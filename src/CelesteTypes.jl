@@ -13,7 +13,7 @@ export SourceMatrix, zero_source_matrix
 export zero_all_param, const_all_param, AllParam
 export values, deriv, SensitiveParam, zero_all_matrix
 export AllParamMatrix, ParamIndex, get_dim
-export clear_source_param!, accum_all_param!
+export clear_param!, accum_all_param!
 export full_index, getindex
 
 import Base.convert
@@ -168,11 +168,9 @@ function zero_source_param(index::ParamIndex)
 	SourceParam(0., zeros(get_dim(index)), index)
 end
 
-function clear_source_param!(sp::SourceParam)
+function clear_param!(sp::SensitiveParam)
 	sp.v = 0.
-	for i in 1:length(sp.d)
-		sp.d[i] = 0.
-	end
+	fill!(sp.d, 0.)
 end
 
 #########################################################

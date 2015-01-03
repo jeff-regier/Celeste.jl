@@ -65,33 +65,24 @@ function accum_galaxy!(bmc::BvnComponent, x::Vector{Float64},
 end
 
 
-function elbo_likelihood(img::Image, V::VariationalParams)
+function load_bvn_mixtures(img::Image, V::VariationalParams)
 	S = length(V)
 
-    E_F = zero_all_matrix(img.H, img.W, S, full_index)
-	fill!(E_F.v, img.epsilon)
-    var_F = zero_all_matrix(img.H, img.W, S, full_index)
-
-	const star_b_index = [2:3, 3 + img.b]
-	fs0m = zero_source_param(star_b_index)
-
-	const gal_b_index = [2:3, 9 + img.b, 15, 16:18]
-	fs1m = zero_source_param(gal_b_index)
+	star_mcs = Array(BvnComponent, 3, S)
+	gal_mcs = Array(BvnComponent, 3, 8, 2, S)
 
 	for s in 1:S
 		Vs = V[s]
 
-		star_mcs = Array(BvnComponent, 3)
 		for k in 1:3
 			pc = img.psf[k]
 			mean_s = [pc.xiBar[1] + Vs.mu[1], pc.xiBar[2] + Vs.mu[2]]
-			star_mcs[k] = BvnComponent(mean_s, pc.SigmaBar, pc.alphaBar)
+			star_mcs[k, s] = BvnComponent(mean_s, pc.SigmaBar, pc.alphaBar)
 		end
 
 		Xi = [[Vs.Xi[1] Vs.Xi[2]], [0. Vs.Xi[3]]]
 		XiXi = Xi' * Xi
 
-		gal_mcs = Array(BvnComponent, 3, 8, 2)
 		for i = 1:2
 			for j in 1:[6,8][i]
 				gc = galaxy_prototypes[i][j]
@@ -100,80 +91,112 @@ function elbo_likelihood(img::Image, V::VariationalParams)
 					mean_s = [pc.xiBar[1] + Vs.mu[1], pc.xiBar[2] + Vs.mu[2]]
 					var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
 					weight = pc.alphaBar * gc.alphaTilde
-					gal_mcs[k, j, i] = BvnComponent(mean_s, var_s, weight)
+					gal_mcs[k, j, i, s] = BvnComponent(mean_s, var_s, weight)
 				end
 			end
 		end
+	end
 
-		chi_var = (Vs.chi * (1. - Vs.chi))
-		chi_var_d = 1. - 2 * Vs.chi
+	star_mcs, gal_mcs
+end
 
-		for w in 1:img.W, h in 1:img.H
-			m = Float64[h, w]
 
-			clear_source_param!(fs0m)
-			for star_mc in star_mcs
-				accum_star!(star_mc, m, Vs.gamma[img.b], fs0m)
+function accum_pixel_source_stats!(img::Image, star_mcs::Array{BvnComponent, 2}, 
+		gal_mcs::Array{BvnComponent, 4}, Vs::SourceParams, s::Int64, m::Vector,
+		fs0m::SourceParam, fs1m::SourceParam, E_F::AllParam, var_F::AllParam)
+
+	clear_param!(fs0m)
+	for star_mc in star_mcs[:, s]
+		accum_star!(star_mc, m, Vs.gamma[img.b], fs0m)
+	end
+
+	clear_param!(fs1m)
+	for i = 1:2
+		theta_dir = (i == 1) ? 1. : -1.
+		theta_i = (i == 1) ? Vs.theta : 1. - Vs.theta
+
+		for j in 1:[6,8][i]
+			for k = 1:3
+				accum_galaxy!(gal_mcs[k, j, i, s], m, Vs.zeta[img.b],
+					theta_i, theta_dir, Vs.Xi, galaxy_prototypes[i][j].sigmaTilde, fs1m)
 			end
+		end
+	end
 	
-			clear_source_param!(fs1m)
-			for i = 1:2
-				theta_dir = (i == 1) ? 1. : -1.
-				theta_i = (i == 1) ? Vs.theta : 1. - Vs.theta
+	E_F.v += (1. - Vs.chi) * fs0m.v + Vs.chi * fs1m.v
 
-				for j in 1:[6,8][i]
-					for k = 1:3
-						accum_galaxy!(gal_mcs[k, j, i], m, Vs.zeta[img.b],
-							theta_i, theta_dir, Vs.Xi, galaxy_prototypes[i][j].sigmaTilde, fs1m)
-					end
-				end
-			end
-			
-			E_F.v[h, w] += (1. - Vs.chi) * fs0m.v + Vs.chi * fs1m.v
-
-			E_F.d[1, h, w, s] += fs1m.v - fs0m.v  # 1 = chi
-			for i in 1:length(fs0m.index)
-				p = fs0m.index[i]
-				E_F.d[p, h, w, s] += (1. - Vs.chi) * fs0m.d[i]
-			end
-			for i in 1:length(fs1m.index)
-				p = fs1m.index[i]
-				E_F.d[p, h, w, s] += Vs.chi * fs1m.d[i]
-			end
-
-			diff10 = fs1m.v - fs0m.v
-			diff10_sq = diff10^2
-			var_F.v[h, w] += chi_var * diff10_sq
-			var_F.d[1, h, w, s] += chi_var_d * diff10_sq  # 1 = chi
-			for i in 1:length(fs0m.index)
-				p = fs0m.index[i]
-				var_F.d[p, h, w, s] -= chi_var * 2 * diff10 * fs0m.d[i]
-			end
-			for i in 1:length(fs1m.index)
-				p = fs1m.index[i]
-				var_F.d[p, h, w, s] += chi_var * 2 * diff10 * fs1m.d[i]
-			end
-		end
+	E_F.d[1, s] += fs1m.v - fs0m.v  # 1 = chi
+	for i in 1:length(fs0m.index)
+		p = fs0m.index[i]
+		E_F.d[p, s] += (1. - Vs.chi) * fs0m.d[i]
+	end
+	for i in 1:length(fs1m.index)
+		p = fs1m.index[i]
+		E_F.d[p, s] += Vs.chi * fs1m.d[i]
 	end
 
-	ret_v = -sum(lfact(img.pixels))
+	diff10 = fs1m.v - fs0m.v
+	diff10_sq = diff10^2
+	chi_var = (Vs.chi * (1. - Vs.chi)) # cache these?
+	chi_var_d = 1. - 2 * Vs.chi
+	var_F.v += chi_var * diff10_sq
+	var_F.d[1, s] += chi_var_d * diff10_sq  # 1 = chi
+	for i in 1:length(fs0m.index)
+		p = fs0m.index[i]
+		var_F.d[p, s] -= chi_var * 2 * diff10 * fs0m.d[i]
+	end
+	for i in 1:length(fs1m.index)
+		p = fs1m.index[i]
+		var_F.d[p, s] += chi_var * 2 * diff10 * fs1m.d[i]
+	end
+end
+
+
+function accum_pixel_ret!(x_nbm, E_F::AllParam, var_F::AllParam, ret::AllParam)
+	ret.v += x_nbm * (log(E_F.v) - var_F.v / (2. * E_F.v^2))
+	ret.v -= E_F.v
+
+	for s in 1:size(E_F.d, 2), p in 1:size(E_F.d, 1)
+		ret.d[p, s] += x_nbm * (E_F.d[p, s] / E_F.v
+			- 0.5 * (E_F.v^2 * var_F.d[p, s] - 
+				var_F.v * 2 * E_F.v * E_F.d[p, s]) 
+					./  E_F.v^4)
+		ret.d[p, s] -= E_F.d[p, s]
+	end
+end
+
+
+function elbo_likelihood(img::Image, V::VariationalParams)
+	star_mcs, gal_mcs = load_bvn_mixtures(img, V)
+
+	S = length(V)
+
+	const star_b_index = [2:3, 3 + img.b]
+	const gal_b_index = [2:3, 9 + img.b, 15, 16:18]
+
+	fs0m = zero_source_param(star_b_index)
+	fs1m = zero_source_param(gal_b_index)
+
+	# could use image-band-specific index here, instead of full_index
+    E_F = zero_all_param(S, full_index)
+    var_F = zero_all_param(S, full_index)
+	ret = const_all_param(S, -sum(lfact(img.pixels)), full_index)
+
 	for w in 1:img.W, h in 1:img.H
-		ret_v += img.pixels[h, w] * (log(E_F.v[h,w]) - 
-				var_F.v[h,w] ./ (2. * (E_F.v[h, w]).^2))
-		ret_v -= E_F.v[h, w]
-	end
-	P = get_dim(full_index)
-	ret_d = zeros(P, S)
-	for s in 1:S, w in 1:img.W, h in 1:img.H, p in 1:P
-		ret_d[p, s] += img.pixels[h, w] * (E_F.d[p, h, w, s] / E_F.v[h,w] 
-			- 0.5 * (E_F.v[h, w]^2 * var_F.d[p, h, w, s] - 
-				var_F.v[h, w] * 2 * E_F.v[h, w] * E_F.d[p, h, w, s]) 
-					./  E_F.v[h, w]^4)
-		ret_d[p, s] -= E_F.d[p, h, w, s]
+		clear_param!(E_F)
+		E_F.v = img.epsilon
+		clear_param!(var_F)
+
+		m = Float64[h, w]
+		for s in 1:S
+			accum_pixel_source_stats!(img, star_mcs, gal_mcs, V[s], s, m, fs0m, fs1m, E_F, var_F)
+		end
+
+		accum_pixel_ret!(img.pixels[h, w], E_F, var_F, ret)
 	end
 
     # sum(img.pixels .* E_log_F) - sum(E_F) -sum(lfact(img.pixels))
-	AllParam(ret_v, ret_d, full_index)
+	ret
 end
 
 
