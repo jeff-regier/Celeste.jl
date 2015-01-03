@@ -5,7 +5,7 @@ import OptimizeElbo
 import StampBlob
 
 using CelesteTypes
-import ViInit
+import ModelInit
 using FITSIO
 using WCSLIB
 
@@ -90,10 +90,9 @@ end
 
 function infer_and_cache(stamp_id)
 	blob = StampBlob.load_stamp_blob(ENV["STAMP"], stamp_id);
-	M = ViInit.sample_prior();
-	V_init = ViInit.init_sources(blob);
+	mp = ModelInit.peak_init(blob);
 
-	V_opt = OptimizeElbo.maximize_elbo(blob, M, V_init)
+	OptimizeElbo.maximize_elbo(blob, M, V_init)
 
     f = open(ENV["STAMP"]"/V-$stamp_id.dat", "w+")
     serialize(f, V_opt)

@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 using Celeste
-
+using CelesteTypes
 
 function small_image_profile()
 	srand(1)
@@ -13,15 +13,14 @@ function small_image_profile()
 	brightness7000K = real(Planck.photons_expected(7000., 10., 1e4))
 
 	three_bodies = [
-		Synthetic.StarParams([10.1, 12.2], brightness7000K),
-		Synthetic.GalaxyParams([71.3, 100.4], brightness7000K , 0.1, [6, 0., 6.]),
-		Synthetic.GalaxyParams([81.5, 103.6], brightness7000K , 0.1, [6, 0., 6.]),
+		CatalogStar([10.1, 12.2], brightness7000K),
+		CatalogGalaxy([71.3, 100.4], brightness7000K , 0.1, [6, 0., 6.]),
+		CatalogGalaxy([81.5, 103.6], brightness7000K , 0.1, [6, 0., 6.]),
 	]
 
    	blob = Synthetic.gen_blob(blob0, three_bodies)
-	M = ViInit.sample_prior()
-	V = ViInit.init_sources(blob)
-	elbo = ElboDeriv.elbo(blob, M, V)
+	mp = ModelInit.peak_init(blob)
+	elbo = ElboDeriv.elbo(blob, mp)
 end
 
 

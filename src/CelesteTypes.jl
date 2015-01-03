@@ -3,18 +3,20 @@
 
 module CelesteTypes
 
+export CatalogEntry, CatalogStar, CatalogGalaxy
+
 export Image, Blob, PriorParams
 export PsfComponent, GalaxyComponent, GalaxyPrototype
 export galaxy_prototypes
 
 export SourceParam, SourceParams, VariationalParams
-export ParamStruct, convert, zero_source_param
+export ParamStruct, ModelParams, convert, zero_source_param
 export SourceMatrix, zero_source_matrix
 export zero_all_param, const_all_param, AllParam
 export values, deriv, SensitiveParam, zero_all_matrix
 export AllParamMatrix, ParamIndex, get_dim
 export clear_param!, accum_all_param!
-export full_index, getindex
+export full_index, getindex, Patch
 
 import Base.convert
 import Base.show
@@ -22,6 +24,25 @@ import Base.show
 import FITSIO
 import Distributions
 import WCSLIB
+
+
+
+abstract CatalogEntry
+
+type CatalogStar <: CatalogEntry
+    mu::Vector{Float64}
+    gamma::Vector{Float64}
+end
+
+type CatalogGalaxy <: CatalogEntry
+    mu::Vector{Float64}
+    zeta::Vector{Float64}
+    theta::Float64
+    Xi::Vector{Float64}
+end
+
+
+############################################
 
 
 immutable GalaxyComponent
@@ -67,6 +88,11 @@ immutable PsfComponent
 	PsfComponent(alphaBar::Float64, xiBar::Vector{Float64}, SigmaBar::Matrix{Float64}) = begin
 		new(alphaBar, xiBar, SigmaBar, SigmaBar^-1, logdet(SigmaBar))
 	end
+end
+
+immutable Patch
+	center::Vector{Float64}
+	radius::Float64
 end
 
 
@@ -138,6 +164,7 @@ function get_dim(index::ParamIndex)
 	length(index)
 end
 
+
 #########################################################
 
 type SensitiveParam{S, T}
@@ -154,14 +181,14 @@ typealias SourceParam SensitiveParam{Float64, Vector{Float64}}
 
 typealias SourceParams ParamStruct{Float64}
 
-function show(Vs::SourceParams)
-    string("chi: $(Vs.chi)\n",
-        "mu: $(Vs.mu)\n",
-        "gamma: $(Vs.gamma)\n",
-        "tau: $(Vs.tau)\n",
-        "zeta: $(Vs.zeta)\n",
-        "theta: $(Vs.theta)\n",
-        "Xi: $(Vs.Xi)\n")
+function show(vs::SourceParams)
+    string("chi: $(vs.chi)\n",
+        "mu: $(vs.mu)\n",
+        "gamma: $(vs.gamma)\n",
+        "tau: $(vs.tau)\n",
+        "zeta: $(vs.zeta)\n",
+        "theta: $(vs.theta)\n",
+        "Xi: $(vs.Xi)\n")
 end
 
 function zero_source_param(index::ParamIndex)
@@ -175,7 +202,17 @@ end
 
 #########################################################
 
-typealias VariationalParams Vector{ParamStruct{Float64}}
+type ModelParams
+	vp::Vector{ParamStruct{Float64}}
+	pp::PriorParams
+	patches::Vector{Patch}
+	S::Int64
+
+	ModelParams(vp, pp, patches) = begin
+		@assert length(vp) == length(patches)
+		new(vp, pp, patches, length(vp))
+	end
+end
 
 #########################################################
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env julia
 
 using Celeste
+using CelesteTypes
 using Base.Test
-
 
 const stamp_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
@@ -14,16 +14,15 @@ function stamp_test()
 	brightness7000K = real(Planck.photons_expected(7000., 5., 1e4))
 
 	two_bodies = [
-		Synthetic.StarParams([11.1, 21.2], brightness7000K),
-		Synthetic.GalaxyParams([15.3, 31.4], brightness7000K , 0.1, [6, 0., 6.]),
+		CatalogStar([11.1, 21.2], brightness7000K),
+		CatalogGalaxy([15.3, 31.4], brightness7000K , 0.1, [6, 0., 6.]),
 	]
 
    	blob = Synthetic.gen_blob(blob0, two_bodies)
-	M = ViInit.sample_prior()
-	V_init = ViInit.init_sources(blob)
-	@test length(V_init) == 2
+	mp = ModelInit.peak_init(blob)
+	@test mp.S == 2
 
-	elbo = ElboDeriv.elbo(blob, M, V_init)
+	elbo = ElboDeriv.elbo(blob, mp)
 	@test_approx_eq elbo.v -2.503656440951526e6
 	truth1 = [-230903.60490336572,21299.08660612206,51088.55474253761,
 		0.1614956164650373,2.0492672411811497,3.331005130357673,
@@ -43,16 +42,16 @@ function stamp_test()
 	end
 
 	println("--- starting optimization---")
-	V_opt = OptimizeElbo.maximize_elbo(blob, M, V_init)
-	@test_approx_eq V_opt[1].chi 0.0001
-	@test_approx_eq V_opt[2].chi 0.9999
-	@test_approx_eq_eps V_opt[1].mu[1] 11.1 0.05
-	@test_approx_eq_eps V_opt[1].mu[2] 21.2 0.05
-	@test_approx_eq_eps V_opt[2].mu[1] 15.3 0.05
-	@test_approx_eq_eps V_opt[2].mu[2] 31.4 0.05
-	@test_approx_eq_eps V_opt[2].Xi[1] 6. 0.05
-	@test_approx_eq_eps V_opt[2].Xi[2] 0. 0.05
-	@test_approx_eq_eps V_opt[2].Xi[3] 6. 0.05
+	OptimizeElbo.maximize_elbo(blob, mp)
+	@test_approx_eq mp.vp[1].chi 0.0001
+	@test_approx_eq mp.vp[2].chi 0.9999
+	@test_approx_eq_eps mp.vp[1].mu[1] 11.1 0.05
+	@test_approx_eq_eps mp.vp[1].mu[2] 21.2 0.05
+	@test_approx_eq_eps mp.vp[2].mu[1] 15.3 0.05
+	@test_approx_eq_eps mp.vp[2].mu[2] 31.4 0.05
+	@test_approx_eq_eps mp.vp[2].Xi[1] 6. 0.05
+	@test_approx_eq_eps mp.vp[2].Xi[2] 0. 0.05
+	@test_approx_eq_eps mp.vp[2].Xi[3] 6. 0.05
 end
 
 
@@ -66,21 +65,56 @@ function small_image_test()
 	brightness7000K = real(Planck.photons_expected(7000., 10., 1e4))
 
 	three_bodies = [
-		Synthetic.StarParams([10.1, 12.2], brightness7000K),
-		Synthetic.GalaxyParams([71.3, 100.4], brightness7000K , 0.1, [6, 0., 6.]),
-		Synthetic.GalaxyParams([81.5, 103.6], brightness7000K , 0.1, [6, 0., 6.]),
+		CatalogStar([10.1, 12.2], brightness7000K),
+		CatalogGalaxy([71.3, 100.4], brightness7000K , 0.1, [6, 0., 6.]),
+		CatalogGalaxy([81.5, 103.6], brightness7000K , 0.1, [6, 0., 6.]),
 	]
 
    	blob = Synthetic.gen_blob(blob0, three_bodies)
-	M = ViInit.sample_prior()
-	V = ViInit.init_sources(blob)
-	@test length(V) == 3
+	mp = ModelInit.peak_init(blob)
+	@test mp.S == 3
 
-	elbo = ElboDeriv.elbo(blob, M, V)
+	elbo = ElboDeriv.elbo(blob, mp)
 	@test_approx_eq elbo.v -1.0539564589332629e7
 end
 
 
+
+function tiling_test()
+	srand(1)
+	blob0 = StampBlob.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	for b in 1:5
+		blob0[b].H, blob0[b].W = 112, 238
+	end
+
+	brightness7000K = real(Planck.photons_expected(7000., 10., 1e4))
+
+	three_bodies = [
+		CatalogGalaxy([4.5, 3.6], brightness7000K , 0.1, [6, 0., 6.]),
+		CatalogStar([60.1, 82.2], brightness7000K),
+		CatalogGalaxy([71.3, 100.4], brightness7000K , 0.1, [6, 0., 6.]),
+	]
+
+   	blob = Synthetic.gen_blob(blob0, three_bodies)
+
+	mp = ModelInit.cat_init(three_bodies)
+	@test mp.S == 3
+
+	elbo = ElboDeriv.elbo(blob, mp)
+
+	@test_approx_eq elbo.v -9.363866983005373e6
+
+	truth = [-509250.41464684,188.92437906,25251.46152459,0.65012746,
+		1.32410644,2.06266958,6.02071596,0.070201,0.0,0.68068553,1.42667276,
+		2.12416342,5.82810905,0.13986853,26693.38441889,-106792.13491265,
+		347.13519247,-23517.62927772]
+	for i in 1:18
+		@test_approx_eq_eps elbo.d[i, 1 + i % 3] truth[i] 1e-6
+	end
+end
+
+
+tiling_test()
 stamp_test()
 small_image_test()
 

@@ -1,9 +1,9 @@
 # written by Jeffrey Regier
 # jeff [at] stat [dot] berkeley [dot] edu
 
-module ViInit
+module ModelInit
 
-export sample_prior, init_sources
+export sample_prior, cat_init, peak_init
 
 using FITSIO
 using Distributions
@@ -95,10 +95,20 @@ function peak_starts(blob::Blob)
 end
 
 
-function init_sources(blob::Blob)
+function peak_init(blob::Blob)
 	v1 = peak_starts(blob)
 	S = size(v1)[2]
-	[init_source(v1[:, s]) for s in 1:S]
+	vp = [init_source(v1[:, s]) for s in 1:S]
+	twice_radius = float(max(blob[1].H, blob[1].W))
+	patches = [Patch(v1[:, s], twice_radius) for s in 1:S]
+	ModelParams(vp, sample_prior(), patches)
+end
+
+
+function cat_init(cat::Vector{CatalogEntry})
+	vp = [init_source(ce.mu) for ce in cat]
+	patches = [Patch(ce.mu, 30.) for ce in cat]
+	ModelParams(vp, sample_prior(), patches)
 end
 
 

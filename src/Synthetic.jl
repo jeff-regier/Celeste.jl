@@ -1,6 +1,6 @@
 module Synthetic
 
-export StarParams, GalaxyParams, gen_blob
+export gen_blob
 
 using CelesteTypes
 import Util
@@ -11,21 +11,6 @@ import Distributions
 function wrapped_poisson(rate::Float64)
     0 < rate ? float(rand(Distributions.Poisson(rate))) : 0.
 end
-
-
-abstract BodyParams
-
-type StarParams <: BodyParams
-	mu::Vector{Float64}
-	gamma::Vector{Float64}
-end
-
-type GalaxyParams <: BodyParams
-    mu::Vector{Float64}
-    zeta::Vector{Float64}
-    theta::Float64
-    Xi::Vector{Float64}
-end 
 
 
 function get_patch(the_mean::Vector{Float64}, H::Int64, W::Int64)
@@ -58,7 +43,7 @@ function write_gaussian(the_mean, the_cov, intensity, pixels)
 end
 
 
-function write_body(img0::Image, sp::StarParams, pixels::Matrix{Float64})
+function write_body(img0::Image, sp::CatalogStar, pixels::Matrix{Float64})
 	for k in 1:length(img0.psf)
 		the_mean = sp.mu + img0.psf[k].xiBar
 		the_cov = img0.psf[k].SigmaBar
@@ -68,7 +53,7 @@ function write_body(img0::Image, sp::StarParams, pixels::Matrix{Float64})
 end
 
 
-function write_body(img0::Image, gp::GalaxyParams, pixels::Matrix{Float64})
+function write_body(img0::Image, gp::CatalogGalaxy, pixels::Matrix{Float64})
 	thetas = [gp.theta, 1 - gp.theta]
 
     Xi = [[gp.Xi[1] gp.Xi[2]], [0.  gp.Xi[3]]]
@@ -87,7 +72,7 @@ function write_body(img0::Image, gp::GalaxyParams, pixels::Matrix{Float64})
 end
 
 
-function gen_image(img0::Image, n_bodies::Vector{BodyParams})
+function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
     pixels = reshape(float(rand(Distributions.Poisson(img0.epsilon),
 					 img0.H * img0.W)), img0.H, img0.W)
 
@@ -99,7 +84,7 @@ function gen_image(img0::Image, n_bodies::Vector{BodyParams})
 end
 
 
-function gen_blob(blob0::Blob, n_bodies::Vector{BodyParams})
+function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry})
 	[gen_image(blob0[b], n_bodies) for b in 1:5]
 end
 

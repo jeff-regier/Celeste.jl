@@ -30,18 +30,18 @@ function pvec_to_pss(x::Vector{Float64})
 end
 
 
-function maximize_elbo(blob::Blob, M::PriorParams, V::VariationalParams)
-	x0 = pss_to_pvec(V)
+function maximize_elbo(blob::Blob, mp::ModelParams)
+	x0 = pss_to_pvec(mp.vp)
 
 	function objective_and_grad(x::Vector{Float64}, g::Vector{Float64})
-		V = pvec_to_pss(x)
-		elbo = ElboDeriv.elbo(blob, M, V)
+		mp.vp = pvec_to_pss(x)
+		elbo = ElboDeriv.elbo(blob, mp)
 		if length(g) > 0
-			svs = [rescale(elbo.d[:, s], false) for s in 1:length(V)]
+			svs = [rescale(elbo.d[:, s], false) for s in 1:mp.S]
 			g[:] = reduce(vcat, svs)
 		end
-		for Vs in V
-			println(show(Vs))
+		for vs in mp.vp
+			println(show(vs))
 			println("-----------------\n")
 		end
 		println("grad: ", g)
@@ -58,7 +58,7 @@ function maximize_elbo(blob::Blob, M::PriorParams, V::VariationalParams)
     lb_s = ParamStruct{Float64}(1e-4, (-10., -10.), 
 		brightness_lb, 1e3,
         brightness_lb, 1e-4, (sqrt(2), -10, sqrt(2)))
-	lbs = pss_to_pvec([lb_s for i in 1:length(V)])
+	lbs = pss_to_pvec([lb_s for i in 1:mp.S])
 	lower_bounds!(opt, lbs)
 
 	brightness_ub = (1e20, 1e20, 1e20, 1e20, 1e20) 
@@ -66,19 +66,17 @@ function maximize_elbo(blob::Blob, M::PriorParams, V::VariationalParams)
     ub_s = ParamStruct{Float64}(1 - 1e-4, (H + 10, W + 10), 
 		brightness_ub, 15_000,
         brightness_ub, 1. - 1e-4, (10., 10, 10))
-	ubs = pss_to_pvec([ub_s for i in 1:length(V)])
+	ubs = pss_to_pvec([ub_s for i in 1:mp.S])
 	upper_bounds!(opt, ubs)
 
 	(max_f, max_x, ret) = optimize(opt, x0)
 
 	println("got $max_f at $max_x after $count iterations (returned $ret)\n")
     
-	for Vs in V
-        print(show(Vs))
+	for vs in mp.vp
+        print(show(vs))
         println("\n-----------------\n")
     end
-
-	V
 end
 
 

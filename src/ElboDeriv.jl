@@ -65,22 +65,20 @@ function accum_galaxy!(bmc::BvnComponent, x::Vector{Float64},
 end
 
 
-function load_bvn_mixtures(img::Image, V::VariationalParams)
-	S = length(V)
+function load_bvn_mixtures(img::Image, mp::ModelParams)
+	star_mcs = Array(BvnComponent, 3, mp.S)
+	gal_mcs = Array(BvnComponent, 3, 8, 2, mp.S)
 
-	star_mcs = Array(BvnComponent, 3, S)
-	gal_mcs = Array(BvnComponent, 3, 8, 2, S)
-
-	for s in 1:S
-		Vs = V[s]
+	for s in 1:mp.S
+		vs = mp.vp[s]
 
 		for k in 1:3
 			pc = img.psf[k]
-			mean_s = [pc.xiBar[1] + Vs.mu[1], pc.xiBar[2] + Vs.mu[2]]
+			mean_s = [pc.xiBar[1] + vs.mu[1], pc.xiBar[2] + vs.mu[2]]
 			star_mcs[k, s] = BvnComponent(mean_s, pc.SigmaBar, pc.alphaBar)
 		end
 
-		Xi = [[Vs.Xi[1] Vs.Xi[2]], [0. Vs.Xi[3]]]
+		Xi = [[vs.Xi[1] vs.Xi[2]], [0. vs.Xi[3]]]
 		XiXi = Xi' * Xi
 
 		for i = 1:2
@@ -88,7 +86,7 @@ function load_bvn_mixtures(img::Image, V::VariationalParams)
 				gc = galaxy_prototypes[i][j]
 				for k = 1:3
 					pc = img.psf[k]
-					mean_s = [pc.xiBar[1] + Vs.mu[1], pc.xiBar[2] + Vs.mu[2]]
+					mean_s = [pc.xiBar[1] + vs.mu[1], pc.xiBar[2] + vs.mu[2]]
 					var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
 					weight = pc.alphaBar * gc.alphaTilde
 					gal_mcs[k, j, i, s] = BvnComponent(mean_s, var_s, weight)
@@ -102,43 +100,43 @@ end
 
 
 function accum_pixel_source_stats!(img::Image, star_mcs::Array{BvnComponent, 2}, 
-		gal_mcs::Array{BvnComponent, 4}, Vs::SourceParams, s::Int64, m::Vector,
+		gal_mcs::Array{BvnComponent, 4}, vs::SourceParams, s::Int64, m::Vector,
 		fs0m::SourceParam, fs1m::SourceParam, E_F::AllParam, var_F::AllParam)
 
 	clear_param!(fs0m)
 	for star_mc in star_mcs[:, s]
-		accum_star!(star_mc, m, Vs.gamma[img.b], fs0m)
+		accum_star!(star_mc, m, vs.gamma[img.b], fs0m)
 	end
 
 	clear_param!(fs1m)
 	for i = 1:2
 		theta_dir = (i == 1) ? 1. : -1.
-		theta_i = (i == 1) ? Vs.theta : 1. - Vs.theta
+		theta_i = (i == 1) ? vs.theta : 1. - vs.theta
 
 		for j in 1:[6,8][i]
 			for k = 1:3
-				accum_galaxy!(gal_mcs[k, j, i, s], m, Vs.zeta[img.b],
-					theta_i, theta_dir, Vs.Xi, galaxy_prototypes[i][j].sigmaTilde, fs1m)
+				accum_galaxy!(gal_mcs[k, j, i, s], m, vs.zeta[img.b],
+					theta_i, theta_dir, vs.Xi, galaxy_prototypes[i][j].sigmaTilde, fs1m)
 			end
 		end
 	end
 	
-	E_F.v += (1. - Vs.chi) * fs0m.v + Vs.chi * fs1m.v
+	E_F.v += (1. - vs.chi) * fs0m.v + vs.chi * fs1m.v
 
 	E_F.d[1, s] += fs1m.v - fs0m.v  # 1 = chi
 	for i in 1:length(fs0m.index)
 		p = fs0m.index[i]
-		E_F.d[p, s] += (1. - Vs.chi) * fs0m.d[i]
+		E_F.d[p, s] += (1. - vs.chi) * fs0m.d[i]
 	end
 	for i in 1:length(fs1m.index)
 		p = fs1m.index[i]
-		E_F.d[p, s] += Vs.chi * fs1m.d[i]
+		E_F.d[p, s] += vs.chi * fs1m.d[i]
 	end
 
 	diff10 = fs1m.v - fs0m.v
 	diff10_sq = diff10^2
-	chi_var = (Vs.chi * (1. - Vs.chi)) # cache these?
-	chi_var_d = 1. - 2 * Vs.chi
+	chi_var = (vs.chi * (1. - vs.chi)) # cache these?
+	chi_var_d = 1. - 2 * vs.chi
 	var_F.v += chi_var * diff10_sq
 	var_F.d[1, s] += chi_var_d * diff10_sq  # 1 = chi
 	for i in 1:length(fs0m.index)
@@ -166,10 +164,8 @@ function accum_pixel_ret!(x_nbm, E_F::AllParam, var_F::AllParam, ret::AllParam)
 end
 
 
-function elbo_likelihood(img::Image, V::VariationalParams)
-	star_mcs, gal_mcs = load_bvn_mixtures(img, V)
-
-	S = length(V)
+function elbo_likelihood(img::Image, mp::ModelParams)
+	star_mcs, gal_mcs = load_bvn_mixtures(img, mp)
 
 	const star_b_index = [2:3, 3 + img.b]
 	const gal_b_index = [2:3, 9 + img.b, 15, 16:18]
@@ -178,9 +174,9 @@ function elbo_likelihood(img::Image, V::VariationalParams)
 	fs1m = zero_source_param(gal_b_index)
 
 	# could use image-band-specific index here, instead of full_index
-    E_F = zero_all_param(S, full_index)
-    var_F = zero_all_param(S, full_index)
-	ret = const_all_param(S, -sum(lfact(img.pixels)), full_index)
+    E_F = zero_all_param(mp.S, full_index)
+    var_F = zero_all_param(mp.S, full_index)
+	ret = const_all_param(mp.S, -sum(lfact(img.pixels)), full_index)
 
 	for w in 1:img.W, h in 1:img.H
 		clear_param!(E_F)
@@ -188,8 +184,8 @@ function elbo_likelihood(img::Image, V::VariationalParams)
 		clear_param!(var_F)
 
 		m = Float64[h, w]
-		for s in 1:S
-			accum_pixel_source_stats!(img, star_mcs, gal_mcs, V[s], s, m, fs0m, fs1m, E_F, var_F)
+		for s in 1:mp.S
+			accum_pixel_source_stats!(img, star_mcs, gal_mcs, mp.vp[s], s, m, fs0m, fs1m, E_F, var_F)
 		end
 
 		accum_pixel_ret!(img.pixels[h, w], E_F, var_F, ret)
@@ -200,57 +196,56 @@ function elbo_likelihood(img::Image, V::VariationalParams)
 end
 
 
-function elbo_likelihood(blob::Blob, V::VariationalParams)
-	ret = zero_all_param(length(V), full_index)
+function elbo_likelihood(blob::Blob, mp::ModelParams)
+	ret = zero_all_param(mp.S, full_index)
 	for img in blob
-		accum_all_param!(elbo_likelihood(img, V), ret)
+		accum_all_param!(elbo_likelihood(img, mp), ret)
 	end
 	ret
 end
 
 
-function regularizer(M::PriorParams, Vs::SourceParams)
-	planck_colors = Planck.expected_colors(Vs.tau)
-	gamma_colors = log(Vs.gamma[2:5]) - log(Vs.gamma[1:4])
+function regularizer(pp::PriorParams, vs::SourceParams)
+	planck_colors = Planck.expected_colors(vs.tau)
+	gamma_colors = log(vs.gamma[2:5]) - log(vs.gamma[1:4])
 	w_s = planck_colors - gamma_colors
-	star_penalty = -.5 * (w_s' * M.Delta^-1 * w_s'')[]
+	star_penalty = -.5 * (w_s' * pp.Delta^-1 * w_s'')[]
 
-	zeta_colors = log(Vs.zeta[2:5]) - log(Vs.zeta[1:4])
-	z_s = M.Theta - zeta_colors
-	galaxy_penalty = -.5 * (z_s' * M.Lambda^-1 * z_s'')[]
+	zeta_colors = log(vs.zeta[2:5]) - log(vs.zeta[1:4])
+	z_s = pp.Theta - zeta_colors
+	galaxy_penalty = -.5 * (z_s' * pp.Lambda^-1 * z_s'')[]
 
-	(1. - Vs.chi) * star_penalty + Vs.chi * galaxy_penalty
+	(1. - vs.chi) * star_penalty + vs.chi * galaxy_penalty
 end
 
 
-function regularizer(M::PriorParams, V::VariationalParams)
+function regularizer(mp::ModelParams)
 	# could compute this faster by aggregating w_s and z_s before multiplication
-	S = length(V)
-	R = zero_all_param(S)
+	R = zero_all_param(mp.S)
 	for s in 1:S
-		accum_new_source!(R, regularizer(M, V[s]), s)
+		accum_new_source!(R, regularizer(pp, mp.vp[s]), s)
 	end
 	R
 end
 
 
-function subtract_kl!(M::PriorParams, V::VariationalParams, accum::AllParam)
-	for s in 1:length(V)
-		Vs = V[s]
+function subtract_kl!(mp::ModelParams, accum::AllParam)
+	for s in 1:M.S
+		vs = mp.vp[s]
 
-		accum.v -= Vs.chi * (log(Vs.chi) - log(M.rho))
-		accum.v -= (1. - Vs.chi) * (log(1. - Vs.chi) - log(1. - M.rho))
+		accum.v -= vs.chi * (log(vs.chi) - log(pp.rho))
+		accum.v -= (1. - vs.chi) * (log(1. - vs.chi) - log(1. - pp.rho))
 
 		# 1 = chi
-		accum.d[1, s] -= (log(Vs.chi) - log(M.rho)) + 1
-		accum.d[1, s] -= -(log(1. - Vs.chi) - log(1. - M.rho)) - 1.
+		accum.d[1, s] -= (log(vs.chi) - log(pp.rho)) + 1
+		accum.d[1, s] -= -(log(1. - vs.chi) - log(1. - pp.rho)) - 1.
 	end
 end
 
 
-function elbo(blob::Blob, M::PriorParams, V::VariationalParams)
-	ret = elbo_likelihood(blob, V)# - kl(M, V) #+ regularizer(M, V) 
-	#subtract_kl!(M, V, ret)
+function elbo(blob::Blob, mp::ModelParams)
+	ret = elbo_likelihood(blob, mp)# - kl(pp, mp.vp) #+ regularizer(pp, mp.vp) 
+	#subtract_kl!(pp, mp.vp, ret)
 	ret
 end
 
