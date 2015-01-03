@@ -31,11 +31,12 @@ const exposure_duration = 54.
 
 const bands = ['z', 'i', 'r', 'g', 'u']
 
+const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
 # load the filter curves
 
 function load_filter_curves()
-	filter_curves = open(ENV["DAT"]"/filter_curves")
+	filter_curves = open("$dat_dir/filter_curves")
 
 	wavelength_lookup = Array(Array{Float64, 1}, 5)
 	sensitivity_lookup = Array(Array{Float64 , 1}, 5)
@@ -55,6 +56,7 @@ function load_filter_curves()
 
 	return wavelength_lookup, sensitivity_lookup
 end
+
 
 wavelength_lookup, sensitivity_lookup = load_filter_curves()
 

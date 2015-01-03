@@ -16,7 +16,8 @@ function sample_prior()
 	rho = 0.5
 	Delta = eye(4) * 1e-2
 
-	f = open(ENV["DAT"]"/ThetaLambda.dat")
+	const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
+	f = open("$dat_dir/ThetaLambda.dat")
 	(Theta, Lambda) = deserialize(f)
 	close(f)
 

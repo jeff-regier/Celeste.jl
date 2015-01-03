@@ -4,7 +4,7 @@ using Celeste
 using Base.Test
 
 
-const stamp_dir = joinpath(Pkg.dir("Celeste"),"test", "dat")
+const stamp_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
 
 function stamp_test()
