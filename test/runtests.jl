@@ -128,6 +128,42 @@ function test_local_sources()
 end
 
 
+function test_local_sources_2()
+	srand(1)
+	blob0 = StampBlob.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	brightness7000K = real(Planck.photons_expected(7000., 10., 1e4))
+	one_body = CatalogEntry[CatalogStar([50., 50.], brightness7000K),]
+
+   	for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
+	small_blob = Synthetic.gen_blob(blob0, one_body)
+
+   	for b in 1:5 blob0[b].H, blob0[b].W = 400, 400 end
+	big_blob = Synthetic.gen_blob(blob0, one_body)
+
+	mp = ModelInit.cat_init(one_body, patch_radius=35., tile_width=2)
+
+	qx = 0
+	for ww=1:50,hh=1:50
+		tile = ImageTile(hh, ww, small_blob[2])
+		if length(ElboDeriv.local_sources(tile, mp)) > 0
+			qx += 1
+		end
+	end
+
+	@test qx == (36 * 2)^2 / 4
+
+	qy = 0
+	for ww=1:200,hh=1:200
+		tile = ImageTile(hh, ww, big_blob[1])
+		if length(ElboDeriv.local_sources(tile, mp)) > 0
+			qy += 1
+		end
+	end
+
+	@test qy == qx
+end
+
+
 function test_tiling()
 	srand(1)
 	blob0 = StampBlob.load_stamp_blob(stamp_dir, "164.4311-39.0359")
@@ -183,6 +219,7 @@ function test_tiling()
 end
 
 
+test_local_sources_2()
 test_local_sources()
 test_small_image()
 test_tiling()

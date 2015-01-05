@@ -198,7 +198,6 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
 		star_mcs::Array{BvnComponent, 2}, gal_mcs::Array{BvnComponent, 4}, 
 		accum::AllParam)
 	source_subset = local_sources(tile, mp)
-
 	h_range, w_range = tile_range(tile, mp.tile_width)
 
 	if length(source_subset) == 0  # special case---for speed
