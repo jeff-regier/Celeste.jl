@@ -31,8 +31,8 @@ function write_gaussian(the_mean, the_cov, intensity, pixels)
 	w_range, h_range = get_patch(the_mean, H, W)
 
 	for w in w_range, h in h_range
-		y[1] = the_mean[1] - h
-		y[2] = the_mean[2] - w
+		y[1] = the_mean[1] - (h - 0.5)
+		y[2] = the_mean[2] - (w - 0.5)
 		ypy = Util.matvec222(the_precision, y)
 		pdf_hw = c * exp(-0.5 * ypy)
 		pixel_rate = intensity * pdf_hw

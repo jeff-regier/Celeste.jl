@@ -19,7 +19,7 @@ function small_image_profile()
 	]
 
    	blob = Synthetic.gen_blob(blob0, three_bodies)
-	mp = ModelInit.peak_init(blob)
+	mp = ModelInit.peak_init(blob, patch_radius=35., tile_width=2)
 	elbo = ElboDeriv.elbo(blob, mp)
 end
 

@@ -16,7 +16,7 @@ export zero_all_param, const_all_param, AllParam
 export values, deriv, SensitiveParam, zero_all_matrix
 export AllParamMatrix, ParamIndex, get_dim
 export clear_param!, accum_all_param!
-export full_index, getindex, Patch
+export full_index, getindex, SkyPatch, ImageTile
 
 import Base.convert
 import Base.show
@@ -41,9 +41,14 @@ type CatalogGalaxy <: CatalogEntry
     Xi::Vector{Float64}
 end
 
-
 ############################################
 
+immutable SkyPatch #pixel coordinates for now, soon wcs
+	center::Vector{Float64}
+	radius::Float64
+end
+
+############################################
 
 immutable GalaxyComponent
 	alphaTilde::Float64
@@ -90,12 +95,6 @@ immutable PsfComponent
 	end
 end
 
-immutable Patch
-	center::Vector{Float64}
-	radius::Float64
-end
-
-
 type Image
 	H::Int64
 	W::Int64
@@ -104,6 +103,13 @@ type Image
 	wcs::WCSLIB.wcsprm
 	epsilon::Float64
 	psf::Vector{PsfComponent}
+end
+
+
+immutable ImageTile
+	hh::Int64 # tile coordinates---not pixel or sky coordinates
+	ww::Int64
+	img::Image
 end
 
 
@@ -164,7 +170,6 @@ function get_dim(index::ParamIndex)
 	length(index)
 end
 
-
 #########################################################
 
 type SensitiveParam{S, T}
@@ -205,12 +210,13 @@ end
 type ModelParams
 	vp::Vector{ParamStruct{Float64}}
 	pp::PriorParams
-	patches::Vector{Patch}
+	patches::Vector{SkyPatch}
+	tile_width::Int64
 	S::Int64
 
-	ModelParams(vp, pp, patches) = begin
+	ModelParams(vp, pp, patches, tile_width) = begin
 		@assert length(vp) == length(patches)
-		new(vp, pp, patches, length(vp))
+		new(vp, pp, patches, tile_width, length(vp))
 	end
 end
 

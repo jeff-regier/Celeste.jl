@@ -65,7 +65,7 @@ function accum_galaxy!(bmc::BvnComponent, x::Vector{Float64},
 end
 
 
-function load_bvn_mixtures(img::Image, mp::ModelParams)
+function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
 	star_mcs = Array(BvnComponent, 3, mp.S)
 	gal_mcs = Array(BvnComponent, 3, 8, 2, mp.S)
 
@@ -73,7 +73,7 @@ function load_bvn_mixtures(img::Image, mp::ModelParams)
 		vs = mp.vp[s]
 
 		for k in 1:3
-			pc = img.psf[k]
+			pc = psf[k]
 			mean_s = [pc.xiBar[1] + vs.mu[1], pc.xiBar[2] + vs.mu[2]]
 			star_mcs[k, s] = BvnComponent(mean_s, pc.SigmaBar, pc.alphaBar)
 		end
@@ -85,7 +85,7 @@ function load_bvn_mixtures(img::Image, mp::ModelParams)
 			for j in 1:[6,8][i]
 				gc = galaxy_prototypes[i][j]
 				for k = 1:3
-					pc = img.psf[k]
+					pc = psf[k]
 					mean_s = [pc.xiBar[1] + vs.mu[1], pc.xiBar[2] + vs.mu[2]]
 					var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
 					weight = pc.alphaBar * gc.alphaTilde
@@ -99,13 +99,14 @@ function load_bvn_mixtures(img::Image, mp::ModelParams)
 end
 
 
-function accum_pixel_source_stats!(img::Image, star_mcs::Array{BvnComponent, 2}, 
-		gal_mcs::Array{BvnComponent, 4}, vs::SourceParams, s::Int64, m::Vector,
+function accum_pixel_source_stats!(star_mcs::Array{BvnComponent, 2}, 
+		gal_mcs::Array{BvnComponent, 4}, vs::SourceParams, s::Int64, 
+		m_pos::Vector{Float64}, b::Int64,
 		fs0m::SourceParam, fs1m::SourceParam, E_F::AllParam, var_F::AllParam)
 
 	clear_param!(fs0m)
 	for star_mc in star_mcs[:, s]
-		accum_star!(star_mc, m, vs.gamma[img.b], fs0m)
+		accum_star!(star_mc, m_pos, vs.gamma[b], fs0m)
 	end
 
 	clear_param!(fs1m)
@@ -115,7 +116,7 @@ function accum_pixel_source_stats!(img::Image, star_mcs::Array{BvnComponent, 2},
 
 		for j in 1:[6,8][i]
 			for k = 1:3
-				accum_galaxy!(gal_mcs[k, j, i, s], m, vs.zeta[img.b],
+				accum_galaxy!(gal_mcs[k, j, i, s], m_pos, vs.zeta[b],
 					theta_i, theta_dir, vs.Xi, galaxy_prototypes[i][j].sigmaTilde, fs1m)
 			end
 		end
@@ -164,42 +165,96 @@ function accum_pixel_ret!(x_nbm, E_F::AllParam, var_F::AllParam, ret::AllParam)
 end
 
 
-function elbo_likelihood(img::Image, mp::ModelParams)
-	star_mcs, gal_mcs = load_bvn_mixtures(img, mp)
+function tile_range(tile::ImageTile, tile_width::Int64)
+	h1 = 1 + (tile.hh - 1) * tile_width 
+	h2 = min(tile.hh * tile_width, tile.img.H)
+	w1 = 1 + (tile.ww - 1) * tile_width 
+	w2 = min(tile.ww * tile_width, tile.img.W)
+	h1:h2, w1:w2
+end
 
-	const star_b_index = [2:3, 3 + img.b]
-	const gal_b_index = [2:3, 9 + img.b, 15, 16:18]
 
+function local_sources(tile::ImageTile, mp::ModelParams)
+	local_subset = Array(Int64, 0)
+
+	tr = mp.tile_width / 2.  # tile radius
+	tc1 = tr + (tile.hh - 1) * mp.tile_width
+	tc2 = tr + (tile.ww - 1) * mp.tile_width
+
+	for s in 1:mp.S
+		pc = mp.patches[s].center  # patch center
+		pr = mp.patches[s].radius  # patch radius
+
+		if abs(pc[1] - tc1) <= (pr + tr) && abs(pc[2] - tc2) <= (pr + tr)
+			push!(local_subset, s)
+		end
+	end
+
+	local_subset
+end
+
+
+function elbo_likelihood!(tile::ImageTile, mp::ModelParams, 
+		star_mcs::Array{BvnComponent, 2}, gal_mcs::Array{BvnComponent, 4}, 
+		accum::AllParam)
+	source_subset = local_sources(tile, mp)
+
+	h_range, w_range = tile_range(tile, mp.tile_width)
+
+	if length(source_subset) == 0  # special case---for speed
+		num_pixels = length(h_range) * length(w_range)
+		ep = tile.img.epsilon
+		tile_x = sum(tile.img.pixels[h_range, w_range])
+		accum.v += tile_x * log(ep) - num_pixels * ep
+		return
+	end
+
+	const star_b_index = [2, 3, 3 + tile.img.b]
+	const gal_b_index = [2, 3, 9 + tile.img.b, 15, 16, 17, 18]
+
+	# could move all these to image, for a speedup
 	fs0m = zero_source_param(star_b_index)
 	fs1m = zero_source_param(gal_b_index)
 
 	# could use image-band-specific index here, instead of full_index
     E_F = zero_all_param(mp.S, full_index)
     var_F = zero_all_param(mp.S, full_index)
-	ret = const_all_param(mp.S, -sum(lfact(img.pixels)), full_index)
 
-	for w in 1:img.W, h in 1:img.H
+	for w in w_range, h in h_range
 		clear_param!(E_F)
-		E_F.v = img.epsilon
+		E_F.v = tile.img.epsilon
 		clear_param!(var_F)
 
-		m = Float64[h, w]
-		for s in 1:mp.S
-			accum_pixel_source_stats!(img, star_mcs, gal_mcs, mp.vp[s], s, m, fs0m, fs1m, E_F, var_F)
+		m_pos = Float64[h - 0.5, w - 0.5]
+		for s in source_subset
+			accum_pixel_source_stats!(star_mcs, gal_mcs, mp.vp[s],
+					s, m_pos, tile.img.b, fs0m, fs1m, E_F, var_F)
 		end
 
-		accum_pixel_ret!(img.pixels[h, w], E_F, var_F, ret)
+		accum_pixel_ret!(tile.img.pixels[h, w], E_F, var_F, accum)
 	end
+end
 
-    # sum(img.pixels .* E_log_F) - sum(E_F) -sum(lfact(img.pixels))
-	ret
+
+function elbo_likelihood!(img::Image, mp::ModelParams, accum::AllParam)
+	accum.v += -sum(lfact(img.pixels))
+
+	star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp)
+
+	WW = int(ceil(img.W / mp.tile_width))
+	HH = int(ceil(img.H / mp.tile_width))
+	for ww in 1:WW, hh in 1:HH
+		tile = ImageTile(hh, ww, img)
+		# might get a speedup from subsetting the mp here
+		elbo_likelihood!(tile, mp, star_mcs, gal_mcs, accum)
+	end
 end
 
 
 function elbo_likelihood(blob::Blob, mp::ModelParams)
 	ret = zero_all_param(mp.S, full_index)
 	for img in blob
-		accum_all_param!(elbo_likelihood(img, mp), ret)
+		elbo_likelihood!(img, mp, ret)
 	end
 	ret
 end

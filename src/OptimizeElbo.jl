@@ -52,7 +52,7 @@ function maximize_elbo(blob::Blob, mp::ModelParams)
 
 	opt = Opt(:LD_LBFGS, length(x0))
 	max_objective!(opt, objective_and_grad)
-	xtol_rel!(opt, 1e-2)
+	xtol_rel!(opt, 1e-4)
 
 	brightness_lb = (1e4, 1e4, 1e4, 1e4, 1e3)
     lb_s = ParamStruct{Float64}(1e-4, (-10., -10.), 
