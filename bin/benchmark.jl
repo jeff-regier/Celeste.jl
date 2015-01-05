@@ -18,7 +18,7 @@ function small_image_profile()
 	S_bodies = CatalogEntry[CatalogStar(locations[:, s][:], brightness7000K) for s in 1:S]
 
    	blob = Synthetic.gen_blob(blob0, S_bodies)
-	mp = ModelInit.cat_init(S_bodies, patch_radius=35., tile_width=10)
+	mp = ModelInit.cat_init(S_bodies, patch_radius=20., tile_width=10)
 	elbo = ElboDeriv.elbo(blob, mp)
 end
 

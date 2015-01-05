@@ -151,11 +151,12 @@ function accum_pixel_source_stats!(star_mcs::Array{BvnComponent, 2},
 end
 
 
-function accum_pixel_ret!(x_nbm, E_F::AllParam, var_F::AllParam, ret::AllParam)
+function accum_pixel_ret!(source_subset::Vector{Int64}, x_nbm::Float64,
+		E_F::AllParam, var_F::AllParam, ret::AllParam)
 	ret.v += x_nbm * (log(E_F.v) - var_F.v / (2. * E_F.v^2))
 	ret.v -= E_F.v
 
-	for s in 1:size(E_F.d, 2), p in 1:size(E_F.d, 1)
+	for s in source_subset, p in 1:size(E_F.d, 1)
 		ret.d[p, s] += x_nbm * (E_F.d[p, s] / E_F.v
 			- 0.5 * (E_F.v^2 * var_F.d[p, s] - 
 				var_F.v * 2 * E_F.v * E_F.d[p, s]) 
@@ -216,6 +217,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
 	fs1m = zero_source_param(gal_b_index)
 
 	# could use image-band-specific index here, instead of full_index
+	# TODO: use source_subset-specific index here, instead of all sources
     E_F = zero_all_param(mp.S, full_index)
     var_F = zero_all_param(mp.S, full_index)
 
@@ -230,7 +232,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
 					s, m_pos, tile.img.b, fs0m, fs1m, E_F, var_F)
 		end
 
-		accum_pixel_ret!(tile.img.pixels[h, w], E_F, var_F, accum)
+		accum_pixel_ret!(source_subset, tile.img.pixels[h, w], E_F, var_F, accum)
 	end
 end
 
