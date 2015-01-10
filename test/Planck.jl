@@ -5,7 +5,6 @@ module Planck
 
 export photons_expected
 
-using DualNumbers
 using CelesteTypes
 
 
@@ -29,9 +28,10 @@ const m_per_ly = c * 31556952.
 const lens_area = .75 * pi * 1.25^2 # in meters^2
 const exposure_duration = 54.
 
-const bands = ['z', 'i', 'r', 'g', 'u']
+const bands = reverse(['u', 'g', 'r', 'i', 'z'])
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
+
 
 # load the filter curves
 
@@ -63,10 +63,10 @@ wavelength_lookup, sensitivity_lookup = load_filter_curves()
 
 # compute the expected number of photons
 
-function photons_per_joule(T, band_id::Int64)
+function photons_per_joule(kelvin, band_id::Int64)
 	x = wavelength_lookup[band_id] 
-	radiances = hpicc2 ./ (x.^5 .* (exp(hc_k ./ (x .* T)) .- 1))
-	total_radiance = sigma * T^4 #across bands, per m^2
+	radiances = hpicc2 ./ (x.^5 .* (exp(hc_k ./ (x .* kelvin)) .- 1))
+	total_radiance = sigma * kelvin^4 #across bands, per m^2
 	radiance_densities = radiances ./ total_radiance
 
 	photon_energies = (h * c ./ x) # Joules
@@ -78,16 +78,24 @@ function photons_per_joule(T, band_id::Int64)
 	return avg_photons * range #approximates the integral
 end
 
-function photons_expected(T, solar_L::Float64, d::Float64, band_id::Int64)
+
+function photons_expected(kelvin, solar_L::Float64, d::Float64, band_id::Int64)
 	L = solar_L * sun_wattage
 	D = d * m_per_ly
 	lens_prop = lens_area ./ (4pi * D^2)
 	lens_watts = lens_prop * L
-	return photons_per_joule(T, band_id) * lens_watts * exposure_duration
+	return photons_per_joule(kelvin, band_id) * lens_watts * exposure_duration
 end
 
-function photons_expected(T, solar_L::Float64, d::Float64)
-	return Dual{Float64}[photons_expected(T, solar_L, d, b) for b in 1:5]
+
+function photons_expected(kelvin, solar_L::Float64, d::Float64)
+	return Float64[photons_expected(kelvin, solar_L, d, b) for b in 1:5]
+end
+
+
+function expected_colors(kelvin)
+    planck_denorm = photons_expected(kelvin, 1., 1.)
+    log(planck_denorm[2:5]) - log(planck_denorm[1:4])
 end
 
 
@@ -97,11 +105,11 @@ end
 # wavelength_lookup[1] = [1:1000000] * 1e-10
 
 # the sun
-# T = 6000.
+# kelvin = 6000.
 # d_in_m = 150e9
 # sun_radius^2 * 4pi
-# photons_per_joule(T, 1) * sun_wattage
-# photons_expected(T, 1., d_in_m / m_per_ly) # 5e22 photons in the r band?
+# photons_per_joule(kelvin, 1) * sun_wattage
+# photons_expected(kelvin, 1., d_in_m / m_per_ly) # 5e22 photons in the r band?
 
 # vega
 # surface_area(9602., 40.12 * sun_wattage)
@@ -117,19 +125,6 @@ end
 # our sun at the edge of the milky way?
 =# photons_expected(6000., 1., 90e3) ### 1685 photons in the r band?
 
-function make_tau(v::Float64, dv::Float64)
-	make_singleton_param(:tau, 1, v, dv)
 end
-
-function expected_colors(tau::SourceParam)
-	dual_tau = dual(tau.v, 1.)
-    planck_denorm = photons_expected(dual_tau, 1., 1.)
-    planck_colors = log(planck_denorm[2:5]) - log(planck_denorm[1:4])
-	[make_tau(real(color), epsilon(color)) for color in planck_colors]
-end
-
-
-end
-
 
 

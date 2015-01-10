@@ -1,11 +1,8 @@
 #!/usr/bin/env julia
 
-import ElboDeriv
-import OptimizeElbo
-import StampBlob
-
+using Celeste
 using CelesteTypes
-import ModelInit
+
 using FITSIO
 using WCSLIB
 
@@ -30,15 +27,6 @@ peak_ts = 2.897 * 1e7 ./ peaks
 include("stamp_ids.jl")
 
 
-type CatalogItem
-	ra::Float64
-	dec::Float64
-	fluxes::Vector
-	x::Float64
-	y::Float64
-end
-
-
 function average_distance(a, b)
 	ret = 0.
 	count = 0
@@ -55,23 +43,8 @@ end
 
 
 function load_catalog(stamp_id)
-	blob = StampBlob.load_stamp_blob(ENV["STAMP"], stamp_id);
-
-	cat = fits_open_table(ENV["STAMP"]"/cat-$stamp_id.fits")
-	num_rows = int(fits_read_keyword(cat, "NAXIS2")[1])
-	table = Array(Float64, num_rows, 7)
-	for i in 1:7
-		data = Array(Float64, num_rows)
-		fits_read_col(cat, Float64, i, 1, 1, data)
-		table[:, i] = data
-	end
-	fits_close_file(cat)
-
-	function row_to_cs(row)
-		x_y = wcss2p(blob[1].wcs, row[1:2]'')
-		CatalogItem(row[1], row[2], reverse(row[3:7][:]), x_y[1], x_y[2])
-	end
-	cat_stars = [row_to_cs(table[i, :][:]) for i in 1:num_rows]
+	blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id);
+	cat_stars = SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id)
 
 	function in_bounds(cs)
 		cs.x >= 3 && cs.x <= 49 && cs.y >= 3 && cs.y <= 49
@@ -89,7 +62,7 @@ end
 
 
 function infer_and_cache(stamp_id)
-	blob = StampBlob.load_stamp_blob(ENV["STAMP"], stamp_id);
+	blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id);
 	mp = ModelInit.peak_init(blob);
 
 	OptimizeElbo.maximize_elbo(blob, M, V_init)
@@ -212,7 +185,7 @@ end
 
 
 function score_peaks(stamp_id)
-	blob = StampBlob.load_stamp_blob(ENV["STAMP"], stamp_id);
+	blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id);
 	M = sample_prior();
 	V = init_sources(blob);
 
@@ -250,7 +223,7 @@ function ef_pixels(img::Image, V::VariationalParams)
 end
 
 function posterior_check_plot(stamp_id)
-	blob = StampBlob.load_stamp_blob(ENV["STAMP"], stamp_id);
+	blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id);
 
 	V = load_cache(stamp_id)
 

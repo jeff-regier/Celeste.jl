@@ -14,7 +14,8 @@ immutable BvnComponent
 	z::Float64
 
 	BvnComponent(the_mean, the_cov, weight) = begin
-		c = 1 ./ (det(the_cov)^.5 * 2pi)
+		the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
+		c = 1 ./ (the_det^.5 * 2pi)
 		new(the_mean, the_cov^-1, c * weight)
 	end
 end
@@ -222,7 +223,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
     var_F = zero_all_param(mp.S, full_index)
 
 	for w in w_range, h in h_range
-		clear_param!(E_F)
+		clear_param!(E_F)  #serious bottleneck
 		E_F.v = tile.img.epsilon
 		clear_param!(var_F)
 
@@ -261,30 +262,6 @@ function elbo_likelihood(blob::Blob, mp::ModelParams)
 end
 
 
-function regularizer(pp::PriorParams, vs::SourceParams)
-	planck_colors = Planck.expected_colors(vs.tau)
-	gamma_colors = log(vs.gamma[2:5]) - log(vs.gamma[1:4])
-	w_s = planck_colors - gamma_colors
-	star_penalty = -.5 * (w_s' * pp.Delta^-1 * w_s'')[]
-
-	zeta_colors = log(vs.zeta[2:5]) - log(vs.zeta[1:4])
-	z_s = pp.Theta - zeta_colors
-	galaxy_penalty = -.5 * (z_s' * pp.Lambda^-1 * z_s'')[]
-
-	(1. - vs.chi) * star_penalty + vs.chi * galaxy_penalty
-end
-
-
-function regularizer(mp::ModelParams)
-	# could compute this faster by aggregating w_s and z_s before multiplication
-	R = zero_all_param(mp.S)
-	for s in 1:S
-		accum_new_source!(R, regularizer(pp, mp.vp[s]), s)
-	end
-	R
-end
-
-
 function subtract_kl!(mp::ModelParams, accum::AllParam)
 	for s in 1:M.S
 		vs = mp.vp[s]
@@ -300,7 +277,7 @@ end
 
 
 function elbo(blob::Blob, mp::ModelParams)
-	ret = elbo_likelihood(blob, mp)# - kl(pp, mp.vp) #+ regularizer(pp, mp.vp) 
+	ret = elbo_likelihood(blob, mp)
 	#subtract_kl!(pp, mp.vp, ret)
 	ret
 end

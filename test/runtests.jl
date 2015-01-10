@@ -4,12 +4,15 @@ using Celeste
 using CelesteTypes
 using Base.Test
 
+import Planck
+import Synthetic
+
 const stamp_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
 
 function test_optimization()
 	srand(1)
-	blob0 = StampBlob.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
 
 	brightness7000K = real(Planck.photons_expected(7000., 5., 1e4))
 
@@ -66,7 +69,7 @@ end
 
 function test_small_image()
 	srand(1)
-	blob0 = StampBlob.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
 	for b in 1:5
 		blob0[b].H, blob0[b].W = 100, 200
 	end
@@ -91,7 +94,7 @@ end
 
 function test_local_sources()
 	srand(1)
-	blob0 = StampBlob.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
 	for b in 1:5
 		blob0[b].H, blob0[b].W = 112, 238
 	end
@@ -130,7 +133,7 @@ end
 
 function test_local_sources_2()
 	srand(1)
-	blob0 = StampBlob.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
 	brightness7000K = real(Planck.photons_expected(7000., 10., 1e4))
 	one_body = CatalogEntry[CatalogStar([50., 50.], brightness7000K),]
 
@@ -166,7 +169,7 @@ end
 
 function test_tiling()
 	srand(1)
-	blob0 = StampBlob.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
 	for b in 1:5
 		blob0[b].H, blob0[b].W = 112, 238
 	end
