@@ -262,16 +262,22 @@ function elbo_likelihood(blob::Blob, mp::ModelParams)
 end
 
 
+function subtract_kl_a!(s::Int64, mp::ModelParams, accum::AllParam)
+	chi = mp.vp[s].chi
+	rho = mp.pp.rho
+
+	accum.v -= chi * (log(chi) - log(rho))
+	accum.v -= (1. - chi) * (log(1. - chi) - log(1. - rho))
+
+	# 1 = chi
+	accum.d[1, s] -= (log(chi) - log(rho)) + 1
+	accum.d[1, s] -= -(log(1. - chi) - log(1. - rho)) - 1.
+end
+
+
 function subtract_kl!(mp::ModelParams, accum::AllParam)
 	for s in 1:M.S
-		vs = mp.vp[s]
-
-		accum.v -= vs.chi * (log(vs.chi) - log(pp.rho))
-		accum.v -= (1. - vs.chi) * (log(1. - vs.chi) - log(1. - pp.rho))
-
-		# 1 = chi
-		accum.d[1, s] -= (log(vs.chi) - log(pp.rho)) + 1
-		accum.d[1, s] -= -(log(1. - vs.chi) - log(1. - pp.rho)) - 1.
+		subtract_kl_a!(s, mp, accum)
 	end
 end
 

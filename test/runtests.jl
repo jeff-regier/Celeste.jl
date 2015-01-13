@@ -4,6 +4,8 @@ using Celeste
 using CelesteTypes
 using Base.Test
 
+using Distributions
+	
 import Planck
 import Synthetic
 
@@ -167,7 +169,7 @@ function test_local_sources_2()
 end
 
 
-function test_tiling()
+function gen_simple_blob_and_mp()
 	srand(1)
 	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
 	for b in 1:5
@@ -180,8 +182,13 @@ function test_tiling()
 		CatalogGalaxy([71.3, 100.4], brightness7000K , 0.1, [6, 0., 6.]),
 	]
    	blob = Synthetic.gen_blob(blob0, three_bodies)
-
 	mp = ModelInit.cat_init(three_bodies)
+
+	blob, mp, three_bodies
+end
+
+function test_tiling()
+	blob, mp, three_bodies = gen_simple_blob_and_mp()
 	@test mp.S == 3
 	elbo = ElboDeriv.elbo(blob, mp)
 
@@ -222,6 +229,29 @@ function test_tiling()
 end
 
 
+function test_kl_divergence_values()
+	blob, mp, three_bodies = gen_simple_blob_and_mp()
+
+	s = 1
+	sample_size = 1_000_000
+
+	q_a = Bernoulli(mp.vp[s].chi)
+	p_a = Bernoulli(mp.pp.rho)
+	q_a_samples = rand(q_a, sample_size)
+	empirical_kl_a = mean(logpdf(q_a, q_a_samples) - logpdf(p_a, q_a_samples))
+
+	accum_a = zero_all_param(mp.S, full_index)
+	ElboDeriv.subtract_kl_a!(s, mp, accum_a)
+	exact_kl_a = -accum_a.v
+	@test_approx_eq_eps empirical_kl_a exact_kl_a 1e-4
+
+	#subtract_kl_r!(s, mp, accum)
+	#subtract_kl_k!(s, mp, accum)
+	#subtract_kl_c!(s, mp, accum)
+end
+
+
+test_kl_divergence_values()
 test_local_sources_2()
 test_local_sources()
 test_small_image()
