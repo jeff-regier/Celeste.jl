@@ -8,7 +8,7 @@ using WCSLIB
 
 function load_stamp_blob(stamp_dir, stamp_id)
     function fetch_image(b)
-        band_letter = reverse(['u', 'g', 'r', 'i', 'z'])[b]
+        band_letter = ['u', 'g', 'r', 'i', 'z'][b]
         filename = "$stamp_dir/stamp-$band_letter-$stamp_id.fits"
 
         fits = FITS(filename)

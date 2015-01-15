@@ -4,7 +4,6 @@
 module ElboDeriv
 
 using CelesteTypes
-import Planck
 import Util
 
 
@@ -33,7 +32,7 @@ end
 
 
 function accum_star!(bmc::BvnComponent, x::Vector{Float64},
-		gamma_b::Float64, fs0m::SourceParam)
+		gamma_b::Float64, fs0m::SensitiveFloat)
 	py1, py2, f = ret_pdf(bmc, x)
 	f_gamma = f * gamma_b
 
@@ -46,7 +45,7 @@ end
 
 function accum_galaxy!(bmc::BvnComponent, x::Vector{Float64},
 		zeta_b::Float64, theta_i::Float64, theta_dir::Float64, 
-		Xi::(Float64,Float64,Float64), st::Float64, fs1m::SourceParam)
+		Xi::(Float64,Float64,Float64), st::Float64, fs1m::SensitiveFloat)
 	py1, py2, f_pre = ret_pdf(bmc, x)
 	f = f_pre * zeta_b * theta_i
 
@@ -101,16 +100,17 @@ end
 
 
 function accum_pixel_source_stats!(star_mcs::Array{BvnComponent, 2}, 
-		gal_mcs::Array{BvnComponent, 4}, vs::SourceParams, s::Int64, 
+		gal_mcs::Array{BvnComponent, 4}, vs::Vector{Float64}, s::Int64, 
 		m_pos::Vector{Float64}, b::Int64,
-		fs0m::SourceParam, fs1m::SourceParam, E_F::AllParam, var_F::AllParam)
+		fs0m::SensitiveFloat, fs1m::SensitiveFloat, 
+		E_F::SensitiveFloat, var_F::SensitiveFloat)
 
-	clear_param!(fs0m)
+	clear!(fs0m)
 	for star_mc in star_mcs[:, s]
 		accum_star!(star_mc, m_pos, vs.gamma[b], fs0m)
 	end
 
-	clear_param!(fs1m)
+	clear!(fs1m)
 	for i = 1:2
 		theta_dir = (i == 1) ? 1. : -1.
 		theta_i = (i == 1) ? vs.theta : 1. - vs.theta
@@ -125,7 +125,7 @@ function accum_pixel_source_stats!(star_mcs::Array{BvnComponent, 2},
 	
 	E_F.v += (1. - vs.chi) * fs0m.v + vs.chi * fs1m.v
 
-	E_F.d[1, s] += fs1m.v - fs0m.v  # 1 = chi
+	E_F.d[ids.chi, s] += fs1m.v - fs0m.v
 	for i in 1:length(fs0m.index)
 		p = fs0m.index[i]
 		E_F.d[p, s] += (1. - vs.chi) * fs0m.d[i]
@@ -140,7 +140,7 @@ function accum_pixel_source_stats!(star_mcs::Array{BvnComponent, 2},
 	chi_var = (vs.chi * (1. - vs.chi)) # cache these?
 	chi_var_d = 1. - 2 * vs.chi
 	var_F.v += chi_var * diff10_sq
-	var_F.d[1, s] += chi_var_d * diff10_sq  # 1 = chi
+	var_F.d[ids.chi, s] += chi_var_d * diff10_sq
 	for i in 1:length(fs0m.index)
 		p = fs0m.index[i]
 		var_F.d[p, s] -= chi_var * 2 * diff10 * fs0m.d[i]
@@ -152,12 +152,12 @@ function accum_pixel_source_stats!(star_mcs::Array{BvnComponent, 2},
 end
 
 
-function accum_pixel_ret!(source_subset::Vector{Int64}, x_nbm::Float64,
-		E_F::AllParam, var_F::AllParam, ret::AllParam)
+function accum_pixel_ret!(tile_sources::Vector{Int64}, x_nbm::Float64,
+		E_F::SensitiveFloat, var_F::SensitiveFloat, ret::SensitiveFloat)
 	ret.v += x_nbm * (log(E_F.v) - var_F.v / (2. * E_F.v^2))
 	ret.v -= E_F.v
 
-	for s in source_subset, p in 1:size(E_F.d, 1)
+	for s in tile_sources, p in 1:size(E_F.d, 1)
 		ret.d[p, s] += x_nbm * (E_F.d[p, s] / E_F.v
 			- 0.5 * (E_F.v^2 * var_F.d[p, s] - 
 				var_F.v * 2 * E_F.v * E_F.d[p, s]) 
@@ -198,11 +198,11 @@ end
 
 function elbo_likelihood!(tile::ImageTile, mp::ModelParams, 
 		star_mcs::Array{BvnComponent, 2}, gal_mcs::Array{BvnComponent, 4}, 
-		accum::AllParam)
-	source_subset = local_sources(tile, mp)
+		accum::SensitiveFloat)
+	tile_sources = local_sources(tile, mp)
 	h_range, w_range = tile_range(tile, mp.tile_width)
 
-	if length(source_subset) == 0  # special case---for speed
+	if length(tile_sources) == 0  # special case---for speed
 		num_pixels = length(h_range) * length(w_range)
 		ep = tile.img.epsilon
 		tile_x = sum(tile.img.pixels[h_range, w_range])
@@ -210,35 +210,33 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
 		return
 	end
 
+	# TODO: revise for new model!!!
 	const star_b_index = [2, 3, 3 + tile.img.b]
 	const gal_b_index = [2, 3, 9 + tile.img.b, 15, 16, 17, 18]
 
-	# could move all these to image, for a speedup
-	fs0m = zero_source_param(star_b_index)
-	fs1m = zero_source_param(gal_b_index)
+	fs0m = zero_sensitive_float(star_b_index)
+	fs1m = zero_sensitive_float(gal_b_index)
 
-	# could use image-band-specific index here, instead of full_index
-	# TODO: use source_subset-specific index here, instead of all sources
-    E_F = zero_all_param(mp.S, full_index)
-    var_F = zero_all_param(mp.S, full_index)
+    E_F = zero_sensitive_float(tile_sources, all_params)
+    var_F = zero_sensitive_float(tile_sources, all_params)
 
 	for w in w_range, h in h_range
-		clear_param!(E_F)  #serious bottleneck
+		clear!(E_F)  #serious bottleneck
 		E_F.v = tile.img.epsilon
-		clear_param!(var_F)
+		clear!(var_F)
 
 		m_pos = Float64[h - 0.5, w - 0.5]
-		for s in source_subset
+		for s in tile_sources
 			accum_pixel_source_stats!(star_mcs, gal_mcs, mp.vp[s],
 					s, m_pos, tile.img.b, fs0m, fs1m, E_F, var_F)
 		end
 
-		accum_pixel_ret!(source_subset, tile.img.pixels[h, w], E_F, var_F, accum)
+		accum_pixel_ret!(tile_sources, tile.img.pixels[h, w], E_F, var_F, accum)
 	end
 end
 
 
-function elbo_likelihood!(img::Image, mp::ModelParams, accum::AllParam)
+function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
 	accum.v += -sum(lfact(img.pixels))
 
 	star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp)
@@ -254,7 +252,7 @@ end
 
 
 function elbo_likelihood(blob::Blob, mp::ModelParams)
-	ret = zero_all_param(mp.S, full_index)
+	ret = zero_sensitive_float([1:mp.S], all_params)
 	for img in blob
 		elbo_likelihood!(img, mp, ret)
 	end
@@ -262,29 +260,87 @@ function elbo_likelihood(blob::Blob, mp::ModelParams)
 end
 
 
-function subtract_kl_a!(s::Int64, mp::ModelParams, accum::AllParam)
-	chi = mp.vp[s].chi
-	rho = mp.pp.rho
+function subtract_kl_c!(d::Int64, i::Int64, s::Int64, mp::ModelParams, 
+		accum::SensitiveFloat)
+	vs = mp.vp[s]
+    beta, lambda = (vs[ids.beta[:, i]], vs[ids.lambda[:, i]])
+    Omega, Lambda = (mp.pp.Omega[i][:, d], mp.pp.Lambda[i][d])
 
-	accum.v -= chi * (log(chi) - log(rho))
-	accum.v -= (1. - chi) * (log(1. - chi) - log(1. - rho))
+	diff = Omega - beta
+	Lambda_inv = Lambda^-1  # cache this!
+	half_kappa = .5 * vs[ids.kappa[d, i]]
 
-	# 1 = chi
-	accum.d[1, s] -= (log(chi) - log(rho)) + 1
-	accum.d[1, s] -= -(log(1. - chi) - log(1. - rho)) - 1.
+	ret = sum(diag(Lambda_inv) .* lambda)
+	ret += (diff' * Lambda_inv * diff)[]
+	ret += -4 - sum(log(lambda)) + logdet(Lambda)
+	accum.v -= ret * half_kappa
+
+	accum.d[ids.kappa[d, i], s] -= .5 * ret
+	accum.d[ids.beta[:, i], s] -= half_kappa * 2Lambda_inv * -diff
+	accum.d[ids.lambda[:, i], s] -= half_kappa * diag(Lambda_inv)
+	accum.d[ids.lambda[:, i], s] -= half_kappa ./ -lambda
 end
 
 
-function subtract_kl!(mp::ModelParams, accum::AllParam)
+function subtract_kl_k!(i::Int64, s::Int64, mp::ModelParams, accum::SensitiveFloat)
+	kappa = mp.vp[s][ids.kappa[:, i]]
+	for d in 1:length(mp.pp.Psi[i])
+		log_ratio = log(kappa[d] / mp.pp.Psi[i][d])
+		accum.v -= kappa[d] * log_ratio
+		accum.d[ids.kappa[d, i] , s] -= 1 + log_ratio
+	end
+end
+
+
+function subtract_kl_r!(i::Int64, s::Int64, mp::ModelParams, accum::SensitiveFloat)
+	vs = mp.vp[s]
+	gamma_si = mp.vp[s][ids.gamma[i]]
+	zeta_si = mp.vp[s][ids.zeta[i]]
+
+	digamma_gamma = digamma(gamma_si)
+	zeta_Phi_ratio = (zeta_si - mp.pp.Phi[i]) / mp.pp.Phi[i]
+	shape_diff = gamma_si - mp.pp.Upsilon[i]
+
+	accum.v -= shape_diff * digamma_gamma
+	accum.v -= -lgamma(gamma_si) + lgamma(mp.pp.Upsilon[i])
+	accum.v -= mp.pp.Upsilon[i] * (log(mp.pp.Phi[i]) - log(zeta_si))
+	accum.v -= gamma_si * zeta_Phi_ratio
+
+	accum.d[ids.gamma[i], s] -= shape_diff * polygamma(1, gamma_si)
+	accum.d[ids.gamma[i], s] -= zeta_Phi_ratio
+
+	accum.d[ids.zeta[i], s] -= -mp.pp.Upsilon[i] / zeta_si
+	accum.d[ids.zeta[i], s] -= gamma_si / mp.pp.Phi[i]
+end
+
+
+function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
+	chi_s = mp.vp[s][ids.chi]
+	Delta = mp.pp.Delta
+
+	accum.v -= chi_s * (log(chi_s) - log(Delta))
+	accum.v -= (1. - chi_s) * (log(1. - chi_s) - log(1. - Delta))
+
+	accum.d[ids.chi, s] -= (log(chi_s) - log(Delta)) + 1
+	accum.d[ids.chi, s] -= -(log(1. - chi_s) - log(1. - Delta)) - 1.
+end
+
+
+function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
 	for s in 1:M.S
 		subtract_kl_a!(s, mp, accum)
+		for i in 1:2
+			subtract_kl_r!(i, s, mp, accum)
+			subtract_kl_k!(i, s, mp, accum)
+			subtract_kl_c!(i, s, mp, accum)
+		end
 	end
 end
 
 
 function elbo(blob::Blob, mp::ModelParams)
 	ret = elbo_likelihood(blob, mp)
-	#subtract_kl!(pp, mp.vp, ret)
+	subtract_kl!(mp, ret)
 	ret
 end
 

@@ -9,26 +9,20 @@ using CelesteTypes
 import ElboDeriv
 
 
-const rescaling = ParamStruct{Float64}(
-	1e1, (1e1, 1e1), (1e-6, 1e-6, 1e-6, 1e-6, 1e-6,), 1e-5,
-	(1e-6, 1e-6, 1e-6, 1e-6, 1e-6,), 1e1, (1e0, 1e0, 1e0))
+const rescaling = ones(length(all_params))
+rescaling[ids.chi] = 1e1
+[rescaling[id] *= 1e1 for id in ids.mu]
+[rescaling[id] *= 1e1 for id in ids.gamma]
+[rescaling[id] *= 1e-9 for id in ids.zeta]
+[rescaling[id] *= 1e2 for id in ids.kappa]
+[rescaling[id] *= 1e1 for id in ids.theta]
+
 
 function rescale(x::Vector{Float64}, dir::Bool=true)
 	@assert length(x) == 18
 	z = dir ? 1. : -1.
 	[x[p] * rescaling[p]^z for p in 1:18]
 end
-
-function pss_to_pvec(pss::Vector{ParamStruct{Float64}})
-	reduce(vcat, [rescale(convert(Vector{Float64}, ps)) for ps in pss])
-end
-
-function pvec_to_pss(x::Vector{Float64})
-	@assert length(x) % 18 == 0
-	[convert(ParamStruct{Float64}, rescale(x[(18i-17):18i], false))
-			for i=1:int(length(x)/18)]
-end
-
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
 	x0 = pss_to_pvec(mp.vp)

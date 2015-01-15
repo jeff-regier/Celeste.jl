@@ -5,26 +5,19 @@ module CelesteTypes
 
 export CatalogEntry, CatalogStar, CatalogGalaxy
 
-export Image, Blob, PriorParams
-export PsfComponent, GalaxyComponent, GalaxyPrototype
-export galaxy_prototypes
+export Image, Blob, SkyPatch, ImageTile, PsfComponent
+export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 
-export SourceParam, SourceParams, VariationalParams
-export ParamStruct, ModelParams, convert, zero_source_param
-export SourceMatrix, zero_source_matrix
-export zero_all_param, const_all_param, AllParam
-export values, deriv, SensitiveParam, zero_all_matrix
-export AllParamMatrix, ParamIndex, get_dim
-export clear_param!, accum_all_param!
-export full_index, getindex, SkyPatch, ImageTile
+export ModelParams, PriorParams, VariationalParams
 
-import Base.convert
-import Base.show
+export SensitiveFloat
+export zero_sensitive_float, const_sensitive_param, clear!, accum!
+
+export ParamIndex, ids, all_params, getindex
 
 import FITSIO
 import Distributions
 import WCSLIB
-
 
 
 abstract CatalogEntry
@@ -43,18 +36,10 @@ end
 
 ############################################
 
-immutable SkyPatch #pixel coordinates for now, soon wcs
-	center::Vector{Float64}
-	radius::Float64
-end
-
-############################################
-
 immutable GalaxyComponent
 	alphaTilde::Float64
 	sigmaTilde::Float64
 end
-
 
 typealias GalaxyPrototype Vector{GalaxyComponent}
 
@@ -81,7 +66,6 @@ end
 
 const galaxy_prototypes = get_galaxy_prototypes()
 
-
 immutable PsfComponent
 	alphaBar::Float64  # TODO: use underscore
 	xiBar::Vector{Float64}
@@ -90,7 +74,8 @@ immutable PsfComponent
 	SigmaBarInv::Matrix{Float64}
 	SigmaBarLd::Float64
 
-	PsfComponent(alphaBar::Float64, xiBar::Vector{Float64}, SigmaBar::Matrix{Float64}) = begin
+	PsfComponent(alphaBar::Float64, xiBar::Vector{Float64}, 
+			SigmaBar::Matrix{Float64}) = begin
 		new(alphaBar, xiBar, SigmaBar, SigmaBar^-1, logdet(SigmaBar))
 	end
 end
@@ -105,110 +90,36 @@ type Image
 	psf::Vector{PsfComponent}
 end
 
-
 immutable ImageTile
 	hh::Int64 # tile coordinates---not pixel or sky coordinates
 	ww::Int64
 	img::Image
 end
 
-
 typealias Blob Vector{Image}
 
+immutable SkyPatch #pixel coordinates for now, soon wcs
+	center::Vector{Float64}
+	radius::Float64
+end
+
+
+#########################################################
 
 immutable PriorParams
-	rho::Float64	
-	Delta::Matrix{Float64}
-	Theta::Vector{Float64}
-	Lambda::Matrix{Float64}
+	Delta::Float64	
+	Upsilon::Vector{Float64}
+	Phi::Vector{Float64}
+    Psi::Vector{Vector{Float64}}
+    Omega::Vector{Array{Float64, 2}}
+    Lambda::Vector{Array{Array{Float64, 2}}}
 end
 
-#########################################################
-
-immutable ParamStruct{T}  # use macros instead?
-	chi::T
-	mu::(T,T)
-	gamma::(T,T,T,T,T)
-	tau::T
-	zeta::(T,T,T,T,T)
-	theta::T
-	Xi::(T,T,T)
-end
-
-function getindex(ps::ParamStruct, i::Int64)
-	field_lengths = (1, 2, 5, 1, 5, 1, 3)
-	if 0 < i <= 1 ps.chi
-    elseif i <= 3 ps.mu[i - 1]
-    elseif i <= 8 ps.gamma[i - 3]
-    elseif i <= 9 ps.tau
-    elseif i <= 14 ps.zeta[i - 9]
-	elseif i <= 15 ps.theta
-    elseif i <= 18 ps.Xi[i - 15]
-	end
-end 
-
-function convert{T}(::Type{Vector{T}}, ps::ParamStruct{T})
-	T[ps[p] for p in 1:18]
-end
-
-function convert{T}(::Type{ParamStruct{T}}, x::Vector{T})
-	@assert(length(x) == 18)
-	ParamStruct{T}(x[1], (x[2], x[3]), 
-		(x[4], x[5], x[6], x[7], x[8]), x[9],
-		(x[10], x[11], x[12], x[13], x[14]), x[15],
-		(x[16], x[17], x[18]))
-end
-
-const param_names = names(ParamStruct)
-const param_ids_struct = ParamStruct{Int64}(1, (2, 3), (4,5,6,7,8), 9, (10,11,12,13,14), 15, (16,17,18))
-
-typealias ParamIndex Vector{Int64}
-
-const full_index = [1:18]
-
-function get_dim(index::ParamIndex)
-	length(index)
-end
-
-#########################################################
-
-type SensitiveParam{S, T}
-    v::S
-    d::T
-	index::ParamIndex
-end
-
-#########################################################
-
-typealias SourceParam SensitiveParam{Float64, Vector{Float64}}
-
-#########################################################
-
-typealias SourceParams ParamStruct{Float64}
-
-function show(vs::SourceParams)
-    string("chi: $(vs.chi)\n",
-        "mu: $(vs.mu)\n",
-        "gamma: $(vs.gamma)\n",
-        "tau: $(vs.tau)\n",
-        "zeta: $(vs.zeta)\n",
-        "theta: $(vs.theta)\n",
-        "Xi: $(vs.Xi)\n")
-end
-
-function zero_source_param(index::ParamIndex)
-	SourceParam(0., zeros(get_dim(index)), index)
-end
-
-function clear_param!(sp::SensitiveParam)
-	sp.v = 0.
-	fill!(sp.d, 0.)
-end
-
-#########################################################
+# TODO: use a matrix here, in conjunction with ArrayViews.jl (?)
+typealias VariationalParams Vector{Vector{Float64}}
 
 type ModelParams
-	vp::Vector{ParamStruct{Float64}}
+	vp::VariationalParams
 	pp::PriorParams
 	patches::Vector{SkyPatch}
 	tile_width::Int64
@@ -222,86 +133,111 @@ end
 
 #########################################################
 
-typealias AllParam SensitiveParam{Float64, Matrix{Float64}}
-
-function const_all_param(S::Int64, c::Float64, index::ParamIndex)
-	AllParam(c, zeros(get_dim(index), S), index)
+immutable ParamIndex
+	chi::Int64
+	mu::Vector{Int64}
+	gamma::Vector{Int64}
+	zeta::Vector{Int64}
+	theta::Int64
+	Xi::Vector{Int64}
+	kappa::Array{Int64, 2}
+	beta::Array{Int64, 2}
+	lambda::Array{Int64, 2}
 end
 
-function zero_all_param(S::Int64, index::ParamIndex)
-	const_all_param(S, 0., index)
+function get_param_ids()
+	I = 2
+	B = 5
+	D = 2
+
+	kappa_end = 11 + I * D
+	beta_end = kappa_end + I * (B - 1)
+	lambda_end = beta_end + I * (B - 1)
+
+	kappa_ids = reshape([12 : kappa_end], D, I)
+	beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
+	lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
+
+	ParamIndex(1, [2, 3], [4, 5], [6, 7], 8, [9, 10, 11], 
+			kappa_ids, beta_ids, lambda_ids)
 end
 
-function accum_all_param!(src::AllParam, accum::AllParam)
-	 # add source index to vary # sources
-	@assert(size(accum.d, 2) == size(src.d, 2))
-	@assert(size(accum.d, 1) == 18)
-	accum.v += src.v
-	for s in 1:size(src.d, 2)
-		for src_p in 1:size(src.d, 1)
-			global_p = src.index[src_p]
-			accum.d[global_p, s] += src.d[src_p, s]
-		end
-	end	
+const ids = get_param_ids()
+
+const all_params = [1:ids.lambda[end]]
+
+function getindex(vs::Vector{Float64}, n::Symbol)
+	@assert(length(vs) == length(all_params))
+	@assert(n == :chi || n == :theta)
+	vs[ids.n]
 end
+
+function getindex(vs::Vector{Float64}, n::Symbol, i::Int64)
+	@assert(length(vs) == length(all_params))
+	@assert(n == :mu || n == :gamma || n == :zeta || n == :Xi)
+	vs[ids.n[i]]
+end
+
+function getindex(vs::Vector{Float64}, n::Symbol, i::Int64, d::Int64)
+	@assert(length(vs) == length(all_params))
+	@assert(n == :kappa)
+	vs[ids.n[d, i]]
+end
+
+function getindex(vs::Vector{Float64}, n::Symbol, i::Int64, d::Int64, b::Int64)
+	@assert(length(vs) == length(all_params))
+	@assert(n == :beta, n == :lambda)
+	vs[ids.n[b, d, i]]
+end
+
+function setindex!(vs::Vector{Float64}, x::Float64, n::Symbol)
+	@assert(length(vs) == length(all_params))
+	for id in ids.n
+		vs[id] = x
+	end
+end
+
+function setindex!(vs::Vector{Float64}, x::Float64, n::Symbol, i::Int64)
+	@assert(length(vs) == length(all_params))
+	vs[param_id.n[i]] = x
+end
+
 
 
 #########################################################
 
-typealias SourceMatrix SensitiveParam{Matrix{Float64}, Array{Float64, 3}}
-
-function convert(::Type{SourceMatrix}, mat::Matrix{SourceParam})
-    SourceMatrix(values(mat), deriv(mat))
+type SensitiveFloat
+    v::Float64
+    d::Matrix{Float64} # local_P x local_S
+	source_index::Vector{Int64}
+	param_index::Vector{Int64}
 end
 
-function convert(::Type{Matrix{SourceParam}}, sm::SourceMatrix)
-    ret = Array(SourceParam, size(sm.v))
-    for w in 1:size(sm.v)[2], h in 1:size(sm.v)[1]
-        ret[h, w] = SourceParam(sm.v[h, w], sm.d[h, w, :][:]) #invert it if slow
-    end
-    ret
+#########################################################
+
+function zero_sensitive_float(s_index::Vector{Int64}, p_index::Vector{Int64})
+	d = zeros(length(p_index), length(s_index))
+	SensitiveFloat(0., d, s_index, p_index)
 end
 
-function zero_source_matrix(H::Int64, W::Int64, index::ParamIndex)
-	D = get_dim(index)
-    SourceMatrix(zeros(H, W), zeros(D, H, W), index)
+function clear!(sp::SensitiveFloat)
+	sp.v = 0.
+	fill!(sp.d, 0.)
 end
 
-########################################################
-
-typealias AllParamMatrix SensitiveParam{Array{Float64, 2}, Array{Float64, 4}}
-
-function zero_all_matrix(H::Int64, W::Int64, S::Int64, index::ParamIndex)
-	D = get_dim(index)
-	AllParamMatrix(zeros(H, W), zeros(D, H, W, S), index)
+function accum!(src::SensitiveFloat, accum::SensitiveFloat)
+	accum.v += src.v
+	for child_s in 1:size(src.d, 2)
+		parent_s = src.source_index[child_s]
+		#parent_s and parent_p aren't necessarily global indexes
+		for child_p in 1:size(src.d, 1)
+			parent_p = src.index[child_p]
+			accum.d[global_p, tile_s] += src.d[child_p, child_s]
+		end
+	end	
 end
 
-############# accessors ###################
-
-function values{T <: SensitiveParam}(arr::Array{T})
-	map((x)->x.v, arr)
-end
-
-function values(arr::Array{Float64})
-	arr
-end
-
-function values(x::SensitiveParam)
-	x.v
-end
-
-function values(x::Float64)
-	x
-end
-
-function values(arr::Array{Float64})
-	arr
-end
-
-function deriv{T <: SensitiveParam}(arr::Array{T})
-	map((x)->x.d, arr)
-end
-
+#########################################################
 
 end
 

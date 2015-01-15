@@ -13,27 +13,42 @@ using CelesteTypes
 
 
 function sample_prior()
-	rho = 0.5
-	Delta = eye(4) * 1e-2
+	Delta = 0.5
 
 	const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
-	f = open("$dat_dir/ThetaLambda.dat")
-	(Theta, Lambda) = deserialize(f)
-	close(f)
 
-	PriorParams(rho, Delta, Theta, Lambda)
+	Upsilon = Array(Float64, 2)
+	Phi = Array(Float64, 2)
+	r_file = open("$dat_dir/r_prior.dat")
+	((Upsilon[1], Phi[1]), (Upsilon[2], Phi[2])) = deserialize(r_file)
+	close(r_file)
+
+	Psi = Array(Vector{Float64}, 2)
+	Omega = Array(Array{Float64, 2}, 2)
+	Lambda = Array(Array{Array{Float64, 2}}, 2)
+	ck_file = open("$dat_dir/ck_prior.dat")
+	((Psi[1], Omega[1], Lambda[1]), (Psi[2], Omega[2], Lambda[2])) = deserialize(ck_file)
+	close(r_file)
+
+	PriorParams(Delta, Upsilon, Phi, Psi, Omega, Lambda)
 end
 
 
-init_source(init_pos::Vector{Float64}) = begin
-	ParamStruct{Float64}(
-		0.5,
-		(init_pos[1], init_pos[2]),
-		(50_000, 50_000,  50_000,  50_000,  50_000), 
-		5000.,
-		(50_000, 50_000,  50_000,  50_000,  50_000), 
-		0.5,
-		(1.5, 0., 1.5))
+#TODO: use blob (and perhaps priors) to initialize these sensibly
+function init_source(init_pos::Vector{Float64})
+	ret = Array(Float64, length(all_params))
+	ret[ids.chi] = 0.5
+	ret[ids.mu[1]] = init_pos[1]
+	ret[ids.mu[2]] = init_pos[2]
+	ret[ids.gamma] = 0.36
+	ret[ids.zeta] = 3e10
+	ret[ids.theta] = 0.5
+	ret[ids.Xi[1]] = ret[ids.Xi[3]] = 1.5
+	ret[ids.Xi[2]] = 0.
+	ret[ids.kappa] = 1. / size(ids.kappa, 1)
+	ret[ids.beta] = 0.
+	ret[ids.lambda] =  1.
+	ret
 end
 
 

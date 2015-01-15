@@ -28,7 +28,7 @@ const m_per_ly = c * 31556952.
 const lens_area = .75 * pi * 1.25^2 # in meters^2
 const exposure_duration = 54.
 
-const bands = reverse(['u', 'g', 'r', 'i', 'z'])
+const bands = ['u', 'g', 'r', 'i', 'z']
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
