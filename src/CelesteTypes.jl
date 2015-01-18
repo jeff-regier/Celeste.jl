@@ -13,7 +13,7 @@ export ModelParams, PriorParams, VariationalParams
 export SensitiveFloat
 export zero_sensitive_float, const_sensitive_param, clear!, accum!
 
-export ParamIndex, ids, all_params, getindex
+export ParamIndex, ids, all_params, star_pos_params, galaxy_pos_params, D
 
 import FITSIO
 import Distributions
@@ -145,10 +145,11 @@ immutable ParamIndex
 	lambda::Array{Int64, 2}
 end
 
+const D = 2
+
 function get_param_ids()
 	I = 2
 	B = 5
-	D = 2
 
 	kappa_end = 11 + I * D
 	beta_end = kappa_end + I * (B - 1)
@@ -165,43 +166,8 @@ end
 const ids = get_param_ids()
 
 const all_params = [1:ids.lambda[end]]
-
-function getindex(vs::Vector{Float64}, n::Symbol)
-	@assert(length(vs) == length(all_params))
-	@assert(n == :chi || n == :theta)
-	vs[ids.n]
-end
-
-function getindex(vs::Vector{Float64}, n::Symbol, i::Int64)
-	@assert(length(vs) == length(all_params))
-	@assert(n == :mu || n == :gamma || n == :zeta || n == :Xi)
-	vs[ids.n[i]]
-end
-
-function getindex(vs::Vector{Float64}, n::Symbol, i::Int64, d::Int64)
-	@assert(length(vs) == length(all_params))
-	@assert(n == :kappa)
-	vs[ids.n[d, i]]
-end
-
-function getindex(vs::Vector{Float64}, n::Symbol, i::Int64, d::Int64, b::Int64)
-	@assert(length(vs) == length(all_params))
-	@assert(n == :beta, n == :lambda)
-	vs[ids.n[b, d, i]]
-end
-
-function setindex!(vs::Vector{Float64}, x::Float64, n::Symbol)
-	@assert(length(vs) == length(all_params))
-	for id in ids.n
-		vs[id] = x
-	end
-end
-
-function setindex!(vs::Vector{Float64}, x::Float64, n::Symbol, i::Int64)
-	@assert(length(vs) == length(all_params))
-	vs[param_id.n[i]] = x
-end
-
+const star_pos_params = ids.mu
+const galaxy_pos_params = [ids.mu, ids.theta, ids.Xi]
 
 
 #########################################################

@@ -3,9 +3,13 @@
 using Celeste
 using CelesteTypes
 
+import Planck
+import Synthetic
+
+
 function small_image_profile()
 	srand(1)
-	blob0 = StampBlob.load_stamp_blob(ENV["STAMP"], "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(ENV["STAMP"], "164.4311-39.0359")
 	for b in 1:5
 		blob0[b].H, blob0[b].W = 2000, 2000
 	end
