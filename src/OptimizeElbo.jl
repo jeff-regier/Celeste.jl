@@ -16,6 +16,7 @@ rescaling[ids.chi] = 1e1
 [rescaling[id] *= 1e-9 for id in ids.zeta]
 [rescaling[id] *= 1e2 for id in ids.kappa]
 [rescaling[id] *= 1e1 for id in ids.theta]
+[rescaling[id] *= 1e1 for id in ids.Xi]
 
 
 function rescale(x::Vector{Float64}, dir::Bool=true)

@@ -14,36 +14,258 @@ const stamp_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
 # verify derivatives of fun_to_test by finite differences
 function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
+	f::SensitiveFloat = fun_to_test(mp)
+
 	for s in 1:mp.S
-		for p in all_params
-			epsilon = 1e-6 / OptimizeElbo.rescaling[p]
+		for p1 in 1:length(f.param_index)
+			p0 = f.param_index[p1]
+
+			epsilon = 1e-5 / OptimizeElbo.rescaling[p0]
 			vp_alt = deepcopy(mp.vp)
-			vp_alt[s][p] += epsilon
+			vp_alt[s][p0] += epsilon
 			mp_alt = ModelParams(vp_alt, mp.pp, mp.patches, mp.tile_width)
 
-			f::SensitiveFloat = fun_to_test(mp)
 			f_alt::SensitiveFloat = fun_to_test(mp_alt)
-			avg_slope = (f_alt.v - f.v) / epsilon
+			avg_slope = if epsilon > 1.
+				f_alt.v / epsilon - f.v / epsilon  # more stable to divide first
+			else
+				(f_alt.v - f.v) / epsilon  # more stable to subtract first
+			end
 
-			d_lb = min(f.d[p, s], f_alt.d[p, s]) - 1e-7
-			d_ub = max(f.d[p, s], f_alt.d[p, s]) + 1e-7
+			d_lb = min(f.d[p1, s], f_alt.d[p1, s]) - 1e-7
+			d_ub = max(f.d[p1, s], f_alt.d[p1, s]) + 1e-7
 			if abs(d_lb) > 1. && abs(d_ub) > 1.
-				d_lb -= 1e-7 * abs(d_lb)
-				d_ub += 1e-7 * abs(d_ub)
+				d_lb -= 1e-5 * abs(d_lb)
+				d_ub += 1e-5 * abs(d_ub)
 			end
 			if !(d_lb <= avg_slope <= d_ub)
-				println("ERROR [source $s, deriv $p]: $d_lb <= $avg_slope <= $d_ub")
-			else
-				println("PASSED [source $s, deriv $p]: $d_lb <= $avg_slope <= $d_ub")
+				println("ERROR [source $s, deriv $p1 ($p0)]: $d_lb <= $avg_slope <= $d_ub")
+#			else
+#				println("PASSED [source $s, deriv $p1 ($p0)]: $d_lb <= $avg_slope <= $d_ub")
 			end
-#			@test d_lb <= avg_slope <= d_ub
-			@test d_ub / d_lb < 1.0001
+			@test d_lb <= avg_slope <= d_ub
+			@test d_ub - d_lb < 1e-6 || d_ub / d_lb < 1.0001
+		end
+	end
+end
+
+#########################
+
+function gen_three_body_model()
+	srand(1)
+	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	for b in 1:5
+		blob0[b].H, blob0[b].W = 112, 238
+	end
+	brightness7000K = real(Planck.photons_expected(7000., 10., 1e4))
+	three_bodies = [
+		CatalogGalaxy([4.5, 3.6], brightness7000K , 0.1, [6, 0., 6.]),
+		CatalogStar([60.1, 82.2], brightness7000K),
+		CatalogGalaxy([71.3, 100.4], brightness7000K , 0.1, [6, 0., 6.]),
+	]
+   	blob = Synthetic.gen_blob(blob0, three_bodies)
+	mp = ModelInit.cat_init(three_bodies)
+
+	blob, mp, three_bodies
+end
+
+
+function gen_one_body_model()
+	srand(1)
+	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	for b in 1:5
+		blob0[b].H, blob0[b].W = 20, 23
+	end
+	brightness7000K = real(Planck.photons_expected(7000., 10., 1e4))
+	one_body = CatalogEntry[
+		CatalogGalaxy([8.5, 9.6], brightness7000K , 0.1, [6, 0., 6.]),
+	]
+   	blob = Synthetic.gen_blob(blob0, one_body)
+	mp = ModelInit.cat_init(one_body)
+
+	blob, mp, one_body
+end
+
+#########################
+
+function test_brightness_derivs()
+	blob, mp0, three_bodies = gen_three_body_model()
+
+	for i = 1:2
+		for b = [3,4,2,5,1]
+			function wrap_source_brightness(mp)
+				sb = ElboDeriv.SourceBrightness(mp.vp[1])
+				ret = zero_sensitive_float([1,2,3], all_params)
+				ret.v = sb.E_l_a[b, i].v
+				ret.d[:, 1] = sb.E_l_a[b, i].d
+				ret
+			end
+			test_by_finite_differences(wrap_source_brightness, mp0)
+
+			function wrap_source_brightness_3(mp)
+				sb = ElboDeriv.SourceBrightness(mp.vp[1])
+				ret = zero_sensitive_float([1,2,3], all_params)
+				ret.v = sb.E_ll_a[b, i].v
+				ret.d[:, 1] = sb.E_ll_a[b, i].d
+				ret
+			end
+			test_by_finite_differences(wrap_source_brightness_3, mp0)
 		end
 	end
 end
 
 
-function test_optimization()
+function test_accum_pos()
+	blob, mp, body = gen_one_body_model()
+
+	function wrap_star(mmp)
+		star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
+		fs0m = zero_sensitive_float([1], star_pos_params)
+		ElboDeriv.accum_star_pos!(star_mcs[1,1], [9, 10.], fs0m)
+		fs0m
+	end
+	test_by_finite_differences(wrap_star, mp)
+
+	function wrap_galaxy(mmp)
+		star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
+		fs1m = zero_sensitive_float([1], galaxy_pos_params)
+		ElboDeriv.accum_galaxy_pos!(gal_mcs[1,1,1,1], [9, 10.],
+			mmp.vp[1][ids.theta], 1., galaxy_prototypes[1][1].sigmaTilde, 
+			mmp.vp[1][ids.Xi], fs1m)
+		fs1m
+	end
+	test_by_finite_differences(wrap_galaxy, mp)
+end
+
+
+function test_accum_pixel_source_stats()
+	blob, mp0, body = gen_one_body_model()
+
+	function wrap_apss_ef(mmp)
+		star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[1].psf, mmp)
+		fs0m = zero_sensitive_float([1], star_pos_params)
+		fs1m = zero_sensitive_float([1], galaxy_pos_params)
+		E_F = zero_sensitive_float([1], all_params)
+		var_F = zero_sensitive_float([1], all_params)
+		sb = ElboDeriv.SourceBrightness(mmp.vp[1])
+		m_pos = [9, 10.]
+		ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
+			mmp.vp[1], 1, 1, m_pos, 1, fs0m, fs1m, E_F, var_F)
+		E_F
+	end
+	test_by_finite_differences(wrap_apss_ef, mp0)
+
+	function wrap_apss_varf(mmp)
+		star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[5].psf, mmp)
+		fs0m = zero_sensitive_float([1], star_pos_params)
+		fs1m = zero_sensitive_float([1], galaxy_pos_params)
+		E_F = zero_sensitive_float([1], all_params)
+		var_F = zero_sensitive_float([1], all_params)
+		sb = ElboDeriv.SourceBrightness(mmp.vp[1])
+		m_pos = [9, 10.]
+		ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
+			mmp.vp[1], 1, 1, m_pos, 5, fs0m, fs1m, E_F, var_F)
+		var_F
+	end
+	test_by_finite_differences(wrap_apss_varf, mp0)
+
+end
+
+function test_elbo_likelihood_derivs()
+	blob, mp0, body = gen_one_body_model()
+
+	function wrap_likelihood_b1(mmp)
+		ElboDeriv.elbo_likelihood([blob[1]], mmp)
+	end
+	test_by_finite_differences(wrap_likelihood_b1, mp0)
+
+	function wrap_likelihood_b5(mmp)
+		ElboDeriv.elbo_likelihood([blob[5]], mmp)
+	end
+	test_by_finite_differences(wrap_likelihood_b5, mp0)
+end
+
+
+function test_kl_divergence_values()
+	blob, mp, three_bodies = gen_three_body_model()
+
+	s = 1
+	i = 1
+	d = 1
+	sample_size = 2_000_000
+
+	function test_kl(q_dist, p_dist, subtract_kl_fun!, tol)
+		q_samples = rand(q_dist, sample_size)
+		empirical_kl = mean(logpdf(q_dist, q_samples) - logpdf(p_dist, q_samples))
+		accum = zero_sensitive_float([s], all_params)
+		subtract_kl_fun!(accum)
+		exact_kl = -accum.v
+		@test_approx_eq_eps empirical_kl exact_kl tol
+	end
+
+	vs = mp.vp[s]
+
+	# a
+	q_a = Bernoulli(vs[ids.chi])
+	p_a = Bernoulli(mp.pp.Delta)
+	test_kl(q_a, p_a, (accum) -> ElboDeriv.subtract_kl_a!(s, mp, accum), 1e-4)
+
+	# r
+	q_r = Gamma(vs[ids.gamma[i]], vs[ids.zeta[i]])
+	p_r = Gamma(mp.pp.Upsilon[i], mp.pp.Phi[i])
+	test_kl(q_r, p_r, (accum) -> ElboDeriv.subtract_kl_r!(i, s, mp, accum), 1e-3)
+
+	# k
+	q_k = Categorical(vs[ids.kappa[:, i]])
+	p_k = Categorical(mp.pp.Psi[i])
+	test_kl(q_k, p_k, (accum) -> ElboDeriv.subtract_kl_k!(i, s, mp, accum), 1e-2)
+
+	# c
+	q_c = MvNormal(vs[ids.beta[:, i]], vs[ids.lambda[:, i]])
+	p_c = MvNormal(mp.pp.Omega[i][:, d], mp.pp.Lambda[i][d])
+	function sklc(accum)
+		ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
+		accum.v /= vs[ids.kappa[d, i]]
+	end
+	test_kl(q_c, p_c, sklc, 1e-2)
+end
+
+
+function test_kl_divergence_derivs()
+	blob, mp0, three_bodies = gen_three_body_model()
+
+	function wrap_kl_a(mp)
+		accum = zero_sensitive_float([1:3], all_params)
+		ElboDeriv.subtract_kl_a!(1, mp, accum)
+		accum
+	end
+	test_by_finite_differences(wrap_kl_a, mp0)
+
+	function wrap_kl_r(mp)
+		accum = zero_sensitive_float([1:3], all_params)
+		ElboDeriv.subtract_kl_r!(1, 1, mp, accum)
+		accum
+	end
+	test_by_finite_differences(wrap_kl_r, mp0)
+
+	function wrap_kl_k(mp)
+		accum = zero_sensitive_float([1:3], all_params)
+		ElboDeriv.subtract_kl_k!(1, 1, mp, accum)
+		accum
+	end
+	test_by_finite_differences(wrap_kl_k, mp0)
+
+	function wrap_kl_c(mp)
+		accum = zero_sensitive_float([1:3], all_params)
+		ElboDeriv.subtract_kl_c!(1, 1, 1, mp, accum)
+		accum
+	end
+	test_by_finite_differences(wrap_kl_c, mp0)
+end
+
+#########################
+
+function test_peak_init_optimization()
 	srand(1)
 	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
 
@@ -58,38 +280,8 @@ function test_optimization()
 	mp = ModelInit.peak_init(blob) #one giant tile, giant patches
 	@test mp.S == 2
 
-	elbo = ElboDeriv.elbo(blob, mp)
-
-	test_by_finite_differences((mmp)->ElboDeriv.elbo(blob, mmp), mp)
-
-	@test_approx_eq elbo.v -2.648350380705838e6
-
-	truth = [8832.38126931,-158138.17153885,-25788.74422143,0.12894523,0.52742055,
-		3.09335286,0.86937324,0.0627955,0.0,0.19817045,0.62086964,3.03401325,
-		1.01654349,0.10382081,5751.79851291,-41162.08801191,1999.78913014,
-		-41030.19690444]
-	for p in 1:18
-		@test_approx_eq_eps elbo.d[p, 1 + p % 2] truth[p] 1e-7
-	end
-
-	# test derivatives by finite differences
-	for p in 1:18
-		epsilon = 1e-6 / OptimizeElbo.rescaling[p]
-		vs1_vec_alt = convert(Vector{Float64}, mp.vp[1])
-		vs1_vec_alt[p] += epsilon
-		vs1_alt = convert(ParamStruct{Float64}, vs1_vec_alt)
-		vs_alt = [vs1_alt, mp.vp[2]]
-		mp2 = ModelParams(vs_alt, mp.pp, mp.patches, mp.tile_width)
-		elbo2 = ElboDeriv.elbo(blob, mp2)
-		avg_slope = (elbo2.v - elbo.v) / epsilon
-
-		println("derivative #", p, ": ", elbo.d[p, 1], " vs ", avg_slope)
-		tol = 1e-4 * abs(avg_slope)
-		@test_approx_eq_eps elbo.d[p , 1] avg_slope tol
-	end
-
-	println("--- starting optimization---")
 	OptimizeElbo.maximize_elbo(blob, mp)
+
 	@test_approx_eq mp.vp[1].chi 0.0001
 	@test_approx_eq mp.vp[2].chi 0.9999
 	@test_approx_eq_eps mp.vp[1].mu[1] 11.1 0.05
@@ -202,27 +394,8 @@ function test_local_sources_2()
 end
 
 
-function gen_simple_blob_and_mp()
-	srand(1)
-	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
-	for b in 1:5
-		blob0[b].H, blob0[b].W = 112, 238
-	end
-	brightness7000K = real(Planck.photons_expected(7000., 10., 1e4))
-	three_bodies = [
-		CatalogGalaxy([4.5, 3.6], brightness7000K , 0.1, [6, 0., 6.]),
-		CatalogStar([60.1, 82.2], brightness7000K),
-		CatalogGalaxy([71.3, 100.4], brightness7000K , 0.1, [6, 0., 6.]),
-	]
-   	blob = Synthetic.gen_blob(blob0, three_bodies)
-	mp = ModelInit.cat_init(three_bodies)
-
-	blob, mp, three_bodies
-end
-
-
 function test_tiling()
-	blob, mp, three_bodies = gen_simple_blob_and_mp()
+	blob, mp, three_bodies = gen_three_body_model()
 	@test mp.S == 3
 	elbo = ElboDeriv.elbo(blob, mp)
 
@@ -263,117 +436,16 @@ function test_tiling()
 end
 
 
-function test_kl_divergence_values()
-	blob, mp, three_bodies = gen_simple_blob_and_mp()
-
-	s = 1
-	i = 1
-	d = 1
-	sample_size = 2_000_000
-
-	function test_kl(q_dist, p_dist, subtract_kl_fun!, tol)
-		q_samples = rand(q_dist, sample_size)
-		empirical_kl = mean(logpdf(q_dist, q_samples) - logpdf(p_dist, q_samples))
-		accum = zero_sensitive_float([s], all_params)
-		subtract_kl_fun!(accum)
-		exact_kl = -accum.v
-		@test_approx_eq_eps empirical_kl exact_kl tol
-	end
-
-	vs = mp.vp[s]
-
-	# a
-	q_a = Bernoulli(vs[ids.chi])
-	p_a = Bernoulli(mp.pp.Delta)
-	test_kl(q_a, p_a, (accum) -> ElboDeriv.subtract_kl_a!(s, mp, accum), 1e-4)
-
-	# r
-	q_r = Gamma(vs[ids.gamma[i]], vs[ids.zeta[i]])
-	p_r = Gamma(mp.pp.Upsilon[i], mp.pp.Phi[i])
-	test_kl(q_r, p_r, (accum) -> ElboDeriv.subtract_kl_r!(i, s, mp, accum), 1e-3)
-
-	# k
-	q_k = Categorical(vs[ids.kappa[:, i]])
-	p_k = Categorical(mp.pp.Psi[i])
-	test_kl(q_k, p_k, (accum) -> ElboDeriv.subtract_kl_k!(i, s, mp, accum), 1e-2)
-
-	# c
-	q_c = MvNormal(vs[ids.beta[:, i]], vs[ids.lambda[:, i]])
-	p_c = MvNormal(mp.pp.Omega[i][:, d], mp.pp.Lambda[i][d])
-	function sklc(accum)
-		ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
-		accum.v /= vs[ids.kappa[d, i]]
-	end
-	test_kl(q_c, p_c, sklc, 1e-2)
-end
-
-
-function test_kl_divergence_derivs()
-	blob, mp0, three_bodies = gen_simple_blob_and_mp()
-
-	function wrap_kl_a(mp)
-		accum = zero_sensitive_float([1:3], all_params)
-		ElboDeriv.subtract_kl_a!(1, mp, accum)
-		accum
-	end
-	test_by_finite_differences(wrap_kl_a, mp0)
-
-	function wrap_kl_r(mp)
-		accum = zero_sensitive_float([1:3], all_params)
-		ElboDeriv.subtract_kl_r!(1, 1, mp, accum)
-		accum
-	end
-	test_by_finite_differences(wrap_kl_r, mp0)
-
-	function wrap_kl_k(mp)
-		accum = zero_sensitive_float([1:3], all_params)
-		ElboDeriv.subtract_kl_k!(1, 1, mp, accum)
-		accum
-	end
-	test_by_finite_differences(wrap_kl_k, mp0)
-
-	function wrap_kl_c(mp)
-		accum = zero_sensitive_float([1:3], all_params)
-		ElboDeriv.subtract_kl_c!(1, 1, 1, mp, accum)
-		accum
-	end
-	test_by_finite_differences(wrap_kl_c, mp0)
-end
-
-
-function test_brightness_derivs()
-	blob, mp0, three_bodies = gen_simple_blob_and_mp()
-
-	for i = 1:2
-		for b = [3,4,2,5,1]
-			function wrap_source_brightness(mp)
-				sb = ElboDeriv.SourceBrightness(mp.vp[1])
-				ret = zero_sensitive_float([1,2,3], all_params)
-				ret.v = sb.E_l_a[b, i].v
-				ret.d[:, 1] = sb.E_l_a[b, i].d
-				ret
-			end
-			test_by_finite_differences(wrap_source_brightness, mp0)
-
-			function wrap_source_brightness_3(mp)
-				sb = ElboDeriv.SourceBrightness(mp.vp[1])
-				ret = zero_sensitive_float([1,2,3], all_params)
-				ret.v = sb.E_ll_a[b, i].v
-				ret.d[:, 1] = sb.E_ll_a[b, i].d
-				ret
-			end
-			test_by_finite_differences(wrap_source_brightness_3, mp0)
-		end
-	end
-end
-
-
-test_optimization()
-test_brightness_derivs()
 test_kl_divergence_derivs()
 test_kl_divergence_values()
+test_accum_pixel_source_stats()
+test_elbo_likelihood_derivs()
+test_accum_pos()
+test_brightness_derivs()
 test_local_sources_2()
 test_local_sources()
+#=
 test_tiling()
 test_small_image()
-
+#test_peak_init_optimization()
+=#

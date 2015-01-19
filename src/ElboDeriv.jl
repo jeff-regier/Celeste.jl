@@ -7,19 +7,6 @@ using CelesteTypes
 import Util
 
 
-immutable BvnComponent
-	the_mean::Vector{Float64}
-	precision::Matrix{Float64}
-	z::Float64
-
-	BvnComponent(the_mean, the_cov, weight) = begin
-		the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
-		c = 1 ./ (the_det^.5 * 2pi)
-		new(the_mean, the_cov^-1, c * weight)
-	end
-end
-
-
 immutable SourceBrightness
 	E_l_a::Matrix{SensitiveFloat}  # [E[l|a=0], E[l]|a=1]]
 	E_ll_a::Matrix{SensitiveFloat}   # [E[l^2|a=0], E[l^2]|a=1]]
@@ -115,6 +102,53 @@ immutable SourceBrightness
 end
 
 
+immutable BvnComponent
+	the_mean::Vector{Float64}
+	precision::Matrix{Float64}
+	z::Float64
+
+	BvnComponent(the_mean, the_cov, weight) = begin
+		the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
+		c = 1 ./ (the_det^.5 * 2pi)
+		new(the_mean, the_cov^-1, c * weight)
+	end
+end
+
+
+function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
+	star_mcs = Array(BvnComponent, 3, mp.S)
+	gal_mcs = Array(BvnComponent, 3, 8, 2, mp.S)
+
+	for s in 1:mp.S
+		vs = mp.vp[s]
+
+		for k in 1:3
+			pc = psf[k]
+			mean_s = [pc.xiBar[1] + vs[ids.mu[1]], pc.xiBar[2] + vs[ids.mu[2]]]
+			star_mcs[k, s] = BvnComponent(mean_s, pc.SigmaBar, pc.alphaBar)
+		end
+
+		Xi = [[vs[ids.Xi[1]] vs[ids.Xi[2]]], [0. vs[ids.Xi[3]]]]
+		XiXi = Xi' * Xi
+
+		for i = 1:2
+			for j in 1:[6,8][i]
+				gc = galaxy_prototypes[i][j]
+				for k = 1:3
+					pc = psf[k]
+					mean_s = [pc.xiBar[1] + vs[ids.mu[1]], pc.xiBar[2] + vs[ids.mu[2]]]
+					var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
+					weight = pc.alphaBar * gc.alphaTilde
+					gal_mcs[k, j, i, s] = BvnComponent(mean_s, var_s, weight)
+				end
+			end
+		end
+	end
+
+	star_mcs, gal_mcs
+end
+
+
 function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
 	y1 = x[1] - bmc.the_mean[1]
 	y2 = x[2] - bmc.the_mean[2]
@@ -154,40 +188,6 @@ function accum_galaxy_pos!(bmc::BvnComponent, x::Vector{Float64},
     fs1m.d[4] += st * (df_dSigma_11 * 2Xi[1] + df_dSigma_12 * Xi[2])
     fs1m.d[5] += st * (df_dSigma_12 * Xi[1] + df_dSigma_22 * 2Xi[2])
     fs1m.d[6] += st * (df_dSigma_22 * 2Xi[3])
-end
-
-
-function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
-	star_mcs = Array(BvnComponent, 3, mp.S)
-	gal_mcs = Array(BvnComponent, 3, 8, 2, mp.S)
-
-	for s in 1:mp.S
-		vs = mp.vp[s]
-
-		for k in 1:3
-			pc = psf[k]
-			mean_s = [pc.xiBar[1] + vs[ids.mu[1]], pc.xiBar[2] + vs[ids.mu[2]]]
-			star_mcs[k, s] = BvnComponent(mean_s, pc.SigmaBar, pc.alphaBar)
-		end
-
-		Xi = [[vs[ids.Xi[1]] vs[ids.Xi[2]]], [0. vs[ids.Xi[3]]]]
-		XiXi = Xi' * Xi
-
-		for i = 1:2
-			for j in 1:[6,8][i]
-				gc = galaxy_prototypes[i][j]
-				for k = 1:3
-					pc = psf[k]
-					mean_s = [pc.xiBar[1] + vs[ids.mu[1]], pc.xiBar[2] + vs[ids.mu[2]]]
-					var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
-					weight = pc.alphaBar * gc.alphaTilde
-					gal_mcs[k, j, i, s] = BvnComponent(mean_s, var_s, weight)
-				end
-			end
-		end
-	end
-
-	star_mcs, gal_mcs
 end
 
 
@@ -232,7 +232,7 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
 	var_F.d[ids.chi, child_s] += llff[2] - llff[1]
 	for i in 1:2
 		for p1 in 1:length(fsm[i].param_index)
-			p0 = fsm[i].param_index[i]
+			p0 = fsm[i].param_index[p1]
 			chi_fd = chi[i] * fsm[i].d[p1]
 			chi_El_fd = sb.E_l_a[b, i].v * chi_fd
 			E_F.d[p0, child_s] += chi_El_fd
