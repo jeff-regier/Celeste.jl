@@ -436,6 +436,7 @@ function test_tiling()
 end
 
 
+test_peak_init_optimization()
 test_kl_divergence_derivs()
 test_kl_divergence_values()
 test_accum_pixel_source_stats()
@@ -447,5 +448,4 @@ test_local_sources()
 #=
 test_tiling()
 test_small_image()
-#test_peak_init_optimization()
 =#
