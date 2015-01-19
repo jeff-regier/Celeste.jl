@@ -22,8 +22,7 @@ end
 
 immutable SourceBrightness
 	E_l_a::Matrix{SensitiveFloat}  # [E[l|a=0], E[l]|a=1]]
-	ElEl::Vector{SensitiveFloat}  # [E(l)]^2
-	E_ll::Vector{SensitiveFloat}   # E(l^2)
+	E_ll_a::Matrix{SensitiveFloat}   # [E[l^2|a=0], E[l^2]|a=1]]
 
 	SourceBrightness(vs::Vector{Float64}) = begin
 		chi = vs[ids.chi]
@@ -76,18 +75,6 @@ immutable SourceBrightness
 			E_l_a[1, i].d[ids.lambda[1, i]] = E_l_a[1, i].v * .5 
 		end
 
-		ElEl = Array(SensitiveFloat, 5)
-
-		for b = 1:5
-			ElEl[b] = zero_sensitive_float([-1], all_params)
-
-			El = (1 - chi) * E_l_a[b, 1].v + chi * E_l_a[b, 2].v
-			ElEl[b].v = El ^ 2
-
-			ElEl[b].d = 2 * El * ((1 - chi) * E_l_a[b, 1].d + chi * E_l_a[b, 2].d)
-			ElEl[b].d[ids.chi] = 2 * El * (E_l_a[b, 2].v - E_l_a[b, 1].v)
-		end
-
 		E_ll_a = Array(SensitiveFloat, 5, 2)
 		for i = 1:2
 			for b = 1:5
@@ -123,15 +110,7 @@ immutable SourceBrightness
 			E_ll_a[1, i].d[ids.lambda[1, i]] = E_ll_a[1, i].v * 2. 
 		end
 
-		E_ll = Array(SensitiveFloat, 5)
-		for b = 1:5
-			E_ll[b] = zero_sensitive_float([-1], all_params)
-			E_ll[b].v = (1. - chi) * E_ll_a[b, 1].v + chi * E_ll_a[b, 2].v
-			E_ll[b].d[:] = (1. - chi) * E_ll_a[b, 1].d + chi * E_ll_a[b, 2].d
-			E_ll[b].d[ids.chi] = E_ll_a[b, 2].v - E_ll_a[b, 1].v
-		end
-
-		new(E_l_a, ElEl, E_ll)
+		new(E_l_a, E_ll_a)
 	end
 end
 
@@ -158,7 +137,7 @@ end
 
 
 function accum_galaxy_pos!(bmc::BvnComponent, x::Vector{Float64},
-		theta_i::Float64, theta_dir::Float64, 
+		theta_i::Float64, theta_dir::Float64, st::Float64,
 		Xi::Vector{Float64}, fs1m::SensitiveFloat)
 	py1, py2, f_pre = ret_pdf(bmc, x)
 	f = f_pre * theta_i
@@ -172,9 +151,9 @@ function accum_galaxy_pos!(bmc::BvnComponent, x::Vector{Float64},
 	df_dSigma_12 = f * (py1 * py2 - bmc.precision[1, 2])  # NB: 2X
 	df_dSigma_22 = 0.5 * f * (py2 * py2 - bmc.precision[2, 2])
 
-    fs1m.d[4] += df_dSigma_11 * 2Xi[1] + df_dSigma_12 * Xi[2]
-    fs1m.d[5] += df_dSigma_12 * Xi[1] + df_dSigma_22 * 2Xi[2]
-    fs1m.d[6] += df_dSigma_22 * 2Xi[3]
+    fs1m.d[4] += st * (df_dSigma_11 * 2Xi[1] + df_dSigma_12 * Xi[2])
+    fs1m.d[5] += st * (df_dSigma_12 * Xi[1] + df_dSigma_22 * 2Xi[2])
+    fs1m.d[6] += st * (df_dSigma_22 * 2Xi[3])
 end
 
 
@@ -223,7 +202,6 @@ function accum_pixel_source_stats!(star_mcs::Array{BvnComponent, 2},
 	for star_mc in star_mcs[:, parent_s]
 		accum_star_pos!(star_mc, m_pos, fs0m)
 	end
-	# TODO:: apply color
 
 	clear!(fs1m)
 	for i = 1:2
@@ -232,13 +210,13 @@ function accum_pixel_source_stats!(star_mcs::Array{BvnComponent, 2},
 
 		for j in 1:[6,8][i]
 			for k = 1:3
-				accum_galaxy_pos!(gal_mcs[k, j, i, parent_s],
-					m_pos, theta_i, theta_dir, vs[ids.Xi], fs1m)
+				accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, theta_i, 
+					theta_dir, galaxy_prototypes[i][j].sigmaTilde, vs[ids.Xi], fs1m)
 			end
 		end
 	end
-	# TODO:: apply galaxy_prototypes[i][j].sigmaTilde, (and color)
-	
+
+	# TODO:: apply color
 	E_F.v += (1. - vs[ids.chi]) * fs0m.v + vs[ids.chi] * fs1m.v
 
 	E_F.d[ids.chi, child_s] += fs1m.v - fs0m.v
@@ -253,7 +231,7 @@ function accum_pixel_source_stats!(star_mcs::Array{BvnComponent, 2},
 
 	diff10 = fs1m.v - fs0m.v
 	diff10_sq = diff10^2
-	chi_var = (vs[ids.chi] * (1. - vs[ids.chi])) # cache these?
+	chi_var = vs[ids.chi] * (1. - vs[ids.chi]) # cache these?
 	chi_var_d = 1. - 2 * vs[ids.chi]
 	var_F.v += chi_var * diff10_sq
 	var_F.d[ids.chi, child_s] += chi_var_d * diff10_sq

@@ -351,28 +351,15 @@ function test_brightness_derivs()
 			end
 			test_by_finite_differences(wrap_source_brightness, mp0)
 
-
+			function wrap_source_brightness_3(mp)
+				sb = ElboDeriv.SourceBrightness(mp.vp[1])
+				ret = zero_sensitive_float([1,2,3], all_params)
+				ret.v = sb.E_ll_a[b, i].v
+				ret.d[:, 1] = sb.E_ll_a[b, i].d
+				ret
+			end
+			test_by_finite_differences(wrap_source_brightness_3, mp0)
 		end
-	end
-
-	for b = [3,4,2,5,1]
-		function wrap_source_brightness_2(mp)
-			sb = ElboDeriv.SourceBrightness(mp.vp[1])
-			ret = zero_sensitive_float([1,2,3], all_params)
-			ret.v = sb.ElEl[b].v
-			ret.d[:, 1] = sb.ElEl[b].d
-			ret
-		end
-		test_by_finite_differences(wrap_source_brightness_2, mp0)
-
-		function wrap_source_brightness_3(mp)
-			sb = ElboDeriv.SourceBrightness(mp.vp[1])
-			ret = zero_sensitive_float([1,2,3], all_params)
-			ret.v = sb.E_ll[b].v
-			ret.d[:, 1] = sb.E_ll[b].d
-			ret
-		end
-		test_by_finite_differences(wrap_source_brightness_3, mp0)
 	end
 end
 
