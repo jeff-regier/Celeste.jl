@@ -20,6 +20,122 @@ immutable BvnComponent
 end
 
 
+immutable SourceBrightness
+	E_l_a::Matrix{SensitiveFloat}  # [E[l|a=0], E[l]|a=1]]
+	ElEl::Vector{SensitiveFloat}  # [E(l)]^2
+	E_ll::Vector{SensitiveFloat}   # E(l^2)
+
+	SourceBrightness(vs::Vector{Float64}) = begin
+		chi = vs[ids.chi]
+		gamma_s = vs[ids.gamma]
+		zeta = vs[ids.zeta]
+		beta = vs[ids.beta]
+		lambda = vs[ids.lambda]
+
+		E_l_a = Array(SensitiveFloat, 5, 2)
+
+		for i = 1:2
+			for b = 1:5
+				E_l_a[b, i] = zero_sensitive_float([-1], all_params)
+			end
+
+			E_l_a[3, i].v = gamma_s[i] * zeta[i]
+			E_l_a[3, i].d[ids.gamma[i]] = zeta[i]
+			E_l_a[3, i].d[ids.zeta[i]] = gamma_s[i]
+
+			E_c_3 = exp(beta[3, i] + .5 * lambda[3, i])
+			E_l_a[4, i].v = E_l_a[3, i].v * E_c_3
+			E_l_a[4, i].d[ids.gamma[i]] = E_l_a[3, i].d[ids.gamma[i]] * E_c_3
+			E_l_a[4, i].d[ids.zeta[i]] = E_l_a[3, i].d[ids.zeta[i]] * E_c_3
+			E_l_a[4, i].d[ids.beta[3, i]] = E_l_a[4, i].v
+			E_l_a[4, i].d[ids.lambda[3, i]] = E_l_a[4, i].v * .5
+
+			E_c_4 = exp(beta[4, i] + .5 * lambda[4, i])
+			E_l_a[5, i].v = E_l_a[4, i].v * E_c_4
+			E_l_a[5, i].d[ids.gamma[i]] = E_l_a[4, i].d[ids.gamma[i]] * E_c_4
+			E_l_a[5, i].d[ids.zeta[i]] = E_l_a[4, i].d[ids.zeta[i]] * E_c_4
+			E_l_a[5, i].d[ids.beta[3, i]] = E_l_a[4, i].d[ids.beta[3, i]] * E_c_4
+			E_l_a[5, i].d[ids.lambda[3, i]] = E_l_a[4, i].d[ids.lambda[3, i]] * E_c_4
+			E_l_a[5, i].d[ids.beta[4, i]] = E_l_a[5, i].v
+			E_l_a[5, i].d[ids.lambda[4, i]] = E_l_a[5, i].v * .5
+
+			E_c_2 = exp(-beta[2, i] + .5 * lambda[2, i])
+			E_l_a[2, i].v = E_l_a[3, i].v * E_c_2
+			E_l_a[2, i].d[ids.gamma[i]] = E_l_a[3, i].d[ids.gamma[i]] * E_c_2
+			E_l_a[2, i].d[ids.zeta[i]] = E_l_a[3, i].d[ids.zeta[i]] * E_c_2
+			E_l_a[2, i].d[ids.beta[2, i]] = E_l_a[2, i].v * -1.
+			E_l_a[2, i].d[ids.lambda[2, i]] = E_l_a[2, i].v * .5
+
+			E_c_1 = exp(-beta[1, i] + .5 * lambda[1, i])
+			E_l_a[1, i].v = E_l_a[2, i].v * E_c_1
+			E_l_a[1, i].d[ids.gamma[i]] = E_l_a[2, i].d[ids.gamma[i]] * E_c_1
+			E_l_a[1, i].d[ids.zeta[i]] = E_l_a[2, i].d[ids.zeta[i]] * E_c_1
+			E_l_a[1, i].d[ids.beta[2, i]] = E_l_a[2, i].d[ids.beta[2, i]] * E_c_1
+			E_l_a[1, i].d[ids.lambda[2, i]] = E_l_a[2, i].d[ids.lambda[2, i]] * E_c_1
+			E_l_a[1, i].d[ids.beta[1, i]] = E_l_a[1, i].v * -1.
+			E_l_a[1, i].d[ids.lambda[1, i]] = E_l_a[1, i].v * .5 
+		end
+
+		ElEl = Array(SensitiveFloat, 5)
+
+		for b = 1:5
+			ElEl[b] = zero_sensitive_float([-1], all_params)
+
+			El = (1 - chi) * E_l_a[b, 1].v + chi * E_l_a[b, 2].v
+			ElEl[b].v = El ^ 2
+
+			ElEl[b].d = 2 * El * ((1 - chi) * E_l_a[b, 1].d + chi * E_l_a[b, 2].d)
+			ElEl[b].d[ids.chi] = 2 * El * (E_l_a[b, 2].v - E_l_a[b, 1].v)
+		end
+
+		E_ll_a = Array(SensitiveFloat, 5, 2)
+		for i = 1:2
+			for b = 1:5
+				E_ll_a[b, i] = zero_sensitive_float([-1], all_params)
+			end
+
+			E_ll_a[3, i].v = gamma_s[i] * zeta[i] * (1 + gamma_s[i])
+			E_ll_a[3, i].d[ids.gamma[i]] = zeta[i] + 2 * gamma_s[i] * zeta[i]
+			E_ll_a[3, i].d[ids.zeta[i]] = gamma_s[i] * (1. + gamma_s[i])
+
+			tmp3 = exp(2beta[3, i] + 2 * lambda[3, i])
+			E_ll_a[4, i].v = E_ll_a[3, i].v * tmp3
+			E_ll_a[4, i].d[:] = E_ll_a[3, i].d * tmp3
+			E_ll_a[4, i].d[ids.beta[3, i]] = E_ll_a[4, i].v * 2.
+			E_ll_a[4, i].d[ids.lambda[3, i]] = E_ll_a[4, i].v * 2. 
+
+			tmp4 = exp(2beta[4, i] + 2 * lambda[4, i])
+			E_ll_a[5, i].v = E_ll_a[4, i].v * tmp4
+			E_ll_a[5, i].d[:] = E_ll_a[4, i].d * tmp4
+			E_ll_a[5, i].d[ids.beta[4, i]] = E_ll_a[5, i].v * 2.
+			E_ll_a[5, i].d[ids.lambda[4, i]] = E_ll_a[5, i].v * 2.
+
+			tmp2 = exp(-2beta[2, i] + 2 * lambda[2, i])
+			E_ll_a[2, i].v = E_ll_a[3, i].v * tmp2
+			E_ll_a[2, i].d[:] = E_ll_a[3, i].d * tmp3
+			E_ll_a[2, i].d[ids.beta[2, i]] = E_ll_a[2, i].v * -2.
+			E_ll_a[2, i].d[ids.lambda[2, i]] = E_ll_a[2, i].v * 2. 
+
+			tmp1 = exp(-2beta[1, i] + 2 * lambda[1, i])
+			E_ll_a[1, i].v = E_ll_a[2, i].v * tmp1
+			E_ll_a[1, i].d[:] = E_ll_a[2, i].d * tmp1
+			E_ll_a[1, i].d[ids.beta[1, i]] = E_ll_a[1, i].v * -2.
+			E_ll_a[1, i].d[ids.lambda[1, i]] = E_ll_a[1, i].v * 2. 
+		end
+
+		E_ll = Array(SensitiveFloat, 5)
+		for b = 1:5
+			E_ll[b] = zero_sensitive_float([-1], all_params)
+			E_ll[b].v = (1. - chi) * E_ll_a[b, 1].v + chi * E_ll_a[b, 2].v
+			E_ll[b].d[:] = (1. - chi) * E_ll_a[b, 1].d + chi * E_ll_a[b, 2].d
+			E_ll[b].d[ids.chi] = E_ll_a[b, 2].v - E_ll_a[b, 1].v
+		end
+
+		new(E_l_a, ElEl, E_ll)
+	end
+end
+
+
 function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
 	y1 = x[1] - bmc.the_mean[1]
 	y2 = x[2] - bmc.the_mean[2]

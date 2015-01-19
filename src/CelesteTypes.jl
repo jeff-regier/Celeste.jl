@@ -169,7 +169,6 @@ const all_params = [1:ids.lambda[end]]
 const star_pos_params = ids.mu
 const galaxy_pos_params = [ids.mu, ids.theta, ids.Xi]
 
-
 #########################################################
 
 type SensitiveFloat

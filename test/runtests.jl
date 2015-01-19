@@ -27,11 +27,15 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
 
 			d_lb = min(f.d[p, s], f_alt.d[p, s]) - 1e-7
 			d_ub = max(f.d[p, s], f_alt.d[p, s]) + 1e-7
+			if abs(d_lb) > 1. && abs(d_ub) > 1.
+				d_lb -= 1e-7 * abs(d_lb)
+				d_ub += 1e-7 * abs(d_ub)
+			end
 			if !(d_lb <= avg_slope <= d_ub)
 				println("ERROR [source $s, deriv $p]: $d_lb <= $avg_slope <= $d_ub")
 			end
 			@test d_lb <= avg_slope <= d_ub
-			@test d_ub - d_lb < 1e-4
+			@test d_ub / d_lb < 1.0001
 		end
 	end
 end
@@ -212,6 +216,7 @@ function gen_simple_blob_and_mp()
 	blob, mp, three_bodies
 end
 
+
 function test_tiling()
 	blob, mp, three_bodies = gen_simple_blob_and_mp()
 	@test mp.S == 3
@@ -298,6 +303,7 @@ function test_kl_divergence_values()
 	test_kl(q_c, p_c, sklc, 1e-2)
 end
 
+
 function test_kl_divergence_derivs()
 	blob, mp0, three_bodies = gen_simple_blob_and_mp()
 
@@ -330,6 +336,48 @@ function test_kl_divergence_derivs()
 	test_by_finite_differences(wrap_kl_c, mp0)
 end
 
+
+function test_brightness_derivs()
+	blob, mp0, three_bodies = gen_simple_blob_and_mp()
+
+	for i = 1:2
+		for b = [3,4,2,5,1]
+			function wrap_source_brightness(mp)
+				sb = ElboDeriv.SourceBrightness(mp.vp[1])
+				ret = zero_sensitive_float([1,2,3], all_params)
+				ret.v = sb.E_l_a[b, i].v
+				ret.d[:, 1] = sb.E_l_a[b, i].d
+				ret
+			end
+			test_by_finite_differences(wrap_source_brightness, mp0)
+
+
+		end
+	end
+
+	for b = [3,4,2,5,1]
+		function wrap_source_brightness_2(mp)
+			sb = ElboDeriv.SourceBrightness(mp.vp[1])
+			ret = zero_sensitive_float([1,2,3], all_params)
+			ret.v = sb.ElEl[b].v
+			ret.d[:, 1] = sb.ElEl[b].d
+			ret
+		end
+		test_by_finite_differences(wrap_source_brightness_2, mp0)
+
+		function wrap_source_brightness_3(mp)
+			sb = ElboDeriv.SourceBrightness(mp.vp[1])
+			ret = zero_sensitive_float([1,2,3], all_params)
+			ret.v = sb.E_ll[b].v
+			ret.d[:, 1] = sb.E_ll[b].d
+			ret
+		end
+		test_by_finite_differences(wrap_source_brightness_3, mp0)
+	end
+end
+
+
+test_brightness_derivs()
 test_kl_divergence_derivs()
 test_kl_divergence_values()
 test_local_sources_2()
