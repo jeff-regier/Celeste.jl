@@ -191,9 +191,9 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
 end
 
 
-function accum_pixel_source_stats!(star_mcs::Array{BvnComponent, 2}, 
-		gal_mcs::Array{BvnComponent, 4}, vs::Vector{Float64}, 
-		child_s::Int64, parent_s,
+function accum_pixel_source_stats!(sb::SourceBrightness,
+		star_mcs::Array{BvnComponent, 2}, gal_mcs::Array{BvnComponent, 4},
+		vs::Vector{Float64}, child_s::Int64, parent_s,
 		m_pos::Vector{Float64}, b::Int64,
 		fs0m::SensitiveFloat, fs1m::SensitiveFloat, 
 		E_F::SensitiveFloat, var_F::SensitiveFloat)
@@ -216,32 +216,38 @@ function accum_pixel_source_stats!(star_mcs::Array{BvnComponent, 2},
 		end
 	end
 
-	# TODO:: apply color
-	E_F.v += (1. - vs[ids.chi]) * fs0m.v + vs[ids.chi] * fs1m.v
+	chi = (1. - vs[ids.chi], vs[ids.chi])
+	fsm = (fs0m, fs1m)
+	lf = (sb.E_l_a[b, 1].v * fs0m.v, sb.E_l_a[b, 2].v * fs1m.v)
+	llff = (sb.E_ll_a[b, 1].v * fs0m.v^2, sb.E_ll_a[b, 2].v * fs1m.v^2)
 
-	E_F.d[ids.chi, child_s] += fs1m.v - fs0m.v
-	for i in 1:length(fs0m.param_index)
-		p = fs0m.param_index[i]
-		E_F.d[p, child_s] += (1. - vs[ids.chi]) * fs0m.d[i]
-	end
-	for i in 1:length(fs1m.param_index)
-		p = fs1m.param_index[i]
-		E_F.d[p, child_s] += vs[ids.chi] * fs1m.d[i]
-	end
+	E_F_s_v = chi[1] * lf[1] + chi[2] * lf[2]
+	E_F.v += E_F_s_v
+	var_F.v -= E_F_s_v ^ 2
+	var_F.v += chi[1] * llff[1] + chi[2] * llff[2]
 
-	diff10 = fs1m.v - fs0m.v
-	diff10_sq = diff10^2
-	chi_var = vs[ids.chi] * (1. - vs[ids.chi]) # cache these?
-	chi_var_d = 1. - 2 * vs[ids.chi]
-	var_F.v += chi_var * diff10_sq
-	var_F.d[ids.chi, child_s] += chi_var_d * diff10_sq
-	for i in 1:length(fs0m.param_index)
-		p = fs0m.param_index[i]
-		var_F.d[p, child_s] -= chi_var * 2 * diff10 * fs0m.d[i]
+	lf_diff = lf[2] - lf[1]
+	E_F.d[ids.chi, child_s] += lf_diff
+	var_F.d[ids.chi, child_s] -= 2 * E_F_s_v * lf_diff
+	var_F.d[ids.chi, child_s] += llff[2] - llff[1]
+	for i in 1:2
+		for p1 in 1:length(fsm[i].param_index)
+			p0 = fsm[i].param_index[i]
+			chi_fd = chi[i] * fsm[i].d[p1]
+			chi_El_fd = sb.E_l_a[b, i].v * chi_fd
+			E_F.d[p0, child_s] += chi_El_fd
+			var_F.d[p0, child_s] -= 2 * E_F_s_v * chi_El_fd
+			var_F.d[p0, child_s] += chi_fd * sb.E_ll_a[b, i].v * 2 * fsm[i].v
+		end
 	end
-	for i in 1:length(fs1m.param_index)
-		p = fs1m.param_index[i]
-		var_F.d[p, child_s] += chi_var * 2 * diff10 * fs1m.d[i]
+	
+	for i in 1:2
+		for p0 in vcat(ids.gamma, ids.zeta, ids.beta[:], ids.lambda[:])
+			chi_f_Eld = chi[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
+			E_F.d[p0, child_s] += chi_f_Eld
+			var_F.d[p0, child_s] -= 2 * E_F_s_v * chi_f_Eld
+			var_F.d[p0, child_s] += chi[i] * fs0m.v^2 * sb.E_ll_a[b, i].d[p0]
+		end
 	end
 end
 
@@ -292,7 +298,8 @@ end
 
 
 function elbo_likelihood!(tile::ImageTile, mp::ModelParams, 
-		star_mcs::Array{BvnComponent, 2}, gal_mcs::Array{BvnComponent, 4}, 
+		sbs::Vector{SourceBrightness},
+ 		star_mcs::Array{BvnComponent, 2}, gal_mcs::Array{BvnComponent, 4}, 
 		accum::SensitiveFloat)
 	tile_sources = local_sources(tile, mp)
 	h_range, w_range = tile_range(tile, mp.tile_width)
@@ -319,8 +326,9 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
 		m_pos = Float64[h - 0.5, w - 0.5]
 		for child_s in 1:length(tile_sources)
 			parent_s = tile_sources[child_s]
-			accum_pixel_source_stats!(star_mcs, gal_mcs, mp.vp[parent_s],
-				child_s, parent_s, m_pos, tile.img.b, fs0m, fs1m, E_F, var_F)
+			accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs, 
+				mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b, 
+				fs0m, fs1m, E_F, var_F)
 		end
 
 		accum_pixel_ret!(tile_sources, tile.img.pixels[h, w], E_F, var_F, accum)
@@ -333,12 +341,14 @@ function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
 
 	star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp)
 
+	sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
+
 	WW = int(ceil(img.W / mp.tile_width))
 	HH = int(ceil(img.H / mp.tile_width))
 	for ww in 1:WW, hh in 1:HH
 		tile = ImageTile(hh, ww, img)
 		# might get a speedup from subsetting the mp here
-		elbo_likelihood!(tile, mp, star_mcs, gal_mcs, accum)
+		elbo_likelihood!(tile, mp, sbs, star_mcs, gal_mcs, accum)
 	end
 end
 

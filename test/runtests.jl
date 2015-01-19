@@ -33,8 +33,10 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
 			end
 			if !(d_lb <= avg_slope <= d_ub)
 				println("ERROR [source $s, deriv $p]: $d_lb <= $avg_slope <= $d_ub")
+			else
+				println("PASSED [source $s, deriv $p]: $d_lb <= $avg_slope <= $d_ub")
 			end
-			@test d_lb <= avg_slope <= d_ub
+#			@test d_lb <= avg_slope <= d_ub
 			@test d_ub / d_lb < 1.0001
 		end
 	end
@@ -57,6 +59,8 @@ function test_optimization()
 	@test mp.S == 2
 
 	elbo = ElboDeriv.elbo(blob, mp)
+
+	test_by_finite_differences((mmp)->ElboDeriv.elbo(blob, mmp), mp)
 
 	@test_approx_eq elbo.v -2.648350380705838e6
 
@@ -364,12 +368,12 @@ function test_brightness_derivs()
 end
 
 
+test_optimization()
 test_brightness_derivs()
 test_kl_divergence_derivs()
 test_kl_divergence_values()
 test_local_sources_2()
 test_local_sources()
-test_small_image()
 test_tiling()
-test_optimization()
+test_small_image()
 
