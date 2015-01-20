@@ -106,10 +106,10 @@ function maximize_elbo(blob::Blob, mp::ModelParams)
 
 	function objective_and_grad(x::Vector{Float64}, g::Vector{Float64})
 		mp.vp = vec_to_vp(x)
-		elbo = ElboDeriv.elbo(blob, mp)
-#		elbo = zero_sensitive_float([1:mp.S], all_params)
-#		elbo.v = sum([sum(vs) for vs in mp.vp])
-#		fill!(elbo.d, 1.)
+#		elbo = ElboDeriv.elbo(blob, mp)
+		elbo = zero_sensitive_float([1:mp.S], all_params)
+		elbo.v = sum([sum(vs) for vs in mp.vp])
+		fill!(elbo.d, 1.)
 		if length(g) > 0
 			svs = [rescale_s(elbo.d[:, s], false) for s in 1:mp.S]
 			g[:] = reduce(vcat, svs)
