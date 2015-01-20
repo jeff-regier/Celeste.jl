@@ -68,9 +68,10 @@ immutable SourceBrightness
 				E_ll_a[b, i] = zero_sensitive_float([-1], all_params)
 			end
 
-			E_ll_a[3, i].v = gamma_s[i] * zeta[i] * (1 + gamma_s[i])
-			E_ll_a[3, i].d[ids.gamma[i]] = zeta[i] + 2 * gamma_s[i] * zeta[i]
-			E_ll_a[3, i].d[ids.zeta[i]] = gamma_s[i] * (1. + gamma_s[i])
+			zeta_sq = zeta[i]^2
+			E_ll_a[3, i].v = gamma_s[i] * (1 + gamma_s[i]) * zeta_sq
+			E_ll_a[3, i].d[ids.gamma[i]] = (1 + 2 * gamma_s[i]) * zeta_sq
+			E_ll_a[3, i].d[ids.zeta[i]] = 2 * gamma_s[i] * (1. + gamma_s[i]) * zeta[i]
 
 			tmp3 = exp(2beta[3, i] + 2 * lambda[3, i])
 			E_ll_a[4, i].v = E_ll_a[3, i].v * tmp3
@@ -246,7 +247,7 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
 			chi_f_Eld = chi[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
 			E_F.d[p0, child_s] += chi_f_Eld
 			var_F.d[p0, child_s] -= 2 * E_F_s_v * chi_f_Eld
-			var_F.d[p0, child_s] += chi[i] * fs0m.v^2 * sb.E_ll_a[b, i].d[p0]
+			var_F.d[p0, child_s] += chi[i] * fsm[i].v^2 * sb.E_ll_a[b, i].d[p0]
 		end
 	end
 end
@@ -295,7 +296,6 @@ function local_sources(tile::ImageTile, mp::ModelParams)
 
 	local_subset
 end
-
 
 function elbo_likelihood!(tile::ImageTile, mp::ModelParams, 
 		sbs::Vector{SourceBrightness},
@@ -444,7 +444,7 @@ end
 
 function elbo(blob::Blob, mp::ModelParams)
 	ret = elbo_likelihood(blob, mp)
-	subtract_kl!(mp, ret)
+#	subtract_kl!(mp, ret)
 	ret
 end
 
