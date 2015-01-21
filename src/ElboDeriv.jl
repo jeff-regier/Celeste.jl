@@ -87,7 +87,7 @@ immutable SourceBrightness
 
 			tmp2 = exp(-2beta[2, i] + 2 * lambda[2, i])
 			E_ll_a[2, i].v = E_ll_a[3, i].v * tmp2
-			E_ll_a[2, i].d[:] = E_ll_a[3, i].d * tmp3
+			E_ll_a[2, i].d[:] = E_ll_a[3, i].d * tmp2
 			E_ll_a[2, i].d[ids.beta[2, i]] = E_ll_a[2, i].v * -2.
 			E_ll_a[2, i].d[ids.lambda[2, i]] = E_ll_a[2, i].v * 2. 
 
@@ -197,7 +197,7 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
 		vs::Vector{Float64}, child_s::Int64, parent_s,
 		m_pos::Vector{Float64}, b::Int64,
 		fs0m::SensitiveFloat, fs1m::SensitiveFloat, 
-		E_F::SensitiveFloat, var_F::SensitiveFloat)
+		E_G::SensitiveFloat, var_G::SensitiveFloat)
 
 	clear!(fs0m)
 	for star_mc in star_mcs[:, parent_s]
@@ -222,49 +222,51 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
 	lf = (sb.E_l_a[b, 1].v * fs0m.v, sb.E_l_a[b, 2].v * fs1m.v)
 	llff = (sb.E_ll_a[b, 1].v * fs0m.v^2, sb.E_ll_a[b, 2].v * fs1m.v^2)
 
-	E_F_s_v = chi[1] * lf[1] + chi[2] * lf[2]
-	E_F.v += E_F_s_v
-	var_F.v -= E_F_s_v ^ 2
-	var_F.v += chi[1] * llff[1] + chi[2] * llff[2]
+	E_G_s_v = chi[1] * lf[1] + chi[2] * lf[2]
+	E_G.v += E_G_s_v
+	var_G.v -= E_G_s_v^2
+	var_G.v += chi[1] * llff[1] + chi[2] * llff[2]
 
 	lf_diff = lf[2] - lf[1]
-	E_F.d[ids.chi, child_s] += lf_diff
-	var_F.d[ids.chi, child_s] -= 2 * E_F_s_v * lf_diff
-	var_F.d[ids.chi, child_s] += llff[2] - llff[1]
+	E_G.d[ids.chi, child_s] += lf_diff
+	var_G.d[ids.chi, child_s] -= 2 * E_G_s_v * lf_diff
+	var_G.d[ids.chi, child_s] += llff[2] - llff[1]
 	for i in 1:2
 		for p1 in 1:length(fsm[i].param_index)
 			p0 = fsm[i].param_index[p1]
 			chi_fd = chi[i] * fsm[i].d[p1]
 			chi_El_fd = sb.E_l_a[b, i].v * chi_fd
-			E_F.d[p0, child_s] += chi_El_fd
-			var_F.d[p0, child_s] -= 2 * E_F_s_v * chi_El_fd
-			var_F.d[p0, child_s] += chi_fd * sb.E_ll_a[b, i].v * 2 * fsm[i].v
+			E_G.d[p0, child_s] += chi_El_fd
+			var_G.d[p0, child_s] -= 2 * E_G_s_v * chi_El_fd
+			var_G.d[p0, child_s] += chi_fd * sb.E_ll_a[b, i].v * 2 * fsm[i].v
 		end
 	end
 	
 	for i in 1:2
 		for p0 in vcat(ids.gamma, ids.zeta, ids.beta[:], ids.lambda[:])
 			chi_f_Eld = chi[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
-			E_F.d[p0, child_s] += chi_f_Eld
-			var_F.d[p0, child_s] -= 2 * E_F_s_v * chi_f_Eld
-			var_F.d[p0, child_s] += chi[i] * fsm[i].v^2 * sb.E_ll_a[b, i].d[p0]
+			E_G.d[p0, child_s] += chi_f_Eld
+			var_G.d[p0, child_s] -= 2 * E_G_s_v * chi_f_Eld
+			var_G.d[p0, child_s] += chi[i] * fsm[i].v^2 * sb.E_ll_a[b, i].d[p0]
 		end
 	end
 end
 
 
-function accum_pixel_ret!(tile_sources::Vector{Int64}, x_nbm::Float64,
-		E_F::SensitiveFloat, var_F::SensitiveFloat, ret::SensitiveFloat)
-	ret.v += x_nbm * (log(E_F.v) - var_F.v / (2. * E_F.v^2))
-	ret.v -= E_F.v
+function accum_pixel_ret!(tile_sources::Vector{Int64}, 
+		x_nbm::Float64, iota::Float64,
+		E_G::SensitiveFloat, var_G::SensitiveFloat, ret::SensitiveFloat)
 
-	for child_s in 1:length(tile_sources), p in 1:size(E_F.d, 1)
+	ret.v += x_nbm * (log(iota) + log(E_G.v) - var_G.v / (2. * E_G.v^2))
+	ret.v -= iota * E_G.v
+
+	for child_s in 1:length(tile_sources), p in 1:size(E_G.d, 1)
 		parent_s = tile_sources[child_s]
-		ret.d[p, parent_s] += x_nbm * (E_F.d[p, child_s] / E_F.v
-			- 0.5 * (E_F.v^2 * var_F.d[p, child_s] - 
-				var_F.v * 2 * E_F.v * E_F.d[p, child_s]) 
-					./  E_F.v^4)
-		ret.d[p, parent_s] -= E_F.d[p, child_s]
+		ret.d[p, parent_s] += x_nbm * (E_G.d[p, child_s] / E_G.v
+			- 0.5 * (E_G.v^2 * var_G.d[p, child_s] - 
+				var_G.v * 2 * E_G.v * E_G.d[p, child_s]) 
+					./  E_G.v^4)
+		ret.d[p, parent_s] -= iota * E_G.d[p, child_s]
 	end
 end
 
@@ -306,32 +308,32 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
 
 	if length(tile_sources) == 0  # special case---for speed
 		num_pixels = length(h_range) * length(w_range)
-		ep = tile.img.epsilon
 		tile_x = sum(tile.img.pixels[h_range, w_range])
-		accum.v += tile_x * log(ep) - num_pixels * ep
+		accum.v += tile_x * log(ep) - num_pixels * tile.img.epsilon
 		return
 	end
 
 	fs0m = zero_sensitive_float([-1], star_pos_params)
 	fs1m = zero_sensitive_float([-1], galaxy_pos_params)
 
-    E_F = zero_sensitive_float(tile_sources, all_params)
-    var_F = zero_sensitive_float(tile_sources, all_params)
+    E_G = zero_sensitive_float(tile_sources, all_params)
+    var_G = zero_sensitive_float(tile_sources, all_params)
 
 	for w in w_range, h in h_range
-		clear!(E_F)  #serious bottleneck
-		E_F.v = tile.img.epsilon
-		clear!(var_F)
+		clear!(E_G)  #serious bottleneck
+		E_G.v = tile.img.epsilon
+		clear!(var_G)
 
 		m_pos = Float64[h - 0.5, w - 0.5]
 		for child_s in 1:length(tile_sources)
 			parent_s = tile_sources[child_s]
 			accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs, 
 				mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b, 
-				fs0m, fs1m, E_F, var_F)
+				fs0m, fs1m, E_G, var_G)
 		end
-
-		accum_pixel_ret!(tile_sources, tile.img.pixels[h, w], E_F, var_F, accum)
+		
+		accum_pixel_ret!(tile_sources, tile.img.pixels[h, w], tile.img.iota,
+			E_G, var_G, accum)
 	end
 end
 

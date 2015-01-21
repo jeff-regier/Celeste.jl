@@ -37,8 +37,9 @@ function load_stamp_blob(stamp_dir, stamp_id)
 		psf = [PsfComponent(alphaBar[k], xiBar[:, k], SigmaBar[:, :, k]) for k in 1:3]
 
         H, W = size(original_pixels)
-		epsilon = median(nelec)
-        Image(H, W, nelec, b, wcs, epsilon, psf)
+		iota = hdr["GAIN"] / hdr["CALIB"]
+		epsilon = hdr["SKY"] * hdr["CALIB"]
+        Image(H, W, nelec, b, wcs, epsilon, iota, psf)
     end
 
     blob = map(fetch_image, 1:5)
@@ -128,8 +129,9 @@ function load_field(field_dir, run_num, camcol_num, frame_num)
 		psf = [PsfComponent(alphaBar[k], xiBar[:, k], SigmaBar[:, :, k]) for k in 1:3]
 
         H, W = size(original_pixels)
-		epsilon = median(nelec)
-        Image(H, W, nelec, b, wcs, epsilon, psf)
+		iota = hdr["GAIN"] / hdr["CALIB"]
+		epsilon = hdr["SKY"] * hdr["CALIB"]
+        Image(H, W, nelec, b, wcs, epsilon, iota, psf)
     end
 
     blob = map(fetch_image, 1:5)

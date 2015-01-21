@@ -12,50 +12,57 @@ import ElboDeriv
 const rescaling = ones(length(all_params))
 rescaling[ids.chi] = 1e1
 [rescaling[id] *= 1e1 for id in ids.mu]
-[rescaling[id] *= 1e1 for id in ids.gamma]
-[rescaling[id] *= 1e-9 for id in ids.zeta]
+[rescaling[id] *= 1e-4 for id in ids.gamma]
+[rescaling[id] *= 1e1 for id in ids.zeta]
 [rescaling[id] *= 1e2 for id in ids.kappa]
 [rescaling[id] *= 1e1 for id in ids.theta]
-[rescaling[id] *= 1e1 for id in ids.Xi]
+[rescaling[id] *= 1e2 for id in ids.Xi]
+[rescaling[id] *= 1e3 for id in ids.beta]
 
 
-function rescale_s(x::Vector{Float64}, dir::Bool=true)
-	@assert length(x) == length(all_params)
-	ret = deepcopy(x)
+const omitted_ids = []
+const left_ids = setdiff(all_params, omitted_ids)
+
+
+function vs_to_coordinates(vs::Vector{Float64})
+	ret = deepcopy(vs)
 #=
-	if dir
-		ret[ids.gamma] = x[ids.gamma] .* x[ids.zeta]  # mean
-		ret[ids.zeta] = ret[ids.gamma] .* x[ids.zeta]  # variance
-	end
-
-	z = dir ? 1. : -1.
-	ret .*= rescaling.^z
-
-	if !dir
-		ret[ids.zeta] = x[ids.zeta] ./ ret[ids.gamma]
-		ret[ids.gamma] = x[ids.gamma] ./ ret[ids.zeta]
-	end
+	ret[ids.gamma] = vs[ids.gamma] .* vs[ids.zeta]  # mean
+	ret[ids.zeta] = ret[ids.gamma] .* vs[ids.zeta]  # variance
 =#
+	ret .*= rescaling
+	ret[left_ids]
+end
+
+
+function coordinates_to_vs(x::Vector{Float64})
+	@assert length(x) == length(left_ids)
+#=
+	ret[ids.zeta] = x[ids.zeta] ./ ret[ids.gamma]
+	ret[ids.gamma] = x[ids.gamma] ./ ret[ids.zeta]
+=#
+	ret = x ./ rescaling[left_ids]
 	ret
 end
 
-function vp_to_vec(vp::Vector{Vector{Float64}})
-	ret = Array(Float64, length(all_params), length(vp))
-	for s in 1:length(vp)
-		ret[:, s] = rescale_s(vp[s], true)
-	end
-	ret[:]
+
+function scale_deriv(x::Vector{Float64})
+	ret = x ./ rescaling
+	ret[left_ids]
 end
 
-function vec_to_vp(pvec::Vector{Float64})
-	@assert length(pvec) % length(all_params) == 0
-	S = int(length(pvec) / length(all_params))
-	vec2 = reshape(pvec, length(all_params), S)
-	ret = Array(Vector{Float64}, S)
-	for s in 1:S
-		ret[s] = rescale_s(vec2[: ,s], false)
-	end
-	ret
+
+function vp_to_coordinates(vp::Vector{Vector{Float64}})
+	reduce(vcat, [vs_to_coordinates(vs) for vs in vp])
+end
+
+
+function coordinates_to_vp(xs::Vector{Float64})
+	P = length(left_ids)
+	@assert length(xs) % P == 0
+	S = int(length(xs) / P)
+	xs2 = reshape(xs, P, S)
+	[coordinates_to_vs(xs2[:, s]) for s in 1:S]
 end
 
 
@@ -71,20 +78,20 @@ function get_nlopt_bounds(img, S)
 	lb[ids.theta] = 1e-2 
 	[lb[id] = sqrt(2) for id in ids.Xi[[1,3]]]
 	lb[ids.Xi[2]] = -10
-	lb2 = rescale_s(lb)
+	lb2 = vs_to_coordinates(lb)
 	lbs = reduce(vcat, [deepcopy(lb2) for s in 1:S])
 
 	ub = Array(Float64, length(all_params))
 	ub[ids.chi] = 1 - 1e-4
 	ub[ids.mu] = [img.H + 10, img.W + 10]
-	[ub[id] = 1e20 for id in ids.gamma]
-	[ub[id] = 1e20 for id in ids.zeta]
+	[ub[id] = 1e12 for id in ids.gamma]
+	[ub[id] = 1e12 for id in ids.zeta]
 	[ub[id] = 1 - 1e-4 for id in ids.kappa]
 	ub[ids.theta] = 1 - 1e-2 
 	[ub[id] = 10 for id in ids.Xi]
 	[ub[id] = 1e4 for id in ids.beta]
 	[ub[id] = 1e4 for id in ids.lambda]
-	ub2 = rescale_s(ub)
+	ub2 = vs_to_coordinates(ub)
 	ubs = reduce(vcat, [deepcopy(ub2) for s in 1:S])
 
 	lbs, ubs
@@ -102,16 +109,19 @@ end
 
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
-	x0 = vp_to_vec(mp.vp)
+	x0 = vp_to_coordinates(mp.vp)
 
 	function objective_and_grad(x::Vector{Float64}, g::Vector{Float64})
-		mp.vp = vec_to_vp(x)
-#		elbo = ElboDeriv.elbo(blob, mp)
-		elbo = zero_sensitive_float([1:mp.S], all_params)
-		elbo.v = sum([sum(vs) for vs in mp.vp])
-		fill!(elbo.d, 1.)
+		vp_new = coordinates_to_vp(x)
+		for s in 1:mp.S
+			mp.vp[s][left_ids] = vp_new[s]
+		end
+		elbo = ElboDeriv.elbo(blob, mp)
+#		elbo = zero_sensitive_float([1:mp.S], all_params)
+#		elbo.v = sum([sum(vs) for vs in mp.vp])
+#		fill!(elbo.d, 1.)
 		if length(g) > 0
-			svs = [rescale_s(elbo.d[:, s], false) for s in 1:mp.S]
+			svs = [scale_deriv(elbo.d[:, s]) for s in 1:mp.S]
 			g[:] = reduce(vcat, svs)
 		end
 

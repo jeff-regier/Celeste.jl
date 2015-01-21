@@ -23,13 +23,13 @@ import WCSLIB
 abstract CatalogEntry
 
 type CatalogStar <: CatalogEntry
-    mu::Vector{Float64}
-    gamma::Vector{Float64}
+    pos::Vector{Float64}
+    fluxes::Vector{Float64}
 end
 
 type CatalogGalaxy <: CatalogEntry
-    mu::Vector{Float64}
-    zeta::Vector{Float64}
+    pos::Vector{Float64}
+    fluxes::Vector{Float64}
     theta::Float64
     Xi::Vector{Float64}
 end
@@ -87,6 +87,7 @@ type Image
 	b::Int64
 	wcs::WCSLIB.wcsprm
 	epsilon::Float64
+	iota::Float64
 	psf::Vector{PsfComponent}
 end
 
@@ -145,7 +146,7 @@ immutable ParamIndex
 	lambda::Array{Int64, 2}
 end
 
-const D = 2
+const D = 4
 
 function get_param_ids()
 	I = 2

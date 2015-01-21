@@ -40,8 +40,8 @@ function init_source(init_pos::Vector{Float64})
 	ret[ids.chi] = 0.5
 	ret[ids.mu[1]] = init_pos[1]
 	ret[ids.mu[2]] = init_pos[2]
-	ret[ids.gamma] = 0.36
-	ret[ids.zeta] = 3e10
+	ret[ids.gamma] = 1e5
+	ret[ids.zeta] = 1e-1
 	ret[ids.theta] = 0.5
 	ret[ids.Xi[1]] = ret[ids.Xi[3]] = 1.5
 	ret[ids.Xi[2]] = 0.
@@ -124,9 +124,9 @@ end
 
 function cat_init(cat::Vector{CatalogEntry}; patch_radius::Float64=Inf,
 		tile_width::Int64=typemax(Int64))
-	vp = [init_source(ce.mu) for ce in cat]
+	vp = [init_source(ce.pos) for ce in cat]
 	# TODO: use non-trivial patch radii, based on the catalog
-	patches = [SkyPatch(ce.mu, patch_radius) for ce in cat]
+	patches = [SkyPatch(ce.pos, patch_radius) for ce in cat]
 	ModelParams(vp, sample_prior(), patches, tile_width)
 end
 

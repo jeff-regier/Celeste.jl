@@ -45,9 +45,9 @@ end
 
 function write_body(img0::Image, sp::CatalogStar, pixels::Matrix{Float64})
 	for k in 1:length(img0.psf)
-		the_mean = sp.mu + img0.psf[k].xiBar
+		the_mean = sp.pos + img0.psf[k].xiBar
 		the_cov = img0.psf[k].SigmaBar
-		intensity = sp.gamma[img0.b] * img0.psf[k].alphaBar
+		intensity = sp.fluxes[img0.b] * img0.iota * img0.psf[k].alphaBar
 		write_gaussian(the_mean, the_cov, intensity, pixels)
 	end
 end
@@ -62,9 +62,10 @@ function write_body(img0::Image, gp::CatalogGalaxy, pixels::Matrix{Float64})
 	for i in 1:2
 		for gproto in galaxy_prototypes[i]
 			for k in 1:length(img0.psf)
-				the_mean = gp.mu + img0.psf[k].xiBar
+				the_mean = gp.pos + img0.psf[k].xiBar
 				the_cov = img0.psf[k].SigmaBar + gproto.sigmaTilde * XiXi
-				intensity = gp.zeta[img0.b] * img0.psf[k].alphaBar * thetas[i] * gproto.alphaTilde
+				intensity = gp.fluxes[img0.b] * img0.iota * img0.psf[k].alphaBar *
+							 thetas[i] * gproto.alphaTilde
 				write_gaussian(the_mean, the_cov, intensity, pixels)
 			end
 		end
@@ -73,14 +74,15 @@ end
 
 
 function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
-    pixels = reshape(float(rand(Distributions.Poisson(img0.epsilon),
+    pixels = reshape(float(rand(Distributions.Poisson(img0.epsilon * img0.iota),
 					 img0.H * img0.W)), img0.H, img0.W)
 
 	for body in n_bodies
 		write_body(img0, body, pixels)
 	end
 
-    return Image(img0.H, img0.W, pixels, img0.b, img0.wcs, img0.epsilon, img0.psf)
+    return Image(img0.H, img0.W, pixels, img0.b, img0.wcs, img0.epsilon,
+			img0.iota, img0.psf)
 end
 
 
