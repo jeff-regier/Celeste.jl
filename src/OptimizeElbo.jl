@@ -20,7 +20,7 @@ rescaling[ids.chi] = 1e1
 [rescaling[id] *= 1e3 for id in ids.beta]
 
 
-const omitted_ids = []
+const omitted_ids = [ids.kappa[:], ids.lambda[:], ids.zeta]
 const left_ids = setdiff(all_params, omitted_ids)
 
 
@@ -66,10 +66,10 @@ function coordinates_to_vp(xs::Vector{Float64})
 end
 
 
-function get_nlopt_bounds(img, S)
+function get_nlopt_bounds(vs::Vector{Float64})
 	lb = Array(Float64, length(all_params))
 	lb[ids.chi] = 1e-4
-	[lb[id] = -10. for id in ids.mu]
+	lb[ids.mu] = vs[ids.mu] - 1.
 	[lb[id] = 1e-4 for id in ids.gamma] #uggg...need min brightness
 	[lb[id] = 1e-4 for id in ids.zeta]
 	[lb[id] = 1e-4 for id in ids.kappa]
@@ -78,12 +78,10 @@ function get_nlopt_bounds(img, S)
 	lb[ids.theta] = 1e-2 
 	[lb[id] = sqrt(2) for id in ids.Xi[[1,3]]]
 	lb[ids.Xi[2]] = -10
-	lb2 = vs_to_coordinates(lb)
-	lbs = reduce(vcat, [deepcopy(lb2) for s in 1:S])
 
 	ub = Array(Float64, length(all_params))
 	ub[ids.chi] = 1 - 1e-4
-	ub[ids.mu] = [img.H + 10, img.W + 10]
+	ub[ids.mu] = vs[ids.mu] + 1.
 	[ub[id] = 1e12 for id in ids.gamma]
 	[ub[id] = 1e12 for id in ids.zeta]
 	[ub[id] = 1 - 1e-4 for id in ids.kappa]
@@ -91,10 +89,15 @@ function get_nlopt_bounds(img, S)
 	[ub[id] = 10 for id in ids.Xi]
 	[ub[id] = 1e4 for id in ids.beta]
 	[ub[id] = 1e4 for id in ids.lambda]
-	ub2 = vs_to_coordinates(ub)
-	ubs = reduce(vcat, [deepcopy(ub2) for s in 1:S])
 
-	lbs, ubs
+	lb, ub
+end
+
+
+function get_nlopt_bounds(vp::Vector{Vector{Float64}})
+	lbs = [get_nlopt_bounds(vs)[1] for vs in vp]
+	ubs = [get_nlopt_bounds(vs)[2] for vs in vp]
+	vp_to_coordinates(lbs), vp_to_coordinates(ubs)
 end
 
 
@@ -110,6 +113,7 @@ end
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
 	x0 = vp_to_coordinates(mp.vp)
+	iter_count = 0
 
 	function objective_and_grad(x::Vector{Float64}, g::Vector{Float64})
 		vp_new = coordinates_to_vp(x)
@@ -125,6 +129,7 @@ function maximize_elbo(blob::Blob, mp::ModelParams)
 			g[:] = reduce(vcat, svs)
 		end
 
+		iter_count += 1
 		print_params(mp.vp)
 		println("grad: ", g)
 		println("elbo: ", elbo.v)
@@ -135,12 +140,12 @@ function maximize_elbo(blob::Blob, mp::ModelParams)
 	opt = Opt(:LD_LBFGS, length(x0))
 	max_objective!(opt, objective_and_grad)
 	xtol_rel!(opt, 1e-4)
-	lbs, ubs = get_nlopt_bounds(blob[1], mp.S)
+	lbs, ubs = get_nlopt_bounds(mp.vp)
 	lower_bounds!(opt, lbs)
 	upper_bounds!(opt, ubs)
 	(max_f, max_x, ret) = optimize(opt, x0)
 
-	println("got $max_f at $max_x after $count iterations (returned $ret)\n")
+	println("got $max_f at $max_x after $iter_count iterations (returned $ret)\n")
 end
 
 

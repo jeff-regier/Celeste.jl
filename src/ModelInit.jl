@@ -41,13 +41,13 @@ function init_source(init_pos::Vector{Float64})
 	ret[ids.mu[1]] = init_pos[1]
 	ret[ids.mu[2]] = init_pos[2]
 	ret[ids.gamma] = 1e5
-	ret[ids.zeta] = 1e-1
+	ret[ids.zeta] = 1e-4
 	ret[ids.theta] = 0.5
 	ret[ids.Xi[1]] = ret[ids.Xi[3]] = 1.5
 	ret[ids.Xi[2]] = 0.
 	ret[ids.kappa] = 1. / size(ids.kappa, 1)
 	ret[ids.beta] = 0.
-	ret[ids.lambda] =  1.
+	ret[ids.lambda] =  1e-4
 	ret
 end
 
@@ -105,7 +105,7 @@ function peak_starts(blob::Blob)
 		peaks_mat[:, i] = peaks[i]
 	end
 
-	peaks_mat
+	peaks_mat - .5  #e.g. the center of pixel [1,1] is [0.5, 0.5]
 #	wcsp2s(img.wcs, peaks_mat)
 end
 

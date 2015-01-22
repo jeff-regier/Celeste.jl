@@ -61,6 +61,8 @@ end
 #########################
 
 const star_fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
+const galaxy_fluxes = [1.377666E+01, 5.635334E+01, 1.258656E+02, 
+					1.884264E+02, 2.351820E+02] * 30  # 1x wasn't bright enough
 
 function gen_three_body_model()
 	srand(1)
@@ -69,9 +71,9 @@ function gen_three_body_model()
 		blob0[b].H, blob0[b].W = 112, 238
 	end
 	three_bodies = [
-		CatalogGalaxy([4.5, 3.6], star_fluxes , 0.1, [6, 0., 6.]),
+		CatalogGalaxy([4.5, 3.6], galaxy_fluxes, 0.1, [6, 0., 6.]),
 		CatalogStar([60.1, 82.2], star_fluxes),
-		CatalogGalaxy([71.3, 100.4], star_fluxes , 0.1, [6, 0., 6.]),
+		CatalogGalaxy([71.3, 100.4], galaxy_fluxes , 0.1, [6, 0., 6.]),
 	]
    	blob = Synthetic.gen_blob(blob0, three_bodies)
 	mp = ModelInit.cat_init(three_bodies)
@@ -86,7 +88,7 @@ function gen_one_galaxy_dataset()
 		blob0[b].H, blob0[b].W = 20, 23
 	end
 	one_body = CatalogEntry[
-		CatalogGalaxy([8.5, 9.6], star_fluxes , 0.1, [6, 0., 6.]),
+		CatalogGalaxy([8.5, 9.6], galaxy_fluxes , 0.1, [6, 0., 6.]),
 	]
    	blob = Synthetic.gen_blob(blob0, one_body)
 	mp = ModelInit.cat_init(one_body)
@@ -247,7 +249,9 @@ function test_kl_divergence_values()
 	test_kl(q_k, p_k, (accum) -> ElboDeriv.subtract_kl_k!(i, s, mp, accum))
 
 	# c
-	q_c = MvNormal(vs[ids.beta[:, i]], vs[ids.lambda[:, i]])
+	mp.pp.Omega[i][:, d] = vs[ids.beta[:, i]]
+	mp.pp.Lambda[i][d] = diagm(vs[ids.lambda[:, i]])
+	q_c = MvNormal(vs[ids.beta[:, i]], diagm(vs[ids.lambda[:, i]]))
 	p_c = MvNormal(mp.pp.Omega[i][:, d], mp.pp.Lambda[i][d])
 	function sklc(accum)
 		ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
@@ -292,7 +296,7 @@ end
 #########################
 
 
-function truth_init()
+function true_star_init()
 	blob, mp, body = gen_one_star_dataset()
 
 	flx = body[1].fluxes
@@ -301,7 +305,24 @@ function truth_init()
 	mp.vp[1][ids.mu] = body[1].pos
 	mp.vp[1][ids.chi] = 1e-3
 	mp.vp[1][ids.zeta] = 1e-4
-	mp.vp[1][ids.gamma] = 1e6#flx[3] ./ mp.vp[1][ids.zeta]
+	mp.vp[1][ids.gamma] = flx[3] ./ mp.vp[1][ids.zeta]
+	mp.vp[1][ids.lambda] = 1e-4
+	mp.vp[1][ids.beta[:, 1]] = mp.vp[1][ids.beta[:, 2]] = colors
+
+	blob, mp, body
+end
+
+
+function true_galaxy_init()
+	blob, mp, body = gen_one_galaxy_dataset()
+
+	flx = body[1].fluxes
+	colors = log(flx[2:5] ./ flx[1:4])
+
+	mp.vp[1][ids.mu] = body[1].pos
+	mp.vp[1][ids.chi] = 1 - 1e-4
+	mp.vp[1][ids.zeta] = 1e-4
+	mp.vp[1][ids.gamma] = flx[3] ./ mp.vp[1][ids.zeta]
 	mp.vp[1][ids.lambda] = 1e-4
 	mp.vp[1][ids.beta[:, 1]] = mp.vp[1][ids.beta[:, 2]] = colors
 
@@ -311,7 +332,7 @@ end
 
 function test_that_variance_is_low()
 	# very peaked variational distribution---variance for F(m) should be low
-	blob, mp, body = truth_init()
+	blob, mp, body = true_star_init()
 
 	star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mp)
 	fs0m = zero_sensitive_float([1], star_pos_params)
@@ -327,8 +348,8 @@ function test_that_variance_is_low()
 end
 
 
-function test_that_truth_is_more_likely()
-	blob, mp, body = truth_init()
+function test_that_star_truth_is_more_likely()
+	blob, mp, body = true_star_init()
 	best = ElboDeriv.elbo_likelihood(blob, mp)
 
 	for bad_chi in [.3, .5, .9]
@@ -367,29 +388,75 @@ function test_that_truth_is_more_likely()
 end
 
 
-function test_optimization_with_good_initialization()
-	blob, mp, body = truth_init()
+function test_star_optimization()
+	blob, mp, body = true_star_init()
+
+	flx = body[1].fluxes
+	true_colors = log(flx[2:5] ./ flx[1:4])
 	
 	OptimizeElbo.maximize_elbo(blob, mp)
 
 	@test_approx_eq mp.vp[1][ids.chi] 0.0001
-	@test_approx_eq_eps mp.vp[1][ids.mu[1]] 10.1 0.05
-	@test_approx_eq_eps mp.vp[1][ids.mu[2]] 12.2 0.05
-	flx = body[1].fluxes
-	true_colors = log(flx[2:5] ./ flx[1:4])
+	@test_approx_eq_eps mp.vp[1][ids.mu[1]] 10.1 0.1
+	@test_approx_eq_eps mp.vp[1][ids.mu[2]] 12.2 0.1
+	@test_approx_eq_eps (mp.vp[1][ids.gamma[1]] * mp.vp[1][ids.zeta[1]]) flx[3] 1e2
 	for b in 1:4
 		@test_approx_eq_eps mp.vp[1][ids.beta[b, 1]] true_colors[b] 0.1
+	end
+	
+end
+
+
+function test_galaxy_optimization()
+	blob, mp, body = true_galaxy_init()
+
+	flx = body[1].fluxes
+	colors = log(flx[2:5] ./ flx[1:4])
+	
+	OptimizeElbo.maximize_elbo(blob, mp)
+
+	@test_approx_eq mp.vp[1][ids.chi] 0.9999
+	@test_approx_eq_eps mp.vp[1][ids.mu[1]] 8.5 0.1
+	@test_approx_eq_eps mp.vp[1][ids.mu[2]] 9.6 0.1
+	@test_approx_eq_eps mp.vp[1][ids.Xi[1]] 6. 0.2
+	@test_approx_eq_eps mp.vp[1][ids.Xi[2]] 0. 0.2
+	@test_approx_eq_eps mp.vp[1][ids.Xi[3]] 6. 0.2
+	@test_approx_eq_eps (mp.vp[1][ids.gamma[2]] * mp.vp[1][ids.zeta[2]]) flx[3] 1e2
+	for b in 1:4
+		@test_approx_eq_eps mp.vp[1][ids.beta[b, 2]] colors[b] 0.1
 	end
 end
 
 
-function test_peak_init_optimization()
+function test_peak_init_galaxy_optimization()
+	blob, mp, body = gen_one_galaxy_dataset()
+	mp = ModelInit.peak_init(blob)
+
+	flx = body[1].fluxes
+	colors = log(flx[2:5] ./ flx[1:4])
+
+	OptimizeElbo.maximize_elbo(blob, mp)
+
+	@test_approx_eq mp.vp[1][ids.chi] 0.9999
+	@test_approx_eq_eps mp.vp[1][ids.mu[1]] 8.5 0.1
+	@test_approx_eq_eps mp.vp[1][ids.mu[2]] 9.6 0.1
+	@test_approx_eq_eps mp.vp[1][ids.Xi[1]] 6. 0.2
+	@test_approx_eq_eps mp.vp[1][ids.Xi[2]] 0. 0.2
+	@test_approx_eq_eps mp.vp[1][ids.Xi[3]] 6. 0.2
+	@test_approx_eq_eps (mp.vp[1][ids.gamma[2]] * mp.vp[1][ids.zeta[2]]) flx[3] 1e2
+	for b in 1:4
+		@test_approx_eq_eps mp.vp[1][ids.beta[b, 2]] colors[b] 0.1
+	end
+end
+
+
+function test_peak_init_2body_optimization()
 	srand(1)
 	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
 
 	two_bodies = [
 		CatalogStar([11.1, 21.2], star_fluxes),
-		CatalogGalaxy([15.3, 31.4], star_fluxes , 0.1, [6, 0., 6.]),
+		CatalogGalaxy([15.3, 31.4], galaxy_fluxes , 0.1, [6, 0., 6.]),
 	]
 
    	blob = Synthetic.gen_blob(blob0, two_bodies)
@@ -400,10 +467,11 @@ function test_peak_init_optimization()
 
 	@test_approx_eq mp.vp[1][ids.chi] 0.0001
 	@test_approx_eq mp.vp[2][ids.chi] 0.9999
-	@test_approx_eq_eps mp.vp[1][ids.mu[1]] 11.1 0.05
-	@test_approx_eq_eps mp.vp[1][ids.mu[2]] 21.2 0.05
-	@test_approx_eq_eps mp.vp[2][ids.mu[1]] 15.3 0.05
-	@test_approx_eq_eps mp.vp[2][ids.mu[2]] 31.4 0.05
+	@test_approx_eq_eps mp.vp[2][ids.theta] 0.1 0.08
+	@test_approx_eq_eps mp.vp[1][ids.mu[1]] 11.1 0.1
+	@test_approx_eq_eps mp.vp[1][ids.mu[2]] 21.2 0.1
+	@test_approx_eq_eps mp.vp[2][ids.mu[1]] 15.3 0.1
+	@test_approx_eq_eps mp.vp[2][ids.mu[2]] 31.4 0.1
 	@test_approx_eq_eps mp.vp[2][ids.Xi[1]] 6. 0.2
 	@test_approx_eq_eps mp.vp[2][ids.Xi[2]] 0. 0.2
 	@test_approx_eq_eps mp.vp[2][ids.Xi[3]] 6. 0.2
@@ -419,8 +487,8 @@ function test_small_image()
 
 	three_bodies = [
 		CatalogStar([10.1, 12.2], star_fluxes),
-		CatalogGalaxy([71.3, 100.4], star_fluxes , 0.1, [6, 0., 6.]),
-		CatalogGalaxy([81.5, 103.6], star_fluxes , 0.1, [6, 0., 6.]),
+		CatalogGalaxy([71.3, 100.4], galaxy_fluxes , 0.1, [6, 0., 6.]),
+		CatalogGalaxy([81.5, 103.6], galaxy_fluxes , 0.1, [6, 0., 6.]),
 	]
 
    	blob = Synthetic.gen_blob(blob0, three_bodies)
@@ -441,9 +509,9 @@ function test_local_sources()
 	end
 
 	three_bodies = [
-		CatalogGalaxy([4.5, 3.6], star_fluxes , 0.1, [6, 0., 6.]),
+		CatalogGalaxy([4.5, 3.6], galaxy_fluxes , 0.1, [6, 0., 6.]),
 		CatalogStar([60.1, 82.2], star_fluxes),
-		CatalogGalaxy([71.3, 100.4], star_fluxes , 0.1, [6, 0., 6.]),
+		CatalogGalaxy([71.3, 100.4], galaxy_fluxes , 0.1, [6, 0., 6.]),
 	]
 
    	blob = Synthetic.gen_blob(blob0, three_bodies)
@@ -510,6 +578,9 @@ function test_tiling()
 	@test mp.S == 3
 	elbo = ElboDeriv.elbo(blob, mp)
 
+	println(elbo.v)
+	println([elbo.d[i, 1 + i % 3] for i in 1:length(all_params)])
+
 	@test_approx_eq_eps elbo.v -9.449959518857952e6 1e-2
 	truth = [-508844.6317699191,-433.93385620506535,17282.741853376505,
 		0.6544622275104429,1.3266708392392763,2.108588044705838,
@@ -517,13 +588,13 @@ function test_tiling()
 		1.4286385448901462,2.19370988751766,5.812194232750391,
 		0.1370825827342583,27674.294319985074,-106680.72303279316,
 		322.99952935271295,-22392.660293056626]
-	for i in 1:18
+	for i in 1:length(all_params)
 		@test_approx_eq_eps elbo.d[i, 1 + i % 3] truth[i] 1e-5
 	end
 
 	mp2 = ModelInit.cat_init(three_bodies, tile_width=10)
 	elbo_tiles = ElboDeriv.elbo(blob, mp2)
-	@test_approx_eq_eps elbo_tiles.v -9.449959518857952e6 1e-2
+	@test_approx_eq_eps elbo_tiles.v elbo.v 1e-2
 	@test_approx_eq elbo_tiles.v elbo.v
 	for i in 1:18
 		@test_approx_eq_eps elbo_tiles.d[i, 1 + i % 3] truth[i] 1e-5
@@ -532,15 +603,15 @@ function test_tiling()
 
 	mp3 = ModelInit.cat_init(three_bodies, patch_radius=30.)
 	elbo_patches = ElboDeriv.elbo(blob, mp3)
-	@test_approx_eq_eps elbo_patches.v -9.449959518857952e6 1e-2
+	@test_approx_eq_eps elbo_patches.v elbo.v 1e-2
 	for i in 1:18
 		@test_approx_eq_eps elbo_patches.d[i, 1 + i % 3] truth[i] 1e-5
 	end
 
 	mp4 = ModelInit.cat_init(three_bodies, patch_radius=35., tile_width=10)
 	elbo_both = ElboDeriv.elbo(blob, mp4)
-	@test_approx_eq_eps elbo_both.v -9.449959518857952e6 1e-1
-	for i in 1:18
+	@test_approx_eq_eps elbo_both.v elbo.v 1e-1
+	for i in 1:length(all_params)
 		tol = abs(truth[i]) * 1e-5
 		@test_approx_eq_eps elbo_both.d[i, 1 + i % 3] truth[i] tol
 	end
@@ -561,20 +632,23 @@ function test_sky_noise_estimates()
 	end
 end
 
-
-test_that_variance_is_low()
+test_local_sources_2()
+test_local_sources()
 test_sky_noise_estimates()
 test_kl_divergence_values()
 test_kl_divergence_derivs()
+
 test_accum_pos()
-test_local_sources_2()
-test_local_sources()
 test_accum_pixel_source_stats()
 test_elbo_likelihood_derivs()
 test_brightness_derivs()
+test_that_variance_is_low()
 test_that_truth_is_more_likely()
-test_optimization_with_good_initialization()
-test_peak_init_optimization()
+
+test_star_optimization()
+test_galaxy_optimization()
+test_peak_init_galaxy_optimization()
+test_peak_init_2body_optimization()
 
 #=
 test_tiling()

@@ -374,9 +374,9 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64, mp::ModelParams,
 	Lambda_inv = Lambda^-1  # cache this!
 	half_kappa = .5 * vs[ids.kappa[d, i]]
 
-	ret = sum(diag(Lambda_inv) .* lambda)
+	ret = sum(diag(Lambda_inv) .* lambda) - 4
 	ret += (diff' * Lambda_inv * diff)[]
-	ret += -4 - sum(log(lambda)) + logdet(Lambda)
+	ret += -sum(log(lambda)) + logdet(Lambda)
 	accum.v -= ret * half_kappa
 
 	accum.d[ids.kappa[d, i], s] -= .5 * ret
@@ -388,7 +388,7 @@ end
 
 function subtract_kl_k!(i::Int64, s::Int64, mp::ModelParams, accum::SensitiveFloat)
 	kappa = mp.vp[s][ids.kappa[:, i]]
-	for d in 1:length(mp.pp.Psi[i])
+	for d in 1:D
 		log_ratio = log(kappa[d] / mp.pp.Psi[i][d])
 		accum.v -= kappa[d] * log_ratio
 		accum.d[ids.kappa[d, i] , s] -= 1 + log_ratio
