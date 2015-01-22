@@ -12,7 +12,7 @@ import ElboDeriv
 const rescaling = ones(length(all_params))
 rescaling[ids.chi] = 1e1
 [rescaling[id] *= 1e1 for id in ids.mu]
-[rescaling[id] *= 1e-4 for id in ids.gamma]
+[rescaling[id] *= 1e-5 for id in ids.gamma]
 [rescaling[id] *= 1e1 for id in ids.zeta]
 [rescaling[id] *= 1e2 for id in ids.kappa]
 [rescaling[id] *= 1e1 for id in ids.theta]
@@ -20,7 +20,7 @@ rescaling[ids.chi] = 1e1
 [rescaling[id] *= 1e3 for id in ids.beta]
 
 
-const omitted_ids = [ids.kappa[:], ids.lambda[:], ids.zeta]
+const omitted_ids = Int64[]
 const left_ids = setdiff(all_params, omitted_ids)
 
 
@@ -111,7 +111,7 @@ function print_params(vp)
 end
 
 
-function maximize_elbo(blob::Blob, mp::ModelParams)
+function maximize_f(f::Function, blob::Blob, mp::ModelParams)
 	x0 = vp_to_coordinates(mp.vp)
 	iter_count = 0
 
@@ -120,10 +120,7 @@ function maximize_elbo(blob::Blob, mp::ModelParams)
 		for s in 1:mp.S
 			mp.vp[s][left_ids] = vp_new[s]
 		end
-		elbo = ElboDeriv.elbo(blob, mp)
-#		elbo = zero_sensitive_float([1:mp.S], all_params)
-#		elbo.v = sum([sum(vs) for vs in mp.vp])
-#		fill!(elbo.d, 1.)
+		elbo = f(blob, mp)
 		if length(g) > 0
 			svs = [scale_deriv(elbo.d[:, s]) for s in 1:mp.S]
 			g[:] = reduce(vcat, svs)
@@ -149,5 +146,20 @@ function maximize_elbo(blob::Blob, mp::ModelParams)
 end
 
 
+function maximize_elbo(blob::Blob, mp::ModelParams)
+	empty!(omitted_ids)
+	empty!(left_ids)
+	append!(left_ids, all_params)
+	maximize_f(ElboDeriv.elbo, blob, mp)
 end
 
+
+function maximize_likelihood(blob::Blob, mp::ModelParams)
+	empty!(omitted_ids)
+	append!(omitted_ids, [ids.kappa[:], ids.lambda[:], ids.zeta])
+	empty!(left_ids)
+	append!(left_ids, setdiff(all_params, omitted_ids))
+	maximize_f(ElboDeriv.elbo_likelihood, blob, mp)
+end
+
+end

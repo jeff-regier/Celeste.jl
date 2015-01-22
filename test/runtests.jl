@@ -396,7 +396,7 @@ function test_star_optimization()
 	flx = body[1].fluxes
 	true_colors = log(flx[2:5] ./ flx[1:4])
 	
-	OptimizeElbo.maximize_elbo(blob, mp)
+	OptimizeElbo.maximize_likelihood(blob, mp)
 
 	@test_approx_eq mp.vp[1][ids.chi] 0.0001
 	@test_approx_eq_eps mp.vp[1][ids.mu[1]] 10.1 0.1
@@ -415,7 +415,7 @@ function test_galaxy_optimization()
 	flx = body[1].fluxes
 	colors = log(flx[2:5] ./ flx[1:4])
 	
-	OptimizeElbo.maximize_elbo(blob, mp)
+	OptimizeElbo.maximize_likelihood(blob, mp)
 
 	@test_approx_eq mp.vp[1][ids.chi] 0.9999
 	@test_approx_eq_eps mp.vp[1][ids.mu[1]] 8.5 0.1
@@ -437,7 +437,7 @@ function test_peak_init_galaxy_optimization()
 	flx = body[1].fluxes
 	colors = log(flx[2:5] ./ flx[1:4])
 
-	OptimizeElbo.maximize_elbo(blob, mp)
+	OptimizeElbo.maximize_likelihood(blob, mp)
 
 	@test_approx_eq mp.vp[1][ids.chi] 0.9999
 	@test_approx_eq_eps mp.vp[1][ids.mu[1]] 8.5 0.1
@@ -465,7 +465,7 @@ function test_peak_init_2body_optimization()
 	mp = ModelInit.peak_init(blob) #one giant tile, giant patches
 	@test mp.S == 2
 
-	OptimizeElbo.maximize_elbo(blob, mp)
+	OptimizeElbo.maximize_likelihood(blob, mp)
 
 	@test_approx_eq mp.vp[1][ids.chi] 0.0001
 	@test_approx_eq mp.vp[2][ids.chi] 0.9999
