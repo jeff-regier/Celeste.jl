@@ -146,7 +146,7 @@ immutable ParamIndex
 	lambda::Array{Int64, 2}
 end
 
-const D = 16
+const D = 2
 
 function get_param_ids()
 	I = 2

@@ -480,29 +480,6 @@ function test_peak_init_2body_optimization()
 end
 
 
-function test_small_image()
-	srand(1)
-	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
-	for b in 1:5
-		blob0[b].H, blob0[b].W = 100, 200
-	end
-
-	three_bodies = [
-		CatalogStar([10.1, 12.2], star_fluxes),
-		CatalogGalaxy([71.3, 100.4], galaxy_fluxes , 0.1, [6, 0., 6.]),
-		CatalogGalaxy([81.5, 103.6], galaxy_fluxes , 0.1, [6, 0., 6.]),
-	]
-
-   	blob = Synthetic.gen_blob(blob0, three_bodies)
-	mp = ModelInit.peak_init(blob)
-	@test mp.S == 3
-
-	elbo = ElboDeriv.elbo(blob, mp)
-
-	@test_approx_eq elbo.v -1.0817836180574356e7
-end
-
-
 function test_local_sources()
 	srand(1)
 	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
@@ -580,18 +557,20 @@ function test_tiling()
 	@test mp.S == 3
 	elbo = ElboDeriv.elbo(blob, mp)
 
-	println(elbo.v)
-	println([elbo.d[i, 1 + i % 3] for i in 1:length(all_params)])
-
-	@test_approx_eq_eps elbo.v -9.449959518857952e6 1e-2
-	truth = [-508844.6317699191,-433.93385620506535,17282.741853376505,
-		0.6544622275104429,1.3266708392392763,2.108588044705838,
-		6.003884511466467,0.0675725062900174,0.0,0.684793716373134,
-		1.4286385448901462,2.19370988751766,5.812194232750391,
-		0.1370825827342583,27674.294319985074,-106680.72303279316,
-		322.99952935271295,-22392.660293056626]
+	@test_approx_eq_eps elbo.v -5.510736539877528e7 1e-2
+	truth = [-589639.8068317885,-77.51825045081908,10845.11541686871,
+		9.800376287994947,3.578252350518456,3.799944250012332e9,
+		7.993597296606618e9,30651.838483584397,-32120.49013679011,
+		4493.95287023283,-31189.08227325438,-20.784856380029844,
+		-14.988221319308648,-17.48847941308796,-18.86589448454384,
+		-126736.39695639168,-118707.02401259453,124492.26047620608,
+		139075.33531095553,-4354.079971826216,-107876.8565144275,
+		199510.48317420128,11400.317802038586,5963.29096662086,
+		98759.56869468512,52879.26783237952,10733.324056292544,
+		43734.44854757365,46077.05261376089,50636.37542440408,
+		48600.26080395124]
 	for i in 1:length(all_params)
-		@test_approx_eq_eps elbo.d[i, 1 + i % 3] truth[i] 1e-5
+		@test_approx_eq_eps elbo.d[i, 1 + i % 3] truth[i] 1e-4
 	end
 
 	mp2 = ModelInit.cat_init(three_bodies, tile_width=10)
@@ -634,11 +613,53 @@ function test_sky_noise_estimates()
 	end
 end
 
-test_local_sources_2()
-test_local_sources()
+function test_full_elbo_optimization()
+	blob, mp, body = true_galaxy_init()
+
+	flx = body[1].fluxes
+	colors = log(flx[2:5] ./ flx[1:4])
+	
+	OptimizeElbo.maximize_elbo(blob, mp)
+
+	@test_approx_eq mp.vp[1][ids.chi] 0.9999
+	@test_approx_eq_eps mp.vp[1][ids.mu[1]] 8.5 0.1
+	@test_approx_eq_eps mp.vp[1][ids.mu[2]] 9.6 0.1
+	@test_approx_eq_eps mp.vp[1][ids.Xi[1]] 6. 0.2
+	@test_approx_eq_eps mp.vp[1][ids.Xi[2]] 0. 0.2
+	@test_approx_eq_eps mp.vp[1][ids.Xi[3]] 6. 0.2
+	@test_approx_eq_eps (mp.vp[1][ids.gamma[2]] * mp.vp[1][ids.zeta[2]]) flx[3] 1e2
+	for b in 1:4
+		@test_approx_eq_eps mp.vp[1][ids.beta[b, 2]] colors[b] 0.1
+	end
+end
+
+
+function test_coordinates_vp_conversion()
+	blob, mp, three_bodies = gen_three_body_model()
+
+	xs = OptimizeElbo.vp_to_coordinates(deepcopy(mp.vp), [ids.lambda[:]])
+	vp_new = deepcopy(mp.vp)
+	OptimizeElbo.coordinates_to_vp!(deepcopy(xs), vp_new, [ids.lambda[:]])
+
+	@test length(xs) + 3 * 2 * (4 + 1) == 
+			length(vp_new[1]) * length(vp_new) == 
+			length(mp.vp[1]) * length(mp.vp)
+
+	for s in 1:3
+		for p in all_params
+			@test_approx_eq mp.vp[s][p] vp_new[s][p]
+		end
+	end
+end
+
+
 test_sky_noise_estimates()
 test_kl_divergence_values()
 test_kl_divergence_derivs()
+
+test_local_sources_2()
+test_local_sources()
+test_tiling()
 
 test_accum_pos()
 #test_accum_pixel_source_stats()
@@ -647,12 +668,11 @@ test_brightness_derivs()
 test_that_variance_is_low()
 test_that_star_truth_is_more_likely()
 
+test_coordinates_vp_conversion()
+
 test_star_optimization()
 test_galaxy_optimization()
 test_peak_init_galaxy_optimization()
 test_peak_init_2body_optimization()
+test_full_elbo_optimization()
 
-#=
-test_tiling()
-test_small_image()
-=#

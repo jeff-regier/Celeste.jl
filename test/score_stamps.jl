@@ -65,17 +65,21 @@ function infer_and_cache(stamp_id)
 	blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id);
 	mp = ModelInit.peak_init(blob);
 
-	OptimizeElbo.maximize_elbo(blob, M, V_init)
+	OptimizeElbo.maximize_elbo(blob, mp)
 
-    f = open(ENV["STAMP"]"/V-$stamp_id.dat", "w+")
-    serialize(f, V_opt)
-    close(f)
+	f = open(ENV["STAMP"]"/V-$stamp_id.dat", "w+")
+	serialize(f, mp)
+	close(f)
 end
 
 
 function infer_and_cache()
 	for stamp_id in stamp_ids
-		infer_and_cache(stamp_id)
+		try
+			infer_and_cache(stamp_id)
+		catch err
+			println(err)
+		end
 	end
 end
 
@@ -253,6 +257,5 @@ function posterior_check_plot()
 		posterior_check_plot(stamp_id)
 	end
 end
-
 
 
