@@ -40,14 +40,14 @@ function init_source(init_pos::Vector{Float64})
 	ret[ids.chi] = 0.5
 	ret[ids.mu[1]] = init_pos[1]
 	ret[ids.mu[2]] = init_pos[2]
-	ret[ids.gamma] = 1e5
-	ret[ids.zeta] = 1e-4
+	ret[ids.gamma] = 1e3
+	ret[ids.zeta] = 2e-2
 	ret[ids.theta] = 0.5
 	ret[ids.Xi[1]] = ret[ids.Xi[3]] = 1.5
 	ret[ids.Xi[2]] = 0.
 	ret[ids.kappa] = 1. / size(ids.kappa, 1)
 	ret[ids.beta] = 0.
-	ret[ids.lambda] =  1e-4
+	ret[ids.lambda] =  1e-2
 	ret
 end
 

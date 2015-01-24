@@ -7,24 +7,38 @@ using FITSIO
 using WCSLIB
 
 
-kelvin_ids = [
-    "246.4702-19.0669", #8300 (flatish >5800)
-    "310.4779-57.5232", #8850
-    "240.0940-37.4041", #4650 (5400 and 5900 close)
-    "270.0000-0.0030", #no spectrograph
-    "150.5244--0.4788", #4800
-    "118.3707-52.5271", #4600
-    "305.1114--12.9577", #4000
-    "130.1765-52.7501", #4000
-    "93.9717-0.5630", #3950
-    "253.1147-11.6072", #3900
-    "188.3444-63.4421", #4050
-]
-
-peaks = Float64[8300, 8850, 4650, -1e20, 4800, 4600, 4000, 4000, 3950, 3900, 4050]
-peak_ts = 2.897 * 1e7 ./ peaks
-
 include("stamp_ids.jl")
+
+
+function infer_and_cache(stamp_id)
+	blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id);
+	mp = ModelInit.peak_init(blob);
+
+	OptimizeElbo.maximize_elbo(blob, mp)
+
+	f = open(ENV["STAMP"]"/V-$stamp_id.dat", "w+")
+	serialize(f, mp)
+	close(f)
+end
+
+
+function infer_and_cache()
+	for stamp_id in stamp_ids
+		try
+			infer_and_cache(stamp_id)
+		catch err
+			println(err)	
+		end
+	end
+end
+
+
+function load_cache(stamp_id)
+    f = open(ENV["STAMP"]"/V-$stamp_id.dat")
+    V = deserialize(f)
+    close(f)
+	V
+end
 
 
 function average_distance(a, b)
@@ -58,37 +72,6 @@ function load_catalog(stamp_id)
 	end
 
 	cat_stars_2, cat_xy
-end
-
-
-function infer_and_cache(stamp_id)
-	blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id);
-	mp = ModelInit.peak_init(blob);
-
-	OptimizeElbo.maximize_elbo(blob, mp)
-
-	f = open(ENV["STAMP"]"/V-$stamp_id.dat", "w+")
-	serialize(f, mp)
-	close(f)
-end
-
-
-function infer_and_cache()
-	for stamp_id in stamp_ids
-		try
-			infer_and_cache(stamp_id)
-		catch err
-			println(err)
-		end
-	end
-end
-
-
-function load_cache(stamp_id)
-    f = open(ENV["STAMP"]"/V-$stamp_id.dat")
-    V = deserialize(f)
-    close(f)
-	V
 end
 
 

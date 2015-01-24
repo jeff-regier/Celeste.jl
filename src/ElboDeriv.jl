@@ -309,7 +309,8 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
 	if length(tile_sources) == 0  # special case---for speed
 		num_pixels = length(h_range) * length(w_range)
 		tile_x = sum(tile.img.pixels[h_range, w_range])
-		accum.v += tile_x * log(ep) - num_pixels * tile.img.epsilon
+		ep = tile.img.epsilon
+		accum.v += tile_x * log(ep) - num_pixels * ep
 		return
 	end
 
