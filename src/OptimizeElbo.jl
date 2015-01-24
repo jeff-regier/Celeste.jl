@@ -9,16 +9,11 @@ using CelesteTypes
 import ElboDeriv
 
 
+const xtol_rel = 1e-6
+const ftol_abs = 1e-5
+
 const rescaling = ones(length(all_params))
-rescaling[ids.chi] = 1e0
-[rescaling[id] *= 1e0 for id in ids.mu]
-[rescaling[id] *= 1e-5 for id in ids.gamma]
-[rescaling[id] *= 1e2 for id in ids.zeta]
-[rescaling[id] *= 1e0 for id in ids.kappa]
-[rescaling[id] *= 1e0 for id in ids.theta]
-[rescaling[id] *= 1e1 for id in ids.Xi]
-[rescaling[id] *= 1e2 for id in ids.beta]
-[rescaling[id] *= 1e1 for id in ids.lambda]
+[rescaling[id] *= 1e-3 for id in ids.gamma]
 
 
 function scale_deriv(elbo::SensitiveFloat, omitted_ids)
@@ -141,6 +136,8 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[
 		iter_count += 1
 		print_params(mp.vp)
 		println("elbo: ", elbo.v)
+		println("xtol_rel: $xtol_rel ;  ftol_abs: $ftol_abs")
+		println("rescaling: ", rescaling)
 		println("\n=======================================\n")
 		elbo.v
 	end
@@ -150,8 +147,8 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[
 	lower_bounds!(opt, lbs)
 	upper_bounds!(opt, ubs)
 	max_objective!(opt, objective_and_grad)
-	xtol_abs!(opt, 1e-6)
-	ftol_abs!(opt, 1e-5)
+	xtol_rel!(opt, xtol_rel)
+	ftol_abs!(opt, ftol_abs)
 	(max_f, max_x, ret) = optimize(opt, x0)
 
 	println("got $max_f at $max_x after $iter_count iterations (returned $ret)\n")
@@ -159,6 +156,8 @@ end
 
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
+	omitted_ids = [ids.kappa[:], ids.lambda[:], ids.mu, ids.theta, ids.Xi, ids.chi]
+	maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 	maximize_f(ElboDeriv.elbo, blob, mp)
 end
 
