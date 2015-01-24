@@ -24,11 +24,11 @@ end
 
 function infer_and_cache()
 	for stamp_id in stamp_ids
-		try
+#		try
 			infer_and_cache(stamp_id)
-		catch err
-			println(err)	
-		end
+#		catch err
+#			println(err)	
+#		end
 	end
 end
 
@@ -241,4 +241,6 @@ function posterior_check_plot()
 	end
 end
 
+
+infer_and_cache()
 

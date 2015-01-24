@@ -12,35 +12,13 @@ import ElboDeriv
 const rescaling = ones(length(all_params))
 rescaling[ids.chi] = 1e0
 [rescaling[id] *= 1e0 for id in ids.mu]
-[rescaling[id] *= 1e-7 for id in ids.gamma]
+[rescaling[id] *= 1e-5 for id in ids.gamma]
 [rescaling[id] *= 1e2 for id in ids.zeta]
 [rescaling[id] *= 1e0 for id in ids.kappa]
 [rescaling[id] *= 1e0 for id in ids.theta]
 [rescaling[id] *= 1e1 for id in ids.Xi]
 [rescaling[id] *= 1e2 for id in ids.beta]
 [rescaling[id] *= 1e1 for id in ids.lambda]
-
-
-function vs_to_coordinates(vs::Vector{Float64})
-	ret = deepcopy(vs)
-#=
-	ret[ids.gamma] = vs[ids.gamma] .* vs[ids.zeta]  # mean
-	ret[ids.zeta] = ret[ids.gamma] .* vs[ids.zeta]  # variance
-=#
-	ret .*= rescaling
-	ret[left_ids]
-end
-
-
-function coordinates_to_vs(x::Vector{Float64})
-	@assert length(x) == length(left_ids)
-#=
-	ret[ids.zeta] = x[ids.zeta] ./ ret[ids.gamma]
-	ret[ids.gamma] = x[ids.gamma] ./ ret[ids.zeta]
-=#
-	ret = x ./ rescaling[left_ids]
-	ret
-end
 
 
 function scale_deriv(elbo::SensitiveFloat, omitted_ids)
@@ -147,16 +125,6 @@ function print_params(vp)
 end
 
 
-function kappa_constraint(x::Vector, grad::Vector, i)
-	w = 1e1
-    if length(grad) > 0
-		grad[:] = -w
-    end
-	println("constrained sum: ", sum(x[ids.kappa[:, i]]))
-	w * (1 - sum(x[ids.kappa[:, i]]))
-end
-
-
 function maximize_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[])
 	x0 = vp_to_coordinates(mp.vp, omitted_ids)
 	iter_count = 0
@@ -183,7 +151,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[
 	upper_bounds!(opt, ubs)
 	max_objective!(opt, objective_and_grad)
 	xtol_abs!(opt, 1e-6)
-	ftol_abs!(opt, 1e-6)
+	ftol_abs!(opt, 1e-5)
 	(max_f, max_x, ret) = optimize(opt, x0)
 
 	println("got $max_f at $max_x after $iter_count iterations (returned $ret)\n")
