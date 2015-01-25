@@ -46,20 +46,32 @@ function load_stamp_blob(stamp_dir, stamp_id)
 end
 
 
-function load_stamp_catalog{T <: CatalogEntry}(::Type{T}, cat_dir, stamp_id)
+function load_stamp_catalog(cat_dir, stamp_id, blob)
     cat_fits = fits_open_table("$cat_dir/cat-$stamp_id.fits")
     num_rows = int(fits_read_keyword(cat_fits, "NAXIS2")[1])
-    table = Array(Float64, num_rows, 7)
-    tmp_data = Array(Float64, num_rows)
-    for i in 1:7
-        fits_read_col(cat, Float64, i, 1, 1, tmp_data)
+    num_cols = int(fits_read_keyword(cat_fits, "TFIELDS")[1])
+	ttypes = [rstrip(fits_read_keyword(cat_fits, "TTYPE$i")[1][2:end-1]) for i in 1:num_cols]
+	tforms = [rstrip(fits_read_keyword(cat_fits, "TFORM$i")[1][2:end-1]) for i in 1:num_cols]
+	col_types = [l in ("D", "E") ? Float64 : l in ("L",) ? Bool : l in ("B", "I") ? Int64 : None for l in tforms]
+    table = Array(Any, num_rows, num_cols)
+    for i in 1:num_cols
+		tmp_data = Array(col_types[i], num_rows)
+        fits_read_col(cat_fits, col_types[i], i, 1, 1, tmp_data)
         table[:, i] = tmp_data
     end
     fits_close_file(cat_fits)
 
+	ra_i = findfirst(ttypes, "ra")
+	dec_i = findfirst(ttypes, "dec")
+	is_star_i = findfirst(ttypes, "is_star")
+	b_letter = ['u', 'g', 'r', 'i', 'z']
+	fluxes_i = Int64[findfirst(ttypes, "psfflux_$b") for b in b_letter]
     function row_to_cs(row)
-        x_y = wcss2p(blob[1].wcs, row[1:2]'')
-        T(x_y, row[3:7][:])
+		x_y = wcss2p(blob[1].wcs, [row[ra_i], row[dec_i]]'')[:]
+		fluxes = row[fluxes_i]
+		row[is_star_i] ?
+			CatalogStar(x_y, fluxes) :
+			CatalogGalaxy(x_y, fluxes, 42., [42., 0., 0])
     end
     CatalogEntry[row_to_cs(table[i, :][:]) for i in 1:num_rows]
 end
