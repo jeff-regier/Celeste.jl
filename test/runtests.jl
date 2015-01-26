@@ -9,7 +9,7 @@ import GSL.deriv_central
 
 import Synthetic
 
-const stamp_dir = joinpath(Pkg.dir("Celeste"), "dat")
+const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
 
 # verify derivatives of fun_to_test by finite differences
@@ -29,11 +29,29 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
 			end
 
 			numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
-			@test abs_err < 1e-5 || abs_err / abs(numeric_deriv) < 1e-5
+#			println("deriv #$p0 (s: $s): $numeric_deriv vs $(f.d[p1, s]) [tol: $abs_err]")
+			@test abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-5
 			@test_approx_eq_eps numeric_deriv f.d[p1, s] 10abs_err
 		end
 	end
 end
+
+
+function perturb_params(mp) # for testing derivatives != 0
+	for vs in mp.vp
+		vs[ids.chi] = 0.7
+		vs[ids.mu[1]] += .8
+		vs[ids.mu[2]] -= .7
+		vs[ids.gamma] *= 0.8
+		vs[ids.gamma] /= 100.
+		vs[ids.zeta] *= 100.
+		vs[ids.theta] -= 0.05
+		vs[ids.Xi] *= 1.2
+		vs[ids.beta] *= 1.2
+		vs[ids.lambda] =  1e-1
+	end
+end
+
 
 #########################
 
@@ -43,7 +61,7 @@ const galaxy_fluxes = [1.377666E+01, 5.635334E+01, 1.258656E+02,
 
 function gen_three_body_model()
 	srand(1)
-	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
 	for b in 1:5
 		blob0[b].H, blob0[b].W = 112, 238
 	end
@@ -54,13 +72,14 @@ function gen_three_body_model()
 	]
    	blob = Synthetic.gen_blob(blob0, three_bodies)
 	mp = ModelInit.cat_init(three_bodies)
+	perturb_params(mp)
 
 	blob, mp, three_bodies
 end
 
 function gen_one_galaxy_dataset()
 	srand(1)
-	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
 	for b in 1:5
 		blob0[b].H, blob0[b].W = 20, 23
 	end
@@ -69,13 +88,14 @@ function gen_one_galaxy_dataset()
 	]
    	blob = Synthetic.gen_blob(blob0, one_body)
 	mp = ModelInit.cat_init(one_body)
+	perturb_params(mp)
 
 	blob, mp, one_body
 end
 
 function gen_one_star_dataset()
 	srand(1)
-	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
 	for b in 1:5
 		blob0[b].H, blob0[b].W = 20, 23
 	end
@@ -84,6 +104,7 @@ function gen_one_star_dataset()
 	]
    	blob = Synthetic.gen_blob(blob0, one_body)
 	mp = ModelInit.cat_init(one_body)
+	perturb_params(mp)
 
 	blob, mp, one_body
 end
@@ -434,7 +455,7 @@ end
 
 function test_peak_init_2body_optimization()
 	srand(1)
-	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
 
 	two_bodies = [
 		CatalogStar([11.1, 21.2], star_fluxes),
@@ -462,7 +483,7 @@ end
 
 function test_local_sources()
 	srand(1)
-	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
 	for b in 1:5
 		blob0[b].H, blob0[b].W = 112, 238
 	end
@@ -499,7 +520,7 @@ end
 
 function test_local_sources_2()
 	srand(1)
-	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
 	one_body = CatalogEntry[CatalogStar([50., 50.], star_fluxes),]
 
    	for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
@@ -534,7 +555,7 @@ end
 
 function test_tiling()
 	srand(1)
-	blob0 = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")
+	blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
 	for b in 1:5
 		blob0[b].H, blob0[b].W = 112, 238
 	end
@@ -581,7 +602,7 @@ end
 function test_sky_noise_estimates()
 	blobs = Array(Blob, 2)
 	blobs[1], mp, three_bodies = gen_three_body_model()  # synthetic
-	blobs[2] = SDSS.load_stamp_blob(stamp_dir, "164.4311-39.0359")  # real
+	blobs[2] = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")  # real
 
 	for blob in blobs
 		for b in 1:5
@@ -630,6 +651,119 @@ function test_coordinates_vp_conversion()
 		end
 	end
 end
+
+
+####################################################
+
+function test_coadd_cat_init_is_more_likely()  # on a real stamp
+	blob = SDSS.load_stamp_blob(dat_dir, "5.0562-0.0643")
+	cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-5.0562-0.0643", blob)
+	mp = ModelInit.cat_init(cat_entries)
+	best = ElboDeriv.elbo_likelihood(blob, mp)
+
+	# s is the brightest source: a galaxy!
+	s = indmax([ce.fluxes[3] for ce in cat_entries])
+	println(cat_entries[s])
+	println(blob[3].camcol_num,  " ", blob[3].run_num)
+
+
+	for flux in 11:25
+		mp_gamma = deepcopy(mp)
+		mp_gamma.vp[s][ids.gamma] = flux ./mp_gamma.vp[s][ids.zeta] 
+#		mp_gamma.vp[s][ids.zeta] /= delta
+		bad_gamma = zero_sensitive_float([1:length(cat_entries)], all_params)
+		ElboDeriv.elbo_likelihood!(blob[3], mp_gamma, bad_gamma)
+		println("$flux $(best.v) vs $(bad_gamma.v)")
+#		@test best.v > bad_gamma.v
+	end
+#=
+	for bad_scale in [.5, 2.]
+		mp_Xi = deepcopy(mp)
+		mp_Xi.vp[s][ids.Xi] *= bad_scale
+		bad_Xi = ElboDeriv.elbo_likelihood(blob, mp_Xi)
+		@test best.v > bad_Xi.v
+
+		mp_Xi11 = deepcopy(mp)
+		mp_Xi11.vp[s][ids.Xi[1]] *= bad_scale
+		bad_Xi11 = ElboDeriv.elbo_likelihood(blob, mp_Xi11)
+		@test best.v > bad_Xi11.v
+	end
+
+	for bad_chi in [.3, .5, .7]
+		mp_chi = deepcopy(mp)
+		mp_chi.vp[s][ids.chi] = bad_chi
+		bad_chi = ElboDeriv.elbo_likelihood(blob, mp_chi)
+		@test best.v > bad_chi.v
+	end
+=#
+	for h2 in -2:2
+		for w2 in -2:2
+			if !(h2 == 0 && w2 == 0)
+				mp_mu = deepcopy(mp)
+				mp_mu.vp[s][ids.mu] += [0.5h2, 0.5w2]
+				bad_mu = ElboDeriv.elbo_likelihood(blob, mp_mu)
+				@test best.v > bad_mu.v
+			end
+		end
+	end
+
+	for b in 1:4
+		for delta in [.1, .7, 1.5, 10.]
+			mp_beta = deepcopy(mp)
+			mp_beta.vp[s][ids.beta[b]] *= delta
+			bad_beta = ElboDeriv.elbo_likelihood(blob, mp_beta)
+			@test best.v > bad_beta.v
+		end
+	end
+end
+
+
+function test_real_stamp_optimization()
+	blob = SDSS.load_stamp_blob(dat_dir, "5.0562-0.0643")
+	cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-5.0562-0.0643", blob)
+
+	for ce in cat_entries
+		println(ce)
+	end
+
+	mp = ModelInit.cat_init(cat_entries)
+	OptimizeElbo.maximize_elbo(blob, mp)
+end
+
+
+function test_tiny_image_tiling()
+	blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+	pc = PsfComponent(1./3, zeros(2), 1e-4 * eye(2))
+	trivial_psf = [pc, pc, pc]
+	pixels = ones(100, 1) * 12
+	pixels[98:100, 1] = [1e3, 1e4, 1e5]
+	img = Image(3, 1, pixels, 3, blob0[3].wcs, 3., 4, trivial_psf, 1, 1, 1)
+	catalog = CatalogEntry[CatalogStar([100., 1], ones(5) * 1e5)]
+
+	mp0 = ModelInit.cat_init(catalog)
+	accum0 = zero_sensitive_float([1], all_params)
+	ElboDeriv.elbo_likelihood!(img, mp0, accum0)
+
+	mp_tiles = ModelInit.cat_init(catalog, patch_radius=10., tile_width=2)
+	accum_tiles = zero_sensitive_float([1], all_params)
+	ElboDeriv.elbo_likelihood!(img, mp_tiles, accum_tiles)
+
+	mp_tiles2 = ModelInit.cat_init(catalog, patch_radius=10., tile_width=5)
+	accum_tiles2 = zero_sensitive_float([1], all_params)
+	ElboDeriv.elbo_likelihood!(img, mp_tiles, accum_tiles2)
+	@test_approx_eq accum_tiles.v accum_tiles2.v
+
+	@test_approx_eq_eps accum0.v accum_tiles.v 100.
+end
+
+
+
+####################################################
+
+test_tiny_image_tiling()
+
+#test_real_stamp_optimization()  # long running
+test_coadd_cat_init_is_more_likely()
 
 test_kl_divergence_derivs()
 test_elbo_derivs()

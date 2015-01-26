@@ -61,7 +61,7 @@ function get_galaxy_prototypes()
 		2.23759216e-04, 1.00220099e-03, 4.18731126e-03, 1.69432589e-02,
 		6.84850479e-02, 2.87207080e-01, 1.33320254e+00, 8.40215071e+00]
 	dev_prototype = [GalaxyComponent(dev_amp[j], dev_var[j]) for j in 1:8]
-	(exp_prototype, dev_prototype)
+	(dev_prototype, exp_prototype)
 end
 
 const galaxy_prototypes = get_galaxy_prototypes()
@@ -89,6 +89,9 @@ type Image
 	epsilon::Float64
 	iota::Float64
 	psf::Vector{PsfComponent}
+	run_num::Int64
+	camcol_num::Int64
+	field_num::Int64
 end
 
 immutable ImageTile

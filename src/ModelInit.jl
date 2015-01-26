@@ -52,6 +52,32 @@ function init_source(init_pos::Vector{Float64})
 end
 
 
+function init_source(ce::CatalogStar)
+	ret = init_source(ce.pos)
+	ret[ids.chi] = 0.01
+	fluxes = max(ce.fluxes, 1e-4)
+	ret[ids.gamma] = fluxes[3] ./ ret[ids.zeta]
+	colors = log(fluxes[2:5] ./ fluxes[1:4])
+	for i in 1:2
+		ret[ids.beta[:, i]] = min(max(colors, -9.), 9.)
+	end
+	ret
+end
+
+
+function init_source(ce::CatalogGalaxy)
+	ret = init_source(ce.pos)
+	ret[ids.chi] = 0.99
+	ret[ids.theta] = min(max(ce.theta, 0.01), 0.99)
+	ret[ids.gamma] = ce.fluxes[3] ./ ret[ids.zeta]
+	for i in 1:2
+		ret[ids.beta[:, i]] = log(ce.fluxes[2:5] ./ ce.fluxes[1:4])
+	end
+	ret[ids.Xi] = ce.Xi
+	ret
+end
+
+
 function matched_filter(img::Image)
 	H, W = 5, 5
 	kernel = zeros(Float64, H, W)
@@ -124,7 +150,7 @@ end
 
 function cat_init(cat::Vector{CatalogEntry}; patch_radius::Float64=Inf,
 		tile_width::Int64=typemax(Int64))
-	vp = [init_source(ce.pos) for ce in cat]
+	vp = [init_source(ce) for ce in cat]
 	# TODO: use non-trivial patch radii, based on the catalog
 	patches = [SkyPatch(ce.pos, patch_radius) for ce in cat]
 	ModelParams(vp, sample_prior(), patches, tile_width)

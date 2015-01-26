@@ -133,7 +133,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
         XiXi = Xi' * Xi
 
         for i = 1:2
-            for j in 1:[6,8][i]
+            for j in 1:[8,6][i]
                 gc = galaxy_prototypes[i][j]
                 for k = 1:3
                     pc = psf[k]
@@ -209,7 +209,7 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
         theta_dir = (i == 1) ? 1. : -1.
         theta_i = (i == 1) ? vs[ids.theta] : 1. - vs[ids.theta]
 
-        for j in 1:[6,8][i]
+        for j in 1:[8,6][i]
             for k = 1:3
                 accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, theta_i, 
                     theta_dir, galaxy_prototypes[i][j].sigmaTilde, vs[ids.Xi], fs1m)
@@ -299,6 +299,7 @@ function local_sources(tile::ImageTile, mp::ModelParams)
     local_subset
 end
 
+
 function elbo_likelihood!(tile::ImageTile, mp::ModelParams, 
         sbs::Vector{SourceBrightness},
          star_mcs::Array{BvnComponent, 2}, gal_mcs::Array{BvnComponent, 4}, 
@@ -321,11 +322,11 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
     var_G = zero_sensitive_float(tile_sources, all_params)
 
     for w in w_range, h in h_range
-        clear!(E_G)  #serious bottleneck
+        clear!(E_G)
         E_G.v = tile.img.epsilon
         clear!(var_G)
 
-        m_pos = Float64[h - 0.5, w - 0.5]
+        m_pos = Float64[h, w]
         for child_s in 1:length(tile_sources)
             parent_s = tile_sources[child_s]
             accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs, 

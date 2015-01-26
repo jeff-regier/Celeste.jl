@@ -31,8 +31,8 @@ function write_gaussian(the_mean, the_cov, intensity, pixels)
 	w_range, h_range = get_patch(the_mean, H, W)
 
 	for w in w_range, h in h_range
-		y[1] = the_mean[1] - (h - 0.5)
-		y[2] = the_mean[2] - (w - 0.5)
+		y[1] = the_mean[1] - h
+		y[2] = the_mean[2] - w
 		ypy = Util.matvec222(the_precision, y)
 		pdf_hw = c * exp(-0.5 * ypy)
 		pixel_rate = intensity * pdf_hw
@@ -82,7 +82,7 @@ function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
 	end
 
     return Image(img0.H, img0.W, pixels, img0.b, img0.wcs, img0.epsilon,
-			img0.iota, img0.psf)
+			img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
 end
 
 

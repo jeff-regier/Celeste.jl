@@ -79,13 +79,13 @@ function get_nlopt_bounds(vs::Vector{Float64})
 	lb = Array(Float64, length(all_params))
 	lb[ids.chi] = 1e-4
 	lb[ids.mu] = vs[ids.mu] - 1.
-	[lb[id] = 1e-4 for id in ids.gamma] #uggg...need min brightness
+	[lb[id] = 1e-4 for id in ids.gamma]
 	[lb[id] = 1e-4 for id in ids.zeta]
 	[lb[id] = 1e-4 for id in ids.kappa]
-	[lb[id] = -2. for id in ids.beta]
+	[lb[id] = -10. for id in ids.beta]
 	[lb[id] = 1e-4 for id in ids.lambda]
 	lb[ids.theta] = 1e-2 
-	[lb[id] = sqrt(2) for id in ids.Xi[[1,3]]]
+	[lb[id] = sqrt(.01) for id in ids.Xi[[1,3]]]
 	lb[ids.Xi[2]] = -10
 
 	ub = Array(Float64, length(all_params))
@@ -96,7 +96,7 @@ function get_nlopt_bounds(vs::Vector{Float64})
 	[ub[id] = 1 - 1e-4 for id in ids.kappa]
 	ub[ids.theta] = 1 - 1e-2 
 	[ub[id] = 10 for id in ids.Xi]
-	[ub[id] = 4. for id in ids.beta]
+	[ub[id] = 10. for id in ids.beta]
 	[ub[id] = 1. for id in ids.lambda]
 
 	lb, ub
@@ -144,6 +144,11 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[
 
 	opt = Opt(:LD_LBFGS, length(x0))
 	lbs, ubs = get_nlopt_bounds(mp.vp, omitted_ids)
+	for i in 1:length(x0)
+		if !(lbs[i] <= x0[i] <= ubs[i])
+			println("coordinate $i fallacy: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
+		end
+	end
 	lower_bounds!(opt, lbs)
 	upper_bounds!(opt, ubs)
 	max_objective!(opt, objective_and_grad)
@@ -157,7 +162,7 @@ end
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
 	omitted_ids = [ids.kappa[:], ids.lambda[:], ids.mu, ids.theta, ids.Xi, ids.chi]
-	maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+#	maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 	maximize_f(ElboDeriv.elbo, blob, mp)
 end
 

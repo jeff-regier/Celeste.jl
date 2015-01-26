@@ -39,14 +39,19 @@ function load_stamp_blob(stamp_dir, stamp_id)
         H, W = size(original_pixels)
 		iota = hdr["GAIN"] / hdr["CALIB"]
 		epsilon = hdr["SKY"] * hdr["CALIB"]
-        Image(H, W, nelec, b, wcs, epsilon, iota, psf)
+
+		run_num = int(hdr["RUN"])
+		camcol_num = int(hdr["CAMCOL"])
+		field_num = int(hdr["FIELD"])
+
+        Image(H, W, nelec, b, wcs, epsilon, iota, psf, run_num, camcol_num, field_num)
     end
 
     blob = map(fetch_image, 1:5)
 end
 
 
-function load_stamp_catalog(cat_dir, stamp_id, blob)
+function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     cat_fits = fits_open_table("$cat_dir/cat-$stamp_id.fits")
     num_rows = int(fits_read_keyword(cat_fits, "NAXIS2")[1])
     num_cols = int(fits_read_keyword(cat_fits, "TFIELDS")[1])
@@ -66,14 +71,42 @@ function load_stamp_catalog(cat_dir, stamp_id, blob)
 	is_star_i = findfirst(ttypes, "is_star")
 	b_letter = ['u', 'g', 'r', 'i', 'z']
 	fluxes_i = Int64[findfirst(ttypes, "psfflux_$b") for b in b_letter]
+	frac_dev_i = findfirst(ttypes, "frac_dev")
+	phi_i, phi_j = findfirst(ttypes, "phi_dev"), findfirst(ttypes, "phi_exp")
+	theta_i, theta_j = findfirst(ttypes, "theta_dev"), findfirst(ttypes, "theta_exp")
+	ab_i, ab_j = findfirst(ttypes, "ab_dev"), findfirst(ttypes, "ab_exp")
+
     function row_to_cs(row)
 		x_y = wcss2p(blob[1].wcs, [row[ra_i], row[dec_i]]'')[:]
 		fluxes = row[fluxes_i]
-		row[is_star_i] ?
-			CatalogStar(x_y, fluxes) :
-			CatalogGalaxy(x_y, fluxes, 42., [42., 0., 0])
+		if row[is_star_i]
+			CatalogStar(x_y, fluxes)
+		else
+			frac_dev = row[frac_dev_i]
+			gal_angle = frac_dev * row[phi_i] + (1 - frac_dev) * row[phi_j]
+			gal_angle *= pi / 180
+			gal_scale = frac_dev * row[theta_i] + (1 - frac_dev) * row[theta_j]
+			gal_ab = frac_dev * row[ab_i] + (1 - frac_dev) * row[ab_j]
+			R = [[cos(gal_angle) -sin(gal_angle)], [sin(gal_angle) cos(gal_angle)]]
+			D = diagm([1., gal_ab])
+			XiXi = gal_scale * R' * D * R
+			Xi_mat = chol(XiXi)
+			Xi = [Xi_mat[1,1], Xi_mat[1,2], Xi_mat[2,2]]
+			CatalogGalaxy(x_y, fluxes, frac_dev, Xi)
+		end
     end
-    CatalogEntry[row_to_cs(table[i, :][:]) for i in 1:num_rows]
+
+	if match_blob
+		camcol_col = findfirst(ttypes, "camcol")
+		run_col = findfirst(ttypes, "run")
+		field_col = findfirst(ttypes, "field")
+		camcol_matches = table[:, camcol_col] .== blob[3].camcol_num
+		run_matches = table[:, run_col] .== blob[3].run_num
+		field_matches = table[:, field_col] .== blob[3].field_num
+		table = table[camcol_matches & run_matches & field_matches, :]
+	end
+
+    CatalogEntry[row_to_cs(table[i, :][:]) for i in 1:size(table, 1)]
 end
 
 
