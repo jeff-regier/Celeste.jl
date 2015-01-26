@@ -84,7 +84,7 @@ function get_nlopt_bounds(vs::Vector{Float64})
 	[lb[id] = 1e-4 for id in ids.kappa]
 	[lb[id] = -10. for id in ids.beta]
 	[lb[id] = 1e-4 for id in ids.lambda]
-	lb[ids.theta] = 1e-2 
+	lb[ids.theta] = 1e-4 
 	[lb[id] = sqrt(.01) for id in ids.Xi[[1,3]]]
 	lb[ids.Xi[2]] = -10
 
@@ -94,7 +94,7 @@ function get_nlopt_bounds(vs::Vector{Float64})
 	[ub[id] = 1e12 for id in ids.gamma]
 	[ub[id] = 1e-1 for id in ids.zeta]
 	[ub[id] = 1 - 1e-4 for id in ids.kappa]
-	ub[ids.theta] = 1 - 1e-2 
+	ub[ids.theta] = 1 - 1e-4
 	[ub[id] = 10 for id in ids.Xi]
 	[ub[id] = 10. for id in ids.beta]
 	[ub[id] = 1. for id in ids.lambda]

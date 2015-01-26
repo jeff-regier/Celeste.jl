@@ -43,29 +43,29 @@ function write_gaussian(the_mean, the_cov, intensity, pixels)
 end
 
 
-function write_body(img0::Image, sp::CatalogStar, pixels::Matrix{Float64})
+function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
 	for k in 1:length(img0.psf)
-		the_mean = sp.pos + img0.psf[k].xiBar
+		the_mean = ce.pos + img0.psf[k].xiBar
 		the_cov = img0.psf[k].SigmaBar
-		intensity = sp.fluxes[img0.b] * img0.iota * img0.psf[k].alphaBar
+		intensity = ce.star_fluxes[img0.b] * img0.iota * img0.psf[k].alphaBar
 		write_gaussian(the_mean, the_cov, intensity, pixels)
 	end
 end
 
 
-function write_body(img0::Image, gp::CatalogGalaxy, pixels::Matrix{Float64})
-	thetas = [gp.theta, 1 - gp.theta]
+function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
+	thetas = [ce.theta, 1 - ce.theta]
 
-    Xi = [[gp.Xi[1] gp.Xi[2]], [0.  gp.Xi[3]]]
+    Xi = [[ce.Xi[1] ce.Xi[2]], [0.  ce.Xi[3]]]
     XiXi = Xi' * Xi
 
 	for i in 1:2
 		for gproto in galaxy_prototypes[i]
 			for k in 1:length(img0.psf)
-				the_mean = gp.pos + img0.psf[k].xiBar
+				the_mean = ce.pos + img0.psf[k].xiBar
 				the_cov = img0.psf[k].SigmaBar + gproto.sigmaTilde * XiXi
-				intensity = gp.fluxes[img0.b] * img0.iota * img0.psf[k].alphaBar *
-							 thetas[i] * gproto.alphaTilde
+				intensity = ce.galaxy_fluxes[img0.b] * img0.iota * 
+					img0.psf[k].alphaBar * thetas[i] * gproto.alphaTilde
 				write_gaussian(the_mean, the_cov, intensity, pixels)
 			end
 		end
@@ -78,7 +78,7 @@ function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
 					 img0.H * img0.W)), img0.H, img0.W)
 
 	for body in n_bodies
-		write_body(img0, body, pixels)
+		body.is_star ? write_star(img0, body, pixels) : write_galaxy(img0, body, pixels)
 	end
 
     return Image(img0.H, img0.W, pixels, img0.b, img0.wcs, img0.epsilon,

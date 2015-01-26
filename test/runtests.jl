@@ -66,9 +66,9 @@ function gen_three_body_model()
 		blob0[b].H, blob0[b].W = 112, 238
 	end
 	three_bodies = [
-		CatalogGalaxy([4.5, 3.6], galaxy_fluxes, 0.1, [6, 0., 6.]),
-		CatalogStar([60.1, 82.2], star_fluxes),
-		CatalogGalaxy([71.3, 100.4], galaxy_fluxes , 0.1, [6, 0., 6.]),
+		CatalogEntry([4.5, 3.6], false, star_fluxes, galaxy_fluxes, 0.1, [6, 0., 6.]),
+		CatalogEntry([60.1, 82.2], true, star_fluxes, galaxy_fluxes, 0.1, [6, 0., 6.]),
+		CatalogEntry([71.3, 100.4], false, star_fluxes, galaxy_fluxes , 0.1, [6, 0., 6.]),
 	]
    	blob = Synthetic.gen_blob(blob0, three_bodies)
 	mp = ModelInit.cat_init(three_bodies)
@@ -84,7 +84,7 @@ function gen_one_galaxy_dataset()
 		blob0[b].H, blob0[b].W = 20, 23
 	end
 	one_body = CatalogEntry[
-		CatalogGalaxy([8.5, 9.6], galaxy_fluxes , 0.1, [6, 0., 6.]),
+		CatalogEntry([8.5, 9.6], false, star_fluxes, galaxy_fluxes , 0.1, [6, 0., 6.]),
 	]
    	blob = Synthetic.gen_blob(blob0, one_body)
 	mp = ModelInit.cat_init(one_body)
@@ -100,7 +100,7 @@ function gen_one_star_dataset()
 		blob0[b].H, blob0[b].W = 20, 23
 	end
 	one_body = CatalogEntry[
-		CatalogStar([10.1, 12.2], star_fluxes),
+		CatalogEntry([10.1, 12.2], true, star_fluxes, galaxy_fluxes, 0.1, [6., 0, 6]),
 	]
    	blob = Synthetic.gen_blob(blob0, one_body)
 	mp = ModelInit.cat_init(one_body)
@@ -458,8 +458,8 @@ function test_peak_init_2body_optimization()
 	blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
 
 	two_bodies = [
-		CatalogStar([11.1, 21.2], star_fluxes),
-		CatalogGalaxy([15.3, 31.4], galaxy_fluxes , 0.1, [6, 0., 6.]),
+		CatalogEntry([11.1, 21.2], true, star_fluxes , 0.1, [6, 0., 6.]),
+		CatalogEntry([15.3, 31.4], false, galaxy_fluxes , 0.1, [6, 0., 6.]),
 	]
 
    	blob = Synthetic.gen_blob(blob0, two_bodies)
@@ -489,9 +489,9 @@ function test_local_sources()
 	end
 
 	three_bodies = [
-		CatalogGalaxy([4.5, 3.6], galaxy_fluxes , 0.1, [6, 0., 6.]),
-		CatalogStar([60.1, 82.2], star_fluxes),
-		CatalogGalaxy([71.3, 100.4], galaxy_fluxes , 0.1, [6, 0., 6.]),
+		CatalogEntry([4.5, 3.6], false, star_fluxes, galaxy_fluxes , 0.1, [6, 0., 6.]),
+		CatalogEntry([60.1, 82.2], true, star_fluxes, galaxy_fluxes , 0.1, [6, 0., 6.]),
+		CatalogEntry([71.3, 100.4], false, star_fluxes, galaxy_fluxes , 0.1, [6, 0., 6.]),
 	]
 
    	blob = Synthetic.gen_blob(blob0, three_bodies)
@@ -521,7 +521,7 @@ end
 function test_local_sources_2()
 	srand(1)
 	blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
-	one_body = CatalogEntry[CatalogStar([50., 50.], star_fluxes),]
+	one_body = [CatalogEntry([50., 50.], true, star_fluxes, galaxy_fluxes, 0.1, [6, 0, 6.]),]
 
    	for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
 	small_blob = Synthetic.gen_blob(blob0, one_body)
@@ -559,10 +559,10 @@ function test_tiling()
 	for b in 1:5
 		blob0[b].H, blob0[b].W = 112, 238
 	end
-	three_bodies = CatalogEntry[
-#		CatalogGalaxy([4.5, 3.6], galaxy_fluxes / 50, 0.1, [3, 0., 3.]),
-		CatalogStar([60.1, 82.2], star_fluxes / 50),
-#		CatalogGalaxy([71.3, 100.4], galaxy_fluxes / 50, 0.1, [3, 0., 3.]),
+	three_bodies = [
+#		CatalogEntry([4.5, 3.6], false, star_fluxes, galaxy_fluxes / 50, 0.1, [3, 0., 3.]),
+		CatalogEntry([60.1, 82.2], true, star_fluxes / 50, galaxy_fluxes, 0.1, [3, 0., 3.]),
+#		CatalogEntry([71.3, 100.4], false, star_fluxes, galaxy_fluxes / 50, 0.1, [3, 0., 3.]),
 	]
    	blob = Synthetic.gen_blob(blob0, three_bodies)
 	mp = ModelInit.cat_init(three_bodies)
@@ -656,28 +656,33 @@ end
 ####################################################
 
 function test_coadd_cat_init_is_more_likely()  # on a real stamp
-	blob = SDSS.load_stamp_blob(dat_dir, "5.0562-0.0643")
-	cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-5.0562-0.0643", blob)
+	blob = SDSS.load_stamp_blob(dat_dir, "5.0073-0.0739")
+	cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-5.0073-0.0739", blob)
 	mp = ModelInit.cat_init(cat_entries)
 	best = ElboDeriv.elbo_likelihood(blob, mp)
 
 	# s is the brightest source: a galaxy!
-	s = indmax([ce.fluxes[3] for ce in cat_entries])
+	s = 1
 	println(cat_entries[s])
-	println(blob[3].camcol_num,  " ", blob[3].run_num)
 
-
-	for flux in 11:25
+	for bad_scale in [.8, 1.2]
 		mp_gamma = deepcopy(mp)
-		mp_gamma.vp[s][ids.gamma] = flux ./mp_gamma.vp[s][ids.zeta] 
-#		mp_gamma.vp[s][ids.zeta] /= delta
-		bad_gamma = zero_sensitive_float([1:length(cat_entries)], all_params)
-		ElboDeriv.elbo_likelihood!(blob[3], mp_gamma, bad_gamma)
-		println("$flux $(best.v) vs $(bad_gamma.v)")
-#		@test best.v > bad_gamma.v
+		mp_gamma.vp[s][ids.gamma] *= bad_scale^2
+		mp_gamma.vp[s][ids.zeta] /= bad_scale  # keep variance the same
+		bad_gamma = ElboDeriv.elbo_likelihood(blob, mp_gamma)
+		@test best.v > bad_gamma.v
 	end
-#=
-	for bad_scale in [.5, 2.]
+
+	for b in 1:4
+		for delta in [-.3, .3]
+			mp_beta = deepcopy(mp)
+			mp_beta.vp[s][ids.beta[b]] += delta
+			bad_beta = ElboDeriv.elbo_likelihood(blob, mp_beta)
+			@test best.v > bad_beta.v
+		end
+	end
+
+	for bad_scale in [.7, 1.3]
 		mp_Xi = deepcopy(mp)
 		mp_Xi.vp[s][ids.Xi] *= bad_scale
 		bad_Xi = ElboDeriv.elbo_likelihood(blob, mp_Xi)
@@ -689,13 +694,13 @@ function test_coadd_cat_init_is_more_likely()  # on a real stamp
 		@test best.v > bad_Xi11.v
 	end
 
-	for bad_chi in [.3, .5, .7]
+	for bad_chi in [.3, .7]
 		mp_chi = deepcopy(mp)
 		mp_chi.vp[s][ids.chi] = bad_chi
 		bad_chi = ElboDeriv.elbo_likelihood(blob, mp_chi)
 		@test best.v > bad_chi.v
 	end
-=#
+
 	for h2 in -2:2
 		for w2 in -2:2
 			if !(h2 == 0 && w2 == 0)
@@ -704,15 +709,6 @@ function test_coadd_cat_init_is_more_likely()  # on a real stamp
 				bad_mu = ElboDeriv.elbo_likelihood(blob, mp_mu)
 				@test best.v > bad_mu.v
 			end
-		end
-	end
-
-	for b in 1:4
-		for delta in [.1, .7, 1.5, 10.]
-			mp_beta = deepcopy(mp)
-			mp_beta.vp[s][ids.beta[b]] *= delta
-			bad_beta = ElboDeriv.elbo_likelihood(blob, mp_beta)
-			@test best.v > bad_beta.v
 		end
 	end
 end
@@ -738,7 +734,7 @@ function test_tiny_image_tiling()
 	pixels = ones(100, 1) * 12
 	pixels[98:100, 1] = [1e3, 1e4, 1e5]
 	img = Image(3, 1, pixels, 3, blob0[3].wcs, 3., 4, trivial_psf, 1, 1, 1)
-	catalog = CatalogEntry[CatalogStar([100., 1], ones(5) * 1e5)]
+	catalog = [CatalogEntry([100., 1], true, ones(5) * 1e5, galaxy_fluxes, .5, [2., 0., 2])]
 
 	mp0 = ModelInit.cat_init(catalog)
 	accum0 = zero_sensitive_float([1], all_params)

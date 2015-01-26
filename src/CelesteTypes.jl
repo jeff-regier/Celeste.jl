@@ -3,7 +3,7 @@
 
 module CelesteTypes
 
-export CatalogEntry, CatalogStar, CatalogGalaxy
+export CatalogEntry
 
 export Image, Blob, SkyPatch, ImageTile, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
@@ -20,16 +20,11 @@ import Distributions
 import WCSLIB
 
 
-abstract CatalogEntry
-
-type CatalogStar <: CatalogEntry
+type CatalogEntry
     pos::Vector{Float64}
-    fluxes::Vector{Float64}
-end
-
-type CatalogGalaxy <: CatalogEntry
-    pos::Vector{Float64}
-    fluxes::Vector{Float64}
+	is_star::Bool
+    star_fluxes::Vector{Float64}
+    galaxy_fluxes::Vector{Float64}
     theta::Float64
     Xi::Vector{Float64}
 end

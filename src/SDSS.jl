@@ -70,7 +70,9 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 	dec_i = findfirst(ttypes, "dec")
 	is_star_i = findfirst(ttypes, "is_star")
 	b_letter = ['u', 'g', 'r', 'i', 'z']
-	fluxes_i = Int64[findfirst(ttypes, "psfflux_$b") for b in b_letter]
+	psfflux_i = Int64[findfirst(ttypes, "psfflux_$b") for b in b_letter]
+	expflux_i = Int64[findfirst(ttypes, "expflux_$b") for b in b_letter]
+	devflux_i = Int64[findfirst(ttypes, "devflux_$b") for b in b_letter]
 	frac_dev_i = findfirst(ttypes, "frac_dev")
 	phi_i, phi_j = findfirst(ttypes, "phi_dev"), findfirst(ttypes, "phi_exp")
 	theta_i, theta_j = findfirst(ttypes, "theta_dev"), findfirst(ttypes, "theta_exp")
@@ -78,22 +80,25 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 
     function row_to_cs(row)
 		x_y = wcss2p(blob[1].wcs, [row[ra_i], row[dec_i]]'')[:]
-		fluxes = row[fluxes_i]
+		star_fluxes = row[psfflux_i]
+		frac_dev = row[frac_dev_i]
+		galaxy_fluxes = frac_dev * row[devflux_i] + (1 - frac_dev) * row[expflux_i]
+
+		gal_angle = frac_dev * row[phi_i] + (1 - frac_dev) * row[phi_j]
+		gal_angle *= pi / 180
+		gal_scale = frac_dev * row[theta_i] + (1 - frac_dev) * row[theta_j]
+		gal_scale *= 2.3^2  # magic scaling factor
+		gal_ab = frac_dev * row[ab_i] + (1 - frac_dev) * row[ab_j]
+		R = [[cos(gal_angle) -sin(gal_angle)], [sin(gal_angle) cos(gal_angle)]]
+		D = diagm([1., gal_ab])
 		if row[is_star_i]
-			CatalogStar(x_y, fluxes)
-		else
-			frac_dev = row[frac_dev_i]
-			gal_angle = frac_dev * row[phi_i] + (1 - frac_dev) * row[phi_j]
-			gal_angle *= pi / 180
-			gal_scale = frac_dev * row[theta_i] + (1 - frac_dev) * row[theta_j]
-			gal_ab = frac_dev * row[ab_i] + (1 - frac_dev) * row[ab_j]
-			R = [[cos(gal_angle) -sin(gal_angle)], [sin(gal_angle) cos(gal_angle)]]
-			D = diagm([1., gal_ab])
-			XiXi = gal_scale * R' * D * R
-			Xi_mat = chol(XiXi)
-			Xi = [Xi_mat[1,1], Xi_mat[1,2], Xi_mat[2,2]]
-			CatalogGalaxy(x_y, fluxes, frac_dev, Xi)
+			gal_scale = max(gal_scale, 0.2)
 		end
+		XiXi = gal_scale * R' * D * R
+		Xi_mat = chol(XiXi)
+		Xi = [Xi_mat[1,1], Xi_mat[1,2], Xi_mat[2,2]]
+
+		CatalogEntry(x_y, row[is_star_i], star_fluxes, galaxy_fluxes, frac_dev, Xi)
     end
 
 	if match_blob
@@ -110,6 +115,7 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 end
 
 
+#=
 function load_field(field_dir, run_num, camcol_num, frame_num)
 	pf_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
 	pf_fits_raw = fits_open_table(pf_filename)
@@ -182,7 +188,6 @@ function load_field(field_dir, run_num, camcol_num, frame_num)
     blob = map(fetch_image, 1:5)
 end
 
-
 function load_catalog(field_dir, run_num, camcol_num, frame_num)
     function common_catalog(cat_str)
         @assert cat_str == "star" || cat_str == "gal"
@@ -213,7 +218,7 @@ function load_catalog(field_dir, run_num, camcol_num, frame_num)
                     for i in 1:length(gal_range)]
     vcat(star_cat, gal_cat)
 end
-
+=#
 
 end
 

@@ -52,28 +52,25 @@ function init_source(init_pos::Vector{Float64})
 end
 
 
-function init_source(ce::CatalogStar)
+function init_source(ce::CatalogEntry)
 	ret = init_source(ce.pos)
-	ret[ids.chi] = 0.01
-	fluxes = max(ce.fluxes, 1e-4)
-	ret[ids.gamma] = fluxes[3] ./ ret[ids.zeta]
-	colors = log(fluxes[2:5] ./ fluxes[1:4])
-	for i in 1:2
-		ret[ids.beta[:, i]] = min(max(colors, -9.), 9.)
-	end
-	ret
-end
 
+	ret[ids.chi] = ce.is_star ? 0.01 : 0.99
 
-function init_source(ce::CatalogGalaxy)
-	ret = init_source(ce.pos)
-	ret[ids.chi] = 0.99
+	star_fluxes = max(ce.star_fluxes, 1e-4)
+	ret[ids.gamma[1]] = star_fluxes[3] ./ ret[ids.zeta[1]]
+
+	galaxy_fluxes = max(ce.galaxy_fluxes, 1e-4)
+	ret[ids.gamma[2]] = galaxy_fluxes[3] ./ ret[ids.zeta[2]]
+
+	get_colors(fluxes) = min(max(log(fluxes[2:5] ./ fluxes[1:4]), -9.), 9.)
+	ret[ids.beta[:, 1]] = get_colors(star_fluxes)
+	ret[ids.beta[:, 2]] = get_colors(galaxy_fluxes)
+
 	ret[ids.theta] = min(max(ce.theta, 0.01), 0.99)
-	ret[ids.gamma] = ce.fluxes[3] ./ ret[ids.zeta]
-	for i in 1:2
-		ret[ids.beta[:, i]] = log(ce.fluxes[2:5] ./ ce.fluxes[1:4])
-	end
+
 	ret[ids.Xi] = ce.Xi
+
 	ret
 end
 
@@ -131,7 +128,7 @@ function peak_starts(blob::Blob)
 		peaks_mat[:, i] = peaks[i]
 	end
 
-	peaks_mat - .5  #e.g. the center of pixel [1,1] is [0.5, 0.5]
+	peaks_mat
 #	wcsp2s(img.wcs, peaks_mat)
 end
 
