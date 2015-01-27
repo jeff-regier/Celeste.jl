@@ -7,6 +7,7 @@ export CatalogEntry
 
 export Image, Blob, SkyPatch, ImageTile, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
+export effective_radii
 
 export ModelParams, PriorParams, VariationalParams
 
@@ -60,6 +61,9 @@ function get_galaxy_prototypes()
 end
 
 const galaxy_prototypes = get_galaxy_prototypes()
+
+const effective_radii = [0.482910, 0.551853]
+
 
 immutable PsfComponent
 	alphaBar::Float64  # TODO: use underscore

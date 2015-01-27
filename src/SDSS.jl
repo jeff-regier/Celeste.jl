@@ -84,17 +84,20 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 		frac_dev = row[frac_dev_i]
 		galaxy_fluxes = frac_dev * row[devflux_i] + (1 - frac_dev) * row[expflux_i]
 
-		gal_angle = frac_dev * row[phi_i] + (1 - frac_dev) * row[phi_j]
-		gal_angle *= pi / 180
-		gal_scale = frac_dev * row[theta_i] + (1 - frac_dev) * row[theta_j]
-		gal_scale *= 2.3^2  # magic scaling factor
-		gal_ab = frac_dev * row[ab_i] + (1 - frac_dev) * row[ab_j]
-		R = [[cos(gal_angle) -sin(gal_angle)], [sin(gal_angle) cos(gal_angle)]]
-		D = diagm([1., gal_ab])
-		if row[is_star_i]
-			gal_scale = max(gal_scale, 0.2)
-		end
-		XiXi = gal_scale * R' * D * R
+		fits_phi = frac_dev * row[phi_i] + (1 - frac_dev) * row[phi_j]
+		fits_theta = frac_dev * row[theta_i] + (1 - frac_dev) * row[theta_j]
+		fits_ab = frac_dev * row[ab_i] + (1 - frac_dev) * row[ab_j]
+
+		re_arcsec = max(fits_theta, 1. / 30)  # re = effective radius
+		re_pixel = re_arcsec / 0.396
+
+		dstn_phi = (90 - fits_phi) * (pi / 180)
+		cp, sp = cos(dstn_phi), sin(dstn_phi)
+		R = [[cp -sp], [sp cp]]  # rotates
+		D = diagm([1., fits_ab])  # shrinks the minor axis
+		W = re_pixel * D * R'
+		XiXi = W' * W
+
 		Xi_mat = chol(XiXi)
 		Xi = [Xi_mat[1,1], Xi_mat[1,2], Xi_mat[2,2]]
 
