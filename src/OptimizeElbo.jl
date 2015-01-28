@@ -149,7 +149,8 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[
 	lbs, ubs = get_nlopt_bounds(mp.vp, omitted_ids)
 	for i in 1:length(x0)
 		if !(lbs[i] <= x0[i] <= ubs[i])
-			println("coordinate $i fallacy: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
+            j = $i % (length(all_params) - length(omitted_ids))
+			println("coordinate $j fallacy: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
 		end
 	end
 	lower_bounds!(opt, lbs)

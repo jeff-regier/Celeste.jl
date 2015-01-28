@@ -831,12 +831,12 @@ test_that_star_truth_is_more_likely()
 test_star_optimization()
 test_full_elbo_optimization()
 test_galaxy_optimization()
-=#
 test_that_galaxy_truth_is_more_likely()
+=#
 
+test_real_stamp_optimization()  # long running
 test_coadd_cat_init_is_more_likely()
 
-#test_real_stamp_optimization()  # long running
 
 # test_tiling()  # bug
 
