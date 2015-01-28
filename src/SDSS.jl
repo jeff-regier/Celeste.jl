@@ -90,7 +90,7 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 
 		re_arcsec = max(fits_theta, 1. / 30)  # re = effective radius
 		re_pixel = re_arcsec / 0.396
-		dstn_phi = (90 - fits_phi) * (pi / 180)
+		dstn_phi = (fits_phi - 90) * (pi / 180)
 
 		CatalogEntry(x_y, row[is_star_i], star_fluxes, 
 			gal_fluxes, frac_dev, fits_ab, dstn_phi, re_pixel)

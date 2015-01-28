@@ -56,7 +56,7 @@ end
 function init_source(ce::CatalogEntry)
 	ret = init_source(ce.pos)
 
-	ret[ids.chi] = ce.is_star ? 0.01 : 0.99
+	ret[ids.chi] = ce.is_star ? 0.0001 : 0.9999
 
 	star_fluxes = max(ce.star_fluxes, 1e-4)
 	ret[ids.gamma[1]] = star_fluxes[3] ./ ret[ids.zeta[1]]

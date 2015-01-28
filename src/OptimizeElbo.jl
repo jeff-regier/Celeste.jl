@@ -86,8 +86,8 @@ function get_nlopt_bounds(vs::Vector{Float64})
 	[lb[id] = 1e-4 for id in ids.lambda]
 	lb[ids.theta] = 1e-4 
 	lb[ids.rho] = 1e-4
-	lb[ids.phi] = -pi/2 + 1e-4
-	lb[ids.sigma] = 0.1
+	lb[ids.phi] = -1e10 #-pi/2 + 1e-4
+	lb[ids.sigma] = 0.07
 
 	ub = Array(Float64, length(all_params))
 	ub[ids.chi] = 1 - 1e-4
@@ -97,7 +97,7 @@ function get_nlopt_bounds(vs::Vector{Float64})
 	[ub[id] = 1 - 1e-4 for id in ids.kappa]
 	ub[ids.theta] = 1 - 1e-4
 	ub[ids.rho] = 1. - 1e-4
-	ub[ids.phi] = pi/2 - 1e-4
+	ub[ids.phi] = 1e10 #pi/2 - 1e-4
 	ub[ids.sigma] = 10.
 	[ub[id] = 10. for id in ids.beta]
 	[ub[id] = 1. for id in ids.lambda]
@@ -149,8 +149,8 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[
 	lbs, ubs = get_nlopt_bounds(mp.vp, omitted_ids)
 	for i in 1:length(x0)
 		if !(lbs[i] <= x0[i] <= ubs[i])
-            j = $i % (length(all_params) - length(omitted_ids))
-			println("coordinate $j fallacy: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
+            j = i % (length(all_params) - length(omitted_ids))
+			println("coordinate $j falsity$(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
 		end
 	end
 	lower_bounds!(opt, lbs)
