@@ -29,7 +29,7 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
 			end
 
 			numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
-			println("deriv #$p0 (s: $s): $numeric_deriv vs $(f.d[p1, s]) [tol: $abs_err]")
+#			println("deriv #$p0 (s: $s): $numeric_deriv vs $(f.d[p1, s]) [tol: $abs_err]")
             obs_err = abs(numeric_deriv - f.d[p1, s]) 
 			@test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-5
 			@test_approx_eq_eps numeric_deriv f.d[p1, s] 10abs_err
@@ -59,7 +59,7 @@ end
 
 const star_fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
 const galaxy_fluxes = [1.377666E+01, 5.635334E+01, 1.258656E+02, 
-					1.884264E+02, 2.351820E+02] * 30  # 1x wasn't bright enough
+					1.884264E+02, 2.351820E+02] * 100  # 1x wasn't bright enough
 
 function standard_ce(pos, is_star::Bool)
 	CatalogEntry(pos, is_star, star_fluxes, galaxy_fluxes, 0.1, .7, pi/4, 4.)
@@ -384,9 +384,6 @@ function test_that_galaxy_truth_is_more_likely()
 	blob, mp, body = gen_one_galaxy_dataset(perturb=false)
 	best = ElboDeriv.elbo_likelihood(blob, mp)
 
-    println(mp.vp[1][ids.beta[:, 2]])
-
-
 	for bad_chi in [.3, .5, .9]
 		mp_chi = deepcopy(mp)
 		mp_chi.vp[1][ids.chi] = bad_chi
@@ -423,7 +420,7 @@ function test_that_galaxy_truth_is_more_likely()
     end
 
 	for b in 1:4
-		for delta in [-.3, -.2, -.1, .1, .2, .5, 1., 2., 3., 4., 9.]
+		for delta in [-.3, .3]
 			mp_beta = deepcopy(mp)
 			mp_beta.vp[1][ids.beta[b, 2]] += delta
 			bad_beta = ElboDeriv.elbo_likelihood(blob, mp_beta)
@@ -746,7 +743,7 @@ function test_coadd_cat_init_is_more_likely()  # on a real stamp
 	for b in 1:4
 		for delta in [-.3, .3]
 			mp_beta = deepcopy(mp)
-			mp_beta.vp[s][ids.beta[b]] += delta
+			mp_beta.vp[s][ids.beta[b, :]] += delta
 			bad_beta = ElboDeriv.elbo_likelihood(blob, mp_beta)
 			@test best.v > bad_beta.v
 		end
@@ -816,6 +813,7 @@ end
 ####################################################
 
 
+#=
 test_util_bvn_cov()
 test_tiny_image_tiling()
 test_kl_divergence_derivs()
@@ -830,11 +828,11 @@ test_accum_pixel_source_derivs()
 test_elbo_derivs()
 test_that_variance_is_low()
 test_that_star_truth_is_more_likely()
-test_that_galaxy_truth_is_more_likely()
 test_star_optimization()
-test_galaxy_optimization()
 test_full_elbo_optimization()
-
+test_galaxy_optimization()
+=#
+test_that_galaxy_truth_is_more_likely()
 
 test_coadd_cat_init_is_more_likely()
 
