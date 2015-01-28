@@ -54,17 +54,16 @@ end
 
 
 function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
-	thetas = [ce.theta, 1 - ce.theta]
+	thetas = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
 
-    Xi = [[ce.Xi[1] ce.Xi[2]], [0.  ce.Xi[3]]]
-    XiXi = Xi' * Xi
+    XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
 
 	for i in 1:2
 		for gproto in galaxy_prototypes[i]
 			for k in 1:length(img0.psf)
 				the_mean = ce.pos + img0.psf[k].xiBar
 				the_cov = img0.psf[k].SigmaBar + gproto.sigmaTilde * XiXi
-				intensity = ce.galaxy_fluxes[img0.b] * img0.iota * 
+				intensity = ce.gal_fluxes[img0.b] * img0.iota * 
 					img0.psf[k].alphaBar * thetas[i] * gproto.alphaTilde
 				write_gaussian(the_mean, the_cov, intensity, pixels)
 			end

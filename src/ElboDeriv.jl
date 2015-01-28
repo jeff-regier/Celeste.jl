@@ -116,9 +116,38 @@ immutable BvnComponent
 end
 
 
+immutable GalaxyCacheComponent
+    theta_dir::Float64
+    theta_i::Float64
+    bmc::BvnComponent
+    dSigma::Matrix{Float64}  # [Sigma11, Sigma12, Sigma22] x [rho, phi, sigma]
+
+    GalaxyCacheComponent(theta_dir::Float64, theta_i::Float64, 
+            gc::GalaxyComponent, pc::PsfComponent, mu::Vector{Float64},
+            rho::Float64, phi::Float64, sigma::Float64) = begin
+        XiXi = Util.get_bvn_cov(rho, phi, sigma)
+        mean_s = [pc.xiBar[1] + mu[1], pc.xiBar[2] + mu[2]]
+        var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
+        weight = pc.alphaBar * gc.alphaTilde  # excludes theta
+        bmc = BvnComponent(mean_s, var_s, weight)
+
+        dSigma = Array(Float64, 3, 3)
+        cos_sin = cos(phi)sin(phi)
+        sin_sq = sin(phi)^2
+        cos_sq = cos(phi)^2
+        dSigma[:, 1] = 2rho * sigma^2 * [sin_sq, -cos_sin, cos_sq]
+        dSigma[:, 2] = sigma^2 * (rho^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
+        dSigma[:, 3] = (2XiXi ./ sigma)[[1, 2, 4]]
+        dSigma .*= gc.sigmaTilde
+
+        new(theta_dir, theta_i, bmc, dSigma)
+    end
+end
+
+
 function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
     star_mcs = Array(BvnComponent, 3, mp.S)
-    gal_mcs = Array(BvnComponent, 3, 8, 2, mp.S)
+    gal_mcs = Array(GalaxyCacheComponent, 3, 8, 2, mp.S)
 
     for s in 1:mp.S
         vs = mp.vp[s]
@@ -129,18 +158,14 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
             star_mcs[k, s] = BvnComponent(mean_s, pc.SigmaBar, pc.alphaBar)
         end
 
-        Xi = [[vs[ids.Xi[1]] vs[ids.Xi[2]]], [0. vs[ids.Xi[3]]]]
-        XiXi = Xi' * Xi
-
         for i = 1:2
+            theta_dir = (i == 1) ? 1. : -1.
+            theta_i = (i == 1) ? vs[ids.theta] : 1. - vs[ids.theta]
             for j in 1:[8,6][i]
-                gc = galaxy_prototypes[i][j]
                 for k = 1:3
-                    pc = psf[k]
-                    mean_s = [pc.xiBar[1] + vs[ids.mu[1]], pc.xiBar[2] + vs[ids.mu[2]]]
-                    var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
-                    weight = pc.alphaBar * gc.alphaTilde
-                    gal_mcs[k, j, i, s] = BvnComponent(mean_s, var_s, weight)
+                    gal_mcs[k, j, i, s] = GalaxyCacheComponent(
+                        theta_dir, theta_i, galaxy_prototypes[i][j], psf[k],
+                        vs[ids.mu], vs[ids.rho], vs[ids.phi], vs[ids.sigma])
                 end
             end
         end
@@ -171,30 +196,33 @@ function accum_star_pos!(bmc::BvnComponent, x::Vector{Float64},
 end
 
 
-function accum_galaxy_pos!(bmc::BvnComponent, x::Vector{Float64},
-        theta_i::Float64, theta_dir::Float64, st::Float64,
-        Xi::Vector{Float64}, fs1m::SensitiveFloat)
-    py1, py2, f_pre = ret_pdf(bmc, x)
-    f = f_pre * theta_i
+function accum_galaxy_pos!(gcc::GalaxyCacheComponent, x::Vector{Float64},
+        fs1m::SensitiveFloat)
+    py1, py2, f_pre = ret_pdf(gcc.bmc, x)
+    f = f_pre * gcc.theta_i
 
     fs1m.v += f
     fs1m.d[1] += f .* py1 #mu1
     fs1m.d[2] += f .* py2 #mu2
-    fs1m.d[3] += theta_dir * f_pre #theta
+    fs1m.d[3] += gcc.theta_dir * f_pre #theta
 
-    df_dSigma_11 = 0.5 * f * (py1 * py1 - bmc.precision[1, 1])
-    df_dSigma_12 = f * (py1 * py2 - bmc.precision[1, 2])  # NB: 2X
-    df_dSigma_22 = 0.5 * f * (py2 * py2 - bmc.precision[2, 2])
+    df_dSigma = Array(Float64, 3)
+    df_dSigma[1] = 0.5 * f * (py1 * py1 - gcc.bmc.precision[1, 1])
+    df_dSigma[2] = f * (py1 * py2 - gcc.bmc.precision[1, 2])  # NB: 2X
+    df_dSigma[3] = 0.5 * f * (py2 * py2 - gcc.bmc.precision[2, 2])
 
-    fs1m.d[4] += st * (df_dSigma_11 * 2Xi[1] + df_dSigma_12 * Xi[2])
-    fs1m.d[5] += st * (df_dSigma_12 * Xi[1] + df_dSigma_22 * 2Xi[2])
-    fs1m.d[6] += st * (df_dSigma_22 * 2Xi[3])
+    for i in 1:3  # [drho, dphi, dsigma]
+        for j in 1:3  # [dSigma11, dSigma12, dSigma22]
+            fs1m.d[i + 3] += df_dSigma[j] * gcc.dSigma[j, i]
+        end
+    end
 end
 
 
 function accum_pixel_source_stats!(sb::SourceBrightness,
-        star_mcs::Array{BvnComponent, 2}, gal_mcs::Array{BvnComponent, 4},
-        vs::Vector{Float64}, child_s::Int64, parent_s,
+        star_mcs::Array{BvnComponent, 2}, 
+        gal_mcs::Array{GalaxyCacheComponent, 4},
+        vs::Vector{Float64}, child_s::Int64, parent_s::Int64,
         m_pos::Vector{Float64}, b::Int64,
         fs0m::SensitiveFloat, fs1m::SensitiveFloat, 
         E_G::SensitiveFloat, var_G::SensitiveFloat)
@@ -206,13 +234,9 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
 
     clear!(fs1m)
     for i = 1:2
-        theta_dir = (i == 1) ? 1. : -1.
-        theta_i = (i == 1) ? vs[ids.theta] : 1. - vs[ids.theta]
-
         for j in 1:[8,6][i]
             for k = 1:3
-                accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, theta_i, 
-                    theta_dir, galaxy_prototypes[i][j].sigmaTilde, vs[ids.Xi], fs1m)
+                accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, fs1m)
             end
         end
     end
@@ -302,7 +326,8 @@ end
 
 function elbo_likelihood!(tile::ImageTile, mp::ModelParams, 
         sbs::Vector{SourceBrightness},
-         star_mcs::Array{BvnComponent, 2}, gal_mcs::Array{BvnComponent, 4}, 
+        star_mcs::Array{BvnComponent, 2}, 
+        gal_mcs::Array{GalaxyCacheComponent, 4}, 
         accum::SensitiveFloat)
     tile_sources = local_sources(tile, mp)
     h_range, w_range = tile_range(tile, mp.tile_width)

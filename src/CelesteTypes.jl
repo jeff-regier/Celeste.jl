@@ -25,9 +25,11 @@ type CatalogEntry
     pos::Vector{Float64}
 	is_star::Bool
     star_fluxes::Vector{Float64}
-    galaxy_fluxes::Vector{Float64}
-    theta::Float64
-    Xi::Vector{Float64}
+    gal_fluxes::Vector{Float64}
+    gal_frac_dev::Float64
+	gal_ab::Float64
+	gal_angle::Float64
+	gal_scale::Float64
 end
 
 ############################################
@@ -142,7 +144,9 @@ immutable ParamIndex
 	gamma::Vector{Int64}
 	zeta::Vector{Int64}
 	theta::Int64
-	Xi::Vector{Int64}
+	rho::Int64  # galaxy minor/maxjor ratio
+	phi::Int64  # galaxy angle
+	sigma::Int64  # galaxy scale
 	kappa::Array{Int64, 2}
 	beta::Array{Int64, 2}
 	lambda::Array{Int64, 2}
@@ -162,7 +166,7 @@ function get_param_ids()
 	beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
 	lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
 
-	ParamIndex(1, [2, 3], [4, 5], [6, 7], 8, [9, 10, 11], 
+	ParamIndex(1, [2, 3], [4, 5], [6, 7], 8, 9, 10, 11, 
 			kappa_ids, beta_ids, lambda_ids)
 end
 
@@ -170,7 +174,7 @@ const ids = get_param_ids()
 
 const all_params = [1:ids.lambda[end]]
 const star_pos_params = ids.mu
-const galaxy_pos_params = [ids.mu, ids.theta, ids.Xi]
+const galaxy_pos_params = [ids.mu, ids.theta, ids.rho, ids.phi, ids.sigma]
 
 #########################################################
 

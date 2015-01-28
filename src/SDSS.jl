@@ -82,7 +82,7 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 		x_y = wcss2p(blob[1].wcs, [row[ra_i], row[dec_i]]'')[:]
 		star_fluxes = row[psfflux_i]
 		frac_dev = row[frac_dev_i]
-		galaxy_fluxes = frac_dev * row[devflux_i] + (1 - frac_dev) * row[expflux_i]
+		gal_fluxes = frac_dev * row[devflux_i] + (1 - frac_dev) * row[expflux_i]
 
 		fits_phi = frac_dev * row[phi_i] + (1 - frac_dev) * row[phi_j]
 		fits_theta = frac_dev * row[theta_i] + (1 - frac_dev) * row[theta_j]
@@ -90,18 +90,10 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 
 		re_arcsec = max(fits_theta, 1. / 30)  # re = effective radius
 		re_pixel = re_arcsec / 0.396
-
 		dstn_phi = (90 - fits_phi) * (pi / 180)
-		cp, sp = cos(dstn_phi), sin(dstn_phi)
-		R = [[cp -sp], [sp cp]]  # rotates
-		D = diagm([1., fits_ab])  # shrinks the minor axis
-		W = re_pixel * D * R'
-		XiXi = W' * W
 
-		Xi_mat = chol(XiXi)
-		Xi = [Xi_mat[1,1], Xi_mat[1,2], Xi_mat[2,2]]
-
-		CatalogEntry(x_y, row[is_star_i], star_fluxes, galaxy_fluxes, frac_dev, Xi)
+		CatalogEntry(x_y, row[is_star_i], star_fluxes, 
+			gal_fluxes, frac_dev, fits_ab, dstn_phi, re_pixel)
     end
 
 	if match_blob

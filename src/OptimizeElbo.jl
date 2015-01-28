@@ -85,8 +85,9 @@ function get_nlopt_bounds(vs::Vector{Float64})
 	[lb[id] = -10. for id in ids.beta]
 	[lb[id] = 1e-4 for id in ids.lambda]
 	lb[ids.theta] = 1e-4 
-	[lb[id] = sqrt(.01) for id in ids.Xi[[1,3]]]
-	lb[ids.Xi[2]] = -10
+	lb[ids.rho] = 1e-4
+	lb[ids.phi] = -pi/2 + 1e-4
+	lb[ids.sigma] = 0.1
 
 	ub = Array(Float64, length(all_params))
 	ub[ids.chi] = 1 - 1e-4
@@ -95,7 +96,9 @@ function get_nlopt_bounds(vs::Vector{Float64})
 	[ub[id] = 1e-1 for id in ids.zeta]
 	[ub[id] = 1 - 1e-4 for id in ids.kappa]
 	ub[ids.theta] = 1 - 1e-4
-	[ub[id] = 10 for id in ids.Xi]
+	ub[ids.rho] = 1. - 1e-4
+	ub[ids.phi] = pi/2 - 1e-4
+	ub[ids.sigma] = 10.
 	[ub[id] = 10. for id in ids.beta]
 	[ub[id] = 1. for id in ids.lambda]
 
@@ -161,8 +164,6 @@ end
 
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
-	omitted_ids = [ids.kappa[:], ids.lambda[:], ids.mu, ids.theta, ids.Xi, ids.chi]
-#	maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 	maximize_f(ElboDeriv.elbo, blob, mp)
 end
 

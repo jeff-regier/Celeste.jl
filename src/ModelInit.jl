@@ -41,10 +41,11 @@ function init_source(init_pos::Vector{Float64})
 	ret[ids.mu[1]] = init_pos[1]
 	ret[ids.mu[2]] = init_pos[2]
 	ret[ids.gamma] = 1e3
-	ret[ids.zeta] = 2e-2
+	ret[ids.zeta] = 2e-3
 	ret[ids.theta] = 0.5
-	ret[ids.Xi[1]] = ret[ids.Xi[3]] = 1.5
-	ret[ids.Xi[2]] = 0.
+	ret[ids.rho] = 0.5
+	ret[ids.phi] = 0.
+	ret[ids.sigma] = 1.
 	ret[ids.kappa] = 1. / size(ids.kappa, 1)
 	ret[ids.beta] = 0.
 	ret[ids.lambda] =  1e-2
@@ -60,16 +61,18 @@ function init_source(ce::CatalogEntry)
 	star_fluxes = max(ce.star_fluxes, 1e-4)
 	ret[ids.gamma[1]] = star_fluxes[3] ./ ret[ids.zeta[1]]
 
-	galaxy_fluxes = max(ce.galaxy_fluxes, 1e-4)
-	ret[ids.gamma[2]] = galaxy_fluxes[3] ./ ret[ids.zeta[2]]
+	gal_fluxes = max(ce.gal_fluxes, 1e-4)
+	ret[ids.gamma[2]] = gal_fluxes[3] ./ ret[ids.zeta[2]]
 
 	get_colors(fluxes) = min(max(log(fluxes[2:5] ./ fluxes[1:4]), -9.), 9.)
 	ret[ids.beta[:, 1]] = get_colors(star_fluxes)
-	ret[ids.beta[:, 2]] = get_colors(galaxy_fluxes)
+	ret[ids.beta[:, 2]] = get_colors(gal_fluxes)
 
-	ret[ids.theta] = min(max(ce.theta, 0.01), 0.99)
+	ret[ids.theta] = min(max(ce.gal_frac_dev, 0.01), 0.99)
 
-	ret[ids.Xi] = ce.Xi
+	ret[ids.rho] = ce.gal_ab
+	ret[ids.phi] = ce.gal_angle
+	ret[ids.sigma] = ce.gal_scale
 
 	ret
 end
