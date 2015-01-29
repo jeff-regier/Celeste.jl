@@ -147,6 +147,23 @@ function peak_init(blob::Blob; patch_radius::Float64=Inf,
 	ModelParams(vp, sample_prior(), patches, tile_width)
 end
 
+#=
+function min_patch_radius(ce::CatalogEntry, blob::Blob)
+    max_var = maximum([maximum([maximum(pc.sigmaBar) for pc in img.psf]) 
+                    for img in blob])
+    if !ce.is_star
+        max_var += gal_scale * maximum()
+    end
+
+    intensity = pc.alphaBar * ce.star_fluxes[b]
+    pdf_target = threshold / intensity
+    # ignore xiBar for now
+    max_var = maximum(diag(pc.sigmaBar))
+    rhs = log(pdf_target) + log(2pi) + 0.5logdet(pc.sigmaBar)
+    x = sqrt(-2 * max_var * rhs)
+    println("patch radius requirement: $x")
+end
+=#
 
 function cat_init(cat::Vector{CatalogEntry}; patch_radius::Float64=Inf,
 		tile_width::Int64=typemax(Int64))

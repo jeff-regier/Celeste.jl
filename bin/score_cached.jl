@@ -71,8 +71,8 @@ function score_cached(stamp_id)
         true_ce.is_star ? "star" : "galaxy", 
         base_ce.is_star ? "star" : "galaxy",
         vs[ids.chi] < .5 ? 
-            "star ($(100 - 100vs[ids.chi])% certainty)" :
-            "galaxy ($(100vs[ids.chi])% certainty")
+            "star ($(100 - 100vs[ids.chi])% certain)" :
+            "galaxy ($(100vs[ids.chi])% certain)")
 
     color_names = ["$(band_letters[i+1])-$(band_letters[i])" for i in 1:4]
 
@@ -115,11 +115,12 @@ function score_cached(stamp_id)
                 true_row[1, :ab_dev], true_row[1, :ab_exp]),
             @sprintf("%.3f (dev), %.3f (exp)", 
                 base_row[1, :ab_dev], base_row[1, :ab_exp]),
-            round(vs[ids.rho], 3))
+            @sprintf("%.3f (both)", vs[ids.rho]))
 
-        my_angle = vs[ids.phi] + pi/2
+        my_angle = pi/2 - vs[ids.phi]
         my_angle -= floor(my_angle / pi) * pi
         my_angle *= 180 / pi
+        ab_warning = vs[ids.rho] > .9 ? "   [NOTE: predicted galaxy is nearly isotropic!]" : ""
         print_comparison("angle (degrees)",
             @sprintf("%.3f (dev), %.3f (exp)",
                 true_row[1, :phi_dev] - floor(true_row[1, :phi_dev] / 180) * 180,
@@ -127,7 +128,7 @@ function score_cached(stamp_id)
             @sprintf("%.3f (dev), %.3f (exp)",
                 base_row[1, :phi_dev] - floor(base_row[1, :phi_dev] / 180) * 180,
                 base_row[1, :phi_exp] - floor(base_row[1, :phi_exp] / 180) * 180),
-            round(my_angle, 3))
+            string(round(my_angle, 3), " (both)", ab_warning))
 
         my_er = vs[ids.sigma] * 0.396
         print_comparison("effective radius (arc seconds)",
@@ -135,7 +136,7 @@ function score_cached(stamp_id)
                 true_row[1, :theta_dev], true_row[1, :theta_exp]),
             @sprintf("%.3f (dev), %.3f (exp)",
                 base_row[1, :theta_dev], base_row[1, :theta_exp]),
-            @sprintf("%.3f", my_er))
+            @sprintf("%.3f (both)", my_er))
     end
 
     #TODO: colors confidence
