@@ -67,12 +67,12 @@ function score_cached(stamp_id)
     print_comparison("position (pixel coordinates)", 
         true_ce.pos, round(base_ce.pos, 3), round(vs[ids.mu], 3))
 
-    print_comparison("Is it a star?",
-        true_ce.is_star ? "yes" : "no", 
-        base_ce.is_star ? "yes" : "no",
+    print_comparison("celestial body type",
+        true_ce.is_star ? "star" : "galaxy", 
+        base_ce.is_star ? "star" : "galaxy",
         vs[ids.chi] < .5 ? 
-            "yes ($(100 - 100vs[ids.chi])% certainty)" :
-            "no ($(100vs[ids.chi])% certainty")
+            "star ($(100 - 100vs[ids.chi])% certainty)" :
+            "galaxy ($(100vs[ids.chi])% certainty")
 
     color_names = ["$(band_letters[i+1])-$(band_letters[i])" for i in 1:4]
 
