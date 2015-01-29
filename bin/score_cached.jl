@@ -85,9 +85,13 @@ function score_cached(stamp_id)
             @sprintf("%.3f (%.3f)", E_r, sd_r))
 
         for c in 1:4
+            true_color = true_ce.star_fluxes[c + 1] <= 0 || true_ce.star_fluxes[c] <= 0. ?
+                "NA" : round(log(true_ce.star_fluxes[c + 1] / true_ce.star_fluxes[c]), 3)
+            base_color = base_ce.star_fluxes[c + 1] <= 0 || base_ce.star_fluxes[c] <= 0 ?
+                "NA" : round(log(base_ce.star_fluxes[c + 1] / base_ce.star_fluxes[c]), 3)
             print_comparison("color $(color_names[c])",
-                round(log(true_ce.star_fluxes[c + 1] / true_ce.star_fluxes[c]), 3),
-                round(log(base_ce.star_fluxes[c + 1] / base_ce.star_fluxes[c]), 3),
+                true_color,
+                base_color,
                 @sprintf("%.3f (%.3f)", vs[ids.beta[c, 1]], sqrt(vs[ids.lambda[c, 1]])))
         end
     else
@@ -99,9 +103,13 @@ function score_cached(stamp_id)
             @sprintf("%.3f (%.3f)", E_r, sd_r))
 
         for c in 1:4
+            true_color = true_ce.gal_fluxes[c + 1] <= 0 || true_ce.gal_fluxes[c] <= 0. ?
+                "NA" : round(log(true_ce.gal_fluxes[c + 1] / true_ce.gal_fluxes[c]), 3)
+            base_color = base_ce.gal_fluxes[c + 1] <= 0 || base_ce.gal_fluxes[c] <= 0 ?
+                "NA" : round(log(base_ce.gal_fluxes[c + 1] / base_ce.gal_fluxes[c]), 3)
             print_comparison("color $(color_names[c])",
-                round(log(true_ce.gal_fluxes[c + 1] / true_ce.gal_fluxes[c]), 3),
-                round(log(base_ce.gal_fluxes[c + 1] / base_ce.gal_fluxes[c]), 3),
+                true_color,
+                base_color,
                 @sprintf("%.3f (%.3f)", vs[ids.beta[c, 2]], sqrt(vs[ids.lambda[c, 2]])))
         end
 
@@ -140,8 +148,6 @@ function score_cached(stamp_id)
     end
 
     println("\n")
-
-    #TODO: colors confidence
 end
 
 
