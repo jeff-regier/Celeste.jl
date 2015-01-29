@@ -131,7 +131,7 @@ function score_cached(stamp_id)
             string(round(my_angle, 3), " (both)", ab_warning))
 
         my_er = vs[ids.sigma] * 0.396
-        print_comparison("effective radius (arc seconds)",
+        print_comparison("effective radius (arcseconds)",
             @sprintf("%.3f (dev), %.3f (exp)",
                 true_row[1, :theta_dev], true_row[1, :theta_exp]),
             @sprintf("%.3f (dev), %.3f (exp)",
