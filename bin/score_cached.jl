@@ -56,7 +56,7 @@ function score_cached(stamp_id)
          match_blob=true)
     mp = load_cache(stamp_id)
 
-    println("\n----STAMP $stamp_id----")
+    println("================= STAMP $stamp_id ====================")
 
 	vs = center_obj(mp.vp)
     true_ce = center_obj(true_cat)
@@ -120,7 +120,7 @@ function score_cached(stamp_id)
         my_angle = pi/2 - vs[ids.phi]
         my_angle -= floor(my_angle / pi) * pi
         my_angle *= 180 / pi
-        ab_warning = vs[ids.rho] > .9 ? "   [NOTE: predicted galaxy is nearly isotropic!]" : ""
+        ab_warning = vs[ids.rho] > .9 ? "   [NOTE: predicted galaxy is nearly isotropic]" : ""
         print_comparison("angle (degrees)",
             @sprintf("%.3f (dev), %.3f (exp)",
                 true_row[1, :phi_dev] - floor(true_row[1, :phi_dev] / 180) * 180,
@@ -139,11 +139,17 @@ function score_cached(stamp_id)
             @sprintf("%.3f (both)", my_er))
     end
 
+    println("\n")
+
     #TODO: colors confidence
 end
 
 
 if length(ARGS) > 0
     score_cached(ARGS[1])
+else
+    for line in eachline(STDIN)
+        score_cached(strip(line))
+    end
 end
 
