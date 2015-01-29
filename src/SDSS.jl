@@ -4,6 +4,7 @@ using CelesteTypes
 
 using FITSIO
 using WCSLIB
+using DataFrames
 
 
 function load_stamp_blob(stamp_dir, stamp_id)
@@ -30,9 +31,12 @@ function load_stamp_blob(stamp_dir, stamp_id)
 			[hdr["PSF_P7"]  hdr["PSF_P8"]]
 		]'
 		SigmaBar = Array(Float64, 2, 2, 3)
-		SigmaBar[:,:,1] = [[hdr["PSF_P9"] hdr["PSF_P11"]], [hdr["PSF_P11"] hdr["PSF_P10"]]]
-		SigmaBar[:,:,2] = [[hdr["PSF_P12"] hdr["PSF_P14"]], [hdr["PSF_P14"] hdr["PSF_P13"]]]
-		SigmaBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]], [hdr["PSF_P17"] hdr["PSF_P16"]]]
+		SigmaBar[:,:,1] = [[hdr["PSF_P9"] hdr["PSF_P11"]], 
+                [hdr["PSF_P11"] hdr["PSF_P10"]]]
+		SigmaBar[:,:,2] = [[hdr["PSF_P12"] hdr["PSF_P14"]], 
+                [hdr["PSF_P14"] hdr["PSF_P13"]]]
+		SigmaBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]],
+                [hdr["PSF_P17"] hdr["PSF_P16"]]]
 
 		psf = [PsfComponent(alphaBar[k], xiBar[:, k], SigmaBar[:, :, k]) for k in 1:3]
 
@@ -51,62 +55,68 @@ function load_stamp_blob(stamp_dir, stamp_id)
 end
 
 
-function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
+function load_stamp_catalog_df(cat_dir, stamp_id, blob; match_blob=false)
     cat_fits = fits_open_table("$cat_dir/cat-$stamp_id.fits")
     num_rows = int(fits_read_keyword(cat_fits, "NAXIS2")[1])
     num_cols = int(fits_read_keyword(cat_fits, "TFIELDS")[1])
 	ttypes = [rstrip(fits_read_keyword(cat_fits, "TTYPE$i")[1][2:end-1]) for i in 1:num_cols]
 	tforms = [rstrip(fits_read_keyword(cat_fits, "TFORM$i")[1][2:end-1]) for i in 1:num_cols]
 	col_types = [l in ("D", "E") ? Float64 : l in ("L",) ? Bool : l in ("B", "I") ? Int64 : None for l in tforms]
-    table = Array(Any, num_rows, num_cols)
+
+    df = DataFrame()
     for i in 1:num_cols
 		tmp_data = Array(col_types[i], num_rows)
         fits_read_col(cat_fits, col_types[i], i, 1, 1, tmp_data)
-        table[:, i] = tmp_data
+        df[symbol(ttypes[i])] = tmp_data
     end
+
     fits_close_file(cat_fits)
 
-	ra_i = findfirst(ttypes, "ra")
-	dec_i = findfirst(ttypes, "dec")
-	is_star_i = findfirst(ttypes, "is_star")
-	b_letter = ['u', 'g', 'r', 'i', 'z']
-	psfflux_i = Int64[findfirst(ttypes, "psfflux_$b") for b in b_letter]
-	expflux_i = Int64[findfirst(ttypes, "expflux_$b") for b in b_letter]
-	devflux_i = Int64[findfirst(ttypes, "devflux_$b") for b in b_letter]
-	frac_dev_i = findfirst(ttypes, "frac_dev")
-	phi_i, phi_j = findfirst(ttypes, "phi_dev"), findfirst(ttypes, "phi_exp")
-	theta_i, theta_j = findfirst(ttypes, "theta_dev"), findfirst(ttypes, "theta_exp")
-	ab_i, ab_j = findfirst(ttypes, "ab_dev"), findfirst(ttypes, "ab_exp")
+	if match_blob
+		camcol_matches = df[:camcol] .== blob[3].camcol_num
+		run_matches = df[:run] .== blob[3].run_num
+		field_matches = df[:field] .== blob[3].field_num
+		df = df[camcol_matches & run_matches & field_matches, :]
+	end
 
-    function row_to_cs(row)
-		x_y = wcss2p(blob[1].wcs, [row[ra_i], row[dec_i]]'')[:]
-		star_fluxes = row[psfflux_i]
-		frac_dev = row[frac_dev_i]
-		gal_fluxes = frac_dev * row[devflux_i] + (1 - frac_dev) * row[expflux_i]
+    df
+end
 
-		fits_phi = frac_dev * row[phi_i] + (1 - frac_dev) * row[phi_j]
-		fits_theta = frac_dev * row[theta_i] + (1 - frac_dev) * row[theta_j]
-		fits_ab = frac_dev * row[ab_i] + (1 - frac_dev) * row[ab_j]
+
+function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
+    df = load_stamp_catalog_df(cat_dir, stamp_id, blob)
+
+    function row_to_ce(row)
+		x_y = wcss2p(blob[1].wcs, [row[1, :ra], row[1, :dec]]'')[:]
+
+		star_fluxes = zeros(5)
+		gal_fluxes = zeros(5)
+        fracs_dev = [row[1, :frac_dev], 1 - row[1, :frac_dev]]
+        for b in 1:5
+            bl = band_letters[b]
+            psf_col = symbol("psfflux_$bl")
+            star_fluxes[b] = row[1, psf_col]
+
+            dev_col = symbol("devflux_$bl")
+            exp_col = symbol("expflux_$bl")
+            gal_fluxes[b] += fracs_dev[1] * row[1, dev_col] + 
+                    fracs_dev[2] * row[1, exp_col]
+        end
+
+		fits_phi = fracs_dev[1] * row[1, :phi_dev] + fracs_dev[2] * row[1, :phi_exp]
+		fits_theta = fracs_dev[1] * row[1, :theta_dev] + fracs_dev[2] * row[1, :theta_exp]
+		fits_ab = fracs_dev[1] * row[1, :ab_dev] + fracs_dev[2] * row[1, :ab_exp]
 
 		re_arcsec = max(fits_theta, 1. / 30)  # re = effective radius
 		re_pixel = re_arcsec / 0.396
-		dstn_phi = (fits_phi - 90) * (pi / 180)
 
-		CatalogEntry(x_y, row[is_star_i], star_fluxes, 
-			gal_fluxes, frac_dev, fits_ab, dstn_phi, re_pixel)
+		phi90 = (fits_phi - 90) * (pi / 180)
+
+		CatalogEntry(x_y, row[1, :is_star], star_fluxes, 
+			gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_pixel)
     end
 
-	if match_blob
-		camcol_col = findfirst(ttypes, "camcol")
-		run_col = findfirst(ttypes, "run")
-		field_col = findfirst(ttypes, "field")
-		camcol_matches = table[:, camcol_col] .== blob[3].camcol_num
-		run_matches = table[:, run_col] .== blob[3].run_num
-		field_matches = table[:, field_col] .== blob[3].field_num
-		table = table[camcol_matches & run_matches & field_matches, :]
-	end
-
-    CatalogEntry[row_to_cs(table[i, :][:]) for i in 1:size(table, 1)]
+    CatalogEntry[row_to_ce(df[i, :]) for i in 1:size(df, 1)]
 end
 
 

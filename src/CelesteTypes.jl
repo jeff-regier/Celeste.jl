@@ -4,6 +4,7 @@
 module CelesteTypes
 
 export CatalogEntry
+export band_letters
 
 export Image, Blob, SkyPatch, ImageTile, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
@@ -20,6 +21,9 @@ import FITSIO
 import Distributions
 import WCSLIB
 
+
+
+const band_letters = ['u', 'g', 'r', 'i', 'z']
 
 type CatalogEntry
     pos::Vector{Float64}
@@ -144,7 +148,7 @@ immutable ParamIndex
 	gamma::Vector{Int64}
 	zeta::Vector{Int64}
 	theta::Int64
-	rho::Int64  # galaxy minor/maxjor ratio
+	rho::Int64  # galaxy minor/major ratio
 	phi::Int64  # galaxy angle
 	sigma::Int64  # galaxy scale
 	kappa::Array{Int64, 2}

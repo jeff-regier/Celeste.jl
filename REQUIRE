@@ -3,3 +3,4 @@ FITSIO
 WCSLIB
 NLopt
 GSL
+DataFrames
