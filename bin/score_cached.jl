@@ -23,18 +23,11 @@ function center_obj(vp::Vector{Vector{Float64}})
 end
 
 
-function center_obj(catalog::DataFrame)
-	distances = [norm([catalog[i, :ra], catalog[i, :dec]] .- 26.) 
-        for i in 1:size(catalog,1)]
+function center_obj(catalog_ce::Vector{CatalogEntry}, catalog_df::DataFrame)
+    @assert length(catalog_ce) == size(catalog_df, 1)
+	distances = [norm(ce.pos .- 26.) for ce in catalog_ce]
 	idx = findmin(distances)[2]
-    catalog[idx, :]
-end
-
-
-function center_obj(catalog::Vector{CatalogEntry})
-	distances = [norm(ce.pos .- 26.) for ce in catalog]
-	idx = findmin(distances)[2]
-    catalog[idx]
+    catalog_ce[idx], catalog_df[idx,:]
 end
 
 
@@ -56,10 +49,8 @@ function load_predictions(stamp_id)
          match_blob=true)
     mp = load_celeste_predictions(stamp_id)
 
-    true_ce = center_obj(true_cat)
-    true_row = center_obj(true_cat_df)
-    base_ce = center_obj(baseline_cat)
-    base_row = center_obj(baseline_cat_df)
+    true_ce, true_row = center_obj(true_cat, true_cat_df)
+    base_ce, base_row = center_obj(baseline_cat, baseline_cat_df)
 	vs = center_obj(mp.vp)
 
     true_ce, true_row, base_ce, base_row, vs
@@ -159,6 +150,12 @@ function report_on_stamp(stamp_id)
 end
 
 
+function degrees_to_diff(a, b)
+    angle_between = abs(a - b) % 180
+    min(angle_between, 180 - angle_between)
+end
+
+
 function score_stamps(stamp_ids)
     N = length(stamp_ids)
 
@@ -166,14 +163,21 @@ function score_stamps(stamp_ids)
     obj_type_err = Array(Bool, 2, N)
 
     flux_r_err = Array(Float64, 2, N)
-    color_err = Array(Float64, 2, N, 4)
-    gal_frac_dev_err = Array(Float64, 2, N)
-    gal_ab_err = Array(Float64, 2, N)
-    gal_angel_err = Array(Float64, 2, N)
-    gal_er_err = Array(Float64, 2, N)
-    num_na = zeros(4)
 
-    true_star = Array(Bool, 2, N)
+    num_na = zeros(4)
+    color_err = Array(Float64, 2, N, 4)
+
+    num_fracdev = 0
+    gal_frac_dev_err = zeros(2, N)
+
+    num_ab = 0
+    gal_ab_err = zeros(2, N)
+
+    num_angle = 0
+    gal_angle_err = zeros(2, N)
+
+    num_scale = 0
+    gal_scale_err = zeros(2, N)
 
     for i in 1:N
         stamp_id = stamp_ids[i]
@@ -184,8 +188,6 @@ function score_stamps(stamp_ids)
 
         obj_type_err[1, i] = true_ce.is_star != base_ce.is_star
         obj_type_err[2, i] = true_ce.is_star != (vs[ids.chi] < .5)
-
-        true_star[i] = true_ce.is_star
 
         true_fluxes = true_ce.is_star ? true_ce.star_fluxes : true_ce.gal_fluxes
         base_fluxes = base_ce.is_star ? base_ce.star_fluxes : base_ce.gal_fluxes
@@ -208,19 +210,56 @@ function score_stamps(stamp_ids)
             end
         end
 
-        gal_frac_dev_err[1, i] = abs(true_ce.gal_frac_dev - base_ce.gal_frac_dev)
-        gal_frac_dev_err[2, i] = abs(true_ce.gal_frac_dev - vs[ids.theta])
+        if !true_ce.is_star
+            if true_ce.gal_frac_dev > .95 || true_ce.gal_frac_dev < 0.05
+                num_fracdev += 1
+                gal_frac_dev_err[1, i] = abs(true_ce.gal_frac_dev - base_ce.gal_frac_dev)
+                gal_frac_dev_err[2, i] = abs(true_ce.gal_frac_dev - vs[ids.theta])
+            end
+
+            if true_ce.gal_frac_dev > .95 || true_ce.gal_frac_dev < 0.05 ||
+                   abs(true_row[1, :ab_dev] - true_row[1, :ab_exp]) < .2
+                num_ab += 1
+                gal_ab_err[1, i] = abs(true_ce.gal_ab - base_ce.gal_ab)
+                gal_ab_err[2, i] = abs(true_ce.gal_ab - vs[ids.rho])
+            end
+
+            if (true_ce.gal_frac_dev > .95 || true_ce.gal_frac_dev < 0.05 ||
+               abs(true_row[1, :phi_dev] - true_row[1, :phi_exp]) < 10) &&
+                    true_ce.gal_ab < .8 && base_ce.gal_ab < .8 &&
+                    vs[ids.rho] < .8
+                num_angle += 1
+                true_deg = (180/pi)true_ce.gal_angle
+                base_deg = (180/pi)base_ce.gal_angle
+                celeste_deg = (180/pi)vs[ids.phi]
+                gal_angle_err[1, i] = degrees_to_diff(true_deg, base_deg)
+                gal_angle_err[2, i] = degrees_to_diff(true_deg, celeste_deg)
+            end
+
+            if true_ce.gal_frac_dev > .95 || true_ce.gal_frac_dev < 0.05 ||
+                   abs(true_row[1, :theta_dev] - true_row[1, :theta_exp]) < .2
+                num_scale += 1
+                gal_scale_err[1, i] = abs(true_ce.gal_scale - base_ce.gal_scale) * .396
+                gal_scale_err[2, i] = abs(true_ce.gal_scale - vs[ids.sigma]) * .396
+            end
+        end
     end
+
+    println("N:$N  num_fracdev:$num_fracdev  num_ab:$num_ab  num_angle:$num_angle  num_scale:$num_scale")
 
     println("pos err: ", mean(pos_err, 2)[:])
     println("obj type err: ", sum(obj_type_err, 2)[:])
     println("flux r err: ", mean(flux_r_err, 2)[:])
-    println("frac_dev err: ", mean(gal_frac_dev_err, 2)[:])
 
     for c in 1:4
         println("color $(color_names[c]) err: ", 
             sum(color_err[:, :, c], 2)[:] / (N - num_na[c]))
     end
+
+    println("frac_dev err: ", sum(gal_frac_dev_err, 2)[:] / num_fracdev)
+    println("ab err: ", sum(gal_ab_err, 2)[:] / num_ab)
+    println("angle err: ", sum(gal_angle_err, 2)[:] / num_angle)
+    println("scale err: ", sum(gal_scale_err, 2)[:] / num_scale)
 end
 
 
