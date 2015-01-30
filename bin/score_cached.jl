@@ -15,10 +15,16 @@ function load_celeste_predictions(stamp_id)
 end
 
 
+type DistanceException <: Exception
+end
+
+
 function center_obj(vp::Vector{Vector{Float64}})
 	distances = [norm(vs[ids.mu] .- 51/2) for vs in vp]
 	s = findmin(distances)[2]
-    @assert(distances[s] < 2.)
+    if distances[s] > 2.
+        throw(DistanceException())
+    end
     vp[s]
 end
 
@@ -179,7 +185,7 @@ function score_stamps(stamp_ids)
     num_scale = 0
     gal_scale_err = zeros(2, N)
 
-    for i in 1:N
+    function process_one_stamp(i)
         stamp_id = stamp_ids[i]
         true_ce, true_row, base_ce, base_row, vs = load_predictions(stamp_id)
 
@@ -245,6 +251,19 @@ function score_stamps(stamp_ids)
         end
     end
 
+
+    for i in 1:N
+        try
+            process_one_stamp(i)
+        catch ex
+            if isa(ex, DistanceException)
+                print("No center object in $line")
+            else
+                throw(ex)
+            end
+        end
+    end
+
     println("N:$N  num_fracdev:$num_fracdev  num_ab:$num_ab  num_angle:$num_angle  num_scale:$num_scale")
 
     println("pos err: ", mean(pos_err, 2)[:])
@@ -266,7 +285,15 @@ end
 f = open(ARGS[2])
 if ARGS[1] == "--report"
     for line in eachline(f)
-        report_on_stamp(strip(line))
+        try
+            report_on_stamp(strip(line))
+        catch ex
+            if isa(ex, DistanceException)
+                print("No center object in $line")
+            else
+                throw(ex)
+            end
+        end
     end
 elseif ARGS[1] == "--score"
     stamp_ids = [strip(line) for line in readlines(f)]
