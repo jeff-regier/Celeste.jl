@@ -173,6 +173,8 @@ function score_stamps(stamp_ids)
     gal_er_err = Array(Float64, 2, N)
     num_na = zeros(4)
 
+    true_star = Array(Bool, 2, N)
+
     for i in 1:N
         stamp_id = stamp_ids[i]
         true_ce, true_row, base_ce, base_row, vs = load_predictions(stamp_id)
@@ -182,6 +184,8 @@ function score_stamps(stamp_ids)
 
         obj_type_err[1, i] = true_ce.is_star != base_ce.is_star
         obj_type_err[2, i] = true_ce.is_star != (vs[ids.chi] < .5)
+
+        true_star[i] = true_ce.is_star
 
         true_fluxes = true_ce.is_star ? true_ce.star_fluxes : true_ce.gal_fluxes
         base_fluxes = base_ce.is_star ? base_ce.star_fluxes : base_ce.gal_fluxes
@@ -204,14 +208,14 @@ function score_stamps(stamp_ids)
             end
         end
 
-        if true_ce.is_star
-        else  # galaxy
-        end
+        gal_frac_dev_err[1, i] = abs(true_ce.gal_frac_dev - base_ce.gal_frac_dev)
+        gal_frac_dev_err[2, i] = abs(true_ce.gal_frac_dev - vs[ids.theta])
     end
 
     println("pos err: ", mean(pos_err, 2)[:])
     println("obj type err: ", sum(obj_type_err, 2)[:])
     println("flux r err: ", mean(flux_r_err, 2)[:])
+    println("frac_dev err: ", mean(gal_frac_dev_err, 2)[:])
 
     for c in 1:4
         println("color $(color_names[c]) err: ", 
