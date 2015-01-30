@@ -3,8 +3,8 @@
 using Celeste
 using CelesteTypes
 
-using DataFrames
 import WCSLIB
+using DataFrames
 
 
 function load_celeste_predictions(stamp_id)
@@ -171,6 +171,7 @@ function score_stamps(stamp_ids)
     gal_ab_err = Array(Float64, 2, n)
     gal_angel_err = Array(Float64, 2, n)
     gal_er_err = Array(Float64, 2, n)
+    num_na = zeros(4)
 
     for i in 1:n
         stamp_id = stamp_ids[i]
@@ -190,12 +191,17 @@ function score_stamps(stamp_ids)
         flux_r_err[2, n] = abs(celeste_r_flux - true_fluxes[3])
 
         for c in 1:4
-            #@assert !(true_fluxes[c + 1] <= 0 || true_fluxes[c] <= 0.)
-            #@assert !(base_fluxes[c + 1] <= 0 || base_fluxes[c] <= 0.)
-            true_color = log(true_fluxes[c + 1] ./ true_fluxes[c])
-            base_color = log(base_fluxes[c + 1] ./ base_fluxes[c])
-            color_err[1, n, c] = abs(true_color - base_color)
-            color_err[2, n, c] = abs(true_color - vs[ids.beta[c, j]])
+            if true_fluxes[c + 1] <= 0 || true_fluxes[c] <= 0. ||
+                base_fluxes[c + 1] <= 0 || base_fluxes[c] <= 0.
+                println("NA for color $c, stamp_id: $stamp_id")
+                num_na[c] += 1
+                color_err[1, n, c] = color_err[2, n, c] = 0
+            else
+                true_color = log(true_fluxes[c + 1] ./ true_fluxes[c])
+                base_color = log(base_fluxes[c + 1] ./ base_fluxes[c])
+                color_err[1, n, c] = abs(true_color - base_color)
+                color_err[2, n, c] = abs(true_color - vs[ids.beta[c, j]])
+            end
         end
 
         if true_ce.is_star
@@ -211,7 +217,8 @@ function score_stamps(stamp_ids)
     println("flux r err: ", mean(flux_r_err, 2)[:])
 
     for c in 1:4
-        println("color $(color_names[c]) err: ", mean(color_err[:, :, c], 2)[:])
+        println("color $(color_names[c]) err: ", 
+            sum(color_err[:, :, c], 2)[:] / (n - num_na[c]))
     end
 end
 
