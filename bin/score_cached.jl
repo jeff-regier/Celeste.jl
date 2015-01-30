@@ -67,9 +67,9 @@ const color_names = ["$(band_letters[i+1])-$(band_letters[i])" for i in 1:4]
 
 
 function report_on_stamp(stamp_id)
-    println("================= STAMP $stamp_id ====================")
-
     true_ce, true_row, base_ce, base_row, vs = load_predictions(stamp_id)
+
+    println("================= STAMP $stamp_id ====================")
 
     print_comparison("position (pixel coordinates)", 
         true_ce.pos, round(base_ce.pos, 3), round(vs[ids.mu], 3))
@@ -257,7 +257,7 @@ function score_stamps(stamp_ids)
             process_one_stamp(i)
         catch ex
             if isa(ex, DistanceException)
-                print("No center object in $line")
+                print("No center object in stamp $i")
             else
                 throw(ex)
             end
