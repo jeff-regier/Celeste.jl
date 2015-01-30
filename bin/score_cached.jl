@@ -173,7 +173,7 @@ function score_stamps(stamp_ids)
     gal_er_err = Array(Float64, 2, N)
     num_na = zeros(4)
 
-    for i in 1:n
+    for i in 1:N
         stamp_id = stamp_ids[i]
         true_ce, true_row, base_ce, base_row, vs = load_predictions(stamp_id)
 
