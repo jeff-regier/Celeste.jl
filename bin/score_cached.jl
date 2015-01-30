@@ -7,7 +7,7 @@ using DataFrames
 import WCSLIB
 
 
-function load_cache(stamp_id)
+function load_celeste_predictions(stamp_id)
     f = open(ENV["STAMP"]"/V-$stamp_id.dat")
     mp = deserialize(f)
     close(f)
@@ -46,7 +46,7 @@ function print_comparison(quantity_name, true_val, base_val, my_val)
 end
 
 
-function score_cached(stamp_id)
+function load_predictions(stamp_id)
     blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
     true_cat_df = SDSS.load_stamp_catalog_df(ENV["STAMP"], "s82-$stamp_id", blob)
     true_cat = SDSS.load_stamp_catalog(ENV["STAMP"], "s82-$stamp_id", blob)
@@ -54,15 +54,25 @@ function score_cached(stamp_id)
          match_blob=true)
     baseline_cat = SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob,
          match_blob=true)
-    mp = load_cache(stamp_id)
+    mp = load_celeste_predictions(stamp_id)
 
-    println("================= STAMP $stamp_id ====================")
-
-	vs = center_obj(mp.vp)
     true_ce = center_obj(true_cat)
     true_row = center_obj(true_cat_df)
     base_ce = center_obj(baseline_cat)
     base_row = center_obj(baseline_cat_df)
+	vs = center_obj(mp.vp)
+
+    true_ce, true_row, base_ce, base_row, vs
+end
+
+
+const color_names = ["$(band_letters[i+1])-$(band_letters[i])" for i in 1:4]
+
+
+function report_on_stamp(stamp_id)
+    println("================= STAMP $stamp_id ====================")
+
+    true_ce, true_row, base_ce, base_row, vs = load_predictions(stamp_id)
 
     print_comparison("position (pixel coordinates)", 
         true_ce.pos, round(base_ce.pos, 3), round(vs[ids.mu], 3))
@@ -73,8 +83,6 @@ function score_cached(stamp_id)
         vs[ids.chi] < .5 ? 
             "star ($(100 - 100vs[ids.chi])% certain)" :
             "galaxy ($(100vs[ids.chi])% certain)")
-
-    color_names = ["$(band_letters[i+1])-$(band_letters[i])" for i in 1:4]
 
     if true_ce.is_star
         E_r = vs[ids.gamma[1]] * vs[ids.zeta[1]]
@@ -151,11 +159,71 @@ function score_cached(stamp_id)
 end
 
 
-if length(ARGS) > 0
-    score_cached(ARGS[1])
-else
-    for line in eachline(STDIN)
-        score_cached(strip(line))
+function score_stamps(stamp_ids)
+    n = length(stamp_ids)
+
+    pos_err = Array(Float64, 2, n)
+    obj_type_err = Array(Bool, 2, n)
+
+    flux_r_err = Array(Float64, 2, n)
+    color_err = Array(Float64, 2, n, 4)
+    gal_frac_dev_err = Array(Float64, 2, n)
+    gal_ab_err = Array(Float64, 2, n)
+    gal_angel_err = Array(Float64, 2, n)
+    gal_er_err = Array(Float64, 2, n)
+
+    for i in 1:n
+        stamp_id = stamp_ids[i]
+        true_ce, true_row, base_ce, base_row, vs = load_predictions(stamp_id)
+
+        pos_err[1, i] = norm(true_ce.pos - base_ce.pos)
+        pos_err[2, i] = norm(true_ce.pos - vs[ids.mu])
+
+        obj_type_err[1, i] = true_ce.is_star != base_ce.is_star
+        obj_type_err[2, i] = true_ce.is_star != (vs[ids.chi] < .5)
+
+        true_fluxes = true_ce.is_star ? true_ce.star_fluxes : true_ce.gal_fluxes
+        base_fluxes = base_ce.is_star ? base_ce.star_fluxes : base_ce.gal_fluxes
+        flux_r_err[1, n] = abs(base_fluxes[3] - true_fluxes[3])
+        j = vs[ids.chi] < .5 ? 1 : 2
+        celeste_r_flux = vs[ids.gamma[j]] * vs[ids.zeta[j]]
+        flux_r_err[2, n] = abs(celeste_r_flux - true_fluxes[3])
+
+        for c in 1:4
+            #@assert !(true_fluxes[c + 1] <= 0 || true_fluxes[c] <= 0.)
+            #@assert !(base_fluxes[c + 1] <= 0 || base_fluxes[c] <= 0.)
+            true_color = log(true_fluxes[c + 1] ./ true_fluxes[c])
+            base_color = log(base_fluxes[c + 1] ./ base_fluxes[c])
+            color_err[1, n, c] = abs(true_color - base_color)
+            color_err[2, n, c] = abs(true_color - vs[ids.beta[c, j]])
+        end
+
+        if true_ce.is_star
+
+        else  # galaxy
+
+        end
+    end
+
+    println("n: $n")
+    println("pos err: ", mean(pos_err, 2)[:])
+    println("obj type err: ", sum(obj_type_err, 2)[:])
+    println("flux r err: ", mean(flux_r_err, 2)[:])
+
+    for c in 1:4
+        println("color $(color_names[c]) err: ", mean(color_err[:, :, c], 2)[:])
     end
 end
+
+
+f = open(ARGS[2])
+if ARGS[1] == "--report"
+    for line in eachline(f)
+        report_on_stamp(strip(line))
+    end
+elseif ARGS[1] == "--score"
+    stamp_ids = [strip(line) for line in readlines(f)]
+    score_stamps(stamp_ids)
+end
+close(f)
 
