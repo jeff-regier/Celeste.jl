@@ -165,13 +165,13 @@ end
 function score_stamps(stamp_ids)
     N = length(stamp_ids)
 
-    pos_err = Array(Float64, 2, N)
-    obj_type_err = Array(Bool, 2, N)
+    pos_err = zeros(2, N)
+    obj_type_err = falses(2, N)
 
-    flux_r_err = Array(Float64, 2, N)
+    flux_r_err = zeros(2, N)
 
     num_na = zeros(4)
-    color_err = Array(Float64, 2, N, 4)
+    color_err = zeros(2, N, 4)
 
     num_fracdev = 0
     gal_frac_dev_err = zeros(2, N)
@@ -185,9 +185,13 @@ function score_stamps(stamp_ids)
     num_scale = 0
     gal_scale_err = zeros(2, N)
 
+    N2 = 0
     function process_one_stamp(i)
         stamp_id = stamp_ids[i]
         true_ce, true_row, base_ce, base_row, vs = load_predictions(stamp_id)
+
+        # doesn't count if an exception happens above
+        N2 += 1
 
         pos_err[1, i] = norm(true_ce.pos - base_ce.pos)
         pos_err[2, i] = norm(true_ce.pos - vs[ids.mu])
@@ -232,8 +236,8 @@ function score_stamps(stamp_ids)
 
             if (true_ce.gal_frac_dev > .95 || true_ce.gal_frac_dev < 0.05 ||
                abs(true_row[1, :phi_dev] - true_row[1, :phi_exp]) < 10) &&
-                    true_ce.gal_ab < .8 && base_ce.gal_ab < .8 &&
-                    vs[ids.rho] < .8
+                    true_ce.gal_ab < .6 && base_ce.gal_ab < .6 &&
+                    vs[ids.rho] < .6
                 num_angle += 1
                 true_deg = (180/pi)true_ce.gal_angle
                 base_deg = (180/pi)base_ce.gal_angle
@@ -257,22 +261,23 @@ function score_stamps(stamp_ids)
             process_one_stamp(i)
         catch ex
             if isa(ex, DistanceException)
-                print("No center object in stamp $i")
+                println("No center object in stamp $i")
             else
                 throw(ex)
             end
         end
     end
 
-    println("N:$N  num_fracdev:$num_fracdev  num_ab:$num_ab  num_angle:$num_angle  num_scale:$num_scale")
+    println("N:$N N2:$N2  num_fracdev:$num_fracdev  num_ab:$num_ab",
+        "num_angle:$num_angle  num_scale:$num_scale")
 
-    println("pos err: ", mean(pos_err, 2)[:])
+    println("pos err: ", sum(pos_err, 2)[:] ./ N2)
     println("obj type err: ", sum(obj_type_err, 2)[:])
-    println("flux r err: ", mean(flux_r_err, 2)[:])
+    println("flux r err: ", sum(flux_r_err, 2)[:] / N2)
 
     for c in 1:4
         println("color $(color_names[c]) err: ", 
-            sum(color_err[:, :, c], 2)[:] / (N - num_na[c]))
+            sum(color_err[:, :, c], 2)[:] / (N2 - num_na[c]))
     end
 
     println("frac_dev err: ", sum(gal_frac_dev_err, 2)[:] / num_fracdev)
