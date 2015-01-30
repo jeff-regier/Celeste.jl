@@ -160,17 +160,17 @@ end
 
 
 function score_stamps(stamp_ids)
-    n = length(stamp_ids)
+    N = length(stamp_ids)
 
-    pos_err = Array(Float64, 2, n)
-    obj_type_err = Array(Bool, 2, n)
+    pos_err = Array(Float64, 2, N)
+    obj_type_err = Array(Bool, 2, N)
 
-    flux_r_err = Array(Float64, 2, n)
-    color_err = Array(Float64, 2, n, 4)
-    gal_frac_dev_err = Array(Float64, 2, n)
-    gal_ab_err = Array(Float64, 2, n)
-    gal_angel_err = Array(Float64, 2, n)
-    gal_er_err = Array(Float64, 2, n)
+    flux_r_err = Array(Float64, 2, N)
+    color_err = Array(Float64, 2, N, 4)
+    gal_frac_dev_err = Array(Float64, 2, N)
+    gal_ab_err = Array(Float64, 2, N)
+    gal_angel_err = Array(Float64, 2, N)
+    gal_er_err = Array(Float64, 2, N)
     num_na = zeros(4)
 
     for i in 1:n
@@ -195,7 +195,7 @@ function score_stamps(stamp_ids)
                 base_fluxes[c + 1] <= 0 || base_fluxes[c] <= 0.
                 println("NA for color $c, stamp_id: $stamp_id")
                 num_na[c] += 1
-                color_err[1, i, c] = color_err[2, n, c] = 0
+                color_err[1, i, c] = color_err[2, i, c] = 0
             else
                 true_color = log(true_fluxes[c + 1] ./ true_fluxes[c])
                 base_color = log(base_fluxes[c + 1] ./ base_fluxes[c])
@@ -209,14 +209,13 @@ function score_stamps(stamp_ids)
         end
     end
 
-    println("n: $n")
     println("pos err: ", mean(pos_err, 2)[:])
     println("obj type err: ", sum(obj_type_err, 2)[:])
     println("flux r err: ", mean(flux_r_err, 2)[:])
 
     for c in 1:4
         println("color $(color_names[c]) err: ", 
-            sum(color_err[:, :, c], 2)[:] / (n - num_na[c]))
+            sum(color_err[:, :, c], 2)[:] / (N - num_na[c]))
     end
 end
 
