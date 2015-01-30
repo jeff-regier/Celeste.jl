@@ -185,29 +185,27 @@ function score_stamps(stamp_ids)
 
         true_fluxes = true_ce.is_star ? true_ce.star_fluxes : true_ce.gal_fluxes
         base_fluxes = base_ce.is_star ? base_ce.star_fluxes : base_ce.gal_fluxes
-        flux_r_err[1, n] = abs(base_fluxes[3] - true_fluxes[3])
+        flux_r_err[1, i] = abs(base_fluxes[3] - true_fluxes[3])
         j = vs[ids.chi] < .5 ? 1 : 2
         celeste_r_flux = vs[ids.gamma[j]] * vs[ids.zeta[j]]
-        flux_r_err[2, n] = abs(celeste_r_flux - true_fluxes[3])
+        flux_r_err[2, i] = abs(celeste_r_flux - true_fluxes[3])
 
         for c in 1:4
             if true_fluxes[c + 1] <= 0 || true_fluxes[c] <= 0. ||
                 base_fluxes[c + 1] <= 0 || base_fluxes[c] <= 0.
                 println("NA for color $c, stamp_id: $stamp_id")
                 num_na[c] += 1
-                color_err[1, n, c] = color_err[2, n, c] = 0
+                color_err[1, i, c] = color_err[2, n, c] = 0
             else
                 true_color = log(true_fluxes[c + 1] ./ true_fluxes[c])
                 base_color = log(base_fluxes[c + 1] ./ base_fluxes[c])
-                color_err[1, n, c] = abs(true_color - base_color)
-                color_err[2, n, c] = abs(true_color - vs[ids.beta[c, j]])
+                color_err[1, i, c] = abs(true_color - base_color)
+                color_err[2, i, c] = abs(true_color - vs[ids.beta[c, j]])
             end
         end
 
         if true_ce.is_star
-
         else  # galaxy
-
         end
     end
 
