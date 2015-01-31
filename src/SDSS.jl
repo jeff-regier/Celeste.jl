@@ -107,6 +107,10 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 		fits_phi = fracs_dev[1] > .5 ? row[1, :phi_dev] : row[1, :phi_exp]
 		fits_theta = fracs_dev[1] > .5 ? row[1, :theta_dev] : row[1, :theta_exp]
 
+        if !match_blob  # horrible hack
+            fits_phi *= -1.
+        end
+
 		re_arcsec = max(fits_theta, 1. / 30)  # re = effective radius
 		re_pixel = re_arcsec / 0.396
 

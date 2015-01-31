@@ -7,6 +7,9 @@ import WCSLIB
 using DataFrames
 
 
+const color_names = ["$(band_letters[i])$(band_letters[i+1])" for i in 1:4]
+
+
 function load_celeste_predictions(stamp_id)
     f = open(ENV["STAMP"]"/V-$stamp_id.dat")
     mp = deserialize(f)
@@ -37,6 +40,120 @@ function center_obj(catalog_ce::Vector{CatalogEntry}, catalog_df::DataFrame)
 end
 
 
+
+function init_results_df(N::Int64)
+    color_col_names = ["color_$cn" for cn in color_names]
+    color_sd_col_names = ["color_$(cn)_sd" for cn in color_names]
+    col_names = ["stamp_id", "ra", "dec", "is_star", "flux_r", "flux_r_sd",
+            color_col_names, color_sd_col_names,
+            "gal_fracdev", "gal_ab", "gal_angle", "gal_scale"]
+    col_symbols = Symbol[symbol(cn) for cn in col_names]
+    col_types = Array(DataType, length(col_names))
+    fill!(col_types, Float64)
+    col_types[1] = String
+    df = DataFrame(col_types, N)
+    names!(df, col_symbols)
+    df
+end
+
+
+function load_photo_obj!(i::Int64, stamp_id::String, is_s82::Bool, df::DataFrame)
+    blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
+    cat_df = is_s82 ?
+        SDSS.load_stamp_catalog_df(ENV["STAMP"], "s82-$stamp_id", blob) :
+        SDSS.load_stamp_catalog_df(ENV["STAMP"], stamp_id, blob, match_blob=true)
+    cat_ce = is_s82 ?
+        SDSS.load_stamp_catalog(ENV["STAMP"], "s82-$stamp_id", blob) :
+        SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob, match_blob=true)
+    ce, ce_df = center_obj(cat_ce, cat_df)
+
+    df[i, :ra] = ce_df[1, :ra]
+    df[i, :dec] = ce_df[1, :dec]
+    df[i, :is_star] = ce_df[1, :is_star] ? 1. : 0.
+
+    fluxes = ce.is_star ? ce.star_fluxes : ce.gal_fluxes
+    df[i, :flux_r] = fluxes[3]
+    for c in 1:4
+        cc = symbol("color_$(color_names[c])")
+        cc_sd = symbol("color_$(color_names[c])_sd")
+        if fluxes[c] > 0 && fluxes[c + 1] > 0  # leave as NA otherwise
+            df[i, cc] = -2.5log10(fluxes[c] / fluxes[c + 1])
+        end
+    end
+
+    df[i, :gal_fracdev] = ce.gal_frac_dev
+
+    if !(0.05 < ce.gal_frac_dev < 0.95) || 
+            abs(ce_df[1, :ab_dev] - ce_df[1, :ab_exp]) < 0.1 # proportion
+        df[i, :gal_ab] = ce.gal_ab
+    end
+
+    if (ce.gal_ab < .6) &&
+        (!(0.05 < ce.gal_frac_dev < 0.95) ||
+            abs(ce_df[1, :phi_dev] - ce_df[1, :phi_exp]) < 10)  # degrees
+        df[i, :gal_angle] = ce.gal_angle
+    end
+
+    if !(0.05 < ce.gal_frac_dev < 0.95) ||
+            abs(ce_df[1, :theta_dev] - ce_df[1, :theta_exp]) < 0.2  # arcsec
+        df[i, :gal_scale] = ce.gal_scale
+    end
+end
+
+
+function load_celeste_obj!(i::Int64, stamp_id::String, df::DataFrame)
+    blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
+    mp = load_celeste_predictions(stamp_id)
+    vs = center_obj(mp.vp)
+
+    ra_dec = WCSLIB.wcsp2s(blob[3].wcs, vs[ids.mu]'')
+
+    df[i, :ra] = ra_dec[1]
+    df[i, :dec] = ra_dec[2]
+    df[i, :is_star] = 1. - vs[ids.chi]
+
+    j = vs[ids.chi] < .5 ? 1 : 2
+    df[i, :flux_r] = vs[ids.gamma[j]] * vs[ids.zeta[j]]
+    df[i, :flux_r_sd] = sqrt(df[i, :flux_r] * vs[ids.zeta[j]])
+
+    for c in 1:4
+        cc = symbol("color_$(color_names[c])")
+        cc_sd = symbol("color_$(color_names[c])_sd")
+        df[i, cc] = 2.5 * log10(e) * vs[ids.beta[c, j]]
+        df[i, cc_sd] = 2.5 * log10(e) * vs[ids.lambda[c, j]]
+    end
+
+    df[i, :gal_fracdev] = vs[ids.chi]
+    df[i, :gal_ab] = vs[ids.rho]
+
+    my_angle = pi/2 - vs[ids.phi]
+    my_angle -= floor(my_angle / pi) * pi
+    my_angle *= 180 / pi
+    df[i, :gal_angle] = my_angle
+
+    df[i, :gal_scale] = vs[ids.sigma] * 0.396
+end
+
+
+function load_df(stamp_ids, per_stamp_callback::Function)
+    N = length(stamp_ids)
+    df = init_results_df(N)
+
+    for i in 1:N
+        stamp_id = stamp_ids[i]
+        df[i, :stamp_id] = stamp_id
+        try
+            per_stamp_callback(i, stamp_id, df)
+        catch ex
+            isa(ex, DistanceException) ? 
+                println("No center object in stamp $stamp_id") : throw(ex)
+        end
+    end
+
+    df
+end
+
+
 function print_comparison(quantity_name, true_val, base_val, my_val)
     println("\n$quantity_name:")
     println("truth: $true_val")
@@ -62,8 +179,6 @@ function load_predictions(stamp_id)
     true_ce, true_row, base_ce, base_row, vs
 end
 
-
-const color_names = ["$(band_letters[i+1])-$(band_letters[i])" for i in 1:4]
 
 
 function report_on_stamp(stamp_id)
@@ -155,6 +270,20 @@ function report_on_stamp(stamp_id)
     println("\n")
 end
 
+
+function write_csvs(stamp_ids)
+    coadd_callback(i, stamp_id, df) = load_photo_obj!(i, stamp_id, true, df)
+    coadd_df = load_df(stamp_ids, coadd_callback)
+
+    primary_callback(i, stamp_id, df) = load_photo_obj!(i, stamp_id, false, df)
+    primary_df = load_df(stamp_ids, primary_callback)
+
+    celeste_df = load_df(stamp_ids, load_celeste_obj!)
+
+    writetable("coadd.csv", coadd_df)
+    writetable("primary.csv", primary_df)
+    writetable("celeste.csv", celeste_df)
+end
 
 function degrees_to_diff(a, b)
     angle_between = abs(a - b) % 180
@@ -288,21 +417,24 @@ end
 
 
 f = open(ARGS[2])
+stamp_ids = [strip(line) for line in readlines(f)]
+close(f)
+
 if ARGS[1] == "--report"
-    for line in eachline(f)
+    for stamp_id in stamp_ids
         try
-            report_on_stamp(strip(line))
+            report_on_stamp(stamp_id)
         catch ex
             if isa(ex, DistanceException)
-                print("No center object in $line")
+                println("No center object in $stamp_id")
             else
                 throw(ex)
             end
         end
     end
 elseif ARGS[1] == "--score"
-    stamp_ids = [strip(line) for line in readlines(f)]
     score_stamps(stamp_ids)
+elseif ARGS[1] == "--csv"
+    write_csvs(stamp_ids)
 end
-close(f)
 
