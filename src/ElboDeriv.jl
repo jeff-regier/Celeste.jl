@@ -394,6 +394,8 @@ end
 function subtract_kl_c!(d::Int64, i::Int64, s::Int64, mp::ModelParams, 
         accum::SensitiveFloat)
     vs = mp.vp[s]
+    chi_si = i == 1 ? vs[ids.chi] : 1 - vs[ids.chi]
+
     beta, lambda = (vs[ids.beta[:, i]], vs[ids.lambda[:, i]])
     Omega, Lambda = (mp.pp.Omega[i][:, d], mp.pp.Lambda[i][d])
 
@@ -404,21 +406,27 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64, mp::ModelParams,
     ret = sum(diag(Lambda_inv) .* lambda) - 4
     ret += (diff' * Lambda_inv * diff)[]
     ret += -sum(log(lambda)) + logdet(Lambda)
-    accum.v -= ret * half_kappa
+    accum.v -= chi_si * ret * half_kappa
 
-    accum.d[ids.kappa[d, i], s] -= .5 * ret
-    accum.d[ids.beta[:, i], s] -= half_kappa * 2Lambda_inv * -diff
-    accum.d[ids.lambda[:, i], s] -= half_kappa * diag(Lambda_inv)
-    accum.d[ids.lambda[:, i], s] -= half_kappa ./ -lambda
+    accum.d[ids.kappa[d, i], s] -= chi_si * .5 * ret
+    accum.d[ids.beta[:, i], s] -= chi_si * half_kappa * 2Lambda_inv * -diff
+    accum.d[ids.lambda[:, i], s] -= chi_si * half_kappa * diag(Lambda_inv)
+    accum.d[ids.lambda[:, i], s] -= chi_si * half_kappa ./ -lambda
+    accum.d[ids.chi, s] -= (i == 1 ? i : -1) * ret * half_kappa
 end
 
 
 function subtract_kl_k!(i::Int64, s::Int64, mp::ModelParams, accum::SensitiveFloat)
-    kappa = mp.vp[s][ids.kappa[:, i]]
+    vs = mp.vp[s]
+    chi_si = i == 1 ? vs[ids.chi] : 1 - vs[ids.chi]
+    kappa_i = vs[ids.kappa[:, i]]
+
     for d in 1:D
-        log_ratio = log(kappa[d] / mp.pp.Psi[i][d])
-        accum.v -= kappa[d] * log_ratio
-        accum.d[ids.kappa[d, i] , s] -= 1 + log_ratio
+        log_ratio = log(kappa_i[d] / mp.pp.Psi[i][d])
+        kappa_log_ratio = kappa_i[d] * log_ratio
+        accum.v -= chi_si * kappa_log_ratio
+        accum.d[ids.kappa[d, i] , s] -= chi_si * (1 + log_ratio)
+        accum.d[ids.chi, s] -= i == 1 ? kappa_log_ratio : -kappa_log_ratio
     end
 end
 
@@ -432,16 +440,21 @@ function subtract_kl_r!(i::Int64, s::Int64, mp::ModelParams, accum::SensitiveFlo
     zeta_Phi_ratio = (zeta_si - mp.pp.Phi[i]) / mp.pp.Phi[i]
     shape_diff = gamma_si - mp.pp.Upsilon[i]
 
-    accum.v -= shape_diff * digamma_gamma
-    accum.v -= -lgamma(gamma_si) + lgamma(mp.pp.Upsilon[i])
-    accum.v -= mp.pp.Upsilon[i] * (log(mp.pp.Phi[i]) - log(zeta_si))
-    accum.v -= gamma_si * zeta_Phi_ratio
+    kl_v = shape_diff * digamma_gamma
+    kl_v += -lgamma(gamma_si) + lgamma(mp.pp.Upsilon[i])
+    kl_v += mp.pp.Upsilon[i] * (log(mp.pp.Phi[i]) - log(zeta_si))
+    kl_v += gamma_si * zeta_Phi_ratio
 
-    accum.d[ids.gamma[i], s] -= shape_diff * polygamma(1, gamma_si)
-    accum.d[ids.gamma[i], s] -= zeta_Phi_ratio
+    chi_si = i == 1 ? vs[ids.chi] : 1 - vs[ids.chi]
+    accum.v -= chi_si * kl_v
 
-    accum.d[ids.zeta[i], s] -= -mp.pp.Upsilon[i] / zeta_si
-    accum.d[ids.zeta[i], s] -= gamma_si / mp.pp.Phi[i]
+    accum.d[ids.gamma[i], s] -= chi_si * shape_diff * polygamma(1, gamma_si)
+    accum.d[ids.gamma[i], s] -= chi_si * zeta_Phi_ratio
+
+    accum.d[ids.zeta[i], s] -= chi_si * (-mp.pp.Upsilon[i] / zeta_si)
+    accum.d[ids.zeta[i], s] -= chi_si * (gamma_si / mp.pp.Phi[i])
+
+    accum.d[ids.chi, s] -= i == 1 ? kl_v : -kl_v
 end
 
 

@@ -72,7 +72,7 @@ function init_source(ce::CatalogEntry)
 
 	ret[ids.rho] = ce.gal_ab
 	ret[ids.phi] = ce.gal_angle
-	ret[ids.sigma] = ce.gal_scale
+	ret[ids.sigma] = max(0.2, ce.gal_scale)
 
 	ret
 end

@@ -14,6 +14,7 @@ const ftol_abs = 1e-5
 
 const rescaling = ones(length(all_params))
 [rescaling[id] *= 1e-3 for id in ids.gamma]
+rescaling[ids.chi] *= 1e1
 
 
 function scale_deriv(elbo::SensitiveFloat, omitted_ids)
@@ -87,7 +88,7 @@ function get_nlopt_bounds(vs::Vector{Float64})
 	lb[ids.theta] = 1e-4 
 	lb[ids.rho] = 1e-4
 	lb[ids.phi] = -1e10 #-pi/2 + 1e-4
-	lb[ids.sigma] = 0.07
+	lb[ids.sigma] = 0.2
 
 	ub = Array(Float64, length(all_params))
 	ub[ids.chi] = 1 - 1e-4
@@ -164,6 +165,7 @@ end
 
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
+#	maximize_likelihood(blob, mp)
 	maximize_f(ElboDeriv.elbo, blob, mp)
 end
 

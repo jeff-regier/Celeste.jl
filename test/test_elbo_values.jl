@@ -40,12 +40,22 @@ function test_kl_divergence_values()
 	# r
 	q_r = Gamma(vs[ids.gamma[i]], vs[ids.zeta[i]])
 	p_r = Gamma(mp.pp.Upsilon[i], mp.pp.Phi[i])
-	test_kl(q_r, p_r, (accum) -> ElboDeriv.subtract_kl_r!(i, s, mp, accum))
+	function sklr(accum)
+		ElboDeriv.subtract_kl_r!(i, s, mp, accum)
+        @assert i == 1
+		accum.v /= vs[ids.chi]
+	end
+    test_kl(q_r, p_r, sklr)
 
 	# k
 	q_k = Categorical(vs[ids.kappa[:, i]])
 	p_k = Categorical(mp.pp.Psi[i])
-	test_kl(q_k, p_k, (accum) -> ElboDeriv.subtract_kl_k!(i, s, mp, accum))
+	function sklk(accum)
+		ElboDeriv.subtract_kl_k!(i, s, mp, accum)
+        @assert i == 1
+		accum.v /= vs[ids.chi]
+	end
+	test_kl(q_k, p_k, sklk)
 
 	# c
 	mp.pp.Omega[i][:, d] = vs[ids.beta[:, i]]
@@ -54,7 +64,7 @@ function test_kl_divergence_values()
 	p_c = MvNormal(mp.pp.Omega[i][:, d], mp.pp.Lambda[i][d])
 	function sklc(accum)
 		ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
-		accum.v /= vs[ids.kappa[d, i]]
+		accum.v /= vs[ids.chi] * vs[ids.kappa[d, i]]
 	end
 	test_kl(q_c, p_c, sklc)
 end

@@ -91,12 +91,12 @@ function load_photo_obj!(i::Int64, stamp_id::String, is_s82::Bool, df::DataFrame
     if (ce.gal_ab < .6) &&
         (!(0.05 < ce.gal_frac_dev < 0.95) ||
             abs(ce_df[1, :phi_dev] - ce_df[1, :phi_exp]) < 10)  # degrees
-        df[i, :gal_angle] = ce.gal_angle
+        df[i, :gal_angle] = ce.gal_angle * (180 / pi)
     end
 
     if !(0.05 < ce.gal_frac_dev < 0.95) ||
             abs(ce_df[1, :theta_dev] - ce_df[1, :theta_exp]) < 0.2  # arcsec
-        df[i, :gal_scale] = ce.gal_scale
+        df[i, :gal_scale] = ce.gal_scale * 0.396
     end
 end
 
