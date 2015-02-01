@@ -1,6 +1,7 @@
 function true_star_init()
     blob, mp, body = gen_sample_star_dataset(perturb=false)
 
+    mp.vp[1][ids.chi] = 1e-4
     mp.vp[1][ids.zeta] = 1e-4
     mp.vp[1][ids.gamma] = sample_star_fluxes[3] ./ mp.vp[1][ids.zeta]
     mp.vp[1][ids.lambda] = 1e-4

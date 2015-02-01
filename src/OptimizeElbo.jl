@@ -9,8 +9,8 @@ using CelesteTypes
 import ElboDeriv
 
 
-const xtol_rel = 1e-6
-const ftol_abs = 1e-5
+const xtol_rel = 1e-7
+const ftol_abs = 1e-6
 
 const rescaling = ones(length(all_params))
 [rescaling[id] *= 1e-3 for id in ids.gamma]

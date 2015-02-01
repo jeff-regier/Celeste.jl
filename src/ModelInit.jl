@@ -149,13 +149,18 @@ end
 
 #=
 function min_patch_radius(ce::CatalogEntry, blob::Blob)
-    max_var = maximum([maximum([maximum(pc.sigmaBar) for pc in img.psf]) 
+    max_var = maximum([maximum([maximum(pc.SigmaBar) for pc in img.psf]) 
                     for img in blob])
     if !ce.is_star
-        max_var += gal_scale * maximum()
+        XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
+        XiXi_max = maximum(XiXi)
+        max_var += maximum([maximum([gc.sigmaTilde * XiXi_max 
+            for gc in galaxy_prototypes[i]]) for i in 1:2])
     end
 
-    intensity = pc.alphaBar * ce.star_fluxes[b]
+    sky = [img.epsilon for img in blob]
+    fluxes = ce.is_star ? : ce.star_fluxes : ce.gal_fluxes
+    thresholds = fluxes ./ (20 * sky)  # 5% of sky
     pdf_target = threshold / intensity
     # ignore xiBar for now
     max_var = maximum(diag(pc.sigmaBar))
