@@ -338,7 +338,6 @@ function score_stamps(stamp_ids)
         for c in 1:4
             if true_fluxes[c + 1] <= 0 || true_fluxes[c] <= 0. ||
                 base_fluxes[c + 1] <= 0 || base_fluxes[c] <= 0.
-                println("NA for color $c, stamp_id: $stamp_id")
                 num_na[c] += 1
                 color_err[1, i, c] = color_err[2, i, c] = 0
             else
@@ -390,7 +389,7 @@ function score_stamps(stamp_ids)
             process_one_stamp(i)
         catch ex
             if isa(ex, DistanceException)
-                println("No center object in stamp $i")
+                println("No center object in stamp $(stamp_ids[i])")
             else
                 throw(ex)
             end

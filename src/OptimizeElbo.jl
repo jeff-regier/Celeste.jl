@@ -99,7 +99,7 @@ function get_nlopt_bounds(vs::Vector{Float64})
 	ub[ids.theta] = 1 - 1e-4
 	ub[ids.rho] = 1. - 1e-4
 	ub[ids.phi] = 1e10 #pi/2 - 1e-4
-	ub[ids.sigma] = 50.
+	ub[ids.sigma] = 15.
 	[ub[id] = 10. for id in ids.beta]
 	[ub[id] = 1. for id in ids.lambda]
 
