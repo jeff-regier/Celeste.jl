@@ -10,8 +10,8 @@ using DataFrames
 const color_names = ["$(band_letters[i])$(band_letters[i+1])" for i in 1:4]
 
 
-function load_celeste_predictions(stamp_id)
-    f = open(ENV["STAMP"]"/V-$stamp_id.dat")
+function load_celeste_predictions(model_dir, stamp_id)
+    f = open("$model_dir/V-$stamp_id.dat")
     mp = deserialize(f)
     close(f)
 	mp
@@ -41,7 +41,8 @@ end
 
 
 
-function init_results_df(N::Int64)
+function init_results_df(stamp_ids)
+    N = length(stamp_ids)
     color_col_names = ["color_$cn" for cn in color_names]
     color_sd_col_names = ["color_$(cn)_sd" for cn in color_names]
     col_names = ["stamp_id", "ra", "dec", "is_star", "flux_r", "flux_r_sd",
@@ -53,6 +54,7 @@ function init_results_df(N::Int64)
     col_types[1] = String
     df = DataFrame(col_types, N)
     names!(df, col_symbols)
+    df[:stamp_id] = stamp_ids
     df
 end
 
@@ -81,30 +83,56 @@ function load_photo_obj!(i::Int64, stamp_id::String, is_s82::Bool, df::DataFrame
         end
     end
 
-    df[i, :gal_fracdev] = ce.gal_frac_dev
-
-    if !(0.05 < ce.gal_frac_dev < 0.95) || 
-            abs(ce_df[1, :ab_dev] - ce_df[1, :ab_exp]) < 0.1 # proportion
+    if !is_s82
+        df[i, :gal_fracdev] = ce.gal_frac_dev
         df[i, :gal_ab] = ce.gal_ab
-    end
-
-    if (ce.gal_ab < .6) &&
-        (!(0.05 < ce.gal_frac_dev < 0.95) ||
-            abs(ce_df[1, :phi_dev] - ce_df[1, :phi_exp]) < 10)  # degrees
         df[i, :gal_angle] = ce.gal_angle * (180 / pi)
-    end
-
-    if !(0.05 < ce.gal_frac_dev < 0.95) ||
-            abs(ce_df[1, :theta_dev] - ce_df[1, :theta_exp]) < 0.2  # arcsec
         df[i, :gal_scale] = ce.gal_scale * 0.396
+    else
+        # only record the truth, when it's comparable to both sets of predictions
+        if ce.is_star < .5
+            if !(0.05 < ce.gal_frac_dev < 0.95)
+                df[i, :gal_fracdev] = ce.gal_frac_dev
+            end
+
+            if !(0.05 < ce.gal_frac_dev < 0.95) || 
+                    abs(ce_df[1, :ab_dev] - ce_df[1, :ab_exp]) < 0.1 # proportion
+                df[i, :gal_ab] = ce.gal_ab
+            end
+
+            if (ce.gal_ab < .6) &&
+                (!(0.05 < ce.gal_frac_dev < 0.95) ||
+                    abs(ce_df[1, :phi_dev] - ce_df[1, :phi_exp]) < 10)  # degrees
+                df[i, :gal_angle] = ce.gal_angle * (180 / pi)
+            end
+
+            if !(0.05 < ce.gal_frac_dev < 0.95) ||
+                    abs(ce_df[1, :theta_dev] - ce_df[1, :theta_exp]) < 0.2  # arcsec
+                df[i, :gal_scale] = ce.gal_scale * 0.396
+            end
+        end
     end
 end
 
 
 function load_celeste_obj!(i::Int64, stamp_id::String, df::DataFrame)
     blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
-    mp = load_celeste_predictions(stamp_id)
+    mp = load_celeste_predictions(ENV["MODEL"], stamp_id)
     vs = center_obj(mp.vp)
+
+    if length(ARGS) == 3 && ARGS[3] == "--alt"
+        mp_alt = load_celeste_predictions(ENV["MODEL_ALT"], stamp_id)
+
+        elbo = ElboDeriv.elbo(blob, mp)    
+        elbo_alt = ElboDeriv.elbo(blob, mp_alt)
+
+        if elbo_alt.v > elbo.v
+            mp = mp_alt
+        end
+        vs = center_obj(mp.vp)
+        println("$stamp_id: $(elbo.v) [elbo] vs $(elbo_alt.v) [elbo_alt]","
+               (chi: $(vs[ids.chi]))")
+    end
 
     ra_dec = WCSLIB.wcsp2s(blob[3].wcs, vs[ids.mu]'')
 
@@ -123,21 +151,16 @@ function load_celeste_obj!(i::Int64, stamp_id::String, df::DataFrame)
         df[i, cc_sd] = 2.5 * log10(e) * vs[ids.lambda[c, j]]
     end
 
-    df[i, :gal_fracdev] = vs[ids.chi]
+    df[i, :gal_fracdev] = vs[ids.theta]
     df[i, :gal_ab] = vs[ids.rho]
-
-    my_angle = pi/2 - vs[ids.phi]
-    my_angle -= floor(my_angle / pi) * pi
-    my_angle *= 180 / pi
-    df[i, :gal_angle] = my_angle
-
+    df[i, :gal_angle] = (180/pi)vs[ids.phi]
     df[i, :gal_scale] = vs[ids.sigma] * 0.396
 end
 
 
 function load_df(stamp_ids, per_stamp_callback::Function)
     N = length(stamp_ids)
-    df = init_results_df(N)
+    df = init_results_df(stamp_ids)
 
     for i in 1:N
         stamp_id = stamp_ids[i]
@@ -154,14 +177,6 @@ function load_df(stamp_ids, per_stamp_callback::Function)
 end
 
 
-function print_comparison(quantity_name, true_val, base_val, my_val)
-    println("\n$quantity_name:")
-    println("truth: $true_val")
-    println("Photo: $base_val")
-    println("Celeste: $my_val")
-end
-
-
 function load_predictions(stamp_id)
     blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
     true_cat_df = SDSS.load_stamp_catalog_df(ENV["STAMP"], "s82-$stamp_id", blob)
@@ -170,7 +185,7 @@ function load_predictions(stamp_id)
          match_blob=true)
     baseline_cat = SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob,
          match_blob=true)
-    mp = load_celeste_predictions(stamp_id)
+    mp = load_celeste_predictions(ENV["MODEL"], stamp_id)
 
     true_ce, true_row = center_obj(true_cat, true_cat_df)
     base_ce, base_row = center_obj(baseline_cat, baseline_cat_df)
@@ -180,260 +195,102 @@ function load_predictions(stamp_id)
 end
 
 
-
-function report_on_stamp(stamp_id)
-    true_ce, true_row, base_ce, base_row, vs = load_predictions(stamp_id)
-
-    println("================= STAMP $stamp_id ====================")
-
-    print_comparison("position (pixel coordinates)", 
-        true_ce.pos, round(base_ce.pos, 3), round(vs[ids.mu], 3))
-
-    print_comparison("celestial body type",
-        true_ce.is_star ? "star" : "galaxy", 
-        base_ce.is_star ? "star" : "galaxy",
-        vs[ids.chi] < .5 ? 
-            "star ($(100 - 100vs[ids.chi])% certain)" :
-            "galaxy ($(100vs[ids.chi])% certain)")
-
-    if true_ce.is_star
-        E_r = vs[ids.gamma[1]] * vs[ids.zeta[1]]
-        sd_r = sqrt(E_r * vs[ids.zeta[1]])
-        print_comparison("brightness (r-band flux)",
-            round(true_ce.star_fluxes[3], 3),
-            round(base_ce.star_fluxes[3], 3),
-            @sprintf("%.3f (%.3f)", E_r, sd_r))
-
-        for c in 1:4
-            true_color = true_ce.star_fluxes[c + 1] <= 0 || true_ce.star_fluxes[c] <= 0. ?
-                "NA" : round(log(true_ce.star_fluxes[c + 1] / true_ce.star_fluxes[c]), 3)
-            base_color = base_ce.star_fluxes[c + 1] <= 0 || base_ce.star_fluxes[c] <= 0 ?
-                "NA" : round(log(base_ce.star_fluxes[c + 1] / base_ce.star_fluxes[c]), 3)
-            print_comparison("color $(color_names[c])",
-                true_color,
-                base_color,
-                @sprintf("%.3f (%.3f)", vs[ids.beta[c, 1]], sqrt(vs[ids.lambda[c, 1]])))
-        end
-    else
-        E_r = vs[ids.gamma[2]] * vs[ids.zeta[2]]
-        sd_r = sqrt(E_r * vs[ids.zeta[2]])
-        print_comparison("flux (r-band)",
-            round(true_ce.gal_fluxes[3], 3),
-            round(base_ce.gal_fluxes[3], 3),
-            @sprintf("%.3f (%.3f)", E_r, sd_r))
-
-        for c in 1:4
-            true_color = true_ce.gal_fluxes[c + 1] <= 0 || true_ce.gal_fluxes[c] <= 0. ?
-                "NA" : round(log(true_ce.gal_fluxes[c + 1] / true_ce.gal_fluxes[c]), 3)
-            base_color = base_ce.gal_fluxes[c + 1] <= 0 || base_ce.gal_fluxes[c] <= 0 ?
-                "NA" : round(log(base_ce.gal_fluxes[c + 1] / base_ce.gal_fluxes[c]), 3)
-            print_comparison("color $(color_names[c])",
-                true_color,
-                base_color,
-                @sprintf("%.3f (%.3f)", vs[ids.beta[c, 2]], sqrt(vs[ids.lambda[c, 2]])))
-        end
-
-        print_comparison("proportion De Vaucouleurs",
-            round(true_ce.gal_frac_dev, 3), 
-            round(base_ce.gal_frac_dev, 3), 
-            round(vs[ids.theta], 3))
-
-        print_comparison("minor/major axis ratio",
-            @sprintf("%.3f (dev), %.3f (exp)",
-                true_row[1, :ab_dev], true_row[1, :ab_exp]),
-            @sprintf("%.3f (dev), %.3f (exp)", 
-                base_row[1, :ab_dev], base_row[1, :ab_exp]),
-            @sprintf("%.3f (both)", vs[ids.rho]))
-
-        my_angle = pi/2 - vs[ids.phi]
-        my_angle -= floor(my_angle / pi) * pi
-        my_angle *= 180 / pi
-        ab_warning = vs[ids.rho] > .9 ? "   [NOTE: predicted galaxy is nearly isotropic]" : ""
-        print_comparison("angle (degrees)",
-            @sprintf("%.3f (dev), %.3f (exp)",
-                true_row[1, :phi_dev] - floor(true_row[1, :phi_dev] / 180) * 180,
-                true_row[1, :phi_exp] - floor(true_row[1, :phi_exp] / 180) * 180),
-            @sprintf("%.3f (dev), %.3f (exp)",
-                base_row[1, :phi_dev] - floor(base_row[1, :phi_dev] / 180) * 180,
-                base_row[1, :phi_exp] - floor(base_row[1, :phi_exp] / 180) * 180),
-            string(round(my_angle, 3), " (both)", ab_warning))
-
-        my_er = vs[ids.sigma] * 0.396
-        print_comparison("effective radius (arcseconds)",
-            @sprintf("%.3f (dev), %.3f (exp)",
-                true_row[1, :theta_dev], true_row[1, :theta_exp]),
-            @sprintf("%.3f (dev), %.3f (exp)",
-                base_row[1, :theta_dev], base_row[1, :theta_exp]),
-            @sprintf("%.3f (both)", my_er))
-    end
-
-    println("\n")
-end
-
-
-function write_csvs(stamp_ids)
-    coadd_callback(i, stamp_id, df) = load_photo_obj!(i, stamp_id, true, df)
-    coadd_df = load_df(stamp_ids, coadd_callback)
-
-    primary_callback(i, stamp_id, df) = load_photo_obj!(i, stamp_id, false, df)
-    primary_df = load_df(stamp_ids, primary_callback)
-
-    celeste_df = load_df(stamp_ids, load_celeste_obj!)
-
-    writetable("coadd.csv", coadd_df)
-    writetable("primary.csv", primary_df)
-    writetable("celeste.csv", celeste_df)
-end
-
 function degrees_to_diff(a, b)
     angle_between = abs(a - b) % 180
     min(angle_between, 180 - angle_between)
 end
 
 
-function score_stamps(stamp_ids)
-    N = length(stamp_ids)
+function get_err_df(truth::DataFrame, predicted::DataFrame)
+    color_cols = [symbol("color_$cn") for cn in color_names]
+    abs_err_cols = [:flux_r, color_cols, :gal_fracdev, :gal_ab, :gal_scale]
+    col_symbols = [:stamp_id, :position, :false_pos, :false_neg, abs_err_cols, :gal_angle]
+            
+    col_types = Array(DataType, length(col_symbols))
+    fill!(col_types, Float64)
+    col_types[1] = String
+    col_types[[3,4]] = Bool
+    ret = DataFrame(col_types, size(truth, 1))
+    names!(ret, col_symbols)
+    ret[:stamp_id] = truth[:stamp_id]
+    ret
 
-    pos_err = zeros(2, N)
-    obj_type_err = falses(2, N)
-
-    flux_r_err = zeros(2, N)
-
-    num_na = zeros(4)
-    color_err = zeros(2, N, 4)
-
-    num_fracdev = 0
-    gal_frac_dev_err = zeros(2, N)
-
-    num_ab = 0
-    gal_ab_err = zeros(2, N)
-
-    num_angle = 0
-    gal_angle_err = zeros(2, N)
-
-    num_scale = 0
-    gal_scale_err = zeros(2, N)
-
-    N2 = 0
-    function process_one_stamp(i)
-        stamp_id = stamp_ids[i]
-        true_ce, true_row, base_ce, base_row, vs = load_predictions(stamp_id)
-
-        # doesn't count if an exception happens above
-        N2 += 1
-
-        pos_err[1, i] = norm(true_ce.pos - base_ce.pos)
-        pos_err[2, i] = norm(true_ce.pos - vs[ids.mu])
-
-        obj_type_err[1, i] = true_ce.is_star != base_ce.is_star
-        obj_type_err[2, i] = true_ce.is_star != (vs[ids.chi] < .5)
-
-        true_fluxes = true_ce.is_star ? true_ce.star_fluxes : true_ce.gal_fluxes
-        base_fluxes = base_ce.is_star ? base_ce.star_fluxes : base_ce.gal_fluxes
-        flux_r_err[1, i] = abs(base_fluxes[3] - true_fluxes[3])
-        j = vs[ids.chi] < .5 ? 1 : 2
-        celeste_r_flux = vs[ids.gamma[j]] * vs[ids.zeta[j]]
-        flux_r_err[2, i] = abs(celeste_r_flux - true_fluxes[3])
-
-        for c in 1:4
-            if true_fluxes[c + 1] <= 0 || true_fluxes[c] <= 0. ||
-                base_fluxes[c + 1] <= 0 || base_fluxes[c] <= 0.
-                num_na[c] += 1
-                color_err[1, i, c] = color_err[2, i, c] = 0
-            else
-                true_color = log(true_fluxes[c + 1] ./ true_fluxes[c])
-                base_color = log(base_fluxes[c + 1] ./ base_fluxes[c])
-                color_err[1, i, c] = abs(true_color - base_color)
-                color_err[2, i, c] = abs(true_color - vs[ids.beta[c, j]])
-            end
-        end
-
-        if !true_ce.is_star
-            if true_ce.gal_frac_dev > .95 || true_ce.gal_frac_dev < 0.05
-                num_fracdev += 1
-                gal_frac_dev_err[1, i] = abs(true_ce.gal_frac_dev - base_ce.gal_frac_dev)
-                gal_frac_dev_err[2, i] = abs(true_ce.gal_frac_dev - vs[ids.theta])
-            end
-
-            if true_ce.gal_frac_dev > .95 || true_ce.gal_frac_dev < 0.05 ||
-                   abs(true_row[1, :ab_dev] - true_row[1, :ab_exp]) < .2
-                num_ab += 1
-                gal_ab_err[1, i] = abs(true_ce.gal_ab - base_ce.gal_ab)
-                gal_ab_err[2, i] = abs(true_ce.gal_ab - vs[ids.rho])
-            end
-
-            if (true_ce.gal_frac_dev > .95 || true_ce.gal_frac_dev < 0.05 ||
-               abs(true_row[1, :phi_dev] - true_row[1, :phi_exp]) < 10) &&
-                    true_ce.gal_ab < .6 && base_ce.gal_ab < .6 &&
-                    vs[ids.rho] < .6
-                num_angle += 1
-                true_deg = (180/pi)true_ce.gal_angle
-                base_deg = (180/pi)base_ce.gal_angle
-                celeste_deg = (180/pi)vs[ids.phi]
-                gal_angle_err[1, i] = degrees_to_diff(true_deg, base_deg)
-                gal_angle_err[2, i] = degrees_to_diff(true_deg, celeste_deg)
-            end
-
-            if true_ce.gal_frac_dev > .95 || true_ce.gal_frac_dev < 0.05 ||
-                   abs(true_row[1, :theta_dev] - true_row[1, :theta_exp]) < .2
-                num_scale += 1
-                gal_scale_err[1, i] = abs(true_ce.gal_scale - base_ce.gal_scale) * .396
-                gal_scale_err[2, i] = abs(true_ce.gal_scale - vs[ids.sigma]) * .396
-            end
-        end
+    for n in abs_err_cols
+        ret[n] = abs(predicted[n] - truth[n])
     end
 
+    predicted_gal = convert(BitArray, predicted[:is_star] .< .5)
+    true_gal = convert(BitArray, truth[:is_star] .< .5)
+    ret[:false_pos] =  predicted_gal & !(true_gal)
+    ret[:false_neg] =  !predicted_gal & true_gal
 
-    for i in 1:N
-        try
-            process_one_stamp(i)
-        catch ex
-            if isa(ex, DistanceException)
-                println("No center object in stamp $(stamp_ids[i])")
-            else
-                throw(ex)
-            end
-        end
-    end
+    ret[:position] = sqrt((truth[:ra] - predicted[:ra]).^2 
+            + (truth[:dec] - predicted[:dec]).^2) * 3600 / .396 # degrees to pixels
 
-    println("N:$N N2:$N2  num_fracdev:$num_fracdev  num_ab:$num_ab",
-        "num_angle:$num_angle  num_scale:$num_scale")
+    ret[:gal_angle] = degrees_to_diff(truth[:gal_angle], predicted[:gal_angle])
 
-    println("pos err: ", sum(pos_err, 2)[:] ./ N2)
-    println("obj type err: ", sum(obj_type_err, 2)[:])
-    println("flux r err: ", sum(flux_r_err, 2)[:] / N2)
-
-    for c in 1:4
-        println("color $(color_names[c]) err: ", 
-            sum(color_err[:, :, c], 2)[:] / (N2 - num_na[c]))
-    end
-
-    println("frac_dev err: ", sum(gal_frac_dev_err, 2)[:] / num_fracdev)
-    println("ab err: ", sum(gal_ab_err, 2)[:] / num_ab)
-    println("angle err: ", sum(gal_angle_err, 2)[:] / num_angle)
-    println("scale err: ", sum(gal_scale_err, 2)[:] / num_scale)
+    ret
 end
 
 
-f = open(ARGS[2])
-stamp_ids = [strip(line) for line in readlines(f)]
-close(f)
-
-if ARGS[1] == "--report"
-    for stamp_id in stamp_ids
-        try
-            report_on_stamp(stamp_id)
-        catch ex
-            if isa(ex, DistanceException)
-                println("No center object in $stamp_id")
-            else
-                throw(ex)
-            end
-        end
+function print_latex_table(df)
+    for i in 1:size(df, 1)
+        is_num_wrong = (df[i, :field] in [:false_pos, :false_neg])::Bool
+        @printf("%-11s & %.3f (%.3f) & %.3f (%.3f) & %d \\\\\n",
+            df[i, :field],
+            df[i, :primary] * (is_num_wrong ? df[i, :N] : 1.),
+            df[i, :primary_sd],
+            df[i, :celeste] * (is_num_wrong ? df[i, :N] : 1.),
+            df[i, :celeste_sd],
+            df[i, :N])
     end
-elseif ARGS[1] == "--score"
-    score_stamps(stamp_ids)
-elseif ARGS[1] == "--csv"
-    write_csvs(stamp_ids)
+    println("")
+end
+
+
+function df_score(stamp_ids)
+    coadd_callback(i, stamp_id, df) = load_photo_obj!(i, stamp_id, true, df)
+    coadd_df = load_df(stamp_ids, coadd_callback)
+    primary_callback(i, stamp_id, df) = load_photo_obj!(i, stamp_id, false, df)
+    primary_df = load_df(stamp_ids, primary_callback)
+    celeste_df = load_df(stamp_ids, load_celeste_obj!)
+
+    primary_err = get_err_df(coadd_df, primary_df)
+    celeste_err = get_err_df(coadd_df, celeste_df)
+
+    ttypes = [Symbol, Float64, Float64, Float64, Float64, Int64]
+    scores_df = DataFrame(ttypes, length(names(celeste_err)) - 1)
+    names!(scores_df, [:field, :primary, :primary_sd, :celeste, :celeste_sd, :N])
+    for i in 1:(size(celeste_err, 2) - 1)
+        n = names(celeste_err)[i + 1]
+        if n == :stamp_id
+            continue
+        end
+        good_row = !isna(primary_err[:, n]) & !isna(celeste_err[:, n])
+        celeste_mean_err = mean(celeste_err[good_row, n])
+        scores_df[i, :field] = n
+        scores_df[i, :N] = sum(good_row)
+        scores_df[i, :primary] = mean(primary_err[good_row, n])
+        scores_df[i, :primary_sd] = std(primary_err[good_row, n]) / sqrt(scores_df[i, :N])
+        scores_df[i, :celeste] = mean(celeste_err[good_row, n])
+        scores_df[i, :celeste_sd] = std(celeste_err[good_row, n]) / sqrt(scores_df[i, :N])
+    end
+
+    if length(ARGS) >= 2 && ARGS[2] == "--csv"
+        writetable("coadd.csv", coadd_df)
+        writetable("primary.csv", primary_df)
+        writetable("celeste.csv", celeste_df)
+    end
+    print_latex_table(scores_df)
+    scores_df
+end
+
+
+if length(ARGS) >= 1
+    f = open(ARGS[1])
+    stamp_ids = [strip(line) for line in readlines(f)]
+    close(f)
+
+    println(df_score(stamp_ids))
 end
 
