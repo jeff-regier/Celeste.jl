@@ -1,0 +1,94 @@
+module Synthetic
+
+export gen_blob
+
+using CelesteTypes
+import Util
+
+import Distributions
+
+
+function wrapped_poisson(rate::Float64)
+    0 < rate ? float(rand(Distributions.Poisson(rate))) : 0.
+end
+
+
+function get_patch(the_mean::Vector{Float64}, H::Int64, W::Int64)
+    const radius = 50.
+    hm, wm = int(the_mean)
+    w11 = max(1, wm - radius):min(W, wm + radius)
+    h11 = max(1, hm - radius):min(H, hm + radius)
+    return(w11, h11)
+end
+
+
+function write_gaussian(the_mean, the_cov, intensity, pixels)
+    the_precision = the_cov^-1
+    c = det(the_precision)^.5 / 2pi
+	y = Array(Float64, 2)
+
+	H, W = size(pixels)
+	w_range, h_range = get_patch(the_mean, H, W)
+
+	for w in w_range, h in h_range
+		y[1] = the_mean[1] - h
+		y[2] = the_mean[2] - w
+		ypy = Util.matvec222(the_precision, y)
+		pdf_hw = c * exp(-0.5 * ypy)
+		pixel_rate = intensity * pdf_hw
+		pixels[h, w] += wrapped_poisson(pixel_rate)
+	end
+
+	pixels
+end
+
+
+function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
+	for k in 1:length(img0.psf)
+		the_mean = ce.pos + img0.psf[k].xiBar
+		the_cov = img0.psf[k].SigmaBar
+		intensity = ce.star_fluxes[img0.b] * img0.iota * img0.psf[k].alphaBar
+		write_gaussian(the_mean, the_cov, intensity, pixels)
+	end
+end
+
+
+function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
+	thetas = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
+
+    XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
+
+	for i in 1:2
+		for gproto in galaxy_prototypes[i]
+			for k in 1:length(img0.psf)
+				the_mean = ce.pos + img0.psf[k].xiBar
+				the_cov = img0.psf[k].SigmaBar + gproto.sigmaTilde * XiXi
+				intensity = ce.gal_fluxes[img0.b] * img0.iota * 
+					img0.psf[k].alphaBar * thetas[i] * gproto.alphaTilde
+				write_gaussian(the_mean, the_cov, intensity, pixels)
+			end
+		end
+	end
+end
+
+
+function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
+    pixels = reshape(float(rand(Distributions.Poisson(img0.epsilon * img0.iota),
+					 img0.H * img0.W)), img0.H, img0.W)
+
+	for body in n_bodies
+		body.is_star ? write_star(img0, body, pixels) : write_galaxy(img0, body, pixels)
+	end
+
+    return Image(img0.H, img0.W, pixels, img0.b, img0.wcs, img0.epsilon,
+			img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
+end
+
+
+function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry})
+	[gen_image(blob0[b], n_bodies) for b in 1:5]
+end
+
+
+end
+

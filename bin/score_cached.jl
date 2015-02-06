@@ -267,6 +267,9 @@ function df_score(stamp_ids)
             continue
         end
         good_row = !isna(primary_err[:, n]) & !isna(celeste_err[:, n])
+		if sum(good_row) == 0
+			continue
+		end
         celeste_mean_err = mean(celeste_err[good_row, n])
         scores_df[i, :field] = n
         scores_df[i, :N] = sum(good_row)
