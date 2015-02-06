@@ -274,9 +274,11 @@ function df_score(stamp_ids)
         scores_df[i, :field] = n
         scores_df[i, :N] = sum(good_row)
         scores_df[i, :primary] = mean(primary_err[good_row, n])
-        scores_df[i, :primary_sd] = std(primary_err[good_row, n]) / sqrt(scores_df[i, :N])
         scores_df[i, :celeste] = mean(celeste_err[good_row, n])
-        scores_df[i, :celeste_sd] = std(celeste_err[good_row, n]) / sqrt(scores_df[i, :N])
+		if sum(good_row) > 1
+			scores_df[i, :primary_sd] = std(primary_err[good_row, n]) / sqrt(scores_df[i, :N])
+			scores_df[i, :celeste_sd] = std(celeste_err[good_row, n]) / sqrt(scores_df[i, :N])
+		end
     end
 
     if length(ARGS) >= 2 && ARGS[2] == "--csv"
@@ -284,7 +286,9 @@ function df_score(stamp_ids)
         writetable("primary.csv", primary_df)
         writetable("celeste.csv", celeste_df)
     end
-    print_latex_table(scores_df)
+    if length(ARGS) >= 2 && ARGS[2] == "--latex"
+		print_latex_table(scores_df)
+	end
     scores_df
 end
 
