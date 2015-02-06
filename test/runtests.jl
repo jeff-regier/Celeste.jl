@@ -276,7 +276,7 @@ test_local_sources_2()
 test_local_sources()
 test_coordinates_vp_conversion()
 
-#include("test_elbo_values.jl")
+include("test_elbo_values.jl")
 include("test_derivs.jl")
 include("test_optimization.jl")
 

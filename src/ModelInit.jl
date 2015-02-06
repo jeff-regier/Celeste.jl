@@ -70,7 +70,7 @@ function init_source(ce::CatalogEntry)
 
 	ret[ids.theta] = min(max(ce.gal_frac_dev, 0.01), 0.99)
 
-	ret[ids.rho] = min(max(ce.gal_ab, .9999), 0.0001)
+	ret[ids.rho] = min(max(ce.gal_ab, 0.0001), 0.9999)
 	ret[ids.phi] = ce.gal_angle
 	ret[ids.sigma] = max(ce.gal_scale, 0.2)
 
