@@ -92,8 +92,8 @@ end
 
 
 function test_real_stamp_optimization()
-	blob = SDSS.load_stamp_blob(dat_dir, "5.0562-0.0643")
-	cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-5.0562-0.0643", blob)
+	blob = SDSS.load_stamp_blob(dat_dir, "5.0073-0.0739")
+	cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-5.0073-0.0739", blob)
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries)
     inbounds(ce) = ce.pos[1] > -10. && ce.pos[2] > -10 && 
