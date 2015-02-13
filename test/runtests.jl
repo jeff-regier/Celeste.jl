@@ -65,7 +65,7 @@ function gen_sample_galaxy_dataset(; perturb=true)
         blob0[b].H, blob0[b].W = 20, 23
     end
     one_body = [sample_ce([8.5, 9.6], false),]
-       blob = Synthetic.gen_blob(blob0, one_body)
+    blob = Synthetic.gen_blob(blob0, one_body)
     mp = ModelInit.cat_init(one_body)
     if perturb
         perturb_params(mp)
