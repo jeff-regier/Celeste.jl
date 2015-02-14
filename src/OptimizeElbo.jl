@@ -11,7 +11,7 @@ import ElboDeriv
 
 const rescaling = ones(length(all_params))
 [rescaling[id] *= 1e-3 for id in ids.gamma]
-rescaling[ids.chi] *= 1e1
+#rescaling[ids.chi] *= 1e1
 
 
 function scale_deriv(elbo::SensitiveFloat, omitted_ids)
