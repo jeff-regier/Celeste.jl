@@ -34,7 +34,7 @@ function perturb_params(mp) # for testing derivatives != 0
         vs[ids.theta] += 0.05
         vs[ids.rho] += 0.05
         vs[ids.phi] += pi/10
-        vs[ids.sigma] *= 0.8
+        vs[ids.sigma] *= 1.2
         vs[ids.beta] += 0.5
         vs[ids.lambda] =  1e-1
     end
@@ -269,6 +269,7 @@ end
 
 
 ####################################################
+include("test_optimization.jl")
 
 test_util_bvn_cov()
 test_sky_noise_estimates()
@@ -278,5 +279,4 @@ test_coordinates_vp_conversion()
 
 include("test_elbo_values.jl")
 include("test_derivs.jl")
-include("test_optimization.jl")
 

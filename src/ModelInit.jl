@@ -56,7 +56,7 @@ end
 function init_source(ce::CatalogEntry)
     ret = init_source(ce.pos)
 
-    ret[ids.chi] = ce.is_star ? 0.01 : 0.99
+#    ret[ids.chi] = ce.is_star ? 0.01 : 0.99
 
     star_fluxes = max(ce.star_fluxes, 1e-4)
     ret[ids.gamma[1]] = star_fluxes[3] ./ ret[ids.zeta[1]]
@@ -70,9 +70,9 @@ function init_source(ce::CatalogEntry)
 
     ret[ids.theta] = min(max(ce.gal_frac_dev, 0.01), 0.99)
 
-    ret[ids.rho] = min(max(ce.gal_ab, 0.0001), 0.9999)
+    ret[ids.rho] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.0001), 0.9999)
     ret[ids.phi] = ce.gal_angle
-    ret[ids.sigma] = max(ce.gal_scale, 0.2)
+    ret[ids.sigma] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
 
     ret
 end

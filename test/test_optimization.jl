@@ -306,8 +306,41 @@ function test_real_stamp_optimization()
     OptimizeElbo.maximize_elbo(blob, mp)
 end
 
+
+function test_bad_galaxy_init()
+    stamp_id = "5.0624-0.1528"
+    blob0 = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
+
+    only_center(ce) = ce.pos[1] > 25. && ce.pos[2] > 25 &&
+        ce.pos[1] < 27 && ce.pos[2] < 27
+
+    cat_coadd = SDSS.load_stamp_catalog(ENV["STAMP"], "s82-$stamp_id", blob0)
+    cat_coadd = filter(only_center, cat_coadd)
+    @test length(cat_coadd) == 1
+
+    blob = Synthetic.gen_blob(blob0, cat_coadd)
+
+    cat_primary = SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob, match_blob=true)
+    cat_primary = filter(only_center, cat_primary)
+    @test length(cat_primary) == 1
+
+    mp_bad_init = ModelInit.cat_init(cat_primary)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bad_init, ftol_abs=1e-7)
+    @test mp_bad_init.vp[1][ids.chi] > .5
+
+    mp_good_init = ModelInit.cat_init(cat_coadd)
+    OptimizeElbo.maximize_elbo(blob, mp_good_init)
+    @test mp_good_init.vp[1][ids.chi] > .5
+
+    @test_approx_eq_eps mp_good_init.vp[1][ids.sigma] mp_bad_init.vp[1][ids.sigma] 0.2
+    @test_approx_eq_eps mp_good_init.vp[1][ids.rho] mp_bad_init.vp[1][ids.rho] 0.2
+    @test_approx_eq_eps mp_good_init.vp[1][ids.theta] mp_bad_init.vp[1][ids.theta] 0.2
+    @test_approx_eq_eps mp_good_init.vp[1][ids.phi] mp_bad_init.vp[1][ids.phi] 0.2
+end
+
 ####################################################
 
+#test_bad_galaxy_init()
 test_kappa_finding()
 test_bad_chi_init()
 test_elbo_invariance_to_chi()

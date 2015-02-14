@@ -132,6 +132,7 @@ end
 
 function test_that_galaxy_truth_is_most_likely()
     blob, mp, body = gen_sample_galaxy_dataset(perturb=false)
+    mp.vp[1][ids.chi] = .99
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
     for bad_chi in [.3, .5, .9]
@@ -191,6 +192,9 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     cat_entries = filter(inbounds, cat_entries)
 
     mp = ModelInit.cat_init(cat_entries)
+    for s in 1:length(cat_entries)
+        mp.vp[s][ids.chi] = cat_entries[s].is_star ? 0.01 : 0.99
+    end
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
     # s is the brightest source: a dev galaxy!
