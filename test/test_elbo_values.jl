@@ -199,7 +199,6 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
 
     # s is the brightest source: a dev galaxy!
     s = 1
-    println(cat_entries[s])
 
     for bad_scale in [.7, 1.3]
         mp_gamma = deepcopy(mp)
@@ -237,12 +236,12 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     end
 
     for b in 1:4
-        for delta in [-2., 4.]
+        for delta in [-2., 2.]
             mp_beta = deepcopy(mp)
             mp_beta.vp[s][ids.beta[b, :]] += delta
             bad_beta = ElboDeriv.elbo_likelihood(blob, mp_beta)
-            println(best.v,  " vs  ", bad_beta.v)
-#            @test best.v > bad_beta.v
+            info("$(best.v)  >  $(bad_beta.v)")
+            @test best.v > bad_beta.v
         end
     end
 end

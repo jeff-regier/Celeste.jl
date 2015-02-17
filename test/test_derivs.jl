@@ -18,7 +18,7 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
             end
 
             numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
-            println("deriv #$p0 (s: $s): $numeric_deriv vs $(f.d[p1, s]) [tol: $abs_err]")
+            info("deriv #$p0 (s: $s): $numeric_deriv vs $(f.d[p1, s]) [tol: $abs_err]")
             obs_err = abs(numeric_deriv - f.d[p1, s]) 
             @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
             @test_approx_eq_eps numeric_deriv f.d[p1, s] 10abs_err
@@ -162,6 +162,19 @@ function test_elbo_derivs()
 end
 
 
+function test_reg_derivs()
+    blob, mp0, body = gen_sample_galaxy_dataset()
+
+    function wrap_reg(mp)
+        accum = zero_sensitive_float([1:3], all_params)
+        ElboDeriv.subtract_reg!(mp, accum)
+        accum
+    end
+    test_by_finite_differences(wrap_reg, mp0)
+end
+
+
+test_reg_derivs()
 test_kl_divergence_derivs()
 test_brightness_derivs()
 test_accum_pos_derivs()

@@ -74,14 +74,12 @@ function test_kappa_finding()
     mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 1]
     higher_klc = get_kl_gal_c()
     @test lower_klc < higher_klc
-    println(lower_klc, "  ", higher_klc)
 
     mp.vp[1][ids.kappa[:, 2]] = [0.99, 0.01]
     mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 1]
     lower_klc = get_kl_gal_c()
     mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 2]
     higher_klc = get_kl_gal_c()
-    println(lower_klc, "  ", higher_klc)
     @test lower_klc < higher_klc
 
     mp.pp.Lambda[2][1][:, :] = mp.pp.Lambda[2][2][:, :] = eye(4)
@@ -137,14 +135,6 @@ function test_bad_chi_init()
     elbo_bad = ElboDeriv.elbo_likelihood(blob, mp)
     @test elbo_bad.d[ids.chi, 1] > 0
 
-    for i = 0:7
-        mp.vp[1][ids.chi] = 0.2 + .1i
-        el_bad = ElboDeriv.elbo_likelihood(blob, mp)
-        elbo_bad = ElboDeriv.elbo(blob, mp)
-        println("like: ", mp.vp[1][ids.chi], "  ", el_bad.v, "  ", el_bad.d[ids.chi, 1])
-        println("elbo", mp.vp[1][ids.chi], "  ", elbo_bad.v, "  ", elbo_bad.d[ids.chi, 1])
-    end
-
     omitted_ids = setdiff(all_params, [ids.chi])
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.chi] >= 0.5
@@ -184,7 +174,6 @@ function test_likelihood_invariance_to_chi()
         ElboDeriv.elbo_likelihood(blob, mp2).v, 1)
 
     for i in 2:length(all_params) #skip chi
-        println(mp.vp[1][i], "  vs  ",  mp2.vp[1][i])
         @test_approx_eq_eps mp.vp[1][i] / mp2.vp[1][i] 1. 0.1
     end
 end
@@ -219,7 +208,6 @@ function test_kl_invariance_to_chi()
     @test_approx_eq_eps kl_wrapper(blob, mp).v kl_wrapper(blob, mp2).v 1e-1
 
     for i in 2:length(all_params) #skip chi
-        println(mp.vp[1][i], "  vs  ",  mp2.vp[1][i])
         @test_approx_eq_eps mp.vp[1][i] / mp2.vp[1][i] 1. 0.1
     end
 end
@@ -248,7 +236,6 @@ function test_elbo_invariance_to_chi()
     @test_approx_eq_eps ElboDeriv.elbo(blob, mp).v ElboDeriv.elbo(blob, mp2).v 1
 
     for i in setdiff(all_params, [ids.chi]) #skip chi
-        println(mp.vp[1][i], "  vs  ",  mp2.vp[1][i])
         @test_approx_eq_eps mp.vp[1][i] / mp2.vp[1][i] 1. 0.1
     end
 end
@@ -298,10 +285,6 @@ function test_real_stamp_optimization()
         ce.pos[1] < 61 && ce.pos[2] < 61
     cat_entries = filter(inbounds, cat_entries)
 
-    for ce in cat_entries
-        println(ce)
-    end
-
     mp = ModelInit.cat_init(cat_entries)
     OptimizeElbo.maximize_elbo(blob, mp)
 end
@@ -325,7 +308,7 @@ function test_bad_galaxy_init()
     @test length(cat_primary) == 1
 
     mp_bad_init = ModelInit.cat_init(cat_primary)
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bad_init, ftol_abs=1e-7)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bad_init)
     @test mp_bad_init.vp[1][ids.chi] > .5
 
     mp_good_init = ModelInit.cat_init(cat_coadd)
@@ -338,9 +321,51 @@ function test_bad_galaxy_init()
     @test_approx_eq_eps mp_good_init.vp[1][ids.phi] mp_bad_init.vp[1][ids.phi] 0.2
 end
 
+
+function test_regularization()
+    blob, mp, body = gen_sample_galaxy_dataset(perturb=true)
+
+    reg_wrapper(blob, mp) = begin
+        accum = zero_sensitive_float([1], all_params)
+        ElboDeriv.subtract_reg!(mp, accum)
+        accum
+    end
+    OptimizeElbo.maximize_f(reg_wrapper, blob, mp)
+
+    sigma_mode = exp(mp.pp.mu_reg - mp.pp.sigma_reg^2)
+    @test_approx_eq_eps mp.vp[1][ids.sigma] sigma_mode 1e-3
+
+    rho_mode = (mp.pp.alpha_reg - 1) / (mp.pp.alpha_reg + mp.pp.beta_reg - 2)
+    @test_approx_eq_eps mp.vp[1][ids.rho] rho_mode 1e-3
+end
+
+
+function test_color()
+    blob, mp, body = gen_sample_galaxy_dataset(perturb=true)
+    # these are a bright star's colors
+    mp.vp[1][ids.beta[:, 1]] = [2.42824, 1.13996, 0.475603, 0.283062]
+    mp.vp[1][ids.beta[:, 2]] = [2.42824, 1.13996, 0.475603, 0.283062]
+
+    klc_wrapper(blob, mp) = begin
+        accum = zero_sensitive_float([1:mp.S], all_params)
+        for s in 1:mp.S, i in 1:2, d in 1:D
+            ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
+        end
+        accum
+    end
+    omitted_ids = [ids.beta[:]]
+    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
+
+    @test_approx_eq_eps mp.vp[1][ids.kappa[2, 1]] 1 1e-2
+    @test_approx_eq mp.vp[1][ids.chi] 0.01
+end
+
+
 ####################################################
 
-#test_bad_galaxy_init()
+test_color()
+test_regularization()
+test_bad_galaxy_init()
 test_kappa_finding()
 test_bad_chi_init()
 test_elbo_invariance_to_chi()

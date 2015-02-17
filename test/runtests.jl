@@ -209,7 +209,6 @@ function test_tiling()
     for s in 1:mp.S
         for i in 1:length(all_params)
             @test_approx_eq_eps elbo_both.d[i, s] elbo.d[i, s] 1e-1
-            println(abs(elbo_both.d[i, s] - elbo.d[i, s]))
         end
     end
 end
@@ -269,7 +268,6 @@ end
 
 
 ####################################################
-include("test_optimization.jl")
 
 test_util_bvn_cov()
 test_sky_noise_estimates()
@@ -279,4 +277,5 @@ test_coordinates_vp_conversion()
 
 include("test_elbo_values.jl")
 include("test_derivs.jl")
+include("test_optimization.jl")
 

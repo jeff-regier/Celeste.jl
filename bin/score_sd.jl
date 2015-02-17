@@ -31,7 +31,7 @@ end
 
 ### is_star UQ
 
-non_triv = 0.0002 .< celeste_df[:is_star] .< .9999
+non_triv = 0.011 .< celeste_df[:is_star] .< .989
 
 wrong_in_non_triv = sum(celeste_err[non_triv, :false_pos]) + 
         sum(celeste_err[non_triv, :false_neg])
@@ -47,5 +47,5 @@ wrong_in_triv = sum(celeste_err[!non_triv, :false_pos]) +
 
 ### brightness
 
-cor(celeste_df[:flux_r], celeste_err[:flux_r])
-cor(celeste_df[:flux_r_sd], celeste_err[:flux_r])
+println("r-r_err cor: ", cor(celeste_df[:flux_r], celeste_err[:flux_r]))
+println("r_sd-r_err cor: ", cor(celeste_df[:flux_r_sd], celeste_err[:flux_r]))
