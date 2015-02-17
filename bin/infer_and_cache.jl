@@ -10,7 +10,7 @@ function peak_infer_and_cache(stamp_id)
 
 	OptimizeElbo.maximize_elbo(blob, mp)
 
-	f = open(ENV["STAMP"]"/V-$stamp_id.dat", "w+")
+	f = open(ENV["MODEL"]"/V-$stamp_id.dat", "w+")
 	serialize(f, mp)
 	close(f)
 end
@@ -23,7 +23,7 @@ function cat_infer_and_cache(stamp_id)
 
 	OptimizeElbo.maximize_elbo(blob, mp)
 
-	f = open(ENV["STAMP"]"/V-$stamp_id.dat", "w+")
+	f = open(ENV["MODEL"]"/V-$stamp_id.dat", "w+")
 	serialize(f, mp)
 	close(f)
 end

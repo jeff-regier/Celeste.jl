@@ -365,7 +365,7 @@ end
 
 test_color()
 test_regularization()
-test_bad_galaxy_init()
+#test_bad_galaxy_init()
 test_kappa_finding()
 test_bad_chi_init()
 test_elbo_invariance_to_chi()
