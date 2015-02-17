@@ -168,6 +168,7 @@ function load_df(stamp_ids, per_stamp_callback::Function)
         try
             per_stamp_callback(i, stamp_id, df)
         catch ex
+            println("Exception for stamp $stamp_id")
             isa(ex, DistanceException) ? 
                 println("No center object in stamp $stamp_id") : throw(ex)
         end

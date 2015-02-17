@@ -122,6 +122,10 @@ immutable PriorParams
     Xi::Vector{Vector{Float64}}               # mixing weight prior on c_s
     Omega::Vector{Array{Float64, 2}}          # mean prior on c_s
     Lambda::Vector{Array{Array{Float64, 2}}}  # cov prior on c_s
+    mu_reg::Float64
+    sigma_reg::Float64
+    alpha_reg::Float64
+    beta_reg::Float64
 end
 
 # TODO: use a matrix here, in conjunction with ArrayViews.jl (?)

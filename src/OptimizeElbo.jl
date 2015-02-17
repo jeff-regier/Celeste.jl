@@ -27,7 +27,9 @@ function scale_deriv(elbo::SensitiveFloat, omitted_ids)
 
         for i = 1:2
             if p0 == ids.kappa[1, i]
-                elbo_new.d[p1, :] -= elbo.d[ids.kappa[end, i]]
+                for s1 in 1:length(elbo.source_index)
+                    elbo_new.d[p1, s1] -= elbo.d[ids.kappa[2, i], s1]
+                end
             end
         end
     end
@@ -164,7 +166,6 @@ end
 
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
-    #maximize_likelihood(blob, mp)
     maximize_f(ElboDeriv.elbo, blob, mp)
 end
 

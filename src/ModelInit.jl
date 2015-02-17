@@ -30,7 +30,14 @@ function sample_prior()
     ((Xi[1], Omega[1], Lambda[1]), (Xi[2], Omega[2], Lambda[2])) = deserialize(ck_file)
     close(r_file)
 
-    PriorParams(Phi, Upsilon, Psi, Xi, Omega, Lambda)
+    muReg = -0.1989290211077033  # from mle for a log normal fit to primary
+    sigmaReg = 0.6157385349577496
+
+    alphaReg = 1.32  # from mle for a beta dist fit to primary
+    betaReg = 1.21
+
+    PriorParams(Phi, Upsilon, Psi, Xi, Omega, Lambda,
+        muReg, sigmaReg, alphaReg, betaReg)
 end
 
 
