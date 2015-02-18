@@ -63,17 +63,20 @@ end
 function init_source(ce::CatalogEntry)
     ret = init_source(ce.pos)
 
-#    ret[ids.chi] = ce.is_star ? 0.01 : 0.99
+    ret[ids.gamma[1]] = max(0.0001, ce.star_fluxes[3]) ./ ret[ids.zeta[1]]
+    ret[ids.gamma[2]] = max(0.0001, ce.gal_fluxes[3]) ./ ret[ids.zeta[2]]
 
-    star_fluxes = max(ce.star_fluxes, 1e-4)
-    ret[ids.gamma[1]] = star_fluxes[3] ./ ret[ids.zeta[1]]
+    get_color(c2, c1) = begin
+        c2 > 0 && c1 > 0 ? min(max(log(c2 / c1), -9.), 9.) :
+            c2 > 0 && c1 <= 0 ? 3.0 :
+                c2 <= 0 && c1 > 0 ? -3.0 : 0.0
+    end
+    get_colors(raw_fluxes) = begin
+        [get_color(raw_fluxes[c+1], raw_fluxes[c]) for c in 1:4]
+    end
 
-    gal_fluxes = max(ce.gal_fluxes, 1e-4)
-    ret[ids.gamma[2]] = gal_fluxes[3] ./ ret[ids.zeta[2]]
-
-    get_colors(fluxes) = min(max(log(fluxes[2:5] ./ fluxes[1:4]), -9.), 9.)
-    ret[ids.beta[:, 1]] = get_colors(star_fluxes)
-    ret[ids.beta[:, 2]] = get_colors(gal_fluxes)
+    ret[ids.beta[:, 1]] = get_colors(ce.star_fluxes)
+    ret[ids.beta[:, 2]] = get_colors(ce.gal_fluxes)
 
     ret[ids.theta] = min(max(ce.gal_frac_dev, 0.01), 0.99)
 

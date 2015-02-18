@@ -527,7 +527,7 @@ end
 function elbo(blob::Blob, mp::ModelParams)
     ret = elbo_likelihood(blob, mp)
     subtract_kl!(mp, ret)
-#    subtract_reg!(mp, ret)
+    subtract_reg!(mp, ret)
     ret
 end
 
