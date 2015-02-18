@@ -11,7 +11,7 @@ const color_names = ["$(band_letters[i])$(band_letters[i+1])" for i in 1:4]
 
 
 function load_celeste_predictions(model_dir, stamp_id)
-    f = open("$model_dir/S-$stamp_id.dat")
+    f = open("$model_dir/V-$stamp_id.dat")
     mp = deserialize(f)
     close(f)
 	mp

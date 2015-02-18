@@ -28,7 +28,7 @@ function synth_infer_and_cache(stamp_id)
 
 	OptimizeElbo.maximize_elbo(blob, mp)
 
-    f = open(ENV["STAMP"]"/S-$stamp_id.dat", "w+")
+    f = open(ENV["MODEL"]"/S-$stamp_id.dat", "w+")
     serialize(f, mp)
     close(f)
 end
