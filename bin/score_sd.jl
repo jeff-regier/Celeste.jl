@@ -1,4 +1,4 @@
-#!/usr/bin/env jula
+#!/usr/bin/env julia
 
 using DataFrames
 
@@ -33,10 +33,10 @@ end
 
 non_triv = 0.011 .< celeste_df[:is_star] .< .989
 
-wrong_in_non_triv = sum(celeste_err[non_triv, :false_pos]) + 
-        sum(celeste_err[non_triv, :false_neg])
-wrong_in_triv = sum(celeste_err[!non_triv, :false_pos]) + 
-        sum(celeste_err[!non_triv, :false_neg])
+wrong_in_non_triv = sum(celeste_err[non_triv, :missed_stars]) + 
+        sum(celeste_err[non_triv, :missed_gals])
+wrong_in_triv = sum(celeste_err[!non_triv, :missed_stars]) + 
+        sum(celeste_err[!non_triv, :missed_gals])
 
 @printf(" %d / %d    %d / %d\n",
     wrong_in_triv,
