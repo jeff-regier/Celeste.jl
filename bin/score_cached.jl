@@ -11,7 +11,7 @@ const color_names = ["$(band_letters[i])$(band_letters[i+1])" for i in 1:4]
 
 
 function load_celeste_predictions(model_dir, stamp_id)
-    f = open("$model_dir/S-$stamp_id.dat")
+    f = open("$model_dir/$(ARGS[2])-$stamp_id.dat")
     mp = deserialize(f)
     close(f)
 	mp
@@ -120,20 +120,6 @@ function load_celeste_obj!(i::Int64, stamp_id::String, df::DataFrame)
     mp = load_celeste_predictions(ENV["MODEL"], stamp_id)
     vs = center_obj(mp.vp)
 
-    if length(ARGS) == 3 && ARGS[3] == "--alt"
-        mp_alt = load_celeste_predictions(ENV["MODEL_ALT"], stamp_id)
-
-        elbo = ElboDeriv.elbo(blob, mp)    
-        elbo_alt = ElboDeriv.elbo(blob, mp_alt)
-
-        if elbo_alt.v > elbo.v
-            mp = mp_alt
-        end
-        vs = center_obj(mp.vp)
-        println("$stamp_id: $(elbo.v) [elbo] vs $(elbo_alt.v) [elbo_alt]","
-               (chi: $(vs[ids.chi]))")
-    end
-
     ra_dec = WCSLIB.wcsp2s(blob[3].wcs, vs[ids.mu]'')
 
     df[i, :ra] = ra_dec[1]
@@ -205,7 +191,7 @@ end
 function get_err_df(truth::DataFrame, predicted::DataFrame)
     color_cols = [symbol("color_$cn") for cn in color_names]
     abs_err_cols = [:flux_r, color_cols, :gal_fracdev, :gal_ab, :gal_scale]
-    col_symbols = [:stamp_id, :position, :false_pos, :false_neg, abs_err_cols, :gal_angle]
+    col_symbols = [:stamp_id, :position, :missed_stars, :missed_gals, abs_err_cols, :gal_angle]
             
     col_types = Array(DataType, length(col_symbols))
     fill!(col_types, Float64)
@@ -222,8 +208,8 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
 
     predicted_gal = convert(BitArray, predicted[:is_star] .< .5)
     true_gal = convert(BitArray, truth[:is_star] .< .5)
-    ret[:false_pos] =  predicted_gal & !(true_gal)
-    ret[:false_neg] =  !predicted_gal & true_gal
+    ret[:missed_stars] =  predicted_gal & !(true_gal)
+    ret[:missed_gals] =  !predicted_gal & true_gal
 
     ret[:position] = sqrt((truth[:ra] - predicted[:ra]).^2 
             + (truth[:dec] - predicted[:dec]).^2) * 3600 / .396 # degrees to pixels
@@ -236,8 +222,8 @@ end
 
 function print_latex_table(df)
     for i in 1:size(df, 1)
-        is_num_wrong = (df[i, :field] in [:false_pos, :false_neg])::Bool
-        @printf("%-11s & %.3f (%.3f) & %.3f (%.3f) & %d \\\\\n",
+        is_num_wrong = (df[i, :field] in [:missed_stars, :missed_gals])::Bool
+        @printf("%-12s & %.2f (%.2f) & %.2f (%.2f) & %d \\\\\n",
             df[i, :field],
             df[i, :primary] * (is_num_wrong ? df[i, :N] : 1.),
             df[i, :primary_sd],
@@ -282,19 +268,19 @@ function df_score(stamp_ids)
 		end
     end
 
-    if length(ARGS) >= 2 && ARGS[2] == "--csv"
+    if length(ARGS) >= 3 && ARGS[3] == "--csv"
         writetable("coadd.csv", coadd_df)
         writetable("primary.csv", primary_df)
         writetable("celeste.csv", celeste_df)
     end
-    if length(ARGS) >= 2 && ARGS[2] == "--latex"
+    if length(ARGS) >= 3 && ARGS[3] == "--latex"
 		print_latex_table(scores_df)
 	end
     scores_df
 end
 
 
-if length(ARGS) >= 1
+if length(ARGS) >= 2
     f = open(ARGS[1])
     stamp_ids = [strip(line) for line in readlines(f)]
     close(f)
