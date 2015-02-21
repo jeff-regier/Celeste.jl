@@ -100,6 +100,7 @@ type Image
 end
 
 immutable ImageTile
+        # Tiles of pixels that share the same set of relevant sources (or other calculations).
 	hh::Int64 # tile coordinates---not pixel or sky coordinates
 	ww::Int64
 	img::Image
@@ -108,6 +109,7 @@ end
 typealias Blob Vector{Image}
 
 immutable SkyPatch #pixel coordinates for now, soon wcs
+        # The amount of sky affected by a source (regardless of the tiling).
 	center::Vector{Float64}
 	radius::Float64
 end
@@ -183,6 +185,7 @@ const galaxy_pos_params = [ids.mu, ids.theta, ids.rho, ids.phi, ids.sigma]
 #########################################################
 
 type SensitiveFloat
+    # A function value and its derivative with respect to its arguments.
     v::Float64
     d::Matrix{Float64} # local_P x local_S
 	source_index::Vector{Int64}
