@@ -14,7 +14,6 @@ export ModelParams, PriorParams, VariationalParams
 
 export SensitiveFloat
 
-#export zero_sensitive_float, const_sensitive_param, clear!, accum!
 export zero_sensitive_float, const_sensitive_param, clear!
 
 export ParamIndex, ids, all_params, star_pos_params, galaxy_pos_params, D
@@ -313,21 +312,6 @@ end
 function clear!(sp::SensitiveFloat)
     sp.v = 0.
     fill!(sp.d, 0.)
-end
-
-function accum!(src::SensitiveFloat, accum::SensitiveFloat)
-    # TODO: I don't see global_p defined anywhere, and I don't think
-    # this function is used.
-
-    accum.v += src.v
-    for child_s in 1:size(src.d, 2)
-        parent_s = src.source_index[child_s]
-        #parent_s and parent_p aren't necessarily global indexes
-        for child_p in 1:size(src.d, 1)
-            parent_p = src.index[child_p]
-            accum.d[global_p, tile_s] += src.d[child_p, child_s]
-        end
-    end
 end
 
 #########################################################
