@@ -282,10 +282,14 @@ function df_score(stamp_ids)
 end
 
 
-if length(ARGS) >= 2
+<<<<<<< HEAD
+if length(ARGS) >= 1
     # The input file is the stamp ids you want to process.
     # It looks for models and raw data using the environment variables
     # $STAMP and $MODELS.  Missing stamp ids will not be handled gracefully.
+=======
+if length(ARGS) >= 2
+>>>>>>> 0fed04ebd614182e4e7a1399ea678736875f8c50
     f = open(ARGS[1])
     stamp_ids = [strip(line) for line in readlines(f)]
     close(f)

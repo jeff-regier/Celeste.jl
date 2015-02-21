@@ -59,7 +59,7 @@ immutable SourceBrightness
             E_l_a[1, i].d[ids.beta[2, i]] = E_l_a[2, i].d[ids.beta[2, i]] * E_c_1
             E_l_a[1, i].d[ids.lambda[2, i]] = E_l_a[2, i].d[ids.lambda[2, i]] * E_c_1
             E_l_a[1, i].d[ids.beta[1, i]] = E_l_a[1, i].v * -1.
-            E_l_a[1, i].d[ids.lambda[1, i]] = E_l_a[1, i].v * .5 
+            E_l_a[1, i].d[ids.lambda[1, i]] = E_l_a[1, i].v * .5
         end
 
         E_ll_a = Array(SensitiveFloat, 5, 2)
@@ -77,7 +77,7 @@ immutable SourceBrightness
             E_ll_a[4, i].v = E_ll_a[3, i].v * tmp3
             E_ll_a[4, i].d[:] = E_ll_a[3, i].d * tmp3
             E_ll_a[4, i].d[ids.beta[3, i]] = E_ll_a[4, i].v * 2.
-            E_ll_a[4, i].d[ids.lambda[3, i]] = E_ll_a[4, i].v * 2. 
+            E_ll_a[4, i].d[ids.lambda[3, i]] = E_ll_a[4, i].v * 2.
 
             tmp4 = exp(2beta[4, i] + 2 * lambda[4, i])
             E_ll_a[5, i].v = E_ll_a[4, i].v * tmp4
@@ -89,13 +89,13 @@ immutable SourceBrightness
             E_ll_a[2, i].v = E_ll_a[3, i].v * tmp2
             E_ll_a[2, i].d[:] = E_ll_a[3, i].d * tmp2
             E_ll_a[2, i].d[ids.beta[2, i]] = E_ll_a[2, i].v * -2.
-            E_ll_a[2, i].d[ids.lambda[2, i]] = E_ll_a[2, i].v * 2. 
+            E_ll_a[2, i].d[ids.lambda[2, i]] = E_ll_a[2, i].v * 2.
 
             tmp1 = exp(-2beta[1, i] + 2 * lambda[1, i])
             E_ll_a[1, i].v = E_ll_a[2, i].v * tmp1
             E_ll_a[1, i].d[:] = E_ll_a[2, i].d * tmp1
             E_ll_a[1, i].d[ids.beta[1, i]] = E_ll_a[1, i].v * -2.
-            E_ll_a[1, i].d[ids.lambda[1, i]] = E_ll_a[1, i].v * 2. 
+            E_ll_a[1, i].d[ids.lambda[1, i]] = E_ll_a[1, i].v * 2.
         end
 
         new(E_l_a, E_ll_a)
@@ -122,7 +122,7 @@ immutable GalaxyCacheComponent
     bmc::BvnComponent
     dSigma::Matrix{Float64}  # [Sigma11, Sigma12, Sigma22] x [rho, phi, sigma]
 
-    GalaxyCacheComponent(theta_dir::Float64, theta_i::Float64, 
+    GalaxyCacheComponent(theta_dir::Float64, theta_i::Float64,
             gc::GalaxyComponent, pc::PsfComponent, mu::Vector{Float64},
             rho::Float64, phi::Float64, sigma::Float64) = begin
         XiXi = Util.get_bvn_cov(rho, phi, sigma)
@@ -220,11 +220,11 @@ end
 
 
 function accum_pixel_source_stats!(sb::SourceBrightness,
-        star_mcs::Array{BvnComponent, 2}, 
+        star_mcs::Array{BvnComponent, 2},
         gal_mcs::Array{GalaxyCacheComponent, 4},
         vs::Vector{Float64}, child_s::Int64, parent_s::Int64,
         m_pos::Vector{Float64}, b::Int64,
-        fs0m::SensitiveFloat, fs1m::SensitiveFloat, 
+        fs0m::SensitiveFloat, fs1m::SensitiveFloat,
         E_G::SensitiveFloat, var_G::SensitiveFloat)
 
     clear!(fs0m)
@@ -265,7 +265,7 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
             var_G.d[p0, child_s] += chi_fd * sb.E_ll_a[b, i].v * 2 * fsm[i].v
         end
     end
-    
+
     for i in 1:2
         for p0 in vcat(ids.gamma, ids.zeta, ids.beta[:], ids.lambda[:])
             chi_f_Eld = chi[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
@@ -277,7 +277,7 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
 end
 
 
-function accum_pixel_ret!(tile_sources::Vector{Int64}, 
+function accum_pixel_ret!(tile_sources::Vector{Int64},
         x_nbm::Float64, iota::Float64,
         E_G::SensitiveFloat, var_G::SensitiveFloat, ret::SensitiveFloat)
 
@@ -287,18 +287,36 @@ function accum_pixel_ret!(tile_sources::Vector{Int64},
     for child_s in 1:length(tile_sources), p in 1:size(E_G.d, 1)
         parent_s = tile_sources[child_s]
         ret.d[p, parent_s] += x_nbm * (E_G.d[p, child_s] / E_G.v
-            - 0.5 * (E_G.v^2 * var_G.d[p, child_s] - 
-                var_G.v * 2 * E_G.v * E_G.d[p, child_s]) 
+            - 0.5 * (E_G.v^2 * var_G.d[p, child_s] -
+                var_G.v * 2 * E_G.v * E_G.d[p, child_s])
                     ./  E_G.v^4)
         ret.d[p, parent_s] -= iota * E_G.d[p, child_s]
     end
 end
 
 
+function accum_pixel_ret2!(tile_sources::Vector{Int64},
+        x_nbm::Float64, iota::Float64,
+        E_G::SensitiveFloat, var_G::SensitiveFloat, ret::SensitiveFloat)
+
+    ret.v += x_nbm * (log(x_nbm) - 1.5)
+    ret.v += iota * E_G.v
+    ret.v -= iota^2/(2x_nbm) * var_G.v
+    ret.v -= iota^2/(2x_nbm) * E_G.v^2
+
+    for child_s in 1:length(tile_sources), p in 1:size(E_G.d, 1)
+        parent_s = tile_sources[child_s]
+        ret.d[p, parent_s] += iota * E_G.d[p, child_s]
+        ret.d[p, parent_s] -= iota^2/(2x_nbm) * var_G.d[p, child_s]
+        ret.d[p, parent_s] -= iota^2/x_nbm * E_G.v * E_G.d[p, child_s]
+    end
+end
+
+
 function tile_range(tile::ImageTile, tile_width::Int64)
-    h1 = 1 + (tile.hh - 1) * tile_width 
+    h1 = 1 + (tile.hh - 1) * tile_width
     h2 = min(tile.hh * tile_width, tile.img.H)
-    w1 = 1 + (tile.ww - 1) * tile_width 
+    w1 = 1 + (tile.ww - 1) * tile_width
     w2 = min(tile.ww * tile_width, tile.img.W)
     h1:h2, w1:w2
 end
@@ -324,10 +342,10 @@ function local_sources(tile::ImageTile, mp::ModelParams)
 end
 
 
-function elbo_likelihood!(tile::ImageTile, mp::ModelParams, 
+function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         sbs::Vector{SourceBrightness},
-        star_mcs::Array{BvnComponent, 2}, 
-        gal_mcs::Array{GalaxyCacheComponent, 4}, 
+        star_mcs::Array{BvnComponent, 2},
+        gal_mcs::Array{GalaxyCacheComponent, 4},
         accum::SensitiveFloat)
     tile_sources = local_sources(tile, mp)
     h_range, w_range = tile_range(tile, mp.tile_width)
@@ -336,6 +354,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         num_pixels = length(h_range) * length(w_range)
         tile_x = sum(tile.img.pixels[h_range, w_range])
         ep = tile.img.epsilon
+        # NB: not using the delta-method approximation here
         accum.v += tile_x * log(ep) - num_pixels * ep
         return
     end
@@ -354,11 +373,11 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         m_pos = Float64[h, w]
         for child_s in 1:length(tile_sources)
             parent_s = tile_sources[child_s]
-            accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs, 
-                mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b, 
+            accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
+                mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
                 fs0m, fs1m, E_G, var_G)
         end
-        
+
         accum_pixel_ret!(tile_sources, tile.img.pixels[h, w], tile.img.iota,
             E_G, var_G, accum)
     end
@@ -391,10 +410,10 @@ function elbo_likelihood(blob::Blob, mp::ModelParams)
 end
 
 
-function subtract_kl_c!(d::Int64, i::Int64, s::Int64, mp::ModelParams, 
+function subtract_kl_c!(d::Int64, i::Int64, s::Int64, mp::ModelParams,
         accum::SensitiveFloat)
     vs = mp.vp[s]
-    chi_si = i == 1 ? vs[ids.chi] : 1 - vs[ids.chi]
+    chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
 
     beta, lambda = (vs[ids.beta[:, i]], vs[ids.lambda[:, i]])
     Omega, Lambda = (mp.pp.Omega[i][:, d], mp.pp.Lambda[i][d])
@@ -412,21 +431,21 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64, mp::ModelParams,
     accum.d[ids.beta[:, i], s] -= chi_si * half_kappa * 2Lambda_inv * -diff
     accum.d[ids.lambda[:, i], s] -= chi_si * half_kappa * diag(Lambda_inv)
     accum.d[ids.lambda[:, i], s] -= chi_si * half_kappa ./ -lambda
-    accum.d[ids.chi, s] -= (i == 1 ? i : -1) * ret * half_kappa
+    accum.d[ids.chi, s] -= (i == 2 ? 1 : -1) * ret * half_kappa
 end
 
 
 function subtract_kl_k!(i::Int64, s::Int64, mp::ModelParams, accum::SensitiveFloat)
     vs = mp.vp[s]
-    chi_si = i == 1 ? vs[ids.chi] : 1 - vs[ids.chi]
+    chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
     kappa_i = vs[ids.kappa[:, i]]
 
     for d in 1:D
-        log_ratio = log(kappa_i[d] / mp.pp.Psi[i][d])
+        log_ratio = log(kappa_i[d] / mp.pp.Xi[i][d])
         kappa_log_ratio = kappa_i[d] * log_ratio
         accum.v -= chi_si * kappa_log_ratio
         accum.d[ids.kappa[d, i] , s] -= chi_si * (1 + log_ratio)
-        accum.d[ids.chi, s] -= i == 1 ? kappa_log_ratio : -kappa_log_ratio
+        accum.d[ids.chi, s] -= i == 2 ? kappa_log_ratio : -kappa_log_ratio
     end
 end
 
@@ -437,36 +456,36 @@ function subtract_kl_r!(i::Int64, s::Int64, mp::ModelParams, accum::SensitiveFlo
     zeta_si = mp.vp[s][ids.zeta[i]]
 
     digamma_gamma = digamma(gamma_si)
-    zeta_Phi_ratio = (zeta_si - mp.pp.Phi[i]) / mp.pp.Phi[i]
+    zeta_Psi_ratio = (zeta_si - mp.pp.Psi[i]) / mp.pp.Psi[i]
     shape_diff = gamma_si - mp.pp.Upsilon[i]
 
     kl_v = shape_diff * digamma_gamma
     kl_v += -lgamma(gamma_si) + lgamma(mp.pp.Upsilon[i])
-    kl_v += mp.pp.Upsilon[i] * (log(mp.pp.Phi[i]) - log(zeta_si))
-    kl_v += gamma_si * zeta_Phi_ratio
+    kl_v += mp.pp.Upsilon[i] * (log(mp.pp.Psi[i]) - log(zeta_si))
+    kl_v += gamma_si * zeta_Psi_ratio
 
-    chi_si = i == 1 ? vs[ids.chi] : 1 - vs[ids.chi]
+    chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
     accum.v -= chi_si * kl_v
 
     accum.d[ids.gamma[i], s] -= chi_si * shape_diff * polygamma(1, gamma_si)
-    accum.d[ids.gamma[i], s] -= chi_si * zeta_Phi_ratio
+    accum.d[ids.gamma[i], s] -= chi_si * zeta_Psi_ratio
 
     accum.d[ids.zeta[i], s] -= chi_si * (-mp.pp.Upsilon[i] / zeta_si)
-    accum.d[ids.zeta[i], s] -= chi_si * (gamma_si / mp.pp.Phi[i])
+    accum.d[ids.zeta[i], s] -= chi_si * (gamma_si / mp.pp.Psi[i])
 
-    accum.d[ids.chi, s] -= i == 1 ? kl_v : -kl_v
+    accum.d[ids.chi, s] -= i == 2 ? kl_v : -kl_v
 end
 
 
 function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
     chi_s = mp.vp[s][ids.chi]
-    Delta = mp.pp.Delta
+    Phi = mp.pp.Phi
 
-    accum.v -= chi_s * (log(chi_s) - log(Delta))
-    accum.v -= (1. - chi_s) * (log(1. - chi_s) - log(1. - Delta))
+    accum.v -= chi_s * (log(chi_s) - log(Phi))
+    accum.v -= (1. - chi_s) * (log(1. - chi_s) - log(1. - Phi))
 
-    accum.d[ids.chi, s] -= (log(chi_s) - log(Delta)) + 1
-    accum.d[ids.chi, s] -= -(log(1. - chi_s) - log(1. - Delta)) - 1.
+    accum.d[ids.chi, s] -= (log(chi_s) - log(Phi)) + 1
+    accum.d[ids.chi, s] -= -(log(1. - chi_s) - log(1. - Phi)) - 1.
 end
 
 
@@ -484,9 +503,31 @@ function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
 end
 
 
+function subtract_reg!(mp::ModelParams, accum::SensitiveFloat)
+    alpha, beta = mp.pp.alpha_reg, mp.pp.beta_reg
+    log_B = lgamma(alpha) + lgamma(beta) - lgamma(alpha + beta)
+    mu_reg, sigma_reg = mp.pp.mu_reg, mp.pp.sigma_reg
+
+    for s in 1:mp.S
+        vs = mp.vp[s]
+        rho, x = vs[ids.rho], vs[ids.sigma]  # too many sigmas
+        ll_ab = (alpha - 1) * log(rho) + (beta - 1) * log(1 - rho) - log_B
+        ll_scale = -log(x) - log(sigma_reg * sqrt(2pi)) -
+            (log(x) - mu_reg)^2 / (2 * sigma_reg^2)
+        accum.v += vs[ids.chi] * (ll_ab + ll_scale)
+        accum.d[ids.rho, s] += vs[ids.chi] *
+            ((alpha - 1)/rho - (beta - 1) / (1 - rho))
+        accum.d[ids.sigma, s] += vs[ids.chi] *
+            (-1/x - (log(x) - mu_reg) / (sigma_reg^2 * x))
+        accum.d[ids.chi, s] += ll_ab + ll_scale
+    end
+end
+
+
 function elbo(blob::Blob, mp::ModelParams)
     ret = elbo_likelihood(blob, mp)
     subtract_kl!(mp, ret)
+    subtract_reg!(mp, ret)
     ret
 end
 
