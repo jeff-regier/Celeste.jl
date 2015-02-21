@@ -184,12 +184,21 @@ immutable PriorParams
     beta_reg::Float64
 end
 
-# The variational parameters for a single celestial object (?)
+# A vector of variational parameters.  The outer index is
+# of celestial objects, and the inner index is over individual
+# parameters for that object (referenced using ParamIndex).
 # TODO: use a matrix here, in conjunction with ArrayViews.jl (?)
 typealias VariationalParams Vector{Vector{Float64}}
 
 type ModelParams
     # The parameters for a particular image.
+    #
+    # Attributes:
+    #  - vp: The variational parameters
+    #  - pp: The prior parameters
+    #  - patches: A vector of SkyPatch objects
+    #  - tile_width: The number of pixels across a tile
+    #  - S: The number of sources.
 
     # The following meanings are clear from the names.
     vp::VariationalParams
@@ -225,7 +234,7 @@ immutable ParamIndex
     gamma::Vector{Int64}
     zeta::Vector{Int64}
 
-    # Rotation of the galaxy.
+    # The probability of being a galaxy of type 1.
     theta::Int64
 
     # galaxy minor/major ratio
