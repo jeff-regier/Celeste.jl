@@ -1,0 +1,5 @@
+# Don't add merge originals.
+**/*.orig
+
+# Don't add emacs temp files.
+**/*~
