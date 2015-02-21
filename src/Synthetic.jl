@@ -7,6 +7,7 @@ import Util
 
 import Distributions
 
+# Generate synthetic data.
 
 function wrapped_poisson(rate::Float64)
     0 < rate ? float(rand(Distributions.Poisson(rate))) : 0.
