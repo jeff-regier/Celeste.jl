@@ -39,6 +39,12 @@ end
 ############################################
 
 immutable GalaxyComponent
+    # Parameters of a single normal component of a galaxy.
+    #
+    # Attributes:
+    #   alphaTilde: The weight of the component.
+    #   sigmaTilde: (?)
+
     alphaTilde::Float64
     sigmaTilde::Float64
 end
@@ -46,6 +52,12 @@ end
 typealias GalaxyPrototype Vector{GalaxyComponent}
 
 function get_galaxy_prototypes()
+    # Pre-defined shapes for galaxies.
+    #
+    # Returns:
+    #   dev_prototype: An array of GalaxyComponent for (?) galaxy types
+    #   exp_prototype: An array of GalaxyComponent for (?) galaxy types
+
     exp_amp = [
         2.34853813e-03, 3.07995260e-02, 2.23364214e-01,
         1.17949102e+00, 4.33873750e+00, 5.99820770e+00]
@@ -68,10 +80,25 @@ end
 
 const galaxy_prototypes = get_galaxy_prototypes()
 
+# What is this?
 const effective_radii = [0.482910, 0.551853]
 
 
 immutable PsfComponent
+    # A single normal component of the point spread function.
+    #
+    # Args:
+    #   alphaBar: The scalar weight of the component. 
+    #   xiVar: The 2x1 location vector
+    #   Sigmabar: The 2x2 covariance
+    #
+    # Attributes:
+    #   alphaBar: The scalar weight of the component. 
+    #   xiVar: The 2x1 location vector
+    #   Sigmabar: The 2x2 covariance
+    #   SigmaBarInv: The 2x2 precision
+    #   SigmaBarLd: The log determinant of the covariance
+
     alphaBar::Float64  # TODO: use underscore
     xiBar::Vector{Float64}
     SigmaBar::Matrix{Float64}
@@ -86,14 +113,33 @@ immutable PsfComponent
 end
 
 type Image
+    # An image for a single color.
+
+    # The image height.
     H::Int64
+
+    # The image width.
     W::Int64
+
+    # An HxW matrix of pixel intensities.
     pixels::Matrix{Float64}
+
+    # ?
     b::Int64
+
+    # World coordinates?
     wcs::WCSLIB.wcsprm
+
+    # The background noise.
     epsilon::Float64
+
+    # The scale of the poisson distribution generating pixel intensitites.
     iota::Float64
+
+    # The components of the point spread function.
     psf::Vector{PsfComponent}
+
+    # ?
     run_num::Int64
     camcol_num::Int64
     field_num::Int64
@@ -109,6 +155,7 @@ immutable ImageTile
     img::Image
 end
 
+# A vector of images, one for each color.
 typealias Blob Vector{Image}
 
 immutable SkyPatch #pixel coordinates for now, soon wcs
@@ -128,23 +175,32 @@ immutable PriorParams
     Xi::Vector{Vector{Float64}}               # mixing weight prior on c_s
     Omega::Vector{Array{Float64, 2}}          # mean prior on c_s
     Lambda::Vector{Array{Array{Float64, 2}}}  # cov prior on c_s
+
+    # ?
     mu_reg::Float64
     sigma_reg::Float64
     alpha_reg::Float64
     beta_reg::Float64
 end
 
+# The variational parameters for a single celestial object (?)
 # TODO: use a matrix here, in conjunction with ArrayViews.jl (?)
 typealias VariationalParams Vector{Vector{Float64}}
 
 type ModelParams
+    # The parameters for a particular image.
+
+    # The following meanings are clear from the names.
     vp::VariationalParams
     pp::PriorParams
     patches::Vector{SkyPatch}
     tile_width::Int64
+
+    # The number of sources.
     S::Int64
 
     ModelParams(vp, pp, patches, tile_width) = begin
+        # There must be one patch for each celestial object.
         @assert length(vp) == length(patches)
         new(vp, pp, patches, tile_width, length(vp))
     end
@@ -153,23 +209,54 @@ end
 #########################################################
 
 immutable ParamIndex
+    # A data structure to index parameters within
+    # a VariationalParams object.
+
+    # Variational parameter for a_s.
+    # The probability of being a galaxy.  (0 = star, 1 = galaxy)
     chi::Int64
+
+    # The location of the object (2x1 vector)
     mu::Vector{Int64}
+
+    # 2x1 scalar variational parameters for r_s.  The first
+    # row is for stars, and the second for galaxies (I think?).
     gamma::Vector{Int64}
     zeta::Vector{Int64}
+
+    # Rotation of the galaxy.
     theta::Int64
-    rho::Int64  # galaxy minor/major ratio
-    phi::Int64  # galaxy angle
-    sigma::Int64  # galaxy scale
+
+    # galaxy minor/major ratio
+    rho::Int64
+
+    # galaxy angle
+    phi::Int64 
+
+    # galaxy scale
+    sigma::Int64
+
+    # The remaining parameters are matrices where the
+    # first column is for stars and the second is for galaxies.
+
+    # Color prior component indicators.
     kappa::Array{Int64, 2}
+
+    # Means and variances of c_s respectively.
     beta::Array{Int64, 2}
     lambda::Array{Int64, 2}
 end
 
+# The number of components in the color prior.
 const D = 2
 
 function get_param_ids()
+    # Build a ParamIndex object.
+
+    # The number of types of galaxies.
     I = 2
+
+    # The number of bands (colors).
     B = 5
 
     kappa_end = 11 + I * D

@@ -1,6 +1,8 @@
 # written by Jeffrey Regier
 # jeff [at] stat [dot] berkeley [dot] edu
 
+# Calculate values and derivatives of the variational ELBO.
+
 module ElboDeriv
 
 using CelesteTypes
@@ -8,6 +10,20 @@ import Util
 
 
 immutable SourceBrightness
+    # SensitiveFloat objects for expectations involving r_s and c_s.
+    #
+    # Args:
+    #   vs: A vector of variational parameters
+    #
+    # Attributes:
+    #   Each matrix has one row for each color and a column for
+    #   star / galaxy.  Row 3 is the gamma distribute baseline brightness,
+    #   and all other rows are lognormal offsets.
+    #   E_l_a: A 5 x 2 matrix of expectations and derivatives of
+    #     color terms
+    #   E_l_a: A 5 x 2 matrix of expectations and derivatives of
+    #     squared color terms
+
     E_l_a::Matrix{SensitiveFloat}  # [E[l|a=0], E[l]|a=1]]
     E_ll_a::Matrix{SensitiveFloat}   # [E[l^2|a=0], E[l^2]|a=1]]
 
@@ -18,6 +34,8 @@ immutable SourceBrightness
         beta = vs[ids.beta]
         lambda = vs[ids.lambda]
 
+        # E_l_a has a row for each of the five colors and columns
+        # for star / galaxy.
         E_l_a = Array(SensitiveFloat, 5, 2)
 
         for i = 1:2
@@ -25,10 +43,13 @@ immutable SourceBrightness
                 E_l_a[b, i] = zero_sensitive_float([-1], all_params)
             end
 
+            # Index 3 is r_s and has a gamma expectation.
             E_l_a[3, i].v = gamma_s[i] * zeta[i]
             E_l_a[3, i].d[ids.gamma[i]] = zeta[i]
             E_l_a[3, i].d[ids.zeta[i]] = gamma_s[i]
 
+            # The remaining indices involve c_s and have lognormal
+            # expectations times E_c_3.
             E_c_3 = exp(beta[3, i] + .5 * lambda[3, i])
             E_l_a[4, i].v = E_l_a[3, i].v * E_c_3
             E_l_a[4, i].d[ids.gamma[i]] = E_l_a[3, i].d[ids.gamma[i]] * E_c_3
@@ -104,6 +125,18 @@ end
 
 
 immutable BvnComponent
+    # Relevant parameters of a bivariate normal distribution.
+    #
+    # Args:
+    #   the_mean: The mean as a 2x1 column vector
+    #   the_cov: The covaraiance as a 2x2 matrix
+    #   weight: A scalar weight
+    #
+    # Attributes:
+    #    the_mean: The mean argument
+    #    precision: The inverse of the_cov
+    #    z: The weight times the normalizing constant.
+
     the_mean::Vector{Float64}
     precision::Matrix{Float64}
     z::Float64
@@ -117,6 +150,12 @@ end
 
 
 immutable GalaxyCacheComponent
+    # A component in the representation of a galaxy as a finite mixture of normals.
+    #
+    # Args:
+    #   theta_dir: ?
+    #   theta_i: ?
+    #   gc:  
     theta_dir::Float64
     theta_i::Float64
     bmc::BvnComponent
