@@ -13,11 +13,14 @@ const xtol_rel = 1e-7
 const ftol_abs = 1e-6
 
 const rescaling = ones(length(all_params))
+
+# Rescale some parameters to have similar dimensions to everything else.
 [rescaling[id] *= 1e-3 for id in ids.gamma]
 rescaling[ids.chi] *= 1e1
 
 
 function scale_deriv(elbo::SensitiveFloat, omitted_ids)
+        # Move between scaled and unscaled parameterizations.
 	left_ids = setdiff(all_params, [omitted_ids, ids.kappa[end, :][:]])
 	new_P = length(left_ids)
 
@@ -40,6 +43,8 @@ end
 
 
 function vp_to_coordinates(vp::Vector{Vector{Float64}}, omitted_ids::Vector{Int64})
+        # vp = variational parameters
+        # coordinates = for optimizer
 	left_ids = setdiff(all_params, [omitted_ids, ids.kappa[end, :][:]])
 	new_P = length(left_ids)
 
@@ -77,6 +82,12 @@ end
 
 
 function get_nlopt_bounds(vs::Vector{Float64})
+        # Note that sources are not allowed to move more than
+        # one pixel from their starting position in order to
+        # avoid label switiching.  (This is why this function gets
+        # the variational parameters as an argument.)
+        # vs: parameters for a particular source.
+        # vp: complete collection of sources.
 	lb = Array(Float64, length(all_params))
 	lb[ids.chi] = 1e-4
 	lb[ids.mu] = vs[ids.mu] - 1.
@@ -125,6 +136,7 @@ end
 
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[])
+        # This calls NLOpt
 	x0 = vp_to_coordinates(mp.vp, omitted_ids)
 	iter_count = 0
 

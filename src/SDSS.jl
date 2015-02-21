@@ -6,6 +6,7 @@ using FITSIO
 using WCSLIB
 using DataFrames
 
+# Just dealing with SDSS stuff.  Now tested.
 
 function load_stamp_blob(stamp_dir, stamp_id)
     function fetch_image(b)
