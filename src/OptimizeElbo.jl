@@ -81,7 +81,7 @@ end
 
 
 function get_nlopt_bounds(vs::Vector{Float64})
-# Note that sources are not allowed to move more than
+    # Note that sources are not allowed to move more than
     # one pixel from their starting position in order to
     # avoid label switiching.  (This is why this function gets
     # the variational parameters as an argument.)
