@@ -14,6 +14,7 @@ export ModelParams, PriorParams, VariationalParams
 
 export SensitiveFloat
 export zero_sensitive_float, const_sensitive_param, clear!, accum!
+#export zero_sensitive_float, const_sensitive_param, clear!
 
 export ParamIndex, ids, all_params, star_pos_params, galaxy_pos_params, D
 
@@ -219,7 +220,7 @@ immutable ParamIndex
     # The location of the object (2x1 vector)
     mu::Vector{Int64}
 
-    # 2x1 scalar variational parameters for r_s.  The first
+    # Ix1 scalar variational parameters for r_s.  The first
     # row is for stars, and the second for galaxies (I think?).
     gamma::Vector{Int64}
     zeta::Vector{Int64}
@@ -239,10 +240,10 @@ immutable ParamIndex
     # The remaining parameters are matrices where the
     # first column is for stars and the second is for galaxies.
 
-    # Color prior component indicators.
+    # DxI matrix of color prior component indicators.
     kappa::Array{Int64, 2}
 
-    # Means and variances of c_s respectively.
+    # (B - 1)xI matrices containing c_s means and variances, respectively.
     beta::Array{Int64, 2}
     lambda::Array{Int64, 2}
 end
@@ -250,10 +251,12 @@ end
 # The number of components in the color prior.
 const D = 2
 
+# TODO: also make B and I global constants?
+
 function get_param_ids()
     # Build a ParamIndex object.
 
-    # The number of types of galaxies.
+    # The number of types of celestial objects (here, stars and galaxies).
     I = 2
 
     # The number of bands (colors).
@@ -281,6 +284,18 @@ const galaxy_pos_params = [ids.mu, ids.theta, ids.rho, ids.phi, ids.sigma]
 
 type SensitiveFloat
     # A function value and its derivative with respect to its arguments.
+    #
+    # Attributes:
+    #   v: The value
+    #   d: The derivative with respect to each variable in
+    #      P-dimensional VariationalParams for each of S celestial objects
+    #      in a local_P x local_S matrix.
+    #   source_index: local_S x 1 vector of source ids with nonzero derivatives.
+    #   param_index: local_P x 1 vector of parameter indices with
+    #      nonzero derivatives. 
+    #
+    #  All derivatives not in source_index and param_index are zero.
+
     v::Float64
     d::Matrix{Float64} # local_P x local_S
     source_index::Vector{Int64}
@@ -300,6 +315,9 @@ function clear!(sp::SensitiveFloat)
 end
 
 function accum!(src::SensitiveFloat, accum::SensitiveFloat)
+    # TODO: I don't see global_p defined anywhere, and I don't think
+    # this function is used.
+
     accum.v += src.v
     for child_s in 1:size(src.d, 2)
         parent_s = src.source_index[child_s]
