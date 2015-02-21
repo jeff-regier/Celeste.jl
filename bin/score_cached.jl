@@ -1,4 +1,6 @@
 #!/usr/bin/env julia
+#
+# This post-processed the VB results to produce csv files.
 
 using Celeste
 using CelesteTypes
@@ -281,6 +283,9 @@ end
 
 
 if length(ARGS) >= 2
+    # The input file is the stamp ids you want to process.
+    # It looks for models and raw data using the environment variables
+    # $STAMP and $MODELS.  Missing stamp ids will not be handled gracefully.
     f = open(ARGS[1])
     stamp_ids = [strip(line) for line in readlines(f)]
     close(f)

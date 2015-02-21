@@ -105,6 +105,10 @@ end
 
 
 function convolve_image(img::Image)
+    # Not totally sure why this is helpful,
+    # but it may help find
+    # peaks in an image that has already been gaussian-blurred.
+    # (Ref in ICML & NIPS papers).
     kernel = matched_filter(img)
     H, W = size(img.pixels)
     padded_pixels = Array(Float64, H + 8, W + 8)
@@ -115,6 +119,7 @@ end
 
 
 function peak_starts(blob::Blob)
+    # Heuristically find the peaks in the blob.  (Blob == field)
     H, W = size(blob[1].pixels)
     added_pixels = zeros(Float64, H, W)
     for b in 1:5

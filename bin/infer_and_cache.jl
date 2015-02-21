@@ -1,5 +1,7 @@
 #!/usr/bin/env julia
 
+# Computationally intensive.  Caches VB optimum in $STAMP.
+
 using Celeste
 using CelesteTypes
 
