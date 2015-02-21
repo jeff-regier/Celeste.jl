@@ -100,22 +100,29 @@ type Image
 end
 
 immutable ImageTile
-    # Tiles of pixels that share the same set of    
-    # relevant sources (or other calculations).
-
-    # tile coordinates---not pixel or sky coordinates
-    hh::Int64 
+<<<<<<< HEAD
+        # Tiles of pixels that share the same set of relevant sources (or other calculations).
+	hh::Int64 # tile coordinates---not pixel or sky coordinates
+	ww::Int64
+	img::Image
+=======
+    hh::Int64 # tile coordinates---not pixel or sky coordinates
     ww::Int64
     img::Image
+>>>>>>> 0fed04ebd614182e4e7a1399ea678736875f8c50
 end
 
 typealias Blob Vector{Image}
 
 immutable SkyPatch #pixel coordinates for now, soon wcs
-    # The amount of sky affected by a
-    # source (regardless of the tiling).
+<<<<<<< HEAD
+        # The amount of sky affected by a source (regardless of the tiling).
+	center::Vector{Float64}
+	radius::Float64
+=======
     center::Vector{Float64}
     radius::Float64
+>>>>>>> 0fed04ebd614182e4e7a1399ea678736875f8c50
 end
 
 

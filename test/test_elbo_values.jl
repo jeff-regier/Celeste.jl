@@ -35,12 +35,12 @@ function test_kl_divergence_values()
 
     # a
     q_a = Bernoulli(vs[ids.chi])
-    p_a = Bernoulli(mp.pp.Delta)
+    p_a = Bernoulli(mp.pp.Phi)
     test_kl(q_a, p_a, (accum) -> ElboDeriv.subtract_kl_a!(s, mp, accum))
 
     # r
     q_r = Gamma(vs[ids.gamma[i]], vs[ids.zeta[i]])
-    p_r = Gamma(mp.pp.Upsilon[i], mp.pp.Phi[i])
+    p_r = Gamma(mp.pp.Upsilon[i], mp.pp.Psi[i])
     function sklr(accum)
         ElboDeriv.subtract_kl_r!(i, s, mp, accum)
         @assert i == 1
@@ -50,7 +50,7 @@ function test_kl_divergence_values()
 
     # k
     q_k = Categorical(vs[ids.kappa[:, i]])
-    p_k = Categorical(mp.pp.Psi[i])
+    p_k = Categorical(mp.pp.Xi[i])
     function sklk(accum)
         ElboDeriv.subtract_kl_k!(i, s, mp, accum)
         @assert i == 1
@@ -120,9 +120,9 @@ function test_that_star_truth_is_most_likely()
     end
 
     for b in 1:4
-        for delta in [.7, .9, 1.1, 1.3]
+        for delta in [-.3, .3]
             mp_beta = deepcopy(mp)
-            mp_beta.vp[1][ids.beta[b], 1] *= delta
+            mp_beta.vp[1][ids.beta[b, 1]] += delta
             bad_beta = ElboDeriv.elbo_likelihood(blob, mp_beta)
             @test best.v > bad_beta.v
         end
@@ -132,6 +132,7 @@ end
 
 function test_that_galaxy_truth_is_most_likely()
     blob, mp, body = gen_sample_galaxy_dataset(perturb=false)
+    mp.vp[1][ids.chi] = .99
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
     for bad_chi in [.3, .5, .9]
@@ -191,11 +192,13 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     cat_entries = filter(inbounds, cat_entries)
 
     mp = ModelInit.cat_init(cat_entries)
+    for s in 1:length(cat_entries)
+        mp.vp[s][ids.chi] = cat_entries[s].is_star ? 0.01 : 0.99
+    end
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
     # s is the brightest source: a dev galaxy!
     s = 1
-    println(cat_entries[s])
 
     for bad_scale in [.7, 1.3]
         mp_gamma = deepcopy(mp)
@@ -237,6 +240,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
             mp_beta = deepcopy(mp)
             mp_beta.vp[s][ids.beta[b, :]] += delta
             bad_beta = ElboDeriv.elbo_likelihood(blob, mp_beta)
+            info("$(best.v)  >  $(bad_beta.v)")
             @test best.v > bad_beta.v
         end
     end
@@ -268,6 +272,7 @@ function test_tiny_image_tiling()
 
     @test_approx_eq_eps accum0.v accum_tiles.v 100.
 end
+
 
 ####################################################
 

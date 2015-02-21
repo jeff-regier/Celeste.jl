@@ -34,7 +34,7 @@ function perturb_params(mp) # for testing derivatives != 0
         vs[ids.theta] += 0.05
         vs[ids.rho] += 0.05
         vs[ids.phi] += pi/10
-        vs[ids.sigma] *= 0.8
+        vs[ids.sigma] *= 1.2
         vs[ids.beta] += 0.5
         vs[ids.lambda] =  1e-1
     end
@@ -65,7 +65,7 @@ function gen_sample_galaxy_dataset(; perturb=true)
         blob0[b].H, blob0[b].W = 20, 23
     end
     one_body = [sample_ce([8.5, 9.6], false),]
-       blob = Synthetic.gen_blob(blob0, one_body)
+    blob = Synthetic.gen_blob(blob0, one_body)
     mp = ModelInit.cat_init(one_body)
     if perturb
         perturb_params(mp)
@@ -209,7 +209,6 @@ function test_tiling()
     for s in 1:mp.S
         for i in 1:length(all_params)
             @test_approx_eq_eps elbo_both.d[i, s] elbo.d[i, s] 1e-1
-            println(abs(elbo_both.d[i, s] - elbo.d[i, s]))
         end
     end
 end
