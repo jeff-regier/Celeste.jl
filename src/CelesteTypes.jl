@@ -13,11 +13,11 @@ export effective_radii
 export ModelParams, PriorParams, VariationalParams
 
 export SensitiveFloat
+
 #export zero_sensitive_float, const_sensitive_param, clear!, accum!
 export zero_sensitive_float, const_sensitive_param, clear!
 
-foo = 2
-export ParamIndex, ids, all_params, star_pos_params, galaxy_pos_params, D, foo
+export ParamIndex, ids, all_params, star_pos_params, galaxy_pos_params, D
 
 import FITSIO
 import Distributions
