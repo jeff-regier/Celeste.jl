@@ -234,7 +234,7 @@ immutable ParamIndex
     gamma::Vector{Int64}
     zeta::Vector{Int64}
 
-    # The probability of being a galaxy of type 1.
+    # The weight given to a galaxy of type 1.
     theta::Int64
 
     # galaxy minor/major ratio

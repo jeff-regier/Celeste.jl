@@ -150,11 +150,14 @@ end
 
 
 immutable GalaxyCacheComponent
-    # A the convolution of a single galaxy component with the PSF.
+    # A the convolution of a one galaxy component with one PSF component.
     #
     # Args:
-    #  - theta_dir: ?
-    #  - theta_i: The variational probabilty that the source is this type of galaxy. 
+    #  - theta_dir: "Theta direction": this is 1 or -1, depending on whether
+    #      increasing theta increases the weight of this GalaxyCacheComponent
+    #      (1) or decreases it (-1).
+    #  - theta_i: The weight given to this type of galaxy for this celestial object.
+    #      This is either theta or (1 - theta).
     #  - gc: The galaxy component to be convolved
     #  - pc: The psf component to be convolved
     #  - mu: The location of the celestial object as a 2x1 vector
