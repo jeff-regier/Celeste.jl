@@ -1,6 +1,8 @@
 # written by Jeffrey Regier
 # jeff [at] stat [dot] berkeley [dot] edu
 
+# Calculate values and derivatives of the variational ELBO.
+
 module ElboDeriv
 
 using CelesteTypes
@@ -8,6 +10,20 @@ import Util
 
 
 immutable SourceBrightness
+    # SensitiveFloat objects for expectations involving r_s and c_s.
+    #
+    # Args:
+    #   vs: A vector of variational parameters
+    #
+    # Attributes:
+    #   Each matrix has one row for each color and a column for
+    #   star / galaxy.  Row 3 is the gamma distribute baseline brightness,
+    #   and all other rows are lognormal offsets.
+    #   E_l_a: A 5 x 2 matrix of expectations and derivatives of
+    #     color terms
+    #   E_ll_a: A 5 x 2 matrix of expectations and derivatives of
+    #     squared color terms
+
     E_l_a::Matrix{SensitiveFloat}  # [E[l|a=0], E[l]|a=1]]
     E_ll_a::Matrix{SensitiveFloat}   # [E[l^2|a=0], E[l^2]|a=1]]
 
@@ -18,6 +34,8 @@ immutable SourceBrightness
         beta = vs[ids.beta]
         lambda = vs[ids.lambda]
 
+        # E_l_a has a row for each of the five colors and columns
+        # for star / galaxy.
         E_l_a = Array(SensitiveFloat, 5, 2)
 
         for i = 1:2
@@ -25,10 +43,13 @@ immutable SourceBrightness
                 E_l_a[b, i] = zero_sensitive_float([-1], all_params)
             end
 
+            # Index 3 is r_s and has a gamma expectation.
             E_l_a[3, i].v = gamma_s[i] * zeta[i]
             E_l_a[3, i].d[ids.gamma[i]] = zeta[i]
             E_l_a[3, i].d[ids.zeta[i]] = gamma_s[i]
 
+            # The remaining indices involve c_s and have lognormal
+            # expectations times E_c_3.
             E_c_3 = exp(beta[3, i] + .5 * lambda[3, i])
             E_l_a[4, i].v = E_l_a[3, i].v * E_c_3
             E_l_a[4, i].d[ids.gamma[i]] = E_l_a[3, i].d[ids.gamma[i]] * E_c_3
@@ -104,6 +125,18 @@ end
 
 
 immutable BvnComponent
+    # Relevant parameters of a bivariate normal distribution.
+    #
+    # Args:
+    #   the_mean: The mean as a 2x1 column vector
+    #   the_cov: The covaraiance as a 2x2 matrix
+    #   weight: A scalar weight
+    #
+    # Attributes:
+    #    the_mean: The mean argument
+    #    precision: The inverse of the_cov
+    #    z: The weight times the normalizing constant.
+
     the_mean::Vector{Float64}
     precision::Matrix{Float64}
     z::Float64
@@ -117,6 +150,28 @@ end
 
 
 immutable GalaxyCacheComponent
+    # A the convolution of a one galaxy component with one PSF component.
+    #
+    # Args:
+    #  - theta_dir: "Theta direction": this is 1 or -1, depending on whether
+    #      increasing theta increases the weight of this GalaxyCacheComponent
+    #      (1) or decreases it (-1).
+    #  - theta_i: The weight given to this type of galaxy for this celestial object.
+    #      This is either theta or (1 - theta).
+    #  - gc: The galaxy component to be convolved
+    #  - pc: The psf component to be convolved
+    #  - mu: The location of the celestial object as a 2x1 vector
+    #  - rho: The ratio of the galaxy minor axis to major axis (0 < rho <= 1)
+    #  - sigma: The scale of the galaxy major axis
+    #
+    # Attributes:
+    #  - theta_dir: Same as input
+    #  - theta_i: Same as input
+    #  - bmc: A BvnComponent with the convolution.
+    #  - dSigma: A 3x3 matrix containing the derivates of
+    #      [Sigma11, Sigma12, Sigma22] (in the rows) with respect to
+    #      [rho, phi, sigma]
+
     theta_dir::Float64
     theta_i::Float64
     bmc::BvnComponent
@@ -146,21 +201,44 @@ end
 
 
 function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
+    # Convolve the current locations and galaxy shapes with the PSF.
+    #
+    # Args:
+    #  - psf: A vector of PSF components
+    #  - mp: The current ModelParams
+    #
+    # Returns:
+    #  - star_mcs: An # of PSF components x # of sources array of BvnComponents
+    #  - gal_mcs: An array of BvnComponents with indices
+    #     - PSF component
+    #     - Galaxy component
+    #     - Galaxy type
+    #     - Source
+
+    # The PSF contains three components, so you see lots of 3's below.
+    # TODO: don't hard-code the number of PSF components
+    # TODO: don't hard code the number of galaxy components (8 and 6 below) either.
+
     star_mcs = Array(BvnComponent, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent, 3, 8, 2, mp.S)
 
     for s in 1:mp.S
         vs = mp.vp[s]
 
+        # Convolve the star locations with the PSF.
         for k in 1:3
             pc = psf[k]
             mean_s = [pc.xiBar[1] + vs[ids.mu[1]], pc.xiBar[2] + vs[ids.mu[2]]]
             star_mcs[k, s] = BvnComponent(mean_s, pc.SigmaBar, pc.alphaBar)
         end
 
+        # Convolve the galaxy representations with the PSF.
         for i = 1:2
+            # TODO: Jeff, could you say what theta_dir is?
             theta_dir = (i == 1) ? 1. : -1.
             theta_i = (i == 1) ? vs[ids.theta] : 1. - vs[ids.theta]
+
+            # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
             for j in 1:[8,6][i]
                 for k = 1:3
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
@@ -176,6 +254,15 @@ end
 
 
 function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
+    # Return quantities related to the pdf of an offset bivariate normal.
+    #
+    # Args:
+    #   - bmc: A bivariate normal component
+    #   - x: A 2x1 vector containing a mean offset to be applied to bmc
+    #
+    # Returns:
+    #   - Stuff
+
     y1 = x[1] - bmc.the_mean[1]
     y2 = x[2] - bmc.the_mean[2]
     py1 = bmc.precision[1,1] * y1 + bmc.precision[1,2] * y2
@@ -187,21 +274,47 @@ end
 
 
 function accum_star_pos!(bmc::BvnComponent, x::Vector{Float64},
-        fs0m::SensitiveFloat)
+                         fs0m::SensitiveFloat)
+    # Add the contributions of a star's bivariate normal term to the ELBO.
+    #
+    # Args:
+    #   - bmc: The component to be added
+    #   - x: An offset for the component (e.g. a source location)
+    #   - fs0m: A SensitiveFloat to which the value of the bvn likelihood
+    #        and its derivatives with respect to x are added.
+    #
+    # Returns:
+    #   Updates fs0m in place.
+
     py1, py2, f = ret_pdf(bmc, x)
 
     fs0m.v += f
+
+    # TODO: reference this with ids
     fs0m.d[1] += f .* py1 #mu1
     fs0m.d[2] += f .* py2 #mu2
 end
 
 
 function accum_galaxy_pos!(gcc::GalaxyCacheComponent, x::Vector{Float64},
-        fs1m::SensitiveFloat)
+                           fs1m::SensitiveFloat)
+    # Add the contributions of a galaxy component term to the ELBO.
+    #
+    # Args:
+    #   - gcc: The galaxy component to be added
+    #   - x: An offset for the component (e.g. a source location)
+    #   - fs1m: A SensitiveFloat to which the value of the likelihood
+    #        and its derivatives with respect to x are added.
+    #
+    # Returns:
+    #   Updates fs1m in place.
+
     py1, py2, f_pre = ret_pdf(gcc.bmc, x)
     f = f_pre * gcc.theta_i
 
     fs1m.v += f
+
+    # TODO: reference this with ids
     fs1m.d[1] += f .* py1 #mu1
     fs1m.d[2] += f .* py2 #mu2
     fs1m.d[3] += gcc.theta_dir * f_pre #theta
