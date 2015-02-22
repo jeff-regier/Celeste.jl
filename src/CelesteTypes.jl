@@ -13,7 +13,8 @@ export effective_radii
 export ModelParams, PriorParams, VariationalParams
 
 export SensitiveFloat
-export zero_sensitive_float, const_sensitive_param, clear!, accum!
+
+export zero_sensitive_float, const_sensitive_param, clear!
 
 export ParamIndex, ids, all_params, star_pos_params, galaxy_pos_params, D
 
@@ -39,6 +40,13 @@ end
 ############################################
 
 immutable GalaxyComponent
+    # Parameters of a single normal component of a galaxy.
+    #
+    # Attributes:
+    #   alphaTilde: The weight of the galaxy component (eta_bar in the ICML submission)
+    #   sigmaTilde: The scale of the galaxy component (nu_bar in the ICLM submission)
+    # TODO: Sync up the notation between the code and the writeup
+
     alphaTilde::Float64
     sigmaTilde::Float64
 end
@@ -46,6 +54,12 @@ end
 typealias GalaxyPrototype Vector{GalaxyComponent}
 
 function get_galaxy_prototypes()
+    # Pre-defined shapes for galaxies.
+    #
+    # Returns:
+    #   dev_prototype: An array of GalaxyComponent for de Vaucouleurs galaxy types
+    #   exp_prototype: An array of GalaxyComponent for exponenttial galaxy types
+
     exp_amp = [
         2.34853813e-03, 3.07995260e-02, 2.23364214e-01,
         1.17949102e+00, 4.33873750e+00, 5.99820770e+00]
@@ -68,10 +82,28 @@ end
 
 const galaxy_prototypes = get_galaxy_prototypes()
 
+# Adjustments to the effective radius hard-coded into get_galaxy_prototypes.
+# (The effective radius is the distance from the center containing half the light.)
 const effective_radii = [0.482910, 0.551853]
 
 
 immutable PsfComponent
+    # A single normal component of the point spread function.
+    #
+    # Args:
+    #   alphaBar: The scalar weight of the component. 
+    #   xiVar: The 2x1 location vector
+    #   Sigmabar: The 2x2 covariance
+    #
+    # Attributes:
+    #   alphaBar: The scalar weight of the component. 
+    #   xiVar: The 2x1 location vector
+    #   Sigmabar: The 2x2 covariance (tau_bar in the ICLM paper)
+    #   SigmaBarInv: The 2x2 precision
+    #   SigmaBarLd: The log determinant of the covariance
+    #
+    # TODO: Change Sigmabar to tau_bar to match the ICML submission.
+
     alphaBar::Float64  # TODO: use underscore
     xiBar::Vector{Float64}
     SigmaBar::Matrix{Float64}
@@ -86,14 +118,35 @@ immutable PsfComponent
 end
 
 type Image
+    # An image for a single color.
+
+    # The image height.
     H::Int64
+
+    # The image width.
     W::Int64
+
+    # An HxW matrix of pixel intensities.
     pixels::Matrix{Float64}
+
+    # The band id (takes on values from 1 to 5).
     b::Int64
+
+    # World coordinates
     wcs::WCSLIB.wcsprm
+
+    # The background noise in nanomaggies.
     epsilon::Float64
+
+    # The expected number of photons contributed to this image
+    # by a source 1 nanomaggie in brightness.
     iota::Float64
+
+    # The components of the point spread function.
     psf::Vector{PsfComponent}
+
+    # SDSS-specific identifiers. A field is a particular region of the sky.
+    # A Camcol is the output of one camera column as part of a Run.
     run_num::Int64
     camcol_num::Int64
     field_num::Int64
@@ -109,6 +162,7 @@ immutable ImageTile
     img::Image
 end
 
+# A vector of images, one for each color.
 typealias Blob Vector{Image}
 
 immutable SkyPatch #pixel coordinates for now, soon wcs
@@ -128,23 +182,41 @@ immutable PriorParams
     Xi::Vector{Vector{Float64}}               # mixing weight prior on c_s
     Omega::Vector{Array{Float64, 2}}          # mean prior on c_s
     Lambda::Vector{Array{Array{Float64, 2}}}  # cov prior on c_s
+
+    # Regulazers for the ELBO to discourage small galaxies.
     mu_reg::Float64
     sigma_reg::Float64
     alpha_reg::Float64
     beta_reg::Float64
 end
 
+# A vector of variational parameters.  The outer index is
+# of celestial objects, and the inner index is over individual
+# parameters for that object (referenced using ParamIndex).
 # TODO: use a matrix here, in conjunction with ArrayViews.jl (?)
 typealias VariationalParams Vector{Vector{Float64}}
 
 type ModelParams
+    # The parameters for a particular image.
+    #
+    # Attributes:
+    #  - vp: The variational parameters
+    #  - pp: The prior parameters
+    #  - patches: A vector of SkyPatch objects
+    #  - tile_width: The number of pixels across a tile
+    #  - S: The number of sources.
+
+    # The following meanings are clear from the names.
     vp::VariationalParams
     pp::PriorParams
     patches::Vector{SkyPatch}
     tile_width::Int64
+
+    # The number of sources.
     S::Int64
 
     ModelParams(vp, pp, patches, tile_width) = begin
+        # There must be one patch for each celestial object.
         @assert length(vp) == length(patches)
         new(vp, pp, patches, tile_width, length(vp))
     end
@@ -153,23 +225,56 @@ end
 #########################################################
 
 immutable ParamIndex
+    # A data structure to index parameters within
+    # a VariationalParams object.
+
+    # Variational parameter for a_s.
+    # The probability of being a galaxy.  (0 = star, 1 = galaxy)
     chi::Int64
+
+    # The location of the object (2x1 vector)
     mu::Vector{Int64}
+
+    # Ix1 scalar variational parameters for r_s.  The first
+    # row is for stars, and the second for galaxies (I think?).
     gamma::Vector{Int64}
     zeta::Vector{Int64}
+
+    # The weight given to a galaxy of type 1.
     theta::Int64
-    rho::Int64  # galaxy minor/major ratio
-    phi::Int64  # galaxy angle
-    sigma::Int64  # galaxy scale
+
+    # galaxy minor/major ratio
+    rho::Int64
+
+    # galaxy angle
+    phi::Int64 
+
+    # galaxy scale
+    sigma::Int64
+
+    # The remaining parameters are matrices where the
+    # first column is for stars and the second is for galaxies.
+
+    # DxI matrix of color prior component indicators.
     kappa::Array{Int64, 2}
+
+    # (B - 1)xI matrices containing c_s means and variances, respectively.
     beta::Array{Int64, 2}
     lambda::Array{Int64, 2}
 end
 
+# The number of components in the color prior.
 const D = 2
 
+# TODO: also make B and I global constants?
+
 function get_param_ids()
+    # Build a ParamIndex object.
+
+    # The number of types of celestial objects (here, stars and galaxies).
     I = 2
+
+    # The number of bands (colors).
     B = 5
 
     kappa_end = 11 + I * D
@@ -194,6 +299,18 @@ const galaxy_pos_params = [ids.mu, ids.theta, ids.rho, ids.phi, ids.sigma]
 
 type SensitiveFloat
     # A function value and its derivative with respect to its arguments.
+    #
+    # Attributes:
+    #   v: The value
+    #   d: The derivative with respect to each variable in
+    #      P-dimensional VariationalParams for each of S celestial objects
+    #      in a local_P x local_S matrix.
+    #   source_index: local_S x 1 vector of source ids with nonzero derivatives.
+    #   param_index: local_P x 1 vector of parameter indices with
+    #      nonzero derivatives. 
+    #
+    #  All derivatives not in source_index and param_index are zero.
+
     v::Float64
     d::Matrix{Float64} # local_P x local_S
     source_index::Vector{Int64}
@@ -210,18 +327,6 @@ end
 function clear!(sp::SensitiveFloat)
     sp.v = 0.
     fill!(sp.d, 0.)
-end
-
-function accum!(src::SensitiveFloat, accum::SensitiveFloat)
-    accum.v += src.v
-    for child_s in 1:size(src.d, 2)
-        parent_s = src.source_index[child_s]
-        #parent_s and parent_p aren't necessarily global indexes
-        for child_p in 1:size(src.d, 1)
-            parent_p = src.index[child_p]
-            accum.d[global_p, tile_s] += src.d[child_p, child_s]
-        end
-    end
 end
 
 #########################################################
