@@ -353,8 +353,8 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
     #   - gal_mcs: An array of galaxy * PSF components.  The index order is
     #       PSF component x galaxy component x galaxy type x source
     #   - vs: The variational parameters for this source
-    #   - child_s: ?
-    #   - parent_s: The index of this source.
+    #   - child_s: The index of this source within the tile.
+    #   - parent_s: The global index of this source.
     #   - m_pos: A 2x1 vector with the pixel location
     #   - b: The band (1 to 5)
     #   - fs0m: The accumulated star contributions (updated in place)
@@ -403,8 +403,6 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
 
     # Add the contributions of this source in this band to
     # the derivatibes of E(G) and Var(G).
-
-    # Why child_s?
 
     # Chi derivatives:
     lf_diff = lf[2] - lf[1]
@@ -545,10 +543,26 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         star_mcs::Array{BvnComponent, 2},
         gal_mcs::Array{GalaxyCacheComponent, 4},
         accum::SensitiveFloat)
+    # Add a tile's contribution to the ELBO likelihood term.
+    #
+    # Args:
+    #   - tile: An image tile.
+    #   - mp: The current model parameters.
+    #   - sbs: The currne source brightnesses.
+    #   - star_mcs: All the star * PCF components.
+    #   - gal_mcs: All the galaxy * PCF components.
+    #   - accum: The ELBO log likelihood to be updated.
+    #
+    # Returns:
+    #   - Adds the tile's contributions to the ELBO log likelihood
+    #     to accum in place. 
+
     tile_sources = local_sources(tile, mp)
     h_range, w_range = tile_range(tile, mp.tile_width)
 
-    if length(tile_sources) == 0  # special case---for speed
+    # For speed, if there are no sources, add the noise
+    # contribution directly.
+    if length(tile_sources) == 0
         num_pixels = length(h_range) * length(w_range)
         tile_x = sum(tile.img.pixels[h_range, w_range])
         ep = tile.img.epsilon
@@ -557,12 +571,16 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         return
     end
 
+    # fs0m and fs1m accumulate contributions from all sources,
+    # and so we say their derivatives are with respect to
+    # source "-1".
     fs0m = zero_sensitive_float([-1], star_pos_params)
     fs1m = zero_sensitive_float([-1], galaxy_pos_params)
 
     E_G = zero_sensitive_float(tile_sources, all_params)
     var_G = zero_sensitive_float(tile_sources, all_params)
 
+    # Iterate over pixels.
     for w in w_range, h in h_range
         clear!(E_G)
         E_G.v = tile.img.epsilon
@@ -583,6 +601,16 @@ end
 
 
 function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
+    # Add the expected log likelihood ELBO term for an image to accum.
+    #
+    # Args:
+    #   - img: An image
+    #   - mp: The current model parameters.
+    #   - accum: A sensitive float containing the ELBO.
+    #
+    # Returns:
+    #   - Adds the expected log likelihood to accum in place.
+
     accum.v += -sum(lfact(img.pixels))
 
     star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp)
@@ -600,6 +628,9 @@ end
 
 
 function elbo_likelihood(blob::Blob, mp::ModelParams)
+    # Return the expected log likelihood for all bands in a section
+    # of the sky.
+
     ret = zero_sensitive_float([1:mp.S], all_params)
     for img in blob
         elbo_likelihood!(img, mp, ret)
