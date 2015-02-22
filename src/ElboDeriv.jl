@@ -440,16 +440,39 @@ end
 function accum_pixel_ret!(tile_sources::Vector{Int64},
         x_nbm::Float64, iota::Float64,
         E_G::SensitiveFloat, var_G::SensitiveFloat, ret::SensitiveFloat)
+    # Add the contributions of a (?) to the ELBO.
+    #
+    # Args:
+    #   - tile_sources: A vector of source ids influencing this tile
+    #   - x_nbm: The photon count at this pixel
+    #   - iota: The camera sensitivity
+    #   - E_G: The expected value of G for (?)
+    #   - var_G: The variance of G for (?)
+    #   - ret: A SensitiveFloat for the ELBO which is updated
+    #
+    # Returns:
+    #   - Adds the contributions to ret in place.
 
+
+    # Accumulate the values.
+    # Add the lower bound to the E_q[log(F_{nbm})] term
     ret.v += x_nbm * (log(iota) + log(E_G.v) - var_G.v / (2. * E_G.v^2))
+
+    # Subtract the E_q[F_{nbm}] term.
     ret.v -= iota * E_G.v
 
+    # Accumulate the derivatives.
     for child_s in 1:length(tile_sources), p in 1:size(E_G.d, 1)
         parent_s = tile_sources[child_s]
-        ret.d[p, parent_s] += x_nbm * (E_G.d[p, child_s] / E_G.v
-            - 0.5 * (E_G.v^2 * var_G.d[p, child_s] -
-                var_G.v * 2 * E_G.v * E_G.d[p, child_s])
-                    ./  E_G.v^4)
+
+        # Derivative of the log term lower bound.
+        ret.d[p, parent_s] +=
+            x_nbm * (E_G.d[p, child_s] / E_G.v
+                     - 0.5 * (E_G.v^2 * var_G.d[p, child_s]
+                              - var_G.v * 2 * E_G.v * E_G.d[p, child_s])
+                        ./  E_G.v^4)
+
+        # Derivative of the linear term.
         ret.d[p, parent_s] -= iota * E_G.d[p, child_s]
     end
 end
