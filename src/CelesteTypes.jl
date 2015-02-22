@@ -43,8 +43,9 @@ immutable GalaxyComponent
     # Parameters of a single normal component of a galaxy.
     #
     # Attributes:
-    #   alphaTilde: The weight of the component.
-    #   sigmaTilde: (?)
+    #   alphaTilde: The weight of the galaxy component (eta_bar in the ICML submission)
+    #   sigmaTilde: The scale of the galaxy component (nu_bar in the ICLM submission)
+    # TODO: Sync up the notation between the code and the writeup
 
     alphaTilde::Float64
     sigmaTilde::Float64
@@ -56,8 +57,8 @@ function get_galaxy_prototypes()
     # Pre-defined shapes for galaxies.
     #
     # Returns:
-    #   dev_prototype: An array of GalaxyComponent for (?) galaxy types
-    #   exp_prototype: An array of GalaxyComponent for (?) galaxy types
+    #   dev_prototype: An array of GalaxyComponent for de Vaucouleurs galaxy types
+    #   exp_prototype: An array of GalaxyComponent for exponenttial galaxy types
 
     exp_amp = [
         2.34853813e-03, 3.07995260e-02, 2.23364214e-01,
@@ -81,7 +82,8 @@ end
 
 const galaxy_prototypes = get_galaxy_prototypes()
 
-# What is this?
+# Adjustments to the effective radius hard-coded into get_galaxy_prototypes.
+# (The effective radius is the distance from the center containing half the light.)
 const effective_radii = [0.482910, 0.551853]
 
 
@@ -96,9 +98,11 @@ immutable PsfComponent
     # Attributes:
     #   alphaBar: The scalar weight of the component. 
     #   xiVar: The 2x1 location vector
-    #   Sigmabar: The 2x2 covariance
+    #   Sigmabar: The 2x2 covariance (tau_bar in the ICLM paper)
     #   SigmaBarInv: The 2x2 precision
     #   SigmaBarLd: The log determinant of the covariance
+    #
+    # TODO: Change Sigmabar to tau_bar to match the ICML submission.
 
     alphaBar::Float64  # TODO: use underscore
     xiBar::Vector{Float64}
@@ -125,22 +129,24 @@ type Image
     # An HxW matrix of pixel intensities.
     pixels::Matrix{Float64}
 
-    # ?
+    # The band id (takes on values from 1 to 5).
     b::Int64
 
-    # World coordinates?
+    # World coordinates
     wcs::WCSLIB.wcsprm
 
-    # The background noise.
+    # The background noise in nanomaggies.
     epsilon::Float64
 
-    # The scale of the poisson distribution generating pixel intensitites.
+    # The expected number of photons contributed to this image
+    # by a source 1 nanomaggie in brightness.
     iota::Float64
 
     # The components of the point spread function.
     psf::Vector{PsfComponent}
 
-    # ?
+    # SDSS-specific identifiers. A field is a particular region of the sky.
+    # A Camcol is the output of one camera column as part of a Run.
     run_num::Int64
     camcol_num::Int64
     field_num::Int64
@@ -177,7 +183,7 @@ immutable PriorParams
     Omega::Vector{Array{Float64, 2}}          # mean prior on c_s
     Lambda::Vector{Array{Array{Float64, 2}}}  # cov prior on c_s
 
-    # ?
+    # Regulazers for the ELBO to discourage small galaxies.
     mu_reg::Float64
     sigma_reg::Float64
     alpha_reg::Float64
