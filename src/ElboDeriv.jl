@@ -440,18 +440,18 @@ end
 function accum_pixel_ret!(tile_sources::Vector{Int64},
         x_nbm::Float64, iota::Float64,
         E_G::SensitiveFloat, var_G::SensitiveFloat, ret::SensitiveFloat)
-    # Add the contributions of a (?) to the ELBO.
+    # Add the contributions of a G term to the ELBO.
     #
     # Args:
     #   - tile_sources: A vector of source ids influencing this tile
     #   - x_nbm: The photon count at this pixel
     #   - iota: The camera sensitivity
-    #   - E_G: The expected value of G for (?)
-    #   - var_G: The variance of G for (?)
+    #   - E_G: The expected value of G
+    #   - var_G: The variance of G
     #   - ret: A SensitiveFloat for the ELBO which is updated
     #
     # Returns:
-    #   - Adds the contributions to ret in place.
+    #   - Adds the contributions of E_G and var_G to ret in place.
 
 
     # Accumulate the values.
@@ -478,25 +478,28 @@ function accum_pixel_ret!(tile_sources::Vector{Int64},
 end
 
 
-function accum_pixel_ret2!(tile_sources::Vector{Int64},
-        x_nbm::Float64, iota::Float64,
-        E_G::SensitiveFloat, var_G::SensitiveFloat, ret::SensitiveFloat)
+# This does not appear to be used.
+# function accum_pixel_ret2!(tile_sources::Vector{Int64},
+#         x_nbm::Float64, iota::Float64,
+#         E_G::SensitiveFloat, var_G::SensitiveFloat, ret::SensitiveFloat)
 
-    ret.v += x_nbm * (log(x_nbm) - 1.5)
-    ret.v += iota * E_G.v
-    ret.v -= iota^2/(2x_nbm) * var_G.v
-    ret.v -= iota^2/(2x_nbm) * E_G.v^2
+#     ret.v += x_nbm * (log(x_nbm) - 1.5)
+#     ret.v += iota * E_G.v
+#     ret.v -= iota^2/(2x_nbm) * var_G.v
+#     ret.v -= iota^2/(2x_nbm) * E_G.v^2
 
-    for child_s in 1:length(tile_sources), p in 1:size(E_G.d, 1)
-        parent_s = tile_sources[child_s]
-        ret.d[p, parent_s] += iota * E_G.d[p, child_s]
-        ret.d[p, parent_s] -= iota^2/(2x_nbm) * var_G.d[p, child_s]
-        ret.d[p, parent_s] -= iota^2/x_nbm * E_G.v * E_G.d[p, child_s]
-    end
-end
+#     for child_s in 1:length(tile_sources), p in 1:size(E_G.d, 1)
+#         parent_s = tile_sources[child_s]
+#         ret.d[p, parent_s] += iota * E_G.d[p, child_s]
+#         ret.d[p, parent_s] -= iota^2/(2x_nbm) * var_G.d[p, child_s]
+#         ret.d[p, parent_s] -= iota^2/x_nbm * E_G.v * E_G.d[p, child_s]
+#     end
+# end
 
 
 function tile_range(tile::ImageTile, tile_width::Int64)
+    # Return the range of image pixels in an ImageTile.
+
     h1 = 1 + (tile.hh - 1) * tile_width
     h2 = min(tile.hh * tile_width, tile.img.H)
     w1 = 1 + (tile.ww - 1) * tile_width
@@ -506,8 +509,20 @@ end
 
 
 function local_sources(tile::ImageTile, mp::ModelParams)
+    # Return 
+    #
+    # Args:
+    #   - tile: An ImageTile (containing tile coordinates)
+    #   - mp: Model parameters.
+    #
+    # Returns:
+    #   - A vector of source ids (from 1 to mp.S) that influence
+    #     pixels in the tile.  A source influences a tile if
+    #     there is any overlap in their squares of influence.
+
     local_subset = Array(Int64, 0)
 
+    # "Radius" is used in the sense of an L_{\infty} norm.
     tr = mp.tile_width / 2.  # tile radius
     tc1 = tr + (tile.hh - 1) * mp.tile_width
     tc2 = tr + (tile.ww - 1) * mp.tile_width
