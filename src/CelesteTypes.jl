@@ -156,8 +156,11 @@ immutable ImageTile
     # Tiles of pixels that share the same set of    
     # relevant sources (or other calculations).
 
-    # tile coordinates---not pixel or sky coordinates
-    hh::Int64 
+    # These are in tile coordinates --- not pixel or sky coordinates.
+    # (I.e., the range of hh and ww are the number of horizontal
+    #  and vertical tiles in the image, respectively.)
+
+    hh::Int64
     ww::Int64
     img::Image
 end
