@@ -20,9 +20,11 @@ immutable SourceBrightness
     #   star / galaxy.  Row 3 is the gamma distribute baseline brightness,
     #   and all other rows are lognormal offsets.
     #   E_l_a: A 5 x 2 matrix of expectations and derivatives of
-    #     color terms
+    #     color terms.  The rows are bands, and the columns
+    #     are star / galaxy.
     #   E_ll_a: A 5 x 2 matrix of expectations and derivatives of
-    #     squared color terms
+    #     squared color terms.  The rows are bands, and the columns
+    #     are star / galaxy.
 
     E_l_a::Matrix{SensitiveFloat}  # [E[l|a=0], E[l]|a=1]]
     E_ll_a::Matrix{SensitiveFloat}   # [E[l^2|a=0], E[l^2]|a=1]]
@@ -273,13 +275,14 @@ function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
 end
 
 
-function accum_star_pos!(bmc::BvnComponent, x::Vector{Float64},
+function accum_star_pos!(bmc::BvnComponent,
+                         x::Vector{Float64},
                          fs0m::SensitiveFloat)
     # Add the contributions of a star's bivariate normal term to the ELBO.
     #
     # Args:
     #   - bmc: The component to be added
-    #   - x: An offset for the component (e.g. a source location)
+    #   - x: An offset for the component (e.g. a pixel location)
     #   - fs0m: A SensitiveFloat to which the value of the bvn likelihood
     #        and its derivatives with respect to x are added.
     #
@@ -296,13 +299,14 @@ function accum_star_pos!(bmc::BvnComponent, x::Vector{Float64},
 end
 
 
-function accum_galaxy_pos!(gcc::GalaxyCacheComponent, x::Vector{Float64},
+function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
+                           x::Vector{Float64},
                            fs1m::SensitiveFloat)
     # Add the contributions of a galaxy component term to the ELBO.
     #
     # Args:
     #   - gcc: The galaxy component to be added
-    #   - x: An offset for the component (e.g. a source location)
+    #   - x: An offset for the component (e.g. a pixel location)
     #   - fs1m: A SensitiveFloat to which the value of the likelihood
     #        and its derivatives with respect to x are added.
     #
@@ -339,21 +343,51 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
         m_pos::Vector{Float64}, b::Int64,
         fs0m::SensitiveFloat, fs1m::SensitiveFloat,
         E_G::SensitiveFloat, var_G::SensitiveFloat)
+    # Add up the ELBO values and derivatives for a single source
+    # in a single band.
+    #
+    # Args:
+    #   - sb: The source's brightness expectations and derivatives
+    #   - star_mcs: An array of star * PSF components.  The index
+    #       order is PSF component x source.
+    #   - gal_mcs: An array of galaxy * PSF components.  The index order is
+    #       PSF component x galaxy component x galaxy type x source
+    #   - vs: The variational parameters for this source
+    #   - child_s: ?
+    #   - parent_s: The index of this source.
+    #   - m_pos: A 2x1 vector with the pixel location
+    #   - b: The band (1 to 5)
+    #   - fs0m: The accumulated star contributions (updated in place)
+    #   - fs1m: The accumulated galaxy contributions (updated in place)
+    #   - E_G: Expected celestial signal in this band (G_{nbm})
+    #        (updated in place)
+    #   - var_G: Variance of G (updated in place)
+    #
+    # Returns:
+    #   - Clears and updates fs0m, fs1m with the total
+    #     star and galaxy contributions to the ELBO from this source
+    #     in this band.  Adds the contributions to E_G and var_G.
 
+    # Accumulate over PSF components.
     clear!(fs0m)
     for star_mc in star_mcs[:, parent_s]
         accum_star_pos!(star_mc, m_pos, fs0m)
     end
 
     clear!(fs1m)
-    for i = 1:2
-        for j in 1:[8,6][i]
-            for k = 1:3
+    # TODO: Don't hard-code the index ranges.
+    for i = 1:2 # Galaxy types
+        for j in 1:[8,6][i] # Galaxy component
+            for k = 1:3 # PSF component
                 accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, fs1m)
             end
         end
     end
 
+    # Add the contributions of this source in this band to
+    # E(G) and Var(G).
+
+    # In the structures below, 1 = star and 2 = galaxy.
     chi = (1. - vs[ids.chi], vs[ids.chi])
     fsm = (fs0m, fs1m)
     lf = (sb.E_l_a[b, 1].v * fs0m.v, sb.E_l_a[b, 2].v * fs1m.v)
@@ -361,14 +395,26 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
 
     E_G_s_v = chi[1] * lf[1] + chi[2] * lf[2]
     E_G.v += E_G_s_v
+
+    # These formulas for the variance of G use the fact that the
+    # variational distributions of each source and band are independent.
     var_G.v -= E_G_s_v^2
     var_G.v += chi[1] * llff[1] + chi[2] * llff[2]
 
+    # Add the contributions of this source in this band to
+    # the derivatibes of E(G) and Var(G).
+
+    # Why child_s?
+
+    # Chi derivatives:
     lf_diff = lf[2] - lf[1]
     E_G.d[ids.chi, child_s] += lf_diff
     var_G.d[ids.chi, child_s] -= 2 * E_G_s_v * lf_diff
     var_G.d[ids.chi, child_s] += llff[2] - llff[1]
-    for i in 1:2
+
+    # Derivatives with respect to the normal component parameters.
+    for i in 1:2 # Stars and galaxies
+        # Loop over parameters for each fsm component.
         for p1 in 1:length(fsm[i].param_index)
             p0 = fsm[i].param_index[p1]
             chi_fd = chi[i] * fsm[i].d[p1]
@@ -379,7 +425,8 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
         end
     end
 
-    for i in 1:2
+    # Derivatives with respect to the brightness parameters.
+    for i in 1:2 # Stars and galaxies
         for p0 in vcat(ids.gamma, ids.zeta, ids.beta[:], ids.lambda[:])
             chi_f_Eld = chi[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
             E_G.d[p0, child_s] += chi_f_Eld
