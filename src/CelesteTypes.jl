@@ -186,6 +186,8 @@ immutable PriorParams
     Omega::Vector{Array{Float64, 2}}          # mean prior on c_s
     Lambda::Vector{Array{Array{Float64, 2}}}  # cov prior on c_s
 
+    # TODO: include Lambda^-1 in this structure.
+
     # Regulazers for the ELBO to discourage small galaxies.
     mu_reg::Float64
     sigma_reg::Float64
