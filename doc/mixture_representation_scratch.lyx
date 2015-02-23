@@ -60,6 +60,15 @@
 \begin_body
 
 \begin_layout Standard
+This is just stream of consciousness thinking about representing the Celeste
+ likelihood as a mixture with auxiliary variables.
+\end_layout
+
+\begin_layout Section
+Naive Mixture
+\end_layout
+
+\begin_layout Standard
 We have
 \begin_inset Formula 
 \begin{eqnarray*}
@@ -186,18 +195,6 @@ P\left(z_{k}=1\right) & = & w_{k}\\
 \begin_layout Standard
 No, certainly not.
  Given that, this approach is doomed.
-\begin_inset Newline newline
-\end_inset
-
-
-\begin_inset Newline newline
-\end_inset
-
-
-\begin_inset Newline newline
-\end_inset
-
-
 \end_layout
 
 \begin_layout Standard
@@ -287,6 +284,212 @@ P\left(z_{sik}=1\right) & = & w_{ki}
 \end_inset
 
 
+\end_layout
+
+\begin_layout Section
+Additive Stability
+\end_layout
+
+\begin_layout Standard
+Imagine trying to estimate 
+\begin_inset Formula $P\left(\lambda\vert x\right)$
+\end_inset
+
+ with 
+\begin_inset Formula 
+\begin{eqnarray*}
+P\left(x\vert\lambda\right) & = & Poisson\left(\sum_{k}\lambda_{k}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+We can also represent using the additive stability of the Poisson distribution
+ as
+\begin_inset Formula 
+\begin{eqnarray*}
+P\left(z_{k}\vert\lambda_{k}\right) & = & Poisson\left(\lambda_{k}\right)\\
+x & = & \sum_{k}z_{k}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Conditional on
+\begin_inset Formula 
+\begin{eqnarray*}
+P\left(\lambda,z\vert x\right) & = & \frac{P\left(\lambda\vert z,x\right)P\left(z\vert x\right)}{P\left(x\right)}\\
+ & = & \frac{P\left(\lambda\vert z\right)P\left(z\vert x\right)}{P\left(x\right)}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+However, only 
+\begin_inset Formula $P\left(z\vert\lambda,x\right)$
+\end_inset
+
+ is easy to evaluate.
+ Still, we can write the log likelihood as
+\begin_inset Formula 
+\[
+P\left(x\vert z,\lambda\right)=P\left(z\vert x,\lambda\right)\frac{P\left(x\vert\lambda\right)}{P\left(z\vert\lambda\right)}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+And 
+\begin_inset Formula $P\left(z\vert x,\lambda\right)=Binomial\left(x,\lambda/\sum\lambda_{k}\right)$
+\end_inset
+
+.
+ We still have the annoying other terms though.
+ What am I thinking?
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+P\left(x\vert\lambda\right) & = & \sum_{z:\sum z_{k}=x}P\left(x,z\vert\lambda\right)P\left(z\right)\\
+ & = & \sum_{z:\sum z_{k}=x}\prod_{k}P\left(z_{k}\vert\lambda_{k}\right)P\left(z\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Give every configuration of 
+\begin_inset Formula $z$
+\end_inset
+
+ a multinoulli variataional distribution, 
+\begin_inset Formula $w$
+\end_inset
+
+, so that the number of states
+\begin_inset Formula 
+\begin{eqnarray*}
+N_{w} & = & \#\textrm{ways to assign }x\textrm{ items to }k\textrm{ categories.}\\
+P\left(w_{i}=1\right) & = & P\left(\textrm{that configuration of }z_{i}\right)=\left(\frac{1}{\sum\lambda_{k}}\right)^{x}\prod_{k}\lambda_{k}^{x_{kw_{i}}}\\
+x_{kw_{i}} & = & \#\textrm{of obs assigned to }k\textrm{ in }w_{i}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+It follows that
+\begin_inset Formula 
+\begin{eqnarray*}
+P\left(x\vert\lambda\right) & = & E_{w\vert x,\lambda}\left(\left(\prod_{k}P\left(x_{kw}\vert\lambda_{k}\right)\right)^{w}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+However, the log doesn't pass through.
+ Ok, again, what am I thinking.
+ If we knew 
+\begin_inset Formula $z$
+\end_inset
+
+, 
+\begin_inset Formula $\lambda$
+\end_inset
+
+ is easy, and if we know 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $\lambda$
+\end_inset
+
+, 
+\begin_inset Formula $z$
+\end_inset
+
+ is easy.
+\begin_inset Formula 
+\begin{eqnarray*}
+P\left(x\vert z,\lambda\right) & = & 1\left(\sum z_{k}=x\right)\prod_{k}P\left(z_{k}\vert\lambda_{k}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+So we have
+\begin_inset Formula 
+\begin{eqnarray*}
+\log P\left(x\vert z,\lambda\right) & = & \log1\left(\sum z_{k}=x\right)+\sum_{k}\log P\left(z_{k}\vert\lambda_{k}\right)\\
+ & = & \log1\left(\sum z_{k}=x\right)+\sum_{k}\left(z_{k}\log\lambda_{k}-\lambda_{k}-\log\left(z_{k}!\right)\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Suppose we then assign the mean field variational distributions
+\begin_inset Formula 
+\begin{eqnarray*}
+z & \sim & Multinomial\\
+\lambda_{k} & \sim & Gamma
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Then it is easy to calculate the ELBO likelihood.
+ Dig that under this variational distribution 
+\begin_inset Formula $E_{q}\left(\log1\left(\sum z_{k}=x\right)\right)=0$
+\end_inset
+
+, irrespective of 
+\begin_inset Formula $q$
+\end_inset
+
+.
+ 
+\begin_inset Formula 
+\begin{eqnarray*}
+E_{q}\left(\log P\left(x\vert z,\lambda\right)\right) & = & \sum_{k}\left(E_{q}\left[z_{k}\right]E_{q}\left[\log\lambda_{k}\right]-E_{q}\left[\lambda_{k}\right]\right)+C
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Finally, this is what I was going for.
 \end_layout
 
 \end_body
