@@ -305,6 +305,8 @@ type SensitiveFloat
     #   d: The derivative with respect to each variable in
     #      P-dimensional VariationalParams for each of S celestial objects
     #      in a local_P x local_S matrix.
+    #   h: The second derivative with respect to each variational parameter,
+    #      in the same format as d.
     #   source_index: local_S x 1 vector of source ids with nonzero derivatives.
     #   param_index: local_P x 1 vector of parameter indices with
     #      nonzero derivatives. 
@@ -313,6 +315,7 @@ type SensitiveFloat
 
     v::Float64
     d::Matrix{Float64} # local_P x local_S
+    h::Matrix{Float64} # local_P x local_S
     source_index::Vector{Int64}
     param_index::Vector{Int64}
 end
@@ -321,7 +324,8 @@ end
 
 function zero_sensitive_float(s_index::Vector{Int64}, p_index::Vector{Int64})
     d = zeros(length(p_index), length(s_index))
-    SensitiveFloat(0., d, s_index, p_index)
+    h = zeros(length(p_index), length(s_index))
+    SensitiveFloat(0., d, h, s_index, p_index)
 end
 
 function clear!(sp::SensitiveFloat)
