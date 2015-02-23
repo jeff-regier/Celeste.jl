@@ -60,15 +60,6 @@ function get_galaxy_prototypes()
     #   dev_prototype: An array of GalaxyComponent for de Vaucouleurs galaxy types
     #   exp_prototype: An array of GalaxyComponent for exponenttial galaxy types
 
-    exp_amp = [
-        2.34853813e-03, 3.07995260e-02, 2.23364214e-01,
-        1.17949102e+00, 4.33873750e+00, 5.99820770e+00]
-    exp_amp /= sum(exp_amp)
-    exp_var = [
-        1.20078965e-03, 8.84526493e-03, 3.91463084e-02,
-        1.39976817e-01, 4.60962500e-01, 1.50159566e+00]
-    exp_prototype = [GalaxyComponent(exp_amp[j], exp_var[j]) for j in 1:6]
-
     dev_amp = [
         4.26347652e-02, 2.40127183e-01, 6.85907632e-01, 1.51937350e+00,
         2.83627243e+00, 4.46467501e+00, 5.72440830e+00, 5.60989349e+00]
@@ -76,15 +67,27 @@ function get_galaxy_prototypes()
     dev_var = [
         2.23759216e-04, 1.00220099e-03, 4.18731126e-03, 1.69432589e-02,
         6.84850479e-02, 2.87207080e-01, 1.33320254e+00, 8.40215071e+00]
+
+	exp_amp = [
+        2.34853813e-03, 3.07995260e-02, 2.23364214e-01,
+        1.17949102e+00, 4.33873750e+00, 5.99820770e+00]
+    exp_amp /= sum(exp_amp)
+    exp_var = [
+        1.20078965e-03, 8.84526493e-03, 3.91463084e-02,
+        1.39976817e-01, 4.60962500e-01, 1.50159566e+00]
+
+	# Adjustments to the effective radius hard-coded above.
+	# (The effective radius is the distance from the center containing half the light.)
+	effective_radii = [1.078031, 0.928896]
+	dev_var /= effective_radii[1]^2
+	exp_var /= effective_radii[2]^2
+
+    exp_prototype = [GalaxyComponent(exp_amp[j], exp_var[j]) for j in 1:6]
     dev_prototype = [GalaxyComponent(dev_amp[j], dev_var[j]) for j in 1:8]
     (dev_prototype, exp_prototype)
 end
 
 const galaxy_prototypes = get_galaxy_prototypes()
-
-# Adjustments to the effective radius hard-coded into get_galaxy_prototypes.
-# (The effective radius is the distance from the center containing half the light.)
-const effective_radii = [0.482910, 0.551853]
 
 
 immutable PsfComponent
