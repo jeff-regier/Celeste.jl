@@ -639,23 +639,49 @@ function elbo_likelihood(blob::Blob, mp::ModelParams)
 end
 
 
-function subtract_kl_c!(d::Int64, i::Int64, s::Int64, mp::ModelParams,
-        accum::SensitiveFloat)
+function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
+                        mp::ModelParams,
+                        accum::SensitiveFloat)
+    # Subtract from accum the entropy and expected prior of
+    # the variational distribution of c
+    # for a source (s), a source type (i, star / galaxy), and
+    # color prior component (d).
+    #
+    # Args:
+    #   - d: A color prior component.
+    #   - i: Source type (star / galaxy).
+    #   - s: Source id.
+    #   - mp: Model parameters.
+    #   - accum: The ELBO value.
+    #
+    # Returns:
+    #   Updates accum in place.
+
     vs = mp.vp[s]
+
+    # The below entropy / prior expectation are of
+    # (c | a_i, kappa), and the final contribution needs to
+    # be weighted by chi (the probability of this celestial object
+    # type) and kappa (the probability of this color prior component).
+
+    # TODO: do not hardcode the number of levels of i.
     chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
+    half_kappa = .5 * vs[ids.kappa[d, i]]
 
     beta, lambda = (vs[ids.beta[:, i]], vs[ids.lambda[:, i]])
     Omega, Lambda = (mp.pp.Omega[i][:, d], mp.pp.Lambda[i][d])
 
     diff = Omega - beta
-    Lambda_inv = Lambda^-1  # cache this!
-    half_kappa = .5 * vs[ids.kappa[d, i]]
+    Lambda_inv = Lambda^-1  # TODO: cache this!
 
+    # In the below expressions the entropy and expected log
+    # prior are mixed up together -- see notes for more details. 
     ret = sum(diag(Lambda_inv) .* lambda) - 4
     ret += (diff' * Lambda_inv * diff)[]
     ret += -sum(log(lambda)) + logdet(Lambda)
     accum.v -= chi_si * ret * half_kappa
 
+    # Accumulate derivatives.
     accum.d[ids.kappa[d, i], s] -= chi_si * .5 * ret
     accum.d[ids.beta[:, i], s] -= chi_si * half_kappa * 2Lambda_inv * -diff
     accum.d[ids.lambda[:, i], s] -= chi_si * half_kappa * diag(Lambda_inv)
@@ -664,8 +690,25 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64, mp::ModelParams,
 end
 
 
-function subtract_kl_k!(i::Int64, s::Int64, mp::ModelParams, accum::SensitiveFloat)
+function subtract_kl_k!(i::Int64, s::Int64,
+                        mp::ModelParams,
+                        accum::SensitiveFloat)
+    # Subtract from accum the entropy and expected prior of
+    # the variational distribution of k
+    # for a source (s), and source type (i, star / galaxy).
+    #
+    # Args:
+    #   - i: Source type (star / galaxy).
+    #   - s: Source id.
+    #   - mp: Model parameters.
+    #   - accum: The ELBO value.
+    #
+    # Returns:
+    #   Updates accum in place.
+
     vs = mp.vp[s]
+
+    # TODO: do not hardcode the number of levels of i.
     chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
     kappa_i = vs[ids.kappa[:, i]]
 
@@ -679,7 +722,21 @@ function subtract_kl_k!(i::Int64, s::Int64, mp::ModelParams, accum::SensitiveFlo
 end
 
 
-function subtract_kl_r!(i::Int64, s::Int64, mp::ModelParams, accum::SensitiveFloat)
+function subtract_kl_r!(i::Int64, s::Int64,
+                        mp::ModelParams, accum::SensitiveFloat)
+    # Subtract from accum the entropy and expected prior of
+    # the variational distribution of r
+    # for a source (s), and source type (i, star / galaxy).
+    #
+    # Args:
+    #   - i: Source type (star / galaxy).
+    #   - s: Source id.
+    #   - mp: Model parameters.
+    #   - accum: The ELBO value.
+    #
+    # Returns:
+    #   Updates accum in place.
+
     vs = mp.vp[s]
     gamma_si = mp.vp[s][ids.gamma[i]]
     zeta_si = mp.vp[s][ids.zeta[i]]
@@ -693,6 +750,7 @@ function subtract_kl_r!(i::Int64, s::Int64, mp::ModelParams, accum::SensitiveFlo
     kl_v += mp.pp.Upsilon[i] * (log(mp.pp.Psi[i]) - log(zeta_si))
     kl_v += gamma_si * zeta_Psi_ratio
 
+    # TODO: do not hardcode the number of levels of i.
     chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
     accum.v -= chi_si * kl_v
 
@@ -707,6 +765,17 @@ end
 
 
 function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
+    # Subtract from accum the entropy and expected prior of
+    # the variational distribution of a source (s).
+    #
+    # Args:
+    #   - s: Source id.
+    #   - mp: Model parameters.
+    #   - accum: The ELBO value.
+    #
+    # Returns:
+    #   Updates accum in place.
+
     chi_s = mp.vp[s][ids.chi]
     Phi = mp.pp.Phi
 
@@ -719,8 +788,13 @@ end
 
 
 function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
+    # Subtract from accum the entropy and expected prior of
+    # the variational distribution.
+
     for s in 1:mp.S
         subtract_kl_a!(s, mp, accum)
+
+        # TODO: Do not hard-code constants.
         for i in 1:2
             subtract_kl_r!(i, s, mp, accum)
             subtract_kl_k!(i, s, mp, accum)
