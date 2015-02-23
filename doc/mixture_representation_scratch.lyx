@@ -1,0 +1,293 @@
+#LyX 2.0 created this file. For more info see http://www.lyx.org/
+\lyxformat 413
+\begin_document
+\begin_header
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_amsmath 1
+\use_esint 1
+\use_mhchem 1
+\use_mathdots 1
+\cite_engine basic
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+We have
+\begin_inset Formula 
+\begin{eqnarray*}
+\log p\left(x_{nbm};\Theta\right) & = & \sum\left\{ x_{nbm}\left[\log F_{nbm}\right]-F_{nbm}-\log\left(x_{nbm}!\right)\right\} \\
+F_{nbm} & = & \iota_{nb}\left(\epsilon_{nb}+G_{nbm}\right)\\
+G_{nbm} & = & \sum_{s}l_{sb}f_{sa_{s}}\left(m\right)\\
+ & = & \sum_{s}r_{s}\prod_{b=1}^{4}\exp\left(\tau_{b}c_{bs}\right)f_{sa_{s}}\left(m\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+(I think there might be some typos in eq.
+ 5 of the ICMl paper?)
+\end_layout
+
+\begin_layout Standard
+In the paper, we now introduce the latent binomial variable 
+\begin_inset Formula $a_{s}$
+\end_inset
+
+:
+\begin_inset Formula 
+\begin{eqnarray*}
+r_{s} & = & r_{s0}^{a_{s}}r_{s1}^{1-a_{s}}\\
+c_{bs} & = & a_{s}c_{bs0}+\left(1-a_{s}\right)c_{bs1}\\
+\prod_{b=1}^{4}\exp\left(\tau_{b}c_{bs}\right) & = & \left(\prod_{b=1}^{4}\exp\left(\tau_{b}c_{bs0}\right)\right)^{a_{s}}\left(\prod_{b=1}^{4}\exp\left(\tau_{b}c_{bs1}\right)\right)^{1-a_{s}}\\
+f_{sa_{s}}\left(m\right) & = & \left(\sum_{k}^{K_{0}}w_{skm0}\phi_{km0}\right)^{a_{s}}\left(\sum_{k}^{K_{1}}w_{skm1}\phi_{km1}\right)^{1-a_{s}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+This is just to say that, depending on the value of the Bernoulli we have
+ a color times a finite Gaussian mixture.
+ Then we have
+\begin_inset Formula 
+\begin{eqnarray*}
+G_{nbm}\vert a_{s},\beta_{si} & = & \sum_{s}\left(r_{s0}\prod_{b=1}^{4}\exp\left(\tau_{b}c_{bs0}\right)\sum_{k}^{K_{0}}w_{skm0}\phi_{km0}\right)^{a_{s}}\left(r_{s1}\prod_{b=1}^{4}\exp\left(\tau_{b}c_{bs1}\right)\sum_{k}^{K_{1}}w_{skm1}\phi_{km1}\right)^{1-a_{s}}\\
+ & := & \sum_{s}\left(\beta_{s0}\sum_{k}^{K_{0}}w_{skm0}\phi_{km0}\right)^{a_{s}}\left(\beta_{s1}\sum_{k}^{K_{1}}w_{skm1}\phi_{km1}\right)^{1-a_{s}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+I just introduced 
+\begin_inset Formula $\beta$
+\end_inset
+
+ for 
+\begin_inset Quotes eld
+\end_inset
+
+brightness
+\begin_inset Quotes erd
+\end_inset
+
+ to make this tidier.
+ Suppose we introduce conditional auxiliary variables until our sums become
+ products.
+ First,
+\begin_inset Formula 
+\begin{eqnarray*}
+G_{nbm}\vert a_{s},\beta_{si} & = & \sum_{s}\left(\frac{\sum_{s}\beta_{s0}}{\sum_{s}\beta_{s0}}\beta_{s0}\sum_{k}^{K_{0}}w_{skm0}\phi_{km0}\right)^{a_{s}}\left(\frac{\sum_{s}\beta_{s1}}{\sum_{s}\beta_{s1}}\beta_{s1}\sum_{k}^{K_{1}}w_{skm1}\phi_{km1}\right)^{1-a_{s}}\\
+ & = & \sum_{s}\left(\sum_{s}\beta_{s0}\right)^{a_{s}}\left(\sum_{s}\beta_{s1}\right)^{1-a_{s}}\left(\frac{\beta_{s0}}{\sum_{s}\beta_{s0}}\sum_{k}^{K_{0}}w_{skm0}\phi_{km0}\right)^{a_{s}}\left(\frac{\beta_{s1}}{\sum_{s}\beta_{s1}}\sum_{k}^{K_{1}}w_{skm1}\phi_{km1}\right)^{1-a_{s}}
+\end{eqnarray*}
+
+\end_inset
+
+Then introduce
+\begin_inset Formula 
+\begin{eqnarray*}
+z_{ni}\vert\beta_{si} & \sim & Multinoulli\left(S\right)\\
+P\left(z_{nis}=1\vert\beta_{si}\right) & = & \frac{\beta_{si}}{\sum_{s}\beta_{si}}\\
+\omega_{nmi} & \sim & Multinoulli\left(K_{i}\right)\\
+P\left(\omega_{nmik}=1\right) & = & w_{skmi}\\
+G_{nbm}\vert a_{s},z_{ni},\omega,\beta_{si} & = & \prod_{s=1}^{S}\left(\sum_{s}\beta_{s0}\right)^{a_{s}}\left(\sum_{s}\beta_{s1}\right)^{1-a_{s}}\prod_{k=1}^{K_{0}}\left(\phi_{km0}\right)^{\omega_{nm0k}z_{s0}a_{s}}\prod_{k=1}^{K_{1}}\left(\phi_{km1}\right)^{\omega_{nm0k}z_{s1}\left(1-a_{s}\right)}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+(Here I'm being a little sloppy with indices.)
+\end_layout
+
+\begin_layout Standard
+Let's ignore the noise (it can be dealt with in a simlar way I think.) Our
+ original likelihood model is now
+\begin_inset Formula 
+\begin{eqnarray*}
+\log p\left(x_{nbm};\Theta,z,\omega\right) & = & \sum\left\{ x_{nbm}\left[\log F_{nbm}\right]-F_{nbm}-\log\left(x_{nbm}!\right)\right\} \\
+F_{nbm} & = & \iota_{nb}G_{nbm}\\
+ & = & \iota_{nb}\prod_{s=1}^{S}\left(\sum_{s}\beta_{s0}\right)^{a_{s}}\left(\sum_{s}\beta_{s1}\right)^{1-a_{s}}\prod_{k=1}^{K_{0}}\left(\phi_{km0}\right)^{\omega_{nm0k}z_{s0}a_{s}}\prod_{k=1}^{K_{1}}\left(\phi_{km1}\right)^{\omega_{nm0k}z_{s1}\left(1-a_{s}\right)}
+\end{eqnarray*}
+
+\end_inset
+
+The question comes down to mixtures of poissons.
+ Is the marginal over
+\begin_inset Formula 
+\begin{eqnarray*}
+\lambda\vert z & = & \prod_{k=1}^{K}\lambda_{k}^{z_{k}}\\
+P\left(z_{k}=1\right) & = & w_{k}\\
+\int P\left(x\vert\lambda,z\right)P\left(z\right)dz & = & Poisson\left(x;\sum w_{k}\lambda_{k}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+No, certainly not.
+ Given that, this approach is doomed.
+\begin_inset Newline newline
+\end_inset
+
+
+\begin_inset Newline newline
+\end_inset
+
+
+\begin_inset Newline newline
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+BELOW NOT TRUE:
+\end_layout
+
+\begin_layout Standard
+As observed in the paper, this decomposes nicely given that the variatoinal
+ distribution of 
+\begin_inset Formula $a_{s}$
+\end_inset
+
+ factors out:
+\begin_inset Formula 
+\begin{eqnarray*}
+E_{q}\left(G_{nbm}\right) & = & \sum_{s}E_{q}\left(a_{s}\right)E_{q}\left(\beta_{s0}\right)\sum_{k}^{K_{0}}w_{k0}\phi_{k0}+\left(1-E_{q}\left(a_{s}\right)\right)E_{q}\left(\beta_{s1}\right)\sum_{k}^{K_{1}}w_{k1}\phi_{k1}\\
+E\left(\log G_{nbm}\right) & = & E_{q}\left(a_{s}\right)E_{q}\left(\log\beta_{s0}\right)\log\left(\sum_{k}^{K_{0}}w_{sk0}\phi_{k0}\right)+\left(1-E_{q}\left(a_{s}\right)\right)E_{q}\left(\beta_{s1}\right)\log\left(\sum_{k}^{K_{1}}w_{sk1}\phi_{k1}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Note at this point that the sufficient statistics for 
+\begin_inset Formula $r_{si}$
+\end_inset
+
+ are 
+\begin_inset Formula $r_{si}$
+\end_inset
+
+ and 
+\begin_inset Formula $\log r_{si}$
+\end_inset
+
+, which matches the gamma distribution exactly.
+ In contrast, the sufficient statistics for 
+\begin_inset Formula $c_{bsi}$
+\end_inset
+
+ are 
+\begin_inset Formula $\exp\left(c_{bsi}\right)$
+\end_inset
+
+ and 
+\begin_inset Formula $c_{bsi}$
+\end_inset
+
+ , which don't match anything very standard.
+ I think you could get around this by making band 0 the reference band and
+ writing
+\begin_inset Formula 
+\begin{eqnarray*}
+\beta_{si} & = & \prod_{b=1}^{5}c_{b}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+...then everything is gamma, and the optimal VB distribution is your convenient,
+ exponential family choice.
+\end_layout
+
+\begin_layout Standard
+Now let us see whether we can gain anything by representing the 
+\begin_inset Formula $\sum w_{k}\phi_{k}$
+\end_inset
+
+ terms as a marginal over indicators in the same way we have already used
+ 
+\begin_inset Formula $a_{s}$
+\end_inset
+
+.
+ We already have
+\begin_inset Formula 
+\begin{eqnarray*}
+G_{nbm}\vert a_{s},z_{s0},z_{s1} & = & \left(\beta_{s0}\prod_{k=1}^{K_{0}}\phi_{k0}^{z_{sk}}\right)^{a_{s}}\left(\beta_{s1}\sum_{k}^{K_{1}}w_{k1}\phi_{k1}\right)^{1-a_{s}}\\
+P\left(z_{sik}=1\right) & = & w_{ki}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document
