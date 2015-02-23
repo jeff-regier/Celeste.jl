@@ -375,7 +375,7 @@ G_{nbm} & =\epsilon_{nb}+\sum_{s=1}^{S}\ell_{sb}\breve{f}_{sa_{s}}\left(m\right)
 and
 \begin_inset Formula 
 \begin{align}
-\ell_{sb} & =r_{s}\prod_{j=b}^{b_{r}}\exp\left\{ c_{sb}\right\} \prod_{j=b_{r}}^{b-1}\exp\left\{ c_{sb}\right\} ,
+\ell_{sb} & =r_{s}\prod_{j=b}^{b_{r}-1}\exp\left\{ c_{sb}\right\} \prod_{j=b_{r}}^{b-1}\exp\left\{ c_{sb}\right\} ,
 \end{align}
 
 \end_inset
