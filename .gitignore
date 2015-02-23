@@ -3,3 +3,6 @@
 
 # Don't add emacs temp files.
 **/*~
+
+# omit converage files
+*.cov
