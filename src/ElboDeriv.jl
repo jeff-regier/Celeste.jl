@@ -438,14 +438,14 @@ end
 function accum_pixel_ret!(tile_sources::Vector{Int64},
         x_nbm::Float64, iota::Float64,
         E_G::SensitiveFloat, var_G::SensitiveFloat, ret::SensitiveFloat)
-    # Add the contributions of a G term to the ELBO.
+    # Add the contributions of the expected value of a G term to the ELBO.
     #
     # Args:
     #   - tile_sources: A vector of source ids influencing this tile
     #   - x_nbm: The photon count at this pixel
-    #   - iota: The camera sensitivity
-    #   - E_G: The expected value of G
-    #   - var_G: The variance of G
+    #   - iota: The optical sensitivity
+    #   - E_G: The variational expected value of G
+    #   - var_G: The variational variance of G
     #   - ret: A SensitiveFloat for the ELBO which is updated
     #
     # Returns:
@@ -804,7 +804,6 @@ function subtract_reg!(mp::ModelParams, accum::SensitiveFloat)
     for s in 1:mp.S
         vs = mp.vp[s]
 
-        # TODO: Why not call x sigma here?
         rho, x = vs[ids.rho], vs[ids.sigma]  # too many sigmas
         ll_ab = (alpha - 1) * log(rho) + (beta - 1) * log(1 - rho) - log_B
         ll_scale = -log(x) - log(sigma_reg * sqrt(2pi)) -
