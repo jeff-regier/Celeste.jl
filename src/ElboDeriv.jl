@@ -674,8 +674,8 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
     diff = Omega - beta
     Lambda_inv = Lambda^-1  # TODO: cache this!
 
-    # In the below expressions the entropy and expected log
-    # prior are mixed up together -- see notes for more details. 
+    # NB: In the below expressions the variational entropy
+    # and expected log prior are kind of mixed up together. 
     ret = sum(diag(Lambda_inv) .* lambda) - 4
     ret += (diff' * Lambda_inv * diff)[]
     ret += -sum(log(lambda)) + logdet(Lambda)
@@ -807,12 +807,23 @@ end
 
 
 function subtract_reg!(mp::ModelParams, accum::SensitiveFloat)
+    # Subtract a regularization term from the ELBO.
+    #
+    # Args:
+    #   - mp: The model parameters
+    #   - accum: The ELBO
+    #
+    # Returns:
+    #   - Updates accum in place.
+
     alpha, beta = mp.pp.alpha_reg, mp.pp.beta_reg
     log_B = lgamma(alpha) + lgamma(beta) - lgamma(alpha + beta)
     mu_reg, sigma_reg = mp.pp.mu_reg, mp.pp.sigma_reg
 
     for s in 1:mp.S
         vs = mp.vp[s]
+
+        # TODO: Why not call x sigma here?
         rho, x = vs[ids.rho], vs[ids.sigma]  # too many sigmas
         ll_ab = (alpha - 1) * log(rho) + (beta - 1) * log(1 - rho) - log_B
         ll_scale = -log(x) - log(sigma_reg * sqrt(2pi)) -
@@ -828,6 +839,15 @@ end
 
 
 function elbo(blob::Blob, mp::ModelParams)
+    # Caculate the ELBO for all the bands of an image.
+    #
+    # Args:
+    #   - blob: An image.
+    #   - mp: Model parameters.
+    #
+    # Returns:
+    #   - The ELBO and its derivatives.
+
     ret = elbo_likelihood(blob, mp)
     subtract_kl!(mp, ret)
     subtract_reg!(mp, ret)
