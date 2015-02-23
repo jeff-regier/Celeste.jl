@@ -476,25 +476,6 @@ function accum_pixel_ret!(tile_sources::Vector{Int64},
 end
 
 
-# This does not appear to be used.
-# function accum_pixel_ret2!(tile_sources::Vector{Int64},
-#         x_nbm::Float64, iota::Float64,
-#         E_G::SensitiveFloat, var_G::SensitiveFloat, ret::SensitiveFloat)
-
-#     ret.v += x_nbm * (log(x_nbm) - 1.5)
-#     ret.v += iota * E_G.v
-#     ret.v -= iota^2/(2x_nbm) * var_G.v
-#     ret.v -= iota^2/(2x_nbm) * E_G.v^2
-
-#     for child_s in 1:length(tile_sources), p in 1:size(E_G.d, 1)
-#         parent_s = tile_sources[child_s]
-#         ret.d[p, parent_s] += iota * E_G.d[p, child_s]
-#         ret.d[p, parent_s] -= iota^2/(2x_nbm) * var_G.d[p, child_s]
-#         ret.d[p, parent_s] -= iota^2/x_nbm * E_G.v * E_G.d[p, child_s]
-#     end
-# end
-
-
 function tile_range(tile::ImageTile, tile_width::Int64)
     # Return the range of image pixels in an ImageTile.
 
