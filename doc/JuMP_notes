@@ -1,0 +1,50 @@
+Hey Ryan, Here's what I know about automatic differentiation (AD):
+
+Earlier I wrote my own AD code for Celeste, based on operator overloading. The "SensitiveFloat" data structure comes from that effort. It's not actually that much work...you don't need to program all the rules for differentiation from calculus, just the ones you use, e.g addition, multiplication. Maybe 20x slower than the current manually coded derivatives, basically due to a lot of extra memory allocation. Everything becomes objects rather than unboxed floating point numbers.
+
+I also tried forward auto diff (FAD), using DualNumbers.
+
+https://github.com/JuliaDiff/DualNumbers.jl
+
+To compute a single gradient, this approach requires rerunning the objective once for every parameter....like 30000x slower than the current code for a full image with 300 celestial bodies.
+
+After these efforts, I've come to think that auto diff based on on JuMP/ReverseDiffSparse is a winner:
+https://github.com/JuliaOpt/JuMP.jl
+https://github.com/mlubin/ReverseDiffSparse.jl
+
+There's some chance we can write our objective in the JuMP modeling language. This would be awesome. The author (Miles) suggests we try introducing auxiliary variables if necessary, to get our objective into a form JuMP can use. I'll copy some things he's written below. If we can't there's another way---much more work---mentioned in the discussion below. If you can figure out whether the code in ElboDeriv.jl can be written in JuMP syntax, that would be great progress! 
+
+
+===================================
+Miles writes:
+...
+ReverseDiffSparse is so far designed to handle only closed-form expressions and not a sequence of operations or full programs. The easiest way to use it coupled with optimization is with JuMP
+....
+That objective doesn't seem *too* bad if it can fit in one slide, although I saw that there are additional functions that aren't defined. Could you give a bit more detail on what you need to compute inside the objective? If it's just a big nasty set of closed-form expressions then there's hope that it can work. What JuMP isn't and won't be capable of handling is implicitly defined functions, control structures, etc. A trick to breaking down the pieces is to introduce auxiliary variables to represent parts of the expression and then combine them together later. Currently this will create new decision variables in the model, though I'm planning on implementing intermediate expressions that exist to help build larger expressions but don't affect the optimization model itself.
+....
+If you want to go all out with ReverseDiffSparse, the biggest trouble will be generating a scalar expression graph/computational graph to feed in as input. If you can generate this manually (it won't be very pretty), I can make the necessary changes to allow this as input. If you just want an efficient way to compute a sparse Hessian (and don't mind maintaining your existing gradient code), I could help you hook into the sparsity exploiting code part of ReverseDiffSparse. It's logically quite separate, as all we need is a (conservative) estimate of the Hessian sparsity pattern and way to evaluate a directional derivative of the gradient, which is exactly what you would get from running your existing gradient code with DualNumbers.
+...
+JuMP can't handle a sum over millions of pixels, right?
+
+If Julia can, JuMP can (in principle). Sums in JuMP syntax just translate to Julia loops. There's a chance that you would hit a bottleneck somewhere by scaling in some way that we haven't tested for, but it would be addressable.
+… 
+I'll have to think about manually generating the expression graph. That might not be so bad, and perhaps I could automate some aspects. Would ReverseDiffSparse be as fast as hand-coded derivatives, if I wrote the expression graph well?
+
+ReverseDiffSparse generates and compiles Julia code on the fly to evaluate the gradient, so yes, it should be about as fast as hand-coded derivatives. I'm thinking though that it would be essentially the same amount of effort if not less for you to manually generate expression graphs in an undocumented format as it would to take you to generate JuMP code itself. JuMP syntax is in 1-1 correspondence with the expression graphs accepted by ReverseDiffSparse, and generating a JuMP model would result in a much more debuggable intermediate format than needing to interact with ReverseDiffSparse through a low-level API which doesn't exist yet :). It's far from ideal, though this would be my recommendation if you want to take this route. I'd be happy to help out with any issues that arise on the JuMP side.
+...
+In addition to using JuMP/ReverseSparseDiff to evaluate the Hessian, I'd like to be able to write (in Julia code) the objective function, without cluttering the code with directives related to differentiation. Using a special "placeholder" data type is no problem, but I'd like to avoid mixing code for inserting objects into the expression graph with code that specifies the objective function. Is that hard going to be hard to achieve, with the approach we discussed earlier (generating JuMP code)?
+
+You may want to use operator overloading to generate the expression graph and then translate it to JuMP code, but a particular issue with that is that JuMP/ReverseDiffSparse can't deal with a flattened out sum with 100,000 terms. That is, the sum:
+sum{x[i]^2, i = 1:100000}
+is translated to a loop. If instead JuMP were given an expression object like Expr(:+, :(x[1]), :(x[2]), ..., :(x[99999]), :(x[100000])), it would try to generate 100,000 lines of code and then compile them, which just won't work (I believe some compiler passes are quadratic in the number of operations in a routine). So the point is that you would need to convey loops in the original code into some similar structure in JuMP using sum{} or prod{}.
+
+We actually just had a discussion on this: https://github.com/JuliaOpt/JuMP.jl/pull/385
+
+Is there an example of code that generates JuMP code that you could send me?
+
+Yes, the Sims package translates their own equation-based models into JuMP code: https://github.com/tshort/Sims.jl/blob/f9e7d45880e1ca72e80e55627c37d00d0e6d76b8/src/utils.jl#L490. 
+…
+ 
+Are you planning to continue developing JuMP/ReverseSparseDiff? What functionality might you add in the future?
+
+JuMP isn't going anywhere, we're pretty invested in its success. Right now I'm working on supporting intermediate expressions (see the issue I linked above), which will probably be directly useful to you. JuMP is already nearly on par with similar software like AMPL, GAMS, and YALMIP. I don't personally plan on developing the kind of transparent reverse-mode AD discussed above, it's a bit outside the scope of my field and what I'm paid to do, but I'm hoping that we'll see more progress on it soon. ReverseDiffSource seems to be pretty active these days, you may want to ask there about what would be needed for Hessians. The component of ReverseDiffSparse that exploits sparsity of Hessians is relatively generic, so ReverseDiffSource could compute Hessian-vector products from source-code analysis, then it wouldn't be too difficult to mash the two together.
