@@ -19,43 +19,20 @@ m = Model(solver=ClpSolver())
 @defVar(m, -10 <= beta[1:k] <= 10)
 @defExpr(xb[i=1:n], dot(vec(x[i,:]), beta))
 @defExpr(eps[i=1:n], y[i] - xb[i])
-@setObjective(m, Min, sum(xb))
+@setObjective(m, Min, sum(eps))
 status = solve(m)
 getObjectiveValue(m)
 
-
-
-
-n = 100
-k = 3
-x = randn(n, k)
-true_beta = randn(k)
-y = x * true_beta + randn(n)
-
-
+# Try a nonlinear version.  This does not work for reasons I don't understand.
 m = Model(solver=NLoptSolver(algorithm=:LD_LBFGS))
-@defVar(m, -10 <= gamma <= 10)
-index = 2
-@defNLExpr(eps[i=1:n], gamma)
-@defNLExpr(eps_sum, sum{eps})
-@setNLObjective(m, Min, eps_sum)
+@defVar(m, -10 <= beta[1:k] <= 10)
+@defExpr(xb[i=1:n], dot(vec(x[i,:]), beta))
+@defNLExpr(eps[i=1:n], (y[i] - xb[i])^2)
+@setNLObjective(m, Min, sum{eps, i=1:n})
 status = solve(m)
 getObjectiveValue(m)
 
 
-@setNLObjective(m, Min, sum{eps, i=1:n})
-
-@defVar(m, -10 <= beta[1:k] <= 10)
-
-cost = [1, 2, 3]
-index = 2
-
-#@defNLExpr(error2[i=1:k], beta[i])
-
-#for this_row in 1:n 
-#  @defNLExpr(error2[i=this_row], (y - beta[1] * x[this_row, 1] - beta[2] * x[this_row, 2] - beta[3] * x[this_row, 3])^2)
-#end
-#@defNLExpr(error2[1], (y - beta[1] * x[1, 1] - beta[2] * x[1, 2] - beta[3] * x[1, 3])^2)
 
 
 
