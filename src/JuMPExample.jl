@@ -1,11 +1,10 @@
 using JuMP
 using NLopt
 using Clp
-
+using Ipopt
 
 #################
 # A stupid but more complicated example.
-
 
 
 n = 100
@@ -15,24 +14,71 @@ true_beta = randn(k)
 y = x * true_beta + randn(n)
 
 # This is stupid but is working with sums and array expressions.
-m = Model(solver=ClpSolver())
+#m = Model(solver=ClpSolver())
+m = Model()
 @defVar(m, -10 <= beta[1:k] <= 10)
-@defExpr(xb[i=1:n], dot(vec(x[i,:]), beta))
-@defExpr(eps[i=1:n], y[i] - xb[i])
-@setObjective(m, Min, sum(eps))
-status = solve(m)
-getObjectiveValue(m)
-
-# Try a nonlinear version.  This does not work for reasons I don't understand.
-m = Model(solver=NLoptSolver(algorithm=:LD_LBFGS))
-@defVar(m, -10 <= beta[1:k] <= 10)
-@defExpr(xb[i=1:n], dot(vec(x[i,:]), beta))
-@defNLExpr(eps[i=1:n], (y[i] - xb[i])^2)
-@setNLObjective(m, Min, sum{eps, i=1:n})
+# One row for example.
+eps_aff = AffExpr(beta[j=1:k], vec(x[1,:]), -y[1])
+@defExpr(eps[i=1:n], AffExpr(beta[j=1:k], vec(x[i,:]), -y[i]))
+@setObjective(m, Min, sum{sum(eps), i=1:n})
 status = solve(m)
 getObjectiveValue(m)
 
 
+# Try a nonlinear version.  This example works.
+m = Model()
+@defVar(m, -10 <= beta[1:k] <= 10)
+@defNLExpr(eps[i=1:n], y[i] - sum{x[i, j] * beta[j], j=1:k})
+@defNLExpr(eps2[i=1:n], eps[i] * eps[i])
+@defNLExpr(eps2_sum, sum{eps2[i], i=1:n}) # Note that only NLExprs can take NLExprs I think
+@setNLObjective(m, Min, eps2_sum)
+status = solve(m)
+getObjectiveValue(m)
+println("beta = ", getValue(beta))
+print((x' * x)^(-1) * (x' * y))
+
+
+# This example works.
+n = 100
+x = randn(n)
+m = Model()
+@defVar(m, -0.1 <= alpha <= 0.1)
+@defNLExpr(eps[i=1:n], exp(x[i] * alpha)) # (1)
+@defNLExpr(eps2[i=1:n], alpha * eps[i]) # (1)
+@setNLObjective(m, Min, sum{eps2[i], i=1:n})
+status = solve(m)
+getObjectiveValue(m)
+println("alpha = ", getValue(alpha))
+sum(exp(getValue(alpha) * x))
+
+
+# This example works.
+n = 100
+x = randn(n, 2)
+m = Model()
+@defVar(m, -0.1 <= alpha[k in 1:2] <= 0.1)
+@defVar(m, -0.1 <= gamma <= 0.1)
+#@defNLExpr(eps[i=1:n], exp(sum{x[k] * alpha[k], k=1:2})) # works but is wrong
+@defNLExpr(eps[i=1:n], exp(sum{x[i, k] * alpha[k], k=1:2}))  # works
+#@defNLExpr(eps[i=1:n], exp(dot(vec(x[i, :]), alpha)))  # does not work
+@defNLExpr(eps2[i=1:n], gamma * eps[i])
+@setNLObjective(m, Min, sum{eps2[i], i=1:n})
+status = solve(m)
+getObjectiveValue(m)
+println("alpha = ", getValue(alpha))
+
+
+# Try a nonlinear version.  This example works.
+m = Model()
+@defVar(m, -10 <= beta[1:k] <= 10)
+@defNLExpr(eps[i=1:n], y[i] - sum{x[i, j] * beta[j], j=1:k})
+@defNLExpr(eps2[i=1:n], eps[i] * eps[i])
+@defNLExpr(eps2_sum, sum{eps2[i], i=1:n}) # Note that only NLExprs can take NLExprs I think
+@setNLObjective(m, Min, eps2_sum)
+status = solve(m)
+getObjectiveValue(m)
+println("beta = ", getValue(beta))
+print((x' * x)^(-1) * (x' * y))
 
 
 
@@ -99,8 +145,9 @@ ni    = N
 h     = 1/ni
 alpha = 350
 
-# So this doesn't work.  I suspect problems fith NLopt.
-m = Model(solver=NLoptSolver(algorithm=:GN_ISRES))
+# So this doesn't work with :GN_ISRES.  I suspect problems fith NLopt.
+#m = Model(solver=NLoptSolver(algorithm=:GN_ISRES))
+m = Model()
 
 @defVar(m, -1 <= t[1:(ni+1)] <= 1)
 @defVar(m, -0.05 <= x[1:(ni+1)] <= 0.05)
