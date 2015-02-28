@@ -1,0 +1,126 @@
+#LyX 2.0 created this file. For more info see http://www.lyx.org/
+\lyxformat 413
+\begin_document
+\begin_header
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_amsmath 1
+\use_esint 1
+\use_mhchem 1
+\use_mathdots 1
+\cite_engine basic
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{align*}
+q(a_{s}) & \sim\mathrm{Bernoulli}\left(\chi_{s}\right),\\
+q\left(r_{s}|a_{s}=i\right) & \sim\mathrm{Gamma}\left(\gamma_{s}^{(i)},\zeta_{s}^{(i)}\right)\\
+\log p\left(x_{n}\vert a_{s},r_{s}\right) & =-F_{n}+x_{n}\log F_{n}+C\\
+F_{n} & =\sum_{s}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right]\phi_{ns}\\
+\phi_{ns} & =\phi\left(m_{n}-\mu_{s}\right)\\
+\mu_{s} & \textrm{ are known locations}\\
+\phi\left(x\right) & =\exp\left(-\frac{1}{2}x^{2}\right)
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Use the approximation:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{align*}
+\mathbb{E}_{q}\left[\log F_{n}\right] & \approx\log\mathbb{E}_{q}\left[F_{n}\right]^{2}-\frac{\mathbb{V}_{q}\left[F_{n}\right]}{2\mathbb{E}_{q}\left[F_{n}\right]^{2}}-\log\phi_{ns}\\
+\mathbb{V}_{q}\left[F_{n}\right] & =\sum_{s}\mathbb{V}_{q}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right]\\
+\mathbb{V}_{q}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right] & =\mathbb{E}_{q}\left[\left(a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right)^{2}\right]-\mathbb{E}_{q}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right]^{2}\\
+ & =\mathbb{E}_{q}\left[a_{s}^{2}r_{s1}^{2}+\left(1-a_{s}\right)^{2}r_{s0}^{2}+2a_{s}r_{s1}\left(1-a_{s}\right)r_{s0}\right]-\mathbb{E}_{q}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right]^{2}\\
+ & =\chi_{s}\mathbb{E}_{q}\left[r_{s1}^{2}\right]+\left(1-\chi_{s}\right)\mathbb{E}_{q}\left[r_{s0}^{2}\right]-\mathbb{E}_{q}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right]^{2}
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+And also
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathbb{E}_{q}\left[r_{si}\right] & = & \gamma_{s}^{(i)}\zeta_{s}^{(i)}\\
+\mathbb{E}_{q}\left[r_{si}^{2}\right] & = & \gamma_{s}^{(i)}\left(\zeta_{s}^{(i)}\right)^{2}+\left(\gamma_{s}^{(i)}\zeta_{s}^{(i)}\right)^{2}\\
+ & = & \left(1+\gamma_{s}^{(i)}\right)\gamma_{s}^{(i)}\left(\zeta_{s}^{(i)}\right)^{2}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Finally, the entropies are:
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathbb{E}_{q}\left[\log q\left(r_{si}\right)\right] & = & \gamma_{s}^{(i)}+\log\zeta_{s}^{(i)}+\log\Gamma\left(\gamma_{s}^{(i)}\right)\\
+\mathbb{E}_{q}\left[\log q\left(a_{s}\right)\right] & = & \chi_{s}\log\chi_{s}+\left(1-\chi_{s}\right)\log\left(1-\chi_{s}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document
