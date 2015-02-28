@@ -79,10 +79,7 @@ m = Model()
 @defNLExpr(e_ra[s=1:S, a=1:2], gamma[s, a] * zeta[s, a])
 @defNLExpr(e_ra2[s=1:S, a=1:2], (1 + gamma[s, a]) * gamma[s, a] * (zeta[s, a] ^ 2))
 @defNLExpr(e_r[s=1:S], chi[s] * e_ra[s, 1] + (1 - chi[s]) * e_ra[s, 2])
-# Note: this is failing for some reason, see below.
-# @defNLExpr(var_r[s=1:S], chi[s] * e_ra2[s, 1] + (1 - chi[s]) * e_ra2[s, 2] - (e_r[s]) ^ 2)
-@defNLExpr(var_r[s=1:S], chi[s] * e_ra2[s, 1] + (1 - chi[s]) * e_ra2[s, 2] -
-	                     (chi[s] * e_ra[s, 1] + (1 - chi[s]) * e_ra[s, 2]) ^ 2)
+@defNLExpr(var_r[s=1:S], chi[s] * e_ra2[s, 1] + (1 - chi[s]) * e_ra2[s, 2] - (e_r[s]) ^ 2)
 
 # Define the F expectations.
 @defNLExpr(e_fns[n=1:N, s=1:S], e_r[s] * phi_ns[n, s])
@@ -95,77 +92,4 @@ m = Model()
 @defNLExpr(e_log_lik, sum{x[n] * e_log_fn[n] - e_fn[n], n=1:N})
 
 @setNLObjective(m, Max, e_log_lik)
-solve(m)
-# ERROR: syntax: function argument names not unique
-#  in genindexlist_parametric at /home/rgiordan/.julia/v0.3/ReverseDiffSparse/src/revmode.jl:385
-#  in genfgrad_simple at /home/rgiordan/.julia/v0.3/ReverseDiffSparse/src/revmode.jl:663
-#  in initialize at /home/rgiordan/.julia/v0.3/JuMP/src/nlp.jl:96
-#  in loadnonlinearproblem! at /home/rgiordan/.julia/v0.3/Ipopt/src/IpoptSolverInterface.jl:269
-#  in solvenlp at /home/rgiordan/.julia/v0.3/JuMP/src/nlp.jl:474
-#  in solve at /home/rgiordan/.julia/v0.3/JuMP/src/solvers.jl:9
-
-# Debugging:
-
-# This is the problem.
-
-
-# works:
-@setNLObjective(m, Max, e_fn[1])
-solve(m)
-
-# works:
-@setNLObjective(m, Max, var_fn[1])
-solve(m)
-
-# Doesn't work:
-@setNLObjective(m, Max, e_fn[1] + var_fn[1])
-solve(m)
-
-# Doesn't work:
-@setNLObjective(m, Max, e_fns[1, 1] + var_fns[1, 1])
-solve(m)
-
-# Doesn't work:
-@setNLObjective(m, Max, e_r[1] + var_r[1])
-solve(m)
- 
-# Works:
-@setNLObjective(m, Max, e_ra[1, 1] + e_ra2[1, 1])
-solve(m)
-
-
-# A minimal example.  As above, this fails with the error
-# ERROR: syntax: function argument names not unique
-m = Model()
-@defVar(m, 1 <= gamma <= 2)
-@defNLExpr(first, gamma)
-@defNLExpr(second, first + gamma) # Expect 2 gamma
-@setNLObjective(m, Max, first + second) # Expect 3 gamma
-solve(m)
- 
-# Fails:
-m = Model()
-@defVar(m, 1 <= gamma <= 2)
-@defNLExpr(first, gamma)
-@defNLExpr(second, first + gamma) # Expect 2 gamma
-@defNLExpr(third, first + gamma) # Expect 2 gamma
-@setNLObjective(m, Max, second + third) # Expect 4 gamma
-solve(m)
-
-# Fails:
-m = Model()
-@defVar(m, 1 <= gamma <= 2)
-@defNLExpr(first, gamma)
-@defNLExpr(second, first + gamma)
-@defNLExpr(third, first + gamma)
-@defNLExpr(fourth, second + third)
-@setNLObjective(m, Max, fourth)
-solve(m)
-
-# Works:
-m = Model()
-@defVar(m, 1 <= gamma <= 2)
-@defNLExpr(first, gamma)
-@defNLExpr(second, first + first)
-@setNLObjective(m, Max, second)
 solve(m)
