@@ -65,7 +65,8 @@ m = Model()
 # TODO: put in the priors, now the difference between a star and galaxy isn't
 # present in the model.
 
-# The entropy is currently not working because of the lgamma function.
+
+
 @setNLObjective(m, Max, e_log_lik + entropy)
 solve(m)
 
