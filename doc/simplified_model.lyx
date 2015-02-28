@@ -77,14 +77,27 @@ F_{n} & =\sum_{s}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right]\phi_{ns}\\
 \end_layout
 
 \begin_layout Standard
+The expected log likelihood is
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathbb{E}_{q}\left[\log P\left(x\right)\right] & = & \sum_{n=1}^{N}\left(x\log\left(F_{n}\right)-F_{n}\right)+C
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
 Use the approximation:
 \end_layout
 
 \begin_layout Standard
 \begin_inset Formula 
 \begin{align*}
+\mathbb{E}_{q}\left[F_{n}\right] & =\sum_{s}\left(\chi_{s}\mathbb{E}_{q}\left[r_{s0}\right]+\left(1-\chi_{s}\right)\mathbb{E}_{q}\left[r_{s1}\right]\right)\phi_{ns}\\
 \mathbb{E}_{q}\left[\log F_{n}\right] & \approx\log\mathbb{E}_{q}\left[F_{n}\right]^{2}-\frac{\mathbb{V}_{q}\left[F_{n}\right]}{2\mathbb{E}_{q}\left[F_{n}\right]^{2}}-\log\phi_{ns}\\
-\mathbb{V}_{q}\left[F_{n}\right] & =\sum_{s}\mathbb{V}_{q}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right]\\
+\mathbb{V}_{q}\left[F_{n}\right] & =\sum_{s}\left(\phi_{ns}\right)^{2}\mathbb{V}_{q}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right]\\
 \mathbb{V}_{q}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right] & =\mathbb{E}_{q}\left[\left(a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right)^{2}\right]-\mathbb{E}_{q}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right]^{2}\\
  & =\mathbb{E}_{q}\left[a_{s}^{2}r_{s1}^{2}+\left(1-a_{s}\right)^{2}r_{s0}^{2}+2a_{s}r_{s1}\left(1-a_{s}\right)r_{s0}\right]-\mathbb{E}_{q}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right]^{2}\\
  & =\chi_{s}\mathbb{E}_{q}\left[r_{s1}^{2}\right]+\left(1-\chi_{s}\right)\mathbb{E}_{q}\left[r_{s0}^{2}\right]-\mathbb{E}_{q}\left[a_{s}r_{s1}+\left(1-a_{s}\right)r_{s0}\right]^{2}
@@ -114,7 +127,7 @@ Finally, the entropies are:
 \begin_inset Formula 
 \begin{eqnarray*}
 \mathbb{E}_{q}\left[\log q\left(r_{si}\right)\right] & = & \gamma_{s}^{(i)}+\log\zeta_{s}^{(i)}+\log\Gamma\left(\gamma_{s}^{(i)}\right)\\
-\mathbb{E}_{q}\left[\log q\left(a_{s}\right)\right] & = & \chi_{s}\log\chi_{s}+\left(1-\chi_{s}\right)\log\left(1-\chi_{s}\right)
+\mathbb{E}_{q}\left[\log q\left(a_{s}\right)\right] & = & -\chi_{s}\log\chi_{s}-\left(1-\chi_{s}\right)\log\left(1-\chi_{s}\right)
 \end{eqnarray*}
 
 \end_inset
