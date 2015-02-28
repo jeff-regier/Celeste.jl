@@ -1,10 +1,11 @@
 using JuMP
-using Gadfly
 using Distributions
+#using Gadfly
 
-N = 1000
-S = 2
+N = 5000
+S = 3
 
+#################################
 # Generate the celestial objects
 mu = linspace(0.25, 0.75, S)
 
@@ -22,58 +23,22 @@ true_brightness = true_is_star .* star_brightness + (1 - true_is_star) .* galaxy
 # Generate the readings
 m = linspace(0, 1, N)
 # Why is this convert statement necessary?
-phi_ns = [convert(Float64, pdf(Normal(0, 0.06), m_i - mu_s)) for m_i in m, mu_s in mu]
+phi_ns = convert(Array{Float64, 2}, [pdf(Normal(0, 0.06), m_i - mu_s) for m_i in m, mu_s in mu])
 x = [convert(Float64, rand(Poisson(b))) for b in phi_ns * true_brightness]
 
 #plot(x=m,y=x)
 
-
-
+#########################
 # Optimize with JuMP
 m = Model()
-@defVar(m, 0.001 <= gamma[1:S, 1:2] <= 10)
-@defVar(m, 0.001 <= zeta[1:S, 1:2] <= 10)
-@defVar(m, 0.001 <= chi[1:S] <= 1 - 0.001)
+@defVar(m, log_gamma[1:S, 1:2])
+@defVar(m, log_zeta[1:S, 1:2])
+@defVar(m, logit_chi[1:S])
 
-# Set values to help with debugging?  It would be nice if we could
-# evaluate expressions one by one.
-for s in 1:S
-	setValue(gamma[s, 1], 5.0)
-	setValue(zeta[s, 1], 5.0)
-	setValue(gamma[s, 2], 3.0)
-	setValue(zeta[s, 2], 3.0)
-    setValue(chi[s], 0.4)
-end
-
-# Define the entropy.
-@defNLExpr(ent_rsa[s=1:S, a=1:2],
-	       gamma[s, a] + log(zeta[s, a]) + lgamma(zeta[s, a]))
-@defNLExpr(ent_as[s=1:S],
-	       -1 * chi[s] * log(chi[s]) - (1 - chi[s]) * log(1 - chi[s]))
-@defNLExpr(entropy, sum{ent_rsa[s, a], s=1:S, a=1:2} + sum{ent_as[s], s=1:S})
-@setNLObjective(m, Max, entropy)
-
-# This gives 
-# ERROR: InexactError()
-# in float64 at float.jl:55
-solve(m)
-
-
-# Hmm, maybe lgamma doesn't work.  Nope:
-m = Model()
-@defVar(m, 1 <= x <= 2)
-@setNLObjective(m, Max, lgamma(x))
-solve(m)
-
-
-
-# The rest of the model:
-
-# Optimize with JuMP
-m = Model()
-@defVar(m, 0.001 <= gamma[1:S, 1:2] <= 10)
-@defVar(m, 0.001 <= zeta[1:S, 1:2] <= 10)
-@defVar(m, 0.001 <= chi[1:S] <= 1 - 0.001)
+# Unconstrin the variables
+@defNLExpr(chi[s=1:S], exp(logit_chi[s]) / (1 + exp(logit_chi[s])))
+@defNLExpr(gamma[s=1:S, a=1:2], exp(log_gamma[s, a]))
+@defNLExpr(zeta[s=1:S, a=1:2], exp(log_zeta[s, a]))
 
 # Define the r expectations.
 @defNLExpr(e_ra[s=1:S, a=1:2], gamma[s, a] * zeta[s, a])
@@ -86,10 +51,30 @@ m = Model()
 @defNLExpr(var_fns[n=1:N, s=1:S], var_r[s] * (phi_ns[n, s])^2)
 @defNLExpr(e_fn[n=1:N], sum{e_fns[n, s], s=1:S})
 @defNLExpr(var_fn[n=1:N], sum{var_fns[n, s], s=1:S})
-
-# This is the problem:
 @defNLExpr(e_log_fn[n=1:N], 2 * log(e_fn[n]) - var_fn[n] / (2 * e_fn[n] ^ 2))
 @defNLExpr(e_log_lik, sum{x[n] * e_log_fn[n] - e_fn[n], n=1:N})
 
+# Define the entropy.
+@defNLExpr(ent_rsa[s=1:S, a=1:2],
+	       gamma[s, a] + log(zeta[s, a]) + lgamma(zeta[s, a]))
+@defNLExpr(ent_as[s=1:S],
+	       -1 * chi[s] * log(chi[s]) - (1 - chi[s]) * log(1 - chi[s]))
+@defNLExpr(entropy, sum{ent_rsa[s, a], s=1:S, a=1:2} + sum{ent_as[s], s=1:S})
+
+# TODO: put in the priors, now the difference between a star and galaxy isn't
+# present in the model.
+
+# The entropy is currently not working because of the lgamma function.
 @setNLObjective(m, Max, e_log_lik)
 solve(m)
+
+
+
+
+# lgamma doesn't work:
+m = Model()
+@defVar(m, 3.0 <= x <= 4.0)
+@setNLObjective(m, Max, lgamma(x))
+solve(m) # Expect lgamma(4.0)
+# ERROR: InexactError()
+#  in float64 at float.jl:55
