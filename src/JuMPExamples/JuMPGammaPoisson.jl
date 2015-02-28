@@ -79,7 +79,10 @@ m = Model()
 @defNLExpr(e_ra[s=1:S, a=1:2], gamma[s, a] * zeta[s, a])
 @defNLExpr(e_ra2[s=1:S, a=1:2], (1 + gamma[s, a]) * gamma[s, a] * (zeta[s, a] ^ 2))
 @defNLExpr(e_r[s=1:S], chi[s] * e_ra[s, 1] + (1 - chi[s]) * e_ra[s, 2])
-@defNLExpr(var_r[s=1:S], chi[s] * e_ra2[s, 1] + (1 - chi[s]) * e_ra2[s, 2] - (e_r[s]) ^ 2)
+# Note: this is failing for some reason, see below.
+# @defNLExpr(var_r[s=1:S], chi[s] * e_ra2[s, 1] + (1 - chi[s]) * e_ra2[s, 2] - (e_r[s]) ^ 2)
+@defNLExpr(var_r[s=1:S], chi[s] * e_ra2[s, 1] + (1 - chi[s]) * e_ra2[s, 2] -
+	                     (chi[s] * e_ra[s, 1] + (1 - chi[s]) * e_ra[s, 2]) ^ 2)
 
 # Define the F expectations.
 @defNLExpr(e_fns[n=1:N, s=1:S], e_r[s] * phi_ns[n, s])
@@ -135,8 +138,34 @@ solve(m)
 # ERROR: syntax: function argument names not unique
 m = Model()
 @defVar(m, 1 <= gamma <= 2)
-@defNLExpr(first, log(gamma))
-@defNLExpr(second, first + log(gamma))
-@setNLObjective(m, Max, first + second)
+@defNLExpr(first, gamma)
+@defNLExpr(second, first + gamma) # Expect 2 gamma
+@setNLObjective(m, Max, first + second) # Expect 3 gamma
 solve(m)
  
+# Fails:
+m = Model()
+@defVar(m, 1 <= gamma <= 2)
+@defNLExpr(first, gamma)
+@defNLExpr(second, first + gamma) # Expect 2 gamma
+@defNLExpr(third, first + gamma) # Expect 2 gamma
+@setNLObjective(m, Max, second + third) # Expect 4 gamma
+solve(m)
+
+# Fails:
+m = Model()
+@defVar(m, 1 <= gamma <= 2)
+@defNLExpr(first, gamma)
+@defNLExpr(second, first + gamma)
+@defNLExpr(third, first + gamma)
+@defNLExpr(fourth, second + third)
+@setNLObjective(m, Max, fourth)
+solve(m)
+
+# Works:
+m = Model()
+@defVar(m, 1 <= gamma <= 2)
+@defNLExpr(first, gamma)
+@defNLExpr(second, first + first)
+@setNLObjective(m, Max, second)
+solve(m)
