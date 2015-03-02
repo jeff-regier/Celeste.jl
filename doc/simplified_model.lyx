@@ -137,10 +137,26 @@ With a gamma prior, the expected prior is
 \end_layout
 
 \begin_layout Standard
+The prior on 
+\begin_inset Formula $a$
+\end_inset
+
+ is
+\begin_inset Formula 
+\begin{eqnarray*}
+\log\pi\left(a_{s}\right) & = & a_{s}\log\Delta+\left(1-a_{s}\right)\log\Delta
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
 Finally, the entropies are:
 \begin_inset Formula 
 \begin{eqnarray*}
-\mathbb{E}_{q}\left[-\log q\left(r_{si}\right)\right] & = & \gamma_{s}^{(i)}+\log\zeta_{s}^{(i)}+\log\Gamma\left(\gamma_{s}^{(i)}\right)\\
+\mathbb{E}_{q}\left[-\log q\left(r_{si}\right)\right] & = & \gamma_{s}^{(i)}+\log\zeta_{s}^{(i)}+\log\Gamma\left(\gamma_{s}^{(i)}\right)+\left(1-\gamma_{s}^{(i)}\right)\psi\left(\gamma_{s}^{(i)}\right)\\
 \mathbb{E}_{q}\left[-\log q\left(a_{s}\right)\right] & = & -\chi_{s}\log\chi_{s}-\left(1-\chi_{s}\right)\log\left(1-\chi_{s}\right)
 \end{eqnarray*}
 
@@ -154,12 +170,12 @@ Right now this doesn't match with Jeff's calculations.
 \begin_inset Formula 
 \begin{eqnarray*}
 D_{KL}\left(q\left(r_{s}\vert a_{i}\right),\pi\left(r_{s}\vert a_{i}\right)\right) & = & \mathbb{E}_{q}\left[-\log q\left(r_{si}\right)\right]+\mathbb{E}_{q}\left[\log\pi\left(r_{si}\right)\right]\\
- & = & \gamma_{s}^{(i)}+\log\zeta_{s}^{(i)}+\log\Gamma\left(\gamma_{s}^{(i)}\right)+\\
+ & = & \gamma_{s}^{(i)}+\log\zeta_{s}^{(i)}+\log\Gamma\left(\gamma_{s}^{(i)}\right)+\left(1-\gamma_{s}^{(i)}\right)\psi\left(\gamma_{s}^{(i)}\right)+\\
  &  & \left(\Upsilon^{i}-1\right)\left(\psi\left(\gamma_{s}^{(i)}\right)+\log\zeta_{s}^{(i)}\right)-\frac{\gamma_{s}^{(i)}\zeta_{s}^{(i)}}{\Phi^{i}}-\Upsilon^{i}\log\left(\Phi^{i}\right)-\log\Gamma\left(\Upsilon^{i}\right)\\
- & = & \log\zeta_{s}^{(i)}+\log\Gamma\left(\gamma_{s}^{(i)}\right)+\left(\Upsilon^{i}-1\right)\left(\psi\left(\gamma_{s}^{(i)}\right)+\log\zeta_{s}^{(i)}\right)-\\
- &  & \gamma_{s}^{(i)}\frac{\zeta_{s}^{(i)}-\Phi^{i}}{\Phi^{i}}-\Upsilon^{i}\log\left(\Phi^{i}\right)-\log\Gamma\left(\Upsilon^{i}\right)\\
- & = & \log\Gamma\left(\gamma_{s}^{(i)}\right)+\Upsilon^{i}\psi\left(\gamma_{s}^{(i)}\right)+\Upsilon^{i}\log\zeta_{s}^{(i)}-\\
- &  & \gamma_{s}^{(i)}\frac{\zeta_{s}^{(i)}-\Phi^{i}}{\Phi^{i}}-\Upsilon^{i}\log\left(\Phi^{i}\right)-\log\Gamma\left(\Upsilon^{i}\right)
+ & = & \log\zeta_{s}^{(i)}+\log\Gamma\left(\gamma_{s}^{(i)}\right)+\Upsilon^{i}\psi\left(\gamma_{s}^{(i)}\right)-\psi\left(\gamma_{s}^{(i)}\right)+\Upsilon^{i}\log\zeta_{s}^{(i)}-\log\zeta_{s}^{(i)}-\\
+ &  & \gamma_{s}^{(i)}\frac{\zeta_{s}^{(i)}-\Phi^{i}}{\Phi^{i}}-\Upsilon^{i}\log\left(\Phi^{i}\right)-\log\Gamma\left(\Upsilon^{i}\right)+\psi\left(\gamma_{s}^{(i)}\right)-\gamma_{s}^{(i)}\psi\left(\gamma_{s}^{(i)}\right)\\
+ & = & \left(\Upsilon^{i}-\gamma_{s}^{(i)}\right)\psi\left(\gamma_{s}^{(i)}\right)+\log\Gamma\left(\gamma_{s}^{(i)}\right)-\log\Gamma\left(\Upsilon^{i}\right)+\\
+ &  & \Upsilon^{i}\left(\log\zeta_{s}^{(i)}-\log\left(\Phi^{i}\right)\right)-\gamma_{s}^{(i)}\frac{\zeta_{s}^{(i)}-\Phi^{i}}{\Phi^{i}}
 \end{eqnarray*}
 
 \end_inset
