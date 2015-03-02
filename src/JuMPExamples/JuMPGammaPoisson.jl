@@ -1,6 +1,6 @@
 using JuMP
 using Distributions
-#using Gadfly
+using Gadfly
 
 N = 500
 S = 3
@@ -10,23 +10,21 @@ S = 3
 mu = linspace(0.25, 0.75, S)
 
 star_prob = 0.5
-star_brightness_mean = 0.0
-star_brightness_sd = 0.6
-galaxy_brightness_mean = 2.3
-galaxy_brightness_sd = 0.6
+prior_upsilon = [1.0, 4.0]
+prior_phi = [0.5, 0.5]
 
-star_brightness = rand(LogNormal(star_brightness_mean, star_brightness_sd), S)
-galaxy_brightness = rand(LogNormal(galaxy_brightness_mean, galaxy_brightness_sd), S)
+star_brightness = rand(Gamma(prior_upsilon[1], prior_phi[1]), S)
+galaxy_brightness = rand(Gamma(prior_upsilon[2], prior_phi[2]), S)
 true_is_star = rand(Bernoulli(star_prob), S)
 true_brightness = true_is_star .* star_brightness + (1 - true_is_star) .* galaxy_brightness
 
 # Generate the readings
-m = linspace(0, 1, N)
+m_loc = linspace(0, 1, N)
 # Why is this convert statement necessary?
-phi_ns = convert(Array{Float64, 2}, [pdf(Normal(0, 0.06), m_i - mu_s) for m_i in m, mu_s in mu])
+phi_ns = convert(Array{Float64, 2}, [pdf(Normal(0, 0.06), m_i - mu_s) for m_i in m_loc, mu_s in mu])
 x = [convert(Float64, rand(Poisson(b))) for b in phi_ns * true_brightness]
 
-#plot(x=m,y=x)
+plot(x=m_loc, y=x)
 
 #########################
 # Optimize with JuMP
@@ -41,10 +39,13 @@ m = Model()
 @defNLExpr(q_zeta[s=1:S, a=1:2], exp(log_zeta[s, a]))
 
 # Define the r expectations.
+@defNLExpr(e_a[s=1:S, 1], q_chi[s])
+@defNLExpr(e_a[s=1:S, 2], 1 - q_chi[s])
 @defNLExpr(e_ra[s=1:S, a=1:2], q_gamma[s, a] * q_zeta[s, a])
 @defNLExpr(e_ra2[s=1:S, a=1:2], (1 + q_gamma[s, a]) * q_gamma[s, a] * (q_zeta[s, a] ^ 2))
-@defNLExpr(e_r[s=1:S], q_chi[s] * e_ra[s, 1] + (1 - q_chi[s]) * e_ra[s, 2])
-@defNLExpr(var_r[s=1:S], q_chi[s] * e_ra2[s, 1] + (1 - q_chi[s]) * e_ra2[s, 2] - (e_r[s]) ^ 2)
+@defNLExpr(e_log_ra[s=1:S, a=1:2], digamma(q_gamma[s, a]) + log(q_zeta[s, a]))
+@defNLExpr(e_r[s=1:S], sum{e_a[s, a] * e_ra[s, a], a=1:2})
+@defNLExpr(var_r[s=1:S], sum{e_a[s, a] * e_ra2[s, a], a=1:2} - (e_r[s]) ^ 2)
 
 # Define the F expectations.
 @defNLExpr(e_fns[n=1:N, s=1:S], e_r[s] * phi_ns[n, s])
@@ -62,11 +63,14 @@ m = Model()
 	       -1 * q_chi[s] * log(q_chi[s]) - (1 - q_chi[s]) * log(1 - q_chi[s]))
 @defNLExpr(entropy, sum{ent_rsa[s, a], s=1:S, a=1:2} + sum{ent_as[s], s=1:S})
 
-# TODO: put in the priors, now the difference between a star and galaxy isn't
-# present in the model.
+# Define the expected priors.
+@defNLExpr(e_ra_prior[s=1:S, a=1:2],
+	       (prior_upsilon[a] - 1) * e_log_ra[s, a] -
+	       e_ra[s, a] / prior_phi[a] -
+	       prior_upsilon[a] * log(prior_phi[a]) - lgamma(prior_upsilon[a]))
+@defNLExpr(e_a_prior[s=1:S], q_chi[s] * log(star_prob) + (1 - q_chi[s]) * log(1 - star_prob))
+@defNLExpr(priors, sum{e_a[s, a] * e_ra_prior[s, a], s=1:S, a=1:2} + sum{e_a_prior[s], s=1:S})
 
-
-
-@setNLObjective(m, Max, e_log_lik + entropy)
+@setNLObjective(m, Max, e_log_lik + entropy + priors)
 solve(m)
 
