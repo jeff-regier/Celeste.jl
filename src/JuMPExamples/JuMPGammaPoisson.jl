@@ -29,8 +29,8 @@ plot(x=m_loc, y=x)
 #########################
 # Optimize with JuMP
 m = Model()
-@defVar(m, log_gamma[1:S, 1:2])
-@defVar(m, log_zeta[1:S, 1:2])
+@defVar(m, log_gamma[1:S, 1:2], start=log(true_brightness[s]))
+@defVar(m, log_zeta[1:S, 1:2], start=)
 @defVar(m, logit_chi[1:S])
 
 # Unconstrain the variables.  Does this really help at all?
@@ -38,14 +38,16 @@ m = Model()
 @defNLExpr(q_gamma[s=1:S, a=1:2], exp(log_gamma[s, a]))
 @defNLExpr(q_zeta[s=1:S, a=1:2], exp(log_zeta[s, a]))
 
-# Define the r expectations.
+# Define the a expectations.
 @defNLExpr(e_a[s=1:S, 1], q_chi[s])
 @defNLExpr(e_a[s=1:S, 2], 1 - q_chi[s])
-@defNLExpr(e_ra[s=1:S, a=1:2], q_gamma[s, a] * q_zeta[s, a])
-@defNLExpr(e_ra2[s=1:S, a=1:2], (1 + q_gamma[s, a]) * q_gamma[s, a] * (q_zeta[s, a] ^ 2))
+
+# Define the r expectations.
+@defNLExpr(e_ra[s=1:S, a=1:2],     q_gamma[s, a] * q_zeta[s, a])
+@defNLExpr(e_ra2[s=1:S, a=1:2],    (1 + q_gamma[s, a]) * q_gamma[s, a] * (q_zeta[s, a] ^ 2))
 @defNLExpr(e_log_ra[s=1:S, a=1:2], digamma(q_gamma[s, a]) + log(q_zeta[s, a]))
-@defNLExpr(e_r[s=1:S], sum{e_a[s, a] * e_ra[s, a], a=1:2})
-@defNLExpr(var_r[s=1:S], sum{e_a[s, a] * e_ra2[s, a], a=1:2} - (e_r[s]) ^ 2)
+@defNLExpr(e_r[s=1:S],             sum{e_a[s, a] * e_ra[s, a], a=1:2})
+@defNLExpr(var_r[s=1:S],           sum{e_a[s, a] * e_ra2[s, a], a=1:2} - (e_r[s]) ^ 2)
 
 # Define the F expectations.
 @defNLExpr(e_fns[n=1:N, s=1:S], e_r[s] * phi_ns[n, s])
