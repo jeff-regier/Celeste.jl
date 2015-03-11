@@ -1,20 +1,24 @@
+# Generates sample datasets for testing.
+module SampleData
 
 using Celeste
 using CelesteTypes
 using Distributions
-import Synthetic
 
-module CelesteSampleData
+import ModelInit
+import Synthetic
+import SDSS
+
+export gen_sample_star_dataset, gen_sample_galaxy_dataset, gen_three_body_dataset
+export dat_dir
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
-
 
 const sample_star_fluxes = [
     4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
 const sample_galaxy_fluxes = [
     1.377666E+01, 5.635334E+01, 1.258656E+02, 
     1.884264E+02, 2.351820E+02] * 100  # 1x wasn't bright enough
-
 
 function sample_ce(pos, is_star::Bool)
     CatalogEntry(pos, is_star, sample_star_fluxes, sample_galaxy_fluxes, 
@@ -93,3 +97,4 @@ function gen_three_body_dataset(; perturb=true)
     blob, mp, three_bodies
 end
 
+end # module end
