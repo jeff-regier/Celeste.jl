@@ -118,3 +118,33 @@ getValue(beta)
 getValue(beta2)
 @defNLExpr(beta2nl[s=1:5], s * beta * beta)
 [ ReverseDiffSparse.getvalue(beta2nl[s], m.colVal) for s=1:5 ]
+
+
+########
+
+m = Model()
+@defVar(m, baz)
+@defNLExpr(foo[1], 5 * baz)
+@defNLExpr(foo[2], -3 * baz)
+@defNLExpr(bar, sum{foo[i], i=1:2})
+setValue(baz, 2)
+ReverseDiffSparse.getvalue(bar, m.colVal) # Expect 4, get -12
+
+############
+
+m = Model()
+@defVar(m, baz)
+@defExpr(foo[1], 5 * baz)
+@defExpr(foo[2], -3 * baz)
+
+########
+
+m = Model()
+@defVar(m, baz)
+@defNLExpr(foo[s=1:2], (s == 1) * 5 * baz + (s == 2) * (-3 * baz))
+@defNLExpr(bar, sum{foo[i], i=1:2})
+setValue(baz, 2)
+ReverseDiffSparse.getvalue(bar, m.colVal) # Get 4
+
+
+
