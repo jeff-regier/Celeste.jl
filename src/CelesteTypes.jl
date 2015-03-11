@@ -16,7 +16,7 @@ export SensitiveFloat
 
 export zero_sensitive_float, const_sensitive_param, clear!
 
-export ParamIndex, ids, all_params, star_pos_params, galaxy_pos_params, D
+export ParamIndex, ids, all_params, star_pos_params, galaxy_pos_params, D, B, I
 
 import FITSIO
 import Distributions
@@ -272,16 +272,15 @@ end
 # The number of components in the color prior.
 const D = 2
 
-# TODO: also make B and I global constants?
+# The number of types of celestial objects (here, stars and galaxies).
+const I = 2
+
+# The number of bands (colors).
+const B = 5
 
 function get_param_ids()
     # Build a ParamIndex object.
 
-    # The number of types of celestial objects (here, stars and galaxies).
-    I = 2
-
-    # The number of bands (colors).
-    B = 5
 
     kappa_end = 11 + I * D
     beta_end = kappa_end + I * (B - 1)

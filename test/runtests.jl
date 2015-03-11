@@ -1,10 +1,10 @@
 #!/usr/bin/env julia
 
-# TODO: check these dependencies
+# TODO: check these dependencies now that SampleData is split out.
 using Celeste
 using CelesteTypes
 using Base.Test
-using CelesteSampleData
+using SampleData
 using Distributions
 
 import Synthetic
