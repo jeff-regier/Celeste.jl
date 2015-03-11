@@ -3,6 +3,7 @@ module Synthetic
 export gen_blob
 
 using CelesteTypes
+import ModelInit
 import Util
 
 import Distributions
@@ -88,6 +89,40 @@ end
 
 function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry})
     [gen_image(blob0[b], n_bodies) for b in 1:5]
+end
+
+
+#######################################
+
+const pp = ModelInit.sample_prior()
+
+
+function sample_fluxes(i::Int64, r_s)
+#    r_s = rand(Distributions.Gamma(pp.Upsilon[i], pp.Psi[i]))
+    k_s = rand(Distributions.Categorical(pp.Xi[i]))
+    c_s = rand(Distributions.MvNormal(pp.Omega[i][:, k_s], pp.Lambda[i][k_s]))
+
+    l_s = Array(Float64, 5)
+    l_s[3] = r_s
+    l_s[4] = l_s[3] * exp(c_s[3])
+    l_s[5] = l_s[4] * exp(c_s[4])
+    l_s[2] = l_s[3] / exp(c_s[2])
+    l_s[1] = l_s[2] / exp(c_s[1])
+    l_s
+end
+
+
+function synthetic_body(ce::CatalogEntry)
+    ce2 = deepcopy(ce)
+#    ce2.is_star = 1 - rand(Distributions.Bernoulli(pp.Phi))
+    ce2.star_fluxes[:] = sample_fluxes(1, ce.star_fluxes[3])
+    ce2.gal_fluxes[:] = sample_fluxes(2, ce.gal_fluxes[3])
+    ce2
+end
+
+
+function synthetic_bodies(n_bodies::Vector{CatalogEntry})
+    CatalogEntry[synthetic_body(ce) for ce in n_bodies]
 end
 
 
