@@ -107,3 +107,14 @@ solve(debug_model)
 getObjectiveValue(debug_model)
 
 ########
+
+using JuMP
+using ReverseDiffSparse
+m = Model()
+@defVar(m, 0 <= beta <= 1)
+@defExpr(beta2, beta * beta)
+setValue(beta, 2.0)
+getValue(beta)
+getValue(beta2)
+@defNLExpr(beta2nl[s=1:5], s * beta * beta)
+[ ReverseDiffSparse.getvalue(beta2nl[s], m.colVal) for s=1:5 ]
