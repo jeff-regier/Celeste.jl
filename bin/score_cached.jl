@@ -1,6 +1,7 @@
 #!/usr/bin/env julia
-#
-# This post-processed the VB results to produce csv files.
+
+# This script post-processes the VB results to produce test scores
+# and csv files.
 
 using Celeste
 using CelesteTypes
@@ -13,7 +14,7 @@ const color_names = ["$(band_letters[i])$(band_letters[i+1])" for i in 1:4]
 
 
 function load_celeste_predictions(model_dir, stamp_id)
-    f = open("$model_dir/$(ARGS[2])-$stamp_id.dat")
+    f = open("$model_dir/$(ARGS[1])-$stamp_id.dat")
     mp = deserialize(f)
     close(f)
 	mp
@@ -47,7 +48,7 @@ function init_results_df(stamp_ids)
     N = length(stamp_ids)
     color_col_names = ["color_$cn" for cn in color_names]
     color_sd_col_names = ["color_$(cn)_sd" for cn in color_names]
-    col_names = ["stamp_id", "ra", "dec", "is_star", "flux_r", "flux_r_sd",
+    col_names = ["stamp_id", "pos1", "pos2", "is_star", "flux_r", "flux_r_sd",
             color_col_names, color_sd_col_names,
             "gal_fracdev", "gal_ab", "gal_angle", "gal_scale"]
     col_symbols = Symbol[symbol(cn) for cn in col_names]
@@ -71,9 +72,9 @@ function load_photo_obj!(i::Int64, stamp_id::String, is_s82::Bool, df::DataFrame
         SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob, match_blob=true)
     ce, ce_df = center_obj(cat_ce, cat_df)
 
-    df[i, :ra] = ce_df[1, :ra]
-    df[i, :dec] = ce_df[1, :dec]
-    df[i, :is_star] = ce_df[1, :is_star] ? 1. : 0.
+    df[i, :pos1] = ce.pos[1]
+    df[i, :pos2] = ce.pos[2]
+    df[i, :is_star] = ce.is_star ? 1. : 0.
 
     fluxes = ce.is_star ? ce.star_fluxes : ce.gal_fluxes
     df[i, :flux_r] = fluxes[3]
@@ -88,8 +89,8 @@ function load_photo_obj!(i::Int64, stamp_id::String, is_s82::Bool, df::DataFrame
     if !is_s82
         df[i, :gal_fracdev] = ce.gal_frac_dev
         df[i, :gal_ab] = ce.gal_ab
-        df[i, :gal_angle] = ce.gal_angle * (180 / pi)
-        df[i, :gal_scale] = ce.gal_scale * 0.396
+        df[i, :gal_angle] = (180/pi)ce.gal_angle
+        df[i, :gal_scale] = ce.gal_scale
     else
         # only record the truth, when it's comparable to both sets of predictions
         if ce.is_star < .5
@@ -105,15 +106,44 @@ function load_photo_obj!(i::Int64, stamp_id::String, is_s82::Bool, df::DataFrame
             if (ce.gal_ab < .6) &&
                 (!(0.05 < ce.gal_frac_dev < 0.95) ||
                     abs(ce_df[1, :phi_dev] - ce_df[1, :phi_exp]) < 10)  # degrees
-                df[i, :gal_angle] = ce.gal_angle * (180 / pi)
+                df[i, :gal_angle] = (180/pi)ce.gal_angle
             end
 
             if !(0.05 < ce.gal_frac_dev < 0.95) ||
                     abs(ce_df[1, :theta_dev] - ce_df[1, :theta_exp]) < 0.2  # arcsec
-                df[i, :gal_scale] = ce.gal_scale * 0.396
+                df[i, :gal_scale] = ce.gal_scale
             end
         end
     end
+end
+
+
+function load_synth_obj!(i::Int64, stamp_id::String, df::DataFrame)
+    blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
+    f = open(ENV["STAMP"]"/cat-synth-$stamp_id.dat")
+    cat_ce = deserialize(f)
+    close(f)
+    cat_df = SDSS.load_stamp_catalog_df(ENV["STAMP"], "s82-$stamp_id", blob)
+    ce, ce_df = center_obj(cat_ce, cat_df)
+
+    df[i, :pos1] = ce.pos[1]
+    df[i, :pos2] = ce.pos[2]
+    df[i, :is_star] = ce.is_star ? 1. : 0.
+
+    fluxes = ce.is_star ? ce.star_fluxes : ce.gal_fluxes
+    df[i, :flux_r] = fluxes[3]
+    for c in 1:4
+        cc = symbol("color_$(color_names[c])")
+        cc_sd = symbol("color_$(color_names[c])_sd")
+        if fluxes[c] > 0 && fluxes[c + 1] > 0  # leave as NA otherwise
+            df[i, cc] = -2.5log10(fluxes[c] / fluxes[c + 1])
+        end
+    end
+
+    df[i, :gal_fracdev] = ce.gal_frac_dev
+    df[i, :gal_ab] = ce.gal_ab
+    df[i, :gal_angle] = (180/pi)ce.gal_angle
+    df[i, :gal_scale] = ce.gal_scale
 end
 
 
@@ -122,10 +152,8 @@ function load_celeste_obj!(i::Int64, stamp_id::String, df::DataFrame)
     mp = load_celeste_predictions(ENV["MODEL"], stamp_id)
     vs = center_obj(mp.vp)
 
-    ra_dec = WCSLIB.wcsp2s(blob[3].wcs, vs[ids.mu]'')
-
-    df[i, :ra] = ra_dec[1]
-    df[i, :dec] = ra_dec[2]
+    df[i, :pos1] = vs[ids.mu][1]
+    df[i, :pos2] = vs[ids.mu][2]
     df[i, :is_star] = 1. - vs[ids.chi]
 
     j = vs[ids.chi] < .5 ? 1 : 2
@@ -142,7 +170,7 @@ function load_celeste_obj!(i::Int64, stamp_id::String, df::DataFrame)
     df[i, :gal_fracdev] = vs[ids.theta]
     df[i, :gal_ab] = vs[ids.rho]
     df[i, :gal_angle] = (180/pi)vs[ids.phi]
-    df[i, :gal_scale] = vs[ids.sigma] * 0.396
+    df[i, :gal_scale] = vs[ids.sigma]
 end
 
 
@@ -163,24 +191,6 @@ function load_df(stamp_ids, per_stamp_callback::Function)
     end
 
     df
-end
-
-
-function load_predictions(stamp_id)
-    blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
-    true_cat_df = SDSS.load_stamp_catalog_df(ENV["STAMP"], "s82-$stamp_id", blob)
-    true_cat = SDSS.load_stamp_catalog(ENV["STAMP"], "s82-$stamp_id", blob)
-    baseline_cat_df = SDSS.load_stamp_catalog_df(ENV["STAMP"], stamp_id, blob,
-         match_blob=true)
-    baseline_cat = SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob,
-         match_blob=true)
-    mp = load_celeste_predictions(ENV["MODEL"], stamp_id)
-
-    true_ce, true_row = center_obj(true_cat, true_cat_df)
-    base_ce, base_row = center_obj(baseline_cat, baseline_cat_df)
-	vs = center_obj(mp.vp)
-
-    true_ce, true_row, base_ce, base_row, vs
 end
 
 
@@ -213,8 +223,8 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
     ret[:missed_stars] =  predicted_gal & !(true_gal)
     ret[:missed_gals] =  !predicted_gal & true_gal
 
-    ret[:position] = sqrt((truth[:ra] - predicted[:ra]).^2 
-            + (truth[:dec] - predicted[:dec]).^2) * 3600 / .396 # degrees to pixels
+    ret[:position] = sqrt((truth[:pos1] - predicted[:pos1]).^2 
+            + (truth[:pos2] - predicted[:pos2]).^2)
 
     ret[:gal_angle] = degrees_to_diff(truth[:gal_angle], predicted[:gal_angle])
 
@@ -238,7 +248,9 @@ end
 
 
 function df_score(stamp_ids)
-    coadd_callback(i, stamp_id, df) = load_photo_obj!(i, stamp_id, true, df)
+    coadd_callback(i, stamp_id, df) = ARGS[1] == "V" ?
+        load_photo_obj!(i, stamp_id, true, df) :
+        load_synth_obj!(i, stamp_id, df)
     coadd_df = load_df(stamp_ids, coadd_callback)
     primary_callback(i, stamp_id, df) = load_photo_obj!(i, stamp_id, false, df)
     primary_df = load_df(stamp_ids, primary_callback)
@@ -286,7 +298,7 @@ if length(ARGS) >= 2
     # The input file is the stamp ids you want to process.
     # It looks for models and raw data using the environment variables
     # $STAMP and $MODELS.  Missing stamp ids will not be handled gracefully.
-    f = open(ARGS[1])
+    f = open(ARGS[2])
     stamp_ids = [strip(line) for line in readlines(f)]
     close(f)
 
