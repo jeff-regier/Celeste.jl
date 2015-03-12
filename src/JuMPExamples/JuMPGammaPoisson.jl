@@ -212,3 +212,86 @@ setValue(foo, 2)
 @defNLExpr(bar[ink=1:2, indigo=1:2, igloo=1:2, icarus=1:2],
 	       foo * ink * indigo * igloo * icarus)
 [ ReverseDiffSparse.getvalue(bar[i, j, k, l], m.colVal) for i=1:2, j=1:2, k=1:2, l=1:2 ]
+
+
+################
+
+immutable SimpleThingy
+	foo::Float64
+	bar::Float64
+	SimpleThingy(offset::Float64) = begin
+		foo = offset
+		bar = offset * 2
+		new(foo, bar)
+	end
+end
+
+immutable MyOtherThingy
+	foo::Array{Float64}
+	MyOtherThingy(offset::Float64) = begin
+		foo = Array(Float64, 5, 10)
+		for i = 1:5
+			for j = 1:10
+				foo[i, j] = offset + i + j
+			end
+		end
+		new(foo)
+	end
+end
+
+immutable My1DArrayThingy
+	foo::Array{Float64}
+	My1DArrayThingy(offset::Float64) = begin
+		foo = Array(Float64, 10)
+		for i = 1:10
+			foo[i] = offset + i
+		end
+		new(foo)
+	end
+end
+
+thingy_array = Array(SimpleThingy, 10)
+for i = 1:10
+	thingy_array[i] = SimpleThingy(convert(Float64, i))
+end
+
+
+thingy_array_array = Array(My1DArrayThingy, 10)
+for i = 1:10
+	thingy_array_array[i] = My1DArrayThingy(convert(Float64, i))
+end
+
+
+other_thingy_array = Array(MyOtherThingy, 10)
+for i = 1:10
+	other_thingy_array[i] = MyOtherThingy(convert(Float64, i))
+end
+
+
+m = Model()
+@defVar(m, bar)
+setValue(bar, 2)
+
+# These work:
+@defNLExpr(thingy_bar[i=1:10], thingy_array[i].foo * bar)
+@defNLExpr(thingy_sum, sum{thingy_array[i].foo * bar, i=1:10})
+ReverseDiffSparse.getvalue(thingy_sum, m.colVal)
+
+# These do not:
+@defNLExpr(other_thingy_bar[i=1:10], other_thingy_array[i].foo[1, 1] * bar)
+@defNLExpr(other_thingy_sum, sum{other_thingy_array[i].foo[1, 1] * bar, i=1:10})
+@defNLExpr(array_thingy_bar[i=1:5], thingy_array_array[i].foo[1] * bar)
+
+# For references, these expressions work:
+other_thingy_array[1].foo[1, 1]
+thingy_array_array[1].foo[1]
+
+# The way to do this is probably:
+thingy_flattened = [ other_thingy_array[i].foo[1, 1] for i=1:10 ]
+@defNLExpr(other_thingy_bar[i=1:10], thingy_flattened[i] * bar)
+
+
+
+
+
+
