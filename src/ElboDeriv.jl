@@ -520,10 +520,10 @@ end
 
 
 function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
-        sbs::Vector{SourceBrightness},
-        star_mcs::Array{BvnComponent, 2},
-        gal_mcs::Array{GalaxyCacheComponent, 4},
-        accum::SensitiveFloat)
+                            sbs::Vector{SourceBrightness},
+                            star_mcs::Array{BvnComponent, 2},
+                            gal_mcs::Array{GalaxyCacheComponent, 4},
+                            accum::SensitiveFloat)
     # Add a tile's contribution to the ELBO likelihood term.
     #
     # Args:
