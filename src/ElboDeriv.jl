@@ -211,7 +211,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
     #
     # Returns:
     #  - star_mcs: An # of PSF components x # of sources array of BvnComponents
-    #  - gal_mcs: An array of BvnComponents with indices
+    #  - gal_mcs: An array of GalaxyCacheComponents with indices
     #     - PSF component
     #     - Galaxy component
     #     - Galaxy type
@@ -520,10 +520,10 @@ end
 
 
 function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
-                            sbs::Vector{SourceBrightness},
-                            star_mcs::Array{BvnComponent, 2},
-                            gal_mcs::Array{GalaxyCacheComponent, 4},
-                            accum::SensitiveFloat)
+                          sbs::Vector{SourceBrightness},
+                          star_mcs::Array{BvnComponent, 2},
+                          gal_mcs::Array{GalaxyCacheComponent, 4},
+                          accum::SensitiveFloat)
     # Add a tile's contribution to the ELBO likelihood term.
     #
     # Args:
