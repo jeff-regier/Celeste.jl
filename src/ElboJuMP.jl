@@ -85,54 +85,66 @@ celeste_m = Model()
 
 SetJuMPParameters(mp)
 
-jump_e_l_a = [ ReverseDiffSparse.getvalue(E_l_a[s, b, a], celeste_m.colVal)
-               for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
-
-sb1 = ElboDeriv.SourceBrightness(mp.vp[s]);
-celeste_val = sb1.E_l_a[b, a].v
-
 # Index 3 is r_s and  has a gamma expectation.
-@defNLExpr(E_l_a[s=1:mp.S, b=3, a=1:CelesteTypes.I],
+@defNLExpr(E_l_a_3[s=1:mp.S, a=1:CelesteTypes.I],
 	       vp_gamma[s, a] * vp_zeta[s, a])
 
 # The remaining indices involve c_s and have lognormal
 # expectations times E_c_3.
-@defNLExpr(E_l_a[s=1:mp.S, b=4, a=1:CelesteTypes.I],
-           E_l_a[s, 3, a] * exp(vp_beta[s, 3, a] + .5 * vp_lambda[s, 3, a]))
+@defNLExpr(E_l_a_4[s=1:mp.S, a=1:CelesteTypes.I],
+           E_l_a_3[s, a] * exp(vp_beta[s, 3, a] + .5 * vp_lambda[s, 3, a]))
+@defNLExpr(E_l_a_5[s=1:mp.S, a=1:CelesteTypes.I],
+           E_l_a_4[s, a] * exp(vp_beta[s, 4, a] + .5 * vp_lambda[s, 4, a]))
 
-jump_val = ReverseDiffSparse.getvalue(E_l_a[s, b, a], celeste_m.colVal)
-celeste_val == jump_val
+@defNLExpr(E_l_a_2[s=1:mp.S, a=1:CelesteTypes.I],
+           E_l_a_3[s, a] * exp(-vp_beta[s, 2, a] + .5 * vp_lambda[s, 2, a]))
+@defNLExpr(E_l_a_1[s=1:mp.S, a=1:CelesteTypes.I],
+           E_l_a_2[s, a] * exp(-vp_beta[s, 1, a] + .5 * vp_lambda[s, 1, a]))
 
-@defNLExpr(E_l_a[s=1:mp.S, b=5, a=1:CelesteTypes.I],
-           E_l_a[s, 4, a] * exp(vp_beta[s, 4, a] + .5 * vp_lambda[s, 4, a]))
+# Copy the brightnesses into a summable indexed structure.
+@defNLExpr(E_l_a[s=1:mp.S, b=1:CelesteTypes.B, a=1:CelesteTypes.I],
+	       (b == 1) * E_l_a_1[s, a] +
+	       (b == 2) * E_l_a_2[s, a] +
+	       (b == 3) * E_l_a_3[s, a] +
+	       (b == 4) * E_l_a_4[s, a] +
+	       (b == 5) * E_l_a_5[s, a])
 
-@defNLExpr(E_l_a[s=1:mp.S, b=2, a=1:CelesteTypes.I],
-           E_l_a[s, 3, a] * exp(-vp_beta[s, 2, a] + .5 * vp_lambda[s, 2, a]))
-@defNLExpr(E_l_a[s=1:mp.S, b=1, a=1:CelesteTypes.I],
-           E_l_a[s, 2, a] * exp(-vp_beta[s, 1, a] + .5 * vp_lambda[s, 1, a]))
+jump_e_l_a = [ ReverseDiffSparse.getvalue(E_l_a[s, b, a], celeste_m.colVal)
+               for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
+
+celeste_e_l_a = [ ElboDeriv.SourceBrightness(mp.vp[s]).E_l_a[b, a].v
+                  for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
+
+
+
 
 # Second order terms.
-@defNLExpr(E_ll_a[s=1:mp.S, b=3, a=1:CelesteTypes.I],
+@defNLExpr(E_ll_a_3[s=1:mp.S, a=1:CelesteTypes.I],
 	       vp_gamma[s, a] * (1 + vp_gamma[s, a]) * vp_zeta[s, a] ^ 2)
 
-@defNLExpr(E_ll_a[s=1:mp.S, b=4, a=1:CelesteTypes.I],
-	       E_ll_a[s, 3, a] * exp(2 * vp_beta[s, 3, a] + 2 * vp_lambda[s, 3, a]))
-@defNLExpr(E_ll_a[s=1:mp.S, b=5, a=1:CelesteTypes.I],
-	       E_ll_a[s, 4, a] * exp(2 * vp_beta[s, 4, a] + 2 * vp_lambda[s, 4, a]))
+@defNLExpr(E_ll_a_4[s=1:mp.S, a=1:CelesteTypes.I],
+	       E_ll_a_3[s, a] * exp(2 * vp_beta[s, 3, a] + 2 * vp_lambda[s, 3, a]))
+@defNLExpr(E_ll_a_5[s=1:mp.S, a=1:CelesteTypes.I],
+	       E_ll_a_4[s, a] * exp(2 * vp_beta[s, 4, a] + 2 * vp_lambda[s, 4, a]))
 
-@defNLExpr(E_ll_a[s=1:mp.S, b=2, a=1:CelesteTypes.I],
-	       E_ll_a[s, 3, a] * exp(-2 * vp_beta[s, 2, a] + 2 * vp_lambda[s, 2, a]))
-@defNLExpr(E_ll_a[s=1:mp.S, b=1, a=1:CelesteTypes.I],
-	       E_ll_a[s, 2, a] * exp(-2 * vp_beta[s, 1, a] + 2 * vp_lambda[s, 1, a]))
+@defNLExpr(E_ll_a_2[s=1:mp.S, a=1:CelesteTypes.I],
+	       E_ll_a_3[s, a] * exp(-2 * vp_beta[s, 2, a] + 2 * vp_lambda[s, 2, a]))
+@defNLExpr(E_ll_a_1[s=1:mp.S, a=1:CelesteTypes.I],
+	       E_ll_a_2[s, a] * exp(-2 * vp_beta[s, 1, a] + 2 * vp_lambda[s, 1, a]))
+
+@defNLExpr(E_ll_a[s=1:mp.S, b=1:CelesteTypes.B, a=1:CelesteTypes.I],
+	       (b == 1) * E_ll_a_1[s, a] +
+	       (b == 2) * E_ll_a_2[s, a] +
+	       (b == 3) * E_ll_a_3[s, a] +
+	       (b == 4) * E_ll_a_4[s, a] +
+	       (b == 5) * E_ll_a_5[s, a])
 
 
-for s=1:mp.S
-	for b=1:CelesteTypes.B
-		for a=1:CelesteTypes.I
-			print(s, ", ", b, ", ", a, "\n")
+jump_e_ll_a = [ ReverseDiffSparse.getvalue(E_ll_a[s, b, a], celeste_m.colVal)
+               for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
 
-		end
-	end
-end
+celeste_e_ll_a = [ ElboDeriv.SourceBrightness(mp.vp[s]).E_ll_a[b, a].v
+                  for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
 
+jump_e_ll_a - celeste_e_ll_a
 
