@@ -148,3 +148,67 @@ ReverseDiffSparse.getvalue(bar, m.colVal) # Get 4
 
 
 
+##############
+# Arrays of expressions
+
+m = Model()
+@defVar(m, bar)
+
+foo = Array(Any, 5, 10)
+for i = 1:5
+	for j = 1:10
+		foo[i, j] = @defNLExpr(placeholder, i * bar + j)
+	end
+end
+setValue(bar, 2)
+
+# This works:
+foo_mat = [ ReverseDiffSparse.getvalue(foo[i, j], m.colVal) for i=1:5, j=1:10]
+
+# The result of this is a parametric expression, not a value:
+@defNLExpr(foo_element, foo[1, 1])
+ReverseDiffSparse.getvalue(foo_element, m.colVal)
+
+# The result of this is an error:
+@defNLExpr(foo_sum, sum{foo[i, j], i=1:5, j=1:10})
+ReverseDiffSparse.getvalue(foo_sum, m.colVal)
+# ERROR: `+` has no method matching +(::Float64, ::ParametricExpression{0})
+#  in _EXPRVAL_ at /home/rgiordan/.julia/v0.3/ReverseDiffSparse/src/revmode.jl:678
+#  in getvalue at /home/rgiordan/.julia/v0.3/ReverseDiffSparse/src/revmode.jl:696
+
+
+##############################
+# Structures of expressions?  No.
+
+m = Model()
+@defVar(m, baz)
+immutable MyThingy
+	foo::Matrix{Any}
+	bar::Any
+	MyThingy(offset::Float64) = begin
+		foo = Array(Any, 5, 10)
+		for i = 1:5
+			for j = 1:10
+				foo[i, j] = @defNLExpr(placeholder, i * baz + j + offset)
+			end
+		end
+		bar = @defNLExpr(baz ^ 2 + offset)
+		new(foo, bar)
+	end
+end
+
+thingy = MyThingy(-4.0)
+
+@defNLExpr(thingy_sum, sum{thingy.foo[i, j], i=1:5, j=1:10});
+setValue(baz, 2)
+ReverseDiffSparse.getvalue(thingy_sum, m.colVal)
+
+
+
+######################
+m = Model()
+@defVar(m, foo)
+setValue(foo, 2)
+@defNLExpr(bar[ink=1:2, indigo=1:2, igloo=1:2, icarus=1:2],
+	       foo * ink * indigo * igloo * icarus)
+[ ReverseDiffSparse.getvalue(bar[i, j, k, l], m.colVal) for i=1:2, j=1:2, k=1:2, l=1:2 ]

@@ -47,8 +47,8 @@ celeste_m = Model()
 # The probability of being a galaxy.  (0 = star, 1 = galaxy)
 @defVar(celeste_m, 0  <= vp_chi[s=1:mp.S] <= 1)
 
- # The location of the object (2x1 vector)
-@defVar(celeste_m, vp_mu[s=1:mp.S, a=1:CelesteTypes.I])
+ # The location of the object.
+@defVar(celeste_m, vp_mu[s=1:mp.S, axis=1:2])
 
 # Ix1 scalar variational parameters for r_s.  The first
 # row is for stars, and the second for galaxies (I think?).
@@ -116,8 +116,6 @@ celeste_e_l_a = [ ElboDeriv.SourceBrightness(mp.vp[s]).E_l_a[b, a].v
                   for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
 
 
-
-
 # Second order terms.
 @defNLExpr(E_ll_a_3[s=1:mp.S, a=1:CelesteTypes.I],
 	       vp_gamma[s, a] * (1 + vp_gamma[s, a]) * vp_zeta[s, a] ^ 2)
@@ -148,3 +146,40 @@ celeste_e_ll_a = [ ElboDeriv.SourceBrightness(mp.vp[s]).E_ll_a[b, a].v
 
 jump_e_ll_a - celeste_e_ll_a
 
+
+####################################
+# The bivariate normal mixtures, originally defined in load_bvn_mixtures
+
+# The number of gaussian components in the gaussian mixture representations
+# of the PCF and galaxies.
+const n_pcf_comp = 3
+const n_gal_comp = 8
+
+# The number of images in a blob.
+const n_img = 5
+
+# Not working:
+@defNLExpr(star_mean[asdf=1:5, s=1:mp.S, k=1:n_pcf_comp, row=1:2],
+	       blobs[1].psf[1].xiBar[row] + asdf + k)
+
+@defNLExpr(star_mean[asdf=1:5], blobs[asdf].psf[1].xiBar[1])
+
+@defNLExpr(star_mean[asdf=1:5, s=1:mp.S, k=1:n_pcf_comp, row=1:2],
+	       blobs[asdf].psf[k].xiBar[row] + vp_mu[s, row])
+
+
+@defNLExpr(star_det[s=1:mp.S, k=1:n_pcf_comp],
+	       blobs[img].psf[k].SigmaBar[1, 1] * blobs[img].psf[k].SigmaBar[2, 2] -
+	       blobs[img].psf[k].SigmaBar[1, 2] * blobs[img].psf[k].SigmaBar[2, 1])
+
+# Matrix inversion by hand.  Maybe it would be better to have a super-variable
+# indexing all bivariate normals so as not to repeat code, or to do some
+# macro magic to build the same nonlinear expression for each inverse. 
+@defNLExpr(star_precision[s=1:mp.S, k=1:n_pcf_comp, row=1:2, col=1:2],
+           (sum{blobs[img].psf[k].SigmaBar[2, 2], row == 1, col == 1} +
+           	sum{blobs[img].psf[k].SigmaBar[1, 1], row == 2, col == 2} -
+           	sum{blobs[img].psf[k].SigmaBar[1, 2], row == 1, col == 2} -
+           	sum{blobs[img].psf[k].SigmaBar[2, 1], row == 2, col == 1}) / star_det[s, k])
+
+@defNLExpr(star_z[s=1:mp.S, k=1:n_pcf_comp],
+	       blobs[img].psf[k].alphaBar ./ (star_det[s, k] ^ 0.5 * 2pi))
