@@ -290,6 +290,45 @@ thingy_array_array[1].foo[1]
 thingy_flattened = [ other_thingy_array[i].foo[1, 1] for i=1:10 ]
 @defNLExpr(other_thingy_bar[i=1:10], thingy_flattened[i] * bar)
 
+###########
+# A simple example for the issue report:
+immutable MyObject
+	foo::Array{Float64}
+	MyObject(x::Float64) = begin
+		foo = Array(Float64, 10)
+		for i = 1:10
+			foo[i] = x + i
+		end
+		new(foo)
+	end
+end
+
+object_array = [ MyObject(convert(Float64, i)) for i = 1:5]
+
+m = Model()
+@defVar(m, bar)
+setValue(bar, 2)
+
+# This expression gives the error
+# ERROR: i not defined
+@defNLExpr(object_bar[i=1:5, j=1:10], object_array[i].foo[j] * bar)
+
+# This works:
+object_flattened = [ object_array[i].foo[j] for i=1:5, j=1:10 ]
+@defNLExpr(object_bar[i=1:5, j=1:10], object_flattened[i, j] * bar)
+
+# This also works:
+immutable MySimpleObject
+	foo::Float64
+	MySimpleObject(x::Float64) = begin
+		foo = x
+		new(foo)
+	end
+end
+simple_object_array = [ MySimpleObject(convert(Float64, i)) for i = 1:5]
+@defNLExpr(simple_object_bar[i=1:5], simple_object_array[i] * bar)
+
+
 
 ##########################
 # Matrix transpose. This is failing in a strange way.
