@@ -250,9 +250,9 @@ galaxy_type2_alpha_tilde =
 # var_s and weight for type 1 galaxies:
 @defNLExpr(galaxy_type1_var_s[b=1:CelesteTypes.B, s=1:mp.S,
 	                          k=1:n_pcf_comp, g_k=1:n_gal1_comp,
-	                          row=1:2, col=1:2],
-	       psf_sigma_bar[b, k, row, col] +
-	       galaxy_type1_sigma_tilde[g_k] * galaxy_xixi_mat[s, row, col])
+	                          vars_row=1:2, vars_col=1:2],
+	       psf_sigma_bar[b, k, vars_row, vars_col] +
+	       galaxy_type1_sigma_tilde[g_k] * galaxy_xixi_mat[s, vars_row, vars_col])
 
 @defNLExpr(galaxy_type1_weight[b=1:CelesteTypes.B,
 	                           k=1:n_pcf_comp, g_k=1:n_gal1_comp],
@@ -261,9 +261,9 @@ galaxy_type2_alpha_tilde =
 # var_s and weight for type 2 galaxies:
 @defNLExpr(galaxy_type2_var_s[b=1:CelesteTypes.B, s=1:mp.S,
 	                          k=1:n_pcf_comp, g_k=1:n_gal2_comp,
-	                          row=1:2, col=1:2],
-	       psf_sigma_bar[b, k, row, col] +
-	       galaxy_type2_sigma_tilde[g_k] * galaxy_xixi_mat[s, row, col])
+	                          vars_row=1:2, vars_col=1:2],
+	       psf_sigma_bar[b, k, vars_row, vars_col] +
+	       galaxy_type2_sigma_tilde[g_k] * galaxy_xixi_mat[s, vars_row, vars_col])
 
 @defNLExpr(galaxy_type2_weight[b=1:CelesteTypes.B,
 	                           k=1:n_pcf_comp, g_k=1:n_gal2_comp],
@@ -274,48 +274,60 @@ galaxy_type2_alpha_tilde =
 
 # The means are the same as for the stars.
 
-# The determinant:
+# The determinant.  Note that the results are inaccurate without
+# grouping the multiplication in parentheses, which is strange.
 @defNLExpr(galaxy_type1_det[b=1:CelesteTypes.B, s=1:mp.S,
 	                        k=1:n_pcf_comp, g_k=1:n_gal1_comp],
-	       galaxy_type1_var_s[b, s, k, g_k, 1, 1] *
-	       galaxy_type1_var_s[b, s, k, g_k, 2, 2] -
-	       galaxy_type1_var_s[b, s, k, g_k, 1, 2] *
-	       galaxy_type1_var_s[b, s, k, g_k, 2, 1])
+	       (galaxy_type1_var_s[b, s, k, g_k, 1, 1] *
+	        galaxy_type1_var_s[b, s, k, g_k, 2, 2]) -
+	       (galaxy_type1_var_s[b, s, k, g_k, 1, 2] *
+	        galaxy_type1_var_s[b, s, k, g_k, 2, 1]))
 
 @defNLExpr(galaxy_type2_det[b=1:CelesteTypes.B, s=1:mp.S,
 	                        k=1:n_pcf_comp, g_k=1:n_gal2_comp],
-	       galaxy_type2_var_s[b, s, k, g_k, 1, 1] *
-	       galaxy_type2_var_s[b, s, k, g_k, 2, 2] -
-	       galaxy_type2_var_s[b, s, k, g_k, 1, 2] *
-	       galaxy_type2_var_s[b, s, k, g_k, 2, 1])
+	       (galaxy_type2_var_s[b, s, k, g_k, 1, 1] *
+	        galaxy_type2_var_s[b, s, k, g_k, 2, 2]) -
+	       (galaxy_type2_var_s[b, s, k, g_k, 1, 2] *
+	        galaxy_type2_var_s[b, s, k, g_k, 2, 1]))
 
-# Matrix inversion by hand.
+# Matrix inversion by hand.  Also strangely, this is inaccurate if the
+# minus signs are outside the sum.
 @defNLExpr(galaxy_type1_precision[b=1:CelesteTypes.B, s=1:mp.S,
 	                              k=1:n_pcf_comp, g_k=1:n_gal1_comp,
-	                              row=1:2, col=1:2],
-           (sum{galaxy_type1_var_s[b, s, k, g_k, 2, 2]; row == 1 && col == 1} +
-           	sum{galaxy_type1_var_s[b, s, k, g_k, 1, 1]; row == 2 && col == 2} -
-           	sum{galaxy_type1_var_s[b, s, k, g_k, 1, 2]; row == 1 && col == 2} -
-           	sum{galaxy_type1_var_s[b, s, k, g_k, 2, 1]; row == 2 && col == 1}) /
-           galaxy_type1_det[b, s, k, g_k])
+	                              prec_row=1:2, prec_col=1:2],
+	       (sum{galaxy_type1_var_s[b, s, k, g_k, 2, 2];
+	       	    prec_row == 1 && prec_col == 1} +
+	       	sum{galaxy_type1_var_s[b, s, k, g_k, 1, 1];
+	       	    prec_row == 2 && prec_col == 2} +
+	       	sum{-galaxy_type1_var_s[b, s, k, g_k, 1, 2];
+	       	    prec_row == 1 && prec_col == 2} +
+	       	sum{-galaxy_type1_var_s[b, s, k, g_k, 2, 1];
+	       	    prec_row == 2 && prec_col == 1}) /
+	        galaxy_type1_det[b, s, k, g_k])
 
 @defNLExpr(galaxy_type2_precision[b=1:CelesteTypes.B, s=1:mp.S,
 	                              k=1:n_pcf_comp, g_k=1:n_gal2_comp,
-	                              row=1:2, col=1:2],
-           (sum{galaxy_type2_var_s[b, s, k, g_k, 2, 2]; row == 1 && col == 1} +
-           	sum{galaxy_type2_var_s[b, s, k, g_k, 1, 1]; row == 2 && col == 2} -
-           	sum{galaxy_type2_var_s[b, s, k, g_k, 1, 2]; row == 1 && col == 2} -
-           	sum{galaxy_type2_var_s[b, s, k, g_k, 2, 1]; row == 2 && col == 1}) /
+	                              prec_row=1:2, prec_col=1:2],
+           (sum{galaxy_type2_var_s[b, s, k, g_k, 2, 2];
+           	    prec_row == 1 && prec_col == 1} +
+           	sum{galaxy_type2_var_s[b, s, k, g_k, 1, 1];
+           	    prec_row == 2 && prec_col == 2} +
+           	sum{-galaxy_type2_var_s[b, s, k, g_k, 1, 2];
+           	    prec_row == 1 && prec_col == 2} +
+           	sum{-galaxy_type2_var_s[b, s, k, g_k, 2, 1];
+           	    prec_row == 2 && prec_col == 1}) /
            galaxy_type2_det[b, s, k, g_k])
 
 
 @defNLExpr(galaxy_type1_z[b=1:CelesteTypes.B, s=1:mp.S,
 	                      k=1:n_pcf_comp, g_k=1:n_gal1_comp],
-	       psf_alpha_bar[b, k] ./ (galaxy_type1_det[b, s, k, g_k] ^ 0.5 * 2pi))
+	        (galaxy_type1_alpha_tilde[g_k] * psf_alpha_bar[b, k]) ./
+	        (galaxy_type1_det[b, s, k, g_k] ^ 0.5 * 2pi))
 
 @defNLExpr(galaxy_type2_z[b=1:CelesteTypes.B, s=1:mp.S,
 	                      k=1:n_pcf_comp, g_k=1:n_gal2_comp],
-	       psf_alpha_bar[b, k] ./ (galaxy_type2_det[b, s, k, g_k] ^ 0.5 * 2pi))
+	       (galaxy_type2_alpha_tilde[g_k] * psf_alpha_bar[b, k]) ./
+	       (galaxy_type2_det[b, s, k, g_k] ^ 0.5 * 2pi))
 
 
 ###################
@@ -350,16 +362,6 @@ jump_star_z =
    							     celeste_m.colVal)
        for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp ]
 
-### Check the galaxies:
-celeste_galaxy_type1_precision = [
-    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 1, s].bmc.precision[row, col]
-    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp,
-    row=1:2, col=1:2 ]
-
- celeste_galaxy_type2_precision = [
-    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 2, s].bmc.precision[row, col]
-    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp,
-    row=1:2, col=1:2 ]
 
 # This is super slow, so just look at a few indices
 # jump_galaxy_type1_precision =
@@ -372,21 +374,108 @@ s = 2
 k = 2
 g_k = 4
 
+
+### Check the galaxies:
+celeste_galaxy_type1_precision = [
+    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 1, s].bmc.precision[row, col]
+    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp,
+    row=1:2, col=1:2 ]
+
+ celeste_galaxy_type2_precision = [
+    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 2, s].bmc.precision[row, col]
+    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp,
+    row=1:2, col=1:2 ]
+
+celeste_galaxy_type1_z = [
+    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 1, s].bmc.z
+    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp ]
+
+celeste_galaxy_type2_z = [
+    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 2, s].bmc.z
+    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp ]
+
+
+
+# Get a var_s
+rho = mp.vp[s][ids.rho]
+phi = mp.vp[s][ids.phi]
+sigma = mp.vp[s][ids.sigma]
+pc = blobs[b].psf[k]
+gc = galaxy_prototypes[1][g_k]
+XiXi = Util.get_bvn_cov(rho, phi, sigma)
+mean_s = [0 0]
+var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
+weight = pc.alphaBar * gc.alphaTilde  # excludes theta
+
+jump_xixi = 
+	[ ReverseDiffSparse.getvalue(galaxy_xixi_mat[s, row, col],
+   							     celeste_m.colVal)
+       for row=1:2, col=1:2 ];
+
+jump_var_s = 
+	[ ReverseDiffSparse.getvalue(galaxy_type1_var_s[b, s, k, g_k, row, col],
+   							     celeste_m.colVal)
+       for row=1:2, col=1:2 ];
+jump_var_s - var_s
+
+jump_galaxy_type1_det =
+	ReverseDiffSparse.getvalue(galaxy_type1_det[b, s, k, g_k],
+   							     celeste_m.colVal)
+det(var_s) - jump_galaxy_type1_det
+
+# This is super slow for some reason.
 jump_galaxy_type1_precision =
 	[ ReverseDiffSparse.getvalue(galaxy_type1_precision[b, s, k, g_k, row, col],
    							     celeste_m.colVal)
-       for row=1:2, col=1:2 ];
+       for row=1:2, col=1:2 ]
+
 this_celeste_galaxy_type1_precision =
    [ celeste_galaxy_type1_precision[b, s, k, g_k, row, col] for row=1:2, col=1:2 ]
 
-jump_galaxy_type2_precision =
-	[ ReverseDiffSparse.getvalue(galaxy_type1_precision[b, s, k, g_k, row, col],
+jump_galaxy_type1_precision - this_celeste_galaxy_type1_precision
+
+# z
+jump_galaxy_type1_z = ReverseDiffSparse.getvalue(galaxy_type1_z[b, s, k, g_k],
+   							    				 celeste_m.colVal)
+jump_galaxy_type1_z - celeste_galaxy_type1_z[b, s, k, g_k]
+
+
+#########
+# Type 2:
+rho = mp.vp[s][ids.rho]
+phi = mp.vp[s][ids.phi]
+sigma = mp.vp[s][ids.sigma]
+pc = blobs[b].psf[k]
+gc = galaxy_prototypes[2][g_k]
+XiXi = Util.get_bvn_cov(rho, phi, sigma)
+mean_s = [0 0]
+var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
+weight = pc.alphaBar * gc.alphaTilde  # excludes theta
+
+jump_var_s = 
+	[ ReverseDiffSparse.getvalue(galaxy_type2_var_s[b, s, k, g_k, row, col],
    							     celeste_m.colVal)
        for row=1:2, col=1:2 ];
-this_celeste_galaxy_type2_precision =
-	[ celeste_galaxy_type2_precision[b, s, k, g_k, row, col] for row=1:2, col=1:2 ]
+jump_var_s - var_s
 
-# They don't quite agree.
-jump_galaxy_type1_precision - this_celeste_galaxy_type1_precision
+jump_galaxy_type2_det =
+	ReverseDiffSparse.getvalue(galaxy_type2_det[b, s, k, g_k],
+   							     celeste_m.colVal)
+
+det(var_s) - jump_galaxy_type2_det
+
+# This is super slow for some reason.
+jump_galaxy_type2_precision =
+	[ ReverseDiffSparse.getvalue(galaxy_type2_precision[b, s, k, g_k, row, col],
+   							     celeste_m.colVal)
+       for row=1:2, col=1:2 ]
+
+this_celeste_galaxy_type2_precision =
+   [ celeste_galaxy_type2_precision[b, s, k, g_k, row, col] for row=1:2, col=1:2 ]
+
 jump_galaxy_type2_precision - this_celeste_galaxy_type2_precision
 
+# z
+jump_galaxy_type2_z = ReverseDiffSparse.getvalue(galaxy_type2_z[b, s, k, g_k],
+   							    				 celeste_m.colVal)
+jump_galaxy_type2_z - celeste_galaxy_type2_z[b, s, k, g_k]
