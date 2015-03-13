@@ -291,7 +291,63 @@ thingy_flattened = [ other_thingy_array[i].foo[1, 1] for i=1:10 ]
 @defNLExpr(other_thingy_bar[i=1:10], thingy_flattened[i] * bar)
 
 
+##########################
+# Matrix transpose. This is failing in a strange way.
+
+m = Model()
+a = [[1, 2] [3, 4]]
+
+@defNLExpr(matrix1[row=1:2, col=1:2], a[row, col]);
+
+# Works:
+matrix1_list_transpose =
+	[ ReverseDiffSparse.getvalue(matrix1[col, row], m.colVal)
+	  for row=1:2, col=1:2 ]
+
+# Works:
+@defNLExpr(matrix1_transpose_v2[r1=1:2, r2=1:2],
+	       matrix1[r2, r1]);
+matrix1_transpose_v2_value =
+	[ ReverseDiffSparse.getvalue(matrix1_transpose_v2[row, col], m.colVal)
+	  for row=1:2, col=1:2 ]
+
+# Does not work:
+@defNLExpr(matrix1_transpose[row=1:2, col=1:2],
+	       matrix1[col, row]);
+matrix1_transpose_value =
+	[ ReverseDiffSparse.getvalue(matrix1_transpose[row, col], m.colVal)
+	  for row=1:2, col=1:2 ]
 
 
+##########################
+# Matrix transpose. This is failing in a strange way.
 
+m = Model()
+a = [[1, 2] [3, 4]]
+
+@defNLExpr(matrix1[rowi=1:2, coli=1:2], a[rowi, coli]);
+
+# Works:
+matrix_a =
+	[ ReverseDiffSparse.getvalue(matrix1[rowi, coli], m.colVal)
+	  for rowi=1:2, coli=1:2 ]
+
+# Works:
+matrix_a_t =
+	[ ReverseDiffSparse.getvalue(matrix1[coli, rowi], m.colVal)
+	  for rowi=1:2, coli=1:2 ]
+
+# Does not work:
+@defNLExpr(matrix1_transpose[rowi=1:2, coli=1:2],
+	       matrix1[coli, rowi]);
+matrix1_transpose_value =
+	[ ReverseDiffSparse.getvalue(matrix1_transpose[rowi, coli], m.colVal)
+	  for rowi=1:2, coli=1:2 ]
+
+# Works:
+@defNLExpr(matrix1_transpose_v2[r1=1:2, r2=1:2],
+	       matrix1[r2, r1]);
+matrix1_transpose_v2_value =
+	[ ReverseDiffSparse.getvalue(matrix1_transpose_v2[rowi, coli], m.colVal)
+	  for rowi=1:2, coli=1:2 ]
 
