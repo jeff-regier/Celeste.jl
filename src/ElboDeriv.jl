@@ -787,37 +787,6 @@ function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
 end
 
 
-function subtract_reg!(mp::ModelParams, accum::SensitiveFloat)
-    # Subtract a regularization term from the ELBO.
-    #
-    # Args:
-    #   - mp: The model parameters
-    #   - accum: The ELBO
-    #
-    # Returns:
-    #   - Updates accum in place.
-
-    alpha, beta = mp.pp.alpha_reg, mp.pp.beta_reg
-    log_B = lgamma(alpha) + lgamma(beta) - lgamma(alpha + beta)
-    mu_reg, sigma_reg = mp.pp.mu_reg, mp.pp.sigma_reg
-
-    for s in 1:mp.S
-        vs = mp.vp[s]
-
-        rho, x = vs[ids.rho], vs[ids.sigma]  # too many sigmas
-        ll_ab = (alpha - 1) * log(rho) + (beta - 1) * log(1 - rho) - log_B
-        ll_scale = -log(x) - log(sigma_reg * sqrt(2pi)) -
-            (log(x) - mu_reg)^2 / (2 * sigma_reg^2)
-        accum.v += vs[ids.chi] * (ll_ab + ll_scale)
-        accum.d[ids.rho, s] += vs[ids.chi] *
-            ((alpha - 1)/rho - (beta - 1) / (1 - rho))
-        accum.d[ids.sigma, s] += vs[ids.chi] *
-            (-1/x - (log(x) - mu_reg) / (sigma_reg^2 * x))
-        accum.d[ids.chi, s] += ll_ab + ll_scale
-    end
-end
-
-
 function elbo(blob::Blob, mp::ModelParams)
     # Caculate the ELBO for all the bands of an image.
     #
@@ -830,7 +799,6 @@ function elbo(blob::Blob, mp::ModelParams)
 
     ret = elbo_likelihood(blob, mp)
     subtract_kl!(mp, ret)
-    subtract_reg!(mp, ret)
     ret
 end
 
