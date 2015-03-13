@@ -23,6 +23,10 @@ function SetJuMPParameters(mp::ModelParams)
 		setValue(vp_mu[s, 1], mp.vp[s][ids.mu][1])
 		setValue(vp_mu[s, 2], mp.vp[s][ids.mu][2])
 
+		setValue(vp_rho[s], mp.vp[s][ids.rho])
+		setValue(vp_sigma[s], mp.vp[s][ids.sigma])
+		setValue(vp_phi[s], mp.vp[s][ids.phi])
+
 		for a=1:CelesteTypes.I
 			setValue(vp_gamma[s, a], mp.vp[s][ids.gamma][a])
 			setValue(vp_zeta[s, a], mp.vp[s][ids.zeta][a])
@@ -195,38 +199,34 @@ psf_alpha_bar = [ blobs[b].psf[k].alphaBar
 # galaxy bvn components
 
 # Terms from Util.get_bvn_cov(rho, phi, sigma):
-@defNLExpr(star_precision[b=1:CelesteTypes.B,
-	                      s=1:mp.S, k=1:n_pcf_comp, row=1:2, col=1:2],
-           (sum{psf_sigma_bar[b, k, 2, 2]; row == 1 && col == 1} +
-           	sum{psf_sigma_bar[b, k, 1, 1]; row == 2 && col == 2} -
-           	sum{psf_sigma_bar[b, k, 1, 2]; row == 1 && col == 2} -
-           	sum{psf_sigma_bar[b, k, 2, 1]; row == 2 && col == 1}) / star_det[b, s, k])
 
 # This is R
 @defNLExpr(galaxy_rot_mat[s=1:mp.S, row=1:2, col=1:2],
-		   (sum{ cos(vp_rho[s]); row == 1 && col == 1} +
-			sum{-sin(vp_rho[s]); row == 1 && col == 2} +
-			sum{ sin(vp_rho[s]); row == 2 && col == 1} +
-			sum{ cos(vp_rho[s]); row == 2 && col == 2}))
+		   (sum{ cos(vp_phi[s]); row == 1 && col == 1} +
+			sum{-sin(vp_phi[s]); row == 1 && col == 2} +
+			sum{ sin(vp_phi[s]); row == 2 && col == 1} +
+			sum{ cos(vp_phi[s]); row == 2 && col == 2}))
 
 # This is D
 @defNLExpr(galaxy_scale_mat[s=1:mp.S, row=1:2, col=1:2],
 			sum{1.0; row == 1 && col == 1} +
 			sum{0.0; row == 1 && col == 2} +
 			sum{0.0; row == 2 && col == 1} +
-			sum{vp_phi[s]; row == 2 && col == 2})
+			sum{vp_rho[s]; row == 2 && col == 2})
 
-# This is scale * D * R'
-@defNLExpr(galaxy_w_mat[s=1:mp.S, row=1:2, col=1:2],
-		   vp_sigma[s] * sum{galaxy_scale_mat[s, row, sum_index] *
-		                     galaxy_rot_mat[s, col, sum_index],
+# This is scale * D * R'.  Note that the column and row names
+# circumvent what seems to be a bug in JuMP, see issue #415 in JuMP.jl
+# on github.
+@defNLExpr(galaxy_w_mat[s=1:mp.S, w_row=1:2, w_col=1:2],
+		   vp_sigma[s] * sum{galaxy_scale_mat[s, w_row, sum_index] *
+		                     galaxy_rot_mat[s, w_col, sum_index],
 		                     sum_index = 1:2})
 
 # This is W' * W
-@defNLExpr(galaxy_xixi_mat[s=1:mp.S, row=1:2, col=1:2],
-		   sum{galaxy_w_mat[s, sum_index, row] *
-	           galaxy_w_mat[s, sum_index, col],
-	           sum_index = 1:2})
+@defNLExpr(galaxy_xixi_mat[s=1:mp.S, xixi_row=1:2, xixi_col=1:2],
+		   sum{galaxy_w_mat[s, xixi_sum_index, xixi_row] *
+	           galaxy_w_mat[s, xixi_sum_index, xixi_col],
+	           xixi_sum_index = 1:2})
 
 
 # The number of normal components in the two galaxy types.
@@ -323,7 +323,7 @@ galaxy_type2_alpha_tilde =
 
 star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blobs[1].psf, mp)
 
-
+### Check the stars:
 celeste_star_mean = [
     ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[1][k, s].the_mean[row]
     for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, row=1:2 ]
@@ -350,4 +350,43 @@ jump_star_z =
    							     celeste_m.colVal)
        for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp ]
 
+### Check the galaxies:
+celeste_galaxy_type1_precision = [
+    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 1, s].bmc.precision[row, col]
+    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp,
+    row=1:2, col=1:2 ]
+
+ celeste_galaxy_type2_precision = [
+    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 2, s].bmc.precision[row, col]
+    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp,
+    row=1:2, col=1:2 ]
+
+# This is super slow, so just look at a few indices
+# jump_galaxy_type1_precision =
+# 	[ ReverseDiffSparse.getvalue(galaxy_type1_precision[b, s, k, g_k, row, col],
+#    							     celeste_m.colVal)
+#        for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp,
+#        row=1:2, col=1:2 ]
+b = 2
+s = 2
+k = 2
+g_k = 4
+
+jump_galaxy_type1_precision =
+	[ ReverseDiffSparse.getvalue(galaxy_type1_precision[b, s, k, g_k, row, col],
+   							     celeste_m.colVal)
+       for row=1:2, col=1:2 ];
+this_celeste_galaxy_type1_precision =
+   [ celeste_galaxy_type1_precision[b, s, k, g_k, row, col] for row=1:2, col=1:2 ]
+
+jump_galaxy_type2_precision =
+	[ ReverseDiffSparse.getvalue(galaxy_type1_precision[b, s, k, g_k, row, col],
+   							     celeste_m.colVal)
+       for row=1:2, col=1:2 ];
+this_celeste_galaxy_type2_precision =
+	[ celeste_galaxy_type2_precision[b, s, k, g_k, row, col] for row=1:2, col=1:2 ]
+
+# They don't quite agree.
+jump_galaxy_type1_precision - this_celeste_galaxy_type1_precision
+jump_galaxy_type2_precision - this_celeste_galaxy_type2_precision
 
