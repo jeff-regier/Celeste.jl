@@ -1,8 +1,5 @@
 using JuMP
 using Dates
-
-#module ElboJuMP
-
 using Celeste
 using CelesteTypes
 import Util
@@ -11,7 +8,7 @@ import SampleData
 using Base.Test
 
 
-# Set the JuMP parameters using the mp object
+# Copy the parameters from the mp object into the JuMP model.
 function SetJuMPParameters(mp::ModelParams)
 	for s=1:mp.S
 		setValue(vp_chi[s], mp.vp[s][ids.chi])
@@ -34,15 +31,18 @@ function SetJuMPParameters(mp::ModelParams)
 end
 
 
-# For now, global constants accessed within the expressions
+# Some simulated data.  blobs contains the image data, and
+# mp is the parameter values.  three_bodies is not used.
+# For now, treat these as global constants accessed within the expressions
 blobs, mp, three_bodies = SampleData.gen_three_body_dataset();
 
-celeste_m = Model()
 
 ##########################
 # Define the variational parameters.
 
-# One set of variational parameters for each object.
+celeste_m = Model()
+
+# One set of variational parameters for each celestial object.
 # These replace the ModelParams.vp object in the old version.
 
 # The probability of being a galaxy.  (0 = star, 1 = galaxy)
@@ -81,6 +81,21 @@ celeste_m = Model()
 
 SetJuMPParameters(mp)
 
+
+################
+# Define the ELBO.  I consistently index objects with these names in this order:
+# b / img: The color band or image that I'm looking at.  (Should be the same.)
+# s: The source astronomical object
+# k: The psf component
+# g_k: The galaxy mixture component
+# a: Colors only. Whether the variable is for a star or galaxy.
+# pw: The w pixel value
+# ph: The h pixel value
+# *row, *col: Rows and columns of 2d vectors or matrices.  There is currently
+# 	a bug in JuMP that requires these names not to be repeated, so I mostly
+#   give objects different row and column names by prepending something to
+#   "row" or "col".
+
 ########################
 # Define the source brightness terms.
 
@@ -108,12 +123,6 @@ SetJuMPParameters(mp)
 	       (b == 4) * E_l_a_4[s, a] +
 	       (b == 5) * E_l_a_5[s, a])
 
-jump_e_l_a = [ ReverseDiffSparse.getvalue(E_l_a[s, b, a], celeste_m.colVal)
-               for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
-
-celeste_e_l_a = [ ElboDeriv.SourceBrightness(mp.vp[s]).E_l_a[b, a].v
-                  for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
-
 # Second order terms.
 @defNLExpr(E_ll_a_3[s=1:mp.S, a=1:CelesteTypes.I],
 	       vp_gamma[s, a] * (1 + vp_gamma[s, a]) * vp_zeta[s, a] ^ 2)
@@ -134,19 +143,6 @@ celeste_e_l_a = [ ElboDeriv.SourceBrightness(mp.vp[s]).E_l_a[b, a].v
 	       (b == 3) * E_ll_a_3[s, a] +
 	       (b == 4) * E_ll_a_4[s, a] +
 	       (b == 5) * E_ll_a_5[s, a])
-
-
-########################
-# Testing
-
-# Test:
-jump_e_ll_a = [ ReverseDiffSparse.getvalue(E_ll_a[s, b, a], celeste_m.colVal)
-               for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
-
-celeste_e_ll_a = [ ElboDeriv.SourceBrightness(mp.vp[s]).E_ll_a[b, a].v
-                  for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
-
-jump_e_ll_a - celeste_e_ll_a
 
 
 ####################################
@@ -280,14 +276,6 @@ galaxy_type2_alpha_tilde =
 	       (galaxy_type1_var_s[b, s, k, g_k, 1, 2] *
 	        galaxy_type1_var_s[b, s, k, g_k, 2, 1]))
 
-# This used to be inaccurate, but now it seems to work.
-@defNLExpr(galaxy_type1_det_bad[b=1:CelesteTypes.B, s=1:mp.S,
-	                        k=1:n_pcf_comp, g_k=1:n_gal1_comp],
-	        galaxy_type1_var_s[b, s, k, g_k, 1, 1] *
-	        galaxy_type1_var_s[b, s, k, g_k, 2, 2] -
-	        galaxy_type1_var_s[b, s, k, g_k, 1, 2] *
-	        galaxy_type1_var_s[b, s, k, g_k, 2, 1])
-
 @defNLExpr(galaxy_type2_det[b=1:CelesteTypes.B, s=1:mp.S,
 	                        k=1:n_pcf_comp, g_k=1:n_gal2_comp],
 	       (galaxy_type2_var_s[b, s, k, g_k, 1, 1] *
@@ -324,20 +312,6 @@ galaxy_type2_alpha_tilde =
            	    prec_row == 2 && prec_col == 1}) /
            galaxy_type2_det[b, s, k, g_k])
 
-@defNLExpr(galaxy_type2_precision_bad[b=1:CelesteTypes.B, s=1:mp.S,
-	                              k=1:n_pcf_comp, g_k=1:n_gal2_comp,
-	                              prec_row=1:2, prec_col=1:2],
-           (sum{galaxy_type2_var_s[b, s, k, g_k, 2, 2];
-           	    prec_row == 1 && prec_col == 1} +
-           	sum{galaxy_type2_var_s[b, s, k, g_k, 1, 1];
-           	    prec_row == 2 && prec_col == 2} -
-           	sum{galaxy_type2_var_s[b, s, k, g_k, 1, 2];
-           	    prec_row == 1 && prec_col == 2} -
-           	sum{galaxy_type2_var_s[b, s, k, g_k, 2, 1];
-           	    prec_row == 2 && prec_col == 1}) /
-           galaxy_type2_det[b, s, k, g_k])
-
-
 @defNLExpr(galaxy_type1_z[b=1:CelesteTypes.B, s=1:mp.S,
 	                      k=1:n_pcf_comp, g_k=1:n_gal1_comp],
 	        (galaxy_type1_alpha_tilde[g_k] * psf_alpha_bar[b, k]) ./
@@ -349,181 +323,11 @@ galaxy_type2_alpha_tilde =
 	       (galaxy_type2_det[b, s, k, g_k] ^ 0.5 * 2pi))
 
 
-########################
-# Testing:
-
-star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blobs[1].psf, mp)
-
-### Check the stars:
-celeste_star_mean = [
-    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[1][k, s].the_mean[row]
-    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, row=1:2 ]
-jump_star_mean =
-	[ ReverseDiffSparse.getvalue(star_mean[b, s, k, row],
-   							  celeste_m.colVal)
-       for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, row=1:2 ]
-
-celeste_star_precision = [
-    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[1][k, s].precision[row, col]
-    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, row=1:2, col=1:2 ]
-jump_star_precision =
-	[ ReverseDiffSparse.getvalue(star_precision[b, s, k, row, col],
-   							     celeste_m.colVal)
-       for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, row=1:2, col=1:2 ]
-
-celeste_star_precision - jump_star_precision
-
-celeste_star_z = [
-    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[1][k, s].z
-    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp ]
-jump_star_z =
-	[ ReverseDiffSparse.getvalue(star_z[b, s, k],
-   							     celeste_m.colVal)
-       for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp ]
-
-
-# This is super slow, so just look at a few indices
-# jump_galaxy_type1_precision =
-# 	[ ReverseDiffSparse.getvalue(galaxy_type1_precision[b, s, k, g_k, row, col],
-#    							     celeste_m.colVal)
-#        for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp,
-#        row=1:2, col=1:2 ]
-b = 2
-s = 2
-k = 2
-g_k = 4
-
-### Check the galaxies:
-celeste_galaxy_type1_precision = [
-    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 1, s].bmc.precision[row, col]
-    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp,
-    row=1:2, col=1:2 ]
-
- celeste_galaxy_type2_precision = [
-    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 2, s].bmc.precision[row, col]
-    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp,
-    row=1:2, col=1:2 ]
-
-celeste_galaxy_type1_z = [
-    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 1, s].bmc.z
-    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp ]
-
-celeste_galaxy_type2_z = [
-    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 2, s].bmc.z
-    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp ]
-
-
-# Get a var_s from the original code:
-rho = mp.vp[s][ids.rho]
-phi = mp.vp[s][ids.phi]
-sigma = mp.vp[s][ids.sigma]
-pc = blobs[b].psf[k]
-gc = galaxy_prototypes[1][g_k]
-XiXi = Util.get_bvn_cov(rho, phi, sigma)
-mean_s = [0 0]
-var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
-weight = pc.alphaBar * gc.alphaTilde  # excludes theta
-
-jump_xixi = 
-	[ ReverseDiffSparse.getvalue(galaxy_xixi_mat[s, row, col],
-   							     celeste_m.colVal)
-       for row=1:2, col=1:2 ];
-
-jump_var_s = 
-	[ ReverseDiffSparse.getvalue(galaxy_type1_var_s[b, s, k, g_k, row, col],
-   							     celeste_m.colVal)
-       for row=1:2, col=1:2 ];
-jump_var_s - var_s
-
-jump_galaxy_type1_det =
-	ReverseDiffSparse.getvalue(galaxy_type1_det[b, s, k, g_k],
-   							     celeste_m.colVal)
-det(var_s) - jump_galaxy_type1_det
-
-# This is super slow for some reason.
-jump_galaxy_type1_precision =
-	[ ReverseDiffSparse.getvalue(galaxy_type1_precision[b, s, k, g_k, row, col],
-   							     celeste_m.colVal)
-       for row=1:2, col=1:2 ]
-
-this_celeste_galaxy_type1_precision =
-   [ celeste_galaxy_type1_precision[b, s, k, g_k, row, col] for row=1:2, col=1:2 ]
-
-jump_galaxy_type1_precision - this_celeste_galaxy_type1_precision
-
-# z
-jump_galaxy_type1_z = ReverseDiffSparse.getvalue(galaxy_type1_z[b, s, k, g_k],
-   							    				 celeste_m.colVal)
-jump_galaxy_type1_z - celeste_galaxy_type1_z[b, s, k, g_k]
-
-
-#########
-# Type 2:
-rho = mp.vp[s][ids.rho]
-phi = mp.vp[s][ids.phi]
-sigma = mp.vp[s][ids.sigma]
-pc = blobs[b].psf[k]
-gc = galaxy_prototypes[2][g_k]
-XiXi = Util.get_bvn_cov(rho, phi, sigma)
-mean_s = [0 0]
-var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
-weight = pc.alphaBar * gc.alphaTilde  # excludes theta
-
-jump_var_s = 
-	[ ReverseDiffSparse.getvalue(galaxy_type2_var_s[b, s, k, g_k, row, col],
-   							     celeste_m.colVal)
-       for row=1:2, col=1:2 ];
-jump_var_s - var_s
-
-jump_galaxy_type2_det =
-	ReverseDiffSparse.getvalue(galaxy_type2_det[b, s, k, g_k],
-   							     celeste_m.colVal)
-
-det(var_s) - jump_galaxy_type2_det
-
-# This is super slow for some reason.
-jump_galaxy_type2_precision =
-	[ ReverseDiffSparse.getvalue(galaxy_type2_precision[b, s, k, g_k, row, col],
-   							     celeste_m.colVal)
-       for row=1:2, col=1:2 ]
-
-this_celeste_galaxy_type2_precision =
-   [ celeste_galaxy_type2_precision[b, s, k, g_k, row, col] for row=1:2, col=1:2 ]
-
-jump_galaxy_type2_precision - this_celeste_galaxy_type2_precision
-
-# z
-jump_galaxy_type2_z = ReverseDiffSparse.getvalue(galaxy_type2_z[b, s, k, g_k],
-   							    				 celeste_m.colVal)
-jump_galaxy_type2_z - celeste_galaxy_type2_z[b, s, k, g_k]
-
-
-# Document the bad determinant.  Doesn't seem bad anymore.
-
-ReverseDiffSparse.getvalue(galaxy_type1_det[b, s, k, g_k], celeste_m.colVal)
-ReverseDiffSparse.getvalue(galaxy_type1_det_bad[b, s, k, g_k], celeste_m.colVal)
-
-
-# It's prohibitively slow to check each galaxy component, but you
-# can check the sums:
-
-@defNLExpr(foo, sum{galaxy_type1_precision[b, s, k, g_k, row, col],
-	                b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp,
-	                row=1:2, col=1:2});
-ReverseDiffSparse.getvalue(foo, celeste_m.colVal) - sum(celeste_galaxy_type1_precision)
-
-
-@defNLExpr(foo, sum{galaxy_type2_precision[b, s, k, g_k, row, col],
-	                b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp,
-	                row=1:2, col=1:2});
-ReverseDiffSparse.getvalue(foo, celeste_m.colVal) - sum(celeste_galaxy_type2_precision)
-
-
 ###########################
 # Get the pdf values for each pixel.  Thie takes care of
 # the functions accum_galaxy_pos and accum_star_pos.
 
-# TOOD: Despite these lines, I'm going to treat the rest of the code as if
+# TOOD: Despite this maximum, I'm going to treat the rest of the code as if
 # each image has the same number of pixels.
 # Is it possible that these might be different for different
 # images?  If so, it might be necessary to put some checks in the
@@ -534,13 +338,15 @@ img_h = maximum([ blobs[b].H for b=1:CelesteTypes.B ])
 # Get a rectangular array containing indicators of whether a
 # source affects each pixel.
 # TODO: is there a sparse multi-dimensional array object that JuMP can
-# interact with?
+# interact with?  Is there a better way to look inside ragged arrays
+# in JuMP?
 pixel_source_indicators = zeros(Int8, mp.S, img_w, img_h)
 
 # NB: in the original code, pixel sources were tracked per image, but I
 # don't see why that's necessary.
 
-# For now use Jeff's tile code with the first image.
+# For now use Jeff's tile code with the first image.   This should be the
+# same for each image.
 img = blobs[1]
 WW = int(ceil(img.W / mp.tile_width))
 HH = int(ceil(img.H / mp.tile_width))
@@ -560,11 +366,13 @@ end
 @defNLExpr(pixel_locations[pw=1:img_w, ph=1:img_h, pixel_row=1:2],
 	       sum{ph; pixel_row == 1} + sum{pw; pixel_row == 2})
 
+# Reproduces
 # function accum_star_pos!(bmc::BvnComponent,
 #                          x::Vector{Float64},
 #                          fs0m::SensitiveFloat)
 # ... which called
 # function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
+# TODO: This is the mean of both stars and galaxies, change the name to reflect this.
 @defNLExpr(star_pdf_mean[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
 	                     pw=1:img_w, ph=1:img_h, pdf_mean_row=1:2],
            pixel_locations[pw, ph, pdf_mean_row] - star_mean[img, s, k, pdf_mean_row])
@@ -605,70 +413,8 @@ end
 	        pixel_source_indicators[s, pw, ph] == 1
 	     })
 
-
-########################
-# Testing
-
-# Get the Celeste values:
-celeste_star_pdf_f = zeros(Float64, CelesteTypes.B, mp.S, n_pcf_comp, img_w, img_h);
-celeste_gal1_pdf_f = zeros(Float64, CelesteTypes.B, mp.S,
-	                       n_pcf_comp, n_gal1_comp,
-						   img_w, img_h);
-celeste_gal2_pdf_f = zeros(Float64, CelesteTypes.B, mp.S,
-	                       n_pcf_comp, n_gal2_comp,
-						   img_w, img_h);
-
-for img=1:CelesteTypes.B
-	blob_img = blobs[img]
-	star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob_img.psf, mp)
-    for w in 1:img_w, h in 1:img_h
-        m_pos = Float64[h, w]
-        for s in 1:mp.S, k in 1:n_pcf_comp
-        	if pixel_source_indicators[s, w, h] == 1
-		    	py1, py2, f = ElboDeriv.ret_pdf(star_mcs[k, s], m_pos)
-		    	celeste_star_pdf_f[img, s, k, w, h] = f
-		    	for g_k in 1:n_gal1_comp
-		    		py1, py2, f = ElboDeriv.ret_pdf(gal_mcs[k, g_k, 1, s].bmc, m_pos)
-		    		celeste_gal1_pdf_f[img, s, k, g_k, w, h] = f
-		    	end
-		    	for g_k in 1:n_gal2_comp
-		    		py1, py2, f = ElboDeriv.ret_pdf(gal_mcs[k, g_k, 2, s].bmc, m_pos)
-		    		celeste_gal2_pdf_f[img, s, k, g_k, w, h] = f
-		    	end
-		    end
-        end
-    end
-end
-
-
-star_celeste_sum = sum(celeste_star_pdf_f)
-gal1_celeste_sum = sum(celeste_gal1_pdf_f)
-gal2_celeste_sum = sum(celeste_gal2_pdf_f)
-
-
-# Get the JuMP sum:
-@defNLExpr(sum_star_pdf_f,
-	       sum{star_pdf_f[img, s, k, pw, ph],
-	           img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
-	           pw=1:img_w, ph=1:img_h});
-@defNLExpr(sum_gal1_pdf_f,
-	       sum{galaxy_type1_pdf_f[img, s, k, g_k, pw, ph],
-	           img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp,
-	           pw=1:img_w, ph=1:img_h});
-@defNLExpr(sum_gal2_pdf_f,
-	       sum{galaxy_type2_pdf_f[img, s, k, g_k, pw, ph],
-	           img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp,
-	           pw=1:img_w, ph=1:img_h});
-
-star_jump_sum = ReverseDiffSparse.getvalue(sum_star_pdf_f, celeste_m.colVal)
-
-# This is incredibly slow, taking many minutes each to compute, so I'm commenting it out.
-#gal1_jump_sum = ReverseDiffSparse.getvalue(sum_gal1_pdf_f, celeste_m.colVal)
-#gal2_jump_sum = ReverseDiffSparse.getvalue(sum_gal2_pdf_f, celeste_m.colVal)
-
-
 #############################
-# accum_pixel_source_stats
+# Get the expectatoin and variance of G (accum_pixel_source_stats)
 
 blob_epsilon = [ blobs[img].epsilon for img=1:CelesteTypes.B ]
 
@@ -692,7 +438,7 @@ blob_epsilon = [ blobs[img].epsilon for img=1:CelesteTypes.B ]
 	       E_G[img, s, pw, ph] ^ 2);
 
 #####################
-# accum_pixel_ret
+# Get the log likelihood (originally accum_pixel_ret)
 
 blob_pixels = [ blobs[img].pixels[ph, pw]
 				for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h ];
@@ -711,13 +457,3 @@ blob_iota = [ blobs[img].iota for img=1:CelesteTypes.B ]
 
 @defNLExpr(elbo_log_likelihood,
 	       sum{img_log_likelihood[img], img=1:CelesteTypes.B});
-
-celeste_time = now()
-celeste_elbo_lik = ElboDeriv.elbo_likelihood(blobs, mp).v
-now()
-celeste_time = celeste_time - now()
-
-jump_time = now()
-jump_elbo_lik = ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
-now()
-jump_time = jump_time - now()
