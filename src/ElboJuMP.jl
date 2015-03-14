@@ -540,7 +540,7 @@ img_h = maximum([ blobs[b].H for b=1:CelesteTypes.B ])
 # source affects each pixel.
 # TODO: is there a sparse multi-dimensional array object that JuMP can
 # interact with?
-pixel_source_indicators = zeros(Int8, img_w, img_h, mp.S)
+pixel_source_indicators = zeros(Int8, mp.S, img_w, img_h)
 
 # NB: in the original code, pixel sources were tracked per image, but I
 # don't see why that's necessary.
@@ -554,13 +554,16 @@ for ww in 1:WW, hh in 1:HH
     this_local_sources = ElboDeriv.local_sources(image_tile, mp)
     h_range, w_range = ElboDeriv.tile_range(tile, mp.tile_width)
     for w in w_range, h in h_range, s in this_local_sources
-    	pixel_source_indicators[w, h, s] = 1
+    	pixel_source_indicators[s, w, h] = 1
     end
 end
 
 # This allows us to have simpler expressions for the means.
+# Note that this is in a perhaps counterintuitive order of
+# h is "height" and w is "width", but I'll follow the convention in the
+# original code.
 @defNLExpr(pixel_locations[pw=1:img_w, ph=1:img_h, pixel_row=1:2],
-	       sum{pw; pixel_row == 1} + sum{ph; pixel_row == 2})
+	       sum{ph; pixel_row == 1} + sum{pw; pixel_row == 2})
 
 # function accum_star_pos!(bmc::BvnComponent,
 #                          x::Vector{Float64},
@@ -573,9 +576,62 @@ end
 
 @defNLExpr(star_pdf_f[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
 	                  pw=1:img_w, ph=1:img_h],
-	        exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
-	        	       star_precision[img, s, k, pdf_f_row, pdf_f_col] *
-	        	       star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
-	        	       pdf_f_row=1:2, pdf_f_col=1:2}) *
-	        star_z[img, s, k])
+	        sum{
+		        exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
+			        	       star_precision[img, s, k, pdf_f_row, pdf_f_col] *
+			        	       star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
+			        	       pdf_f_row=1:2, pdf_f_col=1:2}) *
+		        star_z[img, s, k];
+		        pixel_source_indicators[s, pw, ph] == 1
+		     })
 
+
+# Get the Celeste values:
+celeste_star_pdf_f = zeros(Float64, CelesteTypes.B, mp.S, n_pcf_comp, img_w, img_h);
+for img=1:CelesteTypes.B
+	blob_img = blobs[img]
+	star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob_img.psf, mp)
+	WW = int(ceil(blob_img.W / mp.tile_width))
+	HH = int(ceil(blob_img.H / mp.tile_width))
+	for ww in 1:WW, hh in 1:HH
+	    tile = ElboDeriv.ImageTile(hh, ww, blob_img)
+	    tile_sources = ElboDeriv.local_sources(tile, mp)
+	    h_range, w_range = ElboDeriv.tile_range(tile, mp.tile_width)
+	    for w in w_range, h in h_range
+            m_pos = Float64[h, w]
+	        for s in 1:mp.S, k in 1:n_pcf_comp
+	        	if s in tile_sources
+			    	py1, py2, f = ElboDeriv.ret_pdf(star_mcs[k, s], m_pos)
+			    	celeste_star_pdf_f[img, s, k, w, h] = f
+			    end
+	        end
+	    end
+	end
+end
+sum(celeste_star_pdf_f)
+
+# Try a different way:
+celeste_star_pdf_f = zeros(Float64, CelesteTypes.B, mp.S, n_pcf_comp, img_w, img_h);
+for img=1:CelesteTypes.B
+	blob_img = blobs[img]
+	star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob_img.psf, mp)
+
+    for w in 1:img_w, h in 1:img_h
+        m_pos = Float64[h, w]
+        for s in 1:mp.S, k in 1:n_pcf_comp
+        	if pixel_source_indicators[s, w, h] == 1
+		    	py1, py2, f = ElboDeriv.ret_pdf(star_mcs[k, s], m_pos)
+		    	celeste_star_pdf_f[img, s, k, w, h] = f
+		    end
+        end
+    end
+end
+sum(celeste_star_pdf_f)
+
+
+
+@defNLExpr(sum_star_pdf_f,
+	       sum{star_pdf_f[img, s, k, pw, ph],
+	           img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
+	           pw=1:img_w, ph=1:img_h});
+jump_sum = ReverseDiffSparse.getvalue(sum_star_pdf_f, celeste_m.colVal)

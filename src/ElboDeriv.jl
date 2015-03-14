@@ -567,6 +567,8 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         E_G.v = tile.img.epsilon
         clear!(var_G)
 
+        # Note that this is in a perhaps counterintuitive order of
+        # h is "height" and w is "width".
         m_pos = Float64[h, w]
         for child_s in 1:length(tile_sources)
             parent_s = tile_sources[child_s]
