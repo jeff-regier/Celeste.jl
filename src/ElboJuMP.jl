@@ -33,6 +33,18 @@ end
 # For now, treat these as global constants accessed within the expressions
 blobs, mp, three_bodies = SampleData.gen_three_body_dataset();
 
+max_height = 10
+max_width = 10
+
+# Reduce the size of the images for debugging
+for b in 1:CelesteTypes.B
+	this_height = min(blobs[b].H, max_height)
+	this_width = min(blobs[b].W, max_width)
+	blobs[b].H = this_height
+	blobs[b].W = this_width
+	blobs[b].pixels = blobs[b].pixels[1:this_width, 1:this_height] 
+end
+
 # Currently JuMP can't index into complex types, so convert everything to arrays.
 blob_epsilon = [ blobs[img].epsilon for img=1:CelesteTypes.B ]
 
@@ -97,9 +109,9 @@ pixel_source_indicators = zeros(Int8, mp.S, img_w, img_h)
 
 # For now use Jeff's tile code with the first image.   This should be the
 # same for each image.
-img = blobs[1]
-WW = int(ceil(img.W / mp.tile_width))
-HH = int(ceil(img.H / mp.tile_width))
+img = blobs[1];
+WW = int(ceil(img_w / mp.tile_width))
+HH = int(ceil(img_h / mp.tile_width))
 for ww in 1:WW, hh in 1:HH
     image_tile = ElboDeriv.ImageTile(hh, ww, img)
     this_local_sources = ElboDeriv.local_sources(image_tile, mp)
@@ -174,19 +186,19 @@ SetJuMPParameters(mp)
 
 # Index 3 is r_s and  has a gamma expectation.
 @defNLExpr(E_l_a_3[s=1:mp.S, a=1:CelesteTypes.I],
-	       vp_gamma[s, a] * vp_zeta[s, a])
+	       vp_gamma[s, a] * vp_zeta[s, a]);
 
 # The remaining indices involve c_s and have lognormal
 # expectations times E_c_3.
 @defNLExpr(E_l_a_4[s=1:mp.S, a=1:CelesteTypes.I],
-           E_l_a_3[s, a] * exp(vp_beta[s, 3, a] + .5 * vp_lambda[s, 3, a]))
+           E_l_a_3[s, a] * exp(vp_beta[s, 3, a] + .5 * vp_lambda[s, 3, a]));
 @defNLExpr(E_l_a_5[s=1:mp.S, a=1:CelesteTypes.I],
-           E_l_a_4[s, a] * exp(vp_beta[s, 4, a] + .5 * vp_lambda[s, 4, a]))
+           E_l_a_4[s, a] * exp(vp_beta[s, 4, a] + .5 * vp_lambda[s, 4, a]));
 
 @defNLExpr(E_l_a_2[s=1:mp.S, a=1:CelesteTypes.I],
-           E_l_a_3[s, a] * exp(-vp_beta[s, 2, a] + .5 * vp_lambda[s, 2, a]))
+           E_l_a_3[s, a] * exp(-vp_beta[s, 2, a] + .5 * vp_lambda[s, 2, a]));
 @defNLExpr(E_l_a_1[s=1:mp.S, a=1:CelesteTypes.I],
-           E_l_a_2[s, a] * exp(-vp_beta[s, 1, a] + .5 * vp_lambda[s, 1, a]))
+           E_l_a_2[s, a] * exp(-vp_beta[s, 1, a] + .5 * vp_lambda[s, 1, a]));
 
 # Copy the brightnesses into a summable indexed structure.
 @defNLExpr(E_l_a[s=1:mp.S, b=1:CelesteTypes.B, a=1:CelesteTypes.I],
@@ -194,38 +206,38 @@ SetJuMPParameters(mp)
 	       (b == 2) * E_l_a_2[s, a] +
 	       (b == 3) * E_l_a_3[s, a] +
 	       (b == 4) * E_l_a_4[s, a] +
-	       (b == 5) * E_l_a_5[s, a])
+	       (b == 5) * E_l_a_5[s, a]);
 
 # Second order terms.
 @defNLExpr(E_ll_a_3[s=1:mp.S, a=1:CelesteTypes.I],
-	       vp_gamma[s, a] * (1 + vp_gamma[s, a]) * vp_zeta[s, a] ^ 2)
+	       vp_gamma[s, a] * (1 + vp_gamma[s, a]) * vp_zeta[s, a] ^ 2);
 
 @defNLExpr(E_ll_a_4[s=1:mp.S, a=1:CelesteTypes.I],
-	       E_ll_a_3[s, a] * exp(2 * vp_beta[s, 3, a] + 2 * vp_lambda[s, 3, a]))
+	       E_ll_a_3[s, a] * exp(2 * vp_beta[s, 3, a] + 2 * vp_lambda[s, 3, a]));
 @defNLExpr(E_ll_a_5[s=1:mp.S, a=1:CelesteTypes.I],
-	       E_ll_a_4[s, a] * exp(2 * vp_beta[s, 4, a] + 2 * vp_lambda[s, 4, a]))
+	       E_ll_a_4[s, a] * exp(2 * vp_beta[s, 4, a] + 2 * vp_lambda[s, 4, a]));
 
 @defNLExpr(E_ll_a_2[s=1:mp.S, a=1:CelesteTypes.I],
-	       E_ll_a_3[s, a] * exp(-2 * vp_beta[s, 2, a] + 2 * vp_lambda[s, 2, a]))
+	       E_ll_a_3[s, a] * exp(-2 * vp_beta[s, 2, a] + 2 * vp_lambda[s, 2, a]));
 @defNLExpr(E_ll_a_1[s=1:mp.S, a=1:CelesteTypes.I],
-	       E_ll_a_2[s, a] * exp(-2 * vp_beta[s, 1, a] + 2 * vp_lambda[s, 1, a]))
+	       E_ll_a_2[s, a] * exp(-2 * vp_beta[s, 1, a] + 2 * vp_lambda[s, 1, a]));
 
 @defNLExpr(E_ll_a[s=1:mp.S, b=1:CelesteTypes.B, a=1:CelesteTypes.I],
 	       (b == 1) * E_ll_a_1[s, a] +
 	       (b == 2) * E_ll_a_2[s, a] +
 	       (b == 3) * E_ll_a_3[s, a] +
 	       (b == 4) * E_ll_a_4[s, a] +
-	       (b == 5) * E_ll_a_5[s, a])
+	       (b == 5) * E_ll_a_5[s, a]);
 
 ####################################
 # The bivariate normal mixtures, originally defined in load_bvn_mixtures
 
 @defNLExpr(star_mean[b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, row=1:2],
-	       psf_xi_bar[b, k, row] + vp_mu[s, row])
+	       psf_xi_bar[b, k, row] + vp_mu[s, row]);
 
 @defNLExpr(star_det[b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp],
 	       psf_sigma_bar[b, k, 1, 1] * psf_sigma_bar[b, k, 2, 2] -
-	       psf_sigma_bar[b, k, 1, 2] * psf_sigma_bar[b, k, 2, 1])
+	       psf_sigma_bar[b, k, 1, 2] * psf_sigma_bar[b, k, 2, 1]);
 
 # Matrix inversion by hand.  Maybe it would be better to have a super-variable
 # indexing all bivariate normals so as not to repeat code, or to do some
@@ -235,10 +247,10 @@ SetJuMPParameters(mp)
            (sum{psf_sigma_bar[b, k, 2, 2]; row == 1 && col == 1} +
            	sum{psf_sigma_bar[b, k, 1, 1]; row == 2 && col == 2} -
            	sum{psf_sigma_bar[b, k, 1, 2]; row == 1 && col == 2} -
-           	sum{psf_sigma_bar[b, k, 2, 1]; row == 2 && col == 1}) / star_det[b, s, k])
+           	sum{psf_sigma_bar[b, k, 2, 1]; row == 2 && col == 1}) / star_det[b, s, k]);
 
 @defNLExpr(star_z[b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp],
-	       psf_alpha_bar[b, k] ./ (star_det[b, s, k] ^ 0.5 * 2pi))
+	       psf_alpha_bar[b, k] ./ (star_det[b, s, k] ^ 0.5 * 2pi));
 
 #####################
 # galaxy bvn components
@@ -250,14 +262,14 @@ SetJuMPParameters(mp)
 		   (sum{ cos(vp_phi[s]); row == 1 && col == 1} +
 			sum{-sin(vp_phi[s]); row == 1 && col == 2} +
 			sum{ sin(vp_phi[s]); row == 2 && col == 1} +
-			sum{ cos(vp_phi[s]); row == 2 && col == 2}))
+			sum{ cos(vp_phi[s]); row == 2 && col == 2}));
 
 # This is D
 @defNLExpr(galaxy_scale_mat[s=1:mp.S, row=1:2, col=1:2],
 			sum{1.0; row == 1 && col == 1} +
 			sum{0.0; row == 1 && col == 2} +
 			sum{0.0; row == 2 && col == 1} +
-			sum{vp_rho[s]; row == 2 && col == 2})
+			sum{vp_rho[s]; row == 2 && col == 2});
 
 # This is scale * D * R'.  Note that the column and row names
 # circumvent what seems to be a bug in JuMP, see issue #415 in JuMP.jl
@@ -265,13 +277,13 @@ SetJuMPParameters(mp)
 @defNLExpr(galaxy_w_mat[s=1:mp.S, w_row=1:2, w_col=1:2],
 		   vp_sigma[s] * sum{galaxy_scale_mat[s, w_row, sum_index] *
 		                     galaxy_rot_mat[s, w_col, sum_index],
-		                     sum_index = 1:2})
+		                     sum_index = 1:2});
 
 # This is W' * W
 @defNLExpr(galaxy_xixi_mat[s=1:mp.S, xixi_row=1:2, xixi_col=1:2],
 		   sum{galaxy_w_mat[s, xixi_sum_index, xixi_row] *
 	           galaxy_w_mat[s, xixi_sum_index, xixi_col],
-	           xixi_sum_index = 1:2})
+	           xixi_sum_index = 1:2});
 
 # Terms from GalaxyCacheComponent:
 # var_s and weight for type 1 galaxies:
@@ -279,22 +291,22 @@ SetJuMPParameters(mp)
 	                          k=1:n_pcf_comp, g_k=1:n_gal1_comp,
 	                          vars_row=1:2, vars_col=1:2],
 	       psf_sigma_bar[b, k, vars_row, vars_col] +
-	       galaxy_type1_sigma_tilde[g_k] * galaxy_xixi_mat[s, vars_row, vars_col])
+	       galaxy_type1_sigma_tilde[g_k] * galaxy_xixi_mat[s, vars_row, vars_col]);
 
 @defNLExpr(galaxy_type1_weight[b=1:CelesteTypes.B,
 	                           k=1:n_pcf_comp, g_k=1:n_gal1_comp],
-	       psf_alpha_bar[b, k] * galaxy_type1_alpha_tilde[g_k])
+	       psf_alpha_bar[b, k] * galaxy_type1_alpha_tilde[g_k]);
 
 # var_s and weight for type 2 galaxies:
 @defNLExpr(galaxy_type2_var_s[b=1:CelesteTypes.B, s=1:mp.S,
 	                          k=1:n_pcf_comp, g_k=1:n_gal2_comp,
 	                          vars_row=1:2, vars_col=1:2],
 	       psf_sigma_bar[b, k, vars_row, vars_col] +
-	       galaxy_type2_sigma_tilde[g_k] * galaxy_xixi_mat[s, vars_row, vars_col])
+	       galaxy_type2_sigma_tilde[g_k] * galaxy_xixi_mat[s, vars_row, vars_col]);
 
 @defNLExpr(galaxy_type2_weight[b=1:CelesteTypes.B,
 	                           k=1:n_pcf_comp, g_k=1:n_gal2_comp],
-	       psf_alpha_bar[b, k] * galaxy_type2_alpha_tilde[g_k])
+	       psf_alpha_bar[b, k] * galaxy_type2_alpha_tilde[g_k]);
 
 # Now put these together to get the bivariate normal components,
 # just like for the stars.
@@ -310,14 +322,14 @@ SetJuMPParameters(mp)
 	       (galaxy_type1_var_s[b, s, k, g_k, 1, 1] *
 	        galaxy_type1_var_s[b, s, k, g_k, 2, 2]) -
 	       (galaxy_type1_var_s[b, s, k, g_k, 1, 2] *
-	        galaxy_type1_var_s[b, s, k, g_k, 2, 1]))
+	        galaxy_type1_var_s[b, s, k, g_k, 2, 1]));
 
 @defNLExpr(galaxy_type2_det[b=1:CelesteTypes.B, s=1:mp.S,
 	                        k=1:n_pcf_comp, g_k=1:n_gal2_comp],
 	       (galaxy_type2_var_s[b, s, k, g_k, 1, 1] *
 	        galaxy_type2_var_s[b, s, k, g_k, 2, 2]) -
 	       (galaxy_type2_var_s[b, s, k, g_k, 1, 2] *
-	        galaxy_type2_var_s[b, s, k, g_k, 2, 1]))
+	        galaxy_type2_var_s[b, s, k, g_k, 2, 1]));
 
 # Matrix inversion by hand.  Also strangely, this is inaccurate if the
 # minus signs are outside the sum.  (I haven't tested that since fixing the index
@@ -333,7 +345,7 @@ SetJuMPParameters(mp)
 	       	    prec_row == 1 && prec_col == 2} +
 	       	sum{-galaxy_type1_var_s[b, s, k, g_k, 2, 1];
 	       	    prec_row == 2 && prec_col == 1}) /
-	        galaxy_type1_det[b, s, k, g_k])
+	        galaxy_type1_det[b, s, k, g_k]);
 
 @defNLExpr(galaxy_type2_precision[b=1:CelesteTypes.B, s=1:mp.S,
 	                              k=1:n_pcf_comp, g_k=1:n_gal2_comp,
@@ -346,17 +358,17 @@ SetJuMPParameters(mp)
            	    prec_row == 1 && prec_col == 2} +
            	sum{-galaxy_type2_var_s[b, s, k, g_k, 2, 1];
            	    prec_row == 2 && prec_col == 1}) /
-           galaxy_type2_det[b, s, k, g_k])
+           galaxy_type2_det[b, s, k, g_k]);
 
 @defNLExpr(galaxy_type1_z[b=1:CelesteTypes.B, s=1:mp.S,
 	                      k=1:n_pcf_comp, g_k=1:n_gal1_comp],
 	        (galaxy_type1_alpha_tilde[g_k] * psf_alpha_bar[b, k]) ./
-	        (galaxy_type1_det[b, s, k, g_k] ^ 0.5 * 2pi))
+	        (galaxy_type1_det[b, s, k, g_k] ^ 0.5 * 2pi));
 
 @defNLExpr(galaxy_type2_z[b=1:CelesteTypes.B, s=1:mp.S,
 	                      k=1:n_pcf_comp, g_k=1:n_gal2_comp],
 	       (galaxy_type2_alpha_tilde[g_k] * psf_alpha_bar[b, k]) ./
-	       (galaxy_type2_det[b, s, k, g_k] ^ 0.5 * 2pi))
+	       (galaxy_type2_det[b, s, k, g_k] ^ 0.5 * 2pi));
 
 
 ###########################
@@ -368,7 +380,7 @@ SetJuMPParameters(mp)
 # h is "height" and w is "width", but I'll follow the convention in the
 # original code.
 @defNLExpr(pixel_locations[pw=1:img_w, ph=1:img_h, pixel_row=1:2],
-	       sum{ph; pixel_row == 1} + sum{pw; pixel_row == 2})
+	       sum{ph; pixel_row == 1} + sum{pw; pixel_row == 2});
 
 # Reproduces
 # function accum_star_pos!(bmc::BvnComponent,
@@ -379,7 +391,7 @@ SetJuMPParameters(mp)
 # TODO: This is the mean of both stars and galaxies, change the name to reflect this.
 @defNLExpr(star_pdf_mean[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
 	                     pw=1:img_w, ph=1:img_h, pdf_mean_row=1:2],
-           pixel_locations[pw, ph, pdf_mean_row] - star_mean[img, s, k, pdf_mean_row])
+           pixel_locations[pw, ph, pdf_mean_row] - star_mean[img, s, k, pdf_mean_row]);
 
 @defNLExpr(star_pdf_f[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
 	                  pw=1:img_w, ph=1:img_h],
@@ -390,7 +402,7 @@ SetJuMPParameters(mp)
 			        	       pdf_f_row=1:2, pdf_f_col=1:2}) *
 		        star_z[img, s, k];
 		        pixel_source_indicators[s, pw, ph] == 1
-		     })
+		     });
 
 # Galaxy pdfs
 @defNLExpr(galaxy_type1_pdf_f[img=1:CelesteTypes.B, s=1:mp.S,
@@ -403,7 +415,7 @@ SetJuMPParameters(mp)
 		        	       pdf_f_row=1:2, pdf_f_col=1:2}) *
 	        galaxy_type1_z[img, s, k, g_k];
 	        pixel_source_indicators[s, pw, ph] == 1
-	     })
+	     });
 
 @defNLExpr(galaxy_type2_pdf_f[img=1:CelesteTypes.B, s=1:mp.S,
 	                          k=1:n_pcf_comp, g_k=1:n_gal2_comp,
@@ -415,7 +427,7 @@ SetJuMPParameters(mp)
 		        	       pdf_f_row=1:2, pdf_f_col=1:2}) *
 	        galaxy_type2_z[img, s, k, g_k];
 	        pixel_source_indicators[s, pw, ph] == 1
-	     })
+	     });
 
 #############################
 # Get the expectation and variance of G (accum_pixel_source_stats)
