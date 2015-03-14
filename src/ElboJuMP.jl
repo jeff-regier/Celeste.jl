@@ -1,12 +1,8 @@
 using JuMP
-using Dates
 using Celeste
 using CelesteTypes
 import Util
-import JuMP.getValue
 import SampleData
-using Base.Test
-
 
 # Copy the parameters from the mp object into the JuMP model.
 function SetJuMPParameters(mp::ModelParams)
@@ -19,6 +15,7 @@ function SetJuMPParameters(mp::ModelParams)
 		setValue(vp_sigma[s], mp.vp[s][ids.sigma])
 		setValue(vp_phi[s], mp.vp[s][ids.phi])
 
+		setValue(vp_theta[s], mp.vp[s][ids.theta])
 		for a=1:CelesteTypes.I
 			setValue(vp_gamma[s, a], mp.vp[s][ids.gamma][a])
 			setValue(vp_zeta[s, a], mp.vp[s][ids.zeta][a])
@@ -35,6 +32,82 @@ end
 # mp is the parameter values.  three_bodies is not used.
 # For now, treat these as global constants accessed within the expressions
 blobs, mp, three_bodies = SampleData.gen_three_body_dataset();
+
+# Currently JuMP can't index into complex types, so convert everything to arrays.
+blob_epsilon = [ blobs[img].epsilon for img=1:CelesteTypes.B ]
+
+blob_pixels = [ blobs[img].pixels[ph, pw]
+				for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h ];
+blob_iota = [ blobs[img].iota for img=1:CelesteTypes.B ]
+
+# The number of gaussian components in the gaussian mixture representations
+# of the PCF.
+const n_pcf_comp = 3
+
+# Below I use the fact that the number of colors is also the number
+# of images in a blob.  TODO: change the indexing from b to img for clarity.
+
+# These list comprehensions are necessary because JuMP can't index
+# into immutable objects, it seems.
+psf_xi_bar = [ blobs[b].psf[k].xiBar[row]
+ 		   for b=1:CelesteTypes.B, k=1:n_pcf_comp, row=1:2 ]
+psf_sigma_bar = [ blobs[b].psf[k].SigmaBar[row, col]
+                  for b=1:CelesteTypes.B, k=1:n_pcf_comp, row=1:2, col=1:2 ]
+psf_alpha_bar = [ blobs[b].psf[k].alphaBar
+                  for b=1:CelesteTypes.B, k=1:n_pcf_comp ]
+
+# The number of normal components in the two galaxy types.
+const n_gal1_comp = 8
+const n_gal2_comp = 6
+
+# Since there are different numbers of components per galaxy type,
+# store them in different variables to avoid dealing with ragged arrays. 
+galaxy_type1_sigma_tilde =
+	[ galaxy_prototypes[1][g_k].sigmaTilde for g_k=1:n_gal1_comp ]
+galaxy_type2_sigma_tilde =
+	[ galaxy_prototypes[2][g_k].sigmaTilde for g_k=1:n_gal2_comp ]
+
+galaxy_type1_alpha_tilde =
+	[ galaxy_prototypes[1][g_k].alphaTilde for g_k=1:n_gal1_comp ]
+galaxy_type2_alpha_tilde =
+	[ galaxy_prototypes[2][g_k].alphaTilde for g_k=1:n_gal2_comp ]
+
+
+# Make a data structure to allow JuMP to use only local sources.
+
+# TOOD: Despite this maximum, I'm going to treat the rest of the code as if
+# each image has the same number of pixels.
+# Is it possible that these might be different for different
+# images?  If so, it might be necessary to put some checks in the
+# expressions below or handle this some other way.
+
+img_w = maximum([ blobs[b].W for b=1:CelesteTypes.B ])
+img_h = maximum([ blobs[b].H for b=1:CelesteTypes.B ])
+
+# Get a rectangular array containing indicators of whether a
+# source affects each pixel.
+# TODO: is there a sparse multi-dimensional array object that JuMP can
+# interact with?  Is there a better way to look inside ragged arrays
+# in JuMP?
+pixel_source_indicators = zeros(Int8, mp.S, img_w, img_h)
+
+# NB: in the original code, pixel sources were tracked per image, but I
+# don't see why that's necessary, so I'm just going to use one source
+# list for all five bands.
+
+# For now use Jeff's tile code with the first image.   This should be the
+# same for each image.
+img = blobs[1]
+WW = int(ceil(img.W / mp.tile_width))
+HH = int(ceil(img.H / mp.tile_width))
+for ww in 1:WW, hh in 1:HH
+    image_tile = ElboDeriv.ImageTile(hh, ww, img)
+    this_local_sources = ElboDeriv.local_sources(image_tile, mp)
+    h_range, w_range = ElboDeriv.tile_range(image_tile, mp.tile_width)
+    for w in w_range, h in h_range, s in this_local_sources
+    	pixel_source_indicators[s, w, h] = 1
+    end
+end
 
 
 ##########################
@@ -144,25 +217,8 @@ SetJuMPParameters(mp)
 	       (b == 4) * E_ll_a_4[s, a] +
 	       (b == 5) * E_ll_a_5[s, a])
 
-
 ####################################
 # The bivariate normal mixtures, originally defined in load_bvn_mixtures
-
-# The number of gaussian components in the gaussian mixture representations
-# of the PCF.
-const n_pcf_comp = 3
-
-# Below I use the fact that the number of colors is also the number
-# of images in a blob.  TODO: change the indexing from b to img for clarity.
-
-# These list comprehensions are necessary because JuMP can't index
-# into immutable objects, it seems.
-psf_xi_bar = [ blobs[b].psf[k].xiBar[row]
- 		   for b=1:CelesteTypes.B, k=1:n_pcf_comp, row=1:2 ]
-psf_sigma_bar = [ blobs[b].psf[k].SigmaBar[row, col]
-                  for b=1:CelesteTypes.B, k=1:n_pcf_comp, row=1:2, col=1:2 ]
-psf_alpha_bar = [ blobs[b].psf[k].alphaBar
-                  for b=1:CelesteTypes.B, k=1:n_pcf_comp ]
 
 @defNLExpr(star_mean[b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, row=1:2],
 	       psf_xi_bar[b, k, row] + vp_mu[s, row])
@@ -181,10 +237,8 @@ psf_alpha_bar = [ blobs[b].psf[k].alphaBar
            	sum{psf_sigma_bar[b, k, 1, 2]; row == 1 && col == 2} -
            	sum{psf_sigma_bar[b, k, 2, 1]; row == 2 && col == 1}) / star_det[b, s, k])
 
-
 @defNLExpr(star_z[b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp],
 	       psf_alpha_bar[b, k] ./ (star_det[b, s, k] ^ 0.5 * 2pi))
-
 
 #####################
 # galaxy bvn components
@@ -219,25 +273,7 @@ psf_alpha_bar = [ blobs[b].psf[k].alphaBar
 	           galaxy_w_mat[s, xixi_sum_index, xixi_col],
 	           xixi_sum_index = 1:2})
 
-
-# The number of normal components in the two galaxy types.
-const n_gal1_comp = 8
-const n_gal2_comp = 6
-
-# Since there are different numbers of components per galaxy type,
-# store them in different variables to avoid dealing with ragged arrays. 
-galaxy_type1_sigma_tilde =
-	[ galaxy_prototypes[1][g_k].sigmaTilde for g_k=1:n_gal1_comp ]
-galaxy_type2_sigma_tilde =
-	[ galaxy_prototypes[2][g_k].sigmaTilde for g_k=1:n_gal2_comp ]
-
-galaxy_type1_alpha_tilde =
-	[ galaxy_prototypes[1][g_k].alphaTilde for g_k=1:n_gal1_comp ]
-galaxy_type2_alpha_tilde =
-	[ galaxy_prototypes[2][g_k].alphaTilde for g_k=1:n_gal2_comp ]
-
 # Terms from GalaxyCacheComponent:
-
 # var_s and weight for type 1 galaxies:
 @defNLExpr(galaxy_type1_var_s[b=1:CelesteTypes.B, s=1:mp.S,
 	                          k=1:n_pcf_comp, g_k=1:n_gal1_comp,
@@ -327,38 +363,6 @@ galaxy_type2_alpha_tilde =
 # Get the pdf values for each pixel.  Thie takes care of
 # the functions accum_galaxy_pos and accum_star_pos.
 
-# TOOD: Despite this maximum, I'm going to treat the rest of the code as if
-# each image has the same number of pixels.
-# Is it possible that these might be different for different
-# images?  If so, it might be necessary to put some checks in the
-# expressions below or handle this some other way.
-img_w = maximum([ blobs[b].W for b=1:CelesteTypes.B ])
-img_h = maximum([ blobs[b].H for b=1:CelesteTypes.B ])
-
-# Get a rectangular array containing indicators of whether a
-# source affects each pixel.
-# TODO: is there a sparse multi-dimensional array object that JuMP can
-# interact with?  Is there a better way to look inside ragged arrays
-# in JuMP?
-pixel_source_indicators = zeros(Int8, mp.S, img_w, img_h)
-
-# NB: in the original code, pixel sources were tracked per image, but I
-# don't see why that's necessary.
-
-# For now use Jeff's tile code with the first image.   This should be the
-# same for each image.
-img = blobs[1]
-WW = int(ceil(img.W / mp.tile_width))
-HH = int(ceil(img.H / mp.tile_width))
-for ww in 1:WW, hh in 1:HH
-    image_tile = ElboDeriv.ImageTile(hh, ww, img)
-    this_local_sources = ElboDeriv.local_sources(image_tile, mp)
-    h_range, w_range = ElboDeriv.tile_range(image_tile, mp.tile_width)
-    for w in w_range, h in h_range, s in this_local_sources
-    	pixel_source_indicators[s, w, h] = 1
-    end
-end
-
 # This allows us to have simpler expressions for the means.
 # Note that this is in a perhaps counterintuitive order of
 # h is "height" and w is "width", but I'll follow the convention in the
@@ -414,17 +418,15 @@ end
 	     })
 
 #############################
-# Get the expectatoin and variance of G (accum_pixel_source_stats)
-
-blob_epsilon = [ blobs[img].epsilon for img=1:CelesteTypes.B ]
+# Get the expectation and variance of G (accum_pixel_source_stats)
 
 @defNLExpr(fs0m[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
 	       sum{star_pdf_f[img, s, k, pw, ph], k=1:n_pcf_comp});
 
 @defNLExpr(fs1m[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
-	       sum{galaxy_type1_pdf_f[img, s, k, g_k, pw, ph],
+	       sum{vp_theta[s] * galaxy_type1_pdf_f[img, s, k, g_k, pw, ph],
 	           k=1:n_pcf_comp, g_k=1:n_gal1_comp} +
-   	       sum{galaxy_type2_pdf_f[img, s, k, g_k, pw, ph],
+   	       sum{(1 - vp_theta[s]) * galaxy_type2_pdf_f[img, s, k, g_k, pw, ph],
 	           k=1:n_pcf_comp, g_k=1:n_gal2_comp});
 
 @defNLExpr(E_G[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
@@ -440,10 +442,6 @@ blob_epsilon = [ blobs[img].epsilon for img=1:CelesteTypes.B ]
 #####################
 # Get the log likelihood (originally accum_pixel_ret)
 
-blob_pixels = [ blobs[img].pixels[ph, pw]
-				for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h ];
-blob_iota = [ blobs[img].iota for img=1:CelesteTypes.B ]
-
 # TODO: You could probably aggregate over images at this point, but I'll leave
 # it like this for debugging.
 @defNLExpr(img_log_likelihood[img=1:CelesteTypes.B],
@@ -453,7 +451,6 @@ blob_iota = [ blobs[img].iota for img=1:CelesteTypes.B ]
 	         	Var_G[img, s, pw, ph] / (2.0 * E_G[img, s, pw, ph] ^ 2)) -
 	           blob_iota[img] * E_G[img, s, pw, ph],
 	           pw=1:img_w, ph=1:img_h, s=1:mp.S});
-
 
 @defNLExpr(elbo_log_likelihood,
 	       sum{img_log_likelihood[img], img=1:CelesteTypes.B});
