@@ -591,31 +591,6 @@ celeste_star_pdf_f = zeros(Float64, CelesteTypes.B, mp.S, n_pcf_comp, img_w, img
 for img=1:CelesteTypes.B
 	blob_img = blobs[img]
 	star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob_img.psf, mp)
-	WW = int(ceil(blob_img.W / mp.tile_width))
-	HH = int(ceil(blob_img.H / mp.tile_width))
-	for ww in 1:WW, hh in 1:HH
-	    tile = ElboDeriv.ImageTile(hh, ww, blob_img)
-	    tile_sources = ElboDeriv.local_sources(tile, mp)
-	    h_range, w_range = ElboDeriv.tile_range(tile, mp.tile_width)
-	    for w in w_range, h in h_range
-            m_pos = Float64[h, w]
-	        for s in 1:mp.S, k in 1:n_pcf_comp
-	        	if s in tile_sources
-			    	py1, py2, f = ElboDeriv.ret_pdf(star_mcs[k, s], m_pos)
-			    	celeste_star_pdf_f[img, s, k, w, h] = f
-			    end
-	        end
-	    end
-	end
-end
-sum(celeste_star_pdf_f)
-
-# Try a different way:
-celeste_star_pdf_f = zeros(Float64, CelesteTypes.B, mp.S, n_pcf_comp, img_w, img_h);
-for img=1:CelesteTypes.B
-	blob_img = blobs[img]
-	star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob_img.psf, mp)
-
     for w in 1:img_w, h in 1:img_h
         m_pos = Float64[h, w]
         for s in 1:mp.S, k in 1:n_pcf_comp
@@ -629,9 +604,31 @@ end
 sum(celeste_star_pdf_f)
 
 
-
+# Get the JuMP sum:
 @defNLExpr(sum_star_pdf_f,
 	       sum{star_pdf_f[img, s, k, pw, ph],
 	           img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
 	           pw=1:img_w, ph=1:img_h});
 jump_sum = ReverseDiffSparse.getvalue(sum_star_pdf_f, celeste_m.colVal)
+
+
+b = 2
+k = 1
+s = 1
+h = 1
+w = 1
+star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)
+
+[ ReverseDiffSparse.getvalue(star_pdf_mean[b, s, k, w, h, row], celeste_m.colVal)
+  for row=1:2]
+Float64[h, w] - star_mcs[k, s].the_mean
+
+
+ReverseDiffSparse.getvalue(star_pdf_f[b, s, k, w, h], celeste_m.colVal)
+celeste_star_pdf_f[b, s, k, w, h]	
+
+for this_w=1:img_w
+  print(this_w, ": ",
+  	    ReverseDiffSparse.getvalue(star_pdf_f[b, s, k, this_w, h], celeste_m.colVal) -
+        celeste_star_pdf_f[b, s, k, this_w, h], "\n")
+end
