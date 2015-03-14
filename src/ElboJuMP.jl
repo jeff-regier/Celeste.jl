@@ -283,6 +283,14 @@ galaxy_type2_alpha_tilde =
 	       (galaxy_type1_var_s[b, s, k, g_k, 1, 2] *
 	        galaxy_type1_var_s[b, s, k, g_k, 2, 1]))
 
+# This used to be inaccurate, but now it seems to work.
+@defNLExpr(galaxy_type1_det_bad[b=1:CelesteTypes.B, s=1:mp.S,
+	                        k=1:n_pcf_comp, g_k=1:n_gal1_comp],
+	        galaxy_type1_var_s[b, s, k, g_k, 1, 1] *
+	        galaxy_type1_var_s[b, s, k, g_k, 2, 2] -
+	        galaxy_type1_var_s[b, s, k, g_k, 1, 2] *
+	        galaxy_type1_var_s[b, s, k, g_k, 2, 1])
+
 @defNLExpr(galaxy_type2_det[b=1:CelesteTypes.B, s=1:mp.S,
 	                        k=1:n_pcf_comp, g_k=1:n_gal2_comp],
 	       (galaxy_type2_var_s[b, s, k, g_k, 1, 1] *
@@ -315,6 +323,19 @@ galaxy_type2_alpha_tilde =
            	sum{-galaxy_type2_var_s[b, s, k, g_k, 1, 2];
            	    prec_row == 1 && prec_col == 2} +
            	sum{-galaxy_type2_var_s[b, s, k, g_k, 2, 1];
+           	    prec_row == 2 && prec_col == 1}) /
+           galaxy_type2_det[b, s, k, g_k])
+
+@defNLExpr(galaxy_type2_precision_bad[b=1:CelesteTypes.B, s=1:mp.S,
+	                              k=1:n_pcf_comp, g_k=1:n_gal2_comp,
+	                              prec_row=1:2, prec_col=1:2],
+           (sum{galaxy_type2_var_s[b, s, k, g_k, 2, 2];
+           	    prec_row == 1 && prec_col == 1} +
+           	sum{galaxy_type2_var_s[b, s, k, g_k, 1, 1];
+           	    prec_row == 2 && prec_col == 2} -
+           	sum{galaxy_type2_var_s[b, s, k, g_k, 1, 2];
+           	    prec_row == 1 && prec_col == 2} -
+           	sum{galaxy_type2_var_s[b, s, k, g_k, 2, 1];
            	    prec_row == 2 && prec_col == 1}) /
            galaxy_type2_det[b, s, k, g_k])
 
@@ -479,3 +500,82 @@ jump_galaxy_type2_precision - this_celeste_galaxy_type2_precision
 jump_galaxy_type2_z = ReverseDiffSparse.getvalue(galaxy_type2_z[b, s, k, g_k],
    							    				 celeste_m.colVal)
 jump_galaxy_type2_z - celeste_galaxy_type2_z[b, s, k, g_k]
+
+
+##########################
+# Document the bad determinant.  Doesn't seem bad anymore.
+
+ReverseDiffSparse.getvalue(galaxy_type1_det[b, s, k, g_k], celeste_m.colVal)
+ReverseDiffSparse.getvalue(galaxy_type1_det_bad[b, s, k, g_k], celeste_m.colVal)
+
+
+#######################
+# It's prohibitively slow to check each galaxy component, but you
+# can check the sums:
+
+@defNLExpr(foo, sum{galaxy_type1_precision[b, s, k, g_k, row, col],
+	                b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp,
+	                row=1:2, col=1:2});
+ReverseDiffSparse.getvalue(foo, celeste_m.colVal) - sum(celeste_galaxy_type1_precision)
+
+
+@defNLExpr(foo, sum{galaxy_type2_precision[b, s, k, g_k, row, col],
+	                b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp,
+	                row=1:2, col=1:2});
+ReverseDiffSparse.getvalue(foo, celeste_m.colVal) - sum(celeste_galaxy_type2_precision)
+
+
+###########################
+# Get the pdf values for each pixel
+
+# TOOD: Despite these lines, I'm going to treat the rest of the code as if
+# each image has the same number of pixels.
+# Is it possible that these might be different for different
+# images?  If so, it might be necessary to put some checks in the
+# expressions below or handle this some other way.
+img_w = maximum([ blobs[b].W for b=1:CelesteTypes.B ])
+img_h = maximum([ blobs[b].H for b=1:CelesteTypes.B ])
+
+# Get a rectangular array containing indicators of whether a
+# source affects each pixel.
+# TODO: is there a sparse multi-dimensional array object that JuMP can
+# interact with?
+pixel_source_indicators = zeros(Int8, img_w, img_h, mp.S)
+
+# NB: in the original code, pixel sources were tracked per image, but I
+# don't see why that's necessary.
+
+# For now use Jeff's tile code with the first image.
+img = blobs[1]
+WW = int(ceil(img.W / mp.tile_width))
+HH = int(ceil(img.H / mp.tile_width))
+for ww in 1:WW, hh in 1:HH
+    image_tile = ElboDeriv.ImageTile(hh, ww, img)
+    this_local_sources = ElboDeriv.local_sources(image_tile, mp)
+    h_range, w_range = ElboDeriv.tile_range(tile, mp.tile_width)
+    for w in w_range, h in h_range, s in this_local_sources
+    	pixel_source_indicators[w, h, s] = 1
+    end
+end
+
+# This allows us to have simpler expressions for the means.
+@defNLExpr(pixel_locations[pw=1:img_w, ph=1:img_h, pixel_row=1:2],
+	       sum{pw; pixel_row == 1} + sum{ph; pixel_row == 2})
+
+# function accum_star_pos!(bmc::BvnComponent,
+#                          x::Vector{Float64},
+#                          fs0m::SensitiveFloat)
+# ... which called
+# function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
+@defNLExpr(star_pdf_mean[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
+	                     pw=1:img_w, ph=1:img_h, pdf_mean_row=1:2],
+           pixel_locations[pw, ph, pdf_mean_row] - star_mean[b, s, k, pdf_mean_row])
+
+@defNLExpr(star_pdf_f[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
+	                  pw=1:img_w, ph=1:img_h],
+	        exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
+	        	       star_precision[img, s, k, pdf_f_row, pdf_f_col] *
+	        	       star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
+	        	       pdf_f_row=1:2, pdf_f_col=1:2}) *
+	        star_z[img, s, k])
+

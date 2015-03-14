@@ -390,3 +390,50 @@ matrix1_transpose_v2_value =
 	[ ReverseDiffSparse.getvalue(matrix1_transpose_v2[rowi, coli], m.colVal)
 	  for rowi=1:2, coli=1:2 ]
 
+
+###############################
+# sums.  Seems to work, maybe it was an indexing problem?
+
+m = Model()
+@defVar(m, foo)
+
+x = [ 0.12321312321321, 0.4354354353245, 0.657457645674657, 0.143643514351251 ]
+@defNLExpr(a, (x[1] * x[2]) + (x[3] * x[4]))
+@defNLExpr(b, x[1] * x[2] + x[3] * x[4])
+
+ReverseDiffSparse.getvalue(a, m.colVal)
+ReverseDiffSparse.getvalue(b, m.colVal)
+
+###################
+# Ragged arrays of expressions.
+
+m = Model()
+@defVar(m, foo)
+
+# This doesn't work:
+my_set = [1, 2, 3]
+@defNLExpr(in_my_set[i=1:5], i in my_set)
+
+# This works though:
+n = 10000
+selection_matrix = zeros(Int64, n, n);
+for i = 1:n
+	selection_matrix[i, i] = 1
+end
+#selection_matrix = ones(Int64, n, n);
+
+@defNLExpr(in_my_set[i=1:n, j=1:n],
+	       sum{exp(-foo); selection_matrix[i, j] == 1});
+
+@defNLExpr(sum_in_my_set, sum{in_my_set[i, j], i=1:n, j=1:n});
+setValue(foo, 0.3)
+ReverseDiffSparse.getvalue(sum_in_my_set, m.colVal)
+n * exp(-0.3)
+
+
+
+
+
+
+
+
