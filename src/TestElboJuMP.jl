@@ -259,3 +259,14 @@ jump_time = now()
 jump_elbo_lik = ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
 now()
 jump_time = now() - jump_time
+
+
+#################################
+# Optimize?
+
+@setNLObjective(celeste_m, Max, elbo_log_likelihood)
+
+solve_time = now()
+solve(celeste_m)
+now()
+solve_time = now() - solve_time
