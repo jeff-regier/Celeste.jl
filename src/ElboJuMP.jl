@@ -552,7 +552,7 @@ HH = int(ceil(img.H / mp.tile_width))
 for ww in 1:WW, hh in 1:HH
     image_tile = ElboDeriv.ImageTile(hh, ww, img)
     this_local_sources = ElboDeriv.local_sources(image_tile, mp)
-    h_range, w_range = ElboDeriv.tile_range(tile, mp.tile_width)
+    h_range, w_range = ElboDeriv.tile_range(image_tile, mp.tile_width)
     for w in w_range, h in h_range, s in this_local_sources
     	pixel_source_indicators[s, w, h] = 1
     end
@@ -572,7 +572,7 @@ end
 # function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
 @defNLExpr(star_pdf_mean[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
 	                     pw=1:img_w, ph=1:img_h, pdf_mean_row=1:2],
-           pixel_locations[pw, ph, pdf_mean_row] - star_mean[b, s, k, pdf_mean_row])
+           pixel_locations[pw, ph, pdf_mean_row] - star_mean[img, s, k, pdf_mean_row])
 
 @defNLExpr(star_pdf_f[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
 	                  pw=1:img_w, ph=1:img_h],
@@ -601,7 +601,7 @@ for img=1:CelesteTypes.B
         end
     end
 end
-sum(celeste_star_pdf_f)
+celeste_sum = sum(celeste_star_pdf_f)
 
 
 # Get the JuMP sum:
@@ -611,24 +611,4 @@ sum(celeste_star_pdf_f)
 	           pw=1:img_w, ph=1:img_h});
 jump_sum = ReverseDiffSparse.getvalue(sum_star_pdf_f, celeste_m.colVal)
 
-
-b = 2
-k = 1
-s = 1
-h = 1
-w = 1
-star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)
-
-[ ReverseDiffSparse.getvalue(star_pdf_mean[b, s, k, w, h, row], celeste_m.colVal)
-  for row=1:2]
-Float64[h, w] - star_mcs[k, s].the_mean
-
-
-ReverseDiffSparse.getvalue(star_pdf_f[b, s, k, w, h], celeste_m.colVal)
-celeste_star_pdf_f[b, s, k, w, h]	
-
-for this_w=1:img_w
-  print(this_w, ": ",
-  	    ReverseDiffSparse.getvalue(star_pdf_f[b, s, k, this_w, h], celeste_m.colVal) -
-        celeste_star_pdf_f[b, s, k, this_w, h], "\n")
-end
+celeste_sum - jump_sum
