@@ -519,7 +519,8 @@ ReverseDiffSparse.getvalue(foo, celeste_m.colVal) - sum(celeste_galaxy_type2_pre
 
 
 ###########################
-# Get the pdf values for each pixel
+# Get the pdf values for each pixel.  Thie takes care of
+# the functions accum_galaxy_pos and accum_star_pos.
 
 # TOOD: Despite these lines, I'm going to treat the rest of the code as if
 # each image has the same number of pixels.
@@ -660,11 +661,33 @@ gal2_celeste_sum = sum(celeste_gal2_pdf_f)
 
 star_jump_sum = ReverseDiffSparse.getvalue(sum_star_pdf_f, celeste_m.colVal)
 
-# This is incredibly slow, taking many minutes each to compute:
-gal1_jump_sum = ReverseDiffSparse.getvalue(sum_gal1_pdf_f, celeste_m.colVal)
-gal2_jump_sum = ReverseDiffSparse.getvalue(sum_gal2_pdf_f, celeste_m.colVal)
+# This is incredibly slow, taking many minutes each to compute, so I'm commenting it out.
+#gal1_jump_sum = ReverseDiffSparse.getvalue(sum_gal1_pdf_f, celeste_m.colVal)
+#gal2_jump_sum = ReverseDiffSparse.getvalue(sum_gal2_pdf_f, celeste_m.colVal)
 
 
 #############################
-# Galaxy pdfs
+# accum_pixel_source_stats
+
+@defNLExpr(fs0m[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
+	       sum{star_pdf_f[img, s, k, pw, ph], k=1:n_pcf_comp})
+
+@defNLExpr(fs1m[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
+	       sum{galaxy_type1_pdf_f[img, s, k, g_k, pw, ph],
+	           k=1:n_pcf_comp, g_k=1:n_gal1_comp} +
+   	       sum{galaxy_type2_pdf_f[img, s, k, g_k, pw, ph],
+	           k=1:n_pcf_comp, g_k=1:n_gal2_comp})
+
+@defNLExpr(E_G_signal[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
+	       vp_chi[s] * E_l_a[s, img, 1] * fs0m[img, s, pw, ph] +
+	       (1 - vp_chi[s]) * E_l_a[s, img, 2] * fs1m[img, s, pw, ph])
+
+@defNLExpr(Var_G_signal[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
+	       vp_chi[s] * E_ll_a[s, img, 1] * (fs0m[img, s, pw, ph] ^ 2) +
+	       (1 - vp_chi[s]) *E_ll_a[s, img, 2] * (fs1m[img, s, pw, ph] ^ 2) -
+	       E_G_signal[img, s, pw, ph] ^ 2)
+
+#####################
+# accum_pixel_ret
+
 
