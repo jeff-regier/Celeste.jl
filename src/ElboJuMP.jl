@@ -9,12 +9,6 @@ import JuMP.getValue
 import SampleData
 using Base.Test
 
-# Use this until getValue for nonlinear expressions is in JuMP proper.
-# Right now this doesn't work for arrays.
-function getValue(x::ReverseDiffSparse.ParametricExpression, m::Model)
-	ReverseDiffSparse.getvalue(x, m.colVal)
-end
-
 
 # Set the JuMP parameters using the mp object
 function SetJuMPParameters(mp::ModelParams)
@@ -43,7 +37,6 @@ end
 blobs, mp, three_bodies = SampleData.gen_three_body_dataset();
 
 celeste_m = Model()
-
 
 ##########################
 # Define the variational parameters.
@@ -85,12 +78,10 @@ celeste_m = Model()
 @defVar(celeste_m, vp_beta[s=1:mp.S,   b=1:(CelesteTypes.B - 1), a=1:CelesteTypes.I])
 @defVar(celeste_m, vp_lambda[s=1:mp.S, b=1:(CelesteTypes.B - 1), a=1:CelesteTypes.I] >= 0)
 
-
+SetJuMPParameters(mp)
 
 ########################
 # Define the source brightness terms.
-
-SetJuMPParameters(mp)
 
 # Index 3 is r_s and  has a gamma expectation.
 @defNLExpr(E_l_a_3[s=1:mp.S, a=1:CelesteTypes.I],
@@ -122,7 +113,6 @@ jump_e_l_a = [ ReverseDiffSparse.getvalue(E_l_a[s, b, a], celeste_m.colVal)
 celeste_e_l_a = [ ElboDeriv.SourceBrightness(mp.vp[s]).E_l_a[b, a].v
                   for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
 
-
 # Second order terms.
 @defNLExpr(E_ll_a_3[s=1:mp.S, a=1:CelesteTypes.I],
 	       vp_gamma[s, a] * (1 + vp_gamma[s, a]) * vp_zeta[s, a] ^ 2)
@@ -145,6 +135,10 @@ celeste_e_l_a = [ ElboDeriv.SourceBrightness(mp.vp[s]).E_l_a[b, a].v
 	       (b == 5) * E_ll_a_5[s, a])
 
 
+########################
+# Testing
+
+# Test:
 jump_e_ll_a = [ ReverseDiffSparse.getvalue(E_ll_a[s, b, a], celeste_m.colVal)
                for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
 
@@ -162,7 +156,7 @@ jump_e_ll_a - celeste_e_ll_a
 const n_pcf_comp = 3
 
 # Below I use the fact that the number of colors is also the number
-# of images in a blob.
+# of images in a blob.  TODO: change the indexing from b to img for clarity.
 
 # These list comprehensions are necessary because JuMP can't index
 # into immutable objects, it seems.
@@ -198,7 +192,7 @@ psf_alpha_bar = [ blobs[b].psf[k].alphaBar
 #####################
 # galaxy bvn components
 
-# Terms from Util.get_bvn_cov(rho, phi, sigma):
+# Terms originally from Util.get_bvn_cov(rho, phi, sigma):
 
 # This is R
 @defNLExpr(galaxy_rot_mat[s=1:mp.S, row=1:2, col=1:2],
@@ -270,12 +264,14 @@ galaxy_type2_alpha_tilde =
 	       psf_alpha_bar[b, k] * galaxy_type2_alpha_tilde[g_k])
 
 # Now put these together to get the bivariate normal components,
-# just like for the stars:
+# just like for the stars.
 
 # The means are the same as for the stars.
+# TODO: rename the mean so it's clear that the same quantity is being used for both.
 
-# The determinant.  Note that the results are inaccurate without
-# grouping the multiplication in parentheses, which is strange.
+# The determinant.  Note that the results were originally inaccurate without
+# grouping the multiplication in parentheses, which is strange.  (This is no
+# longer the case, maybe it was some weird artifact of the index name problem.)
 @defNLExpr(galaxy_type1_det[b=1:CelesteTypes.B, s=1:mp.S,
 	                        k=1:n_pcf_comp, g_k=1:n_gal1_comp],
 	       (galaxy_type1_var_s[b, s, k, g_k, 1, 1] *
@@ -299,7 +295,8 @@ galaxy_type2_alpha_tilde =
 	        galaxy_type2_var_s[b, s, k, g_k, 2, 1]))
 
 # Matrix inversion by hand.  Also strangely, this is inaccurate if the
-# minus signs are outside the sum.
+# minus signs are outside the sum.  (I haven't tested that since fixing the index
+# name problem, so maybe that isn't true anymore either.)
 @defNLExpr(galaxy_type1_precision[b=1:CelesteTypes.B, s=1:mp.S,
 	                              k=1:n_pcf_comp, g_k=1:n_gal1_comp,
 	                              prec_row=1:2, prec_col=1:2],
@@ -351,8 +348,8 @@ galaxy_type2_alpha_tilde =
 	       (galaxy_type2_det[b, s, k, g_k] ^ 0.5 * 2pi))
 
 
-###################
-# Check everything:
+########################
+# Testing:
 
 star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blobs[1].psf, mp)
 
@@ -395,7 +392,6 @@ s = 2
 k = 2
 g_k = 4
 
-
 ### Check the galaxies:
 celeste_galaxy_type1_precision = [
     ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 1, s].bmc.precision[row, col]
@@ -416,8 +412,7 @@ celeste_galaxy_type2_z = [
     for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp ]
 
 
-
-# Get a var_s
+# Get a var_s from the original code:
 rho = mp.vp[s][ids.rho]
 phi = mp.vp[s][ids.phi]
 sigma = mp.vp[s][ids.sigma]
@@ -502,14 +497,12 @@ jump_galaxy_type2_z = ReverseDiffSparse.getvalue(galaxy_type2_z[b, s, k, g_k],
 jump_galaxy_type2_z - celeste_galaxy_type2_z[b, s, k, g_k]
 
 
-##########################
 # Document the bad determinant.  Doesn't seem bad anymore.
 
 ReverseDiffSparse.getvalue(galaxy_type1_det[b, s, k, g_k], celeste_m.colVal)
 ReverseDiffSparse.getvalue(galaxy_type1_det_bad[b, s, k, g_k], celeste_m.colVal)
 
 
-#######################
 # It's prohibitively slow to check each galaxy component, but you
 # can check the sums:
 
@@ -585,9 +578,44 @@ end
 		        pixel_source_indicators[s, pw, ph] == 1
 		     })
 
+# Galaxy pdfs
+@defNLExpr(galaxy_type1_pdf_f[img=1:CelesteTypes.B, s=1:mp.S,
+	                          k=1:n_pcf_comp, g_k=1:n_gal1_comp,
+	                          pw=1:img_w, ph=1:img_h],
+        sum{
+	        exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
+		        	       galaxy_type1_precision[img, s, k, g_k, pdf_f_row, pdf_f_col] *
+		        	       star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
+		        	       pdf_f_row=1:2, pdf_f_col=1:2}) *
+	        galaxy_type1_z[img, s, k, g_k];
+	        pixel_source_indicators[s, pw, ph] == 1
+	     })
+
+@defNLExpr(galaxy_type2_pdf_f[img=1:CelesteTypes.B, s=1:mp.S,
+	                          k=1:n_pcf_comp, g_k=1:n_gal2_comp,
+	                          pw=1:img_w, ph=1:img_h],
+        sum{
+	        exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
+		        	       galaxy_type2_precision[img, s, k, g_k, pdf_f_row, pdf_f_col] *
+		        	       star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
+		        	       pdf_f_row=1:2, pdf_f_col=1:2}) *
+	        galaxy_type2_z[img, s, k, g_k];
+	        pixel_source_indicators[s, pw, ph] == 1
+	     })
+
+
+########################
+# Testing
 
 # Get the Celeste values:
 celeste_star_pdf_f = zeros(Float64, CelesteTypes.B, mp.S, n_pcf_comp, img_w, img_h);
+celeste_gal1_pdf_f = zeros(Float64, CelesteTypes.B, mp.S,
+	                       n_pcf_comp, n_gal1_comp,
+						   img_w, img_h);
+celeste_gal2_pdf_f = zeros(Float64, CelesteTypes.B, mp.S,
+	                       n_pcf_comp, n_gal2_comp,
+						   img_w, img_h);
+
 for img=1:CelesteTypes.B
 	blob_img = blobs[img]
 	star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob_img.psf, mp)
@@ -597,11 +625,23 @@ for img=1:CelesteTypes.B
         	if pixel_source_indicators[s, w, h] == 1
 		    	py1, py2, f = ElboDeriv.ret_pdf(star_mcs[k, s], m_pos)
 		    	celeste_star_pdf_f[img, s, k, w, h] = f
+		    	for g_k in 1:n_gal1_comp
+		    		py1, py2, f = ElboDeriv.ret_pdf(gal_mcs[k, g_k, 1, s].bmc, m_pos)
+		    		celeste_gal1_pdf_f[img, s, k, g_k, w, h] = f
+		    	end
+		    	for g_k in 1:n_gal2_comp
+		    		py1, py2, f = ElboDeriv.ret_pdf(gal_mcs[k, g_k, 2, s].bmc, m_pos)
+		    		celeste_gal2_pdf_f[img, s, k, g_k, w, h] = f
+		    	end
 		    end
         end
     end
 end
-celeste_sum = sum(celeste_star_pdf_f)
+
+
+star_celeste_sum = sum(celeste_star_pdf_f)
+gal1_celeste_sum = sum(celeste_gal1_pdf_f)
+gal2_celeste_sum = sum(celeste_gal2_pdf_f)
 
 
 # Get the JuMP sum:
@@ -609,6 +649,22 @@ celeste_sum = sum(celeste_star_pdf_f)
 	       sum{star_pdf_f[img, s, k, pw, ph],
 	           img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
 	           pw=1:img_w, ph=1:img_h});
-jump_sum = ReverseDiffSparse.getvalue(sum_star_pdf_f, celeste_m.colVal)
+@defNLExpr(sum_gal1_pdf_f,
+	       sum{galaxy_type1_pdf_f[img, s, k, g_k, pw, ph],
+	           img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp,
+	           pw=1:img_w, ph=1:img_h});
+@defNLExpr(sum_gal2_pdf_f,
+	       sum{galaxy_type2_pdf_f[img, s, k, g_k, pw, ph],
+	           img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp,
+	           pw=1:img_w, ph=1:img_h});
 
-celeste_sum - jump_sum
+star_jump_sum = ReverseDiffSparse.getvalue(sum_star_pdf_f, celeste_m.colVal)
+
+# This is incredibly slow, taking many minutes each to compute:
+gal1_jump_sum = ReverseDiffSparse.getvalue(sum_gal1_pdf_f, celeste_m.colVal)
+gal2_jump_sum = ReverseDiffSparse.getvalue(sum_gal2_pdf_f, celeste_m.colVal)
+
+
+#############################
+# Galaxy pdfs
+
