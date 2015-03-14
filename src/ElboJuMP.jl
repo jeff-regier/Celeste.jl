@@ -1,4 +1,5 @@
 using JuMP
+using Dates
 
 #module ElboJuMP
 
@@ -669,25 +670,54 @@ star_jump_sum = ReverseDiffSparse.getvalue(sum_star_pdf_f, celeste_m.colVal)
 #############################
 # accum_pixel_source_stats
 
+blob_epsilon = [ blobs[img].epsilon for img=1:CelesteTypes.B ]
+
 @defNLExpr(fs0m[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
-	       sum{star_pdf_f[img, s, k, pw, ph], k=1:n_pcf_comp})
+	       sum{star_pdf_f[img, s, k, pw, ph], k=1:n_pcf_comp});
 
 @defNLExpr(fs1m[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
 	       sum{galaxy_type1_pdf_f[img, s, k, g_k, pw, ph],
 	           k=1:n_pcf_comp, g_k=1:n_gal1_comp} +
    	       sum{galaxy_type2_pdf_f[img, s, k, g_k, pw, ph],
-	           k=1:n_pcf_comp, g_k=1:n_gal2_comp})
+	           k=1:n_pcf_comp, g_k=1:n_gal2_comp});
 
-@defNLExpr(E_G_signal[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
+@defNLExpr(E_G[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
+	       blob_epsilon[img] +
 	       vp_chi[s] * E_l_a[s, img, 1] * fs0m[img, s, pw, ph] +
-	       (1 - vp_chi[s]) * E_l_a[s, img, 2] * fs1m[img, s, pw, ph])
+	       (1 - vp_chi[s]) * E_l_a[s, img, 2] * fs1m[img, s, pw, ph]);
 
-@defNLExpr(Var_G_signal[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
+@defNLExpr(Var_G[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
 	       vp_chi[s] * E_ll_a[s, img, 1] * (fs0m[img, s, pw, ph] ^ 2) +
 	       (1 - vp_chi[s]) *E_ll_a[s, img, 2] * (fs1m[img, s, pw, ph] ^ 2) -
-	       E_G_signal[img, s, pw, ph] ^ 2)
+	       E_G[img, s, pw, ph] ^ 2);
 
 #####################
 # accum_pixel_ret
 
+blob_pixels = [ blobs[img].pixels[ph, pw]
+				for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h ];
+blob_iota = [ blobs[img].iota for img=1:CelesteTypes.B ]
 
+# TODO: You could probably aggregate over images at this point, but I'll leave
+# it like this for debugging.
+@defNLExpr(img_log_likelihood[img=1:CelesteTypes.B],
+	       sum{blob_pixels[img, pw, ph] *
+	           (log(blob_iota[img]) +
+	           	log(E_G[img, s, pw, ph]) -
+	         	Var_G[img, s, pw, ph] / (2.0 * E_G[img, s, pw, ph] ^ 2)) -
+	           blob_iota[img] * E_G[img, s, pw, ph],
+	           pw=1:img_w, ph=1:img_h, s=1:mp.S});
+
+
+@defNLExpr(elbo_log_likelihood,
+	       sum{img_log_likelihood[img], img=1:CelesteTypes.B});
+
+celeste_time = now()
+celeste_elbo_lik = ElboDeriv.elbo_likelihood(blobs, mp).v
+now()
+celeste_time = celeste_time - now()
+
+jump_time = now()
+jump_elbo_lik = ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
+now()
+jump_time = jump_time - now()
