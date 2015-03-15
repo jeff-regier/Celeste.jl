@@ -305,8 +305,6 @@ end
 #reshape(celeste_log_lik_pixel[1, :, :], img_w, img_h) -
 #reshape(jump_log_lik_pixel[1, :, :], img_w, img_h)
 
-
-
 #############################
 # Test the log likelihood
 
@@ -321,9 +319,6 @@ now()
 jump_time = now() - jump_time
 
 @test_approx_eq	celeste_elbo_lik jump_elbo_lik
-
-
-
 
 
 

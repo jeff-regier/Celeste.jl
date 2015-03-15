@@ -471,11 +471,11 @@ SetJuMPParameters(mp)
 	        blob_iota[img] * E_G[img, pw, ph]);
 
 @defNLExpr(img_log_likelihood[img=1:CelesteTypes.B],
-	       sum{pixel_log_likelihood[img, pw, ph] + log_base_measure[img],
+	       sum{pixel_log_likelihood[img, pw, ph],
 	           pw=1:img_w, ph=1:img_h});
 
 @defNLExpr(elbo_log_likelihood,
-	       sum{img_log_likelihood[img], img=1:CelesteTypes.B});
+	       sum{img_log_likelihood[img] + log_base_measure[img], img=1:CelesteTypes.B});
 
 # Don't print the last expression when including!
 1
