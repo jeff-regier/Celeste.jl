@@ -102,7 +102,7 @@ log_base_measure = [ -sum(lfact(blobs[b].pixels)) for b=1:CelesteTypes.B ]
 # TODO: is there a sparse multi-dimensional array object that JuMP can
 # interact with?  Is there a better way to look inside ragged arrays
 # in JuMP?
-pixel_source_indicators = zeros(Int8, mp.S, img_w, img_h)
+pixel_source_indicators = zeros(Int8, mp.S, img_w, img_h);
 
 # NB: in the original code, pixel sources were tracked per image, but I
 # don't see why that's necessary, so I'm just going to use one source
@@ -121,6 +121,7 @@ for ww in 1:WW, hh in 1:HH
     	pixel_source_indicators[s, w, h] = 1
     end
 end
+pixel_source_count = [ sum(pixel_source_indicators[:, pw, ph]) for pw=1:img_w, ph=1:img_h];
 
 
 ##########################
@@ -460,13 +461,17 @@ SetJuMPParameters(mp)
 #####################
 # Get the log likelihood (originally accum_pixel_ret)
 
+# TODO: Use pixel_source_count to not use the delta-method approximation
+# when there are no sources in a pixel.
+@defNLExpr(pixel_log_likelihood[img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h],
+	       blob_pixels[img, pw, ph] *
+	        (log(blob_iota[img]) +
+	         log(E_G[img, pw, ph]) -
+	         Var_G[img, pw, ph] / (2.0 * (E_G[img, pw, ph] ^ 2))) -
+	        blob_iota[img] * E_G[img, pw, ph]);
+
 @defNLExpr(img_log_likelihood[img=1:CelesteTypes.B],
-	       sum{blob_pixels[img, pw, ph] *
-	           (log(blob_iota[img]) +
-	           	log(E_G[img, pw, ph]) -
-	         	Var_G[img, pw, ph] / (2.0 * E_G[img, pw, ph] ^ 2)) -
-	           blob_iota[img] * E_G[img, pw, ph] +
-	           log_base_measure[img],
+	       sum{pixel_log_likelihood[img, pw, ph] + log_base_measure[img],
 	           pw=1:img_w, ph=1:img_h});
 
 @defNLExpr(elbo_log_likelihood,
