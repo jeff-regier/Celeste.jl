@@ -368,7 +368,8 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
     #     star and galaxy contributions to the ELBO from this source
     #     in this band.  Adds the contributions to E_G and var_G.
 
-    # Accumulate over PSF components.
+    # Accumulate over PSF components.  Note that fs0m and fs1m
+    # are cleared at this point.
     clear!(fs0m)
     for star_mc in star_mcs[:, parent_s]
         accum_star_pos!(star_mc, m_pos, fs0m)
@@ -456,7 +457,8 @@ function accum_pixel_ret!(tile_sources::Vector{Int64},
     # Add the lower bound to the E_q[log(F_{nbm})] term
     # Subtract the E_q[F_{nbm}] term.
     likelihood_term =
-        (x_nbm * (log(iota) + log(E_G.v) - var_G.v / (2. * E_G.v^2)) - iota * E_G.v)
+        (x_nbm * (log(iota) + log(E_G.v) - var_G.v / (2. * E_G.v^2)) -
+        iota * E_G.v)
     ret.v += likelihood_term
 
     # Accumulate the derivatives.
@@ -554,9 +556,11 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         return
     end
 
-    # fs0m and accumulat fs1m contributions from all sources,
+    # fs0m and fs1m accumulate contributions from all sources,
     # and so we say their derivatives are with respect to
-    # source "-1".
+    # source "-1".  Note that they are actually cleared
+    # for every source, so I'm not sure why they're passed
+    # in like this, though it's convenient for debugging.
     fs0m = zero_sensitive_float([-1], star_pos_params)
     fs1m = zero_sensitive_float([-1], galaxy_pos_params)
 

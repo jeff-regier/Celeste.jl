@@ -222,6 +222,8 @@ celeste_fs1m = Float64[ celeste_fs1m_gal1[img, s, pw, ph] * mp.vp[s][ids.theta] 
 
 jump_E_G_s = Float64[ ReverseDiffSparse.getvalue(E_G_s[b, s, pw, ph], celeste_m.colVal)
 			          for b=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+jump_Var_G_s = Float64[ ReverseDiffSparse.getvalue(Var_G_s[b, s, pw, ph], celeste_m.colVal)
+			          for b=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
 
 sbs = [ ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S ];
 
@@ -230,7 +232,8 @@ gal_mcs_array = [ ElboDeriv.load_bvn_mixtures(blobs[img].psf, mp)[2] for img=1:C
 
 raw_celeste_fs0m = zeros(Float64, CelesteTypes.B, mp.S, img_w, img_h);
 raw_celeste_fs1m = zeros(Float64, CelesteTypes.B, mp.S, img_w, img_h);
-raw_celeste_e_g = zeros(Float64, CelesteTypes.B, mp.S, img_w, img_h);
+raw_celeste_e_g_s = zeros(Float64, CelesteTypes.B, mp.S, img_w, img_h);
+raw_celeste_var_g_s = zeros(Float64, CelesteTypes.B, mp.S, img_w, img_h);
 
 for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h
 	all_sources = 1:mp.S
@@ -240,8 +243,8 @@ for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h
 	this_fs0m = zero_sensitive_float([-1], star_pos_params)
 	this_fs1m = zero_sensitive_float([-1], galaxy_pos_params)
 
-	E_G = zero_sensitive_float(these_local_sources, all_params)
-	var_G = zero_sensitive_float(these_local_sources, all_params)
+	this_E_G = zero_sensitive_float(these_local_sources, all_params)
+	this_var_G = zero_sensitive_float(these_local_sources, all_params)
 	# Note that each pixel gets only one epsilon term, so it is
 	# not included in E_G_s.
 
@@ -252,16 +255,56 @@ for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h
 								        1, s,
 								        Float64[ph, pw], img,
 								        this_fs0m, this_fs1m,
-								        E_G, var_G)
+								        this_E_G, this_var_G)
 	raw_celeste_fs0m[img, s, pw, ph] = this_fs0m.v
 	raw_celeste_fs1m[img, s, pw, ph] = this_fs1m.v
-	raw_celeste_e_g[img, s, pw, ph] = E_G.v
+	raw_celeste_e_g_s[img, s, pw, ph] = this_E_G.v
+	raw_celeste_var_g_s[img, s, pw, ph] = this_var_G.v
 
 end
 
 @test_approx_eq raw_celeste_fs0m jump_fs0m
 @test_approx_eq raw_celeste_fs1m jump_fs1m
-@test_approx_eq raw_celeste_e_g jump_E_G_s
+@test_approx_eq raw_celeste_e_g_s jump_E_G_s
+@test_approx_eq raw_celeste_var_g_s jump_Var_G_s
+
+
+############################
+# Test per-pixel likelihoods
+
+jump_log_lik_pixel =
+	Float64[ ReverseDiffSparse.getvalue(pixel_log_likelihood[img, pw, ph], celeste_m.colVal)
+			 for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h ];
+
+celeste_e_g = [ blobs[img].epsilon + sum(raw_celeste_e_g_s[img, :, pw, ph])
+                    for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h ];
+celeste_var_g = [ sum(raw_celeste_var_g_s[img, :, pw, ph])
+                  for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h ];
+
+celeste_log_lik_pixel = zeros(Float64, CelesteTypes.B, img_w, img_h);
+for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h
+	# tile_sources is only needed for the derivatives.
+	all_sources = 1:mp.S
+	these_sources = Bool[ pixel_source_indicators[s, pw, ph] == 1 for s=1:mp.S ]
+	these_local_sources = all_sources[these_sources]
+	accum = zero_sensitive_float(these_local_sources, all_params)
+    
+    this_E_G = zero_sensitive_float(these_local_sources, all_params)
+	this_var_G = zero_sensitive_float(these_local_sources, all_params)
+	this_E_G.v = celeste_e_g[img, pw, ph]
+	this_var_G.v = celeste_var_g[img, pw, ph]
+	ElboDeriv.accum_pixel_ret!(these_local_sources,
+				               blobs[img].pixels[ph, pw], blobs[img].iota,
+		    	               this_E_G, this_var_G, accum)
+	
+	celeste_log_lik_pixel[img, pw, ph] = accum.v
+end
+
+@test_approx_eq celeste_log_lik_pixel jump_log_lik_pixel
+
+#reshape(celeste_log_lik_pixel[1, :, :], img_w, img_h) -
+#reshape(jump_log_lik_pixel[1, :, :], img_w, img_h)
+
 
 
 #############################
