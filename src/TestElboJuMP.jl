@@ -112,6 +112,7 @@ celeste_galaxy_type2_z = Float64[
 
 
 # For deeper debugging, get a var_s from the original code:
+#
 # rho = mp.vp[s][ids.rho]
 # phi = mp.vp[s][ids.phi]
 # sigma = mp.vp[s][ids.sigma]
@@ -193,6 +194,74 @@ jump_gal2_pdf_f = Float64[
 @test_approx_eq celeste_gal2_pdf_f jump_gal2_pdf_f
 
 
+#######################
+# Test the G terms
+
+jump_fs0m = Float64[ ReverseDiffSparse.getvalue(fs0m[b, s, pw, ph], celeste_m.colVal)
+			         for b=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+celeste_fs0m = Float64[ sum(celeste_star_pdf_f[img, s, :, pw, ph])
+                        for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+@test_approx_eq	celeste_fs0m jump_fs0m
+
+jump_fs1m = Float64[ ReverseDiffSparse.getvalue(fs1m[b, s, pw, ph], celeste_m.colVal)
+			         for b=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+celeste_fs1m_gal1 = Float64[ sum(celeste_gal1_pdf_f[img, s, :, :, pw, ph])
+                             for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+celeste_fs1m_gal2 = Float64[ sum(celeste_gal2_pdf_f[img, s, :, :, pw, ph])
+                             for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+
+# Very strangely, this gives an error if the line is broken after the + sign.
+# ERROR: syntax: invalid comprehension syntax
+celeste_fs1m = Float64[ celeste_fs1m_gal1[img, s, pw, ph] * mp.vp[s][ids.theta] + celeste_fs1m_gal2[img, s, pw, ph] * (1 - mp.vp[s][ids.theta])
+                        for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+
+@test_approx_eq	celeste_fs1m jump_fs1m
+
+##################################
+# Test the G terms more directly
+
+jump_E_G_s = Float64[ ReverseDiffSparse.getvalue(E_G_s[b, s, pw, ph], celeste_m.colVal)
+			          for b=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+
+sbs = [ ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S ];
+
+star_mcs_array = [ ElboDeriv.load_bvn_mixtures(blobs[img].psf, mp)[1] for img=1:CelesteTypes.B ];
+gal_mcs_array = [ ElboDeriv.load_bvn_mixtures(blobs[img].psf, mp)[2] for img=1:CelesteTypes.B ];
+
+raw_celeste_fs0m = zeros(Float64, CelesteTypes.B, mp.S, img_w, img_h);
+raw_celeste_fs1m = zeros(Float64, CelesteTypes.B, mp.S, img_w, img_h);
+raw_celeste_e_g = zeros(Float64, CelesteTypes.B, mp.S, img_w, img_h);
+
+for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h
+	all_sources = 1:mp.S
+	these_sources = Bool[ pixel_source_indicators[s, pw, ph] == 1 for s=1:mp.S ]
+	these_local_sources = all_sources[these_sources]
+
+	this_fs0m = zero_sensitive_float([-1], star_pos_params)
+	this_fs1m = zero_sensitive_float([-1], galaxy_pos_params)
+
+	E_G = zero_sensitive_float(these_local_sources, all_params)
+	var_G = zero_sensitive_float(these_local_sources, all_params)
+	# Note that each pixel gets only one epsilon term, so it is
+	# not included in E_G_s.
+
+	ElboDeriv.accum_pixel_source_stats!(sbs[s],
+								        star_mcs_array[img],
+								        gal_mcs_array[img],
+								        mp.vp[s],
+								        1, s,
+								        Float64[ph, pw], img,
+								        this_fs0m, this_fs1m,
+								        E_G, var_G)
+	raw_celeste_fs0m[img, s, pw, ph] = this_fs0m.v
+	raw_celeste_fs1m[img, s, pw, ph] = this_fs1m.v
+	raw_celeste_e_g[img, s, pw, ph] = E_G.v
+
+end
+
+@test_approx_eq raw_celeste_fs0m jump_fs0m
+@test_approx_eq raw_celeste_fs1m jump_fs1m
+@test_approx_eq raw_celeste_e_g jump_E_G_s
 
 
 #############################
@@ -207,6 +276,12 @@ jump_time = now()
 jump_elbo_lik = ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
 now()
 jump_time = now() - jump_time
+
+@test_approx_eq	celeste_elbo_lik jump_elbo_lik
+
+
+
+
 
 
 #################################

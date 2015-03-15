@@ -454,10 +454,10 @@ function accum_pixel_ret!(tile_sources::Vector{Int64},
 
     # Accumulate the values.
     # Add the lower bound to the E_q[log(F_{nbm})] term
-    ret.v += x_nbm * (log(iota) + log(E_G.v) - var_G.v / (2. * E_G.v^2))
-
     # Subtract the E_q[F_{nbm}] term.
-    ret.v -= iota * E_G.v
+    likelihood_term =
+        (x_nbm * (log(iota) + log(E_G.v) - var_G.v / (2. * E_G.v^2)) - iota * E_G.v)
+    ret.v += likelihood_term
 
     # Accumulate the derivatives.
     for child_s in 1:length(tile_sources), p in 1:size(E_G.d, 1)
@@ -473,6 +473,8 @@ function accum_pixel_ret!(tile_sources::Vector{Int64},
         # Derivative of the linear term.
         ret.d[p, parent_s] -= iota * E_G.d[p, child_s]
     end
+
+    return(likelihood_term)
 end
 
 
@@ -529,7 +531,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
     # Args:
     #   - tile: An image tile.
     #   - mp: The current model parameters.
-    #   - sbs: The currne source brightnesses.
+    #   - sbs: The current source brightnesses.
     #   - star_mcs: All the star * PCF components.
     #   - gal_mcs: All the galaxy * PCF components.
     #   - accum: The ELBO log likelihood to be updated.
@@ -552,7 +554,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         return
     end
 
-    # fs0m and fs1m accumulate contributions from all sources,
+    # fs0m and accumulat fs1m contributions from all sources,
     # and so we say their derivatives are with respect to
     # source "-1".
     fs0m = zero_sensitive_float([-1], star_pos_params)
@@ -567,8 +569,8 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         E_G.v = tile.img.epsilon
         clear!(var_G)
 
-        # Note that this is in a perhaps counterintuitive order of
-        # h is "height" and w is "width".
+        # Note that this is in a perhaps counterintuitive order
+        # of h and w since h is "height" and w is "width".
         m_pos = Float64[h, w]
         for child_s in 1:length(tile_sources)
             parent_s = tile_sources[child_s]

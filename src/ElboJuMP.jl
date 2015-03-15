@@ -45,6 +45,15 @@ for b in 1:CelesteTypes.B
 	blobs[b].pixels = blobs[b].pixels[1:this_width, 1:this_height] 
 end
 
+# TOOD: Despite this maximum, I'm going to treat the rest of the code as if
+# each image has the same number of pixels.
+# Is it possible that these might be different for different
+# images?  If so, it might be necessary to put some checks in the
+# expressions below or handle this some other way.
+
+img_w = maximum([ blobs[b].W for b=1:CelesteTypes.B ])
+img_h = maximum([ blobs[b].H for b=1:CelesteTypes.B ])
+
 # Currently JuMP can't index into complex types, so convert everything to arrays.
 blob_epsilon = [ blobs[img].epsilon for img=1:CelesteTypes.B ]
 
@@ -84,18 +93,10 @@ galaxy_type1_alpha_tilde =
 galaxy_type2_alpha_tilde =
 	[ galaxy_prototypes[2][g_k].alphaTilde for g_k=1:n_gal2_comp ]
 
+# The constant contribution to the log likelihood of the x! terms.
+log_base_measure = [ -sum(lfact(blobs[b].pixels)) for b=1:CelesteTypes.B ] 
 
 # Make a data structure to allow JuMP to use only local sources.
-
-# TOOD: Despite this maximum, I'm going to treat the rest of the code as if
-# each image has the same number of pixels.
-# Is it possible that these might be different for different
-# images?  If so, it might be necessary to put some checks in the
-# expressions below or handle this some other way.
-
-img_w = maximum([ blobs[b].W for b=1:CelesteTypes.B ])
-img_h = maximum([ blobs[b].H for b=1:CelesteTypes.B ])
-
 # Get a rectangular array containing indicators of whether a
 # source affects each pixel.
 # TODO: is there a sparse multi-dimensional array object that JuMP can
@@ -441,28 +442,35 @@ SetJuMPParameters(mp)
    	       sum{(1 - vp_theta[s]) * galaxy_type2_pdf_f[img, s, k, g_k, pw, ph],
 	           k=1:n_pcf_comp, g_k=1:n_gal2_comp});
 
-@defNLExpr(E_G[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
-	       blob_epsilon[img] +
-	       vp_chi[s] * E_l_a[s, img, 1] * fs0m[img, s, pw, ph] +
-	       (1 - vp_chi[s]) * E_l_a[s, img, 2] * fs1m[img, s, pw, ph]);
+@defNLExpr(E_G_s[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
+	       (1 - vp_chi[s]) * E_l_a[s, img, 1] * fs0m[img, s, pw, ph] +
+	       vp_chi[s]       * E_l_a[s, img, 2] * fs1m[img, s, pw, ph]);
 
-@defNLExpr(Var_G[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
-	       vp_chi[s] * E_ll_a[s, img, 1] * (fs0m[img, s, pw, ph] ^ 2) +
-	       (1 - vp_chi[s]) *E_ll_a[s, img, 2] * (fs1m[img, s, pw, ph] ^ 2) -
-	       E_G[img, s, pw, ph] ^ 2);
+@defNLExpr(Var_G_s[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
+	       (1 - vp_chi[s]) * E_ll_a[s, img, 1] * (fs0m[img, s, pw, ph] ^ 2) +
+	       vp_chi[s]       * E_ll_a[s, img, 2] * (fs1m[img, s, pw, ph] ^ 2) -
+	       (E_G_s[img, s, pw, ph] ^ 2));
+
+@defNLExpr(E_G[img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h],
+	       sum{E_G_s[img, s, pw, ph], s=1:mp.S} + blob_epsilon[img]);
+
+@defNLExpr(Var_G[img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h],
+	       sum{Var_G_s[img, s, pw, ph], s=1:mp.S});
 
 #####################
 # Get the log likelihood (originally accum_pixel_ret)
 
-# TODO: You could probably aggregate over images at this point, but I'll leave
-# it like this for debugging.
 @defNLExpr(img_log_likelihood[img=1:CelesteTypes.B],
 	       sum{blob_pixels[img, pw, ph] *
 	           (log(blob_iota[img]) +
-	           	log(E_G[img, s, pw, ph]) -
-	         	Var_G[img, s, pw, ph] / (2.0 * E_G[img, s, pw, ph] ^ 2)) -
-	           blob_iota[img] * E_G[img, s, pw, ph],
-	           pw=1:img_w, ph=1:img_h, s=1:mp.S});
+	           	log(E_G[img, pw, ph]) -
+	         	Var_G[img, pw, ph] / (2.0 * E_G[img, pw, ph] ^ 2)) -
+	           blob_iota[img] * E_G[img, pw, ph] +
+	           log_base_measure[img],
+	           pw=1:img_w, ph=1:img_h});
 
 @defNLExpr(elbo_log_likelihood,
 	       sum{img_log_likelihood[img], img=1:CelesteTypes.B});
+
+# Don't print the last expression when including!
+1

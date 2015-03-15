@@ -430,7 +430,22 @@ setValue(foo, 0.3)
 ReverseDiffSparse.getvalue(sum_in_my_set, m.colVal)
 n * exp(-0.3)
 
+#####################
+# Check how unused returns are treated
 
+type MyThingy
+	x::Float64
+	y::Float64
+	MyThingy(x, y) = begin
+		new(x, y)
+	end
+end
+
+function update_and_return!(x::MyThingy)
+  x.x += 1
+  x.y -= 1
+  return(2 * x.y)
+end
 
 
 
