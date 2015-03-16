@@ -9,6 +9,7 @@ using Base.Test
 function test_jump_brightness()
 	# Test the brightness
 
+	# NB: These testing indices are not in the same order as the JuMP objects.
 	jump_e_l_a = Float64[ ReverseDiffSparse.getvalue(E_l_a[s, b, a], celeste_m.colVal)
 	                      for s=1:mp.S, a=1:CelesteTypes.I, b=1:CelesteTypes.B ]
 
@@ -304,6 +305,60 @@ function test_jump_likelihood_terms()
 end
 
 
+
+
+function test_minimal_jump_likelihood_terms()
+	# Test only the star functions for the minimal example.
+
+	# Get the Celeste values:
+	celeste_star_pdf_f = zeros(Float64, CelesteTypes.B, mp.S, n_pcf_comp, img_w, img_h);
+
+	for img=1:CelesteTypes.B
+		blob_img = blobs[img]
+		star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob_img.psf, mp)
+	    for w in 1:img_w, h in 1:img_h
+	        m_pos = Float64[h, w]
+	        for s in 1:mp.S, k in 1:n_pcf_comp
+	        	if pixel_source_indicators[s, w, h] == 1
+			    	py1, py2, f = ElboDeriv.ret_pdf(star_mcs[k, s], m_pos)
+			    	celeste_star_pdf_f[img, s, k, w, h] = f
+			    end
+	        end
+	    end
+	end
+
+	jump_star_pdf_f = Float64[
+		ReverseDiffSparse.getvalue(star_pdf_f[img, s, k, pw, ph], celeste_m.colVal) 
+		for img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
+		           pw=1:img_w, ph=1:img_h ];
+
+	@test_approx_eq celeste_star_pdf_f jump_star_pdf_f
+
+	# Test the G terms based on my understanding of them:
+	jump_fs0m = Float64[ ReverseDiffSparse.getvalue(fs0m[b, s, pw, ph], celeste_m.colVal)
+				         for b=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+	celeste_fs0m = Float64[ sum(celeste_star_pdf_f[img, s, :, pw, ph])
+	                        for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+	@test_approx_eq	celeste_fs0m jump_fs0m
+
+	# Only check that you can calculate the per-pixel likelihoods (they won't equal celeste).
+	jump_E_G_s = Float64[ ReverseDiffSparse.getvalue(E_G_s[b, s, pw, ph], celeste_m.colVal)
+				          for b=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+	jump_Var_G_s = Float64[ ReverseDiffSparse.getvalue(Var_G_s[b, s, pw, ph], celeste_m.colVal)
+				          for b=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
+	jump_E_G = Float64[ ReverseDiffSparse.getvalue(E_G[b, pw, ph], celeste_m.colVal)
+				          for b=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h ];
+	jump_Var_G = Float64[ ReverseDiffSparse.getvalue(Var_G[b, pw, ph], celeste_m.colVal)
+				          for b=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h ];
+
+	jump_log_lik_pixel =
+		Float64[ ReverseDiffSparse.getvalue(pixel_log_likelihood[img, pw, ph], celeste_m.colVal)
+				 for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h ];
+
+end
+
+
+
 function test_jump_likelihood()
 	celeste_elbo_lik = ElboDeriv.elbo_likelihood(blobs, mp).v
 	jump_elbo_lik = ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
@@ -316,8 +371,8 @@ end
 blobs, mp, three_bodies = SampleData.gen_three_body_dataset();
 
 # Limit the tests to this many pixels for quick testing:
-max_height = 100
-max_width = 100
+max_height = 1
+max_width = 1
 
 # Reduce the size of the images for debugging
 for b in 1:CelesteTypes.B
@@ -331,12 +386,22 @@ end
 include(joinpath(Pkg.dir("Celeste"), "src/ElboJuMP.jl"))
 SetJuMPParameters(mp)
 
+print("Testing brightness terms:")
 test_jump_brightness()
+
+print("Testing star bvn terms:")
 test_jump_star_bvn()
+
+print("Testing galaxy bvn terms:")
 test_jump_galaxy_bvn()
+
+print("Testing likelihood terms:")
 test_jump_likelihood_terms()
+
+print("Testing likelihood:")
 test_jump_likelihood()
 
+print("Timing the likelihoods:")
 # Compare the times
 celeste_time = @elapsed ElboDeriv.elbo_likelihood(blobs, mp).v
 jump_time = @elapsed ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
