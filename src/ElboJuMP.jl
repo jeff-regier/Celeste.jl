@@ -1,5 +1,5 @@
-# This file implements the ELBO log likelihood in JuMP.  Currently, to use it,
-# include this file in a namespace that has the following objects:
+# This file implements the ELBO log likelihood in JuMP.  For the time being, 
+# use it by including it in a namespace that has the following objects:
 #
 # blobs: An array of Image objects (of length CelestTypes.B)
 # mp:    A ModelParams object
@@ -96,9 +96,8 @@ galaxy_type2_alpha_tilde =
 # The constant contribution to the log likelihood of the x! terms.
 log_base_measure = [ -sum(lfact(blobs[b].pixels)) for b=1:CelesteTypes.B ] 
 
-# Make a data structure to allow JuMP to use only local sources.
-# Get a rectangular array containing indicators of whether a
-# source affects each pixel.
+# Not every source affects every pixel.  Encode which sources affect
+# which pixels in an rectangular array of zeros and ones.
 # TODO: is there a sparse multi-dimensional array object that JuMP can
 # interact with?  Is there a better way to look inside ragged arrays
 # in JuMP?
@@ -169,8 +168,9 @@ celeste_m = Model()
 SetJuMPParameters(mp)
 
 ################
-# Define the ELBO.  I consistently index objects with these names in this order:
+# Define the ELBO.  I (almost) consistently index objects with these names in this order:
 # b / img: The color band or image that I'm looking at.  (Should be the same.)
+#          Note: the brightness objects currently reverse the order of b and s.
 # s: The source astronomical object
 # k: The psf component
 # g_k: The galaxy mixture component
@@ -201,7 +201,9 @@ SetJuMPParameters(mp)
 @defNLExpr(E_l_a_1[s=1:mp.S, a=1:CelesteTypes.I],
            E_l_a_2[s, a] * exp(-vp_beta[s, 1, a] + .5 * vp_lambda[s, 1, a]));
 
-# Copy the brightnesses into a summable indexed structure.
+# Copy the brightnesses into an easily indexed structure.
+# TODO: make the indexing consistent with the rest of the file by
+# putting the band first.
 @defNLExpr(E_l_a[s=1:mp.S, b=1:CelesteTypes.B, a=1:CelesteTypes.I],
 	       (b == 1) * E_l_a_1[s, a] +
 	       (b == 2) * E_l_a_2[s, a] +
@@ -223,6 +225,8 @@ SetJuMPParameters(mp)
 @defNLExpr(E_ll_a_1[s=1:mp.S, a=1:CelesteTypes.I],
 	       E_ll_a_2[s, a] * exp(-2 * vp_beta[s, 1, a] + 2 * vp_lambda[s, 1, a]));
 
+# TODO: make the indexing consistent with the rest of the file by
+# putting the band first.
 @defNLExpr(E_ll_a[s=1:mp.S, b=1:CelesteTypes.B, a=1:CelesteTypes.I],
 	       (b == 1) * E_ll_a_1[s, a] +
 	       (b == 2) * E_ll_a_2[s, a] +
@@ -433,9 +437,11 @@ SetJuMPParameters(mp)
 #############################
 # Get the expectation and variance of G (accum_pixel_source_stats)
 
+# Star density values:
 @defNLExpr(fs0m[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
 	       sum{star_pdf_f[img, s, k, pw, ph], k=1:n_pcf_comp});
 
+# Galaxy density values:
 @defNLExpr(fs1m[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
 	       sum{vp_theta[s] * galaxy_type1_pdf_f[img, s, k, g_k, pw, ph],
 	           k=1:n_pcf_comp, g_k=1:n_gal1_comp} +
