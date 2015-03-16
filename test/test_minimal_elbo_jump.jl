@@ -9,7 +9,7 @@ import SampleData
 
 # The maximum width and height of the testing image in pixels.
 # Change these to test sub-images of different sizes.
-max_size = 20
+max_size = 100
 
 # Load some simulated data.  blobs contains the image data, and
 # mp is the parameter values.  three_bodies is not used.
@@ -38,6 +38,8 @@ SetJuMPParameters(mp)
 
 # Run it twice to make sure that we don't capture compilation time.
 total_time = now()
+jump_time = 0.0
+celeste_time = 0.0
 for iter = 1:2
 	print("iter ", iter, "\n")
 	# Compare the times.  This comparison is not particularly meaningful,

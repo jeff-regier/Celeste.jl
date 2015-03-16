@@ -40,25 +40,6 @@ function test_jump_star_bvn()
 	   							  celeste_m.colVal)
 	       for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, row=1:2 ];
 	@test_approx_eq celeste_star_mean jump_star_mean
-
-	celeste_star_precision = [
-	    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[1][k, s].precision[row, col]
-	    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, row=1:2, col=1:2 ];
-	jump_star_precision =
-		[ ReverseDiffSparse.getvalue(star_precision[b, s, k, row, col],
-	   							     celeste_m.colVal)
-	       for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, row=1:2, col=1:2 ];
-
-	@test_approx_eq celeste_star_precision jump_star_precision
-
-	celeste_star_z = [
-	    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[1][k, s].z
-	    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp ];
-	jump_star_z =
-		[ ReverseDiffSparse.getvalue(star_z[b, s, k],
-	   							     celeste_m.colVal)
-	       for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp ];
-	@test_approx_eq celeste_star_z jump_star_z
 end
 
 
@@ -371,8 +352,8 @@ end
 blobs, mp, three_bodies = SampleData.gen_three_body_dataset();
 
 # Limit the tests to this many pixels for quick testing:
-max_height = 1
-max_width = 1
+max_height = 10
+max_width = 10
 
 # Reduce the size of the images for debugging
 for b in 1:CelesteTypes.B
