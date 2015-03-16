@@ -145,7 +145,7 @@ function test_jump_galaxy_bvn()
 end
 
 
-function test_jump_likelihood()
+function test_jump_likelihood_terms()
 	# Test the galaxy and star functions.  This is one giant function
 	# to avoid recalculating all the celeste values.
 
@@ -301,31 +301,23 @@ function test_jump_likelihood()
 	end
 
 	@test_approx_eq celeste_log_lik_pixel jump_log_lik_pixel
-
-	#############################
-	# Test the log likelihood
-
-	celeste_time = now()
-	celeste_elbo_lik = ElboDeriv.elbo_likelihood(blobs, mp).v
-	now()
-	celeste_time = now() - celeste_time
-
-	jump_time = now()
-	jump_elbo_lik = ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
-	now()
-	jump_time = now() - jump_time
-
-	@test_approx_eq	celeste_elbo_lik jump_elbo_lik
 end
 
+
+function test_jump_likelihood()
+	celeste_elbo_lik = ElboDeriv.elbo_likelihood(blobs, mp).v
+	jump_elbo_lik = ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
+	@test_approx_eq	celeste_elbo_lik jump_elbo_lik
+end
 
 # Some simulated data.  blobs contains the image data, and
 # mp is the parameter values.  three_bodies is not used.
 # For now, treat these as global constants accessed within the expressions
 blobs, mp, three_bodies = SampleData.gen_three_body_dataset();
 
-max_height = 10
-max_width = 10
+# Limit the tests to this many pixels for quick testing:
+max_height = 50
+max_width = 50
 
 # Reduce the size of the images for debugging
 for b in 1:CelesteTypes.B
@@ -342,4 +334,11 @@ SetJuMPParameters(mp)
 test_jump_brightness()
 test_jump_star_bvn()
 test_jump_galaxy_bvn()
+test_jump_likelihood_terms()
 test_jump_likelihood()
+
+# Compare the times
+celeste_time = @elapsed ElboDeriv.elbo_likelihood(blobs, mp).v
+jump_time = @elapsed ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
+
+print(jump_time / celeste_time)
