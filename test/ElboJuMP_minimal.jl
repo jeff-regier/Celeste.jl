@@ -3,12 +3,13 @@
 using Celeste
 using CelesteTypes
 using Base.Test
+using Dates
 
 import SampleData
 
 # The maximum width and height of the testing image in pixels.
 # Change these to test sub-images of different sizes.
-max_size = 50
+max_size = 20
 
 # Load some simulated data.  blobs contains the image data, and
 # mp is the parameter values.  three_bodies is not used.
@@ -21,7 +22,7 @@ for b in 1:CelesteTypes.B
 	this_width = min(blobs[b].W, max_size)
 	blobs[b].H = this_height
 	blobs[b].W = this_width
-	blobs[b].pixels = blobs[b].pixels[1:this_width, 1:this_height] 
+	blobs[b].pixels = blobs[b].pixels[1:this_height, 1:this_width] 
 end
 
 # Populate the brightness arrays using the original Celeste code
@@ -36,11 +37,17 @@ include(joinpath(Pkg.dir("Celeste"), "src/MinimalElboJuMP.jl"))
 SetJuMPParameters(mp)
 
 # Run it twice to make sure that we don't capture compilation time.
+total_time = now()
 for iter = 1:2
+	print("iter ", iter, "\n")
 	# Compare the times.  This comparison is not particularly meaningful,
 	# since celeste is doing much more than the minimal JuMP example.
+	print("Celeste.\n")
 	celeste_time = @elapsed ElboDeriv.elbo_likelihood(blobs, mp).v
+	print("JuMP.\n")
 	jump_time = @elapsed ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
+	print(max_size, ": ", jump_time / celeste_time, "\n")
 end
+total_time = now() - total_time
 
-print(max_size, ": ", jump_time / celeste_time)
+print(max_size, ": ", jump_time / celeste_time, "\n")
