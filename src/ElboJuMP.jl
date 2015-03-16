@@ -1,3 +1,13 @@
+# This file implements the ELBO log likelihood in JuMP.  Currently, to use it,
+# include this file in a namespace that has the following objects:
+#
+# blobs: An array of Image objects (of length CelestTypes.B)
+# mp:    A ModelParams object
+#
+# To include the file, use:
+# include(joinpath(Pkg.dir("Celeste"), "src/ElboJuMP.jl"))
+
+
 using JuMP
 using Celeste
 using CelesteTypes
@@ -27,23 +37,21 @@ function SetJuMPParameters(mp::ModelParams)
 	end
 end
 
+#########################
+# Define some global constants related to the problem.
 
-# Some simulated data.  blobs contains the image data, and
-# mp is the parameter values.  three_bodies is not used.
-# For now, treat these as global constants accessed within the expressions
-blobs, mp, three_bodies = SampleData.gen_three_body_dataset();
+# The number of gaussian components in the gaussian mixture representations
+# of the PCF.
+const n_pcf_comp = 3
 
-max_height = 10
-max_width = 10
+# The number of normal components in the two galaxy types.
+const n_gal1_comp = 8
+const n_gal2_comp = 6
 
-# Reduce the size of the images for debugging
-for b in 1:CelesteTypes.B
-	this_height = min(blobs[b].H, max_height)
-	this_width = min(blobs[b].W, max_width)
-	blobs[b].H = this_height
-	blobs[b].W = this_width
-	blobs[b].pixels = blobs[b].pixels[1:this_width, 1:this_height] 
-end
+
+#####################
+# First some code to convert the original data structures to
+# multidimensional arrays that can be accessed in JuMP.
 
 # TOOD: Despite this maximum, I'm going to treat the rest of the code as if
 # each image has the same number of pixels.
@@ -61,10 +69,6 @@ blob_pixels = [ blobs[img].pixels[ph, pw]
 				for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h ];
 blob_iota = [ blobs[img].iota for img=1:CelesteTypes.B ]
 
-# The number of gaussian components in the gaussian mixture representations
-# of the PCF.
-const n_pcf_comp = 3
-
 # Below I use the fact that the number of colors is also the number
 # of images in a blob.  TODO: change the indexing from b to img for clarity.
 
@@ -76,10 +80,6 @@ psf_sigma_bar = [ blobs[b].psf[k].SigmaBar[row, col]
                   for b=1:CelesteTypes.B, k=1:n_pcf_comp, row=1:2, col=1:2 ]
 psf_alpha_bar = [ blobs[b].psf[k].alphaBar
                   for b=1:CelesteTypes.B, k=1:n_pcf_comp ]
-
-# The number of normal components in the two galaxy types.
-const n_gal1_comp = 8
-const n_gal2_comp = 6
 
 # Since there are different numbers of components per galaxy type,
 # store them in different variables to avoid dealing with ragged arrays. 
@@ -167,7 +167,6 @@ celeste_m = Model()
 @defVar(celeste_m, vp_lambda[s=1:mp.S, b=1:(CelesteTypes.B - 1), a=1:CelesteTypes.I] >= 0)
 
 SetJuMPParameters(mp)
-
 
 ################
 # Define the ELBO.  I consistently index objects with these names in this order:
@@ -475,7 +474,8 @@ SetJuMPParameters(mp)
 	           pw=1:img_w, ph=1:img_h});
 
 @defNLExpr(elbo_log_likelihood,
-	       sum{img_log_likelihood[img] + log_base_measure[img], img=1:CelesteTypes.B});
+	       sum{img_log_likelihood[img] + log_base_measure[img],
+	       img=1:CelesteTypes.B});
 
 # Don't print the last expression when including!
 1
