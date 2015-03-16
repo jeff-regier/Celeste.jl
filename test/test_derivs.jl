@@ -162,19 +162,6 @@ function test_elbo_derivs()
 end
 
 
-function test_reg_derivs()
-    blob, mp0, body = gen_sample_galaxy_dataset()
-
-    function wrap_reg(mp)
-        accum = zero_sensitive_float([1:3], all_params)
-        ElboDeriv.subtract_reg!(mp, accum)
-        accum
-    end
-    test_by_finite_differences(wrap_reg, mp0)
-end
-
-
-test_reg_derivs()
 test_kl_divergence_derivs()
 test_brightness_derivs()
 test_accum_pos_derivs()
