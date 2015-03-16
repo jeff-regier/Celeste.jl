@@ -316,8 +316,8 @@ end
 blobs, mp, three_bodies = SampleData.gen_three_body_dataset();
 
 # Limit the tests to this many pixels for quick testing:
-max_height = 50
-max_width = 50
+max_height = 100
+max_width = 100
 
 # Reduce the size of the images for debugging
 for b in 1:CelesteTypes.B
