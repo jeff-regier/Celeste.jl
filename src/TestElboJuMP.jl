@@ -334,9 +334,14 @@ SetJuMPParameters(mp)
 test_jump_brightness()
 test_jump_star_bvn()
 test_jump_galaxy_bvn()
+
+print("Testing likelihood terms:")
 test_jump_likelihood_terms()
+
+print("Testing likelihood:")
 test_jump_likelihood()
 
+print("Timing the likelihoods:")
 # Compare the times
 celeste_time = @elapsed ElboDeriv.elbo_likelihood(blobs, mp).v
 jump_time = @elapsed ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
