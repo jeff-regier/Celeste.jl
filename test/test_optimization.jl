@@ -322,24 +322,6 @@ function test_bad_galaxy_init()
 end
 
 
-function test_regularization()
-    blob, mp, body = gen_sample_galaxy_dataset(perturb=true)
-
-    reg_wrapper(blob, mp) = begin
-        accum = zero_sensitive_float([1], all_params)
-        ElboDeriv.subtract_reg!(mp, accum)
-        accum
-    end
-    OptimizeElbo.maximize_f(reg_wrapper, blob, mp)
-
-    sigma_mode = exp(mp.pp.mu_reg - mp.pp.sigma_reg^2)
-    @test_approx_eq_eps mp.vp[1][ids.sigma] sigma_mode 1e-3
-
-    rho_mode = (mp.pp.alpha_reg - 1) / (mp.pp.alpha_reg + mp.pp.beta_reg - 2)
-    @test_approx_eq_eps mp.vp[1][ids.rho] rho_mode 1e-3
-end
-
-
 function test_color()
     blob, mp, body = gen_sample_galaxy_dataset(perturb=true)
     # these are a bright star's colors
@@ -364,7 +346,6 @@ end
 ####################################################
 
 test_color()
-test_regularization()
 #test_bad_galaxy_init()
 test_kappa_finding()
 test_bad_chi_init()

@@ -14,7 +14,7 @@ const color_names = ["$(band_letters[i])$(band_letters[i+1])" for i in 1:4]
 
 
 function load_celeste_predictions(model_dir, stamp_id)
-    f = open("$model_dir/$(ARGS[1])-$stamp_id.dat")
+    f = open("$model_dir/$(ARGS[2])-$stamp_id.dat")
     mp = deserialize(f)
     close(f)
 	mp
@@ -149,7 +149,7 @@ end
 
 function load_celeste_obj!(i::Int64, stamp_id::String, df::DataFrame)
     blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
-    mp = load_celeste_predictions(ENV["MODEL"], stamp_id)
+    mp = load_celeste_predictions(ARGS[1], stamp_id)
     vs = center_obj(mp.vp)
 
     df[i, :pos1] = vs[ids.mu][1]
@@ -248,7 +248,7 @@ end
 
 
 function df_score(stamp_ids)
-    coadd_callback(i, stamp_id, df) = ARGS[1] == "V" ?
+    coadd_callback(i, stamp_id, df) = ARGS[2] == "V" ?
         load_photo_obj!(i, stamp_id, true, df) :
         load_synth_obj!(i, stamp_id, df)
     coadd_df = load_df(stamp_ids, coadd_callback)
@@ -293,14 +293,17 @@ function df_score(stamp_ids)
     scores_df
 end
 
+function filter_filenames(rx, filenames)
+    s_filenames = filter((fn)->ismatch(rx, fn), filenames)
+    String[match(rx, fn).captures[1] for fn in s_filenames]
+end
+
 
 if length(ARGS) >= 2
-    # The input file is the stamp ids you want to process.
-    # It looks for models and raw data using the environment variables
-    # $STAMP and $MODELS.  Missing stamp ids will not be handled gracefully.
-    f = open(ARGS[2])
-    stamp_ids = [strip(line) for line in readlines(f)]
-    close(f)
+    filenames = readdir(ARGS[1])
+    s_ids = filter_filenames(r"S-(.*)\.dat", filenames)
+    v_ids = filter_filenames(r"V-(.*)\.dat", filenames)
+    stamp_ids = intersect(s_ids, v_ids)
 
     println(df_score(stamp_ids))
 end

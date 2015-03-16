@@ -188,12 +188,6 @@ immutable PriorParams
     Xi::Vector{Vector{Float64}}               # mixing weight prior on c_s
     Omega::Vector{Array{Float64, 2}}          # mean prior on c_s
     Lambda::Vector{Array{Array{Float64, 2}}}  # cov prior on c_s
-
-    # Regulazers for the ELBO to discourage small galaxies.
-    mu_reg::Float64
-    sigma_reg::Float64
-    alpha_reg::Float64
-    beta_reg::Float64
 end
 
 # A vector of variational parameters.  The outer index is
