@@ -1,4 +1,5 @@
-# This file implements the ELBO log likelihood in JuMP.  For the time being, 
+# This file implements a minimal version of the ELBO log likelihood in JuMP.
+# For the time being, 
 # use it by including it in a namespace that has the following objects:
 #
 # blobs:  An array of Image objects (of length CelestTypes.B)
