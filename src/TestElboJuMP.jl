@@ -1,4 +1,7 @@
 # Tests for ElboJuMP.jl.
+using Celeste
+using CelesteTypes
+import SampleData
 
 using Dates
 using Base.Test
