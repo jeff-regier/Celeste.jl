@@ -240,22 +240,21 @@ SetJuMPParameters(mp)
 @defNLExpr(star_mean[b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, row=1:2],
 	       psf_xi_bar[b, k, row] + vp_mu[s, row]);
 
-@defNLExpr(star_det[b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp],
-	       psf_sigma_bar[b, k, 1, 1] * psf_sigma_bar[b, k, 2, 2] -
-	       psf_sigma_bar[b, k, 1, 2] * psf_sigma_bar[b, k, 2, 1]);
+# Matrix inversion by hand.
+star_det = [ (psf_sigma_bar[b, k, 1, 1] * psf_sigma_bar[b, k, 2, 2] -
+ 	          psf_sigma_bar[b, k, 1, 2] * psf_sigma_bar[b, k, 2, 1])
+ 	          for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp ];
 
-# Matrix inversion by hand.  Maybe it would be better to have a super-variable
-# indexing all bivariate normals so as not to repeat code, or to do some
-# macro magic to build the same nonlinear expression for each inverse. 
-@defNLExpr(star_precision[b=1:CelesteTypes.B,
-	                      s=1:mp.S, k=1:n_pcf_comp, row=1:2, col=1:2],
-           (sum{psf_sigma_bar[b, k, 2, 2]; row == 1 && col == 1} +
-           	sum{psf_sigma_bar[b, k, 1, 1]; row == 2 && col == 2} -
-           	sum{psf_sigma_bar[b, k, 1, 2]; row == 1 && col == 2} -
-           	sum{psf_sigma_bar[b, k, 2, 1]; row == 2 && col == 1}) / star_det[b, s, k]);
+star_precision = zeros(Float64, CelesteTypes.B, mp.S, n_pcf_comp, 2, 2)
+for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp
+	star_precision[b, s, k, 1, 1] = psf_sigma_bar[b, k, 2, 2] / star_det[b, s, k]
+	star_precision[b, s, k, 2, 2] = psf_sigma_bar[b, k, 1, 1] / star_det[b, s, k]
+	star_precision[b, s, k, 1, 2] = -psf_sigma_bar[b, k, 1, 2] / star_det[b, s, k]
+	star_precision[b, s, k, 2, 1] = -psf_sigma_bar[b, k, 2, 1] / star_det[b, s, k]
+end
 
-@defNLExpr(star_z[b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp],
-	       psf_alpha_bar[b, k] ./ (star_det[b, s, k] ^ 0.5 * 2pi));
+star_z = [ psf_alpha_bar[b, k] ./ (star_det[b, s, k] ^ 0.5 * 2pi)
+   		   for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp ];
 
 #####################
 # galaxy bvn components
