@@ -316,8 +316,8 @@ end
 blobs, mp, three_bodies = SampleData.gen_three_body_dataset();
 
 # Limit the tests to this many pixels for quick testing:
-max_height = 5
-max_width = 5
+max_height = 1
+max_width = 1
 
 # Reduce the size of the images for debugging
 for b in 1:CelesteTypes.B
@@ -331,8 +331,13 @@ end
 include(joinpath(Pkg.dir("Celeste"), "src/ElboJuMP.jl"))
 SetJuMPParameters(mp)
 
+print("Testing brightness terms:")
 test_jump_brightness()
+
+print("Testing star bvn terms:")
 test_jump_star_bvn()
+
+print("Testing galaxy bvn terms:")
 test_jump_galaxy_bvn()
 
 print("Testing likelihood terms:")
