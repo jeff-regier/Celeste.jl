@@ -46,6 +46,8 @@ end
 function test_jump_galaxy_bvn()
 	# Test the galaxy bvn functions
 
+	all_bvn_mixtures = [ ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp) for b=1:CelesteTypes.B]
+
 	jump_galaxy_type1_precision = Float64[
 		ReverseDiffSparse.getvalue(galaxy_type1_precision[b, s, k, g_k, row, col],
 	  						       celeste_m.colVal)
@@ -53,7 +55,7 @@ function test_jump_galaxy_bvn()
 			row=1:2, col=1:2 ];
 
 	celeste_galaxy_type1_precision = Float64[
-	    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 1, s].bmc.precision[row, col]
+	    all_bvn_mixtures[b][2][k, g_k, 1, s].bmc.precision[row, col]
 	    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp,
 	    row=1:2, col=1:2 ];
 
@@ -67,7 +69,7 @@ function test_jump_galaxy_bvn()
 			row=1:2, col=1:2 ];
 
 	celeste_galaxy_type2_precision = Float64[
-	    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 2, s].bmc.precision[row, col]
+	    all_bvn_mixtures[b][2][k, g_k, 2, s].bmc.precision[row, col]
 	    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp,
 	    row=1:2, col=1:2 ];
 
@@ -80,7 +82,7 @@ function test_jump_galaxy_bvn()
 	    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp ];
 
 	celeste_galaxy_type1_z = Float64[
-	    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 1, s].bmc.z
+	    all_bvn_mixtures[b][2][k, g_k, 1, s].bmc.z
 	    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal1_comp ];
 
 	@test_approx_eq celeste_galaxy_type1_z jump_galaxy_type1_z
@@ -91,11 +93,10 @@ function test_jump_galaxy_bvn()
 	    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp ];
 
 	celeste_galaxy_type2_z = Float64[
-	    ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp)[2][k, g_k, 2, s].bmc.z
+	    all_bvn_mixtures[b][2][k, g_k, 2, s].bmc.z
 	    for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp, g_k=1:n_gal2_comp ];
 
 	@test_approx_eq celeste_galaxy_type2_z jump_galaxy_type2_z
-
 
 	# For deeper debugging, get a var_s from the original code:
 	#
@@ -131,6 +132,8 @@ function test_jump_likelihood_terms()
 	# Test the galaxy and star functions.  This is one giant function
 	# to avoid recalculating all the celeste values.
 
+	all_bvn_mixtures = [ ElboDeriv.load_bvn_mixtures(blobs[b].psf, mp) for b=1:CelesteTypes.B]
+
 	# Get the Celeste values:
 	celeste_star_pdf_f = zeros(Float64, CelesteTypes.B, mp.S, n_pcf_comp, img_w, img_h);
 	celeste_gal1_pdf_f = zeros(Float64, CelesteTypes.B, mp.S,
@@ -142,7 +145,7 @@ function test_jump_likelihood_terms()
 
 	for img=1:CelesteTypes.B
 		blob_img = blobs[img]
-		star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob_img.psf, mp)
+		star_mcs, gal_mcs = all_bvn_mixtures[img]
 	    for w in 1:img_w, h in 1:img_h
 	        m_pos = Float64[h, w]
 	        for s in pixel_sources[w, h], k in 1:n_pcf_comp
@@ -193,9 +196,8 @@ function test_jump_likelihood_terms()
 	celeste_fs1m_gal2 = Float64[ sum(celeste_gal2_pdf_f[img, s, :, :, pw, ph])
 	                             for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
 
-	# Very strangely, this gives an error if the line is broken after the + sign.
-	# ERROR: syntax: invalid comprehension syntax
-	celeste_fs1m = Float64[ celeste_fs1m_gal1[img, s, pw, ph] * mp.vp[s][ids.theta] + celeste_fs1m_gal2[img, s, pw, ph] * (1 - mp.vp[s][ids.theta])
+	celeste_fs1m = Float64[ (celeste_fs1m_gal1[img, s, pw, ph] * mp.vp[s][ids.theta] +
+		                     celeste_fs1m_gal2[img, s, pw, ph] * (1 - mp.vp[s][ids.theta]))
 	                        for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h ];
 
 	@test_approx_eq	celeste_fs1m jump_fs1m
@@ -340,8 +342,8 @@ end
 
 
 # Limit the tests to this many pixels for quick testing:
-max_height = 50
-max_width = 50
+max_height = 20
+max_width = 20
 
 # Some simulated data.  blobs contains the image data, and
 # mp is the parameter values.  three_bodies is not used.
@@ -354,7 +356,7 @@ for b in 1:CelesteTypes.B
 	this_width = min(blobs[b].W, max_width)
 	blobs[b].H = this_height
 	blobs[b].W = this_width
-	blobs[b].pixels = blobs[b].pixels[1:this_width, 1:this_height] 
+	blobs[b].pixels = blobs[b].pixels[1:this_height, 1:this_width] 
 end
 
 include(joinpath(Pkg.dir("Celeste"), "src/ElboJuMP.jl"))
@@ -378,6 +380,8 @@ test_jump_likelihood()
 print("Timing the likelihoods:")
 # Compare the times
 celeste_time = @elapsed ElboDeriv.elbo_likelihood(blobs, mp).v
+print(now())
 jump_time = @elapsed ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
+print(now())
 
 print(jump_time / celeste_time)
