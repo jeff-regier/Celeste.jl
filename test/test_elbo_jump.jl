@@ -145,19 +145,17 @@ function test_jump_likelihood_terms()
 		star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob_img.psf, mp)
 	    for w in 1:img_w, h in 1:img_h
 	        m_pos = Float64[h, w]
-	        for s in 1:mp.S, k in 1:n_pcf_comp
-	        	if pixel_source_indicators[s, w, h] == 1
-			    	py1, py2, f = ElboDeriv.ret_pdf(star_mcs[k, s], m_pos)
-			    	celeste_star_pdf_f[img, s, k, w, h] = f
-			    	for g_k in 1:n_gal1_comp
-			    		py1, py2, f = ElboDeriv.ret_pdf(gal_mcs[k, g_k, 1, s].bmc, m_pos)
-			    		celeste_gal1_pdf_f[img, s, k, g_k, w, h] = f
-			    	end
-			    	for g_k in 1:n_gal2_comp
-			    		py1, py2, f = ElboDeriv.ret_pdf(gal_mcs[k, g_k, 2, s].bmc, m_pos)
-			    		celeste_gal2_pdf_f[img, s, k, g_k, w, h] = f
-			    	end
-			    end
+	        for s in pixel_sources[w, h], k in 1:n_pcf_comp
+		    	py1, py2, f = ElboDeriv.ret_pdf(star_mcs[k, s], m_pos)
+		    	celeste_star_pdf_f[img, s, k, w, h] = f
+		    	for g_k in 1:n_gal1_comp
+		    		py1, py2, f = ElboDeriv.ret_pdf(gal_mcs[k, g_k, 1, s].bmc, m_pos)
+		    		celeste_gal1_pdf_f[img, s, k, g_k, w, h] = f
+		    	end
+		    	for g_k in 1:n_gal2_comp
+		    		py1, py2, f = ElboDeriv.ret_pdf(gal_mcs[k, g_k, 2, s].bmc, m_pos)
+		    		celeste_gal2_pdf_f[img, s, k, g_k, w, h] = f
+		    	end
 	        end
 	    end
 	end
@@ -221,9 +219,10 @@ function test_jump_likelihood_terms()
 	raw_celeste_var_g_s = zeros(Float64, CelesteTypes.B, mp.S, img_w, img_h);
 
 	for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h
-		all_sources = 1:mp.S
-		these_sources = Bool[ pixel_source_indicators[s, pw, ph] == 1 for s=1:mp.S ]
-		these_local_sources = all_sources[these_sources]
+		#all_sources = 1:mp.S
+		#these_sources = Bool[ pixel_source_indicators[s, pw, ph] == 1 for s=1:mp.S ]
+		#these_local_sources = all_sources[these_sources]
+		these_local_sources = pixel_sources[pw, ph]
 
 		this_fs0m = zero_sensitive_float([-1], star_pos_params)
 		this_fs1m = zero_sensitive_float([-1], galaxy_pos_params)
@@ -266,9 +265,11 @@ function test_jump_likelihood_terms()
 	celeste_log_lik_pixel = zeros(Float64, CelesteTypes.B, img_w, img_h);
 	for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h
 		# tile_sources is only needed for the derivatives.
-		all_sources = 1:mp.S
-		these_sources = Bool[ pixel_source_indicators[s, pw, ph] == 1 for s=1:mp.S ]
-		these_local_sources = all_sources[these_sources]
+		#all_sources = 1:mp.S
+		#these_sources = Bool[ pixel_source_indicators[s, pw, ph] == 1 for s=1:mp.S ]
+		#these_local_sources = all_sources[these_sources]
+
+		these_local_sources = pixel_sources[pw, ph]
 		accum = zero_sensitive_float(these_local_sources, all_params)
 	    
 	    this_E_G = zero_sensitive_float(these_local_sources, all_params)
@@ -299,11 +300,9 @@ function test_minimal_jump_likelihood_terms()
 		star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob_img.psf, mp)
 	    for w in 1:img_w, h in 1:img_h
 	        m_pos = Float64[h, w]
-	        for s in 1:mp.S, k in 1:n_pcf_comp
-	        	if pixel_source_indicators[s, w, h] == 1
-			    	py1, py2, f = ElboDeriv.ret_pdf(star_mcs[k, s], m_pos)
-			    	celeste_star_pdf_f[img, s, k, w, h] = f
-			    end
+	        for s in pixel_sources[pw, ph], k in 1:n_pcf_comp
+		    	py1, py2, f = ElboDeriv.ret_pdf(star_mcs[k, s], m_pos)
+		    	celeste_star_pdf_f[img, s, k, w, h] = f
 	        end
 	    end
 	end
@@ -345,6 +344,8 @@ function test_jump_likelihood()
 	jump_elbo_lik = ReverseDiffSparse.getvalue(elbo_log_likelihood, celeste_m.colVal)
 	@test_approx_eq	celeste_elbo_lik jump_elbo_lik
 end
+
+
 
 # Some simulated data.  blobs contains the image data, and
 # mp is the parameter values.  three_bodies is not used.
