@@ -383,8 +383,8 @@ star_z = [ psf_alpha_bar[b, k] ./ (star_det[b, s, k] ^ 0.5 * 2pi)
 # Note that this is in a perhaps counterintuitive order of
 # h is "height" and w is "width", but I'll follow the convention in the
 # original code.
-@defNLExpr(pixel_locations[pw=1:img_w, ph=1:img_h, pixel_row=1:2],
-	       sum{ph; pixel_row == 1} + sum{pw; pixel_row == 2});
+pixel_locations = [ (pixel_row == 1) * ph + (pixel_row == 2) * pw
+                     for pw=1:img_w, ph=1:img_h, pixel_row=1:2 ];
 
 # Reproduces
 # function accum_star_pos!(bmc::BvnComponent,
@@ -393,6 +393,7 @@ star_z = [ psf_alpha_bar[b, k] ./ (star_det[b, s, k] ^ 0.5 * 2pi)
 # ... which called
 # function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
 # TODO: This is the mean of both stars and galaxies, change the name to reflect this.
+# TODO: make this over only the sources with pixels.
 @defNLExpr(star_pdf_mean[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
 	                     pw=1:img_w, ph=1:img_h, pdf_mean_row=1:2],
            pixel_locations[pw, ph, pdf_mean_row] - star_mean[img, s, k, pdf_mean_row]);
@@ -447,6 +448,8 @@ star_z = [ psf_alpha_bar[b, k] ./ (star_det[b, s, k] ^ 0.5 * 2pi)
    	       sum{(1 - vp_theta[s]) * galaxy_type2_pdf_f[img, s, k, g_k, pw, ph],
 	           k=1:n_pcf_comp, g_k=1:n_gal2_comp});
 
+# TODO: how can you efficiently only evaluate E_G_s and Var_G only at select
+#       pixel X source values? 
 @defNLExpr(E_G_s[img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h],
 	       (1 - vp_chi[s]) * E_l_a[s, img, 1] * fs0m[img, s, pw, ph] +
 	       vp_chi[s]       * E_l_a[s, img, 2] * fs1m[img, s, pw, ph]);
