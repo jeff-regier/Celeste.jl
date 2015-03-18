@@ -8,7 +8,10 @@ using Dates
 import SampleData
 
 # The maximum width and height of the testing image in pixels.
-# Change these to test sub-images of different sizes.
+# Change these to test sub-images of different sizes.  Note
+# that after changing you have to re-run all the code below,
+# since it is used both to modify the blobs object and,
+# in turn, set constants in MinimalElboJuMP.jl.
 max_size = 10
 
 # Load some simulated data.  blobs contains the image data, and
