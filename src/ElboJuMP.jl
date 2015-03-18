@@ -103,13 +103,6 @@ log_base_measure = [ -sum(lfact(blobs[b].pixels)) for b=1:CelesteTypes.B ]
 pixel_locations = [ (pixel_row == 1) * ph + (pixel_row == 2) * pw
                      for pw=1:img_w, ph=1:img_h, pixel_row=1:2 ];
 
-# Not every source affects every pixel.  Encode which sources affect
-# which pixels in an rectangular array of zeros and ones.
-# TODO: is there a sparse multi-dimensional array object that JuMP can
-# interact with?  Is there a better way to look inside ragged arrays
-# in JuMP?
-pixel_source_indicators = zeros(Int8, mp.S, img_w, img_h);
-
 # NB: in the original code, pixel sources were tracked per image, but I
 # don't see why that's necessary, so I'm just going to use one source
 # list for all five bands.
@@ -138,7 +131,6 @@ for ww in 1:WW, hh in 1:HH
     this_local_sources = ElboDeriv.local_sources(image_tile, mp)
     h_range, w_range = ElboDeriv.tile_range(image_tile, mp.tile_width)
     for w in w_range, h in h_range, s in this_local_sources
-    	pixel_source_indicators[s, w, h] = 1
     	push!(source_pixels[s], (w, h))
     	push!(pixel_sources[w, h], s)
     end

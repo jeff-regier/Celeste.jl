@@ -219,9 +219,6 @@ function test_jump_likelihood_terms()
 	raw_celeste_var_g_s = zeros(Float64, CelesteTypes.B, mp.S, img_w, img_h);
 
 	for img=1:CelesteTypes.B, s=1:mp.S, pw=1:img_w, ph=1:img_h
-		#all_sources = 1:mp.S
-		#these_sources = Bool[ pixel_source_indicators[s, pw, ph] == 1 for s=1:mp.S ]
-		#these_local_sources = all_sources[these_sources]
 		these_local_sources = pixel_sources[pw, ph]
 
 		this_fs0m = zero_sensitive_float([-1], star_pos_params)
@@ -265,10 +262,6 @@ function test_jump_likelihood_terms()
 	celeste_log_lik_pixel = zeros(Float64, CelesteTypes.B, img_w, img_h);
 	for img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h
 		# tile_sources is only needed for the derivatives.
-		#all_sources = 1:mp.S
-		#these_sources = Bool[ pixel_source_indicators[s, pw, ph] == 1 for s=1:mp.S ]
-		#these_local_sources = all_sources[these_sources]
-
 		these_local_sources = pixel_sources[pw, ph]
 		accum = zero_sensitive_float(these_local_sources, all_params)
 	    
