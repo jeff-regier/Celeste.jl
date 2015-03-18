@@ -96,6 +96,13 @@ galaxy_type2_alpha_tilde =
 # The constant contribution to the log likelihood of the x! terms.
 log_base_measure = [ -sum(lfact(blobs[b].pixels)) for b=1:CelesteTypes.B ] 
 
+# This allows us to have simpler expressions for the means.
+# Note that this is in a perhaps counterintuitive order of
+# h is "height" and w is "width", but I'll follow the convention in the
+# original code.
+pixel_locations = [ (pixel_row == 1) * ph + (pixel_row == 2) * pw
+                     for pw=1:img_w, ph=1:img_h, pixel_row=1:2 ];
+
 # Not every source affects every pixel.  Encode which sources affect
 # which pixels in an rectangular array of zeros and ones.
 # TODO: is there a sparse multi-dimensional array object that JuMP can
@@ -112,15 +119,30 @@ pixel_source_indicators = zeros(Int8, mp.S, img_w, img_h);
 img = blobs[1];
 WW = int(ceil(img_w / mp.tile_width))
 HH = int(ceil(img_h / mp.tile_width))
+
+# An array ocontainingwhich pixels are associated with each source.
+source_pixels = Array(Array{(Int64, Int64)}, mp.S);
+for s = 1:mp.S
+	source_pixels[s] = Array((Int64, Int64), 0)
+end
+
+# An array contining which sources are associated with
+# each pixel.
+pixel_sources = Array(Array{Int64}, img_w, img_h);
+for pw=1:img_w, ph=1:img_h
+	pixel_sources[pw, ph] = Array(Int64, 0)
+end
+
 for ww in 1:WW, hh in 1:HH
     image_tile = ElboDeriv.ImageTile(hh, ww, img)
     this_local_sources = ElboDeriv.local_sources(image_tile, mp)
     h_range, w_range = ElboDeriv.tile_range(image_tile, mp.tile_width)
     for w in w_range, h in h_range, s in this_local_sources
     	pixel_source_indicators[s, w, h] = 1
+    	push!(source_pixels[s], (w, h))
+    	push!(pixel_sources[w, h], s)
     end
 end
-pixel_source_count = [ sum(pixel_source_indicators[:, pw, ph]) for pw=1:img_w, ph=1:img_h];
 
 
 ##########################
@@ -379,25 +401,20 @@ star_z = [ psf_alpha_bar[b, k] ./ (star_det[b, s, k] ^ 0.5 * 2pi)
 # Get the pdf values for each pixel.  Thie takes care of
 # the functions accum_galaxy_pos and accum_star_pos.
 
-# This allows us to have simpler expressions for the means.
-# Note that this is in a perhaps counterintuitive order of
-# h is "height" and w is "width", but I'll follow the convention in the
-# original code.
-pixel_locations = [ (pixel_row == 1) * ph + (pixel_row == 2) * pw
-                     for pw=1:img_w, ph=1:img_h, pixel_row=1:2 ];
-
 # Reproduces
 # function accum_star_pos!(bmc::BvnComponent,
 #                          x::Vector{Float64},
 #                          fs0m::SensitiveFloat)
 # ... which called
 # function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
+
 # TODO: This is the mean of both stars and galaxies, change the name to reflect this.
-# TODO: make this over only the sources with pixels.
 @defNLExpr(star_pdf_mean[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
 	                     pw=1:img_w, ph=1:img_h, pdf_mean_row=1:2],
            pixel_locations[pw, ph, pdf_mean_row] - star_mean[img, s, k, pdf_mean_row]);
 
+# In this and similar expressions below, not every element will be evaluated -- later we will
+# sum it only over sources that are associated with a particular pixel.
 @defNLExpr(star_pdf_f[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
 	                  pw=1:img_w, ph=1:img_h],
 	        sum{
@@ -405,8 +422,7 @@ pixel_locations = [ (pixel_row == 1) * ph + (pixel_row == 2) * pw
 			        	       star_precision[img, s, k, pdf_f_row, pdf_f_col] *
 			        	       star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
 			        	       pdf_f_row=1:2, pdf_f_col=1:2}) *
-		        star_z[img, s, k];
-		        pixel_source_indicators[s, pw, ph] == 1
+		        star_z[img, s, k]
 		     });
 
 # Galaxy pdfs
@@ -418,8 +434,7 @@ pixel_locations = [ (pixel_row == 1) * ph + (pixel_row == 2) * pw
 		        	       galaxy_type1_precision[img, s, k, g_k, pdf_f_row, pdf_f_col] *
 		        	       star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
 		        	       pdf_f_row=1:2, pdf_f_col=1:2}) *
-	        galaxy_type1_z[img, s, k, g_k];
-	        pixel_source_indicators[s, pw, ph] == 1
+	        galaxy_type1_z[img, s, k, g_k]
 	     });
 
 @defNLExpr(galaxy_type2_pdf_f[img=1:CelesteTypes.B, s=1:mp.S,
@@ -430,8 +445,7 @@ pixel_locations = [ (pixel_row == 1) * ph + (pixel_row == 2) * pw
 		        	       galaxy_type2_precision[img, s, k, g_k, pdf_f_row, pdf_f_col] *
 		        	       star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
 		        	       pdf_f_row=1:2, pdf_f_col=1:2}) *
-	        galaxy_type2_z[img, s, k, g_k];
-	        pixel_source_indicators[s, pw, ph] == 1
+	        galaxy_type2_z[img, s, k, g_k]
 	     });
 
 #############################
@@ -459,11 +473,12 @@ pixel_locations = [ (pixel_row == 1) * ph + (pixel_row == 2) * pw
 	       vp_chi[s]       * E_ll_a[s, img, 2] * (fs1m[img, s, pw, ph] ^ 2) -
 	       (E_G_s[img, s, pw, ph] ^ 2));
 
+# Sum only over the sources associated with a particular pixel.
 @defNLExpr(E_G[img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h],
-	       sum{E_G_s[img, s, pw, ph], s=1:mp.S} + blob_epsilon[img]);
+	       sum{E_G_s[img, s, pw, ph], s=pixel_sources[pw, ph]} + blob_epsilon[img]);
 
 @defNLExpr(Var_G[img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h],
-	       sum{Var_G_s[img, s, pw, ph], s=1:mp.S});
+	       sum{Var_G_s[img, s, pw, ph], s=pixel_sources[pw, ph]});
 
 #####################
 # Get the log likelihood (originally accum_pixel_ret)

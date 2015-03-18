@@ -495,27 +495,3 @@ end
 
 id_to_pixel[pixel_to_id[5, 6]]
 
-
-######
-# ragged arrays
-
-m = Model()
-@defVar(m, foo)
-setValue(foo, 1)
-basic_mat = reshape(1:20, 4, 5)
- m.colVal)
-
-@defNLExpr(bar, foo * sum{ basic_mat[i, j], i=1:4, j=1:i })
-ReverseDiffSparse.getvalue(bar, m.colVal)
-# ERROR: i not defined
-
-@defNLExpr(bar[i=1:4, j=1:5; j == i], foo * basic_mat[i, j]);
-ReverseDiffSparse.getvalue(bar[1, 1], m.colVal)
-# ERROR: i not defined
-
-
-
-@defNLExpr(bar, foo * sum{ basic_mat[i, j], i=1:4, j=1:5 })
-ReverseDiffSparse.getvalue(bar,
-
-
