@@ -9,7 +9,7 @@ import SampleData
 
 # The maximum width and height of the testing image in pixels.
 # Change these to test sub-images of different sizes.
-max_size = 500
+max_size = 10
 
 # Load some simulated data.  blobs contains the image data, and
 # mp is the parameter values.  three_bodies is not used.
