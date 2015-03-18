@@ -447,8 +447,75 @@ function update_and_return!(x::MyThingy)
   return(2 * x.y)
 end
 
+####################
+# Arrays of arrays
+
+my_indices = Array(Array{Float64, 2}, 10)
+my_indices_dims = Array(Float64, 10)
+for i = 1:10
+	my_indices_dims[i] = i
+	my_indices[i] = Array(Float64, i, 2)
+	for j = 1:i
+		my_indices[i][j, :] = [j * 2, j + 2]
+	end
+end
+
+m = Model()
+
+@defNLExpr(ragged_sum_i[i=1:10], sum{ my_indices[i][j, 1] + my_indices[i][j, 2],
+	       j=1:my_indices_dims[i] });
+
+[ ReverseDiffSparse.getvalue(ragged_sum_i[i], m.colVal) for i=1:10]
+@defNLExpr(ragged_sum, sum{ragged_sum_i[i], i=1:10})
+ReverseDiffSparse.getvalue(ragged_sum, m.colVal)
+
+
+#####################
+# Many to many mappings
+
+immutable Pixel
+	id::Int64
+	h::Int64
+	w::Int64
+	Pixel(id, h, w) = begin
+		new(id, h, w)
+	end
+end
+
+img_w = 10
+img_h = 20
+id_to_pixel = Array(Pixel, img_w * img_h);
+pixel_to_id = Array(Int64, img_w, img_h);
+pixel_id = 1
+for w=1:img_w, h=1:img_h
+	id_to_pixel[pixel_id] = Pixel(pixel_id, h, w)
+	pixel_to_id[w, h] = pixel_id
+	pixel_id += 1
+end
+
+id_to_pixel[pixel_to_id[5, 6]]
+
+
+######
+# ragged arrays
+
+m = Model()
+@defVar(m, foo)
+setValue(foo, 1)
+basic_mat = reshape(1:20, 4, 5)
+ m.colVal)
+
+@defNLExpr(bar, foo * sum{ basic_mat[i, j], i=1:4, j=1:i })
+ReverseDiffSparse.getvalue(bar, m.colVal)
+# ERROR: i not defined
+
+@defNLExpr(bar[i=1:4, j=1:5; j == i], foo * basic_mat[i, j]);
+ReverseDiffSparse.getvalue(bar[1, 1], m.colVal)
+# ERROR: i not defined
 
 
 
+@defNLExpr(bar, foo * sum{ basic_mat[i, j], i=1:4, j=1:5 })
+ReverseDiffSparse.getvalue(bar,
 
 
