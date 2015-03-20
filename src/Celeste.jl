@@ -8,6 +8,7 @@ require(joinpath(Pkg.dir("Celeste"), "src", "ElboDeriv.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "Synthetic.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "SampleData.jl"))
+require(joinpath(Pkg.dir("Celeste"), "src", "MinimalElboJuMP.jl"))
 
 import SDSS
 import ElboDeriv
