@@ -29,10 +29,7 @@ function compare_jump_speed()
 
     jump_m, jump_elbo = ElboJuMP.build_jump_model(blob, mp)
 
-    # Run it twice to make sure that we don't capture compilation time.
-    total_time = now()
-    jump_time = 0.0
-    manual_time = 0.0
+    # Run it more than once so we don't capture compilation time.
     for iter = 1:10
         println("trial $iter.")
 
