@@ -26,6 +26,9 @@ const n_pcf_comp = 3
 const n_gal1_comp = 8
 const n_gal2_comp = 6
 
+using ReverseDiffSparse
+eval(ReverseDiffSparse, :(const SPLAT_THRESHOLD = 200))
+
 
 function build_jump_model(blob::Blob, mp::ModelParams)
     # First some code to convert the original data structures to
@@ -92,14 +95,14 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     HH = int(ceil(img_h / mp.tile_width))
 
     # An array ocontainingwhich pixels are associated with each source.
-    source_pixels = Array(Array{(Int64, Int64)}, mp.S);
+    source_pixels = Array(Vector{(Int64, Int64)}, mp.S);
     for s = 1:mp.S
         source_pixels[s] = Array((Int64, Int64), 0)
     end
 
     # An array contining which sources are associated with
     # each pixel.
-    pixel_sources = Array(Array{Int64}, img_w, img_h);
+    pixel_sources = Array(Vector{Int64}, img_w, img_h);
     for pw=1:img_w, ph=1:img_h
         pixel_sources[pw, ph] = Array(Int64, 0)
     end
@@ -215,11 +218,11 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     # TODO: make the indexing consistent with the rest of the file by
     # putting the band first.
     @defNLExpr(E_l_a[s=1:mp.S, b=1:CelesteTypes.B, a=1:CelesteTypes.I],
-               (b == 1) * E_l_a_1[s, a] +
-               (b == 2) * E_l_a_2[s, a] +
-               (b == 3) * E_l_a_3[s, a] +
-               (b == 4) * E_l_a_4[s, a] +
-               (b == 5) * E_l_a_5[s, a]);
+               sum{E_l_a_1[s, a]; b == 1} +
+               sum{E_l_a_2[s, a]; b == 2} +
+               sum{E_l_a_3[s, a]; b == 3} +
+               sum{E_l_a_4[s, a]; b == 4} +
+               sum{E_l_a_5[s, a]; b == 5});
 
     # Second order terms.
     @defNLExpr(E_ll_a_3[s=1:mp.S, a=1:CelesteTypes.I],
@@ -238,11 +241,11 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     # TODO: make the indexing consistent with the rest of the file by
     # putting the band first.
     @defNLExpr(E_ll_a[s=1:mp.S, b=1:CelesteTypes.B, a=1:CelesteTypes.I],
-               (b == 1) * E_ll_a_1[s, a] +
-               (b == 2) * E_ll_a_2[s, a] +
-               (b == 3) * E_ll_a_3[s, a] +
-               (b == 4) * E_ll_a_4[s, a] +
-               (b == 5) * E_ll_a_5[s, a]);
+               sum{ E_ll_a_1[s, a]; b == 1 } +
+               sum{ E_ll_a_2[s, a]; b == 2 } +
+               sum{ E_ll_a_3[s, a]; b == 3 } +
+               sum{ E_ll_a_4[s, a]; b == 4 } +
+               sum{ E_ll_a_5[s, a]; b == 5 });
 
     ####################################
     # The bivariate normal mixtures, originally defined in load_bvn_mixtures
@@ -377,12 +380,12 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     @defNLExpr(galaxy_type1_z[b=1:CelesteTypes.B, s=1:mp.S,
                               k=1:n_pcf_comp, g_k=1:n_gal1_comp],
                 (galaxy_type1_alpha_tilde[g_k] * psf_alpha_bar[b, k]) ./
-                (galaxy_type1_det[b, s, k, g_k] ^ 0.5 * 2pi));
+                (sqrt(galaxy_type1_det[b, s, k, g_k]) * 2pi));
 
     @defNLExpr(galaxy_type2_z[b=1:CelesteTypes.B, s=1:mp.S,
                               k=1:n_pcf_comp, g_k=1:n_gal2_comp],
                (galaxy_type2_alpha_tilde[g_k] * psf_alpha_bar[b, k]) ./
-               (galaxy_type2_det[b, s, k, g_k] ^ 0.5 * 2pi));
+               (sqrt(galaxy_type2_det[b, s, k, g_k]) * 2pi));
 
 
     ###########################
