@@ -349,8 +349,8 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                 sum{-galaxy_type1_var_s[b, s, k, g_k, 1, 2];
                     prec_row == 1 && prec_col == 2} +
                 sum{-galaxy_type1_var_s[b, s, k, g_k, 2, 1];
-                    prec_row == 2 && prec_col == 1}) /
-                galaxy_type1_det[b, s, k, g_k]);
+                    prec_row == 2 && prec_col == 1}))
+                    # / galaxy_type1_det[b, s, k, g_k]);
 
     @defNLExpr(galaxy_type2_precision[b=1:CelesteTypes.B, s=1:mp.S,
                                       k=1:n_pcf_comp, g_k=1:n_gal2_comp,
@@ -362,8 +362,8 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                 sum{-galaxy_type2_var_s[b, s, k, g_k, 1, 2];
                     prec_row == 1 && prec_col == 2} +
                 sum{-galaxy_type2_var_s[b, s, k, g_k, 2, 1];
-                    prec_row == 2 && prec_col == 1}) /
-               galaxy_type2_det[b, s, k, g_k]);
+                    prec_row == 2 && prec_col == 1}))
+               # / galaxy_type2_det[b, s, k, g_k]);
 
     @defNLExpr(galaxy_type1_z[b=1:CelesteTypes.B, s=1:mp.S,
                               k=1:n_pcf_comp, g_k=1:n_gal1_comp],
@@ -410,7 +410,8 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                 exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
                                galaxy_type1_precision[img, s, k, g_k, pdf_f_row, pdf_f_col] *
                                star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
-                               pdf_f_row=1:2, pdf_f_col=1:2}) *
+                               pdf_f_row=1:2, pdf_f_col=1:2}/
+                               galaxy_type1_det[img, s, k, g_k]) *
                 galaxy_type1_z[img, s, k, g_k]
              });
 
@@ -421,7 +422,9 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                 exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
                                galaxy_type2_precision[img, s, k, g_k, pdf_f_row, pdf_f_col] *
                                star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
-                               pdf_f_row=1:2, pdf_f_col=1:2}) *
+                               pdf_f_row=1:2, pdf_f_col=1:2}/
+                               galaxy_type2_det[img, s, k, g_k]
+                               ) *
                 galaxy_type2_z[img, s, k, g_k]
              });
 
