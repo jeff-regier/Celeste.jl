@@ -309,7 +309,7 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     @defNLExpr(galaxy_xixi_mat[s=1:mp.S, row=1:2, col=1:2],
                vp_sigma[s]^2*
                (sum{ cos(vp_phi[s])^2 + vp_rho[s]^2*sin(vp_phi[s])^2 ; row == 1 && col == 1} +
-                sum{ cos(vp_phi[s])*sin(vp_phi[s]) - vp_rho[s]^2*cos(vp_phi[s])*sin(vp_phi[s]); row != col} +
+                sum{ (1-vp_rho[s]^2)*sin(2*vp_phi[s])/2; row != col} +
                 sum{ vp_rho[s]^2*cos(vp_phi[s])^2 + sin(vp_phi[s])^2; row == 2 && col == 2}));
 
     # Terms from GalaxyCacheComponent:
