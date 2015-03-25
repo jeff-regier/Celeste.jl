@@ -32,14 +32,16 @@ function compare_jump_speed()
     # @code_warntype  ReverseDiffSparse.getvalue(jump_elbo, jump_m.colVal)
 
     # Run it more than once so we don't capture compilation time.
-    for iter = 1:10
+    for iter = 1:3
         println("trial $iter.")
 
         println("computing manually...")
         manual_time = @elapsed manual_v = ElboDeriv.elbo_likelihood(blob, mp).v
+        @show manual_time
 
         println("computing with JuMP...")
         jump_time = @elapsed jump_v = ReverseDiffSparse.getvalue(jump_elbo, jump_m.colVal)
+        @show jump_time
 
         println("objective values: $manual_v (manual) vs. $jump_v (jump)")
         @printf("JuMP overhead: %.1fX\n\n", jump_time / manual_time)
