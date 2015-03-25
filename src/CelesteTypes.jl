@@ -23,7 +23,6 @@ import Distributions
 import WCSLIB
 
 
-
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
 type CatalogEntry
@@ -280,9 +279,9 @@ function get_param_ids()
     beta_end = kappa_end + I * (B - 1)
     lambda_end = beta_end + I * (B - 1)
 
-    kappa_ids = reshape([12 : kappa_end], D, I)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
+    kappa_ids = reshape([12 : kappa_end;], D, I)
+    beta_ids = reshape([kappa_end + 1 : beta_end;], B - 1, I)
+    lambda_ids = reshape([beta_end + 1 : lambda_end;], B - 1, I)
 
     ParamIndex(1, [2, 3], [4, 5], [6, 7], 8, 9, 10, 11,
             kappa_ids, beta_ids, lambda_ids)
@@ -290,9 +289,9 @@ end
 
 const ids = get_param_ids()
 
-const all_params = [1:ids.lambda[end]]
+const all_params = [1:ids.lambda[end];]
 const star_pos_params = ids.mu
-const galaxy_pos_params = [ids.mu, ids.theta, ids.rho, ids.phi, ids.sigma]
+const galaxy_pos_params = [ids.mu; ids.theta; ids.rho; ids.phi; ids.sigma]
 
 #########################################################
 
