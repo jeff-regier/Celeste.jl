@@ -262,6 +262,7 @@ function build_jump_model(blob::Blob, mp::ModelParams)
 
     # Terms originally from Util.get_bvn_cov(rho, phi, sigma):
 
+    #=
     # This is R
     @defNLExpr(galaxy_rot_mat[s=1:mp.S, row=1:2, col=1:2],
                (sum{ cos(vp_phi[s]); row == 1 && col == 1} +
@@ -283,12 +284,33 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                vp_sigma[s] * sum{galaxy_scale_mat[s, w_row, sum_index] *
                                  galaxy_rot_mat[s, w_col, sum_index],
                                  sum_index = 1:2});
+    =#
 
+    #=
+    @defNLExpr(galaxy_w_mat[s=1:mp.S, row=1:2, col=1:2],
+               vp_sigma[s]*
+               (sum{ cos(vp_phi[s]); row == 1 && col == 1} +
+                sum{-vp_rho[s]*sin(vp_phi[s]); row == 2 && col == 1} +
+                sum{ sin(vp_phi[s]); row == 1 && col == 2} +
+                sum{ vp_rho[s]*cos(vp_phi[s]); row == 2 && col == 2}));
+    =#
     # This is W' * W
+    #=
     @defNLExpr(galaxy_xixi_mat[s=1:mp.S, xixi_row=1:2, xixi_col=1:2],
                sum{galaxy_w_mat[s, xixi_sum_index, xixi_row] *
                    galaxy_w_mat[s, xixi_sum_index, xixi_col],
                    xixi_sum_index = 1:2});
+    =#
+
+    # (2,1) : w[1,2]*w[1,1] + w[2,2]*w[2,1]
+    # (1,2) : w[1,1]*w[1,2] + w[2,1]*w[2,2]
+    # (2,2) : w[1,2]^2 + w[2,2]^2
+    # This is W' * W
+    @defNLExpr(galaxy_xixi_mat[s=1:mp.S, row=1:2, col=1:2],
+               vp_sigma[s]^2*
+               (sum{ cos(vp_phi[s])^2 + vp_rho[s]^2*sin(vp_phi[s])^2 ; row == 1 && col == 1} +
+                sum{ cos(vp_phi[s])*sin(vp_phi[s]) - vp_rho[s]^2*cos(vp_phi[s])*sin(vp_phi[s]); row != col} +
+                sum{ vp_rho[s]^2*cos(vp_phi[s])^2 + sin(vp_phi[s])^2; row == 2 && col == 2}));
 
     # Terms from GalaxyCacheComponent:
     # var_s and weight for type 1 galaxies:
