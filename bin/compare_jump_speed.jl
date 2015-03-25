@@ -27,7 +27,9 @@ function compare_jump_speed()
         blob[b].pixels = blob[b].pixels[1:this_height, 1:this_width] 
     end
 
-    jump_m, jump_elbo = ElboJuMP.build_jump_model(blob, mp)
+    jump_m, jump_elbo = ElboJuMP.build_jump_model(blob, mp);
+
+    # @code_warntype  ReverseDiffSparse.getvalue(jump_elbo, jump_m.colVal)
 
     # Run it more than once so we don't capture compilation time.
     for iter = 1:10

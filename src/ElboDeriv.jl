@@ -606,8 +606,8 @@ function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-    WW = int(ceil(img.W / mp.tile_width))
-    HH = int(ceil(img.H / mp.tile_width))
+    WW = Int(ceil(img.W / mp.tile_width))
+    HH = Int(ceil(img.H / mp.tile_width))
     for ww in 1:WW, hh in 1:HH
         tile = ImageTile(hh, ww, img)
         # might get a speedup from subsetting the mp here
@@ -620,7 +620,7 @@ function elbo_likelihood(blob::Blob, mp::ModelParams)
     # Return the expected log likelihood for all bands in a section
     # of the sky.
 
-    ret = zero_sensitive_float([1:mp.S], all_params)
+    ret = zero_sensitive_float([1:mp.S;], all_params)
     for img in blob
         elbo_likelihood!(img, mp, ret)
     end

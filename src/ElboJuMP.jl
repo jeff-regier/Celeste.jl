@@ -1,11 +1,4 @@
-# This file implements the ELBO log likelihood in JuMP.  For the time being, 
-# use it by including it in a namespace that has the following objects:
-#
-# blob: An array of Image objects (of length CelestTypes.B)
-# mp:    A ModelParams object
-#
-# To include the file, use:
-# include(joinpath(Pkg.dir("Celeste"), "src/ElboJuMP.jl"))
+# This file implements the ELBO log likelihood in JuMP.
 
 
 module ElboJuMP
@@ -31,7 +24,7 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     # First some code to convert the original data structures to
     # multidimensional arrays that can be accessed in JuMP.
 
-    # TOOD: Despite this maximum, I'm going to treat the rest of the code as if
+    # Despite this maximum, I'm going to treat the rest of the code as if
     # each image has the same number of pixels.
     # Is it possible that these might be different for different
     # images?  If so, it might be necessary to put some checks in the
@@ -78,7 +71,7 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     # Note that this is in a perhaps counterintuitive order of
     # h is "height" and w is "width", but I'll follow the convention in the
     # original code.
-    pixel_locations = [ (pixel_row == 1) * ph + (pixel_row == 2) * pw
+    pixel_locations = Int64[ (pixel_row == 1) * ph + (pixel_row == 2) * pw
                          for pw=1:img_w, ph=1:img_h, pixel_row=1:2 ];
 
     # NB: in the original code, pixel sources were tracked per image, but I
@@ -88,8 +81,8 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     # For now use Jeff's tile code with the first image.   This should be the
     # same for each image.
     img = blob[1];
-    WW = int(ceil(img_w / mp.tile_width))
-    HH = int(ceil(img_h / mp.tile_width))
+    WW = Int(ceil(img_w / mp.tile_width))
+    HH = Int(ceil(img_h / mp.tile_width))
 
     # An array ocontainingwhich pixels are associated with each source.
     source_pixels = Array(Array{(Int64, Int64)}, mp.S);
@@ -114,8 +107,6 @@ function build_jump_model(blob::Blob, mp::ModelParams)
         end
     end
 
-
-    ##########################
     # Define the variational parameters.
 
     jump_m = Model()
@@ -177,7 +168,6 @@ function build_jump_model(blob::Blob, mp::ModelParams)
         end
     end
 
-    ################
     # Define the ELBO.  I (almost) consistently index objects with these names in this order:
     # b / img: The color band or image that I'm looking at.  (Should be the same.)
     #          Note: the brightness objects currently reverse the order of b and s.
@@ -192,7 +182,6 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     #   give objects different row and column names by prepending something to
     #   "row" or "col".
 
-    ########################
     # Define the source brightness terms.
 
     # Index 3 is r_s and  has a gamma expectation.
@@ -251,7 +240,7 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                psf_xi_bar[b, k, row] + vp_mu[s, row]);
 
     # Matrix inversion by hand.
-    star_det = [ (psf_sigma_bar[b, k, 1, 1] * psf_sigma_bar[b, k, 2, 2] -
+    star_det = Float64[ (psf_sigma_bar[b, k, 1, 1] * psf_sigma_bar[b, k, 2, 2] -
                   psf_sigma_bar[b, k, 1, 2] * psf_sigma_bar[b, k, 2, 1])
                   for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp ];
 
@@ -263,10 +252,9 @@ function build_jump_model(blob::Blob, mp::ModelParams)
         star_precision[b, s, k, 2, 1] = -psf_sigma_bar[b, k, 2, 1] / star_det[b, s, k]
     end
 
-    star_z = [ psf_alpha_bar[b, k] ./ (star_det[b, s, k] ^ 0.5 * 2pi)
+    star_z = Float64[ psf_alpha_bar[b, k] ./ (star_det[b, s, k] ^ 0.5 * 2pi)
                for b=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp ];
 
-    #####################
     # galaxy bvn components
 
     # Terms originally from Util.get_bvn_cov(rho, phi, sigma):
@@ -384,8 +372,6 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                (galaxy_type2_alpha_tilde[g_k] * psf_alpha_bar[b, k]) ./
                (galaxy_type2_det[b, s, k, g_k] ^ 0.5 * 2pi));
 
-
-    ###########################
     # Get the pdf values for each pixel.  Thie takes care of
     # the functions accum_galaxy_pos and accum_star_pos.
 
@@ -436,7 +422,6 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                 galaxy_type2_z[img, s, k, g_k]
              });
 
-    #############################
     # Get the expectation and variance of G (accum_pixel_source_stats)
 
     # Star density values:
@@ -468,7 +453,6 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     @defNLExpr(Var_G[img=1:CelesteTypes.B, pw=1:img_w, ph=1:img_h],
                sum{Var_G_s[img, s, pw, ph], s=pixel_sources[pw, ph]});
 
-    #####################
     # Get the log likelihood (originally accum_pixel_ret)
 
     # TODO: Use pixel_source_count to not use the delta-method approximation
