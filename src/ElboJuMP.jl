@@ -84,8 +84,8 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     # For now use Jeff's tile code with the first image.   This should be the
     # same for each image.
     img = blob[1];
-    WW = Int(ceil(img_w / mp.tile_width))
-    HH = Int(ceil(img_h / mp.tile_width))
+    WW = convert(Int, ceil(img_w / mp.tile_width))
+    HH = convert(Int, ceil(img_h / mp.tile_width))
 
     # An array ocontainingwhich pixels are associated with each source.
     source_pixels = Array(Vector{(Int64, Int64)}, mp.S);

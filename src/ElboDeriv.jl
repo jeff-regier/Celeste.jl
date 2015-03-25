@@ -606,8 +606,8 @@ function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-    WW = Int(ceil(img.W / mp.tile_width))
-    HH = Int(ceil(img.H / mp.tile_width))
+    WW = convert(Int, ceil(img.W / mp.tile_width))
+    HH = convert(Int, ceil(img.H / mp.tile_width))
     for ww in 1:WW, hh in 1:HH
         tile = ImageTile(hh, ww, img)
         # might get a speedup from subsetting the mp here
