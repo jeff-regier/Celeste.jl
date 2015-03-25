@@ -45,9 +45,9 @@ function load_stamp_blob(stamp_dir, stamp_id)
         iota = hdr["GAIN"] / hdr["CALIB"]
         epsilon = hdr["SKY"] * hdr["CALIB"]
 
-        run_num = Int(hdr["RUN"])
-        camcol_num = Int(hdr["CAMCOL"])
-        field_num = Int(hdr["FIELD"])
+        run_num = convert(Int, hdr["RUN"])
+        camcol_num = convert(Int, hdr["CAMCOL"])
+        field_num = convert(Int, hdr["FIELD"])
 
         Image(H, W, nelec, b, wcs, epsilon, iota, psf, run_num, camcol_num, field_num)
     end
@@ -58,8 +58,8 @@ end
 
 function load_stamp_catalog_df(cat_dir, stamp_id, blob; match_blob=false)
     cat_fits = fits_open_table("$cat_dir/cat-$stamp_id.fits")
-    num_rows = Int(fits_read_keyword(cat_fits, "NAXIS2")[1])
-    num_cols = Int(fits_read_keyword(cat_fits, "TFIELDS")[1])
+    num_rows = convert(Int, fits_read_keyword(cat_fits, "NAXIS2")[1])
+    num_cols = convert(Int, fits_read_keyword(cat_fits, "TFIELDS")[1])
     ttypes = [rstrip(fits_read_keyword(cat_fits, "TTYPE$i")[1][2:end-1]) for i in 1:num_cols]
     tforms = [rstrip(fits_read_keyword(cat_fits, "TFORM$i")[1][2:end-1]) for i in 1:num_cols]
     col_types = [l in ("D", "E") ? Float64 : l in ("L",) ? Bool : l in ("B", "I") ? Int64 : None for l in tforms]
@@ -132,7 +132,7 @@ function load_field(field_dir, run_num, camcol_num, frame_num)
     pf_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
     pf_fits_raw = fits_open_table(pf_filename)
 
-    num_rows = Int(fits_read_keyword(pf_fits_raw, "NAXIS2")[1])
+    num_rows = convert(Int, fits_read_keyword(pf_fits_raw, "NAXIS2")[1])
     pf_frames = Array(Int64, num_rows)
     fits_read_col(pf_fits_raw, Int64, 6, 1, 1, pf_frames) # 6 = field/frame num
     pf_rownum = searchsorted(pf_frames, Int(frame_num))[1]
@@ -206,7 +206,7 @@ function load_catalog(field_dir, run_num, camcol_num, frame_num)
         cat_file = "$field_dir/calibObj-$run_num-$camcol_num-$cat_str.fits"
         cat_fits = fits_open_table(cat_file)
 
-        num_rows = Int(fits_read_keyword(cat_fits, "NAXIS2")[1])
+        num_rows = convert(Int, fits_read_keyword(cat_fits, "NAXIS2")[1])
         row_frames = Array(Int64, num_rows)
         fits_read_col(cat_fits, Int64, 4, 1, 1, row_frames)  # 4 = field/frame num
         frame_range = searchsorted(row_frames, Int(frame_num))

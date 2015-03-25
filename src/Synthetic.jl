@@ -16,8 +16,8 @@ end
 
 
 function get_patch(the_mean::Vector{Float64}, H::Int64, W::Int64)
-    const radius = 50.
-    hm, wm = Int(round(the_mean[1])), Int(round(the_mean[2]))
+    const radius::Int64 = 50
+    hm, wm = convert(Int, round(the_mean[1])), convert(Int, round(the_mean[2]))
     w11 = max(1, wm - radius):min(W, wm + radius)
     h11 = max(1, hm - radius):min(H, hm + radius)
     return(w11, h11)
@@ -38,7 +38,7 @@ function write_gaussian(the_mean, the_cov, intensity, pixels)
         ypy = Util.matvec222(the_precision, y)
         pdf_hw = c * exp(-0.5 * ypy)
         pixel_rate = intensity * pdf_hw
-        pixels[Int(h), Int(w)] += wrapped_poisson(pixel_rate)
+        pixels[h, w] += wrapped_poisson(pixel_rate)
     end
 
     pixels
