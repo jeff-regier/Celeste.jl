@@ -394,13 +394,12 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     # sum it only over sources that are associated with a particular pixel.
     @defNLExpr(star_pdf_f[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
                           pw=1:img_w, ph=1:img_h],
-                sum{
                     exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
                                    star_precision[img, s, k, pdf_f_row, pdf_f_col] *
                                    star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
                                    pdf_f_row=1:2, pdf_f_col=1:2}) *
                     star_z[img, s, k]
-                 });
+                 );
 
     # Galaxy pdfs
     @defNLExpr(galaxy_type1_pdf_f[img=1:CelesteTypes.B, s=1:mp.S,
@@ -418,7 +417,6 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     @defNLExpr(galaxy_type2_pdf_f[img=1:CelesteTypes.B, s=1:mp.S,
                                   k=1:n_pcf_comp, g_k=1:n_gal2_comp,
                                   pw=1:img_w, ph=1:img_h],
-            sum{
                 exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
                                galaxy_type2_precision[img, s, k, g_k, pdf_f_row, pdf_f_col] *
                                star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
@@ -426,7 +424,7 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                                galaxy_type2_det[img, s, k, g_k]
                                ) *
                 galaxy_type2_z[img, s, k, g_k]
-             });
+             );
 
     # Get the expectation and variance of G (accum_pixel_source_stats)
 
