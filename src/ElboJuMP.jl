@@ -20,7 +20,7 @@ const n_gal1_comp = 8
 const n_gal2_comp = 6
 
 using ReverseDiffSparse
-eval(ReverseDiffSparse, :(const SPLAT_THRESHOLD = 200))
+eval(ReverseDiffSparse, :(const SPLAT_THRESHOLD = 1000))
 
 
 function build_jump_model(blob::Blob, mp::ModelParams)
@@ -262,6 +262,7 @@ function build_jump_model(blob::Blob, mp::ModelParams)
 
     # Terms originally from Util.get_bvn_cov(rho, phi, sigma):
 
+    #=
     # This is R
     @defNLExpr(galaxy_rot_mat[s=1:mp.S, row=1:2, col=1:2],
                (sum{ cos(vp_phi[s]); row == 1 && col == 1} +
@@ -283,12 +284,33 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                vp_sigma[s] * sum{galaxy_scale_mat[s, w_row, sum_index] *
                                  galaxy_rot_mat[s, w_col, sum_index],
                                  sum_index = 1:2});
+    =#
 
+    #=
+    @defNLExpr(galaxy_w_mat[s=1:mp.S, row=1:2, col=1:2],
+               vp_sigma[s]*
+               (sum{ cos(vp_phi[s]); row == 1 && col == 1} +
+                sum{-vp_rho[s]*sin(vp_phi[s]); row == 2 && col == 1} +
+                sum{ sin(vp_phi[s]); row == 1 && col == 2} +
+                sum{ vp_rho[s]*cos(vp_phi[s]); row == 2 && col == 2}));
+    =#
     # This is W' * W
+    #=
     @defNLExpr(galaxy_xixi_mat[s=1:mp.S, xixi_row=1:2, xixi_col=1:2],
                sum{galaxy_w_mat[s, xixi_sum_index, xixi_row] *
                    galaxy_w_mat[s, xixi_sum_index, xixi_col],
                    xixi_sum_index = 1:2});
+    =#
+
+    # (2,1) : w[1,2]*w[1,1] + w[2,2]*w[2,1]
+    # (1,2) : w[1,1]*w[1,2] + w[2,1]*w[2,2]
+    # (2,2) : w[1,2]^2 + w[2,2]^2
+    # This is W' * W
+    @defNLExpr(galaxy_xixi_mat[s=1:mp.S, row=1:2, col=1:2],
+               vp_sigma[s]^2*
+               (sum{ 1 + (vp_rho[s]^2-1)*sin(vp_phi[s])^2 ; row == 1 && col == 1} +
+                sum{ (1-vp_rho[s]^2)*sin(2*vp_phi[s])/2; row != col} +
+                sum{ 1 + (vp_rho[s]^2-1)*cos(vp_phi[s])^2; row == 2 && col == 2}));
 
     # Terms from GalaxyCacheComponent:
     # var_s and weight for type 1 galaxies:
@@ -326,15 +348,13 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                                 k=1:n_pcf_comp, g_k=1:n_gal1_comp],
                (galaxy_type1_var_s[b, s, k, g_k, 1, 1] *
                 galaxy_type1_var_s[b, s, k, g_k, 2, 2]) -
-               (galaxy_type1_var_s[b, s, k, g_k, 1, 2] *
-                galaxy_type1_var_s[b, s, k, g_k, 2, 1]));
+               (galaxy_type1_var_s[b, s, k, g_k, 1, 2]^2))
 
     @defNLExpr(galaxy_type2_det[b=1:CelesteTypes.B, s=1:mp.S,
                                 k=1:n_pcf_comp, g_k=1:n_gal2_comp],
                (galaxy_type2_var_s[b, s, k, g_k, 1, 1] *
                 galaxy_type2_var_s[b, s, k, g_k, 2, 2]) -
-               (galaxy_type2_var_s[b, s, k, g_k, 1, 2] *
-                galaxy_type2_var_s[b, s, k, g_k, 2, 1]));
+               (galaxy_type2_var_s[b, s, k, g_k, 1, 2]^2))
 
     # Matrix inversion by hand.  Also strangely, this is inaccurate if the
     # minus signs are outside the sum.  (I haven't tested that since fixing the index
@@ -394,13 +414,12 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     # sum it only over sources that are associated with a particular pixel.
     @defNLExpr(star_pdf_f[img=1:CelesteTypes.B, s=1:mp.S, k=1:n_pcf_comp,
                           pw=1:img_w, ph=1:img_h],
-                sum{
                     exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
                                    star_precision[img, s, k, pdf_f_row, pdf_f_col] *
                                    star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
                                    pdf_f_row=1:2, pdf_f_col=1:2}) *
                     star_z[img, s, k]
-                 });
+                 );
 
     # Galaxy pdfs
     @defNLExpr(galaxy_type1_pdf_f[img=1:CelesteTypes.B, s=1:mp.S,
@@ -418,7 +437,6 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     @defNLExpr(galaxy_type2_pdf_f[img=1:CelesteTypes.B, s=1:mp.S,
                                   k=1:n_pcf_comp, g_k=1:n_gal2_comp,
                                   pw=1:img_w, ph=1:img_h],
-            sum{
                 exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
                                galaxy_type2_precision[img, s, k, g_k, pdf_f_row, pdf_f_col] *
                                star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
@@ -426,7 +444,7 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                                galaxy_type2_det[img, s, k, g_k]
                                ) *
                 galaxy_type2_z[img, s, k, g_k]
-             });
+             );
 
     # Get the expectation and variance of G (accum_pixel_source_stats)
 
