@@ -20,7 +20,7 @@ const n_gal1_comp = 8
 const n_gal2_comp = 6
 
 using ReverseDiffSparse
-eval(ReverseDiffSparse, :(const SPLAT_THRESHOLD = 200))
+eval(ReverseDiffSparse, :(const SPLAT_THRESHOLD = 1000))
 
 
 function build_jump_model(blob::Blob, mp::ModelParams)
