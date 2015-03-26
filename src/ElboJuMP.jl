@@ -348,15 +348,13 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                                 k=1:n_pcf_comp, g_k=1:n_gal1_comp],
                (galaxy_type1_var_s[b, s, k, g_k, 1, 1] *
                 galaxy_type1_var_s[b, s, k, g_k, 2, 2]) -
-               (galaxy_type1_var_s[b, s, k, g_k, 1, 2] *
-                galaxy_type1_var_s[b, s, k, g_k, 2, 1]));
+               (galaxy_type1_var_s[b, s, k, g_k, 1, 2]^2))
 
     @defNLExpr(galaxy_type2_det[b=1:CelesteTypes.B, s=1:mp.S,
                                 k=1:n_pcf_comp, g_k=1:n_gal2_comp],
                (galaxy_type2_var_s[b, s, k, g_k, 1, 1] *
                 galaxy_type2_var_s[b, s, k, g_k, 2, 2]) -
-               (galaxy_type2_var_s[b, s, k, g_k, 1, 2] *
-                galaxy_type2_var_s[b, s, k, g_k, 2, 1]));
+               (galaxy_type2_var_s[b, s, k, g_k, 1, 2]^2))
 
     # Matrix inversion by hand.  Also strangely, this is inaccurate if the
     # minus signs are outside the sum.  (I haven't tested that since fixing the index
