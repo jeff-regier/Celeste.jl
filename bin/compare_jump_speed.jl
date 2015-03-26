@@ -11,7 +11,7 @@ import ElboJuMP
 function compare_jump_speed()
     # The maximum width and height of the testing image in pixels.
     # Change these to test sub-images of different sizes.
-    const max_size = 10
+    const max_size = 20
 
     # Load some simulated data.  blob contains the image data, and
     # mp is the parameter values.  three_bodies is not used.
@@ -32,7 +32,7 @@ function compare_jump_speed()
     # @code_warntype  ReverseDiffSparse.getvalue(jump_elbo, jump_m.colVal)
 
     # Run it more than once so we don't capture compilation time.
-    for iter = 1:3
+    for iter = 1:5
         println("trial $iter.")
 
         println("computing manually...")
