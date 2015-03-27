@@ -387,12 +387,12 @@ function build_jump_model(blob::Blob, mp::ModelParams)
 
     @defNLExpr(galaxy_type1_z[b=1:CelesteTypes.B, s=1:mp.S,
                               k=1:n_pcf_comp, g_k=1:n_gal1_comp],
-                (galaxy_type1_alpha_tilde[g_k] * psf_alpha_bar[b, k]) ./
+                (galaxy_type1_alpha_tilde[g_k] * psf_alpha_bar[b, k]) /
                 (sqrt(galaxy_type1_det[b, s, k, g_k]) * 2pi));
 
     @defNLExpr(galaxy_type2_z[b=1:CelesteTypes.B, s=1:mp.S,
                               k=1:n_pcf_comp, g_k=1:n_gal2_comp],
-               (galaxy_type2_alpha_tilde[g_k] * psf_alpha_bar[b, k]) ./
+               (galaxy_type2_alpha_tilde[g_k] * psf_alpha_bar[b, k]) /
                (sqrt(galaxy_type2_det[b, s, k, g_k]) * 2pi));
 
     # Get the pdf values for each pixel.  Thie takes care of
