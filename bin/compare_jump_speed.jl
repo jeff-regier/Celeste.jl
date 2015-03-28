@@ -28,6 +28,9 @@ function compare_jump_speed()
     end
 
     jump_m, jump_elbo = ElboJuMP.build_jump_model(blob, mp);
+    obj_expr = @ReverseDiffSparse.processNLExpr jump_elbo
+    fg = ReverseDiffSparse.genfgrad_simple(obj_expr)
+    grad_out = zeros(length(jump_m.colVal))
 
     # @code_warntype  ReverseDiffSparse.getvalue(jump_elbo, jump_m.colVal)
 
@@ -42,6 +45,9 @@ function compare_jump_speed()
         println("computing with JuMP...")
         jump_time = @elapsed jump_v = ReverseDiffSparse.getvalue(jump_elbo, jump_m.colVal)
         @show jump_time
+        grad_time = @elapsed fg(jump_m.colVal, grad_out)
+        @show grad_time
+
 
         println("objective values: $manual_v (manual) vs. $jump_v (jump)")
         @printf("JuMP overhead: %.1fX\n\n", jump_time / manual_time)
