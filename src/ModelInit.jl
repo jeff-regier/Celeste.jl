@@ -13,7 +13,7 @@ using CelesteTypes
 
 
 function sample_prior()
-    Phi = 0.5
+    Phi = 0.05
 
     const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
