@@ -348,7 +348,7 @@ Let
  Hence
 \begin_inset Formula 
 \begin{align}
-\log p(x_{nbm};\Theta) & =\sum_{n=1}^{N}\sum_{b=1}^{B}\sum_{m=1}^{M}\left\{ x_{nbm}\left[\log F_{nbm}\right]-F_{nbm}-\log\left(x_{nbm}!\right)\right\} ,\label{eq:log_p_last-1}
+\log p(x_{nbm};\Theta) & =\sum_{n=1}^{N}\sum_{b=1}^{B}\sum_{m=1}^{M}\left\{ x_{nbm}\left[\log F_{nbm}\right]-F_{nbm}-\log\left(x_{nbm}!\right)\right\} ,
 \end{align}
 
 \end_inset
@@ -359,23 +359,7 @@ where
 \begin_layout Standard
 \begin_inset Formula 
 \begin{align}
-F_{nbm} & =\iota_{nb}G_{nbm},\label{eq:star_Fm-1}
-\end{align}
-
-\end_inset
-
-and
-\begin_inset Formula 
-\begin{align*}
-G_{nbm} & =\epsilon_{nb}+\sum_{s=1}^{S}\ell_{sb}\breve{f}_{sa_{s}}\left(m\right)
-\end{align*}
-
-\end_inset
-
-and
-\begin_inset Formula 
-\begin{align}
-\ell_{sb} & =r_{s}\prod_{j=b}^{b_{r}-1}\exp\left\{ c_{sb}\right\} \prod_{j=b_{r}}^{b-1}\exp\left\{ c_{sb}\right\} ,
+F_{nbm} & =\iota_{nb}G_{nbm},
 \end{align}
 
 \end_inset
@@ -383,7 +367,35 @@ and
 and
 \begin_inset Formula 
 \begin{align}
-\breve{f}_{si}\left(m\right) & =\int\sum_{k=1}^{3}\bar{\alpha}_{nk}\phi\left(m-w;\bar{\xi}_{nbk},\bar{\tau}_{nbk}\right)g_{si}\left(w\right)dw,
+G_{nbm} & =\epsilon_{nb}+\sum_{s=1}^{S}\ell_{sb}f_{sa_{s}}\left(m\right)
+\end{align}
+
+\end_inset
+
+and
+\begin_inset Formula 
+\begin{align}
+\ell_{sb} & =r_{s}\prod_{j=1}^{B}\exp\left\{ I_{b}\left(j\right)c_{bj}\right\} ,
+\end{align}
+
+\end_inset
+
+and
+\begin_inset Formula 
+\begin{align}
+I_{b}\left(j\right) & =\begin{cases}
+1 & b>j\ge b_{r}\\
+-1 & b\le j<b_{r},\\
+0 & \text{otherwise,}
+\end{cases}
+\end{align}
+
+\end_inset
+
+and
+\begin_inset Formula 
+\begin{align}
+f_{si}\left(m\right) & =\int\sum_{k=1}^{3}\bar{\alpha}_{nk}\phi\left(m-w;\bar{\xi}_{nbk},\bar{\tau}_{nbk}\right)g_{si}\left(w\right)dw,
 \end{align}
 
 \end_inset
@@ -458,7 +470,7 @@ Computational formulas
 For stars 
 \begin_inset Formula 
 \begin{align}
-\breve{f}_{s0}\left(m\right) & =\int\sum_{k=1}^{3}\bar{\alpha}_{nbk}\phi\left(m-m';\bar{\xi}_{nbk},\bar{\tau}_{nbk}\right)\delta_{u_{s}}\left(m\right)dm'\\
+f_{s0}\left(m\right) & =\int\sum_{k=1}^{3}\bar{\alpha}_{nbk}\phi\left(m-m';\bar{\xi}_{nbk},\bar{\tau}_{nbk}\right)\delta_{u_{s}}\left(m\right)dm'\\
  & =\sum_{k=1}^{3}\bar{\alpha}_{nbk}\phi\left(m-\mu_{s};\bar{\xi}_{nbk},\bar{\tau}_{nbk}\right)\\
  & =\sum_{k=1}^{3}\bar{\alpha}_{nbk}\phi\left(m;\mu_{s}+\bar{\xi}_{nbk},\bar{\tau}_{nbk}\right).
 \end{align}
@@ -468,7 +480,7 @@ For stars
 For galaxies 
 \begin_inset Formula 
 \begin{align}
-\breve{f}_{s1}\left(m\right) & =\int\sum_{k=1}^{3}\bar{\alpha}_{nk}\phi\left(m-m';\bar{\xi}_{nbk},\bar{\tau}_{nbk}\right)\sum_{i=1}^{2}\theta_{si}h_{si}\left(m'\right)dm'\\
+f_{s1}\left(m\right) & =\int\sum_{k=1}^{3}\bar{\alpha}_{nk}\phi\left(m-m';\bar{\xi}_{nbk},\bar{\tau}_{nbk}\right)\sum_{i=1}^{2}\theta_{si}h_{si}\left(m'\right)dm'\\
  & =\sum_{k=1}^{3}\bar{\alpha}_{nk}\sum_{i=1}^{2}\theta_{si}\sum_{j=1}^{8}\tilde{\alpha}_{ij}\int\phi\left(m-m';\bar{\xi}_{nbk},\bar{\tau}_{nbk}\right)\phi\left(m';\mu_{s},\bar{\eta}_{ij}W_{s}\right)dm'\\
  & =\sum_{k=1}^{3}\bar{\alpha}_{nk}\sum_{i=1}^{2}\theta_{si}\sum_{j=1}^{8}\tilde{\alpha}_{1j}\phi\left(m;\mu_{s}+\bar{\xi}_{nbk},\bar{\tau}_{nbk}+\bar{\eta}_{ij}W_{s}\right).
 \end{align}
@@ -495,7 +507,7 @@ For
 \begin_inset Formula 
 \begin{align}
 a_{s} & \sim\mbox{\mathrm{Bernoulli(\Phi)}},\\
-r_{s}|a_{s}=i & \sim\mathrm{Gamma}\left(\Upsilon^{(i)},\Psi^{(i)}\right),\\
+r_{s}|a_{s}=i & \sim\mathrm{LogNormal}\left(\Upsilon^{(i)},\Psi^{(i)}\right),\\
 k_{s}|a_{s}=i & \sim\mathrm{Categorical\left(\Xi^{(i)}\right),}\\
 c_{s}|k_{s}=d,a_{s}=i & \sim\mathrm{MvNormal}\left(\Omega^{(i,d)},\Lambda^{(i,d)}\right).
 \end{align}
@@ -503,7 +515,7 @@ c_{s}|k_{s}=d,a_{s}=i & \sim\mathrm{MvNormal}\left(\Omega^{(i,d)},\Lambda^{(i,d)
 \end_inset
 
 Then, for 
-\begin_inset Formula $\Theta_{s}=\left(a_{s},c_{s},r_{s}\right)$
+\begin_inset Formula $\Theta_{s}=\left(a_{s},c_{s},k_{s},r_{s}\right)$
 \end_inset
 
  and 
@@ -580,7 +592,7 @@ To find a distribution
  with the following factorization: 
 \begin_inset Formula 
 \begin{align}
-q(\Theta) & =\prod_{s=1}^{S}q(a_{s})q(r_{s}|a_{s})q(k_{s}|a_{s})\prod_{b=1}^{4}q(c_{sb}|a_{s}).\label{eq:q_factorization}
+q(\Theta) & =\prod_{s=1}^{S}q(a_{s})q(r_{s}|a_{s})q(k_{s}|a_{s})\prod_{b=1}^{B}q(c_{sb}|a_{s}).\label{eq:q_factorization}
 \end{align}
 
 \end_inset
@@ -601,7 +613,7 @@ Furthermore, for
 \begin_inset Formula 
 \begin{align}
 q(a_{s}) & \sim\mathrm{Bernoulli}\left(\chi_{s}\right),\\
-q\left(r_{s}|a_{s}=i\right) & \sim\mathrm{Gamma}\left(\gamma_{s}^{(i)},\zeta_{s}^{(i)}\right),\\
+q\left(r_{s}|a_{s}=i\right) & \sim\mathrm{LogNormal}\left(\gamma_{s}^{(i)},\zeta_{s}^{(i)}\right),\\
 q(k_{s}|a_{s}=i) & \sim\mathrm{Categorical\left(\kappa_{s}^{(i)}\right),}\\
 q\left(c_{sb}|a_{s}=i\right) & \sim\mathrm{Normal}\left(\beta_{sb}^{(i)},\lambda_{sb}^{(i)}\right).
 \end{align}
@@ -638,7 +650,7 @@ where
 \begin_layout Standard
 \begin_inset Formula 
 \begin{align}
-\mathbb{E}_{q} & \left[F_{nbm}\right]=\iota_{nb}\mathbb{E}_{q}\left[G_{nbm}\right]
+\mathbb{E}_{q} & \left[F_{nbm}\right]=\bar{\iota}_{nb}\mathbb{E}_{q}\left[G_{nbm}\right]
 \end{align}
 
 \end_inset
@@ -655,8 +667,8 @@ and
 \begin_inset Formula 
 \begin{align}
 \mathbb{E}_{q} & \left[\ell_{s}|a_{s}=i\right]\\
- & =\mathbb{E}_{q}\left[r_{s}|a_{s}=i\right]\mathbb{E}_{q}\left[\prod_{j=1}^{4}\exp\left\{ \tau_{bj}c_{b}\right\} |a_{s}=i\right]\\
- & =\gamma_{s}^{(i)}\zeta_{s}^{(i)}\prod_{j=1}^{4}\mathbb{E}_{q}\left[\exp\left\{ \tau_{bj}c_{b}\right\} \Big|a_{s}=i\right],
+ & =\mathbb{E}_{q}\left[r_{s}|a_{s}=i\right]\mathbb{E}_{q}\left[\prod_{j=1}^{B-1}\exp\left\{ I_{b}\left(j\right)c_{sb}\right\} |a_{s}=i\right]\\
+ & =\exp\left\{ \gamma_{s}^{(i)}+\zeta_{s}^{(i)}/2\right\} \prod_{j=1}^{B-1}\mathbb{E}_{q}\left[\exp\left\{ I_{b}\left(j\right)c_{sb}\right\} \Big|a_{s}=i\right],
 \end{align}
 
 \end_inset
@@ -710,7 +722,7 @@ and
 and
 \begin_inset Formula 
 \begin{align}
-\mathbb{E}_{q_{s}} & \left[\ell_{sb}^{2}|a_{s}=i\right]=\mathbb{E}_{q}\left[r_{s}^{2}|a_{s}=i\right]\prod_{j=1}^{4}\mathbb{E}_{q}\left[\exp\left\{ 2\tau_{bj}c_{b}\right\} \Big|a_{s}=i\right],
+\mathbb{E}_{q_{s}} & \left[\ell_{sb}^{2}|a_{s}=i\right]=\mathbb{E}_{q}\left[r_{s}^{2}|a_{s}=i\right]\prod_{j=1}^{B-1}\mathbb{E}_{q}\left[\exp\left\{ 2I_{b}\left(j\right)c_{sb}\right\} \Big|a_{s}=i\right],
 \end{align}
 
 \end_inset
@@ -718,7 +730,7 @@ and
 and
 \begin_inset Formula 
 \begin{align}
-\mathbb{E}_{q}\left[r_{s}^{2}|a_{s}=i\right] & =\gamma_{s}^{(i)}\left[\zeta_{s}^{(i)}\right]^{2}\left(1+\gamma_{s}^{(i)}\right).
+\mathbb{E}_{q}\left[r_{s}^{2}|a_{s}=i\right] & =\exp\left\{ 2\left(\gamma_{s}^{(i)}+\zeta_{s}^{(i)}\right)\right\} .
 \end{align}
 
 \end_inset
@@ -733,7 +745,8 @@ KL-divergence
 \begin_layout Standard
 \begin_inset Formula 
 \begin{align}
-D_{\mathrm{KL}}\left(q,p\right) & =\int\left[\log q-\log p\right]\prod_{s=1}^{S}q(a_{s})q(r_{s}|a_{s})q(k_{s}|a_{s})\prod_{b=1}^{4}q(c_{sb}|a_{s})\\
+D_{\mathrm{KL}} & \left(q(\Theta),p(\Theta)\right)\\
+ & =\int\left[\log q-\log p\right]\prod_{s=1}^{S}q(a_{s})q(r_{s}|a_{s})q(k_{s}|a_{s})\prod_{b=1}^{B-1}q(c_{sb}|a_{s})\\
  & =\sum_{s=1}^{S}D_{\mathrm{KL}}\left(q\left(a_{s},r_{s},k_{s},c_{s}\right),p_{s}\left(a_{s},r_{s},k_{s},c_{s}\right)\right)\\
  & =\sum_{s=1}^{S}D_{\mathrm{KL}}\left(q(a_{s}),p(a_{s})\right)+\sum_{i=1}^{2}q(a_{s}=i)\\
  & \qquad\qquad\cdot\left[D_{\mathrm{KL}}\left(q(r_{s}|a_{s}=i),p(r_{s}|a_{s}=i)\right)+D_{\mathrm{KL}}\left(q\left(k_{s},c_{s}|a_{s}=i\right),p_{s}\left(k_{s},c_{s}|a_{s}=i\right)\right)\right]\nonumber 
@@ -784,11 +797,7 @@ D_{\mathrm{KL}}\left(q(a_{s}),p(a_{s})\right) & =\chi_{s}\log\frac{\chi_{s}}{\De
 \begin_layout Standard
 \begin_inset Formula 
 \begin{align}
-D_{\mathrm{KL}} & \left(q(r_{s}|a_{s}=i),p(r_{s}|a_{s}=i)\right)\\
- & =\left(\gamma_{s}^{(i)}-\Upsilon^{(i)}\right)\psi\left(\gamma_{s}^{(i)}\right)-\log\Gamma\left(\gamma_{s}^{(i)}\right)+\log\Gamma\left(\Upsilon^{(i)}\right)\\
- & \qquad+\Upsilon^{(i)}\left(\log\Phi^{(i)}-\log\zeta_{s}^{(i)}\right)+\gamma_{s}^{(i)}\frac{\zeta_{s}^{(i)}-\Phi^{(i)}}{\Phi^{(i)}}\nonumber \\
-\frac{\partial}{\partial\gamma_{s}^{(i)}} & =\left(\gamma_{s}^{(i)}-\Upsilon^{(i)}\right)\psi^{(1)}\left(\gamma_{s}^{(i)}\right)+\frac{\zeta_{s}^{(i)}-\Phi^{(i)}}{\Phi^{(i)}}\\
-\frac{\partial}{\partial\zeta_{s}^{(i)}} & =-\frac{\Upsilon^{(i)}}{\zeta_{s}^{(i)}}+\frac{\gamma_{s}^{(i)}}{\Phi^{(i)}}
+D_{\mathrm{KL}} & \left(q(r_{s}|a_{s}=i),p(r_{s}|a_{s}=i)\right)=\log\frac{\Psi^{(i)}}{\zeta_{s}^{(i)}}+\frac{\zeta_{s}^{(i)}+\left(\gamma_{s}^{(i)}-\Upsilon^{(i)}\right)^{2}}{2\Psi^{(i)}}-\frac{1}{2}
 \end{align}
 
 \end_inset
@@ -796,8 +805,7 @@ D_{\mathrm{KL}} & \left(q(r_{s}|a_{s}=i),p(r_{s}|a_{s}=i)\right)\\
 
 \begin_inset Formula 
 \begin{align}
-D_{\mathrm{KL}} & \left(q(k_{s}|a_{s}=i),p(k_{s}|a_{s}=i)\right)=\sum_{d=1}^{D}\kappa_{sd}^{(i)}\left[\log\kappa_{sd}^{(i)}-\log\Psi^{(i,d)}\right]\\
-\frac{\partial}{\partial\kappa_{sd}} & =\left[\log\kappa_{sd}^{(i)}-\log\Psi^{(i,d)}\right]+1
+D_{\mathrm{KL}} & \left(q(k_{s}|a_{s}=i),p(k_{s}|a_{s}=i)\right)=\sum_{d=1}^{D}\kappa_{sd}^{(i)}\left[\log\kappa_{sd}^{(i)}-\log\Psi^{(i,d)}\right]
 \end{align}
 
 \end_inset
