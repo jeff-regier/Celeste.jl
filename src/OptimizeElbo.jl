@@ -18,6 +18,7 @@ const rescaling = ones(length(all_params))
 
 function scale_deriv(elbo::SensitiveFloat, omitted_ids)
     # Move between scaled and unscaled parameterizations.
+
     left_ids = setdiff(all_params, [omitted_ids, ids.kappa[end, :][:]])
     new_P = length(left_ids)
 
@@ -44,6 +45,7 @@ end
 function vp_to_coordinates(vp::Vector{Vector{Float64}}, omitted_ids::Vector{Int64})
     # vp = variational parameters
     # coordinates = for optimizer
+id
     left_ids = setdiff(all_params, [omitted_ids, ids.kappa[end, :][:]])
     new_P = length(left_ids)
 
@@ -74,8 +76,41 @@ function coordinates_to_vp!(xs::Vector{Float64}, vp::Vector{Vector{Float64}},
             vp[s][p0] = xs2[p1, s] ./ rescaling[p0]
         end
         if ids.kappa[1, 1] in left_ids
+            # Each column of kappa is the probability of being a 
+            # type of celestial object (currently star or galax).
+            # Here, assume that there are only two.
             vp[s][ids.kappa[end, :]] = 1. - vp[s][ids.kappa[1, :]]
         end
+    end
+end
+
+
+function unconstrain_parameters!(mp::ModelParams)
+    # Given an mp with constrained parameters,
+    # set the values of the unconstrained parameters.
+
+    for s in 1:mp.S
+        mp.vp[s][ids.chi_free] = Util.inv_logit(mp.vp[s][ids.chi])
+    end
+end
+
+function constrain_parameters!(mp::ModelParams)
+    # Given an mp with unconstrained parameters,
+    # set the values of the constrained parameters.
+
+    for s in 1:mp.S
+        mp.vp[s][ids.chi] = Util.logit(mp.vp[s][ids.chi_free])
+    end
+end
+
+function unconstrain_sensitive_float!(ret::SensitiveFloat, mp)
+    # Given a sensitive float with derivatives with respect to the
+    # constrained parameters, calculate derivatives with respect to
+    # the unconstrained parameters.
+
+    for s in 1:mp.S
+        this_chi = mp.vp[s][ids.chi]
+        ret.d[ids.chi_free, s] = (2 * ret.d[ids.chi, s] * this_chi * (1.0 - this_chi)
     end
 end
 
