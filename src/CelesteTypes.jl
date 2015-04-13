@@ -261,6 +261,11 @@ immutable ParamIndex
     # (B - 1)xI matrices containing c_s means and variances, respectively.
     beta::Array{Int64, 2}
     lambda::Array{Int64, 2}
+
+    # Uncontrained versions of the parameters.
+
+    # logit(chi)
+    chi_free::Int64
 end
 
 # The number of components in the color prior.
@@ -285,13 +290,16 @@ function get_param_ids()
     beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
     lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
 
+    chi_free_id = lambda_end + 1
+
     ParamIndex(1, [2, 3], [4, 5], [6, 7], 8, 9, 10, 11,
-            kappa_ids, beta_ids, lambda_ids)
+               kappa_ids, beta_ids, lambda_ids,
+               chi_free_id)
 end
 
 const ids = get_param_ids()
 
-const all_params = [1:ids.lambda[end]]
+const all_params = [1:ids.chi_free]
 const star_pos_params = ids.mu
 const galaxy_pos_params = [ids.mu, ids.theta, ids.rho, ids.phi, ids.sigma]
 
