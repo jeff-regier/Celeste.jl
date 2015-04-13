@@ -86,7 +86,7 @@ function gen_three_body_dataset(; perturb=true)
         sample_ce([60.1, 82.2], true),
         sample_ce([71.3, 100.4], false),
     ]
-       blob = Synthetic.gen_blob(blob0, three_bodies)
+    ablob = Synthetic.gen_blob(blob0, three_bodies)
     mp = ModelInit.cat_init(three_bodies)
     if perturb
         perturb_params(mp)
@@ -112,7 +112,7 @@ function test_local_sources()
         sample_ce([71.3, 100.4], false),
     ]
 
-       blob = Synthetic.gen_blob(blob0, three_bodies)
+    blob = Synthetic.gen_blob(blob0, three_bodies)
 
     mp = ModelInit.cat_init(three_bodies, patch_radius=20., tile_width=1000)
     @test mp.S == 3
