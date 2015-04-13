@@ -85,24 +85,6 @@ function coordinates_to_vp!(xs::Vector{Float64}, vp::Vector{Vector{Float64}},
 end
 
 
-function unconstrain_parameters!(mp::ModelParams)
-    # Given an mp with constrained parameters,
-    # set the values of the unconstrained parameters.
-
-    for s in 1:mp.S
-        mp.vp[s][ids.chi_free] = Util.inv_logit(mp.vp[s][ids.chi])
-    end
-end
-
-function constrain_parameters!(mp::ModelParams)
-    # Given an mp with unconstrained parameters,
-    # set the values of the constrained parameters.
-
-    for s in 1:mp.S
-        mp.vp[s][ids.chi] = Util.logit(mp.vp[s][ids.chi_free])
-    end
-end
-
 function unconstrain_sensitive_float!(ret::SensitiveFloat, mp)
     # Given a sensitive float with derivatives with respect to the
     # constrained parameters, calculate derivatives with respect to

@@ -16,7 +16,8 @@ export SensitiveFloat
 
 export zero_sensitive_float, const_sensitive_param, clear!
 
-export ParamIndex, ids, all_params, star_pos_params, galaxy_pos_params, D
+export ParamIndex, ids, ids_free, all_params, all_params_free, star_pos_params, galaxy_pos_params, D
+export unconstrain_vp, constrain_vp
 
 using Util
 
@@ -349,6 +350,19 @@ function unconstrain_vp(vp::VariationalParams)
         vp_free[s][2:ids_free.size] = vp[s][2:ids.size]
     end
     vp_free
+end
+
+function constrain_vp(vp_free::VariationalParams)
+    # Convert an unconstrained to an constrained variational parameterization.
+    S = length(vp_free)
+    vp = [ zeros(ids.size) for s = 1:S]
+    for s = 1:S
+        vp[s][ids.chi] = Util.logit(vp_free[s][ids_free.chi_free])
+ 
+        # For now everything else is the same.
+        vp[s][2:ids.size] = vp_free[s][2:ids_free.size]
+    end
+    vp
 end
 
 const all_params = [1:ids.size]
