@@ -803,5 +803,25 @@ function elbo(blob::Blob, mp::ModelParams)
 end
 
 
+function unconstrain_parameters!(mp::ModelParams)
+    for s in 1:mp.s
+        mp.vp[s][ids.chi_free] = Util.inv_logit(mp.vp[s][ids.chi])
+    end
+end
+
+function constrain_parameters!(mp::ModelParams)
+    for s in 1:mp.s
+        mp.vp[s][ids.chi] = Util.logit(mp.vp[s][ids.chi_free])
+    end
+end
+
+function unconstrain_sensitive_float(ret::SensitiveFloat, mp)
+    # Given a sensitive float with derivatives with respect to the
+    # constrained parameters, calculate derivatives with respect to
+    # the unconstrained parameters.
+
+    for s in 1:mp.s
+        ret.d[ids.chi_free, s] = 2 * ret.d[ids.chi, s] * mp.vp[s][ids.chi] * (1.0 - mp.vp[s][ids.chi])
+    end
 end
 
