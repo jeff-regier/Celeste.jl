@@ -50,9 +50,9 @@ three_bodies = [
     sample_ce([4.5, 3.6], false),
     sample_ce([60.1, 82.2], true),
     sample_ce([71.3, 100.4], false),
-]
+];
 
-blob = Synthetic.gen_blob(blob0, three_bodies)
+blob = Synthetic.gen_blob(blob0, three_bodies);
 vp = [ModelInit.init_source(ce) for ce in three_bodies]
 patches = [SkyPatch(ce.pos, 20) for ce in three_bodies]
 my_prior = ModelInit.sample_prior()
@@ -60,7 +60,9 @@ mp = ModelParams(vp, my_prior, patches, 1000)
 
 
 mp = ModelInit.cat_init(three_bodies, patch_radius=20., tile_width=1000)
-
 ret = ElboDeriv.elbo(blob, mp)
+
+ret_free = ElboDeriv.unconstrain_sensitive_float(ret, mp)
+
 
 

@@ -8,6 +8,28 @@ module ElboDeriv
 using CelesteTypes
 import Util
 
+# Functions to convert between the constrained and unconstrained parameterizations.
+function unconstrain_sensitive_float(sf::SensitiveFloat, mp)
+    # Given a sensitive float with derivatives with respect to all the
+    # constrained parameters, calculate derivatives with respect to
+    # the unconstrained parameters.
+
+    # Require that the input have all derivatives defined.
+    @assert size(sf.d) == (ids.size, mp.S)
+
+    sf_free = zero_sensitive_float(collect(1:mp.S), CelesteTypes.all_params_free)
+    sf_free.v = sf.v
+    for s in 1:mp.S
+        this_chi = mp.vp[s][ids.chi]
+        sf_free.d[ids_free.chi_free, s] = 2 * sf.d[ids.chi, s] * this_chi * (1.0 - this_chi)
+
+        # Currently all the rest are the same.
+        sf_free.d[2:ids_free.size, s] = sf.d[2:ids.size, s]
+    end
+
+    sf_free
+end
+
 
 immutable SourceBrightness
     # SensitiveFloat objects for expectations involving r_s and c_s.
@@ -800,29 +822,6 @@ function elbo(blob::Blob, mp::ModelParams)
     ret = elbo_likelihood(blob, mp)
     subtract_kl!(mp, ret)
     ret
-end
-
-
-function unconstrain_parameters!(mp::ModelParams)
-    for s in 1:mp.S
-        mp.vp[s][ids.chi_free] = Util.inv_logit(mp.vp[s][ids.chi])
-    end
-end
-
-function constrain_parameters!(mp::ModelParams)
-    for s in 1:mp.S
-        mp.vp[s][ids.chi] = Util.logit(mp.vp[s][ids.chi_free])
-    end
-end
-
-function unconstrain_sensitive_float!(ret::SensitiveFloat, mp)
-    # Given a sensitive float with derivatives with respect to the
-    # constrained parameters, calculate derivatives with respect to
-    # the unconstrained parameters.
-
-    for s in 1:mp.S
-        ret.d[ids.chi_free, s] = 2 * ret.d[ids.chi, s] * mp.vp[s][ids.chi] * (1.0 - mp.vp[s][ids.chi])
-    end
 end
 
 end
