@@ -8,11 +8,13 @@ module ElboDeriv
 using CelesteTypes
 import Util
 
-# Functions to convert between the constrained and unconstrained parameterizations.
 function unconstrain_sensitive_float(sf::SensitiveFloat, mp)
     # Given a sensitive float with derivatives with respect to all the
     # constrained parameters, calculate derivatives with respect to
     # the unconstrained parameters.
+    #
+    # Note that all the other functions in ElboDeriv calculated derivatives with
+    # respect to the unconstrained parameterization.
 
     # Require that the input have all derivatives defined.
     @assert size(sf.d) == (ids.size, mp.S)
