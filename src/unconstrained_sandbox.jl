@@ -11,6 +11,7 @@ require(joinpath(Pkg.dir("Celeste"), "src", "Synthetic.jl"))
 
 #include(joinpath(Pkg.dir("Celeste"), "src", "CelesteTypes.jl"))
 #include(joinpath(Pkg.dir("Celeste"), "src", "ElboDeriv.jl"))
+#include(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
 
 import ElboDeriv
 using CelesteTypes
@@ -63,6 +64,18 @@ mp = ModelInit.cat_init(three_bodies, patch_radius=20., tile_width=1000)
 ret = ElboDeriv.elbo(blob, mp)
 
 ret_free = ElboDeriv.unconstrain_sensitive_float(ret, mp)
+
+omitted_indices = Array(Int64, 0)
+x_free = OptimizeElbo.vp_to_free_coordinates(vp, omitted_indices)
+x = OptimizeElbo.vp_to_coordinates(vp, omitted_indices)
+hcat(x_free, x)
+
+vp_new1 = copy(vp)
+vp_new2 = copy(vp)
+OptimizeElbo.coordinates_to_vp!(x, vp_new1, omitted_indices)
+OptimizeElbo.free_coordinates_to_vp!(x_free, vp_new2, omitted_indices)
+
+
 
 
 

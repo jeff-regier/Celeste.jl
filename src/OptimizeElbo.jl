@@ -15,6 +15,9 @@ const rescaling = ones(length(all_params))
 [rescaling[id] *= 1e-3 for id in ids.gamma]
 #rescaling[ids.chi] *= 1e1
 
+# Rescaling for the unconstrained parameterization.
+const rescaling_free = ones(length(all_params_free))
+[rescaling_free[id] *= 1e-3 for id in ids_free.gamma]
 
 function scale_deriv(elbo::SensitiveFloat, omitted_ids)
     # Move between scaled and unscaled parameterizations.
@@ -45,7 +48,9 @@ end
 function vp_to_coordinates(vp::Vector{Vector{Float64}}, omitted_ids::Vector{Int64})
     # vp = variational parameters
     # coordinates = for optimizer
-id
+
+    # The last kappa coordinates are excluded because they can be inferred from
+    # the other kappa values.
     left_ids = setdiff(all_params, [omitted_ids, ids.kappa[end, :][:]])
     new_P = length(left_ids)
 
@@ -85,17 +90,63 @@ function coordinates_to_vp!(xs::Vector{Float64}, vp::Vector{Vector{Float64}},
 end
 
 
-function unconstrain_sensitive_float!(ret::SensitiveFloat, mp)
-    # Given a sensitive float with derivatives with respect to the
-    # constrained parameters, calculate derivatives with respect to
-    # the unconstrained parameters.
+function vp_to_free_coordinates(vp::Vector{Vector{Float64}}, omitted_ids::Vector{Int64})
+    # vp = constrained variational parameters
+    # coordinates = unconstrained coordinates for optimizer
+    # omitted_ids: ids to be omitted from the _unconstrained_ vb parameters
+    #    (i.e. indices from ids_free)
 
-    for s in 1:mp.S
-        this_chi = mp.vp[s][ids.chi]
-        ret.d[ids.chi_free, s] = (2 * ret.d[ids.chi, s] * this_chi * (1.0 - this_chi)
+    vp_free = unconstrain_vp(vp)
+    left_ids = setdiff(all_params_free,
+                       [omitted_ids, ids_free.kappa[end, :][:]])
+    new_P = length(left_ids)
+
+    S = length(vp_free)
+    vp_new = [zeros(new_P) for s in 1:S]
+
+    for p1 in 1:length(left_ids)
+        p0 = left_ids[p1]
+        [vp_new[s][p1] = vp_free[s][p0] * rescaling_free[p0] for s in 1:S]
     end
+
+    reduce(vcat, vp_new)
 end
 
+
+function free_coordinates_to_vp!(xs::Vector{Float64}, vp::Vector{Vector{Float64}},
+                                 omitted_ids::Vector{Int64})
+    # Convert the uncontrained optimization vector to the contrained variational parameters.
+    # xs: A vector of the unconstrained parameters for the optimizer.
+    # vp: A VariationalParams object to be updated in place with the
+    #     constrained parameterization.
+    # omitted_ids: ids to be omitted from the _unconstrained_ vb parameters
+    #    (i.e. indices from ids_free)
+
+    left_ids = setdiff(all_params_free, [omitted_ids, ids_free.kappa[end, :][:]])
+
+    P = length(left_ids)
+    @assert length(xs) % P == 0
+    S = int(length(xs) / P)
+    xs2 = reshape(xs, P, S)
+
+    vp_free = unconstrain_vp(vp)
+
+    for s in 1:S
+        for p1 in 1:length(left_ids)
+            p0 = left_ids[p1]
+            vp_free[s][p0] = xs2[p1, s] ./ rescaling_free[p0]
+        end
+
+        # TODO: Simply treat kappa as a constrained variable.
+        if ids.kappa[1, 1] in left_ids
+            # Each column of kappa is the probability of being a 
+            # type of celestial object (currently star or galax).
+            # Here, assume that there are only two.
+            vp_free[s][ids_free.kappa[end, :]] = 1. - vp_free[s][ids_free.kappa[1, :]]
+        end
+    end
+    vp = constrain_vp(vp_free)
+end
 
 function get_nlopt_bounds(vs::Vector{Float64})
     # Note that sources are not allowed to move more than
