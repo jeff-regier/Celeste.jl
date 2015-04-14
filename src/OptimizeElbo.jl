@@ -19,7 +19,7 @@ const rescaling = ones(length(all_params))
 const rescaling_free = ones(length(all_params_free))
 [rescaling_free[id] *= 1e-3 for id in ids_free.gamma]
 
-function scale_deriv(elbo::SensitiveFloat, omitted_ids)
+function scale_deriv(elbo::SensitiveFloat, omitted_ids, scaling_vector)
     # Move between scaled and unscaled parameterizations.
 
     left_ids = setdiff(all_params, [omitted_ids, ids.kappa[end, :][:]])
@@ -30,7 +30,7 @@ function scale_deriv(elbo::SensitiveFloat, omitted_ids)
 
     for p1 in 1:length(left_ids)
         p0 = left_ids[p1]
-        elbo_new.d[p1, :] = elbo.d[p0, :] ./ rescaling[p0]
+        elbo_new.d[p1, :] = elbo.d[p0, :] ./ scaling_vector[p0]
 
         for i = 1:2
             if p0 == ids.kappa[1, i]
@@ -212,7 +212,64 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[
         coordinates_to_vp!(x, mp.vp, omitted_ids)
         elbo = f(blob, mp)
         if length(g) > 0
-            elbo2 = scale_deriv(elbo, omitted_ids)
+            elbo2 = scale_deriv(elbo, omitted_ids, rescaling)
+            svs = [elbo2.d[:, s] for s in 1:mp.S]
+            g[:] = reduce(vcat, svs)
+        end
+
+        iter_count += 1
+        print_params(mp.vp)
+        println("elbo: ", elbo.v)
+        println("xtol_rel: $xtol_rel ;  ftol_abs: $ftol_abs")
+        println("rescaling: ", rescaling)
+        println("\n=======================================\n")
+        elbo.v
+    end
+
+    opt = Opt(:LD_LBFGS, length(x0))
+    lbs, ubs = get_nlopt_bounds(mp.vp, omitted_ids)
+    for i in 1:length(x0)
+        if !(lbs[i] <= x0[i] <= ubs[i])
+            println("coordinate $i falsity: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
+        end
+    end
+    lower_bounds!(opt, lbs)
+    upper_bounds!(opt, ubs)
+    max_objective!(opt, objective_and_grad)
+    xtol_rel!(opt, xtol_rel)
+    ftol_abs!(opt, ftol_abs)
+    (max_f, max_x, ret) = optimize(opt, x0)
+
+    println("got $max_f at $max_x after $iter_count iterations (returned $ret)\n")
+end
+
+
+function maximize_unconstrained_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[],
+    xtol_rel = 1e-7, ftol_abs = 1e-6)
+    # Maximize using NLOpt and unconstrained coordinates.
+    #
+    # Args:
+    #   - f: A function that takes a blob and constrianed coordinates (e.g. ElboDeriv.elbo)
+    #   - blob: Input for f
+    #   - mp: Constrained initial ModelParams
+    #   - omitted_ids: Omitted ids from the _unconstrained_ parameterization (i.e. elements
+    #       of free_ids).
+
+    x0 = vp_to_free_coordinates(mp.vp, omitted_ids)
+    iter_count = 0
+
+    free_mp = deepcopy(mp)
+    free_mp.vp = unconstrain_vp(free_mp.vp)
+
+    function objective_and_grad(x::Vector{Float64}, g::Vector{Float64})
+        free_coordinates_to_vp!(x, free_mp.vp, omitted_ids)
+
+        # Evaluate in the constrianed space and then unconstrain again.
+        mp.vp = constrain_vp(free_mp.vp)
+        elbo = f(blob, mp)
+        elbo_free = ElboDeriv.unconstrain_sensitive_float(elbo, mp)
+        if length(g) > 0
+            elbo2 = scale_deriv(elbo_free, omitted_ids, rescaling_free)
             svs = [elbo2.d[:, s] for s in 1:mp.S]
             g[:] = reduce(vcat, svs)
         end
