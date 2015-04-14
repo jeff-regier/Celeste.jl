@@ -111,34 +111,34 @@ function gen_three_body_dataset(; perturb=true)
 end
 
 
-#blob, mp, body = gen_sample_star_dataset();
-blob, mp, body = gen_sample_galaxy_dataset();
-#blob, mp, body = gen_three_body_dataset();
+#blob, mp_init, body = gen_sample_star_dataset();
+#blob, mp_init, body = gen_sample_galaxy_dataset();
+blob, mp_init, body = gen_three_body_dataset();
 
+mp_original = deepcopy(mp_init)
+mp_free = deepcopy(mp_init)
 
 # Optimize
 omitted_ids = [ids.kappa[:], ids.lambda[:], ids.zeta[:] ]
 omitted_ids_free = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta_free[:] ]
 
 res_iter_count, res_max_f, res_max_x, res_ret =
-	OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
+	OptimizeElbo.maximize_likelihood(blob, mp_original)
 
-mp2 = deepcopy(mp)
 res_free_iter_count, res_free_max_f, res_free_max_x, res_free_ret =
-	OptimizeElbo.maximize_unconstrained_f(ElboDeriv.elbo_likelihood, blob,
-										  mp2, omitted_ids=omitted_ids)
+	OptimizeElbo.maximize_unconstrained_likelihood(blob, mp_free)
 
-# They are not equal, but the unconstrained fit is better.
+# Compare the parameters, fits, and iterations.
 println("===================")
 println("Differences:")
 for var_name in names(ids)
 	println(var_name)
-	for s in 1:mp.S
-		println(s, ": ", mp.vp[s][ids.(var_name)] - mp2.vp[s][ids.(var_name)])
+	for s in 1:mp_init.S
+		println(s, ": ", mp_free.vp[s][ids.(var_name)] - mp_original.vp[s][ids.(var_name)])
 	end
 end
 println("===================")
 
-res_free_max_f - res_max_f
+res_free_max_f / res_max_f
 res_free_iter_count / res_iter_count
 

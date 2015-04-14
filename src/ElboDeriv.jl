@@ -27,7 +27,8 @@ function unconstrain_sensitive_float(sf::SensitiveFloat, mp)
 
         # Simplicial constriants.
         this_chi = mp.vp[s][ids.chi]
-        sf_free.d[ids_free.chi_free, s] = 2 * sf.d[ids.chi, s] * this_chi * (1.0 - this_chi)
+        sf_free.d[ids_free.chi_free, s] =
+            2 * sf.d[ids.chi, s] * this_chi * (1.0 - this_chi)
 
         # Positivity constraints.
         sf_free.d[ids_free.gamma_free, s] = sf.d[ids.gamma, s] .* mp.vp[s][ids.gamma]
