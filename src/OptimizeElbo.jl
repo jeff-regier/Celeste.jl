@@ -17,7 +17,7 @@ const rescaling = ones(length(all_params))
 
 # Rescaling for the unconstrained parameterization.
 const rescaling_free = ones(length(all_params_free))
-# Perhaps this is not necessary with the unconstrained parametrization?
+# It's not clear if this is helpful for the unconstrained parameterization.
 #[rescaling_free[id] *= 1e-3 for id in ids_free.gamma_free]
 
 function scale_deriv(elbo::SensitiveFloat, omitted_ids, scaling_vector)
@@ -261,8 +261,8 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[
 end
 
 
-function maximize_unconstrained_f(f::Function, blob::Blob, mp::ModelParams; omitted_ids=Int64[],
-    xtol_rel = 1e-7, ftol_abs = 1e-6)
+function maximize_unconstrained_f(f::Function, blob::Blob, mp::ModelParams;
+    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
     # Maximize using NLOpt and unconstrained coordinates.
     #
     # Args:
@@ -329,6 +329,20 @@ end
 function maximize_likelihood(blob::Blob, mp::ModelParams)
     omitted_ids = [ids.kappa[:], ids.lambda[:], ids.zeta]
     maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
+end
+
+function maximize_unconstrained_elbo(blob::Blob, mp::ModelParams)
+    omitted_ids = setdiff(all_params_free,
+                          [ids_free.gamma_free, ids_free.zeta_free,
+                           ids.kappa[:], ids.beta[:]])
+    maximize_unconstrained_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+
+    maximize_unconstrained_f(ElboDeriv.elbo, blob, mp, ftol_abs=1e-6)
+end
+
+function maximize_unconstrained_likelihood(blob::Blob, mp::ModelParams)
+    omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta_free]
+    maximize_unconstrained_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
 end
 
 end
