@@ -340,16 +340,33 @@ end
 const ids = get_param_ids()
 const ids_free = get_unconstrained_param_ids()
 
-function unconstrain_vp(vp::VariationalParams)
+function unconstrain_vp!(vp::VariationalParams, vp_free::VariationalParams)
     # Convert a constrained to an unconstrained variational parameterization.
     S = length(vp)
-    vp_free = [ zeros(ids_free.size) for s = 1:S]
     for s = 1:S
         vp_free[s][ids_free.chi_free] = Util.inv_logit(vp[s][ids.chi])
  
         # For now everything else is the same.
         vp_free[s][2:ids_free.size] = vp[s][2:ids.size]
     end
+end
+
+function constrain_vp!(vp_free::VariationalParams, vp::VariationalParams)
+    # Convert an unconstrained to an constrained variational parameterization.
+    S = length(vp_free)
+    for s = 1:S
+        vp[s][ids.chi] = Util.logit(vp_free[s][ids_free.chi_free])
+ 
+        # For now everything else is the same.
+        vp[s][2:ids.size] = vp_free[s][2:ids_free.size]
+    end
+end
+
+function unconstrain_vp(vp::VariationalParams)
+    # Convert a constrained to an unconstrained variational parameterization.
+    S = length(vp)
+    vp_free = [ zeros(ids_free.size) for s = 1:S]
+    unconstrain_vp!(vp, vp_free)
     vp_free
 end
 
@@ -357,14 +374,10 @@ function constrain_vp(vp_free::VariationalParams)
     # Convert an unconstrained to an constrained variational parameterization.
     S = length(vp_free)
     vp = [ zeros(ids.size) for s = 1:S]
-    for s = 1:S
-        vp[s][ids.chi] = Util.logit(vp_free[s][ids_free.chi_free])
- 
-        # For now everything else is the same.
-        vp[s][2:ids.size] = vp_free[s][2:ids_free.size]
-    end
+    constrain_vp!(vp_free, vp)
     vp
 end
+
 
 const all_params = [1:ids.size]
 const all_params_free = [1:ids_free.size]
