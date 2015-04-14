@@ -16,7 +16,8 @@ export SensitiveFloat
 
 export zero_sensitive_float, const_sensitive_param, clear!
 
-export ParamIndex, ids, ids_free, all_params, all_params_free, star_pos_params, galaxy_pos_params, D
+export ParamIndex, ids, ids_free, all_params, all_params_free
+export star_pos_params, galaxy_pos_params, D
 export unconstrain_vp, constrain_vp
 
 using Util
@@ -394,7 +395,6 @@ type ModelParams
 
     ModelParams(vp, pp, patches, tile_width) = begin
         # There must be one patch for each celestial object.
-        print("Hello\n")
         @assert length(vp) == length(patches)
         new_vp_free = unconstrain_vp(vp)
         new(vp, new_vp_free, pp, patches, tile_width, length(vp))

@@ -59,9 +59,9 @@ patches = [SkyPatch(ce.pos, 20) for ce in three_bodies]
 my_prior = ModelInit.sample_prior()
 mp = ModelParams(vp, my_prior, patches, 1000)
 
-
 mp = ModelInit.cat_init(three_bodies, patch_radius=20., tile_width=1000)
 ret = ElboDeriv.elbo(blob, mp)
+
 
 ret_free = ElboDeriv.unconstrain_sensitive_float(ret, mp)
 
