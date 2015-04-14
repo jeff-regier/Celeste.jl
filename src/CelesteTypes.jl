@@ -258,8 +258,8 @@ immutable UnconstrainedParamIndex
 
     # Ix1 scalar variational parameters for r_s.  The first
     # row is for stars, and the second for galaxies (I think?).
-    gamma::Vector{Int64}
-    zeta::Vector{Int64}
+    gamma_free::Vector{Int64}
+    zeta_free::Vector{Int64}
 
     # The weight given to a galaxy of type 1.
     theta::Int64
@@ -309,13 +309,19 @@ function get_param_ids()
     beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
     lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
 
-    ParamIndex(1, [2, 3], [4, 5], [6, 7], 8, 9, 10, 11,
+    ParamIndex(1,      # chi
+               [2, 3], # mu
+               [4, 5], # gamma
+               [6, 7], # zeta
+               8, 9, 10, 11, # theta, rho, phi, sigma
                kappa_ids, beta_ids, lambda_ids,
                lambda_ids[end])
 end
 
 function get_unconstrained_param_ids()
-    # Build a UnconstrainedParamIndex object.
+    # Build a UnconstrainedParamIndex object.  Later the dimensions
+    # of the unconstrained parameterizatoin may differ from the
+    # constrained one (e.g. with simplicial constraints).
 
     # TODO: these are redundant, and should be global constants.
     # The number of types of celestial objects (here, stars and galaxies).
@@ -332,7 +338,11 @@ function get_unconstrained_param_ids()
     beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
     lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
 
-    UnconstrainedParamIndex(1, [2, 3], [4, 5], [6, 7], 8, 9, 10, 11,
+    UnconstrainedParamIndex(1,      # chi
+                            [2, 3], # mu
+                            [4, 5], # gamma
+                            [6, 7], # zeta
+                            8, 9, 10, 11, # theta, rho, phi, sigma
                             kappa_ids, beta_ids, lambda_ids,
                             lambda_ids[end])
 end
@@ -344,10 +354,15 @@ function unconstrain_vp!(vp::VariationalParams, vp_free::VariationalParams)
     # Convert a constrained to an unconstrained variational parameterization.
     S = length(vp)
     for s = 1:S
+        # The default is everything being the same.
+        vp_free[s][1:ids_free.size] = vp[s][1:ids.size]
+
+        # Simplicial constriants.
         vp_free[s][ids_free.chi_free] = Util.inv_logit(vp[s][ids.chi])
- 
-        # For now everything else is the same.
-        vp_free[s][2:ids_free.size] = vp[s][2:ids.size]
+
+        # Positivity constraints
+        vp_free[s][ids_free.gamma_free] = log(vp[s][ids.gamma])
+        vp_free[s][ids_free.zeta_free] = log(vp[s][ids.zeta]) 
     end
 end
 
@@ -355,10 +370,15 @@ function constrain_vp!(vp_free::VariationalParams, vp::VariationalParams)
     # Convert an unconstrained to an constrained variational parameterization.
     S = length(vp_free)
     for s = 1:S
+        # The default is everything being the same.
+        vp[s][1:ids.size] = vp_free[s][1:ids_free.size]
+
+        # Simplicial constriants.
         vp[s][ids.chi] = Util.logit(vp_free[s][ids_free.chi_free])
- 
-        # For now everything else is the same.
-        vp[s][2:ids.size] = vp_free[s][2:ids_free.size]
+
+         # Positivity constraints
+        vp[s][ids.gamma] = exp(vp_free[s][ids_free.gamma_free])
+        vp[s][ids.zeta] = exp(vp_free[s][ids_free.zeta_free])
     end
 end
 

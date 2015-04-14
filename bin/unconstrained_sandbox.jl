@@ -73,43 +73,72 @@ function gen_sample_star_dataset(; perturb=true)
 end
 
 
-blob, mp, body = gen_sample_star_dataset();
+function gen_sample_galaxy_dataset(; perturb=true)
+    srand(1)
+    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    for b in 1:5
+        blob0[b].H, blob0[b].W = 20, 23
+    end
+    one_body = [sample_ce([8.5, 9.6], false),]
+    blob = Synthetic.gen_blob(blob0, one_body)
+    mp = ModelInit.cat_init(one_body)
+    if perturb
+        perturb_params(mp)
+    end
 
-vp = mp.vp
-vp_free = unconstrain_vp(vp)
+    blob, mp, one_body
+end
 
-ret = ElboDeriv.elbo(blob, mp)
-ret_free = ElboDeriv.unconstrain_sensitive_float(ret, mp)
 
-omitted_indices = Array(Int64, 0)
-x_free = OptimizeElbo.vp_to_free_coordinates(vp, omitted_indices)
-x = OptimizeElbo.vp_to_coordinates(vp, omitted_indices)
-# Should differ in the chi place.
-hcat(x_free, x)
+function gen_three_body_dataset(; perturb=true)
+    srand(1)
+    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    for b in 1:5
+        blob0[b].H, blob0[b].W = 112, 238
+    end
+    three_bodies = [
+        sample_ce([4.5, 3.6], false),
+        sample_ce([60.1, 82.2], true),
+        sample_ce([71.3, 100.4], false),
+    ]
+    blob = Synthetic.gen_blob(blob0, three_bodies)
+    mp = ModelInit.cat_init(three_bodies)
+    if perturb
+        perturb_params(mp)
+    end
 
-# Should be the same
-vp_new1 = deepcopy(vp)
-vp_new2 = deepcopy(vp)
-OptimizeElbo.coordinates_to_vp!(x, vp_new1, omitted_indices)
-OptimizeElbo.free_coordinates_to_vp!(x_free, vp_new2, omitted_indices)
-@assert vp_new1 == vp_new2
+    blob, mp, three_bodies
+end
 
-# Should change
-x_free2 = deepcopy(x_free)
-x_free2[1] += 0.2
-@assert x_free2[1] == x_free[1] + 0.2
-OptimizeElbo.free_coordinates_to_vp!(x_free2, vp_new2, omitted_indices)
-@assert vp_new1[1][1] != vp_new2[1][1]
-vp_new1[1][1], vp_new2[1][1]
 
+#blob, mp, body = gen_sample_star_dataset();
+blob, mp, body = gen_sample_galaxy_dataset();
+#blob, mp, body = gen_three_body_dataset();
 
 
 # Optimize
-omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta]
-res = OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
+omitted_ids = [ids.kappa[:], ids.lambda[:], ids.zeta[:] ]
+omitted_ids_free = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta_free[:] ]
+
+res_iter_count, res_max_f, res_max_x, res_ret =
+	OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
 
 mp2 = deepcopy(mp)
-res_free = OptimizeElbo.maximize_unconstrained_f(ElboDeriv.elbo_likelihood, blob,
-												 mp2, omitted_ids=omitted_ids)
+res_free_iter_count, res_free_max_f, res_free_max_x, res_free_ret =
+	OptimizeElbo.maximize_unconstrained_f(ElboDeriv.elbo_likelihood, blob,
+										  mp2, omitted_ids=omitted_ids)
 
+# They are not equal, but the unconstrained fit is better.
+println("===================")
+println("Differences:")
+for var_name in names(ids)
+	println(var_name)
+	for s in 1:mp.S
+		println(s, ": ", mp.vp[s][ids.(var_name)] - mp2.vp[s][ids.(var_name)])
+	end
+end
+println("===================")
+
+res_free_max_f - res_max_f
+res_free_iter_count / res_iter_count
 
