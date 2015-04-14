@@ -22,11 +22,16 @@ function unconstrain_sensitive_float(sf::SensitiveFloat, mp)
     sf_free = zero_sensitive_float(collect(1:mp.S), CelesteTypes.all_params_free)
     sf_free.v = sf.v
     for s in 1:mp.S
+        # Unless specifically transformed, the derivatives are unchanged.
+        sf_free.d[1:ids_free.size, s] = sf.d[1:ids.size, s]
+
+        # Simplicial constriants.
         this_chi = mp.vp[s][ids.chi]
         sf_free.d[ids_free.chi_free, s] = 2 * sf.d[ids.chi, s] * this_chi * (1.0 - this_chi)
 
-        # Currently all the rest are the same.
-        sf_free.d[2:ids_free.size, s] = sf.d[2:ids.size, s]
+        # Positivity constraints.
+        sf_free.d[ids_free.gamma_free, s] = sf.d[ids.gamma, s] .* mp.vp[s][ids.gamma]
+        sf_free.d[ids_free.zeta_free, s] = sf.d[ids.zeta, s] .* mp.vp[s][ids.zeta]
     end
 
     sf_free
