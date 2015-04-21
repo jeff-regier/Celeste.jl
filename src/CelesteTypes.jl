@@ -31,6 +31,15 @@ import WCSLIB
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
+# The number of components in the color prior.
+const D = 2
+
+# The number of types of celestial objects (here, stars and galaxies).
+const Ia = 2
+
+# The number of bands (colors).
+const B = 5
+
 type CatalogEntry
     pos::Vector{Float64}
     is_star::Bool
@@ -208,14 +217,14 @@ immutable ParamIndex
     # a VariationalParams object.
 
     # Variational parameter for a_s.
-    # The probability of being a galaxy.  (0 = star, 1 = galaxy)
-    # TODO: for consistency with kappa, make this an I-dimensional vector. 
-    chi::Int64
+    # The probability of being a particular celestial object (Ia x 1 vector).
+    # (Currently 0 = star, 1 = galaxy)
+    chi::Vector{Int64}
 
     # The location of the object (2x1 vector).
     mu::Vector{Int64}
 
-    # Ix1 scalar variational parameters for r_s.  The first
+    # Ia x 1 scalar variational parameters for r_s.  The first
     # row is for stars, and the second for galaxies (I think?).
     gamma::Vector{Int64}
     zeta::Vector{Int64}
@@ -250,9 +259,9 @@ immutable UnconstrainedParamIndex
     # A data structure to index parameters within
     # an unconstrained VariationalParams object.
 
-    # Unconstrained parameter for a_s.
-    # The probability of being a galaxy.  (0 = star, 1 = galaxy)
-    chi_free::Int64
+    # Unconstrained parameter for a_s of length (Ia - 1)
+    # (the probability of being a type of celestial object).
+    chi_free::Vector{Int64}
 
     # The location of the object (2x1 vector).
     mu::Vector{Int64}
@@ -288,31 +297,22 @@ immutable UnconstrainedParamIndex
     size::Int64
 end
 
-# The number of components in the color prior.
-const D = 2
-
-# The number of types of celestial objects (here, stars and galaxies).
-const Ia = 2
-
-# The number of bands (colors).
-const B = 5
-
 function get_param_ids()
     # Build a ParamIndex object.
 
-    kappa_end = 11 + Ia * D
+    kappa_end = 12 + Ia * D
     beta_end = kappa_end + Ia * (B - 1)
     lambda_end = beta_end + Ia * (B - 1)
 
     kappa_ids = reshape([12 : kappa_end], D, I)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
+    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
+    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
 
-    ParamIndex(1,      # chi
-               [2, 3], # mu
-               [4, 5], # gamma
-               [6, 7], # zeta
-               8, 9, 10, 11, # theta, rho, phi, sigma
+    ParamIndex([1, 2], # chi
+               [3, 4], # mu
+               [5, 6], # gamma
+               [7, 8], # zeta
+               9, 10, 11, 12, # theta, rho, phi, sigma
                kappa_ids, beta_ids, lambda_ids,
                lambda_ids[end])
 end
@@ -326,11 +326,11 @@ function get_unconstrained_param_ids()
     beta_end = kappa_end + Ia * (B - 1)
     lambda_end = beta_end + Ia * (B - 1)
 
-    kappa_ids = reshape([12 : kappa_end], D, I)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
+    kappa_ids = reshape([12 : kappa_end], D, Ia)
+    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
+    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
 
-    UnconstrainedParamIndex(1,      # chi
+    UnconstrainedParamIndex([1],    # chi
                             [2, 3], # mu
                             [4, 5], # gamma
                             [6, 7], # zeta
