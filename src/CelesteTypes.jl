@@ -218,7 +218,7 @@ immutable ParamIndex
 
     # Variational parameter for a_s.
     # The probability of being a particular celestial object (Ia x 1 vector).
-    # (Currently 0 = star, 1 = galaxy)
+    # (Currently the probability of being a star or galaxy, respectively.)
     chi::Vector{Int64}
 
     # The location of the object (2x1 vector).
@@ -346,11 +346,20 @@ function unconstrain_vp!(vp::VariationalParams, vp_free::VariationalParams)
     # Convert a constrained to an unconstrained variational parameterization.
     S = length(vp)
     for s = 1:S
-        # The default is everything being the same.
-        vp_free[s][1:ids_free.size] = vp[s][1:ids.size]
+        # Variables that are unaffected by constraints:
+        vp_free[s][ids_free.mu] = vp[s][ids.mu]
+        vp_free[s][ids_free.theta] = vp[s][ids.theta]
+        vp_free[s][ids_free.rho] = vp[s][ids.rho]
+        vp_free[s][ids_free.phi] = vp[s][ids.phi]
+        vp_free[s][ids_free.sigma] = vp[s][ids.sigma]
+        vp_free[s][ids_free.kappa_ids] = vp[s][ids.kappa_ids]
+        vp_free[s][ids_free.beta_ids] = vp[s][ids.beta_ids]
+        vp_free[s][ids_free.lambda_ids] = vp[s][ids.lambda_ids]
 
-        # Simplicial constriants.
-        vp_free[s][ids_free.chi_free] = Util.inv_logit(vp[s][ids.chi])
+        # Simplicial constriants.  The original script used "chi" to only
+        # refer to the probability of being a galaxy, which is now the
+        # second component of chi.
+        vp_free[s][ids_free.chi_free[1]] = Util.inv_logit(vp[s][ids.chi[2]])
 
         # Positivity constraints
         vp_free[s][ids_free.gamma_free] = log(vp[s][ids.gamma])
@@ -363,10 +372,18 @@ function constrain_vp!(vp_free::VariationalParams, vp::VariationalParams)
     S = length(vp_free)
     for s = 1:S
         # The default is everything being the same.
-        vp[s][1:ids.size] = vp_free[s][1:ids_free.size]
+        vp[s][ids.mu] = vp_free[s][ids_free.mu]
+        vp[s][ids.theta] = vp_free[s][ids_free.theta]
+        vp[s][ids.rho] = vp_free[s][ids_free.rho]
+        vp[s][ids.phi] = vp_free[s][ids_free.phi]
+        vp[s][ids.sigma] = vp_free[s][ids_free.sigma]
+        vp[s][ids.kappa_ids] = vp_free[s][ids_free.kappa_ids]
+        vp[s][ids.beta_ids] = vp_free[s][ids_free.beta_ids]
+        vp[s][ids.lambda_ids] = vp_free[s][ids_free.lambda_ids]
 
         # Simplicial constriants.
-        vp[s][ids.chi] = Util.logit(vp_free[s][ids_free.chi_free])
+        vp[s][ids.chi[2]] = Util.logit(vp_free[s][ids_free.chi_free[2]])
+        vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
 
          # Positivity constraints
         vp[s][ids.gamma] = exp(vp_free[s][ids_free.gamma_free])
