@@ -304,9 +304,9 @@ function get_param_ids()
     beta_end = kappa_end + Ia * (B - 1)
     lambda_end = beta_end + Ia * (B - 1)
 
-    kappa_ids = reshape([12 : kappa_end], D, I)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
+    kappa_ids = reshape([12 : kappa_end], D, Ia)
+    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
+    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
 
     ParamIndex(1,      # chi
                [2, 3], # mu
@@ -326,9 +326,9 @@ function get_unconstrained_param_ids()
     beta_end = kappa_end + Ia * (B - 1)
     lambda_end = beta_end + Ia * (B - 1)
 
-    kappa_ids = reshape([12 : kappa_end], D, I)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
+    kappa_ids = reshape([12 : kappa_end], D, Ia)
+    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
+    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
 
     UnconstrainedParamIndex(1,      # chi
                             [2, 3], # mu
