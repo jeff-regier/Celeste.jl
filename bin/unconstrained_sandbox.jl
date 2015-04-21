@@ -42,7 +42,8 @@ const sample_galaxy_fluxes = [
 
 function perturb_params(mp) # for testing derivatives != 0
     for vs in mp.vp
-        vs[ids.chi] = 0.6
+        vs[ids.chi[2]] = 0.6
+        vs[ids.chi[1]] = 1.0 - vs[ids.chi[2]]
         vs[ids.mu[1]] += .8
         vs[ids.mu[2]] -= .7
         vs[ids.gamma] /= 10

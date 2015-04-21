@@ -37,7 +37,8 @@ end
 #TODO: use blob (and perhaps priors) to initialize these sensibly
 function init_source(init_pos::Vector{Float64})
     ret = Array(Float64, length(all_params))
-    ret[ids.chi] = 0.5
+    ret[ids.chi[2]] = 0.5
+    ret[ids.chi[1]] = 1.0 - ret[ids.chi[2]]
     ret[ids.mu[1]] = init_pos[1]
     ret[ids.mu[2]] = init_pos[2]
     ret[ids.gamma] = 1e3

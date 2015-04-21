@@ -1,6 +1,6 @@
 
 function verify_sample_star(vs, pos)
-    @test_approx_eq vs[ids.chi] 0.01
+    @test_approx_eq vs[ids.chi[2]] 0.01
 
     @test_approx_eq_eps vs[ids.mu[1]] pos[1] 0.1
     @test_approx_eq_eps vs[ids.mu[2]] pos[2] 0.1
@@ -15,7 +15,7 @@ function verify_sample_star(vs, pos)
 end
 
 function verify_sample_galaxy(vs, pos)
-    @test_approx_eq vs[ids.chi] 0.99
+    @test_approx_eq vs[ids.chi[2]] 0.99
 
     @test_approx_eq_eps vs[ids.mu[1]] pos[1] 0.1
     @test_approx_eq_eps vs[ids.mu[2]] pos[2] 0.1
@@ -127,25 +127,26 @@ function test_bad_chi_init()
     blob = Synthetic.gen_blob(blob0, [ce,])
 
     mp = ModelInit.cat_init([ce,])
-    mp.vp[1][ids.chi] = 0.5
+    mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
+     
     omitted_ids = [ids.chi]
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 
-    mp.vp[1][ids.chi] = 0.2
+    mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
     elbo_bad = ElboDeriv.elbo_likelihood(blob, mp)
-    @test elbo_bad.d[ids.chi, 1] > 0
+    @test elbo_bad.d[ids.chi[2], 1] > 0
 
-    omitted_ids = setdiff(all_params, [ids.chi])
+    omitted_ids = setdiff(all_params, ids.chi)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
-    @test mp.vp[1][ids.chi] >= 0.5
+    @test mp.vp[1][ids.chi[2]] >= 0.5
 
     mp2 = deepcopy(mp)
-    mp2.vp[1][ids.chi] = 0.99
+    mp2.vp[1][ids.chi] = [ 0.01, 0.99 ]
     elbo_true2 = ElboDeriv.elbo_likelihood(blob, mp2)
-    mp2.vp[1][ids.chi] = 0.01
+    mp2.vp[1][ids.chi] = [ 0.99, 0.01 ]
     elbo_bad2 = ElboDeriv.elbo_likelihood(blob, mp2)
     @test elbo_true2.v > elbo_bad2.v
-    @test elbo_bad2.d[ids.chi, 1] > 0
+    @test elbo_bad2.d[ids.chi[2], 1] > 0
 end
 
 
@@ -160,16 +161,16 @@ function test_likelihood_invariance_to_chi()
     blob = Synthetic.gen_blob(blob0, [ce,])
 
     mp = ModelInit.cat_init([ce,])
-    mp.vp[1][ids.chi] = 0.2
+    mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
     omitted_ids = [ids.chi, ids.zeta[:]]
     OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
 
     mp2 = ModelInit.cat_init([ce,])
-    mp2.vp[1][ids.chi] = 0.8
+    mp2.vp[1][ids.chi] = [ 0.2, 0.8 ]
     OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp2, omitted_ids=omitted_ids)
 
-    mp.vp[1][ids.chi] = 0.5
-    mp2.vp[1][ids.chi] = 0.5
+    mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
+    mp2.vp[1][ids.chi] = [ 0.5, 0.5 ]
     @test_approx_eq_eps(ElboDeriv.elbo_likelihood(blob, mp).v,
         ElboDeriv.elbo_likelihood(blob, mp2).v, 1)
 
@@ -195,16 +196,16 @@ function test_kl_invariance_to_chi()
     end
 
     mp = ModelInit.cat_init([ce,])
-    mp.vp[1][ids.chi] = 0.8
-    omitted_ids = [ids.chi]
+    mp.vp[1][ids.chi] = [ 0.2, 0.8 ]
+    omitted_ids = ids.chi
     OptimizeElbo.maximize_f(kl_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     mp2 = ModelInit.cat_init([ce,])
-    mp2.vp[1][ids.chi] = 0.2
+    mp2.vp[1][ids.chi] = [ 0.8, 0.2 ]
     OptimizeElbo.maximize_f(kl_wrapper, blob, mp2, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
-    mp.vp[1][ids.chi] = 0.5
-    mp2.vp[1][ids.chi] = 0.5
+    mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
+    mp2.vp[1][ids.chi] = [ 0.5, 0.5 ]
     @test_approx_eq_eps kl_wrapper(blob, mp).v kl_wrapper(blob, mp2).v 1e-1
 
     for i in 2:length(all_params) #skip chi
@@ -223,19 +224,19 @@ function test_elbo_invariance_to_chi()
     blob = Synthetic.gen_blob(blob0, [ce,])
 
     mp = ModelInit.cat_init([ce,])
-    mp.vp[1][ids.chi] = 0.2
+    mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
     omitted_ids = [ids.chi, ids.zeta[:], ids.lambda[:], ids.theta]
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 
     mp2 = ModelInit.cat_init([ce,])
-    mp2.vp[1][ids.chi] = 0.8
+    mp2.vp[1][ids.chi] = [ 0.2, 0.8 ]
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp2, omitted_ids=omitted_ids)
 
-    mp.vp[1][ids.chi] = 0.5
-    mp2.vp[1][ids.chi] = 0.5
+    mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
+    mp2.vp[1][ids.chi] = [ 0.5, 0.5 ]
     @test_approx_eq_eps ElboDeriv.elbo(blob, mp).v ElboDeriv.elbo(blob, mp2).v 1
 
-    for i in setdiff(all_params, [ids.chi]) #skip chi
+    for i in setdiff(all_params, ids.chi) #skip chi
         @test_approx_eq_eps mp.vp[1][i] / mp2.vp[1][i] 1. 0.1
     end
 end
@@ -309,11 +310,11 @@ function test_bad_galaxy_init()
 
     mp_bad_init = ModelInit.cat_init(cat_primary)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bad_init)
-    @test mp_bad_init.vp[1][ids.chi] > .5
+    @test mp_bad_init.vp[1][ids.chi[2]] > .5
 
     mp_good_init = ModelInit.cat_init(cat_coadd)
     OptimizeElbo.maximize_elbo(blob, mp_good_init)
-    @test mp_good_init.vp[1][ids.chi] > .5
+    @test mp_good_init.vp[1][ids.chi[2]] > .5
 
     @test_approx_eq_eps mp_good_init.vp[1][ids.sigma] mp_bad_init.vp[1][ids.sigma] 0.2
     @test_approx_eq_eps mp_good_init.vp[1][ids.rho] mp_bad_init.vp[1][ids.rho] 0.2
@@ -339,7 +340,7 @@ function test_color()
     OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     @test_approx_eq_eps mp.vp[1][ids.kappa[2, 1]] 1 1e-2
-    @test_approx_eq mp.vp[1][ids.chi] 0.01
+    @test_approx_eq mp.vp[1][ids.chi[2]] 0.01
 end
 
 

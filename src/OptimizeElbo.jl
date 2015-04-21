@@ -13,7 +13,6 @@ const rescaling = ones(length(all_params))
 
 # Rescale some parameters to have similar dimensions to everything else.
 [rescaling[id] *= 1e-3 for id in ids.gamma]
-#rescaling[ids.chi] *= 1e1
 
 # Rescaling for the unconstrained parameterization.
 const rescaling_free = ones(length(all_params_free))
