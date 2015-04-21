@@ -111,9 +111,9 @@ function gen_three_body_dataset(; perturb=true)
 end
 
 
-#blob, mp_init, body = gen_sample_star_dataset();
+blob, mp_init, body = gen_sample_star_dataset();
 #blob, mp_init, body = gen_sample_galaxy_dataset();
-blob, mp_init, body = gen_three_body_dataset();
+#blob, mp_init, body = gen_three_body_dataset();
 
 mp_original = deepcopy(mp_init)
 mp_free = deepcopy(mp_init)
