@@ -49,10 +49,10 @@ immutable SourceBrightness
     #   Each matrix has one row for each color and a column for
     #   star / galaxy.  Row 3 is the gamma distribute baseline brightness,
     #   and all other rows are lognormal offsets.
-    #   E_l_a: A 5 x 2 matrix of expectations and derivatives of
+    #   E_l_a: A B x Ia matrix of expectations and derivatives of
     #     color terms.  The rows are bands, and the columns
     #     are star / galaxy.
-    #   E_ll_a: A 5 x 2 matrix of expectations and derivatives of
+    #   E_ll_a: A B x Ia matrix of expectations and derivatives of
     #     squared color terms.  The rows are bands, and the columns
     #     are star / galaxy.
 
