@@ -17,7 +17,8 @@ export SensitiveFloat
 export zero_sensitive_float, const_sensitive_param, clear!
 
 export ParamIndex, ids, ids_free, all_params, all_params_free
-export star_pos_params, galaxy_pos_params, D
+export star_pos_params, galaxy_pos_params
+export D, B, Ia
 export unconstrain_vp, constrain_vp
 
 using Util
@@ -290,24 +291,22 @@ end
 # The number of components in the color prior.
 const D = 2
 
-# TODO: also make B and I global constants?
+# The number of types of celestial objects (here, stars and galaxies).
+const Ia = 2
+
+# The number of bands (colors).
+const B = 5
 
 function get_param_ids()
     # Build a ParamIndex object.
 
-    # The number of types of celestial objects (here, stars and galaxies).
-    I = 2
+    kappa_end = 11 + Ia * D
+    beta_end = kappa_end + Ia * (B - 1)
+    lambda_end = beta_end + Ia * (B - 1)
 
-    # The number of bands (colors).
-    B = 5
-
-    kappa_end = 11 + I * D
-    beta_end = kappa_end + I * (B - 1)
-    lambda_end = beta_end + I * (B - 1)
-
-    kappa_ids = reshape([12 : kappa_end], D, I)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
+    kappa_ids = reshape([12 : kappa_end], D, Ia)
+    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
+    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
 
     ParamIndex(1,      # chi
                [2, 3], # mu
@@ -323,20 +322,13 @@ function get_unconstrained_param_ids()
     # of the unconstrained parameterizatoin may differ from the
     # constrained one (e.g. with simplicial constraints).
 
-    # TODO: these are redundant, and should be global constants.
-    # The number of types of celestial objects (here, stars and galaxies).
-    I = 2
+    kappa_end = 11 + Ia * D
+    beta_end = kappa_end + Ia * (B - 1)
+    lambda_end = beta_end + Ia * (B - 1)
 
-    # The number of bands (colors).
-    B = 5
-
-    kappa_end = 11 + I * D
-    beta_end = kappa_end + I * (B - 1)
-    lambda_end = beta_end + I * (B - 1)
-
-    kappa_ids = reshape([12 : kappa_end], D, I)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
+    kappa_ids = reshape([12 : kappa_end], D, Ia)
+    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
+    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
 
     UnconstrainedParamIndex(1,      # chi
                             [2, 3], # mu

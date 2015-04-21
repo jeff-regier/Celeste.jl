@@ -68,10 +68,10 @@ immutable SourceBrightness
 
         # E_l_a has a row for each of the five colors and columns
         # for star / galaxy.
-        E_l_a = Array(SensitiveFloat, 5, 2)
+        E_l_a = Array(SensitiveFloat, B, Ia)
 
-        for i = 1:2
-            for b = 1:5
+        for i = 1:Ia
+            for b = 1:B
                 E_l_a[b, i] = zero_sensitive_float([-1], all_params)
             end
 
@@ -115,9 +115,9 @@ immutable SourceBrightness
             E_l_a[1, i].d[ids.lambda[1, i]] = E_l_a[1, i].v * .5
         end
 
-        E_ll_a = Array(SensitiveFloat, 5, 2)
-        for i = 1:2
-            for b = 1:5
+        E_ll_a = Array(SensitiveFloat, B, Ia)
+        for i = 1:Ia
+            for b = 1:B
                 E_ll_a[b, i] = zero_sensitive_float([-1], all_params)
             end
 
@@ -265,7 +265,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
         end
 
         # Convolve the galaxy representations with the PSF.
-        for i = 1:2
+        for i = 1:Ia
             # TODO: Jeff, could you say what theta_dir is?
             theta_dir = (i == 1) ? 1. : -1.
             theta_i = (i == 1) ? vs[ids.theta] : 1. - vs[ids.theta]
@@ -441,7 +441,7 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
     var_G.d[ids.chi, child_s] += llff[2] - llff[1]
 
     # Derivatives with respect to the normal component parameters.
-    for i in 1:2 # Stars and galaxies
+    for i in 1:Ia # Stars and galaxies
         # Loop over parameters for each fsm component.
         for p1 in 1:length(fsm[i].param_index)
             p0 = fsm[i].param_index[p1]
@@ -454,7 +454,7 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
     end
 
     # Derivatives with respect to the brightness parameters.
-    for i in 1:2 # Stars and galaxies
+    for i in 1:Ia # Stars and galaxies
         for p0 in vcat(ids.gamma, ids.zeta, ids.beta[:], ids.lambda[:])
             chi_f_Eld = chi[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
             E_G.d[p0, child_s] += chi_f_Eld
@@ -675,6 +675,7 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
     # be weighted by chi (the probability of this celestial object
     # type) and kappa (the probability of this color prior component).
 
+    # TODO: unconstrain chi
     # TODO: do not hardcode the number of levels of i.
     chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
     half_kappa = .5 * vs[ids.kappa[d, i]]
@@ -719,6 +720,7 @@ function subtract_kl_k!(i::Int64, s::Int64,
 
     vs = mp.vp[s]
 
+    # TODO: unconstrain chi
     # TODO: do not hardcode the number of levels of i.
     chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
     kappa_i = vs[ids.kappa[:, i]]
@@ -761,6 +763,7 @@ function subtract_kl_r!(i::Int64, s::Int64,
     kl_v += mp.pp.Upsilon[i] * (log(mp.pp.Psi[i]) - log(zeta_si))
     kl_v += gamma_si * zeta_Psi_ratio
 
+    # TODO: unconstrain chi
     # TODO: do not hardcode the number of levels of i.
     chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
     accum.v -= chi_si * kl_v
@@ -806,7 +809,7 @@ function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
         subtract_kl_a!(s, mp, accum)
 
         # TODO: Do not hard-code constants.
-        for i in 1:2
+        for i in 1:Ia
             subtract_kl_r!(i, s, mp, accum)
             subtract_kl_k!(i, s, mp, accum)
             for d in 1:D
