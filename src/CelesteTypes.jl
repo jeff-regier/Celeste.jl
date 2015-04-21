@@ -304,7 +304,7 @@ function get_param_ids()
     beta_end = kappa_end + Ia * (B - 1)
     lambda_end = beta_end + Ia * (B - 1)
 
-    kappa_ids = reshape([12 : kappa_end], D, Ia)
+    kappa_ids = reshape([13 : kappa_end], D, Ia)
     beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
     lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
 
@@ -352,9 +352,9 @@ function unconstrain_vp!(vp::VariationalParams, vp_free::VariationalParams)
         vp_free[s][ids_free.rho] = vp[s][ids.rho]
         vp_free[s][ids_free.phi] = vp[s][ids.phi]
         vp_free[s][ids_free.sigma] = vp[s][ids.sigma]
-        vp_free[s][ids_free.kappa_ids] = vp[s][ids.kappa_ids]
-        vp_free[s][ids_free.beta_ids] = vp[s][ids.beta_ids]
-        vp_free[s][ids_free.lambda_ids] = vp[s][ids.lambda_ids]
+        vp_free[s][ids_free.kappa] = vp[s][ids.kappa]
+        vp_free[s][ids_free.beta] = vp[s][ids.beta]
+        vp_free[s][ids_free.lambda] = vp[s][ids.lambda]
 
         # Simplicial constriants.  The original script used "chi" to only
         # refer to the probability of being a galaxy, which is now the
@@ -377,9 +377,9 @@ function constrain_vp!(vp_free::VariationalParams, vp::VariationalParams)
         vp[s][ids.rho] = vp_free[s][ids_free.rho]
         vp[s][ids.phi] = vp_free[s][ids_free.phi]
         vp[s][ids.sigma] = vp_free[s][ids_free.sigma]
-        vp[s][ids.kappa_ids] = vp_free[s][ids_free.kappa_ids]
-        vp[s][ids.beta_ids] = vp_free[s][ids_free.beta_ids]
-        vp[s][ids.lambda_ids] = vp_free[s][ids_free.lambda_ids]
+        vp[s][ids.kappa] = vp_free[s][ids_free.kappa]
+        vp[s][ids.beta] = vp_free[s][ids_free.beta]
+        vp[s][ids.lambda] = vp_free[s][ids_free.lambda]
 
         # Simplicial constriants.
         vp[s][ids.chi[2]] = Util.logit(vp_free[s][ids_free.chi_free[2]])
