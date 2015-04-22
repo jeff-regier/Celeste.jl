@@ -55,6 +55,8 @@ type DataTransform
 	end
 end
 
+
+# Functions for an identity transform.
 function unchanged_vp!(vp::VariationalParams, new_vp::VariationalParams)
     # Leave the vp unchanged.
     S = length(vp)
@@ -69,38 +71,17 @@ function unchanged_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 end
 
 
-function rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
-    # Convert an unconstrained to an constrained variational parameterization
-    # where we don't use exp or logit.
+# Functions for a "rectangular transform".  This matches the original Celeste
+# script, contraining chi to sum to one and scaling gamma.
 
-    S = length(vp_free)
-    for s = 1:S
-        # The default is everything being the same.
+const rect_rescaling = ones(length(all_params))
 
-        # Maybe something like this instead:
-        #
-        # for id_symbol in names(ids)
-        #     if id_symbol != convert(Symbol, chi)
-        #         vp[s][ids.(id_symbol)] = vp_free[s][ids_free.(id_symbol)]
-        # end
+# Rescale some parameters to have similar dimensions to everything else.
+[rect_rescaling[id] *= 1e-3 for id in ids.gamma]
 
-        vp[s][ids.mu] = vp_free[s][ids_free.mu]
-        vp[s][ids.theta] = vp_free[s][ids_free.theta]
-        vp[s][ids.rho] = vp_free[s][ids_free.rho]
-        vp[s][ids.phi] = vp_free[s][ids_free.phi]
-        vp[s][ids.sigma] = vp_free[s][ids_free.sigma]
-        vp[s][ids.kappa] = vp_free[s][ids_free.kappa]
-        vp[s][ids.beta] = vp_free[s][ids_free.beta]
-        vp[s][ids.lambda] = vp_free[s][ids_free.lambda]
-        vp[s][ids.gamma] = vp_free[s][ids_free.gamma]
-        vp[s][ids.zeta] = vp_free[s][ids_free.zeta]
-
-        # Simplicial constriants.
-        vp[s][ids.chi[2]] = vp_free[s][ids_free.chi[1]]
-        vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
-    end
-end
-
+rect_unchanged_ids = [ "mu", "gamma", "zeta",
+                       "theta", "rho", "phi", "sigma",
+                       "kappa", "beta", "lambda"]
 
 function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
     # Convert a constrained to an unconstrained variational parameterization
@@ -108,17 +89,12 @@ function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
 
     S = length(vp)
     for s = 1:S
-        # Variables that are unaffected by constraints:
-        vp_free[s][ids_free.mu] = vp[s][ids.mu]
-        vp_free[s][ids_free.theta] = vp[s][ids.theta]
-        vp_free[s][ids_free.rho] = vp[s][ids.rho]
-        vp_free[s][ids_free.phi] = vp[s][ids.phi]
-        vp_free[s][ids_free.sigma] = vp[s][ids.sigma]
-        vp_free[s][ids_free.kappa] = vp[s][ids.kappa]
-        vp_free[s][ids_free.beta] = vp[s][ids.beta]
-        vp_free[s][ids_free.lambda] = vp[s][ids.lambda]
-        vp_free[s][ids_free.gamma] = vp[s][ids.gamma]
-        vp_free[s][ids_free.zeta] = vp[s][ids.zeta]
+        # Variables that are unaffected by constraints (except for scaling):
+        for id_string in rect_unchanged_ids
+            id_symbol = convert(Symbol, id_string)
+            vp_free[s][ids_free.(id_symbol)] =
+                (vp[s][ids.(id_symbol)] .* rect_rescaling[ids.(id_symbol)])
+        end
 
         # Simplicial constriants.  The original script used "chi" to only
         # refer to the probability of being a galaxy, which is now the
@@ -127,58 +103,25 @@ function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
     end
 end
 
+function rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+    # Convert an unconstrained to an constrained variational parameterization
+    # where we don't use exp or logit.
 
-function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
-    # Convert a constrained to an unconstrained variational parameterization
-    # on all of the real line.
-    S = length(vp)
-    for s = 1:S
-        # Variables that are unaffected by constraints:
-        vp_free[s][ids_free.mu] = vp[s][ids.mu]
-        vp_free[s][ids_free.theta] = vp[s][ids.theta]
-        vp_free[s][ids_free.rho] = vp[s][ids.rho]
-        vp_free[s][ids_free.phi] = vp[s][ids.phi]
-        vp_free[s][ids_free.sigma] = vp[s][ids.sigma]
-        vp_free[s][ids_free.kappa] = vp[s][ids.kappa]
-        vp_free[s][ids_free.beta] = vp[s][ids.beta]
-        vp_free[s][ids_free.lambda] = vp[s][ids.lambda]
-
-        # Simplicial constriants.  The original script used "chi" to only
-        # refer to the probability of being a galaxy, which is now the
-        # second component of chi.
-        vp_free[s][ids_free.chi[1]] = Util.inv_logit(vp[s][ids.chi[2]])
-
-        # Positivity constraints
-        vp_free[s][ids_free.gamma] = log(vp[s][ids.gamma])
-        vp_free[s][ids_free.zeta] = log(vp[s][ids.zeta]) 
-    end
-end
-
-function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
-    # Convert an unconstrained to an constrained variational parameterization.
     S = length(vp_free)
     for s = 1:S
-        # The default is everything being the same.
-        vp[s][ids.mu] = vp_free[s][ids_free.mu]
-        vp[s][ids.theta] = vp_free[s][ids_free.theta]
-        vp[s][ids.rho] = vp_free[s][ids_free.rho]
-        vp[s][ids.phi] = vp_free[s][ids_free.phi]
-        vp[s][ids.sigma] = vp_free[s][ids_free.sigma]
-        vp[s][ids.kappa] = vp_free[s][ids_free.kappa]
-        vp[s][ids.beta] = vp_free[s][ids_free.beta]
-        vp[s][ids.lambda] = vp_free[s][ids_free.lambda]
+        # For unchanged ids, simply scale them.
+        for id_string in rect_unchanged_ids
+            id_symbol = convert(Symbol, id_string)
+            vp[s][ids.(id_symbol)] =
+                (vp_free[s][ids_free.(id_symbol)] ./ rect_rescaling[ids.(id_symbol)])
+        end
 
         # Simplicial constriants.
-        vp[s][ids.chi[2]] = Util.logit(vp_free[s][ids_free.chi[1]])
+        vp[s][ids.chi[2]] = vp_free[s][ids_free.chi[1]]
         vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
-
-         # Positivity constraints
-        vp[s][ids.gamma] = exp(vp_free[s][ids_free.gamma])
-        vp[s][ids.zeta] = exp(vp_free[s][ids_free.zeta])
     end
 end
 
-# Conversion functions for sensitive floats.
 function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # Given a sensitive float with derivatives with respect to all the
     # constrained parameters, calculate derivatives with respect to
@@ -198,20 +141,17 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
      sf_free.param_index = all_params_free
 
     for s in 1:mp.S
-        # Unless specifically transformed, the derivatives are unchanged.
-        sf_free.d[ids_free.mu, s] = sf.d[ids.mu, s]
-        sf_free.d[ids_free.theta, s] = sf.d[ids.theta, s]
-        sf_free.d[ids_free.rho, s] = sf.d[ids.rho, s]
-        sf_free.d[ids_free.phi, s] = sf.d[ids.phi, s]
-        sf_free.d[ids_free.sigma, s] = sf.d[ids.sigma, s]
-        sf_free.d[reduce(vcat, ids_free.kappa), s] =
-            sf.d[reduce(vcat, ids.kappa), s]
-        sf_free.d[reduce(vcat, ids_free.beta), s] =
-            sf.d[reduce(vcat, ids.beta), s]
-        sf_free.d[reduce(vcat, ids_free.lambda), s] =
-            sf.d[reduce(vcat, ids.lambda), s]
-        sf_free.d[ids_free.gamma, s] = sf.d[ids.gamma, s]
-        sf_free.d[ids_free.zeta, s] = sf.d[ids.zeta, s]
+        # Variables that are unaffected by constraints (except for scaling):
+        for id_string in rect_unchanged_ids
+            id_symbol = convert(Symbol, id_string)
+
+            # Flatten the indices for matrix indexing
+            id_free_indices = reduce(vcat, ids_free.(id_symbol))
+            id_indices = reduce(vcat, ids.(id_symbol))
+
+            sf_free.d[id_free_indices, s] =
+                (sf.d[id_indices, s] ./ rect_rescaling[id_indices])
+        end
 
         # Simplicial constriants.
         sf_free.d[ids_free.chi[1], s] = sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]
@@ -219,6 +159,55 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 
     sf_free
 end
+
+
+# Functions for a "free transform".  Eventually the idea is that this will
+# have every parameter completely unconstrained.
+free_unchanged_ids = [ "mu", "theta", "rho", "phi", "sigma",
+                       "kappa", "beta", "lambda"]
+
+function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
+    # Convert a constrained to an unconstrained variational parameterization
+    # on all of the real line.
+    S = length(vp)
+    for s = 1:S
+        # Variables that are unaffected by constraints:
+        for id_string in free_unchanged_ids
+            id_symbol = convert(Symbol, id_string)
+            vp_free[s][ids_free.(id_symbol)] = vp[s][ids.(id_symbol)]
+        end
+
+        # Simplicial constriants.  The original script used "chi" to only
+        # refer to the probability of being a galaxy, which is now the
+        # second component of chi.
+        vp_free[s][ids_free.chi[1]] = Util.inv_logit(vp[s][ids.chi[2]])
+
+        # Positivity constraints
+        vp_free[s][ids_free.gamma] = log(vp[s][ids.gamma])
+        vp_free[s][ids_free.zeta] = log(vp[s][ids.zeta]) 
+    end
+end
+
+function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
+    # Convert an unconstrained to an constrained variational parameterization.
+    S = length(vp_free)
+    for s = 1:S
+                # Variables that are unaffected by constraints:
+        for id_string in free_unchanged_ids
+            id_symbol = convert(Symbol, id_string)
+            vp[s][ids.(id_symbol)] = vp_free[s][ids_free.(id_symbol)]
+        end
+
+        # Simplicial constriants.
+        vp[s][ids.chi[2]] = Util.logit(vp_free[s][ids_free.chi[1]])
+        vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
+
+         # Positivity constraints
+        vp[s][ids.gamma] = exp(vp_free[s][ids_free.gamma])
+        vp[s][ids.zeta] = exp(vp_free[s][ids_free.zeta])
+    end
+end
+
 
 function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # Given a sensitive float with derivatives with respect to all the
@@ -239,18 +228,16 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     sf_free.param_index = all_params_free
 
     for s in 1:mp.S
-        # Unless specifically transformed, the derivatives are unchanged.
-        sf_free.d[ids_free.mu, s] = sf.d[ids.mu, s]
-        sf_free.d[ids_free.theta, s] = sf.d[ids.theta, s]
-        sf_free.d[ids_free.rho, s] = sf.d[ids.rho, s]
-        sf_free.d[ids_free.phi, s] = sf.d[ids.phi, s]
-        sf_free.d[ids_free.sigma, s] = sf.d[ids.sigma, s]
-        sf_free.d[reduce(vcat, ids_free.kappa), s] =
-            sf.d[reduce(vcat, ids.kappa), s]
-        sf_free.d[reduce(vcat, ids_free.beta), s] =
-            sf.d[reduce(vcat, ids.beta), s]
-        sf_free.d[reduce(vcat, ids_free.lambda), s] =
-            sf.d[reduce(vcat, ids.lambda), s]
+        # Variables that are unaffected by constraints:
+        for id_string in rect_unchanged_ids
+            id_symbol = convert(Symbol, id_string)
+
+            # Flatten the indices for matrix indexing
+            id_free_indices = reduce(vcat, ids_free.(id_symbol))
+            id_indices = reduce(vcat, ids.(id_symbol))
+
+            sf_free.d[id_free_indices, s] = sf.d[id_indices, s]
+        end
 
         # TODO: write in general form.  Note that the old "chi" is now chi[2].
         # Simplicial constriants.

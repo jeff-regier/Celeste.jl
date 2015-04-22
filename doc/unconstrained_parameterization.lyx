@@ -126,5 +126,18 @@ Positive numbers can be parameterized with
 
 \end_layout
 
+\begin_layout Standard
+If you scale by a constant, then you divide by the constant for the derivative:
+\begin_inset Formula 
+\begin{eqnarray*}
+x & = & \alpha y\\
+\frac{df}{dx} & = & \frac{df}{dy}\frac{dy}{dx}=\frac{1}{\alpha}\frac{df}{dy}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
 \end_body
 \end_document
