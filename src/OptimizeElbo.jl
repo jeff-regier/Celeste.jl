@@ -5,9 +5,9 @@ module OptimizeElbo
 
 using NLopt
 using CelesteTypes
+using Constrain
 
 import ElboDeriv
-
 
 const rescaling = ones(length(all_params))
 

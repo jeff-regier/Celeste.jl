@@ -11,7 +11,9 @@ using Distributions
 import Synthetic
 import SampleData
 
+export empty_model_params
 export dat_dir, sample_ce, perturb_params
+export sample_star_fluxes, sample_galaxy_fluxes
 export gen_sample_star_dataset, gen_sample_galaxy_dataset, gen_three_body_dataset
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
@@ -21,6 +23,13 @@ const sample_star_fluxes = [
 const sample_galaxy_fluxes = [
     1.377666E+01, 5.635334E+01, 1.258656E+02, 
     1.884264E+02, 2.351820E+02] * 100  # 1x wasn't bright enough
+
+
+function empty_model_params(S::Int)
+    vp = [ ModelInit.init_source([ 0., 0. ]) for s in 1:S ]
+    patches = [ SkyPatch([ 0., 0., ], 1.) for s in 1:S ]
+    ModelParams(vp, ModelInit.sample_prior(), patches, 1.)
+end
 
 
 function sample_ce(pos, is_star::Bool)
