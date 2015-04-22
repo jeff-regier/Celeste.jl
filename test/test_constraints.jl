@@ -9,30 +9,27 @@ using Constrain
 
 import ModelInit
 
-function test_parameter_conversion()
+function test_parameter_conversion(transform::DataTransform)
 	blob, mp, body = gen_sample_star_dataset()
 
 	# Check that the constrain and unconstrain operations undo each other.
-	vp2 = deepcopy(mp.vp)
-	vp_free = unconstrain_vp(vp2)
-	constrain_vp!(vp_free, vp2)
-	for (id in names(ids)), s in 1:mp.S
-		@test_approx_eq mp.vp[s][ids.(id)] vp2[s][ids.(id)]
-	end
+	vp_free = transform.from_vp(mp.vp)
+	vp2 = transform.to_vp(vp_free)
 
-	# Check that the constrain and unconstrain operations undo each other.
-	vp2 = deepcopy(mp.vp)
-	vp_free = rect_unconstrain_vp(vp2)
-	rect_constrain_vp!(vp_free, vp2)
 	for (id in names(ids)), s in 1:mp.S
 		@test_approx_eq mp.vp[s][ids.(id)] vp2[s][ids.(id)]
 	end
 end
 
+test_parameter_conversion(rect_transform)
+test_parameter_conversion(free_transform)
 
 
 
 function test_sensitive_float_conversion()
+	# This is from before the DataTransform object.
+
+	# The derivatives before constraining are considered partial derivatives.
 	function chi_function(vp::VariationalParams)
 		const p_true = 0.7
 
@@ -67,15 +64,14 @@ function test_sensitive_float_conversion()
 	perturb_rect_val = rect_unconstrain_sensitive_float(perturb_val, mp)
 	perturb_free_val = unconstrain_sensitive_float(perturb_val, mp)
 
-	rect_delta = (vp_perturb_rect[1][ids_free.chi_free] - vp_rect[1][ids_free.chi_free])[1]
-	free_delta = (vp_perturb_free[1][ids_free.chi_free] - vp_free[1][ids_free.chi_free])[1]
+	rect_delta = (vp_perturb_rect[1][ids_free.chi] - vp_rect[1][ids_free.chi])[1]
+	free_delta = (vp_perturb_free[1][ids_free.chi] - vp_free[1][ids_free.chi])[1]
 
 	rect_numeric_deriv = (perturb_val.v - val.v) / rect_delta
 	free_numeric_deriv = (perturb_val.v - val.v) / free_delta
 
-	@test_approx_eq_eps rect_numeric_deriv  perturb_rect_val.d[ids_free.chi_free][1] epsilon
-	@test_approx_eq_eps free_numeric_deriv  perturb_free_val.d[ids_free.chi_free][1] epsilon
+	@test_approx_eq_eps rect_numeric_deriv  perturb_rect_val.d[ids_free.chi][1] epsilon
+	@test_approx_eq_eps free_numeric_deriv  perturb_free_val.d[ids_free.chi][1] epsilon
 end
 
 test_parameter_conversion()
-test_sensitive_float_conversion()

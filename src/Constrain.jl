@@ -7,9 +7,44 @@ using CelesteTypes
 
 import Util
 
-export unconstrain_vp, rect_unconstrain_vp, constrain_vp, rect_constrain_vp
-export unconstrain_vp!, rect_unconstrain_vp!, constrain_vp!, rect_constrain_vp!
-export rect_unconstrain_sensitive_float, unconstrain_sensitive_float
+export rect_transform, free_transform, DataTransform
+
+#export unconstrain_vp, rect_unconstrain_vp, constrain_vp, rect_constrain_vp
+#export unconstrain_vp!, rect_unconstrain_vp!, constrain_vp!, rect_constrain_vp!
+#export rect_unconstrain_sensitive_float, unconstrain_sensitive_float
+
+type DataTransform
+	# Functiones to move between a ModelParameters object and a
+	# transformation of the data for optimization.
+
+	to_vp::Function
+	from_vp::Function
+	to_vp!::Function
+	from_vp!::Function
+	transform_sensitive_float::Function
+	unchanged_ids::Array{ASCIIString}
+
+	DataTransform(to_vp!, from_vp!, transform_sensitive_float) = begin
+
+        from_vp = function(vp::VariationalParams)
+            S = length(vp)
+            vp_free = [ zeros(ids_free.size) for s = 1:S]
+            from_vp!(vp, vp_free)
+            vp_free
+        end
+
+        to_vp = function(vp_free::FreeVariationalParams)
+            S = length(vp_free)
+            vp = [ zeros(ids.size) for s = 1:S]
+            to_vp!(vp_free, vp)
+            vp
+        end
+
+		new(to_vp, from_vp, to_vp!, from_vp!,
+            transform_sensitive_float)
+	end
+end
+
 
 function rect_unconstrain_vp!(vp::VariationalParams, vp_free::RectVariationalParams)
     # Convert a constrained to an unconstrained variational parameterization
@@ -26,13 +61,13 @@ function rect_unconstrain_vp!(vp::VariationalParams, vp_free::RectVariationalPar
         vp_free[s][ids_free.kappa] = vp[s][ids.kappa]
         vp_free[s][ids_free.beta] = vp[s][ids.beta]
         vp_free[s][ids_free.lambda] = vp[s][ids.lambda]
-        vp_free[s][ids_free.gamma_free] = vp[s][ids.gamma]
-        vp_free[s][ids_free.zeta_free] = vp[s][ids.zeta]
+        vp_free[s][ids_free.gamma] = vp[s][ids.gamma]
+        vp_free[s][ids_free.zeta] = vp[s][ids.zeta]
 
         # Simplicial constriants.  The original script used "chi" to only
         # refer to the probability of being a galaxy, which is now the
         # second component of chi.
-        vp_free[s][ids_free.chi_free[1]] = vp[s][ids.chi[2]]
+        vp_free[s][ids_free.chi[1]] = vp[s][ids.chi[2]]
     end
 end
 
@@ -59,17 +94,17 @@ function rect_constrain_vp!(vp_free::RectVariationalParams, vp::VariationalParam
         vp[s][ids.kappa] = vp_free[s][ids_free.kappa]
         vp[s][ids.beta] = vp_free[s][ids_free.beta]
         vp[s][ids.lambda] = vp_free[s][ids_free.lambda]
-        vp[s][ids.gamma] = vp_free[s][ids_free.gamma_free]
-        vp[s][ids.zeta] = vp_free[s][ids_free.zeta_free]
+        vp[s][ids.gamma] = vp_free[s][ids_free.gamma]
+        vp[s][ids.zeta] = vp_free[s][ids_free.zeta]
 
         # Simplicial constriants.
-        vp[s][ids.chi[2]] = vp_free[s][ids_free.chi_free[1]]
+        vp[s][ids.chi[2]] = vp_free[s][ids_free.chi[1]]
         vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
     end
 end
 
 
-function unconstrain_vp!(vp::VariationalParams, vp_free::FreeVariationalParams)
+function free_unconstrain_vp!(vp::VariationalParams, vp_free::FreeVariationalParams)
     # Convert a constrained to an unconstrained variational parameterization
     # on all of the real line.
     S = length(vp)
@@ -87,15 +122,15 @@ function unconstrain_vp!(vp::VariationalParams, vp_free::FreeVariationalParams)
         # Simplicial constriants.  The original script used "chi" to only
         # refer to the probability of being a galaxy, which is now the
         # second component of chi.
-        vp_free[s][ids_free.chi_free[1]] = Util.inv_logit(vp[s][ids.chi[2]])
+        vp_free[s][ids_free.chi[1]] = Util.inv_logit(vp[s][ids.chi[2]])
 
         # Positivity constraints
-        vp_free[s][ids_free.gamma_free] = log(vp[s][ids.gamma])
-        vp_free[s][ids_free.zeta_free] = log(vp[s][ids.zeta]) 
+        vp_free[s][ids_free.gamma] = log(vp[s][ids.gamma])
+        vp_free[s][ids_free.zeta] = log(vp[s][ids.zeta]) 
     end
 end
 
-function constrain_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
+function free_constrain_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
     # Convert an unconstrained to an constrained variational parameterization.
     S = length(vp_free)
     for s = 1:S
@@ -110,46 +145,46 @@ function constrain_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
         vp[s][ids.lambda] = vp_free[s][ids_free.lambda]
 
         # Simplicial constriants.
-        vp[s][ids.chi[2]] = Util.logit(vp_free[s][ids_free.chi_free[1]])
+        vp[s][ids.chi[2]] = Util.logit(vp_free[s][ids_free.chi[1]])
         vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
 
          # Positivity constraints
-        vp[s][ids.gamma] = exp(vp_free[s][ids_free.gamma_free])
-        vp[s][ids.zeta] = exp(vp_free[s][ids_free.zeta_free])
+        vp[s][ids.gamma] = exp(vp_free[s][ids_free.gamma])
+        vp[s][ids.zeta] = exp(vp_free[s][ids_free.zeta])
     end
 end
 
-function unconstrain_vp(vp::VariationalParams)
-    # Convert a constrained to an unconstrained variational parameterization.
-    S = length(vp)
-    vp_free = [ zeros(ids_free.size) for s = 1:S]
-    unconstrain_vp!(vp, vp_free)
-    vp_free
-end
+# function unconstrain_vp(vp::VariationalParams)
+#     # Convert a constrained to an unconstrained variational parameterization.
+#     S = length(vp)
+#     vp_free = [ zeros(ids_free.size) for s = 1:S]
+#     unconstrain_vp!(vp, vp_free)
+#     vp_free
+# end
 
-function constrain_vp(vp_free::FreeVariationalParams)
-    # Convert an unconstrained to an constrained variational parameterization.
-    S = length(vp_free)
-    vp = [ zeros(ids.size) for s = 1:S]
-    constrain_vp!(vp_free, vp)
-    vp
-end
+# function constrain_vp(vp_free::FreeVariationalParams)
+#     # Convert an unconstrained to an constrained variational parameterization.
+#     S = length(vp_free)
+#     vp = [ zeros(ids.size) for s = 1:S]
+#     constrain_vp!(vp_free, vp)
+#     vp
+# end
 
-function rect_unconstrain_vp(vp::VariationalParams)
-    # Convert a constrained to an unconstrained variational parameterization.
-    S = length(vp)
-    vp_free = [ zeros(ids_free.size) for s = 1:S]
-    rect_unconstrain_vp!(vp, vp_free)
-    vp_free
-end
+# function rect_unconstrain_vp(vp::VariationalParams)
+#     # Convert a constrained to an unconstrained variational parameterization.
+#     S = length(vp)
+#     vp_free = [ zeros(ids_free.size) for s = 1:S]
+#     rect_unconstrain_vp!(vp, vp_free)
+#     vp_free
+# end
 
-function rect_constrain_vp(vp_free::RectVariationalParams)
-    # Convert an unconstrained to an constrained variational parameterization.
-    S = length(vp_free)
-    vp = [ zeros(ids.size) for s = 1:S]
-    rect_constrain_vp!(vp_free, vp)
-    vp
-end
+# function rect_constrain_vp(vp_free::RectVariationalParams)
+#     # Convert an unconstrained to an constrained variational parameterization.
+#     S = length(vp_free)
+#     vp = [ zeros(ids.size) for s = 1:S]
+#     rect_constrain_vp!(vp_free, vp)
+#     vp
+# end
 
 
 # Conversion functions for sensitive floats.
@@ -180,17 +215,17 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
             sf.d[reduce(vcat, ids.beta), s]
         sf_free.d[reduce(vcat, ids_free.lambda), s] =
             sf.d[reduce(vcat, ids.lambda), s]
-        sf_free.d[ids_free.gamma_free, s] = sf.d[ids.gamma, s]
-        sf_free.d[ids_free.zeta_free, s] = sf.d[ids.zeta, s]
+        sf_free.d[ids_free.gamma, s] = sf.d[ids.gamma, s]
+        sf_free.d[ids_free.zeta, s] = sf.d[ids.zeta, s]
 
         # Simplicial constriants.
-        sf_free.d[ids_free.chi_free[1], s] = sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]
+        sf_free.d[ids_free.chi[1], s] = sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]
     end
 
     sf_free
 end
 
-function unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
+function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # Given a sensitive float with derivatives with respect to all the
     # constrained parameters, calculate derivatives with respect to
     # the unconstrained parameters.
@@ -220,16 +255,21 @@ function unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
         # TODO: write in general form.  Note that the old "chi" is now chi[2].
         # Simplicial constriants.
         this_chi = mp.vp[s][ids.chi[2]]
-        sf_free.d[ids_free.chi_free[1], s] =
+        sf_free.d[ids_free.chi[1], s] =
             (sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]) * this_chi * (1.0 - this_chi)
 
         # Positivity constraints.
-        sf_free.d[ids_free.gamma_free, s] = sf.d[ids.gamma, s] .* mp.vp[s][ids.gamma]
-        sf_free.d[ids_free.zeta_free, s] = sf.d[ids.zeta, s] .* mp.vp[s][ids.zeta]
+        sf_free.d[ids_free.gamma, s] = sf.d[ids.gamma, s] .* mp.vp[s][ids.gamma]
+        sf_free.d[ids_free.zeta, s] = sf.d[ids.zeta, s] .* mp.vp[s][ids.zeta]
     end
 
     sf_free
 end
 
+rect_transform = DataTransform(rect_constrain_vp!, rect_unconstrain_vp!,
+                               rect_unconstrain_sensitive_float)
+
+free_transform = DataTransform(free_constrain_vp!, free_unconstrain_vp!,
+                               free_unconstrain_sensitive_float)
 
 end

@@ -265,15 +265,15 @@ immutable UnconstrainedParamIndex
 
     # Unconstrained parameter for a_s of length (Ia - 1)
     # (the probability of being a type of celestial object).
-    chi_free::Vector{Int64}
+    chi::Vector{Int64}
 
     # The location of the object (2x1 vector).
     mu::Vector{Int64}
 
     # Ix1 scalar variational parameters for r_s.  The first
     # row is for stars, and the second for galaxies (I think?).
-    gamma_free::Vector{Int64}
-    zeta_free::Vector{Int64}
+    gamma::Vector{Int64}
+    zeta::Vector{Int64}
 
     # The weight given to a galaxy of type 1.
     theta::Int64
