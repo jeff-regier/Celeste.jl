@@ -9,6 +9,7 @@ require(joinpath(Pkg.dir("Celeste"), "src", "ElboDeriv.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
 #require(joinpath(Pkg.dir("Celeste"), "src", "Synthetic.jl"))
 
+#include(joinpath(Pkg.dir("Celeste"), "src", "Constrain.jl"))
 #include(joinpath(Pkg.dir("Celeste"), "src", "CelesteTypes.jl"))
 #include(joinpath(Pkg.dir("Celeste"), "src", "ElboDeriv.jl"))
 #include(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))

@@ -3,12 +3,9 @@
 using Celeste
 using CelesteTypes
 using Base.Test
-
 using Distributions
-
+using SampleData
 import Synthetic
-import SampleData
-
 
 function test_local_sources()
     srand(1)
