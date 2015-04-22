@@ -403,12 +403,11 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
     # the derivatibes of E(G) and Var(G).
 
     # Chi derivatives:
-    lf_diff = lf[2] - lf[1]
     E_G.d[ids.chi[1], child_s] += lf[1]
     E_G.d[ids.chi[2], child_s] += lf[2]
 
-    var_G.d[ids.chi[1], child_s] -= 2 * E_G_s_v * lf[2]
-    var_G.d[ids.chi[2], child_s] -= 2 * E_G_s_v * lf[1]
+    var_G.d[ids.chi[1], child_s] -= 2 * E_G_s_v * lf[1]
+    var_G.d[ids.chi[2], child_s] -= 2 * E_G_s_v * lf[2]
 
     var_G.d[ids.chi[1], child_s] += llff[1]
     var_G.d[ids.chi[2], child_s] += llff[2]

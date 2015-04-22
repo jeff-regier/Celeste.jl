@@ -40,13 +40,7 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams,
 end
 
 
-function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
-    # By default, test with the identity transform.
-    test_by_finite_differences(fun_to_test, mp, identity_transform)
-end
-
-
-function test_brightness_derivs()
+function test_brightness_derivs(trans::DataTransform)
     blob, mp0, three_bodies = gen_three_body_dataset()
 
     for i = 1:Ia
@@ -58,7 +52,7 @@ function test_brightness_derivs()
                 ret.d[:, 1] = sb.E_l_a[b, i].d
                 ret
             end
-            test_by_finite_differences(wrap_source_brightness, mp0)
+            test_by_finite_differences(wrap_source_brightness, mp0, trans)
 
             function wrap_source_brightness_3(mp)
                 sb = ElboDeriv.SourceBrightness(mp.vp[1])
@@ -67,22 +61,24 @@ function test_brightness_derivs()
                 ret.d[:, 1] = sb.E_ll_a[b, i].d
                 ret
             end
-            test_by_finite_differences(wrap_source_brightness_3, mp0)
+            test_by_finite_differences(wrap_source_brightness_3, mp0, trans)
         end
     end
 end
 
 
-function test_accum_pos_derivs()
+function test_accum_pos_derivs(trans::DataTransform)
     blob, mp, body = gen_sample_galaxy_dataset()
 
+    # Test these derivatives with the identity transform since the
+    # sensitive float is not with respect to all the parameters.
     function wrap_star(mmp)
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
         fs0m = zero_sensitive_float([1], star_pos_params)
         ElboDeriv.accum_star_pos!(star_mcs[1,1], [9, 10.], fs0m)
         fs0m
     end
-    test_by_finite_differences(wrap_star, mp)
+    test_by_finite_differences(wrap_star, mp, identity_transform)
 
     function wrap_galaxy(mmp)
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
@@ -90,11 +86,11 @@ function test_accum_pos_derivs()
         ElboDeriv.accum_galaxy_pos!(gal_mcs[1,1,1,1], [9, 10.], fs1m)
         fs1m
     end
-    test_by_finite_differences(wrap_galaxy, mp)
+    test_by_finite_differences(wrap_galaxy, mp, identity_transform)
 end
 
 
-function test_accum_pixel_source_derivs()
+function test_accum_pixel_source_derivs(trans::DataTransform)
     blob, mp0, body = gen_sample_galaxy_dataset()
 
     function wrap_apss_ef(mmp)
@@ -109,7 +105,7 @@ function test_accum_pixel_source_derivs()
             mmp.vp[1], 1, 1, m_pos, 1, fs0m, fs1m, E_G, var_G)
         E_G
     end
-    test_by_finite_differences(wrap_apss_ef, mp0, rect_transform)
+    test_by_finite_differences(wrap_apss_ef, mp0, trans)
 
     function wrap_apss_varf(mmp)
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
@@ -123,12 +119,12 @@ function test_accum_pixel_source_derivs()
             mmp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G)
         var_G
     end
-    test_by_finite_differences(wrap_apss_varf, mp0, rect_transform)
+    test_by_finite_differences(wrap_apss_varf, mp0, trans)
 
 end
 
 
-function test_kl_divergence_derivs()
+function test_kl_divergence_derivs(trans::DataTransform)
     blob, mp0, three_bodies = gen_three_body_dataset()
 
     function wrap_kl_a(mp)
@@ -136,54 +132,57 @@ function test_kl_divergence_derivs()
         ElboDeriv.subtract_kl_a!(1, mp, accum)
         accum
     end
-    test_by_finite_differences(wrap_kl_a, mp0)
+    test_by_finite_differences(wrap_kl_a, mp0, trans)
 
     function wrap_kl_r(mp)
         accum = zero_sensitive_float([1:3], all_params)
         ElboDeriv.subtract_kl_r!(1, 1, mp, accum)
         accum
     end
-    test_by_finite_differences(wrap_kl_r, mp0)
+    test_by_finite_differences(wrap_kl_r, mp0, trans)
 
     function wrap_kl_k(mp)
         accum = zero_sensitive_float([1:3], all_params)
         ElboDeriv.subtract_kl_k!(1, 1, mp, accum)
         accum
     end
-    test_by_finite_differences(wrap_kl_k, mp0)
+    test_by_finite_differences(wrap_kl_k, mp0, trans)
 
     function wrap_kl_c(mp)
         accum = zero_sensitive_float([1:3], all_params)
         ElboDeriv.subtract_kl_c!(1, 1, 1, mp, accum)
         accum
     end
-    test_by_finite_differences(wrap_kl_c, mp0)
+    test_by_finite_differences(wrap_kl_c, mp0, trans)
 end
 
 
-function test_elbo_derivs()
+function test_elbo_derivs(trans::DataTransform)
     blob, mp0, body = gen_sample_galaxy_dataset()
 
     function wrap_likelihood_b1(mmp)
         ElboDeriv.elbo_likelihood([blob[1]], mmp)
     end
-    test_by_finite_differences(wrap_likelihood_b1, mp0)
+    test_by_finite_differences(wrap_likelihood_b1, mp0, trans)
 
     function wrap_likelihood_b5(mmp)
         ElboDeriv.elbo_likelihood([blob[5]], mmp)
     end
-    test_by_finite_differences(wrap_likelihood_b5, mp0)
+    test_by_finite_differences(wrap_likelihood_b5, mp0, trans)
 
     function wrap_elbo(mmp)
         ElboDeriv.elbo([blob], mmp)
     end
-    test_by_finite_differences(wrap_elbo, mp0)
+    test_by_finite_differences(wrap_elbo, mp0, trans)
 end
 
 
-test_kl_divergence_derivs()
-test_brightness_derivs()
-test_accum_pos_derivs()
-test_accum_pixel_source_derivs()
-test_elbo_derivs()
 
+test_accum_pos_derivs()
+
+for trans in [ rect_transform, free_transform ]
+    test_kl_divergence_derivs(trans)
+    test_brightness_derivs(trans)
+    test_accum_pixel_source_derivs(trans)
+    test_elbo_derivs(trans)
+end
