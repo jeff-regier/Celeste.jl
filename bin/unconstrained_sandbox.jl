@@ -1,24 +1,25 @@
 #!/usr/bin/env julia
 
 
-require(joinpath(Pkg.dir("Celeste"), "src", "Util.jl"))
-require(joinpath(Pkg.dir("Celeste"), "src", "CelesteTypes.jl"))
-#require(joinpath(Pkg.dir("Celeste"), "src", "ModelInit.jl"))
-#require(joinpath(Pkg.dir("Celeste"), "src", "SDSS.jl"))
-require(joinpath(Pkg.dir("Celeste"), "src", "ElboDeriv.jl"))
-require(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
-#require(joinpath(Pkg.dir("Celeste"), "src", "Synthetic.jl"))
+# require(joinpath(Pkg.dir("Celeste"), "src", "Util.jl"))
+# require(joinpath(Pkg.dir("Celeste"), "src", "CelesteTypes.jl"))
+# require(joinpath(Pkg.dir("Celeste"), "src", "ElboDeriv.jl"))
+# require(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
 
 #include(joinpath(Pkg.dir("Celeste"), "src", "Constrain.jl"))
 #include(joinpath(Pkg.dir("Celeste"), "src", "CelesteTypes.jl"))
 #include(joinpath(Pkg.dir("Celeste"), "src", "ElboDeriv.jl"))
 #include(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
 
-using Celeste
 
-import ElboDeriv
+#include(joinpath(Pkg.dir("Celeste"), "test", "test_derivs.jl"))
+
+using Celeste
 using CelesteTypes
+using Constrain
+
 import OptimizeElbo
+import ElboDeriv
 
 using Base.Test
 using SampleData
@@ -29,6 +30,18 @@ blob, mp_init, body = gen_sample_star_dataset();
 
 mp_original = deepcopy(mp_init)
 mp_free = deepcopy(mp_init)
+
+val = ElboDeriv.elbo_likelihood(blob, mp_original)
+val_rect = rect_transform.transform_sensitive_float(val, mp_init)
+
+
+val = ElboDeriv.elbo_likelihood(blob, mp_original)
+val_id = identity_transform.transform_sensitive_float(val, mp_init)
+
+
+val_rect.d[ids_free.gamma, 1]
+val.d[ids.gamma, 1]
+
 
 # Optimize
 omitted_ids = [ids.kappa[:], ids.lambda[:], ids.zeta[:] ]

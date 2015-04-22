@@ -1,13 +1,11 @@
 # written by Jeffrey Regier
 # jeff [at] stat [dot] berkeley [dot] edu
 
-# Calculate values and derivatives of the variational ELBO.
+# Calculate values and partial derivatives of the variational ELBO.
 
 module ElboDeriv
 
 using CelesteTypes
-using Constrain
-
 import Util
 
 immutable SourceBrightness

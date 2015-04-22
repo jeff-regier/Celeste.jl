@@ -1,29 +1,42 @@
 import GSL.deriv_central
+using Constrain
 
 
 # verify derivatives of fun_to_test by finite differences
-function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
+function test_by_finite_differences(fun_to_test::Function, mp::ModelParams,
+                                    trans::DataTransform)
+
     f::SensitiveFloat = fun_to_test(mp)
+    f_trans = trans.transform_sensitive_float(f, mp)
+    vp_trans = trans.from_vp(mp.vp)
 
     for s in 1:mp.S
-        for p1 in 1:length(f.param_index)
-            p0 = f.param_index[p1]
+        for p1 in 1:length(f_trans.param_index)
+            p0 = f_trans.param_index[p1]
 
             fun_to_test_2(epsilon::Float64) = begin
-                vp_local = deepcopy(mp.vp)
-                vp_local[s][p0] += epsilon
+                # Perturb in the transformed space.
+                vp_trans_local = deepcopy(vp_trans)
+                vp_trans_local[s][p0] += epsilon
+                vp_local = trans.to_vp(vp_trans_local)
                 mp_local = ModelParams(vp_local, mp.pp, mp.patches, mp.tile_width)
                 f_local::SensitiveFloat = fun_to_test(mp_local)
                 f_local.v
             end
 
             numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
-            info("deriv #$p0 (s: $s): $numeric_deriv vs $(f.d[p1, s]) [tol: $abs_err]")
-            obs_err = abs(numeric_deriv - f.d[p1, s]) 
+            info("deriv #$p0 (s: $s): $numeric_deriv vs $(f_trans.d[p1, s]) [tol: $abs_err]")
+            obs_err = abs(numeric_deriv - f_trans.d[p1, s]) 
             @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
-            @test_approx_eq_eps numeric_deriv f.d[p1, s] 10abs_err
+            @test_approx_eq_eps numeric_deriv f_trans.d[p1, s] 10abs_err
         end
     end
+end
+
+
+function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
+    # By default, test with the identity transform.
+    test_by_finite_differences(fun_to_test, mp, identity_transform)
 end
 
 
