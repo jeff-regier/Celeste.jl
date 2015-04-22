@@ -67,7 +67,7 @@ function test_brightness_derivs(trans::DataTransform)
 end
 
 
-function test_accum_pos_derivs(trans::DataTransform)
+function test_accum_pos_derivs()
     blob, mp, body = gen_sample_galaxy_dataset()
 
     # Test these derivatives with the identity transform since the
@@ -177,7 +177,7 @@ function test_elbo_derivs(trans::DataTransform)
 end
 
 
-
+# This test doesn't use different transforms.
 test_accum_pos_derivs()
 
 for trans in [ rect_transform, free_transform ]
