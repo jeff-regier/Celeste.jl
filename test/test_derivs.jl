@@ -30,7 +30,7 @@ end
 function test_brightness_derivs()
     blob, mp0, three_bodies = gen_three_body_dataset()
 
-    for i = 1:2
+    for i = 1:Ia
         for b = [3,4,2,5,1]
             function wrap_source_brightness(mp)
                 sb = ElboDeriv.SourceBrightness(mp.vp[1])
