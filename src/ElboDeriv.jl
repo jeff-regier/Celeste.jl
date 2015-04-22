@@ -8,6 +8,42 @@ module ElboDeriv
 using CelesteTypes
 import Util
 
+function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp)
+    # Given a sensitive float with derivatives with respect to all the
+    # constrained parameters, calculate derivatives with respect to
+    # the unconstrained parameters.
+    #
+    # Note that all the other functions in ElboDeriv calculated derivatives with
+    # respect to the unconstrained parameterization.
+
+    # Require that the input have all derivatives defined.
+    @assert size(sf.d) == (ids.size, mp.S)
+
+    sf_free = zero_sensitive_float(collect(1:mp.S), CelesteTypes.all_params_free)
+    sf_free.v = sf.v
+    for s in 1:mp.S
+        # Unless specifically transformed, the derivatives are unchanged.
+        sf_free.d[ids_free.mu, s] = sf.d[ids.mu, s]
+        sf_free.d[ids_free.theta, s] = sf.d[ids.theta, s]
+        sf_free.d[ids_free.rho, s] = sf.d[ids.rho, s]
+        sf_free.d[ids_free.phi, s] = sf.d[ids.phi, s]
+        sf_free.d[ids_free.sigma, s] = sf.d[ids.sigma, s]
+        sf_free.d[reduce(vcat, ids_free.kappa), s] =
+            sf.d[reduce(vcat, ids.kappa), s]
+        sf_free.d[reduce(vcat, ids_free.beta), s] =
+            sf.d[reduce(vcat, ids.beta), s]
+        sf_free.d[reduce(vcat, ids_free.lambda), s] =
+            sf.d[reduce(vcat, ids.lambda), s]
+        sf_free.d[ids_free.gamma_free, s] = sf.d[ids.gamma, s]
+        sf_free.d[ids_free.zeta_free, s] = sf.d[ids.zeta, s]
+
+        # Simplicial constriants.
+        sf_free.d[ids_free.chi_free[1], s] = sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]
+    end
+
+    sf_free
+end
+
 function unconstrain_sensitive_float(sf::SensitiveFloat, mp)
     # Given a sensitive float with derivatives with respect to all the
     # constrained parameters, calculate derivatives with respect to
@@ -23,13 +59,23 @@ function unconstrain_sensitive_float(sf::SensitiveFloat, mp)
     sf_free.v = sf.v
     for s in 1:mp.S
         # Unless specifically transformed, the derivatives are unchanged.
-        sf_free.d[1:ids_free.size, s] = sf.d[1:ids.size, s]
+        sf_free.d[ids_free.mu, s] = sf.d[ids.mu, s]
+        sf_free.d[ids_free.theta, s] = sf.d[ids.theta, s]
+        sf_free.d[ids_free.rho, s] = sf.d[ids.rho, s]
+        sf_free.d[ids_free.phi, s] = sf.d[ids.phi, s]
+        sf_free.d[ids_free.sigma, s] = sf.d[ids.sigma, s]
+        sf_free.d[reduce(vcat, ids_free.kappa), s] =
+            sf.d[reduce(vcat, ids.kappa), s]
+        sf_free.d[reduce(vcat, ids_free.beta), s] =
+            sf.d[reduce(vcat, ids.beta), s]
+        sf_free.d[reduce(vcat, ids_free.lambda), s] =
+            sf.d[reduce(vcat, ids.lambda), s]
 
         # TODO: write in general form.  Note that the old "chi" is now chi[2].
         # Simplicial constriants.
         this_chi = mp.vp[s][ids.chi[2]]
         sf_free.d[ids_free.chi_free[1], s] =
-            2 * sf.d[ids.chi[1], s] * this_chi * (1.0 - this_chi)
+            (sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]) * this_chi * (1.0 - this_chi)
 
         # Positivity constraints.
         sf_free.d[ids_free.gamma_free, s] = sf.d[ids.gamma, s] .* mp.vp[s][ids.gamma]

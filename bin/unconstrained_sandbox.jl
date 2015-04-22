@@ -123,11 +123,28 @@ mp_free = deepcopy(mp_init)
 omitted_ids = [ids.kappa[:], ids.lambda[:], ids.zeta[:] ]
 omitted_ids_free = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta_free[:] ]
 
+res_free_iter_count, res_free_max_f, res_free_max_x, res_free_ret =
+    OptimizeElbo.maximize_unconstrained_likelihood(blob, mp_free)
+
+
+
+# This should not work anymore:
 res_iter_count, res_max_f, res_max_x, res_ret =
 	OptimizeElbo.maximize_likelihood(blob, mp_original)
 
-res_free_iter_count, res_free_max_f, res_free_max_x, res_free_ret =
-	OptimizeElbo.maximize_unconstrained_likelihood(blob, mp_free)
+mp = deepcopy(mp_free)
+x0 = OptimizeElbo.vp_to_free_coordinates(mp.vp, omitted_ids, unconstrain_vp)
+OptimizeElbo.free_coordinates_to_vp!(x0, mp.vp, omitted_ids,
+                        unconstrain_vp, constrain_vp!)
+
+OptimizeElbo.free_coordinates_to_vp!(x0, mp.vp, omitted_ids,
+                        unconstrain_vp, constrain_vp!)
+elbo = ElboDeriv.elbo_likelihood(blob, mp)
+elbo_free = ElboDeriv.unconstrain_sensitive_float(elbo, mp)
+OptimizeElbo.print_params(mp.vp)
+
+
+
 
 # Compare the parameters, fits, and iterations.
 println("===================")

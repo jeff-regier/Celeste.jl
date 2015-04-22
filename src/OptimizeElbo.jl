@@ -44,6 +44,32 @@ function scale_deriv(elbo::SensitiveFloat, omitted_ids, scaling_vector)
     elbo_new
 end
 
+function scale_free_deriv(elbo::SensitiveFloat, omitted_ids, scaling_vector)
+    # Move between scaled and unscaled parameterizations.
+    # TODO: wrap the scaling up into the coordinate transformation.
+
+    left_ids = setdiff(all_params_free, [omitted_ids, ids_free.kappa[end, :][:]])
+    new_P = length(left_ids)
+
+    elbo_new = zero_sensitive_float(elbo.source_index, left_ids)
+    elbo_new.v = elbo.v
+
+    for p1 in 1:length(left_ids)
+        p0 = left_ids[p1]
+        elbo_new.d[p1, :] = elbo.d[p0, :] ./ scaling_vector[p0]
+
+        for i = 1:2
+            if p0 == ids_free.kappa[1, i]
+                for s1 in 1:length(elbo.source_index)
+                    elbo_new.d[p1, s1] -= elbo.d[ids_free.kappa[2, i], s1]
+                end
+            end
+        end
+    end
+
+    elbo_new
+end
+
 
 function vp_to_coordinates(vp::Vector{Vector{Float64}}, omitted_ids::Vector{Int64})
     # vp = variational parameters
@@ -90,13 +116,17 @@ function coordinates_to_vp!(xs::Vector{Float64}, vp::Vector{Vector{Float64}},
 end
 
 
-function vp_to_free_coordinates(vp::Vector{Vector{Float64}}, omitted_ids::Vector{Int64})
+function vp_to_free_coordinates(vp::Vector{Vector{Float64}},
+                                omitted_ids::Vector{Int64},
+                                unconstrain_fn::Function)
     # vp = constrained variational parameters
     # coordinates = unconstrained coordinates for optimizer
     # omitted_ids: ids to be omitted from the _unconstrained_ vb parameters
     #    (i.e. indices from ids_free)
+    # unconstrain_fn: A function to convert VariationalParameters to a
+    #   vector that can be passed to the optimizer.
 
-    vp_free = unconstrain_vp(vp)
+    vp_free = unconstrain_fn(vp)
     left_ids = setdiff(all_params_free,
                        [omitted_ids, ids_free.kappa[end, :][:]])
     new_P = length(left_ids)
@@ -112,14 +142,21 @@ function vp_to_free_coordinates(vp::Vector{Vector{Float64}}, omitted_ids::Vector
     reduce(vcat, vp_new)
 end
 
-function free_coordinates_to_vp!(xs::Vector{Float64}, vp::Vector{Vector{Float64}},
-                                 omitted_ids::Vector{Int64})
+function free_coordinates_to_vp!(xs::Vector{Float64},
+                                 vp::Vector{Vector{Float64}},
+                                 omitted_ids::Vector{Int64},
+                                 unconstrain_fn::Function,
+                                 constrain_fn!::Function)
     # Convert the uncontrained optimization vector to the contrained variational parameters.
     # xs: A vector of the unconstrained parameters for the optimizer.
     # vp: A VariationalParams object to be updated in place with the
     #     constrained parameterization.
     # omitted_ids: ids to be omitted from the _unconstrained_ vb parameters
     #    (i.e. indices from ids_free)
+    # unconstrain_fn: A function to convert VariationalParameters to a
+    #   vector that can be passed to the optimizer.
+    # constrain_fn!: A function to convert a vector of values from the optimized
+    #   to a VariationalParameters object.
 
     left_ids = setdiff(all_params_free, [omitted_ids, ids_free.kappa[end, :][:]])
 
@@ -128,7 +165,7 @@ function free_coordinates_to_vp!(xs::Vector{Float64}, vp::Vector{Vector{Float64}
     S = int(length(xs) / P)
     xs2 = reshape(xs, P, S)
 
-    vp_free = unconstrain_vp(vp)
+    vp_free = unconstrain_fn(vp)
 
     for s in 1:S
         for p1 in 1:length(left_ids)
@@ -144,8 +181,9 @@ function free_coordinates_to_vp!(xs::Vector{Float64}, vp::Vector{Vector{Float64}
             vp_free[s][ids_free.kappa[end, :]] = 1. - vp_free[s][ids_free.kappa[1, :]]
         end
     end
-    CelesteTypes.constrain_vp!(vp_free, vp)
+    constrain_fn!(vp_free, vp)
 end
+
 
 function get_nlopt_bounds(vs::Vector{Float64})
     # Note that sources are not allowed to move more than
@@ -191,18 +229,23 @@ function get_nlopt_bounds(vp::Vector{Vector{Float64}}, omitted_ids)
 end
 
 
-function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}}, omitted_ids)
+function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
+                                        omitted_ids,
+                                        unconstrain_fn::Function)
     # Note that sources are not allowed to move more than
     # one pixel from their starting position in order to
     # avoid label switiching.  (This is why this function gets
     # the variational parameters as an argument.)
     #
-    # vs: parameters for a particular source.
-    # vp: complete collection of sources.
+    # vp: _Constrained_ variational parameters.
+    # omitted_ids: Ids of _unconstrained_ variational parameters to be omitted.
+    # unconstrain_fn: A function to convert VariationalParameters to a
+    #   vector that can be passed to the optimizer.
 
     lbs = [ get_nlopt_bounds(vs)[1] for vs in vp]
     ubs = [ get_nlopt_bounds(vs)[2] for vs in vp]
-    vp_to_free_coordinates(lbs, omitted_ids), vp_to_free_coordinates(ubs, omitted_ids)
+    vp_to_free_coordinates(lbs, omitted_ids, unconstrain_fn),
+    vp_to_free_coordinates(ubs, omitted_ids, unconstrain_fn)
 end
 
 
@@ -271,20 +314,18 @@ function maximize_unconstrained_f(f::Function, blob::Blob, mp::ModelParams;
     #   - omitted_ids: Omitted ids from the _unconstrained_ parameterization (i.e. elements
     #       of free_ids).
 
-    x0 = vp_to_free_coordinates(mp.vp, omitted_ids)
+    x0 = vp_to_free_coordinates(mp.vp, omitted_ids, unconstrain_vp)
     iter_count = 0
-
-    mp_free = deepcopy(mp)
-    mp_free.vp = unconstrain_vp(mp_free.vp)
 
     function objective_and_grad(x::Vector{Float64}, g::Vector{Float64})
         println("Iter: ", iter_count)
         # Evaluate in the constrained space and then unconstrain again.
-        free_coordinates_to_vp!(x, mp.vp, omitted_ids)
+        free_coordinates_to_vp!(x, mp.vp, omitted_ids,
+                                unconstrain_vp, constrain_vp!)
         elbo = f(blob, mp)
         elbo_free = ElboDeriv.unconstrain_sensitive_float(elbo, mp)
         if length(g) > 0
-            elbo2 = scale_deriv(elbo_free, omitted_ids, rescaling_free)
+            elbo2 = scale_free_deriv(elbo_free, omitted_ids, rescaling_free)
             svs = [elbo2.d[:, s] for s in 1:mp.S]
             g[:] = reduce(vcat, svs)
         end
@@ -299,7 +340,7 @@ function maximize_unconstrained_f(f::Function, blob::Blob, mp::ModelParams;
     end
 
     opt = Opt(:LD_LBFGS, length(x0))
-    lbs, ubs = get_nlopt_unconstrained_bounds(mp_free.vp, omitted_ids)
+    lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, unconstrain_vp)
     for i in 1:length(x0)
         if !(lbs[i] <= x0[i] <= ubs[i])
             println("coordinate $i falsity: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
