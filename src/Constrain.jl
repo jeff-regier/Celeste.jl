@@ -7,7 +7,7 @@ using CelesteTypes
 
 import Util
 
-export rect_transform, free_transform, DataTransform
+export rect_transform, free_transform, identity_transform, DataTransform
 
 #export unconstrain_vp, rect_unconstrain_vp, constrain_vp, rect_constrain_vp
 #export unconstrain_vp!, rect_unconstrain_vp!, constrain_vp!, rect_constrain_vp!
@@ -16,13 +16,23 @@ export rect_transform, free_transform, DataTransform
 type DataTransform
 	# Functiones to move between a ModelParameters object and a
 	# transformation of the data for optimization.
+    #
+    # to_vp: A function that takes transformed parameters and returns variational parameters
+    # from_vp: A function that takes variational parameters and returned transformed parameters
+    # to_vp!: A function that takes (transformed paramters, variational parameters) and updates
+    #   the variational parameters in place
+    # from_vp!: A function that takes (variational paramters, transformed parameters) and updates
+    #   the transformed parameters in place
+    # transform_sensitive_float: A function that takes (sensitive float, model parameters)
+    #   where the sensitive float contains partial derivatives with respect to the
+    #   variational parameters and returns a sensitive float with total derivatives with
+    #   respect to the transformed parameters.
 
 	to_vp::Function
 	from_vp::Function
 	to_vp!::Function
 	from_vp!::Function
 	transform_sensitive_float::Function
-	unchanged_ids::Array{ASCIIString}
 
 	DataTransform(to_vp!, from_vp!, transform_sensitive_float) = begin
 
@@ -43,6 +53,52 @@ type DataTransform
 		new(to_vp, from_vp, to_vp!, from_vp!,
             transform_sensitive_float)
 	end
+end
+
+function unchanged_vp!(vp::VariationalParams, new_vp::VariationalParams)
+    # Leave the vp unchanged.
+    S = length(vp_free)
+    for s = 1:S
+        new_vp[s][all_params] = vp[s][all_params]
+    end
+end
+
+function unchanged_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
+    # Leave the sensitive float unchanged.
+    deepcopy(sf)
+end
+
+
+function rect_constrain_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+    # Convert an unconstrained to an constrained variational parameterization
+    # where we don't use exp or logit.
+
+    S = length(vp_free)
+    for s = 1:S
+        # The default is everything being the same.
+
+        # Maybe something like this instead:
+        #
+        # for id_symbol in names(ids)
+        #     if id_symbol != convert(Symbol, chi)
+        #         vp[s][ids.(id_symbol)] = vp_free[s][ids_free.(id_symbol)]
+        # end
+
+        vp[s][ids.mu] = vp_free[s][ids_free.mu]
+        vp[s][ids.theta] = vp_free[s][ids_free.theta]
+        vp[s][ids.rho] = vp_free[s][ids_free.rho]
+        vp[s][ids.phi] = vp_free[s][ids_free.phi]
+        vp[s][ids.sigma] = vp_free[s][ids_free.sigma]
+        vp[s][ids.kappa] = vp_free[s][ids_free.kappa]
+        vp[s][ids.beta] = vp_free[s][ids_free.beta]
+        vp[s][ids.lambda] = vp_free[s][ids_free.lambda]
+        vp[s][ids.gamma] = vp_free[s][ids_free.gamma]
+        vp[s][ids.zeta] = vp_free[s][ids_free.zeta]
+
+        # Simplicial constriants.
+        vp[s][ids.chi[2]] = vp_free[s][ids_free.chi[1]]
+        vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
+    end
 end
 
 
@@ -154,41 +210,7 @@ function free_constrain_vp!(vp_free::FreeVariationalParams, vp::VariationalParam
     end
 end
 
-# function unconstrain_vp(vp::VariationalParams)
-#     # Convert a constrained to an unconstrained variational parameterization.
-#     S = length(vp)
-#     vp_free = [ zeros(ids_free.size) for s = 1:S]
-#     unconstrain_vp!(vp, vp_free)
-#     vp_free
-# end
-
-# function constrain_vp(vp_free::FreeVariationalParams)
-#     # Convert an unconstrained to an constrained variational parameterization.
-#     S = length(vp_free)
-#     vp = [ zeros(ids.size) for s = 1:S]
-#     constrain_vp!(vp_free, vp)
-#     vp
-# end
-
-# function rect_unconstrain_vp(vp::VariationalParams)
-#     # Convert a constrained to an unconstrained variational parameterization.
-#     S = length(vp)
-#     vp_free = [ zeros(ids_free.size) for s = 1:S]
-#     rect_unconstrain_vp!(vp, vp_free)
-#     vp_free
-# end
-
-# function rect_constrain_vp(vp_free::RectVariationalParams)
-#     # Convert an unconstrained to an constrained variational parameterization.
-#     S = length(vp_free)
-#     vp = [ zeros(ids.size) for s = 1:S]
-#     rect_constrain_vp!(vp_free, vp)
-#     vp
-# end
-
-
 # Conversion functions for sensitive floats.
-
 function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # Given a sensitive float with derivatives with respect to all the
     # constrained parameters, calculate derivatives with respect to
@@ -202,6 +224,11 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 
     sf_free = zero_sensitive_float(collect(1:mp.S), CelesteTypes.all_params_free)
     sf_free.v = sf.v
+
+    # Currently the param_index is only really used within ElboDeriv.  By the
+    # time the data hits the optimizer, we assume everything has a derivative. 
+     sf_free.param_index = all_params_free
+
     for s in 1:mp.S
         # Unless specifically transformed, the derivatives are unchanged.
         sf_free.d[ids_free.mu, s] = sf.d[ids.mu, s]
@@ -238,6 +265,11 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 
     sf_free = zero_sensitive_float(collect(1:mp.S), CelesteTypes.all_params_free)
     sf_free.v = sf.v
+
+    # Currently the param_index is only really used within ElboDeriv.  By the
+    # time the data hits the optimizer, we assume everything has a derivative. 
+    sf_free.param_index = all_params_free
+
     for s in 1:mp.S
         # Unless specifically transformed, the derivatives are unchanged.
         sf_free.d[ids_free.mu, s] = sf.d[ids.mu, s]
@@ -271,5 +303,8 @@ rect_transform = DataTransform(rect_constrain_vp!, rect_unconstrain_vp!,
 
 free_transform = DataTransform(free_constrain_vp!, free_unconstrain_vp!,
                                free_unconstrain_sensitive_float)
+
+identity_transform = DataTransform(unchanged_vp!, unchanged_vp!,
+                                   unchanged_sensitive_float)
 
 end
