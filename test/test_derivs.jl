@@ -1,6 +1,12 @@
+using Celeste
+using CelesteTypes
+using Base.Test
+using Distributions
+using SampleData
+import Synthetic
+
 import GSL.deriv_central
 using Constrain
-
 
 # verify derivatives of fun_to_test by finite differences
 function test_by_finite_differences(fun_to_test::Function, mp::ModelParams,
@@ -103,7 +109,7 @@ function test_accum_pixel_source_derivs()
             mmp.vp[1], 1, 1, m_pos, 1, fs0m, fs1m, E_G, var_G)
         E_G
     end
-    test_by_finite_differences(wrap_apss_ef, mp0)
+    test_by_finite_differences(wrap_apss_ef, mp0, rect_transform)
 
     function wrap_apss_varf(mmp)
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
@@ -117,7 +123,7 @@ function test_accum_pixel_source_derivs()
             mmp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G)
         var_G
     end
-    test_by_finite_differences(wrap_apss_varf, mp0)
+    test_by_finite_differences(wrap_apss_varf, mp0, rect_transform)
 
 end
 

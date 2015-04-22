@@ -34,11 +34,11 @@ type DataTransform
 	from_vp!::Function
 	transform_sensitive_float::Function
 
-	DataTransform(to_vp!, from_vp!, transform_sensitive_float) = begin
+	DataTransform(to_vp!, from_vp!, transform_sensitive_float, id_size::Integer) = begin
 
         from_vp = function(vp::VariationalParams)
             S = length(vp)
-            vp_free = [ zeros(ids_free.size) for s = 1:S]
+            vp_free = [ zeros(id_size) for s = 1:S]
             from_vp!(vp, vp_free)
             vp_free
         end
@@ -57,7 +57,7 @@ end
 
 function unchanged_vp!(vp::VariationalParams, new_vp::VariationalParams)
     # Leave the vp unchanged.
-    S = length(vp_free)
+    S = length(vp)
     for s = 1:S
         new_vp[s][all_params] = vp[s][all_params]
     end
@@ -69,7 +69,7 @@ function unchanged_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 end
 
 
-function rect_constrain_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+function rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
     # Convert an unconstrained to an constrained variational parameterization
     # where we don't use exp or logit.
 
@@ -102,7 +102,7 @@ function rect_constrain_vp!(vp_free::RectVariationalParams, vp::VariationalParam
 end
 
 
-function rect_unconstrain_vp!(vp::VariationalParams, vp_free::RectVariationalParams)
+function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
     # Convert a constrained to an unconstrained variational parameterization
     # that does not use logit or exp.
 
@@ -127,40 +127,8 @@ function rect_unconstrain_vp!(vp::VariationalParams, vp_free::RectVariationalPar
     end
 end
 
-function rect_constrain_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
-    # Convert an unconstrained to an constrained variational parameterization
-    # where we don't use exp or logit.
 
-    S = length(vp_free)
-    for s = 1:S
-        # The default is everything being the same.
-
-        # Maybe something like this instead:
-        #
-        # for id_symbol in names(ids)
-        #     if id_symbol != convert(Symbol, chi)
-        #         vp[s][ids.(id_symbol)] = vp_free[s][ids_free.(id_symbol)]
-        # end
-
-        vp[s][ids.mu] = vp_free[s][ids_free.mu]
-        vp[s][ids.theta] = vp_free[s][ids_free.theta]
-        vp[s][ids.rho] = vp_free[s][ids_free.rho]
-        vp[s][ids.phi] = vp_free[s][ids_free.phi]
-        vp[s][ids.sigma] = vp_free[s][ids_free.sigma]
-        vp[s][ids.kappa] = vp_free[s][ids_free.kappa]
-        vp[s][ids.beta] = vp_free[s][ids_free.beta]
-        vp[s][ids.lambda] = vp_free[s][ids_free.lambda]
-        vp[s][ids.gamma] = vp_free[s][ids_free.gamma]
-        vp[s][ids.zeta] = vp_free[s][ids_free.zeta]
-
-        # Simplicial constriants.
-        vp[s][ids.chi[2]] = vp_free[s][ids_free.chi[1]]
-        vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
-    end
-end
-
-
-function free_unconstrain_vp!(vp::VariationalParams, vp_free::FreeVariationalParams)
+function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
     # Convert a constrained to an unconstrained variational parameterization
     # on all of the real line.
     S = length(vp)
@@ -186,7 +154,7 @@ function free_unconstrain_vp!(vp::VariationalParams, vp_free::FreeVariationalPar
     end
 end
 
-function free_constrain_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
+function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
     # Convert an unconstrained to an constrained variational parameterization.
     S = length(vp_free)
     for s = 1:S
@@ -298,13 +266,13 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     sf_free
 end
 
-rect_transform = DataTransform(rect_constrain_vp!, rect_unconstrain_vp!,
-                               rect_unconstrain_sensitive_float)
+rect_transform = DataTransform(rect_to_vp!, vp_to_rect!,
+                               rect_unconstrain_sensitive_float, ids_free.size)
 
-free_transform = DataTransform(free_constrain_vp!, free_unconstrain_vp!,
-                               free_unconstrain_sensitive_float)
+free_transform = DataTransform(free_to_vp!, vp_to_free!,
+                               free_unconstrain_sensitive_float, ids_free.size)
 
 identity_transform = DataTransform(unchanged_vp!, unchanged_vp!,
-                                   unchanged_sensitive_float)
+                                   unchanged_sensitive_float, ids.size)
 
 end
