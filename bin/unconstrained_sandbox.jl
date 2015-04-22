@@ -32,7 +32,7 @@ mp_free = deepcopy(mp_init)
 
 # Optimize
 omitted_ids = [ids.kappa[:], ids.lambda[:], ids.zeta[:] ]
-omitted_ids_free = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta_free[:] ]
+omitted_ids_free = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta[:] ]
 
 res_free_iter_count, res_free_max_f, res_free_max_x, res_free_ret =
     OptimizeElbo.maximize_unconstrained_likelihood(blob, mp_free)
