@@ -55,7 +55,7 @@ type DataTransform
 	end
 end
 
-
+###############################################
 # Functions for an identity transform.
 function unchanged_vp!(vp::VariationalParams, new_vp::VariationalParams)
     # Leave the vp unchanged.
@@ -70,7 +70,7 @@ function unchanged_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     deepcopy(sf)
 end
 
-
+###############################################
 # Functions for a "rectangular transform".  This matches the original Celeste
 # script, contraining chi to sum to one and scaling gamma.
 
@@ -81,7 +81,7 @@ const rect_rescaling = ones(length(all_params))
 
 rect_unchanged_ids = [ "mu", "gamma", "zeta",
                        "theta", "rho", "phi", "sigma",
-                       "kappa", "beta", "lambda"]
+                       "beta", "lambda"]
 
 function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
     # Convert a constrained to an unconstrained variational parameterization
@@ -100,6 +100,9 @@ function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
         # refer to the probability of being a galaxy, which is now the
         # second component of chi.
         vp_free[s][ids_free.chi[1]] = vp[s][ids.chi[2]]
+
+        # Keep all but the last column of kappa.
+        vp_free[s][ids_free.kappa] = vp[s][ids.kappa[:, 1:(Ia - 1)]]
     end
 end
 
@@ -119,6 +122,9 @@ function rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
         # Simplicial constriants.
         vp[s][ids.chi[2]] = vp_free[s][ids_free.chi[1]]
         vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
+
+        vp[s][ids.kappa[:, 1]] = vp_free[s][ids_free.kappa]
+        vp[s][ids.kappa[:, 2]] = 1 - vp[s][ids.kappa[:, 1]]
     end
 end
 
@@ -155,16 +161,17 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 
         # Simplicial constriants.
         sf_free.d[ids_free.chi[1], s] = sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]
+        sf_free.d[ids_free.kappa[:, 1], s] = sf.d[ids.kappa[:, 1], s] - sf.d[ids.kappa[:, 2], s]
     end
 
     sf_free
 end
 
-
+###############################################
 # Functions for a "free transform".  Eventually the idea is that this will
 # have every parameter completely unconstrained.
 free_unchanged_ids = [ "mu", "theta", "rho", "phi", "sigma",
-                       "kappa", "beta", "lambda"]
+                       "beta", "lambda"]
 
 function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
     # Convert a constrained to an unconstrained variational parameterization
@@ -181,6 +188,10 @@ function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
         # refer to the probability of being a galaxy, which is now the
         # second component of chi.
         vp_free[s][ids_free.chi[1]] = Util.inv_logit(vp[s][ids.chi[2]])
+
+        # In contrast, the original script used the last component of kappa
+        # as the free parameter.
+        vp_free[s][ids_free.kappa[:, 1]] = Util.inv_logit(vp[s][ids.kappa[:, 1]])
 
         # Positivity constraints
         vp_free[s][ids_free.gamma] = log(vp[s][ids.gamma])
@@ -201,6 +212,9 @@ function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
         # Simplicial constriants.
         vp[s][ids.chi[2]] = Util.logit(vp_free[s][ids_free.chi[1]])
         vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
+
+        vp[s][ids.kappa[:, 1]] = Util.logit(vp_free[s][ids_free.kappa[:, 1]])
+        vp[s][ids.kappa[:, 2]] = 1.0 - vp[s][ids.kappa[:, 1]]
 
          # Positivity constraints
         vp[s][ids.gamma] = exp(vp_free[s][ids_free.gamma])
@@ -244,6 +258,11 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
         this_chi = mp.vp[s][ids.chi[2]]
         sf_free.d[ids_free.chi[1], s] =
             (sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]) * this_chi * (1.0 - this_chi)
+
+        this_kappa = mp.vp[s][ids.kappa[:, 1]]
+        sf_free.d[ids_free.kappa[:, 1], s] =
+            (sf.d[ids.kappa[:, 1], s] - sf.d[ids.kappa[:, 2], s]) .*
+            this_kappa .* (1.0 - this_kappa)
 
         # Positivity constraints.
         sf_free.d[ids_free.gamma, s] = sf.d[ids.gamma, s] .* mp.vp[s][ids.gamma]

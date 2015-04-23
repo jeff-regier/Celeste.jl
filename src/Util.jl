@@ -32,12 +32,14 @@ function get_bvn_cov(ab::Float64, angle::Float64, scale::Float64)
     W' * W  # XiXi
 end
 
-function inv_logit(x::Float64)
-    -log(1 / x - 1)
+function inv_logit(x)
+    # TODO: bounds checking
+    -log(1.0 ./ x - 1)
 end
 
-function logit(x::Float64)
-    1.0 / (1.0 + exp(-x))
+function logit(x)
+    # TODO: bounds checking
+    1.0 ./ (1.0 + exp(-x))
 end
 
 end
