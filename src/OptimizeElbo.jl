@@ -95,8 +95,9 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
         transform.vector_to_vp!(x, mp.vp, omitted_ids)
         elbo = f(blob, mp)
         elbo_trans = transform.transform_sensitive_float(elbo, mp)
+        left_ids = setdiff(all_params_free, omitted_ids)
         if length(g) > 0
-            svs = [elbo2.d[:, s] for s in 1:mp.S]
+            svs = [elbo_trans.d[left_ids, s] for s in 1:mp.S]
             g[:] = reduce(vcat, svs)
         end
 
@@ -104,7 +105,6 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
         print_params(mp.vp)
         println("elbo: ", elbo.v)
         println("xtol_rel: $xtol_rel ;  ftol_abs: $ftol_abs")
-        println("rescaling: ", rescaling)
         println("\n=======================================\n")
         elbo.v
     end
@@ -131,7 +131,8 @@ end
 function maximize_f(f::Function, blob::Blob, mp::ModelParams;
     omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
     # Default to the rectangular transform
-    maximize_f(f, blob, mp, rect_transform, omitted_ids, xtol_rel, ftol_abs)
+    maximize_f(f, blob, mp, rect_transform,
+               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
 end
 
 function maximize_elbo(blob::Blob, mp::ModelParams)

@@ -38,7 +38,7 @@ type DataTransform
 	transform_sensitive_float::Function
 
 	DataTransform(to_vp!::Function, from_vp!::Function,
-                  vector_to_trans_vp::Function, trans_vp_to_vector::Function,
+                  vector_to_trans_vp!::Function, trans_vp_to_vector::Function,
                   transform_sensitive_float::Function, id_size::Integer) = begin
 
         function from_vp(vp::VariationalParams)
@@ -57,12 +57,15 @@ type DataTransform
 
         function vp_to_vector(vp::VariationalParams, omitted_ids::Vector{Int64})
             vp_trans = from_vp(vp)
-            trans_vp_to_vector(vp_trans, ommitted_ids) 
+            trans_vp_to_vector(vp_trans, omitted_ids) 
         end
 
         function vector_to_vp!(xs::Vector{Float64}, vp::VariationalParams,
                                omitted_ids::Vector{Int64})
-            vp_trans = vector_to_trans_vp(xs, omitted_ids)
+            # This needs to update vp in place so that variables in omitted_ids
+            # stay at their original values.
+            vp_trans = from_vp(vp)
+            vector_to_trans_vp!(xs, vp_trans, omitted_ids)
             to_vp!(vp_trans, vp) 
         end
 
@@ -97,8 +100,8 @@ function unchanged_vp_to_vector(vp::VariationalParams, omitted_ids::Vector{Int64
 end
 
 
-function unchanged_vector_to_vp(xs::Vector{Float64},
-                                omitted_ids::Vector{Int64})
+function unchanged_vector_to_vp!(xs::Vector{Float64}, vp::VariationalParams,
+                                 omitted_ids::Vector{Int64})
     # There is probably no use for this function, since you'll only be passing
     # trasformations to the optimizer, but I'll include it for completeness.
     error("Converting from a vector to untransformed VarationalParams is not supported.")
@@ -107,12 +110,12 @@ end
 
 function free_vp_to_vector(vp::FreeVariationalParams, omitted_ids::Vector{Int64})
     # vp = variational parameters
-    # ommitted_ids = ids in ParamIndex
+    # omitted_ids = ids in ParamIndex
     #
     # There is probably no use for this function, since you'll only be passing
     # trasformations to the optimizer, but I'll include it for completeness.
 
-    left_ids = setdiff(all_params, omitted_ids)
+    left_ids = setdiff(all_params_free, omitted_ids)
     new_P = length(left_ids)
 
     S = length(vp)
@@ -127,8 +130,11 @@ function free_vp_to_vector(vp::FreeVariationalParams, omitted_ids::Vector{Int64}
 end
 
 
-function vector_to_free_vp(xs::Vector{Float64}, omitted_ids::Vector{Int64})
+function vector_to_free_vp!(xs::Vector{Float64}, vp_free::FreeVariationalParams,
+                            omitted_ids::Vector{Int64})
     # xs: A vector created from free variational parameters.
+    # free_vp: Free variational parameters.  Only the ids not in omitted_ids
+    #   will be updated.
     # omitted_ids: Ids to omit (from ids_free)
 
     left_ids = setdiff(all_params_free, omitted_ids)
@@ -137,7 +143,6 @@ function vector_to_free_vp(xs::Vector{Float64}, omitted_ids::Vector{Int64})
     @assert length(xs) % P == 0
     S = int(length(xs) / P)
     xs2 = reshape(xs, P, S)
-    vp_free = [ zeros(id_size) for s = 1:S]
 
     for s in 1:S
         for p1 in 1:length(left_ids)
@@ -145,8 +150,6 @@ function vector_to_free_vp(xs::Vector{Float64}, omitted_ids::Vector{Int64})
             vp_free[s][p0] = xs2[p1, s]
         end
     end
-
-    vp_free
 end
 
 
@@ -354,16 +357,16 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 end
 
 rect_transform = DataTransform(rect_to_vp!, vp_to_rect!,
-                               vector_to_free_vp, free_vp_to_vector, 
+                               vector_to_free_vp!, free_vp_to_vector, 
                                rect_unconstrain_sensitive_float,
                                ids_free.size)
 
 free_transform = DataTransform(free_to_vp!, vp_to_free!,
-                               vector_to_free_vp, free_vp_to_vector,
+                               vector_to_free_vp!, free_vp_to_vector,
                                free_unconstrain_sensitive_float, ids_free.size)
 
 identity_transform = DataTransform(unchanged_vp!, unchanged_vp!,
-                                   unchanged_vector_to_vp, unchanged_vp_to_vector,
+                                   unchanged_vector_to_vp!, unchanged_vp_to_vector,
                                    unchanged_sensitive_float, ids.size)
 
 end

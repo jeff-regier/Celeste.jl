@@ -58,7 +58,7 @@ end
 
 function test_kappa_finding()
     blob, mp, body = gen_sample_galaxy_dataset()
-    omitted_ids = setdiff(all_params, ids.kappa[:])
+    omitted_ids = setdiff(all_params_free, ids_free.kappa[:])
 
     get_kl_gal_c() = begin
         accum = zero_sensitive_float([1], all_params)
@@ -129,14 +129,14 @@ function test_bad_chi_init()
     mp = ModelInit.cat_init([ce,])
     mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
      
-    omitted_ids = [ids.chi]
+    omitted_ids = [ids_free.chi]
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 
     mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
     elbo_bad = ElboDeriv.elbo_likelihood(blob, mp)
     @test elbo_bad.d[ids.chi[2], 1] > 0
 
-    omitted_ids = setdiff(all_params, ids.chi)
+    omitted_ids = setdiff(all_params_free, ids_free.chi)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.chi[2]] >= 0.5
 
@@ -162,7 +162,7 @@ function test_likelihood_invariance_to_chi()
 
     mp = ModelInit.cat_init([ce,])
     mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
-    omitted_ids = [ids.chi, ids.zeta[:]]
+    omitted_ids = [ids_free.chi, ids_free.zeta[:]]
     OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
 
     mp2 = ModelInit.cat_init([ce,])
@@ -197,7 +197,7 @@ function test_kl_invariance_to_chi()
 
     mp = ModelInit.cat_init([ce,])
     mp.vp[1][ids.chi] = [ 0.2, 0.8 ]
-    omitted_ids = ids.chi
+    omitted_ids = ids_free.chi
     OptimizeElbo.maximize_f(kl_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     mp2 = ModelInit.cat_init([ce,])
@@ -225,7 +225,7 @@ function test_elbo_invariance_to_chi()
 
     mp = ModelInit.cat_init([ce,])
     mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
-    omitted_ids = [ids.chi, ids.zeta[:], ids.lambda[:], ids.theta]
+    omitted_ids = [ids_free.chi, ids_free.zeta[:], ids_free.lambda[:], ids_free.theta]
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 
     mp2 = ModelInit.cat_init([ce,])
@@ -336,10 +336,11 @@ function test_color()
         end
         accum
     end
-    omitted_ids = [ids.beta[:]]
+    omitted_ids = [ids_free.beta[:]]
     OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     @test_approx_eq_eps mp.vp[1][ids.kappa[2, 1]] 1 1e-2
+
     @test_approx_eq mp.vp[1][ids.chi[2]] 0.01
 end
 
