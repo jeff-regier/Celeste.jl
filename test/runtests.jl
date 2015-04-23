@@ -137,25 +137,6 @@ function test_sky_noise_estimates()
 end
 
 
-function test_coordinates_vp_conversion()
-    blob, mp, three_bodies = gen_three_body_dataset()
-
-    xs = OptimizeElbo.vp_to_coordinates(deepcopy(mp.vp), [ids.lambda[:]])
-    vp_new = deepcopy(mp.vp)
-    OptimizeElbo.coordinates_to_vp!(deepcopy(xs), vp_new, [ids.lambda[:]])
-
-    @test length(xs) + 3 * 2 * (4 + 1) == 
-            length(vp_new[1]) * length(vp_new) == 
-            length(mp.vp[1]) * length(mp.vp)
-
-    for s in 1:3
-        for p in all_params
-            @test_approx_eq mp.vp[s][p] vp_new[s][p]
-        end
-    end
-end
-
-
 function test_util_bvn_cov()
     rho = .7
     phi = pi/5
@@ -181,7 +162,6 @@ test_util_bvn_cov()
 test_sky_noise_estimates()
 test_local_sources_2()
 test_local_sources()
-test_coordinates_vp_conversion()
 
 include("test_elbo_values.jl")
 include("test_derivs.jl")
