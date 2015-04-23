@@ -23,6 +23,7 @@ type DataTransform
     #   the variational parameters in place
     # from_vp!: A function that takes (variational paramters, transformed parameters) and updates
     #   the transformed parameters in place
+    # ... 
     # transform_sensitive_float: A function that takes (sensitive float, model parameters)
     #   where the sensitive float contains partial derivatives with respect to the
     #   variational parameters and returns a sensitive float with total derivatives with
@@ -32,25 +33,40 @@ type DataTransform
 	from_vp::Function
 	to_vp!::Function
 	from_vp!::Function
+    vp_to_vector::Function
+    vector_to_vp!::Function
 	transform_sensitive_float::Function
 
-	DataTransform(to_vp!, from_vp!, transform_sensitive_float, id_size::Integer) = begin
+	DataTransform(to_vp!::Function, from_vp!::Function,
+                  vector_to_trans_vp::Function, trans_vp_to_vector::Function,
+                  transform_sensitive_float::Function, id_size::Integer) = begin
 
-        from_vp = function(vp::VariationalParams)
+        function from_vp(vp::VariationalParams)
             S = length(vp)
             vp_free = [ zeros(id_size) for s = 1:S]
             from_vp!(vp, vp_free)
             vp_free
         end
 
-        to_vp = function(vp_free::FreeVariationalParams)
+        function to_vp(vp_free::FreeVariationalParams)
             S = length(vp_free)
             vp = [ zeros(ids.size) for s = 1:S]
             to_vp!(vp_free, vp)
             vp
         end
 
-		new(to_vp, from_vp, to_vp!, from_vp!,
+        function vp_to_vector(vp::VariationalParams, omitted_ids::Vector{Int64})
+            vp_trans = from_vp(vp)
+            trans_vp_to_vector(vp_trans, ommitted_ids) 
+        end
+
+        function vector_to_vp!(xs::Vector{Float64}, vp::VariationalParams,
+                               omitted_ids::Vector{Int64})
+            vp_trans = vector_to_trans_vp(xs, omitted_ids)
+            to_vp!(vp_trans, vp) 
+        end
+
+		new(to_vp, from_vp, to_vp!, from_vp!, vp_to_vector, vector_to_vp!,
             transform_sensitive_float)
 	end
 end
@@ -69,6 +85,71 @@ function unchanged_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # Leave the sensitive float unchanged.
     deepcopy(sf)
 end
+
+
+#####################
+# Conversion to and from vectors.
+
+function unchanged_vp_to_vector(vp::VariationalParams, omitted_ids::Vector{Int64})
+    # There is probably no use for this function, since you'll only be passing
+    # trasformations to the optimizer, but I'll include it for completeness.
+    error("Converting untransformed VarationalParams to a vector is not supported.")
+end
+
+
+function unchanged_vector_to_vp(xs::Vector{Float64},
+                                omitted_ids::Vector{Int64})
+    # There is probably no use for this function, since you'll only be passing
+    # trasformations to the optimizer, but I'll include it for completeness.
+    error("Converting from a vector to untransformed VarationalParams is not supported.")
+end
+
+
+function free_vp_to_vector(vp::FreeVariationalParams, omitted_ids::Vector{Int64})
+    # vp = variational parameters
+    # ommitted_ids = ids in ParamIndex
+    #
+    # There is probably no use for this function, since you'll only be passing
+    # trasformations to the optimizer, but I'll include it for completeness.
+
+    left_ids = setdiff(all_params, omitted_ids)
+    new_P = length(left_ids)
+
+    S = length(vp)
+    vp_new = [zeros(new_P) for s in 1:S]
+
+    for p1 in 1:length(left_ids)
+        p0 = left_ids[p1]
+        [ vp_new[s][p1] = vp[s][p0] for s in 1:S ]
+    end
+
+    reduce(vcat, vp_new)
+end
+
+
+function vector_to_free_vp(xs::Vector{Float64}, omitted_ids::Vector{Int64})
+    # xs: A vector created from free variational parameters.
+    # omitted_ids: Ids to omit (from ids_free)
+
+    left_ids = setdiff(all_params_free, omitted_ids)
+
+    P = length(left_ids)
+    @assert length(xs) % P == 0
+    S = int(length(xs) / P)
+    xs2 = reshape(xs, P, S)
+    vp_free = [ zeros(id_size) for s = 1:S]
+
+    for s in 1:S
+        for p1 in 1:length(left_ids)
+            p0 = left_ids[p1]
+            vp_free[s][p0] = xs2[p1, s]
+        end
+    end
+
+    vp_free
+end
+
+
 
 ###############################################
 # Functions for a "rectangular transform".  This matches the original Celeste
@@ -273,12 +354,16 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 end
 
 rect_transform = DataTransform(rect_to_vp!, vp_to_rect!,
-                               rect_unconstrain_sensitive_float, ids_free.size)
+                               vector_to_free_vp, free_vp_to_vector, 
+                               rect_unconstrain_sensitive_float,
+                               ids_free.size)
 
 free_transform = DataTransform(free_to_vp!, vp_to_free!,
+                               vector_to_free_vp, free_vp_to_vector,
                                free_unconstrain_sensitive_float, ids_free.size)
 
 identity_transform = DataTransform(unchanged_vp!, unchanged_vp!,
+                                   unchanged_vector_to_vp, unchanged_vp_to_vector,
                                    unchanged_sensitive_float, ids.size)
 
 end

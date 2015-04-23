@@ -27,8 +27,11 @@ test_parameter_conversion(free_transform)
 
 
 
+
+
+
 function dont_test_sensitive_float_conversion()
-	# This is from before the DataTransform object.
+	# This is from before I implemented the DataTransform object.
 
 	# The derivatives before constraining are considered partial derivatives.
 	function chi_function(vp::VariationalParams)
