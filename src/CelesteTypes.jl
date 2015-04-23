@@ -290,7 +290,7 @@ immutable UnconstrainedParamIndex
     # The remaining parameters are matrices where the
     # first column is for stars and the second is for galaxies.
 
-    # DxI matrix of color prior component indicators.
+    # Dx(Ia - 1) matrix of color prior component indicators.
     kappa::Array{Int64, 2}
 
     # (B - 1)xI matrices containing c_s means and variances, respectively.
@@ -325,12 +325,16 @@ function get_unconstrained_param_ids()
     # Build a UnconstrainedParamIndex object.  Later the dimensions
     # of the unconstrained parameterizatoin may differ from the
     # constrained one (e.g. with simplicial constraints).
+    #
+    # Currently every alternative parameterization has the same
+    # dimension in each parameter.
 
-    kappa_end = 11 + Ia * D
+    # The last colunn of kappa is constrianed by the first Ia - 1 columns. 
+    kappa_end = 11 + (Ia - 1) * D
     beta_end = kappa_end + Ia * (B - 1)
     lambda_end = beta_end + Ia * (B - 1)
 
-    kappa_ids = reshape([12 : kappa_end], D, Ia)
+    kappa_ids = reshape([12 : kappa_end], D, Ia - 1)
     beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
     lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
 
@@ -345,7 +349,6 @@ end
 
 const ids = get_param_ids()
 const ids_free = get_unconstrained_param_ids()
-
 
 const all_params = [1:ids.size]
 const all_params_free = [1:ids_free.size]
