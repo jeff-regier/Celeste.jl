@@ -149,8 +149,9 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams;
 end
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
-    omitted_ids = setdiff(all_params, [ids_free.gamma, ids_free.zeta,
-                                       ids_free.kappa[:], ids_free.beta[:]])
+    omitted_ids = setdiff(all_params_free,
+                          [ids_free.gamma, ids_free.zeta,
+                           ids_free.kappa[:], ids_free.beta[:]])
     maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 
     maximize_f(ElboDeriv.elbo, blob, mp, ftol_abs=1e-6)
