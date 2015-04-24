@@ -334,7 +334,7 @@ function get_unconstrained_param_ids()
     beta_end = kappa_end + Ia * (B - 1)
     lambda_end = beta_end + Ia * (B - 1)
 
-    kappa_ids = reshape([12 : kappa_end], D, Ia - 1)
+    kappa_ids = reshape([12 : kappa_end], Ia - 1, D)
     beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
     lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
 

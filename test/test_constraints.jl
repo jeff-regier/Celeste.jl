@@ -40,8 +40,8 @@ function test_parameter_conversion(transform::DataTransform)
 	end
 end
 
-for trans in [ identity_transform rect_transform free_transform ]
+for trans in [ rect_transform free_transform ]
 	test_parameter_conversion(trans)
 end
 
-include("/home/rgiordan/Documents/git_repos/Celeste.jl/test/test_optimization.jl")
+#include("/home/rgiordan/Documents/git_repos/Celeste.jl/test/test_optimization.jl")
