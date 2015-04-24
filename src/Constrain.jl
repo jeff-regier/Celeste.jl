@@ -185,8 +185,8 @@ function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
         # second component of chi.
         vp_free[s][ids_free.chi[1]] = vp[s][ids.chi[2]]
 
-        # Keep all but the last column of kappa.
-        vp_free[s][ids_free.kappa] = vp[s][ids.kappa[:, 1:(Ia - 1)]]
+        # Keep all but the last row of kappa.
+        vp_free[s][ids_free.kappa] = vp[s][ids.kappa[1:(Ia - 1), :]]
     end
 end
 
@@ -207,8 +207,8 @@ function rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
         vp[s][ids.chi[2]] = vp_free[s][ids_free.chi[1]]
         vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
 
-        vp[s][ids.kappa[:, 1]] = vp_free[s][ids_free.kappa]
-        vp[s][ids.kappa[:, 2]] = 1 - vp[s][ids.kappa[:, 1]]
+        vp[s][ids.kappa[1, :]] = vp_free[s][ids_free.kappa]
+        vp[s][ids.kappa[2, :]] = 1 - vp[s][ids.kappa[1, :]]
     end
 end
 
@@ -245,7 +245,7 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 
         # Simplicial constriants.
         sf_free.d[ids_free.chi[1], s] = sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]
-        sf_free.d[ids_free.kappa[:, 1], s] = sf.d[ids.kappa[:, 1], s] - sf.d[ids.kappa[:, 2], s]
+        sf_free.d[ids_free.kappa[1, :], s] = sf.d[ids.kappa[1, :], s] - sf.d[ids.kappa[2, :], s]
     end
 
     sf_free
@@ -275,7 +275,7 @@ function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
 
         # In contrast, the original script used the last component of kappa
         # as the free parameter.
-        vp_free[s][ids_free.kappa[:, 1]] = Util.inv_logit(vp[s][ids.kappa[:, 1]])
+        vp_free[s][ids_free.kappa[1, :]] = Util.inv_logit(vp[s][ids.kappa[1, :]])
 
         # Positivity constraints
         vp_free[s][ids_free.gamma] = log(vp[s][ids.gamma])
@@ -297,8 +297,8 @@ function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
         vp[s][ids.chi[2]] = Util.logit(vp_free[s][ids_free.chi[1]])
         vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
 
-        vp[s][ids.kappa[:, 1]] = Util.logit(vp_free[s][ids_free.kappa[:, 1]])
-        vp[s][ids.kappa[:, 2]] = 1.0 - vp[s][ids.kappa[:, 1]]
+        vp[s][ids.kappa[1, :]] = Util.logit(vp_free[s][ids_free.kappa[1, :]])
+        vp[s][ids.kappa[2, :]] = 1.0 - vp[s][ids.kappa[1, :]]
 
          # Positivity constraints
         vp[s][ids.gamma] = exp(vp_free[s][ids_free.gamma])
@@ -343,9 +343,9 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
         sf_free.d[ids_free.chi[1], s] =
             (sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]) * this_chi * (1.0 - this_chi)
 
-        this_kappa = mp.vp[s][ids.kappa[:, 1]]
-        sf_free.d[ids_free.kappa[:, 1], s] =
-            (sf.d[ids.kappa[:, 1], s] - sf.d[ids.kappa[:, 2], s]) .*
+        this_kappa = mp.vp[s][ids.kappa[1, :]]
+        sf_free.d[ids_free.kappa[1, :], s] =
+            (sf.d[ids.kappa[1, :], s] - sf.d[ids.kappa[2, :], s]) .*
             this_kappa .* (1.0 - this_kappa)
 
         # Positivity constraints.
