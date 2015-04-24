@@ -357,7 +357,7 @@ function test_quadratic_optimization(trans::DataTransform)
 
     # Set feasible centers for the indicators.
     centers[ids.chi] = [ 0.4, 0.6 ]
-    centers[ids.kappa] = [ fill(0.4, D) fill(0.6, D) ] 
+    centers[ids.kappa] = [ 0.3 0.3; 0.7 0.7 ] 
 
     function quadratic_function(unused_blob::Blob, mp::ModelParams)
         val = zero_sensitive_float([ 1 ], [ all_params ] )
@@ -381,13 +381,13 @@ function test_quadratic_optimization(trans::DataTransform)
     OptimizeElbo.maximize_f(quadratic_function, unused_blob, mp, trans, lbs, ubs,
         xtol_rel=1e-16, ftol_abs=1e-16)
 
-    # hcat(mp.vp[1], centers)
-    # hcat(trans.from_vp(mp.vp)[1],
-    #      trans.from_vp(convert(VariationalParams, [ centers for s = 1 ]))[1])[ids.gamma, :]
-    # trans.from_vp(mp.vp)[1] -
-    #      trans.from_vp(convert(VariationalParams, [ centers for s = 1 ]))[1]
+    hcat(mp.vp[1], centers)
+    hcat(trans.from_vp(mp.vp)[1],
+         trans.from_vp(convert(VariationalParams, [ centers for s = 1 ]))[1])[ids.gamma, :]
+    trans.from_vp(mp.vp)[1] -
+         trans.from_vp(convert(VariationalParams, [ centers for s = 1 ]))[1]
 
-    @test_approx_eq_eps mp.vp[1] centers 1e-8
+    @test_approx_eq_eps mp.vp[1] centers 1e-6
     @test_approx_eq_eps quadratic_function(unused_blob, mp).v 0.0 1e-15
 end
 

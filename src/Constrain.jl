@@ -245,7 +245,9 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 
         # Simplicial constriants.
         sf_free.d[ids_free.chi[1], s] = sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]
-        sf_free.d[ids_free.kappa[1, :], s] = sf.d[ids.kappa[1, :], s] - sf.d[ids.kappa[2, :], s]
+
+        sf_free.d[collect(ids_free.kappa[1, :]), s] =
+            sf.d[collect(ids.kappa[1, :]), s] - sf.d[collect(ids.kappa[2, :]), s]
     end
 
     sf_free
@@ -343,9 +345,9 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
         sf_free.d[ids_free.chi[1], s] =
             (sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]) * this_chi * (1.0 - this_chi)
 
-        this_kappa = mp.vp[s][ids.kappa[1, :]]
-        sf_free.d[ids_free.kappa[1, :], s] =
-            (sf.d[ids.kappa[1, :], s] - sf.d[ids.kappa[2, :], s]) .*
+        this_kappa = collect(mp.vp[s][ids.kappa[1, :]])
+        sf_free.d[collect(ids_free.kappa[1, :]), s] =
+            (sf.d[collect(ids.kappa[1, :]), s] - sf.d[collect(ids.kappa[2, :]), s]) .*
             this_kappa .* (1.0 - this_kappa)
 
         # Positivity constraints.
