@@ -2,7 +2,7 @@ using Celeste
 using CelesteTypes
 using Base.Test
 using SampleData
-using Constrain
+using Transform
 
 function verify_sample_star(vs, pos)
     @test_approx_eq vs[ids.chi[2]] 0.01
@@ -390,8 +390,6 @@ function test_quadratic_optimization(trans::DataTransform)
     @test_approx_eq_eps mp.vp[1] centers 1e-6
     @test_approx_eq_eps quadratic_function(unused_blob, mp).v 0.0 1e-15
 end
-
-#include(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
 
 ####################################################
 
