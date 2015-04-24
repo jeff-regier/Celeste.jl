@@ -35,7 +35,7 @@ type DataTransform
 	from_vp!::Function
     vp_to_vector::Function
     vector_to_vp!::Function
-	transform_sensitive_float::Function
+    transform_sensitive_float::Function
 
 	DataTransform(to_vp!::Function, from_vp!::Function,
                   vector_to_trans_vp!::Function, trans_vp_to_vector::Function,

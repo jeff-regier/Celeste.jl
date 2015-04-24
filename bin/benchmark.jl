@@ -25,7 +25,7 @@ function small_image_profile()
     S_bodies = CatalogEntry[CatalogEntry(locations[:, s][:], true, 
         fluxes, fluxes, 0.1, .7, pi/4, 4.) for s in 1:S]
 
-       blob = Synthetic.gen_blob(blob0, S_bodies)
+    blob = Synthetic.gen_blob(blob0, S_bodies)
     mp = ModelInit.cat_init(S_bodies, patch_radius=20., tile_width=10)
     elbo = ElboDeriv.elbo(blob, mp)
 end
