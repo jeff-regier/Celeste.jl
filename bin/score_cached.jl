@@ -124,7 +124,7 @@ function convert(::Type{CatalogEntry}, vs::Vector{Float64})
 
     CatalogEntry(
         vs[ids.mu],
-        vs[ids.chi] < 0.5,
+        vs[ids.chi[2]] < 0.5,
         get_fluxes(1),
         get_fluxes(2),
         vs[ids.theta],

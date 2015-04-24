@@ -3,7 +3,7 @@
 
 module Util
 
-export matvec222
+export matvec222, logit, inv_logit
 
 function matvec222(mat::Matrix, vec::Vector)
     # x' A x in a slightly more efficient form.
@@ -30,6 +30,16 @@ function get_bvn_cov(ab::Float64, angle::Float64, scale::Float64)
     D = diagm([1., ab])  # shrinks the minor axis
     W = scale * D * R'
     W' * W  # XiXi
+end
+
+function inv_logit(x)
+    # TODO: bounds checking
+    -log(1.0 ./ x - 1)
+end
+
+function logit(x)
+    # TODO: bounds checking
+    1.0 ./ (1.0 + exp(-x))
 end
 
 end

@@ -10,21 +10,33 @@ export Image, Blob, SkyPatch, ImageTile, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 
-export ModelParams, PriorParams, VariationalParams
+export ModelParams, PriorParams
+export VariationalParams, FreeVariationalParams, RectVariationalParams
 
 export SensitiveFloat
 
 export zero_sensitive_float, const_sensitive_param, clear!
 
-export ParamIndex, ids, all_params, star_pos_params, galaxy_pos_params, D
+export ParamIndex, ids, ids_free, all_params, all_params_free
+export star_pos_params, galaxy_pos_params
+export D, B, Ia
+
+using Util
 
 import FITSIO
 import Distributions
 import WCSLIB
 
-
-
 const band_letters = ['u', 'g', 'r', 'i', 'z']
+
+# The number of components in the color prior.
+const D = 2
+
+# The number of types of celestial objects (here, stars and galaxies).
+const Ia = 2
+
+# The number of bands (colors).
+const B = 5
 
 type CatalogEntry
     pos::Vector{Float64}
@@ -193,34 +205,14 @@ end
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual
 # parameters for that object (referenced using ParamIndex).
+
 # TODO: use a matrix here, in conjunction with ArrayViews.jl (?)
+# TODO: Julia noob question -- is there a way to enforce the
+# differences between these variable types?  For now, this is
+# just helpful notation.
 typealias VariationalParams Vector{Vector{Float64}}
-
-type ModelParams
-    # The parameters for a particular image.
-    #
-    # Attributes:
-    #  - vp: The variational parameters
-    #  - pp: The prior parameters
-    #  - patches: A vector of SkyPatch objects
-    #  - tile_width: The number of pixels across a tile
-    #  - S: The number of sources.
-
-    # The following meanings are clear from the names.
-    vp::VariationalParams
-    pp::PriorParams
-    patches::Vector{SkyPatch}
-    tile_width::Int64
-
-    # The number of sources.
-    S::Int64
-
-    ModelParams(vp, pp, patches, tile_width) = begin
-        # There must be one patch for each celestial object.
-        @assert length(vp) == length(patches)
-        new(vp, pp, patches, tile_width, length(vp))
-    end
-end
+typealias RectVariationalParams Vector{Vector{Float64}}
+typealias FreeVariationalParams Vector{Vector{Float64}}
 
 #########################################################
 
@@ -229,13 +221,14 @@ immutable ParamIndex
     # a VariationalParams object.
 
     # Variational parameter for a_s.
-    # The probability of being a galaxy.  (0 = star, 1 = galaxy)
-    chi::Int64
+    # The probability of being a particular celestial object (Ia x 1 vector).
+    # (Currently the probability of being a star or galaxy, respectively.)
+    chi::Vector{Int64}
 
-    # The location of the object (2x1 vector)
+    # The location of the object (2x1 vector).
     mu::Vector{Int64}
 
-    # Ix1 scalar variational parameters for r_s.  The first
+    # Ia x 1 scalar variational parameters for r_s.  The first
     # row is for stars, and the second for galaxies (I think?).
     gamma::Vector{Int64}
     zeta::Vector{Int64}
@@ -261,39 +254,134 @@ immutable ParamIndex
     # (B - 1)xI matrices containing c_s means and variances, respectively.
     beta::Array{Int64, 2}
     lambda::Array{Int64, 2}
+
+    # The size (largest index) of the parameterization.
+    size::Int64
 end
 
-# The number of components in the color prior.
-const D = 2
+immutable UnconstrainedParamIndex
+    # A data structure to index parameters within
+    # an unconstrained VariationalParams object.
 
-# TODO: also make B and I global constants?
+    # Unconstrained parameter for a_s of length (Ia - 1)
+    # (the probability of being a type of celestial object).
+    chi::Vector{Int64}
+
+    # The location of the object (2x1 vector).
+    mu::Vector{Int64}
+
+    # Ix1 scalar variational parameters for r_s.  The first
+    # row is for stars, and the second for galaxies (I think?).
+    gamma::Vector{Int64}
+    zeta::Vector{Int64}
+
+    # The weight given to a galaxy of type 1.
+    theta::Int64
+
+    # galaxy minor/major ratio
+    rho::Int64
+
+    # galaxy angle
+    phi::Int64 
+
+    # galaxy scale
+    sigma::Int64
+
+    # The remaining parameters are matrices where the
+    # first column is for stars and the second is for galaxies.
+
+    # Dx(Ia - 1) matrix of color prior component indicators.
+    kappa::Array{Int64, 2}
+
+    # (B - 1)xI matrices containing c_s means and variances, respectively.
+    beta::Array{Int64, 2}
+    lambda::Array{Int64, 2}
+
+    # The size (largest index) of the parameterization.
+    size::Int64
+end
 
 function get_param_ids()
     # Build a ParamIndex object.
 
-    # The number of types of celestial objects (here, stars and galaxies).
-    I = 2
+    kappa_end = 12 + Ia * D
+    beta_end = kappa_end + Ia * (B - 1)
+    lambda_end = beta_end + Ia * (B - 1)
 
-    # The number of bands (colors).
-    B = 5
+    kappa_ids = reshape([13 : kappa_end], D, Ia)
+    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
+    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
 
-    kappa_end = 11 + I * D
-    beta_end = kappa_end + I * (B - 1)
-    lambda_end = beta_end + I * (B - 1)
+    ParamIndex([1, 2], # chi
+               [3, 4], # mu
+               [5, 6], # gamma
+               [7, 8], # zeta
+               9, 10, 11, 12, # theta, rho, phi, sigma
+               kappa_ids, beta_ids, lambda_ids,
+               lambda_ids[end])
+end
 
-    kappa_ids = reshape([12 : kappa_end], D, I)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, I)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, I)
+function get_unconstrained_param_ids()
+    # Build a UnconstrainedParamIndex object.  Later the dimensions
+    # of the unconstrained parameterizatoin may differ from the
+    # constrained one (e.g. with simplicial constraints).
+    #
+    # Currently every alternative parameterization has the same
+    # dimension in each parameter.
 
-    ParamIndex(1, [2, 3], [4, 5], [6, 7], 8, 9, 10, 11,
-            kappa_ids, beta_ids, lambda_ids)
+    # The last colunn of kappa is constrianed by the first Ia - 1 columns. 
+    kappa_end = 11 + (Ia - 1) * D
+    beta_end = kappa_end + Ia * (B - 1)
+    lambda_end = beta_end + Ia * (B - 1)
+
+    kappa_ids = reshape([12 : kappa_end], Ia - 1, D)
+    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
+    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
+
+    UnconstrainedParamIndex([1],    # chi
+                            [2, 3], # mu
+                            [4, 5], # gamma
+                            [6, 7], # zeta
+                            8, 9, 10, 11, # theta, rho, phi, sigma
+                            kappa_ids, beta_ids, lambda_ids,
+                            lambda_ids[end])
 end
 
 const ids = get_param_ids()
+const ids_free = get_unconstrained_param_ids()
 
-const all_params = [1:ids.lambda[end]]
+const all_params = [1:ids.size]
+const all_params_free = [1:ids_free.size]
+
 const star_pos_params = ids.mu
 const galaxy_pos_params = [ids.mu, ids.theta, ids.rho, ids.phi, ids.sigma]
+
+type ModelParams
+    # The parameters for a particular image.
+    #
+    # Attributes:
+    #  - vp: The variational parameters
+    #  - vp_free: The unconstrained variational parameters.
+    #  - pp: The prior parameters
+    #  - patches: A vector of SkyPatch objects
+    #  - tile_width: The number of pixels across a tile
+    #  - S: The number of sources.
+
+    # The following meanings are clear from the names.
+    vp::VariationalParams
+    pp::PriorParams
+    patches::Vector{SkyPatch}
+    tile_width::Int64
+
+    # The number of sources.
+    S::Int64
+
+    ModelParams(vp, pp, patches, tile_width) = begin
+        # There must be one patch for each celestial object.
+        @assert length(vp) == length(patches)
+        new(vp, pp, patches, tile_width, length(vp))
+    end
+end
 
 #########################################################
 
