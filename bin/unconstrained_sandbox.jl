@@ -6,7 +6,7 @@
 # require(joinpath(Pkg.dir("Celeste"), "src", "ElboDeriv.jl"))
 # require(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
 
-#include(joinpath(Pkg.dir("Celeste"), "src", "Constrain.jl"))
+#include(joinpath(Pkg.dir("Celeste"), "src", "Transform.jl"))
 #include(joinpath(Pkg.dir("Celeste"), "src", "CelesteTypes.jl"))
 #include(joinpath(Pkg.dir("Celeste"), "src", "ElboDeriv.jl"))
 #include(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
@@ -16,7 +16,7 @@
 
 using Celeste
 using CelesteTypes
-using Constrain
+using Transform
 
 import OptimizeElbo
 import ElboDeriv

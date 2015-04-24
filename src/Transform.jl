@@ -1,6 +1,6 @@
 # Convert between different parameterizations.
 
-module Constrain
+module Transform
 
 using Celeste
 using CelesteTypes

@@ -15,7 +15,7 @@ import ElboDeriv
 import OptimizeElbo
 import ModelInit
 import SampleData
-import Constrain
+import Transform
 
 using CelesteTypes
 

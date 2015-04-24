@@ -6,7 +6,7 @@ using SampleData
 import Synthetic
 
 import GSL.deriv_central
-using Constrain
+using Transform
 
 # verify derivatives of fun_to_test by finite differences
 function test_by_finite_differences(fun_to_test::Function, mp::ModelParams,
