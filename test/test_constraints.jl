@@ -1,16 +1,11 @@
 # Test the functions that move between constrained and unconstrained
 # parameterizations.
 
-
-#include(joinpath(Pkg.dir("Celeste"), "src", "Constrain.jl"))
-#include(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
-
-
 using Celeste
 using CelesteTypes
 using Base.Test
 using SampleData
-using Constrain
+using Transform
 
 import ModelInit
 
@@ -43,5 +38,3 @@ end
 for trans in [ rect_transform free_transform ]
 	test_parameter_conversion(trans)
 end
-
-#include("/home/rgiordan/Documents/git_repos/Celeste.jl/test/test_optimization.jl")

@@ -163,6 +163,7 @@ test_sky_noise_estimates()
 test_local_sources_2()
 test_local_sources()
 
+include("test_constraints.jl")
 include("test_elbo_values.jl")
 include("test_derivs.jl")
 include("test_optimization.jl")

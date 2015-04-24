@@ -5,7 +5,7 @@ module OptimizeElbo
 
 using NLopt
 using CelesteTypes
-using Constrain
+using Transform
 
 import ElboDeriv
 
