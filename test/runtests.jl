@@ -3,101 +3,9 @@
 using Celeste
 using CelesteTypes
 using Base.Test
-
 using Distributions
-
+using SampleData
 import Synthetic
-
-const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
-
-
-const sample_star_fluxes = [
-    4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
-const sample_galaxy_fluxes = [
-    1.377666E+01, 5.635334E+01, 1.258656E+02, 
-    1.884264E+02, 2.351820E+02] * 100  # 1x wasn't bright enough
-
-
-function sample_ce(pos, is_star::Bool)
-    CatalogEntry(pos, is_star, sample_star_fluxes, sample_galaxy_fluxes, 
-        0.1, .7, pi/4, 4.)
-end
-
-
-function perturb_params(mp) # for testing derivatives != 0
-    for vs in mp.vp
-        vs[ids.chi] = 0.6
-        vs[ids.mu[1]] += .8
-        vs[ids.mu[2]] -= .7
-        vs[ids.gamma] /= 10
-        vs[ids.zeta] *= 25.
-        vs[ids.theta] += 0.05
-        vs[ids.rho] += 0.05
-        vs[ids.phi] += pi/10
-        vs[ids.sigma] *= 1.2
-        vs[ids.beta] += 0.5
-        vs[ids.lambda] =  1e-1
-    end
-end
-
-
-function gen_sample_star_dataset(; perturb=true)
-    srand(1)
-    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
-    for b in 1:5
-        blob0[b].H, blob0[b].W = 20, 23
-    end
-    one_body = [sample_ce([10.1, 12.2], true),]
-       blob = Synthetic.gen_blob(blob0, one_body)
-    mp = ModelInit.cat_init(one_body)
-    if perturb
-        perturb_params(mp)
-    end
-
-    blob, mp, one_body
-end
-
-
-function gen_sample_galaxy_dataset(; perturb=true)
-    srand(1)
-    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
-    for b in 1:5
-        blob0[b].H, blob0[b].W = 20, 23
-    end
-    one_body = [sample_ce([8.5, 9.6], false),]
-    blob = Synthetic.gen_blob(blob0, one_body)
-    mp = ModelInit.cat_init(one_body)
-    if perturb
-        perturb_params(mp)
-    end
-
-    blob, mp, one_body
-end
-
-
-function gen_three_body_dataset(; perturb=true)
-    srand(1)
-    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
-    for b in 1:5
-        blob0[b].H, blob0[b].W = 112, 238
-    end
-    three_bodies = [
-        sample_ce([4.5, 3.6], false),
-        sample_ce([60.1, 82.2], true),
-        sample_ce([71.3, 100.4], false),
-    ]
-       blob = Synthetic.gen_blob(blob0, three_bodies)
-    mp = ModelInit.cat_init(three_bodies)
-    if perturb
-        perturb_params(mp)
-    end
-
-    blob, mp, three_bodies
-end
-
-
-#########################
-
 
 function test_local_sources()
     srand(1)
@@ -112,7 +20,7 @@ function test_local_sources()
         sample_ce([71.3, 100.4], false),
     ]
 
-       blob = Synthetic.gen_blob(blob0, three_bodies)
+    blob = Synthetic.gen_blob(blob0, three_bodies)
 
     mp = ModelInit.cat_init(three_bodies, patch_radius=20., tile_width=1000)
     @test mp.S == 3
@@ -229,25 +137,6 @@ function test_sky_noise_estimates()
 end
 
 
-function test_coordinates_vp_conversion()
-    blob, mp, three_bodies = gen_three_body_dataset()
-
-    xs = OptimizeElbo.vp_to_coordinates(deepcopy(mp.vp), [ids.lambda[:]])
-    vp_new = deepcopy(mp.vp)
-    OptimizeElbo.coordinates_to_vp!(deepcopy(xs), vp_new, [ids.lambda[:]])
-
-    @test length(xs) + 3 * 2 * (4 + 1) == 
-            length(vp_new[1]) * length(vp_new) == 
-            length(mp.vp[1]) * length(mp.vp)
-
-    for s in 1:3
-        for p in all_params
-            @test_approx_eq mp.vp[s][p] vp_new[s][p]
-        end
-    end
-end
-
-
 function test_util_bvn_cov()
     rho = .7
     phi = pi/5
@@ -273,8 +162,8 @@ test_util_bvn_cov()
 test_sky_noise_estimates()
 test_local_sources_2()
 test_local_sources()
-test_coordinates_vp_conversion()
 
+include("test_constraints.jl")
 include("test_elbo_values.jl")
 include("test_derivs.jl")
 include("test_optimization.jl")

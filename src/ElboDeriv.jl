@@ -1,13 +1,12 @@
 # written by Jeffrey Regier
 # jeff [at] stat [dot] berkeley [dot] edu
 
-# Calculate values and derivatives of the variational ELBO.
+# Calculate values and partial derivatives of the variational ELBO.
 
 module ElboDeriv
 
 using CelesteTypes
 import Util
-
 
 immutable SourceBrightness
     # SensitiveFloat objects for expectations involving r_s and c_s.
@@ -19,10 +18,10 @@ immutable SourceBrightness
     #   Each matrix has one row for each color and a column for
     #   star / galaxy.  Row 3 is the gamma distribute baseline brightness,
     #   and all other rows are lognormal offsets.
-    #   E_l_a: A 5 x 2 matrix of expectations and derivatives of
+    #   E_l_a: A B x Ia matrix of expectations and derivatives of
     #     color terms.  The rows are bands, and the columns
     #     are star / galaxy.
-    #   E_ll_a: A 5 x 2 matrix of expectations and derivatives of
+    #   E_ll_a: A B x Ia matrix of expectations and derivatives of
     #     squared color terms.  The rows are bands, and the columns
     #     are star / galaxy.
 
@@ -30,7 +29,6 @@ immutable SourceBrightness
     E_ll_a::Matrix{SensitiveFloat}   # [E[l^2|a=0], E[l^2]|a=1]]
 
     SourceBrightness(vs::Vector{Float64}) = begin
-        chi = vs[ids.chi]
         gamma_s = vs[ids.gamma]
         zeta = vs[ids.zeta]
         beta = vs[ids.beta]
@@ -38,10 +36,10 @@ immutable SourceBrightness
 
         # E_l_a has a row for each of the five colors and columns
         # for star / galaxy.
-        E_l_a = Array(SensitiveFloat, 5, 2)
+        E_l_a = Array(SensitiveFloat, B, Ia)
 
-        for i = 1:2
-            for b = 1:5
+        for i = 1:Ia
+            for b = 1:B
                 E_l_a[b, i] = zero_sensitive_float([-1], all_params)
             end
 
@@ -85,9 +83,9 @@ immutable SourceBrightness
             E_l_a[1, i].d[ids.lambda[1, i]] = E_l_a[1, i].v * .5
         end
 
-        E_ll_a = Array(SensitiveFloat, 5, 2)
-        for i = 1:2
-            for b = 1:5
+        E_ll_a = Array(SensitiveFloat, B, Ia)
+        for i = 1:Ia
+            for b = 1:B
                 E_ll_a[b, i] = zero_sensitive_float([-1], all_params)
             end
 
@@ -235,7 +233,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
         end
 
         # Convolve the galaxy representations with the PSF.
-        for i = 1:2
+        for i = 1:Ia
             # TODO: Jeff, could you say what theta_dir is?
             theta_dir = (i == 1) ? 1. : -1.
             theta_i = (i == 1) ? vs[ids.theta] : 1. - vs[ids.theta]
@@ -388,7 +386,7 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
     # E(G) and Var(G).
 
     # In the structures below, 1 = star and 2 = galaxy.
-    chi = (1. - vs[ids.chi], vs[ids.chi])
+    chi = vs[ids.chi]
     fsm = (fs0m, fs1m)
     lf = (sb.E_l_a[b, 1].v * fs0m.v, sb.E_l_a[b, 2].v * fs1m.v)
     llff = (sb.E_ll_a[b, 1].v * fs0m.v^2, sb.E_ll_a[b, 2].v * fs1m.v^2)
@@ -405,13 +403,17 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
     # the derivatibes of E(G) and Var(G).
 
     # Chi derivatives:
-    lf_diff = lf[2] - lf[1]
-    E_G.d[ids.chi, child_s] += lf_diff
-    var_G.d[ids.chi, child_s] -= 2 * E_G_s_v * lf_diff
-    var_G.d[ids.chi, child_s] += llff[2] - llff[1]
+    E_G.d[ids.chi[1], child_s] += lf[1]
+    E_G.d[ids.chi[2], child_s] += lf[2]
+
+    var_G.d[ids.chi[1], child_s] -= 2 * E_G_s_v * lf[1]
+    var_G.d[ids.chi[2], child_s] -= 2 * E_G_s_v * lf[2]
+
+    var_G.d[ids.chi[1], child_s] += llff[1]
+    var_G.d[ids.chi[2], child_s] += llff[2]
 
     # Derivatives with respect to the normal component parameters.
-    for i in 1:2 # Stars and galaxies
+    for i in 1:Ia # Stars and galaxies
         # Loop over parameters for each fsm component.
         for p1 in 1:length(fsm[i].param_index)
             p0 = fsm[i].param_index[p1]
@@ -424,7 +426,7 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
     end
 
     # Derivatives with respect to the brightness parameters.
-    for i in 1:2 # Stars and galaxies
+    for i in 1:Ia # Stars and galaxies
         for p0 in vcat(ids.gamma, ids.zeta, ids.beta[:], ids.lambda[:])
             chi_f_Eld = chi[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
             E_G.d[p0, child_s] += chi_f_Eld
@@ -645,8 +647,7 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
     # be weighted by chi (the probability of this celestial object
     # type) and kappa (the probability of this color prior component).
 
-    # TODO: do not hardcode the number of levels of i.
-    chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
+    chi_si = vs[ids.chi[i]]
     half_kappa = .5 * vs[ids.kappa[d, i]]
 
     beta, lambda = (vs[ids.beta[:, i]], vs[ids.lambda[:, i]])
@@ -667,7 +668,7 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
     accum.d[ids.beta[:, i], s] -= chi_si * half_kappa * 2Lambda_inv * -diff
     accum.d[ids.lambda[:, i], s] -= chi_si * half_kappa * diag(Lambda_inv)
     accum.d[ids.lambda[:, i], s] -= chi_si * half_kappa ./ -lambda
-    accum.d[ids.chi, s] -= (i == 2 ? 1 : -1) * ret * half_kappa
+    accum.d[ids.chi[i], s] -= ret * half_kappa
 end
 
 
@@ -689,8 +690,7 @@ function subtract_kl_k!(i::Int64, s::Int64,
 
     vs = mp.vp[s]
 
-    # TODO: do not hardcode the number of levels of i.
-    chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
+    chi_si = vs[ids.chi[i]]
     kappa_i = vs[ids.kappa[:, i]]
 
     for d in 1:D
@@ -698,7 +698,7 @@ function subtract_kl_k!(i::Int64, s::Int64,
         kappa_log_ratio = kappa_i[d] * log_ratio
         accum.v -= chi_si * kappa_log_ratio
         accum.d[ids.kappa[d, i] , s] -= chi_si * (1 + log_ratio)
-        accum.d[ids.chi, s] -= i == 2 ? kappa_log_ratio : -kappa_log_ratio
+        accum.d[ids.chi[i], s] -= kappa_log_ratio
     end
 end
 
@@ -731,8 +731,7 @@ function subtract_kl_r!(i::Int64, s::Int64,
     kl_v += mp.pp.Upsilon[i] * (log(mp.pp.Psi[i]) - log(zeta_si))
     kl_v += gamma_si * zeta_Psi_ratio
 
-    # TODO: do not hardcode the number of levels of i.
-    chi_si = i == 2 ? vs[ids.chi] : 1 - vs[ids.chi]
+    chi_si = vs[ids.chi[i]]
     accum.v -= chi_si * kl_v
 
     accum.d[ids.gamma[i], s] -= chi_si * shape_diff * polygamma(1, gamma_si)
@@ -741,7 +740,7 @@ function subtract_kl_r!(i::Int64, s::Int64,
     accum.d[ids.zeta[i], s] -= chi_si * (-mp.pp.Upsilon[i] / zeta_si)
     accum.d[ids.zeta[i], s] -= chi_si * (gamma_si / mp.pp.Psi[i])
 
-    accum.d[ids.chi, s] -= i == 2 ? kl_v : -kl_v
+    accum.d[ids.chi[i], s] -= kl_v
 end
 
 
@@ -757,14 +756,13 @@ function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
     # Returns:
     #   Updates accum in place.
 
-    chi_s = mp.vp[s][ids.chi]
     Phi = mp.pp.Phi
 
-    accum.v -= chi_s * (log(chi_s) - log(Phi))
-    accum.v -= (1. - chi_s) * (log(1. - chi_s) - log(1. - Phi))
-
-    accum.d[ids.chi, s] -= (log(chi_s) - log(Phi)) + 1
-    accum.d[ids.chi, s] -= -(log(1. - chi_s) - log(1. - Phi)) - 1.
+    for i in 1:Ia
+        chi_s = mp.vp[s][ids.chi[i]]
+        accum.v -= chi_s * (log(chi_s) - log(Phi))
+        accum.d[ids.chi[i], s] -= (log(chi_s) - log(Phi)) + 1
+    end
 end
 
 
@@ -776,7 +774,7 @@ function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
         subtract_kl_a!(s, mp, accum)
 
         # TODO: Do not hard-code constants.
-        for i in 1:2
+        for i in 1:Ia
             subtract_kl_r!(i, s, mp, accum)
             subtract_kl_k!(i, s, mp, accum)
             for d in 1:D
@@ -801,7 +799,6 @@ function elbo(blob::Blob, mp::ModelParams)
     subtract_kl!(mp, ret)
     ret
 end
-
 
 end
 

@@ -1,7 +1,7 @@
 function true_star_init()
     blob, mp, body = gen_sample_star_dataset(perturb=false)
 
-    mp.vp[1][ids.chi] = 1e-4
+    mp.vp[1][ids.chi] = [ 1.0 - 1e-4, 1e-4 ]
     mp.vp[1][ids.zeta] = 1e-4
     mp.vp[1][ids.gamma] = sample_star_fluxes[3] ./ mp.vp[1][ids.zeta]
     mp.vp[1][ids.lambda] = 1e-4
@@ -34,7 +34,7 @@ function test_kl_divergence_values()
     vs = mp.vp[s]
 
     # a
-    q_a = Bernoulli(vs[ids.chi])
+    q_a = Bernoulli(vs[ids.chi[2]])
     p_a = Bernoulli(mp.pp.Phi)
     test_kl(q_a, p_a, (accum) -> ElboDeriv.subtract_kl_a!(s, mp, accum))
 
@@ -44,7 +44,7 @@ function test_kl_divergence_values()
     function sklr(accum)
         ElboDeriv.subtract_kl_r!(i, s, mp, accum)
         @assert i == 1
-        accum.v /= vs[ids.chi]
+        accum.v /= vs[ids.chi[2]]
     end
     test_kl(q_r, p_r, sklr)
 
@@ -54,7 +54,7 @@ function test_kl_divergence_values()
     function sklk(accum)
         ElboDeriv.subtract_kl_k!(i, s, mp, accum)
         @assert i == 1
-        accum.v /= vs[ids.chi]
+        accum.v /= vs[ids.chi[2]]
     end
     test_kl(q_k, p_k, sklk)
 
@@ -65,7 +65,7 @@ function test_kl_divergence_values()
     p_c = MvNormal(mp.pp.Omega[i][:, d], mp.pp.Lambda[i][d])
     function sklc(accum)
         ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
-        accum.v /= vs[ids.chi] * vs[ids.kappa[d, i]]
+        accum.v /= vs[ids.chi[2]] * vs[ids.kappa[d, i]]
     end
     test_kl(q_c, p_c, sklc)
 end
@@ -96,7 +96,7 @@ function test_that_star_truth_is_most_likely()
 
     for bad_chi in [.3, .5, .9]
         mp_chi = deepcopy(mp)
-        mp_chi.vp[1][ids.chi] = bad_chi
+        mp_chi.vp[1][ids.chi] = [ 1.0 - bad_chi, bad_chi ]
         bad_chi = ElboDeriv.elbo_likelihood(blob, mp_chi)
         @test best.v > bad_chi.v
     end
@@ -132,12 +132,12 @@ end
 
 function test_that_galaxy_truth_is_most_likely()
     blob, mp, body = gen_sample_galaxy_dataset(perturb=false)
-    mp.vp[1][ids.chi] = .99
+    mp.vp[1][ids.chi] = [ 0.01, .99 ]
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
     for bad_chi in [.3, .5, .9]
         mp_chi = deepcopy(mp)
-        mp_chi.vp[1][ids.chi] = bad_chi
+        mp_chi.vp[1][ids.chi] = [ 1.0 - bad_chi, bad_chi ]
         bad_chi = ElboDeriv.elbo_likelihood(blob, mp_chi)
         @test best.v > bad_chi.v
     end
@@ -193,7 +193,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
 
     mp = ModelInit.cat_init(cat_entries)
     for s in 1:length(cat_entries)
-        mp.vp[s][ids.chi] = cat_entries[s].is_star ? 0.01 : 0.99
+        mp.vp[s][ids.chi[2]] = cat_entries[s].is_star ? 0.01 : 0.99
+        mp.vp[s][ids.chi[1]] = 1.0 - mp.vp[s][ids.chi[2]]
     end
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
@@ -219,7 +220,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
 
     for bad_chi in [.3, .7]
         mp_chi = deepcopy(mp)
-        mp_chi.vp[s][ids.chi] = bad_chi
+        mp_chi.vp[s][ids.chi] = [ 1.0 - bad_chi, bad_chi ]
+
         bad_chi = ElboDeriv.elbo_likelihood(blob, mp_chi)
         @test best.v > bad_chi.v
     end

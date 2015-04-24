@@ -1,6 +1,11 @@
+using Celeste
+using CelesteTypes
+using Base.Test
+using SampleData
+using Transform
 
 function verify_sample_star(vs, pos)
-    @test_approx_eq vs[ids.chi] 0.01
+    @test_approx_eq vs[ids.chi[2]] 0.01
 
     @test_approx_eq_eps vs[ids.mu[1]] pos[1] 0.1
     @test_approx_eq_eps vs[ids.mu[2]] pos[2] 0.1
@@ -15,7 +20,7 @@ function verify_sample_star(vs, pos)
 end
 
 function verify_sample_galaxy(vs, pos)
-    @test_approx_eq vs[ids.chi] 0.99
+    @test_approx_eq vs[ids.chi[2]] 0.99
 
     @test_approx_eq_eps vs[ids.mu[1]] pos[1] 0.1
     @test_approx_eq_eps vs[ids.mu[2]] pos[2] 0.1
@@ -58,7 +63,7 @@ end
 
 function test_kappa_finding()
     blob, mp, body = gen_sample_galaxy_dataset()
-    omitted_ids = setdiff(all_params, ids.kappa[:])
+    omitted_ids = setdiff(all_params_free, ids_free.kappa[:])
 
     get_kl_gal_c() = begin
         accum = zero_sensitive_float([1], all_params)
@@ -127,25 +132,26 @@ function test_bad_chi_init()
     blob = Synthetic.gen_blob(blob0, [ce,])
 
     mp = ModelInit.cat_init([ce,])
-    mp.vp[1][ids.chi] = 0.5
-    omitted_ids = [ids.chi]
+    mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
+     
+    omitted_ids = [ids_free.chi]
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 
-    mp.vp[1][ids.chi] = 0.2
+    mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
     elbo_bad = ElboDeriv.elbo_likelihood(blob, mp)
-    @test elbo_bad.d[ids.chi, 1] > 0
+    @test elbo_bad.d[ids.chi[2], 1] > 0
 
-    omitted_ids = setdiff(all_params, [ids.chi])
+    omitted_ids = setdiff(all_params_free, ids_free.chi)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
-    @test mp.vp[1][ids.chi] >= 0.5
+    @test mp.vp[1][ids.chi[2]] >= 0.5
 
     mp2 = deepcopy(mp)
-    mp2.vp[1][ids.chi] = 0.99
+    mp2.vp[1][ids.chi] = [ 0.01, 0.99 ]
     elbo_true2 = ElboDeriv.elbo_likelihood(blob, mp2)
-    mp2.vp[1][ids.chi] = 0.01
+    mp2.vp[1][ids.chi] = [ 0.99, 0.01 ]
     elbo_bad2 = ElboDeriv.elbo_likelihood(blob, mp2)
     @test elbo_true2.v > elbo_bad2.v
-    @test elbo_bad2.d[ids.chi, 1] > 0
+    @test elbo_bad2.d[ids.chi[2], 1] > 0
 end
 
 
@@ -160,16 +166,16 @@ function test_likelihood_invariance_to_chi()
     blob = Synthetic.gen_blob(blob0, [ce,])
 
     mp = ModelInit.cat_init([ce,])
-    mp.vp[1][ids.chi] = 0.2
-    omitted_ids = [ids.chi, ids.zeta[:]]
+    mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
+    omitted_ids = [ids_free.chi, ids_free.zeta[:]]
     OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
 
     mp2 = ModelInit.cat_init([ce,])
-    mp2.vp[1][ids.chi] = 0.8
+    mp2.vp[1][ids.chi] = [ 0.2, 0.8 ]
     OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp2, omitted_ids=omitted_ids)
 
-    mp.vp[1][ids.chi] = 0.5
-    mp2.vp[1][ids.chi] = 0.5
+    mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
+    mp2.vp[1][ids.chi] = [ 0.5, 0.5 ]
     @test_approx_eq_eps(ElboDeriv.elbo_likelihood(blob, mp).v,
         ElboDeriv.elbo_likelihood(blob, mp2).v, 1)
 
@@ -195,16 +201,16 @@ function test_kl_invariance_to_chi()
     end
 
     mp = ModelInit.cat_init([ce,])
-    mp.vp[1][ids.chi] = 0.8
-    omitted_ids = [ids.chi]
+    mp.vp[1][ids.chi] = [ 0.2, 0.8 ]
+    omitted_ids = ids_free.chi
     OptimizeElbo.maximize_f(kl_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     mp2 = ModelInit.cat_init([ce,])
-    mp2.vp[1][ids.chi] = 0.2
+    mp2.vp[1][ids.chi] = [ 0.8, 0.2 ]
     OptimizeElbo.maximize_f(kl_wrapper, blob, mp2, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
-    mp.vp[1][ids.chi] = 0.5
-    mp2.vp[1][ids.chi] = 0.5
+    mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
+    mp2.vp[1][ids.chi] = [ 0.5, 0.5 ]
     @test_approx_eq_eps kl_wrapper(blob, mp).v kl_wrapper(blob, mp2).v 1e-1
 
     for i in 2:length(all_params) #skip chi
@@ -223,19 +229,19 @@ function test_elbo_invariance_to_chi()
     blob = Synthetic.gen_blob(blob0, [ce,])
 
     mp = ModelInit.cat_init([ce,])
-    mp.vp[1][ids.chi] = 0.2
-    omitted_ids = [ids.chi, ids.zeta[:], ids.lambda[:], ids.theta]
+    mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
+    omitted_ids = [ids_free.chi, ids_free.zeta[:], ids_free.lambda[:], ids_free.theta]
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 
     mp2 = ModelInit.cat_init([ce,])
-    mp2.vp[1][ids.chi] = 0.8
+    mp2.vp[1][ids.chi] = [ 0.2, 0.8 ]
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp2, omitted_ids=omitted_ids)
 
-    mp.vp[1][ids.chi] = 0.5
-    mp2.vp[1][ids.chi] = 0.5
+    mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
+    mp2.vp[1][ids.chi] = [ 0.5, 0.5 ]
     @test_approx_eq_eps ElboDeriv.elbo(blob, mp).v ElboDeriv.elbo(blob, mp2).v 1
 
-    for i in setdiff(all_params, [ids.chi]) #skip chi
+    for i in setdiff(all_params, ids.chi) #skip chi
         @test_approx_eq_eps mp.vp[1][i] / mp2.vp[1][i] 1. 0.1
     end
 end
@@ -309,11 +315,11 @@ function test_bad_galaxy_init()
 
     mp_bad_init = ModelInit.cat_init(cat_primary)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bad_init)
-    @test mp_bad_init.vp[1][ids.chi] > .5
+    @test mp_bad_init.vp[1][ids.chi[2]] > .5
 
     mp_good_init = ModelInit.cat_init(cat_coadd)
     OptimizeElbo.maximize_elbo(blob, mp_good_init)
-    @test mp_good_init.vp[1][ids.chi] > .5
+    @test mp_good_init.vp[1][ids.chi[2]] > .5
 
     @test_approx_eq_eps mp_good_init.vp[1][ids.sigma] mp_bad_init.vp[1][ids.sigma] 0.2
     @test_approx_eq_eps mp_good_init.vp[1][ids.rho] mp_bad_init.vp[1][ids.rho] 0.2
@@ -335,15 +341,60 @@ function test_color()
         end
         accum
     end
-    omitted_ids = [ids.beta[:]]
+    omitted_ids = [ids_free.beta[:]]
     OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     @test_approx_eq_eps mp.vp[1][ids.kappa[2, 1]] 1 1e-2
-    @test_approx_eq mp.vp[1][ids.chi] 0.01
+
+    @test_approx_eq mp.vp[1][ids.chi[2]] 0.01
 end
 
 
+function test_quadratic_optimization(trans::DataTransform)
+
+    # A very simple quadratic function to test the optimization.
+    const centers = collect(linrange(0.1, 0.9, ids.size))
+
+    # Set feasible centers for the indicators.
+    centers[ids.chi] = [ 0.4, 0.6 ]
+    centers[ids.kappa] = [ 0.3 0.3; 0.7 0.7 ] 
+
+    function quadratic_function(unused_blob::Blob, mp::ModelParams)
+        val = zero_sensitive_float([ 1 ], [ all_params ] )
+        val.v = -sum((mp.vp[1] - centers) .^ 2)
+        val.d[ all_params ] = -2.0 * (mp.vp[1] - centers)
+
+        val
+    end
+
+    # 0.5 is an innocuous value for all parameters.
+    mp = empty_model_params(1)
+    mp.vp = convert(VariationalParams, [ fill(0.5, ids.size) for s in 1:1 ]) 
+    unused_blob = gen_sample_star_dataset()[1]
+
+    vp_lbs = convert(VariationalParams, [ fill(1e-6, ids.size) for s in 1:1 ]) 
+    vp_ubs = convert(VariationalParams, [ fill(1.0 - 1e-6, ids.size) for s in 1:1 ]) 
+
+    lbs = trans.from_vp(vp_lbs)[1]
+    ubs = trans.from_vp(vp_ubs)[1]
+
+    OptimizeElbo.maximize_f(quadratic_function, unused_blob, mp, trans, lbs, ubs,
+        xtol_rel=1e-16, ftol_abs=1e-16)
+
+    hcat(mp.vp[1], centers)
+    hcat(trans.from_vp(mp.vp)[1],
+         trans.from_vp(convert(VariationalParams, [ centers for s = 1 ]))[1])[ids.gamma, :]
+    trans.from_vp(mp.vp)[1] -
+         trans.from_vp(convert(VariationalParams, [ centers for s = 1 ]))[1]
+
+    @test_approx_eq_eps mp.vp[1] centers 1e-6
+    @test_approx_eq_eps quadratic_function(unused_blob, mp).v 0.0 1e-15
+end
+
 ####################################################
+
+test_quadratic_optimization(rect_transform)
+test_quadratic_optimization(free_transform)
 
 test_color()
 #test_bad_galaxy_init()
