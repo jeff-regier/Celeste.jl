@@ -1,3 +1,8 @@
+using Celeste
+using CelesteTypes
+using Base.Test
+using SampleData
+using Constrain
 
 function verify_sample_star(vs, pos)
     @test_approx_eq vs[ids.chi[2]] 0.01
@@ -345,7 +350,53 @@ function test_color()
 end
 
 
+function test_quadratic_optimization(trans::DataTransform)
+
+    # A very simple quadratic function to test the optimization.
+    const centers = collect(linrange(0.1, 0.9, ids.size))
+
+    # Set feasible centers for the indicators.
+    centers[ids.chi] = [ 0.4, 0.6 ]
+    centers[ids.kappa] = [ fill(0.4, D) fill(0.6, D) ] 
+
+    function quadratic_function(unused_blob::Blob, mp::ModelParams)
+        val = zero_sensitive_float([ 1 ], [ all_params ] )
+        val.v = -sum((mp.vp[1] - centers) .^ 2)
+        val.d[ all_params ] = -2.0 * (mp.vp[1] - centers)
+
+        val
+    end
+
+    # 0.5 is an innocuous value for all parameters.
+    mp = empty_model_params(1)
+    mp.vp = convert(VariationalParams, [ fill(0.5, ids.size) for s in 1:1 ]) 
+    unused_blob = gen_sample_star_dataset()[1]
+
+    vp_lbs = convert(VariationalParams, [ fill(1e-6, ids.size) for s in 1:1 ]) 
+    vp_ubs = convert(VariationalParams, [ fill(1.0 - 1e-6, ids.size) for s in 1:1 ]) 
+
+    lbs = trans.from_vp(vp_lbs)[1]
+    ubs = trans.from_vp(vp_ubs)[1]
+
+    OptimizeElbo.maximize_f(quadratic_function, unused_blob, mp, trans, lbs, ubs,
+        xtol_rel=1e-16, ftol_abs=1e-16)
+
+    # hcat(mp.vp[1], centers)
+    # hcat(trans.from_vp(mp.vp)[1],
+    #      trans.from_vp(convert(VariationalParams, [ centers for s = 1 ]))[1])[ids.gamma, :]
+    # trans.from_vp(mp.vp)[1] -
+    #      trans.from_vp(convert(VariationalParams, [ centers for s = 1 ]))[1]
+
+    @test_approx_eq_eps mp.vp[1] centers 1e-8
+    @test_approx_eq_eps quadratic_function(unused_blob, mp).v 0.0 1e-15
+end
+
+#include(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
+
 ####################################################
+
+test_quadratic_optimization(rect_transform)
+test_quadratic_optimization(free_transform)
 
 test_color()
 #test_bad_galaxy_init()

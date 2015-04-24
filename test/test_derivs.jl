@@ -177,7 +177,8 @@ function test_elbo_derivs(trans::DataTransform)
 end
 
 
-function test_simple_derivatives(trans::DataTransform)
+function test_quadratic_derivatives(trans::DataTransform)
+    
     # A very simple quadratic function to test the derivatives.
     function quadratic_function(mp::ModelParams)
         const centers = collect(linrange(0, 10, ids.size))
@@ -203,5 +204,5 @@ for trans in [ identity_transform, rect_transform, free_transform ]
     test_brightness_derivs(trans)
     test_accum_pixel_source_derivs(trans)
     test_elbo_derivs(trans)
-    test_simple_derivatives(trans)
+    test_quadratic_derivatives(trans)
 end
