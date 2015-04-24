@@ -75,14 +75,18 @@ function print_params(vp)
 end
 
 
-function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
+function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform,
+                    lbs::Array{Float64, 1}, ubs::Array{Float64, 1};
+                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
     # Maximize using NLOpt and unconstrained coordinates.
     #
     # Args:
     #   - f: A function that takes a blob and constrianed coordinates (e.g. ElboDeriv.elbo)
     #   - blob: Input for f
     #   - mp: Constrained initial ModelParams
+    #   - transform: The data transform to be applied before optimizing.
+    #   - lbs: An array of lower bounds (in the transformed space)
+    #   - ubs: An array of upper bounds (in the transformed space)
     #   - omitted_ids: Omitted ids from the _unconstrained_ parameterization (i.e. elements
     #       of free_ids).
 
@@ -104,13 +108,13 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
         iter_count += 1
         print_params(mp.vp)
         println("elbo: ", elbo.v)
+        println("gradient:", g)
         println("xtol_rel: $xtol_rel ;  ftol_abs: $ftol_abs")
         println("\n=======================================\n")
         elbo.v
     end
 
     opt = Opt(:LD_LBFGS, length(x0))
-    lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform)
     for i in 1:length(x0)
         if !(lbs[i] <= x0[i] <= ubs[i])
             println("coordinate $i falsity: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
@@ -127,16 +131,26 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     iter_count, max_f, max_x, ret
 end
 
+function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform;
+    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
+    # Default to the bounds given in get_nlopt_unconstrained_bounds.
+
+    lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform)
+    maximize_f(f, blob, mp, transform, lbs, ubs;
+               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
+end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams;
     omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
     # Default to the rectangular transform
+
     maximize_f(f, blob, mp, rect_transform,
                omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
 end
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
-    omitted_ids = setdiff(all_params, [ids.gamma, ids.zeta, ids.kappa[:], ids.beta[:]])
+    omitted_ids = setdiff(all_params, [ids_free.gamma, ids_free.zeta,
+                                       ids_free.kappa[:], ids_free.beta[:]])
     maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 
     maximize_f(ElboDeriv.elbo, blob, mp, ftol_abs=1e-6)
@@ -144,7 +158,7 @@ end
 
 
 function maximize_likelihood(blob::Blob, mp::ModelParams)
-    omitted_ids = [ids.kappa[:], ids.lambda[:], ids.zeta]
+    omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta]
     maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
 end
 
