@@ -108,7 +108,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
         iter_count += 1
         print_params(mp.vp)
         println("elbo: ", elbo.v)
-        println("gradient:", g)
+        #println("gradient:", g)
         println("xtol_rel: $xtol_rel ;  ftol_abs: $ftol_abs")
         println("\n=======================================\n")
         elbo.v
@@ -132,7 +132,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
+                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
     # Default to the bounds given in get_nlopt_unconstrained_bounds.
 
     lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform)
@@ -141,26 +141,39 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
+                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
     # Default to the rectangular transform
 
     maximize_f(f, blob, mp, rect_transform,
                omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
 end
 
-function maximize_elbo(blob::Blob, mp::ModelParams)
+
+function maximize_elbo(blob::Blob, mp::ModelParams, trans::DataTransform; xtol_rel = 1e-7, ftol_abs=1e-6)
     omitted_ids = setdiff(all_params_free,
                           [ids_free.gamma, ids_free.zeta,
                            ids_free.kappa[:], ids_free.beta[:]])
-    maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids, xtol_rel=xtol_rel)
 
-    maximize_f(ElboDeriv.elbo, blob, mp, ftol_abs=1e-6)
+    maximize_f(ElboDeriv.elbo, blob, mp, trans, ftol_abs=ftol_abs-6, xtol_rel=xtol_rel)
 end
 
+
+function maximize_likelihood(blob::Blob, mp::ModelParams, trans::DataTransform; xtol_rel = 1e-7, ftol_abs=1e-6)
+    omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta]
+    maximize_f(ElboDeriv.elbo_likelihood, blob, mp, trans,
+               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
+end
+
+function maximize_elbo(blob::Blob, mp::ModelParams)
+    # Default to the rectangular transform.
+    maximize_elbo(blob, mp, rect_transform)
+end
 
 function maximize_likelihood(blob::Blob, mp::ModelParams)
-    omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta]
-    maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
+    # Default to the rectangular transform.
+    maximize_likelihood(blob, mp, rect_transform)
 end
+
 
 end

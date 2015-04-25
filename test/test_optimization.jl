@@ -47,21 +47,21 @@ end
 #########################################################
 
 
-function test_star_optimization()
+function test_star_optimization(trans::DataTransform)
     blob, mp, body = gen_sample_star_dataset()
-    OptimizeElbo.maximize_likelihood(blob, mp)
+    OptimizeElbo.maximize_likelihood(blob, mp, trans)
     verify_sample_star(mp.vp[1], [10.1, 12.2])
 end
 
 
-function test_galaxy_optimization()
+function test_galaxy_optimization(trans::DataTransform)
     blob, mp, body = gen_sample_galaxy_dataset()
-    OptimizeElbo.maximize_likelihood(blob, mp)
+    OptimizeElbo.maximize_likelihood(blob, mp, trans)
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6])
 end
 
 
-function test_kappa_finding()
+function test_kappa_finding(trans::DataTransform)
     blob, mp, body = gen_sample_galaxy_dataset()
     omitted_ids = setdiff(all_params_free, ids_free.kappa[:])
 
@@ -98,29 +98,29 @@ function test_kappa_finding()
 
     mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 1]
     mp.vp[1][ids.kappa[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.kappa[1, 2]] > .9
 
     mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 2]
     mp.vp[1][ids.kappa[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.kappa[2, 2]] > .9
 
     mp.pp.Xi[2] = [.9, .1]
     mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 1]
     mp.vp[1][ids.kappa[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.kappa[1, 2]] > .9
 
     mp.pp.Xi[2] = [.1, .9]
     mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 2]
     mp.vp[1][ids.kappa[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.kappa[2, 2]] > .9
 end
 
 
-function test_bad_chi_init()
+function test_bad_chi_init(trans::DataTransform)
     gal_color_mode = [ 2.47122, 1.832, 4.0, 5.9192, 9.12822]
     ce = CatalogEntry([7.2, 8.3], false, gal_color_mode, gal_color_mode,
             0.5, .7, pi/4, .5)
@@ -135,14 +135,14 @@ function test_bad_chi_init()
     mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
      
     omitted_ids = [ids_free.chi]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids)
 
     mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
     elbo_bad = ElboDeriv.elbo_likelihood(blob, mp)
     @test elbo_bad.d[ids.chi[2], 1] > 0
 
     omitted_ids = setdiff(all_params_free, ids_free.chi)
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.chi[2]] >= 0.5
 
     mp2 = deepcopy(mp)
@@ -155,7 +155,7 @@ function test_bad_chi_init()
 end
 
 
-function test_likelihood_invariance_to_chi()
+function test_likelihood_invariance_to_chi(trans::DataTransform)
     fluxes = [2.47122, 1.832, 4.0, 5.9192, 9.12822]
     ce = CatalogEntry([7.2,8.3], false, fluxes, fluxes, 0.5, .7, pi/4, .5)
 
@@ -168,11 +168,11 @@ function test_likelihood_invariance_to_chi()
     mp = ModelInit.cat_init([ce,])
     mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
     omitted_ids = [ids_free.chi, ids_free.zeta[:]]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp, trans, omitted_ids=omitted_ids)
 
     mp2 = ModelInit.cat_init([ce,])
     mp2.vp[1][ids.chi] = [ 0.2, 0.8 ]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp2, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp2, trans, omitted_ids=omitted_ids)
 
     mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
     mp2.vp[1][ids.chi] = [ 0.5, 0.5 ]
@@ -185,7 +185,7 @@ function test_likelihood_invariance_to_chi()
 end
 
 
-function test_kl_invariance_to_chi()
+function test_kl_invariance_to_chi(trans::DataTransform)
     fluxes = [2.47122, 1.832, 4.0, 5.9192, 9.12822]
     ce = CatalogEntry([7.2,8.3], false, fluxes, fluxes, 0.5, .7, pi/4, .5)
     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
@@ -203,11 +203,11 @@ function test_kl_invariance_to_chi()
     mp = ModelInit.cat_init([ce,])
     mp.vp[1][ids.chi] = [ 0.2, 0.8 ]
     omitted_ids = ids_free.chi
-    OptimizeElbo.maximize_f(kl_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
+    OptimizeElbo.maximize_f(kl_wrapper, blob, mp, trans, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     mp2 = ModelInit.cat_init([ce,])
     mp2.vp[1][ids.chi] = [ 0.8, 0.2 ]
-    OptimizeElbo.maximize_f(kl_wrapper, blob, mp2, omitted_ids=omitted_ids, ftol_abs=1e-9)
+    OptimizeElbo.maximize_f(kl_wrapper, blob, mp2, trans, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
     mp2.vp[1][ids.chi] = [ 0.5, 0.5 ]
@@ -219,7 +219,7 @@ function test_kl_invariance_to_chi()
 end
 
 
-function test_elbo_invariance_to_chi()
+function test_elbo_invariance_to_chi(trans::DataTransform)
     fluxes = [2.47122, 1.832, 4.0, 5.9192, 9.12822] * 100
     ce = CatalogEntry([7.2,8.3], false, fluxes, fluxes, 0.5, .7, pi/4, .5)
     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
@@ -231,11 +231,11 @@ function test_elbo_invariance_to_chi()
     mp = ModelInit.cat_init([ce,])
     mp.vp[1][ids.chi] = [ 0.8, 0.2 ]
     omitted_ids = [ids_free.chi, ids_free.zeta[:], ids_free.lambda[:], ids_free.theta]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids)
 
     mp2 = ModelInit.cat_init([ce,])
     mp2.vp[1][ids.chi] = [ 0.2, 0.8 ]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp2, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp2, trans, omitted_ids=omitted_ids)
 
     mp.vp[1][ids.chi] = [ 0.5, 0.5 ]
     mp2.vp[1][ids.chi] = [ 0.5, 0.5 ]
@@ -247,15 +247,15 @@ function test_elbo_invariance_to_chi()
 end
 
 
-function test_peak_init_galaxy_optimization()
+function test_peak_init_galaxy_optimization(trans::DataTransform)
     blob, mp, body = gen_sample_galaxy_dataset()
     mp = ModelInit.peak_init(blob)
-    OptimizeElbo.maximize_likelihood(blob, mp)
+    OptimizeElbo.maximize_likelihood(blob, mp, trans)
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6])
 end
 
 
-function test_peak_init_2body_optimization()
+function test_peak_init_2body_optimization(trans::DataTransform)
     srand(1)
     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
 
@@ -268,21 +268,21 @@ function test_peak_init_2body_optimization()
     mp = ModelInit.peak_init(blob) #one giant tile, giant patches
     @test mp.S == 2
 
-    OptimizeElbo.maximize_likelihood(blob, mp)
+    OptimizeElbo.maximize_likelihood(blob, mp, trans)
 
     verify_sample_star(mp.vp[1], [11.1, 21.2])
     verify_sample_galaxy(mp.vp[2], [15.3, 31.4])
 end
 
 
-function test_full_elbo_optimization()
+function test_full_elbo_optimization(trans::DataTransform)
     blob, mp, body = gen_sample_galaxy_dataset(perturb=true)
-    OptimizeElbo.maximize_elbo(blob, mp)
+    OptimizeElbo.maximize_elbo(blob, mp, trans)
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6])
 end
 
 
-function test_real_stamp_optimization()
+function test_real_stamp_optimization(trans::DataTransform)
     blob = SDSS.load_stamp_blob(dat_dir, "5.0073-0.0739")
     cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-5.0073-0.0739", blob)
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
@@ -292,11 +292,11 @@ function test_real_stamp_optimization()
     cat_entries = filter(inbounds, cat_entries)
 
     mp = ModelInit.cat_init(cat_entries)
-    OptimizeElbo.maximize_elbo(blob, mp)
+    OptimizeElbo.maximize_elbo(blob, mp, trans)
 end
 
 
-function test_bad_galaxy_init()
+function test_bad_galaxy_init(trans::DataTransform)
     stamp_id = "5.0624-0.1528"
     blob0 = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
 
@@ -314,11 +314,11 @@ function test_bad_galaxy_init()
     @test length(cat_primary) == 1
 
     mp_bad_init = ModelInit.cat_init(cat_primary)
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bad_init)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bad_init, trans)
     @test mp_bad_init.vp[1][ids.chi[2]] > .5
 
     mp_good_init = ModelInit.cat_init(cat_coadd)
-    OptimizeElbo.maximize_elbo(blob, mp_good_init)
+    OptimizeElbo.maximize_elbo(blob, mp_good_init, trans)
     @test mp_good_init.vp[1][ids.chi[2]] > .5
 
     @test_approx_eq_eps mp_good_init.vp[1][ids.sigma] mp_bad_init.vp[1][ids.sigma] 0.2
@@ -328,7 +328,7 @@ function test_bad_galaxy_init()
 end
 
 
-function test_color()
+function test_color(trans::DataTransform)
     blob, mp, body = gen_sample_galaxy_dataset(perturb=true)
     # these are a bright star's colors
     mp.vp[1][ids.beta[:, 1]] = [2.42824, 1.13996, 0.475603, 0.283062]
@@ -342,7 +342,7 @@ function test_color()
         accum
     end
     omitted_ids = [ids_free.beta[:]]
-    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
+    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, trans, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     @test_approx_eq_eps mp.vp[1][ids.kappa[2, 1]] 1 1e-2
 
@@ -393,19 +393,22 @@ end
 
 ####################################################
 
-test_quadratic_optimization(rect_transform)
-test_quadratic_optimization(free_transform)
+for trans in [ rect_transform free_transform ]
+    start_time = time()
+    test_quadratic_optimization(Transform)
+    test_star_optimization(trans)
+    test_color(trans)
+    test_kappa_finding(trans)
+    test_bad_chi_init(trans)
+    test_elbo_invariance_to_chi(trans)
+    test_kl_invariance_to_chi(trans)
+    test_likelihood_invariance_to_chi(trans)
+    test_full_elbo_optimization(trans)
+    test_galaxy_optimization(trans)
+    test_real_stamp_optimization(trans)  # long running
+    finish_time = time() - start_time
+end
 
-test_color()
 #test_bad_galaxy_init()
-test_kappa_finding()
-test_bad_chi_init()
-test_elbo_invariance_to_chi()
-test_kl_invariance_to_chi()
-test_likelihood_invariance_to_chi()
-test_star_optimization()
-test_full_elbo_optimization()
-test_galaxy_optimization()
-test_real_stamp_optimization()  # long running
 #test_peak_init_2body_optimization()
 #test_peak_init_galaxy_optimization()
