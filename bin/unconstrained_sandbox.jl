@@ -36,7 +36,8 @@ function compare_solutions(mp_rect::ModelParams, mp_free::ModelParams,
     end
     println("===================")
 
-    println("Function value (free / rect): ", res_free_max_f / res_rect_max_f)
+    println("Function value (free - rect) / abs(rect): ",
+            (res_free_max_f - res_rect_max_f) / abs(res_rect_max_f))
     println("Iterations: (free / rect): ", res_free_iter_count / res_rect_iter_count)
 end
 
@@ -57,17 +58,48 @@ omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta[:] ]
 lbs_free, ubs_free = OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, free_transform)
 lbs_rect, ubs_rect= OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, rect_transform)
 
+mp_rect = deepcopy(mp_init)
+res_rect_iter_count, res_rect_max_f, res_rect_max_x, res_rect_ret =
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp_rect, rect_transform,
+                            lbs_rect, ubs_rect, omitted_ids=omitted_ids, xtol_rel = 1e-7, ftol_abs = 1e-6)
+
 mp_free = deepcopy(mp_init)
 res_free_iter_count, res_free_max_f, res_free_max_x, res_free_ret =
     OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp_free, free_transform,
     	       lbs_free, ubs_free, omitted_ids=omitted_ids, xtol_rel = 1e-7, ftol_abs = 1e-6)
 
-mp_rect = deepcopy(mp_init)
-res_rect_iter_count, res_rect_max_f, res_rect_max_x, res_rect_ret =
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp_rect, rect_transform,
-      	                    lbs_rect, ubs_rect, omitted_ids=omitted_ids, xtol_rel = 1e-7, ftol_abs = 1e-6)
-
 compare_solutions(mp_rect, mp_free, res_rect_max_f, res_free_max_f, res_rect_iter_count, res_free_iter_count)
+
+
+
+########################################
+# Three body
+
+blob, mp_init, body = SampleData.gen_three_body_dataset();
+
+mp_original = deepcopy(mp_init)
+mp_free = deepcopy(mp_init)
+mp_rect = deepcopy(mp_init)
+
+# Optimize
+omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta[:] ]
+
+lbs_free, ubs_free = OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, free_transform)
+lbs_rect, ubs_rect= OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, rect_transform)
+
+mp_rect_three = deepcopy(mp_init)
+res_rect_iter_count_three, res_rect_max_f_three, res_rect_max_x, res_rect_ret =
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp_rect_three, rect_transform,
+                            lbs_rect, ubs_rect, omitted_ids=omitted_ids, xtol_rel = 1e-7, ftol_abs = 1e-6)
+
+mp_free_three = deepcopy(mp_init)
+res_free_iter_count_three, res_free_max_f_three, res_free_max_x, res_free_ret =
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp_free_three, free_transform,
+               lbs_free, ubs_free, omitted_ids=omitted_ids, xtol_rel = 1e-7, ftol_abs = 1e-6)
+
+compare_solutions(mp_rect_three, mp_free_three,
+    res_rect_max_f_three, res_free_max_f_three,
+    res_rect_iter_count_three, res_free_iter_count_three)
 
 
 
@@ -96,7 +128,6 @@ compare_solutions(mp_rect_2body, mp_free_2body,
     res_rect_iter_count_2body, res_free_iter_count_2body)
 
 
-
 #################################
 # From test_full_elbo_optimization
 
@@ -119,8 +150,8 @@ compare_solutions(mp_rect_elbo, mp_free_elbo,
 
 #############################################
 # From test_real_stamp_optimization.  This is slow.
-blob = SDSS.load_stamp_blob(dat_dir, "5.0073-0.0739");
-cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-5.0073-0.0739", blob);
+blob = SDSS.load_stamp_blob(SampleData.dat_dir, "5.0073-0.0739");
+cat_entries = SDSS.load_stamp_catalog(SampleData.dat_dir, "s82-5.0073-0.0739", blob);
 bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3;
 cat_entries = filter(bright, cat_entries);
 inbounds(ce) = ce.pos[1] > -10. && ce.pos[2] > -10 &&
@@ -129,13 +160,13 @@ cat_entries = filter(inbounds, cat_entries);
 
 mp = ModelInit.cat_init(cat_entries);
 
-mp_rect = deepcopy(mp);
-res_rect_iter_count, res_rect_max_f, res_rect_max_x, res_rect_ret =
-    OptimizeElbo.maximize_elbo(blob, mp_rect, rect_transform)
+mp_rect_real = deepcopy(mp);
+res_rect_iter_count_real, res_rect_max_f_real, res_rect_max_x, res_rect_ret =
+    OptimizeElbo.maximize_elbo(blob, mp_rect_real, rect_transform)
 
-mp_free = deepcopy(mp);
-res_free_iter_count, res_free_max_f, res_free_max_x, res_free_ret =
-    OptimizeElbo.maximize_elbo(blob, mp_free, free_transform)
+mp_free_real = deepcopy(mp);
+res_free_iter_count_real, res_free_max_f_real, res_free_max_x, res_free_ret =
+    OptimizeElbo.maximize_elbo(blob, mp_free_real, free_transform)
 
 
 
