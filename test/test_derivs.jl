@@ -178,7 +178,6 @@ end
 
 
 function test_quadratic_derivatives(trans::DataTransform)
-    
     # A very simple quadratic function to test the derivatives.
     function quadratic_function(mp::ModelParams)
         const centers = collect(linrange(0, 10, ids.size))
@@ -200,9 +199,9 @@ end
 test_accum_pos_derivs()
 
 for trans in [ identity_transform, rect_transform, free_transform ]
+    test_quadratic_derivatives(trans)
     test_kl_divergence_derivs(trans)
     test_brightness_derivs(trans)
     test_accum_pixel_source_derivs(trans)
     test_elbo_derivs(trans)
-    test_quadratic_derivatives(trans)
 end

@@ -256,8 +256,7 @@ end
 ###############################################
 # Functions for a "free transform".  Eventually the idea is that this will
 # have every parameter completely unconstrained.
-free_unchanged_ids = [ "mu", "theta", "rho", "phi", "sigma",
-                       "beta", "lambda"]
+free_unchanged_ids = [ "mu", "phi", "beta", "lambda"]
 
 function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
     # Convert a constrained to an unconstrained variational parameterization
@@ -275,13 +274,19 @@ function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
         # second component of chi.
         vp_free[s][ids_free.chi[1]] = Util.inv_logit(vp[s][ids.chi[2]])
 
+        vp_free[s][ids_free.theta] = Util.inv_logit(vp[s][ids.theta])
+
         # In contrast, the original script used the last component of kappa
         # as the free parameter.
         vp_free[s][ids_free.kappa[1, :]] = Util.inv_logit(vp[s][ids.kappa[1, :]])
 
+        # Rho is not technically a simplicial constraint but it must lie in (0, 1).
+        vp_free[s][ids_free.rho] = Util.inv_logit(vp[s][ids.rho])
+
         # Positivity constraints
         vp_free[s][ids_free.gamma] = log(vp[s][ids.gamma])
         vp_free[s][ids_free.zeta] = log(vp[s][ids.zeta]) 
+        vp_free[s][ids_free.sigma] = log(vp[s][ids.sigma]) 
     end
 end
 
@@ -299,12 +304,19 @@ function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
         vp[s][ids.chi[2]] = Util.logit(vp_free[s][ids_free.chi[1]])
         vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
 
+        vp[s][ids.theta] = Util.logit(vp_free[s][ids_free.theta])
+
         vp[s][ids.kappa[1, :]] = Util.logit(vp_free[s][ids_free.kappa[1, :]])
         vp[s][ids.kappa[2, :]] = 1.0 - vp[s][ids.kappa[1, :]]
+
+        # Rho is not technically a simplicial constraint but it must lie in (0, 1).
+        vp[s][ids.rho] = Util.logit(vp_free[s][ids_free.rho])
 
          # Positivity constraints
         vp[s][ids.gamma] = exp(vp_free[s][ids_free.gamma])
         vp[s][ids.zeta] = exp(vp_free[s][ids_free.zeta])
+        vp[s][ids.sigma] = exp(vp_free[s][ids_free.sigma])
+
     end
 end
 
@@ -345,18 +357,30 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
         sf_free.d[ids_free.chi[1], s] =
             (sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]) * this_chi * (1.0 - this_chi)
 
+        this_theta = mp.vp[s][ids.theta]
+        sf_free.d[ids_free.theta, s] = sf.d[ids.theta, s] * this_theta * (1.0 - this_theta)
+
         this_kappa = collect(mp.vp[s][ids.kappa[1, :]])
         sf_free.d[collect(ids_free.kappa[1, :]), s] =
             (sf.d[collect(ids.kappa[1, :]), s] - sf.d[collect(ids.kappa[2, :]), s]) .*
             this_kappa .* (1.0 - this_kappa)
 
+        # Rho is constrained to be in (0, 1).
+        this_rho = mp.vp[s][ids.rho]
+        sf_free.d[ids_free.rho, s] = sf.d[ids.rho] * this_rho * (1 - this_rho)
+
         # Positivity constraints.
         sf_free.d[ids_free.gamma, s] = sf.d[ids.gamma, s] .* mp.vp[s][ids.gamma]
         sf_free.d[ids_free.zeta, s] = sf.d[ids.zeta, s] .* mp.vp[s][ids.zeta]
+        sf_free.d[ids_free.sigma, s] = sf.d[ids.sigma, s] .* mp.vp[s][ids.sigma]
     end
 
     sf_free
 end
+
+
+#########################
+# Define the exported variables.
 
 rect_transform = DataTransform(rect_to_vp!, vp_to_rect!,
                                vector_to_free_vp!, free_vp_to_vector, 
