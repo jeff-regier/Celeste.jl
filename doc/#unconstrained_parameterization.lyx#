@@ -114,7 +114,7 @@ In the binary case,
 \begin{eqnarray*}
 \frac{df}{dr} & = & \frac{df}{dz_{1}}z_{1}\left(1-z_{1}\right)-\frac{df}{dz_{2}}z_{1}z_{2}\\
  & = & \left(\frac{df}{dz_{1}}-\frac{df}{dz_{2}}\right)z_{1}\left(1-z_{1}\right)\\
- & = & \frac{df}{dz_{1}}z_{1}\left(1-z_{1}\right)\textrm{ (if a full derivative already)}
+ & = & 2\frac{df}{dz_{1}}z_{1}\left(1-z_{1}\right)
 \end{eqnarray*}
 
 \end_inset
@@ -149,23 +149,6 @@ x & = & \alpha y\\
 \end_layout
 
 \begin_layout Standard
-In the case of 
-\begin_inset Formula $\rho$
-\end_inset
-
-, we are simply using the logit transform, which matches the case of 
-\begin_inset Formula $z_{1}$
-\end_inset
-
- above.
-\begin_inset Formula 
-\begin{eqnarray*}
-\rho & = & \frac{e^{r}}{1+e^{r}}\Rightarrow\\
-\frac{df}{dr} & = & \frac{df}{d\rho}\rho\left(1-\rho\right)
-\end{eqnarray*}
-
-\end_inset
-
 
 \end_layout
 

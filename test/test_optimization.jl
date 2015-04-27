@@ -394,8 +394,7 @@ end
 ####################################################
 
 for trans in [ rect_transform free_transform ]
-    start_time = time()
-    test_quadratic_optimization(Transform)
+    test_quadratic_optimization(trans)
     test_star_optimization(trans)
     test_color(trans)
     test_kappa_finding(trans)
@@ -406,7 +405,6 @@ for trans in [ rect_transform free_transform ]
     test_full_elbo_optimization(trans)
     test_galaxy_optimization(trans)
     test_real_stamp_optimization(trans)  # long running
-    finish_time = time() - start_time
 end
 
 #test_bad_galaxy_init()
