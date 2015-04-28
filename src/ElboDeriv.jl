@@ -182,8 +182,8 @@ immutable GalaxyCacheComponent
             rho::Float64, phi::Float64, sigma::Float64) = begin
         XiXi = Util.get_bvn_cov(rho, phi, sigma)
         mean_s = [pc.xiBar[1] + mu[1], pc.xiBar[2] + mu[2]]
-        var_s = pc.SigmaBar + gc.sigmaTilde * XiXi
-        weight = pc.alphaBar * gc.alphaTilde  # excludes theta
+        var_s = pc.tauBar + gc.nuBar * XiXi
+        weight = pc.alphaBar * gc.etaBar  # excludes theta
         bmc = BvnComponent(mean_s, var_s, weight)
 
         dSigma = Array(Float64, 3, 3)
@@ -193,7 +193,7 @@ immutable GalaxyCacheComponent
         dSigma[:, 1] = 2rho * sigma^2 * [sin_sq, -cos_sin, cos_sq]
         dSigma[:, 2] = sigma^2 * (rho^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
         dSigma[:, 3] = (2XiXi ./ sigma)[[1, 2, 4]]
-        dSigma .*= gc.sigmaTilde
+        dSigma .*= gc.nuBar
 
         new(theta_dir, theta_i, bmc, dSigma)
     end
@@ -229,7 +229,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
         for k in 1:3
             pc = psf[k]
             mean_s = [pc.xiBar[1] + vs[ids.mu[1]], pc.xiBar[2] + vs[ids.mu[2]]]
-            star_mcs[k, s] = BvnComponent(mean_s, pc.SigmaBar, pc.alphaBar)
+            star_mcs[k, s] = BvnComponent(mean_s, pc.tauBar, pc.alphaBar)
         end
 
         # Convolve the galaxy representations with the PSF.
