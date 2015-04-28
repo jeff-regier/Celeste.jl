@@ -256,7 +256,7 @@ end
 ###############################################
 # Functions for a "free transform".  Eventually the idea is that this will
 # have every parameter completely unconstrained.
-free_unchanged_ids = [ "mu", "phi", "beta", "lambda"]
+free_unchanged_ids = [ "mu", "phi", "beta" ]
 
 function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
     # Convert a constrained to an unconstrained variational parameterization
@@ -284,7 +284,8 @@ function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
         vp_free[s][ids_free.rho] = Util.inv_logit(vp[s][ids.rho])
 
         # Positivity constraints
-        vp_free[s][ids_free.sigma] = log(vp[s][ids.sigma]) 
+        vp_free[s][ids_free.sigma] = log(vp[s][ids.sigma])
+        vp_free[s][ids_free.lambda] = log(vp[s][ids.lambda]) 
 
         # Parameterize brightness in more observable quantities.
         # ids_free.gamma = log(gamma) + log(zeta)
@@ -317,8 +318,9 @@ function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
         # Rho is not technically a simplicial constraint but it must lie in (0, 1).
         vp[s][ids.rho] = Util.logit(vp_free[s][ids_free.rho])
 
-         # Positivity constraints
+        # Positivity constraints
         vp[s][ids.sigma] = exp(vp_free[s][ids_free.sigma])
+        vp[s][ids.lambda] = exp(vp_free[s][ids_free.lambda])
 
         # Brightness
         vp[s][ids.gamma] = exp(2 * vp_free[s][ids_free.gamma] - vp_free[s][ids_free.zeta])
@@ -377,6 +379,8 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 
         # Positivity constraints.
         sf_free.d[ids_free.sigma, s] = sf.d[ids.sigma, s] .* mp.vp[s][ids.sigma]
+        sf_free.d[collect(ids_free.lambda), s] =
+            sf.d[collect(ids.lambda), s] .* mp.vp[s][collect(ids.lambda)]
 
         # Brightness.
         sf_free.d[ids_free.gamma, s] =
