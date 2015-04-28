@@ -86,7 +86,7 @@ function matched_filter(img::Image)
     H, W = 5, 5
     kernel = zeros(Float64, H, W)
     for k in 1:3
-        mvn = MvNormal(img.psf[k].xiBar, img.psf[k].SigmaBar)
+        mvn = MvNormal(img.psf[k].xiBar, img.psf[k].tauBar)
         for h in 1:H
             for w in 1:W
                 x = [h - (H + 1) / 2., w - (W + 1) / 2.]
@@ -158,12 +158,12 @@ end
 
 #=
 function min_patch_radius(ce::CatalogEntry, blob::Blob)
-    max_var = maximum([maximum([maximum(pc.SigmaBar) for pc in img.psf]) 
+    max_var = maximum([maximum([maximum(pc.tauBar) for pc in img.psf]) 
                     for img in blob])
     if !ce.is_star
         XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
         XiXi_max = maximum(XiXi)
-        max_var += maximum([maximum([gc.sigmaTilde * XiXi_max 
+        max_var += maximum([maximum([gc.nuBar * XiXi_max 
             for gc in galaxy_prototypes[i]]) for i in 1:2])
     end
 

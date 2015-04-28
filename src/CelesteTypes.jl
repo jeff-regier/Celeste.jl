@@ -55,12 +55,11 @@ immutable GalaxyComponent
     # Parameters of a single normal component of a galaxy.
     #
     # Attributes:
-    #   alphaTilde: The weight of the galaxy component (eta_bar in the ICML submission)
-    #   sigmaTilde: The scale of the galaxy component (nu_bar in the ICLM submission)
-    # TODO: Sync up the notation between the code and the writeup
+    #   etaBar: The weight of the galaxy component
+    #   nuBar: The scale of the galaxy component
 
-    alphaTilde::Float64
-    sigmaTilde::Float64
+    etaBar::Float64
+    nuBar::Float64
 end
 
 typealias GalaxyPrototype Vector{GalaxyComponent}
@@ -114,21 +113,19 @@ immutable PsfComponent
     #   alphaBar: The scalar weight of the component. 
     #   xiVar: The 2x1 location vector
     #   Sigmabar: The 2x2 covariance (tau_bar in the ICLM paper)
-    #   SigmaBarInv: The 2x2 precision
-    #   SigmaBarLd: The log determinant of the covariance
-    #
-    # TODO: Change Sigmabar to tau_bar to match the ICML submission.
+    #   tauBarInv: The 2x2 precision
+    #   tauBarLd: The log determinant of the covariance
 
     alphaBar::Float64  # TODO: use underscore
     xiBar::Vector{Float64}
-    SigmaBar::Matrix{Float64}
+    tauBar::Matrix{Float64}
 
-    SigmaBarInv::Matrix{Float64}
-    SigmaBarLd::Float64
+    tauBarInv::Matrix{Float64}
+    tauBarLd::Float64
 
     PsfComponent(alphaBar::Float64, xiBar::Vector{Float64},
-            SigmaBar::Matrix{Float64}) = begin
-        new(alphaBar, xiBar, SigmaBar, SigmaBar^-1, logdet(SigmaBar))
+            tauBar::Matrix{Float64}) = begin
+        new(alphaBar, xiBar, tauBar, tauBar^-1, logdet(tauBar))
     end
 end
 
