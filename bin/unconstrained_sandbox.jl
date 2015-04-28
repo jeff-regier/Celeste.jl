@@ -42,20 +42,20 @@ function compare_solutions(mp_rect::ModelParams, mp_free::ModelParams,
 end
 
 ########################################
-# Three basic testing problems
+# Basic testing problems
 
 #blob, mp_init, body = SampleData.gen_sample_star_dataset();
 blob, mp_init, body = SampleData.gen_sample_galaxy_dataset();
 
-mp_original = deepcopy(mp_init)
-mp_free = deepcopy(mp_init)
-mp_rect = deepcopy(mp_init)
+mp_original = deepcopy(mp_init);
+mp_free = deepcopy(mp_init);
+mp_rect = deepcopy(mp_init);
 
 # Optimize
-omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta[:] ]
+omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta[:] ];
 
-lbs_free, ubs_free = OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, free_transform)
-lbs_rect, ubs_rect= OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, rect_transform)
+lbs_free, ubs_free = OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, free_transform);
+lbs_rect, ubs_rect= OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, rect_transform);
 
 mp_rect = deepcopy(mp_init)
 res_rect_iter_count, res_rect_max_f, res_rect_max_x, res_rect_ret =

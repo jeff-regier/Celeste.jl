@@ -5,6 +5,7 @@ using CelesteTypes
 using Base.Test
 using Distributions
 using SampleData
+using Transform
 import Synthetic
 
 include(joinpath(Pkg.dir("Celeste"), "test", "test_misc.jl"))

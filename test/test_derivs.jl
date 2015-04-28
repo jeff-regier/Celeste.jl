@@ -198,7 +198,8 @@ end
 # This test doesn't use different transforms.
 test_accum_pos_derivs()
 
-for trans in [ identity_transform, rect_transform, free_transform ]
+#for trans in [ identity_transform, rect_transform, free_transform ]
+for trans in [ free_transform ]
     test_quadratic_derivatives(trans)
     test_kl_divergence_derivs(trans)
     test_brightness_derivs(trans)
