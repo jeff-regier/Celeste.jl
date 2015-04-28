@@ -393,7 +393,8 @@ end
 
 ####################################################
 
-for trans in [ rect_transform free_transform ]
+#for trans in [ rect_transform free_transform ]
+for trans in [ free_transform ]
     test_quadratic_optimization(trans)
     test_star_optimization(trans)
     test_color(trans)

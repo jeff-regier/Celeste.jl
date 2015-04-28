@@ -284,9 +284,14 @@ function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
         vp_free[s][ids_free.rho] = Util.inv_logit(vp[s][ids.rho])
 
         # Positivity constraints
-        vp_free[s][ids_free.gamma] = log(vp[s][ids.gamma])
-        vp_free[s][ids_free.zeta] = log(vp[s][ids.zeta]) 
         vp_free[s][ids_free.sigma] = log(vp[s][ids.sigma]) 
+
+        # Parameterize brightness in more observable quantities.
+        # ids_free.gamma = log(gamma) + log(zeta)
+        # ids_free.zeta = log(gamma) + 2 log(zeta)
+        vp_free[s][ids_free.gamma] = log(vp[s][ids.gamma]) + log(vp[s][ids.zeta])
+        vp_free[s][ids_free.zeta] = log(vp[s][ids.gamma]) + 2 * log(vp[s][ids.zeta]) 
+
     end
 end
 
@@ -313,10 +318,11 @@ function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
         vp[s][ids.rho] = Util.logit(vp_free[s][ids_free.rho])
 
          # Positivity constraints
-        vp[s][ids.gamma] = exp(vp_free[s][ids_free.gamma])
-        vp[s][ids.zeta] = exp(vp_free[s][ids_free.zeta])
         vp[s][ids.sigma] = exp(vp_free[s][ids_free.sigma])
 
+        # Brightness
+        vp[s][ids.gamma] = exp(2 * vp_free[s][ids_free.gamma] - vp_free[s][ids_free.zeta])
+        vp[s][ids.zeta] = exp(vp_free[s][ids_free.zeta] - vp_free[s][ids_free.gamma])
     end
 end
 
@@ -370,9 +376,13 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
         sf_free.d[ids_free.rho, s] = sf.d[ids.rho] * this_rho * (1 - this_rho)
 
         # Positivity constraints.
-        sf_free.d[ids_free.gamma, s] = sf.d[ids.gamma, s] .* mp.vp[s][ids.gamma]
-        sf_free.d[ids_free.zeta, s] = sf.d[ids.zeta, s] .* mp.vp[s][ids.zeta]
         sf_free.d[ids_free.sigma, s] = sf.d[ids.sigma, s] .* mp.vp[s][ids.sigma]
+
+        # Brightness.
+        sf_free.d[ids_free.gamma, s] =
+            2.0 * sf.d[ids.gamma, s] .* mp.vp[s][ids.gamma] - sf.d[ids.zeta, s] .* mp.vp[s][ids.zeta]
+        sf_free.d[ids_free.zeta, s] =
+            -sf.d[ids.gamma, s] .* mp.vp[s][ids.gamma] + sf.d[ids.zeta, s] .* mp.vp[s][ids.zeta]
     end
 
     sf_free

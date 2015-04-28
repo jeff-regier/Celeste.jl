@@ -169,5 +169,29 @@ In the case of
 
 \end_layout
 
+\begin_layout Standard
+It may make sense to parameterize in terms of the product 
+\begin_inset Formula $\gamma\zeta$
+\end_inset
+
+ instead of each separately.
+ Let
+\begin_inset Formula 
+\begin{eqnarray*}
+b & = & \log\left(\gamma\zeta\right)=\log\gamma+\log\zeta\\
+v & = & \log\left(\gamma\zeta^{2}\right)=\log\gamma+2\log\zeta\\
+\zeta & = & \frac{\exp v}{\exp b}=\exp\left(v-b\right)\\
+\gamma & = & \frac{\exp\left(b\right)^{2}}{\exp\left(v\right)}=\exp\left(2b-v\right)\\
+\frac{df}{db} & = & \frac{df}{d\gamma}\frac{d\gamma}{db}+\frac{df}{d\zeta}\frac{d\zeta}{db}\\
+ & = & 2\frac{df}{d\gamma}\gamma-\frac{df}{d\zeta}\zeta\\
+\frac{df}{dv} & = & \frac{df}{d\gamma}\frac{d\gamma}{dv}+\frac{df}{d\zeta}\frac{d\zeta}{dv}\\
+ & = & -\frac{df}{d\gamma}\gamma+\frac{df}{d\zeta}\zeta
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
 \end_body
 \end_document
