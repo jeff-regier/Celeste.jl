@@ -6,7 +6,10 @@
 module ElboDeriv
 
 using CelesteTypes
+
 import Util
+import KL
+
 
 immutable SourceBrightness
     # SensitiveFloat objects for expectations involving r_s and c_s.
@@ -646,28 +649,18 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
     # be weighted by chi (the probability of this celestial object
     # type) and kappa (the probability of this color prior component).
 
-    chi_si = vs[ids.chi[i]]
-    half_kappa = .5 * vs[ids.kappa[d, i]]
+    chi = vs[ids.chi[i]]
+    kappa = vs[ids.kappa[d, i]]
 
-    beta, lambda = (vs[ids.beta[:, i]], vs[ids.lambda[:, i]])
-    Omega, Lambda = (mp.pp.c[i][1][:, d], mp.pp.c[i][2][:, :, d])
-
-    diff = Omega - beta
-    Lambda_inv = Lambda^-1  # TODO: cache this!
-
-    # NB: In the below expressions the variational entropy
-    # and expected log prior are kind of mixed up together. 
-    ret = sum(diag(Lambda_inv) .* lambda) - 4
-    ret += (diff' * Lambda_inv * diff)[]
-    ret += -sum(log(lambda)) + logdet(Lambda)
-    accum.v -= chi_si * ret * half_kappa
-
-    # Accumulate derivatives.
-    accum.d[ids.kappa[d, i], s] -= chi_si * .5 * ret
-    accum.d[ids.beta[:, i], s] -= chi_si * half_kappa * 2Lambda_inv * -diff
-    accum.d[ids.lambda[:, i], s] -= chi_si * half_kappa * diag(Lambda_inv)
-    accum.d[ids.lambda[:, i], s] -= chi_si * half_kappa ./ -lambda
-    accum.d[ids.chi[i], s] -= ret * half_kappa
+    pp_kl_cid = KL.gen_diagmvn_mvn_kl(mp.pp.c[i][1][:, d], 
+                                      mp.pp.c[i][2][:, :, d])
+    (v, (d_beta, d_lambda)) = pp_kl_cid(vs[ids.beta[:, i]],
+                                        vs[ids.lambda[:, i]])
+    accum.v -= v * chi * kappa
+    accum.d[ids.kappa[d, i], s] -= chi * v
+    accum.d[ids.beta[:, i], s] -= chi * kappa * d_beta
+    accum.d[ids.lambda[:, i], s] -= chi * kappa * d_lambda
+    accum.d[ids.chi[i], s] -= kappa * v
 end
 
 
@@ -688,17 +681,11 @@ function subtract_kl_k!(i::Int64, s::Int64,
     #   Updates accum in place.
 
     vs = mp.vp[s]
-
-    chi_si = vs[ids.chi[i]]
-    kappa_i = vs[ids.kappa[:, i]]
-
-    for d in 1:D
-        log_ratio = log(kappa_i[d] / mp.pp.k[i][d])
-        kappa_log_ratio = kappa_i[d] * log_ratio
-        accum.v -= chi_si * kappa_log_ratio
-        accum.d[ids.kappa[d, i] , s] -= chi_si * (1 + log_ratio)
-        accum.d[ids.chi[i], s] -= kappa_log_ratio
-    end
+    pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[i])
+    (v, (d_kappa,)) = pp_kl_ki(mp.vp[s][ids.kappa[:, i]])
+    accum.v -= v * vs[ids.chi[i]]
+    accum.d[ids.kappa[:, i]] -= d_kappa .* vs[ids.chi[i]]
+    accum.d[ids.chi[i]] -= v
 end
 
 
@@ -718,29 +705,14 @@ function subtract_kl_r!(i::Int64, s::Int64,
     #   Updates accum in place.
 
     vs = mp.vp[s]
-    gamma_si = mp.vp[s][ids.gamma[i]]
-    zeta_si = mp.vp[s][ids.zeta[i]]
-
-    digamma_gamma = digamma(gamma_si)
-    zeta_Psi_ratio = (zeta_si - mp.pp.r[i][2]) / mp.pp.r[i][2]
-    shape_diff = gamma_si - mp.pp.r[i][1]
-
-    kl_v = shape_diff * digamma_gamma
-    kl_v += -lgamma(gamma_si) + lgamma(mp.pp.r[i][1])
-    kl_v += mp.pp.r[i][1] * (log(mp.pp.r[i][2]) - log(zeta_si))
-    kl_v += gamma_si * zeta_Psi_ratio
-
-    chi_si = vs[ids.chi[i]]
-    accum.v -= chi_si * kl_v
-
-    accum.d[ids.gamma[i], s] -= chi_si * shape_diff * polygamma(1, gamma_si)
-    accum.d[ids.gamma[i], s] -= chi_si * zeta_Psi_ratio
-
-    accum.d[ids.zeta[i], s] -= chi_si * (-mp.pp.r[i][1] / zeta_si)
-    accum.d[ids.zeta[i], s] -= chi_si * (gamma_si / mp.pp.r[i][2])
-
-    accum.d[ids.chi[i], s] -= kl_v
+    pp_kl_r = KL.gen_gamma_kl(mp.pp.r[i][1], mp.pp.r[i][2])
+    (v, (d_gamma, d_zeta)) = pp_kl_r(vs[ids.gamma[i]], vs[ids.zeta[i]])
+    accum.v -= v * vs[ids.chi[i]]
+    accum.d[ids.gamma[i], s] -= d_gamma .* vs[ids.chi[i]]
+    accum.d[ids.zeta[i], s] -= d_zeta .* vs[ids.chi[i]]
+    accum.d[ids.chi[i]] -= v
 end
+
 
 
 function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
@@ -755,11 +727,10 @@ function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
     # Returns:
     #   Updates accum in place.
 
-    for i in 1:Ia
-        chi_s = mp.vp[s][ids.chi[i]]
-        accum.v -= chi_s * (log(chi_s) - log(mp.pp.a[i]))
-        accum.d[ids.chi[i], s] -= (log(chi_s) - log(mp.pp.a[i])) + 1
-    end
+    pp_kl_a = KL.gen_categorical_kl(mp.pp.a)
+    (v, (d_chi,)) = pp_kl_a(mp.vp[s][ids.chi])
+    accum.v -= v
+    accum.d[ids.chi] -= d_chi
 end
 
 
@@ -770,7 +741,6 @@ function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
     for s in 1:mp.S
         subtract_kl_a!(s, mp, accum)
 
-        # TODO: Do not hard-code constants.
         for i in 1:Ia
             subtract_kl_r!(i, s, mp, accum)
             subtract_kl_k!(i, s, mp, accum)
