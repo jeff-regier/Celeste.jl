@@ -29,6 +29,7 @@ import WCSLIB
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
+
 # The number of components in the color prior.
 const D = 2
 

@@ -1,3 +1,9 @@
+using Celeste
+using CelesteTypes
+using Base.Test
+using SampleData
+
+
 function true_star_init()
     blob, mp, body = gen_sample_star_dataset(perturb=false)
 

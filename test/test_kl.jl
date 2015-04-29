@@ -1,6 +1,4 @@
-#!/usr/bin/env julia
-
-using KL
+using Celeste
 using Base.Test
 using Distributions
 import GSL.deriv_central
