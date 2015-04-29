@@ -9,6 +9,7 @@ require(joinpath(Pkg.dir("Celeste"), "src", "ElboDeriv.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "Synthetic.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "SampleData.jl"))
+require(joinpath(Pkg.dir("Celeste"), "src", "KL.jl"))
 
 import SDSS
 import ElboDeriv
@@ -16,6 +17,7 @@ import OptimizeElbo
 import ModelInit
 import SampleData
 import Transform
+import KL
 
 using CelesteTypes
 
