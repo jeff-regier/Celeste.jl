@@ -234,7 +234,6 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
 
         # Convolve the galaxy representations with the PSF.
         for i = 1:Ia
-            # TODO: Jeff, could you say what theta_dir is?
             theta_dir = (i == 1) ? 1. : -1.
             theta_i = (i == 1) ? vs[ids.theta] : 1. - vs[ids.theta]
 
@@ -651,7 +650,7 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
     half_kappa = .5 * vs[ids.kappa[d, i]]
 
     beta, lambda = (vs[ids.beta[:, i]], vs[ids.lambda[:, i]])
-    Omega, Lambda = (mp.pp.Omega[i][:, d], mp.pp.Lambda[i][d])
+    Omega, Lambda = (mp.pp.c[i][1][:, d], mp.pp.c[i][2][:, :, d])
 
     diff = Omega - beta
     Lambda_inv = Lambda^-1  # TODO: cache this!
@@ -694,7 +693,7 @@ function subtract_kl_k!(i::Int64, s::Int64,
     kappa_i = vs[ids.kappa[:, i]]
 
     for d in 1:D
-        log_ratio = log(kappa_i[d] / mp.pp.Xi[i][d])
+        log_ratio = log(kappa_i[d] / mp.pp.k[i][d])
         kappa_log_ratio = kappa_i[d] * log_ratio
         accum.v -= chi_si * kappa_log_ratio
         accum.d[ids.kappa[d, i] , s] -= chi_si * (1 + log_ratio)
@@ -723,12 +722,12 @@ function subtract_kl_r!(i::Int64, s::Int64,
     zeta_si = mp.vp[s][ids.zeta[i]]
 
     digamma_gamma = digamma(gamma_si)
-    zeta_Psi_ratio = (zeta_si - mp.pp.Psi[i]) / mp.pp.Psi[i]
-    shape_diff = gamma_si - mp.pp.Upsilon[i]
+    zeta_Psi_ratio = (zeta_si - mp.pp.r[i][2]) / mp.pp.r[i][2]
+    shape_diff = gamma_si - mp.pp.r[i][1]
 
     kl_v = shape_diff * digamma_gamma
-    kl_v += -lgamma(gamma_si) + lgamma(mp.pp.Upsilon[i])
-    kl_v += mp.pp.Upsilon[i] * (log(mp.pp.Psi[i]) - log(zeta_si))
+    kl_v += -lgamma(gamma_si) + lgamma(mp.pp.r[i][1])
+    kl_v += mp.pp.r[i][1] * (log(mp.pp.r[i][2]) - log(zeta_si))
     kl_v += gamma_si * zeta_Psi_ratio
 
     chi_si = vs[ids.chi[i]]
@@ -737,8 +736,8 @@ function subtract_kl_r!(i::Int64, s::Int64,
     accum.d[ids.gamma[i], s] -= chi_si * shape_diff * polygamma(1, gamma_si)
     accum.d[ids.gamma[i], s] -= chi_si * zeta_Psi_ratio
 
-    accum.d[ids.zeta[i], s] -= chi_si * (-mp.pp.Upsilon[i] / zeta_si)
-    accum.d[ids.zeta[i], s] -= chi_si * (gamma_si / mp.pp.Psi[i])
+    accum.d[ids.zeta[i], s] -= chi_si * (-mp.pp.r[i][1] / zeta_si)
+    accum.d[ids.zeta[i], s] -= chi_si * (gamma_si / mp.pp.r[i][2])
 
     accum.d[ids.chi[i], s] -= kl_v
 end
@@ -756,12 +755,12 @@ function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
     # Returns:
     #   Updates accum in place.
 
-    Phi = mp.pp.Phi
+    a = mp.pp.a
 
     for i in 1:Ia
         chi_s = mp.vp[s][ids.chi[i]]
-        accum.v -= chi_s * (log(chi_s) - log(Phi))
-        accum.d[ids.chi[i], s] -= (log(chi_s) - log(Phi)) + 1
+        accum.v -= chi_s * (log(chi_s) - log(a))  # Hmmm...is there a bug here?
+        accum.d[ids.chi[i], s] -= (log(chi_s) - log(a)) + 1
     end
 end
 
