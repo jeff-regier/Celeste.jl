@@ -1,6 +1,7 @@
 using Celeste
 using CelesteTypes
 using Base.Test
+using Distributions
 using SampleData
 
 
@@ -41,39 +42,40 @@ function test_kl_divergence_values()
 
     # a
     q_a = Bernoulli(vs[ids.chi[2]])
-    p_a = Bernoulli(mp.pp.Phi)
+    p_a = Bernoulli(mp.pp.a[2])
     test_kl(q_a, p_a, (accum) -> ElboDeriv.subtract_kl_a!(s, mp, accum))
-
-    # r
-    q_r = Gamma(vs[ids.gamma[i]], vs[ids.zeta[i]])
-    p_r = Gamma(mp.pp.Upsilon[i], mp.pp.Psi[i])
-    function sklr(accum)
-        ElboDeriv.subtract_kl_r!(i, s, mp, accum)
-        @assert i == 1
-        accum.v /= vs[ids.chi[2]]
-    end
-    test_kl(q_r, p_r, sklr)
 
     # k
     q_k = Categorical(vs[ids.kappa[:, i]])
-    p_k = Categorical(mp.pp.Xi[i])
+    p_k = Categorical(mp.pp.k[i])
     function sklk(accum)
         ElboDeriv.subtract_kl_k!(i, s, mp, accum)
         @assert i == 1
-        accum.v /= vs[ids.chi[2]]
+        accum.v /= vs[ids.chi[i]]
     end
     test_kl(q_k, p_k, sklk)
 
     # c
-    mp.pp.Omega[i][:, d] = vs[ids.beta[:, i]]
-    mp.pp.Lambda[i][d] = diagm(vs[ids.lambda[:, i]])
+    mp.pp.c[i][1][:, d] = vs[ids.beta[:, i]]
+    mp.pp.c[i][2][:, :, d] = diagm(vs[ids.lambda[:, i]])
     q_c = MvNormal(vs[ids.beta[:, i]], diagm(vs[ids.lambda[:, i]]))
-    p_c = MvNormal(mp.pp.Omega[i][:, d], mp.pp.Lambda[i][d])
+    p_c = MvNormal(mp.pp.c[i][1][:, d], mp.pp.c[i][2][:, :, d])
     function sklc(accum)
         ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
-        accum.v /= vs[ids.chi[2]] * vs[ids.kappa[d, i]]
+        accum.v /= vs[ids.chi[i]] * vs[ids.kappa[d, i]]
     end
     test_kl(q_c, p_c, sklc)
+
+    # r
+    q_r = Gamma(vs[ids.gamma[i]], vs[ids.zeta[i]])
+    p_r = Gamma(mp.pp.r[i][1], mp.pp.r[i][2])
+    function sklr(accum)
+        ElboDeriv.subtract_kl_r!(i, s, mp, accum)
+        @assert i == 1
+        accum.v /= vs[ids.chi[i]]
+    end
+    test_kl(q_r, p_r, sklr)
+
 end
 
 
@@ -284,8 +286,9 @@ end
 
 ####################################################
 
-test_tiny_image_tiling()
+test_kl_divergence_values()
 test_that_variance_is_low()
 test_that_star_truth_is_most_likely()
 test_that_galaxy_truth_is_most_likely()
 test_coadd_cat_init_is_most_likely()
+test_tiny_image_tiling()

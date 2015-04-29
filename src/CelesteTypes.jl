@@ -192,7 +192,7 @@ end
 #########################################################
 
 immutable PriorParams
-    a::Float64  # formerly Phi
+    a::Vector{Float64}  # formerly Phi
     r::Vector{(Float64, Float64)}   # formerly Upsilon, Psi
     k::Vector{Vector{Float64}}  # formerly Xi
     c::Vector{(Matrix{Float64}, Array{Float64, 3})}  # formerly Omega, Lambda

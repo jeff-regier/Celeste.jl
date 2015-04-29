@@ -114,7 +114,7 @@ end
 
 function synthetic_body(ce::CatalogEntry)
     ce2 = deepcopy(ce)
-#    ce2.is_star = 1 - rand(Distributions.Bernoulli(pp.a))
+#    ce2.is_star = rand(Distributions.Bernoulli(pp.a[1]))
     ce2.star_fluxes[:] = sample_fluxes(1, ce.star_fluxes[3])
     ce2.gal_fluxes[:] = sample_fluxes(2, ce.gal_fluxes[3])
     ce2
