@@ -755,12 +755,10 @@ function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
     # Returns:
     #   Updates accum in place.
 
-    a = mp.pp.a
-
     for i in 1:Ia
         chi_s = mp.vp[s][ids.chi[i]]
-        accum.v -= chi_s * (log(chi_s) - log(a))  # Hmmm...is there a bug here?
-        accum.d[ids.chi[i], s] -= (log(chi_s) - log(a)) + 1
+        accum.v -= chi_s * (log(chi_s) - log(mp.pp.a[i]))
+        accum.d[ids.chi[i], s] -= (log(chi_s) - log(mp.pp.a[i])) + 1
     end
 end
 
