@@ -59,8 +59,8 @@ function gen_categorical_kl(p2::Vector{Float64})
 end
 
 
-function gen_gamma_kl(k2, theta2)
-    function(k1, theta1)
+function gen_gamma_kl(k2::Float64, theta2::Float64)
+    function(k1::Float64, theta1::Float64)
         digamma_k1 = digamma(k1)
         theta_ratio = (theta1 - theta2) / theta2
         shape_diff = k1 - k2
@@ -83,7 +83,7 @@ end
 
 function gen_normal_kl(mu2::Float64, sigma2Sq::Float64)
     log_sigma2Sq = log(sigma2Sq)
-    function(mu1, sigma1Sq)
+    function(mu1::Float64, sigma1Sq::Float64)
         diff = mu1 - mu2
         v = .5 * ((log_sigma2Sq - log(sigma1Sq)) + (sigma1Sq + (diff)^2) / sigma2Sq - 1)
         d_mu1 = diff / sigma2Sq
