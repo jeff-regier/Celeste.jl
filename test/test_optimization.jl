@@ -4,6 +4,7 @@ using Base.Test
 using SampleData
 using Transform
 
+
 function verify_sample_star(vs, pos)
     @test_approx_eq vs[ids.chi[2]] 0.01
 
@@ -74,20 +75,20 @@ function test_kappa_finding()
     end
 
     mp.vp[1][ids.kappa[:, 2]] = [0.01, 0.99]
-    mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 2]
+    mp.vp[1][ids.beta[:,2]] = mp.pp.c[2][1][:, 2]
     lower_klc = get_kl_gal_c()
-    mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 1]
+    mp.vp[1][ids.beta[:,2]] = mp.pp.c[2][1][:, 1]
     higher_klc = get_kl_gal_c()
     @test lower_klc < higher_klc
 
     mp.vp[1][ids.kappa[:, 2]] = [0.99, 0.01]
-    mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 1]
+    mp.vp[1][ids.beta[:,2]] = mp.pp.c[2][1][:, 1]
     lower_klc = get_kl_gal_c()
-    mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 2]
+    mp.vp[1][ids.beta[:,2]] = mp.pp.c[2][1][:, 2]
     higher_klc = get_kl_gal_c()
     @test lower_klc < higher_klc
 
-    mp.pp.Lambda[2][1][:, :] = mp.pp.Lambda[2][2][:, :] = eye(4)
+    mp.pp.c[2][2][:, :, 1] = mp.pp.c[2][2][:, :, 2] = eye(4)
     klc_wrapper(blob, mp) = begin
         accum = zero_sensitive_float([1], all_params)
         for d in 1:D
@@ -96,24 +97,24 @@ function test_kappa_finding()
         accum
     end
 
-    mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 1]
+    mp.vp[1][ids.beta[:,2]] = mp.pp.c[2][1][:, 1]
     mp.vp[1][ids.kappa[:, 2]] = [0.5, 0.5]
     OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.kappa[1, 2]] > .9
 
-    mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 2]
+    mp.vp[1][ids.beta[:,2]] = mp.pp.c[2][1][:, 2]
     mp.vp[1][ids.kappa[:, 2]] = [0.5, 0.5]
     OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.kappa[2, 2]] > .9
 
-    mp.pp.Xi[2] = [.9, .1]
-    mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 1]
+    mp.pp.k[2] = [.9, .1]
+    mp.vp[1][ids.beta[:,2]] = mp.pp.c[2][1][:, 1]
     mp.vp[1][ids.kappa[:, 2]] = [0.5, 0.5]
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.kappa[1, 2]] > .9
 
-    mp.pp.Xi[2] = [.1, .9]
-    mp.vp[1][ids.beta[:,2]] = mp.pp.Omega[2][:, 2]
+    mp.pp.k[2] = [.1, .9]
+    mp.vp[1][ids.beta[:,2]] = mp.pp.c[2][1][:, 2]
     mp.vp[1][ids.kappa[:, 2]] = [0.5, 0.5]
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.kappa[2, 2]] > .9
@@ -400,7 +401,7 @@ test_color()
 #test_bad_galaxy_init()
 test_kappa_finding()
 test_bad_chi_init()
-test_elbo_invariance_to_chi()
+#test_elbo_invariance_to_chi()
 test_kl_invariance_to_chi()
 test_likelihood_invariance_to_chi()
 test_star_optimization()

@@ -191,22 +191,16 @@ end
 #########################################################
 
 immutable PriorParams
-    Phi::Float64                              # prior on a_s
-    Upsilon::Vector{Float64}                  # rate prior on r_s
-    Psi::Vector{Float64}                      # scale prior on r_s
-    Xi::Vector{Vector{Float64}}               # mixing weight prior on c_s
-    Omega::Vector{Array{Float64, 2}}          # mean prior on c_s
-    Lambda::Vector{Array{Array{Float64, 2}}}  # cov prior on c_s
+    a::Float64  # formerly Phi
+    r::Vector{(Float64, Float64)}   # formerly Upsilon, Psi
+    k::Vector{Vector{Float64}}  # formerly Xi
+    c::Vector{(Matrix{Float64}, Array{Float64, 3})}  # formerly Omega, Lambda
 end
 
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual
 # parameters for that object (referenced using ParamIndex).
 
-# TODO: use a matrix here, in conjunction with ArrayViews.jl (?)
-# TODO: Julia noob question -- is there a way to enforce the
-# differences between these variable types?  For now, this is
-# just helpful notation.
 typealias VariationalParams Vector{Vector{Float64}}
 typealias RectVariationalParams Vector{Vector{Float64}}
 typealias FreeVariationalParams Vector{Vector{Float64}}
@@ -226,7 +220,7 @@ immutable ParamIndex
     mu::Vector{Int64}
 
     # Ia x 1 scalar variational parameters for r_s.  The first
-    # row is for stars, and the second for galaxies (I think?).
+    # row is for stars, and the second for galaxies
     gamma::Vector{Int64}
     zeta::Vector{Int64}
 
@@ -268,7 +262,7 @@ immutable UnconstrainedParamIndex
     mu::Vector{Int64}
 
     # Ix1 scalar variational parameters for r_s.  The first
-    # row is for stars, and the second for galaxies (I think?).
+    # row is for stars, and the second for galaxies
     gamma::Vector{Int64}
     zeta::Vector{Int64}
 

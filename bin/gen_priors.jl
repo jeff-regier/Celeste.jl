@@ -13,7 +13,7 @@ end
 
 
 function read_r_colors(prior_file)
-	cat = fits_open_table(ENV["DAT"]"/priors/"prior_file)
+	cat = fits_open_table(prior_file)
 	num_rows = int(fits_read_keyword(cat, "NAXIS2")[1])
 	table = Array(Float64, num_rows, 12)
 	for i in 1:12
@@ -43,35 +43,34 @@ function read_r_colors(prior_file)
 end
 
 
-c0, r0 = read_r_colors("stars.fits")
-c1, r1 = read_r_colors("gals.fits")
-
-star_r = fit_mle(Gamma, r0)
-galaxy_r = fit_mle(Gamma, r1)
-
-
-r_file = open(ENV["DAT"]"/r_prior.dat", "w+")
-serialize(r_file, (params(star_r), params(galaxy_r)))
-close(r_file)
+function vecmat_to_tensor(vecmat::Vector{Matrix{Float64}})
+    ret = Array(Float64, size(vecmat[1], 1), size(vecmat[1], 2), length(vecmat))
+    for i in 1:length(vecmat)
+        ret[:, :, i] = vecmat[i]
+    end
+    ret
+end
 
 
-D = length(ARGS) != 0 ? int(ARGS[1]) : 8
-c0_train = c0
-#c0_test = c0[120001:end, :]
-gmm_star = GMM(D, c0_train, kind=:full, method=:split)
-println("star train avll:", GaussianMixtures.avll(gmm_star, c0_train))
-#println("star test avll:", GaussianMixtures.avll(gmm_star, c0_test))
+if length(ARGS) != 2
+    println("usage: gen_priors.jl [catalog.fits] [out_file.dat]")
+else
+    c0, r0 = read_r_colors(ARGS[1])
 
-c1_train = c1
-#c1_test = c1[120001:end, :]
-gmm_gal = GMM(D, c1_train, kind=:full, method=:split)
-println("gal train avll:", GaussianMixtures.avll(gmm_gal, c1_train))
-#println("gal test avll:", GaussianMixtures.avll(gmm_gal, c1_test))
+    fit_r = fit_mle(LogNormal, r0)
 
+    D = 2
+    c0_train = c0
+    #c0_test = c0[120001:end, :]
+    fit_gmm = GMM(D, c0_train, kind=:full, method=:kmeans)
+    println("train avll:", GaussianMixtures.avll(fit_gmm, c0_train))
+    #println("test avll:", GaussianMixtures.avll(fit_gmm, c0_test))
 
-c_file = open(ENV["DAT"]"/ck_prior.dat", "w+")
-serialize(c_file, ((weights(gmm_star), means(gmm_star)', covars(gmm_star)),
-	(weights(gmm_gal), means(gmm_gal)', covars(gmm_gal))))
-close(c_file)
-
-
+    out_file = open(ARGS[2], "w+")
+    serialize(out_file, (
+        params(fit_r),
+        weights(fit_gmm),
+        means(fit_gmm)', 
+        vecmat_to_tensor(covars(fit_gmm))))
+    close(out_file)
+end

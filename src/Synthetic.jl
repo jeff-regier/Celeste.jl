@@ -98,9 +98,9 @@ const pp = ModelInit.sample_prior()
 
 
 function sample_fluxes(i::Int64, r_s)
-#    r_s = rand(Distributions.Gamma(pp.Upsilon[i], pp.Psi[i]))
-    k_s = rand(Distributions.Categorical(pp.Xi[i]))
-    c_s = rand(Distributions.MvNormal(pp.Omega[i][:, k_s], pp.Lambda[i][k_s]))
+#    r_s = rand(Distributions.Gamma(pp.r[i][1], pp.r[i][2]))
+    k_s = rand(Distributions.Categorical(pp.k[i]))
+    c_s = rand(Distributions.MvNormal(pp.c[i][:, k_s], pp.c[i][:, :, k_s]))
 
     l_s = Array(Float64, 5)
     l_s[3] = r_s
@@ -114,7 +114,7 @@ end
 
 function synthetic_body(ce::CatalogEntry)
     ce2 = deepcopy(ce)
-#    ce2.is_star = 1 - rand(Distributions.Bernoulli(pp.Phi))
+#    ce2.is_star = 1 - rand(Distributions.Bernoulli(pp.a))
     ce2.star_fluxes[:] = sample_fluxes(1, ce.star_fluxes[3])
     ce2.gal_fluxes[:] = sample_fluxes(2, ce.gal_fluxes[3])
     ce2

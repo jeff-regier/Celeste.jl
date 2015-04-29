@@ -13,24 +13,25 @@ using CelesteTypes
 
 
 function sample_prior()
-    Phi = 0.05
-
     const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
-    Upsilon = Array(Float64, 2)
-    Psi = Array(Float64, 2)
-    r_file = open("$dat_dir/r_prior.dat")
-    ((Upsilon[1], Psi[1]), (Upsilon[2], Psi[2])) = deserialize(r_file)
-    close(r_file)
+    stars_file = open("$dat_dir/priors/stars.dat")
+    r_fit1, k1, cmean1, ccov1 = deserialize(stars_file)
+    close(stars_file)
 
-    Xi = Array(Vector{Float64}, 2)
-    Omega = Array(Array{Float64, 2}, 2)
-    Lambda = Array(Array{Array{Float64, 2}}, 2)
-    ck_file = open("$dat_dir/ck_prior.dat")
-    ((Xi[1], Omega[1], Lambda[1]), (Xi[2], Omega[2], Lambda[2])) = deserialize(ck_file)
-    close(r_file)
+    gals_file = open("$dat_dir/priors/gals.dat")
+    r_fit2, k2, cmean2, ccov2 = deserialize(gals_file)
+    close(gals_file)
 
-    PriorParams(Phi, Upsilon, Psi, Xi, Omega, Lambda)
+    # TODO: use r_fit1 and r_fit2 instead of magic numbers ?
+
+    # magic numbers below determined from the output of primary
+    # on the test set of stamps
+    PriorParams(
+        0.72,                               # a     
+        [(0.47, 0.012), (1.28, 0.11)],      # r
+        Vector{Float64}[k1, k2],            # k            
+        [(cmean1, ccov1), (cmean2, ccov2)]) # c
 end
 
 
