@@ -21,7 +21,7 @@ const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 const sample_star_fluxes = [
     4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
 const sample_galaxy_fluxes = [
-    1.377666E+01, 5.635334E+01, 1.258656E+02, 
+    1.377666E+01, 5.635334E+01, 1.258656E+02,
     1.884264E+02, 2.351820E+02] * 100  # 1x wasn't bright enough
 
 
@@ -33,24 +33,24 @@ end
 
 
 function sample_ce(pos, is_star::Bool)
-    CatalogEntry(pos, is_star, sample_star_fluxes, sample_galaxy_fluxes, 
+    CatalogEntry(pos, is_star, sample_star_fluxes, sample_galaxy_fluxes,
         0.1, .7, pi/4, 4.)
 end
 
 
 function perturb_params(mp) # for testing derivatives != 0
     for vs in mp.vp
-        vs[ids.chi] = [ 0.4, 0.6 ]
-        vs[ids.mu[1]] += .8
-        vs[ids.mu[2]] -= .7
-        vs[ids.gamma] /= 10
-        vs[ids.zeta] *= 25.
-        vs[ids.theta] += 0.05
-        vs[ids.rho] += 0.05
-        vs[ids.phi] += pi/10
-        vs[ids.sigma] *= 1.2
-        vs[ids.beta] += 0.5
-        vs[ids.lambda] =  1e-1
+        vs[ids.a] = [ 0.4, 0.6 ]
+        vs[ids.u[1]] += .8
+        vs[ids.u[2]] -= .7
+        vs[ids.r1] /= 10
+        vs[ids.r2] *= 25.
+        vs[ids.e_dev] += 0.05
+        vs[ids.e_axis] += 0.05
+        vs[ids.e_angle] += pi/10
+        vs[ids.e_scale] *= 1.2
+        vs[ids.c1] += 0.5
+        vs[ids.c2] =  1e-1
     end
 end
 

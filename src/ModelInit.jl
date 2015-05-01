@@ -28,9 +28,9 @@ function sample_prior()
     # magic numbers below determined from the output of primary
     # on the test set of stamps
     PriorParams(
-        [0.28, 0.72],                       # a     
+        [0.28, 0.72],                       # a
         [(0.47, 0.012), (1.28, 0.11)],      # r
-        Vector{Float64}[k1, k2],            # k            
+        Vector{Float64}[k1, k2],            # k
         [(cmean1, ccov1), (cmean2, ccov2)]) # c
 end
 
@@ -38,19 +38,19 @@ end
 #TODO: use blob (and perhaps priors) to initialize these sensibly
 function init_source(init_pos::Vector{Float64})
     ret = Array(Float64, length(all_params))
-    ret[ids.chi[2]] = 0.5
-    ret[ids.chi[1]] = 1.0 - ret[ids.chi[2]]
-    ret[ids.mu[1]] = init_pos[1]
-    ret[ids.mu[2]] = init_pos[2]
-    ret[ids.gamma] = 1e3
-    ret[ids.zeta] = 2e-3
-    ret[ids.theta] = 0.5
-    ret[ids.rho] = 0.5
-    ret[ids.phi] = 0.
-    ret[ids.sigma] = 1.
-    ret[ids.kappa] = 1. / size(ids.kappa, 1)
-    ret[ids.beta] = 0.
-    ret[ids.lambda] =  1e-2
+    ret[ids.a[2]] = 0.5
+    ret[ids.a[1]] = 1.0 - ret[ids.a[2]]
+    ret[ids.u[1]] = init_pos[1]
+    ret[ids.u[2]] = init_pos[2]
+    ret[ids.r1] = 1e3
+    ret[ids.r2] = 2e-3
+    ret[ids.e_dev] = 0.5
+    ret[ids.e_axis] = 0.5
+    ret[ids.e_angle] = 0.
+    ret[ids.e_scale] = 1.
+    ret[ids.k] = 1. / size(ids.k, 1)
+    ret[ids.c1] = 0.
+    ret[ids.c2] =  1e-2
     ret
 end
 
@@ -58,8 +58,8 @@ end
 function init_source(ce::CatalogEntry)
     ret = init_source(ce.pos)
 
-    ret[ids.gamma[1]] = max(0.0001, ce.star_fluxes[3]) ./ ret[ids.zeta[1]]
-    ret[ids.gamma[2]] = max(0.0001, ce.gal_fluxes[3]) ./ ret[ids.zeta[2]]
+    ret[ids.r1[1]] = max(0.0001, ce.star_fluxes[3]) ./ ret[ids.r2[1]]
+    ret[ids.r1[2]] = max(0.0001, ce.gal_fluxes[3]) ./ ret[ids.r2[2]]
 
     get_color(c2, c1) = begin
         c2 > 0 && c1 > 0 ? min(max(log(c2 / c1), -9.), 9.) :
@@ -70,14 +70,14 @@ function init_source(ce::CatalogEntry)
         [get_color(raw_fluxes[c+1], raw_fluxes[c]) for c in 1:4]
     end
 
-    ret[ids.beta[:, 1]] = get_colors(ce.star_fluxes)
-    ret[ids.beta[:, 2]] = get_colors(ce.gal_fluxes)
+    ret[ids.c1[:, 1]] = get_colors(ce.star_fluxes)
+    ret[ids.c1[:, 2]] = get_colors(ce.gal_fluxes)
 
-    ret[ids.theta] = min(max(ce.gal_frac_dev, 0.01), 0.99)
+    ret[ids.e_dev] = min(max(ce.gal_frac_dev, 0.01), 0.99)
 
-    ret[ids.rho] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.0001), 0.9999)
-    ret[ids.phi] = ce.gal_angle
-    ret[ids.sigma] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
+    ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.0001), 0.9999)
+    ret[ids.e_angle] = ce.gal_angle
+    ret[ids.e_scale] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
 
     ret
 end
@@ -159,12 +159,12 @@ end
 
 #=
 function min_patch_radius(ce::CatalogEntry, blob::Blob)
-    max_var = maximum([maximum([maximum(pc.tauBar) for pc in img.psf]) 
+    max_var = maximum([maximum([maximum(pc.tauBar) for pc in img.psf])
                     for img in blob])
     if !ce.is_star
         XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
         XiXi_max = maximum(XiXi)
-        max_var += maximum([maximum([gc.nuBar * XiXi_max 
+        max_var += maximum([maximum([gc.nuBar * XiXi_max
             for gc in galaxy_prototypes[i]]) for i in 1:2])
     end
 

@@ -139,20 +139,20 @@ end
 
 
 function test_util_bvn_cov()
-    rho = .7
-    phi = pi/5
-    sigma = 2.
+    e_axis = .7
+    e_angle = pi/5
+    e_scale = 2.
 
-    manual_11 = sigma^2 * (1 + (rho^2 - 1) * (sin(phi))^2)
-    util_11 = Util.get_bvn_cov(rho, phi, sigma)[1,1]
+    manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
+    util_11 = Util.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
     @test_approx_eq util_11 manual_11
 
-    manual_12 = sigma^2 * (1 - rho^2) * (cos(phi)sin(phi))
-    util_12 = Util.get_bvn_cov(rho, phi, sigma)[1,2]
+    manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
+    util_12 = Util.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
     @test_approx_eq util_12 manual_12
 
-    manual_22 = sigma^2 * (1 + (rho^2 - 1) * (cos(phi))^2)
-    util_22 = Util.get_bvn_cov(rho, phi, sigma)[2,2]
+    manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
+    util_22 = Util.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
     @test_approx_eq util_22 manual_22
 end
 

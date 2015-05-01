@@ -23,7 +23,7 @@ type DataTransform
     #   the variational parameters in place
     # from_vp!: A function that takes (variational paramters, transformed parameters) and updates
     #   the transformed parameters in place
-    # ... 
+    # ...
     # transform_sensitive_float: A function that takes (sensitive float, model parameters)
     #   where the sensitive float contains partial derivatives with respect to the
     #   variational parameters and returns a sensitive float with total derivatives with
@@ -57,7 +57,7 @@ type DataTransform
 
         function vp_to_vector(vp::VariationalParams, omitted_ids::Vector{Int64})
             vp_trans = from_vp(vp)
-            trans_vp_to_vector(vp_trans, omitted_ids) 
+            trans_vp_to_vector(vp_trans, omitted_ids)
         end
 
         function vector_to_vp!(xs::Vector{Float64}, vp::VariationalParams,
@@ -66,7 +66,7 @@ type DataTransform
             # stay at their original values.
             vp_trans = from_vp(vp)
             vector_to_trans_vp!(xs, vp_trans, omitted_ids)
-            to_vp!(vp_trans, vp) 
+            to_vp!(vp_trans, vp)
         end
 
 		new(to_vp, from_vp, to_vp!, from_vp!, vp_to_vector, vector_to_vp!,
@@ -156,16 +156,16 @@ end
 
 ###############################################
 # Functions for a "rectangular transform".  This matches the original Celeste
-# script, contraining chi to sum to one and scaling gamma.
+# script, contraining a to sum to one and scaling r1.
 
 const rect_rescaling = ones(length(all_params))
 
 # Rescale some parameters to have similar dimensions to everything else.
-[rect_rescaling[id] *= 1e-3 for id in ids.gamma]
+[rect_rescaling[id] *= 1e-3 for id in ids.r1]
 
-rect_unchanged_ids = [ "mu", "gamma", "zeta",
-                       "theta", "rho", "phi", "sigma",
-                       "beta", "lambda"]
+rect_unchanged_ids = [ "u", "r1", "r2",
+                       "e_dev", "e_axis", "e_angle", "e_scale",
+                       "c1", "c2"]
 
 function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
     # Convert a constrained to an unconstrained variational parameterization
@@ -180,13 +180,13 @@ function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
                 (vp[s][ids.(id_symbol)] .* rect_rescaling[ids.(id_symbol)])
         end
 
-        # Simplicial constriants.  The original script used "chi" to only
+        # Simplicial constriants.  The original script used "a" to only
         # refer to the probability of being a galaxy, which is now the
-        # second component of chi.
-        vp_free[s][ids_free.chi[1]] = vp[s][ids.chi[2]]
+        # second component of a.
+        vp_free[s][ids_free.a[1]] = vp[s][ids.a[2]]
 
-        # Keep all but the last row of kappa.
-        vp_free[s][ids_free.kappa] = vp[s][ids.kappa[1:(Ia - 1), :]]
+        # Keep all but the last row of k.
+        vp_free[s][ids_free.k] = vp[s][ids.k[1:(Ia - 1), :]]
     end
 end
 
@@ -204,11 +204,11 @@ function rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
         end
 
         # Simplicial constriants.
-        vp[s][ids.chi[2]] = vp_free[s][ids_free.chi[1]]
-        vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
+        vp[s][ids.a[2]] = vp_free[s][ids_free.a[1]]
+        vp[s][ids.a[1]] = 1.0 - vp[s][ids.a[2]]
 
-        vp[s][ids.kappa[1, :]] = vp_free[s][ids_free.kappa]
-        vp[s][ids.kappa[2, :]] = 1 - vp[s][ids.kappa[1, :]]
+        vp[s][ids.k[1, :]] = vp_free[s][ids_free.k]
+        vp[s][ids.k[2, :]] = 1 - vp[s][ids.k[1, :]]
     end
 end
 
@@ -227,7 +227,7 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     sf_free.v = sf.v
 
     # Currently the param_index is only really used within ElboDeriv.  By the
-    # time the data hits the optimizer, we assume everything has a derivative. 
+    # time the data hits the optimizer, we assume everything has a derivative.
      sf_free.param_index = all_params_free
 
     for s in 1:mp.S
@@ -244,10 +244,10 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
         end
 
         # Simplicial constriants.
-        sf_free.d[ids_free.chi[1], s] = sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]
+        sf_free.d[ids_free.a[1], s] = sf.d[ids.a[2], s] - sf.d[ids.a[1], s]
 
-        sf_free.d[collect(ids_free.kappa[1, :]), s] =
-            sf.d[collect(ids.kappa[1, :]), s] - sf.d[collect(ids.kappa[2, :]), s]
+        sf_free.d[collect(ids_free.k[1, :]), s] =
+            sf.d[collect(ids.k[1, :]), s] - sf.d[collect(ids.k[2, :]), s]
     end
 
     sf_free
@@ -256,8 +256,8 @@ end
 ###############################################
 # Functions for a "free transform".  Eventually the idea is that this will
 # have every parameter completely unconstrained.
-free_unchanged_ids = [ "mu", "theta", "rho", "phi", "sigma",
-                       "beta", "lambda"]
+free_unchanged_ids = [ "u", "e_dev", "e_axis", "e_angle", "e_scale",
+                       "c1", "c2"]
 
 function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
     # Convert a constrained to an unconstrained variational parameterization
@@ -270,18 +270,18 @@ function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
             vp_free[s][ids_free.(id_symbol)] = vp[s][ids.(id_symbol)]
         end
 
-        # Simplicial constriants.  The original script used "chi" to only
+        # Simplicial constriants.  The original script used "a" to only
         # refer to the probability of being a galaxy, which is now the
-        # second component of chi.
-        vp_free[s][ids_free.chi[1]] = Util.inv_logit(vp[s][ids.chi[2]])
+        # second component of a.
+        vp_free[s][ids_free.a[1]] = Util.inv_logit(vp[s][ids.a[2]])
 
-        # In contrast, the original script used the last component of kappa
+        # In contrast, the original script used the last component of k
         # as the free parameter.
-        vp_free[s][ids_free.kappa[1, :]] = Util.inv_logit(vp[s][ids.kappa[1, :]])
+        vp_free[s][ids_free.k[1, :]] = Util.inv_logit(vp[s][ids.k[1, :]])
 
         # Positivity constraints
-        vp_free[s][ids_free.gamma] = log(vp[s][ids.gamma])
-        vp_free[s][ids_free.zeta] = log(vp[s][ids.zeta]) 
+        vp_free[s][ids_free.r1] = log(vp[s][ids.r1])
+        vp_free[s][ids_free.r2] = log(vp[s][ids.r2])
     end
 end
 
@@ -296,15 +296,15 @@ function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
         end
 
         # Simplicial constriants.
-        vp[s][ids.chi[2]] = Util.logit(vp_free[s][ids_free.chi[1]])
-        vp[s][ids.chi[1]] = 1.0 - vp[s][ids.chi[2]]
+        vp[s][ids.a[2]] = Util.logit(vp_free[s][ids_free.a[1]])
+        vp[s][ids.a[1]] = 1.0 - vp[s][ids.a[2]]
 
-        vp[s][ids.kappa[1, :]] = Util.logit(vp_free[s][ids_free.kappa[1, :]])
-        vp[s][ids.kappa[2, :]] = 1.0 - vp[s][ids.kappa[1, :]]
+        vp[s][ids.k[1, :]] = Util.logit(vp_free[s][ids_free.k[1, :]])
+        vp[s][ids.k[2, :]] = 1.0 - vp[s][ids.k[1, :]]
 
          # Positivity constraints
-        vp[s][ids.gamma] = exp(vp_free[s][ids_free.gamma])
-        vp[s][ids.zeta] = exp(vp_free[s][ids_free.zeta])
+        vp[s][ids.r1] = exp(vp_free[s][ids_free.r1])
+        vp[s][ids.r2] = exp(vp_free[s][ids_free.r2])
     end
 end
 
@@ -324,7 +324,7 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     sf_free.v = sf.v
 
     # Currently the param_index is only really used within ElboDeriv.  By the
-    # time the data hits the optimizer, we assume everything has a derivative. 
+    # time the data hits the optimizer, we assume everything has a derivative.
     sf_free.param_index = all_params_free
 
     for s in 1:mp.S
@@ -339,27 +339,27 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
             sf_free.d[id_free_indices, s] = sf.d[id_indices, s]
         end
 
-        # TODO: write in general form.  Note that the old "chi" is now chi[2].
+        # TODO: write in general form.  Note that the old "a" is now a[2].
         # Simplicial constriants.
-        this_chi = mp.vp[s][ids.chi[2]]
-        sf_free.d[ids_free.chi[1], s] =
-            (sf.d[ids.chi[2], s] - sf.d[ids.chi[1], s]) * this_chi * (1.0 - this_chi)
+        this_a = mp.vp[s][ids.a[2]]
+        sf_free.d[ids_free.a[1], s] =
+            (sf.d[ids.a[2], s] - sf.d[ids.a[1], s]) * this_a * (1.0 - this_a)
 
-        this_kappa = collect(mp.vp[s][ids.kappa[1, :]])
-        sf_free.d[collect(ids_free.kappa[1, :]), s] =
-            (sf.d[collect(ids.kappa[1, :]), s] - sf.d[collect(ids.kappa[2, :]), s]) .*
-            this_kappa .* (1.0 - this_kappa)
+        this_k = collect(mp.vp[s][ids.k[1, :]])
+        sf_free.d[collect(ids_free.k[1, :]), s] =
+            (sf.d[collect(ids.k[1, :]), s] - sf.d[collect(ids.k[2, :]), s]) .*
+            this_k .* (1.0 - this_k)
 
         # Positivity constraints.
-        sf_free.d[ids_free.gamma, s] = sf.d[ids.gamma, s] .* mp.vp[s][ids.gamma]
-        sf_free.d[ids_free.zeta, s] = sf.d[ids.zeta, s] .* mp.vp[s][ids.zeta]
+        sf_free.d[ids_free.r1, s] = sf.d[ids.r1, s] .* mp.vp[s][ids.r1]
+        sf_free.d[ids_free.r2, s] = sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
     end
 
     sf_free
 end
 
 rect_transform = DataTransform(rect_to_vp!, vp_to_rect!,
-                               vector_to_free_vp!, free_vp_to_vector, 
+                               vector_to_free_vp!, free_vp_to_vector,
                                rect_unconstrain_sensitive_float,
                                ids_free.size)
 

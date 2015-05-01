@@ -35,10 +35,10 @@ immutable SourceBrightness
     E_ll_a::Matrix{SensitiveFloat}   # [E[l^2|a=0], E[l^2]|a=1]]
 
     SourceBrightness(vs::Vector{Float64}) = begin
-        gamma_s = vs[ids.gamma]
-        zeta = vs[ids.zeta]
-        beta = vs[ids.beta]
-        lambda = vs[ids.lambda]
+        r1 = vs[ids.r1]
+        r2 = vs[ids.r2]
+        c1 = vs[ids.c1]
+        c2 = vs[ids.c2]
 
         # E_l_a has a row for each of the five colors and columns
         # for star / galaxy.
@@ -50,43 +50,43 @@ immutable SourceBrightness
             end
 
             # Index 3 is r_s and has a gamma expectation.
-            E_l_a[3, i].v = gamma_s[i] * zeta[i]
-            E_l_a[3, i].d[ids.gamma[i]] = zeta[i]
-            E_l_a[3, i].d[ids.zeta[i]] = gamma_s[i]
+            E_l_a[3, i].v = r1[i] * r2[i]
+            E_l_a[3, i].d[ids.r1[i]] = r2[i]
+            E_l_a[3, i].d[ids.r2[i]] = r1[i]
 
             # The remaining indices involve c_s and have lognormal
             # expectations times E_c_3.
-            E_c_3 = exp(beta[3, i] + .5 * lambda[3, i])
+            E_c_3 = exp(c1[3, i] + .5 * c2[3, i])
             E_l_a[4, i].v = E_l_a[3, i].v * E_c_3
-            E_l_a[4, i].d[ids.gamma[i]] = E_l_a[3, i].d[ids.gamma[i]] * E_c_3
-            E_l_a[4, i].d[ids.zeta[i]] = E_l_a[3, i].d[ids.zeta[i]] * E_c_3
-            E_l_a[4, i].d[ids.beta[3, i]] = E_l_a[4, i].v
-            E_l_a[4, i].d[ids.lambda[3, i]] = E_l_a[4, i].v * .5
+            E_l_a[4, i].d[ids.r1[i]] = E_l_a[3, i].d[ids.r1[i]] * E_c_3
+            E_l_a[4, i].d[ids.r2[i]] = E_l_a[3, i].d[ids.r2[i]] * E_c_3
+            E_l_a[4, i].d[ids.c1[3, i]] = E_l_a[4, i].v
+            E_l_a[4, i].d[ids.c2[3, i]] = E_l_a[4, i].v * .5
 
-            E_c_4 = exp(beta[4, i] + .5 * lambda[4, i])
+            E_c_4 = exp(c1[4, i] + .5 * c2[4, i])
             E_l_a[5, i].v = E_l_a[4, i].v * E_c_4
-            E_l_a[5, i].d[ids.gamma[i]] = E_l_a[4, i].d[ids.gamma[i]] * E_c_4
-            E_l_a[5, i].d[ids.zeta[i]] = E_l_a[4, i].d[ids.zeta[i]] * E_c_4
-            E_l_a[5, i].d[ids.beta[3, i]] = E_l_a[4, i].d[ids.beta[3, i]] * E_c_4
-            E_l_a[5, i].d[ids.lambda[3, i]] = E_l_a[4, i].d[ids.lambda[3, i]] * E_c_4
-            E_l_a[5, i].d[ids.beta[4, i]] = E_l_a[5, i].v
-            E_l_a[5, i].d[ids.lambda[4, i]] = E_l_a[5, i].v * .5
+            E_l_a[5, i].d[ids.r1[i]] = E_l_a[4, i].d[ids.r1[i]] * E_c_4
+            E_l_a[5, i].d[ids.r2[i]] = E_l_a[4, i].d[ids.r2[i]] * E_c_4
+            E_l_a[5, i].d[ids.c1[3, i]] = E_l_a[4, i].d[ids.c1[3, i]] * E_c_4
+            E_l_a[5, i].d[ids.c2[3, i]] = E_l_a[4, i].d[ids.c2[3, i]] * E_c_4
+            E_l_a[5, i].d[ids.c1[4, i]] = E_l_a[5, i].v
+            E_l_a[5, i].d[ids.c2[4, i]] = E_l_a[5, i].v * .5
 
-            E_c_2 = exp(-beta[2, i] + .5 * lambda[2, i])
+            E_c_2 = exp(-c1[2, i] + .5 * c2[2, i])
             E_l_a[2, i].v = E_l_a[3, i].v * E_c_2
-            E_l_a[2, i].d[ids.gamma[i]] = E_l_a[3, i].d[ids.gamma[i]] * E_c_2
-            E_l_a[2, i].d[ids.zeta[i]] = E_l_a[3, i].d[ids.zeta[i]] * E_c_2
-            E_l_a[2, i].d[ids.beta[2, i]] = E_l_a[2, i].v * -1.
-            E_l_a[2, i].d[ids.lambda[2, i]] = E_l_a[2, i].v * .5
+            E_l_a[2, i].d[ids.r1[i]] = E_l_a[3, i].d[ids.r1[i]] * E_c_2
+            E_l_a[2, i].d[ids.r2[i]] = E_l_a[3, i].d[ids.r2[i]] * E_c_2
+            E_l_a[2, i].d[ids.c1[2, i]] = E_l_a[2, i].v * -1.
+            E_l_a[2, i].d[ids.c2[2, i]] = E_l_a[2, i].v * .5
 
-            E_c_1 = exp(-beta[1, i] + .5 * lambda[1, i])
+            E_c_1 = exp(-c1[1, i] + .5 * c2[1, i])
             E_l_a[1, i].v = E_l_a[2, i].v * E_c_1
-            E_l_a[1, i].d[ids.gamma[i]] = E_l_a[2, i].d[ids.gamma[i]] * E_c_1
-            E_l_a[1, i].d[ids.zeta[i]] = E_l_a[2, i].d[ids.zeta[i]] * E_c_1
-            E_l_a[1, i].d[ids.beta[2, i]] = E_l_a[2, i].d[ids.beta[2, i]] * E_c_1
-            E_l_a[1, i].d[ids.lambda[2, i]] = E_l_a[2, i].d[ids.lambda[2, i]] * E_c_1
-            E_l_a[1, i].d[ids.beta[1, i]] = E_l_a[1, i].v * -1.
-            E_l_a[1, i].d[ids.lambda[1, i]] = E_l_a[1, i].v * .5
+            E_l_a[1, i].d[ids.r1[i]] = E_l_a[2, i].d[ids.r1[i]] * E_c_1
+            E_l_a[1, i].d[ids.r2[i]] = E_l_a[2, i].d[ids.r2[i]] * E_c_1
+            E_l_a[1, i].d[ids.c1[2, i]] = E_l_a[2, i].d[ids.c1[2, i]] * E_c_1
+            E_l_a[1, i].d[ids.c2[2, i]] = E_l_a[2, i].d[ids.c2[2, i]] * E_c_1
+            E_l_a[1, i].d[ids.c1[1, i]] = E_l_a[1, i].v * -1.
+            E_l_a[1, i].d[ids.c2[1, i]] = E_l_a[1, i].v * .5
         end
 
         E_ll_a = Array(SensitiveFloat, B, Ia)
@@ -95,34 +95,34 @@ immutable SourceBrightness
                 E_ll_a[b, i] = zero_sensitive_float([-1], all_params)
             end
 
-            zeta_sq = zeta[i]^2
-            E_ll_a[3, i].v = gamma_s[i] * (1 + gamma_s[i]) * zeta_sq
-            E_ll_a[3, i].d[ids.gamma[i]] = (1 + 2 * gamma_s[i]) * zeta_sq
-            E_ll_a[3, i].d[ids.zeta[i]] = 2 * gamma_s[i] * (1. + gamma_s[i]) * zeta[i]
+            r2_sq = r2[i]^2
+            E_ll_a[3, i].v = r1[i] * (1 + r1[i]) * r2_sq
+            E_ll_a[3, i].d[ids.r1[i]] = (1 + 2 * r1[i]) * r2_sq
+            E_ll_a[3, i].d[ids.r2[i]] = 2 * r1[i] * (1. + r1[i]) * r2[i]
 
-            tmp3 = exp(2beta[3, i] + 2 * lambda[3, i])
+            tmp3 = exp(2c1[3, i] + 2 * c2[3, i])
             E_ll_a[4, i].v = E_ll_a[3, i].v * tmp3
             E_ll_a[4, i].d[:] = E_ll_a[3, i].d * tmp3
-            E_ll_a[4, i].d[ids.beta[3, i]] = E_ll_a[4, i].v * 2.
-            E_ll_a[4, i].d[ids.lambda[3, i]] = E_ll_a[4, i].v * 2.
+            E_ll_a[4, i].d[ids.c1[3, i]] = E_ll_a[4, i].v * 2.
+            E_ll_a[4, i].d[ids.c2[3, i]] = E_ll_a[4, i].v * 2.
 
-            tmp4 = exp(2beta[4, i] + 2 * lambda[4, i])
+            tmp4 = exp(2c1[4, i] + 2 * c2[4, i])
             E_ll_a[5, i].v = E_ll_a[4, i].v * tmp4
             E_ll_a[5, i].d[:] = E_ll_a[4, i].d * tmp4
-            E_ll_a[5, i].d[ids.beta[4, i]] = E_ll_a[5, i].v * 2.
-            E_ll_a[5, i].d[ids.lambda[4, i]] = E_ll_a[5, i].v * 2.
+            E_ll_a[5, i].d[ids.c1[4, i]] = E_ll_a[5, i].v * 2.
+            E_ll_a[5, i].d[ids.c2[4, i]] = E_ll_a[5, i].v * 2.
 
-            tmp2 = exp(-2beta[2, i] + 2 * lambda[2, i])
+            tmp2 = exp(-2c1[2, i] + 2 * c2[2, i])
             E_ll_a[2, i].v = E_ll_a[3, i].v * tmp2
             E_ll_a[2, i].d[:] = E_ll_a[3, i].d * tmp2
-            E_ll_a[2, i].d[ids.beta[2, i]] = E_ll_a[2, i].v * -2.
-            E_ll_a[2, i].d[ids.lambda[2, i]] = E_ll_a[2, i].v * 2.
+            E_ll_a[2, i].d[ids.c1[2, i]] = E_ll_a[2, i].v * -2.
+            E_ll_a[2, i].d[ids.c2[2, i]] = E_ll_a[2, i].v * 2.
 
-            tmp1 = exp(-2beta[1, i] + 2 * lambda[1, i])
+            tmp1 = exp(-2c1[1, i] + 2 * c2[1, i])
             E_ll_a[1, i].v = E_ll_a[2, i].v * tmp1
             E_ll_a[1, i].d[:] = E_ll_a[2, i].d * tmp1
-            E_ll_a[1, i].d[ids.beta[1, i]] = E_ll_a[1, i].v * -2.
-            E_ll_a[1, i].d[ids.lambda[1, i]] = E_ll_a[1, i].v * 2.
+            E_ll_a[1, i].d[ids.c1[1, i]] = E_ll_a[1, i].v * -2.
+            E_ll_a[1, i].d[ids.c2[1, i]] = E_ll_a[1, i].v * 2.
         end
 
         new(E_l_a, E_ll_a)
@@ -167,7 +167,7 @@ Args:
      This is either e_dev or (1 - e_dev).
  - gc: The galaxy component to be convolved
  - pc: The psf component to be convolved
- - mu: The location of the celestial object as a 2x1 vector
+ - u: The location of the celestial object as a 2x1 vector
  - e_axis: The ratio of the galaxy minor axis to major axis (0 < e_axis <= 1)
  - e_scale: The scale of the galaxy major axis
 
@@ -180,30 +180,30 @@ Attributes:
      [e_axis, e_angle, e_scale]
 """ ->
 immutable GalaxyCacheComponent
-    theta_dir::Float64
-    theta_i::Float64
+    e_dev_dir::Float64
+    e_dev_i::Float64
     bmc::BvnComponent
-    dSigma::Matrix{Float64}  # [Sigma11, Sigma12, Sigma22] x [rho, phi, sigma]
+    dSigma::Matrix{Float64}  # [Sigma11, Sigma12, Sigma22] x [e_axis, e_angle, e_scale]
 
-    GalaxyCacheComponent(theta_dir::Float64, theta_i::Float64,
-            gc::GalaxyComponent, pc::PsfComponent, mu::Vector{Float64},
-            rho::Float64, phi::Float64, sigma::Float64) = begin
-        XiXi = Util.get_bvn_cov(rho, phi, sigma)
-        mean_s = [pc.xiBar[1] + mu[1], pc.xiBar[2] + mu[2]]
+    GalaxyCacheComponent(e_dev_dir::Float64, e_dev_i::Float64,
+            gc::GalaxyComponent, pc::PsfComponent, u::Vector{Float64},
+            e_axis::Float64, e_angle::Float64, e_scale::Float64) = begin
+        XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+        mean_s = [pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
         var_s = pc.tauBar + gc.nuBar * XiXi
-        weight = pc.alphaBar * gc.etaBar  # excludes theta
+        weight = pc.alphaBar * gc.etaBar  # excludes e_dev
         bmc = BvnComponent(mean_s, var_s, weight)
 
         dSigma = Array(Float64, 3, 3)
-        cos_sin = cos(phi)sin(phi)
-        sin_sq = sin(phi)^2
-        cos_sq = cos(phi)^2
-        dSigma[:, 1] = 2rho * sigma^2 * [sin_sq, -cos_sin, cos_sq]
-        dSigma[:, 2] = sigma^2 * (rho^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
-        dSigma[:, 3] = (2XiXi ./ sigma)[[1, 2, 4]]
+        cos_sin = cos(e_angle)sin(e_angle)
+        sin_sq = sin(e_angle)^2
+        cos_sq = cos(e_angle)^2
+        dSigma[:, 1] = 2e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq]
+        dSigma[:, 2] = e_scale^2 * (e_axis^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
+        dSigma[:, 3] = (2XiXi ./ e_scale)[[1, 2, 4]]
         dSigma .*= gc.nuBar
 
-        new(theta_dir, theta_i, bmc, dSigma)
+        new(e_dev_dir, e_dev_i, bmc, dSigma)
     end
 end
 
@@ -235,21 +235,21 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
         # Convolve the star locations with the PSF.
         for k in 1:3
             pc = psf[k]
-            mean_s = [pc.xiBar[1] + vs[ids.mu[1]], pc.xiBar[2] + vs[ids.mu[2]]]
+            mean_s = [pc.xiBar[1] + vs[ids.u[1]], pc.xiBar[2] + vs[ids.u[2]]]
             star_mcs[k, s] = BvnComponent(mean_s, pc.tauBar, pc.alphaBar)
         end
 
         # Convolve the galaxy representations with the PSF.
         for i = 1:Ia
-            theta_dir = (i == 1) ? 1. : -1.
-            theta_i = (i == 1) ? vs[ids.theta] : 1. - vs[ids.theta]
+            e_dev_dir = (i == 1) ? 1. : -1.
+            e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
             for j in 1:[8,6][i]
                 for k = 1:3
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
-                        theta_dir, theta_i, galaxy_prototypes[i][j], psf[k],
-                        vs[ids.mu], vs[ids.rho], vs[ids.phi], vs[ids.sigma])
+                        e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
+                        vs[ids.u], vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale])
                 end
             end
         end
@@ -314,21 +314,21 @@ function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
                            x::Vector{Float64},
                            fs1m::SensitiveFloat)
     py1, py2, f_pre = ret_pdf(gcc.bmc, x)
-    f = f_pre * gcc.theta_i
+    f = f_pre * gcc.e_dev_i
 
     fs1m.v += f
 
     # TODO: reference this with ids
-    fs1m.d[1] += f .* py1 #mu1
-    fs1m.d[2] += f .* py2 #mu2
-    fs1m.d[3] += gcc.theta_dir * f_pre #theta
+    fs1m.d[1] += f .* py1 #u1
+    fs1m.d[2] += f .* py2 #u2
+    fs1m.d[3] += gcc.e_dev_dir * f_pre #e_dev
 
     df_dSigma = Array(Float64, 3)
     df_dSigma[1] = 0.5 * f * (py1 * py1 - gcc.bmc.precision[1, 1])
     df_dSigma[2] = f * (py1 * py2 - gcc.bmc.precision[1, 2])  # NB: 2X
     df_dSigma[3] = 0.5 * f * (py2 * py2 - gcc.bmc.precision[2, 2])
 
-    for i in 1:3  # [drho, dphi, dsigma]
+    for i in 1:3  # [d_e_axis, d_e_angle, d_e_scale]
         for j in 1:3  # [dSigma11, dSigma12, dSigma22]
             fs1m.d[i + 3] += df_dSigma[j] * gcc.dSigma[j, i]
         end
@@ -389,52 +389,52 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
     # E(G) and Var(G).
 
     # In the structures below, 1 = star and 2 = galaxy.
-    chi = vs[ids.chi]
+    a = vs[ids.a]
     fsm = (fs0m, fs1m)
     lf = (sb.E_l_a[b, 1].v * fs0m.v, sb.E_l_a[b, 2].v * fs1m.v)
     llff = (sb.E_ll_a[b, 1].v * fs0m.v^2, sb.E_ll_a[b, 2].v * fs1m.v^2)
 
-    E_G_s_v = chi[1] * lf[1] + chi[2] * lf[2]
+    E_G_s_v = a[1] * lf[1] + a[2] * lf[2]
     E_G.v += E_G_s_v
 
     # These formulas for the variance of G use the fact that the
     # variational distributions of each source and band are independent.
     var_G.v -= E_G_s_v^2
-    var_G.v += chi[1] * llff[1] + chi[2] * llff[2]
+    var_G.v += a[1] * llff[1] + a[2] * llff[2]
 
     # Add the contributions of this source in this band to
     # the derivatibes of E(G) and Var(G).
 
     # Chi derivatives:
-    E_G.d[ids.chi[1], child_s] += lf[1]
-    E_G.d[ids.chi[2], child_s] += lf[2]
+    E_G.d[ids.a[1], child_s] += lf[1]
+    E_G.d[ids.a[2], child_s] += lf[2]
 
-    var_G.d[ids.chi[1], child_s] -= 2 * E_G_s_v * lf[1]
-    var_G.d[ids.chi[2], child_s] -= 2 * E_G_s_v * lf[2]
+    var_G.d[ids.a[1], child_s] -= 2 * E_G_s_v * lf[1]
+    var_G.d[ids.a[2], child_s] -= 2 * E_G_s_v * lf[2]
 
-    var_G.d[ids.chi[1], child_s] += llff[1]
-    var_G.d[ids.chi[2], child_s] += llff[2]
+    var_G.d[ids.a[1], child_s] += llff[1]
+    var_G.d[ids.a[2], child_s] += llff[2]
 
     # Derivatives with respect to the normal component parameters.
     for i in 1:Ia # Stars and galaxies
         # Loop over parameters for each fsm component.
         for p1 in 1:length(fsm[i].param_index)
             p0 = fsm[i].param_index[p1]
-            chi_fd = chi[i] * fsm[i].d[p1]
-            chi_El_fd = sb.E_l_a[b, i].v * chi_fd
-            E_G.d[p0, child_s] += chi_El_fd
-            var_G.d[p0, child_s] -= 2 * E_G_s_v * chi_El_fd
-            var_G.d[p0, child_s] += chi_fd * sb.E_ll_a[b, i].v * 2 * fsm[i].v
+            a_fd = a[i] * fsm[i].d[p1]
+            a_El_fd = sb.E_l_a[b, i].v * a_fd
+            E_G.d[p0, child_s] += a_El_fd
+            var_G.d[p0, child_s] -= 2 * E_G_s_v * a_El_fd
+            var_G.d[p0, child_s] += a_fd * sb.E_ll_a[b, i].v * 2 * fsm[i].v
         end
     end
 
     # Derivatives with respect to the brightness parameters.
     for i in 1:Ia # Stars and galaxies
-        for p0 in vcat(ids.gamma, ids.zeta, ids.beta[:], ids.lambda[:])
-            chi_f_Eld = chi[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
-            E_G.d[p0, child_s] += chi_f_Eld
-            var_G.d[p0, child_s] -= 2 * E_G_s_v * chi_f_Eld
-            var_G.d[p0, child_s] += chi[i] * fsm[i].v^2 * sb.E_ll_a[b, i].d[p0]
+        for p0 in vcat(ids.r1, ids.r2, ids.c1[:], ids.c2[:])
+            a_f_Eld = a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
+            E_G.d[p0, child_s] += a_f_Eld
+            var_G.d[p0, child_s] -= 2 * E_G_s_v * a_f_Eld
+            var_G.d[p0, child_s] += a[i] * fsm[i].v^2 * sb.E_ll_a[b, i].d[p0]
         end
     end
 end
@@ -527,7 +527,7 @@ end
 
 
 @doc """
-Add a tile's contribution to the ELBO likelihood term by 
+Add a tile's contribution to the ELBO likelihood term by
 modifying accum in place.
 
 Args:
@@ -631,18 +631,18 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
                         mp::ModelParams,
                         accum::SensitiveFloat)
     vs = mp.vp[s]
-    chi = vs[ids.chi[i]]
-    kappa = vs[ids.kappa[d, i]]
+    a = vs[ids.a[i]]
+    k = vs[ids.k[d, i]]
 
-    pp_kl_cid = KL.gen_diagmvn_mvn_kl(mp.pp.c[i][1][:, d], 
+    pp_kl_cid = KL.gen_diagmvn_mvn_kl(mp.pp.c[i][1][:, d],
                                       mp.pp.c[i][2][:, :, d])
-    (v, (d_beta, d_lambda)) = pp_kl_cid(vs[ids.beta[:, i]],
-                                        vs[ids.lambda[:, i]])
-    accum.v -= v * chi * kappa
-    accum.d[ids.kappa[d, i], s] -= chi * v
-    accum.d[ids.beta[:, i], s] -= chi * kappa * d_beta
-    accum.d[ids.lambda[:, i], s] -= chi * kappa * d_lambda
-    accum.d[ids.chi[i], s] -= kappa * v
+    (v, (d_c1, d_c2)) = pp_kl_cid(vs[ids.c1[:, i]],
+                                        vs[ids.c2[:, i]])
+    accum.v -= v * a * k
+    accum.d[ids.k[d, i], s] -= a * v
+    accum.d[ids.c1[:, i], s] -= a * k * d_c1
+    accum.d[ids.c2[:, i], s] -= a * k * d_c2
+    accum.d[ids.a[i], s] -= k * v
 end
 
 
@@ -651,10 +651,10 @@ function subtract_kl_k!(i::Int64, s::Int64,
                         accum::SensitiveFloat)
     vs = mp.vp[s]
     pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[i])
-    (v, (d_kappa,)) = pp_kl_ki(mp.vp[s][ids.kappa[:, i]])
-    accum.v -= v * vs[ids.chi[i]]
-    accum.d[ids.kappa[:, i]] -= d_kappa .* vs[ids.chi[i]]
-    accum.d[ids.chi[i]] -= v
+    (v, (d_k,)) = pp_kl_ki(mp.vp[s][ids.k[:, i]])
+    accum.v -= v * vs[ids.a[i]]
+    accum.d[ids.k[:, i]] -= d_k .* vs[ids.a[i]]
+    accum.d[ids.a[i]] -= v
 end
 
 
@@ -662,20 +662,20 @@ function subtract_kl_r!(i::Int64, s::Int64,
                         mp::ModelParams, accum::SensitiveFloat)
     vs = mp.vp[s]
     pp_kl_r = KL.gen_gamma_kl(mp.pp.r[i][1], mp.pp.r[i][2])
-    (v, (d_gamma, d_zeta)) = pp_kl_r(vs[ids.gamma[i]], vs[ids.zeta[i]])
-    accum.v -= v * vs[ids.chi[i]]
-    accum.d[ids.gamma[i], s] -= d_gamma .* vs[ids.chi[i]]
-    accum.d[ids.zeta[i], s] -= d_zeta .* vs[ids.chi[i]]
-    accum.d[ids.chi[i]] -= v
+    (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
+    accum.v -= v * vs[ids.a[i]]
+    accum.d[ids.r1[i], s] -= d_r1 .* vs[ids.a[i]]
+    accum.d[ids.r2[i], s] -= d_r2 .* vs[ids.a[i]]
+    accum.d[ids.a[i]] -= v
 end
 
 
 
 function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
     pp_kl_a = KL.gen_categorical_kl(mp.pp.a)
-    (v, (d_chi,)) = pp_kl_a(mp.vp[s][ids.chi])
+    (v, (d_a,)) = pp_kl_a(mp.vp[s][ids.a])
     accum.v -= v
-    accum.d[ids.chi] -= d_chi
+    accum.d[ids.a] -= d_a
 end
 
 
@@ -699,7 +699,7 @@ end
 
 
 @doc """
-Calculates and returns the ELBO and its derivatives for all the bands 
+Calculates and returns the ELBO and its derivatives for all the bands
 of an image.
 
 Args:

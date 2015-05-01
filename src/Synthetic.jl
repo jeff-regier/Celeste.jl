@@ -56,7 +56,7 @@ end
 
 
 function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
-    thetas = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
+    e_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
 
     XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
 
@@ -65,8 +65,8 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
             for k in 1:length(img0.psf)
                 the_mean = ce.pos + img0.psf[k].xiBar
                 the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
-                intensity = ce.gal_fluxes[img0.b] * img0.iota * 
-                    img0.psf[k].alphaBar * thetas[i] * gproto.etaBar
+                intensity = ce.gal_fluxes[img0.b] * img0.iota *
+                    img0.psf[k].alphaBar * e_devs[i] * gproto.etaBar
                 write_gaussian(the_mean, the_cov, intensity, pixels)
             end
         end

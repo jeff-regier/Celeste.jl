@@ -18,30 +18,30 @@ function get_nlopt_bounds(vs::Vector{Float64})
     # vs: parameters for a particular source.
     # vp: complete collection of sources.
     lb = Array(Float64, length(all_params))
-    lb[ids.chi] = 1e-2
-    lb[ids.mu] = vs[ids.mu] - 1.
-    [lb[id] = 1e-4 for id in ids.gamma]
-    [lb[id] = 1e-4 for id in ids.zeta]
-    [lb[id] = 1e-4 for id in ids.kappa]
-    [lb[id] = -10. for id in ids.beta]
-    [lb[id] = 1e-4 for id in ids.lambda]
-    lb[ids.theta] = 1e-2
-    lb[ids.rho] = 1e-4
-    lb[ids.phi] = -1e10 #-pi/2 + 1e-4
-    lb[ids.sigma] = 0.2
+    lb[ids.a] = 1e-2
+    lb[ids.u] = vs[ids.u] - 1.
+    [lb[id] = 1e-4 for id in ids.r1]
+    [lb[id] = 1e-4 for id in ids.r2]
+    [lb[id] = 1e-4 for id in ids.k]
+    [lb[id] = -10. for id in ids.c1]
+    [lb[id] = 1e-4 for id in ids.c2]
+    lb[ids.e_dev] = 1e-2
+    lb[ids.e_axis] = 1e-4
+    lb[ids.e_angle] = -1e10 #-pi/2 + 1e-4
+    lb[ids.e_scale] = 0.2
 
     ub = Array(Float64, length(all_params))
-    ub[ids.chi] = 1 - 1e-2
-    ub[ids.mu] = vs[ids.mu] + 1.
-    [ub[id] = 1e12 for id in ids.gamma]
-    [ub[id] = 1e-1 for id in ids.zeta]
-    [ub[id] = 1 - 1e-4 for id in ids.kappa]
-    [ub[id] = 10. for id in ids.beta]
-    [ub[id] = 1. for id in ids.lambda]
-    ub[ids.theta] = 1 - 1e-2
-    ub[ids.rho] = 1. - 1e-4
-    ub[ids.phi] = 1e10 #pi/2 - 1e-4
-    ub[ids.sigma] = 15.
+    ub[ids.a] = 1 - 1e-2
+    ub[ids.u] = vs[ids.u] + 1.
+    [ub[id] = 1e12 for id in ids.r1]
+    [ub[id] = 1e-1 for id in ids.r2]
+    [ub[id] = 1 - 1e-4 for id in ids.k]
+    [ub[id] = 10. for id in ids.c1]
+    [ub[id] = 1. for id in ids.c2]
+    ub[ids.e_dev] = 1 - 1e-2
+    ub[ids.e_axis] = 1. - 1e-4
+    ub[ids.e_angle] = 1e10 #pi/2 - 1e-4
+    ub[ids.e_scale] = 15.
 
     lb, ub
 end
@@ -151,8 +151,8 @@ end
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
     omitted_ids = setdiff(all_params_free,
-                          [ids_free.gamma, ids_free.zeta,
-                           ids_free.kappa[:], ids_free.beta[:]])
+                          [ids_free.r1, ids_free.r2,
+                           ids_free.k[:], ids_free.c1[:]])
     maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
 
     maximize_f(ElboDeriv.elbo, blob, mp, ftol_abs=1e-6)
@@ -160,7 +160,7 @@ end
 
 
 function maximize_likelihood(blob::Blob, mp::ModelParams)
-    omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta]
+    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
     maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
 end
 

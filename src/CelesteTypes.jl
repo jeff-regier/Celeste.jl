@@ -106,12 +106,12 @@ immutable PsfComponent
     # A single normal component of the point spread function.
     #
     # Args:
-    #   alphaBar: The scalar weight of the component. 
+    #   alphaBar: The scalar weight of the component.
     #   xiVar: The 2x1 location vector
     #   Sigmabar: The 2x2 covariance
     #
     # Attributes:
-    #   alphaBar: The scalar weight of the component. 
+    #   alphaBar: The scalar weight of the component.
     #   xiVar: The 2x1 location vector
     #   Sigmabar: The 2x2 covariance (tau_bar in the ICLM paper)
     #   tauBarInv: The 2x2 precision
@@ -166,7 +166,7 @@ type Image
 end
 
 immutable ImageTile
-    # Tiles of pixels that share the same set of    
+    # Tiles of pixels that share the same set of
     # relevant sources (or other calculations).
 
     # These are in tile coordinates --- not pixel or sky coordinates.
@@ -215,37 +215,37 @@ immutable ParamIndex
     # Variational parameter for a_s.
     # The probability of being a particular celestial object (Ia x 1 vector).
     # (Currently the probability of being a star or galaxy, respectively.)
-    chi::Vector{Int64}
+    a::Vector{Int64}
 
     # The location of the object (2x1 vector).
-    mu::Vector{Int64}
+    u::Vector{Int64}
 
     # Ia x 1 scalar variational parameters for r_s.  The first
     # row is for stars, and the second for galaxies
-    gamma::Vector{Int64}
-    zeta::Vector{Int64}
+    r1::Vector{Int64}
+    r2::Vector{Int64}
 
     # The weight given to a galaxy of type 1.
-    theta::Int64
+    e_dev::Int64
 
     # galaxy minor/major ratio
-    rho::Int64
+    e_axis::Int64
 
     # galaxy angle
-    phi::Int64 
+    e_angle::Int64
 
     # galaxy scale
-    sigma::Int64
+    e_scale::Int64
 
     # The remaining parameters are matrices where the
     # first column is for stars and the second is for galaxies.
 
     # DxI matrix of color prior component indicators.
-    kappa::Array{Int64, 2}
+    k::Array{Int64, 2}
 
     # (B - 1)xI matrices containing c_s means and variances, respectively.
-    beta::Array{Int64, 2}
-    lambda::Array{Int64, 2}
+    c1::Array{Int64, 2}
+    c2::Array{Int64, 2}
 
     # The size (largest index) of the parameterization.
     size::Int64
@@ -257,37 +257,37 @@ immutable UnconstrainedParamIndex
 
     # Unconstrained parameter for a_s of length (Ia - 1)
     # (the probability of being a type of celestial object).
-    chi::Vector{Int64}
+    a::Vector{Int64}
 
     # The location of the object (2x1 vector).
-    mu::Vector{Int64}
+    u::Vector{Int64}
 
     # Ix1 scalar variational parameters for r_s.  The first
     # row is for stars, and the second for galaxies
-    gamma::Vector{Int64}
-    zeta::Vector{Int64}
+    r1::Vector{Int64}
+    r2::Vector{Int64}
 
     # The weight given to a galaxy of type 1.
-    theta::Int64
+    e_dev::Int64
 
     # galaxy minor/major ratio
-    rho::Int64
+    e_axis::Int64
 
     # galaxy angle
-    phi::Int64 
+    e_angle::Int64
 
     # galaxy scale
-    sigma::Int64
+    e_scale::Int64
 
     # The remaining parameters are matrices where the
     # first column is for stars and the second is for galaxies.
 
     # Dx(Ia - 1) matrix of color prior component indicators.
-    kappa::Array{Int64, 2}
+    k::Array{Int64, 2}
 
     # (B - 1)xI matrices containing c_s means and variances, respectively.
-    beta::Array{Int64, 2}
-    lambda::Array{Int64, 2}
+    c1::Array{Int64, 2}
+    c2::Array{Int64, 2}
 
     # The size (largest index) of the parameterization.
     size::Int64
@@ -296,21 +296,21 @@ end
 function get_param_ids()
     # Build a ParamIndex object.
 
-    kappa_end = 12 + Ia * D
-    beta_end = kappa_end + Ia * (B - 1)
-    lambda_end = beta_end + Ia * (B - 1)
+    k_end = 12 + Ia * D
+    c1_end = k_end + Ia * (B - 1)
+    c2_end = c1_end + Ia * (B - 1)
 
-    kappa_ids = reshape([13 : kappa_end], D, Ia)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
+    k_ids = reshape([13 : k_end], D, Ia)
+    c1_ids = reshape([k_end + 1 : c1_end], B - 1, Ia)
+    c2_ids = reshape([c1_end + 1 : c2_end], B - 1, Ia)
 
-    ParamIndex([1, 2], # chi
-               [3, 4], # mu
-               [5, 6], # gamma
-               [7, 8], # zeta
-               9, 10, 11, 12, # theta, rho, phi, sigma
-               kappa_ids, beta_ids, lambda_ids,
-               lambda_ids[end])
+    ParamIndex([1, 2], # a
+               [3, 4], # u
+               [5, 6], # r1
+               [7, 8], # r2
+               9, 10, 11, 12, # e_dev, e_axis, e_angle, e_scale
+               k_ids, c1_ids, c2_ids,
+               c2_ids[end])
 end
 
 function get_unconstrained_param_ids()
@@ -321,22 +321,22 @@ function get_unconstrained_param_ids()
     # Currently every alternative parameterization has the same
     # dimension in each parameter.
 
-    # The last colunn of kappa is constrianed by the first Ia - 1 columns. 
-    kappa_end = 11 + (Ia - 1) * D
-    beta_end = kappa_end + Ia * (B - 1)
-    lambda_end = beta_end + Ia * (B - 1)
+    # The last colunn of k is constrianed by the first Ia - 1 columns.
+    k_end = 11 + (Ia - 1) * D
+    c1_end = k_end + Ia * (B - 1)
+    c2_end = c1_end + Ia * (B - 1)
 
-    kappa_ids = reshape([12 : kappa_end], Ia - 1, D)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
+    k_ids = reshape([12 : k_end], Ia - 1, D)
+    c1_ids = reshape([k_end + 1 : c1_end], B - 1, Ia)
+    c2_ids = reshape([c1_end + 1 : c2_end], B - 1, Ia)
 
-    UnconstrainedParamIndex([1],    # chi
-                            [2, 3], # mu
-                            [4, 5], # gamma
-                            [6, 7], # zeta
-                            8, 9, 10, 11, # theta, rho, phi, sigma
-                            kappa_ids, beta_ids, lambda_ids,
-                            lambda_ids[end])
+    UnconstrainedParamIndex([1],    # a
+                            [2, 3], # u
+                            [4, 5], # r1
+                            [6, 7], # r2
+                            8, 9, 10, 11, # e_dev, e_axis, e_angle, e_scale
+                            k_ids, c1_ids, c2_ids,
+                            c2_ids[end])
 end
 
 const ids = get_param_ids()
@@ -345,8 +345,8 @@ const ids_free = get_unconstrained_param_ids()
 const all_params = [1:ids.size]
 const all_params_free = [1:ids_free.size]
 
-const star_pos_params = ids.mu
-const galaxy_pos_params = [ids.mu, ids.theta, ids.rho, ids.phi, ids.sigma]
+const star_pos_params = ids.u
+const galaxy_pos_params = [ids.u, ids.e_dev, ids.e_axis, ids.e_angle, ids.e_scale]
 
 type ModelParams
     # The parameters for a particular image.
@@ -389,7 +389,7 @@ type SensitiveFloat
     #      in the same format as d.
     #   source_index: local_S x 1 vector of source ids with nonzero derivatives.
     #   param_index: local_P x 1 vector of parameter indices with
-    #      nonzero derivatives. 
+    #      nonzero derivatives.
     #
     #  All derivatives not in source_index and param_index are zero.
 
