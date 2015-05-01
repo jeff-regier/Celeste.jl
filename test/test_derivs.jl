@@ -32,7 +32,7 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams,
 
             numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
             info("deriv #$p0 (s: $s): $numeric_deriv vs $(f_trans.d[p1, s]) [tol: $abs_err]")
-            obs_err = abs(numeric_deriv - f_trans.d[p1, s]) 
+            obs_err = abs(numeric_deriv - f_trans.d[p1, s])
             @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
             @test_approx_eq_eps numeric_deriv f_trans.d[p1, s] 10abs_err
         end
@@ -178,7 +178,7 @@ end
 
 
 function test_quadratic_derivatives(trans::DataTransform)
-    
+
     # A very simple quadratic function to test the derivatives.
     function quadratic_function(mp::ModelParams)
         const centers = collect(linrange(0, 10, ids.size))
@@ -192,7 +192,7 @@ function test_quadratic_derivatives(trans::DataTransform)
 
     # 0.5 is an innocuous value for all parameters.
     mp = empty_model_params(1)
-    mp.vp = convert(VariationalParams, [ fill(0.5, ids.size) for s in 1:1 ]) 
+    mp.vp = convert(VariationalParams, [ fill(0.5, ids.size) for s in 1:1 ])
     test_by_finite_differences(quadratic_function, mp, trans)
 end
 

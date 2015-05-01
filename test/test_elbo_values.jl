@@ -8,10 +8,10 @@ using SampleData
 function true_star_init()
     blob, mp, body = gen_sample_star_dataset(perturb=false)
 
-    mp.vp[1][ids.chi] = [ 1.0 - 1e-4, 1e-4 ]
-    mp.vp[1][ids.zeta] = 1e-4
-    mp.vp[1][ids.gamma] = sample_star_fluxes[3] ./ mp.vp[1][ids.zeta]
-    mp.vp[1][ids.lambda] = 1e-4
+    mp.vp[1][ids.a] = [ 1.0 - 1e-4, 1e-4 ]
+    mp.vp[1][ids.r2] = 1e-4
+    mp.vp[1][ids.r1] = sample_star_fluxes[3] ./ mp.vp[1][ids.r2]
+    mp.vp[1][ids.c2] = 1e-4
 
     blob, mp, body
 end
@@ -41,38 +41,38 @@ function test_kl_divergence_values()
     vs = mp.vp[s]
 
     # a
-    q_a = Bernoulli(vs[ids.chi[2]])
+    q_a = Bernoulli(vs[ids.a[2]])
     p_a = Bernoulli(mp.pp.a[2])
     test_kl(q_a, p_a, (accum) -> ElboDeriv.subtract_kl_a!(s, mp, accum))
 
     # k
-    q_k = Categorical(vs[ids.kappa[:, i]])
+    q_k = Categorical(vs[ids.k[:, i]])
     p_k = Categorical(mp.pp.k[i])
     function sklk(accum)
         ElboDeriv.subtract_kl_k!(i, s, mp, accum)
         @assert i == 1
-        accum.v /= vs[ids.chi[i]]
+        accum.v /= vs[ids.a[i]]
     end
     test_kl(q_k, p_k, sklk)
 
     # c
-    mp.pp.c[i][1][:, d] = vs[ids.beta[:, i]]
-    mp.pp.c[i][2][:, :, d] = diagm(vs[ids.lambda[:, i]])
-    q_c = MvNormal(vs[ids.beta[:, i]], diagm(vs[ids.lambda[:, i]]))
+    mp.pp.c[i][1][:, d] = vs[ids.c1[:, i]]
+    mp.pp.c[i][2][:, :, d] = diagm(vs[ids.c2[:, i]])
+    q_c = MvNormal(vs[ids.c1[:, i]], diagm(vs[ids.c2[:, i]]))
     p_c = MvNormal(mp.pp.c[i][1][:, d], mp.pp.c[i][2][:, :, d])
     function sklc(accum)
         ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
-        accum.v /= vs[ids.chi[i]] * vs[ids.kappa[d, i]]
+        accum.v /= vs[ids.a[i]] * vs[ids.k[d, i]]
     end
     test_kl(q_c, p_c, sklc)
 
     # r
-    q_r = Gamma(vs[ids.gamma[i]], vs[ids.zeta[i]])
+    q_r = Gamma(vs[ids.r1[i]], vs[ids.r2[i]])
     p_r = Gamma(mp.pp.r[i][1], mp.pp.r[i][2])
     function sklr(accum)
         ElboDeriv.subtract_kl_r!(i, s, mp, accum)
         @assert i == 1
-        accum.v /= vs[ids.chi[i]]
+        accum.v /= vs[ids.a[i]]
     end
     test_kl(q_r, p_r, sklr)
 
@@ -102,18 +102,18 @@ function test_that_star_truth_is_most_likely()
 
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
-    for bad_chi in [.3, .5, .9]
-        mp_chi = deepcopy(mp)
-        mp_chi.vp[1][ids.chi] = [ 1.0 - bad_chi, bad_chi ]
-        bad_chi = ElboDeriv.elbo_likelihood(blob, mp_chi)
-        @test best.v > bad_chi.v
+    for bad_a in [.3, .5, .9]
+        mp_a = deepcopy(mp)
+        mp_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ]
+        bad_a = ElboDeriv.elbo_likelihood(blob, mp_a)
+        @test best.v > bad_a.v
     end
 
     for h2 in -2:2
         for w2 in -2:2
             if !(h2 == 0 && w2 == 0)
                 mp_mu = deepcopy(mp)
-                mp_mu.vp[1][ids.mu] += [h2 * .5, w2 * .5]
+                mp_mu.vp[1][ids.u] += [h2 * .5, w2 * .5]
                 bad_mu = ElboDeriv.elbo_likelihood(blob, mp_mu)
                 @test best.v > bad_mu.v
             end
@@ -121,18 +121,18 @@ function test_that_star_truth_is_most_likely()
     end
 
     for delta in [.7, .9, 1.1, 1.3]
-        mp_gamma = deepcopy(mp)
-        mp_gamma.vp[1][ids.gamma] *= delta
-        bad_gamma = ElboDeriv.elbo_likelihood(blob, mp_gamma)
-        @test best.v > bad_gamma.v
+        mp_r1 = deepcopy(mp)
+        mp_r1.vp[1][ids.r1] *= delta
+        bad_r1 = ElboDeriv.elbo_likelihood(blob, mp_r1)
+        @test best.v > bad_r1.v
     end
 
     for b in 1:4
         for delta in [-.3, .3]
-            mp_beta = deepcopy(mp)
-            mp_beta.vp[1][ids.beta[b, 1]] += delta
-            bad_beta = ElboDeriv.elbo_likelihood(blob, mp_beta)
-            @test best.v > bad_beta.v
+            mp_c1 = deepcopy(mp)
+            mp_c1.vp[1][ids.c1[b, 1]] += delta
+            bad_c1 = ElboDeriv.elbo_likelihood(blob, mp_c1)
+            @test best.v > bad_c1.v
         end
     end
 end
@@ -140,21 +140,21 @@ end
 
 function test_that_galaxy_truth_is_most_likely()
     blob, mp, body = gen_sample_galaxy_dataset(perturb=false)
-    mp.vp[1][ids.chi] = [ 0.01, .99 ]
+    mp.vp[1][ids.a] = [ 0.01, .99 ]
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
-    for bad_chi in [.3, .5, .9]
-        mp_chi = deepcopy(mp)
-        mp_chi.vp[1][ids.chi] = [ 1.0 - bad_chi, bad_chi ]
-        bad_chi = ElboDeriv.elbo_likelihood(blob, mp_chi)
-        @test best.v > bad_chi.v
+    for bad_a in [.3, .5, .9]
+        mp_a = deepcopy(mp)
+        mp_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ]
+        bad_a = ElboDeriv.elbo_likelihood(blob, mp_a)
+        @test best.v > bad_a.v
     end
 
     for h2 in -2:2
         for w2 in -2:2
             if !(h2 == 0 && w2 == 0)
                 mp_mu = deepcopy(mp)
-                mp_mu.vp[1][ids.mu] += [h2 * .5, w2 * .5]
+                mp_mu.vp[1][ids.u] += [h2 * .5, w2 * .5]
                 bad_mu = ElboDeriv.elbo_likelihood(blob, mp_mu)
                 @test best.v > bad_mu.v
             end
@@ -162,14 +162,14 @@ function test_that_galaxy_truth_is_most_likely()
     end
 
     for bad_scale in [.8, 1.2]
-        mp_gamma = deepcopy(mp)
-        mp_gamma.vp[1][ids.gamma] *= bad_scale^2
-        mp_gamma.vp[1][ids.zeta] /= bad_scale  # keep variance the same
-        bad_gamma = ElboDeriv.elbo_likelihood(blob, mp_gamma)
-        @test best.v > bad_gamma.v
+        mp_r1 = deepcopy(mp)
+        mp_r1.vp[1][ids.r1] *= bad_scale^2
+        mp_r1.vp[1][ids.r2] /= bad_scale  # keep variance the same
+        bad_r1 = ElboDeriv.elbo_likelihood(blob, mp_r1)
+        @test best.v > bad_r1.v
     end
 
-    for n in [:rho, :phi, :sigma]
+    for n in [:e_axis, :e_angle, :e_scale]
         for bad_scale in [.8, 1.2]
             mp_bad = deepcopy(mp)
             mp_bad.vp[1][ids.(n)] *= bad_scale
@@ -180,10 +180,10 @@ function test_that_galaxy_truth_is_most_likely()
 
     for b in 1:4
         for delta in [-.3, .3]
-            mp_beta = deepcopy(mp)
-            mp_beta.vp[1][ids.beta[b, 2]] += delta
-            bad_beta = ElboDeriv.elbo_likelihood(blob, mp_beta)
-            @test best.v > bad_beta.v
+            mp_c1 = deepcopy(mp)
+            mp_c1.vp[1][ids.c1[b, 2]] += delta
+            bad_c1 = ElboDeriv.elbo_likelihood(blob, mp_c1)
+            @test best.v > bad_c1.v
         end
     end
 end
@@ -195,14 +195,14 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-$stamp_id", blob)
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries)
-    inbounds(ce) = ce.pos[1] > -10. && ce.pos[2] > -10 && 
+    inbounds(ce) = ce.pos[1] > -10. && ce.pos[2] > -10 &&
         ce.pos[1] < 61 && ce.pos[2] < 61
     cat_entries = filter(inbounds, cat_entries)
 
     mp = ModelInit.cat_init(cat_entries)
     for s in 1:length(cat_entries)
-        mp.vp[s][ids.chi[2]] = cat_entries[s].is_star ? 0.01 : 0.99
-        mp.vp[s][ids.chi[1]] = 1.0 - mp.vp[s][ids.chi[2]]
+        mp.vp[s][ids.a[2]] = cat_entries[s].is_star ? 0.01 : 0.99
+        mp.vp[s][ids.a[1]] = 1.0 - mp.vp[s][ids.a[2]]
     end
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
@@ -210,14 +210,14 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     s = 1
 
     for bad_scale in [.7, 1.3]
-        mp_gamma = deepcopy(mp)
-        mp_gamma.vp[s][ids.gamma] *= bad_scale^2
-        mp_gamma.vp[s][ids.zeta] /= bad_scale  # keep variance the same
-        bad_gamma = ElboDeriv.elbo_likelihood(blob, mp_gamma)
-        @test best.v > bad_gamma.v
+        mp_r1 = deepcopy(mp)
+        mp_r1.vp[s][ids.r1] *= bad_scale^2
+        mp_r1.vp[s][ids.r2] /= bad_scale  # keep variance the same
+        bad_r1 = ElboDeriv.elbo_likelihood(blob, mp_r1)
+        @test best.v > bad_r1.v
     end
 
-    for n in [:rho, :phi, :sigma]
+    for n in [:e_axis, :e_angle, :e_scale]
         for bad_scale in [.6, 1.8]
             mp_bad = deepcopy(mp)
             mp_bad.vp[s][ids.(n)] *= bad_scale
@@ -226,19 +226,19 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         end
     end
 
-    for bad_chi in [.3, .7]
-        mp_chi = deepcopy(mp)
-        mp_chi.vp[s][ids.chi] = [ 1.0 - bad_chi, bad_chi ]
+    for bad_a in [.3, .7]
+        mp_a = deepcopy(mp)
+        mp_a.vp[s][ids.a] = [ 1.0 - bad_a, bad_a ]
 
-        bad_chi = ElboDeriv.elbo_likelihood(blob, mp_chi)
-        @test best.v > bad_chi.v
+        bad_a = ElboDeriv.elbo_likelihood(blob, mp_a)
+        @test best.v > bad_a.v
     end
 
     for h2 in -2:2
         for w2 in -2:2
             if !(h2 == 0 && w2 == 0)
                 mp_mu = deepcopy(mp)
-                mp_mu.vp[s][ids.mu] += [0.5h2, 0.5w2]
+                mp_mu.vp[s][ids.u] += [0.5h2, 0.5w2]
                 bad_mu = ElboDeriv.elbo_likelihood(blob, mp_mu)
                 @test best.v > bad_mu.v
             end
@@ -247,11 +247,11 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
 
     for b in 1:4
         for delta in [-2., 2.]
-            mp_beta = deepcopy(mp)
-            mp_beta.vp[s][ids.beta[b, :]] += delta
-            bad_beta = ElboDeriv.elbo_likelihood(blob, mp_beta)
-            info("$(best.v)  >  $(bad_beta.v)")
-            @test best.v > bad_beta.v
+            mp_c1 = deepcopy(mp)
+            mp_c1.vp[s][ids.c1[b, :]] += delta
+            bad_c1 = ElboDeriv.elbo_likelihood(blob, mp_c1)
+            info("$(best.v)  >  $(bad_c1.v)")
+            @test best.v > bad_c1.v
         end
     end
 end

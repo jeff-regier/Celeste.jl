@@ -90,7 +90,7 @@ function test_categorical()
     p_probs = [0.3, 0.4, 0.3]
     q = Categorical(q_probs)
     p = Categorical(p_probs)
-    
+
     claimed_kl = KL.gen_categorical_kl(p_probs)(q_probs)[1]
     verify_kl(q, p, claimed_kl)
 
