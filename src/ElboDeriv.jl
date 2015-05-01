@@ -1,9 +1,11 @@
-# written by Jeffrey Regier
-# jeff [at] stat [dot] berkeley [dot] edu
-
 # Calculate values and partial derivatives of the variational ELBO.
 
 module ElboDeriv
+
+if VERSION < v"0.4.0-dev"
+    using Docile
+end
+@docstrings
 
 using CelesteTypes
 
@@ -11,23 +13,24 @@ import Util
 import KL
 
 
-immutable SourceBrightness
-    # SensitiveFloat objects for expectations involving r_s and c_s.
-    #
-    # Args:
-    #   vs: A vector of variational parameters
-    #
-    # Attributes:
-    #   Each matrix has one row for each color and a column for
-    #   star / galaxy.  Row 3 is the gamma distribute baseline brightness,
-    #   and all other rows are lognormal offsets.
-    #   E_l_a: A B x Ia matrix of expectations and derivatives of
-    #     color terms.  The rows are bands, and the columns
-    #     are star / galaxy.
-    #   E_ll_a: A B x Ia matrix of expectations and derivatives of
-    #     squared color terms.  The rows are bands, and the columns
-    #     are star / galaxy.
+@doc """
+SensitiveFloat objects for expectations involving r_s and c_s.
 
+Args:
+vs: A vector of variational parameters
+
+Attributes:
+Each matrix has one row for each color and a column for
+star / galaxy.  Row 3 is the gamma distribute baseline brightness,
+and all other rows are lognormal offsets.
+- E_l_a: A B x Ia matrix of expectations and derivatives of
+  color terms.  The rows are bands, and the columns
+  are star / galaxy.
+- E_ll_a: A B x Ia matrix of expectations and derivatives of
+  squared color terms.  The rows are bands, and the columns
+  are star / galaxy.
+""" ->
+immutable SourceBrightness
     E_l_a::Matrix{SensitiveFloat}  # [E[l|a=0], E[l]|a=1]]
     E_ll_a::Matrix{SensitiveFloat}   # [E[l^2|a=0], E[l^2]|a=1]]
 
@@ -127,19 +130,20 @@ immutable SourceBrightness
 end
 
 
-immutable BvnComponent
-    # Relevant parameters of a bivariate normal distribution.
-    #
-    # Args:
-    #   the_mean: The mean as a 2x1 column vector
-    #   the_cov: The covaraiance as a 2x2 matrix
-    #   weight: A scalar weight
-    #
-    # Attributes:
-    #    the_mean: The mean argument
-    #    precision: The inverse of the_cov
-    #    z: The weight times the normalizing constant.
+@doc """
+Relevant parameters of a bivariate normal distribution.
 
+Args:
+  the_mean: The mean as a 2x1 column vector
+  the_cov: The covaraiance as a 2x2 matrix
+  weight: A scalar weight
+
+Attributes:
+   the_mean: The mean argument
+   precision: The inverse of the_cov
+   z: The weight times the normalizing constant.
+""" ->
+immutable BvnComponent
     the_mean::Vector{Float64}
     precision::Matrix{Float64}
     z::Float64
@@ -152,29 +156,30 @@ immutable BvnComponent
 end
 
 
-immutable GalaxyCacheComponent
-    # A the convolution of a one galaxy component with one PSF component.
-    #
-    # Args:
-    #  - theta_dir: "Theta direction": this is 1 or -1, depending on whether
-    #      increasing theta increases the weight of this GalaxyCacheComponent
-    #      (1) or decreases it (-1).
-    #  - theta_i: The weight given to this type of galaxy for this celestial object.
-    #      This is either theta or (1 - theta).
-    #  - gc: The galaxy component to be convolved
-    #  - pc: The psf component to be convolved
-    #  - mu: The location of the celestial object as a 2x1 vector
-    #  - rho: The ratio of the galaxy minor axis to major axis (0 < rho <= 1)
-    #  - sigma: The scale of the galaxy major axis
-    #
-    # Attributes:
-    #  - theta_dir: Same as input
-    #  - theta_i: Same as input
-    #  - bmc: A BvnComponent with the convolution.
-    #  - dSigma: A 3x3 matrix containing the derivates of
-    #      [Sigma11, Sigma12, Sigma22] (in the rows) with respect to
-    #      [rho, phi, sigma]
+@doc """
+A the convolution of a one galaxy component with one PSF component.
 
+Args:
+ - e_dev_dir: "Theta direction": this is 1 or -1, depending on whether
+     increasing e_dev increases the weight of this GalaxyCacheComponent
+     (1) or decreases it (-1).
+ - e_dev_i: The weight given to this type of galaxy for this celestial object.
+     This is either e_dev or (1 - e_dev).
+ - gc: The galaxy component to be convolved
+ - pc: The psf component to be convolved
+ - mu: The location of the celestial object as a 2x1 vector
+ - e_axis: The ratio of the galaxy minor axis to major axis (0 < e_axis <= 1)
+ - e_scale: The scale of the galaxy major axis
+
+Attributes:
+ - e_dev_dir: Same as input
+ - e_dev_i: Same as input
+ - bmc: A BvnComponent with the convolution.
+ - dSigma: A 3x3 matrix containing the derivates of
+     [Sigma11, Sigma12, Sigma22] (in the rows) with respect to
+     [e_axis, e_angle, e_scale]
+""" ->
+immutable GalaxyCacheComponent
     theta_dir::Float64
     theta_i::Float64
     bmc::BvnComponent
@@ -203,25 +208,24 @@ immutable GalaxyCacheComponent
 end
 
 
+@doc """
+Convolve the current locations and galaxy shapes with the PSF.
+
+Args:
+ - psf: A vector of PSF components
+ - mp: The current ModelParams
+
+Returns:
+ - star_mcs: An # of PSF components x # of sources array of BvnComponents
+ - gal_mcs: An array of BvnComponents with indices
+    - PSF component
+    - Galaxy component
+    - Galaxy type
+    - Source
+
+The PSF contains three components, so you see lots of 3's below.
+""" ->
 function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
-    # Convolve the current locations and galaxy shapes with the PSF.
-    #
-    # Args:
-    #  - psf: A vector of PSF components
-    #  - mp: The current ModelParams
-    #
-    # Returns:
-    #  - star_mcs: An # of PSF components x # of sources array of BvnComponents
-    #  - gal_mcs: An array of BvnComponents with indices
-    #     - PSF component
-    #     - Galaxy component
-    #     - Galaxy type
-    #     - Source
-
-    # The PSF contains three components, so you see lots of 3's below.
-    # TODO: don't hard-code the number of PSF components
-    # TODO: don't hard code the number of galaxy components (8 and 6 below) either.
-
     star_mcs = Array(BvnComponent, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent, 3, 8, 2, mp.S)
 
@@ -255,16 +259,14 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
 end
 
 
-function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
-    # Return quantities related to the pdf of an offset bivariate normal.
-    #
-    # Args:
-    #   - bmc: A bivariate normal component
-    #   - x: A 2x1 vector containing a mean offset to be applied to bmc
-    #
-    # Returns:
-    #   - Stuff
+@doc """
+Return quantities related to the pdf of an offset bivariate normal.
 
+Args:
+  - bmc: A bivariate normal component
+  - x: A 2x1 vector containing a mean offset to be applied to bmc
+""" ->
+function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
     y1 = x[1] - bmc.the_mean[1]
     y2 = x[2] - bmc.the_mean[2]
     py1 = bmc.precision[1,1] * y1 + bmc.precision[1,2] * y2
@@ -275,20 +277,19 @@ function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
 end
 
 
+@doc """
+Add the contributions of a star's bivariate normal term to the ELBO,
+by updating fs0m in place.
+
+Args:
+  - bmc: The component to be added
+  - x: An offset for the component (e.g. a pixel location)
+  - fs0m: A SensitiveFloat to which the value of the bvn likelihood
+       and its derivatives with respect to x are added.
+""" ->
 function accum_star_pos!(bmc::BvnComponent,
                          x::Vector{Float64},
                          fs0m::SensitiveFloat)
-    # Add the contributions of a star's bivariate normal term to the ELBO.
-    #
-    # Args:
-    #   - bmc: The component to be added
-    #   - x: An offset for the component (e.g. a pixel location)
-    #   - fs0m: A SensitiveFloat to which the value of the bvn likelihood
-    #        and its derivatives with respect to x are added.
-    #
-    # Returns:
-    #   Updates fs0m in place.
-
     py1, py2, f = ret_pdf(bmc, x)
 
     fs0m.v += f
@@ -299,20 +300,19 @@ function accum_star_pos!(bmc::BvnComponent,
 end
 
 
+@doc """
+Add the contributions of a galaxy component term to the ELBO, by
+updating fs1m in place.
+
+Args:
+  - gcc: The galaxy component to be added
+  - x: An offset for the component (e.g. a pixel location)
+  - fs1m: A SensitiveFloat to which the value of the likelihood
+       and its derivatives with respect to x are added.
+""" ->
 function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
                            x::Vector{Float64},
                            fs1m::SensitiveFloat)
-    # Add the contributions of a galaxy component term to the ELBO.
-    #
-    # Args:
-    #   - gcc: The galaxy component to be added
-    #   - x: An offset for the component (e.g. a pixel location)
-    #   - fs1m: A SensitiveFloat to which the value of the likelihood
-    #        and its derivatives with respect to x are added.
-    #
-    # Returns:
-    #   Updates fs1m in place.
-
     py1, py2, f_pre = ret_pdf(gcc.bmc, x)
     f = f_pre * gcc.theta_i
 
@@ -336,6 +336,32 @@ function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
 end
 
 
+@doc """
+Add up the ELBO values and derivatives for a single source
+in a single band.
+
+Args:
+  - sb: The source's brightness expectations and derivatives
+  - star_mcs: An array of star * PSF components.  The index
+      order is PSF component x source.
+  - gal_mcs: An array of galaxy * PSF components.  The index order is
+      PSF component x galaxy component x galaxy type x source
+  - vs: The variational parameters for this source
+  - child_s: The index of this source within the tile.
+  - parent_s: The global index of this source.
+  - m_pos: A 2x1 vector with the pixel location
+  - b: The band (1 to 5)
+  - fs0m: The accumulated star contributions (updated in place)
+  - fs1m: The accumulated galaxy contributions (updated in place)
+  - E_G: Expected celestial signal in this band (G_{nbm})
+       (updated in place)
+  - var_G: Variance of G (updated in place)
+
+Returns:
+  - Clears and updates fs0m, fs1m with the total
+    star and galaxy contributions to the ELBO from this source
+    in this band.  Adds the contributions to E_G and var_G.
+""" ->
 function accum_pixel_source_stats!(sb::SourceBrightness,
         star_mcs::Array{BvnComponent, 2},
         gal_mcs::Array{GalaxyCacheComponent, 4},
@@ -343,31 +369,6 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
         m_pos::Vector{Float64}, b::Int64,
         fs0m::SensitiveFloat, fs1m::SensitiveFloat,
         E_G::SensitiveFloat, var_G::SensitiveFloat)
-    # Add up the ELBO values and derivatives for a single source
-    # in a single band.
-    #
-    # Args:
-    #   - sb: The source's brightness expectations and derivatives
-    #   - star_mcs: An array of star * PSF components.  The index
-    #       order is PSF component x source.
-    #   - gal_mcs: An array of galaxy * PSF components.  The index order is
-    #       PSF component x galaxy component x galaxy type x source
-    #   - vs: The variational parameters for this source
-    #   - child_s: The index of this source within the tile.
-    #   - parent_s: The global index of this source.
-    #   - m_pos: A 2x1 vector with the pixel location
-    #   - b: The band (1 to 5)
-    #   - fs0m: The accumulated star contributions (updated in place)
-    #   - fs1m: The accumulated galaxy contributions (updated in place)
-    #   - E_G: Expected celestial signal in this band (G_{nbm})
-    #        (updated in place)
-    #   - var_G: Variance of G (updated in place)
-    #
-    # Returns:
-    #   - Clears and updates fs0m, fs1m with the total
-    #     star and galaxy contributions to the ELBO from this source
-    #     in this band.  Adds the contributions to E_G and var_G.
-
     # Accumulate over PSF components.
     clear!(fs0m)
     for star_mc in star_mcs[:, parent_s]
@@ -439,23 +440,23 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
 end
 
 
+@doc """
+Add the contributions of the expected value of a G term to the ELBO.
+
+Args:
+  - tile_sources: A vector of source ids influencing this tile
+  - x_nbm: The photon count at this pixel
+  - iota: The optical sensitivity
+  - E_G: The variational expected value of G
+  - var_G: The variational variance of G
+  - accum: A SensitiveFloat for the ELBO which is updated
+
+Returns:
+  - Adds the contributions of E_G and var_G to accum in place.
+""" ->
 function accum_pixel_ret!(tile_sources::Vector{Int64},
         x_nbm::Float64, iota::Float64,
         E_G::SensitiveFloat, var_G::SensitiveFloat, ret::SensitiveFloat)
-    # Add the contributions of the expected value of a G term to the ELBO.
-    #
-    # Args:
-    #   - tile_sources: A vector of source ids influencing this tile
-    #   - x_nbm: The photon count at this pixel
-    #   - iota: The optical sensitivity
-    #   - E_G: The variational expected value of G
-    #   - var_G: The variational variance of G
-    #   - ret: A SensitiveFloat for the ELBO which is updated
-    #
-    # Returns:
-    #   - Adds the contributions of E_G and var_G to ret in place.
-
-
     # Accumulate the values.
     # Add the lower bound to the E_q[log(F_{nbm})] term
     ret.v += x_nbm * (log(iota) + log(E_G.v) - var_G.v / (2. * E_G.v^2))
@@ -480,6 +481,9 @@ function accum_pixel_ret!(tile_sources::Vector{Int64},
 end
 
 
+@doc """
+Return the range of image pixels in an ImageTile.
+""" ->
 function tile_range(tile::ImageTile, tile_width::Int64)
     # Return the range of image pixels in an ImageTile.
 
@@ -491,18 +495,17 @@ function tile_range(tile::ImageTile, tile_width::Int64)
 end
 
 
-function local_sources(tile::ImageTile, mp::ModelParams)
-    # Return 
-    #
-    # Args:
-    #   - tile: An ImageTile (containing tile coordinates)
-    #   - mp: Model parameters.
-    #
-    # Returns:
-    #   - A vector of source ids (from 1 to mp.S) that influence
-    #     pixels in the tile.  A source influences a tile if
-    #     there is any overlap in their squares of influence.
+@doc """
+Args:
+  - tile: An ImageTile (containing tile coordinates)
+  - mp: Model parameters.
 
+Returns:
+  - A vector of source ids (from 1 to mp.S) that influence
+    pixels in the tile.  A source influences a tile if
+    there is any overlap in their squares of influence.
+""" ->
+function local_sources(tile::ImageTile, mp::ModelParams)
     local_subset = Array(Int64, 0)
 
     # "Radius" is used in the sense of an L_{\infty} norm.
@@ -523,25 +526,23 @@ function local_sources(tile::ImageTile, mp::ModelParams)
 end
 
 
+@doc """
+Add a tile's contribution to the ELBO likelihood term by 
+modifying accum in place.
+
+Args:
+  - tile: An image tile.
+  - mp: The current model parameters.
+  - sbs: The currne source brightnesses.
+  - star_mcs: All the star * PCF components.
+  - gal_mcs: All the galaxy * PCF components.
+  - accum: The ELBO log likelihood to be updated.
+""" ->
 function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         sbs::Vector{SourceBrightness},
         star_mcs::Array{BvnComponent, 2},
         gal_mcs::Array{GalaxyCacheComponent, 4},
         accum::SensitiveFloat)
-    # Add a tile's contribution to the ELBO likelihood term.
-    #
-    # Args:
-    #   - tile: An image tile.
-    #   - mp: The current model parameters.
-    #   - sbs: The currne source brightnesses.
-    #   - star_mcs: All the star * PCF components.
-    #   - gal_mcs: All the galaxy * PCF components.
-    #   - accum: The ELBO log likelihood to be updated.
-    #
-    # Returns:
-    #   - Adds the tile's contributions to the ELBO log likelihood
-    #     to accum in place. 
-
     tile_sources = local_sources(tile, mp)
     h_range, w_range = tile_range(tile, mp.tile_width)
 
@@ -585,17 +586,15 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
 end
 
 
-function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
-    # Add the expected log likelihood ELBO term for an image to accum.
-    #
-    # Args:
-    #   - img: An image
-    #   - mp: The current model parameters.
-    #   - accum: A sensitive float containing the ELBO.
-    #
-    # Returns:
-    #   - Adds the expected log likelihood to accum in place.
+@doc """
+Add the expected log likelihood ELBO term for an image to accum.
 
+Args:
+  - img: An image
+  - mp: The current model parameters.
+  - accum: A sensitive float containing the ELBO.
+""" ->
+function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
     accum.v += -sum(lfact(img.pixels))
 
     star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp)
@@ -612,6 +611,10 @@ function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
 end
 
 
+@doc """
+Return the expected log likelihood for all bands in a section
+of the sky.
+""" ->
 function elbo_likelihood(blob::Blob, mp::ModelParams)
     # Return the expected log likelihood for all bands in a section
     # of the sky.
@@ -627,28 +630,7 @@ end
 function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
                         mp::ModelParams,
                         accum::SensitiveFloat)
-    # Subtract from accum the entropy and expected prior of
-    # the variational distribution of c
-    # for a source (s), a source type (i, star / galaxy), and
-    # color prior component (d).
-    #
-    # Args:
-    #   - d: A color prior component.
-    #   - i: Source type (star / galaxy).
-    #   - s: Source id.
-    #   - mp: Model parameters.
-    #   - accum: The ELBO value.
-    #
-    # Returns:
-    #   Updates accum in place.
-
     vs = mp.vp[s]
-
-    # The below entropy / prior expectation are of
-    # (c | a_i, kappa), and the final contribution needs to
-    # be weighted by chi (the probability of this celestial object
-    # type) and kappa (the probability of this color prior component).
-
     chi = vs[ids.chi[i]]
     kappa = vs[ids.kappa[d, i]]
 
@@ -667,19 +649,6 @@ end
 function subtract_kl_k!(i::Int64, s::Int64,
                         mp::ModelParams,
                         accum::SensitiveFloat)
-    # Subtract from accum the entropy and expected prior of
-    # the variational distribution of k
-    # for a source (s), and source type (i, star / galaxy).
-    #
-    # Args:
-    #   - i: Source type (star / galaxy).
-    #   - s: Source id.
-    #   - mp: Model parameters.
-    #   - accum: The ELBO value.
-    #
-    # Returns:
-    #   Updates accum in place.
-
     vs = mp.vp[s]
     pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[i])
     (v, (d_kappa,)) = pp_kl_ki(mp.vp[s][ids.kappa[:, i]])
@@ -691,19 +660,6 @@ end
 
 function subtract_kl_r!(i::Int64, s::Int64,
                         mp::ModelParams, accum::SensitiveFloat)
-    # Subtract from accum the entropy and expected prior of
-    # the variational distribution of r
-    # for a source (s), and source type (i, star / galaxy).
-    #
-    # Args:
-    #   - i: Source type (star / galaxy).
-    #   - s: Source id.
-    #   - mp: Model parameters.
-    #   - accum: The ELBO value.
-    #
-    # Returns:
-    #   Updates accum in place.
-
     vs = mp.vp[s]
     pp_kl_r = KL.gen_gamma_kl(mp.pp.r[i][1], mp.pp.r[i][2])
     (v, (d_gamma, d_zeta)) = pp_kl_r(vs[ids.gamma[i]], vs[ids.zeta[i]])
@@ -716,17 +672,6 @@ end
 
 
 function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
-    # Subtract from accum the entropy and expected prior of
-    # the variational distribution of a source (s).
-    #
-    # Args:
-    #   - s: Source id.
-    #   - mp: Model parameters.
-    #   - accum: The ELBO value.
-    #
-    # Returns:
-    #   Updates accum in place.
-
     pp_kl_a = KL.gen_categorical_kl(mp.pp.a)
     (v, (d_chi,)) = pp_kl_a(mp.vp[s][ids.chi])
     accum.v -= v
@@ -734,10 +679,11 @@ function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
 end
 
 
+@doc """
+Subtract from accum the entropy and expected prior of
+the variational distribution.
+""" ->
 function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
-    # Subtract from accum the entropy and expected prior of
-    # the variational distribution.
-
     for s in 1:mp.S
         subtract_kl_a!(s, mp, accum)
 
@@ -752,16 +698,15 @@ function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
 end
 
 
-function elbo(blob::Blob, mp::ModelParams)
-    # Caculate the ELBO for all the bands of an image.
-    #
-    # Args:
-    #   - blob: An image.
-    #   - mp: Model parameters.
-    #
-    # Returns:
-    #   - The ELBO and its derivatives.
+@doc """
+Calculates and returns the ELBO and its derivatives for all the bands 
+of an image.
 
+Args:
+  - blob: An image.
+  - mp: Model parameters.
+""" ->
+function elbo(blob::Blob, mp::ModelParams)
     ret = elbo_likelihood(blob, mp)
     subtract_kl!(mp, ret)
     ret
