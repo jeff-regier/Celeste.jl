@@ -6,6 +6,10 @@ julia:
 notifications:
   email: false
 
+before_install:
+  - sudo apt-get update -qq -y
+  - sudo apt-get install libgsl0-dev -y
+
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
   - julia --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("GSL"); Pkg.build("Celeste"); Pkg.test("Celeste"; coverage=true)'
