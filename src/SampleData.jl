@@ -1,6 +1,5 @@
 module SampleData
 
-using Base.Test
 using Distributions
 using CelesteTypes
 
