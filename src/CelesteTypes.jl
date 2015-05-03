@@ -1,7 +1,9 @@
-# written by Jeffrey Regier
-# jeff [at] stat [dot] berkeley [dot] edu
-
 module CelesteTypes
+
+if VERSION < v"0.4.0-dev"
+    using Docile
+end
+@docstrings
 
 export CatalogEntry
 export band_letters
@@ -52,26 +54,28 @@ end
 
 ############################################
 
-immutable GalaxyComponent
-    # Parameters of a single normal component of a galaxy.
-    #
-    # Attributes:
-    #   etaBar: The weight of the galaxy component
-    #   nuBar: The scale of the galaxy component
+@doc """
+Parameters of a single normal component of a galaxy.
 
+Attributes:
+  etaBar: The weight of the galaxy component
+  nuBar: The scale of the galaxy component
+""" ->
+immutable GalaxyComponent
     etaBar::Float64
     nuBar::Float64
 end
 
 typealias GalaxyPrototype Vector{GalaxyComponent}
 
-function get_galaxy_prototypes()
-    # Pre-defined shapes for galaxies.
-    #
-    # Returns:
-    #   dev_prototype: An array of GalaxyComponent for de Vaucouleurs galaxy types
-    #   exp_prototype: An array of GalaxyComponent for exponenttial galaxy types
+@doc """
+Pre-defined shapes for galaxies.
 
+Returns:
+  dev_prototype: An array of GalaxyComponent for de Vaucouleurs galaxy types
+  exp_prototype: An array of GalaxyComponent for exponenttial galaxy types
+""" ->
+function get_galaxy_prototypes()
     dev_amp = [
         4.26347652e-02, 2.40127183e-01, 6.85907632e-01, 1.51937350e+00,
         2.83627243e+00, 4.46467501e+00, 5.72440830e+00, 5.60989349e+00]
@@ -102,21 +106,22 @@ end
 const galaxy_prototypes = get_galaxy_prototypes()
 
 
-immutable PsfComponent
-    # A single normal component of the point spread function.
-    #
-    # Args:
-    #   alphaBar: The scalar weight of the component.
-    #   xiVar: The 2x1 location vector
-    #   Sigmabar: The 2x2 covariance
-    #
-    # Attributes:
-    #   alphaBar: The scalar weight of the component.
-    #   xiVar: The 2x1 location vector
-    #   Sigmabar: The 2x2 covariance (tau_bar in the ICLM paper)
-    #   tauBarInv: The 2x2 precision
-    #   tauBarLd: The log determinant of the covariance
+@doc """
+A single normal component of the point spread function.
 
+Args:
+  alphaBar: The scalar weight of the component.
+  xiBar: The 2x1 location vector
+  tauBar: The 2x2 covariance
+
+Attributes:
+  alphaBar: The scalar weight of the component.
+  xiVar: The 2x1 location vector
+  Sigmabar: The 2x2 covariance (tau_bar in the ICLM paper)
+  tauBarInv: The 2x2 precision
+  tauBarLd: The log determinant of the covariance
+""" ->
+immutable PsfComponent
     alphaBar::Float64  # TODO: use underscore
     xiBar::Vector{Float64}
     tauBar::Matrix{Float64}
@@ -130,9 +135,8 @@ immutable PsfComponent
     end
 end
 
+@doc """An image, taken though a particular filter band""" ->
 type Image
-    # An image for a single color.
-
     # The image height.
     H::Int64
 
@@ -165,25 +169,25 @@ type Image
     field_num::Int64
 end
 
+@doc """
+Tiles of pixels that share the same set of
+relevant sources (or other calculations).
+
+These are in tile coordinates --- not pixel or sky coordinates.
+(I.e., the range of hh and ww are the number of horizontal
+ and vertical tiles in the image, respectively.)
+""" ->
 immutable ImageTile
-    # Tiles of pixels that share the same set of
-    # relevant sources (or other calculations).
-
-    # These are in tile coordinates --- not pixel or sky coordinates.
-    # (I.e., the range of hh and ww are the number of horizontal
-    #  and vertical tiles in the image, respectively.)
-
     hh::Int64
     ww::Int64
     img::Image
 end
 
-# A vector of images, one for each color.
+@doc """A vector of images, one for each filter band""" ->
 typealias Blob Vector{Image}
 
+@doc """The amount of sky affected by a source""" ->
 immutable SkyPatch #pixel coordinates for now, soon wcs
-    # The amount of sky affected by a
-    # source (regardless of the tiling).
     center::Vector{Float64}
     radius::Float64
 end
@@ -348,24 +352,23 @@ const all_params_free = [1:ids_free.size]
 const star_pos_params = ids.u
 const galaxy_pos_params = [ids.u, ids.e_dev, ids.e_axis, ids.e_angle, ids.e_scale]
 
-type ModelParams
-    # The parameters for a particular image.
-    #
-    # Attributes:
-    #  - vp: The variational parameters
-    #  - vp_free: The unconstrained variational parameters.
-    #  - pp: The prior parameters
-    #  - patches: A vector of SkyPatch objects
-    #  - tile_width: The number of pixels across a tile
-    #  - S: The number of sources.
 
-    # The following meanings are clear from the names.
+@doc """
+The parameters for a particular image.
+
+Attributes:
+ - vp: The variational parameters
+ - pp: The prior parameters
+ - patches: A vector of SkyPatch objects
+ - tile_width: The number of pixels across a tile
+ - S: The number of sources.
+""" ->
+type ModelParams
     vp::VariationalParams
     pp::PriorParams
     patches::Vector{SkyPatch}
     tile_width::Int64
 
-    # The number of sources.
     S::Int64
 
     ModelParams(vp, pp, patches, tile_width) = begin
@@ -377,22 +380,23 @@ end
 
 #########################################################
 
-type SensitiveFloat
-    # A function value and its derivative with respect to its arguments.
-    #
-    # Attributes:
-    #   v: The value
-    #   d: The derivative with respect to each variable in
-    #      P-dimensional VariationalParams for each of S celestial objects
-    #      in a local_P x local_S matrix.
-    #   h: The second derivative with respect to each variational parameter,
-    #      in the same format as d.
-    #   source_index: local_S x 1 vector of source ids with nonzero derivatives.
-    #   param_index: local_P x 1 vector of parameter indices with
-    #      nonzero derivatives.
-    #
-    #  All derivatives not in source_index and param_index are zero.
+@doc """
+A function value and its derivative with respect to its arguments.
 
+Attributes:
+  v: The value
+  d: The derivative with respect to each variable in
+     P-dimensional VariationalParams for each of S celestial objects
+     in a local_P x local_S matrix.
+  h: The second derivative with respect to each variational parameter,
+     in the same format as d.
+  source_index: local_S x 1 vector of source ids with nonzero derivatives.
+  param_index: local_P x 1 vector of parameter indices with
+     nonzero derivatives.
+
+All derivatives not in source_index and param_index are zero.
+""" ->
+type SensitiveFloat
     v::Float64
     d::Matrix{Float64} # local_P x local_S
     h::Matrix{Float64} # local_P x local_S
