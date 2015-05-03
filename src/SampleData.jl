@@ -1,15 +1,13 @@
-
 module SampleData
-
-using CelesteTypes
-import SDSS
-import OptimizeElbo
-import ModelInit
 
 using Base.Test
 using Distributions
+using CelesteTypes
+
+import SDSS
+import ModelInit
 import Synthetic
-import SampleData
+
 
 export empty_model_params
 export dat_dir, sample_ce, perturb_params
