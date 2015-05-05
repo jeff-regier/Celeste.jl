@@ -14,7 +14,7 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
     f::SensitiveFloat = fun_to_test(mp)
 
     for s in 1:mp.S
-        alignment = align(f.ids, StandardParams)
+        alignment = align(f.ids, CanonicalParams)
         for p1 in 1:length(alignment)
             p0 = alignment[p1]
 
@@ -43,7 +43,7 @@ function test_brightness_derivs()
         for b = [3,4,2,5,1]
             function wrap_source_brightness(mp)
                 sb = ElboDeriv.SourceBrightness(mp.vp[1])
-                ret = zero_sensitive_float(StandardParams, 3)
+                ret = zero_sensitive_float(CanonicalParams, 3)
                 ret.v = sb.E_l_a[b, i].v
                 ret.d[:, 1] = sb.E_l_a[b, i].d
                 ret
@@ -52,7 +52,7 @@ function test_brightness_derivs()
 
             function wrap_source_brightness_3(mp)
                 sb = ElboDeriv.SourceBrightness(mp.vp[1])
-                ret = zero_sensitive_float(StandardParams, 3)
+                ret = zero_sensitive_float(CanonicalParams, 3)
                 ret.v = sb.E_ll_a[b, i].v
                 ret.d[:, 1] = sb.E_ll_a[b, i].d
                 ret
@@ -91,8 +91,8 @@ function test_accum_pixel_source_derivs()
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[1].psf, mmp)
         fs0m = zero_sensitive_float(StarPosParams)
         fs1m = zero_sensitive_float(GalaxyPosParams)
-        E_G = zero_sensitive_float(StandardParams)
-        var_G = zero_sensitive_float(StandardParams)
+        E_G = zero_sensitive_float(CanonicalParams)
+        var_G = zero_sensitive_float(CanonicalParams)
         sb = ElboDeriv.SourceBrightness(mmp.vp[1])
         m_pos = [9, 10.]
         ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
@@ -105,8 +105,8 @@ function test_accum_pixel_source_derivs()
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
         fs0m = zero_sensitive_float(StarPosParams)
         fs1m = zero_sensitive_float(GalaxyPosParams)
-        E_G = zero_sensitive_float(StandardParams)
-        var_G = zero_sensitive_float(StandardParams)
+        E_G = zero_sensitive_float(CanonicalParams)
+        var_G = zero_sensitive_float(CanonicalParams)
         sb = ElboDeriv.SourceBrightness(mmp.vp[1])
         m_pos = [9, 10.]
         ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
@@ -122,28 +122,28 @@ function test_kl_divergence_derivs()
     blob, mp0, three_bodies = gen_three_body_dataset()
 
     function wrap_kl_a(mp)
-        accum = zero_sensitive_float(StandardParams, 3)
+        accum = zero_sensitive_float(CanonicalParams, 3)
         ElboDeriv.subtract_kl_a!(1, mp, accum)
         accum
     end
     test_by_finite_differences(wrap_kl_a, mp0)
 
     function wrap_kl_r(mp)
-        accum = zero_sensitive_float(StandardParams, 3)
+        accum = zero_sensitive_float(CanonicalParams, 3)
         ElboDeriv.subtract_kl_r!(1, 1, mp, accum)
         accum
     end
     test_by_finite_differences(wrap_kl_r, mp0)
 
     function wrap_kl_k(mp)
-        accum = zero_sensitive_float(StandardParams, 3)
+        accum = zero_sensitive_float(CanonicalParams, 3)
         ElboDeriv.subtract_kl_k!(1, 1, mp, accum)
         accum
     end
     test_by_finite_differences(wrap_kl_k, mp0)
 
     function wrap_kl_c(mp)
-        accum = zero_sensitive_float(StandardParams, 3)
+        accum = zero_sensitive_float(CanonicalParams, 3)
         ElboDeriv.subtract_kl_c!(1, 1, 1, mp, accum)
         accum
     end
@@ -174,9 +174,9 @@ end
 function test_quadratic_derivatives()
     # A very simple quadratic function to test the derivatives.
     function quadratic_function(mp::ModelParams)
-        const centers = collect(linrange(0, 10, length(StandardParams)))
+        const centers = collect(linrange(0, 10, length(CanonicalParams)))
 
-        val = zero_sensitive_float(StandardParams)
+        val = zero_sensitive_float(CanonicalParams)
         val.v = sum((mp.vp[1] - centers) .^ 2)
         val.d[ all_params ] = 2.0 * (mp.vp[1] - centers)
 
@@ -185,7 +185,7 @@ function test_quadratic_derivatives()
 
     # 0.5 is an innocuous value for all parameters.
     mp = empty_model_params(1)
-    mp.vp = convert(VariationalParams, [ fill(0.5, length(StandardParams)) 
+    mp.vp = convert(VariationalParams, [ fill(0.5, length(CanonicalParams)) 
         for s in 1:1 ])
     test_by_finite_differences(quadratic_function, mp)
 end

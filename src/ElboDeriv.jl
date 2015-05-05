@@ -41,7 +41,7 @@ immutable SourceBrightness
 
         for i = 1:Ia
             for b = 1:B
-                E_l_a[b, i] = zero_sensitive_float(StandardParams)
+                E_l_a[b, i] = zero_sensitive_float(CanonicalParams)
             end
 
             # Index 3 is r_s and has a gamma expectation.
@@ -87,7 +87,7 @@ immutable SourceBrightness
         E_ll_a = Array(SensitiveFloat, B, Ia)
         for i = 1:Ia
             for b = 1:B
-                E_ll_a[b, i] = zero_sensitive_float(StandardParams)
+                E_ll_a[b, i] = zero_sensitive_float(CanonicalParams)
             end
 
             r2_sq = r2[i]^2
@@ -554,8 +554,8 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
     fs1m = zero_sensitive_float(GalaxyPosParams)
 
     tile_S = length(tile_sources)
-    E_G = zero_sensitive_float(StandardParams, tile_S)
-    var_G = zero_sensitive_float(StandardParams, tile_S)
+    E_G = zero_sensitive_float(CanonicalParams, tile_S)
+    var_G = zero_sensitive_float(CanonicalParams, tile_S)
 
     # Iterate over pixels.
     for w in w_range, h in h_range
@@ -610,7 +610,7 @@ function elbo_likelihood(blob::Blob, mp::ModelParams)
     # Return the expected log likelihood for all bands in a section
     # of the sky.
 
-    ret = zero_sensitive_float(StandardParams, mp.S)
+    ret = zero_sensitive_float(CanonicalParams, mp.S)
     for img in blob
         elbo_likelihood!(img, mp, ret)
     end

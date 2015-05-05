@@ -10,7 +10,7 @@ export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 
 export ModelParams, PriorParams, UnconstrainedParams
-export StandardParams, BrightnessParams, StarPosParams, GalaxyPosParams
+export CanonicalParams, BrightnessParams, StarPosParams, GalaxyPosParams
 export VariationalParams, FreeVariationalParams, RectVariationalParams
 
 export shape_standard_alignment, brightness_standard_alignment, align
@@ -230,7 +230,7 @@ const param_specs = [
     (:StarPosParams, :star_ids, ((:u, 2),)),
     (:GalaxyPosParams, :gal_ids, ue_params),
     (:BrightnessParams, :bids, rc_params1),
-    (:StandardParams, :ids, tuple(ue_params..., rc_params2..., ak_simplex...)),
+    (:CanonicalParams, :ids, tuple(ue_params..., rc_params2..., ak_simplex...)),
     (:UnconstrainedParams, :ids_free, tuple(ue_params..., rc_params2..., ak_free...)),
 ]
 
@@ -271,10 +271,10 @@ end
 
 
 #TODO: build these from ue_align, etc., here.
-align(::StarPosParams, StandardParams) = ids.u
-align(::GalaxyPosParams, StandardParams) = 
+align(::StarPosParams, CanonicalParams) = ids.u
+align(::GalaxyPosParams, CanonicalParams) = 
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
-align(::StandardParams, StandardParams) = [1:length(StandardParams)]
+align(::CanonicalParams, CanonicalParams) = [1:length(CanonicalParams)]
 
 const shape_standard_alignment = (ids.u,
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale])
@@ -283,7 +283,7 @@ const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
 #########################################################
 
-const all_params = [1:length(StandardParams)]
+const all_params = [1:length(CanonicalParams)]
 const all_params_free = [1:length(UnconstrainedParams)]
 
 const star_pos_params = ids.u

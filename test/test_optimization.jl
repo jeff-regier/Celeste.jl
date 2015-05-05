@@ -67,7 +67,7 @@ function test_kappa_finding()
     omitted_ids = setdiff(all_params_free, ids_free.k[:])
 
     get_kl_gal_c() = begin
-        accum = zero_sensitive_float(StandardParams)
+        accum = zero_sensitive_float(CanonicalParams)
         for d in 1:D
             ElboDeriv.subtract_kl_c!(d, 2, 1, mp, accum)
         end
@@ -90,7 +90,7 @@ function test_kappa_finding()
 
     mp.pp.c[2][2][:, :, 1] = mp.pp.c[2][2][:, :, 2] = eye(4)
     klc_wrapper(blob, mp) = begin
-        accum = zero_sensitive_float(StandardParams)
+        accum = zero_sensitive_float(CanonicalParams)
         for d in 1:D
             ElboDeriv.subtract_kl_c!(d, 2, 1, mp, accum)
         end
@@ -196,7 +196,7 @@ function test_kl_invariance_to_a()
     blob = Synthetic.gen_blob(blob0, [ce,])
 
     kl_wrapper(blob, mp) = begin
-        accum = zero_sensitive_float(StandardParams)
+        accum = zero_sensitive_float(CanonicalParams)
         ElboDeriv.subtract_kl!(mp, accum)
         accum
     end
@@ -336,7 +336,7 @@ function test_color()
     mp.vp[1][ids.c1[:, 2]] = [2.42824, 1.13996, 0.475603, 0.283062]
 
     klc_wrapper(blob, mp) = begin
-        accum = zero_sensitive_float(StandardParams, mp.S)
+        accum = zero_sensitive_float(CanonicalParams, mp.S)
         for s in 1:mp.S, i in 1:2, d in 1:D
             ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
         end
@@ -354,14 +354,14 @@ end
 function test_quadratic_optimization(trans::DataTransform)
 
     # A very simple quadratic function to test the optimization.
-    const centers = collect(linrange(0.1, 0.9, length(StandardParams)))
+    const centers = collect(linrange(0.1, 0.9, length(CanonicalParams)))
 
     # Set feasible centers for the indicators.
     centers[ids.a] = [ 0.4, 0.6 ]
     centers[ids.k] = [ 0.3 0.3; 0.7 0.7 ]
 
     function quadratic_function(unused_blob::Blob, mp::ModelParams)
-        val = zero_sensitive_float(StandardParams)
+        val = zero_sensitive_float(CanonicalParams)
         val.v = -sum((mp.vp[1] - centers) .^ 2)
         val.d[ all_params ] = -2.0 * (mp.vp[1] - centers)
 
@@ -370,7 +370,7 @@ function test_quadratic_optimization(trans::DataTransform)
 
     # 0.5 is an innocuous value for all parameters.
     mp = empty_model_params(1)
-    n = length(StandardParams)
+    n = length(CanonicalParams)
     mp.vp = convert(VariationalParams, [fill(0.5, n) for s in 1:1])
     unused_blob = gen_sample_star_dataset()[1]
 

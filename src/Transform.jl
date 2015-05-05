@@ -50,7 +50,7 @@ type DataTransform
 
         function to_vp(vp_free::FreeVariationalParams)
             S = length(vp_free)
-            vp = [ zeros(length(StandardParams)) for s = 1:S]
+            vp = [ zeros(length(CanonicalParams)) for s = 1:S]
             to_vp!(vp_free, vp)
             vp
         end
@@ -221,7 +221,7 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # respect to the unconstrained parameterization.
 
     # Require that the input have all derivatives defined.
-    @assert size(sf.d) == (length(StandardParams), mp.S)
+    @assert size(sf.d) == (length(CanonicalParams), mp.S)
 
     sf_free = zero_sensitive_float(UnconstrainedParams, mp.S)
     sf_free.v = sf.v
@@ -314,7 +314,7 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # respect to the unconstrained parameterization.
 
     # Require that the input have all derivatives defined.
-    @assert size(sf.d) == (length(StandardParams), mp.S)
+    @assert size(sf.d) == (length(CanonicalParams), mp.S)
 
     sf_free = zero_sensitive_float(UnconstrainedParams, mp.S)
     sf_free.v = sf.v
@@ -363,6 +363,6 @@ free_transform = DataTransform(free_to_vp!, vp_to_free!,
 identity_transform = DataTransform(unchanged_vp!, unchanged_vp!,
                                    unchanged_vector_to_vp!, unchanged_vp_to_vector,
                                    unchanged_sensitive_float,
-                                   length(StandardParams))
+                                   length(CanonicalParams))
 
 end
