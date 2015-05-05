@@ -10,6 +10,10 @@ using Transform
 import ElboDeriv
 
 
+#TODO: use Lumberjack.jl for logging
+const debug = false
+
+
 function get_nlopt_bounds(vs::Vector{Float64})
     # Note that sources are not allowed to move more than
     # one pixel from their starting position in order to
@@ -70,7 +74,7 @@ end
 function print_params(vp)
     for vs in vp
         for n in names(ids)
-            println(n, ": ", vs[ids.(n)])
+            println("$n: $(vs[ids.(n)])")
         end
         println("-----------------\n")
     end
@@ -96,7 +100,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     iter_count = 0
 
     function objective_and_grad(x::Vector{Float64}, g::Vector{Float64})
-        println("Iter: ", iter_count)
+        println("Iter: $iter_count")
         # Evaluate in the constrained space and then unconstrain again.
         transform.vector_to_vp!(x, mp.vp, omitted_ids)
         elbo = f(blob, mp)
@@ -108,11 +112,9 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
         end
 
         iter_count += 1
-        print_params(mp.vp)
-        println("elbo: ", elbo.v)
-        println("gradient:", g)
-        println("xtol_rel: $xtol_rel ;  ftol_abs: $ftol_abs")
-        println("\n=======================================\n")
+        debug && print_params(mp.vp)
+        println("elbo: $(elbo.v)")
+        debug && println("\n=======================================\n")
         elbo.v
     end
 
