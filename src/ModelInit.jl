@@ -37,7 +37,7 @@ end
 
 #TODO: use blob (and perhaps priors) to initialize these sensibly
 function init_source(init_pos::Vector{Float64})
-    ret = Array(Float64, length(all_params))
+    ret = Array(Float64, length(CanonicalParams))
     ret[ids.a[2]] = 0.5
     ret[ids.a[1]] = 1.0 - ret[ids.a[2]]
     ret[ids.u[1]] = init_pos[1]

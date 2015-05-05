@@ -21,7 +21,7 @@ function get_nlopt_bounds(vs::Vector{Float64})
     # the variational parameters as an argument.)
     # vs: parameters for a particular source.
     # vp: complete collection of sources.
-    lb = Array(Float64, length(all_params))
+    lb = Array(Float64, length(CanonicalParams))
     lb[ids.a] = 1e-2
     lb[ids.u] = vs[ids.u] - 1.
     [lb[id] = 1e-4 for id in ids.r1]
@@ -34,7 +34,7 @@ function get_nlopt_bounds(vs::Vector{Float64})
     lb[ids.e_angle] = -1e10 #-pi/2 + 1e-4
     lb[ids.e_scale] = 0.2
 
-    ub = Array(Float64, length(all_params))
+    ub = Array(Float64, length(CanonicalParams))
     ub[ids.a] = 1 - 1e-2
     ub[ids.u] = vs[ids.u] + 1.
     [ub[id] = 1e12 for id in ids.r1]
@@ -104,7 +104,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
         transform.vector_to_vp!(x, mp.vp, omitted_ids)
         elbo = f(blob, mp)
         elbo_trans = transform.transform_sensitive_float(elbo, mp)
-        left_ids = setdiff(all_params_free, omitted_ids)
+        left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
         if length(g) > 0
             svs = [elbo_trans.d[left_ids, s] for s in 1:mp.S]
             g[:] = reduce(vcat, svs)
@@ -153,7 +153,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams;
 end
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
-    omitted_ids = setdiff(all_params_free,
+    omitted_ids = setdiff(1:length(UnconstrainedParams),
                           [ids_free.r1, ids_free.r2,
                            ids_free.k[:], ids_free.c1[:]])
     maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)

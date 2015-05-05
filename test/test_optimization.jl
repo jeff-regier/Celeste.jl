@@ -64,7 +64,7 @@ end
 
 function test_kappa_finding()
     blob, mp, body = gen_sample_galaxy_dataset()
-    omitted_ids = setdiff(all_params_free, ids_free.k[:])
+    omitted_ids = setdiff(1:length(UnconstrainedParams), ids_free.k[:])
 
     get_kl_gal_c() = begin
         accum = zero_sensitive_float(CanonicalParams)
@@ -142,7 +142,7 @@ function test_bad_a_init()
     elbo_bad = ElboDeriv.elbo_likelihood(blob, mp)
     @test elbo_bad.d[ids.a[2], 1] > 0
 
-    omitted_ids = setdiff(all_params_free, ids_free.a)
+    omitted_ids = setdiff(1:length(UnconstrainedParams), ids_free.a)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.a[2]] >= 0.5
 
@@ -180,7 +180,7 @@ function test_likelihood_invariance_to_a()
     @test_approx_eq_eps(ElboDeriv.elbo_likelihood(blob, mp).v,
         ElboDeriv.elbo_likelihood(blob, mp2).v, 1)
 
-    for i in 2:length(all_params) #skip a
+    for i in 2:length(1:length(CanonicalParams)) #skip a
         @test_approx_eq_eps mp.vp[1][i] / mp2.vp[1][i] 1. 0.1
     end
 end
@@ -214,7 +214,7 @@ function test_kl_invariance_to_a()
     mp2.vp[1][ids.a] = [ 0.5, 0.5 ]
     @test_approx_eq_eps kl_wrapper(blob, mp).v kl_wrapper(blob, mp2).v 1e-1
 
-    for i in 2:length(all_params) #skip a
+    for i in 2:length(1:length(CanonicalParams)) #skip a
         @test_approx_eq_eps mp.vp[1][i] / mp2.vp[1][i] 1. 0.1
     end
 end
@@ -242,7 +242,7 @@ function test_elbo_invariance_to_a()
     mp2.vp[1][ids.a] = [ 0.5, 0.5 ]
     @test_approx_eq_eps ElboDeriv.elbo(blob, mp).v ElboDeriv.elbo(blob, mp2).v 1
 
-    for i in setdiff(all_params, ids.a) #skip a
+    for i in setdiff(1:length(CanonicalParams), ids.a) #skip a
         @test_approx_eq_eps mp.vp[1][i] / mp2.vp[1][i] 1. 0.1
     end
 end
@@ -363,7 +363,7 @@ function test_quadratic_optimization(trans::DataTransform)
     function quadratic_function(unused_blob::Blob, mp::ModelParams)
         val = zero_sensitive_float(CanonicalParams)
         val.v = -sum((mp.vp[1] - centers) .^ 2)
-        val.d[ all_params ] = -2.0 * (mp.vp[1] - centers)
+        val.d[:] = -2.0 * (mp.vp[1] - centers)
 
         val
     end

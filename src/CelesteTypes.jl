@@ -19,9 +19,7 @@ export SensitiveFloat
 
 export zero_sensitive_float, clear!
 
-export ParamIndex, ids, ids_free, star_ids, gal_ids
-export all_params, all_params_free
-export star_pos_params, galaxy_pos_params
+export ids, ids_free, star_ids, gal_ids
 export D, B, Ia
 
 using Util
@@ -282,13 +280,6 @@ bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
 #########################################################
-
-const all_params = [1:length(CanonicalParams)]
-const all_params_free = [1:length(UnconstrainedParams)]
-
-const star_pos_params = ids.u
-const galaxy_pos_params = [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
-
 
 @doc """
 The parameters for a particular image.
