@@ -14,7 +14,7 @@ export rect_transform, free_transform, identity_transform, DataTransform
 #export rect_unconstrain_sensitive_float, unconstrain_sensitive_float
 
 type DataTransform
-	# Functiones to move between a ModelParameters object and a
+	# Functions to move between a ModelParameters object and a
 	# transformation of the data for optimization.
     #
     # to_vp: A function that takes transformed parameters and returns variational parameters
@@ -223,12 +223,8 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # Require that the input have all derivatives defined.
     @assert size(sf.d) == (length(StandardParams), mp.S)
 
-    sf_free = zero_sensitive_float(collect(1:mp.S), CelesteTypes.all_params_free)
+    sf_free = zero_sensitive_float(UnconstrainedParams, mp.S)
     sf_free.v = sf.v
-
-    # Currently the param_index is only really used within ElboDeriv.  By the
-    # time the data hits the optimizer, we assume everything has a derivative.
-     sf_free.param_index = all_params_free
 
     for s in 1:mp.S
         # Variables that are unaffected by constraints (except for scaling):
@@ -320,12 +316,8 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # Require that the input have all derivatives defined.
     @assert size(sf.d) == (length(StandardParams), mp.S)
 
-    sf_free = zero_sensitive_float(collect(1:mp.S), CelesteTypes.all_params_free)
+    sf_free = zero_sensitive_float(UnconstrainedParams, mp.S)
     sf_free.v = sf.v
-
-    # Currently the param_index is only really used within ElboDeriv.  By the
-    # time the data hits the optimizer, we assume everything has a derivative.
-    sf_free.param_index = all_params_free
 
     for s in 1:mp.S
         # Variables that are unaffected by constraints:

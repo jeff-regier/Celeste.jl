@@ -1,8 +1,6 @@
 module CelesteTypes
 
-if VERSION < v"0.4.0-dev"
-    using Docile
-end
+VERSION < v"0.4.0-dev" && using Docile
 
 export CatalogEntry
 export band_letters
@@ -15,11 +13,14 @@ export ModelParams, PriorParams, UnconstrainedParams
 export StandardParams, BrightnessParams, StarPosParams, GalaxyPosParams
 export VariationalParams, FreeVariationalParams, RectVariationalParams
 
+export shape_standard_alignment, brightness_standard_alignment, align
+
 export SensitiveFloat
 
 export zero_sensitive_float, clear!
 
-export ParamIndex, ids, ids_free, all_params, all_params_free
+export ParamIndex, ids, ids_free, star_ids, gal_ids
+export all_params, all_params_free
 export star_pos_params, galaxy_pos_params
 export D, B, Ia
 
@@ -217,12 +218,11 @@ typealias FreeVariationalParams Vector{Vector{Float64}}
 abstract ParamSet
 
 
-ue_params = ((:u, 2), (:e_axis, 1), (:e_angle, 1),
-        (:e_dev, 1), (:e_scale, 1))
-rc_params1 = ((:r1, 1), (:r2, 1),
-        (:c1, B - 1), (:c2, B - 1))
-rc_params2 = ((:r1, Ia), (:r2, Ia),
-        (:c1, (B - 1,  Ia)), (:c2, (B - 1,  Ia)))
+ue_params = ((:u, 2), (:e_dev, 1), (:e_axis, 1), (:e_angle, 1),
+        (:e_scale, 1))
+rc_params1 = ((:r1, 1), (:r2, 1), (:c1, B - 1), (:c2, B - 1))
+rc_params2 = ((:r1, Ia), (:r2, Ia), (:c1, (B - 1,  Ia)),
+        (:c2, (B - 1,  Ia)))
 ak_simplex = ((:a, Ia), (:k, (D, Ia)))
 ak_free = ((:a, Ia - 1), (:k, (D - 1, Ia)))
 
@@ -264,9 +264,22 @@ for (pn, ids_name, pf) in param_specs
     eval(struct_dec)
 
     eval(:(const $ids_name = $pn()))
-
+    eval(:(getids(::Type{$pn}) = $ids_name))
     eval(:(length(::Type{$pn}) = $prev_end))
+    eval(:(length(an_ids::$pn) = $prev_end))
 end
+
+
+#TODO: build these from ue_align, etc., here.
+align(::StarPosParams, StandardParams) = ids.u
+align(::GalaxyPosParams, StandardParams) = 
+   [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
+align(::StandardParams, StandardParams) = [1:length(StandardParams)]
+
+const shape_standard_alignment = (ids.u,
+   [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale])
+bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
+const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
 #########################################################
 
@@ -314,26 +327,25 @@ Attributes:
      in a local_P x local_S matrix.
   h: The second derivative with respect to each variational parameter,
      in the same format as d.
-  source_index: local_S x 1 vector of source ids with nonzero derivatives.
-  param_index: local_P x 1 vector of parameter indices with
-     nonzero derivatives.
-
-All derivatives not in source_index and param_index are zero.
 """ ->
-type SensitiveFloat
+type SensitiveFloat{T <: ParamSet}
     v::Float64
     d::Matrix{Float64} # local_P x local_S
     h::Matrix{Float64} # local_P x local_S
-    source_index::Vector{Int64}
-    param_index::Vector{Int64}
+    ids::T
 end
 
 #########################################################
 
-function zero_sensitive_float(s_index::Vector{Int64}, p_index::Vector{Int64})
-    d = zeros(length(p_index), length(s_index))
-    h = zeros(length(p_index), length(s_index))
-    SensitiveFloat(0., d, h, s_index, p_index)
+function zero_sensitive_float{T <: ParamSet}(::Type{T})
+    zero_sensitive_float(T, 1)
+end
+
+function zero_sensitive_float{T <: ParamSet}(::Type{T}, local_S::Int64)
+    local_P = length(T)
+    d = zeros(local_P, local_S)
+    h = zeros(local_P, local_S)
+    SensitiveFloat{T}(0., d, h, getids(T))
 end
 
 function clear!(sp::SensitiveFloat)
