@@ -2,12 +2,8 @@
 
 module ElboDeriv
 
-if VERSION < v"0.4.0-dev"
-    using Docile
-end
-
+VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
-
 import Util
 import KL
 
@@ -45,7 +41,7 @@ immutable SourceBrightness
 
         for i = 1:Ia
             for b = 1:B
-                E_l_a[b, i] = zero_sensitive_float([-1], all_params)
+                E_l_a[b, i] = zero_sensitive_float(StandardParams)
             end
 
             # Index 3 is r_s and has a gamma expectation.
@@ -91,7 +87,7 @@ immutable SourceBrightness
         E_ll_a = Array(SensitiveFloat, B, Ia)
         for i = 1:Ia
             for b = 1:B
-                E_ll_a[b, i] = zero_sensitive_float([-1], all_params)
+                E_ll_a[b, i] = zero_sensitive_float(StandardParams)
             end
 
             r2_sq = r2[i]^2
@@ -293,9 +289,8 @@ function accum_star_pos!(bmc::BvnComponent,
 
     fs0m.v += f
 
-    # TODO: reference this with ids
-    fs0m.d[1] += f .* py1 #mu1
-    fs0m.d[2] += f .* py2 #mu2
+    fs0m.d[star_ids.u[1]] += f .* py1
+    fs0m.d[star_ids.u[2]] += f .* py2
 end
 
 
@@ -317,20 +312,19 @@ function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
 
     fs1m.v += f
 
-    # TODO: reference this with ids
-    fs1m.d[1] += f .* py1 #u1
-    fs1m.d[2] += f .* py2 #u2
-    fs1m.d[3] += gcc.e_dev_dir * f_pre #e_dev
+    fs1m.d[gal_ids.u[1]] += f .* py1
+    fs1m.d[gal_ids.u[2]] += f .* py2
+    fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     df_dSigma = Array(Float64, 3)
     df_dSigma[1] = 0.5 * f * (py1 * py1 - gcc.bmc.precision[1, 1])
     df_dSigma[2] = f * (py1 * py2 - gcc.bmc.precision[1, 2])  # NB: 2X
     df_dSigma[3] = 0.5 * f * (py2 * py2 - gcc.bmc.precision[2, 2])
 
-    for i in 1:3  # [d_e_axis, d_e_angle, d_e_scale]
-        for j in 1:3  # [dSigma11, dSigma12, dSigma22]
-            fs1m.d[i + 3] += df_dSigma[j] * gcc.dSigma[j, i]
-        end
+    for j in 1:3  # [dSigma11, dSigma12, dSigma22]
+        fs1m.d[gal_ids.e_axis] += df_dSigma[j] * gcc.dSigma[j, 1]
+        fs1m.d[gal_ids.e_angle] += df_dSigma[j] * gcc.dSigma[j, 2]
+        fs1m.d[gal_ids.e_scale] += df_dSigma[j] * gcc.dSigma[j, 3]
     end
 end
 
@@ -375,7 +369,6 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
     end
 
     clear!(fs1m)
-    # TODO: Don't hard-code the index ranges.
     for i = 1:2 # Galaxy types
         for j in 1:[8,6][i] # Galaxy component
             for k = 1:3 # PSF component
@@ -404,21 +397,17 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
     # Add the contributions of this source in this band to
     # the derivatibes of E(G) and Var(G).
 
-    # Chi derivatives:
-    E_G.d[ids.a[1], child_s] += lf[1]
-    E_G.d[ids.a[2], child_s] += lf[2]
+    # a derivatives:
+    for i in 1:Ia
+        E_G.d[ids.a[i], child_s] += lf[i]
+        var_G.d[ids.a[i], child_s] -= 2 * E_G_s_v * lf[i]
+        var_G.d[ids.a[i], child_s] += llff[i]
+    end
 
-    var_G.d[ids.a[1], child_s] -= 2 * E_G_s_v * lf[1]
-    var_G.d[ids.a[2], child_s] -= 2 * E_G_s_v * lf[2]
-
-    var_G.d[ids.a[1], child_s] += llff[1]
-    var_G.d[ids.a[2], child_s] += llff[2]
-
-    # Derivatives with respect to the normal component parameters.
+    # Derivatives with respect to the spatial parameters
     for i in 1:Ia # Stars and galaxies
-        # Loop over parameters for each fsm component.
-        for p1 in 1:length(fsm[i].param_index)
-            p0 = fsm[i].param_index[p1]
+        for p1 in 1:length(shape_standard_alignment[i])
+            p0 = shape_standard_alignment[i][p1]
             a_fd = a[i] * fsm[i].d[p1]
             a_El_fd = sb.E_l_a[b, i].v * a_fd
             E_G.d[p0, child_s] += a_El_fd
@@ -429,7 +418,9 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
 
     # Derivatives with respect to the brightness parameters.
     for i in 1:Ia # Stars and galaxies
-        for p0 in vcat(ids.r1, ids.r2, ids.c1[:], ids.c2[:])
+        # TODO: use p1, once using BrightnessParams type
+        for p1 in 1:length(brightness_standard_alignment[i])
+            p0 = brightness_standard_alignment[i][p1]
             a_f_Eld = a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
             E_G.d[p0, child_s] += a_f_Eld
             var_G.d[p0, child_s] -= 2 * E_G_s_v * a_f_Eld
@@ -559,11 +550,12 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
     # fs0m and fs1m accumulate contributions from all sources,
     # and so we say their derivatives are with respect to
     # source "-1".
-    fs0m = zero_sensitive_float([-1], star_pos_params)
-    fs1m = zero_sensitive_float([-1], galaxy_pos_params)
+    fs0m = zero_sensitive_float(StarPosParams)
+    fs1m = zero_sensitive_float(GalaxyPosParams)
 
-    E_G = zero_sensitive_float(tile_sources, all_params)
-    var_G = zero_sensitive_float(tile_sources, all_params)
+    tile_S = length(tile_sources)
+    E_G = zero_sensitive_float(StandardParams, tile_S)
+    var_G = zero_sensitive_float(StandardParams, tile_S)
 
     # Iterate over pixels.
     for w in w_range, h in h_range
@@ -618,7 +610,7 @@ function elbo_likelihood(blob::Blob, mp::ModelParams)
     # Return the expected log likelihood for all bands in a section
     # of the sky.
 
-    ret = zero_sensitive_float([1:mp.S], all_params)
+    ret = zero_sensitive_float(StandardParams, mp.S)
     for img in blob
         elbo_likelihood!(img, mp, ret)
     end

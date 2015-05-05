@@ -100,7 +100,6 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     iter_count = 0
 
     function objective_and_grad(x::Vector{Float64}, g::Vector{Float64})
-        println("Iter: $iter_count")
         # Evaluate in the constrained space and then unconstrain again.
         transform.vector_to_vp!(x, mp.vp, omitted_ids)
         elbo = f(blob, mp)
@@ -113,7 +112,8 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
 
         iter_count += 1
         debug && print_params(mp.vp)
-        println("elbo: $(elbo.v)")
+        (debug || iter_count % 10 == 0) && 
+            println("iter $iter_count elbo: $(elbo.v)")
         debug && println("\n=======================================\n")
         elbo.v
     end

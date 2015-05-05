@@ -30,7 +30,7 @@ function test_kl_divergence_values()
         q_samples = rand(q_dist, sample_size)
         empirical_kl_samples = logpdf(q_dist, q_samples) - logpdf(p_dist, q_samples)
         empirical_kl = mean(empirical_kl_samples)
-        accum = zero_sensitive_float([s], all_params)
+        accum = zero_sensitive_float(StandardParams)
         subtract_kl_fun!(accum)
         exact_kl = -accum.v
         tol = 4 * std(empirical_kl_samples) / sqrt(sample_size)
@@ -84,10 +84,10 @@ function test_that_variance_is_low()
     blob, mp, body = true_star_init()
 
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mp)
-    fs0m = zero_sensitive_float([1], star_pos_params)
-    fs1m = zero_sensitive_float([1], galaxy_pos_params)
-    E_G = zero_sensitive_float([1], all_params)
-    var_G = zero_sensitive_float([1], all_params)
+    fs0m = zero_sensitive_float(StarPosParams)
+    fs1m = zero_sensitive_float(GalaxyPosParams)
+    E_G = zero_sensitive_float(StandardParams)
+    var_G = zero_sensitive_float(StandardParams)
     sb = ElboDeriv.SourceBrightness(mp.vp[1])
     m_pos = [10, 12.]
     ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
@@ -268,15 +268,15 @@ function test_tiny_image_tiling()
     catalog[1].star_fluxes = ones(5) * 1e5
 
     mp0 = ModelInit.cat_init(catalog)
-    accum0 = zero_sensitive_float([1], all_params)
+    accum0 = zero_sensitive_float(StandardParams)
     ElboDeriv.elbo_likelihood!(img, mp0, accum0)
 
     mp_tiles = ModelInit.cat_init(catalog, patch_radius=10., tile_width=2)
-    accum_tiles = zero_sensitive_float([1], all_params)
+    accum_tiles = zero_sensitive_float(StandardParams)
     ElboDeriv.elbo_likelihood!(img, mp_tiles, accum_tiles)
 
     mp_tiles2 = ModelInit.cat_init(catalog, patch_radius=10., tile_width=5)
-    accum_tiles2 = zero_sensitive_float([1], all_params)
+    accum_tiles2 = zero_sensitive_float(StandardParams)
     ElboDeriv.elbo_likelihood!(img, mp_tiles, accum_tiles2)
     @test_approx_eq accum_tiles.v accum_tiles2.v
 
