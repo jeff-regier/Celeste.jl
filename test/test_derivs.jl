@@ -181,7 +181,7 @@ function test_quadratic_derivatives(trans::DataTransform)
 
     # A very simple quadratic function to test the derivatives.
     function quadratic_function(mp::ModelParams)
-        const centers = collect(linrange(0, 10, ids.size))
+        const centers = collect(linrange(0, 10, length(StandardParams)))
 
         val = zero_sensitive_float([ 1 ], [ all_params ] )
         val.v = sum((mp.vp[1] - centers) .^ 2)
@@ -192,7 +192,8 @@ function test_quadratic_derivatives(trans::DataTransform)
 
     # 0.5 is an innocuous value for all parameters.
     mp = empty_model_params(1)
-    mp.vp = convert(VariationalParams, [ fill(0.5, ids.size) for s in 1:1 ])
+    mp.vp = convert(VariationalParams, [ fill(0.5, length(StandardParams)) 
+        for s in 1:1 ])
     test_by_finite_differences(quadratic_function, mp, trans)
 end
 

@@ -50,7 +50,7 @@ type DataTransform
 
         function to_vp(vp_free::FreeVariationalParams)
             S = length(vp_free)
-            vp = [ zeros(ids.size) for s = 1:S]
+            vp = [ zeros(length(StandardParams)) for s = 1:S]
             to_vp!(vp_free, vp)
             vp
         end
@@ -221,7 +221,7 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # respect to the unconstrained parameterization.
 
     # Require that the input have all derivatives defined.
-    @assert size(sf.d) == (ids.size, mp.S)
+    @assert size(sf.d) == (length(StandardParams), mp.S)
 
     sf_free = zero_sensitive_float(collect(1:mp.S), CelesteTypes.all_params_free)
     sf_free.v = sf.v
@@ -318,7 +318,7 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # respect to the unconstrained parameterization.
 
     # Require that the input have all derivatives defined.
-    @assert size(sf.d) == (ids.size, mp.S)
+    @assert size(sf.d) == (length(StandardParams), mp.S)
 
     sf_free = zero_sensitive_float(collect(1:mp.S), CelesteTypes.all_params_free)
     sf_free.v = sf.v
@@ -361,14 +361,16 @@ end
 rect_transform = DataTransform(rect_to_vp!, vp_to_rect!,
                                vector_to_free_vp!, free_vp_to_vector,
                                rect_unconstrain_sensitive_float,
-                               ids_free.size)
+                               length(UnconstrainedParams))
 
 free_transform = DataTransform(free_to_vp!, vp_to_free!,
                                vector_to_free_vp!, free_vp_to_vector,
-                               free_unconstrain_sensitive_float, ids_free.size)
+                               free_unconstrain_sensitive_float,
+                               length(UnconstrainedParams))
 
 identity_transform = DataTransform(unchanged_vp!, unchanged_vp!,
                                    unchanged_vector_to_vp!, unchanged_vp_to_vector,
-                                   unchanged_sensitive_float, ids.size)
+                                   unchanged_sensitive_float,
+                                   length(StandardParams))
 
 end

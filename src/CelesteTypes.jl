@@ -12,7 +12,8 @@ export Image, Blob, SkyPatch, ImageTile, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 
-export ModelParams, PriorParams
+export ModelParams, PriorParams, UnconstrainedParams
+export StandardParams, BrightnessParams, StarPosParams, GalaxyPosParams
 export VariationalParams, FreeVariationalParams, RectVariationalParams
 
 export SensitiveFloat
@@ -28,6 +29,8 @@ using Util
 import FITSIO
 import Distributions
 import WCSLIB
+
+import Base.length
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -116,8 +119,8 @@ Args:
 
 Attributes:
   alphaBar: The scalar weight of the component.
-  xiVar: The 2x1 location vector
-  Sigmabar: The 2x2 covariance (tau_bar in the ICLM paper)
+  xiBar: The 2x1 location vector
+  tauBar: The 2x2 covariance (tau_bar in the ICLM paper)
   tauBarInv: The 2x2 precision
   tauBarLd: The log determinant of the covariance
 """ ->
@@ -212,145 +215,67 @@ typealias FreeVariationalParams Vector{Vector{Float64}}
 
 #########################################################
 
-immutable ParamIndex
-    # A data structure to index parameters within
-    # a VariationalParams object.
+abstract ParamSet
 
-    # Variational parameter for a_s.
-    # The probability of being a particular celestial object (Ia x 1 vector).
-    # (Currently the probability of being a star or galaxy, respectively.)
-    a::Vector{Int64}
 
-    # The location of the object (2x1 vector).
-    u::Vector{Int64}
+ue_params = ((:u, 2), (:e_axis, 1), (:e_angle, 1),
+        (:e_dev, 1), (:e_scale, 1))
+rc_params1 = ((:r1, 1), (:r2, 1),
+        (:c1, B - 1), (:c2, B - 1))
+rc_params2 = ((:r1, Ia), (:r2, Ia),
+        (:c1, (B - 1,  Ia)), (:c2, (B - 1,  Ia)))
+ak_simplex = ((:a, Ia), (:k, (D, Ia)))
+ak_free = ((:a, Ia - 1), (:k, (D - 1, Ia)))
 
-    # Ia x 1 scalar variational parameters for r_s.  The first
-    # row is for stars, and the second for galaxies
-    r1::Vector{Int64}
-    r2::Vector{Int64}
+const param_specs = [
+    (:StarPosParams, :star_ids, ((:u, 2),)),
+    (:GalaxyPosParams, :gal_ids, ue_params),
+    (:BrightnessParams, :bids, rc_params1),
+    (:StandardParams, :ids, tuple(ue_params..., rc_params2..., ak_simplex...)),
+    (:UnconstrainedParams, :ids_free, tuple(ue_params..., rc_params2..., ak_free...)),
+]
 
-    # The weight given to a galaxy of type 1.
-    e_dev::Int64
+for (pn, ids_name, pf) in param_specs
+    ids_fields = Any[]
+    ids_init = Any[]
 
-    # galaxy minor/major ratio
-    e_axis::Int64
+    prev_end = 0
+    for (n, ll) in pf
+        id_field = ll == 1 ? :(Int64) : :(Array{Int64, $(length(ll))})
+        push!(ids_fields, :($n::$id_field))
 
-    # galaxy angle
-    e_angle::Int64
+        field_len = *(ll...)
 
-    # galaxy scale
-    e_scale::Int64
+        ids_array = ll == 1 ? prev_end + 1 :
+            [(prev_end + 1) : (prev_end + field_len)]
+        if length(ll) >= 2
+            ids_array = :(reshape($ids_array, $ll))
+        end
+        push!(ids_init, ids_array)
 
-    # The remaining parameters are matrices where the
-    # first column is for stars and the second is for galaxies.
+        prev_end += field_len
+    end
 
-    # DxI matrix of color prior component indicators.
-    k::Array{Int64, 2}
+    new_call = Expr(:call, :new, ids_init...)
+    constructor = Expr(:(=),:($pn()), new_call)
+    push!(ids_fields, constructor)
+    fields_block = Expr(:block, ids_fields...)
+    struct_sig = Expr(:(<:), pn, :ParamSet)
+    struct_dec = Expr(:type, false, struct_sig, fields_block)
+    eval(struct_dec)
 
-    # (B - 1)xI matrices containing c_s means and variances, respectively.
-    c1::Array{Int64, 2}
-    c2::Array{Int64, 2}
+    eval(:(const $ids_name = $pn()))
 
-    # The size (largest index) of the parameterization.
-    size::Int64
+    eval(:(length(::Type{$pn}) = $prev_end))
 end
 
-immutable UnconstrainedParamIndex
-    # A data structure to index parameters within
-    # an unconstrained VariationalParams object.
+#########################################################
 
-    # Unconstrained parameter for a_s of length (Ia - 1)
-    # (the probability of being a type of celestial object).
-    a::Vector{Int64}
-
-    # The location of the object (2x1 vector).
-    u::Vector{Int64}
-
-    # Ix1 scalar variational parameters for r_s.  The first
-    # row is for stars, and the second for galaxies
-    r1::Vector{Int64}
-    r2::Vector{Int64}
-
-    # The weight given to a galaxy of type 1.
-    e_dev::Int64
-
-    # galaxy minor/major ratio
-    e_axis::Int64
-
-    # galaxy angle
-    e_angle::Int64
-
-    # galaxy scale
-    e_scale::Int64
-
-    # The remaining parameters are matrices where the
-    # first column is for stars and the second is for galaxies.
-
-    # Dx(Ia - 1) matrix of color prior component indicators.
-    k::Array{Int64, 2}
-
-    # (B - 1)xI matrices containing c_s means and variances, respectively.
-    c1::Array{Int64, 2}
-    c2::Array{Int64, 2}
-
-    # The size (largest index) of the parameterization.
-    size::Int64
-end
-
-function get_param_ids()
-    # Build a ParamIndex object.
-
-    k_end = 12 + Ia * D
-    c1_end = k_end + Ia * (B - 1)
-    c2_end = c1_end + Ia * (B - 1)
-
-    k_ids = reshape([13 : k_end], D, Ia)
-    c1_ids = reshape([k_end + 1 : c1_end], B - 1, Ia)
-    c2_ids = reshape([c1_end + 1 : c2_end], B - 1, Ia)
-
-    ParamIndex([1, 2], # a
-               [3, 4], # u
-               [5, 6], # r1
-               [7, 8], # r2
-               9, 10, 11, 12, # e_dev, e_axis, e_angle, e_scale
-               k_ids, c1_ids, c2_ids,
-               c2_ids[end])
-end
-
-function get_unconstrained_param_ids()
-    # Build a UnconstrainedParamIndex object.  Later the dimensions
-    # of the unconstrained parameterizatoin may differ from the
-    # constrained one (e.g. with simplicial constraints).
-    #
-    # Currently every alternative parameterization has the same
-    # dimension in each parameter.
-
-    # The last colunn of k is constrianed by the first Ia - 1 columns.
-    k_end = 11 + (Ia - 1) * D
-    c1_end = k_end + Ia * (B - 1)
-    c2_end = c1_end + Ia * (B - 1)
-
-    k_ids = reshape([12 : k_end], Ia - 1, D)
-    c1_ids = reshape([k_end + 1 : c1_end], B - 1, Ia)
-    c2_ids = reshape([c1_end + 1 : c2_end], B - 1, Ia)
-
-    UnconstrainedParamIndex([1],    # a
-                            [2, 3], # u
-                            [4, 5], # r1
-                            [6, 7], # r2
-                            8, 9, 10, 11, # e_dev, e_axis, e_angle, e_scale
-                            k_ids, c1_ids, c2_ids,
-                            c2_ids[end])
-end
-
-const ids = get_param_ids()
-const ids_free = get_unconstrained_param_ids()
-
-const all_params = [1:ids.size]
-const all_params_free = [1:ids_free.size]
+const all_params = [1:length(StandardParams)]
+const all_params_free = [1:length(UnconstrainedParams)]
 
 const star_pos_params = ids.u
-const galaxy_pos_params = [ids.u, ids.e_dev, ids.e_axis, ids.e_angle, ids.e_scale]
+const galaxy_pos_params = [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
 
 
 @doc """
