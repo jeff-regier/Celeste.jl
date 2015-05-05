@@ -178,7 +178,7 @@ function test_quadratic_derivatives()
 
         val = zero_sensitive_float(CanonicalParams)
         val.v = sum((mp.vp[1] - centers) .^ 2)
-        val.d[ all_params ] = 2.0 * (mp.vp[1] - centers)
+        val.d[:] = 2.0 * (mp.vp[1] - centers)
 
         val
     end

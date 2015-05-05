@@ -80,7 +80,7 @@ function unchanged_vp!(vp::VariationalParams, new_vp::VariationalParams)
     # Leave the vp unchanged.
     S = length(vp)
     for s = 1:S
-        new_vp[s][all_params] = vp[s][all_params]
+        new_vp[s][:] = vp[s]
     end
 end
 
@@ -115,7 +115,7 @@ function free_vp_to_vector(vp::FreeVariationalParams, omitted_ids::Vector{Int64}
     # There is probably no use for this function, since you'll only be passing
     # trasformations to the optimizer, but I'll include it for completeness.
 
-    left_ids = setdiff(all_params_free, omitted_ids)
+    left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     new_P = length(left_ids)
 
     S = length(vp)
@@ -137,7 +137,7 @@ function vector_to_free_vp!(xs::Vector{Float64}, vp_free::FreeVariationalParams,
     #   will be updated.
     # omitted_ids: Ids to omit (from ids_free)
 
-    left_ids = setdiff(all_params_free, omitted_ids)
+    left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
 
     P = length(left_ids)
     @assert length(xs) % P == 0
@@ -158,7 +158,7 @@ end
 # Functions for a "rectangular transform".  This matches the original Celeste
 # script, contraining a to sum to one and scaling r1.
 
-const rect_rescaling = ones(length(all_params))
+const rect_rescaling = ones(length(CanonicalParams))
 
 # Rescale some parameters to have similar dimensions to everything else.
 [rect_rescaling[id] *= 1e-3 for id in ids.r1]

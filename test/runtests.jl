@@ -105,7 +105,7 @@ function test_tiling()
     @test_approx_eq_eps elbo_patches.v elbo.v 1e-5
 
     for s in 1:mp.S
-        for i in 1:length(all_params)
+        for i in 1:length(1:length(CanonicalParams))
             @test_approx_eq_eps elbo_tiles.d[i, s] elbo.d[i, s] 1e-5
             @test_approx_eq_eps elbo_patches.d[i, s] elbo.d[i, s] 1e-5
         end
@@ -116,7 +116,7 @@ function test_tiling()
     @test_approx_eq_eps elbo_both.v elbo.v 1e-1
 
     for s in 1:mp.S
-        for i in 1:length(all_params)
+        for i in 1:length(1:length(CanonicalParams))
             @test_approx_eq_eps elbo_both.d[i, s] elbo.d[i, s] 1e-1
         end
     end
