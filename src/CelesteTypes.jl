@@ -3,7 +3,6 @@ module CelesteTypes
 if VERSION < v"0.4.0-dev"
     using Docile
 end
-@docstrings
 
 export CatalogEntry
 export band_letters
@@ -18,7 +17,7 @@ export VariationalParams, FreeVariationalParams, RectVariationalParams
 
 export SensitiveFloat
 
-export zero_sensitive_float, const_sensitive_param, clear!
+export zero_sensitive_float, clear!
 
 export ParamIndex, ids, ids_free, all_params, all_params_free
 export star_pos_params, galaxy_pos_params
