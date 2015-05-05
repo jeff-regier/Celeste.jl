@@ -5,7 +5,6 @@ module ElboDeriv
 if VERSION < v"0.4.0-dev"
     using Docile
 end
-@docstrings
 
 using CelesteTypes
 

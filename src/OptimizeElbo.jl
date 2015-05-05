@@ -48,7 +48,7 @@ end
 
 
 function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
-                                        omitted_ids,
+                                        omitted_ids::Vector{Int64},
                                         transform::DataTransform)
     # Note that sources are not allowed to move more than
     # one pixel from their starting position in order to
@@ -60,9 +60,10 @@ function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
     # unconstrain_fn: A function to convert VariationalParameters to a
     #   vector that can be passed to the optimizer.
 
-    lbs = [ get_nlopt_bounds(vs)[1] for vs in vp]
-    ubs = [ get_nlopt_bounds(vs)[2] for vs in vp]
-    transform.vp_to_vector(lbs, omitted_ids), transform.vp_to_vector(ubs, omitted_ids)
+    lbs = [get_nlopt_bounds(vs)[1] for vs in vp]
+    ubs = [get_nlopt_bounds(vs)[2] for vs in vp]
+    (transform.vp_to_vector(lbs, omitted_ids), 
+        transform.vp_to_vector(ubs, omitted_ids))
 end
 
 

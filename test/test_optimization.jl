@@ -203,7 +203,7 @@ function test_kl_invariance_to_a()
 
     mp = ModelInit.cat_init([ce,])
     mp.vp[1][ids.a] = [ 0.2, 0.8 ]
-    omitted_ids = ids_free.a
+    omitted_ids = [ids_free.a;]
     OptimizeElbo.maximize_f(kl_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     mp2 = ModelInit.cat_init([ce,])
@@ -354,7 +354,7 @@ end
 function test_quadratic_optimization(trans::DataTransform)
 
     # A very simple quadratic function to test the optimization.
-    const centers = collect(linrange(0.1, 0.9, ids.size))
+    const centers = collect(linrange(0.1, 0.9, length(StandardParams)))
 
     # Set feasible centers for the indicators.
     centers[ids.a] = [ 0.4, 0.6 ]
@@ -370,11 +370,12 @@ function test_quadratic_optimization(trans::DataTransform)
 
     # 0.5 is an innocuous value for all parameters.
     mp = empty_model_params(1)
-    mp.vp = convert(VariationalParams, [ fill(0.5, ids.size) for s in 1:1 ])
+    n = length(StandardParams)
+    mp.vp = convert(VariationalParams, [fill(0.5, n) for s in 1:1])
     unused_blob = gen_sample_star_dataset()[1]
 
-    vp_lbs = convert(VariationalParams, [ fill(1e-6, ids.size) for s in 1:1 ])
-    vp_ubs = convert(VariationalParams, [ fill(1.0 - 1e-6, ids.size) for s in 1:1 ])
+    vp_lbs = convert(VariationalParams, [fill(1e-6, n) for s in 1:1])
+    vp_ubs = convert(VariationalParams, [fill(1.0 - 1e-6, n) for s in 1:1])
 
     lbs = trans.from_vp(vp_lbs)[1]
     ubs = trans.from_vp(vp_ubs)[1]
