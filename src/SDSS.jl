@@ -128,7 +128,7 @@ end
 
 
 function load_field(field_dir, run_num::ASCIIString,
-    camcol_num::ASCIIString, frame_num::ASCIIString)
+                    camcol_num::ASCIIString, frame_num::ASCIIString)
     pf_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
     pf_fits_raw = fits_open_table(pf_filename)
 
@@ -202,7 +202,8 @@ function load_field(field_dir, run_num::ASCIIString,
     blob = map(fetch_image, 1:5)
 end
 
-function load_catalog(field_dir, run_num, camcol_num, frame_num)
+function load_catalog(field_dir, run_num::ASCIIString,
+        camcol_num::ASCIIString, frame_num::ASCIIString)
     function common_catalog(cat_str)
         @assert cat_str == "star" || cat_str == "gal"
         cat_file = "$field_dir/calibObj-$run_num-$camcol_num-$cat_str.fits"
