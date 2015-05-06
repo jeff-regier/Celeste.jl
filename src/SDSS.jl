@@ -127,8 +127,8 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 end
 
 
-#=
-function load_field(field_dir, run_num, camcol_num, frame_num)
+function load_field(field_dir, run_num::ASCIIString,
+    camcol_num::ASCIIString, frame_num::ASCIIString)
     pf_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
     pf_fits_raw = fits_open_table(pf_filename)
 
@@ -149,7 +149,6 @@ function load_field(field_dir, run_num, camcol_num, frame_num)
     function fetch_image(b)
         b_letter = ['u', 'g', 'r', 'i', 'z'][b]
         img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
-
         img_fits = FITS(img_filename)
         original_pixels = read(img_fits[1])
         img_hdr1 = readheader(img_fits[1])
@@ -194,7 +193,10 @@ function load_field(field_dir, run_num, camcol_num, frame_num)
         H, W = size(original_pixels)
         iota = hdr["GAIN"] / hdr["CALIB"]
         epsilon = hdr["SKY"] * hdr["CALIB"]
-        Image(H, W, nelec, b, wcs, epsilon, iota, psf)
+
+        # TODO: Is a frame_num a field_num? 
+        Image(H, W, nelec, b, wcs, epsilon, iota, psf,
+            parse(run_num), parse(camcol_num), parse(frame_num))
     end
 
     blob = map(fetch_image, 1:5)
@@ -230,7 +232,6 @@ function load_catalog(field_dir, run_num, camcol_num, frame_num)
                     for i in 1:length(gal_range)]
     vcat(star_cat, gal_cat)
 end
-=#
 
 end
 
