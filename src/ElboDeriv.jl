@@ -644,8 +644,8 @@ function subtract_kl_k!(i::Int64, s::Int64,
     pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[i])
     (v, (d_k,)) = pp_kl_ki(mp.vp[s][ids.k[:, i]])
     accum.v -= v * vs[ids.a[i]]
-    accum.d[ids.k[:, i]] -= d_k .* vs[ids.a[i]]
-    accum.d[ids.a[i]] -= v
+    accum.d[ids.k[:, i], s] -= d_k .* vs[ids.a[i]]
+    accum.d[ids.a[i], s] -= v
 end
 
 
@@ -657,7 +657,7 @@ function subtract_kl_r!(i::Int64, s::Int64,
     accum.v -= v * vs[ids.a[i]]
     accum.d[ids.r1[i], s] -= d_r1 .* vs[ids.a[i]]
     accum.d[ids.r2[i], s] -= d_r2 .* vs[ids.a[i]]
-    accum.d[ids.a[i]] -= v
+    accum.d[ids.a[i], s] -= v
 end
 
 
@@ -666,7 +666,7 @@ function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
     pp_kl_a = KL.gen_categorical_kl(mp.pp.a)
     (v, (d_a,)) = pp_kl_a(mp.vp[s][ids.a])
     accum.v -= v
-    accum.d[ids.a] -= d_a
+    accum.d[ids.a, s] -= d_a
 end
 
 
