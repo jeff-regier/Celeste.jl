@@ -9,6 +9,11 @@ using Transform
 
 import ElboDeriv
 
+
+#TODO: use Lumberjack.jl for logging
+const debug = false
+
+
 function get_nlopt_bounds(vs::Vector{Float64})
     # Note that sources are not allowed to move more than
     # one pixel from their starting position in order to
@@ -16,38 +21,38 @@ function get_nlopt_bounds(vs::Vector{Float64})
     # the variational parameters as an argument.)
     # vs: parameters for a particular source.
     # vp: complete collection of sources.
-    lb = Array(Float64, length(all_params))
-    lb[ids.chi] = 1e-2
-    lb[ids.mu] = vs[ids.mu] - 1.
-    [lb[id] = 1e-4 for id in ids.gamma]
-    [lb[id] = 1e-4 for id in ids.zeta]
-    [lb[id] = 1e-4 for id in ids.kappa]
-    [lb[id] = -10. for id in ids.beta]
-    [lb[id] = 1e-4 for id in ids.lambda]
-    lb[ids.theta] = 1e-2
-    lb[ids.rho] = 1e-4
-    lb[ids.phi] = -1e10 #-pi/2 + 1e-4
-    lb[ids.sigma] = 0.2
+    lb = Array(Float64, length(CanonicalParams))
+    lb[ids.a] = 1e-2
+    lb[ids.u] = vs[ids.u] - 1.
+    [lb[id] = 1e-4 for id in ids.r1]
+    [lb[id] = 1e-4 for id in ids.r2]
+    [lb[id] = 1e-4 for id in ids.k]
+    [lb[id] = -10. for id in ids.c1]
+    [lb[id] = 1e-4 for id in ids.c2]
+    lb[ids.e_dev] = 1e-2
+    lb[ids.e_axis] = 1e-4
+    lb[ids.e_angle] = -1e10 #-pi/2 + 1e-4
+    lb[ids.e_scale] = 0.2
 
-    ub = Array(Float64, length(all_params))
-    ub[ids.chi] = 1 - 1e-2
-    ub[ids.mu] = vs[ids.mu] + 1.
-    [ub[id] = 1e12 for id in ids.gamma]
-    [ub[id] = 1e-1 for id in ids.zeta]
-    [ub[id] = 1 - 1e-4 for id in ids.kappa]
-    [ub[id] = 10. for id in ids.beta]
-    [ub[id] = 1. for id in ids.lambda]
-    ub[ids.theta] = 1 - 1e-2
-    ub[ids.rho] = 1. - 1e-4
-    ub[ids.phi] = 1e10 #pi/2 - 1e-4
-    ub[ids.sigma] = 15.
+    ub = Array(Float64, length(CanonicalParams))
+    ub[ids.a] = 1 - 1e-2
+    ub[ids.u] = vs[ids.u] + 1.
+    [ub[id] = 1e12 for id in ids.r1]
+    [ub[id] = 1e-1 for id in ids.r2]
+    [ub[id] = 1 - 1e-4 for id in ids.k]
+    [ub[id] = 10. for id in ids.c1]
+    [ub[id] = 1. for id in ids.c2]
+    ub[ids.e_dev] = 1 - 1e-2
+    ub[ids.e_axis] = 1. - 1e-4
+    ub[ids.e_angle] = 1e10 #pi/2 - 1e-4
+    ub[ids.e_scale] = 15.
 
     lb, ub
 end
 
 
 function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
-                                        omitted_ids,
+                                        omitted_ids::Vector{Int64},
                                         transform::DataTransform)
     # Note that sources are not allowed to move more than
     # one pixel from their starting position in order to
@@ -59,16 +64,17 @@ function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
     # unconstrain_fn: A function to convert VariationalParameters to a
     #   vector that can be passed to the optimizer.
 
-    lbs = [ get_nlopt_bounds(vs)[1] for vs in vp]
-    ubs = [ get_nlopt_bounds(vs)[2] for vs in vp]
-    transform.vp_to_vector(lbs, omitted_ids), transform.vp_to_vector(ubs, omitted_ids)
+    lbs = [get_nlopt_bounds(vs)[1] for vs in vp]
+    ubs = [get_nlopt_bounds(vs)[2] for vs in vp]
+    (transform.vp_to_vector(lbs, omitted_ids), 
+        transform.vp_to_vector(ubs, omitted_ids))
 end
 
 
 function print_params(vp)
     for vs in vp
         for n in names(ids)
-            println(n, ": ", vs[ids.(n)])
+            println("$n: $(vs[ids.(n)])")
         end
         println("-----------------\n")
     end
@@ -99,18 +105,17 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
         transform.vector_to_vp!(x, mp.vp, omitted_ids)
         elbo = f(blob, mp)
         elbo_trans = transform.transform_sensitive_float(elbo, mp)
-        left_ids = setdiff(all_params_free, omitted_ids)
+        left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
         if length(g) > 0
             svs = [elbo_trans.d[left_ids, s] for s in 1:mp.S]
             g[:] = reduce(vcat, svs)
         end
 
         iter_count += 1
-        print_params(mp.vp)
-        println("elbo: ", elbo.v)
-        #println("gradient:", g)
-        println("xtol_rel: $xtol_rel ;  ftol_abs: $ftol_abs")
-        println("\n=======================================\n")
+        debug && print_params(mp.vp)
+        (debug || iter_count % 10 == 0) && 
+            println("iter $iter_count elbo: $(elbo.v)")
+        debug && println("\n=======================================\n")
         elbo.v
     end
 
@@ -132,7 +137,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform;
-                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
+    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
     # Default to the bounds given in get_nlopt_unconstrained_bounds.
 
     lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform)
@@ -141,28 +146,22 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams;
-                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
+    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
     # Default to the rectangular transform
 
     maximize_f(f, blob, mp, rect_transform,
                omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
 end
 
+function maximize_elbo(blob::Blob, mp::ModelParams, trans::DataTransform;
+    xtol_rel = 1e-7, ftol_abs=1e-6)
+    omitted_ids = setdiff(1:length(UnconstrainedParams),
+                          [ids_free.r1, ids_free.r2,
+                           ids_free.k[:], ids_free.c1[:]])
+    maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids,
+        ftol_abs=ftol_abs, xtol_rel=xtol_rel)
 
-function maximize_elbo(blob::Blob, mp::ModelParams, trans::DataTransform; xtol_rel = 1e-7, ftol_abs=1e-6)
-    omitted_ids = setdiff(all_params_free,
-                          [ids_free.gamma, ids_free.zeta,
-                           ids_free.kappa[:], ids_free.beta[:]])
-    maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids, xtol_rel=xtol_rel)
-
-    maximize_f(ElboDeriv.elbo, blob, mp, trans, ftol_abs=ftol_abs-6, xtol_rel=xtol_rel)
-end
-
-
-function maximize_likelihood(blob::Blob, mp::ModelParams, trans::DataTransform; xtol_rel = 1e-7, ftol_abs=1e-6)
-    omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta]
-    maximize_f(ElboDeriv.elbo_likelihood, blob, mp, trans,
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
+    maximize_f(ElboDeriv.elbo, blob, mp, trans, ftol_abs=ftol_abs, xtol_rel=xtol_rel)
 end
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
@@ -170,10 +169,15 @@ function maximize_elbo(blob::Blob, mp::ModelParams)
     maximize_elbo(blob, mp, rect_transform)
 end
 
+function maximize_likelihood(blob::Blob, mp::ModelParams, trans::DataTransform; xtol_rel = 1e-7, ftol_abs=1e-6)
+    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+    maximize_f(ElboDeriv.elbo_likelihood, blob, mp, trans,
+               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
+end
+
 function maximize_likelihood(blob::Blob, mp::ModelParams)
     # Default to the rectangular transform.
     maximize_likelihood(blob, mp, rect_transform)
 end
-
 
 end

@@ -13,43 +13,44 @@ using CelesteTypes
 
 
 function sample_prior()
-    Phi = 0.05
-
     const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
-    Upsilon = Array(Float64, 2)
-    Psi = Array(Float64, 2)
-    r_file = open("$dat_dir/r_prior.dat")
-    ((Upsilon[1], Psi[1]), (Upsilon[2], Psi[2])) = deserialize(r_file)
-    close(r_file)
+    stars_file = open("$dat_dir/priors/stars.dat")
+    r_fit1, k1, cmean1, ccov1 = deserialize(stars_file)
+    close(stars_file)
 
-    Xi = Array(Vector{Float64}, 2)
-    Omega = Array(Array{Float64, 2}, 2)
-    Lambda = Array(Array{Array{Float64, 2}}, 2)
-    ck_file = open("$dat_dir/ck_prior.dat")
-    ((Xi[1], Omega[1], Lambda[1]), (Xi[2], Omega[2], Lambda[2])) = deserialize(ck_file)
-    close(r_file)
+    gals_file = open("$dat_dir/priors/gals.dat")
+    r_fit2, k2, cmean2, ccov2 = deserialize(gals_file)
+    close(gals_file)
 
-    PriorParams(Phi, Upsilon, Psi, Xi, Omega, Lambda)
+    # TODO: use r_fit1 and r_fit2 instead of magic numbers ?
+
+    # magic numbers below determined from the output of primary
+    # on the test set of stamps
+    PriorParams(
+        [0.28, 0.72],                       # a
+        [(0.47, 0.012), (1.28, 0.11)],      # r
+        Vector{Float64}[k1, k2],            # k
+        [(cmean1, ccov1), (cmean2, ccov2)]) # c
 end
 
 
 #TODO: use blob (and perhaps priors) to initialize these sensibly
 function init_source(init_pos::Vector{Float64})
-    ret = Array(Float64, length(all_params))
-    ret[ids.chi[2]] = 0.5
-    ret[ids.chi[1]] = 1.0 - ret[ids.chi[2]]
-    ret[ids.mu[1]] = init_pos[1]
-    ret[ids.mu[2]] = init_pos[2]
-    ret[ids.gamma] = 1e3
-    ret[ids.zeta] = 2e-3
-    ret[ids.theta] = 0.5
-    ret[ids.rho] = 0.5
-    ret[ids.phi] = 0.
-    ret[ids.sigma] = 1.
-    ret[ids.kappa] = 1. / size(ids.kappa, 1)
-    ret[ids.beta] = 0.
-    ret[ids.lambda] =  1e-2
+    ret = Array(Float64, length(CanonicalParams))
+    ret[ids.a[2]] = 0.5
+    ret[ids.a[1]] = 1.0 - ret[ids.a[2]]
+    ret[ids.u[1]] = init_pos[1]
+    ret[ids.u[2]] = init_pos[2]
+    ret[ids.r1] = 1e3
+    ret[ids.r2] = 2e-3
+    ret[ids.e_dev] = 0.5
+    ret[ids.e_axis] = 0.5
+    ret[ids.e_angle] = 0.
+    ret[ids.e_scale] = 1.
+    ret[ids.k] = 1. / size(ids.k, 1)
+    ret[ids.c1] = 0.
+    ret[ids.c2] =  1e-2
     ret
 end
 
@@ -57,8 +58,8 @@ end
 function init_source(ce::CatalogEntry)
     ret = init_source(ce.pos)
 
-    ret[ids.gamma[1]] = max(0.0001, ce.star_fluxes[3]) ./ ret[ids.zeta[1]]
-    ret[ids.gamma[2]] = max(0.0001, ce.gal_fluxes[3]) ./ ret[ids.zeta[2]]
+    ret[ids.r1[1]] = max(0.0001, ce.star_fluxes[3]) ./ ret[ids.r2[1]]
+    ret[ids.r1[2]] = max(0.0001, ce.gal_fluxes[3]) ./ ret[ids.r2[2]]
 
     get_color(c2, c1) = begin
         c2 > 0 && c1 > 0 ? min(max(log(c2 / c1), -9.), 9.) :
@@ -69,14 +70,14 @@ function init_source(ce::CatalogEntry)
         [get_color(raw_fluxes[c+1], raw_fluxes[c]) for c in 1:4]
     end
 
-    ret[ids.beta[:, 1]] = get_colors(ce.star_fluxes)
-    ret[ids.beta[:, 2]] = get_colors(ce.gal_fluxes)
+    ret[ids.c1[:, 1]] = get_colors(ce.star_fluxes)
+    ret[ids.c1[:, 2]] = get_colors(ce.gal_fluxes)
 
-    ret[ids.theta] = min(max(ce.gal_frac_dev, 0.01), 0.99)
+    ret[ids.e_dev] = min(max(ce.gal_frac_dev, 0.01), 0.99)
 
-    ret[ids.rho] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.0001), 0.9999)
-    ret[ids.phi] = ce.gal_angle
-    ret[ids.sigma] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
+    ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.0001), 0.9999)
+    ret[ids.e_angle] = ce.gal_angle
+    ret[ids.e_scale] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
 
     ret
 end
@@ -86,7 +87,7 @@ function matched_filter(img::Image)
     H, W = 5, 5
     kernel = zeros(Float64, H, W)
     for k in 1:3
-        mvn = MvNormal(img.psf[k].xiBar, img.psf[k].SigmaBar)
+        mvn = MvNormal(img.psf[k].xiBar, img.psf[k].tauBar)
         for h in 1:H
             for w in 1:W
                 x = [h - (H + 1) / 2., w - (W + 1) / 2.]
@@ -158,12 +159,12 @@ end
 
 #=
 function min_patch_radius(ce::CatalogEntry, blob::Blob)
-    max_var = maximum([maximum([maximum(pc.SigmaBar) for pc in img.psf]) 
+    max_var = maximum([maximum([maximum(pc.tauBar) for pc in img.psf])
                     for img in blob])
     if !ce.is_star
         XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
         XiXi_max = maximum(XiXi)
-        max_var += maximum([maximum([gc.sigmaTilde * XiXi_max 
+        max_var += maximum([maximum([gc.nuBar * XiXi_max
             for gc in galaxy_prototypes[i]]) for i in 1:2])
     end
 

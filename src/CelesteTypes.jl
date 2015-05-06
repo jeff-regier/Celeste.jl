@@ -1,7 +1,6 @@
-# written by Jeffrey Regier
-# jeff [at] stat [dot] berkeley [dot] edu
-
 module CelesteTypes
+
+VERSION < v"0.4.0-dev" && using Docile
 
 export CatalogEntry
 export band_letters
@@ -10,15 +9,17 @@ export Image, Blob, SkyPatch, ImageTile, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 
-export ModelParams, PriorParams
+export ModelParams, PriorParams, UnconstrainedParams
+export CanonicalParams, BrightnessParams, StarPosParams, GalaxyPosParams
 export VariationalParams, FreeVariationalParams, RectVariationalParams
+
+export shape_standard_alignment, brightness_standard_alignment, align
 
 export SensitiveFloat
 
-export zero_sensitive_float, const_sensitive_param, clear!
+export zero_sensitive_float, clear!
 
-export ParamIndex, ids, ids_free, all_params, all_params_free
-export star_pos_params, galaxy_pos_params
+export ids, ids_free, star_ids, gal_ids
 export D, B, Ia
 
 using Util
@@ -27,7 +28,10 @@ import FITSIO
 import Distributions
 import WCSLIB
 
+import Base.length
+
 const band_letters = ['u', 'g', 'r', 'i', 'z']
+
 
 # The number of components in the color prior.
 const D = 2
@@ -51,27 +55,28 @@ end
 
 ############################################
 
-immutable GalaxyComponent
-    # Parameters of a single normal component of a galaxy.
-    #
-    # Attributes:
-    #   alphaTilde: The weight of the galaxy component (eta_bar in the ICML submission)
-    #   sigmaTilde: The scale of the galaxy component (nu_bar in the ICLM submission)
-    # TODO: Sync up the notation between the code and the writeup
+@doc """
+Parameters of a single normal component of a galaxy.
 
-    alphaTilde::Float64
-    sigmaTilde::Float64
+Attributes:
+  etaBar: The weight of the galaxy component
+  nuBar: The scale of the galaxy component
+""" ->
+immutable GalaxyComponent
+    etaBar::Float64
+    nuBar::Float64
 end
 
 typealias GalaxyPrototype Vector{GalaxyComponent}
 
-function get_galaxy_prototypes()
-    # Pre-defined shapes for galaxies.
-    #
-    # Returns:
-    #   dev_prototype: An array of GalaxyComponent for de Vaucouleurs galaxy types
-    #   exp_prototype: An array of GalaxyComponent for exponenttial galaxy types
+@doc """
+Pre-defined shapes for galaxies.
 
+Returns:
+  dev_prototype: An array of GalaxyComponent for de Vaucouleurs galaxy types
+  exp_prototype: An array of GalaxyComponent for exponenttial galaxy types
+""" ->
+function get_galaxy_prototypes()
     dev_amp = [
         4.26347652e-02, 2.40127183e-01, 6.85907632e-01, 1.51937350e+00,
         2.83627243e+00, 4.46467501e+00, 5.72440830e+00, 5.60989349e+00]
@@ -102,39 +107,37 @@ end
 const galaxy_prototypes = get_galaxy_prototypes()
 
 
-immutable PsfComponent
-    # A single normal component of the point spread function.
-    #
-    # Args:
-    #   alphaBar: The scalar weight of the component. 
-    #   xiVar: The 2x1 location vector
-    #   Sigmabar: The 2x2 covariance
-    #
-    # Attributes:
-    #   alphaBar: The scalar weight of the component. 
-    #   xiVar: The 2x1 location vector
-    #   Sigmabar: The 2x2 covariance (tau_bar in the ICLM paper)
-    #   SigmaBarInv: The 2x2 precision
-    #   SigmaBarLd: The log determinant of the covariance
-    #
-    # TODO: Change Sigmabar to tau_bar to match the ICML submission.
+@doc """
+A single normal component of the point spread function.
 
+Args:
+  alphaBar: The scalar weight of the component.
+  xiBar: The 2x1 location vector
+  tauBar: The 2x2 covariance
+
+Attributes:
+  alphaBar: The scalar weight of the component.
+  xiBar: The 2x1 location vector
+  tauBar: The 2x2 covariance (tau_bar in the ICLM paper)
+  tauBarInv: The 2x2 precision
+  tauBarLd: The log determinant of the covariance
+""" ->
+immutable PsfComponent
     alphaBar::Float64  # TODO: use underscore
     xiBar::Vector{Float64}
-    SigmaBar::Matrix{Float64}
+    tauBar::Matrix{Float64}
 
-    SigmaBarInv::Matrix{Float64}
-    SigmaBarLd::Float64
+    tauBarInv::Matrix{Float64}
+    tauBarLd::Float64
 
     PsfComponent(alphaBar::Float64, xiBar::Vector{Float64},
-            SigmaBar::Matrix{Float64}) = begin
-        new(alphaBar, xiBar, SigmaBar, SigmaBar^-1, logdet(SigmaBar))
+            tauBar::Matrix{Float64}) = begin
+        new(alphaBar, xiBar, tauBar, tauBar^-1, logdet(tauBar))
     end
 end
 
+@doc """An image, taken though a particular filter band""" ->
 type Image
-    # An image for a single color.
-
     # The image height.
     H::Int64
 
@@ -167,25 +170,25 @@ type Image
     field_num::Int64
 end
 
+@doc """
+Tiles of pixels that share the same set of
+relevant sources (or other calculations).
+
+These are in tile coordinates --- not pixel or sky coordinates.
+(I.e., the range of hh and ww are the number of horizontal
+ and vertical tiles in the image, respectively.)
+""" ->
 immutable ImageTile
-    # Tiles of pixels that share the same set of    
-    # relevant sources (or other calculations).
-
-    # These are in tile coordinates --- not pixel or sky coordinates.
-    # (I.e., the range of hh and ww are the number of horizontal
-    #  and vertical tiles in the image, respectively.)
-
     hh::Int64
     ww::Int64
     img::Image
 end
 
-# A vector of images, one for each color.
+@doc """A vector of images, one for each filter band""" ->
 typealias Blob Vector{Image}
 
+@doc """The amount of sky affected by a source""" ->
 immutable SkyPatch #pixel coordinates for now, soon wcs
-    # The amount of sky affected by a
-    # source (regardless of the tiling).
     center::Vector{Float64}
     radius::Float64
 end
@@ -194,186 +197,124 @@ end
 #########################################################
 
 immutable PriorParams
-    Phi::Float64                              # prior on a_s
-    Upsilon::Vector{Float64}                  # rate prior on r_s
-    Psi::Vector{Float64}                      # scale prior on r_s
-    Xi::Vector{Vector{Float64}}               # mixing weight prior on c_s
-    Omega::Vector{Array{Float64, 2}}          # mean prior on c_s
-    Lambda::Vector{Array{Array{Float64, 2}}}  # cov prior on c_s
+    a::Vector{Float64}  # formerly Phi
+    r::Vector{(Float64, Float64)}   # formerly Upsilon, Psi
+    k::Vector{Vector{Float64}}  # formerly Xi
+    c::Vector{(Matrix{Float64}, Array{Float64, 3})}  # formerly Omega, Lambda
 end
 
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual
 # parameters for that object (referenced using ParamIndex).
 
-# TODO: use a matrix here, in conjunction with ArrayViews.jl (?)
-# TODO: Julia noob question -- is there a way to enforce the
-# differences between these variable types?  For now, this is
-# just helpful notation.
 typealias VariationalParams Vector{Vector{Float64}}
 typealias RectVariationalParams Vector{Vector{Float64}}
 typealias FreeVariationalParams Vector{Vector{Float64}}
 
 #########################################################
 
-immutable ParamIndex
-    # A data structure to index parameters within
-    # a VariationalParams object.
+abstract ParamSet
 
-    # Variational parameter for a_s.
-    # The probability of being a particular celestial object (Ia x 1 vector).
-    # (Currently the probability of being a star or galaxy, respectively.)
-    chi::Vector{Int64}
+# The variable names are:
+# u       = Location (formerly mu)
+# e_dev   = Weight given to a galaxy of type 1 (formerly theta)
+# e_axis  = Galaxy minor/major ratio (formerly rho)
+# e_angle = Galaxy angle (formerly phi)
+# e_scale = Galaxy scale (sigma)
+# For r1 and r2, the first row is stars, and the second is galaxies.
+# r1      = Iax1 shape parameter for r_s. (formerly gamma)
+# r2      = Iax1 scale parameter for r_s. (formerly zeta)
+# c1      = C_s means (formerly beta)
+# c2      = C_s variances (formerly lambda) 
+# a       = robability of being a star or galaxy. (formerly chi)
+# k       = Dx{Ia|Ia - 1} matrix of color prior component indicators. (formerly kappa)
 
-    # The location of the object (2x1 vector).
-    mu::Vector{Int64}
+# Parameters for location and galaxy shape.
+ue_params = ((:u, 2), (:e_dev, 1), (:e_axis, 1), (:e_angle, 1),
+        (:e_scale, 1))
 
-    # Ia x 1 scalar variational parameters for r_s.  The first
-    # row is for stars, and the second for galaxies (I think?).
-    gamma::Vector{Int64}
-    zeta::Vector{Int64}
+# Parameters for the colors.
+rc_params1 = ((:r1, 1), (:r2, 1), (:c1, B - 1), (:c2, B - 1))
+rc_params2 = ((:r1, Ia), (:r2, Ia), (:c1, (B - 1,  Ia)),
+        (:c2, (B - 1,  Ia)))
 
-    # The weight given to a galaxy of type 1.
-    theta::Int64
+# Simplicial variables, either in constrained or free parameterizations.
+ak_simplex = ((:a, Ia), (:k, (D, Ia)))
+ak_free = ((:a, Ia - 1), (:k, (D - 1, Ia)))
 
-    # galaxy minor/major ratio
-    rho::Int64
+const param_specs = [
+    (:StarPosParams, :star_ids, ((:u, 2),)),
+    (:GalaxyPosParams, :gal_ids, ue_params),
+    (:BrightnessParams, :bids, rc_params1),
+    (:CanonicalParams, :ids, tuple(ue_params..., rc_params2..., ak_simplex...)),
+    (:UnconstrainedParams, :ids_free, tuple(ue_params..., rc_params2..., ak_free...)),
+]
 
-    # galaxy angle
-    phi::Int64 
+for (pn, ids_name, pf) in param_specs
+    ids_fields = Any[]
+    ids_init = Any[]
 
-    # galaxy scale
-    sigma::Int64
+    prev_end = 0
+    for (n, ll) in pf
+        id_field = ll == 1 ? :(Int64) : :(Array{Int64, $(length(ll))})
+        push!(ids_fields, :($n::$id_field))
 
-    # The remaining parameters are matrices where the
-    # first column is for stars and the second is for galaxies.
+        field_len = *(ll...)
 
-    # DxI matrix of color prior component indicators.
-    kappa::Array{Int64, 2}
+        ids_array = ll == 1 ? prev_end + 1 :
+            [(prev_end + 1) : (prev_end + field_len)]
+        if length(ll) >= 2
+            ids_array = :(reshape($ids_array, $ll))
+        end
+        push!(ids_init, ids_array)
 
-    # (B - 1)xI matrices containing c_s means and variances, respectively.
-    beta::Array{Int64, 2}
-    lambda::Array{Int64, 2}
+        prev_end += field_len
+    end
 
-    # The size (largest index) of the parameterization.
-    size::Int64
+    new_call = Expr(:call, :new, ids_init...)
+    constructor = Expr(:(=),:($pn()), new_call)
+    push!(ids_fields, constructor)
+    fields_block = Expr(:block, ids_fields...)
+    struct_sig = Expr(:(<:), pn, :ParamSet)
+    struct_dec = Expr(:type, false, struct_sig, fields_block)
+    eval(struct_dec)
+
+    eval(:(const $ids_name = $pn()))
+    eval(:(getids(::Type{$pn}) = $ids_name))
+    eval(:(length(::Type{$pn}) = $prev_end))
+    eval(:(length(an_ids::$pn) = $prev_end))
 end
 
-immutable UnconstrainedParamIndex
-    # A data structure to index parameters within
-    # an unconstrained VariationalParams object.
 
-    # Unconstrained parameter for a_s of length (Ia - 1)
-    # (the probability of being a type of celestial object).
-    chi::Vector{Int64}
+#TODO: build these from ue_align, etc., here.
+align(::StarPosParams, CanonicalParams) = ids.u
+align(::GalaxyPosParams, CanonicalParams) = 
+   [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
+align(::CanonicalParams, CanonicalParams) = [1:length(CanonicalParams)]
 
-    # The location of the object (2x1 vector).
-    mu::Vector{Int64}
+const shape_standard_alignment = (ids.u,
+   [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale])
+bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
+const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
-    # Ix1 scalar variational parameters for r_s.  The first
-    # row is for stars, and the second for galaxies (I think?).
-    gamma::Vector{Int64}
-    zeta::Vector{Int64}
+#########################################################
 
-    # The weight given to a galaxy of type 1.
-    theta::Int64
+@doc """
+The parameters for a particular image.
 
-    # galaxy minor/major ratio
-    rho::Int64
-
-    # galaxy angle
-    phi::Int64 
-
-    # galaxy scale
-    sigma::Int64
-
-    # The remaining parameters are matrices where the
-    # first column is for stars and the second is for galaxies.
-
-    # Dx(Ia - 1) matrix of color prior component indicators.
-    kappa::Array{Int64, 2}
-
-    # (B - 1)xI matrices containing c_s means and variances, respectively.
-    beta::Array{Int64, 2}
-    lambda::Array{Int64, 2}
-
-    # The size (largest index) of the parameterization.
-    size::Int64
-end
-
-function get_param_ids()
-    # Build a ParamIndex object.
-
-    kappa_end = 12 + Ia * D
-    beta_end = kappa_end + Ia * (B - 1)
-    lambda_end = beta_end + Ia * (B - 1)
-
-    kappa_ids = reshape([13 : kappa_end], D, Ia)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
-
-    ParamIndex([1, 2], # chi
-               [3, 4], # mu
-               [5, 6], # gamma
-               [7, 8], # zeta
-               9, 10, 11, 12, # theta, rho, phi, sigma
-               kappa_ids, beta_ids, lambda_ids,
-               lambda_ids[end])
-end
-
-function get_unconstrained_param_ids()
-    # Build a UnconstrainedParamIndex object.  Later the dimensions
-    # of the unconstrained parameterizatoin may differ from the
-    # constrained one (e.g. with simplicial constraints).
-    #
-    # Currently every alternative parameterization has the same
-    # dimension in each parameter.
-
-    # The last colunn of kappa is constrianed by the first Ia - 1 columns. 
-    kappa_end = 11 + (Ia - 1) * D
-    beta_end = kappa_end + Ia * (B - 1)
-    lambda_end = beta_end + Ia * (B - 1)
-
-    kappa_ids = reshape([12 : kappa_end], Ia - 1, D)
-    beta_ids = reshape([kappa_end + 1 : beta_end], B - 1, Ia)
-    lambda_ids = reshape([beta_end + 1 : lambda_end], B - 1, Ia)
-
-    UnconstrainedParamIndex([1],    # chi
-                            [2, 3], # mu
-                            [4, 5], # gamma
-                            [6, 7], # zeta
-                            8, 9, 10, 11, # theta, rho, phi, sigma
-                            kappa_ids, beta_ids, lambda_ids,
-                            lambda_ids[end])
-end
-
-const ids = get_param_ids()
-const ids_free = get_unconstrained_param_ids()
-
-const all_params = [1:ids.size]
-const all_params_free = [1:ids_free.size]
-
-const star_pos_params = ids.mu
-const galaxy_pos_params = [ids.mu, ids.theta, ids.rho, ids.phi, ids.sigma]
-
+Attributes:
+ - vp: The variational parameters
+ - pp: The prior parameters
+ - patches: A vector of SkyPatch objects
+ - tile_width: The number of pixels across a tile
+ - S: The number of sources.
+""" ->
 type ModelParams
-    # The parameters for a particular image.
-    #
-    # Attributes:
-    #  - vp: The variational parameters
-    #  - vp_free: The unconstrained variational parameters.
-    #  - pp: The prior parameters
-    #  - patches: A vector of SkyPatch objects
-    #  - tile_width: The number of pixels across a tile
-    #  - S: The number of sources.
-
-    # The following meanings are clear from the names.
     vp::VariationalParams
     pp::PriorParams
     patches::Vector{SkyPatch}
     tile_width::Int64
 
-    # The number of sources.
     S::Int64
 
     ModelParams(vp, pp, patches, tile_width) = begin
@@ -385,35 +326,35 @@ end
 
 #########################################################
 
-type SensitiveFloat
-    # A function value and its derivative with respect to its arguments.
-    #
-    # Attributes:
-    #   v: The value
-    #   d: The derivative with respect to each variable in
-    #      P-dimensional VariationalParams for each of S celestial objects
-    #      in a local_P x local_S matrix.
-    #   h: The second derivative with respect to each variational parameter,
-    #      in the same format as d.
-    #   source_index: local_S x 1 vector of source ids with nonzero derivatives.
-    #   param_index: local_P x 1 vector of parameter indices with
-    #      nonzero derivatives. 
-    #
-    #  All derivatives not in source_index and param_index are zero.
+@doc """
+A function value and its derivative with respect to its arguments.
 
+Attributes:
+  v: The value
+  d: The derivative with respect to each variable in
+     P-dimensional VariationalParams for each of S celestial objects
+     in a local_P x local_S matrix.
+  h: The second derivative with respect to each variational parameter,
+     in the same format as d.
+""" ->
+type SensitiveFloat{T <: ParamSet}
     v::Float64
     d::Matrix{Float64} # local_P x local_S
     h::Matrix{Float64} # local_P x local_S
-    source_index::Vector{Int64}
-    param_index::Vector{Int64}
+    ids::T
 end
 
 #########################################################
 
-function zero_sensitive_float(s_index::Vector{Int64}, p_index::Vector{Int64})
-    d = zeros(length(p_index), length(s_index))
-    h = zeros(length(p_index), length(s_index))
-    SensitiveFloat(0., d, h, s_index, p_index)
+function zero_sensitive_float{T <: ParamSet}(::Type{T})
+    zero_sensitive_float(T, 1)
+end
+
+function zero_sensitive_float{T <: ParamSet}(::Type{T}, local_S::Int64)
+    local_P = length(T)
+    d = zeros(local_P, local_S)
+    h = zeros(local_P, local_S)
+    SensitiveFloat{T}(0., d, h, getids(T))
 end
 
 function clear!(sp::SensitiveFloat)

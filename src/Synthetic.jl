@@ -48,7 +48,7 @@ end
 function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
     for k in 1:length(img0.psf)
         the_mean = ce.pos + img0.psf[k].xiBar
-        the_cov = img0.psf[k].SigmaBar
+        the_cov = img0.psf[k].tauBar
         intensity = ce.star_fluxes[img0.b] * img0.iota * img0.psf[k].alphaBar
         write_gaussian(the_mean, the_cov, intensity, pixels)
     end
@@ -56,7 +56,7 @@ end
 
 
 function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
-    thetas = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
+    e_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
 
     XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
 
@@ -64,9 +64,9 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
         for gproto in galaxy_prototypes[i]
             for k in 1:length(img0.psf)
                 the_mean = ce.pos + img0.psf[k].xiBar
-                the_cov = img0.psf[k].SigmaBar + gproto.sigmaTilde * XiXi
-                intensity = ce.gal_fluxes[img0.b] * img0.iota * 
-                    img0.psf[k].alphaBar * thetas[i] * gproto.alphaTilde
+                the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
+                intensity = ce.gal_fluxes[img0.b] * img0.iota *
+                    img0.psf[k].alphaBar * e_devs[i] * gproto.etaBar
                 write_gaussian(the_mean, the_cov, intensity, pixels)
             end
         end
@@ -98,9 +98,9 @@ const pp = ModelInit.sample_prior()
 
 
 function sample_fluxes(i::Int64, r_s)
-#    r_s = rand(Distributions.Gamma(pp.Upsilon[i], pp.Psi[i]))
-    k_s = rand(Distributions.Categorical(pp.Xi[i]))
-    c_s = rand(Distributions.MvNormal(pp.Omega[i][:, k_s], pp.Lambda[i][k_s]))
+#    r_s = rand(Distributions.Gamma(pp.r[i][1], pp.r[i][2]))
+    k_s = rand(Distributions.Categorical(pp.k[i]))
+    c_s = rand(Distributions.MvNormal(pp.c[i][:, k_s], pp.c[i][:, :, k_s]))
 
     l_s = Array(Float64, 5)
     l_s[3] = r_s
@@ -114,7 +114,7 @@ end
 
 function synthetic_body(ce::CatalogEntry)
     ce2 = deepcopy(ce)
-#    ce2.is_star = 1 - rand(Distributions.Bernoulli(pp.Phi))
+#    ce2.is_star = rand(Distributions.Bernoulli(pp.a[1]))
     ce2.star_fluxes[:] = sample_fluxes(1, ce.star_fluxes[3])
     ce2.gal_fluxes[:] = sample_fluxes(2, ce.gal_fluxes[3])
     ce2
