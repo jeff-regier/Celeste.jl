@@ -316,10 +316,10 @@ function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
     fs1m.d[gal_ids.u[2]] += f .* py2
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
-    df_dSigma = Array(Float64, 3)
-    df_dSigma[1] = 0.5 * f * (py1 * py1 - gcc.bmc.precision[1, 1])
-    df_dSigma[2] = f * (py1 * py2 - gcc.bmc.precision[1, 2])  # NB: 2X
-    df_dSigma[3] = 0.5 * f * (py2 * py2 - gcc.bmc.precision[2, 2])
+    df_dSigma = (
+        0.5 * f * (py1 * py1 - gcc.bmc.precision[1, 1]),
+        f * (py1 * py2 - gcc.bmc.precision[1, 2]),  # NB: 2X
+        0.5 * f * (py2 * py2 - gcc.bmc.precision[2, 2]))
 
     for j in 1:3  # [dSigma11, dSigma12, dSigma22]
         fs1m.d[gal_ids.e_axis] += df_dSigma[j] * gcc.dSigma[j, 1]
