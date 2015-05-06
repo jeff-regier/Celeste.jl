@@ -261,7 +261,7 @@ Args:
   - bmc: A bivariate normal component
   - x: A 2x1 vector containing a mean offset to be applied to bmc
 """ ->
-function ret_pdf(bmc::BvnComponent, x::Vector{Float64})
+function eval_bvn_pdf(bmc::BvnComponent, x::Vector{Float64})
     y1 = x[1] - bmc.the_mean[1]
     y2 = x[2] - bmc.the_mean[2]
     py1 = bmc.precision[1,1] * y1 + bmc.precision[1,2] * y2
@@ -285,7 +285,7 @@ Args:
 function accum_star_pos!(bmc::BvnComponent,
                          x::Vector{Float64},
                          fs0m::SensitiveFloat)
-    py1, py2, f = ret_pdf(bmc, x)
+    py1, py2, f = eval_bvn_pdf(bmc, x)
 
     fs0m.v += f
 
@@ -307,7 +307,7 @@ Args:
 function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
                            x::Vector{Float64},
                            fs1m::SensitiveFloat)
-    py1, py2, f_pre = ret_pdf(gcc.bmc, x)
+    py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
     f = f_pre * gcc.e_dev_i
 
     fs1m.v += f
@@ -547,9 +547,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         return
     end
 
-    # fs0m and fs1m accumulate contributions from all sources,
-    # and so we say their derivatives are with respect to
-    # source "-1".
+    # fs0m and fs1m accumulate contributions from all sources
     fs0m = zero_sensitive_float(StarPosParams)
     fs1m = zero_sensitive_float(GalaxyPosParams)
 
