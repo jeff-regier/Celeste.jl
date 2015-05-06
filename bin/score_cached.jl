@@ -27,7 +27,7 @@ end
 
 
 function center_obj(vp::Vector{Vector{Float64}})
-	distances = [norm(vs[ids.mu] .- 51/2) for vs in vp]
+	distances = [norm(vs[ids.u] .- 51/2) for vs in vp]
 	s = findmin(distances)[2]
     if distances[s] > 2.
         throw(DistanceException())
@@ -114,23 +114,23 @@ end
 function convert(::Type{CatalogEntry}, vs::Vector{Float64})
     function get_fluxes(i::Int64)
         ret = Array(Float64, 5)
-        ret[3] = vs[ids.gamma[i]] * vs[ids.zeta[i]]
-        ret[4] = ret[3] * exp(vs[ids.beta[3, i]])
-        ret[5] = ret[4] * exp(vs[ids.beta[4, i]])
-        ret[2] = ret[3] / exp(vs[ids.beta[2, i]])
-        ret[1] = ret[2] / exp(vs[ids.beta[1, i]])
+        ret[3] = vs[ids.r1[i]] * vs[ids.r2[i]]
+        ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
+        ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
+        ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
+        ret[1] = ret[2] / exp(vs[ids.c1[1, i]])
         ret
     end
 
     CatalogEntry(
-        vs[ids.mu],
-        vs[ids.chi[2]] < 0.5,
+        vs[ids.u],
+        vs[ids.a[1]] > 0.5,
         get_fluxes(1),
         get_fluxes(2),
-        vs[ids.theta],
-        vs[ids.rho],
-        vs[ids.phi],
-        vs[ids.sigma])
+        vs[ids.e_dev],
+        vs[ids.e_axis],
+        vs[ids.e_angle],
+        vs[ids.e_scale])
 end
 
 
@@ -140,15 +140,15 @@ function load_celeste_obj!(i::Int64, stamp_id::String, df::DataFrame)
     ce = convert(CatalogEntry, vs)
     load_ce!(i, ce, stamp_id, df)
 
-    df[i, :is_star] = 1. - vs[ids.chi]
+    df[i, :is_star] = vs[ids.a[1]]
 
     for j in 1:2
         s_type = ["star", "gal"][j]
         df[i, symbol("$(s_type)_flux_r_sd")] = 
-            sqrt(df[i, symbol("$(s_type)_flux_r")]) * vs[ids.zeta[j]]
+            sqrt(df[i, symbol("$(s_type)_flux_r")]) * vs[ids.r2[j]]
         for c in 1:4
             cc_sd = symbol("$(s_type)_color_$(color_names[c])_sd")
-            df[i, cc_sd] = 2.5 * log10(e) * vs[ids.lambda[c, j]]
+            df[i, cc_sd] = 2.5 * log10(e) * vs[ids.c2[c, j]]
         end
     end
 end

@@ -21,7 +21,7 @@ function get_bvn_cov(ab::Float64, angle::Float64, scale::Float64)
     #
     #  Returns:
     #    The 2x2 covariance matrix parameterized by the inputs.
- 
+
     #@assert -pi/2 <= angle < pi/2
     @assert 0 < scale
     @assert 0 < ab <= 1.
