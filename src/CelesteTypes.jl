@@ -215,12 +215,30 @@ typealias FreeVariationalParams Vector{Vector{Float64}}
 
 abstract ParamSet
 
+# The variable names are:
+# u       = Location (formerly mu)
+# e_dev   = Weight given to a galaxy of type 1 (formerly theta)
+# e_axis  = Galaxy minor/major ratio (formerly rho)
+# e_angle = Galaxy angle (formerly phi)
+# e_scale = Galaxy scale (sigma)
+# For r1 and r2, the first row is stars, and the second is galaxies.
+# r1      = Iax1 shape parameter for r_s. (formerly gamma)
+# r2      = Iax1 scale parameter for r_s. (formerly zeta)
+# c1      = C_s means (formerly beta)
+# c2      = C_s variances (formerly lambda) 
+# a       = robability of being a star or galaxy. (formerly chi)
+# k       = Dx{Ia|Ia - 1} matrix of color prior component indicators. (formerly kappa)
 
+# Parameters for location and galaxy shape.
 ue_params = ((:u, 2), (:e_dev, 1), (:e_axis, 1), (:e_angle, 1),
         (:e_scale, 1))
+
+# Parameters for the colors.
 rc_params1 = ((:r1, 1), (:r2, 1), (:c1, B - 1), (:c2, B - 1))
 rc_params2 = ((:r1, Ia), (:r2, Ia), (:c1, (B - 1,  Ia)),
         (:c2, (B - 1,  Ia)))
+
+# Simplicial variables, either in constrained or free parameterizations.
 ak_simplex = ((:a, Ia), (:k, (D, Ia)))
 ak_free = ((:a, Ia - 1), (:k, (D - 1, Ia)))
 

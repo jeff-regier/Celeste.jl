@@ -1,12 +1,13 @@
+
 module SampleData
 
 using Distributions
 using CelesteTypes
 
 import SDSS
+
 import ModelInit
 import Synthetic
-
 
 export empty_model_params
 export dat_dir, sample_ce, perturb_params

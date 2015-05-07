@@ -100,6 +100,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     iter_count = 0
 
     function objective_and_grad(x::Vector{Float64}, g::Vector{Float64})
+        println("Iter: ", iter_count)
         # Evaluate in the constrained space and then unconstrain again.
         transform.vector_to_vp!(x, mp.vp, omitted_ids)
         elbo = f(blob, mp)
@@ -152,19 +153,31 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams;
                omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
 end
 
-function maximize_elbo(blob::Blob, mp::ModelParams)
+function maximize_elbo(blob::Blob, mp::ModelParams, trans::DataTransform;
+    xtol_rel = 1e-7, ftol_abs=1e-6)
     omitted_ids = setdiff(1:length(UnconstrainedParams),
                           [ids_free.r1, ids_free.r2,
                            ids_free.k[:], ids_free.c1[:]])
-    maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids,
+        ftol_abs=ftol_abs, xtol_rel=xtol_rel)
 
-    maximize_f(ElboDeriv.elbo, blob, mp, ftol_abs=1e-6)
+    maximize_f(ElboDeriv.elbo, blob, mp, trans, ftol_abs=ftol_abs, xtol_rel=xtol_rel)
 end
 
+function maximize_elbo(blob::Blob, mp::ModelParams)
+    # Default to the rectangular transform.
+    maximize_elbo(blob, mp, rect_transform)
+end
+
+function maximize_likelihood(blob::Blob, mp::ModelParams, trans::DataTransform; xtol_rel = 1e-7, ftol_abs=1e-6)
+    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+    maximize_f(ElboDeriv.elbo_likelihood, blob, mp, trans,
+               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
+end
 
 function maximize_likelihood(blob::Blob, mp::ModelParams)
-    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
-    maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
+    # Default to the rectangular transform.
+    maximize_likelihood(blob, mp, rect_transform)
 end
 
 end

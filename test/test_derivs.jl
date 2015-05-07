@@ -171,7 +171,7 @@ function test_elbo_derivs()
 end
 
 
-function test_quadratic_derivatives()
+function test_quadratic_derivatives(trans::DataTransform)
     # A very simple quadratic function to test the derivatives.
     function quadratic_function(mp::ModelParams)
         const centers = collect(linrange(0, 10, length(CanonicalParams)))
@@ -185,15 +185,17 @@ function test_quadratic_derivatives()
 
     # 0.5 is an innocuous value for all parameters.
     mp = empty_model_params(1)
-    mp.vp = convert(VariationalParams, [ fill(0.5, length(CanonicalParams)) 
+    mp.vp = convert(VariationalParams,[ fill(0.5, length(CanonicalParams)) 
         for s in 1:1 ])
     test_by_finite_differences(quadratic_function, mp)
 end
 
+for trans in [ identity_transform, rect_transform, free_transform ]
+    test_quadratic_derivatives(trans)
+end
 
-test_accum_pos_derivs()
 test_kl_divergence_derivs()
 test_brightness_derivs()
 test_accum_pixel_source_derivs()
 test_elbo_derivs()
-test_quadratic_derivatives()
+
