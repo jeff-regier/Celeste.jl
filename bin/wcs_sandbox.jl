@@ -1,5 +1,6 @@
 using Celeste
 using CelesteTypes
+using Gadfly
 
 using FITSIO
 using WCSLIB
@@ -17,8 +18,12 @@ camcol_num = "6"
 frame_num = "0269"
 
 
+# This is the calibration (I think)?
+# http://data.sdss3.org/datamodel/files/PHOTO_CALIB/RERUN/RUN/nfcalib/calibPhotomGlobal.html
 
-# Read the catalog entry?
+
+
+# Read the catalog entry (?)
 photofield_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
 photofield_fits = FITS(photofield_filename)
 
@@ -30,27 +35,27 @@ read_key(photofield_fits[1], "RUN")
 
 # The table.  You can only read one column at a time.
 read_fields = ["run", "rerun", "camcol", "skyversion", "field", "nStars"]
-photofield_dict = Dict()
-[ photofield_dict[field] =  read(photofield_fits[2], field) for field in read_fields ]
 df = DataFrame()
-for (k, v) in photofield_dict
-    df[DataFrames.identifier(string(k))] = v
+for field in read_fields
+    df[DataFrames.identifier(field)] = read(photofield_fits[2], field)
 end
 
-df[df[:field] .== 269, :]
+df[df[:field] .== int(frame_num), :]
 
 
 
-# Read the data.
-b = 1
+# Read the image data.
+# Documented here:
+# http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
+
+b = 3
 b_letter = ['u', 'g', 'r', 'i', 'z'][b]
-
 img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
-
 img_fits = FITS(img_filename)
-# Why is this 4?
 
 length(img_fits)
+sky_image = read(img_fits[3], "ALLSKY");
+#spy(sky_image[:,:,1])  # This looks a bit strange.
 
 
 
