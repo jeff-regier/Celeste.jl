@@ -84,6 +84,5 @@ length(img_fits) # Should be 4
 # This is the sky-subtracted and calibrated image.  There are no fields in the first header.
 processed_image = read(img_fits[1]);
 
-
-# Convert to electron counts.
+# Convert to raw electron counts.
 n_elec = convert(Array{Float64, 2}, band_gain[b] * (processed_image ./ calib_image .- sky_image));
