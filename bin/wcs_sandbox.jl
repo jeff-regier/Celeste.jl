@@ -35,28 +35,22 @@ read_header(photofield_fits[1])
 read_key(photofield_fits[1], "RUN")
 
 # The table.  You can only read one column at a time.
-read_fields = ["run", "rerun", "camcol", "skyversion", "field", "nStars", "gain", "darkVariance"]
+read_fields = ["run", "rerun", "camcol", "skyversion", "field", "nStars", "darkVariance"]
 df = DataFrame()
 for field in read_fields
-    df[DataFrames.identifier(field)] = read(photofield_fits[2], field)
+	println(field)
+	this_col = collect(read(photofield_fits[2], field))
+	println(size(this_col))
+    df[DataFrames.identifier(field)] = this_col;
 end
 
+band_gain = read(photofield_fits[2], "gain");
+
 df[df[:field] .== int(frame_num), :]
-
-
 
 # Read the image data.
 # Documented here:
 # http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
-
-b = 3
-b_letter = ['u', 'g', 'r', 'i', 'z'][b]
-img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
-img_fits = FITS(img_filename)
-length(img_fits) # Should be 4
-
-# This is the sky-subtracted and calibrated image.  There are no fields in the first header.
-processed_image = read(img_fits[1]);
 
 # This is the sky bacgkround:
 sky_image_raw = read(img_fits[3], "ALLSKY");
@@ -76,17 +70,20 @@ sky_grid_vals = (1:1.:size(sky_image_raw)[1], 1:1.:size(sky_image_raw)[2]);
 sky_grid = CoordInterpGrid(sky_grid_vals, sky_image_raw[:,:,1], BCnearest, InterpLinear);
 sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ];
 
-
 # This is the calibration vector:
-calib_image = read(img_fits[2])
+calib_row = read(img_fits[2]);
+calib_image = [ calib_row[x] for x in 1:size(processed_image)[1], y in 1:size(processed_image)[2] ];
+
+b_letter = ['u', 'g', 'r', 'i', 'z'][b]
+
+b = 3
+img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
+img_fits = FITS(img_filename)
+length(img_fits) # Should be 4
+
+# This is the sky-subtracted and calibrated image.  There are no fields in the first header.
+processed_image = read(img_fits[1]);
 
 
-
-
-# Old:
-this_field = SDSS.load_field(field_dir, run_num, camcol_num, frame_num);
-# Doesn't work:
-this_cat = SDSS.load_catalog(field_dir, run_num, camcol_num, frame_num);
-stamp_id = "164.4311-39.0359"
-blob = SDSS.load_stamp_blob(dat_dir, stamp_id);
-cat = SDSS.load_stamp_catalog(dat_dir, stamp_id, blob);
+# Convert to electron counts.
+n_elec = convert(Array{Float64, 2}, band_gain[b] * (processed_image ./ calib_image .- sky_image));
