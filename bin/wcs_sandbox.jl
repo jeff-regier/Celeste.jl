@@ -12,6 +12,11 @@ using FITSIO
 using DataFrames
 using Grid
 
+# Blob for comparison
+
+blob, mp, one_body = gen_sample_galaxy_dataset();
+
+
 
 field_dir = joinpath(dat_dir, "sample_field")
 run_num = "003900"
@@ -44,7 +49,9 @@ for field in read_fields
     df[DataFrames.identifier(field)] = this_col;
 end
 
+field_row = read(photofield_fits[2], "field") .== int(frame_num);
 band_gain = read(photofield_fits[2], "gain");
+band_dark_variance = collect(read(photofield_fits[2], "dark_variance")[:, field_row]);
 
 df[df[:field] .== int(frame_num), :]
 
@@ -85,4 +92,8 @@ length(img_fits) # Should be 4
 processed_image = read(img_fits[1]);
 
 # Convert to raw electron counts.
-n_elec = convert(Array{Float64, 2}, band_gain[b] * (processed_image ./ calib_image .- sky_image));
+dn = convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image));
+n_elec = convert(Array{Float64, 2}, band_gain[b] * dn);
+
+# Get the conversion to nanomaggies
+dn_err= sqrt(dn / band_gain[b] + band_dark_variance[b]);

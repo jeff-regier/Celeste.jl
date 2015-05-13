@@ -15,7 +15,7 @@ function load_stamp_blob(stamp_dir, stamp_id)
 
         fits = FITS(filename)
         original_pixels = read(fits[1])
-        hdr = readheader(fits[1])
+        hdr = read_header(fits[1])
         close(fits)
         dn = original_pixels / hdr["CALIB"] + hdr["SKY"]
         nelec = float(int(dn * hdr["GAIN"]))
@@ -154,8 +154,8 @@ function load_field(field_dir, run_num::ASCIIString,
         img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
         img_fits = FITS(img_filename)
         original_pixels = read(img_fits[1])
-        img_hdr1 = readheader(img_fits[1])
-        img_hdr2 = readheader(img_fits[2])
+        img_hdr1 = read_header(img_fits[1])
+        img_hdr2 = read_header(img_fits[2])
         close(img_fits)
 
         img_fits_raw = fits_open_file(img_filename)
@@ -174,7 +174,7 @@ function load_field(field_dir, run_num::ASCIIString,
         stamp_id = "164.4311-39.0359"
         filename = "$package_dat/stamp-$b_letter-$stamp_id.fits"
         fits = FITS(filename)
-        hdr = readheader(fits[1])
+        hdr = read_header(fits[1])
         close(fits)
 
         dn = original_pixels / img_hdr1["NMGY"] + median(allsky)
