@@ -2,6 +2,11 @@ module SDSS
 
 using CelesteTypes
 
+# FITSIO v0.6.0 removed some of the lower-level functions used here.
+# In particular, I think wcslib may still need this.
+# Include this as a temporary fix.
+using FITSIO.Libcfitsio
+
 using FITSIO
 using WCSLIB
 using DataFrames
@@ -14,15 +19,16 @@ function load_stamp_blob(stamp_dir, stamp_id)
         filename = "$stamp_dir/stamp-$band_letter-$stamp_id.fits"
 
         fits = FITS(filename)
-        original_pixels = read(fits[1])
         hdr = read_header(fits[1])
+        original_pixels = read(fits[1])
         close(fits)
         dn = original_pixels / hdr["CALIB"] + hdr["SKY"]
         nelec = float(int(dn * hdr["GAIN"]))
 
-        fits_file = fits_open_file(filename)
-        header_str = fits_hdr2str(fits_file)
-        close(fits_file)
+        # TODO: Does the new FITS file format allow this to be done at a higher level?
+        fits_file = FITSIO.Libcfitsio.fits_open_file(filename)
+        header_str = FITSIO.Libcfitsio.fits_hdr2str(fits_file)
+        FITSIO.Libcfitsio.fits_close_file(fits_file)
         ((wcs,),nrejected) = wcspih(header_str)
 
         alphaBar = [hdr["PSF_P0"], hdr["PSF_P1"], hdr["PSF_P2"]]
@@ -57,21 +63,18 @@ end
 
 
 function load_stamp_catalog_df(cat_dir, stamp_id, blob; match_blob=false)
-    cat_fits = fits_open_table("$cat_dir/cat-$stamp_id.fits")
-    num_rows = int(fits_read_keyword(cat_fits, "NAXIS2")[1])
-    num_cols = int(fits_read_keyword(cat_fits, "TFIELDS")[1])
-    ttypes = [rstrip(fits_read_keyword(cat_fits, "TTYPE$i")[1][2:end-1]) for i in 1:num_cols]
-    tforms = [rstrip(fits_read_keyword(cat_fits, "TFORM$i")[1][2:end-1]) for i in 1:num_cols]
-    col_types = [l in ("D", "E") ? Float64 : l in ("L",) ? Bool : l in ("B", "I") ? Int64 : None for l in tforms]
+    # TODO: where is this file format documented?
+    cat_fits = FITS("$cat_dir/cat-$stamp_id.fits")
+    num_cols = read_key(cat_fits[2], "TFIELDS")[1]
+    ttypes = [read_key(cat_fits[2], "TTYPE$i")[1] for i in 1:num_cols]
 
     df = DataFrame()
     for i in 1:num_cols
-        tmp_data = Array(col_types[i], num_rows)
-        fits_read_col(cat_fits, col_types[i], i, 1, 1, tmp_data)
+        tmp_data = read(cat_fits[2], ttypes[i])        
         df[symbol(ttypes[i])] = tmp_data
     end
 
-    fits_close_file(cat_fits)
+    close(cat_fits)
 
     if match_blob
         camcol_matches = df[:camcol] .== blob[3].camcol_num
@@ -127,11 +130,8 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 end
 
 
-
-
-
-function load_field(field_dir, run_num::ASCIIString,
-                    camcol_num::ASCIIString, frame_num::ASCIIString)
+#=
+function load_field(field_dir, run_num, camcol_num, frame_num)
     pf_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
     pf_fits_raw = fits_open_table(pf_filename)
 
@@ -152,10 +152,11 @@ function load_field(field_dir, run_num::ASCIIString,
     function fetch_image(b)
         b_letter = ['u', 'g', 'r', 'i', 'z'][b]
         img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
+
         img_fits = FITS(img_filename)
         original_pixels = read(img_fits[1])
-        img_hdr1 = read_header(img_fits[1])
-        img_hdr2 = read_header(img_fits[2])
+        img_hdr1 = readheader(img_fits[1])
+        img_hdr2 = readheader(img_fits[2])
         close(img_fits)
 
         img_fits_raw = fits_open_file(img_filename)
@@ -174,7 +175,7 @@ function load_field(field_dir, run_num::ASCIIString,
         stamp_id = "164.4311-39.0359"
         filename = "$package_dat/stamp-$b_letter-$stamp_id.fits"
         fits = FITS(filename)
-        hdr = read_header(fits[1])
+        hdr = readheader(fits[1])
         close(fits)
 
         dn = original_pixels / img_hdr1["NMGY"] + median(allsky)
@@ -196,17 +197,13 @@ function load_field(field_dir, run_num::ASCIIString,
         H, W = size(original_pixels)
         iota = hdr["GAIN"] / hdr["CALIB"]
         epsilon = hdr["SKY"] * hdr["CALIB"]
-
-        # TODO: Is a frame_num a field_num? 
-        Image(H, W, nelec, b, wcs, epsilon, iota, psf,
-            parse(run_num), parse(camcol_num), parse(frame_num))
+        Image(H, W, nelec, b, wcs, epsilon, iota, psf)
     end
 
     blob = map(fetch_image, 1:5)
 end
 
-function load_catalog(field_dir, run_num::ASCIIString,
-        camcol_num::ASCIIString, frame_num::ASCIIString)
+function load_catalog(field_dir, run_num, camcol_num, frame_num)
     function common_catalog(cat_str)
         @assert cat_str == "star" || cat_str == "gal"
         cat_file = "$field_dir/calibObj-$run_num-$camcol_num-$cat_str.fits"
@@ -236,6 +233,7 @@ function load_catalog(field_dir, run_num::ASCIIString,
                     for i in 1:length(gal_range)]
     vcat(star_cat, gal_cat)
 end
+=#
 
 end
 
