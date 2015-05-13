@@ -285,8 +285,8 @@ function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
         vp_free[s][ids_free.c2] = log(vp[s][ids.c2])
 
 	# Parameterize brightness in more observable quantities.
-        # ids_free.gamma = log(r1) + log(r2)
-        # ids_free.zeta = log(r1) + 2 log(r2)
+        # ids_free.r1 = log(r1) + log(r2)
+        # ids_free.r2 = log(r1) + 2 log(r2)
         vp_free[s][ids_free.r1] = log(vp[s][ids.r1]) + log(vp[s][ids.r2])
         vp_free[s][ids_free.r2] = log(vp[s][ids.r1]) + 2 * log(vp[s][ids.r2]) 
     end
@@ -339,10 +339,6 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     sf_free = zero_sensitive_float(UnconstrainedParams, mp.S)
     sf_free.v = sf.v
 
-    # Currently the param_index is only really used within ElboDeriv.  By the
-    # time the data hits the optimizer, we assume everything has a derivative. 
-    sf_free.param_index = all_params_free
-
     for s in 1:mp.S
         # Variables that are unaffected by constraints:
         for id_string in rect_unchanged_ids
@@ -367,13 +363,13 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
             this_k .* (1.0 - this_k)
 
         # Positivity constraints.
-        sf_free.d[ids_free.sigma, s] = sf.d[ids.sigma, s] .* mp.vp[s][ids.sigma]
-        sf_free.d[collect(ids_free.lambda), s] =
-            sf.d[collect(ids.lambda), s] .* mp.vp[s][collect(ids.lambda)]
+        sf_free.d[ids_free.e_scale, s] = sf.d[ids.e_scale, s] .* mp.vp[s][ids.e_scale]
+        sf_free.d[collect(ids_free.c2), s] =
+            sf.d[collect(ids.c2), s] .* mp.vp[s][collect(ids.c2)]
 
         # Brightness.
         sf_free.d[ids_free.r1, s] =
-            2.0 * sf.d[ids.r1, s] .* mp.vp[s][ids.gamma] - sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
+            2.0 * sf.d[ids.r1, s] .* mp.vp[s][ids.r1] - sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
         sf_free.d[ids_free.r2, s] =
             -sf.d[ids.r1, s] .* mp.vp[s][ids.r1] + sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
     end
