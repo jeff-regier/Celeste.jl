@@ -1,3 +1,7 @@
+
+using SampleData
+import SDSS
+
 function test_local_sources()
     srand(1)
     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
