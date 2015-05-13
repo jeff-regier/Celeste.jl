@@ -138,8 +138,7 @@ psf_fits = FITS(psf_filename);
 # >>> sdss.get_url('psField', 3900, 6, 269, 'r')
 # 'http://data.sdss3.org/sas/dr10/boss/photo/redux/301/3900/objcs/6/psField-003900-6-0269.fit'
 
-
-psf_filename = "psField-003900-6-0269.fit"
+#psf_filename = "psField-003900-6-0269.fit"
 psf_fits = FITS(psf_filename);
 b = 3
 read_header(psf_fits[b + 1])
@@ -218,3 +217,6 @@ psf = (pstruct.rrows)[*,0]*ecoeff[0]+$
 ## software. Use the utility called read_mask.
 
 # http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/fpM.html
+fpm_filename = "$field_dir/fpM-$run_num-r$camcol_num-$frame_num.fit";
+fpm_fits = FITS(fpm_filename);
+
