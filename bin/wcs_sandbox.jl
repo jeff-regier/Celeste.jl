@@ -101,5 +101,22 @@ n_elec = band_gain[b] * dn;
 # Why aren't these at least approximately integers?
 n_elec[1:10, 1:10]
 
-# Get the conversion to nanomaggies
-dn_err= sqrt(dn / band_gain[b] + band_dark_variance[b]);
+# This is supposed to be the error in nanomaggies, if you care.  Why dn / gain?
+dn_err = sqrt(dn / band_gain[b] + band_dark_variance[b]);
+
+# Apparently dn * cimg is in units of nanomaggies:
+#
+#dn= img/cimg+simg
+#nelec= dn*gain
+# var(nelec) = dn * gain
+# var(dn) = var(nelec / gain) = dn / gain
+# sd(dn) = sqrt(dn / gain)
+#dn_err = sqrt(dn / gain + darkVariance)
+#img_err = dn_err*cimg (nanomaggies)
+
+
+# From the frame reference.  Do we need to do this?
+## Finally, there are some areas of the image which are part of bleed trails, bad columns, and the like.
+## If you require to track those in your analysis (e.g. weight them at zero) then you need to use the
+## fpM files. Those files are in a special format, best read using the stand-alone atlas reader
+## software. Use the utility called read_mask.
