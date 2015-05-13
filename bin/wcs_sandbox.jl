@@ -40,7 +40,7 @@ read_header(photofield_fits[1])
 read_key(photofield_fits[1], "RUN")
 
 # The table.  You can only read one column at a time.
-read_fields = ["run", "rerun", "camcol", "skyversion", "field", "nStars", "darkVariance"]
+read_fields = ["run", "rerun", "camcol", "skyversion", "field", "nStars"]
 df = DataFrame()
 for field in read_fields
 	println(field)
@@ -72,8 +72,10 @@ sky_y = collect(read(img_fits[3], "YINTERP"));
 # with associated row and column (if, jf) = (floor(sky_x[i]), floor(sky_y[j]))
 # as lying in the square spanned by the points
 # (sky_image_raw[if, jf], sky_image_raw[if + 1, jf + 1]).
+# ...keeping in mind that IDL uses zero indexing:
+# http://www.exelisvis.com/docs/Manipulating_Arrays.html
 
-sky_grid_vals = (1:1.:size(sky_image_raw)[1], 1:1.:size(sky_image_raw)[2]);
+sky_grid_vals = ((1:1.:size(sky_image_raw)[1]) - 1, (1:1.:size(sky_image_raw)[2]) - 1);
 sky_grid = CoordInterpGrid(sky_grid_vals, sky_image_raw[:,:,1], BCnearest, InterpLinear);
 sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ];
 
@@ -81,9 +83,10 @@ sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ];
 calib_row = read(img_fits[2]);
 calib_image = [ calib_row[x] for x in 1:size(processed_image)[1], y in 1:size(processed_image)[2] ];
 
-b_letter = ['u', 'g', 'r', 'i', 'z'][b]
 
 b = 3
+b_letter = ['u', 'g', 'r', 'i', 'z'][b]
+
 img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
 img_fits = FITS(img_filename)
 length(img_fits) # Should be 4
@@ -93,7 +96,10 @@ processed_image = read(img_fits[1]);
 
 # Convert to raw electron counts.
 dn = convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image));
-n_elec = convert(Array{Float64, 2}, band_gain[b] * dn);
+n_elec = band_gain[b] * dn;
+
+# Why aren't these at least approximately integers?
+n_elec[1:10, 1:10]
 
 # Get the conversion to nanomaggies
 dn_err= sqrt(dn / band_gain[b] + band_dark_variance[b]);
