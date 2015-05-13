@@ -115,8 +115,106 @@ dn_err = sqrt(dn / band_gain[b] + band_dark_variance[b]);
 #img_err = dn_err*cimg (nanomaggies)
 
 
-# From the frame reference.  Do we need to do this?
+# Get the PSF
+psf_filename = "$field_dir/psField-$run_num-$camcol_num-$frame_num.fit";
+psf_fits = FITS(psf_filename);
+
+# I think you need to replicate the code in 
+# https://github.com/rgiordan/astrometry.net/blob/master/sdss/common.py
+# ... called in 
+# https://github.com/dstndstn/astrometry.net/blob/master/sdss/dr7.py
+# There is also this, which is a bit more explicit:
+# https://www.sdss3.org/dr8/algorithms/read_psf.php
+# Or the dr12 version:
+# http://www.sdss.org/dr12/algorithms/read_psf/
+
+
+# File is from:
+#  'http://data.sdss3.org/sas/dr10/boss/photo/redux/301/3900/objcs/6/psField-003900-6-0269.fit'
+
+# For reference, you can get the URLs in python with
+# >>> from astrometry.sdss import *
+# >>> sdss = DR10()
+# >>> sdss.get_url('psField', 3900, 6, 269, 'r')
+# 'http://data.sdss3.org/sas/dr10/boss/photo/redux/301/3900/objcs/6/psField-003900-6-0269.fit'
+
+
+psf_filename = "psField-003900-6-0269.fit"
+psf_fits = FITS(psf_filename);
+b = 3
+read_header(psf_fits[b + 1])
+# ...other fields...
+# TFORM7  =                 '1J' / PIXDATATYPE
+# TTYPE7  =              'RTYPE' / type
+# TFORM8  =             '1PE(0)' / FLOAT
+# TTYPE8  =              'RROWS' / rows_fl32
+# TFORM9  =                 '1J' / INT
+# TTYPE9  =              'RROW0' / row0
+# TFORM10 =                 '1J' / INT
+# TTYPE10 =              'RCOL0' / col0
+# ....
+
+# reconstruct the PSF at location (row,col):
+foo = read_header(psf_fits[b + 1])
+rrows = read(psf_fits[b + 1], "RROWS")
+
+read(psf_fits[b + 1], "RNROW")
+# 4-element Array{Int32,1}:
+#  51
+#  51
+#  51
+#  51
+
+read(psf_fits[b + 1], "RROWS")
+# ERROR: key not found: -42
+#  in read at /home/rgiordan/.julia/v0.3/FITSIO/src/hdutypes.jl:72
+
+
+#nrow_b=(pstruct.nrow_b)[0]
+nrow_b = read(psf_fits[b + 1], "nrow_b")[1]
+
+#ncol_b=(pstruct.ncol_b)[0]
+ncol_b = read(psf_fits[b + 1], "ncol_b")[1]
+
+#;assumes they are the same for each eigen so only use the 0 one
+#rnrow=(pstruct.rnrow)[0]
+#rncol=(pstruct.rncol)[0]
+rnrow = read(psf_fits[b + 1], "rnrow")[1]
+rncol = read(psf_fits[b + 1], "rncol")[1]
+
+nb = nrow_b * ncol_b
+
+#coeffs=fltarr(nb)
+coeffs = zeros(Float64, nb)
+
+#ecoeff=fltarr(3)
+ecoeff = zeros(Float64, 3)
+
+#cmat=pstruct.c
+cmat = read(psf_fits[b + 1], "c")
+
+rcs = 0.001
+#FOR i=0L, nb-1L DO coeffs[i]=(row*rcs)^(i mod nrow_b) * (col*rcs)^(i/nrow_b)
+coeffs = [ (row * rcs)^(i % nrow_b) * (col * rcs)^(i / nrow_b) for i=0:(nb - 1)]
+FOR j=0,2 DO BEGIN
+    FOR i=0L, nb-1L DO BEGIN
+        ecoeff[j]=ecoeff[j]+cmat(i/nrow_b,i mod nrow_b,j)*coeffs[i]
+    ENDFOR
+ENDFOR
+psf = (pstruct.rrows)[*,0]*ecoeff[0]+$
+      (pstruct.rrows)[*,1]*ecoeff[1]+$
+      (pstruct.rrows)[*,2]*ecoeff[2]
+
+
+
+
+
+
+
+# From the frame reference.  Do we need to do this?  Yes.
 ## Finally, there are some areas of the image which are part of bleed trails, bad columns, and the like.
 ## If you require to track those in your analysis (e.g. weight them at zero) then you need to use the
 ## fpM files. Those files are in a special format, best read using the stand-alone atlas reader
 ## software. Use the utility called read_mask.
+
+# http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/fpM.html
