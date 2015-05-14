@@ -1,6 +1,7 @@
 using Celeste
 using CelesteTypes
 #using Gadfly
+using PyPlot
 
 using FITSIO
 using WCSLIB
@@ -98,7 +99,7 @@ processed_image = read(img_fits[1]);
 dn = convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image));
 n_elec = band_gain[b] * dn;
 
-# Why aren't these at least approximately integers?
+# Why aren't these at least approximately integers?  Dustin sez it's ok.
 n_elec[1:10, 1:10]
 
 # This is supposed to be the error in nanomaggies, if you care.  Why dn / gain?
@@ -115,6 +116,11 @@ dn_err = sqrt(dn / band_gain[b] + band_dark_variance[b]);
 #img_err = dn_err*cimg (nanomaggies)
 
 
+
+
+
+
+#######################
 # Get the PSF
 psf_filename = "$field_dir/psField-$run_num-$camcol_num-$frame_num.fit";
 psf_fits = FITS(psf_filename);
@@ -207,7 +213,7 @@ psf = (pstruct.rrows)[*,0]*ecoeff[0]+$
 
 
 
-
+#####################
 # From the frame reference.  Do we need to do this?  Yes.
 ## Finally, there are some areas of the image which are part of bleed trails, bad columns, and the like.
 ## If you require to track those in your analysis (e.g. weight them at zero) then you need to use the
@@ -217,15 +223,20 @@ psf = (pstruct.rrows)[*,0]*ecoeff[0]+$
 # Copying Dustin's code from
 # https://github.com/dstndstn/astrometry.net/blob/master/sdss/common.py
 
+# We will mask this image
+mask_img = deepcopy(n_elec);
+#mask_img = ones(size(n_elec)[1], size(n_elec)[2]);
+
 # http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/fpM.html
 fpm_filename = "$field_dir/fpM-$run_num-r$camcol_num-$frame_num.fit";
 fpm_fits = FITS(fpm_filename);
 
 # The last header contains the mask.
 fpm_mask = fpm_fits[12]
+fpm_hdu_indices = read(fpm_mask, "value")
 
-# TODO: only check these rows:
-masktype_rows = read(fpm_mask, "defName") .== "S_MASKTYPE"
+# Only check these rows:
+masktype_rows = find(read(fpm_mask, "defName") .== "S_MASKTYPE")
 
 # From sdss/dr8.py:
 #   for plane in [ 'INTERP', 'SATUR', 'CR', 'GHOST' ]:
@@ -233,8 +244,37 @@ masktype_rows = read(fpm_mask, "defName") .== "S_MASKTYPE"
 # What is the meaning of these?
 # Apparently attributeName lists the meanings of the HDUs in order.
 keep_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"});
-keep_rows = [ read(fpm_mask, "attributeName")[i] in keep_planes for i=1:11 ]
-# You want the HDU in 2 + fpm_mask.value[i] for i in keep_rows (in a 1-indexed language).
-read(fpm_mask, "value")
+mask_types = read(fpm_mask, "attributeName")
+plane_rows = findin(mask_types[masktype_rows], keep_planes)
 
-# Then read the rectangles from fpm_fits[whatever], which contains an array of row and column minima.
+for fpm_i in plane_rows
+	# You want the HDU in 2 + fpm_mask.value[i] for i in keep_rows (in a 1-indexed language).
+	println("Mask type ", mask_types[fpm_i])
+	mask_index = 2 + fpm_hdu_indices[fpm_i]
+	cmin = read(fpm_fits[mask_index], "cmin")
+	cmax = read(fpm_fits[mask_index], "cmax")
+	rmin = read(fpm_fits[mask_index], "rmin")
+	rmax = read(fpm_fits[mask_index], "rmax")
+	row0 = read(fpm_fits[mask_index], "row0")
+	col0 = read(fpm_fits[mask_index], "col0")
+
+	@assert all(col0 .== 0)
+	@assert all(row0 .== 0)
+	@assert length(rmin) == length(cmin) == length(rmax) == length(cmax)
+
+	for block in 1:length(rmin)
+		# The ranges are for a 0-indexed language.
+		println(block, ": Size of deleted block: ", (cmax[block] + 1 - cmin[block]) * (rmax[block] + 1 - rmin[block]))
+		@assert cmax[block] + 1 <= size(mask_img)[1]
+		@assert cmin[block] + 1 >= 1
+		@assert rmax[block] + 1 <= size(mask_img)[2]
+		@assert rmin[block] + 1 >= 1
+
+		# For some reason, the sizes are inconsistent if the rows are read first.
+		# What is the mapping from (row, col) to (x, y)?
+		mask_img[(cmin[block]:cmax[block]) + 1, (rmin[block]:rmax[block]) + 1] = NaN
+	end
+end
+
+matshow(mask_img)
+matshow(n_elec)
