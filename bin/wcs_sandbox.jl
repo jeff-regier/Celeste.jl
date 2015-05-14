@@ -60,6 +60,26 @@ df[df[:field] .== int(frame_num), :]
 # Documented here:
 # http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
 
+# This is the calibration vector:
+figure()
+for b=1:5
+	b_letter = ['u', 'g', 'r', 'i', 'z'][b]
+	img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
+	img_fits = FITS(img_filename)
+	calib_row = read(img_fits[2]);
+	subplot(5, 1, b)
+	plot(calib_row)
+end
+show()
+
+b = 3
+b_letter = ['u', 'g', 'r', 'i', 'z'][b]
+
+img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
+img_fits = FITS(img_filename)
+length(img_fits) # Should be 4
+
+
 # This is the sky bacgkround:
 sky_image_raw = read(img_fits[3], "ALLSKY");
 sky_x = collect(read(img_fits[3], "XINTERP"));
@@ -84,13 +104,6 @@ sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ];
 calib_row = read(img_fits[2]);
 calib_image = [ calib_row[x] for x in 1:size(processed_image)[1], y in 1:size(processed_image)[2] ];
 
-
-b = 3
-b_letter = ['u', 'g', 'r', 'i', 'z'][b]
-
-img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
-img_fits = FITS(img_filename)
-length(img_fits) # Should be 4
 
 # This is the sky-subtracted and calibrated image.  There are no fields in the first header.
 processed_image = read(img_fits[1]);
