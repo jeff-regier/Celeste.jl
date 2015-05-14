@@ -1,6 +1,6 @@
 using Celeste
 using CelesteTypes
-using Gadfly
+#using Gadfly
 
 using FITSIO
 using WCSLIB
@@ -208,15 +208,33 @@ psf = (pstruct.rrows)[*,0]*ecoeff[0]+$
 
 
 
-
-
 # From the frame reference.  Do we need to do this?  Yes.
 ## Finally, there are some areas of the image which are part of bleed trails, bad columns, and the like.
 ## If you require to track those in your analysis (e.g. weight them at zero) then you need to use the
 ## fpM files. Those files are in a special format, best read using the stand-alone atlas reader
 ## software. Use the utility called read_mask.
 
+# Copying Dustin's code from
+# https://github.com/dstndstn/astrometry.net/blob/master/sdss/common.py
+
 # http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/fpM.html
 fpm_filename = "$field_dir/fpM-$run_num-r$camcol_num-$frame_num.fit";
 fpm_fits = FITS(fpm_filename);
 
+# The last header contains the mask.
+fpm_mask = fpm_fits[12]
+
+# TODO: only check these rows:
+masktype_rows = read(fpm_mask, "defName") .== "S_MASKTYPE"
+
+# From sdss/dr8.py:
+#   for plane in [ 'INTERP', 'SATUR', 'CR', 'GHOST' ]:
+#            fpM.setMaskedPixels(plane, invvar, 0, roi=roi)
+# What is the meaning of these?
+# Apparently attributeName lists the meanings of the HDUs in order.
+keep_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"});
+keep_rows = [ read(fpm_mask, "attributeName")[i] in keep_planes for i=1:11 ]
+# You want the HDU in 2 + fpm_mask.value[i] for i in keep_rows (in a 1-indexed language).
+read(fpm_mask, "value")
+
+# Then read the rectangles from fpm_fits[whatever], which contains an array of row and column minima.
