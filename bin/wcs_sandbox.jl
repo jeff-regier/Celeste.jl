@@ -18,7 +18,6 @@ using Grid
 blob, mp, one_body = gen_sample_galaxy_dataset();
 
 
-
 field_dir = joinpath(dat_dir, "sample_field")
 run_num = "003900"
 camcol_num = "6"
@@ -30,7 +29,7 @@ frame_num = "0269"
 
 
 
-# Read the catalog entry (?)
+# Read the photoField
 photofield_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
 photofield_fits = FITS(photofield_filename)
 
@@ -41,7 +40,7 @@ read_header(photofield_fits[1])
 read_key(photofield_fits[1], "RUN")
 
 # The table.  You can only read one column at a time.
-read_fields = ["run", "rerun", "camcol", "skyversion", "field", "nStars"]
+read_fields = ["run", "rerun", "camcol", "skyversion", "field", "nStars", "ngals"]
 df = DataFrame()
 for field in read_fields
 	println(field)
@@ -49,12 +48,13 @@ for field in read_fields
 	println(size(this_col))
     df[DataFrames.identifier(field)] = this_col;
 end
+df[df[:field] .== int(frame_num), :]
+
 
 field_row = read(photofield_fits[2], "field") .== int(frame_num);
 band_gain = read(photofield_fits[2], "gain");
 band_dark_variance = collect(read(photofield_fits[2], "dark_variance")[:, field_row]);
 
-df[df[:field] .== int(frame_num), :]
 
 # Read the image data.
 # Documented here:
@@ -229,26 +229,41 @@ result - c
 
 ######################
 # Ok ok
+
+
+psf_filename = "psField-003900-6-0269.fit"
+psf_fits = FITS(psf_filename);
 hdu = psf_fits[2]
 
 colname = "RROWS"
 
-# This is the number of "fields".
-ncols = FITSIO.Libcfitsio.fits_get_num_cols(hdu.fitsfile)
-
-
-FITSIO.Libcfitsio.fits_assert_open(hdu.fitsfile)
+# Move to the second header.
 FITSIO.Libcfitsio.fits_movabs_hdu(hdu.fitsfile, hdu.ext)
 
 nrows = FITSIO.Libcfitsio.fits_get_num_rowsll(hdu.fitsfile)
 colnum = FITSIO.Libcfitsio.fits_get_colnum(hdu.fitsfile, colname)
-typecode, repcnt, width = FITSIO.Libcfitsio.fits_get_eqcoltype(hdu.fitsfile, colnum)
 
+rrows_dict = Dict()
 for rownum in 1:nrows
+	println(rownum)
 	repeat, offset = FITSIO.Libcfitsio.fits_read_descriptll(hdu.fitsfile, colnum, rownum)
 	println((repeat, offset))
+	result = zeros(repeat[1])
+
+	# This next line doesn't work, and I'm not sure why.  The acceptable
+	# arguments for "rownum" appear to be 1:4.  Putting offset in elemnum
+	# then gives the following error:
+	# ERROR: bad first element number
+	#  in error at error.jl:21
+	#  in fits_assert_ok at /home/rgiordan/.julia/v0.3/FITSIO/src/cfitsio.jl:197
+	#  in fits_read_col at /home/rgiordan/.julia/v0.3/FITSIO/src/cfitsio.jl:775
+	#  in anonymous at no file:6
+	FITSIO.Libcfitsio.fits_read_col(hdu.fitsfile, colnum, rownum, 1 + offset[1], result)
+	rrows_dict[rownum] = result
 end
 
+result = zeros(20)
+FITSIO.Libcfitsio.fits_read_col(hdu.fitsfile, colnum, 1, 1, result); result
 
 
 #nrow_b=(pstruct.nrow_b)[0]
@@ -354,3 +369,24 @@ end
 
 matshow(mask_img)
 matshow(n_elec)
+
+
+
+
+
+
+###############################
+# calibration
+# Data described here:
+# http://www.sdss.org/dr12/data_access/bulk/
+#
+# Data type is perhaps
+# http://data.sdss3.org/datamodel/files/PHOTO_SWEEP/RERUN/calibObj.html
+#
+# Which is maybe here:
+# http://data.sdss3.org/sas/dr12/boss/sweeps/dr9/301/calibObj-003900-6-sky.fits.gz
+# http://data.sdss3.org/sas/dr12/boss/sweeps/dr9/301/calibObj-003900-6-gal.fits.gz
+# http://data.sdss3.org/sas/dr12/boss/sweeps/dr9/301/calibObj-003900-6-star.fits.gz
+# ...but these files are huge.  Why?
+
+d = FITS("dat/sample_field/calibObj-003900-6-gal.fits")
