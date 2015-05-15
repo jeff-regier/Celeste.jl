@@ -231,9 +231,9 @@ result - c
 # Ok ok
 
 
-psf_filename = "psField-003900-6-0269.fit"
+psf_filename = "$field_dir/psField-003900-6-0269.fit"
 psf_fits = FITS(psf_filename);
-hdu = psf_fits[2]
+hdu = psf_fits[b + 1]
 
 colname = "RROWS"
 
@@ -258,14 +258,15 @@ for rownum in 1:nrows
 	#  in fits_assert_ok at /home/rgiordan/.julia/v0.3/FITSIO/src/cfitsio.jl:197
 	#  in fits_read_col at /home/rgiordan/.julia/v0.3/FITSIO/src/cfitsio.jl:775
 	#  in anonymous at no file:6
-	FITSIO.Libcfitsio.fits_read_col(hdu.fitsfile, colnum, rownum, 1 + offset[1], result)
+	#FITSIO.Libcfitsio.fits_read_col(hdu.fitsfile, colnum, rownum, 1 + offset[1], result)
+	FITSIO.Libcfitsio.fits_read_col(hdu.fitsfile, colnum, rownum, 1, result)
 	rrows_dict[rownum] = result
 end
 
-result = zeros(20)
-FITSIO.Libcfitsio.fits_read_col(hdu.fitsfile, colnum, 1, 1, result); result
+# Not totally sure this is right.
+rrows = hcat([ rrows_dict[i] for i=1:4]...);
 
-
+# Now begin the IDL code.
 #nrow_b=(pstruct.nrow_b)[0]
 nrow_b = read(psf_fits[b + 1], "nrow_b")[1]
 
@@ -275,8 +276,9 @@ ncol_b = read(psf_fits[b + 1], "ncol_b")[1]
 #;assumes they are the same for each eigen so only use the 0 one
 #rnrow=(pstruct.rnrow)[0]
 #rncol=(pstruct.rncol)[0]
-rnrow = read(psf_fits[b + 1], "rnrow")[1]
-rncol = read(psf_fits[b + 1], "rncol")[1]
+# Need to convert for reshape to work.  :(
+rnrow = convert(Int64, read(psf_fits[b + 1], "rnrow")[1])
+rncol = convert(Int64, read(psf_fits[b + 1], "rncol")[1])
 
 nb = nrow_b * ncol_b
 
@@ -289,19 +291,41 @@ ecoeff = zeros(Float64, 3)
 #cmat=pstruct.c
 cmat = read(psf_fits[b + 1], "c")
 
+# What is this?
 rcs = 0.001
+
 #FOR i=0L, nb-1L DO coeffs[i]=(row*rcs)^(i mod nrow_b) * (col*rcs)^(i/nrow_b)
-coeffs = [ (row * rcs)^(i % nrow_b) * (col * rcs)^(i / nrow_b) for i=0:(nb - 1)]
-FOR j=0,2 DO BEGIN
-    FOR i=0L, nb-1L DO BEGIN
-        ecoeff[j]=ecoeff[j]+cmat(i/nrow_b,i mod nrow_b,j)*coeffs[i]
-    ENDFOR
-ENDFOR
-psf = (pstruct.rrows)[*,0]*ecoeff[0]+$
-      (pstruct.rrows)[*,1]*ecoeff[1]+$
-      (pstruct.rrows)[*,2]*ecoeff[2]
+row = 1
+col = 1
+coeffs = [ (row * rcs)^(i % nrow_b) * (col * rcs)^(int(floor(i / nrow_b))) for i=0:(nb - 1)]
+coeffs_mat = [ (row * rcs) ^ i * (col * rcs) ^ j for i=0:(nrow_b - 1), j=0:(ncol_b - 1)]
+
+# FOR j=0,2 DO BEGIN
+#     FOR i=0L, nb-1L DO BEGIN
+#         ecoeff[j]=ecoeff[j]+cmat(i/nrow_b,i mod nrow_b,j)*coeffs[i]
+#     ENDFOR
+# ENDFOR
+
+# I have to presueme that in IDL integer division rounds down.
+ecoeff = zeros(nb)
+for j = 1:3, i = 1:nb
+	println(1 + int(floor((i - 1) / nrow_b)), " ", 1 + (i - 1) % nrow_b)
+	ecoeff[j] += cmat[1 + int(floor((i - 1) / nrow_b)), 1 + (i - 1) % nrow_b, j] * coeffs[i]
+end
+
+ecoeff_mat = zeros(nrow_b, ncol_b)
+for k = 1:3, i = 1:nrow_b, j = 1:ncol_b
+	ecoeff_mat[i, j] += cmat[i, j, k] * coeffs_mat[i, j]
+end
 
 
+# psf = (pstruct.rrows)[*,0]*ecoeff[0]+$
+#       (pstruct.rrows)[*,1]*ecoeff[1]+$
+#       (pstruct.rrows)[*,2]*ecoeff[2]
+
+psf = rrows[:,1] * ecoeff[1] + rrows[:,2] * ecoeff[2] + rrows[:, 3] * ecoeff[3];
+
+matshow(reshape(psf, (rnrow, rncol)))
 
 
 #####################
@@ -367,8 +391,8 @@ for fpm_i in plane_rows
 	end
 end
 
-matshow(mask_img)
-matshow(n_elec)
+#matshow(mask_img)
+#matshow(n_elec)
 
 
 
