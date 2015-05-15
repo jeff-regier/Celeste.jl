@@ -4,7 +4,7 @@ using DataFrames
 
 include("score_cached.jl")
 
-celeste_df = readtable("celeste.csv")
+celeste_df = readtable("celeste_$(ARGS[1]).csv")
 coadd_df = readtable("coadd.csv")
 celeste_err = get_err_df(coadd_df, celeste_df)
 
