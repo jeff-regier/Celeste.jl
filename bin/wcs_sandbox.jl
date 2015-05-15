@@ -24,10 +24,6 @@ camcol_num = "6"
 frame_num = "0269"
 
 
-# This is the calibration (I think)?
-# http://data.sdss3.org/datamodel/files/PHOTO_CALIB/RERUN/RUN/nfcalib/calibPhotomGlobal.html
-
-
 
 # Read the photoField
 photofield_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
@@ -135,6 +131,9 @@ dn_err = sqrt(dn / band_gain[b] + band_dark_variance[b]);
 
 #######################
 # Get the PSF
+# "Documented" here:
+# http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/psField.html
+
 psf_filename = "$field_dir/psField-$run_num-$camcol_num-$frame_num.fit";
 psf_fits = FITS(psf_filename);
 
@@ -146,7 +145,6 @@ psf_fits = FITS(psf_filename);
 # https://www.sdss3.org/dr8/algorithms/read_psf.php
 # Or the dr12 version:
 # http://www.sdss.org/dr12/algorithms/read_psf/
-
 
 # File is from:
 #  'http://data.sdss3.org/sas/dr10/boss/photo/redux/301/3900/objcs/6/psField-003900-6-0269.fit'
@@ -161,83 +159,16 @@ psf_fits = FITS(psf_filename);
 psf_fits = FITS(psf_filename);
 b = 3
 read_header(psf_fits[b + 1])
-# ...other fields...
-# TFORM7  =                 '1J' / PIXDATATYPE
-# TTYPE7  =              'RTYPE' / type
-# TFORM8  =             '1PE(0)' / FLOAT
-# TTYPE8  =              'RROWS' / rows_fl32
-# TFORM9  =                 '1J' / INT
-# TTYPE9  =              'RROW0' / row0
-# TFORM10 =                 '1J' / INT
-# TTYPE10 =              'RCOL0' / col0
-# ....
-
-# reconstruct the PSF at location (row,col):
-foo = read_header(psf_fits[b + 1])
-rrows = read(psf_fits[b + 1], "RROWS")
-
-read(psf_fits[b + 1], "RNROW")
-# 4-element Array{Int32,1}:
-#  51
-#  51
-#  51
-#  51
-
-
-read(psf_fits[b + 1], "RROWS")
-# ERROR: key not found: -42
-#  in read at /home/rgiordan/.julia/v0.3/FITSIO/src/hdutypes.jl:72
-
-import FITSIO.Libcfitsio: libcfitsio
-
-repeat = -1
-offset = -1
-status = -1
-ccall(("fits_read_descriptll", libcfitsio), Int32, (psf_fits[b + 1], 0, 0, 1, repeat, offset, status))
-
-f = psf_fits
-read_header(f[2])
-lambda = read(f[2], "lambda")
-c = read(f[2], "c")
-
-
-hdu = psf_fits[2]
-FITSIO.Libcfitsio.fits_assert_open(hdu.fitsfile)
-FITSIO.Libcfitsio.fits_movabs_hdu(hdu.fitsfile, hdu.ext)
-
-#colname = "lambda"
-colname = "c"
-
-# This is the number of "fields".
-ncols = FITSIO.Libcfitsio.fits_get_num_cols(hdu.fitsfile)
-
-nrows = FITSIO.Libcfitsio.fits_get_num_rowsll(hdu.fitsfile)
-colnum = FITSIO.Libcfitsio.fits_get_colnum(hdu.fitsfile, colname)
-
-typecode, repcnt, width = FITSIO.Libcfitsio.fits_get_eqcoltype(hdu.fitsfile, colnum)
-
-T = Float64
-if repcnt == 1
-    result = Array(T, nrows)
-else
-    rowsize = FITSIO.Libcfitsio.fits_read_tdim(hdu.fitsfile, colnum)
-    result = Array(Float64, rowsize..., nrows)
-end
-
-FITSIO.Libcfitsio.fits_read_col(hdu.fitsfile, colnum, 1, 1, result)
-result - c
 
 ######################
-# Ok ok
+# PSF stuff:
 
-
-psf_filename = "$field_dir/psField-003900-6-0269.fit"
 psf_fits = FITS(psf_filename);
 hdu = psf_fits[b + 1]
 
 colname = "RROWS"
 
-# Move to the second header.
+# Move to the appropriate header.
 FITSIO.Libcfitsio.fits_movabs_hdu(hdu.fitsfile, hdu.ext)
 
 nrows = FITSIO.Libcfitsio.fits_get_num_rowsll(hdu.fitsfile)
@@ -247,18 +178,7 @@ rrows_dict = Dict()
 for rownum in 1:nrows
 	println(rownum)
 	repeat, offset = FITSIO.Libcfitsio.fits_read_descriptll(hdu.fitsfile, colnum, rownum)
-	println((repeat, offset))
 	result = zeros(repeat[1])
-
-	# This next line doesn't work, and I'm not sure why.  The acceptable
-	# arguments for "rownum" appear to be 1:4.  Putting offset in elemnum
-	# then gives the following error:
-	# ERROR: bad first element number
-	#  in error at error.jl:21
-	#  in fits_assert_ok at /home/rgiordan/.julia/v0.3/FITSIO/src/cfitsio.jl:197
-	#  in fits_read_col at /home/rgiordan/.julia/v0.3/FITSIO/src/cfitsio.jl:775
-	#  in anonymous at no file:6
-	#FITSIO.Libcfitsio.fits_read_col(hdu.fitsfile, colnum, rownum, 1 + offset[1], result)
 	FITSIO.Libcfitsio.fits_read_col(hdu.fitsfile, colnum, rownum, 1, result)
 	rrows_dict[rownum] = result
 end
@@ -280,7 +200,7 @@ ncol_b = read(psf_fits[b + 1], "ncol_b")[1]
 rnrow = convert(Int64, read(psf_fits[b + 1], "rnrow")[1])
 rncol = convert(Int64, read(psf_fits[b + 1], "rncol")[1])
 
-nb = nrow_b * ncol_b
+#nb = nrow_b * ncol_b
 
 #coeffs=fltarr(nb)
 coeffs = zeros(Float64, nb)
@@ -288,44 +208,62 @@ coeffs = zeros(Float64, nb)
 #ecoeff=fltarr(3)
 ecoeff = zeros(Float64, 3)
 
+# The "c" data structure is a set of coefficients defining
+# how the weights of the "eigenimages" vary across the images.
 #cmat=pstruct.c
 cmat = read(psf_fits[b + 1], "c")
 
-# What is this?
+# This is a coordinate transform to keep the polynomial coefficients
+# to a reasonable size.
 rcs = 0.001
 
 #FOR i=0L, nb-1L DO coeffs[i]=(row*rcs)^(i mod nrow_b) * (col*rcs)^(i/nrow_b)
+#coeffs = [ (row * rcs)^(i % nrow_b) * (col * rcs)^(int(floor(i / nrow_b))) for i=0:(nb - 1)]
+
+# Find the PSF of a point source at this location in the image.  coeffs_mat contains
+# the coefficients of the "eigenimages" at this location in the image.
 row = 1
 col = 1
-coeffs = [ (row * rcs)^(i % nrow_b) * (col * rcs)^(int(floor(i / nrow_b))) for i=0:(nb - 1)]
 coeffs_mat = [ (row * rcs) ^ i * (col * rcs) ^ j for i=0:(nrow_b - 1), j=0:(ncol_b - 1)]
 
+# I presume that in IDL integer division rounds down.
 # FOR j=0,2 DO BEGIN
 #     FOR i=0L, nb-1L DO BEGIN
 #         ecoeff[j]=ecoeff[j]+cmat(i/nrow_b,i mod nrow_b,j)*coeffs[i]
 #     ENDFOR
 # ENDFOR
 
-# I have to presueme that in IDL integer division rounds down.
-ecoeff = zeros(nb)
-for j = 1:3, i = 1:nb
-	println(1 + int(floor((i - 1) / nrow_b)), " ", 1 + (i - 1) % nrow_b)
-	ecoeff[j] += cmat[1 + int(floor((i - 1) / nrow_b)), 1 + (i - 1) % nrow_b, j] * coeffs[i]
-end
+# ecoeff = zeros(nb)
+# for j = 1:3, i = 1:nb
+# 	println(1 + int(floor((i - 1) / nrow_b)), " ", 1 + (i - 1) % nrow_b)
+# 	ecoeff[j] += cmat[1 + int(floor((i - 1) / nrow_b)), 1 + (i - 1) % nrow_b, j] * coeffs[i]
+# end
 
 ecoeff_mat = zeros(nrow_b, ncol_b)
 for k = 1:3, i = 1:nrow_b, j = 1:ncol_b
 	ecoeff_mat[i, j] += cmat[i, j, k] * coeffs_mat[i, j]
 end
 
-
 # psf = (pstruct.rrows)[*,0]*ecoeff[0]+$
 #       (pstruct.rrows)[*,1]*ecoeff[1]+$
 #       (pstruct.rrows)[*,2]*ecoeff[2]
 
-psf = rrows[:,1] * ecoeff[1] + rrows[:,2] * ecoeff[2] + rrows[:, 3] * ecoeff[3];
+# rrows contains eigen images that need to be weighted be ecoeff.
+psf = reshape(rrows[:,1] * ecoeff[1] + rrows[:,2] * ecoeff[2] + rrows[:, 3] * ecoeff[3],
+	          (rnrow, rncol));
 
-matshow(reshape(psf, (rnrow, rncol)))
+matshow(psf)
+
+
+
+
+
+
+
+
+
+
+
 
 
 #####################
@@ -413,4 +351,3 @@ end
 # http://data.sdss3.org/sas/dr12/boss/sweeps/dr9/301/calibObj-003900-6-star.fits.gz
 # ...but these files are huge.  Why?
 
-d = FITS("dat/sample_field/calibObj-003900-6-gal.fits")
