@@ -283,6 +283,28 @@ function test_tiny_image_tiling()
     @test_approx_eq_eps accum0.v accum_tiles.v 100.
 end
 
+#################
+
+function test_elbo_with_nan()
+    blob, mp, body = gen_sample_star_dataset(perturb=false)
+
+    # Set to 5 to test the code for tiles with no sources.
+    mp.tile_width = 5
+    initial_elbo = ElboDeriv.elbo(blob, mp)
+
+    for b in 1:5
+        blob[b].pixels[1,1] = NaN
+    end
+
+    nan_elbo = ElboDeriv.elbo(blob, mp)
+
+    # We deleted a pixel, so there's reason to expect them to be different, 
+    # but importantly they're reasonably close and not NaN.
+    @test_approx_eq_eps (nan_elbo.v - initial_elbo.v) / initial_elbo.v 0. 1e-4
+    deriv_rel_err = (nan_elbo.d - initial_elbo.d) ./ initial_elbo.d
+    @test_approx_eq_eps deriv_rel_err fill(0., length(mp.vp[1])) 0.05
+end
+
 
 ####################################################
 
@@ -292,3 +314,4 @@ test_that_star_truth_is_most_likely()
 test_that_galaxy_truth_is_most_likely()
 test_coadd_cat_init_is_most_likely()
 test_tiny_image_tiling()
+test_elbo_with_nan()

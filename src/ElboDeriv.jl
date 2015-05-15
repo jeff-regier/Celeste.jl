@@ -539,8 +539,9 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
     # For speed, if there are no sources, add the noise
     # contribution directly.
     if length(tile_sources) == 0
-        num_pixels = length(h_range) * length(w_range)
-        tile_x = sum(tile.img.pixels[h_range, w_range])
+        nan_pixels = isnan(tile.img.pixels[h_range, w_range])
+        num_pixels = length(h_range) * length(w_range) - sum(nan_pixels)
+        tile_x = sum(tile.img.pixels[h_range, w_range][!nan_pixels])
         ep = tile.img.epsilon
         # NB: not using the delta-method approximation here
         accum.v += tile_x * log(ep) - num_pixels * ep
@@ -555,22 +556,25 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
     E_G = zero_sensitive_float(CanonicalParams, tile_S)
     var_G = zero_sensitive_float(CanonicalParams, tile_S)
 
-    # Iterate over pixels.
+    # Iterate over pixels that are not NaN.
     for w in w_range, h in h_range
-        clear!(E_G)
-        E_G.v = tile.img.epsilon
-        clear!(var_G)
+        this_pixel = tile.img.pixels[h, w]
+        if !isnan(this_pixel)
+            clear!(E_G)
+            E_G.v = tile.img.epsilon
+            clear!(var_G)
 
-        m_pos = Float64[h, w]
-        for child_s in 1:length(tile_sources)
-            parent_s = tile_sources[child_s]
-            accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
-                mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
-                fs0m, fs1m, E_G, var_G)
+            m_pos = Float64[h, w]
+            for child_s in 1:length(tile_sources)
+                parent_s = tile_sources[child_s]
+                accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
+                    mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
+                    fs0m, fs1m, E_G, var_G)
+            end
+
+            accum_pixel_ret!(tile_sources, this_pixel, tile.img.iota,
+                E_G, var_G, accum)
         end
-
-        accum_pixel_ret!(tile_sources, tile.img.pixels[h, w], tile.img.iota,
-            E_G, var_G, accum)
     end
 end
 
@@ -584,7 +588,7 @@ Args:
   - accum: A sensitive float containing the ELBO.
 """ ->
 function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
-    accum.v += -sum(lfact(img.pixels))
+    accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
 
     star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp)
 
