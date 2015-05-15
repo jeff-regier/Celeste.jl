@@ -61,16 +61,16 @@ df[df[:field] .== int(frame_num), :]
 # http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
 
 # This is the calibration vector:
-figure()
-for b=1:5
-	b_letter = ['u', 'g', 'r', 'i', 'z'][b]
-	img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
-	img_fits = FITS(img_filename)
-	calib_row = read(img_fits[2]);
-	subplot(5, 1, b)
-	plot(calib_row)
-end
-show()
+# figure()
+# for b=1:5
+# 	b_letter = ['u', 'g', 'r', 'i', 'z'][b]
+# 	img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
+# 	img_fits = FITS(img_filename)
+# 	calib_row = read(img_fits[2]);
+# 	subplot(5, 1, b)
+# 	plot(calib_row)
+# end
+# show()
 
 b = 3
 b_letter = ['u', 'g', 'r', 'i', 'z'][b]
@@ -183,9 +183,72 @@ read(psf_fits[b + 1], "RNROW")
 #  51
 #  51
 
+
 read(psf_fits[b + 1], "RROWS")
 # ERROR: key not found: -42
 #  in read at /home/rgiordan/.julia/v0.3/FITSIO/src/hdutypes.jl:72
+
+import FITSIO.Libcfitsio: libcfitsio
+
+repeat = -1
+offset = -1
+status = -1
+ccall(("fits_read_descriptll", libcfitsio), Int32, (psf_fits[b + 1], 0, 0, 1, repeat, offset, status))
+
+f = psf_fits
+read_header(f[2])
+lambda = read(f[2], "lambda")
+c = read(f[2], "c")
+
+
+hdu = psf_fits[2]
+FITSIO.Libcfitsio.fits_assert_open(hdu.fitsfile)
+FITSIO.Libcfitsio.fits_movabs_hdu(hdu.fitsfile, hdu.ext)
+
+#colname = "lambda"
+colname = "c"
+
+# This is the number of "fields".
+ncols = FITSIO.Libcfitsio.fits_get_num_cols(hdu.fitsfile)
+
+nrows = FITSIO.Libcfitsio.fits_get_num_rowsll(hdu.fitsfile)
+colnum = FITSIO.Libcfitsio.fits_get_colnum(hdu.fitsfile, colname)
+
+typecode, repcnt, width = FITSIO.Libcfitsio.fits_get_eqcoltype(hdu.fitsfile, colnum)
+
+T = Float64
+if repcnt == 1
+    result = Array(T, nrows)
+else
+    rowsize = FITSIO.Libcfitsio.fits_read_tdim(hdu.fitsfile, colnum)
+    result = Array(Float64, rowsize..., nrows)
+end
+
+FITSIO.Libcfitsio.fits_read_col(hdu.fitsfile, colnum, 1, 1, result)
+result - c
+
+######################
+# Ok ok
+hdu = psf_fits[2]
+
+colname = "RROWS"
+
+# This is the number of "fields".
+ncols = FITSIO.Libcfitsio.fits_get_num_cols(hdu.fitsfile)
+
+
+FITSIO.Libcfitsio.fits_assert_open(hdu.fitsfile)
+FITSIO.Libcfitsio.fits_movabs_hdu(hdu.fitsfile, hdu.ext)
+
+nrows = FITSIO.Libcfitsio.fits_get_num_rowsll(hdu.fitsfile)
+colnum = FITSIO.Libcfitsio.fits_get_colnum(hdu.fitsfile, colname)
+typecode, repcnt, width = FITSIO.Libcfitsio.fits_get_eqcoltype(hdu.fitsfile, colnum)
+
+for rownum in 1:nrows
+	repeat, offset = FITSIO.Libcfitsio.fits_read_descriptll(hdu.fitsfile, colnum, rownum)
+	println((repeat, offset))
+end
+
 
 
 #nrow_b=(pstruct.nrow_b)[0]
