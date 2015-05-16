@@ -1,15 +1,17 @@
 module SDSS
 
+VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
+using FITSIO
+using WCSLIB
+using DataFrames
+using Grid
 
 # FITSIO v0.6.0 removed some of the lower-level functions used here.
 # In particular, I think wcslib may still need this.
 # Include this as a temporary fix.
 using FITSIO.Libcfitsio
 
-using FITSIO
-using WCSLIB
-using DataFrames
 
 # Just dealing with SDSS stuff.  Now tested.
 
@@ -132,85 +134,242 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 end
 
 
-function load_field(field_dir, run_num, camcol_num, frame_num)
+@doc """
+Load data from a psField file, which contains the point spread function.
 
-    # First, read in the photofield information (the background sky,
-    # gain, variance, and calibration).
-    photofield_fits = "$field_dir/photoField-$run_num-$camcol_num.fits"
-    photofield_fits = FITS(pf_filename)
-    @assert length(pf_fits) == 2
+Args:
+ - field_dir: The directory of the file
+ - run_num: The run number
+ - camcol_num: The camcol number
+ - frame_num: The frame number
+ - b: The filter band (a number from 1 to 5)
 
-    band_gain = read(photofield_fits[2], "gain");
-    field_row = read(photofield_fits[2], "field") .== int(frame_num);
-    band_dark_variance = collect(read(photofield_fits[2], "dark_variance")[:, field_row]);
+Returns:
+ - rrows: A matrix of flattened eigenimages.
+ - rnrow: The number of rows in an eigenimage.
+ - rncol: The number of columns in an eigenimage.
+ - cmat: The coefficients of the weight polynomial (see below).
 
-    close(pf_fits)
+The point spread function is represented as an rnrow x rncol image
+showing what a true point source would look as viewed through the optics.
+This image varies across the field, and to parameterize this variation,
+the PSF is represented as a linear combination of four "eigenimages",
+with weights that vary across the image.  See get_psf_at_point()
+for more details.
+""" ->
+function load_psf_data(field_dir, run_num, camcol_num, frame_num, b)
+    @assert 1 <= b <= 5
+    psf_filename = "$field_dir/psField-$run_num-$camcol_num-$frame_num.fit";
+    psf_fits = FITS(psf_filename);
+    psf_hdu = psf_fits[b + 1]
 
-    function fetch_image(b)
-        b_letter = bands[b]
+    nrows = read_key(psf_hdu, "NAXIS2")[1]
+    nrow_b = read(psf_hdu, "nrow_b")[1]
+    ncol_b = read(psf_hdu, "ncol_b")[1]
+    rnrow = read(psf_hdu, "rnrow")[1]
+    rncol = read(psf_hdu, "rncol")[1]
+    cmat = convert(Array{Float64, 3}, read(psf_hdu, "c"))
 
-        img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
-        img_fits = FITS(img_filename)
-        @assert length(img_fits) == 4
-
-        # This is the sky-subtracted and calibrated image.  There are no fields in the first header.
-        processed_image = read(img_fits[1]);
-
-        # Read in the sky background.
-        sky_image_raw = read(img_fits[3], "ALLSKY");
-        sky_x = collect(read(img_fits[3], "XINTERP"));
-        sky_y = collect(read(img_fits[3], "YINTERP"));
-
-        # Interpolate to the full image.  Combining the example from
-        # http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
-        # ...with the documentation from the IDL language:
-        # http://www.exelisvis.com/docs/INTERPOLATE.html
-        # ...we can see that we are supposed to interpret a point (sky_x[i], sky_y[j])
-        # with associated row and column (if, jf) = (floor(sky_x[i]), floor(sky_y[j]))
-        # as lying in the square spanned by the points
-        # (sky_image_raw[if, jf], sky_image_raw[if + 1, jf + 1]).
-        # ...keeping in mind that IDL uses zero indexing:
-        # http://www.exelisvis.com/docs/Manipulating_Arrays.html
-        sky_grid_vals = ((1:1.:size(sky_image_raw)[1]) - 1, (1:1.:size(sky_image_raw)[2]) - 1);
-        sky_grid = CoordInterpGrid(sky_grid_vals, sky_image_raw[:,:,1], BCnearest, InterpLinear);
-        sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ];
-
-        # This is the calibration vector:
-        calib_row = read(img_fits[2]);
-        calib_image = [ calib_row[x] for x in 1:size(processed_image)[1], y in 1:size(processed_image)[2] ];
-
-        # Convert to raw electron counts.
-        dn = convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image));
-        nelec = band_gain[b] * dn;
-
-        img_fits_raw = fits_open_file(img_filename)
-        header_str = fits_hdr2str(img_fits_raw)
-        close(img_fits_raw)
-        ((wcs,),nrejected) = wcspih(header_str)
-
-        # TODO: get the PSF components.
-        #psf = [PsfComponent(alphaBar[k], xiBar[:, k], tauBar[:, :, k]) for k in 1:3]
-
-        H, W = size(processed_image)
-
-        # TODO: these need to be stored in the Image object in a sensible way.
-        iota = band_gain[b] ./ calib_image
-        epsilon = sky_image .* calib_image
-        Image(H, W, nelec, b, wcs, epsilon, iota, psf)
+    # Some low-level FITSIO rigamarole until the high-level interface can
+    # read variable length binary rows.
+    
+    # Move to the appropriate header.
+    FITSIO.Libcfitsio.fits_movabs_hdu(psf_hdu.fitsfile, psf_hdu.ext)
+    rrows_colnum = FITSIO.Libcfitsio.fits_get_colnum(psf_hdu.fitsfile, "RROWS")
+    rrows = zeros(Float64, rnrow * rncol, nrows)
+    for rownum in 1:nrows
+        repeat, offset = FITSIO.Libcfitsio.fits_read_descriptll(psf_hdu.fitsfile, rrows_colnum, rownum)
+        @assert repeat[1] == rnrow * rncol
+        result = zeros(repeat[1])
+        FITSIO.Libcfitsio.fits_read_col(psf_hdu.fitsfile, rrows_colnum, rownum, 1, result)
+        rrows[:, rownum] = result
     end
+    close(psf_fits)
 
-    blob = map(fetch_image, 1:5)
+    # Only the first (nrow_b, ncol_b) submatrix of cmat is used for reasons obscure
+    # to the author.
+    rrows, rnrow, rncol, cmat[1:nrow_b, 1:ncol_b, :]
 end
 
 
-function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num)
-    # Set the pixels in masK_img to NaN in the places specified bythe fpM file.
+@doc """
+Using data from a psField file, evaluate the PSF for a source at given point.
 
+Args:
+ - row: The row of the point source (may be a float).
+ - col: The column of the point source (may be a float).
+ - rrows: An (rnrow * rncol) by (k) matrix of flattened eigenimages.
+ - rnrow: The number of rows in the eigenimage.
+ - rncol: The number of columns in the eigenimage.
+ - cmat: An (:, :, k)-array of coefficients of the weight polynomial.
+
+Returns:
+ - An rnrow x rncol image of the PSF at (row, col)
+
+The PSF is represented as a weighted combination of "eigenimages" (stored
+in rrows), where the weights vary smoothly across points (row, col) in the image
+as a polynomial of the form
+weight[k](row, col) = sum_{i,j} cmat[i, j, k] * (rcs * row) ^ i (rcs * col) ^ j
+
+This function is based on the function getPsfAtPoints in astrometry.net:
+https://github.com/dstndstn/astrometry.net/blob/master/sdss/common.py#L953
+""" ->
+function get_psf_at_point(row::Float64, col::Float64,
+                          rrows::Array{Float64, 2}, rnrow::Int32, rncol::Int32, 
+                          cmat::Array{Float64, 3})
+
+    # This is a coordinate transform to keep the polynomial coefficients
+    # to a reasonable size.
+    const rcs = 0.001
+
+    # rrows' image data is in the first column a flattened form.
+    # The second dimension is the number of eigen images, which should
+    # match the number of coefficient arrays.
+    k = size(rrows)[2]
+    @assert k == size(cmat)[3]
+
+    nrow_b = size(cmat)[1]
+    ncol_b = size(cmat)[2]
+
+    # Get the weights.
+    coeffs_mat = [ (row * rcs) ^ i * (col * rcs) ^ j for i=0:(nrow_b - 1), j=0:(ncol_b - 1)]
+    weight_mat = zeros(nrow_b, ncol_b)
+    for k = 1:3, i = 1:nrow_b, j = 1:ncol_b
+        weight_mat[i, j] += cmat[i, j, k] * coeffs_mat[i, j]
+    end
+
+    # Weight the images in rrows and reshape them into matrix form.
+    # It seems I need to convert for reshape to work.  :(
+    psf = reshape(reduce(sum, [ rrows[:, i] * weight_mat[i] for i=1:k]),
+                  (convert(Int64, rnrow), convert(Int64, rncol)))
+
+    psf
+end
+
+
+@doc """
+Load relevant data from a photoField file.
+
+Args:
+ - field_dir: The directory of the file
+ - run_num: The run number
+ - camcol_num: The camcol number
+ - frame_num: The frame number
+ - b: The filter band (a number from 1 to 5)
+
+Returns:
+ - band_gain: An array of gains for the five bands
+ - band_dark_variance: An array of dark variances for the five bands
+""" ->
+function load_photo_field(field_dir, run_num, camcol_num, frame_num)
+    # First, read in the photofield information (the background sky,
+    # gain, variance, and calibration).
+    pf_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
+    pf_fits = FITS(pf_filename)
+    @assert length(pf_fits) == 2
+
+    field_row = read(pf_fits[2], "field") .== int(frame_num)
+    band_gain = collect(read(pf_fits[2], "gain")[:, field_row])
+    band_dark_variance = collect(read(pf_fits[2], "dark_variance")[:, field_row])
+
+    close(pf_fits)
+
+    band_gain, band_dark_variance
+end
+
+
+@doc """
+Load the raw electron counts, calibration vector, and sky background from a field.
+
+Args:
+ - field_dir: The directory of the file
+ - run_num: The run number
+ - camcol_num: The camcol number
+ - frame_num: The frame number
+ - b: The filter band (a number from 1 to 5)
+ - gain: The gain for this band (e.g. as read from photoField)
+
+Returns:
+ - nelec: An image of raw electron counts in nanomaggies
+ - calib_col: A column of calibration values (the same for every column of the image) 
+ - sky_grid: A CoordInterpGrid bilinear interpolation object
+
+The meaing of the frame data structures is thoroughly documented here:
+http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
+""" ->
+function load_raw_field(field_dir, run_num, camcol_num, frame_num, b, gain)
+    @assert 1 <= b <= 5
+    b_letter = bands[b]
+
+    img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
+    img_fits = FITS(img_filename)
+    @assert length(img_fits) == 4
+
+    # This is the sky-subtracted and calibrated image.
+    processed_image = read(img_fits[1]);
+
+    # Read in the sky background.
+    sky_image_raw = read(img_fits[3], "ALLSKY");
+    sky_x = collect(read(img_fits[3], "XINTERP"));
+    sky_y = collect(read(img_fits[3], "YINTERP"));
+
+    # Interpolate the sky to the full image.  Combining the example from
+    # http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
+    # ...with the documentation from the IDL language:
+    # http://www.exelisvis.com/docs/INTERPOLATE.html
+    # ...we can see that we are supposed to interpret a point (sky_x[i], sky_y[j])
+    # with associated row and column (if, jf) = (floor(sky_x[i]), floor(sky_y[j]))
+    # as lying in the square spanned by the points
+    # (sky_image_raw[if, jf], sky_image_raw[if + 1, jf + 1]).
+    # ...keeping in mind that IDL uses zero indexing:
+    # http://www.exelisvis.com/docs/Manipulating_Arrays.html
+    sky_grid_vals = ((1:1.:size(sky_image_raw)[1]) - 1, (1:1.:size(sky_image_raw)[2]) - 1);
+    sky_grid = CoordInterpGrid(sky_grid_vals, sky_image_raw[:,:,1], BCnearest, InterpLinear);
+    sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ];
+
+    # This is the calibration vector:
+    calib_col = read(img_fits[2]);
+    calib_image = [ calib_col[row] for
+                    row in 1:size(processed_image)[1],
+                    col in 1:size(processed_image)[2] ];
+
+    # Convert to raw electron counts.  Note that these may not be close to integers
+    # due to the analog to digital conversion process in the telescope.
+    nelec = gain * convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image));
+
+    nelec, calib_col, sky_grid
+end
+
+# img_fits_raw = fits_open_file(img_filename)
+# header_str = fits_hdr2str(img_fits_raw)
+# close(img_fits_raw)
+# ((wcs,),nrejected) = wcspih(header_str)
+
+
+@doc """
+Set the pixels in mask_img to NaN in the places specified by the fpM file.
+
+Args:
+ - mask_img: The image to be masked (updated in place)
+ - field_dir: The directory of the file
+ - run_num: The run number
+ - camcol_num: The camcol number
+ - frame_num: The frame number
+
+Returns:
+ - Updates mask_img in place by setting to NaN all the pixels specified.
+
+ This is based on the function setMaskedPixels in astrometry.net:
+ https://github.com/dstndstn/astrometry.net/
+""" ->
+function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num)
     # These are the masking planes used by Dustin's code.    
     # From sdss/dr8.py:
-    #   for plane in [ 'INTERP', 'SATUR', 'CR', 'GHOST' ]:
-    #            fpM.setMaskedPixels(plane, invvar, 0, roi=roi)
-    # TODO: What is the meaning of these?
+    #
+    # interp = pixel was bad and interpolated over
+    # satur = saturated
+    # cr = cosmic ray
+    # ghost = artifact from the electronics.
     const mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"});
 
     # http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/fpM.html
@@ -230,7 +389,6 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num)
 
     for fpm_i in plane_rows
         # You want the HDU in 2 + fpm_mask.value[i] for i in keep_rows (in a 1-indexed language).
-        println("Mask type ", mask_types[fpm_i])
         mask_index = 2 + fpm_hdu_indices[fpm_i]
         cmin = read(fpm_fits[mask_index], "cmin")
         cmax = read(fpm_fits[mask_index], "cmax")
@@ -245,15 +403,14 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num)
 
         for block in 1:length(rmin)
             # The ranges are for a 0-indexed language.
-            println(block, ": Size of deleted block: ", (cmax[block] + 1 - cmin[block]) * (rmax[block] + 1 - rmin[block]))
             @assert cmax[block] + 1 <= size(mask_img)[1]
             @assert cmin[block] + 1 >= 1
             @assert rmax[block] + 1 <= size(mask_img)[2]
             @assert rmin[block] + 1 >= 1
 
             # For some reason, the sizes are inconsistent if the rows are read first.
-            # What is the mapping from (row, col) to (x, y)?
-            # TODO: I think I am reading in the images the wrong way around.
+            # I presume that either these names are strange or I am supposed to read
+            # the image from the frame and transpose it.
             mask_img[(cmin[block]:cmax[block]) + 1, (rmin[block]:rmax[block]) + 1] = NaN
         end
     end
