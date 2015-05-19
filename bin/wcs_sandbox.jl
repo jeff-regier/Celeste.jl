@@ -8,6 +8,7 @@ using DataFrames
 using SampleData
 
 using Grid
+using MixtureModels
 
 using SDSS
 
@@ -24,6 +25,9 @@ frame_num = "0269"
 rrows, rnrow, rncol, cmat = SDSS.load_psf_data(field_dir, run_num, camcol_num, frame_num, 1);
 psf = SDSS.get_psf_at_point(1., 1., rrows, rnrow, rncol, cmat);
 matshow(psf)
+
+# no no no
+#gmm = GMM(2, psf; method=:kmeans, kind=:diag, nInit=50, nIter=50, nFinal=50)
 
 
 band_gain, band_dark_variance = SDSS.load_photo_field(field_dir, run_num, camcol_num, frame_num)
