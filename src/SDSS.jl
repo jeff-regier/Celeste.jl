@@ -159,8 +159,8 @@ for more details.
 """ ->
 function load_psf_data(field_dir, run_num, camcol_num, frame_num, b)
     @assert 1 <= b <= 5
-    psf_filename = "$field_dir/psField-$run_num-$camcol_num-$frame_num.fit";
-    psf_fits = FITS(psf_filename);
+    psf_filename = "$field_dir/psField-$run_num-$camcol_num-$frame_num.fit"
+    psf_fits = FITS(psf_filename)
     psf_hdu = psf_fits[b + 1]
 
     nrows = read_key(psf_hdu, "NAXIS2")[1]
@@ -306,12 +306,12 @@ function load_raw_field(field_dir, run_num, camcol_num, frame_num, b, gain)
     @assert length(img_fits) == 4
 
     # This is the sky-subtracted and calibrated image.
-    processed_image = read(img_fits[1]);
+    processed_image = read(img_fits[1])
 
     # Read in the sky background.
-    sky_image_raw = read(img_fits[3], "ALLSKY");
-    sky_x = collect(read(img_fits[3], "XINTERP"));
-    sky_y = collect(read(img_fits[3], "YINTERP"));
+    sky_image_raw = read(img_fits[3], "ALLSKY")
+    sky_x = collect(read(img_fits[3], "XINTERP"))
+    sky_y = collect(read(img_fits[3], "YINTERP"))
 
     # Interpolate the sky to the full image.  Combining the example from
     # http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
@@ -323,19 +323,19 @@ function load_raw_field(field_dir, run_num, camcol_num, frame_num, b, gain)
     # (sky_image_raw[if, jf], sky_image_raw[if + 1, jf + 1]).
     # ...keeping in mind that IDL uses zero indexing:
     # http://www.exelisvis.com/docs/Manipulating_Arrays.html
-    sky_grid_vals = ((1:1.:size(sky_image_raw)[1]) - 1, (1:1.:size(sky_image_raw)[2]) - 1);
-    sky_grid = CoordInterpGrid(sky_grid_vals, sky_image_raw[:,:,1], BCnearest, InterpLinear);
-    sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ];
+    sky_grid_vals = ((1:1.:size(sky_image_raw)[1]) - 1, (1:1.:size(sky_image_raw)[2]) - 1)
+    sky_grid = CoordInterpGrid(sky_grid_vals, sky_image_raw[:,:,1], BCnearest, InterpLinear)
+    sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ]
 
     # This is the calibration vector:
-    calib_col = read(img_fits[2]);
+    calib_col = read(img_fits[2])
     calib_image = [ calib_col[row] for
                     row in 1:size(processed_image)[1],
-                    col in 1:size(processed_image)[2] ];
+                    col in 1:size(processed_image)[2] ]
 
     # Convert to raw electron counts.  Note that these may not be close to integers
     # due to the analog to digital conversion process in the telescope.
-    nelec = gain * convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image));
+    nelec = gain * convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image))
 
     nelec, calib_col, sky_grid
 end
@@ -370,11 +370,11 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num)
     # satur = saturated
     # cr = cosmic ray
     # ghost = artifact from the electronics.
-    const mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"});
+    const mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"})
 
     # http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/fpM.html
-    fpm_filename = "$field_dir/fpM-$run_num-r$camcol_num-$frame_num.fit";
-    fpm_fits = FITS(fpm_filename);
+    fpm_filename = "$field_dir/fpM-$run_num-r$camcol_num-$frame_num.fit"
+    fpm_fits = FITS(fpm_filename)
 
     # The last header contains the mask.
     fpm_mask = fpm_fits[12]
