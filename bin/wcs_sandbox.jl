@@ -28,14 +28,17 @@ matshow(psf)
 
 # no no no
 #gmm = GMM(2, psf; method=:kmeans, kind=:diag, nInit=50, nIter=50, nFinal=50)
-
-
 band_gain, band_dark_variance = SDSS.load_photo_field(field_dir, run_num, camcol_num, frame_num)
 
 b = 1
 nelec, calib_col, sky_grid = SDSS.load_raw_field(field_dir, run_num, camcol_num, frame_num, b, band_gain[b]);
 masked_nelec = deepcopy(nelec);
 SDSS.mask_image!(masked_nelec, field_dir, run_num, camcol_num, frame_num);
+
+nelec_py_df = readtable("/tmp/test_3900_6_269_1_img.csv", header=false);
+nelec_py = [ nelec_py_df[i, j] for i=1:nrow(nelec_py_df), j=1:ncol(nelec_py_df)];
+
+
 
 #######################
 # Get the PSF
@@ -59,7 +62,6 @@ SDSS.mask_image!(masked_nelec, field_dir, run_num, camcol_num, frame_num);
 # >>> sdss = DR10()
 # >>> sdss.get_url('psField', 3900, 6, 269, 'r')
 # 'http://data.sdss3.org/sas/dr10/boss/photo/redux/301/3900/objcs/6/psField-003900-6-0269.fit'
-
 
 
 
