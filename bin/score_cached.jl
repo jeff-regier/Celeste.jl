@@ -18,7 +18,7 @@ function load_celeste_predictions(model_dir, stamp_id)
     f = open("$model_dir/$(ARGS[2])-$stamp_id.dat")
     mp = deserialize(f)
     close(f)
-	mp
+    mp
 end
 
 
@@ -27,8 +27,8 @@ end
 
 
 function center_obj(vp::Vector{Vector{Float64}})
-	distances = [norm(vs[ids.u] .- 51/2) for vs in vp]
-	s = findmin(distances)[2]
+    distances = [norm(vs[ids.u] .- 51/2) for vs in vp]
+    s = findmin(distances)[2]
     if distances[s] > 2.
         throw(DistanceException())
     end
@@ -38,8 +38,8 @@ end
 
 function center_obj(catalog_ce::Vector{CatalogEntry}, catalog_df::DataFrame)
     @assert length(catalog_ce) == size(catalog_df, 1)
-	distances = [norm(ce.pos .- 26.) for ce in catalog_ce]
-	idx = findmin(distances)[2]
+    distances = [norm(ce.pos .- 26.) for ce in catalog_ce]
+    idx = findmin(distances)[2]
     catalog_ce[idx], catalog_df[idx,:]
 end
 
@@ -223,12 +223,12 @@ end
 function print_latex_table(df)
     for i in 1:size(df, 1)
         is_num_wrong = (df[i, :field] in [:missed_stars, :missed_gals])::Bool
-        @printf("%-12s & %.2f (%.2f) & %.2f (%.2f) & %d \\\\\n",
+        @printf("%-12s & %5.2f & %5.2f & %5.2f (%.2f) & %d \\\\\n",
             df[i, :field],
             df[i, :primary] * (is_num_wrong ? df[i, :N] : 1.),
-            df[i, :primary_sd],
             df[i, :celeste] * (is_num_wrong ? df[i, :N] : 1.),
-            df[i, :celeste_sd],
+            df[i, :diff],
+            df[i, :diff_sd],
             df[i, :N])
     end
     println("")
@@ -246,12 +246,6 @@ function df_score(stamp_ids)
 
     primary_err = get_err_df(coadd_df, primary_df)
     celeste_err = get_err_df(coadd_df, celeste_df)
-
-#=
-    abs(ce_df[1, :ab_dev] - ce_df[1, :ab_exp]) < 0.1 # proportion
-    abs(ce_df[1, :phi_dev] - ce_df[1, :phi_exp]) < 10  # degrees
-    abs(ce_df[1, :theta_dev] - ce_df[1, :theta_exp]) < 0.2  # arcsec
-=#
 
     ttypes = [Symbol, Float64, Float64, Float64, Float64, Int64]
     scores_df = DataFrame(ttypes, length(names(celeste_err)) - 1)
@@ -274,29 +268,29 @@ function df_score(stamp_ids)
             end
         end
 
-		if sum(good_row) == 0
-			continue
-		end
+        if sum(good_row) == 0
+            continue
+        end
         celeste_mean_err = mean(celeste_err[good_row, n])
         scores_df[i, :field] = n
         scores_df[i, :N] = sum(good_row)
         scores_df[i, :primary] = mean(primary_err[good_row, n])
         scores_df[i, :celeste] = mean(celeste_err[good_row, n])
-		if sum(good_row) > 1
+        if sum(good_row) > 1
             scores_df[i, :diff] = scores_df[i, :primary] - scores_df[i, :celeste]
             scores_df[i, :diff_sd] =
                 std(Float64[abs(x) for x in primary_err[good_row, n] - celeste_err[good_row, n]]) / sqrt(sum(good_row))
-		end
+        end
     end
 
     if length(ARGS) >= 3 && ARGS[3] == "--csv"
         writetable("coadd.csv", coadd_df)
         writetable("primary.csv", primary_df)
-        writetable("celeste.csv", celeste_df)
+        writetable("celeste_$(ARGS[2]).csv", celeste_df)
     end
     if length(ARGS) >= 3 && ARGS[3] == "--latex"
-		print_latex_table(scores_df)
-	end
+        print_latex_table(scores_df)
+    end
     scores_df
 end
 
