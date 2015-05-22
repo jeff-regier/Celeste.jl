@@ -29,7 +29,7 @@ function sample_prior()
     # on the test set of stamps
     PriorParams(
         [0.28, 0.72],                       # a
-        [(0.47, 0.012), (1.28, 0.11)],      # r
+        [(0.47, 1. / 0.012), (1.28, 1. / 0.11)], # r
         Vector{Float64}[k1, k2],            # k
         [(cmean1, ccov1), (cmean2, ccov2)]) # c
 end
