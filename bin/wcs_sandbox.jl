@@ -36,7 +36,22 @@ masked_nelec = deepcopy(nelec);
 SDSS.mask_image!(masked_nelec, field_dir, run_num, camcol_num, frame_num);
 
 nelec_py_df = readtable("/tmp/test_3900_6_269_1_img.csv", header=false);
-nelec_py = [ nelec_py_df[i, j] for i=1:nrow(nelec_py_df), j=1:ncol(nelec_py_df)];
+
+# Note the transpose.  Isn't there a more efficient way to do this?
+nelec_py = band_gain[b] * [ nelec_py_df[i, j] for j=1:ncol(nelec_py_df), i=1:nrow(nelec_py_df) ];
+
+nelec_py[1:10, 1:10]
+nelec[1:10, 1:10]
+
+# This is reasonably close.
+nelec_py[1:10, 1:10] ./ nelec[1:10, 1:10]
+nelec_py[1:10, 1:10] - nelec[1:10, 1:10]
+
+# This is totally strange.  Python appears to do no processing on the FpC file before turning
+# it into an image.
+fpc_file = "/home/rgiordan/Documents/git_repos/tractor/fpC-003900-u6-0269.fit"
+fpc_fits = FITS(fpc_file)
+raw_fpc = convert(Array{Float64,2}, read(fpc_fits[1]));
 
 
 
