@@ -374,7 +374,7 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num, band;
     # ghost = artifact from the electronics.
 
     # http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/fpM.html
-    band_letter = bands[b]
+    band_letter = bands[band]
     fpm_filename = "$field_dir/fpM-$run_num-$band_letter$camcol_num-$frame_num.fit"
     fpm_fits = FITS(fpm_filename)
 
@@ -413,13 +413,21 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num, band;
             @assert rmax[block] + 1 <= size(mask_img)[2]
             @assert rmin[block] + 1 >= 1
 
-            # For some reason, the sizes are inconsistent if the rows are read first.
-            # I presume that either these names are strange or I am supposed to read
-            # the image from the frame and transpose it.
-            mask_img[(cmin[block]:cmax[block]) + 1, (rmin[block]:rmax[block]) + 1] = NaN
+            # Some notes:
+            # See astrometry.net//sdss/common.py:SetMaskedPixels, which I currently assume is correct.
+            # - In contrast with  julia, the numpy matrix index range [3:5, 3:5] contains four
+            #   pixels, not six.  However, if the numpy is correct, then fpM files contain
+            #   many bad rows that don't get masked at all since cmin == cmax
+            #   or rmin == rmax.  For this reason, I think the python might be erroneous.
+            # - For some reason, the sizes are inconsistent if the rows are read first.
+            #   I presume that either these names are strange or I am supposed to read
+            #   the image from the frame and transpose it.
+            # - Julia is 1-indexed, not 0-indexed.
+            mask_rows = (cmin[block] + 1):(cmax[block])
+            mask_cols = (rmin[block] + 1):(rmax[block])
+            mask_img[mask_rows, mask_cols] = NaN
         end
     end
-
 end
 
 end

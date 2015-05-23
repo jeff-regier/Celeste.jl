@@ -51,22 +51,33 @@ sdss = DR8()
 #sdss.get_url('fpM', args.run, args.camcol, args.field, 'r')
 
 # Mask the image.
+masked_img_data = copy.deepcopy(img[0].data)
 fpM = sdss.readFpM(args.run, args.camcol, args.field, bandname)
 for plane in [ 'INTERP', 'SATUR', 'CR', 'GHOST' ]:
-	masked_img_data = copy.deepcopy(img[0].data)
-	print plane
 	fpM.setMaskedPixels(plane, masked_img_data, NaN)
-	print sum(numpy.isnan(masked_img_data))
 
+print sum(numpy.isnan(masked_img_data))
 numpy.savetxt(file_base + band_str + "masked_img.csv", masked_img_data, delimiter=",")
 
 
-# This doesn't match up with Julia, because the files seem to have different data.
-# For example:
-size(fpM.getMaskPlane('INTERP').rmin) # INTERP is element 1 in the 0-indexed python.
-# == 168
-# In Julia:
-# read(fpm_fits[2], "rmax") == 188
-# There are other data in Julia that are missing from tractor.
+# Debugging the mask:
+if False:
+	size(fpM.getMaskPlane('INTERP').rmin) # INTERP is element 1 in the 0-indexed python.
 
+	name = 'INTERP'
+	masked_img_data = copy.deepcopy(img[0].data)
+	val = NaN
+
+	M = fpM.getMaskPlane(name)
+
+	nan_pixels = 0
+	for (c0,c1,r0,r1,coff,roff) in zip(M.cmin,M.cmax,M.rmin,M.rmax,
+	                                   M.col0, M.row0):
+	    assert(coff == 0)
+	    assert(roff == 0)
+	    nan_pixels = nan_pixels + (r1 - r0 + 1) * (c1 - c0 + 1)
+	    masked_img_data[r0:r1, c0:c1] = val
+
+	print nan_pixels
+	print sum(numpy.isnan(masked_img_data))
 
