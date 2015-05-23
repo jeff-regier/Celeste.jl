@@ -362,7 +362,7 @@ Returns:
  This is based on the function setMaskedPixels in astrometry.net:
  https://github.com/dstndstn/astrometry.net/
 """ ->
-function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num;
+function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num, band;
                      mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
     # The default mask planes are those used by Dustin's astrometry.net code.    
     # See the comments in sdss/dr8.py for fpM.setMaskedPixels
@@ -374,7 +374,8 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num;
     # ghost = artifact from the electronics.
 
     # http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/fpM.html
-    fpm_filename = "$field_dir/fpM-$run_num-r$camcol_num-$frame_num.fit"
+    band_letter = bands[b]
+    fpm_filename = "$field_dir/fpM-$run_num-$band_letter$camcol_num-$frame_num.fit"
     fpm_fits = FITS(fpm_filename)
 
     # The last header contains the mask.

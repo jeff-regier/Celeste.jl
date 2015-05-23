@@ -39,13 +39,16 @@ SDSS.mask_image!(masked_nelec, field_dir, run_num, camcol_num, frame_num, mask_p
 sum(isnan(masked_nelec))
 
 
-fpm_filename = "$field_dir/fpM-$run_num-r$camcol_num-$frame_num.fit"
+band_letter = bands[b]
+fpm_filename = "$field_dir/fpM-$run_num-$band_letter$camcol_num-$frame_num.fit"
+
+#fpm_filename = "$field_dir/fpM-$run_num-r$camcol_num-$frame_num.fit"
 fpm_fits = FITS(fpm_filename)
 
 # The last header contains the mask.
 fpm_mask = fpm_fits[12]
 fpm_hdu_indices = read(fpm_mask, "value")
-    
+
 mask_types = read(fpm_mask, "attributeName")
 plane_rows = findin(mask_types[masktype_rows], mask_planes)
 
@@ -83,6 +86,8 @@ for fpm_i in 1:length(mask_types)
     println(mask_index, " ", sum(isnan(mask_img)), " ", nan_pixels)
 end
 
+# This is a different size than what the python has!
+length(read(fpm_fits[2], "rmax"))
 
 
 #################
