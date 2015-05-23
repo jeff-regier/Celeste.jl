@@ -362,15 +362,16 @@ Returns:
  This is based on the function setMaskedPixels in astrometry.net:
  https://github.com/dstndstn/astrometry.net/
 """ ->
-function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num)
-    # These are the masking planes used by Dustin's code.    
-    # From sdss/dr8.py:
+function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num;
+                     mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
+    # The default mask planes are those used by Dustin's astrometry.net code.    
+    # See the comments in sdss/dr8.py for fpM.setMaskedPixels
+    # and the function sdss/common.py:fpM.setMaskedPixels
     #
     # interp = pixel was bad and interpolated over
     # satur = saturated
     # cr = cosmic ray
     # ghost = artifact from the electronics.
-    const mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"})
 
     # http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/fpM.html
     fpm_filename = "$field_dir/fpM-$run_num-r$camcol_num-$frame_num.fit"
@@ -386,6 +387,9 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num)
     # Apparently attributeName lists the meanings of the HDUs in order.
     mask_types = read(fpm_mask, "attributeName")
     plane_rows = findin(mask_types[masktype_rows], mask_planes)
+
+    # Make sure each mask is present.  Is this check appropriate for all mask files?
+    @assert length(plane_rows) == length(mask_planes)
 
     for fpm_i in plane_rows
         # You want the HDU in 2 + fpm_mask.value[i] for i in keep_rows (in a 1-indexed language).
