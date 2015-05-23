@@ -48,6 +48,7 @@ sdss = DR8()
 
 # This doesn't work:
 #sdss.get_url('fpC', args.run, args.camcol, args.field, 'r')
+#sdss.get_url('fpM', args.run, args.camcol, args.field, 'r')
 
 # Mask the image.
 fpM = sdss.readFpM(args.run, args.camcol, args.field, bandname)
@@ -57,5 +58,15 @@ for plane in [ 'INTERP', 'SATUR', 'CR', 'GHOST' ]:
 	fpM.setMaskedPixels(plane, masked_img_data, NaN)
 	print sum(numpy.isnan(masked_img_data))
 
-
 numpy.savetxt(file_base + band_str + "masked_img.csv", masked_img_data, delimiter=",")
+
+
+# This doesn't match up with Julia, because the files seem to have different data.
+# For example:
+size(fpM.getMaskPlane('INTERP').rmin) # INTERP is element 1 in the 0-indexed python.
+# == 168
+# In Julia:
+# read(fpm_fits[2], "rmax") == 188
+# There are other data in Julia that are missing from tractor.
+
+
