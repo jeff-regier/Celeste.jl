@@ -363,6 +363,7 @@ Returns:
  https://github.com/dstndstn/astrometry.net/
 """ ->
 function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num, band;
+                     python_indexing = true,
                      mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
     # The default mask planes are those used by Dustin's astrometry.net code.    
     # See the comments in sdss/dr8.py for fpM.setMaskedPixels
@@ -423,8 +424,16 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num, band;
             #   I presume that either these names are strange or I am supposed to read
             #   the image from the frame and transpose it.
             # - Julia is 1-indexed, not 0-indexed.
-            mask_rows = (cmin[block] + 1):(cmax[block])
-            mask_cols = (rmin[block] + 1):(rmax[block])
+
+            # Give the option of using Dustin's python indexing or not.
+            if python_indexing
+                mask_rows = (cmin[block] + 1):(cmax[block])
+                mask_cols = (rmin[block] + 1):(rmax[block])
+            else
+                mask_rows = (cmin[block] + 1):(cmax[block] + 1)
+                mask_cols = (rmin[block] + 1):(rmax[block] + 1)
+            end
+
             mask_img[mask_rows, mask_cols] = NaN
         end
     end

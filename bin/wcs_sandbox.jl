@@ -34,11 +34,12 @@ nelec, calib_col, sky_grid = SDSS.load_raw_field(field_dir, run_num, camcol_num,
 
 # Get the masked image.
 masked_nelec = deepcopy(nelec);
-sum(isnan(masked_nelec))
 SDSS.mask_image!(masked_nelec, field_dir, run_num, camcol_num, frame_num, b);
 sum(isnan(masked_nelec))
 
-
+masked_nelec2 = deepcopy(nelec);
+SDSS.mask_image!(masked_nelec2, field_dir, run_num, camcol_num, frame_num, b, python_indexing=false);
+sum(isnan(masked_nelec2))
 
 
 
@@ -65,10 +66,45 @@ nelec[1:10, 1:10]
 # This is reasonably close.
 nelec_py[1:10, 1:10] ./ nelec[1:10, 1:10]
 nelec_py[1:10, 1:10] - nelec[1:10, 1:10]
-
 maximum(abs(nelec_py - nelec))
+ratio_err = abs(nelec_py ./ nelec - 1);
+maximum(ratio_err)
+findn(ratio_err .> 1.0001)
 
-which(abs(nelec_py - nelec) > 10.)
+# Get the relative errors with and without python masking.
+mask_ratio_err = abs(masked_nelec_py ./ masked_nelec - 1);
+mask_ratio_err2 = abs(masked_nelec_py ./ masked_nelec2 - 1);
+
+maximum(mask_ratio_err)
+maximum(mask_ratio_err2)
+
+sum(mask_ratio_err .> 0.01) / sum(!isnan(masked_nelec))
+sum(mask_ratio_err2 .> 0.01) / sum(!isnan(masked_nelec2))
+
+matshow(mask_ratio_err2 .> 0.01)
+
+
+#x_range = [ minimum(log(nelec)), maximum(log(nelec)) ]
+#plot(linrange(x_range[1], x_range[2], 1000), linrange(x_range[1], x_range[2], 1000), "b.")
+log_nelec_py = collect(log(masked_nelec_py));
+log_nelec2 = collect(log(masked_nelec2));
+log_nelec = collect(log(masked_nelec));
+
+close()
+subplot(121)
+plot(log_nelec_py, log_nelec, "b.")
+title("Pixel discrepancy (python masking)")
+xlabel("ln(python pixel values)")
+ylabel("ln(julia pixel values)")
+
+subplot(122)
+plot(log_nelec_py, log_nelec2, "b.")
+title("Pixel discrepancy (julia masking)")
+xlabel("ln(python pixel values)")
+ylabel("ln(julia pixel values)")
+close()
+
+
 
 # Python appears to do no processing on the FpC file before turning
 # it into an image.  Where do the fpC files come from?
