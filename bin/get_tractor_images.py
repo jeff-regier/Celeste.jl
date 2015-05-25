@@ -31,7 +31,8 @@ bandname = bands[args.band]
 #print ''.join(inspect.getsourcelines(pyfits.HDUList)[0])
 
 
-img = get_tractor_image(args.run, args.camcol, args.field, args.band, nanomaggies=True)
+# get_tractor_image_dr9 just calls get_tractor_image_dr8
+img = get_tractor_image_dr8(args.run, args.camcol, args.field, bandname, nanomaggies=True)
 sources = get_tractor_sources_dr9(args.run, args.camcol, args.field,
 	                              nanomaggies=True, fixedComposites=True, useObjcType=True)
 
@@ -43,7 +44,6 @@ numpy.savetxt(file_base + band_str + "psf.csv", img[0].psf, delimiter=",")
 
 
 
-# Later data releases are not supported by get_tractor_image.
 sdss = DR8()
 
 # This doesn't work:
