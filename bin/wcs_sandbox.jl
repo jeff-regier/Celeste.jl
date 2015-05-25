@@ -62,10 +62,12 @@ mm = MixtureModel(MvNormal[
 x_prod = [ Float64[i, j] for i=1:size(psf, 1), j=1:size(psf, 2) ]
 #x_prod = collect(product(1:size(psf, 1), 1:size(psf, 2)));
 x = Float64[ x_row[col] for x_row=x_prod, col=1:2 ];
-psf_w = Float64[ psf[x_row[1], x_row[2]] for x_row=x_prod ];
 
 # Is it ok that it is coming up negative?
-psf_w[ psf_w .< 0 ] = 0
+psf[ psf .< 0 ] = 0
+psf_scale = sum(psf)
+psf_w = Float64[ psf[x_row[1], x_row[2]] / psf_scale for x_row=x_prod ];
+
 gmm = GMM(3, x; kind=:full, nInit=0)
 
 # Initialization
@@ -80,12 +82,18 @@ gmm.Σ[3] = Triangular(Float64[25 -9; -9 25], :U, false)
 
 gmm.w = ones(gmm.n) / gmm.n
 
-for iter=1:10
+for iter=1:300
     post = gmmposterior(gmm, x) 
+    gmm_fit = exp(post[2]) * gmm.w;
+    rss = sum((gmm_fit - psf_w) .^ 2)
+    if isnan(rss)
+        break
+    end
+    println(iter, ": ", rss, " ", new_w)
+
     z = post[1] .* psf_w
     z_sum = collect(sum(z, 1))
     new_w = z_sum / sum(z_sum)
-    println(new_w)
     for d=1:gmm.n
         if new_w[d] > 1e-3
             new_mean = sum(x .* z[:, d], 1) / z_sum[d]
@@ -98,46 +106,24 @@ for iter=1:10
         end
     end
     gmm.w = new_w
-    new_ll = sum(post[2] .* psf_w)
-    if isnan(new_ll)
-        break
-    end
-    println(new_ll)
 end
 
-
-unpack_mat!(z[:, 2], gmm_fit);
-PyPlot.matshow(gmm_fit)
-
-
-#post = exp(gmmposterior(gmm, x)[2]) * gmm.w;
-post = exp(gmmposterior(gmm, x)[2][:, 1]);
+post = exp(gmmposterior(gmm, x)[2]) * gmm.w;
+#post = exp(gmmposterior(gmm, x)[2][:, 1]);
 gmm_fit = deepcopy(psf);
 unpack_mat!(post, gmm_fit);
+gmm_fit = gmm_fit * sum(psf) / sum(gmm_fit);
+
 PyPlot.matshow(gmm_fit)
+PyPlot.title("fit")
 
+PyPlot.matshow(psf)
+PyPlot.title("psf")
 
+PyPlot.matshow(psf - gmm_fit)
+PyPlot.title("diff")
 
-z_unpack1 = Array(Float64, size(psf, 1), size(psf, 2))
-z_unpack2 = Array(Float64, size(psf, 1), size(psf, 2))
-
-unpack_mat!(z[:, 1], z_unpack1)
-unpack_mat!(z[:, 2], z_unpack2)
-
-PyPlot.matshow(z_unpack1 - z_unpack2)
-
-
-
-mm.components[1].μ
-mm.components[1].Σ
-
-
-fig = PyPlot.figure()
-cax = PyPlot.matshow(log_dens, interpolation="nearest")
-PyPlot.colorbar(cax)
-PyPlot.close()
-
-
+sum((psf - gmm_fit) ^ 2)
 
 
 
