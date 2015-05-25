@@ -68,29 +68,37 @@ psf[ psf .< 0 ] = 0
 psf_scale = sum(psf)
 psf_w = Float64[ psf[x_row[1], x_row[2]] / psf_scale for x_row=x_prod ];
 
+psf_starting_var = (x - 26)'  * ((x - 26) .* psf_w)
 gmm = GMM(3, x; kind=:full, nInit=0)
+
+function sigma_for_gmm(sigma_mat)
+    # Returns a matrix suitable for storage in gmm.Σ
+    Triangular(GaussianMixtures.cholinv(sigma_mat), :U, false)
+end
 
 # Initialization
 gmm.μ[1, :] = Float64[26, 26]
-gmm.Σ[1] = Triangular(eye(Float64, 2) * 25, :U, false)
+gmm.Σ[1] = sigma_for_gmm(psf_starting_var)
 
-gmm.μ[2, :] = Float64[25, 26]
-gmm.Σ[2] = Triangular(eye(Float64, 2) * 25, :U, false)
+gmm.μ[2, :] = Float64[25, 25]
+gmm.Σ[2] = sigma_for_gmm(psf_starting_var)
 
-gmm.μ[3, :] = Float64[26, 26]
-gmm.Σ[3] = Triangular(Float64[25 -9; -9 25], :U, false)
+gmm.μ[3, :] = Float64[27, 27]
+gmm.Σ[3] = sigma_for_gmm(psf_starting_var)
 
 gmm.w = ones(gmm.n) / gmm.n
 
-for iter=1:300
-    post = gmmposterior(gmm, x) 
-    gmm_fit = exp(post[2]) * gmm.w;
-    rss = sum((gmm_fit - psf_w) .^ 2)
-    if isnan(rss)
-        break
-    end
-    println(iter, ": ", rss, " ", new_w)
 
+iter = 1
+tol = 1e-9
+max_iter = 500
+rss_diff = Inf
+last_rss = Inf
+fit_done = false
+post = gmmposterior(gmm, x) 
+
+while !fit_done
+    # Update using last value of post.
     z = post[1] .* psf_w
     z_sum = collect(sum(z, 1))
     new_w = z_sum / sum(z_sum)
@@ -106,6 +114,26 @@ for iter=1:300
         end
     end
     gmm.w = new_w
+
+    # Get next posterior and check for convergence.
+    post = gmmposterior(gmm, x) 
+    gmm_fit = exp(post[2]) * gmm.w;
+    rss = mean((gmm_fit - psf_w) .^ 2)
+    rss_diff = last_rss - rss
+    last_rss = rss
+    if isnan(rss)
+        error("NaN in MVN PSF fit.")
+    end
+
+    iter = iter + 1
+    if rss_diff < tol
+        fit_done = true
+    elseif iter >= max_iter
+        warn("PSF MVN fit: max_iter exceeded")
+        fit_done = true
+    end
+
+    println(rss_diff, ": ", rss, " ", new_w)
 end
 
 post = exp(gmmposterior(gmm, x)[2]) * gmm.w;
