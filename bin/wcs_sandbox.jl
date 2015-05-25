@@ -66,15 +66,25 @@ psf_w = Float64[ psf[x_row[1], x_row[2]] for x_row=x_prod ];
 
 # Is it ok that it is coming up negative?
 psf_w[ psf_w .< 0 ] = 0
-gmm = GMM(3, x; kind=:full)
+gmm = GMM(3, x; kind=:full, nInit=0)
 
+# Initialization
+gmm.μ[1, :] = Float64[26, 26]
+gmm.Σ[1] = Triangular(eye(Float64, 2) * 25, :U, false)
+
+gmm.μ[2, :] = Float64[25, 26]
+gmm.Σ[2] = Triangular(eye(Float64, 2) * 25, :U, false)
+
+gmm.μ[3, :] = Float64[26, 26]
+gmm.Σ[3] = Triangular(Float64[25 -9; -9 25], :U, false)
+
+gmm.w = ones(gmm.n) / gmm.n
 
 for iter=1:10
     post = gmmposterior(gmm, x) 
     z = post[1] .* psf_w
     z_sum = collect(sum(z, 1))
     new_w = z_sum / sum(z_sum)
-    gmm.w = new_w
     println(new_w)
     for d=1:gmm.n
         if new_w[d] > 1e-3
@@ -84,11 +94,28 @@ for iter=1:10
             x_cov = x_centered' * (x_centered .* z[:, d]) / z_sum[d]
 
             gmm.μ[d, :] = new_mean
-            gmm.Σ[d] = Triangular(x_cov, :U, false)
+            gmm.Σ[d] = Triangular(GaussianMixtures.cholinv(x_cov), :U, false)
         end
     end
-    println(sum(post[2] .* psf_w))
+    gmm.w = new_w
+    new_ll = sum(post[2] .* psf_w)
+    if isnan(new_ll)
+        break
+    end
+    println(new_ll)
 end
+
+
+unpack_mat!(z[:, 2], gmm_fit);
+PyPlot.matshow(gmm_fit)
+
+
+#post = exp(gmmposterior(gmm, x)[2]) * gmm.w;
+post = exp(gmmposterior(gmm, x)[2][:, 1]);
+gmm_fit = deepcopy(psf);
+unpack_mat!(post, gmm_fit);
+PyPlot.matshow(gmm_fit)
+
 
 
 z_unpack1 = Array(Float64, size(psf, 1), size(psf, 2))
