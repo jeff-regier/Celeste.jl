@@ -70,5 +70,21 @@ SDSS.convert_gmm_to_celeste(gmm)
 
 
 # Load the catalog entry for a field.
+
+# http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
+# In python:
+# 
+# from tractor.sdss import *
+# sdss = DR8()
+# sdss.get_url('photoObj', args.run, args.camcol, args.field)
+#
+# See tractor/sdss.py:_get_sources
+# https://github.com/dstndstn/tractor/blob/f1d92f0569e61f920932635b469222a2ac989ed7/tractor/sdss.py#L217
+
 cat_filename = "$field_dir/photoObj-$run_num-$camcol_num-$frame_num.fits"
 cat_fits = FITS(cat_filename)
+
+# The second block has the objects, e.g.:
+read(cat_fits[2], "PHI_DEV_DEG")
+read(cat_fits[2], "RESOLVE_STATUS") # some kind of bitmap?
+unique(read(cat_fits[2], "OBJC_TYPE"))
