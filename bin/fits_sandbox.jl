@@ -70,5 +70,5 @@ SDSS.convert_gmm_to_celeste(gmm)
 
 
 # Load the catalog entry for a field.
-
- 
+cat_filename = "$field_dir/photoObj-$run_num-$camcol_num-$frame_num.fits"
+cat_fits = FITS(cat_filename)
