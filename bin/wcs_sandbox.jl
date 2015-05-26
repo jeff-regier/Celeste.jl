@@ -49,98 +49,10 @@ sum(isnan(masked_nelec2))
 ###############
 # Fit a mixture of Gaussians to the psf
 
-function unpack_mat!(m_vec, m_mat)
-    for i=1:length(x_prod)
-        m_mat[x_prod[i][1], x_prod[i][2]] = m_vec[i]
-    end
-end
 
-mm = MixtureModel(MvNormal[
-        MvNormal([26., 26.], eye(2)),
-        MvNormal([23., 23.], eye(2)) ])
+gmm = SDSS.fit_psf_gaussians(psf);
 
-x_prod = [ Float64[i, j] for i=1:size(psf, 1), j=1:size(psf, 2) ]
-#x_prod = collect(product(1:size(psf, 1), 1:size(psf, 2)));
-x = Float64[ x_row[col] for x_row=x_prod, col=1:2 ];
-
-# Is it ok that it is coming up negative?
-psf[ psf .< 0 ] = 0
-psf_scale = sum(psf)
-psf_w = Float64[ psf[x_row[1], x_row[2]] / psf_scale for x_row=x_prod ];
-
-psf_starting_var = (x - 26)'  * ((x - 26) .* psf_w)
-gmm = GMM(3, x; kind=:full, nInit=0)
-
-function sigma_for_gmm(sigma_mat)
-    # Returns a matrix suitable for storage in gmm.Σ
-    Triangular(GaussianMixtures.cholinv(sigma_mat), :U, false)
-end
-
-# Initialization
-gmm.μ[1, :] = Float64[26, 26]
-gmm.Σ[1] = sigma_for_gmm(psf_starting_var)
-
-gmm.μ[2, :] = Float64[25, 25]
-gmm.Σ[2] = sigma_for_gmm(psf_starting_var)
-
-gmm.μ[3, :] = Float64[27, 27]
-gmm.Σ[3] = sigma_for_gmm(psf_starting_var)
-
-gmm.w = ones(gmm.n) / gmm.n
-
-
-iter = 1
-tol = 1e-9
-max_iter = 500
-rss_diff = Inf
-last_rss = Inf
-fit_done = false
-post = gmmposterior(gmm, x) 
-
-while !fit_done
-    # Update using last value of post.
-    z = post[1] .* psf_w
-    z_sum = collect(sum(z, 1))
-    new_w = z_sum / sum(z_sum)
-    for d=1:gmm.n
-        if new_w[d] > 1e-3
-            new_mean = sum(x .* z[:, d], 1) / z_sum[d]
-            x_centered = broadcast(-, x, new_mean)
-            #new_sigma = GaussianMixtures.cholinv(x_centered' * x_centered)
-            x_cov = x_centered' * (x_centered .* z[:, d]) / z_sum[d]
-
-            gmm.μ[d, :] = new_mean
-            gmm.Σ[d] = Triangular(GaussianMixtures.cholinv(x_cov), :U, false)
-        end
-    end
-    gmm.w = new_w
-
-    # Get next posterior and check for convergence.
-    post = gmmposterior(gmm, x) 
-    gmm_fit = exp(post[2]) * gmm.w;
-    rss = mean((gmm_fit - psf_w) .^ 2)
-    rss_diff = last_rss - rss
-    last_rss = rss
-    if isnan(rss)
-        error("NaN in MVN PSF fit.")
-    end
-
-    iter = iter + 1
-    if rss_diff < tol
-        fit_done = true
-    elseif iter >= max_iter
-        warn("PSF MVN fit: max_iter exceeded")
-        fit_done = true
-    end
-
-    println(rss_diff, ": ", rss, " ", new_w)
-end
-
-post = exp(gmmposterior(gmm, x)[2]) * gmm.w;
-#post = exp(gmmposterior(gmm, x)[2][:, 1]);
-gmm_fit = deepcopy(psf);
-unpack_mat!(post, gmm_fit);
-gmm_fit = gmm_fit * sum(psf) / sum(gmm_fit);
+gmm_fit = sum(psf) * Float64[ SDSS.evaluate_gmm(gmm, Float64[x, y]')[1] for x=1:size(psf, 1), y=1:size(psf, 2) ]
 
 PyPlot.matshow(gmm_fit)
 PyPlot.title("fit")
@@ -152,6 +64,9 @@ PyPlot.matshow(psf - gmm_fit)
 PyPlot.title("diff")
 
 sum((psf - gmm_fit) ^ 2)
+
+SDSS.convert_gmm_to_celeste(gmm)
+
 
 
 
