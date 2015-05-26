@@ -508,7 +508,7 @@ Returns:
  https://github.com/dstndstn/astrometry.net/
 """ ->
 function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num, band;
-                     python_indexing = true,
+                     python_indexing = false,
                      mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
     # The default mask planes are those used by Dustin's astrometry.net code.    
     # See the comments in sdss/dr8.py for fpM.setMaskedPixels
