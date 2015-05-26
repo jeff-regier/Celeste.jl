@@ -1,19 +1,13 @@
 using Celeste
 using CelesteTypes
 
-using FITSIO
-using WCSLIB
 using DataFrames
 using SampleData
 
-using Grid
-using GaussianMixtures
-using Distributions
-
 using SDSS
+import PSF
 
 import PyPlot
-
 
 # Some examples of the SDSS fits functions.
 
@@ -48,10 +42,10 @@ sum(isnan(masked_nelec))
 
 rrows, rnrow, rncol, cmat = SDSS.load_psf_data(field_dir, run_num, camcol_num, frame_num, 1);
 
-psf = SDSS.get_psf_at_point(1., 1., rrows, rnrow, rncol, cmat);
-gmm = SDSS.fit_psf_gaussians(psf);
+psf = PSF.get_psf_at_point(1., 1., rrows, rnrow, rncol, cmat);
+gmm = PSF.fit_psf_gaussians(psf);
 
-gmm_fit = sum(psf) * Float64[ SDSS.evaluate_gmm(gmm, Float64[x, y]')[1] for x=1:size(psf, 1), y=1:size(psf, 2) ]
+gmm_fit = sum(psf) * Float64[ PSF.evaluate_gmm(gmm, Float64[x, y]')[1] for x=1:size(psf, 1), y=1:size(psf, 2) ]
 
 if false
 	PyPlot.matshow(gmm_fit)
@@ -66,7 +60,7 @@ end
 
 sum((psf - gmm_fit) ^ 2)
 
-SDSS.convert_gmm_to_celeste(gmm)
+PSF.convert_gmm_to_celeste(gmm)
 
 
 # Load the catalog entry for a field.

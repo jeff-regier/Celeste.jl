@@ -2,29 +2,26 @@ module SDSS
 
 VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
-using FITSIO
-using WCSLIB
-using DataFrames
-using Grid
-using GaussianMixtures
+
+import WCSLIB
+import DataFrames
+import FITSIO
+import Grid
 
 # FITSIO v0.6.0 removed some of the lower-level functions used here.
 # In particular, I think wcslib may still need this.
 # Include this as a temporary fix.
 using FITSIO.Libcfitsio
 
-
-# Just dealing with SDSS stuff.  Now tested.
-
-const bands = ['u', 'g', 'r', 'i', 'z']
+const band_letters = ['u', 'g', 'r', 'i', 'z']
 
 function load_stamp_blob(stamp_dir, stamp_id)
     function fetch_image(b)
-        band_letter = bands[b]
+        band_letter = band_letters[b]
         filename = "$stamp_dir/stamp-$band_letter-$stamp_id.fits"
 
-        fits = FITS(filename)
-        hdr = read_header(fits[1])
+        fits = FITSIO.FITS(filename)
+        hdr = FITSIO.read_header(fits[1])
         original_pixels = read(fits[1])
         close(fits)
         dn = original_pixels / hdr["CALIB"] + hdr["SKY"]
@@ -34,7 +31,7 @@ function load_stamp_blob(stamp_dir, stamp_id)
         fits_file = FITSIO.Libcfitsio.fits_open_file(filename)
         header_str = FITSIO.Libcfitsio.fits_hdr2str(fits_file)
         FITSIO.Libcfitsio.fits_close_file(fits_file)
-        ((wcs,),nrejected) = wcspih(header_str)
+        ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
 
         alphaBar = [hdr["PSF_P0"], hdr["PSF_P1"], hdr["PSF_P2"]]
         xiBar = [
@@ -69,11 +66,11 @@ end
 
 function load_stamp_catalog_df(cat_dir, stamp_id, blob; match_blob=false)
     # TODO: where is this file format documented?
-    cat_fits = FITS("$cat_dir/cat-$stamp_id.fits")
-    num_cols = read_key(cat_fits[2], "TFIELDS")[1]
-    ttypes = [read_key(cat_fits[2], "TTYPE$i")[1] for i in 1:num_cols]
+    cat_fits = FITSIO.FITS("$cat_dir/cat-$stamp_id.fits")
+    num_cols = FITSIO.read_key(cat_fits[2], "TFIELDS")[1]
+    ttypes = [FITSIO.read_key(cat_fits[2], "TTYPE$i")[1] for i in 1:num_cols]
 
-    df = DataFrame()
+    df = DataFrames.DataFrame()
     for i in 1:num_cols
         tmp_data = read(cat_fits[2], ttypes[i])        
         df[symbol(ttypes[i])] = tmp_data
@@ -161,234 +158,21 @@ for more details.
 function load_psf_data(field_dir, run_num, camcol_num, frame_num, b)
     @assert 1 <= b <= 5
     psf_filename = "$field_dir/psField-$run_num-$camcol_num-$frame_num.fit"
-    psf_fits = FITS(psf_filename)
+    psf_fits = FITSIO.FITS(psf_filename)
     psf_hdu = psf_fits[b + 1]
 
-    nrows = read_key(psf_hdu, "NAXIS2")[1]
+    nrows = FITSIO.read_key(psf_hdu, "NAXIS2")[1]
     nrow_b = read(psf_hdu, "nrow_b")[1]
     ncol_b = read(psf_hdu, "ncol_b")[1]
     rnrow = read(psf_hdu, "rnrow")[1]
     rncol = read(psf_hdu, "rncol")[1]
     cmat = convert(Array{Float64, 3}, read(psf_hdu, "c"))
-
-    # Some low-level FITSIO rigamarole until the high-level interface can
-    # read variable length binary rows.
-    
-    # Move to the appropriate header.
-    FITSIO.Libcfitsio.fits_movabs_hdu(psf_hdu.fitsfile, psf_hdu.ext)
-    rrows_colnum = FITSIO.Libcfitsio.fits_get_colnum(psf_hdu.fitsfile, "RROWS")
-    rrows = zeros(Float64, rnrow * rncol, nrows)
-    for rownum in 1:nrows
-        repeat, offset = FITSIO.Libcfitsio.fits_read_descriptll(psf_hdu.fitsfile, rrows_colnum, rownum)
-        @assert repeat[1] == rnrow * rncol
-        result = zeros(repeat[1])
-        FITSIO.Libcfitsio.fits_read_col(psf_hdu.fitsfile, rrows_colnum, rownum, 1, result)
-        rrows[:, rownum] = result
-    end
+    rrows = convert(Array{Float64, 2}, reduce(hcat, read(psf_hdu, "rrows")))
     close(psf_fits)
 
     # Only the first (nrow_b, ncol_b) submatrix of cmat is used for reasons obscure
     # to the author.
     rrows, rnrow, rncol, cmat[1:nrow_b, 1:ncol_b, :]
-end
-
-@doc """
-Evaluate a gmm object at the data points x_mat.
-""" ->
-function evaluate_gmm(gmm::GMM, x_mat::Array{Float64, 2})
-    post = gmmposterior(gmm, x_mat) 
-    exp(post[2]) * gmm.w;
-end
-
-
-@doc """
-Fit a mixture of 2d Gaussians to a PSF image (evaluated at a single point).
-
-Args:
- - psf: An matrix image of the point spread function, e.g. as returned by get_psf_at_point.
- - tol: The target mean sum of squared errors between the MVN fit and the raw psf.
- - max_iter: The maximum number of EM steps to take.
-
- Returns:
-  - A GMM object containing the fit
-
- Use an EM algorithm to fit a mixture of three multivariate normals to the
- point spread function.  Although the psf is continuous-valued, we use EM by
- fitting as if we had gotten psf[x, y] data points at the image location [x, y].
- As of writing weighted data matrices of this form were not supported in GaussianMixtures.
-
- Naturally, the mixture only matches the psf up to scale.
-""" ->
-function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
-
-    function sigma_for_gmm(sigma_mat)
-        # Returns a matrix suitable for storage in the field gmm.Σ
-        Triangular(GaussianMixtures.cholinv(sigma_mat), :U, false)
-    end
-
-    # TODO: Is it ok that it is coming up negative in some points?
-    if (any(psf .< 0))
-        warn("Some psf values are negative.")
-        psf[ psf .< 0 ] = 0
-    end
-
-    # Data points at which the psf is evaluated in matrix form.
-    x_prod = [ Float64[i, j] for i=1:size(psf, 1), j=1:size(psf, 2) ]
-    x_mat = Float64[ x_row[col] for x_row=x_prod, col=1:2 ]
-
-    # Unscale the fit vector so we can compare the sum of squared differences
-    # between the psf and our mixture of normals as a convergence criterion.
-    psf_scale = sum(psf)
-    psf_mat = Float64[ psf[x_row[1], x_row[2]] / psf_scale for x_row=x_prod ];
-
-    # Use the GaussianMixtures package to evaluate our likelihoods.  In order to
-    # avoid automatically choosing an initialization point, hard-code three
-    # gaussians for now.  Ignore their initialization, which would not be
-    # weighted by the psf.
-    gmm = GMM(3, x_mat; kind=:full, nInit=0)
-
-    # Get the scale for the starting point from the whole image.
-    psf_center = Float64[ (size(psf, i) - 1) / 2 for i=1:2 ]
-    x_centered = broadcast(-, x_mat, psf_center')
-    psf_starting_var = x_centered' * (x_centered .* psf_mat)
-
-    # Hard-coded initialization.
-    gmm.μ[1, :] = psf_center
-    gmm.Σ[1] = sigma_for_gmm(psf_starting_var)
-
-    gmm.μ[2, :] = psf_center - Float64[2, 2]
-    gmm.Σ[2] = sigma_for_gmm(psf_starting_var)
-
-    gmm.μ[3, :] = psf_center + Float64[2, 2]
-    gmm.Σ[3] = sigma_for_gmm(psf_starting_var)
-
-    gmm.w = ones(gmm.n) / gmm.n
-
-    iter = 1
-    err_diff = Inf
-    last_err = Inf
-    fit_done = false
-
-    # post contains the posterior information about the values of the
-    # mixture as well as the probabilities of each component.
-    post = gmmposterior(gmm, x_mat) 
-
-    while !fit_done
-        # Update gmm using last value of post.  post[1] contains
-        # posterior probabilities of the indicators.
-        z = post[1] .* psf_mat
-        z_sum = collect(sum(z, 1))
-        new_w = z_sum / sum(z_sum)
-        gmm.w = new_w
-        for d=1:gmm.n
-            if new_w[d] > 1e-6
-                new_mean = sum(x_mat .* z[:, d], 1) / z_sum[d]
-                x_centered = broadcast(-, x_mat, new_mean)
-                x_cov = x_centered' * (x_centered .* z[:, d]) / z_sum[d]
-
-                gmm.μ[d, :] = new_mean
-                gmm.Σ[d] = sigma_for_gmm(x_cov)
-            else
-                warn("Component $d has very small probability.")
-            end
-        end
-
-        # Get next posterior and check for convergence.  post[2] contains
-        # the log densities at each point.
-        post = gmmposterior(gmm, x_mat) 
-        gmm_fit = exp(post[2]) * gmm.w;
-        err = mean((gmm_fit - psf_mat) .^ 2)
-        err_diff = last_err - err
-        last_err = err
-        if isnan(err)
-            error("NaN in MVN PSF fit.")
-        end
-
-        iter = iter + 1
-        if err_diff < tol
-            fit_done = true
-        elseif iter >= max_iter
-            warn("PSF MVN fit: max_iter exceeded")
-            fit_done = true
-        end
-
-        println("Fitting psf: $iter: $err_diff")
-    end
-
-    gmm
-end
-
-
-@doc """
-Convert a GaussianMixtures GMM object to an array of Celect PsfComponents.
-
-Args:
- - gmm: A GaussianMixtures GMM object (e.g. as returned by fit_psf_gaussians)
-
- Returns:
-  - An array of PsfComponent objects.
-""" ->
-function convert_gmm_to_celeste(gmm::GMM)
-    function convert_gmm_component_to_celeste(gmm::GMM, d)
-        PsfComponent(gmm.w[d], collect(means(gmm)[d, :]), covars(gmm)[d])
-    end
-
-    [ convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n ]
-end
-
-
-@doc """
-Using data from a psField file, evaluate the PSF for a source at given point.
-
-Args:
- - row: The row of the point source (may be a float).
- - col: The column of the point source (may be a float).
- - rrows: An (rnrow * rncol) by (k) matrix of flattened eigenimages.
- - rnrow: The number of rows in the eigenimage.
- - rncol: The number of columns in the eigenimage.
- - cmat: An (:, :, k)-array of coefficients of the weight polynomial.
-
-Returns:
- - An rnrow x rncol image of the PSF at (row, col)
-
-The PSF is represented as a weighted combination of "eigenimages" (stored
-in rrows), where the weights vary smoothly across points (row, col) in the image
-as a polynomial of the form
-weight[k](row, col) = sum_{i,j} cmat[i, j, k] * (rcs * row) ^ i (rcs * col) ^ j
-
-This function is based on the function getPsfAtPoints in astrometry.net:
-https://github.com/dstndstn/astrometry.net/blob/master/sdss/common.py#L953
-""" ->
-function get_psf_at_point(row::Float64, col::Float64,
-                          rrows::Array{Float64, 2}, rnrow::Int32, rncol::Int32, 
-                          cmat::Array{Float64, 3})
-
-    # This is a coordinate transform to keep the polynomial coefficients
-    # to a reasonable size.
-    const rcs = 0.001
-
-    # rrows' image data is in the first column a flattened form.
-    # The second dimension is the number of eigen images, which should
-    # match the number of coefficient arrays.
-    k = size(rrows)[2]
-    @assert k == size(cmat)[3]
-
-    nrow_b = size(cmat)[1]
-    ncol_b = size(cmat)[2]
-
-    # Get the weights.
-    coeffs_mat = [ (row * rcs) ^ i * (col * rcs) ^ j for i=0:(nrow_b - 1), j=0:(ncol_b - 1)]
-    weight_mat = zeros(nrow_b, ncol_b)
-    for k = 1:3, i = 1:nrow_b, j = 1:ncol_b
-        weight_mat[i, j] += cmat[i, j, k] * coeffs_mat[i, j]
-    end
-
-    # Weight the images in rrows and reshape them into matrix form.
-    # It seems I need to convert for reshape to work.  :(
-    psf = reshape(reduce(sum, [ rrows[:, i] * weight_mat[i] for i=1:k]),
-                  (convert(Int64, rnrow), convert(Int64, rncol)))
-
-    psf
 end
 
 
@@ -400,7 +184,7 @@ Args:
  - run_num: The run number
  - camcol_num: The camcol number
  - frame_num: The frame number
- - b: The filter band (a number from 1 to 5)
+ - b: The filter band id (a number from 1 to 5)
 
 Returns:
  - band_gain: An array of gains for the five bands
@@ -410,7 +194,7 @@ function load_photo_field(field_dir, run_num, camcol_num, frame_num)
     # First, read in the photofield information (the background sky,
     # gain, variance, and calibration).
     pf_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
-    pf_fits = FITS(pf_filename)
+    pf_fits = FITSIO.FITS(pf_filename)
     @assert length(pf_fits) == 2
 
     field_row = read(pf_fits[2], "field") .== int(frame_num)
@@ -444,10 +228,10 @@ http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/fram
 """ ->
 function load_raw_field(field_dir, run_num, camcol_num, frame_num, b, gain)
     @assert 1 <= b <= 5
-    b_letter = bands[b]
+    b_letter = band_letters[b]
 
     img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
-    img_fits = FITS(img_filename)
+    img_fits = FITSIO.FITS(img_filename)
     @assert length(img_fits) == 4
 
     # This is the sky-subtracted and calibrated image.
@@ -469,7 +253,8 @@ function load_raw_field(field_dir, run_num, camcol_num, frame_num, b, gain)
     # ...keeping in mind that IDL uses zero indexing:
     # http://www.exelisvis.com/docs/Manipulating_Arrays.html
     sky_grid_vals = ((1:1.:size(sky_image_raw)[1]) - 1, (1:1.:size(sky_image_raw)[2]) - 1)
-    sky_grid = CoordInterpGrid(sky_grid_vals, sky_image_raw[:,:,1], BCnearest, InterpLinear)
+    sky_grid = Grid.CoordInterpGrid(sky_grid_vals, sky_image_raw[:,:,1],
+        Grid.BCnearest, Grid.InterpLinear)
     sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ]
 
     # This is the calibration vector:
@@ -484,11 +269,6 @@ function load_raw_field(field_dir, run_num, camcol_num, frame_num, b, gain)
 
     nelec, calib_col, sky_grid
 end
-
-# img_fits_raw = fits_open_file(img_filename)
-# header_str = fits_hdr2str(img_fits_raw)
-# close(img_fits_raw)
-# ((wcs,),nrejected) = wcspih(header_str)
 
 
 @doc """
@@ -520,9 +300,9 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num, band;
     # ghost = artifact from the electronics.
 
     # http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/fpM.html
-    band_letter = bands[band]
+    band_letter = band_letters[band]
     fpm_filename = "$field_dir/fpM-$run_num-$band_letter$camcol_num-$frame_num.fit"
-    fpm_fits = FITS(fpm_filename)
+    fpm_fits = FITSIO.FITS(fpm_filename)
 
     # The last header contains the mask.
     fpm_mask = fpm_fits[12]
