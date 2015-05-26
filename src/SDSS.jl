@@ -93,7 +93,7 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     df = load_stamp_catalog_df(cat_dir, stamp_id, blob, match_blob=match_blob)
 
     function row_to_ce(row)
-        x_y = wcss2p(blob[1].wcs, [row[1, :ra], row[1, :dec]]'')[:]
+        x_y = WCSLIB.wcss2p(blob[1].wcs, [row[1, :ra], row[1, :dec]]'')[:]
 
         star_fluxes = zeros(5)
         gal_fluxes = zeros(5)
