@@ -50,6 +50,9 @@ sdss = DR8()
 #sdss.get_url('fpC', args.run, args.camcol, args.field, 'r')
 #sdss.get_url('fpM', args.run, args.camcol, args.field, 'r')
 
+#sdss = DR8()
+#sdss.get_url('photoObj', args.run, args.camcol, args.field)
+
 # Mask the image.
 masked_img_data = copy.deepcopy(img[0].data)
 fpM = sdss.readFpM(args.run, args.camcol, args.field, bandname)
