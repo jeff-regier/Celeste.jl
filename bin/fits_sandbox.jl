@@ -6,7 +6,7 @@ using SampleData
 
 using SDSS
 import PSF
-
+import FITSIO
 import PyPlot
 
 # Some examples of the SDSS fits functions.
@@ -75,10 +75,24 @@ PSF.convert_gmm_to_celeste(gmm)
 # See tractor/sdss.py:_get_sources
 # https://github.com/dstndstn/tractor/blob/f1d92f0569e61f920932635b469222a2ac989ed7/tractor/sdss.py#L217
 
+# Reading this in:
+# type CatalogEntry
+#     pos::Vector{Float64}
+#     is_star::Bool
+#     star_fluxes::Vector{Float64}
+#     gal_fluxes::Vector{Float64}
+#     gal_frac_dev::Float64
+#     gal_ab::Float64
+#     gal_angle::Float64
+#     gal_scale::Float64
+# end
+
 cat_filename = "$field_dir/photoObj-$run_num-$camcol_num-$frame_num.fits"
-cat_fits = FITS(cat_filename)
+cat_fits = FITSIO.FITS(cat_filename)
 
 # The second block has the objects, e.g.:
 read(cat_fits[2], "PHI_DEV_DEG")
 read(cat_fits[2], "RESOLVE_STATUS") # some kind of bitmap?
 unique(read(cat_fits[2], "OBJC_TYPE"))
+
+
