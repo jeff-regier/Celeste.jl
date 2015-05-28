@@ -5,11 +5,11 @@ import GSL.deriv_central
 
 
 function verify_kl(q_dist, p_dist, claimed_kl::Float64)
-    sample_size = 2_000_000
+    sample_size = 4_000_000
     q_samples = rand(q_dist, sample_size)
     empirical_kl_samples = logpdf(q_dist, q_samples) - logpdf(p_dist, q_samples)
     empirical_kl = mean(empirical_kl_samples)
-    tol = 5 * std(empirical_kl_samples) / sqrt(sample_size)
+    tol = 6 * std(empirical_kl_samples) / sqrt(sample_size)
     min_diff = 1e-2 * std(empirical_kl_samples) / sqrt(sample_size)
     info("kl: $empirical_kl vs $claimed_kl [tol: $tol]")
     @test_approx_eq_eps empirical_kl claimed_kl tol
