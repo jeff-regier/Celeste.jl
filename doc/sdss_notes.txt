@@ -1,0 +1,44 @@
+
+
+
+
+
+#######################
+# Get the PSF
+# "Documented" here:
+# http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/psField.html
+
+# I think you need to replicate the code in 
+# https://github.com/rgiordan/astrometry.net/blob/master/sdss/common.py
+# ... called in 
+# https://github.com/dstndstn/astrometry.net/blob/master/sdss/dr7.py
+# There is also this, which is a bit more explicit:
+# https://www.sdss3.org/dr8/algorithms/read_psf.php
+# Or the dr12 version:
+# http://www.sdss.org/dr12/algorithms/read_psf/
+
+# File is from:
+#  'http://data.sdss3.org/sas/dr10/boss/photo/redux/301/3900/objcs/6/psField-003900-6-0269.fit'
+
+# For reference, you can get the URLs in python with
+# >>> from astrometry.sdss import *
+# >>> sdss = DR10()
+# >>> sdss.get_url('psField', 3900, 6, 269, 'r')
+# 'http://data.sdss3.org/sas/dr10/boss/photo/redux/301/3900/objcs/6/psField-003900-6-0269.fit'
+
+
+
+###############################
+# calibration
+# Data described here:
+# http://www.sdss.org/dr12/data_access/bulk/
+#
+# Data type is perhaps
+# http://data.sdss3.org/datamodel/files/PHOTO_SWEEP/RERUN/calibObj.html
+#
+# Which is maybe here:
+# http://data.sdss3.org/sas/dr12/boss/sweeps/dr9/301/calibObj-003900-6-sky.fits.gz
+# http://data.sdss3.org/sas/dr12/boss/sweeps/dr9/301/calibObj-003900-6-gal.fits.gz
+# http://data.sdss3.org/sas/dr12/boss/sweeps/dr9/301/calibObj-003900-6-star.fits.gz
+# ...but these files are huge.  Why?
+

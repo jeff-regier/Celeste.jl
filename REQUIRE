@@ -5,3 +5,6 @@ NLopt
 GSL
 DataFrames
 Docile
+Grid
+GaussianMixtures
+
