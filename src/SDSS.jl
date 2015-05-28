@@ -1,25 +1,27 @@
 module SDSS
 
+VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
+
+import WCSLIB
+import DataFrames
+import FITSIO
+import Grid
 
 # FITSIO v0.6.0 removed some of the lower-level functions used here.
 # In particular, I think wcslib may still need this.
 # Include this as a temporary fix.
 using FITSIO.Libcfitsio
 
-using FITSIO
-using WCSLIB
-using DataFrames
-
-# Just dealing with SDSS stuff.  Now tested.
+const band_letters = ['u', 'g', 'r', 'i', 'z']
 
 function load_stamp_blob(stamp_dir, stamp_id)
     function fetch_image(b)
-        band_letter = ['u', 'g', 'r', 'i', 'z'][b]
+        band_letter = band_letters[b]
         filename = "$stamp_dir/stamp-$band_letter-$stamp_id.fits"
 
-        fits = FITS(filename)
-        hdr = read_header(fits[1])
+        fits = FITSIO.FITS(filename)
+        hdr = FITSIO.read_header(fits[1])
         original_pixels = read(fits[1])
         close(fits)
         dn = original_pixels / hdr["CALIB"] + hdr["SKY"]
@@ -29,7 +31,7 @@ function load_stamp_blob(stamp_dir, stamp_id)
         fits_file = FITSIO.Libcfitsio.fits_open_file(filename)
         header_str = FITSIO.Libcfitsio.fits_hdr2str(fits_file)
         FITSIO.Libcfitsio.fits_close_file(fits_file)
-        ((wcs,),nrejected) = wcspih(header_str)
+        ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
 
         alphaBar = [hdr["PSF_P0"], hdr["PSF_P1"], hdr["PSF_P2"]]
         xiBar = [
@@ -64,11 +66,11 @@ end
 
 function load_stamp_catalog_df(cat_dir, stamp_id, blob; match_blob=false)
     # TODO: where is this file format documented?
-    cat_fits = FITS("$cat_dir/cat-$stamp_id.fits")
-    num_cols = read_key(cat_fits[2], "TFIELDS")[1]
-    ttypes = [read_key(cat_fits[2], "TTYPE$i")[1] for i in 1:num_cols]
+    cat_fits = FITSIO.FITS("$cat_dir/cat-$stamp_id.fits")
+    num_cols = FITSIO.read_key(cat_fits[2], "TFIELDS")[1]
+    ttypes = [FITSIO.read_key(cat_fits[2], "TTYPE$i")[1] for i in 1:num_cols]
 
-    df = DataFrame()
+    df = DataFrames.DataFrame()
     for i in 1:num_cols
         tmp_data = read(cat_fits[2], ttypes[i])        
         df[symbol(ttypes[i])] = tmp_data
@@ -91,7 +93,7 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     df = load_stamp_catalog_df(cat_dir, stamp_id, blob, match_blob=match_blob)
 
     function row_to_ce(row)
-        x_y = wcss2p(blob[1].wcs, [row[1, :ra], row[1, :dec]]'')[:]
+        x_y = WCSLIB.wcss2p(blob[1].wcs, [row[1, :ra], row[1, :dec]]'')[:]
 
         star_fluxes = zeros(5)
         gal_fluxes = zeros(5)
@@ -129,6 +131,238 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     CatalogEntry[row_to_ce(df[i, :]) for i in 1:size(df, 1)]
 end
 
+
+@doc """
+Load data from a psField file, which contains the point spread function.
+
+Args:
+ - field_dir: The directory of the file
+ - run_num: The run number
+ - camcol_num: The camcol number
+ - frame_num: The frame number
+ - b: The filter band (a number from 1 to 5)
+
+Returns:
+ - rrows: A matrix of flattened eigenimages.
+ - rnrow: The number of rows in an eigenimage.
+ - rncol: The number of columns in an eigenimage.
+ - cmat: The coefficients of the weight polynomial (see below).
+
+The point spread function is represented as an rnrow x rncol image
+showing what a true point source would look as viewed through the optics.
+This image varies across the field, and to parameterize this variation,
+the PSF is represented as a linear combination of four "eigenimages",
+with weights that vary across the image.  See get_psf_at_point()
+for more details.
+""" ->
+function load_psf_data(field_dir, run_num, camcol_num, frame_num, b)
+    @assert 1 <= b <= 5
+    psf_filename = "$field_dir/psField-$run_num-$camcol_num-$frame_num.fit"
+    psf_fits = FITSIO.FITS(psf_filename)
+    psf_hdu = psf_fits[b + 1]
+
+    nrows = FITSIO.read_key(psf_hdu, "NAXIS2")[1]
+    nrow_b = read(psf_hdu, "nrow_b")[1]
+    ncol_b = read(psf_hdu, "ncol_b")[1]
+    rnrow = read(psf_hdu, "rnrow")[1]
+    rncol = read(psf_hdu, "rncol")[1]
+    cmat = convert(Array{Float64, 3}, read(psf_hdu, "c"))
+    rrows = convert(Array{Float64, 2}, reduce(hcat, read(psf_hdu, "rrows")))
+    close(psf_fits)
+
+    # Only the first (nrow_b, ncol_b) submatrix of cmat is used for reasons obscure
+    # to the author.
+    rrows, rnrow, rncol, cmat[1:nrow_b, 1:ncol_b, :]
+end
+
+
+@doc """
+Load relevant data from a photoField file.
+
+Args:
+ - field_dir: The directory of the file
+ - run_num: The run number
+ - camcol_num: The camcol number
+ - frame_num: The frame number
+ - b: The filter band id (a number from 1 to 5)
+
+Returns:
+ - band_gain: An array of gains for the five bands
+ - band_dark_variance: An array of dark variances for the five bands
+""" ->
+function load_photo_field(field_dir, run_num, camcol_num, frame_num)
+    # First, read in the photofield information (the background sky,
+    # gain, variance, and calibration).
+    pf_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
+    pf_fits = FITSIO.FITS(pf_filename)
+    @assert length(pf_fits) == 2
+
+    field_row = read(pf_fits[2], "field") .== int(frame_num)
+    band_gain = collect(read(pf_fits[2], "gain")[:, field_row])
+    band_dark_variance = collect(read(pf_fits[2], "dark_variance")[:, field_row])
+
+    close(pf_fits)
+
+    band_gain, band_dark_variance
+end
+
+
+@doc """
+Load the raw electron counts, calibration vector, and sky background from a field.
+
+Args:
+ - field_dir: The directory of the file
+ - run_num: The run number
+ - camcol_num: The camcol number
+ - frame_num: The frame number
+ - b: The filter band (a number from 1 to 5)
+ - gain: The gain for this band (e.g. as read from photoField)
+
+Returns:
+ - nelec: An image of raw electron counts in nanomaggies
+ - calib_col: A column of calibration values (the same for every column of the image) 
+ - sky_grid: A CoordInterpGrid bilinear interpolation object
+
+The meaing of the frame data structures is thoroughly documented here:
+http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
+""" ->
+function load_raw_field(field_dir, run_num, camcol_num, frame_num, b, gain)
+    @assert 1 <= b <= 5
+    b_letter = band_letters[b]
+
+    img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$frame_num.fits"
+    img_fits = FITSIO.FITS(img_filename)
+    @assert length(img_fits) == 4
+
+    # This is the sky-subtracted and calibrated image.
+    processed_image = read(img_fits[1])
+
+    # Read in the sky background.
+    sky_image_raw = read(img_fits[3], "ALLSKY")
+    sky_x = collect(read(img_fits[3], "XINTERP"))
+    sky_y = collect(read(img_fits[3], "YINTERP"))
+
+    # Interpolate the sky to the full image.  Combining the example from
+    # http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
+    # ...with the documentation from the IDL language:
+    # http://www.exelisvis.com/docs/INTERPOLATE.html
+    # ...we can see that we are supposed to interpret a point (sky_x[i], sky_y[j])
+    # with associated row and column (if, jf) = (floor(sky_x[i]), floor(sky_y[j]))
+    # as lying in the square spanned by the points
+    # (sky_image_raw[if, jf], sky_image_raw[if + 1, jf + 1]).
+    # ...keeping in mind that IDL uses zero indexing:
+    # http://www.exelisvis.com/docs/Manipulating_Arrays.html
+    sky_grid_vals = ((1:1.:size(sky_image_raw)[1]) - 1, (1:1.:size(sky_image_raw)[2]) - 1)
+    sky_grid = Grid.CoordInterpGrid(sky_grid_vals, sky_image_raw[:,:,1],
+        Grid.BCnearest, Grid.InterpLinear)
+    sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ]
+
+    # This is the calibration vector:
+    calib_col = read(img_fits[2])
+    calib_image = [ calib_col[row] for
+                    row in 1:size(processed_image)[1],
+                    col in 1:size(processed_image)[2] ]
+
+    # Convert to raw electron counts.  Note that these may not be close to integers
+    # due to the analog to digital conversion process in the telescope.
+    nelec = gain * convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image))
+
+    nelec, calib_col, sky_grid
+end
+
+
+@doc """
+Set the pixels in mask_img to NaN in the places specified by the fpM file.
+
+Args:
+ - mask_img: The image to be masked (updated in place)
+ - field_dir: The directory of the file
+ - run_num: The run number
+ - camcol_num: The camcol number
+ - frame_num: The frame number
+
+Returns:
+ - Updates mask_img in place by setting to NaN all the pixels specified.
+
+ This is based on the function setMaskedPixels in astrometry.net:
+ https://github.com/dstndstn/astrometry.net/
+""" ->
+function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num, band;
+                     python_indexing = false,
+                     mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
+    # The default mask planes are those used by Dustin's astrometry.net code.    
+    # See the comments in sdss/dr8.py for fpM.setMaskedPixels
+    # and the function sdss/common.py:fpM.setMaskedPixels
+    #
+    # interp = pixel was bad and interpolated over
+    # satur = saturated
+    # cr = cosmic ray
+    # ghost = artifact from the electronics.
+
+    # http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/fpM.html
+    band_letter = band_letters[band]
+    fpm_filename = "$field_dir/fpM-$run_num-$band_letter$camcol_num-$frame_num.fit"
+    fpm_fits = FITSIO.FITS(fpm_filename)
+
+    # The last header contains the mask.
+    fpm_mask = fpm_fits[12]
+    fpm_hdu_indices = read(fpm_mask, "value")
+
+    # Only these rows contain masks.
+    masktype_rows = find(read(fpm_mask, "defName") .== "S_MASKTYPE")
+
+    # Apparently attributeName lists the meanings of the HDUs in order.
+    mask_types = read(fpm_mask, "attributeName")
+    plane_rows = findin(mask_types[masktype_rows], mask_planes)
+
+    # Make sure each mask is present.  Is this check appropriate for all mask files?
+    @assert length(plane_rows) == length(mask_planes)
+
+    for fpm_i in plane_rows
+        # You want the HDU in 2 + fpm_mask.value[i] for i in keep_rows (in a 1-indexed language).
+        mask_index = 2 + fpm_hdu_indices[fpm_i]
+        cmin = read(fpm_fits[mask_index], "cmin")
+        cmax = read(fpm_fits[mask_index], "cmax")
+        rmin = read(fpm_fits[mask_index], "rmin")
+        rmax = read(fpm_fits[mask_index], "rmax")
+        row0 = read(fpm_fits[mask_index], "row0")
+        col0 = read(fpm_fits[mask_index], "col0")
+
+        @assert all(col0 .== 0)
+        @assert all(row0 .== 0)
+        @assert length(rmin) == length(cmin) == length(rmax) == length(cmax)
+
+        for block in 1:length(rmin)
+            # The ranges are for a 0-indexed language.
+            @assert cmax[block] + 1 <= size(mask_img)[1]
+            @assert cmin[block] + 1 >= 1
+            @assert rmax[block] + 1 <= size(mask_img)[2]
+            @assert rmin[block] + 1 >= 1
+
+            # Some notes:
+            # See astrometry.net//sdss/common.py:SetMaskedPixels, which I currently assume is correct.
+            # - In contrast with  julia, the numpy matrix index range [3:5, 3:5] contains four
+            #   pixels, not six.  However, if the numpy is correct, then fpM files contain
+            #   many bad rows that don't get masked at all since cmin == cmax
+            #   or rmin == rmax.  For this reason, I think the python might be erroneous.
+            # - For some reason, the sizes are inconsistent if the rows are read first.
+            #   I presume that either these names are strange or I am supposed to read
+            #   the image from the frame and transpose it.
+            # - Julia is 1-indexed, not 0-indexed.
+
+            # Give the option of using Dustin's python indexing or not.
+            if python_indexing
+                mask_rows = (cmin[block] + 1):(cmax[block])
+                mask_cols = (rmin[block] + 1):(rmax[block])
+            else
+                mask_rows = (cmin[block] + 1):(cmax[block] + 1)
+                mask_cols = (rmin[block] + 1):(rmax[block] + 1)
+            end
+
+            mask_img[mask_rows, mask_cols] = NaN
+        end
+    end
+end
 
 end
 
