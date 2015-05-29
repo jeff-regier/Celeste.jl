@@ -64,6 +64,9 @@ PSF.convert_gmm_to_celeste(gmm)
 
 
 
+blob = SDSS.load_stamp_blob(SampleData.dat_dir, "5.0073-0.0739");
+cat_entries_df =
+	SDSS.load_stamp_catalog_df(SampleData.dat_dir, "s82-5.0073-0.0739", blob);
 
 cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, frame_num);
 
