@@ -373,7 +373,7 @@ Args:
  - run_num: The run number
  - camcol_num: The camcol number
  - frame_num: The frame number
- - fracdev_bandnum: The band number from which to read fracdev.  Defaults
+ - bandnum: The band number from which to read galaxy properties.  Defaults
     to 3, the r band
 
 Returns:
@@ -385,7 +385,7 @@ Returns:
  This is based on the function _get_sources in tractor/sdss.py:
  https://github.com/dstndstn/tractor/
 """ ->
-function load_catalog_df(field_dir, run_num, camcol_num, frame_num; fracdev_bandnum=3)
+function load_catalog_df(field_dir, run_num, camcol_num, frame_num; bandnum=3)
 
     cat_filename = "$field_dir/photoObj-$run_num-$camcol_num-$frame_num.fits"
     cat_fits = FITSIO.FITS(cat_filename)
@@ -400,6 +400,7 @@ function load_catalog_df(field_dir, run_num, camcol_num, frame_num; fracdev_band
     has_child = read(cat_hdu, "nchild") .> 0
 
     # This is the position.  In tractor, it is passed into tractor:RaDecPos(ra, dec)
+    objid = read(cat_hdu, "objid");
     ra = read(cat_hdu, "ra")
     dec = read(cat_hdu, "dec")
 
@@ -410,60 +411,45 @@ function load_catalog_df(field_dir, run_num, camcol_num, frame_num; fracdev_band
     is_bad_obj = !(is_star | is_gal)
 
     # Read in the galaxy types.
-    fracdev = read(cat_hdu, "fracdev")[fracdev_bandnum, :][:];
+    fracdev = read(cat_hdu, "fracdev")[bandnum, :][:];
     has_dev = fracdev .> 0.
     has_exp = fracdev .< 1.
     is_comp = has_dev & has_exp
     is_bad_fracdev = (fracdev .< 0.) | (fracdev .> 1)
 
     # Read the fluxes.
-    # TODO: Perhaps do not rename this.
-    starflux = read(cat_hdu, "psfflux")
+    psfflux = read(cat_hdu, "psfflux")
 
-    # Record the compflux if the galaxy is composite, otherwise use
+    # Record the cmodelflux if the galaxy is composite, otherwise use
     # the flux for the appropriate type.
-    compflux = read(cat_hdu, "cmodelflux")
+    cmodelflux = read(cat_hdu, "cmodelflux")
     devflux = read(cat_hdu, "devflux")
     expflux = read(cat_hdu, "expflux")
 
-    galflux = Array(Float64, size(compflux))
-    for i=1:size(galflux, 2)
-        if is_comp[i]
-            galflux[:, i] = compflux[:, i]
-        elseif has_dev[i]
-            galflux[:, i] = devflux[:, i]
-            @assert !has_exp[i]
-        elseif has_exp[i]
-            galflux[:, i] = expflux[:, i]
-        else
-            error("Galaxy has no known type.")
-        end
-    end
-
+    # Only collect the following properties for a particular band.
     # NB: the phi quantites in tractor are multiplied by -1.
-    phi_dev_deg = read(cat_hdu, "phi_dev_deg")
-    phi_exp_deg = read(cat_hdu, "phi_exp_deg")
+    phi_dev_deg = read(cat_hdu, "phi_dev_deg")[bandnum, :][:]
+    phi_exp_deg = read(cat_hdu, "phi_exp_deg")[bandnum, :][:]
 
-    re_dev = read(cat_hdu, "theta_dev")
-    re_exp = read(cat_hdu, "theta_exp")
+    theta_dev = read(cat_hdu, "theta_dev")[bandnum, :][:]
+    theta_exp = read(cat_hdu, "theta_exp")[bandnum, :][:]
 
-    ab_exp = read(cat_hdu, "ab_exp")
-    ab_dev = read(cat_hdu, "ab_dev")
+    ab_exp = read(cat_hdu, "ab_exp")[bandnum, :][:]
+    ab_dev = read(cat_hdu, "ab_dev")[bandnum, :][:]
 
-    objid = read(cat_hdu, "objid");
-    cat_df = DataFrames.DataFrame(objid=objid, ra=ra, dec=dec,
-                                  is_star=is_star, is_gal=is_gal, fracdev=fracdev)
+    # Match the column names in the stamp-making script.
+    cat_df = DataFrames.DataFrame(run=run_num, camcol=camcol_num, field=frame_num,
+                                  objid=objid, ra=ra, dec=dec,
+                                  is_star=is_star, is_gal=is_gal, frac_dev=fracdev)
+                                  ab_exp=ab_exp, theta_exp=theta_exp, phi_exp=phi_exp_deg,
+                                  ab_dev=ab_dev, theta_dev=theta_dev, phi_dev=phi_dev_deg)
 
-    ,
-                                  ab_exp=ab_exp, re_exp=re_exp, phi_exp_deg=phi_exp_deg,
-                                  ab_dev=ab_dev, re_dev=re_dev, phi_dev_deg=phi_dev_deg)
-
-    for bandnum=1:length(band_letters)
-        cat_df[symbol(string("star_flux_", bandnum))] = starflux[bandnum, :][:]
-        cat_df[symbol(string("gal_flux_", bandnum))] = galflux[bandnum, :][:]
-        cat_df[symbol(string("ab_exp", bandnum))] = ab_exp[bandnum, :][:]
-        cat_df[symbol(string("re_exp", bandnum))] = re_exp[bandnum, :][:]
-
+    for b=1:length(band_letters)
+        band_letter = band_letter[b]
+        cat_df[symbol(string("psfflux_", band_letter))] = psfflux[b, :][:]
+        cat_df[symbol(string("compflux_", band_letter))] = compflux[b, :][:]
+        cat_df[symbol(string("expflux_", band_letter))] = expflux[b, :][:]
+        cat_df[symbol(string("devflux_", band_letter))] = devflux[b, :][:]
     end
 
     is_bad = is_bad_fracdev | is_bad_obj | is_bright | has_child
