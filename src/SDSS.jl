@@ -92,14 +92,18 @@ end
 
 function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     df = load_stamp_catalog_df(cat_dir, stamp_id, blob, match_blob=match_blob)
+    convert_catalog_to_celeste(df, blob, match_blob=match_blob)
+end
 
+
+function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=false)
     function row_to_ce(row)
         x_y = WCSLIB.wcss2p(blob[1].wcs, [row[1, :ra], row[1, :dec]]'')[:]
 
         star_fluxes = zeros(5)
         gal_fluxes = zeros(5)
         fracs_dev = [row[1, :frac_dev], 1 - row[1, :frac_dev]]
-        for b in 1:5
+        for b in 1:length(band_letters)
             bl = band_letters[b]
             psf_col = symbol("psfflux_$bl")
             star_fluxes[b] = row[1, psf_col]
@@ -114,7 +118,8 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
         fits_phi = fracs_dev[1] > .5 ? row[1, :phi_dev] : row[1, :phi_exp]
         fits_theta = fracs_dev[1] > .5 ? row[1, :theta_dev] : row[1, :theta_exp]
 
-        if !match_blob  # horrible hack
+        # tractor defines phi as -1 * the phi catalog for some reason.
+        if !match_blob  
             fits_phi *= -1.
         end
 
@@ -438,22 +443,25 @@ function load_catalog_df(field_dir, run_num, camcol_num, frame_num; bandnum=3)
     ab_dev = read(cat_hdu, "ab_dev")[bandnum, :][:]
 
     # Match the column names in the stamp-making script.
-    cat_df = DataFrames.DataFrame(run=run_num, camcol=camcol_num, field=frame_num,
-                                  objid=objid, ra=ra, dec=dec,
-                                  is_star=is_star, is_gal=is_gal, frac_dev=fracdev)
+    cat_df = DataFrames.DataFrame(objid=objid, ra=ra, dec=dec,
+                                  is_star=is_star, is_gal=is_gal, frac_dev=fracdev,
                                   ab_exp=ab_exp, theta_exp=theta_exp, phi_exp=phi_exp_deg,
                                   ab_dev=ab_dev, theta_dev=theta_dev, phi_dev=phi_dev_deg)
 
+    cat_df[:run] = run_num
+    cat_df[:camcol] = camcol_num
+    cat_df[:field] = frame_num
+
     for b=1:length(band_letters)
-        band_letter = band_letter[b]
+        band_letter = band_letters[b]
         cat_df[symbol(string("psfflux_", band_letter))] = psfflux[b, :][:]
-        cat_df[symbol(string("compflux_", band_letter))] = compflux[b, :][:]
+        cat_df[symbol(string("compflux_", band_letter))] = cmodelflux[b, :][:]
         cat_df[symbol(string("expflux_", band_letter))] = expflux[b, :][:]
         cat_df[symbol(string("devflux_", band_letter))] = devflux[b, :][:]
     end
 
     is_bad = is_bad_fracdev | is_bad_obj | is_bright | has_child
-    bad_frac = sum(is_bad) / length(rows)
+    bad_frac = sum(is_bad) / length(objid)
     println("Proportion of bad rows: $bad_frac")
     cat_df = cat_df[!is_bad, :]
 
