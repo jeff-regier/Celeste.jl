@@ -364,5 +364,105 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, frame_num, band;
     end
 end
 
+@doc """
+Read a catalog entry.
+
+Args:
+ - field_dir: The directory of the file
+ - run_num: The run number
+ - camcol_num: The camcol number
+ - frame_num: The frame number
+ - fracdev_bandnum: The band number from which to read fracdev
+
+Returns:
+ - A data frame containing catalog entries in the rows.
+
+ The data format is documented here:
+ http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
+
+ This is based on the function _get_sources in tractor/sdss.py:
+ https://github.com/dstndstn/tractor/
+""" ->
+function load_catalog_df(field_dir, run_num, camcol_num, frame_num; fracdev_bandnum=1)
+
+    cat_filename = "$field_dir/photoObj-$run_num-$camcol_num-$frame_num.fits"
+    cat_fits = FITSIO.FITS(cat_filename)
+
+    cat_hdu = cat_fits[2]
+
+    # Eliminate "bright" objects.
+    # photo_flags1_map is defined in astrometry.net/sdss/common.py
+    # ...where we see that photo_flags1_map['BRIGHT'] = 2
+    const bright_bitmask = 2
+    is_bright = read(cat_hdu, "objc_flags") & bright_bitmask .> 0
+    has_child = read(cat_hdu, "nchild") .> 0
+
+    # This is the position.  In tractor, it is passed into tractor:RaDecPos(ra, dec)
+    ra = read(cat_hdu, "ra")
+    dec = read(cat_hdu, "dec")
+
+    # 6 = star, 3 = galaxy, others can be ignored.
+    objc_type = read(cat_hdu, "objc_type");
+    is_star = objc_type .== 6
+    is_gal = objc_type .== 3
+    is_bad_obj = !(is_star | is_gal)
+
+    # Read in the galaxy types.
+    fracdev = read(cat_hdu, "fracdev")[fracdev_bandnum, :][:];
+    has_dev = fracdev .> 0.
+    has_exp = fracdev .< 1.
+    is_comp = has_dev & has_exp
+    is_bad_fracdev = (fracdev .< 0.) | (fracdev .> 1)
+
+    # Read the fluxes.
+    starflux = read(cat_hdu, "psfflux")
+
+    # Record the compflux if the galaxy is composite, otherwise use
+    # the flux for the appropriate type.
+    compflux = read(cat_hdu, "cmodelflux")
+    devflux = read(cat_hdu, "devflux")
+    expflux = read(cat_hdu, "expflux")
+
+    galflux = Array(Float64, size(compflux))
+    for i=1:size(gal_flux, 2)
+        if is_comp[i]
+            galflux[:, i] = compflux[:, i]
+        elseif has_dev[i]
+            galflux[:, i] = devflux[:, i]
+            @assert !has_exp[i]
+        elseif has_exp[i]
+            galflux[:, i] = expflux[:, i]
+        else
+            error("Galaxy has no known type.")
+        end
+    end
+
+    # NB: the phi quantites in tractor are multiplied by -1.
+    phi_dev_deg = read(cat_hdu, "phi_dev_deg")
+    phi_exp_deg = read(cat_hdu, "phi_exp_deg")
+
+    re_dev = read(cat_hdu, "theta_dev")
+    re_exp = read(cat_hdu, "theta_exp")
+
+    ab_exp = read(cat_hdu, "ab_exp")
+    ab_dev = read(cat_hdu, "ab_dev")
+
+    objid = read(cat_hdu, "objid");
+    cat_df = DataFrame(objid=objid, ra=ra, dec=dec, is_star=is_star, is_gal=is_gal, fracdev=fracdev,
+                       ab_exp=ab_exp, re_exp=re_exp, phi_exp_deg=phi_exp_deg,
+                       ab_dev=ab_dev, re_dev=re_dev, phi_dev_deg=phi_dev_deg)
+
+    for bandnum=1:length(band_letters)
+        cat_df[symbol(string("star_flux_", bandnum))] = starflux[bandnum, :][:]
+        cat_df[symbol(string("gal_flux_", bandnum))] = galflux[bandnum, :][:]
+    end
+
+    is_bad = is_bad_fracdev | is_bad_obj | is_bright | has_child
+    bad_frac = sum(is_bad) / length(rows)
+    println("Proportion of bad rows: $bad_frac")
+    cat_df = cat_df[!is_bad, :]
+
+    cat_df
 end
 
+end

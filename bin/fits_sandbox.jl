@@ -63,6 +63,12 @@ sum((psf - gmm_fit) ^ 2)
 PSF.convert_gmm_to_celeste(gmm)
 
 
+
+
+cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, frame_num);
+
+
+
 # Load the catalog entry for a field.
 
 # http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
