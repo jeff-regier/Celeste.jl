@@ -242,6 +242,12 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     sky_x = collect(read(img_fits[3], "XINTERP"))
     sky_y = collect(read(img_fits[3], "YINTERP"))
 
+    # Get the WCS coordinates.
+    header_str = FITSIO.read_header(img_fits[1], ASCIIString)
+    ((wcs,), nrejected) = WCSLIB.wcspih(header_str)
+
+    close(img_fits)
+
     # Interpolate the sky to the full image.  Combining the example from
     # http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
     # ...with the documentation from the IDL language:
@@ -266,10 +272,6 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     # Convert to raw electron counts.  Note that these may not be close to integers
     # due to the analog to digital conversion process in the telescope.
     nelec = gain * convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image))
-
-    # Get the WCS coordinates.
-    header_str = FITSIO.read_header(img_fits[1], ASCIIString)
-    ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
 
     nelec, calib_col, sky_grid, sky_x, sky_y, wcs
 end
@@ -318,6 +320,8 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, field_num, band;
     # Apparently attributeName lists the meanings of the HDUs in order.
     mask_types = read(fpm_mask, "attributeName")
     plane_rows = findin(mask_types[masktype_rows], mask_planes)
+
+    close(fpm_fits)
 
     # Make sure each mask is present.  Is this check appropriate for all mask files?
     @assert length(plane_rows) == length(mask_planes)
@@ -439,6 +443,8 @@ function load_catalog_df(field_dir, run_num, camcol_num, field_num; bandnum=3)
 
     ab_exp = read(cat_hdu, "ab_exp")[bandnum, :][:]
     ab_dev = read(cat_hdu, "ab_dev")[bandnum, :][:]
+
+    close(cat_fits)
 
     # Match the column names in the stamp-making script.
     cat_df = DataFrames.DataFrame(objid=objid, ra=ra, dec=dec,
