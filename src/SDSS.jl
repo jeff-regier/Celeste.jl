@@ -9,11 +9,6 @@ import FITSIO
 import Grid
 import PSF
 
-# FITSIO v0.6.0 removed some of the lower-level functions used here.
-# In particular, I think wcslib may still need this.
-# Include this as a temporary fix.
-using FITSIO.Libcfitsio
-
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
 function load_stamp_blob(stamp_dir, stamp_id)
@@ -28,11 +23,7 @@ function load_stamp_blob(stamp_dir, stamp_id)
         dn = original_pixels / hdr["CALIB"] + hdr["SKY"]
         nelec = float(int(dn * hdr["GAIN"]))
 
-        # Load the WCS coordinates using low-level FITSIO stuff.  See
-        # https://github.com/JuliaAstro/FITSIO.jl/issues/39
-        fits_file = FITSIO.Libcfitsio.fits_open_file(filename)
-        header_str = FITSIO.Libcfitsio.fits_hdr2str(fits_file)
-        FITSIO.Libcfitsio.fits_close_file(fits_file)
+        header_str = FITSIO.read_header(fits[1], ASCIIString)
         ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
 
         alphaBar = [hdr["PSF_P0"], hdr["PSF_P1"], hdr["PSF_P2"]]
@@ -276,12 +267,8 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     # due to the analog to digital conversion process in the telescope.
     nelec = gain * convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image))
 
-
-    # Load the WCS coordinates using low-level FITSIO stuff.  See
-    # https://github.com/JuliaAstro/FITSIO.jl/issues/39
-    fits_file = FITSIO.Libcfitsio.fits_open_file(img_filename)
-    header_str = FITSIO.Libcfitsio.fits_hdr2str(fits_file)
-    FITSIO.Libcfitsio.fits_close_file(fits_file)
+    # Get the WCS coordinates.
+    header_str = FITSIO.read_header(img_fits[1], ASCIIString)
     ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
 
     nelec, calib_col, sky_grid, sky_x, sky_y, wcs
