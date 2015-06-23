@@ -172,6 +172,9 @@ weight[k](row, col) = sum_{i,j} cmat[i, j, k] * (rcs * row) ^ i (rcs * col) ^ j
 
 This function is based on the function getPsfAtPoints in astrometry.net:
 https://github.com/dstndstn/astrometry.net/blob/master/sdss/common.py#L953
+TODO: I'm a little concerned about the possibility that rows and columns might get mixed up between
+      the python and here -- load up an image and psf with both julia and python
+      and make sure the orientations are consistnent. 
 """ ->
 function get_psf_at_point(row::Float64, col::Float64,
                           rrows::Array{Float64, 2}, rnrow::Int32, rncol::Int32, 
