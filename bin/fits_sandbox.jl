@@ -56,28 +56,61 @@ function get_wcs(img_filename)
 end
 
 b = 1
-
 b_letter = band_letters[b]
 
+
+@assert 1 <= b <= 5
+b_letter = band_letters[b]
+
+# A bug in my FITSIO change:
 img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$field_num.fits"
 img_fits = FITSIO.FITS(img_filename)
-@assert length(img_fits) == 4
+foo = read_header(img_fits[1]);
+bar = read_header(img_fits[2]);
 header_str = FITSIO.read_header(img_fits[1], ASCIIString)
-((wcs,),nrejected) = WCSLIB.wcspih(header_str)
-wcs2 = get_wcs(img_filename)
+close(img_fits)
+
+img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$field_num.fits"
+img_fits = FITSIO.FITS(img_filename);
+sky_image_raw = read(img_fits[3], "ALLSKY");
+header_str = FITSIO.read_header(img_fits[1], ASCIIString);
+((wcs,),nrejected) = WCSLIB.wcspih(header_str);
+close(img_fits);
+
+wcs2 = get_wcs(img_filename);
+
+band_gain, band_dark_variance = SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num);
+nelec, calib_col, sky_grid, sky_x, sky_y, wcs4, sdss_header_str = SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num, b, band_gain[b]);
 
 world_coords = Array(Float64, 2, nrow(cat_df))
 for n=1:nrow(cat_df)
 	world_coords[1, n] = cat_df[n, :ra]
 	world_coords[2, n] = cat_df[n, :dec]
 end
+H = blob[b].H
+W = blob[b].W
+pixcrd = Float64[0 0; 0 H; 0 W; H W]'
 
-wcs2 = get_wcs(img_filename)
+# Why is this not the same?
+hcat(WCSLIB.wcss2p(blob[b].wcs, world_coords)'[1:20,:],
+     WCSLIB.wcss2p(wcs, world_coords)'[1:20,:],
+     WCSLIB.wcss2p(wcs2, world_coords)'[1:20,:],
+     WCSLIB.wcss2p(wcs4, world_coords)'[1:20,:]
+     )
 
-# This does not work.
-pixel_coords = WCSLIB.wcss2p(blob[1].wcs, world_coords)'[1:20,:]
-pixel_coords2 = WCSLIB.wcss2p(wcs, world_coords)'[1:20,:]
-pixel_coords3 = WCSLIB.wcss2p(wcs2, world_coords)'[1:20,:]
+hcat(WCSLIB.wcsp2s(blob[b].wcs, pixcrd)',
+     WCSLIB.wcsp2s(wcs, pixcrd)',
+     WCSLIB.wcsp2s(wcs2, pixcrd)')
+
+
+[ unsafe_load(blob[b].wcs.crval, i) for i=1:2 ]
+[ unsafe_load(wcs.crval, i) for i=1:2 ]
+
+[ unsafe_load(blob[b].wcs.cd, i) for i=1:4 ]
+[ unsafe_load(wcs3.cd, i) for i=1:4 ]
+[ unsafe_load(wcs.cd, i) for i=1:4 ]
+
+
 
 # Other way to read it in?
 naxis = FITSIO.read_key(img_fits[1], "NAXIS")[1]

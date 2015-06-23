@@ -19,12 +19,13 @@ function load_stamp_blob(stamp_dir, stamp_id)
         fits = FITSIO.FITS(filename)
         hdr = FITSIO.read_header(fits[1])
         original_pixels = read(fits[1])
-        close(fits)
         dn = original_pixels / hdr["CALIB"] + hdr["SKY"]
         nelec = float(int(dn * hdr["GAIN"]))
 
         header_str = FITSIO.read_header(fits[1], ASCIIString)
         ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
+
+        close(fits)
 
         alphaBar = [hdr["PSF_P0"], hdr["PSF_P1"], hdr["PSF_P2"]]
         xiBar = [
@@ -246,6 +247,12 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     header_str = FITSIO.read_header(img_fits[1], ASCIIString)
     ((wcs,), nrejected) = WCSLIB.wcspih(header_str)
 
+    # This is the calibration vector:
+    calib_col = read(img_fits[2])
+    calib_image = [ calib_col[row] for
+                    row in 1:size(processed_image)[1],
+                    col in 1:size(processed_image)[2] ]
+
     close(img_fits)
 
     # Interpolate the sky to the full image.  Combining the example from
@@ -261,19 +268,15 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     sky_grid_vals = ((1:1.:size(sky_image_raw)[1]) - 1, (1:1.:size(sky_image_raw)[2]) - 1)
     sky_grid = Grid.CoordInterpGrid(sky_grid_vals, sky_image_raw[:,:,1],
                                     Grid.BCnearest, Grid.InterpLinear)
-    sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ]
 
-    # This is the calibration vector:
-    calib_col = read(img_fits[2])
-    calib_image = [ calib_col[row] for
-                    row in 1:size(processed_image)[1],
-                    col in 1:size(processed_image)[2] ]
+    # This interpolation is really slow.
+    sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ]
 
     # Convert to raw electron counts.  Note that these may not be close to integers
     # due to the analog to digital conversion process in the telescope.
     nelec = gain * convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image))
 
-    nelec, calib_col, sky_grid, sky_x, sky_y, wcs
+    nelec, calib_col, sky_grid, sky_x, sky_y, wcs, header_str
 end
 
 
@@ -320,8 +323,6 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, field_num, band;
     # Apparently attributeName lists the meanings of the HDUs in order.
     mask_types = read(fpm_mask, "attributeName")
     plane_rows = findin(mask_types[masktype_rows], mask_planes)
-
-    close(fpm_fits)
 
     # Make sure each mask is present.  Is this check appropriate for all mask files?
     @assert length(plane_rows) == length(mask_planes)
@@ -370,6 +371,7 @@ function mask_image!(mask_img, field_dir, run_num, camcol_num, field_num, band;
             mask_img[mask_rows, mask_cols] = NaN
         end
     end
+    close(fpm_fits)
 end
 
 @doc """
