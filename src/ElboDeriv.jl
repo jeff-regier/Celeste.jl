@@ -295,7 +295,7 @@ end
 
 
 @doc """
-Add the contributions of a galaxy component term to the ELBO, by
+Add the contributions of a galaxy component term to the ELBO by
 updating fs1m in place.
 
 Args:
