@@ -112,7 +112,7 @@ A single normal component of the point spread function.
 
 Args:
   alphaBar: The scalar weight of the component.
-  xiBar: The 2x1 location vector
+  xiBar: The 2x1 location vector in world coordinates
   tauBar: The 2x2 covariance
 
 Attributes:
@@ -187,8 +187,11 @@ end
 @doc """A vector of images, one for each filter band""" ->
 typealias Blob Vector{Image}
 
-@doc """The amount of sky affected by a source""" ->
-immutable SkyPatch #pixel coordinates for now, soon wcs
+@doc """
+The amount of sky affected by a source in
+world coordinates and an L_{\infty} norm.
+""" ->
+immutable SkyPatch
     center::Vector{Float64}
     radius::Float64
 end
@@ -216,7 +219,7 @@ typealias FreeVariationalParams Vector{Vector{Float64}}
 abstract ParamSet
 
 # The variable names are:
-# u       = Location (formerly mu)
+# u       = Location in world coordinates (formerly mu)
 # e_dev   = Weight given to a galaxy of type 1 (formerly theta)
 # e_axis  = Galaxy minor/major ratio (formerly rho)
 # e_angle = Galaxy angle (formerly phi)

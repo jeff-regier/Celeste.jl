@@ -152,7 +152,7 @@ end
 
 
 @doc """
-A the convolution of a one galaxy component with one PSF component.
+The convolution of a one galaxy component with one PSF component.
 
 Args:
  - e_dev_dir: "Theta direction": this is 1 or -1, depending on whether
@@ -278,7 +278,7 @@ by updating fs0m in place.
 
 Args:
   - bmc: The component to be added
-  - x: An offset for the component (e.g. a pixel location)
+  - x: An offset for the component in world coordinates (e.g. a pixel location)
   - fs0m: A SensitiveFloat to which the value of the bvn likelihood
        and its derivatives with respect to x are added.
 """ ->
@@ -300,7 +300,7 @@ updating fs1m in place.
 
 Args:
   - gcc: The galaxy component to be added
-  - x: An offset for the component (e.g. a pixel location)
+  - x: An offset for the component in world coordinates (e.g. a pixel location)
   - fs1m: A SensitiveFloat to which the value of the likelihood
        and its derivatives with respect to x are added.
 """ ->
@@ -342,7 +342,7 @@ Args:
   - vs: The variational parameters for this source
   - child_s: The index of this source within the tile.
   - parent_s: The global index of this source.
-  - m_pos: A 2x1 vector with the pixel location
+  - m_pos: A 2x1 vector with the pixel location in world coordinates
   - b: The band (1 to 5)
   - fs0m: The accumulated star contributions (updated in place)
   - fs1m: The accumulated galaxy contributions (updated in place)
@@ -436,7 +436,7 @@ Add the contributions of the expected value of a G term to the ELBO.
 Args:
   - tile_sources: A vector of source ids influencing this tile
   - x_nbm: The photon count at this pixel
-  - iota: The optical sensitivity
+  - iota: The optical sensitivity (TODO: really?  This is not what I thought iota was)
   - E_G: The variational expected value of G
   - var_G: The variational variance of G
   - accum: A SensitiveFloat for the ELBO which is updated
@@ -477,6 +477,7 @@ Return the range of image pixels in an ImageTile.
 function tile_range(tile::ImageTile, tile_width::Int64)
     # Return the range of image pixels in an ImageTile.
 
+    # TODO: world coordinates
     h1 = 1 + (tile.hh - 1) * tile_width
     h2 = min(tile.hh * tile_width, tile.img.H)
     w1 = 1 + (tile.ww - 1) * tile_width
@@ -498,16 +499,27 @@ Returns:
 function local_sources(tile::ImageTile, mp::ModelParams)
     local_subset = Array(Int64, 0)
 
+    # TODO: world coordinates
+
     # "Radius" is used in the sense of an L_{\infty} norm.
     tr = mp.tile_width / 2.  # tile radius
     tc1 = tr + (tile.hh - 1) * mp.tile_width
     tc2 = tr + (tile.ww - 1) * mp.tile_width
 
+    # Convert the tile coordinates to world coordinates.
+    tc = Float64[tc1, tc2]
+    t_upper = Float64[tc1 + tr, tc2 + tr]
+
+    tc_wcs = WCSLIB.wcsp2s(time.img.wcs, reshape(tc, 2, 1))
+    t_upper_wcs = WCSLIB.wcsp2s(time.img.wcs, reshape(t_upper, 2, 1))
+
+
+
     for s in 1:mp.S
         pc = mp.patches[s].center  # patch center
         pr = mp.patches[s].radius  # patch radius
 
-        if abs(pc[1] - tc1) <= (pr + tr) && abs(pc[2] - tc2) <= (pr + tr)
+        if abs(pc[1] - tc_wcs[1]) <= (pr + tr) && abs(pc[2] - tc_wcs[2]) <= (pr + tr)
             push!(local_subset, s)
         end
     end
@@ -564,7 +576,8 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
             E_G.v = tile.img.epsilon
             clear!(var_G)
 
-            m_pos = Float64[h, w]
+            # Convert the pixel location to world coordinates.
+            m_pos = WCSLIB.wcsp2s(blob[1].wcs, reshape(Float64[h, w], 2, 1))
             for child_s in 1:length(tile_sources)
                 parent_s = tile_sources[child_s]
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
