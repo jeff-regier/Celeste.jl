@@ -3,6 +3,8 @@
 
 module Util
 
+VERSION < v"0.4.0-dev" && using Docile
+
 export matvec222, logit, inv_logit
 
 function matvec222(mat::Matrix, vec::Vector)
@@ -42,10 +44,10 @@ function logit(x)
     1.0 ./ (1.0 + exp(-x))
 end
 
-# @doc"""
-# Determine whether a ray in direction r from point p
-# intersects the edge from v1 to v2 in two dimensions.
-# """ ->
+@doc """
+Determine whether a ray in direction r from point p
+intersects the edge from v1 to v2 in two dimensions.
+""" ->
 function ray_crossing(p::Array{Float64, 1}, r::Array{Float64, 1},
                       v1::Array{Float64, 1}, v2::Array{Float64, 1})
     @assert length(p) == length(r) == length(v1) == length(v2) == 2
@@ -61,15 +63,15 @@ function ray_crossing(p::Array{Float64, 1}, r::Array{Float64, 1},
         return 0 <= sol[2] < 1 && sol[1] > 0
     end
 end
-
-# @doc"""
-# Use the ray crossing algorithm to determine whether the point p
-# is inside a convex polygon with corners v[i, :], i =1:number of edges,
-# using the ray-casting algorithm in direction r.
-# This assumes the polygon is not self-intersecting, and does not
-# handle the edge cases that might arise from non-convex shapes.
-# A point on the edge of a polygon is considered to be outside the polygon.
-# """ ->
+ 
+@doc """
+Use the ray crossing algorithm to determine whether the point p
+is inside a convex polygon with corners v[i, :], i =1:number of edges,
+using the ray-casting algorithm in direction r.
+This assumes the polygon is not self-intersecting, and does not
+handle the edge cases that might arise from non-convex shapes.
+A point on the edge of a polygon is considered to be outside the polygon.
+""" ->
 function point_inside_polygon(p, r, v)
 
     n_edges = size(v, 1)
@@ -88,5 +90,46 @@ function point_inside_polygon(p, r, v)
 
     return num_crossings % 2 == 1
 end
+
+
+function point_near_polygon_corner(p, radius, v)
+    n_vertices = size(v, 1)
+    @assert length(p) == size(v, 2)
+    @assert n_vertices >= 3
+
+    r2 = radius ^ 2
+    for vertex=1:n_vertices
+        delta = p - v[vertex, :][:]
+        if dot(delta, delta) < r2
+            return true
+        end
+    end
+
+    return false    
+end
+
+function point_near_line_segment(p, radius, v1, v2)
+    delta = v2 - v1
+    delta = delta / sqrt(dot(delta, delta))
+
+    delta_vp1 = v1 - p
+    delta_vp2 = v2 - p
+
+    delta_along1 = dot(delta_vp1, delta) * delta
+    delta_along2 = dot(delta_vp2, delta) * delta
+
+    delta_perp = delta_vp2 - delta_along2
+
+    # Check that the point is between the edges of the line segment
+    # and no more than radius away.
+    return (sqrt(dot(delta_perp, delta_perp)) < radius) &&
+           (dot(delta_along1, delta_along2) < 0)
+end
+
+
+function point_within_radius_of_polygon(p, radius, v)
+
+end
+
 
 end
