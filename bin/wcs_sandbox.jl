@@ -33,14 +33,27 @@ coord[2, 1] = 20
 WCSLIB.wcsp2s(blob[1].wcs, coord)
 
 
-# To find the intersection of a circle with a quadrilateral.
-p = Float64[0, 0]
-v1 = Float64[1, -1]
-v2 = Float64[1, 2]
-r = Float64[-1, 0]
+# Plot neighboring points.
+function make_rot_mat(theta::Float64)
+    [ cos(theta) -sin(theta); sin(theta) cos(theta) ]
+end
 
-ray_crossing(p, r, v1, v2)
+offset = [0, 0]
+rot = make_rot_mat(pi / 3)
+poly = Float64[1 1; -1 1; -1 -1; 1 -1]
+poly = broadcast(+, poly, offset') * rot'
+radius = 0.3
 
+poly_graph = vcat(poly, poly[1,:])
 
+PyPlot.plot(poly_graph[:,1],  poly_graph[:,2], "k")
+
+in_poly = [ (x, y, Util.point_within_radius_of_polygon(Float64[x, y], radius, poly))
+            for x in -3:0.1:6, y in -3:0.1:6 ]
+for p in in_poly
+	if p[3]
+		PyPlot.plot(p[1], p[2], "r+")
+	end
+end
 
 

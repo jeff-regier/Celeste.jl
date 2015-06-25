@@ -79,14 +79,18 @@ function point_inside_polygon(p, r, v)
     @assert n_edges >= 3
 
     num_crossings = 0
-    for edge=1:(n_edges - 1)
-        crossing = ray_crossing(p, r, v[edge, :][:], v[edge + 1, :][:]) ? 1: 0
+    for edge=1:n_edges
+        if edge < n_edges
+            v1 = v[edge, :][:]
+            v2 = v[edge + 1, :][:]
+        else # edge == n_edges
+            # The final edge from the last vertex back to the first.
+            v1 = v[edge, :][:]
+            v2 = v[1, :][:]
+        end
+        crossing = ray_crossing(p, r, v1, v2) ? 1: 0
         num_crossings = num_crossings + crossing
     end
-
-    # The final edge from the last vertex back to the first.
-    crossing = ray_crossing(p, r, v[n_edges, :][:], v[1, :][:]) ? 1: 0
-    num_crossings = num_crossings + crossing
 
     return num_crossings % 2 == 1
 end
@@ -126,9 +130,32 @@ function point_near_line_segment(p, radius, v1, v2)
            (dot(delta_along1, delta_along2) < 0)
 end
 
+function point_near_polygon_edge(p, radius, v)
+    n_edges = size(v, 1)
+    @assert length(p) == size(v, 2)
+    @assert n_edges >= 3
+
+    for edge=1:n_edges
+        if edge < n_edges
+            v1 = v[edge, :][:]
+            v2 = v[edge + 1, :][:]
+        else # edge == n_edges
+            # The final edge from the last vertex back to the first.
+            v1 = v[edge, :][:]
+            v2 = v[1, :][:]
+        end
+        if point_near_line_segment(p, radius, v1, v2)
+            return true
+        end
+    end
+    return false
+end
+
 
 function point_within_radius_of_polygon(p, radius, v)
-
+    return (point_near_polygon_corner(p, radius, v) |
+            point_inside_polygon(p, Float64[1, 0], v) |
+            point_near_polygon_edge(p, radius, v))
 end
 
 

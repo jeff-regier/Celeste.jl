@@ -499,6 +499,10 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
         H = size(nelec, 1)
         W = size(nelec, 2)
 
+        ########################################
+        # TODO: iota and epsilon are backwards!
+        ########################################
+
         # For now, use the median noise and sky image:
         epsilon = band_gain[b] / median(calib_col)
         sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ];
