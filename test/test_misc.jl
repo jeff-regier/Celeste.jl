@@ -1,6 +1,7 @@
-
+using Base.Test
 using SampleData
 import SDSS
+import Util
 
 function test_local_sources()
     srand(1)
@@ -150,6 +151,99 @@ function test_util_bvn_cov()
     @test_approx_eq util_22 manual_22
 end
 
+function test_ray_crossing()
+    p = Float64[0, 0]
+    v1 = Float64[1, -1]
+    v2 = Float64[1, 1]
+    r = Float64[1, 0]
+    @assert Util.ray_crossing(p, r, v1, v2)
+
+    p = Float64[0, 0]
+    v1 = Float64[1, -1]
+    v2 = Float64[1, 1]
+    r = Float64[-1, 0]
+    @assert !Util.ray_crossing(p, r, v1, v2)
+
+    p = Float64[0, 0]
+    v1 = Float64[1, 1]
+    v2 = Float64[1, -1]
+    r = Float64[1, 0]
+    @assert Util.ray_crossing(p, r, v1, v2)
+
+    p = Float64[0, 0]
+    v1 = Float64[1, 1]
+    v2 = Float64[1, 2]
+    r = Float64[1, 0]
+    @assert !Util.ray_crossing(p, r, v1, v2)
+
+    p = Float64[0, 1.5]
+    v1 = Float64[1, 1]
+    v2 = Float64[1, 2]
+    r = Float64[1, 0]
+    @assert Util.ray_crossing(p, r, v1, v2)
+
+    p = Float64[0, 1.5]
+    v1 = Float64[1, 1]
+    v2 = Float64[1, -1]
+    r = Float64[1, 0]
+    @assert !Util.ray_crossing(p, r, v1, v2)
+
+    p = Float64[1.5, 0]
+    v1 = Float64[1, 1]
+    v2 = Float64[2, 1]
+    r = Float64[0, 1]
+    @assert Util.ray_crossing(p, r, v1, v2)
+
+    p = Float64[1.5, 0]
+    v1 = Float64[1, 1]
+    v2 = Float64[-1, 1]
+    r = Float64[0, 1]
+    @assert !Util.ray_crossing(p, r, v1, v2)
+
+    # Parallel to an edge does not count as an intersection.
+    p = Float64[0, 0]
+    v1 = Float64[0, 1]
+    v2 = Float64[0, 2]
+    r = Float64[0, 1]
+    @assert !Util.ray_crossing(p, r, v1, v2)
+
+end
+
+function test_point_inside_polygon()
+
+    function make_rot_mat(theta::Float64)
+        [ cos(theta) -sin(theta); -sin(theta) cos(theta) ]
+    end
+
+    p_in = Float64[0.2, 0.2]
+    p_out = Float64[1.2, 1.2]
+    poly = Float64[1 1; -1 1; -1 -1; 1 -1]
+
+    r = Float64[0, 1]
+    @assert Util.point_inside_polygon(p_in, r, poly)
+    @assert !Util.point_inside_polygon(p_out, r, poly)
+
+    r = Float64[1, 1]
+    @assert Util.point_inside_polygon(p_in, r, poly)
+    @assert !Util.point_inside_polygon(p_out, r, poly)
+
+    r = Float64[0.5, 1]
+    @assert Util.point_inside_polygon(p_in, r, poly)
+    @assert !Util.point_inside_polygon(p_out, r, poly)
+
+    offset = [4., -2.]
+    @assert Util.point_inside_polygon(p_in + offset, r,
+        broadcast(+, poly, offset'))
+    @assert !Util.point_inside_polygon(p_out + offset, r,
+        broadcast(+, poly, offset'))
+
+    rot = make_rot_mat(pi / 3)
+    @assert Util.point_inside_polygon(rot * (p_in + offset), r,
+        broadcast(+, poly, offset') * rot)
+    @assert !Util.point_inside_polygon(rot * (p_out + offset), r,
+        broadcast(+, poly, offset') * rot)
+end
+
 
 ####################################################
 
@@ -157,3 +251,5 @@ test_util_bvn_cov()
 test_sky_noise_estimates()
 test_local_sources_2()
 test_local_sources()
+test_ray_crossing()
+test_point_inside_polygon()

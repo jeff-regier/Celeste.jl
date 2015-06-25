@@ -42,4 +42,51 @@ function logit(x)
     1.0 ./ (1.0 + exp(-x))
 end
 
+# @doc"""
+# Determine whether a ray in direction r from point p
+# intersects the edge from v1 to v2 in two dimensions.
+# """ ->
+function ray_crossing(p::Array{Float64, 1}, r::Array{Float64, 1},
+                      v1::Array{Float64, 1}, v2::Array{Float64, 1})
+    @assert length(p) == length(r) == length(v1) == length(v2) == 2
+
+    delta_v = v2 - v1
+    int_mat = hcat(r, -delta_v)
+    if det(int_mat) == 0
+        # If the ray is parallel to an edge, consider it not to be
+        # an intersection.
+        return false
+    else
+        sol =  int_mat \ (v1 - p)
+        return 0 <= sol[2] < 1 && sol[1] > 0
+    end
+end
+
+# @doc"""
+# Use the ray crossing algorithm to determine whether the point p
+# is inside a convex polygon with corners v[i, :], i =1:number of edges,
+# using the ray-casting algorithm in direction r.
+# This assumes the polygon is not self-intersecting, and does not
+# handle the edge cases that might arise from non-convex shapes.
+# A point on the edge of a polygon is considered to be outside the polygon.
+# """ ->
+function point_inside_polygon(p, r, v)
+
+    n_edges = size(v, 1)
+    @assert length(p) == length(r) == size(v, 2)
+    @assert n_edges >= 3
+
+    num_crossings = 0
+    for edge=1:(n_edges - 1)
+        crossing = ray_crossing(p, r, v[edge, :][:], v[edge + 1, :][:]) ? 1: 0
+        num_crossings = num_crossings + crossing
+    end
+
+    # The final edge from the last vertex back to the first.
+    crossing = ray_crossing(p, r, v[n_edges, :][:], v[1, :][:]) ? 1: 0
+    num_crossings = num_crossings + crossing
+
+    return num_crossings % 2 == 1
+end
+
 end
