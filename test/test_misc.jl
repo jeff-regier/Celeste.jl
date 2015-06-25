@@ -209,12 +209,11 @@ function test_ray_crossing()
 
 end
 
+function make_rot_mat(theta::Float64)
+    [ cos(theta) -sin(theta); sin(theta) cos(theta) ]
+end
+
 function test_point_inside_polygon()
-
-    function make_rot_mat(theta::Float64)
-        [ cos(theta) -sin(theta); -sin(theta) cos(theta) ]
-    end
-
     p_in = Float64[0.2, 0.2]
     p_out = Float64[1.2, 1.2]
     poly = Float64[1 1; -1 1; -1 -1; 1 -1]
@@ -239,9 +238,63 @@ function test_point_inside_polygon()
 
     rot = make_rot_mat(pi / 3)
     @assert Util.point_inside_polygon(rot * (p_in + offset), r,
-        broadcast(+, poly, offset') * rot)
+        broadcast(+, poly, offset') * rot')
     @assert !Util.point_inside_polygon(rot * (p_out + offset), r,
-        broadcast(+, poly, offset') * rot)
+        broadcast(+, poly, offset') * rot')
+end
+
+
+function test_point_near_polygon_corner()
+    p_in = Float64[1.2, 1.3]
+    p_out = Float64[1.4, 1.35]
+    poly = Float64[1 1; -1 1; -1 -1; 1 -1]
+    radius = 0.5
+
+    @assert Util.point_near_polygon_corner(p_in, radius, poly)
+    @assert !Util.point_near_polygon_corner(p_out, radius, poly)
+
+    offset = [4., -2.]
+    rot = make_rot_mat(pi / 3)
+    @assert Util.point_near_polygon_corner(rot * (p_in + offset), radius,
+        broadcast(+, poly, offset') * rot')
+    @assert !Util.point_near_polygon_corner(rot * (p_out + offset), radius,
+        broadcast(+, poly, offset') * rot')
+
+end
+
+function test_point_near_line_segment()
+    radius = 1.0
+    v1 = Float64[1., 0.]
+    v2 = Float64[2., 0.]
+
+    p_in = Float64[1.7, radius * 0.9]
+    p_out = Float64[1.7, radius * 1.1]
+
+    # A point must be between the two segment end points.
+    p_out2 = Float64[2.1, 0]
+
+    @assert Util.point_near_line_segment(p_in, radius, v1, v2)
+    @assert Util.point_near_line_segment(p_in, radius, v2, v1)
+    @assert !Util.point_near_line_segment(p_out, radius, v1, v2)
+    @assert !Util.point_near_line_segment(p_out, radius, v2, v1)
+    @assert !Util.point_near_line_segment(p_out2, radius, v1, v2)
+    @assert !Util.point_near_line_segment(p_out2, radius, v2, v1)
+
+    offset = [4., -2.]
+    rot = make_rot_mat(pi / 3)
+
+    p_in_rot = rot * (p_in + offset)
+    p_out_rot = rot * (p_out + offset)
+    p_out2_rot = rot * (p_out2 + offset)
+
+    v1_rot = rot * (v1 + offset)
+    v2_rot = rot * (v2 + offset)
+    @assert Util.point_near_line_segment(p_in_rot, radius, v1_rot, v2_rot)
+    @assert Util.point_near_line_segment(p_in_rot, radius, v2_rot, v1_rot)
+    @assert !Util.point_near_line_segment(p_out_rot, radius, v1_rot, v2_rot)
+    @assert !Util.point_near_line_segment(p_out_rot, radius, v2_rot, v1_rot)
+    @assert !Util.point_near_line_segment(p_out2_rot, radius, v1_rot, v2_rot)
+    @assert !Util.point_near_line_segment(p_out2_rot, radius, v2_rot, v1_rot)
 end
 
 
@@ -253,3 +306,5 @@ test_local_sources_2()
 test_local_sources()
 test_ray_crossing()
 test_point_inside_polygon()
+test_point_near_polygon_corner()
+test_point_near_line_segment()
