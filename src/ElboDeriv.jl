@@ -505,9 +505,8 @@ function local_sources(tile::ImageTile, mp::ModelParams)
     tc22 = tc + Float64[tr, tr]
     tc21 = tc + Float64[tr, -tr]
 
-    # TODO: These are 0-indexed and should be 1-indexed.
     # Convert the tile coordinates to a polygon in world coordinates.
-    tc_wcs = WCSLIB.wcsp2s(tile.img.wcs, hcat(tc11, tc12, tc22, tc21))'
+    tc_wcs = Util.pixel_to_world(tile.img.wcs, vcat(tc11', tc12', tc22', tc21'))
 
     for s in 1:mp.S
         pc = mp.patches[s].center  # patch center
@@ -571,7 +570,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
             clear!(var_G)
 
             # Convert the pixel location to world coordinates.
-            m_pos = WCSLIB.wcsp2s(blob[1].wcs, reshape(Float64[h, w], 2, 1))
+            m_pos = Util.pixel_to_world(blob[1].wcs, Float64[h, w])
             for child_s in 1:length(tile_sources)
                 parent_s = tile_sources[child_s]
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
