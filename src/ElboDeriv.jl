@@ -505,6 +505,7 @@ function local_sources(tile::ImageTile, mp::ModelParams)
     tc22 = tc + Float64[tr, tr]
     tc21 = tc + Float64[tr, -tr]
 
+    # TODO: These are 0-indexed and should be 1-indexed.
     # Convert the tile coordinates to a polygon in world coordinates.
     tc_wcs = WCSLIB.wcsp2s(tile.img.wcs, hcat(tc11, tc12, tc22, tc21))'
 

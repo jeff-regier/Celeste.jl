@@ -21,16 +21,46 @@ b = 1
 b_letter = band_letters[b]
 
 #############
-# Load the catalog
+# Load and subsample the catalog
 
-blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
-cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+original_blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
+original_cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+
+blob = deepcopy(original_blob);
+cat_df = deepcopy(original_cat_df);
+
+sub_rows = 200:300
+min_row = minimum(collect(sub_rows))
+max_row = maximum(collect(sub_rows))
+cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]])';
+entry_in_range = Bool[true for i=1:size(cat_loc, 2) ];
+for b=1:5
+	blob[b].pixels = blob[b].pixels[sub_rows, sub_rows]
+	blob[b].H = size(blob[b].pixels, 1)
+	blob[b].W = size(blob[b].pixels, 2)
+	wcs_range = WCSLIB.wcss2p(blob[b].wcs, cat_loc)'
+	entry_in_range = entry_in_range &
+		(min_row .<= wcs_range[:, 1] .<= max_row) &
+		(min_row .<= wcs_range[:, 2] .<= max_row)
+end
+cat_df = cat_df[entry_in_range, :]
 cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
+cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]])';
 
-coord = Array(Float64, 2, 1)
-coord[1, 1] = 10.
-coord[2, 1] = 20
-WCSLIB.wcsp2s(blob[1].wcs, coord)
+
+b = 3
+PyPlot.close()
+PyPlot.plt.subplot(1, 2, 1)
+PyPlot.imshow(blob[b].pixels, cmap=PyPlot.ColorMap("gray"))
+
+PyPlot.plt.subplot(1, 2, 2)
+PyPlot.imshow(blob[b].pixels, cmap=PyPlot.ColorMap("gray"))
+cat_px = WCSLIB.wcss2p(blob[b].wcs, cat_loc)' - min_row
+PyPlot.scatter(cat_px[:, 2], cat_px[:, 1], marker="o", c="r", s=50)
+
+
+
+
 
 # Plot neighboring points.
 function make_rot_mat(theta::Float64)
@@ -56,34 +86,5 @@ for p in in_poly
 end
 
 
-tile = ImageTile(5, 5, blob[1]);
-# "Radius" is used in the sense of an L_{\infty} norm.
-tile_width = 10
-tr = tile_width / 2.  # tile radius
-tc1 = tr + (tile.hh - 1) * tile_width
-tc2 = tr + (tile.ww - 1) * tile_width
-
-# Corners of the tile in pixel coordinates
-tc = Float64[tr + (tile.hh - 1) * tile_width, tr + (tile.ww - 1) * tile_width]
-tc11 = tc + Float64[-tr, -tr]
-tc12 = tc + Float64[-tr, tr]
-tc22 = tc + Float64[tr, tr]
-tc21 = tc + Float64[tr, -tr]
-
-# Convert the tile coordinates to a polygon in world coordinates.
-tc_wcs = WCSLIB.wcsp2s(tile.img.wcs, hcat(tc11, tc12, tc22, tc21))'
-PyPlot.plot(tc_wcs[:, 1], tc_wcs[:, 2])
-
-for s in 1:mp.S
-    pc = mp.patches[s].center  # patch center
-    pr = mp.patches[s].radius  # patch radius
-
-    if abs(pc[1] - tc_wcs[1]) <= (pr + tr) && abs(pc[2] - tc_wcs[2]) <= (pr + tr)
-        push!(local_subset, s)
-    end
-end
 
 
-
-# Try getting local sources
-tile = ImageTile()
