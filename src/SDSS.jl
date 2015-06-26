@@ -8,6 +8,7 @@ import DataFrames
 import FITSIO
 import Grid
 import PSF
+import Util
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -250,7 +251,6 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     # These are the column types (not currently used).
     ctype = [FITSIO.read_key(img_fits[1], "CTYPE1")[1],
              FITSIO.read_key(img_fits[1], "CTYPE2")[1]]
-
 
     # This is the calibration vector:
     calib_col = read(img_fits[2])
