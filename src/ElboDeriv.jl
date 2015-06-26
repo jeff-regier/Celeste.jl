@@ -436,7 +436,7 @@ Add the contributions of the expected value of a G term to the ELBO.
 Args:
   - tile_sources: A vector of source ids influencing this tile
   - x_nbm: The photon count at this pixel
-  - iota: The optical sensitivity (TODO: really?  This is not what I thought iota was)
+  - iota: The optical sensitivity
   - E_G: The variational expected value of G
   - var_G: The variational variance of G
   - accum: A SensitiveFloat for the ELBO which is updated
@@ -475,9 +475,6 @@ end
 Return the range of image pixels in an ImageTile.
 """ ->
 function tile_range(tile::ImageTile, tile_width::Int64)
-    # Return the range of image pixels in an ImageTile.
-
-    # TODO: world coordinates
     h1 = 1 + (tile.hh - 1) * tile_width
     h2 = min(tile.hh * tile_width, tile.img.H)
     w1 = 1 + (tile.ww - 1) * tile_width
@@ -499,27 +496,23 @@ Returns:
 function local_sources(tile::ImageTile, mp::ModelParams)
     local_subset = Array(Int64, 0)
 
-    # TODO: world coordinates
+    # Corners of the tile in pixel coordinates.
+    tr = mp.tile_width / 2.  # tile width
+    tc = Float64[tr + (tile.hh - 1) * tile_width,
+                 tr + (tile.ww - 1) * tile_width] # Tile center
+    tc11 = tc + Float64[-tr, -tr]
+    tc12 = tc + Float64[-tr, tr]
+    tc22 = tc + Float64[tr, tr]
+    tc21 = tc + Float64[tr, -tr]
 
-    # "Radius" is used in the sense of an L_{\infty} norm.
-    tr = mp.tile_width / 2.  # tile radius
-    tc1 = tr + (tile.hh - 1) * mp.tile_width
-    tc2 = tr + (tile.ww - 1) * mp.tile_width
-
-    # Convert the tile coordinates to world coordinates.
-    tc = Float64[tc1, tc2]
-    t_upper = Float64[tc1 + tr, tc2 + tr]
-
-    tc_wcs = WCSLIB.wcsp2s(time.img.wcs, reshape(tc, 2, 1))
-    t_upper_wcs = WCSLIB.wcsp2s(time.img.wcs, reshape(t_upper, 2, 1))
-
-
+    # Convert the tile coordinates to a polygon in world coordinates.
+    tc_wcs = WCSLIB.wcsp2s(tile.img.wcs, hcat(tc11, tc12, tc22, tc21))'
 
     for s in 1:mp.S
         pc = mp.patches[s].center  # patch center
         pr = mp.patches[s].radius  # patch radius
 
-        if abs(pc[1] - tc_wcs[1]) <= (pr + tr) && abs(pc[2] - tc_wcs[2]) <= (pr + tr)
+        if point_within_radius_of_polygon(pc, pr, tc_wcs)
             push!(local_subset, s)
         end
     end
