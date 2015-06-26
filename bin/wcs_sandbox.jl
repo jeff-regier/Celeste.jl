@@ -26,38 +26,45 @@ b_letter = band_letters[b]
 original_blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
 original_cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
 
-blob = deepcopy(original_blob);
-cat_df = deepcopy(original_cat_df);
-
-sub_rows = 200:300
+sub_rows = 1:150
 min_row = minimum(collect(sub_rows))
 max_row = maximum(collect(sub_rows))
-cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]])';
-entry_in_range = Bool[true for i=1:size(cat_loc, 2) ];
+blob = deepcopy(original_blob);
+cat_df = deepcopy(original_cat_df);
+cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]]);
+entry_in_range = Bool[true for i=1:size(cat_loc, 1) ];
 for b=1:5
 	blob[b].pixels = blob[b].pixels[sub_rows, sub_rows]
 	blob[b].H = size(blob[b].pixels, 1)
 	blob[b].W = size(blob[b].pixels, 2)
-	wcs_range = WCSLIB.wcss2p(blob[b].wcs, cat_loc)'
+	wcs_range = Util.world_to_pixel(blob[b].wcs, cat_loc)
 	entry_in_range = entry_in_range &
 		(min_row .<= wcs_range[:, 1] .<= max_row) &
 		(min_row .<= wcs_range[:, 2] .<= max_row)
 end
 cat_df = cat_df[entry_in_range, :]
 cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
-cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]])';
+cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]]);
+
+pix_loc = Util.world_to_pixel(blob[b].wcs, cat_loc)
+Util.pixel_to_world(blob[b].wcs, pix_loc)
 
 
-b = 3
 PyPlot.close()
-PyPlot.plt.subplot(1, 2, 1)
-PyPlot.imshow(blob[b].pixels, cmap=PyPlot.ColorMap("gray"))
+#for b=1:5
+	b = 5
+	pixel_graph = blob[b].pixels
+	clip = 1000
+	pixel_graph[pixel_graph .>= clip] = clip
+	PyPlot.figure()
+	PyPlot.plt.subplot(1, 2, 1)
+	PyPlot.imshow(pixel_graph, cmap=PyPlot.ColorMap("gray"))
 
-PyPlot.plt.subplot(1, 2, 2)
-PyPlot.imshow(blob[b].pixels, cmap=PyPlot.ColorMap("gray"))
-cat_px = WCSLIB.wcss2p(blob[b].wcs, cat_loc)' - min_row
-PyPlot.scatter(cat_px[:, 2], cat_px[:, 1], marker="o", c="r", s=50)
-
+	PyPlot.plt.subplot(1, 2, 2)
+	PyPlot.imshow(pixel_graph, cmap=PyPlot.ColorMap("gray"))
+	cat_px = Util.world_to_pixel(blob[b].wcs, cat_loc) - min_row + 1
+	PyPlot.scatter(cat_px[:, 2], cat_px[:, 1], marker="o", c="r", s=25)
+#end
 
 
 

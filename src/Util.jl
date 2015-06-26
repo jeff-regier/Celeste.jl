@@ -5,6 +5,8 @@ module Util
 
 VERSION < v"0.4.0-dev" && using Docile
 
+import WCSLIB
+
 export matvec222, logit, inv_logit
 
 function matvec222(mat::Matrix, vec::Vector)
@@ -158,5 +160,61 @@ function point_within_radius_of_polygon(p, radius, v)
             point_near_polygon_edge(p, radius, v))
 end
 
+@doc """
+Convert a world location to a 1-indexed pixel location.
+
+Args:
+    - wcs: A world coordinate system object
+    - world_loc: Either a 2d vector of world coordinates or a matrix
+                 where the world coordinates are rows.
+
+Returns:
+    - The 1-indexed pixel locations in the same shape as the input. 
+""" ->
+function world_to_pixel(wcs::WCSLIB.wcsprm, world_loc::Array{Float64})
+    single_row = length(size(world_loc)) == 1 
+    if single_row
+        # Convert to a row vector if it's a single value
+        world_loc = world_loc'
+    end
+
+    # wcss2p returns 0-indexed pixel locations.
+    pix_loc = WCSLIB.wcss2p(wcs, world_loc') + 1
+
+    if single_row
+        return pix_loc[:]
+    else
+        return pix_loc'
+    end
+end
+
+
+@doc """
+Convert a 1-indexed pixel location to a world location.
+
+Args:
+    - wcs: A world coordinate system object
+    - pix_loc: Either a 2d vector of pixel coordinates or a matrix
+                 where the pixel coordinates are rows.
+
+Returns:
+    - The world locations in the same shape as the input. 
+""" ->
+function pixel_to_world(wcs::WCSLIB.wcsprm, pix_loc::Array{Float64})
+    single_row = length(size(pix_loc)) == 1 
+    if single_row
+        # Convert to a row vector if it's a single value
+        pix_loc = pix_loc'
+    end
+
+    # wcsp2s uses 0-indexed pixel locations.
+    world_loc = WCSLIB.wcsp2s(wcs, pix_loc' - 1)
+
+    if single_row
+        return world_loc[:]
+    else
+        return world_loc'
+    end
+end
 
 end

@@ -92,7 +92,7 @@ end
 
 function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=false)
     function row_to_ce(row)
-        x_y = WCSLIB.wcss2p(blob[1].wcs, [row[1, :ra], row[1, :dec]]'')[:]
+        x_y = Util.world_to_pixel(blob[1].wcs, [row[1, :ra], row[1, :dec]])[:]
 
         star_fluxes = zeros(5)
         gal_fluxes = zeros(5)
