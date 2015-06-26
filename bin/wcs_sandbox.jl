@@ -25,10 +25,19 @@ b_letter = band_letters[b]
 
 original_blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
 original_cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+cat_loc = convert(Array{Float64}, original_cat_df[[:ra, :dec]]);
+cat_pix = Util.world_to_pixel(blob[4].wcs, cat_loc)
 
+objid = "1237662226208063597"
+obj_loc = cat_pix[original_cat_df[:objid] .== objid, :]
 
-sub_rows_x = 40:60
-sub_rows_y = 120:140
+#sub_rows_x = 1:150
+#sub_rows_y = 1:150
+
+width = 8
+sub_rows_x = floor(obj_loc[1] - width):ceil(obj_loc[1] + width)
+sub_rows_y = floor(obj_loc[2] - width):ceil(obj_loc[2] + width)
+
 x_min = minimum(collect(sub_rows_x))
 y_min = minimum(collect(sub_rows_y))
 x_max = maximum(collect(sub_rows_x))
@@ -38,7 +47,7 @@ cat_df = deepcopy(original_cat_df);
 cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]]);
 entry_in_range = Bool[true for i=1:size(cat_loc, 1) ];
 for b=1:5
-	blob[b].pixels = blob[b].pixels[sub_rows, sub_rows]
+	blob[b].pixels = blob[b].pixels[sub_rows_x, sub_rows_y]
 	blob[b].H = size(blob[b].pixels, 1)
 	blob[b].W = size(blob[b].pixels, 2)
 	wcs_range = Util.world_to_pixel(blob[b].wcs, cat_loc)
@@ -56,12 +65,49 @@ Util.pixel_to_world(blob[b].wcs, pix_loc)
 psf_point_x = 80.
 psf_point_y = 100.
 
+
+for b=1:20
+	PyPlot.close()
+end
+#for b=1:5
+for b=4
+	# Plotting the transpose matches the images in the SDSS image browser
+	# http://skyserver.sdss.org/dr7/en/tools/getimg/fields.asp
+
+	# Here's how to look up an object:
+	# http://skyserver.sdss.org/dr12/en/tools/explore/summary.aspx?id=1237662226208063597
+
+	pixel_graph = blob[b].pixels
+	clip = 8000
+	pixel_graph[pixel_graph .>= clip] = clip
+	PyPlot.figure()
+	PyPlot.plt.subplot(1, 2, 1)
+	PyPlot.imshow(pixel_graph', cmap=PyPlot.ColorMap("gray"), interpolation = "nearest")
+	PyPlot.title("Band $b image\nObj $objid")
+
+	PyPlot.plt.subplot(1, 2, 2)
+	PyPlot.imshow(pixel_graph', cmap=PyPlot.ColorMap("gray"), interpolation = "nearest")
+	# Expect that x_min and y_min are at least one and so take care of the PyPlot offset --
+	# could write - (x_min - 1) - 1.
+	cat_px = Util.world_to_pixel(blob[b].wcs, cat_loc)
+	PyPlot.scatter(cat_px[:, 1] - x_min, cat_px[:, 2] - y_min, marker="o", c="r", s=25)
+
+	obj_row = cat_df[:objid] .== objid 
+	PyPlot.scatter(cat_px[obj_row, 1] - x_min, cat_px[obj_row, 2] - y_min,
+		           marker="x", c="w", s=25)
+
+	PyPlot.title("Band $b with catalog\nObj $objid")
+end
+
+
+###################################
+# Look at the psf.
+
 raw_psf = Array(Array{Float64}, 5)
 for b=1:5
 	rrows, rnrow, rncol, cmat = SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
 	raw_psf[b] = PSF.get_psf_at_point(psf_point_x, psf_point_y, rrows, rnrow, rncol, cmat);
 end
-
 
 if false
 	# This shows that imshow is screwed up and you have to offset the scatterplot by one.
@@ -80,42 +126,7 @@ if false
 end
 
 
-
-
-
-PyPlot.close()
-for b=1:5
-#for b=4
-	# Plotting the transpose matches the images in the SDSS image browser
-	# http://skyserver.sdss.org/dr7/en/tools/getimg/fields.asp
-
-	# Here's how to look up an object:
-	# http://skyserver.sdss.org/dr12/en/tools/explore/summary.aspx?id=1237662226208063597
-
-	objid = "1237662226208063597"
-	pixel_graph = blob[b].pixels
-	clip = 8000
-	pixel_graph[pixel_graph .>= clip] = clip
-	PyPlot.figure()
-	PyPlot.plt.subplot(1, 2, 1)
-	PyPlot.imshow(pixel_graph', cmap=PyPlot.ColorMap("gray"), interpolation = "nearest")
-	PyPlot.title("Band $b image")
-
-	PyPlot.plt.subplot(1, 2, 2)
-	PyPlot.imshow(pixel_graph', cmap=PyPlot.ColorMap("gray"), interpolation = "nearest")
-	cat_px = Util.world_to_pixel(blob[b].wcs, cat_loc) - min_row + 1
-	PyPlot.scatter(cat_px[:, 1] - x_min - 1, cat_px[:, 2] - y_min - 1, marker="o", c="r", s=25)
-
-	obj_row = cat_df[:objid] .== objid 
-	PyPlot.scatter(cat_px[obj_row, 1] - x_min - 1, cat_px[obj_row, 2] - y_min - 1,
-		           marker="x", c="w", s=25)
-
-	PyPlot.title("Band $b with catalog")
-end
-
-
-
-
+###################################
 # Plot neighboring points.
 function make_rot_mat(theta::Float64)
     [ cos(theta) -sin(theta); sin(theta) cos(theta) ]
