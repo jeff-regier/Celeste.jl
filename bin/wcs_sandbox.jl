@@ -32,7 +32,6 @@ coord[1, 1] = 10.
 coord[2, 1] = 20
 WCSLIB.wcsp2s(blob[1].wcs, coord)
 
-
 # Plot neighboring points.
 function make_rot_mat(theta::Float64)
     [ cos(theta) -sin(theta); sin(theta) cos(theta) ]
@@ -57,3 +56,34 @@ for p in in_poly
 end
 
 
+tile = ImageTile(5, 5, blob[1]);
+# "Radius" is used in the sense of an L_{\infty} norm.
+tile_width = 10
+tr = tile_width / 2.  # tile radius
+tc1 = tr + (tile.hh - 1) * tile_width
+tc2 = tr + (tile.ww - 1) * tile_width
+
+# Corners of the tile in pixel coordinates
+tc = Float64[tr + (tile.hh - 1) * tile_width, tr + (tile.ww - 1) * tile_width]
+tc11 = tc + Float64[-tr, -tr]
+tc12 = tc + Float64[-tr, tr]
+tc22 = tc + Float64[tr, tr]
+tc21 = tc + Float64[tr, -tr]
+
+# Convert the tile coordinates to a polygon in world coordinates.
+tc_wcs = WCSLIB.wcsp2s(tile.img.wcs, hcat(tc11, tc12, tc22, tc21))'
+PyPlot.plot(tc_wcs[:, 1], tc_wcs[:, 2])
+
+for s in 1:mp.S
+    pc = mp.patches[s].center  # patch center
+    pr = mp.patches[s].radius  # patch radius
+
+    if abs(pc[1] - tc_wcs[1]) <= (pr + tr) && abs(pc[2] - tc_wcs[2]) <= (pr + tr)
+        push!(local_subset, s)
+    end
+end
+
+
+
+# Try getting local sources
+tile = ImageTile()
