@@ -169,7 +169,10 @@ Args:
                  where the world coordinates are rows.
 
 Returns:
-    - The 1-indexed pixel locations in the same shape as the input. 
+    - The 1-indexed pixel locations in the same shape as the input.
+
+The frame files seem to use the order (RA, DEC) for world coordinates,
+though you should check the CTYPE1 and CTYPE2 header values if in doubt.
 """ ->
 function world_to_pixel(wcs::WCSLIB.wcsprm, world_loc::Array{Float64})
     single_row = length(size(world_loc)) == 1 
@@ -199,6 +202,9 @@ Args:
 
 Returns:
     - The world locations in the same shape as the input. 
+
+The frame files seem to use the order (RA, DEC) for world coordinates,
+though you should check the CTYPE1 and CTYPE2 header values if in doubt.
 """ ->
 function pixel_to_world(wcs::WCSLIB.wcsprm, pix_loc::Array{Float64})
     single_row = length(size(pix_loc)) == 1 
@@ -215,6 +221,11 @@ function pixel_to_world(wcs::WCSLIB.wcsprm, pix_loc::Array{Float64})
     else
         return world_loc'
     end
+end
+
+
+function world_coordinate_names(wcs::WCSLIB.wcsprm)
+    [ unsafe_load(wcs.ctype, i) for i=1:2 ]
 end
 
 end

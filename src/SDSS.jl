@@ -247,6 +247,11 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     header_str = FITSIO.read_header(img_fits[1], ASCIIString)
     ((wcs,), nrejected) = WCSLIB.wcspih(header_str)
 
+    # These are the column types (not currently used).
+    ctype = [FITSIO.read_key(img_fits[1], "CTYPE1")[1],
+             FITSIO.read_key(img_fits[1], "CTYPE2")[1]]
+
+
     # This is the calibration vector:
     calib_col = read(img_fits[2])
     calib_image = [ calib_col[row] for
@@ -520,6 +525,7 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
         psf_point_x = H / 2
         psf_point_y = W / 2
 
+        # TODO: should you center the psf's x at some point?
         raw_psf = PSF.get_psf_at_point(psf_point_x, psf_point_y, rrows, rnrow, rncol, cmat);
         psf_gmm = PSF.fit_psf_gaussians(raw_psf);
         psf = PSF.convert_gmm_to_celeste(psf_gmm)
