@@ -46,8 +46,9 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
     end
 
     # Data points at which the psf is evaluated in matrix form.
+    x_center = Float64[ (size(psf, 1) - 1) / 2.0 + 1, (size(psf, 2) - 1) / 2.0 + 1 ]
     x_prod = [ Float64[i, j] for i=1:size(psf, 1), j=1:size(psf, 2) ]
-    x_mat = Float64[ x_row[col] for x_row=x_prod, col=1:2 ]
+    x_mat = Float64[ x_row[col] - x_center[col] for x_row=x_prod, col=1:2 ]
 
     # Unscale the fit vector so we can compare the sum of squared differences
     # between the psf and our mixture of normals as a convergence criterion.
@@ -61,18 +62,16 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
     gmm = GaussianMixtures.GMM(3, x_mat; kind=:full, nInit=0)
 
     # Get the scale for the starting point from the whole image.
-    psf_center = Float64[ (size(psf, i) - 1) / 2 for i=1:2 ]
-    x_centered = broadcast(-, x_mat, psf_center')
-    psf_starting_var = x_centered' * (x_centered .* psf_mat)
+    psf_starting_var = x_mat' * (x_mat .* psf_mat)
 
     # Hard-coded initialization.
-    gmm.μ[1, :] = psf_center
+    gmm.μ[1, :] = Float64[0, 0]
     gmm.Σ[1] = sigma_for_gmm(psf_starting_var)
 
-    gmm.μ[2, :] = psf_center - Float64[2, 2]
+    gmm.μ[2, :] = Float64[-2, -2]
     gmm.Σ[2] = sigma_for_gmm(psf_starting_var)
 
-    gmm.μ[3, :] = psf_center + Float64[2, 2]
+    gmm.μ[3, :] = Float64[2, 2]
     gmm.Σ[3] = sigma_for_gmm(psf_starting_var)
 
     gmm.w = ones(gmm.n) / gmm.n

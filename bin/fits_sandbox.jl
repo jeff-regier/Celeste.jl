@@ -77,7 +77,8 @@ close()
 PyPlot.plot(py_raw_psf, raw_psf', "k.");
 PyPlot.plot(py_raw_psf, py_raw_psf, "r.");
 
-
+# compute a fit
+psf_gmm = PSF.fit_psf_gaussians(raw_psf)
 
 
 #######################
