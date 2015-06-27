@@ -229,7 +229,8 @@ abstract ParamSet
 # r2      = Iax1 scale parameter for r_s. (formerly zeta)
 # c1      = C_s means (formerly beta)
 # c2      = C_s variances (formerly lambda) 
-# a       = robability of being a star or galaxy. (formerly chi)
+# a       = probability of being a star or galaxy.  a[1] is the
+#           probability of being a star and a[2] of being a galaxy. (formerly chi)
 # k       = Dx{Ia|Ia - 1} matrix of color prior component indicators. (formerly kappa)
 
 # Parameters for location and galaxy shape.

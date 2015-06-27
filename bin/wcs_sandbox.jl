@@ -25,16 +25,28 @@ b_letter = band_letters[b]
 
 original_blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
 original_cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+
+
+##########################
+# Select an object.
+
 cat_loc = convert(Array{Float64}, original_cat_df[[:ra, :dec]]);
 cat_pix = Util.world_to_pixel(original_blob[4].wcs, cat_loc)
 
-objid = "1237662226208063597"
+obj_df = original_cat_df[[:objid, :is_star, :is_gal, :psfflux_r, :compflux_r]]
+sort(obj_df[obj_df[:is_gal] .== true, :], cols=:compflux_r, rev=true)
+
+
+#objid = "1237662226208063597" # A star that was obviously miscentered
+#objid = "1237662226208063499" # A bright star
+objid = "1237662226208063632" # A bright galaxy
+
 obj_loc = cat_pix[original_cat_df[:objid] .== objid, :]
 
 #sub_rows_x = 1:150
 #sub_rows_y = 1:150
 
-width = 12
+width = 20
 sub_rows_x = floor(obj_loc[1] - width):ceil(obj_loc[1] + width)
 sub_rows_y = floor(obj_loc[2] - width):ceil(obj_loc[2] + width)
 
@@ -58,19 +70,16 @@ end
 cat_df = cat_df[entry_in_range, :]
 cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
 cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]]);
+initial_mp = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
 
+
+#############################
+# Plot our image.
 pix_loc = Util.world_to_pixel(blob[b].wcs, cat_loc)
 Util.pixel_to_world(blob[b].wcs, pix_loc)
-
-psf_point_x = 80.
-psf_point_y = 100.
-
-
-for b=1:20
-	PyPlot.close()
-end
-#for b=1:5
-for b=4
+PyPlot.close("all")
+for b=1:5
+#for b=4
 	# Plotting the transpose matches the images in the SDSS image browser
 	# http://skyserver.sdss.org/dr7/en/tools/getimg/fields.asp
 
@@ -100,8 +109,38 @@ for b=4
 end
 
 
+
+##############################
+# Fit the image.
+
+function compare_solutions(mp1::ModelParams, mp2::ModelParams)
+    # Compare the parameters, fits, and iterations.
+    println("===================")
+    println("Differences:")
+    for var_name in names(ids)
+        println(var_name)
+        for s in 1:mp1.S
+            println(s, ":\n", mp1.vp[s][ids.(var_name)], "\n", mp2.vp[s][ids.(var_name)])
+        end
+    end
+    println("===================")
+end
+
+#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
+mp = deepcopy(initial_mp)
+res = OptimizeElbo.maximize_elbo(blob, mp);
+compare_solutions(mp, initial_mp)
+
+brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S]
+brightness_vals = [ Float64[b.E_l_a[i, j].v for i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
+
+
+
+
 ###################################
 # Look at the psf.
+psf_point_x = 80.
+psf_point_y = 100.
 
 raw_psf = Array(Array{Float64}, 5)
 for b=1:5

@@ -11,7 +11,7 @@ import ElboDeriv
 
 
 #TODO: use Lumberjack.jl for logging
-const debug = false
+const debug = true
 
 
 function get_nlopt_bounds(vs::Vector{Float64})
