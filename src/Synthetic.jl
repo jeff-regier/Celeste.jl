@@ -46,6 +46,7 @@ end
 
 
 function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
+    # TODO: move this to use world coordinates.
     for k in 1:length(img0.psf)
         the_mean = ce.pos + img0.psf[k].xiBar
         the_cov = img0.psf[k].tauBar
@@ -56,6 +57,7 @@ end
 
 
 function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
+    # TODO: move this to use world coordinates.
     e_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
 
     XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
@@ -77,6 +79,7 @@ end
 function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
     pixels = reshape(float(rand(Distributions.Poisson(img0.epsilon * img0.iota),
                      img0.H * img0.W)), img0.H, img0.W)
+    # TODO: move this to use world coordinates.
 
     for body in n_bodies
         body.is_star ? write_star(img0, body, pixels) : write_galaxy(img0, body, pixels)
