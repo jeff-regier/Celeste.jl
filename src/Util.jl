@@ -181,8 +181,8 @@ function world_to_pixel(wcs::WCSLIB.wcsprm, world_loc::Array{Float64})
         world_loc = world_loc'
     end
 
-    # wcss2p returns 0-indexed pixel locations.
-    pix_loc = WCSLIB.wcss2p(wcs, world_loc') + 1
+    # wcss2p returns 1-indexed pixel locations.
+    pix_loc = WCSLIB.wcss2p(wcs, world_loc')
 
     if single_row
         return pix_loc[:]
@@ -213,8 +213,8 @@ function pixel_to_world(wcs::WCSLIB.wcsprm, pix_loc::Array{Float64})
         pix_loc = pix_loc'
     end
 
-    # wcsp2s uses 0-indexed pixel locations.
-    world_loc = WCSLIB.wcsp2s(wcs, pix_loc' - 1)
+    # wcsp2s uses 1-indexed pixel locations.
+    world_loc = WCSLIB.wcsp2s(wcs, pix_loc')
 
     if single_row
         return world_loc[:]
