@@ -26,7 +26,7 @@ b_letter = band_letters[b]
 original_blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
 original_cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
 cat_loc = convert(Array{Float64}, original_cat_df[[:ra, :dec]]);
-cat_pix = Util.world_to_pixel(blob[4].wcs, cat_loc)
+cat_pix = Util.world_to_pixel(original_blob[4].wcs, cat_loc)
 
 objid = "1237662226208063597"
 obj_loc = cat_pix[original_cat_df[:objid] .== objid, :]
@@ -34,7 +34,7 @@ obj_loc = cat_pix[original_cat_df[:objid] .== objid, :]
 #sub_rows_x = 1:150
 #sub_rows_y = 1:150
 
-width = 8
+width = 12
 sub_rows_x = floor(obj_loc[1] - width):ceil(obj_loc[1] + width)
 sub_rows_y = floor(obj_loc[2] - width):ceil(obj_loc[2] + width)
 
