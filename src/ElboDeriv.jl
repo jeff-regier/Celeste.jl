@@ -498,8 +498,8 @@ function local_sources(tile::ImageTile, mp::ModelParams)
 
     # Corners of the tile in pixel coordinates.
     tr = mp.tile_width / 2.  # tile width
-    tc = Float64[tr + (tile.hh - 1) * tile_width,
-                 tr + (tile.ww - 1) * tile_width] # Tile center
+    tc = Float64[tr + (tile.hh - 1) * mp.tile_width,
+                 tr + (tile.ww - 1) * mp.tile_width] # Tile center
     tc11 = tc + Float64[-tr, -tr]
     tc12 = tc + Float64[-tr, tr]
     tc22 = tc + Float64[tr, tr]
@@ -512,7 +512,7 @@ function local_sources(tile::ImageTile, mp::ModelParams)
         pc = mp.patches[s].center  # patch center
         pr = mp.patches[s].radius  # patch radius
 
-        if point_within_radius_of_polygon(pc, pr, tc_wcs)
+        if Util.point_within_radius_of_polygon(pc, pr, tc_wcs)
             push!(local_subset, s)
         end
     end
@@ -570,7 +570,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
             clear!(var_G)
 
             # Convert the pixel location to world coordinates.
-            m_pos = Util.pixel_to_world(blob[1].wcs, Float64[h, w])
+            m_pos = Util.pixel_to_world(tile.img.wcs, Float64[h, w])
             for child_s in 1:length(tile_sources)
                 parent_s = tile_sources[child_s]
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
