@@ -494,8 +494,6 @@ Returns:
     there is any overlap in their squares of influence.
 """ ->
 function local_sources(tile::ImageTile, mp::ModelParams)
-    local_subset = Array(Int64, 0)
-
     # Corners of the tile in pixel coordinates.
     tr = mp.tile_width / 2.  # tile width
     tc = Float64[tr + (tile.hh - 1) * mp.tile_width,
@@ -505,19 +503,12 @@ function local_sources(tile::ImageTile, mp::ModelParams)
     tc22 = tc + Float64[tr, tr]
     tc21 = tc + Float64[tr, -tr]
 
-    # Convert the tile coordinates to a polygon in world coordinates.
-    tc_wcs = Util.pixel_to_world(tile.img.wcs, vcat(tc11', tc12', tc22', tc21'))
+    tile_quad = vcat(tc11', tc12', tc22', tc21')
+    pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
+    pr = [ mp.patches[s].radius for s=1:mp.S ]
+    bool_vec = Util.sources_near_quadrilateral(pc, pr, tile_quad)
 
-    for s in 1:mp.S
-        pc = mp.patches[s].center  # patch center
-        pr = mp.patches[s].radius  # patch radius
-
-        if Util.point_within_radius_of_polygon(pc, pr, tc_wcs)
-            push!(local_subset, s)
-        end
-    end
-
-    local_subset
+    s[bool_vec]
 end
 
 

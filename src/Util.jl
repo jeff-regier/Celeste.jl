@@ -46,6 +46,9 @@ function logit(x)
     1.0 ./ (1.0 + exp(-x))
 end
 
+
+# TODO: make a WCS.jl file.
+
 @doc """
 Determine whether a ray in direction r from point p
 intersects the edge from v1 to v2 in two dimensions.
@@ -226,6 +229,38 @@ end
 
 function world_coordinate_names(wcs::WCSLIB.wcsprm)
     [ unsafe_load(wcs.ctype, i) for i=1:2 ]
+end
+
+
+@doc """
+Check whether a set of sources is within <radius> world coordinates of
+a quadrilateral defined in pixel coordinates.
+
+Args:
+  - loc: An S x 2 array of source locations in world coordinates,
+         with the locations as row vectors.
+  - radius: An array of radii in world coordinates, one for each loc.
+  - pix_corners: A 4 x 2 array of quadrilateral corners in pixel coordinates.
+                 The corners must make a quadrilateral when traced in order of the
+                 rows with a final edge between the last row and the first.
+
+Returns:
+    An array of booleans for whether each row of loc is within radius of the
+    pix_corners quadrilateral.
+"""
+function sources_near_quadrilateral(loc::Array{Float64, 2}, radius::Array{Float64, 1}, pix_corners::Array{Float64, 2})
+    @assert size(loc, 2) == size(pix_corners, 2) == 2
+    @assert size(radius, 1) == size(loc, 1)
+    world_corners = Util.pixel_to_world(tile.img.wcs, pix_corners)
+    [ Util.point_within_radius_of_polygon(loc[i, :][:], radius[i], world_corners) for i=1:size(loc, 2)]
+end
+
+@doc """
+sources_in_quadrilateral for a single loc value.
+"""
+function sources_near_quadrilateral(loc::Array{Float64, 1}, radius::Float64, pix_corners::Array{Float64, 2})
+    bool_vec = sources_in_quadrilateral(loc', [ radius ], pix_corners)
+    bool_vec[1]
 end
 
 end
