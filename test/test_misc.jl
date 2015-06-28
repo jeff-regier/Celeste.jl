@@ -298,6 +298,13 @@ function test_point_near_line_segment()
 end
 
 
+function test_id_wcs()
+    rand_coord = rand(10, 2)
+    @assert Util.pixel_to_world(SDSS.wcs_id, rand_coord) == rand_coord
+    @assert Util.world_to_pixel(SDSS.wcs_id, rand_coord) == rand_coord
+end
+
+
 ####################################################
 
 test_util_bvn_cov()
@@ -308,3 +315,4 @@ test_ray_crossing()
 test_point_inside_polygon()
 test_point_near_polygon_corner()
 test_point_near_line_segment()
+test_id_wcs()

@@ -124,4 +124,13 @@ w2 = WCSLIB.wcsprm(naxis;
 
 [ unsafe_load(w2.crval, i) for i=1:2 ]
 
+# An identity wcs
+wcs_id = WCSLIB.wcsprm(2,
+			           cd = Float64[1 0; 0 1],
+			           ctype = ["none", "none"],
+			           crpix = Float64[1, 1],
+			           crval = Float64[1, 1])
 
+rand_coord = rand(10, 2)
+Util.pixel_to_world(wcs_id, rand_coord) == rand_coord
+Util.world_to_pixel(wcs_id, rand_coord) == rand_coord

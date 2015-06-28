@@ -5,6 +5,7 @@ export gen_blob
 using CelesteTypes
 import ModelInit
 import Util
+import SDSS
 
 import Distributions
 
@@ -79,14 +80,13 @@ end
 function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
     pixels = reshape(float(rand(Distributions.Poisson(img0.epsilon * img0.iota),
                      img0.H * img0.W)), img0.H, img0.W)
-    # TODO: move this to use world coordinates.
 
     for body in n_bodies
         body.is_star ? write_star(img0, body, pixels) : write_galaxy(img0, body, pixels)
     end
 
-    return Image(img0.H, img0.W, pixels, img0.b, img0.wcs, img0.epsilon,
-            img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
+    return Image(img0.H, img0.W, pixels, img0.b, SDSS.wcs_id, img0.epsilon,
+                 img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
 end
 
 
