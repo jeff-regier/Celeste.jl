@@ -505,10 +505,10 @@ function local_sources(tile::ImageTile, mp::ModelParams)
 
     tile_quad = vcat(tc11', tc12', tc22', tc21')
     pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
-    pr = [ mp.patches[s].radius for s=1:mp.S ]
-    bool_vec = Util.sources_near_quadrilateral(pc, pr, tile_quad)
+    pr = Float64[ mp.patches[s].radius for s=1:mp.S ]
+    bool_vec = Util.sources_near_quadrilateral(pc, pr, tile_quad, tile.img.wcs)
 
-    s[bool_vec]
+    (collect(1:mp.S))[bool_vec]
 end
 
 
