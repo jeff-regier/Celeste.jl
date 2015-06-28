@@ -131,9 +131,11 @@ mp = deepcopy(initial_mp)
 res = OptimizeElbo.maximize_elbo(blob, mp);
 compare_solutions(mp, initial_mp)
 
-brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S]
-brightness_vals = [ Float64[b.E_l_a[i, j].v for i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
-
+function get_brightness(mp::ModelParams)
+	brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+	brightness_vals = [ Float64[b.E_l_a[i, j].v for i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
+	brightness_vals
+end
 
 
 
