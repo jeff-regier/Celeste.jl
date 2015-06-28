@@ -7,8 +7,8 @@ import SDSS
 import Util
 
 function test_local_sources()
+    # Coarse test that local_sources gets the right objects.
 
-    # TODO: this needs to be updated.
     srand(1)
     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
@@ -46,6 +46,10 @@ end
 
 
 function test_local_sources_2()
+    # Check that a larger blob gets the same number of objects
+    # as a smaller blob.  (This is useful to check edge cases of
+    # the polygon logic.)
+
     srand(1)
     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
     one_body = [sample_ce([50., 50.], true),]
@@ -58,70 +62,66 @@ function test_local_sources_2()
 
     mp = ModelInit.cat_init(one_body, patch_radius=35., tile_width=2)
 
-    small_pairs = Array((Int64, Int64), 0)
     qx = 0
     for ww=1:50,hh=1:50
         tile = ImageTile(hh, ww, small_blob[2])
         if length(ElboDeriv.local_sources(tile, mp)) > 0
-            push!(small_pairs, (ww, hh))
             qx += 1
         end
     end
 
-    #@test qx == (36 * 2)^2 / 4
-    big_pairs = Array((Int64, Int64), 0)
     qy = 0
     for ww=1:200,hh=1:200
         tile = ImageTile(hh, ww, big_blob[1])
         if length(ElboDeriv.local_sources(tile, mp)) > 0
-            push!(big_pairs, (ww, hh))
             qy += 1
         end
     end
 
-    ww = 25
-    hh = 200
-    tile = ImageTile(hh, ww, big_blob[1])
-    ElboDeriv.local_sources(tile, mp)
-
-    wcs = blob[1].wcs
-    tr = mp.tile_width / 2.  # tile width
-    tc = Float64[tr + (tile.hh - 1) * mp.tile_width,
-                 tr + (tile.ww - 1) * mp.tile_width] # Tile center
-    tc11 = tc + Float64[-tr, -tr]
-    tc12 = tc + Float64[-tr, tr]
-    tc22 = tc + Float64[tr, tr]
-    tc21 = tc + Float64[tr, -tr]
-
-    v = vcat(tc11', tc12', tc22', tc21')
-
-    radius = mp.patches[1].radius
-    p = [50., 50.]
-    Util.point_near_polygon_corner(p, radius, v)
-    Util.point_inside_polygon(p, Float64[1, 0], v)
-    Util.point_near_polygon_edge(p, radius, v)
-
-    n_edges = size(v, 1)
-    @assert length(p) == length(r) == size(v, 2)
-    @assert n_edges >= 3
-
-    num_crossings = 0
-    for edge=1:n_edges
-        if edge < n_edges
-            v1 = v[edge, :][:]
-            v2 = v[edge + 1, :][:]
-        else # edge == n_edges
-            # The final edge from the last vertex back to the first.
-            v1 = v[edge, :][:]
-            v2 = v[1, :][:]
-        end
-        crossing = Util.ray_crossing(p, r, v1, v2) ? 1: 0
-        println(crossing)
-        num_crossings = num_crossings + crossing
-    end
-
-
     @test qy == qx
+end
+
+
+function test_local_sources_3()
+    # Test local_sources using world coordinates.
+
+    srand(1)
+    test_b = 3 # Will test using this band only
+    pix_loc = Float64[50., 50.]
+    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    body_loc = Util.pixel_to_world(blob0[test_b].wcs, pix_loc)
+    one_body = [sample_ce(body_loc, true),]
+
+    # Get synthetic blobs but with the original world coordinates.
+    for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
+    blob = Synthetic.gen_blob(blob0, one_body)
+    for b in 1:5 blob[b].wcs = blob0[b].wcs end
+
+    tile_width = 1
+    patch_radius_pix = 5.
+
+    # Get a patch radius in world coordinates by looking at the world diagonals of
+    # a pixel square of a certain size.
+    world_quad = Util.pixel_to_world(blob[test_b].wcs,
+        [0. 0.; 0. patch_radius_pix; patch_radius_pix 0; patch_radius_pix patch_radius_pix])
+    diags = [ world_quad[i, :]' - world_quad[i + 2, :]' for i=1:2 ]
+    patch_radius = maximum([sqrt(dot(d, d)) for d in diags])
+
+    mp = ModelInit.cat_init(one_body, patch_radius=patch_radius, tile_width=tile_width)
+
+    # Source should be present
+    tile = ImageTile(round(pix_loc[1] / tile_width), round(pix_loc[2] / tile_width), blob[test_b])
+    @assert ElboDeriv.local_sources(tile, mp) == [1]
+
+    # Source should not match when you're 1 tile and a half away along the diagonal plus
+    # the pixel radius from the center of the tile.
+    tile = ImageTile(ceil((pix_loc[1] + 1.5 * tile_width * sqrt(2) + patch_radius_pix) / tile_width),
+                     round(pix_loc[2] / tile_width), blob[test_b])
+    @assert ElboDeriv.local_sources(tile, mp) == []
+
+    tile = ImageTile(round((pix_loc[1]) / tile_width),
+                     ceil((pix_loc[2]  + 1.5 * tile_width * sqrt(2) + patch_radius_pix) / tile_width), blob[test_b])
+    @assert ElboDeriv.local_sources(tile, mp) == []
 end
 
 
@@ -401,8 +401,9 @@ end
 
 test_util_bvn_cov()
 test_sky_noise_estimates()
-#test_local_sources_2()
-#test_local_sources()
+test_local_sources()
+test_local_sources_2()
+test_local_sources_3()
 test_ray_crossing()
 test_point_inside_polygon()
 test_point_near_polygon_corner()
