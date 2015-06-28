@@ -192,12 +192,21 @@ end
 function test_coadd_cat_init_is_most_likely()  # on a real stamp
     stamp_id = "5.0073-0.0739"
     blob = SDSS.load_stamp_blob(dat_dir, stamp_id)
+    cat_entries_df = SDSS.load_stamp_catalog_df(dat_dir, "s82-$stamp_id", blob)
+
     cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-$stamp_id", blob)
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries)
-    inbounds(ce) = ce.pos[1] > -10. && ce.pos[2] > -10 &&
-        ce.pos[1] < 61 && ce.pos[2] < 61
-    cat_entries = filter(inbounds, cat_entries)
+
+    ce_pix_locs = [ [ Util.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ] for ce in cat_entries ]
+
+    function ce_inbounds(ce)
+        pix_locs = [ Util.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ]
+        inbounds(pos) = pos[1] > -10. && pos[2] > -10 &&
+                        pos[1] < 61 && pos[2] < 61
+        all([ inbounds(pos) for pos in pix_locs ])
+    end
+    cat_entries = filter(ce_inbounds, cat_entries)
 
     mp = ModelInit.cat_init(cat_entries)
     for s in 1:length(cat_entries)
@@ -207,6 +216,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
     # s is the brightest source: a dev galaxy!
+    # Note: source 2 seems to be the dev galaxy, but source 1 is the brightest,
+    # I don't know what this comment means.
     s = 1
 
     for bad_scale in [.7, 1.3]
@@ -214,6 +225,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         mp_r1.vp[s][ids.r1] *= bad_scale^2
         mp_r1.vp[s][ids.r2] /= bad_scale  # keep variance the same
         bad_r1 = ElboDeriv.elbo_likelihood(blob, mp_r1)
+        println(bad_r1.v, " ?< ", best.v)
         @test best.v > bad_r1.v
     end
 

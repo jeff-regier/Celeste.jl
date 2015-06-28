@@ -44,11 +44,11 @@ function load_stamp_blob(stamp_dir, stamp_id)
         ]'
         tauBar = Array(Float64, 2, 2, 3)
         tauBar[:,:,1] = [[hdr["PSF_P9"] hdr["PSF_P11"]],
-                [hdr["PSF_P11"] hdr["PSF_P10"]]]
+                         [hdr["PSF_P11"] hdr["PSF_P10"]]]
         tauBar[:,:,2] = [[hdr["PSF_P12"] hdr["PSF_P14"]],
-                [hdr["PSF_P14"] hdr["PSF_P13"]]]
+                         [hdr["PSF_P14"] hdr["PSF_P13"]]]
         tauBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]],
-                [hdr["PSF_P17"] hdr["PSF_P16"]]]
+                         [hdr["PSF_P17"] hdr["PSF_P16"]]]
 
         psf = [PsfComponent(alphaBar[k], xiBar[:, k], tauBar[:, :, k]) for k in 1:3]
 
@@ -101,7 +101,6 @@ end
 
 function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=false)
     function row_to_ce(row)
-        #x_y = Util.world_to_pixel(blob[1].wcs, [row[1, :ra], row[1, :dec]])[:]
         x_y = [row[1, :ra], row[1, :dec]]
         star_fluxes = zeros(5)
         gal_fluxes = zeros(5)
@@ -114,7 +113,7 @@ function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=f
             dev_col = symbol("devflux_$bl")
             exp_col = symbol("expflux_$bl")
             gal_fluxes[b] += fracs_dev[1] * row[1, dev_col] +
-                    fracs_dev[2] * row[1, exp_col]
+                             fracs_dev[2] * row[1, exp_col]
         end
 
         fits_ab = fracs_dev[1] > .5 ? row[1, :ab_dev] : row[1, :ab_exp]
@@ -127,14 +126,14 @@ function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=f
         end
 
         re_arcsec = max(fits_theta, 1. / 30)  # re = effective radius
-        re_pixel = re_arcsec / 0.396
+        #re_pixel = re_arcsec / 0.396
 
         phi90 = 90 - fits_phi
         phi90 -= floor(phi90 / 180) * 180
         phi90 *= (pi / 180)
 
         CatalogEntry(x_y, row[1, :is_star], star_fluxes,
-            gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_pixel)
+            gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_arcsec)
     end
 
     CatalogEntry[row_to_ce(df[i, :]) for i in 1:size(df, 1)]
@@ -533,7 +532,7 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
         psf_point_x = H / 2
         psf_point_y = W / 2
 
-        # TODO: should you center the psf's x at some point?
+        # TODO: The PSF must be in world, not pixel coordinates.
         raw_psf = PSF.get_psf_at_point(psf_point_x, psf_point_y, rrows, rnrow, rncol, cmat);
         psf_gmm = PSF.fit_psf_gaussians(raw_psf);
         psf = PSF.convert_gmm_to_celeste(psf_gmm)
