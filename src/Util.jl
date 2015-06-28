@@ -52,6 +52,8 @@ end
 @doc """
 Determine whether a ray in direction r from point p
 intersects the edge from v1 to v2 in two dimensions.
+Intersecting the vertex v1 counts as an intersection but
+intersecting v2 does not.
 """ ->
 function ray_crossing(p::Array{Float64, 1}, r::Array{Float64, 1},
                       v1::Array{Float64, 1}, v2::Array{Float64, 1})
@@ -60,12 +62,19 @@ function ray_crossing(p::Array{Float64, 1}, r::Array{Float64, 1},
     delta_v = v2 - v1
     int_mat = hcat(r, -delta_v)
     if det(int_mat) == 0
-        # If the ray is parallel to an edge, consider it not to be
-        # an intersection.
-        return false
+        # If the ray is parallel to an edge, consider it to be
+        # an intersection only if it passes through v2.
+        delta_v2p = v2 - p
+        if r[1] == 0.
+            return (delta_v2p[1] == 0.) && (delta_v2p[2] == 0. || sign(r[2]) == sign(delta_v2p[2]))
+        elseif r[2] == 0.
+            return (delta_v2p[2] == 0.) && (delta_v2p[1] == 0. || sign(r[1]) == sign(delta_v2p[1]))
+        else
+            return (delta_v2p[1] / r[1]) == (delta_v2p[2] / r[2]) && (sign(delta_v2p[1] / r[1]) >= 0.)
+        end
     else
         sol =  int_mat \ (v1 - p)
-        return 0 <= sol[2] < 1 && sol[1] > 0
+        return 0 < sol[2] <= 1 && sol[1] > 0
     end
 end
  
@@ -247,19 +256,22 @@ Args:
 Returns:
     An array of booleans for whether each row of loc is within radius of the
     pix_corners quadrilateral.
-"""
-function sources_near_quadrilateral(loc::Array{Float64, 2}, radius::Array{Float64, 1}, pix_corners::Array{Float64, 2})
+""" ->
+function sources_near_quadrilateral(loc::Array{Float64, 2}, radius::Array{Float64, 1},
+                                    pix_corners::Array{Float64, 2}, wcs::WCSLIB.wcsprm)
     @assert size(loc, 2) == size(pix_corners, 2) == 2
     @assert size(radius, 1) == size(loc, 1)
-    world_corners = Util.pixel_to_world(tile.img.wcs, pix_corners)
-    [ Util.point_within_radius_of_polygon(loc[i, :][:], radius[i], world_corners) for i=1:size(loc, 2)]
+    world_corners = Util.pixel_to_world(wcs, pix_corners)
+    [ Util.point_within_radius_of_polygon(loc[i, :][:], radius[i], world_corners) for i=1:size(loc, 1)]
 end
+
 
 @doc """
 sources_in_quadrilateral for a single loc value.
-"""
-function sources_near_quadrilateral(loc::Array{Float64, 1}, radius::Float64, pix_corners::Array{Float64, 2})
-    bool_vec = sources_in_quadrilateral(loc', [ radius ], pix_corners)
+""" ->
+function sources_near_quadrilateral(loc::Array{Float64, 1}, radius::Float64,
+                                    pix_corners::Array{Float64, 2}, wcs::WCSLIB.wcsprm)
+    bool_vec = sources_in_quadrilateral(loc', [ radius ], pix_corners, wcs)
     bool_vec[1]
 end
 

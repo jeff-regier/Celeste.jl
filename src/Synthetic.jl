@@ -1,5 +1,7 @@
 module Synthetic
 
+VERSION < v"0.4.0-dev" && using Docile
+
 export gen_blob
 
 using CelesteTypes
@@ -76,7 +78,6 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
     end
 end
 
-
 function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
     pixels = reshape(float(rand(Distributions.Poisson(img0.epsilon * img0.iota),
                      img0.H * img0.W)), img0.H, img0.W)
@@ -89,7 +90,10 @@ function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
                  img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
 end
 
-
+@doc """
+Generate a simulated blob based on a vector of catalog entries using
+identity world coordinates.
+""" ->
 function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry})
     [gen_image(blob0[b], n_bodies) for b in 1:5]
 end

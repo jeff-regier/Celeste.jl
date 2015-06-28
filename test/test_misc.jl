@@ -6,80 +6,123 @@ using CelesteTypes
 import SDSS
 import Util
 
-# function test_local_sources()
+function test_local_sources()
 
-#     # TODO: this needs to be updated.
-#     srand(1)
-#     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
-#     for b in 1:5
-#         blob0[b].H, blob0[b].W = 112, 238
-#     end
+    # TODO: this needs to be updated.
+    srand(1)
+    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    for b in 1:5
+        blob0[b].H, blob0[b].W = 112, 238
+    end
 
-#     three_bodies = [
-#         sample_ce([4.5, 3.6], false),
-#         sample_ce([60.1, 82.2], true),
-#         sample_ce([71.3, 100.4], false),
-#     ]
+    three_bodies = [
+        sample_ce([4.5, 3.6], false),
+        sample_ce([60.1, 82.2], true),
+        sample_ce([71.3, 100.4], false),
+    ]
 
-#     blob = Synthetic.gen_blob(blob0, three_bodies)
+    blob = Synthetic.gen_blob(blob0, three_bodies)
 
-#     mp = ModelInit.cat_init(three_bodies, patch_radius=20., tile_width=1000)
-#     @test mp.S == 3
+    mp = ModelInit.cat_init(three_bodies, patch_radius=20., tile_width=1000)
+    @test mp.S == 3
 
-#     tile = ImageTile(1, 1, blob[3])
-#     subset1000 = ElboDeriv.local_sources(tile, mp)
-#     @test subset1000 == [1,2,3]
+    tile = ImageTile(1, 1, blob[3])
+    subset1000 = ElboDeriv.local_sources(tile, mp)
+    @test subset1000 == [1,2,3]
 
-#     mp.tile_width=10
+    mp.tile_width=10
 
-#     subset10 = ElboDeriv.local_sources(tile, mp)
-#     @test subset10 == [1]
+    subset10 = ElboDeriv.local_sources(tile, mp)
+    @test subset10 == [1]
 
-#     last_tile = ImageTile(11, 24, blob[3])
-#     last_subset = ElboDeriv.local_sources(last_tile, mp)
-#     @test length(last_subset) == 0
+    last_tile = ImageTile(11, 24, blob[3])
+    last_subset = ElboDeriv.local_sources(last_tile, mp)
+    @test length(last_subset) == 0
 
-#     pop_tile = ImageTile(7, 9, blob[3])
-#     pop_subset = ElboDeriv.local_sources(pop_tile, mp)
-#     @test pop_subset == [2,3]
-# end
+    pop_tile = ImageTile(7, 9, blob[3])
+    pop_subset = ElboDeriv.local_sources(pop_tile, mp)
+    @test pop_subset == [2,3]
+end
 
 
-# function test_local_sources_2()
+function test_local_sources_2()
+    srand(1)
+    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    one_body = [sample_ce([50., 50.], true),]
 
-#     # TODO: this needs to be updated.
-#     srand(1)
-#     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
-#     one_body = [sample_ce([50., 50.], true),]
+    for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
+    small_blob = Synthetic.gen_blob(blob0, one_body)
 
-#        for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
-#     small_blob = Synthetic.gen_blob(blob0, one_body)
+    for b in 1:5 blob0[b].H, blob0[b].W = 400, 400 end
+    big_blob = Synthetic.gen_blob(blob0, one_body)
 
-#        for b in 1:5 blob0[b].H, blob0[b].W = 400, 400 end
-#     big_blob = Synthetic.gen_blob(blob0, one_body)
+    mp = ModelInit.cat_init(one_body, patch_radius=35., tile_width=2)
 
-#     mp = ModelInit.cat_init(one_body, patch_radius=35., tile_width=2)
+    small_pairs = Array((Int64, Int64), 0)
+    qx = 0
+    for ww=1:50,hh=1:50
+        tile = ImageTile(hh, ww, small_blob[2])
+        if length(ElboDeriv.local_sources(tile, mp)) > 0
+            push!(small_pairs, (ww, hh))
+            qx += 1
+        end
+    end
 
-#     qx = 0
-#     for ww=1:50,hh=1:50
-#         tile = ImageTile(hh, ww, small_blob[2])
-#         if length(ElboDeriv.local_sources(tile, mp)) > 0
-#             qx += 1
-#         end
-#     end
+    #@test qx == (36 * 2)^2 / 4
+    big_pairs = Array((Int64, Int64), 0)
+    qy = 0
+    for ww=1:200,hh=1:200
+        tile = ImageTile(hh, ww, big_blob[1])
+        if length(ElboDeriv.local_sources(tile, mp)) > 0
+            push!(big_pairs, (ww, hh))
+            qy += 1
+        end
+    end
 
-#     @test qx == (36 * 2)^2 / 4
+    ww = 25
+    hh = 200
+    tile = ImageTile(hh, ww, big_blob[1])
+    ElboDeriv.local_sources(tile, mp)
 
-#     qy = 0
-#     for ww=1:200,hh=1:200
-#         tile = ImageTile(hh, ww, big_blob[1])
-#         if length(ElboDeriv.local_sources(tile, mp)) > 0
-#             qy += 1
-#         end
-#     end
+    wcs = blob[1].wcs
+    tr = mp.tile_width / 2.  # tile width
+    tc = Float64[tr + (tile.hh - 1) * mp.tile_width,
+                 tr + (tile.ww - 1) * mp.tile_width] # Tile center
+    tc11 = tc + Float64[-tr, -tr]
+    tc12 = tc + Float64[-tr, tr]
+    tc22 = tc + Float64[tr, tr]
+    tc21 = tc + Float64[tr, -tr]
 
-#     @test qy == qx
-# end
+    v = vcat(tc11', tc12', tc22', tc21')
+
+    radius = mp.patches[1].radius
+    p = [50., 50.]
+    Util.point_near_polygon_corner(p, radius, v)
+    Util.point_inside_polygon(p, Float64[1, 0], v)
+    Util.point_near_polygon_edge(p, radius, v)
+
+    n_edges = size(v, 1)
+    @assert length(p) == length(r) == size(v, 2)
+    @assert n_edges >= 3
+
+    num_crossings = 0
+    for edge=1:n_edges
+        if edge < n_edges
+            v1 = v[edge, :][:]
+            v2 = v[edge + 1, :][:]
+        else # edge == n_edges
+            # The final edge from the last vertex back to the first.
+            v1 = v[edge, :][:]
+            v2 = v[1, :][:]
+        end
+        crossing = Util.ray_crossing(p, r, v1, v2) ? 1: 0
+        println(crossing)
+        num_crossings = num_crossings + crossing
+    end
+
+
+    @test qy == qx
+end
 
 
 function test_tiling()
@@ -159,62 +202,93 @@ function test_util_bvn_cov()
 end
 
 function test_ray_crossing()
-    p = Float64[0, 0]
+    # Check a line segment that is hit in one direction.
+    p = Float64[0.5, 0.5]
     v1 = Float64[1, -1]
     v2 = Float64[1, 1]
     r = Float64[1, 0]
+
     @assert Util.ray_crossing(p, r, v1, v2)
+    @assert Util.ray_crossing(p, r, v2, v1)
+    @assert !Util.ray_crossing(p, -r, v1, v2)
+    @assert !Util.ray_crossing(p, -r, v2, v1)
 
-    p = Float64[0, 0]
-    v1 = Float64[1, -1]
-    v2 = Float64[1, 1]
-    r = Float64[-1, 0]
-    @assert !Util.ray_crossing(p, r, v1, v2)
-
-    p = Float64[0, 0]
-    v1 = Float64[1, 1]
-    v2 = Float64[1, -1]
-    r = Float64[1, 0]
-    @assert Util.ray_crossing(p, r, v1, v2)
-
-    p = Float64[0, 0]
+    # Check a line segment that is missed in both directions.
+    p = Float64[0.5, 0.5]
     v1 = Float64[1, 1]
     v2 = Float64[1, 2]
     r = Float64[1, 0]
     @assert !Util.ray_crossing(p, r, v1, v2)
+    @assert !Util.ray_crossing(p, r, v2, v1)
+    @assert !Util.ray_crossing(p, -r, v1, v2)
+    @assert !Util.ray_crossing(p, -r, v2, v1)
 
-    p = Float64[0, 1.5]
+    # Check a line segment that intersects a vertex.
+    # Expect that intersecting v2 counts as an intersection
+    # but intersecting v1 does not.
+    p = Float64[0, 2]
     v1 = Float64[1, 1]
     v2 = Float64[1, 2]
     r = Float64[1, 0]
     @assert Util.ray_crossing(p, r, v1, v2)
+    @assert !Util.ray_crossing(p, r, v2, v1)
+    @assert !Util.ray_crossing(p, -r, v1, v2)
+    @assert !Util.ray_crossing(p, -r, v2, v1)
 
-    p = Float64[0, 1.5]
-    v1 = Float64[1, 1]
-    v2 = Float64[1, -1]
-    r = Float64[1, 0]
+
+    # Check parallel cases.
+    # Parallel to an edge does not count as an intersection unless it intersects
+    # the second vertex.
+
+    # Parallel to y-axis:
+    v1 = Float64[1, -1]
+    v2 = Float64[1, 1]
+    r = Float64[0, 1]
+
+    p = Float64[0.5, 0.5]
     @assert !Util.ray_crossing(p, r, v1, v2)
 
-    p = Float64[1.5, 0]
-    v1 = Float64[1, 1]
-    v2 = Float64[2, 1]
-    r = Float64[0, 1]
+    p = Float64[1, 0.5]
     @assert Util.ray_crossing(p, r, v1, v2)
+    @assert !Util.ray_crossing(p, r, v2, v1)
 
-    p = Float64[1.5, 0]
-    v1 = Float64[1, 1]
-    v2 = Float64[-1, 1]
-    r = Float64[0, 1]
+    p = v2
+    @assert Util.ray_crossing(p, r, v1, v2)
+    @assert !Util.ray_crossing(p, r, v2, v1)
+
+    # Parallel to x-axis:
+    v1 = Float64[-1, 1]
+    v2 = Float64[1, 1]
+    r = Float64[1, 0]
+
+    p = Float64[0.5, 0.5]
     @assert !Util.ray_crossing(p, r, v1, v2)
 
-    # Parallel to an edge does not count as an intersection.
-    p = Float64[0, 0]
-    v1 = Float64[0, 1]
-    v2 = Float64[0, 2]
-    r = Float64[0, 1]
+    p = Float64[0.5, 1]
+    @assert Util.ray_crossing(p, r, v1, v2)
+    @assert !Util.ray_crossing(p, r, v2, v1)
+
+    p = v2
+    @assert Util.ray_crossing(p, r, v1, v2)
+    @assert !Util.ray_crossing(p, r, v2, v1)
+
+    # Not parallel to an axis:
+    v1 = Float64[-1, -1]
+    v2 = Float64[1, 1]
+    r = Float64[1, 1]
+
+    p = Float64[1.5, 0.5]
     @assert !Util.ray_crossing(p, r, v1, v2)
 
+    p = Float64[0.5, 0.5]
+    @assert Util.ray_crossing(p, r, v1, v2)
+    @assert !Util.ray_crossing(p, r, v2, v1)
+
+    p = v2
+    @assert Util.ray_crossing(p, r, v1, v2)
+    @assert !Util.ray_crossing(p, r, v2, v1)
 end
+
 
 function make_rot_mat(theta::Float64)
     [ cos(theta) -sin(theta); sin(theta) cos(theta) ]
@@ -248,6 +322,17 @@ function test_point_inside_polygon()
         broadcast(+, poly, offset') * rot')
     @assert !Util.point_inside_polygon(rot * (p_out + offset), r,
         broadcast(+, poly, offset') * rot')
+
+    # Check on the edges.
+    p_in = Float64[1.0, 0.0]
+    p_out = Float64[1.0, -2.0]
+    poly = Float64[1 1; -1 1; -1 -1; 1 -1]
+    r = Float64[0, 1]
+    @assert Util.point_inside_polygon(p_in, r, poly)
+    @assert !Util.point_inside_polygon(p_out, r, poly)
+
+    p_out = Float64[1.0, 2.0]
+    @assert !Util.point_inside_polygon(p_out, r, poly)
 end
 
 
