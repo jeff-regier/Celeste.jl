@@ -127,6 +127,7 @@ function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=f
 
         re_arcsec = max(fits_theta, 1. / 30)  # re = effective radius
         #re_pixel = re_arcsec / 0.396
+        re_def = re_arcsec * 0.0002777777777777778
 
         phi90 = 90 - fits_phi
         phi90 -= floor(phi90 / 180) * 180
