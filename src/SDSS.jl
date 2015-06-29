@@ -33,15 +33,17 @@ function load_stamp_blob(stamp_dir, stamp_id)
 
         header_str = FITSIO.read_header(fits[1], ASCIIString)
         ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
-
         close(fits)
+
+        # Get the world coordinate transform.
+        cd_mat = reshape(Float64[ unsafe_load(wcs.cd, i) for i=1:4 ], 2, 2)
 
         alphaBar = [hdr["PSF_P0"], hdr["PSF_P1"], hdr["PSF_P2"]]
         xiBar = [
             [hdr["PSF_P3"]  hdr["PSF_P4"]],
             [hdr["PSF_P5"]  hdr["PSF_P6"]],
-            [hdr["PSF_P7"]  hdr["PSF_P8"]]
-        ]'
+            [hdr["PSF_P7"]  hdr["PSF_P8"]]]'
+
         tauBar = Array(Float64, 2, 2, 3)
         tauBar[:,:,1] = [[hdr["PSF_P9"] hdr["PSF_P11"]],
                          [hdr["PSF_P11"] hdr["PSF_P10"]]]
@@ -50,7 +52,8 @@ function load_stamp_blob(stamp_dir, stamp_id)
         tauBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]],
                          [hdr["PSF_P17"] hdr["PSF_P16"]]]
 
-        psf = [PsfComponent(alphaBar[k], xiBar[:, k], tauBar[:, :, k]) for k in 1:3]
+        psf = [PsfComponent(alphaBar[k], cd_mat * xiBar[:, k],
+                cd_mat * tauBar[:, :, k] * cd_mat') for k in 1:3]
 
         H, W = size(original_pixels)
         iota = hdr["GAIN"] / hdr["CALIB"]
@@ -127,14 +130,14 @@ function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=f
 
         re_arcsec = max(fits_theta, 1. / 30)  # re = effective radius
         #re_pixel = re_arcsec / 0.396
-        re_def = re_arcsec * 0.0002777777777777778
+        re_deg = re_arcsec * 0.0002777777777777778
 
         phi90 = 90 - fits_phi
         phi90 -= floor(phi90 / 180) * 180
         phi90 *= (pi / 180)
 
         CatalogEntry(x_y, row[1, :is_star], star_fluxes,
-            gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_arcsec)
+            gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_deg)
     end
 
     CatalogEntry[row_to_ce(df[i, :]) for i in 1:size(df, 1)]

@@ -190,6 +190,8 @@ end
 
 
 function test_coadd_cat_init_is_most_likely()  # on a real stamp
+    # TODO: not currently passing.
+
     stamp_id = "5.0073-0.0739"
     blob = SDSS.load_stamp_blob(dat_dir, stamp_id)
     cat_entries_df = SDSS.load_stamp_catalog_df(dat_dir, "s82-$stamp_id", blob)
