@@ -20,6 +20,12 @@ const band_letters = ['u', 'g', 'r', 'i', 'z']
 b = 1
 b_letter = band_letters[b]
 
+
+##################
+# Load a stamp to check out the psf and wcs
+
+stamp_blob = SDSS.load_stamp_blob(dat_dir, "5.0073-0.0739");
+
 #############
 # Load and subsample the catalog
 
