@@ -197,7 +197,8 @@ for p in in_poly
 end
 
 
-
-
 ##############
 # Test wcs location derivative
+
+# This is too slow.
+@time Util.pixel_deriv_to_world_deriv(original_blob[1].wcs, [1., 2.], [2., 4.])

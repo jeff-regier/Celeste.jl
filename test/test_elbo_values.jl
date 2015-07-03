@@ -218,9 +218,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     end
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
-    # s is the brightest source: a dev galaxy!
-    # Note: source 2 seems to be the dev galaxy, but source 1 is the brightest,
-    # I don't know what this comment means.
+    # s is the brightest source.
     s = 1
 
     for bad_scale in [.7, 1.3]
@@ -228,7 +226,6 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         mp_r1.vp[s][ids.r1] *= bad_scale^2
         mp_r1.vp[s][ids.r2] /= bad_scale  # keep variance the same
         bad_r1 = ElboDeriv.elbo_likelihood(blob, mp_r1)
-        println(bad_r1.v, " ?< ", best.v)
         @test best.v > bad_r1.v
     end
 
