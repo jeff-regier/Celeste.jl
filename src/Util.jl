@@ -300,18 +300,22 @@ function pixel_deriv_to_world_deriv(wcs::WCSLIB.wcsprm, df_dpix::Array{Float64, 
     # Assume that 0.1 pixels is a resonable step size irrespective of 
     # the world coordinates.  Choose a step size in world coordinates on
     # the same order.
-    pix_delt = 0.1;
+    # world_delt1 = abs(pixel_to_world(wcs, pix_loc + pix_delt * [0, 1]) - world_loc)
+    # world_delt2 = abs(pixel_to_world(wcs, pix_loc + pix_delt * [1, 0]) - world_loc)
+    # world_delt = Float64[ max(world_delt1[i], world_delt2[i]) for i=1:2 ]
     world_loc = pixel_to_world(wcs, pix_loc)
-    world_delt1 = abs(pixel_to_world(wcs, pix_loc + pix_delt * [0, 1]) - world_loc)
-    world_delt2 = abs(pixel_to_world(wcs, pix_loc + pix_delt * [1, 0]) - world_loc)
-    world_delt = Float64[ max(world_delt1[i], world_delt2[i]) for i=1:2 ]
+    world_delt = Float64[1e-3, 1e-3]
 
     world_loc_1 = world_loc + world_delt[1] * Float64[1, 0]
     world_loc_2 = world_loc + world_delt[2] * Float64[0, 1]
 
-    transform = vcat((world_to_pixel(wcs, world_loc_1) - pix_loc)' / world_delt[1],
-                     (world_to_pixel(wcs, world_loc_2) - pix_loc)' / world_delt[2])
-    transform * df_dpix
+    #transform = vcat((world_to_pixel(wcs, world_loc_1) - pix_loc)' / world_delt[1],
+    #                 (world_to_pixel(wcs, world_loc_2) - pix_loc)' / world_delt[2])
+    #transform * df_dpix
+
+    Float64[ dot(world_to_pixel(wcs, world_loc_1) - pix_loc, df_dpix / world_delt[1]),
+             dot(world_to_pixel(wcs, world_loc_2) - pix_loc, df_dpix / world_delt[2]) ]
+
 end
 
 end
