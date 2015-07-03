@@ -119,7 +119,7 @@ Args:
 Attributes:
   alphaBar: The scalar weight of the component.
   xiBar: The 2x1 location vector
-  tauBar: The 2x2 covariance (tau_bar in the ICLM paper)
+  tauBar: The 2x2 covariance (tau_bar in the ICML paper)
   tauBarInv: The 2x2 precision
   tauBarLd: The log determinant of the covariance
 """ ->

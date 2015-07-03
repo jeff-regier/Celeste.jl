@@ -11,7 +11,7 @@ import ElboDeriv
 
 
 #TODO: use Lumberjack.jl for logging
-const debug = false
+const debug = true
 
 
 function get_nlopt_bounds(vs::Vector{Float64})
@@ -116,6 +116,8 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
         (debug || iter_count % 10 == 0) && 
             println("iter $iter_count elbo: $(elbo.v)")
         debug && println("\n=======================================\n")
+        #debug && println("$(elbo.d)")
+        #debug && println("\n=======================================\n")
         elbo.v
     end
 
