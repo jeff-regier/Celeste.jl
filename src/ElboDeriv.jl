@@ -293,14 +293,15 @@ Args:
 function accum_star_pos!(bmc::BvnComponent,
                          x::Vector{Float64},
                          fs0m::SensitiveFloat,
-                         wcs::WCSLIB.wcsprm)
+                         wcs_jacobian::Array{Float64, 2})
     py1, py2, f = eval_bvn_pdf(bmc, x)
 
     fs0m.v += f
 
     # TODO: does this need to change for world coordiantes?
     dfs0m_dpix = Float64[f .* py1, f .* py2]
-    dfs0m_dworld = Util.pixel_deriv_to_world_deriv(wcs, dfs0m_dpix, x)
+    #dfs0m_dworld = Util.pixel_deriv_to_world_deriv(wcs, dfs0m_dpix, x)
+    dfs0m_dworld = wcs_jacobian * dfs0m_dpix
     fs0m.d[star_ids.u[1]] += dfs0m_dworld[1]
     fs0m.d[star_ids.u[2]] += dfs0m_dworld[2]
 
@@ -323,7 +324,7 @@ Args:
 function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
                            x::Vector{Float64},
                            fs1m::SensitiveFloat,
-                           wcs::WCSLIB.wcsprm)
+                           wcs_jacobian::Array{Float64, 2})
     py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
     f = f_pre * gcc.e_dev_i
 
@@ -331,7 +332,8 @@ function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
 
     # TODO: does this need to change for world coordiantes?
     dfs1m_dpix = Float64[f .* py1, f .* py2]
-    dfs1m_dworld = Util.pixel_deriv_to_world_deriv(wcs, dfs1m_dpix, x)
+    #dfs1m_dworld = Util.pixel_deriv_to_world_deriv(wcs, dfs1m_dpix, x)
+    dfs1m_dworld = wcs_jacobian * dfs1m_dpix
     fs1m.d[gal_ids.u[1]] += dfs1m_dworld[1]
     fs1m.d[gal_ids.u[2]] += dfs1m_dworld[2]
 
@@ -386,18 +388,18 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
         m_pos::Vector{Float64}, b::Int64,
         fs0m::SensitiveFloat, fs1m::SensitiveFloat,
         E_G::SensitiveFloat, var_G::SensitiveFloat,
-        wcs::WCSLIB.wcsprm)
+        wcs_jacobian::Array{Float64, 2})
     # Accumulate over PSF components.
     clear!(fs0m)
     for star_mc in star_mcs[:, parent_s]
-        accum_star_pos!(star_mc, m_pos, fs0m, wcs)
+        accum_star_pos!(star_mc, m_pos, fs0m, wcs_jacobian)
     end
 
     clear!(fs1m)
     for i = 1:2 # Galaxy types
         for j in 1:[8,6][i] # Galaxy component
             for k = 1:3 # PSF component
-                accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, fs1m, wcs)
+                accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, fs1m, wcs_jacobian)
             end
         end
     end
@@ -589,11 +591,12 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
             # Convert the pixel location to world coordinates.
             #m_pos = Util.pixel_to_world(tile.img.wcs, Float64[h, w])
             m_pos = Float64[h, w]
+            wcs_jacobian = Util.pixel_world_jacobian(tile.img.wcs, m_pos)
             for child_s in 1:length(tile_sources)
                 parent_s = tile_sources[child_s]
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
                     mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
-                    fs0m, fs1m, E_G, var_G, tile.img.wcs)
+                    fs0m, fs1m, E_G, var_G, wcs_jacobian)
             end
 
             accum_pixel_ret!(tile_sources, this_pixel, tile.img.iota,

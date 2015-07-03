@@ -69,7 +69,9 @@ function test_accum_pos_derivs()
     function wrap_star(mmp)
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp, blob[3].wcs)
         fs0m = zero_sensitive_float(StarPosParams)
-        ElboDeriv.accum_star_pos!(star_mcs[1,1], [9, 10.], fs0m, blob[3].wcs)
+        m_pos = Float64[9, 10.]
+        wcs_jacobian = pixel_world_jacobian(blob[3].wcs, m_pos)
+        ElboDeriv.accum_star_pos!(star_mcs[1,1], m_pos, fs0m, wcs_jacobian)
         fs0m
     end
     test_by_finite_differences(wrap_star, mp)
@@ -77,7 +79,9 @@ function test_accum_pos_derivs()
     function wrap_galaxy(mmp)
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp, blob[3].wcs)
         fs1m = zero_sensitive_float(GalaxyPosParams)
-        ElboDeriv.accum_galaxy_pos!(gal_mcs[1,1,1,1], [9, 10.], fs1m, blob[3].wcs)
+        m_pos = Float64[9, 10]
+        wcs_jacobian = pixel_world_jacobian(blob[3].wcs, m_pos)
+        ElboDeriv.accum_galaxy_pos!(gal_mcs[1,1,1,1], m_pos, fs1m, wcs_jacobian)
         fs1m
     end
     test_by_finite_differences(wrap_galaxy, mp)
@@ -95,8 +99,9 @@ function test_accum_pixel_source_derivs()
         var_G = zero_sensitive_float(CanonicalParams)
         sb = ElboDeriv.SourceBrightness(mmp.vp[1])
         m_pos = [9, 10.]
+        wcs_jacobian = pixel_world_jacobian(blob[1].wcs, m_pos)
         ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
-            mmp.vp[1], 1, 1, m_pos, 1, fs0m, fs1m, E_G, var_G, blob[1].wcs)
+            mmp.vp[1], 1, 1, m_pos, 1, fs0m, fs1m, E_G, var_G, wcs_jacobian)
         E_G
     end
     test_by_finite_differences(wrap_apss_ef, mp0)
@@ -109,8 +114,9 @@ function test_accum_pixel_source_derivs()
         var_G = zero_sensitive_float(CanonicalParams)
         sb = ElboDeriv.SourceBrightness(mmp.vp[1])
         m_pos = [9, 10.]
+        wcs_jacobian = pixel_world_jacobian(blob[3].wcs, m_pos)
         ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
-            mmp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G, blob[1].wcs)
+            mmp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G, wcs_jacobian)
         var_G
     end
     test_by_finite_differences(wrap_apss_varf, mp0)

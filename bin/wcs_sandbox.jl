@@ -200,5 +200,10 @@ end
 ##############
 # Test wcs location derivative
 
-# This is too slow.
+# Is this too slow?
 @time Util.pixel_deriv_to_world_deriv(original_blob[1].wcs, [1., 2.], [2., 4.])
+
+mp = deepcopy(initial_mp);
+lik_time = @time lik = ElboDeriv.elbo_likelihood(blob, mp);
+@profile lik = ElboDeriv.elbo_likelihood(blob, mp);
+Profile.print(format=:flat)
