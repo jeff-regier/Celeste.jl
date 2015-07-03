@@ -431,10 +431,13 @@ function test_pixel_deriv_to_world_deriv()
     @test_approx_eq_eps test_fun(pix_loc) test_fun_world(world_loc, wcs) 1e-8
 
     pix_deriv = test_fun_grad(pix_loc)
-    world_deriv = Float64[ (test_fun_world(world_loc_1, wcs) - test_fun_world(world_loc, wcs)) / world_del
-                           (test_fun_world(world_loc_2, wcs) - test_fun_world(world_loc, wcs)) / world_del ]
+    world_deriv = Float64[ (test_fun_world(world_loc_1, wcs) -
+                            test_fun_world(world_loc, wcs)) / world_del
+                           (test_fun_world(world_loc_2, wcs) -
+                            test_fun_world(world_loc, wcs)) / world_del ]
 
-    relative_err = Util.pixel_deriv_to_world_deriv(wcs, pix_deriv, pix_loc) - world_deriv) ./ abs(world_deriv)
+    relative_err = (Util.pixel_deriv_to_world_deriv(wcs, pix_deriv, pix_loc) -
+                    world_deriv) ./ abs(world_deriv)
     @test_approx_eq_eps relative_err [ 0 0 ] 1e-3
 end
 
