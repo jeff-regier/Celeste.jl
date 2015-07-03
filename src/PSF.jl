@@ -147,7 +147,7 @@ function convert_gmm_to_celeste(gmm::GaussianMixtures.GMM)
             collect(GaussianMixtures.means(gmm)[d, :]), GaussianMixtures.covars(gmm)[d])
     end
 
-    [ convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n ]
+    CelesteTypes.PsfComponent[ convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n ]
 end
 
 
@@ -172,7 +172,7 @@ This function is based on the function sdss_psf_at_points in astrometry.net:
 https://github.com/dstndstn/astrometry.net/blob/master/util/sdss_psf.py
 """ ->
 function get_psf_at_point(row::Float64, col::Float64,
-                          raw_psf_comp::RawPSFComponents)
+                          raw_psf_comp::CelesteTypes.RawPSFComponents)
 
     # This is a coordinate transform to keep the polynomial coefficients
     # to a reasonable size.
