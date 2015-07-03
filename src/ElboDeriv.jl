@@ -226,7 +226,8 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
 
     for s in 1:mp.S
         vs = mp.vp[s]
-        m_pos = Util.pixel_to_world(tile.img.wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
+        #m_pos = Util.pixel_to_world(tile.img.wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
+        m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
 
         # Convolve the star locations with the PSF.
         for k in 1:3
@@ -240,7 +241,8 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
         for i = 1:Ia
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
-            m_pos = Util.pixel_to_world(tile.img.wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
+            #m_pos = Util.pixel_to_world(tile.img.wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
+            m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
             for j in 1:[8,6][i]
@@ -285,17 +287,24 @@ Args:
   - x: An offset for the component in world coordinates (e.g. a pixel location)
   - fs0m: A SensitiveFloat to which the value of the bvn likelihood
        and its derivatives with respect to x are added.
+ - wcs: The world coordinate system object for this image.
 """ ->
 function accum_star_pos!(bmc::BvnComponent,
                          x::Vector{Float64},
-                         fs0m::SensitiveFloat)
+                         fs0m::SensitiveFloat,
+                         wcs::WCSLIB.wcsprm)
     py1, py2, f = eval_bvn_pdf(bmc, x)
 
     fs0m.v += f
 
     # TODO: does this need to change for world coordiantes?
-    fs0m.d[star_ids.u[1]] += f .* py1
-    fs0m.d[star_ids.u[2]] += f .* py2
+    dfs0m_dpix = Float64[f .* py1, f .* py2]
+    dfs0m_dworld = Util.pixel_deriv_to_world_deriv(wcs, dfs0m_dpix, x)
+    fs0m.d[star_ids.u[1]] += dfs0m_world[1]
+    fs0m.d[star_ids.u[2]] += dfs0m_world[2]
+
+    # fs0m.d[star_ids.u[1]] += f .* py1
+    # fs0m.d[star_ids.u[2]] += f .* py2
 end
 
 
@@ -308,18 +317,25 @@ Args:
   - x: An offset for the component in world coordinates (e.g. a pixel location)
   - fs1m: A SensitiveFloat to which the value of the likelihood
        and its derivatives with respect to x are added.
+  - wcs: The world coordinate system object for this image.
 """ ->
 function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
                            x::Vector{Float64},
-                           fs1m::SensitiveFloat)
+                           fs1m::SensitiveFloat,
+                           wcs::WCSLIB.wcsprm)
     py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
     f = f_pre * gcc.e_dev_i
 
     fs1m.v += f
 
     # TODO: does this need to change for world coordiantes?
-    fs1m.d[gal_ids.u[1]] += f .* py1
-    fs1m.d[gal_ids.u[2]] += f .* py2
+    dfs1m_dpix = Float64[f .* py1, f .* py2]
+    dfs1m_dworld = Util.pixel_deriv_to_world_deriv(wcs, dfs1m_dpix, x)
+    fs1m.d[gal_ids.u[1]] += dfs1m_dworld[1]
+    fs1m.d[gal_ids.u[2]] += dfs1m_dworld[2]
+
+    # fs1m.d[gal_ids.u[1]] += f .* py1
+    # fs1m.d[gal_ids.u[2]] += f .* py2
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     df_dSigma = (
@@ -355,6 +371,7 @@ Args:
   - E_G: Expected celestial signal in this band (G_{nbm})
        (updated in place)
   - var_G: Variance of G (updated in place)
+  - wcs: The world coordinate system object for this image.
 
 Returns:
   - Clears and updates fs0m, fs1m with the total
@@ -367,18 +384,19 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
         vs::Vector{Float64}, child_s::Int64, parent_s::Int64,
         m_pos::Vector{Float64}, b::Int64,
         fs0m::SensitiveFloat, fs1m::SensitiveFloat,
-        E_G::SensitiveFloat, var_G::SensitiveFloat)
+        E_G::SensitiveFloat, var_G::SensitiveFloat,
+        wcs::WCSLIB.wcsprm)
     # Accumulate over PSF components.
     clear!(fs0m)
     for star_mc in star_mcs[:, parent_s]
-        accum_star_pos!(star_mc, m_pos, fs0m)
+        accum_star_pos!(star_mc, m_pos, fs0m, wcs)
     end
 
     clear!(fs1m)
     for i = 1:2 # Galaxy types
         for j in 1:[8,6][i] # Galaxy component
             for k = 1:3 # PSF component
-                accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, fs1m)
+                accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, fs1m, wcs)
             end
         end
     end
@@ -574,7 +592,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
                 parent_s = tile_sources[child_s]
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
                     mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
-                    fs0m, fs1m, E_G, var_G)
+                    fs0m, fs1m, E_G, var_G, tile.img.wcs)
             end
 
             accum_pixel_ret!(tile_sources, this_pixel, tile.img.iota,
