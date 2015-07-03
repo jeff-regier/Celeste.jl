@@ -153,86 +153,77 @@ end
 
 #include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
 mp = deepcopy(initial_mp);
-res = OptimizeElbo.maximize_elbo(blob, mp);
+res = OptimizeElbo.maximize_likelihood(blob, mp);
 compare_solutions(mp, initial_mp)
 
 display_cat(cat_entries[1]);
 get_brightness(mp)
 
 
-
-# It is not computing these derivatives?!?
-mp = deepcopy(initial_mp);
-#mp.vp[1][ids.u] = [0., 0.] 
-#mp.vp[1][ids.e_dev] = 0.02
-#omitted_ids = setdiff(1:length(UnconstrainedParams), [ids_free.u, ids_free.e_dev])
-#omitted_ids = setdiff(1:length(UnconstrainedParams), [ids_free.e_dev])
-#OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, Transform.rect_transform, omitted_ids=omitted_ids)
-elbo = ElboDeriv.elbo_likelihood(blob, mp);
-DataFrame(name=ids_names, elbo=elbo.d[:])
-
 ###################
 
 b = 4
-ret = zero_sensitive_float(CanonicalParams, mp.S)
-img = blob[b]
-ElboDeriv.elbo_likelihood!(img, mp, ret)
+function get_e_g(img, mp)
+	ret = zero_sensitive_float(CanonicalParams, mp.S)
+	img = blob[b]
+	ElboDeriv.elbo_likelihood!(img, mp, ret)
 
-accum = ret
-accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
+	accum = ret
+	accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
 
-star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(img.psf, mp, img.wcs)
+	star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(img.psf, mp, img.wcs)
 
-sbs = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S]
+	sbs = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-WW = int(ceil(img.W / mp.tile_width))
-HH = int(ceil(img.H / mp.tile_width))
-e_image = zeros(img.H, img.W)
-for ww in 1:WW, hh in 1:HH
-	tile = ImageTile(hh, ww, img)
-	# might get a speedup from subsetting the mp here
+	WW = int(ceil(img.W / mp.tile_width))
+	HH = int(ceil(img.H / mp.tile_width))
+	e_image = zeros(img.H, img.W)
+	for ww in 1:WW, hh in 1:HH
+		tile = ImageTile(hh, ww, img)
+		# might get a speedup from subsetting the mp here
 
-	tile_sources = ElboDeriv.local_sources(tile, mp)
-	h_range, w_range = ElboDeriv.tile_range(tile, mp.tile_width)
-	println("$tile_sources $h_range $w_range")
+		tile_sources = ElboDeriv.local_sources(tile, mp)
+		h_range, w_range = ElboDeriv.tile_range(tile, mp.tile_width)
+		println("$tile_sources $h_range $w_range")
 
-	# fs0m and fs1m accumulate contributions from all sources
-	fs0m = zero_sensitive_float(StarPosParams)
-	fs1m = zero_sensitive_float(GalaxyPosParams)
+		# fs0m and fs1m accumulate contributions from all sources
+		fs0m = zero_sensitive_float(StarPosParams)
+		fs1m = zero_sensitive_float(GalaxyPosParams)
 
-	tile_S = length(tile_sources)
-	E_G = zero_sensitive_float(CanonicalParams, tile_S)
-	var_G = zero_sensitive_float(CanonicalParams, tile_S)
+		tile_S = length(tile_sources)
+		E_G = zero_sensitive_float(CanonicalParams, tile_S)
+		var_G = zero_sensitive_float(CanonicalParams, tile_S)
 
-	# Iterate over pixels that are not NaN.
-	for w in w_range, h in h_range
-	    this_pixel = tile.img.pixels[h, w]
-	    if !isnan(this_pixel)
-	        clear!(E_G)
-	        E_G.v = tile.img.epsilon
-	        clear!(var_G)
+		# Iterate over pixels that are not NaN.
+		for w in w_range, h in h_range
+		    this_pixel = tile.img.pixels[h, w]
+		    if !isnan(this_pixel)
+		        clear!(E_G)
+		        E_G.v = tile.img.epsilon
+		        clear!(var_G)
 
-	        # TODO: could you go back to pixel coordinates here?
-	        # Convert the pixel location to world coordinates.
-	        #m_pos = Util.pixel_to_world(tile.img.wcs, Float64[h, w])
-	        m_pos = Float64[h, w]
-	        wcs_jacobian = Util.pixel_world_jacobian(tile.img.wcs, m_pos)
-	        for child_s in 1:length(tile_sources)
-	            parent_s = tile_sources[child_s]
-	            ElboDeriv.accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
-	                mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
-	                fs0m, fs1m, E_G, var_G, wcs_jacobian)
-	        end
-	        println(E_G.v)
-	        e_image[h, w] = E_G.v
-	        ElboDeriv.accum_pixel_ret!(tile_sources, this_pixel, tile.img.iota,
-	            E_G, var_G, accum)
-	    end
+		        m_pos = Float64[h, w]
+		        wcs_jacobian = Util.pixel_world_jacobian(tile.img.wcs, m_pos)
+		        for child_s in 1:length(tile_sources)
+		            parent_s = tile_sources[child_s]
+		            ElboDeriv.accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
+		                mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
+		                fs0m, fs1m, E_G, var_G, wcs_jacobian)
+		        end
+		        println(E_G.v)
+		        e_image[h, w] = E_G.v
+		        ElboDeriv.accum_pixel_ret!(tile_sources, this_pixel, tile.img.iota,
+		            E_G, var_G, accum)
+		    end
+		end
 	end
+
+	e_image
 end
 
+e_images = [ get_e_g(blob[b], mp) for b=1:5 ];
 
-[ round(e_image[i, j] - blob[b].pixels[i, j] / blob[b].iota, 1) for i=1:img.H, j=1:img.W ]
+[ round(e_images[b][i, j] - blob[b].pixels[i, j] / blob[b].iota, 1) for i=1:img.H, j=1:img.W, b=1:5 ]
 
 
 
