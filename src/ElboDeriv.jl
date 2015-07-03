@@ -546,7 +546,7 @@ modifying accum in place.
 Args:
   - tile: An image tile.
   - mp: The current model parameters.
-  - sbs: The currne source brightnesses.
+  - sbs: The current source brightnesses.
   - star_mcs: All the star * PCF components.
   - gal_mcs: All the galaxy * PCF components.
   - accum: The ELBO log likelihood to be updated.

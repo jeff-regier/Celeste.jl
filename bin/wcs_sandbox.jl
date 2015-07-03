@@ -7,7 +7,7 @@ using SampleData
 import SDSS
 import PSF
 import FITSIO
-import PyPlot
+#import PyPlot
 
 # Some examples of the SDSS fits functions.
 field_dir = joinpath(dat_dir, "sample_field")
@@ -20,7 +20,6 @@ const band_letters = ['u', 'g', 'r', 'i', 'z']
 b = 1
 b_letter = band_letters[b]
 
-
 ##################
 # Load a stamp to check out the psf and wcs
 
@@ -32,6 +31,9 @@ stamp_blob = SDSS.load_stamp_blob(dat_dir, "5.0073-0.0739");
 original_blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
 original_cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
 
+cat_cols = [ :objid, :ra, :dec, :is_star, :frac_dev, :compflux_r, :psfflux_r ]
+original_cat_df[:, cat_cols]
+
 ##########################
 # Select an object.
 
@@ -40,30 +42,41 @@ cat_pix = Util.world_to_pixel(original_blob[4].wcs, cat_loc)
 
 obj_df = original_cat_df[[:objid, :is_star, :is_gal, :psfflux_r, :compflux_r]]
 sort(obj_df[obj_df[:is_gal] .== true, :], cols=:compflux_r, rev=true)
+sort(obj_df[obj_df[:is_gal] .== false, :], cols=:psfflux_r, rev=true)
 
 
 #objid = "1237662226208063597" # A star that was obviously miscentered
-#objid = "1237662226208063499" # A bright star
-objid = "1237662226208063632" # A bright galaxy
+#objid = "1237662226208063499" # A bright star also with lots of bad pixels
+#objid = "1237662226208063632" # A bright galaxy
+#objid = "1237662226208063541" # A bright star but with lots of bad pixels
+#objid = "1237662226208063551" # A bright star but with lots of bad pixels
+objid = "1237662226208063565"
 
-obj_loc = cat_pix[original_cat_df[:objid] .== objid, :]
+obj_row = original_cat_df[:objid] .== objid;
+obj_loc = convert(Array, original_cat_df[obj_row, [:ra, :dec]])'[:]
 
 #sub_rows_x = 1:150
 #sub_rows_y = 1:150
 
-width = 20
-sub_rows_x = floor(obj_loc[1] - width):ceil(obj_loc[1] + width)
-sub_rows_y = floor(obj_loc[2] - width):ceil(obj_loc[2] + width)
+width = 8
 
-x_min = minimum(collect(sub_rows_x))
-y_min = minimum(collect(sub_rows_y))
-x_max = maximum(collect(sub_rows_x))
-y_max = maximum(collect(sub_rows_y))
 blob = deepcopy(original_blob);
 cat_df = deepcopy(original_cat_df);
 cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]]);
 entry_in_range = Bool[true for i=1:size(cat_loc, 1) ];
+x_ranges = zeros(2, 5)
+y_ranges = zeros(2, 5)
 for b=1:5
+	obj_loc_pix = Util.world_to_pixel(blob[b].wcs, obj_loc)
+	sub_rows_x = floor(obj_loc_pix[1] - width):ceil(obj_loc_pix[1] + width)
+	sub_rows_y = floor(obj_loc_pix[2] - width):ceil(obj_loc_pix[2] + width)
+	x_min = minimum(collect(sub_rows_x))
+	y_min = minimum(collect(sub_rows_y))
+	x_max = maximum(collect(sub_rows_x))
+	y_max = maximum(collect(sub_rows_y))
+	x_ranges[:, b] = Float64[x_min, x_max]
+	y_ranges[:, b] = Float64[y_min, y_max]
+
 	blob[b].pixels = blob[b].pixels[sub_rows_x, sub_rows_y]
 	blob[b].H = size(blob[b].pixels, 1)
 	blob[b].W = size(blob[b].pixels, 2)
@@ -76,6 +89,49 @@ cat_df = cat_df[entry_in_range, :]
 cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
 cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]]);
 initial_mp = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
+
+
+##############################
+# Fit the image.
+
+function compare_solutions(mp1::ModelParams, mp2::ModelParams)
+    # Compare the parameters, fits, and iterations.
+    println("===================")
+    println("Differences:")
+    for var_name in names(ids)
+        println(var_name)
+        for s in 1:mp1.S
+            println(s, ":\n", mp1.vp[s][ids.(var_name)], "\n", mp2.vp[s][ids.(var_name)])
+        end
+    end
+    println("===================")
+end
+
+function get_brightness(mp::ModelParams)
+	brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+	brightness_vals = [ Float64[b.E_l_a[i, j].v for i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
+	brightness_vals
+end
+
+function display_cat(cat_entry::CatalogEntry)
+	[ println("$name: $(cat_entry.(name))") for name in names(cat_entry) ]
+end
+
+#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
+mp = deepcopy(initial_mp);
+res = OptimizeElbo.maximize_elbo(blob, mp);
+compare_solutions(mp, initial_mp)
+
+display_cat(cat_entries[1]);
+get_brightness(mp)
+
+# It is not computing these derivatives?!?
+mp = deepcopy(initial_mp);
+omitted_ids = setdiff(1:length(UnconstrainedParams), [ids_free.u, ids_free.e_dev])
+mp.vp[1][ids.u] = [0., 0.] 
+mp.vp[1][ids.e_dev] = 0.02
+#omitted_ids = setdiff(1:length(UnconstrainedParams), [ids_free.e_dev])
+OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, Transform.rect_transform, omitted_ids=omitted_ids)
 
 
 #############################
@@ -112,38 +168,6 @@ for b=1:5
 
 	PyPlot.title("Band $b with catalog\nObj $objid")
 end
-
-
-
-##############################
-# Fit the image.
-
-function compare_solutions(mp1::ModelParams, mp2::ModelParams)
-    # Compare the parameters, fits, and iterations.
-    println("===================")
-    println("Differences:")
-    for var_name in names(ids)
-        println(var_name)
-        for s in 1:mp1.S
-            println(s, ":\n", mp1.vp[s][ids.(var_name)], "\n", mp2.vp[s][ids.(var_name)])
-        end
-    end
-    println("===================")
-end
-
-function get_brightness(mp::ModelParams)
-	brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
-	brightness_vals = [ Float64[b.E_l_a[i, j].v for i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
-	brightness_vals
-end
-
-#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
-mp = deepcopy(initial_mp)
-res = OptimizeElbo.maximize_elbo(blob, mp);
-compare_solutions(mp, initial_mp)
-
-get_brightness(mp)
-
 
 
 ###################################

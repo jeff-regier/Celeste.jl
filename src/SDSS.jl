@@ -520,7 +520,9 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
         H = size(nelec, 1)
         W = size(nelec, 2)
 
-        # For now, use the median noise and sky image:
+        # For now, use the median noise and sky image.  Here, 
+        # epsilon * iota needs to be in units comparable to nelec electron counts.
+        # Note that each are actuall pretty variable.
         iota = band_gain[b] / median(calib_col)
         epsilon = median(sky_image) * median(calib_col)
 
