@@ -125,16 +125,17 @@ function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=f
             fits_phi *= -1.
         end
 
+        # TODO: make a decision here
         re_arcsec = max(fits_theta, 1. / 30)  # re = effective radius
-        #re_pixel = re_arcsec / 0.396
-        re_deg = re_arcsec * 0.0002777777777777778
+        re_pixel = re_arcsec / 0.396
+        #re_deg = re_arcsec * 0.0002777777777777778
 
         phi90 = 90 - fits_phi
         phi90 -= floor(phi90 / 180) * 180
         phi90 *= (pi / 180)
 
         CatalogEntry(x_y, row[1, :is_star], star_fluxes,
-            gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_deg)
+            gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_pixel)
     end
 
     CatalogEntry[row_to_ce(df[i, :]) for i in 1:size(df, 1)]
