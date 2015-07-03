@@ -232,6 +232,7 @@ Returns:
  - sky_grid: A CoordInterpGrid bilinear interpolation object
  - sky_x: The x coordinates at which to evaluate sky_grid to match nelec.
  - sky_y: The y coordinates at which to evaluate sky_grid to match nelec.
+ - sky_image: The sky interpolated to the original image size.
  - wcs: A wcsprm object for converting between world and pixel coordinates.
 
 The meaing of the frame data structures is thoroughly documented here:
@@ -284,13 +285,15 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
                                     Grid.BCnearest, Grid.InterpLinear)
 
     # This interpolation is really slow.
+    print("...starting sky fit...")
     sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ]
+    print("done with sky fit. ")
 
     # Convert to raw electron counts.  Note that these may not be close to integers
     # due to the analog to digital conversion process in the telescope.
     nelec = gain * convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image))
 
-    nelec, calib_col, sky_grid, sky_x, sky_y, wcs, header_str
+    nelec, calib_col, sky_grid, sky_x, sky_y, sky_image, wcs
 end
 
 
@@ -508,23 +511,18 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
     blob = Array(Image, 5)
     for b=1:5
         print("Reading band $b image data...")
-        nelec, calib_col, sky_grid, sky_x, sky_y, wcs = SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num, b, band_gain[b]);
+        nelec, calib_col, sky_grid, sky_x, sky_y, sky_image, wcs =
+            SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num, b, band_gain[b]);
+
+        print("Masking image...")
         SDSS.mask_image!(nelec, field_dir, run_num, camcol_num, field_num, b);
+        println("done.")
         H = size(nelec, 1)
         W = size(nelec, 2)
 
-        ########################################
-        # TODO: iota and epsilon are backwards!
-        ########################################
-
         # For now, use the median noise and sky image:
-        epsilon = band_gain[b] / median(calib_col)
-        sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ];
-        if false
-            sp1 = PyPlot.matshow(sky_image)
-            PyPlot.colorbar(sp1)
-        end
-        iota = median(sky_image)
+        iota = band_gain[b] / median(calib_col)
+        epsilon = median(sky_image) * median(calib_col)
 
         # Load and fit the psf.
         println("reading psf...")

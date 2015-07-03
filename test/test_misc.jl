@@ -404,7 +404,7 @@ function test_pixel_deriv_to_world_deriv()
     field_num = "0269"
 
     # The gain is wrong but it doesn't matter.
-    wcs = SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num, 1, 1.0)[6];
+    wcs = SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num, 1, 1.0)[7];
 
     function test_fun(pix_loc::Array{Float64, 1})
         pix_loc[1]^2 + 0.5 * pix_loc[2]

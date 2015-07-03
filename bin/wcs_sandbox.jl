@@ -131,16 +131,18 @@ function compare_solutions(mp1::ModelParams, mp2::ModelParams)
     println("===================")
 end
 
-#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
-mp = deepcopy(initial_mp)
-res = OptimizeElbo.maximize_elbo(blob, mp);
-compare_solutions(mp, initial_mp)
-
 function get_brightness(mp::ModelParams)
 	brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
 	brightness_vals = [ Float64[b.E_l_a[i, j].v for i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
 	brightness_vals
 end
+
+#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
+mp = deepcopy(initial_mp)
+res = OptimizeElbo.maximize_elbo(blob, mp);
+compare_solutions(mp, initial_mp)
+
+get_brightness(mp)
 
 
 
@@ -198,7 +200,7 @@ end
 
 
 ##############
-# Test wcs location derivative
+# Check the likelihood time
 
 # Is this too slow?
 @time Util.pixel_deriv_to_world_deriv(original_blob[1].wcs, [1., 2.], [2., 4.])
