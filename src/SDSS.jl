@@ -520,8 +520,16 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
         # For now, use the median noise and sky image.  Here, 
         # epsilon * iota needs to be in units comparable to nelec electron counts.
         # Note that each are actuall pretty variable.
-        iota = band_gain[b] / median(calib_col)
-        epsilon = median(sky_image) * median(calib_col)
+        iota = convert(Float64, band_gain[b] / median(calib_col))
+        epsilon = convert(Float64, median(sky_image) * median(calib_col))
+        epsilon_mat = Array(Float64, H, W)
+        iota_vec = Array(Float64, H)
+        for h=1:H
+            iota_vec[h] = band_gain[b] / calib_col[h]
+            for w=1:W
+                epsilon_mat[h, w] = sky_image[h, w] * calib_col[h]
+            end
+        end
 
         # Load and fit the psf.
         println("reading psf...")
@@ -536,10 +544,12 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
         psf_gmm = PSF.fit_psf_gaussians(raw_psf);
         psf = PSF.convert_gmm_to_celeste(psf_gmm)
 
+        # Set it to use a constant background but include the non-constant data.
         blob[b] = Image(H, W,
                         nelec, b, wcs,
                         epsilon, iota, psf,
-                        int(run_num), int(camcol_num), int(field_num))
+                        int(run_num), int(camcol_num), int(field_num),
+                        true, epsilon_mat, iota_vec, raw_psf_comp)
     end
 
     blob

@@ -5,7 +5,7 @@ VERSION < v"0.4.0-dev" && using Docile
 export CatalogEntry
 export band_letters
 
-export Image, Blob, SkyPatch, ImageTile, PsfComponent
+export Image, Blob, SkyPatch, ImageTile, PsfComponent, RawPSFComponents
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 
@@ -120,7 +120,7 @@ immutable RawPSFComponents
     rrows::Array{Float64,2}
     rnrow::Int32
     rncol::Int32
-    cmat::Array{Float64,2}
+    cmat::Array{Float64,3}
 end
 
 
@@ -187,17 +187,29 @@ type Image
     camcol_num::Int64
     field_num::Int64
 
-    # Field-varying parameters.
-    constant_background::bool
-    epsilon_mat::Float64
-    iota_vec::Float64
+    # # Field-varying parameters.
+    constant_background::Bool
+    epsilon_mat::Array{Float64, 2}
+    iota_vec::Array{Float64, 1}
+    raw_psf_comp::RawPSFComponents
 end
 
-Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm, epsilon::Float64,
-      iota::Float64, psf::Vector{PsfComponent}, run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
-    new(H, W, pixels, b, wcs, epsilon, iota, psf, run_num, camcol_num, field_num, true, Float64[], Float64[])
+# Initialization for an image with noise and background parameters that are constant across the image.
+Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
+      epsilon::Float64, iota::Float64, psf::Vector{PsfComponent},
+      run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
+    empty_psf_comp = RawPSFComponents(Array(Float64, 0, 0), -1, -1, Array(Float64, 0, 0, 0))
+    Image(H, W, pixels, b, wcs, epsilon, iota, psf, run_num, camcol_num, field_num,
+          true, Array(Float64, 0, 0), Array(Float64, 0), empty_psf_comp)
 end
 
+# Initialization for an image with noise and background parameters that vary across the image.
+Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
+      epsilon_mat::Array{Float64, 1}, iota_vec::Array{Float64, 2}, psf::Vector{PsfComponent}, raw_psf_comp::RawPSFComponents,
+      run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
+    Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num, field_num,
+          false, epsilon_mat, iota_vec, raw_psf_comp)
+end
 
 @doc """
 Tiles of pixels that share the same set of
