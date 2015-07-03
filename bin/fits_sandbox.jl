@@ -34,7 +34,6 @@ cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
 cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
 cat_coords = convert(Array{Float64}, cat_df[[:ra, :dec]])'
 
-
 ###############
 # Write the data to csv.
 

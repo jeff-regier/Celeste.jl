@@ -32,7 +32,6 @@ stamp_blob = SDSS.load_stamp_blob(dat_dir, "5.0073-0.0739");
 original_blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
 original_cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
 
-
 ##########################
 # Select an object.
 
@@ -200,3 +199,47 @@ end
 
 
 
+##############
+# Test wcs location derivative
+wcs = SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num, 1, 1.0)[6];
+
+function test_fun(pix_loc::Array{Float64, 1})
+	pix_loc[1]^2 + 0.5 * pix_loc[2]
+end
+
+function test_fun_grad(pix_loc::Array{Float64, 1})
+	Float64[2 * pix_loc[1], 0.5 ]
+end
+
+function test_fun_world(world_loc::Array{Float64, 1}, wcs::WCSLIB.wcsprm)
+	pix_loc = Util.world_to_pixel(wcs, world_loc)
+	test_fun(pix_loc)
+end 
+
+
+pix_del = 1e-3
+world_del = 1e-9
+
+pix_loc = Float64[5, 5]
+pix_loc_1 = pix_loc + pix_del * [1, 0]
+pix_loc_2 = pix_loc + pix_del * [0, 1]
+world_loc = Util.pixel_to_world(wcs, pix_loc)
+world_loc_1 = world_loc + world_del * [1, 0]
+world_loc_2 = world_loc + world_del * [0, 1]
+
+using Base.Test
+@test_approx_eq_eps test_fun(pix_loc) test_fun_world(world_loc, wcs) 1e-8
+
+pix_deriv = Float64[ (test_fun(pix_loc_1) - test_fun(pix_loc)) / pix_del
+                     (test_fun(pix_loc_2) - test_fun(pix_loc)) / pix_del ]
+test_fun_grad(pix_loc)
+world_deriv = Float64[ (test_fun_world(world_loc_1, wcs) - test_fun_world(world_loc, wcs)) / world_del
+                       (test_fun_world(world_loc_2, wcs) - test_fun_world(world_loc, wcs)) / world_del ]
+
+relative_err = Util.pixel_deriv_to_world_deriv(wcs, pix_deriv, pix_loc) - world_deriv) ./ abs(world_deriv)
+@test_approx_eq_eps relative_err [ 0 0 ] 1e-3
+
+for pix_delt = [1, 0.5, 0.1, 0.05, 0.01, 0.001 ]
+	trans = Util.d_pixel_d_wcs(wcs, pix_loc; pix_delt=pix_delt)
+	println((world_deriv - trans * pix_deriv) ./ abs(world_deriv))
+end

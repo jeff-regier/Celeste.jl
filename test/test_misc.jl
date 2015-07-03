@@ -397,6 +397,48 @@ function test_id_wcs()
 end
 
 
+function test_pixel_deriv_to_world_deriv()
+    field_dir = joinpath(dat_dir, "sample_field")
+    run_num = "003900"
+    camcol_num = "6"
+    field_num = "0269"
+
+    # The gain is wrong but it doesn't matter.
+    wcs = SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num, 1, 1.0)[6];
+
+    function test_fun(pix_loc::Array{Float64, 1})
+        pix_loc[1]^2 + 0.5 * pix_loc[2]
+    end
+
+    function test_fun_grad(pix_loc::Array{Float64, 1})
+        Float64[2 * pix_loc[1], 0.5 ]
+    end
+
+    function test_fun_world(world_loc::Array{Float64, 1}, wcs::WCSLIB.wcsprm)
+        pix_loc = Util.world_to_pixel(wcs, world_loc)
+        test_fun(pix_loc)
+    end 
+
+    pix_del = 1e-3
+    world_del = 1e-9
+    pix_loc = Float64[5, 5]
+    pix_loc_1 = pix_loc + pix_del * [1, 0]
+    pix_loc_2 = pix_loc + pix_del * [0, 1]
+    world_loc = Util.pixel_to_world(wcs, pix_loc)
+    world_loc_1 = world_loc + world_del * [1, 0]
+    world_loc_2 = world_loc + world_del * [0, 1]
+
+    @test_approx_eq_eps test_fun(pix_loc) test_fun_world(world_loc, wcs) 1e-8
+
+    pix_deriv = test_fun_grad(pix_loc)
+    world_deriv = Float64[ (test_fun_world(world_loc_1, wcs) - test_fun_world(world_loc, wcs)) / world_del
+                           (test_fun_world(world_loc_2, wcs) - test_fun_world(world_loc, wcs)) / world_del ]
+
+    relative_err = Util.pixel_deriv_to_world_deriv(wcs, pix_deriv, pix_loc) - world_deriv) ./ abs(world_deriv)
+    @test_approx_eq_eps relative_err [ 0 0 ] 1e-3
+end
+
+
 ####################################################
 
 test_util_bvn_cov()
@@ -409,3 +451,4 @@ test_point_inside_polygon()
 test_point_near_polygon_corner()
 test_point_near_line_segment()
 test_id_wcs()
+test_pixel_deriv_to_world_deriv()
