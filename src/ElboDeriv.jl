@@ -562,12 +562,23 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
     # For speed, if there are no sources, add the noise
     # contribution directly.
     if length(tile_sources) == 0
-        nan_pixels = isnan(tile.img.pixels[h_range, w_range])
-        num_pixels = length(h_range) * length(w_range) - sum(nan_pixels)
-        tile_x = sum(tile.img.pixels[h_range, w_range][!nan_pixels])
-        ep = tile.img.epsilon
+
         # NB: not using the delta-method approximation here
-        accum.v += tile_x * log(ep) - num_pixels * ep
+        if img.constant_background
+            nan_pixels = isnan(tile.img.pixels[h_range, w_range])
+            num_pixels = length(h_range) * length(w_range) - sum(nan_pixels)
+            tile_x = sum(tile.img.pixels[h_range, w_range][!nan_pixels])
+            ep = tile.img.epsilon
+            accum.v += tile_x * log(ep) - num_pixels * ep
+        else
+            for w in w_range, h in h_range
+                this_pixel = tile.img.pixels[h, w]
+                if !isnan(this_pixel)
+                    ep = tile.img.epsilon_mat[h, w]
+                    accum.v += this_pixel * log(ep) - ep                    
+                end
+            end
+        end
         return
     end
 
@@ -584,7 +595,13 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         this_pixel = tile.img.pixels[h, w]
         if !isnan(this_pixel)
             clear!(E_G)
-            E_G.v = tile.img.epsilon
+            if img.constant_background
+                E_G.v = tile.img.epsilon
+                iota = tile.img.iota
+            else
+                E_G.v = tile.img.epsilon_mat[h, w]
+                iota = tile.img.iota_vec[h]
+            end
             clear!(var_G)
 
             # TODO: could you go back to pixel coordinates here?
@@ -599,8 +616,8 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
                     fs0m, fs1m, E_G, var_G, wcs_jacobian)
             end
 
-            accum_pixel_ret!(tile_sources, this_pixel, tile.img.iota,
-                E_G, var_G, accum)
+            accum_pixel_ret!(tile_sources, this_pixel, iota,
+                             E_G, var_G, accum)
         end
     end
 end
