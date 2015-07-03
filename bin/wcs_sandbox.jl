@@ -271,8 +271,8 @@ psf_point_y = 100.
 
 raw_psf = Array(Array{Float64}, 5)
 for b=1:5
-	rrows, rnrow, rncol, cmat = SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
-	raw_psf[b] = PSF.get_psf_at_point(psf_point_x, psf_point_y, rrows, rnrow, rncol, cmat);
+	raw_psf_comp = SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
+	raw_psf[b] = PSF.get_psf_at_point(psf_point_x, psf_point_y, raw_psf_comp);
 end
 
 if false

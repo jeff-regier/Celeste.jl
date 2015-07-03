@@ -108,6 +108,23 @@ const galaxy_prototypes = get_galaxy_prototypes()
 
 
 @doc """
+All the information form a psField file needed to compute a raw PSF for a point.
+
+Attributes:
+ - rrows: A matrix of flattened eigenimages.
+ - rnrow: The number of rows in an eigenimage.
+ - rncol: The number of columns in an eigenimage.
+ - cmat: The coefficients of the weight polynomial (see get_psf_at_point()).
+""" ->
+immutable RawPSFComponents
+    rrows::Array{Float64,2}
+    rnrow::Int32
+    rncol::Int32
+    cmat::Array{Float64,2}
+end
+
+
+@doc """
 A single normal component of the point spread function.
 All quantities are in pixel coordinates.
 
@@ -169,7 +186,18 @@ type Image
     run_num::Int64
     camcol_num::Int64
     field_num::Int64
+
+    # Field-varying parameters.
+    constant_background::bool
+    epsilon_mat::Float64
+    iota_vec::Float64
 end
+
+Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm, epsilon::Float64,
+      iota::Float64, psf::Vector{PsfComponent}, run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
+    new(H, W, pixels, b, wcs, epsilon, iota, psf, run_num, camcol_num, field_num, true, Float64[], Float64[])
+end
+
 
 @doc """
 Tiles of pixels that share the same set of

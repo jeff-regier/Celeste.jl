@@ -153,10 +153,7 @@ Args:
  - b: The filter band (a number from 1 to 5)
 
 Returns:
- - rrows: A matrix of flattened eigenimages.
- - rnrow: The number of rows in an eigenimage.
- - rncol: The number of columns in an eigenimage.
- - cmat: The coefficients of the weight polynomial (see below).
+ - RawPSFComponents.
 
 The point spread function is represented as an rnrow x rncol image
 showing what a true point source would look as viewed through the optics.
@@ -182,7 +179,7 @@ function load_psf_data(field_dir, run_num, camcol_num, field_num, b)
 
     # Only the first (nrow_b, ncol_b) submatrix of cmat is used for reasons obscure
     # to the author.
-    rrows, rnrow, rncol, cmat[1:nrow_b, 1:ncol_b, :]
+    RawPSFComponents(rrows, rnrow, rncol, cmat[1:nrow_b, 1:ncol_b, :])
 end
 
 
@@ -528,14 +525,14 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
 
         # Load and fit the psf.
         println("reading psf...")
-        rrows, rnrow, rncol, cmat = SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
+        raw_psf_comp = SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
 
         # For now, evaluate the psf at the middle of the image.
         psf_point_x = H / 2
         psf_point_y = W / 2
 
         # TODO: The PSF is in pixel coordinates.  Is that what we want?
-        raw_psf = PSF.get_psf_at_point(psf_point_x, psf_point_y, rrows, rnrow, rncol, cmat);
+        raw_psf = PSF.get_psf_at_point(psf_point_x, psf_point_y, raw_psf_comp);
         psf_gmm = PSF.fit_psf_gaussians(raw_psf);
         psf = PSF.convert_gmm_to_celeste(psf_gmm)
 

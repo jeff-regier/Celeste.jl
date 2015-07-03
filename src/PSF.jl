@@ -157,10 +157,7 @@ Using data from a psField file, evaluate the PSF for a source at given point.
 Args:
  - row: The row of the point source (may be a float).
  - col: The column of the point source (may be a float).
- - rrows: An (rnrow * rncol) by (k) matrix of flattened eigenimages.
- - rnrow: The number of rows in the eigenimage.
- - rncol: The number of columns in the eigenimage.
- - cmat: An (:, :, k)-array of coefficients of the weight polynomial.
+ - raw_psf_comp: Raw PSF components (e.g. as read from a psField file)
 
 Returns:
  - An rnrow x rncol image of the PSF at (row, col)
@@ -175,8 +172,7 @@ This function is based on the function sdss_psf_at_points in astrometry.net:
 https://github.com/dstndstn/astrometry.net/blob/master/util/sdss_psf.py
 """ ->
 function get_psf_at_point(row::Float64, col::Float64,
-                          rrows::Array{Float64, 2}, rnrow::Int32, rncol::Int32, 
-                          cmat::Array{Float64, 3})
+                          raw_psf_comp::RawPSFComponents)
 
     # This is a coordinate transform to keep the polynomial coefficients
     # to a reasonable size.
@@ -185,7 +181,9 @@ function get_psf_at_point(row::Float64, col::Float64,
     # rrows' image data is in the first column a flattened form.
     # The second dimension is the number of eigen images, which should
     # match the number of coefficient arrays.
-    k_tot = size(rrows)[2]
+    cmat = raw_psf_comp.cmat
+
+    k_tot = size(raw_psf_comp.rrows)[2]
     @assert k_tot == size(cmat)[3]
 
     nrow_b = size(cmat)[1]
@@ -202,8 +200,8 @@ function get_psf_at_point(row::Float64, col::Float64,
 
     # Weight the images in rrows and reshape them into matrix form.
     # It seems I need to convert for reshape to work.  :(
-    psf = reshape(sum([ rrows[:, i] * weight_mat[i] for i=1:k_tot]),
-                  (convert(Int64, rnrow), convert(Int64, rncol)))
+    psf = reshape(sum([ raw_psf_comp.rrows[:, i] * weight_mat[i] for i=1:k_tot]),
+                  (convert(Int64, raw_psf_comp.rnrow), convert(Int64, raw_psf_comp.rncol)))
 
     psf
 end
