@@ -67,17 +67,17 @@ function test_accum_pos_derivs()
     blob, mp, body = gen_sample_galaxy_dataset()
 
     function wrap_star(mmp)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp, blob[3].wcs)
         fs0m = zero_sensitive_float(StarPosParams)
-        ElboDeriv.accum_star_pos!(star_mcs[1,1], [9, 10.], fs0m)
+        ElboDeriv.accum_star_pos!(star_mcs[1,1], [9, 10.], fs0m, blob[3].wcs)
         fs0m
     end
     test_by_finite_differences(wrap_star, mp)
 
     function wrap_galaxy(mmp)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp, blob[3].wcs)
         fs1m = zero_sensitive_float(GalaxyPosParams)
-        ElboDeriv.accum_galaxy_pos!(gal_mcs[1,1,1,1], [9, 10.], fs1m)
+        ElboDeriv.accum_galaxy_pos!(gal_mcs[1,1,1,1], [9, 10.], fs1m, blob[3].wcs)
         fs1m
     end
     test_by_finite_differences(wrap_galaxy, mp)
@@ -88,7 +88,7 @@ function test_accum_pixel_source_derivs()
     blob, mp0, body = gen_sample_galaxy_dataset()
 
     function wrap_apss_ef(mmp)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[1].psf, mmp)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[1].psf, mmp, blob[1].wcs)
         fs0m = zero_sensitive_float(StarPosParams)
         fs1m = zero_sensitive_float(GalaxyPosParams)
         E_G = zero_sensitive_float(CanonicalParams)
@@ -96,13 +96,13 @@ function test_accum_pixel_source_derivs()
         sb = ElboDeriv.SourceBrightness(mmp.vp[1])
         m_pos = [9, 10.]
         ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
-            mmp.vp[1], 1, 1, m_pos, 1, fs0m, fs1m, E_G, var_G)
+            mmp.vp[1], 1, 1, m_pos, 1, fs0m, fs1m, E_G, var_G, blob[1].wcs)
         E_G
     end
     test_by_finite_differences(wrap_apss_ef, mp0)
 
     function wrap_apss_varf(mmp)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp, blob[3].wcs)
         fs0m = zero_sensitive_float(StarPosParams)
         fs1m = zero_sensitive_float(GalaxyPosParams)
         E_G = zero_sensitive_float(CanonicalParams)
@@ -110,7 +110,7 @@ function test_accum_pixel_source_derivs()
         sb = ElboDeriv.SourceBrightness(mmp.vp[1])
         m_pos = [9, 10.]
         ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
-            mmp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G)
+            mmp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G, blob[1].wcs)
         var_G
     end
     test_by_finite_differences(wrap_apss_varf, mp0)

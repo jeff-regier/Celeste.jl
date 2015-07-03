@@ -35,9 +35,6 @@ function load_stamp_blob(stamp_dir, stamp_id)
         ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
         close(fits)
 
-        # Get the world coordinate transform.
-        cd_mat = reshape(Float64[ unsafe_load(wcs.cd, i) for i=1:4 ], 2, 2)
-
         alphaBar = [hdr["PSF_P0"], hdr["PSF_P1"], hdr["PSF_P2"]]
         xiBar = [
             [hdr["PSF_P3"]  hdr["PSF_P4"]],
@@ -52,8 +49,8 @@ function load_stamp_blob(stamp_dir, stamp_id)
         tauBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]],
                          [hdr["PSF_P17"] hdr["PSF_P16"]]]
 
-        psf = [PsfComponent(alphaBar[k], cd_mat * xiBar[:, k],
-                cd_mat * tauBar[:, :, k] * cd_mat') for k in 1:3]
+        psf = [PsfComponent(alphaBar[k], xiBar[:, k],
+                            tauBar[:, :, k]) for k in 1:3]
 
         H, W = size(original_pixels)
         iota = hdr["GAIN"] / hdr["CALIB"]

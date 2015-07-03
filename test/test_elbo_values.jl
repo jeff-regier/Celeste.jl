@@ -83,15 +83,16 @@ function test_that_variance_is_low()
     # very peaked variational distribution---variance for F(m) should be low
     blob, mp, body = true_star_init()
 
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mp)
+    test_b = 3
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[test_b].psf, mp, blob[test_b].wcs)
     fs0m = zero_sensitive_float(StarPosParams)
     fs1m = zero_sensitive_float(GalaxyPosParams)
     E_G = zero_sensitive_float(CanonicalParams)
     var_G = zero_sensitive_float(CanonicalParams)
     sb = ElboDeriv.SourceBrightness(mp.vp[1])
-    m_pos = [10, 12.]
+    m_pos = Float64[10, 12]
     ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
-        mp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G)
+        mp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G, blob[test_b].wcs)
 
     @test 0 < var_G.v < 1e-2 * E_G.v^2
 end

@@ -294,6 +294,9 @@ function pixel_deriv_to_world_deriv(wcs::WCSLIB.wcsprm, df_dpix::Array{Float64, 
 
     @assert length(pix_loc) == length(df_dpix) == 2
 
+    # TODO: This needs to be much faster if we're going to do it for every source
+    # at every pixel.
+
     # Assume that 0.1 pixels is a resonable step size irrespective of 
     # the world coordinates.  Choose a step size in world coordinates on
     # the same order.
