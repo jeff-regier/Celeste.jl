@@ -173,6 +173,43 @@ function point_within_radius_of_polygon(p, radius, v)
 end
 
 @doc """
+Check whether a set of sources is within <radius> world coordinates of
+a quadrilateral defined in pixel coordinates.
+
+Args:
+  - loc: An S x 2 array of source locations in world coordinates,
+         with the locations as row vectors.
+  - radius: An array of radii in world coordinates, one for each loc.
+  - pix_corners: A 4 x 2 array of quadrilateral corners in pixel coordinates.
+                 The corners must make a quadrilateral when traced in order of the
+                 rows with a final edge between the last row and the first.
+
+Returns:
+    An array of booleans for whether each row of loc is within radius of the
+    pix_corners quadrilateral.
+""" ->
+function sources_near_quadrilateral(loc::Array{Float64, 2}, radius::Array{Float64, 1},
+                                    pix_corners::Array{Float64, 2}, wcs::WCSLIB.wcsprm)
+    @assert size(loc, 2) == size(pix_corners, 2) == 2
+    @assert size(radius, 1) == size(loc, 1)
+    world_corners = Util.pixel_to_world(wcs, pix_corners)
+    [ Util.point_within_radius_of_polygon(loc[i, :][:], radius[i], world_corners) for i=1:size(loc, 1)]
+end
+
+
+@doc """
+sources_in_quadrilateral for a single loc value.
+""" ->
+function sources_near_quadrilateral(loc::Array{Float64, 1}, radius::Float64,
+                                    pix_corners::Array{Float64, 2}, wcs::WCSLIB.wcsprm)
+    bool_vec = sources_in_quadrilateral(loc', [ radius ], pix_corners, wcs)
+    bool_vec[1]
+end
+
+
+################ WCS stuff below
+
+@doc """
 Convert a world location to a 1-indexed pixel location.
 
 Args:
@@ -242,38 +279,36 @@ end
 
 
 @doc """
-Check whether a set of sources is within <radius> world coordinates of
-a quadrilateral defined in pixel coordinates.
+Transform a derivative of a scalar function with respect to pixel
+coordinates into a derivatve with respect to world coordinates.
 
-Args:
-  - loc: An S x 2 array of source locations in world coordinates,
-         with the locations as row vectors.
-  - radius: An array of radii in world coordinates, one for each loc.
-  - pix_corners: A 4 x 2 array of quadrilateral corners in pixel coordinates.
-                 The corners must make a quadrilateral when traced in order of the
-                 rows with a final edge between the last row and the first.
-
-Returns:
-    An array of booleans for whether each row of loc is within radius of the
-    pix_corners quadrilateral.
+Arguments:
+    - wcs: The world coordinate system object
+    - df_dpix: The derivative of a scalar function with respect to pixel coordinates
+    - pix_loc: The pixel location at which the derivative was taken.
+    - pix_delt: In pixel coordinates, the size of the difference for the finite
+                difference approximation of the wcs transform.
 """ ->
-function sources_near_quadrilateral(loc::Array{Float64, 2}, radius::Array{Float64, 1},
-                                    pix_corners::Array{Float64, 2}, wcs::WCSLIB.wcsprm)
-    @assert size(loc, 2) == size(pix_corners, 2) == 2
-    @assert size(radius, 1) == size(loc, 1)
-    world_corners = Util.pixel_to_world(wcs, pix_corners)
-    [ Util.point_within_radius_of_polygon(loc[i, :][:], radius[i], world_corners) for i=1:size(loc, 1)]
+function pixel_deriv_to_world_deriv(wcs::WCSLIB.wcsprm, df_dpix::Array{Float64, 1},
+                                    pix_loc::Array{Float64, 1}; pix_delt=0.1)
+
+    @assert length(pix_loc) == length(df_dpix) == 2
+
+    # Assume that 0.1 pixels is a resonable step size irrespective of 
+    # the world coordinates.  Choose a step size in world coordinates on
+    # the same order.
+    pix_delt = 0.1;
+    world_loc = pixel_to_world(wcs, pix_loc)
+    world_delt1 = abs(pixel_to_world(wcs, pix_loc + pix_delt * [0, 1]) - world_loc)
+    world_delt2 = abs(pixel_to_world(wcs, pix_loc + pix_delt * [1, 0]) - world_loc)
+    world_delt = Float64[ max(world_delt1[i], world_delt2[i]) for i=1:2 ]
+
+    world_loc_1 = world_loc + world_delt[1] * Float64[1, 0]
+    world_loc_2 = world_loc + world_delt[2] * Float64[0, 1]
+
+    transform = vcat((world_to_pixel(wcs, world_loc_1) - pix_loc)' / world_delt[1],
+                     (world_to_pixel(wcs, world_loc_2) - pix_loc)' / world_delt[2])
+    transform * df_dpix
 end
-
-
-@doc """
-sources_in_quadrilateral for a single loc value.
-""" ->
-function sources_near_quadrilateral(loc::Array{Float64, 1}, radius::Float64,
-                                    pix_corners::Array{Float64, 2}, wcs::WCSLIB.wcsprm)
-    bool_vec = sources_in_quadrilateral(loc', [ radius ], pix_corners, wcs)
-    bool_vec[1]
-end
-
 
 end
