@@ -109,10 +109,11 @@ const galaxy_prototypes = get_galaxy_prototypes()
 
 @doc """
 A single normal component of the point spread function.
+All quantities are in pixel coordinates.
 
 Args:
   alphaBar: The scalar weight of the component.
-  xiBar: The 2x1 location vector in world coordinates
+  xiBar: The 2x1 location vector
   tauBar: The 2x2 covariance
 
 Attributes:
