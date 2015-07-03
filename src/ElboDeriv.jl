@@ -4,9 +4,9 @@ module ElboDeriv
 
 VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
-import Util
 import KL
-
+import Util
+import WCSLIB
 
 @doc """
 SensitiveFloat objects for expectations involving r_s and c_s.
@@ -217,22 +217,23 @@ Returns:
     - Galaxy component
     - Galaxy type
     - Source
+  - wcs: A world coordinate system object
 
 The PSF contains three components, so you see lots of 3's below.
 """ ->
-function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
+function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSLIB.wcsprm)
     star_mcs = Array(BvnComponent, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent, 3, 8, 2, mp.S)
 
     for s in 1:mp.S
         vs = mp.vp[s]
-        #m_pos = Util.pixel_to_world(tile.img.wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
-        m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
+        # TODO: make a decision here
+        m_pos = Util.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
+        #m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
 
         # Convolve the star locations with the PSF.
         for k in 1:3
             pc = psf[k]
-            # TODO: you could just use pixel coordinates here.
             mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
             star_mcs[k, s] = BvnComponent(mean_s, pc.tauBar, pc.alphaBar)
         end
@@ -241,8 +242,8 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
         for i = 1:Ia
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
-            #m_pos = Util.pixel_to_world(tile.img.wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
-            m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
+            m_pos = Util.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
+            #m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
             for j in 1:[8,6][i]
@@ -284,7 +285,7 @@ by updating fs0m in place.
 
 Args:
   - bmc: The component to be added
-  - x: An offset for the component in world coordinates (e.g. a pixel location)
+  - x: An offset for the component in pixel coordinates (e.g. a pixel location)
   - fs0m: A SensitiveFloat to which the value of the bvn likelihood
        and its derivatives with respect to x are added.
  - wcs: The world coordinate system object for this image.
@@ -300,8 +301,8 @@ function accum_star_pos!(bmc::BvnComponent,
     # TODO: does this need to change for world coordiantes?
     dfs0m_dpix = Float64[f .* py1, f .* py2]
     dfs0m_dworld = Util.pixel_deriv_to_world_deriv(wcs, dfs0m_dpix, x)
-    fs0m.d[star_ids.u[1]] += dfs0m_world[1]
-    fs0m.d[star_ids.u[2]] += dfs0m_world[2]
+    fs0m.d[star_ids.u[1]] += dfs0m_dworld[1]
+    fs0m.d[star_ids.u[2]] += dfs0m_dworld[2]
 
     # fs0m.d[star_ids.u[1]] += f .* py1
     # fs0m.d[star_ids.u[2]] += f .* py2
@@ -314,7 +315,7 @@ updating fs1m in place.
 
 Args:
   - gcc: The galaxy component to be added
-  - x: An offset for the component in world coordinates (e.g. a pixel location)
+  - x: An offset for the component in pixel coordinates (e.g. a pixel location)
   - fs1m: A SensitiveFloat to which the value of the likelihood
        and its derivatives with respect to x are added.
   - wcs: The world coordinate system object for this image.
@@ -364,7 +365,7 @@ Args:
   - vs: The variational parameters for this source
   - child_s: The index of this source within the tile.
   - parent_s: The global index of this source.
-  - m_pos: A 2x1 vector with the pixel location in world coordinates
+  - m_pos: A 2x1 vector with the pixel location in pixel coordinates
   - b: The band (1 to 5)
   - fs0m: The accumulated star contributions (updated in place)
   - fs1m: The accumulated galaxy contributions (updated in place)
@@ -613,7 +614,7 @@ Args:
 function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
     accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
 
-    star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp)
+    star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp, img.wcs)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
