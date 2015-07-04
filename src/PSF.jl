@@ -32,7 +32,7 @@ Args:
 
  Naturally, the mixture only matches the psf up to scale.
 """ ->
-function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
+function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500, verbose=false)
 
     function sigma_for_gmm(sigma_mat)
         # Returns a matrix suitable for storage in the field gmm.Σ
@@ -69,10 +69,10 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
     gmm.μ[1, :] = Float64[0, 0]
     gmm.Σ[1] = sigma_for_gmm(psf_starting_var)
 
-    gmm.μ[2, :] = -Float64[2, 2]
+    gmm.μ[2, :] = -Float64[0.2, 0.2]
     gmm.Σ[2] = sigma_for_gmm(psf_starting_var)
 
-    gmm.μ[3, :] = Float64[2, 2]
+    gmm.μ[3, :] = Float64[0.2, 0.2]
     gmm.Σ[3] = sigma_for_gmm(psf_starting_var)
 
     gmm.w = ones(gmm.n) / gmm.n
@@ -111,7 +111,11 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
         post = GaussianMixtures.gmmposterior(gmm, x_mat) 
         gmm_fit = exp(post[2]) * gmm.w;
         err = mean((gmm_fit - psf_mat) .^ 2)
-        err_diff = last_err - err
+        err_diff = abs(last_err - err)
+        if verbose
+            println("$iter: err=$err err_diff=$err_diff")
+        end
+
         last_err = err
         if isnan(err)
             error("NaN in MVN PSF fit.")
@@ -119,6 +123,7 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
 
         iter = iter + 1
         if err_diff < tol
+            println("Tolerance reached ($err_diff < $tol)")
             fit_done = true
         elseif iter >= max_iter
             warn("PSF MVN fit: max_iter exceeded")
