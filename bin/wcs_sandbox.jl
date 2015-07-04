@@ -151,6 +151,15 @@ for (name in names(ids))
 end
 
 
+# Set the psfs to the local psfs
+for b=1:5
+	psf_point = Util.world_to_pixel(blob[b].wcs, obj_loc)
+    raw_psf = PSF.get_psf_at_point(psf_point[1], psf_point[2], blob[b].raw_psf_comp);
+    psf_gmm = PSF.fit_psf_gaussians(raw_psf, tol=1e-12, verbose=true);
+    blob[b].psf = PSF.convert_gmm_to_celeste(psf_gmm)
+end
+
+
 for b=1:5
 	# Try varying background.
 	blob[b].constant_background = false
@@ -162,12 +171,12 @@ compare_solutions(mp, initial_mp)
 
 
 for b=1:5
-	# Try varying background.
+	# Try non-varying background.
 	blob[b].constant_background = true
 end
 #include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
 mp_const = deepcopy(initial_mp);
-res = OptimizeElbo.maximize_likelihood(blob, mp_const);
+res = OptimizeElbo.maximize_elbo(blob, mp_const);
 compare_solutions(mp, mp_const)
 
 
