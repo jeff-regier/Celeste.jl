@@ -46,8 +46,9 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
     end
 
     # Data points at which the psf is evaluated in matrix form.
+    x_center = Float64[ (size(psf, 1) - 1) / 2.0 + 1, (size(psf, 2) - 1) / 2.0 + 1 ]
     x_prod = [ Float64[i, j] for i=1:size(psf, 1), j=1:size(psf, 2) ]
-    x_mat = Float64[ x_row[col] for x_row=x_prod, col=1:2 ]
+    x_mat = Float64[ x_row[col] - x_center[col] for x_row=x_prod, col=1:2 ]
 
     # Unscale the fit vector so we can compare the sum of squared differences
     # between the psf and our mixture of normals as a convergence criterion.
@@ -61,18 +62,16 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
     gmm = GaussianMixtures.GMM(3, x_mat; kind=:full, nInit=0)
 
     # Get the scale for the starting point from the whole image.
-    psf_center = Float64[ (size(psf, i) - 1) / 2 for i=1:2 ]
-    x_centered = broadcast(-, x_mat, psf_center')
-    psf_starting_var = x_centered' * (x_centered .* psf_mat)
+    psf_starting_var = x_mat' * (x_mat .* psf_mat)
 
     # Hard-coded initialization.
-    gmm.μ[1, :] = psf_center
+    gmm.μ[1, :] = Float64[0, 0]
     gmm.Σ[1] = sigma_for_gmm(psf_starting_var)
 
-    gmm.μ[2, :] = psf_center - Float64[2, 2]
+    gmm.μ[2, :] = Float64[-2, -2]
     gmm.Σ[2] = sigma_for_gmm(psf_starting_var)
 
-    gmm.μ[3, :] = psf_center + Float64[2, 2]
+    gmm.μ[3, :] = Float64[2, 2]
     gmm.Σ[3] = sigma_for_gmm(psf_starting_var)
 
     gmm.w = ones(gmm.n) / gmm.n
@@ -169,9 +168,10 @@ The PSF is represented as a weighted combination of "eigenimages" (stored
 in rrows), where the weights vary smoothly across points (row, col) in the image
 as a polynomial of the form
 weight[k](row, col) = sum_{i,j} cmat[i, j, k] * (rcs * row) ^ i (rcs * col) ^ j
+...where row and col are zero-indexed.
 
-This function is based on the function getPsfAtPoints in astrometry.net:
-https://github.com/dstndstn/astrometry.net/blob/master/sdss/common.py#L953
+This function is based on the function sdss_psf_at_points in astrometry.net:
+https://github.com/dstndstn/astrometry.net/blob/master/util/sdss_psf.py
 """ ->
 function get_psf_at_point(row::Float64, col::Float64,
                           rrows::Array{Float64, 2}, rnrow::Int32, rncol::Int32, 
@@ -184,22 +184,24 @@ function get_psf_at_point(row::Float64, col::Float64,
     # rrows' image data is in the first column a flattened form.
     # The second dimension is the number of eigen images, which should
     # match the number of coefficient arrays.
-    k = size(rrows)[2]
-    @assert k == size(cmat)[3]
+    k_tot = size(rrows)[2]
+    @assert k_tot == size(cmat)[3]
 
     nrow_b = size(cmat)[1]
     ncol_b = size(cmat)[2]
 
-    # Get the weights.
-    coeffs_mat = [ (row * rcs) ^ i * (col * rcs) ^ j for i=0:(nrow_b - 1), j=0:(ncol_b - 1)]
-    weight_mat = zeros(nrow_b, ncol_b)
-    for k = 1:3, i = 1:nrow_b, j = 1:ncol_b
-        weight_mat[i, j] += cmat[i, j, k] * coeffs_mat[i, j]
+    # Get the weights.  The row and column are intended to be
+    # zero-indexed.
+    coeffs_mat = [ ((row - 1) * rcs) ^ i * ((col - 1) * rcs) ^ j for
+                    i=0:(nrow_b - 1), j=0:(ncol_b - 1)]
+    weight_mat = zeros(k_tot)
+    for k = 1:k_tot, i = 1:nrow_b, j = 1:ncol_b
+        weight_mat[k] += cmat[i, j, k] * coeffs_mat[i, j]
     end
 
     # Weight the images in rrows and reshape them into matrix form.
     # It seems I need to convert for reshape to work.  :(
-    psf = reshape(reduce(sum, [ rrows[:, i] * weight_mat[i] for i=1:k]),
+    psf = reshape(sum([ rrows[:, i] * weight_mat[i] for i=1:k_tot]),
                   (convert(Int64, rnrow), convert(Int64, rncol)))
 
     psf
