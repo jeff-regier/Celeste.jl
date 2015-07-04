@@ -1,4 +1,4 @@
-# Load a correctly processed image from tractor.
+# Load a processed image from tractor.
 
 from tractor.sdss import *
 import argparse
@@ -30,7 +30,6 @@ bandname = bands[args.band]
 # Very useful:
 #print ''.join(inspect.getsourcelines(pyfits.HDUList)[0])
 
-
 # get_tractor_image_dr9 just calls get_tractor_image_dr8
 img = get_tractor_image_dr8(args.run, args.camcol, args.field, bandname, nanomaggies=True)
 sources = get_tractor_sources_dr9(args.run, args.camcol, args.field,
@@ -41,8 +40,6 @@ file_base = args.destination_base + ('_%d_%d_%d_' % (args.run, args.camcol, args
 band_str = '%d_' % (args.band + 1) # Python uses 0 indexing
 numpy.savetxt(file_base + band_str + "img.csv", img[0].data, delimiter=",")
 numpy.savetxt(file_base + band_str + "psf.csv", img[0].psf, delimiter=",")
-
-
 
 sdss = DR8()
 
@@ -83,4 +80,3 @@ if False:
 
 	print nan_pixels
 	print sum(numpy.isnan(masked_img_data))
-
