@@ -20,6 +20,7 @@ export SensitiveFloat
 export zero_sensitive_float, clear!
 
 export ids, ids_free, star_ids, gal_ids
+export ids_names, ids_free_names
 export D, B, Ia
 
 using Util
@@ -341,6 +342,24 @@ const shape_standard_alignment = (ids.u,
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale])
 bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
+
+# TODO: maybe these should be incorporated into the framework above (which I don't really understand.)
+ids_free_names = Array(ASCIIString, length(ids_free))
+for (name in names(ids_free)) 
+    inds = ids_free.(name)
+    for i = 1:length(inds)
+        ids_free_names[inds[i]] = "$(name)_$(i)"
+    end
+end
+
+ids_names = Array(ASCIIString, length(ids))
+for (name in names(ids)) 
+    inds = ids.(name)
+    for i = 1:length(inds)
+        ids_names[inds[i]] = "$(name)_$(i)"
+    end
+end
+
 
 #########################################################
 
