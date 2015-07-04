@@ -113,7 +113,7 @@ end
 function compare_solutions(mp1::ModelParams, mp2::ModelParams)
     # Compare the parameters, fits, and iterations.
     println("===================")
-    println("Differences:")
+    println("Differences:  mp1 vs mp2:")
     for var_name in names(ids)
         println(var_name)
         for s in 1:mp1.S
@@ -165,10 +165,16 @@ for b=1:5
     fit_psfs[b] = PSF.get_psf_at_point(blob[b].psf)
 end
 
+# The PSF is not great but it doesn't look so bad that it will
+# completely destroy the ability to do inference.
 nz = 16:35
+println("==============================")
 vcat(round(raw_psfs[b][nz, nz], 3),
      round(fit_psfs[b][nz, nz], 3))
-round(fit_psfs[b][nz, nz] - raw_psfs[b][nz, nz], 3)
+round(1000. .* (fit_psfs[b][nz, nz] - raw_psfs[b][nz, nz]), 1)
+println(psf_scales[b])
+
+
 
 for b=1:5
 	# Try varying background.
@@ -176,22 +182,28 @@ for b=1:5
 end
 #include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
 mp = deepcopy(initial_mp);
+mp.vp[1][ids.e_scale] = 0.5
+#res = OptimizeElbo.maximize_likelihood(blob, mp, Transform.rect_transform, xtol_rel=0);
 res = OptimizeElbo.maximize_likelihood(blob, mp);
+# It says this star is a galaxy.
 compare_solutions(mp, initial_mp)
+# lik = ElboDeriv.elbo_likelihood(blob, mp);
+# DataFrame(name=ids_names, d=lik.d[:,1])
 
 
+# This gives pretty different values.
 for b=1:5
 	# Try non-varying background.
 	blob[b].constant_background = true
 end
 #include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
 mp_const = deepcopy(initial_mp);
-res = OptimizeElbo.maximize_elbo(blob, mp_const);
+#res = OptimizeElbo.maximize_elbo(blob, mp_const);
+res = OptimizeElbo.maximize_likelihood(blob, mp_const);
 compare_solutions(mp, mp_const)
 
 
-
-
+# Look.
 display_cat(cat_entries[1]);
 get_brightness(mp)
 

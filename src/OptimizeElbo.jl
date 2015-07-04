@@ -8,6 +8,7 @@ using CelesteTypes
 using Transform
 
 import ElboDeriv
+import DataFrames
 
 
 #TODO: use Lumberjack.jl for logging
@@ -116,7 +117,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
         (debug || iter_count % 10 == 0) && 
             println("iter $iter_count elbo: $(elbo.v)")
         debug && println("\n=======================================\n")
-        #debug && println("$(elbo.d)")
+        debug && println(DataFrames.DataFrame(names=ids_free_names[left_ids], elbo_deriv=g))
         #debug && println("\n=======================================\n")
         elbo.v
     end
