@@ -564,7 +564,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
     if length(tile_sources) == 0
 
         # NB: not using the delta-method approximation here
-        if img.constant_background
+        if tile.img.constant_background
             nan_pixels = isnan(tile.img.pixels[h_range, w_range])
             num_pixels = length(h_range) * length(w_range) - sum(nan_pixels)
             tile_x = sum(tile.img.pixels[h_range, w_range][!nan_pixels])
@@ -595,7 +595,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         this_pixel = tile.img.pixels[h, w]
         if !isnan(this_pixel)
             clear!(E_G)
-            if img.constant_background
+            if tile.img.constant_background
                 E_G.v = tile.img.epsilon
                 iota = tile.img.iota
             else

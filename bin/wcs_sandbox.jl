@@ -151,10 +151,27 @@ for (name in names(ids))
 end
 
 
+for b=1:5
+	# Try varying background.
+	blob[b].constant_background = false
+end
 #include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
 mp = deepcopy(initial_mp);
 res = OptimizeElbo.maximize_likelihood(blob, mp);
 compare_solutions(mp, initial_mp)
+
+
+for b=1:5
+	# Try varying background.
+	blob[b].constant_background = true
+end
+#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
+mp_const = deepcopy(initial_mp);
+res = OptimizeElbo.maximize_likelihood(blob, mp_const);
+compare_solutions(mp, mp_const)
+
+
+
 
 display_cat(cat_entries[1]);
 get_brightness(mp)
@@ -223,7 +240,9 @@ end
 
 e_images = [ get_e_g(blob[b], mp) for b=1:5 ];
 
-[ round(e_images[b][i, j] - blob[b].pixels[i, j] / blob[b].iota, 1) for i=1:img.H, j=1:img.W, b=1:5 ]
+H = blob[1].H
+W = blob[2].W
+[ round(e_images[b][i, j] - blob[b].pixels[i, j] / blob[b].iota, 1) for i=1:H, j=1:W, b=1:5 ]
 
 
 
