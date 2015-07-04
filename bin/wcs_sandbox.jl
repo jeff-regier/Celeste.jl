@@ -152,13 +152,23 @@ end
 
 
 # Set the psfs to the local psfs
+fit_psfs = Array(Array{Float64, 2}, 5)
+raw_psfs = Array(Array{Float64, 2}, 5)
+psf_scales = Array(Float64, 5)
 for b=1:5
 	psf_point = Util.world_to_pixel(blob[b].wcs, obj_loc)
     raw_psf = PSF.get_psf_at_point(psf_point[1], psf_point[2], blob[b].raw_psf_comp);
+    raw_psfs[b] = raw_psf / sum(raw_psf)
+    psf_scales[b] = sum(raw_psf)
     psf_gmm = PSF.fit_psf_gaussians(raw_psf, tol=1e-12, verbose=true);
     blob[b].psf = PSF.convert_gmm_to_celeste(psf_gmm)
+    fit_psfs[b] = PSF.get_psf_at_point(blob[b].psf)
 end
 
+nz = 16:35
+vcat(round(raw_psfs[b][nz, nz], 3),
+     round(fit_psfs[b][nz, nz], 3))
+round(fit_psfs[b][nz, nz] - raw_psfs[b][nz, nz], 3)
 
 for b=1:5
 	# Try varying background.

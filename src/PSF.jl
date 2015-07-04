@@ -211,4 +211,21 @@ function get_psf_at_point(row::Float64, col::Float64,
     psf
 end
 
+
+@doc """
+A version for a single Celeste mixture.
+""" ->
+function get_psf_value(row::Float64, col::Float64, psf::CelesteTypes.PsfComponent)
+    x = Float64[row, col] - psf.xiBar
+    (psf.alphaBar * exp(-0.5 * x' * psf.tauBarInv * x - 0.5 * psf.tauBarLd) / (2 * pi))[1]
+end
+
+
+@doc """
+A version for the celeste mixture of Gaussians.
+""" ->
+function get_psf_at_point(psf_array::Array{CelesteTypes.PsfComponent, 1}; rows=collect(-25:25), cols=collect(-25:25))
+    [ sum([ get_psf_value(float(row), float(col), psf) for psf in psf_array ]) for row in rows, col in cols ]
+end
+
 end
