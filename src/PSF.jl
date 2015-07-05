@@ -5,12 +5,29 @@ VERSION < v"0.4.0-dev" && using Docile
 import CelesteTypes
 import GaussianMixtures
 
+# TODO: synchronize these names and document them.
 @doc """
 Evaluate a gmm object at the data points x_mat.
 """ ->
 function evaluate_gmm(gmm::GaussianMixtures.GMM, x_mat::Array{Float64, 2})
     post = GaussianMixtures.gmmposterior(gmm, x_mat) 
     exp(post[2]) * gmm.w;
+end
+
+@doc """
+A version for a single Celeste mixture.
+""" ->
+function get_psf_value(row::Float64, col::Float64, psf::CelesteTypes.PsfComponent)
+    x = Float64[row, col] - psf.xiBar
+    (psf.alphaBar * exp(-0.5 * x' * psf.tauBarInv * x - 0.5 * psf.tauBarLd) / (2 * pi))[1]
+end
+
+
+@doc """
+A version for the celeste mixture of Gaussians.
+""" ->
+function get_psf_at_point(psf_array::Array{CelesteTypes.PsfComponent, 1}; rows=collect(-25:25), cols=collect(-25:25))
+    [ sum([ get_psf_value(float(row), float(col), psf) for psf in psf_array ]) for row in rows, col in cols ]
 end
 
 
@@ -24,13 +41,15 @@ Args:
 
  Returns:
   - A GaussianMixtures.GMM object containing the fit
+  - A scaling that minimized the least squares error.
 
  Use an EM algorithm to fit a mixture of three multivariate normals to the
  point spread function.  Although the psf is continuous-valued, we use EM by
  fitting as if we had gotten psf[x, y] data points at the image location [x, y].
  As of writing weighted data matrices of this form were not supported in GaussianMixtures.
 
- Naturally, the mixture only matches the psf up to scale.
+ Note that this is a little incoherent -- we use something like log loss
+ to fit the mixture and squared error loss to fit the scale.
 """ ->
 function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500, verbose=false)
 
@@ -51,8 +70,7 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500, v
     x_mat = Float64[ x_row[col] for x_row=x_prod, col=1:2 ]
     x_mat = broadcast(-, x_mat, psf_center')
 
-    # Unscale the fit vector so we can compare the sum of squared differences
-    # between the psf and our mixture of normals as a convergence criterion.
+    # The function we're trying to match.
     psf_scale = sum(psf)
     psf_mat = Float64[ psf[x_row[1], x_row[2]] / psf_scale for x_row=x_prod ];
 
@@ -133,7 +151,12 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500, v
         println("Fitting psf: $iter: $err_diff")
     end
 
-    gmm
+    # Get the scaling constant that minimizes the squared error.
+    post = GaussianMixtures.gmmposterior(gmm, x_mat) 
+    gmm_fit = exp(post[2]) * gmm.w;
+    scale = sum(gmm_fit .* psf_mat) / sum(gmm_fit .* gmm_fit)
+
+    gmm, scale
 end
 
 
@@ -146,9 +169,9 @@ Args:
  Returns:
   - An array of PsfComponent objects.
 """ ->
-function convert_gmm_to_celeste(gmm::GaussianMixtures.GMM)
+function convert_gmm_to_celeste(gmm::GaussianMixtures.GMM, scale::Float64)
     function convert_gmm_component_to_celeste(gmm::GaussianMixtures.GMM, d)
-        CelesteTypes.PsfComponent(gmm.w[d],
+        CelesteTypes.PsfComponent(scale * gmm.w[d],
             collect(GaussianMixtures.means(gmm)[d, :]), GaussianMixtures.covars(gmm)[d])
     end
 
@@ -211,21 +234,5 @@ function get_psf_at_point(row::Float64, col::Float64,
     psf
 end
 
-
-@doc """
-A version for a single Celeste mixture.
-""" ->
-function get_psf_value(row::Float64, col::Float64, psf::CelesteTypes.PsfComponent)
-    x = Float64[row, col] - psf.xiBar
-    (psf.alphaBar * exp(-0.5 * x' * psf.tauBarInv * x - 0.5 * psf.tauBarLd) / (2 * pi))[1]
-end
-
-
-@doc """
-A version for the celeste mixture of Gaussians.
-""" ->
-function get_psf_at_point(psf_array::Array{CelesteTypes.PsfComponent, 1}; rows=collect(-25:25), cols=collect(-25:25))
-    [ sum([ get_psf_value(float(row), float(col), psf) for psf in psf_array ]) for row in rows, col in cols ]
-end
 
 end

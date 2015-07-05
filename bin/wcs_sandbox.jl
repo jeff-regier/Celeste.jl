@@ -134,22 +134,6 @@ function display_cat(cat_entry::CatalogEntry)
 	[ println("$name: $(cat_entry.(name))") for name in names(cat_entry) ]
 end
 
-ids_free_names = Array(ASCIIString, length(ids_free))
-for (name in names(ids_free)) 
-	inds = ids_free.(name)
-	for i = 1:length(inds)
-		ids_free_names[inds[i]] = "$(name)_$(i)"
-	end
-end
-
-ids_names = Array(ASCIIString, length(ids))
-for (name in names(ids)) 
-	inds = ids.(name)
-	for i = 1:length(inds)
-		ids_names[inds[i]] = "$(name)_$(i)"
-	end
-end
-
 
 # Set the psfs to the local psfs
 fit_psfs = Array(Array{Float64, 2}, 5)
@@ -160,8 +144,8 @@ for b=1:5
     raw_psf = PSF.get_psf_at_point(psf_point[1], psf_point[2], blob[b].raw_psf_comp);
     raw_psfs[b] = raw_psf / sum(raw_psf)
     psf_scales[b] = sum(raw_psf)
-    psf_gmm = PSF.fit_psf_gaussians(raw_psf, tol=1e-12, verbose=true);
-    blob[b].psf = PSF.convert_gmm_to_celeste(psf_gmm)
+    psf_gmm, scale = PSF.fit_psf_gaussians(raw_psf, tol=1e-12, verbose=true);
+    blob[b].psf = PSF.convert_gmm_to_celeste(psf_gmm, scale)
     fit_psfs[b] = PSF.get_psf_at_point(blob[b].psf)
 end
 
@@ -185,7 +169,7 @@ mp = deepcopy(initial_mp);
 mp.vp[1][ids.e_scale] = 0.5
 #res = OptimizeElbo.maximize_likelihood(blob, mp, Transform.rect_transform, xtol_rel=0);
 res = OptimizeElbo.maximize_likelihood(blob, mp);
-# It says this star is a galaxy.
+# It says this star is a galaxy.  A problem with the PSF?
 compare_solutions(mp, initial_mp)
 # lik = ElboDeriv.elbo_likelihood(blob, mp);
 # DataFrame(name=ids_names, d=lik.d[:,1])

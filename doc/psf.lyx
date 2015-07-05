@@ -1,0 +1,300 @@
+#LyX 2.1 created this file. For more info see http://www.lyx.org/
+\lyxformat 474
+\begin_document
+\begin_header
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_math auto
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+f\left(x\right) & = & \sum_{i=1}\alpha_{i}\phi_{i}\left(x\right)\\
+ & = & a\sum_{i=1}w_{i}\phi_{i}\left(x\right)\textrm{, where }\sum_{i}w_{i}=1\\
+ & = & ag\left(x\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+We can perform coordinate ascent on 
+\begin_inset Formula $w_{i}$
+\end_inset
+
+ and 
+\begin_inset Formula $\phi_{i}$
+\end_inset
+
+ alternating with coordinate ascent on 
+\begin_inset Formula $a$
+\end_inset
+
+.
+ Given 
+\begin_inset Formula $a$
+\end_inset
+
+, the mixture can be fit with EM on 
+\begin_inset Formula $a^{-1}f\left(x\right)$
+\end_inset
+
+.
+ Given the mixture, the optimal 
+\begin_inset Formula $a$
+\end_inset
+
+ is given by 
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d}{da}\sum_{n}\left(f\left(x_{n}\right)-ag\left(x_{n}\right)\right)^{2} & = & 0\\
+\sum_{n}g\left(x_{n}\right)\left(f\left(x_{n}\right)-ag\left(x_{n}\right)\right) & = & 0\\
+a & = & \frac{\sum_{n}f\left(x_{n}\right)g\left(x_{n}\right)}{\sum_{n}g\left(x_{n}\right)^{2}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+When you do EM with a mixture of normals, you're maximizing
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L} & = & \frac{1}{n}\sum_{n}\log\left(\sum_{i}\alpha_{i}\phi_{i}\left(x_{n}\right)\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Suppose you imagine that you have an 
+\begin_inset Formula $f\left(x_{n}\right)n$
+\end_inset
+
+ points at each 
+\begin_inset Formula $x_{n}$
+\end_inset
+
+, and take 
+\begin_inset Formula $n\rightarrow\infty$
+\end_inset
+
+.
+ Then 
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L} & = & \sum_{n}f\left(x_{n}\right)\log\left(\sum_{i}\alpha_{i}\phi_{i}\left(x_{n}\right)\right)\\
+\sum_{n}\frac{f\left(x_{n}\right)}{\sum_{i}\alpha_{i}\phi_{i}\left(x_{n}\right)}\frac{d}{d\theta}\left(\sum_{i}\alpha_{i}\phi_{i}\left(x_{n}\right)\right) & = & 0
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+It's not obvious what this is doing.
+ How about
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L} & = & \sum_{n}f\left(x_{n}\right)\left(\sum_{i}\alpha_{i}z_{n}\log\left(\phi_{i}\left(x_{n}\right)\right)\right)\\
+ & = & \sum_{i}\alpha_{i}\sum_{n}z_{n}f\left(x_{n}\right)\log\left(\phi_{i}\left(x_{n}\right)\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+What we really want is (for a fixed 
+\begin_inset Formula $a$
+\end_inset
+
+)
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L} & = & \sum_{n}\left(f\left(x_{n}\right)-g\left(x_{n}\right)\right)^{2}\\
+ & = & \sum_{n}\left(f\left(x_{n}\right)-\alpha\sum_{i}w_{i}\phi\left(x_{n}\right)\right)^{2}\Rightarrow\\
+\sum_{n}\left(f\left(x_{n}\right)-ag\left(x_{n}\right)\right)\frac{dg}{d\theta}\vert_{x_{n}} & = & 0
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Now, 
+\begin_inset Formula 
+\begin{eqnarray*}
+g\left(x;\theta\right) & = & \sum_{i}w_{i}\exp\left(-\frac{1}{2}\left(x-\mu_{i}\right)^{T}V_{i}\left(x-\mu_{i}\right)-\frac{1}{2}\log V_{i}-2\pi\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Look, suppose an observation 
+\begin_inset Formula $x_{n}$
+\end_inset
+
+ comes with multiplicity 
+\begin_inset Formula $c_{n}$
+\end_inset
+
+.
+ Then maximizing the log likelihood maximizes:
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L} & = & \sum_{n}c_{n}\log g\left(x_{n};\theta\right)\\
+\frac{d\mathcal{L}}{d\theta} & = & \sum_{n}\frac{c_{n}}{g\left(x_{n};\theta\right)}g'\left(x_{n};\theta\right)=0
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+This is not the same as minimizing the squared difference between the two
+ distributions, though a Taylor expansion gives
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{c_{n}}{g\left(x_{n};\theta\right)} & \approx & \frac{c_{n}}{g\left(x_{n};\theta_{0}\right)+g'\left(x_{n};\theta\right)\left(\theta-\theta_{0}\right)}\\
+ & = & \frac{c_{n}g\left(x_{n};\theta_{0}\right)^{-1}}{1+g\left(x_{n};\theta_{0}\right)^{-1}g'\left(x_{n};\theta_{0}\right)\left(\theta-\theta_{0}\right)}\\
+ & \approx & c_{n}g\left(x_{n};\theta_{0}\right)^{-1}-c_{n}g\left(x_{n};\theta_{0}\right)^{-1}g\left(x_{n};\theta_{0}\right)^{-1}g'\left(x_{n};\theta_{0}\right)\left(\theta-\theta_{0}\right)\\
+ & = & c_{n}g\left(x_{n};\theta_{0}\right)^{-1}-c_{n}g\left(x_{n};\theta_{0}\right)^{-1}\frac{d}{d\theta}\log g\left(x_{n};\theta\right)\vert_{\theta_{0}}\left(\theta-\theta_{0}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+so that
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d\mathcal{L}}{d\theta} & = & \sum_{n}\frac{c_{n}}{g\left(x_{n};\theta\right)}g\left(x_{n};\theta\right)\frac{d}{d\theta}\log g\left(x_{n};\theta\right)\vert_{\theta}\\
+ & = & \sum_{n}\left(c_{n}\frac{d}{d\theta}\log g\left(x_{n};\theta\right)\vert_{\theta}-c_{n}\frac{d}{d\theta}\log g\left(x_{n};\theta\right)\vert_{\theta_{0}}\frac{d}{d\theta}\log g\left(x_{n};\theta\right)\vert_{\theta}\left(\theta-\theta_{0}\right)\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Not sure this is going anywhere.
+ Suppose that at each point,
+\begin_inset Formula 
+\begin{eqnarray*}
+f\left(x_{n}\right) & \sim & N\left(g\left(x_{n}\right),1\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Then 
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L} & = & -\frac{1}{2}\sum_{n}\left(f\left(x_{n}\right)-g\left(x_{n}\right)\right)^{2}\\
+ & \propto & \sum_{n}\left(g\left(x_{n}\right)^{2}-2f\left(x_{n}\right)g\left(x_{n}\right)\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Is this in any way approximately
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L} & = & \sum_{n}f\left(x_{n}\right)\log g\left(x_{n}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+? Not really.
+\end_layout
+
+\end_body
+\end_document
