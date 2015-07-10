@@ -208,20 +208,20 @@ function test_ray_crossing()
     v2 = Float64[1, 1]
     r = Float64[1, 0]
 
-    @assert Util.ray_crossing(p, r, v1, v2)
-    @assert Util.ray_crossing(p, r, v2, v1)
-    @assert !Util.ray_crossing(p, -r, v1, v2)
-    @assert !Util.ray_crossing(p, -r, v2, v1)
+    @assert WCS.ray_crossing(p, r, v1, v2)
+    @assert WCS.ray_crossing(p, r, v2, v1)
+    @assert !WCS.ray_crossing(p, -r, v1, v2)
+    @assert !WCS.ray_crossing(p, -r, v2, v1)
 
     # Check a line segment that is missed in both directions.
     p = Float64[0.5, 0.5]
     v1 = Float64[1, 1]
     v2 = Float64[1, 2]
     r = Float64[1, 0]
-    @assert !Util.ray_crossing(p, r, v1, v2)
-    @assert !Util.ray_crossing(p, r, v2, v1)
-    @assert !Util.ray_crossing(p, -r, v1, v2)
-    @assert !Util.ray_crossing(p, -r, v2, v1)
+    @assert !WCS.ray_crossing(p, r, v1, v2)
+    @assert !WCS.ray_crossing(p, r, v2, v1)
+    @assert !WCS.ray_crossing(p, -r, v1, v2)
+    @assert !WCS.ray_crossing(p, -r, v2, v1)
 
     # Check a line segment that intersects a vertex.
     # Expect that intersecting v2 counts as an intersection
@@ -230,10 +230,10 @@ function test_ray_crossing()
     v1 = Float64[1, 1]
     v2 = Float64[1, 2]
     r = Float64[1, 0]
-    @assert Util.ray_crossing(p, r, v1, v2)
-    @assert !Util.ray_crossing(p, r, v2, v1)
-    @assert !Util.ray_crossing(p, -r, v1, v2)
-    @assert !Util.ray_crossing(p, -r, v2, v1)
+    @assert WCS.ray_crossing(p, r, v1, v2)
+    @assert !WCS.ray_crossing(p, r, v2, v1)
+    @assert !WCS.ray_crossing(p, -r, v1, v2)
+    @assert !WCS.ray_crossing(p, -r, v2, v1)
 
 
     # Check parallel cases.
@@ -246,15 +246,15 @@ function test_ray_crossing()
     r = Float64[0, 1]
 
     p = Float64[0.5, 0.5]
-    @assert !Util.ray_crossing(p, r, v1, v2)
+    @assert !WCS.ray_crossing(p, r, v1, v2)
 
     p = Float64[1, 0.5]
-    @assert Util.ray_crossing(p, r, v1, v2)
-    @assert !Util.ray_crossing(p, r, v2, v1)
+    @assert WCS.ray_crossing(p, r, v1, v2)
+    @assert !WCS.ray_crossing(p, r, v2, v1)
 
     p = v2
-    @assert Util.ray_crossing(p, r, v1, v2)
-    @assert !Util.ray_crossing(p, r, v2, v1)
+    @assert WCS.ray_crossing(p, r, v1, v2)
+    @assert !WCS.ray_crossing(p, r, v2, v1)
 
     # Parallel to x-axis:
     v1 = Float64[-1, 1]
@@ -262,15 +262,15 @@ function test_ray_crossing()
     r = Float64[1, 0]
 
     p = Float64[0.5, 0.5]
-    @assert !Util.ray_crossing(p, r, v1, v2)
+    @assert !WCS.ray_crossing(p, r, v1, v2)
 
     p = Float64[0.5, 1]
-    @assert Util.ray_crossing(p, r, v1, v2)
-    @assert !Util.ray_crossing(p, r, v2, v1)
+    @assert WCS.ray_crossing(p, r, v1, v2)
+    @assert !WCS.ray_crossing(p, r, v2, v1)
 
     p = v2
-    @assert Util.ray_crossing(p, r, v1, v2)
-    @assert !Util.ray_crossing(p, r, v2, v1)
+    @assert WCS.ray_crossing(p, r, v1, v2)
+    @assert !WCS.ray_crossing(p, r, v2, v1)
 
     # Not parallel to an axis:
     v1 = Float64[-1, -1]
@@ -278,15 +278,15 @@ function test_ray_crossing()
     r = Float64[1, 1]
 
     p = Float64[1.5, 0.5]
-    @assert !Util.ray_crossing(p, r, v1, v2)
+    @assert !WCS.ray_crossing(p, r, v1, v2)
 
     p = Float64[0.5, 0.5]
-    @assert Util.ray_crossing(p, r, v1, v2)
-    @assert !Util.ray_crossing(p, r, v2, v1)
+    @assert WCS.ray_crossing(p, r, v1, v2)
+    @assert !WCS.ray_crossing(p, r, v2, v1)
 
     p = v2
-    @assert Util.ray_crossing(p, r, v1, v2)
-    @assert !Util.ray_crossing(p, r, v2, v1)
+    @assert WCS.ray_crossing(p, r, v1, v2)
+    @assert !WCS.ray_crossing(p, r, v2, v1)
 end
 
 

@@ -301,7 +301,7 @@ function accum_star_pos!(bmc::BvnComponent,
     # TODO: does this need to change for world coordiantes?
     dfs0m_dpix = Float64[f .* py1, f .* py2]
     #dfs0m_dworld = Util.pixel_deriv_to_world_deriv(wcs, dfs0m_dpix, x)
-    dfs0m_dworld = wcs_jacobian * dfs0m_dpix
+    dfs0m_dworld = wcs_jacobian' * dfs0m_dpix
     fs0m.d[star_ids.u[1]] += dfs0m_dworld[1]
     fs0m.d[star_ids.u[2]] += dfs0m_dworld[2]
 
@@ -333,7 +333,7 @@ function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
     # TODO: does this need to change for world coordiantes?
     dfs1m_dpix = Float64[f .* py1, f .* py2]
     #dfs1m_dworld = Util.pixel_deriv_to_world_deriv(wcs, dfs1m_dpix, x)
-    dfs1m_dworld = wcs_jacobian * dfs1m_dpix
+    dfs1m_dworld = wcs_jacobian' * dfs1m_dpix
     fs1m.d[gal_ids.u[1]] += dfs1m_dworld[1]
     fs1m.d[gal_ids.u[2]] += dfs1m_dworld[2]
 
@@ -608,7 +608,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
             # Convert the pixel location to world coordinates.
             #m_pos = Util.pixel_to_world(tile.img.wcs, Float64[h, w])
             m_pos = Float64[h, w]
-            wcs_jacobian = Util.pixel_world_jacobian(tile.img.wcs, m_pos)
+            wcs_jacobian = WCS.pixel_world_jacobian(tile.img.wcs, m_pos)
             for child_s in 1:length(tile_sources)
                 parent_s = tile_sources[child_s]
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
