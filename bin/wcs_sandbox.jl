@@ -54,13 +54,14 @@ sort(obj_df[obj_df[:is_gal] .== false, :], cols=:psfflux_r, rev=true)
 #objid = "1237662226208063632" # A bright galaxy
 #objid = "1237662226208063541" # A bright star but with lots of bad pixels
 #objid = "1237662226208063551" # A bright star but with lots of bad pixels
-objid = "1237662226208063565" # A bright star
+objid = "1237662226208063491" # A bright star ... bad pixels though
+#objid = "1237662226208063565" # A bright star
 
 
 #sub_rows_x = 1:150
 #sub_rows_y = 1:150
 
-width = 8
+width = 13
 
 blob = deepcopy(original_blob);
 reset_crpix!(blob);
@@ -149,6 +150,11 @@ for b=1:5
     fit_psfs[b] = PSF.get_psf_at_point(blob[b].psf)
 end
 
+b = 5
+writedlm("/tmp/raw_psf_$b.csv", raw_psfs[4], ',')
+writedlm("/tmp/fit_psf_$b.csv", fit_psfs[4], ',')
+writedlm("/tmp/pixels_$b.csv", blob[b].pixels, ',')
+
 # The PSF is not great but it doesn't look so bad that it will
 # completely destroy the ability to do inference.
 nz = 16:35
@@ -174,7 +180,8 @@ compare_solutions(mp, initial_mp)
 # DataFrame(name=ids_names, d=lik.d[:,1])
 
 
-# This gives pretty different values.
+# This gives pretty different values.  Note! It is getting the wrong pixels from
+# the sky and bias columns because of the re-sizing...
 for b=1:5
 	# Try non-varying background.
 	blob[b].constant_background = true
