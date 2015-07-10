@@ -49,9 +49,8 @@ end
 
 
 function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
-    # TODO: move this to use world coordinates.
     for k in 1:length(img0.psf)
-        the_mean = ce.pos + img0.psf[k].xiBar
+        the_mean = Util.world_to_pixel(img0.wcs, ce.pos) + img0.psf[k].xiBar
         the_cov = img0.psf[k].tauBar
         intensity = ce.star_fluxes[img0.b] * img0.iota * img0.psf[k].alphaBar
         write_gaussian(the_mean, the_cov, intensity, pixels)
@@ -60,7 +59,6 @@ end
 
 
 function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
-    # TODO: move this to use world coordinates.
     e_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
 
     XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
@@ -68,7 +66,8 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
     for i in 1:2
         for gproto in galaxy_prototypes[i]
             for k in 1:length(img0.psf)
-                the_mean = ce.pos + img0.psf[k].xiBar
+                the_mean = Util.world_to_pixel(img0.wcs, ce.pos) +
+                           img0.psf[k].xiBar
                 the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
                 intensity = ce.gal_fluxes[img0.b] * img0.iota *
                     img0.psf[k].alphaBar * e_devs[i] * gproto.etaBar
@@ -78,7 +77,7 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
     end
 end
 
-function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
+function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; identity_wcs=true)
     pixels = reshape(float(rand(Distributions.Poisson(img0.epsilon * img0.iota),
                      img0.H * img0.W)), img0.H, img0.W)
 
@@ -86,7 +85,8 @@ function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
         body.is_star ? write_star(img0, body, pixels) : write_galaxy(img0, body, pixels)
     end
 
-    return Image(img0.H, img0.W, pixels, img0.b, SDSS.wcs_id, img0.epsilon,
+    wcs = identity_wcs ? SDSS.wcs_id: img0.wcs 
+    return Image(img0.H, img0.W, pixels, img0.b, wcs, img0.epsilon,
                  img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
 end
 
@@ -94,8 +94,8 @@ end
 Generate a simulated blob based on a vector of catalog entries using
 identity world coordinates.
 """ ->
-function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry})
-    [gen_image(blob0[b], n_bodies) for b in 1:5]
+function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry}; identity_wcs=true)
+    [gen_image(blob0[b], n_bodies, identity_wcs=identity_wcs) for b in 1:5]
 end
 
 
