@@ -159,7 +159,6 @@ round(1000. .* (fit_psfs[b][nz, nz] - raw_psfs[b][nz, nz]), 1)
 println(psf_scales[b])
 
 
-
 for b=1:5
 	# Try varying background.
 	blob[b].constant_background = false
@@ -197,7 +196,6 @@ get_brightness(mp)
 b = 4
 function get_e_g(img, mp)
 	ret = zero_sensitive_float(CanonicalParams, mp.S)
-	img = blob[b]
 	ElboDeriv.elbo_likelihood!(img, mp, ret)
 
 	accum = ret
@@ -216,7 +214,7 @@ function get_e_g(img, mp)
 
 		tile_sources = ElboDeriv.local_sources(tile, mp)
 		h_range, w_range = ElboDeriv.tile_range(tile, mp.tile_width)
-		println("$tile_sources $h_range $w_range")
+		println("Sources: $tile_sources    h,w range: $h_range $w_range")
 
 		# fs0m and fs1m accumulate contributions from all sources
 		fs0m = zero_sensitive_float(StarPosParams)
@@ -242,8 +240,7 @@ function get_e_g(img, mp)
 		                mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
 		                fs0m, fs1m, E_G, var_G, wcs_jacobian)
 		        end
-		        println(E_G.v)
-		        e_image[h, w] = E_G.v
+		        e_image[h, w] = E_G.v * tile.img.iota
 		        ElboDeriv.accum_pixel_ret!(tile_sources, this_pixel, tile.img.iota,
 		            E_G, var_G, accum)
 		    end
@@ -260,6 +257,56 @@ W = blob[2].W
 [ round(e_images[b][i, j] - blob[b].pixels[i, j] / blob[b].iota, 1) for i=1:H, j=1:W, b=1:5 ]
 
 
+###############
+# Synthetic data
+blob0 = deepcopy(blob);
+
+function perturb_params(mp) # for testing derivatives != 0
+    for vs in mp.vp
+        vs[ids.a] = [ 0.4, 0.6 ]
+        vs[ids.u[1]] += 1e-3
+        vs[ids.u[2]] -= 1e-3
+        vs[ids.r1] /= 10
+        vs[ids.r2] *= 25.
+        vs[ids.e_dev] += 0.05
+        vs[ids.e_axis] += 0.05
+        vs[ids.e_angle] += pi/10
+        vs[ids.e_scale] *= 1.2
+        vs[ids.c1] += 0.5
+        vs[ids.c2] =  1e-1
+    end
+end
+
+const sample_star_fluxes = [
+    4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
+const sample_galaxy_fluxes = [
+    1.377666E+01, 5.635334E+01, 1.258656E+02,
+    1.884264E+02, 2.351820E+02] * 100  # 1x wasn't bright enough
+
+function sample_ce(pos, is_star::Bool)
+    CatalogEntry(pos, is_star, sample_star_fluxes, sample_galaxy_fluxes,
+        0.1, .7, pi/4, 4.)
+end
+
+one_body = [sample_ce(cat_entries[1].pos, true),];
+synth_blob = Synthetic.gen_blob(blob0, one_body; identity_wcs=false);
+for b=1:5
+	synth_blob[b].constant_background = true
+end
+cat_mp = ModelInit.cat_init(one_body);
+initial_mp = deepcopy(cat_mp);
+perturb_params(initial_mp);
+#get_e_g(synth_blob[3], initial_mp)
+#synth_blob[3].pixels
+
+mp = deepcopy(initial_mp);
+#res = OptimizeElbo.maximize_elbo(synth_blob, mp);
+res = OptimizeElbo.maximize_likelihood(synth_blob, mp);
+compare_solutions(initial_mp, mp)
+compare_solutions(cat_mp, mp)
+
+get_brightness(mp)
+sample_star_fluxes
 
 
 #############################

@@ -163,6 +163,7 @@ const rect_rescaling = ones(length(CanonicalParams))
 # Rescale some parameters to have similar dimensions to everything else.
 [rect_rescaling[id] *= 1e-3 for id in ids.r1]
 [rect_rescaling[id] *= 1e5 for id in ids.u]
+# TODO: perhaps a should also be rescaled?
 
 rect_unchanged_ids = [ "u", "r1", "r2",
                        "e_dev", "e_axis", "e_angle", "e_scale",

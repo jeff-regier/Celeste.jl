@@ -60,7 +60,7 @@ function gen_sample_star_dataset(; perturb=true)
         blob0[b].H, blob0[b].W = 20, 23
     end
     one_body = [sample_ce([10.1, 12.2], true),]
-       blob = Synthetic.gen_blob(blob0, one_body)
+    blob = Synthetic.gen_blob(blob0, one_body)
     mp = ModelInit.cat_init(one_body)
     if perturb
         perturb_params(mp)
