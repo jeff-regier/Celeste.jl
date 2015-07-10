@@ -4,6 +4,7 @@ using Base.Test
 using Distributions
 using SampleData
 
+import WCS
 
 function true_star_init()
     blob, mp, body = gen_sample_star_dataset(perturb=false)
@@ -202,10 +203,10 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries)
 
-    ce_pix_locs = [ [ Util.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ] for ce in cat_entries ]
+    ce_pix_locs = [ [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ] for ce in cat_entries ]
 
     function ce_inbounds(ce)
-        pix_locs = [ Util.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ]
+        pix_locs = [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ]
         inbounds(pos) = pos[1] > -10. && pos[2] > -10 &&
                         pos[1] < 61 && pos[2] < 61
         all([ inbounds(pos) for pos in pix_locs ])

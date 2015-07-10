@@ -3,8 +3,10 @@ using CelesteTypes
 using Base.Test
 using Distributions
 using SampleData
-import Synthetic
 using Transform
+
+import Synthetic
+import WCS
 
 import GSL.deriv_central
 
@@ -70,7 +72,7 @@ function test_accum_pos_derivs()
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp, blob[3].wcs)
         fs0m = zero_sensitive_float(StarPosParams)
         m_pos = Float64[9, 10.]
-        wcs_jacobian = Util.pixel_world_jacobian(blob[3].wcs, m_pos)
+        wcs_jacobian = WCS.pixel_world_jacobian(blob[3].wcs, m_pos)
         ElboDeriv.accum_star_pos!(star_mcs[1,1], m_pos, fs0m, wcs_jacobian)
         fs0m
     end
@@ -80,7 +82,7 @@ function test_accum_pos_derivs()
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp, blob[3].wcs)
         fs1m = zero_sensitive_float(GalaxyPosParams)
         m_pos = Float64[9, 10]
-        wcs_jacobian = Util.pixel_world_jacobian(blob[3].wcs, m_pos)
+        wcs_jacobian = WCS.pixel_world_jacobian(blob[3].wcs, m_pos)
         ElboDeriv.accum_galaxy_pos!(gal_mcs[1,1,1,1], m_pos, fs1m, wcs_jacobian)
         fs1m
     end
@@ -99,7 +101,7 @@ function test_accum_pixel_source_derivs()
         var_G = zero_sensitive_float(CanonicalParams)
         sb = ElboDeriv.SourceBrightness(mmp.vp[1])
         m_pos = [9, 10.]
-        wcs_jacobian = Util.pixel_world_jacobian(blob[1].wcs, m_pos)
+        wcs_jacobian = WCS.pixel_world_jacobian(blob[1].wcs, m_pos)
         ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
             mmp.vp[1], 1, 1, m_pos, 1, fs0m, fs1m, E_G, var_G, wcs_jacobian)
         E_G
@@ -114,7 +116,7 @@ function test_accum_pixel_source_derivs()
         var_G = zero_sensitive_float(CanonicalParams)
         sb = ElboDeriv.SourceBrightness(mmp.vp[1])
         m_pos = [9, 10.]
-        wcs_jacobian = Util.pixel_world_jacobian(blob[3].wcs, m_pos)
+        wcs_jacobian = WCS.pixel_world_jacobian(blob[3].wcs, m_pos)
         ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
             mmp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G, wcs_jacobian)
         var_G

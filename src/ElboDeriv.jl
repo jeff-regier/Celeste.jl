@@ -6,6 +6,7 @@ VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
 import KL
 import Util
+import WCS
 import WCSLIB
 
 @doc """
@@ -228,7 +229,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSL
     for s in 1:mp.S
         vs = mp.vp[s]
         # TODO: make a decision here
-        m_pos = Util.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
+        m_pos = WCS.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
         #m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
 
         # Convolve the star locations with the PSF.
@@ -242,7 +243,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSL
         for i = 1:Ia
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
-            m_pos = Util.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
+            m_pos = WCS.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
             #m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
@@ -300,7 +301,7 @@ function accum_star_pos!(bmc::BvnComponent,
 
     # TODO: does this need to change for world coordiantes?
     dfs0m_dpix = Float64[f .* py1, f .* py2]
-    #dfs0m_dworld = Util.pixel_deriv_to_world_deriv(wcs, dfs0m_dpix, x)
+    #dfs0m_dworld = WCS.pixel_deriv_to_world_deriv(wcs, dfs0m_dpix, x)
     dfs0m_dworld = wcs_jacobian' * dfs0m_dpix
     fs0m.d[star_ids.u[1]] += dfs0m_dworld[1]
     fs0m.d[star_ids.u[2]] += dfs0m_dworld[2]
@@ -332,7 +333,7 @@ function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
 
     # TODO: does this need to change for world coordiantes?
     dfs1m_dpix = Float64[f .* py1, f .* py2]
-    #dfs1m_dworld = Util.pixel_deriv_to_world_deriv(wcs, dfs1m_dpix, x)
+    #dfs1m_dworld = WCS.pixel_deriv_to_world_deriv(wcs, dfs1m_dpix, x)
     dfs1m_dworld = wcs_jacobian' * dfs1m_dpix
     fs1m.d[gal_ids.u[1]] += dfs1m_dworld[1]
     fs1m.d[gal_ids.u[2]] += dfs1m_dworld[2]
@@ -533,7 +534,7 @@ function local_sources(tile::ImageTile, mp::ModelParams)
     tile_quad = vcat(tc11', tc12', tc22', tc21')
     pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
     pr = Float64[ mp.patches[s].radius for s=1:mp.S ]
-    bool_vec = Util.sources_near_quadrilateral(pc, pr, tile_quad, tile.img.wcs)
+    bool_vec = WCS.sources_near_quadrilateral(pc, pr, tile_quad, tile.img.wcs)
 
     (collect(1:mp.S))[bool_vec]
 end
@@ -606,7 +607,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
 
             # TODO: could you go back to pixel coordinates here?
             # Convert the pixel location to world coordinates.
-            #m_pos = Util.pixel_to_world(tile.img.wcs, Float64[h, w])
+            #m_pos = WCS.pixel_to_world(tile.img.wcs, Float64[h, w])
             m_pos = Float64[h, w]
             wcs_jacobian = WCS.pixel_world_jacobian(tile.img.wcs, m_pos)
             for child_s in 1:length(tile_sources)
