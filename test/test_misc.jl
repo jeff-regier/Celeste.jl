@@ -14,6 +14,7 @@ function test_local_sources()
     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
+        blob0[b].wcs = WCS.wcs_id
     end
 
     three_bodies = [
