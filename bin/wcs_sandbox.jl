@@ -7,6 +7,7 @@ using SampleData
 import SDSS
 import PSF
 import FITSIO
+import WCS
 #import PyPlot
 
 # Some examples of the SDSS fits functions.
@@ -69,12 +70,12 @@ cat_df = deepcopy(original_cat_df);
 cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]]);
 obj_row = original_cat_df[:objid] .== objid;
 obj_loc = convert(Array, original_cat_df[obj_row, [:ra, :dec]])'[:]
-#[ Util.world_to_pixel(blob[b].wcs, obj_loc) for b=1:5]
+#[ WCS.world_to_pixel(blob[b].wcs, obj_loc) for b=1:5]
 entry_in_range = Bool[true for i=1:size(cat_loc, 1) ];
 x_ranges = zeros(2, 5)
 y_ranges = zeros(2, 5)
 for b=1:5
-	obj_loc_pix = Util.world_to_pixel(blob[b].wcs, obj_loc)
+	obj_loc_pix = WCS.world_to_pixel(blob[b].wcs, obj_loc)
 	sub_rows_x = floor(obj_loc_pix[1] - width):ceil(obj_loc_pix[1] + width)
 	sub_rows_y = floor(obj_loc_pix[2] - width):ceil(obj_loc_pix[2] + width)
 	x_min = minimum(collect(sub_rows_x))
@@ -84,7 +85,7 @@ for b=1:5
 	x_ranges[:, b] = Float64[x_min, x_max]
 	y_ranges[:, b] = Float64[y_min, y_max]
 
-	wcs_range = Util.world_to_pixel(blob[b].wcs, cat_loc)
+	wcs_range = WCS.world_to_pixel(blob[b].wcs, cat_loc)
 	entry_in_range = entry_in_range &
 		(x_min .<= wcs_range[:, 1] .<= x_max) &
 		(y_min .<= wcs_range[:, 2] .<= y_max)
@@ -107,7 +108,7 @@ initial_mp = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
 
 # Check the re-centering
 for b=1:5
-	println(Util.world_to_pixel(blob[b].wcs, obj_loc))
+	println(WCS.world_to_pixel(blob[b].wcs, obj_loc))
 end
 
 ##############################
@@ -143,7 +144,7 @@ fit_psfs = Array(Array{Float64, 2}, 5)
 raw_psfs = Array(Array{Float64, 2}, 5)
 psf_scales = Array(Float64, 5)
 for b=1:5
-	psf_point = Util.world_to_pixel(blob[b].wcs, obj_loc) + Float64[ x_ranges[1, b], y_ranges[1, b]]
+	psf_point = WCS.world_to_pixel(blob[b].wcs, obj_loc) + Float64[ x_ranges[1, b], y_ranges[1, b]]
     raw_psf = PSF.get_psf_at_point(psf_point[1], psf_point[2], blob[b].raw_psf_comp);
     raw_psfs[b] = raw_psf / sum(raw_psf)
     psf_scales[b] = sum(raw_psf)
@@ -251,7 +252,7 @@ function get_e_g(img, mp)
 		        clear!(var_G)
 
 		        m_pos = Float64[h, w]
-		        wcs_jacobian = Util.pixel_world_jacobian(tile.img.wcs, m_pos)'
+		        wcs_jacobian = WCS.pixel_world_jacobian(tile.img.wcs, m_pos)'
 		        for child_s in 1:length(tile_sources)
 		            parent_s = tile_sources[child_s]
 		            ElboDeriv.accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
@@ -332,8 +333,8 @@ sample_star_fluxes
 
 #############################
 # Plot our image.
-pix_loc = Util.world_to_pixel(blob[b].wcs, cat_loc)
-Util.pixel_to_world(blob[b].wcs, pix_loc)
+pix_loc = WCS.world_to_pixel(blob[b].wcs, cat_loc)
+WCS.pixel_to_world(blob[b].wcs, pix_loc)
 PyPlot.close("all")
 for b=1:5
 #for b=4
@@ -355,7 +356,7 @@ for b=1:5
 	PyPlot.imshow(pixel_graph', cmap=PyPlot.ColorMap("gray"), interpolation = "nearest")
 	# Expect that x_min and y_min are at least one and so take care of the PyPlot offset --
 	# could write - (x_min - 1) - 1.
-	cat_px = Util.world_to_pixel(blob[b].wcs, cat_loc)
+	cat_px = WCS.world_to_pixel(blob[b].wcs, cat_loc)
 	PyPlot.scatter(cat_px[:, 1] - x_min, cat_px[:, 2] - y_min, marker="o", c="r", s=25)
 
 	obj_row = cat_df[:objid] .== objid 
@@ -410,7 +411,7 @@ poly_graph = vcat(poly, poly[1,:])
 
 PyPlot.plot(poly_graph[:,1],  poly_graph[:,2], "k")
 
-in_poly = [ (x, y, Util.point_within_radius_of_polygon(Float64[x, y], radius, poly))
+in_poly = [ (x, y, WCS.point_within_radius_of_polygon(Float64[x, y], radius, poly))
             for x in -3:0.1:6, y in -3:0.1:6 ]
 for p in in_poly
 	if p[3]
@@ -423,7 +424,7 @@ end
 # Check the likelihood time
 
 # Is this too slow?
-@time Util.pixel_deriv_to_world_deriv(original_blob[1].wcs, [1., 2.], [2., 4.])
+@time WCS.pixel_deriv_to_world_deriv(original_blob[1].wcs, [1., 2.], [2., 4.])
 
 mp = deepcopy(initial_mp);
 lik_time = @time lik = ElboDeriv.elbo_likelihood(blob, mp);

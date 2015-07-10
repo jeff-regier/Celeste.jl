@@ -8,6 +8,7 @@ import SDSS
 import PSF
 import FITSIO
 import PyPlot
+import WCS
 
 # Some examples of the SDSS fits functions.
 field_dir = joinpath(dat_dir, "sample_field")
@@ -131,5 +132,5 @@ wcs_id = WCSLIB.wcsprm(2,
 			           crval = Float64[1, 1])
 
 rand_coord = rand(10, 2)
-Util.pixel_to_world(wcs_id, rand_coord) == rand_coord
-Util.world_to_pixel(wcs_id, rand_coord) == rand_coord
+WCS.pixel_to_world(wcs_id, rand_coord) == rand_coord
+WCS.world_to_pixel(wcs_id, rand_coord) == rand_coord

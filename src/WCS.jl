@@ -4,14 +4,26 @@ VERSION < v"0.4.0-dev" && using Docile
 
 import WCSLIB
 
+export sources_near_quadrilateral
+export pixel_deriv_to_world_deriv, world_coordinate_names
+
 
 # Functions for determining whether a point is near or in a poylgon.
 
 @doc """
-Determine whether a ray in direction r from point p
-intersects the edge from v1 to v2 in two dimensions.
-Intersecting the vertex v1 counts as an intersection but
-intersecting v2 does not.
+Determine whether a given ray intersects a line segment.
+
+Args:
+ - p: A point in 2d space
+ - r: A 2d vector.  The direction from p to look for a crossing.
+ - v1: The first point of the line segment.
+ - v2: The second point of the line segment.
+
+ Returns:
+  Whether or not the ray r from point p intersects the line segment
+  (v1, v2). Intersecting the vertex v1 counts as an intersection but
+  intersecting v2 does not.  A point on the ray itself is considered
+  an intersection.
 """ ->
 function ray_crossing(p::Array{Float64, 1}, r::Array{Float64, 1},
                       v1::Array{Float64, 1}, v2::Array{Float64, 1})
@@ -24,11 +36,14 @@ function ray_crossing(p::Array{Float64, 1}, r::Array{Float64, 1},
         # an intersection only if it passes through v2.
         delta_v2p = v2 - p
         if r[1] == 0.
-            return (delta_v2p[1] == 0.) && (delta_v2p[2] == 0. || sign(r[2]) == sign(delta_v2p[2]))
+            return (delta_v2p[1] == 0.) &&
+                   (delta_v2p[2] == 0. || sign(r[2]) == sign(delta_v2p[2]))
         elseif r[2] == 0.
-            return (delta_v2p[2] == 0.) && (delta_v2p[1] == 0. || sign(r[1]) == sign(delta_v2p[1]))
+            return (delta_v2p[2] == 0.) &&
+                   (delta_v2p[1] == 0. || sign(r[1]) == sign(delta_v2p[1]))
         else
-            return (delta_v2p[1] / r[1]) == (delta_v2p[2] / r[2]) && (sign(delta_v2p[1] / r[1]) >= 0.)
+            return (delta_v2p[1] / r[1]) == (delta_v2p[2] / r[2]) &&
+                   (sign(delta_v2p[1] / r[1]) >= 0.)
         end
     else
         sol =  int_mat \ (v1 - p)
@@ -37,12 +52,21 @@ function ray_crossing(p::Array{Float64, 1}, r::Array{Float64, 1},
 end
  
 @doc """
-Use the ray crossing algorithm to determine whether the point p
-is inside a convex polygon with corners v[i, :], i =1:number of edges,
-using the ray-casting algorithm in direction r.
+Returns whether a point p is inside the polygon with verices v.
+
+Args:
+ - p: A point in 2d space.
+ - r: A ray for the ray crossing algorithm.  Any ray should do.
+ - v: An (edge - 1) x 2 matrix of polygon corners.  An edge from the last
+      row to the first is implicit.
+
+Returns:
+	Use the ray crossing algorithm to determine whether the point p
+	is inside a convex polygon with corners v[i, :], i =1:number of edges,
+	using the ray-casting algorithm in direction r.
+
 This assumes the polygon is not self-intersecting, and does not
 handle the edge cases that might arise from non-convex shapes.
-A point on the edge of a polygon is considered to be outside the polygon.
 """ ->
 function point_inside_polygon(p, r, v)
 
@@ -67,7 +91,17 @@ function point_inside_polygon(p, r, v)
     return num_crossings % 2 == 1
 end
 
+@doc """
+Returns whether a point p is within radius of any of the points in v.
 
+Args:
+ - p: A point
+ - radius: A radius
+ - v: An n x 2 matrix of points
+
+Returns:
+ Whether p is radius close to any of the points in v.
+""" ->
 function point_near_polygon_corner(p, radius, v)
     n_vertices = size(v, 1)
     @assert length(p) == size(v, 2)
@@ -84,6 +118,20 @@ function point_near_polygon_corner(p, radius, v)
     return false    
 end
 
+@doc """
+Returns whether a point p is within radius of the line
+segment from v1 to v2 in a direction perpindicular to the
+line segment.
+
+Args:
+ - p: A point
+ - radius: A radius
+ - v1, v2: The endpoints of the line segment.
+
+Returns:
+ Whether p is within radius of the line segment (v1, v2)
+ in a direction perpindicular to (v1, v2).
+""" ->
 function point_near_line_segment(p, radius, v1, v2)
     delta = v2 - v1
     delta = delta / sqrt(dot(delta, delta))
@@ -103,6 +151,18 @@ function point_near_line_segment(p, radius, v1, v2)
 end
 
 
+@doc """
+Returns whether a point p is near the edges of the polygon with verices v.
+
+Args:
+ - p: A point in 2d space.
+ - radius: The distance from the edge.
+ - v: An (edge - 1) x 2 matrix of polygon corners.  An edge from the last
+      row to the first is implicit.
+
+Returns:
+ Whether the point p is within radius of any of the edges of the polygon v.
+""" ->
 function point_near_polygon_edge(p, radius, v)
     n_edges = size(v, 1)
     @assert length(p) == size(v, 2)
@@ -125,6 +185,18 @@ function point_near_polygon_edge(p, radius, v)
 end
 
 
+@doc """
+Returns whether a point p is in or within radius of a polygon.
+
+Args:
+ - p: A point in 2d space.
+ - radius: The distance from the edge.
+ - v: An (edge - 1) x 2 matrix of polygon corners.  An edge from the last
+      row to the first is implicit.
+
+Returns:
+ Whether the point p is in or radius-near the polygon v.
+""" ->
 function point_within_radius_of_polygon(p, radius, v)
     return (point_near_polygon_corner(p, radius, v) |
             point_inside_polygon(p, Float64[1, 0], v) |
@@ -151,8 +223,9 @@ function sources_near_quadrilateral(loc::Array{Float64, 2}, radius::Array{Float6
                                     pix_corners::Array{Float64, 2}, wcs::WCSLIB.wcsprm)
     @assert size(loc, 2) == size(pix_corners, 2) == 2
     @assert size(radius, 1) == size(loc, 1)
-    world_corners = Util.pixel_to_world(wcs, pix_corners)
-    [ Util.point_within_radius_of_polygon(loc[i, :][:], radius[i], world_corners) for i=1:size(loc, 1)]
+    world_corners = WCS.pixel_to_world(wcs, pix_corners)
+    [ point_within_radius_of_polygon(loc[i, :][:],
+    	radius[i], world_corners) for i=1:size(loc, 1)]
 end
 
 
@@ -245,14 +318,16 @@ from pixel to world coordinates.
 Args:
  - wcs: The world coordinate system
  - pix_loc: The location at which to evaluate the jacobian
- - world_delt: The step size for the finite difference approximation in world coordinates
+ - world_delt: The step size for the finite difference
+               approximation in world coordinates
 
 Returns:
  - The jacobian of the transform pixel_coord = F(world_coord).  Following the
    standard definition, the pixel coordinates vary across rows and the world
    coordinates across columns.
 """ ->
-function pixel_world_jacobian(wcs::WCSLIB.wcsprm, pix_loc::Array{Float64, 1}; world_delt=1e-3)
+function pixel_world_jacobian(wcs::WCSLIB.wcsprm, pix_loc::Array{Float64, 1};
+	                          world_delt=1e-3)
     world_loc = pixel_to_world(wcs, pix_loc)
     world_delt = Float64[world_delt, world_delt]
 
@@ -272,7 +347,8 @@ Args:
  - wcs: The world coordinate system object
  - df_dpix: The derivative of a scalar function with respect to pixel coordinates
  - pix_loc: The pixel location at which the derivative was taken.
- - world_delt: The step size for the finite difference approximation in world coordinates
+ - world_delt: The step size for the finite difference
+               approximation in world coordinates
 
 Returns:
  - The derivative with respect to world coordinates.
