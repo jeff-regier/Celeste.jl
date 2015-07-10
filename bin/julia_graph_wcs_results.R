@@ -16,6 +16,7 @@ ReadJuliaCSV <- function(filename) {
 }
 
 images <- data.frame()
+psfs <- data.frame()
 for (b in 1:5) {
   
   raw_psf <- ReadJuliaCSV(sprintf("/tmp/raw_psf_%d.csv", b))
@@ -27,11 +28,16 @@ for (b in 1:5) {
   pixels$image <- "pixels"
   synth_pixels$image <- "synthetic"
   e_image$image <- "fit"
-  pixels$b <- synth_pixels$b <- e_image$b <- b
+  pixels$b <- synth_pixels$b <- e_image$b <- raw_psf$b <- fit_psf$b <- b
+  
+  raw_psf$image <- "raw"
+  fit_psf$image <- "fit"
   
   images <- rbind(images, rbind(pixels, synth_pixels, e_image))  
+  psfs <- rbind(psfs, raw_psf, fit_psf)
 }
 images2 <- dcast(images, row + col + b ~ image)
+psfs2 <- dcast(psfs, row + col + b ~ image)
 
 ggplot(images) +
   geom_tile(aes(x=row, y=col, fill=value, group=image)) +
@@ -57,13 +63,15 @@ grid.arrange(
   ncol=3
 )
 
+ggplot(filter(psfs2, row >= 20, row <= 31, col >= 20, col <= 31)) +
+  geom_raster(aes(x=row, y=col, fill=raw - fit)) + ggtitle("PSF difference")
 
 grid.arrange(
   ggplot(filter(raw_psf, row >= 20, row <= 31, col >= 20, col <= 31)) +
-    geom_raster(aes(x=row, y=col, fill=value))
+    geom_raster(aes(x=row, y=col, fill=value)) + ggtitle("Raw PSF")
   ,
   ggplot(filter(fit_psf, row >= 20, row <= 31, col >= 20, col <= 31)) +
-    geom_raster(aes(x=row, y=col, fill=value))
+    geom_raster(aes(x=row, y=col, fill=value)) + ggtitle("Fit PSF")
   ,
   ncol=2
 )
