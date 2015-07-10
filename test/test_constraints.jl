@@ -35,6 +35,6 @@ function test_parameter_conversion(transform::DataTransform)
 	end
 end
 
-for trans in [ rect_transform free_transform ]
+for trans in [ pixel_rect_transform world_rect_transform free_transform ]
 	test_parameter_conversion(trans)
 end
