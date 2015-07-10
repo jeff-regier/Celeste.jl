@@ -393,8 +393,8 @@ end
 
 function test_id_wcs()
     rand_coord = rand(10, 2)
-    @assert WCS.pixel_to_world(SDSS.wcs_id, rand_coord) == rand_coord
-    @assert WCS.world_to_pixel(SDSS.wcs_id, rand_coord) == rand_coord
+    @assert WCS.pixel_to_world(WCS.wcs_id, rand_coord) == rand_coord
+    @assert WCS.world_to_pixel(WCS.wcs_id, rand_coord) == rand_coord
 end
 
 

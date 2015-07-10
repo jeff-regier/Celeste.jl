@@ -132,5 +132,5 @@ wcs_id = WCSLIB.wcsprm(2,
 			           crval = Float64[1, 1])
 
 rand_coord = rand(10, 2)
-WCS.pixel_to_world(wcs_id, rand_coord) == rand_coord
-WCS.world_to_pixel(wcs_id, rand_coord) == rand_coord
+WCS.pixel_to_world(WCS.wcs_id, rand_coord) == rand_coord
+WCS.world_to_pixel(WCS.wcs_id, rand_coord) == rand_coord

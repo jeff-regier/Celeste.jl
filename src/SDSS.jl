@@ -12,13 +12,6 @@ import Util
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
-# A world coordinate system where the world and pixel coordinates are the same.
-const wcs_id = WCSLIB.wcsprm(2,
-                             cd = Float64[1 0; 0 1],
-                             ctype = ["none", "none"],
-                             crpix = Float64[1, 1],
-                             crval = Float64[1, 1]);
-
 
 function load_stamp_blob(stamp_dir, stamp_id)
     function fetch_image(b)
