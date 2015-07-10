@@ -54,14 +54,14 @@ sort(obj_df[obj_df[:is_gal] .== false, :], cols=:psfflux_r, rev=true)
 #objid = "1237662226208063632" # A bright galaxy
 #objid = "1237662226208063541" # A bright star but with lots of bad pixels
 #objid = "1237662226208063551" # A bright star but with lots of bad pixels
-objid = "1237662226208063491" # A bright star ... bad pixels though
-#objid = "1237662226208063565" # A bright star
+#objid = "1237662226208063491" # A bright star ... bad pixels though
+objid = "1237662226208063565" # A brightish star
 
 
 #sub_rows_x = 1:150
 #sub_rows_y = 1:150
 
-width = 13
+width = 4
 
 blob = deepcopy(original_blob);
 reset_crpix!(blob);
@@ -97,6 +97,8 @@ for b=1:5
 	blob[b].pixels = blob[b].pixels[sub_rows_x, sub_rows_y]
 	blob[b].H = size(blob[b].pixels, 1)
 	blob[b].W = size(blob[b].pixels, 2)
+	blob[b].iota_vec = blob[b].iota_vec[x_min:x_max]
+	blob[b].epsilon_mat = blob[b].epsilon_mat[x_min:x_max, y_min:y_max]
 end
 cat_df = cat_df[entry_in_range, :]
 cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
@@ -141,19 +143,27 @@ fit_psfs = Array(Array{Float64, 2}, 5)
 raw_psfs = Array(Array{Float64, 2}, 5)
 psf_scales = Array(Float64, 5)
 for b=1:5
-	psf_point = Util.world_to_pixel(blob[b].wcs, obj_loc)
+	psf_point = Util.world_to_pixel(blob[b].wcs, obj_loc) + Float64[ x_ranges[1, b], y_ranges[1, b]]
     raw_psf = PSF.get_psf_at_point(psf_point[1], psf_point[2], blob[b].raw_psf_comp);
     raw_psfs[b] = raw_psf / sum(raw_psf)
     psf_scales[b] = sum(raw_psf)
-    psf_gmm, scale = PSF.fit_psf_gaussians(raw_psf, tol=1e-12, verbose=true);
+    psf_gmm, scale = PSF.fit_psf_gaussians(raw_psf, tol=1e-9, verbose=false);
     blob[b].psf = PSF.convert_gmm_to_celeste(psf_gmm, scale)
     fit_psfs[b] = PSF.get_psf_at_point(blob[b].psf)
 end
 
-b = 5
-writedlm("/tmp/raw_psf_$b.csv", raw_psfs[4], ',')
-writedlm("/tmp/fit_psf_$b.csv", fit_psfs[4], ',')
-writedlm("/tmp/pixels_$b.csv", blob[b].pixels, ',')
+this_star_fluxes = convert(Array{Float64}, cat_df[[:psfflux_u, :psfflux_g, :psfflux_r, :psfflux_i, :psfflux_z ]])[:]
+synth_cat_entry = CatalogEntry(obj_loc, true, this_star_fluxes, this_star_fluxes, 0.1, .7, pi/4, 4.)
+synth_blob = Synthetic.gen_blob(blob, [synth_cat_entry]; identity_wcs=false, expectation=true);
+
+# Graph things in R since PyPlot is broken.
+# Note that this star doesn't look a ton like the raw psf, especially in band 3.
+for b=1:5
+	writedlm("/tmp/raw_psf_$b.csv", raw_psfs[4], ',')
+	writedlm("/tmp/fit_psf_$b.csv", fit_psfs[4], ',')
+	writedlm("/tmp/pixels_$b.csv", blob[b].pixels, ',')
+	writedlm("/tmp/synth_pixels_$b.csv", synth_blob[b].pixels, ',')
+end
 
 # The PSF is not great but it doesn't look so bad that it will
 # completely destroy the ability to do inference.
@@ -165,6 +175,20 @@ round(1000. .* (fit_psfs[b][nz, nz] - raw_psfs[b][nz, nz]), 1)
 println(psf_scales[b])
 
 
+for b=1:5
+	# Try non-varying background.
+	blob[b].constant_background = true
+end
+#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
+mp_const = deepcopy(initial_mp);
+#res = OptimizeElbo.maximize_elbo(blob, mp_const);
+res = OptimizeElbo.maximize_likelihood(blob, mp_const);
+compare_solutions(mp, mp_const)
+get_brightness(mp_const)
+
+
+# This gives pretty different values.  Note! It is getting the wrong pixels from
+# the sky and bias columns because of the re-sizing...
 for b=1:5
 	# Try varying background.
 	blob[b].constant_background = false
@@ -178,19 +202,6 @@ res = OptimizeElbo.maximize_likelihood(blob, mp);
 compare_solutions(mp, initial_mp)
 # lik = ElboDeriv.elbo_likelihood(blob, mp);
 # DataFrame(name=ids_names, d=lik.d[:,1])
-
-
-# This gives pretty different values.  Note! It is getting the wrong pixels from
-# the sky and bias columns because of the re-sizing...
-for b=1:5
-	# Try non-varying background.
-	blob[b].constant_background = true
-end
-#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
-mp_const = deepcopy(initial_mp);
-#res = OptimizeElbo.maximize_elbo(blob, mp_const);
-res = OptimizeElbo.maximize_likelihood(blob, mp_const);
-compare_solutions(mp, mp_const)
 
 
 # Look.
@@ -258,6 +269,9 @@ function get_e_g(img, mp)
 end
 
 e_images = [ get_e_g(blob[b], mp) for b=1:5 ];
+for b=1:5
+	writedlm("/tmp/e_image_$b.csv", e_images[b], ',')
+end
 
 H = blob[1].H
 W = blob[2].W
