@@ -6,7 +6,7 @@ import WCSLIB
 
 export sources_near_quadrilateral
 export pixel_deriv_to_world_deriv, world_coordinate_names
-
+export wcs_id
 
 # Functions for determining whether a point is near or in a poylgon.
 
@@ -359,5 +359,12 @@ function pixel_deriv_to_world_deriv(wcs::WCSLIB.wcsprm, df_dpix::Array{Float64, 
     trans = pixel_world_jacobian(wcs, pix_loc, world_delt=world_delt)
     trans' * df_dpix
 end
+
+# A world coordinate system where the world and pixel coordinates are the same.
+const wcs_id = WCSLIB.wcsprm(2,
+                             cd = Float64[1 0; 0 1],
+                             ctype = ["none", "none"],
+                             crpix = Float64[1, 1],
+                             crval = Float64[1, 1]);
 
 end

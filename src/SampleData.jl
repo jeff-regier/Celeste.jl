@@ -5,6 +5,7 @@ using Distributions
 using CelesteTypes
 
 import SDSS
+import WCS
 
 import ModelInit
 import Synthetic
@@ -58,6 +59,7 @@ function gen_sample_star_dataset(; perturb=true)
     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
+        blob0[b].wcs = WCS.wcs_id
     end
     one_body = [sample_ce([10.1, 12.2], true),]
     blob = Synthetic.gen_blob(blob0, one_body)
@@ -75,6 +77,7 @@ function gen_sample_galaxy_dataset(; perturb=true)
     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
+        blob0[b].wcs = WCS.wcs_id
     end
     one_body = [sample_ce([8.5, 9.6], false),]
     blob = Synthetic.gen_blob(blob0, one_body)
@@ -92,7 +95,10 @@ function gen_three_body_dataset(; perturb=true)
     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
+        blob0[b].wcs = WCS.wcs_id
     end
+    # Note that the stamps' world coordinates have the same center
+    # for each image.
     three_bodies = [
         sample_ce([4.5, 3.6], false),
         sample_ce([60.1, 82.2], true),

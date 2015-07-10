@@ -108,8 +108,8 @@ function test_that_star_truth_is_most_likely()
     for bad_a in [.3, .5, .9]
         mp_a = deepcopy(mp)
         mp_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ]
-        bad_a = ElboDeriv.elbo_likelihood(blob, mp_a)
-        @test best.v > bad_a.v
+        bad_a_lik = ElboDeriv.elbo_likelihood(blob, mp_a)
+        @test best.v > bad_a_lik.v
     end
 
     for h2 in -2:2

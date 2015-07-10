@@ -87,8 +87,7 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
     end
 end
 
-function gen_image(img0::Image, n_bodies::Vector{CatalogEntry};
-                   identity_wcs=true, expectation=false)
+function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=false)
     if expectation
         pixels = [ img0.epsilon * img0.iota for h=1:img0.H, w=1:img0.W ]
     else
@@ -100,8 +99,7 @@ function gen_image(img0::Image, n_bodies::Vector{CatalogEntry};
         body.is_star ? write_star(img0, body, pixels) : write_galaxy(img0, body, pixels)
     end
 
-    wcs = identity_wcs ? SDSS.wcs_id: img0.wcs 
-    return Image(img0.H, img0.W, pixels, img0.b, wcs, img0.epsilon,
+    return Image(img0.H, img0.W, pixels, img0.b, img0.wcs, img0.epsilon,
                  img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
 end
 
@@ -109,10 +107,8 @@ end
 Generate a simulated blob based on a vector of catalog entries using
 identity world coordinates.
 """ ->
-function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry};
-                  identity_wcs=true, expectation=false)
-    [gen_image(blob0[b], n_bodies, identity_wcs=identity_wcs,
-               expectation=expectation) for b in 1:5]
+function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry}; expectation=false)
+    [gen_image(blob0[b], n_bodies, expectation=expectation) for b in 1:5]
 end
 
 
