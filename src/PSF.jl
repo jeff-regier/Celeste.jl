@@ -5,31 +5,6 @@ VERSION < v"0.4.0-dev" && using Docile
 import CelesteTypes
 import GaussianMixtures
 
-# TODO: synchronize these names and document them.
-@doc """
-Evaluate a gmm object at the data points x_mat.
-""" ->
-function evaluate_gmm(gmm::GaussianMixtures.GMM, x_mat::Array{Float64, 2})
-    post = GaussianMixtures.gmmposterior(gmm, x_mat) 
-    exp(post[2]) * gmm.w;
-end
-
-@doc """
-A version for a single Celeste mixture.
-""" ->
-function get_psf_value(row::Float64, col::Float64, psf::CelesteTypes.PsfComponent)
-    x = Float64[row, col] - psf.xiBar
-    (psf.alphaBar * exp(-0.5 * x' * psf.tauBarInv * x - 0.5 * psf.tauBarLd) / (2 * pi))[1]
-end
-
-
-@doc """
-A version for the celeste mixture of Gaussians.
-""" ->
-function get_psf_at_point(psf_array::Array{CelesteTypes.PsfComponent, 1}; rows=collect(-25:25), cols=collect(-25:25))
-    [ sum([ get_psf_value(float(row), float(col), psf) for psf in psf_array ]) for row in rows, col in cols ]
-end
-
 
 @doc """
 Fit a mixture of 2d Gaussians to a PSF image (evaluated at a single point).
@@ -232,6 +207,34 @@ function get_psf_at_point(row::Float64, col::Float64,
                   (convert(Int64, raw_psf_comp.rnrow), convert(Int64, raw_psf_comp.rncol)))
 
     psf
+end
+
+@doc """
+Return an image of a Celeste GMM PSF evaluated at rows, cols.
+
+Args:
+ - psf_array: The PSF to be evaluated as an array of PsfComponent
+ - rows: The rows in the image (usually in pixel coordinates)
+ - cols: The column in the image (usually in pixel coordinates)
+
+ Returns:
+  - The PSF values at rows and cols.  The default size is the same as
+    that returned by get_psf_at_point applied to FITS header values.
+
+Note that the point in the image at which the PSF is evaluated --
+that is, the center of the image returned by this function -- is
+already implicit in the value of psf_array.
+""" ->
+function get_psf_at_point(psf_array::Array{CelesteTypes.PsfComponent, 1};
+                          rows=collect(-25:25), cols=collect(-25:25))
+
+    function get_psf_value(psf::CelesteTypes.PsfComponent, row::Float64, col::Float64)
+        x = Float64[row, col] - psf.xiBar
+        (psf.alphaBar * exp(-0.5 * x' * psf.tauBarInv * x - 0.5 * psf.tauBarLd) / (2 * pi))[1]
+    end
+
+    [ sum([ get_psf_value(psf, float(row), float(col)) for psf in psf_array ]) for
+      row in rows, col in cols ]
 end
 
 

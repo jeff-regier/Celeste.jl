@@ -91,7 +91,7 @@ function test_that_variance_is_low()
     var_G = zero_sensitive_float(CanonicalParams)
     sb = ElboDeriv.SourceBrightness(mp.vp[1])
     m_pos = Float64[10, 12]
-    wcs_jacobian = Util.pixel_world_jacobian(blob[test_b].wcs, m_pos)
+    wcs_jacobian = WCS.pixel_world_jacobian(blob[test_b].wcs, m_pos)
     ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
         mp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G, wcs_jacobian)
 

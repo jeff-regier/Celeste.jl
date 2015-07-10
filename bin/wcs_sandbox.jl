@@ -251,7 +251,7 @@ function get_e_g(img, mp)
 		        clear!(var_G)
 
 		        m_pos = Float64[h, w]
-		        wcs_jacobian = Util.pixel_world_jacobian(tile.img.wcs, m_pos)
+		        wcs_jacobian = Util.pixel_world_jacobian(tile.img.wcs, m_pos)'
 		        for child_s in 1:length(tile_sources)
 		            parent_s = tile_sources[child_s]
 		            ElboDeriv.accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
