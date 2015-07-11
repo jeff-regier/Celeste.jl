@@ -55,11 +55,11 @@ mp_rect = deepcopy(mp_init);
 omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta[:] ];
 
 lbs_free, ubs_free = OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, free_transform);
-lbs_rect, ubs_rect= OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, rect_transform);
+lbs_rect, ubs_rect= OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, pixel_rect_transform);
 
 mp_rect = deepcopy(mp_init)
 res_rect_iter_count, res_rect_max_f, res_rect_max_x, res_rect_ret =
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp_rect, rect_transform,
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp_rect, pixel_rect_transform,
                             lbs_rect, ubs_rect, omitted_ids=omitted_ids, xtol_rel = 1e-7, ftol_abs = 1e-6)
 
 mp_free = deepcopy(mp_init)
@@ -84,11 +84,11 @@ mp_rect = deepcopy(mp_init);
 omitted_ids = [ids_free.kappa[:], ids_free.lambda[:], ids_free.zeta[:] ];
 
 lbs_free, ubs_free = OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, free_transform);
-lbs_rect, ubs_rect= OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, rect_transform);
+lbs_rect, ubs_rect= OptimizeElbo.get_nlopt_unconstrained_bounds(mp_original.vp, omitted_ids, pixel_rect_transform);
 
 mp_rect_three = deepcopy(mp_init)
 res_rect_iter_count_three, res_rect_max_f_three, res_rect_max_x, res_rect_ret =
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp_rect_three, rect_transform,
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp_rect_three, pixel_rect_transform,
                             lbs_rect, ubs_rect, omitted_ids=omitted_ids, xtol_rel = 1e-7, ftol_abs = 1e-6)
 
 mp_free_three = deepcopy(mp_init)
@@ -116,7 +116,7 @@ mp = ModelInit.peak_init(blob); #one giant tile, giant patches
 
 mp_rect_2body = deepcopy(mp)
 res_rect_iter_count_2body, res_rect_max_f_2body, res_rect_max_x, res_rect_ret =
-    OptimizeElbo.maximize_likelihood(blob, mp_rect_2body, rect_transform)
+    OptimizeElbo.maximize_likelihood(blob, mp_rect_2body, pixel_rect_transform)
 
 mp_free_2body = deepcopy(mp)
 res_free_iter_count_2body, res_free_max_f_2body, res_free_max_x, res_free_ret =
@@ -134,7 +134,7 @@ blob, mp, body = SampleData.gen_sample_galaxy_dataset(perturb=true);
 
 mp_rect_elbo = deepcopy(mp);
 res_rect_iter_count_elbo, res_rect_max_f_elbo, res_rect_max_x, res_rect_ret =
-    OptimizeElbo.maximize_elbo(blob, mp_rect_elbo, rect_transform)
+    OptimizeElbo.maximize_elbo(blob, mp_rect_elbo, pixel_rect_transform)
 
 mp_free_elbo = deepcopy(mp);
 res_free_iter_count_elbo, res_free_max_f_elbo, res_free_max_x, res_free_ret =
@@ -161,7 +161,7 @@ mp = ModelInit.cat_init(cat_entries);
 
 mp_rect_real = deepcopy(mp);
 res_rect_iter_count_real, res_rect_max_f_real, res_rect_max_x, res_rect_ret =
-    OptimizeElbo.maximize_elbo(blob, mp_rect_real, rect_transform)
+    OptimizeElbo.maximize_elbo(blob, mp_rect_real, pixel_rect_transform)
 
 mp_free_real = deepcopy(mp);
 res_free_iter_count_real, res_free_max_f_real, res_free_max_x, res_free_ret =
