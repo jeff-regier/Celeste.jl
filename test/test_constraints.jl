@@ -10,7 +10,7 @@ using Transform
 import ModelInit
 
 function test_parameter_conversion(transform::DataTransform)
-	blob, mp, body = gen_three_body_dataset()
+	blob, mp, body = gen_three_body_dataset();
 	original_vp = deepcopy(mp.vp)
 
 	# Check that the constrain and unconstrain operations undo each other.

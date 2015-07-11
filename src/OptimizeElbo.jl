@@ -147,9 +147,9 @@ end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams;
     omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
-    # Default to the rectangular transform
+    # Default to the world rectangular transform
 
-    maximize_f(f, blob, mp, rect_transform,
+    maximize_f(f, blob, mp, world_rect_transform,
                omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
 end
 
@@ -166,7 +166,7 @@ end
 
 function maximize_elbo(blob::Blob, mp::ModelParams)
     # Default to the rectangular transform.
-    maximize_elbo(blob, mp, rect_transform)
+    maximize_elbo(blob, mp, world_rect_transform)
 end
 
 function maximize_likelihood(blob::Blob, mp::ModelParams, trans::DataTransform; xtol_rel = 1e-7, ftol_abs=1e-6)
@@ -177,7 +177,7 @@ end
 
 function maximize_likelihood(blob::Blob, mp::ModelParams)
     # Default to the rectangular transform.
-    maximize_likelihood(blob, mp, rect_transform)
+    maximize_likelihood(blob, mp, world_rect_transform)
 end
 
 end

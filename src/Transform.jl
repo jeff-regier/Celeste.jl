@@ -162,12 +162,13 @@ const rect_rescaling = ones(length(CanonicalParams))
 
 # Rescale some parameters to have similar dimensions to everything else.
 
+# These are backwards.
 const world_rect_rescaling = ones(length(UnconstrainedParams))
 [world_rect_rescaling[id] *= 1e-3 for id in ids_free.r1]
+[world_rect_rescaling[id] *= 1e5 for id in ids_free.u]
 
 const pixel_rect_rescaling = ones(length(UnconstrainedParams))
 [pixel_rect_rescaling[id] *= 1e-3 for id in ids_free.r1]
-[pixel_rect_rescaling[id] *= 1e5 for id in ids_free.u]
 
 rect_unchanged_ids = [ "u", "r1", "r2",
                        "e_dev", "e_axis", "e_angle", "e_scale",
@@ -210,7 +211,7 @@ function rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams,
     for s = 1:S
         scaled_vp_free = deepcopy(vp_free[s])
         for i = 1:length(ids_free)
-            scaled_vp_free[i] = scaled_vp_free / rect_rescaling[i]
+            scaled_vp_free[i] = scaled_vp_free[i] / rect_rescaling[i]
         end
 
         # Variables that are unaffected by constraints (except for scaling):
@@ -352,7 +353,7 @@ function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
         vp[s][ids.a[2]] = Util.logit(vp_free[s][ids_free.a[1]])
         vp[s][ids.a[1]] = 1.0 - vp[s][ids.a[2]]
 
-	vp[s][ids.e_dev] = Util.logit(vp_free[s][ids_free.e_dev])
+    	vp[s][ids.e_dev] = Util.logit(vp_free[s][ids_free.e_dev])
 
         vp[s][ids.k[1, :]] = Util.logit(vp_free[s][ids_free.k[1, :]])
         vp[s][ids.k[2, :]] = 1.0 - vp[s][ids.k[1, :]]

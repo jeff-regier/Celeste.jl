@@ -99,24 +99,24 @@ function test_kappa_finding(trans::DataTransform)
 
     mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 1]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[1, 2]] > .9
 
     mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[2, 2]] > .9
 
     mp.pp.k[2] = [.9, .1]
     mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 1]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[1, 2]] > .9
 
     mp.pp.k[2] = [.1, .9]
     mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[2, 2]] > .9
 end
 
@@ -136,14 +136,16 @@ function test_bad_a_init()
     mp.vp[1][ids.a] = [ 0.5, 0.5 ]
 
     omitted_ids = [ids_free.a]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp,
+        pixel_rect_transform, omitted_ids=omitted_ids)
 
     mp.vp[1][ids.a] = [ 0.8, 0.2 ]
     elbo_bad = ElboDeriv.elbo_likelihood(blob, mp)
     @test elbo_bad.d[ids.a[2], 1] > 0
 
     omitted_ids = setdiff(1:length(UnconstrainedParams), ids_free.a)
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp,
+        pixel_rect_transform, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.a[2]] >= 0.5
 
     mp2 = deepcopy(mp)
@@ -169,11 +171,13 @@ function test_likelihood_invariance_to_a()
     mp = ModelInit.cat_init([ce,])
     mp.vp[1][ids.a] = [ 0.8, 0.2 ]
     omitted_ids = [ids_free.a, ids_free.r2[:]]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp,
+        pixel_rect_transform, omitted_ids=omitted_ids)
 
     mp2 = ModelInit.cat_init([ce,])
     mp2.vp[1][ids.a] = [ 0.2, 0.8 ]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp2, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp2,
+        pixel_rect_transform, omitted_ids=omitted_ids)
 
     mp.vp[1][ids.a] = [ 0.5, 0.5 ]
     mp2.vp[1][ids.a] = [ 0.5, 0.5 ]
@@ -204,11 +208,13 @@ function test_kl_invariance_to_a()
     mp = ModelInit.cat_init([ce,])
     mp.vp[1][ids.a] = [ 0.2, 0.8 ]
     omitted_ids = [ids_free.a;]
-    OptimizeElbo.maximize_f(kl_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
+    OptimizeElbo.maximize_f(kl_wrapper, blob, mp,
+        pixel_rect_transform, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     mp2 = ModelInit.cat_init([ce,])
     mp2.vp[1][ids.a] = [ 0.8, 0.2 ]
-    OptimizeElbo.maximize_f(kl_wrapper, blob, mp2, omitted_ids=omitted_ids, ftol_abs=1e-9)
+    OptimizeElbo.maximize_f(kl_wrapper, blob, mp2,
+        pixel_rect_transform, omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     mp.vp[1][ids.a] = [ 0.5, 0.5 ]
     mp2.vp[1][ids.a] = [ 0.5, 0.5 ]
@@ -232,11 +238,13 @@ function test_elbo_invariance_to_a()
     mp = ModelInit.cat_init([ce,])
     mp.vp[1][ids.a] = [ 0.8, 0.2 ]
     omitted_ids = [ids_free.a, ids_free.r2[:], ids_free.c2[:], ids_free.e_dev]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp,
+        pixel_rect_transform, omitted_ids=omitted_ids)
 
     mp2 = ModelInit.cat_init([ce,])
     mp2.vp[1][ids.a] = [ 0.2, 0.8 ]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp2, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp2,
+        pixel_rect_transform, omitted_ids=omitted_ids)
 
     mp.vp[1][ids.a] = [ 0.5, 0.5 ]
     mp2.vp[1][ids.a] = [ 0.5, 0.5 ]
@@ -315,11 +323,11 @@ function test_bad_galaxy_init(trans::DataTransform)
     @test length(cat_primary) == 1
 
     mp_bad_init = ModelInit.cat_init(cat_primary)
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bad_init)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bad_init, trans)
     @test mp_bad_init.vp[1][ids.a[2]] > .5
 
     mp_good_init = ModelInit.cat_init(cat_coadd)
-    OptimizeElbo.maximize_elbo(blob, mp_good_init)
+    OptimizeElbo.maximize_elbo(blob, mp_good_init, trans)
     @test mp_good_init.vp[1][ids.a[2]] > .5
 
     @test_approx_eq_eps mp_good_init.vp[1][ids.e_scale] mp_bad_init.vp[1][ids.e_scale] 0.2
@@ -343,7 +351,8 @@ function test_color(trans::DataTransform)
         accum
     end
     omitted_ids = [ids_free.c1[:]]
-    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, omitted_ids=omitted_ids, ftol_abs=1e-9)
+    OptimizeElbo.maximize_f(klc_wrapper, blob, mp, trans,
+        omitted_ids=omitted_ids, ftol_abs=1e-9)
 
     @test_approx_eq_eps mp.vp[1][ids.k[2, 1]] 1 1e-2
 
@@ -400,17 +409,17 @@ end
 # Currently the optimization does not work with free_transform due
 # to a mysterious NLOpt failure, so do not include it as part of the
 # unit tests.
-for trans in [ rect_transform ]
-    test_quadratic_optimization(trans)
-    #test_bad_galaxy_init()
-    test_kappa_finding(trans)
-    test_bad_a_init()
-    #test_elbo_invariance_to_a()
-    test_kl_invariance_to_a()
-    test_likelihood_invariance_to_a()
-    test_star_optimization(trans)
-    test_full_elbo_optimization(trans)
-    test_galaxy_optimization(trans)
-    test_real_stamp_optimization(trans)  # long running
-end
+test_quadratic_optimization(pixel_rect_transform)
+test_quadratic_optimization(world_rect_transform)
+
+#test_bad_galaxy_init()
+test_kappa_finding(pixel_rect_transform)
+test_bad_a_init()
+#test_elbo_invariance_to_a()
+test_kl_invariance_to_a()
+test_likelihood_invariance_to_a()
+test_star_optimization(pixel_rect_transform)
+test_full_elbo_optimization(pixel_rect_transform)
+test_galaxy_optimization(pixel_rect_transform)
+test_real_stamp_optimization(pixel_rect_transform)  # long running
 
