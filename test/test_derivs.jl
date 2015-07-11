@@ -198,7 +198,7 @@ function test_quadratic_derivatives(trans::DataTransform)
     test_by_finite_differences(quadratic_function, mp)
 end
 
-for trans in [ identity_transform, rect_transform, free_transform ]
+for trans in [ identity_transform, pixel_rect_transform, world_rect_transform, free_transform ]
     test_quadratic_derivatives(trans)
 end
 
