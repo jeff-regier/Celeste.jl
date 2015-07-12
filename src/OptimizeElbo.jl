@@ -113,13 +113,15 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
         end
 
         iter_count += 1
-        debug && print_params(mp.vp)
         (debug || iter_count % 10 == 0) && 
-            println("iter $iter_count elbo: $(elbo.v)")
-        debug && println("\n=======================================\n")
-        g_names = repmat(ids_free_names[left_ids], mp.S)
-        debug && println(DataFrames.DataFrame(names=g_names, elbo_deriv=g))
-        #debug && println("\n=======================================\n")
+                println("iter $iter_count elbo: $(elbo.v)")
+        if debug
+            print_params(mp.vp)
+            println("\n=======================================\n")
+            g_names = repmat(ids_free_names[left_ids], mp.S)
+            println(DataFrames.DataFrame(names=g_names, elbo_deriv=g))
+            println("\n=======================================\n")
+        end
         elbo.v
     end
 
