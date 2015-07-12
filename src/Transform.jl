@@ -7,7 +7,7 @@ using CelesteTypes
 
 import Util
 
-export rect_transform, free_transform, identity_transform, DataTransform
+export pixel_rect_transform, world_rect_transform, free_transform, identity_transform, DataTransform
 
 #export unconstrain_vp, rect_unconstrain_vp, constrain_vp, rect_constrain_vp
 #export unconstrain_vp!, rect_unconstrain_vp!, constrain_vp!, rect_constrain_vp!
@@ -184,8 +184,7 @@ function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams,
         # Variables that are unaffected by constraints (except for scaling):
         for id_string in rect_unchanged_ids
             id_symbol = convert(Symbol, id_string)
-            vp_free[s][ids_free.(id_symbol)] =
-                (vp[s][ids.(id_symbol)] .* rect_rescaling[ids.(id_symbol)])
+            vp_free[s][ids_free.(id_symbol)] = vp[s][ids.(id_symbol)]
         end
 
         # Simplicial constriants.  The original script used "a" to only
