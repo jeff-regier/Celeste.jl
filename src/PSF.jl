@@ -5,6 +5,14 @@ VERSION < v"0.4.0-dev" && using Docile
 import CelesteTypes
 import GaussianMixtures
 
+@doc """
+Evaluate a gmm object at the data points x_mat.
+""" ->
+function evaluate_gmm(gmm::GaussianMixtures.GMM, x_mat::Array{Float64, 2})
+    post = GaussianMixtures.gmmposterior(gmm, x_mat) 
+    exp(post[2]) * gmm.w;
+end
+
 
 @doc """
 Fit a mixture of 2d Gaussians to a PSF image (evaluated at a single point).
