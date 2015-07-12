@@ -7,7 +7,7 @@ using CelesteTypes
 
 import Util
 
-export rect_transform, free_transform, identity_transform, DataTransform
+export pixel_rect_transform, world_rect_transform, free_transform, identity_transform, DataTransform
 
 #export unconstrain_vp, rect_unconstrain_vp, constrain_vp, rect_constrain_vp
 #export unconstrain_vp!, rect_unconstrain_vp!, constrain_vp!, rect_constrain_vp!
@@ -161,13 +161,21 @@ end
 const rect_rescaling = ones(length(CanonicalParams))
 
 # Rescale some parameters to have similar dimensions to everything else.
-[rect_rescaling[id] *= 1e-3 for id in ids.r1]
+
+# These are backwards.
+const world_rect_rescaling = ones(length(UnconstrainedParams))
+[world_rect_rescaling[id] *= 1e-3 for id in ids_free.r1]
+[world_rect_rescaling[id] *= 1e5 for id in ids_free.u]
+
+const pixel_rect_rescaling = ones(length(UnconstrainedParams))
+[pixel_rect_rescaling[id] *= 1e-3 for id in ids_free.r1]
 
 rect_unchanged_ids = [ "u", "r1", "r2",
                        "e_dev", "e_axis", "e_angle", "e_scale",
                        "c1", "c2"]
 
-function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
+function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams,
+                     rect_rescaling::Array{Float64, 1})
     # Convert a constrained to an unconstrained variational parameterization
     # that does not use logit or exp.
 
@@ -176,8 +184,7 @@ function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
         # Variables that are unaffected by constraints (except for scaling):
         for id_string in rect_unchanged_ids
             id_symbol = convert(Symbol, id_string)
-            vp_free[s][ids_free.(id_symbol)] =
-                (vp[s][ids.(id_symbol)] .* rect_rescaling[ids.(id_symbol)])
+            vp_free[s][ids_free.(id_symbol)] = vp[s][ids.(id_symbol)]
         end
 
         # Simplicial constriants.  The original script used "a" to only
@@ -187,32 +194,42 @@ function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
 
         # Keep all but the last row of k.
         vp_free[s][ids_free.k] = vp[s][ids.k[1:(Ia - 1), :]]
+
+        for i in 1:length(ids_free)
+            vp_free[s][i] = vp_free[s][i] .* rect_rescaling[i]
+        end
     end
 end
 
-function rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+function rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams,
+                     rect_rescaling::Array{Float64, 1})
     # Convert an unconstrained to an constrained variational parameterization
     # where we don't use exp or logit.
 
     S = length(vp_free)
     for s = 1:S
-        # For unchanged ids, simply scale them.
+        scaled_vp_free = deepcopy(vp_free[s])
+        for i = 1:length(ids_free)
+            scaled_vp_free[i] = scaled_vp_free[i] / rect_rescaling[i]
+        end
+
+        # Variables that are unaffected by constraints (except for scaling):
         for id_string in rect_unchanged_ids
             id_symbol = convert(Symbol, id_string)
-            vp[s][ids.(id_symbol)] =
-                (vp_free[s][ids_free.(id_symbol)] ./ rect_rescaling[ids.(id_symbol)])
+            vp[s][ids.(id_symbol)] = scaled_vp_free[ids_free.(id_symbol)]
         end
 
         # Simplicial constriants.
-        vp[s][ids.a[2]] = vp_free[s][ids_free.a[1]]
+        vp[s][ids.a[2]] = scaled_vp_free[ids_free.a[1]]
         vp[s][ids.a[1]] = 1.0 - vp[s][ids.a[2]]
 
-        vp[s][ids.k[1, :]] = vp_free[s][ids_free.k]
+        vp[s][ids.k[1, :]] = scaled_vp_free[ids_free.k]
         vp[s][ids.k[2, :]] = 1 - vp[s][ids.k[1, :]]
     end
 end
 
-function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
+function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams,
+                                          rect_rescaling::Array{Float64, 1})
     # Given a sensitive float with derivatives with respect to all the
     # constrained parameters, calculate derivatives with respect to
     # the unconstrained parameters.
@@ -235,8 +252,7 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
             id_free_indices = reduce(vcat, ids_free.(id_symbol))
             id_indices = reduce(vcat, ids.(id_symbol))
 
-            sf_free.d[id_free_indices, s] =
-                (sf.d[id_indices, s] ./ rect_rescaling[id_indices])
+            sf_free.d[id_free_indices, s] = sf.d[id_indices, s]
         end
 
         # Simplicial constriants.
@@ -244,10 +260,40 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 
         sf_free.d[collect(ids_free.k[1, :]), s] =
             sf.d[collect(ids.k[1, :]), s] - sf.d[collect(ids.k[2, :]), s]
+
+        for i in 1:length(ids_free)
+            sf_free.d[i, s] = sf_free.d[i, s] ./ rect_rescaling[i]
+        end
     end
 
     sf_free
 end
+
+
+function pixel_vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
+    vp_to_rect!(vp, vp_free, pixel_rect_rescaling)
+end
+
+function world_vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
+    vp_to_rect!(vp, vp_free, world_rect_rescaling)
+end
+
+function pixel_rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+    rect_to_vp!(vp_free, vp, pixel_rect_rescaling)
+end
+
+function world_rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+    rect_to_vp!(vp_free, vp, world_rect_rescaling)
+end
+
+function pixel_rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
+    rect_unconstrain_sensitive_float(sf, mp, pixel_rect_rescaling)
+end
+
+function world_rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
+    rect_unconstrain_sensitive_float(sf, mp, world_rect_rescaling)
+end
+
 
 ###############################################
 # Functions for a "free transform".  Eventually the idea is that this will
@@ -306,7 +352,7 @@ function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
         vp[s][ids.a[2]] = Util.logit(vp_free[s][ids_free.a[1]])
         vp[s][ids.a[1]] = 1.0 - vp[s][ids.a[2]]
 
-	vp[s][ids.e_dev] = Util.logit(vp_free[s][ids_free.e_dev])
+    	vp[s][ids.e_dev] = Util.logit(vp_free[s][ids_free.e_dev])
 
         vp[s][ids.k[1, :]] = Util.logit(vp_free[s][ids_free.k[1, :]])
         vp[s][ids.k[2, :]] = 1.0 - vp[s][ids.k[1, :]]
@@ -381,10 +427,15 @@ end
 #########################
 # Define the exported variables.
 
-rect_transform = DataTransform(rect_to_vp!, vp_to_rect!,
-                               vector_to_free_vp!, free_vp_to_vector,
-                               rect_unconstrain_sensitive_float,
-                               length(UnconstrainedParams))
+pixel_rect_transform = DataTransform(pixel_rect_to_vp!, pixel_vp_to_rect!,
+                                     vector_to_free_vp!, free_vp_to_vector,
+                                     pixel_rect_unconstrain_sensitive_float,
+                                     length(UnconstrainedParams))
+
+world_rect_transform = DataTransform(world_rect_to_vp!, world_vp_to_rect!,
+                                     vector_to_free_vp!, free_vp_to_vector,
+                                     world_rect_unconstrain_sensitive_float,
+                                     length(UnconstrainedParams))
 
 free_transform = DataTransform(free_to_vp!, vp_to_free!,
                                vector_to_free_vp!, free_vp_to_vector,
