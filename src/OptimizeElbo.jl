@@ -12,7 +12,7 @@ import DataFrames
 
 
 #TODO: use Lumberjack.jl for logging
-const debug = true
+const debug = false
 
 
 function get_nlopt_bounds(vs::Vector{Float64})
@@ -117,7 +117,8 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
         (debug || iter_count % 10 == 0) && 
             println("iter $iter_count elbo: $(elbo.v)")
         debug && println("\n=======================================\n")
-        debug && println(DataFrames.DataFrame(names=ids_free_names[left_ids], elbo_deriv=g))
+        g_names = repmat(ids_free_names[left_ids], mp.S)
+        debug && println(DataFrames.DataFrame(names=g_names, elbo_deriv=g))
         #debug && println("\n=======================================\n")
         elbo.v
     end

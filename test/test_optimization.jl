@@ -426,5 +426,5 @@ test_likelihood_invariance_to_a()
 test_star_optimization(pixel_rect_transform)
 test_full_elbo_optimization(pixel_rect_transform)
 test_galaxy_optimization(pixel_rect_transform)
-test_real_stamp_optimization(pixel_rect_transform)  # long running
+test_real_stamp_optimization(world_rect_transform)  # long running
 
