@@ -30,7 +30,7 @@ immutable SourceBrightness
     E_l_a::Matrix{SensitiveFloat}  # [E[l|a=0], E[l]|a=1]]
     E_ll_a::Matrix{SensitiveFloat}   # [E[l^2|a=0], E[l^2]|a=1]]
 
-    SourceBrightness(vs::Vector{Float64}) = begin
+    SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
         r1 = vs[ids.r1]
         r2 = vs[ids.r2]
         c1 = vs[ids.c1]
@@ -42,7 +42,7 @@ immutable SourceBrightness
 
         for i = 1:Ia
             for b = 1:B
-                E_l_a[b, i] = zero_sensitive_float(CanonicalParams)
+                E_l_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
             end
 
             # Index 3 is r_s and has a gamma expectation.
@@ -88,7 +88,7 @@ immutable SourceBrightness
         E_ll_a = Array(SensitiveFloat, B, Ia)
         for i = 1:Ia
             for b = 1:B
-                E_ll_a[b, i] = zero_sensitive_float(CanonicalParams)
+                E_ll_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
             end
 
             r2_sq = r2[i]^2
@@ -139,10 +139,10 @@ Attributes:
    precision: The inverse of the_cov
    z: The weight times the normalizing constant.
 """ ->
-immutable BvnComponent
-    the_mean::Vector{Float64}
-    precision::Matrix{Float64}
-    z::Float64
+immutable BvnComponent{NumType <: Number}
+    the_mean::Vector{NumType}
+    precision::Matrix{NumType}
+    z::NumType
 
     BvnComponent(the_mean, the_cov, weight) = begin
         the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
@@ -151,6 +151,9 @@ immutable BvnComponent
     end
 end
 
+BvnComponent{NumType <: Number}(the_mean, the_cov, weight) = begin
+    BvnComponent{NumType}(the_mean, the_cov, weight)
+end
 
 @doc """
 The convolution of a one galaxy component with one PSF component.
@@ -175,22 +178,22 @@ Attributes:
      [Sigma11, Sigma12, Sigma22] (in the rows) with respect to
      [e_axis, e_angle, e_scale]
 """ ->
-immutable GalaxyCacheComponent
-    e_dev_dir::Float64
-    e_dev_i::Float64
-    bmc::BvnComponent
-    dSigma::Matrix{Float64}  # [Sigma11, Sigma12, Sigma22] x [e_axis, e_angle, e_scale]
+immutable GalaxyCacheComponent{NumType <: Number}
+    e_dev_dir::NumType
+    e_dev_i::NumType
+    bmc::BvnComponent{NumType}
+    dSigma::Matrix{NumType}  # [Sigma11, Sigma12, Sigma22] x [e_axis, e_angle, e_scale]
 
-    GalaxyCacheComponent(e_dev_dir::Float64, e_dev_i::Float64,
-            gc::GalaxyComponent, pc::PsfComponent, u::Vector{Float64},
-            e_axis::Float64, e_angle::Float64, e_scale::Float64) = begin
+    GalaxyCacheComponent(e_dev_dir::NumType, e_dev_i::NumType,
+            gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
+            e_axis::NumType, e_angle::NumType, e_scale::NumType) = begin
         XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
         mean_s = [pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
         var_s = pc.tauBar + gc.nuBar * XiXi
         weight = pc.alphaBar * gc.etaBar  # excludes e_dev
         bmc = BvnComponent(mean_s, var_s, weight)
 
-        dSigma = Array(Float64, 3, 3)
+        dSigma = Array(NumType, 3, 3)
         cos_sin = cos(e_angle)sin(e_angle)
         sin_sq = sin(e_angle)^2
         cos_sq = cos(e_angle)^2
@@ -228,9 +231,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSL
 
     for s in 1:mp.S
         vs = mp.vp[s]
-        # TODO: make a decision here
-        m_pos = WCS.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
-        #m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
+        m_pos = WCS.world_to_pixel(wcs, vs[ids.u[1], ids.u[2]])
 
         # Convolve the star locations with the PSF.
         for k in 1:3
@@ -243,8 +244,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSL
         for i = 1:Ia
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
-            m_pos = WCS.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
-            #m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
+            m_pos = WCS.world_to_pixel(wcs, vs[ids.u[1], ids.u[2]])
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
             for j in 1:[8,6][i]
