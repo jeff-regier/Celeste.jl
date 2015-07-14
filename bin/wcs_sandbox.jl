@@ -62,7 +62,7 @@ objid = "1237662226208063565" # A brightish star but with good pixels.
 #sub_rows_x = 1:150
 #sub_rows_y = 1:150
 
-width = 4
+width = 8
 
 blob = deepcopy(original_blob);
 reset_crpix!(blob);
@@ -119,7 +119,7 @@ end
 custom_rect_rescaling = ones(length(UnconstrainedParams));
 [custom_rect_rescaling[id] *= 1e-3 for id in ids_free.r1];
 [custom_rect_rescaling[id] *= 1e5 for id in ids_free.u];
-[custom_rect_rescaling[id] *= 1e3 for id in ids_free.a];
+[custom_rect_rescaling[id] *= 1e1 for id in ids_free.a];
 
 function custom_vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
     Transform.vp_to_rect!(vp, vp_free, custom_rect_rescaling)
@@ -221,10 +221,10 @@ end
 #include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
 mp_const = deepcopy(initial_mp);
 #res = OptimizeElbo.maximize_elbo(blob, mp_const);
-res = OptimizeElbo.maximize_elbo(blob, mp_const, custom_rect_transform);
+res = OptimizeElbo.maximize_likelihood(blob, mp_const, custom_rect_transform);
 compare_solutions(mp, initial_mp)
+display_cat(cat_entries[1]);
 get_brightness(mp_const)
-this_star_fluxes
 
 
 ###################
