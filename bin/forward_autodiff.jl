@@ -4,35 +4,34 @@ using CelesteTypes
 using DataFrames
 using SampleData
 
-import SDSS
-import PSF
-import FITSIO
-import WCS
-
 using ForwardDiff
 
+import WCSLIB
+
+zero_sensitive_float(CanonicalParams, Float64, 2)
+zero_sensitive_float(CanonicalParams, ForwardDiff.Dual, 2)
 
 
-immutable Badger5{T <: Number}
-	snout::T
-	claw::T
+loc = Float64[1. 1.; 0. 0.]
+loc_dual = convert(Matrix{ForwardDiff.Dual}, loc)
 
-	Badger5{T <: Number}(snout::T, claw::T) = begin
-		new(snout, claw)
-	end
-end
-
-Badger5(4., 5.)
+WCSLIB.wcss2p(WCS.wcs_id, loc)
+WCSLIB.wcss2p(WCS.wcs_id, loc_dual) # Fails
+WCS.pixel_to_world(WCS.wcs_id, loc)
+WCS.pixel_to_world(WCS.wcs_id, loc_dual)
 
 
 
-function Fox{T <: Number}(x::T)
-	x * 2
-end
 
-function Badger{T <: Number}(snout::T, claw::T)
-	Badger(snout, claw)
-end
+
+
+
+
+
+
+
+
+
 
 
 

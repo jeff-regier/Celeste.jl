@@ -199,6 +199,7 @@ end
 Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
       epsilon::Float64, iota::Float64, psf::Vector{PsfComponent},
       run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
+
     empty_psf_comp = RawPSFComponents(Array(Float64, 0, 0), -1, -1, Array(Float64, 0, 0, 0))
     Image(H, W, pixels, b, wcs, epsilon, iota, psf, run_num, camcol_num, field_num,
           true, Array(Float64, 0, 0), Array(Float64, 0), empty_psf_comp)
@@ -206,8 +207,10 @@ end
 
 # Initialization for an image with noise and background parameters that vary across the image.
 Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
-      epsilon_mat::Array{Float64, 1}, iota_vec::Array{Float64, 2}, psf::Vector{PsfComponent}, raw_psf_comp::RawPSFComponents,
+      epsilon_mat::Array{Float64, 1}, iota_vec::Array{Float64, 2},
+      psf::Vector{PsfComponent}, raw_psf_comp::RawPSFComponents,
       run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
+
     Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num, field_num,
           false, epsilon_mat, iota_vec, raw_psf_comp)
 end
@@ -252,9 +255,9 @@ end
 # of celestial objects, and the inner index is over individual
 # parameters for that object (referenced using ParamIndex).
 
-typealias VariationalParams Vector{Vector{Float64}}
-typealias RectVariationalParams Vector{Vector{Float64}}
-typealias FreeVariationalParams Vector{Vector{Float64}}
+typealias VariationalParams{NumType <: Number} Vector{Vector{NumType}}
+typealias RectVariationalParams{NumType <: Number} Vector{Vector{NumType}}
+typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 
 #########################################################
 
@@ -373,8 +376,8 @@ Attributes:
  - tile_width: The number of pixels across a tile
  - S: The number of sources.
 """ ->
-type ModelParams
-    vp::VariationalParams
+type ModelParams{NumType <: Number}
+    vp::VariationalParams{NumType}
     pp::PriorParams
     patches::Vector{SkyPatch}
     tile_width::Int64
@@ -386,6 +389,11 @@ type ModelParams
         @assert length(vp) == length(patches)
         new(vp, pp, patches, tile_width, length(vp))
     end
+end
+
+ModelParams{NumType <: Number}(vp::VariationalParams{NumType}, pp::PriorParams,
+                               patches::Vector{SkyPatch}, tile_width::Int64) = begin
+    ModelParams{NumType}(vp, pp, patches, tile_width)
 end
 
 #########################################################
@@ -401,30 +409,41 @@ Attributes:
   h: The second derivative with respect to each variational parameter,
      in the same format as d.
 """ ->
-type SensitiveFloat{T <: ParamSet}
-    v::Float64
-    d::Matrix{Float64} # local_P x local_S
-    h::Matrix{Float64} # local_P x local_S
-    ids::T
+type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
+    v::NumType
+    d::Matrix{NumType} # local_P x local_S
+    h::Matrix{NumType} # local_P x local_S
+    ids::ParamType
 end
 
 #########################################################
 
-function zero_sensitive_float{T <: ParamSet}(::Type{T})
-    zero_sensitive_float(T, 1)
+function zero_sensitive_float{ParamType <: ParamSet}(::Type{ParamType}, NumType::DataType, local_S::Int64)
+    local_P = length(ParamType)
+    d = zeros(NumType, local_P, local_S)
+    h = zeros(NumType, local_P, local_S)
+    SensitiveFloat{ParamType, NumType}(zero(NumType), d, h, getids(ParamType))
 end
 
-function zero_sensitive_float{T <: ParamSet}(::Type{T}, local_S::Int64)
-    local_P = length(T)
-    d = zeros(local_P, local_S)
-    h = zeros(local_P, local_S)
-    SensitiveFloat{T}(0., d, h, getids(T))
+function zero_sensitive_float{ParamType <: ParamSet}(::Type{ParamType}, NumType::DataType)
+    # Default to a single source.
+    zero_sensitive_float(ParamType, NumType, 1)
 end
 
-function clear!(sp::SensitiveFloat)
-    sp.v = 0.
-    fill!(sp.d, 0.)
+function clear!{ParamType <: ParamSet, NumType <: Number}(sp::SensitiveFloat{ParamType, NumType})
+    sp.v = zero(NumType)
+    fill!(sp.d, zero(NumType))
 end
+
+# If no type is specified, default to using Float64.
+function zero_sensitive_float{ParamType <: ParamSet}(param_arg::Type{ParamType}, local_S::Int64)
+    zero_sensitive_float(param_arg, Float64, local_S)
+end
+
+function zero_sensitive_float{ParamType <: ParamSet}(param_arg::Type{ParamType})
+    zero_sensitive_float(param_arg, Float64, 1)
+end
+
 
 #########################################################
 

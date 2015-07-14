@@ -13,7 +13,7 @@ function matvec222(mat::Matrix, vec::Vector)
             (mat[2,1] * vec[1] + mat[2,2] * vec[2]) * vec[2]
 end
 
-function get_bvn_cov(ab::Float64, angle::Float64, scale::Float64)
+function get_bvn_cov{NumType <: Number}(ab::NumType, angle::NumType, scale::NumType)
     # Unpack a rotation-parameterized BVN covariance matrix.
     #
     # Args:
@@ -34,12 +34,12 @@ function get_bvn_cov(ab::Float64, angle::Float64, scale::Float64)
     W' * W  # XiXi
 end
 
-function inv_logit(x)
+function inv_logit{NumType <: Number}(x::NumType)
     # TODO: bounds checking
     -log(1.0 ./ x - 1)
 end
 
-function logit(x)
+function logit{NumType <: Number}(x::NumType)
     # TODO: bounds checking
     1.0 ./ (1.0 + exp(-x))
 end
