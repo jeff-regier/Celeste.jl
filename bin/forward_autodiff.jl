@@ -45,7 +45,5 @@ g_fd = objective_grad(x0)
 celeste_elbo = transform.transform_sensitive_float(ElboDeriv.elbo(blob, mp), mp);
 hcat(g_fd, celeste_elbo.d[kept_ids])
 g_fd - celeste_elbo.d[kept_ids]
- 
-# ok doesn't work
 
 

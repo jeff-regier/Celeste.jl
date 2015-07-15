@@ -6,8 +6,6 @@ export gen_wrappedcauchy_uniform_kl, gen_categorical_kl, gen_gamma_kl
 export gen_normal_kl, gen_isobvnormal_kl, gen_diagmvn_mvn_kl
 
 
-#trigamma(x) = polygamma(1, x)
-
 # Note that KL divergences may be between parameters of two different types,
 # e.g. if the prior is a float and the parameter is a dual number.
 
@@ -62,7 +60,7 @@ end
 
 
 function gen_gamma_kl{NumType <: Number}(k2::NumType, theta2::NumType)
-    function(k1, theta1)
+    function this_gamma_lk{NumType2 <: Number}(k1::NumType2, theta1::NumType2)
         digamma_k1 = digamma(k1)
         theta_ratio = (theta1 - theta2) / theta2
         shape_diff = k1 - k2
@@ -84,8 +82,8 @@ end
 
 
 function gen_normal_kl{NumType <: Number}(mu2::NumType, sigma2Sq::NumType)
-    log_sigma2Sq = log(sigma2Sq)
-    function(mu1, sigma1Sq)
+    const log_sigma2Sq = log(sigma2Sq)
+    function this_normal_lk{NumType2 <: Number}(mu1::NumType2, sigma1Sq::NumType2)
         diff = mu1 - mu2
         v = .5 * ((log_sigma2Sq - log(sigma1Sq)) + (sigma1Sq + (diff)^2) / sigma2Sq - 1)
         d_mu1 = diff / sigma2Sq
@@ -96,7 +94,7 @@ end
 
 
 function gen_isobvnormal_kl{NumType <: Number}(mean2::Vector{NumType}, var2::NumType)
-    function(mean1, var1)
+    function this_isobvnormal_kl{NumType2 <: Number}(mean1::Vector{NumType2}, var1::NumType2)
         diff_sq = (mean1[1] - mean2[1])^2 + (mean1[2] - mean2[2])^2
         v = var1 / var2 + diff_sq / 2var2 - 1 + log(var2 / var1)
 
