@@ -151,7 +151,7 @@ immutable BvnComponent{NumType <: Number}
     end
 end
 
-BvnComponent{NumType <: Number}(the_mean, the_cov, weight) = begin
+BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType) = begin
     BvnComponent{NumType}(the_mean, the_cov, weight)
 end
 
@@ -206,6 +206,11 @@ immutable GalaxyCacheComponent{NumType <: Number}
     end
 end
 
+GalaxyCacheComponent{NumType <: Number}(e_dev_dir::NumType, e_dev_i::NumType,
+                     gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
+                     e_axis::NumType, e_angle::NumType, e_scale::NumType) =
+    GalaxyCacheComponent{NumType}(e_dev_dir, e_dev_i, gc, pc, u, e_axis, e_angle, e_scale)
+
 
 @doc """
 Convolve the current locations and galaxy shapes with the PSF.
@@ -231,7 +236,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSL
 
     for s in 1:mp.S
         vs = mp.vp[s]
-        m_pos = WCS.world_to_pixel(wcs, vs[ids.u[1], ids.u[2]])
+        m_pos = WCS.world_to_pixel(wcs, vs[[ids.u[1], ids.u[2]]])
 
         # Convolve the star locations with the PSF.
         for k in 1:3
@@ -244,7 +249,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSL
         for i = 1:Ia
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
-            m_pos = WCS.world_to_pixel(wcs, vs[ids.u[1], ids.u[2]])
+            m_pos = WCS.world_to_pixel(wcs, vs[[ids.u[1], ids.u[2]]])
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
             for j in 1:[8,6][i]
