@@ -27,7 +27,7 @@ const sample_galaxy_fluxes = [
 function empty_model_params(S::Int)
     vp = [ ModelInit.init_source([ 0., 0. ]) for s in 1:S ]
     patches = [ SkyPatch([ 0., 0., ], 1.) for s in 1:S ]
-    ModelParams(vp, ModelInit.sample_prior(), patches, 1.)
+    ModelParams(vp, ModelInit.sample_prior(), patches, 1)
 end
 
 
