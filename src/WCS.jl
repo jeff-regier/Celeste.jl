@@ -310,7 +310,7 @@ end
 @doc """
 Extract the real part from a 1d or 2d DualNumbers array.
 """ ->
-function flatten_dual_number_array(world_loc::Array{DualNumbers.Dual})
+function flatten_dual_number_array{NumType <: Number}(world_loc::Array{DualNumbers.Dual{NumType}})
     if length(size(world_loc)) == 1
         float_world_loc = Float64[ DualNumbers.real(loc) for loc in world_loc ]
     else
@@ -325,16 +325,18 @@ end
 Special handling of the DualNumber type which cannot be passed to C.  Note
 that forward differentation cannot be applied to the location for this reason.
 """ ->
-function world_to_pixel(wcs::WCSLIB.wcsprm, world_loc::Array{DualNumbers.Dual})
-    world_to_pixel(wcs, flatten_dual_number_array(world_loc))
+function world_to_pixel{NumType <: Number}(wcs::WCSLIB.wcsprm, world_loc::Array{DualNumbers.Dual{NumType}})
+    dual_type = typeof(world_loc[1])
+    convert(Array{dual_type}, world_to_pixel(wcs, flatten_dual_number_array(world_loc)))
 end
 
 @doc """
 Special handling of the DualNumber type which cannot be passed to C.  Note
 that forward differentation cannot be applied to the location for this reason.
 """ ->
-function pixel_to_world(wcs::WCSLIB.wcsprm, world_loc::Array{DualNumbers.Dual})
-    pixel_to_world(wcs, flatten_dual_number_array(world_loc))
+function pixel_to_world{NumType <: Number}(wcs::WCSLIB.wcsprm, world_loc::Array{DualNumbers.Dual{NumType}})
+    dual_type = typeof(world_loc[1])
+    convert(Array{dual_type}, pixel_to_world(wcs, flatten_dual_number_array(world_loc)))
 end
 
 

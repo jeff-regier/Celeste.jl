@@ -61,7 +61,7 @@ type DataTransform
             trans_vp_to_vector(vp_trans, omitted_ids)
         end
 
-        function vector_to_vp!{NumType <: Number}(xs::Vector{Float64},
+        function vector_to_vp!{NumType <: Number}(xs::Vector{NumType},
                                                   vp::VariationalParams{NumType},
                                                   omitted_ids::Vector{Int64})
             # This needs to update vp in place so that variables in omitted_ids
@@ -133,7 +133,7 @@ function free_vp_to_vector{NumType <: Number}(vp::FreeVariationalParams{NumType}
 end
 
 
-function vector_to_free_vp!{NumType <: Number}(xs::Vector{Float64},
+function vector_to_free_vp!{NumType <: Number}(xs::Vector{NumType},
                                                vp_free::FreeVariationalParams{NumType},
                                                omitted_ids::Vector{Int64})
     # xs: A vector created from free variational parameters.

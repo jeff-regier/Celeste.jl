@@ -142,7 +142,7 @@ Attributes:
 immutable BvnComponent{NumType <: Number}
     the_mean::Vector{NumType}
     precision::Matrix{NumType}
-    z::NumType
+    z::Float64
 
     BvnComponent(the_mean, the_cov, weight) = begin
         the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
@@ -151,7 +151,12 @@ immutable BvnComponent{NumType <: Number}
     end
 end
 
-BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType) = begin
+BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64) = begin
+    the_mean_type = typeof(the_mean[1])
+    BvnComponent{NumType}(the_mean, convert(Array{the_mean_type}, the_cov), weight)
+end
+
+BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64) = begin
     BvnComponent{NumType}(the_mean, the_cov, weight)
 end
 
@@ -179,12 +184,12 @@ Attributes:
      [e_axis, e_angle, e_scale]
 """ ->
 immutable GalaxyCacheComponent{NumType <: Number}
-    e_dev_dir::NumType
+    e_dev_dir::Float64
     e_dev_i::NumType
     bmc::BvnComponent{NumType}
     dSigma::Matrix{NumType}  # [Sigma11, Sigma12, Sigma22] x [e_axis, e_angle, e_scale]
 
-    GalaxyCacheComponent(e_dev_dir::NumType, e_dev_i::NumType,
+    GalaxyCacheComponent(e_dev_dir::Float64, e_dev_i::NumType,
             gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
             e_axis::NumType, e_angle::NumType, e_scale::NumType) = begin
         XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
@@ -206,7 +211,12 @@ immutable GalaxyCacheComponent{NumType <: Number}
     end
 end
 
-GalaxyCacheComponent{NumType <: Number}(e_dev_dir::NumType, e_dev_i::NumType,
+# GalaxyCacheComponent{NumType <: Number}(e_dev_dir::NumType, e_dev_i::NumType,
+#                      gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
+#                      e_axis::NumType, e_angle::NumType, e_scale::NumType) =
+#     GalaxyCacheComponent{NumType}(e_dev_dir, e_dev_i, gc, pc, u, e_axis, e_angle, e_scale)
+
+GalaxyCacheComponent{NumType <: Number}(e_dev_dir::Float64, e_dev_i::NumType,
                      gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
                      e_axis::NumType, e_angle::NumType, e_scale::NumType) =
     GalaxyCacheComponent{NumType}(e_dev_dir, e_dev_i, gc, pc, u, e_axis, e_angle, e_scale)

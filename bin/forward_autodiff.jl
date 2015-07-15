@@ -5,35 +5,7 @@ using DataFrames
 using SampleData
 
 using ForwardDiff
-
-import WCSLIB
-
-zero_sensitive_float(CanonicalParams, Float64, 2)
-zero_sensitive_float(CanonicalParams, ForwardDiff.Dual, 2)
-
-
-loc = Float64[1. 1.; 0. 0.]
-loc_dual = convert(Matrix{ForwardDiff.Dual}, loc)
-
-WCSLIB.wcss2p(WCS.wcs_id, loc)
-WCSLIB.wcss2p(WCS.wcs_id, loc_dual) # Fails
-WCS.pixel_to_world(WCS.wcs_id, loc)
-WCS.pixel_to_world(WCS.wcs_id, loc_dual)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+using DualNumbers
 
 # Some examples of the SDSS fits functions.
 field_dir = joinpath(dat_dir, "sample_field")
@@ -132,11 +104,11 @@ custom_rect_rescaling = ones(length(UnconstrainedParams));
 [custom_rect_rescaling[id] *= 1e5 for id in ids_free.u];
 [custom_rect_rescaling[id] *= 1e1 for id in ids_free.a];
 
-function custom_vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
+function custom_vp_to_rect!{NumType <: Number}(vp::VariationalParams{NumType}, vp_free::RectVariationalParams{NumType})
     Transform.vp_to_rect!(vp, vp_free, custom_rect_rescaling)
 end
 
-function custom_rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+function custom_rect_to_vp!{NumType <: Number}(vp_free::RectVariationalParams{NumType}, vp::VariationalParams{NumType})
     Transform.rect_to_vp!(vp_free, vp, custom_rect_rescaling)
 end
 
@@ -203,15 +175,10 @@ cat_mp = ModelInit.cat_init(one_body);
 initial_mp = deepcopy(cat_mp);
 perturb_params(initial_mp);
 mp = deepcopy(initial_mp);
+#res = OptimizeElbo.maximize_likelihood(synth_blob, mp);
 
 
-res = OptimizeElbo.maximize_likelihood(synth_blob, mp);
-compare_solutions(initial_mp, mp)
-compare_solutions(cat_mp, mp)
-
-get_brightness(mp)
-sample_star_fluxes
-
+mp_dual = ModelParams(convert(Array{Array{Dual{Float64}, 1}, 1}, mp.vp), mp.pp, mp.patches, mp.tile_width);
 
 # Compare with forward differentiation
 transform = custom_rect_transform;
@@ -219,12 +186,30 @@ omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2];
 x0 = transform.vp_to_vector(mp.vp, omitted_ids);
 iter_count = 0
 
-function objective(x)
+dual_loc = DualNumbers.Dual{Float64}[1, 2]
+WCS.flatten_dual_number_array(dual_loc)
+WCS.world_to_pixel(WCS.wcs_id, dual_loc)
+
+function objective(x::Array{Float64})
     # Evaluate in the constrained space and then unconstrain again.
-    transform.vector_to_vp!(x, mp.vp, omitted_ids)
-    elbo = f(blob, mp)
+    println("Float")
+    x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ]
+    transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
+    elbo = ElboDeriv.elbo(blob, mp_dual)
+    elbo.v
+end
+function objective(x::Array{Dual{Float64}})
+    # Evaluate in the constrained space and then unconstrain again.
+    println("Dual")
+    transform.vector_to_vp!(x, mp_dual.vp, omitted_ids)
+    elbo = ElboDeriv.elbo(blob, mp_dual)
     elbo.v
 end
 
+objective(x0)
+
 objective_grad = ForwardDiff.forwarddiff_gradient(objective, Float64, fadtype=:dual; n=length(x0));
 g_fd = objective_grad(x0)
+
+# ok doesn't work
+
