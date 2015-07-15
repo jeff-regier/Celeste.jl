@@ -6,7 +6,7 @@ export gen_wrappedcauchy_uniform_kl, gen_categorical_kl, gen_gamma_kl
 export gen_normal_kl, gen_isobvnormal_kl, gen_diagmvn_mvn_kl
 
 
-trigamma(x) = polygamma(1, x)
+#trigamma(x) = polygamma(1, x)
 
 # Note that KL divergences may be between parameters of two different types,
 # e.g. if the prior is a float and the parameter is a dual number.
@@ -46,14 +46,14 @@ end
 
 
 function gen_categorical_kl{NumType <: Number}(p2::Vector{NumType})
-    function(p1)
-        v = 0.
-        d_p1 = Array(NumType, length(p1))
+    function this_categorical_kl{NumType2 <: Number}(p1::Vector{NumType2})
+        v = zero(NumType2)
+        d_p1 = Array(NumType2, length(p1))
 
         for i in 1:length(p2)
             log_ratio = log(p1[i]) - log(p2[i])
             v += p1[i] * log_ratio
-            d_p1[i] = 1 + log_ratio
+            d_p1[i] = one(NumType) + log_ratio
         end
 
         v, (d_p1,)
@@ -113,7 +113,8 @@ function gen_diagmvn_mvn_kl{NumType <: Number}(mean2::Vector{NumType}, cov2::Mat
     const logdet_cov2 = logdet(cov2)
     const K = length(mean2)
 
-    function(mean1, vars1)
+    function this_diagmvn_mvn_kl{NumType2 <: Number}(mean1::Vector{NumType2}, vars1::Vector{NumType2})
+        const diag_precision2 = convert(Vector{NumType2}, diag(precision2))
         diff = mean2 - mean1
 
         v = sum(diag(precision2) .* vars1) - K
@@ -122,7 +123,7 @@ function gen_diagmvn_mvn_kl{NumType <: Number}(mean2::Vector{NumType}, cov2::Mat
         v *= 0.5
 
         d_mean1 = precision2 * -diff
-        d_vars1 = 0.5 * diag(precision2)
+        d_vars1 = 0.5 * diag_precision2
         d_vars1[:] += -0.5 ./ vars1
 
         v, (d_mean1, d_vars1)
