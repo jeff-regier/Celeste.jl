@@ -569,7 +569,8 @@ Args:
   - gal_mcs: All the galaxy * PCF components.
   - accum: The ELBO log likelihood to be updated.
 """ ->
-function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
+function elbo_likelihood!(tile::ImageTile,
+        mp::ModelParams,
         sbs::Vector{SourceBrightness},
         star_mcs::Array{BvnComponent, 2},
         gal_mcs::Array{GalaxyCacheComponent, 4},
@@ -600,7 +601,7 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         return
     end
 
-    # fs0m and fs1m accumulate contributions from all sources
+    # fs0m and fs1m accumulate contributions from all sources.
     num_type = typeof(mp.vp[1][1])
     fs0m = zero_sensitive_float(StarPosParams, num_type)
     fs1m = zero_sensitive_float(GalaxyPosParams, num_type)
@@ -671,12 +672,11 @@ end
 Return the expected log likelihood for all bands in a section
 of the sky.
 """ ->
-function elbo_likelihood(blob::Blob, mp::ModelParams)
+function elbo_likelihood{NumType <: Number}(blob::Blob, mp::ModelParams{NumType})
     # Return the expected log likelihood for all bands in a section
     # of the sky.
 
-    num_type = typeof(mp.vp[1][1])
-    ret = zero_sensitive_float(CanonicalParams, num_type, mp.S)
+    ret = zero_sensitive_float(CanonicalParams, NumType, mp.S)
     for img in blob
         elbo_likelihood!(img, mp, ret)
     end
