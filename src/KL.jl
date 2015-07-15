@@ -8,9 +8,11 @@ export gen_normal_kl, gen_isobvnormal_kl, gen_diagmvn_mvn_kl
 
 trigamma(x) = polygamma(1, x)
 
+# Note that KL divergences may be between parameters of two different types,
+# e.g. if the prior is a float and the parameter is a dual number.
 
-function gen_beta_kl(alpha2::Float64, beta2::Float64)
-    function(alpha1, beta1)
+function gen_beta_kl{NumType <: Number}(alpha2::NumType, beta2::NumType)
+    function this_beta_kl{NumType2 <: Number}(alpha1::NumType2, beta1::NumType2)
         alpha_diff = alpha1 - alpha2
         beta_diff = beta1 - beta2
         both_inv_diff = -(alpha_diff + beta_diff)
@@ -35,7 +37,7 @@ end
 
 
 function gen_wrappedcauchy_uniform_kl()
-    function(scale1::Float64)
+    function(scale1)
         v = -log(1 - exp(-2scale1))
         d_scale1 = -2exp(-2scale1) / (1 - exp(-2scale1))
         v, (d_scale1,)
@@ -43,10 +45,10 @@ function gen_wrappedcauchy_uniform_kl()
 end
 
 
-function gen_categorical_kl(p2::Vector{Float64})
-    function(p1::Vector{Float64})
+function gen_categorical_kl{NumType <: Number}(p2::Vector{NumType})
+    function(p1)
         v = 0.
-        d_p1 = Array(Float64, length(p1))
+        d_p1 = Array(NumType, length(p1))
 
         for i in 1:length(p2)
             log_ratio = log(p1[i]) - log(p2[i])
@@ -59,8 +61,8 @@ function gen_categorical_kl(p2::Vector{Float64})
 end
 
 
-function gen_gamma_kl(k2::Float64, theta2::Float64)
-    function(k1::Float64, theta1::Float64)
+function gen_gamma_kl{NumType <: Number}(k2::NumType, theta2::NumType)
+    function(k1, theta1)
         digamma_k1 = digamma(k1)
         theta_ratio = (theta1 - theta2) / theta2
         shape_diff = k1 - k2
@@ -81,9 +83,9 @@ function gen_gamma_kl(k2::Float64, theta2::Float64)
 end
 
 
-function gen_normal_kl(mu2::Float64, sigma2Sq::Float64)
+function gen_normal_kl{NumType <: Number}(mu2::NumType, sigma2Sq::NumType)
     log_sigma2Sq = log(sigma2Sq)
-    function(mu1::Float64, sigma1Sq::Float64)
+    function(mu1, sigma1Sq)
         diff = mu1 - mu2
         v = .5 * ((log_sigma2Sq - log(sigma1Sq)) + (sigma1Sq + (diff)^2) / sigma2Sq - 1)
         d_mu1 = diff / sigma2Sq
@@ -93,8 +95,8 @@ function gen_normal_kl(mu2::Float64, sigma2Sq::Float64)
 end
 
 
-function gen_isobvnormal_kl(mean2::Vector{Float64}, var2::Float64)
-    function(mean1::Vector{Float64}, var1::Float64)
+function gen_isobvnormal_kl{NumType <: Number}(mean2::Vector{NumType}, var2::NumType)
+    function(mean1, var1)
         diff_sq = (mean1[1] - mean2[1])^2 + (mean1[2] - mean2[2])^2
         v = var1 / var2 + diff_sq / 2var2 - 1 + log(var2 / var1)
 
@@ -106,12 +108,12 @@ function gen_isobvnormal_kl(mean2::Vector{Float64}, var2::Float64)
 end
 
 
-function gen_diagmvn_mvn_kl(mean2::Vector{Float64}, cov2::Matrix{Float64})
+function gen_diagmvn_mvn_kl{NumType <: Number}(mean2::Vector{NumType}, cov2::Matrix{NumType})
     const precision2 = cov2^-1
     const logdet_cov2 = logdet(cov2)
     const K = length(mean2)
 
-    function(mean1::Vector{Float64}, vars1::Vector{Float64})
+    function(mean1, vars1)
         diff = mean2 - mean1
 
         v = sum(diag(precision2) .* vars1) - K
@@ -129,7 +131,7 @@ end
 
 
 function gen_isobvnormal_flat_kl()
-    function(var1::Float64)
+    function(var1)
         v = -(1 + log(2pi) + log(var1))
         d_var1 = -1 / var1
         v, (d_var1,)

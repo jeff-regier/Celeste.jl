@@ -142,7 +142,7 @@ Attributes:
 immutable BvnComponent{NumType <: Number}
     the_mean::Vector{NumType}
     precision::Matrix{NumType}
-    z::Float64
+    z::NumType
 
     BvnComponent(the_mean, the_cov, weight) = begin
         the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
@@ -152,11 +152,14 @@ immutable BvnComponent{NumType <: Number}
 end
 
 BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64) = begin
-    the_mean_type = typeof(the_mean[1])
-    BvnComponent{NumType}(the_mean, convert(Array{the_mean_type}, the_cov), weight)
+    BvnComponent{NumType}(the_mean, convert(Array{NumType}, the_cov), convert(NumType, weight))
 end
 
 BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64) = begin
+    BvnComponent{NumType}(the_mean, the_cov, convert(NumType, weight))
+end
+
+BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType) = begin
     BvnComponent{NumType}(the_mean, the_cov, weight)
 end
 
@@ -193,7 +196,7 @@ immutable GalaxyCacheComponent{NumType <: Number}
             gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
             e_axis::NumType, e_angle::NumType, e_scale::NumType) = begin
         XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
-        mean_s = [pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
+        mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
         var_s = pc.tauBar + gc.nuBar * XiXi
         weight = pc.alphaBar * gc.etaBar  # excludes e_dev
         bmc = BvnComponent(mean_s, var_s, weight)
@@ -210,11 +213,6 @@ immutable GalaxyCacheComponent{NumType <: Number}
         new(e_dev_dir, e_dev_i, bmc, dSigma)
     end
 end
-
-# GalaxyCacheComponent{NumType <: Number}(e_dev_dir::NumType, e_dev_i::NumType,
-#                      gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
-#                      e_axis::NumType, e_angle::NumType, e_scale::NumType) =
-#     GalaxyCacheComponent{NumType}(e_dev_dir, e_dev_i, gc, pc, u, e_axis, e_angle, e_scale)
 
 GalaxyCacheComponent{NumType <: Number}(e_dev_dir::Float64, e_dev_i::NumType,
                      gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
@@ -306,7 +304,7 @@ Args:
        and its derivatives with respect to x are added.
  - wcs: The world coordinate system object for this image.
 """ ->
-function accum_star_pos!(bmc::BvnComponent,
+function accum_star_pos!{NumType <: Number}(bmc::BvnComponent{NumType},
                          x::Vector{Float64},
                          fs0m::SensitiveFloat,
                          wcs_jacobian::Array{Float64, 2})
@@ -337,7 +335,7 @@ Args:
        and its derivatives with respect to x are added.
   - wcs: The world coordinate system object for this image.
 """ ->
-function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
+function accum_galaxy_pos!{NumType <: Number}(gcc::GalaxyCacheComponent{NumType},
                            x::Vector{Float64},
                            fs1m::SensitiveFloat,
                            wcs_jacobian::Array{Float64, 2})
@@ -346,15 +344,10 @@ function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
 
     fs1m.v += f
 
-    # TODO: does this need to change for world coordiantes?
-    dfs1m_dpix = Float64[f .* py1, f .* py2]
-    #dfs1m_dworld = WCS.pixel_deriv_to_world_deriv(wcs, dfs1m_dpix, x)
+    dfs1m_dpix = NumType[f .* py1, f .* py2]
     dfs1m_dworld = wcs_jacobian' * dfs1m_dpix
     fs1m.d[gal_ids.u[1]] += dfs1m_dworld[1]
     fs1m.d[gal_ids.u[2]] += dfs1m_dworld[2]
-
-    # fs1m.d[gal_ids.u[1]] += f .* py1
-    # fs1m.d[gal_ids.u[2]] += f .* py2
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     df_dSigma = (
@@ -397,10 +390,19 @@ Returns:
     star and galaxy contributions to the ELBO from this source
     in this band.  Adds the contributions to E_G and var_G.
 """ ->
-function accum_pixel_source_stats!(sb::SourceBrightness,
+# function accum_pixel_source_stats!{NumType <: Number}(sb::SourceBrightness,
+#         star_mcs::Array{BvnComponent{NumType}, 2},
+#         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+#         vs::Vector{NumType}, child_s::Int64, parent_s::Int64,
+#         m_pos::Vector{Float64}, b::Int64,
+#         fs0m::SensitiveFloat, fs1m::SensitiveFloat,
+#         E_G::SensitiveFloat, var_G::SensitiveFloat,
+#         wcs_jacobian::Array{Float64, 2})
+
+function accum_pixel_source_stats!{NumType <: Number}(sb::SourceBrightness,
         star_mcs::Array{BvnComponent, 2},
         gal_mcs::Array{GalaxyCacheComponent, 4},
-        vs::Vector{Float64}, child_s::Int64, parent_s::Int64,
+        vs::Vector{NumType}, child_s::Int64, parent_s::Int64,
         m_pos::Vector{Float64}, b::Int64,
         fs0m::SensitiveFloat, fs1m::SensitiveFloat,
         E_G::SensitiveFloat, var_G::SensitiveFloat,
@@ -599,12 +601,13 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
     end
 
     # fs0m and fs1m accumulate contributions from all sources
-    fs0m = zero_sensitive_float(StarPosParams)
-    fs1m = zero_sensitive_float(GalaxyPosParams)
+    num_type = typeof(mp.vp[1][1])
+    fs0m = zero_sensitive_float(StarPosParams, num_type)
+    fs1m = zero_sensitive_float(GalaxyPosParams, num_type)
 
     tile_S = length(tile_sources)
-    E_G = zero_sensitive_float(CanonicalParams, tile_S)
-    var_G = zero_sensitive_float(CanonicalParams, tile_S)
+    E_G = zero_sensitive_float(CanonicalParams, num_type, tile_S)
+    var_G = zero_sensitive_float(CanonicalParams, num_type, tile_S)
 
     # Iterate over pixels that are not NaN.
     for w in w_range, h in h_range
@@ -672,7 +675,8 @@ function elbo_likelihood(blob::Blob, mp::ModelParams)
     # Return the expected log likelihood for all bands in a section
     # of the sky.
 
-    ret = zero_sensitive_float(CanonicalParams, mp.S)
+    num_type = typeof(mp.vp[1][1])
+    ret = zero_sensitive_float(CanonicalParams, num_type, mp.S)
     for img in blob
         elbo_likelihood!(img, mp, ret)
     end
