@@ -12,7 +12,7 @@ import DataFrames
 
 
 #TODO: use Lumberjack.jl for logging
-const debug = true
+const debug = false
 
 
 function get_nlopt_bounds(vs::Vector{Float64})
