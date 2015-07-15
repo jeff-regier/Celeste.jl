@@ -41,27 +41,29 @@ type DataTransform
                   vector_to_trans_vp!::Function, trans_vp_to_vector::Function,
                   transform_sensitive_float::Function, id_size::Integer) = begin
 
-        function from_vp(vp::VariationalParams)
+        function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
             S = length(vp)
-            vp_free = [ zeros(id_size) for s = 1:S]
+            vp_free = [ zeros(NumType, id_size) for s = 1:S]
             from_vp!(vp, vp_free)
             vp_free
         end
 
-        function to_vp(vp_free::FreeVariationalParams)
+        function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
             S = length(vp_free)
             vp = [ zeros(length(CanonicalParams)) for s = 1:S]
             to_vp!(vp_free, vp)
             vp
         end
 
-        function vp_to_vector(vp::VariationalParams, omitted_ids::Vector{Int64})
+        function vp_to_vector{NumType <: Number}(vp::VariationalParams{NumType},
+                                                 omitted_ids::Vector{Int64})
             vp_trans = from_vp(vp)
             trans_vp_to_vector(vp_trans, omitted_ids)
         end
 
-        function vector_to_vp!(xs::Vector{Float64}, vp::VariationalParams,
-                               omitted_ids::Vector{Int64})
+        function vector_to_vp!{NumType <: Number}(xs::Vector{Float64},
+                                                  vp::VariationalParams{NumType},
+                                                  omitted_ids::Vector{Int64})
             # This needs to update vp in place so that variables in omitted_ids
             # stay at their original values.
             vp_trans = from_vp(vp)
@@ -108,7 +110,8 @@ function unchanged_vector_to_vp!(xs::Vector{Float64}, vp::VariationalParams,
 end
 
 
-function free_vp_to_vector(vp::FreeVariationalParams, omitted_ids::Vector{Int64})
+function free_vp_to_vector{NumType <: Number}(vp::FreeVariationalParams{NumType},
+                                              omitted_ids::Vector{Int64})
     # vp = variational parameters
     # omitted_ids = ids in ParamIndex
     #
@@ -119,7 +122,7 @@ function free_vp_to_vector(vp::FreeVariationalParams, omitted_ids::Vector{Int64}
     new_P = length(left_ids)
 
     S = length(vp)
-    vp_new = [zeros(new_P) for s in 1:S]
+    vp_new = [zeros(NumType, new_P) for s in 1:S]
 
     for p1 in 1:length(left_ids)
         p0 = left_ids[p1]
@@ -130,8 +133,9 @@ function free_vp_to_vector(vp::FreeVariationalParams, omitted_ids::Vector{Int64}
 end
 
 
-function vector_to_free_vp!(xs::Vector{Float64}, vp_free::FreeVariationalParams,
-                            omitted_ids::Vector{Int64})
+function vector_to_free_vp!{NumType <: Number}(xs::Vector{Float64},
+                                               vp_free::FreeVariationalParams{NumType},
+                                               omitted_ids::Vector{Int64})
     # xs: A vector created from free variational parameters.
     # free_vp: Free variational parameters.  Only the ids not in omitted_ids
     #   will be updated.
@@ -171,8 +175,9 @@ rect_unchanged_ids = [ "u", "r1", "r2",
                        "e_dev", "e_axis", "e_angle", "e_scale",
                        "c1", "c2"]
 
-function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams,
-                     rect_rescaling::Array{Float64, 1})
+function vp_to_rect!{NumType <: Number}(vp::VariationalParams{NumType},
+                                        vp_free::RectVariationalParams{NumType},
+                                        rect_rescaling::Array{Float64, 1})
     # Convert a constrained to an unconstrained variational parameterization
     # that does not use logit or exp.
 
@@ -198,8 +203,9 @@ function vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams,
     end
 end
 
-function rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams,
-                     rect_rescaling::Array{Float64, 1})
+function rect_to_vp!{NumType <: Number}(vp_free::RectVariationalParams{NumType},
+                                        vp::VariationalParams{NumType},
+                                        rect_rescaling::Array{Float64, 1})
     # Convert an unconstrained to an constrained variational parameterization
     # where we don't use exp or logit.
 
@@ -267,19 +273,21 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams,
 end
 
 
-function pixel_vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
+function pixel_vp_to_rect!{NumType <: Number}(vp::VariationalParams{NumType},
+                                              vp_free::RectVariationalParams{NumType})
     vp_to_rect!(vp, vp_free, pixel_rect_rescaling)
 end
 
-function world_vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
+function world_vp_to_rect!{NumType <: Number}(vp::VariationalParams{NumType},
+                                              vp_free::RectVariationalParams{NumType})
     vp_to_rect!(vp, vp_free, world_rect_rescaling)
 end
 
-function pixel_rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+function pixel_rect_to_vp!{NumType <: Number}(vp_free::RectVariationalParams{NumType}, vp::VariationalParams{NumType})
     rect_to_vp!(vp_free, vp, pixel_rect_rescaling)
 end
 
-function world_rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+function world_rect_to_vp!{NumType <: Number}(vp_free::RectVariationalParams{NumType}, vp::VariationalParams{NumType})
     rect_to_vp!(vp_free, vp, world_rect_rescaling)
 end
 
@@ -298,7 +306,8 @@ end
 free_unchanged_ids = [ "u", "e_dev", "e_axis", "e_angle", "e_scale",
                        "c1", "c2"]
 
-function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
+function vp_to_free!{NumType <: Number}(vp::VariationalParams{NumType},
+                                        vp_free::FreeVariationalParams{NumType})
     # Convert a constrained to an unconstrained variational parameterization
     # on all of the real line.
     S = length(vp)
@@ -335,7 +344,8 @@ function vp_to_free!(vp::VariationalParams, vp_free::FreeVariationalParams)
     end
 end
 
-function free_to_vp!(vp_free::FreeVariationalParams, vp::VariationalParams)
+function free_to_vp!{NumType <: Number}(vp_free::FreeVariationalParams{NumType},
+                                        vp::VariationalParams{NumType})
     # Convert an unconstrained to an constrained variational parameterization.
     S = length(vp_free)
     for s = 1:S
