@@ -4,6 +4,7 @@ using Base.Test
 using Distributions
 using SampleData
 
+import WCS
 
 function true_star_init()
     blob, mp, body = gen_sample_star_dataset(perturb=false)
@@ -83,15 +84,17 @@ function test_that_variance_is_low()
     # very peaked variational distribution---variance for F(m) should be low
     blob, mp, body = true_star_init()
 
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mp)
+    test_b = 3
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[test_b].psf, mp, blob[test_b].wcs)
     fs0m = zero_sensitive_float(StarPosParams)
     fs1m = zero_sensitive_float(GalaxyPosParams)
     E_G = zero_sensitive_float(CanonicalParams)
     var_G = zero_sensitive_float(CanonicalParams)
     sb = ElboDeriv.SourceBrightness(mp.vp[1])
-    m_pos = [10, 12.]
+    m_pos = Float64[10, 12]
+    wcs_jacobian = WCS.pixel_world_jacobian(blob[test_b].wcs, m_pos)
     ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
-        mp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G)
+        mp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G, wcs_jacobian)
 
     @test 0 < var_G.v < 1e-2 * E_G.v^2
 end
@@ -105,8 +108,8 @@ function test_that_star_truth_is_most_likely()
     for bad_a in [.3, .5, .9]
         mp_a = deepcopy(mp)
         mp_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ]
-        bad_a = ElboDeriv.elbo_likelihood(blob, mp_a)
-        @test best.v > bad_a.v
+        bad_a_lik = ElboDeriv.elbo_likelihood(blob, mp_a)
+        @test best.v > bad_a_lik.v
     end
 
     for h2 in -2:2
@@ -190,14 +193,25 @@ end
 
 
 function test_coadd_cat_init_is_most_likely()  # on a real stamp
+    # TODO: not currently passing.
+
     stamp_id = "5.0073-0.0739"
     blob = SDSS.load_stamp_blob(dat_dir, stamp_id)
+    cat_entries_df = SDSS.load_stamp_catalog_df(dat_dir, "s82-$stamp_id", blob)
+
     cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-$stamp_id", blob)
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries)
-    inbounds(ce) = ce.pos[1] > -10. && ce.pos[2] > -10 &&
-        ce.pos[1] < 61 && ce.pos[2] < 61
-    cat_entries = filter(inbounds, cat_entries)
+
+    ce_pix_locs = [ [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ] for ce in cat_entries ]
+
+    function ce_inbounds(ce)
+        pix_locs = [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ]
+        inbounds(pos) = pos[1] > -10. && pos[2] > -10 &&
+                        pos[1] < 61 && pos[2] < 61
+        all([ inbounds(pos) for pos in pix_locs ])
+    end
+    cat_entries = filter(ce_inbounds, cat_entries)
 
     mp = ModelInit.cat_init(cat_entries)
     for s in 1:length(cat_entries)
@@ -206,7 +220,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     end
     best = ElboDeriv.elbo_likelihood(blob, mp)
 
-    # s is the brightest source: a dev galaxy!
+    # s is the brightest source.
     s = 1
 
     for bad_scale in [.7, 1.3]
@@ -263,7 +277,7 @@ function test_tiny_image_tiling()
     trivial_psf = [pc, pc, pc]
     pixels = ones(100, 1) * 12
     pixels[98:100, 1] = [1e3, 1e4, 1e5]
-    img = Image(3, 1, pixels, 3, blob0[3].wcs, 3., 4, trivial_psf, 1, 1, 1)
+    img = Image(3, 1, pixels, 3, blob0[3].wcs, 3., 4., trivial_psf, 1, 1, 1)
     catalog = [sample_ce([100., 1], true),]
     catalog[1].star_fluxes = ones(5) * 1e5
 

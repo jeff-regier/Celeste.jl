@@ -1,6 +1,7 @@
 module Celeste
 
 require(joinpath(Pkg.dir("Celeste"), "src", "Util.jl"))
+require(joinpath(Pkg.dir("Celeste"), "src", "WCS.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "KL.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "CelesteTypes.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "Transform.jl"))
@@ -12,6 +13,7 @@ require(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "Synthetic.jl"))
 require(joinpath(Pkg.dir("Celeste"), "src", "SampleData.jl"))
 
+import WCS
 import PSF
 import SDSS
 import ElboDeriv

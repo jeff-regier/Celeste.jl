@@ -3,6 +3,8 @@
 
 module ModelInit
 
+VERSION < v"0.4.0-dev" && using Docile
+
 export sample_prior, cat_init, peak_init
 
 using FITSIO
@@ -34,9 +36,11 @@ function sample_prior()
         [(cmean1, ccov1), (cmean2, ccov2)]) # c
 end
 
-
-#TODO: use blob (and perhaps priors) to initialize these sensibly
+@doc """
+Return a default-initialized VariationalParams object.
+""" ->
 function init_source(init_pos::Vector{Float64})
+    #TODO: use blob (and perhaps priors) to initialize these sensibly
     ret = Array(Float64, length(CanonicalParams))
     ret[ids.a[2]] = 0.5
     ret[ids.a[1]] = 1.0 - ret[ids.a[2]]
@@ -54,7 +58,9 @@ function init_source(init_pos::Vector{Float64})
     ret
 end
 
-
+@doc """
+Return a VariationalParams object initialized form a catalog entry.
+""" ->
 function init_source(ce::CatalogEntry)
     ret = init_source(ce.pos)
 
@@ -180,6 +186,9 @@ function min_patch_radius(ce::CatalogEntry, blob::Blob)
 end
 =#
 
+@doc """
+Return a ModelParams object initialized from an array of catalog entries. 
+""" ->
 function cat_init(cat::Vector{CatalogEntry}; patch_radius::Float64=Inf,
         tile_width::Int64=typemax(Int64))
     vp = [init_source(ce) for ce in cat]

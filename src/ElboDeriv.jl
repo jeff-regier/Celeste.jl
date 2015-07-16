@@ -4,9 +4,10 @@ module ElboDeriv
 
 VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
-import Util
 import KL
-
+import Util
+import WCS
+import WCSLIB
 
 @doc """
 SensitiveFloat objects for expectations involving r_s and c_s.
@@ -152,7 +153,7 @@ end
 
 
 @doc """
-A the convolution of a one galaxy component with one PSF component.
+The convolution of a one galaxy component with one PSF component.
 
 Args:
  - e_dev_dir: "Theta direction": this is 1 or -1, depending on whether
@@ -217,20 +218,22 @@ Returns:
     - Galaxy component
     - Galaxy type
     - Source
+  - wcs: A world coordinate system object
 
 The PSF contains three components, so you see lots of 3's below.
 """ ->
-function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
+function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSLIB.wcsprm)
     star_mcs = Array(BvnComponent, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent, 3, 8, 2, mp.S)
 
     for s in 1:mp.S
         vs = mp.vp[s]
+        m_pos = WCS.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
 
         # Convolve the star locations with the PSF.
         for k in 1:3
             pc = psf[k]
-            mean_s = [pc.xiBar[1] + vs[ids.u[1]], pc.xiBar[2] + vs[ids.u[2]]]
+            mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
             star_mcs[k, s] = BvnComponent(mean_s, pc.tauBar, pc.alphaBar)
         end
 
@@ -238,13 +241,14 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
         for i = 1:Ia
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
+            m_pos = WCS.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
             for j in 1:[8,6][i]
                 for k = 1:3
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
-                        vs[ids.u], vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale])
+                        m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale])
                 end
             end
         end
@@ -278,19 +282,23 @@ by updating fs0m in place.
 
 Args:
   - bmc: The component to be added
-  - x: An offset for the component (e.g. a pixel location)
+  - x: An offset for the component in pixel coordinates (e.g. a pixel location)
   - fs0m: A SensitiveFloat to which the value of the bvn likelihood
        and its derivatives with respect to x are added.
+ - wcs: The world coordinate system object for this image.
 """ ->
 function accum_star_pos!(bmc::BvnComponent,
                          x::Vector{Float64},
-                         fs0m::SensitiveFloat)
+                         fs0m::SensitiveFloat,
+                         wcs_jacobian::Array{Float64, 2})
     py1, py2, f = eval_bvn_pdf(bmc, x)
 
     fs0m.v += f
 
-    fs0m.d[star_ids.u[1]] += f .* py1
-    fs0m.d[star_ids.u[2]] += f .* py2
+    dfs0m_dpix = Float64[f .* py1, f .* py2]
+    dfs0m_dworld = wcs_jacobian' * dfs0m_dpix
+    fs0m.d[star_ids.u[1]] += dfs0m_dworld[1]
+    fs0m.d[star_ids.u[2]] += dfs0m_dworld[2]
 end
 
 
@@ -300,20 +308,25 @@ updating fs1m in place.
 
 Args:
   - gcc: The galaxy component to be added
-  - x: An offset for the component (e.g. a pixel location)
+  - x: An offset for the component in pixel coordinates (e.g. a pixel location)
   - fs1m: A SensitiveFloat to which the value of the likelihood
        and its derivatives with respect to x are added.
+  - wcs: The world coordinate system object for this image.
 """ ->
 function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
                            x::Vector{Float64},
-                           fs1m::SensitiveFloat)
+                           fs1m::SensitiveFloat,
+                           wcs_jacobian::Array{Float64, 2})
     py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
     f = f_pre * gcc.e_dev_i
 
     fs1m.v += f
 
-    fs1m.d[gal_ids.u[1]] += f .* py1
-    fs1m.d[gal_ids.u[2]] += f .* py2
+    dfs1m_dpix = Float64[f .* py1, f .* py2]
+    dfs1m_dworld = wcs_jacobian' * dfs1m_dpix
+    fs1m.d[gal_ids.u[1]] += dfs1m_dworld[1]
+    fs1m.d[gal_ids.u[2]] += dfs1m_dworld[2]
+
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     df_dSigma = (
@@ -342,13 +355,14 @@ Args:
   - vs: The variational parameters for this source
   - child_s: The index of this source within the tile.
   - parent_s: The global index of this source.
-  - m_pos: A 2x1 vector with the pixel location
+  - m_pos: A 2x1 vector with the pixel location in pixel coordinates
   - b: The band (1 to 5)
   - fs0m: The accumulated star contributions (updated in place)
   - fs1m: The accumulated galaxy contributions (updated in place)
   - E_G: Expected celestial signal in this band (G_{nbm})
        (updated in place)
   - var_G: Variance of G (updated in place)
+  - wcs: The world coordinate system object for this image.
 
 Returns:
   - Clears and updates fs0m, fs1m with the total
@@ -361,18 +375,19 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
         vs::Vector{Float64}, child_s::Int64, parent_s::Int64,
         m_pos::Vector{Float64}, b::Int64,
         fs0m::SensitiveFloat, fs1m::SensitiveFloat,
-        E_G::SensitiveFloat, var_G::SensitiveFloat)
+        E_G::SensitiveFloat, var_G::SensitiveFloat,
+        wcs_jacobian::Array{Float64, 2})
     # Accumulate over PSF components.
     clear!(fs0m)
     for star_mc in star_mcs[:, parent_s]
-        accum_star_pos!(star_mc, m_pos, fs0m)
+        accum_star_pos!(star_mc, m_pos, fs0m, wcs_jacobian)
     end
 
     clear!(fs1m)
     for i = 1:2 # Galaxy types
         for j in 1:[8,6][i] # Galaxy component
             for k = 1:3 # PSF component
-                accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, fs1m)
+                accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, fs1m, wcs_jacobian)
             end
         end
     end
@@ -475,8 +490,6 @@ end
 Return the range of image pixels in an ImageTile.
 """ ->
 function tile_range(tile::ImageTile, tile_width::Int64)
-    # Return the range of image pixels in an ImageTile.
-
     h1 = 1 + (tile.hh - 1) * tile_width
     h2 = min(tile.hh * tile_width, tile.img.H)
     w1 = 1 + (tile.ww - 1) * tile_width
@@ -496,23 +509,21 @@ Returns:
     there is any overlap in their squares of influence.
 """ ->
 function local_sources(tile::ImageTile, mp::ModelParams)
-    local_subset = Array(Int64, 0)
+    # Corners of the tile in pixel coordinates.
+    tr = mp.tile_width / 2.  # tile width
+    tc = Float64[tr + (tile.hh - 1) * mp.tile_width,
+                 tr + (tile.ww - 1) * mp.tile_width] # Tile center
+    tc11 = tc + Float64[-tr, -tr]
+    tc12 = tc + Float64[-tr, tr]
+    tc22 = tc + Float64[tr, tr]
+    tc21 = tc + Float64[tr, -tr]
 
-    # "Radius" is used in the sense of an L_{\infty} norm.
-    tr = mp.tile_width / 2.  # tile radius
-    tc1 = tr + (tile.hh - 1) * mp.tile_width
-    tc2 = tr + (tile.ww - 1) * mp.tile_width
+    tile_quad = vcat(tc11', tc12', tc22', tc21')
+    pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
+    pr = Float64[ mp.patches[s].radius for s=1:mp.S ]
+    bool_vec = WCS.sources_near_quadrilateral(pc, pr, tile_quad, tile.img.wcs)
 
-    for s in 1:mp.S
-        pc = mp.patches[s].center  # patch center
-        pr = mp.patches[s].radius  # patch radius
-
-        if abs(pc[1] - tc1) <= (pr + tr) && abs(pc[2] - tc2) <= (pr + tr)
-            push!(local_subset, s)
-        end
-    end
-
-    local_subset
+    (collect(1:mp.S))[bool_vec]
 end
 
 
@@ -523,7 +534,7 @@ modifying accum in place.
 Args:
   - tile: An image tile.
   - mp: The current model parameters.
-  - sbs: The currne source brightnesses.
+  - sbs: The current source brightnesses.
   - star_mcs: All the star * PCF components.
   - gal_mcs: All the galaxy * PCF components.
   - accum: The ELBO log likelihood to be updated.
@@ -539,12 +550,23 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
     # For speed, if there are no sources, add the noise
     # contribution directly.
     if length(tile_sources) == 0
-        nan_pixels = isnan(tile.img.pixels[h_range, w_range])
-        num_pixels = length(h_range) * length(w_range) - sum(nan_pixels)
-        tile_x = sum(tile.img.pixels[h_range, w_range][!nan_pixels])
-        ep = tile.img.epsilon
+
         # NB: not using the delta-method approximation here
-        accum.v += tile_x * log(ep) - num_pixels * ep
+        if tile.img.constant_background
+            nan_pixels = isnan(tile.img.pixels[h_range, w_range])
+            num_pixels = length(h_range) * length(w_range) - sum(nan_pixels)
+            tile_x = sum(tile.img.pixels[h_range, w_range][!nan_pixels])
+            ep = tile.img.epsilon
+            accum.v += tile_x * log(ep) - num_pixels * ep
+        else
+            for w in w_range, h in h_range
+                this_pixel = tile.img.pixels[h, w]
+                if !isnan(this_pixel)
+                    ep = tile.img.epsilon_mat[h, w]
+                    accum.v += this_pixel * log(ep) - ep                    
+                end
+            end
+        end
         return
     end
 
@@ -561,19 +583,26 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
         this_pixel = tile.img.pixels[h, w]
         if !isnan(this_pixel)
             clear!(E_G)
-            E_G.v = tile.img.epsilon
+            if tile.img.constant_background
+                E_G.v = tile.img.epsilon
+                iota = tile.img.iota
+            else
+                E_G.v = tile.img.epsilon_mat[h, w]
+                iota = tile.img.iota_vec[h]
+            end
             clear!(var_G)
 
             m_pos = Float64[h, w]
+            wcs_jacobian = WCS.pixel_world_jacobian(tile.img.wcs, m_pos)
             for child_s in 1:length(tile_sources)
                 parent_s = tile_sources[child_s]
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
                     mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
-                    fs0m, fs1m, E_G, var_G)
+                    fs0m, fs1m, E_G, var_G, wcs_jacobian)
             end
 
-            accum_pixel_ret!(tile_sources, this_pixel, tile.img.iota,
-                E_G, var_G, accum)
+            accum_pixel_ret!(tile_sources, this_pixel, iota,
+                             E_G, var_G, accum)
         end
     end
 end
@@ -590,7 +619,7 @@ Args:
 function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
     accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
 
-    star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp)
+    star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp, img.wcs)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 

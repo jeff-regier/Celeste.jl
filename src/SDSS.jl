@@ -8,8 +8,10 @@ import DataFrames
 import FITSIO
 import Grid
 import PSF
+import Util
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
+
 
 function load_stamp_blob(stamp_dir, stamp_id)
     function fetch_image(b)
@@ -24,24 +26,24 @@ function load_stamp_blob(stamp_dir, stamp_id)
 
         header_str = FITSIO.read_header(fits[1], ASCIIString)
         ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
-
         close(fits)
 
         alphaBar = [hdr["PSF_P0"], hdr["PSF_P1"], hdr["PSF_P2"]]
         xiBar = [
             [hdr["PSF_P3"]  hdr["PSF_P4"]],
             [hdr["PSF_P5"]  hdr["PSF_P6"]],
-            [hdr["PSF_P7"]  hdr["PSF_P8"]]
-        ]'
+            [hdr["PSF_P7"]  hdr["PSF_P8"]]]'
+
         tauBar = Array(Float64, 2, 2, 3)
         tauBar[:,:,1] = [[hdr["PSF_P9"] hdr["PSF_P11"]],
-                [hdr["PSF_P11"] hdr["PSF_P10"]]]
+                         [hdr["PSF_P11"] hdr["PSF_P10"]]]
         tauBar[:,:,2] = [[hdr["PSF_P12"] hdr["PSF_P14"]],
-                [hdr["PSF_P14"] hdr["PSF_P13"]]]
+                         [hdr["PSF_P14"] hdr["PSF_P13"]]]
         tauBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]],
-                [hdr["PSF_P17"] hdr["PSF_P16"]]]
+                         [hdr["PSF_P17"] hdr["PSF_P16"]]]
 
-        psf = [PsfComponent(alphaBar[k], xiBar[:, k], tauBar[:, :, k]) for k in 1:3]
+        psf = [PsfComponent(alphaBar[k], xiBar[:, k],
+                            tauBar[:, :, k]) for k in 1:3]
 
         H, W = size(original_pixels)
         iota = hdr["GAIN"] / hdr["CALIB"]
@@ -92,8 +94,7 @@ end
 
 function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=false)
     function row_to_ce(row)
-        x_y = WCSLIB.wcss2p(blob[1].wcs, [row[1, :ra], row[1, :dec]]'')[:]
-
+        x_y = [row[1, :ra], row[1, :dec]]
         star_fluxes = zeros(5)
         gal_fluxes = zeros(5)
         fracs_dev = [row[1, :frac_dev], 1 - row[1, :frac_dev]]
@@ -105,7 +106,7 @@ function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=f
             dev_col = symbol("devflux_$bl")
             exp_col = symbol("expflux_$bl")
             gal_fluxes[b] += fracs_dev[1] * row[1, dev_col] +
-                    fracs_dev[2] * row[1, exp_col]
+                             fracs_dev[2] * row[1, exp_col]
         end
 
         fits_ab = fracs_dev[1] > .5 ? row[1, :ab_dev] : row[1, :ab_exp]
@@ -143,10 +144,7 @@ Args:
  - b: The filter band (a number from 1 to 5)
 
 Returns:
- - rrows: A matrix of flattened eigenimages.
- - rnrow: The number of rows in an eigenimage.
- - rncol: The number of columns in an eigenimage.
- - cmat: The coefficients of the weight polynomial (see below).
+ - RawPSFComponents.
 
 The point spread function is represented as an rnrow x rncol image
 showing what a true point source would look as viewed through the optics.
@@ -172,7 +170,7 @@ function load_psf_data(field_dir, run_num, camcol_num, field_num, b)
 
     # Only the first (nrow_b, ncol_b) submatrix of cmat is used for reasons obscure
     # to the author.
-    rrows, rnrow, rncol, cmat[1:nrow_b, 1:ncol_b, :]
+    RawPSFComponents(rrows, rnrow, rncol, cmat[1:nrow_b, 1:ncol_b, :])
 end
 
 
@@ -222,6 +220,7 @@ Returns:
  - sky_grid: A CoordInterpGrid bilinear interpolation object
  - sky_x: The x coordinates at which to evaluate sky_grid to match nelec.
  - sky_y: The y coordinates at which to evaluate sky_grid to match nelec.
+ - sky_image: The sky interpolated to the original image size.
  - wcs: A wcsprm object for converting between world and pixel coordinates.
 
 The meaing of the frame data structures is thoroughly documented here:
@@ -247,6 +246,10 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     header_str = FITSIO.read_header(img_fits[1], ASCIIString)
     ((wcs,), nrejected) = WCSLIB.wcspih(header_str)
 
+    # These are the column types (not currently used).
+    ctype = [FITSIO.read_key(img_fits[1], "CTYPE1")[1],
+             FITSIO.read_key(img_fits[1], "CTYPE2")[1]]
+
     # This is the calibration vector:
     calib_col = read(img_fits[2])
     calib_image = [ calib_col[row] for
@@ -270,13 +273,15 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
                                     Grid.BCnearest, Grid.InterpLinear)
 
     # This interpolation is really slow.
+    print("...starting sky fit...")
     sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ]
+    print("done with sky fit. ")
 
     # Convert to raw electron counts.  Note that these may not be close to integers
     # due to the analog to digital conversion process in the telescope.
     nelec = gain * convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image))
 
-    nelec, calib_col, sky_grid, sky_x, sky_y, wcs, header_str
+    nelec, calib_col, sky_grid, sky_x, sky_y, sky_image, wcs
 end
 
 
@@ -494,36 +499,47 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
     blob = Array(Image, 5)
     for b=1:5
         print("Reading band $b image data...")
-        nelec, calib_col, sky_grid, sky_x, sky_y, wcs = SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num, b, band_gain[b]);
+        nelec, calib_col, sky_grid, sky_x, sky_y, sky_image, wcs =
+            SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num, b, band_gain[b]);
+
+        print("Masking image...")
         SDSS.mask_image!(nelec, field_dir, run_num, camcol_num, field_num, b);
+        println("done.")
         H = size(nelec, 1)
         W = size(nelec, 2)
 
-        # For now, use the median noise and sky image:
-        epsilon = band_gain[b] / median(calib_col)
-        sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ];
-        if false
-            sp1 = PyPlot.matshow(sky_image)
-            PyPlot.colorbar(sp1)
+        # For now, use the median noise and sky image.  Here, 
+        # epsilon * iota needs to be in units comparable to nelec electron counts.
+        # Note that each are actuall pretty variable.
+        iota = convert(Float64, band_gain[b] / median(calib_col))
+        epsilon = convert(Float64, median(sky_image) * median(calib_col))
+        epsilon_mat = Array(Float64, H, W)
+        iota_vec = Array(Float64, H)
+        for h=1:H
+            iota_vec[h] = band_gain[b] / calib_col[h]
+            for w=1:W
+                epsilon_mat[h, w] = sky_image[h, w] * calib_col[h]
+            end
         end
-        iota = median(sky_image)
 
         # Load and fit the psf.
         println("reading psf...")
-        rrows, rnrow, rncol, cmat = SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
+        raw_psf_comp = SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
 
         # For now, evaluate the psf at the middle of the image.
         psf_point_x = H / 2
         psf_point_y = W / 2
 
-        raw_psf = PSF.get_psf_at_point(psf_point_x, psf_point_y, rrows, rnrow, rncol, cmat);
-        psf_gmm = PSF.fit_psf_gaussians(raw_psf);
-        psf = PSF.convert_gmm_to_celeste(psf_gmm)
+        raw_psf = PSF.get_psf_at_point(psf_point_x, psf_point_y, raw_psf_comp);
+        psf_gmm, scale = PSF.fit_psf_gaussians(raw_psf);
+        psf = PSF.convert_gmm_to_celeste(psf_gmm, scale)
 
+        # Set it to use a constant background but include the non-constant data.
         blob[b] = Image(H, W,
                         nelec, b, wcs,
                         epsilon, iota, psf,
-                        int(run_num), int(camcol_num), int(field_num))
+                        int(run_num), int(camcol_num), int(field_num),
+                        true, epsilon_mat, iota_vec, raw_psf_comp)
     end
 
     blob

@@ -1,10 +1,14 @@
 module Synthetic
 
+VERSION < v"0.4.0-dev" && using Docile
+
 export gen_blob
 
 using CelesteTypes
 import ModelInit
 import Util
+import WCS
+import SDSS
 
 import Distributions
 
@@ -24,7 +28,8 @@ function get_patch(the_mean::Vector{Float64}, H::Int64, W::Int64)
 end
 
 
-function write_gaussian(the_mean, the_cov, intensity, pixels)
+function write_gaussian(the_mean, the_cov, intensity, pixels;
+                        expectation=false)
     the_precision = the_cov^-1
     c = det(the_precision)^.5 / 2pi
     y = Array(Float64, 2)
@@ -38,24 +43,31 @@ function write_gaussian(the_mean, the_cov, intensity, pixels)
         ypy = Util.matvec222(the_precision, y)
         pdf_hw = c * exp(-0.5 * ypy)
         pixel_rate = intensity * pdf_hw
-        pixels[h, w] += wrapped_poisson(pixel_rate)
+        if expectation
+            pixels[h, w] += pixel_rate
+        else
+            pixels[h, w] += wrapped_poisson(pixel_rate)
+        end
     end
 
     pixels
 end
 
 
-function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
+function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
+                    expectation=false)
     for k in 1:length(img0.psf)
-        the_mean = ce.pos + img0.psf[k].xiBar
+        the_mean = WCS.world_to_pixel(img0.wcs, ce.pos) + img0.psf[k].xiBar
         the_cov = img0.psf[k].tauBar
         intensity = ce.star_fluxes[img0.b] * img0.iota * img0.psf[k].alphaBar
-        write_gaussian(the_mean, the_cov, intensity, pixels)
+        write_gaussian(the_mean, the_cov, intensity, pixels,
+            expectation = expectation)
     end
 end
 
 
-function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
+function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
+                      expectation=false)
     e_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
 
     XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
@@ -63,32 +75,40 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64})
     for i in 1:2
         for gproto in galaxy_prototypes[i]
             for k in 1:length(img0.psf)
-                the_mean = ce.pos + img0.psf[k].xiBar
+                the_mean = WCS.world_to_pixel(img0.wcs, ce.pos) +
+                           img0.psf[k].xiBar
                 the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
                 intensity = ce.gal_fluxes[img0.b] * img0.iota *
                     img0.psf[k].alphaBar * e_devs[i] * gproto.etaBar
-                write_gaussian(the_mean, the_cov, intensity, pixels)
+                write_gaussian(the_mean, the_cov, intensity, pixels,
+                    expectation=expectation)
             end
         end
     end
 end
 
-
-function gen_image(img0::Image, n_bodies::Vector{CatalogEntry})
-    pixels = reshape(float(rand(Distributions.Poisson(img0.epsilon * img0.iota),
-                     img0.H * img0.W)), img0.H, img0.W)
+function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=false)
+    if expectation
+        pixels = [ img0.epsilon * img0.iota for h=1:img0.H, w=1:img0.W ]
+    else
+        pixels = reshape(float(rand(Distributions.Poisson(img0.epsilon * img0.iota),
+                         img0.H * img0.W)), img0.H, img0.W)
+    end
 
     for body in n_bodies
         body.is_star ? write_star(img0, body, pixels) : write_galaxy(img0, body, pixels)
     end
 
     return Image(img0.H, img0.W, pixels, img0.b, img0.wcs, img0.epsilon,
-            img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
+                 img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
 end
 
-
-function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry})
-    [gen_image(blob0[b], n_bodies) for b in 1:5]
+@doc """
+Generate a simulated blob based on a vector of catalog entries using
+identity world coordinates.
+""" ->
+function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry}; expectation=false)
+    [gen_image(blob0[b], n_bodies, expectation=expectation) for b in 1:5]
 end
 
 
