@@ -195,7 +195,8 @@ type Image
     raw_psf_comp::RawPSFComponents
 end
 
-# Initialization for an image with noise and background parameters that are constant across the image.
+# Initialization for an image with noise and background parameters that are constant
+# across the image.
 Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
       epsilon::Float64, iota::Float64, psf::Vector{PsfComponent},
       run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
@@ -206,7 +207,8 @@ end
 
 # Initialization for an image with noise and background parameters that vary across the image.
 Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
-      epsilon_mat::Array{Float64, 1}, iota_vec::Array{Float64, 2}, psf::Vector{PsfComponent}, raw_psf_comp::RawPSFComponents,
+      epsilon_mat::Array{Float64, 1}, iota_vec::Array{Float64, 2},
+       psf::Vector{PsfComponent}, raw_psf_comp::RawPSFComponents,
       run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
     Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num, field_num,
           false, epsilon_mat, iota_vec, raw_psf_comp)

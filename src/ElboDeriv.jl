@@ -228,9 +228,7 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSL
 
     for s in 1:mp.S
         vs = mp.vp[s]
-        # TODO: make a decision here
         m_pos = WCS.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
-        #m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
 
         # Convolve the star locations with the PSF.
         for k in 1:3
@@ -244,12 +242,10 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSL
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
             m_pos = WCS.world_to_pixel(wcs, Float64[vs[ids.u[1]], vs[ids.u[2]]])
-            #m_pos = Float64[vs[ids.u[1]], vs[ids.u[2]]]
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
             for j in 1:[8,6][i]
                 for k = 1:3
-                    # TODO: you could just use pixel coordinates here.
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
                         m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale])
@@ -299,15 +295,10 @@ function accum_star_pos!(bmc::BvnComponent,
 
     fs0m.v += f
 
-    # TODO: does this need to change for world coordiantes?
     dfs0m_dpix = Float64[f .* py1, f .* py2]
-    #dfs0m_dworld = WCS.pixel_deriv_to_world_deriv(wcs, dfs0m_dpix, x)
     dfs0m_dworld = wcs_jacobian' * dfs0m_dpix
     fs0m.d[star_ids.u[1]] += dfs0m_dworld[1]
     fs0m.d[star_ids.u[2]] += dfs0m_dworld[2]
-
-    # fs0m.d[star_ids.u[1]] += f .* py1
-    # fs0m.d[star_ids.u[2]] += f .* py2
 end
 
 
@@ -331,15 +322,11 @@ function accum_galaxy_pos!(gcc::GalaxyCacheComponent,
 
     fs1m.v += f
 
-    # TODO: does this need to change for world coordiantes?
     dfs1m_dpix = Float64[f .* py1, f .* py2]
-    #dfs1m_dworld = WCS.pixel_deriv_to_world_deriv(wcs, dfs1m_dpix, x)
     dfs1m_dworld = wcs_jacobian' * dfs1m_dpix
     fs1m.d[gal_ids.u[1]] += dfs1m_dworld[1]
     fs1m.d[gal_ids.u[2]] += dfs1m_dworld[2]
 
-    # fs1m.d[gal_ids.u[1]] += f .* py1
-    # fs1m.d[gal_ids.u[2]] += f .* py2
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     df_dSigma = (
@@ -605,9 +592,6 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
             end
             clear!(var_G)
 
-            # TODO: could you go back to pixel coordinates here?
-            # Convert the pixel location to world coordinates.
-            #m_pos = WCS.pixel_to_world(tile.img.wcs, Float64[h, w])
             m_pos = Float64[h, w]
             wcs_jacobian = WCS.pixel_world_jacobian(tile.img.wcs, m_pos)
             for child_s in 1:length(tile_sources)
