@@ -18,23 +18,19 @@ x0_dual = Dual{Float64}[ Dual{Float64}(x0[i], 0.) for i = 1:length(x0) ]
 
 mp_dual = ModelParams(convert(Array{Array{Dual{Float64}, 1}, 1}, mp.vp), mp.pp, mp.patches, mp.tile_width);
 
-
-include("src/KL.jl")
-include("src/ElboDeriv.jl")
-function objective(x::Array{Float64})
-    # Evaluate in the constrained space and then unconstrain again.
-    println("Float")
-    x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ]
-    transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
-    elbo = ElboDeriv.elbo(blob, mp_dual)
-    elbo.v
-end
 function objective(x::Array{Dual{Float64}})
     # Evaluate in the constrained space and then unconstrain again.
     println("Dual")
     transform.vector_to_vp!(x, mp_dual.vp, omitted_ids)
     elbo = ElboDeriv.elbo(blob, mp_dual)
     elbo.v
+end
+
+function objective(x::Array{Float64})
+    # Evaluate in the constrained space and then unconstrain again.
+    println("Float")
+    x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ]
+    objective(x_dual)
 end
 
 objective(x0)
