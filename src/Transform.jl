@@ -230,8 +230,9 @@ function rect_to_vp!{NumType <: Number}(vp_free::RectVariationalParams{NumType},
     end
 end
 
-function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams,
-                                          rect_rescaling::Array{Float64, 1})
+function rect_unconstrain_sensitive_float{NumType  <: Number}(sf::SensitiveFloat,
+                                                              mp::ModelParams{NumType},
+                                                              rect_rescaling::Array{Float64, 1})
     # Given a sensitive float with derivatives with respect to all the
     # constrained parameters, calculate derivatives with respect to
     # the unconstrained parameters.
@@ -242,7 +243,7 @@ function rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams,
     # Require that the input have all derivatives defined.
     @assert size(sf.d) == (length(CanonicalParams), mp.S)
 
-    sf_free = zero_sensitive_float(UnconstrainedParams, mp.S)
+    sf_free = zero_sensitive_float(UnconstrainedParams, NumType, mp.S)
     sf_free.v = sf.v
 
     for s in 1:mp.S
