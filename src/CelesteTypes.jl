@@ -5,7 +5,7 @@ VERSION < v"0.4.0-dev" && using Docile
 export CatalogEntry
 export band_letters
 
-export Image, Blob, SkyPatch, ImageTile, PsfComponent
+export Image, Blob, SkyPatch, ImageTile, PsfComponent, RawPSFComponents
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 
@@ -20,6 +20,7 @@ export SensitiveFloat
 export zero_sensitive_float, clear!
 
 export ids, ids_free, star_ids, gal_ids
+export ids_names, ids_free_names
 export D, B, Ia
 
 using Util
@@ -108,7 +109,25 @@ const galaxy_prototypes = get_galaxy_prototypes()
 
 
 @doc """
+All the information form a psField file needed to compute a raw PSF for a point.
+
+Attributes:
+ - rrows: A matrix of flattened eigenimages.
+ - rnrow: The number of rows in an eigenimage.
+ - rncol: The number of columns in an eigenimage.
+ - cmat: The coefficients of the weight polynomial (see get_psf_at_point()).
+""" ->
+immutable RawPSFComponents
+    rrows::Array{Float64,2}
+    rnrow::Int32
+    rncol::Int32
+    cmat::Array{Float64,3}
+end
+
+
+@doc """
 A single normal component of the point spread function.
+All quantities are in pixel coordinates.
 
 Args:
   alphaBar: The scalar weight of the component.
@@ -118,7 +137,7 @@ Args:
 Attributes:
   alphaBar: The scalar weight of the component.
   xiBar: The 2x1 location vector
-  tauBar: The 2x2 covariance (tau_bar in the ICLM paper)
+  tauBar: The 2x2 covariance (tau_bar in the ICML paper)
   tauBarInv: The 2x2 precision
   tauBarLd: The log determinant of the covariance
 """ ->
@@ -168,6 +187,31 @@ type Image
     run_num::Int64
     camcol_num::Int64
     field_num::Int64
+
+    # # Field-varying parameters.
+    constant_background::Bool
+    epsilon_mat::Array{Float64, 2}
+    iota_vec::Array{Float64, 1}
+    raw_psf_comp::RawPSFComponents
+end
+
+# Initialization for an image with noise and background parameters that are constant
+# across the image.
+Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
+      epsilon::Float64, iota::Float64, psf::Vector{PsfComponent},
+      run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
+    empty_psf_comp = RawPSFComponents(Array(Float64, 0, 0), -1, -1, Array(Float64, 0, 0, 0))
+    Image(H, W, pixels, b, wcs, epsilon, iota, psf, run_num, camcol_num, field_num,
+          true, Array(Float64, 0, 0), Array(Float64, 0), empty_psf_comp)
+end
+
+# Initialization for an image with noise and background parameters that vary across the image.
+Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
+      epsilon_mat::Array{Float64, 1}, iota_vec::Array{Float64, 2},
+       psf::Vector{PsfComponent}, raw_psf_comp::RawPSFComponents,
+      run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
+    Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num, field_num,
+          false, epsilon_mat, iota_vec, raw_psf_comp)
 end
 
 @doc """
@@ -187,8 +231,11 @@ end
 @doc """A vector of images, one for each filter band""" ->
 typealias Blob Vector{Image}
 
-@doc """The amount of sky affected by a source""" ->
-immutable SkyPatch #pixel coordinates for now, soon wcs
+@doc """
+The amount of sky affected by a source in
+world coordinates and an L_{\infty} norm.
+""" ->
+immutable SkyPatch
     center::Vector{Float64}
     radius::Float64
 end
@@ -216,7 +263,7 @@ typealias FreeVariationalParams Vector{Vector{Float64}}
 abstract ParamSet
 
 # The variable names are:
-# u       = Location (formerly mu)
+# u       = Location in world coordinates (formerly mu)
 # e_dev   = Weight given to a galaxy of type 1 (formerly theta)
 # e_axis  = Galaxy minor/major ratio (formerly rho)
 # e_angle = Galaxy angle (formerly phi)
@@ -226,7 +273,8 @@ abstract ParamSet
 # r2      = Iax1 scale parameter for r_s. (formerly zeta)
 # c1      = C_s means (formerly beta)
 # c2      = C_s variances (formerly lambda) 
-# a       = robability of being a star or galaxy. (formerly chi)
+# a       = probability of being a star or galaxy.  a[1] is the
+#           probability of being a star and a[2] of being a galaxy. (formerly chi)
 # k       = Dx{Ia|Ia - 1} matrix of color prior component indicators. (formerly kappa)
 
 # Parameters for location and galaxy shape.
@@ -296,6 +344,24 @@ const shape_standard_alignment = (ids.u,
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale])
 bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
+
+# TODO: maybe these should be incorporated into the framework above (which I don't really understand.)
+ids_free_names = Array(ASCIIString, length(ids_free))
+for (name in names(ids_free)) 
+    inds = ids_free.(name)
+    for i = 1:length(inds)
+        ids_free_names[inds[i]] = "$(name)_$(i)"
+    end
+end
+
+ids_names = Array(ASCIIString, length(ids))
+for (name in names(ids)) 
+    inds = ids.(name)
+    for i = 1:length(inds)
+        ids_names[inds[i]] = "$(name)_$(i)"
+    end
+end
+
 
 #########################################################
 

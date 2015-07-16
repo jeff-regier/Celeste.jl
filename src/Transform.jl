@@ -158,11 +158,7 @@ end
 # Functions for a "rectangular transform".  This matches the original Celeste
 # script, contraining a to sum to one and scaling r1.
 
-const rect_rescaling = ones(length(CanonicalParams))
-
 # Rescale some parameters to have similar dimensions to everything else.
-
-# These are backwards.
 const world_rect_rescaling = ones(length(UnconstrainedParams))
 [world_rect_rescaling[id] *= 1e-3 for id in ids_free.r1]
 [world_rect_rescaling[id] *= 1e5 for id in ids_free.u]

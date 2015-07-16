@@ -24,15 +24,17 @@ Args:
 
  Returns:
   - A GaussianMixtures.GMM object containing the fit
+  - A scaling that minimized the least squares error.
 
  Use an EM algorithm to fit a mixture of three multivariate normals to the
  point spread function.  Although the psf is continuous-valued, we use EM by
  fitting as if we had gotten psf[x, y] data points at the image location [x, y].
  As of writing weighted data matrices of this form were not supported in GaussianMixtures.
 
- Naturally, the mixture only matches the psf up to scale.
+ Note that this is a little incoherent -- we use something like log loss
+ to fit the mixture and squared error loss to fit the scale.
 """ ->
-function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
+function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500, verbose=false)
 
     function sigma_for_gmm(sigma_mat)
         # Returns a matrix suitable for storage in the field gmm.Σ
@@ -46,12 +48,12 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
     end
 
     # Data points at which the psf is evaluated in matrix form.
-    x_center = Float64[ (size(psf, 1) - 1) / 2.0 + 1, (size(psf, 2) - 1) / 2.0 + 1 ]
+    psf_center = Float64[ (size(psf, i) - 1) / 2 + 1 for i=1:2 ]
     x_prod = [ Float64[i, j] for i=1:size(psf, 1), j=1:size(psf, 2) ]
-    x_mat = Float64[ x_row[col] - x_center[col] for x_row=x_prod, col=1:2 ]
+    x_mat = Float64[ x_row[col] for x_row=x_prod, col=1:2 ]
+    x_mat = broadcast(-, x_mat, psf_center')
 
-    # Unscale the fit vector so we can compare the sum of squared differences
-    # between the psf and our mixture of normals as a convergence criterion.
+    # The function we're trying to match.
     psf_scale = sum(psf)
     psf_mat = Float64[ psf[x_row[1], x_row[2]] / psf_scale for x_row=x_prod ];
 
@@ -68,10 +70,10 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
     gmm.μ[1, :] = Float64[0, 0]
     gmm.Σ[1] = sigma_for_gmm(psf_starting_var)
 
-    gmm.μ[2, :] = Float64[-2, -2]
+    gmm.μ[2, :] = -Float64[0.2, 0.2]
     gmm.Σ[2] = sigma_for_gmm(psf_starting_var)
 
-    gmm.μ[3, :] = Float64[2, 2]
+    gmm.μ[3, :] = Float64[0.2, 0.2]
     gmm.Σ[3] = sigma_for_gmm(psf_starting_var)
 
     gmm.w = ones(gmm.n) / gmm.n
@@ -110,7 +112,11 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
         post = GaussianMixtures.gmmposterior(gmm, x_mat) 
         gmm_fit = exp(post[2]) * gmm.w;
         err = mean((gmm_fit - psf_mat) .^ 2)
-        err_diff = last_err - err
+        err_diff = abs(last_err - err)
+        if verbose
+            println("$iter: err=$err err_diff=$err_diff")
+        end
+
         last_err = err
         if isnan(err)
             error("NaN in MVN PSF fit.")
@@ -118,6 +124,7 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
 
         iter = iter + 1
         if err_diff < tol
+            println("Tolerance reached ($err_diff < $tol)")
             fit_done = true
         elseif iter >= max_iter
             warn("PSF MVN fit: max_iter exceeded")
@@ -127,7 +134,12 @@ function fit_psf_gaussians(psf::Array{Float64, 2}; tol = 1e-9, max_iter = 500)
         println("Fitting psf: $iter: $err_diff")
     end
 
-    gmm
+    # Get the scaling constant that minimizes the squared error.
+    post = GaussianMixtures.gmmposterior(gmm, x_mat) 
+    gmm_fit = exp(post[2]) * gmm.w;
+    scale = sum(gmm_fit .* psf_mat) / sum(gmm_fit .* gmm_fit)
+
+    gmm, scale
 end
 
 
@@ -140,13 +152,13 @@ Args:
  Returns:
   - An array of PsfComponent objects.
 """ ->
-function convert_gmm_to_celeste(gmm::GaussianMixtures.GMM)
+function convert_gmm_to_celeste(gmm::GaussianMixtures.GMM, scale::Float64)
     function convert_gmm_component_to_celeste(gmm::GaussianMixtures.GMM, d)
-        CelesteTypes.PsfComponent(gmm.w[d],
+        CelesteTypes.PsfComponent(scale * gmm.w[d],
             collect(GaussianMixtures.means(gmm)[d, :]), GaussianMixtures.covars(gmm)[d])
     end
 
-    [ convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n ]
+    CelesteTypes.PsfComponent[ convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n ]
 end
 
 
@@ -156,10 +168,7 @@ Using data from a psField file, evaluate the PSF for a source at given point.
 Args:
  - row: The row of the point source (may be a float).
  - col: The column of the point source (may be a float).
- - rrows: An (rnrow * rncol) by (k) matrix of flattened eigenimages.
- - rnrow: The number of rows in the eigenimage.
- - rncol: The number of columns in the eigenimage.
- - cmat: An (:, :, k)-array of coefficients of the weight polynomial.
+ - raw_psf_comp: Raw PSF components (e.g. as read from a psField file)
 
 Returns:
  - An rnrow x rncol image of the PSF at (row, col)
@@ -174,8 +183,7 @@ This function is based on the function sdss_psf_at_points in astrometry.net:
 https://github.com/dstndstn/astrometry.net/blob/master/util/sdss_psf.py
 """ ->
 function get_psf_at_point(row::Float64, col::Float64,
-                          rrows::Array{Float64, 2}, rnrow::Int32, rncol::Int32, 
-                          cmat::Array{Float64, 3})
+                          raw_psf_comp::CelesteTypes.RawPSFComponents)
 
     # This is a coordinate transform to keep the polynomial coefficients
     # to a reasonable size.
@@ -184,7 +192,9 @@ function get_psf_at_point(row::Float64, col::Float64,
     # rrows' image data is in the first column a flattened form.
     # The second dimension is the number of eigen images, which should
     # match the number of coefficient arrays.
-    k_tot = size(rrows)[2]
+    cmat = raw_psf_comp.cmat
+
+    k_tot = size(raw_psf_comp.rrows)[2]
     @assert k_tot == size(cmat)[3]
 
     nrow_b = size(cmat)[1]
@@ -201,10 +211,39 @@ function get_psf_at_point(row::Float64, col::Float64,
 
     # Weight the images in rrows and reshape them into matrix form.
     # It seems I need to convert for reshape to work.  :(
-    psf = reshape(sum([ rrows[:, i] * weight_mat[i] for i=1:k_tot]),
-                  (convert(Int64, rnrow), convert(Int64, rncol)))
+    psf = reshape(sum([ raw_psf_comp.rrows[:, i] * weight_mat[i] for i=1:k_tot]),
+                  (convert(Int64, raw_psf_comp.rnrow), convert(Int64, raw_psf_comp.rncol)))
 
     psf
 end
+
+@doc """
+Return an image of a Celeste GMM PSF evaluated at rows, cols.
+
+Args:
+ - psf_array: The PSF to be evaluated as an array of PsfComponent
+ - rows: The rows in the image (usually in pixel coordinates)
+ - cols: The column in the image (usually in pixel coordinates)
+
+ Returns:
+  - The PSF values at rows and cols.  The default size is the same as
+    that returned by get_psf_at_point applied to FITS header values.
+
+Note that the point in the image at which the PSF is evaluated --
+that is, the center of the image returned by this function -- is
+already implicit in the value of psf_array.
+""" ->
+function get_psf_at_point(psf_array::Array{CelesteTypes.PsfComponent, 1};
+                          rows=collect(-25:25), cols=collect(-25:25))
+
+    function get_psf_value(psf::CelesteTypes.PsfComponent, row::Float64, col::Float64)
+        x = Float64[row, col] - psf.xiBar
+        (psf.alphaBar * exp(-0.5 * x' * psf.tauBarInv * x - 0.5 * psf.tauBarLd) / (2 * pi))[1]
+    end
+
+    [ sum([ get_psf_value(psf, float(row), float(col)) for psf in psf_array ]) for
+      row in rows, col in cols ]
+end
+
 
 end
