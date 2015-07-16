@@ -201,7 +201,7 @@ immutable GalaxyCacheComponent{NumType <: Number}
         weight = pc.alphaBar * gc.etaBar  # excludes e_dev
         bmc = BvnComponent(mean_s, var_s, weight)
 
-        dSigma = Array(NumType, 3, 3)
+        dSigma = Array(Float64, 3, 3)
         cos_sin = cos(e_angle)sin(e_angle)
         sin_sq = sin(e_angle)^2
         cos_sq = cos(e_angle)^2
@@ -348,6 +348,7 @@ function accum_galaxy_pos!{NumType <: Number}(gcc::GalaxyCacheComponent{NumType}
     dfs1m_dworld = wcs_jacobian' * dfs1m_dpix
     fs1m.d[gal_ids.u[1]] += dfs1m_dworld[1]
     fs1m.d[gal_ids.u[2]] += dfs1m_dworld[2]
+
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     df_dSigma = (
@@ -390,15 +391,6 @@ Returns:
     star and galaxy contributions to the ELBO from this source
     in this band.  Adds the contributions to E_G and var_G.
 """ ->
-# function accum_pixel_source_stats!{NumType <: Number}(sb::SourceBrightness,
-#         star_mcs::Array{BvnComponent{NumType}, 2},
-#         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-#         vs::Vector{NumType}, child_s::Int64, parent_s::Int64,
-#         m_pos::Vector{Float64}, b::Int64,
-#         fs0m::SensitiveFloat, fs1m::SensitiveFloat,
-#         E_G::SensitiveFloat, var_G::SensitiveFloat,
-#         wcs_jacobian::Array{Float64, 2})
-
 function accum_pixel_source_stats!{NumType <: Number}(sb::SourceBrightness,
         star_mcs::Array{BvnComponent, 2},
         gal_mcs::Array{GalaxyCacheComponent, 4},
@@ -624,9 +616,6 @@ function elbo_likelihood!(tile::ImageTile,
             end
             clear!(var_G)
 
-            # TODO: could you go back to pixel coordinates here?
-            # Convert the pixel location to world coordinates.
-            #m_pos = WCS.pixel_to_world(tile.img.wcs, Float64[h, w])
             m_pos = Float64[h, w]
             wcs_jacobian = WCS.pixel_world_jacobian(tile.img.wcs, m_pos)
             for child_s in 1:length(tile_sources)

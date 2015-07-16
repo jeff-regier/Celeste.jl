@@ -97,8 +97,6 @@ function gen_three_body_dataset(; perturb=true)
         blob0[b].H, blob0[b].W = 112, 238
         blob0[b].wcs = WCS.wcs_id
     end
-    # Note that the stamps' world coordinates have the same center
-    # for each image.
     three_bodies = [
         sample_ce([4.5, 3.6], false),
         sample_ce([60.1, 82.2], true),
