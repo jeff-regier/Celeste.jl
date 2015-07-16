@@ -201,7 +201,7 @@ immutable GalaxyCacheComponent{NumType <: Number}
         weight = pc.alphaBar * gc.etaBar  # excludes e_dev
         bmc = BvnComponent(mean_s, var_s, weight)
 
-        dSigma = Array(Float64, 3, 3)
+        dSigma = Array(NumType, 3, 3)
         cos_sin = cos(e_angle)sin(e_angle)
         sin_sq = sin(e_angle)^2
         cos_sq = cos(e_angle)^2
