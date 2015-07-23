@@ -385,23 +385,17 @@ function test_quadratic_optimization(trans::DataTransform)
     # 0.5 is an innocuous value for all parameters.
     mp = empty_model_params(1)
     n = length(CanonicalParams)
-    mp.vp = convert(VariationalParams, [fill(0.5, n) for s in 1:1])
+    mp.vp = convert(VariationalParams{Float64}, [fill(0.5, n) for s in 1:1])
     unused_blob = gen_sample_star_dataset()[1]
 
-    vp_lbs = convert(VariationalParams, [fill(1e-6, n) for s in 1:1])
-    vp_ubs = convert(VariationalParams, [fill(1.0 - 1e-6, n) for s in 1:1])
+    vp_lbs = convert(VariationalParams{Float64}, [fill(1e-6, n) for s in 1:1])
+    vp_ubs = convert(VariationalParams{Float64}, [fill(1.0 - 1e-6, n) for s in 1:1])
 
     lbs = trans.from_vp(vp_lbs)[1]
     ubs = trans.from_vp(vp_ubs)[1]
 
     OptimizeElbo.maximize_f(quadratic_function, unused_blob, mp, trans, lbs, ubs,
         xtol_rel=1e-16, ftol_abs=1e-16)
-
-    hcat(mp.vp[1], centers)
-    hcat(trans.from_vp(mp.vp)[1],
-         trans.from_vp(convert(VariationalParams, [ centers for s = 1 ]))[1])[ids.r1, :]
-    trans.from_vp(mp.vp)[1] -
-         trans.from_vp(convert(VariationalParams, [ centers for s = 1 ]))[1]
 
     @test_approx_eq_eps mp.vp[1] centers 1e-6
     @test_approx_eq_eps quadratic_function(unused_blob, mp).v 0.0 1e-15

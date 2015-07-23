@@ -193,7 +193,7 @@ function test_quadratic_derivatives(trans::DataTransform)
 
     # 0.5 is an innocuous value for all parameters.
     mp = empty_model_params(1)
-    mp.vp = convert(VariationalParams,[ fill(0.5, length(CanonicalParams)) 
+    mp.vp = convert(VariationalParams{Float64}, [ fill(0.5, length(CanonicalParams)) 
         for s in 1:1 ])
     test_by_finite_differences(quadratic_function, mp)
 end
