@@ -3,6 +3,7 @@ module WCS
 VERSION < v"0.4.0-dev" && using Docile
 
 import WCSLIB
+import DualNumbers
 
 export sources_near_quadrilateral
 export pixel_deriv_to_world_deriv, world_coordinate_names
@@ -287,7 +288,9 @@ Returns:
 The frame files seem to use the order (RA, DEC) for world coordinates,
 though you should check the CTYPE1 and CTYPE2 header values if in doubt.
 """ ->
-function pixel_to_world(wcs::WCSLIB.wcsprm, pix_loc::Array{Float64})
+function pixel_to_world{NumType <: Number}(wcs::WCSLIB.wcsprm, pix_loc::Array{NumType})
+    # C must be passed Float64 types.
+    pix_loc = convert(Array{Float64}, pix_loc)
     single_row = length(size(pix_loc)) == 1 
     if single_row
         # Convert to a row vector if it's a single value
@@ -303,6 +306,39 @@ function pixel_to_world(wcs::WCSLIB.wcsprm, pix_loc::Array{Float64})
         return world_loc'
     end
 end
+
+@doc """
+Extract the real part from a 1d or 2d DualNumbers array.
+""" ->
+function flatten_dual_number_array{NumType <: Number}(world_loc::Array{DualNumbers.Dual{NumType}})
+    if length(size(world_loc)) == 1
+        float_world_loc = Float64[ DualNumbers.real(loc) for loc in world_loc ]
+    else
+        @assert length(size(world_loc)) == 2
+        float_world_loc = Float64[ DualNumbers.real(world_loc[i, j]) for
+                                   i=1:size(world_loc, 1), j=1:size(world_loc, 2)]
+    end
+    float_world_loc
+end
+
+@doc """
+Special handling of the DualNumber type which cannot be passed to C.  Note
+that forward differentation cannot be applied to the location for this reason.
+""" ->
+function world_to_pixel{NumType <: Number}(wcs::WCSLIB.wcsprm, world_loc::Array{DualNumbers.Dual{NumType}})
+    dual_type = typeof(world_loc[1])
+    convert(Array{dual_type}, world_to_pixel(wcs, flatten_dual_number_array(world_loc)))
+end
+
+@doc """
+Special handling of the DualNumber type which cannot be passed to C.  Note
+that forward differentation cannot be applied to the location for this reason.
+""" ->
+function pixel_to_world{NumType <: Number}(wcs::WCSLIB.wcsprm, world_loc::Array{DualNumbers.Dual{NumType}})
+    dual_type = typeof(world_loc[1])
+    convert(Array{dual_type}, pixel_to_world(wcs, flatten_dual_number_array(world_loc)))
+end
+
 
 @doc """
 The names of the coordinate axes in a WCS coordinate system.

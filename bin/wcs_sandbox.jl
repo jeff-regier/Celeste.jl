@@ -56,13 +56,13 @@ sort(obj_df[obj_df[:is_gal] .== false, :], cols=:psfflux_r, rev=true)
 #objid = "1237662226208063541" # A bright star but with lots of bad pixels
 #objid = "1237662226208063551" # A bright star but with lots of bad pixels
 #objid = "1237662226208063491" # A bright star ... bad pixels though
-objid = "1237662226208063565" # A brightish star
+objid = "1237662226208063565" # A brightish star but with good pixels.
 
 
 #sub_rows_x = 1:150
 #sub_rows_y = 1:150
 
-width = 4
+width = 8
 
 blob = deepcopy(original_blob);
 reset_crpix!(blob);
@@ -109,10 +109,36 @@ initial_mp = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
 # Check the re-centering
 for b=1:5
 	println(WCS.world_to_pixel(blob[b].wcs, obj_loc))
+	#println(WCS.world_to_pixel(blob[b].wcs, initial_mp.vp[1][ids.u]))
 end
 
 ##############################
 # Fit the image.
+
+# Define a custom scaling.
+custom_rect_rescaling = ones(length(UnconstrainedParams));
+[custom_rect_rescaling[id] *= 1e-3 for id in ids_free.r1];
+[custom_rect_rescaling[id] *= 1e5 for id in ids_free.u];
+[custom_rect_rescaling[id] *= 1e1 for id in ids_free.a];
+
+function custom_vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
+    Transform.vp_to_rect!(vp, vp_free, custom_rect_rescaling)
+end
+
+function custom_rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+    Transform.rect_to_vp!(vp_free, vp, custom_rect_rescaling)
+end
+
+function custom_rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
+    Transform.rect_unconstrain_sensitive_float(sf, mp, custom_rect_rescaling)
+end
+
+custom_rect_transform = Transform.DataTransform(custom_rect_to_vp!, custom_vp_to_rect!,
+                                     Transform.vector_to_free_vp!, Transform.free_vp_to_vector,
+                                     custom_rect_unconstrain_sensitive_float,
+                                     length(UnconstrainedParams));
+
+# Some helper functions
 
 function compare_solutions(mp1::ModelParams, mp2::ModelParams)
     # Compare the parameters, fits, and iterations.
@@ -176,38 +202,29 @@ round(1000. .* (fit_psfs[b][nz, nz] - raw_psfs[b][nz, nz]), 1)
 println(psf_scales[b])
 
 
+# Try varying background.
 for b=1:5
-	# Try non-varying background.
+	blob[b].constant_background = false
+end
+#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
+mp = deepcopy(initial_mp);
+#res = OptimizeElbo.maximize_likelihood(blob, mp, Transform.rect_transform, xtol_rel=0);
+res = OptimizeElbo.maximize_likelihood(blob, mp, custom_rect_transform);
+compare_solutions(mp, initial_mp)
+display_cat(cat_entries[1]);
+get_brightness(mp)
+
+# Try non-varying background.
+for b=1:5
 	blob[b].constant_background = true
 end
 #include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
 mp_const = deepcopy(initial_mp);
 #res = OptimizeElbo.maximize_elbo(blob, mp_const);
-res = OptimizeElbo.maximize_likelihood(blob, mp_const);
-compare_solutions(mp, mp_const)
-get_brightness(mp_const)
-
-
-# This gives pretty different values.  Note! It is getting the wrong pixels from
-# the sky and bias columns because of the re-sizing...
-for b=1:5
-	# Try varying background.
-	blob[b].constant_background = false
-end
-#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
-mp = deepcopy(initial_mp);
-mp.vp[1][ids.e_scale] = 0.5
-#res = OptimizeElbo.maximize_likelihood(blob, mp, Transform.rect_transform, xtol_rel=0);
-res = OptimizeElbo.maximize_likelihood(blob, mp);
-# It says this star is a galaxy.  A problem with the PSF?
+res = OptimizeElbo.maximize_likelihood(blob, mp_const, custom_rect_transform);
 compare_solutions(mp, initial_mp)
-# lik = ElboDeriv.elbo_likelihood(blob, mp);
-# DataFrame(name=ids_names, d=lik.d[:,1])
-
-
-# Look.
 display_cat(cat_entries[1]);
-get_brightness(mp)
+get_brightness(mp_const)
 
 
 ###################
