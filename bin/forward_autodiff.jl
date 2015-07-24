@@ -29,7 +29,12 @@ omitted_ids = union(omitted_ids, ids_free.r2[2])
 omitted_ids = unique(omitted_ids)
 
 kept_ids = setdiff(1:length(ids_free), omitted_ids)
+eps = 1e-9
+mp.vp[1][ids.a] = [ 1.0 - eps, eps ]
 
+mp_fit = deepcopy(mp_original);
+mp_fit.vp[1][ids.a] = [ 1.0 - eps, eps ]
+OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids);
 
 
 x0 = transform.vp_to_vector(mp.vp, omitted_ids);
@@ -127,7 +132,7 @@ end
 
 
 ##########
-max_iters = 20;
+max_iters = 30;
 
 d = Optim.DifferentiableFunction(get_elbo_value, get_elbo_derivative!);
 x_old = deepcopy(x0);
@@ -166,12 +171,20 @@ for iter in 1:max_iters
     max_ev = maximum(hess_ev)
     if min_ev < 0
         println("========== Warning -- non-convex, $(min_ev)")
+        elbo_hess += eye(length(x_new)) * abs(min_ev)
+        hess_ev = eig(elbo_hess)[1]
+        min_ev = minimum(hess_ev)
+        max_ev = maximum(hess_ev)
     end
     println("========= Eigenvalues: $(max_ev), $(min_ev)")
     if abs(max_ev) / abs(min_ev) > 1e3
         println("Regularizing hessian")
-        elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e2)
+        elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e6)
+        hess_ev = eig(elbo_hess)[1]
+        min_ev = minimum(hess_ev)
+        max_ev = maximum(hess_ev)
     end
+    println("========= Eigenvalues: $(max_ev), $(min_ev)")
     x_direction = -(elbo_hess \ gr_new);
     alpha = 1.0;
     backsteps = 0;
@@ -186,7 +199,7 @@ for iter in 1:max_iters
     x_direction = alpha * x_direction
     gr_new = zeros(Float64, length(x_old));
     get_elbo_derivative!(x_old, gr_new);
-    //println(DataFrame(name=ids_free_names[kept_ids], grad=gr_new, hess=diag(elbo_hess), p=x_direction))
+    #println(DataFrame(name=ids_free_names[kept_ids], grad=gr_new, hess=diag(elbo_hess), p=x_direction))
     lsr = Optim.LineSearchResults(Float64); # Not used
     c = -1.; # Not used
     mayterminate = true; # Not used
@@ -200,9 +213,9 @@ for iter in 1:max_iters
     x_vals[iter] = deepcopy(x_new)
 end
 
-hcat(f_vals, last_f_vals)
-hcat(diff(f_vals) ./ f_vals[1:(end-1)], diff(last_f_vals) ./ last_f_vals[1:(end-1)])
-minimum(f_vals) / minimum(last_f_vals)
+f_vals
+diff(f_vals) ./ f_vals[1:(end-1)]
+minimum(f_vals)
 
 [ x ./ [x_vals[1] - x_vals[end]] for x in diff(x_vals) ]
 
@@ -232,4 +245,9 @@ show_mp(mp)
 show_mp(mp_original)
 
 get_brightness(mp)
+get_brightness(mp_fit)
 get_brightness(mp_original)
+
+fit_v = ElboDeriv.elbo(blob, mp_fit).v;
+((-f_vals) - fit_v) / abs(fit_v) # f_vals are negative because it's minimization
+(ElboDeriv.elbo(blob, mp).v - fit_v) / abs(fit_v)

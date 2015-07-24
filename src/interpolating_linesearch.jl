@@ -189,7 +189,7 @@ function zoom(a_lo::Real,
         if isnan(phi_a_j)
             a_j /= rho
             a_hi = a_j
-            println("Armijo scaling back by rho.  $a_j")
+            verbose && println("Armijo scaling back by rho.  $a_j")
         elseif (phi_a_j > phi_0 + c1 * a_j * phiprime_0) ||
              (phi_a_j > phi_a_lo)
             verbose && println("Reducing a_hi")
