@@ -38,7 +38,7 @@ function get_autodiff_funcs(mp, kept_ids, omitted_ids, transform, f::Function)
     function f_objective(x_dual::Array{Dual{Float64}})
         # Evaluate in the constrained space and then unconstrain again.
         transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
-        f_res = f(blob, mp_dual)
+        f_res = f(mp_dual)
         res = transform.transform_sensitive_float(f_res, mp_dual)
         res
     end
@@ -71,10 +71,10 @@ function get_autodiff_funcs(mp, kept_ids, omitted_ids, transform, f::Function)
             print(".")
             x_dual[index] = Dual(x[index], 1.)
             deriv = f_deriv(x_dual)[kept_ids]
-            elbo_hess[:, index] = Float64[ epsilon(x_val) for x_val in deriv ]
+            hess[:, index] = Float64[ epsilon(x_val) for x_val in deriv ]
             x_dual[index] = Dual(x[index], 0.)
         end
-        print("\n")
+        print("Done.\n")
         hess
     end
 
@@ -131,62 +131,55 @@ end
 nlopt_fail_mp = deepcopy(mp_fit);
 x_fail = transform.vp_to_vector(nlopt_fail_mp.vp, omitted_ids);
 
+
+#########
+# The derivative with respect to r2 is wrong with the free transform
+
 elbo_ad_grad, elbo_value, elbo_deriv, elbo_objective, elbo_hessian =
-    get_autodiff_funcs(nlopt_fail_mp, kept_ids, omitted_ids, Transform.free_transform, ElboDeriv.elbo);
+    get_autodiff_funcs(nlopt_fail_mp, kept_ids, omitted_ids, Transform.free_transform,
+                       mp -> ElboDeriv.elbo(blob, mp));
 
 x_elbo_d_fail = elbo_deriv(x_fail);
 g_fd_fail = elbo_ad_grad(x_fail);
-x_elbo_d_fail[kept_ids] - g_fd_fail 
+x_elbo_d_fail[kept_ids] - g_fd_fail
 DataFrame(name=ids_free_names[kept_ids], elbo_d=x_elbo_d_fail[kept_ids], ad_d=g_fd_fail, diff=x_elbo_d_fail[kept_ids] - g_fd_fail)
+#hess = elbo_hessian(x_fail);
 
-# The derivative with respect to r2 is wrong.
 
+###############
+# The brighness seems ok
 
-# Check the brightness
-brightness_mp = deepcopy(nlopt_fail_mp);
-brightness_mp_dual = get_dual_mp(brightness_mp);
-brightness_kept_ids = ids_free.r2[1];
-brightness_ommitted_ids = setdiff(1:length(ids_free), brightness_kept_ids)
-b_i = 1;
-function brightness_objective(x_dual::Array{Dual{Float64}})
-    # Evaluate in the constrained space and then unconstrain again.
-    transform.vector_to_vp!(x_dual, brightness_mp_dual.vp, brightness_ommitted_ids)
-    brightness = ElboDeriv.SourceBrightness(brightness_mp_dual.vp[1])
-    res = transform.transform_sensitive_float(brightness.E_ll_a[b_i, 1], brightness_mp_dual)
-    res
+b_i = 1
+function get_brightness_e_l_a(mp::ModelParams)
+    println("Brighntess component $b_i")
+    brightness = ElboDeriv.SourceBrightness(mp.vp[1])
+    brightness.E_l_a[b_i, 1]
 end
 
-function brightness_objective(x::Array{Float64})
-    # Evaluate in the constrained space and then unconstrain again.
-    x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ]
-    brightness_objective(x_dual)
+function get_brightness_e_ll_a(mp::ModelParams)
+    println("Brighntess component $b_i")
+    brightness = ElboDeriv.SourceBrightness(mp.vp[1])
+    brightness.E_ll_a[b_i, 1]
 end
 
-function brightness_value(x)
-    println("Brighness value for b_i = $b_i")
-    brightness_objective(x).v
-end
+bright_ad_grad, bright_value, bright_deriv, bright_objective, bright_hessian =
+    get_autodiff_funcs(nlopt_fail_mp, kept_ids, omitted_ids, Transform.free_transform,
+                       get_brightness_e_ll_a);
 
-function brightness_deriv(x)
-    brightness_objective(x).d[brightness_kept_ids]
-end
-
-brightness_x = transform.vp_to_vector(nlopt_fail_mp.vp, brightness_ommitted_ids)
-brightness_value(brightness_x)
-
-brightness_value_ad_grad = ForwardDiff.forwarddiff_gradient(brightness_value, Float64, fadtype=:dual; n=length(brightness_x));
-
-# Sure enough, there is a bug in the E_ll_a derivatives wrt r2.  But not for the rect transform, ony for the free.
+bright_x = transform.vp_to_vector(nlopt_fail_mp.vp, omitted_ids);
 for b_i in 1:5
-    println(brightness_value(brightness_x), "\n",
-        real(brightness_value_ad_grad(brightness_x)[1]), "\n",
-        brightness_deriv(brightness_x))
+    ad_deriv = bright_ad_grad(bright_x)
+    clst_deriv = bright_deriv(bright_x)[kept_ids]
+    println(DataFrame(name=ids_free_names[kept_ids], ad=ad_deriv, celeste=clst_deriv, diff=clst_deriv - ad_deriv))
 end
+
+
 
 ###########
 # The gamma_lk_wrapper seems to be fine.
+
 k1 = nlopt_fail_mp.pp.r[1][1]; theta1 = nlopt_fail_mp.pp.r[1][2];
-k2 = nlopt_fail_mp.vp[1][ids.r1][1]; theta2 = nlopt_fail_mp.vp[1][ids.r2][1];
+k2 = nlopt_fail_mp.vp[1][ids.r1[1]]; theta2 = nlopt_fail_mp.vp[1][ids.r2[1]];
 gamma_kl = KL.gen_gamma_kl(k1, theta1);
 gamma_kl(k2, theta2)
 
@@ -202,8 +195,85 @@ ad_grad = gamma_kl_ad_grad(p)
 d1, d2 = gamma_kl(k2, theta2)[2]
 clst_grad = Float64[d1, d2]
 ad_grad - clst_grad
-###############
 
+
+###############
+# The difference is only in the ELBO, not in the likelihood.
+
+function subtract_kl_r!(i::Int64, s::Int64,
+                        mp::ModelParams, accum::SensitiveFloat)
+    vs = mp.vp[s]
+    k1 = mp.pp.r[i][1]
+    theta1 = mp.pp.r[i][2]
+    #println(k1, " ", theta1)
+    pp_kl_r = KL.gen_gamma_kl(k1, theta1)
+    k2 = vs[ids.r1[i]]
+    theta2 = vs[ids.r2[i]]
+    #println(k2, " ", theta2)
+    #println(pp_kl_r(k2, theta2))
+    (v, (d_r1, d_r2)) = pp_kl_r(k2, theta2)
+    println(d_r1, " ", d_r2)
+    accum.v -= v * vs[ids.a[i]]
+    accum.d[ids.r1[i], s] -= d_r1 .* vs[ids.a[i]]
+    accum.d[ids.r2[i], s] -= d_r2 .* vs[ids.a[i]]
+    accum.d[ids.a[i], s] -= v
+end
+
+function subtract_kl_r{T <: Number}(mp::ModelParams{T})
+    accum = zero_sensitive_float(CanonicalParams, T)
+    subtract_kl_r!(1, 1, mp, accum)
+    accum
+end
+
+kl_res = subtract_kl_r(nlopt_fail_mp);
+
+v_r1 = nlopt_fail_mp.vp[1][ids.r1[1]]
+d_r1 = kl_res.d[ids.r1[1]]
+
+v_r2 = nlopt_fail_mp.vp[1][ids.r2[1]]
+d_r2 = kl_res.d[ids.r2[1]]
+
+2.0 * d_r1 * v_r1 - d_r2 * v_r2
+-1.0 * d_r1 * v_r1 + d_r2 * v_r2
+
+
+subtract_kl_r(nlopt_fail_mp).v
+
+kl_ad_grad, kl_value, kl_deriv, kl_objective, kl_hessian =
+    get_autodiff_funcs(nlopt_fail_mp, kept_ids, omitted_ids, Transform.free_transform,
+                       subtract_kl_r);
+
+x_kl_d_fail = kl_deriv(x_fail);
+g_fd_fail = kl_ad_grad(x_fail);
+x_kl_d_fail[kept_ids] - g_fd_fail
+DataFrame(name=ids_free_names[kept_ids], kl_d=x_kl_d_fail[kept_ids], ad_d=g_fd_fail, diff=x_kl_d_fail[kept_ids] - g_fd_fail)
+
+
+###################
+# gen_gamma_kl is probably the problem, as it involves taking the differences of very large floating point values.
+
+digamma_k1 = digamma(k1)
+theta_ratio = (theta1 - theta2) / theta2
+shape_diff = k1 - k2
+
+# The things that are summed to get v:
+shape_diff * digamma_k1
+-lgamma(k1) + lgamma(k2)
+k2 * (log(theta2) - log(theta1))
+k1 * theta_ratio
+
+# The things that are summed to get d_k1:
+shape_diff * trigamma(k1)
+theta_ratio
+
+# The things that are summed to get d_theta1:
+-k2 / theta1
+k1 / theta2
+
+
+
+
+##########################
 
 x0 = transform.vp_to_vector(mp.vp, omitted_ids);
 x0_dual = Dual{Float64}[ Dual{Float64}(x0[i], 0.) for i = 1:length(x0) ]
