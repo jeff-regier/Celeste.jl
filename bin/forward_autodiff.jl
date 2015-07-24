@@ -162,7 +162,16 @@ for iter in 1:max_iters
     #x_direction = -1e-6 * gr_new;
     get_elbo_hessian!(x_new, elbo_hess);
     hess_ev = eig(elbo_hess)[1]
-    println("========= Eigenvalues: $(maximum(hess_ev)), $(minimum(hess_ev))")
+    min_ev = minimum(hess_ev)
+    max_ev = maximum(hess_ev)
+    if min_ev < 0
+        println("========== Warning -- non-convex, $(min_ev)")
+    end
+    println("========= Eigenvalues: $(max_ev), $(min_ev)")
+    if abs(max_ev) / abs(min_ev) > 1e3
+        println("Regularizing hessian")
+        elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e2)
+    end
     x_direction = -(elbo_hess \ gr_new);
     alpha = 1.0;
     backsteps = 0;
@@ -175,11 +184,9 @@ for iter in 1:max_iters
         end
     end
     x_direction = alpha * x_direction
-
-    println(x_direction)
     gr_new = zeros(Float64, length(x_old));
     get_elbo_derivative!(x_old, gr_new);
-    println(DataFrame(name=ids_free_names[kept_ids], grad=gr_new, hess=diag(elbo_hess), p=x_direction))
+    //println(DataFrame(name=ids_free_names[kept_ids], grad=gr_new, hess=diag(elbo_hess), p=x_direction))
     lsr = Optim.LineSearchResults(Float64); # Not used
     c = -1.; # Not used
     mayterminate = true; # Not used
@@ -188,10 +195,41 @@ for iter in 1:max_iters
                               lsr, c, mayterminate;
                               c1 = 1e-4,
                               c2 = 0.9,
-                              rho = 2.0, verbose=true);
+                              rho = 2.0, verbose=false);
     f_vals[iter] = get_elbo_value(x_new);
-    x_vals[iter] = x_new
+    x_vals[iter] = deepcopy(x_new)
 end
 
-diff(f_vals) ./ f_vals[1:(end-1)]
+hcat(f_vals, last_f_vals)
+hcat(diff(f_vals) ./ f_vals[1:(end-1)], diff(last_f_vals) ./ last_f_vals[1:(end-1)])
+minimum(f_vals) / minimum(last_f_vals)
 
+[ x ./ [x_vals[1] - x_vals[end]] for x in diff(x_vals) ]
+
+
+last_f_vals = deepcopy(f_vals)
+
+transform.vector_to_vp!(x_new, mp.vp, omitted_ids)
+
+
+function get_brightness(mp::ModelParams)
+    brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+    brightness_vals = [ Float64[b.E_l_a[i, j].v for
+        i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
+    brightness_vals
+end
+
+function show_mp(mp_show)
+    for var_name in names(ids)
+        println(var_name)
+        for s in 1:mp_show.S
+            println(s, ":\n", mp_show.vp[s][ids.(var_name)])
+        end
+    end
+end
+
+show_mp(mp)
+show_mp(mp_original)
+
+get_brightness(mp)
+get_brightness(mp_original)
