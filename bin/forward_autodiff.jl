@@ -27,7 +27,8 @@ end
 
 blob, mp_original, body = gen_sample_star_dataset();
 mp = deepcopy(mp_original);
-transform = Transform.free_transform;
+#transform = Transform.free_transform;
+transform = Transform.world_rect_transform;
 
 # Note that the u hessians are no good.
 #omitted_ids = Int64[ids_free.u, ids_free.k[:], ids_free.c2[:], ids_free.r2];
@@ -41,6 +42,7 @@ omitted_ids = union(omitted_ids, ids_free.c1[:,2])
 omitted_ids = union(omitted_ids, ids_free.c2[:,2])
 omitted_ids = union(omitted_ids, ids_free.r1[2])
 omitted_ids = union(omitted_ids, ids_free.r2[2])
+omitted_ids = union(omitted_ids, ids_free.k[:,2])
 omitted_ids = unique(omitted_ids)
 
 kept_ids = setdiff(1:length(ids_free), omitted_ids)
@@ -66,7 +68,80 @@ for i in 1:length(eps_vec)
     x_results[i] = max_x
 end
 
+nlopt_fail_mp = deepcopy(mp_fit);
+x_fail = transform.vp_to_vector(nlopt_fail_mp.vp, omitted_ids);
+x_elbo_d_fail = elbo_deriv(x_fail);
+objective_grad = ForwardDiff.forwarddiff_gradient(elbo_value, Float64, fadtype=:dual; n=length(x_fail));
+g_fd_fail = objective_grad(x_fail);
+DataFrame(name=ids_free_names[kept_ids], elbo_d=real(x_elbo_d_fail[kept_ids]), ad_d=g_fd_fail)
 
+# The derivative with respect to r2 is wrong.
+
+
+# Check the brightness
+function get_dual_mp(mp::ModelParams{Float64})
+    ModelParams(convert(Array{Array{Dual{Float64}, 1}, 1}, mp.vp),
+                mp.pp, mp.patches, mp.tile_width)
+end
+brightness_mp = deepcopy(nlopt_fail_mp);
+brightness_mp_dual = get_dual_mp(brightness_mp);
+brightness_kept_ids = ids_free.r2[1];
+brightness_ommitted_ids = setdiff(1:length(ids_free), brightness_kept_ids)
+b_i = 1;
+function brightness_objective(x_dual::Array{Dual{Float64}})
+    # Evaluate in the constrained space and then unconstrain again.
+    transform.vector_to_vp!(x_dual, brightness_mp_dual.vp, brightness_ommitted_ids)
+    brightness = ElboDeriv.SourceBrightness(brightness_mp_dual.vp[1])
+    res = transform.transform_sensitive_float(brightness.E_ll_a[b_i, 1], brightness_mp_dual)
+    res
+end
+
+function brightness_objective(x::Array{Float64})
+    # Evaluate in the constrained space and then unconstrain again.
+    x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ]
+    brightness_objective(x_dual)
+end
+
+function brightness_value(x)
+    println("Brighness value for b_i = $b_i")
+    brightness_objective(x).v
+end
+
+function brightness_deriv(x)
+    brightness_objective(x).d[brightness_kept_ids]
+end
+
+brightness_x = transform.vp_to_vector(nlopt_fail_mp.vp, brightness_ommitted_ids)
+brightness_value(brightness_x)
+
+brightness_value_ad_grad = ForwardDiff.forwarddiff_gradient(brightness_value, Float64, fadtype=:dual; n=length(brightness_x));
+
+# Sure enough, there is a bug in the E_ll_a derivatives wrt r2.  But not for the rect transform, ony for the free.
+for b_i in 1:5
+    println(brightness_value(brightness_x), "\n",
+        real(brightness_value_ad_grad(brightness_x)[1]), "\n",
+        brightness_deriv(brightness_x))
+end
+
+# The gamma_lk_wrapper seems to be fine.
+k1 = nlopt_fail_mp.pp.r[1][1]; theta1 = nlopt_fail_mp.pp.r[1][2];
+k2 = nlopt_fail_mp.vp[1][ids.r1][1]; theta2 = nlopt_fail_mp.vp[1][ids.r2][1];
+gamma_kl = KL.gen_gamma_kl(k1, theta1);
+gamma_kl(k2, theta2)
+
+function gamma_kl_wrapper{T <: Number}(p::Array{T})
+    gamma_kl(p[1], p[2])[1]
+end
+
+p = Float64[k2, theta2]
+gamma_kl(k2, theta2)[1]
+gamma_kl_wrapper(p)
+gamma_kl_ad_grad = ForwardDiff.forwarddiff_gradient(gamma_kl_wrapper, Float64, fadtype=:dual; n=2);
+ad_grad = gamma_kl_ad_grad(p)
+d1, d2 = gamma_kl(k2, theta2)[2]
+clst_grad = Float64[d1, d2]
+ad_grad - clst_grad
+###############
 
 
 x0 = transform.vp_to_vector(mp.vp, omitted_ids);
