@@ -422,9 +422,9 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
 
         # Brightness.
         sf_free.d[ids_free.r1, s] =
-            2.0 * sf.d[ids.r1, s] .* mp.vp[s][ids.r1] - sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
+            2.0 * sf.d[ids.r1, s] .* mp.vp[s][ids.r1] - sf.d[ids.r2, s] .* mp.vp[s][ids.r1]
         sf_free.d[ids_free.r2, s] =
-            -sf.d[ids.r1, s] .* mp.vp[s][ids.r1] + sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
+            -sf.d[ids.r1, s] .* mp.vp[s][ids.r2] + sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
     end
 
     sf_free
