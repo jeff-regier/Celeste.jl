@@ -125,7 +125,10 @@ if false
     x = optim_res1.minimum;
 end
 
-###########
+
+##########
+max_iters = 20;
+
 d = Optim.DifferentiableFunction(get_elbo_value, get_elbo_derivative!);
 x_old = deepcopy(x0);
 x_new = deepcopy(x_old);
@@ -136,7 +139,6 @@ f_val = get_elbo_value(x_new);
 
 elbo_hess = zeros(Float64, length(kept_ids), length(kept_ids));
 get_elbo_hessian!(x_new, elbo_hess);
-max_iters = 5;
 f_vals = zeros(Float64, max_iters)
 x_vals = [ zeros(Float64, length(x_old)) for iter=1:max_iters ]
 println(DataFrame(name=ids_free_names[kept_ids], grad=gr_new, hess=diag(elbo_hess)))
@@ -151,14 +153,32 @@ sort(hess_eig_val)
 #     println(eigs[[:name, symbol("x$i")]])
 # end
 
+rho = 2.0;
+max_backstep = 20;
 include("src/interpolating_linesearch.jl")
 for iter in 1:max_iters
     println("-------------------$iter")
     x_old = deepcopy(x_new);
     #x_direction = -1e-6 * gr_new;
     get_elbo_hessian!(x_new, elbo_hess);
+    hess_ev = eig(elbo_hess)[1]
+    println("========= Eigenvalues: $(maximum(hess_ev)), $(minimum(hess_ev))")
     x_direction = -(elbo_hess \ gr_new);
+    alpha = 1.0;
+    backsteps = 0;
+    while isnan(get_elbo_value(x_old + alpha * x_direction))
+        alpha /= rho;
+        println("Backstepping: ")
+        backsteps += 1;
+        if backsteps > max_backstep
+            error("Not a descent direction.")
+        end
+    end
+    x_direction = alpha * x_direction
+
+    println(x_direction)
     gr_new = zeros(Float64, length(x_old));
+    get_elbo_derivative!(x_old, gr_new);
     println(DataFrame(name=ids_free_names[kept_ids], grad=gr_new, hess=diag(elbo_hess), p=x_direction))
     lsr = Optim.LineSearchResults(Float64); # Not used
     c = -1.; # Not used

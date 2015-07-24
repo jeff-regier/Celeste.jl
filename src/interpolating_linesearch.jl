@@ -39,6 +39,8 @@ function interpolating_linesearch!{T}(d::Union(DifferentiableFunction,
     phiprime_0 = dot(gr_new, p)
     phiprime_a_i = NaN
     phiprime_0 < 0 || error("p is not a descent direction")
+    @assert !isnan(phiprime_0)
+    @assert !isnan(phi_0)
 
     # Iteration counter
     i = 1
@@ -127,6 +129,10 @@ function zoom(a_lo::Real,
     # Count iterations
     iteration = 0
 
+    rho = 2.0
+
+    @assert !isnan(f(x))
+
     # Shrink bracket
     while iteration < max_iterations
         verbose && println("Zoom iteration $iteration")
@@ -155,7 +161,11 @@ function zoom(a_lo::Real,
         phiprime_a_hi = dot(gr_new, p)
 
         # Interpolate a_j
-        if a_lo < a_hi
+        if isnan(phi_a_hi)
+          a_hi /= rho
+          a_j = a_hi
+          println("Scaling back by rho.  $a_j")
+        elseif a_lo < a_hi
             a_j = interpolate(a_lo, a_hi,
                               phi_a_lo, phi_a_hi,
                               phiprime_a_lo, phiprime_a_hi)
@@ -176,11 +186,13 @@ function zoom(a_lo::Real,
         f_calls += 1
 
         # Check Armijo
-        if (phi_a_j > phi_0 + c1 * a_j * phiprime_0) ||
-             (phi_a_j > phi_a_lo) ||
-             isnan(phi_a_j)
-            verbose && println("Reducing a_hi")
+        if isnan(phi_a_j)
+            a_j /= rho
             a_hi = a_j
+            println("Armijo scaling back by rho.  $a_j")
+        elseif (phi_a_j > phi_0 + c1 * a_j * phiprime_0) ||
+             (phi_a_j > phi_a_lo)
+            verbose && println("Reducing a_hi")
         else
             # Evaluate phiprime(a_j)
             g!(x_new, gr_new)
@@ -194,7 +206,8 @@ function zoom(a_lo::Real,
 
             if phiprime_a_j * (a_hi - a_lo) >= 0.0
                 verbose && println("setting a_hi = a_lo")
-                a_hi = a_lo
+                return a_j, f_calls, g_calls
+                #a_hi = a_lo # I don't get why this doesn't return here.
             end
 
             a_lo = a_j
