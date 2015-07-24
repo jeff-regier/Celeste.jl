@@ -329,14 +329,14 @@ function vp_to_free!{NumType <: Number}(vp::VariationalParams{NumType},
         # as the free parameter.
         vp_free[s][ids_free.k[1, :]] = Util.inv_logit(vp[s][ids.k[1, :]])
 
-	# e_axis is not technically a simplicial constraint but it must lie in (0, 1).
+	    # e_axis is not technically a simplicial constraint but it must lie in (0, 1).
         vp_free[s][ids_free.e_axis] = Util.inv_logit(vp[s][ids.e_axis])
 
         # Positivity constraints
         vp_free[s][ids_free.e_scale] = log(vp[s][ids.e_scale])
         vp_free[s][ids_free.c2] = log(vp[s][ids.c2])
 
-	# Parameterize brightness in more observable quantities.
+	    # Parameterize brightness in more observable quantities.
         # ids_free.r1 = log(r1) + log(r2)
         # ids_free.r2 = log(r1) + 2 log(r2)
         vp_free[s][ids_free.r1] = log(vp[s][ids.r1]) + log(vp[s][ids.r2])
@@ -364,7 +364,7 @@ function free_to_vp!{NumType <: Number}(vp_free::FreeVariationalParams{NumType},
         vp[s][ids.k[1, :]] = Util.logit(vp_free[s][ids_free.k[1, :]])
         vp[s][ids.k[2, :]] = 1.0 - vp[s][ids.k[1, :]]
 	
-	# e_axis is not technically a simplicial constraint but it must lie in (0, 1).
+	    # e_axis is not technically a simplicial constraint but it must lie in (0, 1).
         vp[s][ids.e_axis] = Util.logit(vp_free[s][ids_free.e_axis])
 
          # Positivity constraints
