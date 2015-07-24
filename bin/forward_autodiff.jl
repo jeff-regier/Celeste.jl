@@ -9,11 +9,27 @@ using DualNumbers
 import Transform
 import Optim
 
+function get_brightness(mp::ModelParams)
+    brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+    brightness_vals = [ Float64[b.E_l_a[i, j].v for
+        i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
+    brightness_vals
+end
+
+function show_mp(mp_show)
+    for var_name in names(ids)
+        println(var_name)
+        for s in 1:mp_show.S
+            println(s, ":\n", mp_show.vp[s][ids.(var_name)])
+        end
+    end
+end
+
 blob, mp_original, body = gen_sample_star_dataset();
 mp = deepcopy(mp_original);
 transform = Transform.free_transform;
-# Note that the u hessians are no good.
 
+# Note that the u hessians are no good.
 #omitted_ids = Int64[ids_free.u, ids_free.k[:], ids_free.c2[:], ids_free.r2];
 #omitted_ids = ids_free.u;
 
@@ -23,7 +39,6 @@ omitted_ids = union(omitted_ids, ids_free.u)
 omitted_ids = union(omitted_ids, ids_free.a)
 omitted_ids = union(omitted_ids, ids_free.c1[:,2])
 omitted_ids = union(omitted_ids, ids_free.c2[:,2])
-omitted_ids = union(omitted_ids, ids_free.c1[:,2])
 omitted_ids = union(omitted_ids, ids_free.r1[2])
 omitted_ids = union(omitted_ids, ids_free.r2[2])
 omitted_ids = unique(omitted_ids)
@@ -32,9 +47,26 @@ kept_ids = setdiff(1:length(ids_free), omitted_ids)
 eps = 1e-9
 mp.vp[1][ids.a] = [ 1.0 - eps, eps ]
 
-mp_fit = deepcopy(mp_original);
-mp_fit.vp[1][ids.a] = [ 1.0 - eps, eps ]
-OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids);
+
+eps_vec = linspace(eps, 1 - eps, 5);
+brightness_results = Array(Any, length(eps_vec));
+elbo_results = Array(Float64, length(eps_vec));
+mp_results = Array(Any, length(eps_vec));
+x_results = Array(Any, length(eps_vec));
+
+for i in 1:length(eps_vec)
+    this_eps = eps_vec[i]
+    mp_fit = deepcopy(mp_original);
+    mp_fit.vp[1][ids.a] = [ 1.0 - this_eps, this_eps ]
+    println("$i $(mp_fit.vp[1][ids.a])")
+    iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids);
+    elbo_results[i] = ElboDeriv.elbo(blob, mp_fit).v;
+    brightness_results[i] = get_brightness(mp_fit);
+    mp_results[i] = deepcopy(mp_fit);
+    x_results[i] = max_x
+end
+
+
 
 
 x0 = transform.vp_to_vector(mp.vp, omitted_ids);
@@ -225,21 +257,6 @@ last_f_vals = deepcopy(f_vals)
 transform.vector_to_vp!(x_new, mp.vp, omitted_ids)
 
 
-function get_brightness(mp::ModelParams)
-    brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
-    brightness_vals = [ Float64[b.E_l_a[i, j].v for
-        i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
-    brightness_vals
-end
-
-function show_mp(mp_show)
-    for var_name in names(ids)
-        println(var_name)
-        for s in 1:mp_show.S
-            println(s, ":\n", mp_show.vp[s][ids.(var_name)])
-        end
-    end
-end
 
 show_mp(mp)
 show_mp(mp_original)
