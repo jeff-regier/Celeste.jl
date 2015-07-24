@@ -194,7 +194,7 @@ function vp_to_rect!{NumType <: Number}(vp::VariationalParams{NumType},
         vp_free[s][ids_free.a[1]] = vp[s][ids.a[2]]
 
         # Keep all but the last row of k.
-        vp_free[s][ids_free.k] = vp[s][ids.k[1:(Ia - 1), :]]
+        vp_free[s][ids_free.k] = vp[s][ids.k[1:(D - 1), :]]
 
         for i in 1:length(ids_free)
             vp_free[s][i] = vp_free[s][i] .* rect_rescaling[i]
