@@ -116,7 +116,8 @@ elbo_results = Array(Float64, length(eps_vec));
 mp_results = Array(Any, length(eps_vec));
 x_results = Array(Any, length(eps_vec));
 
-for i in 1:length(eps_vec)
+#for i in 1:length(eps_vec)
+    i = 2
     this_eps = eps_vec[i]
     mp_fit = deepcopy(mp_original);
     mp_fit.vp[1][ids.a] = [ 1.0 - this_eps, this_eps ]
@@ -126,7 +127,7 @@ for i in 1:length(eps_vec)
     brightness_results[i] = get_brightness(mp_fit);
     mp_results[i] = deepcopy(mp_fit);
     x_results[i] = max_x
-end
+#end
 
 nlopt_fail_mp = deepcopy(mp_fit);
 x_fail = transform.vp_to_vector(nlopt_fail_mp.vp, omitted_ids);
@@ -227,6 +228,9 @@ end
 
 kl_res = subtract_kl_r(nlopt_fail_mp);
 
+############
+# Here are the terms in the transfrom:
+
 v_r1 = nlopt_fail_mp.vp[1][ids.r1[1]]
 d_r1 = kl_res.d[ids.r1[1]]
 
@@ -236,21 +240,50 @@ d_r2 = kl_res.d[ids.r2[1]]
 2.0 * d_r1 * v_r1 - d_r2 * v_r2
 -1.0 * d_r1 * v_r1 + d_r2 * v_r2
 
+log(v_r1)
+log(v_r2)
+
+# What does autodiff do?  First it gets these guys:
+
+# v_r1 and v_r2 should be known quite precisely -- the come from
+# exp(difference of logs).
+exp(2 * x_fail[1] - x_fail[2]) == v_r1
+exp(x_fail[2] - x_fail[1]) == v_r2
+
+# The derivatives will be huge at this point.
+
+# Then it applies the kl function.  That involves adding and subtracting
+# very large floating point values.
+
+# It never really gets untransformed.
+# This suggests that there is likely a problem with autodiff, not
+# with the hand-coded derivatives
+
+
+############
 
 subtract_kl_r(nlopt_fail_mp).v
 
+# The problem is only for the free_transform.
+#kl_transform = Transform.world_rect_transform;
+kl_transform = Transform.free_transform;
+
+kl_x_fail = kl_transform.vp_to_vector(nlopt_fail_mp.vp, omitted_ids);
 kl_ad_grad, kl_value, kl_deriv, kl_objective, kl_hessian =
-    get_autodiff_funcs(nlopt_fail_mp, kept_ids, omitted_ids, Transform.free_transform,
+    get_autodiff_funcs(nlopt_fail_mp, kept_ids, omitted_ids, kl_transform,
                        subtract_kl_r);
 
-x_kl_d_fail = kl_deriv(x_fail);
-g_fd_fail = kl_ad_grad(x_fail);
+x_kl_d_fail = kl_deriv(kl_x_fail);
+g_fd_fail = kl_ad_grad(kl_x_fail);
 x_kl_d_fail[kept_ids] - g_fd_fail
 DataFrame(name=ids_free_names[kept_ids], kl_d=x_kl_d_fail[kept_ids], ad_d=g_fd_fail, diff=x_kl_d_fail[kept_ids] - g_fd_fail)
 
 
+nlopt_fail_mp_free_vp = transform.from_vp(nlopt_fail_mp.vp);
+
 ###################
-# gen_gamma_kl is probably the problem, as it involves taking the differences of very large floating point values.
+# gen_gamma_kl might be a problem, as it involves taking the differences of very large floating point values.
+# However, taken alone, the derivatves are fine.
 
 digamma_k1 = digamma(k1)
 theta_ratio = (theta1 - theta2) / theta2
@@ -269,6 +302,15 @@ theta_ratio
 # The things that are summed to get d_theta1:
 -k2 / theta1
 k1 / theta2
+
+
+hcat(reduce(hcat, OptimizeElbo.get_nlopt_unconstrained_bounds(nlopt_fail_mp.vp, omitted_ids, transform)), x_fail)
+
+##################################
+# Check the transform derivatives somehow?
+
+
+
 
 
 
