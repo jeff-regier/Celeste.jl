@@ -25,10 +25,70 @@ function show_mp(mp_show)
     end
 end
 
+function get_dual_mp(mp::ModelParams{Float64})
+    ModelParams(convert(Array{Array{Dual{Float64}, 1}, 1}, mp.vp),
+                mp.pp, mp.patches, mp.tile_width)
+end
+
+
+function get_autodiff_funcs(mp, kept_ids, omitted_ids, transform, f::Function)
+
+    mp_dual = get_dual_mp(mp);
+
+    function f_objective(x_dual::Array{Dual{Float64}})
+        # Evaluate in the constrained space and then unconstrain again.
+        transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
+        f_res = f(blob, mp_dual)
+        res = transform.transform_sensitive_float(f_res, mp_dual)
+        res
+    end
+
+    function f_objective(x::Array{Float64})
+        # Evaluate in the constrained space and then unconstrain again.
+        x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ]
+        f_objective(x_dual)
+    end
+
+    function f_value(x)
+        f_objective(x).v
+    end
+
+    function f_deriv(x)
+        f_objective(x).d[:]
+    end
+
+    function f_deriv(x::Vector{Float64})
+        real(f_objective(x).d[:])
+    end
+
+    function f_hessian(x::Array{Float64})
+        k = length(kept_ids)
+        @assert k == length(x)
+        hess = zeros(Float64, k, k);
+        x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:k ]
+        print("Getting Hessian ($k components): ")
+        for index in 1:k
+            print(".")
+            x_dual[index] = Dual(x[index], 1.)
+            deriv = f_deriv(x_dual)[kept_ids]
+            elbo_hess[:, index] = Float64[ epsilon(x_val) for x_val in deriv ]
+            x_dual[index] = Dual(x[index], 0.)
+        end
+        print("\n")
+        hess
+    end
+
+    f_ad_grad = ForwardDiff.forwarddiff_gradient(f_value, Float64, fadtype=:dual; n=length(kept_ids));
+
+    f_ad_grad, f_value, f_deriv, f_objective, f_hessian
+end
+
+
+
 blob, mp_original, body = gen_sample_star_dataset();
 mp = deepcopy(mp_original);
-#transform = Transform.free_transform;
-transform = Transform.world_rect_transform;
+transform = Transform.free_transform;
+#transform = Transform.world_rect_transform;
 
 # Note that the u hessians are no good.
 #omitted_ids = Int64[ids_free.u, ids_free.k[:], ids_free.c2[:], ids_free.r2];
@@ -70,19 +130,19 @@ end
 
 nlopt_fail_mp = deepcopy(mp_fit);
 x_fail = transform.vp_to_vector(nlopt_fail_mp.vp, omitted_ids);
+
+elbo_ad_grad, elbo_value, elbo_deriv, elbo_objective, elbo_hessian =
+    get_autodiff_funcs(nlopt_fail_mp, kept_ids, omitted_ids, Transform.free_transform, ElboDeriv.elbo);
+
 x_elbo_d_fail = elbo_deriv(x_fail);
-objective_grad = ForwardDiff.forwarddiff_gradient(elbo_value, Float64, fadtype=:dual; n=length(x_fail));
-g_fd_fail = objective_grad(x_fail);
-DataFrame(name=ids_free_names[kept_ids], elbo_d=real(x_elbo_d_fail[kept_ids]), ad_d=g_fd_fail)
+g_fd_fail = elbo_ad_grad(x_fail);
+x_elbo_d_fail[kept_ids] - g_fd_fail 
+DataFrame(name=ids_free_names[kept_ids], elbo_d=x_elbo_d_fail[kept_ids], ad_d=g_fd_fail, diff=x_elbo_d_fail[kept_ids] - g_fd_fail)
 
 # The derivative with respect to r2 is wrong.
 
 
 # Check the brightness
-function get_dual_mp(mp::ModelParams{Float64})
-    ModelParams(convert(Array{Array{Dual{Float64}, 1}, 1}, mp.vp),
-                mp.pp, mp.patches, mp.tile_width)
-end
 brightness_mp = deepcopy(nlopt_fail_mp);
 brightness_mp_dual = get_dual_mp(brightness_mp);
 brightness_kept_ids = ids_free.r2[1];
@@ -123,6 +183,7 @@ for b_i in 1:5
         brightness_deriv(brightness_x))
 end
 
+###########
 # The gamma_lk_wrapper seems to be fine.
 k1 = nlopt_fail_mp.pp.r[1][1]; theta1 = nlopt_fail_mp.pp.r[1][2];
 k2 = nlopt_fail_mp.vp[1][ids.r1][1]; theta2 = nlopt_fail_mp.vp[1][ids.r2][1];
@@ -148,7 +209,6 @@ x0 = transform.vp_to_vector(mp.vp, omitted_ids);
 x0_dual = Dual{Float64}[ Dual{Float64}(x0[i], 0.) for i = 1:length(x0) ]
 
 mp_dual = ModelParams(convert(Array{Array{Dual{Float64}, 1}, 1}, mp.vp), mp.pp, mp.patches, mp.tile_width);
-
 function elbo_objective(x_dual::Array{Dual{Float64}})
     # Evaluate in the constrained space and then unconstrain again.
     transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
