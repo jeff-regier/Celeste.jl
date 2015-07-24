@@ -410,6 +410,7 @@ end
 # unit tests.
 test_quadratic_optimization(pixel_rect_transform)
 test_quadratic_optimization(world_rect_transform)
+test_quadratic_optimization(free_transform)
 
 #test_bad_galaxy_init()
 test_kappa_finding(pixel_rect_transform)
