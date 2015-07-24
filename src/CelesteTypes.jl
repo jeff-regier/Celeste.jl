@@ -275,7 +275,7 @@ abstract ParamSet
 # c2      = C_s variances (formerly lambda) 
 # a       = probability of being a star or galaxy.  a[1] is the
 #           probability of being a star and a[2] of being a galaxy. (formerly chi)
-# k       = Dx{Ia|Ia - 1} matrix of color prior component indicators. (formerly kappa)
+# k       = {D|D-1}xIa matrix of color prior component indicators. (formerly kappa)
 
 # Parameters for location and galaxy shape.
 ue_params = ((:u, 2), (:e_dev, 1), (:e_axis, 1), (:e_angle, 1),
