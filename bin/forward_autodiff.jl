@@ -50,20 +50,23 @@ function get_autodiff_funcs(mp, kept_ids, omitted_ids, transform, f::Function)
     end
 
     function f_value(x)
+        @assert length(x) == length(kept_ids)
         f_objective(x).v
     end
 
     function f_deriv(x)
+        @assert length(x) == length(kept_ids)
         f_objective(x).d[:]
     end
 
     function f_deriv(x::Vector{Float64})
+        @assert length(x) == length(kept_ids)
         real(f_objective(x).d[:])
     end
 
     function f_hessian(x::Array{Float64})
+        @assert length(x) == length(kept_ids)
         k = length(kept_ids)
-        @assert k == length(x)
         hess = zeros(Float64, k, k);
         x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:k ]
         print("Getting Hessian ($k components): ")
@@ -85,11 +88,6 @@ end
 
 
 
-blob, mp_original, body = gen_sample_star_dataset();
-mp = deepcopy(mp_original);
-transform = Transform.free_transform;
-#transform = Transform.world_rect_transform;
-
 # Note that the u hessians are no good.
 #omitted_ids = Int64[ids_free.u, ids_free.k[:], ids_free.c2[:], ids_free.r2];
 #omitted_ids = ids_free.u;
@@ -106,11 +104,50 @@ omitted_ids = union(omitted_ids, ids_free.k[:,2])
 omitted_ids = unique(omitted_ids)
 
 kept_ids = setdiff(1:length(ids_free), omitted_ids)
-eps = 1e-9
-mp.vp[1][ids.a] = [ 1.0 - eps, eps ]
 
 
-eps_vec = linspace(eps, 1 - eps, 5);
+transform = Transform.free_transform;
+if false
+    # This is strongly affected by a for some reason
+    blob, mp_original, body = gen_sample_star_dataset(perturb=true);
+
+    # blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    # for b in 1:5
+    #     blob0[b].H, blob0[b].W = 20, 23
+    #     blob0[b].wcs = WCS.wcs_id
+    # end
+
+    # one_body = [sample_ce([10.1, 12.2], true),]
+    # blob = Synthetic.gen_blob(blob0, one_body)
+    # mp = ModelInit.cat_init(one_body)
+
+else if false
+    blob, mp_original, body = gen_sample_galaxy_dataset(perturb=false);
+else
+    # Load an example from test_optimization
+    # This was originally a galaxy dataset.
+    fluxes = [2.47122, 1.832, 4.0, 5.9192, 9.12822] * 1000;
+    is_star = true
+
+    #ce = CatalogEntry([7.2,8.3], is_star, fluxes, fluxes, 0.5, .7, pi/4, .5);
+    ce = SampleData.sample_ce([7.2,8.3], is_star);
+    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359");
+    for b in 1:5
+        blob0[b].H, blob0[b].W = 20, 23;
+        blob0[b].wcs = WCS.wcs_id;
+    end
+    blob = Synthetic.gen_blob(blob0, [ce,]);
+    mp_original = ModelInit.cat_init([ce,]);
+
+    # Artificially change the galaxy parameters
+    # mp_original.vp[1][ids.r1[2]] *= 2.0
+    # mp_original.vp[1][ids.e_scale] *= 2.0
+end
+
+mp = deepcopy(mp_original);
+eps = 1e-2
+
+eps_vec = linspace(eps, 1 - eps, 3);
 brightness_results = Array(Any, length(eps_vec));
 elbo_results = Array(Float64, length(eps_vec));
 mp_results = Array(Any, length(eps_vec));
@@ -121,292 +158,62 @@ for i in 1:length(eps_vec)
     mp_fit = deepcopy(mp_original);
     mp_fit.vp[1][ids.a] = [ 1.0 - this_eps, this_eps ]
     println("$i $(mp_fit.vp[1][ids.a])")
-    iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids);
+    iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids, ftol_abs=1e-4);
     elbo_results[i] = ElboDeriv.elbo(blob, mp_fit).v;
     brightness_results[i] = get_brightness(mp_fit);
     mp_results[i] = deepcopy(mp_fit);
     x_results[i] = max_x
 end
 
-nlopt_fail_mp = deepcopy(mp_fit);
-x_fail = transform.vp_to_vector(nlopt_fail_mp.vp, omitted_ids);
+reduce(hcat, [ b[1][:,1] for b in brightness_results ])
 
 
-#########
-# The derivative with respect to r2 is wrong with the free transform
+
+##############
+mp_fit = deepcopy(mp_original);
+x0 = transform.vp_to_vector(mp_fit.vp, omitted_ids);
+x0_dual = Dual{Float64}[ Dual{Float64}(x0[i], 0.) for i = 1:length(x0) ];
 
 elbo_ad_grad, elbo_value, elbo_deriv, elbo_objective, elbo_hessian =
-    get_autodiff_funcs(nlopt_fail_mp, kept_ids, omitted_ids, Transform.free_transform,
+    get_autodiff_funcs(mp_fit, kept_ids, omitted_ids, Transform.free_transform,
                        mp -> ElboDeriv.elbo(blob, mp));
 
-x_elbo_d_fail = elbo_deriv(x_fail);
-g_fd_fail = elbo_ad_grad(x_fail);
-x_elbo_d_fail[kept_ids] - g_fd_fail
-DataFrame(name=ids_free_names[kept_ids], elbo_d=x_elbo_d_fail[kept_ids], ad_d=g_fd_fail, diff=x_elbo_d_fail[kept_ids] - g_fd_fail)
-#hess = elbo_hessian(x_fail);
+x_elbo_d = elbo_deriv(x0);
+g_fd = elbo_ad_grad(x0);
+DataFrame(name=ids_free_names[kept_ids], elbo_d=x_elbo_d[kept_ids], ad_d=g_fd, diff=x_elbo_d[kept_ids] - g_fd)
+hess = elbo_hessian(x_fail);
 
-
-###############
-# The brighness seems ok
-
-b_i = 1
-function get_brightness_e_l_a(mp::ModelParams)
-    println("Brighntess component $b_i")
-    brightness = ElboDeriv.SourceBrightness(mp.vp[1])
-    brightness.E_l_a[b_i, 1]
+scale = -1.0
+function elbo_scale_value(x)
+    scale * real(elbo_value(x))
+end
+function elbo_scale_deriv!(x, grad)
+    grad[:] = scale * elbo_deriv(x)[kept_ids]
+end
+function elbo_scale_hess!(x, hess)
+    hess[:, :] = scale * elbo_hessian(x)
 end
 
-function get_brightness_e_ll_a(mp::ModelParams)
-    println("Brighntess component $b_i")
-    brightness = ElboDeriv.SourceBrightness(mp.vp[1])
-    brightness.E_ll_a[b_i, 1]
-end
+grad = zeros(Float64, length(x0));
+hess = zeros(Float64, length(x0), length(x0));
 
-bright_ad_grad, bright_value, bright_deriv, bright_objective, bright_hessian =
-    get_autodiff_funcs(nlopt_fail_mp, kept_ids, omitted_ids, Transform.free_transform,
-                       get_brightness_e_ll_a);
+elbo_scale_value(x0)
+elbo_scale_deriv!(x0, grad)
+elbo_scale_hess!(x0, hess)
 
-bright_x = transform.vp_to_vector(nlopt_fail_mp.vp, omitted_ids);
-for b_i in 1:5
-    ad_deriv = bright_ad_grad(bright_x)
-    clst_deriv = bright_deriv(bright_x)[kept_ids]
-    println(DataFrame(name=ids_free_names[kept_ids], ad=ad_deriv, celeste=clst_deriv, diff=clst_deriv - ad_deriv))
-end
-
-
-
-###########
-# The gamma_lk_wrapper seems to be fine.
-
-k1 = nlopt_fail_mp.pp.r[1][1]; theta1 = nlopt_fail_mp.pp.r[1][2];
-k2 = nlopt_fail_mp.vp[1][ids.r1[1]]; theta2 = nlopt_fail_mp.vp[1][ids.r2[1]];
-gamma_kl = KL.gen_gamma_kl(k1, theta1);
-gamma_kl(k2, theta2)
-
-function gamma_kl_wrapper{T <: Number}(p::Array{T})
-    gamma_kl(p[1], p[2])[1]
-end
-
-p = Float64[k2, theta2]
-gamma_kl(k2, theta2)[1]
-gamma_kl_wrapper(p)
-gamma_kl_ad_grad = ForwardDiff.forwarddiff_gradient(gamma_kl_wrapper, Float64, fadtype=:dual; n=2);
-ad_grad = gamma_kl_ad_grad(p)
-d1, d2 = gamma_kl(k2, theta2)[2]
-clst_grad = Float64[d1, d2]
-ad_grad - clst_grad
-
-
-###############
-# The difference is only in the ELBO, not in the likelihood.
-
-function subtract_kl_r!(i::Int64, s::Int64,
-                        mp::ModelParams, accum::SensitiveFloat)
-    vs = mp.vp[s]
-    k1 = mp.pp.r[i][1]
-    theta1 = mp.pp.r[i][2]
-    #println(k1, " ", theta1)
-    pp_kl_r = KL.gen_gamma_kl(k1, theta1)
-    k2 = vs[ids.r1[i]]
-    theta2 = vs[ids.r2[i]]
-    #println(k2, " ", theta2)
-    #println(pp_kl_r(k2, theta2))
-    (v, (d_r1, d_r2)) = pp_kl_r(k2, theta2)
-    println(d_r1, " ", d_r2)
-    accum.v -= v * vs[ids.a[i]]
-    accum.d[ids.r1[i], s] -= d_r1 .* vs[ids.a[i]]
-    accum.d[ids.r2[i], s] -= d_r2 .* vs[ids.a[i]]
-    accum.d[ids.a[i], s] -= v
-end
-
-function subtract_kl_r{T <: Number}(mp::ModelParams{T})
-    accum = zero_sensitive_float(CanonicalParams, T)
-    subtract_kl_r!(1, 1, mp, accum)
-    accum
-end
-
-kl_res = subtract_kl_r(nlopt_fail_mp);
-
-############
-# Here are the terms in the transfrom:
-
-v_r1 = nlopt_fail_mp.vp[1][ids.r1[1]]
-d_r1 = kl_res.d[ids.r1[1]]
-
-v_r2 = nlopt_fail_mp.vp[1][ids.r2[1]]
-d_r2 = kl_res.d[ids.r2[1]]
-
-2.0 * d_r1 * v_r1 - d_r2 * v_r2
--1.0 * d_r1 * v_r1 + d_r2 * v_r2
-
-log(v_r1)
-log(v_r2)
-
-# What does autodiff do?  First it gets these guys:
-
-# v_r1 and v_r2 should be known quite precisely -- the come from
-# exp(difference of logs).
-exp(2 * x_fail[1] - x_fail[2]) == v_r1
-exp(x_fail[2] - x_fail[1]) == v_r2
-
-# The derivatives will be huge at this point.
-
-# Then it applies the kl function.  That involves adding and subtracting
-# very large floating point values.
-
-# It never really gets untransformed.
-# This suggests that there is likely a problem with autodiff, not
-# with the hand-coded derivatives
-
-
-############
-
-subtract_kl_r(nlopt_fail_mp).v
-
-# The problem is only for the free_transform.
-#kl_transform = Transform.world_rect_transform;
-kl_transform = Transform.free_transform;
-
-kl_x_fail = kl_transform.vp_to_vector(nlopt_fail_mp.vp, omitted_ids);
-kl_ad_grad, kl_value, kl_deriv, kl_objective, kl_hessian =
-    get_autodiff_funcs(nlopt_fail_mp, kept_ids, omitted_ids, kl_transform,
-                       subtract_kl_r);
-
-x_kl_d_fail = kl_deriv(kl_x_fail);
-g_fd_fail = kl_ad_grad(kl_x_fail);
-x_kl_d_fail[kept_ids] - g_fd_fail
-DataFrame(name=ids_free_names[kept_ids], kl_d=x_kl_d_fail[kept_ids], ad_d=g_fd_fail, diff=x_kl_d_fail[kept_ids] - g_fd_fail)
-
-
-nlopt_fail_mp_free_vp = transform.from_vp(nlopt_fail_mp.vp);
-
-###################
-# gen_gamma_kl might be a problem, as it involves taking the differences of very large floating point values.
-# However, taken alone, the derivatves are fine.
-
-digamma_k1 = digamma(k1)
-theta_ratio = (theta1 - theta2) / theta2
-shape_diff = k1 - k2
-
-# The things that are summed to get v:
-shape_diff * digamma_k1
--lgamma(k1) + lgamma(k2)
-k2 * (log(theta2) - log(theta1))
-k1 * theta_ratio
-
-# The things that are summed to get d_k1:
-shape_diff * trigamma(k1)
-theta_ratio
-
-# The things that are summed to get d_theta1:
--k2 / theta1
-k1 / theta2
-
-
-hcat(reduce(hcat, OptimizeElbo.get_nlopt_unconstrained_bounds(nlopt_fail_mp.vp, omitted_ids, transform)), x_fail)
-
-##################################
-# Check the transform derivatives somehow?
-
-
-
-
+################
+# Newton out of the box
+optim_res0 = Optim.optimize(elbo_scale_value,
+                             elbo_scale_deriv!,
+                             elbo_scale_hess!,
+                             x0, method=:newton, show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
 
 
 
 ##########################
-
-x0 = transform.vp_to_vector(mp.vp, omitted_ids);
-x0_dual = Dual{Float64}[ Dual{Float64}(x0[i], 0.) for i = 1:length(x0) ]
-
-mp_dual = ModelParams(convert(Array{Array{Dual{Float64}, 1}, 1}, mp.vp), mp.pp, mp.patches, mp.tile_width);
-function elbo_objective(x_dual::Array{Dual{Float64}})
-    # Evaluate in the constrained space and then unconstrain again.
-    transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
-    elbo_res = ElboDeriv.elbo(blob, mp_dual)
-    res = transform.transform_sensitive_float(elbo_res, mp_dual)
-end
-
-function elbo_objective(x::Array{Float64})
-    # Evaluate in the constrained space and then unconstrain again.
-    x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ]
-    elbo_objective(x_dual)
-end
-
-function elbo_value(x)
-    elbo_objective(x).v
-end
-
-function elbo_deriv(x)
-    elbo_objective(x).d[:]
-end
-
-elbo_objective(x0);
-elbo_objective(x0_dual);
-
-objective_grad = ForwardDiff.forwarddiff_gradient(elbo_value, Float64, fadtype=:dual; n=length(x0));
-g_fd = objective_grad(x0);
-
-celeste_elbo = transform.transform_sensitive_float(ElboDeriv.elbo(blob, mp), mp);
-hcat(g_fd, celeste_elbo.d[kept_ids])
-g_fd - celeste_elbo.d[kept_ids]
+# Newton's method by hand
 
 hess_reg = 0.0;
-scale = -1.0;
-function get_elbo_hessian(x::Array{Float64})
-    k = length(kept_ids)
-    @assert k == length(x)
-    elbo_hess = zeros(Float64, k, k);
-    x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:k ]
-    for index in 1:k
-        println("Getting Hessian -- $index of $k")
-        x_dual[index] = Dual(x[index], 1.)
-        deriv = elbo_deriv(x_dual)[kept_ids]
-        elbo_hess[:, index] = Float64[ epsilon(x_val) for x_val in deriv ]
-        x_dual[index] = Dual(x[index], 0.)
-    end
-    # Normally we maximize, so the hessian should be negative definite.
-    scale * (elbo_hess - hess_reg * eye(length(x)))
-end
-
-function get_elbo_hessian!(x::Array{Float64}, hess)
-    hess[:,:] = get_elbo_hessian(x)
-end
-
-function get_id_hessian!(x::Array{Float64}, hess)
-    hess[:, :] = -1.0 * scale * eye(Float64, length(x))
-end
-
-function get_elbo_derivative!(x::Array{Float64}, grad)
-    grad[:] = scale * Float64[ real(x_val) for x_val in elbo_deriv(x)[kept_ids] ]
-end
-
-function get_elbo_value(x::Array{Float64})
-    elbo_val = scale * real(elbo_value(x))
-    println("elbo val: $elbo_val")
-    elbo_val
-end
-
-if false
-    # Newton's method doesn't work very well out of the box -- lots of bad steps.
-    optim_res0 = Optim.optimize(get_elbo_value,
-                                 get_elbo_derivative!,
-                                 get_elbo_hessian!,
-                                 x0, method=:newton, show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
-
-    # Try first steps with an identity gradient then NM.
-    optim_res0 = Optim.optimize(get_elbo_value,
-                                 get_elbo_derivative!,
-                                 get_id_hessian!,
-                                 x0, method=:newton, show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
-
-    x1 = optim_res0.minimum;
-    optim_res1 = Optim.optimize(get_elbo_value,
-                                 get_elbo_derivative!,
-                                 get_elbo_hessian!,
-                                 x1, method=:newton, show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
-    x = optim_res1.minimum;
-end
 
 
 ##########
@@ -514,3 +321,36 @@ get_brightness(mp_original)
 fit_v = ElboDeriv.elbo(blob, mp_fit).v;
 ((-f_vals) - fit_v) / abs(fit_v) # f_vals are negative because it's minimization
 (ElboDeriv.elbo(blob, mp).v - fit_v) / abs(fit_v)
+
+
+
+
+
+
+
+
+
+###########################
+# 
+
+if false
+    # Newton's method doesn't work very well out of the box -- lots of bad steps.
+    optim_res0 = Optim.optimize(get_elbo_value,
+                                 get_elbo_derivative!,
+                                 get_elbo_hessian!,
+                                 x0, method=:newton, show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
+
+    # Try first steps with an identity gradient then NM.
+    optim_res0 = Optim.optimize(get_elbo_value,
+                                 get_elbo_derivative!,
+                                 get_id_hessian!,
+                                 x0, method=:newton, show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
+
+    x1 = optim_res0.minimum;
+    optim_res1 = Optim.optimize(get_elbo_value,
+                                 get_elbo_derivative!,
+                                 get_elbo_hessian!,
+                                 x1, method=:newton, show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
+    x = optim_res1.minimum;
+end
+
