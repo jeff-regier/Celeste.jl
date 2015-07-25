@@ -106,10 +106,45 @@ omitted_ids = unique(omitted_ids)
 kept_ids = setdiff(1:length(ids_free), omitted_ids)
 
 
+using Base.Test
+function test_elbo_invariance_to_a()
+    # Changing this line to 1000 causes the test to fail.
+    fluxes = [2.47122, 1.832, 4.0, 5.9192, 9.12822] * 1000
+    ce = CatalogEntry([7.2,8.3], false, fluxes, fluxes, 0.5, .7, pi/4, .5)
+    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    for b in 1:5
+        blob0[b].H, blob0[b].W = 20, 23
+        blob0[b].wcs = WCS.wcs_id
+    end
+    blob = Synthetic.gen_blob(blob0, [ce,])
+
+    mp = ModelInit.cat_init([ce,])
+    mp.vp[1][ids.a] = [ 0.8, 0.2 ]
+    omitted_ids = [ids_free.a, ids_free.r2[:], ids_free.c2[:], ids_free.e_dev]
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp,
+        Transform.pixel_rect_transform, omitted_ids=omitted_ids)
+
+    mp2 = ModelInit.cat_init([ce,])
+    mp2.vp[1][ids.a] = [ 0.2, 0.8 ]
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp2,
+        Transform.pixel_rect_transform, omitted_ids=omitted_ids)
+
+    mp.vp[1][ids.a] = [ 0.5, 0.5 ]
+    mp2.vp[1][ids.a] = [ 0.5, 0.5 ]
+    @test_approx_eq_eps ElboDeriv.elbo(blob, mp).v ElboDeriv.elbo(blob, mp2).v 1
+
+    for i in setdiff(1:length(CanonicalParams), ids.a) #skip a
+        @test_approx_eq_eps mp.vp[1][i] / mp2.vp[1][i] 1. 0.1
+    end
+end
+#test_elbo_invariance_to_a()
+
+
+
 transform = Transform.free_transform;
 if false
     # This is strongly affected by a for some reason
-    blob, mp_original, body = gen_sample_star_dataset(perturb=true);
+    blob, mp_original, body = gen_sample_star_dataset(perturb=false);
 
     # blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
     # for b in 1:5
@@ -120,17 +155,16 @@ if false
     # one_body = [sample_ce([10.1, 12.2], true),]
     # blob = Synthetic.gen_blob(blob0, one_body)
     # mp = ModelInit.cat_init(one_body)
-
-else if false
+elseif false
     blob, mp_original, body = gen_sample_galaxy_dataset(perturb=false);
 else
     # Load an example from test_optimization
     # This was originally a galaxy dataset.
-    fluxes = [2.47122, 1.832, 4.0, 5.9192, 9.12822] * 1000;
-    is_star = true
+    fluxes = [2.47122, 1.832, 4.0, 5.9192, 9.12822] * 100;
+    is_star = false
 
-    #ce = CatalogEntry([7.2,8.3], is_star, fluxes, fluxes, 0.5, .7, pi/4, .5);
-    ce = SampleData.sample_ce([7.2,8.3], is_star);
+    ce = CatalogEntry([7.2,8.3], is_star, fluxes, fluxes, 0.5, .7, pi/4, .5);
+    #ce = SampleData.sample_ce([7.2,8.3], is_star);
     blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359");
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23;
@@ -144,29 +178,28 @@ else
     # mp_original.vp[1][ids.e_scale] *= 2.0
 end
 
-mp = deepcopy(mp_original);
-eps = 1e-2
+if false
+    eps = 0.01
+    eps_vec = linspace(eps, 1 - eps, 3);
+    brightness_results = Array(Any, length(eps_vec));
+    elbo_results = Array(Float64, length(eps_vec));
+    mp_results = Array(Any, length(eps_vec));
+    x_results = Array(Any, length(eps_vec));
 
-eps_vec = linspace(eps, 1 - eps, 3);
-brightness_results = Array(Any, length(eps_vec));
-elbo_results = Array(Float64, length(eps_vec));
-mp_results = Array(Any, length(eps_vec));
-x_results = Array(Any, length(eps_vec));
+    for i in 1:length(eps_vec)
+        this_eps = eps_vec[i]
+        mp_fit = deepcopy(mp_original);
+        mp_fit.vp[1][ids.a] = [ 1.0 - this_eps, this_eps ]
+        println("$i $(mp_fit.vp[1][ids.a])")
+        iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids, ftol_abs=1e-4);
+        elbo_results[i] = ElboDeriv.elbo(blob, mp_fit).v;
+        brightness_results[i] = get_brightness(mp_fit);
+        mp_results[i] = deepcopy(mp_fit);
+        x_results[i] = max_x
+    end
 
-for i in 1:length(eps_vec)
-    this_eps = eps_vec[i]
-    mp_fit = deepcopy(mp_original);
-    mp_fit.vp[1][ids.a] = [ 1.0 - this_eps, this_eps ]
-    println("$i $(mp_fit.vp[1][ids.a])")
-    iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids, ftol_abs=1e-4);
-    elbo_results[i] = ElboDeriv.elbo(blob, mp_fit).v;
-    brightness_results[i] = get_brightness(mp_fit);
-    mp_results[i] = deepcopy(mp_fit);
-    x_results[i] = max_x
+    reduce(hcat, [ b[1][:,1] for b in brightness_results ])
 end
-
-reduce(hcat, [ b[1][:,1] for b in brightness_results ])
-
 
 
 ##############
@@ -185,7 +218,9 @@ hess = elbo_hessian(x_fail);
 
 scale = -1.0
 function elbo_scale_value(x)
-    scale * real(elbo_value(x))
+    val = scale * real(elbo_value(x))
+    println("Elbo: $val")
+    val
 end
 function elbo_scale_deriv!(x, grad)
     grad[:] = scale * elbo_deriv(x)[kept_ids]
@@ -194,54 +229,40 @@ function elbo_scale_hess!(x, hess)
     hess[:, :] = scale * elbo_hessian(x)
 end
 
-grad = zeros(Float64, length(x0));
-hess = zeros(Float64, length(x0), length(x0));
+elbo_grad = zeros(Float64, length(x0));
+elbo_hess = zeros(Float64, length(x0), length(x0));
 
 elbo_scale_value(x0)
-elbo_scale_deriv!(x0, grad)
-elbo_scale_hess!(x0, hess)
+elbo_scale_deriv!(x0, elbo_grad)
+elbo_scale_hess!(x0, elbo_hess);
 
-################
-# Newton out of the box
-optim_res0 = Optim.optimize(elbo_scale_value,
-                             elbo_scale_deriv!,
-                             elbo_scale_hess!,
-                             x0, method=:newton, show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
+if false
+    hess_eig_val = eig(elbo_hess)[1];
+    hess_eig_vec = eig(elbo_hess)[2];
+    sort(hess_eig_val)
+    eigs = DataFrame([ round(hess_eig_vec[:,i], 3) for i in sortperm(hess_eig_val)]);
+    eigs[:name] = ids_free_names[kept_ids]
+    for i = 1:length(kept_ids)
+        println(sort(hess_eig_val)[i])
+        println(eigs[[:name, symbol("x$i")]])
+    end
+end
 
-
-
-##########################
+#########################
 # Newton's method by hand
 
 hess_reg = 0.0;
-
-
-##########
 max_iters = 30;
 
-d = Optim.DifferentiableFunction(get_elbo_value, get_elbo_derivative!);
+d = Optim.DifferentiableFunction(elbo_scale_value, elbo_scale_deriv!);
 x_old = deepcopy(x0);
 x_new = deepcopy(x_old);
 gr_new = zeros(Float64, length(x_old));
-get_elbo_derivative!(x_old, gr_new);
 iter = 1
-f_val = get_elbo_value(x_new);
+f_val = elbo_scale_value(x_new);
 
-elbo_hess = zeros(Float64, length(kept_ids), length(kept_ids));
-get_elbo_hessian!(x_new, elbo_hess);
-f_vals = zeros(Float64, max_iters)
-x_vals = [ zeros(Float64, length(x_old)) for iter=1:max_iters ]
-println(DataFrame(name=ids_free_names[kept_ids], grad=gr_new, hess=diag(elbo_hess)))
-
-hess_eig_val = eig(elbo_hess)[1];
-hess_eig_vec = eig(elbo_hess)[2];
-sort(hess_eig_val)
-# eigs = DataFrame([ round(hess_eig_vec[:,i], 3) for i in sortperm(hess_eig_val)]);
-# eigs[:name] = ids_free_names[kept_ids]
-# for i = 1:length(kept_ids)
-#     println(sort(hess_eig_val)[i])
-#     println(eigs[[:name, symbol("x$i")]])
-# end
+f_vals = zeros(Float64, max_iters);
+x_vals = [ zeros(Float64, length(x_old)) for iter=1:max_iters ];
 
 rho = 2.0;
 max_backstep = 20;
@@ -250,7 +271,7 @@ for iter in 1:max_iters
     println("-------------------$iter")
     x_old = deepcopy(x_new);
     #x_direction = -1e-6 * gr_new;
-    get_elbo_hessian!(x_new, elbo_hess);
+    elbo_scale_hess!(x_new, elbo_hess);
     hess_ev = eig(elbo_hess)[1]
     min_ev = minimum(hess_ev)
     max_ev = maximum(hess_ev)
@@ -262,18 +283,18 @@ for iter in 1:max_iters
         max_ev = maximum(hess_ev)
     end
     println("========= Eigenvalues: $(max_ev), $(min_ev)")
-    if abs(max_ev) / abs(min_ev) > 1e3
-        println("Regularizing hessian")
-        elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e6)
-        hess_ev = eig(elbo_hess)[1]
-        min_ev = minimum(hess_ev)
-        max_ev = maximum(hess_ev)
-    end
-    println("========= Eigenvalues: $(max_ev), $(min_ev)")
+    # if abs(max_ev) / abs(min_ev) > 1e3
+    #     println("Regularizing hessian")
+    #     elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e6)
+    #     hess_ev = eig(elbo_hess)[1]
+    #     min_ev = minimum(hess_ev)
+    #     max_ev = maximum(hess_ev)
+    #     println("========= Eigenvalues: $(max_ev), $(min_ev)")
+    # end
     x_direction = -(elbo_hess \ gr_new);
     alpha = 1.0;
     backsteps = 0;
-    while isnan(get_elbo_value(x_old + alpha * x_direction))
+    while isnan(elbo_scale_value(x_old + alpha * x_direction))
         alpha /= rho;
         println("Backstepping: ")
         backsteps += 1;
@@ -283,7 +304,7 @@ for iter in 1:max_iters
     end
     x_direction = alpha * x_direction
     gr_new = zeros(Float64, length(x_old));
-    get_elbo_derivative!(x_old, gr_new);
+    elbo_scale_deriv!(x_old, gr_new);
     #println(DataFrame(name=ids_free_names[kept_ids], grad=gr_new, hess=diag(elbo_hess), p=x_direction))
     lsr = Optim.LineSearchResults(Float64); # Not used
     c = -1.; # Not used
@@ -294,7 +315,7 @@ for iter in 1:max_iters
                               c1 = 1e-4,
                               c2 = 0.9,
                               rho = 2.0, verbose=false);
-    f_vals[iter] = get_elbo_value(x_new);
+    f_vals[iter] = elbo_scale_value(x_new);
     x_vals[iter] = deepcopy(x_new)
 end
 
@@ -305,52 +326,31 @@ minimum(f_vals)
 [ x ./ [x_vals[1] - x_vals[end]] for x in diff(x_vals) ]
 
 
-last_f_vals = deepcopy(f_vals)
-
-transform.vector_to_vp!(x_new, mp.vp, omitted_ids)
-
+mp_nm = deepcopy(mp_original);
+transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
 
 
-show_mp(mp)
-show_mp(mp_original)
-
-get_brightness(mp)
-get_brightness(mp_fit)
-get_brightness(mp_original)
+mp_fit = deepcopy(mp_original)
+iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids);
 
 fit_v = ElboDeriv.elbo(blob, mp_fit).v;
 ((-f_vals) - fit_v) / abs(fit_v) # f_vals are negative because it's minimization
 (ElboDeriv.elbo(blob, mp).v - fit_v) / abs(fit_v)
 
+show_mp(mp_nm)
+show_mp(mp_fit)
+show_mp(mp_original)
+
+get_brightness(mp_nm)
+get_brightness(mp_fit)
+get_brightness(mp_original)
 
 
-
-
-
-
-
-
-###########################
-# 
-
-if false
-    # Newton's method doesn't work very well out of the box -- lots of bad steps.
-    optim_res0 = Optim.optimize(get_elbo_value,
-                                 get_elbo_derivative!,
-                                 get_elbo_hessian!,
-                                 x0, method=:newton, show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
-
-    # Try first steps with an identity gradient then NM.
-    optim_res0 = Optim.optimize(get_elbo_value,
-                                 get_elbo_derivative!,
-                                 get_id_hessian!,
-                                 x0, method=:newton, show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
-
-    x1 = optim_res0.minimum;
-    optim_res1 = Optim.optimize(get_elbo_value,
-                                 get_elbo_derivative!,
-                                 get_elbo_hessian!,
-                                 x1, method=:newton, show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
-    x = optim_res1.minimum;
-end
+################
+# Newton out of the box takes too many bad steps
+optim_res0 = Optim.optimize(elbo_scale_value,
+                             elbo_scale_deriv!,
+                             elbo_scale_hess!,
+                             x0, method=:newton,
+                             show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
 
