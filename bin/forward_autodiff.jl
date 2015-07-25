@@ -214,7 +214,6 @@ elbo_ad_grad, elbo_value, elbo_deriv, elbo_objective, elbo_hessian =
 x_elbo_d = elbo_deriv(x0);
 g_fd = elbo_ad_grad(x0);
 DataFrame(name=ids_free_names[kept_ids], elbo_d=x_elbo_d[kept_ids], ad_d=g_fd, diff=x_elbo_d[kept_ids] - g_fd)
-hess = elbo_hessian(x_fail);
 
 scale = -1.0
 function elbo_scale_value(x)
@@ -251,8 +250,14 @@ end
 #########################
 # Newton's method by hand
 
+# Get a BFGS fit for comparison
+mp_fit = deepcopy(mp_original)
+iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids);
+fit_v = ElboDeriv.elbo(blob, mp_fit).v;
+
+# Stuff:
 hess_reg = 0.0;
-max_iters = 30;
+max_iters = 10;
 
 d = Optim.DifferentiableFunction(elbo_scale_value, elbo_scale_deriv!);
 x_old = deepcopy(x0);
@@ -267,6 +272,10 @@ x_vals = [ zeros(Float64, length(x_old)) for iter=1:max_iters ];
 rho = 2.0;
 max_backstep = 20;
 include("src/interpolating_linesearch.jl")
+
+# warm start with BFGS
+mp_start = deepcopy(mp_original)
+start_iter_count, start_f, x_new = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_start, Transform.free_transform, omitted_ids=omitted_ids, ftol_abs=1000);
 for iter in 1:max_iters
     println("-------------------$iter")
     x_old = deepcopy(x_new);
@@ -275,23 +284,26 @@ for iter in 1:max_iters
     hess_ev = eig(elbo_hess)[1]
     min_ev = minimum(hess_ev)
     max_ev = maximum(hess_ev)
+    println("========= Eigenvalues: $(max_ev), $(min_ev)")
     if min_ev < 0
         println("========== Warning -- non-convex, $(min_ev)")
         elbo_hess += eye(length(x_new)) * abs(min_ev)
         hess_ev = eig(elbo_hess)[1]
         min_ev = minimum(hess_ev)
         max_ev = maximum(hess_ev)
+        println("========= New eigenvalues: $(max_ev), $(min_ev)")
     end
-    println("========= Eigenvalues: $(max_ev), $(min_ev)")
-    # if abs(max_ev) / abs(min_ev) > 1e3
-    #     println("Regularizing hessian")
-    #     elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e6)
-    #     hess_ev = eig(elbo_hess)[1]
-    #     min_ev = minimum(hess_ev)
-    #     max_ev = maximum(hess_ev)
-    #     println("========= Eigenvalues: $(max_ev), $(min_ev)")
-    # end
-    x_direction = -(elbo_hess \ gr_new);
+    if abs(max_ev) / abs(min_ev) > 1e6
+        println("Regularizing hessian")
+        elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e6)
+        hess_ev = eig(elbo_hess)[1]
+        min_ev = minimum(hess_ev)
+        max_ev = maximum(hess_ev)
+        println("========= New eigenvalues: $(max_ev), $(min_ev)")
+    end
+    gr_new = zeros(Float64, length(x_old));
+    elbo_scale_deriv!(x_old, gr_new);
+    x_direction = -(elbo_hess \ gr_new)
     alpha = 1.0;
     backsteps = 0;
     while isnan(elbo_scale_value(x_old + alpha * x_direction))
@@ -303,8 +315,6 @@ for iter in 1:max_iters
         end
     end
     x_direction = alpha * x_direction
-    gr_new = zeros(Float64, length(x_old));
-    elbo_scale_deriv!(x_old, gr_new);
     #println(DataFrame(name=ids_free_names[kept_ids], grad=gr_new, hess=diag(elbo_hess), p=x_direction))
     lsr = Optim.LineSearchResults(Float64); # Not used
     c = -1.; # Not used
@@ -315,9 +325,19 @@ for iter in 1:max_iters
                               c1 = 1e-4,
                               c2 = 0.9,
                               rho = 2.0, verbose=false);
-    f_vals[iter] = elbo_scale_value(x_new);
+    this_f_val = elbo_scale_value(x_new)
+    f_vals[iter] = this_f_val;
     x_vals[iter] = deepcopy(x_new)
+    println(">>>>>>  Current value $(this_f_val) (BFGS got $(-fit_v))")
+    mp_nm = deepcopy(mp_original);
+    transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
+    println(get_brightness(mp_nm))
+    println("\n\n")
 end
+
+
+((-f_vals) - fit_v) / abs(fit_v) # f_vals are negative because it's minimization
+(ElboDeriv.elbo(blob, mp_nm).v - fit_v) / abs(fit_v)
 
 f_vals
 diff(f_vals) ./ f_vals[1:(end-1)]
@@ -325,17 +345,9 @@ minimum(f_vals)
 
 [ x ./ [x_vals[1] - x_vals[end]] for x in diff(x_vals) ]
 
-
 mp_nm = deepcopy(mp_original);
 transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
 
-
-mp_fit = deepcopy(mp_original)
-iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids);
-
-fit_v = ElboDeriv.elbo(blob, mp_fit).v;
-((-f_vals) - fit_v) / abs(fit_v) # f_vals are negative because it's minimization
-(ElboDeriv.elbo(blob, mp).v - fit_v) / abs(fit_v)
 
 show_mp(mp_nm)
 show_mp(mp_fit)
