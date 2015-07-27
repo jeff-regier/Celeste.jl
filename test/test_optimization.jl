@@ -4,33 +4,44 @@ using Base.Test
 using SampleData
 using Transform
 
-function test_wrapper(trans::DataTransform)
-    trans = free_transform;
+import OptimizeElbo
 
+function test_wrapper(trans::DataTransform)
+    # Note that due to the WCS transformation, location coordinates can't be done with autodiff.
     omitted_ids = [ids_free.u];
     kept_ids = setdiff(1:length(ids_free), omitted_ids);
-    #blob, mp, body = SampleData.gen_two_body_dataset();
-    blob, mp, body = SampleData.gen_sample_star_dataset();
-    wrapper = OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(blob, mp), mp, trans, kept_ids, omitted_ids);
+    blob, mp, body = SampleData.gen_two_body_dataset();
+    
+    wrapper = OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(blob, mp),
+        mp, trans, kept_ids, omitted_ids);
 
     x = trans.vp_to_vector(mp.vp, omitted_ids);
     elbo_result = trans.transform_sensitive_float(ElboDeriv.elbo(blob, mp), mp);
     elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, s] for s=1:mp.S ]);
 
     w_v, w_grad = wrapper.f_value_grad(x);
+    w_grad2 = zeros(Float64, length(x));
+    wrapper.f_value_grad!(x, w_grad2);
+
     @test_approx_eq(w_v, elbo_result.v)
     @test_approx_eq(w_grad, elbo_grad)
+    @test_approx_eq(w_grad, w_grad2)
 
     @test_approx_eq(w_v, wrapper.f_value(x))
     @test_approx_eq(w_grad, wrapper.f_grad(x))
 
-    # Note that due to the WCS transformation, location coordinates can't be done with autodiff.
+    this_iter = wrapper.state.f_evals;
+    wrapper.f_value(x);
+    @test wrapper.state.f_evals == this_iter + 1
+
+    # Test that the autodiff derivatives match the actual derivatives.
     w_ad_grad = wrapper.f_ad_grad(x);
     @test_approx_eq(w_grad, w_ad_grad)
-    DataFrame(a=repmat(ids_free_names[kept_ids], mp.S), b=w_ad_grad, c=w_grad)
 
+    # Just test that the Hessian can be computed and is symmetric.
+    w_hess = wrapper.f_ad_hessian(x);
+    @test_approx_eq(w_hess, w_hess')
 end
-
 
 
 function verify_sample_star(vs, pos)
@@ -440,6 +451,7 @@ end
 # unit tests.
 test_quadratic_optimization(pixel_rect_transform)
 test_quadratic_optimization(world_rect_transform)
+test_wrapper(free_transform)
 
 #test_bad_galaxy_init()
 test_kappa_finding(pixel_rect_transform)

@@ -11,66 +11,10 @@ import ElboDeriv
 import DataFrames
 import ForwardDiff
 
+export ObjectiveWrapperFunctions, WrapperState
 
 #TODO: use Lumberjack.jl for logging
 const debug = false
-
-
-function get_nlopt_bounds(vs::Vector{Float64})
-    # Note that sources are not allowed to move more than
-    # one pixel from their starting position in order to
-    # avoid label switiching.  (This is why this function gets
-    # the variational parameters as an argument.)
-    # vs: parameters for a particular source.
-    # vp: complete collection of sources.
-    lb = Array(Float64, length(CanonicalParams))
-    lb[ids.a] = 1e-2
-    lb[ids.u] = vs[ids.u] - 1.
-    [lb[id] = 1e-4 for id in ids.r1]
-    [lb[id] = 1e-4 for id in ids.r2]
-    [lb[id] = 1e-4 for id in ids.k]
-    [lb[id] = -10. for id in ids.c1]
-    [lb[id] = 1e-4 for id in ids.c2]
-    lb[ids.e_dev] = 1e-2
-    lb[ids.e_axis] = 1e-4
-    lb[ids.e_angle] = -1e10 #-pi/2 + 1e-4
-    lb[ids.e_scale] = 0.2
-
-    ub = Array(Float64, length(CanonicalParams))
-    ub[ids.a] = 1 - 1e-2
-    ub[ids.u] = vs[ids.u] + 1.
-    [ub[id] = 1e12 for id in ids.r1]
-    [ub[id] = 1e-1 for id in ids.r2]
-    [ub[id] = 1 - 1e-4 for id in ids.k]
-    [ub[id] = 10. for id in ids.c1]
-    [ub[id] = 1. for id in ids.c2]
-    ub[ids.e_dev] = 1 - 1e-2
-    ub[ids.e_axis] = 1. - 1e-4
-    ub[ids.e_angle] = 1e10 #pi/2 - 1e-4
-    ub[ids.e_scale] = 15.
-
-    lb, ub
-end
-
-
-function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
-                                        omitted_ids::Vector{Int64},
-                                        transform::DataTransform)
-    # Note that sources are not allowed to move more than
-    # one pixel from their starting position in order to
-    # avoid label switiching.  (This is why this function gets
-    # the variational parameters as an argument.)
-    #
-    # vp: _Constrained_ variational parameters.
-    # omitted_ids: Ids of _unconstrained_ variational parameters to be omitted.
-    # unconstrain_fn: A function to convert VariationalParameters to a
-    #   vector that can be passed to the optimizer.
-
-    lbs = [get_nlopt_bounds(vs)[1] for vs in vp]
-    ubs = [get_nlopt_bounds(vs)[2] for vs in vp]
-    (transform.vp_to_vector(lbs, omitted_ids), 
-        transform.vp_to_vector(ubs, omitted_ids))
-end
 
 
 function print_params(vp)
@@ -81,6 +25,7 @@ function print_params(vp)
         println("-----------------\n")
     end
 end
+
 
 # The main reason we need this is to have a mutable type to keep
 # track of function evaluations, but we can keep other metadata
@@ -103,12 +48,12 @@ type ObjectiveWrapperFunctions
     f_ad_hessian::Function
 
     state::WrapperState
-    transform::Transform.DataTransform
-    mp::ModelParams
+    transform::DataTransform
+    mp::ModelParams{Float64}
     kept_ids::Array{Int64}
     omitted_ids::Array{Int64}
 
-    ObjectiveWrapperFunctions(f::Function, mp::ModelParams, transform::DataTransform,
+    ObjectiveWrapperFunctions(f::Function, mp::ModelParams{Float64}, transform::DataTransform,
                               kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1}) = begin
 
         function get_dual_mp(mp::ModelParams{Float64})
@@ -188,8 +133,8 @@ type ObjectiveWrapperFunctions
             for index in 1:k
                 print(".")
                 x_dual[index] = ForwardDiff.Dual(x[index], 1.)
-                deriv = f_grad(x_dual)[kept_ids]
-                hess[:, index] = Float64[ epsilon(x_val) for x_val in deriv ]
+                deriv = f_grad(x_dual)
+                hess[:, index] = Float64[ ForwardDiff.epsilon(x_val) for x_val in deriv ]
                 x_dual[index] = ForwardDiff.Dual(x[index], 0.)
             end
             print("Done.\n")
@@ -198,10 +143,65 @@ type ObjectiveWrapperFunctions
 
         new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_ad_grad, f_ad_hessian,
             state, transform, mp, kept_ids, omitted_ids)
-
     end
 end
 
+
+function get_nlopt_bounds(vs::Vector{Float64})
+    # Note that sources are not allowed to move more than
+    # one pixel from their starting position in order to
+    # avoid label switiching.  (This is why this function gets
+    # the variational parameters as an argument.)
+    # vs: parameters for a particular source.
+    # vp: complete collection of sources.
+    lb = Array(Float64, length(CanonicalParams))
+    lb[ids.a] = 1e-2
+    lb[ids.u] = vs[ids.u] - 1.
+    [lb[id] = 1e-4 for id in ids.r1]
+    [lb[id] = 1e-4 for id in ids.r2]
+    [lb[id] = 1e-4 for id in ids.k]
+    [lb[id] = -10. for id in ids.c1]
+    [lb[id] = 1e-4 for id in ids.c2]
+    lb[ids.e_dev] = 1e-2
+    lb[ids.e_axis] = 1e-4
+    lb[ids.e_angle] = -1e10 #-pi/2 + 1e-4
+    lb[ids.e_scale] = 0.2
+
+    ub = Array(Float64, length(CanonicalParams))
+    ub[ids.a] = 1 - 1e-2
+    ub[ids.u] = vs[ids.u] + 1.
+    [ub[id] = 1e12 for id in ids.r1]
+    [ub[id] = 1e-1 for id in ids.r2]
+    [ub[id] = 1 - 1e-4 for id in ids.k]
+    [ub[id] = 10. for id in ids.c1]
+    [ub[id] = 1. for id in ids.c2]
+    ub[ids.e_dev] = 1 - 1e-2
+    ub[ids.e_axis] = 1. - 1e-4
+    ub[ids.e_angle] = 1e10 #pi/2 - 1e-4
+    ub[ids.e_scale] = 15.
+
+    lb, ub
+end
+
+
+function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
+                                        omitted_ids::Vector{Int64},
+                                        transform::DataTransform)
+    # Note that sources are not allowed to move more than
+    # one pixel from their starting position in order to
+    # avoid label switiching.  (This is why this function gets
+    # the variational parameters as an argument.)
+    #
+    # vp: _Constrained_ variational parameters.
+    # omitted_ids: Ids of _unconstrained_ variational parameters to be omitted.
+    # unconstrain_fn: A function to convert VariationalParameters to a
+    #   vector that can be passed to the optimizer.
+
+    lbs = [get_nlopt_bounds(vs)[1] for vs in vp]
+    ubs = [get_nlopt_bounds(vs)[2] for vs in vp]
+    (transform.vp_to_vector(lbs, omitted_ids), 
+        transform.vp_to_vector(ubs, omitted_ids))
+end
 
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform,
