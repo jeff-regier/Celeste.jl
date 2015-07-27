@@ -7,6 +7,7 @@ using SampleData
 using ForwardDiff
 using DualNumbers
 import Transform
+import Optim
 
 
 type MutableInt
@@ -37,7 +38,8 @@ fun_with_iter = FunWithIter(foo)
 
 
 blob, mp, body = gen_sample_star_dataset();
-transform = Transform.pixel_rect_transform;
+
+transform = Transform.free_transform;
 #omitted_ids = Int64[ids_free.u, ids_free.k[:], ids_free.c2[:], ids_free.r2];
 omitted_ids = Int64[ids_free.u]; # The u derivatives are no good.
 kept_ids = setdiff(1:length(ids_free), omitted_ids)
@@ -72,6 +74,7 @@ elbo_objective(x0_dual);
 
 objective_grad = ForwardDiff.forwarddiff_gradient(elbo_value, Float64, fadtype=:dual; n=length(x0));
 g_fd = objective_grad(x0);
+
 celeste_elbo = transform.transform_sensitive_float(ElboDeriv.elbo(blob, mp), mp);
 hcat(g_fd, celeste_elbo.d[kept_ids])
 g_fd - celeste_elbo.d[kept_ids]
@@ -97,3 +100,23 @@ elbo_hess = get_elbo_hessian(x0)
 maximum(abs(elbo_hess - elbo_hess'))
 lambda = eig(elbo_hess)[1]
 maximum(abs(lambda)) / minimum(abs(lambda)) # Very badly conditioned!
+
+function get_elbo_hessian!(x::Array{Float64}, hess)
+    hess[:,:] = -get_elbo_hessian(x)
+end
+
+function get_elbo_derivative!(x::Array{Float64}, grad)
+    grad[:] = -Float64[ real(x_val) for x_val in elbo_deriv(x)[kept_ids] ]
+end
+
+function get_elbo_value(x::Array{Float64})
+    elbo_val = -real(elbo_value(x))
+    println("elbo val: $elbo_val")
+    elbo_val
+end
+
+# Newton's method doesn't work very well out of the box -- lots of bad steps.
+optim_res = Optim.optimize(get_elbo_value,
+                             get_elbo_derivative!,
+                             get_elbo_hessian!,
+                             x0, method=:newton, show_trace=true)
