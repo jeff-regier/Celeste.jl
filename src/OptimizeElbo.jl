@@ -9,6 +9,7 @@ using Transform
 
 import ElboDeriv
 import DataFrames
+import ForwardDiff
 
 
 #TODO: use Lumberjack.jl for logging
@@ -80,6 +81,127 @@ function print_params(vp)
         println("-----------------\n")
     end
 end
+
+# The main reason we need this is to have a mutable type to keep
+# track of function evaluations, but we can keep other metadata
+# in it as well.
+type WrapperState
+    f_evals::Int64
+    verbose::Bool
+    print_every_n::Int64
+end
+
+
+type ObjectiveWrapperFunctions
+
+    f_objective::Function
+    f_value_grad::Function
+    f_value_grad!::Function
+    f_value::Function
+    f_grad::Function
+    f_ad_grad::Function
+    f_hessian::Function
+
+    state::WrapperState
+    transform::Transform.DataTransform
+    mp::ModelParams
+    kept_ids::Array{Int64}
+    omitted_ids::Array{Int64}
+
+    ObjectiveWrapperFunctions(f::Function, mp::ModelParams, transform::DataTransform,
+                              kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1}) = begin
+
+        function get_dual_mp(mp::ModelParams{Float64})
+            ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
+                        mp.pp, mp.patches, mp.tile_width)
+        end
+        mp_dual = get_dual_mp(mp);
+
+
+        state = WrapperState(0, false, 10)
+        function print_status(iter_mp::ModelParams)
+            if state.verbose || (state.f_evals % state.print_every_n == 0)
+                println("iter $iter_count elbo: $(elbo.v)")
+            end
+            if state.verbose
+                print_params(iter_mp.vp)
+                println("\n=======================================\n")
+            end
+        end
+
+        function f_objective(x_dual::Array{ForwardDiff.Dual{Float64}})
+            state.f_evals += 1
+            # Evaluate in the constrained space and then unconstrain again.
+            transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
+            f_res = f(mp_dual)
+            print_status(mp_dual)
+            transform.transform_sensitive_float(f_res, mp_dual)
+        end
+
+        function f_objective(x::Array{Float64})
+            state.f_evals += 1
+            # Evaluate in the constrained space and then unconstrain again.
+            transform.vector_to_vp!(x, mp.vp, omitted_ids)
+            f_res = f(mp)
+            print_status(mp)
+            transform.transform_sensitive_float(f_res, mp)
+        end
+
+        function f_value_grad{T <: Number}(x::Array{T, 1})
+            @assert length(x) == length(kept_ids) * mp.S
+            res = f_objective(x)
+            grad = zeros(T, length(x))
+            if length(grad) > 0
+                svs = [res.d[kept_ids, s] for s in 1:mp.S]
+                grad[:] = reduce(vcat, svs)
+            end
+            res.v, grad
+        end
+
+        function f_value_grad!(x, grad)
+            @assert length(x) == length(kept_ids) * mp.S
+            @assert length(x) == length(grad)
+            value, grad[:] = f_value_grad(x)
+            value
+        end
+
+        # TODO: Add caching.
+        function f_value(x)
+            @assert length(x) == length(kept_ids) * mp.S
+            f_objective(x).v
+        end
+
+        function f_grad(x)
+            @assert length(x) == length(kept_ids) * mp.S
+            f_value_grad(x)[2]
+        end
+
+        # Forward diff versions of the gradient and Hessian.
+        f_ad_grad = ForwardDiff.forwarddiff_gradient(f_value, Float64, fadtype=:dual; n=length(kept_ids));
+
+        function f_hessian(x::Array{Float64})
+            @assert length(x) == length(kept_ids) * mp.S
+            k = length(kept_ids)
+            hess = zeros(Float64, k, k);
+            x_dual = ForwardDiff.Dual{Float64}[ ForwardDiff.Dual{Float64}(x[i], 0.) for i = 1:k ]
+            print("Getting Hessian ($k components): ")
+            for index in 1:k
+                print(".")
+                x_dual[index] = ForwardDiff.Dual(x[index], 1.)
+                deriv = f_deriv(x_dual)[kept_ids]
+                hess[:, index] = Float64[ epsilon(x_val) for x_val in deriv ]
+                x_dual[index] = ForwardDiff.Dual(x[index], 0.)
+            end
+            print("Done.\n")
+            hess
+        end
+
+        new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_ad_grad, f_hessian,
+            state, transform, mp, kept_ids, omitted_ids)
+
+    end
+end
+
 
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform,

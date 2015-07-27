@@ -401,6 +401,25 @@ function test_quadratic_optimization(trans::DataTransform)
     @test_approx_eq_eps quadratic_function(unused_blob, mp).v 0.0 1e-15
 end
 
+function test_wrapper(trans::DataTransform)
+    trans = free_transform;
+    omitted_ids = [ids_free.a];
+    kept_ids = setdiff(1:length(ids_free), omitted_ids);
+    blob, mp, body = gen_two_body_dataset();
+    wrapper = OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(blob, mp), mp, trans, kept_ids, omitted_ids);
+
+    x = trans.vp_to_vector(mp.vp, omitted_ids);
+    elbo_result = trans.transform_sensitive_float(ElboDeriv.elbo(blob, mp), mp);
+    elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, s] for s=1:mp.S ]);
+
+    w_v, w_grad = wrapper.f_value_grad(x);
+    @test_approx_eq(w_v, elbo_result.v)
+    @test_approx_eq(w_grad, elbo_grad)
+
+end
+
+
+
 ####################################################
 
 #for trans in [ rect_transform free_transform ]

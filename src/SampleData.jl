@@ -89,6 +89,30 @@ function gen_sample_galaxy_dataset(; perturb=true)
     blob, mp, one_body
 end
 
+function gen_two_body_dataset(; perturb=true)
+    # A small two-body dataset for quick unit testing.  These objects
+    # will be too close to be identifiable.
+
+    srand(1)
+    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    for b in 1:5
+        blob0[b].H, blob0[b].W = 20, 23
+        blob0[b].wcs = WCS.wcs_id
+    end
+    two_bodies = [
+        sample_ce([4.5, 3.6], false),
+        sample_ce([10.1, 12.1], true)
+    ]
+    blob = Synthetic.gen_blob(blob0, two_bodies)
+    mp = ModelInit.cat_init(two_bodies)
+    if perturb
+        perturb_params(mp)
+    end
+
+    blob, mp, two_bodies
+end
+
+
 
 function gen_three_body_dataset(; perturb=true)
     srand(1)
