@@ -303,8 +303,7 @@ end
 ###############################################
 # Functions for a "free transform".  Eventually the idea is that this will
 # have every parameter completely unconstrained.
-free_unchanged_ids = [ "u", "e_dev", "e_axis", "e_angle", "e_scale",
-                       "c1", "c2"]
+free_unchanged_ids = [ "u", "e_angle", "e_scale", "c1", "c2"]
 
 function vp_to_free!{NumType <: Number}(vp::VariationalParams{NumType},
                                         vp_free::FreeVariationalParams{NumType})
