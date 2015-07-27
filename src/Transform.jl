@@ -378,7 +378,7 @@ function free_to_vp!{NumType <: Number}(vp_free::FreeVariationalParams{NumType},
 end
 
 
-function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
+function free_unconstrain_sensitive_float{NumType <: Number}(sf::SensitiveFloat, mp::ModelParams{NumType})
     # Given a sensitive float with derivatives with respect to all the
     # constrained parameters, calculate derivatives with respect to
     # the unconstrained parameters.
@@ -389,7 +389,7 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
     # Require that the input have all derivatives defined.
     @assert size(sf.d) == (length(CanonicalParams), mp.S)
 
-    sf_free = zero_sensitive_float(UnconstrainedParams, mp.S)
+    sf_free = zero_sensitive_float(UnconstrainedParams, NumType, mp.S)
     sf_free.v = sf.v
 
     for s in 1:mp.S
@@ -419,17 +419,12 @@ function free_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
         sf_free.d[ids_free.e_scale, s] = sf.d[ids.e_scale, s] .* mp.vp[s][ids.e_scale]
         sf_free.d[collect(ids_free.c2), s] =
             sf.d[collect(ids.c2), s] .* mp.vp[s][collect(ids.c2)]
-
-        # Brightness.
-        sf_free.d[ids_free.r1, s] =
-            2.0 * sf.d[ids.r1, s] .* mp.vp[s][ids.r1] - sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
-        sf_free.d[ids_free.r2, s] =
-            -sf.d[ids.r1, s] .* mp.vp[s][ids.r1] + sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
+        sf_free.d[ids_free.r1, s] = sf.d[ids.r1, s] .* mp.vp[s][ids.r1]
+        sf_free.d[ids_free.r2, s] = sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
     end
 
     sf_free
 end
-
 
 #########################
 # Define the exported variables.

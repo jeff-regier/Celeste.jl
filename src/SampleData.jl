@@ -13,7 +13,7 @@ import Synthetic
 export empty_model_params
 export dat_dir, sample_ce, perturb_params
 export sample_star_fluxes, sample_galaxy_fluxes
-export gen_sample_star_dataset, gen_sample_galaxy_dataset, gen_three_body_dataset
+export gen_sample_star_dataset, gen_sample_galaxy_dataset, gen_two_body_dataset, gen_three_body_dataset
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 

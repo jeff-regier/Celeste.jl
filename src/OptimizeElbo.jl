@@ -100,7 +100,7 @@ type ObjectiveWrapperFunctions
     f_value::Function
     f_grad::Function
     f_ad_grad::Function
-    f_hessian::Function
+    f_ad_hessian::Function
 
     state::WrapperState
     transform::Transform.DataTransform
@@ -116,12 +116,12 @@ type ObjectiveWrapperFunctions
                         mp.pp, mp.patches, mp.tile_width)
         end
         mp_dual = get_dual_mp(mp);
-
+        x_length = length(kept_ids) * mp.S
 
         state = WrapperState(0, false, 10)
-        function print_status(iter_mp::ModelParams)
+        function print_status{T <: Number}(iter_mp::ModelParams, value::T)
             if state.verbose || (state.f_evals % state.print_every_n == 0)
-                println("iter $iter_count elbo: $(elbo.v)")
+                println("iter $(state.f_evals) elbo: $(value)")
             end
             if state.verbose
                 print_params(iter_mp.vp)
@@ -134,7 +134,7 @@ type ObjectiveWrapperFunctions
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
             f_res = f(mp_dual)
-            print_status(mp_dual)
+            print_status(mp_dual, real(f_res.v))
             transform.transform_sensitive_float(f_res, mp_dual)
         end
 
@@ -143,12 +143,12 @@ type ObjectiveWrapperFunctions
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x, mp.vp, omitted_ids)
             f_res = f(mp)
-            print_status(mp)
+            print_status(mp, f_res.v)
             transform.transform_sensitive_float(f_res, mp)
         end
 
         function f_value_grad{T <: Number}(x::Array{T, 1})
-            @assert length(x) == length(kept_ids) * mp.S
+            @assert length(x) == x_length
             res = f_objective(x)
             grad = zeros(T, length(x))
             if length(grad) > 0
@@ -159,7 +159,7 @@ type ObjectiveWrapperFunctions
         end
 
         function f_value_grad!(x, grad)
-            @assert length(x) == length(kept_ids) * mp.S
+            @assert length(x) == x_length
             @assert length(x) == length(grad)
             value, grad[:] = f_value_grad(x)
             value
@@ -167,28 +167,28 @@ type ObjectiveWrapperFunctions
 
         # TODO: Add caching.
         function f_value(x)
-            @assert length(x) == length(kept_ids) * mp.S
+            @assert length(x) == x_length
             f_objective(x).v
-        end
+       end
 
         function f_grad(x)
-            @assert length(x) == length(kept_ids) * mp.S
+            @assert length(x) == x_length
             f_value_grad(x)[2]
         end
 
         # Forward diff versions of the gradient and Hessian.
-        f_ad_grad = ForwardDiff.forwarddiff_gradient(f_value, Float64, fadtype=:dual; n=length(kept_ids));
+        f_ad_grad = ForwardDiff.forwarddiff_gradient(f_value, Float64, fadtype=:dual; n=x_length);
 
-        function f_hessian(x::Array{Float64})
-            @assert length(x) == length(kept_ids) * mp.S
-            k = length(kept_ids)
+        function f_ad_hessian(x::Array{Float64})
+            @assert length(x) == x_length
+            k = x_length
             hess = zeros(Float64, k, k);
             x_dual = ForwardDiff.Dual{Float64}[ ForwardDiff.Dual{Float64}(x[i], 0.) for i = 1:k ]
             print("Getting Hessian ($k components): ")
             for index in 1:k
                 print(".")
                 x_dual[index] = ForwardDiff.Dual(x[index], 1.)
-                deriv = f_deriv(x_dual)[kept_ids]
+                deriv = f_grad(x_dual)[kept_ids]
                 hess[:, index] = Float64[ epsilon(x_val) for x_val in deriv ]
                 x_dual[index] = ForwardDiff.Dual(x[index], 0.)
             end
@@ -196,7 +196,7 @@ type ObjectiveWrapperFunctions
             hess
         end
 
-        new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_ad_grad, f_hessian,
+        new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_ad_grad, f_ad_hessian,
             state, transform, mp, kept_ids, omitted_ids)
 
     end

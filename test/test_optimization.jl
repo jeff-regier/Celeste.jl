@@ -4,6 +4,34 @@ using Base.Test
 using SampleData
 using Transform
 
+function test_wrapper(trans::DataTransform)
+    trans = free_transform;
+
+    omitted_ids = [ids_free.u];
+    kept_ids = setdiff(1:length(ids_free), omitted_ids);
+    #blob, mp, body = SampleData.gen_two_body_dataset();
+    blob, mp, body = SampleData.gen_sample_star_dataset();
+    wrapper = OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(blob, mp), mp, trans, kept_ids, omitted_ids);
+
+    x = trans.vp_to_vector(mp.vp, omitted_ids);
+    elbo_result = trans.transform_sensitive_float(ElboDeriv.elbo(blob, mp), mp);
+    elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, s] for s=1:mp.S ]);
+
+    w_v, w_grad = wrapper.f_value_grad(x);
+    @test_approx_eq(w_v, elbo_result.v)
+    @test_approx_eq(w_grad, elbo_grad)
+
+    @test_approx_eq(w_v, wrapper.f_value(x))
+    @test_approx_eq(w_grad, wrapper.f_grad(x))
+
+    # Note that due to the WCS transformation, location coordinates can't be done with autodiff.
+    w_ad_grad = wrapper.f_ad_grad(x);
+    @test_approx_eq(w_grad, w_ad_grad)
+    DataFrame(a=repmat(ids_free_names[kept_ids], mp.S), b=w_ad_grad, c=w_grad)
+
+end
+
+
 
 function verify_sample_star(vs, pos)
     @test_approx_eq vs[ids.a[2]] 0.01
@@ -399,23 +427,6 @@ function test_quadratic_optimization(trans::DataTransform)
 
     @test_approx_eq_eps mp.vp[1] centers 1e-6
     @test_approx_eq_eps quadratic_function(unused_blob, mp).v 0.0 1e-15
-end
-
-function test_wrapper(trans::DataTransform)
-    trans = free_transform;
-    omitted_ids = [ids_free.a];
-    kept_ids = setdiff(1:length(ids_free), omitted_ids);
-    blob, mp, body = gen_two_body_dataset();
-    wrapper = OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(blob, mp), mp, trans, kept_ids, omitted_ids);
-
-    x = trans.vp_to_vector(mp.vp, omitted_ids);
-    elbo_result = trans.transform_sensitive_float(ElboDeriv.elbo(blob, mp), mp);
-    elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, s] for s=1:mp.S ]);
-
-    w_v, w_grad = wrapper.f_value_grad(x);
-    @test_approx_eq(w_v, elbo_result.v)
-    @test_approx_eq(w_grad, elbo_grad)
-
 end
 
 
