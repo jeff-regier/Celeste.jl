@@ -395,6 +395,11 @@ ModelParams{NumType <: Number}(vp::VariationalParams{NumType}, pp::PriorParams,
     ModelParams{NumType}(vp, pp, patches, tile_width)
 end
 
+function get_dual_mp(mp::ModelParams{Float64})
+    ModelParams(convert(Array{Array{Dual{Float64}, 1}, 1}, mp.vp),
+                mp.pp, mp.patches, mp.tile_width)
+end
+
 #########################################################
 
 @doc """

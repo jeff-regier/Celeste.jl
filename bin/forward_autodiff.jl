@@ -8,6 +8,34 @@ using ForwardDiff
 using DualNumbers
 import Transform
 
+
+type MutableInt
+    iters::Int64
+end
+
+type FunWithIter
+    f::Function
+    iter::MutableInt
+
+    FunWithIter(foo::Function) = begin
+        iter = MutableInt(0)
+        function f(x)
+            iter.iters = iter.iters + 1
+            foo(x)
+        end
+        new(f, iter)
+    end
+end
+
+function foo(x) 
+    x + 5.0
+end
+fun_with_iter = FunWithIter(foo)
+
+
+
+
+
 blob, mp, body = gen_sample_star_dataset();
 transform = Transform.pixel_rect_transform;
 #omitted_ids = Int64[ids_free.u, ids_free.k[:], ids_free.c2[:], ids_free.r2];
