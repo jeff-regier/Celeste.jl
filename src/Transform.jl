@@ -322,13 +322,12 @@ function vp_to_free!{NumType <: Number}(vp::VariationalParams{NumType},
         # second component of a.
         vp_free[s][ids_free.a[1]] = Util.inv_logit(vp[s][ids.a[2]])
 
-        vp_free[s][ids_free.e_dev] = Util.inv_logit(vp[s][ids_free.e_dev])
-
         # In contrast, the original script used the last component of k
         # as the free parameter.
         vp_free[s][ids_free.k[1, :]] = Util.inv_logit(vp[s][ids.k[1, :]])
 
-    	# e_axis is not technically a simplicial constraint but it must lie in (0, 1).
+        # [0, 1] constraints.
+        vp_free[s][ids_free.e_dev] = Util.inv_logit(vp[s][ids_free.e_dev])
         vp_free[s][ids_free.e_axis] = Util.inv_logit(vp[s][ids.e_axis])
 
         # Positivity constraints
@@ -354,12 +353,11 @@ function free_to_vp!{NumType <: Number}(vp_free::FreeVariationalParams{NumType},
         vp[s][ids.a[2]] = Util.logit(vp_free[s][ids_free.a[1]])
         vp[s][ids.a[1]] = 1.0 - vp[s][ids.a[2]]
 
-    	vp[s][ids.e_dev] = Util.logit(vp_free[s][ids_free.e_dev])
-
         vp[s][ids.k[1, :]] = Util.logit(vp_free[s][ids_free.k[1, :]])
         vp[s][ids.k[2, :]] = 1.0 - vp[s][ids.k[1, :]]
 	
-    	# e_axis is not technically a simplicial constraint but it must lie in (0, 1).
+    	# [0, 1] constraints.
+        vp[s][ids.e_dev] = Util.logit(vp_free[s][ids_free.e_dev])
         vp[s][ids.e_axis] = Util.logit(vp_free[s][ids_free.e_axis])
 
         # Positivity constraints
@@ -387,7 +385,7 @@ function free_unconstrain_sensitive_float{NumType <: Number}(sf::SensitiveFloat,
 
     for s in 1:mp.S
         # Variables that are unaffected by constraints:
-        for id_string in rect_unchanged_ids
+        for id_string in free_unchanged_ids
             id_symbol = convert(Symbol, id_string)
 
             # Flatten the indices for matrix indexing
@@ -407,6 +405,13 @@ function free_unconstrain_sensitive_float{NumType <: Number}(sf::SensitiveFloat,
         sf_free.d[collect(ids_free.k[1, :]), s] =
             (sf.d[collect(ids.k[1, :]), s] - sf.d[collect(ids.k[2, :]), s]) .*
             this_k .* (1.0 - this_k)
+
+        # [0, 1] constraints.
+        this_dev = mp.vp[s][ids.e_dev]
+        sf_free.d[ids_free.e_dev, s] = sf.d[ids.e_dev, s] * this_dev * (1.0 - this_dev)
+
+        this_axis = mp.vp[s][ids.e_axis]
+        sf_free.d[ids_free.e_axis, s] = sf.d[ids.e_axis, s] * this_axis * (1.0 - this_axis)
 
         # Positivity constraints.
         sf_free.d[ids_free.e_scale, s] = sf.d[ids.e_scale, s] .* mp.vp[s][ids.e_scale]
