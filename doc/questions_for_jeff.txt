@@ -1,7 +1,0 @@
-- Why the accumlative form of the color band luminances?
-What about if the mixture of normals is negative?  (In MCMC, I guess with VB it's fine)
-
-- Viewing fits files.
-  - fv or fv-viewer or something
-  - spydr
-  - topcat (view tables from fits files)
