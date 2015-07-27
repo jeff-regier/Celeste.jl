@@ -3,6 +3,8 @@
 
 module OptimizeElbo
 
+VERSION < v"0.4.0-dev" && using Docile
+
 using NLopt
 using CelesteTypes
 using Transform
@@ -66,7 +68,7 @@ type ObjectiveWrapperFunctions
         state = WrapperState(0, false, 10)
         function print_status{T <: Number}(iter_mp::ModelParams, value::T)
             if state.verbose || (state.f_evals % state.print_every_n == 0)
-                println("iter $(state.f_evals) elbo: $(value)")
+                println("f_evals: $(state.f_evals) value: $(value)")
             end
             if state.verbose
                 print_params(iter_mp.vp)
@@ -219,33 +221,11 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     #   - omitted_ids: Omitted ids from the _unconstrained_ parameterization (i.e. elements
     #       of free_ids).
 
+    kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
     iter_count = 0
 
-    function objective_and_grad(x::Vector{Float64}, g::Vector{Float64})
-        println("Iter: ", iter_count)
-        # Evaluate in the constrained space and then unconstrain again.
-        transform.vector_to_vp!(x, mp.vp, omitted_ids)
-        elbo = f(blob, mp)
-        elbo_trans = transform.transform_sensitive_float(elbo, mp)
-        left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-        if length(g) > 0
-            svs = [elbo_trans.d[left_ids, s] for s in 1:mp.S]
-            g[:] = reduce(vcat, svs)
-        end
-
-        iter_count += 1
-        (debug || iter_count % 10 == 0) && 
-                println("iter $iter_count elbo: $(elbo.v)")
-        if debug
-            print_params(mp.vp)
-            println("\n=======================================\n")
-            g_names = repmat(ids_free_names[left_ids], mp.S)
-            println(DataFrames.DataFrame(names=g_names, elbo_deriv=g))
-            println("\n=======================================\n")
-        end
-        elbo.v
-    end
+    obj_wrapper = ObjectiveWrapperFunctions(mp -> f(blob, mp), mp, transform, kept_ids, omitted_ids);
 
     opt = Opt(:LD_LBFGS, length(x0))
     for i in 1:length(x0)
@@ -255,7 +235,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     end
     lower_bounds!(opt, lbs)
     upper_bounds!(opt, ubs)
-    max_objective!(opt, objective_and_grad)
+    max_objective!(opt, obj_wrapper.f_value_grad!)
     xtol_rel!(opt, xtol_rel)
     ftol_abs!(opt, ftol_abs)
     (max_f, max_x, ret) = optimize(opt, x0)
