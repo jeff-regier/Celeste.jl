@@ -9,6 +9,8 @@ using DualNumbers
 import Transform
 import Optim
 
+
+
 function get_brightness(mp::ModelParams)
     brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
     brightness_vals = [ Float64[b.E_l_a[i, j].v for
@@ -358,11 +360,11 @@ get_brightness(mp_fit)
 get_brightness(mp_original)
 
 
-################
-# Newton out of the box takes too many bad steps
-optim_res0 = Optim.optimize(elbo_scale_value,
-                             elbo_scale_deriv!,
-                             elbo_scale_hess!,
-                             x0, method=:newton,
-                             show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
+# ################
+# # Newton out of the box takes too many bad steps
+# optim_res0 = Optim.optimize(elbo_scale_value,
+#                              elbo_scale_deriv!,
+#                              elbo_scale_hess!,
+#                              x0, method=:newton,
+#                              show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
 
