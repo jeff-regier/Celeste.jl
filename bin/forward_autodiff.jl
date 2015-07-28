@@ -13,28 +13,67 @@ include("src/interpolating_linesearch.jl")
 
 # Note that the u hessians are no good.
 #omitted_ids = Int64[ids_free.u, ids_free.k[:], ids_free.c2[:], ids_free.r2];
-omitted_ids = ids_free.u;
+#omitted_ids = ids_free.u;
 
-# Optimize only the star parameters.
-# omitted_ids = reduce(vcat, [gal_ids.(name) for name in names(gal_ids)]);
-# omitted_ids = union(omitted_ids, ids_free.u)
-# omitted_ids = union(omitted_ids, ids_free.a)
-# omitted_ids = union(omitted_ids, ids_free.c1[:,2])
-# omitted_ids = union(omitted_ids, ids_free.c2[:,2])
-# omitted_ids = union(omitted_ids, ids_free.r1[2])
-# omitted_ids = union(omitted_ids, ids_free.r2[2])
-# omitted_ids = union(omitted_ids, ids_free.k[:,2])
-# omitted_ids = unique(omitted_ids)
+galaxy_ids = union(ids_free.c1[:,2],
+                   ids_free.c2[:,2],
+                   ids_free.r1[2],
+                   ids_free.r2[2],
+                   ids_free.k[:,2],
+                   ids_free.e_dev, ids_free.e_axis, ids_free.e_angle, ids_free.e_scale);
 
-kept_ids = setdiff(1:length(ids_free), omitted_ids)
-
-#blob, mp_original, body = gen_sample_star_dataset()
-#blob, mp_original, body = gen_sample_galaxy_dataset(perturb=true);
-#blob, mp_original, body = gen_three_body_dataset(perturb=true); # Too slow.
-
+star_ids = union(ids_free.c1[:,1],
+                   ids_free.c2[:,1],
+                   ids_free.r1[1],
+                   ids_free.r2[1],
+                   ids_free.k[:,1]);
 
 
 transform = Transform.free_transform;
+
+simulation = false
+if simulation
+    #blob, mp_original, body = gen_sample_star_dataset()
+    blob, mp_original, body = gen_sample_galaxy_dataset(perturb=true);
+    #blob, mp_original, body = gen_three_body_dataset(perturb=true); # Too slow.
+else
+    # An actual celestial body.
+    field_dir = joinpath(dat_dir, "sample_field")
+    run_num = "003900"
+    camcol_num = "6"
+    field_num = "0269"
+
+    original_blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
+    original_cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+    cat_loc = convert(Array{Float64}, original_cat_df[[:ra, :dec]]);
+
+    obj_cols = [:objid, :is_star, :is_gal, :psfflux_r, :compflux_r];
+    sort(original_cat_df[original_cat_df[:is_gal] .== true, obj_cols], cols=:compflux_r, rev=true)
+    sort(original_cat_df[original_cat_df[:is_gal] .== false, obj_cols], cols=:psfflux_r, rev=true)
+
+    objid = "1237662226208063565" # A brightish star but with good pixels.
+    obj_row = original_cat_df[:objid] .== objid;
+    obj_loc = Float64[original_cat_df[obj_row, :ra][1], original_cat_df[obj_row, :dec][1]]
+
+    blob = deepcopy(original_blob);
+    width = 8.
+    x_ranges, y_ranges = SDSS.crop_image!(blob, width, obj_loc);
+    @assert SDSS.test_catalog_entry_in_image(blob, obj_loc)
+    entry_in_image = [SDSS.test_catalog_entry_in_image(blob, cat_loc[i,:][:]) for i=1:size(cat_loc, 1)];
+    original_cat_df[entry_in_image, cat_cols]
+    cat_entries = SDSS.convert_catalog_to_celeste(original_cat_df[entry_in_image, :], blob)
+    mp_original = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
+end
+
+
+# Optimize only the star parameters.
+omitted_ids = sort(unique(union(galaxy_ids, ids_free.a, ids_free.u)));
+epsilon = 1e-6
+for s=1:mp_original.S
+    mp_original.vp[s][ids.a] = [ 1.0 - epsilon, epsilon ]
+end
+kept_ids = setdiff(1:length(ids_free), omitted_ids)
+
 
 ##############
 mp_fit = deepcopy(mp_original);
@@ -67,6 +106,7 @@ elbo_grad = zeros(Float64, length(x0));
 elbo_hess = zeros(Float64, length(x0), length(x0));
 
 if false
+
     elbo_scale_value(x0)
     elbo_scale_deriv!(x0, elbo_grad)
     elbo_scale_hess!(x0, elbo_hess);
@@ -98,7 +138,7 @@ fit_v = ElboDeriv.elbo(blob, mp_fit).v;
 
 # Stuff:
 hess_reg = 0.0;
-max_iters = 5;
+max_iters = 3;
 
 d = Optim.DifferentiableFunction(elbo_scale_value, elbo_scale_deriv!);
 x_old = deepcopy(x0);
@@ -116,7 +156,7 @@ max_backstep = 20;
 
 # warm start with BFGS
 mp_start = deepcopy(mp_original)
-start_iter_count, start_f, x_start = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_start, Transform.free_transform, omitted_ids=omitted_ids, ftol_abs=10);
+start_iter_count, start_f, x_start = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_start, Transform.free_transform, omitted_ids=omitted_ids, ftol_abs=1);
 obj_wrap.state.f_evals = start_iter_count;
 x_new = deepcopy(x_start); # For quick restarts while debugging
 for iter in 1:max_iters

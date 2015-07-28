@@ -421,7 +421,7 @@ Display several model parameters side by side.
 """ ->
 function print_params(mp_tuple::ModelParams...)
     println("Printing for $(length(mp_tuple)) parameters.")
-    for s in 1:mp.S
+    for s in 1:mp_tuple[1].S
         println("=======================\n Object $(s):")
         for var_name in names(ids)
             println(var_name)
