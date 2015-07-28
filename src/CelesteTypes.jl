@@ -237,6 +237,10 @@ typealias Blob Vector{Image}
 Attributes of the patch of sky surrounding a single
 celestial object.
 
+Currently this is per object, and the jacobian and pixel
+center are set per image.  Eventually the plan is to have one
+SkyPatch per object per image.
+
 Attributes:
   - center: The approximate source location in world coordinates
   - radius: The width of the influence of the object in world coordinates
@@ -245,18 +249,19 @@ Attributes:
   - wcs_jacobian: The jacobian of the WCS transform in this region of the sky for each band
   - pixel_center: The pixel location of center in each band.
 """ ->
-immutable SkyPatch
+type SkyPatch
     center::Vector{Float64}
     radius::Float64
    
     psf::Vector{PsfComponent}
-    wcs_jacobian::Array{Matrix{Float64}, 1}
-    pixel_center::Array{Vector{Float64}}
+    wcs_jacobian::Matrix{Float64}
+    pixel_center::Vector{Float64}
 end
 
 SkyPatch(center::Vector{Float64}, radius::Float64) = begin
-    # TODO: Don't allow this default initialization.
-    SkyPatch(center, radius, PsfComponent[], [eye(Float64, 2) for b=1:5], [zeros(Float64, 2) for b=1:5])
+    # TODO: Don't allow this default initialization when this is initialized once
+    # per image.
+    SkyPatch(center, radius, PsfComponent[], eye(Float64, 2), zeros(Float64, 2))
 end
 
 
