@@ -9,6 +9,7 @@ import FITSIO
 import Grid
 import PSF
 import Util
+import WCS
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 

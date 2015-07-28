@@ -6,7 +6,6 @@ using SampleData
 
 import SDSS
 import PSF
-import FITSIO
 import WCS
 #import PyPlot
 
@@ -93,15 +92,15 @@ custom_rect_rescaling = ones(length(UnconstrainedParams));
 [custom_rect_rescaling[id] *= 1e5 for id in ids_free.u];
 [custom_rect_rescaling[id] *= 1e1 for id in ids_free.a];
 
-function custom_vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
+function custom_vp_to_rect!{T <: Number}(vp::VariationalParams{T}, vp_free::RectVariationalParams{T})
     Transform.vp_to_rect!(vp, vp_free, custom_rect_rescaling)
 end
 
-function custom_rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+function custom_rect_to_vp!{T <: Number}(vp_free::RectVariationalParams{T}, vp::VariationalParams{T})
     Transform.rect_to_vp!(vp_free, vp, custom_rect_rescaling)
 end
 
-function custom_rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
+function custom_rect_unconstrain_sensitive_float{T <: Number}(sf::SensitiveFloat{T}, mp::ModelParams{T})
     Transform.rect_unconstrain_sensitive_float(sf, mp, custom_rect_rescaling)
 end
 
@@ -110,27 +109,6 @@ custom_rect_transform = Transform.DataTransform(custom_rect_to_vp!, custom_vp_to
                                      custom_rect_unconstrain_sensitive_float,
                                      length(UnconstrainedParams));
 
-# Some helper functions
-
-function compare_solutions(mp1::ModelParams, mp2::ModelParams)
-    # Compare the parameters, fits, and iterations.
-    println("===================")
-    println("Differences:  mp1 vs mp2:")
-    for var_name in names(ids)
-        println(var_name)
-        for s in 1:mp1.S
-            println(s, ":\n", mp1.vp[s][ids.(var_name)], "\n", mp2.vp[s][ids.(var_name)])
-        end
-    end
-    println("===================")
-end
-
-function get_brightness(mp::ModelParams)
-	brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
-	brightness_vals = [ Float64[b.E_l_a[i, j].v for
-		i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
-	brightness_vals
-end
 
 function display_cat(cat_entry::CatalogEntry)
 	[ println("$name: $(cat_entry.(name))") for name in names(cat_entry) ]
@@ -153,7 +131,7 @@ end
 
 this_star_fluxes = convert(Array{Float64}, cat_df[[:psfflux_u, :psfflux_g, :psfflux_r, :psfflux_i, :psfflux_z ]])[:]
 synth_cat_entry = CatalogEntry(obj_loc, true, this_star_fluxes, this_star_fluxes, 0.1, .7, pi/4, 4.)
-synth_blob = Synthetic.gen_blob(blob, [synth_cat_entry]; identity_wcs=false, expectation=true);
+synth_blob = Synthetic.gen_blob(blob, [synth_cat_entry]; expectation=true);
 
 # Graph things in R since PyPlot is broken.
 # Note that this star doesn't look a ton like the raw psf, especially in band 3.
@@ -174,6 +152,18 @@ round(1000. .* (fit_psfs[b][nz, nz] - raw_psfs[b][nz, nz]), 1)
 println(psf_scales[b])
 
 
+function print_params2(mp_tuple::ModelParams...)
+    println("Printing for $(length(mp_tuple)) parameters.")
+    for s in 1:mp_tuple[1].S
+        println("=======================\n Object $(s):")
+        for var_name in names(ids)
+            println(var_name)
+            mp_vars = [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for index in 1:length(mp_tuple) ] 
+            println(reduce(hcat, mp_vars))
+        end
+    end
+end
+
 # Try varying background.
 for b=1:5
 	blob[b].constant_background = false
@@ -182,9 +172,9 @@ end
 mp = deepcopy(initial_mp);
 #res = OptimizeElbo.maximize_likelihood(blob, mp, Transform.rect_transform, xtol_rel=0);
 res = OptimizeElbo.maximize_likelihood(blob, mp, custom_rect_transform);
-compare_solutions(mp, initial_mp)
+print_params2(mp, initial_mp)
 display_cat(cat_entries[1]);
-get_brightness(mp)
+ElboDeriv.get_brightness(mp)
 
 # Try non-varying background.
 for b=1:5
