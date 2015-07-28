@@ -58,11 +58,7 @@ type ObjectiveWrapperFunctions
     ObjectiveWrapperFunctions(f::Function, mp::ModelParams{Float64}, transform::DataTransform,
                               kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1}) = begin
 
-        function get_dual_mp(mp::ModelParams{Float64})
-            ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
-                        mp.pp, mp.patches, mp.tile_width)
-        end
-        mp_dual = get_dual_mp(mp);
+        mp_dual = CelesteTypes.convert(ModelParams{ForwardDiff.Dual}, mp);
         x_length = length(kept_ids) * mp.S
 
         state = WrapperState(0, false, 10)

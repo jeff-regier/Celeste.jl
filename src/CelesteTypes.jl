@@ -25,9 +25,11 @@ export D, B, Ia
 
 using Util
 
+import Base.convert
 import FITSIO
 import Distributions
 import WCSLIB
+import ForwardDiff
 
 import Base.length
 
@@ -395,8 +397,8 @@ ModelParams{NumType <: Number}(vp::VariationalParams{NumType}, pp::PriorParams,
     ModelParams{NumType}(vp, pp, patches, tile_width)
 end
 
-function get_dual_mp(mp::ModelParams{Float64})
-    ModelParams(convert(Array{Array{Dual{Float64}, 1}, 1}, mp.vp),
+function convert(::Type{ModelParams{ForwardDiff.Dual}}, mp::ModelParams{Float64})
+    ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
                 mp.pp, mp.patches, mp.tile_width)
 end
 
