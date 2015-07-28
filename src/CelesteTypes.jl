@@ -19,6 +19,7 @@ export SensitiveFloat
 
 export zero_sensitive_float, clear!
 
+export print_params
 export ids, ids_free, star_ids, gal_ids
 export ids_names, ids_free_names
 export D, B, Ia
@@ -401,6 +402,35 @@ function convert(::Type{ModelParams{ForwardDiff.Dual}}, mp::ModelParams{Float64}
     ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
                 mp.pp, mp.patches, mp.tile_width)
 end
+
+@doc """
+Display model parameters with the variable names.
+""" ->
+function print_params(mp::ModelParams)
+    for s in 1:mp.S
+        println("=======================\n Object $(s):")
+        for var_name in names(ids)
+            println(var_name)
+            println(mp.vp[s][ids.(var_name)])
+        end
+    end
+end
+
+@doc """
+Display several model parameters side by side.
+""" ->
+function print_params(mp_tuple::ModelParams...)
+    println("Printing for $(length(mp_tuple)) parameters.")
+    for s in 1:mp.S
+        println("=======================\n Object $(s):")
+        for var_name in names(ids)
+            println(var_name)
+            mp_vars = [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for index in 1:length(mp_tuple) ] 
+            println(reduce(hcat, mp_vars))
+        end
+    end
+end
+
 
 #########################################################
 
