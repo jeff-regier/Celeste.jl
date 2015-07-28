@@ -6,7 +6,7 @@ using Transform
 
 import OptimizeElbo
 
-function test_wrapper(trans::DataTransform)
+function test_objective_wrapper(trans::DataTransform)
     # Note that due to the WCS transformation, location coordinates can't be done with autodiff.
     omitted_ids = [ids_free.u];
     kept_ids = setdiff(1:length(ids_free), omitted_ids);
@@ -441,7 +441,6 @@ function test_quadratic_optimization(trans::DataTransform)
 end
 
 
-
 ####################################################
 
 #for trans in [ rect_transform free_transform ]
@@ -453,8 +452,8 @@ test_quadratic_optimization(pixel_rect_transform)
 test_quadratic_optimization(world_rect_transform)
 test_quadratic_optimization(free_transform)
 
-test_wrapper(free_transform)
-test_wrapper(world_rect_transform)
+test_objective_wrapper(free_transform)
+test_objective_wrapper(world_rect_transform)
 
 #test_bad_galaxy_init()
 test_kappa_finding(pixel_rect_transform)
