@@ -10,6 +10,8 @@ import FITSIO
 import WCS
 #import PyPlot
 
+VERSION < v"0.4.0-dev" && using Docile
+
 # Some examples of the SDSS fits functions.
 field_dir = joinpath(dat_dir, "sample_field")
 run_num = "003900"
@@ -58,58 +60,28 @@ sort(obj_df[obj_df[:is_gal] .== false, :], cols=:psfflux_r, rev=true)
 #objid = "1237662226208063491" # A bright star ... bad pixels though
 objid = "1237662226208063565" # A brightish star but with good pixels.
 
-
 #sub_rows_x = 1:150
 #sub_rows_y = 1:150
-
-width = 8
-
 blob = deepcopy(original_blob);
 reset_crpix!(blob);
+width = 8.
+
 cat_df = deepcopy(original_cat_df);
-cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]]);
 obj_row = original_cat_df[:objid] .== objid;
 obj_loc = convert(Array, original_cat_df[obj_row, [:ra, :dec]])'[:]
-#[ WCS.world_to_pixel(blob[b].wcs, obj_loc) for b=1:5]
-entry_in_range = Bool[true for i=1:size(cat_loc, 1) ];
-x_ranges = zeros(2, 5)
-y_ranges = zeros(2, 5)
-for b=1:5
-	obj_loc_pix = WCS.world_to_pixel(blob[b].wcs, obj_loc)
-	sub_rows_x = floor(obj_loc_pix[1] - width):ceil(obj_loc_pix[1] + width)
-	sub_rows_y = floor(obj_loc_pix[2] - width):ceil(obj_loc_pix[2] + width)
-	x_min = minimum(collect(sub_rows_x))
-	y_min = minimum(collect(sub_rows_y))
-	x_max = maximum(collect(sub_rows_x))
-	y_max = maximum(collect(sub_rows_y))
-	x_ranges[:, b] = Float64[x_min, x_max]
-	y_ranges[:, b] = Float64[y_min, y_max]
 
-	wcs_range = WCS.world_to_pixel(blob[b].wcs, cat_loc)
-	entry_in_range = entry_in_range &
-		(x_min .<= wcs_range[:, 1] .<= x_max) &
-		(y_min .<= wcs_range[:, 2] .<= y_max)
+x_ranges, y_ranges = SDSS.crop_image!(blob, width, obj_loc);
+@assert SDSS.test_catalog_entry_in_image(blob, obj_loc)
 
-	# Re-center the WCS coordinates
-	crpix = original_crpix_band[:, b]
-	unsafe_store!(blob[b].wcs.crpix, crpix[1] - x_min + 1, 1)
-	unsafe_store!(blob[b].wcs.crpix, crpix[2] - y_min + 1, 2)
-	
-	blob[b].pixels = blob[b].pixels[sub_rows_x, sub_rows_y]
-	blob[b].H = size(blob[b].pixels, 1)
-	blob[b].W = size(blob[b].pixels, 2)
-	blob[b].iota_vec = blob[b].iota_vec[x_min:x_max]
-	blob[b].epsilon_mat = blob[b].epsilon_mat[x_min:x_max, y_min:y_max]
-end
-cat_df = cat_df[entry_in_range, :]
-cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
 cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]]);
+entry_in_image = [SDSS.test_catalog_entry_in_image(blob, cat_loc[i,:][:]) for i=1:size(cat_loc, 1)];
+cat_df[entry_in_image, cat_cols]
+cat_entries = SDSS.convert_catalog_to_celeste(cat_df[entry_in_image, :], blob)
 initial_mp = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
 
-# Check the re-centering
+# Check the re-centering.  This should be a little larger than width.
 for b=1:5
 	println(WCS.world_to_pixel(blob[b].wcs, obj_loc))
-	#println(WCS.world_to_pixel(blob[b].wcs, initial_mp.vp[1][ids.u]))
 end
 
 ##############################
