@@ -246,8 +246,12 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSL
     for s in 1:mp.S
         vs = mp.vp[s]
 
+        world_loc = vs[[ids.u[1], ids.u[2]]]
+        m_pos = WCS.world_to_pixel(mp.patches[s].wcs_jacobian, mp.patches[s].center,
+                                   mp.patches[s].pixel_center, world_loc)
+
         # TODO: Change this to use the jacobian and an offset so it can be differentiated.
-        m_pos = WCS.world_to_pixel(wcs, vs[[ids.u[1], ids.u[2]]])
+        #m_pos = WCS.world_to_pixel(wcs, )
 
         # Convolve the star locations with the PSF.
         for k in 1:3
@@ -260,12 +264,11 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSL
         for i = 1:Ia
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
-            m_pos = WCS.world_to_pixel(wcs, vs[[ids.u[1], ids.u[2]]])
+            #m_pos = WCS.world_to_pixel(wcs, vs[[ids.u[1], ids.u[2]]])
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
             for j in 1:[8,6][i]
                 for k = 1:3
-                    # TODO: you could just use pixel coordinates here.
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
                         m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale])
@@ -617,9 +620,10 @@ function elbo_likelihood!(tile::ImageTile,
             clear!(var_G)
 
             m_pos = Float64[h, w]
-            wcs_jacobian = WCS.pixel_world_jacobian(tile.img.wcs, m_pos)
+            #wcs_jacobian = WCS.pixel_world_jacobian(tile.img.wcs, m_pos)
             for child_s in 1:length(tile_sources)
                 # TODO: Give each source its own jacobian rather than each pixel.
+                wcs_jacobian = mp.patches[child_s].wcs_jacobian
                 parent_s = tile_sources[child_s]
                 # wcs_jacobian = mp.patches[s].wcs_jacobian
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,

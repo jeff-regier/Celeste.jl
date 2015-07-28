@@ -287,18 +287,18 @@ Args:
 Returns:
     - The 1-indexed pixel locations in the same shape as the input.
 """ ->
-function world_to_pixel(wcs_jacobian::Matrix{Float64}, world_offset::Vector{Float64},
-                        pixel_offset::Vector{Float64}, world_loc::Array{Float64})
+function world_to_pixel{NumType <: Number}(wcs_jacobian::Matrix{Float64}, world_offset::Vector{Float64},
+                                           pixel_offset::Vector{Float64}, world_loc::Array{NumType})
     single_row = length(size(world_loc)) == 1 
-    if single_row
-        # Convert to a row vector if it's a single value
+    if !single_row
+        # Convert to a row vector if it's an array
         world_loc = world_loc'
     end
 
     pix_loc = wcs_jacobian * (world_loc - world_offset) + pixel_offset
 
     if single_row
-        return pix_loc[:]
+        return pix_loc
     else
         return pix_loc'
     end
