@@ -44,23 +44,35 @@ else
     field_num = "0269"
 
     original_blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
+    # Need to do this until WCS has an actual deep copy.
+    original_crpix_band = Float64[unsafe_load(original_blob[b].wcs.crpix, i) for i=1:2, b=1:5];
+    function reset_crpix!(blob)
+        for b=1:5
+            unsafe_store!(blob[b].wcs.crpix, original_crpix_band[1, b], 1)
+            unsafe_store!(blob[b].wcs.crpix, original_crpix_band[2, b], 2)
+        end
+    end
+
     original_cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
     cat_loc = convert(Array{Float64}, original_cat_df[[:ra, :dec]]);
 
-    obj_cols = [:objid, :is_star, :is_gal, :psfflux_r, :compflux_r];
+    obj_cols = [:objid, :is_star, :is_gal, :psfflux_r, :compflux_r, :ra, :dec];
     sort(original_cat_df[original_cat_df[:is_gal] .== true, obj_cols], cols=:compflux_r, rev=true)
     sort(original_cat_df[original_cat_df[:is_gal] .== false, obj_cols], cols=:psfflux_r, rev=true)
 
-    objid = "1237662226208063565" # A brightish star but with good pixels.
+    objid = "1237662226208063576" # A galaxy
+    #objid = "1237662226208063565" # A brightish star but with good pixels.
     obj_row = original_cat_df[:objid] .== objid;
     obj_loc = Float64[original_cat_df[obj_row, :ra][1], original_cat_df[obj_row, :dec][1]]
 
     blob = deepcopy(original_blob);
-    width = 8.
+    reset_crpix!(blob)
+    WCS.world_to_pixel(blob[3].wcs, obj_loc)
+    width = 12.
     x_ranges, y_ranges = SDSS.crop_image!(blob, width, obj_loc);
     @assert SDSS.test_catalog_entry_in_image(blob, obj_loc)
     entry_in_image = [SDSS.test_catalog_entry_in_image(blob, cat_loc[i,:][:]) for i=1:size(cat_loc, 1)];
-    original_cat_df[entry_in_image, cat_cols]
+    original_cat_df[entry_in_image, obj_cols]
     cat_entries = SDSS.convert_catalog_to_celeste(original_cat_df[entry_in_image, :], blob)
     mp_original = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
 end
@@ -138,15 +150,14 @@ function print_x_params(x::Vector{Float64})
     print_params(mp_copy)
 end
 
-
 # Get a BFGS fit for comparison
-mp_fit = deepcopy(mp_original)
+mp_fit = deepcopy(mp_original);
 iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids);
 fit_v = ElboDeriv.elbo(blob, mp_fit).v;
 
 # Stuff:
 hess_reg = 0.0;
-max_iters = 3;
+max_iters = 10;
 
 d = Optim.DifferentiableFunction(elbo_scale_value, elbo_scale_deriv!);
 x_old = deepcopy(x0);
@@ -162,39 +173,40 @@ x_vals = [ zeros(Float64, length(x_old)) for iter=1:max_iters ];
 rho = 2.0;
 max_backstep = 20;
 
-# Newton has no incentive not to take too-large steps.  Put NaNs in the transform functions?
+# Newton has no incentive not to take too-large steps due to the bad numerics at extreme values.
+# Put NaNs in the transform functions?
 
 # warm start with BFGS
 mp_start = deepcopy(mp_original)
-start_iter_count, start_f, x_start = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_start, Transform.free_transform, omitted_ids=omitted_ids, ftol_abs=1e-2);
+start_iter_count, start_f, x_start = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_start, Transform.free_transform, omitted_ids=omitted_ids, ftol_abs=1);
 obj_wrap.state.f_evals = start_iter_count;
 x_new = deepcopy(x_start); # For quick restarts while debugging
 old_val = -start_f;
 for iter in 1:max_iters
     println("-------------------$iter")
     x_old = deepcopy(x_new);
-    #x_direction = -1e-6 * gr_new;
+
     elbo_scale_hess!(x_new, elbo_hess);
     hess_ev = eig(elbo_hess)[1]
     min_ev = minimum(hess_ev)
     max_ev = maximum(hess_ev)
     println("========= Eigenvalues: $(max_ev), $(min_ev)")
-    if min_ev < 0
-        println("========== Warning -- non-convex, $(min_ev)")
-        elbo_hess += eye(length(x_new)) * abs(min_ev)
-        hess_ev = eig(elbo_hess)[1]
-        min_ev = minimum(hess_ev)
-        max_ev = maximum(hess_ev)
-        println("========= New eigenvalues: $(max_ev), $(min_ev)")
-    end
-    if abs(max_ev) / abs(min_ev) > 1e6
-        println("Regularizing hessian")
-        elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e6)
-        hess_ev = eig(elbo_hess)[1]
-        min_ev = minimum(hess_ev)
-        max_ev = maximum(hess_ev)
-        println("========= New eigenvalues: $(max_ev), $(min_ev)")
-    end
+    # if min_ev < 0
+    #     println("========== Warning -- non-convex, $(min_ev)")
+    #     elbo_hess += eye(length(x_new)) * abs(min_ev)
+    #     hess_ev = eig(elbo_hess)[1]
+    #     min_ev = minimum(hess_ev)
+    #     max_ev = maximum(hess_ev)
+    #     println("========= New eigenvalues: $(max_ev), $(min_ev)")
+    # end
+    # if abs(max_ev) / abs(min_ev) > 1e6
+    #     println("Regularizing hessian")
+    #     elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e6)
+    #     hess_ev = eig(elbo_hess)[1]
+    #     min_ev = minimum(hess_ev)
+    #     max_ev = maximum(hess_ev)
+    #     println("========= New eigenvalues: $(max_ev), $(min_ev)")
+    # end
     gr_new = zeros(Float64, length(x_old));
     elbo_scale_deriv!(x_old, gr_new);
     x_direction = -(elbo_hess \ gr_new)
@@ -202,31 +214,32 @@ for iter in 1:max_iters
     decreased = false;
     alpha = 1.0;
     backsteps = 0;
-    new_x = x_old + alpha * x_direction;
-    new_val = elbo_scale_value(new_x);
+    x_new = x_old + alpha * x_direction;
+    new_val = elbo_scale_value(x_new);
     while isnan(new_val) || (new_val >= old_val)
         alpha /= rho;
-        println("Backstepping: ")
+        println("Backstepping.  Ratio is $(new_val / old_val - 1)")
         backsteps += 1;
         if backsteps > max_backstep
             error("Not a descent direction.")
         end
-        new_x = x_old + alpha * x_direction;
-        new_val = elbo_scale_value(new_x);
+        x_new = x_old + alpha * x_direction;
+        new_val = elbo_scale_value(x_new);
     end
+    println("Chose alpha = $alpha with a change of $(new_val / old_val - 1)")
 
-    # x_direction = alpha * x_direction
+    x_direction = alpha * x_direction
     #println(DataFrame(name=ids_free_names[kept_ids], grad=gr_new, hess=diag(elbo_hess), p=x_direction))
-    # lsr = Optim.LineSearchResults(Float64); # Not used
-    # c = -1.; # Not used
-    # mayterminate = true; # Not used
-    # #if backsteps == 0
-    # interpolating_linesearch!(d, x_old, x_direction,
-    #                           x_new, gr_new,
-    #                           lsr, c, mayterminate;
-    #                           c1 = 1e-4,
-    #                           c2 = 0.9,
-    #                           rho = 2.0, verbose=false);
+    lsr = Optim.LineSearchResults(Float64); # Not used
+    c = -1.; # Not used
+    mayterminate = true; # Not used
+    #if backsteps == 0
+    interpolating_linesearch!(d, x_old, x_direction,
+                              x_new, gr_new,
+                              lsr, c, mayterminate;
+                              c1 = 1e-4,
+                              c2 = 0.9,
+                              rho = 2.0, verbose=false);
     # # else
     # #     a_star, f_up, g_up = zoom(0., 1.0,
     # #                               dot(gr_new, x_direction), new_val,
@@ -234,7 +247,7 @@ for iter in 1:max_iters
     # #                               x_old, x_direction, x_new, gr_new, verbose=true)
     # # end
 
-    print_x_params(x_new)
+    #print_x_params(x_new)
     this_f_val = elbo_scale_value(x_new)
     f_vals[iter] = this_f_val;
     x_vals[iter] = deepcopy(x_new)
@@ -242,7 +255,7 @@ for iter in 1:max_iters
     println(">>>>>>  Current value after $(obj_wrap.state.f_evals) evaluations: $(this_f_val) (BFGS got $(-fit_v))")
     mp_nm = deepcopy(mp_original);
     transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
-    println(ElboDeriv.get_brightness(mp_nm))
+    #println(ElboDeriv.get_brightness(mp_nm))
     println("\n\n")
 end
 
@@ -264,9 +277,9 @@ transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
 
 print_params(mp_nm, mp_fit, mp_original)
 
-get_brightness(mp_nm)
-get_brightness(mp_fit)
-get_brightness(mp_original)
+ElboDeriv.get_brightness(mp_nm)
+ElboDeriv.get_brightness(mp_fit)
+ElboDeriv.get_brightness(mp_original)
 
 
 # ################

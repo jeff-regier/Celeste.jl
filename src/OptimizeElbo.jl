@@ -36,6 +36,7 @@ type WrapperState
     f_evals::Int64
     verbose::Bool
     print_every_n::Int64
+    scale::Float64
 end
 
 
@@ -93,6 +94,7 @@ type ObjectiveWrapperFunctions
             transform.transform_sensitive_float(f_res, mp)
         end
 
+        # The following functions are multiplied by state.scale.
         function f_value_grad{T <: Number}(x::Array{T, 1})
             @assert length(x) == x_length
             res = f_objective(x)
@@ -101,7 +103,7 @@ type ObjectiveWrapperFunctions
                 svs = [res.d[kept_ids, s] for s in 1:mp.S]
                 grad[:] = reduce(vcat, svs)
             end
-            res.v, grad
+            state.scale * res.v, state.scale .* grad
         end
 
         function f_value_grad!(x, grad)
@@ -114,7 +116,7 @@ type ObjectiveWrapperFunctions
         # TODO: Add caching.
         function f_value(x)
             @assert length(x) == x_length
-            f_objective(x).v
+            f_value_grad(x)[1]
        end
 
         function f_grad(x)
@@ -179,7 +181,7 @@ function get_nlopt_bounds(vs::Vector{Float64})
     ub[ids.e_dev] = 1 - 1e-2
     ub[ids.e_axis] = 1. - 1e-4
     ub[ids.e_angle] = 1e10 #pi/2 - 1e-4
-    ub[ids.e_scale] = 15.
+    ub[ids.e_scale] = 20.
 
     lb, ub
 end

@@ -305,6 +305,10 @@ end
 # have every parameter completely unconstrained.
 free_unchanged_ids = [ "u", "e_angle", "e_scale", "c1", "c2"]
 
+# Below these values the Elbo is not reliable.
+const free_r1_min = 1e-4
+const free_r2_min = 1e-4
+
 function vp_to_free!{NumType <: Number}(vp::VariationalParams{NumType},
                                         vp_free::FreeVariationalParams{NumType})
     # Convert a constrained to an unconstrained variational parameterization
@@ -333,8 +337,8 @@ function vp_to_free!{NumType <: Number}(vp::VariationalParams{NumType},
         # Positivity constraints
         vp_free[s][ids_free.e_scale] = log(vp[s][ids.e_scale])
         vp_free[s][ids_free.c2] = log(vp[s][ids.c2])
-        vp_free[s][ids_free.r1] = log(vp[s][ids.r1])
-        vp_free[s][ids_free.r2] = log(vp[s][ids.r2])
+        vp_free[s][ids_free.r1] = log(vp[s][ids.r1] - free_r1_min)
+        vp_free[s][ids_free.r2] = log(vp[s][ids.r2] - free_r2_min)
     end
 end
 
@@ -363,8 +367,8 @@ function free_to_vp!{NumType <: Number}(vp_free::FreeVariationalParams{NumType},
         # Positivity constraints
         vp[s][ids.e_scale] = exp(vp_free[s][ids_free.e_scale])
         vp[s][ids.c2] = exp(vp_free[s][ids_free.c2])
-        vp[s][ids.r1] = exp(vp_free[s][ids_free.r1])
-        vp[s][ids.r2] = exp(vp_free[s][ids_free.r2])
+        vp[s][ids.r1] = exp(vp_free[s][ids_free.r1]) + free_r1_min
+        vp[s][ids.r2] = exp(vp_free[s][ids_free.r2]) + free_r2_min
     end
 end
 
@@ -415,8 +419,7 @@ function free_unconstrain_sensitive_float{NumType <: Number}(sf::SensitiveFloat,
 
         # Positivity constraints.
         sf_free.d[ids_free.e_scale, s] = sf.d[ids.e_scale, s] .* mp.vp[s][ids.e_scale]
-        sf_free.d[collect(ids_free.c2), s] =
-            sf.d[collect(ids.c2), s] .* mp.vp[s][collect(ids.c2)]
+        sf_free.d[collect(ids_free.c2), s] = sf.d[collect(ids.c2), s] .* mp.vp[s][collect(ids.c2)]
         sf_free.d[ids_free.r1, s] = sf.d[ids.r1, s] .* mp.vp[s][ids.r1]
         sf_free.d[ids_free.r2, s] = sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
     end

@@ -28,7 +28,7 @@ function test_parameter_conversion(transform::DataTransform)
 	@test length(x) == length(vp_free[1]) * mp.S
 
 	# Why is this convert necessary?
-	vp2 = convert(VariationalParams{Float64}, [ zeros(Float64, length(vp[1])) for s = 1:mp.S ])
+	vp2 = convert(VariationalParams{Float64}, [ ones(Float64, length(vp[1])) for s = 1:mp.S ])
 	transform.vector_to_vp!(x, vp2, omitted_ids)
 	for id in names(ids), s in 1:mp.S
 		@test_approx_eq original_vp[s][ids.(id)] vp2[s][ids.(id)]
