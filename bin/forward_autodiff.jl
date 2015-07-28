@@ -95,6 +95,7 @@ else
 end
 kept_ids = setdiff(1:length(ids_free), omitted_ids)
 
+
 ##############
 mp_fit = deepcopy(mp_original);
 x0 = transform.vp_to_vector(mp_fit.vp, omitted_ids);
@@ -157,7 +158,7 @@ fit_v = ElboDeriv.elbo(blob, mp_fit).v;
 
 # Stuff:
 hess_reg = 0.0;
-max_iters = 10;
+max_iters = 20;
 
 d = Optim.DifferentiableFunction(elbo_scale_value, elbo_scale_deriv!);
 x_old = deepcopy(x0);
@@ -191,22 +192,22 @@ for iter in 1:max_iters
     min_ev = minimum(hess_ev)
     max_ev = maximum(hess_ev)
     println("========= Eigenvalues: $(max_ev), $(min_ev)")
-    # if min_ev < 0
-    #     println("========== Warning -- non-convex, $(min_ev)")
-    #     elbo_hess += eye(length(x_new)) * abs(min_ev)
-    #     hess_ev = eig(elbo_hess)[1]
-    #     min_ev = minimum(hess_ev)
-    #     max_ev = maximum(hess_ev)
-    #     println("========= New eigenvalues: $(max_ev), $(min_ev)")
-    # end
-    # if abs(max_ev) / abs(min_ev) > 1e6
-    #     println("Regularizing hessian")
-    #     elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e6)
-    #     hess_ev = eig(elbo_hess)[1]
-    #     min_ev = minimum(hess_ev)
-    #     max_ev = maximum(hess_ev)
-    #     println("========= New eigenvalues: $(max_ev), $(min_ev)")
-    # end
+    if min_ev < 0
+        println("========== Warning -- non-convex, $(min_ev)")
+        elbo_hess += eye(length(x_new)) * abs(min_ev)
+        hess_ev = eig(elbo_hess)[1]
+        min_ev = minimum(hess_ev)
+        max_ev = maximum(hess_ev)
+        println("========= New eigenvalues: $(max_ev), $(min_ev)")
+    end
+    if abs(max_ev) / abs(min_ev) > 1e6
+        println("Regularizing hessian")
+        elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e6)
+        hess_ev = eig(elbo_hess)[1]
+        min_ev = minimum(hess_ev)
+        max_ev = maximum(hess_ev)
+        println("========= New eigenvalues: $(max_ev), $(min_ev)")
+    end
     gr_new = zeros(Float64, length(x_old));
     elbo_scale_deriv!(x_old, gr_new);
     x_direction = -(elbo_hess \ gr_new)
@@ -216,7 +217,7 @@ for iter in 1:max_iters
     backsteps = 0;
     x_new = x_old + alpha * x_direction;
     new_val = elbo_scale_value(x_new);
-    while isnan(new_val) || (new_val >= old_val)
+    while isnan(new_val) #|| (new_val >= old_val)
         alpha /= rho;
         println("Backstepping.  Ratio is $(new_val / old_val - 1)")
         backsteps += 1;
@@ -280,13 +281,3 @@ print_params(mp_nm, mp_fit, mp_original)
 ElboDeriv.get_brightness(mp_nm)
 ElboDeriv.get_brightness(mp_fit)
 ElboDeriv.get_brightness(mp_original)
-
-
-# ################
-# # Newton out of the box takes too many bad steps
-# optim_res0 = Optim.optimize(elbo_scale_value,
-#                              elbo_scale_deriv!,
-#                              elbo_scale_hess!,
-#                              x0, method=:newton,
-#                              show_trace=true, ftol=1e-6, xtol=0.0, grtol=1e-4, iterations=30)
-

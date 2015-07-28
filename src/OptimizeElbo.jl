@@ -62,7 +62,7 @@ type ObjectiveWrapperFunctions
         mp_dual = CelesteTypes.convert(ModelParams{ForwardDiff.Dual}, mp);
         x_length = length(kept_ids) * mp.S
 
-        state = WrapperState(0, false, 10)
+        state = WrapperState(0, false, 10, 1.0)
         function print_status{T <: Number}(iter_mp::ModelParams, value::T)
             if state.verbose || (state.f_evals % state.print_every_n == 0)
                 println("f(x) after $(state.f_evals) evals: $(value)")
@@ -181,7 +181,7 @@ function get_nlopt_bounds(vs::Vector{Float64})
     ub[ids.e_dev] = 1 - 1e-2
     ub[ids.e_axis] = 1. - 1e-4
     ub[ids.e_angle] = 1e10 #pi/2 - 1e-4
-    ub[ids.e_scale] = 20.
+    ub[ids.e_scale] = 50.
 
     lb, ub
 end
