@@ -64,7 +64,7 @@ type ObjectiveWrapperFunctions
         state = WrapperState(0, false, 10)
         function print_status{T <: Number}(iter_mp::ModelParams, value::T)
             if state.verbose || (state.f_evals % state.print_every_n == 0)
-                println("f_evals: $(state.f_evals) value: $(value)")
+                println("f(x) after $(state.f_evals) evals: $(value)")
             end
             if state.verbose
                 print_params(iter_mp.vp)
@@ -74,6 +74,9 @@ type ObjectiveWrapperFunctions
 
         function f_objective(x_dual::Array{ForwardDiff.Dual{Float64}})
             state.f_evals += 1
+            # TODO: If the transformation results in NaN parameters,
+            # return NaN without evaluating the function.
+
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
             f_res = f(mp_dual)
@@ -219,7 +222,6 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
-    iter_count = 0
 
     obj_wrapper = ObjectiveWrapperFunctions(mp -> f(blob, mp), mp, transform, kept_ids, omitted_ids);
 
@@ -236,6 +238,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     ftol_abs!(opt, ftol_abs)
     (max_f, max_x, ret) = optimize(opt, x0)
 
+    iter_count = obj_wrapper.state.f_evals
     println("got $max_f at $max_x after $iter_count iterations (returned $ret)\n")
     iter_count, max_f, max_x, ret
 end
