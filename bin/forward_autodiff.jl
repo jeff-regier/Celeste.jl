@@ -30,7 +30,9 @@ kept_ids = setdiff(1:length(ids_free), omitted_ids)
 
 #blob, mp_original, body = gen_sample_star_dataset()
 #blob, mp_original, body = gen_sample_galaxy_dataset(perturb=true);
-blob, mp_original, body = gen_three_body_dataset(perturb=true);
+#blob, mp_original, body = gen_three_body_dataset(perturb=true); # Too slow.
+
+
 
 transform = Transform.free_transform;
 
