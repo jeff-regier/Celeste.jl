@@ -235,14 +235,23 @@ end
 typealias Blob Vector{Image}
 
 @doc """
+Attributes of the patch of sky surrounding a single
+celestial object.
+
 The amount of sky affected by a source in
 world coordinates and an L_{\infty} norm.
 """ ->
 immutable SkyPatch
     center::Vector{Float64}
     radius::Float64
+   
+    psf::Vector{PsfComponent}
+    wcs_jacobian::Array{Float64, 2}
 end
 
+SkyPatch(center::Vector{Float64}, radius::Float64) = begin
+    SkyPatch(center, radius, PsfComponent[], Array(Float64, 0, 0))
+end
 
 #########################################################
 
