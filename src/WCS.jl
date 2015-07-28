@@ -275,6 +275,38 @@ end
 
 
 @doc """
+Convert a world location to a 1-indexed pixel location using a linear
+approximation to the true transform.
+
+Args:
+    - wcs_jacobian: The jacobian of the transform pixel_log = F(world_loc)
+    - world_offset: The world location at which the jacobian is evaluated
+    - pixel_offset: The pixel location of the world offset
+    - world_loc: The world location to be translated to pixel coordinates.
+
+Returns:
+    - The 1-indexed pixel locations in the same shape as the input.
+""" ->
+function world_to_pixel(wcs_jacobian::Matrix{Float64}, world_offset::Vector{Float64},
+                        pixel_offset::Vector{Float64}, world_loc::Array{Float64})
+    single_row = length(size(world_loc)) == 1 
+    if single_row
+        # Convert to a row vector if it's a single value
+        world_loc = world_loc'
+    end
+
+    pix_loc = wcs_jacobian * (world_loc - world_offset) + pixel_offset
+
+    if single_row
+        return pix_loc[:]
+    else
+        return pix_loc'
+    end
+end
+
+
+
+@doc """
 Convert a 1-indexed pixel location to a world location.
 
 Args:

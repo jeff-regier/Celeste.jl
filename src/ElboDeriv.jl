@@ -239,11 +239,14 @@ Returns:
 The PSF contains three components, so you see lots of 3's below.
 """ ->
 function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSLIB.wcsprm)
+    # TODO: Don't pass wcs, all the information is in mp.patches.
     star_mcs = Array(BvnComponent, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent, 3, 8, 2, mp.S)
 
     for s in 1:mp.S
         vs = mp.vp[s]
+
+        # TODO: Change this to use the jacobian and an offset so it can be differentiated.
         m_pos = WCS.world_to_pixel(wcs, vs[[ids.u[1], ids.u[2]]])
 
         # Convolve the star locations with the PSF.
@@ -312,15 +315,10 @@ function accum_star_pos!{NumType <: Number}(bmc::BvnComponent{NumType},
 
     fs0m.v += f
 
-    # TODO: does this need to change for world coordiantes?
     dfs0m_dpix = Float64[f .* py1, f .* py2]
-    #dfs0m_dworld = WCS.pixel_deriv_to_world_deriv(wcs, dfs0m_dpix, x)
     dfs0m_dworld = wcs_jacobian' * dfs0m_dpix
     fs0m.d[star_ids.u[1]] += dfs0m_dworld[1]
     fs0m.d[star_ids.u[2]] += dfs0m_dworld[2]
-
-    # fs0m.d[star_ids.u[1]] += f .* py1
-    # fs0m.d[star_ids.u[2]] += f .* py2
 end
 
 
@@ -567,6 +565,8 @@ function elbo_likelihood!(tile::ImageTile,
         star_mcs::Array{BvnComponent, 2},
         gal_mcs::Array{GalaxyCacheComponent, 4},
         accum::SensitiveFloat)
+
+    # TODO: calculate local sources outside the likelihood function
     tile_sources = local_sources(tile, mp)
     h_range, w_range = tile_range(tile, mp.tile_width)
 
@@ -619,7 +619,9 @@ function elbo_likelihood!(tile::ImageTile,
             m_pos = Float64[h, w]
             wcs_jacobian = WCS.pixel_world_jacobian(tile.img.wcs, m_pos)
             for child_s in 1:length(tile_sources)
+                # TODO: Give each source its own jacobian rather than each pixel.
                 parent_s = tile_sources[child_s]
+                # wcs_jacobian = mp.patches[s].wcs_jacobian
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
                     mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
                     fs0m, fs1m, E_G, var_G, wcs_jacobian)
@@ -641,6 +643,14 @@ Args:
   - accum: A sensitive float containing the ELBO.
 """ ->
 function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
+    @assert length(mp.patches) == mp.S
+    for s=1:mp.S
+        mp.patches[s].pixel_center = WCS.world_to_pixel(img.wcs, mp.patches[s].center)
+        mp.patches[s].wcs_jacobian = WCS.pixel_world_jacobian(img.wcs, mp.patches[s].pixel_center)
+
+        # TODO: Also set the psf here.
+    end
+
     accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
 
     star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp, img.wcs)
