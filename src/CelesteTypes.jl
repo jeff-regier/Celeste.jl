@@ -25,9 +25,11 @@ export D, B, Ia
 
 using Util
 
+import Base.convert
 import FITSIO
 import Distributions
 import WCSLIB
+import ForwardDiff
 
 import Base.length
 
@@ -393,6 +395,11 @@ end
 ModelParams{NumType <: Number}(vp::VariationalParams{NumType}, pp::PriorParams,
                                patches::Vector{SkyPatch}, tile_width::Int64) = begin
     ModelParams{NumType}(vp, pp, patches, tile_width)
+end
+
+function convert(::Type{ModelParams{ForwardDiff.Dual}}, mp::ModelParams{Float64})
+    ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
+                mp.pp, mp.patches, mp.tile_width)
 end
 
 #########################################################
