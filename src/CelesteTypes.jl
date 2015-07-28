@@ -234,12 +234,29 @@ end
 typealias Blob Vector{Image}
 
 @doc """
-The amount of sky affected by a source in
-world coordinates and an L_{\infty} norm.
+Attributes of the patch of sky surrounding a single
+celestial object.
+
+Attributes:
+  - center: The approximate source location in world coordinates
+  - radius: The width of the influence of the object in world coordinates
+
+  - psf: The point spread function in this region of the sky
+  - wcs_jacobian: The jacobian of the WCS transform in this region of the sky for each band
+  - pixel_center: The pixel location of center in each band.
 """ ->
 immutable SkyPatch
     center::Vector{Float64}
     radius::Float64
+   
+    psf::Vector{PsfComponent}
+    wcs_jacobian::Array{Matrix{Float64}, 1}
+    pixel_center::Array{Vector{Float64}}
+end
+
+SkyPatch(center::Vector{Float64}, radius::Float64) = begin
+    # TODO: Don't allow this default initialization.
+    SkyPatch(center, radius, PsfComponent[], [eye(Float64, 2) for b=1:5], [zeros(Float64, 2) for b=1:5])
 end
 
 
