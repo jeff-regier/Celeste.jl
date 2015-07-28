@@ -186,6 +186,7 @@ old_val = -start_f;
 for iter in 1:max_iters
     println("-------------------$iter")
     x_old = deepcopy(x_new);
+    old_val = new_val;
 
     elbo_scale_hess!(x_new, elbo_hess);
     hess_ev = eig(elbo_hess)[1]
@@ -249,29 +250,28 @@ for iter in 1:max_iters
     # # end
 
     #print_x_params(x_new)
-    this_f_val = elbo_scale_value(x_new)
-    f_vals[iter] = this_f_val;
+    new_val = elbo_scale_value(x_new)
+    val_diff = new_val / old_val - 1
+    f_vals[iter] = new_val;
     x_vals[iter] = deepcopy(x_new)
     cumulative_iters[iter] = obj_wrap.state.f_evals
-    println(">>>>>>  Current value after $(obj_wrap.state.f_evals) evaluations: $(this_f_val) (BFGS got $(-fit_v))")
+    println(">>>>>>  Current value after $(obj_wrap.state.f_evals) evaluations: $(new_val) (BFGS got $(-fit_v))")
     mp_nm = deepcopy(mp_original);
     transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
     #println(ElboDeriv.get_brightness(mp_nm))
     println("\n\n")
 end
 
+# f_vals are negative because it's minimization
 println("Newton objective - BFGS objective (higher is better)")
-((-f_vals) - fit_v) / abs(fit_v) # f_vals are negative because it's minimization
-
 println("Cumulative fuction evaluation ratio:")
-cumulative_iters ./ iter_count
+hcat(((-f_vals) - fit_v) / abs(fit_v), cumulative_iters ./ iter_count)
 
 f_vals
 diff(f_vals) ./ f_vals[1:(end-1)]
 minimum(f_vals)
 
-[ x ./ [x_vals[1] - x_vals[end]] for x in diff(x_vals) ]
-
+x_vals
 mp_nm = deepcopy(mp_original);
 transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
 
