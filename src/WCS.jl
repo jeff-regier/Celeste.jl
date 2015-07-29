@@ -428,6 +428,7 @@ function pixel_deriv_to_world_deriv(wcs::WCSLIB.wcsprm, df_dpix::Array{Float64, 
     trans' * df_dpix
 end
 
+
 # A world coordinate system where the world and pixel coordinates are the same.
 const wcs_id = WCSLIB.wcsprm(2,
                              cd = Float64[1 0; 0 1],
