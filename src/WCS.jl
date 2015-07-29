@@ -275,6 +275,38 @@ end
 
 
 @doc """
+Convert a world location to a 1-indexed pixel location using a linear
+approximation to the true transform.
+
+Args:
+    - wcs_jacobian: The jacobian of the transform pixel_log = F(world_loc)
+    - world_offset: The world location at which the jacobian is evaluated
+    - pixel_offset: The pixel location of the world offset
+    - world_loc: The world location to be translated to pixel coordinates.
+
+Returns:
+    - The 1-indexed pixel locations in the same shape as the input.
+""" ->
+function world_to_pixel{NumType <: Number}(wcs_jacobian::Matrix{Float64}, world_offset::Vector{Float64},
+                                           pixel_offset::Vector{Float64}, world_loc::Array{NumType})
+    single_row = length(size(world_loc)) == 1 
+    if !single_row
+        # Convert to a row vector if it's an array
+        world_loc = world_loc'
+    end
+
+    pix_loc = wcs_jacobian * (world_loc - world_offset) + pixel_offset
+
+    if single_row
+        return pix_loc
+    else
+        return pix_loc'
+    end
+end
+
+
+
+@doc """
 Convert a 1-indexed pixel location to a world location.
 
 Args:
@@ -395,6 +427,7 @@ function pixel_deriv_to_world_deriv(wcs::WCSLIB.wcsprm, df_dpix::Array{Float64, 
     trans = pixel_world_jacobian(wcs, pix_loc, world_delt=world_delt)
     trans' * df_dpix
 end
+
 
 # A world coordinate system where the world and pixel coordinates are the same.
 const wcs_id = WCSLIB.wcsprm(2,

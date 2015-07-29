@@ -69,20 +69,22 @@ function test_accum_pos_derivs()
     blob, mp, body = gen_sample_galaxy_dataset()
 
     function wrap_star(mmp)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp, blob[3].wcs)
-        fs0m = zero_sensitive_float(StarPosParams)
         m_pos = Float64[9, 10.]
         wcs_jacobian = WCS.pixel_world_jacobian(blob[3].wcs, m_pos)
+        set_patch_wcs!(mmp.patches[1], blob[3].wcs)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
+        fs0m = zero_sensitive_float(StarPosParams)
         ElboDeriv.accum_star_pos!(star_mcs[1,1], m_pos, fs0m, wcs_jacobian)
         fs0m
     end
     test_by_finite_differences(wrap_star, mp)
 
     function wrap_galaxy(mmp)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp, blob[3].wcs)
-        fs1m = zero_sensitive_float(GalaxyPosParams)
         m_pos = Float64[9, 10]
         wcs_jacobian = WCS.pixel_world_jacobian(blob[3].wcs, m_pos)
+        set_patch_wcs!(mmp.patches[1], blob[3].wcs)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
+        fs1m = zero_sensitive_float(GalaxyPosParams)
         ElboDeriv.accum_galaxy_pos!(gal_mcs[1,1,1,1], m_pos, fs1m, wcs_jacobian)
         fs1m
     end
@@ -94,14 +96,15 @@ function test_accum_pixel_source_derivs()
     blob, mp0, body = gen_sample_galaxy_dataset()
 
     function wrap_apss_ef(mmp)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[1].psf, mmp, blob[1].wcs)
+        m_pos = [9, 10.]
+        wcs_jacobian = WCS.pixel_world_jacobian(blob[1].wcs, m_pos)
+        set_patch_wcs!(mmp.patches[1], blob[1].wcs)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[1].psf, mmp)
         fs0m = zero_sensitive_float(StarPosParams)
         fs1m = zero_sensitive_float(GalaxyPosParams)
         E_G = zero_sensitive_float(CanonicalParams)
         var_G = zero_sensitive_float(CanonicalParams)
         sb = ElboDeriv.SourceBrightness(mmp.vp[1])
-        m_pos = [9, 10.]
-        wcs_jacobian = WCS.pixel_world_jacobian(blob[1].wcs, m_pos)
         ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
             mmp.vp[1], 1, 1, m_pos, 1, fs0m, fs1m, E_G, var_G, wcs_jacobian)
         E_G
@@ -109,7 +112,8 @@ function test_accum_pixel_source_derivs()
     test_by_finite_differences(wrap_apss_ef, mp0)
 
     function wrap_apss_varf(mmp)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp, blob[3].wcs)
+        set_patch_wcs!(mmp.patches[1], blob[3].wcs)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
         fs0m = zero_sensitive_float(StarPosParams)
         fs1m = zero_sensitive_float(GalaxyPosParams)
         E_G = zero_sensitive_float(CanonicalParams)
