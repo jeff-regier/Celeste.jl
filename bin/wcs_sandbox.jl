@@ -232,6 +232,8 @@ get_brightness(mp_const)
 
 b = 4
 function get_e_g(img, mp)
+	# Note: this is now broken due to needing the wcs Jacobian.
+
 	ret = zero_sensitive_float(CanonicalParams, mp.S)
 	ElboDeriv.elbo_likelihood!(img, mp, ret)
 

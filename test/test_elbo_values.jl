@@ -85,7 +85,8 @@ function test_that_variance_is_low()
     blob, mp, body = true_star_init()
 
     test_b = 3
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[test_b].psf, mp, blob[test_b].wcs)
+    set_patch_wcs!(mp.patches[1], blob[test_b].wcs)
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[test_b].psf, mp)
     fs0m = zero_sensitive_float(StarPosParams)
     fs1m = zero_sensitive_float(GalaxyPosParams)
     E_G = zero_sensitive_float(CanonicalParams)

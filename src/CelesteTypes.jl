@@ -19,6 +19,8 @@ export SensitiveFloat
 
 export zero_sensitive_float, clear!
 
+export set_patch_wcs!
+
 export ids, ids_free, star_ids, gal_ids
 export ids_names, ids_free_names
 export D, B, Ia
@@ -29,6 +31,7 @@ import Base.convert
 import FITSIO
 import Distributions
 import WCSLIB
+import WCS
 import ForwardDiff
 
 import Base.length
@@ -263,6 +266,15 @@ SkyPatch(center::Vector{Float64}, radius::Float64) = begin
     # per image.
     SkyPatch(center, radius, PsfComponent[], eye(Float64, 2), zeros(Float64, 2))
 end
+
+@doc """
+Update a patch's pixel center and world coordinates jacobian given a wcs object.
+""" ->
+function set_patch_wcs!(patch::SkyPatch, wcs::WCSLIB.wcsprm)
+    patch.pixel_center = WCS.world_to_pixel(wcs, patch.center)
+    patch.wcs_jacobian = WCS.pixel_world_jacobian(wcs, patch.pixel_center)
+end
+
 
 
 #########################################################
