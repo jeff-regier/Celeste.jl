@@ -97,7 +97,7 @@ end
 
 function test_galaxy_optimization(trans::DataTransform)
     blob, mp, body = gen_sample_galaxy_dataset()
-    OptimizeElbo.maximize_likelihood(blob, mp, trans)
+    OptimizeElbo.maximize_likelihood(blob, mp, trans, xtol_rel=0.0)
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6])
 end
 
@@ -330,7 +330,7 @@ end
 
 function test_full_elbo_optimization(trans::DataTransform)
     blob, mp, body = gen_sample_galaxy_dataset(perturb=true)
-    OptimizeElbo.maximize_elbo(blob, mp, trans)
+    OptimizeElbo.maximize_elbo(blob, mp, trans, xtol_rel=0.0)
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6])
 end
 
