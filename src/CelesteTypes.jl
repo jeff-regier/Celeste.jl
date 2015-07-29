@@ -424,6 +424,33 @@ function convert(::Type{ModelParams{ForwardDiff.Dual}}, mp::ModelParams{Float64}
                 mp.pp, mp.patches, mp.tile_width)
 end
 
+@doc """
+Display model parameters with the variable names.
+""" ->
+function print_params(mp::ModelParams)
+    for s in 1:mp.S
+        println("=======================\n Object $(s):")
+        for var_name in names(ids)
+            println(var_name)
+            println(mp.vp[s][ids.(var_name)])
+        end
+    end
+end
+
+@doc """
+Display several model parameters side by side.
+""" ->
+function print_params(mp_tuple::ModelParams...)
+    println("Printing for $(length(mp_tuple)) parameters.")
+    for s in 1:mp_tuple[1].S
+        println("=======================\n Object $(s):")
+        for var_name in names(ids)
+            println(var_name)
+            mp_vars = [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for index in 1:length(mp_tuple) ] 
+            println(reduce(hcat, mp_vars))
+        end
+    end
+end
 #########################################################
 
 @doc """

@@ -10,6 +10,7 @@ import FITSIO
 import WCS
 #import PyPlot
 
+
 # Some examples of the SDSS fits functions.
 field_dir = joinpath(dat_dir, "sample_field")
 run_num = "003900"
