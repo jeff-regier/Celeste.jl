@@ -7,7 +7,6 @@ using CelesteTypes
 import KL
 import Util
 import WCS
-import WCSLIB
 
 @doc """
 SensitiveFloat objects for expectations involving r_s and c_s.
@@ -234,17 +233,19 @@ Returns:
     - Galaxy component
     - Galaxy type
     - Source
-  - wcs: A world coordinate system object
 
 The PSF contains three components, so you see lots of 3's below.
 """ ->
-function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSLIB.wcsprm)
+function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
     star_mcs = Array(BvnComponent, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent, 3, 8, 2, mp.S)
 
     for s in 1:mp.S
         vs = mp.vp[s]
-        m_pos = WCS.world_to_pixel(wcs, vs[[ids.u[1], ids.u[2]]])
+
+        world_loc = vs[[ids.u[1], ids.u[2]]]
+        m_pos = WCS.world_to_pixel(mp.patches[s].wcs_jacobian, mp.patches[s].center,
+                                   mp.patches[s].pixel_center, world_loc)
 
         # Convolve the star locations with the PSF.
         for k in 1:3
@@ -257,12 +258,10 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, wcs::WCSL
         for i = 1:Ia
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
-            m_pos = WCS.world_to_pixel(wcs, vs[[ids.u[1], ids.u[2]]])
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
             for j in 1:[8,6][i]
                 for k = 1:3
-                    # TODO: you could just use pixel coordinates here.
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
                         m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale])
@@ -302,7 +301,7 @@ Args:
   - x: An offset for the component in pixel coordinates (e.g. a pixel location)
   - fs0m: A SensitiveFloat to which the value of the bvn likelihood
        and its derivatives with respect to x are added.
- - wcs: The world coordinate system object for this image.
+ - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
 """ ->
 function accum_star_pos!{NumType <: Number}(bmc::BvnComponent{NumType},
                          x::Vector{Float64},
@@ -312,15 +311,10 @@ function accum_star_pos!{NumType <: Number}(bmc::BvnComponent{NumType},
 
     fs0m.v += f
 
-    # TODO: does this need to change for world coordiantes?
-    dfs0m_dpix = Float64[f .* py1, f .* py2]
-    #dfs0m_dworld = WCS.pixel_deriv_to_world_deriv(wcs, dfs0m_dpix, x)
+    dfs0m_dpix = NumType[f .* py1, f .* py2]
     dfs0m_dworld = wcs_jacobian' * dfs0m_dpix
     fs0m.d[star_ids.u[1]] += dfs0m_dworld[1]
     fs0m.d[star_ids.u[2]] += dfs0m_dworld[2]
-
-    # fs0m.d[star_ids.u[1]] += f .* py1
-    # fs0m.d[star_ids.u[2]] += f .* py2
 end
 
 
@@ -333,7 +327,7 @@ Args:
   - x: An offset for the component in pixel coordinates (e.g. a pixel location)
   - fs1m: A SensitiveFloat to which the value of the likelihood
        and its derivatives with respect to x are added.
-  - wcs: The world coordinate system object for this image.
+ - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
 """ ->
 function accum_galaxy_pos!{NumType <: Number}(gcc::GalaxyCacheComponent{NumType},
                            x::Vector{Float64},
@@ -384,7 +378,7 @@ Args:
   - E_G: Expected celestial signal in this band (G_{nbm})
        (updated in place)
   - var_G: Variance of G (updated in place)
-  - wcs: The world coordinate system object for this image.
+  - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
 
 Returns:
   - Clears and updates fs0m, fs1m with the total
@@ -567,6 +561,8 @@ function elbo_likelihood!(tile::ImageTile,
         star_mcs::Array{BvnComponent, 2},
         gal_mcs::Array{GalaxyCacheComponent, 4},
         accum::SensitiveFloat)
+
+    # TODO: calculate local sources outside the likelihood function
     tile_sources = local_sources(tile, mp)
     h_range, w_range = tile_range(tile, mp.tile_width)
 
@@ -617,8 +613,8 @@ function elbo_likelihood!(tile::ImageTile,
             clear!(var_G)
 
             m_pos = Float64[h, w]
-            wcs_jacobian = WCS.pixel_world_jacobian(tile.img.wcs, m_pos)
             for child_s in 1:length(tile_sources)
+                wcs_jacobian = mp.patches[child_s].wcs_jacobian
                 parent_s = tile_sources[child_s]
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
                     mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
@@ -641,9 +637,15 @@ Args:
   - accum: A sensitive float containing the ELBO.
 """ ->
 function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
+    @assert length(mp.patches) == mp.S
+    for s=1:mp.S
+        set_patch_wcs!(mp.patches[s], img.wcs)
+        # TODO: Also set a local psf here.
+    end
+
     accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
 
-    star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp, img.wcs)
+    star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
