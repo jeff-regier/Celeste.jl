@@ -318,7 +318,7 @@ function accum_star_pos!{NumType <: Number}(bmc::BvnComponent{NumType},
 
     fs0m.v += f
 
-    dfs0m_dpix = Float64[f .* py1, f .* py2]
+    dfs0m_dpix = NumType[f .* py1, f .* py2]
     dfs0m_dworld = wcs_jacobian' * dfs0m_dpix
     fs0m.d[star_ids.u[1]] += dfs0m_dworld[1]
     fs0m.d[star_ids.u[2]] += dfs0m_dworld[2]
