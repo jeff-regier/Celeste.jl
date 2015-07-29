@@ -97,7 +97,7 @@ end
 
 function test_galaxy_optimization(trans::DataTransform)
     blob, mp, body = gen_sample_galaxy_dataset()
-    OptimizeElbo.maximize_likelihood(blob, mp, trans)
+    OptimizeElbo.maximize_likelihood(blob, mp, trans, xtol_rel=0.0)
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6])
 end
 
@@ -330,7 +330,7 @@ end
 
 function test_full_elbo_optimization(trans::DataTransform)
     blob, mp, body = gen_sample_galaxy_dataset(perturb=true)
-    OptimizeElbo.maximize_elbo(blob, mp, trans)
+    OptimizeElbo.maximize_elbo(blob, mp, trans, xtol_rel=0.0)
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6])
 end
 
@@ -345,7 +345,7 @@ function test_real_stamp_optimization(trans::DataTransform)
     cat_entries = filter(inbounds, cat_entries)
 
     mp = ModelInit.cat_init(cat_entries)
-    OptimizeElbo.maximize_elbo(blob, mp, trans)
+    OptimizeElbo.maximize_elbo(blob, mp, trans, xtol_rel=0.0)
 end
 
 
@@ -452,16 +452,17 @@ test_quadratic_optimization(world_rect_transform)
 test_quadratic_optimization(free_transform)
 
 test_objective_wrapper(free_transform)
-test_objective_wrapper(world_rect_transform)
+test_objective_wrapper(free_transform)
 
 #test_bad_galaxy_init()
-test_kappa_finding(pixel_rect_transform)
+test_kappa_finding(free_transform)
 test_bad_a_init()
 #test_elbo_invariance_to_a()
 test_kl_invariance_to_a()
 test_likelihood_invariance_to_a()
-test_star_optimization(pixel_rect_transform)
-test_full_elbo_optimization(pixel_rect_transform)
-#test_galaxy_optimization(pixel_rect_transform) # currently broken due to NLOPT failure.
-#test_real_stamp_optimization(world_rect_transform)  # long running.  Temporarily commented out for NLOPT failure.
+test_star_optimization(free_transform)
+
+test_full_elbo_optimization(free_transform)
+test_galaxy_optimization(free_transform)
+test_real_stamp_optimization(free_transform)
 
