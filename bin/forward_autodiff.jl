@@ -77,185 +77,115 @@ else
     mp_original = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
 end
 
-fit_star = false
-if fit_star
-    # Optimize only the star parameters.
-    omitted_ids = sort(unique(union(galaxy_ids, ids_free.a, ids_free.u)));
-    epsilon = 1e-6
-    for s=1:mp_original.S
-        mp_original.vp[s][ids.a] = [ 1.0 - epsilon, epsilon ]
-    end
-else
-    # Optimize only the galaxy parameters.
-    omitted_ids = sort(unique(union(star_ids, ids_free.a, ids_free.u)));
-    epsilon = 1e-6
-    for s=1:mp_original.S
-        mp_original.vp[s][ids.a] = [ epsilon, 1.0 - epsilon ]
-    end
+# fit_star = false
+# if fit_star
+#     # Optimize only the star parameters.
+#     omitted_ids = sort(unique(union(galaxy_ids, ids_free.a, ids_free.u)));
+#     epsilon = 1e-6
+#     for s=1:mp_original.S
+#         mp_original.vp[s][ids.a] = [ 1.0 - epsilon, epsilon ]
+#     end
+# else
+#     # Optimize only the galaxy parameters.
+#     omitted_ids = sort(unique(union(star_ids, ids_free.a, ids_free.u)));
+#     epsilon = 1e-6
+#     for s=1:mp_original.S
+#         mp_original.vp[s][ids.a] = [ epsilon, 1.0 - epsilon ]
+#     end
+# end
+
+for s in 1:mp_original.S
+    mp_original.vp[s][ids.a] = [ 0.5, 0.5 ]
 end
+omitted_ids = Int64[]
 kept_ids = setdiff(1:length(ids_free), omitted_ids)
 
+lbs, ubs = OptimizeElbo.get_nlopt_bounds(mp_original.vp[1]);
 
 ##############
-mp_fit = deepcopy(mp_original);
-x0 = transform.vp_to_vector(mp_fit.vp, omitted_ids);
-x0_dual = Dual{Float64}[ Dual{Float64}(x0[i], 0.) for i = 1:length(x0) ];
-
-obj_wrap = OptimizeElbo.ObjectiveWrapperFunctions(
-    mp -> ElboDeriv.elbo(blob, mp), deepcopy(mp_original), transform, kept_ids, omitted_ids);
-
-if false # Checks
-    x_elbo_d = obj_wrap.f_grad(x0);
-    g_fd = obj_wrap.f_ad_grad(x0);
-    DataFrame(name=ids_free_names[kept_ids], elbo_d=x_elbo_d, ad_d=g_fd, diff=x_elbo_d - g_fd)
-end
-
-scale = -1.0
-function elbo_scale_value(x)
-    val = scale * obj_wrap.f_value(x)
-    println("Elbo: $val")
-    val
-end
-function elbo_scale_deriv!(x, grad)
-    grad[:] = scale * obj_wrap.f_grad(x)
-end
-function elbo_scale_hess!(x, hess)
-    hess[:, :] = scale * obj_wrap.f_ad_hessian(x)
-end
-
-elbo_grad = zeros(Float64, length(x0));
-elbo_hess = zeros(Float64, length(x0), length(x0));
-
-if false
-
-    elbo_scale_value(x0)
-    elbo_scale_deriv!(x0, elbo_grad)
-    elbo_scale_hess!(x0, elbo_hess);
-
-    hess_eig_val = eig(elbo_hess)[1];
-    hess_eig_vec = eig(elbo_hess)[2];
-    sort(hess_eig_val)
-    eigs = DataFrame([ round(hess_eig_vec[:,i], 3) for i in sortperm(hess_eig_val)]);
-    eigs[:name] = ids_free_names[kept_ids]
-    for i = 1:length(kept_ids)
-        println(sort(hess_eig_val)[i])
-        println(eigs[[:name, symbol("x$i")]])
-    end
-end
-
-#########################
-# Newton's method by hand
-function print_x_params(x::Vector{Float64})
-    mp_copy = deepcopy(mp_original)
-    transform.vector_to_vp!(x, mp_copy.vp, omitted_ids)
-    print_params(mp_copy)
-end
-
 # Get a BFGS fit for comparison
 mp_fit = deepcopy(mp_original);
 iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, Transform.free_transform, omitted_ids=omitted_ids);
 fit_v = ElboDeriv.elbo(blob, mp_fit).v;
 
-# Stuff:
-hess_reg = 0.0;
-max_iters = 20;
 
-d = Optim.DifferentiableFunction(elbo_scale_value, elbo_scale_deriv!);
-x_old = deepcopy(x0);
-x_new = deepcopy(x_old);
-gr_new = zeros(Float64, length(x_old));
-iter = 1
-f_val = elbo_scale_value(x_new);
+#########################
+# Newton's method by hand
+
+obj_wrap = OptimizeElbo.ObjectiveWrapperFunctions(
+    mp -> ElboDeriv.elbo(blob, mp), deepcopy(mp_original), transform, kept_ids, omitted_ids);
+obj_wrap.state.scale = -1.0 # For minimization, which is required by the linesearch algorithm.
+
+elbo_grad = zeros(Float64, length(x0));
+elbo_hess = zeros(Float64, length(x0), length(x0));
+
+max_iters = 10;
+
+d = Optim.DifferentiableFunction(obj_wrap.f_value, obj_wrap.f_grad!);
 
 f_vals = zeros(Float64, max_iters);
 cumulative_iters = zeros(Int64, max_iters);
 x_vals = [ zeros(Float64, length(x_old)) for iter=1:max_iters ];
 
-rho = 2.0;
-max_backstep = 20;
-
-# Newton has no incentive not to take too-large steps due to the bad numerics at extreme values.
-# Put NaNs in the transform functions?
-
 # warm start with BFGS
-mp_start = deepcopy(mp_original)
-start_iter_count, start_f, x_start = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_start, Transform.free_transform, omitted_ids=omitted_ids, ftol_abs=1);
-obj_wrap.state.f_evals = start_iter_count;
-x_new = deepcopy(x_start); # For quick restarts while debugging
-old_val = -start_f;
+warm_start = false
+if warm_start
+    mp_start = deepcopy(mp_original)
+    start_iter_count, start_f, x_start = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_start, Transform.free_transform, omitted_ids=omitted_ids, ftol_abs=1);
+    obj_wrap.state.f_evals = start_iter_count;
+    x_new = deepcopy(x_start); # For quick restarts while debugging
+    new_val = old_val = -start_f;
+else
+    x_new = transform.vp_to_vector(mp_original.vp, omitted_ids);
+    obj_wrap.state.f_evals = 0
+end
+
 for iter in 1:max_iters
     println("-------------------$iter")
     x_old = deepcopy(x_new);
     old_val = new_val;
 
-    elbo_scale_hess!(x_new, elbo_hess);
+    elbo_hess = obj_wrap.f_ad_hessian(x_new);
     hess_ev = eig(elbo_hess)[1]
     min_ev = minimum(hess_ev)
     max_ev = maximum(hess_ev)
     println("========= Eigenvalues: $(max_ev), $(min_ev)")
     if min_ev < 0
         println("========== Warning -- non-convex, $(min_ev)")
-        elbo_hess += eye(length(x_new)) * abs(min_ev)
+        elbo_hess += eye(length(x_new)) * abs(min_ev) * 2
         hess_ev = eig(elbo_hess)[1]
         min_ev = minimum(hess_ev)
         max_ev = maximum(hess_ev)
         println("========= New eigenvalues: $(max_ev), $(min_ev)")
     end
-    if abs(max_ev) / abs(min_ev) > 1e6
-        println("Regularizing hessian")
-        elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e6)
-        hess_ev = eig(elbo_hess)[1]
-        min_ev = minimum(hess_ev)
-        max_ev = maximum(hess_ev)
-        println("========= New eigenvalues: $(max_ev), $(min_ev)")
-    end
-    gr_new = zeros(Float64, length(x_old));
-    elbo_scale_deriv!(x_old, gr_new);
+    # if abs(max_ev) / abs(min_ev) > 1e6
+    #     println("Regularizing hessian")
+    #     elbo_hess += eye(length(x_new)) * (abs(max_ev) / 1e6)
+    #     hess_ev = eig(elbo_hess)[1]
+    #     min_ev = minimum(hess_ev)
+    #     max_ev = maximum(hess_ev)
+    #     println("========= New eigenvalues: $(max_ev), $(min_ev)")
+    # end
+    f_val, gr_new = obj_wrap.f_value_grad(x_old);
     x_direction = -(elbo_hess \ gr_new)
 
-    decreased = false;
-    alpha = 1.0;
-    backsteps = 0;
-    x_new = x_old + alpha * x_direction;
-    new_val = elbo_scale_value(x_new);
-    while isnan(new_val) #|| (new_val >= old_val)
-        alpha /= rho;
-        println("Backstepping.  Ratio is $(new_val / old_val - 1)")
-        backsteps += 1;
-        if backsteps > max_backstep
-            error("Not a descent direction.")
-        end
-        x_new = x_old + alpha * x_direction;
-        new_val = elbo_scale_value(x_new);
-    end
-    println("Chose alpha = $alpha with a change of $(new_val / old_val - 1)")
-
-    x_direction = alpha * x_direction
-    #println(DataFrame(name=ids_free_names[kept_ids], grad=gr_new, hess=diag(elbo_hess), p=x_direction))
     lsr = Optim.LineSearchResults(Float64); # Not used
     c = -1.; # Not used
     mayterminate = true; # Not used
-    #if backsteps == 0
+    pre_linesearch_iters = obj_wrap.state.f_evals
     interpolating_linesearch!(d, x_old, x_direction,
                               x_new, gr_new,
                               lsr, c, mayterminate;
                               c1 = 1e-4,
                               c2 = 0.9,
                               rho = 2.0, verbose=false);
-    # # else
-    # #     a_star, f_up, g_up = zoom(0., 1.0,
-    # #                               dot(gr_new, x_direction), new_val,
-    # #                               elbo_scale_value, elbo_scale_deriv!,
-    # #                               x_old, x_direction, x_new, gr_new, verbose=true)
-    # # end
-
-    #print_x_params(x_new)
-    new_val = elbo_scale_value(x_new)
+    new_val = obj_wrap.f_value(x_new)
+    println("Spent $(obj_wrap.state.f_evals - pre_linesearch_iters) iterations on linesearch for an extra $(f_val - new_val).")
     val_diff = new_val / old_val - 1
     f_vals[iter] = new_val;
     x_vals[iter] = deepcopy(x_new)
     cumulative_iters[iter] = obj_wrap.state.f_evals
-    println(">>>>>>  Current value after $(obj_wrap.state.f_evals) evaluations: $(new_val) (BFGS got $(-fit_v))")
+    println(">>>>>>  Current value after $(obj_wrap.state.f_evals) evaluations: $(new_val) (BFGS got $(-fit_v) in $(iter_count) iters)")
     mp_nm = deepcopy(mp_original);
     transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
     #println(ElboDeriv.get_brightness(mp_nm))
@@ -267,14 +197,10 @@ println("Newton objective - BFGS objective (higher is better)")
 println("Cumulative fuction evaluation ratio:")
 hcat(((-f_vals) - fit_v) / abs(fit_v), cumulative_iters ./ iter_count)
 
-f_vals
-diff(f_vals) ./ f_vals[1:(end-1)]
-minimum(f_vals)
+reduce(hcat, [ x_diff ./ x_vals[1] for x_diff in diff(x_vals) ])
 
-x_vals
 mp_nm = deepcopy(mp_original);
 transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
-
 
 print_params(mp_nm, mp_fit, mp_original)
 

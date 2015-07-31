@@ -18,17 +18,6 @@ export ObjectiveWrapperFunctions, WrapperState
 #TODO: use Lumberjack.jl for logging
 const debug = false
 
-
-function print_params(vp)
-    for vs in vp
-        for n in names(ids)
-            println("$n: $(vs[ids.(n)])")
-        end
-        println("-----------------\n")
-    end
-end
-
-
 # The main reason we need this is to have a mutable type to keep
 # track of function evaluations, but we can keep other metadata
 # in it as well.
@@ -47,8 +36,10 @@ type ObjectiveWrapperFunctions
     f_value_grad!::Function
     f_value::Function
     f_grad::Function
+    f_grad!::Function
     f_ad_grad::Function
     f_ad_hessian::Function
+    print_x_params::Function
 
     state::WrapperState
     transform::DataTransform
@@ -68,7 +59,7 @@ type ObjectiveWrapperFunctions
                 println("f(x) after $(state.f_evals) evals: $(value)")
             end
             if state.verbose
-                print_params(iter_mp.vp)
+                print_params(iter_mp)
                 println("\n=======================================\n")
             end
         end
@@ -124,6 +115,10 @@ type ObjectiveWrapperFunctions
             f_value_grad(x)[2]
         end
 
+        function f_grad!(x, grad)
+            grad[:] = f_grad(x)
+        end
+
         # Forward diff versions of the gradient and Hessian.
         f_ad_grad = ForwardDiff.forwarddiff_gradient(f_value, Float64, fadtype=:dual; n=x_length);
 
@@ -144,7 +139,13 @@ type ObjectiveWrapperFunctions
             hess
         end
 
-        new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_ad_grad, f_ad_hessian,
+        function print_x_params(x)
+            mp_copy = deepcopy(mp)
+            transform.vector_to_vp!(x, mp_copy.vp, omitted_ids)
+            print_params(mp_copy)
+        end
+
+        new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_grad!, f_ad_grad, f_ad_hessian, print_x_params,
             state, transform, mp, kept_ids, omitted_ids)
     end
 end
@@ -209,7 +210,7 @@ end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform,
                     lbs::Array{Float64, 1}, ubs::Array{Float64, 1};
-                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
+                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false)
     # Maximize using NLOpt and unconstrained coordinates.
     #
     # Args:
@@ -226,6 +227,7 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
 
     obj_wrapper = ObjectiveWrapperFunctions(mp -> f(blob, mp), mp, transform, kept_ids, omitted_ids);
+    obj_wrapper.state.verbose = verbose
 
     opt = Opt(:LD_LBFGS, length(x0))
     for i in 1:length(x0)
