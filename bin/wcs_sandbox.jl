@@ -22,6 +22,8 @@ const band_letters = ['u', 'g', 'r', 'i', 'z']
 b = 1
 b_letter = band_letters[b]
 
+include("src/NewtonsMethod.jl")
+
 ##################
 # Load a stamp to check out the psf and wcs
 
@@ -100,7 +102,7 @@ function custom_rect_to_vp!{T <: Number}(vp_free::RectVariationalParams{T}, vp::
     Transform.rect_to_vp!(vp_free, vp, custom_rect_rescaling)
 end
 
-function custom_rect_unconstrain_sensitive_float{T <: Number}(sf::SensitiveFloat{T}, mp::ModelParams{T})
+function custom_rect_unconstrain_sensitive_float{T <: Number}(sf::SensitiveFloat, mp::ModelParams{T})
     Transform.rect_unconstrain_sensitive_float(sf, mp, custom_rect_rescaling)
 end
 
@@ -109,10 +111,6 @@ custom_rect_transform = Transform.DataTransform(custom_rect_to_vp!, custom_vp_to
                                      custom_rect_unconstrain_sensitive_float,
                                      length(UnconstrainedParams));
 
-
-function display_cat(cat_entry::CatalogEntry)
-	[ println("$name: $(cat_entry.(name))") for name in names(cat_entry) ]
-end
 
 
 # Set the psfs to the local psfs
@@ -151,19 +149,6 @@ vcat(round(raw_psfs[b][nz, nz], 3),
 round(1000. .* (fit_psfs[b][nz, nz] - raw_psfs[b][nz, nz]), 1)
 println(psf_scales[b])
 
-
-function print_params2(mp_tuple::ModelParams...)
-    println("Printing for $(length(mp_tuple)) parameters.")
-    for s in 1:mp_tuple[1].S
-        println("=======================\n Object $(s):")
-        for var_name in names(ids)
-            println(var_name)
-            mp_vars = [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for index in 1:length(mp_tuple) ] 
-            println(reduce(hcat, mp_vars))
-        end
-    end
-end
-
 # Try varying background.
 for b=1:5
 	blob[b].constant_background = false
@@ -172,21 +157,51 @@ end
 mp = deepcopy(initial_mp);
 #res = OptimizeElbo.maximize_likelihood(blob, mp, Transform.rect_transform, xtol_rel=0);
 res = OptimizeElbo.maximize_likelihood(blob, mp, custom_rect_transform);
+res = OptimizeElbo.maximize_likelihood(blob, mp, free_transform);
 print_params2(mp, initial_mp)
-display_cat(cat_entries[1]);
+print_cat_entry(cat_entries[1]);
 ElboDeriv.get_brightness(mp)
 
-# Try non-varying background.
-for b=1:5
-	blob[b].constant_background = true
+
+# By hand
+using NLopt
+
+lbs, ubs = OptimizeElbo.get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform);
+
+f = ElboDeriv.elbo_likelihood
+transform = free_transform;
+omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids);
+x0 = transform.vp_to_vector(mp.vp, omitted_ids);
+
+obj_wrapper = ObjectiveWrapperFunctions(mp -> f(blob, mp), mp, transform, kept_ids, omitted_ids);
+obj_wrapper.state.print_every_n = 1;
+obj_wrapper.state.verbose = true;
+
+opt = Opt(:LD_LBFGS, length(x0))
+for i in 1:length(x0)
+    if !(lbs[i] <= x0[i] <= ubs[i])
+        println("coordinate $i falsity: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
+    end
 end
-#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
-mp_const = deepcopy(initial_mp);
-#res = OptimizeElbo.maximize_elbo(blob, mp_const);
-res = OptimizeElbo.maximize_likelihood(blob, mp_const, custom_rect_transform);
-compare_solutions(mp, initial_mp)
-display_cat(cat_entries[1]);
-get_brightness(mp_const)
+lower_bounds!(opt, lbs);
+upper_bounds!(opt, ubs);
+max_objective!(opt, obj_wrapper.f_value_grad!);
+xtol_rel!(opt, 1e-7);
+ftol_abs!(opt, 1e-6);
+(max_f, max_x, ret) = optimize(opt, x0);
+
+iter_count = obj_wrapper.state.f_evals
+println("got $max_f at $max_x after $iter_count iterations (returned $ret)\n")
+iter_count, max_f, max_x, ret
+
+
+
+
+
+
+
+
 
 
 ###################

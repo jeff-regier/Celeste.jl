@@ -25,6 +25,8 @@ export ids, ids_free, star_ids, gal_ids
 export ids_names, ids_free_names
 export D, B, Ia
 
+export print_params
+
 using Util
 
 import Base.convert
@@ -32,6 +34,7 @@ import FITSIO
 import Distributions
 import WCSLIB
 import ForwardDiff
+import WCS
 
 import Base.length
 
@@ -463,6 +466,13 @@ function print_params(mp_tuple::ModelParams...)
     end
 end
 
+
+@doc """
+Display a Celeste catalog entry.
+""" ->
+function print_cat_entry(cat_entry::CatalogEntry)
+    [ println("$name: $(cat_entry.(name))") for name in names(cat_entry) ]
+end
 
 #########################################################
 
