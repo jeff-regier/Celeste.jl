@@ -272,3 +272,62 @@ ElboDeriv.get_brightness(mp_original)
 ElboDeriv.get_brightness(mp_nm)
 ElboDeriv.get_brightness(mp_optim)
 
+
+##########################
+# Simpler tests
+
+
+
+function verify_sample_star(vs, pos)
+    @test vs[ids.a[2]] <= 0.011
+
+    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
+    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
+
+    brightness_hat = vs[ids.r1[1]] * vs[ids.r2[1]]
+    @test_approx_eq_eps brightness_hat / sample_star_fluxes[3] 1. 0.01
+
+    true_colors = log(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
+    for b in 1:4
+        @test_approx_eq_eps vs[ids.c1[b, 1]] true_colors[b] 0.2
+    end
+end
+
+function verify_sample_galaxy(vs, pos)
+    @test vs[ids.a[2]] >= 0.98
+
+    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
+    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
+
+    @test_approx_eq_eps vs[ids.e_axis] .7 0.05
+    @test_approx_eq_eps vs[ids.e_dev] 0.1 0.08
+    @test_approx_eq_eps vs[ids.e_scale] 4. 0.2
+
+    phi_hat = vs[ids.e_angle]
+    phi_hat -= floor(phi_hat / pi) * pi
+    five_deg = 5 * pi/180
+    @test_approx_eq_eps phi_hat pi/4 five_deg
+
+    brightness_hat = vs[ids.r1[2]] * vs[ids.r2[2]]
+    @test_approx_eq_eps brightness_hat / sample_galaxy_fluxes[3] 1. 0.01
+
+    true_colors = log(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])
+    for b in 1:4
+        @test_approx_eq_eps vs[ids.c1[b, 2]] true_colors[b] 0.2
+    end
+end
+
+omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+blob, mp_original, body = gen_sample_star_dataset();
+
+mp_bfgs = deepcopy(mp_original);
+OptimizeElbo.maximize_likelihood(blob, mp_bfgs, transform);
+verify_sample_star(mp_bfgs.vp[1], [10.1, 12.2]);
+
+mp = deepcopy(mp_original);
+iter_count, max_f, max_x, ret = 
+    OptimizeElbo.maximize_f_newton(mp -> ElboDeriv.elbo(blob, mp), mp, transform,
+                               omitted_ids=omitted_ids, verbose=false, max_iters=10);
+print_params(mp, mp_bfgs)
+verify_sample_star(mp.vp[1], [10.1, 12.2])
+

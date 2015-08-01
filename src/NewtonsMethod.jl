@@ -41,6 +41,6 @@ function maximize_f_newton(f::Function, mp::ModelParams, transform::Transform.Da
     max_x = nm_result.minimum
 
     println("got $max_f at $max_x after $iter_count function evaluations ($(nm_result.iterations) Newton steps)\n")
-    iter_count, max_f, max_x, ret
+    iter_count, max_f, max_x, nm_result
 end
 
