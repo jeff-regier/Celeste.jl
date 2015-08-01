@@ -161,8 +161,8 @@ function get_nlopt_bounds(vs::Vector{Float64})
     lb = Array(Float64, length(CanonicalParams))
     lb[ids.a] = 1e-2
     lb[ids.u] = vs[ids.u] - 1.
-    [lb[id] = 1e-4 for id in ids.r1]
-    [lb[id] = 1e-4 for id in ids.r2]
+    [lb[id] = 2e-4 for id in ids.r1]
+    [lb[id] = 2e-4 for id in ids.r2]
     [lb[id] = 1e-4 for id in ids.k]
     [lb[id] = -10. for id in ids.c1]
     [lb[id] = 1e-4 for id in ids.c2]
@@ -174,8 +174,8 @@ function get_nlopt_bounds(vs::Vector{Float64})
     ub = Array(Float64, length(CanonicalParams))
     ub[ids.a] = 1 - 1e-2
     ub[ids.u] = vs[ids.u] + 1.
-    [ub[id] = 1e12 for id in ids.r1]
-    [ub[id] = 1e-1 for id in ids.r2]
+    [ub[id] = 1e11 for id in ids.r1]
+    [ub[id] = 0.09 for id in ids.r2]
     [ub[id] = 1 - 1e-4 for id in ids.k]
     [ub[id] = 10. for id in ids.c1]
     [ub[id] = 1. for id in ids.c2]
@@ -248,12 +248,12 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
+    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false)
     # Default to the bounds given in get_nlopt_unconstrained_bounds.
 
     lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform)
     maximize_f(f, blob, mp, transform, lbs, ubs;
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
+               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose=verbose)
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams;

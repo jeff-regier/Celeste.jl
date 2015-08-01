@@ -3,6 +3,28 @@ library(dplyr)
 library(reshape2)
 library(gridExtra)
 
+
+######### Looking at a single stamp: 
+images <- list()
+for (b in 1:5) {
+  file_name <- sprintf("/tmp/pixels_%d.csv", b)
+  print(file_name)
+  du <- as.matrix(read.csv(file_name, header=F))
+  colnames(du) <- 1:ncol(du)
+  rownames(du) <- 1:nrow(du)
+  du_melt <- melt(du)
+  names(du_melt) <- c("row", "col", "value")
+  du_melt$band <- b
+  images[[as.character(b)]] <- du_melt
+}
+du <- do.call(rbind, images)
+
+ggplot(du) +
+  geom_raster(data=du, aes(x=row, y=col, fill=value)) +
+  scale_fill_continuous(low="#000000", high="#FFFFFF", na.value = "purple") +
+  facet_grid(band ~ .)
+
+########## Looking at a whole image:
 dcat <- read.csv("/tmp/catalog-003900-6-0269.csv", header=T)
 
 band <- 3
