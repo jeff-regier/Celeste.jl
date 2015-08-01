@@ -115,8 +115,12 @@ kept_ids = setdiff(1:length(ids_free), omitted_ids)
 
 lbs, ubs = OptimizeElbo.get_nlopt_bounds(mp_original.vp[1]);
 
+
 ##############
 # Get a BFGS fit for comparison
+iter_count = NaN
+fit_v = NaN
+
 mp_fit = deepcopy(mp_original);
 iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, transform, omitted_ids=omitted_ids, verbose=true);
 fit_v = ElboDeriv.elbo(blob, mp_fit).v;
@@ -139,8 +143,9 @@ d = Optim.DifferentiableFunction(obj_wrap.f_value, obj_wrap.f_grad!, obj_wrap.f_
 
 f_vals = zeros(Float64, max_iters);
 cumulative_iters = zeros(Int64, max_iters);
-x_vals = [ zeros(Float64, length(x_old)) for iter=1:max_iters ];
-grads = [ zeros(Float64, length(x_old)) for iter=1:max_iters ];
+x_vals = [ zeros(Float64, length(x0)) for iter=1:max_iters ];
+grads = [ zeros(Float64, length(x0)) for iter=1:max_iters ];
+hesses = [ zeros(Float64, length(x0), length(x0)) for iter=1:max_iters ];
 
 # warm start with BFGS
 warm_start = false
@@ -153,6 +158,7 @@ if warm_start
 else
     x_new = transform.vp_to_vector(mp_original.vp, omitted_ids);
     obj_wrap.state.f_evals = 0
+    new_val = old_val = obj_wrap.f_value(x_new);
 end
 
 for iter in 1:max_iters
@@ -161,6 +167,7 @@ for iter in 1:max_iters
     old_val = new_val;
 
     elbo_hess = obj_wrap.f_ad_hessian(x_new);
+    hesses[iter] = elbo_hess
     hess_ev = eig(elbo_hess)[1]
     min_ev = minimum(hess_ev)
     max_ev = maximum(hess_ev)
@@ -229,26 +236,26 @@ ElboDeriv.get_brightness(mp_original)
 ####################
 # Newton's method with our own hessian regularization
 
-obj_wrap = OptimizeElbo.ObjectiveWrapperFunctions(
+optim_obj_wrap = OptimizeElbo.ObjectiveWrapperFunctions(
     mp -> ElboDeriv.elbo(blob, mp), deepcopy(mp_original), transform, kept_ids, omitted_ids);
-obj_wrap.state.scale = -1.0 # For minimization, which is required by the linesearch algorithm.
-obj_wrap.state.print_every_n = 1
-obj_wrap.state.verbose = true
+optim_obj_wrap.state.scale = -1.0 # For minimization, which is required by the linesearch algorithm.
+optim_obj_wrap.state.print_every_n = 1
+optim_obj_wrap.state.verbose = true
 
 function f_hess_reg!(x, new_hess)
-    hess = obj_wrap.f_ad_hessian(x)
+    hess = optim_obj_wrap.f_ad_hessian(x)
     hess_ev = eig(hess)[1]
     min_ev = minimum(hess_ev)
     max_ev = maximum(hess_ev)
 
     # Make it positive definite.
     if min_ev < 0
-        hess += eye(length(x_new)) * abs(min_ev) * 2
+        hess += eye(length(x)) * abs(min_ev) * 2
     end
 
     new_hess[:,:] = hess
 end
 
 x0 = transform.vp_to_vector(mp_original.vp, omitted_ids);
-nm_result = Optim.optimize(obj_wrap.f_value, obj_wrap.f_grad!, f_hess_reg!, x0, method = :newton)
+nm_result = Optim.optimize(optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!, x0, method = :newton, iterations = max_iters)
 

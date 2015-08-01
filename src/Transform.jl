@@ -340,7 +340,7 @@ function vp_to_free!{NumType <: Number}(vp::VariationalParams{NumType},
         vp_free[s][ids_free.e_scale] = log(vp[s][ids.e_scale])
         vp_free[s][ids_free.c2] = log(vp[s][ids.c2])
 
-        # Box constraints.
+        # Box constraints.  Strict inequality is required for the transform to exist.
         @assert(all(free_r1_min .< vp[s][ids.r1] .< free_r1_max),
                 "r1 outside bounds for $s: $(vp[s][ids.r1])")
         @assert(all(free_r2_min .< vp[s][ids.r2] .< free_r2_max),
@@ -433,9 +433,11 @@ function free_unconstrain_sensitive_float{NumType <: Number}(sf::SensitiveFloat,
         sf_free.d[ids_free.e_scale, s] = sf.d[ids.e_scale, s] .* mp.vp[s][ids.e_scale]
         sf_free.d[collect(ids_free.c2), s] = sf.d[collect(ids.c2), s] .* mp.vp[s][collect(ids.c2)]
 
-        # Box constraints
-        @assert all(free_r1_min .< mp.vp[s][ids.r1] .< free_r1_max)
-        @assert all(free_r2_min .< mp.vp[s][ids.r2] .< free_r2_max)
+        # Box constraints.  Strict inequality is not required for derivatives.
+        @assert(all(free_r1_min .<= mp.vp[s][ids.r1] .<= free_r1_max),
+                "r1 outside bounds for $s: $(mp.vp[s][ids.r1])")
+        @assert(all(free_r2_min .<= mp.vp[s][ids.r2] .<= free_r2_max),
+                "r2 outside bounds for $s: $(mp.vp[s][ids.r2])")
         free_r1_scaled = (mp.vp[s][ids.r1] - free_r1_min) / (free_r1_max - free_r1_min)
         free_r2_scaled = (mp.vp[s][ids.r2] - free_r2_min) / (free_r2_max - free_r2_min)
         sf_free.d[ids_free.r1, s] = sf.d[ids.r1, s] .* free_r1_scaled .* (1 - free_r1_scaled) .* (free_r1_max - free_r1_min)

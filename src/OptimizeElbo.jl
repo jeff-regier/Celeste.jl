@@ -67,12 +67,12 @@ type ObjectiveWrapperFunctions
         function f_objective(x_dual::Array{ForwardDiff.Dual{Float64}})
             state.f_evals += 1
             # TODO: If the transformation results in NaN parameters,
-            # return NaN without evaluating the function.
+            # return NaN without evaluating the function?
 
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
             f_res = f(mp_dual)
-            print_status(mp_dual, real(f_res.v))
+            #print_status(mp_dual, real(f_res.v))
             transform.transform_sensitive_float(f_res, mp_dual)
         end
 
