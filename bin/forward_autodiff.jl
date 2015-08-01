@@ -11,6 +11,7 @@ import Optim
 import JLD
 
 include("src/interpolating_linesearch.jl")
+include("src/NewtonsMethod.jl")
 
 # Note that the u hessians are no good.
 #omitted_ids = Int64[ids_free.u, ids_free.k[:], ids_free.c2[:], ids_free.r2];
@@ -137,7 +138,7 @@ x0 = transform.vp_to_vector(mp_original.vp, omitted_ids);
 elbo_grad = zeros(Float64, length(x0));
 elbo_hess = zeros(Float64, length(x0), length(x0));
 
-max_iters = 10;
+max_iters = 12;
 
 d = Optim.DifferentiableFunction(obj_wrap.f_value, obj_wrap.f_grad!, obj_wrap.f_value_grad!);
 
@@ -225,14 +226,6 @@ reduce(hcat, [ x_diff ./ x_vals[1] for x_diff in diff(x_vals) ])
 mp_nm = deepcopy(mp_original);
 transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
 
-print_params(mp_original, mp_nm, mp_fit)
-
-ElboDeriv.get_brightness(mp_nm)
-ElboDeriv.get_brightness(mp_fit)
-ElboDeriv.get_brightness(mp_original)
-
-
-
 ####################
 # Newton's method with our own hessian regularization
 
@@ -258,4 +251,24 @@ end
 
 x0 = transform.vp_to_vector(mp_original.vp, omitted_ids);
 nm_result = Optim.optimize(optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!, x0, method = :newton, iterations = max_iters)
+optim_iters = optim_obj_wrap.state.f_evals
+
+mp_optim = deepcopy(mp_original)
+transform.vector_to_vp!(nm_result.minimum, mp_optim.vp, omitted_ids);
+
+
+#########################
+# Wrapper
+
+mp_optim2 = deepcopy(mp_original)
+iter_count, max_f, max_x, ret = maximize_f_newton(mp -> ElboDeriv.elbo(blob, mp), mp_optim2, transform,
+                      omitted_ids=omitted_ids, verbose=true, max_iters=10)
+
+######################
+# Print results
+print_params(mp_original, mp_nm, mp_optim)
+
+ElboDeriv.get_brightness(mp_original)
+ElboDeriv.get_brightness(mp_nm)
+ElboDeriv.get_brightness(mp_optim)
 
