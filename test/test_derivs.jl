@@ -11,7 +11,8 @@ import WCS
 import GSL.deriv_central
 
 
-# verify derivatives of fun_to_test by finite differences
+# verify derivatives of fun_to_test by finite differences for functions of
+# ModelParams that return a SensitiveFloat.
 function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
     f::SensitiveFloat = fun_to_test(mp)
 
@@ -34,6 +35,28 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
             @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
             @test_approx_eq_eps numeric_deriv f.d[p1, s] 10abs_err
         end
+    end
+end
+
+
+# verify derivatives of fun_to_test by finite differences for functions of
+# numeric vectors that return a tuple (value, gradient).
+function test_by_finite_differences(fun_to_test::Function, x::Vector{Float64})
+    value, grad = fun_to_test(x)
+
+    for s in 1:length(x)
+        fun_to_test_2(epsilon::Float64) = begin
+            x_local = deepcopy(x)
+            x_local[s] += epsilon
+            f_local = fun_to_test(x_local)
+            f_local[1]
+        end
+
+        numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
+        info("deriv #$s: $numeric_deriv vs $(grad[s]) [tol: $abs_err]")
+        obs_err = abs(numeric_deriv - grad[s]) 
+        @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
+        @test_approx_eq_eps numeric_deriv grad[s] 10abs_err
     end
 end
 
@@ -183,11 +206,39 @@ function test_elbo_derivs()
 end
 
 
+function test_elbo_derivs_with_transform(trans::DataTransform)
+    blob, mp0, body = gen_sample_galaxy_dataset();
+
+    omitted_ids = Int64[];
+    x0 = trans.vp_to_vector(mp0.vp, omitted_ids)
+
+    # f is a function of a ModelParams object that returns a SensitiveFloat.
+    function wrap_function(f::Function)
+        function wrapped_f(x)
+            mmp = deepcopy(mp0)
+            trans.vector_to_vp!(x, mmp.vp, omitted_ids)
+            result = f(mmp)
+            result_trans = trans.transform_sensitive_float(result, mmp)
+            result_trans.v, reduce(vcat, result_trans.d)
+        end
+        wrapped_f
+    end
+
+    wrap_likelihood_b1 = wrap_function(mmp -> ElboDeriv.elbo_likelihood([blob[1]], mmp))
+    test_by_finite_differences(wrap_likelihood_b1, x0)
+
+    wrap_likelihood_b5 = wrap_function(mmp -> ElboDeriv.elbo_likelihood([blob[5]], mmp))
+    test_by_finite_differences(wrap_likelihood_b5, x0)
+
+    wrap_elbo = wrap_function(mmp -> ElboDeriv.elbo([blob], mmp))
+    test_by_finite_differences(wrap_elbo, x0)
+end
+
+
 function test_quadratic_derivatives(trans::DataTransform)
     # A very simple quadratic function to test the derivatives.
     function quadratic_function(mp::ModelParams)
         const centers = collect(linrange(0, 10, length(CanonicalParams)))
-
         val = zero_sensitive_float(CanonicalParams)
         val.v = sum((mp.vp[1] - centers) .^ 2)
         val.d[:] = 2.0 * (mp.vp[1] - centers)
@@ -202,6 +253,7 @@ function test_quadratic_derivatives(trans::DataTransform)
     test_by_finite_differences(quadratic_function, mp)
 end
 
+
 for trans in [ identity_transform, pixel_rect_transform, world_rect_transform, free_transform ]
     test_quadratic_derivatives(trans)
 end
@@ -210,4 +262,5 @@ test_kl_divergence_derivs()
 test_brightness_derivs()
 test_accum_pixel_source_derivs()
 test_elbo_derivs()
+test_elbo_derivs_with_transform()
 
