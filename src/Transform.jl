@@ -94,7 +94,7 @@ function unbox_derivative{NumType <: Number}(
   deriv::Union(NumType, Array{NumType}),
   lower_bound::Union(NumType, Array{NumType}),
   upper_bound::Union(NumType, Array{NumType}))
-    @assert(length(param) == length(deriv) == length(free_deriv),
+    @assert(length(param) == length(deriv),
             "Wrong length parameters for unbox_sensitive_float")
 
     # Box constraints.  Strict inequality is not required for derivatives.
@@ -266,14 +266,15 @@ DataTransform(bounds::Vector{ParamBounds}) = begin
     sf::SensitiveFloat, mp::ModelParams{NumType})
 
       # Require that the input have all derivatives defined.
-      @assert size(sf.d) == (length(CanonicalParams), mp.S) == length(bounds)
+      @assert size(sf.d) == (length(CanonicalParams), mp.S)
+      @assert mp.S == length(bounds)
 
       sf_free = zero_sensitive_float(UnconstrainedParams, NumType, mp.S)
       sf_free.v = sf.v
 
       for s in 1:mp.S
         sf_free.d[:, s] =
-          unbox_variational_params(mp.vp[s], sf.d[:, s][:], bounds[s])
+          unbox_param_derivative(mp.vp[s], sf.d[:, s][:], bounds[s])
       end
 
       sf_free
@@ -284,17 +285,18 @@ DataTransform(bounds::Vector{ParamBounds}) = begin
 end
 
 function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
-  bounds = Array(ParamBounds, 3)
+  bounds = Array(ParamBounds, mp.S)
   for s=1:mp.S
+    # Bounds that are too large cause numerical errors.
     bounds[s] = ParamBounds()
     bounds[s][:u] = (mp.vp[s][ids.u] - loc_width, mp.vp[s][ids.u] + loc_width)
-    bounds[s][:r1] = (1e-4, 1e12)
+    bounds[s][:r1] = (1e-4, 1e4)
     bounds[s][:r2] = (1e-4, 0.1)
     bounds[s][:c1] = (-10., 10.)
     bounds[s][:c2] = (1e-4, 1.)
     bounds[s][:e_dev] = (1e-2, 1 - 1e-2)
     bounds[s][:e_axis] = (1e-4, 1 - 1e-4)
-    bounds[s][:e_angle] = (-1e10, 1e10)
+    bounds[s][:e_angle] = (-1e4, 1e4)
     bounds[s][:e_scale] = (0.2, 15.)
   end
   DataTransform(bounds)
