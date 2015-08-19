@@ -17,7 +17,7 @@ typealias ParamBounds Dict{Symbol, (Union(Float64, Vector{Float64}), Union(Float
 #####################
 # Conversion to and from vectors.
 
-function free_vp_to_vector{NumType <: Number}(vp::Vector{NumType},
+function free_vp_to_vector{NumType <: Number}(vp::FreeVariationalParams{NumType},
                                               omitted_ids::Vector{Int64})
     # vp = variational parameters
     # omitted_ids = ids in ParamIndex
@@ -26,13 +26,22 @@ function free_vp_to_vector{NumType <: Number}(vp::Vector{NumType},
     # trasformations to the optimizer, but I'll include it for completeness.
 
     left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    new_p = 1:length(left_ids)
-    new_p[:] = vp[left_ids]
+    new_P = length(left_ids)
+
+    S = length(vp)
+    vp_new = [zeros(NumType, new_P) for s in 1:S]
+
+    for p1 in 1:length(left_ids)
+        p0 = left_ids[p1]
+        [ vp_new[s][p1] = vp[s][p0] for s in 1:S ]
+    end
+
+    reduce(vcat, vp_new)
 end
 
 
 function vector_to_free_vp!{NumType <: Number}(xs::Vector{NumType},
-                                               vp_free::Vector{NumType},
+                                               vp_free::FreeVariationalParams{NumType},
                                                omitted_ids::Vector{Int64})
     # xs: A vector created from free variational parameters.
     # free_vp: Free variational parameters.  Only the ids not in omitted_ids
@@ -40,24 +49,38 @@ function vector_to_free_vp!{NumType <: Number}(xs::Vector{NumType},
     # omitted_ids: Ids to omit (from ids_free)
 
     left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    vp_free[left_ids] = xs
-end
 
+    P = length(left_ids)
+    @assert length(xs) % P == 0
+    S = int(length(xs) / P)
+    xs2 = reshape(xs, P, S)
+
+    for s in 1:S
+        for p1 in 1:length(left_ids)
+            p0 = left_ids[p1]
+            vp_free[s][p0] = xs2[p1, s]
+        end
+    end
+end
 
 ###############################################
 # Functions for a "free transform".
 
 function unbox_parameter{NumType <: Number}(
-  param::Union(NumType, Vector{NumType}), upper_bound::Float64, lower_bound::Float64)
+  param::Union(NumType, Array{NumType}),
+  lower_bound::Union(NumType, Array{NumType}),
+  upper_bound::Union(NumType, Array{NumType}))
     @assert(all(lower_bound .< param .< upper_bound),
-            "param outside bounds: $param ($lower_bound, $upper_bound)")
-    param_scaled = (param - lower_bound) / (upper_bound - lower_bound)
+            "unbox_parameter: param outside bounds: $param ($lower_bound, $upper_bound)")
+    param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
     Util.inv_logit(param_scaled)
 end
 
 function box_parameter{NumType <: Number}(
-  free_param::Union(NumType, Vector{NumType}), upper_bound::Float64, lower_bound::Float64)
-    Util.logit(free_params) * (upper_bound - lower_bound) + lower_bound
+  free_param::Union(NumType, Array{NumType}),
+  lower_bound::Union(NumType, Array{NumType}),
+  upper_bound::Union(NumType, Array{NumType}))
+    Util.logit(free_param) .* (upper_bound - lower_bound) + lower_bound
 end
 
 @doc """
@@ -66,14 +89,16 @@ within the box constrains, and <deriv> is the derivative with respect
 to these paraemters.
 """ ->
 function unbox_derivative{NumType <: Number}(
-  param::Union(NumType, Vector{NumType}), deriv::Union(NumType, Vector{NumType}),
-  upper_bound::Float64, lower_bound::Float64)
+  param::Union(NumType, Array{NumType}),
+  deriv::Union(NumType, Array{NumType}),
+  lower_bound::Union(NumType, Array{NumType}),
+  upper_bound::Union(NumType, Array{NumType}))
     @assert(length(param) == length(deriv) == length(free_deriv),
             "Wrong length parameters for unbox_sensitive_float")
 
     # Box constraints.  Strict inequality is not required for derivatives.
     @assert(all(lower_bound .<= param .<= upper_bound),
-            "param outside bounds: $param ($lower_bound, $upper_bound)")
+            "unbox_derivative: param outside bounds: $param ($lower_bound, $upper_bound)")
     param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
 
     deriv .* param_scaled .* (1 - param_scaled) .* (upper_bound - lower_bound)
@@ -113,8 +138,8 @@ function free_to_vp!{NumType <: Number}(
     vp[ids.a[2]] = Util.logit(vp_free[ids_free.a[1]])
     vp[ids.a[1]] = 1.0 - vp[ids.a[2]]
 
-    vp[s][ids.k[1, :]] = Util.logit(vp_free[s][ids_free.k[1, :]])
-    vp[s][ids.k[2, :]] = 1.0 - vp[s][ids.k[1, :]]
+    vp[ids.k[1, :]] = Util.logit(vp_free[ids_free.k[1, :]])
+    vp[ids.k[2, :]] = 1.0 - vp[ids.k[1, :]]
 
     # Box constraints.
     for (param, limits) in bounds
@@ -217,7 +242,7 @@ DataTransform(bounds::Vector{ParamBounds}) = begin
   function vp_to_vector{NumType <: Number}(vp::VariationalParams{NumType},
                                            omitted_ids::Vector{Int64})
       vp_trans = from_vp(vp)
-      trans_vp_to_vector(vp_trans, omitted_ids)
+      free_vp_to_vector(vp_trans, omitted_ids)
   end
 
   function vector_to_vp!{NumType <: Number}(xs::Vector{NumType},
@@ -226,7 +251,7 @@ DataTransform(bounds::Vector{ParamBounds}) = begin
       # This needs to update vp in place so that variables in omitted_ids
       # stay at their original values.
       vp_trans = from_vp(vp)
-      vector_to_trans_vp!(xs, vp_trans, omitted_ids)
+      vector_to_free_vp!(xs, vp_trans, omitted_ids)
       to_vp!(vp_trans, vp)
   end
 
