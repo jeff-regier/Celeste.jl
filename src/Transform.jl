@@ -352,7 +352,7 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
     bounds[s][:c2] = (1e-4, 1.)
     bounds[s][:e_dev] = (1e-2, 1 - 1e-2)
     bounds[s][:e_axis] = (1e-2, 1 - 1e-2)
-    bounds[s][:e_angle] = (-1e4, 1e4)
+    bounds[s][:e_angle] = (-10.0, 10.0)
     bounds[s][:e_scale] = (0.2, 15.)
   end
   DataTransform(bounds)

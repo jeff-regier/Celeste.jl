@@ -280,9 +280,11 @@ function test_derivative_transform()
   test_by_finite_differences(free_function, free_param)
 end
 
+test_elbo_derivs_with_transform()
+
+
 test_kl_divergence_derivs()
 test_brightness_derivs()
 test_accum_pixel_source_derivs()
 test_elbo_derivs()
 test_derivative_transform()
-test_elbo_derivs_with_transform()
