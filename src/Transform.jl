@@ -9,7 +9,7 @@ import Util
 VERSION < v"0.4.0-dev" && using Docile
 @docstrings
 
-export DataTransform, ParamBounds, get_mp_transform
+export DataTransform, ParamBounds, get_mp_transform, generate_valid_parameters
 
 # The box bounds for a symbol.
 typealias ParamBounds Dict{Symbol, (Union(Float64, Vector{Float64}), Union(Float64, Vector{Float64})) }
@@ -71,17 +71,37 @@ function unbox_parameter{NumType <: Number}(
   param::Union(NumType, Array{NumType}),
   lower_bound::Union(NumType, Array{NumType}),
   upper_bound::Union(NumType, Array{NumType}))
+
+    positive_constraint = any(upper_bound .== Inf)
+    if positive_constraint && !all(upper_bound .== Inf)
+      error("unbox_parameter: Some but not all upper bounds are Inf: $upper_bound")
+    end
+
     @assert(all(lower_bound .< param .< upper_bound),
             "unbox_parameter: param outside bounds: $param ($lower_bound, $upper_bound)")
-    param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
-    Util.inv_logit(param_scaled)
+
+    if positive_constraint
+      return log(param - lower_bound)
+    else
+      param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
+      return Util.inv_logit(param_scaled)
+    end
 end
 
 function box_parameter{NumType <: Number}(
   free_param::Union(NumType, Array{NumType}),
   lower_bound::Union(NumType, Array{NumType}),
   upper_bound::Union(NumType, Array{NumType}))
-    Util.logit(free_param) .* (upper_bound - lower_bound) + lower_bound
+
+  positive_constraint = any(upper_bound .== Inf)
+  if positive_constraint && !all(upper_bound .== Inf)
+    error("box_parameter: Some but not all upper bounds are Inf: $upper_bound")
+  end
+  if positive_constraint
+    return exp(free_param) + lower_bound
+  else
+    return Util.logit(free_param) .* (upper_bound - lower_bound) + lower_bound
+  end
 end
 
 @doc """
@@ -97,12 +117,22 @@ function unbox_derivative{NumType <: Number}(
     @assert(length(param) == length(deriv),
             "Wrong length parameters for unbox_sensitive_float")
 
-    # Box constraints.  Strict inequality is not required for derivatives.
+    positive_constraint = any(upper_bound .== Inf)
+    if positive_constraint && !all(upper_bound .== Inf)
+      error("unbox_derivative: Some but not all upper bounds are Inf: $upper_bound")
+    end
+
+    # Strict inequality is not required for derivatives.
     @assert(all(lower_bound .<= param .<= upper_bound),
             "unbox_derivative: param outside bounds: $param ($lower_bound, $upper_bound)")
-    param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
 
-    deriv .* param_scaled .* (1 - param_scaled) .* (upper_bound - lower_bound)
+    if positive_constraint
+      return deriv .* (param - lower_bound)
+    else
+      # Box constraints.
+      param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
+      return deriv .* param_scaled .* (1 - param_scaled) .* (upper_bound - lower_bound)
+    end
 end
 
 
@@ -177,10 +207,31 @@ function unbox_param_derivative{NumType <: Number}(
   d_free
 end
 
+@doc """
+Generate parameters within the given bounds.
+""" ->
+function generate_valid_parameters(
+  NumType::DataType, bounds::Vector{ParamBounds})
+
+  @assert NumType <: Number
+  S = length(bounds)
+  vp = convert(VariationalParams{NumType},
+	             [ zeros(NumType, length(ids)) for s = 1:S ])
+	for s=1:S
+		for (param, limits) in bounds[s]
+			if (limits[2] == Inf)
+	    	vp[s][ids.(param)] = limits[1] + 1.0
+			else
+				vp[s][ids.(param)] = 0.5 * (limits[2] - limits[1]) + limits[1]
+			end
+	  end
+	end
+  vp
+end
+
 
 #########################
 # Define the exported variables.
-
 
 @doc """
 Functions to move between a single source's variational parameters and a
@@ -290,7 +341,7 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
     # Bounds that are too large cause numerical errors.
     bounds[s] = ParamBounds()
     bounds[s][:u] = (mp.vp[s][ids.u] - loc_width, mp.vp[s][ids.u] + loc_width)
-    bounds[s][:r1] = (1e-4, 1e4)
+    bounds[s][:r1] = (1e-4, Inf)
     bounds[s][:r2] = (1e-4, 0.1)
     bounds[s][:c1] = (-10., 10.)
     bounds[s][:c2] = (1e-4, 1.)
