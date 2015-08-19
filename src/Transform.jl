@@ -137,25 +137,36 @@ end
 ###############################################
 # Functions for a "free transform".
 
-function unbox_parameter(param::Union(Float64, Vector{Float64}), upper_bound::Float64, lower_bound::Float64)
-    @assert(all(lower_bound .< param .< upper_bound), "param outside bounds: $param ($lower_bound, $upper_bound)")
+function unbox_parameter{NumType <: Number}(
+  param::Union(NumType, Vector{NumType}), upper_bound::Float64, lower_bound::Float64)
+    @assert(all(lower_bound .< param .< upper_bound),
+            "param outside bounds: $param ($lower_bound, $upper_bound)")
     param_scaled = (param - lower_bound) / (upper_bound - lower_bound)
     Util.inv_logit(param_scaled)
 end
 
-function box_parameter(free_param::Union(Float64, Vector{Float64}), upper_bound::Float64, lower_bound::Float64)
+function box_parameter{NumType <: Number}(
+  free_param::Union(NumType, Vector{NumType}), upper_bound::Float64, lower_bound::Float64)
     Util.logit(free_params) * (upper_bound - lower_bound) + lower_bound
 end
 
-function unbox_sensitive_float!(sf::SensitiveFloat,
-                                param::Union(Float64, Vector{Float64}), upper_bound::Float64, lower_bound::Float64,
-                                index::Union(Int64, Vector{Int64}), s::Int64)
-    @assert length(param) == length(index)
+@doc """
+Updates free_deriv in place.  <param> is the parameter that lies
+within the box constrains, and <deriv> is the derivative with respect
+to these paraemters.
+""" ->
+function unbox_derivative{NumType <: Number}(
+  param::Union(NumType, Vector{NumType}), deriv::Union(NumType, Vector{NumType}),
+  upper_bound::Float64, lower_bound::Float64)
+    @assert(length(param) == length(deriv) == length(free_deriv),
+            "Wrong length parameters for unbox_sensitive_float")
 
     # Box constraints.  Strict inequality is not required for derivatives.
-    @assert(all(lower_bound .<= param .<= upper_bound), "param outside bounds: $param ($lower_bound, $upper_bound)")
+    @assert(all(lower_bound .<= param .<= upper_bound),
+            "param outside bounds: $param ($lower_bound, $upper_bound)")
     param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
-    sf.d[index, s] = sf.d[index, s] .* param_scaled .* (1 - param_scaled) .* (upper_bound - lower_bound)
+
+    deriv .* param_scaled .* (1 - param_scaled) .* (upper_bound - lower_bound)
 end
 
 
@@ -173,7 +184,6 @@ bounds[:e_angle] = (-1e10, 1e10)
 bounds[:e_scale] = (0.2, 15)
 
 
-
 @doc """
 Convert a variational parameter vector to an unconstrained version using
 the lower bounds lbs and ubs (which are expressed)
@@ -181,7 +191,9 @@ the lower bounds lbs and ubs (which are expressed)
 function vp_to_free!{NumType <: Number}(vp::Vector{NumType},
                                         vp_free::Vector{NumType},
                                         bounds::ParamBounds)
-    # Simplicial constriants.  The original script used "a" to only
+    # Simplicial constriants.
+
+    # The original script used "a" to only
     # refer to the probability of being a galaxy, which is now the
     # second component of a.
     vp_free[ids_free.a[1]] = Util.inv_logit(vp[ids.a[2]])
@@ -191,52 +203,70 @@ function vp_to_free!{NumType <: Number}(vp::Vector{NumType},
     vp_free[ids_free.k[1, :]] = Util.inv_logit(vp[ids.k[1, :]])
 
     # Box constraints.
-    for param, limits in bounds
-        vp_free[ids_free.(param)] = unbox_parameter(vp[ids.(param)], limits[1], limits[2])
+    for (param, limits) in bounds
+        vp_free[ids_free.(param)] =
+          unbox_parameter(vp[ids.(param)], limits[1], limits[2])
     end
 end
 
 
-function free_to_vp!{NumType <: Number}(vp_free::FreeVariationalParams{NumType},
-                                        vp::VariationalParams{NumType})
+function free_to_vp!{NumType <: Number}(vp_free::Vector{NumType},
+                                        vp::Vector{NumType},
+                                        bounds::ParamBounds)
     # Convert an unconstrained to an constrained variational parameterization.
-    S = length(vp_free)
-    for s = 1:S
-                # Variables that are unaffected by constraints:
-        for id_string in free_unchanged_ids
-            id_symbol = convert(Symbol, id_string)
-            vp[s][ids.(id_symbol)] = vp_free[s][ids_free.(id_symbol)]
-        end
 
-        # Simplicial constriants.
-        vp[s][ids.a[2]] = Util.logit(vp_free[s][ids_free.a[1]])
-        vp[s][ids.a[1]] = 1.0 - vp[s][ids.a[2]]
+    # Simplicial constriants.
+    vp[ids.a[2]] = Util.logit(vp_free[ids_free.a[1]])
+    vp[ids.a[1]] = 1.0 - vp[ids.a[2]]
 
-        vp[s][ids.k[1, :]] = Util.logit(vp_free[s][ids_free.k[1, :]])
-        vp[s][ids.k[2, :]] = 1.0 - vp[s][ids.k[1, :]]
-	
-    	# [0, 1] constraints.
-        vp[s][ids.e_dev] = Util.logit(vp_free[s][ids_free.e_dev])
-        vp[s][ids.e_axis] = Util.logit(vp_free[s][ids_free.e_axis])
+    vp[s][ids.k[1, :]] = Util.logit(vp_free[s][ids_free.k[1, :]])
+    vp[s][ids.k[2, :]] = 1.0 - vp[s][ids.k[1, :]]
 
-        # Positivity constraints
-        vp[s][ids.e_scale] = exp(vp_free[s][ids_free.e_scale])
-        vp[s][ids.c2] = exp(vp_free[s][ids_free.c2])
-
-        # Box constraints.
-        vp[s][ids.r1] = Util.logit(vp_free[s][ids.r1]) * (free_r1_max - free_r1_min) + free_r1_min
-        vp[s][ids.r2] = Util.logit(vp_free[s][ids.r2]) * (free_r2_max - free_r2_min) + free_r2_min
+    # Box constraints.
+    for (param, limits) in bounds
+        vp[ids.(param)] =
+          box_parameter(vp_free[ids_free.(param)], limits[1], limits[2])
     end
 end
 
 
-function free_unconstrain_sensitive_float{NumType <: Number}(sf::SensitiveFloat, mp::ModelParams{NumType})
-    # Given a sensitive float with derivatives with respect to all the
-    # constrained parameters, calculate derivatives with respect to
-    # the unconstrained parameters.
-    #
-    # Note that all the other functions in ElboDeriv calculated derivatives with
-    # respect to the unconstrained parameterization.
+@doc """
+Return the derviatives with respect to the unboxed
+parameters given derivatives with respect to the boxed parameters.
+""" ->
+function unbox_param_derivative{NumType <: Number}
+  (vp::Vector{NumType}, d::Vector{NumType}, bounds::ParamBounds)
+
+  d_free = zeros(NumType, length(UnconstrainedParams))
+
+  # TODO: write in general form.  Note that the old "a" is now a[2].
+  # Simplicial constriants.
+  this_a = vp[ids.a[2]]
+  d_free[ids_free.a[1]] =
+      (d[ids.a[2]] - d[ids.a[1]]) * this_a * (1.0 - this_a)
+
+  this_k = collect(vp[ids.k[1, :]])
+  d_free[collect(ids_free.k[1, :])] =
+      (d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])]) .*
+      this_k .* (1.0 - this_k)
+
+  for (param, limits) in bounds
+      d_free[ids_free.(param)] =
+        unbox_derivative(vp[ids.(param)], d[ids.(param)], limits[1], limits[2])
+  end
+
+  d_free
+end
+
+@doc """
+Given a sensitive float with derivatives with respect to all the
+constrained parameters, calculate derivatives with respect to
+the unconstrained parameters.
+
+Note that all the other functions in ElboDeriv calculated derivatives with
+respect to the unconstrained parameterization.""" ->
+function unbox_sensitive_float{NumType <: Number}
+  (sf::SensitiveFloat, mp::ModelParams{NumType}, bounds::Vector{ParamBounds})
 
     # Require that the input have all derivatives defined.
     @assert size(sf.d) == (length(CanonicalParams), mp.S)
@@ -245,48 +275,7 @@ function free_unconstrain_sensitive_float{NumType <: Number}(sf::SensitiveFloat,
     sf_free.v = sf.v
 
     for s in 1:mp.S
-        # Variables that are unaffected by constraints:
-        for id_string in free_unchanged_ids
-            id_symbol = convert(Symbol, id_string)
-
-            # Flatten the indices for matrix indexing
-            id_free_indices = reduce(vcat, ids_free.(id_symbol))
-            id_indices = reduce(vcat, ids.(id_symbol))
-
-            sf_free.d[id_free_indices, s] = sf.d[id_indices, s]
-        end
-
-        # TODO: write in general form.  Note that the old "a" is now a[2].
-        # Simplicial constriants.
-        this_a = mp.vp[s][ids.a[2]]
-        sf_free.d[ids_free.a[1], s] =
-            (sf.d[ids.a[2], s] - sf.d[ids.a[1], s]) * this_a * (1.0 - this_a)
-
-        this_k = collect(mp.vp[s][ids.k[1, :]])
-        sf_free.d[collect(ids_free.k[1, :]), s] =
-            (sf.d[collect(ids.k[1, :]), s] - sf.d[collect(ids.k[2, :]), s]) .*
-            this_k .* (1.0 - this_k)
-
-        # [0, 1] constraints.
-        this_dev = mp.vp[s][ids.e_dev]
-        sf_free.d[ids_free.e_dev, s] = sf.d[ids.e_dev, s] * this_dev * (1.0 - this_dev)
-
-        this_axis = mp.vp[s][ids.e_axis]
-        sf_free.d[ids_free.e_axis, s] = sf.d[ids.e_axis, s] * this_axis * (1.0 - this_axis)
-
-        # Positivity constraints.
-        sf_free.d[ids_free.e_scale, s] = sf.d[ids.e_scale, s] .* mp.vp[s][ids.e_scale]
-        sf_free.d[collect(ids_free.c2), s] = sf.d[collect(ids.c2), s] .* mp.vp[s][collect(ids.c2)]
-
-        # Box constraints.  Strict inequality is not required for derivatives.
-        @assert(all(free_r1_min .<= mp.vp[s][ids.r1] .<= free_r1_max),
-                "r1 outside bounds for $s: $(mp.vp[s][ids.r1])")
-        @assert(all(free_r2_min .<= mp.vp[s][ids.r2] .<= free_r2_max),
-                "r2 outside bounds for $s: $(mp.vp[s][ids.r2])")
-        free_r1_scaled = (mp.vp[s][ids.r1] - free_r1_min) / (free_r1_max - free_r1_min)
-        free_r2_scaled = (mp.vp[s][ids.r2] - free_r2_min) / (free_r2_max - free_r2_min)
-        sf_free.d[ids_free.r1, s] = sf.d[ids.r1, s] .* free_r1_scaled .* (1 - free_r1_scaled) .* (free_r1_max - free_r1_min)
-        sf_free.d[ids_free.r2, s] = sf.d[ids.r2, s] .* free_r2_scaled .* (1 - free_r2_scaled) .* (free_r2_max - free_r2_min)
+      sf_free.d[:, s] = unbox_variational_params(mp.vp[s], sf.d[:, s][:], bounds[s])
     end
 
     sf_free
