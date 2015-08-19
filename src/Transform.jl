@@ -8,104 +8,10 @@ using CelesteTypes
 import Util
 VERSION < v"0.4.0-dev" && using Docile
 
-export pixel_rect_transform, world_rect_transform, free_transform, identity_transform, DataTransform
-
-
-#export unconstrain_vp, rect_unconstrain_vp, constrain_vp, rect_constrain_vp
-#export unconstrain_vp!, rect_unconstrain_vp!, constrain_vp!, rect_constrain_vp!
-#export rect_unconstrain_sensitive_float, unconstrain_sensitive_float
-
-@doc """
-Functions to move between a single source's variational parameters and a
-transformation of the data for optimization.
-
-to_vp: A function that takes transformed parameters and returns variational parameters
-from_vp: A function that takes variational parameters and returned transformed parameters
-to_vp!: A function that takes (transformed paramters, variational parameters) and updates
-  the variational parameters in place
-from_vp!: A function that takes (variational paramters, transformed parameters) and updates
-  the transformed parameters in place
-...
-transform_sensitive_float: A function that takes (sensitive float, model parameters)
-  where the sensitive float contains partial derivatives with respect to the
-  variational parameters and returns a sensitive float with total derivatives with
-  respect to the transformed parameters. """ ->
-type DataTransform
-
-	to_vp::Function
-	from_vp::Function
-	to_vp!::Function
-	from_vp!::Function
-    vp_to_vector::Function
-    vector_to_vp!::Function
-	transform_sensitive_float::Function
-
-	DataTransform(to_vp!::Function, from_vp!::Function,
-                  vector_to_trans_vp!::Function, trans_vp_to_vector::Function,
-                  transform_sensitive_float::Function, id_size::Integer) = begin
-
-        function from_vp{NumType <: Number}(vp::Vector{NumType})
-            vp_free = zeros(NumType, id_size)
-            from_vp!(vp, vp_free)
-            vp_free
-        end
-
-        function to_vp{NumType <: Number}(vp_free::Vector{NumType})
-            vp = zeros(length(CanonicalParams))
-            to_vp!(vp_free, vp)
-            vp
-        end
-
-        function vp_to_vector{NumType <: Number}(vp::Vector{NumType},
-                                                 omitted_ids::Vector{Int64})
-            vp_trans = from_vp(vp)
-            trans_vp_to_vector(vp_trans, omitted_ids)
-        end
-
-        function vector_to_vp!{NumType <: Number}(xs::Vector{NumType},
-                                                  vp::Vector{NumType},
-                                                  omitted_ids::Vector{Int64})
-            # This needs to update vp in place so that variables in omitted_ids
-            # stay at their original values.
-            vp_trans = from_vp(vp)
-            vector_to_trans_vp!(xs, vp_trans, omitted_ids)
-            to_vp!(vp_trans, vp)
-        end
-
-		new(to_vp, from_vp, to_vp!, from_vp!, vp_to_vector, vector_to_vp!,
-            transform_sensitive_float)
-	end
-end
-
-###############################################
-# Functions for an identity transform.
-function unchanged_vp!{NumType <: Number}(vp::Vector{NumType}, new_vp::Vector{NumType})
-    new_vp[:] = vp
-end
-
-function unchanged_sensitive_float{NumType <: Number}(sf::SensitiveFloat, vp::Vector{NumType})
-    # Leave the sensitive float unchanged.
-    deepcopy(sf)
-end
-
+export DataTransform, ParamBounds
 
 #####################
 # Conversion to and from vectors.
-
-function unchanged_vp_to_vector{NumType <: Number}(vp::Vector{NumType}, omitted_ids::Vector{Int64})
-    # There is probably no use for this function, since you'll only be passing
-    # trasformations to the optimizer, but I'll include it for completeness.
-    error("Converting untransformed VarationalParams to a vector is not supported.")
-end
-
-
-function unchanged_vector_to_vp!{NumType <: Number}(xs::Vector{Float64}, vp::Vector{NumType},
-                                                    omitted_ids::Vector{Int64})
-    # There is probably no use for this function, since you'll only be passing
-    # trasformations to the optimizer, but I'll include it for completeness.
-    error("Converting from a vector to untransformed VarationalParams is not supported.")
-end
-
 
 function free_vp_to_vector{NumType <: Number}(vp::Vector{NumType},
                                               omitted_ids::Vector{Int64})
@@ -170,8 +76,9 @@ function unbox_derivative{NumType <: Number}(
 end
 
 
-# Just for example.  In real life each source gets its own location constraints.
 typealias ParamBounds Dict{Symbol, (Float64, Float64)}
+
+# Just for example.  In real life each source gets its own location constraints.
 bounds = ParamBounds()
 bounds[:u] = (-1., 1.)
 bounds[:r1] = (1e-4, 1e12)
@@ -182,7 +89,6 @@ bounds[:e_dev] = (1e-2, 1 - 1e-2)
 bounds[:e_axis] = (1e-4, 1 - 1e-4)
 bounds[:e_angle] = (-1e10, 1e10)
 bounds[:e_scale] = (0.2, 15)
-
 
 @doc """
 Convert a variational parameter vector to an unconstrained version using
@@ -258,50 +164,100 @@ function unbox_param_derivative{NumType <: Number}
   d_free
 end
 
-@doc """
-Given a sensitive float with derivatives with respect to all the
-constrained parameters, calculate derivatives with respect to
-the unconstrained parameters.
-
-Note that all the other functions in ElboDeriv calculated derivatives with
-respect to the unconstrained parameterization.""" ->
-function unbox_sensitive_float{NumType <: Number}
-  (sf::SensitiveFloat, mp::ModelParams{NumType}, bounds::Vector{ParamBounds})
-
-    # Require that the input have all derivatives defined.
-    @assert size(sf.d) == (length(CanonicalParams), mp.S)
-
-    sf_free = zero_sensitive_float(UnconstrainedParams, NumType, mp.S)
-    sf_free.v = sf.v
-
-    for s in 1:mp.S
-      sf_free.d[:, s] = unbox_variational_params(mp.vp[s], sf.d[:, s][:], bounds[s])
-    end
-
-    sf_free
-end
 
 #########################
 # Define the exported variables.
 
-pixel_rect_transform = DataTransform(pixel_rect_to_vp!, pixel_vp_to_rect!,
-                                     vector_to_free_vp!, free_vp_to_vector,
-                                     pixel_rect_unconstrain_sensitive_float,
-                                     length(UnconstrainedParams))
 
-world_rect_transform = DataTransform(world_rect_to_vp!, world_vp_to_rect!,
-                                     vector_to_free_vp!, free_vp_to_vector,
-                                     world_rect_unconstrain_sensitive_float,
-                                     length(UnconstrainedParams))
+@doc """
+Functions to move between a single source's variational parameters and a
+transformation of the data for optimization.
 
-free_transform = DataTransform(free_to_vp!, vp_to_free!,
-                               vector_to_free_vp!, free_vp_to_vector,
-                               free_unconstrain_sensitive_float,
-                               length(UnconstrainedParams))
+to_vp: A function that takes transformed parameters and returns variational parameters
+from_vp: A function that takes variational parameters and returned transformed parameters
+to_vp!: A function that takes (transformed paramters, variational parameters) and updates
+  the variational parameters in place
+from_vp!: A function that takes (variational paramters, transformed parameters) and updates
+  the transformed parameters in place
+...
+transform_sensitive_float: A function that takes (sensitive float, model parameters)
+  where the sensitive float contains partial derivatives with respect to the
+  variational parameters and returns a sensitive float with total derivatives with
+  respect to the transformed parameters. """ ->
+type DataTransform
+	to_vp::Function
+	from_vp::Function
+	to_vp!::Function
+	from_vp!::Function
+  vp_to_vector::Function
+  vector_to_vp!::Function
+	transform_sensitive_float::Function
+  bounds::Vector{ParamBounds}
+end
 
-identity_transform = DataTransform(unchanged_vp!, unchanged_vp!,
-                                   unchanged_vector_to_vp!, unchanged_vp_to_vector,
-                                   unchanged_sensitive_float,
-                                   length(CanonicalParams))
+DataTransform(bounds::Vector{ParamBounds}) = begin
+  function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
+      S = length(vp)
+      @assert S == length(bounds)
+      vp_free = [ zeros(NumType, id_size) for s = 1:S]
+      for s=1:S
+        vp_to_free!(vp[s], vp_free[s], bounds[s])
+      end
+      vp_free
+  end
+
+  function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
+      S = length(vp_free)
+      @assert S == length(bounds)
+      vp = [ zeros(length(CanonicalParams)) for s = 1:S]
+      for s=1:S
+        free_to_vp!(vp_free[s], vp[s], bounds[s])
+      end
+      vp
+  end
+
+  function vp_to_vector{NumType <: Number}(vp::VariationalParams{NumType},
+                                           omitted_ids::Vector{Int64})
+      vp_trans = from_vp(vp)
+      trans_vp_to_vector(vp_trans, omitted_ids)
+  end
+
+  function vector_to_vp!{NumType <: Number}(xs::Vector{NumType},
+                                            vp::VariationalParams{NumType},
+                                            omitted_ids::Vector{Int64})
+      # This needs to update vp in place so that variables in omitted_ids
+      # stay at their original values.
+      vp_trans = from_vp(vp)
+      vector_to_trans_vp!(xs, vp_trans, omitted_ids)
+      to_vp!(vp_trans, vp)
+  end
+
+  @doc """
+  Given a sensitive float with derivatives with respect to all the
+  constrained parameters, calculate derivatives with respect to
+  the unconstrained parameters.
+
+  Note that all the other functions in ElboDeriv calculated derivatives with
+  respect to the unconstrained parameterization.""" ->
+  function transform_sensitive_float{NumType <: Number}(
+    sf::SensitiveFloat, mp::ModelParams{NumType})
+
+      # Require that the input have all derivatives defined.
+      @assert size(sf.d) == (length(CanonicalParams), mp.S) == length(bounds)
+
+      sf_free = zero_sensitive_float(UnconstrainedParams, NumType, mp.S)
+      sf_free.v = sf.v
+
+      for s in 1:mp.S
+        sf_free.d[:, s] =
+          unbox_variational_params(mp.vp[s], sf.d[:, s][:], bounds[s])
+      end
+
+      sf_free
+  end
+
+  DataTransform(to_vp, from_vp, to_vp!, from_vp!, vp_to_vector, vector_to_vp!,
+                transform_sensitive_float, bounds)
+end
 
 end

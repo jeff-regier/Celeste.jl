@@ -31,7 +31,7 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
 
             numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
             info("deriv #$p0 (s: $s): $numeric_deriv vs $(f.d[p1, s]) [tol: $abs_err]")
-            obs_err = abs(numeric_deriv - f.d[p1, s]) 
+            obs_err = abs(numeric_deriv - f.d[p1, s])
             @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
             @test_approx_eq_eps numeric_deriv f.d[p1, s] 10abs_err
         end
@@ -54,7 +54,7 @@ function test_by_finite_differences(fun_to_test::Function, x::Vector{Float64})
 
         numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
         info("deriv #$s: $numeric_deriv vs $(grad[s]) [tol: $abs_err]")
-        obs_err = abs(numeric_deriv - grad[s]) 
+        obs_err = abs(numeric_deriv - grad[s])
         @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
         @test_approx_eq_eps numeric_deriv grad[s] 10abs_err
     end
@@ -235,32 +235,8 @@ function test_elbo_derivs_with_transform(trans::DataTransform)
 end
 
 
-function test_quadratic_derivatives(trans::DataTransform)
-    # A very simple quadratic function to test the derivatives.
-    function quadratic_function(mp::ModelParams)
-        const centers = collect(linrange(0, 10, length(CanonicalParams)))
-        val = zero_sensitive_float(CanonicalParams)
-        val.v = sum((mp.vp[1] - centers) .^ 2)
-        val.d[:] = 2.0 * (mp.vp[1] - centers)
-
-        val
-    end
-
-    # 0.5 is an innocuous value for all parameters.
-    mp = empty_model_params(1)
-    mp.vp = convert(VariationalParams{Float64}, [ fill(0.5, length(CanonicalParams)) 
-        for s in 1:1 ])
-    test_by_finite_differences(quadratic_function, mp)
-end
-
-
-for trans in [ identity_transform, pixel_rect_transform, world_rect_transform, free_transform ]
-    test_quadratic_derivatives(trans)
-end
-
 test_kl_divergence_derivs()
 test_brightness_derivs()
 test_accum_pixel_source_derivs()
 test_elbo_derivs()
-test_elbo_derivs_with_transform()
-
+test_elbo_derivs_with_transform(free_transform)
