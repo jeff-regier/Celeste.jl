@@ -47,10 +47,11 @@ end
 ###############################################
 # Functions for a "free transform".
 
+# TODO: These need to be made more flxeible.
 function unbox_parameter{NumType <: Number}(
-  param::Union(NumType, Vector{NumType}), upper_bound::Float64, lower_bound::Float64)
+  param::Union(NumType, Array{NumType}), lower_bound::Float64, upper_bound::Float64)
     @assert(all(lower_bound .< param .< upper_bound),
-            "param outside bounds: $param ($lower_bound, $upper_bound)")
+            "unbox_parameter: param outside bounds: $param ($lower_bound, $upper_bound)")
     param_scaled = (param - lower_bound) / (upper_bound - lower_bound)
     Util.inv_logit(param_scaled)
 end
@@ -67,13 +68,13 @@ to these paraemters.
 """ ->
 function unbox_derivative{NumType <: Number}(
   param::Union(NumType, Vector{NumType}), deriv::Union(NumType, Vector{NumType}),
-  upper_bound::Float64, lower_bound::Float64)
+  lower_bound::Float64, upper_bound::Float64)
     @assert(length(param) == length(deriv) == length(free_deriv),
             "Wrong length parameters for unbox_sensitive_float")
 
     # Box constraints.  Strict inequality is not required for derivatives.
     @assert(all(lower_bound .<= param .<= upper_bound),
-            "param outside bounds: $param ($lower_bound, $upper_bound)")
+            "unbox_derivative: param outside bounds: $param ($lower_bound, $upper_bound)")
     param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
 
     deriv .* param_scaled .* (1 - param_scaled) .* (upper_bound - lower_bound)
