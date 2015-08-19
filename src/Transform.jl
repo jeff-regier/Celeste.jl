@@ -8,7 +8,10 @@ using CelesteTypes
 import Util
 VERSION < v"0.4.0-dev" && using Docile
 
-export DataTransform, ParamBounds
+export DataTransform, ParamBounds, get_mp_transform
+
+# The box bounds for a symbol.
+typealias ParamBounds Dict{Symbol, (Union(Float64, Vector{Float64}), Union(Float64, Vector{Float64})) }
 
 #####################
 # Conversion to and from vectors.
@@ -76,27 +79,12 @@ function unbox_derivative{NumType <: Number}(
 end
 
 
-typealias ParamBounds Dict{Symbol, (Float64, Float64)}
-
-# Just for example.  In real life each source gets its own location constraints.
-bounds = ParamBounds()
-bounds[:u] = (-1., 1.)
-bounds[:r1] = (1e-4, 1e12)
-bounds[:r2] = (1e-4, 0.1)
-bounds[:c1] = (-10., 10.)
-bounds[:c2] = (1e-4, 1.)
-bounds[:e_dev] = (1e-2, 1 - 1e-2)
-bounds[:e_axis] = (1e-4, 1 - 1e-4)
-bounds[:e_angle] = (-1e10, 1e10)
-bounds[:e_scale] = (0.2, 15)
-
 @doc """
 Convert a variational parameter vector to an unconstrained version using
 the lower bounds lbs and ubs (which are expressed)
 """ ->
-function vp_to_free!{NumType <: Number}(vp::Vector{NumType},
-                                        vp_free::Vector{NumType},
-                                        bounds::ParamBounds)
+function vp_to_free!{NumType <: Number}(
+  vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds)
     # Simplicial constriants.
 
     # The original script used "a" to only
@@ -116,9 +104,8 @@ function vp_to_free!{NumType <: Number}(vp::Vector{NumType},
 end
 
 
-function free_to_vp!{NumType <: Number}(vp_free::Vector{NumType},
-                                        vp::Vector{NumType},
-                                        bounds::ParamBounds)
+function free_to_vp!{NumType <: Number}(
+  vp_free::Vector{NumType}, vp::Vector{NumType}, bounds::ParamBounds)
     # Convert an unconstrained to an constrained variational parameterization.
 
     # Simplicial constriants.
@@ -140,8 +127,8 @@ end
 Return the derviatives with respect to the unboxed
 parameters given derivatives with respect to the boxed parameters.
 """ ->
-function unbox_param_derivative{NumType <: Number}
-  (vp::Vector{NumType}, d::Vector{NumType}, bounds::ParamBounds)
+function unbox_param_derivative{NumType <: Number}(
+  vp::Vector{NumType}, d::Vector{NumType}, bounds::ParamBounds)
 
   d_free = zeros(NumType, length(UnconstrainedParams))
 
@@ -259,5 +246,25 @@ DataTransform(bounds::Vector{ParamBounds}) = begin
   DataTransform(to_vp, from_vp, to_vp!, from_vp!, vp_to_vector, vector_to_vp!,
                 transform_sensitive_float, bounds)
 end
+
+function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
+  bounds = Array(ParamBounds, 3)
+  for s=1:mp.S
+    bounds[s] = ParamBounds()
+
+    # Ok, here you can't have a single bound for both :u.
+    bounds[s][:u] = (mp.vp[s][ids.u] - loc_width, mp.vp[s][ids.u] + loc_width)
+    bounds[s][:r1] = (1e-4, 1e12)
+    bounds[s][:r2] = (1e-4, 0.1)
+    bounds[s][:c1] = (-10., 10.)
+    bounds[s][:c2] = (1e-4, 1.)
+    bounds[s][:e_dev] = (1e-2, 1 - 1e-2)
+    bounds[s][:e_axis] = (1e-4, 1 - 1e-4)
+    bounds[s][:e_angle] = (-1e10, 1e10)
+    bounds[s][:e_scale] = (0.2, 15.)
+  end
+  DataTransform(bounds)
+end
+
 
 end
