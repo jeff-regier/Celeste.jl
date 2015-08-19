@@ -63,6 +63,7 @@ function vector_to_free_vp!{NumType <: Number}(xs::Vector{NumType},
     end
 end
 
+
 ###############################################
 # Functions for a "free transform".
 
