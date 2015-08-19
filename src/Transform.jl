@@ -7,6 +7,7 @@ using CelesteTypes
 
 import Util
 VERSION < v"0.4.0-dev" && using Docile
+@docstrings
 
 export DataTransform, ParamBounds, get_mp_transform
 
@@ -140,8 +141,7 @@ function unbox_param_derivative{NumType <: Number}(
 
   this_k = collect(vp[ids.k[1, :]])
   d_free[collect(ids_free.k[1, :])] =
-      (d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])]) .*
-      this_k .* (1.0 - this_k)
+      (d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])]) .* this_k .* (1.0 - this_k)
 
   for (param, limits) in bounds
       d_free[ids_free.(param)] =
@@ -183,23 +183,34 @@ type DataTransform
 end
 
 DataTransform(bounds::Vector{ParamBounds}) = begin
-  function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
+
+  function from_vp!{NumType <: Number}(
+    vp::VariationalParams{NumType}, vp_free::VariationalParams{NumType})
       S = length(vp)
       @assert S == length(bounds)
-      vp_free = [ zeros(NumType, id_size) for s = 1:S]
       for s=1:S
         vp_to_free!(vp[s], vp_free[s], bounds[s])
       end
+  end
+
+  function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
+      vp_free = [ zeros(NumType, length(ids_free)) for s = 1:length(vp)]
+      from_vp!(vp, vp_free)
       vp_free
   end
 
-  function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
+  function to_vp!{NumType <: Number}(
+    vp_free::FreeVariationalParams{NumType}, vp::VariationalParams{NumType})
       S = length(vp_free)
       @assert S == length(bounds)
-      vp = [ zeros(length(CanonicalParams)) for s = 1:S]
       for s=1:S
         free_to_vp!(vp_free[s], vp[s], bounds[s])
       end
+  end
+
+  function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
+      vp = [ zeros(length(CanonicalParams)) for s = 1:length(vp_free)]
+      to_vp!(vp_free, vp)
       vp
   end
 
@@ -219,13 +230,12 @@ DataTransform(bounds::Vector{ParamBounds}) = begin
       to_vp!(vp_trans, vp)
   end
 
-  @doc """
-  Given a sensitive float with derivatives with respect to all the
-  constrained parameters, calculate derivatives with respect to
-  the unconstrained parameters.
-
-  Note that all the other functions in ElboDeriv calculated derivatives with
-  respect to the unconstrained parameterization.""" ->
+  # Given a sensitive float with derivatives with respect to all the
+  # constrained parameters, calculate derivatives with respect to
+  # the unconstrained parameters.
+  #
+  # Note that all the other functions in ElboDeriv calculated derivatives with
+  # respect to the unconstrained parameterization.
   function transform_sensitive_float{NumType <: Number}(
     sf::SensitiveFloat, mp::ModelParams{NumType})
 
@@ -251,8 +261,6 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
   bounds = Array(ParamBounds, 3)
   for s=1:mp.S
     bounds[s] = ParamBounds()
-
-    # Ok, here you can't have a single bound for both :u.
     bounds[s][:u] = (mp.vp[s][ids.u] - loc_width, mp.vp[s][ids.u] + loc_width)
     bounds[s][:r1] = (1e-4, 1e12)
     bounds[s][:r2] = (1e-4, 0.1)
