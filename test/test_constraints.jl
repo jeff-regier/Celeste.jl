@@ -9,8 +9,9 @@ using Transform
 
 import ModelInit
 
-function test_parameter_conversion(transform::DataTransform)
+function test_parameter_conversion()
 	blob, mp, body = gen_three_body_dataset();
+	transform = get_mp_transform(mp, loc_width=1.0)
 	original_vp = deepcopy(mp.vp);
 
 	# Check that the constrain and unconstrain operations undo each other.
