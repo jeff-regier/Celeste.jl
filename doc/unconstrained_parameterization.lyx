@@ -136,6 +136,19 @@ Positive numbers can be parameterized with
 \end_layout
 
 \begin_layout Standard
+Lower-bounded numbers can be parameterized with
+\begin_inset Formula 
+\begin{eqnarray*}
+\beta & = & \exp b+\beta_{0}\\
+\frac{df}{db} & = & \frac{df}{d\beta}\frac{d\beta}{db}=\frac{df}{d\beta}\left(\beta-\beta_{0}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
 If you scale by a constant, then you divide by the constant for the derivative:
 \begin_inset Formula 
 \begin{eqnarray*}

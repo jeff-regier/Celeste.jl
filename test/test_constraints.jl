@@ -7,7 +7,50 @@ using Base.Test
 using SampleData
 using Transform
 
+import DualNumbers
 import ModelInit
+
+
+function test_transform_box_functions()
+	function box_and_unbox(param, lower_bound, upper_bound)
+		param_free = Transform.unbox_parameter(param, lower_bound, upper_bound)
+		new_param = Transform.box_parameter(param_free, lower_bound, upper_bound)
+		@test_approx_eq_eps param new_param 1e-6
+	end
+
+	box_and_unbox(1.0, -1.0, 2.0)
+	box_and_unbox(1.0, -1.0, Inf)
+
+	box_and_unbox([1.0, 1.5], -1.0, 2.0)
+	box_and_unbox([1.0, 1.5], -1.0, Inf)
+
+	box_and_unbox([1.0, 10.0], [-1.0, 9.0], [2.0, 12.0])
+	box_and_unbox([1.0, 10.0], [-1.0, 9.0], [Inf, Inf])
+
+	# Just check that these run.  The derivatives themselves
+	# will be checked elsewhere.
+	Transform.unbox_derivative(1.0, 2.0, -1.0, 2.0)
+	Transform.unbox_derivative(1.0, 2.0, -1.0, Inf)
+	Transform.unbox_derivative(
+		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [2.0, 12.0])
+	Transform.unbox_derivative(
+		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [Inf, Inf])
+
+	# Check the bounds checking errors.
+	@test_throws Exception Transform.unbox_parameter(1.0, 2.0, 3.0)
+	@test_throws Exception Transform.unbox_parameter([1.0, 1.5], 2.0, 3.0)
+	@test_throws Exception Transform.unbox_parameter(
+		[1.0, 10.0], [2.0, 3.0], [9.0, 12.0])
+
+	# Check that mixed bound types throws an error.
+	@test_throws Exception Transform.unbox_parameter(
+		[1.0, 10.0], [-1.0, 9.0], [2.0, Inf])
+	@test_throws Exception Transform.box_parameter(
+		[1.0, 10.0], [-1.0, 9.0], [2.0, Inf])
+	@test_throws Exception Transform.unbox_derivative(
+		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [2.0, Inf])
+
+end
 
 
 function test_parameter_conversion()
@@ -29,15 +72,7 @@ function test_parameter_conversion()
 	x = transform.vp_to_vector(vp, omitted_ids)
 	@test length(x) == length(vp_free[1]) * mp.S
 
-	# Generate parameters within the bounds.
-	vp2 = convert(VariationalParams{Float64},
-	              [ zeros(Float64, length(vp[1])) for s = 1:mp.S ])
-	for s=1:mp.S
-		for (param, limits) in transform.bounds[s]
-	    vp2[s][ids.(param)] = 0.5 * (limits[2] - limits[1]) + limits[1]
-	  end
-	end
-
+	vp2 = generate_valid_parameters(Float64, transform.bounds)
 	transform.vector_to_vp!(x, vp2, omitted_ids)
 	for id in names(ids), s in 1:mp.S
 		@test_approx_eq_eps(original_vp[s][ids.(id)], vp2[s][ids.(id)], 1e-6)
@@ -45,3 +80,4 @@ function test_parameter_conversion()
 end
 
 test_parameter_conversion()
+test_transform_box_functions()
