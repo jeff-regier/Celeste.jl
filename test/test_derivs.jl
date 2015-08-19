@@ -206,8 +206,9 @@ function test_elbo_derivs()
 end
 
 
-function test_elbo_derivs_with_transform(trans::DataTransform)
+function test_elbo_derivs_with_transform()
     blob, mp0, body = gen_sample_galaxy_dataset();
+    trans = get_mp_transform(mp0, loc_width=1.0);
 
     omitted_ids = Int64[];
     x0 = trans.vp_to_vector(mp0.vp, omitted_ids)
@@ -234,9 +235,9 @@ function test_elbo_derivs_with_transform(trans::DataTransform)
     test_by_finite_differences(wrap_elbo, x0)
 end
 
+test_elbo_derivs_with_transform()
 
 test_kl_divergence_derivs()
 test_brightness_derivs()
 test_accum_pixel_source_derivs()
 test_elbo_derivs()
-test_elbo_derivs_with_transform(free_transform)

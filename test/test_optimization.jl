@@ -6,12 +6,13 @@ using Transform
 
 import OptimizeElbo
 
-function test_objective_wrapper(trans::DataTransform)
+function test_objective_wrapper()
     # Note that due to the WCS transformation, location coordinates can't be done with autodiff.
     omitted_ids = [ids_free.u];
     kept_ids = setdiff(1:length(ids_free), omitted_ids);
     blob, mp, body = SampleData.gen_two_body_dataset();
-    
+    trans = get_mp_transform(mp, loc_width=1.0);
+
     wrapper = OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(blob, mp),
         mp, trans, kept_ids, omitted_ids);
 
@@ -466,4 +467,3 @@ test_star_optimization(free_transform)
 test_full_elbo_optimization(free_transform)
 test_galaxy_optimization(free_transform)
 test_real_stamp_optimization(free_transform)
-
