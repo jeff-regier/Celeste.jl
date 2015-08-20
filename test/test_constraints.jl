@@ -7,7 +7,7 @@ using Base.Test
 using SampleData
 using Transform
 
-import DualNumbers
+using DualNumbers
 import ModelInit
 
 
@@ -21,11 +21,20 @@ function test_transform_box_functions()
 	box_and_unbox(1.0, -1.0, 2.0)
 	box_and_unbox(1.0, -1.0, Inf)
 
+	# Test that the edges work.
+	box_and_unbox(-1.0, -1.0, 2.0)
+	box_and_unbox(2.0, -1.0, 2.0)
+	box_and_unbox(-1.0, -1.0, Inf)
+
 	box_and_unbox([1.0, 1.5], -1.0, 2.0)
 	box_and_unbox([1.0, 1.5], -1.0, Inf)
 
 	box_and_unbox([1.0, 10.0], [-1.0, 9.0], [2.0, 12.0])
 	box_and_unbox([1.0, 10.0], [-1.0, 9.0], [Inf, Inf])
+
+	box_and_unbox(Dual(1.0), -1.0, 2.0)
+	box_and_unbox([Dual(1.0), Dual(1.5)], -1.0, 2.0)
+	box_and_unbox([Dual(1.0), Dual(10.0)], [-1.0, 9.0], [2.0, 12.0])
 
 	# Just check that these run.  The derivatives themselves
 	# will be checked elsewhere.
@@ -35,6 +44,9 @@ function test_transform_box_functions()
 		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [2.0, 12.0])
 	Transform.unbox_derivative(
 		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [Inf, Inf])
+	Transform.unbox_derivative(Dual(1.0), Dual(2.0), -1.0, 2.0)
+	Transform.unbox_derivative(
+		[Dual(1.0), Dual(10.0)], [Dual(2.0), Dual(3.0)], [-1.0, 9.0], [2.0, 12.0])
 
 	# Check the bounds checking errors.
 	@test_throws Exception Transform.unbox_parameter(1.0, 2.0, 3.0)
@@ -49,7 +61,6 @@ function test_transform_box_functions()
 		[1.0, 10.0], [-1.0, 9.0], [2.0, Inf])
 	@test_throws Exception Transform.unbox_derivative(
 		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [2.0, Inf])
-
 end
 
 

@@ -12,7 +12,9 @@ VERSION < v"0.4.0-dev" && using Docile
 export DataTransform, ParamBounds, get_mp_transform, generate_valid_parameters
 
 # The box bounds for a symbol.
-typealias ParamBounds Dict{Symbol, (Union(Float64, Vector{Float64}), Union(Float64, Vector{Float64})) }
+typealias ParamBounds Dict{Symbol,
+                           (Union(Float64, Vector{Float64}),
+                            Union(Float64, Vector{Float64})) }
 
 #####################
 # Conversion to and from vectors.
@@ -69,15 +71,17 @@ end
 
 function unbox_parameter{NumType <: Number}(
   param::Union(NumType, Array{NumType}),
-  lower_bound::Union(NumType, Array{NumType}),
-  upper_bound::Union(NumType, Array{NumType}))
+  lower_bound::Union(Float64, Array{Float64}),
+  upper_bound::Union(Float64, Array{Float64}))
 
     positive_constraint = any(upper_bound .== Inf)
     if positive_constraint && !all(upper_bound .== Inf)
       error("unbox_parameter: Some but not all upper bounds are Inf: $upper_bound")
     end
 
-    @assert(all(lower_bound .< param .< upper_bound),
+    # exp and the logit functions handle infinities correctly, so
+    # parameters can equal the bounds.
+    @assert(all(lower_bound .<= real(param) .<= upper_bound),
             "unbox_parameter: param outside bounds: $param ($lower_bound, $upper_bound)")
 
     if positive_constraint
@@ -90,8 +94,8 @@ end
 
 function box_parameter{NumType <: Number}(
   free_param::Union(NumType, Array{NumType}),
-  lower_bound::Union(NumType, Array{NumType}),
-  upper_bound::Union(NumType, Array{NumType}))
+  lower_bound::Union(Float64, Array{Float64}),
+  upper_bound::Union(Float64, Array{Float64}))
 
   positive_constraint = any(upper_bound .== Inf)
   if positive_constraint && !all(upper_bound .== Inf)
@@ -112,8 +116,8 @@ to these paraemters.
 function unbox_derivative{NumType <: Number}(
   param::Union(NumType, Array{NumType}),
   deriv::Union(NumType, Array{NumType}),
-  lower_bound::Union(NumType, Array{NumType}),
-  upper_bound::Union(NumType, Array{NumType}))
+  lower_bound::Union(Float64, Array{Float64}),
+  upper_bound::Union(Float64, Array{Float64}))
     @assert(length(param) == length(deriv),
             "Wrong length parameters for unbox_sensitive_float")
 
@@ -123,7 +127,7 @@ function unbox_derivative{NumType <: Number}(
     end
 
     # Strict inequality is not required for derivatives.
-    @assert(all(lower_bound .<= param .<= upper_bound),
+    @assert(all(lower_bound .<= real(param) .<= upper_bound),
             "unbox_derivative: param outside bounds: $param ($lower_bound, $upper_bound)")
 
     if positive_constraint

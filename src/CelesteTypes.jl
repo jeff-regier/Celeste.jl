@@ -15,10 +15,8 @@ export VariationalParams, FreeVariationalParams, RectVariationalParams
 
 export shape_standard_alignment, brightness_standard_alignment, align
 
-export SensitiveFloat
-
-export zero_sensitive_float, clear!
-
+export SensitiveFloat, zero_sensitive_float, clear!
+export print_params
 export set_patch_wcs!
 
 export ids, ids_free, star_ids, gal_ids
@@ -255,7 +253,7 @@ Attributes:
 type SkyPatch
     center::Vector{Float64}
     radius::Float64
-   
+
     psf::Vector{PsfComponent}
     wcs_jacobian::Matrix{Float64}
     pixel_center::Vector{Float64}
@@ -308,7 +306,7 @@ abstract ParamSet
 # r1      = Iax1 shape parameter for r_s. (formerly gamma)
 # r2      = Iax1 scale parameter for r_s. (formerly zeta)
 # c1      = C_s means (formerly beta)
-# c2      = C_s variances (formerly lambda) 
+# c2      = C_s variances (formerly lambda)
 # a       = probability of being a star or galaxy.  a[1] is the
 #           probability of being a star and a[2] of being a galaxy. (formerly chi)
 # k       = {D|D-1}xIa matrix of color prior component indicators. (formerly kappa)
@@ -372,7 +370,7 @@ end
 
 #TODO: build these from ue_align, etc., here.
 align(::StarPosParams, CanonicalParams) = ids.u
-align(::GalaxyPosParams, CanonicalParams) = 
+align(::GalaxyPosParams, CanonicalParams) =
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
 align(::CanonicalParams, CanonicalParams) = [1:length(CanonicalParams)]
 
@@ -383,7 +381,7 @@ const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
 # TODO: maybe these should be incorporated into the framework above (which I don't really understand.)
 ids_free_names = Array(ASCIIString, length(ids_free))
-for (name in names(ids_free)) 
+for (name in names(ids_free))
     inds = ids_free.(name)
     for i = 1:length(inds)
         ids_free_names[inds[i]] = "$(name)_$(i)"
@@ -391,7 +389,7 @@ for (name in names(ids_free))
 end
 
 ids_names = Array(ASCIIString, length(ids))
-for (name in names(ids)) 
+for (name in names(ids))
     inds = ids.(name)
     for i = 1:length(inds)
         ids_names[inds[i]] = "$(name)_$(i)"
@@ -458,7 +456,7 @@ function print_params(mp_tuple::ModelParams...)
         println("=======================\n Object $(s):")
         for var_name in names(ids)
             println(var_name)
-            mp_vars = [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for index in 1:length(mp_tuple) ] 
+            mp_vars = [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for index in 1:length(mp_tuple) ]
             println(reduce(hcat, mp_vars))
         end
     end
@@ -515,4 +513,3 @@ end
 #########################################################
 
 end
-
