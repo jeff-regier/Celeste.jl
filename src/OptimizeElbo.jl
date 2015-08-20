@@ -195,16 +195,18 @@ function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
     # unconstrain_fn: A function to convert VariationalParameters to a
     #   vector that can be passed to the optimizer.
 
-    lbs = [get_nlopt_bounds(vs)[1] for vs in vp]
-    ubs = [get_nlopt_bounds(vs)[2] for vs in vp]
-    (transform.vp_to_vector(lbs, omitted_ids), 
-        transform.vp_to_vector(ubs, omitted_ids))
+    # lbs = [get_nlopt_bounds(vs)[1] for vs in vp]
+    # ubs = [get_nlopt_bounds(vs)[2] for vs in vp]
+    # (transform.vp_to_vector(lbs, omitted_ids),
+    #     transform.vp_to_vector(ubs, omitted_ids))
+    vec_size = (length(ids_free) - length(omitted_ids)) * length(vp)
+    fill(-100.0, vec_size), fill(100.0, vec_size)
 end
 
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform,
                     lbs::Array{Float64, 1}, ubs::Array{Float64, 1};
-                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
+                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
     # Maximize using NLOpt and unconstrained coordinates.
     #
     # Args:
@@ -221,7 +223,9 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
     iter_count = 0
 
-    obj_wrapper = ObjectiveWrapperFunctions(mp -> f(blob, mp), mp, transform, kept_ids, omitted_ids);
+    obj_wrapper = ObjectiveWrapperFunctions(
+      mp -> f(blob, mp), mp, transform, kept_ids, omitted_ids);
+    obj_wrapper.state.verbose = verbose
 
     opt = Opt(:LD_LBFGS, length(x0))
     for i in 1:length(x0)
@@ -236,47 +240,51 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     ftol_abs!(opt, ftol_abs)
     (max_f, max_x, ret) = optimize(opt, x0)
 
-    println("got $max_f at $max_x after $iter_count iterations (returned $ret)\n")
+    println("got $max_f at $max_x after $iter_count iters (returned $ret)\n")
     iter_count, max_f, max_x, ret
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
+    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
     # Default to the bounds given in get_nlopt_unconstrained_bounds.
 
     lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform)
     maximize_f(f, blob, mp, transform, lbs, ubs;
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
+               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose = verbose)
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
+    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
     # Default to the world rectangular transform
 
     maximize_f(f, blob, mp, world_rect_transform,
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
+               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose=verbose)
 end
 
 function maximize_elbo(blob::Blob, mp::ModelParams, trans::DataTransform;
-    xtol_rel = 1e-7, ftol_abs=1e-6)
+    xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
     omitted_ids = setdiff(1:length(UnconstrainedParams),
                           [ids_free.r1, ids_free.r2,
                            ids_free.k[:], ids_free.c1[:]])
     maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids,
-        ftol_abs=ftol_abs, xtol_rel=xtol_rel)
+        ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
 
-    maximize_f(ElboDeriv.elbo, blob, mp, trans, ftol_abs=ftol_abs, xtol_rel=xtol_rel)
+    maximize_f(ElboDeriv.elbo, blob, mp, trans,
+        ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
 end
 
-function maximize_elbo(blob::Blob, mp::ModelParams)
-    # Default to the rectangular transform.
-    maximize_elbo(blob, mp, world_rect_transform)
+function maximize_elbo(blob::Blob, mp::ModelParams; verbose = false)
+    trans = get_mp_transform(mp)
+    maximize_elbo(blob, mp, trans, verbose=verbose)
 end
 
-function maximize_likelihood(blob::Blob, mp::ModelParams, trans::DataTransform; xtol_rel = 1e-7, ftol_abs=1e-6)
+function maximize_likelihood(
+  blob::Blob, mp::ModelParams, trans::DataTransform;
+  xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
     omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
     maximize_f(ElboDeriv.elbo_likelihood, blob, mp, trans,
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
+               omitted_ids=omitted_ids, xtol_rel=xtol_rel,
+               ftol_abs=ftol_abs, verbose=verbose)
 end
 
 function maximize_likelihood(blob::Blob, mp::ModelParams)
