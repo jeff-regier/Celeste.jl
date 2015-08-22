@@ -62,13 +62,22 @@ type ObjectiveWrapperFunctions
         x_length = length(kept_ids) * mp.S
 
         state = WrapperState(0, false, 10)
-        function print_status{T <: Number}(iter_mp::ModelParams, value::T)
+        function print_status{T <: Number}(
+          iter_mp::ModelParams, value::T, grad::Array{T})
             if state.verbose || (state.f_evals % state.print_every_n == 0)
                 println("f_evals: $(state.f_evals) value: $(value)")
             end
             if state.verbose
-                print_params(iter_mp.vp)
-                println("\n=======================================\n")
+              state_df = DataFrames.DataFrame(names=ids_names)
+              #print_params(iter_mp.vp)
+              for s=1:mp.S
+                state_df[symbol(string("val", s))] = iter_mp.vp[s]
+              end
+              for s=1:mp.S
+                state_df[symbol(string("grad", s))] = grad[:, s]
+              end
+              println(state_df)
+              println("\n=======================================\n")
             end
         end
 
@@ -77,7 +86,7 @@ type ObjectiveWrapperFunctions
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
             f_res = f(mp_dual)
-            print_status(mp_dual, real(f_res.v))
+            print_status(mp_dual, real(f_res.v), real(f_res.d))
             transform.transform_sensitive_float(f_res, mp_dual)
         end
 
@@ -86,7 +95,7 @@ type ObjectiveWrapperFunctions
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x, mp.vp, omitted_ids)
             f_res = f(mp)
-            print_status(mp, f_res.v)
+            print_status(mp, f_res.v, f_res.d)
             transform.transform_sensitive_float(f_res, mp)
         end
 
