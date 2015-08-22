@@ -11,9 +11,11 @@ VERSION < v"0.4.0-dev" && using Docile
 
 export DataTransform, ParamBounds, get_mp_transform, generate_valid_parameters
 
-# The box bounds for a symbol.
+# The box bounds for a symbol.  The tuple contains
+# (lower bounds, upper bound, rescaling).
 typealias ParamBounds Dict{Symbol,
                            (Union(Float64, Vector{Float64}),
+                            Union(Float64, Vector{Float64}),
                             Union(Float64, Vector{Float64})) }
 
 #####################
@@ -72,7 +74,8 @@ end
 function unbox_parameter{NumType <: Number}(
   param::Union(NumType, Array{NumType}),
   lower_bound::Union(Float64, Array{Float64}),
-  upper_bound::Union(Float64, Array{Float64}))
+  upper_bound::Union(Float64, Array{Float64}),
+  scale::Union(Float64, Array{Float64}))
 
     positive_constraint = any(upper_bound .== Inf)
     if positive_constraint && !all(upper_bound .== Inf)
@@ -85,26 +88,27 @@ function unbox_parameter{NumType <: Number}(
             "unbox_parameter: param outside bounds: $param ($lower_bound, $upper_bound)")
 
     if positive_constraint
-      return log(param - lower_bound)
+      return log(param - lower_bound) .* scale
     else
-      param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
-      return Util.inv_logit(param_scaled)
+      param_bounded = (param - lower_bound) ./ (upper_bound - lower_bound)
+      return Util.inv_logit(param_bounded) .* scale
     end
 end
 
 function box_parameter{NumType <: Number}(
   free_param::Union(NumType, Array{NumType}),
   lower_bound::Union(Float64, Array{Float64}),
-  upper_bound::Union(Float64, Array{Float64}))
+  upper_bound::Union(Float64, Array{Float64}),
+  scale::Union(Float64, Array{Float64}))
 
   positive_constraint = any(upper_bound .== Inf)
   if positive_constraint && !all(upper_bound .== Inf)
     error("box_parameter: Some but not all upper bounds are Inf: $upper_bound")
   end
   if positive_constraint
-    return exp(free_param) + lower_bound
+    return (exp(free_param ./ scale) + lower_bound)
   else
-    return Util.logit(free_param) .* (upper_bound - lower_bound) + lower_bound
+    return Util.logit(free_param ./ scale) .* (upper_bound - lower_bound) + lower_bound
   end
 end
 
@@ -117,7 +121,8 @@ function unbox_derivative{NumType <: Number}(
   param::Union(NumType, Array{NumType}),
   deriv::Union(NumType, Array{NumType}),
   lower_bound::Union(Float64, Array{Float64}),
-  upper_bound::Union(Float64, Array{Float64}))
+  upper_bound::Union(Float64, Array{Float64}),
+  scale::Union(Float64, Array{Float64}))
     @assert(length(param) == length(deriv),
             "Wrong length parameters for unbox_sensitive_float")
 
@@ -131,11 +136,12 @@ function unbox_derivative{NumType <: Number}(
             "unbox_derivative: param outside bounds: $param ($lower_bound, $upper_bound)")
 
     if positive_constraint
-      return deriv .* (param - lower_bound)
+      return deriv .* (param - lower_bound) ./ scale
     else
       # Box constraints.
       param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
-      return deriv .* param_scaled .* (1 - param_scaled) .* (upper_bound - lower_bound)
+      return (deriv .* param_scaled .*
+              (1 - param_scaled) .* (upper_bound - lower_bound) ./ scale)
     end
 end
 
@@ -162,7 +168,7 @@ function vp_to_free!{NumType <: Number}(
     # Box constraints.
     for (param, limits) in bounds
         vp_free[ids_free.(param)] =
-          unbox_parameter(vp[ids.(param)], limits[1], limits[2])
+          unbox_parameter(vp[ids.(param)], limits[1], limits[2], limits[3])
     end
 end
 
@@ -181,7 +187,7 @@ function free_to_vp!{NumType <: Number}(
     # Box constraints.
     for (param, limits) in bounds
         vp[ids.(param)] =
-          box_parameter(vp_free[ids_free.(param)], limits[1], limits[2])
+          box_parameter(vp_free[ids_free.(param)], limits[1], limits[2], limits[3])
     end
 end
 
@@ -207,7 +213,7 @@ function unbox_param_derivative{NumType <: Number}(
 
   for (param, limits) in bounds
       d_free[ids_free.(param)] =
-        unbox_derivative(vp[ids.(param)], d[ids.(param)], limits[1], limits[2])
+        unbox_derivative(vp[ids.(param)], d[ids.(param)], limits[1], limits[2], limits[3])
   end
 
   d_free
@@ -349,15 +355,15 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
   for s=1:mp.S
     # Bounds that are too large cause numerical errors.
     bounds[s] = ParamBounds()
-    bounds[s][:u] = (mp.vp[s][ids.u] - loc_width, mp.vp[s][ids.u] + loc_width)
-    bounds[s][:r1] = (1e-4, Inf)
-    bounds[s][:r2] = (1e-4, 0.1)
-    bounds[s][:c1] = (-10., 10.)
-    bounds[s][:c2] = (1e-4, 1.)
-    bounds[s][:e_dev] = (1e-2, 1 - 1e-2)
-    bounds[s][:e_axis] = (1e-2, 1 - 1e-2)
-    bounds[s][:e_angle] = (-10.0, 10.0)
-    bounds[s][:e_scale] = (0.2, 15.)
+    bounds[s][:u] = (mp.vp[s][ids.u] - loc_width, mp.vp[s][ids.u] + loc_width, 1.0)
+    bounds[s][:r1] = (1e-4, Inf, 1e-3)
+    bounds[s][:r2] = (1e-4, 0.1, 1.0)
+    bounds[s][:c1] = (-10., 10., 1.0)
+    bounds[s][:c2] = (1e-4, 1., 1.0)
+    bounds[s][:e_dev] = (1e-2, 1 - 1e-2, 1.0)
+    bounds[s][:e_axis] = (1e-2, 1 - 1e-2, 1.0)
+    bounds[s][:e_angle] = (-10.0, 10.0, 1.0)
+    bounds[s][:e_scale] = (0.2, 15., 1.0)
   end
   DataTransform(bounds)
 end

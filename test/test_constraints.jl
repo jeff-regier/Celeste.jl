@@ -12,41 +12,65 @@ import ModelInit
 
 
 function test_transform_box_functions()
-	function box_and_unbox(param, lower_bound, upper_bound)
-		param_free = Transform.unbox_parameter(param, lower_bound, upper_bound)
-		new_param = Transform.box_parameter(param_free, lower_bound, upper_bound)
+	function box_and_unbox(param, lower_bound, upper_bound; scale=1.0)
+		param_free = Transform.unbox_parameter(param, lower_bound, upper_bound, scale)
+		new_param = Transform.box_parameter(param_free, lower_bound, upper_bound, scale)
 		@test_approx_eq_eps param new_param 1e-6
 	end
 
-	box_and_unbox(1.0, -1.0, 2.0)
-	box_and_unbox(1.0, -1.0, Inf)
+	for this_scale = [ 1.0, 2.0 ]
+		box_and_unbox(1.0, -1.0, 2.0, scale=this_scale)
+		box_and_unbox(1.0, -1.0, Inf, scale=this_scale)
 
-	# Test that the edges work.
-	box_and_unbox(-1.0, -1.0, 2.0)
-	box_and_unbox(2.0, -1.0, 2.0)
-	box_and_unbox(-1.0, -1.0, Inf)
+		# Test that the edges work.
+		box_and_unbox(-1.0, -1.0, 2.0, scale=this_scale)
+		box_and_unbox(2.0, -1.0, 2.0, scale=this_scale)
+		box_and_unbox(-1.0, -1.0, Inf, scale=this_scale)
+		box_and_unbox(Dual(1.0), -1.0, 2.0, scale=this_scale)
+	end
 
-	box_and_unbox([1.0, 1.5], -1.0, 2.0)
-	box_and_unbox([1.0, 1.5], -1.0, Inf)
+	for this_scale = (1.0, 2.0, [2.0, 3.0])
+		box_and_unbox([1.0, 1.5], -1.0, 2.0, scale=this_scale)
+		box_and_unbox([1.0, 1.5], -1.0, Inf, scale=this_scale)
 
-	box_and_unbox([1.0, 10.0], [-1.0, 9.0], [2.0, 12.0])
-	box_and_unbox([1.0, 10.0], [-1.0, 9.0], [Inf, Inf])
+		box_and_unbox([1.0, 10.0], [-1.0, 9.0], [2.0, 12.0], scale=this_scale)
+		box_and_unbox([1.0, 10.0], [-1.0, 9.0], [Inf, Inf], scale=this_scale)
 
-	box_and_unbox(Dual(1.0), -1.0, 2.0)
-	box_and_unbox([Dual(1.0), Dual(1.5)], -1.0, 2.0)
-	box_and_unbox([Dual(1.0), Dual(10.0)], [-1.0, 9.0], [2.0, 12.0])
+		box_and_unbox([Dual(1.0), Dual(1.5)], -1.0, 2.0, scale=this_scale)
+		box_and_unbox([Dual(1.0), Dual(10.0)], [-1.0, 9.0], [2.0, 12.0],
+									scale=this_scale)
+	end
+
 
 	# Just check that these run.  The derivatives themselves
 	# will be checked elsewhere.
-	Transform.unbox_derivative(1.0, 2.0, -1.0, 2.0)
-	Transform.unbox_derivative(1.0, 2.0, -1.0, Inf)
+	this_scale = 1.0
+	Transform.unbox_derivative(1.0, 2.0, -1.0, 2.0, this_scale)
+	Transform.unbox_derivative(1.0, 2.0, -1.0, Inf, this_scale)
 	Transform.unbox_derivative(
-		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [2.0, 12.0])
+		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [2.0, 12.0], this_scale)
 	Transform.unbox_derivative(
-		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [Inf, Inf])
-	Transform.unbox_derivative(Dual(1.0), Dual(2.0), -1.0, 2.0)
+		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [Inf, Inf], this_scale)
+	Transform.unbox_derivative(Dual(1.0), Dual(2.0), -1.0, 2.0, this_scale)
 	Transform.unbox_derivative(
-		[Dual(1.0), Dual(10.0)], [Dual(2.0), Dual(3.0)], [-1.0, 9.0], [2.0, 12.0])
+		[Dual(1.0), Dual(10.0)], [Dual(2.0), Dual(3.0)], [-1.0, 9.0], [2.0, 12.0],
+		this_scale)
+
+	# Check that the scaling is working.
+	@test_approx_eq_eps(Transform.unbox_parameter(1.0, -1.0, 2.0, 2.0),
+											Transform.unbox_parameter(1.0, -1.0, 2.0, 1.0) * 2.0,
+											1e-6)
+	@test_approx_eq_eps(Transform.unbox_parameter(1.0, -1.0, Inf, 2.0),
+											Transform.unbox_parameter(1.0, -1.0, Inf, 1.0) * 2.0,
+											1e-6)
+	@test_approx_eq_eps(
+		Transform.unbox_derivative(1.0, 2.0, -1.0, 2.0, 2.0),
+	  Transform.unbox_derivative(1.0, 2.0, -1.0, 2.0, 1.0) * 0.5,
+		1e-6)
+	@test_approx_eq_eps(
+		Transform.unbox_derivative(1.0, 2.0, -1.0, Inf, 2.0),
+	  Transform.unbox_derivative(1.0, 2.0, -1.0, Inf, 1.0) * 0.5,
+		1e-6)
 
 	# Check the bounds checking errors.
 	@test_throws Exception Transform.unbox_parameter(1.0, 2.0, 3.0)
