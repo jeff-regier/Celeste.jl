@@ -240,22 +240,23 @@ function test_derivative_transform()
   box_param = [1.0, 2.0, 1.001]
   lower_bounds = [-1.0, -2.0, 1.0]
   upper_bounds = [2.0, Inf, Inf]
+  scales = [ 2.0, 3.0, 100.0 ]
   N = length(box_param)
 
-  function get_free_param(box_param, lower_bounds, upper_bounds)
+  function get_free_param(box_param, lower_bounds, upper_bounds, scales)
     free_param = zeros(Float64, N)
     for n=1:N
       free_param[n] =
-        Transform.unbox_parameter(box_param[n], lower_bounds[n], upper_bounds[n])
+        Transform.unbox_parameter(box_param[n], lower_bounds[n], upper_bounds[n], scales[n])
     end
     free_param
   end
 
-  function get_box_param(free_param, lower_bounds, upper_bounds)
+  function get_box_param(free_param, lower_bounds, upper_bounds, scales)
     box_param = zeros(Float64, N)
     for n=1:N
       box_param[n] =
-        Transform.box_parameter(free_param[n], lower_bounds[n], upper_bounds[n])
+        Transform.box_parameter(free_param[n], lower_bounds[n], upper_bounds[n], scales[n])
     end
     box_param
   end
@@ -266,17 +267,17 @@ function test_derivative_transform()
   end
 
   function free_function(free_param)
-    box_param = get_box_param(free_param, lower_bounds, upper_bounds)
+    box_param = get_box_param(free_param, lower_bounds, upper_bounds, scales)
     v, box_deriv = box_function(box_param)
     free_deriv = zeros(Float64, N)
     for n=1:N
       free_deriv[n] = Transform.unbox_derivative(
-        box_param[n], box_deriv[n], lower_bounds[n], upper_bounds[n])
+        box_param[n], box_deriv[n], lower_bounds[n], upper_bounds[n], scales[n])
     end
     v, free_deriv
   end
 
-  free_param = get_free_param(box_param, lower_bounds, upper_bounds)
+  free_param = get_free_param(box_param, lower_bounds, upper_bounds, scales)
   test_by_finite_differences(free_function, free_param)
 end
 

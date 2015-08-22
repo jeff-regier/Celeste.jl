@@ -208,8 +208,19 @@ function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
     # ubs = [get_nlopt_bounds(vs)[2] for vs in vp]
     # (transform.vp_to_vector(lbs, omitted_ids),
     #     transform.vp_to_vector(ubs, omitted_ids))
-    vec_size = (length(ids_free) - length(omitted_ids)) * length(vp)
-    fill(-100.0, vec_size), fill(100.0, vec_size)
+
+    kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
+    lbs = fill(-100.0, length(ids_free), length(vp))
+    ubs = fill(100.0, length(ids_free), length(vp))
+
+    # Change the bounds to match the scaling
+    for s=1:length(vp)
+      for (param, bounds) in transform.bounds[s]
+        lbs[collect(ids_free.(param)), s] *= bounds[3]
+        ubs[collect(ids_free.(param)), s] *= bounds[3]
+      end
+    end
+    reduce(vcat, lbs[kept_ids, :]), reduce(vcat, ubs[kept_ids, :])
 end
 
 
