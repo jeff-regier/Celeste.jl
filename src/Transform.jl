@@ -148,6 +148,9 @@ end
 ######################
 # Functions to take actual parameter vectors.
 
+# Treat the simplex bounds separately.
+const simplex_min = 0.01
+
 @doc """
 Convert a variational parameter vector to an unconstrained version using
 the lower bounds lbs and ubs (which are expressed)
@@ -159,11 +162,15 @@ function vp_to_free!{NumType <: Number}(
     # The original script used "a" to only
     # refer to the probability of being a galaxy, which is now the
     # second component of a.
-    vp_free[ids_free.a[1]] = Util.inv_logit(vp[ids.a[2]])
+    #vp_free[ids_free.a[1]] = Util.inv_logit(vp[ids.a[2]])
+    vp_free[ids_free.a[1]] =
+      unbox_parameter(vp[ids.a[2]], simplex_min, 1 - simplex_min, 1.0)
 
     # In contrast, the original script used the last component of k
     # as the free parameter.
-    vp_free[ids_free.k[1, :]] = Util.inv_logit(vp[ids.k[1, :]])
+    #vp_free[ids_free.k[1, :]] = Util.inv_logit(vp[ids.k[1, :]])
+    vp_free[ids_free.k[1, :]] =
+      unbox_parameter(vp[ids.k[1, :]], simplex_min, 1 - simplex_min, 1.0)
 
     # Box constraints.
     for (param, limits) in bounds
@@ -178,10 +185,14 @@ function free_to_vp!{NumType <: Number}(
     # Convert an unconstrained to an constrained variational parameterization.
 
     # Simplicial constriants.
-    vp[ids.a[2]] = Util.logit(vp_free[ids_free.a[1]])
+    #vp[ids.a[2]] = Util.logit(vp_free[ids_free.a[1]])
+    vp[ids.a[2]] =
+      box_parameter(vp_free[ids_free.a[1]], simplex_min, 1.0 - simplex_min, 1.0)
     vp[ids.a[1]] = 1.0 - vp[ids.a[2]]
 
-    vp[ids.k[1, :]] = Util.logit(vp_free[ids_free.k[1, :]])
+    #vp[ids.k[1, :]] = Util.logit(vp_free[ids_free.k[1, :]])
+    vp[ids.k[1, :]] =
+      box_parameter(vp_free[ids_free.k[1, :]], simplex_min, 1.0 - simplex_min, 1.0)
     vp[ids.k[2, :]] = 1.0 - vp[ids.k[1, :]]
 
     # Box constraints.
@@ -203,13 +214,19 @@ function unbox_param_derivative{NumType <: Number}(
 
   # TODO: write in general form.  Note that the old "a" is now a[2].
   # Simplicial constriants.
-  this_a = vp[ids.a[2]]
+  #this_a = vp[ids.a[2]]
+  #d_free[ids_free.a[1]] =
+  #    (d[ids.a[2]] - d[ids.a[1]]) * this_a * (1.0 - this_a)
   d_free[ids_free.a[1]] =
-      (d[ids.a[2]] - d[ids.a[1]]) * this_a * (1.0 - this_a)
+    unbox_derivative(vp[ids.a[2]], d[ids.a[2]] - d[ids.a[1]],
+                     simplex_min, 1.0 - simplex_min, 1.0)
 
   this_k = collect(vp[ids.k[1, :]])
   d_free[collect(ids_free.k[1, :])] =
       (d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])]) .* this_k .* (1.0 - this_k)
+  d_free[collect(ids_free.k[1, :])] =
+    unbox_derivative(collect(vp[ids.k[1, :]]), d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])],
+                     simplex_min, 1.0 - simplex_min, 1.0)
 
   for (param, limits) in bounds
       d_free[ids_free.(param)] =
@@ -237,7 +254,11 @@ function generate_valid_parameters(
 				vp[s][ids.(param)] = 0.5 * (limits[2] - limits[1]) + limits[1]
 			end
 	  end
+    # Simplex parameters
+    vp[s][ids.a] = 1 / Ia
+    vp[s][collect(ids.k)] = 1 / D
 	end
+
   vp
 end
 

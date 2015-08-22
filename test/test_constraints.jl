@@ -114,5 +114,5 @@ function test_parameter_conversion()
 	end
 end
 
-test_parameter_conversion()
 test_transform_box_functions()
+test_parameter_conversion()
