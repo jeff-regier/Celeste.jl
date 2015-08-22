@@ -93,21 +93,10 @@ end
 
 
 function test_star_optimization()
-    # TODO: this is failing due to bad scaling.
     blob, mp, body = gen_sample_star_dataset();
     trans = get_mp_transform(mp, loc_width=1.0);
     OptimizeElbo.maximize_likelihood(blob, mp, trans)
     verify_sample_star(mp.vp[1], [10.1, 12.2])
-
-    blob, mp, body = gen_sample_star_dataset();
-    #trans = get_mp_transform(mp, loc_width=1.0);
-    trans.bounds[1][:r1] = (0.0001, Inf, 1e-3)
-    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, blob, mp, trans,
-               omitted_ids=omitted_ids, xtol_rel=0., ftol_abs=1e-15, verbose=true)
-    verify_sample_star(mp.vp[1], [10.1, 12.2])
-
-
 end
 
 

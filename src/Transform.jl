@@ -149,7 +149,7 @@ end
 # Functions to take actual parameter vectors.
 
 # Treat the simplex bounds separately.
-const simplex_min = 0.01
+const simplex_min = 0.005
 
 @doc """
 Convert a variational parameter vector to an unconstrained version using
