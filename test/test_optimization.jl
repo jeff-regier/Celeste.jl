@@ -19,6 +19,11 @@ function test_objective_wrapper()
     elbo_result = trans.transform_sensitive_float(ElboDeriv.elbo(blob, mp), mp);
     elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, s] for s=1:mp.S ]);
 
+    # Tese the print function
+    wrapper.state.verbose = true
+    wrapper.f_objective(x);
+    wrapper.state.verbose = false
+
     w_v, w_grad = wrapper.f_value_grad(x);
     w_grad2 = zeros(Float64, length(x));
     wrapper.f_value_grad!(x, w_grad2);

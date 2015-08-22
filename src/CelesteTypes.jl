@@ -380,21 +380,29 @@ bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
 # TODO: maybe these should be incorporated into the framework above (which I don't really understand.)
-ids_free_names = Array(ASCIIString, length(ids_free))
-for (name in names(ids_free))
-    inds = ids_free.(name)
-    for i = 1:length(inds)
-        ids_free_names[inds[i]] = "$(name)_$(i)"
+function get_id_names(ids::Union(CanonicalParams, UnconstrainedParams))
+  ids_names = Array(ASCIIString, length(ids))
+  for (name in names(this_ids))
+    inds = ids.(name)
+    if length(size(inds)) == 1
+      ids_names[inds] = "$(name)"
+    else if length(size(inds)) == 2
+      for i = 1:size(inds)[1]
+          ids_names[inds[i]] = "$(name)_$(i)"
+      end
+    else if length(size(inds)) == 3
+      for i = 1:size(inds)[1], j = 1:size(inds)[2]
+          ids_names[inds[i, j]] = "$(name)_$(i)_$(j)"
+      end
+    else
+      error("Names of 3d parameters not supported.")
     end
+  end
+  return ids_names
 end
 
-ids_names = Array(ASCIIString, length(ids))
-for (name in names(ids))
-    inds = ids.(name)
-    for i = 1:length(inds)
-        ids_names[inds[i]] = "$(name)_$(i)"
-    end
-end
+const ids_names = get_id_names(ids)
+const ids_free_names = get_id_names(ids_free)
 
 
 #########################################################
