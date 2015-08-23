@@ -9,7 +9,6 @@ import FITSIO
 import Grid
 import PSF
 import Util
-import WCS
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -70,7 +69,7 @@ function load_stamp_catalog_df(cat_dir, stamp_id, blob; match_blob=false)
 
     df = DataFrames.DataFrame()
     for i in 1:num_cols
-        tmp_data = read(cat_fits[2], ttypes[i])        
+        tmp_data = read(cat_fits[2], ttypes[i])
         df[symbol(ttypes[i])] = tmp_data
     end
 
@@ -115,7 +114,7 @@ function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=f
         fits_theta = fracs_dev[1] > .5 ? row[1, :theta_dev] : row[1, :theta_exp]
 
         # tractor defines phi as -1 * the phi catalog for some reason.
-        if !match_blob  
+        if !match_blob
             fits_phi *= -1.
         end
 
@@ -217,7 +216,7 @@ Args:
 
 Returns:
  - nelec: An image of raw electron counts in nanomaggies
- - calib_col: A column of calibration values (the same for every column of the image) 
+ - calib_col: A column of calibration values (the same for every column of the image)
  - sky_grid: A CoordInterpGrid bilinear interpolation object
  - sky_x: The x coordinates at which to evaluate sky_grid to match nelec.
  - sky_y: The y coordinates at which to evaluate sky_grid to match nelec.
@@ -274,9 +273,7 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
                                     Grid.BCnearest, Grid.InterpLinear)
 
     # This interpolation is really slow.
-    print("...starting sky fit...")
     sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ]
-    print("done with sky fit. ")
 
     # Convert to raw electron counts.  Note that these may not be close to integers
     # due to the analog to digital conversion process in the telescope.
@@ -305,7 +302,7 @@ Returns:
 function mask_image!(mask_img, field_dir, run_num, camcol_num, field_num, band;
                      python_indexing = false,
                      mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
-    # The default mask planes are those used by Dustin's astrometry.net code.    
+    # The default mask planes are those used by Dustin's astrometry.net code.
     # See the comments in sdss/dr8.py for fpM.setMaskedPixels
     # and the function sdss/common.py:fpM.setMaskedPixels
     #
@@ -509,7 +506,7 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
         H = size(nelec, 1)
         W = size(nelec, 2)
 
-        # For now, use the median noise and sky image.  Here, 
+        # For now, use the median noise and sky image.  Here,
         # epsilon * iota needs to be in units comparable to nelec electron counts.
         # Note that each are actuall pretty variable.
         iota = convert(Float64, band_gain[b] / median(calib_col))
@@ -545,72 +542,5 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
 
     blob
 end
-
-@doc """
-Crop an image in place to a (2 * width) x (2 * width) - pixel square centered
-at the world coordinates wcs_center.
-
-Args:
-  - blob: The field to crop
-  - width: The width in pixels of each quadrant
-  - wcs_center: A location in world coordinates (e.g. the location of a celestial body)
-""" ->
-function crop_image!(blob::Array{Image, 1}, width::Float64, wcs_center::Array{Float64, 1})
-    @assert length(wcs_center) == 2
-    @assert width > 0
-
-    original_crpix_band = Float64[unsafe_load(blob[b].wcs.crpix, i) for i=1:2, b=1:5];
-
-    x_ranges = zeros(2, 5)
-    y_ranges = zeros(2, 5)
-    for b=1:5
-        # Get the pixels that are near enough to the wcs_center.
-        obj_loc_pix = WCS.world_to_pixel(blob[b].wcs, wcs_center)
-        sub_rows_x = floor(obj_loc_pix[1] - width):ceil(obj_loc_pix[1] + width)
-        sub_rows_y = floor(obj_loc_pix[2] - width):ceil(obj_loc_pix[2] + width)
-        x_min = minimum(collect(sub_rows_x))
-        y_min = minimum(collect(sub_rows_y))
-        x_max = maximum(collect(sub_rows_x))
-        y_max = maximum(collect(sub_rows_y))
-        x_ranges[:, b] = Float64[x_min, x_max]
-        y_ranges[:, b] = Float64[y_min, y_max]
-
-        # Crop the image down to the selected pixels.
-        # Re-center the WCS coordinates
-        crpix = original_crpix_band[:, b]
-        unsafe_store!(blob[b].wcs.crpix, crpix[1] - x_min + 1, 1)
-        unsafe_store!(blob[b].wcs.crpix, crpix[2] - y_min + 1, 2)
-        
-        blob[b].pixels = blob[b].pixels[sub_rows_x, sub_rows_y]
-        blob[b].H = size(blob[b].pixels, 1)
-        blob[b].W = size(blob[b].pixels, 2)
-        blob[b].iota_vec = blob[b].iota_vec[x_min:x_max]
-        blob[b].epsilon_mat = blob[b].epsilon_mat[x_min:x_max, y_min:y_max]
-    end
-
-    x_ranges, y_ranges
-end
-
-@doc """
-Check whether the center of a celestial body is in any of the frames of an image.
-
-Args:
-  - blob: The image to check
-  - wcs_loc: A location in world coordinates (e.g. the location of a celestial body)
-
-Returns:
-  - Whether the pixel wcs_loc lies within any of the image's fields.
-""" ->
-function test_catalog_entry_in_image(blob::Array{Image, 1}, wcs_loc::Array{Float64, 1})
-    for b=1:5
-        pixel_loc = WCS.world_to_pixel(blob[b].wcs, wcs_loc)
-        if (1 <= pixel_loc[1] <= blob[b].H) && (1 <= pixel_loc[2] <= blob[b].W)
-            return true
-        end
-    end
-    return false
-end
-
-
 
 end

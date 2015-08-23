@@ -12,12 +12,12 @@ using Transform
 import ElboDeriv
 import DataFrames
 import ForwardDiff
-import Optim
 
 export ObjectiveWrapperFunctions, WrapperState
 
 #TODO: use Lumberjack.jl for logging
 const debug = false
+
 
 # The main reason we need this is to have a mutable type to keep
 # track of function evaluations, but we can keep other metadata
@@ -26,7 +26,6 @@ type WrapperState
     f_evals::Int64
     verbose::Bool
     print_every_n::Int64
-    scale::Float64
 end
 
 
@@ -37,10 +36,8 @@ type ObjectiveWrapperFunctions
     f_value_grad!::Function
     f_value::Function
     f_grad::Function
-    f_grad!::Function
     f_ad_grad::Function
     f_ad_hessian::Function
-    print_x_params::Function
 
     state::WrapperState
     transform::DataTransform
@@ -54,27 +51,38 @@ type ObjectiveWrapperFunctions
         mp_dual = CelesteTypes.convert(ModelParams{ForwardDiff.Dual}, mp);
         x_length = length(kept_ids) * mp.S
 
-        state = WrapperState(0, false, 10, 1.0)
-        function print_status{T <: Number}(iter_mp::ModelParams, value::T)
+        state = WrapperState(0, false, 10)
+        function print_status{T <: Number}(
+          iter_vp::VariationalParams{T}, value::T, grad::Array{T})
             if state.verbose || (state.f_evals % state.print_every_n == 0)
-                println("f(x) after $(state.f_evals) evals: $(value)")
+                println("f_evals: $(state.f_evals) value: $(value)")
             end
             if state.verbose
-                print_params(iter_mp)
-                println("\n=======================================\n")
+              S = length(iter_vp)
+              if length(iter_vp[1]) == length(ids_names)
+                state_df = DataFrames.DataFrame(names=ids_names)
+              elseif length(iter_vp[1]) == length(ids_free_names)
+                state_df = DataFrames.DataFrame(names=ids_free_names)
+              else
+                state_df = DataFrames.DataFrame(names=[ "x$i" for i=1:length(iter_vp[1, :])])
+              end
+              for s=1:S
+                state_df[symbol(string("val", s))] = iter_vp[s]
+              end
+              for s=1:mp.S
+                state_df[symbol(string("grad", s))] = grad[:, s]
+              end
+              println(state_df)
+              println("\n=======================================\n")
             end
         end
 
         function f_objective(x_dual::Array{ForwardDiff.Dual{Float64}})
             state.f_evals += 1
-            # TODO: If the transformation results in NaN parameters,
-            # return NaN without evaluating the function?
-
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
             f_res = f(mp_dual)
-            #print_status(mp_dual, real(f_res.v))
-            transform.transform_sensitive_float(f_res, mp_dual)
+            f_res_trans = transform.transform_sensitive_float(f_res, mp_dual)
         end
 
         function f_objective(x::Array{Float64})
@@ -82,11 +90,15 @@ type ObjectiveWrapperFunctions
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x, mp.vp, omitted_ids)
             f_res = f(mp)
-            print_status(mp, f_res.v)
-            transform.transform_sensitive_float(f_res, mp)
+
+            # TODO: Add an option to print either the transformed or
+            # free parameterizations.
+            #print_status(mp.vp, f_res.v, f_res.d)
+            f_res_trans = transform.transform_sensitive_float(f_res, mp)
+            print_status(transform.from_vp(mp.vp), f_res_trans.v, f_res_trans.d)
+            f_res_trans
         end
 
-        # The following functions are multiplied by state.scale.
         function f_value_grad{T <: Number}(x::Array{T, 1})
             @assert length(x) == x_length
             res = f_objective(x)
@@ -95,7 +107,7 @@ type ObjectiveWrapperFunctions
                 svs = [res.d[kept_ids, s] for s in 1:mp.S]
                 grad[:] = reduce(vcat, svs)
             end
-            state.scale * res.v, state.scale .* grad
+            res.v, grad
         end
 
         function f_value_grad!(x, grad)
@@ -108,16 +120,12 @@ type ObjectiveWrapperFunctions
         # TODO: Add caching.
         function f_value(x)
             @assert length(x) == x_length
-            f_value_grad(x)[1]
+            f_objective(x).v
        end
 
         function f_grad(x)
             @assert length(x) == x_length
             f_value_grad(x)[2]
-        end
-
-        function f_grad!(x, grad)
-            grad[:] = f_grad(x)
         end
 
         # Forward diff versions of the gradient and Hessian.
@@ -140,120 +148,39 @@ type ObjectiveWrapperFunctions
             hess
         end
 
-        function print_x_params(x)
-            mp_copy = deepcopy(mp)
-            transform.vector_to_vp!(x, mp_copy.vp, omitted_ids)
-            print_params(mp_copy)
-        end
-
-        new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_grad!, f_ad_grad, f_ad_hessian, print_x_params,
+        new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_ad_grad, f_ad_hessian,
             state, transform, mp, kept_ids, omitted_ids)
     end
-end
-
-
-function get_nlopt_bounds(vs::Vector{Float64})
-    # Note that sources are not allowed to move more than
-    # one pixel from their starting position in order to
-    # avoid label switiching.  (This is why this function gets
-    # the variational parameters as an argument.)
-    # vs: parameters for a particular source.
-    # vp: complete collection of sources.
-    lb = Array(Float64, length(CanonicalParams))
-    lb[ids.a] = 1e-2
-    lb[ids.u] = vs[ids.u] - 1.
-    [lb[id] = 2e-4 for id in ids.r1]
-    [lb[id] = 2e-4 for id in ids.r2]
-    [lb[id] = 1e-4 for id in ids.k]
-    [lb[id] = -10. for id in ids.c1]
-    [lb[id] = 1e-4 for id in ids.c2]
-    lb[ids.e_dev] = 1e-2
-    lb[ids.e_axis] = 1e-4
-    lb[ids.e_angle] = -1e10 #-pi/2 + 1e-4
-    lb[ids.e_scale] = 0.2
-
-    ub = Array(Float64, length(CanonicalParams))
-    ub[ids.a] = 1 - 1e-2
-    ub[ids.u] = vs[ids.u] + 1.
-    [ub[id] = 1e11 for id in ids.r1]
-    [ub[id] = 0.09 for id in ids.r2]
-    [ub[id] = 1 - 1e-4 for id in ids.k]
-    [ub[id] = 10. for id in ids.c1]
-    [ub[id] = 1. for id in ids.c2]
-    ub[ids.e_dev] = 1 - 1e-2
-    ub[ids.e_axis] = 1. - 1e-4
-    ub[ids.e_angle] = 1e10 #pi/2 - 1e-4
-    ub[ids.e_scale] = 50.
-
-    lb, ub
 end
 
 
 function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
                                         omitted_ids::Vector{Int64},
                                         transform::DataTransform)
-    # Note that sources are not allowed to move more than
-    # one pixel from their starting position in order to
-    # avoid label switiching.  (This is why this function gets
-    # the variational parameters as an argument.)
+    # Set reasonable bounds for unconstrained parameters.
     #
-    # vp: _Constrained_ variational parameters.
+    # vp: Variational parameters.
     # omitted_ids: Ids of _unconstrained_ variational parameters to be omitted.
-    # unconstrain_fn: A function to convert VariationalParameters to a
-    #   vector that can be passed to the optimizer.
-
-    lbs = [get_nlopt_bounds(vs)[1] for vs in vp]
-    ubs = [get_nlopt_bounds(vs)[2] for vs in vp]
-    (transform.vp_to_vector(lbs, omitted_ids), 
-        transform.vp_to_vector(ubs, omitted_ids))
-end
-
-
-function maximize_f_newton(f::Function, mp::ModelParams, transform::Transform.DataTransform;
-                           omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6,
-                           verbose=false, hess_reg=2.0, max_iters=100)
+    # transform: A DataTransform object.
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    x0 = transform.vp_to_vector(mp.vp, omitted_ids)
+    lbs = fill(-15.0, length(ids_free), length(vp))
+    ubs = fill(15.0, length(ids_free), length(vp))
 
-    optim_obj_wrap = OptimizeElbo.ObjectiveWrapperFunctions(f, mp, transform, kept_ids, omitted_ids);
-    optim_obj_wrap.state.scale = -1.0 # For minimization, which is required by the linesearch algorithm.
-    optim_obj_wrap.state.verbose = verbose
-
-    function f_hess_reg!(x, new_hess)
-        hess = optim_obj_wrap.f_ad_hessian(x)
-        hess_ev = eig(hess)[1]
-        min_ev = minimum(hess_ev)
-        max_ev = maximum(hess_ev)
-
-        # Make it positive definite.
-        if min_ev < 0
-            verbose && println("Hessian is negative definite (min eigenvalue $(min_ev)).  Regularizing with $(hess_reg).")
-            hess += eye(length(x)) * abs(min_ev) * hess_reg
-        end
-
-        new_hess[:,:] = hess
+    # Change the bounds to match the scaling
+    for s=1:length(vp)
+      for (param, bounds) in transform.bounds[s]
+        lbs[collect(ids_free.(param)), s] *= bounds[3]
+        ubs[collect(ids_free.(param)), s] *= bounds[3]
+      end
     end
-
-    x0 = transform.vp_to_vector(mp.vp, omitted_ids);
-
-    # TODO: are xtol_rel and ftol_abs still good names?
-    nm_result = Optim.optimize(optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!,
-                               x0, method=:newton, iterations=max_iters, xtol=xtol_rel, ftol=ftol_abs)
-
-    iter_count = optim_obj_wrap.state.f_evals
-    transform.vector_to_vp!(nm_result.minimum, mp.vp, omitted_ids);
-    max_f = -1.0 * nm_result.f_minimum
-    max_x = nm_result.minimum
-
-    println("got $max_f at $max_x after $iter_count function evaluations ($(nm_result.iterations) Newton steps)\n")
-    iter_count, max_f, max_x, nm_result
+    reduce(vcat, lbs[kept_ids, :]), reduce(vcat, ubs[kept_ids, :])
 end
 
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform,
-                    lbs::Array{Float64, 1}, ubs::Array{Float64, 1};
-                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false)
+                    lbs::Union(Float64, Vector{Float64}), ubs::Union(Float64, Vector{Float64});
+                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
     # Maximize using NLOpt and unconstrained coordinates.
     #
     # Args:
@@ -265,11 +192,16 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     #   - ubs: An array of upper bounds (in the transformed space)
     #   - omitted_ids: Omitted ids from the _unconstrained_ parameterization (i.e. elements
     #       of free_ids).
+    #   - xtol_rel: X convergence
+    #   - ftol_abs: F convergence
+    #   - verbose: Print detailed output
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
+    iter_count = 0
 
-    obj_wrapper = ObjectiveWrapperFunctions(mp -> f(blob, mp), mp, transform, kept_ids, omitted_ids);
+    obj_wrapper = ObjectiveWrapperFunctions(
+      mp -> f(blob, mp), mp, transform, kept_ids, omitted_ids);
     obj_wrapper.state.verbose = verbose
 
     opt = Opt(:LD_LBFGS, length(x0))
@@ -285,48 +217,52 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     ftol_abs!(opt, ftol_abs)
     (max_f, max_x, ret) = optimize(opt, x0)
 
-    iter_count = obj_wrapper.state.f_evals
-    println("got $max_f at $max_x after $iter_count iterations (returned $ret)\n")
+    println("got $max_f at $max_x after $iter_count iters (returned $ret)\n")
     iter_count, max_f, max_x, ret
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false)
+    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
     # Default to the bounds given in get_nlopt_unconstrained_bounds.
 
     lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform)
     maximize_f(f, blob, mp, transform, lbs, ubs;
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose=verbose)
+      omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose = verbose)
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6)
-    # Default to the world rectangular transform
+    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
+    # Use the default transform.
 
-    maximize_f(f, blob, mp, world_rect_transform,
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
+    transform = get_mp_transform(mp);
+    maximize_f(f, blob, mp, transform,
+      omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose=verbose)
 end
 
 function maximize_elbo(blob::Blob, mp::ModelParams, trans::DataTransform;
-    xtol_rel = 1e-7, ftol_abs=1e-6)
+    xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
     omitted_ids = setdiff(1:length(UnconstrainedParams),
                           [ids_free.r1, ids_free.r2,
                            ids_free.k[:], ids_free.c1[:]])
     maximize_f(ElboDeriv.elbo, blob, mp, trans, omitted_ids=omitted_ids,
-        ftol_abs=ftol_abs, xtol_rel=xtol_rel)
+        ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
 
-    maximize_f(ElboDeriv.elbo, blob, mp, trans, ftol_abs=ftol_abs, xtol_rel=xtol_rel)
+    maximize_f(ElboDeriv.elbo, blob, mp, trans,
+        ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
 end
 
-function maximize_elbo(blob::Blob, mp::ModelParams)
-    # Default to the rectangular transform.
-    maximize_elbo(blob, mp, world_rect_transform)
+function maximize_elbo(blob::Blob, mp::ModelParams; verbose = false)
+    trans = get_mp_transform(mp)
+    maximize_elbo(blob, mp, trans, verbose=verbose)
 end
 
-function maximize_likelihood(blob::Blob, mp::ModelParams, trans::DataTransform; xtol_rel = 1e-7, ftol_abs=1e-6)
+function maximize_likelihood(
+  blob::Blob, mp::ModelParams, trans::DataTransform;
+  xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
     omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
     maximize_f(ElboDeriv.elbo_likelihood, blob, mp, trans,
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs)
+               omitted_ids=omitted_ids, xtol_rel=xtol_rel,
+               ftol_abs=ftol_abs, verbose=verbose)
 end
 
 function maximize_likelihood(blob::Blob, mp::ModelParams)
