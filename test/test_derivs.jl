@@ -10,6 +10,8 @@ import WCS
 
 import GSL.deriv_central
 
+println("Running derivative tests.")
+
 
 # verify derivatives of fun_to_test by finite differences for functions of
 # ModelParams that return a SensitiveFloat.

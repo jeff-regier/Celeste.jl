@@ -19,16 +19,6 @@ export ObjectiveWrapperFunctions, WrapperState
 const debug = false
 
 
-function print_params(vp)
-    for vs in vp
-        for n in names(ids)
-            println("$n: $(vs[ids.(n)])")
-        end
-        println("-----------------\n")
-    end
-end
-
-
 # The main reason we need this is to have a mutable type to keep
 # track of function evaluations, but we can keep other metadata
 # in it as well.
@@ -92,7 +82,6 @@ type ObjectiveWrapperFunctions
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
             f_res = f(mp_dual)
-            print_status(mp_dual.vp, real(f_res.v), real(f_res.d))
             f_res_trans = transform.transform_sensitive_float(f_res, mp_dual)
         end
 
@@ -165,60 +154,14 @@ type ObjectiveWrapperFunctions
 end
 
 
-function get_nlopt_bounds(vs::Vector{Float64})
-    # Note that sources are not allowed to move more than
-    # one pixel from their starting position in order to
-    # avoid label switiching.  (This is why this function gets
-    # the variational parameters as an argument.)
-    # vs: parameters for a particular source.
-    # vp: complete collection of sources.
-    lb = Array(Float64, length(CanonicalParams))
-    lb[ids.a] = 1e-2
-    lb[ids.u] = vs[ids.u] - 1.
-    [lb[id] = 1e-4 for id in ids.r1]
-    [lb[id] = 1e-4 for id in ids.r2]
-    [lb[id] = 1e-4 for id in ids.k]
-    [lb[id] = -10. for id in ids.c1]
-    [lb[id] = 1e-4 for id in ids.c2]
-    lb[ids.e_dev] = 1e-2
-    lb[ids.e_axis] = 1e-4
-    lb[ids.e_angle] = -1e10 #-pi/2 + 1e-4
-    lb[ids.e_scale] = 0.2
-
-    ub = Array(Float64, length(CanonicalParams))
-    ub[ids.a] = 1 - 1e-2
-    ub[ids.u] = vs[ids.u] + 1.
-    [ub[id] = 1e12 for id in ids.r1]
-    [ub[id] = 1e-1 for id in ids.r2]
-    [ub[id] = 1 - 1e-4 for id in ids.k]
-    [ub[id] = 10. for id in ids.c1]
-    [ub[id] = 1. for id in ids.c2]
-    ub[ids.e_dev] = 1 - 1e-2
-    ub[ids.e_axis] = 1. - 1e-4
-    ub[ids.e_angle] = 1e10 #pi/2 - 1e-4
-    ub[ids.e_scale] = 15.
-
-    lb, ub
-end
-
-
 function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
                                         omitted_ids::Vector{Int64},
                                         transform::DataTransform)
-    # Note that sources are not allowed to move more than
-    # one pixel from their starting position in order to
-    # avoid label switiching.  (This is why this function gets
-    # the variational parameters as an argument.)
+    # Set reasonable bounds for unconstrained parameters.
     #
-    # vp: _Constrained_ variational parameters.
+    # vp: Variational parameters.
     # omitted_ids: Ids of _unconstrained_ variational parameters to be omitted.
-    # unconstrain_fn: A function to convert VariationalParameters to a
-    #   vector that can be passed to the optimizer.
-
-    # lbs = [get_nlopt_bounds(vs)[1] for vs in vp]
-    # ubs = [get_nlopt_bounds(vs)[2] for vs in vp]
-    # (transform.vp_to_vector(lbs, omitted_ids),
-    #     transform.vp_to_vector(ubs, omitted_ids))
+    # transform: A DataTransform object.
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     lbs = fill(-15.0, length(ids_free), length(vp))
@@ -249,6 +192,9 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     #   - ubs: An array of upper bounds (in the transformed space)
     #   - omitted_ids: Omitted ids from the _unconstrained_ parameterization (i.e. elements
     #       of free_ids).
+    #   - xtol_rel: X convergence
+    #   - ftol_abs: F convergence
+    #   - verbose: Print detailed output
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
@@ -281,15 +227,16 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
 
     lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform)
     maximize_f(f, blob, mp, transform, lbs, ubs;
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose = verbose)
+      omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose = verbose)
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams;
     omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
-    # Default to the world rectangular transform
+    # Use the default transform.
 
-    maximize_f(f, blob, mp, world_rect_transform,
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose=verbose)
+    transform = get_mp_transform(mp);
+    maximize_f(f, blob, mp, transform,
+      omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose=verbose)
 end
 
 function maximize_elbo(blob::Blob, mp::ModelParams, trans::DataTransform;

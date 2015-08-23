@@ -10,6 +10,7 @@ using Transform
 using DualNumbers
 import ModelInit
 
+println("Running constraint tests.")
 
 function test_transform_box_functions()
 	function box_and_unbox(param, lower_bound, upper_bound; scale=1.0)

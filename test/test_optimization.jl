@@ -6,6 +6,9 @@ using Transform
 
 import OptimizeElbo
 
+println("Running optimization tests.")
+
+
 function test_objective_wrapper()
     omitted_ids = Int64[];
     kept_ids = setdiff(1:length(ids_free), omitted_ids);
@@ -40,10 +43,12 @@ function test_objective_wrapper()
     @test wrapper.state.f_evals == this_iter + 1
 
     # Test that the autodiff derivatives match the actual derivatives.
+    println("Testing autodiff gradient...")
     w_ad_grad = wrapper.f_ad_grad(x);
     @test_approx_eq(w_grad, w_ad_grad)
 
     # Just test that the Hessian can be computed and is symmetric.
+    println("Testing autodiff Hessian...")
     w_hess = wrapper.f_ad_hessian(x);
     @test_approx_eq(w_hess, w_hess')
 end
@@ -425,8 +430,7 @@ function test_color(trans::DataTransform)
 end
 
 
-function test_quadratic_optimization(trans::DataTransform)
-
+function test_quadratic_optimization()
     # A very simple quadratic function to test the optimization.
     const centers = collect(linrange(0.1, 0.9, length(CanonicalParams)))
 
@@ -442,21 +446,19 @@ function test_quadratic_optimization(trans::DataTransform)
         val
     end
 
-    ###############
-    # TODO: this needs to be changed for the new transforms.
+    bounds = Array(ParamBounds, 1)
+    bounds[1] = ParamBounds()
+    for param in setdiff(names(ids), [:a, :k])
+      bounds[1][symbol(param)] = (0., 1.0, 1.0)
+    end
+    trans = DataTransform(bounds)
 
-    # 0.5 is an innocuous value for all parameters.
     mp = empty_model_params(1)
-    trans = DataTransform
     n = length(CanonicalParams)
     mp.vp = convert(VariationalParams{Float64}, [fill(0.5, n) for s in 1:1])
-    unused_blob = gen_sample_star_dataset()[1]
+    unused_blob = gen_sample_star_dataset()[1];
 
-    vp_lbs = convert(VariationalParams{Float64}, [fill(1e-6, n) for s in 1:1])
-    vp_ubs = convert(VariationalParams{Float64}, [fill(1.0 - 1e-6, n) for s in 1:1])
-
-    lbs = trans.from_vp(vp_lbs)[1]
-    ubs = trans.from_vp(vp_ubs)[1]
+    lbs, ubs = OptimizeElbo.get_nlopt_unconstrained_bounds(mp.vp, Int64[], trans)
 
     OptimizeElbo.maximize_f(quadratic_function, unused_blob, mp, trans, lbs, ubs,
         xtol_rel=1e-16, ftol_abs=1e-16)
@@ -468,12 +470,8 @@ end
 
 ####################################################
 
-# test_quadratic_optimization(pixel_rect_transform)
-# test_quadratic_optimization(world_rect_transform)
-# test_quadratic_optimization(free_transform)
-
+test_quadratic_optimization()
 test_objective_wrapper()
-
 #test_bad_galaxy_init()
 test_kappa_finding()
 test_bad_a_init()
