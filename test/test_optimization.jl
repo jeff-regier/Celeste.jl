@@ -101,7 +101,7 @@ end
 
 
 function test_galaxy_optimization()
-    blob, mp, body = gen_sample_galaxy_dataset()
+    blob, mp, body = gen_sample_galaxy_dataset();
     trans = get_mp_transform(mp, loc_width=1.0);
     OptimizeElbo.maximize_likelihood(blob, mp, trans, xtol_rel=0.0)
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6])
@@ -481,7 +481,6 @@ test_bad_a_init()
 #test_kl_invariance_to_a()
 #test_likelihood_invariance_to_a()
 test_star_optimization()
-
-test_full_elbo_optimization(free_transform)
-test_galaxy_optimization(free_transform)
-test_real_stamp_optimization(free_transform)
+test_galaxy_optimization()
+test_full_elbo_optimization()
+test_real_stamp_optimization()
