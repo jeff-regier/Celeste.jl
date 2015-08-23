@@ -63,15 +63,21 @@ type ObjectiveWrapperFunctions
 
         state = WrapperState(0, false, 10)
         function print_status{T <: Number}(
-          iter_mp::ModelParams, value::T, grad::Array{T})
+          iter_vp::VariationalParams{T}, value::T, grad::Array{T})
             if state.verbose || (state.f_evals % state.print_every_n == 0)
                 println("f_evals: $(state.f_evals) value: $(value)")
             end
             if state.verbose
-              state_df = DataFrames.DataFrame(names=ids_names)
-              #print_params(iter_mp.vp)
-              for s=1:mp.S
-                state_df[symbol(string("val", s))] = iter_mp.vp[s]
+              S = length(iter_vp)
+              if length(iter_vp[1]) == length(ids_names)
+                state_df = DataFrames.DataFrame(names=ids_names)
+              elseif length(iter_vp[1]) == length(ids_free_names)
+                state_df = DataFrames.DataFrame(names=ids_free_names)
+              else
+                state_df = DataFrames.DataFrame(names=[ "x$i" for i=1:length(iter_vp[1, :])])
+              end
+              for s=1:S
+                state_df[symbol(string("val", s))] = iter_vp[s]
               end
               for s=1:mp.S
                 state_df[symbol(string("grad", s))] = grad[:, s]
@@ -86,8 +92,8 @@ type ObjectiveWrapperFunctions
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
             f_res = f(mp_dual)
-            print_status(mp_dual, real(f_res.v), real(f_res.d))
-            transform.transform_sensitive_float(f_res, mp_dual)
+            print_status(mp_dual.vp, real(f_res.v), real(f_res.d))
+            f_res_trans = transform.transform_sensitive_float(f_res, mp_dual)
         end
 
         function f_objective(x::Array{Float64})
@@ -95,8 +101,13 @@ type ObjectiveWrapperFunctions
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x, mp.vp, omitted_ids)
             f_res = f(mp)
-            print_status(mp, f_res.v, f_res.d)
-            transform.transform_sensitive_float(f_res, mp)
+
+            # TODO: Add an option to print either the transformed or
+            # free parameterizations.
+            #print_status(mp.vp, f_res.v, f_res.d)
+            f_res_trans = transform.transform_sensitive_float(f_res, mp)
+            print_status(transform.from_vp(mp.vp), f_res_trans.v, f_res_trans.d)
+            f_res_trans
         end
 
         function f_value_grad{T <: Number}(x::Array{T, 1})
@@ -210,8 +221,8 @@ function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
     #     transform.vp_to_vector(ubs, omitted_ids))
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    lbs = fill(-100.0, length(ids_free), length(vp))
-    ubs = fill(100.0, length(ids_free), length(vp))
+    lbs = fill(-15.0, length(ids_free), length(vp))
+    ubs = fill(15.0, length(ids_free), length(vp))
 
     # Change the bounds to match the scaling
     for s=1:length(vp)
@@ -225,7 +236,7 @@ end
 
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform,
-                    lbs::Array{Float64, 1}, ubs::Array{Float64, 1};
+                    lbs::Union(Float64, Vector{Float64}), ubs::Union(Float64, Vector{Float64});
                     omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
     # Maximize using NLOpt and unconstrained coordinates.
     #

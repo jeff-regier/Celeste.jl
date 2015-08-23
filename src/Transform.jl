@@ -377,7 +377,7 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
     # Bounds that are too large cause numerical errors.
     bounds[s] = ParamBounds()
     bounds[s][:u] = (mp.vp[s][ids.u] - loc_width, mp.vp[s][ids.u] + loc_width, 1.0)
-    bounds[s][:r1] = (1e-4, Inf, 1e-3)
+    bounds[s][:r1] = (1e-4, Inf, 1e-2)
     bounds[s][:r2] = (1e-4, 0.1, 1.0)
     bounds[s][:c1] = (-10., 10., 1.0)
     bounds[s][:c2] = (1e-4, 1., 1.0)
