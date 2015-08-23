@@ -6,6 +6,8 @@ using SampleData
 
 import WCS
 
+println("Running ELBO value tests.")
+
 function true_star_init()
     blob, mp, body = gen_sample_star_dataset(perturb=false)
 
@@ -313,7 +315,7 @@ function test_elbo_with_nan()
 
     nan_elbo = ElboDeriv.elbo(blob, mp)
 
-    # We deleted a pixel, so there's reason to expect them to be different, 
+    # We deleted a pixel, so there's reason to expect them to be different,
     # but importantly they're reasonably close and not NaN.
     @test_approx_eq_eps (nan_elbo.v - initial_elbo.v) / initial_elbo.v 0. 1e-4
     deriv_rel_err = (nan_elbo.d - initial_elbo.d) ./ initial_elbo.d

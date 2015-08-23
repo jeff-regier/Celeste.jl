@@ -15,10 +15,8 @@ export VariationalParams, FreeVariationalParams, RectVariationalParams
 
 export shape_standard_alignment, brightness_standard_alignment, align
 
-export SensitiveFloat
-
-export zero_sensitive_float, clear!
-
+export SensitiveFloat, zero_sensitive_float, clear!
+export print_params
 export set_patch_wcs!
 
 export ids, ids_free, star_ids, gal_ids
@@ -257,7 +255,7 @@ Attributes:
 type SkyPatch
     center::Vector{Float64}
     radius::Float64
-   
+
     psf::Vector{PsfComponent}
     wcs_jacobian::Matrix{Float64}
     pixel_center::Vector{Float64}
@@ -310,7 +308,7 @@ abstract ParamSet
 # r1      = Iax1 shape parameter for r_s. (formerly gamma)
 # r2      = Iax1 scale parameter for r_s. (formerly zeta)
 # c1      = C_s means (formerly beta)
-# c2      = C_s variances (formerly lambda) 
+# c2      = C_s variances (formerly lambda)
 # a       = probability of being a star or galaxy.  a[1] is the
 #           probability of being a star and a[2] of being a galaxy. (formerly chi)
 # k       = {D|D-1}xIa matrix of color prior component indicators. (formerly kappa)
@@ -374,7 +372,7 @@ end
 
 #TODO: build these from ue_align, etc., here.
 align(::StarPosParams, CanonicalParams) = ids.u
-align(::GalaxyPosParams, CanonicalParams) = 
+align(::GalaxyPosParams, CanonicalParams) =
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
 align(::CanonicalParams, CanonicalParams) = [1:length(CanonicalParams)]
 
@@ -384,22 +382,29 @@ bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
 # TODO: maybe these should be incorporated into the framework above (which I don't really understand.)
-ids_free_names = Array(ASCIIString, length(ids_free))
-for (name in names(ids_free)) 
-    inds = ids_free.(name)
-    for i = 1:length(inds)
-        ids_free_names[inds[i]] = "$(name)_$(i)"
-    end
-end
-
-ids_names = Array(ASCIIString, length(ids))
-for (name in names(ids)) 
+function get_id_names(ids::Union(CanonicalParams, UnconstrainedParams))
+  ids_names = Array(ASCIIString, length(ids))
+  for (name in names(ids))
     inds = ids.(name)
-    for i = 1:length(inds)
-        ids_names[inds[i]] = "$(name)_$(i)"
+    if length(size(inds)) == 0
+      ids_names[inds] = "$(name)"
+    elseif length(size(inds)) == 1
+      for i = 1:size(inds)[1]
+          ids_names[inds[i]] = "$(name)_$(i)"
+      end
+    elseif length(size(inds)) == 2
+      for i = 1:size(inds)[1], j = 1:size(inds)[2]
+          ids_names[inds[i, j]] = "$(name)_$(i)_$(j)"
+      end
+    else
+      error("Names of 3d parameters not supported ($(name))")
     end
+  end
+  return ids_names
 end
 
+const ids_names = get_id_names(ids)
+const ids_free_names = get_id_names(ids_free)
 
 #########################################################
 
@@ -460,7 +465,7 @@ function print_params(mp_tuple::ModelParams...)
         println("=======================\n Object $(s):")
         for var_name in names(ids)
             println(var_name)
-            mp_vars = [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for index in 1:length(mp_tuple) ] 
+            mp_vars = [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for index in 1:length(mp_tuple) ]
             println(reduce(hcat, mp_vars))
         end
     end
@@ -526,4 +531,3 @@ end
 #########################################################
 
 end
-
