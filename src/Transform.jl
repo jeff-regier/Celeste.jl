@@ -162,13 +162,11 @@ function vp_to_free!{NumType <: Number}(
     # The original script used "a" to only
     # refer to the probability of being a galaxy, which is now the
     # second component of a.
-    #vp_free[ids_free.a[1]] = Util.inv_logit(vp[ids.a[2]])
     vp_free[ids_free.a[1]] =
       unbox_parameter(vp[ids.a[2]], simplex_min, 1 - simplex_min, 1.0)
 
     # In contrast, the original script used the last component of k
     # as the free parameter.
-    #vp_free[ids_free.k[1, :]] = Util.inv_logit(vp[ids.k[1, :]])
     vp_free[ids_free.k[1, :]] =
       unbox_parameter(vp[ids.k[1, :]], simplex_min, 1 - simplex_min, 1.0)
 
@@ -185,12 +183,10 @@ function free_to_vp!{NumType <: Number}(
     # Convert an unconstrained to an constrained variational parameterization.
 
     # Simplicial constriants.
-    #vp[ids.a[2]] = Util.logit(vp_free[ids_free.a[1]])
     vp[ids.a[2]] =
       box_parameter(vp_free[ids_free.a[1]], simplex_min, 1.0 - simplex_min, 1.0)
     vp[ids.a[1]] = 1.0 - vp[ids.a[2]]
 
-    #vp[ids.k[1, :]] = Util.logit(vp_free[ids_free.k[1, :]])
     vp[ids.k[1, :]] =
       box_parameter(vp_free[ids_free.k[1, :]], simplex_min, 1.0 - simplex_min, 1.0)
     vp[ids.k[2, :]] = 1.0 - vp[ids.k[1, :]]
@@ -214,9 +210,6 @@ function unbox_param_derivative{NumType <: Number}(
 
   # TODO: write in general form.  Note that the old "a" is now a[2].
   # Simplicial constriants.
-  #this_a = vp[ids.a[2]]
-  #d_free[ids_free.a[1]] =
-  #    (d[ids.a[2]] - d[ids.a[1]]) * this_a * (1.0 - this_a)
   d_free[ids_free.a[1]] =
     unbox_derivative(vp[ids.a[2]], d[ids.a[2]] - d[ids.a[1]],
                      simplex_min, 1.0 - simplex_min, 1.0)
@@ -294,6 +287,11 @@ end
 
 DataTransform(bounds::Vector{ParamBounds}) = begin
 
+  # Make sure that each variable has its bounds set.
+  for s=1:length(bounds)
+    @assert Set(keys(bounds[s])) == Set(setdiff(names(ids), [:a, :k]))
+  end
+
   function from_vp!{NumType <: Number}(
     vp::VariationalParams{NumType}, vp_free::VariationalParams{NumType})
       S = length(vp)
@@ -345,7 +343,7 @@ DataTransform(bounds::Vector{ParamBounds}) = begin
   # the unconstrained parameters.
   #
   # Note that all the other functions in ElboDeriv calculated derivatives with
-  # respect to the unconstrained parameterization.
+  # respect to the constrained parameterization.
   function transform_sensitive_float{NumType <: Number}(
     sf::SensitiveFloat, mp::ModelParams{NumType})
 
@@ -374,7 +372,6 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
   # Note that, for numerical reasons, the bounds must be on the scale
   # of reasonably meaningful changes.
   for s=1:mp.S
-    # Bounds that are too large cause numerical errors.
     bounds[s] = ParamBounds()
     bounds[s][:u] = (mp.vp[s][ids.u] - loc_width, mp.vp[s][ids.u] + loc_width, 1.0)
     bounds[s][:r1] = (1e-4, Inf, 1e-2)
