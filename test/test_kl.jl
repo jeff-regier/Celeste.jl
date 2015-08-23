@@ -3,6 +3,7 @@ using Base.Test
 using Distributions
 import GSL.deriv_central
 
+println("Running KL tests.")
 
 function verify_kl(q_dist, p_dist, claimed_kl::Float64)
     sample_size = 4_000_000
@@ -208,4 +209,3 @@ test_univariate_normal()
 test_isobvnormal()
 test_diagmvn_mvn()
 test_isobvnormal_flat()
-

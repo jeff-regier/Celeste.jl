@@ -6,109 +6,20 @@ using Celeste
 using CelesteTypes
 
 import Util
+VERSION < v"0.4.0-dev" && using Docile
+@docstrings
 
-export pixel_rect_transform, world_rect_transform, free_transform, identity_transform, DataTransform
+export DataTransform, ParamBounds, get_mp_transform, generate_valid_parameters
 
-#export unconstrain_vp, rect_unconstrain_vp, constrain_vp, rect_constrain_vp
-#export unconstrain_vp!, rect_unconstrain_vp!, constrain_vp!, rect_constrain_vp!
-#export rect_unconstrain_sensitive_float, unconstrain_sensitive_float
-
-type DataTransform
-	# Functions to move between a ModelParameters object and a
-	# transformation of the data for optimization.
-    #
-    # to_vp: A function that takes transformed parameters and returns variational parameters
-    # from_vp: A function that takes variational parameters and returned transformed parameters
-    # to_vp!: A function that takes (transformed paramters, variational parameters) and updates
-    #   the variational parameters in place
-    # from_vp!: A function that takes (variational paramters, transformed parameters) and updates
-    #   the transformed parameters in place
-    # ...
-    # transform_sensitive_float: A function that takes (sensitive float, model parameters)
-    #   where the sensitive float contains partial derivatives with respect to the
-    #   variational parameters and returns a sensitive float with total derivatives with
-    #   respect to the transformed parameters.
-
-	to_vp::Function
-	from_vp::Function
-	to_vp!::Function
-	from_vp!::Function
-    vp_to_vector::Function
-    vector_to_vp!::Function
-	transform_sensitive_float::Function
-
-	DataTransform(to_vp!::Function, from_vp!::Function,
-                  vector_to_trans_vp!::Function, trans_vp_to_vector::Function,
-                  transform_sensitive_float::Function, id_size::Integer) = begin
-
-        function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
-            S = length(vp)
-            vp_free = [ zeros(NumType, id_size) for s = 1:S]
-            from_vp!(vp, vp_free)
-            vp_free
-        end
-
-        function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
-            S = length(vp_free)
-            vp = [ zeros(length(CanonicalParams)) for s = 1:S]
-            to_vp!(vp_free, vp)
-            vp
-        end
-
-        function vp_to_vector{NumType <: Number}(vp::VariationalParams{NumType},
-                                                 omitted_ids::Vector{Int64})
-            vp_trans = from_vp(vp)
-            trans_vp_to_vector(vp_trans, omitted_ids)
-        end
-
-        function vector_to_vp!{NumType <: Number}(xs::Vector{NumType},
-                                                  vp::VariationalParams{NumType},
-                                                  omitted_ids::Vector{Int64})
-            # This needs to update vp in place so that variables in omitted_ids
-            # stay at their original values.
-            vp_trans = from_vp(vp)
-            vector_to_trans_vp!(xs, vp_trans, omitted_ids)
-            to_vp!(vp_trans, vp)
-        end
-
-		new(to_vp, from_vp, to_vp!, from_vp!, vp_to_vector, vector_to_vp!,
-            transform_sensitive_float)
-	end
-end
-
-###############################################
-# Functions for an identity transform.
-function unchanged_vp!(vp::VariationalParams, new_vp::VariationalParams)
-    # Leave the vp unchanged.
-    S = length(vp)
-    for s = 1:S
-        new_vp[s][:] = vp[s]
-    end
-end
-
-function unchanged_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
-    # Leave the sensitive float unchanged.
-    deepcopy(sf)
-end
-
+# The box bounds for a symbol.  The tuple contains
+# (lower bounds, upper bound, rescaling).
+typealias ParamBounds Dict{Symbol,
+                           (Union(Float64, Vector{Float64}),
+                            Union(Float64, Vector{Float64}),
+                            Union(Float64, Vector{Float64})) }
 
 #####################
 # Conversion to and from vectors.
-
-function unchanged_vp_to_vector(vp::VariationalParams, omitted_ids::Vector{Int64})
-    # There is probably no use for this function, since you'll only be passing
-    # trasformations to the optimizer, but I'll include it for completeness.
-    error("Converting untransformed VarationalParams to a vector is not supported.")
-end
-
-
-function unchanged_vector_to_vp!(xs::Vector{Float64}, vp::VariationalParams,
-                                 omitted_ids::Vector{Int64})
-    # There is probably no use for this function, since you'll only be passing
-    # trasformations to the optimizer, but I'll include it for completeness.
-    error("Converting from a vector to untransformed VarationalParams is not supported.")
-end
-
 
 function free_vp_to_vector{NumType <: Number}(vp::FreeVariationalParams{NumType},
                                               omitted_ids::Vector{Int64})
@@ -157,294 +68,323 @@ function vector_to_free_vp!{NumType <: Number}(xs::Vector{NumType},
 end
 
 
-
 ###############################################
-# Functions for a "rectangular transform".  This matches the original Celeste
-# script, contraining a to sum to one and scaling r1.
+# Functions for a "free transform".
 
-# Rescale some parameters to have similar dimensions to everything else.
-const world_rect_rescaling = ones(length(UnconstrainedParams))
-[world_rect_rescaling[id] *= 1e-3 for id in ids_free.r1]
-[world_rect_rescaling[id] *= 1e5 for id in ids_free.u]
+function unbox_parameter{NumType <: Number}(
+  param::Union(NumType, Array{NumType}),
+  lower_bound::Union(Float64, Array{Float64}),
+  upper_bound::Union(Float64, Array{Float64}),
+  scale::Union(Float64, Array{Float64}))
 
-const pixel_rect_rescaling = ones(length(UnconstrainedParams))
-[pixel_rect_rescaling[id] *= 1e-3 for id in ids_free.r1]
+    positive_constraint = any(upper_bound .== Inf)
+    if positive_constraint && !all(upper_bound .== Inf)
+      error("unbox_parameter: Some but not all upper bounds are Inf: $upper_bound")
+    end
 
-rect_unchanged_ids = [ "u", "r1", "r2",
-                       "e_dev", "e_axis", "e_angle", "e_scale",
-                       "c1", "c2"]
+    # exp and the logit functions handle infinities correctly, so
+    # parameters can equal the bounds.
+    @assert(all(lower_bound .<= real(param) .<= upper_bound),
+            "unbox_parameter: param outside bounds: $param ($lower_bound, $upper_bound)")
 
-function vp_to_rect!{NumType <: Number}(vp::VariationalParams{NumType},
-                                        vp_free::RectVariationalParams{NumType},
-                                        rect_rescaling::Array{Float64, 1})
-    # Convert a constrained to an unconstrained variational parameterization
-    # that does not use logit or exp.
-
-    S = length(vp)
-    for s = 1:S
-        # Variables that are unaffected by constraints (except for scaling):
-        for id_string in rect_unchanged_ids
-            id_symbol = convert(Symbol, id_string)
-            vp_free[s][ids_free.(id_symbol)] = vp[s][ids.(id_symbol)]
-        end
-
-        # Simplicial constriants.  The original script used "a" to only
-        # refer to the probability of being a galaxy, which is now the
-        # second component of a.
-        vp_free[s][ids_free.a[1]] = vp[s][ids.a[2]]
-
-        # Keep all but the last row of k.
-        vp_free[s][ids_free.k] = vp[s][ids.k[1:(D - 1), :]]
-
-        for i in 1:length(ids_free)
-            vp_free[s][i] = vp_free[s][i] .* rect_rescaling[i]
-        end
+    if positive_constraint
+      return log(param - lower_bound) .* scale
+    else
+      param_bounded = (param - lower_bound) ./ (upper_bound - lower_bound)
+      return Util.inv_logit(param_bounded) .* scale
     end
 end
 
-function rect_to_vp!{NumType <: Number}(vp_free::RectVariationalParams{NumType},
-                                        vp::VariationalParams{NumType},
-                                        rect_rescaling::Array{Float64, 1})
-    # Convert an unconstrained to an constrained variational parameterization
-    # where we don't use exp or logit.
+function box_parameter{NumType <: Number}(
+  free_param::Union(NumType, Array{NumType}),
+  lower_bound::Union(Float64, Array{Float64}),
+  upper_bound::Union(Float64, Array{Float64}),
+  scale::Union(Float64, Array{Float64}))
 
-    S = length(vp_free)
-    for s = 1:S
-        scaled_vp_free = deepcopy(vp_free[s])
-        for i = 1:length(ids_free)
-            scaled_vp_free[i] = scaled_vp_free[i] / rect_rescaling[i]
-        end
+  positive_constraint = any(upper_bound .== Inf)
+  if positive_constraint && !all(upper_bound .== Inf)
+    error("box_parameter: Some but not all upper bounds are Inf: $upper_bound")
+  end
+  if positive_constraint
+    return (exp(free_param ./ scale) + lower_bound)
+  else
+    return Util.logit(free_param ./ scale) .* (upper_bound - lower_bound) + lower_bound
+  end
+end
 
-        # Variables that are unaffected by constraints (except for scaling):
-        for id_string in rect_unchanged_ids
-            id_symbol = convert(Symbol, id_string)
-            vp[s][ids.(id_symbol)] = scaled_vp_free[ids_free.(id_symbol)]
-        end
+@doc """
+Updates free_deriv in place.  <param> is the parameter that lies
+within the box constrains, and <deriv> is the derivative with respect
+to these paraemters.
+""" ->
+function unbox_derivative{NumType <: Number}(
+  param::Union(NumType, Array{NumType}),
+  deriv::Union(NumType, Array{NumType}),
+  lower_bound::Union(Float64, Array{Float64}),
+  upper_bound::Union(Float64, Array{Float64}),
+  scale::Union(Float64, Array{Float64}))
+    @assert(length(param) == length(deriv),
+            "Wrong length parameters for unbox_sensitive_float")
 
-        # Simplicial constriants.
-        vp[s][ids.a[2]] = scaled_vp_free[ids_free.a[1]]
-        vp[s][ids.a[1]] = 1.0 - vp[s][ids.a[2]]
+    positive_constraint = any(upper_bound .== Inf)
+    if positive_constraint && !all(upper_bound .== Inf)
+      error("unbox_derivative: Some but not all upper bounds are Inf: $upper_bound")
+    end
 
-        vp[s][ids.k[1, :]] = scaled_vp_free[ids_free.k]
-        vp[s][ids.k[2, :]] = 1 - vp[s][ids.k[1, :]]
+    # Strict inequality is not required for derivatives.
+    @assert(all(lower_bound .<= real(param) .<= upper_bound),
+            "unbox_derivative: param outside bounds: $param ($lower_bound, $upper_bound)")
+
+    if positive_constraint
+      return deriv .* (param - lower_bound) ./ scale
+    else
+      # Box constraints.
+      param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
+      return (deriv .* param_scaled .*
+              (1 - param_scaled) .* (upper_bound - lower_bound) ./ scale)
     end
 end
 
-function rect_unconstrain_sensitive_float{NumType  <: Number}(sf::SensitiveFloat,
-                                                              mp::ModelParams{NumType},
-                                                              rect_rescaling::Array{Float64, 1})
-    # Given a sensitive float with derivatives with respect to all the
-    # constrained parameters, calculate derivatives with respect to
-    # the unconstrained parameters.
-    #
-    # Note that all the other functions in ElboDeriv calculated derivatives with
-    # respect to the unconstrained parameterization.
+######################
+# Functions to take actual parameter vectors.
 
-    # Require that the input have all derivatives defined.
-    @assert size(sf.d) == (length(CanonicalParams), mp.S)
+# Treat the simplex bounds separately.
+const simplex_min = 0.005
 
-    sf_free = zero_sensitive_float(UnconstrainedParams, NumType, mp.S)
-    sf_free.v = sf.v
+@doc """
+Convert a variational parameter vector to an unconstrained version using
+the lower bounds lbs and ubs (which are expressed)
+""" ->
+function vp_to_free!{NumType <: Number}(
+  vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds)
+    # Simplicial constriants.
 
-    for s in 1:mp.S
-        # Variables that are unaffected by constraints (except for scaling):
-        for id_string in rect_unchanged_ids
-            id_symbol = convert(Symbol, id_string)
+    # The original script used "a" to only
+    # refer to the probability of being a galaxy, which is now the
+    # second component of a.
+    vp_free[ids_free.a[1]] =
+      unbox_parameter(vp[ids.a[2]], simplex_min, 1 - simplex_min, 1.0)
 
-            # Flatten the indices for matrix indexing
-            id_free_indices = reduce(vcat, ids_free.(id_symbol))
-            id_indices = reduce(vcat, ids.(id_symbol))
+    # In contrast, the original script used the last component of k
+    # as the free parameter.
+    vp_free[ids_free.k[1, :]] =
+      unbox_parameter(vp[ids.k[1, :]], simplex_min, 1 - simplex_min, 1.0)
 
-            sf_free.d[id_free_indices, s] = sf.d[id_indices, s]
-        end
-
-        # Simplicial constriants.
-        sf_free.d[ids_free.a[1], s] = sf.d[ids.a[2], s] - sf.d[ids.a[1], s]
-
-        sf_free.d[collect(ids_free.k[1, :]), s] =
-            sf.d[collect(ids.k[1, :]), s] - sf.d[collect(ids.k[2, :]), s]
-
-        for i in 1:length(ids_free)
-            sf_free.d[i, s] = sf_free.d[i, s] ./ rect_rescaling[i]
-        end
-    end
-
-    sf_free
-end
-
-
-function pixel_vp_to_rect!{NumType <: Number}(vp::VariationalParams{NumType},
-                                              vp_free::RectVariationalParams{NumType})
-    vp_to_rect!(vp, vp_free, pixel_rect_rescaling)
-end
-
-function world_vp_to_rect!{NumType <: Number}(vp::VariationalParams{NumType},
-                                              vp_free::RectVariationalParams{NumType})
-    vp_to_rect!(vp, vp_free, world_rect_rescaling)
-end
-
-function pixel_rect_to_vp!{NumType <: Number}(vp_free::RectVariationalParams{NumType}, vp::VariationalParams{NumType})
-    rect_to_vp!(vp_free, vp, pixel_rect_rescaling)
-end
-
-function world_rect_to_vp!{NumType <: Number}(vp_free::RectVariationalParams{NumType}, vp::VariationalParams{NumType})
-    rect_to_vp!(vp_free, vp, world_rect_rescaling)
-end
-
-function pixel_rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
-    rect_unconstrain_sensitive_float(sf, mp, pixel_rect_rescaling)
-end
-
-function world_rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
-    rect_unconstrain_sensitive_float(sf, mp, world_rect_rescaling)
-end
-
-
-###############################################
-# Functions for a "free transform".  Eventually the idea is that this will
-# have every parameter completely unconstrained.
-free_unchanged_ids = [ "u", "e_angle", "e_scale", "c1", "c2"]
-
-function vp_to_free!{NumType <: Number}(vp::VariationalParams{NumType},
-                                        vp_free::FreeVariationalParams{NumType})
-    # Convert a constrained to an unconstrained variational parameterization
-    # on all of the real line.
-    S = length(vp)
-    for s = 1:S
-        # Variables that are unaffected by constraints:
-        for id_string in free_unchanged_ids
-            id_symbol = convert(Symbol, id_string)
-            vp_free[s][ids_free.(id_symbol)] = vp[s][ids.(id_symbol)]
-        end
-
-        # Simplicial constriants.  The original script used "a" to only
-        # refer to the probability of being a galaxy, which is now the
-        # second component of a.
-        vp_free[s][ids_free.a[1]] = Util.inv_logit(vp[s][ids.a[2]])
-
-        # In contrast, the original script used the last component of k
-        # as the free parameter.
-        vp_free[s][ids_free.k[1, :]] = Util.inv_logit(vp[s][ids.k[1, :]])
-
-        # [0, 1] constraints.
-        vp_free[s][ids_free.e_dev] = Util.inv_logit(vp[s][ids_free.e_dev])
-        vp_free[s][ids_free.e_axis] = Util.inv_logit(vp[s][ids.e_axis])
-
-        # Positivity constraints
-        vp_free[s][ids_free.e_scale] = log(vp[s][ids.e_scale])
-        vp_free[s][ids_free.c2] = log(vp[s][ids.c2])
-        vp_free[s][ids_free.r1] = log(vp[s][ids.r1])
-        vp_free[s][ids_free.r2] = log(vp[s][ids.r2])
+    # Box constraints.
+    for (param, limits) in bounds
+        vp_free[ids_free.(param)] =
+          unbox_parameter(vp[ids.(param)], limits[1], limits[2], limits[3])
     end
 end
 
-function free_to_vp!{NumType <: Number}(vp_free::FreeVariationalParams{NumType},
-                                        vp::VariationalParams{NumType})
+
+function free_to_vp!{NumType <: Number}(
+  vp_free::Vector{NumType}, vp::Vector{NumType}, bounds::ParamBounds)
     # Convert an unconstrained to an constrained variational parameterization.
-    S = length(vp_free)
-    for s = 1:S
-                # Variables that are unaffected by constraints:
-        for id_string in free_unchanged_ids
-            id_symbol = convert(Symbol, id_string)
-            vp[s][ids.(id_symbol)] = vp_free[s][ids_free.(id_symbol)]
-        end
 
-        # Simplicial constriants.
-        vp[s][ids.a[2]] = Util.logit(vp_free[s][ids_free.a[1]])
-        vp[s][ids.a[1]] = 1.0 - vp[s][ids.a[2]]
+    # Simplicial constriants.
+    vp[ids.a[2]] =
+      box_parameter(vp_free[ids_free.a[1]], simplex_min, 1.0 - simplex_min, 1.0)
+    vp[ids.a[1]] = 1.0 - vp[ids.a[2]]
 
-        vp[s][ids.k[1, :]] = Util.logit(vp_free[s][ids_free.k[1, :]])
-        vp[s][ids.k[2, :]] = 1.0 - vp[s][ids.k[1, :]]
-	
-    	# [0, 1] constraints.
-        vp[s][ids.e_dev] = Util.logit(vp_free[s][ids_free.e_dev])
-        vp[s][ids.e_axis] = Util.logit(vp_free[s][ids_free.e_axis])
+    vp[ids.k[1, :]] =
+      box_parameter(vp_free[ids_free.k[1, :]], simplex_min, 1.0 - simplex_min, 1.0)
+    vp[ids.k[2, :]] = 1.0 - vp[ids.k[1, :]]
 
-        # Positivity constraints
-        vp[s][ids.e_scale] = exp(vp_free[s][ids_free.e_scale])
-        vp[s][ids.c2] = exp(vp_free[s][ids_free.c2])
-        vp[s][ids.r1] = exp(vp_free[s][ids_free.r1])
-        vp[s][ids.r2] = exp(vp_free[s][ids_free.r2])
+    # Box constraints.
+    for (param, limits) in bounds
+        vp[ids.(param)] =
+          box_parameter(vp_free[ids_free.(param)], limits[1], limits[2], limits[3])
     end
 end
 
 
-function free_unconstrain_sensitive_float{NumType <: Number}(sf::SensitiveFloat, mp::ModelParams{NumType})
-    # Given a sensitive float with derivatives with respect to all the
-    # constrained parameters, calculate derivatives with respect to
-    # the unconstrained parameters.
-    #
-    # Note that all the other functions in ElboDeriv calculated derivatives with
-    # respect to the unconstrained parameterization.
+@doc """
+Return the derviatives with respect to the unboxed
+parameters given derivatives with respect to the boxed parameters.
+""" ->
+function unbox_param_derivative{NumType <: Number}(
+  vp::Vector{NumType}, d::Vector{NumType}, bounds::ParamBounds)
 
-    # Require that the input have all derivatives defined.
-    @assert size(sf.d) == (length(CanonicalParams), mp.S)
+  d_free = zeros(NumType, length(UnconstrainedParams))
 
-    sf_free = zero_sensitive_float(UnconstrainedParams, NumType, mp.S)
-    sf_free.v = sf.v
+  # TODO: write in general form.  Note that the old "a" is now a[2].
+  # Simplicial constriants.
+  d_free[ids_free.a[1]] =
+    unbox_derivative(vp[ids.a[2]], d[ids.a[2]] - d[ids.a[1]],
+                     simplex_min, 1.0 - simplex_min, 1.0)
 
-    for s in 1:mp.S
-        # Variables that are unaffected by constraints:
-        for id_string in free_unchanged_ids
-            id_symbol = convert(Symbol, id_string)
+  this_k = collect(vp[ids.k[1, :]])
+  d_free[collect(ids_free.k[1, :])] =
+      (d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])]) .* this_k .* (1.0 - this_k)
+  d_free[collect(ids_free.k[1, :])] =
+    unbox_derivative(collect(vp[ids.k[1, :]]), d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])],
+                     simplex_min, 1.0 - simplex_min, 1.0)
 
-            # Flatten the indices for matrix indexing
-            id_free_indices = reduce(vcat, ids_free.(id_symbol))
-            id_indices = reduce(vcat, ids.(id_symbol))
+  for (param, limits) in bounds
+      d_free[ids_free.(param)] =
+        unbox_derivative(vp[ids.(param)], d[ids.(param)], limits[1], limits[2], limits[3])
+  end
 
-            sf_free.d[id_free_indices, s] = sf.d[id_indices, s]
-        end
-
-        # TODO: write in general form.  Note that the old "a" is now a[2].
-        # Simplicial constriants.
-        this_a = mp.vp[s][ids.a[2]]
-        sf_free.d[ids_free.a[1], s] =
-            (sf.d[ids.a[2], s] - sf.d[ids.a[1], s]) * this_a * (1.0 - this_a)
-
-        this_k = collect(mp.vp[s][ids.k[1, :]])
-        sf_free.d[collect(ids_free.k[1, :]), s] =
-            (sf.d[collect(ids.k[1, :]), s] - sf.d[collect(ids.k[2, :]), s]) .*
-            this_k .* (1.0 - this_k)
-
-        # [0, 1] constraints.
-        this_dev = mp.vp[s][ids.e_dev]
-        sf_free.d[ids_free.e_dev, s] = sf.d[ids.e_dev, s] * this_dev * (1.0 - this_dev)
-
-        this_axis = mp.vp[s][ids.e_axis]
-        sf_free.d[ids_free.e_axis, s] = sf.d[ids.e_axis, s] * this_axis * (1.0 - this_axis)
-
-        # Positivity constraints.
-        sf_free.d[ids_free.e_scale, s] = sf.d[ids.e_scale, s] .* mp.vp[s][ids.e_scale]
-        sf_free.d[collect(ids_free.c2), s] =
-            sf.d[collect(ids.c2), s] .* mp.vp[s][collect(ids.c2)]
-        sf_free.d[ids_free.r1, s] = sf.d[ids.r1, s] .* mp.vp[s][ids.r1]
-        sf_free.d[ids_free.r2, s] = sf.d[ids.r2, s] .* mp.vp[s][ids.r2]
-    end
-
-    sf_free
+  d_free
 end
+
+@doc """
+Generate parameters within the given bounds.
+""" ->
+function generate_valid_parameters(
+  NumType::DataType, bounds::Vector{ParamBounds})
+
+  @assert NumType <: Number
+  S = length(bounds)
+  vp = convert(VariationalParams{NumType},
+	             [ zeros(NumType, length(ids)) for s = 1:S ])
+	for s=1:S
+		for (param, limits) in bounds[s]
+			if (limits[2] == Inf)
+	    	vp[s][ids.(param)] = limits[1] + 1.0
+			else
+				vp[s][ids.(param)] = 0.5 * (limits[2] - limits[1]) + limits[1]
+			end
+	  end
+    # Simplex parameters
+    vp[s][ids.a] = 1 / Ia
+    vp[s][collect(ids.k)] = 1 / D
+	end
+
+  vp
+end
+
 
 #########################
 # Define the exported variables.
 
-pixel_rect_transform = DataTransform(pixel_rect_to_vp!, pixel_vp_to_rect!,
-                                     vector_to_free_vp!, free_vp_to_vector,
-                                     pixel_rect_unconstrain_sensitive_float,
-                                     length(UnconstrainedParams))
+@doc """
+Functions to move between a single source's variational parameters and a
+transformation of the data for optimization.
 
-world_rect_transform = DataTransform(world_rect_to_vp!, world_vp_to_rect!,
-                                     vector_to_free_vp!, free_vp_to_vector,
-                                     world_rect_unconstrain_sensitive_float,
-                                     length(UnconstrainedParams))
+to_vp: A function that takes transformed parameters and returns variational parameters
+from_vp: A function that takes variational parameters and returned transformed parameters
+to_vp!: A function that takes (transformed paramters, variational parameters) and updates
+  the variational parameters in place
+from_vp!: A function that takes (variational paramters, transformed parameters) and updates
+  the transformed parameters in place
+...
+transform_sensitive_float: A function that takes (sensitive float, model parameters)
+  where the sensitive float contains partial derivatives with respect to the
+  variational parameters and returns a sensitive float with total derivatives with
+  respect to the transformed parameters. """ ->
+type DataTransform
+	to_vp::Function
+	from_vp::Function
+	to_vp!::Function
+	from_vp!::Function
+  vp_to_vector::Function
+  vector_to_vp!::Function
+	transform_sensitive_float::Function
+  bounds::Vector{ParamBounds}
+end
 
-free_transform = DataTransform(free_to_vp!, vp_to_free!,
-                               vector_to_free_vp!, free_vp_to_vector,
-                               free_unconstrain_sensitive_float,
-                               length(UnconstrainedParams))
+DataTransform(bounds::Vector{ParamBounds}) = begin
 
-identity_transform = DataTransform(unchanged_vp!, unchanged_vp!,
-                                   unchanged_vector_to_vp!, unchanged_vp_to_vector,
-                                   unchanged_sensitive_float,
-                                   length(CanonicalParams))
+  # Make sure that each variable has its bounds set.
+  for s=1:length(bounds)
+    @assert Set(keys(bounds[s])) == Set(setdiff(names(ids), [:a, :k]))
+  end
+
+  function from_vp!{NumType <: Number}(
+    vp::VariationalParams{NumType}, vp_free::VariationalParams{NumType})
+      S = length(vp)
+      @assert S == length(bounds)
+      for s=1:S
+        vp_to_free!(vp[s], vp_free[s], bounds[s])
+      end
+  end
+
+  function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
+      vp_free = [ zeros(NumType, length(ids_free)) for s = 1:length(vp)]
+      from_vp!(vp, vp_free)
+      vp_free
+  end
+
+  function to_vp!{NumType <: Number}(
+    vp_free::FreeVariationalParams{NumType}, vp::VariationalParams{NumType})
+      S = length(vp_free)
+      @assert S == length(bounds)
+      for s=1:S
+        free_to_vp!(vp_free[s], vp[s], bounds[s])
+      end
+  end
+
+  function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
+      vp = [ zeros(length(CanonicalParams)) for s = 1:length(vp_free)]
+      to_vp!(vp_free, vp)
+      vp
+  end
+
+  function vp_to_vector{NumType <: Number}(vp::VariationalParams{NumType},
+                                           omitted_ids::Vector{Int64})
+      vp_trans = from_vp(vp)
+      free_vp_to_vector(vp_trans, omitted_ids)
+  end
+
+  function vector_to_vp!{NumType <: Number}(xs::Vector{NumType},
+                                            vp::VariationalParams{NumType},
+                                            omitted_ids::Vector{Int64})
+      # This needs to update vp in place so that variables in omitted_ids
+      # stay at their original values.
+      vp_trans = from_vp(vp)
+      vector_to_free_vp!(xs, vp_trans, omitted_ids)
+      to_vp!(vp_trans, vp)
+  end
+
+  # Given a sensitive float with derivatives with respect to all the
+  # constrained parameters, calculate derivatives with respect to
+  # the unconstrained parameters.
+  #
+  # Note that all the other functions in ElboDeriv calculated derivatives with
+  # respect to the constrained parameterization.
+  function transform_sensitive_float{NumType <: Number}(
+    sf::SensitiveFloat, mp::ModelParams{NumType})
+
+      # Require that the input have all derivatives defined.
+      @assert size(sf.d) == (length(CanonicalParams), mp.S)
+      @assert mp.S == length(bounds)
+
+      sf_free = zero_sensitive_float(UnconstrainedParams, NumType, mp.S)
+      sf_free.v = sf.v
+
+      for s in 1:mp.S
+        sf_free.d[:, s] =
+          unbox_param_derivative(mp.vp[s], sf.d[:, s][:], bounds[s])
+      end
+
+      sf_free
+  end
+
+  DataTransform(to_vp, from_vp, to_vp!, from_vp!, vp_to_vector, vector_to_vp!,
+                transform_sensitive_float, bounds)
+end
+
+function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
+  bounds = Array(ParamBounds, mp.S)
+
+  # Note that, for numerical reasons, the bounds must be on the scale
+  # of reasonably meaningful changes.
+  for s=1:mp.S
+    bounds[s] = ParamBounds()
+    bounds[s][:u] = (mp.vp[s][ids.u] - loc_width, mp.vp[s][ids.u] + loc_width, 1.0)
+    bounds[s][:r1] = (1e-4, Inf, 1e-2)
+    bounds[s][:r2] = (1e-4, 0.1, 1.0)
+    bounds[s][:c1] = (-10., 10., 1.0)
+    bounds[s][:c2] = (1e-4, 1., 1.0)
+    bounds[s][:e_dev] = (1e-2, 1 - 1e-2, 1.0)
+    bounds[s][:e_axis] = (1e-2, 1 - 1e-2, 1.0)
+    bounds[s][:e_angle] = (-10.0, 10.0, 1.0)
+    bounds[s][:e_scale] = (0.2, 15., 1.0)
+  end
+  DataTransform(bounds)
+end
+
 
 end

@@ -6,6 +6,7 @@ using CelesteTypes
 import SDSS
 import WCS
 
+println("Running WCS tests.")
 
 function test_ray_crossing()
     # Check a line segment that is hit in one direction.
@@ -224,7 +225,7 @@ function test_pixel_deriv_to_world_deriv()
     function test_fun_world(world_loc::Array{Float64, 1}, wcs::WCSLIB.wcsprm)
         pix_loc = WCS.world_to_pixel(wcs, world_loc)
         test_fun(pix_loc)
-    end 
+    end
 
     pix_del = 1e-3
     world_del = 1e-9

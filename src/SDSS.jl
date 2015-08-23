@@ -69,7 +69,7 @@ function load_stamp_catalog_df(cat_dir, stamp_id, blob; match_blob=false)
 
     df = DataFrames.DataFrame()
     for i in 1:num_cols
-        tmp_data = read(cat_fits[2], ttypes[i])        
+        tmp_data = read(cat_fits[2], ttypes[i])
         df[symbol(ttypes[i])] = tmp_data
     end
 
@@ -114,7 +114,7 @@ function convert_catalog_to_celeste(df::DataFrames.DataFrame, blob; match_blob=f
         fits_theta = fracs_dev[1] > .5 ? row[1, :theta_dev] : row[1, :theta_exp]
 
         # tractor defines phi as -1 * the phi catalog for some reason.
-        if !match_blob  
+        if !match_blob
             fits_phi *= -1.
         end
 
@@ -216,7 +216,7 @@ Args:
 
 Returns:
  - nelec: An image of raw electron counts in nanomaggies
- - calib_col: A column of calibration values (the same for every column of the image) 
+ - calib_col: A column of calibration values (the same for every column of the image)
  - sky_grid: A CoordInterpGrid bilinear interpolation object
  - sky_x: The x coordinates at which to evaluate sky_grid to match nelec.
  - sky_y: The y coordinates at which to evaluate sky_grid to match nelec.
@@ -273,9 +273,7 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
                                     Grid.BCnearest, Grid.InterpLinear)
 
     # This interpolation is really slow.
-    print("...starting sky fit...")
     sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ]
-    print("done with sky fit. ")
 
     # Convert to raw electron counts.  Note that these may not be close to integers
     # due to the analog to digital conversion process in the telescope.
@@ -304,7 +302,7 @@ Returns:
 function mask_image!(mask_img, field_dir, run_num, camcol_num, field_num, band;
                      python_indexing = false,
                      mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
-    # The default mask planes are those used by Dustin's astrometry.net code.    
+    # The default mask planes are those used by Dustin's astrometry.net code.
     # See the comments in sdss/dr8.py for fpM.setMaskedPixels
     # and the function sdss/common.py:fpM.setMaskedPixels
     #
@@ -508,7 +506,7 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
         H = size(nelec, 1)
         W = size(nelec, 2)
 
-        # For now, use the median noise and sky image.  Here, 
+        # For now, use the median noise and sky image.  Here,
         # epsilon * iota needs to be in units comparable to nelec electron counts.
         # Note that each are actuall pretty variable.
         iota = convert(Float64, band_gain[b] / median(calib_col))
