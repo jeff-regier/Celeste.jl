@@ -10,8 +10,11 @@ import WCS
 
 import GSL.deriv_central
 
+println("Running derivative tests.")
 
-# verify derivatives of fun_to_test by finite differences
+
+# verify derivatives of fun_to_test by finite differences for functions of
+# ModelParams that return a SensitiveFloat.
 function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
     f::SensitiveFloat = fun_to_test(mp)
 
@@ -30,10 +33,32 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
 
             numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
             info("deriv #$p0 (s: $s): $numeric_deriv vs $(f.d[p1, s]) [tol: $abs_err]")
-            obs_err = abs(numeric_deriv - f.d[p1, s]) 
+            obs_err = abs(numeric_deriv - f.d[p1, s])
             @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
             @test_approx_eq_eps numeric_deriv f.d[p1, s] 10abs_err
         end
+    end
+end
+
+
+# verify derivatives of fun_to_test by finite differences for functions of
+# numeric vectors that return a tuple (value, gradient).
+function test_by_finite_differences(fun_to_test::Function, x::Vector{Float64})
+    value, grad = fun_to_test(x)
+
+    for s in 1:length(x)
+        fun_to_test_2(epsilon::Float64) = begin
+            x_local = deepcopy(x)
+            x_local[s] += epsilon
+            f_local = fun_to_test(x_local)
+            f_local[1]
+        end
+
+        numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
+        info("deriv #$s: $numeric_deriv vs $(grad[s]) [tol: $abs_err]")
+        obs_err = abs(numeric_deriv - grad[s])
+        @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
+        @test_approx_eq_eps numeric_deriv grad[s] 10abs_err
     end
 end
 
@@ -183,31 +208,84 @@ function test_elbo_derivs()
 end
 
 
-function test_quadratic_derivatives(trans::DataTransform)
-    # A very simple quadratic function to test the derivatives.
-    function quadratic_function(mp::ModelParams)
-        const centers = collect(linrange(0, 10, length(CanonicalParams)))
+function test_elbo_derivs_with_transform()
+    blob, mp0, body = gen_sample_galaxy_dataset();
+    trans = get_mp_transform(mp0, loc_width=1.0);
 
-        val = zero_sensitive_float(CanonicalParams)
-        val.v = sum((mp.vp[1] - centers) .^ 2)
-        val.d[:] = 2.0 * (mp.vp[1] - centers)
+    omitted_ids = Int64[];
+    x0 = trans.vp_to_vector(mp0.vp, omitted_ids)
 
-        val
+    # f is a function of a ModelParams object that returns a SensitiveFloat.
+    function wrap_function(f::Function)
+        function wrapped_f(x)
+            mmp = deepcopy(mp0)
+            trans.vector_to_vp!(x, mmp.vp, omitted_ids)
+            result = f(mmp)
+            result_trans = trans.transform_sensitive_float(result, mmp)
+            result_trans.v, reduce(vcat, result_trans.d)
+        end
+        wrapped_f
     end
 
-    # 0.5 is an innocuous value for all parameters.
-    mp = empty_model_params(1)
-    mp.vp = convert(VariationalParams{Float64}, [ fill(0.5, length(CanonicalParams)) 
-        for s in 1:1 ])
-    test_by_finite_differences(quadratic_function, mp)
+    wrap_likelihood_b1 = wrap_function(mmp -> ElboDeriv.elbo_likelihood([blob[1]], mmp))
+    test_by_finite_differences(wrap_likelihood_b1, x0)
+
+    wrap_likelihood_b5 = wrap_function(mmp -> ElboDeriv.elbo_likelihood([blob[5]], mmp))
+    test_by_finite_differences(wrap_likelihood_b5, x0)
+
+    wrap_elbo = wrap_function(mmp -> ElboDeriv.elbo([blob], mmp))
+    test_by_finite_differences(wrap_elbo, x0)
 end
 
-for trans in [ identity_transform, pixel_rect_transform, world_rect_transform, free_transform ]
-    test_quadratic_derivatives(trans)
+
+function test_derivative_transform()
+  box_param = [1.0, 2.0, 1.001]
+  lower_bounds = [-1.0, -2.0, 1.0]
+  upper_bounds = [2.0, Inf, Inf]
+  scales = [ 2.0, 3.0, 100.0 ]
+  N = length(box_param)
+
+  function get_free_param(box_param, lower_bounds, upper_bounds, scales)
+    free_param = zeros(Float64, N)
+    for n=1:N
+      free_param[n] =
+        Transform.unbox_parameter(box_param[n], lower_bounds[n], upper_bounds[n], scales[n])
+    end
+    free_param
+  end
+
+  function get_box_param(free_param, lower_bounds, upper_bounds, scales)
+    box_param = zeros(Float64, N)
+    for n=1:N
+      box_param[n] =
+        Transform.box_parameter(free_param[n], lower_bounds[n], upper_bounds[n], scales[n])
+    end
+    box_param
+  end
+
+  # Return value, gradient
+  function box_function(box_param)
+    sum(box_param .^ 2), 2 * box_param
+  end
+
+  function free_function(free_param)
+    box_param = get_box_param(free_param, lower_bounds, upper_bounds, scales)
+    v, box_deriv = box_function(box_param)
+    free_deriv = zeros(Float64, N)
+    for n=1:N
+      free_deriv[n] = Transform.unbox_derivative(
+        box_param[n], box_deriv[n], lower_bounds[n], upper_bounds[n], scales[n])
+    end
+    v, free_deriv
+  end
+
+  free_param = get_free_param(box_param, lower_bounds, upper_bounds, scales)
+  test_by_finite_differences(free_function, free_param)
 end
 
 test_kl_divergence_derivs()
 test_brightness_derivs()
 test_accum_pixel_source_derivs()
 test_elbo_derivs()
-
+test_derivative_transform()
+test_elbo_derivs_with_transform()

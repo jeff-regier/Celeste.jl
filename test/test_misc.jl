@@ -7,6 +7,7 @@ import SDSS
 import Util
 import WCS
 
+println("Running misc tests.")
 
 function test_local_sources()
     # Coarse test that local_sources gets the right objects.
