@@ -9,6 +9,7 @@ import FITSIO
 import Grid
 import PSF
 import Util
+import WCS
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -394,7 +395,7 @@ Returns:
  The data format is documented here:
  http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
 
- This is based on the function _get_sources in tractor/sdss.py:
+ This is based on the function get_sources in tractor/sdss.py:
  https://github.com/dstndstn/tractor/
 """ ->
 function load_catalog_df(field_dir, run_num, camcol_num, field_num; bandnum=3)
@@ -492,7 +493,8 @@ Returns:
 """ ->
 function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
 
-    band_gain, band_dark_variance = SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
+    band_gain, band_dark_variance =
+      SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
 
     blob = Array(Image, 5)
     for b=1:5
@@ -541,6 +543,73 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
     end
 
     blob
+end
+
+
+@doc """
+Crop an image in place to a (2 * width) x (2 * width) - pixel square centered
+at the world coordinates wcs_center.
+Args:
+  - blob: The field to crop
+  - width: The width in pixels of each quadrant
+  - wcs_center: A location in world coordinates (e.g. the location of a celestial body)
+""" ->
+function crop_image!(
+  blob::Array{Image, 1}, width::Float64, wcs_center::Vector{Float64})
+    @assert length(wcs_center) == 2
+    @assert width > 0
+
+    # Get the original world coordinate centers.
+    original_crpix_band =
+      Float64[unsafe_load(blob[b].wcs.crpix, i) for i=1:2, b=1:5];
+
+    x_ranges = zeros(2, 5)
+    y_ranges = zeros(2, 5)
+    for b=1:5
+        # Get the pixels that are near enough to the wcs_center.
+        obj_loc_pix = WCS.world_to_pixel(blob[b].wcs, wcs_center)
+        sub_rows_x = floor(obj_loc_pix[1] - width):ceil(obj_loc_pix[1] + width)
+        sub_rows_y = floor(obj_loc_pix[2] - width):ceil(obj_loc_pix[2] + width)
+        x_min = minimum(collect(sub_rows_x))
+        y_min = minimum(collect(sub_rows_y))
+        x_max = maximum(collect(sub_rows_x))
+        y_max = maximum(collect(sub_rows_y))
+        x_ranges[:, b] = Float64[x_min, x_max]
+        y_ranges[:, b] = Float64[y_min, y_max]
+
+        # Crop the image down to the selected pixels.
+        # Re-center the WCS coordinates
+        crpix = original_crpix_band[:, b]
+        unsafe_store!(blob[b].wcs.crpix, crpix[1] - x_min + 1, 1)
+        unsafe_store!(blob[b].wcs.crpix, crpix[2] - y_min + 1, 2)
+
+        blob[b].pixels = blob[b].pixels[sub_rows_x, sub_rows_y]
+        blob[b].H = size(blob[b].pixels, 1)
+        blob[b].W = size(blob[b].pixels, 2)
+        blob[b].iota_vec = blob[b].iota_vec[x_min:x_max]
+        blob[b].epsilon_mat = blob[b].epsilon_mat[x_min:x_max, y_min:y_max]
+    end
+
+    x_ranges, y_ranges
+end
+
+@doc """
+Check whether the center of a celestial body is in any of the frames of an image.
+Args:
+  - blob: The image to check
+  - wcs_loc: A location in world coordinates (e.g. the location of a celestial body)
+Returns:
+  - Whether the pixel wcs_loc lies within any of the image's fields.
+""" ->
+function test_catalog_entry_in_image(
+  blob::Array{Image, 1}, wcs_loc::Array{Float64, 1})
+    for b=1:5
+        pixel_loc = WCS.world_to_pixel(blob[b].wcs, wcs_loc)
+        if (1 <= pixel_loc[1] <= blob[b].H) && (1 <= pixel_loc[2] <= blob[b].W)
+            return true
+        end
+    end
+    return false
 end
 
 end
