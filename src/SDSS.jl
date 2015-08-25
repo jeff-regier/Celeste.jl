@@ -597,7 +597,8 @@ Args:
 Returns:
   - Whether the pixel wcs_loc lies within any of the image's fields.
 """ ->
-function test_catalog_entry_in_image(blob::Array{Image, 1}, wcs_loc::Array{Float64, 1})
+function test_catalog_entry_in_image(
+  blob::Array{Image, 1}, wcs_loc::Array{Float64, 1})
     for b=1:5
         pixel_loc = WCS.world_to_pixel(blob[b].wcs, wcs_loc)
         if (1 <= pixel_loc[1] <= blob[b].H) && (1 <= pixel_loc[2] <= blob[b].W)
