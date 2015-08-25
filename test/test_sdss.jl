@@ -2,37 +2,23 @@ using Celeste
 using Base.Test
 using CelesteTypes
 using SampleData
+using DataFrames
 
 import SDSS
 
 println("Running sdss tests.")
 
-const field_dir = joinpath(dat_dir, "sample_field")
-const run_num = "003900"
-const camcol_num = "6"
-const field_num = "0269"
-const band_letters = ['u', 'g', 'r', 'i', 'z']
+field_dir = joinpath(dat_dir, "sample_field")
+run_num = "003900"
+camcol_num = "6"
+field_num = "0269"
+band_letters = ['u', 'g', 'r', 'i', 'z']
 
-function test_load_catalog()
-  cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
-  cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
-
-  # Just check some basic facts about the catalog.
-  @test nrow(cat_df) == 805
-  @test length(cat_entries) == nrow(cat_df)
-  @test sum([ cat_entry.is_star for cat_entry in cat_entries ]) ==
-        sum(cat_df[:is_star])
-end
-
-function test_load_blob()
-  b_letter = band_letters[1]
-  blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
-end
 
 function test_load_psf()
   raw_psf_comp =
     SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, 1);
-  raw_psf = PSF.get_psf_at_point(psf_point_x, psf_point_y, raw_psf_comp);
+  raw_psf = PSF.get_psf_at_point(10.0, 10.0, raw_psf_comp);
 
   # Check that the raw psf is approximately symmetric
   center_point = (size(raw_psf)[1] + 1) / 2
@@ -71,6 +57,13 @@ end
 function test_blob()
   blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
   cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+  cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
+
+  # Just check some basic facts about the catalog.
+  @test nrow(cat_df) == 805
+  @test length(cat_entries) == nrow(cat_df)
+  @test sum([ cat_entry.is_star for cat_entry in cat_entries ]) ==
+        sum(cat_df[:is_star])
 
   # Find an object near the middle of the image.
   img_center = Float64[ median(cat_df[:ra]), median(cat_df[:dec]) ]
@@ -93,7 +86,6 @@ function test_blob()
   @test SDSS.test_catalog_entry_in_image(blob, obj_loc)
 end
 
-test_load_catalog()
 test_load_psf()
 test_field()
 test_blob()
