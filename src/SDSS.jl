@@ -394,7 +394,7 @@ Returns:
  The data format is documented here:
  http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
 
- This is based on the function _get_sources in tractor/sdss.py:
+ This is based on the function get_sources in tractor/sdss.py:
  https://github.com/dstndstn/tractor/
 """ ->
 function load_catalog_df(field_dir, run_num, camcol_num, field_num; bandnum=3)
@@ -492,7 +492,8 @@ Returns:
 """ ->
 function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
 
-    band_gain, band_dark_variance = SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
+    band_gain, band_dark_variance =
+      SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
 
     blob = Array(Image, 5)
     for b=1:5
