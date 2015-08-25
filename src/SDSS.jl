@@ -9,6 +9,7 @@ import FITSIO
 import Grid
 import PSF
 import Util
+import WCS
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -553,11 +554,14 @@ Args:
   - width: The width in pixels of each quadrant
   - wcs_center: A location in world coordinates (e.g. the location of a celestial body)
 """ ->
-function crop_image!(blob::Array{Image, 1}, width::Float64, wcs_center::Array{Float64, 1})
+function crop_image!(
+  blob::Array{Image, 1}, width::Float64, wcs_center::Vector{Float64})
     @assert length(wcs_center) == 2
     @assert width > 0
 
-    original_crpix_band = Float64[unsafe_load(blob[b].wcs.crpix, i) for i=1:2, b=1:5];
+    # Get the original world coordinate centers.
+    original_crpix_band =
+      Float64[unsafe_load(blob[b].wcs.crpix, i) for i=1:2, b=1:5];
 
     x_ranges = zeros(2, 5)
     y_ranges = zeros(2, 5)

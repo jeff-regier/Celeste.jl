@@ -62,7 +62,8 @@ function test_field()
   # Test that at least some pixels are bad
   @test sum(isnan(nelec)) > 0
 
-  # Test that no more than 1% are bad
+  # Test that no more than 1% are bad.  Not sure this is a good test
+  # in general but it works for the current files.
   @test sum(isnan(nelec)) / prod(size(nelec)) < 0.01
 end
 
@@ -70,11 +71,29 @@ end
 function test_blob()
   blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
   cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
-  cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
 
-  # TODO: test crop
+  # Find an object near the middle of the image.
+  img_center = Float64[ median(cat_df[:ra]), median(cat_df[:dec]) ]
+  dist = by(cat_df, :objid,
+     df -> DataFrame(dist=(df[:ra] - img_center[1]).^2 +
+                          (df[:dec] - img_center[2]).^2))
+  obj_rows = dist[:dist] .== minimum(dist[:dist])
+  @assert any(obj_rows)
+  obj_loc = Float64[ cat_df[obj_rows, :ra][1], cat_df[obj_rows, :dec][1]]
+  objid = cat_df[obj_rows, :objid][1]
+
+  # Test cropping.
+  original_blob = deepcopy(blob)
+  width = 5.0
+  SDSS.crop_image!(blob, width, obj_loc)
+  for b=1:5
+    @test 2 * width <= blob[b].H <= 2 * (width + 1)
+    @test 2 * width <= blob[b].W <= 2 * (width + 1)
+  end
+  @test SDSS.test_catalog_entry_in_image(blob, obj_loc)
 end
 
 test_load_catalog()
 test_load_psf()
 test_field()
+test_blob()
