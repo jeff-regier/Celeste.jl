@@ -394,7 +394,7 @@ Returns:
  The data format is documented here:
  http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
 
- This is based on the function _get_sources in tractor/sdss.py:
+ This is based on the function get_sources in tractor/sdss.py:
  https://github.com/dstndstn/tractor/
 """ ->
 function load_catalog_df(field_dir, run_num, camcol_num, field_num; bandnum=3)
@@ -492,7 +492,8 @@ Returns:
 """ ->
 function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
 
-    band_gain, band_dark_variance = SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
+    band_gain, band_dark_variance =
+      SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
 
     blob = Array(Image, 5)
     for b=1:5
@@ -604,6 +605,35 @@ function test_catalog_entry_in_image(blob::Array{Image, 1}, wcs_loc::Array{Float
         end
     end
     return false
+end
+
+
+@doc """
+""" ->
+function download_fits_files(field_num, run_num, camcol_num, field_dif)
+
+  # pain in the butt.
+  dr8_url = "http://data.sdss3.org/sas/dr8/groups/boss/"
+
+
+  for b in 1:5
+    'frame': '/sas/dr9/boss/photoObj/frames/%(rerun)s/%(run)i/%(camcol)i/frame-%(band)s-%(run)06i-%(camcol)i-%(field)04i.fits.bz2',
+    img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$field_num.fits"
+
+    'fpM': 'photo/redux/%(rerun)s/%(run)i/objcs/%(camcol)i/fpM-%(run)06i-%(band)s%(camcol)i-%(field)04i.fit.gz',
+    fpm_filename = "$field_dir/fpM-$run_num-$band_letter$camcol_num-$field_num.fit"
+  end
+
+  'psField': 'photo/redux/%(rerun)s/%(run)i/objcs/%(camcol)i/psField-%(run)06i-%(camcol)i-%(field)04i.fit',
+  psf_filename = "$field_dir/psField-$run_num-$camcol_num-$field_num.fit"
+
+  cat_filename = "$field_dir/photoObj-$run_num-$camcol_num-$field_num.fits"
+  'photoObj': 'photoObj/%(rerun)s/%(run)i/%(camcol)i/photoObj-%(run)06i-%(camcol)i-%(field)04i.fits',
+
+  pf_filename = "$field_dir/photoField-$run_num-$camcol_num.fits"
+  'photoField': 'photoObj/%(rerun)s/%(run)i/photoField-%(run)06i-%(camcol)i.fits',
+
+
 end
 
 end
