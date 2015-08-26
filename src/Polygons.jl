@@ -4,6 +4,7 @@ VERSION < v"0.4.0-dev" && using Docile
 
 import WCSLIB
 import DualNumbers
+import SloanDigitalSkySurvey: WCS
 
 export sources_near_quadrilateral
 
