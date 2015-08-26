@@ -4,8 +4,8 @@ module SampleData
 using Distributions
 using CelesteTypes
 
-import SDSS
-import WCS
+import SloanDigitalSkySurvey: WCS
+import Images
 
 import ModelInit
 import Synthetic
@@ -13,7 +13,8 @@ import Synthetic
 export empty_model_params
 export dat_dir, sample_ce, perturb_params
 export sample_star_fluxes, sample_galaxy_fluxes
-export gen_sample_star_dataset, gen_sample_galaxy_dataset, gen_two_body_dataset, gen_three_body_dataset
+export gen_sample_star_dataset, gen_sample_galaxy_dataset
+export gen_two_body_dataset, gen_three_body_dataset
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
@@ -56,7 +57,7 @@ end
 
 function gen_sample_star_dataset(; perturb=true)
     srand(1)
-    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
         blob0[b].wcs = WCS.wcs_id
@@ -74,7 +75,7 @@ end
 
 function gen_sample_galaxy_dataset(; perturb=true)
     srand(1)
-    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
         blob0[b].wcs = WCS.wcs_id
@@ -94,7 +95,7 @@ function gen_two_body_dataset(; perturb=true)
     # will be too close to be identifiable.
 
     srand(1)
-    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
         blob0[b].wcs = WCS.wcs_id
@@ -116,7 +117,7 @@ end
 
 function gen_three_body_dataset(; perturb=true)
     srand(1)
-    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
         blob0[b].wcs = WCS.wcs_id

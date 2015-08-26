@@ -8,7 +8,6 @@ using CelesteTypes
 import ModelInit
 import Util
 import WCS
-import SDSS
 
 import Distributions
 
@@ -147,4 +146,3 @@ end
 
 
 end
-
