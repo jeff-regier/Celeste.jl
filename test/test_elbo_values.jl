@@ -202,7 +202,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     blob = Images.load_stamp_blob(dat_dir, stamp_id)
     cat_entries_df = SDSS.load_stamp_catalog_df(dat_dir, "s82-$stamp_id", blob)
 
-    cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-$stamp_id", blob)
+    cat_entries = Images.load_stamp_catalog(dat_dir, "s82-$stamp_id", blob)
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries)
 
