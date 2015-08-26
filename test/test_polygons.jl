@@ -3,7 +3,6 @@ using Base.Test
 using SampleData
 using CelesteTypes
 
-import SDSS
 import Polygons
 
 println("Running Polygons tests.")
