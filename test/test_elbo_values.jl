@@ -199,7 +199,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     # TODO: not currently passing.
 
     stamp_id = "5.0073-0.0739"
-    blob = SDSS.load_stamp_blob(dat_dir, stamp_id)
+    blob = Images.load_stamp_blob(dat_dir, stamp_id)
     cat_entries_df = SDSS.load_stamp_catalog_df(dat_dir, "s82-$stamp_id", blob)
 
     cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-$stamp_id", blob)
@@ -275,7 +275,7 @@ end
 
 
 function test_tiny_image_tiling()
-    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
     pc = PsfComponent(1./3, zeros(2), 1e-4 * eye(2))
     trivial_psf = [pc, pc, pc]
     pixels = ones(100, 1) * 12

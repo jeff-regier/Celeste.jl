@@ -16,7 +16,7 @@ import PSF
 import Util
 import WCS
 
-export load_sdss_blob, crop_image!, test_catalog_entry_in_image
+export load_stamp_blob, load_sdss_blob, crop_image!, test_catalog_entry_in_image
 export convert_gmm_to_celeste, get_psf_at_point
 export convert_catalog_to_celeste, load_stamp_catalog
 
@@ -77,6 +77,53 @@ function convert_catalog_to_celeste(
     end
 
     CatalogEntry[row_to_ce(df[i, :]) for i in 1:size(df, 1)]
+end
+
+
+function load_stamp_blob(stamp_dir, stamp_id)
+    function fetch_image(b)
+        band_letter = band_letters[b]
+        filename = "$stamp_dir/stamp-$band_letter-$stamp_id.fits"
+
+        fits = FITSIO.FITS(filename)
+        hdr = FITSIO.read_header(fits[1])
+        original_pixels = read(fits[1])
+        dn = original_pixels / hdr["CALIB"] + hdr["SKY"]
+        nelec = float(int(dn * hdr["GAIN"]))
+
+        header_str = FITSIO.read_header(fits[1], ASCIIString)
+        ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
+        close(fits)
+
+        alphaBar = [hdr["PSF_P0"], hdr["PSF_P1"], hdr["PSF_P2"]]
+        xiBar = [
+            [hdr["PSF_P3"]  hdr["PSF_P4"]],
+            [hdr["PSF_P5"]  hdr["PSF_P6"]],
+            [hdr["PSF_P7"]  hdr["PSF_P8"]]]'
+
+        tauBar = Array(Float64, 2, 2, 3)
+        tauBar[:,:,1] = [[hdr["PSF_P9"] hdr["PSF_P11"]],
+                         [hdr["PSF_P11"] hdr["PSF_P10"]]]
+        tauBar[:,:,2] = [[hdr["PSF_P12"] hdr["PSF_P14"]],
+                         [hdr["PSF_P14"] hdr["PSF_P13"]]]
+        tauBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]],
+                         [hdr["PSF_P17"] hdr["PSF_P16"]]]
+
+        psf = [PsfComponent(alphaBar[k], xiBar[:, k],
+                            tauBar[:, :, k]) for k in 1:3]
+
+        H, W = size(original_pixels)
+        iota = hdr["GAIN"] / hdr["CALIB"]
+        epsilon = hdr["SKY"] * hdr["CALIB"]
+
+        run_num = int(hdr["RUN"])
+        camcol_num = int(hdr["CAMCOL"])
+        field_num = int(hdr["FIELD"])
+
+        Image(H, W, nelec, b, wcs, epsilon, iota, psf, run_num, camcol_num, field_num)
+    end
+
+    blob = map(fetch_image, 1:5)
 end
 
 
