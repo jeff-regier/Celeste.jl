@@ -105,7 +105,7 @@ compare_solutions(mp_rect_three, mp_free_three,
 ########################################
 # From test_peak_init_2body_optimization
 srand(1)
-blob0 = SDSS.load_stamp_blob(SampleData.dat_dir, "164.4311-39.0359");
+blob0 = Images.load_stamp_blob(SampleData.dat_dir, "164.4311-39.0359");
 two_bodies = [
     SampleData.sample_ce([11.1, 21.2], true),
     SampleData.sample_ce([15.3, 31.4], false),
@@ -149,7 +149,7 @@ compare_solutions(mp_rect_elbo, mp_free_elbo,
 
 #############################################
 # From test_real_stamp_optimization.  This is slow.
-blob = SDSS.load_stamp_blob(SampleData.dat_dir, "5.0073-0.0739");
+blob = Images.load_stamp_blob(SampleData.dat_dir, "5.0073-0.0739");
 cat_entries = SDSS.load_stamp_catalog(SampleData.dat_dir, "s82-5.0073-0.0739", blob);
 bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3;
 cat_entries = filter(bright, cat_entries);

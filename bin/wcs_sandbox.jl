@@ -4,7 +4,7 @@ using CelesteTypes
 using DataFrames
 using SampleData
 
-import SDSS
+import SloanDigitalSkySurvey: SDSS
 import PSF
 import FITSIO
 import WCS
@@ -24,7 +24,7 @@ b_letter = band_letters[b]
 ##################
 # Load a stamp to check out the psf and wcs
 
-stamp_blob = SDSS.load_stamp_blob(dat_dir, "5.0073-0.0739");
+stamp_blob = Images.load_stamp_blob(dat_dir, "5.0073-0.0739");
 
 #############
 # Load and subsample the catalog
@@ -94,7 +94,7 @@ for b=1:5
 	crpix = original_crpix_band[:, b]
 	unsafe_store!(blob[b].wcs.crpix, crpix[1] - x_min + 1, 1)
 	unsafe_store!(blob[b].wcs.crpix, crpix[2] - y_min + 1, 2)
-	
+
 	blob[b].pixels = blob[b].pixels[sub_rows_x, sub_rows_y]
 	blob[b].H = size(blob[b].pixels, 1)
 	blob[b].W = size(blob[b].pixels, 2)
@@ -378,7 +378,7 @@ for b=1:5
 	cat_px = WCS.world_to_pixel(blob[b].wcs, cat_loc)
 	PyPlot.scatter(cat_px[:, 1] - x_min, cat_px[:, 2] - y_min, marker="o", c="r", s=25)
 
-	obj_row = cat_df[:objid] .== objid 
+	obj_row = cat_df[:objid] .== objid
 	PyPlot.scatter(cat_px[obj_row, 1] - x_min, cat_px[obj_row, 2] - y_min,
 		           marker="x", c="w", s=25)
 
