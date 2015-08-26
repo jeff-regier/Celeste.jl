@@ -9,7 +9,6 @@ export sample_prior, cat_init, peak_init
 
 using FITSIO
 using Distributions
-using WCSLIB
 using Util
 using CelesteTypes
 
@@ -187,7 +186,7 @@ end
 =#
 
 @doc """
-Return a ModelParams object initialized from an array of catalog entries. 
+Return a ModelParams object initialized from an array of catalog entries.
 """ ->
 function cat_init(cat::Vector{CatalogEntry}; patch_radius::Float64=Inf,
         tile_width::Int64=typemax(Int64))

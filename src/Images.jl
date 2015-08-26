@@ -14,6 +14,8 @@ import PSF
 import Util
 import WCS
 
+export load_sdss_blob, crop_image!, test_catalog_entry_in_image
+export convert_gmm_to_celeste, get_psf_at_point
 
 @doc """
 Read a blob from SDSS.

@@ -8,9 +8,9 @@ using SampleData
 using Transform
 import Synthetic
 
-include(joinpath(Pkg.dir("Celeste"), "test", "test_sdss.jl"))
+include(joinpath(Pkg.dir("Celeste"), "test", "test_images.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_misc.jl"))
-include(joinpath(Pkg.dir("Celeste"), "test", "test_wcs.jl"))
+include(joinpath(Pkg.dir("Celeste"), "test", "test_polygons.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_kl.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_constraints.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_elbo_values.jl"))
