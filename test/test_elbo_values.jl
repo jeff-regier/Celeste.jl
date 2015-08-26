@@ -4,9 +4,11 @@ using Base.Test
 using Distributions
 using SampleData
 
-import WCS
+import SloanDigitalSkySurvey: SDSS
+import SloanDigitalSkySurvey: WCS
 
 println("Running ELBO value tests.")
+
 
 function true_star_init()
     blob, mp, body = gen_sample_star_dataset(perturb=false)
