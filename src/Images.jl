@@ -4,6 +4,8 @@ VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
 import SloanDigitalSkySurvey: SDSS
 import SloanDigitalSkySurvey: WCS
+import SloanDigitalSkySurvey: PSF
+import SloanDigitalSkySurvey.PSF.get_psf_at_point
 
 import WCSLIB
 import DataFrames
@@ -16,6 +18,67 @@ import WCS
 
 export load_sdss_blob, crop_image!, test_catalog_entry_in_image
 export convert_gmm_to_celeste, get_psf_at_point
+export convert_catalog_to_celeste, load_stamp_catalog
+
+
+function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
+    df = load_stamp_catalog_df(cat_dir, stamp_id, blob, match_blob=match_blob)
+    convert_catalog_to_celeste(df, blob, match_blob=match_blob)
+end
+
+
+@doc """
+Convert a dataframe catalog (e.g. as returned by
+SloanDigitalSkySurvey.SDSS.load_catalog_df) to an array of Celeste CatalogEntry
+objects.
+
+Args:
+  - df: The dataframe output of SloanDigitalSkySurvey.SDSS.load_catalog_df
+  - blob: The blob that the catalog corresponds to
+  - match_blob: If false, changes the direction of phi to match tractor,
+                not Celeste.
+""" ->
+function convert_catalog_to_celeste(
+  df::DataFrames.DataFrame, blob::Array{Image, 1}; match_blob=false)
+    function row_to_ce(row)
+        x_y = [row[1, :ra], row[1, :dec]]
+        star_fluxes = zeros(5)
+        gal_fluxes = zeros(5)
+        fracs_dev = [row[1, :frac_dev], 1 - row[1, :frac_dev]]
+        for b in 1:length(band_letters)
+            bl = band_letters[b]
+            psf_col = symbol("psfflux_$bl")
+            star_fluxes[b] = row[1, psf_col]
+
+            dev_col = symbol("devflux_$bl")
+            exp_col = symbol("expflux_$bl")
+            gal_fluxes[b] += fracs_dev[1] * row[1, dev_col] +
+                             fracs_dev[2] * row[1, exp_col]
+        end
+
+        fits_ab = fracs_dev[1] > .5 ? row[1, :ab_dev] : row[1, :ab_exp]
+        fits_phi = fracs_dev[1] > .5 ? row[1, :phi_dev] : row[1, :phi_exp]
+        fits_theta = fracs_dev[1] > .5 ? row[1, :theta_dev] : row[1, :theta_exp]
+
+        # tractor defines phi as -1 * the phi catalog for some reason.
+        if !match_blob
+            fits_phi *= -1.
+        end
+
+        re_arcsec = max(fits_theta, 1. / 30)  # re = effective radius
+        re_pixel = re_arcsec / 0.396
+
+        phi90 = 90 - fits_phi
+        phi90 -= floor(phi90 / 180) * 180
+        phi90 *= (pi / 180)
+
+        CatalogEntry(x_y, row[1, :is_star], star_fluxes,
+            gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_pixel)
+    end
+
+    CatalogEntry[row_to_ce(df[i, :]) for i in 1:size(df, 1)]
+end
+
 
 @doc """
 Read a blob from SDSS.
@@ -68,9 +131,9 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
         psf_point_x = H / 2
         psf_point_y = W / 2
 
-        raw_psf = PSF.get_psf_at_point(psf_point_x, psf_point_y, raw_psf_comp);
+        raw_psf = get_psf_at_point(psf_point_x, psf_point_y, raw_psf_comp);
         psf_gmm, scale = PSF.fit_psf_gaussians(raw_psf);
-        psf = PSF.convert_gmm_to_celeste(psf_gmm, scale)
+        psf = convert_gmm_to_celeste(psf_gmm, scale)
 
         # Set it to use a constant background but include the non-constant data.
         blob[b] = Image(H, W,
