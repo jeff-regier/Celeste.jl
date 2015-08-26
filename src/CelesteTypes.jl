@@ -5,7 +5,7 @@ VERSION < v"0.4.0-dev" && using Docile
 export CatalogEntry
 export band_letters
 
-export Image, Blob, SkyPatch, ImageTile, PsfComponent, RawPSFComponents
+export Image, Blob, SkyPatch, ImageTile, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 
@@ -24,6 +24,7 @@ export ids_names, ids_free_names
 export D, B, Ia
 
 using Util
+using SloanDigitalSkySurvey.PSF.RawPSFComponents
 
 import Base.convert
 import FITSIO
@@ -109,23 +110,6 @@ function get_galaxy_prototypes()
 end
 
 const galaxy_prototypes = get_galaxy_prototypes()
-
-
-@doc """
-All the information form a psField file needed to compute a raw PSF for a point.
-
-Attributes:
- - rrows: A matrix of flattened eigenimages.
- - rnrow: The number of rows in an eigenimage.
- - rncol: The number of columns in an eigenimage.
- - cmat: The coefficients of the weight polynomial (see get_psf_at_point()).
-""" ->
-immutable RawPSFComponents
-    rrows::Array{Float64,2}
-    rnrow::Int32
-    rncol::Int32
-    cmat::Array{Float64,3}
-end
 
 
 @doc """
