@@ -22,7 +22,7 @@ export convert_catalog_to_celeste, load_stamp_catalog
 
 
 function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
-    df = load_stamp_catalog_df(cat_dir, stamp_id, blob, match_blob=match_blob)
+    df = SDSS.load_stamp_catalog_df(cat_dir, stamp_id, blob, match_blob=match_blob)
     convert_catalog_to_celeste(df, blob, match_blob=match_blob)
 end
 
