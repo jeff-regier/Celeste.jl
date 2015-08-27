@@ -142,7 +142,8 @@ Args:
 Returns:
  - A blob (array of Image objects).
 """ ->
-function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
+function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
+  mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
 
     band_gain, band_dark_variance =
       SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
@@ -154,7 +155,8 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num)
             SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num, b, band_gain[b]);
 
         print("Masking image...")
-        SDSS.mask_image!(nelec, field_dir, run_num, camcol_num, field_num, b);
+        SDSS.mask_image!(nelec, field_dir, run_num, camcol_num, field_num, b,
+                         mask_planes=mask_planes);
         println("done.")
         H = size(nelec, 1)
         W = size(nelec, 2)
