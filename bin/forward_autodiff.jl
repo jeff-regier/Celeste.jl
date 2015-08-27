@@ -31,16 +31,15 @@ star_ids = union(ids_free.c1[:,1],
                    ids_free.k[:,1]);
 
 
-transform = Transform.free_transform;
-
 jld_file = "$dat_dir/SDSS_blob.jld"
 
 
-simulation = false
+simulation = true
 if simulation
-    #blob, mp_original, body = gen_sample_star_dataset()
-    blob, mp_original, body = gen_sample_galaxy_dataset(perturb=true);
+    blob, mp_original, body = gen_sample_star_dataset(perturb=true);
+    #blob, mp_original, body = gen_sample_galaxy_dataset(perturb=true);
     #blob, mp_original, body = gen_three_body_dataset(perturb=true); # Too slow.
+    transform = Transform.get_mp_transform(mp_original)
 else
     # An actual celestial body.
     field_dir = joinpath(dat_dir, "sample_field")
@@ -48,7 +47,9 @@ else
     camcol_num = "6"
     field_num = "0269"
 
-    original_blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
+    original_blob =
+      Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num,
+                            mask_planes=Set());
     # Can't write a WCS pointer to a JLD file.
     #JLD.save(jld_file, "original_blob", original_blob)
 
@@ -68,7 +69,7 @@ else
     sort(original_cat_df[original_cat_df[:is_gal] .== true, obj_cols], cols=:compflux_r, rev=true)
     sort(original_cat_df[original_cat_df[:is_gal] .== false, obj_cols], cols=:psfflux_r, rev=true)
 
-    objid = "1237662226208063541" # A bright star with bad pixels    
+    objid = "1237662226208063541" # A bright star with bad pixels
     #objid = "1237662226208063576" # A galaxy
     #objid = "1237662226208063565" # A brightish star but with good pixels.
     obj_row = original_cat_df[:objid] .== objid;
@@ -78,18 +79,14 @@ else
     reset_crpix!(blob)
     WCS.world_to_pixel(blob[3].wcs, obj_loc)
     width = 15.
-    x_ranges, y_ranges = SDSS.crop_image!(blob, width, obj_loc);
-    @assert SDSS.test_catalog_entry_in_image(blob, obj_loc)
-    entry_in_image = [SDSS.test_catalog_entry_in_image(blob, cat_loc[i,:][:]) for i=1:size(cat_loc, 1)];
+    Images.crop_image!(blob, width, obj_loc);
+    @assert Images.test_catalog_entry_in_image(blob, obj_loc)
+    entry_in_image = [Images.test_catalog_entry_in_image(blob, cat_loc[i,:][:]) for i=1:size(cat_loc, 1)];
     original_cat_df[entry_in_image, obj_cols]
-    cat_entries = SDSS.convert_catalog_to_celeste(original_cat_df[entry_in_image, :], blob)
+    cat_entries = Images.convert_catalog_to_celeste(original_cat_df[entry_in_image, :], blob)
     mp_original = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
+    transform = Transform.get_mp_transform(mp_original);
 end
-
-for b=1:5
-    writedlm("/tmp/pixels_$b.csv", blob[b].pixels, ',')
-end
-
 
 # fit_star = false
 # if fit_star
@@ -108,23 +105,107 @@ end
 #     end
 # end
 
+
 for s in 1:mp_original.S
     mp_original.vp[s][ids.a] = [ 0.5, 0.5 ]
 end
 omitted_ids = Int64[]
 kept_ids = setdiff(1:length(ids_free), omitted_ids)
 
-lbs, ubs = OptimizeElbo.get_nlopt_bounds(mp_original.vp[1]);
+# For newton's method.
+max_iters = 12;
 
 
 ##############
 # Get a BFGS fit for comparison
 iter_count = NaN
-fit_v = NaN
+bfgs_v = NaN
 
-mp_fit = deepcopy(mp_original);
-iter_count, max_f, max_x, ret = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_fit, transform, omitted_ids=omitted_ids, verbose=true);
-fit_v = ElboDeriv.elbo(blob, mp_fit).v;
+mp_bfgs = deepcopy(mp_original);
+iter_count, max_f, max_x, ret =
+  OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bfgs, transform,
+                          omitted_ids=omitted_ids, verbose=true);
+bfgs_v = ElboDeriv.elbo(blob, mp_bfgs).v;
+
+####################
+# Newton's method with our own hessian regularization
+
+mp_optim = deepcopy(mp_original)
+iter_count, max_f, max_x, ret =
+  maximize_f_newton(mp -> ElboDeriv.elbo(blob, mp), mp_optim, transform,
+                    omitted_ids=omitted_ids, verbose=true, max_iters=max_iters,
+                    hess_reg=5.0)
+
+######################
+# Print results
+print_params(mp_original, mp_optim, mp_bfgs)
+
+ElboDeriv.get_brightness(mp_original)[1]
+ElboDeriv.get_brightness(mp_optim)[1]
+ElboDeriv.get_brightness(mp_bfgs)[1]
+
+
+##########################
+# Simpler tests
+
+
+
+function verify_sample_star(vs, pos)
+    @test vs[ids.a[2]] <= 0.011
+
+    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
+    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
+
+    brightness_hat = vs[ids.r1[1]] * vs[ids.r2[1]]
+    @test_approx_eq_eps brightness_hat / sample_star_fluxes[3] 1. 0.01
+
+    true_colors = log(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
+    for b in 1:4
+        @test_approx_eq_eps vs[ids.c1[b, 1]] true_colors[b] 0.2
+    end
+end
+
+function verify_sample_galaxy(vs, pos)
+    @test vs[ids.a[2]] >= 0.98
+
+    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
+    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
+
+    @test_approx_eq_eps vs[ids.e_axis] .7 0.05
+    @test_approx_eq_eps vs[ids.e_dev] 0.1 0.08
+    @test_approx_eq_eps vs[ids.e_scale] 4. 0.2
+
+    phi_hat = vs[ids.e_angle]
+    phi_hat -= floor(phi_hat / pi) * pi
+    five_deg = 5 * pi/180
+    @test_approx_eq_eps phi_hat pi/4 five_deg
+
+    brightness_hat = vs[ids.r1[2]] * vs[ids.r2[2]]
+    @test_approx_eq_eps brightness_hat / sample_galaxy_fluxes[3] 1. 0.01
+
+    true_colors = log(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])
+    for b in 1:4
+        @test_approx_eq_eps vs[ids.c1[b, 2]] true_colors[b] 0.2
+    end
+end
+
+omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+blob, mp_original, body = gen_sample_star_dataset();
+
+mp_bfgs = deepcopy(mp_original);
+OptimizeElbo.maximize_likelihood(blob, mp_bfgs, transform);
+verify_sample_star(mp_bfgs.vp[1], [10.1, 12.2]);
+
+mp = deepcopy(mp_original);
+iter_count, max_f, max_x, ret =
+    OptimizeElbo.maximize_f_newton(mp -> ElboDeriv.elbo(blob, mp), mp, transform,
+                               omitted_ids=omitted_ids, verbose=false, max_iters=10);
+print_params(mp, mp_bfgs)
+verify_sample_star(mp.vp[1], [10.1, 12.2])
+
+
+
+
 
 
 #########################
@@ -138,9 +219,11 @@ x0 = transform.vp_to_vector(mp_original.vp, omitted_ids);
 elbo_grad = zeros(Float64, length(x0));
 elbo_hess = zeros(Float64, length(x0), length(x0));
 
-max_iters = 12;
 
-d = Optim.DifferentiableFunction(obj_wrap.f_value, obj_wrap.f_grad!, obj_wrap.f_value_grad!);
+function f_grad!(x, grad)
+  grad[:] = obj_wrap.f_grad(x)
+end
+d = Optim.DifferentiableFunction(obj_wrap.f_value, f_grad!, obj_wrap.f_value_grad!);
 
 f_vals = zeros(Float64, max_iters);
 cumulative_iters = zeros(Int64, max_iters);
@@ -209,7 +292,7 @@ for iter in 1:max_iters
     x_vals[iter] = deepcopy(x_new)
     grads[iter] = deepcopy(gr_new)
     cumulative_iters[iter] = obj_wrap.state.f_evals
-    println(">>>>>>  Current value after $(obj_wrap.state.f_evals) evaluations: $(new_val) (BFGS got $(-fit_v) in $(iter_count) iters)")
+    println(">>>>>>  Current value after $(obj_wrap.state.f_evals) evaluations: $(new_val) (BFGS got $(-bfgs_v) in $(iter_count) iters)")
     mp_nm = deepcopy(mp_original);
     transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
     #println(ElboDeriv.get_brightness(mp_nm))
@@ -219,115 +302,9 @@ end
 # f_vals are negative because it's minimization
 println("Newton objective - BFGS objective (higher is better)")
 println("Cumulative fuction evaluation ratio:")
-hcat(((-f_vals) - fit_v) / abs(fit_v), cumulative_iters ./ iter_count)
+hcat(((-f_vals) - bfgs_v) / abs(bfgs_v), cumulative_iters ./ iter_count)
 
 reduce(hcat, [ x_diff ./ x_vals[1] for x_diff in diff(x_vals) ])
 
 mp_nm = deepcopy(mp_original);
 transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
-
-####################
-# Newton's method with our own hessian regularization
-
-optim_obj_wrap = OptimizeElbo.ObjectiveWrapperFunctions(
-    mp -> ElboDeriv.elbo(blob, mp), deepcopy(mp_original), transform, kept_ids, omitted_ids);
-optim_obj_wrap.state.scale = -1.0 # For minimization, which is required by the linesearch algorithm.
-optim_obj_wrap.state.print_every_n = 1
-optim_obj_wrap.state.verbose = true
-
-function f_hess_reg!(x, new_hess)
-    hess = optim_obj_wrap.f_ad_hessian(x)
-    hess_ev = eig(hess)[1]
-    min_ev = minimum(hess_ev)
-    max_ev = maximum(hess_ev)
-
-    # Make it positive definite.
-    if min_ev < 0
-        hess += eye(length(x)) * abs(min_ev) * 2
-    end
-
-    new_hess[:,:] = hess
-end
-
-x0 = transform.vp_to_vector(mp_original.vp, omitted_ids);
-nm_result = Optim.optimize(optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!, x0, method = :newton, iterations = max_iters)
-optim_iters = optim_obj_wrap.state.f_evals
-
-mp_optim = deepcopy(mp_original)
-transform.vector_to_vp!(nm_result.minimum, mp_optim.vp, omitted_ids);
-
-
-#########################
-# Wrapper
-
-mp_optim2 = deepcopy(mp_original)
-iter_count, max_f, max_x, ret = maximize_f_newton(mp -> ElboDeriv.elbo(blob, mp), mp_optim2, transform,
-                      omitted_ids=omitted_ids, verbose=true, max_iters=10)
-
-######################
-# Print results
-print_params(mp_original, mp_nm, mp_optim)
-
-ElboDeriv.get_brightness(mp_original)
-ElboDeriv.get_brightness(mp_nm)
-ElboDeriv.get_brightness(mp_optim)
-
-
-##########################
-# Simpler tests
-
-
-
-function verify_sample_star(vs, pos)
-    @test vs[ids.a[2]] <= 0.011
-
-    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
-    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
-
-    brightness_hat = vs[ids.r1[1]] * vs[ids.r2[1]]
-    @test_approx_eq_eps brightness_hat / sample_star_fluxes[3] 1. 0.01
-
-    true_colors = log(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
-    for b in 1:4
-        @test_approx_eq_eps vs[ids.c1[b, 1]] true_colors[b] 0.2
-    end
-end
-
-function verify_sample_galaxy(vs, pos)
-    @test vs[ids.a[2]] >= 0.98
-
-    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
-    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
-
-    @test_approx_eq_eps vs[ids.e_axis] .7 0.05
-    @test_approx_eq_eps vs[ids.e_dev] 0.1 0.08
-    @test_approx_eq_eps vs[ids.e_scale] 4. 0.2
-
-    phi_hat = vs[ids.e_angle]
-    phi_hat -= floor(phi_hat / pi) * pi
-    five_deg = 5 * pi/180
-    @test_approx_eq_eps phi_hat pi/4 five_deg
-
-    brightness_hat = vs[ids.r1[2]] * vs[ids.r2[2]]
-    @test_approx_eq_eps brightness_hat / sample_galaxy_fluxes[3] 1. 0.01
-
-    true_colors = log(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])
-    for b in 1:4
-        @test_approx_eq_eps vs[ids.c1[b, 2]] true_colors[b] 0.2
-    end
-end
-
-omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
-blob, mp_original, body = gen_sample_star_dataset();
-
-mp_bfgs = deepcopy(mp_original);
-OptimizeElbo.maximize_likelihood(blob, mp_bfgs, transform);
-verify_sample_star(mp_bfgs.vp[1], [10.1, 12.2]);
-
-mp = deepcopy(mp_original);
-iter_count, max_f, max_x, ret = 
-    OptimizeElbo.maximize_f_newton(mp -> ElboDeriv.elbo(blob, mp), mp, transform,
-                               omitted_ids=omitted_ids, verbose=false, max_iters=10);
-print_params(mp, mp_bfgs)
-verify_sample_star(mp.vp[1], [10.1, 12.2])
-

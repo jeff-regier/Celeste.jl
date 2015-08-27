@@ -26,6 +26,7 @@ type WrapperState
     f_evals::Int64
     verbose::Bool
     print_every_n::Int64
+    scale::Float64
 end
 
 
@@ -36,6 +37,7 @@ type ObjectiveWrapperFunctions
     f_value_grad!::Function
     f_value::Function
     f_grad::Function
+    f_grad!::Function
     f_ad_grad::Function
     f_ad_hessian::Function
 
@@ -51,7 +53,7 @@ type ObjectiveWrapperFunctions
         mp_dual = CelesteTypes.convert(ModelParams{ForwardDiff.Dual}, mp);
         x_length = length(kept_ids) * mp.S
 
-        state = WrapperState(0, false, 10)
+        state = WrapperState(0, false, 10, 1.0)
         function print_status{T <: Number}(
           iter_vp::VariationalParams{T}, value::T, grad::Array{T})
             if state.verbose || (state.f_evals % state.print_every_n == 0)
@@ -107,9 +109,10 @@ type ObjectiveWrapperFunctions
                 svs = [res.d[kept_ids, s] for s in 1:mp.S]
                 grad[:] = reduce(vcat, svs)
             end
-            res.v, grad
+            state.scale * res.v, state.scale .* grad
         end
 
+        # The remaining functions are scaled.
         function f_value_grad!(x, grad)
             @assert length(x) == x_length
             @assert length(x) == length(grad)
@@ -120,12 +123,16 @@ type ObjectiveWrapperFunctions
         # TODO: Add caching.
         function f_value(x)
             @assert length(x) == x_length
-            f_objective(x).v
+            f_value_grad(x)[1]
        end
 
         function f_grad(x)
             @assert length(x) == x_length
             f_value_grad(x)[2]
+        end
+
+        function f_grad!(x, grad)
+            grad[:] = f_grad(x)
         end
 
         # Forward diff versions of the gradient and Hessian.
@@ -148,7 +155,8 @@ type ObjectiveWrapperFunctions
             hess
         end
 
-        new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_ad_grad, f_ad_hessian,
+        new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_grad!,
+            f_ad_grad, f_ad_hessian,
             state, transform, mp, kept_ids, omitted_ids)
     end
 end
@@ -170,6 +178,10 @@ function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
     # Change the bounds to match the scaling
     for s=1:length(vp)
       for (param, bounds) in transform.bounds[s]
+        if (bounds[2] == Inf)
+          # Hack: higher bounds for upper-unconstrained params.
+          ubs[collect(ids_free.(param)), s] = 20.0
+        end
         lbs[collect(ids_free.(param)), s] *= bounds[3]
         ubs[collect(ids_free.(param)), s] *= bounds[3]
       end
