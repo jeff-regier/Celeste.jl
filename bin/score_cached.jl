@@ -10,6 +10,7 @@ import WCSLIB
 import Base.convert
 using DataFrames
 
+import SloanDigitalSkySurvey: SDSS
 
 const color_names = ["$(band_letters[i])$(band_letters[i+1])" for i in 1:4]
 
@@ -48,12 +49,12 @@ function init_results_df(stamp_ids)
     N = length(stamp_ids)
     color_col_names = ["color_$cn" for cn in color_names]
     color_sd_col_names = ["color_$(cn)_sd" for cn in color_names]
-    col_names = ["stamp_id", "pos1", "pos2", "is_star", 
+    col_names = ["stamp_id", "pos1", "pos2", "is_star",
             "star_flux_r", "star_flux_r_sd",
             "gal_flux_r", "gal_flux_r_sd",
-            ["star_$c" for c in color_col_names], 
+            ["star_$c" for c in color_col_names],
             ["star_$c" for c in color_sd_col_names],
-            ["gal_$c" for c in color_col_names], 
+            ["gal_$c" for c in color_col_names],
             ["gal_$c" for c in color_sd_col_names],
             "gal_fracdev", "gal_ab", "gal_angle", "gal_scale"]
     col_symbols = Symbol[symbol(cn) for cn in col_names]
@@ -92,9 +93,9 @@ function load_ce!(i::Int64, ce::CatalogEntry, stamp_id::String, df::DataFrame)
 end
 
 
-function load_photo_obj!(i::Int64, stamp_id::String, 
+function load_photo_obj!(i::Int64, stamp_id::String,
             is_s82::Bool, is_synth::Bool, df::DataFrame)
-    blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
+    blob = Images.load_stamp_blob(ENV["STAMP"], stamp_id)
     cat_df = is_s82 ?
         SDSS.load_stamp_catalog_df(ENV["STAMP"], "s82-$stamp_id", blob) :
         SDSS.load_stamp_catalog_df(ENV["STAMP"], stamp_id, blob, match_blob=true)
@@ -144,7 +145,7 @@ function load_celeste_obj!(i::Int64, stamp_id::String, df::DataFrame)
 
     for j in 1:2
         s_type = ["star", "gal"][j]
-        df[i, symbol("$(s_type)_flux_r_sd")] = 
+        df[i, symbol("$(s_type)_flux_r_sd")] =
             sqrt(df[i, symbol("$(s_type)_flux_r")]) * vs[ids.r2[j]]
         for c in 1:4
             cc_sd = symbol("$(s_type)_color_$(color_names[c])_sd")
@@ -177,9 +178,9 @@ end
 function get_err_df(truth::DataFrame, predicted::DataFrame)
     color_cols = [symbol("color_$cn") for cn in color_names]
     abs_err_cols = [:gal_fracdev, :gal_ab, :gal_scale]
-    col_symbols = [:stamp_id, :position, :missed_stars, :missed_gals, 
+    col_symbols = [:stamp_id, :position, :missed_stars, :missed_gals,
         :flux_r, color_cols, abs_err_cols, :gal_angle]
-            
+
     col_types = Array(DataType, length(col_symbols))
     fill!(col_types, Float64)
     col_types[1] = String
@@ -193,20 +194,20 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
     ret[:missed_stars] =  predicted_gal & !(true_gal)
     ret[:missed_gals] =  !predicted_gal & true_gal
 
-    ret[:position] = sqrt((truth[:pos1] - predicted[:pos1]).^2 
+    ret[:position] = sqrt((truth[:pos1] - predicted[:pos1]).^2
             + (truth[:pos2] - predicted[:pos2]).^2)
 
-    ret[true_gal, :flux_r] = 
+    ret[true_gal, :flux_r] =
         abs(truth[true_gal, :gal_flux_r] - predicted[true_gal, :gal_flux_r])
-    ret[!true_gal, :flux_r] = 
+    ret[!true_gal, :flux_r] =
         abs(truth[!true_gal, :star_flux_r] - predicted[!true_gal, :star_flux_r])
 
     for cn in color_names
         ret[true_gal, symbol("color_$cn")] =
-            abs(truth[true_gal, symbol("gal_color_$cn")] - 
+            abs(truth[true_gal, symbol("gal_color_$cn")] -
                 predicted[true_gal, symbol("gal_color_$cn")])
         ret[!true_gal, symbol("color_$cn")] =
-            abs(truth[!true_gal, symbol("star_color_$cn")] - 
+            abs(truth[!true_gal, symbol("star_color_$cn")] -
                 predicted[!true_gal, symbol("star_color_$cn")])
     end
 
@@ -309,4 +310,3 @@ if length(ARGS) >= 2
 
     println(df_score(stamp_ids))
 end
-

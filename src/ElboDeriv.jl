@@ -6,7 +6,8 @@ VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
 import KL
 import Util
-import WCS
+import Polygons
+import SloanDigitalSkySurvey: WCS
 
 @doc """
 SensitiveFloat objects for expectations involving r_s and c_s.
@@ -557,7 +558,8 @@ function local_sources(tile::ImageTile, mp::ModelParams)
     tile_quad = vcat(tc11', tc12', tc22', tc21')
     pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
     pr = Float64[ mp.patches[s].radius for s=1:mp.S ]
-    bool_vec = WCS.sources_near_quadrilateral(pc, pr, tile_quad, tile.img.wcs)
+    bool_vec =
+      Polygons.sources_near_quadrilateral(pc, pr, tile_quad, tile.img.wcs)
 
     (collect(1:mp.S))[bool_vec]
 end
@@ -602,7 +604,7 @@ function elbo_likelihood!(tile::ImageTile,
                 this_pixel = tile.img.pixels[h, w]
                 if !isnan(this_pixel)
                     ep = tile.img.epsilon_mat[h, w]
-                    accum.v += this_pixel * log(ep) - ep                    
+                    accum.v += this_pixel * log(ep) - ep
                 end
             end
         end
@@ -781,4 +783,3 @@ function elbo(blob::Blob, mp::ModelParams)
 end
 
 end
-

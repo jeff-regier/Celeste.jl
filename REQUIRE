@@ -1,11 +1,12 @@
+DataFrames
 Distributions
+Docile
 DualNumbers
 FITSIO
 ForwardDiff
-WCSLIB
 NLopt
-GSL
-DataFrames
-Docile
-Grid
 GaussianMixtures
+Grid
+GSL
+SloanDigitalSkySurvey
+WCSLIB

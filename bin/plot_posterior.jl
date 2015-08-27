@@ -3,7 +3,6 @@
 using Celeste
 using CelesteTypes
 
-
 function load_cache(stamp_id)
     f = open(ENV["STAMP"]"/V-$stamp_id.dat")
     V = deserialize(f)
@@ -32,7 +31,7 @@ end
 
 
 function posterior_check_plot(stamp_id)
-	blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id);
+	blob = Images.load_stamp_blob(ENV["STAMP"], stamp_id);
 
 	V = load_cache(stamp_id)
 
@@ -62,5 +61,3 @@ function posterior_check_plot()
 		posterior_check_plot(stamp_id)
 	end
 end
-
-
