@@ -4,8 +4,9 @@ using CelesteTypes
 using DataFrames
 using SampleData
 
-import SDSS
+import SloanDigitalSkySurvey: SDSS
 import PSF
+import FITSIO
 import WCS
 #import PyPlot
 
@@ -27,7 +28,7 @@ include("src/NewtonsMethod.jl")
 ##################
 # Load a stamp to check out the psf and wcs
 
-stamp_blob = SDSS.load_stamp_blob(dat_dir, "5.0073-0.0739");
+stamp_blob = Images.load_stamp_blob(dat_dir, "5.0073-0.0739");
 
 #############
 # Load and subsample the catalog
@@ -61,6 +62,7 @@ sort(obj_df[obj_df[:is_gal] .== false, :], cols=:psfflux_r, rev=true)
 #objid = "1237662226208063491" # A bright star ... bad pixels though
 objid = "1237662226208063565" # A brightish star but with good pixels.
 
+
 #sub_rows_x = 1:150
 #sub_rows_y = 1:150
 blob = deepcopy(original_blob);
@@ -70,6 +72,7 @@ width = 8.
 cat_df = deepcopy(original_cat_df);
 obj_row = original_cat_df[:objid] .== objid;
 obj_loc = convert(Array, original_cat_df[obj_row, [:ra, :dec]])'[:]
+
 
 x_ranges, y_ranges = SDSS.crop_image!(blob, width, obj_loc);
 @assert SDSS.test_catalog_entry_in_image(blob, obj_loc)
@@ -148,6 +151,7 @@ vcat(round(raw_psfs[b][nz, nz], 3),
      round(fit_psfs[b][nz, nz], 3))
 round(1000. .* (fit_psfs[b][nz, nz] - raw_psfs[b][nz, nz]), 1)
 println(psf_scales[b])
+
 
 # Try varying background.
 for b=1:5
