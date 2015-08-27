@@ -1,11 +1,9 @@
-using SloanDigitalSkySurvey
+using Celeste
 using Base.Test
 using DataFrames
-
-import SDSS
-
-# PyPlot is only a dependency for this example, so it's not in the REQUIRE file.
-using PyPlot
+import PyPlot
+import Images
+import SloanDigitalSkySurvey: SDSS
 
 const field_dir =
   joinpath(Pkg.dir("SloanDigitalSkySurvey"), "dat", "sample_field")
@@ -17,33 +15,23 @@ const field_num = "0269"
 cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
 objid = cat_df[:objid][1]
 
-# Gain and dark variance for all the bands are in a single file.
-band_gain, band_dark_variance =
-  SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num);
-
-# Load a band's image.  b can be in 1:5.
-b = 3
-nelec, calib_col, sky_grid, sky_x, sky_y, sky_image, wcs =
-  SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num,
-                      b, band_gain[b]);
-
-# Mask the image.
-nelec_original = deepcopy(nelec);
-SDSS.mask_image!(nelec, field_dir, run_num, camcol_num, field_num, b);
-
-nelec_mask = Dict()
-for mask in ["S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"]
-  nelec_mask[mask] = deepcopy(nelec_original);
-  SDSS.mask_image!(nelec_mask[mask], field_dir, run_num, camcol_num, field_num, b, mask_planes=Set({mask}));
-end
-
-
-
-
 # Load the point spread function.
 raw_psf_comp =
   SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
 
+blob = Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num,
+  mask_planes=Set());
+
+mask_planes = ["S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"]
+blob_masks = Dict()
+for mask_plane in mask_planes
+  println("getting $mask_plane")
+  blob_masks[mask_plane] = deepcopy(blob)
+  for b=1:5
+    SDSS.mask_image!(blob[b].pixels, field_dir, run_num, camcol_num, field_num, b,
+                     mask_planes=Set({mask_plane}))
+  end
+end
 
 # Display the image with a dot at the object location.
 pixel_graph = deepcopy(nelec_original)
@@ -68,9 +56,3 @@ PyPlot.plt.subplot(1, 2, 2)
 PyPlot.title("Band $b image without masking\nObj $objid")
 PyPlot.imshow(pixel_graph_masked', cmap=PyPlot.ColorMap("gray"), interpolation = "nearest")
 PyPlot.scatter(obj_px[1] - 1, obj_px[2] - 1, marker="o", c="r", s=25)
-
-# Display the point spread function at that object.
-raw_psf = PSF.get_psf_at_point(obj_px[1], obj_px[2], raw_psf_comp);
-PyPlot.figure()
-PyPlot.title("Band $b PSF at pixel $(obj_px)\nObj $objid")
-PyPlot.imshow(raw_psf', cmap=PyPlot.ColorMap("gray"), interpolation = "nearest")
