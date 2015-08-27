@@ -95,9 +95,9 @@ type ObjectiveWrapperFunctions
 
             # TODO: Add an option to print either the transformed or
             # free parameterizations.
-            #print_status(mp.vp, f_res.v, f_res.d)
+            print_status(mp.vp, f_res.v, f_res.d)
             f_res_trans = transform.transform_sensitive_float(f_res, mp)
-            print_status(transform.from_vp(mp.vp), f_res_trans.v, f_res_trans.d)
+            #print_status(transform.from_vp(mp.vp), f_res_trans.v, f_res_trans.d)
             f_res_trans
         end
 
