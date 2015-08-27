@@ -10,6 +10,8 @@ import Transform
 import Optim
 import JLD
 
+import NLsolve # Try the trust region method here?
+
 include("src/interpolating_linesearch.jl")
 include("src/NewtonsMethod.jl")
 
@@ -36,10 +38,10 @@ jld_file = "$dat_dir/SDSS_blob.jld"
 
 simulation = true
 if simulation
-    blob, mp_original, body = gen_sample_star_dataset(perturb=true);
+    blob, mp_original, body = gen_sample_star_dataset(perturb=false);
     #blob, mp_original, body = gen_sample_galaxy_dataset(perturb=true);
     #blob, mp_original, body = gen_three_body_dataset(perturb=true); # Too slow.
-    transform = Transform.get_mp_transform(mp_original)
+    transform = Transform.get_mp_transform(mp_original, loc_width=1.0)
 else
     # An actual celestial body.
     field_dir = joinpath(dat_dir, "sample_field")
@@ -85,35 +87,37 @@ else
     original_cat_df[entry_in_image, obj_cols]
     cat_entries = Images.convert_catalog_to_celeste(original_cat_df[entry_in_image, :], blob)
     mp_original = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
-    transform = Transform.get_mp_transform(mp_original);
+    transform = Transform.get_mp_transform(mp_original)
 end
 
-# fit_star = false
-# if fit_star
-#     # Optimize only the star parameters.
-#     omitted_ids = sort(unique(union(galaxy_ids, ids_free.a, ids_free.u)));
-#     epsilon = 1e-6
-#     for s=1:mp_original.S
-#         mp_original.vp[s][ids.a] = [ 1.0 - epsilon, epsilon ]
-#     end
-# else
-#     # Optimize only the galaxy parameters.
-#     omitted_ids = sort(unique(union(star_ids, ids_free.a, ids_free.u)));
-#     epsilon = 1e-6
-#     for s=1:mp_original.S
-#         mp_original.vp[s][ids.a] = [ epsilon, 1.0 - epsilon ]
-#     end
-# end
-
-
-for s in 1:mp_original.S
-    mp_original.vp[s][ids.a] = [ 0.5, 0.5 ]
+function fit_only_type!(obj_type::Symbol, mp::ModelParams)
+  valid_types = Symbol[:star, :galaxy, :both, :a]
+  if !any(obj_type .== valid_types)
+    error("obj_type must be in $(valid_types)")
+  end
+  epsilon = 0.006
+  if obj_type == :star
+    for s=1:mp.S
+        mp.vp[s][ids.a] = [ 1.0 - epsilon, epsilon ]
+    end
+    omitted_ids = sort(unique(union(galaxy_ids, ids_free.a, ids_free.u)));
+  elseif obj_type == :galaxy
+    for s=1:mp.S
+        mp.vp[s][ids.a] = [ epsilon, 1.0 - epsilon ]
+    end
+    omitted_ids = sort(unique(union(star_ids, ids_free.a, ids_free.u)));
+  elseif obj_type == :both
+    omitted_ids = Int64[];
+  elseif obj_type == :a
+    omitted_ids = setdiff(1:length(ids_free), ids_free.a)
+    for s=1:mp.S
+        mp.vp[s][ids.a] = [ 0.5, 0.5 ]
+    end
+  else
+    error("obj_type must be in $(valid_types)")
+  end
+  omitted_ids
 end
-omitted_ids = Int64[]
-kept_ids = setdiff(1:length(ids_free), omitted_ids)
-
-# For newton's method.
-max_iters = 12;
 
 
 ##############
@@ -121,20 +125,82 @@ max_iters = 12;
 iter_count = NaN
 bfgs_v = NaN
 
-mp_bfgs = deepcopy(mp_original);
-iter_count, max_f, max_x, ret =
-  OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bfgs, transform,
-                          omitted_ids=omitted_ids, verbose=true);
+function bfgs_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
+  mp_bfgs = deepcopy(mp_original);
+  iter_count, max_f, max_x, ret =
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bfgs, transform,
+                            omitted_ids=omitted_ids, verbose=true);
+  mp_bfgs, iter_count, max_f
+end
 bfgs_v = ElboDeriv.elbo(blob, mp_bfgs).v;
+
 
 ####################
 # Newton's method with our own hessian regularization
 
-mp_optim = deepcopy(mp_original)
-iter_count, max_f, max_x, ret =
-  maximize_f_newton(mp -> ElboDeriv.elbo(blob, mp), mp_optim, transform,
-                    omitted_ids=omitted_ids, verbose=true, max_iters=max_iters,
-                    hess_reg=5.0)
+# For newton's method.
+max_iters = 20;
+
+function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
+  mp_optim = deepcopy(mp_original);
+  iter_count, max_f, max_x, ret =
+    maximize_f_newton(mp -> ElboDeriv.elbo(blob, mp), mp_optim, transform,
+                      omitted_ids=omitted_ids, verbose=true, max_iters=max_iters,
+                      hess_reg=10.0)
+  mp_optim, iter_count, max_f
+end
+
+
+function fit_type(obj_type::Symbol, mp_original::ModelParams, fit_fun::Function)
+  mp_type = deepcopy(mp_original)
+  omitted_ids = fit_only_type!(obj_type, mp_type);
+  mp_type, iter_count, max_f = fit_fun(mp_type, omitted_ids)
+  mp_type, iter_count, max_f
+end
+
+function combine_star_gal(mp_star::ModelParams, mp_gal::ModelParams)
+  mp_combined = deepcopy(mp_original);
+  for s=1:mp_combined.S
+    mp_combined.vp[s][galaxy_ids] = mp_gal.vp[s][galaxy_ids]
+    mp_combined.vp[s][star_ids] = mp_gal.vp[s][star_ids]
+    mp_combined.vp[s][ids.a] = [0.5, 0.5]
+  end
+  mp_combined
+end
+
+# Try fitting one type at a time.
+bfgs_results = Dict()
+nm_results = Dict()
+
+nm_results[:star], nm_star_iters, nm_star_v = fit_type(:star, mp_original, newton_fit_params)
+bfgs_results[:star], bfgs_star_iters, bfgs_star_v = fit_type(:star, mp_original, bfgs_fit_params)
+
+nm_results[:galaxy], nm_gal_iters, nm_gal_v = fit_type(:galaxy, mp_original, newton_fit_params)
+bfgs_results[:galaxy], bfgs_gal_iters, bfgs_gal_v = fit_type(:galaxy, mp_original, bfgs_fit_params)
+
+println(nm_star_v, ", ", nm_star_iters)
+println(bfgs_star_v, ", ", bfgs_star_iters)
+
+println(nm_gal_v, ", ", nm_gal_iters)
+println(bfgs_gal_v, ", ", bfgs_gal_iters)
+
+nm_results[:combined] = combine_star_gal(nm_results[:star], nm_results[:galaxy])
+bfgs_results[:combined] = combine_star_gal(bfgs_results[:star], bfgs_results[:galaxy])
+print_params(nm_results[:combined], bfgs_results[:combined])
+ElboDeriv.get_brightness(nm_results[:combined])
+ElboDeriv.get_brightness(bfgs_results[:combined])
+
+nm_results[:a] = fit_type(:a, nm_results[:combined], newton_fit_params)[1]
+bfgs_results[:a] = fit_type(:a, bfgs_results[:combined], bfgs_fit_params)[1]
+print_params(nm_results[:a], bfgs_results[:a])
+
+# For some reason this sets a to be 0.5...
+nm_results[:both], nm_both_iters, nm_both_v =
+fit_type(:both, nm_results[:a], newton_fit_params)
+bfgs_results[:both], nm_both_iters, nm_both_v =
+  fit_type(:a, bfgs_results[:a], bfgs_fit_params)
+
+
 
 ######################
 # Print results
@@ -147,8 +213,6 @@ ElboDeriv.get_brightness(mp_bfgs)[1]
 
 ##########################
 # Simpler tests
-
-
 
 function verify_sample_star(vs, pos)
     @test vs[ids.a[2]] <= 0.011
@@ -208,8 +272,14 @@ verify_sample_star(mp.vp[1], [10.1, 12.2])
 
 
 
+
+
+
+
+
+##########################
 #########################
-# Newton's method by hand
+# Newton's method by hand, probably obsolete.
 
 obj_wrap = OptimizeElbo.ObjectiveWrapperFunctions(
     mp -> ElboDeriv.elbo(blob, mp), deepcopy(mp_original), transform, kept_ids, omitted_ids);
