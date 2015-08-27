@@ -80,6 +80,9 @@ function convert_catalog_to_celeste(
 end
 
 
+@doc """
+Load a stamp into a Celeste blob.
+""" ->
 function load_stamp_blob(stamp_dir, stamp_id)
     function fetch_image(b)
         band_letter = band_letters[b]
