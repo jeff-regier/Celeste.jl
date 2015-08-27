@@ -6,9 +6,10 @@ using Celeste
 using CelesteTypes
 import Synthetic
 
+import SloanDigitalSkySurvey: SDSS
 
 function peak_infer_and_cache(stamp_id)
-	blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id);
+	blob = Images.load_stamp_blob(ENV["STAMP"], stamp_id);
 	mp = ModelInit.peak_init(blob);
 
 	OptimizeElbo.maximize_elbo(blob, mp)
@@ -20,7 +21,7 @@ end
 
 
 function cat_infer_and_cache(stamp_id)
-	blob = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id);
+	blob = Images.load_stamp_blob(ENV["STAMP"], stamp_id);
 	cat_entries = SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob, match_blob=true)
 	mp = ModelInit.cat_init(cat_entries)
 
@@ -41,7 +42,7 @@ function synth_infer_and_cache(stamp_id)
     cat_synth = deserialize(f)
     close(f)
 
-    blob0 = SDSS.load_stamp_blob(ENV["STAMP"], stamp_id)
+    blob0 = Images.load_stamp_blob(ENV["STAMP"], stamp_id)
     blob = Synthetic.gen_blob(blob0, cat_synth)
 
     cat_synth = filter(bright, cat_synth)
@@ -68,4 +69,3 @@ if length(ARGS) == 2
         synth_infer_and_cache(ARGS[2])
     end
 end
-

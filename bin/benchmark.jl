@@ -5,14 +5,13 @@ using CelesteTypes
 
 import Synthetic
 
-
 const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
 
 function small_image_profile()
     srand(1)
 
-    blob0 = SDSS.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 1000, 1000
     end
@@ -22,7 +21,7 @@ function small_image_profile()
     S = 100
     locations = rand(2, S) .* 1000.
 
-    S_bodies = CatalogEntry[CatalogEntry(locations[:, s][:], true, 
+    S_bodies = CatalogEntry[CatalogEntry(locations[:, s][:], true,
         fluxes, fluxes, 0.1, .7, pi/4, 4.) for s in 1:S]
 
     blob = Synthetic.gen_blob(blob0, S_bodies)
@@ -36,5 +35,3 @@ small_image_profile()
 @profile small_image_profile()
 #Profile.print()
 Profile.print(format=:flat)
-
-
