@@ -30,7 +30,7 @@ function test_local_sources()
     mp = ModelInit.cat_init(three_bodies, patch_radius=20., tile_width=1000)
     @test mp.S == 3
 
-    tile = ImageTile(1, 1, blob[3])
+    tile = ImageTile(1, 1, blob[3], mp.tile_width)
     subset1000 = ElboDeriv.local_sources(tile, mp)
     @test subset1000 == [1,2,3]
 
@@ -39,11 +39,11 @@ function test_local_sources()
     subset10 = ElboDeriv.local_sources(tile, mp)
     @test subset10 == [1]
 
-    last_tile = ImageTile(11, 24, blob[3])
+    last_tile = ImageTile(11, 24, blob[3], mp.tile_width)
     last_subset = ElboDeriv.local_sources(last_tile, mp)
     @test length(last_subset) == 0
 
-    pop_tile = ImageTile(7, 9, blob[3])
+    pop_tile = ImageTile(7, 9, blob[3], mp.tile_width)
     pop_subset = ElboDeriv.local_sources(pop_tile, mp)
     @test pop_subset == [2,3]
 end

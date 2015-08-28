@@ -203,9 +203,16 @@ Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
           false, epsilon_mat, iota_vec, raw_psf_comp)
 end
 
+
+@doc """A vector of images, one for each filter band""" ->
+typealias Blob Vector{Image}
+
+
+
 @doc """
 Tiles of pixels that share the same set of
-relevant sources (or other calculations).
+relevant sources (or other calculations).  It contains all the information
+necessary to compute the ELBO and derivatives in this patch of sky.
 
 These are in tile coordinates --- not pixel or sky coordinates.
 (I.e., the range of hh and ww are the number of horizontal
@@ -214,11 +221,60 @@ These are in tile coordinates --- not pixel or sky coordinates.
 immutable ImageTile
     hh::Int64
     ww::Int64
-    img::Image
+    b::Int64
+
+    h_range::UnitRange{Int64}
+    w_range::UnitRange{Int64}
+    pixels::Matrix{Float64}
+
+    constant_background::Bool
+    epsilon::Float64
+    epsilon_mat::Matrix{Float64}
+    iota::Float64
+    iota_vec::Matrix{Float64}
 end
 
-@doc """A vector of images, one for each filter band""" ->
-typealias Blob Vector{Image}
+
+@doc """
+Return the range of image pixels in an ImageTile.
+
+Args:
+  - hh: The tile row index (in 1:number of tile rows)
+  - ww: The tile column index (in 1:number of tile columns)
+  - H: The number of pixel rows in the image
+  - W: The number of pixel columns in the image
+  - tile_width: The width and height of a tile in pixels
+""" ->
+function tile_range(hh::Int64, ww::Int64, H::Int64, W::Int64, tile_width::Int64)
+    h1 = 1 + (hh - 1) * tile_width
+    h2 = min(hh * tile_width, H)
+    w1 = 1 + (ww - 1) * tile_width
+    w2 = min(ww * tile_width, W)
+    h1:h2, w1:w2
+end
+
+
+@doc """
+Constructs an image tile from an image.
+
+Args:
+  - img: The Image to be broken into tiles
+  - hh: The tile row index (in 1:number of tile rows)
+  - ww: The tile column index (in 1:number of tile columns)
+  - tile_width: The width and height of a tile in pixels
+""" ->
+ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
+  b = img.b
+  h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
+  pixels = img[h_range, w_range]
+
+  epsilon_mat = img.epsilon_mat[h_range, w_range]
+  iota_vec = img.iota_vec[h_range]
+
+  ImageTile(hh, ww, b, h_range, w_range, pixels,
+            constant_background, epsilon, epsilon_mat, iota, iota_vec)
+end
+
 
 @doc """
 Attributes of the patch of sky surrounding a single
@@ -365,7 +421,8 @@ const shape_standard_alignment = (ids.u,
 bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
-# TODO: maybe these should be incorporated into the framework above (which I don't really understand.)
+# TODO: maybe these should be incorporated into the framework above
+# (which I don't really understand.)
 function get_id_names(ids::Union(CanonicalParams, UnconstrainedParams))
   ids_names = Array(ASCIIString, length(ids))
   for (name in names(ids))
@@ -449,7 +506,9 @@ function print_params(mp_tuple::ModelParams...)
         println("=======================\n Object $(s):")
         for var_name in names(ids)
             println(var_name)
-            mp_vars = [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for index in 1:length(mp_tuple) ]
+            mp_vars =
+              [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for
+                index in 1:length(mp_tuple) ]
             println(reduce(hcat, mp_vars))
         end
     end
@@ -485,25 +544,29 @@ end
 
 #########################################################
 
-function zero_sensitive_float{ParamType <: ParamSet}(::Type{ParamType}, NumType::DataType, local_S::Int64)
+function zero_sensitive_float{ParamType <: ParamSet}(
+  ::Type{ParamType}, NumType::DataType, local_S::Int64)
     local_P = length(ParamType)
     d = zeros(NumType, local_P, local_S)
     h = zeros(NumType, local_P, local_S)
     SensitiveFloat{ParamType, NumType}(zero(NumType), d, h, getids(ParamType))
 end
 
-function zero_sensitive_float{ParamType <: ParamSet}(::Type{ParamType}, NumType::DataType)
+function zero_sensitive_float{ParamType <: ParamSet}(
+  ::Type{ParamType}, NumType::DataType)
     # Default to a single source.
     zero_sensitive_float(ParamType, NumType, 1)
 end
 
-function clear!{ParamType <: ParamSet, NumType <: Number}(sp::SensitiveFloat{ParamType, NumType})
+function clear!{ParamType <: ParamSet, NumType <: Number}(
+  sp::SensitiveFloat{ParamType, NumType})
     sp.v = zero(NumType)
     fill!(sp.d, zero(NumType))
 end
 
 # If no type is specified, default to using Float64.
-function zero_sensitive_float{ParamType <: ParamSet}(param_arg::Type{ParamType}, local_S::Int64)
+function zero_sensitive_float{ParamType <: ParamSet}(
+  param_arg::Type{ParamType}, local_S::Int64)
     zero_sensitive_float(param_arg, Float64, local_S)
 end
 
