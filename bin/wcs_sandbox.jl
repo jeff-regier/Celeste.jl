@@ -23,8 +23,6 @@ const band_letters = ['u', 'g', 'r', 'i', 'z']
 b = 1
 b_letter = band_letters[b]
 
-include("src/NewtonsMethod.jl")
-
 ##################
 # Load a stamp to check out the psf and wcs
 
@@ -359,7 +357,7 @@ for b=1:5
 	cat_px = WCS.world_to_pixel(blob[b].wcs, cat_loc)
 	PyPlot.scatter(cat_px[:, 1] - x_min, cat_px[:, 2] - y_min, marker="o", c="r", s=25)
 
-	obj_row = cat_df[:objid] .== objid 
+	obj_row = cat_df[:objid] .== objid
 	PyPlot.scatter(cat_px[obj_row, 1] - x_min, cat_px[obj_row, 2] - y_min,
 		           marker="x", c="w", s=25)
 
