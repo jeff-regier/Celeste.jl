@@ -206,5 +206,40 @@ v & = & \log\left(\gamma\zeta^{2}\right)=\log\gamma+2\log\zeta\\
 
 \end_layout
 
+\begin_layout Standard
+Certain variables might need to have box constraints.
+ In that case,
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+y_{0} & = & \frac{1}{1+\exp\left(-x\right)}\\
+1-y_{0} & = & \frac{\exp\left(-x\right)}{1+\exp\left(-x\right)}\\
+y & = & y_{0}\left(y_{max}-y_{min}\right)+y_{min}\\
+y_{0} & = & \frac{y-y_{min}}{y_{max}-y_{min}}\\
+\frac{df}{dx} & = & \frac{df}{dy}\frac{dy}{dx}\\
+\frac{dy}{dx} & = & \frac{dy}{dy_{0}}\frac{dy_{0}}{dx}\\
+ & = & \left(y_{max}-y_{min}\right)y_{0}\left(1-y_{0}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Since, as above
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{dy_{0}}{dx} & = & \frac{\exp\left(-x\right)}{\left(1+\exp\left(-x\right)\right)^{2}}\\
+ & = & y_{0}\left(1-y_{0}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
 \end_body
 \end_document

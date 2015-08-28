@@ -105,6 +105,22 @@ function test_star_optimization()
 end
 
 
+function test_star_optimization_newton()
+    # Currently only check that it is able to take a step -- Newton's method
+    # currently needs a warm start to converge in a resonable amount of time due
+    # to the high cost of evaluating the Hessian at each step.
+    blob, mp, body = gen_sample_star_dataset();
+    trans = get_mp_transform(mp, loc_width=1.0);
+    function lik_function(mp::ModelParams)
+      ElboDeriv.elbo_likelihood(blob, mp)
+    end
+    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+    OptimizeElbo.maximize_f_newton(
+      lik_function, mp, trans,
+      omitted_ids=omitted_ids, verbose=false, max_iters=2, hess_reg=2.0);
+end
+
+
 function test_galaxy_optimization()
     blob, mp, body = gen_sample_galaxy_dataset();
     trans = get_mp_transform(mp, loc_width=1.0);
@@ -467,7 +483,6 @@ function test_quadratic_optimization()
     @test_approx_eq_eps quadratic_function(unused_blob, mp).v 0.0 1e-15
 end
 
-
 ####################################################
 
 test_quadratic_optimization()
@@ -479,6 +494,7 @@ test_bad_a_init()
 #test_kl_invariance_to_a()
 #test_likelihood_invariance_to_a()
 test_star_optimization()
+test_star_optimization_newton()
 test_galaxy_optimization()
 test_full_elbo_optimization()
 #test_real_stamp_optimization() # Too long-running
