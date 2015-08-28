@@ -125,6 +125,26 @@ immutable SourceBrightness
     end
 end
 
+@doc """
+A convenience function for getting only the brightness parameters
+from model parameters.
+
+Args:
+  mp: Model parameters
+
+Returns:
+  An array of E_l_a and E_ll_a for each source.
+""" ->
+function get_brightness(mp::ModelParams)
+    brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+    brightness_vals = [ Float64[b.E_l_a[i, j].v for
+        i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
+    brightness_squares = [ Float64[b.E_l_a[i, j].v for
+        i=1:size(b.E_ll_a, 1), j=1:size(b.E_ll_a, 2)] for b in brightness]
+
+    brightness_vals, brightness_squares
+end
+
 
 @doc """
 Relevant parameters of a bivariate normal distribution.

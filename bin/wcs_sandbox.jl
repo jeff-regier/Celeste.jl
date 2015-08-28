@@ -10,6 +10,8 @@ import FITSIO
 import WCS
 #import PyPlot
 
+VERSION < v"0.4.0-dev" && using Docile
+
 # Some examples of the SDSS fits functions.
 field_dir = joinpath(dat_dir, "sample_field")
 run_num = "003900"
@@ -61,55 +63,27 @@ objid = "1237662226208063565" # A brightish star but with good pixels.
 
 #sub_rows_x = 1:150
 #sub_rows_y = 1:150
-
-width = 8
-
 blob = deepcopy(original_blob);
 reset_crpix!(blob);
+width = 8.
+
 cat_df = deepcopy(original_cat_df);
-cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]]);
 obj_row = original_cat_df[:objid] .== objid;
 obj_loc = convert(Array, original_cat_df[obj_row, [:ra, :dec]])'[:]
-#[ WCS.world_to_pixel(blob[b].wcs, obj_loc) for b=1:5]
-entry_in_range = Bool[true for i=1:size(cat_loc, 1) ];
-x_ranges = zeros(2, 5)
-y_ranges = zeros(2, 5)
-for b=1:5
-	obj_loc_pix = WCS.world_to_pixel(blob[b].wcs, obj_loc)
-	sub_rows_x = floor(obj_loc_pix[1] - width):ceil(obj_loc_pix[1] + width)
-	sub_rows_y = floor(obj_loc_pix[2] - width):ceil(obj_loc_pix[2] + width)
-	x_min = minimum(collect(sub_rows_x))
-	y_min = minimum(collect(sub_rows_y))
-	x_max = maximum(collect(sub_rows_x))
-	y_max = maximum(collect(sub_rows_y))
-	x_ranges[:, b] = Float64[x_min, x_max]
-	y_ranges[:, b] = Float64[y_min, y_max]
 
-	wcs_range = WCS.world_to_pixel(blob[b].wcs, cat_loc)
-	entry_in_range = entry_in_range &
-		(x_min .<= wcs_range[:, 1] .<= x_max) &
-		(y_min .<= wcs_range[:, 2] .<= y_max)
 
-	# Re-center the WCS coordinates
-	crpix = original_crpix_band[:, b]
-	unsafe_store!(blob[b].wcs.crpix, crpix[1] - x_min + 1, 1)
-	unsafe_store!(blob[b].wcs.crpix, crpix[2] - y_min + 1, 2)
+x_ranges, y_ranges = SDSS.crop_image!(blob, width, obj_loc);
+@assert SDSS.test_catalog_entry_in_image(blob, obj_loc)
 
-	blob[b].pixels = blob[b].pixels[sub_rows_x, sub_rows_y]
-	blob[b].H = size(blob[b].pixels, 1)
-	blob[b].W = size(blob[b].pixels, 2)
-	blob[b].iota_vec = blob[b].iota_vec[x_min:x_max]
-	blob[b].epsilon_mat = blob[b].epsilon_mat[x_min:x_max, y_min:y_max]
-end
-cat_df = cat_df[entry_in_range, :]
-cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
 cat_loc = convert(Array{Float64}, cat_df[[:ra, :dec]]);
+entry_in_image = [SDSS.test_catalog_entry_in_image(blob, cat_loc[i,:][:]) for i=1:size(cat_loc, 1)];
+cat_df[entry_in_image, cat_cols]
+cat_entries = SDSS.convert_catalog_to_celeste(cat_df[entry_in_image, :], blob)
 initial_mp = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
 
-# Check the re-centering
+# Check the re-centering.  This should be a little larger than width.
 for b=1:5
 	println(WCS.world_to_pixel(blob[b].wcs, obj_loc))
-	#println(WCS.world_to_pixel(blob[b].wcs, initial_mp.vp[1][ids.u]))
 end
 
 ##############################
@@ -121,15 +95,15 @@ custom_rect_rescaling = ones(length(UnconstrainedParams));
 [custom_rect_rescaling[id] *= 1e5 for id in ids_free.u];
 [custom_rect_rescaling[id] *= 1e1 for id in ids_free.a];
 
-function custom_vp_to_rect!(vp::VariationalParams, vp_free::RectVariationalParams)
+function custom_vp_to_rect!{T <: Number}(vp::VariationalParams{T}, vp_free::RectVariationalParams{T})
     Transform.vp_to_rect!(vp, vp_free, custom_rect_rescaling)
 end
 
-function custom_rect_to_vp!(vp_free::RectVariationalParams, vp::VariationalParams)
+function custom_rect_to_vp!{T <: Number}(vp_free::RectVariationalParams{T}, vp::VariationalParams{T})
     Transform.rect_to_vp!(vp_free, vp, custom_rect_rescaling)
 end
 
-function custom_rect_unconstrain_sensitive_float(sf::SensitiveFloat, mp::ModelParams)
+function custom_rect_unconstrain_sensitive_float{T <: Number}(sf::SensitiveFloat, mp::ModelParams{T})
     Transform.rect_unconstrain_sensitive_float(sf, mp, custom_rect_rescaling)
 end
 
@@ -138,31 +112,6 @@ custom_rect_transform = Transform.DataTransform(custom_rect_to_vp!, custom_vp_to
                                      custom_rect_unconstrain_sensitive_float,
                                      length(UnconstrainedParams));
 
-# Some helper functions
-
-function compare_solutions(mp1::ModelParams, mp2::ModelParams)
-    # Compare the parameters, fits, and iterations.
-    println("===================")
-    println("Differences:  mp1 vs mp2:")
-    for var_name in names(ids)
-        println(var_name)
-        for s in 1:mp1.S
-            println(s, ":\n", mp1.vp[s][ids.(var_name)], "\n", mp2.vp[s][ids.(var_name)])
-        end
-    end
-    println("===================")
-end
-
-function get_brightness(mp::ModelParams)
-	brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
-	brightness_vals = [ Float64[b.E_l_a[i, j].v for
-		i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
-	brightness_vals
-end
-
-function display_cat(cat_entry::CatalogEntry)
-	[ println("$name: $(cat_entry.(name))") for name in names(cat_entry) ]
-end
 
 
 # Set the psfs to the local psfs
@@ -181,7 +130,7 @@ end
 
 this_star_fluxes = convert(Array{Float64}, cat_df[[:psfflux_u, :psfflux_g, :psfflux_r, :psfflux_i, :psfflux_z ]])[:]
 synth_cat_entry = CatalogEntry(obj_loc, true, this_star_fluxes, this_star_fluxes, 0.1, .7, pi/4, 4.)
-synth_blob = Synthetic.gen_blob(blob, [synth_cat_entry]; identity_wcs=false, expectation=true);
+synth_blob = Synthetic.gen_blob(blob, [synth_cat_entry]; expectation=true);
 
 # Graph things in R since PyPlot is broken.
 # Note that this star doesn't look a ton like the raw psf, especially in band 3.
@@ -210,21 +159,51 @@ end
 mp = deepcopy(initial_mp);
 #res = OptimizeElbo.maximize_likelihood(blob, mp, Transform.rect_transform, xtol_rel=0);
 res = OptimizeElbo.maximize_likelihood(blob, mp, custom_rect_transform);
-compare_solutions(mp, initial_mp)
-display_cat(cat_entries[1]);
-get_brightness(mp)
+res = OptimizeElbo.maximize_likelihood(blob, mp, free_transform);
+print_params2(mp, initial_mp)
+print_cat_entry(cat_entries[1]);
+ElboDeriv.get_brightness(mp)
 
-# Try non-varying background.
-for b=1:5
-	blob[b].constant_background = true
+
+# By hand
+using NLopt
+
+lbs, ubs = OptimizeElbo.get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform);
+
+f = ElboDeriv.elbo_likelihood
+transform = free_transform;
+omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids);
+x0 = transform.vp_to_vector(mp.vp, omitted_ids);
+
+obj_wrapper = ObjectiveWrapperFunctions(mp -> f(blob, mp), mp, transform, kept_ids, omitted_ids);
+obj_wrapper.state.print_every_n = 1;
+obj_wrapper.state.verbose = true;
+
+opt = Opt(:LD_LBFGS, length(x0))
+for i in 1:length(x0)
+    if !(lbs[i] <= x0[i] <= ubs[i])
+        println("coordinate $i falsity: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
+    end
 end
-#include("src/ElboDeriv.jl"); include("src/OptimizeElbo.jl")
-mp_const = deepcopy(initial_mp);
-#res = OptimizeElbo.maximize_elbo(blob, mp_const);
-res = OptimizeElbo.maximize_likelihood(blob, mp_const, custom_rect_transform);
-compare_solutions(mp, initial_mp)
-display_cat(cat_entries[1]);
-get_brightness(mp_const)
+lower_bounds!(opt, lbs);
+upper_bounds!(opt, ubs);
+max_objective!(opt, obj_wrapper.f_value_grad!);
+xtol_rel!(opt, 1e-7);
+ftol_abs!(opt, 1e-6);
+(max_f, max_x, ret) = optimize(opt, x0);
+
+iter_count = obj_wrapper.state.f_evals
+println("got $max_f at $max_x after $iter_count iterations (returned $ret)\n")
+iter_count, max_f, max_x, ret
+
+
+
+
+
+
+
+
 
 
 ###################

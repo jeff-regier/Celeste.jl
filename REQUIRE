@@ -5,6 +5,7 @@ DualNumbers
 FITSIO
 ForwardDiff
 NLopt
+Optim
 GaussianMixtures
 Grid
 GSL
