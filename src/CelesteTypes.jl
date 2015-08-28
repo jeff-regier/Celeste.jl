@@ -7,7 +7,7 @@ export band_letters
 
 export Image, Blob, SkyPatch, ImageTile, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
-export effective_radii, tile_image
+export effective_radii, break_image_into_tiles
 
 export ModelParams, PriorParams, UnconstrainedParams
 export CanonicalParams, BrightnessParams, StarPosParams, GalaxyPosParams
@@ -224,6 +224,8 @@ immutable ImageTile
 
     h_range::UnitRange{Int64}
     w_range::UnitRange{Int64}
+    h_width::Int64
+    w_width::Int64
     pixels::Matrix{Float64}
 
     constant_background::Bool
@@ -265,6 +267,8 @@ Args:
 ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
   b = img.b
   h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
+  h_width = maximum(h_range) - minimum(h_range) + 1
+  w_width = maximum(w_range) - minimum(w_range) + 1
   pixels = img.pixels[h_range, w_range]
 
   if img.constant_background
@@ -275,14 +279,21 @@ ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
     iota_vec = img.iota_vec[h_range]
   end
 
-  ImageTile(hh, ww, b, h_range, w_range, pixels,
+  ImageTile(hh, ww, b, h_range, w_range, h_width, w_width, pixels,
             img.constant_background, img.epsilon, epsilon_mat, img.iota, iota_vec)
 end
 
 @doc """
 Convert an image to an array of tiles of a given width.
+
+Args:
+  - img: An image to be broken into tiles
+  - tile_width: The size in pixels of each tile
+
+Returns:
+  An array of tiles containing the image.
 """ ->
-function tile_image(img::Image, tile_width::Int64)
+function break_image_into_tiles(img::Image, tile_width::Int64)
   WW = int(ceil(img.W / tile_width))
   HH = int(ceil(img.H / tile_width))
   ImageTile[ ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW ]

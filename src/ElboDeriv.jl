@@ -652,15 +652,12 @@ Args:
   - accum: The ELBO log likelihood to be updated.
 """ ->
 function tile_likelihood!(tile::ImageTile,
+        tile_sources::Vector{Int64},
         mp::ModelParams,
         sbs::Vector{SourceBrightness},
         star_mcs::Array{BvnComponent, 2},
         gal_mcs::Array{GalaxyCacheComponent, 4},
         accum::SensitiveFloat)
-
-    # TODO: calculate local sources outside the likelihood function
-    tile_sources = local_sources(tile, mp)
-    h_range, w_range = tile_range(tile, mp.tile_width)
 
     # For speed, if there are no sources, add the noise
     # contribution directly.
@@ -668,16 +665,17 @@ function tile_likelihood!(tile::ImageTile,
 
         # NB: not using the delta-method approximation here
         if tile.img.constant_background
-            nan_pixels = isnan(tile.img.pixels[h_range, w_range])
-            num_pixels = length(h_range) * length(w_range) - sum(nan_pixels)
-            tile_x = sum(tile.img.pixels[h_range, w_range][!nan_pixels])
-            ep = tile.img.epsilon
+            nan_pixels = isnan(tile.pixels)
+            num_pixels =
+              length(tile.h_range) * length(tile.w_range) - sum(nan_pixels)
+            tile_x = sum(tile.pixels[!nan_pixels])
+            ep = tile.epsilon
             accum.v += tile_x * log(ep) - num_pixels * ep
         else
-            for w in w_range, h in h_range
-                this_pixel = tile.img.pixels[h, w]
+            for w in 1:tile.w_width, h in 1:tile.h_width
+                this_pixel = tile.pixels[h, w]
                 if !isnan(this_pixel)
-                    ep = tile.img.epsilon_mat[h, w]
+                    ep = tile.epsilon_mat[h, w]
                     accum.v += this_pixel * log(ep) - ep
                 end
             end
@@ -695,8 +693,8 @@ function tile_likelihood!(tile::ImageTile,
     var_G = zero_sensitive_float(CanonicalParams, num_type, tile_S)
 
     # Iterate over pixels that are not NaN.
-    for w in w_range, h in h_range
-        this_pixel = tile.img.pixels[h, w]
+    for w in 1:tile.w_width, h in 1:tile.h_width
+        this_pixel = tile.pixels[h, w]
         if !isnan(this_pixel)
             clear!(E_G)
             if tile.img.constant_background
@@ -708,7 +706,7 @@ function tile_likelihood!(tile::ImageTile,
             end
             clear!(var_G)
 
-            m_pos = Float64[h, w]
+            m_pos = Float64[tile.h_range[h], tile.w_range[w]]
             for child_s in 1:length(tile_sources)
                 wcs_jacobian = mp.patches[child_s].wcs_jacobian
                 parent_s = tile_sources[child_s]
@@ -745,12 +743,10 @@ function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-    WW = int(ceil(img.W / mp.tile_width))
-    HH = int(ceil(img.H / mp.tile_width))
-    tiles = ImageTile[ ImageTile(hh, ww, img) for ww=1:WW, hh=1:HH]
-
+    tiles = break_image_into_tiles(img, mp.tile_width)
     for tile in tiles
-        tile_likelihood!(tile, mp, sbs, star_mcs, gal_mcs, accum)
+        tile_sources = local_sources(tile, mp, img.wcs)
+        tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
     end
 end
 

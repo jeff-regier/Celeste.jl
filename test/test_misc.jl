@@ -17,10 +17,11 @@ function test_tile_image()
   tile_width = 20;
   tile = ImageTile(1, 1, img, tile_width);
 
-  tiles = tile_image(img, tile_width);
+  tiles = break_image_into_tiles(img, tile_width);
   @test size(tiles) ==
     (int(ceil(img.H  / tile_width)), int(ceil(img.W / tile_width)))
   for tile in tiles
+    @test tile.b == img.b
     @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
     @test tile.epsilon == img.epsilon
     @test tile.iota == img.iota
@@ -31,14 +32,20 @@ function test_tile_image()
   img.constant_background = false
   img.epsilon_mat = rand(size(img.pixels));
   img.iota_vec = rand(size(img.pixels)[1]);
-  tiles = tile_image(img, tile_width);
+  tiles = break_image_into_tiles(img, tile_width);
   @test size(tiles) ==
     (int(ceil(img.H  / tile_width)), int(ceil(img.W / tile_width)))
   for tile in tiles
+    @test tile.b == img.b
     @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
     @test tile.epsilon_mat == img.epsilon_mat[tile.h_range, tile.w_range]
     @test tile.iota_vec == img.iota_vec[tile.h_range]
     @test tile.constant_background == img.constant_background
+  end
+
+  tile = tiles[2, 2]
+  for h in 1:tile.h_width, w in 1:tile.w_width
+    @test tile.pixels[h, w] == img.pixels[tile.h_range[h], tile.w_range[w]]
   end
 end
 
@@ -69,7 +76,7 @@ function test_local_sources()
 
     mp.tile_width=10
 
-    subset10 = ElboDeriv.local_sources(tile, mp)
+    subset10 = ElboDeriv.local_sources(tile, mp, blob[3].wcs)
     @test subset10 == [1]
 
     last_tile = ImageTile(11, 24, blob[3], mp.tile_width)
@@ -149,19 +156,19 @@ function test_local_sources_3()
     # Source should be present
     tile = ImageTile(round(pix_loc[1] / tile_width),
                      round(pix_loc[2] / tile_width), blob[test_b])
-    @assert ElboDeriv.local_sources(tile, mp) == [1]
+    @assert ElboDeriv.local_sources(tile, mp, blob[test_b]) == [1]
 
     # Source should not match when you're 1 tile and a half away along the diagonal plus
     # the pixel radius from the center of the tile.
     tile = ImageTile(ceil((pix_loc[1] + 1.5 * tile_width * sqrt(2) +
                            patch_radius_pix) / tile_width),
                      round(pix_loc[2] / tile_width), blob[test_b])
-    @assert ElboDeriv.local_sources(tile, mp) == []
+    @assert ElboDeriv.local_sources(tile, mp, blob[test_b]) == []
 
     tile = ImageTile(round((pix_loc[1]) / tile_width),
                      ceil((pix_loc[2]  + 1.5 * tile_width * sqrt(2) +
                            patch_radius_pix) / tile_width), blob[test_b])
-    @assert ElboDeriv.local_sources(tile, mp) == []
+    @assert ElboDeriv.local_sources(tile, mp, blob[test_b]) == []
 end
 
 
@@ -245,9 +252,9 @@ end
 
 ####################################################
 
+test_tile_image()
 test_util_bvn_cov()
 test_sky_noise_estimates()
 test_local_sources()
 test_local_sources_2()
 test_local_sources_3()
-test_tile_image()
