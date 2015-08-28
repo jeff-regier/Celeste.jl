@@ -9,6 +9,88 @@ import Util
 import Polygons
 import SloanDigitalSkySurvey: WCS
 
+
+@doc """
+Subtract the KL divergence from the prior for c
+""" ->
+function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
+                        mp::ModelParams,
+                        accum::SensitiveFloat)
+    vs = mp.vp[s]
+    a = vs[ids.a[i]]
+    k = vs[ids.k[d, i]]
+
+    pp_kl_cid = KL.gen_diagmvn_mvn_kl(mp.pp.c[i][1][:, d],
+                                      mp.pp.c[i][2][:, :, d])
+    (v, (d_c1, d_c2)) = pp_kl_cid(vs[ids.c1[:, i]],
+                                        vs[ids.c2[:, i]])
+    accum.v -= v * a * k
+    accum.d[ids.k[d, i], s] -= a * v
+    accum.d[ids.c1[:, i], s] -= a * k * d_c1
+    accum.d[ids.c2[:, i], s] -= a * k * d_c2
+    accum.d[ids.a[i], s] -= k * v
+end
+
+@doc """
+Subtract the KL divergence from the prior for k
+""" ->
+function subtract_kl_k!(i::Int64, s::Int64,
+                        mp::ModelParams,
+                        accum::SensitiveFloat)
+    vs = mp.vp[s]
+    pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[i])
+    (v, (d_k,)) = pp_kl_ki(mp.vp[s][ids.k[:, i]])
+    accum.v -= v * vs[ids.a[i]]
+    accum.d[ids.k[:, i], s] -= d_k .* vs[ids.a[i]]
+    accum.d[ids.a[i], s] -= v
+end
+
+
+@doc """
+Subtract the KL divergence from the prior for r
+""" ->
+function subtract_kl_r!(i::Int64, s::Int64,
+                        mp::ModelParams, accum::SensitiveFloat)
+    vs = mp.vp[s]
+    pp_kl_r = KL.gen_gamma_kl(mp.pp.r[i][1], mp.pp.r[i][2])
+    (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
+    accum.v -= v * vs[ids.a[i]]
+    accum.d[ids.r1[i], s] -= d_r1 .* vs[ids.a[i]]
+    accum.d[ids.r2[i], s] -= d_r2 .* vs[ids.a[i]]
+    accum.d[ids.a[i], s] -= v
+end
+
+
+@doc """
+Subtract the KL divergence from the prior for a
+""" ->
+function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
+    pp_kl_a = KL.gen_categorical_kl(mp.pp.a)
+    (v, (d_a,)) = pp_kl_a(mp.vp[s][ids.a])
+    accum.v -= v
+    accum.d[ids.a, s] -= d_a
+end
+
+
+@doc """
+Subtract from accum the entropy and expected prior of
+the variational distribution.
+""" ->
+function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
+    for s in 1:mp.S
+        subtract_kl_a!(s, mp, accum)
+
+        for i in 1:Ia
+            subtract_kl_r!(i, s, mp, accum)
+            subtract_kl_k!(i, s, mp, accum)
+            for d in 1:D
+                subtract_kl_c!(d, i, s, mp, accum)
+            end
+        end
+    end
+end
+
+
 @doc """
 SensitiveFloat objects for expectations involving r_s and c_s.
 
@@ -171,15 +253,19 @@ immutable BvnComponent{NumType <: Number}
     end
 end
 
-BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64) = begin
-    BvnComponent{NumType}(the_mean, convert(Array{NumType}, the_cov), convert(NumType, weight))
+BvnComponent{NumType <: Number}(
+  the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64) = begin
+    BvnComponent{NumType}(
+      the_mean, convert(Array{NumType}, the_cov), convert(NumType, weight))
 end
 
-BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64) = begin
+BvnComponent{NumType <: Number}(
+  the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64) = begin
     BvnComponent{NumType}(the_mean, the_cov, convert(NumType, weight))
 end
 
-BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType) = begin
+BvnComponent{NumType <: Number}(
+  the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType) = begin
     BvnComponent{NumType}(the_mean, the_cov, weight)
 end
 
@@ -523,16 +609,6 @@ function accum_pixel_ret!(tile_sources::Vector{Int64},
 end
 
 
-@doc """
-Return the range of image pixels in an ImageTile.
-""" ->
-function tile_range(tile::ImageTile, tile_width::Int64)
-    h1 = 1 + (tile.hh - 1) * tile_width
-    h2 = min(tile.hh * tile_width, tile.img.H)
-    w1 = 1 + (tile.ww - 1) * tile_width
-    w2 = min(tile.ww * tile_width, tile.img.W)
-    h1:h2, w1:w2
-end
 
 
 @doc """
@@ -577,7 +653,7 @@ Args:
   - gal_mcs: All the galaxy * PCF components.
   - accum: The ELBO log likelihood to be updated.
 """ ->
-function elbo_likelihood!(tile::ImageTile,
+function tile_likelihood!(tile::ImageTile,
         mp::ModelParams,
         sbs::Vector{SourceBrightness},
         star_mcs::Array{BvnComponent, 2},
@@ -673,13 +749,20 @@ function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
 
     WW = int(ceil(img.W / mp.tile_width))
     HH = int(ceil(img.H / mp.tile_width))
-    for ww in 1:WW, hh in 1:HH
-        tile = ImageTile(hh, ww, img)
-        # might get a speedup from subsetting the mp here
-        elbo_likelihood!(tile, mp, sbs, star_mcs, gal_mcs, accum)
+    tiles = ImageTile[ ImageTile(hh, ww, img) for ww=1:WW, hh=1:HH]
+
+    for tile in tiles
+        tile_likelihood!(tile, mp, sbs, star_mcs, gal_mcs, accum)
     end
 end
 
+
+@doc """
+Break an image into tiles.
+""" ->
+function tile_image(img::Image, tile_width::Int64)
+
+end
 
 @doc """
 Return the expected log likelihood for all bands in a section
@@ -694,77 +777,6 @@ function elbo_likelihood{NumType <: Number}(blob::Blob, mp::ModelParams{NumType}
         elbo_likelihood!(img, mp, ret)
     end
     ret
-end
-
-
-function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
-                        mp::ModelParams,
-                        accum::SensitiveFloat)
-    vs = mp.vp[s]
-    a = vs[ids.a[i]]
-    k = vs[ids.k[d, i]]
-
-    pp_kl_cid = KL.gen_diagmvn_mvn_kl(mp.pp.c[i][1][:, d],
-                                      mp.pp.c[i][2][:, :, d])
-    (v, (d_c1, d_c2)) = pp_kl_cid(vs[ids.c1[:, i]],
-                                        vs[ids.c2[:, i]])
-    accum.v -= v * a * k
-    accum.d[ids.k[d, i], s] -= a * v
-    accum.d[ids.c1[:, i], s] -= a * k * d_c1
-    accum.d[ids.c2[:, i], s] -= a * k * d_c2
-    accum.d[ids.a[i], s] -= k * v
-end
-
-
-function subtract_kl_k!(i::Int64, s::Int64,
-                        mp::ModelParams,
-                        accum::SensitiveFloat)
-    vs = mp.vp[s]
-    pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[i])
-    (v, (d_k,)) = pp_kl_ki(mp.vp[s][ids.k[:, i]])
-    accum.v -= v * vs[ids.a[i]]
-    accum.d[ids.k[:, i], s] -= d_k .* vs[ids.a[i]]
-    accum.d[ids.a[i], s] -= v
-end
-
-
-function subtract_kl_r!(i::Int64, s::Int64,
-                        mp::ModelParams, accum::SensitiveFloat)
-    vs = mp.vp[s]
-    pp_kl_r = KL.gen_gamma_kl(mp.pp.r[i][1], mp.pp.r[i][2])
-    (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
-    accum.v -= v * vs[ids.a[i]]
-    accum.d[ids.r1[i], s] -= d_r1 .* vs[ids.a[i]]
-    accum.d[ids.r2[i], s] -= d_r2 .* vs[ids.a[i]]
-    accum.d[ids.a[i], s] -= v
-end
-
-
-
-function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
-    pp_kl_a = KL.gen_categorical_kl(mp.pp.a)
-    (v, (d_a,)) = pp_kl_a(mp.vp[s][ids.a])
-    accum.v -= v
-    accum.d[ids.a, s] -= d_a
-end
-
-
-@doc """
-Subtract from accum the entropy and expected prior of
-the variational distribution.
-""" ->
-function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
-    for s in 1:mp.S
-        subtract_kl_a!(s, mp, accum)
-
-        for i in 1:Ia
-            subtract_kl_r!(i, s, mp, accum)
-            subtract_kl_k!(i, s, mp, accum)
-            for d in 1:D
-                subtract_kl_c!(d, i, s, mp, accum)
-            end
-        end
-    end
 end
 
 
