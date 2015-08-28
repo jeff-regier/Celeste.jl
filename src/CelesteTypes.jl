@@ -7,7 +7,7 @@ export band_letters
 
 export Image, Blob, SkyPatch, ImageTile, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
-export effective_radii
+export effective_radii, tile_image
 
 export ModelParams, PriorParams, UnconstrainedParams
 export CanonicalParams, BrightnessParams, StarPosParams, GalaxyPosParams
@@ -208,7 +208,6 @@ end
 typealias Blob Vector{Image}
 
 
-
 @doc """
 Tiles of pixels that share the same set of
 relevant sources (or other calculations).  It contains all the information
@@ -231,7 +230,7 @@ immutable ImageTile
     epsilon::Float64
     epsilon_mat::Matrix{Float64}
     iota::Float64
-    iota_vec::Matrix{Float64}
+    iota_vec::Vector{Float64}
 end
 
 
@@ -266,15 +265,28 @@ Args:
 ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
   b = img.b
   h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
-  pixels = img[h_range, w_range]
+  pixels = img.pixels[h_range, w_range]
 
-  epsilon_mat = img.epsilon_mat[h_range, w_range]
-  iota_vec = img.iota_vec[h_range]
+  if img.constant_background
+    epsilon_mat = img.epsilon_mat
+    iota_vec = img.iota_vec
+  else
+    epsilon_mat = img.epsilon_mat[h_range, w_range]
+    iota_vec = img.iota_vec[h_range]
+  end
 
   ImageTile(hh, ww, b, h_range, w_range, pixels,
-            constant_background, epsilon, epsilon_mat, iota, iota_vec)
+            img.constant_background, img.epsilon, epsilon_mat, img.iota, iota_vec)
 end
 
+@doc """
+Convert an image to an array of tiles of a given width.
+""" ->
+function tile_image(img::Image, tile_width::Int64)
+  WW = int(ceil(img.W / tile_width))
+  HH = int(ceil(img.H / tile_width))
+  ImageTile[ ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW ]
+end
 
 @doc """
 Attributes of the patch of sky surrounding a single
