@@ -8,7 +8,7 @@ import KL
 import Util
 import Polygons
 import SloanDigitalSkySurvey: WCS
-
+import WCSLIB
 
 @doc """
 Subtract the KL divergence from the prior for c
@@ -621,21 +621,19 @@ Returns:
     pixels in the tile.  A source influences a tile if
     there is any overlap in their squares of influence.
 """ ->
-function local_sources(tile::ImageTile, mp::ModelParams)
+function local_sources(tile::ImageTile, mp::ModelParams, wcs::WCSLIB.wcsprm)
     # Corners of the tile in pixel coordinates.
-    tr = mp.tile_width / 2.  # tile width
-    tc = Float64[tr + (tile.hh - 1) * mp.tile_width,
-                 tr + (tile.ww - 1) * mp.tile_width] # Tile center
-    tc11 = tc + Float64[-tr, -tr]
-    tc12 = tc + Float64[-tr, tr]
-    tc22 = tc + Float64[tr, tr]
-    tc21 = tc + Float64[tr, -tr]
+
+    tc11 = Float64[minimum(tile.h_range), minimum(tile.w_range)]
+    tc12 = Float64[minimum(tile.h_range), maximum(tile.w_range)]
+    tc22 = Float64[maximum(tile.h_range), maximum(tile.w_range)]
+    tc21 = Float64[maximum(tile.h_range), minimum(tile.w_range)]
 
     tile_quad = vcat(tc11', tc12', tc22', tc21')
     pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
     pr = Float64[ mp.patches[s].radius for s=1:mp.S ]
     bool_vec =
-      Polygons.sources_near_quadrilateral(pc, pr, tile_quad, tile.img.wcs)
+      Polygons.sources_near_quadrilateral(pc, pr, tile_quad, wcs)
 
     (collect(1:mp.S))[bool_vec]
 end
