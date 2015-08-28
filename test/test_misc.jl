@@ -70,12 +70,13 @@ function test_local_sources()
     mp = ModelInit.cat_init(three_bodies, patch_radius=20., tile_width=1000);
     @test mp.S == 3
 
+    mp.tile_width = 1000
     tile = ImageTile(1, 1, blob[3], mp.tile_width);
     subset1000 = ElboDeriv.local_sources(tile, mp, blob[3].wcs);
     @test subset1000 == [1,2,3]
 
-    mp.tile_width=10
-
+    mp.tile_width = 10
+    tile = ImageTile(1, 1, blob[3], mp.tile_width);
     subset10 = ElboDeriv.local_sources(tile, mp, blob[3].wcs)
     @test subset10 == [1]
 
@@ -95,20 +96,20 @@ function test_local_sources_2()
     # the polygon logic.)
 
     srand(1)
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
     one_body = [sample_ce([50., 50.], true),]
 
     for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
-    small_blob = Synthetic.gen_blob(blob0, one_body)
+    small_blob = Synthetic.gen_blob(blob0, one_body);
 
     for b in 1:5 blob0[b].H, blob0[b].W = 400, 400 end
-    big_blob = Synthetic.gen_blob(blob0, one_body)
+    big_blob = Synthetic.gen_blob(blob0, one_body);
 
-    mp = ModelInit.cat_init(one_body, patch_radius=35., tile_width=2)
+    mp = ModelInit.cat_init(one_body, patch_radius=35., tile_width=2);
 
     qx = 0
     for ww=1:50,hh=1:50
-        tile = ImageTile(hh, ww, small_blob[2])
+        tile = ImageTile(hh, ww, small_blob[2], mp.tile_width)
         if length(ElboDeriv.local_sources(tile, mp, small_blob[2].wcs)) > 0
             qx += 1
         end
@@ -116,7 +117,7 @@ function test_local_sources_2()
 
     qy = 0
     for ww=1:200,hh=1:200
-        tile = ImageTile(hh, ww, big_blob[1])
+        tile = ImageTile(hh, ww, big_blob[1], mp.tile_width)
         if length(ElboDeriv.local_sources(tile, mp, big_blob[1].wcs)) > 0
             qy += 1
         end
@@ -132,13 +133,13 @@ function test_local_sources_3()
     srand(1)
     test_b = 3 # Will test using this band only
     pix_loc = Float64[50., 50.]
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
     body_loc = WCS.pixel_to_world(blob0[test_b].wcs, pix_loc)
     one_body = [sample_ce(body_loc, true),]
 
     # Get synthetic blobs but with the original world coordinates.
     for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
-    blob = Synthetic.gen_blob(blob0, one_body)
+    blob = Synthetic.gen_blob(blob0, one_body);
     for b in 1:5 blob[b].wcs = blob0[b].wcs end
 
     tile_width = 1
@@ -154,21 +155,27 @@ function test_local_sources_3()
     mp = ModelInit.cat_init(one_body, patch_radius=patch_radius, tile_width=tile_width)
 
     # Source should be present
-    tile = ImageTile(round(pix_loc[1] / tile_width),
-                     round(pix_loc[2] / tile_width), blob[test_b])
-    @assert ElboDeriv.local_sources(tile, mp, blob[test_b]) == [1]
+    tile = ImageTile(int(round(pix_loc[1] / tile_width)),
+                     int(round(pix_loc[2] / tile_width)),
+                     blob[test_b],
+                     mp.tile_width);
+    @assert ElboDeriv.local_sources(tile, mp, blob[test_b].wcs) == [1]
 
     # Source should not match when you're 1 tile and a half away along the diagonal plus
     # the pixel radius from the center of the tile.
-    tile = ImageTile(ceil((pix_loc[1] + 1.5 * tile_width * sqrt(2) +
-                           patch_radius_pix) / tile_width),
-                     round(pix_loc[2] / tile_width), blob[test_b])
-    @assert ElboDeriv.local_sources(tile, mp, blob[test_b]) == []
+    tile = ImageTile(int(ceil((pix_loc[1] + 1.5 * tile_width * sqrt(2) +
+                              patch_radius_pix) / tile_width)),
+                     int(round(pix_loc[2] / tile_width)),
+                     blob[test_b],
+                     mp.tile_width)
+    @assert ElboDeriv.local_sources(tile, mp, blob[test_b].wcs) == []
 
-    tile = ImageTile(round((pix_loc[1]) / tile_width),
-                     ceil((pix_loc[2]  + 1.5 * tile_width * sqrt(2) +
-                           patch_radius_pix) / tile_width), blob[test_b])
-    @assert ElboDeriv.local_sources(tile, mp, blob[test_b]) == []
+    tile = ImageTile(int(round((pix_loc[1]) / tile_width)),
+                     int(ceil((pix_loc[2]  + 1.5 * tile_width * sqrt(2) +
+                           patch_radius_pix) / tile_width)),
+                     blob[test_b],
+                     mp.tile_width)
+    @assert ElboDeriv.local_sources(tile, mp, blob[test_b].wcs) == []
 end
 
 

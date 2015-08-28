@@ -664,7 +664,7 @@ function tile_likelihood!(tile::ImageTile,
     if length(tile_sources) == 0
 
         # NB: not using the delta-method approximation here
-        if tile.img.constant_background
+        if tile.constant_background
             nan_pixels = isnan(tile.pixels)
             num_pixels =
               length(tile.h_range) * length(tile.w_range) - sum(nan_pixels)
@@ -697,12 +697,12 @@ function tile_likelihood!(tile::ImageTile,
         this_pixel = tile.pixels[h, w]
         if !isnan(this_pixel)
             clear!(E_G)
-            if tile.img.constant_background
-                E_G.v = tile.img.epsilon
-                iota = tile.img.iota
+            if tile.constant_background
+                E_G.v = tile.epsilon
+                iota = tile.iota
             else
-                E_G.v = tile.img.epsilon_mat[h, w]
-                iota = tile.img.iota_vec[h]
+                E_G.v = tile.epsilon_mat[h, w]
+                iota = tile.iota_vec[h]
             end
             clear!(var_G)
 
@@ -711,7 +711,7 @@ function tile_likelihood!(tile::ImageTile,
                 wcs_jacobian = mp.patches[child_s].wcs_jacobian
                 parent_s = tile_sources[child_s]
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
-                    mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
+                    mp.vp[parent_s], child_s, parent_s, m_pos, tile.b,
                     fs0m, fs1m, E_G, var_G, wcs_jacobian)
             end
 
