@@ -12,6 +12,7 @@ using Transform
 import ElboDeriv
 import DataFrames
 import ForwardDiff
+import Optim
 
 export ObjectiveWrapperFunctions, WrapperState
 
@@ -47,8 +48,9 @@ type ObjectiveWrapperFunctions
     kept_ids::Array{Int64}
     omitted_ids::Array{Int64}
 
-    ObjectiveWrapperFunctions(f::Function, mp::ModelParams{Float64}, transform::DataTransform,
-                              kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1}) = begin
+    ObjectiveWrapperFunctions(
+      f::Function, mp::ModelParams{Float64}, transform::DataTransform,
+      kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1}) = begin
 
         mp_dual = CelesteTypes.convert(ModelParams{ForwardDiff.Dual}, mp);
         x_length = length(kept_ids) * mp.S
@@ -66,7 +68,8 @@ type ObjectiveWrapperFunctions
               elseif length(iter_vp[1]) == length(ids_free_names)
                 state_df = DataFrames.DataFrame(names=ids_free_names)
               else
-                state_df = DataFrames.DataFrame(names=[ "x$i" for i=1:length(iter_vp[1, :])])
+                state_df = DataFrames.DataFrame(
+                  names=[ "x$i" for i=1:length(iter_vp[1, :])])
               end
               for s=1:S
                 state_df[symbol(string("val", s))] = iter_vp[s]
@@ -136,19 +139,22 @@ type ObjectiveWrapperFunctions
         end
 
         # Forward diff versions of the gradient and Hessian.
-        f_ad_grad = ForwardDiff.forwarddiff_gradient(f_value, Float64, fadtype=:dual; n=x_length);
+        f_ad_grad = ForwardDiff.forwarddiff_gradient(
+          f_value, Float64, fadtype=:dual; n=x_length);
 
         function f_ad_hessian(x::Array{Float64})
             @assert length(x) == x_length
             k = x_length
             hess = zeros(Float64, k, k);
-            x_dual = ForwardDiff.Dual{Float64}[ ForwardDiff.Dual{Float64}(x[i], 0.) for i = 1:k ]
+            x_dual = ForwardDiff.Dual{Float64}[
+                      ForwardDiff.Dual{Float64}(x[i], 0.) for i = 1:k ]
             print("Getting Hessian ($k components): ")
             for index in 1:k
                 print(".")
                 x_dual[index] = ForwardDiff.Dual(x[index], 1.)
                 deriv = f_grad(x_dual)
-                hess[:, index] = Float64[ ForwardDiff.epsilon(x_val) for x_val in deriv ]
+                hess[:, index] =
+                  Float64[ ForwardDiff.epsilon(x_val) for x_val in deriv ]
                 x_dual[index] = ForwardDiff.Dual(x[index], 0.)
             end
             print("Done.\n")
@@ -190,23 +196,107 @@ function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
 end
 
 
-function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform,
-                    lbs::Union(Float64, Vector{Float64}), ubs::Union(Float64, Vector{Float64});
-                    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
-    # Maximize using NLOpt and unconstrained coordinates.
-    #
-    # Args:
-    #   - f: A function that takes a blob and constrianed coordinates (e.g. ElboDeriv.elbo)
-    #   - blob: Input for f
-    #   - mp: Constrained initial ModelParams
-    #   - transform: The data transform to be applied before optimizing.
-    #   - lbs: An array of lower bounds (in the transformed space)
-    #   - ubs: An array of upper bounds (in the transformed space)
-    #   - omitted_ids: Omitted ids from the _unconstrained_ parameterization (i.e. elements
-    #       of free_ids).
-    #   - xtol_rel: X convergence
-    #   - ftol_abs: F convergence
-    #   - verbose: Print detailed output
+@doc """
+Optimizes f using Newton's method and exact Hessians.  For now, it is
+not clear whether this or BFGS is better, so it is kept as a separate function.
+
+Args:
+  - f: A function that takes a blob and constrained coordinates
+       (e.g. ElboDeriv.elbo)
+  - blob: Input for f
+  - mp: Constrained initial ModelParams
+  - transform: The data transform to be applied before optimizing.
+  - lbs: An array of lower bounds (in the transformed space)
+  - ubs: An array of upper bounds (in the transformed space)
+  - omitted_ids: Omitted ids from the _unconstrained_ parameterization
+      (i.e. elements of free_ids).
+  - xtol_rel: X convergence
+  - ftol_abs: F convergence
+  - verbose: Print detailed output
+
+Returns:
+  - iter_count: The number of iterations taken
+  - max_f: The maximum function value achieved
+  - max_x: The optimal function input
+  - ret: The return code of optimize()
+""" ->
+function maximize_f_newton(
+  f::Function, mp::ModelParams, transform::Transform.DataTransform;
+  omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
+  hess_reg=2.0, max_iters=100)
+
+    kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
+    x0 = transform.vp_to_vector(mp.vp, omitted_ids)
+
+    optim_obj_wrap =
+      OptimizeElbo.ObjectiveWrapperFunctions(f, mp, transform, kept_ids, omitted_ids);
+
+    # For minimization, which is required by the linesearch algorithm.
+    optim_obj_wrap.state.scale = -1.0
+    optim_obj_wrap.state.verbose = verbose
+
+    function f_hess_reg!(x, new_hess)
+        hess = optim_obj_wrap.f_ad_hessian(x)
+        hess_ev = eig(hess)[1]
+        min_ev = minimum(hess_ev)
+        max_ev = maximum(hess_ev)
+
+        # Make it positive definite.
+        if min_ev < 0
+            verbose && println("Hessian is negative definite with ",
+                               "eigenvalues: (min $(min_ev), max $(max_ev)).  ",
+                               "Regularizing with $(hess_reg).")
+            hess += eye(length(x)) * abs(min_ev) * hess_reg
+        end
+
+        new_hess[:,:] = hess
+    end
+
+    x0 = transform.vp_to_vector(mp.vp, omitted_ids);
+
+    # TODO: are xtol_rel and ftol_abs still good names?
+    nm_result =
+      Optim.optimize(optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!,
+                     x0, method=:newton, iterations=max_iters,
+                     xtol=xtol_rel, ftol=ftol_abs)
+
+    iter_count = optim_obj_wrap.state.f_evals
+    transform.vector_to_vp!(nm_result.minimum, mp.vp, omitted_ids);
+    max_f = -1.0 * nm_result.f_minimum
+    max_x = nm_result.minimum
+
+    println("got $max_f at $max_x after $iter_count function evaluations ",
+            "($(nm_result.iterations) Newton steps)\n")
+    iter_count, max_f, max_x, nm_result
+end
+
+@doc """
+Maximize using BFGS and unconstrained coordinates.
+
+Args:
+  - f: A function that takes a blob and constrained coordinates
+       (e.g. ElboDeriv.elbo)
+  - blob: Input for f
+  - mp: Constrained initial ModelParams
+  - transform: The data transform to be applied before optimizing.
+  - lbs: An array of lower bounds (in the transformed space)
+  - ubs: An array of upper bounds (in the transformed space)
+  - omitted_ids: Omitted ids from the _unconstrained_ parameterization
+       (i.e. elements of free_ids).
+  - xtol_rel: X convergence
+  - ftol_abs: F convergence
+  - verbose: Print detailed output
+
+Returns:
+  - iter_count: The number of iterations taken
+  - max_f: The maximum function value achieved
+  - max_x: The optimal function input
+  - ret: The return code of optimize()
+""" ->
+function maximize_f(
+  f::Function, blob::Blob, mp::ModelParams, transform::DataTransform,
+  lbs::Union(Float64, Vector{Float64}), ubs::Union(Float64, Vector{Float64});
+  omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
@@ -233,13 +323,15 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTra
     iter_count, max_f, max_x, ret
 end
 
-function maximize_f(f::Function, blob::Blob, mp::ModelParams, transform::DataTransform;
+function maximize_f(
+  f::Function, blob::Blob, mp::ModelParams, transform::DataTransform;
     omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
     # Default to the bounds given in get_nlopt_unconstrained_bounds.
 
     lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform)
     maximize_f(f, blob, mp, transform, lbs, ubs;
-      omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose = verbose)
+      omitted_ids=omitted_ids, xtol_rel=xtol_rel,
+      ftol_abs=ftol_abs, verbose = verbose)
 end
 
 function maximize_f(f::Function, blob::Blob, mp::ModelParams;
@@ -248,7 +340,8 @@ function maximize_f(f::Function, blob::Blob, mp::ModelParams;
 
     transform = get_mp_transform(mp);
     maximize_f(f, blob, mp, transform,
-      omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs, verbose=verbose)
+      omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs,
+      verbose=verbose)
 end
 
 function maximize_elbo(blob::Blob, mp::ModelParams, trans::DataTransform;
