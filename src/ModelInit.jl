@@ -158,7 +158,7 @@ function peak_init(blob::Blob; patch_radius::Float64=Inf,
     vp = [init_source(v1[:, s]) for s in 1:S]
     twice_radius = float(max(blob[1].H, blob[1].W))
     # TODO: use non-trival patch radii, based on blob detection routine
-    patches = [SkyPatch(v1[:, s], patch_radius) for s in 1:S]
+    patches = [SkyPatch(v1[:, s], patch_radius) for s in 1:S, b in 1:5]
     ModelParams(vp, sample_prior(), patches, tile_width)
 end
 
@@ -192,7 +192,7 @@ function cat_init(cat::Vector{CatalogEntry}; patch_radius::Float64=Inf,
         tile_width::Int64=typemax(Int64))
     vp = [init_source(ce) for ce in cat]
     # TODO: use non-trivial patch radii, based on the catalog
-    patches = [SkyPatch(ce.pos, patch_radius) for ce in cat]
+    patches = [SkyPatch(ce.pos, patch_radius) for ce in cat, b in 1:5]
     ModelParams(vp, sample_prior(), patches, tile_width)
 end
 

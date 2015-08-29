@@ -726,16 +726,11 @@ end
 Add the expected log likelihood ELBO term for an image to accum.
 
 Args:
-  - img: An image
+  - tiles: An array of ImageTiles
   - mp: The current model parameters.
   - accum: A sensitive float containing the ELBO.
 """ ->
-function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
-    @assert length(mp.patches) == mp.S
-    for s=1:mp.S
-        set_patch_wcs!(mp.patches[s], img.wcs)
-        # TODO: Also set a local psf here.
-    end
+function elbo_likelihood!(tiles::Array{ImageTile}, mp::ModelParams, accum::SensitiveFloat)
 
     accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
 
@@ -750,13 +745,6 @@ function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
     end
 end
 
-
-@doc """
-Break an image into tiles.
-""" ->
-function tile_image(img::Image, tile_width::Int64)
-
-end
 
 @doc """
 Return the expected log likelihood for all bands in a section
@@ -786,6 +774,21 @@ function elbo(blob::Blob, mp::ModelParams)
     ret = elbo_likelihood(blob, mp)
     subtract_kl!(mp, ret)
     ret
+end
+
+
+@doc """
+Break the images into tiles and initialize the patches.
+""" ->
+function initialize_celeste!(blob::Blob, mp::ModelParams)
+  tiled_blob = break_blob_into_tiles(blob, mp.tile_width)
+
+  @assert length(mp.patches) == mp.S
+  for s=1:mp.S
+      # TODO: Also set a local psf here.
+      set_patch_wcs!(mp.patches[s], img.wcs)
+  end
+
 end
 
 end

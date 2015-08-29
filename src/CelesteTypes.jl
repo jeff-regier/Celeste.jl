@@ -5,9 +5,11 @@ VERSION < v"0.4.0-dev" && using Docile
 export CatalogEntry
 export band_letters
 
-export Image, Blob, SkyPatch, ImageTile, PsfComponent
+export Image, Blob, TiledBlob, ImageTile, SkyPatch, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
-export effective_radii, break_image_into_tiles
+export effective_radii
+
+export break_blob_into_tiles, break_image_into_tiles
 
 export ModelParams, PriorParams, UnconstrainedParams
 export CanonicalParams, BrightnessParams, StarPosParams, GalaxyPosParams
@@ -213,9 +215,19 @@ Tiles of pixels that share the same set of
 relevant sources (or other calculations).  It contains all the information
 necessary to compute the ELBO and derivatives in this patch of sky.
 
-These are in tile coordinates --- not pixel or sky coordinates.
-(I.e., the range of hh and ww are the number of horizontal
- and vertical tiles in the image, respectively.)
+Note that this cannot be of type Image for the purposes of Celeste
+because the raw wcs object is a C++ pointer which julia resonably
+refuses to parallelize.
+
+Attributes:
+- hh: The tile row index (in 1:number of tile rows)
+- ww: The tile column index (in 1:number of tile columns)
+- h_range: The h pixel locations of the tile in the original image
+- w_range: The w pixel locations of the tile in the original image
+- h_width: The width of the tile in the h direction
+- w_width: The width of the tile in the w direction
+- pixels: The pixel values
+- remainder: the same as in the Image type.
 """ ->
 immutable ImageTile
     hh::Int64
@@ -283,6 +295,9 @@ ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
             img.constant_background, img.epsilon, epsilon_mat, img.iota, iota_vec)
 end
 
+typealias TiledImage Array{ImageTile}
+typealias TiledBlob Vector{TiledImage}
+
 @doc """
 Convert an image to an array of tiles of a given width.
 
@@ -299,13 +314,14 @@ function break_image_into_tiles(img::Image, tile_width::Int64)
   ImageTile[ ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW ]
 end
 
+function break_blob_into_tiles(blob::Blob, tile_width::Int64)
+  [ break_image_into_tiles(img, tile_width) for img in blob ]
+end
+
+
 @doc """
 Attributes of the patch of sky surrounding a single
-celestial object.
-
-Currently this is per object, and the jacobian and pixel
-center are set per image.  Eventually the plan is to have one
-SkyPatch per object per image.
+celestial object in a single image.
 
 Attributes:
   - center: The approximate source location in world coordinates
@@ -478,14 +494,14 @@ The parameters for a particular image.
 Attributes:
  - vp: The variational parameters
  - pp: The prior parameters
- - patches: A vector of SkyPatch objects
+ - patches: An objects by bands matrix of SkyPatch objects
  - tile_width: The number of pixels across a tile
  - S: The number of sources.
 """ ->
 type ModelParams{NumType <: Number}
     vp::VariationalParams{NumType}
     pp::PriorParams
-    patches::Vector{SkyPatch}
+    patches::Array{SkyPatch, 2}
     tile_width::Int64
 
     S::Int64
@@ -497,8 +513,9 @@ type ModelParams{NumType <: Number}
     end
 end
 
-ModelParams{NumType <: Number}(vp::VariationalParams{NumType}, pp::PriorParams,
-                               patches::Vector{SkyPatch}, tile_width::Int64) = begin
+ModelParams{NumType <: Number}(
+  vp::VariationalParams{NumType}, pp::PriorParams,
+  patches::Array{SkyPatch, 2}, tile_width::Int64) = begin
     ModelParams{NumType}(vp, pp, patches, tile_width)
 end
 
