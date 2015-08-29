@@ -218,7 +218,7 @@ function get_e_g(img, mp)
 	accum = ret
 	accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
 
-	star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(img.psf, mp, img.wcs)
+	star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(img.psf, mp, img.wcs, b)
 
 	sbs = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 

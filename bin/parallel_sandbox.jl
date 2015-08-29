@@ -26,7 +26,7 @@ for s=1:mp.S
     # TODO: Also set a local psf here.
 end
 
-star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(img.psf, mp);
+star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(img.psf, mp, 3);
 sbs = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
 
 mp.tile_width = 20

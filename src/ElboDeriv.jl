@@ -332,6 +332,7 @@ Convolve the current locations and galaxy shapes with the PSF.
 Args:
  - psf: A vector of PSF components
  - mp: The current ModelParams
+ - b: The current band
 
 Returns:
  - star_mcs: An # of PSF components x # of sources array of BvnComponents
@@ -343,7 +344,7 @@ Returns:
 
 The PSF contains three components, so you see lots of 3's below.
 """ ->
-function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
+function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, b::Int64)
     star_mcs = Array(BvnComponent, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent, 3, 8, 2, mp.S)
 
@@ -351,7 +352,8 @@ function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
         vs = mp.vp[s]
 
         world_loc = vs[[ids.u[1], ids.u[2]]]
-        m_pos = WCS.world_to_pixel(mp.patches[s].wcs_jacobian, mp.patches[s].center,
+        m_pos = WCS.world_to_pixel(mp.patches[s, b].wcs_jacobian,
+                                   mp.patches[s].center,
                                    mp.patches[s].pixel_center, world_loc)
 
         # Convolve the star locations with the PSF.
@@ -729,12 +731,14 @@ Args:
   - tiles: An array of ImageTiles
   - mp: The current model parameters.
   - accum: A sensitive float containing the ELBO.
+  - b: The current band
 """ ->
-function elbo_likelihood!(tiles::Array{ImageTile}, mp::ModelParams, accum::SensitiveFloat)
+function elbo_likelihood!(
+  tiles::Array{ImageTile}, mp::ModelParams, accum::SensitiveFloat, b::Int64)
 
     accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
 
-    star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp)
+    star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp, b)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
@@ -755,8 +759,8 @@ function elbo_likelihood{NumType <: Number}(blob::Blob, mp::ModelParams{NumType}
     # of the sky.
 
     ret = zero_sensitive_float(CanonicalParams, NumType, mp.S)
-    for img in blob
-        elbo_likelihood!(img, mp, ret)
+    for b in 1:5
+        elbo_likelihood!(blob[b], mp, ret, b)
     end
     ret
 end
