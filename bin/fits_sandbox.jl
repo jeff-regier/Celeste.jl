@@ -25,14 +25,14 @@ b_letter = band_letters[b]
 # Load the catalog
 
 # In python:
-# 
+#
 # from tractor.sdss import *
 # sdss = DR8()
 # sdss.get_url('photoObj', args.run, args.camcol, args.field)
 
-blob = SDSS.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
+blob = Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
 cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
-cat_entries = SDSS.convert_catalog_to_celeste(cat_df, blob);
+cat_entries = Images.convert_catalog_to_celeste(cat_df, blob);
 cat_coords = convert(Array{Float64}, cat_df[[:ra, :dec]])'
 
 ###############

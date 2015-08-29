@@ -324,15 +324,6 @@ SkyPatch(center::Vector{Float64}, radius::Float64) = begin
     SkyPatch(center, radius, PsfComponent[], eye(Float64, 2), zeros(Float64, 2))
 end
 
-@doc """
-Update a patch's pixel center and world coordinates jacobian given a wcs object.
-""" ->
-function set_patch_wcs!(patch::SkyPatch, wcs::WCSLIB.wcsprm)
-    patch.pixel_center = WCS.world_to_pixel(wcs, patch.center)
-    patch.wcs_jacobian = WCS.pixel_world_jacobian(wcs, patch.pixel_center)
-end
-
-
 
 #########################################################
 
