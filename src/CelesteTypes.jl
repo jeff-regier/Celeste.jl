@@ -494,7 +494,7 @@ The parameters for a particular image.
 Attributes:
  - vp: The variational parameters
  - pp: The prior parameters
- - patches: An objects by bands matrix of SkyPatch objects
+ - patches: An (objects X bands) matrix of SkyPatch objects
  - tile_width: The number of pixels across a tile
  - S: The number of sources.
 """ ->
@@ -508,11 +508,12 @@ type ModelParams{NumType <: Number}
 
     ModelParams(vp, pp, patches, tile_width) = begin
         # There must be one patch for each celestial object.
-        @assert length(vp) == length(patches)
+        @assert size(patches) == (length(vp), 5)
         new(vp, pp, patches, tile_width, length(vp))
     end
 end
 
+# TODO: Is this second initialization function necessary?
 ModelParams{NumType <: Number}(
   vp::VariationalParams{NumType}, pp::PriorParams,
   patches::Array{SkyPatch, 2}, tile_width::Int64) = begin
