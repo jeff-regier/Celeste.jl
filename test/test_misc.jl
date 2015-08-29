@@ -3,6 +3,7 @@ using Base.Test
 using SampleData
 using CelesteTypes
 
+import Images
 import SDSS
 import Util
 import WCS
@@ -17,7 +18,7 @@ function test_tile_image()
   tile_width = 20;
   tile = ImageTile(1, 1, img, tile_width);
 
-  tiles = break_image_into_tiles(img, tile_width);
+  tiles = Images.break_image_into_tiles(img, tile_width);
   @test size(tiles) ==
     (int(ceil(img.H  / tile_width)), int(ceil(img.W / tile_width)))
   for tile in tiles
@@ -32,7 +33,7 @@ function test_tile_image()
   img.constant_background = false
   img.epsilon_mat = rand(size(img.pixels));
   img.iota_vec = rand(size(img.pixels)[1]);
-  tiles = break_image_into_tiles(img, tile_width);
+  tiles = Images.break_image_into_tiles(img, tile_width);
   @test size(tiles) ==
     (int(ceil(img.H  / tile_width)), int(ceil(img.W / tile_width)))
   for tile in tiles

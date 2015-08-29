@@ -9,8 +9,6 @@ export Image, Blob, TiledBlob, ImageTile, SkyPatch, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 
-export break_blob_into_tiles, break_image_into_tiles
-
 export ModelParams, PriorParams, UnconstrainedParams
 export CanonicalParams, BrightnessParams, StarPosParams, GalaxyPosParams
 export VariationalParams, FreeVariationalParams, RectVariationalParams
@@ -295,28 +293,8 @@ ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
             img.constant_background, img.epsilon, epsilon_mat, img.iota, iota_vec)
 end
 
-typealias TiledImage Array{ImageTile}
+typealias TiledImage Array{ImageTile, 2}
 typealias TiledBlob Vector{TiledImage}
-
-@doc """
-Convert an image to an array of tiles of a given width.
-
-Args:
-  - img: An image to be broken into tiles
-  - tile_width: The size in pixels of each tile
-
-Returns:
-  An array of tiles containing the image.
-""" ->
-function break_image_into_tiles(img::Image, tile_width::Int64)
-  WW = int(ceil(img.W / tile_width))
-  HH = int(ceil(img.H / tile_width))
-  ImageTile[ ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW ]
-end
-
-function break_blob_into_tiles(blob::Blob, tile_width::Int64)
-  [ break_image_into_tiles(img, tile_width) for img in blob ]
-end
 
 
 @doc """

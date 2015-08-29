@@ -68,8 +68,8 @@ function gen_sample_star_dataset(; perturb=true)
     if perturb
         perturb_params(mp)
     end
-
-    blob, mp, one_body
+    tiled_blob = Images.initialize_celeste!(blob, mp)
+    blob, mp, one_body, tiled_blob
 end
 
 
@@ -86,8 +86,8 @@ function gen_sample_galaxy_dataset(; perturb=true)
     if perturb
         perturb_params(mp)
     end
-
-    blob, mp, one_body
+    tiled_blob = Images.initialize_celeste!(blob, mp)
+    blob, mp, one_body, tiled_blob
 end
 
 function gen_two_body_dataset(; perturb=true)
@@ -110,7 +110,8 @@ function gen_two_body_dataset(; perturb=true)
         perturb_params(mp)
     end
 
-    blob, mp, two_bodies
+    tiled_blob = Images.initialize_celeste!(blob, mp)
+    blob, mp, two_bodies, tiled_blob
 end
 
 
@@ -133,7 +134,8 @@ function gen_three_body_dataset(; perturb=true)
         perturb_params(mp)
     end
 
-    blob, mp, three_bodies
+    tiled_blob = Images.initialize_celeste!(blob, mp)
+    blob, mp, three_bodies, tiled_blob
 end
 
 end # End module

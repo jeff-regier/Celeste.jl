@@ -735,9 +735,6 @@ Args:
 """ ->
 function elbo_likelihood!(
   tiles::Array{ImageTile}, mp::ModelParams, accum::SensitiveFloat, b::Int64)
-
-    accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
-
     star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp, b)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
@@ -746,6 +743,7 @@ function elbo_likelihood!(
     for tile in tiles
         tile_sources = local_sources(tile, mp, img.wcs)
         tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
+        accum.v += -sum(lfact(tile.pixels[!isnan(tile.pixels)]))
     end
 end
 
@@ -754,13 +752,14 @@ end
 Return the expected log likelihood for all bands in a section
 of the sky.
 """ ->
-function elbo_likelihood{NumType <: Number}(blob::Blob, mp::ModelParams{NumType})
+function elbo_likelihood{NumType <: Number}(
+  tiled_blob::TiledBlob, mp::ModelParams{NumType})
     # Return the expected log likelihood for all bands in a section
     # of the sky.
 
     ret = zero_sensitive_float(CanonicalParams, NumType, mp.S)
     for b in 1:5
-        elbo_likelihood!(blob[b], mp, ret, b)
+        elbo_likelihood!(tiled_blob[b], mp, ret, b)
     end
     ret
 end
@@ -771,28 +770,15 @@ Calculates and returns the ELBO and its derivatives for all the bands
 of an image.
 
 Args:
-  - blob: An image.
+  - tiled_blob: A TiledBlob.
   - mp: Model parameters.
 """ ->
-function elbo(blob::Blob, mp::ModelParams)
-    ret = elbo_likelihood(blob, mp)
+function elbo(tiled_blob::TiledBlob, mp::ModelParams)
+    ret = elbo_likelihood(tiled_blob, mp)
     subtract_kl!(mp, ret)
     ret
 end
 
 
-@doc """
-Break the images into tiles and initialize the patches.
-""" ->
-function initialize_celeste!(blob::Blob, mp::ModelParams)
-  tiled_blob = break_blob_into_tiles(blob, mp.tile_width)
-
-  @assert length(mp.patches) == mp.S
-  for s=1:mp.S
-      # TODO: Also set a local psf here.
-      set_patch_wcs!(mp.patches[s], img.wcs)
-  end
-
-end
 
 end
