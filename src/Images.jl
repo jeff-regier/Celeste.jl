@@ -19,7 +19,8 @@ import WCS
 export load_stamp_blob, load_sdss_blob, crop_image!, test_catalog_entry_in_image
 export convert_gmm_to_celeste, get_psf_at_point
 export convert_catalog_to_celeste, load_stamp_catalog
-
+export break_blob_into_tiles, break_image_into_tiles
+export initialize_celeste!
 
 function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     df = SDSS.load_stamp_catalog_df(cat_dir, stamp_id, blob, match_blob=match_blob)
@@ -314,6 +315,53 @@ function get_psf_at_point(psf_array::Array{CelesteTypes.PsfComponent, 1};
 
     [ sum([ get_psf_value(psf, float(row), float(col)) for psf in psf_array ]) for
       row in rows, col in cols ]
+end
+
+
+@doc """
+Convert an image to an array of tiles of a given width.
+
+Args:
+  - img: An image to be broken into tiles
+  - tile_width: The size in pixels of each tile
+
+Returns:
+  An array of tiles containing the image.
+""" ->
+function break_image_into_tiles(img::Image, tile_width::Int64)
+  WW = int(ceil(img.W / tile_width))
+  HH = int(ceil(img.H / tile_width))
+  ImageTile[ ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW ]
+end
+
+
+@doc """
+Break a blob into tiles.
+""" ->
+function break_blob_into_tiles(blob::Blob, tile_width::Int64)
+  [ break_image_into_tiles(img, tile_width) for img in blob ]
+end
+
+
+@doc """
+Break the images into tiles and initialize the patches.
+
+Args:
+  - blob: A Blob containing the images.
+  - mp: Model parameters.
+
+Returns:
+  Updates mp in place and returns a tiled blob.
+""" ->
+function initialize_celeste!(blob::Blob, mp::ModelParams)
+  tiled_blob = break_blob_into_tiles(blob, mp.tile_width)
+
+  @assert size(mp.patches)[1] == mp.S
+  for s=1:mp.S
+      # TODO: Also set a local psf here.
+      set_patch_wcs!(mp.patches[s], blob[s].wcs)
+  end
+  tiled_blob
 end
 
 
