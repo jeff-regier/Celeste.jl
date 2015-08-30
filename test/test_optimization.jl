@@ -204,7 +204,7 @@ function test_bad_a_init()
     blob = Synthetic.gen_blob(blob0, [ce,])
 
     mp = ModelInit.cat_init([ce,])
-    tiled_blob = ModelInit.initalize_celeste!(blob, mp)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
     trans = get_mp_transform(mp, loc_width=1.0);
 
     mp.vp[1][ids.a] = [ 0.5, 0.5 ]
