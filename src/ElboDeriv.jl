@@ -706,6 +706,7 @@ Args:
 """ ->
 function elbo_likelihood!(
   tiles::Array{ImageTile}, mp::ModelParams, b::Int64, accum::SensitiveFloat)
+
     star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]

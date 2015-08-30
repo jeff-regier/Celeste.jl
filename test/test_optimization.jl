@@ -9,6 +9,48 @@ import OptimizeElbo
 println("Running optimization tests.")
 
 
+function verify_sample_star(vs, pos)
+    @test vs[ids.a[2]] <= 0.01
+
+    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
+    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
+
+    brightness_hat = vs[ids.r1[1]] * vs[ids.r2[1]]
+    @test_approx_eq_eps brightness_hat / sample_star_fluxes[3] 1. 0.01
+
+    true_colors = log(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
+    for b in 1:4
+        @test_approx_eq_eps vs[ids.c1[b, 1]] true_colors[b] 0.2
+    end
+end
+
+function verify_sample_galaxy(vs, pos)
+    @test vs[ids.a[2]] >= 0.99
+
+    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
+    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
+
+    @test_approx_eq_eps vs[ids.e_axis] .7 0.05
+    @test_approx_eq_eps vs[ids.e_dev] 0.1 0.08
+    @test_approx_eq_eps vs[ids.e_scale] 4. 0.2
+
+    phi_hat = vs[ids.e_angle]
+    phi_hat -= floor(phi_hat / pi) * pi
+    five_deg = 5 * pi/180
+    @test_approx_eq_eps phi_hat pi/4 five_deg
+
+    brightness_hat = vs[ids.r1[2]] * vs[ids.r2[2]]
+    @test_approx_eq_eps brightness_hat / sample_galaxy_fluxes[3] 1. 0.01
+
+    true_colors = log(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])
+    for b in 1:4
+        @test_approx_eq_eps vs[ids.c1[b, 2]] true_colors[b] 0.2
+    end
+end
+
+
+#########################################################
+
 function test_objective_wrapper()
     omitted_ids = Int64[];
     kept_ids = setdiff(1:length(ids_free), omitted_ids);
@@ -56,53 +98,11 @@ function test_objective_wrapper()
 end
 
 
-function verify_sample_star(vs, pos)
-    @test vs[ids.a[2]] <= 0.01
-
-    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
-    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
-
-    brightness_hat = vs[ids.r1[1]] * vs[ids.r2[1]]
-    @test_approx_eq_eps brightness_hat / sample_star_fluxes[3] 1. 0.01
-
-    true_colors = log(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
-    for b in 1:4
-        @test_approx_eq_eps vs[ids.c1[b, 1]] true_colors[b] 0.2
-    end
-end
-
-function verify_sample_galaxy(vs, pos)
-    @test vs[ids.a[2]] >= 0.99
-
-    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
-    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
-
-    @test_approx_eq_eps vs[ids.e_axis] .7 0.05
-    @test_approx_eq_eps vs[ids.e_dev] 0.1 0.08
-    @test_approx_eq_eps vs[ids.e_scale] 4. 0.2
-
-    phi_hat = vs[ids.e_angle]
-    phi_hat -= floor(phi_hat / pi) * pi
-    five_deg = 5 * pi/180
-    @test_approx_eq_eps phi_hat pi/4 five_deg
-
-    brightness_hat = vs[ids.r1[2]] * vs[ids.r2[2]]
-    @test_approx_eq_eps brightness_hat / sample_galaxy_fluxes[3] 1. 0.01
-
-    true_colors = log(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])
-    for b in 1:4
-        @test_approx_eq_eps vs[ids.c1[b, 2]] true_colors[b] 0.2
-    end
-end
-
-
-#########################################################
-
 
 function test_star_optimization()
     blob, mp, body, tiled_blob = gen_sample_star_dataset();
-    trans = get_mp_transform(mp, loc_width=1.0);
-    OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans)
+    trans = get_mp_transform(mp, loc_width=5.0);
+    OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=true)
     verify_sample_star(mp.vp[1], [10.1, 12.2])
 end
 
