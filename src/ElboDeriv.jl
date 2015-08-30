@@ -692,6 +692,9 @@ function tile_likelihood!(tile::ImageTile,
                              E_G, var_G, accum)
         end
     end
+
+    # Subtract the log factorial term
+    accum.v += -sum(lfact(tile.pixels[!isnan(tile.pixels)]))
 end
 
 
@@ -704,18 +707,28 @@ Args:
   - accum: A sensitive float containing the ELBO.
   - b: The current band
 """ ->
-function elbo_likelihood!(
-  tiles::Array{ImageTile}, mp::ModelParams, b::Int64, accum::SensitiveFloat)
+function elbo_likelihood!{NumType <: Number}(
+  tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64, accum::SensitiveFloat)
 
     star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
-
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-    for tile in tiles
-        tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-        tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
-        accum.v += -sum(lfact(tile.pixels[!isnan(tile.pixels)]))
+    function get_tile_sf(tile::ImageTile)
+      # TODO: Only pass a snesitive float as big as the tile's local sources.
+      tile_accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
+      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+      tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, tile_accum)
+      tile_accum
     end
+
+    accum_par = @parallel (+) for tile in tiles
+      get_tile_sf(tile)
+    end
+
+    # TODO: why doesn't @parallel update something in place?
+    accum.v = accum_par.v
+    accum.d = accum_par.d
+    accum.h = accum_par.h
 end
 
 

@@ -21,6 +21,7 @@ function true_star_init()
     blob, mp, body, tiled_blob
 end
 
+
 #################################
 
 function test_kl_divergence_values()
@@ -107,8 +108,7 @@ end
 
 function test_that_star_truth_is_most_likely()
     blob, mp, body, tiled_blob = true_star_init();
-
-    best = ElboDeriv.elbo_likelihood(tiled_blob, mp)
+    best = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
     for bad_a in [.3, .5, .9]
         mp_a = deepcopy(mp)
