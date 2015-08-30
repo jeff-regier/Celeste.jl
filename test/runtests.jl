@@ -8,6 +8,7 @@ using SampleData
 using Transform
 import Synthetic
 
+
 include(joinpath(Pkg.dir("Celeste"), "test", "test_misc.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_polygons.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_kl.jl"))

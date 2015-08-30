@@ -223,7 +223,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         mp.vp[s][ids.a[2]] = cat_entries[s].is_star ? 0.01 : 0.99
         mp.vp[s][ids.a[1]] = 1.0 - mp.vp[s][ids.a[2]]
     end
-    tiled_blob = Images.initialize_celeste!(blob, mp)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
     best = ElboDeriv.elbo_likelihood(tiled_blob, mp)
 
     # s is the brightest source.
@@ -313,7 +313,7 @@ function test_elbo_with_nan()
 
     # Set to 5 to test the code for tiles with no sources.
     mp.tile_width = 5
-    tiled_blob = Images.initialize_celeste!(blob, mp)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
     initial_elbo = ElboDeriv.elbo(tiled_blob, mp)
 
     for b in 1:5

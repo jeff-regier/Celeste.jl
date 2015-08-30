@@ -7,11 +7,14 @@ VERSION < v"0.4.0-dev" && using Docile
 
 export sample_prior, cat_init, peak_init
 
+export initialize_celeste!
+
 using FITSIO
 using Distributions
 using Util
 using CelesteTypes
 
+import Images
 
 function sample_prior()
     const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
@@ -194,6 +197,42 @@ function cat_init(cat::Vector{CatalogEntry}; patch_radius::Float64=Inf,
     # TODO: use non-trivial patch radii, based on the catalog
     patches = [SkyPatch(ce.pos, patch_radius) for ce in cat, b in 1:5]
     ModelParams(vp, sample_prior(), patches, tile_width)
+end
+
+
+@doc """
+Break the images into tiles and initialize the model parameters.
+
+Args:
+  - blob: A Blob containing the images.
+  - mp: Model parameters.
+
+Returns:
+  Updates mp in place with psfs, world coordinates, and tile sources.
+  Returns a tiled blob.
+""" ->
+function initialize_celeste!(blob::Blob, mp::ModelParams)
+  # Set the model parameters
+  @assert size(mp.patches)[1] == mp.S
+  for s=1:mp.S
+    Images.set_patch_wcs!(mp.patches[s], blob[s].wcs)
+  end
+  Images.set_patch_psfs!(blob, mp)
+
+  tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
+
+  @assert length(mp.tile_sources) == 5
+  for b=1:5
+    H = size(tiled_blob[b])[1]
+    W = size(tiled_blob[b])[2]
+    mp.tile_sources[b] = fill(Int64[], H, W)
+    for h in 1:H, w in 1:W
+      mp.tile_sources[b][h, w] =
+        Images.local_sources(tiled_blob[b][h, w], mp, blob[b].wcs)
+    end
+  end
+
+  tiled_blob
 end
 
 
