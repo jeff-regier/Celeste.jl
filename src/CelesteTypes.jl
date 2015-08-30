@@ -5,7 +5,7 @@ VERSION < v"0.4.0-dev" && using Docile
 export CatalogEntry
 export band_letters
 
-export Image, Blob, TiledBlob, ImageTile, SkyPatch, PsfComponent
+export Image, Blob, TiledImage, TiledBlob, ImageTile, SkyPatch, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 

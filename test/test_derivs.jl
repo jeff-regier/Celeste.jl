@@ -197,7 +197,7 @@ function test_elbo_derivs()
     test_by_finite_differences(wrap_likelihood_b1, mp0)
 
     function wrap_likelihood_b5(mmp)
-        ElboDeriv.elbo_likelihood([tiled_blob[5]], mmp)
+        ElboDeriv.elbo_likelihood(fill(tiled_blob[5], 1), mmp)
     end
     test_by_finite_differences(wrap_likelihood_b5, mp0)
 
@@ -209,7 +209,7 @@ end
 
 
 function test_elbo_derivs_with_transform()
-    blob, mp0, body = gen_sample_galaxy_dataset();
+    blob, mp0, body, tiled_blob = gen_sample_galaxy_dataset();
     trans = get_mp_transform(mp0, loc_width=1.0);
 
     omitted_ids = Int64[];
@@ -227,13 +227,15 @@ function test_elbo_derivs_with_transform()
         wrapped_f
     end
 
-    wrap_likelihood_b1 = wrap_function(mmp -> ElboDeriv.elbo_likelihood([blob[1]], mmp))
+    wrap_likelihood_b1 =
+      wrap_function(mmp -> ElboDeriv.elbo_likelihood(fill(tiled_blob[1], 1), mmp))
     test_by_finite_differences(wrap_likelihood_b1, x0)
 
-    wrap_likelihood_b5 = wrap_function(mmp -> ElboDeriv.elbo_likelihood([blob[5]], mmp))
+    wrap_likelihood_b5 =
+      wrap_function(mmp -> ElboDeriv.elbo_likelihood(fill(tiled_blob[5], 1), mmp))
     test_by_finite_differences(wrap_likelihood_b5, x0)
 
-    wrap_elbo = wrap_function(mmp -> ElboDeriv.elbo([blob], mmp))
+    wrap_elbo = wrap_function(mmp -> ElboDeriv.elbo(tiled_blob, mmp))
     test_by_finite_differences(wrap_elbo, x0)
 end
 

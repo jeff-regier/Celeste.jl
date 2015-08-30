@@ -15,6 +15,7 @@ using Util
 using CelesteTypes
 
 import Images
+import WCSLIB
 
 function sample_prior()
     const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
@@ -201,6 +202,21 @@ end
 
 
 @doc """
+
+""" ->
+function get_tiled_image_sources(
+  tiled_image::TiledImage, wcs::WCSLIB.wcsprm, mp::ModelParams)
+
+  H, W = size(tiled_image)
+  tile_sources = fill(Int64[], H, W)
+  for h in 1:H, w in 1:W
+    tile_sources[h, w] = Images.local_sources(tiled_image[h, w], mp, wcs)
+  end
+  tile_sources
+end
+
+
+@doc """
 Break the images into tiles and initialize the model parameters.
 
 Args:
@@ -223,13 +239,7 @@ function initialize_celeste!(blob::Blob, mp::ModelParams)
 
   @assert length(mp.tile_sources) == 5
   for b=1:5
-    H = size(tiled_blob[b])[1]
-    W = size(tiled_blob[b])[2]
-    mp.tile_sources[b] = fill(Int64[], H, W)
-    for h in 1:H, w in 1:W
-      mp.tile_sources[b][h, w] =
-        Images.local_sources(tiled_blob[b][h, w], mp, blob[b].wcs)
-    end
+    mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp)
   end
 
   tiled_blob
