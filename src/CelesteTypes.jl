@@ -473,6 +473,8 @@ type ModelParams{NumType <: Number}
     patches::Array{SkyPatch, 2}
     tile_width::Int64
 
+    # TODO: put tile_sources here?  Or keep it around as a part of a tiled blob?
+
     S::Int64
 
     ModelParams(vp, pp, patches, tile_width) = begin

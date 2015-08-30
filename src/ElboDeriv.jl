@@ -735,12 +735,12 @@ Args:
   - b: The current band
 """ ->
 function elbo_likelihood!(
-  tiles::Array{ImageTile}, mp::ModelParams, accum::SensitiveFloat, b::Int64)
+  tiles::Array{ImageTile}, tile_sources::Vector{Int64},
+  mp::ModelParams, accum::SensitiveFloat, b::Int64)
     star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-    tiles = break_image_into_tiles(img, mp.tile_width)
     for tile in tiles
         tile_sources = local_sources(tile, mp, img.wcs)
         tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
