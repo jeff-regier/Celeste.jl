@@ -728,7 +728,7 @@ function elbo_likelihood{NumType <: Number}(
     # of the sky.
 
     ret = zero_sensitive_float(CanonicalParams, NumType, mp.S)
-    for b in 1:5
+    for b in 1:length(tiled_blob)
         elbo_likelihood!(tiled_blob[b], mp, b, ret)
     end
     ret

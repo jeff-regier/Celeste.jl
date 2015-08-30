@@ -80,6 +80,7 @@ function test_blob()
   @test_approx_eq_eps(obj_psf_val[:], point_patch_psf[:], 1e-6)
 end
 
+
 function test_stamp_get_object_psf()
   stamp_blob, stamp_mp, body = gen_sample_star_dataset();
   img = stamp_blob[3];
@@ -92,5 +93,29 @@ function test_stamp_get_object_psf()
   @test_approx_eq_eps(obj_psf_val[:], original_psf_val[:], 1e-6)
 end
 
+
+function test_get_tiled_image_source()
+  # Test that an object only occurs the appropriate tile's local sources.
+  blob, mp, body = gen_sample_star_dataset();
+  img = blob[3];
+
+  [ mp.patches[1, b].radius = 1e-6 for b=1:5 ]
+
+  tiled_img = Images.break_image_into_tiles(img, 10);
+  for hh in 1:size(tiled_img)[1], ww in 1:size(tiled_img)[2]
+    tile = tiled_img[hh, ww]
+    loc = Float64[mean(tile.h_range), mean(tile.w_range)]
+    [ mp.vp[1][ids.u] = mp.patches[1, b].center = loc for b=1:5 ]
+    local_sources = ModelInit.get_tiled_image_sources(tiled_img, img.wcs, mp)
+    @test local_sources[hh, ww] == Int64[1]
+    for hh2 in 1:size(tiled_img)[1], ww2 in 1:size(tiled_img)[2]
+      if (hh2 != hh) || (ww2 != ww)
+        @test local_sources[hh2, ww2] == Int64[]
+      end
+    end
+  end
+end
+
 test_blob()
 test_stamp_get_object_psf()
+test_get_tiled_image_source()
