@@ -12,6 +12,7 @@ import DataFrames
 import FITSIO
 import GaussianMixtures
 import Grid
+import Polygons
 import PSF
 import Util
 import WCS
@@ -20,7 +21,7 @@ export load_stamp_blob, load_sdss_blob, crop_image!, test_catalog_entry_in_image
 export convert_gmm_to_celeste, get_psf_at_point
 export convert_catalog_to_celeste, load_stamp_catalog
 export break_blob_into_tiles, break_image_into_tiles
-export initialize_celeste!
+export local_sources
 
 function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     df = SDSS.load_stamp_catalog_df(cat_dir, stamp_id, blob, match_blob=match_blob)
@@ -382,28 +383,32 @@ function set_patch_psfs!(blob::Blob, mp::ModelParams)
   end
 end
 
-@doc """
-Break the images into tiles and initialize the patches.
 
+@doc """
 Args:
-  - blob: A Blob containing the images.
+  - tile: An ImageTile (containing tile coordinates)
   - mp: Model parameters.
 
 Returns:
-  Updates mp in place with psfs and world coordinates.
-  Returns a tiled blob.
+  - A vector of source ids (from 1 to mp.S) that influence
+    pixels in the tile.  A source influences a tile if
+    there is any overlap in their squares of influence.
 """ ->
-function initialize_celeste!(blob::Blob, mp::ModelParams)
+function local_sources(tile::ImageTile, mp::ModelParams, wcs::WCSLIB.wcsprm)
+    # Corners of the tile in pixel coordinates.
 
-  # Set the model parameters
-  @assert size(mp.patches)[1] == mp.S
-  for s=1:mp.S
-    set_patch_wcs!(mp.patches[s], blob[s].wcs)
-  end
-  set_patch_psfs!(blob, mp)
+    tc11 = Float64[minimum(tile.h_range), minimum(tile.w_range)]
+    tc12 = Float64[minimum(tile.h_range), maximum(tile.w_range)]
+    tc22 = Float64[maximum(tile.h_range), maximum(tile.w_range)]
+    tc21 = Float64[maximum(tile.h_range), minimum(tile.w_range)]
 
-  tiled_blob = break_blob_into_tiles(blob, mp.tile_width)
-  tiled_blob
+    tile_quad = vcat(tc11', tc12', tc22', tc21')
+    pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
+    pr = Float64[ mp.patches[s].radius for s=1:mp.S ]
+    bool_vec =
+      Polygons.sources_near_quadrilateral(pc, pr, tile_quad, wcs)
+
+    (collect(1:mp.S))[bool_vec]
 end
 
 

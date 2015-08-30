@@ -612,36 +612,6 @@ function accum_pixel_ret!(tile_sources::Vector{Int64},
 end
 
 
-
-
-@doc """
-Args:
-  - tile: An ImageTile (containing tile coordinates)
-  - mp: Model parameters.
-
-Returns:
-  - A vector of source ids (from 1 to mp.S) that influence
-    pixels in the tile.  A source influences a tile if
-    there is any overlap in their squares of influence.
-""" ->
-function local_sources(tile::ImageTile, mp::ModelParams, wcs::WCSLIB.wcsprm)
-    # Corners of the tile in pixel coordinates.
-
-    tc11 = Float64[minimum(tile.h_range), minimum(tile.w_range)]
-    tc12 = Float64[minimum(tile.h_range), maximum(tile.w_range)]
-    tc22 = Float64[maximum(tile.h_range), maximum(tile.w_range)]
-    tc21 = Float64[maximum(tile.h_range), minimum(tile.w_range)]
-
-    tile_quad = vcat(tc11', tc12', tc22', tc21')
-    pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
-    pr = Float64[ mp.patches[s].radius for s=1:mp.S ]
-    bool_vec =
-      Polygons.sources_near_quadrilateral(pc, pr, tile_quad, wcs)
-
-    (collect(1:mp.S))[bool_vec]
-end
-
-
 @doc """
 Add a tile's contribution to the ELBO likelihood term by
 modifying accum in place.
@@ -735,14 +705,13 @@ Args:
   - b: The current band
 """ ->
 function elbo_likelihood!(
-  tiles::Array{ImageTile}, tile_sources::Vector{Int64},
-  mp::ModelParams, accum::SensitiveFloat, b::Int64)
+  tiles::Array{ImageTile}, mp::ModelParams, b::Int64, accum::SensitiveFloat)
     star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
     for tile in tiles
-        tile_sources = local_sources(tile, mp, img.wcs)
+        tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
         tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
         accum.v += -sum(lfact(tile.pixels[!isnan(tile.pixels)]))
     end
@@ -760,7 +729,7 @@ function elbo_likelihood{NumType <: Number}(
 
     ret = zero_sensitive_float(CanonicalParams, NumType, mp.S)
     for b in 1:5
-        elbo_likelihood!(tiled_blob[b], mp, ret, b)
+        elbo_likelihood!(tiled_blob[b], mp, b, ret)
     end
     ret
 end

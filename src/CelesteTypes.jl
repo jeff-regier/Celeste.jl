@@ -17,7 +17,6 @@ export shape_standard_alignment, brightness_standard_alignment, align
 
 export SensitiveFloat, zero_sensitive_float, clear!
 export print_params
-export set_patch_wcs!
 
 export ids, ids_free, star_ids, gal_ids
 export ids_names, ids_free_names
@@ -465,6 +464,8 @@ Attributes:
  - pp: The prior parameters
  - patches: An (objects X bands) matrix of SkyPatch objects
  - tile_width: The number of pixels across a tile
+ - tile_sources: A vector (over bands) of an array (over tiles) of vectors
+                 of sources influencing each tile.
  - S: The number of sources.
 """ ->
 type ModelParams{NumType <: Number}
@@ -472,15 +473,17 @@ type ModelParams{NumType <: Number}
     pp::PriorParams
     patches::Array{SkyPatch, 2}
     tile_width::Int64
-
-    # TODO: put tile_sources here?  Or keep it around as a part of a tiled blob?
+    tile_sources::Vector{Array{Array{Int64}}}
 
     S::Int64
 
     ModelParams(vp, pp, patches, tile_width) = begin
         # There must be one patch for each celestial object.
+        S = length(vp)
+        all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)
+
         @assert size(patches) == (length(vp), 5)
-        new(vp, pp, patches, tile_width, length(vp))
+        new(vp, pp, patches, tile_width, all_tile_sources, S)
     end
 end
 

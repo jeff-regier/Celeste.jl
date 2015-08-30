@@ -22,7 +22,7 @@ NumType = Float64
 
 @assert length(mp.patches) == mp.S
 for s=1:mp.S
-    ElboDeriv.set_patch_wcs!(mp.patches[s], img.wcs)
+    Images.set_patch_wcs!(mp.patches[s], img.wcs)
     # TODO: Also set a local psf here.
 end
 

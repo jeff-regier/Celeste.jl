@@ -229,7 +229,7 @@ function get_e_g(img, mp)
 		tile = ImageTile(hh, ww, img)
 		# might get a speedup from subsetting the mp here
 
-		tile_sources = ElboDeriv.local_sources(tile, mp)
+		tile_sources = Images.local_sources(tile, mp)
 		h_range, w_range = ElboDeriv.tile_range(tile, mp.tile_width)
 		println("Sources: $tile_sources    h,w range: $h_range $w_range")
 
