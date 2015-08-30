@@ -20,7 +20,7 @@ export load_stamp_blob, load_sdss_blob, crop_image!, test_catalog_entry_in_image
 export convert_gmm_to_celeste, get_psf_at_point
 export convert_catalog_to_celeste, load_stamp_catalog
 export break_blob_into_tiles, break_image_into_tiles
-export initialize_celeste!, get_source_psf
+export initialize_celeste!
 
 function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     df = SDSS.load_stamp_catalog_df(cat_dir, stamp_id, blob, match_blob=match_blob)
