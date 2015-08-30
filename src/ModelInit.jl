@@ -227,18 +227,21 @@ Returns:
   Updates mp in place with psfs, world coordinates, and tile sources.
   Returns a tiled blob.
 """ ->
-function initialize_celeste!(blob::Blob, mp::ModelParams)
+function initialize_celeste!(blob::Blob, mp::ModelParams; patch_radius=Inf)
   # Set the model parameters
   @assert size(mp.patches)[1] == mp.S
   for s=1:mp.S
     Images.set_patch_wcs!(mp.patches[s], blob[s].wcs)
+    for b = 1:length(blob)
+      mp.patches[s, b].center = mp.vp[s][ids.u]
+      mp.patches[s, b].radius = patch_radius
+    end
   end
   Images.set_patch_psfs!(blob, mp)
 
   tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
-
-  @assert length(mp.tile_sources) == 5
-  for b=1:5
+  @assert length(mp.tile_sources) == length(blob)
+  for b=1:length(blob)
     mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp)
   end
 
