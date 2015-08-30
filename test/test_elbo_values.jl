@@ -278,32 +278,36 @@ end
 
 
 function test_tiny_image_tiling()
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
-    pc = PsfComponent(1./3, zeros(2), 1e-4 * eye(2))
-    trivial_psf = [pc, pc, pc]
-    pixels = ones(100, 1) * 12
-    pixels[98:100, 1] = [1e3, 1e4, 1e5]
-    img = Image(3, 1, pixels, 3, blob0[3].wcs, 3., 4., trivial_psf, 1, 1, 1)
-    catalog = [sample_ce([100., 1], true),]
-    catalog[1].star_fluxes = ones(5) * 1e5
+  # Test that the tilling doesn't matter much for a body that is nearly a
+  # point with a narrow psf.
 
-    mp0 = ModelInit.cat_init(catalog)
-    untiled_img = Images.break_image_into_tiles(img, mp0.tile_width)
-    accum0 = zero_sensitive_float(CanonicalParams)
-    ElboDeriv.elbo_likelihood!(untiled_img, mp0, accum0)
+  blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+  pc = PsfComponent(1./3, zeros(2), 1e-4 * eye(2))
+  trivial_psf = [pc, pc, pc]
+  pixels = ones(100, 1) * 12
+  pixels[98:100, 1] = [1e3, 1e4, 1e5]
+  img = Image(3, 1, pixels, 3, blob0[3].wcs, 3., 4., trivial_psf, 1, 1, 1)
+  catalog = [sample_ce([100., 1], true),]
+  catalog[1].star_fluxes = ones(5) * 1e5
 
-    mp_tiles = ModelInit.cat_init(catalog, patch_radius=10., tile_width=2)
-    tiled_img = Images.break_image_into_tiles(img, mp_tiles.tile_width)
-    accum_tiles = zero_sensitive_float(CanonicalParams)
-    ElboDeriv.elbo_likelihood!(tiled_img, mp_tiles, accum_tiles)
+  mp0 = ModelInit.cat_init(catalog)
+  tiled_blob0 = ModelInit.initialize_celeste!(fill(img, 5), mp0; patch_radius=Inf)
+  accum0 = zero_sensitive_float(CanonicalParams)
+  ElboDeriv.elbo_likelihood!(tiled_blob0[3], mp0, 3, accum0)
 
-    mp_tiles2 = ModelInit.cat_init(catalog, patch_radius=10., tile_width=5)
-    tiled_img2 = Images.break_image_into_tiles(img, mp_tiles2.tile_width)
-    accum_tiles2 = zero_sensitive_float(CanonicalParams)
-    ElboDeriv.elbo_likelihood!(tiled_img2, mp_tiles, accum_tiles2)
-    @test_approx_eq accum_tiles.v accum_tiles2.v
+  mp0.tile_width = 2
+  tiled_blob1 = ModelInit.initialize_celeste!(fill(img, 5), mp0; patch_radius=10.)
+  accum_tiles = zero_sensitive_float(CanonicalParams)
+  ElboDeriv.elbo_likelihood!(tiled_blob1[3], mp0, 3, accum_tiles)
 
-    @test_approx_eq_eps accum0.v accum_tiles.v 100.
+  mp0.tile_width = 5
+  tiled_blob2 = ModelInit.initialize_celeste!(fill(img, 5), mp0; patch_radius=10.)
+  accum_tiles2 = zero_sensitive_float(CanonicalParams)
+  ElboDeriv.elbo_likelihood!(tiled_blob2[3], mp0, 3, accum_tiles2)
+
+  @test_approx_eq accum_tiles.v accum_tiles2.v
+  @test_approx_eq_eps accum0.v accum_tiles.v 100.
+
 end
 
 #################
