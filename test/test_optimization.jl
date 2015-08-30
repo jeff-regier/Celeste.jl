@@ -12,14 +12,16 @@ println("Running optimization tests.")
 function test_objective_wrapper()
     omitted_ids = Int64[];
     kept_ids = setdiff(1:length(ids_free), omitted_ids);
-    blob, mp, body = SampleData.gen_two_body_dataset();
+    blob, mp, body, tiled_blob = SampleData.gen_two_body_dataset();
     trans = get_mp_transform(mp, loc_width=1.0);
 
-    wrapper = OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(blob, mp),
+    wrapper =
+      OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(tiled_blob, mp),
         mp, trans, kept_ids, omitted_ids);
 
     x = trans.vp_to_vector(mp.vp, omitted_ids);
-    elbo_result = trans.transform_sensitive_float(ElboDeriv.elbo(blob, mp), mp);
+    elbo_result =
+      trans.transform_sensitive_float(ElboDeriv.elbo(tiled_blob, mp), mp);
     elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, s] for s=1:mp.S ]);
 
     # Tese the print function
@@ -98,9 +100,9 @@ end
 
 
 function test_star_optimization()
-    blob, mp, body = gen_sample_star_dataset();
+    blob, mp, body, tiled_blob = gen_sample_star_dataset();
     trans = get_mp_transform(mp, loc_width=1.0);
-    OptimizeElbo.maximize_likelihood(blob, mp, trans)
+    OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans)
     verify_sample_star(mp.vp[1], [10.1, 12.2])
 end
 
