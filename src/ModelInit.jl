@@ -231,11 +231,11 @@ function initialize_celeste!(blob::Blob, mp::ModelParams; patch_radius=Inf)
   # Set the model parameters
   @assert size(mp.patches)[1] == mp.S
   for s=1:mp.S
-    Images.set_patch_wcs!(mp.patches[s], blob[s].wcs)
     for b = 1:length(blob)
       mp.patches[s, b].center = mp.vp[s][ids.u]
       mp.patches[s, b].radius = patch_radius
     end
+    Images.set_patch_wcs!(mp.patches[s], blob[s].wcs)
   end
   Images.set_patch_psfs!(blob, mp)
 

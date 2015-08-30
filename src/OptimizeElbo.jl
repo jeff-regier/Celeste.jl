@@ -362,17 +362,12 @@ function maximize_elbo(tiled_blob::TiledBlob, mp::ModelParams; verbose = false)
 end
 
 function maximize_likelihood(
-  blob::TiledBlob, mp::ModelParams, trans::DataTransform;
+  tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;
   xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
     omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
-    maximize_f(ElboDeriv.elbo_likelihood, blob, mp, trans,
+    maximize_f(ElboDeriv.elbo_likelihood, tiled_blob, mp, trans,
                omitted_ids=omitted_ids, xtol_rel=xtol_rel,
                ftol_abs=ftol_abs, verbose=verbose)
-end
-
-function maximize_likelihood(blob::TiledBlob, mp::ModelParams)
-    # Default to the rectangular transform.
-    maximize_likelihood(blob, mp, world_rect_transform)
 end
 
 end
