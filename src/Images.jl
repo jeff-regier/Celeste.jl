@@ -390,16 +390,19 @@ Args:
   - mp: Model parameters.
 
 Returns:
-  Updates mp in place and returns a tiled blob.
+  Updates mp in place with psfs and world coordinates.
+  Returns a tiled blob.
 """ ->
 function initialize_celeste!(blob::Blob, mp::ModelParams)
-  tiled_blob = break_blob_into_tiles(blob, mp.tile_width)
 
+  # Set the model parameters
   @assert size(mp.patches)[1] == mp.S
   for s=1:mp.S
-      # TODO: Also set a local psf here.
-      set_patch_wcs!(mp.patches[s], blob[s].wcs)
+    set_patch_wcs!(mp.patches[s], blob[s].wcs)
   end
+  set_patch_psfs!(blob, mp)
+
+  tiled_blob = break_blob_into_tiles(blob, mp.tile_width)
   tiled_blob
 end
 

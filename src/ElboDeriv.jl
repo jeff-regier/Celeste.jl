@@ -344,11 +344,12 @@ Returns:
 
 The PSF contains three components, so you see lots of 3's below.
 """ ->
-function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams, b::Int64)
+function load_bvn_mixtures(mp::ModelParams, b::Int64)
     star_mcs = Array(BvnComponent, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent, 3, 8, 2, mp.S)
 
     for s in 1:mp.S
+        psf = mp.patches[s, b].psf
         vs = mp.vp[s]
 
         world_loc = vs[[ids.u[1], ids.u[2]]]
@@ -735,7 +736,7 @@ Args:
 """ ->
 function elbo_likelihood!(
   tiles::Array{ImageTile}, mp::ModelParams, accum::SensitiveFloat, b::Int64)
-    star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp, b)
+    star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
 
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
