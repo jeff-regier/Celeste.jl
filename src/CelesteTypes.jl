@@ -589,7 +589,18 @@ function zero_sensitive_float{ParamType <: ParamSet}(param_arg::Type{ParamType})
     zero_sensitive_float(param_arg, Float64, 1)
 end
 
+function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
+  @assert sf1.ids == sf2.ids
+  @assert size(sf1.d) == size(sf2.d)
+  @assert size(sf1.h) == size(sf2.h)
 
-#########################################################
+  sf3 = deepcopy(sf1)
+  sf3.v = sf1.v + sf2.v
+  sf3.d = sf1.d + sf2.d
+  sf3.h = sf1.h + sf2.h
+
+  sf3
+end
+
 
 end

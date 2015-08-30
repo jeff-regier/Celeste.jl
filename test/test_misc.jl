@@ -257,6 +257,30 @@ function test_util_bvn_cov()
 end
 
 
+function test_add_sensitive_floats()
+  S = 3
+  sf1 = zero_sensitive_float(CanonicalParams, Float64, S)
+  sf2 = zero_sensitive_float(CanonicalParams, Float64, S)
+
+  sf1.v = rand()
+  sf2.v = rand()
+  sf1.d = rand(size(sf1.d))
+  sf2.d = rand(size(sf2.d))
+  sf1.h = rand(size(sf1.h))
+  sf2.h = rand(size(sf2.h))
+
+  sf3 = sf1 + sf2
+  @test sf3.v == sf1.v + sf2.v
+  @test sf3.d == sf1.d + sf2.d
+  @test sf3.h == sf1.h + sf2.h
+
+
+  sf_bad_size = zero_sensitive_float(CanonicalParams, Float64, S + 1);
+  sf_bad_type = zero_sensitive_float(UnconstrainedParams, Float64, S);
+
+  @test_throws ErrorException sf_bad_size + sf1
+  @test_throws ErrorException sf_bad_type + sf1
+end
 
 ####################################################
 
@@ -266,3 +290,4 @@ test_sky_noise_estimates()
 test_local_sources()
 test_local_sources_2()
 test_local_sources_3()
+test_add_sensitive_floats()
