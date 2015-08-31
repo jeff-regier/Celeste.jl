@@ -209,9 +209,12 @@ function get_tiled_image_sources(
 
   H, W = size(tiled_image)
   tile_sources = fill(Int64[], H, W)
+  println("Getting sources ($(H * W) total tiles).")
   for h in 1:H, w in 1:W
+    print(".")
     tile_sources[h, w] = Images.local_sources(tiled_image[h, w], mp, wcs)
   end
+  println("Done.")
   tile_sources
 end
 
@@ -230,21 +233,30 @@ Returns:
 function initialize_celeste!(blob::Blob, mp::ModelParams; patch_radius=Inf)
   # Set the model parameters
   @assert size(mp.patches)[1] == mp.S
+  @assert size(mp.patches)[2] == length(blob)
+
+  println("Initiazling Celeste.")
+  println("Initializing patches...")
   for s=1:mp.S
     for b = 1:length(blob)
+      Images.set_patch_wcs!(mp.patches[s, b], blob[b].wcs)
       mp.patches[s, b].center = mp.vp[s][ids.u]
       mp.patches[s, b].radius = patch_radius
     end
-    Images.set_patch_wcs!(mp.patches[s], blob[s].wcs)
   end
+  println("Setting patch psfs...")
   Images.set_patch_psfs!(blob, mp)
 
+  println("Breaking blob into tiles...")
   tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
   @assert length(mp.tile_sources) == length(blob)
+  println("Getting sources...")
   for b=1:length(blob)
+    println("...for band $b")
     mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp)
   end
 
+  println("Done.")
   tiled_blob
 end
 
