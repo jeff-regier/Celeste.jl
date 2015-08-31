@@ -311,15 +311,14 @@ function test_tiny_image_tiling()
 
 end
 
-#################
 
 function test_elbo_with_nan()
-    blob, mp, body = gen_sample_star_dataset(perturb=false)
+    blob, mp, body = gen_sample_star_dataset(perturb=false);
 
     # Set to 5 to test the code for tiles with no sources.
     mp.tile_width = 5
-    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
-    initial_elbo = ElboDeriv.elbo(tiled_blob, mp)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp);
+    initial_elbo = ElboDeriv.elbo(tiled_blob, mp);
 
     for b in 1:5
         blob[b].pixels[1,1] = NaN
@@ -333,7 +332,6 @@ function test_elbo_with_nan()
     deriv_rel_err = (nan_elbo.d - initial_elbo.d) ./ initial_elbo.d
     @test_approx_eq_eps deriv_rel_err fill(0., length(mp.vp[1])) 0.05
 end
-
 
 ####################################################
 

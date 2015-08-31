@@ -590,7 +590,10 @@ function zero_sensitive_float{ParamType <: ParamSet}(param_arg::Type{ParamType})
 end
 
 function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
-  @assert sf1.ids == sf2.ids
+  # Simply asserting equality of the ids doesn't work for some reason.
+  @assert typeof(sf1.ids) == typeof(sf2.ids)
+  @assert length(sf1.ids) == length(sf2.ids)
+
   @assert size(sf1.d) == size(sf2.d)
   @assert size(sf1.h) == size(sf2.h)
 
