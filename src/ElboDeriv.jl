@@ -722,13 +722,13 @@ function elbo_likelihood!{NumType <: Number}(
     end
 
     accum_par = @parallel (+) for tile in tiles
-      get_tile_sf(tile)
+     get_tile_sf(tile)
     end
 
     # TODO: why doesn't @parallel update something in place?
-    accum.v = accum_par.v
-    accum.d = accum_par.d
-    accum.h = accum_par.h
+    accum.v += accum_par.v
+    accum.d += accum_par.d
+    accum.h += accum_par.h
 end
 
 

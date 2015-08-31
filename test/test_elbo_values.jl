@@ -143,6 +143,7 @@ function test_that_star_truth_is_most_likely()
             @test best.v > bad_c1.v
         end
     end
+
 end
 
 
