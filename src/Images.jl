@@ -385,6 +385,23 @@ end
 
 
 @doc """
+A fast function to determine which sources might belong to which tiles.
+
+Args:
+""" ->
+function local_source_candidates(tiled_blob::TiledBlob, mp::ModelParams)
+  b = 1
+  tiles = tiled_blob[b];
+  candidates = fill(Int64[], size(tiles));
+
+  patch_pixel_radii =
+    Float64[1 / maximum(abs(eig(mp.patches[s, b].wcs_jacobian)[1]))
+            for s=1:mp.S, b=1:length(tiled_blob)];
+  
+end
+
+
+@doc """
 Args:
   - tile: An ImageTile (containing tile coordinates)
   - mp: Model parameters.
@@ -402,7 +419,7 @@ function local_sources(tile::ImageTile, mp::ModelParams, wcs::WCSLIB.wcsprm)
     tc22 = Float64[maximum(tile.h_range), maximum(tile.w_range)]
     tc21 = Float64[maximum(tile.h_range), minimum(tile.w_range)]
 
-    tile_quad = vcat(tc11', tc12', tc22', tc21')
+    tile_quad = WCS.pixel_to_world(wcs, vcat(tc11', tc12', tc22', tc21'))
     pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
     pr = Float64[ mp.patches[s].radius for s=1:mp.S ]
     bool_vec =
