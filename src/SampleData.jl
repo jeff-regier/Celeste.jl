@@ -27,7 +27,7 @@ const sample_galaxy_fluxes = [
 
 function empty_model_params(S::Int)
     vp = [ ModelInit.init_source([ 0., 0. ]) for s in 1:S ]
-    patches = [ SkyPatch([ 0., 0., ], 1.) for s in 1:S ]
+    patches = [ SkyPatch([ 0., 0., ], 1.) for s in 1:S, b in 1:5 ]
     ModelParams(vp, ModelInit.sample_prior(), patches, 1)
 end
 
@@ -68,8 +68,8 @@ function gen_sample_star_dataset(; perturb=true)
     if perturb
         perturb_params(mp)
     end
-
-    blob, mp, one_body
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
+    blob, mp, one_body, tiled_blob
 end
 
 
@@ -86,8 +86,8 @@ function gen_sample_galaxy_dataset(; perturb=true)
     if perturb
         perturb_params(mp)
     end
-
-    blob, mp, one_body
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
+    blob, mp, one_body, tiled_blob
 end
 
 function gen_two_body_dataset(; perturb=true)
@@ -110,7 +110,8 @@ function gen_two_body_dataset(; perturb=true)
         perturb_params(mp)
     end
 
-    blob, mp, two_bodies
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
+    blob, mp, two_bodies, tiled_blob
 end
 
 
@@ -133,7 +134,8 @@ function gen_three_body_dataset(; perturb=true)
         perturb_params(mp)
     end
 
-    blob, mp, three_bodies
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
+    blob, mp, three_bodies, tiled_blob
 end
 
 end # End module

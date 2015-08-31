@@ -5,7 +5,7 @@ VERSION < v"0.4.0-dev" && using Docile
 export CatalogEntry
 export band_letters
 
-export Image, Blob, SkyPatch, ImageTile, PsfComponent
+export Image, Blob, TiledImage, TiledBlob, ImageTile, SkyPatch, PsfComponent
 export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 
@@ -17,7 +17,6 @@ export shape_standard_alignment, brightness_standard_alignment, align
 
 export SensitiveFloat, zero_sensitive_float, clear!
 export print_params
-export set_patch_wcs!
 
 export ids, ids_free, star_ids, gal_ids
 export ids_names, ids_free_names
@@ -203,30 +202,103 @@ Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
           false, epsilon_mat, iota_vec, raw_psf_comp)
 end
 
-@doc """
-Tiles of pixels that share the same set of
-relevant sources (or other calculations).
-
-These are in tile coordinates --- not pixel or sky coordinates.
-(I.e., the range of hh and ww are the number of horizontal
- and vertical tiles in the image, respectively.)
-""" ->
-immutable ImageTile
-    hh::Int64
-    ww::Int64
-    img::Image
-end
 
 @doc """A vector of images, one for each filter band""" ->
 typealias Blob Vector{Image}
 
+
+@doc """
+Tiles of pixels that share the same set of
+relevant sources (or other calculations).  It contains all the information
+necessary to compute the ELBO and derivatives in this patch of sky.
+
+Note that this cannot be of type Image for the purposes of Celeste
+because the raw wcs object is a C++ pointer which julia resonably
+refuses to parallelize.
+
+Attributes:
+- hh: The tile row index (in 1:number of tile rows)
+- ww: The tile column index (in 1:number of tile columns)
+- h_range: The h pixel locations of the tile in the original image
+- w_range: The w pixel locations of the tile in the original image
+- h_width: The width of the tile in the h direction
+- w_width: The width of the tile in the w direction
+- pixels: The pixel values
+- remainder: the same as in the Image type.
+""" ->
+immutable ImageTile
+    hh::Int64
+    ww::Int64
+    b::Int64
+
+    h_range::UnitRange{Int64}
+    w_range::UnitRange{Int64}
+    h_width::Int64
+    w_width::Int64
+    pixels::Matrix{Float64}
+
+    constant_background::Bool
+    epsilon::Float64
+    epsilon_mat::Matrix{Float64}
+    iota::Float64
+    iota_vec::Vector{Float64}
+end
+
+
+@doc """
+Return the range of image pixels in an ImageTile.
+
+Args:
+  - hh: The tile row index (in 1:number of tile rows)
+  - ww: The tile column index (in 1:number of tile columns)
+  - H: The number of pixel rows in the image
+  - W: The number of pixel columns in the image
+  - tile_width: The width and height of a tile in pixels
+""" ->
+function tile_range(hh::Int64, ww::Int64, H::Int64, W::Int64, tile_width::Int64)
+    h1 = 1 + (hh - 1) * tile_width
+    h2 = min(hh * tile_width, H)
+    w1 = 1 + (ww - 1) * tile_width
+    w2 = min(ww * tile_width, W)
+    h1:h2, w1:w2
+end
+
+
+@doc """
+Constructs an image tile from an image.
+
+Args:
+  - img: The Image to be broken into tiles
+  - hh: The tile row index (in 1:number of tile rows)
+  - ww: The tile column index (in 1:number of tile columns)
+  - tile_width: The width and height of a tile in pixels
+""" ->
+ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
+  b = img.b
+  h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
+  h_width = maximum(h_range) - minimum(h_range) + 1
+  w_width = maximum(w_range) - minimum(w_range) + 1
+  pixels = img.pixels[h_range, w_range]
+
+  if img.constant_background
+    epsilon_mat = img.epsilon_mat
+    iota_vec = img.iota_vec
+  else
+    epsilon_mat = img.epsilon_mat[h_range, w_range]
+    iota_vec = img.iota_vec[h_range]
+  end
+
+  ImageTile(hh, ww, b, h_range, w_range, h_width, w_width, pixels,
+            img.constant_background, img.epsilon, epsilon_mat, img.iota, iota_vec)
+end
+
+typealias TiledImage Array{ImageTile, 2}
+typealias TiledBlob Vector{TiledImage}
+
+
 @doc """
 Attributes of the patch of sky surrounding a single
-celestial object.
-
-Currently this is per object, and the jacobian and pixel
-center are set per image.  Eventually the plan is to have one
-SkyPatch per object per image.
+celestial object in a single image.
 
 Attributes:
   - center: The approximate source location in world coordinates
@@ -250,15 +322,6 @@ SkyPatch(center::Vector{Float64}, radius::Float64) = begin
     # per image.
     SkyPatch(center, radius, PsfComponent[], eye(Float64, 2), zeros(Float64, 2))
 end
-
-@doc """
-Update a patch's pixel center and world coordinates jacobian given a wcs object.
-""" ->
-function set_patch_wcs!(patch::SkyPatch, wcs::WCSLIB.wcsprm)
-    patch.pixel_center = WCS.world_to_pixel(wcs, patch.center)
-    patch.wcs_jacobian = WCS.pixel_world_jacobian(wcs, patch.pixel_center)
-end
-
 
 
 #########################################################
@@ -365,7 +428,8 @@ const shape_standard_alignment = (ids.u,
 bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
-# TODO: maybe these should be incorporated into the framework above (which I don't really understand.)
+# TODO: maybe these should be incorporated into the framework above
+# (which I don't really understand.)
 function get_id_names(ids::Union(CanonicalParams, UnconstrainedParams))
   ids_names = Array(ASCIIString, length(ids))
   for (name in names(ids))
@@ -398,27 +462,35 @@ The parameters for a particular image.
 Attributes:
  - vp: The variational parameters
  - pp: The prior parameters
- - patches: A vector of SkyPatch objects
+ - patches: An (objects X bands) matrix of SkyPatch objects
  - tile_width: The number of pixels across a tile
+ - tile_sources: A vector (over bands) of an array (over tiles) of vectors
+                 of sources influencing each tile.
  - S: The number of sources.
 """ ->
 type ModelParams{NumType <: Number}
     vp::VariationalParams{NumType}
     pp::PriorParams
-    patches::Vector{SkyPatch}
+    patches::Array{SkyPatch, 2}
     tile_width::Int64
+    tile_sources::Vector{Array{Array{Int64}}}
 
     S::Int64
 
     ModelParams(vp, pp, patches, tile_width) = begin
         # There must be one patch for each celestial object.
-        @assert length(vp) == length(patches)
-        new(vp, pp, patches, tile_width, length(vp))
+        S = length(vp)
+        all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)
+
+        @assert size(patches) == (length(vp), 5)
+        new(vp, pp, patches, tile_width, all_tile_sources, S)
     end
 end
 
-ModelParams{NumType <: Number}(vp::VariationalParams{NumType}, pp::PriorParams,
-                               patches::Vector{SkyPatch}, tile_width::Int64) = begin
+# TODO: Is this second initialization function necessary?
+ModelParams{NumType <: Number}(
+  vp::VariationalParams{NumType}, pp::PriorParams,
+  patches::Array{SkyPatch, 2}, tile_width::Int64) = begin
     ModelParams{NumType}(vp, pp, patches, tile_width)
 end
 
@@ -449,7 +521,9 @@ function print_params(mp_tuple::ModelParams...)
         println("=======================\n Object $(s):")
         for var_name in names(ids)
             println(var_name)
-            mp_vars = [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for index in 1:length(mp_tuple) ]
+            mp_vars =
+              [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for
+                index in 1:length(mp_tuple) ]
             println(reduce(hcat, mp_vars))
         end
     end
@@ -485,25 +559,29 @@ end
 
 #########################################################
 
-function zero_sensitive_float{ParamType <: ParamSet}(::Type{ParamType}, NumType::DataType, local_S::Int64)
+function zero_sensitive_float{ParamType <: ParamSet}(
+  ::Type{ParamType}, NumType::DataType, local_S::Int64)
     local_P = length(ParamType)
     d = zeros(NumType, local_P, local_S)
     h = zeros(NumType, local_P, local_S)
     SensitiveFloat{ParamType, NumType}(zero(NumType), d, h, getids(ParamType))
 end
 
-function zero_sensitive_float{ParamType <: ParamSet}(::Type{ParamType}, NumType::DataType)
+function zero_sensitive_float{ParamType <: ParamSet}(
+  ::Type{ParamType}, NumType::DataType)
     # Default to a single source.
     zero_sensitive_float(ParamType, NumType, 1)
 end
 
-function clear!{ParamType <: ParamSet, NumType <: Number}(sp::SensitiveFloat{ParamType, NumType})
+function clear!{ParamType <: ParamSet, NumType <: Number}(
+  sp::SensitiveFloat{ParamType, NumType})
     sp.v = zero(NumType)
     fill!(sp.d, zero(NumType))
 end
 
 # If no type is specified, default to using Float64.
-function zero_sensitive_float{ParamType <: ParamSet}(param_arg::Type{ParamType}, local_S::Int64)
+function zero_sensitive_float{ParamType <: ParamSet}(
+  param_arg::Type{ParamType}, local_S::Int64)
     zero_sensitive_float(param_arg, Float64, local_S)
 end
 
@@ -511,7 +589,21 @@ function zero_sensitive_float{ParamType <: ParamSet}(param_arg::Type{ParamType})
     zero_sensitive_float(param_arg, Float64, 1)
 end
 
+function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
+  # Simply asserting equality of the ids doesn't work for some reason.
+  @assert typeof(sf1.ids) == typeof(sf2.ids)
+  @assert length(sf1.ids) == length(sf2.ids)
 
-#########################################################
+  @assert size(sf1.d) == size(sf2.d)
+  @assert size(sf1.h) == size(sf2.h)
+
+  sf3 = deepcopy(sf1)
+  sf3.v = sf1.v + sf2.v
+  sf3.d = sf1.d + sf2.d
+  sf3.h = sf1.h + sf2.h
+
+  sf3
+end
+
 
 end

@@ -96,8 +96,8 @@ function test_accum_pos_derivs()
     function wrap_star(mmp)
         m_pos = Float64[9, 10.]
         wcs_jacobian = WCS.pixel_world_jacobian(blob[3].wcs, m_pos)
-        set_patch_wcs!(mmp.patches[1], blob[3].wcs)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
+        Images.set_patch_wcs!(mmp.patches[1], blob[3].wcs)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mmp, 3)
         fs0m = zero_sensitive_float(StarPosParams)
         ElboDeriv.accum_star_pos!(star_mcs[1,1], m_pos, fs0m, wcs_jacobian)
         fs0m
@@ -107,8 +107,8 @@ function test_accum_pos_derivs()
     function wrap_galaxy(mmp)
         m_pos = Float64[9, 10]
         wcs_jacobian = WCS.pixel_world_jacobian(blob[3].wcs, m_pos)
-        set_patch_wcs!(mmp.patches[1], blob[3].wcs)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
+        Images.set_patch_wcs!(mmp.patches[1], blob[3].wcs)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mmp, 3)
         fs1m = zero_sensitive_float(GalaxyPosParams)
         ElboDeriv.accum_galaxy_pos!(gal_mcs[1,1,1,1], m_pos, fs1m, wcs_jacobian)
         fs1m
@@ -123,8 +123,8 @@ function test_accum_pixel_source_derivs()
     function wrap_apss_ef(mmp)
         m_pos = [9, 10.]
         wcs_jacobian = WCS.pixel_world_jacobian(blob[1].wcs, m_pos)
-        set_patch_wcs!(mmp.patches[1], blob[1].wcs)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[1].psf, mmp)
+        Images.set_patch_wcs!(mmp.patches[1], blob[1].wcs)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mmp, 3)
         fs0m = zero_sensitive_float(StarPosParams)
         fs1m = zero_sensitive_float(GalaxyPosParams)
         E_G = zero_sensitive_float(CanonicalParams)
@@ -137,8 +137,8 @@ function test_accum_pixel_source_derivs()
     test_by_finite_differences(wrap_apss_ef, mp0)
 
     function wrap_apss_varf(mmp)
-        set_patch_wcs!(mmp.patches[1], blob[3].wcs)
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(blob[3].psf, mmp)
+        Images.set_patch_wcs!(mmp.patches[1], blob[3].wcs)
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mmp, 3)
         fs0m = zero_sensitive_float(StarPosParams)
         fs1m = zero_sensitive_float(GalaxyPosParams)
         E_G = zero_sensitive_float(CanonicalParams)
@@ -189,27 +189,27 @@ end
 
 
 function test_elbo_derivs()
-    blob, mp0, body = gen_sample_galaxy_dataset()
+    blob, mp0, body, tiled_blob = gen_sample_galaxy_dataset();
 
     function wrap_likelihood_b1(mmp)
-        ElboDeriv.elbo_likelihood([blob[1]], mmp)
+        ElboDeriv.elbo_likelihood(fill(tiled_blob[1], 1), mmp)
     end
     test_by_finite_differences(wrap_likelihood_b1, mp0)
 
     function wrap_likelihood_b5(mmp)
-        ElboDeriv.elbo_likelihood([blob[5]], mmp)
+        ElboDeriv.elbo_likelihood(fill(tiled_blob[5], 1), mmp)
     end
     test_by_finite_differences(wrap_likelihood_b5, mp0)
 
     function wrap_elbo(mmp)
-        ElboDeriv.elbo([blob], mmp)
+        ElboDeriv.elbo(tiled_blob, mmp)
     end
     test_by_finite_differences(wrap_elbo, mp0)
 end
 
 
 function test_elbo_derivs_with_transform()
-    blob, mp0, body = gen_sample_galaxy_dataset();
+    blob, mp0, body, tiled_blob = gen_sample_galaxy_dataset();
     trans = get_mp_transform(mp0, loc_width=1.0);
 
     omitted_ids = Int64[];
@@ -227,13 +227,15 @@ function test_elbo_derivs_with_transform()
         wrapped_f
     end
 
-    wrap_likelihood_b1 = wrap_function(mmp -> ElboDeriv.elbo_likelihood([blob[1]], mmp))
+    wrap_likelihood_b1 =
+      wrap_function(mmp -> ElboDeriv.elbo_likelihood(fill(tiled_blob[1], 1), mmp))
     test_by_finite_differences(wrap_likelihood_b1, x0)
 
-    wrap_likelihood_b5 = wrap_function(mmp -> ElboDeriv.elbo_likelihood([blob[5]], mmp))
+    wrap_likelihood_b5 =
+      wrap_function(mmp -> ElboDeriv.elbo_likelihood(fill(tiled_blob[5], 1), mmp))
     test_by_finite_differences(wrap_likelihood_b5, x0)
 
-    wrap_elbo = wrap_function(mmp -> ElboDeriv.elbo([blob], mmp))
+    wrap_elbo = wrap_function(mmp -> ElboDeriv.elbo(tiled_blob, mmp))
     test_by_finite_differences(wrap_elbo, x0)
 end
 

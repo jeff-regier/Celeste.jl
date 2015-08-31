@@ -8,6 +8,88 @@ import KL
 import Util
 import Polygons
 import SloanDigitalSkySurvey: WCS
+import WCSLIB
+
+@doc """
+Subtract the KL divergence from the prior for c
+""" ->
+function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
+                        mp::ModelParams,
+                        accum::SensitiveFloat)
+    vs = mp.vp[s]
+    a = vs[ids.a[i]]
+    k = vs[ids.k[d, i]]
+
+    pp_kl_cid = KL.gen_diagmvn_mvn_kl(mp.pp.c[i][1][:, d],
+                                      mp.pp.c[i][2][:, :, d])
+    (v, (d_c1, d_c2)) = pp_kl_cid(vs[ids.c1[:, i]],
+                                        vs[ids.c2[:, i]])
+    accum.v -= v * a * k
+    accum.d[ids.k[d, i], s] -= a * v
+    accum.d[ids.c1[:, i], s] -= a * k * d_c1
+    accum.d[ids.c2[:, i], s] -= a * k * d_c2
+    accum.d[ids.a[i], s] -= k * v
+end
+
+@doc """
+Subtract the KL divergence from the prior for k
+""" ->
+function subtract_kl_k!(i::Int64, s::Int64,
+                        mp::ModelParams,
+                        accum::SensitiveFloat)
+    vs = mp.vp[s]
+    pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[i])
+    (v, (d_k,)) = pp_kl_ki(mp.vp[s][ids.k[:, i]])
+    accum.v -= v * vs[ids.a[i]]
+    accum.d[ids.k[:, i], s] -= d_k .* vs[ids.a[i]]
+    accum.d[ids.a[i], s] -= v
+end
+
+
+@doc """
+Subtract the KL divergence from the prior for r
+""" ->
+function subtract_kl_r!(i::Int64, s::Int64,
+                        mp::ModelParams, accum::SensitiveFloat)
+    vs = mp.vp[s]
+    pp_kl_r = KL.gen_gamma_kl(mp.pp.r[i][1], mp.pp.r[i][2])
+    (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
+    accum.v -= v * vs[ids.a[i]]
+    accum.d[ids.r1[i], s] -= d_r1 .* vs[ids.a[i]]
+    accum.d[ids.r2[i], s] -= d_r2 .* vs[ids.a[i]]
+    accum.d[ids.a[i], s] -= v
+end
+
+
+@doc """
+Subtract the KL divergence from the prior for a
+""" ->
+function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
+    pp_kl_a = KL.gen_categorical_kl(mp.pp.a)
+    (v, (d_a,)) = pp_kl_a(mp.vp[s][ids.a])
+    accum.v -= v
+    accum.d[ids.a, s] -= d_a
+end
+
+
+@doc """
+Subtract from accum the entropy and expected prior of
+the variational distribution.
+""" ->
+function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
+    for s in 1:mp.S
+        subtract_kl_a!(s, mp, accum)
+
+        for i in 1:Ia
+            subtract_kl_r!(i, s, mp, accum)
+            subtract_kl_k!(i, s, mp, accum)
+            for d in 1:D
+                subtract_kl_c!(d, i, s, mp, accum)
+            end
+        end
+    end
+end
+
 
 @doc """
 SensitiveFloat objects for expectations involving r_s and c_s.
@@ -171,15 +253,19 @@ immutable BvnComponent{NumType <: Number}
     end
 end
 
-BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64) = begin
-    BvnComponent{NumType}(the_mean, convert(Array{NumType}, the_cov), convert(NumType, weight))
+BvnComponent{NumType <: Number}(
+  the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64) = begin
+    BvnComponent{NumType}(
+      the_mean, convert(Array{NumType}, the_cov), convert(NumType, weight))
 end
 
-BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64) = begin
+BvnComponent{NumType <: Number}(
+  the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64) = begin
     BvnComponent{NumType}(the_mean, the_cov, convert(NumType, weight))
 end
 
-BvnComponent{NumType <: Number}(the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType) = begin
+BvnComponent{NumType <: Number}(
+  the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType) = begin
     BvnComponent{NumType}(the_mean, the_cov, weight)
 end
 
@@ -246,6 +332,7 @@ Convolve the current locations and galaxy shapes with the PSF.
 Args:
  - psf: A vector of PSF components
  - mp: The current ModelParams
+ - b: The current band
 
 Returns:
  - star_mcs: An # of PSF components x # of sources array of BvnComponents
@@ -257,15 +344,17 @@ Returns:
 
 The PSF contains three components, so you see lots of 3's below.
 """ ->
-function load_bvn_mixtures(psf::Vector{PsfComponent}, mp::ModelParams)
+function load_bvn_mixtures(mp::ModelParams, b::Int64)
     star_mcs = Array(BvnComponent, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent, 3, 8, 2, mp.S)
 
     for s in 1:mp.S
+        psf = mp.patches[s, b].psf
         vs = mp.vp[s]
 
         world_loc = vs[[ids.u[1], ids.u[2]]]
-        m_pos = WCS.world_to_pixel(mp.patches[s].wcs_jacobian, mp.patches[s].center,
+        m_pos = WCS.world_to_pixel(mp.patches[s, b].wcs_jacobian,
+                                   mp.patches[s].center,
                                    mp.patches[s].pixel_center, world_loc)
 
         # Convolve the star locations with the PSF.
@@ -524,48 +613,6 @@ end
 
 
 @doc """
-Return the range of image pixels in an ImageTile.
-""" ->
-function tile_range(tile::ImageTile, tile_width::Int64)
-    h1 = 1 + (tile.hh - 1) * tile_width
-    h2 = min(tile.hh * tile_width, tile.img.H)
-    w1 = 1 + (tile.ww - 1) * tile_width
-    w2 = min(tile.ww * tile_width, tile.img.W)
-    h1:h2, w1:w2
-end
-
-
-@doc """
-Args:
-  - tile: An ImageTile (containing tile coordinates)
-  - mp: Model parameters.
-
-Returns:
-  - A vector of source ids (from 1 to mp.S) that influence
-    pixels in the tile.  A source influences a tile if
-    there is any overlap in their squares of influence.
-""" ->
-function local_sources(tile::ImageTile, mp::ModelParams)
-    # Corners of the tile in pixel coordinates.
-    tr = mp.tile_width / 2.  # tile width
-    tc = Float64[tr + (tile.hh - 1) * mp.tile_width,
-                 tr + (tile.ww - 1) * mp.tile_width] # Tile center
-    tc11 = tc + Float64[-tr, -tr]
-    tc12 = tc + Float64[-tr, tr]
-    tc22 = tc + Float64[tr, tr]
-    tc21 = tc + Float64[tr, -tr]
-
-    tile_quad = vcat(tc11', tc12', tc22', tc21')
-    pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
-    pr = Float64[ mp.patches[s].radius for s=1:mp.S ]
-    bool_vec =
-      Polygons.sources_near_quadrilateral(pc, pr, tile_quad, tile.img.wcs)
-
-    (collect(1:mp.S))[bool_vec]
-end
-
-
-@doc """
 Add a tile's contribution to the ELBO likelihood term by
 modifying accum in place.
 
@@ -577,33 +624,31 @@ Args:
   - gal_mcs: All the galaxy * PCF components.
   - accum: The ELBO log likelihood to be updated.
 """ ->
-function elbo_likelihood!(tile::ImageTile,
+function tile_likelihood!(tile::ImageTile,
+        tile_sources::Vector{Int64},
         mp::ModelParams,
         sbs::Vector{SourceBrightness},
         star_mcs::Array{BvnComponent, 2},
         gal_mcs::Array{GalaxyCacheComponent, 4},
         accum::SensitiveFloat)
 
-    # TODO: calculate local sources outside the likelihood function
-    tile_sources = local_sources(tile, mp)
-    h_range, w_range = tile_range(tile, mp.tile_width)
-
     # For speed, if there are no sources, add the noise
     # contribution directly.
     if length(tile_sources) == 0
 
         # NB: not using the delta-method approximation here
-        if tile.img.constant_background
-            nan_pixels = isnan(tile.img.pixels[h_range, w_range])
-            num_pixels = length(h_range) * length(w_range) - sum(nan_pixels)
-            tile_x = sum(tile.img.pixels[h_range, w_range][!nan_pixels])
-            ep = tile.img.epsilon
+        if tile.constant_background
+            nan_pixels = isnan(tile.pixels)
+            num_pixels =
+              length(tile.h_range) * length(tile.w_range) - sum(nan_pixels)
+            tile_x = sum(tile.pixels[!nan_pixels])
+            ep = tile.epsilon
             accum.v += tile_x * log(ep) - num_pixels * ep
         else
-            for w in w_range, h in h_range
-                this_pixel = tile.img.pixels[h, w]
+            for w in 1:tile.w_width, h in 1:tile.h_width
+                this_pixel = tile.pixels[h, w]
                 if !isnan(this_pixel)
-                    ep = tile.img.epsilon_mat[h, w]
+                    ep = tile.epsilon_mat[h, w]
                     accum.v += this_pixel * log(ep) - ep
                 end
             end
@@ -621,25 +666,25 @@ function elbo_likelihood!(tile::ImageTile,
     var_G = zero_sensitive_float(CanonicalParams, num_type, tile_S)
 
     # Iterate over pixels that are not NaN.
-    for w in w_range, h in h_range
-        this_pixel = tile.img.pixels[h, w]
+    for w in 1:tile.w_width, h in 1:tile.h_width
+        this_pixel = tile.pixels[h, w]
         if !isnan(this_pixel)
             clear!(E_G)
-            if tile.img.constant_background
-                E_G.v = tile.img.epsilon
-                iota = tile.img.iota
+            if tile.constant_background
+                E_G.v = tile.epsilon
+                iota = tile.iota
             else
-                E_G.v = tile.img.epsilon_mat[h, w]
-                iota = tile.img.iota_vec[h]
+                E_G.v = tile.epsilon_mat[h, w]
+                iota = tile.iota_vec[h]
             end
             clear!(var_G)
 
-            m_pos = Float64[h, w]
+            m_pos = Float64[tile.h_range[h], tile.w_range[w]]
             for child_s in 1:length(tile_sources)
                 wcs_jacobian = mp.patches[child_s].wcs_jacobian
                 parent_s = tile_sources[child_s]
                 accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
-                    mp.vp[parent_s], child_s, parent_s, m_pos, tile.img.b,
+                    mp.vp[parent_s], child_s, parent_s, m_pos, tile.b,
                     fs0m, fs1m, E_G, var_G, wcs_jacobian)
             end
 
@@ -647,6 +692,9 @@ function elbo_likelihood!(tile::ImageTile,
                              E_G, var_G, accum)
         end
     end
+
+    # Subtract the log factorial term
+    accum.v += -sum(lfact(tile.pixels[!isnan(tile.pixels)]))
 end
 
 
@@ -654,30 +702,33 @@ end
 Add the expected log likelihood ELBO term for an image to accum.
 
 Args:
-  - img: An image
+  - tiles: An array of ImageTiles
   - mp: The current model parameters.
   - accum: A sensitive float containing the ELBO.
+  - b: The current band
 """ ->
-function elbo_likelihood!(img::Image, mp::ModelParams, accum::SensitiveFloat)
-    @assert length(mp.patches) == mp.S
-    for s=1:mp.S
-        set_patch_wcs!(mp.patches[s], img.wcs)
-        # TODO: Also set a local psf here.
-    end
+function elbo_likelihood!{NumType <: Number}(
+  tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64, accum::SensitiveFloat)
 
-    accum.v += -sum(lfact(img.pixels[!isnan(img.pixels)]))
-
-    star_mcs, gal_mcs = load_bvn_mixtures(img.psf, mp)
-
+    star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-    WW = int(ceil(img.W / mp.tile_width))
-    HH = int(ceil(img.H / mp.tile_width))
-    for ww in 1:WW, hh in 1:HH
-        tile = ImageTile(hh, ww, img)
-        # might get a speedup from subsetting the mp here
-        elbo_likelihood!(tile, mp, sbs, star_mcs, gal_mcs, accum)
+    function get_tile_sf(tile::ImageTile)
+      # TODO: Only pass a snesitive float as big as the tile's local sources.
+      tile_accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
+      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+      tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, tile_accum)
+      tile_accum
     end
+
+    accum_par = @parallel (+) for tile in tiles
+      get_tile_sf(tile)
+    end
+
+    # TODO: why doesn't @parallel update something in place?
+    accum.v += accum_par.v
+    accum.d += accum_par.d
+    accum.h += accum_par.h
 end
 
 
@@ -685,86 +736,16 @@ end
 Return the expected log likelihood for all bands in a section
 of the sky.
 """ ->
-function elbo_likelihood{NumType <: Number}(blob::Blob, mp::ModelParams{NumType})
+function elbo_likelihood{NumType <: Number}(
+  tiled_blob::TiledBlob, mp::ModelParams{NumType})
     # Return the expected log likelihood for all bands in a section
     # of the sky.
 
     ret = zero_sensitive_float(CanonicalParams, NumType, mp.S)
-    for img in blob
-        elbo_likelihood!(img, mp, ret)
+    for b in 1:length(tiled_blob)
+        elbo_likelihood!(tiled_blob[b], mp, b, ret)
     end
     ret
-end
-
-
-function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
-                        mp::ModelParams,
-                        accum::SensitiveFloat)
-    vs = mp.vp[s]
-    a = vs[ids.a[i]]
-    k = vs[ids.k[d, i]]
-
-    pp_kl_cid = KL.gen_diagmvn_mvn_kl(mp.pp.c[i][1][:, d],
-                                      mp.pp.c[i][2][:, :, d])
-    (v, (d_c1, d_c2)) = pp_kl_cid(vs[ids.c1[:, i]],
-                                        vs[ids.c2[:, i]])
-    accum.v -= v * a * k
-    accum.d[ids.k[d, i], s] -= a * v
-    accum.d[ids.c1[:, i], s] -= a * k * d_c1
-    accum.d[ids.c2[:, i], s] -= a * k * d_c2
-    accum.d[ids.a[i], s] -= k * v
-end
-
-
-function subtract_kl_k!(i::Int64, s::Int64,
-                        mp::ModelParams,
-                        accum::SensitiveFloat)
-    vs = mp.vp[s]
-    pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[i])
-    (v, (d_k,)) = pp_kl_ki(mp.vp[s][ids.k[:, i]])
-    accum.v -= v * vs[ids.a[i]]
-    accum.d[ids.k[:, i], s] -= d_k .* vs[ids.a[i]]
-    accum.d[ids.a[i], s] -= v
-end
-
-
-function subtract_kl_r!(i::Int64, s::Int64,
-                        mp::ModelParams, accum::SensitiveFloat)
-    vs = mp.vp[s]
-    pp_kl_r = KL.gen_gamma_kl(mp.pp.r[i][1], mp.pp.r[i][2])
-    (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
-    accum.v -= v * vs[ids.a[i]]
-    accum.d[ids.r1[i], s] -= d_r1 .* vs[ids.a[i]]
-    accum.d[ids.r2[i], s] -= d_r2 .* vs[ids.a[i]]
-    accum.d[ids.a[i], s] -= v
-end
-
-
-
-function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
-    pp_kl_a = KL.gen_categorical_kl(mp.pp.a)
-    (v, (d_a,)) = pp_kl_a(mp.vp[s][ids.a])
-    accum.v -= v
-    accum.d[ids.a, s] -= d_a
-end
-
-
-@doc """
-Subtract from accum the entropy and expected prior of
-the variational distribution.
-""" ->
-function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
-    for s in 1:mp.S
-        subtract_kl_a!(s, mp, accum)
-
-        for i in 1:Ia
-            subtract_kl_r!(i, s, mp, accum)
-            subtract_kl_k!(i, s, mp, accum)
-            for d in 1:D
-                subtract_kl_c!(d, i, s, mp, accum)
-            end
-        end
-    end
 end
 
 
@@ -773,13 +754,15 @@ Calculates and returns the ELBO and its derivatives for all the bands
 of an image.
 
 Args:
-  - blob: An image.
+  - tiled_blob: A TiledBlob.
   - mp: Model parameters.
 """ ->
-function elbo(blob::Blob, mp::ModelParams)
-    ret = elbo_likelihood(blob, mp)
+function elbo(tiled_blob::TiledBlob, mp::ModelParams)
+    ret = elbo_likelihood(tiled_blob, mp)
     subtract_kl!(mp, ret)
     ret
 end
+
+
 
 end

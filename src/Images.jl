@@ -12,6 +12,7 @@ import DataFrames
 import FITSIO
 import GaussianMixtures
 import Grid
+import Polygons
 import PSF
 import Util
 import WCS
@@ -19,7 +20,8 @@ import WCS
 export load_stamp_blob, load_sdss_blob, crop_image!, test_catalog_entry_in_image
 export convert_gmm_to_celeste, get_psf_at_point
 export convert_catalog_to_celeste, load_stamp_catalog
-
+export break_blob_into_tiles, break_image_into_tiles
+export local_sources
 
 function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     df = SDSS.load_stamp_catalog_df(cat_dir, stamp_id, blob, match_blob=match_blob)
@@ -208,6 +210,10 @@ Args:
   - wcs_center: A location in world coordinates (e.g. the location of a celestial body)
 """ ->
 function crop_image!(
+  ##############
+  # TODO: deprecate this and use tiles instead
+  ##############
+
   blob::Array{Image, 1}, width::Float64, wcs_center::Vector{Float64})
     @assert length(wcs_center) == 2
     @assert width > 0
@@ -312,8 +318,97 @@ function get_psf_at_point(psf_array::Array{CelesteTypes.PsfComponent, 1};
         (psf.alphaBar * exp_term / (2 * pi))[1]
     end
 
-    [ sum([ get_psf_value(psf, float(row), float(col)) for psf in psf_array ]) for
-      row in rows, col in cols ]
+    Float64[
+      sum([ get_psf_value(psf, float(row), float(col)) for psf in psf_array ])
+        for row in rows, col in cols ]
+end
+
+
+@doc """
+Convert an image to an array of tiles of a given width.
+
+Args:
+  - img: An image to be broken into tiles
+  - tile_width: The size in pixels of each tile
+
+Returns:
+  An array of tiles containing the image.
+""" ->
+function break_image_into_tiles(img::Image, tile_width::Int64)
+  WW = int(ceil(img.W / tile_width))
+  HH = int(ceil(img.H / tile_width))
+  ImageTile[ ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW ]
+end
+
+
+@doc """
+Break a blob into tiles.
+""" ->
+function break_blob_into_tiles(blob::Blob, tile_width::Int64)
+  [ break_image_into_tiles(img, tile_width) for img in blob ]
+end
+
+
+@doc """
+Update a patch's pixel center and world coordinates jacobian given a wcs object.
+""" ->
+function set_patch_wcs!(patch::SkyPatch, wcs::WCSLIB.wcsprm)
+    patch.pixel_center = WCS.world_to_pixel(wcs, patch.center)
+    patch.wcs_jacobian = WCS.pixel_world_jacobian(wcs, patch.pixel_center)
+end
+
+
+@doc """
+Get the PSF located at a particular source from an image.
+""" ->
+function get_source_psf(vp::Vector{Float64}, img::Image)
+    # Some stamps or simulated data have no raw psf information.  In that case,
+    # just use the psf from the image.
+    if size(img.raw_psf_comp.rrows) == (0, 0)
+      return img.psf
+      #return PSF.get_psf_at_point(img.psf)
+    else
+      world_loc = vp[ids.u]
+      pixel_loc = WCS.world_to_pixel(img.wcs, world_loc)
+      raw_psf =  PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
+      fit_psf, scale = PSF.fit_psf_gaussians(raw_psf)
+      return Images.convert_gmm_to_celeste(fit_psf, scale)
+    end
+end
+
+
+function set_patch_psfs!(blob::Blob, mp::ModelParams)
+  for s=1:mp.S, b=1:5
+    mp.patches[s, b].psf = get_source_psf(mp.vp[s], blob[b])
+  end
+end
+
+
+@doc """
+Args:
+  - tile: An ImageTile (containing tile coordinates)
+  - mp: Model parameters.
+
+Returns:
+  - A vector of source ids (from 1 to mp.S) that influence
+    pixels in the tile.  A source influences a tile if
+    there is any overlap in their squares of influence.
+""" ->
+function local_sources(tile::ImageTile, mp::ModelParams, wcs::WCSLIB.wcsprm)
+    # Corners of the tile in pixel coordinates.
+
+    tc11 = Float64[minimum(tile.h_range), minimum(tile.w_range)]
+    tc12 = Float64[minimum(tile.h_range), maximum(tile.w_range)]
+    tc22 = Float64[maximum(tile.h_range), maximum(tile.w_range)]
+    tc21 = Float64[maximum(tile.h_range), minimum(tile.w_range)]
+
+    tile_quad = vcat(tc11', tc12', tc22', tc21')
+    pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
+    pr = Float64[ mp.patches[s].radius for s=1:mp.S ]
+    bool_vec =
+      Polygons.sources_near_quadrilateral(pc, pr, tile_quad, wcs)
+
+    (collect(1:mp.S))[bool_vec]
 end
 
 
