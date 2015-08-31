@@ -24,20 +24,11 @@ function verify_sample_star(vs, pos)
     end
 end
 
-blob, mp, body, tiled_blob = gen_sample_star_dataset();
-trans = get_mp_transform(mp, loc_width=1.0);
-OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
-verify_sample_star(mp.vp[1], [10.1, 12.2])
-
-
-
-
-
-
-
-
-
-
+# blob, mp, body, tiled_blob = gen_sample_star_dataset();
+# trans = get_mp_transform(mp, loc_width=1.0);
+# OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
+# verify_sample_star(mp.vp[1], [10.1, 12.2])
+# 
 
 function verify_sample_galaxy(vs, pos)
     @test vs[ids.a[2]] >= 0.99
