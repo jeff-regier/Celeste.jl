@@ -7,11 +7,15 @@ VERSION < v"0.4.0-dev" && using Docile
 
 export sample_prior, cat_init, peak_init
 
+export initialize_celeste!
+
 using FITSIO
 using Distributions
 using Util
 using CelesteTypes
 
+import Images
+import WCSLIB
 
 function sample_prior()
     const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
@@ -158,7 +162,7 @@ function peak_init(blob::Blob; patch_radius::Float64=Inf,
     vp = [init_source(v1[:, s]) for s in 1:S]
     twice_radius = float(max(blob[1].H, blob[1].W))
     # TODO: use non-trival patch radii, based on blob detection routine
-    patches = [SkyPatch(v1[:, s], patch_radius) for s in 1:S]
+    patches = [SkyPatch(v1[:, s], patch_radius) for s in 1:S, b in 1:5]
     ModelParams(vp, sample_prior(), patches, tile_width)
 end
 
@@ -192,8 +196,56 @@ function cat_init(cat::Vector{CatalogEntry}; patch_radius::Float64=Inf,
         tile_width::Int64=typemax(Int64))
     vp = [init_source(ce) for ce in cat]
     # TODO: use non-trivial patch radii, based on the catalog
-    patches = [SkyPatch(ce.pos, patch_radius) for ce in cat]
+    patches = [SkyPatch(ce.pos, patch_radius) for ce in cat, b in 1:5]
     ModelParams(vp, sample_prior(), patches, tile_width)
+end
+
+
+@doc """
+
+""" ->
+function get_tiled_image_sources(
+  tiled_image::TiledImage, wcs::WCSLIB.wcsprm, mp::ModelParams)
+
+  H, W = size(tiled_image)
+  tile_sources = fill(Int64[], H, W)
+  for h in 1:H, w in 1:W
+    tile_sources[h, w] = Images.local_sources(tiled_image[h, w], mp, wcs)
+  end
+  tile_sources
+end
+
+
+@doc """
+Break the images into tiles and initialize the model parameters.
+
+Args:
+  - blob: A Blob containing the images.
+  - mp: Model parameters.
+
+Returns:
+  Updates mp in place with psfs, world coordinates, and tile sources.
+  Returns a tiled blob.
+""" ->
+function initialize_celeste!(blob::Blob, mp::ModelParams; patch_radius=Inf)
+  # Set the model parameters
+  @assert size(mp.patches)[1] == mp.S
+  for s=1:mp.S
+    for b = 1:length(blob)
+      mp.patches[s, b].center = mp.vp[s][ids.u]
+      mp.patches[s, b].radius = patch_radius
+    end
+    Images.set_patch_wcs!(mp.patches[s], blob[s].wcs)
+  end
+  Images.set_patch_psfs!(blob, mp)
+
+  tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
+  @assert length(mp.tile_sources) == length(blob)
+  for b=1:length(blob)
+    mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp)
+  end
+
+  tiled_blob
 end
 
 
