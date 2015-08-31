@@ -267,8 +267,8 @@ function test_add_sensitive_floats()
       sf1
   end
 
-  sf1 = generate_random_sf()
-  sf2 = generate_random_sf()
+  sf1 = generate_random_sf();
+  sf2 = generate_random_sf();
 
   sf3 = sf1 + sf2
   @test sf3.v == sf1.v + sf2.v
@@ -282,14 +282,14 @@ function test_add_sensitive_floats()
   @test_throws ErrorException sf_bad_size + sf1
   @test_throws ErrorException sf_bad_type + sf1
 
-  function ==(sf1::SensitiveFloat, sf2::SensitiveFloat)
+  function sf_equal(sf1::SensitiveFloat, sf2::SensitiveFloat)
     sf1.v == sf2.v && sf2.d == sf2.d && sf1.h == sf2.h
   end
 
   # Check that recursive summing works.
   sf_vector = [ generate_random_sf() for i=1:3 ]
-  @test sum(sf_vector) == reduce(+, sf_vector)
-  @test sum(sf_vector) == sf_vector[1] + sf_vector[2] + sf_vector[3]
+  @test sf_equal(sum(sf_vector), reduce(+, sf_vector))
+  @test sf_equal(sum(sf_vector), sf_vector[1] + sf_vector[2] + sf_vector[3])
 
 end
 
