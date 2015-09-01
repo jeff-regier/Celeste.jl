@@ -293,14 +293,14 @@ function test_tiny_image_tiling()
 
   mp0 = ModelInit.cat_init(catalog)
   [ mp0.patches[s, b].radius = Inf for
-    s=1:size(mp.patches)[1], b=1:size(mp.patches)[2]]
+    s=1:size(mp0.patches)[1], b=1:size(mp0.patches)[2]]
   tiled_blob0 = ModelInit.initialize_celeste!(fill(img, 5), mp0)
   accum0 = zero_sensitive_float(CanonicalParams)
   ElboDeriv.elbo_likelihood!(tiled_blob0[3], mp0, 3, accum0)
 
   mp0.tile_width = 2
   [ mp0.patches[s, b].radius = 10. for
-    s=1:size(mp.patches)[1], b=1:size(mp.patches)[2]]
+    s=1:size(mp0.patches)[1], b=1:size(mp0.patches)[2]]
   tiled_blob1 = ModelInit.initialize_celeste!(fill(img, 5), mp0)
   accum_tiles = zero_sensitive_float(CanonicalParams)
   ElboDeriv.elbo_likelihood!(tiled_blob1[3], mp0, 3, accum_tiles)
