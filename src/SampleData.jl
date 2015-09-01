@@ -1,6 +1,7 @@
 
 module SampleData
 
+VERSION < v"0.4.0-dev" && using Docile
 using Distributions
 using CelesteTypes
 
@@ -14,7 +15,7 @@ export empty_model_params
 export dat_dir, sample_ce, perturb_params
 export sample_star_fluxes, sample_galaxy_fluxes
 export gen_sample_star_dataset, gen_sample_galaxy_dataset
-export gen_two_body_dataset, gen_three_body_dataset
+export gen_two_body_dataset, gen_three_body_dataset, gen_n_body_dataset
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
@@ -162,7 +163,8 @@ function gen_n_body_dataset(S::Int64; patch_pixel_radius=20., tile_width=50)
     WCS.pixel_to_world(blob[3].wcs, [patch_pixel_radius patch_pixel_radius; 0. 0.])
   world_radius = maximum(abs(world_radius_pts[1,:] - world_radius_pts[2,:]))
   mp = ModelInit.cat_init(S_bodies, patch_radius=world_radius, tile_width=tile_width);
-  tiled_blob = ModelInit.initialize_celeste!(blob, mp; patch_radius=world_radius);
+  [ mp.patches[s, b].radius = world_radius for s=1:size(mp.patches)[1], b=1:size(mp.patches)[2]]
+  tiled_blob = ModelInit.initialize_celeste!(blob, mp);
 
   blob, mp, S_bodies, tiled_blob
 end

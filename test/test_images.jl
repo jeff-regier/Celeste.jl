@@ -106,7 +106,8 @@ function test_get_tiled_image_source()
     tile = tiled_img[hh, ww]
     loc = Float64[mean(tile.h_range), mean(tile.w_range)]
     [ mp.vp[1][ids.u] = mp.patches[1, b].center = loc for b=1:5 ]
-    local_sources = ModelInit.get_tiled_image_sources(tiled_img, img.wcs, mp)
+    local_sources =
+      ModelInit.get_tiled_image_sources(tiled_img, img.wcs, mp.patches[:, b][:])
     @test local_sources[hh, ww] == Int64[1]
     for hh2 in 1:size(tiled_img)[1], ww2 in 1:size(tiled_img)[2]
       if (hh2 != hh) || (ww2 != ww)
@@ -118,23 +119,45 @@ end
 
 
 function test_local_source_candidate()
+
+  using Celeste
+  using Base.Test
+  using CelesteTypes
+  using SampleData
+  using DataFrames
+
+  import ModelInit
+  import Images
+  import SloanDigitalSkySurvey: SDSS
+
+  println("Running Images tests.")
+
+  field_dir = joinpath(dat_dir, "sample_field")
+  run_num = "003900"
+  camcol_num = "6"
+  field_num = "0269"
+
   blob, mp, body, tiled_blob = gen_n_body_dataset(100);
 
-  # Get the sources by brute force.
-  tile_sources = Array(Array{Vector{Int64}}, length(tiled_blob))
-  for b=1:length(blob)
-    println("...for band $b")
-    tile_sources[b] =
-      ModelInit.get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp)
-  end
+  # This is run by gen_n_body_dataset but put it here for safe testing in
+  # case that changes.
+  tiled_blob = ModelInit.initialize_celeste!(blob, mp);
 
-  # Check that all the actual sources are candidates.
-  candidates = Images.local_source_candidates(tiled_blob, mp);
-  @test length(candidates) == length(tile_sources)
-  for b=1:length(tile_sources)
-    @test size(candidates[b]) == size(tile_sources[b])
-    for h=1:size(candidates[b])[1], w=1:size(candidates[b])[2]
-      @test setdiff(tile_sources[b][h, w], candidates[b][h, w]) == []
+  for b=1:length(tiled_blob)
+    # Get the sources by iterating over everything.
+    patches = mp.patches[:,b][:]
+    tile_sources =
+      ModelInit.get_tiled_image_sources(tiled_blob[b], blob[b].wcs, patches)
+
+    # Get a set of candidates.
+    candidates = Images.local_source_candidates(tiled_blob[b], patches);
+
+    # Check that all the actual sources are candidates and that this is the
+    # same as what is returned by initialize_celeste!.
+    @test size(candidates) == size(tile_sources)
+    for h=1:size(candidates)[1], w=1:size(candidates)[2]
+      @test setdiff(tile_sources[h, w], candidates[h, w]) == []
+      @test tile_sources[h, w] == mp.tile_sources[b][h, w]
     end
   end
 end
@@ -142,3 +165,4 @@ end
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
+test_local_source_candidate()
