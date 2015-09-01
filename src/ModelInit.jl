@@ -14,6 +14,7 @@ using Distributions
 using Util
 using CelesteTypes
 
+import SloanDigitalSkySurvey: WCS
 import Images
 import WCSLIB
 
@@ -244,16 +245,20 @@ function initialize_celeste!(blob::Blob, mp::ModelParams)
     for b = 1:length(blob)
       Images.set_patch_wcs!(mp.patches[s, b], blob[b].wcs)
       mp.patches[s, b].center = mp.vp[s][ids.u]
+      mp.patches[s, b].pixel_center =
+        WCS.world_to_pixel(blob[b].wcs, mp.patches[s, b].center)
     end
   end
   Images.set_patch_psfs!(blob, mp)
 
-  tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
+  tiled_blob =
+    Images.break_blob_into_tiles(blob, mp.tile_width)
   @assert length(mp.tile_sources) == length(blob)
 
   for b=1:length(blob)
     mp.tile_sources[b] =
-      get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
+      get_tiled_image_sources(tiled_blob[b],
+        blob[b].wcs, mp.patches[:, b][:])
   end
 
   tiled_blob
