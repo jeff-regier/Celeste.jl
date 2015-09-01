@@ -124,24 +124,6 @@ end
 
 
 function test_local_source_candidate()
-
-  using Celeste
-  using Base.Test
-  using CelesteTypes
-  using SampleData
-  using DataFrames
-
-  import ModelInit
-  import Images
-  import SloanDigitalSkySurvey: SDSS
-
-  println("Running Images tests.")
-
-  field_dir = joinpath(dat_dir, "sample_field")
-  run_num = "003900"
-  camcol_num = "6"
-  field_num = "0269"
-
   blob, mp, body, tiled_blob = gen_n_body_dataset(100);
 
   # This is run by gen_n_body_dataset but put it here for safe testing in
