@@ -203,6 +203,7 @@ function point_within_radius_of_polygon(p, radius, v)
             point_near_polygon_edge(p, radius, v))
 end
 
+
 @doc """
 Check whether a set of sources is within <radius> world coordinates of
 a quadrilateral defined in pixel coordinates.

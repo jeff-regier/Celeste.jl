@@ -14,6 +14,7 @@ using Distributions
 using Util
 using CelesteTypes
 
+import SloanDigitalSkySurvey: WCS
 import Images
 import WCSLIB
 
@@ -205,12 +206,20 @@ end
 
 """ ->
 function get_tiled_image_sources(
-  tiled_image::TiledImage, wcs::WCSLIB.wcsprm, mp::ModelParams)
+  tiled_image::TiledImage, wcs::WCSLIB.wcsprm, patches::Vector{SkyPatch})
 
   H, W = size(tiled_image)
   tile_sources = fill(Int64[], H, W)
+  candidates = Images.local_source_candidates(tiled_image, patches)
   for h in 1:H, w in 1:W
-    tile_sources[h, w] = Images.local_sources(tiled_image[h, w], mp, wcs)
+    # Only look for sources within the candidate set.
+    cand_patches = patches[candidates[h, w]]
+    if length(cand_patches) > 0
+      cand_sources = Images.local_sources(tiled_image[h, w], cand_patches, wcs)
+      tile_sources[h, w] = candidates[h, w][cand_sources]
+    else
+      tile_sources[h, w] = Int64[]
+    end
   end
   tile_sources
 end
@@ -227,22 +236,29 @@ Returns:
   Updates mp in place with psfs, world coordinates, and tile sources.
   Returns a tiled blob.
 """ ->
-function initialize_celeste!(blob::Blob, mp::ModelParams; patch_radius=Inf)
+function initialize_celeste!(blob::Blob, mp::ModelParams)
   # Set the model parameters
   @assert size(mp.patches)[1] == mp.S
+  @assert size(mp.patches)[2] == length(blob)
+
   for s=1:mp.S
     for b = 1:length(blob)
+      Images.set_patch_wcs!(mp.patches[s, b], blob[b].wcs)
       mp.patches[s, b].center = mp.vp[s][ids.u]
-      mp.patches[s, b].radius = patch_radius
+      mp.patches[s, b].pixel_center =
+        WCS.world_to_pixel(blob[b].wcs, mp.patches[s, b].center)
     end
-    Images.set_patch_wcs!(mp.patches[s], blob[s].wcs)
   end
   Images.set_patch_psfs!(blob, mp)
 
-  tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
+  tiled_blob =
+    Images.break_blob_into_tiles(blob, mp.tile_width)
   @assert length(mp.tile_sources) == length(blob)
+
   for b=1:length(blob)
-    mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp)
+    mp.tile_sources[b] =
+      get_tiled_image_sources(tiled_blob[b],
+        blob[b].wcs, mp.patches[:, b][:])
   end
 
   tiled_blob

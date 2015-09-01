@@ -73,20 +73,20 @@ function test_local_sources()
 
     mp.tile_width = 1000
     tile = ImageTile(1, 1, blob[3], mp.tile_width);
-    subset1000 = Images.local_sources(tile, mp, blob[3].wcs);
+    subset1000 = Images.local_sources(tile, mp.patches[:,3][:], blob[3].wcs);
     @test subset1000 == [1,2,3]
 
     mp.tile_width = 10
     tile = ImageTile(1, 1, blob[3], mp.tile_width);
-    subset10 = Images.local_sources(tile, mp, blob[3].wcs)
+    subset10 = Images.local_sources(tile, mp.patches[:,3][:], blob[3].wcs)
     @test subset10 == [1]
 
     last_tile = ImageTile(11, 24, blob[3], mp.tile_width)
-    last_subset = Images.local_sources(last_tile, mp, blob[3].wcs)
+    last_subset = Images.local_sources(last_tile, mp.patches[:,3][:], blob[3].wcs)
     @test length(last_subset) == 0
 
     pop_tile = ImageTile(7, 9, blob[3], mp.tile_width)
-    pop_subset = Images.local_sources(pop_tile, mp, blob[3].wcs)
+    pop_subset = Images.local_sources(pop_tile, mp.patches[:,3][:], blob[3].wcs)
     @test pop_subset == [2,3]
 end
 
@@ -111,7 +111,7 @@ function test_local_sources_2()
     qx = 0
     for ww=1:50,hh=1:50
         tile = ImageTile(hh, ww, small_blob[2], mp.tile_width)
-        if length(Images.local_sources(tile, mp, small_blob[2].wcs)) > 0
+        if length(Images.local_sources(tile, mp.patches[:,2][:], small_blob[2].wcs)) > 0
             qx += 1
         end
     end
@@ -119,7 +119,7 @@ function test_local_sources_2()
     qy = 0
     for ww=1:200,hh=1:200
         tile = ImageTile(hh, ww, big_blob[1], mp.tile_width)
-        if length(Images.local_sources(tile, mp, big_blob[1].wcs)) > 0
+        if length(Images.local_sources(tile, mp.patches[:,1][:], big_blob[1].wcs)) > 0
             qy += 1
         end
     end
@@ -160,7 +160,7 @@ function test_local_sources_3()
                      int(round(pix_loc[2] / tile_width)),
                      blob[test_b],
                      mp.tile_width);
-    @assert Images.local_sources(tile, mp, blob[test_b].wcs) == [1]
+    @assert Images.local_sources(tile, mp.patches[:,test_b][:], blob[test_b].wcs) == [1]
 
     # Source should not match when you're 1 tile and a half away along the diagonal plus
     # the pixel radius from the center of the tile.
@@ -169,14 +169,14 @@ function test_local_sources_3()
                      int(round(pix_loc[2] / tile_width)),
                      blob[test_b],
                      mp.tile_width)
-    @assert Images.local_sources(tile, mp, blob[test_b].wcs) == []
+    @assert Images.local_sources(tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
 
     tile = ImageTile(int(round((pix_loc[1]) / tile_width)),
                      int(ceil((pix_loc[2]  + 1.5 * tile_width * sqrt(2) +
                            patch_radius_pix) / tile_width)),
                      blob[test_b],
                      mp.tile_width)
-    @assert Images.local_sources(tile, mp, blob[test_b].wcs) == []
+    @assert Images.local_sources(tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
 end
 
 
@@ -292,6 +292,7 @@ function test_add_sensitive_floats()
   @test sf_equal(sum(sf_vector), sf_vector[1] + sf_vector[2] + sf_vector[3])
 
 end
+
 
 ####################################################
 

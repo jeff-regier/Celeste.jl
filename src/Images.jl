@@ -385,30 +385,70 @@ end
 
 
 @doc """
+A fast function to determine which sources might belong to which tiles.
+
 Args:
-  - tile: An ImageTile (containing tile coordinates)
-  - mp: Model parameters.
+  - tiles: A TiledImage
+  - mp: ModelParams (with its patches already defined)
 
 Returns:
-  - A vector of source ids (from 1 to mp.S) that influence
-    pixels in the tile.  A source influences a tile if
+  - An array (over tiles) of a vector of candidate
+    source patches.  If a patch is a candidate, it may be within the patch radius
+    of a point in the tile, though it might not.
+""" ->
+function local_source_candidates(tiles::TiledImage, patches::Vector{SkyPatch})
+
+  # Get the largest size of the pixel ellipse defined by the patch
+  # world coordinate circle.
+  patch_pixel_radii =
+    Float64[patches[s].radius * maximum(abs(eig(patches[s].wcs_jacobian)[1]))
+            for s=1:length(patches)];
+
+  candidates = fill(Int64[], size(tiles));
+  for h=1:size(tiles)[1], w=1:size(tiles)[2]
+    # Find the patches that are less than the radius plus diagonal from the
+    # center of the tile.  These are candidates for having some overlap with the tile.
+    tile = tiles[h, w]
+    tile_center = [ mean(tile.h_range), mean(tile.w_range)]
+    tile_diag = 0.5 * sqrt(tile.h_width ^ 2 + tile.w_width ^ 2)
+    patch_distances =
+      [ sqrt(sum((tile_center - patches[s].pixel_center) .^ 2)) for
+        s=1:length(patches)]
+    candidates[h, w] = find(patch_distances .<= tile_diag .+ patch_pixel_radii)
+  end
+
+  candidates
+end
+
+
+@doc """
+Args:
+  - tile: An ImageTile (containing tile coordinates)
+  - patches: A vector of SkyPatch objects to be matched with the tile.
+  - wcs: A WCS object for the image in question.
+
+Returns:
+  - A vector of source ids (from 1 to length(patches)) that influence
+    pixels in the tile.  A patch influences a tile if
     there is any overlap in their squares of influence.
 """ ->
-function local_sources(tile::ImageTile, mp::ModelParams, wcs::WCSLIB.wcsprm)
+function local_sources(tile::ImageTile, patches::Vector{SkyPatch}, wcs::WCSLIB.wcsprm)
     # Corners of the tile in pixel coordinates.
+    if length(patches) == 0
+      return Int64[]
+    end
 
     tc11 = Float64[minimum(tile.h_range), minimum(tile.w_range)]
-    tc12 = Float64[minimum(tile.h_range), maximum(tile.w_range)]
-    tc22 = Float64[maximum(tile.h_range), maximum(tile.w_range)]
-    tc21 = Float64[maximum(tile.h_range), minimum(tile.w_range)]
-
+    tc12 = Float64[minimum(tile.h_range), maximum(tile.w_range) + 1]
+    tc22 = Float64[maximum(tile.h_range) + 1, maximum(tile.w_range) + 1]
+    tc21 = Float64[maximum(tile.h_range) + 1, minimum(tile.w_range)]
     tile_quad = vcat(tc11', tc12', tc22', tc21')
-    pc = reduce(vcat, [ mp.patches[s].center' for s=1:mp.S ])
-    pr = Float64[ mp.patches[s].radius for s=1:mp.S ]
-    bool_vec =
-      Polygons.sources_near_quadrilateral(pc, pr, tile_quad, wcs)
 
-    (collect(1:mp.S))[bool_vec]
+    pc = reduce(vcat, [ patches[s].center' for s=1:length(patches) ])
+    pr = Float64[ patches[s].radius for s=1:length(patches) ]
+    bool_vec = Polygons.sources_near_quadrilateral(pc, pr, tile_quad, wcs)
+
+    (collect(1:length(patches)))[bool_vec]
 end
 
 
