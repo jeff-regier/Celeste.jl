@@ -105,9 +105,14 @@ function test_get_tiled_image_source()
   for hh in 1:size(tiled_img)[1], ww in 1:size(tiled_img)[2]
     tile = tiled_img[hh, ww]
     loc = Float64[mean(tile.h_range), mean(tile.w_range)]
-    [ mp.vp[1][ids.u] = mp.patches[1, b].center = loc for b=1:5 ]
+    for b = 1:5
+      mp.vp[1][ids.u] =
+        mp.patches[1, b].center =
+        mp.patches[1, b].pixel_center = loc
+    end
+    patches = mp.patches[:, 3][:]
     local_sources =
-      ModelInit.get_tiled_image_sources(tiled_img, img.wcs, mp.patches[:, 3][:])
+      ModelInit.get_tiled_image_sources(tiled_img, img.wcs, patches)
     @test local_sources[hh, ww] == Int64[1]
     for hh2 in 1:size(tiled_img)[1], ww2 in 1:size(tiled_img)[2]
       if (hh2 != hh) || (ww2 != ww)
