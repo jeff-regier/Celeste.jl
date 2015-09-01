@@ -309,6 +309,7 @@ Attributes:
   - pixel_center: The pixel location of center in each band.
 """ ->
 type SkyPatch
+    # TODO: this should perhaps be static to avoid accidental inconsistent data.
     center::Vector{Float64}
     radius::Float64
 
