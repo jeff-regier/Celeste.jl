@@ -1,6 +1,7 @@
 
 module SampleData
 
+VERSION < v"0.4.0-dev" && using Docile
 using Distributions
 using CelesteTypes
 
@@ -14,7 +15,7 @@ export empty_model_params
 export dat_dir, sample_ce, perturb_params
 export sample_star_fluxes, sample_galaxy_fluxes
 export gen_sample_star_dataset, gen_sample_galaxy_dataset
-export gen_two_body_dataset, gen_three_body_dataset
+export gen_two_body_dataset, gen_three_body_dataset, gen_n_body_dataset
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
@@ -136,6 +137,36 @@ function gen_three_body_dataset(; perturb=true)
 
     tiled_blob = ModelInit.initialize_celeste!(blob, mp)
     blob, mp, three_bodies, tiled_blob
+end
+
+
+@doc """
+Generate a large dataset with S randomly placed bodies.
+""" ->
+function gen_n_body_dataset(S::Int64; patch_pixel_radius=20., tile_width=50)
+  blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
+  img_size = 1000
+  for b in 1:5
+      blob0[b].H, blob0[b].W = img_size, img_size
+  end
+
+  fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
+
+  locations = rand(S, 2) .* float(img_size)
+  world_locations = WCS.pixel_to_world(blob0[3].wcs, locations)
+
+  S_bodies = CatalogEntry[CatalogEntry(world_locations[s, :][:], true,
+      fluxes, fluxes, 0.1, .7, pi/4, 4.) for s in 1:S];
+
+  blob = Synthetic.gen_blob(blob0, S_bodies);
+  world_radius_pts =
+    WCS.pixel_to_world(blob[3].wcs, [patch_pixel_radius patch_pixel_radius; 0. 0.])
+  world_radius = maximum(abs(world_radius_pts[1,:] - world_radius_pts[2,:]))
+  mp = ModelInit.cat_init(S_bodies, patch_radius=world_radius, tile_width=tile_width);
+  [ mp.patches[s, b].radius = world_radius for s=1:size(mp.patches)[1], b=1:size(mp.patches)[2]]
+  tiled_blob = ModelInit.initialize_celeste!(blob, mp);
+
+  blob, mp, S_bodies, tiled_blob
 end
 
 end # End module
