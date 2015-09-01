@@ -116,6 +116,29 @@ function test_get_tiled_image_source()
   end
 end
 
+
+function test_local_source_candidate()
+  blob, mp, body, tiled_blob = gen_n_body_dataset(100);
+
+  # Get the sources by brute force.
+  tile_sources = Array(Array{Vector{Int64}}, length(tiled_blob))
+  for b=1:length(blob)
+    println("...for band $b")
+    tile_sources[b] =
+      ModelInit.get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp)
+  end
+
+  # Check that all the actual sources are candidates.
+  candidates = Images.local_source_candidates(tiled_blob, mp);
+  @test length(candidates) == length(tile_sources)
+  for b=1:length(tile_sources)
+    @test size(candidates[b]) == size(tile_sources[b])
+    for h=1:size(candidates[b])[1], w=1:size(candidates[b])[2]
+      @test setdiff(tile_sources[b][h, w], candidates[b][h, w]) == []
+    end
+  end
+end
+
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()

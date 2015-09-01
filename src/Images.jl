@@ -388,16 +388,38 @@ end
 A fast function to determine which sources might belong to which tiles.
 
 Args:
+  - tiled_blob: A TiledBlob
+  - mp: ModelParams (with its patches already defined)
+
+Returns:
+  - A vector (over bands) of an array (over tiles) of a vector of candidate
+    source patches.  If a patch is a canddiate, it may be within the patch radius
+    of a point in the tile, though it might not.
 """ ->
 function local_source_candidates(tiled_blob::TiledBlob, mp::ModelParams)
-  b = 1
-  tiles = tiled_blob[b];
-  candidates = fill(Int64[], size(tiles));
+  local_source_candidates_array = Array(Array{Vector{Int64}}, length(tiled_blob))
+  for b=1:length(tiled_blob)
+    tiles = tiled_blob[b];
 
-  patch_pixel_radii =
-    Float64[1 / maximum(abs(eig(mp.patches[s, b].wcs_jacobian)[1]))
-            for s=1:mp.S, b=1:length(tiled_blob)];
-  
+    # The largest size of the pixel ellipse defined by the patch
+    # world coordinate circles.
+    patch_pixel_radii =
+      Float64[mp.patches[s, b].radius *
+              maximum(abs(eig(mp.patches[s, b].wcs_jacobian)[1]))
+              for s=1:mp.S, b=1:length(tiled_blob)];
+
+    candidates = fill(Int64[], size(tiles));
+    for h=1:size(tiles)[1], w=1:size(tiles)[2]
+      tile = tiles[h, w]
+      tile_center = [ mean(tile.h_range), mean(tile.w_range)]
+      tile_diag = 0.5 * sqrt(tile.h_width ^ 2 + tile.w_width ^ 2)
+      patch_distances =
+        [ sqrt(sum((tile_center - mp.patches[s, b].pixel_center) .^ 2)) for s=1:mp.S]
+      candidates[h, w] = find(patch_distances .<= tile_diag .+ patch_pixel_radii[:, b])
+    end
+    local_source_candidates_array[b] = candidates
+  end
+  local_source_candidates_array
 end
 
 
