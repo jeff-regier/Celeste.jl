@@ -223,7 +223,7 @@ Returns:
 function maximize_f_newton(
   f::Function, mp::ModelParams, transform::Transform.DataTransform;
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  hess_reg=2.0, max_iters=100)
+  hess_reg=2.0, max_iters=100, optim_method=:newton)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
@@ -257,7 +257,7 @@ function maximize_f_newton(
     # TODO: are xtol_rel and ftol_abs still good names?
     nm_result =
       Optim.optimize(optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!,
-                     x0, method=:newton, iterations=max_iters,
+                     x0, method=optim_method, iterations=max_iters,
                      xtol=xtol_rel, ftol=ftol_abs)
 
     iter_count = optim_obj_wrap.state.f_evals

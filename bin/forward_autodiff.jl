@@ -12,13 +12,6 @@ import JLD
 
 import NLsolve # Try the trust region method here?
 
-include("src/interpolating_linesearch.jl")
-include("src/NewtonsMethod.jl")
-
-# Note that the u hessians are no good.
-#omitted_ids = Int64[ids_free.u, ids_free.k[:], ids_free.c2[:], ids_free.r2];
-#omitted_ids = ids_free.u;
-
 galaxy_ids = union(ids_free.c1[:,2],
                    ids_free.c2[:,2],
                    ids_free.r1[2],
@@ -27,10 +20,10 @@ galaxy_ids = union(ids_free.c1[:,2],
                    ids_free.e_dev, ids_free.e_axis, ids_free.e_angle, ids_free.e_scale);
 
 star_ids = union(ids_free.c1[:,1],
-                   ids_free.c2[:,1],
-                   ids_free.r1[1],
-                   ids_free.r2[1],
-                   ids_free.k[:,1]);
+                 ids_free.c2[:,1],
+                 ids_free.r1[1],
+                 ids_free.r2[1],
+                 ids_free.k[:,1]);
 
 
 jld_file = "$dat_dir/SDSS_blob.jld"
@@ -38,10 +31,11 @@ jld_file = "$dat_dir/SDSS_blob.jld"
 
 simulation = true
 if simulation
-    blob, mp_original, body = gen_sample_star_dataset(perturb=false);
+    blob, mp_original, body, tiled_blob =
+      gen_sample_star_dataset(perturb=false);
     #blob, mp_original, body = gen_sample_galaxy_dataset(perturb=true);
     #blob, mp_original, body = gen_three_body_dataset(perturb=true); # Too slow.
-    transform = Transform.get_mp_transform(mp_original, loc_width=1.0)
+    transform = Transform.get_mp_transform(mp_original, loc_width=1.0);
 else
     # An actual celestial body.
     field_dir = joinpath(dat_dir, "sample_field")
@@ -56,7 +50,8 @@ else
     #JLD.save(jld_file, "original_blob", original_blob)
 
     # Need to do this until WCS has an actual deep copy.
-    original_crpix_band = Float64[unsafe_load(original_blob[b].wcs.crpix, i) for i=1:2, b=1:5];
+    original_crpix_band =
+      Float64[unsafe_load(original_blob[b].wcs.crpix, i) for i=1:2, b=1:5];
     function reset_crpix!(blob)
         for b=1:5
             unsafe_store!(blob[b].wcs.crpix, original_crpix_band[1, b], 1)
@@ -68,14 +63,17 @@ else
     cat_loc = convert(Array{Float64}, original_cat_df[[:ra, :dec]]);
 
     obj_cols = [:objid, :is_star, :is_gal, :psfflux_r, :compflux_r, :ra, :dec];
-    sort(original_cat_df[original_cat_df[:is_gal] .== true, obj_cols], cols=:compflux_r, rev=true)
-    sort(original_cat_df[original_cat_df[:is_gal] .== false, obj_cols], cols=:psfflux_r, rev=true)
+    sort(original_cat_df[original_cat_df[:is_gal] .== true, obj_cols],
+        cols=:compflux_r, rev=true)
+    sort(original_cat_df[original_cat_df[:is_gal] .== false, obj_cols],
+        cols=:psfflux_r, rev=true)
 
     objid = "1237662226208063541" # A bright star with bad pixels
     #objid = "1237662226208063576" # A galaxy
     #objid = "1237662226208063565" # A brightish star but with good pixels.
     obj_row = original_cat_df[:objid] .== objid;
-    obj_loc = Float64[original_cat_df[obj_row, :ra][1], original_cat_df[obj_row, :dec][1]]
+    obj_loc = Float64[original_cat_df[obj_row, :ra][1],
+                      original_cat_df[obj_row, :dec][1]]
 
     blob = deepcopy(original_blob);
     reset_crpix!(blob)
@@ -83,12 +81,17 @@ else
     width = 15.
     Images.crop_image!(blob, width, obj_loc);
     @assert Images.test_catalog_entry_in_image(blob, obj_loc)
-    entry_in_image = [Images.test_catalog_entry_in_image(blob, cat_loc[i,:][:]) for i=1:size(cat_loc, 1)];
+    entry_in_image =
+      [Images.test_catalog_entry_in_image(blob, cat_loc[i,:][:]) for
+       i=1:size(cat_loc, 1)];
     original_cat_df[entry_in_image, obj_cols]
-    cat_entries = Images.convert_catalog_to_celeste(original_cat_df[entry_in_image, :], blob)
-    mp_original = ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
+    cat_entries =
+      Images.convert_catalog_to_celeste(original_cat_df[entry_in_image, :], blob)
+    mp_original =
+      ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
     transform = Transform.get_mp_transform(mp_original)
 end
+
 
 function fit_only_type!(obj_type::Symbol, mp::ModelParams)
   valid_types = Symbol[:star, :galaxy, :both, :a]
@@ -128,7 +131,7 @@ bfgs_v = NaN
 function bfgs_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
   mp_bfgs = deepcopy(mp_original);
   iter_count, max_f, max_x, ret =
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_bfgs, transform,
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp_bfgs, transform,
                             omitted_ids=omitted_ids, verbose=true);
   mp_bfgs, iter_count, max_f
 end
@@ -139,14 +142,15 @@ bfgs_v = ElboDeriv.elbo(blob, mp_bfgs).v;
 # Newton's method with our own hessian regularization
 
 # For newton's method.
-max_iters = 20;
+max_iters = 50;
 
 function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
   mp_optim = deepcopy(mp_original);
   iter_count, max_f, max_x, ret =
-    maximize_f_newton(mp -> ElboDeriv.elbo(blob, mp), mp_optim, transform,
-                      omitted_ids=omitted_ids, verbose=true, max_iters=max_iters,
-                      hess_reg=10.0)
+    OptimizeElbo.maximize_f_newton(
+      mp -> ElboDeriv.elbo(tiled_blob, mp), mp_optim, transform,
+      omitted_ids=omitted_ids, verbose=true, max_iters=max_iters,
+      hess_reg=0.0, optim_method=:newton_tr)
   mp_optim, iter_count, max_f
 end
 
@@ -168,15 +172,22 @@ function combine_star_gal(mp_star::ModelParams, mp_gal::ModelParams)
   mp_combined
 end
 
+
+nm_results_both = newton_fit_params(mp_original, Int64[]);
+
 # Try fitting one type at a time.
 bfgs_results = Dict()
 nm_results = Dict()
 
-nm_results[:star], nm_star_iters, nm_star_v = fit_type(:star, mp_original, newton_fit_params)
-bfgs_results[:star], bfgs_star_iters, bfgs_star_v = fit_type(:star, mp_original, bfgs_fit_params)
+nm_results[:star], nm_star_iters, nm_star_v =
+  fit_type(:star, mp_original, newton_fit_params)
+bfgs_results[:star], bfgs_star_iters, bfgs_star_v =
+  fit_type(:star, mp_original, bfgs_fit_params)
 
-nm_results[:galaxy], nm_gal_iters, nm_gal_v = fit_type(:galaxy, mp_original, newton_fit_params)
-bfgs_results[:galaxy], bfgs_gal_iters, bfgs_gal_v = fit_type(:galaxy, mp_original, bfgs_fit_params)
+nm_results[:galaxy], nm_gal_iters, nm_gal_v =
+  fit_type(:galaxy, mp_original, newton_fit_params)
+bfgs_results[:galaxy], bfgs_gal_iters, bfgs_gal_v =
+  fit_type(:galaxy, mp_original, bfgs_fit_params)
 
 println(nm_star_v, ", ", nm_star_iters)
 println(bfgs_star_v, ", ", bfgs_star_iters)
@@ -262,8 +273,9 @@ verify_sample_star(mp_bfgs.vp[1], [10.1, 12.2]);
 
 mp = deepcopy(mp_original);
 iter_count, max_f, max_x, ret =
-    OptimizeElbo.maximize_f_newton(mp -> ElboDeriv.elbo(blob, mp), mp, transform,
-                               omitted_ids=omitted_ids, verbose=false, max_iters=10);
+    OptimizeElbo.maximize_f_newton(
+      mp -> ElboDeriv.elbo(blob, mp), mp, transform,
+      omitted_ids=omitted_ids, verbose=false, max_iters=10);
 print_params(mp, mp_bfgs)
 verify_sample_star(mp.vp[1], [10.1, 12.2])
 
@@ -282,9 +294,10 @@ verify_sample_star(mp.vp[1], [10.1, 12.2])
 # Newton's method by hand, probably obsolete.
 
 obj_wrap = OptimizeElbo.ObjectiveWrapperFunctions(
-    mp -> ElboDeriv.elbo(blob, mp), deepcopy(mp_original), transform, kept_ids, omitted_ids);
-obj_wrap.state.scale = -1.0 # For minimization, which is required by the linesearch algorithm.
-
+    mp -> ElboDeriv.elbo(blob, mp),
+    deepcopy(mp_original), transform, kept_ids, omitted_ids);
+# For minimization, which is required by the linesearch algorithm.
+obj_wrap.state.scale = -1.0
 x0 = transform.vp_to_vector(mp_original.vp, omitted_ids);
 elbo_grad = zeros(Float64, length(x0));
 elbo_hess = zeros(Float64, length(x0), length(x0));
@@ -305,7 +318,9 @@ hesses = [ zeros(Float64, length(x0), length(x0)) for iter=1:max_iters ];
 warm_start = false
 if warm_start
     mp_start = deepcopy(mp_original)
-    start_iter_count, start_f, x_start = OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_start, Transform.free_transform, omitted_ids=omitted_ids, ftol_abs=1);
+    start_iter_count, start_f, x_start =
+      OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_start, Transform.free_transform,
+                              omitted_ids=omitted_ids, ftol_abs=1);
     obj_wrap.state.f_evals = start_iter_count;
     x_new = deepcopy(x_start); # For quick restarts while debugging
     new_val = old_val = -start_f;
@@ -356,13 +371,15 @@ for iter in 1:max_iters
                               c2 = 0.9,
                               rho = 2.0, verbose=false);
     new_val, gr_new = obj_wrap.f_value_grad(x_new)
-    println("Spent $(obj_wrap.state.f_evals - pre_linesearch_iters) iterations on linesearch for an extra $(f_val - new_val).")
+    println("Spent $(obj_wrap.state.f_evals - pre_linesearch_iters) iterations ",
+             "on linesearch for an extra $(f_val - new_val).")
     val_diff = new_val / old_val - 1
     f_vals[iter] = new_val;
     x_vals[iter] = deepcopy(x_new)
     grads[iter] = deepcopy(gr_new)
     cumulative_iters[iter] = obj_wrap.state.f_evals
-    println(">>>>>>  Current value after $(obj_wrap.state.f_evals) evaluations: $(new_val) (BFGS got $(-bfgs_v) in $(iter_count) iters)")
+    println(">>>>>>  Current value after $(obj_wrap.state.f_evals) evaluations: ",
+            "$(new_val) (BFGS got $(-bfgs_v) in $(iter_count) iters)")
     mp_nm = deepcopy(mp_original);
     transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
     #println(ElboDeriv.get_brightness(mp_nm))
