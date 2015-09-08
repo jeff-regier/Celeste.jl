@@ -158,7 +158,8 @@ type ObjectiveWrapperFunctions
                 x_dual[index] = ForwardDiff.Dual(x[index], 0.)
             end
             print("Done.\n")
-            hess
+            # Assure that the hessian is symmetric.
+            0.5 * (hess + hess')
         end
 
         new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_grad!,
@@ -243,7 +244,7 @@ function maximize_f_newton(
 
         # Make it positive definite.
         if min_ev < 0
-            verbose && println("Hessian is negative definite with ",
+            verbose && println("Hessian is semi-definite with ",
                                "eigenvalues: (min $(min_ev), max $(max_ev)).  ",
                                "Regularizing with $(hess_reg).")
             hess += eye(length(x)) * abs(min_ev) * hess_reg
@@ -255,10 +256,27 @@ function maximize_f_newton(
     x0 = transform.vp_to_vector(mp.vp, omitted_ids);
 
     # TODO: are xtol_rel and ftol_abs still good names?
-    nm_result =
-      Optim.optimize(optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!,
-                     x0, method=optim_method, iterations=max_iters,
-                     xtol=xtol_rel, ftol=ftol_abs)
+    # nm_result =
+    #   Optim.optimize(optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!,
+    #                  x0, method=optim_method, iterations=max_iters,
+    #                  xtol=xtol_rel, ftol=ftol_abs,
+    #                  show_trace=verbose, store_trace=verbose,
+    #                  extended_trace=verbose)
+
+    d = Optim.TwiceDifferentiableFunction(
+      optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!)
+    nm_result = Optim.newton_tr(d,
+           x0,
+           xtol = xtol_rel,
+           ftol = ftol_abs,
+           grtol = 1e-8,
+           iterations = max_iters,
+           store_trace = verbose,
+           show_trace = verbose,
+           extended_trace = verbose,
+           initial_delta=1e6,
+           delta_hat=1e9)
+
 
     iter_count = optim_obj_wrap.state.f_evals
     transform.vector_to_vp!(nm_result.minimum, mp.vp, omitted_ids);

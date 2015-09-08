@@ -144,6 +144,7 @@ bfgs_v = ElboDeriv.elbo(blob, mp_bfgs).v;
 # For newton's method.
 max_iters = 50;
 
+include("src/OptimizeElbo.jl")
 function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
   mp_optim = deepcopy(mp_original);
   iter_count, max_f, max_x, ret =
@@ -153,6 +154,9 @@ function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
       hess_reg=0.0, optim_method=:newton_tr)
   mp_optim, iter_count, max_f
 end
+
+nm_results_both = newton_fit_params(mp_original, Int64[]);
+
 
 
 function fit_type(obj_type::Symbol, mp_original::ModelParams, fit_fun::Function)
@@ -173,7 +177,6 @@ function combine_star_gal(mp_star::ModelParams, mp_gal::ModelParams)
 end
 
 
-nm_results_both = newton_fit_params(mp_original, Int64[]);
 
 # Try fitting one type at a time.
 bfgs_results = Dict()
