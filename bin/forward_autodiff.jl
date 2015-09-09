@@ -158,11 +158,29 @@ end
 
 nm_results_both_optim, iter_count, max_f, nm_ret =
   newton_fit_params(mp_original, Int64[]);
+
+values = Float64[ s.value for s in nm_ret.trace.states ]
+xs = [ s.metadata["x"] for s in nm_ret.trace.states ]
+
+start = 1
+i = 1
+for i=1:length(ids_free_names)
+  PyPlot.figure()
+  plot(start:length(xs), [ x[i] for x in xs], "k.")
+  PyPlot.title(ids_free_names[i])
+end
+
+# PyPlot.close("all")
+deltas = Float64[ s.metadata["delta"] for s in nm_ret.trace.states ]
+
+plot(3:length(deltas), log(deltas)[3:end], "k.")
+
+
 nm_v = ElboDeriv.elbo(tiled_blob, nm_results_both_optim).v;
 ElboDeriv.get_brightness(nm_results_both_optim)
 ElboDeriv.get_brightness(mp_original)
 print_params(nm_results_both_optim, mp_original)
-
+println("Newton elbo: $(nm_v) BFGS elbo: $(bfgs_v)")
 
 
 function fit_type(obj_type::Symbol, mp_original::ModelParams, fit_fun::Function)

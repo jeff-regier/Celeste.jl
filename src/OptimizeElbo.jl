@@ -274,7 +274,7 @@ function maximize_f_newton(
            store_trace = verbose,
            show_trace = false,
            extended_trace = verbose,
-           initial_delta=1e6,
+           initial_delta=10,
            delta_hat=1e9)
 
     # TODO: this isn't updating.
