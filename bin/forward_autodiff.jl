@@ -135,8 +135,9 @@ function bfgs_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
                             omitted_ids=omitted_ids, verbose=true);
   mp_bfgs, iter_count, max_f
 end
-bfgs_v = ElboDeriv.elbo(blob, mp_bfgs).v;
-
+mp_bfgs_both_optim, iter_count, max_f = bfgs_fit_params(mp_original, Int64[])
+bfgs_v = ElboDeriv.elbo(tiled_blob, mp_bfgs_both_optim).v;
+# 1014 iters
 
 ####################
 # Newton's method with our own hessian regularization
@@ -144,7 +145,7 @@ bfgs_v = ElboDeriv.elbo(blob, mp_bfgs).v;
 # For newton's method.
 max_iters = 50;
 
-include("src/OptimizeElbo.jl")
+include("../Optim.jl/src/Optim.jl"); include("src/OptimizeElbo.jl")
 function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
   mp_optim = deepcopy(mp_original);
   iter_count, max_f, max_x, ret =
@@ -152,10 +153,15 @@ function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
       mp -> ElboDeriv.elbo(tiled_blob, mp), mp_optim, transform,
       omitted_ids=omitted_ids, verbose=true, max_iters=max_iters,
       hess_reg=0.0, optim_method=:newton_tr)
-  mp_optim, iter_count, max_f
+  mp_optim, iter_count, max_f, ret
 end
 
-nm_results_both = newton_fit_params(mp_original, Int64[]);
+nm_results_both_optim, iter_count, max_f, nm_ret =
+  newton_fit_params(mp_original, Int64[]);
+nm_v = ElboDeriv.elbo(tiled_blob, nm_results_both_optim).v;
+ElboDeriv.get_brightness(nm_results_both_optim)
+ElboDeriv.get_brightness(mp_original)
+print_params(nm_results_both_optim, mp_original)
 
 
 
