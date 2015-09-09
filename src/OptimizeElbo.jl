@@ -272,13 +272,14 @@ function maximize_f_newton(
            grtol = 1e-8,
            iterations = max_iters,
            store_trace = verbose,
-           show_trace = verbose,
+           show_trace = false,
            extended_trace = verbose,
            initial_delta=1e6,
            delta_hat=1e9)
 
-
+    # TODO: this isn't updating.
     iter_count = optim_obj_wrap.state.f_evals
+    println(optim_obj_wrap.state, " iter_count: ", iter_count)
     transform.vector_to_vp!(nm_result.minimum, mp.vp, omitted_ids);
     max_f = -1.0 * nm_result.f_minimum
     max_x = nm_result.minimum
