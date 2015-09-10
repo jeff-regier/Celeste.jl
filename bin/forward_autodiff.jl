@@ -31,9 +31,10 @@ jld_file = "$dat_dir/SDSS_blob.jld"
 
 simulation = true
 if simulation
-    blob, mp_original, body, tiled_blob =
-      gen_sample_star_dataset(perturb=false);
-    #blob, mp_original, body = gen_sample_galaxy_dataset(perturb=true);
+    #blob, mp_original, body, tiled_blob = gen_sample_star_dataset(perturb=true);
+
+    # The gen_sample_galaxy locations and brightnesses look off.
+    blob, mp_original, body = gen_sample_galaxy_dataset(perturb=false);
     #blob, mp_original, body = gen_three_body_dataset(perturb=true); # Too slow.
     transform = Transform.get_mp_transform(mp_original, loc_width=1.0);
 else
@@ -50,14 +51,14 @@ else
     #JLD.save(jld_file, "original_blob", original_blob)
 
     # Need to do this until WCS has an actual deep copy.
-    original_crpix_band =
-      Float64[unsafe_load(original_blob[b].wcs.crpix, i) for i=1:2, b=1:5];
-    function reset_crpix!(blob)
-        for b=1:5
-            unsafe_store!(blob[b].wcs.crpix, original_crpix_band[1, b], 1)
-            unsafe_store!(blob[b].wcs.crpix, original_crpix_band[2, b], 2)
-        end
-    end
+    # original_crpix_band =
+    #   Float64[unsafe_load(original_blob[b].wcs.crpix, i) for i=1:2, b=1:5];
+    # function reset_crpix!(blob)
+    #     for b=1:5
+    #         unsafe_store!(blob[b].wcs.crpix, original_crpix_band[1, b], 1)
+    #         unsafe_store!(blob[b].wcs.crpix, original_crpix_band[2, b], 2)
+    #     end
+    # end
 
     original_cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
     cat_loc = convert(Array{Float64}, original_cat_df[[:ra, :dec]]);
@@ -76,7 +77,9 @@ else
                       original_cat_df[obj_row, :dec][1]]
 
     blob = deepcopy(original_blob);
-    reset_crpix!(blob)
+    #reset_crpix!(blob)
+
+    # TODO: make a tile for an object.
     WCS.world_to_pixel(blob[3].wcs, obj_loc)
     width = 15.
     Images.crop_image!(blob, width, obj_loc);
@@ -135,15 +138,16 @@ function bfgs_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
                             omitted_ids=omitted_ids, verbose=true);
   mp_bfgs, iter_count, max_f
 end
-mp_bfgs_both_optim, iter_count, max_f = bfgs_fit_params(mp_original, Int64[])
+mp_bfgs_both_optim, bfgs_iter_count, max_f = bfgs_fit_params(mp_original, Int64[])
 bfgs_v = ElboDeriv.elbo(tiled_blob, mp_bfgs_both_optim).v;
 # 1014 iters
 
 ####################
 # Newton's method with our own hessian regularization
 
-# For newton's method.
-max_iters = 50;
+# For newton's method.  It doesn't actually converge, so this
+# controls the number of steps.
+max_iters = 30;
 
 include("../Optim.jl/src/Optim.jl"); include("src/OptimizeElbo.jl")
 function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
@@ -156,11 +160,12 @@ function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
   mp_optim, iter_count, max_f, ret
 end
 
-nm_results_both_optim, iter_count, max_f, nm_ret =
-  newton_fit_params(mp_original, Int64[]);
+nm_results_both_optim, nm_iter_count, max_f, nm_ret =
+    newton_fit_params(mp_original, Int64[]);
 
 values = Float64[ s.value for s in nm_ret.trace.states ]
 xs = [ s.metadata["x"] for s in nm_ret.trace.states ]
+as = Float64[ x[ids_free.a] for x in xs ]
 
 start = 1
 i = 1
@@ -169,19 +174,24 @@ for i=1:length(ids_free_names)
   plot(start:length(xs), [ x[i] for x in xs], "k.")
   PyPlot.title(ids_free_names[i])
 end
+PyPlot.close("all")
 
-# PyPlot.close("all")
 deltas = Float64[ s.metadata["delta"] for s in nm_ret.trace.states ]
-
-plot(3:length(deltas), log(deltas)[3:end], "k.")
+plot(start:length(deltas), log(deltas)[start:end], "k.")
+plot(start:length(values), log(values)[start:end], "r.")
+plot(start:length(as), as[start:end], "b.")
 
 
 nm_v = ElboDeriv.elbo(tiled_blob, nm_results_both_optim).v;
 ElboDeriv.get_brightness(nm_results_both_optim)
+ElboDeriv.get_brightness(mp_bfgs_both_optim)
 ElboDeriv.get_brightness(mp_original)
-print_params(nm_results_both_optim, mp_original)
+print_params(nm_results_both_optim, mp_bfgs_both_optim, mp_original)
 println("Newton elbo: $(nm_v) BFGS elbo: $(bfgs_v)")
 
+
+
+#############################
 
 function fit_type(obj_type::Symbol, mp_original::ModelParams, fit_fun::Function)
   mp_type = deepcopy(mp_original)

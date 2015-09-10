@@ -274,12 +274,10 @@ function maximize_f_newton(
            store_trace = verbose,
            show_trace = false,
            extended_trace = verbose,
-           initial_delta=10,
+           initial_delta=10.0,
            delta_hat=1e9)
 
-    # TODO: this isn't updating.
     iter_count = optim_obj_wrap.state.f_evals
-    println(optim_obj_wrap.state, " iter_count: ", iter_count)
     transform.vector_to_vp!(nm_result.minimum, mp.vp, omitted_ids);
     max_f = -1.0 * nm_result.f_minimum
     max_x = nm_result.minimum
@@ -319,7 +317,6 @@ function maximize_f(
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
-    iter_count = 0
 
     obj_wrapper = ObjectiveWrapperFunctions(
       mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
@@ -338,8 +335,7 @@ function maximize_f(
     ftol_abs!(opt, ftol_abs)
     (max_f, max_x, ret) = optimize(opt, x0)
 
-    println("got $max_f at $max_x after $iter_count iters (returned $ret)\n")
-    iter_count, max_f, max_x, ret
+    obj_wrapper.state.f_evals, max_f, max_x, ret
 end
 
 function maximize_f(
