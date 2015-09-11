@@ -22,6 +22,7 @@ function test_blob()
   blob = Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
   cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
   cat_entries = Images.convert_catalog_to_celeste(cat_df, blob);
+  mp = ModelInit.cat_init(cat_entries; patch_radius=1e-10);
 
   # Just check some basic facts about the catalog.
   @test size(cat_df)[1] == 805
@@ -39,16 +40,20 @@ function test_blob()
   @assert sum(obj_rows) == 1
   obj_loc = Float64[ cat_df[obj_rows, :ra][1], cat_df[obj_rows, :dec][1]]
   objid = cat_df[obj_rows, :objid][1]
+  obj_row = find(obj_rows)[1]
 
-  # # Test cropping.  TODO -- delete this, it messes with the original center.
-  # cropped_blob = deepcopy(blob)
-  # width = 5.0
-  # Images.crop_image!(cropped_blob, width, obj_loc)
-  # for b=1:5
-  #   @test 2 * width <= cropped_blob[b].H <= 2 * (width + 1)
-  #   @test 2 * width <= cropped_blob[b].W <= 2 * (width + 1)
-  # end
-  # @test Images.test_catalog_entry_in_image(cropped_blob, obj_loc)
+  # # Test cropping.
+  width = 5.0
+  cropped_blob = Images.crop_blob_to_location(blob, width, obj_loc);
+  for b=1:5
+    # Check that it only has one tile of the right size containing the object.
+    @assert length(cropped_blob[b]) == 1
+    @test 2 * width <= cropped_blob[b][1].h_width <= 2 * (width + 1)
+    @test 2 * width <= cropped_blob[b][1].w_width <= 2 * (width + 1)
+    tile_sources =
+      Images.local_sources(cropped_blob[b][1], mp.patches[:,b][:], blob[b].wcs)
+    @test obj_row in tile_sources
+  end
 
   # Test get_source_psf at point while we have the blob loaded.
   test_b = 3

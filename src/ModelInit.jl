@@ -243,6 +243,7 @@ function initialize_celeste!(blob::Blob, mp::ModelParams)
 
   for s=1:mp.S
     for b = 1:length(blob)
+      # TODO: Make patches static and only initialize once.
       Images.set_patch_wcs!(mp.patches[s, b], blob[b].wcs)
       mp.patches[s, b].center = mp.vp[s][ids.u]
       mp.patches[s, b].pixel_center =
