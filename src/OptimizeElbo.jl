@@ -326,6 +326,11 @@ function maximize_f(
     for i in 1:length(x0)
         if !(lbs[i] <= x0[i] <= ubs[i])
             println("coordinate $i falsity: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
+            if x0[i] >= ubs[i]
+              x0[i] = ubs[i] - 1e-6
+            elseif x0[i] <= lbs[i]
+              x0[i] = lbs[i] + 1e-6
+            end
         end
     end
     lower_bounds!(opt, lbs)

@@ -10,14 +10,15 @@ import Transform
 import Optim
 import JLD
 
-import NLsolve # Try the trust region method here?
+using PyPlot
 
 galaxy_ids = union(ids_free.c1[:,2],
                    ids_free.c2[:,2],
                    ids_free.r1[2],
                    ids_free.r2[2],
                    ids_free.k[:,2],
-                   ids_free.e_dev, ids_free.e_axis, ids_free.e_angle, ids_free.e_scale);
+                   ids_free.e_dev, ids_free.e_axis,
+                   ids_free.e_angle, ids_free.e_scale);
 
 star_ids = union(ids_free.c1[:,1],
                  ids_free.c2[:,1],
@@ -29,7 +30,7 @@ star_ids = union(ids_free.c1[:,1],
 jld_file = "$dat_dir/SDSS_blob.jld"
 
 
-simulation = true
+simulation = false
 if simulation
     #blob, mp_original, body, tiled_blob = gen_sample_star_dataset(perturb=true);
 
@@ -47,21 +48,12 @@ else
     original_blob =
       Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num,
                             mask_planes=Set());
-    # Can't write a WCS pointer to a JLD file.
-    #JLD.save(jld_file, "original_blob", original_blob)
 
-    # Need to do this until WCS has an actual deep copy.
-    # original_crpix_band =
-    #   Float64[unsafe_load(original_blob[b].wcs.crpix, i) for i=1:2, b=1:5];
-    # function reset_crpix!(blob)
-    #     for b=1:5
-    #         unsafe_store!(blob[b].wcs.crpix, original_crpix_band[1, b], 1)
-    #         unsafe_store!(blob[b].wcs.crpix, original_crpix_band[2, b], 2)
-    #     end
-    # end
-
-    original_cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+    original_cat_df =
+      SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
     cat_loc = convert(Array{Float64}, original_cat_df[[:ra, :dec]]);
+    original_cat_entries =
+      Images.convert_catalog_to_celeste(original_cat_df, original_blob);
 
     obj_cols = [:objid, :is_star, :is_gal, :psfflux_r, :compflux_r, :ra, :dec];
     sort(original_cat_df[original_cat_df[:is_gal] .== true, obj_cols],
@@ -69,30 +61,37 @@ else
     sort(original_cat_df[original_cat_df[:is_gal] .== false, obj_cols],
         cols=:psfflux_r, rev=true)
 
-    objid = "1237662226208063541" # A bright star with bad pixels
+    #objid = "1237662226208063541" # A bright star with bad pixels --
+    # I think this has a neighbor, too.
+
     #objid = "1237662226208063576" # A galaxy
-    #objid = "1237662226208063565" # A brightish star but with good pixels.
+    objid = "1237662226208063565" # A brightish star but with good pixels.
     obj_row = original_cat_df[:objid] .== objid;
     obj_loc = Float64[original_cat_df[obj_row, :ra][1],
                       original_cat_df[obj_row, :dec][1]]
-
-    blob = deepcopy(original_blob);
-    #reset_crpix!(blob)
+    obj_row_num = find(obj_row)[1]
 
     # TODO: make a tile for an object.
-    WCS.world_to_pixel(blob[3].wcs, obj_loc)
-    width = 15.
-    Images.crop_image!(blob, width, obj_loc);
-    @assert Images.test_catalog_entry_in_image(blob, obj_loc)
-    entry_in_image =
-      [Images.test_catalog_entry_in_image(blob, cat_loc[i,:][:]) for
-       i=1:size(cat_loc, 1)];
-    original_cat_df[entry_in_image, obj_cols]
-    cat_entries =
-      Images.convert_catalog_to_celeste(original_cat_df[entry_in_image, :], blob)
+    tile_width = 15
+    tiled_blob =
+      Images.crop_blob_to_location(original_blob, tile_width, obj_loc);
+    mp_original_all =
+      ModelInit.cat_init(cat_entries, patch_radius=1e-3, tile_width=tile_width);
+
+    # Make sure we only got one sources
+    for b=1:5
+      tile_sources =
+        Images.local_sources(tiled_blob[b][1],
+                             mp_original_all.patches[:,b], original_blob[b].wcs)
+      @assert length(tile_sources) == 1
+      PyPlot.matshow(tiled_blob[b][1].pixels);
+      PyPlot.title(b)
+    end
     mp_original =
-      ModelInit.cat_init(cat_entries, patch_radius=20.0, tile_width=5);
-    transform = Transform.get_mp_transform(mp_original)
+      ModelInit.cat_init([original_cat_entries[obj_row_num]],
+                         patch_radius=1e-3, tile_width=tile_width);
+    transform = Transform.get_mp_transform(mp_original);
+    ModelInit.initialize_celeste!(tiled_blob, original_blob, mp_original);
 end
 
 
@@ -232,8 +231,10 @@ println(bfgs_star_v, ", ", bfgs_star_iters)
 println(nm_gal_v, ", ", nm_gal_iters)
 println(bfgs_gal_v, ", ", bfgs_gal_iters)
 
-nm_results[:combined] = combine_star_gal(nm_results[:star], nm_results[:galaxy])
-bfgs_results[:combined] = combine_star_gal(bfgs_results[:star], bfgs_results[:galaxy])
+nm_results[:combined] =
+  combine_star_gal(nm_results[:star], nm_results[:galaxy])
+bfgs_results[:combined] =
+  combine_star_gal(bfgs_results[:star], bfgs_results[:galaxy])
 print_params(nm_results[:combined], bfgs_results[:combined])
 ElboDeriv.get_brightness(nm_results[:combined])
 ElboDeriv.get_brightness(bfgs_results[:combined])
@@ -343,7 +344,8 @@ elbo_hess = zeros(Float64, length(x0), length(x0));
 function f_grad!(x, grad)
   grad[:] = obj_wrap.f_grad(x)
 end
-d = Optim.DifferentiableFunction(obj_wrap.f_value, f_grad!, obj_wrap.f_value_grad!);
+d = Optim.DifferentiableFunction(obj_wrap.f_value, f_grad!,
+                                 obj_wrap.f_value_grad!);
 
 f_vals = zeros(Float64, max_iters);
 cumulative_iters = zeros(Int64, max_iters);
@@ -356,7 +358,8 @@ warm_start = false
 if warm_start
     mp_start = deepcopy(mp_original)
     start_iter_count, start_f, x_start =
-      OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_start, Transform.free_transform,
+      OptimizeElbo.maximize_f(ElboDeriv.elbo, blob, mp_start,
+                              Transform.free_transform,
                               omitted_ids=omitted_ids, ftol_abs=1);
     obj_wrap.state.f_evals = start_iter_count;
     x_new = deepcopy(x_start); # For quick restarts while debugging

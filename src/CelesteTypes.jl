@@ -100,7 +100,8 @@ function get_galaxy_prototypes()
         1.39976817e-01, 4.60962500e-01, 1.50159566e+00]
 
 	# Adjustments to the effective radius hard-coded above.
-	# (The effective radius is the distance from the center containing half the light.)
+	# (The effective radius is the distance from the center containing half
+  # the light.)
 	effective_radii = [1.078031, 0.928896]
 	dev_var /= effective_radii[1]^2
 	exp_var /= effective_radii[2]^2
@@ -183,17 +184,20 @@ type Image
     raw_psf_comp::RawPSFComponents
 end
 
-# Initialization for an image with noise and background parameters that are constant
-# across the image.
+# Initialization for an image with noise and background parameters that are
+# constant across the image.
 Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
       epsilon::Float64, iota::Float64, psf::Vector{PsfComponent},
       run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
-    empty_psf_comp = RawPSFComponents(Array(Float64, 0, 0), -1, -1, Array(Float64, 0, 0, 0))
-    Image(H, W, pixels, b, wcs, epsilon, iota, psf, run_num, camcol_num, field_num,
+    empty_psf_comp =
+      RawPSFComponents(Array(Float64, 0, 0), -1, -1, Array(Float64, 0, 0, 0))
+    Image(H, W, pixels, b, wcs, epsilon, iota, psf,
+          run_num, camcol_num, field_num,
           true, Array(Float64, 0, 0), Array(Float64, 0), empty_psf_comp)
 end
 
-# Initialization for an image with noise and background parameters that vary across the image.
+# Initialization for an image with noise and background parameters that vary
+# across the image.
 Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
       epsilon_mat::Array{Float64, 1}, iota_vec::Array{Float64, 2},
        psf::Vector{PsfComponent}, raw_psf_comp::RawPSFComponents,
@@ -290,7 +294,7 @@ Args:
 """ ->
 ImageTile(img::Image,
           h_range::UnitRange{Int64}, w_range::UnitRange{Int64};
-          hh::Int64=-1, ww::Int64=-1) = begin
+          hh::Int64=1, ww::Int64=1) = begin
   b = img.b
   h_width = maximum(h_range) - minimum(h_range) + 1
   w_width = maximum(w_range) - minimum(w_range) + 1
@@ -377,8 +381,10 @@ abstract ParamSet
 # c1      = C_s means (formerly beta)
 # c2      = C_s variances (formerly lambda)
 # a       = probability of being a star or galaxy.  a[1] is the
-#           probability of being a star and a[2] of being a galaxy. (formerly chi)
-# k       = {D|D-1}xIa matrix of color prior component indicators. (formerly kappa)
+#           probability of being a star and a[2] of being a galaxy.
+#           (formerly chi)
+# k       = {D|D-1}xIa matrix of color prior component indicators.
+#           (formerly kappa)
 
 # Parameters for location and galaxy shape.
 ue_params = ((:u, 2), (:e_dev, 1), (:e_axis, 1), (:e_angle, 1),
@@ -398,7 +404,8 @@ const param_specs = [
     (:GalaxyPosParams, :gal_ids, ue_params),
     (:BrightnessParams, :bids, rc_params1),
     (:CanonicalParams, :ids, tuple(ue_params..., rc_params2..., ak_simplex...)),
-    (:UnconstrainedParams, :ids_free, tuple(ue_params..., rc_params2..., ak_free...)),
+    (:UnconstrainedParams, :ids_free,
+     tuple(ue_params..., rc_params2..., ak_free...)),
 ]
 
 for (pn, ids_name, pf) in param_specs
