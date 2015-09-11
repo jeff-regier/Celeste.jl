@@ -66,6 +66,7 @@ end
 Return a VariationalParams object initialized form a catalog entry.
 """ ->
 function init_source(ce::CatalogEntry)
+    # TODO: sync this up with the transform bounds
     ret = init_source(ce.pos)
 
     ret[ids.r1[1]] = max(0.0001, ce.star_fluxes[3]) ./ ret[ids.r2[1]]
@@ -83,9 +84,9 @@ function init_source(ce::CatalogEntry)
     ret[ids.c1[:, 1]] = get_colors(ce.star_fluxes)
     ret[ids.c1[:, 2]] = get_colors(ce.gal_fluxes)
 
-    ret[ids.e_dev] = min(max(ce.gal_frac_dev, 0.01), 0.99)
+    ret[ids.e_dev] = min(max(ce.gal_frac_dev, 0.015), 0.985)
 
-    ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.0001), 0.9999)
+    ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.015), 0.985)
     ret[ids.e_angle] = ce.gal_angle
     ret[ids.e_scale] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
 
@@ -237,13 +238,24 @@ Returns:
   Returns a tiled blob.
 """ ->
 function initialize_celeste!(blob::Blob, mp::ModelParams)
+  tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
+  initialize_celeste!(tiled_blob, blob, mp)
+  tiled_blob
+end
+
+@doc """
+Initialize celeste if you've already tiled your blob (e.g. when you are
+cropping to a single object location)
+""" ->
+function initialize_celeste!(tiled_blob::TiledBlob, blob::Blob, mp::ModelParams)
   # Set the model parameters
   @assert size(mp.patches)[1] == mp.S
   @assert size(mp.patches)[2] == length(blob)
 
   for s=1:mp.S
     for b = 1:length(blob)
-      # TODO: Make patches static and only initialize once.
+      # TODO: Make patches static and only initialize once.  This can
+      # cause hard-to-debug inconsistencies.
       Images.set_patch_wcs!(mp.patches[s, b], blob[b].wcs)
       mp.patches[s, b].center = mp.vp[s][ids.u]
       mp.patches[s, b].pixel_center =
@@ -252,14 +264,10 @@ function initialize_celeste!(blob::Blob, mp::ModelParams)
   end
   Images.set_patch_psfs!(blob, mp)
 
-  tiled_blob =
-    Images.break_blob_into_tiles(blob, mp.tile_width)
   @assert length(mp.tile_sources) == length(blob)
-
   for b=1:length(blob)
     mp.tile_sources[b] =
-      get_tiled_image_sources(tiled_blob[b],
-        blob[b].wcs, mp.patches[:, b][:])
+      get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
   end
 
   tiled_blob
