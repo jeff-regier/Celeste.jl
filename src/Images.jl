@@ -17,14 +17,16 @@ import PSF
 import Util
 import WCS
 
-export load_stamp_blob, load_sdss_blob, crop_image!, test_catalog_entry_in_image
+export load_stamp_blob, load_sdss_blob, crop_image!
+export test_catalog_entry_in_image
 export convert_gmm_to_celeste, get_psf_at_point
 export convert_catalog_to_celeste, load_stamp_catalog
 export break_blob_into_tiles, break_image_into_tiles
 export local_sources
 
 function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
-    df = SDSS.load_stamp_catalog_df(cat_dir, stamp_id, blob, match_blob=match_blob)
+    df = SDSS.load_stamp_catalog_df(cat_dir, stamp_id, blob,
+                                    match_blob=match_blob)
     convert_catalog_to_celeste(df, blob, match_blob=match_blob)
 end
 
@@ -125,7 +127,8 @@ function load_stamp_blob(stamp_dir, stamp_id)
         camcol_num = int(hdr["CAMCOL"])
         field_num = int(hdr["FIELD"])
 
-        Image(H, W, nelec, b, wcs, epsilon, iota, psf, run_num, camcol_num, field_num)
+        Image(H, W, nelec, b, wcs, epsilon, iota, psf,
+              run_num, camcol_num, field_num)
     end
 
     blob = map(fetch_image, 1:5)
@@ -145,7 +148,8 @@ Returns:
  - A blob (array of Image objects).
 """ ->
 function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
-  mask_planes = Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
+  mask_planes =
+    Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
 
     band_gain, band_dark_variance =
       SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
@@ -154,7 +158,8 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
     for b=1:5
         print("Reading band $b image data...")
         nelec, calib_col, sky_grid, sky_x, sky_y, sky_image, wcs =
-            SDSS.load_raw_field(field_dir, run_num, camcol_num, field_num, b, band_gain[b]);
+            SDSS.load_raw_field(field_dir, run_num, camcol_num,
+                                field_num, b, band_gain[b]);
 
         print("Masking image...")
         SDSS.mask_image!(nelec, field_dir, run_num, camcol_num, field_num, b,
@@ -164,7 +169,8 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
         W = size(nelec, 2)
 
         # For now, use the median noise and sky image.  Here,
-        # epsilon * iota needs to be in units comparable to nelec electron counts.
+        # epsilon * iota needs to be in units comparable to nelec
+        # electron counts.
         # Note that each are actuall pretty variable.
         iota = convert(Float64, band_gain[b] / median(calib_col))
         epsilon = convert(Float64, median(sky_image) * median(calib_col))
@@ -179,7 +185,8 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
 
         # Load and fit the psf.
         println("reading psf...")
-        raw_psf_comp = SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
+        raw_psf_comp =
+          SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
 
         # For now, evaluate the psf at the middle of the image.
         psf_point_x = H / 2
@@ -207,56 +214,38 @@ at the world coordinates wcs_center.
 Args:
   - blob: The field to crop
   - width: The width in pixels of each quadrant
-  - wcs_center: A location in world coordinates (e.g. the location of a celestial body)
-""" ->
-function crop_image!(
-  ##############
-  # TODO: deprecate this and use tiles instead
-  ##############
+  - wcs_center: A location in world coordinates (e.g. the location of a
+                celestial body)
 
+Returns:
+  - A tiled blob with a single tile in each image centered at wcs_center.
+    This can be used to investigate a certain celestial object in a single
+    tiled blob, for example.
+""" ->
+function crop_blob_to_location(
   blob::Array{Image, 1}, width::Float64, wcs_center::Vector{Float64})
     @assert length(wcs_center) == 2
     @assert width > 0
 
-    # Get the original world coordinate centers.
-    original_crpix_band =
-      Float64[unsafe_load(blob[b].wcs.crpix, i) for i=1:2, b=1:5];
-
-    x_ranges = zeros(2, 5)
-    y_ranges = zeros(2, 5)
+    tiled_blob = Array(TiledImage, length(blob))
     for b=1:5
         # Get the pixels that are near enough to the wcs_center.
-        obj_loc_pix = WCS.world_to_pixel(blob[b].wcs, wcs_center)
-        sub_rows_x = floor(obj_loc_pix[1] - width):ceil(obj_loc_pix[1] + width)
-        sub_rows_y = floor(obj_loc_pix[2] - width):ceil(obj_loc_pix[2] + width)
-        x_min = minimum(collect(sub_rows_x))
-        y_min = minimum(collect(sub_rows_y))
-        x_max = maximum(collect(sub_rows_x))
-        y_max = maximum(collect(sub_rows_y))
-        x_ranges[:, b] = Float64[x_min, x_max]
-        y_ranges[:, b] = Float64[y_min, y_max]
-
-        # Crop the image down to the selected pixels.
-        # Re-center the WCS coordinates
-        crpix = original_crpix_band[:, b]
-        unsafe_store!(blob[b].wcs.crpix, crpix[1] - x_min + 1, 1)
-        unsafe_store!(blob[b].wcs.crpix, crpix[2] - y_min + 1, 2)
-
-        blob[b].pixels = blob[b].pixels[sub_rows_x, sub_rows_y]
-        blob[b].H = size(blob[b].pixels, 1)
-        blob[b].W = size(blob[b].pixels, 2)
-        blob[b].iota_vec = blob[b].iota_vec[x_min:x_max]
-        blob[b].epsilon_mat = blob[b].epsilon_mat[x_min:x_max, y_min:y_max]
+        pix_center = WCS.world_to_pixel(blob[b].wcs, wcs_center)
+        sub_rows_h =
+          int(floor(pix_center[1] - width)):int(ceil(pix_center[1] + width))
+        sub_rows_w =
+          int(floor(pix_center[2] - width)):int(ceil(pix_center[2] + width))
+        tiled_blob[b] = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
     end
-
-    x_ranges, y_ranges
+    tiled_blob
 end
 
 @doc """
 Check whether the center of a celestial body is in any of the frames of an image.
 Args:
   - blob: The image to check
-  - wcs_loc: A location in world coordinates (e.g. the location of a celestial body)
+  - wcs_loc: A location in world coordinates (e.g. the location of a
+             celestial body)
 Returns:
   - Whether the pixel wcs_loc lies within any of the image's fields.
 """ ->
@@ -288,7 +277,8 @@ function convert_gmm_to_celeste(gmm::GaussianMixtures.GMM, scale::Float64)
             GaussianMixtures.covars(gmm)[d])
     end
 
-    CelesteTypes.PsfComponent[ convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n ]
+    CelesteTypes.PsfComponent[
+      convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n ]
 end
 
 
@@ -370,7 +360,8 @@ function get_source_psf(vp::Vector{Float64}, img::Image)
     else
       world_loc = vp[ids.u]
       pixel_loc = WCS.world_to_pixel(img.wcs, world_loc)
-      raw_psf =  PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
+      raw_psf =
+        PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
       fit_psf, scale = PSF.fit_psf_gaussians(raw_psf)
       return Images.convert_gmm_to_celeste(fit_psf, scale)
     end
@@ -407,7 +398,8 @@ function local_source_candidates(tiles::TiledImage, patches::Vector{SkyPatch})
   candidates = fill(Int64[], size(tiles));
   for h=1:size(tiles)[1], w=1:size(tiles)[2]
     # Find the patches that are less than the radius plus diagonal from the
-    # center of the tile.  These are candidates for having some overlap with the tile.
+    # center of the tile.  These are candidates for having some
+    # overlap with the tile.
     tile = tiles[h, w]
     tile_center = [ mean(tile.h_range), mean(tile.w_range)]
     tile_diag = 0.5 * sqrt(tile.h_width ^ 2 + tile.w_width ^ 2)
@@ -432,7 +424,8 @@ Returns:
     pixels in the tile.  A patch influences a tile if
     there is any overlap in their squares of influence.
 """ ->
-function local_sources(tile::ImageTile, patches::Vector{SkyPatch}, wcs::WCSLIB.wcsprm)
+function local_sources(
+  tile::ImageTile, patches::Vector{SkyPatch}, wcs::WCSLIB.wcsprm)
     # Corners of the tile in pixel coordinates.
     if length(patches) == 0
       return Int64[]

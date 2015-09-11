@@ -274,8 +274,24 @@ Args:
   - tile_width: The width and height of a tile in pixels
 """ ->
 ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
-  b = img.b
   h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
+  ImageTile(img, h_range, w_range; hh=hh, ww=ww)
+end
+
+@doc """
+Constructs an image tile from specific image pixels.
+
+Args:
+  - img: The Image to be broken into tiles
+  - h_range: A UnitRange for the h pixels
+  - w_range: A UnitRange for the w pixels
+  - hh: Optional h index in tile coordinates
+  - ww: Optional w index in tile coordinates
+""" ->
+ImageTile(img::Image,
+          h_range::UnitRange{Int64}, w_range::UnitRange{Int64};
+          hh::Int64=-1, ww::Int64=-1) = begin
+  b = img.b
   h_width = maximum(h_range) - minimum(h_range) + 1
   w_width = maximum(w_range) - minimum(w_range) + 1
   pixels = img.pixels[h_range, w_range]
@@ -289,8 +305,10 @@ ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
   end
 
   ImageTile(hh, ww, b, h_range, w_range, h_width, w_width, pixels,
-            img.constant_background, img.epsilon, epsilon_mat, img.iota, iota_vec)
+            img.constant_background, img.epsilon, epsilon_mat,
+            img.iota, iota_vec)
 end
+
 
 typealias TiledImage Array{ImageTile, 2}
 typealias TiledBlob Vector{TiledImage}
@@ -305,7 +323,8 @@ Attributes:
   - radius: The width of the influence of the object in world coordinates
 
   - psf: The point spread function in this region of the sky
-  - wcs_jacobian: The jacobian of the WCS transform in this region of the sky for each band
+  - wcs_jacobian: The jacobian of the WCS transform in this region of the
+                  sky for each band
   - pixel_center: The pixel location of center in each band.
 """ ->
 type SkyPatch
