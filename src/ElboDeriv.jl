@@ -613,6 +613,39 @@ end
 
 
 @doc """
+
+""" ->
+function expected_pixel_brightness!(
+    h::Int64, w::Int64,
+    sbs::Vector{SourceBrightness},
+    star_mcs::Array{BvnComponent, 2},
+    gal_mcs::Array{GalaxyCacheComponent, 4},
+    tile::ImageTile, E_G::SensitiveFloat, var_G::SensitiveFloat,
+    tile_sources::Vector{Int64}, fs0m::SensitiveFloat, fs1m::SensitiveFloat)
+
+  clear!(E_G)
+  if tile.constant_background
+      E_G.v = tile.epsilon
+      iota = tile.iota
+  else
+      E_G.v = tile.epsilon_mat[h, w]
+      iota = tile.iota_vec[h]
+  end
+  clear!(var_G)
+
+  m_pos = Float64[tile.h_range[h], tile.w_range[w]]
+  for child_s in 1:length(tile_sources)
+      wcs_jacobian = mp.patches[child_s].wcs_jacobian
+      parent_s = tile_sources[child_s]
+      accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
+          mp.vp[parent_s], child_s, parent_s, m_pos, tile.b,
+          fs0m, fs1m, E_G, var_G, wcs_jacobian)
+  end
+
+end
+
+
+@doc """
 Add a tile's contribution to the ELBO likelihood term by
 modifying accum in place.
 
@@ -669,6 +702,50 @@ function tile_likelihood!(tile::ImageTile,
     for w in 1:tile.w_width, h in 1:tile.h_width
         this_pixel = tile.pixels[h, w]
         if !isnan(this_pixel)
+            expected_pixel_brightness!()
+            accum_pixel_ret!(tile_sources, this_pixel, iota,
+                             E_G, var_G, accum)
+        end
+    end
+
+    # Subtract the log factorial term
+    accum.v += -sum(lfact(tile.pixels[!isnan(tile.pixels)]))
+end
+
+
+@doc """
+Return the image predicted for the tile given the current parameters.
+
+Args:
+  - tile: An image tile.
+  - mp: The current model parameters.
+  - sbs: The current source brightnesses.
+  - star_mcs: All the star * PCF components.
+  - gal_mcs: All the galaxy * PCF components.
+  - accum: The ELBO log likelihood to be updated.
+""" ->
+function tile_predicted_image(tile::ImageTile,
+        tile_sources::Vector{Int64},
+        mp::ModelParams,
+        sbs::Vector{SourceBrightness},
+        star_mcs::Array{BvnComponent, 2},
+        gal_mcs::Array{GalaxyCacheComponent, 4},
+        accum::SensitiveFloat)
+
+    # fs0m and fs1m accumulate contributions from all sources.
+    num_type = typeof(mp.vp[1][1])
+    fs0m = zero_sensitive_float(StarPosParams, num_type)
+    fs1m = zero_sensitive_float(GalaxyPosParams, num_type)
+
+    tile_S = length(tile_sources)
+    E_G = zero_sensitive_float(CanonicalParams, num_type, tile_S)
+    var_G = zero_sensitive_float(CanonicalParams, num_type, tile_S)
+
+    predicted_pixels = copy(tile.pixels)
+    # Iterate over pixels that are not NaN.
+    for w in 1:tile.w_width, h in 1:tile.h_width
+        this_pixel = tile.pixels[h, w]
+        if !isnan(this_pixel)
             clear!(E_G)
             if tile.constant_background
                 E_G.v = tile.epsilon
@@ -688,13 +765,11 @@ function tile_likelihood!(tile::ImageTile,
                     fs0m, fs1m, E_G, var_G, wcs_jacobian)
             end
 
-            accum_pixel_ret!(tile_sources, this_pixel, iota,
-                             E_G, var_G, accum)
+            predicted_pixels[w, h] = E_G.v * iota
         end
     end
 
-    # Subtract the log factorial term
-    accum.v += -sum(lfact(tile.pixels[!isnan(tile.pixels)]))
+    predicted_pixels
 end
 
 

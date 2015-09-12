@@ -226,6 +226,8 @@ function maximize_f_newton(
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
   hess_reg=2.0, max_iters=100, optim_method=:newton)
 
+  # TODO: make these arguments match maximize_f.
+
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
 
