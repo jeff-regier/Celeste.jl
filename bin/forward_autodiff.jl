@@ -76,7 +76,8 @@ else
     tiled_blob =
       Images.crop_blob_to_location(original_blob, tile_width, obj_loc);
     mp_original_all =
-      ModelInit.cat_init(cat_entries, patch_radius=1e-3, tile_width=tile_width);
+      ModelInit.cat_init(original_cat_entries, patch_radius=1e-3,
+                         tile_width=tile_width);
 
     # Make sure we only got one sources
     for b=1:5
@@ -84,8 +85,8 @@ else
         Images.local_sources(tiled_blob[b][1],
                              mp_original_all.patches[:,b], original_blob[b].wcs)
       @assert length(tile_sources) == 1
-      PyPlot.matshow(tiled_blob[b][1].pixels);
-      PyPlot.title(b)
+      #PyPlot.matshow(tiled_blob[b][1].pixels);
+      #PyPlot.title(b)
     end
     mp_original =
       ModelInit.cat_init([original_cat_entries[obj_row_num]],
@@ -94,42 +95,8 @@ else
     ModelInit.initialize_celeste!(tiled_blob, original_blob, mp_original);
 end
 
-
-function fit_only_type!(obj_type::Symbol, mp::ModelParams)
-  valid_types = Symbol[:star, :galaxy, :both, :a]
-  if !any(obj_type .== valid_types)
-    error("obj_type must be in $(valid_types)")
-  end
-  epsilon = 0.006
-  if obj_type == :star
-    for s=1:mp.S
-        mp.vp[s][ids.a] = [ 1.0 - epsilon, epsilon ]
-    end
-    omitted_ids = sort(unique(union(galaxy_ids, ids_free.a, ids_free.u)));
-  elseif obj_type == :galaxy
-    for s=1:mp.S
-        mp.vp[s][ids.a] = [ epsilon, 1.0 - epsilon ]
-    end
-    omitted_ids = sort(unique(union(star_ids, ids_free.a, ids_free.u)));
-  elseif obj_type == :both
-    omitted_ids = Int64[];
-  elseif obj_type == :a
-    omitted_ids = setdiff(1:length(ids_free), ids_free.a)
-    for s=1:mp.S
-        mp.vp[s][ids.a] = [ 0.5, 0.5 ]
-    end
-  else
-    error("obj_type must be in $(valid_types)")
-  end
-  omitted_ids
-end
-
-
 ##############
 # Get a BFGS fit for comparison
-iter_count = NaN
-bfgs_v = NaN
-
 function bfgs_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
   mp_bfgs = deepcopy(mp_original);
   iter_count, max_f, max_x, ret =
@@ -148,7 +115,7 @@ bfgs_v = ElboDeriv.elbo(tiled_blob, mp_bfgs_both_optim).v;
 # controls the number of steps.
 max_iters = 30;
 
-include("../Optim.jl/src/Optim.jl"); include("src/OptimizeElbo.jl")
+#include("../Optim.jl/src/Optim.jl"); include("src/OptimizeElbo.jl")
 function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
   mp_optim = deepcopy(mp_original);
   iter_count, max_f, max_x, ret =
@@ -191,6 +158,38 @@ println("Newton elbo: $(nm_v) BFGS elbo: $(bfgs_v)")
 
 
 #############################
+# Explore fitting only one object at a time.
+
+function fit_only_type!(obj_type::Symbol, mp::ModelParams)
+  valid_types = Symbol[:star, :galaxy, :both, :a]
+  if !any(obj_type .== valid_types)
+    error("obj_type must be in $(valid_types)")
+  end
+  epsilon = 0.006
+  if obj_type == :star
+    for s=1:mp.S
+        mp.vp[s][ids.a] = [ 1.0 - epsilon, epsilon ]
+    end
+    omitted_ids = sort(unique(union(galaxy_ids, ids_free.a, ids_free.u)));
+  elseif obj_type == :galaxy
+    for s=1:mp.S
+        mp.vp[s][ids.a] = [ epsilon, 1.0 - epsilon ]
+    end
+    omitted_ids = sort(unique(union(star_ids, ids_free.a, ids_free.u)));
+  elseif obj_type == :both
+    omitted_ids = Int64[];
+  elseif obj_type == :a
+    omitted_ids = setdiff(1:length(ids_free), ids_free.a)
+    for s=1:mp.S
+        mp.vp[s][ids.a] = [ 0.5, 0.5 ]
+    end
+  else
+    error("obj_type must be in $(valid_types)")
+  end
+  omitted_ids
+end
+
+
 
 function fit_type(obj_type::Symbol, mp_original::ModelParams, fit_fun::Function)
   mp_type = deepcopy(mp_original)
