@@ -26,7 +26,8 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
             fun_to_test_2(epsilon::Float64) = begin
                 vp_local = deepcopy(mp.vp)
                 vp_local[s][p0] += epsilon
-                mp_local = ModelParams(vp_local, mp.pp, mp.patches, mp.tile_width)
+                mp_local = copy(mp)
+                mp_local.vp = vp_local
                 f_local::SensitiveFloat = fun_to_test(mp_local)
                 f_local.v
             end

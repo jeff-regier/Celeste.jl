@@ -157,15 +157,12 @@ function peak_starts(blob::Blob)
 end
 
 
-function peak_init(blob::Blob; patch_radius::Float64=Inf,
-        tile_width::Int64=typemax(Int64))
+function peak_init(blob::Blob; tile_width::Int64=typemax(Int64))
     v1 = peak_starts(blob)
     S = size(v1)[2]
     vp = [init_source(v1[:, s]) for s in 1:S]
     twice_radius = float(max(blob[1].H, blob[1].W))
-    # TODO: use non-trival patch radii, based on blob detection routine
-    patches = [SkyPatch(v1[:, s], patch_radius) for s in 1:S, b in 1:5]
-    ModelParams(vp, sample_prior(), patches, tile_width)
+    ModelParams(vp, sample_prior(), tile_width)
 end
 
 #=
@@ -194,12 +191,9 @@ end
 @doc """
 Return a ModelParams object initialized from an array of catalog entries.
 """ ->
-function cat_init(cat::Vector{CatalogEntry}; patch_radius::Float64=Inf,
-        tile_width::Int64=typemax(Int64))
+function cat_init(cat::Vector{CatalogEntry}; tile_width::Int64=typemax(Int64))
     vp = [init_source(ce) for ce in cat]
-    # TODO: use non-trivial patch radii, based on the catalog
-    patches = [SkyPatch(ce.pos, patch_radius) for ce in cat, b in 1:5]
-    ModelParams(vp, sample_prior(), patches, tile_width)
+    ModelParams(vp, sample_prior(), tile_width)
 end
 
 
@@ -226,6 +220,7 @@ function get_tiled_image_sources(
 end
 
 
+
 @doc """
 Break the images into tiles and initialize the model parameters.
 
@@ -247,27 +242,23 @@ end
 Initialize celeste if you've already tiled your blob (e.g. when you are
 cropping to a single object location)
 """ ->
-function initialize_celeste!(tiled_blob::TiledBlob, blob::Blob, mp::ModelParams)
+function initialize_celeste!(
+    tiled_blob::TiledBlob, blob::Blob, mp::ModelParams; patch_radius=Inf)
   # Set the model parameters
-  @assert size(mp.patches)[1] == mp.S
-  @assert size(mp.patches)[2] == length(blob)
 
-  for s=1:mp.S
-    for b = 1:length(blob)
-      # TODO: Make patches static and only initialize once.  This can
-      # cause hard-to-debug inconsistencies.
-      Images.set_patch_wcs!(mp.patches[s, b], blob[b].wcs)
-      mp.patches[s, b].center = mp.vp[s][ids.u]
-      mp.patches[s, b].pixel_center =
-        WCS.world_to_pixel(blob[b].wcs, mp.patches[s, b].center)
-    end
-  end
-  Images.set_patch_psfs!(blob, mp)
-
+  mp.patches = Array(SkyPatch, mp.S, length(blob))
   @assert length(mp.tile_sources) == length(blob)
-  for b=1:length(blob)
+  mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
+
+  for b = 1:length(blob)
+    for s=1:mp.S
+      mp.patches[s, b] = SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b])
+    end
     mp.tile_sources[b] =
       get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
+  end
+
+  for b=1:length(blob)
   end
 
   tiled_blob

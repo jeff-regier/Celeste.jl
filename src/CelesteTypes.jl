@@ -331,20 +331,22 @@ Attributes:
                   sky for each band
   - pixel_center: The pixel location of center in each band.
 """ ->
-type SkyPatch
-    # TODO: this should perhaps be static to avoid accidental inconsistent data.
+immutable SkyPatch
     center::Vector{Float64}
     radius::Float64
 
     psf::Vector{PsfComponent}
     wcs_jacobian::Matrix{Float64}
     pixel_center::Vector{Float64}
-end
 
-SkyPatch(center::Vector{Float64}, radius::Float64) = begin
-    # TODO: Don't allow this default initialization when this is initialized once
-    # per image.
-    SkyPatch(center, radius, PsfComponent[], eye(Float64, 2), zeros(Float64, 2))
+    SkyPatch(world_center::Vector{Float64},
+             radius::Float64, img::Image) = begin
+        psf = Images.get_source_psf(world_center, img)
+        pixel_center = WCS.world_to_pixel(world_center, img.wcs)
+        wcs_jacobian = WCS.pixel_world_jacobian(img.wcs, pixel_center)
+
+        new(world_center, radius, psf, wcs_jacobian, pixel_center)
+    end
 end
 
 
@@ -504,21 +506,19 @@ type ModelParams{NumType <: Number}
 
     S::Int64
 
-    ModelParams(vp, pp, patches, tile_width) = begin
+    ModelParams(vp, pp, tile_width) = begin
         # There must be one patch for each celestial object.
         S = length(vp)
         all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)
-
-        @assert size(patches) == (length(vp), 5)
+        patches = Array(SkyPatch, S, 5)
         new(vp, pp, patches, tile_width, all_tile_sources, S)
     end
 end
 
 # TODO: Is this second initialization function necessary?
 ModelParams{NumType <: Number}(
-  vp::VariationalParams{NumType}, pp::PriorParams,
-  patches::Array{SkyPatch, 2}, tile_width::Int64) = begin
-    ModelParams{NumType}(vp, pp, patches, tile_width)
+  vp::VariationalParams{NumType}, pp::PriorParams, tile_width::Int64) = begin
+    ModelParams{NumType}(vp, pp, tile_width)
 end
 
 function convert(::Type{ModelParams{ForwardDiff.Dual}}, mp::ModelParams{Float64})
