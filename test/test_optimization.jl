@@ -8,6 +8,10 @@ import OptimizeElbo
 
 println("Running optimization tests.")
 
+blob, mp, body, tiled_blob = gen_sample_star_dataset();
+trans = get_mp_transform(mp, loc_width=1.0);
+OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
+
 
 function verify_sample_star(vs, pos)
     @test vs[ids.a[2]] <= 0.01
@@ -119,13 +123,13 @@ function test_star_optimization_newton()
     # to the high cost of evaluating the Hessian at each step.
     blob, mp, body, tiled_blob = gen_sample_star_dataset();
     trans = get_mp_transform(mp, loc_width=1.0);
-    function lik_function(mp::ModelParams)
+    function lik_function(tiled_blob::TiledBlob, mp::ModelParams)
       ElboDeriv.elbo_likelihood(tiled_blob, mp)
     end
     omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
     OptimizeElbo.maximize_f_newton(
-      lik_function, mp, trans,
-      omitted_ids=omitted_ids, verbose=false, max_iters=2, hess_reg=2.0);
+      lik_function, tiled_blob, mp, trans,
+      omitted_ids=omitted_ids, verbose=false, max_iters=2, hess_reg=0.0);
 end
 
 

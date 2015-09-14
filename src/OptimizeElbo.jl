@@ -222,17 +222,17 @@ Returns:
   - ret: The return code of optimize()
 """ ->
 function maximize_f_newton(
-  f::Function, mp::ModelParams, transform::Transform.DataTransform;
+  f::Function, tiled_blob::TiledBlob, mp::ModelParams,
+  transform::Transform.DataTransform;
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  hess_reg=2.0, max_iters=100, optim_method=:newton)
-
-  # TODO: make these arguments match maximize_f.
+  hess_reg=0.0, max_iters=100)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
 
     optim_obj_wrap =
-      OptimizeElbo.ObjectiveWrapperFunctions(f, mp, transform, kept_ids, omitted_ids);
+      OptimizeElbo.ObjectiveWrapperFunctions(
+        mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
 
     # For minimization, which is required by the linesearch algorithm.
     optim_obj_wrap.state.scale = -1.0
@@ -246,7 +246,7 @@ function maximize_f_newton(
 
         # Make it positive definite.
         if min_ev < 0
-            verbose && println("Hessian is semi-definite with ",
+            verbose && println("Hessian is not positive definite with ",
                                "eigenvalues: (min $(min_ev), max $(max_ev)).  ",
                                "Regularizing with $(hess_reg).")
             hess += eye(length(x)) * abs(min_ev) * hess_reg
@@ -256,14 +256,6 @@ function maximize_f_newton(
     end
 
     x0 = transform.vp_to_vector(mp.vp, omitted_ids);
-
-    # TODO: are xtol_rel and ftol_abs still good names?
-    # nm_result =
-    #   Optim.optimize(optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!,
-    #                  x0, method=optim_method, iterations=max_iters,
-    #                  xtol=xtol_rel, ftol=ftol_abs,
-    #                  show_trace=verbose, store_trace=verbose,
-    #                  extended_trace=verbose)
 
     d = Optim.TwiceDifferentiableFunction(
       optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!)
@@ -313,7 +305,8 @@ Returns:
   - ret: The return code of optimize()
 """ ->
 function maximize_f(
-  f::Function, tiled_blob::TiledBlob, mp::ModelParams, transform::DataTransform,
+  f::Function, tiled_blob::TiledBlob, mp::ModelParams,
+  transform::DataTransform,
   lbs::Union(Float64, Vector{Float64}), ubs::Union(Float64, Vector{Float64});
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
 
@@ -344,6 +337,7 @@ function maximize_f(
 
     obj_wrapper.state.f_evals, max_f, max_x, ret
 end
+
 
 function maximize_f(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams, transform::DataTransform;

@@ -120,7 +120,7 @@ function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
   mp_optim = deepcopy(mp_original);
   iter_count, max_f, max_x, ret =
     OptimizeElbo.maximize_f_newton(
-      mp -> ElboDeriv.elbo(tiled_blob, mp), mp_optim, transform,
+      ElboDeriv.elbo, tiled_blob, mp_optim, transform,
       omitted_ids=omitted_ids, verbose=true, max_iters=max_iters,
       hess_reg=0.0, optim_method=:newton_tr)
   mp_optim, iter_count, max_f, ret
@@ -311,7 +311,7 @@ verify_sample_star(mp_bfgs.vp[1], [10.1, 12.2]);
 mp = deepcopy(mp_original);
 iter_count, max_f, max_x, ret =
     OptimizeElbo.maximize_f_newton(
-      mp -> ElboDeriv.elbo(blob, mp), mp, transform,
+      ElboDeriv.elbo, mp, tiled_blob, transform,
       omitted_ids=omitted_ids, verbose=false, max_iters=10);
 print_params(mp, mp_bfgs)
 verify_sample_star(mp.vp[1], [10.1, 12.2])

@@ -67,7 +67,7 @@ function test_blob()
   original_psf_celeste = Images.convert_gmm_to_celeste(original_psf_gmm, scale);
   fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
-  obj_psf = Images.get_source_psf(mp.vp[1], img);
+  obj_psf = Images.get_source_psf(mp.vp[1][ids.u], img);
   obj_psf_val = PSF.get_psf_at_point(obj_psf);
 
   # The fits should match exactly.
@@ -94,7 +94,7 @@ function test_stamp_get_object_psf()
   original_psf_val = PSF.get_psf_at_point(img.psf);
 
   obj_psf_val =
-    PSF.get_psf_at_point(Images.get_source_psf(stamp_mp.vp[1], img))
+    PSF.get_psf_at_point(Images.get_source_psf(stamp_mp.vp[1][ids.u], img))
   @test_approx_eq_eps(obj_psf_val[:], original_psf_val[:], 1e-6)
 end
 
