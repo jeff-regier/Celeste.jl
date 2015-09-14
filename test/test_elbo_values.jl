@@ -199,8 +199,6 @@ end
 
 
 function test_coadd_cat_init_is_most_likely()  # on a real stamp
-    # TODO: not currently passing.
-
     stamp_id = "5.0073-0.0739"
     blob = Images.load_stamp_blob(dat_dir, stamp_id)
 
@@ -209,7 +207,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     cat_entries = filter(bright, cat_entries)
 
     ce_pix_locs =
-      [ [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ] for ce in cat_entries ]
+      [ [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ]
+        for ce in cat_entries ]
 
     function ce_inbounds(ce)
         pix_locs = [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ]
