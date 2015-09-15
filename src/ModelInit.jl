@@ -267,7 +267,7 @@ Args:
   - mp: Model parameters.
 
 Returns:
-  Updates mp in place patches and tile sources.
+  Updates in place mp's patches and tile sources.
   Returns a tiled blob.
 """ ->
 function initialize_tiles_and_patches!(
