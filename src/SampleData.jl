@@ -28,7 +28,6 @@ const sample_galaxy_fluxes = [
 
 function empty_model_params(S::Int)
     vp = [ ModelInit.init_source([ 0., 0. ]) for s in 1:S ]
-    #patches = [ SkyPatch([ 0., 0., ], 1.) for s in 1:S, b in 1:5 ]
     ModelParams(vp, ModelInit.sample_prior(), 1)
 end
 
@@ -69,7 +68,7 @@ function gen_sample_star_dataset(; perturb=true)
     if perturb
         perturb_params(mp)
     end
-    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
+    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
     blob, mp, one_body, tiled_blob
 end
 
@@ -87,7 +86,7 @@ function gen_sample_galaxy_dataset(; perturb=true)
     if perturb
         perturb_params(mp)
     end
-    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
+    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
     blob, mp, one_body, tiled_blob
 end
 
@@ -111,7 +110,7 @@ function gen_two_body_dataset(; perturb=true)
         perturb_params(mp)
     end
 
-    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
+    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
     blob, mp, two_bodies, tiled_blob
 end
 
@@ -135,7 +134,7 @@ function gen_three_body_dataset(; perturb=true)
         perturb_params(mp)
     end
 
-    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
+    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
     blob, mp, three_bodies, tiled_blob
 end
 
@@ -160,11 +159,12 @@ function gen_n_body_dataset(S::Int64; patch_pixel_radius=20., tile_width=50)
 
   blob = Synthetic.gen_blob(blob0, S_bodies);
   world_radius_pts =
-    WCS.pixel_to_world(blob[3].wcs, [patch_pixel_radius patch_pixel_radius; 0. 0.])
+    WCS.pixel_to_world(blob[3].wcs,
+                       [patch_pixel_radius patch_pixel_radius; 0. 0.])
   world_radius = maximum(abs(world_radius_pts[1,:] - world_radius_pts[2,:]))
-  mp = ModelInit.cat_init(S_bodies, patch_radius=world_radius, tile_width=tile_width);
+  mp = ModelInit.cat_init(S_bodies, tile_width=tile_width);
   [ mp.patches[s, b].radius = world_radius for s=1:size(mp.patches)[1], b=1:size(mp.patches)[2]]
-  tiled_blob = ModelInit.initialize_celeste!(blob, mp);
+  tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp);
 
   blob, mp, S_bodies, tiled_blob
 end

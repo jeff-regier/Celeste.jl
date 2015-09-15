@@ -7,7 +7,7 @@ VERSION < v"0.4.0-dev" && using Docile
 
 export sample_prior, cat_init, peak_init
 
-export initialize_celeste!
+export initialize_tiles_and_patches!
 
 using FITSIO
 using Distributions
@@ -232,9 +232,9 @@ Returns:
   Updates mp in place with psfs, world coordinates, and tile sources.
   Returns a tiled blob.
 """ ->
-function initialize_celeste!(blob::Blob, mp::ModelParams)
+function initialize_tiles_and_patches!(blob::Blob, mp::ModelParams)
   tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
-  initialize_celeste!(tiled_blob, blob, mp)
+  initialize_tiles_and_patches!(tiled_blob, blob, mp)
   tiled_blob
 end
 
@@ -242,7 +242,7 @@ end
 Initialize celeste if you've already tiled your blob (e.g. when you are
 cropping to a single object location)
 """ ->
-function initialize_celeste!(
+function initialize_tiles_and_patches!(
     tiled_blob::TiledBlob, blob::Blob, mp::ModelParams; patch_radius=Inf)
   # Set the model parameters
 
@@ -256,9 +256,6 @@ function initialize_celeste!(
     end
     mp.tile_sources[b] =
       get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
-  end
-
-  for b=1:length(blob)
   end
 
   tiled_blob

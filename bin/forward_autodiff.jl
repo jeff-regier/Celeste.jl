@@ -92,7 +92,7 @@ else
       ModelInit.cat_init([original_cat_entries[obj_row_num]],
                          patch_radius=1e-3, tile_width=tile_width);
     transform = Transform.get_mp_transform(mp_original);
-    ModelInit.initialize_celeste!(tiled_blob, original_blob, mp_original);
+    ModelInit.initialize_tiles_and_patches!(tiled_blob, original_blob, mp_original);
 end
 
 ##############

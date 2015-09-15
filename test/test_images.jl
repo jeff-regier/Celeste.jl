@@ -22,7 +22,7 @@ function test_blob()
   blob = Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
   cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
   cat_entries = Images.convert_catalog_to_celeste(cat_df, blob);
-  mp = ModelInit.cat_init(cat_entries; patch_radius=1e-10);
+  mp = ModelInit.cat_init(cat_entries);
 
   # Just check some basic facts about the catalog.
   @test size(cat_df)[1] == 805
@@ -32,7 +32,8 @@ function test_blob()
 
   # Find an object near the middle of the image.
   #img_center = Float64[ median(cat_df[:ra]), median(cat_df[:dec]) ]
-  img_center = WCS.pixel_to_world(blob[3].wcs, Float64[blob[3].H / 2, blob[3].W / 2])
+  img_center =
+    WCS.pixel_to_world(blob[3].wcs, Float64[blob[3].H / 2, blob[3].W / 2])
   dist = by(cat_df, :objid,
      df -> DataFrame(dist=(df[:ra] - img_center[1]).^2 +
                           (df[:dec] - img_center[2]).^2))
@@ -133,7 +134,7 @@ function test_local_source_candidate()
 
   # This is run by gen_n_body_dataset but put it here for safe testing in
   # case that changes.
-  tiled_blob = ModelInit.initialize_celeste!(blob, mp);
+  tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp);
 
   for b=1:length(tiled_blob)
     # Get the sources by iterating over everything.
@@ -145,7 +146,7 @@ function test_local_source_candidate()
     candidates = Images.local_source_candidates(tiled_blob[b], patches);
 
     # Check that all the actual sources are candidates and that this is the
-    # same as what is returned by initialize_celeste!.
+    # same as what is returned by initialize_tiles_and_patches!.
     @test size(candidates) == size(tile_sources)
     for h=1:size(candidates)[1], w=1:size(candidates)[2]
       @test setdiff(tile_sources[h, w], candidates[h, w]) == []
