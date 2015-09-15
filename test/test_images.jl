@@ -23,6 +23,8 @@ function test_blob()
   cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
   cat_entries = Images.convert_catalog_to_celeste(cat_df, blob);
   mp = ModelInit.cat_init(cat_entries);
+  tiled_blob = ModelInit.initialize_tiles_and_patches!(
+    blob, mp, patch_radius=1e-6, fit_psf=false);
 
   # Just check some basic facts about the catalog.
   @test size(cat_df)[1] == 805
@@ -61,7 +63,6 @@ function test_blob()
   img = blob[test_b];
   obj_index = find(obj_rows)
   mp = ModelInit.cat_init(cat_entries[obj_index]);
-  tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
   pixel_loc = WCS.world_to_pixel(img.wcs, obj_loc);
   original_psf_val =
     PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
