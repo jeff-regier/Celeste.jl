@@ -18,12 +18,15 @@ import Util
 import WCS
 
 export load_stamp_blob, load_sdss_blob, crop_image!
-export test_catalog_entry_in_image
 export convert_gmm_to_celeste, get_psf_at_point
 export convert_catalog_to_celeste, load_stamp_catalog
 export break_blob_into_tiles, break_image_into_tiles
 export local_sources
 
+
+@doc """
+Load a stamp catalog.
+""" ->
 function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     df = SDSS.load_stamp_catalog_df(cat_dir, stamp_id, blob,
                                     match_blob=match_blob)
@@ -241,26 +244,9 @@ function crop_blob_to_location(
     tiled_blob
 end
 
-@doc """
-Check whether the center of a celestial body is in any of the frames of an image.
-Args:
-  - blob: The image to check
-  - wcs_loc: A location in world coordinates (e.g. the location of a
-             celestial body)
-Returns:
-  - Whether the pixel wcs_loc lies within any of the image's fields.
-""" ->
-function test_catalog_entry_in_image(
-  blob::Array{Image, 1}, wcs_loc::Array{Float64, 1})
-    for b=1:5
-        pixel_loc = WCS.world_to_pixel(blob[b].wcs, wcs_loc)
-        if (1 <= pixel_loc[1] <= blob[b].H) && (1 <= pixel_loc[2] <= blob[b].W)
-            return true
-        end
-    end
-    return false
-end
 
+############################################
+# PSF functions
 
 @doc """
 Convert a GaussianMixtures.GMM object to an array of Celect PsfComponents.
@@ -316,6 +302,35 @@ end
 
 
 @doc """
+Get the PSF located at a particular world location in an image.
+
+Args:
+  - world_loc: A location in world coordinates.
+  - img: An Image
+
+Returns:
+  - An array of PsfComponent objects that represents the PSF as a mixture
+    of Gaussians.
+""" ->
+function get_source_psf(world_loc::Vector{Float64}, img::Image)
+    # Some stamps or simulated data have no raw psf information.  In that case,
+    # just use the psf from the image.
+    if size(img.raw_psf_comp.rrows) == (0, 0)
+      return img.psf
+    else
+      pixel_loc = WCS.world_to_pixel(img.wcs, world_loc)
+      raw_psf =
+        PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
+      fit_psf, scale = PSF.fit_psf_gaussians(raw_psf)
+      return Images.convert_gmm_to_celeste(fit_psf, scale)
+    end
+end
+
+
+#######################################
+# Tiling functions
+
+@doc """
 Convert an image to an array of tiles of a given width.
 
 Args:
@@ -340,23 +355,8 @@ function break_blob_into_tiles(blob::Blob, tile_width::Int64)
 end
 
 
-@doc """
-Get the PSF located at a particular source from an image.
-""" ->
-function get_source_psf(world_loc::Vector{Float64}, img::Image)
-    # Some stamps or simulated data have no raw psf information.  In that case,
-    # just use the psf from the image.
-    if size(img.raw_psf_comp.rrows) == (0, 0)
-      return img.psf
-    else
-      pixel_loc = WCS.world_to_pixel(img.wcs, world_loc)
-      raw_psf =
-        PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
-      fit_psf, scale = PSF.fit_psf_gaussians(raw_psf)
-      return Images.convert_gmm_to_celeste(fit_psf, scale)
-    end
-end
-
+#######################################
+# Functions for matching sources to tiles.
 
 @doc """
 A fast function to determine which sources might belong to which tiles.
