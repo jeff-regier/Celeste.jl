@@ -61,6 +61,7 @@ function test_blob()
   img = blob[test_b];
   obj_index = find(obj_rows)
   mp = ModelInit.cat_init(cat_entries[obj_index]);
+  tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
   pixel_loc = WCS.world_to_pixel(img.wcs, obj_loc);
   original_psf_val =
     PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
@@ -79,7 +80,7 @@ function test_blob()
 
   mp_several =
     ModelInit.cat_init([cat_entries[1], cat_entries[obj_index]]);
-  Images.set_patch_psfs!(blob, mp_several);
+  ModelInit.initialize_tiles_and_patches!(tiled_blob, mp_several)
 
   # The second set of vp is the object of interest
   point_patch_psf = PSF.get_psf_at_point(mp_several.patches[2, test_b].psf);
@@ -102,9 +103,10 @@ end
 
 function test_get_tiled_image_source()
   # Test that an object only occurs the appropriate tile's local sources.
-  blob, mp, body = gen_sample_star_dataset();
+  blob, mp, body, tiled_blob = gen_sample_star_dataset();
   img = blob[3];
 
+  ModelInit.initialize_tiles_and_patches!(tiled_blob, mp; patch_radius=1e-6)
   [ mp.patches[1, b].radius = 1e-6 for b=1:5 ]
 
   tiled_img = Images.break_image_into_tiles(img, 10);
