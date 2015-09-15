@@ -76,23 +76,26 @@ else
     tiled_blob =
       Images.crop_blob_to_location(original_blob, tile_width, obj_loc);
     mp_original_all =
-      ModelInit.cat_init(original_cat_entries, patch_radius=1e-3,
-                         tile_width=tile_width);
+      ModelInit.cat_init(original_cat_entries, tile_width=tile_width);
+    ModelInit.initialize_tiles_and_patches!(
+      tiled_blob, original_blob, mp_original_all,
+      patch_radius=1e-5, fit_psf=false);
 
     # Make sure we only got one sources
     for b=1:5
       tile_sources =
         Images.local_sources(tiled_blob[b][1],
                              mp_original_all.patches[:,b], original_blob[b].wcs)
-      @assert length(tile_sources) == 1
+      @assert(length(tile_sources) == 1, "$tile_sources")
       #PyPlot.matshow(tiled_blob[b][1].pixels);
       #PyPlot.title(b)
     end
     mp_original =
       ModelInit.cat_init([original_cat_entries[obj_row_num]],
-                         patch_radius=1e-3, tile_width=tile_width);
+                         tile_width=tile_width);
     transform = Transform.get_mp_transform(mp_original);
-    ModelInit.initialize_tiles_and_patches!(tiled_blob, original_blob, mp_original);
+    ModelInit.initialize_tiles_and_patches!(
+      tiled_blob, original_blob, mp_original);
 end
 
 ##############

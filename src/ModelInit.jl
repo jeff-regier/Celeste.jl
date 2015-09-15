@@ -203,8 +203,13 @@ Returns:
   A SkyPatch object.
 """ ->
 SkyPatch(world_center::Vector{Float64},
-         radius::Float64, img::Image) = begin
-    psf = Images.get_source_psf(world_center, img)
+         radius::Float64, img::Image; fit_psf=true) = begin
+    if fit_psf
+      psf = Images.get_source_psf(world_center, img)
+    else
+      psf = img.psf
+    end
+
     pixel_center = WCS.world_to_pixel(img.wcs, world_center)
     wcs_jacobian = WCS.pixel_world_jacobian(img.wcs, pixel_center)
 
@@ -277,7 +282,8 @@ Initialize the tiles and patches if you've already tiled your blob
 (e.g. when you are cropping to a single object location)
 """ ->
 function initialize_tiles_and_patches!(
-    tiled_blob::TiledBlob, blob::Blob, mp::ModelParams; patch_radius=Inf)
+    tiled_blob::TiledBlob, blob::Blob, mp::ModelParams;
+    patch_radius=Inf, fit_psf=true)
   # Set the model parameters
 
   mp.patches = Array(SkyPatch, mp.S, length(blob))
@@ -286,7 +292,8 @@ function initialize_tiles_and_patches!(
 
   for b = 1:length(blob)
     for s=1:mp.S
-      mp.patches[s, b] = SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b])
+      mp.patches[s, b] =
+        SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
     end
     mp.tile_sources[b] =
       get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
