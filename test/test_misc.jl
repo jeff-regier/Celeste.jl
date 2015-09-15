@@ -68,24 +68,32 @@ function test_local_sources()
 
     blob = Synthetic.gen_blob(blob0, three_bodies);
 
-    mp = ModelInit.cat_init(three_bodies, patch_radius=20., tile_width=1000);
+    mp = ModelInit.cat_init(three_bodies, tile_width=1000);
     @test mp.S == 3
 
     mp.tile_width = 1000
     tile = ImageTile(1, 1, blob[3], mp.tile_width);
+    ModelInit.initialize_tiles_and_patches!(
+      fill(fill(tile, 1, 1), 5), blob, mp; patch_radius=20.);
     subset1000 = Images.local_sources(tile, mp.patches[:,3][:], blob[3].wcs);
     @test subset1000 == [1,2,3]
 
     mp.tile_width = 10
     tile = ImageTile(1, 1, blob[3], mp.tile_width);
+    ModelInit.initialize_tiles_and_patches!(
+      fill(fill(tile, 1, 1), 5), blob, mp; patch_radius=20.);
     subset10 = Images.local_sources(tile, mp.patches[:,3][:], blob[3].wcs)
     @test subset10 == [1]
 
     last_tile = ImageTile(11, 24, blob[3], mp.tile_width)
+    ModelInit.initialize_tiles_and_patches!(
+      fill(fill(last_tile, 1, 1), 5), blob, mp; patch_radius=20.);
     last_subset = Images.local_sources(last_tile, mp.patches[:,3][:], blob[3].wcs)
     @test length(last_subset) == 0
 
     pop_tile = ImageTile(7, 9, blob[3], mp.tile_width)
+    ModelInit.initialize_tiles_and_patches!(
+      fill(fill(pop_tile, 1, 1), 5), blob, mp; patch_radius=20.);
     pop_subset = Images.local_sources(pop_tile, mp.patches[:,3][:], blob[3].wcs)
     @test pop_subset == [2,3]
 end
@@ -99,6 +107,7 @@ function test_local_sources_2()
     srand(1)
     blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
     one_body = [sample_ce([50., 50.], true),]
+    for b in 1:5 blob0[b].wcs = WCS.wcs_id end
 
     for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
     small_blob = Synthetic.gen_blob(blob0, one_body);
@@ -106,25 +115,21 @@ function test_local_sources_2()
     for b in 1:5 blob0[b].H, blob0[b].W = 400, 400 end
     big_blob = Synthetic.gen_blob(blob0, one_body);
 
-    mp = ModelInit.cat_init(one_body, patch_radius=35., tile_width=2);
+    mp = ModelInit.cat_init(one_body, tile_width=2);
 
-    qx = 0
-    for ww=1:50,hh=1:50
-        tile = ImageTile(hh, ww, small_blob[2], mp.tile_width)
-        if length(Images.local_sources(tile, mp.patches[:,2][:], small_blob[2].wcs)) > 0
-            qx += 1
-        end
-    end
+    mp_small = deepcopy(mp);
+    small_tiled_blob = ModelInit.initialize_tiles_and_patches!(
+      small_blob, mp_small, patch_radius=35.);
+    small_source_tiles =
+      [ sum([ length(s) > 0 for s in source ]) for source in mp_small.tile_sources ]
 
-    qy = 0
-    for ww=1:200,hh=1:200
-        tile = ImageTile(hh, ww, big_blob[1], mp.tile_width)
-        if length(Images.local_sources(tile, mp.patches[:,1][:], big_blob[1].wcs)) > 0
-            qy += 1
-        end
-    end
+    mp_big = deepcopy(mp);
+    big_tiled_blob = ModelInit.initialize_tiles_and_patches!(
+      big_blob, mp_big, patch_radius=35.);
+    big_source_tiles =
+      [ sum([ length(s) > 0 for s in source ]) for source in mp_big.tile_sources ]
 
-    @test qy == qx
+    @test all(big_source_tiles .== small_source_tiles)
 end
 
 
@@ -149,18 +154,24 @@ function test_local_sources_3()
     # Get a patch radius in world coordinates by looking at the world diagonals of
     # a pixel square of a certain size.
     world_quad = WCS.pixel_to_world(blob[test_b].wcs,
-        [0. 0.; 0. patch_radius_pix; patch_radius_pix 0; patch_radius_pix patch_radius_pix])
+        [0. 0.;
+         0. patch_radius_pix;
+         patch_radius_pix 0;
+         patch_radius_pix patch_radius_pix])
     diags = [ world_quad[i, :]' - world_quad[i + 2, :]' for i=1:2 ]
     patch_radius = maximum([sqrt(dot(d, d)) for d in diags])
 
-    mp = ModelInit.cat_init(one_body, patch_radius=patch_radius, tile_width=tile_width)
+    mp = ModelInit.cat_init(one_body, tile_width=tile_width)
+    tiled_blob = ModelInit.initialize_tiles_and_patches!(
+      blob, mp, patch_radius=patch_radius);
 
     # Source should be present
     tile = ImageTile(int(round(pix_loc[1] / tile_width)),
                      int(round(pix_loc[2] / tile_width)),
                      blob[test_b],
                      mp.tile_width);
-    @assert Images.local_sources(tile, mp.patches[:,test_b][:], blob[test_b].wcs) == [1]
+    @test Images.local_sources(
+      tile, mp.patches[:,test_b][:], blob[test_b].wcs) == [1]
 
     # Source should not match when you're 1 tile and a half away along the diagonal plus
     # the pixel radius from the center of the tile.
@@ -169,14 +180,16 @@ function test_local_sources_3()
                      int(round(pix_loc[2] / tile_width)),
                      blob[test_b],
                      mp.tile_width)
-    @assert Images.local_sources(tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
+    @test Images.local_sources(
+      tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
 
     tile = ImageTile(int(round((pix_loc[1]) / tile_width)),
                      int(ceil((pix_loc[2]  + 1.5 * tile_width * sqrt(2) +
                            patch_radius_pix) / tile_width)),
                      blob[test_b],
                      mp.tile_width)
-    @assert Images.local_sources(tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
+    @test Images.local_sources(
+      tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
 end
 
 

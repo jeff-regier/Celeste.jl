@@ -270,9 +270,11 @@ Returns:
   Updates mp in place patches and tile sources.
   Returns a tiled blob.
 """ ->
-function initialize_tiles_and_patches!(blob::Blob, mp::ModelParams)
+function initialize_tiles_and_patches!(
+    blob::Blob, mp::ModelParams; patch_radius=Inf, fit_psf=true)
   tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
-  initialize_tiles_and_patches!(tiled_blob, blob, mp)
+  initialize_tiles_and_patches!(
+    tiled_blob, blob, mp, patch_radius=patch_radius, fit_psf=fit_psf)
   tiled_blob
 end
 
@@ -286,8 +288,8 @@ function initialize_tiles_and_patches!(
     patch_radius=Inf, fit_psf=true)
   # Set the model parameters
 
+  @assert length(tiled_blob) == length(blob)
   mp.patches = Array(SkyPatch, mp.S, length(blob))
-  @assert length(mp.tile_sources) == length(blob)
   mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
 
   for b = 1:length(blob)
