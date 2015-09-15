@@ -190,6 +190,18 @@ function min_patch_radius(ce::CatalogEntry, blob::Blob)
 end
 =#
 
+@doc """
+Initialize a SkyPatch object at a particular location.
+
+Args:
+  - world_center: The location of the patch
+  - radius: The radius, in world coordinates, of the circle of pixels that
+            affect this patch of sky.
+  - img: An Image object.
+
+Returns:
+  A SkyPatch object.
+""" ->
 SkyPatch(world_center::Vector{Float64},
          radius::Float64, img::Image) = begin
     psf = Images.get_source_psf(world_center, img)
@@ -210,7 +222,17 @@ end
 
 
 @doc """
+Get the sources associated with each tile in a TiledImage.
 
+Args:
+  - tiled_image: A TiledImage
+  - wcs: The world coordinate system for the object.
+  - patches: A vector of SkyPatch objects, one for each celestial object.
+
+Returns:
+  - An array (same dimensions as the tiles) of vectors of indices
+    into patches indicating which patches are affected by any pixels
+    in the tiles.
 """ ->
 function get_tiled_image_sources(
   tiled_image::TiledImage, wcs::WCSLIB.wcsprm, patches::Vector{SkyPatch})
@@ -232,7 +254,6 @@ function get_tiled_image_sources(
 end
 
 
-
 @doc """
 Break the images into tiles and initialize the model parameters.
 
@@ -241,7 +262,7 @@ Args:
   - mp: Model parameters.
 
 Returns:
-  Updates mp in place with psfs, world coordinates, and tile sources.
+  Updates mp in place patches and tile sources.
   Returns a tiled blob.
 """ ->
 function initialize_tiles_and_patches!(blob::Blob, mp::ModelParams)
@@ -249,6 +270,7 @@ function initialize_tiles_and_patches!(blob::Blob, mp::ModelParams)
   initialize_tiles_and_patches!(tiled_blob, blob, mp)
   tiled_blob
 end
+
 
 @doc """
 Initialize the tiles and patches if you've already tiled your blob
