@@ -161,7 +161,7 @@ ElboDeriv.get_brightness(mp_bfgs_both_optim)
 ElboDeriv.get_brightness(mp_original)
 print_params(nm_results_both_optim, mp_bfgs_both_optim, mp_original)
 println("Newton elbo: $(nm_v) BFGS elbo: $(bfgs_v)")
-
+println("Newton iters: $(nm_iter_count) BFGS iters: $(bfgs_iter_count)")
 
 
 #############################
