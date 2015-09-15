@@ -19,6 +19,8 @@ export ObjectiveWrapperFunctions, WrapperState
 #TODO: use Lumberjack.jl for logging
 const debug = false
 
+# Only include until this is merged with Optim.jl.
+include(joinpath(Pkg.dir("Celeste"), "src", "newton_trust_region.jl"))
 
 # The main reason we need this is to have a mutable type to keep
 # track of function evaluations, but we can keep other metadata
@@ -259,17 +261,19 @@ function maximize_f_newton(
 
     d = Optim.TwiceDifferentiableFunction(
       optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!)
-    nm_result = Optim.newton_tr(d,
-           x0,
-           xtol = xtol_rel,
-           ftol = ftol_abs,
-           grtol = 1e-8,
-           iterations = max_iters,
-           store_trace = verbose,
-           show_trace = false,
-           extended_trace = verbose,
-           initial_delta=10.0,
-           delta_hat=1e9)
+
+    # TODO: use the Optim version after newton_tr is merged.
+    nm_result = newton_tr(d,
+                          x0,
+                          xtol = xtol_rel,
+                          ftol = ftol_abs,
+                          grtol = 1e-8,
+                          iterations = max_iters,
+                          store_trace = verbose,
+                          show_trace = false,
+                          extended_trace = verbose,
+                          initial_delta=10.0,
+                          delta_hat=1e9)
 
     iter_count = optim_obj_wrap.state.f_evals
     transform.vector_to_vp!(nm_result.minimum, mp.vp, omitted_ids);

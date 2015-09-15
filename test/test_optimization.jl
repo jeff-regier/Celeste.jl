@@ -8,9 +8,17 @@ import OptimizeElbo
 
 println("Running optimization tests.")
 
-# blob, mp, body, tiled_blob = gen_sample_star_dataset();
-# trans = get_mp_transform(mp, loc_width=1.0);
-# OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
+blob, mp, body, tiled_blob = gen_sample_star_dataset();
+trans = get_mp_transform(mp, loc_width=1.0);
+function lik_function(tiled_blob::TiledBlob, mp::ModelParams)
+  ElboDeriv.elbo_likelihood(tiled_blob, mp)
+end
+omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+OptimizeElbo.maximize_f_newton(
+  lik_function, tiled_blob, mp, trans,
+  omitted_ids=omitted_ids, verbose=false, max_iters=2, hess_reg=0.0);
+
+
 
 
 function verify_sample_star(vs, pos)
