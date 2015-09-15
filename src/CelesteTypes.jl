@@ -28,11 +28,10 @@ using Util
 using SloanDigitalSkySurvey.PSF.RawPSFComponents
 
 import Base.convert
-import FITSIO
 import Distributions
-import WCSLIB
+import FITSIO
 import ForwardDiff
-import WCS
+import WCSLIB
 
 import Base.length
 
@@ -338,15 +337,6 @@ immutable SkyPatch
     psf::Vector{PsfComponent}
     wcs_jacobian::Matrix{Float64}
     pixel_center::Vector{Float64}
-
-    SkyPatch(world_center::Vector{Float64},
-             radius::Float64, img::Image) = begin
-        psf = Images.get_source_psf(world_center, img)
-        pixel_center = WCS.world_to_pixel(world_center, img.wcs)
-        wcs_jacobian = WCS.pixel_world_jacobian(img.wcs, pixel_center)
-
-        new(world_center, radius, psf, wcs_jacobian, pixel_center)
-    end
 end
 
 
@@ -522,8 +512,11 @@ ModelParams{NumType <: Number}(
 end
 
 function convert(::Type{ModelParams{ForwardDiff.Dual}}, mp::ModelParams{Float64})
-    ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
-                mp.pp, mp.patches, mp.tile_width)
+    mp_dual =
+      ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
+                  mp.pp, mp.tile_width)
+    mp_dual.patches = mp.patches
+    mp_dual
 end
 
 @doc """

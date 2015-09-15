@@ -8,9 +8,9 @@ import OptimizeElbo
 
 println("Running optimization tests.")
 
-blob, mp, body, tiled_blob = gen_sample_star_dataset();
-trans = get_mp_transform(mp, loc_width=1.0);
-OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
+# blob, mp, body, tiled_blob = gen_sample_star_dataset();
+# trans = get_mp_transform(mp, loc_width=1.0);
+# OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
 
 
 function verify_sample_star(vs, pos)
@@ -179,24 +179,28 @@ function test_kappa_finding()
 
     mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 1]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(klc_wrapper, tiled_blob, mp, trans, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(
+      klc_wrapper, tiled_blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[1, 2]] > .9
 
     mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(klc_wrapper, tiled_blob, mp, trans, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(
+      klc_wrapper, tiled_blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[2, 2]] > .9
 
     mp.pp.k[2] = [.9, .1]
     mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 1]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(
+      ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[1, 2]] > .9
 
     mp.pp.k[2] = [.1, .9]
     mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(
+      ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[2, 2]] > .9
 end
 
@@ -214,20 +218,22 @@ function test_bad_a_init()
     blob = Synthetic.gen_blob(blob0, [ce,])
 
     mp = ModelInit.cat_init([ce,])
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
     trans = get_mp_transform(mp, loc_width=1.0);
 
     mp.vp[1][ids.a] = [ 0.5, 0.5 ]
 
     omitted_ids = [ids_free.a]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(
+      ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
 
     mp.vp[1][ids.a] = [ 0.8, 0.2 ]
     elbo_bad = ElboDeriv.elbo_likelihood(tiled_blob, mp)
     @test elbo_bad.d[ids.a[2], 1] > 0
 
     omitted_ids = setdiff(1:length(UnconstrainedParams), ids_free.a)
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f(
+      ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.a[2]] >= 0.5
 
     mp2 = deepcopy(mp)
@@ -252,7 +258,7 @@ function test_likelihood_invariance_to_a()
     blob = Synthetic.gen_blob(blob0, [ce,])
 
     mp = ModelInit.cat_init([ce,])
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
     trans = get_mp_transform(mp, loc_width=1.0);
 
     mp.vp[1][ids.a] = [ 0.8, 0.2 ]
@@ -293,7 +299,7 @@ function test_kl_invariance_to_a()
     end
 
     mp = ModelInit.cat_init([ce,])
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
     trans = get_mp_transform(mp, loc_width=1.0);
     mp.vp[1][ids.a] = [ 0.2, 0.8 ]
     omitted_ids = [ids_free.a;]
@@ -307,7 +313,8 @@ function test_kl_invariance_to_a()
 
     mp.vp[1][ids.a] = [ 0.5, 0.5 ]
     mp2.vp[1][ids.a] = [ 0.5, 0.5 ]
-    @test_approx_eq_eps kl_wrapper(tiled_blob, mp).v kl_wrapper(tiled_blob, mp2).v 1e-1
+    @test_approx_eq_eps(kl_wrapper(tiled_blob, mp).v,
+                        kl_wrapper(tiled_blob, mp2).v, 1e-1)
 
     for i in 2:length(1:length(CanonicalParams)) #skip a
         @test_approx_eq_eps mp.vp[1][i] / mp2.vp[1][i] 1. 0.1
@@ -326,7 +333,7 @@ function test_elbo_invariance_to_a()
     blob = Synthetic.gen_blob(blob0, [ce,])
 
     mp = ModelInit.cat_init([ce,])
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
     trans = get_mp_transform(mp, loc_width=1.0);
 
     mp.vp[1][ids.a] = [ 0.8, 0.2 ]
@@ -341,7 +348,8 @@ function test_elbo_invariance_to_a()
 
     mp.vp[1][ids.a] = [ 0.5, 0.5 ]
     mp2.vp[1][ids.a] = [ 0.5, 0.5 ]
-    @test_approx_eq_eps ElboDeriv.elbo(tiled_blob, mp).v ElboDeriv.elbo(tiled_blob, mp2).v 1
+    @test_approx_eq_eps(ElboDeriv.elbo(tiled_blob, mp).v,
+                        ElboDeriv.elbo(tiled_blob, mp2).v, 1)
 
     for i in setdiff(1:length(CanonicalParams), ids.a) #skip a
         @test_approx_eq_eps mp.vp[1][i] / mp2.vp[1][i] 1. 0.1
@@ -370,7 +378,7 @@ function test_peak_init_2body_optimization()
 
     blob = Synthetic.gen_blob(blob0, two_bodies)
     mp = ModelInit.peak_init(blob) #one giant tile, giant patches
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
     trans = get_mp_transform(mp, loc_width=1.0);
 
     @test mp.S == 2
@@ -400,7 +408,7 @@ function test_real_stamp_optimization()
     cat_entries = filter(inbounds, cat_entries)
 
     mp = ModelInit.cat_init(cat_entries)
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
     trans = get_mp_transform(mp, loc_width=1.0);
     OptimizeElbo.maximize_elbo(tiled_blob, mp, trans, xtol_rel=0.0)
 end
@@ -419,25 +427,30 @@ function test_bad_galaxy_init()
 
     blob = Synthetic.gen_blob(blob0, cat_coadd)
 
-    cat_primary = SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob, match_blob=true)
+    cat_primary =
+      SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob, match_blob=true)
     cat_primary = filter(only_center, cat_primary)
     @test length(cat_primary) == 1
 
     mp_good_init = ModelInit.cat_init(cat_coadd)
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp_good_init)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp_good_init)
     trans = get_mp_transform(mp_good_init, loc_width=1.0);
     OptimizeElbo.maximize_elbo(blob, mp_good_init, trans)
     @test mp_good_init.vp[1][ids.a[2]] > .5
 
     mp_bad_init = ModelInit.cat_init(cat_primary)
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp_bad_init)
+    tiled_blob = ModelInit.initialize_celeste!(blob, mp_bad_init)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp_bad_init, trans)
     @test mp_bad_init.vp[1][ids.a[2]] > .5
 
-    @test_approx_eq_eps mp_good_init.vp[1][ids.e_scale] mp_bad_init.vp[1][ids.e_scale] 0.2
-    @test_approx_eq_eps mp_good_init.vp[1][ids.e_axis] mp_bad_init.vp[1][ids.e_axis] 0.2
-    @test_approx_eq_eps mp_good_init.vp[1][ids.e_dev] mp_bad_init.vp[1][ids.e_dev] 0.2
-    @test_approx_eq_eps mp_good_init.vp[1][ids.e_angle] mp_bad_init.vp[1][ids.e_angle] 0.2
+    @test_approx_eq_eps(
+      mp_good_init.vp[1][ids.e_scale], mp_bad_init.vp[1][ids.e_scale], 0.2)
+    @test_approx_eq_eps(
+      mp_good_init.vp[1][ids.e_axis], mp_bad_init.vp[1][ids.e_axis], 0.2)
+    @test_approx_eq_eps(
+      mp_good_init.vp[1][ids.e_dev], mp_bad_init.vp[1][ids.e_dev], 0.2)
+    @test_approx_eq_eps(
+      mp_good_init.vp[1][ids.e_angle], mp_bad_init.vp[1][ids.e_angle], 0.2)
 end
 
 
@@ -494,9 +507,11 @@ function test_quadratic_optimization()
     mp.vp = convert(VariationalParams{Float64}, [fill(0.5, n) for s in 1:1])
     unused_blob = gen_sample_star_dataset()[4];
 
-    lbs, ubs = OptimizeElbo.get_nlopt_unconstrained_bounds(mp.vp, Int64[], trans)
+    lbs, ubs =
+      OptimizeElbo.get_nlopt_unconstrained_bounds(mp.vp, Int64[], trans)
 
-    OptimizeElbo.maximize_f(quadratic_function, unused_blob, mp, trans, lbs, ubs,
+    OptimizeElbo.maximize_f(
+        quadratic_function, unused_blob, mp, trans, lbs, ubs,
         xtol_rel=1e-16, ftol_abs=1e-16)
 
     @test_approx_eq_eps mp.vp[1] centers 1e-6

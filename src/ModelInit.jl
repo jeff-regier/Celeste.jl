@@ -17,6 +17,8 @@ using CelesteTypes
 import SloanDigitalSkySurvey: WCS
 import Images
 import WCSLIB
+import CelesteTypes.SkyPatch
+
 
 function sample_prior()
     const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
@@ -188,6 +190,16 @@ function min_patch_radius(ce::CatalogEntry, blob::Blob)
 end
 =#
 
+SkyPatch(world_center::Vector{Float64},
+         radius::Float64, img::Image) = begin
+    psf = Images.get_source_psf(world_center, img)
+    pixel_center = WCS.world_to_pixel(img.wcs, world_center)
+    wcs_jacobian = WCS.pixel_world_jacobian(img.wcs, pixel_center)
+
+    SkyPatch(world_center, radius, psf, wcs_jacobian, pixel_center)
+end
+
+
 @doc """
 Return a ModelParams object initialized from an array of catalog entries.
 """ ->
@@ -239,8 +251,8 @@ function initialize_tiles_and_patches!(blob::Blob, mp::ModelParams)
 end
 
 @doc """
-Initialize celeste if you've already tiled your blob (e.g. when you are
-cropping to a single object location)
+Initialize the tiles and patches if you've already tiled your blob
+(e.g. when you are cropping to a single object location)
 """ ->
 function initialize_tiles_and_patches!(
     tiled_blob::TiledBlob, blob::Blob, mp::ModelParams; patch_radius=Inf)
