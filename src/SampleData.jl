@@ -163,8 +163,8 @@ function gen_n_body_dataset(S::Int64; patch_pixel_radius=20., tile_width=50)
                        [patch_pixel_radius patch_pixel_radius; 0. 0.])
   world_radius = maximum(abs(world_radius_pts[1,:] - world_radius_pts[2,:]))
   mp = ModelInit.cat_init(S_bodies, tile_width=tile_width);
-  [ mp.patches[s, b].radius = world_radius for s=1:size(mp.patches)[1], b=1:size(mp.patches)[2]]
-  tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp);
+  tiled_blob = ModelInit.initialize_tiles_and_patches!(
+    blob, mp; patch_radius=world_radius);
 
   blob, mp, S_bodies, tiled_blob
 end

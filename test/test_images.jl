@@ -81,7 +81,7 @@ function test_blob()
 
   mp_several =
     ModelInit.cat_init([cat_entries[1], cat_entries[obj_index]]);
-  ModelInit.initialize_tiles_and_patches!(tiled_blob, mp_several)
+  ModelInit.initialize_tiles_and_patches!(tiled_blob, blob, mp_several)
 
   # The second set of vp is the object of interest
   point_patch_psf = PSF.get_psf_at_point(mp_several.patches[2, test_b].psf);
@@ -107,17 +107,16 @@ function test_get_tiled_image_source()
   blob, mp, body, tiled_blob = gen_sample_star_dataset();
   img = blob[3];
 
-  ModelInit.initialize_tiles_and_patches!(tiled_blob, mp; patch_radius=1e-6)
-  [ mp.patches[1, b].radius = 1e-6 for b=1:5 ]
+  ModelInit.initialize_tiles_and_patches!(
+    tiled_blob, blob, mp; patch_radius=1e-6)
 
   tiled_img = Images.break_image_into_tiles(img, 10);
   for hh in 1:size(tiled_img)[1], ww in 1:size(tiled_img)[2]
     tile = tiled_img[hh, ww]
     loc = Float64[mean(tile.h_range), mean(tile.w_range)]
     for b = 1:5
-      mp.vp[1][ids.u] =
-        mp.patches[1, b].center =
-        mp.patches[1, b].pixel_center = loc
+      mp.vp[1][ids.u] = loc
+      mp.patches[1, b] = SkyPatch(loc, 1e-6, blob[b], fit_psf=false)
     end
     patches = mp.patches[:, 3][:]
     local_sources =
@@ -137,7 +136,7 @@ function test_local_source_candidate()
 
   # This is run by gen_n_body_dataset but put it here for safe testing in
   # case that changes.
-  tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp);
+  ModelInit.initialize_tiles_and_patches!(tiled_blob, blob, mp);
 
   for b=1:length(tiled_blob)
     # Get the sources by iterating over everything.
