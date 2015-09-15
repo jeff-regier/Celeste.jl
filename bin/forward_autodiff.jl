@@ -64,6 +64,8 @@ else
     #objid = "1237662226208063541" # A bright star with bad pixels --
     # I think this has a neighbor, too.
 
+
+    objid = "1237662226208063499" # A bright star
     #objid = "1237662226208063576" # A galaxy
     objid = "1237662226208063565" # A brightish star but with good pixels.
     obj_row = original_cat_df[:objid] .== objid;
@@ -71,7 +73,7 @@ else
                       original_cat_df[obj_row, :dec][1]]
     obj_row_num = find(obj_row)[1]
 
-    # TODO: make a tile for an object.
+    # Make a tile for the object
     tile_width = 15
     tiled_blob =
       Images.crop_blob_to_location(original_blob, tile_width, obj_loc);
@@ -84,12 +86,13 @@ else
     # Make sure we only got one sources
     for b=1:5
       tile_sources =
-        Images.local_sources(tiled_blob[b][1],
-                             mp_original_all.patches[:,b], original_blob[b].wcs)
+        Images.local_sources(
+          tiled_blob[b][1], mp_original_all.patches[:,b], original_blob[b].wcs)
       @assert(length(tile_sources) == 1, "$tile_sources")
-      #PyPlot.matshow(tiled_blob[b][1].pixels);
-      #PyPlot.title(b)
+      PyPlot.matshow(tiled_blob[b][1].pixels);
+      PyPlot.title(b)
     end
+    PyPlot.close("all")
     mp_original =
       ModelInit.cat_init([original_cat_entries[obj_row_num]],
                          tile_width=tile_width);
@@ -125,7 +128,7 @@ function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
     OptimizeElbo.maximize_f_newton(
       ElboDeriv.elbo, tiled_blob, mp_optim, transform,
       omitted_ids=omitted_ids, verbose=true, max_iters=max_iters,
-      hess_reg=0.0, optim_method=:newton_tr)
+      hess_reg=0.0)
   mp_optim, iter_count, max_f, ret
 end
 
@@ -152,6 +155,7 @@ plot(start:length(as), as[start:end], "b.")
 
 
 nm_v = ElboDeriv.elbo(tiled_blob, nm_results_both_optim).v;
+
 ElboDeriv.get_brightness(nm_results_both_optim)
 ElboDeriv.get_brightness(mp_bfgs_both_optim)
 ElboDeriv.get_brightness(mp_original)

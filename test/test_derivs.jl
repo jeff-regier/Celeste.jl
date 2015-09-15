@@ -26,16 +26,19 @@ function test_by_finite_differences(fun_to_test::Function, mp::ModelParams)
             fun_to_test_2(epsilon::Float64) = begin
                 vp_local = deepcopy(mp.vp)
                 vp_local[s][p0] += epsilon
-                mp_local = copy(mp)
+                mp_local = deepcopy(mp)
                 mp_local.vp = vp_local
                 f_local::SensitiveFloat = fun_to_test(mp_local)
                 f_local.v
             end
 
             numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
-            info("deriv #$p0 (s: $s): $numeric_deriv vs $(f.d[p1, s]) [tol: $abs_err]")
+            info(string("deriv #$p0 (s: $s): $numeric_deriv vs $(f.d[p1, s]) ",
+                        "[tol: $abs_err]"))
             obs_err = abs(numeric_deriv - f.d[p1, s])
-            @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
+            @test(obs_err < 1e-11 ||
+                  abs_err < 1e-4 ||
+                  abs_err / abs(numeric_deriv) < 1e-4)
             @test_approx_eq_eps numeric_deriv f.d[p1, s] 10abs_err
         end
     end
@@ -58,7 +61,9 @@ function test_by_finite_differences(fun_to_test::Function, x::Vector{Float64})
         numeric_deriv, abs_err = deriv_central(fun_to_test_2, 0., 1e-3)
         info("deriv #$s: $numeric_deriv vs $(grad[s]) [tol: $abs_err]")
         obs_err = abs(numeric_deriv - grad[s])
-        @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
+        @test(obs_err < 1e-11 ||
+              abs_err < 1e-4 ||
+              abs_err / abs(numeric_deriv) < 1e-4)
         @test_approx_eq_eps numeric_deriv grad[s] 10abs_err
     end
 end
@@ -92,12 +97,12 @@ end
 
 
 function test_accum_pos_derivs()
-    blob, mp, body = gen_sample_galaxy_dataset()
+    blob, mp, body, tiled_blob = gen_sample_galaxy_dataset();
 
     function wrap_star(mmp)
         m_pos = Float64[9, 10.]
         wcs_jacobian = WCS.pixel_world_jacobian(blob[3].wcs, m_pos)
-        Images.set_patch_wcs!(mmp.patches[1], blob[3].wcs)
+        ModelInit.initialize_tiles_and_patches!(blob, tiled_blob, mmp)
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mmp, 3)
         fs0m = zero_sensitive_float(StarPosParams)
         ElboDeriv.accum_star_pos!(star_mcs[1,1], m_pos, fs0m, wcs_jacobian)
@@ -108,7 +113,7 @@ function test_accum_pos_derivs()
     function wrap_galaxy(mmp)
         m_pos = Float64[9, 10]
         wcs_jacobian = WCS.pixel_world_jacobian(blob[3].wcs, m_pos)
-        Images.set_patch_wcs!(mmp.patches[1], blob[3].wcs)
+        ModelInit.initialize_tiles_and_patches!(blob, tiled_blob, mmp)
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mmp, 3)
         fs1m = zero_sensitive_float(GalaxyPosParams)
         ElboDeriv.accum_galaxy_pos!(gal_mcs[1,1,1,1], m_pos, fs1m, wcs_jacobian)
@@ -119,12 +124,12 @@ end
 
 
 function test_accum_pixel_source_derivs()
-    blob, mp0, body = gen_sample_galaxy_dataset()
+    blob, mp0, body, tiled_blob = gen_sample_galaxy_dataset();
 
     function wrap_apss_ef(mmp)
         m_pos = [9, 10.]
         wcs_jacobian = WCS.pixel_world_jacobian(blob[1].wcs, m_pos)
-        Images.set_patch_wcs!(mmp.patches[1], blob[1].wcs)
+        ModelInit.initialize_tiles_and_patches!(tiled_blob, blob, mmp)
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mmp, 3)
         fs0m = zero_sensitive_float(StarPosParams)
         fs1m = zero_sensitive_float(GalaxyPosParams)
@@ -138,7 +143,7 @@ function test_accum_pixel_source_derivs()
     test_by_finite_differences(wrap_apss_ef, mp0)
 
     function wrap_apss_varf(mmp)
-        Images.set_patch_wcs!(mmp.patches[1], blob[3].wcs)
+        ModelInit.initialize_tiles_and_patches!(tiled_blob, blob, mmp)
         star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mmp, 3)
         fs0m = zero_sensitive_float(StarPosParams)
         fs1m = zero_sensitive_float(GalaxyPosParams)
@@ -252,7 +257,8 @@ function test_derivative_transform()
     free_param = zeros(Float64, N)
     for n=1:N
       free_param[n] =
-        Transform.unbox_parameter(box_param[n], lower_bounds[n], upper_bounds[n], scales[n])
+        Transform.unbox_parameter(
+          box_param[n], lower_bounds[n], upper_bounds[n], scales[n])
     end
     free_param
   end
@@ -261,7 +267,8 @@ function test_derivative_transform()
     box_param = zeros(Float64, N)
     for n=1:N
       box_param[n] =
-        Transform.box_parameter(free_param[n], lower_bounds[n], upper_bounds[n], scales[n])
+        Transform.box_parameter(
+          free_param[n], lower_bounds[n], upper_bounds[n], scales[n])
     end
     box_param
   end
