@@ -22,6 +22,9 @@ function test_blob()
   blob = Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
   cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
   cat_entries = Images.convert_catalog_to_celeste(cat_df, blob);
+  mp = ModelInit.cat_init(cat_entries);
+  tiled_blob = ModelInit.initialize_tiles_and_patches!(
+    blob, mp, patch_radius=1e-6, fit_psf=false);
 
   # Just check some basic facts about the catalog.
   @test size(cat_df)[1] == 805
@@ -31,7 +34,8 @@ function test_blob()
 
   # Find an object near the middle of the image.
   #img_center = Float64[ median(cat_df[:ra]), median(cat_df[:dec]) ]
-  img_center = WCS.pixel_to_world(blob[3].wcs, Float64[blob[3].H / 2, blob[3].W / 2])
+  img_center =
+    WCS.pixel_to_world(blob[3].wcs, Float64[blob[3].H / 2, blob[3].W / 2])
   dist = by(cat_df, :objid,
      df -> DataFrame(dist=(df[:ra] - img_center[1]).^2 +
                           (df[:dec] - img_center[2]).^2))
@@ -39,16 +43,20 @@ function test_blob()
   @assert sum(obj_rows) == 1
   obj_loc = Float64[ cat_df[obj_rows, :ra][1], cat_df[obj_rows, :dec][1]]
   objid = cat_df[obj_rows, :objid][1]
+  obj_row = find(obj_rows)[1]
 
-  # # Test cropping.  TODO -- delete this, it messes with the original center.
-  # cropped_blob = deepcopy(blob)
-  # width = 5.0
-  # Images.crop_image!(cropped_blob, width, obj_loc)
-  # for b=1:5
-  #   @test 2 * width <= cropped_blob[b].H <= 2 * (width + 1)
-  #   @test 2 * width <= cropped_blob[b].W <= 2 * (width + 1)
-  # end
-  # @test Images.test_catalog_entry_in_image(cropped_blob, obj_loc)
+  # # Test cropping.
+  width = 5.0
+  cropped_blob = Images.crop_blob_to_location(blob, width, obj_loc);
+  for b=1:5
+    # Check that it only has one tile of the right size containing the object.
+    @assert length(cropped_blob[b]) == 1
+    @test 2 * width <= cropped_blob[b][1].h_width <= 2 * (width + 1)
+    @test 2 * width <= cropped_blob[b][1].w_width <= 2 * (width + 1)
+    tile_sources =
+      Images.local_sources(cropped_blob[b][1], mp.patches[:,b][:], blob[b].wcs)
+    @test obj_row in tile_sources
+  end
 
   # Test get_source_psf at point while we have the blob loaded.
   test_b = 3
@@ -62,7 +70,7 @@ function test_blob()
   original_psf_celeste = Images.convert_gmm_to_celeste(original_psf_gmm, scale);
   fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
-  obj_psf = Images.get_source_psf(mp.vp[1], img);
+  obj_psf = Images.get_source_psf(mp.vp[1][ids.u], img);
   obj_psf_val = PSF.get_psf_at_point(obj_psf);
 
   # The fits should match exactly.
@@ -73,7 +81,7 @@ function test_blob()
 
   mp_several =
     ModelInit.cat_init([cat_entries[1], cat_entries[obj_index]]);
-  Images.set_patch_psfs!(blob, mp_several);
+  ModelInit.initialize_tiles_and_patches!(tiled_blob, blob, mp_several)
 
   # The second set of vp is the object of interest
   point_patch_psf = PSF.get_psf_at_point(mp_several.patches[2, test_b].psf);
@@ -89,26 +97,26 @@ function test_stamp_get_object_psf()
   original_psf_val = PSF.get_psf_at_point(img.psf);
 
   obj_psf_val =
-    PSF.get_psf_at_point(Images.get_source_psf(stamp_mp.vp[1], img))
+    PSF.get_psf_at_point(Images.get_source_psf(stamp_mp.vp[1][ids.u], img))
   @test_approx_eq_eps(obj_psf_val[:], original_psf_val[:], 1e-6)
 end
 
 
 function test_get_tiled_image_source()
   # Test that an object only occurs the appropriate tile's local sources.
-  blob, mp, body = gen_sample_star_dataset();
+  blob, mp, body, tiled_blob = gen_sample_star_dataset();
   img = blob[3];
 
-  [ mp.patches[1, b].radius = 1e-6 for b=1:5 ]
+  ModelInit.initialize_tiles_and_patches!(
+    tiled_blob, blob, mp; patch_radius=1e-6)
 
   tiled_img = Images.break_image_into_tiles(img, 10);
   for hh in 1:size(tiled_img)[1], ww in 1:size(tiled_img)[2]
     tile = tiled_img[hh, ww]
     loc = Float64[mean(tile.h_range), mean(tile.w_range)]
     for b = 1:5
-      mp.vp[1][ids.u] =
-        mp.patches[1, b].center =
-        mp.patches[1, b].pixel_center = loc
+      mp.vp[1][ids.u] = loc
+      mp.patches[1, b] = SkyPatch(loc, 1e-6, blob[b], fit_psf=false)
     end
     patches = mp.patches[:, 3][:]
     local_sources =
@@ -128,7 +136,7 @@ function test_local_source_candidate()
 
   # This is run by gen_n_body_dataset but put it here for safe testing in
   # case that changes.
-  tiled_blob = ModelInit.initialize_celeste!(blob, mp);
+  ModelInit.initialize_tiles_and_patches!(tiled_blob, blob, mp);
 
   for b=1:length(tiled_blob)
     # Get the sources by iterating over everything.
@@ -140,7 +148,7 @@ function test_local_source_candidate()
     candidates = Images.local_source_candidates(tiled_blob[b], patches);
 
     # Check that all the actual sources are candidates and that this is the
-    # same as what is returned by initialize_celeste!.
+    # same as what is returned by initialize_tiles_and_patches!.
     @test size(candidates) == size(tile_sources)
     for h=1:size(candidates)[1], w=1:size(candidates)[2]
       @test setdiff(tile_sources[h, w], candidates[h, w]) == []

@@ -90,7 +90,6 @@ function test_that_variance_is_low()
     blob, mp, body, tiled_blob = true_star_init()
 
     test_b = 3
-    Images.set_patch_wcs!(mp.patches[1], blob[test_b].wcs)
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, test_b)
     fs0m = zero_sensitive_float(StarPosParams)
     fs1m = zero_sensitive_float(GalaxyPosParams)
@@ -199,8 +198,6 @@ end
 
 
 function test_coadd_cat_init_is_most_likely()  # on a real stamp
-    # TODO: not currently passing.
-
     stamp_id = "5.0073-0.0739"
     blob = Images.load_stamp_blob(dat_dir, stamp_id)
 
@@ -209,7 +206,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     cat_entries = filter(bright, cat_entries)
 
     ce_pix_locs =
-      [ [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ] for ce in cat_entries ]
+      [ [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ]
+        for ce in cat_entries ]
 
     function ce_inbounds(ce)
         pix_locs = [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ]
@@ -224,7 +222,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         mp.vp[s][ids.a[2]] = cat_entries[s].is_star ? 0.01 : 0.99
         mp.vp[s][ids.a[1]] = 1.0 - mp.vp[s][ids.a[2]]
     end
-    tiled_blob = ModelInit.initialize_celeste!(blob, mp)
+    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
     best = ElboDeriv.elbo_likelihood(tiled_blob, mp)
 
     # s is the brightest source.
@@ -282,7 +280,7 @@ function test_tiny_image_tiling()
   # Test that the tilling doesn't matter much for a body that is nearly a
   # point with a narrow psf.
 
-  blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+  blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
   pc = PsfComponent(1./3, zeros(2), 1e-4 * eye(2))
   trivial_psf = [pc, pc, pc]
   pixels = ones(100, 1) * 12
@@ -292,21 +290,20 @@ function test_tiny_image_tiling()
   catalog[1].star_fluxes = ones(5) * 1e5
 
   mp0 = ModelInit.cat_init(catalog)
-  [ mp0.patches[s, b].radius = Inf for
-    s=1:size(mp0.patches)[1], b=1:size(mp0.patches)[2]]
-  tiled_blob0 = ModelInit.initialize_celeste!(fill(img, 5), mp0)
+  tiled_blob0 =
+    ModelInit.initialize_tiles_and_patches!(fill(img, 5), mp0, patch_radius=Inf)
   accum0 = zero_sensitive_float(CanonicalParams)
   ElboDeriv.elbo_likelihood!(tiled_blob0[3], mp0, 3, accum0)
 
   mp0.tile_width = 2
-  [ mp0.patches[s, b].radius = 10. for
-    s=1:size(mp0.patches)[1], b=1:size(mp0.patches)[2]]
-  tiled_blob1 = ModelInit.initialize_celeste!(fill(img, 5), mp0)
+  tiled_blob1 =
+    ModelInit.initialize_tiles_and_patches!(fill(img, 5), mp0, patch_radius=10.)
   accum_tiles = zero_sensitive_float(CanonicalParams)
   ElboDeriv.elbo_likelihood!(tiled_blob1[3], mp0, 3, accum_tiles)
 
   mp0.tile_width = 5
-  tiled_blob2 = ModelInit.initialize_celeste!(fill(img, 5), mp0)
+  tiled_blob2 =
+    ModelInit.initialize_tiles_and_patches!(fill(img, 5), mp0, patch_radius=10.)
   accum_tiles2 = zero_sensitive_float(CanonicalParams)
   ElboDeriv.elbo_likelihood!(tiled_blob2[3], mp0, 3, accum_tiles2)
 
@@ -321,7 +318,7 @@ function test_elbo_with_nan()
 
     # Set to 5 to test the code for tiles with no sources.
     mp.tile_width = 5
-    tiled_blob = ModelInit.initialize_celeste!(blob, mp);
+    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp);
     initial_elbo = ElboDeriv.elbo(tiled_blob, mp);
 
     for b in 1:5

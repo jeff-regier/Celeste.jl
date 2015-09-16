@@ -7,7 +7,7 @@ VERSION < v"0.4.0-dev" && using Docile
 
 export sample_prior, cat_init, peak_init
 
-export initialize_celeste!
+export initialize_tiles_and_patches!
 
 using FITSIO
 using Distributions
@@ -17,6 +17,8 @@ using CelesteTypes
 import SloanDigitalSkySurvey: WCS
 import Images
 import WCSLIB
+import CelesteTypes.SkyPatch
+
 
 function sample_prior()
     const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
@@ -66,6 +68,7 @@ end
 Return a VariationalParams object initialized form a catalog entry.
 """ ->
 function init_source(ce::CatalogEntry)
+    # TODO: sync this up with the transform bounds
     ret = init_source(ce.pos)
 
     ret[ids.r1[1]] = max(0.0001, ce.star_fluxes[3]) ./ ret[ids.r2[1]]
@@ -83,9 +86,9 @@ function init_source(ce::CatalogEntry)
     ret[ids.c1[:, 1]] = get_colors(ce.star_fluxes)
     ret[ids.c1[:, 2]] = get_colors(ce.gal_fluxes)
 
-    ret[ids.e_dev] = min(max(ce.gal_frac_dev, 0.01), 0.99)
+    ret[ids.e_dev] = min(max(ce.gal_frac_dev, 0.015), 0.985)
 
-    ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.0001), 0.9999)
+    ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.015), 0.985)
     ret[ids.e_angle] = ce.gal_angle
     ret[ids.e_scale] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
 
@@ -156,15 +159,12 @@ function peak_starts(blob::Blob)
 end
 
 
-function peak_init(blob::Blob; patch_radius::Float64=Inf,
-        tile_width::Int64=typemax(Int64))
+function peak_init(blob::Blob; tile_width::Int64=typemax(Int64))
     v1 = peak_starts(blob)
     S = size(v1)[2]
     vp = [init_source(v1[:, s]) for s in 1:S]
     twice_radius = float(max(blob[1].H, blob[1].W))
-    # TODO: use non-trival patch radii, based on blob detection routine
-    patches = [SkyPatch(v1[:, s], patch_radius) for s in 1:S, b in 1:5]
-    ModelParams(vp, sample_prior(), patches, tile_width)
+    ModelParams(vp, sample_prior(), tile_width)
 end
 
 #=
@@ -191,19 +191,53 @@ end
 =#
 
 @doc """
-Return a ModelParams object initialized from an array of catalog entries.
+Initialize a SkyPatch object at a particular location.
+
+Args:
+  - world_center: The location of the patch
+  - radius: The radius, in world coordinates, of the circle of pixels that
+            affect this patch of sky.
+  - img: An Image object.
+
+Returns:
+  A SkyPatch object.
 """ ->
-function cat_init(cat::Vector{CatalogEntry}; patch_radius::Float64=Inf,
-        tile_width::Int64=typemax(Int64))
-    vp = [init_source(ce) for ce in cat]
-    # TODO: use non-trivial patch radii, based on the catalog
-    patches = [SkyPatch(ce.pos, patch_radius) for ce in cat, b in 1:5]
-    ModelParams(vp, sample_prior(), patches, tile_width)
+SkyPatch(world_center::Vector{Float64},
+         radius::Float64, img::Image; fit_psf=true) = begin
+    if fit_psf
+      psf = Images.get_source_psf(world_center, img)
+    else
+      psf = img.psf
+    end
+
+    pixel_center = WCS.world_to_pixel(img.wcs, world_center)
+    wcs_jacobian = WCS.pixel_world_jacobian(img.wcs, pixel_center)
+
+    SkyPatch(world_center, radius, psf, wcs_jacobian, pixel_center)
 end
 
 
 @doc """
+Return a ModelParams object initialized from an array of catalog entries.
+""" ->
+function cat_init(cat::Vector{CatalogEntry}; tile_width::Int64=typemax(Int64))
+    vp = [init_source(ce) for ce in cat]
+    ModelParams(vp, sample_prior(), tile_width)
+end
 
+
+@doc """
+Get the sources associated with each tile in a TiledImage.
+
+Args:
+  - tiled_image: A TiledImage
+  - wcs: The world coordinate system for the object.
+  - patches: A vector of SkyPatch objects, one for each celestial object.
+
+Returns:
+  - An array (same dimensions as the tiles) of vectors of indices
+    into patches indicating which patches are affected by any pixels
+    in the tiles.
 """ ->
 function get_tiled_image_sources(
   tiled_image::TiledImage, wcs::WCSLIB.wcsprm, patches::Vector{SkyPatch})
@@ -233,32 +267,38 @@ Args:
   - mp: Model parameters.
 
 Returns:
-  Updates mp in place with psfs, world coordinates, and tile sources.
+  Updates in place mp's patches and tile sources.
   Returns a tiled blob.
 """ ->
-function initialize_celeste!(blob::Blob, mp::ModelParams)
+function initialize_tiles_and_patches!(
+    blob::Blob, mp::ModelParams; patch_radius=Inf, fit_psf=true)
+  tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
+  initialize_tiles_and_patches!(
+    tiled_blob, blob, mp, patch_radius=patch_radius, fit_psf=fit_psf)
+  tiled_blob
+end
+
+
+@doc """
+Initialize the tiles and patches if you've already tiled your blob
+(e.g. when you are cropping to a single object location)
+""" ->
+function initialize_tiles_and_patches!(
+    tiled_blob::TiledBlob, blob::Blob, mp::ModelParams;
+    patch_radius=Inf, fit_psf=true)
   # Set the model parameters
-  @assert size(mp.patches)[1] == mp.S
-  @assert size(mp.patches)[2] == length(blob)
 
-  for s=1:mp.S
-    for b = 1:length(blob)
-      Images.set_patch_wcs!(mp.patches[s, b], blob[b].wcs)
-      mp.patches[s, b].center = mp.vp[s][ids.u]
-      mp.patches[s, b].pixel_center =
-        WCS.world_to_pixel(blob[b].wcs, mp.patches[s, b].center)
+  @assert length(tiled_blob) == length(blob)
+  mp.patches = Array(SkyPatch, mp.S, length(blob))
+  mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
+
+  for b = 1:length(blob)
+    for s=1:mp.S
+      mp.patches[s, b] =
+        SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
     end
-  end
-  Images.set_patch_psfs!(blob, mp)
-
-  tiled_blob =
-    Images.break_blob_into_tiles(blob, mp.tile_width)
-  @assert length(mp.tile_sources) == length(blob)
-
-  for b=1:length(blob)
     mp.tile_sources[b] =
-      get_tiled_image_sources(tiled_blob[b],
-        blob[b].wcs, mp.patches[:, b][:])
+      get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
   end
 
   tiled_blob
