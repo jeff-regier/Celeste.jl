@@ -19,6 +19,8 @@ export ObjectiveWrapperFunctions, WrapperState
 #TODO: use Lumberjack.jl for logging
 const debug = false
 
+# Only include until this is merged with Optim.jl.
+include(joinpath(Pkg.dir("Celeste"), "src", "newton_trust_region.jl"))
 
 # The main reason we need this is to have a mutable type to keep
 # track of function evaluations, but we can keep other metadata
@@ -158,7 +160,8 @@ type ObjectiveWrapperFunctions
                 x_dual[index] = ForwardDiff.Dual(x[index], 0.)
             end
             print("Done.\n")
-            hess
+            # Assure that the hessian is symmetric.
+            0.5 * (hess + hess')
         end
 
         new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_grad!,
@@ -221,15 +224,17 @@ Returns:
   - ret: The return code of optimize()
 """ ->
 function maximize_f_newton(
-  f::Function, mp::ModelParams, transform::Transform.DataTransform;
+  f::Function, tiled_blob::TiledBlob, mp::ModelParams,
+  transform::Transform.DataTransform;
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  hess_reg=2.0, max_iters=100)
+  hess_reg=0.0, max_iters=100)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
 
     optim_obj_wrap =
-      OptimizeElbo.ObjectiveWrapperFunctions(f, mp, transform, kept_ids, omitted_ids);
+      OptimizeElbo.ObjectiveWrapperFunctions(
+        mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
 
     # For minimization, which is required by the linesearch algorithm.
     optim_obj_wrap.state.scale = -1.0
@@ -243,7 +248,7 @@ function maximize_f_newton(
 
         # Make it positive definite.
         if min_ev < 0
-            verbose && println("Hessian is negative definite with ",
+            verbose && println("Hessian is not positive definite with ",
                                "eigenvalues: (min $(min_ev), max $(max_ev)).  ",
                                "Regularizing with $(hess_reg).")
             hess += eye(length(x)) * abs(min_ev) * hess_reg
@@ -254,11 +259,21 @@ function maximize_f_newton(
 
     x0 = transform.vp_to_vector(mp.vp, omitted_ids);
 
-    # TODO: are xtol_rel and ftol_abs still good names?
-    nm_result =
-      Optim.optimize(optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!,
-                     x0, method=:newton, iterations=max_iters,
-                     xtol=xtol_rel, ftol=ftol_abs)
+    d = Optim.TwiceDifferentiableFunction(
+      optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!)
+
+    # TODO: use the Optim version after newton_tr is merged.
+    nm_result = newton_tr(d,
+                          x0,
+                          xtol = xtol_rel,
+                          ftol = ftol_abs,
+                          grtol = 1e-8,
+                          iterations = max_iters,
+                          store_trace = verbose,
+                          show_trace = false,
+                          extended_trace = verbose,
+                          initial_delta=10.0,
+                          delta_hat=1e9)
 
     iter_count = optim_obj_wrap.state.f_evals
     transform.vector_to_vp!(nm_result.minimum, mp.vp, omitted_ids);
@@ -294,13 +309,13 @@ Returns:
   - ret: The return code of optimize()
 """ ->
 function maximize_f(
-  f::Function, tiled_blob::TiledBlob, mp::ModelParams, transform::DataTransform,
+  f::Function, tiled_blob::TiledBlob, mp::ModelParams,
+  transform::DataTransform,
   lbs::Union(Float64, Vector{Float64}), ubs::Union(Float64, Vector{Float64});
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
-    iter_count = 0
 
     obj_wrapper = ObjectiveWrapperFunctions(
       mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
@@ -310,6 +325,11 @@ function maximize_f(
     for i in 1:length(x0)
         if !(lbs[i] <= x0[i] <= ubs[i])
             println("coordinate $i falsity: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
+            if x0[i] >= ubs[i]
+              x0[i] = ubs[i] - 1e-6
+            elseif x0[i] <= lbs[i]
+              x0[i] = lbs[i] + 1e-6
+            end
         end
     end
     lower_bounds!(opt, lbs)
@@ -319,9 +339,9 @@ function maximize_f(
     ftol_abs!(opt, ftol_abs)
     (max_f, max_x, ret) = optimize(opt, x0)
 
-    println("got $max_f at $max_x after $iter_count iters (returned $ret)\n")
-    iter_count, max_f, max_x, ret
+    obj_wrapper.state.f_evals, max_f, max_x, ret
 end
+
 
 function maximize_f(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams, transform::DataTransform;

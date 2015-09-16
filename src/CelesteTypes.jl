@@ -28,11 +28,10 @@ using Util
 using SloanDigitalSkySurvey.PSF.RawPSFComponents
 
 import Base.convert
-import FITSIO
 import Distributions
-import WCSLIB
+import FITSIO
 import ForwardDiff
-import WCS
+import WCSLIB
 
 import Base.length
 
@@ -100,7 +99,8 @@ function get_galaxy_prototypes()
         1.39976817e-01, 4.60962500e-01, 1.50159566e+00]
 
 	# Adjustments to the effective radius hard-coded above.
-	# (The effective radius is the distance from the center containing half the light.)
+	# (The effective radius is the distance from the center containing half
+  # the light.)
 	effective_radii = [1.078031, 0.928896]
 	dev_var /= effective_radii[1]^2
 	exp_var /= effective_radii[2]^2
@@ -183,17 +183,20 @@ type Image
     raw_psf_comp::RawPSFComponents
 end
 
-# Initialization for an image with noise and background parameters that are constant
-# across the image.
+# Initialization for an image with noise and background parameters that are
+# constant across the image.
 Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
       epsilon::Float64, iota::Float64, psf::Vector{PsfComponent},
       run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
-    empty_psf_comp = RawPSFComponents(Array(Float64, 0, 0), -1, -1, Array(Float64, 0, 0, 0))
-    Image(H, W, pixels, b, wcs, epsilon, iota, psf, run_num, camcol_num, field_num,
+    empty_psf_comp =
+      RawPSFComponents(Array(Float64, 0, 0), -1, -1, Array(Float64, 0, 0, 0))
+    Image(H, W, pixels, b, wcs, epsilon, iota, psf,
+          run_num, camcol_num, field_num,
           true, Array(Float64, 0, 0), Array(Float64, 0), empty_psf_comp)
 end
 
-# Initialization for an image with noise and background parameters that vary across the image.
+# Initialization for an image with noise and background parameters that vary
+# across the image.
 Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
       epsilon_mat::Array{Float64, 1}, iota_vec::Array{Float64, 2},
        psf::Vector{PsfComponent}, raw_psf_comp::RawPSFComponents,
@@ -274,8 +277,24 @@ Args:
   - tile_width: The width and height of a tile in pixels
 """ ->
 ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
-  b = img.b
   h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
+  ImageTile(img, h_range, w_range; hh=hh, ww=ww)
+end
+
+@doc """
+Constructs an image tile from specific image pixels.
+
+Args:
+  - img: The Image to be broken into tiles
+  - h_range: A UnitRange for the h pixels
+  - w_range: A UnitRange for the w pixels
+  - hh: Optional h index in tile coordinates
+  - ww: Optional w index in tile coordinates
+""" ->
+ImageTile(img::Image,
+          h_range::UnitRange{Int64}, w_range::UnitRange{Int64};
+          hh::Int64=1, ww::Int64=1) = begin
+  b = img.b
   h_width = maximum(h_range) - minimum(h_range) + 1
   w_width = maximum(w_range) - minimum(w_range) + 1
   pixels = img.pixels[h_range, w_range]
@@ -289,8 +308,10 @@ ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
   end
 
   ImageTile(hh, ww, b, h_range, w_range, h_width, w_width, pixels,
-            img.constant_background, img.epsilon, epsilon_mat, img.iota, iota_vec)
+            img.constant_background, img.epsilon, epsilon_mat,
+            img.iota, iota_vec)
 end
+
 
 typealias TiledImage Array{ImageTile, 2}
 typealias TiledBlob Vector{TiledImage}
@@ -305,22 +326,17 @@ Attributes:
   - radius: The width of the influence of the object in world coordinates
 
   - psf: The point spread function in this region of the sky
-  - wcs_jacobian: The jacobian of the WCS transform in this region of the sky for each band
+  - wcs_jacobian: The jacobian of the WCS transform in this region of the
+                  sky for each band
   - pixel_center: The pixel location of center in each band.
 """ ->
-type SkyPatch
+immutable SkyPatch
     center::Vector{Float64}
     radius::Float64
 
     psf::Vector{PsfComponent}
     wcs_jacobian::Matrix{Float64}
     pixel_center::Vector{Float64}
-end
-
-SkyPatch(center::Vector{Float64}, radius::Float64) = begin
-    # TODO: Don't allow this default initialization when this is initialized once
-    # per image.
-    SkyPatch(center, radius, PsfComponent[], eye(Float64, 2), zeros(Float64, 2))
 end
 
 
@@ -357,8 +373,10 @@ abstract ParamSet
 # c1      = C_s means (formerly beta)
 # c2      = C_s variances (formerly lambda)
 # a       = probability of being a star or galaxy.  a[1] is the
-#           probability of being a star and a[2] of being a galaxy. (formerly chi)
-# k       = {D|D-1}xIa matrix of color prior component indicators. (formerly kappa)
+#           probability of being a star and a[2] of being a galaxy.
+#           (formerly chi)
+# k       = {D|D-1}xIa matrix of color prior component indicators.
+#           (formerly kappa)
 
 # Parameters for location and galaxy shape.
 ue_params = ((:u, 2), (:e_dev, 1), (:e_axis, 1), (:e_angle, 1),
@@ -378,7 +396,8 @@ const param_specs = [
     (:GalaxyPosParams, :gal_ids, ue_params),
     (:BrightnessParams, :bids, rc_params1),
     (:CanonicalParams, :ids, tuple(ue_params..., rc_params2..., ak_simplex...)),
-    (:UnconstrainedParams, :ids_free, tuple(ue_params..., rc_params2..., ak_free...)),
+    (:UnconstrainedParams, :ids_free,
+     tuple(ue_params..., rc_params2..., ak_free...)),
 ]
 
 for (pn, ids_name, pf) in param_specs
@@ -477,26 +496,27 @@ type ModelParams{NumType <: Number}
 
     S::Int64
 
-    ModelParams(vp, pp, patches, tile_width) = begin
+    ModelParams(vp, pp, tile_width) = begin
         # There must be one patch for each celestial object.
         S = length(vp)
         all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)
-
-        @assert size(patches) == (length(vp), 5)
+        patches = Array(SkyPatch, S, 5)
         new(vp, pp, patches, tile_width, all_tile_sources, S)
     end
 end
 
 # TODO: Is this second initialization function necessary?
 ModelParams{NumType <: Number}(
-  vp::VariationalParams{NumType}, pp::PriorParams,
-  patches::Array{SkyPatch, 2}, tile_width::Int64) = begin
-    ModelParams{NumType}(vp, pp, patches, tile_width)
+  vp::VariationalParams{NumType}, pp::PriorParams, tile_width::Int64) = begin
+    ModelParams{NumType}(vp, pp, tile_width)
 end
 
 function convert(::Type{ModelParams{ForwardDiff.Dual}}, mp::ModelParams{Float64})
-    ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
-                mp.pp, mp.patches, mp.tile_width)
+    mp_dual =
+      ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
+                  mp.pp, mp.tile_width)
+    mp_dual.patches = mp.patches
+    mp_dual
 end
 
 @doc """

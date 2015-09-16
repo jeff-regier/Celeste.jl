@@ -44,9 +44,9 @@ function free_vp_to_vector{NumType <: Number}(vp::FreeVariationalParams{NumType}
 end
 
 
-function vector_to_free_vp!{NumType <: Number}(xs::Vector{NumType},
-                                               vp_free::FreeVariationalParams{NumType},
-                                               omitted_ids::Vector{Int64})
+function vector_to_free_vp!{NumType <: Number}(
+    xs::Vector{NumType}, vp_free::FreeVariationalParams{NumType},
+    omitted_ids::Vector{Int64})
     # xs: A vector created from free variational parameters.
     # free_vp: Free variational parameters.  Only the ids not in omitted_ids
     #   will be updated.
@@ -85,7 +85,8 @@ function unbox_parameter{NumType <: Number}(
     # exp and the logit functions handle infinities correctly, so
     # parameters can equal the bounds.
     @assert(all(lower_bound .<= real(param) .<= upper_bound),
-            "unbox_parameter: param outside bounds: $param ($lower_bound, $upper_bound)")
+            string("unbox_parameter: param outside bounds: ",
+                   "$param ($lower_bound, $upper_bound)"))
 
     if positive_constraint
       return log(param - lower_bound) .* scale
@@ -108,7 +109,8 @@ function box_parameter{NumType <: Number}(
   if positive_constraint
     return (exp(free_param ./ scale) + lower_bound)
   else
-    return Util.logit(free_param ./ scale) .* (upper_bound - lower_bound) + lower_bound
+    return Util.logit(free_param ./ scale) .*
+           (upper_bound - lower_bound) + lower_bound
   end
 end
 
@@ -128,12 +130,14 @@ function unbox_derivative{NumType <: Number}(
 
     positive_constraint = any(upper_bound .== Inf)
     if positive_constraint && !all(upper_bound .== Inf)
-      error("unbox_derivative: Some but not all upper bounds are Inf: $upper_bound")
+      error(string("unbox_derivative: Some but not all upper bounds are Inf: ",
+                   "$upper_bound"))
     end
 
     # Strict inequality is not required for derivatives.
     @assert(all(lower_bound .<= real(param) .<= upper_bound),
-            "unbox_derivative: param outside bounds: $param ($lower_bound, $upper_bound)")
+            string("unbox_derivative: param outside bounds: ",
+                   "$param ($lower_bound, $upper_bound)"))
 
     if positive_constraint
       return deriv .* (param - lower_bound) ./ scale
@@ -216,14 +220,17 @@ function unbox_param_derivative{NumType <: Number}(
 
   this_k = collect(vp[ids.k[1, :]])
   d_free[collect(ids_free.k[1, :])] =
-      (d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])]) .* this_k .* (1.0 - this_k)
+      (d[collect(ids.k[1, :])] -
+       d[collect(ids.k[2, :])]) .* this_k .* (1.0 - this_k)
   d_free[collect(ids_free.k[1, :])] =
-    unbox_derivative(collect(vp[ids.k[1, :]]), d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])],
+    unbox_derivative(collect(vp[ids.k[1, :]]),
+                     d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])],
                      simplex_min, 1.0 - simplex_min, 1.0)
 
   for (param, limits) in bounds
       d_free[ids_free.(param)] =
-        unbox_derivative(vp[ids.(param)], d[ids.(param)], limits[1], limits[2], limits[3])
+        unbox_derivative(vp[ids.(param)], d[ids.(param)],
+                         limits[1], limits[2], limits[3])
   end
 
   d_free
@@ -263,17 +270,19 @@ end
 Functions to move between a single source's variational parameters and a
 transformation of the data for optimization.
 
-to_vp: A function that takes transformed parameters and returns variational parameters
-from_vp: A function that takes variational parameters and returned transformed parameters
-to_vp!: A function that takes (transformed paramters, variational parameters) and updates
-  the variational parameters in place
-from_vp!: A function that takes (variational paramters, transformed parameters) and updates
-  the transformed parameters in place
+to_vp: A function that takes transformed parameters and returns
+       variational parameters
+from_vp: A function that takes variational parameters and returned
+         transformed parameters
+to_vp!: A function that takes (transformed paramters, variational parameters)
+        and updates the variational parameters in place
+from_vp!: A function that takes (variational paramters, transformed parameters)
+          and updates the transformed parameters in place
 ...
-transform_sensitive_float: A function that takes (sensitive float, model parameters)
-  where the sensitive float contains partial derivatives with respect to the
-  variational parameters and returns a sensitive float with total derivatives with
-  respect to the transformed parameters. """ ->
+transform_sensitive_float: A function that takes (sensitive float, model
+  parameters) where the sensitive float contains partial derivatives with
+  respect to the variational parameters and returns a sensitive float with total
+  derivatives with respect to the transformed parameters. """ ->
 type DataTransform
 	to_vp::Function
 	from_vp::Function
