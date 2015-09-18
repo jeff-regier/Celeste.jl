@@ -64,45 +64,60 @@ else
     #objid = "1237662226208063541" # A bright star with bad pixels --
     # I think this has a neighbor, too.
 
-
     objid = "1237662226208063499" # A bright star
     #objid = "1237662226208063576" # A galaxy
     objid = "1237662226208063565" # A brightish star but with good pixels.
-    obj_row = original_cat_df[:objid] .== objid;
-    obj_loc = Float64[original_cat_df[obj_row, :ra][1],
-                      original_cat_df[obj_row, :dec][1]]
-    obj_row_num = find(obj_row)[1]
 
-    # Make a tile for the object
-    tile_width = 15
-    tiled_blob =
-      Images.crop_blob_to_location(original_blob, tile_width, obj_loc);
     mp_original_all =
       ModelInit.cat_init(original_cat_entries, tile_width=tile_width);
     ModelInit.initialize_tiles_and_patches!(
       tiled_blob, original_blob, mp_original_all,
       patch_radius=1e-5, fit_psf=false);
 
-    # Make sure we only got one sources
-    for b=1:5
-      tile_sources =
-        Images.local_sources(
-          tiled_blob[b][1], mp_original_all.patches[:,b], original_blob[b].wcs)
-      @assert(length(tile_sources) == 1, "$tile_sources")
-      PyPlot.matshow(tiled_blob[b][1].pixels);
-      PyPlot.title(b)
+    function CountSources(tiled_blob::TiledBlob)
+      num_sources = 0
+      for b=1:5
+        tile_sources =
+          Images.local_sources(
+            tiled_blob[b][1], mp_original_all.patches[:,b], original_blob[b].wcs)
+        num_sources = max(num_sources, length(tile_sources))
+      end
+      num_sources
     end
-    PyPlot.close("all")
-    mp_original =
-      ModelInit.cat_init([original_cat_entries[obj_row_num]],
-                         tile_width=tile_width);
-    transform = Transform.get_mp_transform(mp_original);
-    ModelInit.initialize_tiles_and_patches!(
-      tiled_blob, original_blob, mp_original);
+
+    function get_object_tile(objid::ASCIIString; tile_width=20)
+      obj_row = original_cat_df[:objid] .== objid;
+      obj_loc = Float64[original_cat_df[obj_row, :ra][1],
+                        original_cat_df[obj_row, :dec][1]]
+      obj_row_num = find(obj_row)[1]
+
+      # Make a tile for the object
+      tiled_blob =
+        Images.crop_blob_to_location(original_blob, tile_width, obj_loc);
+      mp_original =
+        ModelInit.cat_init([original_cat_entries[obj_row_num]],
+                           tile_width=tile_width);
+      transform = Transform.get_mp_transform(mp_original);
+      ModelInit.initialize_tiles_and_patches!(
+        tiled_blob, original_blob, mp_original);
+      num_sources = CountSources(tiled_blob)
+
+      tiled_blob, mp_original, transform, num_sources
+    end
+
+    tiled_blob, mp_original, transform, num_sources = get_object_tile(objid);
+    @assert(num_sources == 1, "$tile_sources")
+
+    # Make sure we only got one source
+
+    # PyPlot.matshow(tiled_blob[b][1].pixels);
+    # PyPlot.title(b)
+    # PyPlot.close("all")
 end
 
+
 ##############
-# Get a BFGS fit for comparison
+# Get a BFGS fit
 function bfgs_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
   mp_bfgs = deepcopy(mp_original);
   iter_count, max_f, max_x, ret =
@@ -110,16 +125,14 @@ function bfgs_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
                             omitted_ids=omitted_ids, verbose=true);
   mp_bfgs, iter_count, max_f
 end
-mp_bfgs_both_optim, bfgs_iter_count, max_f = bfgs_fit_params(mp_original, Int64[])
-bfgs_v = ElboDeriv.elbo(tiled_blob, mp_bfgs_both_optim).v;
-# 1014 iters
+
 
 ####################
-# Newton's method with our own hessian regularization
+# Newton's method
 
 # For newton's method.  It doesn't actually converge, so this
 # controls the number of steps.
-max_iters = 30;
+max_iters = 10;
 
 #include("../Optim.jl/src/Optim.jl"); include("src/OptimizeElbo.jl")
 function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
@@ -131,6 +144,36 @@ function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
       hess_reg=0.0)
   mp_optim, iter_count, max_f, ret
 end
+
+
+
+########################
+# Run NM on all objects
+
+nm_all_results = Dict()
+for objid in original_cat_df[:objid]
+  println("...... $objid")
+  tiled_blob, mp_original, transform, num_sources = get_object_tile(objid);
+  if num_sources > 1
+    println(num_sources, ", skipping")
+    continue
+  end
+  println("fitting $objid")
+  mp_optim, iter_count, max_f, ret = newton_fit_params(mp_original, Int64[])
+  nm_all_results[objid] = (mp_original, mp_optim, iter_count, max_f, ret)
+end
+
+
+
+
+
+#####################
+# Older code
+
+mp_bfgs_both_optim, bfgs_iter_count, max_f = bfgs_fit_params(mp_original, Int64[])
+bfgs_v = ElboDeriv.elbo(tiled_blob, mp_bfgs_both_optim).v;
+# 1014 iters
+
 
 nm_results_both_optim, nm_iter_count, max_f, nm_ret =
     newton_fit_params(mp_original, Int64[]);
