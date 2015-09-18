@@ -235,10 +235,13 @@ function crop_blob_to_location(
     for b=1:5
         # Get the pixels that are near enough to the wcs_center.
         pix_center = WCS.world_to_pixel(blob[b].wcs, wcs_center)
-        sub_rows_h =
-          int(floor(pix_center[1] - width)):int(ceil(pix_center[1] + width))
-        sub_rows_w =
-          int(floor(pix_center[2] - width)):int(ceil(pix_center[2] + width))
+        h_min = max(int(floor(pix_center[1] - width)), 1)
+        h_max = min(int(ceil(pix_center[1] + width)), blob[b].H)
+        sub_rows_h = h_min:h_max
+
+        w_min = max(int(floor(pix_center[2] - width)), 1)
+        w_max = min(int(ceil(pix_center[2] + width)), blob[b].W)
+        sub_rows_w = w_min:w_max
         tiled_blob[b] = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
     end
     tiled_blob

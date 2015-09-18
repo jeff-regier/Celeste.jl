@@ -153,6 +153,8 @@ end
 
 # This is out of bounds
 objid = "1237662226208063581"
+tiled_blob, mp_original, transform, sources = get_object_tile(objid);
+
 
 nm_all_results = Dict()
 for objid in original_cat_df[:objid]
