@@ -363,14 +363,15 @@ A fast function to determine which sources might belong to which tiles.
 
 Args:
   - tiles: A TiledImage
-  - mp: ModelParams (with its patches already defined)
+  - patches: A vector of patches (e.g. for a particular band)
 
 Returns:
   - An array (over tiles) of a vector of candidate
     source patches.  If a patch is a candidate, it may be within the patch radius
     of a point in the tile, though it might not.
 """ ->
-function local_source_candidates(tiles::TiledImage, patches::Vector{SkyPatch})
+function local_source_candidates(
+    tiles::TiledImage, patches::Vector{SkyPatch})
 
   # Get the largest size of the pixel ellipse defined by the patch
   # world coordinate circle.

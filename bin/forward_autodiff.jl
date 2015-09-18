@@ -68,10 +68,12 @@ else
     #objid = "1237662226208063576" # A galaxy
     objid = "1237662226208063565" # A brightish star but with good pixels.
 
+    tile_width = 30
+
     mp_original_all =
       ModelInit.cat_init(original_cat_entries, tile_width=tile_width);
-    ModelInit.initialize_tiles_and_patches!(
-      tiled_blob, original_blob, mp_original_all,
+    tiled_blob = ModelInit.initialize_tiles_and_patches!(
+      original_blob, mp_original_all,
       patch_radius=1e-5, fit_psf=false);
 
     function CountSources(tiled_blob::TiledBlob)
@@ -85,7 +87,7 @@ else
       num_sources
     end
 
-    function get_object_tile(objid::ASCIIString; tile_width=20)
+    function get_object_tile(objid::ASCIIString; tile_width=30)
       obj_row = original_cat_df[:objid] .== objid;
       obj_loc = Float64[original_cat_df[obj_row, :ra][1],
                         original_cat_df[obj_row, :dec][1]]
@@ -152,7 +154,7 @@ end
 
 nm_all_results = Dict()
 for objid in original_cat_df[:objid]
-  println("...... $objid")
+  println("\n\n\n\n...... FITTING $objid")
   tiled_blob, mp_original, transform, num_sources = get_object_tile(objid);
   if num_sources > 1
     println(num_sources, ", skipping")
@@ -163,8 +165,62 @@ for objid in original_cat_df[:objid]
   nm_all_results[objid] = (mp_original, mp_optim, iter_count, max_f, ret)
 end
 
+objid = collect(keys(nm_all_results))[5]
+result = nm_all_results[objid];
+#for (objid, result) in nm_all_results
+  mp_original = result[1]
+  mp_optim = result[2]
+  println("\n\n\n\n", objid)
+  println(original_cat_df[original_cat_df[:objid] .== objid, obj_cols])
+  print_params(result[1], result[2])
+  println(ElboDeriv.get_brightness(result[1])[1])
+  println(ElboDeriv.get_brightness(result[2])[1])
 
 
+  tiled_blob, mp_original, transform, num_sources = get_object_tile(objid);
+  for b=1:5
+    tile = tiled_blob[b][1,1];
+    pred_pix = ElboDeriv.tile_predicted_image(tile, mp_original, b);
+
+    pix_loc = WCS.world_to_pixel(original_blob[b].wcs, mp_original.vp[1][ids.u])
+    tile_loc = pix_loc - [minimum(tile.h_range) - 1, minimum(tile.w_range) - 1]
+
+    PyPlot.figure()
+    PyPlot.subplot(121)
+    PyPlot.imshow(pred_pix)
+    PyPlot.plot(tile_loc[1], tile_loc[2], "r+")
+    PyPlot.title("Predicted band $b")
+
+    PyPlot.subplot(122)
+    PyPlot.imshow(tiled_blob[b][1,1].pixels)
+    PyPlot.plot(tile_loc[1], tile_loc[2], "r+")
+    PyPlot.title("Actual band $b")
+  end
+
+
+#PyPlot.close("all")
+#end
+
+using ElboDeriv.load_bvn_mixtures
+using ElboDeriv.SourceBrightness
+using ElboDeriv.tile_predicted_image
+
+function tile_predicted_image(tile::ImageTile, mp::ModelParams, b::Int64)
+  num_type = typeof(mp.vp[1][1])
+  star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
+  sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
+
+  accum = zero_sensitive_float(CanonicalParams, num_type, mp.S)
+  tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+
+  ElboDeriv.tile_predicted_image(tile,
+          tile_sources,
+          mp,
+          sbs,
+          star_mcs,
+          gal_mcs,
+          accum)
+end
 
 
 #####################
