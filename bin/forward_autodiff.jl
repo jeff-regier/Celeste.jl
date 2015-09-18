@@ -151,6 +151,9 @@ end
 ########################
 # Run NM on all isolated objects
 
+# This is out of bounds
+objid = "1237662226208063581"
+
 nm_all_results = Dict()
 for objid in original_cat_df[:objid]
   println("\n\n\n\n...... FITTING $objid")
@@ -160,14 +163,16 @@ for objid in original_cat_df[:objid]
     continue
   end
   println("fitting $objid")
+  println(original_cat_df[original_cat_df[:objid] .== objid, obj_cols])
+
   mp_optim, iter_count, max_f, ret = newton_fit_params(mp_original, Int64[])
   nm_all_results[objid] = (mp_original, mp_optim, iter_count, max_f, ret)
 end
 
 
 for (objid, result) in nm_all_results
-  mp_original = result[1]
-  mp_optim = result[2]
+  mp_original = result[1];
+  mp_optim = result[2];
   println("\n\n\n\n", objid)
   println(original_cat_df[original_cat_df[:objid] .== objid, obj_cols])
   print_params(result[1], result[2])
@@ -177,7 +182,7 @@ for (objid, result) in nm_all_results
 end
 
 
-objid = collect(keys(nm_all_results))[1]
+objid = collect(keys(nm_all_results))[6]
 result = nm_all_results[objid];
 tiled_blob, mp_original, transform, num_sources = get_object_tile(objid);
 mp_optim = result[2];
@@ -190,43 +195,73 @@ for b=1:5
   tile_loc = pix_loc - [minimum(tile.h_range) - 1, minimum(tile.w_range) - 1]
 
   PyPlot.figure()
-  PyPlot.subplot(131)
+  plot_index = 1
+
+  PyPlot.subplot(1, 3, plot_index)
+  plot_index += 1
   PyPlot.imshow(pred_pix)
   PyPlot.plot(tile_loc[1] - 1., tile_loc[2] - 1., "r+")
   PyPlot.title("Original predicted band $b")
 
-  PyPlot.subplot(132)
+  PyPlot.subplot(1, 3, plot_index)
+  plot_index += 1
   PyPlot.imshow(fit_pred_pix)
   PyPlot.plot(tile_loc[1] - 1., tile_loc[2] - 1., "r+")
   PyPlot.title("Fit predicted band $b")
 
-  PyPlot.subplot(133)
+  PyPlot.subplot(1, 3, plot_index)
+  plot_index += 1
   PyPlot.imshow(tiled_blob[b][1,1].pixels)
   PyPlot.plot(tile_loc[1] - 1., tile_loc[2] - 1., "r+")
   PyPlot.title("Actual band $b")
 end
 #PyPlot.close("all")
 
-using ElboDeriv.load_bvn_mixtures
-using ElboDeriv.SourceBrightness
-using ElboDeriv.tile_predicted_image
 
-function tile_predicted_image(tile::ImageTile, mp::ModelParams, b::Int64)
-  num_type = typeof(mp.vp[1][1])
-  star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
-  sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-  accum = zero_sensitive_float(CanonicalParams, num_type, mp.S)
-  tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+# Show the original image near an object
+pixel_width = 10
+pixel_crop = 1000
 
-  ElboDeriv.tile_predicted_image(tile,
-          tile_sources,
-          mp,
-          sbs,
-          star_mcs,
-          gal_mcs,
-          accum)
+obj_row = original_cat_df[:objid] .== objid;
+obj_loc = Float64[original_cat_df[obj_row, :ra][1],
+                  original_cat_df[obj_row, :dec][1]]
+obj_pix_loc = [WCS.world_to_pixel(original_blob[b].wcs, obj_loc) for b=1:5]
+obj_row_num = find(obj_row)[1]
+
+original_cat_df[obj_row, obj_cols]
+PyPlot.figure()
+for b=1:5
+  h_range =
+    int(obj_pix_loc[b][1] - pixel_width):int(obj_pix_loc[b][1] + pixel_width)
+  w_range =
+    int(obj_pix_loc[b][2] - pixel_width):int(obj_pix_loc[b][2] + pixel_width)
+
+  pixels = original_blob[b].pixels[h_range, w_range]
+  pixels[pixels .> pixel_crop] = pixel_crop
+
+  PyPlot.subplot(150 + b)
+  PyPlot.imshow(pixels)
+  PyPlot.plot(
+    obj_pix_loc[b][1] - minimum(h_range),
+    obj_pix_loc[b][2] - minimum(w_range), "r+")
+  PyPlot.title("Band $b")
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 #####################
