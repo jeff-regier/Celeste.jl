@@ -74,23 +74,24 @@ else
       ModelInit.cat_init(original_cat_entries, tile_width=tile_width);
     tiled_blob = ModelInit.initialize_tiles_and_patches!(
       original_blob, mp_original_all,
-      patch_radius=1e-5, fit_psf=false);
+      patch_radius=1e-3, fit_psf=false);
 
     function CountSources(tiled_blob::TiledBlob)
-      num_sources = 0
+      sources = Int64[]
       for b=1:5
         tile_sources =
           Images.local_sources(
-            tiled_blob[b][1], mp_original_all.patches[:,b], original_blob[b].wcs)
-        num_sources = max(num_sources, length(tile_sources))
+            tiled_blob[b][1, 1], mp_original_all.patches[:,b], original_blob[b].wcs)
+        sources = union(sources, tile_sources)
       end
-      num_sources
+      sources
     end
 
     function get_object_tile(objid::ASCIIString; tile_width=30)
       obj_row = original_cat_df[:objid] .== objid;
       obj_loc = Float64[original_cat_df[obj_row, :ra][1],
                         original_cat_df[obj_row, :dec][1]]
+      obj_pix_loc = [WCS.world_to_pixel(original_blob[b].wcs, obj_loc) for b=1:5]
       obj_row_num = find(obj_row)[1]
 
       # Make a tile for the object
@@ -102,19 +103,17 @@ else
       transform = Transform.get_mp_transform(mp_original);
       ModelInit.initialize_tiles_and_patches!(
         tiled_blob, original_blob, mp_original);
-      num_sources = CountSources(tiled_blob)
+      sources = CountSources(tiled_blob)
 
-      tiled_blob, mp_original, transform, num_sources
+      tiled_blob, mp_original, transform, sources
     end
 
-    tiled_blob, mp_original, transform, num_sources = get_object_tile(objid);
-    @assert(num_sources == 1, "$tile_sources")
-
     # Make sure we only got one source
+    tiled_blob, mp_original, transform, sources = get_object_tile(objid);
+    @assert(length(sources) == 1, "$tile_sources")
+    @assert(sources == [obj_row_num], "$sources")
 
-    # PyPlot.matshow(tiled_blob[b][1].pixels);
-    # PyPlot.title(b)
-    # PyPlot.close("all")
+    [ tiled_blob[b][1,1].h_range for b=1:5]
 end
 
 
@@ -150,14 +149,14 @@ end
 
 
 ########################
-# Run NM on all objects
+# Run NM on all isolated objects
 
 nm_all_results = Dict()
 for objid in original_cat_df[:objid]
   println("\n\n\n\n...... FITTING $objid")
-  tiled_blob, mp_original, transform, num_sources = get_object_tile(objid);
-  if num_sources > 1
-    println(num_sources, ", skipping")
+  tiled_blob, mp_original, transform, sources = get_object_tile(objid);
+  if length(sources) > 1
+    println(sources, ", skipping because of extra sources")
     continue
   end
   println("fitting $objid")
@@ -165,41 +164,48 @@ for objid in original_cat_df[:objid]
   nm_all_results[objid] = (mp_original, mp_optim, iter_count, max_f, ret)
 end
 
-objid = collect(keys(nm_all_results))[5]
-result = nm_all_results[objid];
-#for (objid, result) in nm_all_results
+
+for (objid, result) in nm_all_results
   mp_original = result[1]
   mp_optim = result[2]
   println("\n\n\n\n", objid)
   println(original_cat_df[original_cat_df[:objid] .== objid, obj_cols])
   print_params(result[1], result[2])
-  println(ElboDeriv.get_brightness(result[1])[1])
-  println(ElboDeriv.get_brightness(result[2])[1])
+
+  println("Original brighntess:\n", ElboDeriv.get_brightness(mp_original)[1])
+  println("Fit brightness:\n", ElboDeriv.get_brightness(mp_optim)[1])
+end
 
 
-  tiled_blob, mp_original, transform, num_sources = get_object_tile(objid);
-  for b=1:5
-    tile = tiled_blob[b][1,1];
-    pred_pix = ElboDeriv.tile_predicted_image(tile, mp_original, b);
+objid = collect(keys(nm_all_results))[1]
+result = nm_all_results[objid];
+tiled_blob, mp_original, transform, num_sources = get_object_tile(objid);
+mp_optim = result[2];
+for b=1:5
+  tile = tiled_blob[b][1,1];
+  pred_pix = ElboDeriv.tile_predicted_image(tile, mp_original, b);
+  fit_pred_pix = ElboDeriv.tile_predicted_image(tile, mp_optim, b);
 
-    pix_loc = WCS.world_to_pixel(original_blob[b].wcs, mp_original.vp[1][ids.u])
-    tile_loc = pix_loc - [minimum(tile.h_range) - 1, minimum(tile.w_range) - 1]
+  pix_loc = WCS.world_to_pixel(original_blob[b].wcs, mp_original.vp[1][ids.u])
+  tile_loc = pix_loc - [minimum(tile.h_range) - 1, minimum(tile.w_range) - 1]
 
-    PyPlot.figure()
-    PyPlot.subplot(121)
-    PyPlot.imshow(pred_pix)
-    PyPlot.plot(tile_loc[1], tile_loc[2], "r+")
-    PyPlot.title("Predicted band $b")
+  PyPlot.figure()
+  PyPlot.subplot(131)
+  PyPlot.imshow(pred_pix)
+  PyPlot.plot(tile_loc[1] - 1., tile_loc[2] - 1., "r+")
+  PyPlot.title("Original predicted band $b")
 
-    PyPlot.subplot(122)
-    PyPlot.imshow(tiled_blob[b][1,1].pixels)
-    PyPlot.plot(tile_loc[1], tile_loc[2], "r+")
-    PyPlot.title("Actual band $b")
-  end
+  PyPlot.subplot(132)
+  PyPlot.imshow(fit_pred_pix)
+  PyPlot.plot(tile_loc[1] - 1., tile_loc[2] - 1., "r+")
+  PyPlot.title("Fit predicted band $b")
 
-
+  PyPlot.subplot(133)
+  PyPlot.imshow(tiled_blob[b][1,1].pixels)
+  PyPlot.plot(tile_loc[1] - 1., tile_loc[2] - 1., "r+")
+  PyPlot.title("Actual band $b")
+end
 #PyPlot.close("all")
-#end
 
 using ElboDeriv.load_bvn_mixtures
 using ElboDeriv.SourceBrightness
