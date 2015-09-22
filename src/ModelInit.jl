@@ -5,7 +5,7 @@ module ModelInit
 
 VERSION < v"0.4.0-dev" && using Docile
 
-export sample_prior, cat_init, peak_init
+export sample_prior, peak_init
 
 export initialize_tiles_and_patches!
 
@@ -90,7 +90,7 @@ function init_source(ce::CatalogEntry)
 
     ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.015), 0.985)
     ret[ids.e_angle] = ce.gal_angle
-    ret[ids.e_scale] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
+    ret[ids.e_scale] = ce.is_star ? 0.2 : min(max(ce.gal_scale, 0.2), 69.)
 
     ret
 end
@@ -159,36 +159,75 @@ function peak_starts(blob::Blob)
 end
 
 
-function peak_init(blob::Blob; tile_width::Int64=typemax(Int64))
+function peak_init(blob::Blob)
     v1 = peak_starts(blob)
     S = size(v1)[2]
     vp = [init_source(v1[:, s]) for s in 1:S]
     twice_radius = float(max(blob[1].H, blob[1].W))
-    ModelParams(vp, sample_prior(), tile_width)
+    ModelParams(vp, sample_prior())
 end
 
-#=
-function min_patch_radius(ce::CatalogEntry, blob::Blob)
-    max_var = maximum([maximum([maximum(pc.tauBar) for pc in img.psf])
-                    for img in blob])
-    if !ce.is_star
-        XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
-        XiXi_max = maximum(XiXi)
-        max_var += maximum([maximum([gc.nuBar * XiXi_max
-            for gc in galaxy_prototypes[i]]) for i in 1:2])
+
+
+#############################
+# Set patch sizes using the catalog.
+
+function get_psf_width(psf::Array{PsfComponent}; width_scale=1.0)
+  # A heuristic measure of the PSF width based on an anology
+  # with it being a mixture of normals.  Note that it is not an actual
+  # mixture of normals, and in particular that sum(alphaBar) \ne 1.
+
+  # The PSF is not necessarily centered at (0, 0), but we want a measure
+  # of its maximal width around (0, 0), not around its center.
+  # Approximate this by finding the covariance of a point randomly drawn
+  # from a mixture of gaussians.
+  alpha_norm = sum([ psf_comp.alphaBar for psf_comp in psf ])
+  cov_est = zeros(Float64, 2, 2)
+  for psf_comp in psf
+    cov_est +=
+      psf_comp.alphaBar * (psf_comp.xiBar * psf_comp.xiBar' + psf_comp.tauBar) /
+      alpha_norm
+  end
+
+  # Return the twice the sd of the most spread direction, scaled by the total
+  # mass in the PSF.
+  width_scale * sqrt(eigs(cov_est; nev=1)[1][1]) * alpha_norm
+end
+
+
+@doc """
+Choose a reasonable patch radius based on the catalog.
+""" ->
+function choose_patch_radius(
+  pixel_center::Vector{Float64}, ce::CatalogEntry,
+  psf::Array{PsfComponent}, img::Image; width_scale=1.0)
+
+    psf_width = get_psf_width(psf, width_scale=width_scale)
+
+    # The galaxy scale is the point with half the light -- if the light
+    # were entirely in a univariate normal, this would be at 0.67 standard
+    # deviations.  We are being a bit conservative here.
+    obj_width =
+      ce.is_star ? psf_width: width_scale * ce.gal_scale / 0.67 + psf_width
+
+    if img.constant_background
+      epsilon = img.epsilon
+    else
+      # Get the average sky noise in a rectangle of the width of the psf.
+      h_range = (pixel_center[1] - obj_width):(pixel_center[1] + obj_width)
+      w_range = (pixel_center[2] - obj_width):(pixel_center[2] + obj_width)
+      epsilon = mean(img.epsilon_mat[h_range, w_range])
     end
+    flux = ce.is_star ? ce.star_fluxes[img.b] : ce.gal_fluxes[img.b]
 
-    sky = [img.epsilon for img in blob]
-    fluxes = ce.is_star ? : ce.star_fluxes : ce.gal_fluxes
-    thresholds = fluxes ./ (20 * sky)  # 5% of sky
-    pdf_target = threshold / intensity
-    # ignore xiBar for now
-    max_var = maximum(diag(pc.sigmaBar))
-    rhs = log(pdf_target) + log(2pi) + 0.5logdet(pc.sigmaBar)
-    x = sqrt(-2 * max_var * rhs)
-    println("patch radius requirement: $x")
+    # For the worst-case scenario, find where a 1d pdf would take the
+    # value of 5% of the sky noise when the standard deviation is obj_width.
+    pdf_target = epsilon / (20 * flux)  # 5% of sky
+    rhs = log(pdf_target) + 0.5 * log(2pi) + log(obj_width)
+    radius_req = sqrt(-2 * (obj_width ^ 2) * rhs)
+    radius_req
 end
-=#
+
 
 @doc """
 Initialize a SkyPatch object at a particular location.
@@ -218,11 +257,31 @@ end
 
 
 @doc """
-Return a ModelParams object initialized from an array of catalog entries.
+Initialize a SkyPatch object for a catalog entry.
+
+Args:
+  - ce: The catalog entry for the object.
+  - img: An Image object.
+  - fit_psf: Whether to fit the psf at this location.
+
+Returns:
+  A SkyPatch object with a radius chosen based on the catalog.
 """ ->
-function cat_init(cat::Vector{CatalogEntry}; tile_width::Int64=typemax(Int64))
-    vp = [init_source(ce) for ce in cat]
-    ModelParams(vp, sample_prior(), tile_width)
+SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true) = begin
+    world_center = ce.pos
+    if fit_psf
+      psf = Images.get_source_psf(world_center, img)
+    else
+      psf = img.psf
+    end
+
+    pixel_center = WCS.world_to_pixel(img.wcs, world_center)
+    wcs_jacobian = WCS.pixel_world_jacobian(img.wcs, pixel_center)
+
+    pix_radius = choose_patch_radius(pixel_center, ce, psf, img)
+    sky_radius = Images.pixel_radius_to_world(pix_radius, wcs_jacobian)
+
+    SkyPatch(world_center, sky_radius, psf, wcs_jacobian, pixel_center)
 end
 
 
@@ -259,50 +318,115 @@ function get_tiled_image_sources(
 end
 
 
+# @doc """
+# Break the images into tiles and initialize the model parameters.
+#
+# Args:
+#   - blob: A Blob containing the images.
+#   - mp: Model parameters.
+#
+# Returns:
+#   Updates in place mp's patches and tile sources.
+#   Returns a tiled blob.
+# """ ->
+# function initialize_tiles_and_patches!(
+#     blob::Blob, mp::ModelParams, tile_width::Int64;
+#     patch_radius=Inf, fit_psf=true)
+#   tiled_blob = Images.break_blob_into_tiles(blob, tile_width)
+#   initialize_tiles_and_patches!(
+#     tiled_blob, blob, mp, patch_radius=patch_radius, fit_psf=fit_psf)
+#   tiled_blob
+# end
+#
+#
+# @doc """
+# Initialize the tiles and patches if you've already tiled your blob
+# (e.g. when you are cropping to a single object location)
+# """ ->
+# function initialize_tiles_and_patches!(
+#     tiled_blob::TiledBlob, blob::Blob, mp::ModelParams;
+#     patch_radius=Inf, fit_psf=true)
+#   # Set the model parameters
+#
+#   @assert length(tiled_blob) == length(blob)
+#   mp.patches = Array(SkyPatch, mp.S, length(blob))
+#   mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
+#
+#   for b = 1:length(blob)
+#     for s=1:mp.S
+#       mp.patches[s, b] =
+#         SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
+#     end
+#     mp.tile_sources[b] =
+#       get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
+#   end
+#
+#   tiled_blob
+# end
+
+
 @doc """
-Break the images into tiles and initialize the model parameters.
-
-Args:
-  - blob: A Blob containing the images.
-  - mp: Model parameters.
-
-Returns:
-  Updates in place mp's patches and tile sources.
-  Returns a tiled blob.
+Turn a blob and vector of catalog entries into a tiled_blob and model
+parameters that can be used with Celeste.
 """ ->
-function initialize_tiles_and_patches!(
-    blob::Blob, mp::ModelParams; patch_radius=Inf, fit_psf=true)
-  tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
-  initialize_tiles_and_patches!(
-    tiled_blob, blob, mp, patch_radius=patch_radius, fit_psf=fit_psf)
-  tiled_blob
+function initialize_celeste(
+    blob::Blob, cat::Vector{CatalogEntry};
+    tile_width::Int64=typemax(Int64), fit_psf::Bool=true,
+    patch_radius::Float64=-1., radius_from_cat::Bool=true)
+
+  tiled_blob = Images.break_blob_into_tiles(blob, tile_width)
+  mp = initialize_model_params(tiled_blob, blob,
+                               fit_psf=fit_psf, patch_radius=patch_radius,
+                               radius_from_cat=radius_from_cat)
+  tiled_blob, mp
 end
 
 
 @doc """
-Initialize the tiles and patches if you've already tiled your blob
-(e.g. when you are cropping to a single object location)
+Initilize the model params to the given catalog and tiled image.
+
+Args:
+  - tiled_blob: A TiledBlob
+  - blob: The original Blob
+  - cat: A vector of catalog entries
+  - fit_psf: Whether to give each patch its own local PSF
+  - patch_radius: If set less than Inf or if radius_from_cat=false,
+                  the radius in world coordinates of each patch.
+  - radius_from_cat: If true, choose the patch radius from the catalog.
+                     If false, use patch_radius for each patch.
 """ ->
-function initialize_tiles_and_patches!(
-    tiled_blob::TiledBlob, blob::Blob, mp::ModelParams;
-    patch_radius=Inf, fit_psf=true)
-  # Set the model parameters
+function initialize_model_params(
+    tiled_blob::TiledBlob, blob::Blob, cat::Vector{CatalogEntry};
+    fit_psf::Bool=true, patch_radius::Float64=-1., radius_from_cat::Bool=true)
 
   @assert length(tiled_blob) == length(blob)
+
+  # If patch_radius is set by the caller, don't use the radius from the catalog.
+  if patch_radius != -1.
+    radius_from_cat = false
+  end
+  if !radius_from_cat
+    @assert(patch_radius > 0.,
+            "If !radius_from_cat, you must specify a positive patch_radius.")
+  end
+  vp = [init_source(ce) for ce in cat]
+  mp = ModelParams(vp, sample_prior())
+
   mp.patches = Array(SkyPatch, mp.S, length(blob))
   mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
-
   for b = 1:length(blob)
     for s=1:mp.S
-      mp.patches[s, b] =
-        SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
+      if radius_from_cat
+        mp.patches[s, b] = SkyPatch(ce[s], blob[b], fit_psf=fit_psf)
+      else
+        mp.patches[s, b] =
+          SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
+      end
     end
     mp.tile_sources[b] =
       get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
   end
 
-  tiled_blob
 end
-
 
 end

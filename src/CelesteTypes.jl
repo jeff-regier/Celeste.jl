@@ -491,17 +491,16 @@ type ModelParams{NumType <: Number}
     vp::VariationalParams{NumType}
     pp::PriorParams
     patches::Array{SkyPatch, 2}
-    tile_width::Int64
     tile_sources::Vector{Array{Array{Int64}}}
 
     S::Int64
 
-    ModelParams(vp, pp, tile_width) = begin
+    ModelParams(vp, pp) = begin
         # There must be one patch for each celestial object.
         S = length(vp)
         all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)
         patches = Array(SkyPatch, S, 5)
-        new(vp, pp, patches, tile_width, all_tile_sources, S)
+        new(vp, pp, patches, all_tile_sources, S)
     end
 end
 
@@ -514,7 +513,7 @@ end
 function convert(::Type{ModelParams{ForwardDiff.Dual}}, mp::ModelParams{Float64})
     mp_dual =
       ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
-                  mp.pp, mp.tile_width)
+                  mp.pp)
     mp_dual.patches = mp.patches
     mp_dual
 end

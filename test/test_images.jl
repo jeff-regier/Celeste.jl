@@ -22,9 +22,9 @@ function test_blob()
   blob = Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
   cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
   cat_entries = Images.convert_catalog_to_celeste(cat_df, blob);
-  mp = ModelInit.cat_init(cat_entries);
-  tiled_blob = ModelInit.initialize_tiles_and_patches!(
-    blob, mp, patch_radius=1e-6, fit_psf=false);
+  mp, tiled_blob =
+    ModelInit.initialize_celeste(blob, cat_entries, patch_radius=1e-6,
+                                 fit_psf=false);
 
   # Just check some basic facts about the catalog.
   @test size(cat_df)[1] == 805
@@ -62,7 +62,7 @@ function test_blob()
   test_b = 3
   img = blob[test_b];
   obj_index = find(obj_rows)
-  mp = ModelInit.cat_init(cat_entries[obj_index]);
+  mp_obj = ModelInit.initialize_model_params(tiled_blob, cat_entries[obj_index]);
   pixel_loc = WCS.world_to_pixel(img.wcs, obj_loc);
   original_psf_val =
     PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
@@ -70,7 +70,7 @@ function test_blob()
   original_psf_celeste = Images.convert_gmm_to_celeste(original_psf_gmm, scale);
   fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
-  obj_psf = Images.get_source_psf(mp.vp[1][ids.u], img);
+  obj_psf = Images.get_source_psf(mp_obj.vp[1][ids.u], img);
   obj_psf_val = PSF.get_psf_at_point(obj_psf);
 
   # The fits should match exactly.
@@ -80,8 +80,8 @@ function test_blob()
   @test_approx_eq_eps(obj_psf_val[:], original_psf_val[:], 1e-2)
 
   mp_several =
-    ModelInit.cat_init([cat_entries[1], cat_entries[obj_index]]);
-  ModelInit.initialize_tiles_and_patches!(tiled_blob, blob, mp_several)
+    ModelInit.initialize_model_params(
+      tiled_blob, blob, [cat_entries[1], cat_entries[obj_index]]);
 
   # The second set of vp is the object of interest
   point_patch_psf = PSF.get_psf_at_point(mp_several.patches[2, test_b].psf);
@@ -107,8 +107,8 @@ function test_get_tiled_image_source()
   blob, mp, body, tiled_blob = gen_sample_star_dataset();
   img = blob[3];
 
-  ModelInit.initialize_tiles_and_patches!(
-    tiled_blob, blob, mp; patch_radius=1e-6)
+  mp = ModelInit.initialize_model_params(
+    tiled_blob, blob, body; patch_radius=1e-6)
 
   tiled_img = Images.break_image_into_tiles(img, 10);
   for hh in 1:size(tiled_img)[1], ww in 1:size(tiled_img)[2]
@@ -136,7 +136,7 @@ function test_local_source_candidate()
 
   # This is run by gen_n_body_dataset but put it here for safe testing in
   # case that changes.
-  ModelInit.initialize_tiles_and_patches!(tiled_blob, blob, mp);
+  ModelInit.initialize_model_params(tiled_blob, blob, body);
 
   for b=1:length(tiled_blob)
     # Get the sources by iterating over everything.

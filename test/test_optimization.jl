@@ -212,8 +212,7 @@ function test_bad_a_init()
     end
     blob = Synthetic.gen_blob(blob0, [ce,])
 
-    mp = ModelInit.cat_init([ce,])
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, mp, [ce,])
     trans = get_mp_transform(mp, loc_width=1.0);
 
     mp.vp[1][ids.a] = [ 0.5, 0.5 ]
@@ -291,8 +290,7 @@ function test_real_stamp_optimization()
         ce.pos[1] < 61 && ce.pos[2] < 61
     cat_entries = filter(inbounds, cat_entries)
 
-    mp = ModelInit.cat_init(cat_entries)
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, mp, cat_entries)
     trans = get_mp_transform(mp, loc_width=1.0);
     OptimizeElbo.maximize_elbo(tiled_blob, mp, trans, xtol_rel=0.0)
 end
@@ -316,14 +314,13 @@ function test_bad_galaxy_init()
     cat_primary = filter(only_center, cat_primary)
     @test length(cat_primary) == 1
 
-    mp_good_init = ModelInit.cat_init(cat_coadd)
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp_good_init)
+    tiled_blob, mp_good_init =
+      ModelInit.initialize_celeste(blob, mp_good_init, cat_coadd)
     trans = get_mp_transform(mp_good_init, loc_width=1.0);
     OptimizeElbo.maximize_elbo(blob, mp_good_init, trans)
     @test mp_good_init.vp[1][ids.a[2]] > .5
 
-    mp_bad_init = ModelInit.cat_init(cat_primary)
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp_bad_init)
+    tiled_blob, mp_bad_init = ModelInit.initialize_celeste(blob, cat_primary)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp_bad_init, trans)
     @test mp_bad_init.vp[1][ids.a[2]] > .5
 
