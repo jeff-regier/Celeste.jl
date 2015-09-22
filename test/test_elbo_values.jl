@@ -217,12 +217,11 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     end
     cat_entries = filter(ce_inbounds, cat_entries)
 
-    mp = ModelInit.cat_init(cat_entries)
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, cat_entries)
     for s in 1:length(cat_entries)
         mp.vp[s][ids.a[2]] = cat_entries[s].is_star ? 0.01 : 0.99
         mp.vp[s][ids.a[1]] = 1.0 - mp.vp[s][ids.a[2]]
     end
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
     best = ElboDeriv.elbo_likelihood(tiled_blob, mp)
 
     # s is the brightest source.
@@ -289,21 +288,24 @@ function test_tiny_image_tiling()
   catalog = [sample_ce([100., 1], true),]
   catalog[1].star_fluxes = ones(5) * 1e5
 
-  mp0 = ModelInit.cat_init(catalog)
-  tiled_blob0 =
-    ModelInit.initialize_tiles_and_patches!(fill(img, 5), mp0, patch_radius=Inf)
+  tiled_blob0, mp0 =
+    ModelInit.initialize_celeste(fill(img, 5), catalog, patch_radius=Inf, )
+   =
+    ModelInit.initialize_tiles_and_patches!(, mp0, patch_radius=Inf)
   accum0 = zero_sensitive_float(CanonicalParams)
   ElboDeriv.elbo_likelihood!(tiled_blob0[3], mp0, 3, accum0)
 
-  mp0.tile_width = 2
+  tile_width = 2
   tiled_blob1 =
-    ModelInit.initialize_tiles_and_patches!(fill(img, 5), mp0, patch_radius=10.)
+    ModelInit.initialize_tiles_and_patches!(
+      fill(img, 5), mp0, tile_width, patch_radius=10.)
   accum_tiles = zero_sensitive_float(CanonicalParams)
   ElboDeriv.elbo_likelihood!(tiled_blob1[3], mp0, 3, accum_tiles)
 
-  mp0.tile_width = 5
+  tile_width = 5
   tiled_blob2 =
-    ModelInit.initialize_tiles_and_patches!(fill(img, 5), mp0, patch_radius=10.)
+    ModelInit.initialize_tiles_and_patches!(
+      fill(img, 5), mp0, tile_width, patch_radius=10.)
   accum_tiles2 = zero_sensitive_float(CanonicalParams)
   ElboDeriv.elbo_likelihood!(tiled_blob2[3], mp0, 3, accum_tiles2)
 
@@ -316,9 +318,8 @@ end
 function test_elbo_with_nan()
     blob, mp, body = gen_sample_star_dataset(perturb=false);
 
-    # Set to 5 to test the code for tiles with no sources.
-    mp.tile_width = 5
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp);
+    # Set tile width to 5 to test the code for tiles with no sources.
+    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp, 5);
     initial_elbo = ElboDeriv.elbo(tiled_blob, mp);
 
     for b in 1:5

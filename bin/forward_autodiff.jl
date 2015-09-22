@@ -70,11 +70,10 @@ else
 
     tile_width = 30
 
-    mp_original_all =
-      ModelInit.cat_init(original_cat_entries, tile_width=tile_width);
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(
-      original_blob, mp_original_all,
-      patch_radius=1e-3, fit_psf=false);
+    tiled_blob, mp_original_all =
+      ModelInit.initialize_celeste(
+        original_blob, original_cat_entries,
+        tile_width=tile_width, patch_radius=1e-3, fit_psf=false);
 
     function CountSources(tiled_blob::TiledBlob)
       sources = Int64[]
@@ -97,12 +96,9 @@ else
       # Make a tile for the object
       tiled_blob =
         Images.crop_blob_to_location(original_blob, tile_width, obj_loc);
-      mp_original =
-        ModelInit.cat_init([original_cat_entries[obj_row_num]],
-                           tile_width=tile_width);
-      transform = Transform.get_mp_transform(mp_original);
-      ModelInit.initialize_tiles_and_patches!(
+      mp_original = ModelInit.initialize_model_params(
         tiled_blob, original_blob, mp_original);
+      transform = Transform.get_mp_transform(mp_original);
       sources = CountSources(tiled_blob)
 
       tiled_blob, mp_original, transform, sources
@@ -151,10 +147,9 @@ end
 ########################
 # Run NM on all isolated objects
 
-# This is out of bounds
-objid = "1237662226208063581"
+# This one has a bounds problem.
+objid = "1237662226208063744"
 tiled_blob, mp_original, transform, sources = get_object_tile(objid);
-
 
 nm_all_results = Dict()
 for objid in original_cat_df[:objid]
@@ -177,7 +172,9 @@ for (objid, result) in nm_all_results
   mp_optim = result[2];
   println("\n\n\n\n", objid)
   println(original_cat_df[original_cat_df[:objid] .== objid, obj_cols])
-  print_params(result[1], result[2])
+  #print_params(result[1], result[2])
+  println([mp_optim.vp[1][ids.a]])
+  println([mp_optim.vp[1][ids.e_scale]])
 
   println("Original brighntess:\n", ElboDeriv.get_brightness(mp_original)[1])
   println("Fit brightness:\n", ElboDeriv.get_brightness(mp_optim)[1])
@@ -185,6 +182,7 @@ end
 
 
 objid = collect(keys(nm_all_results))[6]
+
 result = nm_all_results[objid];
 tiled_blob, mp_original, transform, num_sources = get_object_tile(objid);
 mp_optim = result[2];

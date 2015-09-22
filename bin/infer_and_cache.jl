@@ -22,8 +22,9 @@ end
 
 function cat_infer_and_cache(stamp_id)
 	blob = Images.load_stamp_blob(ENV["STAMP"], stamp_id);
-	cat_entries = SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob, match_blob=true)
-	mp = ModelInit.cat_init(cat_entries)
+	cat_entries =
+		SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob, match_blob=true)
+	tiled_blob, mp = ModelInit.initialize_celeste(blob, cat_entries)
 
 	OptimizeElbo.maximize_elbo(blob, mp)
 
@@ -48,11 +49,12 @@ function synth_infer_and_cache(stamp_id)
     cat_synth = filter(bright, cat_synth)
     cat_synth = filter(inbounds, cat_synth)
 
-    cat_primary = SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob, match_blob=true)
+    cat_primary =
+			SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob, match_blob=true)
     cat_primary = filter(bright, cat_primary)
     cat_primary = filter(inbounds, cat_primary)
 
-    mp = ModelInit.cat_init(cat_primary)
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, cat_primary)
 
     OptimizeElbo.maximize_elbo(blob, mp)
 

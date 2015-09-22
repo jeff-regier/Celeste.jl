@@ -361,6 +361,14 @@ end
 #######################################
 # Functions for matching sources to tiles.
 
+# A pixel circle maps locally to a world ellipse.  Return the major
+# axis of that ellipse.
+function pixel_radius_to_world(pix_radius::Float64,
+                               wcs_jacobian::Matrix{Float64})
+  pix_radius / minimum(abs(eig(wcs_jacobian)[1]));
+end
+
+
 @doc """
 A fast function to determine which sources might belong to which tiles.
 
