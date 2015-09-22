@@ -7,7 +7,7 @@ VERSION < v"0.4.0-dev" && using Docile
 
 export sample_prior, peak_init
 
-export initialize_tiles_and_patches!
+export intialize_celeste, initialize_model_params
 
 using FITSIO
 using Distributions
@@ -375,7 +375,7 @@ function initialize_celeste(
     patch_radius::Float64=-1., radius_from_cat::Bool=true)
 
   tiled_blob = Images.break_blob_into_tiles(blob, tile_width)
-  mp = initialize_model_params(tiled_blob, blob,
+  mp = initialize_model_params(tiled_blob, blob, cat,
                                fit_psf=fit_psf, patch_radius=patch_radius,
                                radius_from_cat=radius_from_cat)
   tiled_blob, mp

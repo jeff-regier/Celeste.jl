@@ -103,7 +103,7 @@ function gen_two_body_dataset(; perturb=true)
         sample_ce([10.1, 12.1], true)
     ]
     blob = Synthetic.gen_blob(blob0, two_bodies)
-    tiled_blob, mp = ModelInit.initialize_celeste(blob, one_body)
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, two_bodies)
     if perturb
         perturb_params(mp)
     end
@@ -125,7 +125,7 @@ function gen_three_body_dataset(; perturb=true)
         sample_ce([71.3, 100.4], false),
     ]
     blob = Synthetic.gen_blob(blob0, three_bodies)
-    tiled_blob, mp = ModelInit.initialize_celeste(blob, one_body)
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, three_bodies)
     if perturb
         perturb_params(mp)
     end
