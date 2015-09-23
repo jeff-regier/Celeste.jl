@@ -200,7 +200,7 @@ Choose a reasonable patch radius based on the catalog.
 """ ->
 function choose_patch_radius(
   pixel_center::Vector{Float64}, ce::CatalogEntry,
-  psf::Array{PsfComponent}, img::Image; width_scale=1.0)
+  psf::Array{PsfComponent}, img::Image; width_scale=1.0, max_radius=100)
 
     psf_width = get_psf_width(psf, width_scale=width_scale)
 
@@ -222,6 +222,8 @@ function choose_patch_radius(
 
     # For the worst-case scenario, find where a 1d pdf would take the
     # value of 5% of the sky noise when the standard deviation is obj_width.
+
+    # TODO: What to do when this has no solution?
     pdf_target = epsilon / (20 * flux)  # 5% of sky
     rhs = log(pdf_target) + 0.5 * log(2pi) + log(obj_width)
     radius_req = sqrt(-2 * (obj_width ^ 2) * rhs)
