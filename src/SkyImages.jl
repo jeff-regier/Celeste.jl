@@ -152,7 +152,7 @@ Returns:
 """ ->
 function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
   mask_planes =
-    Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
+    Set(["S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"]))
 
     band_gain, band_dark_variance =
       SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
