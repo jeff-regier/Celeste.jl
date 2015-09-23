@@ -318,53 +318,6 @@ function get_tiled_image_sources(
 end
 
 
-# @doc """
-# Break the images into tiles and initialize the model parameters.
-#
-# Args:
-#   - blob: A Blob containing the images.
-#   - mp: Model parameters.
-#
-# Returns:
-#   Updates in place mp's patches and tile sources.
-#   Returns a tiled blob.
-# """ ->
-# function initialize_tiles_and_patches!(
-#     blob::Blob, mp::ModelParams, tile_width::Int64;
-#     patch_radius=Inf, fit_psf=true)
-#   tiled_blob = Images.break_blob_into_tiles(blob, tile_width)
-#   initialize_tiles_and_patches!(
-#     tiled_blob, blob, mp, patch_radius=patch_radius, fit_psf=fit_psf)
-#   tiled_blob
-# end
-#
-#
-# @doc """
-# Initialize the tiles and patches if you've already tiled your blob
-# (e.g. when you are cropping to a single object location)
-# """ ->
-# function initialize_tiles_and_patches!(
-#     tiled_blob::TiledBlob, blob::Blob, mp::ModelParams;
-#     patch_radius=Inf, fit_psf=true)
-#   # Set the model parameters
-#
-#   @assert length(tiled_blob) == length(blob)
-#   mp.patches = Array(SkyPatch, mp.S, length(blob))
-#   mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
-#
-#   for b = 1:length(blob)
-#     for s=1:mp.S
-#       mp.patches[s, b] =
-#         SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
-#     end
-#     mp.tile_sources[b] =
-#       get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
-#   end
-#
-#   tiled_blob
-# end
-
-
 @doc """
 Turn a blob and vector of catalog entries into a tiled_blob and model
 parameters that can be used with Celeste.
@@ -400,6 +353,8 @@ function initialize_model_params(
     fit_psf::Bool=true, patch_radius::Float64=-1., radius_from_cat::Bool=true)
 
   @assert length(tiled_blob) == length(blob)
+  @assert(length(cat) > 0,
+          "Cannot initilize model parameters with no catalog entries")
 
   # If patch_radius is set by the caller, don't use the radius from the catalog.
   if patch_radius != -1.
@@ -417,7 +372,7 @@ function initialize_model_params(
   for b = 1:length(blob)
     for s=1:mp.S
       if radius_from_cat
-        mp.patches[s, b] = SkyPatch(ce[s], blob[b], fit_psf=fit_psf)
+        mp.patches[s, b] = SkyPatch(cat[s], blob[b], fit_psf=fit_psf)
       else
         mp.patches[s, b] =
           SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
@@ -427,6 +382,7 @@ function initialize_model_params(
       get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
   end
 
+  mp
 end
 
 end

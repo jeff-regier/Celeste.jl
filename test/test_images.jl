@@ -136,7 +136,7 @@ function test_local_source_candidate()
 
   # This is run by gen_n_body_dataset but put it here for safe testing in
   # case that changes.
-  ModelInit.initialize_model_params(tiled_blob, blob, body);
+  mp = ModelInit.initialize_model_params(tiled_blob, blob, body);
 
   for b=1:length(tiled_blob)
     # Get the sources by iterating over everything.
@@ -148,7 +148,7 @@ function test_local_source_candidate()
     candidates = Images.local_source_candidates(tiled_blob[b], patches);
 
     # Check that all the actual sources are candidates and that this is the
-    # same as what is returned by initialize_tiles_and_patches!.
+    # same as what is returned by initialize_model_params.
     @test size(candidates) == size(tile_sources)
     for h=1:size(candidates)[1], w=1:size(candidates)[2]
       @test setdiff(tile_sources[h, w], candidates[h, w]) == []

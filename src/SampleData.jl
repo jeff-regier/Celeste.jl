@@ -114,7 +114,7 @@ end
 
 function gen_three_body_dataset(; perturb=true)
     srand(1)
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
         blob0[b].wcs = WCS.wcs_id
@@ -123,9 +123,9 @@ function gen_three_body_dataset(; perturb=true)
         sample_ce([4.5, 3.6], false),
         sample_ce([60.1, 82.2], true),
         sample_ce([71.3, 100.4], false),
-    ]
-    blob = Synthetic.gen_blob(blob0, three_bodies)
-    tiled_blob, mp = ModelInit.initialize_celeste(blob, three_bodies)
+    ];
+    blob = Synthetic.gen_blob(blob0, three_bodies);
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, three_bodies);
     if perturb
         perturb_params(mp)
     end
