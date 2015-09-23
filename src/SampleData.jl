@@ -6,7 +6,7 @@ using Distributions
 using CelesteTypes
 
 import SloanDigitalSkySurvey: WCS
-import Images
+import SkyImages
 
 import ModelInit
 import Synthetic
@@ -57,7 +57,7 @@ end
 
 function gen_sample_star_dataset(; perturb=true)
     srand(1)
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
         blob0[b].wcs = WCS.wcs_id
@@ -75,7 +75,7 @@ end
 
 function gen_sample_galaxy_dataset(; perturb=true)
     srand(1)
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
         blob0[b].wcs = WCS.wcs_id
@@ -95,7 +95,7 @@ function gen_two_body_dataset(; perturb=true)
     # will be too close to be identifiable.
 
     srand(1)
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
         blob0[b].wcs = WCS.wcs_id
@@ -118,7 +118,7 @@ end
 
 function gen_three_body_dataset(; perturb=true)
     srand(1)
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
         blob0[b].wcs = WCS.wcs_id
@@ -143,7 +143,7 @@ end
 Generate a large dataset with S randomly placed bodies.
 """ ->
 function gen_n_body_dataset(S::Int64; patch_pixel_radius=20., tile_width=50)
-  blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
+  blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
   img_size = 1000
   for b in 1:5
       blob0[b].H, blob0[b].W = img_size, img_size

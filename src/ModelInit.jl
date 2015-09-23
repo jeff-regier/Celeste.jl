@@ -15,7 +15,7 @@ using Util
 using CelesteTypes
 
 import SloanDigitalSkySurvey: WCS
-import Images
+import SkyImages
 import WCSLIB
 import CelesteTypes.SkyPatch
 
@@ -205,7 +205,7 @@ Returns:
 SkyPatch(world_center::Vector{Float64},
          radius::Float64, img::Image; fit_psf=true) = begin
     if fit_psf
-      psf = Images.get_source_psf(world_center, img)
+      psf = SkyImages.get_source_psf(world_center, img)
     else
       psf = img.psf
     end
@@ -244,12 +244,12 @@ function get_tiled_image_sources(
 
   H, W = size(tiled_image)
   tile_sources = fill(Int64[], H, W)
-  candidates = Images.local_source_candidates(tiled_image, patches)
+  candidates = SkyImages.local_source_candidates(tiled_image, patches)
   for h in 1:H, w in 1:W
     # Only look for sources within the candidate set.
     cand_patches = patches[candidates[h, w]]
     if length(cand_patches) > 0
-      cand_sources = Images.local_sources(tiled_image[h, w], cand_patches, wcs)
+      cand_sources = SkyImages.local_sources(tiled_image[h, w], cand_patches, wcs)
       tile_sources[h, w] = candidates[h, w][cand_sources]
     else
       tile_sources[h, w] = Int64[]
@@ -272,7 +272,7 @@ Returns:
 """ ->
 function initialize_tiles_and_patches!(
     blob::Blob, mp::ModelParams; patch_radius=Inf, fit_psf=true)
-  tiled_blob = Images.break_blob_into_tiles(blob, mp.tile_width)
+  tiled_blob = SkyImages.break_blob_into_tiles(blob, mp.tile_width)
   initialize_tiles_and_patches!(
     tiled_blob, blob, mp, patch_radius=patch_radius, fit_psf=fit_psf)
   tiled_blob
