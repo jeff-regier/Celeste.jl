@@ -1,4 +1,4 @@
-module Images
+module SkyImages
 
 VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
@@ -322,7 +322,7 @@ function get_source_psf(world_loc::Vector{Float64}, img::Image)
       raw_psf =
         PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
       fit_psf, scale = PSF.fit_psf_gaussians(raw_psf)
-      return Images.convert_gmm_to_celeste(fit_psf, scale)
+      return SkyImages.convert_gmm_to_celeste(fit_psf, scale)
     end
 end
 
