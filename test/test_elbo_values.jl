@@ -288,24 +288,21 @@ function test_tiny_image_tiling()
   catalog = [sample_ce([100., 1], true),]
   catalog[1].star_fluxes = ones(5) * 1e5
 
-  tiled_blob0, mp0 =
-    ModelInit.initialize_celeste(fill(img, 5), catalog, patch_radius=Inf, )
-   =
-    ModelInit.initialize_tiles_and_patches!(, mp0, patch_radius=Inf)
+  tiled_blob0, mp0 = ModelInit.initialize_celeste(
+    fill(img, 5), catalog, patch_radius=Inf)
   accum0 = zero_sensitive_float(CanonicalParams)
   ElboDeriv.elbo_likelihood!(tiled_blob0[3], mp0, 3, accum0)
 
   tile_width = 2
-  tiled_blob1 =
-    ModelInit.initialize_tiles_and_patches!(
-      fill(img, 5), mp0, tile_width, patch_radius=10.)
+  tiled_blob1, mp0 = ModelInit.initialize_celeste(
+    fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.)
   accum_tiles = zero_sensitive_float(CanonicalParams)
   ElboDeriv.elbo_likelihood!(tiled_blob1[3], mp0, 3, accum_tiles)
 
   tile_width = 5
-  tiled_blob2 =
-    ModelInit.initialize_tiles_and_patches!(
-      fill(img, 5), mp0, tile_width, patch_radius=10.)
+  tiled_blob2, mp0 =
+    ModelInit.initialize_celeste(
+      fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.)
   accum_tiles2 = zero_sensitive_float(CanonicalParams)
   ElboDeriv.elbo_likelihood!(tiled_blob2[3], mp0, 3, accum_tiles2)
 
@@ -319,7 +316,7 @@ function test_elbo_with_nan()
     blob, mp, body = gen_sample_star_dataset(perturb=false);
 
     # Set tile width to 5 to test the code for tiles with no sources.
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp, 5);
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, body, tile_width=5);
     initial_elbo = ElboDeriv.elbo(tiled_blob, mp);
 
     for b in 1:5

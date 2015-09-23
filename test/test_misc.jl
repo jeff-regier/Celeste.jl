@@ -155,7 +155,7 @@ function test_local_sources_3()
     patch_radius = maximum([sqrt(dot(d, d)) for d in diags])
 
     tiled_blob, mp = ModelInit.initialize_celeste(
-      blob, mp, one_body, patch_radius=patch_radius);
+      blob, one_body, patch_radius=patch_radius);
 
     # Source should be present
     tile = ImageTile(int(round(pix_loc[1] / tile_width)),

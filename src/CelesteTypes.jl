@@ -506,8 +506,8 @@ end
 
 # TODO: Is this second initialization function necessary?
 ModelParams{NumType <: Number}(
-  vp::VariationalParams{NumType}, pp::PriorParams, tile_width::Int64) = begin
-    ModelParams{NumType}(vp, pp, tile_width)
+  vp::VariationalParams{NumType}, pp::PriorParams) = begin
+    ModelParams{NumType}(vp, pp)
 end
 
 function convert(::Type{ModelParams{ForwardDiff.Dual}}, mp::ModelParams{Float64})
