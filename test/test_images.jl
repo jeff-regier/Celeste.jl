@@ -22,7 +22,7 @@ function test_blob()
   blob = Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
   cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
   cat_entries = Images.convert_catalog_to_celeste(cat_df, blob);
-  mp, tiled_blob =
+  tiled_blob, mp =
     ModelInit.initialize_celeste(blob, cat_entries, patch_radius=1e-6,
                                  fit_psf=false);
 
@@ -62,7 +62,8 @@ function test_blob()
   test_b = 3
   img = blob[test_b];
   obj_index = find(obj_rows)
-  mp_obj = ModelInit.initialize_model_params(tiled_blob, cat_entries[obj_index]);
+  mp_obj = ModelInit.initialize_model_params(
+    tiled_blob, blob, cat_entries[obj_index]);
   pixel_loc = WCS.world_to_pixel(img.wcs, obj_loc);
   original_psf_val =
     PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
