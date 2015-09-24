@@ -71,7 +71,7 @@ function test_blob()
   original_psf_celeste = SkyImages.convert_gmm_to_celeste(original_psf_gmm, scale);
   fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
-  obj_psf = SkyImages.get_source_psf(mp.vp[1][ids.u], img);
+  obj_psf = SkyImages.get_source_psf(mp_obj.vp[1][ids.u], img);
   obj_psf_val = PSF.get_psf_at_point(obj_psf);
 
   # The fits should match exactly.
@@ -171,7 +171,7 @@ function test_set_patch_size()
   end
 
   srand(1)
-  blob0 =SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
+  blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
   img_size = 150
   for b in 1:5
       blob0[b].H, blob0[b].W = img_size, img_size
@@ -221,3 +221,4 @@ test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
 test_local_source_candidate()
+test_set_patch_size()
