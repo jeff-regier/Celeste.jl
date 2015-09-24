@@ -22,9 +22,9 @@ function test_blob()
   blob = SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
   cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
   cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
-  mp = ModelInit.cat_init(cat_entries);
-  tiled_blob = ModelInit.initialize_tiles_and_patches!(
-    blob, mp, patch_radius=1e-6, fit_psf=false);
+  tiled_blob, mp =
+    ModelInit.initialize_celeste(blob, cat_entries, patch_radius=1e-6,
+                                 fit_psf=false);
 
   # Just check some basic facts about the catalog.
   @test size(cat_df)[1] == 805
@@ -62,7 +62,8 @@ function test_blob()
   test_b = 3
   img = blob[test_b];
   obj_index = find(obj_rows)
-  mp = ModelInit.cat_init(cat_entries[obj_index]);
+  mp_obj = ModelInit.initialize_model_params(
+    tiled_blob, blob, cat_entries[obj_index]);
   pixel_loc = WCS.world_to_pixel(img.wcs, obj_loc);
   original_psf_val =
     PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
@@ -70,7 +71,7 @@ function test_blob()
   original_psf_celeste = SkyImages.convert_gmm_to_celeste(original_psf_gmm, scale);
   fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
-  obj_psf = SkyImages.get_source_psf(mp.vp[1][ids.u], img);
+  obj_psf = SkyImages.get_source_psf(mp_obj.vp[1][ids.u], img);
   obj_psf_val = PSF.get_psf_at_point(obj_psf);
 
   # The fits should match exactly.
@@ -80,8 +81,8 @@ function test_blob()
   @test_approx_eq_eps(obj_psf_val[:], original_psf_val[:], 1e-2)
 
   mp_several =
-    ModelInit.cat_init([cat_entries[1], cat_entries[obj_index]]);
-  ModelInit.initialize_tiles_and_patches!(tiled_blob, blob, mp_several)
+    ModelInit.initialize_model_params(
+      tiled_blob, blob, [cat_entries[1], cat_entries[obj_index]]);
 
   # The second set of vp is the object of interest
   point_patch_psf = PSF.get_psf_at_point(mp_several.patches[2, test_b].psf);
@@ -107,8 +108,8 @@ function test_get_tiled_image_source()
   blob, mp, body, tiled_blob = gen_sample_star_dataset();
   img = blob[3];
 
-  ModelInit.initialize_tiles_and_patches!(
-    tiled_blob, blob, mp; patch_radius=1e-6)
+  mp = ModelInit.initialize_model_params(
+    tiled_blob, blob, body; patch_radius=1e-6)
 
   tiled_img = SkyImages.break_image_into_tiles(img, 10);
   for hh in 1:size(tiled_img)[1], ww in 1:size(tiled_img)[2]
@@ -136,7 +137,7 @@ function test_local_source_candidate()
 
   # This is run by gen_n_body_dataset but put it here for safe testing in
   # case that changes.
-  ModelInit.initialize_tiles_and_patches!(tiled_blob, blob, mp);
+  mp = ModelInit.initialize_model_params(tiled_blob, blob, body);
 
   for b=1:length(tiled_blob)
     # Get the sources by iterating over everything.
@@ -148,7 +149,7 @@ function test_local_source_candidate()
     candidates = SkyImages.local_source_candidates(tiled_blob[b], patches);
 
     # Check that all the actual sources are candidates and that this is the
-    # same as what is returned by initialize_tiles_and_patches!.
+    # same as what is returned by initialize_model_params.
     @test size(candidates) == size(tile_sources)
     for h=1:size(candidates)[1], w=1:size(candidates)[2]
       @test setdiff(tile_sources[h, w], candidates[h, w]) == []
@@ -157,7 +158,67 @@ function test_local_source_candidate()
   end
 end
 
+
+function test_set_patch_size()
+  # Test that the patch size gets most of the light from a variety of
+  # galaxy shapes.
+  # This shows that the current patch size is actually far too conservative.
+
+  function gal_catalog_from_scale(gal_scale::Float64, flux_scale::Float64)
+    CatalogEntry[CatalogEntry(world_location, false,
+                              flux_scale * fluxes, flux_scale * fluxes,
+                              0.1, .01, pi/4, gal_scale) ]
+  end
+
+  srand(1)
+  blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
+  img_size = 150
+  for b in 1:5
+      blob0[b].H, blob0[b].W = img_size, img_size
+  end
+  fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
+
+  world_location = WCS.pixel_to_world(blob0[3].wcs,
+                                      Float64[img_size / 2, img_size / 2])
+
+  for gal_scale in [1.0, 10.0], flux_scale in [0.1, 10.0]
+    cat = gal_catalog_from_scale(gal_scale, flux_scale);
+    blob = Synthetic.gen_blob(blob0, cat);
+    tiled_blob, mp =
+      ModelInit.initialize_celeste(blob, cat, tile_width=typemax(Int64));
+
+    for b=1:5
+      @assert size(tiled_blob[b]) == (1, 1)
+      tile_image = ElboDeriv.tile_predicted_image(tiled_blob[b][1,1], mp);
+
+      # Assume here that the bacgkround is constant and subtract the sky noise.
+      @assert blob[b].constant_background
+      tile_image = tile_image .- blob[b].epsilon * blob[b].iota
+
+      pixel_center = WCS.world_to_pixel(blob[b].wcs, cat[1].pos)
+      radius = ModelInit.choose_patch_radius(
+        pixel_center, cat[1], blob[b].psf, blob[b])
+
+      circle_pts = fill(false, blob[b].H, blob[b].W);
+      in_circle = 0.0
+      for x=1:size(tile_image)[1], y=1:size(tile_image)[2]
+        if ((x - pixel_center[1]) ^ 2 + (y - pixel_center[2]) ^ 2) < radius ^ 2
+          in_circle += tile_image[x, y]
+          circle_pts[x, y] = true
+        end
+      end
+      @test in_circle / sum(tile_image) > 0.95
+
+      # Convenient for visualizing:
+      # in_circle / sum(tile_image)
+      # imshow(tile_image .- blob[b].epsilon)
+      # imshow(circle_pts, alpha=0.4)
+    end
+  end
+end
+
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
 test_local_source_candidate()
+test_set_patch_size()

@@ -10,6 +10,8 @@ import Polygons
 import SloanDigitalSkySurvey: WCS
 import WCSLIB
 
+export tile_predicted_image
+
 @doc """
 Subtract the KL divergence from the prior for c
 """ ->
@@ -354,8 +356,8 @@ function load_bvn_mixtures(mp::ModelParams, b::Int64)
 
         world_loc = vs[[ids.u[1], ids.u[2]]]
         m_pos = WCS.world_to_pixel(mp.patches[s, b].wcs_jacobian,
-                                   mp.patches[s].center,
-                                   mp.patches[s].pixel_center, world_loc)
+                                   mp.patches[s, b].center,
+                                   mp.patches[s, b].pixel_center, world_loc)
 
         # Convolve the star locations with the PSF.
         for k in 1:3
@@ -614,6 +616,10 @@ end
 
 @doc """
 Expected pixel brightness.
+Args:
+  h: The row of the tile
+  w: The column of the tile
+  ...the rest are the same as elsewhere.
 
 Returns:
   - Iota.
@@ -639,7 +645,7 @@ function expected_pixel_brightness!(
 
   m_pos = Float64[tile.h_range[h], tile.w_range[w]]
   for child_s in 1:length(tile_sources)
-      wcs_jacobian = mp.patches[child_s].wcs_jacobian
+      wcs_jacobian = mp.patches[child_s, tile.b].wcs_jacobian
       parent_s = tile_sources[child_s]
       accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
           mp.vp[parent_s], child_s, parent_s, m_pos, tile.b,
@@ -728,6 +734,9 @@ Args:
   - star_mcs: All the star * PCF components.
   - gal_mcs: All the galaxy * PCF components.
   - accum: The ELBO log likelihood to be updated.
+
+Returns:
+  A matrix of the same size as the tile with the predicted brightnesses.
 """ ->
 function tile_predicted_image(tile::ImageTile,
         tile_sources::Vector{Int64},
@@ -759,6 +768,28 @@ function tile_predicted_image(tile::ImageTile,
     end
 
     predicted_pixels
+end
+
+
+@doc """
+Produce a predicted image for a given tile and model parameters.
+""" ->
+function tile_predicted_image(tile::ImageTile, mp::ModelParams)
+  b = tile.b
+  num_type = typeof(mp.vp[1][1])
+  star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
+  sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
+
+  accum = zero_sensitive_float(CanonicalParams, num_type, mp.S)
+  tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+
+  tile_predicted_image(tile,
+          tile_sources,
+          mp,
+          sbs,
+          star_mcs,
+          gal_mcs,
+          accum)
 end
 
 

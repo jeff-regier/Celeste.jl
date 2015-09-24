@@ -28,7 +28,7 @@ const sample_galaxy_fluxes = [
 
 function empty_model_params(S::Int)
     vp = [ ModelInit.init_source([ 0., 0. ]) for s in 1:S ]
-    ModelParams(vp, ModelInit.sample_prior(), 1)
+    ModelParams(vp, ModelInit.sample_prior())
 end
 
 
@@ -64,11 +64,10 @@ function gen_sample_star_dataset(; perturb=true)
     end
     one_body = [sample_ce([10.1, 12.2], true),]
     blob = Synthetic.gen_blob(blob0, one_body)
-    mp = ModelInit.cat_init(one_body)
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, one_body)
     if perturb
         perturb_params(mp)
     end
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
     blob, mp, one_body, tiled_blob
 end
 
@@ -82,11 +81,10 @@ function gen_sample_galaxy_dataset(; perturb=true)
     end
     one_body = [sample_ce([8.5, 9.6], false),]
     blob = Synthetic.gen_blob(blob0, one_body)
-    mp = ModelInit.cat_init(one_body)
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, one_body)
     if perturb
         perturb_params(mp)
     end
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
     blob, mp, one_body, tiled_blob
 end
 
@@ -105,12 +103,10 @@ function gen_two_body_dataset(; perturb=true)
         sample_ce([10.1, 12.1], true)
     ]
     blob = Synthetic.gen_blob(blob0, two_bodies)
-    mp = ModelInit.cat_init(two_bodies)
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, two_bodies)
     if perturb
         perturb_params(mp)
     end
-
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
     blob, mp, two_bodies, tiled_blob
 end
 
@@ -127,14 +123,12 @@ function gen_three_body_dataset(; perturb=true)
         sample_ce([4.5, 3.6], false),
         sample_ce([60.1, 82.2], true),
         sample_ce([71.3, 100.4], false),
-    ]
-    blob = Synthetic.gen_blob(blob0, three_bodies)
-    mp = ModelInit.cat_init(three_bodies)
+    ];
+    blob = Synthetic.gen_blob(blob0, three_bodies);
+    tiled_blob, mp = ModelInit.initialize_celeste(blob, three_bodies);
     if perturb
         perturb_params(mp)
     end
-
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(blob, mp)
     blob, mp, three_bodies, tiled_blob
 end
 
@@ -162,9 +156,8 @@ function gen_n_body_dataset(S::Int64; patch_pixel_radius=20., tile_width=50)
     WCS.pixel_to_world(blob[3].wcs,
                        [patch_pixel_radius patch_pixel_radius; 0. 0.])
   world_radius = maximum(abs(world_radius_pts[1,:] - world_radius_pts[2,:]))
-  mp = ModelInit.cat_init(S_bodies, tile_width=tile_width);
-  tiled_blob = ModelInit.initialize_tiles_and_patches!(
-    blob, mp; patch_radius=world_radius);
+  tiled_blob, mp = ModelInit.initialize_celeste(
+    blob, S_bodies, tile_width=tile_width, patch_radius=world_radius)
 
   blob, mp, S_bodies, tiled_blob
 end
