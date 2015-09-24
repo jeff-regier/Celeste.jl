@@ -1,4 +1,4 @@
-module Images
+module SkyImages
 
 VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
@@ -152,7 +152,7 @@ Returns:
 """ ->
 function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
   mask_planes =
-    Set({"S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"}))
+    Set(["S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"]))
 
     band_gain, band_dark_variance =
       SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
@@ -322,7 +322,7 @@ function get_source_psf(world_loc::Vector{Float64}, img::Image)
       raw_psf =
         PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
       fit_psf, scale = PSF.fit_psf_gaussians(raw_psf)
-      return Images.convert_gmm_to_celeste(fit_psf, scale)
+      return SkyImages.convert_gmm_to_celeste(fit_psf, scale)
     end
 end
 

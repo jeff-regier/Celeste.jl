@@ -205,7 +205,7 @@ function test_bad_a_init()
     ce = CatalogEntry([7.2, 8.3], false, gal_color_mode, gal_color_mode,
             0.5, .7, pi/4, .5)
 
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
         blob0[b].wcs = WCS.wcs_id
@@ -253,7 +253,7 @@ end
 
 function test_peak_init_2body_optimization()
     srand(1)
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
 
     two_bodies = [
         sample_ce([11.1, 21.2], true),
@@ -283,7 +283,7 @@ end
 
 
 function test_real_stamp_optimization()
-    blob = Images.load_stamp_blob(dat_dir, "5.0073-0.0739")
+    blob = SkyImages.load_stamp_blob(dat_dir, "5.0073-0.0739")
     cat_entries = SDSS.load_stamp_catalog(dat_dir, "s82-5.0073-0.0739", blob)
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries)
@@ -300,7 +300,7 @@ end
 
 function test_bad_galaxy_init()
     stamp_id = "5.0624-0.1528"
-    blob0 = Images.load_stamp_blob(ENV["STAMP"], stamp_id)
+    blob0 = SkyImages.load_stamp_blob(ENV["STAMP"], stamp_id)
 
     only_center(ce) = ce.pos[1] > 25. && ce.pos[2] > 25 &&
         ce.pos[1] < 27 && ce.pos[2] < 27
