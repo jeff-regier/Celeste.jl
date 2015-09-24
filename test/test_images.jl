@@ -158,7 +158,67 @@ function test_local_source_candidate()
   end
 end
 
+
+function test_set_patch_size()
+  # Test that the patch size gets most of the light from a variety of
+  # galaxy shapes.
+  # This shows that the current patch size is actually far too conservative.
+
+  function gal_catalog_from_scale(gal_scale::Float64, flux_scale::Float64)
+    CatalogEntry[CatalogEntry(world_location, false,
+                              flux_scale * fluxes, flux_scale * fluxes,
+                              0.1, .01, pi/4, gal_scale) ]
+  end
+
+  srand(1)
+  blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
+  img_size = 150
+  for b in 1:5
+      blob0[b].H, blob0[b].W = img_size, img_size
+  end
+  fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
+
+  world_location = WCS.pixel_to_world(blob0[3].wcs,
+                                      Float64[img_size / 2, img_size / 2])
+
+  for gal_scale in [1.0, 10.0], flux_scale in [0.1, 10.0]
+    cat = gal_catalog_from_scale(gal_scale, flux_scale);
+    blob = Synthetic.gen_blob(blob0, cat);
+    tiled_blob, mp =
+      ModelInit.initialize_celeste(blob, cat, tile_width=typemax(Int64));
+
+    for b=1:5
+      @assert size(tiled_blob[b]) == (1, 1)
+      tile_image = ElboDeriv.tile_predicted_image(tiled_blob[b][1,1], mp);
+
+      # Assume here that the bacgkround is constant and subtract the sky noise.
+      @assert blob[b].constant_background
+      tile_image = tile_image .- blob[b].epsilon * blob[b].iota
+
+      pixel_center = WCS.world_to_pixel(blob[b].wcs, cat[1].pos)
+      radius = ModelInit.choose_patch_radius(
+        pixel_center, cat[1], blob[b].psf, blob[b])
+
+      circle_pts = fill(false, blob[b].H, blob[b].W);
+      in_circle = 0.0
+      for x=1:size(tile_image)[1], y=1:size(tile_image)[2]
+        if ((x - pixel_center[1]) ^ 2 + (y - pixel_center[2]) ^ 2) < radius ^ 2
+          in_circle += tile_image[x, y]
+          circle_pts[x, y] = true
+        end
+      end
+      @test in_circle / sum(tile_image) > 0.95
+
+      # Convenient for visualizing:
+      # in_circle / sum(tile_image)
+      # imshow(tile_image .- blob[b].epsilon)
+      # imshow(circle_pts, alpha=0.4)
+    end
+  end
+end
+
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
 test_local_source_candidate()
+test_set_patch_size()
