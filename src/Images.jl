@@ -55,12 +55,14 @@ function convert_catalog_to_celeste(
         for b in 1:length(band_letters)
             bl = band_letters[b]
             psf_col = symbol("psfflux_$bl")
-            star_fluxes[b] = row[1, psf_col]
+
+            # TODO: How can there be negative fluxes?
+            star_fluxes[b] = max(row[1, psf_col], 0.0)
 
             dev_col = symbol("devflux_$bl")
             exp_col = symbol("expflux_$bl")
-            gal_fluxes[b] += fracs_dev[1] * row[1, dev_col] +
-                             fracs_dev[2] * row[1, exp_col]
+            gal_fluxes[b] += fracs_dev[1] * max(row[1, dev_col], 0.0) +
+                             fracs_dev[2] * max(row[1, exp_col], 0.0)
         end
 
         fits_ab = fracs_dev[1] > .5 ? row[1, :ab_dev] : row[1, :ab_exp]
@@ -366,6 +368,13 @@ end
 function pixel_radius_to_world(pix_radius::Float64,
                                wcs_jacobian::Matrix{Float64})
   pix_radius / minimum(abs(eig(wcs_jacobian)[1]));
+end
+
+# A world circle maps locally to a pixel ellipse.  Return the major
+# axis of that ellipse.
+function world_radius_to_pixel(world_radius::Float64,
+                               wcs_jacobian::Matrix{Float64})
+  world_radius * minimum(abs(eig(wcs_jacobian)[1]));
 end
 
 

@@ -232,6 +232,7 @@ function choose_patch_radius(
       epsilon = mean(img.epsilon_mat[h_range, w_range])
     end
     flux = ce.is_star ? ce.star_fluxes[img.b] : ce.gal_fluxes[img.b]
+    @assert flux > 0.
 
     # Choose enough pixels that the light is either 90% of the light
     # would be captured from a 1d gaussian or 5% of the sky noise,
@@ -379,7 +380,7 @@ function initialize_model_params(
     @assert(patch_radius > 0.,
             "If !radius_from_cat, you must specify a positive patch_radius.")
   end
-  vp = [init_source(ce) for ce in cat]
+  vp = Array{Float64, 1}[init_source(ce) for ce in cat]
   mp = ModelParams(vp, sample_prior())
 
   mp.patches = Array(SkyPatch, mp.S, length(blob))
@@ -388,6 +389,8 @@ function initialize_model_params(
     for s=1:mp.S
       if radius_from_cat
         mp.patches[s, b] = SkyPatch(cat[s], blob[b], fit_psf=fit_psf)
+        println("Radius: ($b, $s)", Images.world_radius_to_pixel(
+          mp.patches[s, b].radius, mp.patches[s, b].wcs_jacobian))
       else
         mp.patches[s, b] =
           SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
