@@ -55,12 +55,14 @@ function convert_catalog_to_celeste(
         for b in 1:length(band_letters)
             bl = band_letters[b]
             psf_col = symbol("psfflux_$bl")
-            star_fluxes[b] = row[1, psf_col]
+
+            # TODO: How can there be negative fluxes?
+            star_fluxes[b] = max(row[1, psf_col], 0.0)
 
             dev_col = symbol("devflux_$bl")
             exp_col = symbol("expflux_$bl")
-            gal_fluxes[b] += fracs_dev[1] * row[1, dev_col] +
-                             fracs_dev[2] * row[1, exp_col]
+            gal_fluxes[b] += fracs_dev[1] * max(row[1, dev_col], 1e-6) +
+                             fracs_dev[2] * max(row[1, exp_col], 1e-6)
         end
 
         fits_ab = fracs_dev[1] > .5 ? row[1, :ab_dev] : row[1, :ab_exp]
@@ -235,10 +237,13 @@ function crop_blob_to_location(
     for b=1:5
         # Get the pixels that are near enough to the wcs_center.
         pix_center = WCS.world_to_pixel(blob[b].wcs, wcs_center)
-        sub_rows_h =
-          int(floor(pix_center[1] - width)):int(ceil(pix_center[1] + width))
-        sub_rows_w =
-          int(floor(pix_center[2] - width)):int(ceil(pix_center[2] + width))
+        h_min = max(int(floor(pix_center[1] - width)), 1)
+        h_max = min(int(ceil(pix_center[1] + width)), blob[b].H)
+        sub_rows_h = h_min:h_max
+
+        w_min = max(int(floor(pix_center[2] - width)), 1)
+        w_max = min(int(ceil(pix_center[2] + width)), blob[b].W)
+        sub_rows_w = w_min:w_max
         tiled_blob[b] = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
     end
     tiled_blob
@@ -358,19 +363,35 @@ end
 #######################################
 # Functions for matching sources to tiles.
 
+# A pixel circle maps locally to a world ellipse.  Return the major
+# axis of that ellipse.
+function pixel_radius_to_world(pix_radius::Float64,
+                               wcs_jacobian::Matrix{Float64})
+  pix_radius / minimum(abs(eig(wcs_jacobian)[1]));
+end
+
+# A world circle maps locally to a pixel ellipse.  Return the major
+# axis of that ellipse.
+function world_radius_to_pixel(world_radius::Float64,
+                               wcs_jacobian::Matrix{Float64})
+  world_radius * minimum(abs(eig(wcs_jacobian)[1]));
+end
+
+
 @doc """
 A fast function to determine which sources might belong to which tiles.
 
 Args:
   - tiles: A TiledImage
-  - mp: ModelParams (with its patches already defined)
+  - patches: A vector of patches (e.g. for a particular band)
 
 Returns:
   - An array (over tiles) of a vector of candidate
     source patches.  If a patch is a candidate, it may be within the patch radius
     of a point in the tile, though it might not.
 """ ->
-function local_source_candidates(tiles::TiledImage, patches::Vector{SkyPatch})
+function local_source_candidates(
+    tiles::TiledImage, patches::Vector{SkyPatch})
 
   # Get the largest size of the pixel ellipse defined by the patch
   # world coordinate circle.

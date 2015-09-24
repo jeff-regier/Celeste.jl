@@ -68,32 +68,29 @@ function test_local_sources()
 
     blob = Synthetic.gen_blob(blob0, three_bodies);
 
-    mp = ModelInit.cat_init(three_bodies, tile_width=1000);
+    tile = ImageTile(1, 1, blob[3], 1000);
+    mp = ModelInit.initialize_model_params(
+      fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
     @test mp.S == 3
-
-    mp.tile_width = 1000
-    tile = ImageTile(1, 1, blob[3], mp.tile_width);
-    ModelInit.initialize_tiles_and_patches!(
-      fill(fill(tile, 1, 1), 5), blob, mp; patch_radius=20.);
     subset1000 = SkyImages.local_sources(tile, mp.patches[:,3][:], blob[3].wcs);
     @test subset1000 == [1,2,3]
 
-    mp.tile_width = 10
-    tile = ImageTile(1, 1, blob[3], mp.tile_width);
-    ModelInit.initialize_tiles_and_patches!(
-      fill(fill(tile, 1, 1), 5), blob, mp; patch_radius=20.);
+    tile_width = 10
+    tile = ImageTile(1, 1, blob[3], tile_width);
+    ModelInit.initialize_model_params(
+      fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
     subset10 = SkyImages.local_sources(tile, mp.patches[:,3][:], blob[3].wcs)
     @test subset10 == [1]
 
-    last_tile = ImageTile(11, 24, blob[3], mp.tile_width)
-    ModelInit.initialize_tiles_and_patches!(
-      fill(fill(last_tile, 1, 1), 5), blob, mp; patch_radius=20.);
-    last_subset = SkyImages.local_sources(last_tile, mp.patches[:,3][:], blob[3].wcs)
+    last_tile = ImageTile(11, 24, blob[3], tile_width)
+    ModelInit.initialize_model_params(
+      fill(fill(last_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
+    last_subset =SkyImages.local_sources(last_tile, mp.patches[:,3][:], blob[3].wcs)
     @test length(last_subset) == 0
 
-    pop_tile = ImageTile(7, 9, blob[3], mp.tile_width)
-    ModelInit.initialize_tiles_and_patches!(
-      fill(fill(pop_tile, 1, 1), 5), blob, mp; patch_radius=20.);
+    pop_tile = ImageTile(7, 9, blob[3], tile_width)
+    ModelInit.initialize_model_params(
+      fill(fill(pop_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
     pop_subset = SkyImages.local_sources(pop_tile, mp.patches[:,3][:], blob[3].wcs)
     @test pop_subset == [2,3]
 end
@@ -115,17 +112,13 @@ function test_local_sources_2()
     for b in 1:5 blob0[b].H, blob0[b].W = 400, 400 end
     big_blob = Synthetic.gen_blob(blob0, one_body);
 
-    mp = ModelInit.cat_init(one_body, tile_width=2);
-
-    mp_small = deepcopy(mp);
-    small_tiled_blob = ModelInit.initialize_tiles_and_patches!(
-      small_blob, mp_small, patch_radius=35.);
+    small_tiled_blob, mp_small = ModelInit.initialize_celeste(
+      small_blob, one_body, patch_radius=35.);
     small_source_tiles =
       [ sum([ length(s) > 0 for s in source ]) for source in mp_small.tile_sources ]
 
-    mp_big = deepcopy(mp);
-    big_tiled_blob = ModelInit.initialize_tiles_and_patches!(
-      big_blob, mp_big, patch_radius=35.);
+    big_tiled_blob, mp_big = ModelInit.initialize_celeste(
+      big_blob, one_body, patch_radius=35.);
     big_source_tiles =
       [ sum([ length(s) > 0 for s in source ]) for source in mp_big.tile_sources ]
 
@@ -161,15 +154,14 @@ function test_local_sources_3()
     diags = [ world_quad[i, :]' - world_quad[i + 2, :]' for i=1:2 ]
     patch_radius = maximum([sqrt(dot(d, d)) for d in diags])
 
-    mp = ModelInit.cat_init(one_body, tile_width=tile_width)
-    tiled_blob = ModelInit.initialize_tiles_and_patches!(
-      blob, mp, patch_radius=patch_radius);
+    tiled_blob, mp = ModelInit.initialize_celeste(
+      blob, one_body, patch_radius=patch_radius);
 
     # Source should be present
     tile = ImageTile(int(round(pix_loc[1] / tile_width)),
                      int(round(pix_loc[2] / tile_width)),
                      blob[test_b],
-                     mp.tile_width);
+                     tile_width);
     @test SkyImages.local_sources(
       tile, mp.patches[:,test_b][:], blob[test_b].wcs) == [1]
 
@@ -179,7 +171,7 @@ function test_local_sources_3()
                               patch_radius_pix) / tile_width)),
                      int(round(pix_loc[2] / tile_width)),
                      blob[test_b],
-                     mp.tile_width)
+                     tile_width)
     @test SkyImages.local_sources(
       tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
 
@@ -187,7 +179,7 @@ function test_local_sources_3()
                      int(ceil((pix_loc[2]  + 1.5 * tile_width * sqrt(2) +
                            patch_radius_pix) / tile_width)),
                      blob[test_b],
-                     mp.tile_width)
+                     tile_width)
     @test SkyImages.local_sources(
       tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
 end
@@ -195,7 +187,7 @@ end
 
 function test_tiling()
     srand(1)
-    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 =SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
     end
