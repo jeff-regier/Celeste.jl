@@ -197,6 +197,16 @@ end
 
 @doc """
 Choose a reasonable patch radius based on the catalog.
+TODO: Select this by rendering the object and solving an optimization
+problem.
+
+Args:
+  - pixel_center: The pixel location of the object
+  - ce: The catalog entry for the object
+  - psf: The psf at this location
+  - img: The image
+  - width_scale: A multiple of standard deviations to use
+  - max_radius: The maximum radius in pixels.
 """ ->
 function choose_patch_radius(
   pixel_center::Vector{Float64}, ce::CatalogEntry,
@@ -220,14 +230,14 @@ function choose_patch_radius(
     end
     flux = ce.is_star ? ce.star_fluxes[img.b] : ce.gal_fluxes[img.b]
 
-    # For the worst-case scenario, find where a 1d pdf would take the
-    # value of 5% of the sky noise when the standard deviation is obj_width.
-
-    # TODO: What to do when this has no solution?
-    pdf_target = epsilon / (20 * flux)  # 5% of sky
+    # Choose enough pixels that the light is either 90% of the light
+    # would be captured from a 1d gaussian or 5% of the sky noise,
+    # whichever is a wider radius.
+    pdf_90 = exp(-0.5 * (1.64)^2) / (sqrt(2pi) * obj_width)
+    pdf_target = min(pdf_90, epsilon / (20 * flux))
     rhs = log(pdf_target) + 0.5 * log(2pi) + log(obj_width)
     radius_req = sqrt(-2 * (obj_width ^ 2) * rhs)
-    radius_req
+    min(radius_req, max_radius)
 end
 
 
