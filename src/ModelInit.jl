@@ -389,8 +389,6 @@ function initialize_model_params(
     for s=1:mp.S
       if radius_from_cat
         mp.patches[s, b] = SkyPatch(cat[s], blob[b], fit_psf=fit_psf)
-        println("Radius: ($b, $s)", Images.world_radius_to_pixel(
-          mp.patches[s, b].radius, mp.patches[s, b].wcs_jacobian))
       else
         mp.patches[s, b] =
           SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
