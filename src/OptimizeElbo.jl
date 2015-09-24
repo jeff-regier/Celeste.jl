@@ -223,7 +223,7 @@ Returns:
   - max_x: The optimal function input
   - ret: The return code of optimize()
 """ ->
-function maximize_f_newton(
+function maximize_f(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::Transform.DataTransform;
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
@@ -308,7 +308,7 @@ Returns:
   - max_x: The optimal function input
   - ret: The return code of optimize()
 """ ->
-function maximize_f(
+function maximize_f_bfgs(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::DataTransform,
   lbs::Union(Float64, Vector{Float64}), ubs::Union(Float64, Vector{Float64});
