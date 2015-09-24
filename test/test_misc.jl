@@ -85,7 +85,7 @@ function test_local_sources()
     last_tile = ImageTile(11, 24, blob[3], tile_width)
     ModelInit.initialize_model_params(
       fill(fill(last_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
-    last_subset = Images.local_sources(last_tile, mp.patches[:,3][:], blob[3].wcs)
+    last_subset =SkyImages.local_sources(last_tile, mp.patches[:,3][:], blob[3].wcs)
     @test length(last_subset) == 0
 
     pop_tile = ImageTile(7, 9, blob[3], tile_width)
@@ -187,7 +187,7 @@ end
 
 function test_tiling()
     srand(1)
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    blob0 =SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
     end
