@@ -207,6 +207,9 @@ Args:
   - img: The image
   - width_scale: A multiple of standard deviations to use
   - max_radius: The maximum radius in pixels.
+
+Returns:
+  - A radius in pixels chosen from the catalog entry.
 """ ->
 function choose_patch_radius(
   pixel_center::Vector{Float64}, ce::CatalogEntry,

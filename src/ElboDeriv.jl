@@ -774,7 +774,8 @@ end
 @doc """
 Produce a predicted image for a given tile and model parameters.
 """ ->
-function tile_predicted_image(tile::ImageTile, mp::ModelParams, b::Int64)
+function tile_predicted_image(tile::ImageTile, mp::ModelParams)
+  b = tile.b
   num_type = typeof(mp.vp[1][1])
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
   sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
