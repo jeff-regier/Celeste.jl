@@ -171,7 +171,7 @@ function test_set_patch_size()
   end
 
   srand(1)
-  blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
+  blob0 =SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
   img_size = 150
   for b in 1:5
       blob0[b].H, blob0[b].W = img_size, img_size
