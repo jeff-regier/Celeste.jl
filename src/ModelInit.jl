@@ -388,7 +388,7 @@ function initialize_model_params(
 
   for b = 1:length(blob)
     for s=1:mp.S
-      patch_args = radius_from_cat ? cat[s] : (mp.vp[s][ids.u], patch_radius)
+      patch_args = radius_from_cat ? (cat[s]) : (mp.vp[s][ids.u], patch_radius)
       mp.patches[s, b] = SkyPatch(patch_args..., blob[b], fit_psf=fit_psf)
     end
     mp.tile_sources[b] =
