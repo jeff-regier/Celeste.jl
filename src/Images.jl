@@ -61,8 +61,8 @@ function convert_catalog_to_celeste(
 
             dev_col = symbol("devflux_$bl")
             exp_col = symbol("expflux_$bl")
-            gal_fluxes[b] += fracs_dev[1] * max(row[1, dev_col], 0.0) +
-                             fracs_dev[2] * max(row[1, exp_col], 0.0)
+            gal_fluxes[b] += fracs_dev[1] * max(row[1, dev_col], 1e-6) +
+                             fracs_dev[2] * max(row[1, exp_col], 1e-6)
         end
 
         fits_ab = fracs_dev[1] > .5 ? row[1, :ab_dev] : row[1, :ab_exp]
