@@ -3,7 +3,7 @@ using Base.Test
 using SampleData
 using CelesteTypes
 
-import Images
+import SkyImages
 import SDSS
 import Util
 import WCS
@@ -18,7 +18,7 @@ function test_tile_image()
   tile_width = 20;
   tile = ImageTile(1, 1, img, tile_width);
 
-  tiles = Images.break_image_into_tiles(img, tile_width);
+  tiles = SkyImages.break_image_into_tiles(img, tile_width);
   @test size(tiles) ==
     (int(ceil(img.H  / tile_width)), int(ceil(img.W / tile_width)))
   for tile in tiles
@@ -33,7 +33,7 @@ function test_tile_image()
   img.constant_background = false
   img.epsilon_mat = rand(size(img.pixels));
   img.iota_vec = rand(size(img.pixels)[1]);
-  tiles = Images.break_image_into_tiles(img, tile_width);
+  tiles = SkyImages.break_image_into_tiles(img, tile_width);
   @test size(tiles) ==
     (int(ceil(img.H  / tile_width)), int(ceil(img.W / tile_width)))
   for tile in tiles
@@ -54,7 +54,7 @@ function test_local_sources()
     # Coarse test that local_sources gets the right objects.
 
     srand(1)
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
+    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
         blob0[b].wcs = WCS.wcs_id
@@ -72,14 +72,14 @@ function test_local_sources()
     mp = ModelInit.initialize_model_params(
       fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
     @test mp.S == 3
-    subset1000 = Images.local_sources(tile, mp.patches[:,3][:], blob[3].wcs);
+    subset1000 = SkyImages.local_sources(tile, mp.patches[:,3][:], blob[3].wcs);
     @test subset1000 == [1,2,3]
 
     tile_width = 10
     tile = ImageTile(1, 1, blob[3], tile_width);
     ModelInit.initialize_model_params(
       fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
-    subset10 = Images.local_sources(tile, mp.patches[:,3][:], blob[3].wcs)
+    subset10 = SkyImages.local_sources(tile, mp.patches[:,3][:], blob[3].wcs)
     @test subset10 == [1]
 
     last_tile = ImageTile(11, 24, blob[3], tile_width)
@@ -91,7 +91,7 @@ function test_local_sources()
     pop_tile = ImageTile(7, 9, blob[3], tile_width)
     ModelInit.initialize_model_params(
       fill(fill(pop_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
-    pop_subset = Images.local_sources(pop_tile, mp.patches[:,3][:], blob[3].wcs)
+    pop_subset = SkyImages.local_sources(pop_tile, mp.patches[:,3][:], blob[3].wcs)
     @test pop_subset == [2,3]
 end
 
@@ -102,7 +102,7 @@ function test_local_sources_2()
     # the polygon logic.)
 
     srand(1)
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
+    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
     one_body = [sample_ce([50., 50.], true),]
     for b in 1:5 blob0[b].wcs = WCS.wcs_id end
 
@@ -132,7 +132,7 @@ function test_local_sources_3()
     srand(1)
     test_b = 3 # Will test using this band only
     pix_loc = Float64[50., 50.]
-    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359");
+    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
     body_loc = WCS.pixel_to_world(blob0[test_b].wcs, pix_loc)
     one_body = [sample_ce(body_loc, true),]
 
@@ -162,7 +162,7 @@ function test_local_sources_3()
                      int(round(pix_loc[2] / tile_width)),
                      blob[test_b],
                      tile_width);
-    @test Images.local_sources(
+    @test SkyImages.local_sources(
       tile, mp.patches[:,test_b][:], blob[test_b].wcs) == [1]
 
     # Source should not match when you're 1 tile and a half away along the diagonal plus
@@ -172,7 +172,7 @@ function test_local_sources_3()
                      int(round(pix_loc[2] / tile_width)),
                      blob[test_b],
                      tile_width)
-    @test Images.local_sources(
+    @test SkyImages.local_sources(
       tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
 
     tile = ImageTile(int(round((pix_loc[1]) / tile_width)),
@@ -180,15 +180,58 @@ function test_local_sources_3()
                            patch_radius_pix) / tile_width)),
                      blob[test_b],
                      tile_width)
-    @test Images.local_sources(
+    @test SkyImages.local_sources(
       tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
+end
+
+
+function test_tiling()
+    srand(1)
+    blob0 = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")
+    for b in 1:5
+        blob0[b].H, blob0[b].W = 112, 238
+    end
+    three_bodies = [
+        sample_ce([4.5, 3.6], false),
+        sample_ce([60.1, 82.2], true),
+        sample_ce([71.3, 100.4], false),
+    ]
+   blob = Synthetic.gen_blob(blob0, three_bodies)
+
+    mp = ModelInit.cat_init(three_bodies)
+    elbo = ElboDeriv.elbo(blob, mp)
+
+    mp2 = ModelInit.cat_init(three_bodies, tile_width=10)
+    elbo_tiles = ElboDeriv.elbo(blob, mp2)
+    @test_approx_eq_eps elbo_tiles.v elbo.v 1e-5
+
+    mp3 = ModelInit.cat_init(three_bodies, patch_radius=30.)
+    elbo_patches = ElboDeriv.elbo(blob, mp3)
+    @test_approx_eq_eps elbo_patches.v elbo.v 1e-5
+
+    for s in 1:mp.S
+        for i in 1:length(1:length(CanonicalParams))
+            @test_approx_eq_eps elbo_tiles.d[i, s] elbo.d[i, s] 1e-5
+            @test_approx_eq_eps elbo_patches.d[i, s] elbo.d[i, s] 1e-5
+        end
+    end
+
+    mp4 = ModelInit.cat_init(three_bodies, patch_radius=35., tile_width=10)
+    elbo_both = ElboDeriv.elbo(blob, mp4)
+    @test_approx_eq_eps elbo_both.v elbo.v 1e-1
+
+    for s in 1:mp.S
+        for i in 1:length(1:length(CanonicalParams))
+            @test_approx_eq_eps elbo_both.d[i, s] elbo.d[i, s] 1e-1
+        end
+    end
 end
 
 
 function test_sky_noise_estimates()
     blobs = Array(Blob, 2)
     blobs[1], mp, three_bodies = gen_three_body_dataset()  # synthetic
-    blobs[2] = Images.load_stamp_blob(dat_dir, "164.4311-39.0359")  # real
+    blobs[2] = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")  # real
 
     for blob in blobs
         for b in 1:5
