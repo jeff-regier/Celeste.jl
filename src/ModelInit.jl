@@ -15,7 +15,7 @@ using Util
 using CelesteTypes
 
 import SloanDigitalSkySurvey: WCS
-import Images
+import SkyImages
 import WCSLIB
 import CelesteTypes.SkyPatch
 
@@ -90,7 +90,7 @@ function init_source(ce::CatalogEntry)
 
     ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.015), 0.985)
     ret[ids.e_angle] = ce.gal_angle
-    ret[ids.e_scale] = ce.is_star ? 0.2 : min(max(ce.gal_scale, 0.2), 69.)
+    ret[ids.e_scale] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
 
     ret
 end
@@ -260,7 +260,7 @@ Returns:
 SkyPatch(world_center::Vector{Float64},
          radius::Float64, img::Image; fit_psf=true) = begin
     if fit_psf
-      psf = Images.get_source_psf(world_center, img)
+      psf = SkyImages.get_source_psf(world_center, img)
     else
       psf = img.psf
     end
@@ -286,7 +286,7 @@ Returns:
 SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true) = begin
     world_center = ce.pos
     if fit_psf
-      psf = Images.get_source_psf(world_center, img)
+      psf = SkyImages.get_source_psf(world_center, img)
     else
       psf = img.psf
     end
@@ -295,7 +295,7 @@ SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true) = begin
     wcs_jacobian = WCS.pixel_world_jacobian(img.wcs, pixel_center)
 
     pix_radius = choose_patch_radius(pixel_center, ce, psf, img)
-    sky_radius = Images.pixel_radius_to_world(pix_radius, wcs_jacobian)
+    sky_radius = SkyImages.pixel_radius_to_world(pix_radius, wcs_jacobian)
 
     SkyPatch(world_center, sky_radius, psf, wcs_jacobian, pixel_center)
 end
@@ -319,12 +319,12 @@ function get_tiled_image_sources(
 
   H, W = size(tiled_image)
   tile_sources = fill(Int64[], H, W)
-  candidates = Images.local_source_candidates(tiled_image, patches)
+  candidates = SkyImages.local_source_candidates(tiled_image, patches)
   for h in 1:H, w in 1:W
     # Only look for sources within the candidate set.
     cand_patches = patches[candidates[h, w]]
     if length(cand_patches) > 0
-      cand_sources = Images.local_sources(tiled_image[h, w], cand_patches, wcs)
+      cand_sources = SkyImages.local_sources(tiled_image[h, w], cand_patches, wcs)
       tile_sources[h, w] = candidates[h, w][cand_sources]
     else
       tile_sources[h, w] = Int64[]
@@ -343,7 +343,7 @@ function initialize_celeste(
     tile_width::Int64=typemax(Int64), fit_psf::Bool=true,
     patch_radius::Float64=-1., radius_from_cat::Bool=true)
 
-  tiled_blob = Images.break_blob_into_tiles(blob, tile_width)
+  tiled_blob = SkyImages.break_blob_into_tiles(blob, tile_width)
   mp = initialize_model_params(tiled_blob, blob, cat,
                                fit_psf=fit_psf, patch_radius=patch_radius,
                                radius_from_cat=radius_from_cat)
@@ -385,6 +385,7 @@ function initialize_model_params(
 
   mp.patches = Array(SkyPatch, mp.S, length(blob))
   mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
+
   for b = 1:length(blob)
     for s=1:mp.S
       if radius_from_cat
@@ -400,5 +401,6 @@ function initialize_model_params(
 
   mp
 end
+
 
 end

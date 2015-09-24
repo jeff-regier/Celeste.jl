@@ -5,10 +5,10 @@ using SampleData
 using DataFrames
 
 import ModelInit
-import Images
+import SkyImages
 import SloanDigitalSkySurvey: SDSS
 
-println("Running Images tests.")
+println("Running SkyImages tests.")
 
 field_dir = joinpath(dat_dir, "sample_field")
 run_num = "003900"
@@ -19,9 +19,9 @@ function test_blob()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
 
-  blob = Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
+  blob = SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
   cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
-  cat_entries = Images.convert_catalog_to_celeste(cat_df, blob);
+  cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
   tiled_blob, mp =
     ModelInit.initialize_celeste(blob, cat_entries, patch_radius=1e-6,
                                  fit_psf=false);
@@ -47,14 +47,14 @@ function test_blob()
 
   # # Test cropping.
   width = 5.0
-  cropped_blob = Images.crop_blob_to_location(blob, width, obj_loc);
+  cropped_blob = SkyImages.crop_blob_to_location(blob, width, obj_loc);
   for b=1:5
     # Check that it only has one tile of the right size containing the object.
     @assert length(cropped_blob[b]) == 1
     @test 2 * width <= cropped_blob[b][1].h_width <= 2 * (width + 1)
     @test 2 * width <= cropped_blob[b][1].w_width <= 2 * (width + 1)
     tile_sources =
-      Images.local_sources(cropped_blob[b][1], mp.patches[:,b][:], blob[b].wcs)
+      SkyImages.local_sources(cropped_blob[b][1], mp.patches[:,b][:], blob[b].wcs)
     @test obj_row in tile_sources
   end
 
@@ -68,10 +68,10 @@ function test_blob()
   original_psf_val =
     PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
   original_psf_gmm, scale = PSF.fit_psf_gaussians(original_psf_val);
-  original_psf_celeste = Images.convert_gmm_to_celeste(original_psf_gmm, scale);
+  original_psf_celeste = SkyImages.convert_gmm_to_celeste(original_psf_gmm, scale);
   fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
-  obj_psf = Images.get_source_psf(mp_obj.vp[1][ids.u], img);
+  obj_psf = SkyImages.get_source_psf(mp.vp[1][ids.u], img);
   obj_psf_val = PSF.get_psf_at_point(obj_psf);
 
   # The fits should match exactly.
@@ -98,7 +98,7 @@ function test_stamp_get_object_psf()
   original_psf_val = PSF.get_psf_at_point(img.psf);
 
   obj_psf_val =
-    PSF.get_psf_at_point(Images.get_source_psf(stamp_mp.vp[1][ids.u], img))
+    PSF.get_psf_at_point(SkyImages.get_source_psf(stamp_mp.vp[1][ids.u], img))
   @test_approx_eq_eps(obj_psf_val[:], original_psf_val[:], 1e-6)
 end
 
@@ -111,7 +111,7 @@ function test_get_tiled_image_source()
   mp = ModelInit.initialize_model_params(
     tiled_blob, blob, body; patch_radius=1e-6)
 
-  tiled_img = Images.break_image_into_tiles(img, 10);
+  tiled_img = SkyImages.break_image_into_tiles(img, 10);
   for hh in 1:size(tiled_img)[1], ww in 1:size(tiled_img)[2]
     tile = tiled_img[hh, ww]
     loc = Float64[mean(tile.h_range), mean(tile.w_range)]
@@ -146,7 +146,7 @@ function test_local_source_candidate()
       ModelInit.get_tiled_image_sources(tiled_blob[b], blob[b].wcs, patches)
 
     # Get a set of candidates.
-    candidates = Images.local_source_candidates(tiled_blob[b], patches);
+    candidates = SkyImages.local_source_candidates(tiled_blob[b], patches);
 
     # Check that all the actual sources are candidates and that this is the
     # same as what is returned by initialize_model_params.
@@ -221,4 +221,3 @@ test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
 test_local_source_candidate()
-test_set_patch_size()
