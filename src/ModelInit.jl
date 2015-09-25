@@ -23,23 +23,26 @@ import CelesteTypes.SkyPatch
 function sample_prior()
     const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
+    # set a = [.99, .01] if stars are underrepresented
+    # due to the greater flexibility of the galaxy model
+    a = [0.28, 0.72]
+    r = Array(Float64, 2, Ia)
+    k = Array(Float64, D, Ia)
+    c_mean = Array(Float64, B - 1, D, Ia)
+    c_cov = Array(Float64, B - 1, B - 1, D, Ia)
+
     stars_file = open("$dat_dir/priors/stars.dat")
-    r_fit1, k1, cmean1, ccov1 = deserialize(stars_file)
+    r_fit1, k[:, 1], c_mean[:,:,1], c_cov[:,:,:,1] = deserialize(stars_file)
     close(stars_file)
 
     gals_file = open("$dat_dir/priors/gals.dat")
-    r_fit2, k2, cmean2, ccov2 = deserialize(gals_file)
+    r_fit2, k[:, 2], c_mean[:,:,2], c_cov[:,:,:,2] = deserialize(gals_file)
     close(gals_file)
 
     # TODO: use r_fit1 and r_fit2 instead of magic numbers ?
+    r = [0.47 1.28; 1/0.012 1/0.11]
 
-    # magic numbers below determined from the output of primary
-    # on the test set of stamps
-    PriorParams(
-        [0.28, 0.72],                       # a
-        [(0.47, 1. / 0.012), (1.28, 1. / 0.11)], # r
-        Vector{Float64}[k1, k2],            # k
-        [(cmean1, ccov1), (cmean2, ccov2)]) # c
+    PriorParams(a, r, k, c_mean, c_cov)
 end
 
 @doc """

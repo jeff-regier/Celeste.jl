@@ -344,9 +344,10 @@ end
 
 immutable PriorParams
     a::Vector{Float64}  # formerly Phi
-    r::Vector{(Float64, Float64)}   # formerly Upsilon, Psi
-    k::Vector{Vector{Float64}}  # formerly Xi
-    c::Vector{(Matrix{Float64}, Array{Float64, 3})}  # formerly Omega, Lambda
+    r::Matrix{Float64}   # formerly Upsilon, Psi
+    k::Matrix{Float64}  # formerly Xi
+    c_mean::Array{Float64, 3} # formerly Omega
+    c_cov::Array{Float64, 4} # formerly Lambda
 end
 
 # A vector of variational parameters.  The outer index is

@@ -53,7 +53,7 @@ function test_kl_divergence_values()
 
     # k
     q_k = Categorical(vs[ids.k[:, i]])
-    p_k = Categorical(mp.pp.k[i])
+    p_k = Categorical(mp.pp.k[:, i])
     function sklk(accum)
         ElboDeriv.subtract_kl_k!(i, s, mp, accum)
         @assert i == 1
@@ -62,10 +62,10 @@ function test_kl_divergence_values()
     test_kl(q_k, p_k, sklk)
 
     # c
-    mp.pp.c[i][1][:, d] = vs[ids.c1[:, i]]
-    mp.pp.c[i][2][:, :, d] = diagm(vs[ids.c2[:, i]])
+    mp.pp.c_mean[:,d,i] = vs[ids.c1[:, i]]
+    mp.pp.c_cov[:,:,d,i] = diagm(vs[ids.c2[:, i]])
     q_c = MvNormal(vs[ids.c1[:, i]], diagm(vs[ids.c2[:, i]]))
-    p_c = MvNormal(mp.pp.c[i][1][:, d], mp.pp.c[i][2][:, :, d])
+    p_c = MvNormal(mp.pp.c_mean[:, d, i], mp.pp.c_cov[:, :, d, i])
     function sklc(accum)
         ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
         accum.v /= vs[ids.a[i]] * vs[ids.k[d, i]]
@@ -74,7 +74,7 @@ function test_kl_divergence_values()
 
     # r
     q_r = Gamma(vs[ids.r1[i]], vs[ids.r2[i]])
-    p_r = Gamma(mp.pp.r[i][1], mp.pp.r[i][2])
+    p_r = Gamma(mp.pp.r[1, i], mp.pp.r[2, i])
     function sklr(accum)
         ElboDeriv.subtract_kl_r!(i, s, mp, accum)
         @assert i == 1
