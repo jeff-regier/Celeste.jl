@@ -122,7 +122,7 @@ function test_star_optimization_newton()
       ElboDeriv.elbo_likelihood(tiled_blob, mp)
     end
     omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
-    OptimizeElbo.maximize_f_bfgs(
+    OptimizeElbo.maximize_f_newton(
       lik_function, tiled_blob, mp, trans,
       omitted_ids=omitted_ids, verbose=false, max_iters=2, hess_reg=0.0);
 end
