@@ -26,11 +26,12 @@ export print_params
 
 using Util
 using SloanDigitalSkySurvey.PSF.RawPSFComponents
+using Compat
 
 import Base.convert
 import Distributions
 import FITSIO
-import ForwardDiff
+import DualNumbers
 import WCSLIB
 
 import Base.length
@@ -413,7 +414,7 @@ for (pn, ids_name, pf) in param_specs
         field_len = *(ll...)
 
         ids_array = ll == 1 ? prev_end + 1 :
-            [(prev_end + 1) : (prev_end + field_len)]
+            collect( (prev_end + 1):(prev_end + field_len) )
         if length(ll) >= 2
             ids_array = :(reshape($ids_array, $ll))
         end
@@ -452,7 +453,7 @@ const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 # (which I don't really understand.)
 function get_id_names(ids::Union(CanonicalParams, UnconstrainedParams))
   ids_names = Array(ASCIIString, length(ids))
-  for (name in names(ids))
+  for (name in @compat(fieldnames(ids)))
     inds = ids.(name)
     if length(size(inds)) == 0
       ids_names[inds] = "$(name)"
@@ -511,9 +512,9 @@ ModelParams{NumType <: Number}(
     ModelParams{NumType}(vp, pp)
 end
 
-function convert(::Type{ModelParams{ForwardDiff.Dual}}, mp::ModelParams{Float64})
+function convert(::Type{ModelParams{DualNumbers.Dual}}, mp::ModelParams{Float64})
     mp_dual =
-      ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
+      ModelParams(convert(Array{Array{DualNumbers.Dual{Float64}, 1}, 1}, mp.vp),
                   mp.pp)
     mp_dual.patches = mp.patches
     mp_dual
@@ -525,7 +526,7 @@ Display model parameters with the variable names.
 function print_params(mp::ModelParams)
     for s in 1:mp.S
         println("=======================\n Object $(s):")
-        for var_name in names(ids)
+        for var_name in @compat(fieldnames(ids))
             println(var_name)
             println(mp.vp[s][ids.(var_name)])
         end
@@ -539,7 +540,7 @@ function print_params(mp_tuple::ModelParams...)
     println("Printing for $(length(mp_tuple)) parameters.")
     for s in 1:mp_tuple[1].S
         println("=======================\n Object $(s):")
-        for var_name in names(ids)
+        for var_name in @compat(fieldnames(ids))
             println(var_name)
             mp_vars =
               [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for
@@ -554,7 +555,8 @@ end
 Display a Celeste catalog entry.
 """ ->
 function print_cat_entry(cat_entry::CatalogEntry)
-    [ println("$name: $(cat_entry.(name))") for name in names(cat_entry) ]
+    [ println("$name: $(cat_entry.(name))") for name in 
+            @compat(fieldnames(cat_entry)) ]
 end
 
 #########################################################
