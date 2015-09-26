@@ -1,6 +1,7 @@
-Compat
+Compat # Only for newton_trust_region.jl
 DataFrames
 Distributions
+Docile
 DualNumbers
 FITSIO
 ForwardDiff 0.0.2 0.0.3+
