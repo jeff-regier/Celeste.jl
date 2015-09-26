@@ -213,7 +213,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         pix_locs = [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ]
         inbounds(pos) = pos[1] > -10. && pos[2] > -10 &&
                         pos[1] < 61 && pos[2] < 61
-        all([ inbounds(pos) for pos in pix_locs ])
+        reduce(&, [inbounds(pos) for pos in pix_locs])
     end
     cat_entries = filter(ce_inbounds, cat_entries)
 

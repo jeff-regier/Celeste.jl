@@ -29,6 +29,7 @@ using SloanDigitalSkySurvey.PSF.RawPSFComponents
 using Compat
 
 import Base.convert
+import Base.+
 import Distributions
 import FITSIO
 import DualNumbers
@@ -84,20 +85,20 @@ Returns:
 """ ->
 function get_galaxy_prototypes()
     dev_amp = [
-        4.26347652e-02, 2.40127183e-01, 6.85907632e-01, 1.51937350e+00,
-        2.83627243e+00, 4.46467501e+00, 5.72440830e+00, 5.60989349e+00]
+        4.26347652e-2, 2.40127183e-1, 6.85907632e-1, 1.51937350,
+        2.83627243, 4.46467501, 5.72440830, 5.60989349]
     dev_amp /= sum(dev_amp)
     dev_var = [
-        2.23759216e-04, 1.00220099e-03, 4.18731126e-03, 1.69432589e-02,
-        6.84850479e-02, 2.87207080e-01, 1.33320254e+00, 8.40215071e+00]
+        2.23759216e-4, 1.00220099e-3, 4.18731126e-3, 1.69432589e-2,
+        6.84850479e-2, 2.87207080e-1, 1.33320254, 8.40215071]
 
 	exp_amp = [
-        2.34853813e-03, 3.07995260e-02, 2.23364214e-01,
-        1.17949102e+00, 4.33873750e+00, 5.99820770e+00]
+        2.34853813e-3, 3.07995260e-2, 2.23364214e-1,
+        1.17949102, 4.33873750, 5.99820770]
     exp_amp /= sum(exp_amp)
     exp_var = [
-        1.20078965e-03, 8.84526493e-03, 3.91463084e-02,
-        1.39976817e-01, 4.60962500e-01, 1.50159566e+00]
+        1.20078965e-3, 8.84526493e-3, 3.91463084e-2,
+        1.39976817e-1, 4.60962500e-1, 1.50159566]
 
 	# Adjustments to the effective radius hard-coded above.
 	# (The effective radius is the distance from the center containing half

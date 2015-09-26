@@ -2,6 +2,7 @@ using Celeste
 using Base.Test
 using SampleData
 using CelesteTypes
+using Compat
 
 import SkyImages
 import SDSS
@@ -20,7 +21,8 @@ function test_tile_image()
 
   tiles = SkyImages.break_image_into_tiles(img, tile_width);
   @test size(tiles) ==
-    (int(ceil(img.H  / tile_width)), int(ceil(img.W / tile_width)))
+    (@compat(round(Int, ceil(img.H  / tile_width))),
+     @compat(round(Int, ceil(img.W / tile_width))))
   for tile in tiles
     @test tile.b == img.b
     @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
@@ -34,8 +36,9 @@ function test_tile_image()
   img.epsilon_mat = rand(size(img.pixels));
   img.iota_vec = rand(size(img.pixels)[1]);
   tiles = SkyImages.break_image_into_tiles(img, tile_width);
-  @test size(tiles) ==
-    (int(ceil(img.H  / tile_width)), int(ceil(img.W / tile_width)))
+  @test size(tiles) == (
+    @compat(ceil(Int, img.H  / tile_width)),
+    @compat(ceil(Int, img.W / tile_width)))
   for tile in tiles
     @test tile.b == img.b
     @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
@@ -158,28 +161,31 @@ function test_local_sources_3()
       blob, one_body, patch_radius=patch_radius);
 
     # Source should be present
-    tile = ImageTile(int(round(pix_loc[1] / tile_width)),
-                     int(round(pix_loc[2] / tile_width)),
-                     blob[test_b],
-                     tile_width);
+    tile = ImageTile(
+        @compat(round(Int, pix_loc[1] / tile_width)),
+        @compat(round(Int, pix_loc[2] / tile_width)),
+        blob[test_b],
+        tile_width);
     @test SkyImages.local_sources(
       tile, mp.patches[:,test_b][:], blob[test_b].wcs) == [1]
 
     # Source should not match when you're 1 tile and a half away along the diagonal plus
     # the pixel radius from the center of the tile.
-    tile = ImageTile(int(ceil((pix_loc[1] + 1.5 * tile_width * sqrt(2) +
-                              patch_radius_pix) / tile_width)),
-                     int(round(pix_loc[2] / tile_width)),
-                     blob[test_b],
-                     tile_width)
+    tile = ImageTile(
+        @compat(ceil(Int, (pix_loc[1] + 1.5 * tile_width * sqrt(2) + 
+                patch_radius_pix) / tile_width)),
+        @compat(round(Int, pix_loc[2] / tile_width)),
+        blob[test_b],
+        tile_width)
     @test SkyImages.local_sources(
       tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
 
-    tile = ImageTile(int(round((pix_loc[1]) / tile_width)),
-                     int(ceil((pix_loc[2]  + 1.5 * tile_width * sqrt(2) +
+    tile = ImageTile(
+        @compat(round(Int, (pix_loc[1]) / tile_width)),
+        @compat(ceil(Int, (pix_loc[2]  + 1.5 * tile_width * sqrt(2) +
                            patch_radius_pix) / tile_width)),
-                     blob[test_b],
-                     tile_width)
+        blob[test_b],
+        tile_width)
     @test SkyImages.local_sources(
       tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
 end

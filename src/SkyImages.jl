@@ -2,6 +2,7 @@ module SkyImages
 
 VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
+using Compat
 import SloanDigitalSkySurvey: SDSS
 import SloanDigitalSkySurvey: WCS
 import SloanDigitalSkySurvey: PSF
@@ -101,24 +102,25 @@ function load_stamp_blob(stamp_dir, stamp_id)
         hdr = FITSIO.read_header(fits[1])
         original_pixels = read(fits[1])
         dn = original_pixels / hdr["CALIB"] + hdr["SKY"]
-        nelec = float(int(dn * hdr["GAIN"]))
+        nelec_f32 = @compat(round(dn * hdr["GAIN"]))
+        nelec = convert(Array{Float64}, nelec_f32)
 
         header_str = FITSIO.read_header(fits[1], ASCIIString)
         ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
         close(fits)
 
-        alphaBar = [hdr["PSF_P0"], hdr["PSF_P1"], hdr["PSF_P2"]]
+        alphaBar = [hdr["PSF_P0"]; hdr["PSF_P1"]; hdr["PSF_P2"]]
         xiBar = [
-            [hdr["PSF_P3"]  hdr["PSF_P4"]],
-            [hdr["PSF_P5"]  hdr["PSF_P6"]],
+            [hdr["PSF_P3"]  hdr["PSF_P4"]];
+            [hdr["PSF_P5"]  hdr["PSF_P6"]];
             [hdr["PSF_P7"]  hdr["PSF_P8"]]]'
 
         tauBar = Array(Float64, 2, 2, 3)
-        tauBar[:,:,1] = [[hdr["PSF_P9"] hdr["PSF_P11"]],
+        tauBar[:,:,1] = [[hdr["PSF_P9"] hdr["PSF_P11"]];
                          [hdr["PSF_P11"] hdr["PSF_P10"]]]
-        tauBar[:,:,2] = [[hdr["PSF_P12"] hdr["PSF_P14"]],
+        tauBar[:,:,2] = [[hdr["PSF_P12"] hdr["PSF_P14"]];
                          [hdr["PSF_P14"] hdr["PSF_P13"]]]
-        tauBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]],
+        tauBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]];
                          [hdr["PSF_P17"] hdr["PSF_P16"]]]
 
         psf = [PsfComponent(alphaBar[k], xiBar[:, k],
@@ -128,9 +130,9 @@ function load_stamp_blob(stamp_dir, stamp_id)
         iota = hdr["GAIN"] / hdr["CALIB"]
         epsilon = hdr["SKY"] * hdr["CALIB"]
 
-        run_num = int(hdr["RUN"])
-        camcol_num = int(hdr["CAMCOL"])
-        field_num = int(hdr["FIELD"])
+        run_num = @compat(round(Int, hdr["RUN"]))
+        camcol_num = @compat(round(Int, hdr["CAMCOL"]))
+        field_num = @compat(round(Int, hdr["FIELD"]))
 
         Image(H, W, nelec, b, wcs, epsilon, iota, psf,
               run_num, camcol_num, field_num)
@@ -202,11 +204,11 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
         psf = convert_gmm_to_celeste(psf_gmm, scale)
 
         # Set it to use a constant background but include the non-constant data.
-        blob[b] = Image(H, W,
-                        nelec, b, wcs,
-                        epsilon, iota, psf,
-                        int(run_num), int(camcol_num), int(field_num),
-                        true, epsilon_mat, iota_vec, raw_psf_comp)
+        blob[b] = Image(H, W, nelec, b, wcs, epsilon, iota, psf,
+                      @compat(parse(Int, run_num)),
+                      @compat(parse(Int, camcol_num)),
+                      @compat(parse(Int, field_num)),
+                      true, epsilon_mat, iota_vec, raw_psf_comp)
     end
 
     blob
@@ -237,12 +239,12 @@ function crop_blob_to_location(
     for b=1:5
         # Get the pixels that are near enough to the wcs_center.
         pix_center = WCS.world_to_pixel(blob[b].wcs, wcs_center)
-        h_min = max(int(floor(pix_center[1] - width)), 1)
-        h_max = min(int(ceil(pix_center[1] + width)), blob[b].H)
+        h_min = max(@compat(floor(Int, pix_center[1] - width)), 1)
+        h_max = min(@compat(ceil(Int, pix_center[1] + width)), blob[b].H)
         sub_rows_h = h_min:h_max
 
-        w_min = max(int(floor(pix_center[2] - width)), 1)
-        w_max = min(int(ceil(pix_center[2] + width)), blob[b].W)
+        w_min = max(@compat(floor(Int, (pix_center[2] - width))), 1)
+        w_max = min(@compat(ceil(Int, pix_center[2] + width)), blob[b].W)
         sub_rows_w = w_min:w_max
         tiled_blob[b] = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
     end
@@ -346,8 +348,8 @@ Returns:
   An array of tiles containing the image.
 """ ->
 function break_image_into_tiles(img::Image, tile_width::Int64)
-  WW = int(ceil(img.W / tile_width))
-  HH = int(ceil(img.H / tile_width))
+  WW = @compat(ceil(Int, img.W / tile_width))
+  HH = @compat(ceil(Int, img.H / tile_width))
   ImageTile[ ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW ]
 end
 

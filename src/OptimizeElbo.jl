@@ -188,12 +188,12 @@ function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
     # Change the bounds to match the scaling
     for s=1:length(vp)
       for (param, bounds) in transform.bounds[s]
-        if (bounds[2] == Inf)
+        if (bounds.ub == Inf)
           # Hack: higher bounds for upper-unconstrained params.
           ubs[collect(ids_free.(param)), s] = 20.0
         end
-        lbs[collect(ids_free.(param)), s] *= bounds[3]
-        ubs[collect(ids_free.(param)), s] *= bounds[3]
+        lbs[collect(ids_free.(param)), s] .*= bounds.rescaling
+        ubs[collect(ids_free.(param)), s] .*= bounds.rescaling
       end
     end
     reduce(vcat, lbs[kept_ids, :]), reduce(vcat, ubs[kept_ids, :])
