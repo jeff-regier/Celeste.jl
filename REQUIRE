@@ -1,4 +1,4 @@
-Compat # Only for newton_trust_region.jl
+Compat
 DataFrames
 Distributions
 Docile

@@ -3,6 +3,7 @@ using CelesteTypes
 using Base.Test
 using SampleData
 using Transform
+using Compat
 
 import OptimizeElbo
 
@@ -362,7 +363,7 @@ end
 
 function test_quadratic_optimization()
     # A very simple quadratic function to test the optimization.
-    const centers = collect(linrange(0.1, 0.9, length(CanonicalParams)))
+    const centers = collect(linspace(0.1, 0.9, length(CanonicalParams)))
 
     # Set feasible centers for the indicators.
     centers[ids.a] = [ 0.4, 0.6 ]
@@ -378,8 +379,8 @@ function test_quadratic_optimization()
 
     bounds = Array(ParamBounds, 1)
     bounds[1] = ParamBounds()
-    for param in setdiff(names(ids), [:a, :k])
-      bounds[1][symbol(param)] = (0., 1.0, 1.0)
+    for param in setdiff(@compat(fieldnames(ids)), [:a, :k])
+      bounds[1][symbol(param)] = ParamBox(0., 1.0, 1.0)
     end
     trans = DataTransform(bounds)
 
