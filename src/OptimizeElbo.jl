@@ -312,7 +312,8 @@ Returns:
 function maximize_f(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::DataTransform,
-  lbs::Union(Float64, Vector{Float64}), ubs::Union(Float64, Vector{Float64});
+  lbs::@compat(Union{Float64, Vector{Float64}}),
+  ubs::@compat(Union{Float64, Vector{Float64}});
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)

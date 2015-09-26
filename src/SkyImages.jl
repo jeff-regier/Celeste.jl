@@ -230,7 +230,8 @@ Returns:
     tiled blob, for example.
 """ ->
 function crop_blob_to_location(
-  blob::Array{Image, 1}, width::Union(Float64, Int64),
+  blob::Array{Image, 1},
+  width::@compat(Union{Float64, Int64}),
   wcs_center::Vector{Float64})
     @assert length(wcs_center) == 2
     @assert width > 0
