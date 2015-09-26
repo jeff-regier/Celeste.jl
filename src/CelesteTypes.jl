@@ -452,7 +452,8 @@ const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
 # TODO: maybe these should be incorporated into the framework above
 # (which I don't really understand.)
-function get_id_names(ids::Union(CanonicalParams, UnconstrainedParams))
+function get_id_names(
+  ids::@compat(Union{CanonicalParams, UnconstrainedParams}))
   ids_names = Array(ASCIIString, length(ids))
   for (name in @compat(fieldnames(ids)))
     inds = ids.(name)
