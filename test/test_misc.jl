@@ -290,8 +290,8 @@ function test_add_sensitive_floats()
   sf_bad_size = zero_sensitive_float(CanonicalParams, Float64, S + 1);
   sf_bad_type = zero_sensitive_float(UnconstrainedParams, Float64, S);
 
-  @test_throws ErrorException sf_bad_size + sf1
-  @test_throws ErrorException sf_bad_type + sf1
+  @test_throws @compat(AssertionError) sf_bad_size + sf1
+  @test_throws @compat(AssertionError) sf_bad_type + sf1
 
   function sf_equal(sf1::SensitiveFloat, sf2::SensitiveFloat)
     sf1.v == sf2.v && sf2.d == sf2.d && sf1.h == sf2.h
