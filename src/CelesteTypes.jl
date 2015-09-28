@@ -26,11 +26,13 @@ export print_params
 
 using Util
 using SloanDigitalSkySurvey.PSF.RawPSFComponents
+using Compat
 
 import Base.convert
+import Base.+
 import Distributions
 import FITSIO
-import ForwardDiff
+import DualNumbers
 import WCSLIB
 
 import Base.length
@@ -83,20 +85,20 @@ Returns:
 """ ->
 function get_galaxy_prototypes()
     dev_amp = [
-        4.26347652e-02, 2.40127183e-01, 6.85907632e-01, 1.51937350e+00,
-        2.83627243e+00, 4.46467501e+00, 5.72440830e+00, 5.60989349e+00]
+        4.26347652e-2, 2.40127183e-1, 6.85907632e-1, 1.51937350,
+        2.83627243, 4.46467501, 5.72440830, 5.60989349]
     dev_amp /= sum(dev_amp)
     dev_var = [
-        2.23759216e-04, 1.00220099e-03, 4.18731126e-03, 1.69432589e-02,
-        6.84850479e-02, 2.87207080e-01, 1.33320254e+00, 8.40215071e+00]
+        2.23759216e-4, 1.00220099e-3, 4.18731126e-3, 1.69432589e-2,
+        6.84850479e-2, 2.87207080e-1, 1.33320254, 8.40215071]
 
 	exp_amp = [
-        2.34853813e-03, 3.07995260e-02, 2.23364214e-01,
-        1.17949102e+00, 4.33873750e+00, 5.99820770e+00]
+        2.34853813e-3, 3.07995260e-2, 2.23364214e-1,
+        1.17949102, 4.33873750, 5.99820770]
     exp_amp /= sum(exp_amp)
     exp_var = [
-        1.20078965e-03, 8.84526493e-03, 3.91463084e-02,
-        1.39976817e-01, 4.60962500e-01, 1.50159566e+00]
+        1.20078965e-3, 8.84526493e-3, 3.91463084e-2,
+        1.39976817e-1, 4.60962500e-1, 1.50159566]
 
 	# Adjustments to the effective radius hard-coded above.
 	# (The effective radius is the distance from the center containing half
@@ -344,9 +346,10 @@ end
 
 immutable PriorParams
     a::Vector{Float64}  # formerly Phi
-    r::Vector{(Float64, Float64)}   # formerly Upsilon, Psi
-    k::Vector{Vector{Float64}}  # formerly Xi
-    c::Vector{(Matrix{Float64}, Array{Float64, 3})}  # formerly Omega, Lambda
+    r::Matrix{Float64}   # formerly Upsilon, Psi
+    k::Matrix{Float64}  # formerly Xi
+    c_mean::Array{Float64, 3} # formerly Omega
+    c_cov::Array{Float64, 4} # formerly Lambda
 end
 
 # A vector of variational parameters.  The outer index is
@@ -412,7 +415,7 @@ for (pn, ids_name, pf) in param_specs
         field_len = *(ll...)
 
         ids_array = ll == 1 ? prev_end + 1 :
-            [(prev_end + 1) : (prev_end + field_len)]
+            collect( (prev_end + 1):(prev_end + field_len) )
         if length(ll) >= 2
             ids_array = :(reshape($ids_array, $ll))
         end
@@ -449,9 +452,10 @@ const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
 # TODO: maybe these should be incorporated into the framework above
 # (which I don't really understand.)
-function get_id_names(ids::Union(CanonicalParams, UnconstrainedParams))
+function get_id_names(
+  ids::@compat(Union{CanonicalParams, UnconstrainedParams}))
   ids_names = Array(ASCIIString, length(ids))
-  for (name in names(ids))
+  for (name in @compat(fieldnames(ids)))
     inds = ids.(name)
     if length(size(inds)) == 0
       ids_names[inds] = "$(name)"
@@ -510,9 +514,9 @@ ModelParams{NumType <: Number}(
     ModelParams{NumType}(vp, pp)
 end
 
-function convert(::Type{ModelParams{ForwardDiff.Dual}}, mp::ModelParams{Float64})
+function convert(::Type{ModelParams{DualNumbers.Dual}}, mp::ModelParams{Float64})
     mp_dual =
-      ModelParams(convert(Array{Array{ForwardDiff.Dual{Float64}, 1}, 1}, mp.vp),
+      ModelParams(convert(Array{Array{DualNumbers.Dual{Float64}, 1}, 1}, mp.vp),
                   mp.pp)
     mp_dual.patches = mp.patches
     mp_dual
@@ -524,7 +528,7 @@ Display model parameters with the variable names.
 function print_params(mp::ModelParams)
     for s in 1:mp.S
         println("=======================\n Object $(s):")
-        for var_name in names(ids)
+        for var_name in @compat(fieldnames(ids))
             println(var_name)
             println(mp.vp[s][ids.(var_name)])
         end
@@ -538,7 +542,7 @@ function print_params(mp_tuple::ModelParams...)
     println("Printing for $(length(mp_tuple)) parameters.")
     for s in 1:mp_tuple[1].S
         println("=======================\n Object $(s):")
-        for var_name in names(ids)
+        for var_name in @compat(fieldnames(ids))
             println(var_name)
             mp_vars =
               [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for
@@ -553,7 +557,8 @@ end
 Display a Celeste catalog entry.
 """ ->
 function print_cat_entry(cat_entry::CatalogEntry)
-    [ println("$name: $(cat_entry.(name))") for name in names(cat_entry) ]
+    [ println("$name: $(cat_entry.(name))") for name in 
+            @compat(fieldnames(cat_entry)) ]
 end
 
 #########################################################

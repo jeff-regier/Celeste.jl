@@ -12,6 +12,7 @@ using Transform
 import ElboDeriv
 import DataFrames
 import ForwardDiff
+import DualNumbers
 import Optim
 
 export ObjectiveWrapperFunctions, WrapperState
@@ -54,7 +55,7 @@ type ObjectiveWrapperFunctions
       f::Function, mp::ModelParams{Float64}, transform::DataTransform,
       kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1}) = begin
 
-        mp_dual = CelesteTypes.convert(ModelParams{ForwardDiff.Dual}, mp);
+        mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
         x_length = length(kept_ids) * mp.S
 
         state = WrapperState(0, false, 10, 1.0)
@@ -84,7 +85,7 @@ type ObjectiveWrapperFunctions
             end
         end
 
-        function f_objective(x_dual::Array{ForwardDiff.Dual{Float64}})
+        function f_objective(x_dual::Array{DualNumbers.Dual{Float64}})
             state.f_evals += 1
             # Evaluate in the constrained space and then unconstrain again.
             transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
@@ -148,16 +149,16 @@ type ObjectiveWrapperFunctions
             @assert length(x) == x_length
             k = x_length
             hess = zeros(Float64, k, k);
-            x_dual = ForwardDiff.Dual{Float64}[
-                      ForwardDiff.Dual{Float64}(x[i], 0.) for i = 1:k ]
+            x_dual = DualNumbers.Dual{Float64}[
+                      DualNumbers.Dual{Float64}(x[i], 0.) for i = 1:k ]
             print("Getting Hessian ($k components): ")
             for index in 1:k
                 print(".")
-                x_dual[index] = ForwardDiff.Dual(x[index], 1.)
+                x_dual[index] = DualNumbers.Dual(x[index], 1.)
                 deriv = f_grad(x_dual)
                 hess[:, index] =
                   Float64[ ForwardDiff.epsilon(x_val) for x_val in deriv ]
-                x_dual[index] = ForwardDiff.Dual(x[index], 0.)
+                x_dual[index] = DualNumbers.Dual(x[index], 0.)
             end
             print("Done.\n")
             # Assure that the hessian is symmetric.
@@ -187,12 +188,12 @@ function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
     # Change the bounds to match the scaling
     for s=1:length(vp)
       for (param, bounds) in transform.bounds[s]
-        if (bounds[2] == Inf)
+        if (bounds.ub == Inf)
           # Hack: higher bounds for upper-unconstrained params.
           ubs[collect(ids_free.(param)), s] = 20.0
         end
-        lbs[collect(ids_free.(param)), s] *= bounds[3]
-        ubs[collect(ids_free.(param)), s] *= bounds[3]
+        lbs[collect(ids_free.(param)), s] .*= bounds.rescaling
+        ubs[collect(ids_free.(param)), s] .*= bounds.rescaling
       end
     end
     reduce(vcat, lbs[kept_ids, :]), reduce(vcat, ubs[kept_ids, :])
@@ -311,7 +312,8 @@ Returns:
 function maximize_f(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::DataTransform,
-  lbs::Union(Float64, Vector{Float64}), ubs::Union(Float64, Vector{Float64});
+  lbs::@compat(Union{Float64, Vector{Float64}}),
+  ubs::@compat(Union{Float64, Vector{Float64}});
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
