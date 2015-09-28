@@ -3,6 +3,7 @@ using CelesteTypes
 using Base.Test
 using SampleData
 using Transform
+using Compat
 
 import OptimizeElbo
 
@@ -150,20 +151,20 @@ function test_kappa_finding()
     end
 
     mp.vp[1][ids.k[:, 2]] = [0.01, 0.99]
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 2]
+    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 2, 2]
     lower_klc = get_kl_gal_c()
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 1]
+    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 1, 2]
     higher_klc = get_kl_gal_c()
     @test lower_klc < higher_klc
 
     mp.vp[1][ids.k[:, 2]] = [0.99, 0.01]
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 1]
+    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 1, 2]
     lower_klc = get_kl_gal_c()
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 2]
+    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 2, 2]
     higher_klc = get_kl_gal_c()
     @test lower_klc < higher_klc
 
-    mp.pp.c[2][2][:, :, 1] = mp.pp.c[2][2][:, :, 2] = eye(4)
+    mp.pp.c_cov[:, :, 1, 2] = mp.pp.c_cov[:, :, 2, 2] = eye(4)
     klc_wrapper(tiled_blob, mp) = begin
         accum = zero_sensitive_float(CanonicalParams)
         for d in 1:D
@@ -172,27 +173,27 @@ function test_kappa_finding()
         accum
     end
 
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 1]
+    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 1, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
     OptimizeElbo.maximize_f(
       klc_wrapper, tiled_blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[1, 2]] > .9
 
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 2]
+    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 2, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
     OptimizeElbo.maximize_f(
       klc_wrapper, tiled_blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[2, 2]] > .9
 
-    mp.pp.k[2] = [.9, .1]
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 1]
+    mp.pp.k[:, 2] = [.9, .1]
+    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 1, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
     OptimizeElbo.maximize_f(
       ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[1, 2]] > .9
 
-    mp.pp.k[2] = [.1, .9]
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c[2][1][:, 2]
+    mp.pp.k[:, 2] = [.1, .9]
+    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 2, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
     OptimizeElbo.maximize_f(
       ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
@@ -362,7 +363,7 @@ end
 
 function test_quadratic_optimization()
     # A very simple quadratic function to test the optimization.
-    const centers = collect(linrange(0.1, 0.9, length(CanonicalParams)))
+    const centers = collect(linspace(0.1, 0.9, length(CanonicalParams)))
 
     # Set feasible centers for the indicators.
     centers[ids.a] = [ 0.4, 0.6 ]
@@ -378,8 +379,8 @@ function test_quadratic_optimization()
 
     bounds = Array(ParamBounds, 1)
     bounds[1] = ParamBounds()
-    for param in setdiff(names(ids), [:a, :k])
-      bounds[1][symbol(param)] = (0., 1.0, 1.0)
+    for param in setdiff(@compat(fieldnames(ids)), [:a, :k])
+      bounds[1][symbol(param)] = ParamBox(0., 1.0, 1.0)
     end
     trans = DataTransform(bounds)
 

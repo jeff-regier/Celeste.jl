@@ -22,8 +22,8 @@ function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
     a = vs[ids.a[i]]
     k = vs[ids.k[d, i]]
 
-    pp_kl_cid = KL.gen_diagmvn_mvn_kl(mp.pp.c[i][1][:, d],
-                                      mp.pp.c[i][2][:, :, d])
+    pp_kl_cid = KL.gen_diagmvn_mvn_kl(mp.pp.c_mean[:, d, i],
+                                      mp.pp.c_cov[:, :, d, i])
     (v, (d_c1, d_c2)) = pp_kl_cid(vs[ids.c1[:, i]],
                                         vs[ids.c2[:, i]])
     accum.v -= v * a * k
@@ -40,7 +40,7 @@ function subtract_kl_k!(i::Int64, s::Int64,
                         mp::ModelParams,
                         accum::SensitiveFloat)
     vs = mp.vp[s]
-    pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[i])
+    pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[:, i])
     (v, (d_k,)) = pp_kl_ki(mp.vp[s][ids.k[:, i]])
     accum.v -= v * vs[ids.a[i]]
     accum.d[ids.k[:, i], s] -= d_k .* vs[ids.a[i]]
@@ -54,7 +54,7 @@ Subtract the KL divergence from the prior for r
 function subtract_kl_r!(i::Int64, s::Int64,
                         mp::ModelParams, accum::SensitiveFloat)
     vs = mp.vp[s]
-    pp_kl_r = KL.gen_gamma_kl(mp.pp.r[i][1], mp.pp.r[i][2])
+    pp_kl_r = KL.gen_gamma_kl(mp.pp.r[1, i], mp.pp.r[2, i])
     (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
     accum.v -= v * vs[ids.a[i]]
     accum.d[ids.r1[i], s] -= d_r1 .* vs[ids.a[i]]

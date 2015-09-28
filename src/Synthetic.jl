@@ -5,6 +5,7 @@ VERSION < v"0.4.0-dev" && using Docile
 export gen_blob
 
 using CelesteTypes
+using Compat
 import ModelInit
 import Util
 import WCS
@@ -19,8 +20,9 @@ end
 
 
 function get_patch(the_mean::Vector{Float64}, H::Int64, W::Int64)
-    const radius = 50.
-    hm, wm = int(the_mean)
+    const radius = 50
+    hm = @compat(round(Int, the_mean[1]))
+    wm = @compat(round(Int, the_mean[2]))
     w11 = max(1, wm - radius):min(W, wm + radius)
     h11 = max(1, hm - radius):min(H, hm + radius)
     return(w11, h11)
@@ -42,11 +44,7 @@ function write_gaussian(the_mean, the_cov, intensity, pixels;
         ypy = Util.matvec222(the_precision, y)
         pdf_hw = c * exp(-0.5 * ypy)
         pixel_rate = intensity * pdf_hw
-        if expectation
-            pixels[h, w] += pixel_rate
-        else
-            pixels[h, w] += wrapped_poisson(pixel_rate)
-        end
+        pixels[h, w] += expectation ? pixel_rate : wrapped_poisson(pixel_rate)
     end
 
     pixels

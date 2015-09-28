@@ -4,19 +4,24 @@ module Transform
 
 using Celeste
 using CelesteTypes
+using Compat
 
 import Util
 VERSION < v"0.4.0-dev" && using Docile
-@docstrings
 
-export DataTransform, ParamBounds, get_mp_transform, generate_valid_parameters
+export DataTransform, ParamBounds, ParamBox
+export get_mp_transform, generate_valid_parameters
+
+
+immutable ParamBox{T <: Union(Float64, Vector{Float64})}
+    lb::T
+    ub::T
+    rescaling::T
+end
 
 # The box bounds for a symbol.  The tuple contains
 # (lower bounds, upper bound, rescaling).
-typealias ParamBounds Dict{Symbol,
-                           (Union(Float64, Vector{Float64}),
-                            Union(Float64, Vector{Float64}),
-                            Union(Float64, Vector{Float64})) }
+typealias ParamBounds Dict{Symbol, ParamBox}
 
 #####################
 # Conversion to and from vectors.
@@ -56,7 +61,7 @@ function vector_to_free_vp!{NumType <: Number}(
 
     P = length(left_ids)
     @assert length(xs) % P == 0
-    S = int(length(xs) / P)
+    S = @compat(round(Int, length(xs) / P))
     xs2 = reshape(xs, P, S)
 
     for s in 1:S
@@ -177,7 +182,7 @@ function vp_to_free!{NumType <: Number}(
     # Box constraints.
     for (param, limits) in bounds
         vp_free[ids_free.(param)] =
-          unbox_parameter(vp[ids.(param)], limits[1], limits[2], limits[3])
+          unbox_parameter(vp[ids.(param)], limits.lb, limits.ub, limits.rescaling)
     end
 end
 
@@ -198,7 +203,7 @@ function free_to_vp!{NumType <: Number}(
     # Box constraints.
     for (param, limits) in bounds
         vp[ids.(param)] =
-          box_parameter(vp_free[ids_free.(param)], limits[1], limits[2], limits[3])
+          box_parameter(vp_free[ids_free.(param)], limits.lb, limits.ub, limits.rescaling)
     end
 end
 
@@ -230,7 +235,7 @@ function unbox_param_derivative{NumType <: Number}(
   for (param, limits) in bounds
       d_free[ids_free.(param)] =
         unbox_derivative(vp[ids.(param)], d[ids.(param)],
-                         limits[1], limits[2], limits[3])
+                         limits.lb, limits.ub, limits.rescaling)
   end
 
   d_free
@@ -248,10 +253,10 @@ function generate_valid_parameters(
 	             [ zeros(NumType, length(ids)) for s = 1:S ])
 	for s=1:S
 		for (param, limits) in bounds[s]
-			if (limits[2] == Inf)
-	    	vp[s][ids.(param)] = limits[1] + 1.0
+			if (limits.ub == Inf)
+	    	vp[s][ids.(param)] = limits.lb + 1.0
 			else
-				vp[s][ids.(param)] = 0.5 * (limits[2] - limits[1]) + limits[1]
+				vp[s][ids.(param)] = 0.5 * (limits.ub - limits.lb) + limits.lb
 			end
 	  end
     # Simplex parameters
@@ -382,18 +387,20 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
   # of reasonably meaningful changes.
   for s=1:mp.S
     bounds[s] = ParamBounds()
-    bounds[s][:u] = (mp.vp[s][ids.u] - loc_width, mp.vp[s][ids.u] + loc_width, 1.0)
-    bounds[s][:r1] = (1e-4, Inf, 1e-2)
-    bounds[s][:r2] = (1e-4, 0.1, 1.0)
-    bounds[s][:c1] = (-10., 10., 1.0)
-    bounds[s][:c2] = (1e-4, 1., 1.0)
-    bounds[s][:e_dev] = (1e-2, 1 - 1e-2, 1.0)
-    bounds[s][:e_axis] = (1e-2, 1 - 1e-2, 1.0)
-    bounds[s][:e_angle] = (-10.0, 10.0, 1.0)
-    bounds[s][:e_scale] = (0.1, 70., 1.0)
+    u = mp.vp[s][ids.u]
+    bounds[s][:u] = ParamBox(u - loc_width, u + loc_width, ones(2))
+    bounds[s][:r1] = ParamBox(1e-4, Inf, 1e-2)
+    bounds[s][:r2] = ParamBox(1e-4, 0.1, 1.0)
+    bounds[s][:c1] = ParamBox(-10., 10., 1.0)
+    bounds[s][:c2] = ParamBox(1e-4, 1., 1.0)
+    bounds[s][:e_dev] = ParamBox(1e-2, 1 - 1e-2, 1.0)
+    bounds[s][:e_axis] = ParamBox(1e-2, 1 - 1e-2, 1.0)
+    bounds[s][:e_angle] = ParamBox(-10.0, 10.0, 1.0)
+    bounds[s][:e_scale] = ParamBox(0.1, 70., 1.0)
   end
   DataTransform(bounds)
 end
 
 
 end
+
