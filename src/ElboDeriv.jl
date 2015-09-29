@@ -427,10 +427,16 @@ function accum_star_pos!{NumType <: Number}(bmc::BvnComponent{NumType},
 
     fs0m.v += f
 
-    dfs0m_dpix = NumType[f .* py1, f .* py2]
-    dfs0m_dworld = wcs_jacobian' * dfs0m_dpix
-    fs0m.d[star_ids.u[1]] += dfs0m_dworld[1]
-    fs0m.d[star_ids.u[2]] += dfs0m_dworld[2]
+    # This is
+    # dfs0m_dworld = wcs_jacobian' * NumType[f .* py1, f .* py2]
+
+    fs0m.d[star_ids.u[1]] +=
+      convert(NumType,
+              f * (wcs_jacobian[1, 1] * py1 + wcs_jacobian[2, 1] * py2))
+    fs0m.d[star_ids.u[2]] +=
+      convert(NumType,
+              f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
+
 end
 
 
@@ -454,24 +460,14 @@ function accum_galaxy_pos!{NumType <: Number}(gcc::GalaxyCacheComponent{NumType}
 
     fs1m.v += f
 
-    # TODO: can this be optimized?
-    # dfs1m_dpix = NumType[f .* py1, f .* py2]
-    # dfs1m_dworld = wcs_jacobian' * dfs1m_dpix
-    #
-    # dfs1m_dworld_1 = f * (wcs_jacobian[1, 1] * py1 + wcs_jacobian[2, 1] * py2)
-    # dfs1m_dworld_2 = f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2)
-
-    # println("here")
-    # println(dfs1m_dworld_1, " ", dfs1m_dworld[1])
-    # println(dfs1m_dworld_2, " ", dfs1m_dworld[2])
-
-    # @assert abs(dfs1m_dworld_1 - dfs1m_dworld[1]) < 1e-12
-    # @assert abs(dfs1m_dworld_2 - dfs1m_dworld[2]) < 1e-12
-
+    # This is
+    # dfs1m_dworld = wcs_jacobian' * NumType[f .* py1, f .* py2]
     fs1m.d[gal_ids.u[1]] +=
-      convert(NumType, f * (wcs_jacobian[1, 1] * py1 + wcs_jacobian[2, 1] * py2))
+      convert(NumType,
+              f * (wcs_jacobian[1, 1] * py1 + wcs_jacobian[2, 1] * py2))
     fs1m.d[gal_ids.u[2]] +=
-      convert(NumType, f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
+      convert(NumType,
+              f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
 
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
