@@ -9,17 +9,16 @@ import SampleData
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
-function small_image_profile()
-    srand(1)
-    println("Loading data.")
-    blob, mp, body, tiled_blob =
-      SampleData.gen_n_body_dataset(100, tile_width=10);
-    println("Calculating ELBO.")
+srand(1)
+println("Loading data.")
+blob, mp, body, tiled_blob =
+  SampleData.gen_n_body_dataset(100, tile_width=10);
 
+function small_image_profile()
+    println("Calculating ELBO.")
     elbo_time = time()
     elbo = ElboDeriv.elbo(tiled_blob, mp)
     elbo_time = time() - elbo_time
-
     elbo, elbo_time
 end
 
