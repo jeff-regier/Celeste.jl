@@ -12,6 +12,8 @@ import WCSLIB
 
 export tile_predicted_image
 
+global pixel_eval_count = 0
+
 @doc """
 Subtract the KL divergence from the prior for c
 """ ->
@@ -517,6 +519,10 @@ function accum_pixel_source_stats!{NumType <: Number}(sb::SourceBrightness,
         fs0m::SensitiveFloat, fs1m::SensitiveFloat,
         E_G::SensitiveFloat, var_G::SensitiveFloat,
         wcs_jacobian::Array{Float64, 2})
+
+    global pixel_eval_count
+    pixel_eval_count += 1
+
     # Accumulate over PSF components.
     clear!(fs0m)
     for star_mc in star_mcs[:, parent_s]
@@ -812,6 +818,10 @@ Args:
 function elbo_likelihood!{NumType <: Number}(
   tiles::Array{ImageTile}, mp::ModelParams{NumType},
   b::Int64, accum::SensitiveFloat)
+
+    global pixel_eval_count
+
+    pixel_eval_count = 0
 
     star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
