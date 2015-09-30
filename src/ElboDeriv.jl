@@ -551,7 +551,7 @@ function accum_pixel_source_stats!{NumType <: Number}(sb::SourceBrightness,
     var_G.v += a[1] * llff[1] + a[2] * llff[2]
 
     # Add the contributions of this source in this band to
-    # the derivatibes of E(G) and Var(G).
+    # the derivatives of E(G) and Var(G).
 
     # a derivatives:
     for i in 1:Ia
@@ -647,25 +647,19 @@ function expected_pixel_brightness!(
     fs0m::SensitiveFloat, fs1m::SensitiveFloat)
 
   clear!(E_G)
-  if tile.constant_background
-      E_G.v = tile.epsilon
-      iota = tile.iota
-  else
-      E_G.v = tile.epsilon_mat[h, w]
-      iota = tile.iota_vec[h]
-  end
   clear!(var_G)
 
-  m_pos = Float64[tile.h_range[h], tile.w_range[w]]
+  E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
   for child_s in 1:length(tile_sources)
-      wcs_jacobian = mp.patches[child_s, tile.b].wcs_jacobian
-      parent_s = tile_sources[child_s]
-      accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
-          mp.vp[parent_s], child_s, parent_s, m_pos, tile.b,
-          fs0m, fs1m, E_G, var_G, wcs_jacobian)
+      accum_pixel_source_stats!(sbs[tile_sources[child_s]], star_mcs, gal_mcs,
+          mp.vp[tile_sources[child_s]], child_s, tile_sources[child_s],
+          Float64[tile.h_range[h], tile.w_range[w]], tile.b,
+          fs0m, fs1m, E_G, var_G,
+          mp.patches[child_s, tile.b].wcs_jacobian)
   end
 
-  iota
+  # Return the appropriate value of iota.
+  tile.constant_background ? tile.iota : tile.iota_vec[h]
 end
 
 
