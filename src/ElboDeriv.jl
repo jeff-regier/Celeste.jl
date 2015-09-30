@@ -235,7 +235,7 @@ Args:
 Returns:
   An array of E_l_a and E_ll_a for each source.
 """ ->
-function get_brightness(mp::ModelParams)
+function get_brightness{NumType <: Number}(mp::ModelParams{NumType})
     brightness = [SourceBrightness(mp.vp[s]) for s in 1:mp.S];
     brightness_vals = [ Float64[b.E_l_a[i, j].v for
         i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
@@ -527,7 +527,8 @@ Returns:
     star and galaxy contributions to the ELBO from this source
     in this band.  Adds the contributions to E_G and var_G.
 """ ->
-function accum_pixel_source_stats!{NumType <: Number}(sb::SourceBrightness,
+function accum_pixel_source_stats!{NumType <: Number}(
+        sb::SourceBrightness{NumType},
         star_mcs::Array{BvnComponent{NumType}, 2},
         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
         vs::Vector{NumType}, child_s::Int64, parent_s::Int64,
