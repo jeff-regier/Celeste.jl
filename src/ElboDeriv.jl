@@ -17,9 +17,11 @@ global pixel_eval_count = 0
 @doc """
 Subtract the KL divergence from the prior for c
 """ ->
-function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
-                        mp::ModelParams,
-                        accum::SensitiveFloat)
+function subtract_kl_c!{NumType <: Number}(
+  d::Int64, i::Int64, s::Int64,
+  mp::ModelParams{NumType},
+  accum::SensitiveFloat{NumType})
+
     vs = mp.vp[s]
     a = vs[ids.a[i]]
     k = vs[ids.k[d, i]]
@@ -38,9 +40,11 @@ end
 @doc """
 Subtract the KL divergence from the prior for k
 """ ->
-function subtract_kl_k!(i::Int64, s::Int64,
-                        mp::ModelParams,
-                        accum::SensitiveFloat)
+function subtract_kl_k!{NumType <: Number}(
+  i::Int64, s::Int64,
+  mp::ModelParams{NumType},
+  accum::SensitiveFloat{NumType})
+
     vs = mp.vp[s]
     pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[:, i])
     (v, (d_k,)) = pp_kl_ki(mp.vp[s][ids.k[:, i]])
@@ -53,8 +57,9 @@ end
 @doc """
 Subtract the KL divergence from the prior for r
 """ ->
-function subtract_kl_r!(i::Int64, s::Int64,
-                        mp::ModelParams, accum::SensitiveFloat)
+function subtract_kl_r!{NumType <: Number}(
+  i::Int64, s::Int64,
+  mp::ModelParams{NumType}, accum::SensitiveFloat{NumType})
     vs = mp.vp[s]
     pp_kl_r = KL.gen_gamma_kl(mp.pp.r[1, i], mp.pp.r[2, i])
     (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
@@ -68,7 +73,8 @@ end
 @doc """
 Subtract the KL divergence from the prior for a
 """ ->
-function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
+function subtract_kl_a!{NumType <: Number}(
+  s::Int64, mp::ModelParams{NumType}, accum::SensitiveFloat{NumType})
     pp_kl_a = KL.gen_categorical_kl(mp.pp.a)
     (v, (d_a,)) = pp_kl_a(mp.vp[s][ids.a])
     accum.v -= v
@@ -80,7 +86,8 @@ end
 Subtract from accum the entropy and expected prior of
 the variational distribution.
 """ ->
-function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
+function subtract_kl!{NumType <: Number}(
+  mp::ModelParams{NumType}, accum::SensitiveFloat{NumType})
     for s in 1:mp.S
         subtract_kl_a!(s, mp, accum)
 
@@ -113,8 +120,11 @@ and all other rows are lognormal offsets.
   are star / galaxy.
 """ ->
 immutable SourceBrightness{NumType <: Number}
-    E_l_a::Matrix{SensitiveFloat{CanonicalParams, NumType}}  # [E[l|a=0], E[l]|a=1]]
-    E_ll_a::Matrix{SensitiveFloat{CanonicalParams, NumType}}   # [E[l^2|a=0], E[l^2]|a=1]]
+    # [E[l|a=0], E[l]|a=1]]
+    E_l_a::Matrix{SensitiveFloat{CanonicalParams, NumType}}
+
+    # [E[l^2|a=0], E[l^2]|a=1]]
+    E_ll_a::Matrix{SensitiveFloat{CanonicalParams, NumType}}
 end
 
 
