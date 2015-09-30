@@ -20,7 +20,7 @@ Subtract the KL divergence from the prior for c
 function subtract_kl_c!{NumType <: Number}(
   d::Int64, i::Int64, s::Int64,
   mp::ModelParams{NumType},
-  accum::SensitiveFloat{NumType})
+  accum::SensitiveFloat{CanonicalParams, NumType})
 
     vs = mp.vp[s]
     a = vs[ids.a[i]]
@@ -43,7 +43,7 @@ Subtract the KL divergence from the prior for k
 function subtract_kl_k!{NumType <: Number}(
   i::Int64, s::Int64,
   mp::ModelParams{NumType},
-  accum::SensitiveFloat{NumType})
+  accum::SensitiveFloat{CanonicalParams, NumType})
 
     vs = mp.vp[s]
     pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[:, i])
@@ -59,7 +59,8 @@ Subtract the KL divergence from the prior for r
 """ ->
 function subtract_kl_r!{NumType <: Number}(
   i::Int64, s::Int64,
-  mp::ModelParams{NumType}, accum::SensitiveFloat{NumType})
+  mp::ModelParams{NumType},
+  accum::SensitiveFloat{CanonicalParams, NumType})
     vs = mp.vp[s]
     pp_kl_r = KL.gen_gamma_kl(mp.pp.r[1, i], mp.pp.r[2, i])
     (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
@@ -74,7 +75,8 @@ end
 Subtract the KL divergence from the prior for a
 """ ->
 function subtract_kl_a!{NumType <: Number}(
-  s::Int64, mp::ModelParams{NumType}, accum::SensitiveFloat{NumType})
+  s::Int64, mp::ModelParams{NumType},
+  accum::SensitiveFloat{CanonicalParams, NumType})
     pp_kl_a = KL.gen_categorical_kl(mp.pp.a)
     (v, (d_a,)) = pp_kl_a(mp.vp[s][ids.a])
     accum.v -= v
@@ -87,7 +89,7 @@ Subtract from accum the entropy and expected prior of
 the variational distribution.
 """ ->
 function subtract_kl!{NumType <: Number}(
-  mp::ModelParams{NumType}, accum::SensitiveFloat{NumType})
+  mp::ModelParams{NumType}, accum::SensitiveFloat{CanonicalParams, NumType})
     for s in 1:mp.S
         subtract_kl_a!(s, mp, accum)
 
