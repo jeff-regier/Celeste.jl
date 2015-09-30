@@ -298,7 +298,8 @@ immutable GalaxyCacheComponent{NumType <: Number}
     e_dev_dir::Float64
     e_dev_i::NumType
     bmc::BvnComponent{NumType}
-    dSigma::Matrix{NumType}  # [Sigma11, Sigma12, Sigma22] x [e_axis, e_angle, e_scale]
+    dSigma::Matrix{NumType}
+    # [Sigma11, Sigma12, Sigma22] x [e_axis, e_angle, e_scale]
 
     GalaxyCacheComponent(e_dev_dir::Float64, e_dev_i::NumType,
             gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
@@ -314,7 +315,8 @@ immutable GalaxyCacheComponent{NumType <: Number}
         sin_sq = sin(e_angle)^2
         cos_sq = cos(e_angle)^2
         dSigma[:, 1] = 2e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq]
-        dSigma[:, 2] = e_scale^2 * (e_axis^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
+        dSigma[:, 2] = e_scale^2 * (e_axis^2 - 1) *
+                       [2cos_sin, sin_sq - cos_sq, -2cos_sin]
         dSigma[:, 3] = (2XiXi ./ e_scale)[[1, 2, 4]]
         dSigma .*= gc.nuBar
 
@@ -325,7 +327,8 @@ end
 GalaxyCacheComponent{NumType <: Number}(e_dev_dir::Float64, e_dev_i::NumType,
                      gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
                      e_axis::NumType, e_angle::NumType, e_scale::NumType) =
-    GalaxyCacheComponent{NumType}(e_dev_dir, e_dev_i, gc, pc, u, e_axis, e_angle, e_scale)
+    GalaxyCacheComponent{NumType}(
+      e_dev_dir, e_dev_i, gc, pc, u, e_axis, e_angle, e_scale)
 
 
 @doc """
@@ -371,7 +374,8 @@ function load_bvn_mixtures(mp::ModelParams, b::Int64)
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
 
-            # Galaxies of type 1 have 8 components, and type 2 have 6 components (?)
+            # Galaxies of type 1 have 8 components, and type 2 have
+            # 6 components (?)
             for j in 1:[8,6][i]
                 for k = 1:3
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
@@ -423,10 +427,14 @@ function accum_star_pos!{NumType <: Number}(bmc::BvnComponent{NumType},
 
     fs0m.v += f
 
-    dfs0m_dpix = NumType[f .* py1, f .* py2]
-    dfs0m_dworld = wcs_jacobian' * dfs0m_dpix
-    fs0m.d[star_ids.u[1]] += dfs0m_dworld[1]
-    fs0m.d[star_ids.u[2]] += dfs0m_dworld[2]
+    # This is
+    # dfs0m_dworld = wcs_jacobian' * NumType[f .* py1, f .* py2]
+    fs0m.d[star_ids.u[1]] +=
+      convert(NumType,
+              f * (wcs_jacobian[1, 1] * py1 + wcs_jacobian[2, 1] * py2))
+    fs0m.d[star_ids.u[2]] +=
+      convert(NumType,
+              f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
 end
 
 
@@ -450,10 +458,14 @@ function accum_galaxy_pos!{NumType <: Number}(gcc::GalaxyCacheComponent{NumType}
 
     fs1m.v += f
 
-    dfs1m_dpix = NumType[f .* py1, f .* py2]
-    dfs1m_dworld = wcs_jacobian' * dfs1m_dpix
-    fs1m.d[gal_ids.u[1]] += dfs1m_dworld[1]
-    fs1m.d[gal_ids.u[2]] += dfs1m_dworld[2]
+    # This is
+    # dfs1m_dworld = wcs_jacobian' * NumType[f .* py1, f .* py2]
+    fs1m.d[gal_ids.u[1]] +=
+      convert(NumType,
+              f * (wcs_jacobian[1, 1] * py1 + wcs_jacobian[2, 1] * py2))
+    fs1m.d[gal_ids.u[2]] +=
+      convert(NumType,
+              f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
 
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
@@ -515,7 +527,8 @@ function accum_pixel_source_stats!{NumType <: Number}(sb::SourceBrightness,
     for i = 1:2 # Galaxy types
         for j in 1:[8,6][i] # Galaxy component
             for k = 1:3 # PSF component
-                accum_galaxy_pos!(gal_mcs[k, j, i, parent_s], m_pos, fs1m, wcs_jacobian)
+                accum_galaxy_pos!(
+                  gal_mcs[k, j, i, parent_s], m_pos, fs1m, wcs_jacobian)
             end
         end
     end
@@ -538,7 +551,7 @@ function accum_pixel_source_stats!{NumType <: Number}(sb::SourceBrightness,
     var_G.v += a[1] * llff[1] + a[2] * llff[2]
 
     # Add the contributions of this source in this band to
-    # the derivatibes of E(G) and Var(G).
+    # the derivatives of E(G) and Var(G).
 
     # a derivatives:
     for i in 1:Ia
@@ -634,25 +647,19 @@ function expected_pixel_brightness!(
     fs0m::SensitiveFloat, fs1m::SensitiveFloat)
 
   clear!(E_G)
-  if tile.constant_background
-      E_G.v = tile.epsilon
-      iota = tile.iota
-  else
-      E_G.v = tile.epsilon_mat[h, w]
-      iota = tile.iota_vec[h]
-  end
   clear!(var_G)
 
-  m_pos = Float64[tile.h_range[h], tile.w_range[w]]
+  E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
   for child_s in 1:length(tile_sources)
-      wcs_jacobian = mp.patches[child_s, tile.b].wcs_jacobian
-      parent_s = tile_sources[child_s]
-      accum_pixel_source_stats!(sbs[parent_s], star_mcs, gal_mcs,
-          mp.vp[parent_s], child_s, parent_s, m_pos, tile.b,
-          fs0m, fs1m, E_G, var_G, wcs_jacobian)
+      accum_pixel_source_stats!(sbs[tile_sources[child_s]], star_mcs, gal_mcs,
+          mp.vp[tile_sources[child_s]], child_s, tile_sources[child_s],
+          Float64[tile.h_range[h], tile.w_range[w]], tile.b,
+          fs0m, fs1m, E_G, var_G,
+          mp.patches[child_s, tile.b].wcs_jacobian)
   end
 
-  iota
+  # Return the appropriate value of iota.
+  tile.constant_background ? tile.iota : tile.iota_vec[h]
 end
 
 
@@ -803,7 +810,8 @@ Args:
   - b: The current band
 """ ->
 function elbo_likelihood!{NumType <: Number}(
-  tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64, accum::SensitiveFloat)
+  tiles::Array{ImageTile}, mp::ModelParams{NumType},
+  b::Int64, accum::SensitiveFloat)
 
     star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
     sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
@@ -812,7 +820,8 @@ function elbo_likelihood!{NumType <: Number}(
       # TODO: Only pass a snesitive float as big as the tile's local sources.
       tile_accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
       tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-      tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, tile_accum)
+      tile_likelihood!(
+        tile, tile_sources, mp, sbs, star_mcs, gal_mcs, tile_accum)
       tile_accum
     end
 
