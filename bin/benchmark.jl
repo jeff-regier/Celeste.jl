@@ -27,7 +27,6 @@ end
 println("Running with ", length(workers()), " processors.")
 @time elbo, elbo_time = small_image_profile();
 
-
 Profile.init(10^7, 0.001)
 @profile small_image_profile()
 Profile.print()
