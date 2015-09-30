@@ -29,4 +29,6 @@ Profile.init(10^7, 0.001)
 elbo, elbo_time = small_image_profile()
 @profile small_image_profile()
 Profile.print()
+
+println("Elbo time: $(elbo_time) seconds")
 #Profile.print(format=:flat)
