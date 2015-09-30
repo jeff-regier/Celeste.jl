@@ -429,14 +429,12 @@ function accum_star_pos!{NumType <: Number}(bmc::BvnComponent{NumType},
 
     # This is
     # dfs0m_dworld = wcs_jacobian' * NumType[f .* py1, f .* py2]
-
     fs0m.d[star_ids.u[1]] +=
       convert(NumType,
               f * (wcs_jacobian[1, 1] * py1 + wcs_jacobian[2, 1] * py2))
     fs0m.d[star_ids.u[2]] +=
       convert(NumType,
               f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
-
 end
 
 
