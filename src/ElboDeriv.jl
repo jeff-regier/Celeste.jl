@@ -15,9 +15,11 @@ export tile_predicted_image
 @doc """
 Subtract the KL divergence from the prior for c
 """ ->
-function subtract_kl_c!(d::Int64, i::Int64, s::Int64,
-                        mp::ModelParams,
-                        accum::SensitiveFloat)
+function subtract_kl_c!{NumType <: Number}(
+  d::Int64, i::Int64, s::Int64,
+  mp::ModelParams{NumType},
+  accum::SensitiveFloat{CanonicalParams, NumType})
+
     vs = mp.vp[s]
     a = vs[ids.a[i]]
     k = vs[ids.k[d, i]]
@@ -36,9 +38,11 @@ end
 @doc """
 Subtract the KL divergence from the prior for k
 """ ->
-function subtract_kl_k!(i::Int64, s::Int64,
-                        mp::ModelParams,
-                        accum::SensitiveFloat)
+function subtract_kl_k!{NumType <: Number}(
+  i::Int64, s::Int64,
+  mp::ModelParams{NumType},
+  accum::SensitiveFloat{CanonicalParams, NumType})
+
     vs = mp.vp[s]
     pp_kl_ki = KL.gen_categorical_kl(mp.pp.k[:, i])
     (v, (d_k,)) = pp_kl_ki(mp.vp[s][ids.k[:, i]])
@@ -51,8 +55,10 @@ end
 @doc """
 Subtract the KL divergence from the prior for r
 """ ->
-function subtract_kl_r!(i::Int64, s::Int64,
-                        mp::ModelParams, accum::SensitiveFloat)
+function subtract_kl_r!{NumType <: Number}(
+  i::Int64, s::Int64,
+  mp::ModelParams{NumType},
+  accum::SensitiveFloat{CanonicalParams, NumType})
     vs = mp.vp[s]
     pp_kl_r = KL.gen_gamma_kl(mp.pp.r[1, i], mp.pp.r[2, i])
     (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
@@ -66,7 +72,9 @@ end
 @doc """
 Subtract the KL divergence from the prior for a
 """ ->
-function subtract_kl_a!(s::Int64, mp::ModelParams, accum::SensitiveFloat)
+function subtract_kl_a!{NumType <: Number}(
+  s::Int64, mp::ModelParams{NumType},
+  accum::SensitiveFloat{CanonicalParams, NumType})
     pp_kl_a = KL.gen_categorical_kl(mp.pp.a)
     (v, (d_a,)) = pp_kl_a(mp.vp[s][ids.a])
     accum.v -= v
@@ -78,7 +86,8 @@ end
 Subtract from accum the entropy and expected prior of
 the variational distribution.
 """ ->
-function subtract_kl!(mp::ModelParams, accum::SensitiveFloat)
+function subtract_kl!{NumType <: Number}(
+  mp::ModelParams{NumType}, accum::SensitiveFloat{CanonicalParams, NumType})
     for s in 1:mp.S
         subtract_kl_a!(s, mp, accum)
 
@@ -110,104 +119,109 @@ and all other rows are lognormal offsets.
   squared color terms.  The rows are bands, and the columns
   are star / galaxy.
 """ ->
-immutable SourceBrightness
-    E_l_a::Matrix{SensitiveFloat}  # [E[l|a=0], E[l]|a=1]]
-    E_ll_a::Matrix{SensitiveFloat}   # [E[l^2|a=0], E[l^2]|a=1]]
+immutable SourceBrightness{NumType <: Number}
+    # [E[l|a=0], E[l]|a=1]]
+    E_l_a::Matrix{SensitiveFloat{CanonicalParams, NumType}}
 
-    SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
-        r1 = vs[ids.r1]
-        r2 = vs[ids.r2]
-        c1 = vs[ids.c1]
-        c2 = vs[ids.c2]
-
-        # E_l_a has a row for each of the five colors and columns
-        # for star / galaxy.
-        E_l_a = Array(SensitiveFloat, B, Ia)
-
-        for i = 1:Ia
-            for b = 1:B
-                E_l_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
-            end
-
-            # Index 3 is r_s and has a gamma expectation.
-            E_l_a[3, i].v = r1[i] * r2[i]
-            E_l_a[3, i].d[ids.r1[i]] = r2[i]
-            E_l_a[3, i].d[ids.r2[i]] = r1[i]
-
-            # The remaining indices involve c_s and have lognormal
-            # expectations times E_c_3.
-            E_c_3 = exp(c1[3, i] + .5 * c2[3, i])
-            E_l_a[4, i].v = E_l_a[3, i].v * E_c_3
-            E_l_a[4, i].d[ids.r1[i]] = E_l_a[3, i].d[ids.r1[i]] * E_c_3
-            E_l_a[4, i].d[ids.r2[i]] = E_l_a[3, i].d[ids.r2[i]] * E_c_3
-            E_l_a[4, i].d[ids.c1[3, i]] = E_l_a[4, i].v
-            E_l_a[4, i].d[ids.c2[3, i]] = E_l_a[4, i].v * .5
-
-            E_c_4 = exp(c1[4, i] + .5 * c2[4, i])
-            E_l_a[5, i].v = E_l_a[4, i].v * E_c_4
-            E_l_a[5, i].d[ids.r1[i]] = E_l_a[4, i].d[ids.r1[i]] * E_c_4
-            E_l_a[5, i].d[ids.r2[i]] = E_l_a[4, i].d[ids.r2[i]] * E_c_4
-            E_l_a[5, i].d[ids.c1[3, i]] = E_l_a[4, i].d[ids.c1[3, i]] * E_c_4
-            E_l_a[5, i].d[ids.c2[3, i]] = E_l_a[4, i].d[ids.c2[3, i]] * E_c_4
-            E_l_a[5, i].d[ids.c1[4, i]] = E_l_a[5, i].v
-            E_l_a[5, i].d[ids.c2[4, i]] = E_l_a[5, i].v * .5
-
-            E_c_2 = exp(-c1[2, i] + .5 * c2[2, i])
-            E_l_a[2, i].v = E_l_a[3, i].v * E_c_2
-            E_l_a[2, i].d[ids.r1[i]] = E_l_a[3, i].d[ids.r1[i]] * E_c_2
-            E_l_a[2, i].d[ids.r2[i]] = E_l_a[3, i].d[ids.r2[i]] * E_c_2
-            E_l_a[2, i].d[ids.c1[2, i]] = E_l_a[2, i].v * -1.
-            E_l_a[2, i].d[ids.c2[2, i]] = E_l_a[2, i].v * .5
-
-            E_c_1 = exp(-c1[1, i] + .5 * c2[1, i])
-            E_l_a[1, i].v = E_l_a[2, i].v * E_c_1
-            E_l_a[1, i].d[ids.r1[i]] = E_l_a[2, i].d[ids.r1[i]] * E_c_1
-            E_l_a[1, i].d[ids.r2[i]] = E_l_a[2, i].d[ids.r2[i]] * E_c_1
-            E_l_a[1, i].d[ids.c1[2, i]] = E_l_a[2, i].d[ids.c1[2, i]] * E_c_1
-            E_l_a[1, i].d[ids.c2[2, i]] = E_l_a[2, i].d[ids.c2[2, i]] * E_c_1
-            E_l_a[1, i].d[ids.c1[1, i]] = E_l_a[1, i].v * -1.
-            E_l_a[1, i].d[ids.c2[1, i]] = E_l_a[1, i].v * .5
-        end
-
-        E_ll_a = Array(SensitiveFloat, B, Ia)
-        for i = 1:Ia
-            for b = 1:B
-                E_ll_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
-            end
-
-            r2_sq = r2[i]^2
-            E_ll_a[3, i].v = r1[i] * (1 + r1[i]) * r2_sq
-            E_ll_a[3, i].d[ids.r1[i]] = (1 + 2 * r1[i]) * r2_sq
-            E_ll_a[3, i].d[ids.r2[i]] = 2 * r1[i] * (1. + r1[i]) * r2[i]
-
-            tmp3 = exp(2c1[3, i] + 2 * c2[3, i])
-            E_ll_a[4, i].v = E_ll_a[3, i].v * tmp3
-            E_ll_a[4, i].d[:] = E_ll_a[3, i].d * tmp3
-            E_ll_a[4, i].d[ids.c1[3, i]] = E_ll_a[4, i].v * 2.
-            E_ll_a[4, i].d[ids.c2[3, i]] = E_ll_a[4, i].v * 2.
-
-            tmp4 = exp(2c1[4, i] + 2 * c2[4, i])
-            E_ll_a[5, i].v = E_ll_a[4, i].v * tmp4
-            E_ll_a[5, i].d[:] = E_ll_a[4, i].d * tmp4
-            E_ll_a[5, i].d[ids.c1[4, i]] = E_ll_a[5, i].v * 2.
-            E_ll_a[5, i].d[ids.c2[4, i]] = E_ll_a[5, i].v * 2.
-
-            tmp2 = exp(-2c1[2, i] + 2 * c2[2, i])
-            E_ll_a[2, i].v = E_ll_a[3, i].v * tmp2
-            E_ll_a[2, i].d[:] = E_ll_a[3, i].d * tmp2
-            E_ll_a[2, i].d[ids.c1[2, i]] = E_ll_a[2, i].v * -2.
-            E_ll_a[2, i].d[ids.c2[2, i]] = E_ll_a[2, i].v * 2.
-
-            tmp1 = exp(-2c1[1, i] + 2 * c2[1, i])
-            E_ll_a[1, i].v = E_ll_a[2, i].v * tmp1
-            E_ll_a[1, i].d[:] = E_ll_a[2, i].d * tmp1
-            E_ll_a[1, i].d[ids.c1[1, i]] = E_ll_a[1, i].v * -2.
-            E_ll_a[1, i].d[ids.c2[1, i]] = E_ll_a[1, i].v * 2.
-        end
-
-        new(E_l_a, E_ll_a)
-    end
+    # [E[l^2|a=0], E[l^2]|a=1]]
+    E_ll_a::Matrix{SensitiveFloat{CanonicalParams, NumType}}
 end
+
+
+SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
+    r1 = vs[ids.r1]
+    r2 = vs[ids.r2]
+    c1 = vs[ids.c1]
+    c2 = vs[ids.c2]
+
+    # E_l_a has a row for each of the five colors and columns
+    # for star / galaxy.
+    E_l_a = Array(SensitiveFloat{CanonicalParams, NumType}, B, Ia)
+
+    for i = 1:Ia
+        for b = 1:B
+            E_l_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
+        end
+
+        # Index 3 is r_s and has a gamma expectation.
+        E_l_a[3, i].v = r1[i] * r2[i]
+        E_l_a[3, i].d[ids.r1[i]] = r2[i]
+        E_l_a[3, i].d[ids.r2[i]] = r1[i]
+
+        # The remaining indices involve c_s and have lognormal
+        # expectations times E_c_3.
+        E_c_3 = exp(c1[3, i] + .5 * c2[3, i])
+        E_l_a[4, i].v = E_l_a[3, i].v * E_c_3
+        E_l_a[4, i].d[ids.r1[i]] = E_l_a[3, i].d[ids.r1[i]] * E_c_3
+        E_l_a[4, i].d[ids.r2[i]] = E_l_a[3, i].d[ids.r2[i]] * E_c_3
+        E_l_a[4, i].d[ids.c1[3, i]] = E_l_a[4, i].v
+        E_l_a[4, i].d[ids.c2[3, i]] = E_l_a[4, i].v * .5
+
+        E_c_4 = exp(c1[4, i] + .5 * c2[4, i])
+        E_l_a[5, i].v = E_l_a[4, i].v * E_c_4
+        E_l_a[5, i].d[ids.r1[i]] = E_l_a[4, i].d[ids.r1[i]] * E_c_4
+        E_l_a[5, i].d[ids.r2[i]] = E_l_a[4, i].d[ids.r2[i]] * E_c_4
+        E_l_a[5, i].d[ids.c1[3, i]] = E_l_a[4, i].d[ids.c1[3, i]] * E_c_4
+        E_l_a[5, i].d[ids.c2[3, i]] = E_l_a[4, i].d[ids.c2[3, i]] * E_c_4
+        E_l_a[5, i].d[ids.c1[4, i]] = E_l_a[5, i].v
+        E_l_a[5, i].d[ids.c2[4, i]] = E_l_a[5, i].v * .5
+
+        E_c_2 = exp(-c1[2, i] + .5 * c2[2, i])
+        E_l_a[2, i].v = E_l_a[3, i].v * E_c_2
+        E_l_a[2, i].d[ids.r1[i]] = E_l_a[3, i].d[ids.r1[i]] * E_c_2
+        E_l_a[2, i].d[ids.r2[i]] = E_l_a[3, i].d[ids.r2[i]] * E_c_2
+        E_l_a[2, i].d[ids.c1[2, i]] = E_l_a[2, i].v * -1.
+        E_l_a[2, i].d[ids.c2[2, i]] = E_l_a[2, i].v * .5
+
+        E_c_1 = exp(-c1[1, i] + .5 * c2[1, i])
+        E_l_a[1, i].v = E_l_a[2, i].v * E_c_1
+        E_l_a[1, i].d[ids.r1[i]] = E_l_a[2, i].d[ids.r1[i]] * E_c_1
+        E_l_a[1, i].d[ids.r2[i]] = E_l_a[2, i].d[ids.r2[i]] * E_c_1
+        E_l_a[1, i].d[ids.c1[2, i]] = E_l_a[2, i].d[ids.c1[2, i]] * E_c_1
+        E_l_a[1, i].d[ids.c2[2, i]] = E_l_a[2, i].d[ids.c2[2, i]] * E_c_1
+        E_l_a[1, i].d[ids.c1[1, i]] = E_l_a[1, i].v * -1.
+        E_l_a[1, i].d[ids.c2[1, i]] = E_l_a[1, i].v * .5
+    end
+
+    E_ll_a = Array(SensitiveFloat{CanonicalParams, NumType}, B, Ia)
+    for i = 1:Ia
+        for b = 1:B
+            E_ll_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
+        end
+
+        r2_sq = r2[i]^2
+        E_ll_a[3, i].v = r1[i] * (1 + r1[i]) * r2_sq
+        E_ll_a[3, i].d[ids.r1[i]] = (1 + 2 * r1[i]) * r2_sq
+        E_ll_a[3, i].d[ids.r2[i]] = 2 * r1[i] * (1. + r1[i]) * r2[i]
+
+        tmp3 = exp(2c1[3, i] + 2 * c2[3, i])
+        E_ll_a[4, i].v = E_ll_a[3, i].v * tmp3
+        E_ll_a[4, i].d[:] = E_ll_a[3, i].d * tmp3
+        E_ll_a[4, i].d[ids.c1[3, i]] = E_ll_a[4, i].v * 2.
+        E_ll_a[4, i].d[ids.c2[3, i]] = E_ll_a[4, i].v * 2.
+
+        tmp4 = exp(2c1[4, i] + 2 * c2[4, i])
+        E_ll_a[5, i].v = E_ll_a[4, i].v * tmp4
+        E_ll_a[5, i].d[:] = E_ll_a[4, i].d * tmp4
+        E_ll_a[5, i].d[ids.c1[4, i]] = E_ll_a[5, i].v * 2.
+        E_ll_a[5, i].d[ids.c2[4, i]] = E_ll_a[5, i].v * 2.
+
+        tmp2 = exp(-2c1[2, i] + 2 * c2[2, i])
+        E_ll_a[2, i].v = E_ll_a[3, i].v * tmp2
+        E_ll_a[2, i].d[:] = E_ll_a[3, i].d * tmp2
+        E_ll_a[2, i].d[ids.c1[2, i]] = E_ll_a[2, i].v * -2.
+        E_ll_a[2, i].d[ids.c2[2, i]] = E_ll_a[2, i].v * 2.
+
+        tmp1 = exp(-2c1[1, i] + 2 * c2[1, i])
+        E_ll_a[1, i].v = E_ll_a[2, i].v * tmp1
+        E_ll_a[1, i].d[:] = E_ll_a[2, i].d * tmp1
+        E_ll_a[1, i].d[ids.c1[1, i]] = E_ll_a[1, i].v * -2.
+        E_ll_a[1, i].d[ids.c2[1, i]] = E_ll_a[1, i].v * 2.
+    end
+
+    SourceBrightness(E_l_a, E_ll_a)
+end
+
 
 @doc """
 A convenience function for getting only the brightness parameters
@@ -219,8 +233,8 @@ Args:
 Returns:
   An array of E_l_a and E_ll_a for each source.
 """ ->
-function get_brightness(mp::ModelParams)
-    brightness = [ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+function get_brightness{NumType <: Number}(mp::ModelParams{NumType})
+    brightness = [SourceBrightness(mp.vp[s]) for s in 1:mp.S];
     brightness_vals = [ Float64[b.E_l_a[i, j].v for
         i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
     brightness_squares = [ Float64[b.E_l_a[i, j].v for
@@ -349,9 +363,9 @@ Returns:
 
 The PSF contains three components, so you see lots of 3's below.
 """ ->
-function load_bvn_mixtures(mp::ModelParams, b::Int64)
-    star_mcs = Array(BvnComponent, 3, mp.S)
-    gal_mcs = Array(GalaxyCacheComponent, 3, 8, 2, mp.S)
+function load_bvn_mixtures{NumType <: Number}(mp::ModelParams{NumType}, b::Int64)
+    star_mcs = Array(BvnComponent{NumType}, 3, mp.S)
+    gal_mcs = Array(GalaxyCacheComponent{NumType}, 3, 8, 2, mp.S)
 
     for s in 1:mp.S
         psf = mp.patches[s, b].psf
@@ -397,7 +411,9 @@ Args:
   - bmc: A bivariate normal component
   - x: A 2x1 vector containing a mean offset to be applied to bmc
 """ ->
-function eval_bvn_pdf(bmc::BvnComponent, x::Vector{Float64})
+function eval_bvn_pdf{NumType <: Number}(
+  bmc::BvnComponent{NumType}, x::Vector{Float64})
+
     y1 = x[1] - bmc.the_mean[1]
     y2 = x[2] - bmc.the_mean[2]
     py1 = bmc.precision[1,1] * y1 + bmc.precision[1,2] * y2
@@ -421,7 +437,7 @@ Args:
 """ ->
 function accum_star_pos!{NumType <: Number}(bmc::BvnComponent{NumType},
                          x::Vector{Float64},
-                         fs0m::SensitiveFloat,
+                         fs0m::SensitiveFloat{StarPosParams, NumType},
                          wcs_jacobian::Array{Float64, 2})
     py1, py2, f = eval_bvn_pdf(bmc, x)
 
@@ -451,7 +467,7 @@ Args:
 """ ->
 function accum_galaxy_pos!{NumType <: Number}(gcc::GalaxyCacheComponent{NumType},
                            x::Vector{Float64},
-                           fs1m::SensitiveFloat,
+                           fs1m::SensitiveFloat{GalaxyPosParams, NumType},
                            wcs_jacobian::Array{Float64, 2})
     py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
     f = f_pre * gcc.e_dev_i
@@ -509,14 +525,18 @@ Returns:
     star and galaxy contributions to the ELBO from this source
     in this band.  Adds the contributions to E_G and var_G.
 """ ->
-function accum_pixel_source_stats!{NumType <: Number}(sb::SourceBrightness,
-        star_mcs::Array{BvnComponent, 2},
-        gal_mcs::Array{GalaxyCacheComponent, 4},
+function accum_pixel_source_stats!{NumType <: Number}(
+        sb::SourceBrightness{NumType},
+        star_mcs::Array{BvnComponent{NumType}, 2},
+        gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
         vs::Vector{NumType}, child_s::Int64, parent_s::Int64,
         m_pos::Vector{Float64}, b::Int64,
-        fs0m::SensitiveFloat, fs1m::SensitiveFloat,
-        E_G::SensitiveFloat, var_G::SensitiveFloat,
+        fs0m::SensitiveFloat{StarPosParams, NumType},
+        fs1m::SensitiveFloat{GalaxyPosParams, NumType},
+        E_G::SensitiveFloat{CanonicalParams, NumType},
+        var_G::SensitiveFloat{CanonicalParams, NumType},
         wcs_jacobian::Array{Float64, 2})
+
     # Accumulate over PSF components.
     clear!(fs0m)
     for star_mc in star_mcs[:, parent_s]
@@ -600,9 +620,11 @@ Args:
 Returns:
   - Adds the contributions of E_G and var_G to accum in place.
 """ ->
-function accum_pixel_ret!(tile_sources::Vector{Int64},
+function accum_pixel_ret!{NumType <: Number}(tile_sources::Vector{Int64},
         x_nbm::Float64, iota::Float64,
-        E_G::SensitiveFloat, var_G::SensitiveFloat, ret::SensitiveFloat)
+        E_G::SensitiveFloat{CanonicalParams, NumType},
+        var_G::SensitiveFloat{CanonicalParams, NumType},
+        ret::SensitiveFloat{CanonicalParams, NumType})
     # Accumulate the values.
     # Add the lower bound to the E_q[log(F_{nbm})] term
     ret.v += x_nbm * (log(iota) + log(E_G.v) - var_G.v / (2. * E_G.v^2))
@@ -637,14 +659,18 @@ Args:
 Returns:
   - Iota.
 """ ->
-function expected_pixel_brightness!(
+function expected_pixel_brightness!{NumType <: Number}(
     h::Int64, w::Int64,
-    sbs::Vector{SourceBrightness},
-    star_mcs::Array{BvnComponent, 2},
-    gal_mcs::Array{GalaxyCacheComponent, 4},
-    tile::ImageTile, E_G::SensitiveFloat, var_G::SensitiveFloat,
-    mp::ModelParams, tile_sources::Vector{Int64},
-    fs0m::SensitiveFloat, fs1m::SensitiveFloat)
+    sbs::Vector{SourceBrightness{NumType}},
+    star_mcs::Array{BvnComponent{NumType}, 2},
+    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+    tile::ImageTile,
+    E_G::SensitiveFloat{CanonicalParams, NumType},
+    var_G::SensitiveFloat{CanonicalParams, NumType},
+    mp::ModelParams{NumType},
+    tile_sources::Vector{Int64},
+    fs0m::SensitiveFloat{StarPosParams, NumType},
+    fs1m::SensitiveFloat{GalaxyPosParams, NumType})
 
   clear!(E_G)
   clear!(var_G)
@@ -675,13 +701,14 @@ Args:
   - gal_mcs: All the galaxy * PCF components.
   - accum: The ELBO log likelihood to be updated.
 """ ->
-function tile_likelihood!(tile::ImageTile,
+function tile_likelihood!{NumType <: Number}(
+        tile::ImageTile,
         tile_sources::Vector{Int64},
-        mp::ModelParams,
-        sbs::Vector{SourceBrightness},
-        star_mcs::Array{BvnComponent, 2},
-        gal_mcs::Array{GalaxyCacheComponent, 4},
-        accum::SensitiveFloat)
+        mp::ModelParams{NumType},
+        sbs::Vector{SourceBrightness{NumType}},
+        star_mcs::Array{BvnComponent{NumType}, 2},
+        gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+        accum::SensitiveFloat{CanonicalParams, NumType})
 
     # For speed, if there are no sources, add the noise
     # contribution directly.
@@ -745,13 +772,14 @@ Args:
 Returns:
   A matrix of the same size as the tile with the predicted brightnesses.
 """ ->
-function tile_predicted_image(tile::ImageTile,
+function tile_predicted_image{NumType <: Number}(
+        tile::ImageTile,
         tile_sources::Vector{Int64},
-        mp::ModelParams,
-        sbs::Vector{SourceBrightness},
-        star_mcs::Array{BvnComponent, 2},
-        gal_mcs::Array{GalaxyCacheComponent, 4},
-        accum::SensitiveFloat)
+        mp::ModelParams{NumType},
+        sbs::Vector{SourceBrightness{NumType}},
+        star_mcs::Array{BvnComponent{NumType}, 2},
+        gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+        accum::SensitiveFloat{CanonicalParams, NumType})
 
     # fs0m and fs1m accumulate contributions from all sources.
     num_type = typeof(mp.vp[1][1])
@@ -781,7 +809,9 @@ end
 @doc """
 Produce a predicted image for a given tile and model parameters.
 """ ->
-function tile_predicted_image(tile::ImageTile, mp::ModelParams)
+function tile_predicted_image{NumType <: Number}(
+    tile::ImageTile, mp::ModelParams{NumType})
+
   b = tile.b
   num_type = typeof(mp.vp[1][1])
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
@@ -811,10 +841,10 @@ Args:
 """ ->
 function elbo_likelihood!{NumType <: Number}(
   tiles::Array{ImageTile}, mp::ModelParams{NumType},
-  b::Int64, accum::SensitiveFloat)
+  b::Int64, accum::SensitiveFloat{CanonicalParams, NumType})
 
     star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
-    sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
+    sbs = SourceBrightness{NumType}[ SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
     function get_tile_sf(tile::ImageTile)
       # TODO: Only pass a snesitive float as big as the tile's local sources.
@@ -861,7 +891,7 @@ Args:
   - tiled_blob: A TiledBlob.
   - mp: Model parameters.
 """ ->
-function elbo(tiled_blob::TiledBlob, mp::ModelParams)
+function elbo{NumType <: Number}(tiled_blob::TiledBlob, mp::ModelParams{NumType})
     ret = elbo_likelihood(tiled_blob, mp)
     subtract_kl!(mp, ret)
     ret
