@@ -99,7 +99,7 @@ function test_parameter_conversion()
 	vp_free = transform.from_vp(mp.vp)
 	vp2 = transform.to_vp(vp_free)
 
-	for id in @compat(fieldnames(ids)), s in 1:mp.S
+	for id in fieldnames(ids), s in 1:mp.S
 		@test_approx_eq_eps(original_vp[s][ids.(id)], vp2[s][ids.(id)], 1e-6)
 	end
 
@@ -111,7 +111,7 @@ function test_parameter_conversion()
 
 	vp2 = generate_valid_parameters(Float64, transform.bounds)
 	transform.vector_to_vp!(x, vp2, omitted_ids)
-	for id in @compat(fieldnames(ids)), s in 1:mp.S
+	for id in fieldnames(ids), s in 1:mp.S
 		@test_approx_eq_eps(original_vp[s][ids.(id)], vp2[s][ids.(id)], 1e-6)
 	end
 end

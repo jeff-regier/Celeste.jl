@@ -21,8 +21,8 @@ end
 
 function get_patch(the_mean::Vector{Float64}, H::Int64, W::Int64)
     const radius = 50
-    hm = @compat(round(Int, the_mean[1]))
-    wm = @compat(round(Int, the_mean[2]))
+    hm = round(Int, the_mean[1])
+    wm = round(Int, the_mean[2])
     w11 = max(1, wm - radius):min(W, wm + radius)
     h11 = max(1, hm - radius):min(H, hm + radius)
     return(w11, h11)
