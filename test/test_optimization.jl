@@ -379,7 +379,7 @@ function test_quadratic_optimization()
 
     bounds = Array(ParamBounds, 1)
     bounds[1] = ParamBounds()
-    for param in setdiff(@compat(fieldnames(ids)), [:a, :k])
+    for param in setdiff(fieldnames(ids), [:a, :k])
       bounds[1][symbol(param)] = ParamBox(0., 1.0, 1.0)
     end
     trans = DataTransform(bounds)

@@ -102,7 +102,7 @@ function load_stamp_blob(stamp_dir, stamp_id)
         hdr = FITSIO.read_header(fits[1])
         original_pixels = read(fits[1])
         dn = original_pixels / hdr["CALIB"] + hdr["SKY"]
-        nelec_f32 = @compat(round(dn * hdr["GAIN"]))
+        nelec_f32 = round(dn * hdr["GAIN"])
         nelec = convert(Array{Float64}, nelec_f32)
 
         header_str = FITSIO.read_header(fits[1], ASCIIString)
@@ -130,9 +130,9 @@ function load_stamp_blob(stamp_dir, stamp_id)
         iota = hdr["GAIN"] / hdr["CALIB"]
         epsilon = hdr["SKY"] * hdr["CALIB"]
 
-        run_num = @compat(round(Int, hdr["RUN"]))
-        camcol_num = @compat(round(Int, hdr["CAMCOL"]))
-        field_num = @compat(round(Int, hdr["FIELD"]))
+        run_num = round(Int, hdr["RUN"])
+        camcol_num = round(Int, hdr["CAMCOL"])
+        field_num = round(Int, hdr["FIELD"])
 
         Image(H, W, nelec, b, wcs, epsilon, iota, psf,
               run_num, camcol_num, field_num)
@@ -205,9 +205,9 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
 
         # Set it to use a constant background but include the non-constant data.
         blob[b] = Image(H, W, nelec, b, wcs, epsilon, iota, psf,
-                      @compat(parse(Int, run_num)),
-                      @compat(parse(Int, camcol_num)),
-                      @compat(parse(Int, field_num)),
+                      parse(Int, run_num),
+                      parse(Int, camcol_num),
+                      parse(Int, field_num),
                       true, epsilon_mat, iota_vec, raw_psf_comp)
     end
 
@@ -240,12 +240,12 @@ function crop_blob_to_location(
     for b=1:5
         # Get the pixels that are near enough to the wcs_center.
         pix_center = WCS.world_to_pixel(blob[b].wcs, wcs_center)
-        h_min = max(@compat(floor(Int, pix_center[1] - width)), 1)
-        h_max = min(@compat(ceil(Int, pix_center[1] + width)), blob[b].H)
+        h_min = max(floor(Int, pix_center[1] - width), 1)
+        h_max = min(ceil(Int, pix_center[1] + width), blob[b].H)
         sub_rows_h = h_min:h_max
 
-        w_min = max(@compat(floor(Int, (pix_center[2] - width))), 1)
-        w_max = min(@compat(ceil(Int, pix_center[2] + width)), blob[b].W)
+        w_min = max(floor(Int, (pix_center[2] - width)), 1)
+        w_max = min(ceil(Int, pix_center[2] + width), blob[b].W)
         sub_rows_w = w_min:w_max
         tiled_blob[b] = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
     end
@@ -349,8 +349,8 @@ Returns:
   An array of tiles containing the image.
 """ ->
 function break_image_into_tiles(img::Image, tile_width::Int64)
-  WW = @compat(ceil(Int, img.W / tile_width))
-  HH = @compat(ceil(Int, img.H / tile_width))
+  WW = ceil(Int, img.W / tile_width)
+  HH = ceil(Int, img.H / tile_width)
   ImageTile[ ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW ]
 end
 
