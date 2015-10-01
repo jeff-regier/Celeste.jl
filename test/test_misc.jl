@@ -21,8 +21,8 @@ function test_tile_image()
 
   tiles = SkyImages.break_image_into_tiles(img, tile_width);
   @test size(tiles) ==
-    (@compat(round(Int, ceil(img.H  / tile_width))),
-     @compat(round(Int, ceil(img.W / tile_width))))
+    (round(Int, ceil(img.H  / tile_width)),
+     round(Int, ceil(img.W / tile_width)))
   for tile in tiles
     @test tile.b == img.b
     @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
@@ -37,8 +37,8 @@ function test_tile_image()
   img.iota_vec = rand(size(img.pixels)[1]);
   tiles = SkyImages.break_image_into_tiles(img, tile_width);
   @test size(tiles) == (
-    @compat(ceil(Int, img.H  / tile_width)),
-    @compat(ceil(Int, img.W / tile_width)))
+    ceil(Int, img.H  / tile_width),
+    ceil(Int, img.W / tile_width))
   for tile in tiles
     @test tile.b == img.b
     @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
@@ -162,8 +162,8 @@ function test_local_sources_3()
 
     # Source should be present
     tile = ImageTile(
-        @compat(round(Int, pix_loc[1] / tile_width)),
-        @compat(round(Int, pix_loc[2] / tile_width)),
+        round(Int, pix_loc[1] / tile_width),
+        round(Int, pix_loc[2] / tile_width),
         blob[test_b],
         tile_width);
     @test SkyImages.local_sources(
@@ -172,18 +172,18 @@ function test_local_sources_3()
     # Source should not match when you're 1 tile and a half away along the diagonal plus
     # the pixel radius from the center of the tile.
     tile = ImageTile(
-        @compat(ceil(Int, (pix_loc[1] + 1.5 * tile_width * sqrt(2) + 
-                patch_radius_pix) / tile_width)),
-        @compat(round(Int, pix_loc[2] / tile_width)),
+        ceil(Int, (pix_loc[1] + 1.5 * tile_width * sqrt(2) + 
+                patch_radius_pix) / tile_width),
+        round(Int, pix_loc[2] / tile_width),
         blob[test_b],
         tile_width)
     @test SkyImages.local_sources(
       tile, mp.patches[:,test_b][:], blob[test_b].wcs) == []
 
     tile = ImageTile(
-        @compat(round(Int, (pix_loc[1]) / tile_width)),
-        @compat(ceil(Int, (pix_loc[2]  + 1.5 * tile_width * sqrt(2) +
-                           patch_radius_pix) / tile_width)),
+        round(Int, (pix_loc[1]) / tile_width),
+        ceil(Int, (pix_loc[2]  + 1.5 * tile_width * sqrt(2) +
+                           patch_radius_pix) / tile_width),
         blob[test_b],
         tile_width)
     @test SkyImages.local_sources(
@@ -290,8 +290,8 @@ function test_add_sensitive_floats()
   sf_bad_size = zero_sensitive_float(CanonicalParams, Float64, S + 1);
   sf_bad_type = zero_sensitive_float(UnconstrainedParams, Float64, S);
 
-  @test_throws @compat(AssertionError) sf_bad_size + sf1
-  @test_throws @compat(AssertionError) sf_bad_type + sf1
+  @test_throws AssertionError sf_bad_size + sf1
+  @test_throws AssertionError sf_bad_type + sf1
 
   function sf_equal(sf1::SensitiveFloat, sf2::SensitiveFloat)
     sf1.v == sf2.v && sf2.d == sf2.d && sf1.h == sf2.h

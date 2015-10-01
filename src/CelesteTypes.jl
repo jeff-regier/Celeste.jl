@@ -443,7 +443,7 @@ end
 align(::StarPosParams, CanonicalParams) = ids.u
 align(::GalaxyPosParams, CanonicalParams) =
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
-align(::CanonicalParams, CanonicalParams) = [1:length(CanonicalParams)]
+align(::CanonicalParams, CanonicalParams) = collect(1:length(CanonicalParams))
 
 const shape_standard_alignment = (ids.u,
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale])
@@ -455,7 +455,7 @@ const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 function get_id_names(
   ids::@compat(Union{CanonicalParams, UnconstrainedParams}))
   ids_names = Array(ASCIIString, length(ids))
-  for (name in @compat(fieldnames(ids)))
+  for (name in fieldnames(ids))
     inds = ids.(name)
     if length(size(inds)) == 0
       ids_names[inds] = "$(name)"
@@ -528,7 +528,7 @@ Display model parameters with the variable names.
 function print_params(mp::ModelParams)
     for s in 1:mp.S
         println("=======================\n Object $(s):")
-        for var_name in @compat(fieldnames(ids))
+        for var_name in fieldnames(ids)
             println(var_name)
             println(mp.vp[s][ids.(var_name)])
         end
@@ -542,7 +542,7 @@ function print_params(mp_tuple::ModelParams...)
     println("Printing for $(length(mp_tuple)) parameters.")
     for s in 1:mp_tuple[1].S
         println("=======================\n Object $(s):")
-        for var_name in @compat(fieldnames(ids))
+        for var_name in fieldnames(ids)
             println(var_name)
             mp_vars =
               [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for
@@ -557,8 +557,8 @@ end
 Display a Celeste catalog entry.
 """ ->
 function print_cat_entry(cat_entry::CatalogEntry)
-    [ println("$name: $(cat_entry.(name))") for name in 
-            @compat(fieldnames(cat_entry)) ]
+    [println("$name: $(cat_entry.(name))") for name in 
+            fieldnames(cat_entry)]
 end
 
 #########################################################
