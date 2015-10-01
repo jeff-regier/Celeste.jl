@@ -12,8 +12,6 @@ import WCSLIB
 
 export tile_predicted_image
 
-global pixel_eval_count = 0
-
 @doc """
 Subtract the KL divergence from the prior for c
 """ ->
@@ -538,9 +536,6 @@ function accum_pixel_source_stats!{NumType <: Number}(
         E_G::SensitiveFloat{CanonicalParams, NumType},
         var_G::SensitiveFloat{CanonicalParams, NumType},
         wcs_jacobian::Array{Float64, 2})
-
-    global pixel_eval_count
-    pixel_eval_count += 1
 
     # Accumulate over PSF components.
     clear!(fs0m)
