@@ -18,18 +18,19 @@ blob, mp, body, tiled_blob =
 
 function small_image_profile()
     println("Calculating ELBO.")
-    elbo_time = time()
-    elbo = ElboDeriv.elbo(tiled_blob, mp);
-    elbo_time = time() - elbo_time
-    elbo, elbo_time
+
+    # do a trial run first, so we don't profile/time compling the code
+    ElboDeriv.elbo(tiled_blob, mp)
+
+    # profile the code
+    Profile.init(10^8, 0.001)
+    @profile elbo = ElboDeriv.elbo(tiled_blob, mp)
+    Profile.print(format=:flat)
+
+    # let's time it without any overhead from profiling
+    @time ElboDeriv.elbo(tiled_blob, mp)
 end
 
 println("Running with ", length(workers()), " processors.")
-@time elbo, elbo_time = small_image_profile();
+small_image_profile();
 
-Profile.init(10^7, 0.001)
-@profile small_image_profile()
-Profile.print()
-
-println("Elbo time: $(elbo_time) seconds")
-#Profile.print(format=:flat)
