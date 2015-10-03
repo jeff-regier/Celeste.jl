@@ -44,6 +44,10 @@ memstats()
 @runat 2 mat_worker = fetch(rr)
 memstats()
 
+# Ah, but it is undone with garbage collection.
+@everywhere gc()
+memstats()
+
 # Confirm that the copy on worker two is in fact a local copy
 @runat 2 mat_worker[1,1]= -20.
 @runat 2 rr2 = RemoteRef(2)
@@ -70,16 +74,10 @@ rr = remotecall_fetch(2, () -> rr)
 big_mat_1 = fetch(rr);
 memstats()
 
-# Ah, but it is undone with garbage collection.
-@everywhere gc()
-memstats()
-
-
-
 
 
 #############
-# Stuff that doesn't work
+# Some original flailing
 
 # This doesn't work for assignment.
 for worker_rr in rr_array
@@ -94,7 +92,6 @@ remote_vars()
 
 # Doesn't work, maybe something weird with keywords:
 # @runat(2, y=1.23)
-
 
 mat = rand(2, 2);
 
@@ -130,27 +127,3 @@ end
 for worker_rr in rr_array
   println(worker_rr.where, ": ", fetch(worker_rr))
 end
-
-
-# A working example with a big thing:
-mat = rand(int(1e4), int(1e5));
-@everywhere rr = RemoteRef(1)
-rr_array = [ remotecall_fetch(worker, () -> rr) for worker in workers() ]
-
-tic()
-for worker_rr in rr_array
-  put!(worker_rr, mat)
-end
-toc()
-
-tic()
-for worker_rr in rr_array
-  println(worker_rr.where, ": ", fetch(worker_rr)[1:5, 1:5])
-end
-toc()
-
-tic()
-for worker_rr in rr_array
-  println(worker_rr.where, ": ", fetch(worker_rr)[1:5, 1:5])
-end
-toc()
