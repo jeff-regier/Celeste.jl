@@ -844,6 +844,8 @@ function elbo_likelihood!{NumType <: Number}(
   b::Int64, accum::SensitiveFloat{CanonicalParams, NumType};
   parallel=false)
 
+    # TODO: b is in tiles and does not need to be an argument.
+
     star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
     sbs = SourceBrightness{NumType}[ SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
