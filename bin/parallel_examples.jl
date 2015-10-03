@@ -41,10 +41,15 @@ memstats()
 
 # Now this actually copies the array over.  Though for some reason it
 # also increases the memory usage of the first process.
+@runat 2 mat11 = fetch(rr)[1,1]
+memstats()
+
+# Making a local copy of the whole array uses as much memory as saving
+# just he first element.
 @runat 2 mat_worker = fetch(rr)
 memstats()
 
-# Ah, but it is undone with garbage collection.
+# But the extra memory is freed with garbage collection.
 @everywhere gc()
 memstats()
 
@@ -66,8 +71,7 @@ memstats()
           end
 memstats()
 
-# Copy from process 2 to process 1.  Again, this increases memory
-# usage on process 2.
+# Copy from process 2 to process 1.
 @runat 2 rr = RemoteRef(2)
 @runat 2 put!(rr, big_mats[1])
 rr = remotecall_fetch(2, () -> rr)
