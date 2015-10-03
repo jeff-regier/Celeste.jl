@@ -40,20 +40,21 @@ end
 memstats()
 
 # Now this actually copies the array over.  Though for some reason it
-# also increases the memory usage of the first process.  Maybe ps
-# counts the memory used by sub-processes?
+# also increases the memory usage of the first process.
 @runat 2 mat_worker = fetch(rr)
 memstats()
 
+# Confirm that the copy on worker two is in fact a local copy
 @runat 2 mat_worker[1,1]= -20.
 @runat 2 rr2 = RemoteRef(2)
 @runat 2 put!(rr2, mat_worker)
 rr2 = remotecall_fetch(2, () -> rr2)
 mat_worker = fetch(rr2);
 mat_worker[1, 1]
+mat[1, 1]
 memstats()
 
-# Note that this only runs up the memory usage on process 2
+# Note that this only runs up the memory usage on process 2.
 @runat 2 num_big_mats = 5
 @runat 2 big_mats = Array(Any, num_big_mats);
 @runat 2 for i = 1:num_big_mats
@@ -61,9 +62,17 @@ memstats()
           end
 memstats()
 
+# Copy from process 2 to process 1.  Again, this increases memory
+# usage on process 2.
+@runat 2 rr = RemoteRef(2)
+@runat 2 put!(rr, big_mats[1])
+rr = remotecall_fetch(2, () -> rr)
+big_mat_1 = fetch(rr);
+memstats()
 
-
-
+# Ah, but it is undone with garbage collection.
+@everywhere gc()
+memstats()
 
 
 
