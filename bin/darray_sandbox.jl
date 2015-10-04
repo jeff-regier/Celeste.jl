@@ -11,10 +11,17 @@ macro everywhereelse(ex)
     end
 end
 
+# This is like @everywhere but only runs on a particular process.
+macro runat(p, ex)
+  quote
+    remotecall_fetch($p, ()->(eval(Main,$(Expr(:quote,ex))); nothing))
+  end
+end
+
 # Start with julia -p <n_workers.
 # Make sure there are at least five workers:
-nw = 5
-if length(workers()) < 5
+nw = 10
+if length(workers()) < nw
   addprocs(nw - length(workers()))
 end
 
@@ -161,9 +168,8 @@ end
   accum_par = sum(accum_workers);
 end;
 
+tiles = original_tiles;
 @time eval_likelihood()
-abs(accum.v / sum(accum_workers_v))
-serial_accum_v = accum.v
 
 # Make sure they match.
 @assert abs(accum.v / accum_par.v - 1) < 1e-6
@@ -174,3 +180,29 @@ for id=1:nw
   tiles = original_tiles[:, col_ranges[id]]
   eval_likelihood()
 end
+
+
+# Profiling.  The two look similar.
+tiles = original_tiles[:, col_ranges[2]];
+@runat 2 begin
+  Profile.init(10^8, 0.001)
+  @profile eval_likelihood()
+  data, ldict = Profile.retrieve()
+end
+data2 = remotecall_fetch(2, () -> data);
+ldict2 = remotecall_fetch(2, () -> ldict);
+
+Profile.init(10^8, 0.001)
+@profile eval_likelihood()
+data, ldict = Profile.retrieve();
+
+Profile.print(data2, ldict2)
+println("-----------------")
+Profile.print(data, ldict)
+
+# The same amount of memory is allocated.
+@runat 2 begin
+  @time eval_likelihood()
+end
+
+@time eval_likelihood()
