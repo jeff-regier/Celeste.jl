@@ -13,15 +13,15 @@ end
 
 
 function read_r_colors(prior_file)
-	cat = fits_open_table(prior_file)
-	num_rows = int(fits_read_keyword(cat, "NAXIS2")[1])
+	fits = FITS(prior_file)
+    cat = fits[2]
+	num_rows, = read_key(cat, "NAXIS2")
 	table = Array(Float64, num_rows, 12)
 	for i in 1:12
-		data = Array(Float64, num_rows)
-		fits_read_col(cat, Float64, i, 1, 1, data)
-		table[:, i] = data
+        col_name, = read_key(cat, "TTYPE$i")
+		table[:, i] = read(cat, col_name)
 	end
-	fits_close_file(cat)
+	close(fits)
 
 	t2 = table[:,:]
 	for err_col in 8:12
@@ -59,10 +59,10 @@ else
 
     fit_r = fit_mle(LogNormal, r0)
 
-    D = 2
+    D = 64
     c0_train = c0
     #c0_test = c0[120001:end, :]
-    fit_gmm = GMM(D, c0_train, kind=:full, method=:kmeans)
+    fit_gmm = GMM(D, c0_train, kind=:full, method=:split)
     println("train avll:", GaussianMixtures.avll(fit_gmm, c0_train))
     #println("test avll:", GaussianMixtures.avll(fit_gmm, c0_test))
 
