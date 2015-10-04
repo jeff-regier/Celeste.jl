@@ -18,6 +18,7 @@ macro runat(p, ex)
   end
 end
 
+
 # A working example with a big object:
 mat = rand(int(1e4), int(1e4));
 mat2 = rand(int(1e4), int(1e4));
@@ -39,17 +40,27 @@ for worker_rr in rr_array
 end
 memstats()
 
-# Now this actually copies the array over.  Though for some reason it
-# also increases the memory usage of the first process.
+# Now this actually copies the array over.  Note that extra memory is allocated
+# during the copy but is freed by gc().
+fetch_time1 = time()
 @runat 2 mat11 = fetch(rr)[1,1]
+fetch_time1 = time() - fetch_time1
+memstats()
+gc()
 memstats()
 
-# Making a local copy of the whole array uses as much memory as saving
-# just he first element.
+# Subsequent fetches take just as much time and allocate just as much memory
+# before gc().  It is evidently re-fetching each time.
+fetch_time2 = time()
+@runat 2 mat12 = fetch(rr)[1,2]
+fetch_time2 = time() - fetch_time2
+memstats()
+
+# Making a local copy of the whole array.
 @runat 2 mat_worker = fetch(rr)
 memstats()
 
-# But the extra memory is freed with garbage collection.
+# Again, the extra memory is freed with garbage collection.
 @everywhere gc()
 memstats()
 
@@ -78,10 +89,29 @@ rr = remotecall_fetch(2, () -> rr)
 big_mat_1 = fetch(rr);
 memstats()
 
+# Subsequent fetches doesn't pick up changes in the immutable objects
+@runat 2 rr = RemoteRef(1)
+rr = remotecall_fetch(2, () -> rr)
+myx = 1.23
+put!(rr, myx)
+@runat 2 println(fetch(rr))
+myx += 1.45
+@runat 2 println(fetch(rr))
+
+# But it does in mutable ones
+@runat 2 rr = RemoteRef(1)
+rr = remotecall_fetch(2, () -> rr)
+myxvec = [ 1.23 ]
+put!(rr, myxvec)
+@runat 2 println(fetch(rr))
+myxvec[1] += 1.45
+@runat 2 println(fetch(rr))
+
+
 
 
 #############
-# Some original flailing
+# Some of the initial flailing
 
 # This doesn't work for assignment.
 for worker_rr in rr_array
@@ -131,3 +161,10 @@ end
 for worker_rr in rr_array
   println(worker_rr.where, ": ", fetch(worker_rr))
 end
+
+# This does not seem to clear the meory for some reason
+@runat 2 big_mats = 0
+@runat 2 mat_worker = 0
+mat = 0
+big_mat_1 = 0
+@everywhere gc()
