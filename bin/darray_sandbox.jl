@@ -42,16 +42,28 @@ println("Running with ", length(workers()), " processors.")
   using ElboDeriv.BvnComponent
   using ElboDeriv.GalaxyCacheComponent
 
-  function elbo_likelihood!{NumType <: Number}(
-    tile::ImageTile, mp::ModelParams{NumType},
-    sbs::Vector{SourceBrightness{NumType}},
-    star_mcs::Array{BvnComponent{NumType}, 2},
-    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-    accum::SensitiveFloat{CanonicalParams, NumType})
-      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-      tile_likelihood!(
-        tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
+  function eval_likelihood()
+    println(myid(), " is starting.")
+    elbo_time = time()
+    global accum
+    clear!(accum)
+    for b in 1:5
+      println("Proc $(myid()) starting band $b")
+      sbs = param_state.sbs_vec[b]
+      star_mcs = param_state.star_mcs_vec[b]
+      gal_mcs = param_state.gal_mcs_vec[b]
+      for tile in tiled_blob[b][:]
+        tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+        tile_likelihood!(
+          tile, tile_sources, mp,
+          sbs, star_mcs, gal_mcs,
+          accum);
+      end
+    end
+    elbo_time = time() - elbo_time
+    println(myid(), " is done in $(elbo_time)s.")
   end
+
 end
 
 srand(1)
@@ -161,29 +173,6 @@ end
 
 #######################################
 # Define the likelihood function
-@everywhere begin
-  function eval_likelihood()
-    println(myid(), " is starting.")
-    elbo_time = time()
-    global accum
-    clear!(accum)
-    for b in 1:5
-      println("Proc $(myid()) starting band $b")
-      sbs = param_state.sbs_vec[b]
-      star_mcs = param_state.star_mcs_vec[b]
-      gal_mcs = param_state.gal_mcs_vec[b]
-      for tile in tiled_blob[b][:]
-        tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-        tile_likelihood!(
-          tile, tile_sources, mp,
-          sbs, star_mcs, gal_mcs,
-          accum);
-      end
-    end
-    elbo_time = time() - elbo_time
-    println(myid(), " is done in $(elbo_time)s.")
-  end
-end
 
 # Evaluate the elbo locally.
 @time eval_likelihood()
@@ -195,12 +184,13 @@ end
   accum_par = sum(accum_workers);
 end;
 
-
 # Make sure they match.
 @assert abs(accum.v / accum_par.v - 1) < 1e-6
 @assert maximum(abs((accum.d .+ 1e-8) ./ (accum_par.d .+ 1e-8) - 1)) < 1e-6
 
-# Profiling.  The two look similar.
+
+######################################
+# Profiling.
 @runat 2 begin
   Profile.init(10^8, 0.001)
   @profile eval_likelihood()

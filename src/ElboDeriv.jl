@@ -849,34 +849,10 @@ function elbo_likelihood!{NumType <: Number}(
     star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
     sbs = SourceBrightness{NumType}[ SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-    if parallel
-      # This is currently very inefficient due to the memory allocation
-      # required for the reduce.
-
-      function get_tile_sf(tile::ImageTile)
-        # TODO: Only pass a snesitive float as big as the tile's local sources.
-        tile_accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
-        tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-        tile_likelihood!(
-          tile, tile_sources, mp, sbs, star_mcs, gal_mcs, tile_accum)
-        tile_accum
-      end
-
-      accum_par = @parallel (+) for tile in tiles
-        get_tile_sf(tile)
-      end
-
-      # TODO: why doesn't @parallel update something in place?
-      accum.v += accum_par.v
-      accum.d += accum_par.d
-      accum.h += accum_par.h
-
-    else
-      for tile in tiles
-        tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-        tile_likelihood!(
-          tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
-      end
+    for tile in tiles
+      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+      tile_likelihood!(
+        tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
     end
 end
 
