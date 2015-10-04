@@ -23,6 +23,8 @@ end
 mat = rand(int(1e4), int(1e4));
 mat2 = rand(int(1e4), int(1e4));
 
+# Note that workers() includes [ 1 ] before running addprocs() but
+# does not afterwareds.  :(
 addprocs(2)
 memstats()
 

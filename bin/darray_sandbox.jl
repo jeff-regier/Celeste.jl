@@ -18,10 +18,10 @@ macro runat(p, ex)
   end
 end
 
-# Make sure there are at least nw workers:
-nw = 10
+# Make sure there are at least nw workers.
+nw = 5
 if length(workers()) < nw
-  addprocs(nw - length(workers()))
+  addprocs(nw - length(setdiff(workers(), [myid()])))
 end
 
 @everywhere using Celeste
@@ -72,74 +72,80 @@ end
 ####################################################
 # Load data
 
-import Synthetic
-import ModelInit
-import SampleData
+@everywhere begin
+  import Synthetic
+  import ModelInit
+  import SampleData
 
-const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
+  const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
-synthetic = true
-println("Loading data.")
+  synthetic = false
+  println("Loading data.")
 
-if synthetic
-  srand(1)
-  S = 100
-  blob, mp, body, tiled_blob =
-    SampleData.gen_n_body_dataset(S, tile_width=10);
-else
-  # An actual image
-  field_dir = joinpath(dat_dir, "sample_field")
-  run_num = "003900"
-  camcol_num = "6"
-  field_num = "0269"
+  if synthetic
+    srand(1)
+    S = 100
+    blob, mp, body, tiled_blob =
+      SampleData.gen_n_body_dataset(S, tile_width=10);
+  else
+    println("Loading from file")
+    using JLD
+    img_dict = JLD.load(joinpath(dat_dir, "initialzed_celeste_003900-6-0269.JLD"));
+    tiled_blob = img_dict["tiled_blob"];
+    mp = img_dict["mp_all"];
+  end;
 
-  blob =
-    SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num,
-                          mask_planes=Set());
-
-  cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
-  cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
-
-  tiled_blob, mp =
-    ModelInit.initialize_celeste(blob, cat_entries,
-      tile_width=10, fit_psf=false);
+  NumType = Float64
+  accum = zero_sensitive_float(CanonicalParams, NumType, mp.S);
 end
-
-NumType = Float64
-accum = zero_sensitive_float(CanonicalParams, NumType, mp.S);
-
 
 #######################################
 # Divide up the tiles
-nw = length(workers())
 
-distributed_tiled_blobs = Array(TiledBlob, nw);
-for w=1:nw
-  distributed_tiled_blobs[w] = Array(TiledImage, 5);
-end
+# distributed_tiled_blobs = Array(TiledBlob, nw);
+# for w=1:nw
+#   distributed_tiled_blobs[w] = Array(TiledImage, 5);
+# end
 
 for b=1:5
   col_cuts = iround(linspace(1, size(tiled_blob[b])[2] + 1, nw + 1))
   col_ranges = map(i -> col_cuts[i]:col_cuts[i + 1] - 1, 1:nw)
-  for w=1:nw
-    distributed_tiled_blobs[w][b] = tiled_blob[b][:, col_ranges[w]]
+  # for w=1:nw
+  #   distributed_tiled_blobs[w][b] = tiled_blob[b][:, col_ranges[w]]
+  # end
+end
+
+# Copy the tiles to the workers.  This fails with the full image.
+# @everywhereelse tiles_rr = RemoteRef(1)
+# tiles_rr = [ remotecall_fetch(w, () -> tiles_rr) for w in workers() ]
+# for iw=1:nw
+#   put!(tiles_rr[iw], distributed_tiled_blobs[iw])
+# end
+# @everywhereelse tiled_blob = fetch(tiles_rr);
+
+
+# Try doing it direclty.  This fails the same way.
+# Since this is used to index into accum_rr, it must
+# be the same on every process.
+worker_ids = workers()
+@everywhereelse begin
+  worker_ids = remotecall_fetch(1, () -> worker_ids)
+  proc_id_vec = find(worker_ids .== myid())
+  @assert length(proc_id_vec) == 1
+  proc_id = proc_id_vec[1]
+  col_ranges = remotecall_fetch(1, () -> col_ranges)
+  for b=1:5
+    tiled_blob[b] = tiled_blob[b][:, col_ranges[proc_id]]
   end
 end
-
-# Copy the tiles to the workers.
-@everywhereelse tiles_rr = RemoteRef(1)
-tiles_rr = [ remotecall_fetch(w, () -> tiles_rr) for w in workers() ]
-for iw=1:nw
-  put!(tiles_rr[iw], distributed_tiled_blobs[iw])
-end
-
-@everywhereelse tiled_blob = fetch(tiles_rr);
+# @everywhereelse remotecall_fetch(1, println, proc_id)
+# @everywhereelse tiled_blob =
+#     remotecall_fetch(1, (i) -> distributed_tiled_blobs[i], proc_id);
 
 # Sanity check that the tiles were communicated successfully
-@everywhereelse tilesum = sum([ sum(t.pixels) for t in tiles])
-tilesum = sum([sum([ sum(t.pixels) for t in tiled_blob[b]]) for b=1:5 ])
-@assert tilesum == sum([remotecall_fetch(w, () -> tilesum) for w in workers()])
-
+@everywhere tilesum = sum([sum([ sum(t.pixels) for t in tiled_blob[b]]) for b=1:5 ])
+remote_tilesums = [remotecall_fetch(w, () -> tilesum) for w in workers()];
+@assert tilesum == sum(remote_tilesums)
 
 #######################################
 # All the information that needs to be communicated to the tile processors.
@@ -184,17 +190,10 @@ end
 
 # Set up for accum to be communicated back to process 1
 
-# Since this is used to index into accum_rr, it must
-# be the same on every process.
-worker_ids = workers()
-@everywhereelse worker_ids = remotecall_fetch(1, () -> worker_ids)
-
 accum_rr = [ RemoteRef(w) for w in workers() ]
 @everywhereelse begin
   accum = zero_sensitive_float(CanonicalParams, Float64, mp.S)
   accum_rr = RemoteRef(myid())
-  proc_id = find(worker_ids .== myid())
-  @assert length(proc_id) == 1
   accum_rr = remotecall_fetch(1, i -> accum_rr[i], proc_id[1])
   put!(accum_rr, accum)
 end
