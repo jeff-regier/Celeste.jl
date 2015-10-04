@@ -56,6 +56,7 @@ blob, mp, body, tiled_blob =
 
 NumType = Float64
 tiles = tiled_blob[3];
+original_tiles = tiles;
 b = 3;
 accum = zero_sensitive_float(CanonicalParams, NumType, mp.S);
 
@@ -68,48 +69,74 @@ nw = length(workers())
 col_cuts = iround(linspace(1, size(tiles)[2] + 1, nw + 1))
 col_ranges = map(i -> col_cuts[i]:col_cuts[i + 1] - 1, 1:nw)
 
+# Since this is used to index into data structures, it must
+# be the same on every process.
+worker_ids = workers()
+@everywhereelse worker_ids = remotecall_fetch(1, () -> worker_ids)
+
+# Copy the tiles.
 @everywhereelse tiles_rr = RemoteRef(1)
 tiles_rr = [ remotecall_fetch(w, () -> tiles_rr) for w in workers() ]
 for iw=1:nw
   put!(tiles_rr[iw], tiles[:,col_ranges[iw]])
 end
 
-mp_rr = RemoteRef(1)
-sbs_rr = RemoteRef(1)
-gal_mcs_rr = RemoteRef(1)
-star_mcs_rr = RemoteRef(1)
+@everywhereelse mp_rr = RemoteRef(1)
+mp_rr = [ remotecall_fetch(w, () -> mp_rr) for w in workers() ]
+for rr in mp_rr
+  put!(rr, mp)
+end
+@everywhereelse mp = fetch(mp_rr)
 
-put!(mp_rr, mp);
-put!(sbs_rr, sbs);
-put!(gal_mcs_rr, gal_mcs);
-put!(star_mcs_rr, star_mcs);
+@everywhereelse sbs_rr = RemoteRef(1)
+sbs_rr = [ remotecall_fetch(w, () -> sbs_rr) for w in workers() ]
+for rr in sbs_rr
+  put!(rr, sbs)
+end
+@everywhereelse sbs = fetch(sbs_rr)
 
+@everywhereelse star_mcs_rr = RemoteRef(1)
+star_mcs_rr = [ remotecall_fetch(w, () -> star_mcs_rr) for w in workers() ]
+for rr in star_mcs_rr
+  put!(rr, star_mcs)
+end
+@everywhereelse star_mcs = fetch(star_mcs_rr)
+
+@everywhereelse gal_mcs_rr = RemoteRef(1)
+gal_mcs_rr = [ remotecall_fetch(w, () -> gal_mcs_rr) for w in workers() ]
+for rr in gal_mcs_rr
+  put!(rr, gal_mcs)
+end
+@everywhereelse gal_mcs = fetch(gal_mcs_rr)
+
+# Note that this updates automatically:
+# mp.vp[1][1] = 5.0
+# @everywhereelse mp = fetch(mp_rr)
+# @everywhereelse println(mp.vp[1][1])
+
+# Set up for accum to be communicated back to process 1
+accum_rr = [ RemoteRef(w) for w in workers() ]
 @everywhereelse begin
-  mp_rr = remotecall_fetch(1, () -> mp_rr);
-  mp = fetch(mp_rr);
-
-  sbs_rr = remotecall_fetch(1, () -> sbs_rr);
-  sbs = fetch(sbs_rr);
-
-  star_mcs_rr = remotecall_fetch(1, () -> star_mcs_rr);
-  star_mcs = fetch(star_mcs_rr);
-
-  gal_mcs_rr = remotecall_fetch(1, () -> gal_mcs_rr);
-  gal_mcs = fetch(gal_mcs_rr);
-
   tiles = fetch(tiles_rr);
   accum = zero_sensitive_float(CanonicalParams, Float64, mp.S)
   accum_rr = RemoteRef(myid())
+  proc_id = find(worker_ids .== myid())
+  @assert length(proc_id) == 1
+  accum_rr = remotecall_fetch(1, i -> accum_rr[i], proc_id[1])
   put!(accum_rr, accum)
 end
-accum_rr = [remotecall_fetch(w, () -> accum_rr) for w in workers()];
 
-# Sanity check
+# Sanity check that the tiles were communicated successfully
 @everywhereelse tilesum = sum([ sum(t.pixels) for t in tiles])
 tilesum = sum([ sum(t.pixels) for t in tiles])
 @assert tilesum == sum([ remotecall_fetch(w, () -> tilesum) for w in workers() ])
 
-# Likelihood
+# Sanity check that the mp is the same.
+for w in workers()
+  @assert mp.vp == remotecall_fetch(w, () -> mp.vp)
+end
+
+# Define the likelihood function
 @everywhere begin
   function eval_likelihood()
     println(myid(), " is starting.")
@@ -119,50 +146,31 @@ tilesum = sum([ sum(t.pixels) for t in tiles])
     for tile in tiles
       tile_sources = mp.tile_sources[3][tile.hh, tile.ww]
       tile_likelihood!(
-        tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
+        tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum);
     end
     elbo_time = time() - elbo_time
     println(myid(), " is done in $(elbo_time)s.")
   end
 end
 
-# The value of accum in the remote ref is not getting updated.
-@everywhere begin
-  function set_accum(x::Float64)
-    global accum
-    accum.v = x
-  end
-end
 
-@everywhereelse set_accum(7.0)
-[ fetch(rr).v for rr in accum_rr] # Doesn't work
-[ remotecall_fetch(w, () -> accum.v) for w in workers() ] # works
-
-# Try setting the RemoteRefs on the remote ones
-accum_rr = [ RemoteRef(w) for w in workers() ]
-@everywhereelse begin
-  # The worker ids are not in the same order on every process
-  worker_ids = remotecall_fetch(1, workers)
-  proc_id = find(worker_ids .== myid())
-  @assert length(proc_id) == 1
-  accum_rr = remotecall_fetch(1, i -> accum_rr[i], proc_id[1])
-  put!(accum_rr, accum)
-end
-
-# Now this works
-@everywhereelse set_accum(9.0)
-[ fetch(rr).v for rr in accum_rr] # Doesn't work
-[ remotecall_fetch(w, () -> accum.v) for w in workers() ] # works
-
-
-
-# Evaluate the ELBO in parallel
+# Evaluate the ELBO in parallel.  Most of the time is taken up on the workers.
 @time begin
   @everywhereelse eval_likelihood();
-  accum_par = sum([ fetch(rr) for rr in accum_rr]);
-end
+  accum_workers = [ fetch(rr) for rr in accum_rr];
+  accum_par = sum(accum_workers);
+end;
 
-# Do it in serial
 @time eval_likelihood()
-@assert abs(accum.v - accum_par.v) < 1e-6
-@assert maximum(abs(accum.d - accum_par.d)) < 1e-6
+abs(accum.v / sum(accum_workers_v))
+serial_accum_v = accum.v
+
+# Make sure they match.
+@assert abs(accum.v / accum_par.v - 1) < 1e-6
+@assert maximum(abs((accum.d .+ 1e-8) ./ (accum_par.d .+ 1e-8) - 1)) < 1e-6
+
+# Note that each iteration takes less time on process 1.  Why?
+for id=1:nw
+  tiles = original_tiles[:, col_ranges[id]]
+  eval_likelihood()
+end
