@@ -110,11 +110,6 @@ for b=1:5
   param_state.sbs_vec[b] = sbs
 end
 
-# Since this is used to index into data structures, it must
-# be the same on every process.
-worker_ids = workers()
-@everywhereelse worker_ids = remotecall_fetch(1, () -> worker_ids)
-
 # Copy the tiles.
 @everywhereelse tiles_rr = RemoteRef(1)
 tiles_rr = [ remotecall_fetch(w, () -> tiles_rr) for w in workers() ]
@@ -134,6 +129,12 @@ end
 @everywhereelse param_state = fetch(param_state_rr)
 
 # Set up for accum to be communicated back to process 1
+
+# Since this is used to index into accum_rr, it must
+# be the same on every process.
+worker_ids = workers()
+@everywhereelse worker_ids = remotecall_fetch(1, () -> worker_ids)
+
 accum_rr = [ RemoteRef(w) for w in workers() ]
 @everywhereelse begin
   tiles = fetch(tiles_rr);
@@ -147,8 +148,8 @@ end
 
 # Sanity check that the tiles were communicated successfully
 @everywhereelse tilesum = sum([ sum(t.pixels) for t in tiles])
-tilesum = sum([ sum(t.pixels) for t in [ tiled_blob[b] for b in 1:5]] ])
-@assert tilesum == sum([ remotecall_fetch(w, () -> tilesum) for w in workers() ])
+tilesum = sum([sum([ sum(t.pixels) for t in tiled_blob[b]]) for b=1:5 ])
+@assert tilesum == sum([remotecall_fetch(w, () -> tilesum) for w in workers()])
 
 # Sanity check that the mp is the same.
 for w in workers()
@@ -163,15 +164,19 @@ end
     global accum
     clear!(accum)
     for tile in tiles
-      tile_sources = mp.tile_sources[3][tile.hh, tile.ww]
+      b = tile.b
+      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
       tile_likelihood!(
-        tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum);
+        tile, tile_sources, mp,
+        param_state.sbs_vec[b],
+        param_state.star_mcs_vec[b],
+        param_state.gal_mcs_vec[b],
+        accum);
     end
     elbo_time = time() - elbo_time
     println(myid(), " is done in $(elbo_time)s.")
   end
 end
-
 
 # Evaluate the ELBO in parallel.  Most of the time is taken up on the workers.
 @time begin
