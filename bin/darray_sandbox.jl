@@ -62,26 +62,41 @@ blob, mp, body, tiled_blob =
   SampleData.gen_n_body_dataset(S, tile_width=10);
 
 NumType = Float64
-tiles = tiled_blob[3];
-original_tiles = tiles;
 accum = zero_sensitive_float(CanonicalParams, NumType, mp.S);
 
-# Divide up the work
+#######################################
+# Divide up the tiles
 nw = length(workers())
 
-distributed_tiles = Array(Array{ImageTile}, nw);
+distributed_tiled_blobs = Array(TiledBlob, nw);
 for w=1:nw
-  distributed_tiles[w] = ImageTile[];
+  distributed_tiled_blobs[w] = Array(TiledImage, 5);
 end
 
 for b=1:5
   col_cuts = iround(linspace(1, size(tiled_blob[b])[2] + 1, nw + 1))
   col_ranges = map(i -> col_cuts[i]:col_cuts[i + 1] - 1, 1:nw)
   for w=1:nw
-    append!(distributed_tiles[w], tiled_blob[b][:, col_ranges[w]][:])
+    distributed_tiled_blobs[w][b] = tiled_blob[b][:, col_ranges[w]]
   end
 end
 
+# Copy the tiles.
+@everywhereelse tiles_rr = RemoteRef(1)
+tiles_rr = [ remotecall_fetch(w, () -> tiles_rr) for w in workers() ]
+for iw=1:nw
+  put!(tiles_rr[iw], distributed_tiled_blobs[iw])
+end
+
+@everywhereelse tiled_blob = fetch(tiles_rr);
+
+# Sanity check that the tiles were communicated successfully
+@everywhereelse tilesum = sum([ sum(t.pixels) for t in tiles])
+tilesum = sum([sum([ sum(t.pixels) for t in tiled_blob[b]]) for b=1:5 ])
+@assert tilesum == sum([remotecall_fetch(w, () -> tilesum) for w in workers()])
+
+
+#######################################
 # All the information that needs to be communicated to the tile processors.
 @everywhere type ParamState{NumType <: Number}
   vp::VariationalParams{NumType}
@@ -110,13 +125,6 @@ for b=1:5
   param_state.sbs_vec[b] = sbs
 end
 
-# Copy the tiles.
-@everywhereelse tiles_rr = RemoteRef(1)
-tiles_rr = [ remotecall_fetch(w, () -> tiles_rr) for w in workers() ]
-for iw=1:nw
-  put!(tiles_rr[iw], distributed_tiles[iw])
-end
-
 # Copy the model params.
 @everywhereelse mp = remotecall_fetch(1, () -> mp);
 
@@ -137,7 +145,6 @@ worker_ids = workers()
 
 accum_rr = [ RemoteRef(w) for w in workers() ]
 @everywhereelse begin
-  tiles = fetch(tiles_rr);
   accum = zero_sensitive_float(CanonicalParams, Float64, mp.S)
   accum_rr = RemoteRef(myid())
   proc_id = find(worker_ids .== myid())
@@ -146,16 +153,13 @@ accum_rr = [ RemoteRef(w) for w in workers() ]
   put!(accum_rr, accum)
 end
 
-# Sanity check that the tiles were communicated successfully
-@everywhereelse tilesum = sum([ sum(t.pixels) for t in tiles])
-tilesum = sum([sum([ sum(t.pixels) for t in tiled_blob[b]]) for b=1:5 ])
-@assert tilesum == sum([remotecall_fetch(w, () -> tilesum) for w in workers()])
-
 # Sanity check that the mp is the same.
 for w in workers()
   @assert mp.vp == remotecall_fetch(w, () -> mp.vp)
 end
 
+
+#######################################
 # Define the likelihood function
 @everywhere begin
   function eval_likelihood()
@@ -163,20 +167,26 @@ end
     elbo_time = time()
     global accum
     clear!(accum)
-    for tile in tiles
-      b = tile.b
-      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-      tile_likelihood!(
-        tile, tile_sources, mp,
-        param_state.sbs_vec[b],
-        param_state.star_mcs_vec[b],
-        param_state.gal_mcs_vec[b],
-        accum);
+    for b in 1:5
+      println("Proc $(myid()) starting band $b")
+      sbs = param_state.sbs_vec[b]
+      star_mcs = param_state.star_mcs_vec[b]
+      gal_mcs = param_state.gal_mcs_vec[b]
+      for tile in tiled_blob[b][:]
+        tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+        tile_likelihood!(
+          tile, tile_sources, mp,
+          sbs, star_mcs, gal_mcs,
+          accum);
+      end
     end
     elbo_time = time() - elbo_time
     println(myid(), " is done in $(elbo_time)s.")
   end
 end
+
+# Evaluate the elbo locally.
+@time eval_likelihood()
 
 # Evaluate the ELBO in parallel.  Most of the time is taken up on the workers.
 @time begin
@@ -185,22 +195,12 @@ end
   accum_par = sum(accum_workers);
 end;
 
-tiles = original_tiles;
-@time eval_likelihood()
 
 # Make sure they match.
 @assert abs(accum.v / accum_par.v - 1) < 1e-6
 @assert maximum(abs((accum.d .+ 1e-8) ./ (accum_par.d .+ 1e-8) - 1)) < 1e-6
 
-# Note that each iteration takes less time on process 1.  Why?
-for id=1:nw
-  tiles = original_tiles[:, col_ranges[id]]
-  eval_likelihood()
-end
-
-
 # Profiling.  The two look similar.
-tiles = original_tiles[:, col_ranges[2]];
 @runat 2 begin
   Profile.init(10^8, 0.001)
   @profile eval_likelihood()
