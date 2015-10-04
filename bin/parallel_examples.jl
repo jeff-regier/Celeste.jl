@@ -112,6 +112,15 @@ myxvec[1] += 1.45
 # a variable in process 2 as seen by process 1, the RemoteRef must
 # be initialized on process 1.  TODO: document this.
 
+# Compare.  The destination of a new RemoteRef is always the current process.
+RemoteRef(1) # Won't work for communicating from 1
+@everywhereelse println(RemoteRef(1)) # will work for communicating from 1
+
+
+# Warning: workers() does not return the same order everywhere.
+@everywhere println(workers())
+
+
 
 #############
 # Some of the initial flailing
