@@ -84,7 +84,6 @@ put!(sbs_rr, sbs);
 put!(gal_mcs_rr, gal_mcs);
 put!(star_mcs_rr, star_mcs);
 
-
 @everywhereelse begin
   mp_rr = remotecall_fetch(1, () -> mp_rr);
   mp = fetch(mp_rr);
@@ -103,32 +102,67 @@ put!(star_mcs_rr, star_mcs);
   accum_rr = RemoteRef(myid())
   put!(accum_rr, accum)
 end
-
 accum_rr = [remotecall_fetch(w, () -> accum_rr) for w in workers()];
 
-# Evaluate the ELBO
-tic()
-@everywhereelse begin
-  #println(myid(), " is starting")
-  for tile in tiles
-    #print(myid())
-    tile_sources = mp.tile_sources[3][tile.hh, tile.ww]
-    tile_likelihood!(
-      tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
+# Sanity check
+@everywhereelse tilesum = sum([ sum(t.pixels) for t in tiles])
+tilesum = sum([ sum(t.pixels) for t in tiles])
+@assert tilesum == sum([ remotecall_fetch(w, () -> tilesum) for w in workers() ])
+
+# Likelihood
+@everywhere begin
+  function eval_likelihood()
+    println(myid(), " is starting.")
+    elbo_time = time()
+    global accum
+    clear!(accum)
+    for tile in tiles
+      tile_sources = mp.tile_sources[3][tile.hh, tile.ww]
+      tile_likelihood!(
+        tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
+    end
+    elbo_time = time() - elbo_time
+    println(myid(), " is done in $(elbo_time)s.")
   end
-  #println(myid(), " is done")
 end
-accum_par = sum([ fetch(rr) for rr in accum_rr]);
-toc()
+
+# The value of accum in the remote ref is not getting updated.
+@everywhere begin
+  function set_accum(x::Float64)
+    global accum
+    accum.v = x
+  end
+end
+
+@everywhereelse set_accum(7.0)
+[ fetch(rr).v for rr in accum_rr] # Doesn't work
+[ remotecall_fetch(w, () -> accum.v) for w in workers() ] # works
+
+# Try setting the RemoteRefs on the remote ones
+accum_rr = [ RemoteRef(w) for w in workers() ]
+@everywhereelse begin
+  # The worker ids are not in the same order on every process
+  worker_ids = remotecall_fetch(1, workers)
+  proc_id = find(worker_ids .== myid())
+  @assert length(proc_id) == 1
+  accum_rr = remotecall_fetch(1, i -> accum_rr[i], proc_id[1])
+  put!(accum_rr, accum)
+end
+
+# Now this works
+@everywhereelse set_accum(9.0)
+[ fetch(rr).v for rr in accum_rr] # Doesn't work
+[ remotecall_fetch(w, () -> accum.v) for w in workers() ] # works
+
+
+
+# Evaluate the ELBO in parallel
+@time begin
+  @everywhereelse eval_likelihood();
+  accum_par = sum([ fetch(rr) for rr in accum_rr]);
+end
 
 # Do it in serial
-accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
-tic()
-for tile in tiles
-  tile_sources = mp.tile_sources[3][tile.hh, tile.ww]
-  tile_likelihood!(
-    tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
-end
-toc()
-abs(accum.v - accum_par.v)
-maximum(abs(accum.d - accum_par.d))
+@time eval_likelihood()
+@assert abs(accum.v - accum_par.v) < 1e-6
+@assert maximum(abs(accum.d - accum_par.d)) < 1e-6
