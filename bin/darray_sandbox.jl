@@ -1,6 +1,6 @@
 #!/usr/bin/env julia
 
-# Like @everywhere but for remote workers.
+# Like @everywhere but for remote workers only.
 macro everywhereelse(ex)
   quote
     @sync begin
@@ -18,23 +18,14 @@ macro runat(p, ex)
   end
 end
 
-# Start with julia -p <n_workers.
 # Make sure there are at least nw workers:
 nw = 10
 if length(workers()) < nw
   addprocs(nw - length(workers()))
 end
 
-# http://julia.readthedocs.org/en/release-0.3/manual/parallel-computing/
 @everywhere using Celeste
 @everywhere using CelesteTypes
-
-import Synthetic
-import ModelInit
-import SampleData
-
-const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
-println("Running with ", length(workers()), " processors.")
 
 @everywhere begin
   using ElboDeriv.tile_likelihood!
@@ -47,8 +38,9 @@ println("Running with ", length(workers()), " processors.")
     elbo_time = time()
     global accum
     clear!(accum)
+    mp.vp = param_state.vp
     for b in 1:5
-      println("Proc $(myid()) starting band $b")
+      #println("Proc $(myid()) starting band $b")
       sbs = param_state.sbs_vec[b]
       star_mcs = param_state.star_mcs_vec[b]
       gal_mcs = param_state.gal_mcs_vec[b]
@@ -62,19 +54,60 @@ println("Running with ", length(workers()), " processors.")
     end
     elbo_time = time() - elbo_time
     println(myid(), " is done in $(elbo_time)s.")
+    elbo_time
   end
 
+  function local_sources()
+    sources = Int64[]
+    for b in 1:5
+      for tile in tiled_blob[b][:]
+        append!(sources, mp.tile_sources[b][tile.hh, tile.ww])
+      end
+    end
+    unique(sources)
+  end
 end
 
-srand(1)
+
+####################################################
+# Load data
+
+import Synthetic
+import ModelInit
+import SampleData
+
+const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
+
+synthetic = true
 println("Loading data.")
 
-S = 100
-blob, mp, body, tiled_blob =
-  SampleData.gen_n_body_dataset(S, tile_width=10);
+if synthetic
+  srand(1)
+  S = 100
+  blob, mp, body, tiled_blob =
+    SampleData.gen_n_body_dataset(S, tile_width=10);
+else
+  # An actual image
+  field_dir = joinpath(dat_dir, "sample_field")
+  run_num = "003900"
+  camcol_num = "6"
+  field_num = "0269"
+
+  blob =
+    SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num,
+                          mask_planes=Set());
+
+  cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+  cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
+
+  tiled_blob, mp =
+    ModelInit.initialize_celeste(blob, cat_entries,
+      tile_width=10, fit_psf=false);
+end
 
 NumType = Float64
 accum = zero_sensitive_float(CanonicalParams, NumType, mp.S);
+
 
 #######################################
 # Divide up the tiles
@@ -93,7 +126,7 @@ for b=1:5
   end
 end
 
-# Copy the tiles.
+# Copy the tiles to the workers.
 @everywhereelse tiles_rr = RemoteRef(1)
 tiles_rr = [ remotecall_fetch(w, () -> tiles_rr) for w in workers() ]
 for iw=1:nw
@@ -110,6 +143,7 @@ tilesum = sum([sum([ sum(t.pixels) for t in tiled_blob[b]]) for b=1:5 ])
 
 #######################################
 # All the information that needs to be communicated to the tile processors.
+
 @everywhere type ParamState{NumType <: Number}
   vp::VariationalParams{NumType}
   star_mcs_vec::Vector{Array{BvnComponent{NumType},2}}
@@ -172,14 +206,14 @@ end
 
 
 #######################################
-# Define the likelihood function
+# Evaluate the elbo.
 
-# Evaluate the elbo locally.
+# locally:
 @time eval_likelihood()
 
 # Evaluate the ELBO in parallel.  Most of the time is taken up on the workers.
 @time begin
-  @everywhereelse eval_likelihood();
+  @everywhereelse elbo_time = eval_likelihood();
   accum_workers = [ fetch(rr) for rr in accum_rr];
   accum_par = sum(accum_workers);
 end;
@@ -188,6 +222,10 @@ end;
 @assert abs(accum.v / accum_par.v - 1) < 1e-6
 @assert maximum(abs((accum.d .+ 1e-8) ./ (accum_par.d .+ 1e-8) - 1)) < 1e-6
 
+elbo_times = [ remotecall_fetch(w, () -> elbo_time) for w in workers() ]
+num_sources = [ remotecall_fetch(w, () -> length(local_sources())) for w in workers() ]
+
+elbo_times ./ num_sources
 
 ######################################
 # Profiling.
