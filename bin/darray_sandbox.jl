@@ -99,6 +99,8 @@ end
   accum = zero_sensitive_float(CanonicalParams, NumType, mp.S);
 end
 
+original_tiled_blob = deepcopy(tiled_blob);
+
 #######################################
 # Divide up the tiles
 
@@ -208,7 +210,7 @@ end
 # Evaluate the elbo.
 
 # locally:
-@time eval_likelihood()
+@time elbo_time = eval_likelihood()
 
 # Evaluate the ELBO in parallel.  Most of the time is taken up on the workers.
 @time begin
@@ -222,12 +224,22 @@ end;
 @assert maximum(abs((accum.d .+ 1e-8) ./ (accum_par.d .+ 1e-8) - 1)) < 1e-6
 
 elbo_times = [ remotecall_fetch(w, () -> elbo_time) for w in workers() ]
+elbo_time / maximum(elbo_times)
+elbo_time / nw
 num_sources = [ remotecall_fetch(w, () -> length(local_sources())) for w in workers() ]
 
 elbo_times ./ num_sources
 
 ######################################
 # Profiling.
+
+for b=1:5
+  tiled_blob[b] = tiled_blob[b][:, col_ranges[1]]
+end
+
+# Dig that process 2 alone on shelob runs as fast as the serial version
+# over nw, though all in parallel do not.  That suggests that it's shelob's
+# limitations not the actual scaling.
 @runat 2 begin
   Profile.init(10^8, 0.001)
   @profile eval_likelihood()
