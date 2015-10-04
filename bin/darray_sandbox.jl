@@ -19,8 +19,8 @@ macro runat(p, ex)
 end
 
 # Start with julia -p <n_workers.
-# Make sure there are at least five workers:
-nw = 10
+# Make sure there are at least nw workers:
+nw = 3
 if length(workers()) < nw
   addprocs(nw - length(workers()))
 end
@@ -64,17 +64,54 @@ blob, mp, body, tiled_blob =
 NumType = Float64
 tiles = tiled_blob[3];
 original_tiles = tiles;
-b = 3;
 accum = zero_sensitive_float(CanonicalParams, NumType, mp.S);
-
-star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-sbs = ElboDeriv.SourceBrightness{NumType}[
-  ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
 
 # Divide up the work
 nw = length(workers())
-col_cuts = iround(linspace(1, size(tiles)[2] + 1, nw + 1))
-col_ranges = map(i -> col_cuts[i]:col_cuts[i + 1] - 1, 1:nw)
+
+distributed_tiles = Array(Array{ImageTile}, nw);
+for w=1:nw
+  distributed_tiles[w] = ImageTile[];
+end
+
+for b=1:5
+  col_cuts = iround(linspace(1, size(tiled_blob[b])[2] + 1, nw + 1))
+  col_ranges = map(i -> col_cuts[i]:col_cuts[i + 1] - 1, 1:nw)
+  for w=1:nw
+    append!(distributed_tiles[w], tiled_blob[b][:, col_ranges[w]][:])
+  end
+end
+
+# All the information that needs to be communicated to the tile processors.
+type ParamState{NumType <: Number}
+  mp::ModelParams{NumType}
+  star_mcs_vec::Vector{Array{BvnComponent{NumType},2}}
+  gal_mcs_vec::Vector{Array{GalaxyCacheComponent{NumType},4}}
+  sbs_vec::Vector{Vector{SourceBrightness{NumType}}}
+end
+
+ParamState{NumType <: Number}(mp::ModelParams{NumType}) = begin
+  num_bands = size(mp.patches)[2]
+  star_mcs_vec = Array(Array{BvnComponent{NumType},2}, num_bands)
+  gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType},4}, num_bands)
+  sbs_vec = Array(Vector{SourceBrightness{NumType}}, num_bands)
+  ParamState(mp, star_mcs_vec, gal_mcs_vec, sbs_vec)
+end
+
+NumType = Float64
+param_state = ParamState(mp);
+for b=1:5
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  sbs = ElboDeriv.SourceBrightness{NumType}[
+    ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+
+  param_state.star_mcs_vec[b] = star_mcs
+  param_state.gal_mcs_vec[b] = gal_mcs
+  param_state.sbs_vec[b] = sbs
+end
+
+
+
 
 # Since this is used to index into data structures, it must
 # be the same on every process.
