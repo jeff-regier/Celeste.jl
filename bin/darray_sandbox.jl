@@ -2,13 +2,13 @@
 
 # Like @everywhere but for remote workers.
 macro everywhereelse(ex)
-    quote
-        @sync begin
-            for w in workers()
-                @async remotecall_fetch(w, ()->(eval(Main,$(Expr(:quote,ex))); nothing))
-            end
-        end
+  quote
+    @sync begin
+      for w in workers()
+        @async remotecall_fetch(w, ()->(eval(Main,$(Expr(:quote,ex))); nothing))
+      end
     end
+  end
 end
 
 # This is like @everywhere but only runs on a particular process.
@@ -83,8 +83,8 @@ for b=1:5
 end
 
 # All the information that needs to be communicated to the tile processors.
-type ParamState{NumType <: Number}
-  mp::ModelParams{NumType}
+@everywhere type ParamState{NumType <: Number}
+  vp::VariationalParams{NumType}
   star_mcs_vec::Vector{Array{BvnComponent{NumType},2}}
   gal_mcs_vec::Vector{Array{GalaxyCacheComponent{NumType},4}}
   sbs_vec::Vector{Vector{SourceBrightness{NumType}}}
@@ -95,7 +95,7 @@ ParamState{NumType <: Number}(mp::ModelParams{NumType}) = begin
   star_mcs_vec = Array(Array{BvnComponent{NumType},2}, num_bands)
   gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType},4}, num_bands)
   sbs_vec = Array(Vector{SourceBrightness{NumType}}, num_bands)
-  ParamState(mp, star_mcs_vec, gal_mcs_vec, sbs_vec)
+  ParamState(mp.vp, star_mcs_vec, gal_mcs_vec, sbs_vec)
 end
 
 NumType = Float64
@@ -110,9 +110,6 @@ for b=1:5
   param_state.sbs_vec[b] = sbs
 end
 
-
-
-
 # Since this is used to index into data structures, it must
 # be the same on every process.
 worker_ids = workers()
@@ -122,41 +119,19 @@ worker_ids = workers()
 @everywhereelse tiles_rr = RemoteRef(1)
 tiles_rr = [ remotecall_fetch(w, () -> tiles_rr) for w in workers() ]
 for iw=1:nw
-  put!(tiles_rr[iw], tiles[:,col_ranges[iw]])
+  put!(tiles_rr[iw], distributed_tiles[iw])
 end
 
-@everywhereelse mp_rr = RemoteRef(1)
-mp_rr = [ remotecall_fetch(w, () -> mp_rr) for w in workers() ]
-for rr in mp_rr
-  put!(rr, mp)
-end
-@everywhereelse mp = fetch(mp_rr)
+# Copy the model params.
+@everywhereelse mp = remotecall_fetch(1, () -> mp);
 
-@everywhereelse sbs_rr = RemoteRef(1)
-sbs_rr = [ remotecall_fetch(w, () -> sbs_rr) for w in workers() ]
-for rr in sbs_rr
-  put!(rr, sbs)
+# Set up sockets for the ParamState
+@everywhereelse param_state_rr = RemoteRef(1)
+param_state_rr = [remotecall_fetch(w, () -> param_state_rr) for w in workers()]
+for rr in param_state_rr
+  put!(rr, param_state)
 end
-@everywhereelse sbs = fetch(sbs_rr)
-
-@everywhereelse star_mcs_rr = RemoteRef(1)
-star_mcs_rr = [ remotecall_fetch(w, () -> star_mcs_rr) for w in workers() ]
-for rr in star_mcs_rr
-  put!(rr, star_mcs)
-end
-@everywhereelse star_mcs = fetch(star_mcs_rr)
-
-@everywhereelse gal_mcs_rr = RemoteRef(1)
-gal_mcs_rr = [ remotecall_fetch(w, () -> gal_mcs_rr) for w in workers() ]
-for rr in gal_mcs_rr
-  put!(rr, gal_mcs)
-end
-@everywhereelse gal_mcs = fetch(gal_mcs_rr)
-
-# Note that this updates automatically:
-# mp.vp[1][1] = 5.0
-# @everywhereelse mp = fetch(mp_rr)
-# @everywhereelse println(mp.vp[1][1])
+@everywhereelse param_state = fetch(param_state_rr)
 
 # Set up for accum to be communicated back to process 1
 accum_rr = [ RemoteRef(w) for w in workers() ]
@@ -172,7 +147,7 @@ end
 
 # Sanity check that the tiles were communicated successfully
 @everywhereelse tilesum = sum([ sum(t.pixels) for t in tiles])
-tilesum = sum([ sum(t.pixels) for t in tiles])
+tilesum = sum([ sum(t.pixels) for t in [ tiled_blob[b] for b in 1:5]] ])
 @assert tilesum == sum([ remotecall_fetch(w, () -> tilesum) for w in workers() ])
 
 # Sanity check that the mp is the same.
