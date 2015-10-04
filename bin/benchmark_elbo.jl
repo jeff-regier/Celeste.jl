@@ -11,26 +11,21 @@ const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
 srand(1)
 println("Loading data.")
+println("Running with ", length(workers()), " processors.")
 
 S = 100
 blob, mp, body, tiled_blob =
   SampleData.gen_n_body_dataset(S, tile_width=10);
 
-function small_image_profile()
-    println("Calculating ELBO.")
+println("Calculating ELBO.")
 
-    # do a trial run first, so we don't profile/time compling the code
-    ElboDeriv.elbo(tiled_blob, mp)
+# do a trial run first, so we don't profile/time compling the code
+@time ElboDeriv.elbo(tiled_blob, mp)
 
-    # profile the code
-    Profile.init(10^8, 0.001)
-    @profile elbo = ElboDeriv.elbo(tiled_blob, mp)
-    Profile.print(format=:flat)
+# profile the code
+Profile.init(10^8, 0.001)
+@profile elbo = ElboDeriv.elbo(tiled_blob, mp)
+Profile.print(format=:flat)
 
-    # let's time it without any overhead from profiling
-    @time ElboDeriv.elbo(tiled_blob, mp)
-end
-
-println("Running with ", length(workers()), " processors.")
-small_image_profile();
-
+# let's time it without any overhead from profiling
+@time ElboDeriv.elbo(tiled_blob, mp)
