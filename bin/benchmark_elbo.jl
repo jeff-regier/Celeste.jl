@@ -20,12 +20,12 @@ blob, mp, body, tiled_blob =
 println("Calculating ELBO.")
 
 # do a trial run first, so we don't profile/time compling the code
-@time ElboDeriv.elbo(tiled_blob, mp)
+@time ElboDeriv.elbo(tiled_blob, mp);
+
+# let's time it without any overhead from profiling
+@time ElboDeriv.elbo(tiled_blob, mp);
 
 # profile the code
 Profile.init(10^8, 0.001)
 @profile elbo = ElboDeriv.elbo(tiled_blob, mp)
 Profile.print(format=:flat)
-
-# let's time it without any overhead from profiling
-@time ElboDeriv.elbo(tiled_blob, mp)
