@@ -1,7 +1,7 @@
 
 
 function memstats()
-  println(run(`ps -C julia -o "%P" -o "%mem" -o "%CPU"`))
+  println(run(`ps -C julia -o pid,%mem,%cpu`))
 end
 
 
