@@ -107,7 +107,10 @@ put!(rr, myxvec)
 myxvec[1] += 1.45
 @runat 2 println(fetch(rr))
 
-
+# Note that this doesn't work right when the remoteref source and
+# destination don't match.  For example, to dynamically update
+# a variable in process 2 as seen by process 1, the RemoteRef must
+# be initialized on process 1.  TODO: document this.
 
 
 #############
