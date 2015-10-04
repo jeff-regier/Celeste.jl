@@ -20,7 +20,7 @@ end
 
 # Start with julia -p <n_workers.
 # Make sure there are at least nw workers:
-nw = 3
+nw = 10
 if length(workers()) < nw
   addprocs(nw - length(workers()))
 end
