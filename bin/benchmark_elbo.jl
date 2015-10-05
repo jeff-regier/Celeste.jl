@@ -31,6 +31,9 @@ function small_image_profile()
     @time ElboDeriv.elbo(tiled_blob, mp)
 end
 
+# on a intel core2 Q6600 processor,
+# median runtime is consistently 27 seconds with Julia 0.3
+# median runtime is consistently 24 seconds with Julia 0.4
 println("Running with ", length(workers()), " processors.")
 small_image_profile();
 
