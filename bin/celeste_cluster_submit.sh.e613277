@@ -1,0 +1,8 @@
+Warning: New definition 
+    ^ at /accounts/grad/rgiordano/.julia/v0.3/ForwardDiff/src/typed_fad/GraDual.jl:148
+is ambiguous with: 
+    ^ at promotion.jl:192.
+To fix, define 
+    ^
+before the new definition.
+(GraDual{T1<:Real,n},T2<:Real)(T<:Number,T<:Number)(_<:GraDual{T1<:Real,n},_<:GraDual{T1<:Real,n})
