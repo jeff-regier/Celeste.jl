@@ -44,10 +44,11 @@ for w in workers()
 end
 
 #######################################
-# Evaluate the elbo.
+# Evaluate the elbo.  Do it twice to avoid compile time.
 
 # locally:
 accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
+@time elbo_time = eval_likelihood()
 @time elbo_time = eval_likelihood()
 
 # Evaluate the ELBO in parallel.  Most of the time is taken up on the workers.
@@ -57,11 +58,17 @@ accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
   accum_par = sum(accum_workers);
 end;
 
-# Sometimes this is faster indicating that you're processer bound in the
-# parallel execution.
-@runat 2 begin
-  @time eval_likelihood()
-end
+@time begin
+  @everywhereelse elbo_time = eval_likelihood();
+  accum_workers = [ fetch(rr) for rr in accum_rr];
+  accum_par = sum(accum_workers);
+end;
+
+# # Sometimes this is faster indicating that you're processer bound in the
+# # parallel execution.
+# @runat 2 begin
+#   @time eval_likelihood()
+# end
 
 # Make sure they match.
 @assert abs(accum.v / accum_par.v - 1) < 1e-6
@@ -70,9 +77,18 @@ end
 elbo_times = [ remotecall_fetch(w, () -> elbo_time) for w in workers() ]
 elbo_time / maximum(elbo_times)
 elbo_time / nw
-num_sources = [ remotecall_fetch(w, () -> length(local_sources())) for w in workers() ]
+num_sources = [ remotecall_fetch(w, () -> length(node_sources())) for w in workers() ]
 
 elbo_times ./ num_sources
 
+result_filename = joinpath(dat_dir, "parallel_results_$(int(time())).JLD")
+result_dict = Dict()
+result_dict["elbo_time"] = elbo_time;
+result_dict["elbo_times"] = elbo_times;
+# result_dict["accum"] = accum;
+# result_dict["accum_par"] = accum_par;
+result_dict["nw"] = nw;
+result_dict["frame_jld_file"] = frame_jld_file;
+result_dict["synthetic"] = synthetic;
 
-JLD.save()
+JLD.save(result_filename, result_dict)

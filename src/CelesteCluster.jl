@@ -192,7 +192,8 @@ end
 
 
 @doc """
-Helper for remote evaluation of the elbo.
+Helper for remote evaluation of the elbo.  TODO: perhaps this belongs
+in ElboDeriv.
 """ ->
 function eval_likelihood!{NumType <: Number}(
     accum::SensitiveFloat{CanonicalParams, NumType},
