@@ -20,33 +20,18 @@ println("Loading libraries.")
   using CelesteTypes
   using JLD
   import SampleData.dat_dir
+  include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
   frame_jld_file = "initialzed_celeste_003900-6-0269.JLD"
-  synthetic = false
+  synthetic = true
 end
 
-include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
-
-println("Loading data.")
-@everywhere begin
-  if synthetic
-    srand(1)
-    S = 100
-    blob, mp, body, tiled_blob =
-      SampleData.gen_n_body_dataset(S, tile_width=10);
-  else
-    img_dict = JLD.load(joinpath(dat_dir, frame_jld_file));
-    tiled_blob = img_dict["tiled_blob"];
-    mp = img_dict["mp_all"];
-  end
-end;
-
-CelesteCluster.initialize_cluster();
+load_cluster_data();
+initialize_cluster();
 
 # Define the elbo evaluation function.
 # TODO: maybe this should be in ElboDeriv.
-@everywhere eval_likelihood! =
-  remotecall_fetch(1, () -> CelesteCluster.eval_likelihood!)
-
+# @everywhere eval_likelihood! =
+#   remotecall_fetch(1, () -> CelesteCluster.eval_likelihood!)
 
 # Sanity check that the tiles were communicated successfully
 @everywhere tilesum = sum([sum([ sum(t.pixels) for t in tiled_blob[b]]) for b=1:5 ])
@@ -87,3 +72,6 @@ elbo_time / nw
 num_sources = [ remotecall_fetch(w, () -> length(local_sources())) for w in workers() ]
 
 elbo_times ./ num_sources
+
+
+JLD.save()

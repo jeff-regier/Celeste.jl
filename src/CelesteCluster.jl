@@ -57,7 +57,6 @@ ParamState{NumType <: Number}(mp::ModelParams{NumType}) = begin
 end
 
 
-
 @doc """
 Return a vector of the sources that affect the node.
 """ ->
@@ -102,6 +101,24 @@ function create_workers(nw::Int64)
 end
 
 
+# This requires synthetic and frame_jld_file to be defined
+# everywhere in the global scope.
+function load_cluster_data()
+  println("Loading data.")
+  @everywhere begin
+    if synthetic
+      srand(1)
+      S = 100
+      blob, mp, body, tiled_blob =
+        SampleData.gen_n_body_dataset(S, tile_width=10);
+    else
+      img_dict = JLD.load(joinpath(dat_dir, frame_jld_file));
+      tiled_blob = img_dict["tiled_blob"];
+      mp = img_dict["mp_all"];
+    end
+  end;
+end
+
 @doc """
 Make sure there are <nw> workers.  Intended to be called on startup only.
 
@@ -121,9 +138,11 @@ function initialize_cluster()
   global param_state
   global mp
   global tiled_blob
+  global param_state_rr
 
   println("Dividing the blobs.")
   for b=1:5
+    #global col_ranges
     col_cuts = iround(linspace(1, size(tiled_blob[b])[2] + 1, nw + 1))
     col_ranges = map(i -> col_cuts[i]:col_cuts[i + 1] - 1, 1:nw)
   end
@@ -146,6 +165,8 @@ function initialize_cluster()
   update_param_state!(mp, param_state);
 
   @everywhereelse begin
+    global param_state_rr
+    global mp
     mp = remotecall_fetch(1, () -> mp);
     param_state_rr = RemoteRef(1)
   end
