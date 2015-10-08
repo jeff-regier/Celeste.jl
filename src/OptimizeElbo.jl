@@ -264,7 +264,7 @@ function maximize_f_newton(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::Transform.DataTransform;
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  hess_reg=0.0, max_iters=100, block_hessian=false)
+  hess_reg=0.0, max_iters=100, block_hessian=false, rho_lower=0.25)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x0 = transform.vp_to_vector(mp.vp, omitted_ids)
@@ -311,7 +311,8 @@ function maximize_f_newton(
                           show_trace = false,
                           extended_trace = verbose,
                           initial_delta=10.0,
-                          delta_hat=1e9)
+                          delta_hat=1e9,
+                          rho_lower = rho_lower)
 
     iter_count = optim_obj_wrap.state.f_evals
     transform.vector_to_vp!(nm_result.minimum, mp.vp, omitted_ids);

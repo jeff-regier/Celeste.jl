@@ -798,7 +798,7 @@ function tile_predicted_image{NumType <: Number}(
             iota = expected_pixel_brightness!(
               h, w, sbs, star_mcs, gal_mcs, tile, E_G, var_G,
               mp, tile_sources, fs0m, fs1m)
-            predicted_pixels[w, h] = E_G.v * iota
+            predicted_pixels[h, w] = E_G.v * iota
         end
     end
 
