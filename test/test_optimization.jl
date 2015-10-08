@@ -100,7 +100,23 @@ function test_objective_wrapper()
     # Just test that the Hessian can be computed and is symmetric.
     println("Testing autodiff Hessian...")
     w_hess = wrapper.f_ad_hessian(x);
-    @test_approx_eq(w_hess, w_hess')
+    @test issym(w_hess)
+
+    println("Testing block diagonal autodiff Hessian...")
+    w_bdiag_hess = wrapper.f_block_diag_ad_hessian(x);
+    @test issym(w_bdiag_hess)
+
+    # TODO: test their similarity on more distant objects -- these
+    # two Hessians are actually quite different.
+
+    # TODO: I don't have internet and so can't look up the efficient
+    # construciton of block diagonal matrices
+    # bdiag_mask = zeros(Float64, length(x), length(x))
+    # for s = 0:(mp.S -1)
+    #   indices = (1 + s * length(kept_ids)):((s + 1) * length(kept_ids))
+    #   bdiag_mask[indices, indices] = 1.
+    # end
+    # w_hess_masked = w_hess .* bdiag_mask;
 end
 
 
@@ -125,7 +141,7 @@ function test_star_optimization_newton()
     omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
     OptimizeElbo.maximize_f_newton(
       lik_function, tiled_blob, mp, trans,
-      omitted_ids=omitted_ids, verbose=false, max_iters=2, hess_reg=0.0);
+      omitted_ids=omitted_ids, verbose=true, hess_reg=0.0);
 end
 
 
