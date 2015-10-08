@@ -222,4 +222,13 @@ function eval_likelihood!{NumType <: Number}(
   elbo_time
 end
 
+function eval_likelihood()
+  global accum
+  global param_state
+  global mp
+  global tiled_blob
+
+  eval_likelihood!(accum, param_state, mp, tiled_blob)
+end
+
 #end # Module end
