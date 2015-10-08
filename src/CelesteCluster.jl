@@ -1,11 +1,12 @@
 # Calculate values and partial derivatives of the variational ELBO.
 
-module CelesteCluster
+# For various reasons, e.g. the need to access the global scope when
+# communicating to subprocesses, this is best not done as a module.
+#module CelesteCluster
 
 VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
 using JLD
-
 
 using ElboDeriv.tile_likelihood!
 using ElboDeriv.SourceBrightness
@@ -104,17 +105,23 @@ end
 @doc """
 Make sure there are <nw> workers.  Intended to be called on startup only.
 
-Args:
-  - frame_jld_file: A JLD file containing the initialized model.
-  - nw: The number of workers to use
-  - synthetic: If true, generate synthetic data instead of using the JLD file.
-
+Requires mp to be defined in the global scope and for every
+worker to have a tiled_blob defined.
 """ ->
 function initialize_cluster()
   # Divide up the tiled_blobs.
   # Unfortunately, we run out of memory
   # when we try to communciate actual subsets of a tiled_blob over sockets,
   # so currently each node must load the whole file and then subset it.
+
+  # For now it's more convenient to define global variables than
+  # to make RemoteRefs for everything.
+  global col_ranges
+  global worker_ids
+  global param_state
+  global mp
+  global tiled_blob
+
   println("Dividing the blobs.")
   for b=1:5
     col_cuts = iround(linspace(1, size(tiled_blob[b])[2] + 1, nw + 1))
@@ -150,6 +157,7 @@ function initialize_cluster()
 
   # Set up for accum to be communicated back to process 1
   println("Initializing the accum sockets.")
+  global accum_rr
   accum_rr = [ RemoteRef(w) for w in workers() ]
   @everywhereelse begin
     accum = zero_sensitive_float(CanonicalParams, Float64, mp.S)
@@ -158,8 +166,7 @@ function initialize_cluster()
     put!(accum_rr, accum)
   end
 
-  img_dict, tiled_blob, mp, col_ranges, worker_ids,
-  param_state, param_state_rr, accum_rr
+  param_state_rr, accum_rr
 end
 
 
@@ -194,5 +201,4 @@ function eval_likelihood!{NumType <: Number}(
   elbo_time
 end
 
-
-end # Module end
+#end # Module end

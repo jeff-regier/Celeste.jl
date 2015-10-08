@@ -1,11 +1,17 @@
 #!/usr/bin/env julia
-using Celeste
-using CelesteCluster
 
 # Use nw workers.
 nw = 5
+println("Adding workers.")
+for worker in workers()
+  if worker != myid()
+    rmprocs(worker)
+  end
+end
+addprocs(nw)
+@assert(length(workers()) == nw)
 
-CelesteCluster.create_workers(nw);
+#create_workers(nw);
 
 # Strangely the libraries cannot be loaded from within the module.
 println("Loading libraries.")
@@ -17,6 +23,8 @@ println("Loading libraries.")
   frame_jld_file = "initialzed_celeste_003900-6-0269.JLD"
   synthetic = false
 end
+
+include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
 
 println("Loading data.")
 @everywhere begin
@@ -32,9 +40,7 @@ println("Loading data.")
   end
 end;
 
-
-
-CelesteCluster.initialize_cluster(frame_jld_file, nw);
+CelesteCluster.initialize_cluster();
 
 # Define the elbo evaluation function.
 # TODO: maybe this should be in ElboDeriv.
