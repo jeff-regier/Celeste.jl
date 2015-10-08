@@ -8,7 +8,6 @@ using ForwardDiff
 using DualNumbers
 import Transform
 import Optim
-import JLD
 
 using PyPlot
 
@@ -25,10 +24,6 @@ star_ids = union(ids_free.c1[:,1],
                  ids_free.r1[1],
                  ids_free.r2[1],
                  ids_free.k[:,1]);
-
-
-jld_file = "$dat_dir/SDSS_blob.jld"
-
 
 simulation = false
 if simulation
