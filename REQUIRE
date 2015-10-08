@@ -5,6 +5,7 @@ Docile
 DualNumbers
 FITSIO
 ForwardDiff
+JLD
 NLopt
 Optim
 GaussianMixtures
