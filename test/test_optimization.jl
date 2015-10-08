@@ -24,12 +24,6 @@ function verify_sample_star(vs, pos)
     end
 end
 
-# blob, mp, body, tiled_blob = gen_sample_star_dataset();
-# trans = get_mp_transform(mp, loc_width=1.0);
-# OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
-# verify_sample_star(mp.vp[1], [10.1, 12.2])
-#
-
 function verify_sample_galaxy(vs, pos)
     @test vs[ids.a[2]] >= 0.99
 
@@ -130,10 +124,11 @@ end
 
 
 function test_star_optimization_newton()
-    # Currently only check that it is able to take a step -- Newton's method
-    # currently needs a warm start to converge in a resonable amount of time due
-    # to the high cost of evaluating the Hessian at each step.
     blob, mp, body, tiled_blob = gen_sample_star_dataset();
+
+    # Newton's method converges on a small galaxy unless we start with
+    # a high star probability.
+    mp.vp[1][ids.a] = [0.8, 0.2]
     trans = get_mp_transform(mp, loc_width=1.0);
     function lik_function(tiled_blob::TiledBlob, mp::ModelParams)
       ElboDeriv.elbo_likelihood(tiled_blob, mp)
@@ -142,7 +137,72 @@ function test_star_optimization_newton()
     OptimizeElbo.maximize_f_newton(
       lik_function, tiled_blob, mp, trans,
       omitted_ids=omitted_ids, verbose=true, hess_reg=0.0);
+    verify_sample_star(mp.vp[1], [10.1, 12.2])
 end
+
+function test_two_body_optimization_newton()
+    blob, mp, two_bodies, tiled_blob = SampleData.gen_two_body_dataset();
+
+    trans = get_mp_transform(mp, loc_width=1.0);
+    function lik_function(tiled_blob::TiledBlob, mp::ModelParams)
+      ElboDeriv.elbo_likelihood(tiled_blob, mp)
+    end
+    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+
+    function elbo_function(tiled_blob::TiledBlob, mp::ModelParams)
+      ElboDeriv.elbo(tiled_blob, mp)
+    end
+    omitted_ids = Int64[]
+
+    mp_newton = deepcopy(mp);
+    newton_iter_count = OptimizeElbo.maximize_f_newton(
+      elbo_function, tiled_blob, mp_newton, trans,
+      omitted_ids=omitted_ids, verbose=true);
+
+    mp_bfgs = deepcopy(mp);
+    bfgs_iter_count = OptimizeElbo.maximize_f(
+      elbo_function, tiled_blob, mp_bfgs, trans,
+      omitted_ids=omitted_ids, verbose=true);
+
+    newton_image = ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], mp_newton);
+    bfgs_image = ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], mp_bfgs);
+    original_image = tiled_blob[3][1,1].pixels;
+
+    PyPlot.figure()
+    PyPlot.subplot(1, 3, 1)
+    PyPlot.imshow(newton_image)
+    PyPlot.title("Newton")
+
+    PyPlot.subplot(1, 3, 2)
+    PyPlot.imshow(bfgs_image)
+    PyPlot.title("BFGS")
+
+    PyPlot.subplot(1, 3, 3)
+    PyPlot.imshow(orignal_image)
+    PyPlot.title("Original")
+
+    sum((newton_image .- original_image) .^ 2)
+    sum((bfgs_image .- original_image) .^ 2)
+
+    # bfgs beats newton here.
+    elbo_function(tiled_blob, mp_bfgs).v
+    elbo_function(tiled_blob, mp_newton).v
+
+    # bfgs beats newton here.
+    lik_function(tiled_blob, mp_bfgs).v
+    lik_function(tiled_blob, mp_newton).v
+
+    # This does not work well.  It keeps taking very small steps.
+    mp_newton_bdiag = deepcopy(mp);
+    newton_bdiag_iter_count = OptimizeElbo.maximize_f_newton(
+      elbo_function, tiled_blob, mp_newton_bdiag, trans,
+      omitted_ids=omitted_ids, verbose=true, block_hessian=true,
+      rho_lower = 0.001);
+
+    elbo_function(tiled_blob, mp_newton_bdiag).v
+
+end
+
 
 
 function test_galaxy_optimization()
