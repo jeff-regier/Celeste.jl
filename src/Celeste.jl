@@ -10,7 +10,6 @@ import ModelInit
 import SampleData
 import Transform
 import KL
-import CelesteCluster
 
 using CelesteTypes
 
