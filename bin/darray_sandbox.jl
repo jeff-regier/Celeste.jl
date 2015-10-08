@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 # Use nw workers.
-nw = 10
+nw = 2
 println("Adding workers.")
 for worker in workers()
   if worker != myid()
@@ -22,7 +22,7 @@ println("Loading libraries.")
   import SampleData.dat_dir
   include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
   frame_jld_file = "initialzed_celeste_003900-6-0269.JLD"
-  synthetic = false
+  synthetic = true
 end
 
 load_cluster_data();
@@ -36,13 +36,12 @@ initialize_cluster();
 # Sanity check that the tiles were communicated successfully
 @everywhere tilesum = sum([sum([ sum(t.pixels) for t in tiled_blob[b]]) for b=1:5 ])
 remote_tilesums = [remotecall_fetch(w, () -> tilesum) for w in workers()];
-#@assert tilesum == sum(remote_tilesums)
-println("$tilesum vs $(remote_tilesums)")
-    
+@assert tilesum == sum(remote_tilesums)
+
 # Sanity check that the mp is the same.
-#for w in workers()
-  #@assert mp.vp == remotecall_fetch(w, () -> mp.vp)
-#end
+for w in workers()
+  @assert mp.vp == remotecall_fetch(w, () -> mp.vp)
+end
 
 #######################################
 # Evaluate the elbo.  Do it twice to avoid compile time.
@@ -86,12 +85,10 @@ result_filename = joinpath(dat_dir, "parallel_results_$(int(time())).JLD")
 result_dict = Dict()
 result_dict["elbo_time"] = elbo_time;
 result_dict["elbo_times"] = elbo_times;
-result_dict["accum"] = accum;
-result_dict["accum_par"] = accum_par;
+# result_dict["accum"] = accum;
+# result_dict["accum_par"] = accum_par;
 result_dict["nw"] = nw;
 result_dict["frame_jld_file"] = frame_jld_file;
 result_dict["synthetic"] = synthetic;
-result_dict["tilesum"] = tilesum;
-result_dict["remote_tilesums"] = remote_tilesums;
 
 JLD.save(result_filename, result_dict)
