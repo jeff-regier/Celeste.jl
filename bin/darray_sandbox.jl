@@ -47,6 +47,7 @@ end
 # Evaluate the elbo.
 
 # locally:
+accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
 @time elbo_time = eval_likelihood()
 
 # Evaluate the ELBO in parallel.  Most of the time is taken up on the workers.
