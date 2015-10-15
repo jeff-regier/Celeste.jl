@@ -14,8 +14,8 @@ before_install:
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia --inline=yes --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("GSL");
-        Pkg.build("Celeste"); Pkg.test("Celeste"; coverage=true)'
+  - julia --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("GSL");
+        Pkg.build("Celeste"); Pkg.test("Celeste"; coverage=false)'
 
 after_success:
   - julia -e 'cd(Pkg.dir("Celeste")); Pkg.add("Coverage"); 
