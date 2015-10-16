@@ -2,7 +2,7 @@ language: julia
 os:
   - linux
 julia:
-#  - 0.4
+  - 0.4
   - 0.3
 notifications:
   email: false
@@ -10,10 +10,13 @@ notifications:
 before_install:
 #  - sudo apt-get update -qq -y
   - sudo apt-get install libgsl0-dev -y
+  - sudo apt-get install libwcs4 -y
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("GSL"); Pkg.build("Celeste"); Pkg.test("Celeste"; coverage=true)'
+  - julia --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("GSL");
+        Pkg.build("Celeste"); Pkg.test("Celeste"; coverage=false)'
 
 after_success:
-  - julia -e 'cd(Pkg.dir("Celeste")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
+  - julia -e 'cd(Pkg.dir("Celeste")); Pkg.add("Coverage"); 
+        using Coverage; Coveralls.submit(Coveralls.process_folder())'
