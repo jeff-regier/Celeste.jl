@@ -883,20 +883,16 @@ end
 
 @doc """
 Evaluate the ELBO with pre-computed brightnesses and components
-stored in ParameterMessage.  This is used for distributed evaluation
-of the ELBO so it also prints worker information.
+stored in ParameterMessage.
 """ ->
 function elbo_likelihood!{NumType <: Number}(
     tiled_blob::TiledBlob,
     param_msg::ParameterMessage{NumType}, mp::ModelParams{NumType},
     accum::SensitiveFloat{CanonicalParams, NumType})
 
-  println("Worker ", myid(), " is starting the likelihood evaluation.")
-  elbo_time = time()
   clear!(accum)
   mp.vp = param_msg.vp
   for b in 1:5
-    #println("Proc $(myid()) starting band $b")
     sbs = param_msg.sbs_vec[b]
     star_mcs = param_msg.star_mcs_vec[b]
     gal_mcs = param_msg.gal_mcs_vec[b]
@@ -908,9 +904,6 @@ function elbo_likelihood!{NumType <: Number}(
         accum);
     end
   end
-  elbo_time = time() - elbo_time
-  println("Worker ", myid(), " is done in $(elbo_time)s.")
-  elbo_time
 end
 
 

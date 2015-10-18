@@ -1,4 +1,4 @@
-# Calculate values and partial derivatives of the variational ELBO.
+# Distribute Celeste calculations across a cluster of workers.
 
 # For various reasons, e.g. the need to access the global scope when
 # communicating to subprocesses, I have not made this into a module.
@@ -8,11 +8,6 @@ using Celeste
 using CelesteTypes
 using JLD
 import SampleData.dat_dir
-
-#using ElboDeriv.tile_likelihood!
-using ElboDeriv.SourceBrightness
-using ElboDeriv.BvnComponent
-using ElboDeriv.GalaxyCacheComponent
 
 # Like @everywhere but for remote workers only.
 macro everywhereelse(ex)
@@ -34,7 +29,8 @@ end
 
 
 @doc """
-Return a vector of the sources that affect the node.
+Return a vector of the sources that affect the node.  Assumes tiled_blob
+and mp are globally defined.
 """ ->
 function node_sources()
   sources = Int64[]
@@ -46,9 +42,10 @@ function node_sources()
   unique(sources)
 end
 
-
+@doc """
+Close all but the current worker and then add nw of them.
+""" ->
 function create_workers(nw::Int64)
-  # Close all but the current worker and then add nw of them.
   println("Adding workers.")
   for worker in workers()
     if worker != myid()
@@ -60,14 +57,22 @@ function create_workers(nw::Int64)
 end
 
 
-# This requires synthetic and frame_jld_file to be defined
-# everywhere in the global scope.
+@doc """
+Load synthetic or actual data across the cluster of workers.
+
+This requires certain variables to be defined in the global scope.
+- synthetic
+- If synthetic, then S
+- If !synthetic, then dat_dir and frame_jld_file.
+
+If synthetic is false, the file frame_jld_file must contain a dictionary
+with an initialized TiledBlob and ModelParams object.
+""" ->
 function load_cluster_data()
   println("Loading data.")
   @everywhere begin
     if synthetic
       srand(1)
-      S = 100
       blob, mp, body, tiled_blob =
         SampleData.gen_n_body_dataset(S, tile_width=10);
     else
@@ -80,16 +85,22 @@ end
 
 
 @doc """
-Initialize the cluster.
+Perform a number of initialization tasks across the cluster.  The result
+is a set of globally defined variables on each worker.  It assumes that
+each worker has its own identical copy of mp and tiled_blob as global
+variables.
+
+The tasks are:
+- Divide up the blobs by assigning to each worker a unique subset of the
+  tile columns.
+- Initialize the ParameterMessage objects and define RemoteRefs for
+  communicating updates.
+- Initialize the sensitive floats and define RemoteRefs for communicating them.
 """ ->
 function initialize_cluster()
-  # Divide up the tiled_blobs.
-  # Unfortunately, we run out of memory
-  # when we try to communciate actual subsets of a tiled_blob over sockets,
-  # so currently each node must load the whole file and then subset it.
-
-  # For now it's more convenient to define global variables than
-  # to make RemoteRefs for everything.
+  # It's more convenient to define global variables than
+  # to make RemoteRefs for everything.  Eventually maybe we should wrap
+  # everything into a single type with its own RemoteRef?
   global col_ranges
   global worker_ids
   global param_msg
@@ -97,9 +108,12 @@ function initialize_cluster()
   global tiled_blob
   global param_msg_rr
 
+  # Divide up the tiled_blobs.
+  # Unfortunately, we run out of memory
+  # when we try to communciate actual subsets of a tiled_blob over sockets,
+  # so currently each node must load the whole file and then subset it.
   println("Dividing the blobs.")
   for b=1:5
-    #global col_ranges
     col_cuts = iround(linspace(1, size(tiled_blob[b])[2] + 1, nw + 1))
     col_ranges = map(i -> col_cuts[i]:col_cuts[i + 1] - 1, 1:nw)
   end
@@ -118,7 +132,7 @@ function initialize_cluster()
 
   # Initialize the ParameterMessage sockets and copy the ModelParams.
   println("Initializing the parameters.")
-  param_msg = ParameterMessage(mp);
+  param_msg = ElboDeriv.ParameterMessage(mp);
   ElboDeriv.update_parameter_message!(mp, param_msg);
 
   @everywhereelse begin
@@ -154,5 +168,10 @@ function eval_worker_likelihood()
   global mp
   global accum
 
+  println("Worker ", myid(), " is starting the likelihood evaluation.")
+  elbo_time = time()
   ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum)
+  elbo_time = time() - elbo_time
+  println("Worker ", myid(), " is done in $(elbo_time)s.")
+  elbo_time
 end
