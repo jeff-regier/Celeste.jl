@@ -16,10 +16,6 @@ addprocs(nw)
 # Strangely the libraries cannot be loaded from within the module.
 println("Loading libraries.")
 @everywhere begin
-  using Celeste
-  using CelesteTypes
-  using JLD
-  import SampleData.dat_dir
   include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
   frame_jld_file = "initialzed_celeste_003900-6-0269.JLD"
   synthetic = true
@@ -30,8 +26,8 @@ initialize_cluster();
 
 # Define the elbo evaluation function.
 # TODO: maybe this should be in ElboDeriv.
-# @everywhere eval_likelihood! =
-#   remotecall_fetch(1, () -> CelesteCluster.eval_likelihood!)
+# @everywhere eval_worker_likelihood! =
+#   remotecall_fetch(1, () -> CelesteCluster.eval_worker_likelihood!)
 
 # Sanity check that the tiles were communicated successfully
 @everywhere tilesum = sum([sum([ sum(t.pixels) for t in tiled_blob[b]]) for b=1:5 ])
@@ -48,18 +44,18 @@ end
 
 # locally:
 accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
-@time elbo_time = eval_likelihood()
-@time elbo_time = eval_likelihood()
+@time elbo_time = eval_worker_likelihood()
+@time elbo_time = eval_worker_likelihood()
 
 # Evaluate the ELBO in parallel.  Most of the time is taken up on the workers.
 @time begin
-  @everywhereelse elbo_time = eval_likelihood();
+  @everywhereelse elbo_time = eval_worker_likelihood();
   accum_workers = [ fetch(rr) for rr in accum_rr];
   accum_par = sum(accum_workers);
 end;
 
 @time begin
-  @everywhereelse elbo_time = eval_likelihood();
+  @everywhereelse elbo_time = eval_worker_likelihood();
   accum_workers = [ fetch(rr) for rr in accum_rr];
   accum_par = sum(accum_workers);
 end;
@@ -67,7 +63,7 @@ end;
 # # Sometimes this is faster indicating that you're processer bound in the
 # # parallel execution.
 # @runat 2 begin
-#   @time eval_likelihood()
+#   @time eval_worker_likelihood()
 # end
 
 # Make sure they match.
