@@ -1,14 +1,15 @@
 # Calculate values and partial derivatives of the variational ELBO.
 
 # For various reasons, e.g. the need to access the global scope when
-# communicating to subprocesses, this is best not done as a module.
-#module CelesteCluster
+# communicating to subprocesses, I have not made this into a module.
 
 VERSION < v"0.4.0-dev" && using Docile
+using Celeste
 using CelesteTypes
 using JLD
+import SampleData.dat_dir
 
-using ElboDeriv.tile_likelihood!
+#using ElboDeriv.tile_likelihood!
 using ElboDeriv.SourceBrightness
 using ElboDeriv.BvnComponent
 using ElboDeriv.GalaxyCacheComponent
@@ -31,31 +32,6 @@ macro runat(p, ex)
   end
 end
 
-@doc """
-A type containing all the information that needs to be communicated
-to worker nodes at each iteration.
-
-Attributes:
-  vp: The VariationalParams for the ModelParams object
-  star_mcs_vec: A vector of star BVN components, one for each band
-  gal_mcs_vec: A vector of galaxy BVN components, one for each band
-  sbs_vec: A vector of brightness vectors, one for each band
-""" ->
-type ParamState{NumType <: Number}
-  vp::VariationalParams{NumType}
-  star_mcs_vec::Vector{Array{BvnComponent{NumType},2}}
-  gal_mcs_vec::Vector{Array{GalaxyCacheComponent{NumType},4}}
-  sbs_vec::Vector{Vector{SourceBrightness{NumType}}}
-end
-
-ParamState{NumType <: Number}(mp::ModelParams{NumType}) = begin
-  num_bands = size(mp.patches)[2]
-  star_mcs_vec = Array(Array{BvnComponent{NumType},2}, num_bands)
-  gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType},4}, num_bands)
-  sbs_vec = Array(Vector{SourceBrightness{NumType}}, num_bands)
-  ParamState(mp.vp, star_mcs_vec, gal_mcs_vec, sbs_vec)
-end
-
 
 @doc """
 Return a vector of the sources that affect the node.
@@ -68,23 +44,6 @@ function node_sources()
     end
   end
   unique(sources)
-end
-
-
-@doc """
-Update param_state in place using mp.
-""" ->
-function update_param_state!{NumType <: Number}(
-    mp::ModelParams{NumType}, param_state::ParamState{NumType})
-    for b=1:5
-      star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-      sbs = ElboDeriv.SourceBrightness{Float64}[
-        ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
-
-      param_state.star_mcs_vec[b] = star_mcs
-      param_state.gal_mcs_vec[b] = gal_mcs
-      param_state.sbs_vec[b] = sbs
-    end
 end
 
 
@@ -119,11 +78,9 @@ function load_cluster_data()
   end;
 end
 
-@doc """
-Make sure there are <nw> workers.  Intended to be called on startup only.
 
-Requires mp to be defined in the global scope and for every
-worker to have a tiled_blob defined.
+@doc """
+Initialize the cluster.
 """ ->
 function initialize_cluster()
   # Divide up the tiled_blobs.
@@ -135,10 +92,10 @@ function initialize_cluster()
   # to make RemoteRefs for everything.
   global col_ranges
   global worker_ids
-  global param_state
+  global param_msg
   global mp
   global tiled_blob
-  global param_state_rr
+  global param_msg_rr
 
   println("Dividing the blobs.")
   for b=1:5
@@ -159,22 +116,22 @@ function initialize_cluster()
     end
   end
 
-  # Initialize the ParamState sockets and copy the ModelParams.
+  # Initialize the ParameterMessage sockets and copy the ModelParams.
   println("Initializing the parameters.")
-  param_state = ParamState(mp);
-  update_param_state!(mp, param_state);
+  param_msg = ParameterMessage(mp);
+  ElboDeriv.update_parameter_message!(mp, param_msg);
 
   @everywhereelse begin
-    global param_state_rr
+    global param_msg_rr
     global mp
     mp = remotecall_fetch(1, () -> mp);
-    param_state_rr = RemoteRef(1)
+    param_msg_rr = RemoteRef(1)
   end
-  param_state_rr = [remotecall_fetch(w, () -> param_state_rr) for w in workers()]
-  for rr in param_state_rr
-    put!(rr, param_state)
+  param_msg_rr = [remotecall_fetch(w, () -> param_msg_rr) for w in workers()]
+  for rr in param_msg_rr
+    put!(rr, param_msg)
   end
-  @everywhereelse param_state = fetch(param_state_rr)
+  @everywhereelse param_msg = fetch(param_msg_rr)
 
   # Set up for accum to be communicated back to process 1
   println("Initializing the accum sockets.")
@@ -187,49 +144,15 @@ function initialize_cluster()
     put!(accum_rr, accum)
   end
 
-  param_state_rr, accum_rr
+  param_msg_rr, accum_rr
 end
 
 
-@doc """
-Helper for remote evaluation of the elbo.  TODO: perhaps this belongs
-in ElboDeriv.
-""" ->
-function eval_likelihood!{NumType <: Number}(
-    accum::SensitiveFloat{CanonicalParams, NumType},
-    param_state::ParamState{NumType}, mp::ModelParams{NumType},
-    tiled_blob::TiledBlob)
-
-  println(myid(), " is starting.")
-  elbo_time = time()
-  global accum
-  clear!(accum)
-  mp.vp = param_state.vp
-  for b in 1:5
-    #println("Proc $(myid()) starting band $b")
-    sbs = param_state.sbs_vec[b]
-    star_mcs = param_state.star_mcs_vec[b]
-    gal_mcs = param_state.gal_mcs_vec[b]
-    for tile in tiled_blob[b][:]
-      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-      tile_likelihood!(
-        tile, tile_sources, mp,
-        sbs, star_mcs, gal_mcs,
-        accum);
-    end
-  end
-  elbo_time = time() - elbo_time
-  println(myid(), " is done in $(elbo_time)s.")
-  elbo_time
-end
-
-function eval_likelihood()
-  global accum
-  global param_state
-  global mp
+function eval_worker_likelihood()
   global tiled_blob
+  global param_msg
+  global mp
+  global accum
 
-  eval_likelihood!(accum, param_state, mp, tiled_blob)
+  ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum)
 end
-
-#end # Module end
