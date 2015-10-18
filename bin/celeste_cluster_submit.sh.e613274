@@ -1,5 +1,0 @@
-ERROR: assertion failed: tilesum == sum(remote_tilesums)
- in error at error.jl:21
- in _start at ./client.jl:395
-WARNING: Forcibly interrupting busy workers
-KeyError(2)
