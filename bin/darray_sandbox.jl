@@ -11,11 +11,10 @@ end
 addprocs(nw)
 @assert(length(workers()) == nw)
 
-#create_workers(nw);
 
-# Strangely the libraries cannot be loaded from within the module.
 println("Loading libraries.")
 @everywhere begin
+  using Celeste
   include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
   frame_jld_file = "initialzed_celeste_003900-6-0269.JLD"
   synthetic = true
@@ -23,11 +22,6 @@ end
 
 load_cluster_data();
 initialize_cluster();
-
-# Define the elbo evaluation function.
-# TODO: maybe this should be in ElboDeriv.
-# @everywhere eval_worker_likelihood! =
-#   remotecall_fetch(1, () -> CelesteCluster.eval_worker_likelihood!)
 
 # Sanity check that the tiles were communicated successfully
 @everywhere tilesum = sum([sum([ sum(t.pixels) for t in tiled_blob[b]]) for b=1:5 ])
@@ -47,7 +41,8 @@ accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
 @time elbo_time = eval_worker_likelihood()
 @time elbo_time = eval_worker_likelihood()
 
-# Evaluate the ELBO in parallel.  Most of the time is taken up on the workers.
+# Evaluate the ELBO in parallel.  Most of the time is taken up on the workers,
+# not in communication.
 @time begin
   @everywhereelse elbo_time = eval_worker_likelihood();
   accum_workers = [ fetch(rr) for rr in accum_rr];
