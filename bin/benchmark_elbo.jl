@@ -11,7 +11,6 @@ const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
 srand(1)
 println("Loading data.")
-println("Running with ", length(workers()), " processors.")
 
 S = 100
 blob, mp, body, tiled_blob =
@@ -25,7 +24,9 @@ println("Calculating ELBO.")
 # let's time it without any overhead from profiling
 @time ElboDeriv.elbo(tiled_blob, mp);
 
-# profile the code
+# on a intel core2 Q6600 processor,
+# median runtime is consistently 27 seconds with Julia 0.3
+# median runtime is consistently 24 seconds with Julia 0.4
 Profile.init(10^8, 0.001)
 @profile elbo = ElboDeriv.elbo(tiled_blob, mp)
 Profile.print(format=:flat)
