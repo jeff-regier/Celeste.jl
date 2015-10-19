@@ -10,6 +10,8 @@ import Polygons
 import SloanDigitalSkySurvey: WCS
 import WCSLIB
 
+using DualNumbers.Dual
+
 export tile_predicted_image
 export ParameterMessage, update_parameter_message!
 
@@ -469,7 +471,7 @@ function update_parameter_message!{NumType <: Number}(
   for b=1:5
     param_msg.star_mcs_vec[b], param_msg.gal_mcs_vec[b] =
       load_bvn_mixtures(mp, b);
-    param_msg.sbs_vec[b] = SourceBrightness{Float64}[
+    param_msg.sbs_vec[b] = SourceBrightness{NumType}[
       SourceBrightness(mp.vp[s]) for s in 1:mp.S];
   end
 end
@@ -872,12 +874,55 @@ function tile_predicted_image{NumType <: Number}(
   tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
 
   tile_predicted_image(tile,
-          tile_sources,
-          mp,
-          sbs,
-          star_mcs,
-          gal_mcs,
-          accum)
+                       tile_sources,
+                       mp,
+                       sbs,
+                       star_mcs,
+                       gal_mcs,
+                       accum)
+end
+
+
+@doc """
+Use forward auto-differentiation to compute the Hessian.
+""" ->
+function elbo_hessian!(tiled_blob::TiledBlob,
+    param_msg::ParameterMessage{Dual{Float64}},
+    mp::ModelParams{Dual{Float64}})
+
+  # Vectors of the row, column, and value of the Hessian entries.
+  # The indices are tuples of (source, parameter) which will be
+  # linearized later.
+  hess_i = (Int64, Int64)[]
+  hess_j = (Int64, Int64)[]
+  hess_val = Float64[]
+
+  mp.vp = param_msg.vp
+  accum = zero_sensitive_float(CanonicalParams, Dual(Float64), mp.S)
+  for b in 1:5
+    sbs = param_msg.sbs_vec[b]
+    star_mcs = param_msg.star_mcs_vec[b]
+    gal_mcs = param_msg.gal_mcs_vec[b]
+    for tile in tiled_blob[b][:]
+      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+
+      # Get the hessian entries (s1, index1), (s2, index2)
+      for s1 in tile_sources, index1=1:length(CanonicalParams)
+        # Get the derivative of the gradient wrt (s1, index1)
+        @assert DualNumbers.epsilon(mp.vp[s1][index1]) == 0.0
+        mp.vp[s1][index1] = Dual(DualNumbers.real(mp.vp[s1][index1]), 1.0)
+        clear!(accum)
+        tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum);
+        for s2 in tile_sources, index2=1:length(CanonicalParams)
+          push!(hess_i, (s1, index1))
+          push!(hess_j, (s2, index2))
+          push!(hess_val, DualNumbers.epsilon(accum.d[index2, s2]))
+        end
+        mp.vp[s1][index1] = Dual(DualNumbers.real(mp.vp[s1][index1]), 0.0)
+      end
+    end
+  end
+  hess_i, hess_j, hess_val
 end
 
 
