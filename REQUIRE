@@ -4,12 +4,12 @@ Distributions
 Docile
 DualNumbers
 FITSIO
-ForwardDiff
+ForwardDiff 0.0.3 0.1
 JLD
 NLopt
 Optim
 GaussianMixtures
 Grid
-GSL
+GSL 0.1.2 0.2
 SloanDigitalSkySurvey
 WCSLIB
