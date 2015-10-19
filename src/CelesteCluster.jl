@@ -114,7 +114,7 @@ function initialize_cluster()
   # so currently each node must load the whole file and then subset it.
   println("Dividing the blobs.")
   for b=1:5
-    col_cuts = iround(linspace(1, size(tiled_blob[b])[2] + 1, nw + 1))
+    col_cuts = round(Integer, linspace(1, size(tiled_blob[b])[2] + 1, nw + 1))
     col_ranges = map(i -> col_cuts[i]:col_cuts[i + 1] - 1, 1:nw)
   end
 
