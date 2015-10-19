@@ -25,13 +25,14 @@ star_ids = union(ids_free.c1[:,1],
                  ids_free.r2[1],
                  ids_free.k[:,1]);
 
-simulation = false
+simulation = true
 if simulation
     #blob, mp_original, body, tiled_blob = gen_sample_star_dataset(perturb=true);
 
     # The gen_sample_galaxy locations and brightnesses look off.
-    blob, mp_original, body = gen_sample_galaxy_dataset(perturb=false);
-    #blob, mp_original, body = gen_three_body_dataset(perturb=true); # Too slow.
+    #blob, mp_original, body = gen_sample_galaxy_dataset(perturb=false);
+    blob, mp_original, body, tiled_blob = gen_three_body_dataset(perturb=true);
+    tiled_blob, mp_original = ModelInit.initialize_celeste(blob, body, tile_width=30);
     transform = Transform.get_mp_transform(mp_original, loc_width=1.0);
 else
     # An actual celestial body.
@@ -41,14 +42,14 @@ else
     field_num = "0269"
 
     original_blob =
-      Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num,
+      SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num,
                             mask_planes=Set());
 
     original_cat_df =
       SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
     cat_loc = convert(Array{Float64}, original_cat_df[[:ra, :dec]]);
     original_cat_entries =
-      Images.convert_catalog_to_celeste(original_cat_df, original_blob);
+      SkyImages.convert_catalog_to_celeste(original_cat_df, original_blob);
 
     obj_cols = [:objid, :is_star, :is_gal, :psfflux_r, :compflux_r, :ra, :dec];
     sort(original_cat_df[original_cat_df[:is_gal] .== true, obj_cols],
@@ -68,13 +69,13 @@ else
     tiled_blob, mp_original_all =
       ModelInit.initialize_celeste(
         original_blob, original_cat_entries,
-        tile_width=tile_width, patch_radius=1e-3, fit_psf=false);
+        tile_width=tile_width, fit_psf=false);
 
     function CountSources(tiled_blob::TiledBlob)
       sources = Int64[]
       for b=1:5
         tile_sources =
-          Images.local_sources(
+          SkyImages.local_sources(
             tiled_blob[b][1, 1], mp_original_all.patches[:,b], original_blob[b].wcs)
         sources = union(sources, tile_sources)
       end
@@ -90,9 +91,9 @@ else
 
       # Make a tile for the object
       tiled_blob =
-        Images.crop_blob_to_location(original_blob, tile_width, obj_loc);
+        SkyImages.crop_blob_to_location(original_blob, tile_width, obj_loc);
       mp_original = ModelInit.initialize_model_params(
-        tiled_blob, original_blob, mp_original);
+        tiled_blob, original_blob, original_cat_entries[obj_row]);
       transform = Transform.get_mp_transform(mp_original);
       sources = CountSources(tiled_blob)
 
@@ -106,6 +107,70 @@ else
 
     [ tiled_blob[b][1,1].h_range for b=1:5]
 end
+
+# Look at overlapping objects
+for b=1:5
+  lengths = Int64[ length(s) for s in mp_original_all.tile_sources[b] ]
+  println(hcat(unique(lengths), counts(lengths)))
+end
+
+
+# Try the Hessian
+param_msg = ElboDeriv.ParameterMessage(mp_original);
+ElboDeriv.update_parameter_message!(mp_original, param_msg);
+mp = deepcopy(mp_original);
+accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
+elbo_val = ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum);
+
+mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
+param_msg_dual = ElboDeriv.ParameterMessage(mp_dual);
+ElboDeriv.update_parameter_message!(mp_dual, param_msg_dual);
+
+using ElboDeriv.ParameterMessage
+@doc """
+Use forward auto-differentiation to compute the Hessian.
+""" ->
+function elbo_hessian!(tiled_blob::TiledBlob,
+    param_msg::ParameterMessage{Dual{Float64}},
+    mp::ModelParams{Dual{Float64}})
+
+  # Vectors of the row, column, and value of the Hessian entries.
+  # The indices are tuples of (source, parameter) which will be
+  # linearized later.
+  hess_i = (Int64, Int64)[]
+  hess_j = (Int64, Int64)[]
+  hess_val = Float64[]
+
+  mp.vp = param_msg.vp
+  accum = zero_sensitive_float(CanonicalParams, Dual(Float64), mp.S)
+  for b in 1:5
+    sbs = param_msg.sbs_vec[b]
+    star_mcs = param_msg.star_mcs_vec[b]
+    gal_mcs = param_msg.gal_mcs_vec[b]
+    for tile in tiled_blob[b][:]
+      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+
+      # Get the hessian entries (s1, index1), (s2, index2)
+      for s1 in tile_sources, index1=1:length(CanonicalParams)
+        # Get the derivative of the gradient wrt (s1, index1)
+        @assert DualNumbers.epsilon(mp.vp[s1][index1]) == 0.0
+        mp.vp[s1][index1] = Dual(DualNumbers.real(mp.vp[s1][index1]), 1.0)
+        clear!(accum)
+        tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum);
+        for s2 in tile_sources, index2=1:length(CanonicalParams)
+          push!(hess_i, (s1, index1))
+          push!(hess_j, (s2, index2))
+          push!(hess_val, DualNumbers.epsilon(accum.d[index2, s2]))
+        end
+        mp.vp[s1][index1] = Dual(DualNumbers.real(mp.vp[s1][index1]), 0.0)
+      end
+    end
+  end
+  hess_i, hess_j, hess_val
+end
+hess_i, hess_j, hess_val = ElboDeriv.elbo_hessian!(tiled_blob, param_msg_dual, mp_dual);
+
+
 
 
 ##############
