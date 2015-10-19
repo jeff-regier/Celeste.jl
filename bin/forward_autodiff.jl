@@ -150,16 +150,16 @@ function elbo_hessian(tiled_blob::TiledBlob,
     star_mcs = param_msg.star_mcs_vec[b]
     gal_mcs = param_msg.gal_mcs_vec[b]
     for tile in tiled_blob[b][:]
-      verbose && println("Tile .... ")
       tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-
-      verbose && println(tile_sources)
+      verbose && println("Tile $(tile.hh), $(tile.ww) with $(length(tile_sources)) sources.")
       # Get the hessian entries (s1, index1), (s2, index2)
       for s1 in tile_sources, index1=1:length(CanonicalParams)
         # Get the derivative of the gradient wrt (s1, index1)
         @assert DualNumbers.epsilon(mp.vp[s1][index1]) == 0.0
         mp.vp[s1][index1] = Dual(DualNumbers.real(mp.vp[s1][index1]), 1.0)
         clear!(accum)
+        # The bsbs and everything must of course also be calculated, so this is
+        # wrong.  Also you need the hessian wrt the transform as well.
         tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum);
         for s2 in tile_sources, index2=1:length(CanonicalParams)
           this_hess_val = DualNumbers.epsilon(accum.d[index2, s2])
@@ -178,8 +178,23 @@ end
 
 new_hess_time = time()
 hess_i, hess_j, hess_val = elbo_hessian(tiled_blob, param_msg_dual, mp_dual);
-new_hess_time - time() - new_hess_time
+new_hess_time = time() - new_hess_time
 
+@assert length(hess_i) == length(hess_j) == length(hess_val)
+# TODO: make this function part of the transform.
+function vector_loc(s::Int64, index::Int64)
+  @assert index <= length(UnconstrainedParams)
+  index + length(UnconstrainedParams) * (s - 1)
+end
+hess_i_vec = Array(Int64, length(hess_i));
+hess_j_vec = Array(Int64, length(hess_j));
+for entry in 1:length(hess_i)
+  hess_i_vec[entry] = vector_loc(hess_i[entry][1], hess_i[entry][2])
+  hess_j_vec[entry] = vector_loc(hess_j[entry][1], hess_j[entry][2])
+end
+new_hess = sparse(hess_i_vec, hess_j_vec, hess_val);
+
+# Compare with the old method.
 omitted_ids = Int64[]
 kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
 x0 = transform.vp_to_vector(mp.vp, omitted_ids);
