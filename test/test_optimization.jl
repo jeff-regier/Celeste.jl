@@ -100,17 +100,9 @@ function test_objective_wrapper()
     w_bdiag_hess = wrapper.f_block_diag_ad_hessian(x);
     @test issym(w_bdiag_hess)
 
-    # TODO: test their similarity on more distant objects -- these
+    # TODO:  If we're going with the approximate block diagonal
+    # approach, test their similarity on more distant objects -- these
     # two Hessians are actually quite different.
-
-    # TODO: I don't have internet and so can't look up the efficient
-    # construciton of block diagonal matrices
-    # bdiag_mask = zeros(Float64, length(x), length(x))
-    # for s = 0:(mp.S -1)
-    #   indices = (1 + s * length(kept_ids)):((s + 1) * length(kept_ids))
-    #   bdiag_mask[indices, indices] = 1.
-    # end
-    # w_hess_masked = w_hess .* bdiag_mask;
 end
 
 
@@ -140,14 +132,19 @@ function test_star_optimization_newton()
     verify_sample_star(mp.vp[1], [10.1, 12.2])
 end
 
+
 function test_two_body_optimization_newton()
+    # This test is currently too slow to be part of the ordinary
+    # test suite, and the block diagonal hessian does not work very well.
+    # For now, leave it in for future reference.
+  
     blob, mp, two_bodies, tiled_blob = SampleData.gen_two_body_dataset();
 
     trans = get_mp_transform(mp, loc_width=1.0);
     function lik_function(tiled_blob::TiledBlob, mp::ModelParams)
       ElboDeriv.elbo_likelihood(tiled_blob, mp)
     end
-    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+    omitted_ids = [ids_free.k[:]; ids_free.c2[:]; ids_free.r2]
 
     function elbo_function(tiled_blob::TiledBlob, mp::ModelParams)
       ElboDeriv.elbo(tiled_blob, mp)
@@ -184,13 +181,9 @@ function test_two_body_optimization_newton()
     sum((newton_image .- original_image) .^ 2)
     sum((bfgs_image .- original_image) .^ 2)
 
-    # bfgs beats newton here.
+    # newton beats bfgs on the elbo, though not on the likelihood.
     elbo_function(tiled_blob, mp_bfgs).v
     elbo_function(tiled_blob, mp_newton).v
-
-    # bfgs beats newton here.
-    lik_function(tiled_blob, mp_bfgs).v
-    lik_function(tiled_blob, mp_newton).v
 
     # This does not work well.  It keeps taking very small steps.
     mp_newton_bdiag = deepcopy(mp);
@@ -200,7 +193,6 @@ function test_two_body_optimization_newton()
       rho_lower = 0.001);
 
     elbo_function(tiled_blob, mp_newton_bdiag).v
-
 end
 
 
