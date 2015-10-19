@@ -126,44 +126,13 @@ mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
 param_msg_dual = ElboDeriv.ParameterMessage(mp_dual);
 ElboDeriv.update_parameter_message!(mp_dual, param_msg_dual);
 
-using ElboDeriv.ParameterMessage
-using ElboDeriv.tile_likelihood!
-using ElboDeriv.load_bvn_mixtures
-using ElboDeriv.SourceBrightness
-
-@doc """
-Use forward auto-differentiation to compute the Hessian.
-""" ->
-function elbo_hessian_term!(tiled_blob::TiledBlob,
-                            mp_dual::ModelParams{Dual{Float64}},
-                            accum::SensitiveFloat{CanonicalParams, Dual{Float64}},
-                            deriv_source::Int64; verbose=true)
-
-  # For now let's just re-calculate these each time.  It's not the
-  # bulk of the computation.
-  clear!(accum)
-  for b in 1:5
-    star_mcs, gal_mcs = load_bvn_mixtures(mp_dual, b)
-    sbs = SourceBrightness{Dual{Float64}}[
-      SourceBrightness(mp_dual.vp[s]) for s in 1:mp.S]
-    for tile in tiled_blob[b][:]
-      tile_sources = mp_dual.tile_sources[b][tile.hh, tile.ww]
-      if in(deriv_source, tile_sources)
-        tile_likelihood!(tile, tile_sources, mp_dual, sbs, star_mcs, gal_mcs, accum);
-      end
-    end
-  end
-  accum
-end
 
 # TODO: this will be a local x built on a local transform.
+omitted_ids = Int64[]
 x = transform.vp_to_vector(mp.vp, omitted_ids)
-x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ];
 
 k = int(length(x) / mp.S)
 @assert length(x) == k * mp.S
-x_dual_mat = reshape(x_dual, k, mp.S)
-@assert x_dual_mat[:,1] == x[1:k]
 
 # Vectors of the row, column, and value of the Hessian entries.
 # The indices are tuples of (source, parameter) which will be
@@ -172,10 +141,13 @@ hess_i = (Int64, Int64)[]
 hess_j = (Int64, Int64)[]
 hess_val = Float64[]
 
-accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp.S)
+accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp_dual.S);
+x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ];
+x_dual_mat = reshape(x_dual, k, mp.S);
+@assert x_dual_mat[:,1] == x[1:k]
 
 new_hess_time = time()
-for s1=1:mp.S
+for s1=1:mp_dual.S
   println("Source $s1")
   for index1=1:k
     print(".")
@@ -183,19 +155,19 @@ for s1=1:mp.S
     @assert epsilon(x_dual_mat[index1, s1]) == 0.
     x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 1.)
     transform.vector_to_vp!(x_dual_mat[:], mp_dual.vp, omitted_ids);
-    elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
+    ElboDeriv.elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
     accum_trans = transform.transform_sensitive_float(accum, mp_dual);
     @assert size(accum_trans.d) == (k, mp.S)
     x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 0.)
 
     # Record the hessian terms.
-    for s2=1:mp.S, index2=1:k
+    for s2=1:mp_dual.S, index2=1:k
       this_hess_val = DualNumbers.epsilon(accum_trans.d[index2, s2])
-      #if (abs(this_hess_val) > 0)
+      if (this_hess_val != 0)
         push!(hess_i, (s1, index1))
         push!(hess_j, (s2, index2))
         push!(hess_val, this_hess_val)
-      #end
+      end
     end
   end
   println("Done with source $s1.")
@@ -215,10 +187,9 @@ for entry in 1:length(hess_i)
   hess_i_vec[entry] = vector_loc(hess_i[entry][1], hess_i[entry][2])
   hess_j_vec[entry] = vector_loc(hess_j[entry][1], hess_j[entry][2])
 end
-new_hess = sparse(hess_i_vec, hess_j_vec, hess_val, length(x), length(x));
-
-maximum(new_hess - new_hess')
-
+new_hess_sparse = sparse(hess_i_vec, hess_j_vec, hess_val, length(x), length(x));
+maximum(new_hess_sparse - new_hess_sparse')
+new_hess = 0.5 * full(new_hess_sparse + new_hess_sparse')
 
 
 # Compare with the old method.
@@ -234,7 +205,13 @@ obj_hess_time = time()
 obj_hess = obj_wrapper.f_ad_hessian(x0);
 obj_hess_time = time() - obj_hess_time
 
+i, j = findn((abs(obj_hess) .> 1e-10) & (abs(new_hess) .< 1e-10))
+
 plot(obj_hess[:], new_hess[:], "k.")
+
+#########################
+# test
+
 
 
 ##############

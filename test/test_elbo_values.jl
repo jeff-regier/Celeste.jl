@@ -356,6 +356,40 @@ function test_elbo_likelihood_flavors()
   @test_approx_eq_eps(accum.d, original_accum.d, 1e-16)
 end
 
+
+function test_elbo_hessian_term()
+  # Test that the epsilon parts of dual numbers passed to
+  # elbo_hessian_term are the same.
+
+  blob, mp_original, body, tiled_blob = gen_three_body_dataset(perturb=true);
+
+  # Break into smaller tiles than is the default.
+  tiled_blob, mp_original =
+    ModelInit.initialize_celeste(blob, body, tile_width=30);
+  transform = Transform.get_mp_transform(mp_original, loc_width=1.0);
+
+  accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp_dual.S);
+  x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ];
+  x_dual_mat = reshape(x_dual, k, mp.S);
+  @assert x_dual_mat[:,1] == x[1:k]
+
+  for s1 in 1:mp.S, index1 in [1, 10, 29]
+    original_val = real(x_dual_mat[index1, s1])
+    x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 1.)
+    transform.vector_to_vp!(x_dual_mat[:], mp_dual.vp, omitted_ids);
+    ElboDeriv.elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
+    accum_trans = transform.transform_sensitive_float(accum, mp_dual);
+    @assert size(accum_trans.d) == (k, mp.S)
+    x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 0.)
+
+    accum_full = ElboDeriv.elbo(tiled_blob, mp_dual);
+    accum_full_trans = transform.transform_sensitive_float(accum_full, mp_dual);
+
+    # The real parts will not be the same, but the epsilon parts should be.
+    @test_approx_eq epsilon(accum_trans.d[:]) epsilon(accum_full_trans.d[:])
+  end
+end
+
 ####################################################
 
 test_kl_divergence_values()
@@ -366,3 +400,4 @@ test_coadd_cat_init_is_most_likely()
 test_tiny_image_tiling()
 test_elbo_with_nan()
 test_elbo_likelihood_flavors()
+test_elbo_hessian_term()
