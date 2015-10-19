@@ -217,13 +217,13 @@ function test_elbo_derivs_with_transform()
     trans = get_mp_transform(mp0, loc_width=1.0);
 
     omitted_ids = Int64[];
-    x0 = trans.vp_to_vector(mp0.vp, omitted_ids)
+    x0 = trans.vp_to_array(mp0.vp, omitted_ids)
 
     # f is a function of a ModelParams object that returns a SensitiveFloat.
     function wrap_function(f::Function)
         function wrapped_f(x)
             mmp = deepcopy(mp0)
-            trans.vector_to_vp!(x, mmp.vp, omitted_ids)
+            trans.array_to_vp!(x, mmp.vp, omitted_ids)
             result = f(mmp)
             result_trans = trans.transform_sensitive_float(result, mmp)
             result_trans.v, reduce(vcat, result_trans.d)

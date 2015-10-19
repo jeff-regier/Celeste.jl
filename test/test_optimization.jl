@@ -61,7 +61,7 @@ function test_objective_wrapper()
       OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(tiled_blob, mp),
         mp, trans, kept_ids, omitted_ids);
 
-    x = trans.vp_to_vector(mp.vp, omitted_ids);
+    x = trans.vp_to_array(mp.vp, omitted_ids);
     elbo_result =
       trans.transform_sensitive_float(ElboDeriv.elbo(tiled_blob, mp), mp);
     elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, s] for s=1:mp.S ]);
@@ -137,7 +137,7 @@ function test_two_body_optimization_newton()
     # This test is currently too slow to be part of the ordinary
     # test suite, and the block diagonal hessian does not work very well.
     # For now, leave it in for future reference.
-  
+
     blob, mp, two_bodies, tiled_blob = SampleData.gen_two_body_dataset();
 
     trans = get_mp_transform(mp, loc_width=1.0);
