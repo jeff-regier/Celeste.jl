@@ -1,3 +1,7 @@
 # globs for SCF cluster output files.
 *.e?????
 *.o?????
+
+# Notebook checkpoints.
+.ipynb_checkpoints/
+.ipynb_checkpoints/distributed_examples-checkpoint.ipynb
