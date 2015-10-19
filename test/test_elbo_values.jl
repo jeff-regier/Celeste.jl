@@ -361,18 +361,26 @@ function test_elbo_hessian_term()
   # Test that the epsilon parts of dual numbers passed to
   # elbo_hessian_term are the same.
 
-  blob, mp_original, body, tiled_blob = gen_three_body_dataset(perturb=true);
+  blob, mp, body, tiled_blob = gen_three_body_dataset(perturb=true);
 
   # Break into smaller tiles than is the default.
-  tiled_blob, mp_original =
+  tiled_blob, mp =
     ModelInit.initialize_celeste(blob, body, tile_width=30);
-  transform = Transform.get_mp_transform(mp_original, loc_width=1.0);
+  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
+  transform = Transform.get_mp_transform(mp, loc_width=1.0);
+  omitted_ids = Int64[]
 
-  accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp_dual.S);
-  x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ];
+  x = transform.vp_to_vector(mp.vp, omitted_ids)
+  k = round(Int, length(x) / mp.S)
+  @assert length(x) == k * mp.S
+
+  x_dual = DualNumbers.Dual{Float64}[
+    DualNumbers.Dual{Float64}(x[i], 0.) for i = 1:length(x) ];
   x_dual_mat = reshape(x_dual, k, mp.S);
   @assert x_dual_mat[:,1] == x[1:k]
 
+  accum = zero_sensitive_float(CanonicalParams,
+                               DualNumbers.Dual{Float64}, mp_dual.S);
   for s1 in 1:mp.S, index1 in [1, 10, 29]
     original_val = real(x_dual_mat[index1, s1])
     x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 1.)
@@ -386,9 +394,12 @@ function test_elbo_hessian_term()
     accum_full_trans = transform.transform_sensitive_float(accum_full, mp_dual);
 
     # The real parts will not be the same, but the epsilon parts should be.
-    @test_approx_eq epsilon(accum_trans.d[:]) epsilon(accum_full_trans.d[:])
+    @test_approx_eq(DualNumbers.epsilon(accum_trans.d[:]),
+                    DualNumbers.epsilon(accum_full_trans.d[:]))
   end
 end
+
+test_elbo_hessian_term()
 
 ####################################################
 
@@ -400,4 +411,3 @@ test_coadd_cat_init_is_most_likely()
 test_tiny_image_tiling()
 test_elbo_with_nan()
 test_elbo_likelihood_flavors()
-test_elbo_hessian_term()
