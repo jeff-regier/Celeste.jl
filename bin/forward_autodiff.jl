@@ -174,6 +174,7 @@ hess_val = Float64[]
 
 accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp.S)
 
+new_hess_time = time()
 for s1=1:mp.S
   println("Source $s1")
   for index1=1:k
@@ -183,10 +184,12 @@ for s1=1:mp.S
     x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 1.)
     transform.vector_to_vp!(x_dual_mat[:], mp_dual.vp, omitted_ids);
     elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
+    accum_trans = transform.transform_sensitive_float(accum, mp_dual);
+    @assert size(accum_trans.d) == (k, mp.S)
 
     # Record the hessian terms.
-    for s2 in 1:mp.S, index2=1:length(CanonicalParams)
-      this_hess_val = DualNumbers.epsilon(accum.d[index2, s2])
+    for s2=1:mp.S, index2=1:k
+      this_hess_val = DualNumbers.epsilon(accum_trans.d[index2, s2])
       if (abs(this_hess_val) > 1e-16)
         push!(hess_i, (s1, index1))
         push!(hess_j, (s2, index2))
@@ -197,20 +200,14 @@ for s1=1:mp.S
   end
   println("Done with source $s1.")
 end
-
-
-
-
-
-new_hess_time = time()
-hess_i, hess_j, hess_val = elbo_hessian(tiled_blob, param_msg_dual, mp_dual);
 new_hess_time = time() - new_hess_time
+
 
 @assert length(hess_i) == length(hess_j) == length(hess_val)
 # TODO: make this function part of the transform.
 function vector_loc(s::Int64, index::Int64)
-  @assert index <= length(UnconstrainedParams)
-  index + length(UnconstrainedParams) * (s - 1)
+  @assert index <= k
+  index + k * (s - 1)
 end
 hess_i_vec = Array(Int64, length(hess_i));
 hess_j_vec = Array(Int64, length(hess_j));
@@ -218,7 +215,11 @@ for entry in 1:length(hess_i)
   hess_i_vec[entry] = vector_loc(hess_i[entry][1], hess_i[entry][2])
   hess_j_vec[entry] = vector_loc(hess_j[entry][1], hess_j[entry][2])
 end
-new_hess = sparse(hess_i_vec, hess_j_vec, hess_val);
+new_hess = sparse(hess_i_vec, hess_j_vec, hess_val, length(x), length(x));
+
+maximum(new_hess - new_hess')
+
+
 
 # Compare with the old method.
 omitted_ids = Int64[]
