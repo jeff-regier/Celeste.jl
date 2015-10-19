@@ -26,7 +26,7 @@ typealias ParamBounds Dict{Symbol, ParamBox}
 #####################
 # Conversion to and from vectors.
 
-function free_vp_to_vector{NumType <: Number}(vp::FreeVariationalParams{NumType},
+function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
                                               omitted_ids::Vector{Int64})
     # vp = variational parameters
     # omitted_ids = ids in ParamIndex
@@ -45,30 +45,33 @@ function free_vp_to_vector{NumType <: Number}(vp::FreeVariationalParams{NumType}
         [ vp_new[s][p1] = vp[s][p0] for s in 1:S ]
     end
 
-    reduce(vcat, vp_new)
+    reduce(hcat, vp_new)
 end
 
+@doc """
+Transform a parameter vector to variational parameters in place.
 
-function vector_to_free_vp!{NumType <: Number}(
-    xs::Vector{NumType}, vp_free::FreeVariationalParams{NumType},
+Args:
+ - xs: A (param x sources) matrix created from free variational parameters.
+ - vp_free: Free variational parameters.  Only the ids not in omitted_ids
+            will be updated.
+ - omitted_ids: Ids to omit (from ids_free)
+
+Returns:
+ - Update vp_free in place.
+""" ->
+function array_to_free_vp!{NumType <: Number}(
+    xs::Matrix{NumType}, vp_free::FreeVariationalParams{NumType},
     omitted_ids::Vector{Int64})
-    # xs: A vector created from free variational parameters.
-    # free_vp: Free variational parameters.  Only the ids not in omitted_ids
-    #   will be updated.
-    # omitted_ids: Ids to omit (from ids_free)
 
     left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-
     P = length(left_ids)
-    @assert length(xs) % P == 0
-    S = @compat(round(Int, length(xs) / P))
-    xs2 = reshape(xs, P, S)
+    S = length(vp_free)
+    @assert size(xs) == (P, S)
 
-    for s in 1:S
-        for p1 in 1:length(left_ids)
-            p0 = left_ids[p1]
-            vp_free[s][p0] = xs2[p1, s]
-        end
+    for s in 1:S, p1 in 1:P
+        p0 = left_ids[p1]
+        vp_free[s][p0] = xs[p1, s]
     end
 end
 
@@ -293,8 +296,8 @@ type DataTransform
 	from_vp::Function
 	to_vp!::Function
 	from_vp!::Function
-  vp_to_vector::Function
-  vector_to_vp!::Function
+  vp_to_array::Function
+  array_to_vp!::Function
 	transform_sensitive_float::Function
   bounds::Vector{ParamBounds}
 end
@@ -336,19 +339,19 @@ DataTransform(bounds::Vector{ParamBounds}) = begin
       vp
   end
 
-  function vp_to_vector{NumType <: Number}(vp::VariationalParams{NumType},
+  function vp_to_array{NumType <: Number}(vp::VariationalParams{NumType},
                                            omitted_ids::Vector{Int64})
       vp_trans = from_vp(vp)
-      free_vp_to_vector(vp_trans, omitted_ids)
+      free_vp_to_array(vp_trans, omitted_ids)
   end
 
-  function vector_to_vp!{NumType <: Number}(xs::Vector{NumType},
-                                            vp::VariationalParams{NumType},
-                                            omitted_ids::Vector{Int64})
+  function array_to_vp!{NumType <: Number}(xs::Matrix{NumType},
+                                           vp::VariationalParams{NumType},
+                                           omitted_ids::Vector{Int64})
       # This needs to update vp in place so that variables in omitted_ids
       # stay at their original values.
       vp_trans = from_vp(vp)
-      vector_to_free_vp!(xs, vp_trans, omitted_ids)
+      array_to_free_vp!(xs, vp_trans, omitted_ids)
       to_vp!(vp_trans, vp)
   end
 
@@ -376,7 +379,7 @@ DataTransform(bounds::Vector{ParamBounds}) = begin
       sf_free
   end
 
-  DataTransform(to_vp, from_vp, to_vp!, from_vp!, vp_to_vector, vector_to_vp!,
+  DataTransform(to_vp, from_vp, to_vp!, from_vp!, vp_to_array, array_to_vp!,
                 transform_sensitive_float, bounds)
 end
 
@@ -403,4 +406,3 @@ end
 
 
 end
-

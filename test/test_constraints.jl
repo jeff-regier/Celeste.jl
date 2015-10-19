@@ -106,11 +106,11 @@ function test_parameter_conversion()
 	# Check conversion to and from a vector.
 	omitted_ids = Array(Int64, 0)
 	vp = deepcopy(mp.vp)
-	x = transform.vp_to_vector(vp, omitted_ids)
+	x = transform.vp_to_array(vp, omitted_ids)
 	@test length(x) == length(vp_free[1]) * mp.S
 
 	vp2 = generate_valid_parameters(Float64, transform.bounds)
-	transform.vector_to_vp!(x, vp2, omitted_ids)
+	transform.array_to_vp!(x, vp2, omitted_ids)
 	for id in fieldnames(ids), s in 1:mp.S
 		@test_approx_eq_eps(original_vp[s][ids.(id)], vp2[s][ids.(id)], 1e-6)
 	end

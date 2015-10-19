@@ -122,14 +122,10 @@ mp = deepcopy(mp_original);
 accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
 elbo_val = ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum);
 
-mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
-param_msg_dual = ElboDeriv.ParameterMessage(mp_dual);
-ElboDeriv.update_parameter_message!(mp_dual, param_msg_dual);
-
 
 # TODO: this will be a local x built on a local transform.
 omitted_ids = Int64[]
-x = transform.vp_to_vector(mp.vp, omitted_ids)
+x = transform.vp_to_array(mp.vp, omitted_ids)
 
 k = int(length(x) / mp.S)
 @assert length(x) == k * mp.S
@@ -137,65 +133,70 @@ k = int(length(x) / mp.S)
 # Vectors of the row, column, and value of the Hessian entries.
 # The indices are tuples of (source, parameter) which will be
 # linearized later.
-hess_i = (Int64, Int64)[]
-hess_j = (Int64, Int64)[]
-hess_val = Float64[]
+function elbo_hessian(x::Matrix{Float64}, mp::ModelParams{Float64})
 
-accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp_dual.S);
-x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ];
-x_dual_mat = reshape(x_dual, k, mp.S);
-@assert x_dual_mat[:,1] == x[1:k]
+  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
 
-new_hess_time = time()
-for s1=1:mp_dual.S
-  println("Source $s1")
-  for index1=1:k
-    print(".")
-    original_val = real(x_dual_mat[index1, s1])
-    @assert epsilon(x_dual_mat[index1, s1]) == 0.
-    x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 1.)
-    transform.vector_to_vp!(x_dual_mat[:], mp_dual.vp, omitted_ids);
-    ElboDeriv.elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
-    accum_trans = transform.transform_sensitive_float(accum, mp_dual);
-    @assert size(accum_trans.d) == (k, mp.S)
-    x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 0.)
+  hess_i = (Int64, Int64)[]
+  hess_j = (Int64, Int64)[]
+  hess_val = Float64[]
 
-    # Record the hessian terms.
-    for s2=1:mp_dual.S, index2=1:k
-      this_hess_val = DualNumbers.epsilon(accum_trans.d[index2, s2])
-      if (this_hess_val != 0)
-        push!(hess_i, (s1, index1))
-        push!(hess_j, (s2, index2))
-        push!(hess_val, this_hess_val)
+  accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp_dual.S);
+  x_dual = Dual{Float64}[ Dual{Float64}(x[i, j], 0.) for
+                          i = 1:size(x)[1], j=1:size(x)[2] ];
+
+  new_hess_time = time()
+  for s1=1:mp_dual.S
+    println("Source $s1")
+    for index1=1:k
+      print(".")
+      original_val = real(x_dual[index1, s1])
+      @assert epsilon(x_dual[index1, s1]) == 0.
+      x_dual[index1, s1] = DualNumbers.Dual(original_val, 1.)
+      transform.array_to_vp!(x_dual[:], mp_dual.vp, omitted_ids);
+      ElboDeriv.elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
+      accum_trans = transform.transform_sensitive_float(accum, mp_dual);
+      @assert size(accum_trans.d) == (k, mp.S)
+      x_dual[index1, s1] = DualNumbers.Dual(original_val, 0.)
+
+      # Record the hessian terms.
+      for s2=1:mp_dual.S, index2=1:k
+        this_hess_val = DualNumbers.epsilon(accum_trans.d[index2, s2])
+        if (this_hess_val != 0)
+          push!(hess_i, (s1, index1))
+          push!(hess_j, (s2, index2))
+          push!(hess_val, this_hess_val)
+        end
       end
     end
+    println("Done with source $s1.")
   end
-  println("Done with source $s1.")
-end
-new_hess_time = time() - new_hess_time
+  new_hess_time = time() - new_hess_time
 
 
-@assert length(hess_i) == length(hess_j) == length(hess_val)
-# TODO: make this function part of the transform.
-function vector_loc(s::Int64, index::Int64)
-  @assert index <= k
-  index + k * (s - 1)
+  @assert length(hess_i) == length(hess_j) == length(hess_val)
+  # TODO: make this function part of the transform.
+  function vector_loc(s::Int64, index::Int64)
+    @assert index <= k
+    index + k * (s - 1)
+  end
+  hess_i_vec = Array(Int64, length(hess_i));
+  hess_j_vec = Array(Int64, length(hess_j));
+  for entry in 1:length(hess_i)
+    hess_i_vec[entry] = vector_loc(hess_i[entry][1], hess_i[entry][2])
+    hess_j_vec[entry] = vector_loc(hess_j[entry][1], hess_j[entry][2])
+  end
+  new_hess_sparse = sparse(hess_i_vec, hess_j_vec, hess_val, length(x), length(x));
+  maximum(new_hess_sparse - new_hess_sparse')
+  new_hess = 0.5 * full(new_hess_sparse + new_hess_sparse')
 end
-hess_i_vec = Array(Int64, length(hess_i));
-hess_j_vec = Array(Int64, length(hess_j));
-for entry in 1:length(hess_i)
-  hess_i_vec[entry] = vector_loc(hess_i[entry][1], hess_i[entry][2])
-  hess_j_vec[entry] = vector_loc(hess_j[entry][1], hess_j[entry][2])
-end
-new_hess_sparse = sparse(hess_i_vec, hess_j_vec, hess_val, length(x), length(x));
-maximum(new_hess_sparse - new_hess_sparse')
-new_hess = 0.5 * full(new_hess_sparse + new_hess_sparse')
+
 
 
 # Compare with the old method.
 omitted_ids = Int64[]
 kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-x0 = transform.vp_to_vector(mp.vp, omitted_ids);
+x0 = transform.vp_to_array(mp.vp, omitted_ids);
 
 obj_wrapper = OptimizeElbo.ObjectiveWrapperFunctions(
   mp -> ElboDeriv.elbo(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
@@ -208,6 +209,7 @@ obj_hess_time = time() - obj_hess_time
 i, j = findn((abs(obj_hess) .> 1e-10) & (abs(new_hess) .< 1e-10))
 
 plot(obj_hess[:], new_hess[:], "k.")
+
 
 #########################
 # test
@@ -583,7 +585,7 @@ obj_wrap = OptimizeElbo.ObjectiveWrapperFunctions(
     deepcopy(mp_original), transform, kept_ids, omitted_ids);
 # For minimization, which is required by the linesearch algorithm.
 obj_wrap.state.scale = -1.0
-x0 = transform.vp_to_vector(mp_original.vp, omitted_ids);
+x0 = transform.vp_to_array(mp_original.vp, omitted_ids);
 elbo_grad = zeros(Float64, length(x0));
 elbo_hess = zeros(Float64, length(x0), length(x0));
 
@@ -612,7 +614,7 @@ if warm_start
     x_new = deepcopy(x_start); # For quick restarts while debugging
     new_val = old_val = -start_f;
 else
-    x_new = transform.vp_to_vector(mp_original.vp, omitted_ids);
+    x_new = transform.vp_to_array(mp_original.vp, omitted_ids);
     obj_wrap.state.f_evals = 0
     new_val = old_val = obj_wrap.f_value(x_new);
 end
@@ -668,7 +670,7 @@ for iter in 1:max_iters
     println(">>>>>>  Current value after $(obj_wrap.state.f_evals) evaluations: ",
             "$(new_val) (BFGS got $(-bfgs_v) in $(iter_count) iters)")
     mp_nm = deepcopy(mp_original);
-    transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
+    transform.array_to_vp!(x_new, mp_nm.vp, omitted_ids);
     #println(ElboDeriv.get_brightness(mp_nm))
     println("\n\n")
 end
@@ -681,4 +683,4 @@ hcat(((-f_vals) - bfgs_v) / abs(bfgs_v), cumulative_iters ./ iter_count)
 reduce(hcat, [ x_diff ./ x_vals[1] for x_diff in diff(x_vals) ])
 
 mp_nm = deepcopy(mp_original);
-transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
+transform.array_to_vp!(x_new, mp_nm.vp, omitted_ids);

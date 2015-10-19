@@ -89,7 +89,7 @@ type ObjectiveWrapperFunctions
         function f_objective(x_dual::Array{DualNumbers.Dual{Float64}})
             state.f_evals += 1
             # Evaluate in the constrained space and then unconstrain again.
-            transform.vector_to_vp!(x_dual, mp_dual.vp, omitted_ids)
+            transform.array_to_vp!(x_dual, mp_dual.vp, omitted_ids)
             f_res = f(mp_dual)
             f_res_trans = transform.transform_sensitive_float(f_res, mp_dual)
         end
@@ -97,7 +97,7 @@ type ObjectiveWrapperFunctions
         function f_objective(x::Array{Float64})
             state.f_evals += 1
             # Evaluate in the constrained space and then unconstrain again.
-            transform.vector_to_vp!(x, mp.vp, omitted_ids)
+            transform.array_to_vp!(x, mp.vp, omitted_ids)
             f_res = f(mp)
 
             # TODO: Add an option to print either the transformed or
@@ -267,8 +267,6 @@ function maximize_f_newton(
   hess_reg=0.0, max_iters=100, block_hessian=false, rho_lower=0.25)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    x0 = transform.vp_to_vector(mp.vp, omitted_ids)
-
     optim_obj_wrap =
       OptimizeElbo.ObjectiveWrapperFunctions(
         mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
@@ -295,7 +293,7 @@ function maximize_f_newton(
         new_hess[:,:] = hess
     end
 
-    x0 = transform.vp_to_vector(mp.vp, omitted_ids);
+    x0 = transform.vp_to_array(mp.vp, omitted_ids);
 
     d = Optim.TwiceDifferentiableFunction(
       optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!)
@@ -315,7 +313,7 @@ function maximize_f_newton(
                           rho_lower = rho_lower)
 
     iter_count = optim_obj_wrap.state.f_evals
-    transform.vector_to_vp!(nm_result.minimum, mp.vp, omitted_ids);
+    transform.array_to_vp!(nm_result.minimum, mp.vp, omitted_ids);
     max_f = -1.0 * nm_result.f_minimum
     max_x = nm_result.minimum
 
@@ -355,7 +353,7 @@ function maximize_f(
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    x0 = transform.vp_to_vector(mp.vp, omitted_ids)
+    x0 = transform.vp_to_array(mp.vp, omitted_ids)
 
     obj_wrapper = ObjectiveWrapperFunctions(
       mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
