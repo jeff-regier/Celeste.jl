@@ -11,6 +11,7 @@ import SloanDigitalSkySurvey: WCS
 import WCSLIB
 
 export tile_predicted_image
+export ParameterMessage, update_parameter_message!
 
 @doc """
 Subtract the KL divergence from the prior for c
@@ -285,6 +286,7 @@ BvnComponent{NumType <: Number}(
     BvnComponent{NumType}(the_mean, the_cov, weight)
 end
 
+
 @doc """
 The convolution of a one galaxy component with one PSF component.
 
@@ -421,6 +423,55 @@ function eval_bvn_pdf{NumType <: Number}(
     c_ytpy = -0.5 * (y1 * py1 + y2 * py2)
     f_denorm = exp(c_ytpy)
     py1, py2, bmc.z * f_denorm
+end
+
+
+@doc """
+A type containing all the information that needs to be communicated
+to worker nodes at each iteration.  This currently consists of pre-computed
+information about each source.
+
+Attributes:
+  vp: The VariationalParams for the ModelParams object
+  star_mcs_vec: A vector of star BVN components, one for each band
+  gal_mcs_vec: A vector of galaxy BVN components, one for each band
+  sbs_vec: A vector of brightness vectors, one for each band
+""" ->
+type ParameterMessage{NumType <: Number}
+  vp::VariationalParams{NumType}
+  star_mcs_vec::Vector{Array{BvnComponent{NumType},2}}
+  gal_mcs_vec::Vector{Array{GalaxyCacheComponent{NumType},4}}
+  sbs_vec::Vector{Vector{SourceBrightness{NumType}}}
+end
+
+@doc """
+This allocates memory for but does not initialize the source parameters.
+""" ->
+ParameterMessage{NumType <: Number}(mp::ModelParams{NumType}) = begin
+  num_bands = size(mp.patches)[2]
+  star_mcs_vec = Array(Array{BvnComponent{NumType},2}, num_bands)
+  gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType},4}, num_bands)
+  sbs_vec = Array(Vector{SourceBrightness{NumType}}, num_bands)
+  ParameterMessage(mp.vp, star_mcs_vec, gal_mcs_vec, sbs_vec)
+end
+
+
+@doc """
+Update a ParameterMessage in place using mp.
+
+Args:
+  - mp: A ModelParams object
+  - param_msg: A ParameterMessage that is updated using the parameter values
+               in mp.
+""" ->
+function update_parameter_message!{NumType <: Number}(
+    mp::ModelParams{NumType}, param_msg::ParameterMessage{NumType})
+  for b=1:5
+    param_msg.star_mcs_vec[b], param_msg.gal_mcs_vec[b] =
+      load_bvn_mixtures(mp, b);
+    param_msg.sbs_vec[b] = SourceBrightness{Float64}[
+      SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+  end
 end
 
 
@@ -798,7 +849,7 @@ function tile_predicted_image{NumType <: Number}(
             iota = expected_pixel_brightness!(
               h, w, sbs, star_mcs, gal_mcs, tile, E_G, var_G,
               mp, tile_sources, fs0m, fs1m)
-            predicted_pixels[w, h] = E_G.v * iota
+            predicted_pixels[h, w] = E_G.v * iota
         end
     end
 
@@ -831,6 +882,32 @@ end
 
 
 @doc """
+Evaluate the ELBO with pre-computed brightnesses and components
+stored in ParameterMessage.
+""" ->
+function elbo_likelihood!{NumType <: Number}(
+    tiled_blob::TiledBlob,
+    param_msg::ParameterMessage{NumType}, mp::ModelParams{NumType},
+    accum::SensitiveFloat{CanonicalParams, NumType})
+
+  clear!(accum)
+  mp.vp = param_msg.vp
+  for b in 1:5
+    sbs = param_msg.sbs_vec[b]
+    star_mcs = param_msg.star_mcs_vec[b]
+    gal_mcs = param_msg.gal_mcs_vec[b]
+    for tile in tiled_blob[b][:]
+      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+      tile_likelihood!(
+        tile, tile_sources, mp,
+        sbs, star_mcs, gal_mcs,
+        accum);
+    end
+  end
+end
+
+
+@doc """
 Add the expected log likelihood ELBO term for an image to accum.
 
 Args:
@@ -841,41 +918,16 @@ Args:
 """ ->
 function elbo_likelihood!{NumType <: Number}(
   tiles::Array{ImageTile}, mp::ModelParams{NumType},
-  b::Int64, accum::SensitiveFloat{CanonicalParams, NumType};
-  parallel=false)
+  b::Int64, accum::SensitiveFloat{CanonicalParams, NumType})
 
-    star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
-    sbs = SourceBrightness{NumType}[ SourceBrightness(mp.vp[s]) for s in 1:mp.S]
+  star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
+  sbs = SourceBrightness{NumType}[ SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-    if parallel
-      # This is currently very inefficient due to the memory allocation
-      # required for the reduce.
-
-      function get_tile_sf(tile::ImageTile)
-        # TODO: Only pass a snesitive float as big as the tile's local sources.
-        tile_accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
-        tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-        tile_likelihood!(
-          tile, tile_sources, mp, sbs, star_mcs, gal_mcs, tile_accum)
-        tile_accum
-      end
-
-      accum_par = @parallel (+) for tile in tiles
-        get_tile_sf(tile)
-      end
-
-      # TODO: why doesn't @parallel update something in place?
-      accum.v += accum_par.v
-      accum.d += accum_par.d
-      accum.h += accum_par.h
-
-    else
-      for tile in tiles
-        tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-        tile_likelihood!(
-          tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
-      end
-    end
+  for tile in tiles
+    tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+    tile_likelihood!(
+      tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
+  end
 end
 
 

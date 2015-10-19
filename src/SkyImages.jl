@@ -58,7 +58,7 @@ function convert_catalog_to_celeste(
             psf_col = symbol("psfflux_$bl")
 
             # TODO: How can there be negative fluxes?
-            star_fluxes[b] = max(row[1, psf_col], 0.0)
+            star_fluxes[b] = max(row[1, psf_col], 1e-6)
 
             dev_col = symbol("devflux_$bl")
             exp_col = symbol("expflux_$bl")

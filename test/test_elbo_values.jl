@@ -34,7 +34,8 @@ function test_kl_divergence_values()
 
     function test_kl(q_dist, p_dist, subtract_kl_fun!)
         q_samples = rand(q_dist, sample_size)
-        empirical_kl_samples = logpdf(q_dist, q_samples) - logpdf(p_dist, q_samples)
+        empirical_kl_samples =
+          logpdf(q_dist, q_samples) - logpdf(p_dist, q_samples)
         empirical_kl = mean(empirical_kl_samples)
         accum = zero_sensitive_float(CanonicalParams)
         subtract_kl_fun!(accum)
@@ -332,6 +333,29 @@ function test_elbo_with_nan()
     @test_approx_eq_eps deriv_rel_err fill(0., length(mp.vp[1])) 0.05
 end
 
+
+function test_elbo_likelihood_flavors()
+  # Test that the different argument combinations ot elbo_likelihood give the
+  # same answer.
+  blob, mp, body, tiled_blob = gen_sample_star_dataset(perturb=false);
+  original_accum = ElboDeriv.elbo_likelihood(tiled_blob, mp);
+
+  param_msg = ElboDeriv.ParameterMessage(mp);
+  ElboDeriv.update_parameter_message!(mp, param_msg);
+
+  accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
+  for b = 1:5
+    ElboDeriv.elbo_likelihood!(tiled_blob[b], mp, b, accum)
+  end
+  @test_approx_eq_eps(accum.v, original_accum.v, 1e-16)
+  @test_approx_eq_eps(accum.d, original_accum.d, 1e-16)
+
+  clear!(accum);
+  ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum);
+  @test_approx_eq_eps(accum.v, original_accum.v, 1e-16)
+  @test_approx_eq_eps(accum.d, original_accum.d, 1e-16)
+end
+
 ####################################################
 
 test_kl_divergence_values()
@@ -341,3 +365,4 @@ test_that_galaxy_truth_is_most_likely()
 test_coadd_cat_init_is_most_likely()
 test_tiny_image_tiling()
 test_elbo_with_nan()
+test_elbo_likelihood_flavors()

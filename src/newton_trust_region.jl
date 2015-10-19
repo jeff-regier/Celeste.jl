@@ -264,6 +264,8 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
                        xtol::Real = 1e-32,
                        ftol::Real = 1e-8,
                        grtol::Real = 1e-8,
+                       rho_lower::Real = 0.25,
+                       rho_upper::Real = 0.75,
                        iterations::Integer = 1_000,
                        store_trace::Bool = false,
                        show_trace::Bool = false,
@@ -272,6 +274,8 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
     @assert(delta_hat > 0, "delta_hat must be strictly positive")
     @assert(0 < initial_delta < delta_hat, "delta must be in (0, delta_hat)")
     @assert(0 <= eta < 0.25, "eta must be in [0, 0.25)")
+    @assert(rho_lower < rho_upper, "must have rho_lower < rho_upper")
+    @assert(rho_lower >= 0.)
 
     # Maintain current state in x and previous state in x_previous
     x, x_previous = copy(initial_x), copy(initial_x)
@@ -353,11 +357,15 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
                 "(diff = $(f_x - f_x_previous)), and m = $m")
         verbose_println("Interior = $interior, delta = $delta.")
 
-        if rho < 0.25
+        if rho < rho_lower
+            verbose_println("Shrinking trust region.")
             delta *= 0.25
-        elseif (rho > 0.75) && (!interior)
+        elseif (rho > rho_upper) && (!interior)
+            verbose_println("Growing trust region.")
             delta = min(2 * delta, delta_hat)
-        # else leave delta unchanged.
+        else
+          # else leave delta unchanged.
+          verbose_println("Keeping trust region the same.")
         end
 
         if rho > eta
