@@ -157,15 +157,17 @@ function elbo_hessian(tiled_blob::TiledBlob,
       # Get the hessian entries (s1, index1), (s2, index2)
       for s1 in tile_sources, index1=1:length(CanonicalParams)
         # Get the derivative of the gradient wrt (s1, index1)
-        verbose && println(s1, " ", index1)
         @assert DualNumbers.epsilon(mp.vp[s1][index1]) == 0.0
         mp.vp[s1][index1] = Dual(DualNumbers.real(mp.vp[s1][index1]), 1.0)
         clear!(accum)
         tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum);
         for s2 in tile_sources, index2=1:length(CanonicalParams)
-          push!(hess_i, (s1, index1))
-          push!(hess_j, (s2, index2))
-          push!(hess_val, DualNumbers.epsilon(accum.d[index2, s2]))
+          this_hess_val = DualNumbers.epsilon(accum.d[index2, s2])
+          if (abs(this_hess_val) > 1e-16)
+            push!(hess_i, (s1, index1))
+            push!(hess_j, (s2, index2))
+            push!(hess_val, this_hess_val)
+          end
         end
         mp.vp[s1][index1] = Dual(DualNumbers.real(mp.vp[s1][index1]), 0.0)
       end
@@ -173,10 +175,22 @@ function elbo_hessian(tiled_blob::TiledBlob,
   end
   hess_i, hess_j, hess_val
 end
+
+new_hess_time = time()
 hess_i, hess_j, hess_val = elbo_hessian(tiled_blob, param_msg_dual, mp_dual);
+new_hess_time - time() - new_hess_time
 
+omitted_ids = Int64[]
+kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
+x0 = transform.vp_to_vector(mp.vp, omitted_ids);
 
+obj_wrapper = OptimizeElbo.ObjectiveWrapperFunctions(
+  mp -> ElboDeriv.elbo(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
+obj_wrapper.state.verbose = true
 
+obj_hess_time = time()
+obj_hess = obj_wrapper.f_ad_hessian(x0);
+obj_hess_time = time() - obj_hess_time
 
 ##############
 # Get a BFGS fit
