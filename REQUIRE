@@ -1,10 +1,11 @@
-Compat
+Compat 0 0.7.5
 DataFrames
 Distributions
 Docile
 DualNumbers
 FITSIO
 ForwardDiff 0.0.3 0.1
+JLD
 NLopt
 Optim
 GaussianMixtures

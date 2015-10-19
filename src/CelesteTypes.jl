@@ -557,7 +557,7 @@ end
 Display a Celeste catalog entry.
 """ ->
 function print_cat_entry(cat_entry::CatalogEntry)
-    [println("$name: $(cat_entry.(name))") for name in 
+    [println("$name: $(cat_entry.(name))") for name in
             fieldnames(cat_entry)]
 end
 
@@ -628,6 +628,5 @@ function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
 
   sf3
 end
-
 
 end
