@@ -110,7 +110,7 @@ end
 
 # Look at overlapping objects
 for b=1:5
-  lengths = Int64[ length(s) for s in mp_original_all.tile_sources[b] ]
+  lengths = Int64[ length(s) for s in mp_original.tile_sources[b] ]
   println(hcat(unique(lengths), counts(lengths)))
 end
 
@@ -127,12 +127,14 @@ param_msg_dual = ElboDeriv.ParameterMessage(mp_dual);
 ElboDeriv.update_parameter_message!(mp_dual, param_msg_dual);
 
 using ElboDeriv.ParameterMessage
+using ElboDeriv.tile_likelihood!
+
 @doc """
 Use forward auto-differentiation to compute the Hessian.
 """ ->
-function elbo_hessian!(tiled_blob::TiledBlob,
+function elbo_hessian(tiled_blob::TiledBlob,
     param_msg::ParameterMessage{Dual{Float64}},
-    mp::ModelParams{Dual{Float64}})
+    mp::ModelParams{Dual{Float64}}; verbose=true)
 
   # Vectors of the row, column, and value of the Hessian entries.
   # The indices are tuples of (source, parameter) which will be
@@ -142,17 +144,20 @@ function elbo_hessian!(tiled_blob::TiledBlob,
   hess_val = Float64[]
 
   mp.vp = param_msg.vp
-  accum = zero_sensitive_float(CanonicalParams, Dual(Float64), mp.S)
+  accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp.S)
   for b in 1:5
     sbs = param_msg.sbs_vec[b]
     star_mcs = param_msg.star_mcs_vec[b]
     gal_mcs = param_msg.gal_mcs_vec[b]
     for tile in tiled_blob[b][:]
+      verbose && println("Tile .... ")
       tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
 
+      verbose && println(tile_sources)
       # Get the hessian entries (s1, index1), (s2, index2)
       for s1 in tile_sources, index1=1:length(CanonicalParams)
         # Get the derivative of the gradient wrt (s1, index1)
+        verbose && println(s1, " ", index1)
         @assert DualNumbers.epsilon(mp.vp[s1][index1]) == 0.0
         mp.vp[s1][index1] = Dual(DualNumbers.real(mp.vp[s1][index1]), 1.0)
         clear!(accum)
@@ -168,7 +173,7 @@ function elbo_hessian!(tiled_blob::TiledBlob,
   end
   hess_i, hess_j, hess_val
 end
-hess_i, hess_j, hess_val = ElboDeriv.elbo_hessian!(tiled_blob, param_msg_dual, mp_dual);
+hess_i, hess_j, hess_val = elbo_hessian(tiled_blob, param_msg_dual, mp_dual);
 
 
 
