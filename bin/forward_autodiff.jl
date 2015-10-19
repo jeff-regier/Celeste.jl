@@ -186,17 +186,17 @@ for s1=1:mp.S
     elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
     accum_trans = transform.transform_sensitive_float(accum, mp_dual);
     @assert size(accum_trans.d) == (k, mp.S)
+    x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 0.)
 
     # Record the hessian terms.
     for s2=1:mp.S, index2=1:k
       this_hess_val = DualNumbers.epsilon(accum_trans.d[index2, s2])
-      if (abs(this_hess_val) > 1e-16)
+      #if (abs(this_hess_val) > 0)
         push!(hess_i, (s1, index1))
         push!(hess_j, (s2, index2))
         push!(hess_val, this_hess_val)
-      end
+      #end
     end
-    x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 0.)
   end
   println("Done with source $s1.")
 end
@@ -233,6 +233,9 @@ obj_wrapper.state.verbose = true
 obj_hess_time = time()
 obj_hess = obj_wrapper.f_ad_hessian(x0);
 obj_hess_time = time() - obj_hess_time
+
+plot(obj_hess[:], new_hess[:], "k.")
+
 
 ##############
 # Get a BFGS fit
