@@ -128,53 +128,79 @@ ElboDeriv.update_parameter_message!(mp_dual, param_msg_dual);
 
 using ElboDeriv.ParameterMessage
 using ElboDeriv.tile_likelihood!
+using ElboDeriv.load_bvn_mixtures
+using ElboDeriv.SourceBrightness
 
 @doc """
 Use forward auto-differentiation to compute the Hessian.
 """ ->
-function elbo_hessian(tiled_blob::TiledBlob,
-    param_msg::ParameterMessage{Dual{Float64}},
-    mp::ModelParams{Dual{Float64}}; verbose=true)
+function elbo_hessian_term!(tiled_blob::TiledBlob,
+                            mp_dual::ModelParams{Dual{Float64}},
+                            accum::SensitiveFloat{CanonicalParams, Dual{Float64}},
+                            deriv_source::Int64; verbose=true)
 
-  # Vectors of the row, column, and value of the Hessian entries.
-  # The indices are tuples of (source, parameter) which will be
-  # linearized later.
-  hess_i = (Int64, Int64)[]
-  hess_j = (Int64, Int64)[]
-  hess_val = Float64[]
-
-  mp.vp = param_msg.vp
-  accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp.S)
+  # For now let's just re-calculate these each time.  It's not the
+  # bulk of the computation.
+  clear!(accum)
   for b in 1:5
-    sbs = param_msg.sbs_vec[b]
-    star_mcs = param_msg.star_mcs_vec[b]
-    gal_mcs = param_msg.gal_mcs_vec[b]
+    star_mcs, gal_mcs = load_bvn_mixtures(mp_dual, b)
+    sbs = SourceBrightness{Dual{Float64}}[
+      SourceBrightness(mp_dual.vp[s]) for s in 1:mp.S]
     for tile in tiled_blob[b][:]
-      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-      verbose && println("Tile $(tile.hh), $(tile.ww) with $(length(tile_sources)) sources.")
-      # Get the hessian entries (s1, index1), (s2, index2)
-      for s1 in tile_sources, index1=1:length(CanonicalParams)
-        # Get the derivative of the gradient wrt (s1, index1)
-        @assert DualNumbers.epsilon(mp.vp[s1][index1]) == 0.0
-        mp.vp[s1][index1] = Dual(DualNumbers.real(mp.vp[s1][index1]), 1.0)
-        clear!(accum)
-        # The bsbs and everything must of course also be calculated, so this is
-        # wrong.  Also you need the hessian wrt the transform as well.
-        tile_likelihood!(tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum);
-        for s2 in tile_sources, index2=1:length(CanonicalParams)
-          this_hess_val = DualNumbers.epsilon(accum.d[index2, s2])
-          if (abs(this_hess_val) > 1e-16)
-            push!(hess_i, (s1, index1))
-            push!(hess_j, (s2, index2))
-            push!(hess_val, this_hess_val)
-          end
-        end
-        mp.vp[s1][index1] = Dual(DualNumbers.real(mp.vp[s1][index1]), 0.0)
+      tile_sources = mp_dual.tile_sources[b][tile.hh, tile.ww]
+      if in(deriv_source, tile_sources)
+        tile_likelihood!(tile, tile_sources, mp_dual, sbs, star_mcs, gal_mcs, accum);
       end
     end
   end
-  hess_i, hess_j, hess_val
+  accum
 end
+
+# TODO: this will be a local x built on a local transform.
+x = transform.vp_to_vector(mp.vp, omitted_ids)
+x_dual = Dual{Float64}[ Dual{Float64}(x[i], 0.) for i = 1:length(x) ];
+
+k = int(length(x) / mp.S)
+@assert length(x) == k * mp.S
+x_dual_mat = reshape(x_dual, k, mp.S)
+@assert x_dual_mat[:,1] == x[1:k]
+
+# Vectors of the row, column, and value of the Hessian entries.
+# The indices are tuples of (source, parameter) which will be
+# linearized later.
+hess_i = (Int64, Int64)[]
+hess_j = (Int64, Int64)[]
+hess_val = Float64[]
+
+accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp.S)
+
+for s1=1:mp.S
+  println("Source $s1")
+  for index1=1:k
+    print(".")
+    original_val = real(x_dual_mat[index1, s1])
+    @assert epsilon(x_dual_mat[index1, s1]) == 0.
+    x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 1.)
+    transform.vector_to_vp!(x_dual_mat[:], mp_dual.vp, omitted_ids);
+    elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
+
+    # Record the hessian terms.
+    for s2 in 1:mp.S, index2=1:length(CanonicalParams)
+      this_hess_val = DualNumbers.epsilon(accum.d[index2, s2])
+      if (abs(this_hess_val) > 1e-16)
+        push!(hess_i, (s1, index1))
+        push!(hess_j, (s2, index2))
+        push!(hess_val, this_hess_val)
+      end
+    end
+    x_dual_mat[index1, s1] = DualNumbers.Dual(original_val, 0.)
+  end
+  println("Done with source $s1.")
+end
+
+
+
+
 
 new_hess_time = time()
 hess_i, hess_j, hess_val = elbo_hessian(tiled_blob, param_msg_dual, mp_dual);
