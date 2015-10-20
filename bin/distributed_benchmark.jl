@@ -67,22 +67,17 @@ end
 
 # Evaluate the Hessian.
 @everywhereelse begin
-  hess_i, hess_j, hess_val, new_hess_time =
-    OptimizeElbo.elbo_hessian(tiled_blob, x, mp_dual, transform,
-                              omitted_ids, verbose=true,
-                              deriv_sources=worker_sources);
-  new_hess_sparse =
-    OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+  @time eval_worker_hessian()
 end
 
-hess_i, hess_j, hess_val, new_hess_time =
-  OptimizeElbo.elbo_hessian(tiled_blob, x, mp_dual, transform,
-                            omitted_ids, verbose=true,
-                            deriv_sources=worker_sources);
-new_hess_sparse =
-  OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+# locally
+@time eval_worker_hessian()
 
 @everywhere println(new_hess_time / length(worker_sources))
+
+# Check that the two Hessians are the same.
+new_hess_sparse =
+  OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
 
 workers_hess =
   [ remotecall_fetch(w, () -> (hess_i, hess_j, hess_val)) for w in workers()];
