@@ -239,7 +239,7 @@ function choose_patch_radius(
 
     # Choose enough pixels that the light is either 90% of the light
     # would be captured from a 1d gaussian or 5% of the sky noise,
-    # whichever is a wider radius.
+    # whichever is a larger radius.
     pdf_90 = exp(-0.5 * (1.64)^2) / (sqrt(2pi) * obj_width)
     pdf_target = min(pdf_90, epsilon / (20 * flux))
     rhs = log(pdf_target) + 0.5 * log(2pi) + log(obj_width)
@@ -282,11 +282,12 @@ Args:
   - ce: The catalog entry for the object.
   - img: An Image object.
   - fit_psf: Whether to fit the psf at this location.
+  - scale_patch_size: A hack.  Scale the catalog-chosen patch size.
 
 Returns:
   A SkyPatch object with a radius chosen based on the catalog.
 """ ->
-SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true) = begin
+SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true, scale_patch_size=1.0) = begin
     world_center = ce.pos
     if fit_psf
       psf = SkyImages.get_source_psf(world_center, img)
@@ -300,7 +301,8 @@ SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true) = begin
     pix_radius = choose_patch_radius(pixel_center, ce, psf, img)
     sky_radius = SkyImages.pixel_radius_to_world(pix_radius, wcs_jacobian)
 
-    SkyPatch(world_center, sky_radius, psf, wcs_jacobian, pixel_center)
+    SkyPatch(world_center, scale_patch_size * sky_radius,
+             psf, wcs_jacobian, pixel_center)
 end
 
 
@@ -369,7 +371,8 @@ Args:
 """ ->
 function initialize_model_params(
     tiled_blob::TiledBlob, blob::Blob, cat::Vector{CatalogEntry};
-    fit_psf::Bool=true, patch_radius::Float64=-1., radius_from_cat::Bool=true)
+    fit_psf::Bool=true, patch_radius::Float64=-1., radius_from_cat::Bool=true,
+    scale_patch_size::Float64=1.0)
 
   @assert length(tiled_blob) == length(blob)
   @assert(length(cat) > 0,
@@ -391,8 +394,10 @@ function initialize_model_params(
 
   for b = 1:length(blob)
     for s=1:mp.S
-      patch_args = radius_from_cat ? (cat[s],) : (mp.vp[s][ids.u], patch_radius)
-      mp.patches[s, b] = SkyPatch(patch_args..., blob[b], fit_psf=fit_psf)
+      mp.patches[s, b] = radius_from_cat ?
+        SkyPatch(cat[s], blob[b], fit_psf=fit_psf,
+                 scale_patch_size=scale_patch_size):
+        SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
     end
     mp.tile_sources[b] =
       get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
