@@ -171,7 +171,30 @@ function eval_worker_likelihood()
   println("Worker ", myid(), " is starting the likelihood evaluation.")
   elbo_time = time()
   ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum)
+  subtract_kl!(mp, accum)
   elbo_time = time() - elbo_time
   println("Worker ", myid(), " is done in $(elbo_time)s.")
   elbo_time
+end
+
+
+
+function eval_worker_hessian()
+  # TODO: this will be a local x built on a local transform.
+  omitted_ids = Int64[]
+
+  x = transform.vp_to_array(mp.vp, omitted_ids);
+  k = size(x)[1]
+  @assert length(x) == k * mp.S
+
+  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
+  @time hess_i, hess_j, hess_val, new_hess_time =
+    OptimizeElbo.elbo_hessian(tiled_blob, x, mp_dual, transform,
+                              omitted_ids, verbose=true);
+
+  @time ElboDeriv.elbo(tiled_blob, mp);
+  x = transform.vp_to_array(mp.vp, omitted_ids);
+  new_hess_sparse = unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+  new_hess = full(new_hess_sparse);
+
 end

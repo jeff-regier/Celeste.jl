@@ -240,7 +240,8 @@ end
 
 function unpack_hessian_vals(hess_i::Vector{Tuple{Int64, Int64}},
                              hess_j::Vector{Tuple{Int64, Int64}},
-                             hess_val::Vector{Float64}, dims::Tuple{Int64, Int64})
+                             hess_val::Vector{Float64},
+                             dims::Tuple{Int64, Int64})
   # TODO: make this function part of the transform.
   hess_i_vec = Array(Int64, length(hess_i));
   hess_j_vec = Array(Int64, length(hess_j));
@@ -248,8 +249,8 @@ function unpack_hessian_vals(hess_i::Vector{Tuple{Int64, Int64}},
     hess_i_vec[entry] = sub2ind(dims, hess_i[entry][2], hess_i[entry][1])
     hess_j_vec[entry] = sub2ind(dims, hess_j[entry][2], hess_j[entry][1])
   end
-  new_hess_sparse = sparse(hess_i_vec, hess_j_vec, hess_val, length(x), length(x));
-  maximum(new_hess_sparse - new_hess_sparse')
+  new_hess_sparse =
+    sparse(hess_i_vec, hess_j_vec, hess_val, prod(dims), prod(dims));
   new_hess = 0.5 * full(new_hess_sparse + new_hess_sparse')
 end
 
@@ -300,6 +301,7 @@ Args:
   - xtol_rel: X convergence
   - ftol_abs: F convergence
   - verbose: Print detailed output
+  - elbo_hessian: Use a more efficient autodiff function for the ELBO hessian.
 
 Returns:
   - iter_count: The number of iterations taken
@@ -311,7 +313,7 @@ function maximize_f_newton(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::Transform.DataTransform;
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  max_iters=100, rho_lower=0.25)
+  max_iters=100, rho_lower=0.25, elbo_hessian=false)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
@@ -328,7 +330,6 @@ function maximize_f_newton(
     end
 
     x0 = transform.vp_to_array(mp.vp, omitted_ids);
-
     d = Optim.TwiceDifferentiableFunction(
       optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_wrapper!)
 

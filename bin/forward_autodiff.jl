@@ -25,7 +25,7 @@ star_ids = union(ids_free.c1[:,1],
                  ids_free.r2[1],
                  ids_free.k[:,1]);
 
-simulation = true
+simulation = false
 if simulation
     #blob, mp_original, body, tiled_blob = gen_sample_star_dataset(perturb=true);
 
@@ -127,7 +127,7 @@ elbo_val = ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum);
 omitted_ids = Int64[]
 
 x = transform.vp_to_array(mp.vp, omitted_ids);
-k = round(Int64, length(x) / mp.S)
+k = size(x)[1]
 @assert length(x) == k * mp.S
 
 mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
@@ -139,6 +139,13 @@ mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
 x = transform.vp_to_array(mp.vp, omitted_ids);
 new_hess_sparse = unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
 new_hess = full(new_hess_sparse);
+
+
+
+
+
+
+
 
 ###############################
 # Compare with the old method.
