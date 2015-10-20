@@ -234,7 +234,7 @@ function maximize_f_newton(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::Transform.DataTransform;
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  hess_reg=0.0, max_iters=100, rho_lower=0.25)
+  max_iters=100, rho_lower=0.25)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
@@ -245,31 +245,19 @@ function maximize_f_newton(
     optim_obj_wrap.state.scale = -1.0
     optim_obj_wrap.state.verbose = verbose
 
-    function f_hess_reg!(x, new_hess)
-        hess = optim_obj_wrap.f_ad_hessian(x)
-        hess_ev = eig(hess)[1]
-        min_ev = minimum(hess_ev)
-        max_ev = maximum(hess_ev)
-
-        # Make it positive definite.
-        if min_ev < 0
-            verbose && println("Hessian is not positive definite with ",
-                               "eigenvalues: (min $(min_ev), max $(max_ev)).  ",
-                               "Regularizing with $(hess_reg).")
-            hess += eye(length(x)) * abs(min_ev) * hess_reg
-        end
-
-        new_hess[:,:] = hess
+    function f_hess_wrapper!(x, new_hess)
+      hess = optim_obj_wrap.f_ad_hessian(x)
+      new_hess[:,:] = hess
     end
 
-    x0 = transform.vp_to_array(mp.vp, omitted_ids)[:];
+    x0 = transform.vp_to_array(mp.vp, omitted_ids);
 
     d = Optim.TwiceDifferentiableFunction(
-      optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!)
+      optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_wrapper!)
 
     # TODO: use the Optim version after newton_tr is merged.
     nm_result = newton_tr(d,
-                          x0,
+                          x0[:],
                           xtol = xtol_rel,
                           ftol = ftol_abs,
                           grtol = 1e-8,
@@ -282,7 +270,8 @@ function maximize_f_newton(
                           rho_lower = rho_lower)
 
     iter_count = optim_obj_wrap.state.f_evals
-    transform.array_to_vp!(nm_result.minimum, mp.vp, omitted_ids);
+    transform.array_to_vp!(reshape(nm_result.minimum, size(x0)),
+                           mp.vp, omitted_ids);
     max_f = -1.0 * nm_result.f_minimum
     max_x = nm_result.minimum
 
