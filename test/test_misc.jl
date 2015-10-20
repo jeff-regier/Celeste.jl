@@ -318,7 +318,7 @@ function test_convert_dual_mp()
   end
 
   # Test the remaining fields.
-  for field_name in setdiff(names(mp), [:vp])
+  for field_name in setdiff(fieldnames(mp), [:vp])
     @test mp_dual.(field_name) == mp.(field_name)
   end
 end

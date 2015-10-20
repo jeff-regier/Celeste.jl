@@ -247,8 +247,7 @@ function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
   iter_count, max_f, max_x, ret =
     OptimizeElbo.maximize_f_newton(
       ElboDeriv.elbo, tiled_blob, mp_optim, transform,
-      omitted_ids=omitted_ids, verbose=true, max_iters=max_iters,
-      hess_reg=0.0)
+      omitted_ids=omitted_ids, verbose=true, max_iters=max_iters)
   mp_optim, iter_count, max_f, ret
 end
 
