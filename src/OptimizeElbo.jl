@@ -239,7 +239,7 @@ end
 
 
 function unpack_hessian_vals(hess_i::@compat(Vector{Tuple{Int64, Int64}}),
-                             hess_j::Vector{Tuple{Int64, Int64}},
+                             hess_j::@compat(Vector{Tuple{Int64, Int64}}),
                              hess_val::Vector{Float64},
                              dims::@compat(Tuple{Int64, Int64}))
   # TODO: make this function part of the transform.
