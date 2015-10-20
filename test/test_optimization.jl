@@ -68,32 +68,32 @@ function test_objective_wrapper()
 
     # Tese the print function
     wrapper.state.verbose = true
-    wrapper.f_objective(x);
+    wrapper.f_objective(x[:]);
     wrapper.state.verbose = false
 
-    w_v, w_grad = wrapper.f_value_grad(x);
+    w_v, w_grad = wrapper.f_value_grad(x[:]);
     w_grad2 = zeros(Float64, length(x));
-    wrapper.f_value_grad!(x, w_grad2);
+    wrapper.f_value_grad!(x[:], w_grad2);
 
     @test_approx_eq(w_v, elbo_result.v)
     @test_approx_eq(w_grad, elbo_grad)
     @test_approx_eq(w_grad, w_grad2)
 
-    @test_approx_eq(w_v, wrapper.f_value(x))
-    @test_approx_eq(w_grad, wrapper.f_grad(x))
+    @test_approx_eq(w_v, wrapper.f_value(x[:]))
+    @test_approx_eq(w_grad, wrapper.f_grad(x[:]))
 
     this_iter = wrapper.state.f_evals;
-    wrapper.f_value(x);
+    wrapper.f_value(x[:]);
     @test wrapper.state.f_evals == this_iter + 1
 
     # Test that the autodiff derivatives match the actual derivatives.
     println("Testing autodiff gradient...")
-    w_ad_grad = wrapper.f_ad_grad(x);
+    w_ad_grad = wrapper.f_ad_grad(x[:]);
     @test_approx_eq(w_grad, w_ad_grad)
 
     # Just test that the Hessian can be computed and is symmetric.
     println("Testing autodiff Hessian...")
-    w_hess = wrapper.f_ad_hessian(x);
+    w_hess = wrapper.f_ad_hessian(x[:]);
     @test issym(w_hess)
 end
 

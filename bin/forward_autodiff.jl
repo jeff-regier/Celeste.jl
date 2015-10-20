@@ -197,11 +197,11 @@ end
   elbo_hessian(tiled_blob, mp, transform, verbose=true);
 
 @time ElboDeriv.elbo(tiled_blob, mp);
+x = transform.vp_to_array(mp.vp, omitted_ids);
 new_hess_sparse = unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
-new_hess = full(new_hess);
+new_hess = full(new_hess_sparse);
 
 # Compare with the old method.
-omitted_ids = Int64[]
 kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
 x0 = transform.vp_to_array(mp.vp, omitted_ids);
 
