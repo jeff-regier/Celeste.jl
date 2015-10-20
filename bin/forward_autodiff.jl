@@ -180,24 +180,25 @@ function elbo_hessian(tiled_blob::TiledBlob, mp::ModelParams{Float64},
   hess_i, hess_j, hess_val, new_hess_time
 end
 
-
-hess_i, hess_j, hess_val, new_hess_time =
-  elbo_hessian(tiled_blob, mp, transform, verbose=true);
-
-
-
 function unpack_hessian_vals(hess_i, hess_j, hess_val, dims)
   # TODO: make this function part of the transform.
   hess_i_vec = Array(Int64, length(hess_i));
   hess_j_vec = Array(Int64, length(hess_j));
   for entry in 1:length(hess_i)
-    hess_i_vec[entry] = sub2ind(dims, hess_i[entry][1], hess_i[entry][2])
-    hess_j_vec[entry] = sub2ind(dims, hess_j[entry][1], hess_j[entry][2])
+    hess_i_vec[entry] = sub2ind(dims, hess_i[entry][2], hess_i[entry][1])
+    hess_j_vec[entry] = sub2ind(dims, hess_j[entry][2], hess_j[entry][1])
   end
   new_hess_sparse = sparse(hess_i_vec, hess_j_vec, hess_val, length(x), length(x));
   maximum(new_hess_sparse - new_hess_sparse')
   new_hess = 0.5 * full(new_hess_sparse + new_hess_sparse')
 end
+
+@time hess_i, hess_j, hess_val, new_hess_time =
+  elbo_hessian(tiled_blob, mp, transform, verbose=true);
+
+@time ElboDeriv.elbo(tiled_blob, mp);
+new_hess_sparse = unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+new_hess = full(new_hess);
 
 # Compare with the old method.
 omitted_ids = Int64[]
