@@ -15,6 +15,10 @@ import ForwardDiff
 import DualNumbers
 import Optim
 
+using DualNumbers.Dual
+using DualNumbers.epsilon
+using DualNumbers.real
+
 export ObjectiveWrapperFunctions, WrapperState
 
 #TODO: use Lumberjack.jl for logging
@@ -177,6 +181,7 @@ type ObjectiveWrapperFunctions
     end
 end
 
+
 @doc """
 Vectors of the row, column, and value of the Hessian entries.
 The indices are tuples of (source, parameter) which will be
@@ -185,8 +190,9 @@ linearized later.
 function elbo_hessian(tiled_blob::TiledBlob,
                       x::Matrix{Float64},
                       mp_dual::ModelParams{DualNumbers.Dual{Float64}},
-                      transform::Transform.DataTransform;
-                      deriv_sources=1:mp.S,
+                      transform::Transform.DataTransform,
+                      omitted_ids::Vector{Int64};
+                      deriv_sources=1:mp_dual.S,
                       verbose=false)
   k = size(x)[1]
   @assert size(x)[2] == length(mp_dual.vp)
@@ -210,7 +216,7 @@ function elbo_hessian(tiled_blob::TiledBlob,
       transform.array_to_vp!(x_dual, mp_dual.vp, omitted_ids);
       ElboDeriv.elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
       accum_trans = transform.transform_sensitive_float(accum, mp_dual);
-      @assert size(accum_trans.d) == (k, mp.S)
+      @assert size(accum_trans.d) == (k, mp_dual.S)
       x_dual[index1, s1] = DualNumbers.Dual(original_val, 0.)
 
       # Record the hessian terms.
@@ -231,7 +237,10 @@ function elbo_hessian(tiled_blob::TiledBlob,
   hess_i, hess_j, hess_val, new_hess_time
 end
 
-function unpack_hessian_vals(hess_i, hess_j, hess_val, dims)
+
+function unpack_hessian_vals(hess_i::Vector{Tuple{Int64, Int64}},
+                             hess_j::Vector{Tuple{Int64, Int64}},
+                             hess_val::Vector{Float64}, dims::Tuple{Int64, Int64})
   # TODO: make this function part of the transform.
   hess_i_vec = Array(Int64, length(hess_i));
   hess_j_vec = Array(Int64, length(hess_j));

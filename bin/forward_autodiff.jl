@@ -126,19 +126,21 @@ elbo_val = ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum);
 # TODO: this will be a local x built on a local transform.
 omitted_ids = Int64[]
 
-k = int(length(x) / mp.S)
+x = transform.vp_to_array(mp.vp, omitted_ids);
+k = round(Int64, length(x) / mp.S)
 @assert length(x) == k * mp.S
 
-x = transform.vp_to_array(mp.vp, omitted_ids);
 mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
 @time hess_i, hess_j, hess_val, new_hess_time =
-  elbo_hessian(tiled_blob, x, mp_dual, transform, verbose=true);
+  OptimizeElbo.elbo_hessian(tiled_blob, x, mp_dual, transform,
+                            omitted_ids, verbose=true);
 
 @time ElboDeriv.elbo(tiled_blob, mp);
 x = transform.vp_to_array(mp.vp, omitted_ids);
 new_hess_sparse = unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
 new_hess = full(new_hess_sparse);
 
+###############################
 # Compare with the old method.
 kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
 x0 = transform.vp_to_array(mp.vp, omitted_ids);
