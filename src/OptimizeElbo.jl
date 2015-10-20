@@ -238,10 +238,10 @@ function elbo_hessian(tiled_blob::TiledBlob,
 end
 
 
-function unpack_hessian_vals(hess_i::Vector{Tuple{Int64, Int64}},
+function unpack_hessian_vals(hess_i::@compat(Vector{Tuple{Int64, Int64}}),
                              hess_j::Vector{Tuple{Int64, Int64}},
                              hess_val::Vector{Float64},
-                             dims::Tuple{Int64, Int64})
+                             dims::@compat(Tuple{Int64, Int64}))
   # TODO: make this function part of the transform.
   hess_i_vec = Array(Int64, length(hess_i));
   hess_j_vec = Array(Int64, length(hess_j));
