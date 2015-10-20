@@ -136,13 +136,12 @@ function elbo_hessian(tiled_blob::TiledBlob, mp::ModelParams{Float64},
                       transform::Transform.DataTransform;
                       deriv_sources=1:mp.S, verbose=false)
 
-  @assert size(x)[2] == mp.S
   x = transform.vp_to_array(mp.vp, omitted_ids)
   k = size(x)[1]
   mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
 
-  hess_i = (Int64, Int64)[]
-  hess_j = (Int64, Int64)[]
+  hess_i = Tuple{Int64, Int64}[]
+  hess_j = Tuple{Int64, Int64}[]
   hess_val = Float64[]
 
   accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp_dual.S);
@@ -157,14 +156,14 @@ function elbo_hessian(tiled_blob::TiledBlob, mp::ModelParams{Float64},
       original_val = real(x_dual[index1, s1])
       @assert epsilon(x_dual[index1, s1]) == 0.
       x_dual[index1, s1] = DualNumbers.Dual(original_val, 1.)
-      transform.array_to_vp!(x_dual[:], mp_dual.vp, omitted_ids);
+      transform.array_to_vp!(x_dual, mp_dual.vp, omitted_ids);
       ElboDeriv.elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
       accum_trans = transform.transform_sensitive_float(accum, mp_dual);
       @assert size(accum_trans.d) == (k, mp.S)
       x_dual[index1, s1] = DualNumbers.Dual(original_val, 0.)
 
       # Record the hessian terms.
-      for s2=1:deriv_sources, index2=1:k
+      for s2 in deriv_sources, index2=1:k
         this_hess_val = DualNumbers.epsilon(accum_trans.d[index2, s2])
         if (this_hess_val != 0)
           push!(hess_i, (s1, index1))
@@ -184,6 +183,8 @@ end
 
 hess_i, hess_j, hess_val, new_hess_time =
   elbo_hessian(tiled_blob, mp, transform, verbose=true);
+
+
 
 function unpack_hessian_vals(hess_i, hess_j, hess_val, dims)
   # TODO: make this function part of the transform.
