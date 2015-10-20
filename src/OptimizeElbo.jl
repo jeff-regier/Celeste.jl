@@ -86,18 +86,19 @@ type ObjectiveWrapperFunctions
             end
         end
 
-        function f_objective(x_dual::Array{DualNumbers.Dual{Float64}})
+        # Takes a vector
+        function f_objective(x_dual::Vector{DualNumbers.Dual{Float64}})
             state.f_evals += 1
             # Evaluate in the constrained space and then unconstrain again.
-            transform.array_to_vp!(x_dual, mp_dual.vp, omitted_ids)
+            transform.array_to_vp!(reshape(x_dual, x_size), mp_dual.vp, omitted_ids)
             f_res = f(mp_dual)
             f_res_trans = transform.transform_sensitive_float(f_res, mp_dual)
         end
 
-        function f_objective(x::Array{Float64})
+        function f_objective(x::Vector{Float64})
             state.f_evals += 1
             # Evaluate in the constrained space and then unconstrain again.
-            transform.array_to_vp!(x, mp.vp, omitted_ids)
+            transform.array_to_vp!(reshape(x, x_size), mp.vp, omitted_ids)
             f_res = f(mp)
 
             # TODO: Add an option to print either the transformed or
@@ -108,21 +109,21 @@ type ObjectiveWrapperFunctions
             f_res_trans
         end
 
-        function f_value_grad{T <: Number}(x::Array{T, 2})
-            @assert size(x) == x_size
+        function f_value_grad{T <: Number}(x::Array{T, 1})
+            @assert length(x) == x_length
             res = f_objective(x)
-            grad = zeros(T, size(x))
+            grad = zeros(T, length(x))
             if length(grad) > 0
                 svs = [res.d[kept_ids, s] for s in 1:mp.S]
-                grad[:,:] = reduce(hcat, svs)
+                grad[:] = reduce(vcat, svs)
             end
             state.scale * res.v, state.scale .* grad
         end
 
-        # The remaining functions are scaled.
+        # The remaining functions are scaled and take matrices.
         function f_value_grad!(x, grad)
-            @assert size(x) == x_size
-            @assert size(x) == size(grad)
+            @assert length(x) == x_length
+            @assert length(x) == length(grad)
             value, grad[:,:] = f_value_grad(x)
             value
         end
@@ -146,8 +147,9 @@ type ObjectiveWrapperFunctions
         f_ad_grad = ForwardDiff.forwarddiff_gradient(
           f_value, Float64, fadtype=:dual; n=x_length);
 
-        function f_ad_hessian(x::Array{Float64})
-            @assert size(x) == x_size
+        function f_ad_hessian(x_vec::Array{Float64})
+            @assert length(x_vec) == x_length
+            x = reshape(x_vec, x_size)
             k = length(x)
             hess = zeros(Float64, k, k);
             x_dual = DualNumbers.Dual{Float64}[
@@ -158,7 +160,7 @@ type ObjectiveWrapperFunctions
                 index == 1 ? print("o"): print(".")
                 original_x = x[index, s]
                 x_dual[index, s] = DualNumbers.Dual(original_x, 1.)
-                deriv = f_grad(x_dual)
+                deriv = f_grad(x_dual[:])
                 # This goes through deriv in column-major order.
                 hess[:, index] =
                   Float64[ ForwardDiff.epsilon(x_val) for x_val in deriv ]
@@ -260,7 +262,7 @@ function maximize_f_newton(
         new_hess[:,:] = hess
     end
 
-    x0 = transform.vp_to_array(mp.vp, omitted_ids);
+    x0 = transform.vp_to_array(mp.vp, omitted_ids)[:];
 
     d = Optim.TwiceDifferentiableFunction(
       optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_reg!)
@@ -320,7 +322,7 @@ function maximize_f(
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    x0 = transform.vp_to_array(mp.vp, omitted_ids)
+    x0 = transform.vp_to_array(mp.vp, omitted_ids)[:]
 
     obj_wrapper = ObjectiveWrapperFunctions(
       mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
