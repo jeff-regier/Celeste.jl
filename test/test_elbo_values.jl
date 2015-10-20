@@ -384,7 +384,7 @@ function test_elbo_hessian_term()
     transform.array_to_vp!(x_dual, mp_dual.vp, omitted_ids);
     ElboDeriv.elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
     accum_trans = transform.transform_sensitive_float(accum, mp_dual);
-    @assert size(accum_trans.d) == (k, mp.S)
+    @assert size(accum_trans.d) == size(x)
     x_dual[index1, s1] = DualNumbers.Dual(original_val, 0.)
 
     accum_full = ElboDeriv.elbo(tiled_blob, mp_dual);
