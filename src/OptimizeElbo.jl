@@ -44,7 +44,6 @@ type ObjectiveWrapperFunctions
     f_grad!::Function
     f_ad_grad::Function
     f_ad_hessian::Function
-    f_block_diag_ad_hessian::Function
 
     state::WrapperState
     transform::DataTransform
@@ -58,6 +57,7 @@ type ObjectiveWrapperFunctions
 
         mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
         x_length = length(kept_ids) * mp.S
+        x_size = (length(kept_ids), mp.S)
 
         state = WrapperState(0, false, 10, 1.0)
         function print_status{T <: Number}(
@@ -108,22 +108,22 @@ type ObjectiveWrapperFunctions
             f_res_trans
         end
 
-        function f_value_grad{T <: Number}(x::Array{T, 1})
-            @assert length(x) == x_length
+        function f_value_grad{T <: Number}(x::Array{T, 2})
+            @assert size(x) == x_size
             res = f_objective(x)
-            grad = zeros(T, length(x))
+            grad = zeros(T, size(x))
             if length(grad) > 0
                 svs = [res.d[kept_ids, s] for s in 1:mp.S]
-                grad[:] = reduce(vcat, svs)
+                grad[:,:] = reduce(hcat, svs)
             end
             state.scale * res.v, state.scale .* grad
         end
 
         # The remaining functions are scaled.
         function f_value_grad!(x, grad)
-            @assert length(x) == x_length
-            @assert length(x) == length(grad)
-            value, grad[:] = f_value_grad(x)
+            @assert size(x) == x_size
+            @assert size(x) == size(grad)
+            value, grad[:,:] = f_value_grad(x)
             value
         end
 
@@ -139,7 +139,7 @@ type ObjectiveWrapperFunctions
         end
 
         function f_grad!(x, grad)
-            grad[:] = f_grad(x)
+            grad[:,:] = f_grad(x)
         end
 
         # Forward diff versions of the gradient and Hessian.
@@ -147,62 +147,30 @@ type ObjectiveWrapperFunctions
           f_value, Float64, fadtype=:dual; n=x_length);
 
         function f_ad_hessian(x::Array{Float64})
-            @assert length(x) == x_length
-            k = x_length
+            @assert size(x) == x_size
+            k = length(x)
             hess = zeros(Float64, k, k);
             x_dual = DualNumbers.Dual{Float64}[
-                      DualNumbers.Dual{Float64}(x[i], 0.) for i = 1:k ]
+              DualNumbers.Dual{Float64}(x[i, j], 0.) for
+              i = 1:size(x)[1], j=1:size(x)[2]];
             print("Getting Hessian ($k components): ")
-            for index in 1:k
-                print(".")
-                x_dual[index] = DualNumbers.Dual(x[index], 1.)
+            for s in 1:size(x)[2], index in 1:size(x)[1]
+                index == 1 ? print("o"): print(".")
+                original_x = x[index, s]
+                x_dual[index, s] = DualNumbers.Dual(original_x, 1.)
                 deriv = f_grad(x_dual)
+                # This goes through deriv in column-major order.
                 hess[:, index] =
                   Float64[ ForwardDiff.epsilon(x_val) for x_val in deriv ]
-                x_dual[index] = DualNumbers.Dual(x[index], 0.)
+                x_dual[index, s] = DualNumbers.Dual(original_x, 0.)
             end
             print("Done.\n")
-            # Assure that the hessian is symmetric.
-            0.5 * (hess + hess')
-        end
-
-        # Compute the hessian assuming block diagonality across
-        # celestial objects.  Assume that x is a vector of parameters
-        # that stacks the objects in order, i.e.
-        # x = (x_1, x_2, ..., x_S)
-        # and that the Hessian has the form
-        # BlockDiagonal(h_1, h_2, ..., h_S)
-        function f_block_diag_ad_hessian(x::Array{Float64})
-            k = length(kept_ids)
-            @assert length(x) == x_length == k * mp.S
-            # TODO: make this sparse
-            hess = zeros(Float64, k * mp.S, k * mp.S);
-            x_dual = DualNumbers.Dual{Float64}[
-              DualNumbers.Dual{Float64}(x[i], 0.) for i = 1:x_length ]
-            print("Getting Hessian ($k components): ")
-            for index in 1:k
-                print(".")
-                for s = 0:(mp.S - 1)
-                  source_index = index + s * k
-                  x_dual[source_index] = DualNumbers.Dual(x[source_index], 1.)
-                end
-                deriv = f_grad(x_dual)
-                for s = 0:(mp.S - 1)
-                  source_index = index + s * k
-                  source_indices = (1 + s * k):(k + s * k)
-                  hess[source_indices, source_index] =
-                    Float64[ ForwardDiff.epsilon(x_val) for
-                             x_val in deriv[source_indices] ]
-                  x_dual[source_index] = DualNumbers.Dual(x[index], 0.)
-                end
-            end
-            print("Done.\n")
-            # Assure that the hessian is symmetric.
+            # Assure that the hessian is exactly symmetric.
             0.5 * (hess + hess')
         end
 
         new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_grad!,
-            f_ad_grad, f_ad_hessian, f_block_diag_ad_hessian,
+            f_ad_grad, f_ad_hessian,
             state, transform, mp, kept_ids, omitted_ids)
     end
 end
@@ -264,7 +232,7 @@ function maximize_f_newton(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::Transform.DataTransform;
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  hess_reg=0.0, max_iters=100, block_hessian=false, rho_lower=0.25)
+  hess_reg=0.0, max_iters=100, rho_lower=0.25)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
@@ -276,8 +244,7 @@ function maximize_f_newton(
     optim_obj_wrap.state.verbose = verbose
 
     function f_hess_reg!(x, new_hess)
-        hess = block_hessian ? optim_obj_wrap.f_block_diag_ad_hessian(x):
-                               optim_obj_wrap.f_ad_hessian(x)
+        hess = optim_obj_wrap.f_ad_hessian(x)
         hess_ev = eig(hess)[1]
         min_ev = minimum(hess_ev)
         max_ev = maximum(hess_ev)

@@ -27,7 +27,7 @@ typealias ParamBounds Dict{Symbol, ParamBox}
 # Conversion to and from vectors.
 
 function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
-                                              omitted_ids::Vector{Int64})
+                                             omitted_ids::Vector{Int64})
     # vp = variational parameters
     # omitted_ids = ids in ParamIndex
     #
@@ -36,16 +36,15 @@ function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
 
     left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     new_P = length(left_ids)
-
     S = length(vp)
-    vp_new = [zeros(NumType, new_P) for s in 1:S]
+    x_new = zeros(NumType, new_P, S)
 
-    for p1 in 1:length(left_ids)
+    for p1 in 1:length(left_ids), s=1:S
         p0 = left_ids[p1]
-        [ vp_new[s][p1] = vp[s][p0] for s in 1:S ]
+        x_new[p1, s] = vp[s][p0]
     end
 
-    reduce(hcat, vp_new)
+    x_new
 end
 
 @doc """

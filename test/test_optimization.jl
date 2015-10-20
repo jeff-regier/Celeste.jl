@@ -95,14 +95,6 @@ function test_objective_wrapper()
     println("Testing autodiff Hessian...")
     w_hess = wrapper.f_ad_hessian(x);
     @test issym(w_hess)
-
-    println("Testing block diagonal autodiff Hessian...")
-    w_bdiag_hess = wrapper.f_block_diag_ad_hessian(x);
-    @test issym(w_bdiag_hess)
-
-    # TODO:  If we're going with the approximate block diagonal
-    # approach, test their similarity on more distant objects -- these
-    # two Hessians are actually quite different.
 end
 
 
