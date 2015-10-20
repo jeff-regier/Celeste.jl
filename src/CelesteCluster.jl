@@ -174,7 +174,7 @@ function eval_worker_likelihood()
   println("Worker ", myid(), " is starting the likelihood evaluation.")
   elbo_time = time()
   ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum)
-  subtract_kl!(mp, accum)
+  ElboDeriv.subtract_kl!(mp, accum)
   elbo_time = time() - elbo_time
   println("Worker ", myid(), " is done in $(elbo_time)s.")
   elbo_time
