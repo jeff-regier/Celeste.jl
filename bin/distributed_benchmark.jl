@@ -17,19 +17,25 @@ println("Loading libraries.")
   using Celeste
   include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
   frame_jld_file = "initialzed_celeste_003900-6-0269.JLD"
-  S = 10
+  S = 20
   synthetic = true
 end
 
 
 load_cluster_data();
 initialize_cluster();
+@everywhere println([ size(tiled_blob[b]) for b=1:5])
 
 @everywhere begin
   # Shrink the radii artificially.
-  scale_patch_size = 0.2
+  scale_patch_size = 0.4
+
+  # You need to use the original blob here, not the subsampled one.
+  # TODO: There should be a way to safely subset tiled blobs.
+  mp = deepcopy(original_mp)
   mp = ModelInit.initialize_model_params(
-        tiled_blob, blob, body, fit_psf=true, scale_patch_size=scale_patch_size)
+        original_tiled_blob, blob, body,
+        fit_psf=true, scale_patch_size=scale_patch_size)
 end
 
 b = 3
@@ -59,19 +65,35 @@ end
   mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
 end
 
-@everywhere begin
+# Evaluate the Hessian.
+@everywhereelse begin
   hess_i, hess_j, hess_val, new_hess_time =
     OptimizeElbo.elbo_hessian(tiled_blob, x, mp_dual, transform,
-                              omitted_ids, verbose=true);
+                              omitted_ids, verbose=true,
+                              deriv_sources=worker_sources);
   new_hess_sparse =
     OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
 end
 
+hess_i, hess_j, hess_val, new_hess_time =
+  OptimizeElbo.elbo_hessian(tiled_blob, x, mp_dual, transform,
+                            omitted_ids, verbose=true,
+                            deriv_sources=worker_sources);
+new_hess_sparse =
+  OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
 
+@everywhere println(new_hess_time / length(worker_sources))
 
+workers_hess =
+  [ remotecall_fetch(w, () -> (hess_i, hess_j, hess_val)) for w in workers()];
+workers_hess_i = reduce(vcat, [ h[1] for h in workers_hess ]);
+workers_hess_j = reduce(vcat, [ h[2] for h in workers_hess ]);
+workers_hess_val = reduce(vcat, [ h[3] for h in workers_hess ]);
+workers_hess_sparse =
+  OptimizeElbo.unpack_hessian_vals(workers_hess_i, workers_hess_j,
+                                   workers_hess_val, size(x));
 
-
-
+@assert maximum(abs(workers_hess_sparse .- new_hess_sparse)) < 1e-16
 
 
 
