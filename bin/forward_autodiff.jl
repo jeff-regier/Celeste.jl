@@ -125,7 +125,6 @@ elbo_val = ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum);
 
 # TODO: this will be a local x built on a local transform.
 omitted_ids = Int64[]
-x = transform.vp_to_array(mp.vp, omitted_ids)
 
 k = int(length(x) / mp.S)
 @assert length(x) == k * mp.S
@@ -133,8 +132,13 @@ k = int(length(x) / mp.S)
 # Vectors of the row, column, and value of the Hessian entries.
 # The indices are tuples of (source, parameter) which will be
 # linearized later.
-function elbo_hessian(x::Matrix{Float64}, mp::ModelParams{Float64})
+function elbo_hessian(tiled_blob::TiledBlob, mp::ModelParams{Float64},
+                      transform::Transform.DataTransform;
+                      deriv_sources=1:mp.S, verbose=false)
 
+  @assert size(x)[2] == mp.S
+  x = transform.vp_to_array(mp.vp, omitted_ids)
+  k = size(x)[1]
   mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
 
   hess_i = (Int64, Int64)[]
@@ -146,10 +150,10 @@ function elbo_hessian(x::Matrix{Float64}, mp::ModelParams{Float64})
                           i = 1:size(x)[1], j=1:size(x)[2] ];
 
   new_hess_time = time()
-  for s1=1:mp_dual.S
-    println("Source $s1")
+  for s1 in deriv_sources
+    verbose && println("Source $s1")
     for index1=1:k
-      print(".")
+      verbose && print(".")
       original_val = real(x_dual[index1, s1])
       @assert epsilon(x_dual[index1, s1]) == 0.
       x_dual[index1, s1] = DualNumbers.Dual(original_val, 1.)
@@ -160,7 +164,7 @@ function elbo_hessian(x::Matrix{Float64}, mp::ModelParams{Float64})
       x_dual[index1, s1] = DualNumbers.Dual(original_val, 0.)
 
       # Record the hessian terms.
-      for s2=1:mp_dual.S, index2=1:k
+      for s2=1:deriv_sources, index2=1:k
         this_hess_val = DualNumbers.epsilon(accum_trans.d[index2, s2])
         if (this_hess_val != 0)
           push!(hess_i, (s1, index1))
@@ -169,29 +173,30 @@ function elbo_hessian(x::Matrix{Float64}, mp::ModelParams{Float64})
         end
       end
     end
-    println("Done with source $s1.")
+    verbose && println("Done with source $s1.")
   end
   new_hess_time = time() - new_hess_time
 
-
   @assert length(hess_i) == length(hess_j) == length(hess_val)
+  hess_i, hess_j, hess_val, new_hess_time
+end
+
+
+hess_i, hess_j, hess_val, new_hess_time =
+  elbo_hessian(tiled_blob, mp, transform, verbose=true);
+
+function unpack_hessian_vals(hess_i, hess_j, hess_val, dims)
   # TODO: make this function part of the transform.
-  function vector_loc(s::Int64, index::Int64)
-    @assert index <= k
-    index + k * (s - 1)
-  end
   hess_i_vec = Array(Int64, length(hess_i));
   hess_j_vec = Array(Int64, length(hess_j));
   for entry in 1:length(hess_i)
-    hess_i_vec[entry] = vector_loc(hess_i[entry][1], hess_i[entry][2])
-    hess_j_vec[entry] = vector_loc(hess_j[entry][1], hess_j[entry][2])
+    hess_i_vec[entry] = sub2ind(dims, hess_i[entry][1], hess_i[entry][2])
+    hess_j_vec[entry] = sub2ind(dims, hess_j[entry][1], hess_j[entry][2])
   end
   new_hess_sparse = sparse(hess_i_vec, hess_j_vec, hess_val, length(x), length(x));
   maximum(new_hess_sparse - new_hess_sparse')
   new_hess = 0.5 * full(new_hess_sparse + new_hess_sparse')
 end
-
-
 
 # Compare with the old method.
 omitted_ids = Int64[]
