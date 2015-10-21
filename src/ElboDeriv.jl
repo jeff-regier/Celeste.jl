@@ -10,6 +10,8 @@ import Polygons
 import SloanDigitalSkySurvey: WCS
 import WCSLIB
 
+using DualNumbers.Dual
+
 export tile_predicted_image
 export ParameterMessage, update_parameter_message!
 
@@ -469,7 +471,7 @@ function update_parameter_message!{NumType <: Number}(
   for b=1:5
     param_msg.star_mcs_vec[b], param_msg.gal_mcs_vec[b] =
       load_bvn_mixtures(mp, b);
-    param_msg.sbs_vec[b] = SourceBrightness{Float64}[
+    param_msg.sbs_vec[b] = SourceBrightness{NumType}[
       SourceBrightness(mp.vp[s]) for s in 1:mp.S];
   end
 end
@@ -872,12 +874,52 @@ function tile_predicted_image{NumType <: Number}(
   tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
 
   tile_predicted_image(tile,
-          tile_sources,
-          mp,
-          sbs,
-          star_mcs,
-          gal_mcs,
-          accum)
+                       tile_sources,
+                       mp,
+                       sbs,
+                       star_mcs,
+                       gal_mcs,
+                       accum)
+end
+
+
+@doc """
+Calculate the ELBO only for tiles containing a particular source.
+This can save a lot of computation when using autodifferentiation to get
+the Hessian.  The values of the ELBO and derivatives will be incorrect,
+but if only VariationalParams associated with deriv_source have non-zero
+epsilon, then the DualNumber derivatives will be correct.
+
+Args:
+  - tiled_blob: The TiledBlob
+  - mp_dual: A dual representation of the ModelParams with all zero epsilons.
+  - accum: A dual number sensitive float.
+  - deriv_source: An integer index from 1 to mp.S.  Only tiles containing
+      deriv_source as a source will be calculated.
+
+Returns:
+  - Clears and updates the SensitiveFloat accum in place.
+""" ->
+function elbo_hessian_term!(tiled_blob::TiledBlob,
+                            mp_dual::ModelParams{Dual{Float64}},
+                            accum::SensitiveFloat{CanonicalParams, Dual{Float64}},
+                            deriv_source::Int64)
+  @assert 1 <= deriv_source <= mp_dual.S
+  clear!(accum)
+  for b in 1:5
+    # For now let's just re-calculate these each time.  It's not the
+    # bulk of the computation.
+    star_mcs, gal_mcs = load_bvn_mixtures(mp_dual, b)
+    sbs = SourceBrightness{Dual{Float64}}[
+      SourceBrightness(mp_dual.vp[s]) for s in 1:mp_dual.S]
+    for tile in tiled_blob[b][:]
+      tile_sources = mp_dual.tile_sources[b][tile.hh, tile.ww]
+      if in(deriv_source, tile_sources)
+        tile_likelihood!(tile, tile_sources, mp_dual, sbs, star_mcs, gal_mcs, accum);
+      end
+    end
+  end
+  subtract_kl!(mp_dual, accum)
 end
 
 

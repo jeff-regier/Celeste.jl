@@ -30,8 +30,9 @@ if simulation
     #blob, mp_original, body, tiled_blob = gen_sample_star_dataset(perturb=true);
 
     # The gen_sample_galaxy locations and brightnesses look off.
-    blob, mp_original, body = gen_sample_galaxy_dataset(perturb=false);
-    #blob, mp_original, body = gen_three_body_dataset(perturb=true); # Too slow.
+    #blob, mp_original, body = gen_sample_galaxy_dataset(perturb=false);
+    blob, mp_original, body, tiled_blob = gen_three_body_dataset(perturb=true);
+    tiled_blob, mp_original = ModelInit.initialize_celeste(blob, body, tile_width=30);
     transform = Transform.get_mp_transform(mp_original, loc_width=1.0);
 else
     # An actual celestial body.
@@ -41,14 +42,14 @@ else
     field_num = "0269"
 
     original_blob =
-      Images.load_sdss_blob(field_dir, run_num, camcol_num, field_num,
+      SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num,
                             mask_planes=Set());
 
     original_cat_df =
       SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
     cat_loc = convert(Array{Float64}, original_cat_df[[:ra, :dec]]);
     original_cat_entries =
-      Images.convert_catalog_to_celeste(original_cat_df, original_blob);
+      SkyImages.convert_catalog_to_celeste(original_cat_df, original_blob);
 
     obj_cols = [:objid, :is_star, :is_gal, :psfflux_r, :compflux_r, :ra, :dec];
     sort(original_cat_df[original_cat_df[:is_gal] .== true, obj_cols],
@@ -68,13 +69,13 @@ else
     tiled_blob, mp_original_all =
       ModelInit.initialize_celeste(
         original_blob, original_cat_entries,
-        tile_width=tile_width, patch_radius=1e-3, fit_psf=false);
+        tile_width=tile_width, fit_psf=false);
 
     function CountSources(tiled_blob::TiledBlob)
       sources = Int64[]
       for b=1:5
         tile_sources =
-          Images.local_sources(
+          SkyImages.local_sources(
             tiled_blob[b][1, 1], mp_original_all.patches[:,b], original_blob[b].wcs)
         sources = union(sources, tile_sources)
       end
@@ -90,9 +91,9 @@ else
 
       # Make a tile for the object
       tiled_blob =
-        Images.crop_blob_to_location(original_blob, tile_width, obj_loc);
+        SkyImages.crop_blob_to_location(original_blob, tile_width, obj_loc);
       mp_original = ModelInit.initialize_model_params(
-        tiled_blob, original_blob, mp_original);
+        tiled_blob, original_blob, original_cat_entries[obj_row]);
       transform = Transform.get_mp_transform(mp_original);
       sources = CountSources(tiled_blob)
 
@@ -106,6 +107,66 @@ else
 
     [ tiled_blob[b][1,1].h_range for b=1:5]
 end
+
+# Look at overlapping objects
+for b=1:5
+  lengths = Int64[ length(s) for s in mp_original.tile_sources[b] ]
+  println(hcat(unique(lengths), counts(lengths)))
+end
+
+
+# Try the Hessian
+param_msg = ElboDeriv.ParameterMessage(mp_original);
+ElboDeriv.update_parameter_message!(mp_original, param_msg);
+mp = deepcopy(mp_original);
+accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
+elbo_val = ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum);
+
+
+# TODO: this will be a local x built on a local transform.
+omitted_ids = Int64[]
+
+x = transform.vp_to_array(mp.vp, omitted_ids);
+k = size(x)[1]
+@assert length(x) == k * mp.S
+
+mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
+@time hess_i, hess_j, hess_val, new_hess_time =
+  OptimizeElbo.elbo_hessian(tiled_blob, x, mp_dual, transform,
+                            omitted_ids, verbose=true);
+
+@time ElboDeriv.elbo(tiled_blob, mp);
+x = transform.vp_to_array(mp.vp, omitted_ids);
+new_hess_sparse = unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+new_hess = full(new_hess_sparse);
+
+
+
+
+
+
+
+
+###############################
+# Compare with the old method.
+kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
+x0 = transform.vp_to_array(mp.vp, omitted_ids);
+
+obj_wrapper = OptimizeElbo.ObjectiveWrapperFunctions(
+  mp -> ElboDeriv.elbo(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
+obj_wrapper.state.verbose = true
+
+obj_hess_time = time()
+obj_hess = obj_wrapper.f_ad_hessian(x0);
+obj_hess_time = time() - obj_hess_time
+
+i, j = findn((abs(obj_hess) .> 1e-10) & (abs(new_hess) .< 1e-10))
+
+plot(obj_hess[:], new_hess[:], "k.")
+
+
+#########################
+# test
 
 
 ##############
@@ -132,8 +193,7 @@ function newton_fit_params(mp_original::ModelParams, omitted_ids::Array{Int64})
   iter_count, max_f, max_x, ret =
     OptimizeElbo.maximize_f_newton(
       ElboDeriv.elbo, tiled_blob, mp_optim, transform,
-      omitted_ids=omitted_ids, verbose=true, max_iters=max_iters,
-      hess_reg=0.0)
+      omitted_ids=omitted_ids, verbose=true, max_iters=max_iters)
   mp_optim, iter_count, max_f, ret
 end
 
@@ -477,7 +537,7 @@ obj_wrap = OptimizeElbo.ObjectiveWrapperFunctions(
     deepcopy(mp_original), transform, kept_ids, omitted_ids);
 # For minimization, which is required by the linesearch algorithm.
 obj_wrap.state.scale = -1.0
-x0 = transform.vp_to_vector(mp_original.vp, omitted_ids);
+x0 = transform.vp_to_array(mp_original.vp, omitted_ids);
 elbo_grad = zeros(Float64, length(x0));
 elbo_hess = zeros(Float64, length(x0), length(x0));
 
@@ -506,7 +566,7 @@ if warm_start
     x_new = deepcopy(x_start); # For quick restarts while debugging
     new_val = old_val = -start_f;
 else
-    x_new = transform.vp_to_vector(mp_original.vp, omitted_ids);
+    x_new = transform.vp_to_array(mp_original.vp, omitted_ids);
     obj_wrap.state.f_evals = 0
     new_val = old_val = obj_wrap.f_value(x_new);
 end
@@ -562,7 +622,7 @@ for iter in 1:max_iters
     println(">>>>>>  Current value after $(obj_wrap.state.f_evals) evaluations: ",
             "$(new_val) (BFGS got $(-bfgs_v) in $(iter_count) iters)")
     mp_nm = deepcopy(mp_original);
-    transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
+    transform.array_to_vp!(x_new, mp_nm.vp, omitted_ids);
     #println(ElboDeriv.get_brightness(mp_nm))
     println("\n\n")
 end
@@ -575,4 +635,4 @@ hcat(((-f_vals) - bfgs_v) / abs(bfgs_v), cumulative_iters ./ iter_count)
 reduce(hcat, [ x_diff ./ x_vals[1] for x_diff in diff(x_vals) ])
 
 mp_nm = deepcopy(mp_original);
-transform.vector_to_vp!(x_new, mp_nm.vp, omitted_ids);
+transform.array_to_vp!(x_new, mp_nm.vp, omitted_ids);

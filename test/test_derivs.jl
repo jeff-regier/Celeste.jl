@@ -217,13 +217,15 @@ function test_elbo_derivs_with_transform()
     trans = get_mp_transform(mp0, loc_width=1.0);
 
     omitted_ids = Int64[];
-    x0 = trans.vp_to_vector(mp0.vp, omitted_ids)
+    x0 = trans.vp_to_array(mp0.vp, omitted_ids)
 
     # f is a function of a ModelParams object that returns a SensitiveFloat.
     function wrap_function(f::Function)
         function wrapped_f(x)
             mmp = deepcopy(mp0)
-            trans.vector_to_vp!(x, mmp.vp, omitted_ids)
+            @assert length(x) % mp0.S == 0
+            x_mat = reshape(x, round(Int, length(x) / mp0.S), mp0.S)
+            trans.array_to_vp!(x_mat, mmp.vp, omitted_ids)
             result = f(mmp)
             result_trans = trans.transform_sensitive_float(result, mmp)
             result_trans.v, reduce(vcat, result_trans.d)
@@ -233,14 +235,14 @@ function test_elbo_derivs_with_transform()
 
     wrap_likelihood_b1 =
       wrap_function(mmp -> ElboDeriv.elbo_likelihood(fill(tiled_blob[1], 1), mmp))
-    test_by_finite_differences(wrap_likelihood_b1, x0)
+    test_by_finite_differences(wrap_likelihood_b1, x0[:])
 
     wrap_likelihood_b5 =
       wrap_function(mmp -> ElboDeriv.elbo_likelihood(fill(tiled_blob[5], 1), mmp))
-    test_by_finite_differences(wrap_likelihood_b5, x0)
+    test_by_finite_differences(wrap_likelihood_b5, x0[:])
 
     wrap_elbo = wrap_function(mmp -> ElboDeriv.elbo(tiled_blob, mmp))
-    test_by_finite_differences(wrap_elbo, x0)
+    test_by_finite_differences(wrap_elbo, x0[:])
 end
 
 
