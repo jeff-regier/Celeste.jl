@@ -519,6 +519,7 @@ function convert(::Type{ModelParams{DualNumbers.Dual}}, mp::ModelParams{Float64}
       ModelParams(convert(Array{Array{DualNumbers.Dual{Float64}, 1}, 1}, mp.vp),
                   mp.pp)
     mp_dual.patches = mp.patches
+    mp_dual.tile_sources = mp.tile_sources
     mp_dual
 end
 

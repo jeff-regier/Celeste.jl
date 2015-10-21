@@ -61,56 +61,40 @@ function test_objective_wrapper()
       OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(tiled_blob, mp),
         mp, trans, kept_ids, omitted_ids);
 
-    x = trans.vp_to_vector(mp.vp, omitted_ids);
+    x = trans.vp_to_array(mp.vp, omitted_ids);
     elbo_result =
       trans.transform_sensitive_float(ElboDeriv.elbo(tiled_blob, mp), mp);
     elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, s] for s=1:mp.S ]);
 
     # Tese the print function
     wrapper.state.verbose = true
-    wrapper.f_objective(x);
+    wrapper.f_objective(x[:]);
     wrapper.state.verbose = false
 
-    w_v, w_grad = wrapper.f_value_grad(x);
+    w_v, w_grad = wrapper.f_value_grad(x[:]);
     w_grad2 = zeros(Float64, length(x));
-    wrapper.f_value_grad!(x, w_grad2);
+    wrapper.f_value_grad!(x[:], w_grad2);
 
     @test_approx_eq(w_v, elbo_result.v)
     @test_approx_eq(w_grad, elbo_grad)
     @test_approx_eq(w_grad, w_grad2)
 
-    @test_approx_eq(w_v, wrapper.f_value(x))
-    @test_approx_eq(w_grad, wrapper.f_grad(x))
+    @test_approx_eq(w_v, wrapper.f_value(x[:]))
+    @test_approx_eq(w_grad, wrapper.f_grad(x[:]))
 
     this_iter = wrapper.state.f_evals;
-    wrapper.f_value(x);
+    wrapper.f_value(x[:]);
     @test wrapper.state.f_evals == this_iter + 1
 
     # Test that the autodiff derivatives match the actual derivatives.
     println("Testing autodiff gradient...")
-    w_ad_grad = wrapper.f_ad_grad(x);
+    w_ad_grad = wrapper.f_ad_grad(x[:]);
     @test_approx_eq(w_grad, w_ad_grad)
 
     # Just test that the Hessian can be computed and is symmetric.
     println("Testing autodiff Hessian...")
-    w_hess = wrapper.f_ad_hessian(x);
+    w_hess = wrapper.f_ad_hessian(x[:]);
     @test issym(w_hess)
-
-    println("Testing block diagonal autodiff Hessian...")
-    w_bdiag_hess = wrapper.f_block_diag_ad_hessian(x);
-    @test issym(w_bdiag_hess)
-
-    # TODO: test their similarity on more distant objects -- these
-    # two Hessians are actually quite different.
-
-    # TODO: I don't have internet and so can't look up the efficient
-    # construciton of block diagonal matrices
-    # bdiag_mask = zeros(Float64, length(x), length(x))
-    # for s = 0:(mp.S -1)
-    #   indices = (1 + s * length(kept_ids)):((s + 1) * length(kept_ids))
-    #   bdiag_mask[indices, indices] = 1.
-    # end
-    # w_hess_masked = w_hess .* bdiag_mask;
 end
 
 
@@ -136,18 +120,23 @@ function test_star_optimization_newton()
     omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
     OptimizeElbo.maximize_f_newton(
       lik_function, tiled_blob, mp, trans,
-      omitted_ids=omitted_ids, verbose=true, hess_reg=0.0);
+      omitted_ids=omitted_ids, verbose=true);
     verify_sample_star(mp.vp[1], [10.1, 12.2])
 end
 
+
 function test_two_body_optimization_newton()
+    # This test is currently too slow to be part of the ordinary
+    # test suite, and the block diagonal hessian does not work very well.
+    # For now, leave it in for future reference.
+
     blob, mp, two_bodies, tiled_blob = SampleData.gen_two_body_dataset();
 
     trans = get_mp_transform(mp, loc_width=1.0);
     function lik_function(tiled_blob::TiledBlob, mp::ModelParams)
       ElboDeriv.elbo_likelihood(tiled_blob, mp)
     end
-    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+    omitted_ids = [ids_free.k[:]; ids_free.c2[:]; ids_free.r2]
 
     function elbo_function(tiled_blob::TiledBlob, mp::ModelParams)
       ElboDeriv.elbo(tiled_blob, mp)
@@ -184,13 +173,9 @@ function test_two_body_optimization_newton()
     sum((newton_image .- original_image) .^ 2)
     sum((bfgs_image .- original_image) .^ 2)
 
-    # bfgs beats newton here.
+    # newton beats bfgs on the elbo, though not on the likelihood.
     elbo_function(tiled_blob, mp_bfgs).v
     elbo_function(tiled_blob, mp_newton).v
-
-    # bfgs beats newton here.
-    lik_function(tiled_blob, mp_bfgs).v
-    lik_function(tiled_blob, mp_newton).v
 
     # This does not work well.  It keeps taking very small steps.
     mp_newton_bdiag = deepcopy(mp);
@@ -200,7 +185,6 @@ function test_two_body_optimization_newton()
       rho_lower = 0.001);
 
     elbo_function(tiled_blob, mp_newton_bdiag).v
-
 end
 
 

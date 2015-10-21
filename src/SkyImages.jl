@@ -409,11 +409,12 @@ function local_source_candidates(
     # overlap with the tile.
     tile = tiles[h, w]
     tile_center = [ mean(tile.h_range), mean(tile.w_range)]
-    tile_diag = 0.5 * sqrt(tile.h_width ^ 2 + tile.w_width ^ 2)
+    tile_diag = (0.5 ^ 2) * (tile.h_width ^ 2 + tile.w_width ^ 2)
     patch_distances =
-      [ sqrt(sum((tile_center - patches[s].pixel_center) .^ 2)) for
+      [ sum((tile_center .- patches[s].pixel_center) .^ 2) for
         s=1:length(patches)]
-    candidates[h, w] = find(patch_distances .<= tile_diag .+ patch_pixel_radii)
+    candidates[h, w] =
+      find(patch_distances .<= (tile_diag .+ patch_pixel_radii) .^ 2)
   end
 
   candidates

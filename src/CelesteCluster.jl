@@ -73,13 +73,15 @@ function load_cluster_data()
   @everywhere begin
     if synthetic
       srand(1)
-      blob, mp, body, tiled_blob =
+      blob, original_mp, body, original_tiled_blob =
         SampleData.gen_n_body_dataset(S, tile_width=10);
     else
       img_dict = JLD.load(joinpath(dat_dir, frame_jld_file));
-      tiled_blob = img_dict["tiled_blob"];
-      mp = img_dict["mp_all"];
+      original_tiled_blob = img_dict["tiled_blob"];
+      original_mp = img_dict["mp_all"];
     end
+    mp = deepcopy(original_mp);
+    tiled_blob = deepcopy(original_tiled_blob);
   end;
 end
 
@@ -126,6 +128,7 @@ function initialize_cluster()
     proc_id = proc_id_vec[1]
     col_ranges = remotecall_fetch(1, () -> col_ranges)
     for b=1:5
+      # TODO: You should make a tiled_blob slicing function.
       tiled_blob[b] = tiled_blob[b][:, col_ranges[proc_id]]
     end
   end
@@ -174,4 +177,21 @@ function eval_worker_likelihood()
   elbo_time = time() - elbo_time
   println("Worker ", myid(), " is done in $(elbo_time)s.")
   elbo_time
+end
+
+
+
+function eval_worker_hessian()
+  omitted_ids = Int64[]
+
+  global hess_i, hess_j, hess_val, new_hess_time
+
+  # TODO: Only use an x containing the local sources?
+  x = transform.vp_to_array(mp.vp, omitted_ids);
+
+  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
+  @time hess_i, hess_j, hess_val, new_hess_time =
+    OptimizeElbo.elbo_hessian(tiled_blob, x, mp_dual, transform,
+                              omitted_ids, verbose=true,
+                              deriv_sources=worker_sources);
 end

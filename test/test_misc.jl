@@ -172,7 +172,7 @@ function test_local_sources_3()
     # Source should not match when you're 1 tile and a half away along the diagonal plus
     # the pixel radius from the center of the tile.
     tile = ImageTile(
-        ceil(Int, (pix_loc[1] + 1.5 * tile_width * sqrt(2) + 
+        ceil(Int, (pix_loc[1] + 1.5 * tile_width * sqrt(2) +
                 patch_radius_pix) / tile_width),
         round(Int, pix_loc[2] / tile_width),
         blob[test_b],
@@ -305,6 +305,24 @@ function test_add_sensitive_floats()
 end
 
 
+function test_convert_dual_mp()
+  blob, mp, body, tiled_blob = gen_three_body_dataset(perturb=true);
+  tiled_blob, mp_original =
+    ModelInit.initialize_celeste(blob, body, tile_width=30);
+  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
+
+  # Test the variational parameters.
+  for s in 1:mp.S
+    @test_approx_eq DualNumbers.real(mp_dual.vp[s]) mp.vp[s]
+    @test_approx_eq DualNumbers.epsilon(mp_dual.vp[s]) fill(0.0, length(mp.vp[s]))
+  end
+
+  # Test the remaining fields.
+  for field_name in setdiff(fieldnames(mp), [:vp])
+    @test mp_dual.(field_name) == mp.(field_name)
+  end
+end
+
 ####################################################
 
 test_tile_image()
@@ -314,3 +332,4 @@ test_local_sources()
 test_local_sources_2()
 test_local_sources_3()
 test_add_sensitive_floats()
+test_convert_dual_mp()

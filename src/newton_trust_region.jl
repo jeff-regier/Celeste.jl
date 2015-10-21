@@ -347,7 +347,7 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
           # This should only happen if the step is zero, in which case
           # we should accept the step and assess_convergence().
           @assert(f_x_diff == 0,
-                  "m == 0 but the acutal function change ($f_x_diff) is nonzero")
+                  "m == 0 but the actual function change ($f_x_diff) is nonzero")
           rho = 1.0
         else
           rho = f_x_diff / (0 - m)
