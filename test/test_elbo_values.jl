@@ -409,11 +409,18 @@ function test_active_sources()
                     sources in mp.tile_sources[3]])
   @assert any(Bool[ !(2 in sources) & (3 in sources) for
                     sources in mp.tile_sources[3]])
+  @assert !any(Bool[ (1 in sources) & (3 in sources) for
+                     sources in mp.tile_sources[3]])
 
+  mp.active_sources = 1:mp.S
   elbo_all = ElboDeriv.elbo(tiled_blob, mp);
 
   mp.active_sources = [3];
   elbo_3 = ElboDeriv.elbo(tiled_blob, mp);
+
+  @test elbo_3.v != elbo_all.v
+  @test_approx_eq elbo_all.d[:,3] elbo_3.d[:,3]
+  @test_approx_eq elbo_3.d[:,1] zeros(size(elbo_3.d)[1])
 end
 
 
@@ -427,5 +434,5 @@ test_coadd_cat_init_is_most_likely()
 test_tiny_image_tiling()
 test_elbo_with_nan()
 test_elbo_likelihood_flavors()
-test_elbo_hessian_term()
+#test_elbo_hessian_term() # TODO: fix this to use the ModelParams
 test_active_sources()

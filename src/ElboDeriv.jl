@@ -371,7 +371,7 @@ function load_bvn_mixtures{NumType <: Number}(mp::ModelParams{NumType}, b::Int64
     star_mcs = Array(BvnComponent{NumType}, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent{NumType}, 3, 8, 2, mp.S)
 
-    for s in mp.S
+    for s in 1:mp.S
         psf = mp.patches[s, b].psf
         vs = mp.vp[s]
 
@@ -673,7 +673,8 @@ Args:
 Returns:
   - Adds the contributions of E_G and var_G to accum in place.
 """ ->
-function accum_pixel_ret!{NumType <: Number}(tile_sources::Vector{Int64},
+function accum_pixel_ret!{NumType <: Number}(
+        tile_sources::Vector{Int64},
         x_nbm::Float64, iota::Float64,
         E_G::SensitiveFloat{CanonicalParams, NumType},
         var_G::SensitiveFloat{CanonicalParams, NumType},
@@ -787,13 +788,12 @@ function tile_likelihood!{NumType <: Number}(
     end
 
     # fs0m and fs1m accumulate contributions from all sources.
-    num_type = typeof(mp.vp[1][1])
-    fs0m = zero_sensitive_float(StarPosParams, num_type)
-    fs1m = zero_sensitive_float(GalaxyPosParams, num_type)
+    fs0m = zero_sensitive_float(StarPosParams, NumType)
+    fs1m = zero_sensitive_float(GalaxyPosParams, NumType)
 
     tile_S = length(tile_sources)
-    E_G = zero_sensitive_float(CanonicalParams, num_type, tile_S)
-    var_G = zero_sensitive_float(CanonicalParams, num_type, tile_S)
+    E_G = zero_sensitive_float(CanonicalParams, NumType, tile_S)
+    var_G = zero_sensitive_float(CanonicalParams, NumType, tile_S)
 
     # Iterate over pixels that are not NaN.
     for w in 1:tile.w_width, h in 1:tile.h_width
@@ -835,13 +835,12 @@ function tile_predicted_image{NumType <: Number}(
         accum::SensitiveFloat{CanonicalParams, NumType})
 
     # fs0m and fs1m accumulate contributions from all sources.
-    num_type = typeof(mp.vp[1][1])
-    fs0m = zero_sensitive_float(StarPosParams, num_type)
-    fs1m = zero_sensitive_float(GalaxyPosParams, num_type)
+    fs0m = zero_sensitive_float(StarPosParams, NumType)
+    fs1m = zero_sensitive_float(GalaxyPosParams, NumType)
 
     tile_S = length(tile_sources)
-    E_G = zero_sensitive_float(CanonicalParams, num_type, tile_S)
-    var_G = zero_sensitive_float(CanonicalParams, num_type, tile_S)
+    E_G = zero_sensitive_float(CanonicalParams, NumType, tile_S)
+    var_G = zero_sensitive_float(CanonicalParams, NumType, tile_S)
 
     predicted_pixels = copy(tile.pixels)
     # Iterate over pixels that are not NaN.
@@ -866,11 +865,10 @@ function tile_predicted_image{NumType <: Number}(
     tile::ImageTile, mp::ModelParams{NumType})
 
   b = tile.b
-  num_type = typeof(mp.vp[1][1])
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
   sbs = [SourceBrightness(mp.vp[s]) for s in mp.S]
 
-  accum = zero_sensitive_float(CanonicalParams, num_type, mp.S)
+  accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
   tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
 
   tile_predicted_image(tile,
@@ -884,58 +882,19 @@ end
 
 
 @doc """
-Calculate the ELBO only for tiles containing a particular source.
-This can save a lot of computation when using autodifferentiation to get
-the Hessian.  The values of the ELBO and derivatives will be incorrect,
-but if only VariationalParams associated with deriv_source have non-zero
-epsilon, then the DualNumber derivatives will be correct.
-
-Args:
-  - tiled_blob: The TiledBlob
-  - mp_dual: A dual representation of the ModelParams with all zero epsilons.
-  - accum: A dual number sensitive float.
-  - deriv_source: An integer index from 1 to mp.S.  Only tiles containing
-      deriv_source as a source will be calculated.
-
-Returns:
-  - Clears and updates the SensitiveFloat accum in place.
-""" ->
-function elbo_hessian_term!(tiled_blob::TiledBlob,
-                            mp_dual::ModelParams{Dual{Float64}},
-                            accum::SensitiveFloat{CanonicalParams, Dual{Float64}},
-                            deriv_source::Int64)
-  @assert 1 <= deriv_source <= mp_dual.S
-  clear!(accum)
-  for b in 1:5
-    # For now let's just re-calculate these each time.  It's not the
-    # bulk of the computation.
-    star_mcs, gal_mcs = load_bvn_mixtures(mp_dual, b)
-    sbs = SourceBrightness{Dual{Float64}}[
-      SourceBrightness(mp_dual.vp[s]) for s in 1:mp_dual.S]
-    for tile in tiled_blob[b][:]
-      tile_sources = mp_dual.tile_sources[b][tile.hh, tile.ww]
-      if in(deriv_source, tile_sources)
-        tile_likelihood!(tile, tile_sources, mp_dual, sbs, star_mcs, gal_mcs, accum);
-      end
-    end
-  end
-  subtract_kl!(mp_dual, accum)
-end
-
-
-@doc """
 The ELBO likelihood for given brighntess and bvn components.
 """ ->
 function elbo_likelihood!{NumType <: Number}(
-  tiled_image::TiledImage,
+  tiled_image::Array{ImageTile},
   mp::ModelParams{NumType},
   sbs::Vector{SourceBrightness{NumType}},
   star_mcs::Array{BvnComponent{NumType}, 2},
   gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
   accum::SensitiveFloat{CanonicalParams, NumType})
 
+  @assert maximum(mp.active_sources) <= mp.S
   for tile in tiled_image[:]
-    tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+    tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
     if length(intersect(tile_sources, mp.active_sources)) > 0
       tile_likelihood!(
         tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum);
@@ -961,7 +920,7 @@ function elbo_likelihood!{NumType <: Number}(
     sbs = param_msg.sbs_vec[b]
     star_mcs = param_msg.star_mcs_vec[b]
     gal_mcs = param_msg.gal_mcs_vec[b]
-    elbo_likelihood!(tiled_blob[b], sbs, star_mcs, gal_mcs, mp, accum)
+    elbo_likelihood!(tiled_blob[b], mp, sbs, star_mcs, gal_mcs, accum)
   end
 end
 
@@ -980,8 +939,8 @@ function elbo_likelihood!{NumType <: Number}(
   b::Int64, accum::SensitiveFloat{CanonicalParams, NumType})
 
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
-  sbs = SourceBrightness{NumType}[ SourceBrightness(mp.vp[s]) for s in 1:mp.S]
-  elbo_likelihood!(tiles, sbs, star_mcs, gal_mcs, mp, accum)
+  sbs = SourceBrightness{NumType}[SourceBrightness(mp.vp[s]) for s in 1:mp.S]
+  elbo_likelihood!(tiles, mp, sbs, star_mcs, gal_mcs, accum)
 end
 
 
