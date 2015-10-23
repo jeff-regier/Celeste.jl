@@ -72,13 +72,13 @@ end
 
 # locally
 @time eval_worker_hessian()
-
 @everywhere println(new_hess_time / length(worker_sources))
 
 # Check that the two Hessians are the same.
-new_hess_sparse =
+hess_sparse =
   OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
 
+workers_hess_times = [ remotecall_fetch(w, () -> new_hess_time) for w in workers() ];
 workers_hess =
   [ remotecall_fetch(w, () -> (hess_i, hess_j, hess_val)) for w in workers()];
 workers_hess_i = reduce(vcat, [ h[1] for h in workers_hess ]);
@@ -88,7 +88,7 @@ workers_hess_sparse =
   OptimizeElbo.unpack_hessian_vals(workers_hess_i, workers_hess_j,
                                    workers_hess_val, size(x));
 
-@assert maximum(abs(workers_hess_sparse .- new_hess_sparse)) < 1e-16
+@assert maximum(abs(workers_hess_sparse .- hess_sparse)) < 1e-16
 
 
 
@@ -140,5 +140,9 @@ result_dict["elbo_times"] = elbo_times;
 result_dict["nw"] = nw;
 result_dict["frame_jld_file"] = frame_jld_file;
 result_dict["synthetic"] = synthetic;
+result_dict["workers_hess_times"] = workers_hess_times;
+result_dict["hess_times"] = hess_times;
+result_dict["workers_hess_sparse"] = workers_hess_sparse;
+result_dict["hess_sparse"] = hess_sparse;
 
 JLD.save(result_filename, result_dict)

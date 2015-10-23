@@ -91,7 +91,7 @@ the variational distribution.
 """ ->
 function subtract_kl!{NumType <: Number}(
   mp::ModelParams{NumType}, accum::SensitiveFloat{CanonicalParams, NumType})
-    for s in 1:mp.S
+    for s in mp.active_sources
         subtract_kl_a!(s, mp, accum)
 
         for i in 1:Ia
@@ -237,7 +237,7 @@ Returns:
   An array of E_l_a and E_ll_a for each source.
 """ ->
 function get_brightness{NumType <: Number}(mp::ModelParams{NumType})
-    brightness = [SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+    brightness = [SourceBrightness(mp.vp[s]) for s in mp.S];
     brightness_vals = [ Float64[b.E_l_a[i, j].v for
         i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
     brightness_squares = [ Float64[b.E_l_a[i, j].v for
@@ -371,7 +371,7 @@ function load_bvn_mixtures{NumType <: Number}(mp::ModelParams{NumType}, b::Int64
     star_mcs = Array(BvnComponent{NumType}, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent{NumType}, 3, 8, 2, mp.S)
 
-    for s in 1:mp.S
+    for s in mp.S
         psf = mp.patches[s, b].psf
         vs = mp.vp[s]
 
@@ -472,7 +472,7 @@ function update_parameter_message!{NumType <: Number}(
     param_msg.star_mcs_vec[b], param_msg.gal_mcs_vec[b] =
       load_bvn_mixtures(mp, b);
     param_msg.sbs_vec[b] = SourceBrightness{NumType}[
-      SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+      SourceBrightness(mp.vp[s]) for s in mp.S];
   end
 end
 
@@ -868,7 +868,7 @@ function tile_predicted_image{NumType <: Number}(
   b = tile.b
   num_type = typeof(mp.vp[1][1])
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
-  sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
+  sbs = [SourceBrightness(mp.vp[s]) for s in mp.S]
 
   accum = zero_sensitive_float(CanonicalParams, num_type, mp.S)
   tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
@@ -924,12 +924,35 @@ end
 
 
 @doc """
+The ELBO likelihood for given brighntess and bvn components.
+""" ->
+function elbo_likelihood!{NumType <: Number}(
+  tiled_image::TiledImage,
+  mp::ModelParams{NumType},
+  sbs::Vector{SourceBrightness{NumType}},
+  star_mcs::Array{BvnComponent{NumType}, 2},
+  gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+  accum::SensitiveFloat{CanonicalParams, NumType})
+
+  for tile in tiled_image[:]
+    tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+    if length(intersect(tile_sources, mp.active_sources)) > 0
+      tile_likelihood!(
+        tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum);
+    end
+  end
+
+end
+
+
+@doc """
 Evaluate the ELBO with pre-computed brightnesses and components
 stored in ParameterMessage.
 """ ->
 function elbo_likelihood!{NumType <: Number}(
     tiled_blob::TiledBlob,
-    param_msg::ParameterMessage{NumType}, mp::ModelParams{NumType},
+    param_msg::ParameterMessage{NumType},
+    mp::ModelParams{NumType},
     accum::SensitiveFloat{CanonicalParams, NumType})
 
   clear!(accum)
@@ -938,13 +961,7 @@ function elbo_likelihood!{NumType <: Number}(
     sbs = param_msg.sbs_vec[b]
     star_mcs = param_msg.star_mcs_vec[b]
     gal_mcs = param_msg.gal_mcs_vec[b]
-    for tile in tiled_blob[b][:]
-      tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-      tile_likelihood!(
-        tile, tile_sources, mp,
-        sbs, star_mcs, gal_mcs,
-        accum);
-    end
+    elbo_likelihood!(tiled_blob[b], sbs, star_mcs, gal_mcs, mp, accum)
   end
 end
 
@@ -964,12 +981,7 @@ function elbo_likelihood!{NumType <: Number}(
 
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
   sbs = SourceBrightness{NumType}[ SourceBrightness(mp.vp[s]) for s in 1:mp.S]
-
-  for tile in tiles
-    tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
-    tile_likelihood!(
-      tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum)
-  end
+  elbo_likelihood!(tiles, sbs, star_mcs, gal_mcs, mp, accum)
 end
 
 
