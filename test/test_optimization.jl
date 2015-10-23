@@ -264,7 +264,7 @@ end
 function test_bad_a_init()
     gal_color_mode = [ 2.47122, 1.832, 4.0, 5.9192, 9.12822]
     ce = CatalogEntry([7.2, 8.3], false, gal_color_mode, gal_color_mode,
-            0.5, .7, pi/4, .5)
+            0.5, .7, pi/4, .5, "test")
 
     blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5

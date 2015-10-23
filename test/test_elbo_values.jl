@@ -397,6 +397,26 @@ function test_elbo_hessian_term()
 end
 
 
+function test_active_sources()
+  blob, mp, three_bodies, tiled_blob = gen_three_body_dataset();
+
+  # Change the tile size.
+  tiled_blob, mp = ModelInit.initialize_celeste(
+    blob, three_bodies, tile_width=10, fit_psf=false);
+
+  # To ensure a valid test make sure object 3 is partially overlapping.
+  @assert any(Bool[ (2 in sources) & (3 in sources) for
+                    sources in mp.tile_sources[3]])
+  @assert any(Bool[ !(2 in sources) & (3 in sources) for
+                    sources in mp.tile_sources[3]])
+
+  elbo_all = ElboDeriv.elbo(tiled_blob, mp);
+
+  mp.active_sources = [3];
+  elbo_3 = ElboDeriv.elbo(tiled_blob, mp);
+end
+
+
 ####################################################
 
 test_kl_divergence_values()
@@ -408,3 +428,4 @@ test_tiny_image_tiling()
 test_elbo_with_nan()
 test_elbo_likelihood_flavors()
 test_elbo_hessian_term()
+test_active_sources()

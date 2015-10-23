@@ -58,6 +58,7 @@ type CatalogEntry
     gal_ab::Float64
     gal_angle::Float64
     gal_scale::Float64
+    objid::ASCIIString
 end
 
 ############################################
@@ -489,6 +490,10 @@ Attributes:
  - tile_width: The number of pixels across a tile
  - tile_sources: A vector (over bands) of an array (over tiles) of vectors
                  of sources influencing each tile.
+ - active_sources: Indices of the sources that are currently being fit by the
+                   model.
+ - objids: Global object ids for the sources in this ModelParams object.
+
  - S: The number of sources.
 """ ->
 type ModelParams{NumType <: Number}
@@ -496,6 +501,8 @@ type ModelParams{NumType <: Number}
     pp::PriorParams
     patches::Array{SkyPatch, 2}
     tile_sources::Vector{Array{Array{Int64}}}
+    active_sources::Vector{Int64}
+    objids::Vector{ASCIIString}
 
     S::Int64
 
@@ -504,7 +511,10 @@ type ModelParams{NumType <: Number}
         S = length(vp)
         all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)
         patches = Array(SkyPatch, S, 5)
-        new(vp, pp, patches, all_tile_sources, S)
+        active_sources = collect(1:S)
+        objids = ASCIIString[string(s) for s in 1:S]
+
+        new(vp, pp, patches, all_tile_sources, active_sources, objids, S)
     end
 end
 
@@ -520,6 +530,8 @@ function convert(::Type{ModelParams{DualNumbers.Dual}}, mp::ModelParams{Float64}
                   mp.pp)
     mp_dual.patches = mp.patches
     mp_dual.tile_sources = mp.tile_sources
+    mp_dual.active_sources = mp.active_sources
+    mp_dual.objids = mp.objids
     mp_dual
 end
 

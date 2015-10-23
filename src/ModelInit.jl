@@ -388,6 +388,7 @@ function initialize_model_params(
   end
   vp = Array{Float64, 1}[init_source(ce) for ce in cat]
   mp = ModelParams(vp, sample_prior())
+  mp.objids = ASCIIString[ cat_entry.objid for cat_entry in cat]
 
   mp.patches = Array(SkyPatch, mp.S, length(blob))
   mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
