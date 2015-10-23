@@ -56,10 +56,12 @@ type ObjectiveWrapperFunctions
     kept_ids::Array{Int64}
     omitted_ids::Array{Int64}
 
+    # if fast_hessian is true, set the ModelParams active sources to
+    # include only the dual number currently being set.
     ObjectiveWrapperFunctions(
       f::Function, mp::ModelParams{Float64}, transform::DataTransform,
       kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1};
-      fast_hessian::Bool=false) = begin
+      fast_hessian::Bool=true) = begin
 
         mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
         x_length = length(kept_ids) * mp.S
@@ -200,7 +202,6 @@ type ObjectiveWrapperFunctions
             x_dual = DualNumbers.Dual{Float64}[
               DualNumbers.Dual{Float64}(x[i, j], 0.) for
               i = 1:size(x)[1], j=1:size(x)[2]];
-            mp_dual.active_sources = collect(1:mp_dual.S)
 
             # Vectors of the (source, component) indices for the rows
             # and columns of the Hessian.
@@ -219,14 +220,14 @@ type ObjectiveWrapperFunctions
                 # epsilon != 0.  The values of the derivatives themselves (that
                 # is, the real part of the dual numbers) will be wrong but the
                 # second derivatives with respect to source s will be right.
-                mp_dual.active_sources = [s]
+                mp_dual.active_sources = [s1]
               end
               for index1 in 1:size(x)[1]
                 index1 == 1 ? print("o"): print(".")
-                original_x = x[index1, s]
-                x_dual[index1, s] = DualNumbers.Dual(original_x, 1.)
-                deriv = f_grad(x_dual[:])
-                x_dual[index, s] = DualNumbers.Dual(original_x, 0.)
+                original_x = x[index1, s1]
+                x_dual[index1, s1] = DualNumbers.Dual(original_x, 1.)
+                deriv = reshape(f_grad(x_dual[:]), size(x_dual))
+                x_dual[index1, s1] = DualNumbers.Dual(original_x, 0.)
 
                 # Record the hessian terms.
                 for s2 in deriv_sources, index2=1:size(x)[1]
@@ -353,7 +354,8 @@ function maximize_f_newton(
 
     x0 = transform.vp_to_array(mp.vp, omitted_ids);
     d = Optim.TwiceDifferentiableFunction(
-      optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_ad_hess!)
+      optim_obj_wrap.f_value, optim_obj_wrap.f_grad!,
+      optim_obj_wrap.f_ad_hessian!)
 
     # TODO: use the Optim version after newton_tr is merged.
     nm_result = newton_tr(d,
@@ -463,8 +465,8 @@ end
 function maximize_elbo(tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;
     xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
     omitted_ids = setdiff(1:length(UnconstrainedParams),
-                          [ids_free.r1, ids_free.r2,
-                           ids_free.k[:], ids_free.c1[:]])
+                          [ids_free.r1; ids_free.r2;
+                           ids_free.k[:]; ids_free.c1[:]])
     maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids,
         ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
 
@@ -480,7 +482,7 @@ end
 function maximize_likelihood(
   tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;
   xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
-    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+    omitted_ids = [ids_free.k[:]; ids_free.c2[:]; ids_free.r2]
     maximize_f(ElboDeriv.elbo_likelihood, tiled_blob, mp, trans,
                omitted_ids=omitted_ids, xtol_rel=xtol_rel,
                ftol_abs=ftol_abs, verbose=verbose)

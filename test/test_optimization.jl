@@ -93,12 +93,29 @@ function test_objective_wrapper()
 
     # Just test that the Hessian can be computed and is symmetric.
     println("Testing autodiff Hessian...")
-    hess = zeros(Float64, length(x), length(x));
-    w_hess = wrapper.f_ad_hessian!(x[:], hess);
+    w_hess = zeros(Float64, length(x), length(x));
+    wrapper.f_ad_hessian!(x[:], w_hess);
 
     hess_i, hess_j, hess_val = wrapper.f_ad_hessian_sparse(x[:]);
-    w_hess_sparse = unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+    w_hess_sparse =
+      OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
     @test_approx_eq(w_hess, full(w_hess_sparse))
+    #plot(w_hess, w_hess_sparse, "k.")
+
+    # TODO: fix these:
+    wrapper_slow_hess =
+      OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(tiled_blob, mp),
+        mp, trans, kept_ids, omitted_ids, fast_hessian=false);
+
+    println("Testing autodiff Hessian...")
+    slow_w_hess = zeros(Float64, length(x), length(x));
+    wrapper_slow_hess.f_ad_hessian!(x[:], slow_w_hess);
+    @test_approx_eq(slow_w_hess, w_hess)
+
+    hess_i, hess_j, hess_val = wrapper_slow_hess.f_ad_hessian_sparse(x[:]);
+    slow_w_hess_sparse = unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+    @test_approx_eq(slow_w_hess, full(slow_w_hess_sparse))
+
 end
 
 
