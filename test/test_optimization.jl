@@ -93,8 +93,12 @@ function test_objective_wrapper()
 
     # Just test that the Hessian can be computed and is symmetric.
     println("Testing autodiff Hessian...")
-    w_hess = wrapper.f_ad_hessian(x[:]);
-    @test issym(w_hess)
+    hess = zeros(Float64, length(x), length(x));
+    w_hess = wrapper.f_ad_hessian!(x[:], hess);
+
+    hess_i, hess_j, hess_val = wrapper.f_ad_hessian_sparse(x[:]);
+    w_hess_sparse = unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+    @test_approx_eq(w_hess, full(w_hess_sparse))
 end
 
 
