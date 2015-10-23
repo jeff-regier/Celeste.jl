@@ -164,6 +164,13 @@ type ObjectiveWrapperFunctions
                 index == 1 ? print("o"): print(".")
                 original_x = x[index, s]
                 x_dual[index, s] = DualNumbers.Dual(original_x, 1.)
+
+                # Only need to calculate the derivatives in tiles
+                # where epsilon != 0.  The values of the derivatives themselves
+                # (that is, the real part of the dual numbers) will be wrong
+                # but the second derivatives with respect to source s
+                # will be right.
+                mp_dual.active_sources = [s]
                 deriv = f_grad(x_dual[:])
                 # This goes through deriv in column-major order.
                 hess[:, index] =
@@ -182,60 +189,61 @@ type ObjectiveWrapperFunctions
 end
 
 
-@doc """
-Vectors of the row, column, and value of the Hessian entries.
-The indices are tuples of (source, parameter) which will be
-linearized later.
-""" ->
-function elbo_hessian(tiled_blob::TiledBlob,
-                      x::Matrix{Float64},
-                      mp_dual::ModelParams{DualNumbers.Dual{Float64}},
-                      transform::Transform.DataTransform,
-                      omitted_ids::Vector{Int64};
-                      deriv_sources=1:mp_dual.S,
-                      verbose=false)
-  k = size(x)[1]
-  @assert size(x)[2] == length(mp_dual.vp)
-
-  hess_i = Tuple{Int64, Int64}[]
-  hess_j = Tuple{Int64, Int64}[]
-  hess_val = Float64[]
-
-  accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp_dual.S);
-  x_dual = Dual{Float64}[ Dual{Float64}(x[i, j], 0.) for
-                          i = 1:size(x)[1], j=1:size(x)[2] ];
-
-  new_hess_time = time()
-  for s1 in deriv_sources
-    verbose && println("Source $s1")
-    for index1=1:k
-      verbose && print(".")
-      original_val = real(x_dual[index1, s1])
-      @assert epsilon(x_dual[index1, s1]) == 0.
-      x_dual[index1, s1] = DualNumbers.Dual(original_val, 1.);
-      transform.array_to_vp!(x_dual, mp_dual.vp, omitted_ids);
-      ElboDeriv.elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
-      accum_trans = transform.transform_sensitive_float(accum, mp_dual);
-      @assert size(accum_trans.d) == (k, mp_dual.S)
-      x_dual[index1, s1] = DualNumbers.Dual(original_val, 0.)
-
-      # Record the hessian terms.
-      for s2 in deriv_sources, index2=1:k
-        this_hess_val = DualNumbers.epsilon(accum_trans.d[index2, s2])
-        if (this_hess_val != 0)
-          push!(hess_i, (s1, index1))
-          push!(hess_j, (s2, index2))
-          push!(hess_val, this_hess_val)
-        end
-      end
-    end
-    verbose && println("Done with source $s1.")
-  end
-  new_hess_time = time() - new_hess_time
-
-  @assert length(hess_i) == length(hess_j) == length(hess_val)
-  hess_i, hess_j, hess_val, new_hess_time
-end
+# TODO: redo this with the ModelParams active sources.
+# @doc """
+# Vectors of the row, column, and value of the Hessian entries.
+# The indices are tuples of (source, parameter) which will be
+# linearized later.
+# """ ->
+# function elbo_hessian(tiled_blob::TiledBlob,
+#                       x::Matrix{Float64},
+#                       mp_dual::ModelParams{DualNumbers.Dual{Float64}},
+#                       transform::Transform.DataTransform,
+#                       omitted_ids::Vector{Int64};
+#                       deriv_sources=1:mp_dual.S,
+#                       verbose=false)
+#   k = size(x)[1]
+#   @assert size(x)[2] == length(mp_dual.vp)
+#
+#   hess_i = Tuple{Int64, Int64}[]
+#   hess_j = Tuple{Int64, Int64}[]
+#   hess_val = Float64[]
+#
+#   accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp_dual.S);
+#   x_dual = Dual{Float64}[ Dual{Float64}(x[i, j], 0.) for
+#                           i = 1:size(x)[1], j=1:size(x)[2] ];
+#
+#   new_hess_time = time()
+#   for s1 in deriv_sources
+#     verbose && println("Source $s1")
+#     for index1=1:k
+#       verbose && print(".")
+#       original_val = real(x_dual[index1, s1])
+#       @assert epsilon(x_dual[index1, s1]) == 0.
+#       x_dual[index1, s1] = DualNumbers.Dual(original_val, 1.);
+#       transform.array_to_vp!(x_dual, mp_dual.vp, omitted_ids);
+#       ElboDeriv.elbo!(tiled_blob, mp_dual, accum, s1);
+#       accum_trans = transform.transform_sensitive_float(accum, mp_dual);
+#       @assert size(accum_trans.d) == (k, mp_dual.S)
+#       x_dual[index1, s1] = DualNumbers.Dual(original_val, 0.)
+#
+#       # Record the hessian terms.
+#       for s2 in deriv_sources, index2=1:k
+#         this_hess_val = DualNumbers.epsilon(accum_trans.d[index2, s2])
+#         if (this_hess_val != 0)
+#           push!(hess_i, (s1, index1))
+#           push!(hess_j, (s2, index2))
+#           push!(hess_val, this_hess_val)
+#         end
+#       end
+#     end
+#     verbose && println("Done with source $s1.")
+#   end
+#   new_hess_time = time() - new_hess_time
+#
+#   @assert length(hess_i) == length(hess_j) == length(hess_val)
+#   hess_i, hess_j, hess_val, new_hess_time
+# end
 
 
 function unpack_hessian_vals(hess_i::@compat(Vector{Tuple{Int64, Int64}}),
@@ -301,7 +309,6 @@ Args:
   - xtol_rel: X convergence
   - ftol_abs: F convergence
   - verbose: Print detailed output
-  - elbo_hessian: Use a more efficient autodiff function for the ELBO hessian.
 
 Returns:
   - iter_count: The number of iterations taken
@@ -313,7 +320,7 @@ function maximize_f_newton(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::Transform.DataTransform;
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  max_iters=100, rho_lower=0.25, elbo_hessian=false)
+  max_iters=100, rho_lower=0.25)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
