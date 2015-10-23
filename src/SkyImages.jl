@@ -31,6 +31,7 @@ Load a stamp catalog.
 function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     df = SDSS.load_stamp_catalog_df(cat_dir, stamp_id, blob,
                                     match_blob=match_blob)
+    df[:objid] = [ string(s) for s=1:size(df)[1] ]
     convert_catalog_to_celeste(df, blob, match_blob=match_blob)
 end
 
