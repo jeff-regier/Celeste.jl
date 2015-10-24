@@ -198,7 +198,7 @@ end
 
 
 function test_kappa_finding()
-    blob, mp, body, tiled_blob = gen_sample_galaxy_dataset()
+    blob, mp, body, tiled_blob = gen_sample_galaxy_dataset();
     trans = get_mp_transform(mp, loc_width=1.0);
     omitted_ids = setdiff(1:length(UnconstrainedParams), ids_free.k[:])
 
@@ -225,38 +225,41 @@ function test_kappa_finding()
     @test lower_klc < higher_klc
 
     mp.pp.c_cov[:, :, 1, 2] = mp.pp.c_cov[:, :, 2, 2] = eye(4)
-    klc_wrapper(tiled_blob, mp) = begin
-        accum = zero_sensitive_float(CanonicalParams)
-        for d in 1:D
-            ElboDeriv.subtract_kl_c!(d, 2, 1, mp, accum)
-        end
-        accum
+    klc_wrapper{NumType <: Number}(
+        tiled_blob::TiledBlob, mp::ModelParams{NumType}) = begin
+      accum = zero_sensitive_float(CanonicalParams, NumType)
+      for d in 1:D
+          ElboDeriv.subtract_kl_c!(d, 2, 1, mp, accum)
+      end
+      accum
     end
 
     mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 1, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(
-      klc_wrapper, tiled_blob, mp, trans, omitted_ids=omitted_ids)
+    lbs, ubs = OptimizeElbo.get_nlopt_unconstrained_bounds(
+      mp.vp, omitted_ids, trans);
+    OptimizeElbo.maximize_f_bfgs(
+      klc_wrapper, tiled_blob, mp, trans, lbs, ubs, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[1, 2]] > .9
 
     mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 2, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(
-      klc_wrapper, tiled_blob, mp, trans, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f_bfgs(
+      klc_wrapper, tiled_blob, mp, trans, lbs, ubs, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[2, 2]] > .9
 
     mp.pp.k[:, 2] = [.9, .1]
     mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 1, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(
-      ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f_bfgs(
+      ElboDeriv.elbo, tiled_blob, mp, trans, lbs, ubs, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[1, 2]] > .9
 
     mp.pp.k[:, 2] = [.1, .9]
     mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 2, 2]
     mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f(
-      ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids)
+    OptimizeElbo.maximize_f_bfgs(
+      ElboDeriv.elbo, tiled_blob, mp, trans, lbs, ubs, omitted_ids=omitted_ids)
     @test mp.vp[1][ids.k[2, 2]] > .9
 end
 
