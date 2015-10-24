@@ -1,20 +1,21 @@
-# TODO: This is intended to be used in Optim.jl.  Until that is submitted
-# and merged, I'll include the working file in Celeste so the build passes.
+# # TODO: This is intended to be used in Optim.jl.  Until that is submitted
+# # and merged, I'll include the working file in Celeste so the build passes.
+# using Optim.update!
+# using Optim.OptimizationTrace
+# using Optim._dot
+# using Optim.norm2
+# using Optim.assess_convergence
+# using Optim.MultivariateOptimizationResults
+# using Optim.TwiceDifferentiableFunction
+
 using Compat
-using Optim.update!
-using Optim.OptimizationTrace
-using Optim._dot
-using Optim.norm2
-using Optim.assess_convergence
-using Optim.MultivariateOptimizationResults
-using Optim.TwiceDifferentiableFunction
 
 function verbose_println(x...)
-  println(x...)
+  #println(x...)
 end
 
 function verbose_println(x)
-  println(x)
+  #println(x)
 end
 
 
@@ -23,15 +24,15 @@ macro newton_tr_trace()
         if tracing
             dt = Dict()
             if extended_trace
-                dt["x"] = copy(x)
-                dt["g(x)"] = copy(gr)
-                dt["h(x)"] = copy(H)
-                dt["delta"] = copy(delta)
+                dt["x"] = copy(trs.x)
+                dt["g(x)"] = copy(trs.gr)
+                dt["h(x)"] = copy(trs.H)
+                dt["delta"] = copy(trs.delta)
             end
-            grnorm = norm(gr, Inf)
-            update!(tr,
-                    iteration,
-                    f_x,
+            grnorm = norm(trs.gr, Inf)
+            update!(trs.tr,
+                    trs.iteration,
+                    trs.f_x,
                     grnorm,
                     dt,
                     store_trace,
@@ -257,6 +258,22 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
 end
 
 
+# A type for storing the current state of the algorithm.
+#
+# Attributes:
+#  - x: The current parameter vector
+#  - x_previous: The last accepted parameter vector
+#  - gr: The current gradient
+#  - gr_previous: The last accepted gradient
+#  - f_x: The current function value
+#  - f_x_previous: The last accepted function value
+#  - H: The current Hessian
+#  - n: The length of the parameter vector
+#  - s: The previous step direction
+#  - delta: The current size of the trust region
+#  - iteration: The current iteration number
+#  - f_calls: The number of function calls
+#  - g_calls: The number of gradient calls
 type NewtonTRState{T}
   x::Vector{T}
   x_previous::Vector{T}
@@ -272,50 +289,51 @@ type NewtonTRState{T}
   f_calls::Integer
   g_calls::Integer
   tr::OptimizationTrace
+end
 
-  NetwonTRState{T}(d::TwiceDifferentiableFunction,
-                   initial_x::Vector{T};
-                   initial_delta::T=1.0,) = begin
-    # Maintain current state in x and previous state in x_previous
-    x, x_previous = copy(initial_x), copy(initial_x)
 
-    # Count the total number of iterations
-    iteration = 1
+# Initialize a NewtonTRState object.
+NewtonTRState{T}(d::TwiceDifferentiableFunction,
+                 initial_x::Vector{T};
+                 initial_delta::T=1.0) = begin
+  # Maintain current state in x and previous state in x_previous
+  x, x_previous = copy(initial_x), copy(initial_x)
 
-    # Track calls to function and gradient
-    f_calls, g_calls = 0, 0
+  # Count the total number of iterations
+  iteration = 1
 
-    # Count number of parameters
-    n = length(x)
+  # Track calls to function and gradient
+  f_calls, g_calls = 0, 0
 
-    # Maintain current gradient in gr
-    gr = Array(T, n)
+  # Count number of parameters
+  n = length(x)
 
-    # The current search direction
-    # TODO: Try to avoid re-allocating s
-    s = Array(T, n)
+  # Maintain current gradient in gr
+  gr = Array(T, n)
 
-    # Store f(x), the function value, in f_x
-    f_x_previous, f_x = NaN, d.fg!(x, gr)
+  # The current search direction
+  s = Array(T, n)
 
-    # We need to store the previous gradient in case we reject a step.
-    gr_previous = copy(gr)
+  # Store f(x), the function value, in f_x
+  f_x_previous, f_x = NaN, d.fg!(x, gr)
 
-    f_calls, g_calls = f_calls + 1, g_calls + 1
+  # We need to store the previous gradient in case we reject a step.
+  gr_previous = copy(gr)
 
-    # Store the hessian in H
-    H = Array(T, n, n)
-    d.h!(x, H)
+  f_calls, g_calls = f_calls + 1, g_calls + 1
 
-    # Keep track of trust region sizes
-    delta = copy(initial_delta)
+  # Store the hessian in H
+  H = Array(T, n, n)
+  d.h!(x, H)
 
-    # Trace the history of states visited
-    tr = OptimizationTrace()
+  # Keep track of trust region sizes
+  delta = copy(initial_delta)
 
-    new(x, x_previous, gr, gr_previous, f_x, f_x_previous,
-        H, n, s, delta, iteration, f_calls, g_calls, tr)
-    end
+  # Trace the history of states visited
+  tr = OptimizationTrace()
+
+  NewtonTRState(x, x_previous, gr, gr_previous, f_x, f_x_previous,
+                H, n, s, delta, iteration, f_calls, g_calls, tr)
 end
 
 
@@ -334,6 +352,8 @@ function take_newton_tr_step!{T}(d::TwiceDifferentiableFunction,
                                  extended_trace::Bool = false)
 
   verbose_println("\n-----------------Iter $(trs.iteration)")
+
+  x_converged = f_converged = gr_converged = converged = false
 
   # Find the next step direction.
   m, interior = solve_tr_subproblem!(trs.gr, trs.H, trs.delta, trs.s)
@@ -381,7 +401,8 @@ function take_newton_tr_step!{T}(d::TwiceDifferentiableFunction,
 
   if rho > eta
      # Accept the point and check convergence
-     verbose_println("Accepting improvement from f_prev=$(f_x_previous) f=$(f_x).")
+     verbose_println("Accepting improvement from ",
+                     "f_prev=$(trs.f_x_previous) f=$(trs.f_x).")
 
      x_converged,
      f_converged,
@@ -421,7 +442,6 @@ function take_newton_tr_step!{T}(d::TwiceDifferentiableFunction,
   trs.iteration += 1
 
   # Record the step
-  tr = trs.tr
   tracing = store_trace || show_trace || extended_trace
   @newton_tr_trace
 
@@ -450,14 +470,13 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
     @assert(rho_lower < rho_upper, "must have rho_lower < rho_upper")
     @assert(rho_lower >= 0.)
 
-    trs = NetwonTRState(d, initial_x, initial_delta)
-    tr = trs.tr
+    trs = NewtonTRState(d, initial_x, initial_delta=initial_delta)
 
     tracing = store_trace || show_trace || extended_trace
     @newton_tr_trace
 
     # Iterate until convergence
-    converged = false
+    converged = x_converged = f_converged = gr_converged = false
     while !converged && trs.iteration <= iterations
       x_converged, f_converged, gr_converged, converged =
         take_newton_tr_step!(d,
