@@ -1,12 +1,12 @@
 # # TODO: This is intended to be used in Optim.jl.  Until that is submitted
 # # and merged, I'll include the working file in Celeste so the build passes.
-# using Optim.update!
-# using Optim.OptimizationTrace
-# using Optim._dot
-# using Optim.norm2
-# using Optim.assess_convergence
-# using Optim.MultivariateOptimizationResults
-# using Optim.TwiceDifferentiableFunction
+using Optim.update!
+using Optim.OptimizationTrace
+using Optim._dot
+using Optim.norm2
+using Optim.assess_convergence
+using Optim.MultivariateOptimizationResults
+using Optim.TwiceDifferentiableFunction
 
 using Compat
 
