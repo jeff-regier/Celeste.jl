@@ -286,7 +286,6 @@ function unpack_hessian_vals(hess_i::@compat(Vector{Tuple{Int64, Int64}}),
 end
 
 
-
 function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
                                         omitted_ids::Vector{Int64},
                                         transform::DataTransform)

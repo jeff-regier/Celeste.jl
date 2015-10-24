@@ -866,7 +866,7 @@ function tile_predicted_image{NumType <: Number}(
 
   b = tile.b
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
-  sbs = [SourceBrightness(mp.vp[s]) for s in mp.S]
+  sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
   accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
   tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
