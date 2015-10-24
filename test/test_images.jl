@@ -84,7 +84,7 @@ function test_blob()
 
   mp_several =
     ModelInit.initialize_model_params(
-      tiled_blob, blob, [cat_entries[1], cat_entries[obj_index]]);
+      tiled_blob, blob, [cat_entries[1]; cat_entries[obj_index]]);
 
   # The second set of vp is the object of interest
   point_patch_psf = PSF.get_psf_at_point(mp_several.patches[2, test_b].psf);
