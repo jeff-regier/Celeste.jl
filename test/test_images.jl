@@ -22,6 +22,8 @@ function test_blob()
   blob = SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
   cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
   cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
+  @test ASCIIString[cat_entry.objid for cat_entry in cat_entries ] ==
+        convert(Vector{ASCIIString}, cat_df[:objid])
   tiled_blob, mp =
     ModelInit.initialize_celeste(blob, cat_entries, patch_radius=1e-6,
                                  fit_psf=false);
@@ -82,7 +84,7 @@ function test_blob()
 
   mp_several =
     ModelInit.initialize_model_params(
-      tiled_blob, blob, [cat_entries[1], cat_entries[obj_index]]);
+      tiled_blob, blob, [cat_entries[1]; cat_entries[obj_index]]);
 
   # The second set of vp is the object of interest
   point_patch_psf = PSF.get_psf_at_point(mp_several.patches[2, test_b].psf);
@@ -167,7 +169,7 @@ function test_set_patch_size()
   function gal_catalog_from_scale(gal_scale::Float64, flux_scale::Float64)
     CatalogEntry[CatalogEntry(world_location, false,
                               flux_scale * fluxes, flux_scale * fluxes,
-                              0.1, .01, pi/4, gal_scale) ]
+                              0.1, .01, pi/4, gal_scale, "sample") ]
   end
 
   srand(1)

@@ -31,6 +31,7 @@ Load a stamp catalog.
 function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     df = SDSS.load_stamp_catalog_df(cat_dir, stamp_id, blob,
                                     match_blob=match_blob)
+    df[:objid] = [ string(s) for s=1:size(df)[1] ]
     convert_catalog_to_celeste(df, blob, match_blob=match_blob)
 end
 
@@ -83,7 +84,8 @@ function convert_catalog_to_celeste(
         phi90 *= (pi / 180)
 
         CatalogEntry(x_y, row[1, :is_star], star_fluxes,
-            gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_pixel)
+            gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_pixel,
+            row[1, :objid])
     end
 
     CatalogEntry[row_to_ce(df[i, :]) for i in 1:size(df, 1)]
