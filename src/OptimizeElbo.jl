@@ -208,8 +208,8 @@ type ObjectiveWrapperFunctions
 
             # Vectors of the (source, component) indices for the rows
             # and columns of the Hessian.
-            hess_i = Tuple{Int64, Int64}[]
-            hess_j = Tuple{Int64, Int64}[]
+            hess_i = @compat(Tuple{Int64, Int64}[])
+            hess_j = @compat(Tuple{Int64, Int64}[])
 
             # Values of the hessian in the (hess_i, hess_j) locations.
             hess_val = Float64[]
