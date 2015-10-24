@@ -200,9 +200,9 @@ end
 
 function test_coadd_cat_init_is_most_likely()  # on a real stamp
     stamp_id = "5.0073-0.0739"
-    blob = SkyImages.load_stamp_blob(dat_dir, stamp_id)
+    blob = SkyImages.load_stamp_blob(dat_dir, stamp_id);
 
-    cat_entries = SkyImages.load_stamp_catalog(dat_dir, "s82-$stamp_id", blob)
+    cat_entries = SkyImages.load_stamp_catalog(dat_dir, "s82-$stamp_id", blob);
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries)
 
@@ -357,43 +357,30 @@ function test_elbo_likelihood_flavors()
 end
 
 
-function test_elbo_hessian_term()
-  # Test that the epsilon parts of dual numbers passed to
-  # elbo_hessian_term are the same.
+function test_active_sources()
+  blob, mp, three_bodies, tiled_blob = gen_three_body_dataset();
 
-  blob, mp, body, tiled_blob = gen_three_body_dataset(perturb=true);
+  # Change the tile size.
+  tiled_blob, mp = ModelInit.initialize_celeste(
+    blob, three_bodies, tile_width=10, fit_psf=false);
 
-  # Break into smaller tiles than is the default.
-  tiled_blob, mp =
-    ModelInit.initialize_celeste(blob, body, tile_width=30);
-  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
-  transform = Transform.get_mp_transform(mp, loc_width=1.0);
-  omitted_ids = Int64[]
+  # To ensure a valid test make sure object 3 is partially overlapping.
+  @assert any(Bool[ (2 in sources) & (3 in sources) for
+                    sources in mp.tile_sources[3]])
+  @assert any(Bool[ !(2 in sources) & (3 in sources) for
+                    sources in mp.tile_sources[3]])
+  @assert !any(Bool[ (1 in sources) & (3 in sources) for
+                     sources in mp.tile_sources[3]])
 
-  x = transform.vp_to_array(mp.vp, omitted_ids)
-  x_dual = DualNumbers.Dual{Float64}[
-    DualNumbers.Dual{Float64}(x[i, j], 0.) for i = 1:size(x)[1], j=1:size(x)[2]];
+  mp.active_sources = 1:mp.S
+  elbo_all = ElboDeriv.elbo(tiled_blob, mp);
 
-  accum = zero_sensitive_float(CanonicalParams,
-                               DualNumbers.Dual{Float64}, mp_dual.S);
+  mp.active_sources = [3];
+  elbo_3 = ElboDeriv.elbo(tiled_blob, mp);
 
-  # Test for all three sournces and a set of parameters.
-  for s1 in 1:mp.S, index1 in [1, 10, 29]
-    original_val = real(x_dual[index1, s1])
-    x_dual[index1, s1] = DualNumbers.Dual(original_val, 1.)
-    transform.array_to_vp!(x_dual, mp_dual.vp, omitted_ids);
-    ElboDeriv.elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
-    accum_trans = transform.transform_sensitive_float(accum, mp_dual);
-    @assert size(accum_trans.d) == size(x)
-    x_dual[index1, s1] = DualNumbers.Dual(original_val, 0.)
-
-    accum_full = ElboDeriv.elbo(tiled_blob, mp_dual);
-    accum_full_trans = transform.transform_sensitive_float(accum_full, mp_dual);
-
-    # The real parts will not be the same, but the epsilon parts should be.
-    @test_approx_eq(DualNumbers.epsilon(accum_trans.d[:]),
-                    DualNumbers.epsilon(accum_full_trans.d[:]))
-  end
+  @test elbo_3.v != elbo_all.v
+  @test_approx_eq elbo_all.d[:,3] elbo_3.d[:,3]
+  @test_approx_eq elbo_3.d[:,1] zeros(size(elbo_3.d)[1])
 end
 
 
@@ -407,4 +394,4 @@ test_coadd_cat_init_is_most_likely()
 test_tiny_image_tiling()
 test_elbo_with_nan()
 test_elbo_likelihood_flavors()
-test_elbo_hessian_term()
+test_active_sources()

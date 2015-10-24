@@ -47,7 +47,8 @@ type ObjectiveWrapperFunctions
     f_grad::Function
     f_grad!::Function
     f_ad_grad::Function
-    f_ad_hessian::Function
+    f_ad_hessian!::Function
+    f_ad_hessian_sparse::Function
 
     state::WrapperState
     transform::DataTransform
@@ -55,9 +56,12 @@ type ObjectiveWrapperFunctions
     kept_ids::Array{Int64}
     omitted_ids::Array{Int64}
 
+    # if fast_hessian is true, set the ModelParams active sources to
+    # include only the dual number currently being set.
     ObjectiveWrapperFunctions(
       f::Function, mp::ModelParams{Float64}, transform::DataTransform,
-      kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1}) = begin
+      kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1};
+      fast_hessian::Bool=true) = begin
 
         mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
         x_length = length(kept_ids) * mp.S
@@ -151,93 +155,118 @@ type ObjectiveWrapperFunctions
         f_ad_grad = ForwardDiff.forwarddiff_gradient(
           f_value, Float64, fadtype=:dual; n=x_length);
 
-        function f_ad_hessian(x_vec::Array{Float64})
+        # Update <hess> in place with an autodiff hessian.
+        function f_ad_hessian!(x_vec::Array{Float64}, hess::Matrix{Float64})
             @assert length(x_vec) == x_length
             x = reshape(x_vec, x_size)
-            k = length(x)
-            hess = zeros(Float64, k, k);
+            k = length(x_vec)
+
             x_dual = DualNumbers.Dual{Float64}[
               DualNumbers.Dual{Float64}(x[i, j], 0.) for
               i = 1:size(x)[1], j=1:size(x)[2]];
+
+            @assert size(hess) == (k, k)
+
             print("Getting Hessian ($k components): ")
-            for s in 1:size(x)[2], index in 1:size(x)[1]
+            deriv_sources = fast_hessian ? mp.active_sources: collect(1:mp.S)
+            mp_dual.active_sources = deriv_sources
+            for s in deriv_sources
+              if fast_hessian
+                # We only need to calculate the derivatives in tiles where
+                # epsilon != 0.  The values of the derivatives themselves (that
+                # is, the real part of the dual numbers) will be wrong but the
+                # second derivatives with respect to source s will be right.
+                mp_dual.active_sources = [s]
+              end
+              for index in 1:size(x)[1]
                 index == 1 ? print("o"): print(".")
                 original_x = x[index, s]
                 x_dual[index, s] = DualNumbers.Dual(original_x, 1.)
+
                 deriv = f_grad(x_dual[:])
                 # This goes through deriv in column-major order.
-                hess[:, index] =
+                hess[:, sub2ind(x_size, index, s)] =
                   Float64[ ForwardDiff.epsilon(x_val) for x_val in deriv ]
                 x_dual[index, s] = DualNumbers.Dual(original_x, 0.)
+              end
             end
             print("Done.\n")
             # Assure that the hessian is exactly symmetric.
-            0.5 * (hess + hess')
+            hess[:,:] = 0.5 * (hess + hess')
+        end
+
+        # Returns the row and column indices and value of a sparse Hessian
+        # computed with autodifferentiation.
+        function f_ad_hessian_sparse(x_vec::Array{Float64})
+            @assert length(x_vec) == x_length
+            x = reshape(x_vec, x_size)
+            k = length(x_vec)
+
+            x_dual = DualNumbers.Dual{Float64}[
+              DualNumbers.Dual{Float64}(x[i, j], 0.) for
+              i = 1:size(x)[1], j=1:size(x)[2]];
+
+            # Vectors of the (source, component) indices for the rows
+            # and columns of the Hessian.
+            hess_i = @compat(Tuple{Int64, Int64}[])
+            hess_j = @compat(Tuple{Int64, Int64}[])
+
+            # Values of the hessian in the (hess_i, hess_j) locations.
+            hess_val = Float64[]
+
+            print("Getting sparse Hessian ($k components): ")
+            deriv_sources = fast_hessian ? mp.active_sources: collect(1:mp.S)
+            mp_dual.active_sources = deriv_sources
+            for s1 in deriv_sources
+              if fast_hessian
+                # We only need to calculate the derivatives in tiles where
+                # epsilon != 0.  The values of the derivatives themselves (that
+                # is, the real part of the dual numbers) will be wrong but the
+                # second derivatives with respect to source s will be right.
+                mp_dual.active_sources = [s1]
+              end
+              for index1 in 1:size(x)[1]
+                index1 == 1 ? print("o"): print(".")
+                original_x = x[index1, s1]
+                x_dual[index1, s1] = DualNumbers.Dual(original_x, 1.)
+                deriv = reshape(f_grad(x_dual[:]), x_size)
+                x_dual[index1, s1] = DualNumbers.Dual(original_x, 0.)
+
+                # Record the hessian terms.
+                for s2 in deriv_sources, index2=1:size(x)[1]
+                  this_hess_val = DualNumbers.epsilon(deriv[index2, s2])
+                  if (this_hess_val != 0)
+                    push!(hess_i, (s1, index1))
+                    push!(hess_j, (s2, index2))
+                    push!(hess_val, this_hess_val)
+                  end # index2 for
+                end # s2 for
+              end # index for
+            end # s1 for
+            print("Done.\n")
+            hess_i, hess_j, hess_val
         end
 
         new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_grad!,
-            f_ad_grad, f_ad_hessian,
+            f_ad_grad, f_ad_hessian!, f_ad_hessian_sparse,
             state, transform, mp, kept_ids, omitted_ids)
     end
 end
 
 
 @doc """
-Vectors of the row, column, and value of the Hessian entries.
-The indices are tuples of (source, parameter) which will be
-linearized later.
+Convert the indices and values of a sparse Hessian matrix to an actual
+sparse matrix.
+
+Args:
+  - hess_i: A vector of (source, component) tuples for the Hessian rows
+  - hess_j: A vector of (source, component) tuples for the Hessian columns
+  - hess_val: The values of the Hessian corresponding to (hess_i, hess_j)
+  - dims: The dimensions of the parameter matrix (#components, #sources)
+
+Returns:
+  - A symmetric sparse matrix corresponding to the inputs.
 """ ->
-function elbo_hessian(tiled_blob::TiledBlob,
-                      x::Matrix{Float64},
-                      mp_dual::ModelParams{DualNumbers.Dual{Float64}},
-                      transform::Transform.DataTransform,
-                      omitted_ids::Vector{Int64};
-                      deriv_sources=1:mp_dual.S,
-                      verbose=false)
-  k = size(x)[1]
-  @assert size(x)[2] == length(mp_dual.vp)
-
-  hess_i = Tuple{Int64, Int64}[]
-  hess_j = Tuple{Int64, Int64}[]
-  hess_val = Float64[]
-
-  accum = zero_sensitive_float(CanonicalParams, Dual{Float64}, mp_dual.S);
-  x_dual = Dual{Float64}[ Dual{Float64}(x[i, j], 0.) for
-                          i = 1:size(x)[1], j=1:size(x)[2] ];
-
-  new_hess_time = time()
-  for s1 in deriv_sources
-    verbose && println("Source $s1")
-    for index1=1:k
-      verbose && print(".")
-      original_val = real(x_dual[index1, s1])
-      @assert epsilon(x_dual[index1, s1]) == 0.
-      x_dual[index1, s1] = DualNumbers.Dual(original_val, 1.);
-      transform.array_to_vp!(x_dual, mp_dual.vp, omitted_ids);
-      ElboDeriv.elbo_hessian_term!(tiled_blob, mp_dual, accum, s1);
-      accum_trans = transform.transform_sensitive_float(accum, mp_dual);
-      @assert size(accum_trans.d) == (k, mp_dual.S)
-      x_dual[index1, s1] = DualNumbers.Dual(original_val, 0.)
-
-      # Record the hessian terms.
-      for s2 in deriv_sources, index2=1:k
-        this_hess_val = DualNumbers.epsilon(accum_trans.d[index2, s2])
-        if (this_hess_val != 0)
-          push!(hess_i, (s1, index1))
-          push!(hess_j, (s2, index2))
-          push!(hess_val, this_hess_val)
-        end
-      end
-    end
-    verbose && println("Done with source $s1.")
-  end
-  new_hess_time = time() - new_hess_time
-
-  @assert length(hess_i) == length(hess_j) == length(hess_val)
-  hess_i, hess_j, hess_val, new_hess_time
-end
-
-
 function unpack_hessian_vals(hess_i::@compat(Vector{Tuple{Int64, Int64}}),
                              hess_j::@compat(Vector{Tuple{Int64, Int64}}),
                              hess_val::Vector{Float64},
@@ -251,9 +280,10 @@ function unpack_hessian_vals(hess_i::@compat(Vector{Tuple{Int64, Int64}}),
   end
   new_hess_sparse =
     sparse(hess_i_vec, hess_j_vec, hess_val, prod(dims), prod(dims));
-  new_hess = 0.5 * full(new_hess_sparse + new_hess_sparse')
-end
 
+  # Guarantee exact symmetry.
+  new_hess = 0.5 * (new_hess_sparse + new_hess_sparse')
+end
 
 
 function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
@@ -301,7 +331,6 @@ Args:
   - xtol_rel: X convergence
   - ftol_abs: F convergence
   - verbose: Print detailed output
-  - elbo_hessian: Use a more efficient autodiff function for the ELBO hessian.
 
 Returns:
   - iter_count: The number of iterations taken
@@ -309,29 +338,26 @@ Returns:
   - max_x: The optimal function input
   - ret: The return code of optimize()
 """ ->
-function maximize_f_newton(
+function maximize_f(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::Transform.DataTransform;
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  max_iters=100, rho_lower=0.25, elbo_hessian=false)
+  max_iters=100, rho_lower=0.25, fast_hessian=true)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
       OptimizeElbo.ObjectiveWrapperFunctions(
-        mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
+        mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids,
+        fast_hessian=fast_hessian);
 
     # For minimization, which is required by the linesearch algorithm.
     optim_obj_wrap.state.scale = -1.0
     optim_obj_wrap.state.verbose = verbose
 
-    function f_hess_wrapper!(x, new_hess)
-      hess = optim_obj_wrap.f_ad_hessian(x)
-      new_hess[:,:] = hess
-    end
-
     x0 = transform.vp_to_array(mp.vp, omitted_ids);
     d = Optim.TwiceDifferentiableFunction(
-      optim_obj_wrap.f_value, optim_obj_wrap.f_grad!, f_hess_wrapper!)
+      optim_obj_wrap.f_value, optim_obj_wrap.f_grad!,
+      optim_obj_wrap.f_ad_hessian!)
 
     # TODO: use the Optim version after newton_tr is merged.
     nm_result = newton_tr(d,
@@ -381,7 +407,7 @@ Returns:
   - max_x: The optimal function input
   - ret: The return code of optimize()
 """ ->
-function maximize_f(
+function maximize_f_bfgs(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::DataTransform,
   lbs::@compat(Union{Float64, Vector{Float64}}),
@@ -417,17 +443,6 @@ function maximize_f(
 end
 
 
-function maximize_f(
-  f::Function, tiled_blob::TiledBlob, mp::ModelParams, transform::DataTransform;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
-    # Default to the bounds given in get_nlopt_unconstrained_bounds.
-
-    lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform)
-    maximize_f(f, tiled_blob, mp, transform, lbs, ubs;
-      omitted_ids=omitted_ids, xtol_rel=xtol_rel,
-      ftol_abs=ftol_abs, verbose = verbose)
-end
-
 function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
     omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
     # Use the default transform.
@@ -441,8 +456,8 @@ end
 function maximize_elbo(tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;
     xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
     omitted_ids = setdiff(1:length(UnconstrainedParams),
-                          [ids_free.r1, ids_free.r2,
-                           ids_free.k[:], ids_free.c1[:]])
+                          [ids_free.r1; ids_free.r2;
+                           ids_free.k[:]; ids_free.c1[:]])
     maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids,
         ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
 
@@ -458,7 +473,7 @@ end
 function maximize_likelihood(
   tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;
   xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
-    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+    omitted_ids = [ids_free.k[:]; ids_free.c2[:]; ids_free.r2]
     maximize_f(ElboDeriv.elbo_likelihood, tiled_blob, mp, trans,
                omitted_ids=omitted_ids, xtol_rel=xtol_rel,
                ftol_abs=ftol_abs, verbose=verbose)

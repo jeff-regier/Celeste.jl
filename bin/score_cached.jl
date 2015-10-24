@@ -112,7 +112,7 @@ function load_photo_obj!(i::Int64, stamp_id::String,
 end
 
 
-function convert(::Type{CatalogEntry}, vs::Vector{Float64})
+function convert(::Type{CatalogEntry}, vs::Vector{Float64}; objid="converted")
     function get_fluxes(i::Int64)
         ret = Array(Float64, 5)
         ret[3] = vs[ids.r1[i]] * vs[ids.r2[i]]
@@ -131,7 +131,8 @@ function convert(::Type{CatalogEntry}, vs::Vector{Float64})
         vs[ids.e_dev],
         vs[ids.e_axis],
         vs[ids.e_angle],
-        vs[ids.e_scale])
+        vs[ids.e_scale],
+        objid)
 end
 
 

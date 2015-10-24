@@ -157,7 +157,8 @@ obj_wrapper = OptimizeElbo.ObjectiveWrapperFunctions(
 obj_wrapper.state.verbose = true
 
 obj_hess_time = time()
-obj_hess = obj_wrapper.f_ad_hessian(x0);
+hess = zeros(Float64, length(x0), length(x0));
+obj_hess = obj_wrapper.f_ad_hessian!(x0, hess);
 obj_hess_time = time() - obj_hess_time
 
 i, j = findn((abs(obj_hess) .> 1e-10) & (abs(new_hess) .< 1e-10))
@@ -576,7 +577,8 @@ for iter in 1:max_iters
     x_old = deepcopy(x_new);
     old_val = new_val;
 
-    elbo_hess = obj_wrap.f_ad_hessian(x_new);
+    hess = zeros(Float64, length(x0), length(x0));
+    elbo_hess = obj_wrap.f_ad_hessian!(x_new, hess);
     hesses[iter] = elbo_hess
     hess_ev = eig(elbo_hess)[1]
     min_ev = minimum(hess_ev)
