@@ -338,11 +338,11 @@ Returns:
   - max_x: The optimal function input
   - ret: The return code of optimize()
 """ ->
-function maximize_f_newton(
+function maximize_f(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::Transform.DataTransform;
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  max_iters=100, rho_lower=0.25, fast_hessian=false)
+  max_iters=100, rho_lower=0.25, fast_hessian=true)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
@@ -407,7 +407,7 @@ Returns:
   - max_x: The optimal function input
   - ret: The return code of optimize()
 """ ->
-function maximize_f(
+function maximize_f_bfgs(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::DataTransform,
   lbs::@compat(Union{Float64, Vector{Float64}}),
@@ -442,17 +442,6 @@ function maximize_f(
     obj_wrapper.state.f_evals, max_f, max_x, ret
 end
 
-
-function maximize_f(
-  f::Function, tiled_blob::TiledBlob, mp::ModelParams, transform::DataTransform;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
-    # Default to the bounds given in get_nlopt_unconstrained_bounds.
-
-    lbs, ubs = get_nlopt_unconstrained_bounds(mp.vp, omitted_ids, transform)
-    maximize_f(f, tiled_blob, mp, transform, lbs, ubs;
-      omitted_ids=omitted_ids, xtol_rel=xtol_rel,
-      ftol_abs=ftol_abs, verbose = verbose)
-end
 
 function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
     omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
