@@ -160,10 +160,13 @@ type ObjectiveWrapperFunctions
             @assert length(x_vec) == x_length
             x = reshape(x_vec, x_size)
             k = length(x_vec)
-            @assert size(hess) == (k, k)
+
             x_dual = DualNumbers.Dual{Float64}[
               DualNumbers.Dual{Float64}(x[i, j], 0.) for
               i = 1:size(x)[1], j=1:size(x)[2]];
+
+            @assert size(hess) == (k, k)
+
             print("Getting Hessian ($k components): ")
             deriv_sources = fast_hessian ? mp.active_sources: collect(1:mp.S)
             mp_dual.active_sources = deriv_sources
@@ -182,7 +185,7 @@ type ObjectiveWrapperFunctions
 
                 deriv = f_grad(x_dual[:])
                 # This goes through deriv in column-major order.
-                hess[:, index] =
+                hess[:, sub2ind(x_size, index, s)] =
                   Float64[ ForwardDiff.epsilon(x_val) for x_val in deriv ]
                 x_dual[index, s] = DualNumbers.Dual(original_x, 0.)
               end
@@ -211,7 +214,7 @@ type ObjectiveWrapperFunctions
             # Values of the hessian in the (hess_i, hess_j) locations.
             hess_val = Float64[]
 
-            print("Getting Hessian ($k components): ")
+            print("Getting sparse Hessian ($k components): ")
             deriv_sources = fast_hessian ? mp.active_sources: collect(1:mp.S)
             mp_dual.active_sources = deriv_sources
             for s1 in deriv_sources
@@ -226,7 +229,7 @@ type ObjectiveWrapperFunctions
                 index1 == 1 ? print("o"): print(".")
                 original_x = x[index1, s1]
                 x_dual[index1, s1] = DualNumbers.Dual(original_x, 1.)
-                deriv = reshape(f_grad(x_dual[:]), size(x_dual))
+                deriv = reshape(f_grad(x_dual[:]), x_size)
                 x_dual[index1, s1] = DualNumbers.Dual(original_x, 0.)
 
                 # Record the hessian terms.
