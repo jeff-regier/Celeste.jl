@@ -192,7 +192,7 @@ type ObjectiveWrapperFunctions
             end
             print("Done.\n")
             # Assure that the hessian is exactly symmetric.
-            0.5 * (hess + hess')
+            hess[:,:] = 0.5 * (hess + hess')
         end
 
         # Returns the row and column indices and value of a sparse Hessian
