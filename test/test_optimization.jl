@@ -113,9 +113,8 @@ function test_objective_wrapper()
     @test_approx_eq(slow_w_hess, w_hess)
 
     hess_i, hess_j, hess_val = wrapper_slow_hess.f_ad_hessian_sparse(x[:]);
-    slow_w_hess_sparse = unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+    slow_w_hess_sparse = OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
     @test_approx_eq(slow_w_hess, full(slow_w_hess_sparse))
-
 end
 
 
