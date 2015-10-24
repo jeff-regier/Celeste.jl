@@ -472,7 +472,7 @@ function update_parameter_message!{NumType <: Number}(
     param_msg.star_mcs_vec[b], param_msg.gal_mcs_vec[b] =
       load_bvn_mixtures(mp, b);
     param_msg.sbs_vec[b] = SourceBrightness{NumType}[
-      SourceBrightness(mp.vp[s]) for s in mp.S];
+      SourceBrightness(mp.vp[s]) for s in 1:mp.S];
   end
 end
 
