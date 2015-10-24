@@ -140,7 +140,7 @@ function test_star_optimization_newton()
     function lik_function(tiled_blob::TiledBlob, mp::ModelParams)
       ElboDeriv.elbo_likelihood(tiled_blob, mp)
     end
-    omitted_ids = [ids_free.k[:], ids_free.c2[:], ids_free.r2]
+    omitted_ids = [ids_free.k[:]; ids_free.c2[:]; ids_free.r2]
     OptimizeElbo.maximize_f_newton(
       lik_function, tiled_blob, mp, trans,
       omitted_ids=omitted_ids, verbose=true);
@@ -213,9 +213,17 @@ end
 
 
 function test_galaxy_optimization()
+    # NLOpt fails here.
     blob, mp, body, tiled_blob = gen_sample_galaxy_dataset();
-    trans = get_mp_transform(mp, loc_width=1.0);
-    OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, xtol_rel=0.0)
+    trans = get_mp_transform(mp, loc_width=3.0);
+
+    function lik_function(tiled_blob::TiledBlob, mp::ModelParams)
+      ElboDeriv.elbo_likelihood(tiled_blob, mp)
+    end
+    omitted_ids = [ids_free.k[:]; ids_free.c2[:]; ids_free.r2]
+    OptimizeElbo.maximize_f_newton(
+      lik_function, tiled_blob, mp, trans,
+      omitted_ids=omitted_ids, verbose=true);
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6])
 end
 
