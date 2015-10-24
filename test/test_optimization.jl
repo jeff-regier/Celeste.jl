@@ -54,7 +54,12 @@ end
 function test_objective_wrapper()
     omitted_ids = Int64[];
     kept_ids = setdiff(1:length(ids_free), omitted_ids);
-    blob, mp, body, tiled_blob = SampleData.gen_two_body_dataset();
+
+    blob, mp, two_bodies, tiled_blob = SampleData.gen_two_body_dataset();
+    # Change the tile size.
+    tiled_blob, mp = ModelInit.initialize_celeste(
+      blob, two_bodies, tile_width=5, fit_psf=false, patch_radius=10.);
+
     trans = get_mp_transform(mp, loc_width=1.0);
 
     wrapper =
@@ -100,9 +105,7 @@ function test_objective_wrapper()
     w_hess_sparse =
       OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
     @test_approx_eq(w_hess, full(w_hess_sparse))
-    #plot(w_hess, w_hess_sparse, "k.")
 
-    # TODO: fix these:
     wrapper_slow_hess =
       OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(tiled_blob, mp),
         mp, trans, kept_ids, omitted_ids, fast_hessian=false);
