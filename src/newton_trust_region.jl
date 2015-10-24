@@ -78,6 +78,7 @@ function check_hard_case_candidate(H_eigv, qg)
   hard_case, lambda_index - 1
 end
 
+
 # Choose a point in the trust region for the next step using
 # the interative (nearly exact) method of section 4.3 of Nocedal and Wright.
 # This is appropriate for Hessians that you factorize quickly.
@@ -256,27 +257,25 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
 end
 
 
-function newton_tr{T}(d::TwiceDifferentiableFunction,
-                       initial_x::Vector{T};
-                       initial_delta::T=1.0,
-                       delta_hat::T = 100.0,
-                       eta::T = 0.1,
-                       xtol::Real = 1e-32,
-                       ftol::Real = 1e-8,
-                       grtol::Real = 1e-8,
-                       rho_lower::Real = 0.25,
-                       rho_upper::Real = 0.75,
-                       iterations::Integer = 1_000,
-                       store_trace::Bool = false,
-                       show_trace::Bool = false,
-                       extended_trace::Bool = false)
+type NewtonTRState{T}
+  x::Vector{T}
+  x_previous::Vector{T}
+  gr::Vector{T}
+  gr_previous::Vector{T}
+  f_x::Real
+  f_x_previous::Real
+  H::Matrix{T} # The Hesssian.
+  n::Integer # The size of the pareameter vector.
+  s::Vector{T} # Memory allocated for the current search direction.
+  delta::Real # The current trust region size.
+  iteration::Integer
+  f_calls::Integer
+  g_calls::Integer
+  tr::OptimizationTrace
 
-    @assert(delta_hat > 0, "delta_hat must be strictly positive")
-    @assert(0 < initial_delta < delta_hat, "delta must be in (0, delta_hat)")
-    @assert(0 <= eta < 0.25, "eta must be in [0, 0.25)")
-    @assert(rho_lower < rho_upper, "must have rho_lower < rho_upper")
-    @assert(rho_lower >= 0.)
-
+  NetwonTRState{T}(d::TwiceDifferentiableFunction,
+                   initial_x::Vector{T};
+                   initial_delta::T=1.0,) = begin
     # Maintain current state in x and previous state in x_previous
     x, x_previous = copy(initial_x), copy(initial_x)
 
@@ -313,118 +312,182 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
 
     # Trace the history of states visited
     tr = OptimizationTrace()
+
+    new(x, x_previous, gr, gr_previous, f_x, f_x_previous,
+        H, n, s, delta, iteration, f_calls, g_calls, tr)
+    end
+end
+
+
+function take_newton_tr_step!{T}(d::TwiceDifferentiableFunction,
+                                 trs::NewtonTRState{T};
+                                 delta_hat::T = 100.0,
+                                 eta::T = 0.1,
+                                 xtol::Real = 1e-32,
+                                 ftol::Real = 1e-8,
+                                 grtol::Real = 1e-8,
+                                 rho_lower::Real = 0.25,
+                                 rho_upper::Real = 0.75,
+                                 iterations::Integer = 1_000,
+                                 store_trace::Bool = false,
+                                 show_trace::Bool = false,
+                                 extended_trace::Bool = false)
+
+  verbose_println("\n-----------------Iter $(trs.iteration)")
+
+  # Find the next step direction.
+  m, interior = solve_tr_subproblem!(trs.gr, trs.H, trs.delta, trs.s)
+
+  # Maintain a record of previous position
+  copy!(trs.x_previous, trs.x)
+
+  # Update current position
+  for i in 1:trs.n
+     @inbounds trs.x[i] = trs.x[i] + trs.s[i]
+  end
+
+  # Update the function value and gradient
+  copy!(trs.gr_previous, trs.gr)
+  trs.f_x_previous, trs.f_x = trs.f_x, d.fg!(trs.x, trs.gr)
+  trs.f_calls, trs.g_calls = trs.f_calls + 1, trs.g_calls + 1
+
+  # Update the trust region size based on the discrepancy between
+  # the predicted and actual function values.  (Algorithm 4.1 in N&W)
+  f_x_diff = trs.f_x_previous - trs.f_x
+  if m == 0
+   # This should only happen if the step is zero, in which case
+   # we should accept the step and assess_convergence().
+   @assert(f_x_diff == 0,
+           "m == 0 but the actual function change ($f_x_diff) is nonzero")
+   rho = 1.0
+  else
+   rho = f_x_diff / (0 - m)
+  end
+
+  verbose_println("Got rho = $rho from $(trs.f_x) - $(trs.f_x_previous) ",
+         "(diff = $(trs.f_x - trs.f_x_previous)), and m = $m")
+  verbose_println("Interior = $interior, delta = $(trs.delta).")
+
+  if rho < rho_lower
+     verbose_println("Shrinking trust region.")
+     trs.delta *= 0.25
+  elseif (rho > rho_upper) && (!interior)
+     verbose_println("Growing trust region.")
+     trs.delta = min(2 * trs.delta, delta_hat)
+  else
+   # else leave delta unchanged.
+   verbose_println("Keeping trust region the same.")
+  end
+
+  if rho > eta
+     # Accept the point and check convergence
+     verbose_println("Accepting improvement from f_prev=$(f_x_previous) f=$(f_x).")
+
+     x_converged,
+     f_converged,
+     gr_converged,
+     converged = assess_convergence(trs.x,
+                                    trs.x_previous,
+                                    trs.f_x,
+                                    trs.f_x_previous,
+                                    trs.gr,
+                                    xtol,
+                                    ftol,
+                                    grtol)
+     if !converged
+       # Only compute the next Hessian if we haven't converged
+       d.h!(trs.x, trs.H)
+     else
+       verbose_println("Converged.")
+     end
+  else
+     # The improvement is too small and we won't take it.
+     verbose_println("Rejecting improvement from $(trs.x_previous) to ",
+             "$(trs.x), f=$(trs.f_x) (f_prev = $(trs.f_x_previous))")
+
+     # If you reject an interior solution, make sure that the next
+     # delta is smaller than the current step.  Otherwise you waste
+     # steps reducing delta by constant factors while each solution
+     # will be the same.
+     trs.delta = 0.25 * sqrt(norm2(trs.x - trs.x_previous))
+
+     trs.f_x = trs.f_x_previous
+     copy!(trs.x, trs.x_previous)
+     copy!(trs.gr, trs.gr_previous)
+
+  end
+
+  # Increment the number of steps we've had to perform
+  trs.iteration += 1
+
+  # Record the step
+  tr = trs.tr
+  tracing = store_trace || show_trace || extended_trace
+  @newton_tr_trace
+
+  x_converged, f_converged, gr_converged, converged
+end
+
+
+function newton_tr{T}(d::TwiceDifferentiableFunction,
+                       initial_x::Vector{T};
+                       initial_delta::T=1.0,
+                       delta_hat::T = 100.0,
+                       eta::T = 0.1,
+                       xtol::Real = 1e-32,
+                       ftol::Real = 1e-8,
+                       grtol::Real = 1e-8,
+                       rho_lower::Real = 0.25,
+                       rho_upper::Real = 0.75,
+                       iterations::Integer = 1_000,
+                       store_trace::Bool = false,
+                       show_trace::Bool = false,
+                       extended_trace::Bool = false)
+
+    @assert(delta_hat > 0, "delta_hat must be strictly positive")
+    @assert(0 < initial_delta < delta_hat, "delta must be in (0, delta_hat)")
+    @assert(0 <= eta < 0.25, "eta must be in [0, 0.25)")
+    @assert(rho_lower < rho_upper, "must have rho_lower < rho_upper")
+    @assert(rho_lower >= 0.)
+
+    trs = NetwonTRState(d, initial_x, initial_delta)
+    tr = trs.tr
+
     tracing = store_trace || show_trace || extended_trace
     @newton_tr_trace
 
-    # Assess multiple types of convergence
-    x_converged, f_converged, gr_converged = false, false, false
-
     # Iterate until convergence
     converged = false
-    while !converged && iteration <= iterations
-        verbose_println("\n-----------------Iter $iteration")
-
-        # Find the next step direction.
-        m, interior = solve_tr_subproblem!(gr, H, delta, s)
-
-        # Maintain a record of previous position
-        copy!(x_previous, x)
-
-        # Update current position
-        for i in 1:n
-            @inbounds x[i] = x[i] + s[i]
-        end
-
-        # Update the function value and gradient
-        copy!(gr_previous, gr)
-        f_x_previous, f_x = f_x, d.fg!(x, gr)
-        f_calls, g_calls = f_calls + 1, g_calls + 1
-
-        # Update the trust region size based on the discrepancy between
-        # the predicted and actual function values.  (Algorithm 4.1 in N&W)
-        f_x_diff = f_x_previous - f_x
-        if m == 0
-          # This should only happen if the step is zero, in which case
-          # we should accept the step and assess_convergence().
-          @assert(f_x_diff == 0,
-                  "m == 0 but the actual function change ($f_x_diff) is nonzero")
-          rho = 1.0
-        else
-          rho = f_x_diff / (0 - m)
-        end
-
-        verbose_println("Got rho = $rho from $(f_x) - $(f_x_previous) ",
-                "(diff = $(f_x - f_x_previous)), and m = $m")
-        verbose_println("Interior = $interior, delta = $delta.")
-
-        if rho < rho_lower
-            verbose_println("Shrinking trust region.")
-            delta *= 0.25
-        elseif (rho > rho_upper) && (!interior)
-            verbose_println("Growing trust region.")
-            delta = min(2 * delta, delta_hat)
-        else
-          # else leave delta unchanged.
-          verbose_println("Keeping trust region the same.")
-        end
-
-        if rho > eta
-            # Accept the point and check convergence
-            verbose_println("Accepting improvement from f_prev=$(f_x_previous) f=$(f_x).")
-
-            x_converged,
-            f_converged,
-            gr_converged,
-            converged = assess_convergence(x,
-                                           x_previous,
-                                           f_x,
-                                           f_x_previous,
-                                           gr,
-                                           xtol,
-                                           ftol,
-                                           grtol)
-            if !converged
-              # Only compute the next Hessian if we haven't converged
-              d.h!(x, H)
-            else
-              verbose_println("Converged.")
-            end
-        else
-            # The improvement is too small and we won't take it.
-            verbose_println("Rejecting improvement from $(x_previous) to ",
-                    "$x, f=$f_x (f_prev = $(f_x_previous))")
-
-            # If you reject an interior solution, make sure that the next
-            # delta is smaller than the current step.  Otherwise you waste
-            # steps reducing delta by constant factors while each solution
-            # will be the same.
-            delta = 0.25 * sqrt(norm2(x - x_previous))
-
-            f_x = f_x_previous
-            copy!(x, x_previous)
-            copy!(gr, gr_previous)
-
-        end
-
-        # Increment the number of steps we've had to perform
-        iteration += 1
-
-        @newton_tr_trace
+    while !converged && trs.iteration <= iterations
+      x_converged, f_converged, gr_converged, converged =
+        take_newton_tr_step!(d,
+                             trs,
+                             delta_hat=delta_hat,
+                             eta=eta,
+                             xtol=xtol,
+                             ftol=ftol,
+                             grtol=grtol,
+                             rho_lower=rho_lower,
+                             rho_upper=rho_upper,
+                             iterations=iterations,
+                             store_trace=store_trace,
+                             show_trace=show_trace,
+                             extended_trace=extended_trace)
     end
 
     return MultivariateOptimizationResults("Newton's Method with Trust Region",
                                            initial_x,
-                                           x,
-                                           @compat(Float64(f_x)),
-                                           iteration,
-                                           iteration == iterations,
+                                           trs.x,
+                                           @compat(Float64(trs.f_x)),
+                                           trs.iteration,
+                                           trs.iteration == iterations,
                                            x_converged,
                                            xtol,
                                            f_converged,
                                            ftol,
                                            gr_converged,
                                            grtol,
-                                           tr,
-                                           f_calls,
-                                           g_calls)
+                                           trs.tr,
+                                           trs.f_calls,
+                                           trs.g_calls)
 end
