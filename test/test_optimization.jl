@@ -190,7 +190,7 @@ function test_two_body_optimization_newton()
     PyPlot.title("BFGS")
 
     PyPlot.subplot(1, 3, 3)
-    PyPlot.imshow(orignal_image)
+    PyPlot.imshow(original_image)
     PyPlot.title("Original")
 
     sum((newton_image .- original_image) .^ 2)
@@ -199,21 +199,11 @@ function test_two_body_optimization_newton()
     # newton beats bfgs on the elbo, though not on the likelihood.
     elbo_function(tiled_blob, mp_bfgs).v
     elbo_function(tiled_blob, mp_newton).v
-
-    # This does not work well.  It keeps taking very small steps.
-    mp_newton_bdiag = deepcopy(mp);
-    newton_bdiag_iter_count = OptimizeElbo.maximize_f_newton(
-      elbo_function, tiled_blob, mp_newton_bdiag, trans,
-      omitted_ids=omitted_ids, verbose=true, block_hessian=true,
-      rho_lower = 0.001);
-
-    elbo_function(tiled_blob, mp_newton_bdiag).v
 end
 
 
-
 function test_galaxy_optimization()
-    # NLOpt fails here.
+    # NLOpt fails here so use newton.
     blob, mp, body, tiled_blob = gen_sample_galaxy_dataset();
     trans = get_mp_transform(mp, loc_width=3.0);
 
