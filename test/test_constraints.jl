@@ -92,28 +92,46 @@ end
 
 function test_parameter_conversion()
 	blob, mp, body = gen_three_body_dataset();
+
+	function check_transform(transform::DataTransform, mp::ModelParams)
+		original_vp = deepcopy(mp.vp);
+		mp_check = deepcopy(mp);
+
+		# Check that the constrain and unconstrain operations undo each other.
+		vp_free = transform.from_vp(mp.vp)
+		transform.to_vp!(vp_free, mp_check.vp)
+
+		for id in fieldnames(ids), s in 1:mp.S
+			@test_approx_eq_eps(original_vp[s][ids.(id)],
+			                    mp_check.vp[s][ids.(id)], 1e-6)
+		end
+
+		# Check conversion to and from a vector.
+		omitted_ids = Array(Int64, 0)
+		vp = deepcopy(mp.vp)
+		x = transform.vp_to_array(vp, omitted_ids)
+		@test length(x) == length(vp_free[1]) * length(mp.active_sources)
+
+		vp2 = generate_valid_parameters(Float64, transform.bounds)
+		transform.array_to_vp!(x, vp2, omitted_ids)
+		for id in fieldnames(ids), si in 1:transform.active_S
+			s = transform.active_sources[si]
+			@test_approx_eq_eps(original_vp[s][ids.(id)], vp2[si][ids.(id)], 1e-6)
+		end
+	end
+
 	transform = get_mp_transform(mp, loc_width=1.0);
-	original_vp = deepcopy(mp.vp);
+	check_transform(transform, mp)
 
-	# Check that the constrain and unconstrain operations undo each other.
-	vp_free = transform.from_vp(mp.vp)
-	vp2 = transform.to_vp(vp_free)
+	# Test transforming only active sources.
+	mp1 = deepcopy(mp);
+	mp1.active_sources = [1]
+	transform1 = Transform.get_mp_transform(mp1)
 
-	for id in fieldnames(ids), s in 1:mp.S
-		@test_approx_eq_eps(original_vp[s][ids.(id)], vp2[s][ids.(id)], 1e-6)
-	end
+	@assert transform1.S == mp.S
+	@assert transform1.active_S == 1
+	check_transform(transform1, mp1)
 
-	# Check conversion to and from a vector.
-	omitted_ids = Array(Int64, 0)
-	vp = deepcopy(mp.vp)
-	x = transform.vp_to_array(vp, omitted_ids)
-	@test length(x) == length(vp_free[1]) * mp.S
-
-	vp2 = generate_valid_parameters(Float64, transform.bounds)
-	transform.array_to_vp!(x, vp2, omitted_ids)
-	for id in fieldnames(ids), s in 1:mp.S
-		@test_approx_eq_eps(original_vp[s][ids.(id)], vp2[s][ids.(id)], 1e-6)
-	end
 end
 
 test_transform_box_functions()
