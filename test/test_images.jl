@@ -193,10 +193,6 @@ function test_set_patch_size()
       @assert size(tiled_blob[b]) == (1, 1)
       tile_image = ElboDeriv.tile_predicted_image(tiled_blob[b][1,1], mp);
 
-      # Assume here that the bacgkround is constant and subtract the sky noise.
-      @assert blob[b].constant_background
-      tile_image = tile_image .- blob[b].epsilon * blob[b].iota
-
       pixel_center = WCS.world_to_pixel(blob[b].wcs, cat[1].pos)
       radius = ModelInit.choose_patch_radius(
         pixel_center, cat[1], blob[b].psf, blob[b])
@@ -212,8 +208,9 @@ function test_set_patch_size()
       @test in_circle / sum(tile_image) > 0.95
 
       # Convenient for visualizing:
+      # using PyPlot
       # in_circle / sum(tile_image)
-      # imshow(tile_image .- blob[b].epsilon)
+      # imshow(tile_image); colorbar()
       # imshow(circle_pts, alpha=0.4)
     end
   end
