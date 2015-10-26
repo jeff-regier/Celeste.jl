@@ -26,13 +26,16 @@ typealias ParamBounds Dict{Symbol, ParamBox}
 #####################
 # Conversion to and from vectors.
 
+@doc """
+Transform VariationalParams to an array.
+
+vp = variational parameters
+omitted_ids = ids in ParamIndex
+
+There is probably no use for this function, since you'll only be passing
+trasformations to the optimizer, but I'll include it for completeness.""" ->
 function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
                                              omitted_ids::Vector{Int64})
-    # vp = variational parameters
-    # omitted_ids = ids in ParamIndex
-    #
-    # There is probably no use for this function, since you'll only be passing
-    # trasformations to the optimizer, but I'll include it for completeness.
 
     left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     new_P = length(left_ids)
@@ -164,7 +167,7 @@ const simplex_min = 0.005
 
 @doc """
 Convert a variational parameter vector to an unconstrained version using
-the lower bounds lbs and ubs (which are expressed)
+the lower bounds lbs and ubs.
 """ ->
 function vp_to_free!{NumType <: Number}(
   vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds)
@@ -289,7 +292,11 @@ from_vp!: A function that takes (variational paramters, transformed parameters)
 transform_sensitive_float: A function that takes (sensitive float, model
   parameters) where the sensitive float contains partial derivatives with
   respect to the variational parameters and returns a sensitive float with total
-  derivatives with respect to the transformed parameters. """ ->
+  derivatives with respect to the transformed parameters.
+bounds: The bounds for each parameter and each object in ModelParams.
+active_sources: The sources that are being optimized.  Only these sources'
+  parameters are transformed into the parameter vector.
+  """ ->
 type DataTransform
 	to_vp::Function
 	from_vp::Function
@@ -299,11 +306,24 @@ type DataTransform
   array_to_vp!::Function
 	transform_sensitive_float::Function
   bounds::Vector{ParamBounds}
+  active_sources::Vector{Int64}
+  active_S::Int64
+  S::Int64
 end
 
-DataTransform(bounds::Vector{ParamBounds}) = begin
+# TODO: Maybe this should be initialized with ModelParams with optional
+# custom bounds.  Or maybe it should be part of ModelParams with one transform
+# per celestial object rather than a single object containing an array of
+# transforms.
+DataTransform(bounds::Vector{ParamBounds};
+              active_sources=collect(1:length(bounds)), S=length(bounds)) = begin
 
-  # Make sure that each variable has its bounds set.
+  @assert length(bounds) == length(active_sources)
+  @assert maximum(active_sources) <= S
+  active_S = length(active_sources)
+
+  # Make sure that each variable has its bounds set.  The simplicial variables
+  # :a and :k don't have bounds.
   for s=1:length(bounds)
     @assert Set(keys(bounds[s])) == Set(setdiff(fieldnames(ids), [:a, :k]))
   end
@@ -311,35 +331,39 @@ DataTransform(bounds::Vector{ParamBounds}) = begin
   function from_vp!{NumType <: Number}(
     vp::VariationalParams{NumType}, vp_free::VariationalParams{NumType})
       S = length(vp)
-      @assert S == length(bounds)
-      for s=1:S
-        vp_to_free!(vp[s], vp_free[s], bounds[s])
+      @assert length(vp_free) == active_S
+      for si=1:active_S
+        s = active_sources[si]
+        vp_to_free!(vp[s], vp_free[si], bounds[si])
       end
   end
 
   function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
-      vp_free = [ zeros(NumType, length(ids_free)) for s = 1:length(vp)]
+      vp_free = [ zeros(NumType, length(ids_free)) for si = 1:active_S]
       from_vp!(vp, vp_free)
       vp_free
   end
 
   function to_vp!{NumType <: Number}(
     vp_free::FreeVariationalParams{NumType}, vp::VariationalParams{NumType})
-      S = length(vp_free)
-      @assert S == length(bounds)
-      for s=1:S
-        free_to_vp!(vp_free[s], vp[s], bounds[s])
+      @assert length(vp_free) == active_S
+      for si=1:active_S
+        s = active_sources[si]
+        free_to_vp!(vp_free[si], vp[s], bounds[si])
       end
   end
 
   function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
-      vp = [ zeros(length(CanonicalParams)) for s = 1:length(vp_free)]
+      @assert(active_S == S,
+              string("to_vp is not supported when active_sources is a ",
+                     "strict subset of all sources."))
+      vp = [ zeros(length(CanonicalParams)) for s = 1:S]
       to_vp!(vp_free, vp)
       vp
   end
 
   function vp_to_array{NumType <: Number}(vp::VariationalParams{NumType},
-                                           omitted_ids::Vector{Int64})
+                                          omitted_ids::Vector{Int64})
       vp_trans = from_vp(vp)
       free_vp_to_array(vp_trans, omitted_ids)
   end
@@ -363,44 +387,47 @@ DataTransform(bounds::Vector{ParamBounds}) = begin
   function transform_sensitive_float{NumType <: Number}(
     sf::SensitiveFloat, mp::ModelParams{NumType})
 
-      # Require that the input have all derivatives defined.
-      @assert size(sf.d) == (length(CanonicalParams), mp.S)
-      @assert mp.S == length(bounds)
+      # Require that the input have all derivatives defined, even for the
+      # non-active sources.
+      @assert size(sf.d) == (length(CanonicalParams), S)
+      @assert mp.S == S
 
-      sf_free = zero_sensitive_float(UnconstrainedParams, NumType, mp.S)
+      sf_free = zero_sensitive_float(UnconstrainedParams, NumType, active_S)
       sf_free.v = sf.v
 
-      for s in 1:mp.S
-        sf_free.d[:, s] =
-          unbox_param_derivative(mp.vp[s], sf.d[:, s][:], bounds[s])
+      for si in 1:active_S
+        s = active_sources[si]
+        sf_free.d[:, si] =
+          unbox_param_derivative(mp.vp[s], sf.d[:, si][:], bounds[si])
       end
 
       sf_free
   end
 
   DataTransform(to_vp, from_vp, to_vp!, from_vp!, vp_to_array, array_to_vp!,
-                transform_sensitive_float, bounds)
+                transform_sensitive_float, bounds, active_sources, active_S, S)
 end
 
 function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
-  bounds = Array(ParamBounds, mp.S)
+  bounds = Array(ParamBounds, length(mp.active_sources))
 
   # Note that, for numerical reasons, the bounds must be on the scale
   # of reasonably meaningful changes.
-  for s=1:mp.S
-    bounds[s] = ParamBounds()
+  for si in 1:length(mp.active_sources)
+    s = mp.active_sources[si]
+    bounds[si] = ParamBounds()
     u = mp.vp[s][ids.u]
-    bounds[s][:u] = ParamBox(u - loc_width, u + loc_width, ones(2))
-    bounds[s][:r1] = ParamBox(1e-4, Inf, 1e-2)
-    bounds[s][:r2] = ParamBox(1e-4, 0.1, 1.0)
-    bounds[s][:c1] = ParamBox(-10., 10., 1.0)
-    bounds[s][:c2] = ParamBox(1e-4, 1., 1.0)
-    bounds[s][:e_dev] = ParamBox(1e-2, 1 - 1e-2, 1.0)
-    bounds[s][:e_axis] = ParamBox(1e-2, 1 - 1e-2, 1.0)
-    bounds[s][:e_angle] = ParamBox(-10.0, 10.0, 1.0)
-    bounds[s][:e_scale] = ParamBox(0.1, 70., 1.0)
+    bounds[si][:u] = ParamBox(u - loc_width, u + loc_width, ones(2))
+    bounds[si][:r1] = ParamBox(1e-4, Inf, 1e-2)
+    bounds[si][:r2] = ParamBox(1e-4, 0.1, 1.0)
+    bounds[si][:c1] = ParamBox(-10., 10., 1.0)
+    bounds[si][:c2] = ParamBox(1e-4, 1., 1.0)
+    bounds[si][:e_dev] = ParamBox(1e-2, 1 - 1e-2, 1.0)
+    bounds[si][:e_axis] = ParamBox(1e-2, 1 - 1e-2, 1.0)
+    bounds[si][:e_angle] = ParamBox(-10.0, 10.0, 1.0)
+    bounds[si][:e_scale] = ParamBox(0.1, 70., 1.0)
   end
-  DataTransform(bounds)
+  DataTransform(bounds, active_sources=mp.active_sources, S=mp.S)
 end
 
 

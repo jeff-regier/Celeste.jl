@@ -64,8 +64,9 @@ type ObjectiveWrapperFunctions
       fast_hessian::Bool=true) = begin
 
         mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
-        x_length = length(kept_ids) * mp.S
-        x_size = (length(kept_ids), mp.S)
+        @assert transform.active_sources == mp.active_sources
+        x_length = length(kept_ids) * transform.active_S
+        x_size = (length(kept_ids), transform.active_S)
 
         state = WrapperState(0, false, 10, 1.0)
         function print_status{T <: Number}(
@@ -86,7 +87,7 @@ type ObjectiveWrapperFunctions
               for s=1:S
                 state_df[symbol(string("val", s))] = iter_vp[s]
               end
-              for s=1:mp.S
+              for s=1:S
                 state_df[symbol(string("grad", s))] = grad[:, s]
               end
               println(state_df)
@@ -94,7 +95,6 @@ type ObjectiveWrapperFunctions
             end
         end
 
-        # Takes a vector
         function f_objective(x_dual::Vector{DualNumbers.Dual{Float64}})
             state.f_evals += 1
             # Evaluate in the constrained space and then unconstrain again.
@@ -111,7 +111,8 @@ type ObjectiveWrapperFunctions
 
             # TODO: Add an option to print either the transformed or
             # free parameterizations.
-            print_status(mp.vp, f_res.v, f_res.d)
+            print_status(mp.vp[mp.active_sources],
+                         f_res.v, f_res.d[:, mp.active_sources])
             f_res_trans = transform.transform_sensitive_float(f_res, mp)
             #print_status(transform.from_vp(mp.vp), f_res_trans.v, f_res_trans.d)
             f_res_trans
@@ -122,7 +123,7 @@ type ObjectiveWrapperFunctions
             res = f_objective(x)
             grad = zeros(T, length(x))
             if length(grad) > 0
-                svs = [res.d[kept_ids, s] for s in 1:mp.S]
+                svs = [res.d[kept_ids, si] for si in 1:transform.active_S]
                 grad[:] = reduce(vcat, svs)
             end
             state.scale * res.v, state.scale .* grad
