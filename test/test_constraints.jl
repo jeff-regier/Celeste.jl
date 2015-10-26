@@ -118,6 +118,8 @@ function test_parameter_conversion()
 			s = transform.active_sources[si]
 			@test_approx_eq_eps(original_vp[s][ids.(id)], vp2[si][ids.(id)], 1e-6)
 		end
+
+		# TODO: test transforming sensitive floats.
 	end
 
 	transform = get_mp_transform(mp, loc_width=1.0);

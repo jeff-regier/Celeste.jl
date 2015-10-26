@@ -387,8 +387,9 @@ DataTransform(bounds::Vector{ParamBounds};
   function transform_sensitive_float{NumType <: Number}(
     sf::SensitiveFloat, mp::ModelParams{NumType})
 
-      # Require that the input have all derivatives defined.
-      @assert size(sf.d) == (length(CanonicalParams), active_S)
+      # Require that the input have all derivatives defined, even for the
+      # non-active sources.
+      @assert size(sf.d) == (length(CanonicalParams), S)
       @assert mp.S == S
 
       sf_free = zero_sensitive_float(UnconstrainedParams, NumType, active_S)
