@@ -27,9 +27,13 @@ mp_1 = deepcopy(mp);
 mp_1.active_sources = [1];
 
 transform = Transform.get_mp_transform(mp_1);
-
-
 OptimizeElbo.maximize_elbo(tiled_blob, mp_1; verbose=true);
+
+
+
+
+
+
 
 
 

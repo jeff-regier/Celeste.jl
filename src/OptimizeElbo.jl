@@ -87,7 +87,7 @@ type ObjectiveWrapperFunctions
               for s=1:S
                 state_df[symbol(string("val", s))] = iter_vp[s]
               end
-              for s=1:mp.S
+              for s=1:S
                 state_df[symbol(string("grad", s))] = grad[:, s]
               end
               println(state_df)
@@ -111,7 +111,8 @@ type ObjectiveWrapperFunctions
 
             # TODO: Add an option to print either the transformed or
             # free parameterizations.
-            print_status(mp.vp, f_res.v, f_res.d)
+            print_status(mp.vp[mp.active_sources],
+                         f_res.v, f_res.d[:, mp.active_sources])
             f_res_trans = transform.transform_sensitive_float(f_res, mp)
             #print_status(transform.from_vp(mp.vp), f_res_trans.v, f_res_trans.d)
             f_res_trans
