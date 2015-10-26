@@ -18,7 +18,7 @@ println("Loading libraries.")
   include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
   frame_jld_file = "initialzed_celeste_003900-6-0269.JLD"
   S = 20
-  synthetic = true
+  synthetic = false
 end
 
 load_cluster_data();
