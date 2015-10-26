@@ -724,12 +724,18 @@ function expected_pixel_brightness!{NumType <: Number}(
     mp::ModelParams{NumType},
     tile_sources::Vector{Int64},
     fs0m::SensitiveFloat{StarPosParams, NumType},
-    fs1m::SensitiveFloat{GalaxyPosParams, NumType})
+    fs1m::SensitiveFloat{GalaxyPosParams, NumType};
+    include_epsilon::Bool=true)
 
   clear!(E_G)
   clear!(var_G)
 
-  E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
+  if include_epsilon
+    E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
+  else
+    E_G.v = 0.0
+  end
+
   for child_s in 1:length(tile_sources)
       accum_pixel_source_stats!(sbs[tile_sources[child_s]], star_mcs, gal_mcs,
           mp.vp[tile_sources[child_s]], child_s, tile_sources[child_s],
@@ -762,11 +768,12 @@ function tile_likelihood!{NumType <: Number}(
         sbs::Vector{SourceBrightness{NumType}},
         star_mcs::Array{BvnComponent{NumType}, 2},
         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-        accum::SensitiveFloat{CanonicalParams, NumType})
+        accum::SensitiveFloat{CanonicalParams, NumType};
+        include_epsilon::Bool=true)
 
     # For speed, if there are no sources, add the noise
     # contribution directly.
-    if length(tile_sources) == 0
+    if (length(tile_sources) == 0) && include_epsilon
         # NB: not using the delta-method approximation here
         if tile.constant_background
             nan_pixels = isnan(tile.pixels)
@@ -801,7 +808,8 @@ function tile_likelihood!{NumType <: Number}(
         if !isnan(this_pixel)
             iota = expected_pixel_brightness!(
               h, w, sbs, star_mcs, gal_mcs, tile, E_G, var_G,
-              mp, tile_sources, fs0m, fs1m)
+              mp, tile_sources, fs0m, fs1m,
+              include_epsilon=include_epsilon)
             accum_pixel_ret!(tile_sources, this_pixel, iota, E_G, var_G, accum)
         end
     end
@@ -832,7 +840,8 @@ function tile_predicted_image{NumType <: Number}(
         sbs::Vector{SourceBrightness{NumType}},
         star_mcs::Array{BvnComponent{NumType}, 2},
         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-        accum::SensitiveFloat{CanonicalParams, NumType})
+        accum::SensitiveFloat{CanonicalParams, NumType};
+        include_epsilon::Bool=true)
 
     # fs0m and fs1m accumulate contributions from all sources.
     fs0m = zero_sensitive_float(StarPosParams, NumType)
@@ -849,7 +858,8 @@ function tile_predicted_image{NumType <: Number}(
         if !isnan(this_pixel)
             iota = expected_pixel_brightness!(
               h, w, sbs, star_mcs, gal_mcs, tile, E_G, var_G,
-              mp, tile_sources, fs0m, fs1m)
+              mp, tile_sources, fs0m, fs1m,
+              include_epsilon=include_epsilon)
             predicted_pixels[h, w] = E_G.v * iota
         end
     end
@@ -860,9 +870,13 @@ end
 
 @doc """
 Produce a predicted image for a given tile and model parameters.
+
+If include_epsilon is true, then the background is also rendered.
+Otherwise, only pixels from the object are rendered.
 """ ->
 function tile_predicted_image{NumType <: Number}(
-    tile::ImageTile, mp::ModelParams{NumType})
+    tile::ImageTile, mp::ModelParams{NumType};
+    include_epsilon::Bool=false)
 
   b = tile.b
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
@@ -877,7 +891,8 @@ function tile_predicted_image{NumType <: Number}(
                        sbs,
                        star_mcs,
                        gal_mcs,
-                       accum)
+                       accum,
+                       include_epsilon=include_epsilon)
 end
 
 

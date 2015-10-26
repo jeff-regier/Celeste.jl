@@ -9,6 +9,7 @@ import OptimizeElbo
 
 println("Running optimization tests.")
 
+
 function verify_sample_star(vs, pos)
     @test vs[ids.a[2]] <= 0.01
 
@@ -131,6 +132,29 @@ function test_star_optimization()
     trans = get_mp_transform(mp, loc_width=1.0);
     OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
     verify_sample_star(mp.vp[1], [10.1, 12.2])
+end
+
+
+function test_single_source_optimization()
+  blob, mp, three_bodies, tiled_blob = gen_three_body_dataset();
+
+  # Change the tile size.
+  tiled_blob, mp = ModelInit.initialize_celeste(
+  blob, three_bodies, tile_width=10, fit_psf=false);
+  mp_original = deepcopy(mp);
+
+  mp.active_sources = Int64[1]
+  transform = get_mp_transform(mp, loc_width=1.0);
+
+  f = ElboDeriv.elbo;
+  omitted_ids = Int64[]
+
+  OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=true)
+
+  # Test that it only optimized source 1
+  @test mp.vp[1] != mp_original.vp[1]
+  @test_approx_eq mp.vp[2] mp_original.vp[2]
+  @test_approx_eq mp.vp[3] mp_original.vp[3]
 end
 
 
@@ -405,5 +429,6 @@ test_kappa_finding()
 test_bad_a_init()
 test_star_optimization()
 test_galaxy_optimization()
+test_single_source_optimization()
 test_full_elbo_optimization()
 test_real_stamp_optimization()
