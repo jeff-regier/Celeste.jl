@@ -398,7 +398,7 @@ DataTransform(bounds::Vector{ParamBounds};
       for si in 1:active_S
         s = active_sources[si]
         sf_free.d[:, si] =
-          unbox_param_derivative(mp.vp[s], sf.d[:, si][:], bounds[si])
+          unbox_param_derivative(mp.vp[s], sf.d[:, s][:], bounds[si])
       end
 
       sf_free
