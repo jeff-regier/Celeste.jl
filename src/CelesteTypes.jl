@@ -539,7 +539,7 @@ end
 Display model parameters with the variable names.
 """ ->
 function print_params(mp::ModelParams)
-    for s in 1:mp.S
+    for s in mp.active_sources
         println("=======================\n Object $(s):")
         for var_name in fieldnames(ids)
             println(var_name)
@@ -553,7 +553,7 @@ Display several model parameters side by side.
 """ ->
 function print_params(mp_tuple::ModelParams...)
     println("Printing for $(length(mp_tuple)) parameters.")
-    for s in 1:mp_tuple[1].S
+    for s in mp_tuple[1].active_sources
         println("=======================\n Object $(s):")
         for var_name in fieldnames(ids)
             println(var_name)
