@@ -169,10 +169,9 @@ type ObjectiveWrapperFunctions
             @assert size(hess) == (k, k)
 
             print("Getting Hessian ($k components): ")
-            deriv_sources = fast_hessian ? mp.active_sources: collect(1:mp.S)
-            mp_dual.active_sources = deriv_sources
-            for si in 1:length(deriv_sources)
-              s = deriv_sources[si]
+            mp_dual.active_sources = mp.active_sources
+            for si in 1:length(mp.active_sources)
+              s = mp.active_sources[si]
               if fast_hessian
                 # We only need to calculate the derivatives in tiles where
                 # epsilon != 0.  The values of the derivatives themselves (that
@@ -180,7 +179,7 @@ type ObjectiveWrapperFunctions
                 # second derivatives with respect to source s will be right.
                 mp_dual.active_sources = [s]
               end
-              for index in 1:size(x)[1]
+              for index in 1:x_size[1]
                 index == 1 ? print("o"): print(".")
                 original_x = x[index, si]
                 x_dual[index, si] = DualNumbers.Dual(original_x, 1.)
@@ -206,7 +205,7 @@ type ObjectiveWrapperFunctions
 
             x_dual = DualNumbers.Dual{Float64}[
               DualNumbers.Dual{Float64}(x[i, j], 0.) for
-              i = 1:size(x)[1], j=1:size(x)[2]];
+              i = 1:x_size[1], j=1:x_size[2]];
 
             # Vectors of the (source, component) indices for the rows
             # and columns of the Hessian.
@@ -217,10 +216,9 @@ type ObjectiveWrapperFunctions
             hess_val = Float64[]
 
             print("Getting sparse Hessian ($k components): ")
-            deriv_sources = fast_hessian ? mp.active_sources: collect(1:mp.S)
-            mp_dual.active_sources = deriv_sources
-            for s1i in 1:length(deriv_sources)
-              s1 = deriv_sources[s1i]
+            mp_dual.active_sources = mp.active_sources
+            for s1i in 1:length(mp.active_sources)
+              s1 = mp.active_sources[s1i]
               if fast_hessian
                 # We only need to calculate the derivatives in tiles where
                 # epsilon != 0.  The values of the derivatives themselves (that
@@ -228,16 +226,16 @@ type ObjectiveWrapperFunctions
                 # second derivatives with respect to source s will be right.
                 mp_dual.active_sources = [s1]
               end
-              for index1 in 1:size(x)[1]
+              for index1 in 1:x_size[1]
                 index1 == 1 ? print("o"): print(".")
-                original_x = x[index1, s1]
+                original_x = x[index1, s1i]
                 x_dual[index1, s1i] = DualNumbers.Dual(original_x, 1.)
                 deriv = reshape(f_grad(x_dual[:]), x_size)
                 x_dual[index1, s1i] = DualNumbers.Dual(original_x, 0.)
 
                 # Record the hessian terms.
-                for s2i in 1:length(deriv_sources), index2=1:size(x)[1]
-                  s2 = deriv_sources[s2i]
+                for s2i in 1:length(mp.active_sources), index2=1:size(x)[1]
+                  s2 = mp.active_sources[s2i]
                   this_hess_val = DualNumbers.epsilon(deriv[index2, s2i])
                   if (this_hess_val != 0)
                     push!(hess_i, (s1i, index1))
