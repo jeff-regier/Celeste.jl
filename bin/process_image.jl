@@ -1,7 +1,11 @@
 #!/usr/bin/env julia
+println("Running process_image.jl")
+println(versioninfo())
+
 using Celeste
-using PyPlot
+#using PyPlot
 using ArgParse
+using Compat
 
 # Command line arguments
 s = ArgParseSettings()
@@ -27,6 +31,8 @@ include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
 #frame_jld_file = "initialzed_celeste_003900_6_0269_5px.JLD"
 S = 20
 synthetic = false
+
+println("Loading data with sources = $(sources).")
 
 if synthetic
   srand(1)
@@ -76,11 +82,11 @@ for s in sources
   elbo_time = time() - elbo_time
 
   JLD.save("$dat_dir/elbo_fit_$(analysis_name)_s$(s)_$(time).JLD",
-           Dict("vp[s]" => mp_s.vp[s],
-                "s" => s,
-                "result" => result,
-                "elbo_time" => elbo_time,
-                "frame_jld_file" => frame_jld_file));
+           @compat(Dict("vp[s]" => mp_s.vp[s],
+                        "s" => s,
+                        "result" => result,
+                        "elbo_time" => elbo_time,
+                        "frame_jld_file" => frame_jld_file)));
 end
 println("All done!")
 
