@@ -194,3 +194,63 @@ function eval_worker_hessian()
                               omitted_ids, verbose=true,
                               deriv_sources=worker_sources);
 end
+
+
+# Not technically for the cluster but temporarily going here.
+# Trim the tile_sources for source s.
+function trim_source_tiles!(s::Int64, mp::ModelParams{Float64})
+  pred_tiles = Array(Array{Float64}, 5);
+  for b = 1:5
+    H, W = size(tiled_blob[b])
+    @assert size(mp.tile_sources[b]) == size(tiled_blob[b])
+    pred_tiles[b] = Array(Float64, H, W)
+    for h=1:H, w=1:W
+      if s in mp.tile_sources[b][h, w]
+        tile = tiled_blob[b][h, w]
+        pred_tiles[b][h, w] =
+          sum(ElboDeriv.tile_predicted_image(tile, mp, include_epsilon=false))
+      else
+        pred_tiles[b][h, w] = 0.0
+      end
+    end
+    nonzero_pixels = sort(pred_tiles[b][pred_tiles[b] .> 0])
+    println("Source $b sorted tiles: $(nonzero_pixels)")
+    min_index = findfirst(cumsum(nonzero_pixels ./ sum(nonzero_pixels)) .>= 5e-2)
+    threshold = nonzero_pixels[min_index]
+    for h=1:H, w=1:W
+      if s in mp.tile_sources[b][h, w] && pred_tiles[b][h, w] < threshold
+        mp.tile_sources[b][h, w] = setdiff(mp.tile_sources[b][h, w], [s])
+      end
+    end
+  end
+end
+
+
+function stitch_object_tiles(
+    s::Int64, b::Int64, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
+    predicted::Bool=false)
+
+  H, W = size(tiled_blob[b])
+  has_s = Bool[ s in mp.tile_sources[b][h, w] for h=1:H, w=1:W ];
+  tiles_s = tiled_blob[b][has_s];
+  h_range = Int[typemax(Int), typemin(Int)]
+  w_range = Int[typemax(Int), typemin(Int)]
+  print("Stitching...")
+  for tile in tiles_s
+    print(".")
+    h_range[1] = min(minimum(tile.h_range), h_range[1])
+    h_range[2] = max(maximum(tile.h_range), h_range[2])
+    w_range[1] = min(minimum(tile.w_range), w_range[1])
+    w_range[2] = max(maximum(tile.w_range), w_range[2])
+  end
+  println("Done.")
+
+  image_s = fill(0.0, diff(h_range)[1] + 1, diff(w_range)[1] + 1);
+  for tile in tiles_s
+    image_s[tile.h_range - h_range[1] + 1, tile.w_range - w_range[1] + 1] =
+      predicted ?
+      ElboDeriv.tile_predicted_image(tile, mp, include_epsilon=false):
+      tile.pixels
+  end
+  image_s
+end
