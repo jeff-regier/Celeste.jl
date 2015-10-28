@@ -447,13 +447,14 @@ end
 
 
 function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
+    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
+    max_iters = 100)
     # Use the default transform.
 
     transform = get_mp_transform(mp);
     maximize_f(f, tiled_blob, mp, transform,
       omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs,
-      verbose=verbose)
+      verbose=verbose, max_iters=max_iters)
 end
 
 function maximize_elbo(tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;

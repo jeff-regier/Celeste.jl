@@ -125,12 +125,12 @@ function test_objective_hessians()
       OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
     @test_approx_eq(w_hess, full(w_hess_sparse))
 
+    println("Testing slow autodiff Hessian...")
     wrapper_slow_hess =
       OptimizeElbo.ObjectiveWrapperFunctions(
         mp -> ElboDeriv.elbo(tiled_blob, mp),
         mp, trans, kept_ids, omitted_ids, fast_hessian=false);
 
-    println("Testing slow autodiff Hessian...")
     slow_w_hess = zeros(Float64, length(x), length(x));
     wrapper_slow_hess.f_ad_hessian!(x[:], slow_w_hess);
     @test_approx_eq(slow_w_hess, w_hess)
