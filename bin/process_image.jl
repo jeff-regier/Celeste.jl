@@ -47,8 +47,8 @@ source = unique(sources)
 
 omitted_ids = Int64[]
 
-
 analysis_name = "iters_20"
+max_iters = 20
 for s in sources
   println("Processing source $s.")
 
@@ -72,7 +72,7 @@ for s in sources
   elbo_time = time()
   iter_count, max_f, max_x, result =
     OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp_s;
-                            verbose=true, max_iters=1);
+                            verbose=true, max_iters=max_iters);
   elbo_time = time() - elbo_time
 
   JLD.save("$dat_dir/elbo_fit_$(analysis_name)_s$(s)_$(time).JLD",
