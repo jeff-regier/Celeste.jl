@@ -9,7 +9,7 @@ field_dir = joinpath(dat_dir, "sample_field")
 run_num = "003900"
 camcol_num = "6"
 field_num = "0269"
-tile_width = 5
+tile_width = 10
 
 blob =
   SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num,
