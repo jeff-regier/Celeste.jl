@@ -408,7 +408,7 @@ DataTransform(bounds::Vector{ParamBounds};
                 transform_sensitive_float, bounds, active_sources, active_S, S)
 end
 
-function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
+function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
   bounds = Array(ParamBounds, length(mp.active_sources))
 
   # Note that, for numerical reasons, the bounds must be on the scale
