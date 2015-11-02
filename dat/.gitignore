@@ -1,2 +1,2 @@
 *.JLD
-window_flist.fits # This file is too large to check in.
+./window_flist.fits
