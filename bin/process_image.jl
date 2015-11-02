@@ -81,7 +81,7 @@ for s in sources
                             verbose=true, max_iters=max_iters);
   elbo_time = time() - elbo_time
 
-  JLD.save("$dat_dir/elbo_fit_$(analysis_name)_s$(s)_$(time).JLD",
+  JLD.save("$dat_dir/elbo_fit_$(analysis_name)_s$(s)_$(time()).JLD",
            @compat(Dict("vp[s]" => mp_s.vp[s],
                         "s" => s,
                         "result" => result,
