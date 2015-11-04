@@ -1,0 +1,385 @@
+#LyX 2.1 created this file. For more info see http://www.lyx.org/
+\lyxformat 474
+\begin_document
+\begin_header
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_math auto
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Scaling up CELESTE
+\end_layout
+
+\begin_layout Section
+Introduction
+\end_layout
+
+\begin_layout Standard
+This document contains some first thoughts about how to scale up the CELESTE
+ model.
+\end_layout
+
+\begin_layout Subsection
+Model
+\end_layout
+
+\begin_layout Standard
+The sky contains a large number (~400 million) of Celestial objects, each
+ of which is characterized in Celeste by 32 parameters (this may change
+ over time).
+ In the long-run there may be trans-object parameters, such as optical informati
+on about the telescope.
+ These parameters describe the light we expect an object to emit.
+ Turning this light into image pixels via the telescope is the source of
+ randomness in the model.
+ The goal is to take the pixel images and infer the object parameters.
+\end_layout
+
+\begin_layout Standard
+The image data consists of ~1 million 
+\begin_inset Quotes eld
+\end_inset
+
+field
+\begin_inset Quotes erd
+\end_inset
+
+ files for each of five bands.
+ Each field is 1361 x 2048, or ~2.7 million pixels.
+ In total, there are 1.3e13 pixels.
+ Obviously, most celestial objects do not contribute to most pixels.
+ We have been breaking fields up into superpixels, or 
+\begin_inset Quotes eld
+\end_inset
+
+tiles
+\begin_inset Quotes erd
+\end_inset
+
+ and building a many-to-many map between tiles and objects.
+ Fields overlap so an object can appear in multiple fields.
+ Given the parameters, each pixel is assumed to be independent.
+\end_layout
+
+\begin_layout Standard
+For detailed background on the model, see Regier, Jeffrey, et al.
+ "Celeste: Variational inference for a generative model of astronomical
+ images." arXiv preprint arXiv:1506.01351 (2015).
+ For some nice summary statistics, see 
+\begin_inset Flex URL
+status open
+
+\begin_layout Plain Layout
+
+http://www.sdss.org/dr12/scope/
+\end_layout
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Subsection
+Optimization
+\end_layout
+
+\begin_layout Standard
+CELESTE builds a catalog by fitting the celestial parameters to the images
+ using a particular loss function called the 
+\begin_inset Quotes eld
+\end_inset
+
+evidence lower bound
+\begin_inset Quotes erd
+\end_inset
+
+ or 
+\begin_inset Quotes eld
+\end_inset
+
+ELBO
+\begin_inset Quotes erd
+\end_inset
+
+.
+ (This special loss function allows us to measure both fit to the data and
+ uncertainty.) The goal is to optimize this function.
+ The steps are:
+\end_layout
+
+\begin_layout Itemize
+Initialize the parameters using the existing catalog
+\end_layout
+
+\begin_layout Itemize
+Repeat until convergence:
+\end_layout
+
+\begin_deeper
+\begin_layout Enumerate
+Using the parameters, evaluate the loss function and its derivatives on
+ the images
+\end_layout
+
+\begin_layout Enumerate
+Using the derivatives, take an objective-increasing step in object parameter
+ space
+\end_layout
+
+\end_deeper
+\begin_layout Standard
+Step (1) is the computationally expensive one.
+ Currently, it takes on the order of seconds to evaluate an object parameter's
+ derivative on all the pixels that it affects.
+ We use a second-order method, and calculating a Hessian takes about a minute
+ (though we hope to hard-code the Hessian and reduce this time significantly
+ in the future).
+ On a single object, the algorithm converges in 20-30 steps using second-order
+ methods.
+\end_layout
+
+\begin_layout Standard
+Since the pixels are independent given the parameters, step (2) can be executed
+ completely in parallel.
+\end_layout
+
+\begin_layout Standard
+One can imagine the celestial objects and images as a many-to-many bipartite
+ graph.
+ Objects occur in several images, and an image may contain several objects.
+ Given this, one might think of three optimization strategies, in increasing
+ order of complexity:
+\end_layout
+
+\begin_layout Enumerate
+Optimize each object separately and in parallel, keeping all the objects
+ fixed at their initial values.
+ Repeat, hopefully not too many times.
+\end_layout
+
+\begin_layout Enumerate
+Put the images and parameters on separate, distributed processes and add
+ 
+\begin_inset Quotes eld
+\end_inset
+
+shuffle
+\begin_inset Quotes erd
+\end_inset
+
+ steps 1.5 and 2.5, and perform updates synchronously.
+\end_layout
+
+\begin_deeper
+\begin_layout Enumerate
+1.5.
+ Communicate the parameters to tile processes
+\end_layout
+
+\begin_layout Enumerate
+2.5.
+ Communicate the derivatives to the parameter processes
+\end_layout
+
+\end_deeper
+\begin_layout Enumerate
+Like (2) but with asynchronous updating.
+\end_layout
+
+\begin_layout Standard
+Our current approach is (1).
+ We haven't yet evaluated whether it will be good enough.
+\end_layout
+
+\begin_layout Subsection
+Code
+\end_layout
+
+\begin_layout Standard
+CELESTE is written in julia.
+ The code can be found at 
+\begin_inset Flex URL
+status open
+
+\begin_layout Plain Layout
+
+https://github.com/jeff-regier/Celeste.jl
+\end_layout
+
+\end_inset
+
+.
+ Below is an introduction to the codebase that I wrote for Kiran.
+\end_layout
+
+\begin_layout Standard
+The file with most of the interesting computation happens is src/ElboDeriv.jl.
+ You may also want to look at src/CelesteTypes.jl for the definition of data
+ structures used there.
+ The objective function that we are maximizing is called the "elbo" (for
+ "evidence lower bound"), and the bulk of our computation is in evaluating
+ this objective and its derivative.
+ You can look at bin/benchmark_elbo.jl for an example of generating a small
+ sample image and evaluating the elbo and its derivatives once -- this is
+ done with the function ElboDeriv.elbo.
+\end_layout
+
+\begin_layout Standard
+The key data structures are ModelParams (usually "mp" in our code) and arrays
+ of ImageTile objects.
+ The ImageTile objects contain the pixels in a photograph of a small section
+ of the sky and related information about what band (color) image the tile
+ was taken from, its location, and background noise estimates.
+ ImageTile objects are kept around in a TiledBlob, which has five elements,
+ one for each band of an picture of the sky.
+ Each band contains a TiledImage, which is a 2d array of ImageTiles that
+ partition that band's raw pixels into smaller tiles.
+\end_layout
+
+\begin_layout Standard
+A single celestial object (a star or a galaxy) is called a "source", as
+ in "a source of light".
+ The type ModelParams contains information about sources.
+ Each image contains S sources, which for now we take to be fixed.
+ For your purposes, there are three important fields in the ModelParams
+ object: - vp: These are the mutable model parameters that we are optimizing
+ over.
+ It is an array of length S, where each element has the parameters germane
+ to one source.
+ You can think of this as our parameter vector.
+ - patches: This is an immutable array of length S containing about each
+ source that is initialized once and never changed.
+ For example, it has information about the optics at that source location
+ and an estimated size of the source.
+ - tile_sources: This is an array that matches the dimensions of the TiledImage.
+ It contains the many-to-many mapping between sources and ImageTiles.
+ Each tile may be affected by multiple sources and each source may appear
+ in multiple tiles, and this mapping is contained in mp.tile_sources.
+\end_layout
+
+\begin_layout Standard
+One more data structure is worth mentioning.
+ The return value of an evaluation of ElboDeriv.elbo is a SensitiveFloat.
+ This contains both the value of the objective and the derivatives of the
+ objective with repsect to a range of parameters.
+\end_layout
+
+\begin_layout Standard
+The steps of Celeste are something like:
+\end_layout
+
+\begin_layout Itemize
+Initialize the TiledImage objects and ModelParams (using an existing catalog).
+ 
+\end_layout
+
+\begin_layout Itemize
+Until converged:
+\end_layout
+
+\begin_deeper
+\begin_layout Itemize
+Using the current parameters, run over each of the ImageTiles to get the
+ function value and derivatives in SensitiveFloats
+\end_layout
+
+\begin_layout Itemize
+Add up the SensitiveFloats to get an overall function value and gradient
+\end_layout
+
+\begin_layout Itemize
+Using the gradient, take a step, updating the value of each source in ModelParam
+s Done
+\end_layout
+
+\end_deeper
+\begin_layout Standard
+Since the function value and derivatives is simply the sum over ImageTiles,
+ that is the step can be done completely in parallel.
+ The resulting SensitiveFloats must be added to compute the gradient step
+ to update the ModelParams.
+\end_layout
+
+\begin_layout Standard
+With this in mind, you can take a look at src/ElboDeriv.jl.
+ You may want to read from the bottom to the top, which is the direction
+ of high- to low-level functions.
+ Specifically, if you take a look at src/ElboDeriv.jl:elbo_likelihood!, you
+ will find a naive attempt to parallelize the elbo evaluation over the tiles
+ using @parallel.
+ (It's currently disabled by default because it doesn't work very well.)
+ This is, I think, the first place to start looking at parallizing Celeste.
+\end_layout
+
+\begin_layout Standard
+In the long run, we will run over not only a single TiledBlob, but over
+ many of them.
+ The basic paradigm, however, will remain the same -- we will have a large
+ number of sources, a many-to-many mapping with ImageTiles, and a reduce
+ over SensitiveFloats at each step.
+\end_layout
+
+\end_body
+\end_document
