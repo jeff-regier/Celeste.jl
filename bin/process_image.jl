@@ -3,7 +3,6 @@ println("Running process_image.jl")
 println(versioninfo())
 
 using Celeste
-#using PyPlot
 using ArgParse
 using Compat
 

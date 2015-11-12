@@ -210,7 +210,7 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
                       parse(Int, run_num),
                       parse(Int, camcol_num),
                       parse(Int, field_num),
-                      true, epsilon_mat, iota_vec, raw_psf_comp)
+                      false, epsilon_mat, iota_vec, raw_psf_comp)
     end
 
     blob

@@ -197,29 +197,31 @@ end
 
 
 # Not technically for the cluster but temporarily going here.
-# Trim the tile_sources for source s.
-function trim_source_tiles!(s::Int64, mp::ModelParams{Float64})
-  pred_tiles = Array(Array{Float64}, 5);
+# TODO: test this.
+# Set to NaN any pixels significantly below background noise for the
+# specified source.
+function trim_source_tiles!(
+    s::Int64, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
+    noise_fraction::Float64=0.05)
+
+  trimmed_tiled_blob =
+    Array{ImageTile, 2}[ Array(ImageTile, size(tiled_blob[b])...) for
+                         b=1:length(tiled_blob)];
+
   for b = 1:5
     H, W = size(tiled_blob[b])
     @assert size(mp.tile_sources[b]) == size(tiled_blob[b])
-    pred_tiles[b] = Array(Float64, H, W)
     for h=1:H, w=1:W
       if s in mp.tile_sources[b][h, w]
-        tile = tiled_blob[b][h, w]
-        pred_tiles[b][h, w] =
-          sum(ElboDeriv.tile_predicted_image(tile, mp, include_epsilon=false))
-      else
-        pred_tiles[b][h, w] = 0.0
-      end
-    end
-    nonzero_pixels = sort(pred_tiles[b][pred_tiles[b] .> 0])
-    println("Source $b sorted tiles: $(nonzero_pixels)")
-    min_index = findfirst(cumsum(nonzero_pixels ./ sum(nonzero_pixels)) .>= 5e-2)
-    threshold = nonzero_pixels[min_index]
-    for h=1:H, w=1:W
-      if s in mp.tile_sources[b][h, w] && pred_tiles[b][h, w] < threshold
-        mp.tile_sources[b][h, w] = setdiff(mp.tile_sources[b][h, w], [s])
+        tile = deepcopy(tiled_blob[b][h, w]);
+        pred_tile =
+          ElboDeriv.tile_predicted_image(tile, mp, include_epsilon=false);
+        if tile.constant_background
+          tile.pixels[pred_tile .< (tile.epsilon .* noise_fraction)] = NaN
+        else
+          tile.pixels[pred_tile .< (tile.epsilon_mat .* noise_fraction)] = NaN
+        end
+        trimmed_tiled_blob[b][h, w] = tile;
       end
     end
   end
