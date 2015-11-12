@@ -16,7 +16,7 @@ s = ArgParseSettings()
         default = "[1]"
     "--image_file"
         help = "The image JLD file"
-        default = "initialzed_celeste_003900_6_0269_5px.JLD"
+        default = "initialzed_celeste_003900_6_0269_20px.JLD"
 end
 
 parsed_args = parse_args(s)
