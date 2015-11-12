@@ -306,6 +306,7 @@ ImageTile(img::Image,
     epsilon_mat = img.epsilon_mat
     iota_vec = img.iota_vec
   else
+    # TODO: this subsetting doesn't seem to be working.
     epsilon_mat = img.epsilon_mat[h_range, w_range]
     iota_vec = img.iota_vec[h_range]
   end
