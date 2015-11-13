@@ -383,6 +383,33 @@ function test_active_sources()
   @test_approx_eq elbo_3.d[:,1] zeros(size(elbo_3.d)[1])
 end
 
+function test_trim_source_tiles()
+  blob, mp, bodies, tiled_blob = gen_n_body_dataset(3);
+
+  s = 1
+  trimmed_tiled_blob = ModelInit.trim_source_tiles(s, mp, tiled_blob);
+
+  loc_ids = ids.u
+  non_loc_ids = setdiff(1:length(ids), ids.u)
+  for b=1:5
+    # Make sure pixels got NaN-ed out
+    @test(
+      sum([ sum(!isnan(tile.pixels)) for tile in trimmed_tiled_blob[b]]) <
+      sum([ sum(!isnan(tile.pixels)) for tile in tiled_blob[b]]))
+    s_tiles = SkyImages.find_source_tiles(s, b, mp)
+    mp.active_sources = [s];
+    elbo_full = ElboDeriv.elbo(tiled_blob, mp);
+    elbo_trim = ElboDeriv.elbo(trimmed_tiled_blob, mp);
+    @test_approx_eq_eps(
+      elbo_full.d[loc_ids, s] ./ elbo_trim.d[loc_ids, s],
+      fill(1.0, length(loc_ids)), 3e-2)
+    @test_approx_eq_eps(
+      elbo_full.d[non_loc_ids, s] ./ elbo_trim.d[non_loc_ids, s],
+      fill(1.0, length(non_loc_ids)), 2e-3)
+  end
+end
+
+
 
 ####################################################
 
@@ -395,3 +422,4 @@ test_tiny_image_tiling()
 test_elbo_with_nan()
 test_elbo_likelihood_flavors()
 test_active_sources()
+test_trim_source_tiles()
