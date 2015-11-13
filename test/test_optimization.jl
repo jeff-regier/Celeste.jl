@@ -406,6 +406,8 @@ end
 
 
 function test_quadratic_optimization()
+    println("Testing quadratic optimization.")
+
     # A very simple quadratic function to test the optimization.
     const centers = collect(linspace(0.1, 0.9, length(CanonicalParams)));
 
