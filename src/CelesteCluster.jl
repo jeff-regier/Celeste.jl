@@ -200,31 +200,53 @@ end
 # TODO: test this.
 # Set to NaN any pixels significantly below background noise for the
 # specified source.
-function trim_source_tiles!(
+function trim_source_tiles(
     s::Int64, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
-    noise_fraction::Float64=0.05)
+    noise_fraction::Float64=0.1)
 
   trimmed_tiled_blob =
     Array{ImageTile, 2}[ Array(ImageTile, size(tiled_blob[b])...) for
                          b=1:length(tiled_blob)];
 
   for b = 1:5
+    println("Processing band $b...")
     H, W = size(tiled_blob[b])
     @assert size(mp.tile_sources[b]) == size(tiled_blob[b])
     for h=1:H, w=1:W
+      tile = deepcopy(tiled_blob[b][h, w]);
       if s in mp.tile_sources[b][h, w]
-        tile = deepcopy(tiled_blob[b][h, w]);
         pred_tile =
           ElboDeriv.tile_predicted_image(tile, mp, include_epsilon=false);
         if tile.constant_background
-          tile.pixels[pred_tile .< (tile.epsilon .* noise_fraction)] = NaN
+          tile.pixels[pred_tile .< (tile.iota * tile.epsilon .* noise_fraction)] = NaN
         else
-          tile.pixels[pred_tile .< (tile.epsilon_mat .* noise_fraction)] = NaN
+          tile.pixels[
+            pred_tile .<
+            (tile.iota_vec .* tile.epsilon_mat .* noise_fraction)] = NaN
         end
         trimmed_tiled_blob[b][h, w] = tile;
+      else
+        empty_tile = ImageTile(tile.hh, tile.ww, tile.b,
+                               tile.h_range, tile.w_range,
+                               tile.h_width, tile.w_width,
+                               Array(Float64, 0, 0), tile.constant_background,
+                               tile.epsilon, Array(Float64, 0, 0), tile.iota,
+                               Array(Float64, 0))
+        trimmed_tiled_blob[b][h, w] = empty_tile;
       end
     end
   end
+
+  trimmed_tiled_blob
+end
+
+
+@doc """
+Return a vector of (h, w) indices of tiles that contain this source.
+""" ->
+function find_source_tiles(s::Int64, b::Int64, mp::ModelParams)
+  [ ind2sub(size(mp.tile_sources[b]), ind) for ind in
+    find([ s in sources for sources in mp.tile_sources[b]]) ]
 end
 
 

@@ -15,7 +15,7 @@ s = ArgParseSettings()
         default = "[1]"
     "--image_file"
         help = "The image JLD file"
-        default = "initialzed_celeste_003900_6_0269_20px.JLD"
+        default = "dat/initialzed_celeste_000211_4_0227_20px.JLD"
 end
 
 parsed_args = parse_args(s)
@@ -25,10 +25,7 @@ eval(parse(string("sources = Int64", parsed_args["sources"])))
 frame_jld_file = parsed_args["image_file"]
 
 include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
-#frame_jld_file = "initialzed_celeste_003900_6_0269_20px.JLD"
-#frame_jld_file = "initialzed_celeste_003900_6_0269_10px_nopsf.JLD"
-#frame_jld_file = "initialzed_celeste_003900_6_0269_5px.JLD"
-S = 20
+sim_S = 20
 synthetic = false
 
 println("Loading data with sources = $(sources).")
@@ -36,7 +33,7 @@ println("Loading data with sources = $(sources).")
 if synthetic
   srand(1)
   blob, original_mp, body, tiled_blob =
-    SampleData.gen_n_body_dataset(S, tile_width=10);
+    SampleData.gen_n_body_dataset(sim_S, tile_width=10);
 else
   img_dict = JLD.load(joinpath(dat_dir, frame_jld_file));
   tiled_blob = img_dict["tiled_blob"];
@@ -71,12 +68,13 @@ for s in sources
   end
 
   transform = Transform.get_mp_transform(mp_s);
-  trim_source_tiles!(s, mp_s);
-
+  trimmed_tiled_blob = trim_source_tiles(s, mp_s, tiled_blob, noise_fraction=0.5);
+  #imshow(stitch_object_tiles(s, b, mp, trimmed_tiled_blob))
   f = ElboDeriv.elbo
+
   elbo_time = time()
   iter_count, max_f, max_x, result =
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp_s;
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_blob, mp_s;
                             verbose=true, max_iters=max_iters);
   elbo_time = time() - elbo_time
 
