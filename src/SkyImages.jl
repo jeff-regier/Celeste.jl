@@ -10,6 +10,7 @@ import SloanDigitalSkySurvey.PSF.get_psf_at_point
 
 import WCSLIB
 import DataFrames
+import ElboDeriv # For stitch_object_tiles
 import FITSIO
 import GaussianMixtures
 import Grid
@@ -452,6 +453,59 @@ function local_sources(
     bool_vec = Polygons.sources_near_quadrilateral(pc, pr, tile_quad, wcs)
 
     (collect(1:length(patches)))[bool_vec]
+end
+
+@doc """
+Return a vector of (h, w) indices of tiles that contain this source.
+""" ->
+function find_source_tiles(s::Int64, b::Int64, mp::ModelParams)
+  [ ind2sub(size(mp.tile_sources[b]), ind) for ind in
+    find([ s in sources for sources in mp.tile_sources[b]]) ]
+end
+
+@doc """
+Combine the tiles associated with a single source into an image.
+
+Args:
+  s: The source index
+  b: The band
+  mp: The ModelParams object
+  tiled_blob: The original tiled blob
+  predicted: If true, render the object based on the values in ModelParams.
+             Otherwise, show the image from tiled_blob.
+
+Returns:
+  A matrix of pixel values for the particular object using only tiles in
+  which it is found according to the ModelParams tile_sources field.  Pixels
+  from tiles that do not have this source will be marked as 0.0.
+""" ->
+function stitch_object_tiles(
+    s::Int64, b::Int64, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
+    predicted::Bool=false)
+
+  H, W = size(tiled_blob[b])
+  has_s = Bool[ s in mp.tile_sources[b][h, w] for h=1:H, w=1:W ];
+  tiles_s = tiled_blob[b][has_s];
+  h_range = Int[typemax(Int), typemin(Int)]
+  w_range = Int[typemax(Int), typemin(Int)]
+  print("Stitching...")
+  for tile in tiles_s
+    print(".")
+    h_range[1] = min(minimum(tile.h_range), h_range[1])
+    h_range[2] = max(maximum(tile.h_range), h_range[2])
+    w_range[1] = min(minimum(tile.w_range), w_range[1])
+    w_range[2] = max(maximum(tile.w_range), w_range[2])
+  end
+  println("Done.")
+
+  image_s = fill(0.0, diff(h_range)[1] + 1, diff(w_range)[1] + 1);
+  for tile in tiles_s
+    image_s[tile.h_range - h_range[1] + 1, tile.w_range - w_range[1] + 1] =
+      predicted ?
+      ElboDeriv.tile_predicted_image(tile, mp, include_epsilon=false):
+      tile.pixels
+  end
+  image_s
 end
 
 
