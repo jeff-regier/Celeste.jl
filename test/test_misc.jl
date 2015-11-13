@@ -234,6 +234,11 @@ function test_tiling()
 end
 
 
+function test_trim_source_tiles()
+  blob, mp, bodies, tiled_blob = gen_n_body_dataset(3);
+  
+end
+
 function test_sky_noise_estimates()
     blobs = Array(Blob, 2)
     blobs[1], mp, three_bodies = gen_three_body_dataset()  # synthetic
