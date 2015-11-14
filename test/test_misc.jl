@@ -234,28 +234,6 @@ function test_tiling()
 end
 
 
-function test_trim_source_tiles()
-  blob, mp, bodies, tiled_blob = gen_n_body_dataset(3);
-
-  s = 1
-  trimmed_tiled_blob = ModelInit.trim_source_tiles(s, mp, tiled_blob);
-
-  loc_ids = ids.u
-  non_loc_ids = setdiff(1:length(ids), ids.u)
-  for b=1:5
-    s_tiles = SkyImages.find_source_tiles(s, b, mp)
-    mp.active_sources = [s];
-    elbo_full = ElboDeriv.elbo(tiled_blob, mp);
-    elbo_trim = ElboDeriv.elbo(trimmed_tiled_blob, mp);
-    @test_approx_eq_eps(
-      elbo_full.d[loc_ids, s] ./ elbo_trim.d[loc_ids, s],
-      fill(1.0, length(loc_ids)), 3e-2)
-    @test_approx_eq_eps(
-      elbo_full.d[non_loc_ids, s] ./ elbo_trim.d[non_loc_ids, s],
-      fill(1.0, length(non_loc_ids)), 2e-3)
-  end
-end
-
 function test_sky_noise_estimates()
     blobs = Array(Blob, 2)
     blobs[1], mp, three_bodies = gen_three_body_dataset()  # synthetic
@@ -307,7 +285,6 @@ function test_add_sensitive_floats()
   @test sf3.v == sf1.v + sf2.v
   @test sf3.d == sf1.d + sf2.d
   @test sf3.h == sf1.h + sf2.h
-
 
   sf_bad_size = zero_sensitive_float(CanonicalParams, Float64, S + 1);
   sf_bad_type = zero_sensitive_float(UnconstrainedParams, Float64, S);

@@ -15,7 +15,7 @@ s = ArgParseSettings()
         default = "[1]"
     "--image_file"
         help = "The image JLD file"
-        default = "dat/initialzed_celeste_000211_4_0227_20px.JLD"
+        default = "stripe82_fields/initialzed_celeste_000211_4_0227_20px.JLD"
 end
 
 parsed_args = parse_args(s)
@@ -68,21 +68,21 @@ for s in sources
   end
 
   transform = Transform.get_mp_transform(mp_s);
-  trimmed_tiled_blob = trim_source_tiles(s, mp_s, tiled_blob, noise_fraction=0.5);
+  trimmed_tiled_blob =
+    ModelInit.trim_source_tiles(s, mp_s, tiled_blob, noise_fraction=0.1);
   #imshow(stitch_object_tiles(s, b, mp, trimmed_tiled_blob))
-  f = ElboDeriv.elbo
 
-  elbo_time = time()
+  fit_time = time()
   iter_count, max_f, max_x, result =
     OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_blob, mp_s;
                             verbose=true, max_iters=max_iters);
-  elbo_time = time() - elbo_time
+  fit_time = time() - fit_time
 
   JLD.save("$dat_dir/elbo_fit_$(analysis_name)_s$(s)_$(time()).JLD",
            @compat(Dict("vp[s]" => mp_s.vp[s],
                         "s" => s,
                         "result" => result,
-                        "elbo_time" => elbo_time,
+                        "fit_time" => fit_time,
                         "frame_jld_file" => frame_jld_file)));
 end
 println("All done!")
