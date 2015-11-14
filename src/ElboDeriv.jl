@@ -776,7 +776,7 @@ function tile_likelihood!{NumType <: Number}(
     if (length(tile_sources) == 0) && include_epsilon
         # NB: not using the delta-method approximation here
         if tile.constant_background
-            nan_pixels = isnan(tile.pixels)
+            nan_pixels = Base.isnan(tile.pixels)
             num_pixels =
               length(tile.h_range) * length(tile.w_range) - sum(nan_pixels)
             tile_x = sum(tile.pixels[!nan_pixels])
@@ -785,7 +785,7 @@ function tile_likelihood!{NumType <: Number}(
         else
             for w in 1:tile.w_width, h in 1:tile.h_width
                 this_pixel = tile.pixels[h, w]
-                if !isnan(this_pixel)
+                if !Base.isnan(this_pixel)
                     ep = tile.epsilon_mat[h, w]
                     accum.v += this_pixel * log(ep) - ep
                 end
@@ -805,7 +805,7 @@ function tile_likelihood!{NumType <: Number}(
     # Iterate over pixels that are not NaN.
     for w in 1:tile.w_width, h in 1:tile.h_width
         this_pixel = tile.pixels[h, w]
-        if !isnan(this_pixel)
+        if !Base.isnan(this_pixel)
             iota = expected_pixel_brightness!(
               h, w, sbs, star_mcs, gal_mcs, tile, E_G, var_G,
               mp, tile_sources, fs0m, fs1m,
@@ -815,7 +815,7 @@ function tile_likelihood!{NumType <: Number}(
     end
 
     # Subtract the log factorial term
-    accum.v += -sum(lfact(tile.pixels[!isnan(tile.pixels)]))
+    accum.v += -sum(lfact(tile.pixels[!Base.isnan(tile.pixels)]))
 end
 
 
@@ -855,7 +855,7 @@ function tile_predicted_image{NumType <: Number}(
     # Iterate over pixels that are not NaN.
     for w in 1:tile.w_width, h in 1:tile.h_width
         this_pixel = tile.pixels[h, w]
-        if !isnan(this_pixel)
+        if !Base.isnan(this_pixel)
             iota = expected_pixel_brightness!(
               h, w, sbs, star_mcs, gal_mcs, tile, E_G, var_G,
               mp, tile_sources, fs0m, fs1m,
