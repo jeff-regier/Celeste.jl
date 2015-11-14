@@ -394,8 +394,8 @@ function test_trim_source_tiles()
   for b=1:5
     # Make sure pixels got NaN-ed out
     @test(
-      sum([ sum(!isnan(tile.pixels)) for tile in trimmed_tiled_blob[b]]) <
-      sum([ sum(!isnan(tile.pixels)) for tile in tiled_blob[b]]))
+      sum([ sum(!Base.isnan(tile.pixels)) for tile in trimmed_tiled_blob[b]]) <
+      sum([ sum(!Base.isnan(tile.pixels)) for tile in tiled_blob[b]]))
     s_tiles = SkyImages.find_source_tiles(s, b, mp)
     mp.active_sources = [s];
     elbo_full = ElboDeriv.elbo(tiled_blob, mp);

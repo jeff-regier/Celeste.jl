@@ -269,6 +269,8 @@ end
 
 
 function test_add_sensitive_floats()
+  # TODO: test the new Hessian functionality
+
   S = 3
   function generate_random_sf()
       sf1 = zero_sensitive_float(CanonicalParams, Float64, S)
