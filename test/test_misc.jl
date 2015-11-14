@@ -286,7 +286,6 @@ function test_add_sensitive_floats()
   @test sf3.d == sf1.d + sf2.d
   @test sf3.h == sf1.h + sf2.h
 
-
   sf_bad_size = zero_sensitive_float(CanonicalParams, Float64, S + 1);
   sf_bad_type = zero_sensitive_float(UnconstrainedParams, Float64, S);
 

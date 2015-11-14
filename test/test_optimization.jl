@@ -56,21 +56,23 @@ function test_objective_wrapper()
     omitted_ids = Int64[];
     kept_ids = setdiff(1:length(ids_free), omitted_ids);
 
-    blob, mp, two_bodies, tiled_blob = SampleData.gen_two_body_dataset();
+    blob, mp, bodies, tiled_blob = SampleData.gen_three_body_dataset();
     # Change the tile size.
     tiled_blob, mp = ModelInit.initialize_celeste(
-      blob, two_bodies, tile_width=5, fit_psf=false, patch_radius=10.);
-
-    trans = get_mp_transform(mp, loc_width=1.0);
+      blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
+    mp.active_sources = Int64[2, 3]
+    trans = Transform.get_mp_transform(mp, loc_width=1.0);
 
     wrapper =
-      OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(tiled_blob, mp),
+      OptimizeElbo.ObjectiveWrapperFunctions(
+        mp -> ElboDeriv.elbo(tiled_blob, mp),
         mp, trans, kept_ids, omitted_ids);
 
     x = trans.vp_to_array(mp.vp, omitted_ids);
     elbo_result =
       trans.transform_sensitive_float(ElboDeriv.elbo(tiled_blob, mp), mp);
-    elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, s] for s=1:mp.S ]);
+    elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, si] for
+                               si in 1:length(mp.active_sources) ]);
 
     # Tese the print function
     wrapper.state.verbose = true
@@ -88,16 +90,32 @@ function test_objective_wrapper()
     @test_approx_eq(w_v, wrapper.f_value(x[:]))
     @test_approx_eq(w_grad, wrapper.f_grad(x[:]))
 
-    this_iter = wrapper.state.f_evals;
-    wrapper.f_value(x[:]);
-    @test wrapper.state.f_evals == this_iter + 1
-
-    # Test that the autodiff derivatives match the actual derivatives.
     println("Testing autodiff gradient...")
     w_ad_grad = wrapper.f_ad_grad(x[:]);
     @test_approx_eq(w_grad, w_ad_grad)
 
-    # Just test that the Hessian can be computed and is symmetric.
+    this_iter = wrapper.state.f_evals;
+    wrapper.f_value(x[:]);
+    @test wrapper.state.f_evals == this_iter + 1
+end
+
+function test_objective_hessians()
+    blob, mp, bodies, tiled_blob = SampleData.gen_three_body_dataset();
+    # Change the tile size.
+    tiled_blob, mp = ModelInit.initialize_celeste(
+      blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
+    mp.active_sources = Int64[2, 3]
+    trans = Transform.get_mp_transform(mp, loc_width=1.0);
+    omitted_ids = Int64[];
+    kept_ids = setdiff(1:length(ids_free), omitted_ids);
+    x = trans.vp_to_array(mp.vp, omitted_ids);
+
+    wrapper =
+      OptimizeElbo.ObjectiveWrapperFunctions(
+        mp -> ElboDeriv.elbo(tiled_blob, mp),
+        mp, trans, kept_ids, omitted_ids);
+
+    # Test that the Hessian works in its various flavors.
     println("Testing autodiff Hessian...")
     w_hess = zeros(Float64, length(x), length(x));
     wrapper.f_ad_hessian!(x[:], w_hess);
@@ -107,17 +125,19 @@ function test_objective_wrapper()
       OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
     @test_approx_eq(w_hess, full(w_hess_sparse))
 
+    println("Testing slow autodiff Hessian...")
     wrapper_slow_hess =
-      OptimizeElbo.ObjectiveWrapperFunctions(mp -> ElboDeriv.elbo(tiled_blob, mp),
+      OptimizeElbo.ObjectiveWrapperFunctions(
+        mp -> ElboDeriv.elbo(tiled_blob, mp),
         mp, trans, kept_ids, omitted_ids, fast_hessian=false);
 
-    println("Testing autodiff Hessian...")
     slow_w_hess = zeros(Float64, length(x), length(x));
     wrapper_slow_hess.f_ad_hessian!(x[:], slow_w_hess);
     @test_approx_eq(slow_w_hess, w_hess)
 
     hess_i, hess_j, hess_val = wrapper_slow_hess.f_ad_hessian_sparse(x[:]);
-    slow_w_hess_sparse = OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+    slow_w_hess_sparse =
+      OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
     @test_approx_eq(slow_w_hess, full(slow_w_hess_sparse))
 end
 
@@ -143,7 +163,8 @@ function test_single_source_optimization()
   blob, three_bodies, tile_width=10, fit_psf=false);
   mp_original = deepcopy(mp);
 
-  mp.active_sources = Int64[1]
+  s = 2
+  mp.active_sources = Int64[s]
   transform = get_mp_transform(mp, loc_width=1.0);
 
   f = ElboDeriv.elbo;
@@ -151,10 +172,11 @@ function test_single_source_optimization()
 
   OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=true)
 
-  # Test that it only optimized source 1
-  @test mp.vp[1] != mp_original.vp[1]
-  @test_approx_eq mp.vp[2] mp_original.vp[2]
-  @test_approx_eq mp.vp[3] mp_original.vp[3]
+  # Test that it only optimized source s
+  @test mp.vp[s] != mp_original.vp[s]
+  for other_s in setdiff(1:mp.S, s)
+    @test_approx_eq mp.vp[other_s] mp_original.vp[other_s]
+  end
 end
 
 
@@ -384,6 +406,8 @@ end
 
 
 function test_quadratic_optimization()
+    println("Testing quadratic optimization.")
+
     # A very simple quadratic function to test the optimization.
     const centers = collect(linspace(0.1, 0.9, length(CanonicalParams)));
 
@@ -425,6 +449,7 @@ end
 
 test_quadratic_optimization()
 test_objective_wrapper()
+test_objective_hessians()
 test_kappa_finding()
 test_bad_a_init()
 test_star_optimization()

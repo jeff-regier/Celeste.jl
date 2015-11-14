@@ -73,15 +73,14 @@ function load_cluster_data()
   @everywhere begin
     if synthetic
       srand(1)
-      blob, original_mp, body, original_tiled_blob =
+      blob, original_mp, body, tiled_blob =
         SampleData.gen_n_body_dataset(S, tile_width=10);
     else
       img_dict = JLD.load(joinpath(dat_dir, frame_jld_file));
-      original_tiled_blob = img_dict["tiled_blob"];
+      tiled_blob = img_dict["tiled_blob"];
       original_mp = img_dict["mp_all"];
     end
     mp = deepcopy(original_mp);
-    tiled_blob = deepcopy(original_tiled_blob);
   end;
 end
 

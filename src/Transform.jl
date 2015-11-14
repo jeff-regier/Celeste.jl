@@ -398,7 +398,7 @@ DataTransform(bounds::Vector{ParamBounds};
       for si in 1:active_S
         s = active_sources[si]
         sf_free.d[:, si] =
-          unbox_param_derivative(mp.vp[s], sf.d[:, si][:], bounds[si])
+          unbox_param_derivative(mp.vp[s], sf.d[:, s][:], bounds[si])
       end
 
       sf_free
@@ -408,7 +408,7 @@ DataTransform(bounds::Vector{ParamBounds};
                 transform_sensitive_float, bounds, active_sources, active_S, S)
 end
 
-function get_mp_transform(mp::ModelParams; loc_width::Float64=1e-3)
+function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
   bounds = Array(ParamBounds, length(mp.active_sources))
 
   # Note that, for numerical reasons, the bounds must be on the scale

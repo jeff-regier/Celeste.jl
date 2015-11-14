@@ -1,0 +1,7 @@
+You want the window_flist.fits file, which lists all images.  Then either cut on incl < 1 to get stripe 82, or cut on |Dec| < 1.5.
+
+That file for DR9 is here:
+http://data.sdss3.org/sas/dr9/env/PHOTO_RESOLVE/window_flist.fits
+
+Its description is here:
+http://data.sdss3.org/datamodel/files/PHOTO_RESOLVE/window_flist.html
