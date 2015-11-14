@@ -164,14 +164,14 @@ type ObjectiveWrapperFunctions
 
             x_dual = DualNumbers.Dual{Float64}[
               DualNumbers.Dual{Float64}(x[i, j], 0.) for
-              i = 1:size(x)[1], j=1:size(x)[2]];
+              i = 1:(x_size[1]), j=1:(x_size[2])];
 
             @assert size(hess) == (k, k)
 
             print("Getting Hessian ($k components): ")
-            deriv_sources = fast_hessian ? mp.active_sources: collect(1:mp.S)
-            mp_dual.active_sources = deriv_sources
-            for s in deriv_sources
+            mp_dual.active_sources = mp.active_sources
+            for si in 1:length(mp.active_sources)
+              s = mp.active_sources[si]
               if fast_hessian
                 # We only need to calculate the derivatives in tiles where
                 # epsilon != 0.  The values of the derivatives themselves (that
@@ -179,16 +179,16 @@ type ObjectiveWrapperFunctions
                 # second derivatives with respect to source s will be right.
                 mp_dual.active_sources = [s]
               end
-              for index in 1:size(x)[1]
+              for index in 1:x_size[1]
                 index == 1 ? print("o"): print(".")
-                original_x = x[index, s]
-                x_dual[index, s] = DualNumbers.Dual(original_x, 1.)
+                original_x = x[index, si]
+                x_dual[index, si] = DualNumbers.Dual(original_x, 1.)
 
                 deriv = f_grad(x_dual[:])
                 # This goes through deriv in column-major order.
-                hess[:, sub2ind(x_size, index, s)] =
+                hess[:, sub2ind(x_size, index, si)] =
                   Float64[ ForwardDiff.epsilon(x_val) for x_val in deriv ]
-                x_dual[index, s] = DualNumbers.Dual(original_x, 0.)
+                x_dual[index, si] = DualNumbers.Dual(original_x, 0.)
               end
             end
             print("Done.\n")
@@ -205,7 +205,7 @@ type ObjectiveWrapperFunctions
 
             x_dual = DualNumbers.Dual{Float64}[
               DualNumbers.Dual{Float64}(x[i, j], 0.) for
-              i = 1:size(x)[1], j=1:size(x)[2]];
+              i = 1:x_size[1], j=1:x_size[2]];
 
             # Vectors of the (source, component) indices for the rows
             # and columns of the Hessian.
@@ -216,9 +216,9 @@ type ObjectiveWrapperFunctions
             hess_val = Float64[]
 
             print("Getting sparse Hessian ($k components): ")
-            deriv_sources = fast_hessian ? mp.active_sources: collect(1:mp.S)
-            mp_dual.active_sources = deriv_sources
-            for s1 in deriv_sources
+            mp_dual.active_sources = mp.active_sources
+            for s1i in 1:length(mp.active_sources)
+              s1 = mp.active_sources[s1i]
               if fast_hessian
                 # We only need to calculate the derivatives in tiles where
                 # epsilon != 0.  The values of the derivatives themselves (that
@@ -226,19 +226,20 @@ type ObjectiveWrapperFunctions
                 # second derivatives with respect to source s will be right.
                 mp_dual.active_sources = [s1]
               end
-              for index1 in 1:size(x)[1]
+              for index1 in 1:x_size[1]
                 index1 == 1 ? print("o"): print(".")
-                original_x = x[index1, s1]
-                x_dual[index1, s1] = DualNumbers.Dual(original_x, 1.)
+                original_x = x[index1, s1i]
+                x_dual[index1, s1i] = DualNumbers.Dual(original_x, 1.)
                 deriv = reshape(f_grad(x_dual[:]), x_size)
-                x_dual[index1, s1] = DualNumbers.Dual(original_x, 0.)
+                x_dual[index1, s1i] = DualNumbers.Dual(original_x, 0.)
 
                 # Record the hessian terms.
-                for s2 in deriv_sources, index2=1:size(x)[1]
-                  this_hess_val = DualNumbers.epsilon(deriv[index2, s2])
+                for s2i in 1:length(mp.active_sources), index2=1:size(x)[1]
+                  s2 = mp.active_sources[s2i]
+                  this_hess_val = DualNumbers.epsilon(deriv[index2, s2i])
                   if (this_hess_val != 0)
-                    push!(hess_i, (s1, index1))
-                    push!(hess_j, (s2, index2))
+                    push!(hess_i, (s1i, index1))
+                    push!(hess_j, (s2i, index2))
                     push!(hess_val, this_hess_val)
                   end # index2 for
                 end # s2 for
@@ -248,7 +249,8 @@ type ObjectiveWrapperFunctions
             hess_i, hess_j, hess_val
         end
 
-        new(f_objective, f_value_grad, f_value_grad!, f_value, f_grad, f_grad!,
+        new(f_objective, f_value_grad, f_value_grad!,
+            f_value, f_grad, f_grad!,
             f_ad_grad, f_ad_hessian!, f_ad_hessian_sparse,
             state, transform, mp, kept_ids, omitted_ids)
     end
@@ -445,23 +447,18 @@ end
 
 
 function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
+    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
+    max_iters = 100)
     # Use the default transform.
 
     transform = get_mp_transform(mp);
     maximize_f(f, tiled_blob, mp, transform,
       omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs,
-      verbose=verbose)
+      verbose=verbose, max_iters=max_iters)
 end
 
 function maximize_elbo(tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;
     xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
-    omitted_ids = setdiff(1:length(UnconstrainedParams),
-                          [ids_free.r1; ids_free.r2;
-                           ids_free.k[:]; ids_free.c1[:]])
-    maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids,
-        ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
-
     maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans,
         ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
 end

@@ -4,6 +4,7 @@ module SampleData
 VERSION < v"0.4.0-dev" && using Docile
 using Distributions
 using CelesteTypes
+using Compat
 
 import SloanDigitalSkySurvey: WCS
 import SkyImages
@@ -134,24 +135,34 @@ end
 
 
 @doc """
-Generate a large dataset with S randomly placed bodies.
+Generate a large dataset with S randomly placed bodies and non-constant
+background.
 """ ->
 function gen_n_body_dataset(S::Int64; patch_pixel_radius=20., tile_width=50)
   blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
-  img_size = 1000
+  img_size_h = 900
+  img_size_w = 1000
   for b in 1:5
-      blob0[b].H, blob0[b].W = img_size, img_size
+      blob0[b].H, blob0[b].W = img_size_h, img_size_w
   end
 
   fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
 
-  locations = rand(S, 2) .* float(img_size)
+  locations = rand(S, 2) .* @compat([ float(img_size_h) float(img_size_w) ])
   world_locations = WCS.pixel_to_world(blob0[3].wcs, locations)
 
   S_bodies = CatalogEntry[CatalogEntry(world_locations[s, :][:], true,
       fluxes, fluxes, 0.1, .7, pi/4, 4., string(s)) for s in 1:S];
 
   blob = Synthetic.gen_blob(blob0, S_bodies);
+
+  # Make non-constant background.
+  for b=1:5
+    blob[b].constant_background = false
+    blob[b].iota_vec = fill(blob[b].iota, blob[b].H)
+    blob[b].epsilon_mat = fill(blob[b].epsilon, blob[b].H, blob[b].W)
+  end
+
   world_radius_pts =
     WCS.pixel_to_world(blob[3].wcs,
                        [patch_pixel_radius patch_pixel_radius; 0. 0.])
