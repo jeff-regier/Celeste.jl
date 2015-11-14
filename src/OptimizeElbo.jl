@@ -459,12 +459,6 @@ end
 
 function maximize_elbo(tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;
     xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
-    # omitted_ids = setdiff(1:length(UnconstrainedParams),
-    #                       [ids_free.r1; ids_free.r2;
-    #                        ids_free.k[:]; ids_free.c1[:]])
-    # maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, omitted_ids=omitted_ids,
-    #     ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
-
     maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans,
         ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
 end
