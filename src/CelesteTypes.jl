@@ -577,6 +577,18 @@ end
 
 #########################################################
 
+type HessianEntry{NumType <: Number}
+  # An entry in a sparse Hessian containing a derivative with respect
+  # to source s1, parameter i1 and source s2, parameter i2,
+  # with value v.
+  s1::Int64
+  i1::Int64
+  s2::Int64
+  i2::Int64
+  v::NumType
+end
+
+
 @doc """
 A function value and its derivative with respect to its arguments.
 
@@ -591,7 +603,7 @@ Attributes:
 type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
     v::NumType
     d::Matrix{NumType} # local_P x local_S
-    h::Matrix{NumType} # local_P x local_S
+    h::Array{HessianEntry{NumType}}
     ids::ParamType
 end
 
@@ -601,7 +613,7 @@ function zero_sensitive_float{ParamType <: ParamSet}(
   ::Type{ParamType}, NumType::DataType, local_S::Int64)
     local_P = length(ParamType)
     d = zeros(NumType, local_P, local_S)
-    h = zeros(NumType, local_P, local_S)
+    h = HessianEntry{NumType}[]
     SensitiveFloat{ParamType, NumType}(zero(NumType), d, h, getids(ParamType))
 end
 
@@ -614,6 +626,7 @@ end
 function clear!{ParamType <: ParamSet, NumType <: Number}(
   sp::SensitiveFloat{ParamType, NumType})
     sp.v = zero(NumType)
+    h = HessianEntry{NumType}[]
     fill!(sp.d, zero(NumType))
 end
 
@@ -633,12 +646,11 @@ function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
   @assert length(sf1.ids) == length(sf2.ids)
 
   @assert size(sf1.d) == size(sf2.d)
-  @assert size(sf1.h) == size(sf2.h)
 
   sf3 = deepcopy(sf1)
   sf3.v = sf1.v + sf2.v
   sf3.d = sf1.d + sf2.d
-  sf3.h = sf1.h + sf2.h
+  sf3.h = vcat(sf1.h, sf2.h)
 
   sf3
 end
