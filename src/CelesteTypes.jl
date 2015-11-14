@@ -348,7 +348,8 @@ end
 
 immutable PriorParams
     a::Vector{Float64}  # formerly Phi
-    r::Matrix{Float64}   # formerly Upsilon, Psi
+    r_mean::Vector{Float64}
+    r_cov::Vector{Float64}
     k::Matrix{Float64}  # formerly Xi
     c_mean::Array{Float64, 3} # formerly Omega
     c_cov::Array{Float64, 4} # formerly Lambda
