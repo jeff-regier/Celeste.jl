@@ -56,8 +56,14 @@ type ObjectiveWrapperFunctions
     kept_ids::Array{Int64}
     omitted_ids::Array{Int64}
 
-    # if fast_hessian is true, set the ModelParams active sources to
-    # include only the dual number currently being set.
+    # Arguments:
+    #  f: A function that takes in ModelParams and returns a SensitiveFloat.
+    #  mp: Initial ModelParams
+    #  transform: A DataTransform that matches ModelParams
+    #  kept_ids: The free parameter ids to keep
+    #  omitted_ids: The free parameter ids to omit (TODO: this is redundant)
+    #  fast_hessian: Evaluate the forward autodiff Hessian using only
+    #                mp.active_sources to speed up computation.
     ObjectiveWrapperFunctions(
       f::Function, mp::ModelParams{Float64}, transform::DataTransform,
       kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1};

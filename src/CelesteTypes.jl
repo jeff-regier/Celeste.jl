@@ -610,7 +610,7 @@ type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
     v::NumType
     d::Matrix{NumType} # local_P x local_S
     h::Array{HessianEntry{NumType}}
-    hs::Array{NumType} # local_S x local_P x local_P
+    hs::Array{NumType} # local_P x local_P x local_S
     ids::ParamType
 end
 
@@ -622,17 +622,15 @@ Set a SensitiveFloat's hessian term, maintaining symmetry.
 function set_hess!{ParamType <: ParamSet, NumType <: Number}(
     sf::SensitiveFloat{ParamType, NumType},
     i::Int64, j::Int64, v::NumType)
-  i != j ?
-    sf.hs[1, i, j] = sf.hs[s, j, i] = v:
-    sf.hs[1, i, j] = v
+  set_hess!(sf, i, j, 1, v)
 end
 
 function set_hess!{ParamType <: ParamSet, NumType <: Number}(
     sf::SensitiveFloat{ParamType, NumType},
     i::Int64, j::Int64, s::Int64, v::NumType)
   i != j ?
-    sf.hs[s, i, j] = sf.hs[s, j, i] = v:
-    sf.hs[s, i, j] = v
+    sf.hs[i, j, s] = sf.hs[j, i, s] = v:
+    sf.hs[i, j, s] = v
 end
 
 function zero_sensitive_float{ParamType <: ParamSet}(

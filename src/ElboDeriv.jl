@@ -180,7 +180,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
                          (ids.r1[i], ids.r2[i]),
                          (ids.r2[i], ids.r2[i])]
           set_hess!(E_l_a[4, i], hess_ids...,
-                    E_c_3 * E_l_a[3, i].hs[1, hess_ids...])
+                    E_c_3 * E_l_a[3, i].hs[hess_ids..., 1])
         end
         set_hess!(E_l_a[4, i], ids.c1[3, i], ids.c1[3, i], E_l_a[4, i].v)
         set_hess!(E_l_a[4, i], ids.c1[3, i], ids.c2[3, i], E_l_a[4, i].v * 0.5)
@@ -203,7 +203,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
                          (ids.c1[3, i], ids.c2[3, i]),
                          (ids.c2[3, i], ids.c2[3, i])]
           set_hess!(E_l_a[5, i], hess_ids...,
-                    E_c_4 * E_l_a[4, i].hs[1, hess_ids...])
+                    E_c_4 * E_l_a[4, i].hs[hess_ids..., 1])
         end
         set_hess!(E_l_a[5, i], ids.c1[i], ids.c1[i], E_l_a[5, i].v)
         set_hess!(E_l_a[5, i], ids.c1[4, i], ids.c2[4, i], E_l_a[5, i].v * 0.5)
@@ -221,7 +221,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
                          (ids.r1[i], ids.r2[i]),
                          (ids.r2[i], ids.r2[i])]
           set_hess!(E_l_a[2, i], hess_ids...,
-                    E_c_3 * E_l_a[3, i].hs[1, hess_ids...])
+                    E_c_3 * E_l_a[3, i].hs[hess_ids..., 1])
         end
         set_hess!(E_l_a[2, i], ids.c1[2, i], ids.c1[2, i], E_l_a[4, i].v)
         set_hess!(E_l_a[2, i], ids.c1[2, i], ids.c2[2, i], E_l_a[4, i].v * -0.5)
@@ -244,7 +244,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
                          (ids.c1[2, i], ids.c2[2, i]),
                          (ids.c2[2, i], ids.c2[2, i])]
           set_hess!(E_l_a[1, i], hess_ids...,
-                    E_c_4 * E_l_a[2, i].hs[1, hess_ids...])
+                    E_c_4 * E_l_a[2, i].hs[hess_ids..., 1])
         end
         set_hess!(E_l_a[1, i], ids.c1[1, i], ids.c1[1, i], E_l_a[5, i].v)
         set_hess!(E_l_a[1, i], ids.c1[1, i], ids.c2[1, i], E_l_a[5, i].v * -0.5)
@@ -276,7 +276,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
         for hess_ids in [(ids.r1[i], ids.r1[i]),
                          (ids.r1[i], ids.r2[i]),
                          (ids.r2[i], ids.r2[i])]
-          set_hess!(E_ll_a[4, i], hess_ids..., E_ll_a[3, i].hs[hess_ids...])
+          set_hess!(E_ll_a[4, i], hess_ids..., E_ll_a[3, i].hs[hess_ids..., 1])
         end
         for hess_ids in [(ids.c1[3, i], ids.c1[3, i]),
                          (ids.c1[3, i], ids.c2[3, i]),
@@ -296,7 +296,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
                          (ids.c1[3, i], ids.c1[3, i]),
                          (ids.c1[3, i], ids.c2[3, i]),
                          (ids.c2[3, i], ids.c2[3, i])]
-          set_hess!(E_ll_a[5, i], hess_ids..., E_ll_a[4, i].hs[hess_ids...])
+          set_hess!(E_ll_a[5, i], hess_ids..., E_ll_a[4, i].hs[hess_ids..., 1])
         end
         for hess_ids in [(ids.c1[4, i], ids.c1[4, i]),
                          (ids.c1[4, i], ids.c2[4, i]),
@@ -313,7 +313,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
         for hess_ids in [(ids.r1[i], ids.r1[i]),
                          (ids.r1[i], ids.r2[i]),
                          (ids.r2[i], ids.r2[i])]
-          set_hess!(E_ll_a[2, i], hess_ids..., E_ll_a[3, i].hs[hess_ids...])
+          set_hess!(E_ll_a[2, i], hess_ids..., E_ll_a[3, i].hs[hess_ids..., 1])
         end
         for hess_ids in [(ids.c1[2, i], ids.c1[2, i]),
                          (ids.c2[2, i], ids.c2[2, i])]
@@ -334,7 +334,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
                          (ids.c1[2, i], ids.c1[2, i]),
                          (ids.c1[2, i], ids.c2[2, i]),
                          (ids.c2[2, i], ids.c2[2, i])]
-          set_hess!(E_ll_a[1, i], hess_ids..., E_ll_a[2, i].hs[hess_ids...])
+          set_hess!(E_ll_a[1, i], hess_ids..., E_ll_a[2, i].hs[hess_ids..., 1])
         end
         for hess_ids in [(ids.c1[1, i], ids.c1[1, i]),
                          (ids.c2[1, i], ids.c2[1, i])]
