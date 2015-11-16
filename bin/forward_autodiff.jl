@@ -471,7 +471,7 @@ function verify_sample_star(vs, pos)
     @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
     @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
 
-    brightness_hat = vs[ids.r1[1]] * vs[ids.r2[1]]
+    brightness_hat = exp(vs[ids.r1[1]] + 0.5 * vs[ids.r2[1]])
     @test_approx_eq_eps brightness_hat / sample_star_fluxes[3] 1. 0.01
 
     true_colors = log(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
@@ -495,7 +495,7 @@ function verify_sample_galaxy(vs, pos)
     five_deg = 5 * pi/180
     @test_approx_eq_eps phi_hat pi/4 five_deg
 
-    brightness_hat = vs[ids.r1[2]] * vs[ids.r2[2]]
+    brightness_hat = exp(vs[ids.r1[2]] + 0.5 * vs[ids.r2[2]])
     @test_approx_eq_eps brightness_hat / sample_galaxy_fluxes[3] 1. 0.01
 
     true_colors = log(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])

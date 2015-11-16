@@ -28,7 +28,8 @@ function sample_prior()
     # set a = [.99, .01] if stars are underrepresented
     # due to the greater flexibility of the galaxy model
     a = [0.28, 0.72]
-    r = Array(Float64, 2, Ia)
+    r_mean = Array(Float64, Ia)
+    r_var = Array(Float64, Ia)
     k = Array(Float64, D, Ia)
     c_mean = Array(Float64, B - 1, D, Ia)
     c_cov = Array(Float64, B - 1, B - 1, D, Ia)
@@ -41,10 +42,19 @@ function sample_prior()
     r_fit2, k[:, 2], c_mean[:,:,2], c_cov[:,:,:,2] = deserialize(gals_file)
     close(gals_file)
 
-    # TODO: use r_fit1 and r_fit2 instead of magic numbers ?
-    r = [0.47 1.28; 1/0.012 1/0.11]
+    # These "magic numbers" have been in use for a while.
+    # They were initially gamma parameters, and now they are log normal
+    # parameters.  TODO: Get rid of these and use an empirical prior.
+    # r = [0.47 1.28; 1/0.012 1/0.11] # These were gamma (shape, scale)
 
-    PriorParams(a, r, k, c_mean, c_cov)
+    mean_brightness = [0.47 / 0.012, 1.28 / 0.11 ]
+    var_brightness = [0.47 / (0.012 ^ 2), 1.28 / (0.11 ^ 2) ]
+
+    # The prior contains parameters of a lognormal distribution with
+    # the desired means.
+    r_var = log(var_brightness ./ (mean_brightness .^ 2) + 1)
+    r_mean = log(mean_brightness) - 0.5 * r_var
+    PriorParams(a, r_mean, r_var, k, c_mean, c_cov)
 end
 
 @doc """
@@ -57,8 +67,8 @@ function init_source(init_pos::Vector{Float64})
     ret[ids.a[1]] = 1.0 - ret[ids.a[2]]
     ret[ids.u[1]] = init_pos[1]
     ret[ids.u[2]] = init_pos[2]
-    ret[ids.r1] = 1e3
-    ret[ids.r2] = 2e-3
+    ret[ids.r1] = log(2.0)
+    ret[ids.r2] = 1e-3
     ret[ids.e_dev] = 0.5
     ret[ids.e_axis] = 0.5
     ret[ids.e_angle] = 0.
@@ -76,8 +86,8 @@ function init_source(ce::CatalogEntry)
     # TODO: sync this up with the transform bounds
     ret = init_source(ce.pos)
 
-    ret[ids.r1[1]] = max(0.0001, ce.star_fluxes[3]) ./ ret[ids.r2[1]]
-    ret[ids.r1[2]] = max(0.0001, ce.gal_fluxes[3]) ./ ret[ids.r2[2]]
+    ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
+    ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))
 
     get_color(c2, c1) = begin
         c2 > 0 && c1 > 0 ? min(max(log(c2 / c1), -9.), 9.) :
@@ -405,7 +415,7 @@ function initialize_model_params(
 
   println("Processing the bands.")
   for b = 1:length(blob)
-    println("  Band $b patches:")
+    print("  Band $b patches...")
     for s=1:mp.S
       (s % 10  == 0) && print(".")
       mp.patches[s, b] = radius_from_cat ?
@@ -413,11 +423,11 @@ function initialize_model_params(
                  scale_patch_size=scale_patch_size):
         SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
     end
-    print("\n")
-    println("  Band $b tiled image sources:")
+    print("Band $b tiled image sources...")
     mp.tile_sources[b] =
       get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
   end
+  print("\n")
 
   mp
 end

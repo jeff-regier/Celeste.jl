@@ -86,6 +86,7 @@ end
 
 @doc """
 KL divergence between a pair of gamma distributions
+NB: This is currently not used in the Celeste model.
 
 Args:
 - k2: the shape parameter for the second gamma distribution
@@ -133,8 +134,10 @@ function gen_normal_kl{NumType <: Number}(mu2::NumType, sigma2Sq::NumType)
     const log_sigma2Sq = log(sigma2Sq)
     function this_normal_lk{NumType2 <: Number}(mu1::NumType2, sigma1Sq::NumType2)
         diff = mu1 - mu2
-        v = .5 * ((log_sigma2Sq - log(sigma1Sq)) + (sigma1Sq + (diff)^2) / sigma2Sq - 1)
+        v = .5 * ((log_sigma2Sq - log(sigma1Sq)) +
+            (sigma1Sq + (diff)^2) / sigma2Sq - 1)
         d_mu1 = diff / sigma2Sq
+
         d_sigma1Sq = 0.5 * (-1. / sigma1Sq + 1 / sigma2Sq)
         v, (d_mu1, d_sigma1Sq)
     end
@@ -154,8 +157,10 @@ Returns:
   bivariate normal distribution, and returns the KL divergence
   and its derivatives
 """ ->
-function gen_isobvnormal_kl{NumType <: Number}(mean2::Vector{NumType}, var2::NumType)
-    function this_isobvnormal_kl{NumType2 <: Number}(mean1::Vector{NumType2}, var1::NumType2)
+function gen_isobvnormal_kl{NumType <: Number}(
+  mean2::Vector{NumType}, var2::NumType)
+    function this_isobvnormal_kl{NumType2 <: Number}(
+      mean1::Vector{NumType2}, var1::NumType2)
         diff_sq = (mean1[1] - mean2[1])^2 + (mean1[2] - mean2[2])^2
         v = var1 / var2 + diff_sq / 2var2 - 1 + log(var2 / var1)
 
@@ -176,15 +181,17 @@ Args:
 - cov2: the covariance matrix for the second normal distribution
 
 Returns:
-- a function the takes mean and variance parameters for the first normal 
+- a function the takes mean and variance parameters for the first normal
   distribution, and returns the KL divergence and its derivatives
 """ ->
-function gen_diagmvn_mvn_kl{NumType <: Number}(mean2::Vector{NumType}, cov2::Matrix{NumType})
+function gen_diagmvn_mvn_kl{NumType <: Number}(
+  mean2::Vector{NumType}, cov2::Matrix{NumType})
     const precision2 = cov2^-1
     const logdet_cov2 = logdet(cov2)
     const K = length(mean2)
 
-    function this_diagmvn_mvn_kl{NumType2 <: Number}(mean1::Vector{NumType2}, vars1::Vector{NumType2})
+    function this_diagmvn_mvn_kl{NumType2 <: Number}(
+      mean1::Vector{NumType2}, vars1::Vector{NumType2})
         const diag_precision2 = convert(Vector{NumType2}, diag(precision2))
         diff = mean2 - mean1
 
@@ -219,4 +226,3 @@ function gen_isobvnormal_flat_kl()
 end
 
 end
-
