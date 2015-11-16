@@ -115,7 +115,7 @@ end
 function convert(::Type{CatalogEntry}, vs::Vector{Float64}; objid="converted")
     function get_fluxes(i::Int64)
         ret = Array(Float64, 5)
-        ret[3] = vs[ids.r1[i]] * vs[ids.r2[i]]
+        ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
         ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
         ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
         ret[2] = ret[3] / exp(vs[ids.c1[2, i]])

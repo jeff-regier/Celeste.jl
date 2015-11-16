@@ -15,7 +15,8 @@ function true_star_init()
 
     mp.vp[1][ids.a] = [ 1.0 - 1e-4, 1e-4 ]
     mp.vp[1][ids.r2] = 1e-4
-    mp.vp[1][ids.r1] = sample_star_fluxes[3] ./ mp.vp[1][ids.r2]
+    mp.vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * mp.vp[1][ids.r2]
+    #mp.vp[1][ids.r1] = sample_star_fluxes[3] ./ mp.vp[1][ids.r2]
     mp.vp[1][ids.c2] = 1e-4
 
     blob, mp, body, tiled_blob
@@ -74,8 +75,8 @@ function test_kl_divergence_values()
     test_kl(q_c, p_c, sklc)
 
     # r
-    q_r = Gamma(vs[ids.r1[i]], vs[ids.r2[i]])
-    p_r = Gamma(mp.pp.r[1, i], mp.pp.r[2, i])
+    q_r = Normal(vs[ids.r1[i]], sqrt(vs[ids.r2[i]]))
+    p_r = Normal(mp.pp.r_mean[i], sqrt(mp.pp.r_var[i]))
     function sklr(accum)
         ElboDeriv.subtract_kl_r!(i, s, mp, accum)
         @assert i == 1
@@ -130,7 +131,7 @@ function test_that_star_truth_is_most_likely()
 
     for delta in [.7, .9, 1.1, 1.3]
         mp_r1 = deepcopy(mp)
-        mp_r1.vp[1][ids.r1] *= delta
+        mp_r1.vp[1][ids.r1] += log(delta)
         bad_r1 = ElboDeriv.elbo_likelihood(tiled_blob, mp_r1)
         @test best.v > bad_r1.v
     end
@@ -148,15 +149,15 @@ end
 
 
 function test_that_galaxy_truth_is_most_likely()
-    blob, mp, body, tiled_blob = gen_sample_galaxy_dataset(perturb=false)
+    blob, mp, body, tiled_blob = gen_sample_galaxy_dataset(perturb=false);
     mp.vp[1][ids.a] = [ 0.01, .99 ]
-    best = ElboDeriv.elbo_likelihood(tiled_blob, mp)
+    best = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
     for bad_a in [.3, .5, .9]
-        mp_a = deepcopy(mp)
-        mp_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ]
-        bad_a = ElboDeriv.elbo_likelihood(tiled_blob, mp_a)
-        @test best.v > bad_a.v
+        mp_a = deepcopy(mp);
+        mp_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ];
+        bad_a = ElboDeriv.elbo_likelihood(tiled_blob, mp_a);
+        @test best.v > bad_a.v;
     end
 
     for h2 in -2:2
@@ -172,8 +173,7 @@ function test_that_galaxy_truth_is_most_likely()
 
     for bad_scale in [.8, 1.2]
         mp_r1 = deepcopy(mp)
-        mp_r1.vp[1][ids.r1] *= bad_scale^2
-        mp_r1.vp[1][ids.r2] /= bad_scale  # keep variance the same
+        mp_r1.vp[1][ids.r1] += 2 * log(bad_scale)
         bad_r1 = ElboDeriv.elbo_likelihood(tiled_blob, mp_r1)
         @test best.v > bad_r1.v
     end
@@ -230,8 +230,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
 
     for bad_scale in [.7, 1.3]
         mp_r1 = deepcopy(mp)
-        mp_r1.vp[s][ids.r1] *= bad_scale^2
-        mp_r1.vp[s][ids.r2] /= bad_scale  # keep variance the same
+        mp_r1.vp[s][ids.r1] += 2 * log(bad_scale)
         bad_r1 = ElboDeriv.elbo_likelihood(tiled_blob, mp_r1)
         @test best.v > bad_r1.v
     end
