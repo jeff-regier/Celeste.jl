@@ -103,19 +103,19 @@ function test_categorical()
 end
 
 
-function test_gamma()
-    q_k, q_theta = 3., 2.
-    q = Gamma(q_k, q_theta)
-    p_k, p_theta = 7.5, 1.
-    p = Gamma(p_k, p_theta)
-
-    claimed_kl = KL.gen_gamma_kl(p_k, p_theta)(q_k, q_theta)[1]
-    verify_kl(q, p, claimed_kl)
-
-    x = [q_k, q_theta]
-    f(x) = KL.gen_gamma_kl(p_k, p_theta)(x[1], x[2])
-    verify_derivs(f, x)
-end
+# function test_gamma()
+#     q_k, q_theta = 3., 2.
+#     q = Gamma(q_k, q_theta)
+#     p_k, p_theta = 7.5, 1.
+#     p = Gamma(p_k, p_theta)
+#
+#     claimed_kl = KL.gen_gamma_kl(p_k, p_theta)(q_k, q_theta)[1]
+#     verify_kl(q, p, claimed_kl)
+#
+#     x = [q_k, q_theta]
+#     f(x) = KL.gen_gamma_kl(p_k, p_theta)(x[1], x[2])
+#     verify_derivs(f, x)
+# end
 
 
 function test_univariate_normal()
@@ -204,7 +204,7 @@ end
 test_beta()
 test_wrappedcauchy_uniform()
 test_categorical()
-test_gamma()
+#test_gamma()
 test_univariate_normal()
 test_isobvnormal()
 test_diagmvn_mvn()

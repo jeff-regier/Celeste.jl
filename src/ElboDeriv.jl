@@ -154,7 +154,9 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
             E_l_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
         end
 
-        # Index 3 is r_s and has a lognormal expectation.
+        # band 3 is the reference band, relative to which the colors are
+        # specified.
+        # It is denoted r_s and has a lognormal expectation.
         E_l_a[3, i].v = exp(r1[i] + 0.5 * r2[i])
         E_l_a[3, i].d[ids.r1[i]] = E_l_a[3, i].v
         E_l_a[3, i].d[ids.r2[i]] = E_l_a[3, i].v * .5
@@ -255,6 +257,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
             E_ll_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
         end
 
+        # Band 3.
         tmpr = exp(2 * r1[i] + 2 * r2[i])
         E_ll_a[3, i].v = tmpr
         E_ll_a[3, i].d[ids.r1[i]] = E_ll_a[3, i].d[ids.r2[i]] = 2 * tmpr
