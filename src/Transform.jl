@@ -430,5 +430,68 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
   DataTransform(bounds, active_sources=mp.active_sources, S=mp.S)
 end
 
+# An identity transform that does not enforce any bounds.
+function get_identity_transform(P::Int64, S::Int64)
+
+  active_S = S
+  active_sources = 1:S
+  bounds = ParamBounds[]
+
+  function from_vp!{NumType <: Number}(
+    vp::VariationalParams{NumType}, vp_free::VariationalParams{NumType})
+      @assert length(vp_free) == length(vp) == active_S
+      for s=1:S
+        @assert length(vp_free[s]) == length(vp[s]) == P
+        vp_free[s][:] = vp[s]
+      end
+  end
+
+  function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
+      vp_free = [ zeros(NumType, P) for si = 1:active_S]
+      from_vp!(vp, vp_free)
+      vp_free
+  end
+
+  function to_vp!{NumType <: Number}(
+    vp_free::FreeVariationalParams{NumType}, vp::VariationalParams{NumType})
+    @assert length(vp_free) == length(vp) == active_S
+    for s=1:S
+      @assert length(vp_free[s]) == length(vp[s]) == P
+      vp[s][:] = vp_free[s]
+    end
+  end
+
+  function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
+      vp = [ zeros(P) for s = 1:S]
+      to_vp!(vp_free, vp)
+      vp
+  end
+
+  function vp_to_array{NumType <: Number}(vp::VariationalParams{NumType},
+                                          omitted_ids::Vector{Int64})
+      vp_trans = from_vp(vp)
+      free_vp_to_array(vp_trans, omitted_ids)
+  end
+
+  function array_to_vp!{NumType <: Number}(xs::Matrix{NumType},
+                                           vp::VariationalParams{NumType},
+                                           omitted_ids::Vector{Int64})
+      # This needs to update vp in place so that variables in omitted_ids
+      # stay at their original values.
+      vp_trans = from_vp(vp)
+      array_to_free_vp!(xs, vp_trans, omitted_ids)
+      to_vp!(vp_trans, vp)
+  end
+
+  function transform_sensitive_float{NumType <: Number}(
+      sf::SensitiveFloat, mp::ModelParams{NumType})
+    sf
+  end
+
+  DataTransform(to_vp, from_vp, to_vp!, from_vp!, vp_to_array, array_to_vp!,
+                transform_sensitive_float, bounds, active_sources, active_S, S)
+end
+
+
 
 end
