@@ -89,9 +89,6 @@ function init_source(ce::CatalogEntry)
     ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
     ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))
 
-    # ret[ids.r1[1]] = max(0.0001, ce.star_fluxes[3]) ./ ret[ids.r2[1]]
-    # ret[ids.r1[2]] = max(0.0001, ce.gal_fluxes[3]) ./ ret[ids.r2[2]]
-
     get_color(c2, c1) = begin
         c2 > 0 && c1 > 0 ? min(max(log(c2 / c1), -9.), 9.) :
             c2 > 0 && c1 <= 0 ? 3.0 :
