@@ -66,7 +66,6 @@ function subtract_kl_r!{NumType <: Number}(
     vs = mp.vp[s]
     a = vs[ids.a[i]]
 
-    # TODO: This is wrong -- understand what's up with the other color prior.
     pp_kl_r = KL.gen_normal_kl(mp.pp.r_mean[i], mp.pp.r_var[i])
     (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
 

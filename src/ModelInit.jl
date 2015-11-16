@@ -46,9 +46,14 @@ function sample_prior()
     # They were initially gamma parameters, and now they are log normal
     # parameters.  TODO: Get rid of these and use an empirical prior.
     # r = [0.47 1.28; 1/0.012 1/0.11] # These were gamma (shape, scale)
-    r_mean = [0.47 / 0.012, 1.28 / 0.11 ]
-    r_var = [0.47 / (0.012 ^ 2), 1.28 / (0.11 ^ 2) ]
 
+    mean_brightness = [0.47 / 0.012, 1.28 / 0.11 ]
+    var_brightness = [0.47 / (0.012 ^ 2), 1.28 / (0.11 ^ 2) ]
+
+    # The prior contains parameters of a lognormal distribution with
+    # the desired means.
+    r_var = log(var_brightness ./ (mean_brightness .^ 2) + 1)
+    r_mean = log(mean_brightness) - 0.5 * r_var
     PriorParams(a, r_mean, r_var, k, c_mean, c_cov)
 end
 
@@ -62,8 +67,8 @@ function init_source(init_pos::Vector{Float64})
     ret[ids.a[1]] = 1.0 - ret[ids.a[2]]
     ret[ids.u[1]] = init_pos[1]
     ret[ids.u[2]] = init_pos[2]
-    ret[ids.r1] = 1e3
-    ret[ids.r2] = 2e-3
+    ret[ids.r1] = log(2.0)
+    ret[ids.r2] = 1e-3
     ret[ids.e_dev] = 0.5
     ret[ids.e_axis] = 0.5
     ret[ids.e_angle] = 0.
@@ -81,8 +86,11 @@ function init_source(ce::CatalogEntry)
     # TODO: sync this up with the transform bounds
     ret = init_source(ce.pos)
 
-    ret[ids.r1[1]] = max(0.0001, ce.star_fluxes[3]) ./ ret[ids.r2[1]]
-    ret[ids.r1[2]] = max(0.0001, ce.gal_fluxes[3]) ./ ret[ids.r2[2]]
+    ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
+    ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))
+
+    # ret[ids.r1[1]] = max(0.0001, ce.star_fluxes[3]) ./ ret[ids.r2[1]]
+    # ret[ids.r1[2]] = max(0.0001, ce.gal_fluxes[3]) ./ ret[ids.r2[2]]
 
     get_color(c2, c1) = begin
         c2 > 0 && c1 > 0 ? min(max(log(c2 / c1), -9.), 9.) :
