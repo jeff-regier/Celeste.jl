@@ -9,7 +9,6 @@ import OptimizeElbo
 
 println("Running optimization tests.")
 
-
 function verify_sample_star(vs, pos)
     @test vs[ids.a[2]] <= 0.01
 
