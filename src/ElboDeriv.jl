@@ -56,18 +56,26 @@ end
 
 
 @doc """
-Subtract the KL divergence from the prior for r
+Subtract the KL divergence from the prior for r for object type i.
 """ ->
 function subtract_kl_r!{NumType <: Number}(
   i::Int64, s::Int64,
   mp::ModelParams{NumType},
   accum::SensitiveFloat{CanonicalParams, NumType})
+
     vs = mp.vp[s]
-    pp_kl_r = KL.gen_gamma_kl(mp.pp.r[1, i], mp.pp.r[2, i])
+    a = vs[ids.a[i]]
+
+    # TODO: This is wrong -- understand what's up with the other color prior.
+    pp_kl_r = KL.gen_normal_kl(mp.pp.r_mean[i], mp.pp.r_var[i])
     (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
-    accum.v -= v * vs[ids.a[i]]
-    accum.d[ids.r1[i], s] -= d_r1 .* vs[ids.a[i]]
-    accum.d[ids.r2[i], s] -= d_r2 .* vs[ids.a[i]]
+
+    # pp_kl_r = KL.gen_gamma_kl(mp.pp.r[1, i], mp.pp.r[2, i])
+    # (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
+
+    accum.v -= v * a
+    accum.d[ids.r1[i], s] -= d_r1 .* a
+    accum.d[ids.r2[i], s] -= d_r2 .* a
     accum.d[ids.a[i], s] -= v
 end
 
@@ -146,10 +154,10 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
             E_l_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
         end
 
-        # Index 3 is r_s and has a gamma expectation.
-        E_l_a[3, i].v = r1[i] * r2[i]
-        E_l_a[3, i].d[ids.r1[i]] = r2[i]
-        E_l_a[3, i].d[ids.r2[i]] = r1[i]
+        # Index 3 is r_s and has a lognormal expectation.
+        E_l_a[3, i].v = exp(r1[i] + 0.5 * r2[i])
+        E_l_a[3, i].d[ids.r1[i]] = E_l_a[3, i].v
+        E_l_a[3, i].d[ids.r2[i]] = E_l_a[3, i].v * .5
 
         # The remaining indices involve c_s and have lognormal
         # expectations times E_c_3.
@@ -192,30 +200,29 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
             E_ll_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
         end
 
-        r2_sq = r2[i]^2
-        E_ll_a[3, i].v = r1[i] * (1 + r1[i]) * r2_sq
-        E_ll_a[3, i].d[ids.r1[i]] = (1 + 2 * r1[i]) * r2_sq
-        E_ll_a[3, i].d[ids.r2[i]] = 2 * r1[i] * (1. + r1[i]) * r2[i]
+        tmpr = exp(2 * r1[i] + 2 * r2[i])
+        E_ll_a[3, i].v = tmpr
+        E_ll_a[3, i].d[ids.r1[i]] = E_ll_a[3, i].d[ids.r2[i]] = 2 * tmpr
 
-        tmp3 = exp(2c1[3, i] + 2 * c2[3, i])
+        tmp3 = exp(2 * c1[3, i] + 2 * c2[3, i])
         E_ll_a[4, i].v = E_ll_a[3, i].v * tmp3
         E_ll_a[4, i].d[:] = E_ll_a[3, i].d * tmp3
         E_ll_a[4, i].d[ids.c1[3, i]] = E_ll_a[4, i].v * 2.
         E_ll_a[4, i].d[ids.c2[3, i]] = E_ll_a[4, i].v * 2.
 
-        tmp4 = exp(2c1[4, i] + 2 * c2[4, i])
+        tmp4 = exp(2 * c1[4, i] + 2 * c2[4, i])
         E_ll_a[5, i].v = E_ll_a[4, i].v * tmp4
         E_ll_a[5, i].d[:] = E_ll_a[4, i].d * tmp4
         E_ll_a[5, i].d[ids.c1[4, i]] = E_ll_a[5, i].v * 2.
         E_ll_a[5, i].d[ids.c2[4, i]] = E_ll_a[5, i].v * 2.
 
-        tmp2 = exp(-2c1[2, i] + 2 * c2[2, i])
+        tmp2 = exp(-2 * c1[2, i] + 2 * c2[2, i])
         E_ll_a[2, i].v = E_ll_a[3, i].v * tmp2
         E_ll_a[2, i].d[:] = E_ll_a[3, i].d * tmp2
         E_ll_a[2, i].d[ids.c1[2, i]] = E_ll_a[2, i].v * -2.
         E_ll_a[2, i].d[ids.c2[2, i]] = E_ll_a[2, i].v * 2.
 
-        tmp1 = exp(-2c1[1, i] + 2 * c2[1, i])
+        tmp1 = exp(-2 * c1[1, i] + 2 * c2[1, i])
         E_ll_a[1, i].v = E_ll_a[2, i].v * tmp1
         E_ll_a[1, i].d[:] = E_ll_a[2, i].d * tmp1
         E_ll_a[1, i].d[ids.c1[1, i]] = E_ll_a[1, i].v * -2.
