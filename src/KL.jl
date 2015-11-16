@@ -84,37 +84,38 @@ function gen_categorical_kl{NumType <: Number}(p2::Vector{NumType})
 end
 
 
-# @doc """
-# KL divergence between a pair of gamma distributions
-#
-# Args:
-# - k2: the shape parameter for the second gamma distribution
-# - theta2: the scale parameter for the second gamma distribution
-#
-# Returns:
-# - a function the takes shape and scale parameters for the first
-#   gamma distribution, and returns the KL divergence and its derivatives
-# """ ->
-# function gen_gamma_kl{NumType <: Number}(k2::NumType, theta2::NumType)
-#     function this_gamma_lk{NumType2 <: Number}(k1::NumType2, theta1::NumType2)
-#         digamma_k1 = digamma(k1)
-#         theta_ratio = (theta1 - theta2) / theta2
-#         shape_diff = k1 - k2
-#
-#         v = shape_diff * digamma_k1
-#         v += -lgamma(k1) + lgamma(k2)
-#         v += k2 * (log(theta2) - log(theta1))
-#         v += k1 * theta_ratio
-#
-#         d_k1 = shape_diff * trigamma(k1)
-#         d_k1 += theta_ratio
-#
-#         d_theta1 = -k2 / theta1
-#         d_theta1 += k1 / theta2
-#
-#         v, (d_k1, d_theta1)
-#     end
-# end
+@doc """
+KL divergence between a pair of gamma distributions
+NB: This is currently not used in the Celeste model.
+
+Args:
+- k2: the shape parameter for the second gamma distribution
+- theta2: the scale parameter for the second gamma distribution
+
+Returns:
+- a function the takes shape and scale parameters for the first
+  gamma distribution, and returns the KL divergence and its derivatives
+""" ->
+function gen_gamma_kl{NumType <: Number}(k2::NumType, theta2::NumType)
+    function this_gamma_lk{NumType2 <: Number}(k1::NumType2, theta1::NumType2)
+        digamma_k1 = digamma(k1)
+        theta_ratio = (theta1 - theta2) / theta2
+        shape_diff = k1 - k2
+
+        v = shape_diff * digamma_k1
+        v += -lgamma(k1) + lgamma(k2)
+        v += k2 * (log(theta2) - log(theta1))
+        v += k1 * theta_ratio
+
+        d_k1 = shape_diff * trigamma(k1)
+        d_k1 += theta_ratio
+
+        d_theta1 = -k2 / theta1
+        d_theta1 += k1 / theta2
+
+        v, (d_k1, d_theta1)
+    end
+end
 
 
 @doc """
@@ -136,6 +137,7 @@ function gen_normal_kl{NumType <: Number}(mu2::NumType, sigma2Sq::NumType)
         v = .5 * ((log_sigma2Sq - log(sigma1Sq)) +
             (sigma1Sq + (diff)^2) / sigma2Sq - 1)
         d_mu1 = diff / sigma2Sq
+
         d_sigma1Sq = 0.5 * (-1. / sigma1Sq + 1 / sigma2Sq)
         v, (d_mu1, d_sigma1Sq)
     end
