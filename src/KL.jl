@@ -137,6 +137,9 @@ function gen_normal_kl{NumType <: Number}(mu2::NumType, sigma2Sq::NumType)
         v = .5 * ((log_sigma2Sq - log(sigma1Sq)) +
             (sigma1Sq + (diff)^2) / sigma2Sq - 1)
         d_mu1 = diff / sigma2Sq
+
+        # TODO: Is this causing numeric problems?  Should we parameterize
+        # as a function of the precision?
         d_sigma1Sq = 0.5 * (-1. / sigma1Sq + 1 / sigma2Sq)
         v, (d_mu1, d_sigma1Sq)
     end
