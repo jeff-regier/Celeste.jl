@@ -22,6 +22,8 @@ export ids, ids_free, star_ids, gal_ids
 export ids_names, ids_free_names
 export D, B, Ia
 
+export set_hess!
+
 export print_params
 
 using Util
@@ -594,28 +596,55 @@ end
 A function value and its derivative with respect to its arguments.
 
 Attributes:
-  v: The value
-  d: The derivative with respect to each variable in
-     P-dimensional VariationalParams for each of S celestial objects
-     in a local_P x local_S matrix.
-  h: The second derivative with respect to each variational parameter,
-     in the same format as d.
+  v:  The value
+  d:  The derivative with respect to each variable in
+      P-dimensional VariationalParams for each of S celestial objects
+      in a local_P x local_S matrix.
+  h:  The second derivative with respect to each variational parameter,
+      in the same format as d.  This is used for the full Hessian
+      with respect to all the sources.
+  hs: An array of per-source Hessians.  This will generally be reserved
+      for the Hessian of brightness values that depend only on one source.
 """ ->
 type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
     v::NumType
     d::Matrix{NumType} # local_P x local_S
     h::Array{HessianEntry{NumType}}
+    hs::Array{NumType} # local_S x local_P x local_P
     ids::ParamType
 end
 
 #########################################################
+
+@doc """
+Set a SensitiveFloat's hessian term, maintaining symmetry.
+""" ->
+function set_hess!{ParamType <: ParamSet, NumType <: Number}(
+    sf::SensitiveFloat{ParamType, NumType},
+    i::Int64, j::Int64, v::NumType)
+  i != j ?
+    sf.hs[1, i, j] = sf.hs[s, j, i] = v:
+    sf.hs[1, i, j] = v
+end
+
+function set_hess!{ParamType <: ParamSet, NumType <: Number}(
+    sf::SensitiveFloat{ParamType, NumType},
+    i::Int64, j::Int64, s::Int64, v::NumType)
+  i != j ?
+    sf.hs[s, i, j] = sf.hs[s, j, i] = v:
+    sf.hs[s, i, j] = v
+end
 
 function zero_sensitive_float{ParamType <: ParamSet}(
   ::Type{ParamType}, NumType::DataType, local_S::Int64)
     local_P = length(ParamType)
     d = zeros(NumType, local_P, local_S)
     h = HessianEntry{NumType}[]
-    SensitiveFloat{ParamType, NumType}(zero(NumType), d, h, getids(ParamType))
+
+    # TODO: is there some kind of symmetric matrix type to use?
+    hs = zeros(local_P, local_P, local_S)
+    SensitiveFloat{ParamType, NumType}(
+      zero(NumType), d, h, hs, getids(ParamType))
 end
 
 function zero_sensitive_float{ParamType <: ParamSet}(
@@ -629,6 +658,7 @@ function clear!{ParamType <: ParamSet, NumType <: Number}(
     sp.v = zero(NumType)
     h = HessianEntry{NumType}[]
     fill!(sp.d, zero(NumType))
+    fill!(sp.hs, zero(NumType))
 end
 
 # If no type is specified, default to using Float64.
@@ -645,6 +675,7 @@ function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
   # Simply asserting equality of the ids doesn't work for some reason.
   @assert typeof(sf1.ids) == typeof(sf2.ids)
   @assert length(sf1.ids) == length(sf2.ids)
+  @assert size(sf1.hs) == size(sf2.hs)
 
   @assert size(sf1.d) == size(sf2.d)
 
@@ -652,6 +683,7 @@ function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
   sf3.v = sf1.v + sf2.v
   sf3.d = sf1.d + sf2.d
   sf3.h = vcat(sf1.h, sf2.h)
+  sf3.hs = sf1.hs + sf2.hs
 
   sf3
 end
