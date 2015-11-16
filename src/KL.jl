@@ -133,7 +133,8 @@ function gen_normal_kl{NumType <: Number}(mu2::NumType, sigma2Sq::NumType)
     const log_sigma2Sq = log(sigma2Sq)
     function this_normal_lk{NumType2 <: Number}(mu1::NumType2, sigma1Sq::NumType2)
         diff = mu1 - mu2
-        v = .5 * ((log_sigma2Sq - log(sigma1Sq)) + (sigma1Sq + (diff)^2) / sigma2Sq - 1)
+        v = .5 * ((log_sigma2Sq - log(sigma1Sq)) +
+            (sigma1Sq + (diff)^2) / sigma2Sq - 1)
         d_mu1 = diff / sigma2Sq
         d_sigma1Sq = 0.5 * (-1. / sigma1Sq + 1 / sigma2Sq)
         v, (d_mu1, d_sigma1Sq)
