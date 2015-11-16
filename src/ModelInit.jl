@@ -418,7 +418,7 @@ function initialize_model_params(
 
   println("Processing the bands.")
   for b = 1:length(blob)
-    println("  Band $b patches:")
+    print("  Band $b patches...")
     for s=1:mp.S
       (s % 10  == 0) && print(".")
       mp.patches[s, b] = radius_from_cat ?
@@ -426,11 +426,11 @@ function initialize_model_params(
                  scale_patch_size=scale_patch_size):
         SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
     end
-    print("\n")
-    println("  Band $b tiled image sources:")
+    print("Band $b tiled image sources...")
     mp.tile_sources[b] =
       get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
   end
+  print("\n")
 
   mp
 end
