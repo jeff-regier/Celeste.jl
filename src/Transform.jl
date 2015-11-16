@@ -419,8 +419,8 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
     u = mp.vp[s][ids.u]
     bounds[si][:u] = ParamBox(u - loc_width, u + loc_width, ones(2))
 
-    # TODO: r1 can be unbounded, but that is not really currently supported.
-    bounds[si][:r1] = ParamBox(1e-4, Inf, 1.0)
+    # TODO: r1 can be unbounded, but that is not currently supported.
+    bounds[si][:r1] = ParamBox(-1.0, 10., 1.0)
     bounds[si][:r2] = ParamBox(1e-4, 0.1, 1.0)
     bounds[si][:c1] = ParamBox(-10., 10., 1.0)
     bounds[si][:c2] = ParamBox(1e-4, 1., 1.0)
