@@ -14,11 +14,11 @@ end
 
 function read_r_colors(prior_file)
 	fits = FITS(prior_file)
-    cat = fits[2]
+  cat = fits[2]
 	num_rows, = read_key(cat, "NAXIS2")
 	table = Array(Float64, num_rows, 12)
 	for i in 1:12
-        col_name, = read_key(cat, "TTYPE$i")
+    col_name, = read_key(cat, "TTYPE$i")
 		table[:, i] = read(cat, col_name)
 	end
 	close(fits)
@@ -70,7 +70,7 @@ else
     serialize(out_file, (
         params(fit_r),
         weights(fit_gmm),
-        means(fit_gmm)', 
+        means(fit_gmm)',
         vecmat_to_tensor(covars(fit_gmm))))
     close(out_file)
 end
