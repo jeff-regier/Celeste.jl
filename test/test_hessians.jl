@@ -10,6 +10,56 @@ import WCS
 
 println("Running hessian tests.")
 
+
+# Test for hessians.
+
+ret1 = zero_sensitive_float(CanonicalParams, Float64, 2);
+ret2 = zero_sensitive_float(CanonicalParams, Float64, 2);
+
+# Two sets of ids with some overlap and some disjointness.
+p = length(ids)
+ids1 = find((1:p) .% 2 .== 0)
+ids2 = setdiff(1:p, ids1)
+ids1 = union(ids1, 1:5)
+ids2 = union(ids2, 1:5)
+
+l1 = l2 = zeros(Float64, p);
+l1[ids1] = rand(length(ids1))
+l2[ids2] = rand(length(ids2))
+
+sigma1 = sigma2 = zeros(Float64, p, p);
+sigma1[ids1, ids1] = rand(length(ids1), length(ids1))
+sigma2[ids2, ids2] = rand(length(ids2), length(ids2))
+
+x = 0.1 * rand(p);
+
+function testfun1(x)
+  (l1' * x + 0.5 * x' * sigma1 * x)[1,1]
+end
+
+function testfun2(x)
+  (l2' * x + 0.5 * x' * sigma2 * x)[1,1]
+end
+
+function testfun(x)
+  testfun1(x) * testfun2(x)
+end
+
+testfun(x)
+
+hess = zeros(Float64, p, p);
+
+using ForwardDiff
+ForwardDiff.hessian!(hess, testfun, x)
+
+
+# We will test the function ret1 * l1 * sigma * l2 * ret2.
+ret1.v = 5.0;
+ret2.v = 6.0;
+
+
+
+
 #function test_brightness_hessian()
     blob, mp, three_bodies = gen_three_body_dataset();
     kept_ids = [ ids_free.r1; ids_free.r2; ids_free.c1[:]; ids_free.c2[:] ];
@@ -80,7 +130,7 @@ println("Running hessian tests.")
 function test_set_hess()
   sf = zero_sensitive_float(CanonicalParams, 2);
   CelesteTypes.set_hess!(sf, 2, 3, 5.0);
-  @test_approx_eq sf.hs[2, 3, 1] 5.0
+  @test_approx_eq sf.hs[1][2, 3] 5.0
   @test_approx_eq sf.hs[1][3, 2] 5.0
 
   CelesteTypes.set_hess!(sf, 4, 4, 6.0);
