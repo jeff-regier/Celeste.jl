@@ -4,7 +4,7 @@ Distributions
 Docile
 DualNumbers
 FITSIO
-ForwardDiff 0.0.3 0.1
+ForwardDiff
 JLD
 NLopt
 Optim
