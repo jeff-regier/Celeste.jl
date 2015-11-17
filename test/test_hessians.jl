@@ -81,17 +81,17 @@ function test_set_hess()
   sf = zero_sensitive_float(CanonicalParams, 2);
   CelesteTypes.set_hess!(sf, 2, 3, 5.0);
   @test_approx_eq sf.hs[2, 3, 1] 5.0
-  @test_approx_eq sf.hs[3, 2, 1] 5.0
+  @test_approx_eq sf.hs[1][3, 2] 5.0
 
   CelesteTypes.set_hess!(sf, 4, 4, 6.0);
-  @test_approx_eq sf.hs[4, 4, 1] 6.0
+  @test_approx_eq sf.hs[1][4, 4] 6.0
 
   CelesteTypes.set_hess!(sf, 2, 3, 2, 7.0);
-  @test_approx_eq sf.hs[2, 3, 2] 7.0
-  @test_approx_eq sf.hs[3, 2, 2] 7.0
+  @test_approx_eq sf.hs[2][2, 3] 7.0
+  @test_approx_eq sf.hs[2][3, 2] 7.0
 
   CelesteTypes.set_hess!(sf, 4, 4, 2, 8.0);
-  @test_approx_eq sf.hs[4, 4, 2] 8.0
+  @test_approx_eq sf.hs[2][4, 4] 8.0
 end
 
 

@@ -611,7 +611,7 @@ type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
     v::NumType
     d::Matrix{NumType} # local_P x local_S
     h::Array{HessianEntry{NumType}}
-    hs::Array{NumType} # local_P x local_P x local_S
+    hs::Array{Matrix{NumType}} #  local_S array of local_P x local_P
     ids::ParamType
 end
 
@@ -630,8 +630,8 @@ function set_hess!{ParamType <: ParamSet, NumType <: Number}(
     sf::SensitiveFloat{ParamType, NumType},
     i::Int64, j::Int64, s::Int64, v::NumType)
   i != j ?
-    sf.hs[i, j, s] = sf.hs[j, i, s] = v:
-    sf.hs[i, j, s] = v
+    sf.hs[s][i, j] = sf.hs[s][j, i] = v:
+    sf.hs[s][i, j] = v
 end
 
 function zero_sensitive_float{ParamType <: ParamSet}(
@@ -641,7 +641,7 @@ function zero_sensitive_float{ParamType <: ParamSet}(
     h = HessianEntry{NumType}[]
 
     # TODO: is there some kind of symmetric matrix type to use?
-    hs = zeros(local_P, local_P, local_S)
+    hs = fill(zeros(local_P, local_P), local_S)
     SensitiveFloat{ParamType, NumType}(
       zero(NumType), d, h, hs, getids(ParamType))
 end
@@ -657,7 +657,7 @@ function clear!{ParamType <: ParamSet, NumType <: Number}(
     sp.v = zero(NumType)
     h = HessianEntry{NumType}[]
     fill!(sp.d, zero(NumType))
-    fill!(sp.hs, zero(NumType))
+    [ fill!(sp.hs[s], zero(NumType)) for s=1:size(sp.d)[2]) ]
 end
 
 # If no type is specified, default to using Float64.
@@ -671,10 +671,12 @@ function zero_sensitive_float{ParamType <: ParamSet}(param_arg::Type{ParamType})
 end
 
 function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
+  S = size(sf1.d)[2]
+
   # Simply asserting equality of the ids doesn't work for some reason.
   @assert typeof(sf1.ids) == typeof(sf2.ids)
   @assert length(sf1.ids) == length(sf2.ids)
-  @assert size(sf1.hs) == size(sf2.hs)
+  [ @assert size(sf1.hs[s]) == size(sf2.hs[s]) for s=1:S ]
 
   @assert size(sf1.d) == size(sf2.d)
 
@@ -682,7 +684,9 @@ function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
   sf3.v = sf1.v + sf2.v
   sf3.d = sf1.d + sf2.d
   sf3.h = vcat(sf1.h, sf2.h)
-  sf3.hs = sf1.hs + sf2.hs
+  for s=1:S
+    sf3.hs = sf1.hs + sf2.hs
+  end
 
   sf3
 end
