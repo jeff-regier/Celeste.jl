@@ -176,6 +176,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
         E_l_a[4, i].d[ids.c1[3, i]] = E_l_a[4, i].v
         E_l_a[4, i].d[ids.c2[3, i]] = E_l_a[4, i].v * .5
 
+        # TODO: you're missing the cross terms.
         for hess_ids in [(ids.r1[i], ids.r1[i]),
                          (ids.r1[i], ids.r2[i]),
                          (ids.r2[i], ids.r2[i])]
@@ -432,7 +433,7 @@ Attributes:
  - bmc: A BvnComponent with the convolution.
  - dSigma: A 3x3 matrix containing the derivates of
      [Sigma11, Sigma12, Sigma22] (in the rows) with respect to
-     [e_axis, e_angle, e_scale]
+     [e_axis, e_angle, e_scale] (in the columns)
 """ ->
 immutable GalaxyCacheComponent{NumType <: Number}
     e_dev_dir::Float64
@@ -454,9 +455,13 @@ immutable GalaxyCacheComponent{NumType <: Number}
         cos_sin = cos(e_angle)sin(e_angle)
         sin_sq = sin(e_angle)^2
         cos_sq = cos(e_angle)^2
-        dSigma[:, 1] = 2e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq]
+
+        # e_axis derivative:
+        dSigma[:, 1] = 2 * e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq]
+        # e_angle derivative:
         dSigma[:, 2] = e_scale^2 * (e_axis^2 - 1) *
                        [2cos_sin, sin_sq - cos_sq, -2cos_sin]
+        # e_scale derivative:
         dSigma[:, 3] = (2XiXi ./ e_scale)[[1, 2, 4]]
         dSigma .*= gc.nuBar
 
@@ -536,6 +541,11 @@ Return quantities related to the pdf of an offset bivariate normal.
 Args:
   - bmc: A bivariate normal component
   - x: A 2x1 vector containing a mean offset to be applied to bmc
+
+Returns:
+  - py1: The first row of the precision times (x - the_mean)
+  - py2: The second row of the precision times (x - the_mean)
+  - The density of the bivariate normal times the weight.
 """ ->
 function eval_bvn_pdf{NumType <: Number}(
   bmc::BvnComponent{NumType}, x::Vector{Float64})
@@ -649,7 +659,7 @@ function accum_galaxy_pos!{NumType <: Number}(gcc::GalaxyCacheComponent{NumType}
 
     fs1m.v += f
 
-    # This is
+    # This is an expanded version of
     # dfs1m_dworld = wcs_jacobian' * NumType[f .* py1, f .* py2]
     fs1m.d[gal_ids.u[1]] +=
       convert(NumType,
@@ -660,10 +670,11 @@ function accum_galaxy_pos!{NumType <: Number}(gcc::GalaxyCacheComponent{NumType}
 
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
+    # The derivatives of f with respect to Sigma11, Sigma12, and Sigma22.
     df_dSigma = (
-        0.5 * f * (py1 * py1 - gcc.bmc.precision[1, 1]),
-        f * (py1 * py2 - gcc.bmc.precision[1, 2]),  # NB: 2X
-        0.5 * f * (py2 * py2 - gcc.bmc.precision[2, 2]))
+        f * 0.5 * (py1 * py1 - gcc.bmc.precision[1, 1]),
+        f *       (py1 * py2 - gcc.bmc.precision[1, 2]),  # NB: 2X
+        f * 0.5 * (py2 * py2 - gcc.bmc.precision[2, 2]))
 
     for j in 1:3  # [dSigma11, dSigma12, dSigma22]
         fs1m.d[gal_ids.e_axis] += df_dSigma[j] * gcc.dSigma[j, 1]
