@@ -5,58 +5,106 @@ using Distributions
 using SampleData
 using Transform
 
+using ForwardDiff
+
 import Synthetic
 import WCS
 
 println("Running hessian tests.")
 
+include(joinpath(Pkg.dir("Celeste"), "src/SensitiveFloat.jl"))
 
-# Test for hessians.
+function test_multiply_sf()
+  # Test for hessians.
+  # Two sets of ids with some overlap and some disjointness.
+  p = length(ids)
+  S = 2
 
-ret1 = zero_sensitive_float(CanonicalParams, Float64, 2);
-ret2 = zero_sensitive_float(CanonicalParams, Float64, 2);
+  ids1 = find((1:p) .% 2 .== 0)
+  ids2 = setdiff(1:p, ids1)
+  ids1 = union(ids1, 1:5)
+  ids2 = union(ids2, 1:5)
 
-# Two sets of ids with some overlap and some disjointness.
-p = length(ids)
-ids1 = find((1:p) .% 2 .== 0)
-ids2 = setdiff(1:p, ids1)
-ids1 = union(ids1, 1:5)
-ids2 = union(ids2, 1:5)
+  l1 = zeros(Float64, S * p);
+  l2 = zeros(Float64, S * p);
+  l1[ids1] = rand(length(ids1))
+  l2[ids2] = rand(length(ids2))
+  l1[ids1 + p] = rand(length(ids1))
+  l2[ids2 + p] = rand(length(ids2))
 
-l1 = l2 = zeros(Float64, p);
-l1[ids1] = rand(length(ids1))
-l2[ids2] = rand(length(ids2))
+  sigma1 = zeros(Float64, S * p, S * p);
+  sigma2 = zeros(Float64, S * p, S * p);
+  sigma1[ids1, ids1] = rand(length(ids1), length(ids1));
+  sigma2[ids2, ids2] = rand(length(ids2), length(ids2));
+  sigma1[ids1 + p, ids1 + p] = rand(length(ids1), length(ids1));
+  sigma2[ids2 + p, ids2 + p] = rand(length(ids2), length(ids2));
+  sigma1 = 0.5 * (sigma1 + sigma1')
+  sigma2 = 0.5 * (sigma2 + sigma2')
 
-sigma1 = sigma2 = zeros(Float64, p, p);
-sigma1[ids1, ids1] = rand(length(ids1), length(ids1))
-sigma2[ids2, ids2] = rand(length(ids2), length(ids2))
+  x = 0.1 * rand(S * p);
 
-x = 0.1 * rand(p);
+  function testfun1(x)
+    (l1' * x + 0.5 * x' * sigma1 * x)[1,1]
+  end
 
-function testfun1(x)
-  (l1' * x + 0.5 * x' * sigma1 * x)[1,1]
+  function testfun2(x)
+    (l2' * x + 0.5 * x' * sigma2 * x)[1,1]
+  end
+
+  function testfun(x)
+    testfun1(x) * testfun2(x)
+  end
+
+  ret1 = zero_sensitive_float(CanonicalParams, Float64, S);
+  ret2 = zero_sensitive_float(CanonicalParams, Float64, S);
+  s_ind = Array(UnitRange{Int64}, 2);
+  s_ind[1] = 1:p
+  s_ind[2] = (1:p) + p
+
+  ret1.v = testfun1(x)
+  fill!(ret1.d, 0.0);
+  for s=1:S
+    fill!(ret1.hs[s], 0.0);
+    ret1.d[:, s] = l1[s_ind[s]] + sigma1[s_ind[s], s_ind[s]] * x[s_ind[s]];
+    ret1.hs[s] = sigma1[s_ind[s], s_ind[s]];
+  end
+
+  ret2.v = testfun2(x)
+  fill!(ret2.d, 0.0);
+  for s=1:S
+    fill!(ret2.hs[s], 0.0);
+    ret2.d[:, s] = l2[s_ind[s]] + sigma2[s_ind[s], s_ind[s]] * x[s_ind[s]];
+    ret2.hs[s] = sigma2[s_ind[s], s_ind[s]];
+  end
+
+  hess = zeros(Float64, S * p, S * p);
+  grad = ForwardDiff.gradient(testfun1, x);
+  ForwardDiff.hessian!(hess, testfun1, x);
+  for s=1:S
+    @test_approx_eq(ret1.d[:, s], grad[s_ind[s]])
+    @test_approx_eq(ret1.hs[s], hess[s_ind[s], s_ind[s]])
+  end
+
+  grad = ForwardDiff.gradient(testfun2, x);
+  ForwardDiff.hessian!(hess, testfun2, x);
+  for s=1:S
+    @test_approx_eq(ret2.d[:, s], grad[s_ind[s]])
+    @test_approx_eq(ret2.hs[s], hess[s_ind[s], s_ind[s]])
+  end
+
+
+  grad = ForwardDiff.gradient(testfun, x);
+  ForwardDiff.hessian!(hess, testfun, x);
+
+  sf1 = deepcopy(ret1);
+  sf2 = deepcopy(ret2);
+  multiply_sf!(sf1, sf2, ids1=ids1, ids2=ids2);
+
+  for s=1:S
+    @test_approx_eq(sf1.d[:, s], grad[s_ind[s]])
+    @test_approx_eq(sf1.hs[s][:], hess[s_ind[s], s_ind[s]])
+  end
 end
-
-function testfun2(x)
-  (l2' * x + 0.5 * x' * sigma2 * x)[1,1]
-end
-
-function testfun(x)
-  testfun1(x) * testfun2(x)
-end
-
-testfun(x)
-
-hess = zeros(Float64, p, p);
-
-using ForwardDiff
-ForwardDiff.hessian!(hess, testfun, x)
-
-
-# We will test the function ret1 * l1 * sigma * l2 * ret2.
-ret1.v = 5.0;
-ret2.v = 6.0;
-
 
 
 
@@ -106,7 +154,9 @@ ret2.v = 6.0;
               @test_approx_eq ad_hess[hess_ind, hess_ind] bright.hs[kept_ids, kept_ids, s]
             end
 
-            reduce(hcat, ind2sub(size(bright.hs[kept_ids, kept_ids]), find(abs(ad_hess[hess_ind, hess_ind][:] .- bright.hs[kept_ids,kept_ids,1][:]) .> 1e-6)))
+            reduce(hcat, ind2sub(size(bright.hs[kept_ids, kept_ids]),
+                            find(abs(ad_hess[hess_ind, hess_ind][:] .-
+                                     bright.hs[kept_ids,kept_ids,1][:]) .> 1e-6)))
         end
     end
     #
