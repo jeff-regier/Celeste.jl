@@ -579,7 +579,43 @@ function print_cat_entry(cat_entry::CatalogEntry)
             fieldnames(cat_entry)]
 end
 
+
+type HessianEntry{NumType <: Number}
+  # An entry in a sparse Hessian containing a derivative with respect
+  # to source s1, parameter i1 and source s2, parameter i2,
+  # with value v.
+  s1::Int64
+  i1::Int64
+  s2::Int64
+  i2::Int64
+  v::NumType
+end
+
+
+@doc """
+A function value and its derivative with respect to its arguments.
+
+Attributes:
+  v:  The value
+  d:  The derivative with respect to each variable in
+      P-dimensional VariationalParams for each of S celestial objects
+      in a local_P x local_S matrix.
+  h:  The second derivative with respect to each variational parameter,
+      in the same format as d.  This is used for the full Hessian
+      with respect to all the sources.
+  hs: An array of per-source Hessians.  This will generally be reserved
+      for the Hessian of brightness values that depend only on one source.
+""" ->
+type SensitiveFloat{ParamType <: CelesteTypes.ParamSet, NumType <: Number}
+    v::NumType
+    d::Matrix{NumType} # local_P x local_S
+    h::Array{HessianEntry{NumType}}
+    hs::Array{Matrix{NumType}} #  local_S array of local_P x local_P
+    ids::ParamType
+end
+
+
 # TODO: wrap this into its own module
-include(joinpath(Pkg.dir("Celeste"), "src/SensitiveFloat.jl"))
+#include(joinpath(Pkg.dir("Celeste"), "src/SensitiveFloat.jl"))
 
 end
