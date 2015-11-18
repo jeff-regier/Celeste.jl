@@ -616,6 +616,6 @@ end
 
 
 # TODO: wrap this into its own module
-#include(joinpath(Pkg.dir("Celeste"), "src/SensitiveFloat.jl"))
+include(joinpath(Pkg.dir("Celeste"), "src/SensitiveFloat.jl"))
 
 end

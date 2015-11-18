@@ -2,6 +2,8 @@
 using CelesteTypes.getids
 using CelesteTypes.HessianEntry
 
+export multiply_sf!
+
 #########################################################
 
 @doc """
