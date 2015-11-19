@@ -62,7 +62,7 @@ end
   transform = Transform.get_mp_transform(mp);
   x = transform.vp_to_array(mp.vp, omitted_ids);
   k = size(x)[1]
-  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
+  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual{Float64}}, mp);
 end
 
 # Evaluate the Hessian.
