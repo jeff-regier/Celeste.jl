@@ -12,12 +12,16 @@ using Transform
 import ElboDeriv
 import DataFrames
 import ForwardDiff
-import DualNumbers
+#import DualNumbers
 import Optim
 
-using DualNumbers.Dual
-using DualNumbers.epsilon
-using DualNumbers.real
+# using DualNumbers.Dual
+# using DualNumbers.epsilon
+# using DualNumbers.real
+
+using ForwardDiff.value
+using ForwardDiff.eps
+
 
 export ObjectiveWrapperFunctions, WrapperState
 
@@ -55,6 +59,7 @@ type ObjectiveWrapperFunctions
     mp::ModelParams{Float64}
     kept_ids::Array{Int64}
     omitted_ids::Array{Int64}
+    DualType::DataType
 
     # if fast_hessian is true, set the ModelParams active sources to
     # include only the dual number currently being set.
@@ -63,10 +68,11 @@ type ObjectiveWrapperFunctions
       kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1};
       fast_hessian::Bool=true) = begin
 
-        mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
-        @assert transform.active_sources == mp.active_sources
         x_length = length(kept_ids) * transform.active_S
         x_size = (length(kept_ids), transform.active_S)
+        DualType = ForwardDiff.GradientNumber{x_length, Float64}
+        mp_dual = CelesteTypes.convert(DualType, mp);
+        @assert transform.active_sources == mp.active_sources
 
         state = WrapperState(0, false, 10, 1.0)
         function print_status{T <: Number}(
@@ -95,7 +101,7 @@ type ObjectiveWrapperFunctions
             end
         end
 
-        function f_objective(x_dual::Vector{DualNumbers.Dual{Float64}})
+        function f_objective(x_dual::Vector{DualType})
             state.f_evals += 1
             # Evaluate in the constrained space and then unconstrain again.
             transform.array_to_vp!(reshape(x_dual, x_size), mp_dual.vp, omitted_ids)
@@ -120,6 +126,7 @@ type ObjectiveWrapperFunctions
 
         function f_value_grad{T <: Number}(x::Vector{T})
             @assert length(x) == x_length
+            println("f_value_grad: x = $x, type = $(typeof(x))")
             res = f_objective(x)
             grad = zeros(T, length(x))
             if length(grad) > 0
@@ -152,9 +159,14 @@ type ObjectiveWrapperFunctions
             grad[:,:] = f_grad(x)
         end
 
+
+        # TODO: I think the new ForwardDiff API will not support both
+        # dual numbers and ForwardDiff.gradient with the same constructs.
+        
         # Forward diff versions of the gradient and Hessian.
-        f_ad_grad = ForwardDiff.forwarddiff_gradient(
-          f_value, Float64, fadtype=:dual; n=x_length);
+        # f_ad_grad = ForwardDiff.gradient(
+        #   f_value, Float64, fadtype=:dual; n=x_length, mutates=false);
+        f_ad_grad = ForwardDiff.gradient(f_value, mutates=false);
 
         # Update <hess> in place with an autodiff hessian.
         function f_ad_hessian!(x_vec::Array{Float64}, hess::Matrix{Float64})
@@ -162,7 +174,7 @@ type ObjectiveWrapperFunctions
             x = reshape(x_vec, x_size)
             k = length(x_vec)
 
-            x_dual = DualNumbers.Dual{Float64}[
+            x_dual = DualType[
               DualNumbers.Dual{Float64}(x[i, j], 0.) for
               i = 1:(x_size[1]), j=1:(x_size[2])];
 
@@ -187,7 +199,7 @@ type ObjectiveWrapperFunctions
                 deriv = f_grad(x_dual[:])
                 # This goes through deriv in column-major order.
                 hess[:, sub2ind(x_size, index, si)] =
-                  Float64[ ForwardDiff.epsilon(x_val) for x_val in deriv ]
+                  Float64[ DualNumbers.epsilon(x_val) for x_val in deriv ]
                 x_dual[index, si] = DualNumbers.Dual(original_x, 0.)
               end
             end
@@ -252,7 +264,7 @@ type ObjectiveWrapperFunctions
         new(f_objective, f_value_grad, f_value_grad!,
             f_value, f_grad, f_grad!,
             f_ad_grad, f_ad_hessian!, f_ad_hessian_sparse,
-            state, transform, mp, kept_ids, omitted_ids)
+            state, transform, mp, kept_ids, omitted_ids, DualType)
     end
 end
 
