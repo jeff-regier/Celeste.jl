@@ -62,6 +62,49 @@ function test_objective_wrapper()
     mp.active_sources = Int64[2, 3]
     trans = Transform.get_mp_transform(mp, loc_width=1.0);
 
+    transform = trans;
+    f = mp -> ElboDeriv.elbo(tiled_blob, mp);
+
+    x = transform.vp_to_array(mp.vp, omitted_ids);
+    x_vec = x[:]
+    mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
+    x_length = length(kept_ids) * transform.active_S
+    x_size = (length(kept_ids), transform.active_S)
+    k = length(x_vec)
+
+    x_dual = DualNumbers.Dual{Float64}[
+      DualNumbers.Dual{Float64}(x[i, j], 0.) for
+      i = 1:(x_size[1]), j=1:(x_size[2])];
+
+    FDType = ForwardDiff.GradientNumber{length(x_vec), Float64, Array{Float64,1}}
+
+    mp_dual =
+      ModelParams(convert(Array{Array{FDType, 1}, 1}, mp.vp),
+                  mp.pp);
+    mp_dual.patches = mp.patches;
+    mp_dual.tile_sources = mp.tile_sources;
+    mp_dual.active_sources = mp.active_sources;
+    mp_dual.objids = mp.objids;
+
+    function f_objective(x_dual::Vector{FDType})
+        println("hello: dual")
+        transform.array_to_vp!(reshape(x_dual, x_size), mp_dual.vp, omitted_ids)
+        f_res = f(mp_dual)
+        f_res_trans = transform.transform_sensitive_float(f_res, mp_dual)
+    end
+
+    function f_objective{T <: Number}(x::Vector{T})
+        println("hello: generic")
+        transform.array_to_vp!(reshape(x, x_size), mp.vp, omitted_ids)
+        f_res = f(mp)
+        f_res_trans = transform.transform_sensitive_float(f_res, mp)
+        f_res_trans
+    end
+
+    g = ForwardDiff.gradient(f_objective, mutates=false);
+    g(x_vec)
+
+
     wrapper =
       OptimizeElbo.ObjectiveWrapperFunctions(
         mp -> ElboDeriv.elbo(tiled_blob, mp),
