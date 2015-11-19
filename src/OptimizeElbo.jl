@@ -11,17 +11,12 @@ using Transform
 
 import ElboDeriv
 import DataFrames
-import ForwardDiff
-#import DualNumbers
+import DualNumbers
 import Optim
 
-# using DualNumbers.Dual
-# using DualNumbers.epsilon
-# using DualNumbers.real
-
-using ForwardDiff.value
-using ForwardDiff.eps
-
+using DualNumbers.Dual
+using DualNumbers.epsilon
+using DualNumbers.real
 
 export ObjectiveWrapperFunctions, WrapperState
 
@@ -50,7 +45,6 @@ type ObjectiveWrapperFunctions
     f_value::Function
     f_grad::Function
     f_grad!::Function
-    f_ad_grad::Function
     f_ad_hessian!::Function
     f_ad_hessian_sparse::Function
 
@@ -70,7 +64,7 @@ type ObjectiveWrapperFunctions
 
         x_length = length(kept_ids) * transform.active_S
         x_size = (length(kept_ids), transform.active_S)
-        DualType = ForwardDiff.GradientNumber{x_length, Float64}
+        DualType = DualNumbers.Dual{Float64}
         mp_dual = CelesteTypes.convert(DualType, mp);
         @assert transform.active_sources == mp.active_sources
 
@@ -159,15 +153,6 @@ type ObjectiveWrapperFunctions
             grad[:,:] = f_grad(x)
         end
 
-
-        # TODO: I think the new ForwardDiff API will not support both
-        # dual numbers and ForwardDiff.gradient with the same constructs.
-        
-        # Forward diff versions of the gradient and Hessian.
-        # f_ad_grad = ForwardDiff.gradient(
-        #   f_value, Float64, fadtype=:dual; n=x_length, mutates=false);
-        f_ad_grad = ForwardDiff.gradient(f_value, mutates=false);
-
         # Update <hess> in place with an autodiff hessian.
         function f_ad_hessian!(x_vec::Array{Float64}, hess::Matrix{Float64})
             @assert length(x_vec) == x_length
@@ -175,8 +160,7 @@ type ObjectiveWrapperFunctions
             k = length(x_vec)
 
             x_dual = DualType[
-              DualNumbers.Dual{Float64}(x[i, j], 0.) for
-              i = 1:(x_size[1]), j=1:(x_size[2])];
+              DualType(x[i, j], 0.) for i = 1:(x_size[1]), j=1:(x_size[2])];
 
             @assert size(hess) == (k, k)
 
@@ -263,7 +247,7 @@ type ObjectiveWrapperFunctions
 
         new(f_objective, f_value_grad, f_value_grad!,
             f_value, f_grad, f_grad!,
-            f_ad_grad, f_ad_hessian!, f_ad_hessian_sparse,
+            f_ad_hessian!, f_ad_hessian_sparse,
             state, transform, mp, kept_ids, omitted_ids, DualType)
     end
 end

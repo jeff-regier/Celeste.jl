@@ -72,21 +72,20 @@ function test_objective_wrapper()
     x_size = (length(kept_ids), transform.active_S)
     k = length(x_vec)
 
-    x_dual = DualNumbers.Dual{Float64}[
+    DualType = DualNumbers.Dual{Float64}
+    x_dual = DualType[
       DualNumbers.Dual{Float64}(x[i, j], 0.) for
       i = 1:(x_size[1]), j=1:(x_size[2])];
 
-    FDType = ForwardDiff.GradientNumber{length(x_vec), Float64, Array{Float64,1}}
-
     mp_dual =
-      ModelParams(convert(Array{Array{FDType, 1}, 1}, mp.vp),
+      ModelParams(convert(Array{Array{DualType, 1}, 1}, mp.vp),
                   mp.pp);
     mp_dual.patches = mp.patches;
     mp_dual.tile_sources = mp.tile_sources;
     mp_dual.active_sources = mp.active_sources;
     mp_dual.objids = mp.objids;
 
-    function f_objective(x_dual::Vector{FDType})
+    function f_objective(x_dual::Vector{DualType})
         println("hello: dual")
         transform.array_to_vp!(reshape(x_dual, x_size), mp_dual.vp, omitted_ids)
         f_res = f(mp_dual)
@@ -100,10 +99,6 @@ function test_objective_wrapper()
         f_res_trans = transform.transform_sensitive_float(f_res, mp)
         f_res_trans
     end
-
-    g = ForwardDiff.gradient(f_objective, mutates=false);
-    g(x_vec)
-
 
     wrapper =
       OptimizeElbo.ObjectiveWrapperFunctions(
@@ -131,10 +126,6 @@ function test_objective_wrapper()
 
     @test_approx_eq(w_v, wrapper.f_value(x[:]))
     @test_approx_eq(w_grad, wrapper.f_grad(x[:]))
-
-    println("Testing autodiff gradient...")
-    w_ad_grad = wrapper.f_ad_grad(x[:]);
-    @test_approx_eq(w_grad, w_ad_grad)
 
     this_iter = wrapper.state.f_evals;
     wrapper.f_value(x[:]);

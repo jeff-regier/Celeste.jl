@@ -526,9 +526,10 @@ ModelParams{NumType <: Number}(
     ModelParams{NumType}(vp, pp)
 end
 
-function convert{T <: ForwardDiff.ForwardDiffNumber}(
-      ::Type{T}, mp::ModelParams{Float64})
-    mp_dual = ModelParams(convert(Array{Array{T, 1}, 1}, mp.vp), mp.pp)
+function convert(::Type{ModelParams{DualNumbers.Dual}}, mp::ModelParams{Float64})
+    mp_dual =
+      ModelParams(convert(Array{Array{DualNumbers.Dual{Float64}, 1}, 1}, mp.vp),
+                  mp.pp)
     mp_dual.patches = mp.patches
     mp_dual.tile_sources = mp.tile_sources
     mp_dual.active_sources = mp.active_sources
