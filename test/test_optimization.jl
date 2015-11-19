@@ -89,10 +89,6 @@ function test_objective_wrapper()
     @test_approx_eq(w_v, wrapper.f_value(x[:]))
     @test_approx_eq(w_grad, wrapper.f_grad(x[:]))
 
-    println("Testing autodiff gradient...")
-    w_ad_grad = wrapper.f_ad_grad(x[:]);
-    @test_approx_eq(w_grad, w_ad_grad)
-
     this_iter = wrapper.state.f_evals;
     wrapper.f_value(x[:]);
     @test wrapper.state.f_evals == this_iter + 1
