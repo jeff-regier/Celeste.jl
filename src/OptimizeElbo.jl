@@ -11,7 +11,6 @@ using Transform
 
 import ElboDeriv
 import DataFrames
-import ForwardDiff
 import DualNumbers
 import Optim
 
@@ -46,7 +45,6 @@ type ObjectiveWrapperFunctions
     f_value::Function
     f_grad::Function
     f_grad!::Function
-    f_ad_grad::Function
     f_ad_hessian!::Function
     f_ad_hessian_sparse::Function
 
@@ -55,6 +53,7 @@ type ObjectiveWrapperFunctions
     mp::ModelParams{Float64}
     kept_ids::Array{Int64}
     omitted_ids::Array{Int64}
+    DualType::DataType
 
     # Arguments:
     #  f: A function that takes in ModelParams and returns a SensitiveFloat.
@@ -69,10 +68,11 @@ type ObjectiveWrapperFunctions
       kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1};
       fast_hessian::Bool=true) = begin
 
-        mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
-        @assert transform.active_sources == mp.active_sources
         x_length = length(kept_ids) * transform.active_S
         x_size = (length(kept_ids), transform.active_S)
+        DualType = DualNumbers.Dual{Float64}
+        mp_dual = CelesteTypes.convert(ModelParams{DualType}, mp);
+        @assert transform.active_sources == mp.active_sources
 
         state = WrapperState(0, false, 10, 1.0)
         function print_status{T <: Number}(
@@ -101,7 +101,7 @@ type ObjectiveWrapperFunctions
             end
         end
 
-        function f_objective(x_dual::Vector{DualNumbers.Dual{Float64}})
+        function f_objective(x_dual::Vector{DualType})
             state.f_evals += 1
             # Evaluate in the constrained space and then unconstrain again.
             transform.array_to_vp!(reshape(x_dual, x_size), mp_dual.vp, omitted_ids)
@@ -158,19 +158,14 @@ type ObjectiveWrapperFunctions
             grad[:,:] = f_grad(x)
         end
 
-        # Forward diff versions of the gradient and Hessian.
-        f_ad_grad = ForwardDiff.forwarddiff_gradient(
-          f_value, Float64, fadtype=:dual; n=x_length);
-
         # Update <hess> in place with an autodiff hessian.
         function f_ad_hessian!(x_vec::Array{Float64}, hess::Matrix{Float64})
             @assert length(x_vec) == x_length
             x = reshape(x_vec, x_size)
             k = length(x_vec)
 
-            x_dual = DualNumbers.Dual{Float64}[
-              DualNumbers.Dual{Float64}(x[i, j], 0.) for
-              i = 1:(x_size[1]), j=1:(x_size[2])];
+            x_dual = DualType[
+              DualType(x[i, j], 0.) for i = 1:(x_size[1]), j=1:(x_size[2])];
 
             @assert size(hess) == (k, k)
 
@@ -188,13 +183,13 @@ type ObjectiveWrapperFunctions
               for index in 1:x_size[1]
                 index == 1 ? print("o"): print(".")
                 original_x = x[index, si]
-                x_dual[index, si] = DualNumbers.Dual(original_x, 1.)
+                x_dual[index, si] = DualType(original_x, 1.)
 
                 deriv = f_grad(x_dual[:])
                 # This goes through deriv in column-major order.
                 hess[:, sub2ind(x_size, index, si)] =
-                  Float64[ ForwardDiff.epsilon(x_val) for x_val in deriv ]
-                x_dual[index, si] = DualNumbers.Dual(original_x, 0.)
+                  Float64[ DualNumbers.epsilon(x_val) for x_val in deriv ]
+                x_dual[index, si] = DualType(original_x, 0.)
               end
             end
             print("Done.\n")
@@ -209,9 +204,8 @@ type ObjectiveWrapperFunctions
             x = reshape(x_vec, x_size)
             k = length(x_vec)
 
-            x_dual = DualNumbers.Dual{Float64}[
-              DualNumbers.Dual{Float64}(x[i, j], 0.) for
-              i = 1:x_size[1], j=1:x_size[2]];
+            x_dual = DualType[DualType(x[i, j], 0.) for
+                              i = 1:x_size[1], j=1:x_size[2]];
 
             # Vectors of the (source, component) indices for the rows
             # and columns of the Hessian.
@@ -235,9 +229,9 @@ type ObjectiveWrapperFunctions
               for index1 in 1:x_size[1]
                 index1 == 1 ? print("o"): print(".")
                 original_x = x[index1, s1i]
-                x_dual[index1, s1i] = DualNumbers.Dual(original_x, 1.)
+                x_dual[index1, s1i] = DualType(original_x, 1.)
                 deriv = reshape(f_grad(x_dual[:]), x_size)
-                x_dual[index1, s1i] = DualNumbers.Dual(original_x, 0.)
+                x_dual[index1, s1i] = DualType(original_x, 0.)
 
                 # Record the hessian terms.
                 for s2i in 1:length(mp.active_sources), index2=1:size(x)[1]
@@ -257,8 +251,8 @@ type ObjectiveWrapperFunctions
 
         new(f_objective, f_value_grad, f_value_grad!,
             f_value, f_grad, f_grad!,
-            f_ad_grad, f_ad_hessian!, f_ad_hessian_sparse,
-            state, transform, mp, kept_ids, omitted_ids)
+            f_ad_hessian!, f_ad_hessian_sparse,
+            state, transform, mp, kept_ids, omitted_ids, DualType)
     end
 end
 

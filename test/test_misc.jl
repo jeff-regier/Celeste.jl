@@ -310,7 +310,7 @@ function test_convert_dual_mp()
   blob, mp, body, tiled_blob = gen_three_body_dataset(perturb=true);
   tiled_blob, mp_original =
     ModelInit.initialize_celeste(blob, body, tile_width=30);
-  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
+  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual{Float64}}, mp);
 
   # Test the variational parameters.
   for s in 1:mp.S

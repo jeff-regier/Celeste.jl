@@ -62,6 +62,44 @@ function test_objective_wrapper()
     mp.active_sources = Int64[2, 3]
     trans = Transform.get_mp_transform(mp, loc_width=1.0);
 
+    transform = trans;
+    f = mp -> ElboDeriv.elbo(tiled_blob, mp);
+
+    x = transform.vp_to_array(mp.vp, omitted_ids);
+    x_vec = x[:]
+    mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual{Float64}}, mp);
+    x_length = length(kept_ids) * transform.active_S
+    x_size = (length(kept_ids), transform.active_S)
+    k = length(x_vec)
+
+    DualType = DualNumbers.Dual{Float64}
+    x_dual = DualType[
+      DualNumbers.Dual{Float64}(x[i, j], 0.) for
+      i = 1:(x_size[1]), j=1:(x_size[2])];
+
+    mp_dual =
+      ModelParams(convert(Array{Array{DualType, 1}, 1}, mp.vp),
+                  mp.pp);
+    mp_dual.patches = mp.patches;
+    mp_dual.tile_sources = mp.tile_sources;
+    mp_dual.active_sources = mp.active_sources;
+    mp_dual.objids = mp.objids;
+
+    function f_objective(x_dual::Vector{DualType})
+        println("hello: dual")
+        transform.array_to_vp!(reshape(x_dual, x_size), mp_dual.vp, omitted_ids)
+        f_res = f(mp_dual)
+        f_res_trans = transform.transform_sensitive_float(f_res, mp_dual)
+    end
+
+    function f_objective{T <: Number}(x::Vector{T})
+        println("hello: generic")
+        transform.array_to_vp!(reshape(x, x_size), mp.vp, omitted_ids)
+        f_res = f(mp)
+        f_res_trans = transform.transform_sensitive_float(f_res, mp)
+        f_res_trans
+    end
+
     wrapper =
       OptimizeElbo.ObjectiveWrapperFunctions(
         mp -> ElboDeriv.elbo(tiled_blob, mp),
@@ -88,10 +126,6 @@ function test_objective_wrapper()
 
     @test_approx_eq(w_v, wrapper.f_value(x[:]))
     @test_approx_eq(w_grad, wrapper.f_grad(x[:]))
-
-    println("Testing autodiff gradient...")
-    w_ad_grad = wrapper.f_ad_grad(x[:]);
-    @test_approx_eq(w_grad, w_ad_grad)
 
     this_iter = wrapper.state.f_evals;
     wrapper.f_value(x[:]);
