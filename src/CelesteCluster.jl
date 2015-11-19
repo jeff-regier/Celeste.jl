@@ -188,7 +188,7 @@ function eval_worker_hessian()
   # TODO: Only use an x containing the local sources?
   x = transform.vp_to_array(mp.vp, omitted_ids);
 
-  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
+  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual{Float64}}, mp);
   @time hess_i, hess_j, hess_val, new_hess_time =
     OptimizeElbo.elbo_hessian(tiled_blob, x, mp_dual, transform,
                               omitted_ids, verbose=true,

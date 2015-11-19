@@ -65,7 +65,7 @@ type ObjectiveWrapperFunctions
         x_length = length(kept_ids) * transform.active_S
         x_size = (length(kept_ids), transform.active_S)
         DualType = DualNumbers.Dual{Float64}
-        mp_dual = CelesteTypes.convert(DualType, mp);
+        mp_dual = CelesteTypes.convert(ModelParams{DualType}, mp);
         @assert transform.active_sources == mp.active_sources
 
         state = WrapperState(0, false, 10, 1.0)
@@ -120,7 +120,6 @@ type ObjectiveWrapperFunctions
 
         function f_value_grad{T <: Number}(x::Vector{T})
             @assert length(x) == x_length
-            println("f_value_grad: x = $x, type = $(typeof(x))")
             res = f_objective(x)
             grad = zeros(T, length(x))
             if length(grad) > 0
@@ -178,13 +177,13 @@ type ObjectiveWrapperFunctions
               for index in 1:x_size[1]
                 index == 1 ? print("o"): print(".")
                 original_x = x[index, si]
-                x_dual[index, si] = DualNumbers.Dual(original_x, 1.)
+                x_dual[index, si] = DualType(original_x, 1.)
 
                 deriv = f_grad(x_dual[:])
                 # This goes through deriv in column-major order.
                 hess[:, sub2ind(x_size, index, si)] =
                   Float64[ DualNumbers.epsilon(x_val) for x_val in deriv ]
-                x_dual[index, si] = DualNumbers.Dual(original_x, 0.)
+                x_dual[index, si] = DualType(original_x, 0.)
               end
             end
             print("Done.\n")
@@ -199,9 +198,8 @@ type ObjectiveWrapperFunctions
             x = reshape(x_vec, x_size)
             k = length(x_vec)
 
-            x_dual = DualNumbers.Dual{Float64}[
-              DualNumbers.Dual{Float64}(x[i, j], 0.) for
-              i = 1:x_size[1], j=1:x_size[2]];
+            x_dual = DualType[DualType(x[i, j], 0.) for
+                              i = 1:x_size[1], j=1:x_size[2]];
 
             # Vectors of the (source, component) indices for the rows
             # and columns of the Hessian.
@@ -225,9 +223,9 @@ type ObjectiveWrapperFunctions
               for index1 in 1:x_size[1]
                 index1 == 1 ? print("o"): print(".")
                 original_x = x[index1, s1i]
-                x_dual[index1, s1i] = DualNumbers.Dual(original_x, 1.)
+                x_dual[index1, s1i] = DualType(original_x, 1.)
                 deriv = reshape(f_grad(x_dual[:]), x_size)
-                x_dual[index1, s1i] = DualNumbers.Dual(original_x, 0.)
+                x_dual[index1, s1i] = DualType(original_x, 0.)
 
                 # Record the hessian terms.
                 for s2i in 1:length(mp.active_sources), index2=1:size(x)[1]

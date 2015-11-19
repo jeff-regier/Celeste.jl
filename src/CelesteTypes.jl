@@ -526,7 +526,8 @@ ModelParams{NumType <: Number}(
     ModelParams{NumType}(vp, pp)
 end
 
-function convert(::Type{ModelParams{DualNumbers.Dual}}, mp::ModelParams{Float64})
+function convert(::Type{ModelParams{DualNumbers.Dual{Float64}}},
+                 mp::ModelParams{Float64})
     mp_dual =
       ModelParams(convert(Array{Array{DualNumbers.Dual{Float64}, 1}, 1}, mp.vp),
                   mp.pp)
