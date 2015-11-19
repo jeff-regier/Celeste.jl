@@ -67,7 +67,7 @@ function test_objective_wrapper()
 
     x = transform.vp_to_array(mp.vp, omitted_ids);
     x_vec = x[:]
-    mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual}, mp);
+    mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual{Float64}}, mp);
     x_length = length(kept_ids) * transform.active_S
     x_size = (length(kept_ids), transform.active_S)
     k = length(x_vec)
