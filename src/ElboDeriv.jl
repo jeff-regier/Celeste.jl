@@ -379,6 +379,13 @@ type BvnDerivs
 end
 
 
+@doc """
+Calculate the value, gradient, and hessian of x' (sigma^{-1}) x with respect
+to x and sigma.
+
+TODO: This should be -0.5 * x' sigma^-1 x
+TODO: This should be -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
+""" ->
 function bvn_derivs{NumType <: Number}(
     bvn::BvnComponent{NumType}, x::Vector{Float64})
 
@@ -417,22 +424,28 @@ function bvn_derivs{NumType <: Number}(
 
   # Hessian terms involving only sigma
   for s_ind=1:3
-    h[bvn_ids.sig[1], bvn_ids.sig[s_ind]] = h[bvn_ids.sig[s_ind], bvn_ids.sig[1]] =
+    h[bvn_ids.sig[1], bvn_ids.sig[s_ind]] =
+      h[bvn_ids.sig[s_ind], bvn_ids.sig[1]] =
       -2.0 * py1 * dpy1_ds[s_ind]
-    h[bvn_ids.sig[2], bvn_ids.sig[s_ind]] = h[bvn_ids.sig[s_ind], bvn_ids.sig[2]] =
+    h[bvn_ids.sig[2], bvn_ids.sig[s_ind]] =
+      h[bvn_ids.sig[s_ind], bvn_ids.sig[2]] =
       -2.0 * (py1 * dpy2_ds[s_ind] + py2 * dpy1_ds[s_ind])
-    h[bvn_ids.sig[3], bvn_ids.sig[s_ind]] = h[bvn_ids.sig[s_ind], bvn_ids.sig[3]] =
+    h[bvn_ids.sig[3], bvn_ids.sig[s_ind]] =
+      h[bvn_ids.sig[s_ind], bvn_ids.sig[3]] =
       -2.0 * py2 * dpy2_ds[s_ind]
   end
 
-  # Hessian terms involving both x and sigma.  Note that
-  # dpyA / dxB = bvn.precision[A, B]
+  # Hessian terms involving both x and sigma.
+  # Note that dpyA / dxB = bvn.precision[A, B]
   for x_ind=1:2
-    h[bvn_ids.sig[1], bvn_ids.x[x_ind]] = h[bvn_ids.x[x_ind], bvn_ids.sig[1]] =
+    h[bvn_ids.sig[1], bvn_ids.x[x_ind]] =
+      h[bvn_ids.x[x_ind], bvn_ids.sig[1]] =
       -2.0 * py1 * bvn.precision[1, x_ind]
-    h[bvn_ids.sig[2], bvn_ids.x[x_ind]] = h[bvn_ids.x[x_ind], bvn_ids.sig[2]] =
+    h[bvn_ids.sig[2], bvn_ids.x[x_ind]] =
+      h[bvn_ids.x[x_ind], bvn_ids.sig[2]] =
       -2.0 * (py1 * bvn.precision[2, x_ind] + py2 * bvn.precision[1, x_ind])
-    h[bvn_ids.sig[3], bvn_ids.x[x_ind]] = h[bvn_ids.x[x_ind], bvn_ids.sig[3]] =
+    h[bvn_ids.sig[3], bvn_ids.x[x_ind]] =
+      h[bvn_ids.x[x_ind], bvn_ids.sig[3]] =
       -2.0 * py2 * bvn.precision[2, x_ind]
   end
 
@@ -671,6 +684,20 @@ function accum_star_pos!{NumType <: Number}(
     fs0m.d[star_ids.u[2]] +=
       convert(NumType,
               f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
+
+    # Note that dpyA / dxB = bmc.precision[A, B]
+    # TODO: there's a redundant step here.
+    # TODO: test this!
+    for u_id = 1:2
+      fs0m.hs[1][star_ids.u[1], star_ids.u[u_id]] +=
+        convert(NumType,
+                f * (wcs_jacobian[1, 1] * bmc.precision[1, u_id] +
+                     wcs_jacobian[2, 1] * bmc.precision[2, u_id]))
+      fs0m.hs[1][star_ids.u[2], star_ids.u[u_id]] +=
+        convert(NumType,
+                f * (wcs_jacobian[1, 2] * bmc.precision[1, u_id] +
+                     wcs_jacobian[2, 2] * bmc.precision[2, u_id]))
+    end
 end
 
 
@@ -685,7 +712,8 @@ Args:
        and its derivatives with respect to x are added.
  - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
 """ ->
-function accum_galaxy_pos!{NumType <: Number}(gcc::GalaxyCacheComponent{NumType},
+function accum_galaxy_pos!{NumType <: Number}(
+                           gcc::GalaxyCacheComponent{NumType},
                            x::Vector{Float64},
                            fs1m::SensitiveFloat{GalaxyPosParams, NumType},
                            wcs_jacobian::Array{Float64, 2})
@@ -693,6 +721,8 @@ function accum_galaxy_pos!{NumType <: Number}(gcc::GalaxyCacheComponent{NumType}
     f = f_pre * gcc.e_dev_i
 
     fs1m.v += f
+
+    # Gradient and Hessian with respect to location parameters.
 
     # This is an expanded version of
     # dfs1m_dworld = wcs_jacobian' * NumType[f .* py1, f .* py2]
@@ -702,6 +732,23 @@ function accum_galaxy_pos!{NumType <: Number}(gcc::GalaxyCacheComponent{NumType}
     fs1m.d[gal_ids.u[2]] +=
       convert(NumType,
               f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
+
+    # Note that dpyA / dxB = bmc.precision[A, B]
+    # TODO: there's a redundant step here.
+    # TODO: test this!
+    # TODO: this is wrong, there will be cross terms in the Hessian.
+    for u_id = 1:2
+      fs1m.hs[1][star_ids.u[1], star_ids.u[u_id]] +=
+        convert(NumType,
+                f * (wcs_jacobian[1, 1] * gcc.bmc.precision[1, u_id] +
+                     wcs_jacobian[2, 1] * gcc.bmc.precision[2, u_id]))
+      fs1m.hs[1][star_ids.u[2], star_ids.u[u_id]] +=
+        convert(NumType,
+                f * (wcs_jacobian[1, 2] * gcc.bmc.precision[1, u_id] +
+                     wcs_jacobian[2, 2] * gcc.bmc.precision[2, u_id]))
+    end
+
+    # Derivatives with respect to galaxy shape parameters.
 
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
