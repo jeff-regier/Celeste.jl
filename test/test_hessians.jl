@@ -29,7 +29,7 @@ bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
 bvn_sf = ElboDeriv.bvn_derivs(bvn, x);
 
 
-function f{T <: Number}(x::Vector{Number}, sigma::Matrix{Number})
+function f{T <: Number}(x::Vector{T}, sigma::Matrix{T})
   weight * ((x - offset)' * (sigma \ (x - offset)))[1,1]
 end
 
@@ -44,7 +44,6 @@ function f_wrap{T <: Number}(par::Vector{T})
   x_loc = par[bvn_ids.x]
   s_vec = par[bvn_ids.sig]
   sig_loc = T[s_vec[1] s_vec[2]; s_vec[2] s_vec[3]]
-  println(sig_loc)
   f(x_loc, sig_loc)
 end
 
