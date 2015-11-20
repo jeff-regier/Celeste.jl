@@ -92,6 +92,10 @@ function test_objective_wrapper()
     this_iter = wrapper.state.f_evals;
     wrapper.f_value(x[:]);
     @test wrapper.state.f_evals == this_iter + 1
+
+    # Check the AD gradient.
+    ad_grad = wrapper.f_ad_grad(x[:]);
+    @test_approx_eq ad_grad[:] w_grad
 end
 
 function test_objective_hessians()
