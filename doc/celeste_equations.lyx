@@ -886,6 +886,10 @@ In the case that
 p_{y1}\\
 p_{y2}
 \end{array}\right)\\
+ & = & \left(\begin{array}{c}
+\Lambda_{11}x_{1}+\Lambda_{12}x_{2}\\
+\Lambda_{12}x_{1}+\Lambda_{22}x_{2}
+\end{array}\right)\\
 \frac{d}{d\Sigma_{11}}\left(x^{T}\Sigma^{-1}x\right) & = & \left(\begin{array}{cc}
 p_{y1} & p_{y2}\end{array}\right)\left[\begin{array}{cc}
 1 & 0\\

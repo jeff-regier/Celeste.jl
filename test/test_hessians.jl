@@ -11,17 +11,48 @@ using ForwardDiff
 import Synthetic
 import WCS
 
+
+# For debugging:
+using ElboDeriv.bvn_ids
+using ElboDeriv.eval_bvn_pdf
+using ElboDeriv.BvnDerivs
+NumType = Float64
+
 println("Running hessian tests.")
 
 x = Float64[2.0, 3.0]
 sigma = Float64[1.0 0.2; 0.2 1.0]
 offset = Float64[0.5, 0.5]
+weight = 1.0
 
-bvn = ElboDeriv.BvnComponent(x, sigma, 0.5);
-ElboDeriv.bvn_derivs(bvn, offset)
+bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
+bvn_sf = ElboDeriv.bvn_derivs(bvn, x);
 
 
+function f{T <: Number}(x::Vector{Number}, sigma::Matrix{Number})
+  weight * ((x - offset)' * (sigma \ (x - offset)))[1,1]
+end
 
+function wrap(x::Vector{Float64}, sigma::Matrix{Float64})
+  par = zeros(Float64, bvn_ids.length)
+  par[bvn_ids.x] = x
+  par[bvn_ids.sig] = [ sigma[1, 1], sigma[1, 2], sigma[2, 2]]
+  par
+end
+
+function f_wrap{T <: Number}(par::Vector{T})
+  x_loc = par[bvn_ids.x]
+  s_vec = par[bvn_ids.sig]
+  sig_loc = T[s_vec[1] s_vec[2]; s_vec[2] s_vec[3]]
+  println(sig_loc)
+  f(x_loc, sig_loc)
+end
+
+par = wrap(x, sigma);
+@test_approx_eq bvn_sf.v f_wrap(par)
+
+ad_g = ForwardDiff.gradient(f_wrap);
+ad_g(par)
 
 
 
