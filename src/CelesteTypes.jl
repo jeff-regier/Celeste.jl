@@ -547,13 +547,13 @@ end
 function forward_diff_model_params{T <: Number}(
     FDType::Type{T},
     base_mp::ModelParams{Float64})
-  S = length(mp.vp)
-  P = length(mp.vp[1])
-  mp_fd = ModelParams{FDType}(fill(zeros(FDType, P), S), mp.pp);
-  mp_fd.patches = mp.patches;
-  mp_fd.tile_sources = mp.tile_sources;
-  mp_fd.active_sources = mp.active_sources;
-  mp_fd.objids = mp.objids;
+  S = length(base_mp.vp)
+  P = length(base_mp.vp[1])
+  mp_fd = ModelParams{FDType}(fill(zeros(FDType, P), S), base_mp.pp);
+  mp_fd.patches = base_mp.patches;
+  mp_fd.tile_sources = base_mp.tile_sources;
+  mp_fd.active_sources = base_mp.active_sources;
+  mp_fd.objids = base_mp.objids;
   mp_fd
 end
 
