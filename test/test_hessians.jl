@@ -216,10 +216,29 @@ end
 g = ForwardDiff.gradient(f2)
 h = ForwardDiff.hessian(f2)
 
-FDType = ForwardDiff.GradientNumber{length(x), typeof(x[1])}
-
 x = rand(length(ids));
+FDType = typeof(fd[1])
 
+blob, mp, three_bodies = gen_three_body_dataset();
+kept_ids = [ ids.r1; ids.r2; ids.c1[:]; ids.c2[:] ];
+omitted_ids = setdiff(1:length(ids), kept_ids);
+
+sf_fd = zero_sensitive_float(CanonicalParams, FDType);
+transform = Transform.get_identity_transform(length(ids), mp.S);
+function example{T <: Number}(x::Vector{T})
+  mp_fd = forward_diff_model_params(T, mp);
+  x_mat = reshape(x, length(kept_ids), mp.S)
+  transform.array_to_vp!(x_mat, mp_fd.vp, omitted_ids);
+  sum([ sum(mp_fd.vp[s]) for s=1:mp_fd.S ])
+end
+
+
+g = ForwardDiff.gradient(example)
+x = transform.vp_to_array(mp.vp, omitted_ids);
+grad = g(x[:])
+
+
+h = ForwardDiff.hessian(example)
 id_transform
 
 

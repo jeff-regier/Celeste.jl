@@ -544,22 +544,30 @@ end
 
 
 # Does this make any sense?
-function convert(::Type{ForwardDiff.GradientNumber},
-                 mp::ModelParams{Float64})
+function forward_diff_model_params{T <: Number}(
+    FDType::Type{T},
+    base_mp::ModelParams{Float64})
+  S = length(mp.vp)
+  P = length(mp.vp[1])
+  mp_fd = ModelParams{FDType}(fill(zeros(FDType, P), S), mp.pp);
+  mp_fd.patches = mp.patches;
+  mp_fd.tile_sources = mp.tile_sources;
+  mp_fd.active_sources = mp.active_sources;
+  mp_fd.objids = mp.objids;
+  mp_fd
+end
 
+function convert(FDType::Type{ForwardDiff.GradientNumber},
+                 mp::ModelParams{Float64})
     x = mp.vp[1]
     P = length(x)
     FDType = ForwardDiff.GradientNumber{length(mp.vp[1]), Float64}
+
     fd_x = [ ForwardDiff.GradientNumber(x[i], zeros(Float64, P)...) for i=1:P ]
     convert(FDType, x[1])
 
     vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
     mp_fd = ModelParams(vp_fd, mp.pp)
-    mp_fd.patches = mp.patches
-    mp_fd.tile_sources = mp.tile_sources
-    mp_fd.active_sources = mp.active_sources
-    mp_fd.objids = mp.objids
-    mp_fd
 end
 
 
