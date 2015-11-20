@@ -95,7 +95,7 @@ function multiply_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 
   S = size(sf1.d)[2]
 
-  # Can you actually do this in place without overwriting things you need?
+  # You have to do this in the right order to not overwrite needed terms.
 
   # Chain rule for second derivatives.
   for s=1:S

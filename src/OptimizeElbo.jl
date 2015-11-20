@@ -45,6 +45,7 @@ type ObjectiveWrapperFunctions
     f_value::Function
     f_grad::Function
     f_grad!::Function
+    f_ad_grad::Function
     f_ad_hessian!::Function
     f_ad_hessian_sparse::Function
 
@@ -158,6 +159,37 @@ type ObjectiveWrapperFunctions
             grad[:,:] = f_grad(x)
         end
 
+        # Compute a forward AD gradient.  This is mostly useful
+        # for debugging and testing.
+        function f_ad_grad(x_vec::Array{Float64})
+          # TODO: combine this and the Hessian into a single function.
+          @assert length(x_vec) == x_length
+          x = reshape(x_vec, x_size)
+          k = length(x_vec)
+
+          x_dual = DualType[
+            DualType(x[i, j], 0.) for i = 1:(x_size[1]), j=1:(x_size[2])];
+
+          grad = zeros(Float64, x_size...)
+          print("Getting autodiff gradient ($k components): ")
+          mp_dual.active_sources = mp.active_sources
+          for si in 1:length(mp.active_sources)
+            s = mp.active_sources[si]
+            for index in 1:x_size[1]
+              index == 1 ? print("+"): print("-")
+              original_x = x[index, si]
+              x_dual[index, si] = DualType(original_x, 1.)
+
+              value = f_value(x_dual[:])
+              # This goes through deriv in column-major order.
+              grad[index, si] = Float64(DualNumbers.epsilon(value))
+              x_dual[index, si] = DualType(original_x, 0.)
+            end
+          end
+          print("Done.\n")
+          grad
+        end
+
         # Update <hess> in place with an autodiff hessian.
         function f_ad_hessian!(x_vec::Array{Float64}, hess::Matrix{Float64})
             @assert length(x_vec) == x_length
@@ -250,7 +282,7 @@ type ObjectiveWrapperFunctions
         end
 
         new(f_objective, f_value_grad, f_value_grad!,
-            f_value, f_grad, f_grad!,
+            f_value, f_grad, f_grad!, f_ad_grad,
             f_ad_hessian!, f_ad_hessian_sparse,
             state, transform, mp, kept_ids, omitted_ids, DualType)
     end
