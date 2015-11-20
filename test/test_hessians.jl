@@ -4,6 +4,7 @@ using Base.Test
 using Distributions
 using SampleData
 using Transform
+using PyPlot
 
 using ForwardDiff
 
@@ -16,15 +17,8 @@ println("Running hessian tests.")
 
 #function test_brightness_hessian()
     blob, mp, three_bodies = gen_three_body_dataset();
-    kept_ids = [ ids_free.r1; ids_free.r2; ids_free.c1[:]; ids_free.c2[:] ];
-    omitted_ids = setdiff(1:length(ids_free), kept_ids);
-
-    # mp = deepcopy(mp_original);
-    # mp.vp = fill(mp_original.vp[1], 1);
-    # mp.patches = mp_original.patches[1, :];
-    # mp.active_sources = [1]
-    # mp.objids = fill(mp_original.objids[1], 1)
-    # mp.S = 1
+    kept_ids = [ ids.r1; ids.r2; ids.c1[:]; ids.c2[:] ];
+    omitted_ids = setdiff(1:length(ids), kept_ids);
 
     transform = Transform.get_identity_transform(length(ids), mp.S);
     ad_hess = zeros(Float64, length(kept_ids) * mp.S, length(kept_ids) * mp.S);
@@ -52,17 +46,17 @@ println("Running hessian tests.")
             # Sanity check.
             @test_approx_eq objective.f_value(x[:]) bright.v
 
+
+
             # Compare the AD hessian with the exact hessian.
-            println("b $b i $i")
+            println("b=$b i=$i")
             objective.f_ad_hessian!(x[:], ad_hess);
             for s=1:mp.S
               hess_ind = (1:length(kept_ids)) + (s - 1) * length(kept_ids)
-              @test_approx_eq ad_hess[hess_ind, hess_ind] bright.hs[kept_ids, kept_ids, s]
+              hess0 = ad_hess[hess_ind, hess_ind]
+              hess1 = bright.hs[s][kept_ids, kept_ids]
+              @test_approx_eq ad_hess[hess_ind, hess_ind] bright.hs[s][kept_ids, kept_ids]
             end
-
-            reduce(hcat, ind2sub(size(bright.hs[kept_ids, kept_ids]),
-                            find(abs(ad_hess[hess_ind, hess_ind][:] .-
-                                     bright.hs[kept_ids,kept_ids,1][:]) .> 1e-6)))
         end
     end
     #
@@ -194,3 +188,40 @@ end
 
 
 test_set_hess()
+test_multiply_sf()
+
+
+
+#############################
+# Try to understand ForwardDiff.
+
+using ForwardDiff
+
+xd = 0
+
+function f2{T <: Number}(x::Vector{T})
+  global xd
+  println(typeof(x))
+  println(size(x))
+  xT = typeof(x[1])
+  println(xT)
+  println(isa(xT, Number))
+  value = sum(x .* x)
+  xd = x
+  println("value type:")
+  println(typeof(value))
+  value
+end
+
+g = ForwardDiff.gradient(f2)
+h = ForwardDiff.hessian(f2)
+
+FDType = ForwardDiff.GradientNumber{length(x), typeof(x[1])}
+
+x = rand(length(ids));
+
+id_transform
+
+
+g(x)
+h(x)

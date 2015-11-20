@@ -430,7 +430,9 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
   DataTransform(bounds, active_sources=mp.active_sources, S=mp.S)
 end
 
-# An identity transform that does not enforce any bounds.
+# An identity transform that does not enforce any bounds nor reduce
+# the dimension of the variational params.  This is mostly useful
+# for testing.
 function get_identity_transform(P::Int64, S::Int64)
 
   active_S = S
@@ -469,8 +471,12 @@ function get_identity_transform(P::Int64, S::Int64)
 
   function vp_to_array{NumType <: Number}(vp::VariationalParams{NumType},
                                           omitted_ids::Vector{Int64})
-      vp_trans = from_vp(vp)
-      free_vp_to_array(vp_trans, omitted_ids)
+      kept_ids = setdiff(1:P, omitted_ids)
+      xs = zeros(length(kept_ids), S)
+      for s=1:S
+        xs[:, s] = vp[s][kept_ids]
+      end
+      xs
   end
 
   function array_to_vp!{NumType <: Number}(xs::Matrix{NumType},
@@ -478,9 +484,10 @@ function get_identity_transform(P::Int64, S::Int64)
                                            omitted_ids::Vector{Int64})
       # This needs to update vp in place so that variables in omitted_ids
       # stay at their original values.
-      vp_trans = from_vp(vp)
-      array_to_free_vp!(xs, vp_trans, omitted_ids)
-      to_vp!(vp_trans, vp)
+      kept_ids = setdiff(1:P, omitted_ids)
+      for s=1:S
+        vp[s][kept_ids] = xs[:, s]
+      end
   end
 
   function transform_sensitive_float{NumType <: Number}(

@@ -29,6 +29,7 @@ export print_params
 using Util
 using SloanDigitalSkySurvey.PSF.RawPSFComponents
 using Compat
+using ForwardDiff
 
 import Base.convert
 import Base.+
@@ -540,6 +541,27 @@ function convert(::Type{ModelParams{DualNumbers.Dual{Float64}}},
     mp_dual.objids = mp.objids
     mp_dual
 end
+
+
+# Does this make any sense?
+function convert(::Type{ForwardDiff.GradientNumber},
+                 mp::ModelParams{Float64})
+
+    x = mp.vp[1]
+    P = length(x)
+    FDType = ForwardDiff.GradientNumber{length(mp.vp[1]), Float64}
+    fd_x = [ ForwardDiff.GradientNumber(x[i], zeros(Float64, P)...) for i=1:P ]
+    convert(FDType, x[1])
+
+    vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
+    mp_fd = ModelParams(vp_fd, mp.pp)
+    mp_fd.patches = mp.patches
+    mp_fd.tile_sources = mp.tile_sources
+    mp_fd.active_sources = mp.active_sources
+    mp_fd.objids = mp.objids
+    mp_fd
+end
+
 
 @doc """
 Display model parameters with the variable names.
