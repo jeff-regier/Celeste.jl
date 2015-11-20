@@ -13,6 +13,18 @@ import WCS
 
 println("Running hessian tests.")
 
+x = Float64[2.0, 3.0]
+sigma = Float64[1.0 0.2; 0.2 1.0]
+offset = Float64[0.5, 0.5]
+
+bvn = ElboDeriv.BvnComponent(x, sigma, 0.5);
+ElboDeriv.bvn_derivs(bvn, offset)
+
+
+
+
+
+
 function test_brightness_hessian()
     blob, mp, three_bodies = gen_three_body_dataset();
     kept_ids = [ ids.r1; ids.r2; ids.c1[:]; ids.c2[:] ];
@@ -171,6 +183,7 @@ function test_set_hess()
   CelesteTypes.set_hess!(sf, 4, 4, 2, 8.0);
   @test_approx_eq sf.hs[2][4, 4] 8.0
 end
+
 
 
 test_set_hess()
