@@ -275,6 +275,25 @@ grad = g(x[:])
 FDType = typeof(x_fd[1,1])
 reshape(grad, length(kept_ids), mp.S)
 
-ElboDeriv.elbo(tiled_blob, mp_fd);
 
-sb = ElboDeriv.SourceBrightness(mp_fd.vp);
+######################################
+#
+
+include("src/ElboNoDeriv.jl")
+blob, mp, three_bodies, tiled_blob = gen_sample_star_dataset();
+kept_ids = 1:length(ids);
+omitted_ids = setdiff(1:length(ids), kept_ids);
+
+sb = ElboNoDeriv.SourceBrightness(mp_fd.vp[1]);
+@time elbo = ElboNoDeriv.elbo(tiled_blob, mp_fd);
+@time elbo = ElboDeriv.elbo(tiled_blob, mp);
+
+@time foo = mp_fd.vp
+
+@time for n=1:10000
+  foo = sum([ mp_fd.vp[1][i] * mp_fd.vp[1][i] for i=1:length(ids)] )
+end
+
+@time for n=1:10000
+  bar = sum([ mp.vp[1][i] * mp.vp[1][i] for i=1:length(ids)] )
+end
