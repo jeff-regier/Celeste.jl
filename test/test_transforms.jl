@@ -136,5 +136,30 @@ function test_parameter_conversion()
 
 end
 
+
+function test_identity_transform()
+	blob, mp, three_bodies = gen_three_body_dataset();
+	omitted_ids = Int64[];
+	kept_ids = setdiff(1:length(ids_free), omitted_ids);
+
+	transform = Transform.get_identity_transform(length(ids), mp.S);
+	@test_approx_eq reduce(hcat, mp.vp) reduce(hcat, transform.from_vp(mp.vp))
+	@test_approx_eq reduce(hcat, mp.vp) reduce(hcat, transform.to_vp(mp.vp))
+	xs = transform.vp_to_array(mp.vp, omitted_ids);
+	@test_approx_eq  xs reduce(hcat, mp.vp)
+	vp_new = deepcopy(mp.vp);
+	transform.array_to_vp!(xs, vp_new, omitted_ids);
+	@test_approx_eq reduce(hcat, vp_new) reduce(hcat, mp.vp)
+
+	sf = zero_sensitive_float(CanonicalParams, Float64, mp.S);
+	sf.d = rand(length(ids), mp.S)
+	sf_new = transform.transform_sensitive_float(sf, mp);
+	@test_approx_eq sf_new.v sf.v
+	@test_approx_eq sf_new.d sf.d
+	[ @test_approx_eq sf_new.hs[s] sf.hs[s] for s=1:mp.S]
+end
+
+
 test_transform_box_functions()
 test_parameter_conversion()
+test_identity_transform()
