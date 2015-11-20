@@ -360,16 +360,13 @@ end
 # Derivatives
 
 immutable BvnDerivIndices
-  x1::Int64
-  x2::Int64
-  s11::Int64
-  s12::Int64
-  s22::Int64
-  length::Int64
+  sig::Vector{Int64} # Sigma_11, Sigma_12, Sigma_22 in that order.
+  x::Vector{Int64} # x1, x2 in that order
+  length::Int64 # The total number of indices
 end
 
 function set_bvn_deriv_indices()
-  BvnDerivIndices(1, 2, 3, 4, 5, 5)
+  BvnDerivIndices([1, 2, 3], [4, 5], 5)
 end
 
 const bvn_ids = set_bvn_deriv_indices();
@@ -381,37 +378,62 @@ type BvnDerivs
   h::Matrix{Float64}
 end
 
+
 function bvn_derivs{NumType <: Number}(
     bvn::BvnComponent{NumType}, x::Vector{Float64})
 
-  py1, py2, f_pre = eval_bvn_pdf(bvn, x)
+  py1, py2, f_pre = eval_bvn_pdf(bvn, x);
 
-  v = f_pre
+  v = (x[1] - bvn.the_mean[1]) * py1 + (x[2] - bvn.the_mean[2]) * py2
 
   d = zeros(NumType, bvn_ids.length)
-  d[bvn_ids.x1] = 2.0 * py1
-  d[bvn_ids.x2] = 2.0 * py2
+  d[bvn_ids.x[1]] = 2.0 * py1
+  d[bvn_ids.x[2]] = 2.0 * py2
 
-  d[bvn_ids.s11] = py1 * py1
-  d[bvn_ids.s12] = 2.0 * py1 * py2
-  d[bvn_ids.s22] = py2 * py2
+  d[bvn_ids.sig[1]] = py1 * py1
+  d[bvn_ids.sig[2]] = 2.0 * py1 * py2
+  d[bvn_ids.sig[3]] = py2 * py2
 
+  # Hessian calcultion.
+
+  # Hessian terms involving only x
   h = zeros(NumType, bvn_ids.length, bvn_ids.length)
-  h[bvn_ids.x1, bvn_ids.x1] = 2.0 * precision[1,1]
-  h[bvn_ids.x2, bvn_ids.x2] = 2.0 * precision[2,2]
-  h[bvn_ids.x1, bvn_ids.x2] = h[bvn_ids.x2, bvn_ids.x1] = 2.0 * precision[1,2]
+  h[bvn_ids.x[1], bvn_ids.x[1]] = 2.0 * bvn.precision[1,1]
+  h[bvn_ids.x[2], bvn_ids.x[2]] = 2.0 * bvn.precision[2,2]
+  h[bvn_ids.x[1], bvn_ids.x[2]] =
+    h[bvn_ids.x[2], bvn_ids.x[1]] = 2.0 * bvn.precision[1,2]
 
-  dpy1_ds11 = -py1 * precision[1,1]
-  dpy1_ds12 = -py2 * precision[1,1] - py1 * precision[1,2]
-  dpy1_ds22 = -py2 * precision[1,2]
+  # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
+  # These are used for the hessian calculations.
+  dpy1_ds = Array(Float64, 3)
+  dpy1_ds[1] = -py1 * bvn.precision[1,1]
+  dpy1_ds[2] = -py2 * bvn.precision[1,1] - py1 * bvn.precision[1,2]
+  dpy1_ds[3] = -py2 * bvn.precision[1,2]
 
-  dpy2_ds11 = -py2 * precision[2,2]
-  dpy2_ds12 = -py1 * precision[1,1] - py2 * precision[1,2]
-  dpy2_ds22 = -py1 * precision[1,2]
+  dpy2_ds = Array(Float64, 3)
+  dpy2_ds[1] = -py2 * bvn.precision[2,2]
+  dpy2_ds[2] = -py1 * bvn.precision[1,1] - py2 * bvn.precision[1,2]
+  dpy2_ds[3] = -py1 * bvn.precision[1,2]
 
-  h[bvn_ids.s11, bvn_ids.s11] = 2.0 * py1 * dpy1_ds11
-  h[bvn_ids.s12, bvn_ids.s11] = 2.0 * py1 * dpy1_ds11
-  # ... maybe you should treat sigma with its own indices and do this in a loop.
+  # Hessian terms involving only sigma
+  for s_ind=1:3
+    h[bvn_ids.sig[1], bvn_ids.sig[s_ind]] = 2.0 * py1 * dpy1_ds[s_ind]
+    h[bvn_ids.sig[2], bvn_ids.sig[s_ind]] =
+      2.0 * (py1 * dpy1_ds[s_ind] + py2 * dpy2_ds[s_ind])
+    h[bvn_ids.sig[3], bvn_ids.sig[s_ind]] = 2.0 * py2 * dpy2_ds[s_ind]
+  end
+
+  # Hessian terms involving both x and sigma.  Note that
+  # dpyA / dxB = bvn.precision[A, B]
+  for x_ind=1:2
+    h[bvn_ids.sig[1], bvn_ids.x[x_ind]] = h[bvn_ids.x[x_ind], bvn_ids.sig[1]] =
+      py1 * bvn.precision[1, x_ind]
+    h[bvn_ids.sig[2], bvn_ids.x[x_ind]] = h[bvn_ids.x[x_ind], bvn_ids.sig[2]] =
+      2.0 * (py1 * bvn.precision[2, x_ind] + py2 * bvn.precision[1, x_ind])
+    h[bvn_ids.sig[3], bvn_ids.x[x_ind]] = h[bvn_ids.x[x_ind], bvn_ids.sig[3]] =
+      2.0 * py2 * bvn.precision[2, x_ind]
+  end
+
   BvnDerivs(v, d, h)
 end
 
