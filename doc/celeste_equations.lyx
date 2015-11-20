@@ -890,14 +890,14 @@ p_{y2}
 \Lambda_{11}x_{1}+\Lambda_{12}x_{2}\\
 \Lambda_{12}x_{1}+\Lambda_{22}x_{2}
 \end{array}\right)\\
-\frac{d}{d\Sigma_{11}}\left(x^{T}\Sigma^{-1}x\right) & = & \left(\begin{array}{cc}
+\frac{d}{d\Sigma_{11}}\left(x^{T}\Sigma^{-1}x\right) & = & -\left(\begin{array}{cc}
 p_{y1} & p_{y2}\end{array}\right)\left[\begin{array}{cc}
 1 & 0\\
 0 & 0
 \end{array}\right]\left(\begin{array}{c}
 p_{y1}\\
 p_{y2}
-\end{array}\right)=p_{y1}^{2}\\
+\end{array}\right)=-p_{y1}^{2}\\
 \frac{d}{d\Sigma_{11}}\log\left|\Sigma\right| & = & \textrm{trace}\left(\Sigma^{-1}\left[\begin{array}{cc}
 1 & 0\\
 0 & 0
@@ -913,7 +913,7 @@ p_{y2}
 Similarly,
 \begin_inset Formula 
 \begin{eqnarray*}
-\frac{d}{d\Sigma_{12}}\left(x^{T}\Sigma^{-1}x\right) & = & 2p_{y1}p_{y2}\\
+\frac{d}{d\Sigma_{12}}\left(x^{T}\Sigma^{-1}x\right) & = & -2p_{y1}p_{y2}\\
 \frac{d}{d\Sigma_{12}}\log\left|\Sigma\right| & = & 2\left(\Sigma^{-1}\right)_{12}
 \end{eqnarray*}
 
@@ -929,7 +929,7 @@ and
 \begin_layout Standard
 \begin_inset Formula 
 \begin{eqnarray*}
-\frac{d}{d\Sigma_{22}}\left(x^{T}\Sigma^{-1}x\right) & = & 2p_{y2}^{2}\\
+\frac{d}{d\Sigma_{22}}\left(x^{T}\Sigma^{-1}x\right) & = & -2p_{y2}^{2}\\
 \frac{d}{d\Sigma_{22}}\log\left|\Sigma\right| & = & \left(\Sigma^{-1}\right)_{22}
 \end{eqnarray*}
 
@@ -1124,6 +1124,10 @@ and
 
 \begin_layout Subsubsection
 Hessians
+\end_layout
+
+\begin_layout Standard
+Note! Fix all the signs plz ok thx bai
 \end_layout
 
 \begin_layout Standard

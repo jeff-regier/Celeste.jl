@@ -20,39 +20,46 @@ NumType = Float64
 
 println("Running hessian tests.")
 
-x = Float64[2.0, 3.0]
-sigma = Float64[1.0 0.2; 0.2 1.0]
-offset = Float64[0.5, 0.5]
-weight = 1.0
 
-bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
-bvn_sf = ElboDeriv.bvn_derivs(bvn, x);
+function test_bvn_derivatives()
+  x = Float64[2.0, 3.0]
+  sigma = Float64[1.0 0.2; 0.2 1.0]
+  offset = Float64[0.5, 0.5]
+  weight = 1.0
+
+  bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
+  bvn_sf = ElboDeriv.bvn_derivs(bvn, x);
 
 
-function f{T <: Number}(x::Vector{T}, sigma::Matrix{T})
-  weight * ((x - offset)' * (sigma \ (x - offset)))[1,1]
+  function f{T <: Number}(x::Vector{T}, sigma::Matrix{T})
+    weight * ((x - offset)' * (sigma \ (x - offset)))[1,1]
+  end
+
+  function wrap(x::Vector{Float64}, sigma::Matrix{Float64})
+    par = zeros(Float64, bvn_ids.length)
+    par[bvn_ids.x] = x
+    par[bvn_ids.sig] = [ sigma[1, 1], sigma[1, 2], sigma[2, 2]]
+    par
+  end
+
+  function f_wrap{T <: Number}(par::Vector{T})
+    x_loc = par[bvn_ids.x]
+    s_vec = par[bvn_ids.sig]
+    sig_loc = T[s_vec[1] s_vec[2]; s_vec[2] s_vec[3]]
+    f(x_loc, sig_loc)
+  end
+
+  par = wrap(x, sigma);
+  @test_approx_eq bvn_sf.v f_wrap(par)
+
+  ad_grad = ForwardDiff.gradient(f_wrap);
+  ad_d = ad_grad(par);
+  @test_approx_eq bvn_sf.d ad_d
+
+  ad_hess = ForwardDiff.hessian(f_wrap);
+  ad_h = ad_hess(par);
+  @test_approx_eq ad_h bvn_sf.h
 end
-
-function wrap(x::Vector{Float64}, sigma::Matrix{Float64})
-  par = zeros(Float64, bvn_ids.length)
-  par[bvn_ids.x] = x
-  par[bvn_ids.sig] = [ sigma[1, 1], sigma[1, 2], sigma[2, 2]]
-  par
-end
-
-function f_wrap{T <: Number}(par::Vector{T})
-  x_loc = par[bvn_ids.x]
-  s_vec = par[bvn_ids.sig]
-  sig_loc = T[s_vec[1] s_vec[2]; s_vec[2] s_vec[3]]
-  f(x_loc, sig_loc)
-end
-
-par = wrap(x, sigma);
-@test_approx_eq bvn_sf.v f_wrap(par)
-
-ad_g = ForwardDiff.gradient(f_wrap);
-ad_g(par)
-
 
 
 function test_brightness_hessian()
@@ -215,7 +222,7 @@ function test_set_hess()
 end
 
 
-
 test_set_hess()
 test_multiply_sf()
 test_brightness_hessian()
+test_bvn_derivatives()
