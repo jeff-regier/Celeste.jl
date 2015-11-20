@@ -878,6 +878,10 @@ In the case that
 \Sigma_{11} & \Sigma_{12}\\
 \Sigma_{12} & \Sigma_{22}
 \end{array}\right]\\
+\Lambda=\Sigma^{-1} & = & \left[\begin{array}{cc}
+\Lambda_{11} & \Lambda_{12}\\
+\Lambda_{12} & \Lambda_{22}
+\end{array}\right]\\
 \Sigma^{-1}x & =: & \left(\begin{array}{c}
 p_{y1}\\
 p_{y2}
@@ -1114,6 +1118,10 @@ and
 
 \end_layout
 
+\begin_layout Subsubsection
+Hessians
+\end_layout
+
 \begin_layout Standard
 Now, the second derivatives of 
 \begin_inset Formula $f$
@@ -1270,6 +1278,44 @@ and
 \begin{eqnarray*}
 \frac{d}{d\Sigma_{22}}\left(x^{T}\Sigma^{-1}x\right) & = & 2p_{y2}^{2}\\
 \frac{d}{d\Sigma_{22}}\log\left|\Sigma\right| & = & \left(\Sigma^{-1}\right)_{22}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Another way of putting it
+\end_layout
+
+\begin_layout Standard
+You will need up to second-order derivatives of 
+\begin_inset Formula 
+\begin{eqnarray*}
+\phi & = & x^{T}\Sigma^{-1}x
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+...with respect to 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $\Sigma$
+\end_inset
+
+.
+ These can be put in a single data structure, and then the chain rule can
+ be used for the rest.
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d\phi}{dx} & = & \frac{1}{2}\Sigma^{-1}x\\
 \end{eqnarray*}
 
 \end_inset

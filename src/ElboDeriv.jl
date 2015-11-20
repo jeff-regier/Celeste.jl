@@ -214,7 +214,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
 
         ################################
         # Squared terms.
-        
+
         for b = 1:B
             E_ll_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
         end
@@ -287,102 +287,6 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
 end
 
 
-
-
-OldSourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
-    r1 = vs[ids.r1]
-    r2 = vs[ids.r2]
-    c1 = vs[ids.c1]
-    c2 = vs[ids.c2]
-
-    # E_l_a has a row for each of the five colors and columns
-    # for star / galaxy.
-    E_l_a = Array(SensitiveFloat{CanonicalParams, NumType}, B, Ia)
-
-    for i = 1:Ia
-        for b = 1:B
-            E_l_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
-        end
-
-        # Index 3 is r_s and has a lognormal expectation.
-        E_l_a[3, i].v = exp(r1[i] + 0.5 * r2[i])
-        E_l_a[3, i].d[ids.r1[i]] = E_l_a[3, i].v
-        E_l_a[3, i].d[ids.r2[i]] = E_l_a[3, i].v * .5
-
-        # The remaining indices involve c_s and have lognormal
-        # expectations times E_c_3.
-        E_c_3 = exp(c1[3, i] + .5 * c2[3, i])
-        E_l_a[4, i].v = E_l_a[3, i].v * E_c_3
-        E_l_a[4, i].d[ids.r1[i]] = E_l_a[3, i].d[ids.r1[i]] * E_c_3
-        E_l_a[4, i].d[ids.r2[i]] = E_l_a[3, i].d[ids.r2[i]] * E_c_3
-        E_l_a[4, i].d[ids.c1[3, i]] = E_l_a[4, i].v
-        E_l_a[4, i].d[ids.c2[3, i]] = E_l_a[4, i].v * .5
-
-        E_c_4 = exp(c1[4, i] + .5 * c2[4, i])
-        E_l_a[5, i].v = E_l_a[4, i].v * E_c_4
-        E_l_a[5, i].d[ids.r1[i]] = E_l_a[4, i].d[ids.r1[i]] * E_c_4
-        E_l_a[5, i].d[ids.r2[i]] = E_l_a[4, i].d[ids.r2[i]] * E_c_4
-        E_l_a[5, i].d[ids.c1[3, i]] = E_l_a[4, i].d[ids.c1[3, i]] * E_c_4
-        E_l_a[5, i].d[ids.c2[3, i]] = E_l_a[4, i].d[ids.c2[3, i]] * E_c_4
-        E_l_a[5, i].d[ids.c1[4, i]] = E_l_a[5, i].v
-        E_l_a[5, i].d[ids.c2[4, i]] = E_l_a[5, i].v * .5
-
-        E_c_2 = exp(-c1[2, i] + .5 * c2[2, i])
-        E_l_a[2, i].v = E_l_a[3, i].v * E_c_2
-        E_l_a[2, i].d[ids.r1[i]] = E_l_a[3, i].d[ids.r1[i]] * E_c_2
-        E_l_a[2, i].d[ids.r2[i]] = E_l_a[3, i].d[ids.r2[i]] * E_c_2
-        E_l_a[2, i].d[ids.c1[2, i]] = E_l_a[2, i].v * -1.
-        E_l_a[2, i].d[ids.c2[2, i]] = E_l_a[2, i].v * .5
-
-        E_c_1 = exp(-c1[1, i] + .5 * c2[1, i])
-        E_l_a[1, i].v = E_l_a[2, i].v * E_c_1
-        E_l_a[1, i].d[ids.r1[i]] = E_l_a[2, i].d[ids.r1[i]] * E_c_1
-        E_l_a[1, i].d[ids.r2[i]] = E_l_a[2, i].d[ids.r2[i]] * E_c_1
-        E_l_a[1, i].d[ids.c1[2, i]] = E_l_a[2, i].d[ids.c1[2, i]] * E_c_1
-        E_l_a[1, i].d[ids.c2[2, i]] = E_l_a[2, i].d[ids.c2[2, i]] * E_c_1
-        E_l_a[1, i].d[ids.c1[1, i]] = E_l_a[1, i].v * -1.
-        E_l_a[1, i].d[ids.c2[1, i]] = E_l_a[1, i].v * .5
-    end
-
-    E_ll_a = Array(SensitiveFloat{CanonicalParams, NumType}, B, Ia)
-    for i = 1:Ia
-        for b = 1:B
-            E_ll_a[b, i] = zero_sensitive_float(CanonicalParams, NumType)
-        end
-
-        tmpr = exp(2 * r1[i] + 2 * r2[i])
-        E_ll_a[3, i].v = tmpr
-        E_ll_a[3, i].d[ids.r1[i]] = E_ll_a[3, i].d[ids.r2[i]] = 2 * tmpr
-
-        tmp3 = exp(2 * c1[3, i] + 2 * c2[3, i])
-        E_ll_a[4, i].v = E_ll_a[3, i].v * tmp3
-        E_ll_a[4, i].d[:] = E_ll_a[3, i].d * tmp3
-        E_ll_a[4, i].d[ids.c1[3, i]] = E_ll_a[4, i].v * 2.
-        E_ll_a[4, i].d[ids.c2[3, i]] = E_ll_a[4, i].v * 2.
-
-        tmp4 = exp(2 * c1[4, i] + 2 * c2[4, i])
-        E_ll_a[5, i].v = E_ll_a[4, i].v * tmp4
-        E_ll_a[5, i].d[:] = E_ll_a[4, i].d * tmp4
-        E_ll_a[5, i].d[ids.c1[4, i]] = E_ll_a[5, i].v * 2.
-        E_ll_a[5, i].d[ids.c2[4, i]] = E_ll_a[5, i].v * 2.
-
-        tmp2 = exp(-2 * c1[2, i] + 2 * c2[2, i])
-        E_ll_a[2, i].v = E_ll_a[3, i].v * tmp2
-        E_ll_a[2, i].d[:] = E_ll_a[3, i].d * tmp2
-        E_ll_a[2, i].d[ids.c1[2, i]] = E_ll_a[2, i].v * -2.
-        E_ll_a[2, i].d[ids.c2[2, i]] = E_ll_a[2, i].v * 2.
-
-        tmp1 = exp(-2 * c1[1, i] + 2 * c2[1, i])
-        E_ll_a[1, i].v = E_ll_a[2, i].v * tmp1
-        E_ll_a[1, i].d[:] = E_ll_a[2, i].d * tmp1
-        E_ll_a[1, i].d[ids.c1[1, i]] = E_ll_a[1, i].v * -2.
-        E_ll_a[1, i].d[ids.c2[1, i]] = E_ll_a[1, i].v * 2.
-    end
-
-    SourceBrightness(E_l_a, E_ll_a)
-end
-
-
 @doc """
 A convenience function for getting only the brightness parameters
 from model parameters.
@@ -403,6 +307,8 @@ function get_brightness{NumType <: Number}(mp::ModelParams{NumType})
     brightness_vals, brightness_squares
 end
 
+###################################
+# Bivariate normal stuff.
 
 @doc """
 Relevant parameters of a bivariate normal distribution.
@@ -444,6 +350,76 @@ BvnComponent{NumType <: Number}(
   the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType) = begin
     BvnComponent{NumType}(the_mean, the_cov, weight)
 end
+
+
+
+
+
+
+##################
+# Derivatives
+
+immutable BvnDerivIndices
+  x1::Int64
+  x2::Int64
+  s11::Int64
+  s12::Int64
+  s22::Int64
+  length::Int64
+end
+
+function set_bvn_deriv_indices()
+  BvnDerivIndices(1, 2, 3, 4, 5, 5)
+end
+
+const bvn_ids = set_bvn_deriv_indices();
+
+type BvnDerivs
+  # These are indexed by bvn_ids.
+  v::Float64
+  d::Vector{Float64}
+  h::Matrix{Float64}
+end
+
+function bvn_derivs{NumType <: Number}(
+    bvn::BvnComponent{NumType}, x::Vector{Float64})
+
+  py1, py2, f_pre = eval_bvn_pdf(bvn, x)
+
+  v = f_pre
+
+  d = zeros(NumType, bvn_ids.length)
+  d[bvn_ids.x1] = 2.0 * py1
+  d[bvn_ids.x2] = 2.0 * py2
+
+  d[bvn_ids.s11] = py1 * py1
+  d[bvn_ids.s12] = 2.0 * py1 * py2
+  d[bvn_ids.s22] = py2 * py2
+
+  h = zeros(NumType, bvn_ids.length, bvn_ids.length)
+  h[bvn_ids.x1, bvn_ids.x1] = 2.0 * precision[1,1]
+  h[bvn_ids.x2, bvn_ids.x2] = 2.0 * precision[2,2]
+  h[bvn_ids.x1, bvn_ids.x2] = h[bvn_ids.x2, bvn_ids.x1] = 2.0 * precision[1,2]
+
+  dpy1_ds11 = -py1 * precision[1,1]
+  dpy1_ds12 = -py2 * precision[1,1] - py1 * precision[1,2]
+  dpy1_ds22 = -py2 * precision[1,2]
+
+  dpy2_ds11 = -py2 * precision[2,2]
+  dpy2_ds12 = -py1 * precision[1,1] - py2 * precision[1,2]
+  dpy2_ds22 = -py1 * precision[1,2]
+
+  h[bvn_ids.s11, bvn_ids.s11] = 2.0 * py1 * dpy1_ds11
+  h[bvn_ids.s12, bvn_ids.s11] = 2.0 * py1 * dpy1_ds11
+  # ... maybe you should treat sigma with its own indices and do this in a loop.
+  BvnDerivs(v, d, h)
+end
+
+
+
+
+
+
 
 
 @doc """
@@ -654,7 +630,8 @@ Args:
        and its derivatives with respect to x are added.
  - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
 """ ->
-function accum_star_pos!{NumType <: Number}(bmc::BvnComponent{NumType},
+function accum_star_pos!{NumType <: Number}(
+                         bmc::BvnComponent{NumType},
                          x::Vector{Float64},
                          fs0m::SensitiveFloat{StarPosParams, NumType},
                          wcs_jacobian::Array{Float64, 2})
@@ -904,7 +881,8 @@ function expected_pixel_brightness!{NumType <: Number}(
   end
 
   for child_s in 1:length(tile_sources)
-      accum_pixel_source_stats!(sbs[tile_sources[child_s]], star_mcs, gal_mcs,
+      accum_pixel_source_stats!(
+          sbs[tile_sources[child_s]], star_mcs, gal_mcs,
           mp.vp[tile_sources[child_s]], child_s, tile_sources[child_s],
           Float64[tile.h_range[h], tile.w_range[w]], tile.b,
           fs0m, fs1m, E_G, var_G,
