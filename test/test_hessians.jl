@@ -241,7 +241,7 @@ function gradind(x)
   find(ForwardDiff.grad(x))
 end
 
-blob, mp, three_bodies = gen_three_body_dataset();
+blob, mp, three_bodies, tiled_blob = gen_three_body_dataset();
 kept_ids = 1:length(ids);
 omitted_ids = setdiff(1:length(ids), kept_ids);
 
@@ -259,6 +259,8 @@ function example{T <: Number}(x::Vector{T})
   x_fd = deepcopy(x_mat)
   x_fd_vec = deepcopy(x)
   transform.array_to_vp!(x_mat, mp_fd.vp, omitted_ids);
+
+
   tot = zero(T)
   for s = 1:mp_fd.S, id in kept_ids
     tot += mp_fd.vp[s][id]
@@ -273,41 +275,6 @@ grad = g(x[:])
 FDType = typeof(x_fd[1,1])
 reshape(grad, length(kept_ids), mp.S)
 
+ElboDeriv.elbo(tiled_blob, mp_fd);
 
-#fd_vp = deepcopy(mp_fd.vp);
-fd_vp = fill(zeros(FDType, length(ids)), mp.S);
-for s=1:mp.S, id in 1:length(kept_ids)
-  println("---------- $s $id")
-  println(gradind(x_fd[id, s]))
-  #fd_vp[s][kept_ids[id]] = x_fd[id, s]
-  fd_vp[s][kept_ids[id]] = x_fd_vec[id + (s - 1) * length(kept_ids)]
-  #fd_vp[s][kept_ids[id]] = deepcopy(x_fd[id, s])
-  println(gradind(fd_vp[s][kept_ids[id]]))
-  println(gradind(fd_vp[1][1]))
-end
-gradind(fd_vp[1][7])
-ForwardDiff.value(fd_vp[1][1])
-mp.vp[1][1]
-
-vp = deepcopy(mp.vp);
-for s=1:S, id in 1:length(kept_ids)
-  println("---------- $s $id")
-  vp[s][kept_ids[id]] = x[id, s]
-end
-vp[1][1]
-mp.vp[1][1]
-
-
-
-transform.array_to_vp!(x_fd, mp_fd.vp, omitted_ids);
-
-# This is screwed up:
-gradind(mp_fd.vp[1][7])
-
-
-h = ForwardDiff.hessian(example)
-id_transform
-
-
-g(x)
-h(x)
+sb = ElboDeriv.SourceBrightness(mp_fd.vp);
