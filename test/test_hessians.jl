@@ -219,23 +219,85 @@ h = ForwardDiff.hessian(f2)
 x = rand(length(ids));
 FDType = typeof(fd[1])
 
+########
+
+
+using Celeste
+using CelesteTypes
+using Base.Test
+using Distributions
+using SampleData
+using Transform
+using PyPlot
+
+using ForwardDiff
+
+import Synthetic
+import WCS
+
+println("Running hessian tests.")
+
 blob, mp, three_bodies = gen_three_body_dataset();
-kept_ids = [ ids.r1; ids.r2; ids.c1[:]; ids.c2[:] ];
+kept_ids = 1:length(ids);
 omitted_ids = setdiff(1:length(ids), kept_ids);
 
-sf_fd = zero_sensitive_float(CanonicalParams, FDType);
+mp_fd = 0.0;
+x_fd = 0.0;
+
 transform = Transform.get_identity_transform(length(ids), mp.S);
 function example{T <: Number}(x::Vector{T})
-  mp_fd = forward_diff_model_params(T, mp);
+  global mp_fd
+  global x_fd
+  mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
   x_mat = reshape(x, length(kept_ids), mp.S)
+  x_fd = deepcopy(x_mat)
   transform.array_to_vp!(x_mat, mp_fd.vp, omitted_ids);
-  sum([ sum(mp_fd.vp[s]) for s=1:mp_fd.S ])
+  tot = zero(T)
+  for s = 1:mp_fd.S, id in kept_ids
+    tot += mp_fd.vp[s][id]
+  end
+  tot
 end
 
 
 g = ForwardDiff.gradient(example)
 x = transform.vp_to_array(mp.vp, omitted_ids);
 grad = g(x[:])
+FDType = typeof(x_fd[1,1])
+reshape(grad, length(kept_ids), mp.S)
+
+
+function gradind(x)
+  find(ForwardDiff.grad(x))
+end
+
+#fd_vp = deepcopy(mp_fd.vp);
+fd_vp = fill(zeros(FDType, length(ids)), S)
+for s=1:S, id in 1:length(kept_ids)
+  println("---------- $s $id")
+  println(gradind(x_fd[id, s]))
+  fd_vp[s][kept_ids[id]] = x_fd[id, s]
+  println(gradind(fd_vp[s][kept_ids[id]]))
+  println(gradind(fd_vp[1][7]))
+end
+gradind(fd_vp[1][7])
+ForwardDiff.value(fd_vp[1][1])
+mp.vp[1][1]
+
+vp = deepcopy(mp.vp);
+for s=1:S, id in 1:length(kept_ids)
+  println("---------- $s $id")
+  vp[s][kept_ids[id]] = x[id, s]
+end
+vp[1][1]
+mp.vp[1][1]
+
+
+
+transform.array_to_vp!(x_fd, mp_fd.vp, omitted_ids);
+
+# This is screwed up:
+gradind(mp_fd.vp[1][7])
 
 
 h = ForwardDiff.hessian(example)
