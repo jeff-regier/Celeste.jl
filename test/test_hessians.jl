@@ -237,20 +237,27 @@ import WCS
 
 println("Running hessian tests.")
 
+function gradind(x)
+  find(ForwardDiff.grad(x))
+end
+
 blob, mp, three_bodies = gen_three_body_dataset();
 kept_ids = 1:length(ids);
 omitted_ids = setdiff(1:length(ids), kept_ids);
 
 mp_fd = 0.0;
+x_fd_vec = 0.0;
 x_fd = 0.0;
 
 transform = Transform.get_identity_transform(length(ids), mp.S);
 function example{T <: Number}(x::Vector{T})
   global mp_fd
   global x_fd
+  global x_fd_vec
   mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
   x_mat = reshape(x, length(kept_ids), mp.S)
   x_fd = deepcopy(x_mat)
+  x_fd_vec = deepcopy(x)
   transform.array_to_vp!(x_mat, mp_fd.vp, omitted_ids);
   tot = zero(T)
   for s = 1:mp_fd.S, id in kept_ids
@@ -267,18 +274,16 @@ FDType = typeof(x_fd[1,1])
 reshape(grad, length(kept_ids), mp.S)
 
 
-function gradind(x)
-  find(ForwardDiff.grad(x))
-end
-
 #fd_vp = deepcopy(mp_fd.vp);
-fd_vp = fill(zeros(FDType, length(ids)), S)
-for s=1:S, id in 1:length(kept_ids)
+fd_vp = fill(zeros(FDType, length(ids)), mp.S);
+for s=1:mp.S, id in 1:length(kept_ids)
   println("---------- $s $id")
   println(gradind(x_fd[id, s]))
-  fd_vp[s][kept_ids[id]] = x_fd[id, s]
+  #fd_vp[s][kept_ids[id]] = x_fd[id, s]
+  fd_vp[s][kept_ids[id]] = x_fd_vec[id + (s - 1) * length(kept_ids)]
+  #fd_vp[s][kept_ids[id]] = deepcopy(x_fd[id, s])
   println(gradind(fd_vp[s][kept_ids[id]]))
-  println(gradind(fd_vp[1][7]))
+  println(gradind(fd_vp[1][1]))
 end
 gradind(fd_vp[1][7])
 ForwardDiff.value(fd_vp[1][1])
