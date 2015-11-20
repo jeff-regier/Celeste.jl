@@ -390,9 +390,9 @@ function bvn_derivs{NumType <: Number}(
   d[bvn_ids.x[1]] = 2.0 * py1
   d[bvn_ids.x[2]] = 2.0 * py2
 
-  d[bvn_ids.sig[1]] = py1 * py1
-  d[bvn_ids.sig[2]] = 2.0 * py1 * py2
-  d[bvn_ids.sig[3]] = py2 * py2
+  d[bvn_ids.sig[1]] = -py1 * py1
+  d[bvn_ids.sig[2]] = -2.0 * py1 * py2
+  d[bvn_ids.sig[3]] = -py2 * py2
 
   # Hessian calcultion.
 
@@ -411,27 +411,29 @@ function bvn_derivs{NumType <: Number}(
   dpy1_ds[3] = -py2 * bvn.precision[1,2]
 
   dpy2_ds = Array(Float64, 3)
-  dpy2_ds[1] = -py2 * bvn.precision[2,2]
+  dpy2_ds[1] = -py1 * bvn.precision[1,2]
   dpy2_ds[2] = -py1 * bvn.precision[1,1] - py2 * bvn.precision[1,2]
-  dpy2_ds[3] = -py1 * bvn.precision[1,2]
+  dpy2_ds[3] = -py2 * bvn.precision[2,2]
 
   # Hessian terms involving only sigma
   for s_ind=1:3
-    h[bvn_ids.sig[1], bvn_ids.sig[s_ind]] = 2.0 * py1 * dpy1_ds[s_ind]
-    h[bvn_ids.sig[2], bvn_ids.sig[s_ind]] =
-      2.0 * (py1 * dpy1_ds[s_ind] + py2 * dpy2_ds[s_ind])
-    h[bvn_ids.sig[3], bvn_ids.sig[s_ind]] = 2.0 * py2 * dpy2_ds[s_ind]
+    h[bvn_ids.sig[1], bvn_ids.sig[s_ind]] = h[bvn_ids.sig[s_ind], bvn_ids.sig[1]] =
+      -2.0 * py1 * dpy1_ds[s_ind]
+    h[bvn_ids.sig[2], bvn_ids.sig[s_ind]] = h[bvn_ids.sig[s_ind], bvn_ids.sig[2]] =
+      -2.0 * (py1 * dpy2_ds[s_ind] + py2 * dpy1_ds[s_ind])
+    h[bvn_ids.sig[3], bvn_ids.sig[s_ind]] = h[bvn_ids.sig[s_ind], bvn_ids.sig[3]] =
+      -2.0 * py2 * dpy2_ds[s_ind]
   end
 
   # Hessian terms involving both x and sigma.  Note that
   # dpyA / dxB = bvn.precision[A, B]
   for x_ind=1:2
     h[bvn_ids.sig[1], bvn_ids.x[x_ind]] = h[bvn_ids.x[x_ind], bvn_ids.sig[1]] =
-      py1 * bvn.precision[1, x_ind]
+      -2.0 * py1 * bvn.precision[1, x_ind]
     h[bvn_ids.sig[2], bvn_ids.x[x_ind]] = h[bvn_ids.x[x_ind], bvn_ids.sig[2]] =
-      2.0 * (py1 * bvn.precision[2, x_ind] + py2 * bvn.precision[1, x_ind])
+      -2.0 * (py1 * bvn.precision[2, x_ind] + py2 * bvn.precision[1, x_ind])
     h[bvn_ids.sig[3], bvn_ids.x[x_ind]] = h[bvn_ids.x[x_ind], bvn_ids.sig[3]] =
-      2.0 * py2 * bvn.precision[2, x_ind]
+      -2.0 * py2 * bvn.precision[2, x_ind]
   end
 
   BvnDerivs(v, d, h)
