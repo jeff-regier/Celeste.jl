@@ -1328,7 +1328,47 @@ You will need up to second-order derivatives of
 
 \end_inset
 
+...etc
+\end_layout
 
+\begin_layout Subsection
+Locations
+\end_layout
+
+\begin_layout Standard
+Let 
+\begin_inset Formula $J$
+\end_inset
+
+ be the Jacobian from world to pixel coordinates.
+ Then the 
+\begin_inset Formula $x$
+\end_inset
+
+ term above is
+\begin_inset Formula 
+\begin{eqnarray*}
+x & = & x_{0}+Ju+u_{0}\\
+\frac{dx}{du} & = & J\\
+\frac{d\phi}{du} & = & \frac{d\phi}{dx}\frac{dx}{du}=\phi J\frac{d}{dx}\left(-\frac{1}{2}x'\Sigma^{-1}x\right)=-\phi J\left(\Sigma^{-1}x\right)=-\phi Jp_{y}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The second derivatives are given by 
+\begin_inset Formula 
+\begin{eqnarray*}
+p_{y} & = & \Sigma^{-1}x\\
+\frac{dp_{y}}{du} & = & \Sigma^{-1}J
+\end{eqnarray*}
+
+\end_inset
+
+.
 \end_layout
 
 \end_body
