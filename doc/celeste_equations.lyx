@@ -938,6 +938,219 @@ and
 
 \end_layout
 
+\begin_layout Subsubsection
+Hessians
+\end_layout
+
+\begin_layout Standard
+Note! Fix all the signs plz ok thx bai
+\end_layout
+
+\begin_layout Standard
+Now, the second derivatives of 
+\begin_inset Formula $f$
+\end_inset
+
+ with respect to 
+\begin_inset Formula $\Sigma$
+\end_inset
+
+.
+ First,
+\begin_inset Formula 
+\begin{eqnarray*}
+p_{y1} & = & \left(\begin{array}{cc}
+1 & 0\end{array}\right)\Sigma^{-1}x\\
+\frac{dp_{y1}}{d\Sigma_{11}} & = & -\left(\begin{array}{cc}
+1 & 0\end{array}\right)\left(\Sigma^{-1}\left[\begin{array}{cc}
+1 & 0\\
+0 & 0
+\end{array}\right]\Sigma^{-1}\right)x\\
+ & = & -\left(\begin{array}{cc}
+1 & 0\end{array}\right)\Sigma^{-1}\left(\begin{array}{c}
+p_{y1}\\
+0
+\end{array}\right)\\
+ & = & -\left(\Sigma^{-1}\right)_{11}p_{y1}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Similarly,
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{dp_{y1}}{d\Sigma_{22}} & = & -\left(\Sigma^{-1}\right)_{12}p_{y2}\\
+\frac{dp_{y1}}{d\Sigma_{12}} & = & -\left(\begin{array}{cc}
+1 & 0\end{array}\right)\Sigma^{-1}\left[\begin{array}{cc}
+0 & 1\\
+1 & 0
+\end{array}\right]\left(\begin{array}{c}
+p_{y1}\\
+p_{y2}
+\end{array}\right)\\
+ & = & -\left(\begin{array}{cc}
+1 & 0\end{array}\right)\Sigma^{-1}\left(\begin{array}{c}
+p_{y2}\\
+p_{y1}
+\end{array}\right)\\
+ & = & -\left(\begin{array}{cc}
+1 & 0\end{array}\right)\left(\begin{array}{c}
+\left(\Sigma^{-1}\right)_{11}p_{y2}+\left(\Sigma^{-1}\right)_{12}p_{y1}\\
+\left(\Sigma^{-1}\right)_{12}p_{y2}+\left(\Sigma^{-1}\right)_{22}p_{y1}
+\end{array}\right)\\
+ & = & -\left(\Sigma^{-1}\right)_{11}p_{y2}-\left(\Sigma^{-1}\right)_{12}p_{y1}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+By symmetry,
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{dp_{y1}}{d\Sigma_{22}} & = & -\left(\Sigma^{-1}\right)_{22}p_{y2}\\
+\frac{dp_{y2}}{d\Sigma_{11}} & = & -\left(\Sigma^{-1}\right)_{12}p_{y1}\\
+\frac{dp_{y2}}{d\Sigma_{12}} & = & -\left(\Sigma^{-1}\right)_{22}p_{y1}-\left(\Sigma^{-1}\right)_{12}p_{y2}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Next for the hessian of 
+\begin_inset Formula $\log\left|\Sigma\right|$
+\end_inset
+
+ terms, we need the first derivatives of 
+\begin_inset Formula $\Sigma^{-1}$
+\end_inset
+
+ with respect to 
+\begin_inset Formula $\Sigma$
+\end_inset
+
+.
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d}{d\Sigma_{11}}\left(\Sigma^{-1}\right) & = & -\Sigma^{-1}\left[\begin{array}{cc}
+1 & 0\\
+0 & 0
+\end{array}\right]\Sigma^{-1}\\
+ & = & -\left[\begin{array}{cc}
+\Lambda_{11} & \Lambda_{12}\\
+\Lambda_{12} & \Lambda_{22}
+\end{array}\right]\left[\begin{array}{cc}
+\Lambda_{11} & \Lambda_{12}\\
+0 & 0
+\end{array}\right]\\
+ & = & -\left[\begin{array}{cc}
+\Lambda_{11}^{2} & \Lambda_{11}\Lambda_{12}\\
+\Lambda_{11}\Lambda_{12} & \Lambda_{12}^{2}
+\end{array}\right]
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d}{d\Sigma_{12}}\left(\Sigma^{-1}\right) & = & -\Sigma^{-1}\left[\begin{array}{cc}
+0 & 1\\
+1 & 0
+\end{array}\right]\Sigma^{-1}\\
+ & = & -\left[\begin{array}{cc}
+\Lambda_{11} & \Lambda_{12}\\
+\Lambda_{12} & \Lambda_{22}
+\end{array}\right]\left[\begin{array}{cc}
+\Lambda_{12} & \Lambda_{22}\\
+\Lambda_{11} & \Lambda_{12}
+\end{array}\right]\\
+ & = & -\left[\begin{array}{cc}
+2\Lambda_{11}\Lambda_{12} & \Lambda_{11}\Lambda_{22}+\Lambda_{12}^{2}\\
+\Lambda_{11}\Lambda_{22}+\Lambda_{12}^{2} & 2\Lambda_{22}\Lambda_{12}
+\end{array}\right]
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d}{d\Sigma_{22}}\left(\Sigma^{-1}\right) & = & -\Sigma^{-1}\left[\begin{array}{cc}
+0 & 0\\
+0 & 1
+\end{array}\right]\Sigma^{-1}\\
+ & = & -\left[\begin{array}{cc}
+\Lambda_{11} & \Lambda_{12}\\
+\Lambda_{12} & \Lambda_{22}
+\end{array}\right]\left[\begin{array}{cc}
+0 & 0\\
+\Lambda_{12} & \Lambda_{22}
+\end{array}\right]\\
+ & = & -\left[\begin{array}{cc}
+\Lambda_{12}^{2} & \Lambda_{22}\Lambda_{12}\\
+\Lambda_{22}\Lambda_{12} & \Lambda_{22}^{2}
+\end{array}\right]
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+So that
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d^{2}\log\left|\Sigma\right|}{d\left(\Sigma_{11},\Sigma_{12},\Sigma_{22}\right)^{2}} & = & \left(\begin{array}{ccc}
+\Lambda_{11}^{2} & 2\Lambda_{11}\Lambda_{12} & \Lambda_{12}^{2}\\
+2\Lambda_{11}\Lambda_{12} & 2\left(\Lambda_{11}\Lambda_{22}+\Lambda_{12}^{2}\right) & 2\Lambda_{22}\Lambda_{12}\\
+\Lambda_{12}^{2} & 2\Lambda_{22}\Lambda_{12} & \Lambda_{22}^{2}
+\end{array}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+There's a formula on Wikipedia for second derivatives, but I don't think
+ we need it:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d^{2}\Sigma^{-1}}{dxdy} & = & \Sigma^{-1}\left(\frac{d\Sigma}{dx}\Sigma^{-1}\frac{d\Sigma}{dy}-\frac{d^{2}\Sigma}{dxdy}+\frac{d\Sigma}{dy}\Sigma^{-1}\frac{d\Sigma}{dx}\right)\Sigma^{-1}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Galaxy parameterization derivatives
+\end_layout
+
 \begin_layout Standard
 In our case, we have (see 
 \family typewriter
@@ -1115,177 +1328,6 @@ and
 \begin_inset Formula 
 \begin{eqnarray*}
 \frac{d^{2}\Sigma}{d\rho_{s}^{2}} & = & \frac{1}{\rho_{s}}\frac{d\Sigma}{d\rho_{s}}
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Subsubsection
-Hessians
-\end_layout
-
-\begin_layout Standard
-Note! Fix all the signs plz ok thx bai
-\end_layout
-
-\begin_layout Standard
-Now, the second derivatives of 
-\begin_inset Formula $f$
-\end_inset
-
- with respect to 
-\begin_inset Formula $\Sigma$
-\end_inset
-
-.
- First,
-\begin_inset Formula 
-\begin{eqnarray*}
-p_{y1} & = & \left(\begin{array}{cc}
-1 & 0\end{array}\right)\Sigma^{-1}x\\
-\frac{dp_{y1}}{d\Sigma_{11}} & = & -\left(\begin{array}{cc}
-1 & 0\end{array}\right)\left(\Sigma^{-1}\left[\begin{array}{cc}
-1 & 0\\
-0 & 0
-\end{array}\right]\Sigma^{-1}\right)x\\
- & = & -\left(\begin{array}{cc}
-1 & 0\end{array}\right)\Sigma^{-1}\left(\begin{array}{c}
-p_{y1}\\
-0
-\end{array}\right)\\
- & = & -\left(\Sigma^{-1}\right)_{11}p_{y1}
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-Similarly,
-\begin_inset Formula 
-\begin{eqnarray*}
-\frac{dp_{y1}}{d\Sigma_{22}} & = & -\left(\Sigma^{-1}\right)_{12}p_{y2}\\
-\frac{dp_{y1}}{d\Sigma_{12}} & = & -\left(\begin{array}{cc}
-1 & 0\end{array}\right)\Sigma^{-1}\left[\begin{array}{cc}
-0 & 1\\
-1 & 0
-\end{array}\right]\left(\begin{array}{c}
-p_{y1}\\
-p_{y2}
-\end{array}\right)\\
- & = & -\left(\begin{array}{cc}
-1 & 0\end{array}\right)\Sigma^{-1}\left(\begin{array}{c}
-p_{y2}\\
-p_{y1}
-\end{array}\right)\\
- & = & -\left(\begin{array}{cc}
-1 & 0\end{array}\right)\left(\begin{array}{c}
-\left(\Sigma^{-1}\right)_{11}p_{y2}+\left(\Sigma^{-1}\right)_{12}p_{y1}\\
-\left(\Sigma^{-1}\right)_{12}p_{y2}+\left(\Sigma^{-1}\right)_{22}p_{y1}
-\end{array}\right)\\
- & = & -\left(\Sigma^{-1}\right)_{11}p_{y2}-\left(\Sigma^{-1}\right)_{12}p_{y1}
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-By symmetry,
-\end_layout
-
-\begin_layout Standard
-\begin_inset Formula 
-\begin{eqnarray*}
-\frac{dp_{y1}}{d\Sigma_{22}} & = & -\left(\Sigma^{-1}\right)_{22}p_{y2}\\
-\frac{dp_{y2}}{d\Sigma_{11}} & = & -\left(\Sigma^{-1}\right)_{12}p_{y1}\\
-\frac{dp_{y2}}{d\Sigma_{12}} & = & -\left(\Sigma^{-1}\right)_{22}p_{y1}-\left(\Sigma^{-1}\right)_{12}p_{y2}
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-Next,
-\begin_inset Formula 
-\begin{eqnarray*}
-\frac{d}{d\Sigma_{11}}\left(\Sigma^{-1}\right) & = & -\Sigma^{-1}\left[\begin{array}{cc}
-1 & 0\\
-0 & 0
-\end{array}\right]\Sigma^{-1}\\
- & = & -\left[\begin{array}{cc}
-\Lambda_{11} & \Lambda_{12}\\
-\Lambda_{12} & \Lambda_{22}
-\end{array}\right]\left[\begin{array}{cc}
-\Lambda_{11} & \Lambda_{12}\\
-0 & 0
-\end{array}\right]\\
- & = & -\left[\begin{array}{cc}
-\Lambda_{11}^{2} & \Lambda_{11}\Lambda_{12}\\
-\Lambda_{11}\Lambda_{12} & \Lambda_{12}^{2}
-\end{array}\right]\\
-\Sigma^{-1} & =: & \Lambda
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-Ok ok:
-\end_layout
-
-\begin_layout Standard
-\begin_inset Formula 
-\begin{eqnarray*}
-\frac{d}{d\Sigma_{11}}\left(x^{T}\Sigma^{-1}x\right) & = & \left(\begin{array}{cc}
-p_{y1} & p_{y2}\end{array}\right)\left[\begin{array}{cc}
-1 & 0\\
-0 & 0
-\end{array}\right]\left(\begin{array}{c}
-p_{y1}\\
-p_{y2}
-\end{array}\right)=p_{y1}^{2}\\
-\frac{d}{d\Sigma_{11}}\log\left|\Sigma\right| & = & \textrm{trace}\left(\Sigma^{-1}\left[\begin{array}{cc}
-1 & 0\\
-0 & 0
-\end{array}\right]\right)=\left(\Sigma^{-1}\right)_{11}
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-Similarly,
-\begin_inset Formula 
-\begin{eqnarray*}
-\frac{d}{d\Sigma_{12}}\left(x^{T}\Sigma^{-1}x\right) & = & 2p_{y1}p_{y2}\\
-\frac{d}{d\Sigma_{12}}\log\left|\Sigma\right| & = & 2\left(\Sigma^{-1}\right)_{12}
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-and
-\end_layout
-
-\begin_layout Standard
-\begin_inset Formula 
-\begin{eqnarray*}
-\frac{d}{d\Sigma_{22}}\left(x^{T}\Sigma^{-1}x\right) & = & 2p_{y2}^{2}\\
-\frac{d}{d\Sigma_{22}}\log\left|\Sigma\right| & = & \left(\Sigma^{-1}\right)_{22}
 \end{eqnarray*}
 
 \end_inset
