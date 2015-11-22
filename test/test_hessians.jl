@@ -25,14 +25,17 @@ function test_bvn_derivatives()
   x = Float64[2.0, 3.0]
   sigma = Float64[1.0 0.2; 0.2 1.0]
   offset = Float64[0.5, 0.5]
-  weight = 1.0
+
+  # Note that bvn_derivs doesn't use the weight, so set it to something
+  # strange to check that it doesn't matter.
+  weight = 0.724
 
   bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
   bvn_sf = ElboDeriv.bvn_derivs(bvn, x);
 
-
   function f{T <: Number}(x::Vector{T}, sigma::Matrix{T})
-    weight * ((x - offset)' * (sigma \ (x - offset)))[1,1]
+    local_x = x - offset
+    -0.5 * ((local_x' * (sigma \ local_x))[1,1] + log(det(sigma)))
   end
 
   function wrap(x::Vector{Float64}, sigma::Matrix{Float64})
@@ -59,6 +62,7 @@ function test_bvn_derivatives()
   ad_hess = ForwardDiff.hessian(f_wrap);
   ad_h = ad_hess(par);
   @test_approx_eq ad_h bvn_sf.h
+
 end
 
 

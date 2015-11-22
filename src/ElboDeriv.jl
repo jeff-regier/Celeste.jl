@@ -380,35 +380,38 @@ end
 
 
 @doc """
-Calculate the value, gradient, and hessian of x' (sigma^{-1}) x with respect
-to x and sigma.
-
-TODO: This should be -0.5 * x' sigma^-1 x
-TODO: This should be -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
+Calculate the value, gradient, and hessian of
+  -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
+with respect to x and sigma.
 """ ->
 function bvn_derivs{NumType <: Number}(
     bvn::BvnComponent{NumType}, x::Vector{Float64})
 
   py1, py2, f_pre = eval_bvn_pdf(bvn, x);
 
-  v = (x[1] - bvn.the_mean[1]) * py1 + (x[2] - bvn.the_mean[2]) * py2
+  # TODO: the value is not really neccessary, I think.
+  v = -0.5 * (
+    (x[1] - bvn.the_mean[1]) * py1 + (x[2] - bvn.the_mean[2]) * py2 -
+    log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
 
   d = zeros(NumType, bvn_ids.length)
-  d[bvn_ids.x[1]] = 2.0 * py1
-  d[bvn_ids.x[2]] = 2.0 * py2
+  d[bvn_ids.x[1]] = -py1
+  d[bvn_ids.x[2]] = -py2
 
-  d[bvn_ids.sig[1]] = -py1 * py1
-  d[bvn_ids.sig[2]] = -2.0 * py1 * py2
-  d[bvn_ids.sig[3]] = -py2 * py2
+  # The first term is the derivative of -0.5 * x' Sigma^{-1} x
+  # The second term is the derivative of -0.5 * log|Sigma|
+  d[bvn_ids.sig[1]] = 0.5 * py1 * py1 - 0.5 * bvn.precision[1, 1]
+  d[bvn_ids.sig[2]] = py1 * py2             - bvn.precision[1, 2]
+  d[bvn_ids.sig[3]] = 0.5 * py2 * py2 - 0.5 * bvn.precision[2, 2]
 
-  # Hessian calcultion.
+  # Hessian calculation.
 
   # Hessian terms involving only x
   h = zeros(NumType, bvn_ids.length, bvn_ids.length)
-  h[bvn_ids.x[1], bvn_ids.x[1]] = 2.0 * bvn.precision[1,1]
-  h[bvn_ids.x[2], bvn_ids.x[2]] = 2.0 * bvn.precision[2,2]
-  h[bvn_ids.x[1], bvn_ids.x[2]] =
-    h[bvn_ids.x[2], bvn_ids.x[1]] = 2.0 * bvn.precision[1,2]
+  h[bvn_ids.x[1], bvn_ids.x[1]] = -bvn.precision[1,1]
+  h[bvn_ids.x[2], bvn_ids.x[2]] = -bvn.precision[2,2]
+  h[bvn_ids.x[1], bvn_ids.x[2]] = h[bvn_ids.x[2], bvn_ids.x[1]] =
+    -bvn.precision[1,2]
 
   # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
   # These are used for the hessian calculations.
@@ -422,17 +425,28 @@ function bvn_derivs{NumType <: Number}(
   dpy2_ds[2] = -py1 * bvn.precision[1,1] - py2 * bvn.precision[1,2]
   dpy2_ds[3] = -py2 * bvn.precision[2,2]
 
+  # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
+  # derivatives of log|Sigma| with respect to sigma.
+  dsiginv_dsig = Array(Float64, 3, 3)
+  dsiginv_dsig[1, 1] = -bvn.precision[1, 1] ^ 2
+  dsiginv_dsig[1, 2] = dsiginv_dsig[2, 1] =
+    -2.0 * bvn.precision[1, 1] * bvn.precision[2, 1]
+  dsiginv_dsig[1, 3] = dsiginv_dsig[3, 1] = -bvn.precision[1, 2] ^ 2
+  dsiginv_dsig[2, 2] =
+    -2.0 * (bvn.precision[1, 1] * bvn.precision[2, 2] + bvn.precision[1, 2] ^ 2)
+  dsiginv_dsig[2, 3] = dsiginv_dsig[3, 2] =
+    -2.0 * bvn.precision[2, 2] * bvn.precision[1, 2]
+  dsiginv_dsig[3, 3] = -bvn.precision[2, 2] ^ 2
+
   # Hessian terms involving only sigma
   for s_ind=1:3
-    h[bvn_ids.sig[1], bvn_ids.sig[s_ind]] =
-      h[bvn_ids.sig[s_ind], bvn_ids.sig[1]] =
-      -2.0 * py1 * dpy1_ds[s_ind]
-    h[bvn_ids.sig[2], bvn_ids.sig[s_ind]] =
-      h[bvn_ids.sig[s_ind], bvn_ids.sig[2]] =
-      -2.0 * (py1 * dpy2_ds[s_ind] + py2 * dpy1_ds[s_ind])
-    h[bvn_ids.sig[3], bvn_ids.sig[s_ind]] =
-      h[bvn_ids.sig[s_ind], bvn_ids.sig[3]] =
-      -2.0 * py2 * dpy2_ds[s_ind]
+    index = bvn_ids.sig[s_ind]
+    h[bvn_ids.sig[1], index] = h[index, bvn_ids.sig[1]] =
+      py1 * dpy1_ds[s_ind] - 0.5 * dsiginv_dsig[s_ind, 1]
+    h[bvn_ids.sig[2], index] = h[index, bvn_ids.sig[2]] =
+      py1 * dpy2_ds[s_ind] + py2 * dpy1_ds[s_ind] - 0.5 * dsiginv_dsig[s_ind, 2]
+    h[bvn_ids.sig[3], index] = h[index, bvn_ids.sig[3]] =
+      py2 * dpy2_ds[s_ind] - 0.5 * dsiginv_dsig[s_ind, 3]
   end
 
   # Hessian terms involving both x and sigma.
@@ -440,13 +454,13 @@ function bvn_derivs{NumType <: Number}(
   for x_ind=1:2
     h[bvn_ids.sig[1], bvn_ids.x[x_ind]] =
       h[bvn_ids.x[x_ind], bvn_ids.sig[1]] =
-      -2.0 * py1 * bvn.precision[1, x_ind]
+      py1 * bvn.precision[1, x_ind]
     h[bvn_ids.sig[2], bvn_ids.x[x_ind]] =
       h[bvn_ids.x[x_ind], bvn_ids.sig[2]] =
-      -2.0 * (py1 * bvn.precision[2, x_ind] + py2 * bvn.precision[1, x_ind])
+      py1 * bvn.precision[2, x_ind] + py2 * bvn.precision[1, x_ind]
     h[bvn_ids.sig[3], bvn_ids.x[x_ind]] =
       h[bvn_ids.x[x_ind], bvn_ids.sig[3]] =
-      -2.0 * py2 * bvn.precision[2, x_ind]
+      py2 * bvn.precision[2, x_ind]
   end
 
   BvnDerivs(v, d, h)
@@ -455,7 +469,7 @@ end
 
 
 
-
+###############################
 
 
 
@@ -722,47 +736,51 @@ function accum_galaxy_pos!{NumType <: Number}(
 
     fs1m.v += f
 
+    bvn_derivs = bvn_derivs(gcc.bmc, x);
+
+    # Gradient calculations.
+    # Note that dxA_duB = wcs_jacobian[A, B].
+    for x_id in 1:2, u_id in 1:2
+      fs1m.d[gal_ids.u[u_id]] +=
+        f * bvn_derivs.d[bvn_ids.x[x_id]] * wcs_jacobian[x_id, u_id]
+    end
+
+    # par_id indexes dSigma from GalaxyCacheComponent, which is
+    # e_axis, e_angle, e_scale
+    par_ids = Int64[gal_ids.e_axis, gal_ids.e_angle, gal_ids.e_scale]
+    for par_id in 1:3, sig_id in 1:3
+      fs1m.d[par_ids[par_id]] +=
+        f * gcc.dSigma[par_id, sig_id] * bvn_derivs.d[bvn_ids.sig[sig_id]]
+    end
+
     # Gradient and Hessian with respect to location parameters.
 
-    # This is an expanded version of
-    # dfs1m_dworld = wcs_jacobian' * NumType[f .* py1, f .* py2]
-    fs1m.d[gal_ids.u[1]] +=
-      convert(NumType,
-              f * (wcs_jacobian[1, 1] * py1 + wcs_jacobian[2, 1] * py2))
-    fs1m.d[gal_ids.u[2]] +=
-      convert(NumType,
-              f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
+    # # This is an expanded version of
+    # # dfs1m_dworld = wcs_jacobian' * NumType[f .* py1, f .* py2]
+    # fs1m.d[gal_ids.u[1]] +=
+    #   convert(NumType,
+    #           f * (wcs_jacobian[1, 1] * py1 + wcs_jacobian[2, 1] * py2))
+    # fs1m.d[gal_ids.u[2]] +=
+    #   convert(NumType,
+    #           f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
 
     # Note that dpyA / dxB = bmc.precision[A, B]
-    # TODO: there's a redundant step here.
-    # TODO: test this!
-    # TODO: this is wrong, there will be cross terms in the Hessian.
-    for u_id = 1:2
-      fs1m.hs[1][star_ids.u[1], star_ids.u[u_id]] +=
-        convert(NumType,
-                f * (wcs_jacobian[1, 1] * gcc.bmc.precision[1, u_id] +
-                     wcs_jacobian[2, 1] * gcc.bmc.precision[2, u_id]))
-      fs1m.hs[1][star_ids.u[2], star_ids.u[u_id]] +=
-        convert(NumType,
-                f * (wcs_jacobian[1, 2] * gcc.bmc.precision[1, u_id] +
-                     wcs_jacobian[2, 2] * gcc.bmc.precision[2, u_id]))
-    end
 
     # Derivatives with respect to galaxy shape parameters.
 
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
-    # The derivatives of f with respect to Sigma11, Sigma12, and Sigma22.
-    df_dSigma = (
-        f * 0.5 * (py1 * py1 - gcc.bmc.precision[1, 1]),
-        f *       (py1 * py2 - gcc.bmc.precision[1, 2]),  # NB: 2X
-        f * 0.5 * (py2 * py2 - gcc.bmc.precision[2, 2]))
-
-    for j in 1:3  # [dSigma11, dSigma12, dSigma22]
-        fs1m.d[gal_ids.e_axis] += df_dSigma[j] * gcc.dSigma[j, 1]
-        fs1m.d[gal_ids.e_angle] += df_dSigma[j] * gcc.dSigma[j, 2]
-        fs1m.d[gal_ids.e_scale] += df_dSigma[j] * gcc.dSigma[j, 3]
-    end
+    # # The derivatives of f with respect to Sigma11, Sigma12, and Sigma22.
+    # df_dSigma = (
+    #     f * 0.5 * (py1 * py1 - gcc.bmc.precision[1, 1]),
+    #     f *       (py1 * py2 - gcc.bmc.precision[1, 2]),  # NB: 2X
+    #     f * 0.5 * (py2 * py2 - gcc.bmc.precision[2, 2]))
+    #
+    # for j in 1:3  # [dSigma11, dSigma12, dSigma22]
+    #     fs1m.d[gal_ids.e_axis] += df_dSigma[j] * gcc.dSigma[j, 1]
+    #     fs1m.d[gal_ids.e_angle] += df_dSigma[j] * gcc.dSigma[j, 2]
+    #     fs1m.d[gal_ids.e_scale] += df_dSigma[j] * gcc.dSigma[j, 3]
+    # end
 end
 
 
