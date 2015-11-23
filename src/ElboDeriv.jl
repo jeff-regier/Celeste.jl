@@ -538,21 +538,25 @@ GalaxySigmaDerivs{NumType <: Number}(
 
   # Second derivatives involving e_scale
   t[:, gal_shape_ids.e_scale, gal_shape_ids.e_scale] =
-    -(2 * XiXi[1, 2, 4] ./ (e_scale ^ 2))[[1, 2, 4]]
+    (2 * XiXi ./ (e_scale ^ 2))[[1, 2, 4]]
   t[:, gal_shape_ids.e_scale, gal_shape_ids.e_axis] =
-    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
-    (2 * j[:, gal_shape_ids.e_axis] ./ e_scale)[[1, 2, 4]]
+    (2 * j[:, gal_shape_ids.e_axis] ./ e_scale)
   t[:, gal_shape_ids.e_scale, gal_shape_ids.e_angle] =
-    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
-    (2 * j[:, gal_shape_ids.e_angle] ./ e_scale)[[1, 2, 4]]
+    (2 * j[:, gal_shape_ids.e_angle] ./ e_scale)
+
+  t[:, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
+    t[:, gal_shape_ids.e_scale, gal_shape_ids.e_axis]
+  t[:, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
+    t[:, gal_shape_ids.e_scale, gal_shape_ids.e_angle]
 
   # Remaining second derivatives involving e_angle
   t[:, gal_shape_ids.e_angle, gal_shape_ids.e_angle] =
     2 * e_scale^2 * (e_axis^2 - 1) *
     [cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq]
   t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
-    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle] =
     2 * e_scale^2 * e_axis * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
+  t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle] =
+    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis]
 
   # The second derivative involving only e_axis.
   t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
