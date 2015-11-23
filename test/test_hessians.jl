@@ -76,12 +76,7 @@ fs1m = zero_sensitive_float(GalaxyPosParams, 1);
 star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
 ElboDeriv.accum_galaxy_pos!(gal_mcs[gcc_ind...], x, fs1m, wcs_jacobian);
 
-@test_approx_eq fs1m.v f_wrap(par)
-
-ad_d = ForwardDiff.gradient(f_wrap)
-@test_approx_eq ad_d(par) fs1m.d
-
-# Sanity check.
+# Two sanity checks.
 gcc = gal_mcs[gcc_ind...];
 bvn_sf = ElboDeriv.get_bvn_derivs(gcc.bmc, x);
 gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
@@ -91,6 +86,17 @@ pc = mp.patches[s, b].psf[gcc_ind[1]]
   pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(bvn_sf.v) / (2 * pi),
   fs1m.v)
 
+@test_approx_eq fs1m.v f_wrap(par)
+
+# Test the gradient.
+ad_d = ForwardDiff.gradient(f_wrap)
+@test_approx_eq ad_d(par) fs1m.d
+
+
+# Test the hessian.
+ad_h = ForwardDiff.hessian(f_wrap)
+ad_h(par)
+fs1m.hs[1]
 
 
 
