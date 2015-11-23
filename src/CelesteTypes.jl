@@ -390,8 +390,8 @@ abstract ParamSet
 #           (formerly kappa)
 
 # Parameters for location and galaxy shape.
-gal_shape_params = ((:e_dev, 1), (:e_axis, 1), (:e_angle, 1), (:e_scale, 1))
-ue_params = ((:u, 2), gal_shape_params...)
+gal_shape_params = ((:e_axis, 1), (:e_angle, 1), (:e_scale, 1))
+ue_params = ((:u, 2), (:e_dev, 1), gal_shape_params...)
 
 # Parameters for the colors.
 rc_params1 = ((:r1, 1), (:r2, 1), (:c1, B - 1), (:c2, B - 1))
@@ -453,7 +453,7 @@ align(::StarPosParams, CanonicalParams) = ids.u
 align(::GalaxyPosParams, CanonicalParams) =
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
 align(::GalaxyShapeParams, CanonicalParams) =
-  [ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
+  [ids.e_axis; ids.e_angle; ids.e_scale]
 align(::CanonicalParams, CanonicalParams) = collect(1:length(CanonicalParams))
 
 # The shape and brightness parameters for stars and galaxies respectively.

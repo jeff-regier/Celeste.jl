@@ -509,6 +509,15 @@ type GalaxySigmaDerivs{NumType <: Number}
   t::Array{NumType, 3}
 end
 
+@doc """
+Args:
+  - e_angle: Phi in the notes
+  - e_axis: Rho in the notes
+  - e_scale: Lower case sigma in the notes
+  - XiXi: The value of sigma.
+
+Note that nubar is not included.
+""" ->
 GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
     XiXi::Matrix{NumType}) = begin
@@ -523,9 +532,31 @@ GalaxySigmaDerivs{NumType <: Number}(
   j[:, gal_shape_ids.e_angle] =
     e_scale^2 * (e_axis^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
   j[:, gal_shape_ids.e_scale] = (2XiXi ./ e_scale)[[1, 2, 4]]
-  j[:, gal_shape_ids.e_dev] = 1.0
 
+  # Second derivatives.
   t = Array(NumType, 3, length(gal_shape_ids), length(gal_shape_ids))
+
+  # Second derivatives involving e_scale
+  t[:, gal_shape_ids.e_scale, gal_shape_ids.e_scale] =
+    -(2 * XiXi[1, 2, 4] ./ (e_scale ^ 2))[[1, 2, 4]]
+  t[:, gal_shape_ids.e_scale, gal_shape_ids.e_axis] =
+    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
+    (2 * j[:, gal_shape_ids.e_axis] ./ e_scale)[[1, 2, 4]]
+  t[:, gal_shape_ids.e_scale, gal_shape_ids.e_angle] =
+    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
+    (2 * j[:, gal_shape_ids.e_angle] ./ e_scale)[[1, 2, 4]]
+
+  # Remaining second derivatives involving e_angle
+  t[:, gal_shape_ids.e_angle, gal_shape_ids.e_angle] =
+    2 * e_scale^2 * (e_axis^2 - 1) *
+    [cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq]
+  t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
+    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle] =
+    2 * e_scale^2 * e_axis * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
+
+  # The second derivative involving only e_axis.
+  t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
+    2 * e_scale^2 * [sin_sq, -cos_sin, cos_sq]
 
   GalaxySigmaDerivs(j, t)
 end
@@ -570,7 +601,7 @@ immutable GalaxyCacheComponent{NumType <: Number}
         weight = pc.alphaBar * gc.etaBar  # excludes e_dev
         bmc = BvnComponent(mean_s, var_s, weight)
 
-        sig_sf = GalaxySigmaDerivs(e_axis, e_angle, e_scale, XiXi)
+        sig_sf = GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
         sig_sf.j .*= gc.nuBar
 
         new(e_dev_dir, e_dev_i, bmc, sig_sf)
@@ -640,55 +671,6 @@ function load_bvn_mixtures{NumType <: Number}(mp::ModelParams{NumType}, b::Int64
     end
 
     star_mcs, gal_mcs
-end
-
-
-@doc """
-A type containing all the information that needs to be communicated
-to worker nodes at each iteration.  This currently consists of pre-computed
-information about each source.
-
-Attributes:
-  vp: The VariationalParams for the ModelParams object
-  star_mcs_vec: A vector of star BVN components, one for each band
-  gal_mcs_vec: A vector of galaxy BVN components, one for each band
-  sbs_vec: A vector of brightness vectors, one for each band
-""" ->
-type ParameterMessage{NumType <: Number}
-  vp::VariationalParams{NumType}
-  star_mcs_vec::Vector{Array{BvnComponent{NumType},2}}
-  gal_mcs_vec::Vector{Array{GalaxyCacheComponent{NumType},4}}
-  sbs_vec::Vector{Vector{SourceBrightness{NumType}}}
-end
-
-@doc """
-This allocates memory for but does not initialize the source parameters.
-""" ->
-ParameterMessage{NumType <: Number}(mp::ModelParams{NumType}) = begin
-  num_bands = size(mp.patches)[2]
-  star_mcs_vec = Array(Array{BvnComponent{NumType},2}, num_bands)
-  gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType},4}, num_bands)
-  sbs_vec = Array(Vector{SourceBrightness{NumType}}, num_bands)
-  ParameterMessage(mp.vp, star_mcs_vec, gal_mcs_vec, sbs_vec)
-end
-
-
-@doc """
-Update a ParameterMessage in place using mp.
-
-Args:
-  - mp: A ModelParams object
-  - param_msg: A ParameterMessage that is updated using the parameter values
-               in mp.
-""" ->
-function update_parameter_message!{NumType <: Number}(
-    mp::ModelParams{NumType}, param_msg::ParameterMessage{NumType})
-  for b=1:5
-    param_msg.star_mcs_vec[b], param_msg.gal_mcs_vec[b] =
-      load_bvn_mixtures(mp, b);
-    param_msg.sbs_vec[b] = SourceBrightness{NumType}[
-      SourceBrightness(mp.vp[s]) for s in 1:mp.S];
-  end
 end
 
 
@@ -769,8 +751,8 @@ function accum_galaxy_pos!{NumType <: Number}(
         wcs_jacobian[x_id, u_id]
     end
 
-    # The e_dev derivatives is easy.
-    #fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
+    # The e_dev derivative.  e_dev just scales the entire component.
+    fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     # Use the chain rule.
     gal_d = zeros(NumType, length(gal_shape_ids))
@@ -784,7 +766,6 @@ function accum_galaxy_pos!{NumType <: Number}(
     end
 
     # Calculate the hessian.
-
     for gal_id1 in 1:length(gal_shape_ids), gal_id2 in 1:length(gal_shape_ids)
       g1 = gal_shape_alignment[gal_id1]
       g2 = gal_shape_alignment[gal_id2]
@@ -994,6 +975,55 @@ function expected_pixel_brightness!{NumType <: Number}(
 
   # Return the appropriate value of iota.
   tile.constant_background ? tile.iota : tile.iota_vec[h]
+end
+
+
+@doc """
+A type containing all the information that needs to be communicated
+to worker nodes at each iteration.  This currently consists of pre-computed
+information about each source.
+
+Attributes:
+  vp: The VariationalParams for the ModelParams object
+  star_mcs_vec: A vector of star BVN components, one for each band
+  gal_mcs_vec: A vector of galaxy BVN components, one for each band
+  sbs_vec: A vector of brightness vectors, one for each band
+""" ->
+type ParameterMessage{NumType <: Number}
+  vp::VariationalParams{NumType}
+  star_mcs_vec::Vector{Array{BvnComponent{NumType},2}}
+  gal_mcs_vec::Vector{Array{GalaxyCacheComponent{NumType},4}}
+  sbs_vec::Vector{Vector{SourceBrightness{NumType}}}
+end
+
+@doc """
+This allocates memory for but does not initialize the source parameters.
+""" ->
+ParameterMessage{NumType <: Number}(mp::ModelParams{NumType}) = begin
+  num_bands = size(mp.patches)[2]
+  star_mcs_vec = Array(Array{BvnComponent{NumType},2}, num_bands)
+  gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType},4}, num_bands)
+  sbs_vec = Array(Vector{SourceBrightness{NumType}}, num_bands)
+  ParameterMessage(mp.vp, star_mcs_vec, gal_mcs_vec, sbs_vec)
+end
+
+
+@doc """
+Update a ParameterMessage in place using mp.
+
+Args:
+  - mp: A ModelParams object
+  - param_msg: A ParameterMessage that is updated using the parameter values
+               in mp.
+""" ->
+function update_parameter_message!{NumType <: Number}(
+    mp::ModelParams{NumType}, param_msg::ParameterMessage{NumType})
+  for b=1:5
+    param_msg.star_mcs_vec[b], param_msg.gal_mcs_vec[b] =
+      load_bvn_mixtures(mp, b);
+    param_msg.sbs_vec[b] = SourceBrightness{NumType}[
+      SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+  end
 end
 
 

@@ -1323,6 +1323,23 @@ and
 
 \end_layout
 
+\begin_layout Standard
+Finally,
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d^{2}\Sigma}{d\rho_{s}^{2}} & = & \bar{\eta}2\sigma_{s}^{2}\begin{bmatrix}\sin^{2}\varphi_{s} & -\cos\varphi_{s}\sin\varphi_{s}\\
+\cdot & \cos^{2}\varphi_{s}
+\end{bmatrix}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
 \begin_layout Subsection
 Another way of putting it
 \end_layout
@@ -1352,8 +1369,7 @@ You will need up to second-order derivatives of
  Then
 \begin_inset Formula 
 \begin{eqnarray*}
-\frac{d^{2}}{dadb}\theta\exp\left(\phi\right) & = & \frac{d}{db}\theta\left(\exp\left(\phi\right)\frac{d\phi}{da}\right)=\theta\exp\left(\phi\right)\left(\frac{d\phi}{da}\frac{d\phi}{db}+\frac{d^{2}\phi}{dadb}\right)\\
-\frac{d^{2}\phi}{dadb} & = & \sum
+\frac{d^{2}}{dadb}\theta\exp\left(\phi\right) & = & \frac{d}{db}\theta\left(\exp\left(\phi\right)\frac{d\phi}{da}\right)=\theta\exp\left(\phi\right)\left(\frac{d\phi}{da}\frac{d\phi}{db}+\frac{d^{2}\phi}{dadb}\right)
 \end{eqnarray*}
 
 \end_inset
