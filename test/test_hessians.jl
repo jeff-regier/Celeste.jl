@@ -20,6 +20,13 @@ NumType = Float64
 
 println("Running hessian tests.")
 
+
+
+
+##################
+# Test galaxy pixel derivatives.
+
+
 # TODO: test with a real and asymmetric wcs jacobian.
 blob, mp, three_bodies = gen_three_body_dataset();
 omitted_ids = Int64[];
@@ -97,6 +104,57 @@ ad_d = ForwardDiff.gradient(f_wrap)
 ad_h = ForwardDiff.hessian(f_wrap)
 ad_h(par)
 fs1m.hs[1]
+
+
+
+
+
+
+
+
+
+function test_galaxy_sigma_derivs()
+  e_angle, e_axis, e_scale = (pi / 4, 0.7, 1.2)
+
+  function wrap_par{T <: Number}(e_angle::T, e_axis::T, e_scale::T)
+    par = zeros(T, length(gal_shape_ids))
+    par[gal_shape_ids.e_angle] = e_angle
+    par[gal_shape_ids.e_axis] = e_axis
+    par[gal_shape_ids.e_scale] = e_scale
+    par
+  end
+
+  for si in 1:3
+    sig_i = [(1, 1), (1, 2), (2, 2)][si]
+    println("Testing sigma[$(sig_i)]")
+    function f_wrap{T <: Number}(par::Vector{T})
+      e_angle = par[gal_shape_ids.e_angle]
+      e_axis = par[gal_shape_ids.e_axis]
+      e_scale = par[gal_shape_ids.e_scale]
+      Util.get_bvn_cov(e_axis, e_angle, e_scale)[sig_i...]
+    end
+
+    par = wrap_par(e_angle, e_axis, e_scale)
+    XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+
+    gal_derivs = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi);
+
+    ad_grad_fun = ForwardDiff.gradient(f_wrap);
+    ad_grad = ad_grad_fun(par);
+
+    @test_approx_eq gal_derivs.j[si, :][:] ad_grad
+
+    ad_hess_fun = ForwardDiff.hessian(f_wrap);
+    ad_hess = ad_hess_fun(par);
+
+    @test_approx_eq(
+      ad_hess,
+      reshape(gal_derivs.t[si, :, :],
+              length(gal_shape_ids), length(gal_shape_ids)))
+  end
+end
+
+
 
 
 
@@ -319,3 +377,4 @@ test_set_hess()
 test_multiply_sf()
 test_brightness_hessian()
 test_bvn_derivatives()
+test_galaxy_sigma_derivs()
