@@ -310,6 +310,7 @@ end
 ###################################
 # Bivariate normal stuff.
 
+
 @doc """
 Relevant parameters of a bivariate normal distribution.
 
@@ -352,8 +353,29 @@ BvnComponent{NumType <: Number}(
 end
 
 
+@doc """
+Return quantities related to the pdf of an offset bivariate normal.
 
+Args:
+  - bmc: A bivariate normal component
+  - x: A 2x1 vector containing a mean offset to be applied to bmc
 
+Returns:
+  - py1: The first row of the precision times (x - the_mean)
+  - py2: The second row of the precision times (x - the_mean)
+  - The density of the bivariate normal times the weight.
+""" ->
+function eval_bvn_pdf{NumType <: Number}(
+  bmc::BvnComponent{NumType}, x::Vector{Float64})
+
+    y1 = x[1] - bmc.the_mean[1]
+    y2 = x[2] - bmc.the_mean[2]
+    py1 = bmc.precision[1,1] * y1 + bmc.precision[1,2] * y2
+    py2 = bmc.precision[2,1] * y1 + bmc.precision[2,2] * y2
+    c_ytpy = -0.5 * (y1 * py1 + y2 * py2)
+    f_denorm = exp(c_ytpy)
+    py1, py2, bmc.z * f_denorm
+end
 
 
 ##################
@@ -389,7 +411,8 @@ function get_bvn_derivs{NumType <: Number}(
 
   py1, py2, f_pre = eval_bvn_pdf(bvn, x);
 
-  # TODO: the value is not really neccessary, I think.
+  # TODO: the value is not really neccessary except for testing,
+  # I think, and if it is,  you should get the determinant from the bvn.
   v = -0.5 * (
     (x[1] - bvn.the_mean[1]) * py1 + (x[2] - bvn.the_mean[2]) * py2 -
     log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
@@ -581,7 +604,7 @@ function load_bvn_mixtures{NumType <: Number}(mp::ModelParams{NumType}, b::Int64
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
 
             # Galaxies of type 1 have 8 components, and type 2 have
-            # 6 components (?)
+            # 6 components.
             for j in 1:[8,6][i]
                 for k = 1:3
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
@@ -593,31 +616,6 @@ function load_bvn_mixtures{NumType <: Number}(mp::ModelParams{NumType}, b::Int64
     end
 
     star_mcs, gal_mcs
-end
-
-
-@doc """
-Return quantities related to the pdf of an offset bivariate normal.
-
-Args:
-  - bmc: A bivariate normal component
-  - x: A 2x1 vector containing a mean offset to be applied to bmc
-
-Returns:
-  - py1: The first row of the precision times (x - the_mean)
-  - py2: The second row of the precision times (x - the_mean)
-  - The density of the bivariate normal times the weight.
-""" ->
-function eval_bvn_pdf{NumType <: Number}(
-  bmc::BvnComponent{NumType}, x::Vector{Float64})
-
-    y1 = x[1] - bmc.the_mean[1]
-    y2 = x[2] - bmc.the_mean[2]
-    py1 = bmc.precision[1,1] * y1 + bmc.precision[1,2] * y2
-    py2 = bmc.precision[2,1] * y1 + bmc.precision[2,2] * y2
-    c_ytpy = -0.5 * (y1 * py1 + y2 * py2)
-    f_denorm = exp(c_ytpy)
-    py1, py2, bmc.z * f_denorm
 end
 
 
@@ -739,21 +737,22 @@ function accum_galaxy_pos!{NumType <: Number}(
     bvn_sf = get_bvn_derivs(gcc.bmc, x);
 
     # Gradient calculations.
-    # Note that dxA_duB = wcs_jacobian[A, B].
+    # Note that dxA_duB = -wcs_jacobian[A, B].  (It is minus the jacobian
+    # because the object position affects the bvn.the_mean term.)
     for x_id in 1:2, u_id in 1:2
       fs1m.d[gal_ids.u[u_id]] +=
-        f * bvn_sf.d[bvn_ids.x[x_id]] * wcs_jacobian[x_id, u_id]
+        -f * bvn_sf.d[bvn_ids.x[x_id]] * wcs_jacobian[x_id, u_id]
     end
 
     # The e_dev derivatives is easy.
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     # par_id indexes dSigma from GalaxyCacheComponent, which is
-    # e_axis, e_angle, e_scale
+    # e_axis, e_angle, e_scale.  sig_id indexes [Sigma11, Sigma12, Sigma22].
     par_ids = Int64[gal_ids.e_axis, gal_ids.e_angle, gal_ids.e_scale]
     for par_id in 1:3, sig_id in 1:3
       fs1m.d[par_ids[par_id]] +=
-        f * gcc.dSigma[par_id, sig_id] * bvn_sf.d[bvn_ids.sig[sig_id]]
+        f * gcc.dSigma[sig_id, par_id] * bvn_sf.d[bvn_ids.sig[sig_id]]
     end
 
     # Gradient and Hessian with respect to location parameters.
