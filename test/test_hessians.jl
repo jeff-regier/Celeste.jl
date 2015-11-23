@@ -20,18 +20,77 @@ NumType = Float64
 
 println("Running hessian tests.")
 
+blob, mp, three_bodies = gen_three_body_dataset();
+omitted_ids = Int64[];
+kept_ids = setdiff(1:length(ids), omitted_ids);
+
+s = 1
+b = 3
+gcc_ind = (1, 2)
+
+x = ceil(mp.vp[s][ids.u])
+wcs_jacobian = mp.patches[s].wcs_jacobian;
+
+function f_wrap{T <: Number}(par::Vector{T})
+  # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
+  if T != Float64
+    mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
+    # Set the values (but not gradient numbers) for parameters other
+    # than the galaxy parameters.
+    for s=1:mp.S, i=1:length(ids)
+      mp_fd.vp[s][i] = mp.vp[s][i]
+    end
+  else
+    mp_fd = deepcopy(mp)
+  end
+  fs1m = zero_sensitive_float(GalaxyPosParams, T, 1);
+
+
+  # Make sure par is as long as the galaxy parameters.
+  @assert length(par) == length(shape_standard_alignment[2])
+  for p1 in 1:length(par)
+      p0 = shape_standard_alignment[2][p1]
+      mp_fd.vp[s][p0] = par[p1]
+  end
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
+  ElboDeriv.accum_galaxy_pos!(gal_mcs[gcc_ind...], x, fs1m, wcs_jacobian);
+  fs1m.v
+end
+
+function mp_to_par(mp::ModelParams{Float64})
+  par = zeros(length(shape_standard_alignment[2]))
+  for p1 in 1:length(par)
+      p0 = shape_standard_alignment[2][p1]
+      par[p1] = mp.vp[s][p0]
+  end
+  par
+end
+
+par = mp_to_par(mp)
+f_wrap(par)
+
+fs1m = zero_sensitive_float(GalaxyPosParams, 1);
+star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+ElboDeriv.accum_galaxy_pos!(gal_mcs[gcc_ind...], x, fs1m, wcs_jacobian);
+
+@test_approx_eq fs1m.v f_wrap(par)
+
+ad_d = ForwardDiff.gradient(f_wrap)
+hcat(ad_d(par), fs1m.d)
+
+
 
 function test_bvn_derivatives()
   x = Float64[2.0, 3.0]
   sigma = Float64[1.0 0.2; 0.2 1.0]
   offset = Float64[0.5, 0.5]
 
-  # Note that bvn_derivs doesn't use the weight, so set it to something
+  # Note that get_bvn_derivs doesn't use the weight, so set it to something
   # strange to check that it doesn't matter.
   weight = 0.724
 
   bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
-  bvn_sf = ElboDeriv.bvn_derivs(bvn, x);
+  bvn_sf = ElboDeriv.get_bvn_derivs(bvn, x);
 
   function f{T <: Number}(x::Vector{T}, sigma::Matrix{T})
     local_x = x - offset
