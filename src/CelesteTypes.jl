@@ -10,7 +10,8 @@ export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 
 export ModelParams, PriorParams, UnconstrainedParams
-export CanonicalParams, BrightnessParams, StarPosParams, GalaxyPosParams
+export CanonicalParams, BrightnessParams, StarPosParams
+export GalaxyPosParams, GalaxyShapeParams
 export VariationalParams, FreeVariationalParams, RectVariationalParams
 
 export shape_standard_alignment, brightness_standard_alignment, align
@@ -18,7 +19,7 @@ export shape_standard_alignment, brightness_standard_alignment, align
 export SensitiveFloat, zero_sensitive_float, clear!
 export print_params
 
-export ids, ids_free, star_ids, gal_ids
+export ids, ids_free, star_ids, gal_ids, gal_shape_ids
 export ids_names, ids_free_names
 export D, B, Ia
 
@@ -388,8 +389,8 @@ abstract ParamSet
 #           (formerly kappa)
 
 # Parameters for location and galaxy shape.
-ue_params = ((:u, 2), (:e_dev, 1), (:e_axis, 1), (:e_angle, 1),
-        (:e_scale, 1))
+gal_shape_params = ((:e_dev, 1), (:e_axis, 1), (:e_angle, 1), (:e_scale, 1))
+ue_params = ((:u, 2), gal_shape_params...)
 
 # Parameters for the colors.
 rc_params1 = ((:r1, 1), (:r2, 1), (:c1, B - 1), (:c2, B - 1))
@@ -402,6 +403,7 @@ ak_free = ((:a, Ia - 1), (:k, (D - 1, Ia)))
 
 const param_specs = [
     (:StarPosParams, :star_ids, ((:u, 2),)),
+    (:GalaxyShapeParams, :gal_shape_ids, gal_shape_params),
     (:GalaxyPosParams, :gal_ids, ue_params),
     (:BrightnessParams, :bids, rc_params1),
     (:CanonicalParams, :ids, tuple(ue_params..., rc_params2..., ak_simplex...)),
@@ -449,6 +451,8 @@ end
 align(::StarPosParams, CanonicalParams) = ids.u
 align(::GalaxyPosParams, CanonicalParams) =
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
+align(::GalaxyShapeParams, CanonicalParams) =
+  [ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
 align(::CanonicalParams, CanonicalParams) = collect(1:length(CanonicalParams))
 
 # The shape and brightness parameters for stars and galaxies respectively.
@@ -456,6 +460,7 @@ const shape_standard_alignment = (ids.u,
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale])
 bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
+const gal_shape_alignment = align(gal_shape_ids, ids)
 
 # TODO: maybe these should be incorporated into the framework above
 # (which I don't really understand.)

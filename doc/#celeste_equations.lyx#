@@ -1352,8 +1352,7 @@ You will need up to second-order derivatives of
  Then
 \begin_inset Formula 
 \begin{eqnarray*}
-\frac{d^{2}}{dadb}\theta\exp\left(\phi\right) & = & \frac{d}{db}\theta\left(\exp\left(\phi\right)\frac{d\phi}{da}\right)=\theta\exp\left(\phi\right)\left(\frac{d\phi}{da}\frac{d\phi}{db}+\frac{d^{2}\phi}{dadb}\right)\\
-\frac{d^{2}\phi}{dadb} & = & \sum
+\frac{d^{2}}{dadb}\theta\exp\left(\phi\right) & = & \frac{d}{db}\theta\left(\exp\left(\phi\right)\frac{d\phi}{da}\right)=\theta\exp\left(\phi\right)\left(\frac{d\phi}{da}\frac{d\phi}{db}+\frac{d^{2}\phi}{dadb}\right)
 \end{eqnarray*}
 
 \end_inset

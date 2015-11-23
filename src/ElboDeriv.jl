@@ -381,6 +381,7 @@ end
 ##################
 # Derivatives
 
+# TODO: make this a ParameterSet and use SensitiveFloats instead.
 immutable BvnDerivIndices
   sig::Vector{Int64} # Sigma_11, Sigma_12, Sigma_22 in that order.
   x::Vector{Int64} # x1, x2 in that order
@@ -494,6 +495,40 @@ end
 
 ###############################
 
+@doc """
+The derivatives of sigma with respect to the galaxy shape parameters.  In
+each case, sigma is [Sigma11, Sigma12, Sigma22], and the galaxy shape
+parameters are indexed by GalaxyShapeParams.
+ - j: A Jacobian matrix Sigma x GalaxyShapeParams of
+      d Sigma / d GalaxyShapeParams
+ - t: A Sigma x GalaxyShapeParams x GalaxyShapeParams tensor of second
+      derivatives d2 Sigma / d GalaxyShapeParams d GalaxyShapeParams.
+""" ->
+type GalaxySigmaDerivs{NumType <: Number}
+  j::Matrix{Number}
+  t::Array{Number, 3}
+end
+
+GalaxySigmaDerivs{NumType <: Number}(
+    e_angle::NumType, e_axis::NumType, e_scale::NumType,
+    XiXi::Matrix{NumType}) = begin
+
+  cos_sin = cos(e_angle)sin(e_angle)
+  sin_sq = sin(e_angle)^2
+  cos_sq = cos(e_angle)^2
+
+  j = Array(NumType, 3, length(gal_shape_ids))
+  j[:, gal_shape_ids.e_axis] =
+    2 * e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq]
+  j[:, gal_shape_ids.e_angle] =
+    e_scale^2 * (e_axis^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
+  j[:, gal_shape_ids.e_scale] = (2XiXi ./ e_scale)[[1, 2, 4]]
+  j[:, gal_shape_ids.e_dev] = 1.0
+
+  t = Array(NumType, 3, length(gal_shape_ids), length(gal_shape_ids))
+
+  GalaxySigmaDerivs(j, t)
+end
 
 
 @doc """
@@ -523,7 +558,7 @@ immutable GalaxyCacheComponent{NumType <: Number}
     e_dev_dir::Float64
     e_dev_i::NumType
     bmc::BvnComponent{NumType}
-    dSigma::Matrix{NumType}
+    sig_sf::GalaxySigmaDerivs{NumType}
     # [Sigma11, Sigma12, Sigma22] x [e_axis, e_angle, e_scale]
 
     GalaxyCacheComponent(e_dev_dir::Float64, e_dev_i::NumType,
@@ -535,21 +570,10 @@ immutable GalaxyCacheComponent{NumType <: Number}
         weight = pc.alphaBar * gc.etaBar  # excludes e_dev
         bmc = BvnComponent(mean_s, var_s, weight)
 
-        dSigma = Array(NumType, 3, 3)
-        cos_sin = cos(e_angle)sin(e_angle)
-        sin_sq = sin(e_angle)^2
-        cos_sq = cos(e_angle)^2
+        sig_sf = GalaxySigmaDerivs(e_axis, e_angle, e_scale, XiXi)
+        sig_sf.j .*= gc.nuBar
 
-        # e_axis derivative:
-        dSigma[:, 1] = 2 * e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq]
-        # e_angle derivative:
-        dSigma[:, 2] = e_scale^2 * (e_axis^2 - 1) *
-                       [2cos_sin, sin_sq - cos_sq, -2cos_sin]
-        # e_scale derivative:
-        dSigma[:, 3] = (2XiXi ./ e_scale)[[1, 2, 4]]
-        dSigma .*= gc.nuBar
-
-        new(e_dev_dir, e_dev_i, bmc, dSigma)
+        new(e_dev_dir, e_dev_i, bmc, sig_sf)
     end
 end
 
@@ -745,43 +769,26 @@ function accum_galaxy_pos!{NumType <: Number}(
     end
 
     # The e_dev derivatives is easy.
-    fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
+    #fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
-    # par_id indexes dSigma from GalaxyCacheComponent, which is
-    # e_axis, e_angle, e_scale.  sig_id indexes [Sigma11, Sigma12, Sigma22].
-    par_ids = Int64[gal_ids.e_axis, gal_ids.e_angle, gal_ids.e_scale]
-    for par_id in 1:3, sig_id in 1:3
-      fs1m.d[par_ids[par_id]] +=
-        f * gcc.dSigma[sig_id, par_id] * bvn_sf.d[bvn_ids.sig[sig_id]]
+    # Use the chain rule.
+    for par_id in gal_shape_ids, sig_id in 1:3
+      fs1m.d[gal_shape_alignment[par_id]] +=
+        f * gcc.sig_sf.j[sig_id, par_id] * bvn_sf.d[bvn_ids.sig[sig_id]]
     end
 
-    # Gradient and Hessian with respect to location parameters.
+    # Calculate the hessian.
 
-    # # This is an expanded version of
-    # # dfs1m_dworld = wcs_jacobian' * NumType[f .* py1, f .* py2]
-    # fs1m.d[gal_ids.u[1]] +=
-    #   convert(NumType,
-    #           f * (wcs_jacobian[1, 1] * py1 + wcs_jacobian[2, 1] * py2))
-    # fs1m.d[gal_ids.u[2]] +=
-    #   convert(NumType,
-    #           f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
+    # Terms involving only shape parameters.
+    for par_id1 in 1:3, par_id2 in 1:3,  sig_id1 in 1:3, sig_id2 in 1:3
+      p1 = par_ids[par_id1]
+      p2 = par_ids[par_id2]
+      s1 = bvn_ids.sig[sig_id1]
+      s2 = bvn_ids.sig[sig_id2]
+      # fs1m.hs[1] +=
+      #   f * ()
+    end
 
-    # Note that dpyA / dxB = bmc.precision[A, B]
-
-    # Derivatives with respect to galaxy shape parameters.
-
-
-    # # The derivatives of f with respect to Sigma11, Sigma12, and Sigma22.
-    # df_dSigma = (
-    #     f * 0.5 * (py1 * py1 - gcc.bmc.precision[1, 1]),
-    #     f *       (py1 * py2 - gcc.bmc.precision[1, 2]),  # NB: 2X
-    #     f * 0.5 * (py2 * py2 - gcc.bmc.precision[2, 2]))
-    #
-    # for j in 1:3  # [dSigma11, dSigma12, dSigma22]
-    #     fs1m.d[gal_ids.e_axis] += df_dSigma[j] * gcc.dSigma[j, 1]
-    #     fs1m.d[gal_ids.e_angle] += df_dSigma[j] * gcc.dSigma[j, 2]
-    #     fs1m.d[gal_ids.e_scale] += df_dSigma[j] * gcc.dSigma[j, 3]
-    # end
 end
 
 
