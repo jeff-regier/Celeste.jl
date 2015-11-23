@@ -568,6 +568,10 @@ end
 
 @doc """
 The convolution of a one galaxy component with one PSF component.
+It also contains the derivatives of sigma with respect to the shape parameters.
+It does not contain the derivatives with respect to other parameters
+(u and e_dev) because they have easy expressions in terms of other known
+quantities.
 
 Args:
  - e_dev_dir: "Theta direction": this is 1 or -1, depending on whether
@@ -724,6 +728,78 @@ end
 
 
 @doc """
+Transform the bvn derivatives and hessians from (x, sigma) to the
+galaxy parameters u and gal_shape_ids.
+
+TODO: preallocate this memory in global variables?
+""" ->
+function transform_bvn_derivs{NumType <: Number}(
+    bvn_sf::BvnDerivatives{NumType},
+    gcc::GalaxyCacheComponent{NumType},
+    wcs_jacobian::Array{Float64, 2})
+
+    # Derivatives.  Here, s stands for "shape".
+    bvn_u_d = zeros(NumType, 2)
+    bvn_s_d = zeros(NumType, length(gal_shape_ids))
+
+    # The hessians.
+    bvn_uu_h = zeros(NumType, 2, 2)
+    bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
+    bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
+
+    # Gradient calculations.
+
+    # Note that dxA_duB = -wcs_jacobian[A, B].  (It is minus the jacobian
+    # because the object position affects the bvn.the_mean term, which is
+    # subtracted from the pixel location as defined in bvn_sf.d.)
+    for x_id in 1:2, u_id in 1:2
+      bvn_u_d[u_id] += -bvn_sf.d[bvn_ids.x[x_id]] * wcs_jacobian[x_id, u_id]
+    end
+
+    # Use the chain rule for the shape derviatives.
+    for s_id in 1:length(gal_shape_ids), sig_id in 1:3
+      bvn_s_d[s_id] +=
+        gcc.sig_sf.j[s_id, gal_id] * bvn_sf.d[bvn_ids.sig[sig_id]]
+    end
+
+    # Hessian calculations.
+
+    # Second derivatives involving only u.
+    # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.
+    # TODO: eliminate redunant term.
+    for u_id1 in 1:2, u_id2 in 1:2, x_id1 in 1:2, x_id2 in 1:2
+      bvn_uu_h[u_id1, u_id2] +=
+        bvn_sf.h[bvn_ids.x[x_id1], bvn_ids.x[x_id2]] *
+        wcs_jacobian[x_id1, u_id1] * wcs_jacobian[x_id2, u_id2]
+    end
+
+    # Second derviatives involving only shape parameters.
+    # TODO: eliminate redundancies.
+    for s_id1 in 1:length(gal_shape_ids), s_id2 in 1:length(gal_shape_ids)
+      for sig_id1 in 1:3
+        bvn_ss_h[s_id1, s_id2] +=
+          bvn_sf.d[bvn_ids.sig[sig_id1]] * gcc.sig_sf.h[s_id1, s_id2]
+        for sig_id2 in 1:3
+          bvn_ss_h[s_id1, s_id2] +=
+            bvn_sf.h[bvn_ids.sig[sig_id1], bvn_ids.sig[sig_id2]] *
+            gcc.sig_sf.d[s_id1] * gcc.sig_sf.d[s_id2]
+        end
+      end
+    end
+
+    # Second derivates involving both a shape term and a u term.
+    for s_id in 1:length(gal_shape_ids), u_id in 1:2,
+        sig_id in 1:3, x_id in 1:2
+      bvn_us_h[u_id, s_id] +=
+        bvn_sf.h[bvn_ids.sig[sig_id], bvn_ids.x[x_id]] *
+        bvn_s_d[sig_id] * bvn_u_d[u_id]
+    end
+
+    bvn_x_d, bvn_s_d, bvn_xx_h, bvn_ss_h, bvn_xs_h
+end
+
+
+@doc """
 Add the contributions of a galaxy component term to the ELBO by
 updating fs1m in place.
 
@@ -746,17 +822,21 @@ function accum_galaxy_pos!{NumType <: Number}(
 
     bvn_sf = get_bvn_derivs(gcc.bmc, x);
 
-    # Gradient calculations.
-    # Note that dxA_duB = -wcs_jacobian[A, B].  (It is minus the jacobian
-    # because the object position affects the bvn.the_mean term.)
+
+    bvn_x_d, bvn_s_d, bvn_xx_h, bvn_ss_h, bvn_xs_h =
+      transform_bvn_derivs(bvn_sf, gcc, wcs_jacobian)
 
     # gal_d contains derivatives of -0.5 * (x' Sigma \ x - log |Sigma|)
-    # with respect to
+    # with respect to gal_ids.
     gal_d = zeros(NumType, length(gal_shape_ids))
 
-    for x_id in 1:2, u_id in 1:2
-      fs1m.d[gal_ids.u[u_id]] +=
-        -f * bvn_sf.d[bvn_ids.x[x_id]] * wcs_jacobian[x_id, u_id]
+    # Accumulate the derivatives.
+    for u_id in 1:2
+      fs1m.d[gal_ids.u[u_id]] += bvn_x_d[u_id]
+    end
+
+    for gal_id in 1:length(gal_shape_ids)
+      fs1m.d[gal_shape_alignment[gal_id]] += f * gal_d[gal_id]
     end
 
     # The e_dev derivative.  e_dev just scales the entire component.
@@ -764,21 +844,12 @@ function accum_galaxy_pos!{NumType <: Number}(
     # is an exp or dev component.
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
-    # Use the chain rule.  Cache these derivatives for re-use in the
-    # Hessian calculation.
-    for gal_id in 1:length(gal_shape_ids), sig_id in 1:3
-      gal_d[gal_id] +=
-        gcc.sig_sf.j[sig_id, gal_id] * bvn_sf.d[bvn_ids.sig[sig_id]]
-    end
-
-    # Accumulate the derivatives.
-    for gal_id in 1:length(gal_shape_ids)
-      fs1m.d[gal_shape_alignment[gal_id]] += f * gal_d[gal_id]
-    end
-
     # Calculate the hessian.  For each parameter in
     # (u, e_dev, gal_shape_params), we need to sum over the first and
     # second derivatives with respect to (x, Sigma11, Sigma12, Sigma22).
+
+    # TODO: you need to add back in the products of the derivatives
+    # when using the transformed Hessian.
 
     # Second derivatives involving only u.
     # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.

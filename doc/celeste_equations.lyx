@@ -1430,6 +1430,46 @@ So
 
 \end_layout
 
+\begin_layout Standard
+The shape terms involve both:
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d^{2}\phi}{ds_{A}ds_{B}} & = & \sum_{\Sigma}\frac{d\phi}{d\Sigma}\frac{d^{2}\Sigma}{ds_{A}ds_{B}}+\sum_{\Sigma_{1},\Sigma_{2}}\frac{d\Sigma_{1}}{ds_{A}}\frac{d\Sigma_{2}}{ds_{B}}\frac{d^{2}\phi}{d\Sigma_{1}d\Sigma_{2}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Since 
+\begin_inset Formula $\Sigma$
+\end_inset
+
+ and 
+\begin_inset Formula $x$
+\end_inset
+
+ do not have any arguments in common, the off-diagonal terms have only second
+ derivatives of 
+\begin_inset Formula $\phi$
+\end_inset
+
+:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d^{2}\phi}{dsdu} & = & \sum_{\Sigma,x}\frac{d\Sigma}{ds}\frac{dx}{du}\frac{d^{2}\phi}{d\Sigma dx}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
 \begin_layout Subsection
 Locations
 \end_layout
