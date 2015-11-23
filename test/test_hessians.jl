@@ -20,13 +20,16 @@ NumType = Float64
 
 println("Running hessian tests.")
 
+# TODO: test with a real and asymmetric wcs jacobian.
 blob, mp, three_bodies = gen_three_body_dataset();
 omitted_ids = Int64[];
 kept_ids = setdiff(1:length(ids), omitted_ids);
 
 s = 1
 b = 3
-gcc_ind = (1, 2)
+
+# This is psf, galaxy, gal type, source
+gcc_ind = (1, 1, 1, s)
 
 x = ceil(mp.vp[s][ids.u])
 wcs_jacobian = mp.patches[s].wcs_jacobian;
@@ -76,7 +79,28 @@ ElboDeriv.accum_galaxy_pos!(gal_mcs[gcc_ind...], x, fs1m, wcs_jacobian);
 @test_approx_eq fs1m.v f_wrap(par)
 
 ad_d = ForwardDiff.gradient(f_wrap)
-hcat(ad_d(par), fs1m.d)
+@test_approx_eq ad_d(par) fs1m.d
+
+# Sanity check.
+gcc = gal_mcs[gcc_ind...];
+bvn_sf = ElboDeriv.get_bvn_derivs(gcc.bmc, x);
+gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
+pc = mp.patches[s, b].psf[gcc_ind[1]]
+
+@test_approx_eq(
+  pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(bvn_sf.v) / (2 * pi),
+  fs1m.v)
+
+
+
+
+
+
+
+
+
+
+
 
 
 
