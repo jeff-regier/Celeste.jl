@@ -505,8 +505,8 @@ parameters are indexed by GalaxyShapeParams.
       derivatives d2 Sigma / d GalaxyShapeParams d GalaxyShapeParams.
 """ ->
 type GalaxySigmaDerivs{NumType <: Number}
-  j::Matrix{Number}
-  t::Array{Number, 3}
+  j::Matrix{NumType}
+  t::Array{NumType, 3}
 end
 
 GalaxySigmaDerivs{NumType <: Number}(
@@ -765,28 +765,34 @@ function accum_galaxy_pos!{NumType <: Number}(
     # because the object position affects the bvn.the_mean term.)
     for x_id in 1:2, u_id in 1:2
       fs1m.d[gal_ids.u[u_id]] +=
-        -f * bvn_sf.d[bvn_ids.x[x_id]] * wcs_jacobian[x_id, u_id]
+        -f * bvn_sf.d[bvn_ids.x[x_id]] *
+        wcs_jacobian[x_id, u_id]
     end
 
     # The e_dev derivatives is easy.
     #fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     # Use the chain rule.
-    for par_id in gal_shape_ids, sig_id in 1:3
-      fs1m.d[gal_shape_alignment[par_id]] +=
-        f * gcc.sig_sf.j[sig_id, par_id] * bvn_sf.d[bvn_ids.sig[sig_id]]
+    gal_d = zeros(NumType, length(gal_shape_ids))
+    for gal_id in 1:length(gal_shape_ids), sig_id in 1:3
+      gal_d[gal_id] +=
+        f * gcc.sig_sf.j[sig_id, gal_id] * bvn_sf.d[bvn_ids.sig[sig_id]]
+    end
+
+    for gal_id in 1:length(gal_shape_ids)
+      fs1m.d[gal_shape_alignment[gal_id]] += gal_d[gal_id]
     end
 
     # Calculate the hessian.
 
-    # Terms involving only shape parameters.
-    for par_id1 in 1:3, par_id2 in 1:3,  sig_id1 in 1:3, sig_id2 in 1:3
-      p1 = par_ids[par_id1]
-      p2 = par_ids[par_id2]
-      s1 = bvn_ids.sig[sig_id1]
-      s2 = bvn_ids.sig[sig_id2]
-      # fs1m.hs[1] +=
-      #   f * ()
+    for gal_id1 in 1:length(gal_shape_ids), gal_id2 in 1:length(gal_shape_ids)
+      g1 = gal_shape_alignment[gal_id1]
+      g2 = gal_shape_alignment[gal_id2]
+      fs1m.hs[1][g1, g2] += f * gal_d[gal_id1] * gal_d[gal_id1]
+
+      for sig_id in 1:3
+        fs1m.hs[1][g1, g2] += f * gcc.sig_sf.t[sig_id, gal_id1, gal_id2]
+      end
     end
 
 end

@@ -14,7 +14,8 @@ export CanonicalParams, BrightnessParams, StarPosParams
 export GalaxyPosParams, GalaxyShapeParams
 export VariationalParams, FreeVariationalParams, RectVariationalParams
 
-export shape_standard_alignment, brightness_standard_alignment, align
+export shape_standard_alignment, brightness_standard_alignment
+export gal_shape_alignment, align
 
 export SensitiveFloat, zero_sensitive_float, clear!
 export print_params
