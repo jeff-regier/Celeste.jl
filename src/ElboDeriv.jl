@@ -413,7 +413,7 @@ function get_bvn_derivs{NumType <: Number}(
   py1, py2, f_pre = eval_bvn_pdf(bvn, x);
 
   # TODO: the value is not really neccessary except for testing,
-  # I think, and if it is,  you should get the determinant from the bvn.
+  # I think, and if it is, you should get the determinant from the bvn.
   v = -0.5 * (
     (x[1] - bvn.the_mean[1]) * py1 + (x[2] - bvn.the_mean[2]) * py2 -
     log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
@@ -749,34 +749,60 @@ function accum_galaxy_pos!{NumType <: Number}(
     # Gradient calculations.
     # Note that dxA_duB = -wcs_jacobian[A, B].  (It is minus the jacobian
     # because the object position affects the bvn.the_mean term.)
+
+    # gal_d contains derivatives of -0.5 * (x' Sigma \ x - log |Sigma|)
+    # with respect to
+    gal_d = zeros(NumType, length(gal_shape_ids))
+
     for x_id in 1:2, u_id in 1:2
       fs1m.d[gal_ids.u[u_id]] +=
-        -f * bvn_sf.d[bvn_ids.x[x_id]] *
-        wcs_jacobian[x_id, u_id]
+        -f * bvn_sf.d[bvn_ids.x[x_id]] * wcs_jacobian[x_id, u_id]
     end
 
     # The e_dev derivative.  e_dev just scales the entire component.
+    # The direction is positive or negative depending on whether this
+    # is an exp or dev component.
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
-    # Use the chain rule.
-    gal_d = zeros(NumType, length(gal_shape_ids))
+    # Use the chain rule.  Cache these derivatives for re-use in the
+    # Hessian calculation.
     for gal_id in 1:length(gal_shape_ids), sig_id in 1:3
       gal_d[gal_id] +=
-        f * gcc.sig_sf.j[sig_id, gal_id] * bvn_sf.d[bvn_ids.sig[sig_id]]
+        gcc.sig_sf.j[sig_id, gal_id] * bvn_sf.d[bvn_ids.sig[sig_id]]
     end
 
+    # Accumulate the derivatives.
     for gal_id in 1:length(gal_shape_ids)
-      fs1m.d[gal_shape_alignment[gal_id]] += gal_d[gal_id]
+      fs1m.d[gal_shape_alignment[gal_id]] += f * gal_d[gal_id]
     end
 
-    # Calculate the hessian.
+    # Calculate the hessian.  For each parameter in
+    # (u, e_dev, gal_shape_params), we need to sum over the first and
+    # second derivatives with respect to (x, Sigma11, Sigma12, Sigma22).
+
+    # Second derivatives involving only u.
+    # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.
+    for u_id1 in 1:2, u_id2 in 1:2
+      u1 = gal_ids.u[u_id1]
+      u2 = gal_ids.u[u_id2]
+      fs1m.hs[1][u1, u2] += f * gal_d[u_id1] * gal_d[u_id1]
+      for x_id1 in 1:2, x_id2 in 1:2
+      fs1m.hs[1][gal_ids.u[u_id1], gal_ids.u[u_id2]] +=
+        f * bvn_sf.h[bvn_ids.x[x_id1], bvn_ids.x[x_id2]] *
+        wcs_jacobian[x_id1, u_id1] * wcs_jacobian[x_id2, u_id2]
+    end
+
+    # Second derivatives involving only the galaxy shape parameters.
     for gal_id1 in 1:length(gal_shape_ids), gal_id2 in 1:length(gal_shape_ids)
       g1 = gal_shape_alignment[gal_id1]
       g2 = gal_shape_alignment[gal_id2]
       fs1m.hs[1][g1, g2] += f * gal_d[gal_id1] * gal_d[gal_id1]
 
-      for sig_id in 1:3
+      for sig_id1 in 1:3
         fs1m.hs[1][g1, g2] += f * gcc.sig_sf.t[sig_id, gal_id1, gal_id2]
+        for sig_id2 in 1:3
+
+        end
       end
     end
 

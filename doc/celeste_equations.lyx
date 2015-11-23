@@ -1377,6 +1377,59 @@ You will need up to second-order derivatives of
 
 \end_layout
 
+\begin_layout Standard
+And recall
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d^{2}\phi}{dadb} & = & \frac{d}{da}\left(\sum_{p}\frac{d\phi}{dp}\frac{dp}{db}\right)\\
+ & = & \sum_{p}\frac{d\phi}{dp}\frac{d^{2}p}{dadb}+\sum_{p,q}\frac{dq}{da}\frac{dp}{db}\frac{d^{2}\phi}{dpdq}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Note that
+\begin_inset Formula 
+\begin{eqnarray*}
+x & = & x\left(u\right)\\
+\Sigma & = & \Sigma\left(\sigma_{s},\rho_{s},\phi_{s}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Also,
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d^{2}x}{du^{2}} & = & 0
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+So
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d^{2}\phi}{du_{A}du_{B}} & = & \sum_{x_{1},x_{2}}\frac{d^{2}\phi}{dx_{1}dx_{2}}\frac{dx_{1}}{du_{1}}\frac{dx_{2}}{du_{2}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
 \begin_layout Subsection
 Locations
 \end_layout

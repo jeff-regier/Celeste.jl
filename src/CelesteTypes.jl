@@ -452,16 +452,19 @@ end
 align(::StarPosParams, CanonicalParams) = ids.u
 align(::GalaxyPosParams, CanonicalParams) =
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
-align(::GalaxyShapeParams, CanonicalParams) =
-  [ids.e_axis; ids.e_angle; ids.e_scale]
 align(::CanonicalParams, CanonicalParams) = collect(1:length(CanonicalParams))
+align(::GalaxyShapeParams, GalaxyPosParams) =
+  [gal_ids.e_axis; gal_ids.e_angle; gal_ids.e_scale]
 
 # The shape and brightness parameters for stars and galaxies respectively.
 const shape_standard_alignment = (ids.u,
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale])
 bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
-const gal_shape_alignment = align(gal_shape_ids, ids)
+
+# Note that gal_shape_alignment aligns the shape ids with the GalaxyPosParams,
+# not the CanonicalParams.
+const gal_shape_alignment = align(gal_shape_ids, gal_ids)
 
 # TODO: maybe these should be incorporated into the framework above
 # (which I don't really understand.)
