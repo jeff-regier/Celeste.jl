@@ -371,11 +371,11 @@ end
 
 const bvn_ids = set_bvn_deriv_indices();
 
-type BvnDerivs
+type BvnDerivs{NumType <: Number}
   # These are indexed by bvn_ids.
-  v::Float64
-  d::Vector{Float64}
-  h::Matrix{Float64}
+  v::NumType
+  d::Vector{NumType}
+  h::Matrix{NumType}
 end
 
 
@@ -384,7 +384,7 @@ Calculate the value, gradient, and hessian of
   -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
 with respect to x and sigma.
 """ ->
-function bvn_derivs{NumType <: Number}(
+function get_bvn_derivs{NumType <: Number}(
     bvn::BvnComponent{NumType}, x::Vector{Float64})
 
   py1, py2, f_pre = eval_bvn_pdf(bvn, x);
@@ -415,19 +415,19 @@ function bvn_derivs{NumType <: Number}(
 
   # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
   # These are used for the hessian calculations.
-  dpy1_ds = Array(Float64, 3)
+  dpy1_ds = Array(NumType, 3)
   dpy1_ds[1] = -py1 * bvn.precision[1,1]
   dpy1_ds[2] = -py2 * bvn.precision[1,1] - py1 * bvn.precision[1,2]
   dpy1_ds[3] = -py2 * bvn.precision[1,2]
 
-  dpy2_ds = Array(Float64, 3)
+  dpy2_ds = Array(NumType, 3)
   dpy2_ds[1] = -py1 * bvn.precision[1,2]
   dpy2_ds[2] = -py1 * bvn.precision[1,1] - py2 * bvn.precision[1,2]
   dpy2_ds[3] = -py2 * bvn.precision[2,2]
 
   # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
   # derivatives of log|Sigma| with respect to sigma.
-  dsiginv_dsig = Array(Float64, 3, 3)
+  dsiginv_dsig = Array(NumType, 3, 3)
   dsiginv_dsig[1, 1] = -bvn.precision[1, 1] ^ 2
   dsiginv_dsig[1, 2] = dsiginv_dsig[2, 1] =
     -2.0 * bvn.precision[1, 1] * bvn.precision[2, 1]
@@ -463,7 +463,7 @@ function bvn_derivs{NumType <: Number}(
       py2 * bvn.precision[2, x_ind]
   end
 
-  BvnDerivs(v, d, h)
+  BvnDerivs{NumType}(v, d, h)
 end
 
 
@@ -576,7 +576,7 @@ function load_bvn_mixtures{NumType <: Number}(mp::ModelParams{NumType}, b::Int64
         end
 
         # Convolve the galaxy representations with the PSF.
-        for i = 1:Ia
+        for i = 1:2 # i indexes dev vs exp galaxy types.
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
 
@@ -736,21 +736,24 @@ function accum_galaxy_pos!{NumType <: Number}(
 
     fs1m.v += f
 
-    bvn_derivs = bvn_derivs(gcc.bmc, x);
+    bvn_sf = get_bvn_derivs(gcc.bmc, x);
 
     # Gradient calculations.
     # Note that dxA_duB = wcs_jacobian[A, B].
     for x_id in 1:2, u_id in 1:2
       fs1m.d[gal_ids.u[u_id]] +=
-        f * bvn_derivs.d[bvn_ids.x[x_id]] * wcs_jacobian[x_id, u_id]
+        f * bvn_sf.d[bvn_ids.x[x_id]] * wcs_jacobian[x_id, u_id]
     end
+
+    # The e_dev derivatives is easy.
+    fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     # par_id indexes dSigma from GalaxyCacheComponent, which is
     # e_axis, e_angle, e_scale
     par_ids = Int64[gal_ids.e_axis, gal_ids.e_angle, gal_ids.e_scale]
     for par_id in 1:3, sig_id in 1:3
       fs1m.d[par_ids[par_id]] +=
-        f * gcc.dSigma[par_id, sig_id] * bvn_derivs.d[bvn_ids.sig[sig_id]]
+        f * gcc.dSigma[par_id, sig_id] * bvn_sf.d[bvn_ids.sig[sig_id]]
     end
 
     # Gradient and Hessian with respect to location parameters.
@@ -768,7 +771,6 @@ function accum_galaxy_pos!{NumType <: Number}(
 
     # Derivatives with respect to galaxy shape parameters.
 
-    fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     # # The derivatives of f with respect to Sigma11, Sigma12, and Sigma22.
     # df_dSigma = (
