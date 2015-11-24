@@ -32,19 +32,18 @@ e_angle, e_axis, e_scale = (pi / 4, 0.7, 1.2)
 u = Float64[2.1, 3.1]
 x = Float64[2.8, 2.9]
 
+# Pick a single source and band for testing.
+s = 1
+b = 3
+
 # The pixel and world centers shouldn't matter for derivatives.
 patch = mp.patches[s];
 psf = patch.psf[s];
-
-s = 1
-b = 3
 
 # Pick out a single galaxy component for testing.
 gp = galaxy_prototypes[1][1];
 e_dev_dir = 1.0;
 e_dev_i = 0.8;
-
-
 
 immutable ParIds
   u::Vector{Int64}
@@ -119,8 +118,8 @@ ad_hess = ad_hess_fun(par);
 
 @test_approx_eq ad_hess[1:2, 1:2] bvn_xx_h
 
-ad_hess[3:5, 3:5]
-bvn_ss_h
+# I'm not sure why this requires less precision for the test.
+@test_approx_eq_eps ad_hess[3:5, 3:5] bvn_ss_h 1e-10
 
 ad_hess[1:2, 3:5]
 bvn_xs_h
