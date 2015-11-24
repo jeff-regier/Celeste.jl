@@ -21,101 +21,83 @@ NumType = Float64
 println("Running hessian tests.")
 
 
+function test_fs1m_derivatives()
+  # TODO: test with a real and asymmetric wcs jacobian.
+  blob, mp, three_bodies = gen_three_body_dataset();
+  omitted_ids = Int64[];
+  kept_ids = setdiff(1:length(ids), omitted_ids);
 
+  s = 1
+  b = 3
 
-##################
-# Test galaxy pixel derivatives.
+  patch = mp.patches[s]
+  u = mp.vp[s][ids.u]
+  u_pix = WCS.world_to_pixel(
+    patch.wcs_jacobian, patch.center, patch.pixel_center, u)
+  x = ceil(u_pix + [1.0, 2.0])
 
+  # Pick out a single galaxy component for testing.
+  # The index is psf, galaxy, gal type, source
+  gcc_ind = (1, 1, 1, s)
+  function f_wrap{T <: Number}(par::Vector{T})
+    # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
+    if T != Float64
+      mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
+    else
+      mp_fd = deepcopy(mp)
+    end
+    fs1m = zero_sensitive_float(GalaxyPosParams, T, 1);
 
-# TODO: test with a real and asymmetric wcs jacobian.
-blob, mp, three_bodies = gen_three_body_dataset();
-omitted_ids = Int64[];
-kept_ids = setdiff(1:length(ids), omitted_ids);
-
-s = 1
-b = 3
-
-patch = mp.patches[s]
-u = mp.vp[s][ids.u]
-u_pix = WCS.world_to_pixel(
-  patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-x = ceil(u_pix + [1.0, 2.0])
-
-# Pick out a single galaxy component for testing.
-# The index is psf, galaxy, gal type, source
-gcc_ind = (1, 1, 1, s)
-function f_wrap{T <: Number}(par::Vector{T})
-  # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-  if T != Float64
-    mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
-  else
-    mp_fd = deepcopy(mp)
+    # Make sure par is as long as the galaxy parameters.
+    @assert length(par) == length(shape_standard_alignment[2])
+    for p1 in 1:length(par)
+        p0 = shape_standard_alignment[2][p1]
+        mp_fd.vp[s][p0] = par[p1]
+    end
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
+    ElboDeriv.accum_galaxy_pos!(gal_mcs[gcc_ind...], x, fs1m, patch.wcs_jacobian);
+    fs1m.v
   end
-  fs1m = zero_sensitive_float(GalaxyPosParams, T, 1);
 
-  # Make sure par is as long as the galaxy parameters.
-  @assert length(par) == length(shape_standard_alignment[2])
-  for p1 in 1:length(par)
-      p0 = shape_standard_alignment[2][p1]
-      mp_fd.vp[s][p0] = par[p1]
+  function mp_to_par(mp::ModelParams{Float64})
+    par = zeros(length(shape_standard_alignment[2]))
+    for p1 in 1:length(par)
+        p0 = shape_standard_alignment[2][p1]
+        par[p1] = mp.vp[s][p0]
+    end
+    par
   end
-  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
+
+  par = mp_to_par(mp)
+  f_wrap(par)
+
+  fs1m = zero_sensitive_float(GalaxyPosParams, 1);
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
   ElboDeriv.accum_galaxy_pos!(gal_mcs[gcc_ind...], x, fs1m, patch.wcs_jacobian);
-  fs1m.v
+
+  # Two sanity checks.
+  gcc = gal_mcs[gcc_ind...];
+  bvn_sf = ElboDeriv.get_bvn_derivs(gcc.bmc, x);
+  gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
+  pc = mp.patches[s, b].psf[gcc_ind[1]]
+
+  @test_approx_eq(
+    pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(bvn_sf.v) / (2 * pi),
+    fs1m.v)
+
+  @test_approx_eq fs1m.v f_wrap(par)
+
+  # Test the gradient.
+  ad_grad_fun = ForwardDiff.gradient(f_wrap);
+  ad_grad = ad_grad_fun(par);
+  @test_approx_eq ad_grad fs1m.d
+
+  # Test the hessian.
+  ad_hess_fun = ForwardDiff.hessian(f_wrap)
+  ad_hess = ad_hess_fun(par)
+  @test_approx_eq_eps ad_hess fs1m.hs[1] 1e-10
+
 end
-
-function mp_to_par(mp::ModelParams{Float64})
-  par = zeros(length(shape_standard_alignment[2]))
-  for p1 in 1:length(par)
-      p0 = shape_standard_alignment[2][p1]
-      par[p1] = mp.vp[s][p0]
-  end
-  par
-end
-
-par = mp_to_par(mp)
-f_wrap(par)
-
-fs1m = zero_sensitive_float(GalaxyPosParams, 1);
-star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-ElboDeriv.accum_galaxy_pos!(gal_mcs[gcc_ind...], x, fs1m, patch.wcs_jacobian);
-
-# Two sanity checks.
-gcc = gal_mcs[gcc_ind...];
-bvn_sf = ElboDeriv.get_bvn_derivs(gcc.bmc, x);
-gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
-pc = mp.patches[s, b].psf[gcc_ind[1]]
-
-@test_approx_eq(
-  pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(bvn_sf.v) / (2 * pi),
-  fs1m.v)
-
-@test_approx_eq fs1m.v f_wrap(par)
-
-# Test the gradient.
-ad_grad_fun = ForwardDiff.gradient(f_wrap);
-ad_grad = ad_grad_fun(par);
-@test_approx_eq ad_grad fs1m.d
-
-# Test the hessian.
-ad_hess_fun = ForwardDiff.hessian(f_wrap)
-ad_hess = ad_hess_fun(par)
-fs1m.hs[1]
-@test_approx_eq ad_hess fs1m.hs[1]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 function test_galaxy_variable_transform()
@@ -470,3 +452,4 @@ test_brightness_hessian()
 test_bvn_derivatives()
 test_galaxy_sigma_derivs()
 test_galaxy_variable_transform()
+test_fs1m_derivatives()
