@@ -38,29 +38,23 @@ function accum_star_pos!{NumType <: Number}(
                          wcs_jacobian::Array{Float64, 2})
     py1, py2, f = eval_bvn_pdf(bmc, x)
 
+    # TODO: This wastes a _lot_ of calculation.  Make a version for
+    # stars that only calculates the x derivatives.
+    bvn_sf = get_bvn_derivs(bmc, x);
+    bvn_u_d, bvn_uu_h = transform_bvn_derivs(bvn_sf, bmc, wcs_jacobian)
+
     fs0m.v += f
 
-    # This is
-    # dfs0m_dworld = wcs_jacobian' * NumType[f .* py1, f .* py2]
-    fs0m.d[star_ids.u[1]] +=
-      convert(NumType,
-              f * (wcs_jacobian[1, 1] * py1 + wcs_jacobian[2, 1] * py2))
-    fs0m.d[star_ids.u[2]] +=
-      convert(NumType,
-              f * (wcs_jacobian[1, 2] * py1 + wcs_jacobian[2, 2] * py2))
+    # Accumulate the derivatives.
+    for u_id in 1:2
+      fs0m.d[star_ids.u[u_id]] += f * bvn_u_d[u_id]
+    end
 
-    # Note that dpyA / dxB = bmc.precision[A, B]
-    # TODO: there's a redundant step here.
-    # TODO: test this!
-    for u_id = 1:2
-      fs0m.hs[1][star_ids.u[1], star_ids.u[u_id]] +=
-        convert(NumType,
-                f * (wcs_jacobian[1, 1] * bmc.precision[1, u_id] +
-                     wcs_jacobian[2, 1] * bmc.precision[2, u_id]))
-      fs0m.hs[1][star_ids.u[2], star_ids.u[u_id]] +=
-        convert(NumType,
-                f * (wcs_jacobian[1, 2] * bmc.precision[1, u_id] +
-                     wcs_jacobian[2, 2] * bmc.precision[2, u_id]))
+    # Hessian terms involving only the location parameters.
+    # TODO: redundant term
+    for u_id1 in 1:2, u_id2 in 1:2
+      fs0m.hs[1][star_ids.u[u_id1], star_ids.u[u_id2]] +=
+        f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
     end
 end
 
@@ -87,7 +81,6 @@ function accum_galaxy_pos!{NumType <: Number}(
     fs1m.v += f
 
     bvn_sf = get_bvn_derivs(gcc.bmc, x);
-
     bvn_u_d, bvn_s_d, bvn_uu_h, bvn_ss_h, bvn_us_h =
       transform_bvn_derivs(bvn_sf, gcc, wcs_jacobian)
 
@@ -106,6 +99,8 @@ function accum_galaxy_pos!{NumType <: Number}(
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     # The Hessians:
+
+    # Hessian terms involving only the shape parameters.
     for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
       s1 = gal_shape_alignment[shape_id1]
       s2 = gal_shape_alignment[shape_id2]
@@ -114,6 +109,7 @@ function accum_galaxy_pos!{NumType <: Number}(
              bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
     end
 
+    # Hessian terms involving only the location parameters.
     for u_id1 in 1:2, u_id2 in 1:2
       u1 = gal_ids.u[u_id1]
       u2 = gal_ids.u[u_id2]
@@ -121,6 +117,7 @@ function accum_galaxy_pos!{NumType <: Number}(
         f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
     end
 
+    # Hessian terms involving both the shape and locaiton parameters.
     for u_id in 1:2, shape_id in 1:length(gal_shape_ids)
       ui = gal_ids.u[u_id]
       si = gal_shape_alignment[shape_id]
