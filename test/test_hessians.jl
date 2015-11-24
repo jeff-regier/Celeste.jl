@@ -36,10 +36,20 @@ x = Float64[2.8, 2.9]
 patch = mp.patches[s];
 psf = patch.psf[s];
 
+s = 1
+b = 3
+
+# Pick out a single galaxy component for testing.
+gp = galaxy_prototypes[1][1];
+e_dev_dir = 1.0;
+e_dev_i = 0.8;
+
+
+
 immutable ParIds
   u::Vector{Int64}
-  e_angle::Int64
   e_axis::Int64
+  e_angle::Int64
   e_scale::Int64
   length::Int64
 
@@ -60,18 +70,6 @@ function wrap_par{T <: Number}(
   par
 end
 
-
-#for si in 1:3
-si = 1
-s = 1
-b = 3
-gcc_ind = (1, 1, 1, s)
-
-
-# Pick out a single galaxy component for testing.
-gp = galaxy_prototypes[1][1];
-e_dev_dir = 1.0;
-e_dev_i = 0.8;
 
 
 par_t = 0.0
@@ -96,13 +94,6 @@ end
 
 par = wrap_par(u, e_angle, e_axis, e_scale)
 
-# Sanity check the wrapper.
-@test_approx_eq(
-  -0.5 *((x - gcc.bmc.the_mean)' * gcc.bmc.precision * (x - gcc.bmc.the_mean) -
-         log(det(gcc.bmc.precision)))[1,1] - log(2pi) +
-         log(psf.alphaBar * gp.etaBar),
-  f_wrap(par))
-
 u_pix = WCS.world_to_pixel(
   patch.wcs_jacobian, patch.center, patch.pixel_center, u)
 gcc = ElboDeriv.GalaxyCacheComponent(
@@ -111,12 +102,28 @@ bvn_sf = ElboDeriv.get_bvn_derivs(gcc.bmc, x);
 bvn_x_d, bvn_s_d, bvn_xx_h, bvn_ss_h, bvn_xs_h =
   ElboDeriv.transform_bvn_derivs(bvn_sf, gcc, patch.wcs_jacobian);
 
+# Sanity check the wrapper.
+@test_approx_eq(
+  -0.5 *((x - gcc.bmc.the_mean)' * gcc.bmc.precision * (x - gcc.bmc.the_mean) -
+         log(det(gcc.bmc.precision)))[1,1] - log(2pi) +
+         log(psf.alphaBar * gp.etaBar),
+  f_wrap(par))
+
+# Check the gradient.
 ad_grad_fun = ForwardDiff.gradient(f_wrap);
 ad_grad = ad_grad_fun(par)
-hcat(ad_grad, [bvn_x_d; bvn_s_d])
+@test_approx_eq ad_grad [bvn_x_d; bvn_s_d]
 
 ad_hess_fun = ForwardDiff.hessian(f_wrap);
-ad_hess = ad_hess_fun(par)
+ad_hess = ad_hess_fun(par);
+
+@test_approx_eq ad_hess[1:2, 1:2] bvn_xx_h
+
+ad_hess[3:5, 3:5]
+bvn_ss_h
+
+ad_hess[1:2, 3:5]
+bvn_xs_h
 
 
 
