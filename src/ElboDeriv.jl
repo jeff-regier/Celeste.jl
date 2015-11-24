@@ -130,10 +130,10 @@ function accum_galaxy_pos!{NumType <: Number}(
 
       # Do the e_dev hessians while we're here.
       devi = gal_ids.e_dev
-      fs1m.hs[1][ui, devi] = f * gcc.e_dev_dir * bvn_u_d[u_id]
+      fs1m.hs[1][ui, devi] = f_pre * gcc.e_dev_dir * bvn_u_d[u_id]
       fs1m.hs[1][devi, ui] = fs1m.hs[1][ui, devi]
-      fs1m.hs[1][si, devi] = f * gcc.e_dev_dir * bvn_s_d[shape_id]
-      fs1m.hs[1][devi, si] = fs1m.hs[1][shape_id, devi]
+      fs1m.hs[1][si, devi] = f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
+      fs1m.hs[1][devi, si] = fs1m.hs[1][si, devi]
     end
 end
 
