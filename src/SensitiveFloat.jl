@@ -55,7 +55,8 @@ function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
     zero_sensitive_float(param_arg, Float64, local_S)
 end
 
-function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(param_arg::Type{ParamType})
+function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
+  param_arg::Type{ParamType})
     zero_sensitive_float(param_arg, Float64, 1)
 end
 
@@ -100,7 +101,8 @@ function multiply_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   # Chain rule for second derivatives.
   for s=1:S
     #fill!(sf1.hs[s], 0.0)
-    # Second derivate terms involving second derivates.  TODO: nearly half are redudnant.
+    # Second derivate terms involving second derivates.
+    # TODO: nearly half are redudnant.
     for i in ids1, j in ids1
       sf1.hs[s][i, j] = sf2.v * sf1.hs[s][i, j]
     end

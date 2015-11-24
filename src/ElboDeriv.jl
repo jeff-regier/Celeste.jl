@@ -196,7 +196,7 @@ function accum_pixel_source_stats!{NumType <: Number}(
     # TODO: You will need to:
     # - square a sensitive float
     # - multiply them (they have different params)
-    # - multiply by a (special case?)
+    # - multiply by <a> (special case?)
     # - log a sensitive float
     # - somehow get x / y^2 (for the variance term)
 
@@ -206,6 +206,7 @@ function accum_pixel_source_stats!{NumType <: Number}(
     lf = (sb.E_l_a[b, 1].v * fs0m.v, sb.E_l_a[b, 2].v * fs1m.v)
     llff = (sb.E_ll_a[b, 1].v * fs0m.v^2, sb.E_ll_a[b, 2].v * fs1m.v^2)
 
+    # TODO: special case multiply by a.
     E_G_s_v = a[1] * lf[1] + a[2] * lf[2]
     E_G.v += E_G_s_v
 
