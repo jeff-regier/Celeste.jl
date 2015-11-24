@@ -193,6 +193,13 @@ function accum_pixel_source_stats!{NumType <: Number}(
     # Add the contributions of this source in this band to
     # E(G) and Var(G).
 
+    # TODO: You will need to:
+    # - square a sensitive float
+    # - multiply them (they have different params)
+    # - multiply by a (special case?)
+    # - log a sensitive float
+    # - somehow get x / y^2 (for the variance term)
+
     # In the structures below, 1 = star and 2 = galaxy.
     a = vs[ids.a]
     fsm = (fs0m, fs1m)
