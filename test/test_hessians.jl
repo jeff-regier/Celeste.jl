@@ -13,7 +13,6 @@ import WCS
 
 println("Running hessian tests.")
 
-
 function test_fsXm_derivatives()
   # TODO: test with a real and asymmetric wcs jacobian.
   blob, mp, three_bodies = gen_three_body_dataset();
@@ -23,7 +22,7 @@ function test_fsXm_derivatives()
   s = 1
   b = 3
 
-  patch = mp.patches[s]
+  patch = mp.patches[s];
   u = mp.vp[s][ids.u]
   u_pix = WCS.world_to_pixel(
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
@@ -64,7 +63,7 @@ function test_fsXm_derivatives()
     par
   end
 
-  par = mp_to_par_gal(mp)
+  par = mp_to_par_gal(mp);
 
   fs1m = zero_sensitive_float(GalaxyPosParams, 1);
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
