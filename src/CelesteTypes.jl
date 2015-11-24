@@ -660,7 +660,7 @@ type SensitiveFloat{ParamType <: CelesteTypes.ParamSet, NumType <: Number}
 end
 
 
-# TODO: wrap this into its own module
+# TODO: wrap this into its own module?
 include(joinpath(Pkg.dir("Celeste"), "src/SensitiveFloat.jl"))
 
 end
