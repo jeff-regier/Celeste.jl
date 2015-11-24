@@ -1,3 +1,4 @@
+
 @doc """
 Relevant parameters of a bivariate normal distribution.
 
@@ -68,7 +69,7 @@ end
 ##################
 # Derivatives
 
-# TODO: make this a ParameterSet and use SensitiveFloats instead.
+# TODO: make this a ParameterSet and use SensitiveFloats instead?
 immutable BvnDerivIndices
   sig::Vector{Int64} # Sigma_11, Sigma_12, Sigma_22 in that order.
   x::Vector{Int64} # x1, x2 in that order
@@ -298,6 +299,7 @@ immutable GalaxyCacheComponent{NumType <: Number}
 
         sig_sf = GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
         sig_sf.j .*= gc.nuBar
+        sig_sf.t .*= gc.nuBar
 
         new(e_dev_dir, e_dev_i, bmc, sig_sf)
     end
@@ -408,7 +410,7 @@ function transform_bvn_derivs{NumType <: Number}(
 
     # Second derivatives involving only u.
     # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.
-    # TODO: eliminate redunant term.
+    # TODO: eliminate the redunant term.
     for u_id1 in 1:2, u_id2 in 1:2, x_id1 in 1:2, x_id2 in 1:2
       bvn_uu_h[u_id1, u_id2] +=
         bvn_sf.h[bvn_ids.x[x_id1], bvn_ids.x[x_id2]] *
