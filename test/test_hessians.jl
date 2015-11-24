@@ -11,17 +11,10 @@ using ForwardDiff
 import Synthetic
 import WCS
 
-
-# For debugging:
-using ElboDeriv.bvn_ids
-using ElboDeriv.eval_bvn_pdf
-using ElboDeriv.BvnDerivs
-NumType = Float64
-
 println("Running hessian tests.")
 
 
-function test_fs1m_derivatives()
+function test_fsXm_derivatives()
   # TODO: test with a real and asymmetric wcs jacobian.
   blob, mp, three_bodies = gen_three_body_dataset();
   omitted_ids = Int64[];
@@ -36,10 +29,13 @@ function test_fs1m_derivatives()
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   x = ceil(u_pix + [1.0, 2.0])
 
+  ###########################
+  # Galaxies
+
   # Pick out a single galaxy component for testing.
   # The index is psf, galaxy, gal type, source
   gcc_ind = (1, 1, 1, s)
-  function f_wrap{T <: Number}(par::Vector{T})
+  function f_wrap_gal{T <: Number}(par::Vector{T})
     # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
     if T != Float64
       mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
@@ -59,7 +55,7 @@ function test_fs1m_derivatives()
     fs1m.v
   end
 
-  function mp_to_par(mp::ModelParams{Float64})
+  function mp_to_par_gal(mp::ModelParams{Float64})
     par = zeros(length(shape_standard_alignment[2]))
     for p1 in 1:length(par)
         p0 = shape_standard_alignment[2][p1]
@@ -68,8 +64,7 @@ function test_fs1m_derivatives()
     par
   end
 
-  par = mp_to_par(mp)
-  f_wrap(par)
+  par = mp_to_par_gal(mp)
 
   fs1m = zero_sensitive_float(GalaxyPosParams, 1);
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
@@ -85,18 +80,71 @@ function test_fs1m_derivatives()
     pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(bvn_sf.v) / (2 * pi),
     fs1m.v)
 
-  @test_approx_eq fs1m.v f_wrap(par)
+  @test_approx_eq fs1m.v f_wrap_gal(par)
 
   # Test the gradient.
-  ad_grad_fun = ForwardDiff.gradient(f_wrap);
+  ad_grad_fun = ForwardDiff.gradient(f_wrap_gal);
   ad_grad = ad_grad_fun(par);
   @test_approx_eq ad_grad fs1m.d
 
   # Test the hessian.
-  ad_hess_fun = ForwardDiff.hessian(f_wrap)
+  ad_hess_fun = ForwardDiff.hessian(f_wrap_gal)
   ad_hess = ad_hess_fun(par)
   @test_approx_eq_eps ad_hess fs1m.hs[1] 1e-10
 
+
+  ###########################
+  # Stars
+
+  # Pick out a single galaxy component for testing.
+  # The index is psf, source
+  bmc_ind = (1, s)
+  function f_wrap_star{T <: Number}(par::Vector{T})
+    # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
+    if T != Float64
+      mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
+    else
+      mp_fd = deepcopy(mp)
+    end
+    fs0m = zero_sensitive_float(StarPosParams, T, 1);
+
+    # Make sure par is as long as the galaxy parameters.
+    @assert length(par) == length(ids.u)
+    for p1 in 1:2
+        p0 = ids.u[p1]
+        mp_fd.vp[s][p0] = par[p1]
+    end
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
+    ElboDeriv.accum_star_pos!(star_mcs[bmc_ind...], x, fs0m, patch.wcs_jacobian);
+    fs0m.v
+  end
+
+  function mp_to_par_star(mp::ModelParams{Float64})
+    par = zeros(2)
+    for p1 in 1:length(par)
+        par[p1] = mp.vp[s][ids.u[p1]]
+    end
+    par
+  end
+
+  par = mp_to_par_star(mp)
+
+  fs0m = zero_sensitive_float(StarPosParams, 1);
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  ElboDeriv.accum_star_pos!(star_mcs[bmc_ind...], x, fs0m, patch.wcs_jacobian);
+
+  # One sanity check.
+  @test_approx_eq fs0m.v f_wrap_star(par)
+
+  # Test the gradient.
+  ad_grad_fun = ForwardDiff.gradient(f_wrap_star);
+  ad_grad = ad_grad_fun(par);
+  @test_approx_eq ad_grad fs0m.d
+
+  # Test the hessian.
+  ad_hess_fun = ForwardDiff.hessian(f_wrap_star)
+  ad_hess = ad_hess_fun(par)
+  @test_approx_eq_eps ad_hess fs0m.hs[1] 1e-10
 end
 
 
@@ -104,6 +152,10 @@ function test_galaxy_variable_transform()
   # TODO: test with a real and asymmetric wcs jacobian.
   # We only need this for a psf and jacobian.
   blob, mp, three_bodies = gen_three_body_dataset();
+
+  # Pick a single source and band for testing.
+  s = 1
+  b = 3
 
   # The pixel and world centers shouldn't matter for derivatives.
   patch = mp.patches[s];
@@ -119,46 +171,34 @@ function test_galaxy_variable_transform()
   u = Float64[2.1, 3.1]
   x = Float64[2.8, 2.9]
 
-  # Pick a single source and band for testing.
-  s = 1
-  b = 3
-
-  immutable ParIds
-    u::Vector{Int64}
-    e_axis::Int64
-    e_angle::Int64
-    e_scale::Int64
-    length::Int64
-
-    ParIds() = begin
-      new([1, 2], 3, 4, 5, 5)
-    end
-  end
-
-  par_ids = ParIds()
+  par_ids_u = [1, 2]
+  par_ids_e_axis = 3
+  par_ids_e_angle = 4
+  par_ids_e_scale = 5
+  par_ids_length = 5
 
   function wrap_par{T <: Number}(
       u::Vector{T}, e_angle::T, e_axis::T, e_scale::T)
-    par = zeros(T, par_ids.length)
-    par[par_ids.u] = u
-    par[par_ids.e_angle] = e_angle
-    par[par_ids.e_axis] = e_axis
-    par[par_ids.e_scale] = e_scale
+    par = zeros(T, par_ids_length)
+    par[par_ids_u] = u
+    par[par_ids_e_angle] = e_angle
+    par[par_ids_e_axis] = e_axis
+    par[par_ids_e_scale] = e_scale
     par
   end
 
   function f_wrap{T <: Number}(par::Vector{T})
-    u = par[par_ids.u]
-    e_angle = par[par_ids.e_angle]
-    e_axis = par[par_ids.e_axis]
-    e_scale = par[par_ids.e_scale]
+    u = par[par_ids_u]
+    e_angle = par[par_ids_e_angle]
+    e_axis = par[par_ids_e_axis]
+    e_scale = par[par_ids_e_scale]
     u_pix = WCS.world_to_pixel(
       patch.wcs_jacobian, patch.center, patch.pixel_center, u)
     e_dev_i_fd = convert(T, e_dev_i)
     gcc = ElboDeriv.GalaxyCacheComponent(
             e_dev_dir, e_dev_i_fd, gp, psf, u_pix, e_axis, e_angle, e_scale);
 
-    py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x);
+    py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x);
 
     log(f_pre)
   end
@@ -212,10 +252,11 @@ function test_galaxy_sigma_derivs()
     sig_i = [(1, 1), (1, 2), (2, 2)][si]
     println("Testing sigma[$(sig_i)]")
     function f_wrap{T <: Number}(par::Vector{T})
-      e_angle = par[gal_shape_ids.e_angle]
-      e_axis = par[gal_shape_ids.e_axis]
-      e_scale = par[gal_shape_ids.e_scale]
-      Util.get_bvn_cov(e_axis, e_angle, e_scale)[sig_i...]
+      e_angle_fd = par[gal_shape_ids.e_angle]
+      e_axis_fd = par[gal_shape_ids.e_axis]
+      e_scale_fd = par[gal_shape_ids.e_scale]
+      this_cov = Util.get_bvn_cov(e_axis_fd, e_angle_fd, e_scale_fd)
+      this_cov[sig_i...]
     end
 
     par = wrap_par(e_angle, e_axis, e_scale)
@@ -225,12 +266,10 @@ function test_galaxy_sigma_derivs()
 
     ad_grad_fun = ForwardDiff.gradient(f_wrap);
     ad_grad = ad_grad_fun(par);
-
     @test_approx_eq gal_derivs.j[si, :][:] ad_grad
 
     ad_hess_fun = ForwardDiff.hessian(f_wrap);
     ad_hess = ad_hess_fun(par);
-
     @test_approx_eq(
       ad_hess,
       reshape(gal_derivs.t[si, :, :],
@@ -259,15 +298,15 @@ function test_bvn_derivatives()
   end
 
   function wrap(x::Vector{Float64}, sigma::Matrix{Float64})
-    par = zeros(Float64, bvn_ids.length)
-    par[bvn_ids.x] = x
-    par[bvn_ids.sig] = [ sigma[1, 1], sigma[1, 2], sigma[2, 2]]
+    par = zeros(Float64, ElboDeriv.bvn_ids.length)
+    par[ElboDeriv.bvn_ids.x] = x
+    par[ElboDeriv.bvn_ids.sig] = [ sigma[1, 1], sigma[1, 2], sigma[2, 2]]
     par
   end
 
   function f_wrap{T <: Number}(par::Vector{T})
-    x_loc = par[bvn_ids.x]
-    s_vec = par[bvn_ids.sig]
+    x_loc = par[ElboDeriv.bvn_ids.x]
+    s_vec = par[ElboDeriv.bvn_ids.sig]
     sig_loc = T[s_vec[1] s_vec[2]; s_vec[2] s_vec[3]]
     f(x_loc, sig_loc)
   end
@@ -452,4 +491,4 @@ test_brightness_hessian()
 test_bvn_derivatives()
 test_galaxy_sigma_derivs()
 test_galaxy_variable_transform()
-test_fs1m_derivatives()
+test_fsXm_derivatives()

@@ -372,24 +372,21 @@ end
 
 
 @doc """
-Transform the bvn derivatives and hessians from (x, sigma) to the
-galaxy parameters (u, gal_shape_ids).
+Transform the bvn derivatives and hessians from (x) to the
+galaxy parameters (u).
 
 TODO: preallocate this memory in global variables?
 """ ->
 function transform_bvn_derivs{NumType <: Number}(
     bvn_sf::BvnDerivs{NumType},
-    gcc::GalaxyCacheComponent{NumType},
+    bmc::BvnComponent{NumType},
     wcs_jacobian::Array{Float64, 2})
 
     # Derivatives.  Here, s stands for "shape".
     bvn_u_d = zeros(NumType, 2)
-    bvn_s_d = zeros(NumType, length(gal_shape_ids))
 
     # The hessians.
     bvn_uu_h = zeros(NumType, 2, 2)
-    bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
-    bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
 
     # Gradient calculations.
 
@@ -400,6 +397,45 @@ function transform_bvn_derivs{NumType <: Number}(
       bvn_u_d[u_id] += -bvn_sf.d[bvn_ids.x[x_id]] * wcs_jacobian[x_id, u_id]
     end
 
+    # Hessian calculations.
+
+    # Second derivatives involving only u.
+    # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.
+    # TODO: eliminate the redundant term.
+    for u_id1 in 1:2, u_id2 in 1:2, x_id1 in 1:2, x_id2 in 1:2
+      bvn_uu_h[u_id1, u_id2] +=
+        bvn_sf.h[bvn_ids.x[x_id1], bvn_ids.x[x_id2]] *
+        wcs_jacobian[x_id1, u_id1] * wcs_jacobian[x_id2, u_id2]
+    end
+
+    bvn_u_d, bvn_uu_h
+end
+
+
+
+@doc """
+Transform the bvn derivatives and hessians from (x, sigma) to the
+galaxy parameters (u, gal_shape_ids).
+
+TODO: preallocate this memory in global variables?
+""" ->
+function transform_bvn_derivs{NumType <: Number}(
+    bvn_sf::BvnDerivs{NumType},
+    gcc::GalaxyCacheComponent{NumType},
+    wcs_jacobian::Array{Float64, 2})
+
+    # Transform the u derivates first.
+    bvn_u_d, bvn_uu_h = transform_bvn_derivs(bvn_sf, gcc.bmc, wcs_jacobian)
+
+    # Derivatives.  Here, s stands for "shape".
+    bvn_s_d = zeros(NumType, length(gal_shape_ids))
+
+    # The hessians.
+    bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
+    bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
+
+    # Gradient calculations.
+
     # Use the chain rule for the shape derviatives.
     for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
       bvn_s_d[shape_id] +=
@@ -407,15 +443,6 @@ function transform_bvn_derivs{NumType <: Number}(
     end
 
     # Hessian calculations.
-
-    # Second derivatives involving only u.
-    # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.
-    # TODO: eliminate the redunant term.
-    for u_id1 in 1:2, u_id2 in 1:2, x_id1 in 1:2, x_id2 in 1:2
-      bvn_uu_h[u_id1, u_id2] +=
-        bvn_sf.h[bvn_ids.x[x_id1], bvn_ids.x[x_id2]] *
-        wcs_jacobian[x_id1, u_id1] * wcs_jacobian[x_id2, u_id2]
-    end
 
     # Second derviatives involving only shape parameters.
     # TODO: eliminate redundancies.
