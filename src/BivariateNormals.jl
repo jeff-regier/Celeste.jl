@@ -439,7 +439,7 @@ function transform_bvn_derivs{NumType <: Number}(
         sig_id in 1:3, x_id in 1:2
       bvn_us_h[u_id, shape_id] +=
         bvn_sf.h[bvn_ids.sig[sig_id], bvn_ids.x[x_id]] *
-        bvn_s_d[sig_id] * bvn_u_d[u_id]
+        gcc.sig_sf.j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
     end
 
     bvn_u_d, bvn_s_d, bvn_uu_h, bvn_ss_h, bvn_us_h

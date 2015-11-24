@@ -21,113 +21,6 @@ NumType = Float64
 println("Running hessian tests.")
 
 
-# TODO: test with a real and asymmetric wcs jacobian.
-blob, mp, three_bodies = gen_three_body_dataset();
-# omitted_ids = Int64[];
-# kept_ids = setdiff(1:length(ids), omitted_ids);
-
-# Test the variable transformation.
-e_angle, e_axis, e_scale = (pi / 4, 0.7, 1.2)
-#wcs_jacobian = Float64[1.1 0.2; 0.1 0.9]
-u = Float64[2.1, 3.1]
-x = Float64[2.8, 2.9]
-
-# Pick a single source and band for testing.
-s = 1
-b = 3
-
-# The pixel and world centers shouldn't matter for derivatives.
-patch = mp.patches[s];
-psf = patch.psf[s];
-
-# Pick out a single galaxy component for testing.
-gp = galaxy_prototypes[1][1];
-e_dev_dir = 1.0;
-e_dev_i = 0.8;
-
-immutable ParIds
-  u::Vector{Int64}
-  e_axis::Int64
-  e_angle::Int64
-  e_scale::Int64
-  length::Int64
-
-  ParIds() = begin
-    new([1, 2], 3, 4, 5, 5)
-  end
-end
-
-par_ids = ParIds()
-
-function wrap_par{T <: Number}(
-    u::Vector{T}, e_angle::T, e_axis::T, e_scale::T)
-  par = zeros(T, par_ids.length)
-  par[par_ids.u] = u
-  par[par_ids.e_angle] = e_angle
-  par[par_ids.e_axis] = e_axis
-  par[par_ids.e_scale] = e_scale
-  par
-end
-
-
-
-par_t = 0.0
-
-function f_wrap{T <: Number}(par::Vector{T})
-  global par_t
-  par_t = deepcopy(par)
-  u = par[par_ids.u]
-  e_angle = par[par_ids.e_angle]
-  e_axis = par[par_ids.e_axis]
-  e_scale = par[par_ids.e_scale]
-  u_pix = WCS.world_to_pixel(
-    patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-  e_dev_i_fd = convert(T, e_dev_i)
-  gcc = ElboDeriv.GalaxyCacheComponent(
-          e_dev_dir, e_dev_i_fd, gp, psf, u_pix, e_axis, e_angle, e_scale);
-
-  py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x);
-
-  log(f_pre)
-end
-
-par = wrap_par(u, e_angle, e_axis, e_scale)
-
-u_pix = WCS.world_to_pixel(
-  patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-gcc = ElboDeriv.GalaxyCacheComponent(
-        e_dev_dir, e_dev_i, gp, psf, u_pix, e_axis, e_angle, e_scale);
-bvn_sf = ElboDeriv.get_bvn_derivs(gcc.bmc, x);
-bvn_x_d, bvn_s_d, bvn_xx_h, bvn_ss_h, bvn_xs_h =
-  ElboDeriv.transform_bvn_derivs(bvn_sf, gcc, patch.wcs_jacobian);
-
-# Sanity check the wrapper.
-@test_approx_eq(
-  -0.5 *((x - gcc.bmc.the_mean)' * gcc.bmc.precision * (x - gcc.bmc.the_mean) -
-         log(det(gcc.bmc.precision)))[1,1] - log(2pi) +
-         log(psf.alphaBar * gp.etaBar),
-  f_wrap(par))
-
-# Check the gradient.
-ad_grad_fun = ForwardDiff.gradient(f_wrap);
-ad_grad = ad_grad_fun(par)
-@test_approx_eq ad_grad [bvn_x_d; bvn_s_d]
-
-ad_hess_fun = ForwardDiff.hessian(f_wrap);
-ad_hess = ad_hess_fun(par);
-
-@test_approx_eq ad_hess[1:2, 1:2] bvn_xx_h
-
-# I'm not sure why this requires less precision for the test.
-@test_approx_eq_eps ad_hess[3:5, 3:5] bvn_ss_h 1e-10
-
-ad_hess[1:2, 3:5]
-bvn_xs_h
-
-
-
-
-
 
 
 ##################
@@ -213,6 +106,108 @@ fs1m.hs[1]
 
 
 
+
+
+
+
+
+
+
+
+
+function test_galaxy_variable_transform()
+  # TODO: test with a real and asymmetric wcs jacobian.
+  # We only need this for a psf and jacobian.
+  blob, mp, three_bodies = gen_three_body_dataset();
+
+  # The pixel and world centers shouldn't matter for derivatives.
+  patch = mp.patches[s];
+  psf = patch.psf[s];
+
+  # Pick out a single galaxy component for testing.
+  gp = galaxy_prototypes[1][1];
+  e_dev_dir = 1.0;
+  e_dev_i = 0.8;
+
+  # Test the variable transformation.
+  e_angle, e_axis, e_scale = (pi / 4, 0.7, 1.2)
+  u = Float64[2.1, 3.1]
+  x = Float64[2.8, 2.9]
+
+  # Pick a single source and band for testing.
+  s = 1
+  b = 3
+
+  immutable ParIds
+    u::Vector{Int64}
+    e_axis::Int64
+    e_angle::Int64
+    e_scale::Int64
+    length::Int64
+
+    ParIds() = begin
+      new([1, 2], 3, 4, 5, 5)
+    end
+  end
+
+  par_ids = ParIds()
+
+  function wrap_par{T <: Number}(
+      u::Vector{T}, e_angle::T, e_axis::T, e_scale::T)
+    par = zeros(T, par_ids.length)
+    par[par_ids.u] = u
+    par[par_ids.e_angle] = e_angle
+    par[par_ids.e_axis] = e_axis
+    par[par_ids.e_scale] = e_scale
+    par
+  end
+
+  function f_wrap{T <: Number}(par::Vector{T})
+    u = par[par_ids.u]
+    e_angle = par[par_ids.e_angle]
+    e_axis = par[par_ids.e_axis]
+    e_scale = par[par_ids.e_scale]
+    u_pix = WCS.world_to_pixel(
+      patch.wcs_jacobian, patch.center, patch.pixel_center, u)
+    e_dev_i_fd = convert(T, e_dev_i)
+    gcc = ElboDeriv.GalaxyCacheComponent(
+            e_dev_dir, e_dev_i_fd, gp, psf, u_pix, e_axis, e_angle, e_scale);
+
+    py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x);
+
+    log(f_pre)
+  end
+
+  par = wrap_par(u, e_angle, e_axis, e_scale)
+  u_pix = WCS.world_to_pixel(
+    patch.wcs_jacobian, patch.center, patch.pixel_center, u)
+  gcc = ElboDeriv.GalaxyCacheComponent(
+          e_dev_dir, e_dev_i, gp, psf, u_pix, e_axis, e_angle, e_scale);
+  bvn_sf = ElboDeriv.get_bvn_derivs(gcc.bmc, x);
+  bvn_x_d, bvn_s_d, bvn_xx_h, bvn_ss_h, bvn_xs_h =
+    ElboDeriv.transform_bvn_derivs(bvn_sf, gcc, patch.wcs_jacobian);
+
+  # Sanity check the wrapper.
+  @test_approx_eq(
+    -0.5 *((x - gcc.bmc.the_mean)' * gcc.bmc.precision * (x - gcc.bmc.the_mean) -
+           log(det(gcc.bmc.precision)))[1,1] - log(2pi) +
+           log(psf.alphaBar * gp.etaBar),
+    f_wrap(par))
+
+  # Check the gradient.
+  ad_grad_fun = ForwardDiff.gradient(f_wrap);
+  ad_grad = ad_grad_fun(par)
+  @test_approx_eq ad_grad [bvn_x_d; bvn_s_d]
+
+  ad_hess_fun = ForwardDiff.hessian(f_wrap);
+  ad_hess = ad_hess_fun(par);
+
+  @test_approx_eq ad_hess[1:2, 1:2] bvn_xx_h
+  @test_approx_eq ad_hess[1:2, 3:5] bvn_xs_h
+
+  # I'm not sure why this requires less precision for this test.
+  @test_approx_eq_eps ad_hess[3:5, 3:5] bvn_ss_h 1e-10
+end
 
 
 function test_galaxy_sigma_derivs()
@@ -471,3 +466,4 @@ test_multiply_sf()
 test_brightness_hessian()
 test_bvn_derivatives()
 test_galaxy_sigma_derivs()
+test_galaxy_variable_transform()
