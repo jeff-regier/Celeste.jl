@@ -371,22 +371,67 @@ function load_bvn_mixtures{NumType <: Number}(mp::ModelParams{NumType}, b::Int64
 end
 
 
+####################################################
+# Start caching allocated memory.
+
+type ElboIntermediateValues{NumType <: Number}
+  bvn_u_d::Array{NumType, 1}
+  bvn_uu_h::Array{NumType, 2}
+  bvn_s_d::Array{NumType, 1}
+  bvn_ss_h::Array{NumType, 2}
+  bvn_us_h::Array{NumType, 2}
+end
+
+ElboIntermediateValues(NumType::DataType) = begin
+  @assert NumType <: Number
+
+  # Derivatives wrt u.
+  bvn_u_d = zeros(NumType, 2)
+  bvn_uu_h = zeros(NumType, 2, 2)
+
+  # Shape deriviatives.  Here, s stands for "shape".
+  bvn_s_d = zeros(NumType, length(gal_shape_ids))
+
+  # The hessians.
+  bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
+  bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
+
+  ElboIntermediateValues{NumType}(
+    bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h)
+end
+
+elbo_value_cache = Dict{DataType, ElboIntermediateValues}()
+
+function elbo_cache_fetch(NumType::DataType)
+  global elbo_value_cache
+  if haskey(elbo_value_cache, NumType)
+    println("Data type $NumType found in ELBO value cache.")
+    return elbo_value_cache[NumType]
+  else
+    # Allocate memory.
+    println("Data type $NumType not found in ELBO cache.  Allocating.")
+    sf_cache_v = ElboIntermediateValues(NumType);
+    elbo_value_cache[NumType] = sf_cache_v
+    return sf_cache_v
+  end
+end
+
+
 @doc """
 Transform the bvn derivatives and hessians from (x) to the
 galaxy parameters (u).
-
-TODO: preallocate this memory in global variables?
 """ ->
 function transform_bvn_derivs{NumType <: Number}(
     bvn_sf::BvnDerivs{NumType},
     bmc::BvnComponent{NumType},
     wcs_jacobian::Array{Float64, 2})
 
-    # Derivatives.  Here, s stands for "shape".
-    bvn_u_d = zeros(NumType, 2)
+    cached = elbo_cache_fetch(NumType)
+    bvn_u_d = cached.bvn_u_d
+    bvn_uu_h = cached.bvn_uu_h
 
-    # The hessians.
-    bvn_uu_h = zeros(NumType, 2, 2)
+    fill!(bvn_u_d, 0.0)
+    fill!(bvn_uu_h, 0.0)
 
     # Gradient calculations.
 
@@ -412,6 +457,7 @@ function transform_bvn_derivs{NumType <: Number}(
 end
 
 
+# Pre-allocate memory for sensitivey floats.
 
 @doc """
 Transform the bvn derivatives and hessians from (x, sigma) to the
@@ -424,15 +470,17 @@ function transform_bvn_derivs{NumType <: Number}(
     gcc::GalaxyCacheComponent{NumType},
     wcs_jacobian::Array{Float64, 2})
 
+    cached = elbo_cache_fetch(NumType)
+    bvn_s_d = cached.bvn_s_d
+    bvn_ss_h = cached.bvn_ss_h
+    bvn_us_h = cached.bvn_us_h
+
+    fill!(bvn_s_d, 0.0)
+    fill!(bvn_ss_h, 0.0)
+    fill!(bvn_us_h, 0.0)
+
     # Transform the u derivates first.
     bvn_u_d, bvn_uu_h = transform_bvn_derivs(bvn_sf, gcc.bmc, wcs_jacobian)
-
-    # Derivatives.  Here, s stands for "shape".
-    bvn_s_d = zeros(NumType, length(gal_shape_ids))
-
-    # The hessians.
-    bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
-    bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
 
     # Gradient calculations.
 
