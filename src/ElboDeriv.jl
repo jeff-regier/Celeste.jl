@@ -93,11 +93,11 @@ function accum_galaxy_pos!{NumType <: Number}(
 
     # Accumulate the derivatives.
     for u_id in 1:2
-      fs1m.d[gal_ids.u[u_id]] += bvn_u_d[u_id]
+      fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]
     end
 
     for gal_id in 1:length(gal_shape_ids)
-      fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_u_d[gal_id]
+      fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
     end
 
     # The e_dev derivative.  e_dev just scales the entire component.
@@ -106,11 +106,34 @@ function accum_galaxy_pos!{NumType <: Number}(
     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
     # The Hessians:
-    for gal_id1 in 1:length(gal_shape_ids), gal_id2 in 1:length(gal_shape_ids)
-      g1 = gal_shape_alignment[gal_id1]
-      g2 = gal_shape_alignment[gal_id2]
-      fs1m.hs[1][g1, g2] +=
-        f * (bvn_ss_h[gal_id1, gal_id2] + bvn_s_d[gal_id1] * bvn_s_d[gal_id2])
+    for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
+      s1 = gal_shape_alignment[shape_id1]
+      s2 = gal_shape_alignment[shape_id2]
+      fs1m.hs[1][s1, s2] +=
+        f * (bvn_ss_h[shape_id1, shape_id2] +
+             bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
+    end
+
+    for u_id1 in 1:2, u_id2 in 1:2
+      u1 = gal_ids.u[u_id1]
+      u2 = gal_ids.u[u_id2]
+      fs1m.hs[1][u1, u2] +=
+        f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
+    end
+
+    for u_id in 1:2, shape_id in 1:length(gal_shape_ids)
+      ui = gal_ids.u[u_id]
+      si = gal_shape_alignment[shape_id]
+      fs1m.hs[1][ui, si] +=
+        f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
+      fs1m.hs[1][si, ui] = fs1m.hs[1][ui, si]
+
+      # Do the e_dev hessians while we're here.
+      devi = gal_ids.e_dev
+      fs1m.hs[1][ui, devi] = f * gcc.e_dev_dir * bvn_u_d[u_id]
+      fs1m.hs[1][devi, ui] = fs1m.hs[1][ui, devi]
+      fs1m.hs[1][si, devi] = f * gcc.e_dev_dir * bvn_s_d[shape_id]
+      fs1m.hs[1][devi, si] = fs1m.hs[1][shape_id, devi]
     end
 end
 
