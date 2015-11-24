@@ -6,13 +6,12 @@ Celeste.jl
 
 
 Celeste.jl finds and characterizes stars and galaxies in astronomical images.
-It implements variational inference for a generative model of the images,
-as described in
+It implements variational inference for the generative model described in
 
 > [Jeffrey Regier, Andrew Miller, Jon McAuliffe, Ryan Adams, Matt Hoffman,
 > Dustin Lang, David Schlegel, and Prabhat. “Celeste: Variational inference for
-> a generative model of astronomical images”. In: *Proceedings of the 32nd In-
-> ternational Conference on Machine Learning (ICML)*. 2015.](
+> a generative model of astronomical images”. In: *Proceedings of the 32nd 
+> International Conference on Machine Learning (ICML)*. 2015.](
 > http://www.stat.berkeley.edu/~jeff/publications/regier2015celeste.pdf)
 
 #### License
