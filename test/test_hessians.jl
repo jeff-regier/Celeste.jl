@@ -28,6 +28,8 @@ function test_fsXm_derivatives()
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   x = ceil(u_pix + [1.0, 2.0])
 
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64);
+
   ###########################
   # Galaxies
 
@@ -50,7 +52,9 @@ function test_fsXm_derivatives()
         mp_fd.vp[s][p0] = par[p1]
     end
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
-    ElboDeriv.accum_galaxy_pos!(gal_mcs[gcc_ind...], x, fs1m, patch.wcs_jacobian);
+    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T);
+    ElboDeriv.accum_galaxy_pos!(
+      elbo_vars_fd, gal_mcs[gcc_ind...], x, fs1m, patch.wcs_jacobian);
     fs1m.v
   end
 
@@ -67,7 +71,8 @@ function test_fsXm_derivatives()
 
   fs1m = zero_sensitive_float(GalaxyPosParams, 1);
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-  ElboDeriv.accum_galaxy_pos!(gal_mcs[gcc_ind...], x, fs1m, patch.wcs_jacobian);
+  ElboDeriv.accum_galaxy_pos!(
+    elbo_vars, gal_mcs[gcc_ind...], x, fs1m, patch.wcs_jacobian);
 
   # Two sanity checks.
   gcc = gal_mcs[gcc_ind...];
@@ -114,7 +119,9 @@ function test_fsXm_derivatives()
         mp_fd.vp[s][p0] = par[p1]
     end
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
-    ElboDeriv.accum_star_pos!(star_mcs[bmc_ind...], x, fs0m, patch.wcs_jacobian);
+    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T);
+    ElboDeriv.accum_star_pos!(
+      elbo_vars_fd, star_mcs[bmc_ind...], x, fs0m, patch.wcs_jacobian);
     fs0m.v
   end
 
@@ -130,7 +137,8 @@ function test_fsXm_derivatives()
 
   fs0m = zero_sensitive_float(StarPosParams, 1);
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-  ElboDeriv.accum_star_pos!(star_mcs[bmc_ind...], x, fs0m, patch.wcs_jacobian);
+  ElboDeriv.accum_star_pos!(
+    elbo_vars, star_mcs[bmc_ind...], x, fs0m, patch.wcs_jacobian);
 
   # One sanity check.
   @test_approx_eq fs0m.v f_wrap_star(par)
@@ -208,8 +216,9 @@ function test_galaxy_variable_transform()
   gcc = ElboDeriv.GalaxyCacheComponent(
           e_dev_dir, e_dev_i, gp, psf, u_pix, e_axis, e_angle, e_scale);
   bvn_sf = ElboDeriv.get_bvn_derivs(gcc.bmc, x);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64);
   bvn_x_d, bvn_s_d, bvn_xx_h, bvn_ss_h, bvn_xs_h =
-    ElboDeriv.transform_bvn_derivs(bvn_sf, gcc, patch.wcs_jacobian);
+    ElboDeriv.transform_bvn_derivs(elbo_vars, bvn_sf, gcc, patch.wcs_jacobian);
 
   # Sanity check the wrapper.
   @test_approx_eq(
