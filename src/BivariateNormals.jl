@@ -69,27 +69,6 @@ end
 ##################
 # Derivatives
 
-# # TODO: make this a ParameterSet and use SensitiveFloats instead?
-# immutable BvnDerivIndices
-#   sig::Vector{Int64} # Sigma_11, Sigma_12, Sigma_22 in that order.
-#   x::Vector{Int64} # x1, x2 in that order
-#   length::Int64 # The total number of indices
-# end
-#
-# function set_bvn_deriv_indices()
-#   BvnDerivIndices([1, 2, 3], [4, 5], 5)
-# end
-#
-# const bvn_ids = set_bvn_deriv_indices();
-#
-# type BvnDerivs{NumType <: Number}
-#   # These are indexed by bvn_ids.
-#   v::NumType
-#   d::Vector{NumType}
-#   h::Matrix{NumType}
-# end
-#
-
 @doc """
 Calculate the value, gradient, and hessian of
   -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
