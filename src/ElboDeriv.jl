@@ -13,7 +13,6 @@ import WCSLIB
 using DualNumbers.Dual
 
 export tile_predicted_image
-export ParameterMessage, update_parameter_message!
 
 
 ####################################################
@@ -215,9 +214,10 @@ end
 
 @doc """
 Add up the ELBO values and derivatives for a single source
-in a single band.
+in a single band to get E_G and var_G.
 
 Args:
+  - elbo_vars: ElboIntermediateVariables
   - sb: The source's brightness expectations and derivatives
   - star_mcs: An array of star * PSF components.  The index
       order is PSF component x source.
@@ -228,8 +228,6 @@ Args:
   - parent_s: The global index of this source.
   - m_pos: A 2x1 vector with the pixel location in pixel coordinates
   - b: The band (1 to 5)
-  - fs0m: The accumulated star contributions (updated in place)
-  - fs1m: The accumulated galaxy contributions (updated in place)
   - E_G: Expected celestial signal in this band (G_{nbm})
        (updated in place)
   - var_G: Variance of G (updated in place)
@@ -333,7 +331,7 @@ end
 
 
 @doc """
-Add the contributions of the expected value of a G term to the ELBO.
+Add the contributions of the expected value of a E_G and var_G term to the ELBO.
 
 Args:
   - tile_sources: A vector of source ids influencing this tile
@@ -378,6 +376,8 @@ function accum_pixel_ret!{NumType <: Number}(
     end
 end
 
+############################################
+# The remaining functions loop over tiles, sources, and pixels.
 
 @doc """
 Expected pixel brightness.
@@ -424,55 +424,6 @@ function expected_pixel_brightness!{NumType <: Number}(
 
   # Return the appropriate value of iota.
   tile.constant_background ? tile.iota : tile.iota_vec[h]
-end
-
-
-@doc """
-A type containing all the information that needs to be communicated
-to worker nodes at each iteration.  This currently consists of pre-computed
-information about each source.
-
-Attributes:
-  vp: The VariationalParams for the ModelParams object
-  star_mcs_vec: A vector of star BVN components, one for each band
-  gal_mcs_vec: A vector of galaxy BVN components, one for each band
-  sbs_vec: A vector of brightness vectors, one for each band
-""" ->
-type ParameterMessage{NumType <: Number}
-  vp::VariationalParams{NumType}
-  star_mcs_vec::Vector{Array{BvnComponent{NumType},2}}
-  gal_mcs_vec::Vector{Array{GalaxyCacheComponent{NumType},4}}
-  sbs_vec::Vector{Vector{SourceBrightness{NumType}}}
-end
-
-@doc """
-This allocates memory for but does not initialize the source parameters.
-""" ->
-ParameterMessage{NumType <: Number}(mp::ModelParams{NumType}) = begin
-  num_bands = size(mp.patches)[2]
-  star_mcs_vec = Array(Array{BvnComponent{NumType},2}, num_bands)
-  gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType},4}, num_bands)
-  sbs_vec = Array(Vector{SourceBrightness{NumType}}, num_bands)
-  ParameterMessage(mp.vp, star_mcs_vec, gal_mcs_vec, sbs_vec)
-end
-
-
-@doc """
-Update a ParameterMessage in place using mp.
-
-Args:
-  - mp: A ModelParams object
-  - param_msg: A ParameterMessage that is updated using the parameter values
-               in mp.
-""" ->
-function update_parameter_message!{NumType <: Number}(
-    mp::ModelParams{NumType}, param_msg::ParameterMessage{NumType})
-  for b=1:5
-    param_msg.star_mcs_vec[b], param_msg.gal_mcs_vec[b] =
-      load_bvn_mixtures(mp, b);
-    param_msg.sbs_vec[b] = SourceBrightness{NumType}[
-      SourceBrightness(mp.vp[s]) for s in 1:mp.S];
-  end
 end
 
 
@@ -570,6 +521,7 @@ function tile_predicted_image{NumType <: Number}(
     # TODO: initialize this higher up?
     elbo_vars = ElboIntermediateVariables(NumType);
 
+    # TODO: perhaps you can put E_G and var_G into elbo_vars.
     tile_S = length(tile_sources)
     E_G = zero_sensitive_float(CanonicalParams, NumType, tile_S)
     var_G = zero_sensitive_float(CanonicalParams, NumType, tile_S)
@@ -642,27 +594,6 @@ end
 
 
 @doc """
-Evaluate the ELBO with pre-computed brightnesses and components
-stored in ParameterMessage.
-""" ->
-function elbo_likelihood!{NumType <: Number}(
-    tiled_blob::TiledBlob,
-    param_msg::ParameterMessage{NumType},
-    mp::ModelParams{NumType},
-    accum::SensitiveFloat{CanonicalParams, NumType})
-
-  clear!(accum)
-  mp.vp = param_msg.vp
-  for b in 1:5
-    sbs = param_msg.sbs_vec[b]
-    star_mcs = param_msg.star_mcs_vec[b]
-    gal_mcs = param_msg.gal_mcs_vec[b]
-    elbo_likelihood!(tiled_blob[b], mp, sbs, star_mcs, gal_mcs, accum)
-  end
-end
-
-
-@doc """
 Add the expected log likelihood ELBO term for an image to accum.
 
 Args:
@@ -690,9 +621,9 @@ function elbo_likelihood{NumType <: Number}(
     # Return the expected log likelihood for all bands in a section
     # of the sky.
 
-    ret = zero_sensitive_float(CanonicalParams, NumType, mp.S)
+    accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
     for b in 1:length(tiled_blob)
-        elbo_likelihood!(tiled_blob[b], mp, b, ret)
+        elbo_likelihood!(tiled_blob[b], mp, b, accum)
     end
     ret
 end
@@ -707,9 +638,9 @@ Args:
   - mp: Model parameters.
 """ ->
 function elbo{NumType <: Number}(tiled_blob::TiledBlob, mp::ModelParams{NumType})
-    ret = elbo_likelihood(tiled_blob, mp)
-    subtract_kl!(mp, ret)
-    ret
+    accum = elbo_likelihood(tiled_blob, mp)
+    subtract_kl!(mp, accum)
+    accum
 end
 
 
