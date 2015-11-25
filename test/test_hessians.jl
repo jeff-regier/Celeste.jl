@@ -76,12 +76,12 @@ function test_fsXm_derivatives()
 
   # Two sanity checks.
   gcc = gal_mcs[gcc_ind...];
-  bvn_sf = ElboDeriv.get_bvn_derivs(gcc.bmc, x);
+  v = ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x);
   gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
   pc = mp.patches[s, b].psf[gcc_ind[1]]
 
   @test_approx_eq(
-    pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(bvn_sf.v) / (2 * pi),
+    pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(v) / (2 * pi),
     fs1m.v)
 
   @test_approx_eq fs1m.v f_wrap_gal(par)
@@ -100,7 +100,7 @@ function test_fsXm_derivatives()
   ###########################
   # Stars
 
-  # Pick out a single galaxy component for testing.
+  # Pick out a single star component for testing.
   # The index is psf, source
   bmc_ind = (1, s)
   function f_wrap_star{T <: Number}(par::Vector{T})
@@ -201,6 +201,7 @@ function test_galaxy_variable_transform()
     e_scale = par[par_ids_e_scale]
     u_pix = WCS.world_to_pixel(
       patch.wcs_jacobian, patch.center, patch.pixel_center, u)
+    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T)
     e_dev_i_fd = convert(T, e_dev_i)
     gcc = ElboDeriv.GalaxyCacheComponent(
             e_dev_dir, e_dev_i_fd, gp, psf, u_pix, e_axis, e_angle, e_scale);
@@ -215,10 +216,9 @@ function test_galaxy_variable_transform()
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   gcc = ElboDeriv.GalaxyCacheComponent(
           e_dev_dir, e_dev_i, gp, psf, u_pix, e_axis, e_angle, e_scale);
-  bvn_sf = ElboDeriv.get_bvn_derivs(gcc.bmc, x);
-  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64);
-  bvn_x_d, bvn_s_d, bvn_xx_h, bvn_ss_h, bvn_xs_h =
-    ElboDeriv.transform_bvn_derivs(elbo_vars, bvn_sf, gcc, patch.wcs_jacobian);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64)
+  ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x);
+  ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
 
   # Sanity check the wrapper.
   @test_approx_eq(
@@ -230,16 +230,16 @@ function test_galaxy_variable_transform()
   # Check the gradient.
   ad_grad_fun = ForwardDiff.gradient(f_wrap);
   ad_grad = ad_grad_fun(par)
-  @test_approx_eq ad_grad [bvn_x_d; bvn_s_d]
+  @test_approx_eq ad_grad [elbo_vars.bvn_u_d; elbo_vars.bvn_s_d]
 
   ad_hess_fun = ForwardDiff.hessian(f_wrap);
   ad_hess = ad_hess_fun(par);
 
-  @test_approx_eq ad_hess[1:2, 1:2] bvn_xx_h
-  @test_approx_eq ad_hess[1:2, 3:5] bvn_xs_h
+  @test_approx_eq ad_hess[1:2, 1:2] elbo_vars.bvn_uu_h
+  @test_approx_eq ad_hess[1:2, 3:5] elbo_vars.bvn_us_h
 
   # I'm not sure why this requires less precision for this test.
-  @test_approx_eq_eps ad_hess[3:5, 3:5] bvn_ss_h 1e-10
+  @test_approx_eq_eps ad_hess[3:5, 3:5] elbo_vars.bvn_ss_h 1e-10
 end
 
 
@@ -298,38 +298,43 @@ function test_bvn_derivatives()
   weight = 0.724
 
   bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
-  bvn_sf = ElboDeriv.get_bvn_derivs(bvn, x);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64);
+  v = ElboDeriv.get_bvn_derivs!(elbo_vars, bvn, x);
 
   function f{T <: Number}(x::Vector{T}, sigma::Matrix{T})
     local_x = x - offset
     -0.5 * ((local_x' * (sigma \ local_x))[1,1] + log(det(sigma)))
   end
 
+  x_ids = 1:2
+  sig_ids = 3:5
   function wrap(x::Vector{Float64}, sigma::Matrix{Float64})
-    par = zeros(Float64, ElboDeriv.bvn_ids.length)
-    par[ElboDeriv.bvn_ids.x] = x
-    par[ElboDeriv.bvn_ids.sig] = [ sigma[1, 1], sigma[1, 2], sigma[2, 2]]
+    par = zeros(Float64, length(x_ids) + length(sig_ids))
+    par[x_ids] = x
+    par[sig_ids] = [ sigma[1, 1], sigma[1, 2], sigma[2, 2]]
     par
   end
 
   function f_wrap{T <: Number}(par::Vector{T})
-    x_loc = par[ElboDeriv.bvn_ids.x]
-    s_vec = par[ElboDeriv.bvn_ids.sig]
+    x_loc = par[x_ids]
+    s_vec = par[sig_ids]
     sig_loc = T[s_vec[1] s_vec[2]; s_vec[2] s_vec[3]]
     f(x_loc, sig_loc)
   end
 
   par = wrap(x, sigma);
-  @test_approx_eq bvn_sf.v f_wrap(par)
+  @test_approx_eq v f_wrap(par)
 
-  ad_grad = ForwardDiff.gradient(f_wrap);
-  ad_d = ad_grad(par);
-  @test_approx_eq bvn_sf.d ad_d
+  ad_grad_fun = ForwardDiff.gradient(f_wrap);
+  ad_d = ad_grad_fun(par);
+  @test_approx_eq elbo_vars.bvn_x_d ad_d[x_ids]
+  @test_approx_eq elbo_vars.bvn_sig_d ad_d[sig_ids]
 
-  ad_hess = ForwardDiff.hessian(f_wrap);
-  ad_h = ad_hess(par);
-  @test_approx_eq ad_h bvn_sf.h
-
+  ad_hess_fun = ForwardDiff.hessian(f_wrap);
+  ad_h = ad_hess_fun(par);
+  @test_approx_eq elbo_vars.bvn_xx_h ad_h[x_ids, x_ids]
+  @test_approx_eq elbo_vars.bvn_xsig_h ad_h[x_ids, sig_ids]
+  @test_approx_eq elbo_vars.bvn_sigsig_h ad_h[sig_ids, sig_ids]
 end
 
 

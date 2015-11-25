@@ -46,7 +46,7 @@ ElboIntermediateVariables(NumType::DataType) = begin
   @assert NumType <: Number
 
   bvn_x_d = zeros(NumType, 2)
-  bvn_sig_d = zeros(NumType, 2)
+  bvn_sig_d = zeros(NumType, 3)
   bvn_xx_h = zeros(NumType, 2, 2)
   bvn_xsig_h = zeros(NumType, 2, 3)
   bvn_sigsig_h = zeros(NumType, 3, 3)
@@ -103,6 +103,9 @@ function accum_star_pos!{NumType <: Number}(
   transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
 
   fs0m.v += f
+
+  bvn_u_d = elbo_vars.bvn_u_d
+  bvn_uu_h = elbo_vars.bvn_uu_h
 
   # Accumulate the derivatives.
   for u_id in 1:2

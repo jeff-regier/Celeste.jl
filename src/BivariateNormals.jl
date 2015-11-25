@@ -157,7 +157,7 @@ function get_bvn_derivs!{NumType <: Number}(
   for s_ind=1:3
     bvn_sigsig_h[1, s_ind] = bvn_sigsig_h[s_ind, 1] =
       py1 * dpy1_dsig[s_ind] - 0.5 * dsiginv_dsig[s_ind, 1]
-    bvn_sigsig_h[2, s_ind] = h[s_ind, 2] =
+    bvn_sigsig_h[2, s_ind] = bvn_sigsig_h[s_ind, 2] =
       py1 * dpy2_dsig[s_ind] + py2 * dpy1_dsig[s_ind] -
       0.5 * dsiginv_dsig[s_ind, 2]
     bvn_sigsig_h[3, s_ind] = bvn_sigsig_h[s_ind, 3] =
@@ -173,6 +173,8 @@ function get_bvn_derivs!{NumType <: Number}(
       py1 * bvn.precision[2, x_ind] + py2 * bvn.precision[1, x_ind]
     bvn_xsig_h[x_ind, 3] = py2 * bvn.precision[2, x_ind]
   end
+
+  v
 end
 
 
