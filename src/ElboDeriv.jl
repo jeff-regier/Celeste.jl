@@ -15,10 +15,67 @@ using DualNumbers.Dual
 export tile_predicted_image
 export ParameterMessage, update_parameter_message!
 
+
+####################################################
+# Store pre-allocated memory in this data structures, which contains
+# intermediate values used in the ELBO calculation.
+
+type ElboIntermediateVariables{NumType <: Number}
+
+  # Derivatives of a bvn with respect to (x, sig).
+  bvn_x_d::Array{NumType, 1}
+  bvn_sig_d::Array{NumType, 1}
+  bvn_xx_h::Array{NumType, 2}
+  bvn_xsig_h::Array{NumType, 2}
+  bvn_sigsig_h::Array{NumType, 2}
+
+  # intermediate values used in d bvn / d(x, sig)
+  dpy1_dsig::Array{NumType, 1}
+  dpy2_dsig::Array{NumType, 1}
+  dsiginv_dsig::Array{NumType, 2}
+
+  # Derivatives of a bvn with respect to (u, shape)
+  bvn_u_d::Array{NumType, 1}
+  bvn_uu_h::Array{NumType, 2}
+  bvn_s_d::Array{NumType, 1}
+  bvn_ss_h::Array{NumType, 2}
+  bvn_us_h::Array{NumType, 2}
+end
+
+ElboIntermediateVariables(NumType::DataType) = begin
+  @assert NumType <: Number
+
+  bvn_x_d = zeros(NumType, 2)
+  bvn_sig_d = zeros(NumType, 2)
+  bvn_xx_h = zeros(NumType, 2, 2)
+  bvn_xsig_h = zeros(NumType, 2, 3)
+  bvn_sigsig_h = zeros(NumType, 3, 3)
+
+  dpy1_dsig = zeros(NumType, 3)
+  dpy2_dsig = zeros(NumType, 3)
+  dsiginv_dsig = zeros(NumType, 3, 3)
+
+  # Derivatives wrt u.
+  bvn_u_d = zeros(NumType, 2)
+  bvn_uu_h = zeros(NumType, 2, 2)
+
+  # Shape deriviatives.  Here, s stands for "shape".
+  bvn_s_d = zeros(NumType, length(gal_shape_ids))
+
+  # The hessians.
+  bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
+  bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
+
+  ElboIntermediateVariables{NumType}(
+    bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
+    dpy1_dsig, dpy2_dsig, dsiginv_dsig,
+    bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h)
+end
+
+
 include(joinpath(Pkg.dir("Celeste"), "src/ElboKL.jl"))
 include(joinpath(Pkg.dir("Celeste"), "src/SourceBrightness.jl"))
 include(joinpath(Pkg.dir("Celeste"), "src/BivariateNormals.jl"))
-
 
 @doc """
 Add the contributions of a star's bivariate normal term to the ELBO,
@@ -32,30 +89,32 @@ Args:
  - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
 """ ->
 function accum_star_pos!{NumType <: Number}(
-                         bmc::BvnComponent{NumType},
-                         x::Vector{Float64},
-                         fs0m::SensitiveFloat{StarPosParams, NumType},
-                         wcs_jacobian::Array{Float64, 2})
-    py1, py2, f = eval_bvn_pdf(bmc, x)
+    elbo_vars::ElboIntermediateVariables{NumType},
+    bmc::BvnComponent{NumType},
+    x::Vector{Float64},
+    fs0m::SensitiveFloat{StarPosParams, NumType},
+    wcs_jacobian::Array{Float64, 2})
 
-    # TODO: This wastes a _lot_ of calculation.  Make a version for
-    # stars that only calculates the x derivatives.
-    bvn_sf = get_bvn_derivs(bmc, x);
-    bvn_u_d, bvn_uu_h = transform_bvn_derivs(bvn_sf, bmc, wcs_jacobian)
+  py1, py2, f = eval_bvn_pdf(bmc, x)
 
-    fs0m.v += f
+  # TODO: This wastes a _lot_ of calculation.  Make a version for
+  # stars that only calculates the x derivatives.
+  get_bvn_derivs!(elbo_vars, bmc, x);
+  transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
 
-    # Accumulate the derivatives.
-    for u_id in 1:2
-      fs0m.d[star_ids.u[u_id]] += f * bvn_u_d[u_id]
-    end
+  fs0m.v += f
 
-    # Hessian terms involving only the location parameters.
-    # TODO: redundant term
-    for u_id1 in 1:2, u_id2 in 1:2
-      fs0m.hs[1][star_ids.u[u_id1], star_ids.u[u_id2]] +=
-        f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
-    end
+  # Accumulate the derivatives.
+  for u_id in 1:2
+    fs0m.d[star_ids.u[u_id]] += f * bvn_u_d[u_id]
+  end
+
+  # Hessian terms involving only the location parameters.
+  # TODO: redundant term
+  for u_id1 in 1:2, u_id2 in 1:2
+    fs0m.hs[1][star_ids.u[u_id1], star_ids.u[u_id2]] +=
+      f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
+  end
 end
 
 
@@ -71,67 +130,74 @@ Args:
  - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
 """ ->
 function accum_galaxy_pos!{NumType <: Number}(
-                           gcc::GalaxyCacheComponent{NumType},
-                           x::Vector{Float64},
-                           fs1m::SensitiveFloat{GalaxyPosParams, NumType},
-                           wcs_jacobian::Array{Float64, 2})
-    py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
-    f = f_pre * gcc.e_dev_i
+    elbo_vars::ElboIntermediateVariables{NumType},
+    gcc::GalaxyCacheComponent{NumType},
+    x::Vector{Float64},
+    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
+    wcs_jacobian::Array{Float64, 2})
 
-    fs1m.v += f
+  py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
+  f = f_pre * gcc.e_dev_i
 
-    bvn_sf = get_bvn_derivs(gcc.bmc, x);
-    bvn_u_d, bvn_s_d, bvn_uu_h, bvn_ss_h, bvn_us_h =
-      transform_bvn_derivs(bvn_sf, gcc, wcs_jacobian)
+  fs1m.v += f
 
-    # Accumulate the derivatives.
-    for u_id in 1:2
-      fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]
-    end
+  get_bvn_derivs!(elbo_vars, gcc.bmc, x);
+  transform_bvn_derivs!(elbo_vars, gcc, wcs_jacobian)
 
-    for gal_id in 1:length(gal_shape_ids)
-      fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
-    end
+  bvn_u_d = elbo_vars.bvn_u_d
+  bvn_uu_h = elbo_vars.bvn_uu_h
+  bvn_s_d = elbo_vars.bvn_s_d
+  bvn_ss_h = elbo_vars.bvn_ss_h
+  bvn_us_h = elbo_vars.bvn_us_h
 
-    # The e_dev derivative.  e_dev just scales the entire component.
-    # The direction is positive or negative depending on whether this
-    # is an exp or dev component.
-    fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
+  # Accumulate the derivatives.
+  for u_id in 1:2
+    fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]
+  end
 
-    # The Hessians:
+  for gal_id in 1:length(gal_shape_ids)
+    fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
+  end
 
-    # Hessian terms involving only the shape parameters.
-    for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
-      s1 = gal_shape_alignment[shape_id1]
-      s2 = gal_shape_alignment[shape_id2]
-      fs1m.hs[1][s1, s2] +=
-        f * (bvn_ss_h[shape_id1, shape_id2] +
-             bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
-    end
+  # The e_dev derivative.  e_dev just scales the entire component.
+  # The direction is positive or negative depending on whether this
+  # is an exp or dev component.
+  fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
-    # Hessian terms involving only the location parameters.
-    for u_id1 in 1:2, u_id2 in 1:2
-      u1 = gal_ids.u[u_id1]
-      u2 = gal_ids.u[u_id2]
-      fs1m.hs[1][u1, u2] +=
-        f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
-    end
+  # The Hessians:
 
-    # Hessian terms involving both the shape and locaiton parameters.
-    for u_id in 1:2, shape_id in 1:length(gal_shape_ids)
-      ui = gal_ids.u[u_id]
-      si = gal_shape_alignment[shape_id]
-      fs1m.hs[1][ui, si] +=
-        f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
-      fs1m.hs[1][si, ui] = fs1m.hs[1][ui, si]
+  # Hessian terms involving only the shape parameters.
+  for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
+    s1 = gal_shape_alignment[shape_id1]
+    s2 = gal_shape_alignment[shape_id2]
+    fs1m.hs[1][s1, s2] +=
+      f * (bvn_ss_h[shape_id1, shape_id2] +
+           bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
+  end
 
-      # Do the e_dev hessians while we're here.
-      devi = gal_ids.e_dev
-      fs1m.hs[1][ui, devi] = f_pre * gcc.e_dev_dir * bvn_u_d[u_id]
-      fs1m.hs[1][devi, ui] = fs1m.hs[1][ui, devi]
-      fs1m.hs[1][si, devi] = f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
-      fs1m.hs[1][devi, si] = fs1m.hs[1][si, devi]
-    end
+  # Hessian terms involving only the location parameters.
+  for u_id1 in 1:2, u_id2 in 1:2
+    u1 = gal_ids.u[u_id1]
+    u2 = gal_ids.u[u_id2]
+    fs1m.hs[1][u1, u2] +=
+      f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
+  end
+
+  # Hessian terms involving both the shape and locaiton parameters.
+  for u_id in 1:2, shape_id in 1:length(gal_shape_ids)
+    ui = gal_ids.u[u_id]
+    si = gal_shape_alignment[shape_id]
+    fs1m.hs[1][ui, si] +=
+      f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
+    fs1m.hs[1][si, ui] = fs1m.hs[1][ui, si]
+
+    # Do the e_dev hessians while we're here.
+    devi = gal_ids.e_dev
+    fs1m.hs[1][ui, devi] = f_pre * gcc.e_dev_dir * bvn_u_d[u_id]
+    fs1m.hs[1][devi, ui] = fs1m.hs[1][ui, devi]
+    fs1m.hs[1][si, devi] = f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
+    fs1m.hs[1][devi, si] = fs1m.hs[1][si, devi]
+  end
 end
 
 
@@ -174,10 +240,13 @@ function accum_pixel_source_stats!{NumType <: Number}(
         var_G::SensitiveFloat{CanonicalParams, NumType},
         wcs_jacobian::Array{Float64, 2})
 
+    # TODO: initialize this higher up.
+    elbo_vars = ElboIntermediateVariables(NumType);
+
     # Accumulate over PSF components.
     clear!(fs0m)
     for star_mc in star_mcs[:, parent_s]
-        accum_star_pos!(star_mc, m_pos, fs0m, wcs_jacobian)
+        accum_star_pos!(elbo_vars, star_mc, m_pos, fs0m, wcs_jacobian)
     end
 
     clear!(fs1m)
@@ -185,7 +254,8 @@ function accum_pixel_source_stats!{NumType <: Number}(
         for j in 1:[8,6][i] # Galaxy component
             for k = 1:3 # PSF component
                 accum_galaxy_pos!(
-                  gal_mcs[k, j, i, parent_s], m_pos, fs1m, wcs_jacobian)
+                  elbo_vars, gal_mcs[k, j, i, parent_s],
+                  m_pos, fs1m, wcs_jacobian)
             end
         end
     end
