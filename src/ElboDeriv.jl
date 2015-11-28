@@ -39,12 +39,21 @@ type ElboIntermediateVariables{NumType <: Number}
   bvn_ss_h::Array{NumType, 2}
   bvn_us_h::Array{NumType, 2}
 
-  # Star and galaxy bvn quantities from all sources.
-  fs0m::SensitiveFloat{StarPosParams, NumType}
-  fs1m::SensitiveFloat{GalaxyPosParams, NumType}
+  # Vectors of star and galaxy bvn quantities from all sources for a pixel.
+  # The vector has one element for each active source, in the same order
+  # as mp.active_sources.
+  fs0m_vec::Vector{SensitiveFloat{StarPosParams, NumType}}
+  fs1m_vec::Vector{SensitiveFloat{GalaxyPosParams, NumType}}
+
+  # Expected pixel intensity and variance for a pixel from all sources.
+  E_G::SensitiveFloat{CanonicalParams, NumType}
+  var_G::SensitiveFloat{CanonicalParams, NumType}
+
+  # The ELBO itself.
+  accum::SensitiveFloat{CanonicalParams, NumType}
 end
 
-ElboIntermediateVariables(NumType::DataType) = begin
+ElboIntermediateVariables(NumType::DataType, num_sources::Int64) = begin
   @assert NumType <: Number
 
   bvn_x_d = zeros(NumType, 2)
@@ -69,14 +78,19 @@ ElboIntermediateVariables(NumType::DataType) = begin
   bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
 
   # fs0m and fs1m accumulate contributions from all sources.
-  fs0m = zero_sensitive_float(StarPosParams, NumType)
-  fs1m = zero_sensitive_float(GalaxyPosParams, NumType)
+  fs0m_vec = fill(zero_sensitive_float(StarPosParams, NumType), num_sources)
+  fs1m_vec = fill(zero_sensitive_float(GalaxyPosParams, NumType), num_sources)
+
+  E_G = zero_sensitive_float(CanonicalParams, NumType, num_sources)
+  var_G = zero_sensitive_float(CanonicalParams, NumType, num_sources)
+
+  accum = zero_sensitive_float(CanonicalParams, NumType, num_sources)
 
   ElboIntermediateVariables{NumType}(
     bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
     dpy1_dsig, dpy2_dsig, dsiginv_dsig,
     bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h,
-    fs0m, fs1m)
+    fs0m, fs1m, E_G, var_G, accum)
 end
 
 
@@ -89,6 +103,8 @@ Add the contributions of a star's bivariate normal term to the ELBO,
 by updating fs0m in place.
 
 Args:
+  - elbo_vars: Elbo intermediate values.
+  - sa: The index of the current source in mp.active_sources
   - bmc: The component to be added
   - x: An offset for the component in pixel coordinates (e.g. a pixel location)
   - fs0m: A SensitiveFloat to which the value of the bvn likelihood
@@ -97,6 +113,7 @@ Args:
 """ ->
 function accum_star_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
+    s::Int64,
     bmc::BvnComponent{NumType},
     x::Vector{Float64},
     wcs_jacobian::Array{Float64, 2})
@@ -108,7 +125,7 @@ function accum_star_pos!{NumType <: Number}(
   get_bvn_derivs!(elbo_vars, bmc, x);
   transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
 
-  fs0m = elbo_vars.fs0m
+  fs0m = elbo_vars.fs0m_vec[sa]
   bvn_u_d = elbo_vars.bvn_u_d
   bvn_uu_h = elbo_vars.bvn_uu_h
 
@@ -122,7 +139,7 @@ function accum_star_pos!{NumType <: Number}(
   # Hessian terms involving only the location parameters.
   # TODO: redundant term
   for u_id1 in 1:2, u_id2 in 1:2
-    fs0m.hs[1][star_ids.u[u_id1], star_ids.u[u_id2]] +=
+    fs0m.h[star_ids.u[u_id1], star_ids.u[u_id2]] +=
       f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
   end
 end
@@ -133,14 +150,15 @@ Add the contributions of a galaxy component term to the ELBO by
 updating fs1m in place.
 
 Args:
+  - elbo_vars: Elbo intermediate variables
+  - sa: The index of the current source in active_sources
   - gcc: The galaxy component to be added
   - x: An offset for the component in pixel coordinates (e.g. a pixel location)
-  - fs1m: A SensitiveFloat to which the value of the likelihood
-       and its derivatives with respect to x are added.
  - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
 """ ->
 function accum_galaxy_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
+    sa::Int64,
     gcc::GalaxyCacheComponent{NumType},
     x::Vector{Float64},
     wcs_jacobian::Array{Float64, 2})
@@ -148,11 +166,10 @@ function accum_galaxy_pos!{NumType <: Number}(
   py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
   f = f_pre * gcc.e_dev_i
 
-
   get_bvn_derivs!(elbo_vars, gcc.bmc, x);
   transform_bvn_derivs!(elbo_vars, gcc, wcs_jacobian)
 
-  fs1m = elbo_vars.fs1m;
+  fs1m = elbo_vars.fs1m_vec[sa];
   bvn_u_d = elbo_vars.bvn_u_d
   bvn_uu_h = elbo_vars.bvn_uu_h
   bvn_s_d = elbo_vars.bvn_s_d
@@ -181,7 +198,7 @@ function accum_galaxy_pos!{NumType <: Number}(
   for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
     s1 = gal_shape_alignment[shape_id1]
     s2 = gal_shape_alignment[shape_id2]
-    fs1m.hs[1][s1, s2] +=
+    fs1m.h[s1, s2] +=
       f * (bvn_ss_h[shape_id1, shape_id2] +
            bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
   end
@@ -190,7 +207,7 @@ function accum_galaxy_pos!{NumType <: Number}(
   for u_id1 in 1:2, u_id2 in 1:2
     u1 = gal_ids.u[u_id1]
     u2 = gal_ids.u[u_id2]
-    fs1m.hs[1][u1, u2] +=
+    fs1m.h[u1, u2] +=
       f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
   end
 
@@ -198,16 +215,16 @@ function accum_galaxy_pos!{NumType <: Number}(
   for u_id in 1:2, shape_id in 1:length(gal_shape_ids)
     ui = gal_ids.u[u_id]
     si = gal_shape_alignment[shape_id]
-    fs1m.hs[1][ui, si] +=
+    fs1m.h[ui, si] +=
       f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
-    fs1m.hs[1][si, ui] = fs1m.hs[1][ui, si]
+    fs1m.h[si, ui] = fs1m.h[ui, si]
 
     # Do the e_dev hessians while we're here.
     devi = gal_ids.e_dev
-    fs1m.hs[1][ui, devi] = f_pre * gcc.e_dev_dir * bvn_u_d[u_id]
-    fs1m.hs[1][devi, ui] = fs1m.hs[1][ui, devi]
-    fs1m.hs[1][si, devi] = f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
-    fs1m.hs[1][devi, si] = fs1m.hs[1][si, devi]
+    fs1m.h[ui, devi] = f_pre * gcc.e_dev_dir * bvn_u_d[u_id]
+    fs1m.h[devi, ui] = fs1m.h[ui, devi]
+    fs1m.h[si, devi] = f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
+    fs1m.h[devi, si] = fs1m.h[si, devi]
   end
 end
 
@@ -216,21 +233,20 @@ end
 Add up the ELBO values and derivatives for a single source
 in a single band to get E_G and var_G.
 
+TODO: Since the hessians tie together different sources, this
+can no longer process the sources one at a time.
+
 Args:
   - elbo_vars: ElboIntermediateVariables
+  - sa: The index of the source in active_sources.
   - sb: The source's brightness expectations and derivatives
   - star_mcs: An array of star * PSF components.  The index
       order is PSF component x source.
   - gal_mcs: An array of galaxy * PSF components.  The index order is
       PSF component x galaxy component x galaxy type x source
   - vs: The variational parameters for this source
-  - child_s: The index of this source within the tile.
-  - parent_s: The global index of this source.
   - m_pos: A 2x1 vector with the pixel location in pixel coordinates
   - b: The band (1 to 5)
-  - E_G: Expected celestial signal in this band (G_{nbm})
-       (updated in place)
-  - var_G: Variance of G (updated in place)
   - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
 
 Returns:
@@ -240,21 +256,23 @@ Returns:
 """ ->
 function accum_pixel_source_stats!{NumType <: Number}(
         elbo_vars::ElboIntermediateVariables{NumType},
+        sa::Int64,
         sb::SourceBrightness{NumType},
         star_mcs::Array{BvnComponent{NumType}, 2},
         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-        vs::Vector{NumType}, child_s::Int64, parent_s::Int64,
+        vs::Vector{NumType},
         m_pos::Vector{Float64}, b::Int64,
-        E_G::SensitiveFloat{CanonicalParams, NumType},
-        var_G::SensitiveFloat{CanonicalParams, NumType},
         wcs_jacobian::Array{Float64, 2})
 
-    fs0m = elbo_vars.fs0m;
-    fs1m = elbo_vars.fs1m;
+    fs0m = elbo_vars.fs0m_vec[sa];
+    fs1m = elbo_vars.fs1m_vec[sa];
+
+    E_G = elbo_vars.E_G;
+    var_G = elbo_vars.var_G;
 
     # Accumulate over PSF components.
     clear!(fs0m)
-    for star_mc in star_mcs[:, parent_s]
+    for star_mc in star_mcs[:, sa]
         accum_star_pos!(elbo_vars, star_mc, m_pos, wcs_jacobian)
     end
 
@@ -263,11 +281,14 @@ function accum_pixel_source_stats!{NumType <: Number}(
         for j in 1:[8,6][i] # Galaxy component
             for k = 1:3 # PSF component
                 accum_galaxy_pos!(
-                  elbo_vars, gal_mcs[k, j, i, parent_s],
+                  elbo_vars, gal_mcs[k, j, i, sa],
                   m_pos, wcs_jacobian)
             end
         end
     end
+
+    ####################################
+    # Everything from here on needs to be rewritten.
 
     # Add the contributions of this source in this band to
     # E(G) and Var(G).
@@ -278,6 +299,9 @@ function accum_pixel_source_stats!{NumType <: Number}(
     # - multiply by <a> (special case?)
     # - log a sensitive float
     # - somehow get x / y^2 (for the variance term)
+
+    # Furthermore, the code below has E_G and var_G only as big as
+    # the current pixel's active sources rather than all active sources.
 
     # In the structures below, 1 = star and 2 = galaxy.
     a = vs[ids.a]
@@ -330,28 +354,74 @@ function accum_pixel_source_stats!{NumType <: Number}(
 end
 
 
+############################################
+# The remaining functions loop over tiles, sources, and pixels.
+
+@doc """
+Expected pixel brightness.
+Args:
+  h: The row of the tile
+  w: The column of the tile
+  ...the rest are the same as elsewhere.
+  tile_sources: The indices within active_sources that are present in the tile.
+
+Returns:
+  - Iota.
+""" ->
+function expected_pixel_brightness!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    h::Int64, w::Int64,
+    sbs::Vector{SourceBrightness{NumType}},
+    star_mcs::Array{BvnComponent{NumType}, 2},
+    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+    tile::ImageTile,
+    mp::ModelParams{NumType},
+    tile_sources::Vector{Int64},
+    include_epsilon::Bool=true)
+
+  clear!(elbo_vars.E_G)
+  clear!(elbo_vars.var_G)
+
+  if include_epsilon
+    E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
+  else
+    E_G.v = 0.0
+  end
+
+  s = mp.active_sources[sa]
+  for sa in tile_sources
+      accum_pixel_source_stats!(
+          elbo_vars, sbs[s], star_mcs, gal_mcs, mp.vp[sa],
+          Float64[tile.h_range[h], tile.w_range[w]], tile.b,
+          mp.patches[s, tile.b].wcs_jacobian)
+  end
+
+  # Return the appropriate value of iota.
+  tile.constant_background ? tile.iota : tile.iota_vec[h]
+end
+
+
 @doc """
 Add the contributions of the expected value of a E_G and var_G term to the ELBO.
 
 Args:
+  - elbo_vars: Intermediate values for the ELBO
   - tile_sources: A vector of source ids influencing this tile
   - x_nbm: The photon count at this pixel
   - iota: The optical sensitivity
-  - E_G: The variational expected value of G
-  - var_G: The variational variance of G
   - accum: A SensitiveFloat for the ELBO which is updated
 
 Returns:
   - Adds the contributions of E_G and var_G to accum in place.
 """ ->
-function accum_pixel_ret!{NumType <: Number}(
+function accum_pixel_elbo_terms!{NumType <: Number}(
         elbo_vars::ElboIntermediateVariables{NumType},
         tile_sources::Vector{Int64},
         x_nbm::Float64, iota::Float64,
-        E_G::SensitiveFloat{CanonicalParams, NumType},
-        var_G::SensitiveFloat{CanonicalParams, NumType},
         ret::SensitiveFloat{CanonicalParams, NumType})
 
+    E_G = elbo_vars.E_G
+    var_G = elbo_vars.var_G
 
     # Accumulate the values.
     # Add the lower bound to the E_q[log(F_{nbm})] term
@@ -376,56 +446,6 @@ function accum_pixel_ret!{NumType <: Number}(
     end
 end
 
-############################################
-# The remaining functions loop over tiles, sources, and pixels.
-
-@doc """
-Expected pixel brightness.
-Args:
-  h: The row of the tile
-  w: The column of the tile
-  ...the rest are the same as elsewhere.
-
-Returns:
-  - Iota.
-""" ->
-function expected_pixel_brightness!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
-    h::Int64, w::Int64,
-    sbs::Vector{SourceBrightness{NumType}},
-    star_mcs::Array{BvnComponent{NumType}, 2},
-    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-    tile::ImageTile,
-    E_G::SensitiveFloat{CanonicalParams, NumType},
-    var_G::SensitiveFloat{CanonicalParams, NumType},
-    mp::ModelParams{NumType},
-    tile_sources::Vector{Int64},
-    include_epsilon::Bool=true)
-
-  fs0m = elbo_vars.fs0m;
-  fs1m = elbo_vars.fs1m;
-
-  clear!(E_G)
-  clear!(var_G)
-
-  if include_epsilon
-    E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
-  else
-    E_G.v = 0.0
-  end
-
-  for child_s in 1:length(tile_sources)
-      accum_pixel_source_stats!(
-          elbo_vars, sbs[tile_sources[child_s]], star_mcs, gal_mcs,
-          mp.vp[tile_sources[child_s]], child_s, tile_sources[child_s],
-          Float64[tile.h_range[h], tile.w_range[w]], tile.b,
-          E_G, var_G, mp.patches[child_s, tile.b].wcs_jacobian)
-  end
-
-  # Return the appropriate value of iota.
-  tile.constant_background ? tile.iota : tile.iota_vec[h]
-end
-
 
 @doc """
 Add a tile's contribution to the ELBO likelihood term by
@@ -440,14 +460,16 @@ Args:
   - accum: The ELBO log likelihood to be updated.
 """ ->
 function tile_likelihood!{NumType <: Number}(
+        elbo_vars::ElboIntermediateVariables{NumType},
         tile::ImageTile,
         tile_sources::Vector{Int64},
         mp::ModelParams{NumType},
         sbs::Vector{SourceBrightness{NumType}},
         star_mcs::Array{BvnComponent{NumType}, 2},
         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-        accum::SensitiveFloat{CanonicalParams, NumType};
         include_epsilon::Bool=true)
+
+    accum = elbo_vars.accum
 
     # For speed, if there are no sources, add the noise
     # contribution directly.
@@ -472,19 +494,15 @@ function tile_likelihood!{NumType <: Number}(
         return
     end
 
-    tile_S = length(tile_sources)
-    E_G = zero_sensitive_float(CanonicalParams, NumType, tile_S)
-    var_G = zero_sensitive_float(CanonicalParams, NumType, tile_S)
-
     # Iterate over pixels that are not NaN.
     for w in 1:tile.w_width, h in 1:tile.h_width
         this_pixel = tile.pixels[h, w]
         if !Base.isnan(this_pixel)
             iota = expected_pixel_brightness!(
-              elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile, E_G, var_G,
+              elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
               mp, tile_sources, include_epsilon=include_epsilon)
-            accum_pixel_ret!(
-              elbo_vars, tile_sources, this_pixel, iota, E_G, var_G, accum)
+            accum_pixel_elbo_terms!(
+              elbo_vars, tile_sources, this_pixel, iota, accum)
         end
     end
 
@@ -508,23 +526,14 @@ Returns:
   A matrix of the same size as the tile with the predicted brightnesses.
 """ ->
 function tile_predicted_image{NumType <: Number}(
+        elbo_vars::ElboIntermediateVariables{NumType},
         tile::ImageTile,
         tile_sources::Vector{Int64},
         mp::ModelParams{NumType},
         sbs::Vector{SourceBrightness{NumType}},
         star_mcs::Array{BvnComponent{NumType}, 2},
         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-        accum::SensitiveFloat{CanonicalParams, NumType};
         include_epsilon::Bool=true)
-
-
-    # TODO: initialize this higher up?
-    elbo_vars = ElboIntermediateVariables(NumType);
-
-    # TODO: perhaps you can put E_G and var_G into elbo_vars.
-    tile_S = length(tile_sources)
-    E_G = zero_sensitive_float(CanonicalParams, NumType, tile_S)
-    var_G = zero_sensitive_float(CanonicalParams, NumType, tile_S)
 
     predicted_pixels = copy(tile.pixels)
     # Iterate over pixels that are not NaN.
@@ -532,7 +541,7 @@ function tile_predicted_image{NumType <: Number}(
         this_pixel = tile.pixels[h, w]
         if !Base.isnan(this_pixel)
             iota = expected_pixel_brightness!(
-              elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile, E_G, var_G,
+              elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
               mp, tile_sources, include_epsilon=include_epsilon)
             predicted_pixels[h, w] = E_G.v * iota
         end
@@ -556,16 +565,16 @@ function tile_predicted_image{NumType <: Number}(
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
   sbs = [SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-  accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
   tile_sources = mp.tile_sources[b][tile.hh, tile.ww]
+  elbo_vars = ElboIntermediateVariables(NumType);
 
-  tile_predicted_image(tile,
+  tile_predicted_image(elbo_vars,
+                       tile,
                        tile_sources,
                        mp,
                        sbs,
                        star_mcs,
                        gal_mcs,
-                       accum,
                        include_epsilon=include_epsilon)
 end
 
@@ -574,19 +583,19 @@ end
 The ELBO likelihood for given brighntess and bvn components.
 """ ->
 function elbo_likelihood!{NumType <: Number}(
+  elbo_vars::ElboIntermediateVariables{NumType},
   tiled_image::Array{ImageTile},
   mp::ModelParams{NumType},
   sbs::Vector{SourceBrightness{NumType}},
   star_mcs::Array{BvnComponent{NumType}, 2},
-  gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-  accum::SensitiveFloat{CanonicalParams, NumType})
+  gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
 
   @assert maximum(mp.active_sources) <= mp.S
   for tile in tiled_image[:]
     tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
     if length(intersect(tile_sources, mp.active_sources)) > 0
       tile_likelihood!(
-        tile, tile_sources, mp, sbs, star_mcs, gal_mcs, accum);
+        elbo_vars, tile, tile_sources, mp, sbs, star_mcs, gal_mcs);
     end
   end
 
@@ -603,12 +612,12 @@ Args:
   - b: The current band
 """ ->
 function elbo_likelihood!{NumType <: Number}(
-  tiles::Array{ImageTile}, mp::ModelParams{NumType},
-  b::Int64, accum::SensitiveFloat{CanonicalParams, NumType})
+  elbo_vars::ElboIntermediateVariables{NumType},
+  tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64)
 
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
   sbs = SourceBrightness{NumType}[SourceBrightness(mp.vp[s]) for s in 1:mp.S]
-  elbo_likelihood!(tiles, mp, sbs, star_mcs, gal_mcs, accum)
+  elbo_likelihood!(elbo_vars, tiles, mp, sbs, star_mcs, gal_mcs)
 end
 
 
@@ -617,15 +626,13 @@ Return the expected log likelihood for all bands in a section
 of the sky.
 """ ->
 function elbo_likelihood{NumType <: Number}(
-  tiled_blob::TiledBlob, mp::ModelParams{NumType})
-    # Return the expected log likelihood for all bands in a section
-    # of the sky.
+    tiled_blob::TiledBlob, mp::ModelParams{NumType})
 
-    accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
-    for b in 1:length(tiled_blob)
-        elbo_likelihood!(tiled_blob[b], mp, b, accum)
-    end
-    ret
+  elbo_vars = ElboIntermediateVariables(NumType, length(mp.active_sources));
+  for b in 1:length(tiled_blob)
+      elbo_likelihood!(elbo_vars, tiled_blob[b], mp, b)
+  end
+  elbo_vars.accum
 end
 
 
@@ -637,10 +644,13 @@ Args:
   - tiled_blob: A TiledBlob.
   - mp: Model parameters.
 """ ->
-function elbo{NumType <: Number}(tiled_blob::TiledBlob, mp::ModelParams{NumType})
-    accum = elbo_likelihood(tiled_blob, mp)
-    subtract_kl!(mp, accum)
-    accum
+function elbo{NumType <: Number}(
+    tiled_blob::TiledBlob, mp::ModelParams{NumType})
+  accum = elbo_likelihood(tiled_blob, mp)
+
+  # TODO: subtract the kl with the hessian.
+  subtract_kl!(mp, accum)
+  accum
 end
 
 

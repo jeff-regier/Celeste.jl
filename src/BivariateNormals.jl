@@ -299,12 +299,14 @@ Args:
  - b: The current band
 
 Returns:
- - star_mcs: An # of PSF components x # of sources array of BvnComponents
+ - star_mcs: An array of BvnComponents with indices
+    - PSF component
+    - Source (index within active_sources)
  - gal_mcs: An array of BvnComponents with indices
     - PSF component
     - Galaxy component
     - Galaxy type
-    - Source
+    - Source (index within active_sources)
 
 The PSF contains three components, so you see lots of 3's below.
 """ ->
