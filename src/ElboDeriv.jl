@@ -47,6 +47,7 @@ type ElboIntermediateVariables{NumType <: Number}
 
   # Expected pixel intensity and variance for a pixel from all sources.
   E_G::SensitiveFloat{CanonicalParams, NumType}
+  E_G2::SensitiveFloat{CanonicalParams, NumType}
   var_G::SensitiveFloat{CanonicalParams, NumType}
 
   # The ELBO itself.
@@ -82,6 +83,7 @@ ElboIntermediateVariables(NumType::DataType, num_sources::Int64) = begin
   fs1m_vec = fill(zero_sensitive_float(GalaxyPosParams, NumType), num_sources)
 
   E_G = zero_sensitive_float(CanonicalParams, NumType, num_sources)
+  E_G2 = zero_sensitive_float(CanonicalParams, NumType, num_sources)
   var_G = zero_sensitive_float(CanonicalParams, NumType, num_sources)
 
   accum = zero_sensitive_float(CanonicalParams, NumType, num_sources)
@@ -90,7 +92,7 @@ ElboIntermediateVariables(NumType::DataType, num_sources::Int64) = begin
     bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
     dpy1_dsig, dpy2_dsig, dsiginv_dsig,
     bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h,
-    fs0m_vec, fs1m_vec, E_G, var_G, accum)
+    fs0m_vec, fs1m_vec, E_G, E_G2, var_G, accum)
 end
 
 
@@ -232,6 +234,131 @@ end
 
 
 @doc """
+An a-weighted combination of bvn * brightness for a particular pixel.
+
+Updates E_G in place.
+""" ->
+function combine_pixel_sources!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    tile_sources::Vector{Int64},
+    b::Int64,
+    sbs::Vector{SourceBrightness{NumType}},
+    a::Vector{NumType})
+
+  # The indices in the sf hessian for source sa.
+  function get_source_indices(sa_ind::Int64)
+    P = length(CanonicalParams)
+    (1:P) + P * (sa_ind - 1)
+  end
+
+  # E[G] and E{G ^ 2}
+  E_G = elbo_vars.E_G;
+  E_G2 = elbo_vars.E_G2;
+
+  clear!(E_G)
+  clear!(E_G2)
+  for sa_ind in 1:length(tile_sources)
+    sa = tile_sources[sa_ind]
+    fsm = (elbo_vars.fs0m_vec[sa], elbo_vars.fs1m_vec[sa]);
+    sb = sbs[sa]
+    lf = (sb.E_l_a[b, 1].v * fsm[1].v, sb.E_l_a[b, 2].v * fsm[2].v)
+    s_inds = get_source_indices(sa_ind)
+
+    E_G_s_v = a[1] * lf[1] + a[2] * lf[2]
+    E_G.v += E_G_s_v
+
+    llff = (sb.E_ll_a[b, 1].v * fsm[1].v^2, sb.E_ll_a[b, 2].v * fsm[2].v^2)
+    E_G2_s_v = a[1] * llff[1] + a[2] * llff[2]
+    E_G2.v += E_G2_s_v
+
+    # a derivatives:
+    for i in 1:Ia # Stars and galaxies
+      E_G.d[ids.a[i], sa] += lf[i]
+      E_G2.d[ids.a[i], sa] += llff[i]
+
+      # Derivatives with respect to the spatial parameters
+      p0_shape = shape_standard_alignment[i]
+
+      a_fd = a[i] * fsm[i].d[:, 1]
+      a_El_fd = sb.E_l_a[b, i].v * a_fd
+      E_G.d[p0_shape, sa] += a_El_fd
+      E_G2.d[p0_shape, sa] += sb.E_ll_a[b, i].v * 2 * fsm[i].v * a_fd
+
+      # for p1 in 1:length(shape_standard_alignment[i])
+      #     p0 = shape_standard_alignment[i][p1]
+      #     a_fd = a[i] * fsm[i].d[p1]
+      #     a_El_fd = sb.E_l_a[b, i].v * a_fd
+      #     E_G.d[p0, sa] += a_El_fd
+      #     E_G2.d[p0, sa] += a_fd * sb.E_ll_a[b, i].v * 2 * fsm[i].v
+      # end
+
+      # Derivatives with respect to the brightness parameters.
+      p0_bright = brightness_standard_alignment[i]
+      E_G.d[p0_bright, sa] += a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
+      E_G2.d[p0_bright, sa] += a[i] * fsm[i].v^2 * sb.E_ll_a[b, i].d[p0_bright, 1]
+      # for p1 in 1:length(brightness_standard_alignment[i])
+      #     p0 = brightness_standard_alignment[i][p1]
+      #     # TODO: use p1 to index E_l_a and E_ll_a once using BrightnessParams type
+      #     a_f_Eld = a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
+      #     E_G.d[p0, sa] += a_f_Eld
+      #     E_G2.d[p0, sa] += a[i] * fsm[i].v^2 * sb.E_ll_a[b, i].d[p0]
+      # end
+
+      # Hessians.
+
+      # The indicies of the brightness parameters in the Hessian for this source.
+      p0_bright_hess = s_ind[p0_bright]
+
+      # The indicies of the shape parameters in the Hessian for this source.
+      p0_shape_hess = s_ind[p0_shape]
+
+      # The (a, a) block of the hessian is zero.
+
+      # The (bright, bright) block:
+      E_G.h[p0_bright_hess, p0_bright_hess] +=
+        a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright_hess, p0_bright_hess]
+      E_G2.h[p0_bright_hess, p0_bright_hess] +=
+        a[i] * fsm[i].v * sb.E_ll_a[b, i].h[p0_bright_hess, p0_bright_hess]
+
+      # The (shape, shape) block:
+      E_G.h[p0_shape_hess, p0_shape_hess] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
+      E_G2.h[p0_shape_hess, p0_shape_hess] +=
+        2 * a[i] * sb.E_l_a[b, i].v * (fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
+
+      # TODO: eliminate redundancy.
+      # The (a, bright) blocks:
+      h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
+      E_G.h[ids.a[i], p0_bright_hess] += h_a_bright
+      E_G.h[p0_bright_hess, ids.a[i]] += h_a_bright'
+
+      h2_a_bright = fsm[i].v * sb.E_ll_a[b, i].d[p0_bright, 1]
+      E_G2.h[ids.a[i], p0_bright_hess] += h2_a_bright
+      E_G2.h[p0_bright_hess, ids.a[i]] += h2_a_bright'
+
+      # The (a, shape) blocks.
+      h_a_shape = sb.E_l_a[b, i].v * fsm[i].d
+      E_G.h[ids.a[i], p0_shape_hess] += h_a_shape
+      E_G.h[p0_shape_hess, ids.a[i]] += h_a_shape'
+
+      h2_a_shape = 2 * sb.E_l_a[b, i].v * fsm[i].v * fsm[i].d
+      E_G2.h[ids.a[i], p0_shape_hess] += h2_a_shape
+      E_G2.h[p0_shape_hess, ids.a[i]] += h2_a_shape'
+
+      # The (shape, bright) blocks.
+      h_bright_shape = a[i] * sb.E_l_a[b, i].d[p0_bright, sa] * fsm[i].d'
+      E_G.h[p0_bright_hess, p0_shape_hess] += h_bright_shape
+      E_G.h[p0_shape_hess, p0_bright_hess] += h_bright_shape'
+
+      h2_bright_shape = 2 * a[i] * sb.E_ll_a[b, i].d[p0_bright, sa] * fsm[i].v * fsm[i].d'
+      E_G2.h[p0_bright_hess, p0_shape_hess] += h2_bright_shape
+      E_G2.h[p0_shape_hess, p0_bright_hess] += h2_bright_shape'
+    end
+  end
+end
+
+
+
+@doc """
 Add up the ELBO values and derivatives for a single source
 in a single band to get E_G and var_G.
 
@@ -256,23 +383,21 @@ Returns:
     star and galaxy contributions to the ELBO from this source
     in this band.  Adds the contributions to E_G and var_G.
 """ ->
-function accum_pixel_source_stats!{NumType <: Number}(
+function accum_pixel_brightness_stats!{NumType <: Number}(
         elbo_vars::ElboIntermediateVariables{NumType},
-        sa::Int64,
-        sb::SourceBrightness{NumType},
+        sbs::Vector{SourceBrightness{NumType}},
         star_mcs::Array{BvnComponent{NumType}, 2},
         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
         vs::Vector{NumType},
         m_pos::Vector{Float64}, b::Int64,
         wcs_jacobian::Array{Float64, 2})
 
+    # TODO: replace this with expected_pixel_brightness
+
     fs0m = elbo_vars.fs0m_vec[sa];
     fs1m = elbo_vars.fs1m_vec[sa];
 
-    E_G = elbo_vars.E_G;
-    var_G = elbo_vars.var_G;
 
-    # Accumulate over PSF components.
     clear!(fs0m)
     for star_mc in star_mcs[:, sa]
         accum_star_pos!(elbo_vars, star_mc, m_pos, wcs_jacobian)
@@ -282,9 +407,7 @@ function accum_pixel_source_stats!{NumType <: Number}(
     for i = 1:2 # Galaxy types
         for j in 1:[8,6][i] # Galaxy component
             for k = 1:3 # PSF component
-                accum_galaxy_pos!(
-                  elbo_vars, gal_mcs[k, j, i, sa],
-                  m_pos, wcs_jacobian)
+                accum_galaxy_pos!( elbo_vars, gal_mcs[k, j, i, sa], m_pos, wcs_jacobian)
             end
         end
     end
@@ -370,7 +493,7 @@ Args:
 Returns:
   - Iota.
 """ ->
-function expected_pixel_brightness!{NumType <: Number}(
+function get_expected_pixel_brightness!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     h::Int64, w::Int64,
     sbs::Vector{SourceBrightness{NumType}},
@@ -381,8 +504,11 @@ function expected_pixel_brightness!{NumType <: Number}(
     tile_sources::Vector{Int64},
     include_epsilon::Bool=true)
 
-  clear!(elbo_vars.E_G)
-  clear!(elbo_vars.var_G)
+  E_G = elbo_vars.E_G;
+  var_G = elbo_vars.var_G;
+
+  clear!(E_G)
+  clear!(var_G)
 
   if include_epsilon
     E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
@@ -390,13 +516,40 @@ function expected_pixel_brightness!{NumType <: Number}(
     E_G.v = 0.0
   end
 
-  s = mp.active_sources[sa]
+  # Populate fs0m_vec and fs1m_vec.
   for sa in tile_sources
-      accum_pixel_source_stats!(
-          elbo_vars, sbs[s], star_mcs, gal_mcs, mp.vp[sa],
-          Float64[tile.h_range[h], tile.w_range[w]], tile.b,
-          mp.patches[s, tile.b].wcs_jacobian)
+    s = mp.active_sources[sa]
+    wcs_jacobian = mp.patches[s, tile.b].wcs_jacobian;
+    sb = sbs[s];
+
+    m_pos = Float64[tile.h_range[h], tile.w_range[w]]
+
+    clear!(elbo_vars.fs0m_vec[sa])
+    for star_mc in star_mcs[:, sa]
+        accum_star_pos!(elbo_vars, star_mc, m_pos, wcs_jacobian)
+    end
+
+    clear!(elbo_vars.fs1m_vec[sa])
+    for i = 1:2 # Galaxy types
+        for j in 1:[8,6][i] # Galaxy component
+            for k = 1:3 # PSF component
+                gal_mv = gal_mcs[k, j, i, sa];
+                accum_galaxy_pos!(elbo_vars, gal_mc, m_pos, wcs_jacobian)
+            end
+        end
+    end
+
+    # accum_pixel_source_stats!(
+    #     elbo_vars, sbs[s], star_mcs, gal_mcs, mp.vp[sa],
+    #     Float64[tile.h_range[h], tile.w_range[w]], tile.b,
+    #     mp.patches[s, tile.b].wcs_jacobian)
   end
+
+
+
+
+
+
 
   # Return the appropriate value of iota.
   tile.constant_background ? tile.iota : tile.iota_vec[h]
