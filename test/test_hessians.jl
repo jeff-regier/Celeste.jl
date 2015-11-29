@@ -14,110 +14,113 @@ import WCS
 println("Running hessian tests.")
 
 
+function test_combine_sfs()
+  # TODO: this test was designed for multiply_sf.  Make it more general.
+
+  # Two sets of ids with some overlap and some disjointness.
+  p = length(ids)
+  S = 2
+
+  ids1 = find((1:p) .% 2 .== 0)
+  ids2 = setdiff(1:p, ids1)
+  ids1 = union(ids1, 1:5)
+  ids2 = union(ids2, 1:5)
+
+  l1 = zeros(Float64, S * p);
+  l2 = zeros(Float64, S * p);
+  l1[ids1] = rand(length(ids1))
+  l2[ids2] = rand(length(ids2))
+  l1[ids1 + p] = rand(length(ids1))
+  l2[ids2 + p] = rand(length(ids2))
+
+  sigma1 = zeros(Float64, S * p, S * p);
+  sigma2 = zeros(Float64, S * p, S * p);
+  sigma1[ids1, ids1] = rand(length(ids1), length(ids1));
+  sigma2[ids2, ids2] = rand(length(ids2), length(ids2));
+  sigma1[ids1 + p, ids1 + p] = rand(length(ids1), length(ids1));
+  sigma2[ids2 + p, ids2 + p] = rand(length(ids2), length(ids2));
+  sigma1 = 0.5 * (sigma1 + sigma1');
+  sigma2 = 0.5 * (sigma2 + sigma2');
+
+  x = 0.1 * rand(S * p);
+
+  function base_fun1{T <: Number}(x::Vector{T})
+    (l1' * x + 0.5 * x' * sigma1 * x)[1,1]
+  end
+
+  function base_fun2{T <: Number}(x::Vector{T})
+    (l2' * x + 0.5 * x' * sigma2 * x)[1,1]
+  end
+
+  function multiply_fun{T <: Number}(x::Vector{T})
+    base_fun1(x) * base_fun1(x)
+  end
+
+  function combine_fun{T <: Number}(x::Vector{T})
+    (base_fun1(x) ^ 2) * sqrt(base_fun2(x))
+  end
+
+  function combine_fun_derivatives{T <: Number}(x::Vector{T})
+    g_d = T[2 * base_fun1(x) * sqrt(base_fun2(x)),
+            0.5 * (base_fun1(x) ^ 2) / sqrt(base_fun2(x)) ]
+    g_h = zeros(T, 2, 2)
+    g_h[1, 1] = 2 * sqrt(base_fun2(x))
+    g_h[2, 2] = -0.25 * (base_fun1(x) ^ 2) * (base_fun2(x) ^(-3/2))
+    g_h[1, 2] = g_h[2, 1] = base_fun1(x) / sqrt(base_fun2(x))
+    g_d, g_h
+  end
 
 
+  s_ind = Array(UnitRange{Int64}, 2);
+  s_ind[1] = 1:p
+  s_ind[2] = (1:p) + p
 
-
-
-
-# Test for hessians.
-# Two sets of ids with some overlap and some disjointness.
-p = length(ids)
-S = 2
-
-ids1 = find((1:p) .% 2 .== 0)
-ids2 = setdiff(1:p, ids1)
-ids1 = union(ids1, 1:5)
-ids2 = union(ids2, 1:5)
-
-l1 = zeros(Float64, S * p);
-l2 = zeros(Float64, S * p);
-l1[ids1] = rand(length(ids1))
-l2[ids2] = rand(length(ids2))
-l1[ids1 + p] = rand(length(ids1))
-l2[ids2 + p] = rand(length(ids2))
-
-sigma1 = zeros(Float64, S * p, S * p);
-sigma2 = zeros(Float64, S * p, S * p);
-sigma1[ids1, ids1] = rand(length(ids1), length(ids1));
-sigma2[ids2, ids2] = rand(length(ids2), length(ids2));
-sigma1[ids1 + p, ids1 + p] = rand(length(ids1), length(ids1));
-sigma2[ids2 + p, ids2 + p] = rand(length(ids2), length(ids2));
-sigma1 = 0.5 * (sigma1 + sigma1');
-sigma2 = 0.5 * (sigma2 + sigma2');
-
-x = 0.1 * rand(S * p);
-
-function testfun1(x)
-  (l1' * x + 0.5 * x' * sigma1 * x)[1,1]
-end
-
-function testfun2(x)
-  (l2' * x + 0.5 * x' * sigma2 * x)[1,1]
-end
-
-function testfun(x)
-  testfun1(x) * testfun2(x)
-end
-
-ret1 = zero_sensitive_float(CanonicalParams, Float64, 1);
-ret2 = zero_sensitive_float(CanonicalParams, Float64, 1);
-s_ind = Array(UnitRange{Int64}, 2);
-s_ind[1] = 1:p
-s_ind[2] = (1:p) + p
-
-ret1.v = testfun1(x)
-fill!(ret1.d, 0.0);
-for s=1:S
+  ret1 = zero_sensitive_float(CanonicalParams, Float64, S);
+  ret1.v = base_fun1(x)
+  fill!(ret1.d, 0.0);
   fill!(ret1.h, 0.0);
-  ret1.d[:, s] = l1[s_ind[s]] + sigma1[s_ind[s], s_ind[s]] * x[s_ind[s]];
-  ret1.h = sigma1[s_ind[s], s_ind[s]];
-end
+  for s=1:S
+    ret1.d[:, s] = l1[s_ind[s]] + sigma1[s_ind[s], s_ind[s]] * x[s_ind[s]];
+    ret1.h[s_ind[s], s_ind[s]] = sigma1[s_ind[s], s_ind[s]];
+  end
 
-ret2.v = testfun2(x)
-fill!(ret2.d, 0.0);
-for s=1:S
+  ret2 = zero_sensitive_float(CanonicalParams, Float64, S);
+  ret2.v = base_fun2(x)
+  fill!(ret2.d, 0.0);
   fill!(ret2.h, 0.0);
-  ret2.d[:, s] = l2[s_ind[s]] + sigma2[s_ind[s], s_ind[s]] * x[s_ind[s]];
-  ret2.h = sigma2[s_ind[s], s_ind[s]];
+  for s=1:S
+    ret2.d[:, s] = l2[s_ind[s]] + sigma2[s_ind[s], s_ind[s]] * x[s_ind[s]];
+    ret2.h[s_ind[s], s_ind[s]] = sigma2[s_ind[s], s_ind[s]];
+  end
+
+  grad = ForwardDiff.gradient(base_fun1, x);
+  hess = ForwardDiff.hessian(base_fun1, x);
+  for s=1:S
+    @test_approx_eq(ret1.d[:, s], grad[s_ind[s]])
+  end
+  @test_approx_eq(ret1.h, hess)
+
+  grad = ForwardDiff.gradient(base_fun2, x);
+  hess = ForwardDiff.hessian(base_fun2, x);
+  for s=1:S
+    @test_approx_eq(ret2.d[:, s], grad[s_ind[s]])
+  end
+  @test_approx_eq(ret2.h, hess)
+
+  # Test the combinations.
+  v = combine_fun(x);
+  grad = ForwardDiff.gradient(combine_fun, x);
+  hess = ForwardDiff.hessian(combine_fun, x);
+
+  sf1 = deepcopy(ret1);
+  sf2 = deepcopy(ret2);
+  g_d, g_h = combine_fun_derivatives(x)
+  CelesteTypes.combine_sfs!(sf1, sf2, sf1.v ^ 2 * sqrt(sf2.v), g_d, g_h);
+
+  @test_approx_eq sf1.v v
+  @test_approx_eq sf1.d[:] grad
+  @test_approx_eq sf1.h hess
 end
-
-hess = zeros(Float64, S * p, S * p);
-grad = ForwardDiff.gradient(testfun1, x);
-ForwardDiff.hessian!(hess, testfun1, x);
-for s=1:S
-  @test_approx_eq(ret1.d[:, s], grad[s_ind[s]])
-  @test_approx_eq(ret1.h, hess[s_ind[s], s_ind[s]])
-end
-
-grad = ForwardDiff.gradient(testfun2, x);
-ForwardDiff.hessian!(hess, testfun2, x);
-for s=1:S
-  @test_approx_eq(ret2.d[:, s], grad[s_ind[s]])
-  @test_approx_eq(ret2.h, hess[s_ind[s], s_ind[s]])
-end
-
-
-grad = ForwardDiff.gradient(testfun, x);
-ForwardDiff.hessian!(hess, testfun, x);
-
-sf1 = deepcopy(ret1);
-sf2 = deepcopy(ret2);
-multiply_sf!(sf1, sf2, ids1=ids1, ids2=ids2);
-
-for s=1:S
-  @test_approx_eq(sf1.d[:, s], grad[s_ind[s]])
-  @test_approx_eq(sf1.h[:], hess[s_ind[s], s_ind[s]])
-end
-
-
-
-
-
-
-
-
-
 
 
 function test_fsXm_derivatives()
@@ -173,7 +176,7 @@ function test_fsXm_derivatives()
     par
   end
 
-  par = mp_to_par_gal(mp);
+  par_gal = mp_to_par_gal(mp);
 
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
   clear!(elbo_vars.fs1m_vec[s]);
@@ -192,17 +195,15 @@ function test_fsXm_derivatives()
     pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(v) / (2 * pi),
     fs1m.v)
 
-  @test_approx_eq fs1m.v f_wrap_gal(par)
+  @test_approx_eq fs1m.v f_wrap_gal(par_gal)
 
   # Test the gradient.
-  ad_grad_fun = ForwardDiff.gradient(f_wrap_gal);
-  ad_grad = ad_grad_fun(par);
-  @test_approx_eq ad_grad fs1m.d
+  ad_grad_gal = ForwardDiff.gradient(f_wrap_gal, par_gal);
+  @test_approx_eq ad_grad_gal fs1m.d
 
   # Test the hessian.
-  ad_hess_fun = ForwardDiff.hessian(f_wrap_gal)
-  ad_hess = ad_hess_fun(par)
-  @test_approx_eq_eps ad_hess fs1m.h 1e-10
+  ad_hess_gal = ForwardDiff.hessian(f_wrap_gal, par_gal)
+  @test_approx_eq_eps ad_hess_gal fs1m.h 1e-10
 
 
   ###########################
@@ -218,7 +219,6 @@ function test_fsXm_derivatives()
     else
       mp_fd = deepcopy(mp)
     end
-    fs0m = zero_sensitive_float(StarPosParams, T, 1);
 
     # Make sure par is as long as the galaxy parameters.
     @assert length(par) == length(ids.u)
@@ -241,7 +241,7 @@ function test_fsXm_derivatives()
     par
   end
 
-  par = mp_to_par_star(mp)
+  par_star = mp_to_par_star(mp)
 
   clear!(elbo_vars.fs0m_vec[s])
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
@@ -250,17 +250,15 @@ function test_fsXm_derivatives()
   fs0m = deepcopy(elbo_vars.fs0m_vec[s])
 
   # One sanity check.
-  @test_approx_eq fs0m.v f_wrap_star(par)
+  @test_approx_eq fs0m.v f_wrap_star(par_star)
 
   # Test the gradient.
-  ad_grad_fun = ForwardDiff.gradient(f_wrap_star);
-  ad_grad = ad_grad_fun(par);
-  @test_approx_eq ad_grad fs0m.d
+  ad_grad_star = ForwardDiff.gradient(f_wrap_star, par_star);
+  @test_approx_eq ad_grad_star fs0m.d
 
   # Test the hessian.
-  ad_hess_fun = ForwardDiff.hessian(f_wrap_star)
-  ad_hess = ad_hess_fun(par)
-  @test_approx_eq_eps ad_hess fs0m.h 1e-10
+  ad_hess_star = ForwardDiff.hessian(f_wrap_star, par_star)
+  @test_approx_eq_eps ad_hess_star fs0m.h 1e-10
 end
 
 
@@ -500,8 +498,8 @@ function test_set_hess()
 end
 
 
+test_combine_sfs()
 test_set_hess()
-test_multiply_sf()
 test_brightness_hessian()
 test_bvn_derivatives()
 test_galaxy_sigma_derivs()

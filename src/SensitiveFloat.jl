@@ -133,7 +133,7 @@ The result is stored in sf1.
 function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf1::SensitiveFloat{ParamType, NumType},
     sf2::SensitiveFloat{ParamType, NumType},
-    g_d::Vector{NumType}, g_h::Matrix{NumType})
+    v::NumType, g_d::Vector{NumType}, g_h::Matrix{NumType})
 
   S = size(sf1.d)[2]
   @assert g_h[1, 2] == g_h[2, 1]
@@ -149,4 +149,6 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   for s=1:S
     sf1.d[:, s] = g_d[1] * sf1.d[:, s] + g_d[2] * sf2.d[:, s]
   end
+
+  sf1.v = v
 end
