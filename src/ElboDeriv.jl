@@ -415,35 +415,35 @@ Returns:
   - Adds the contributions of E_G and var_G to accum in place.
 """ ->
 function accum_pixel_elbo_terms!{NumType <: Number}(
-        elbo_vars::ElboIntermediateVariables{NumType},
-        tile_sources::Vector{Int64},
-        x_nbm::Float64, iota::Float64,
-        ret::SensitiveFloat{CanonicalParams, NumType})
+    elbo_vars::ElboIntermediateVariables{NumType},
+    tile_sources::Vector{Int64},
+    x_nbm::Float64, iota::Float64,
+    ret::SensitiveFloat{CanonicalParams, NumType})
 
-    E_G = elbo_vars.E_G
-    var_G = elbo_vars.var_G
+  E_G = elbo_vars.E_G
+  var_G = elbo_vars.var_G
 
-    # Accumulate the values.
-    # Add the lower bound to the E_q[log(F_{nbm})] term
-    ret.v += x_nbm * (log(iota) + log(E_G.v) - var_G.v / (2. * E_G.v^2))
+  # Accumulate the values.
+  # Add the lower bound to the E_q[log(F_{nbm})] term
+  ret.v += x_nbm * (log(iota) + log(E_G.v) - var_G.v / (2. * E_G.v^2))
 
-    # Subtract the E_q[F_{nbm}] term.
-    ret.v -= iota * E_G.v
+  # Subtract the E_q[F_{nbm}] term.
+  ret.v -= iota * E_G.v
 
-    # Accumulate the derivatives.
-    for child_s in 1:length(tile_sources), p in 1:size(E_G.d, 1)
-        parent_s = tile_sources[child_s]
+  # Accumulate the derivatives.
+  for child_s in 1:length(tile_sources), p in 1:size(E_G.d, 1)
+      parent_s = tile_sources[child_s]
 
-        # Derivative of the log term lower bound.
-        ret.d[p, parent_s] +=
-            x_nbm * (E_G.d[p, child_s] / E_G.v
-                     - 0.5 * (E_G.v^2 * var_G.d[p, child_s]
-                              - var_G.v * 2 * E_G.v * E_G.d[p, child_s])
-                        ./  E_G.v^4)
+      # Derivative of the log term lower bound.
+      ret.d[p, parent_s] +=
+          x_nbm * (E_G.d[p, child_s] / E_G.v
+                   - 0.5 * (E_G.v^2 * var_G.d[p, child_s]
+                            - var_G.v * 2 * E_G.v * E_G.d[p, child_s])
+                      ./  E_G.v^4)
 
-        # Derivative of the linear term.
-        ret.d[p, parent_s] -= iota * E_G.d[p, child_s]
-    end
+      # Derivative of the linear term.
+      ret.d[p, parent_s] -= iota * E_G.d[p, child_s]
+  end
 end
 
 
@@ -460,54 +460,54 @@ Args:
   - accum: The ELBO log likelihood to be updated.
 """ ->
 function tile_likelihood!{NumType <: Number}(
-        elbo_vars::ElboIntermediateVariables{NumType},
-        tile::ImageTile,
-        tile_sources::Vector{Int64},
-        mp::ModelParams{NumType},
-        sbs::Vector{SourceBrightness{NumType}},
-        star_mcs::Array{BvnComponent{NumType}, 2},
-        gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-        include_epsilon::Bool=true)
+    elbo_vars::ElboIntermediateVariables{NumType},
+    tile::ImageTile,
+    tile_sources::Vector{Int64},
+    mp::ModelParams{NumType},
+    sbs::Vector{SourceBrightness{NumType}},
+    star_mcs::Array{BvnComponent{NumType}, 2},
+    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+    include_epsilon::Bool=true)
 
-    accum = elbo_vars.accum
+  accum = elbo_vars.accum
 
-    # For speed, if there are no sources, add the noise
-    # contribution directly.
-    if (length(tile_sources) == 0) && include_epsilon
-        # NB: not using the delta-method approximation here
-        if tile.constant_background
-            nan_pixels = Base.isnan(tile.pixels)
-            num_pixels =
-              length(tile.h_range) * length(tile.w_range) - sum(nan_pixels)
-            tile_x = sum(tile.pixels[!nan_pixels])
-            ep = tile.epsilon
-            accum.v += tile_x * log(ep) - num_pixels * ep
-        else
-            for w in 1:tile.w_width, h in 1:tile.h_width
-                this_pixel = tile.pixels[h, w]
-                if !Base.isnan(this_pixel)
-                    ep = tile.epsilon_mat[h, w]
-                    accum.v += this_pixel * log(ep) - ep
-                end
-            end
-        end
-        return
-    end
+  # For speed, if there are no sources, add the noise
+  # contribution directly.
+  if (length(tile_sources) == 0) && include_epsilon
+      # NB: not using the delta-method approximation here
+      if tile.constant_background
+          nan_pixels = Base.isnan(tile.pixels)
+          num_pixels =
+            length(tile.h_range) * length(tile.w_range) - sum(nan_pixels)
+          tile_x = sum(tile.pixels[!nan_pixels])
+          ep = tile.epsilon
+          accum.v += tile_x * log(ep) - num_pixels * ep
+      else
+          for w in 1:tile.w_width, h in 1:tile.h_width
+              this_pixel = tile.pixels[h, w]
+              if !Base.isnan(this_pixel)
+                  ep = tile.epsilon_mat[h, w]
+                  accum.v += this_pixel * log(ep) - ep
+              end
+          end
+      end
+      return
+  end
 
-    # Iterate over pixels that are not NaN.
-    for w in 1:tile.w_width, h in 1:tile.h_width
-        this_pixel = tile.pixels[h, w]
-        if !Base.isnan(this_pixel)
-            iota = expected_pixel_brightness!(
-              elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-              mp, tile_sources, include_epsilon=include_epsilon)
-            accum_pixel_elbo_terms!(
-              elbo_vars, tile_sources, this_pixel, iota, accum)
-        end
-    end
+  # Iterate over pixels that are not NaN.
+  for w in 1:tile.w_width, h in 1:tile.h_width
+      this_pixel = tile.pixels[h, w]
+      if !Base.isnan(this_pixel)
+          iota = expected_pixel_brightness!(
+            elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
+            mp, tile_sources, include_epsilon=include_epsilon)
+          accum_pixel_elbo_terms!(
+            elbo_vars, tile_sources, this_pixel, iota, accum)
+      end
+  end
 
-    # Subtract the log factorial term
-    accum.v += -sum(lfact(tile.pixels[!Base.isnan(tile.pixels)]))
+  # Subtract the log factorial term
+  accum.v += -sum(lfact(tile.pixels[!Base.isnan(tile.pixels)]))
 end
 
 
@@ -612,8 +612,8 @@ Args:
   - b: The current band
 """ ->
 function elbo_likelihood!{NumType <: Number}(
-  elbo_vars::ElboIntermediateVariables{NumType},
-  tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64)
+    elbo_vars::ElboIntermediateVariables{NumType},
+    tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64)
 
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
   sbs = SourceBrightness{NumType}[SourceBrightness(mp.vp[s]) for s in 1:mp.S]
