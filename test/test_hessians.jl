@@ -135,7 +135,7 @@ function test_fsXm_derivatives()
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   x = ceil(u_pix + [1.0, 2.0])
 
-  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
 
   ###########################
   # Galaxies
@@ -150,7 +150,6 @@ function test_fsXm_derivatives()
     else
       mp_fd = deepcopy(mp)
     end
-    fs1m = zero_sensitive_float(GalaxyPosParams, T, 1);
 
     # Make sure par is as long as the galaxy parameters.
     @assert length(par) == length(shape_standard_alignment[2])
@@ -159,10 +158,10 @@ function test_fsXm_derivatives()
         mp_fd.vp[s][p0] = par[p1]
     end
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
-    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T);
+    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1);
     ElboDeriv.accum_galaxy_pos!(
-      elbo_vars_fd, gal_mcs[gcc_ind...], x, fs1m, patch.wcs_jacobian);
-    fs1m.v
+      elbo_vars_fd, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian);
+    elbo_vars_fd.fs1m_vec[s].v
   end
 
   function mp_to_par_gal(mp::ModelParams{Float64})
@@ -176,13 +175,15 @@ function test_fsXm_derivatives()
 
   par = mp_to_par_gal(mp);
 
-  fs1m = zero_sensitive_float(GalaxyPosParams, 1);
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  clear!(elbo_vars.fs1m_vec[s]);
   ElboDeriv.accum_galaxy_pos!(
-    elbo_vars, gal_mcs[gcc_ind...], x, fs1m, patch.wcs_jacobian);
+    elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian);
+  fs1m = deepcopy(elbo_vars.fs1m_vec[s]);
 
   # Two sanity checks.
   gcc = gal_mcs[gcc_ind...];
+  clear!(elbo_vars.fs1m_vec[s]);
   v = ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x);
   gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
   pc = mp.patches[s, b].psf[gcc_ind[1]]
@@ -226,10 +227,10 @@ function test_fsXm_derivatives()
         mp_fd.vp[s][p0] = par[p1]
     end
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
-    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T);
+    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1);
     ElboDeriv.accum_star_pos!(
-      elbo_vars_fd, star_mcs[bmc_ind...], x, fs0m, patch.wcs_jacobian);
-    fs0m.v
+      elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
+    elbo_vars_fd.fs0m_vec[s].v
   end
 
   function mp_to_par_star(mp::ModelParams{Float64})
@@ -242,10 +243,11 @@ function test_fsXm_derivatives()
 
   par = mp_to_par_star(mp)
 
-  fs0m = zero_sensitive_float(StarPosParams, 1);
+  clear!(elbo_vars.fs0m_vec[s])
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
   ElboDeriv.accum_star_pos!(
-    elbo_vars, star_mcs[bmc_ind...], x, fs0m, patch.wcs_jacobian);
+    elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
+  fs0m = deepcopy(elbo_vars.fs0m_vec[s])
 
   # One sanity check.
   @test_approx_eq fs0m.v f_wrap_star(par)
@@ -308,7 +310,7 @@ function test_galaxy_variable_transform()
     e_scale = par[par_ids_e_scale]
     u_pix = WCS.world_to_pixel(
       patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T)
+    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1)
     e_dev_i_fd = convert(T, e_dev_i)
     gcc = ElboDeriv.GalaxyCacheComponent(
             e_dev_dir, e_dev_i_fd, gp, psf, u_pix, e_axis, e_angle, e_scale);
@@ -323,7 +325,7 @@ function test_galaxy_variable_transform()
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   gcc = ElboDeriv.GalaxyCacheComponent(
           e_dev_dir, e_dev_i, gp, psf, u_pix, e_axis, e_angle, e_scale);
-  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64)
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
   ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x);
   ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
 
@@ -405,7 +407,7 @@ function test_bvn_derivatives()
   weight = 0.724
 
   bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
-  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
   v = ElboDeriv.get_bvn_derivs!(elbo_vars, bvn, x);
 
   function f{T <: Number}(x::Vector{T}, sigma::Matrix{T})

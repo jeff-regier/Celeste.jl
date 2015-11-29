@@ -90,7 +90,7 @@ ElboIntermediateVariables(NumType::DataType, num_sources::Int64) = begin
     bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
     dpy1_dsig, dpy2_dsig, dsiginv_dsig,
     bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h,
-    fs0m, fs1m, E_G, var_G, accum)
+    fs0m_vec, fs1m_vec, E_G, var_G, accum)
 end
 
 
@@ -113,7 +113,7 @@ Args:
 """ ->
 function accum_star_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    s::Int64,
+    sa::Int64,
     bmc::BvnComponent{NumType},
     x::Vector{Float64},
     wcs_jacobian::Array{Float64, 2})
@@ -154,7 +154,9 @@ Args:
   - sa: The index of the current source in active_sources
   - gcc: The galaxy component to be added
   - x: An offset for the component in pixel coordinates (e.g. a pixel location)
- - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
+  - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
+
+Updates elbo_vars.fs1m_vec[sa] in place.
 """ ->
 function accum_galaxy_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
