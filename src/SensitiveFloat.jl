@@ -152,3 +152,20 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 
   sf1.v = v
 end
+
+
+@doc """
+TODO: don't ignore the ids arguments and test.
+""" ->
+function multiply_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+    sf1::SensitiveFloat{ParamType, NumType},
+    sf2::SensitiveFloat{ParamType, NumType};
+    ids1::Vector{Int64}=collect(1:length(ParamType)),
+    ids2::Vector{Int64}=collect(1:length(ParamType)))
+
+  v = sf1.v * sf2.v
+  g_d = NumType[sf2.v, sf1.v]
+  g_h = NumType[0 1; 1 0]
+
+  combine_sfs!(sf1, sf2, v, g_d, g_h)
+end
