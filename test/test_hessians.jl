@@ -4,7 +4,7 @@ using Base.Test
 using Distributions
 using SampleData
 using Transform
-#using PyPlot
+using PyPlot
 
 using ForwardDiff
 
@@ -34,8 +34,8 @@ function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
   ElboDeriv.populate_fsm_vecs!(
     elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
 
-  E_G = elbo_vars.E_G;
-  E_G2 = elbo_vars.E_G2;
+  E_G = elbo_vars_loc.E_G;
+  E_G2 = elbo_vars_loc.E_G2;
 
   clear!(E_G);
   clear!(E_G2);
@@ -66,10 +66,10 @@ for sa_ind in 1:S
 end
 x = x_mat[:];
 
-v = wrapper_fun(x)
 elbo_vars = e_g_wrapper_fun(mp);
-
 sf = test_squares ? deepcopy(elbo_vars.E_G2) : deepcopy(elbo_vars.E_G);
+
+v = wrapper_fun(x)
 @test_approx_eq v sf.v
 
 grad = ForwardDiff.gradient(wrapper_fun, x);
@@ -77,7 +77,7 @@ grad = ForwardDiff.gradient(wrapper_fun, x);
 
 hess = ForwardDiff.hessian(wrapper_fun, x);
 #@test_approx_eq hess elbo_vars.E_G.h
-matshow(sf.h - hess)
+matshow(abs(sf.h - hess) .> 1e-6)
 
 
 
