@@ -307,7 +307,6 @@ function combine_pixel_sources!{NumType <: Number}(
   clear!(E_G2);
   for sa_ind in 1:length(tile_sources)
     sa = tile_sources[sa_ind]
-    println("Source $sa")
     a = mp.vp[sa][ids.a]
     fsm = (elbo_vars.fs0m_vec[sa], elbo_vars.fs1m_vec[sa]);
     sb = sbs[sa];
@@ -322,12 +321,17 @@ function combine_pixel_sources!{NumType <: Number}(
     E_G2.v += E_G2_s_v
 
     for i in 1:Ia # Stars and galaxies
-      println("i $i")
       E_G.d[ids.a[i], sa] += lf[i]
       E_G2.d[ids.a[i], sa] += llff[i]
 
       p0_shape = shape_standard_alignment[i]
       p0_bright = brightness_standard_alignment[i]
+
+      # The indicies of the brightness parameters in the Hessian for this source.
+      p0_bright_hess = s_inds[p0_bright]
+
+      # The indicies of the shape parameters in the Hessian for this source.
+      p0_shape_hess = s_inds[p0_shape]
 
       # Derivatives with respect to the spatial parameters
       a_fd = a[i] * fsm[i].d[:, 1]
@@ -355,12 +359,6 @@ function combine_pixel_sources!{NumType <: Number}(
       # end
 
       # Hessians.
-
-      # The indicies of the brightness parameters in the Hessian for this source.
-      p0_bright_hess = s_inds[p0_bright]
-
-      # The indicies of the shape parameters in the Hessian for this source.
-      p0_shape_hess = s_inds[p0_shape]
 
       # The (a, a) block of the hessian is zero.
 

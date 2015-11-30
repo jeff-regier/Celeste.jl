@@ -14,25 +14,70 @@ import WCS
 println("Running hessian tests.")
 
 
-blob, mp, three_bodies, tiled_blob = gen_three_body_dataset();
+blob, mp, bodies, tiled_blob = gen_sample_galaxy_dataset();
 
+S = length(mp.active_sources)
+P = length(CanonicalParams)
 b = 3
-h = 65
-w = 85
+h = 10
+w = 10
 tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
-star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-sbs = ElboDeriv.SourceBrightness{Float64}[ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
 
-elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S);
-ElboDeriv.populate_fsm_vecs!(elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs);
 
-E_G = elbo_vars.E_G;
-E_G2 = elbo_vars.E_G2;
+function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  sbs = ElboDeriv.SourceBrightness{NumType}[
+    ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
 
-clear!(E_G);
-clear!(E_G2);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(NumType, mp.S);
+  ElboDeriv.populate_fsm_vecs!(elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs);
 
-ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile, sbs);
+  E_G = elbo_vars.E_G;
+  E_G2 = elbo_vars.E_G2;
+
+  clear!(E_G);
+  clear!(E_G2);
+
+  ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile, sbs);
+  elbo_vars
+end
+
+function wrapper_fun{NumType <: Number}(x::Vector{NumType})
+  @assert length(x) == S * P
+  x_mat = reshape(x, (P, S))
+  if NumType != Float64
+    mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
+  else
+    mp_fd = deepcopy(mp)
+  end
+  for sa_ind in 1:length(mp.active_sources)
+    mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
+  end
+  elbo_vars_fd = e_g_wrapper_fun(mp_fd)
+  elbo_vars_fd.E_G.v
+end
+
+
+x_mat = zeros(Float64, P, S);
+for sa_ind in 1:S
+  x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
+end
+x = x_mat[:];
+
+v = wrapper_fun(x)
+elbo_vars = e_g_wrapper_fun(mp);
+
+@test_approx_eq elbo_vars.E_G.v v
+
+grad = ForwardDiff.gradient(wrapper_fun, x);
+#plot(grad, elbo_vars.E_G.d[:], "k.")
+
+@test_approx_eq grad elbo_vars.E_G.d
+
+hess = ForwardDiff.hessian(wrapper_fun, x);
+@test_approx_eq hess elbo_vars.E_G.h
+
+
 
 
 
