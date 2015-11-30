@@ -358,6 +358,7 @@ function combine_pixel_sources!{NumType <: Number}(
       #     E_G2.d[p0, sa] += a[i] * fsm[i].v^2 * sb.E_ll_a[b, i].d[p0]
       # end
 
+      ######################
       # Hessians.
 
       # The (a, a) block of the hessian is zero.

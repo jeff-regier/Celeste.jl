@@ -23,14 +23,16 @@ h = 10
 w = 10
 tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
 
+test_squares = false
 
 function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
   sbs = ElboDeriv.SourceBrightness{NumType}[
     ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
 
-  elbo_vars = ElboDeriv.ElboIntermediateVariables(NumType, mp.S);
-  ElboDeriv.populate_fsm_vecs!(elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs);
+  elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S);
+  ElboDeriv.populate_fsm_vecs!(
+    elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
 
   E_G = elbo_vars.E_G;
   E_G2 = elbo_vars.E_G2;
@@ -38,8 +40,8 @@ function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
   clear!(E_G);
   clear!(E_G2);
 
-  ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile, sbs);
-  elbo_vars
+  ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
+  elbo_vars_loc
 end
 
 function wrapper_fun{NumType <: Number}(x::Vector{NumType})
@@ -54,7 +56,7 @@ function wrapper_fun{NumType <: Number}(x::Vector{NumType})
     mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
   end
   elbo_vars_fd = e_g_wrapper_fun(mp_fd)
-  elbo_vars_fd.E_G.v
+  test_squares ? elbo_vars_fd.E_G2.v : elbo_vars_fd.E_G.v
 end
 
 
@@ -67,16 +69,15 @@ x = x_mat[:];
 v = wrapper_fun(x)
 elbo_vars = e_g_wrapper_fun(mp);
 
-@test_approx_eq elbo_vars.E_G.v v
+sf = test_squares ? deepcopy(elbo_vars.E_G2) : deepcopy(elbo_vars.E_G);
+@test_approx_eq v sf.v
 
 grad = ForwardDiff.gradient(wrapper_fun, x);
-#plot(grad, elbo_vars.E_G.d[:], "k.")
-
-@test_approx_eq grad elbo_vars.E_G.d
+@test_approx_eq grad sf.d
 
 hess = ForwardDiff.hessian(wrapper_fun, x);
-@test_approx_eq hess elbo_vars.E_G.h
-
+#@test_approx_eq hess elbo_vars.E_G.h
+matshow(sf.h - hess)
 
 
 
