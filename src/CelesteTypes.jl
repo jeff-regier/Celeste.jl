@@ -24,7 +24,7 @@ export ids, ids_free, star_ids, gal_ids, gal_shape_ids
 export ids_names, ids_free_names
 export D, B, Ia
 
-export set_hess!
+export set_hess!, multiply_sfs!, combine_sfs!
 
 export print_params
 

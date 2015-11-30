@@ -14,6 +14,33 @@ import WCS
 println("Running hessian tests.")
 
 
+blob, mp, three_bodies, tiled_blob = gen_three_body_dataset();
+
+b = 3
+h = 65
+w = 85
+tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
+star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+sbs = ElboDeriv.SourceBrightness{Float64}[ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+
+elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S);
+ElboDeriv.populate_fsm_vecs!(elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs);
+
+E_G = elbo_vars.E_G;
+E_G2 = elbo_vars.E_G2;
+
+clear!(E_G);
+clear!(E_G2);
+
+ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile, sbs);
+
+
+
+
+
+
+
+
 function test_combine_sfs()
   # TODO: this test was designed for multiply_sf.  Make it more general.
 

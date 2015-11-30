@@ -66,7 +66,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
         set_hess!(E_l_a[4, i], ids.c1[3, i], ids.c1[3, i], E_l_a[4, i].v)
         set_hess!(E_l_a[4, i], ids.c1[3, i], ids.c2[3, i], E_l_a[4, i].v * 0.5)
         set_hess!(E_l_a[4, i], ids.c2[3, i], ids.c2[3, i], E_l_a[4, i].v * 0.25)
-        multiply_sf!(E_l_a[4, i], E_l_a[3, i], ids1=ids_color_3, ids2=ids_band_3)
+        multiply_sfs!(E_l_a[4, i], E_l_a[3, i], ids1=ids_color_3, ids2=ids_band_3)
 
         # Band 5 = band 4 * color 4.
         E_l_a[5, i].v = exp(c1[4, i] + .5 * c2[4, i])
@@ -75,8 +75,8 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
         set_hess!(E_l_a[5, i], ids.c1[4, i], ids.c1[4, i], E_l_a[5, i].v)
         set_hess!(E_l_a[5, i], ids.c1[4, i], ids.c2[4, i], E_l_a[5, i].v * 0.5)
         set_hess!(E_l_a[5, i], ids.c2[4, i], ids.c2[4, i], E_l_a[5, i].v * 0.25)
-        multiply_sf!(E_l_a[5, i], E_l_a[4, i],
-                     ids1=ids_color_4, ids2=union(ids_band_3, ids_color_3))
+        multiply_sfs!(E_l_a[5, i], E_l_a[4, i],
+                      ids1=ids_color_4, ids2=union(ids_band_3, ids_color_3))
 
         # Band 2 = band 3 * color 2.
         E_l_a[2, i].v = exp(-c1[2, i] + .5 * c2[2, i])
@@ -85,7 +85,7 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
         set_hess!(E_l_a[2, i], ids.c1[2, i], ids.c1[2, i], E_l_a[2, i].v)
         set_hess!(E_l_a[2, i], ids.c1[2, i], ids.c2[2, i], E_l_a[2, i].v * -0.5)
         set_hess!(E_l_a[2, i], ids.c2[2, i], ids.c2[2, i], E_l_a[2, i].v * 0.25)
-        multiply_sf!(E_l_a[2, i], E_l_a[3, i], ids1=ids_color_2, ids2=ids_band_3)
+        multiply_sfs!(E_l_a[2, i], E_l_a[3, i], ids1=ids_color_2, ids2=ids_band_3)
 
         # Band 1 = band 2 * color 1.
         E_l_a[1, i].v = exp(-c1[1, i] + .5 * c2[1, i])
@@ -94,8 +94,8 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
         set_hess!(E_l_a[1, i], ids.c1[1, i], ids.c1[1, i], E_l_a[1, i].v)
         set_hess!(E_l_a[1, i], ids.c1[1, i], ids.c2[1, i], E_l_a[1, i].v * -0.5)
         set_hess!(E_l_a[1, i], ids.c2[1, i], ids.c2[1, i], E_l_a[1, i].v * 0.25)
-        multiply_sf!(E_l_a[1, i], E_l_a[2, i],
-                     ids1=ids_color_1, ids2=union(ids_band_3, ids_color_2))
+        multiply_sfs!(E_l_a[1, i], E_l_a[2, i],
+                      ids1=ids_color_1, ids2=union(ids_band_3, ids_color_2))
 
         ################################
         # Squared terms.
@@ -123,8 +123,8 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
                          (ids.c2[3, i], ids.c2[3, i])]
           set_hess!(E_ll_a[4, i], hess_ids..., E_ll_a[4, i].v * 4.0)
         end
-        multiply_sf!(E_ll_a[4, i], E_ll_a[3, i],
-                     ids1=ids_color_3, ids2=ids_band_3)
+        multiply_sfs!(E_ll_a[4, i], E_ll_a[3, i],
+                      ids1=ids_color_3, ids2=ids_band_3)
 
         # Band 5 = band 4 * color 4.
         tmp4 = exp(2 * c1[4, i] + 2 * c2[4, i])
@@ -136,8 +136,8 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
                          (ids.c2[4, i], ids.c2[4, i])]
           set_hess!(E_ll_a[5, i], hess_ids..., E_ll_a[5, i].v * 4.0)
         end
-        multiply_sf!(E_ll_a[5, i], E_ll_a[4, i],
-                     ids1=ids_color_4, ids2=union(ids_band_3, ids_color_3))
+        multiply_sfs!(E_ll_a[5, i], E_ll_a[4, i],
+                      ids1=ids_color_4, ids2=union(ids_band_3, ids_color_3))
 
         # Band 2 = band 3 * color 2
         tmp2 = exp(-2 * c1[2, i] + 2 * c2[2, i])
@@ -150,8 +150,8 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
         end
         set_hess!(E_ll_a[2, i], ids.c1[2, i], ids.c2[2, i],
                   E_ll_a[2, i].v * -4.0)
-        multiply_sf!(E_ll_a[2, i], E_ll_a[3, i],
-                     ids1=ids_color_2, ids2=ids_band_3)
+        multiply_sfs!(E_ll_a[2, i], E_ll_a[3, i],
+                      ids1=ids_color_2, ids2=ids_band_3)
 
         # Band 1 = band 2 * color 1
         E_ll_a[1, i].v = exp(-2 * c1[1, i] + 2 * c2[1, i])
@@ -163,8 +163,8 @@ SourceBrightness{NumType <: Number}(vs::Vector{NumType}) = begin
         end
         set_hess!(E_ll_a[1, i], ids.c1[1, i], ids.c2[1, i],
                   E_ll_a[1, i].v * -4.0)
-        multiply_sf!(E_ll_a[1, i], E_ll_a[2, i],
-                     ids1=ids_color_1, ids2=union(ids_band_3, ids_color_2))
+        multiply_sfs!(E_ll_a[1, i], E_ll_a[2, i],
+                      ids1=ids_color_1, ids2=union(ids_band_3, ids_color_2))
 
     end
 
