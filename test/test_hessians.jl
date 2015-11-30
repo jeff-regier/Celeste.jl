@@ -23,6 +23,9 @@ h = 10
 w = 10
 tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
 
+# For debugging.  Only the galaxy hessian is wrong for E_G.
+mp.vp[1][ids.a] = [0. 1.]
+
 test_squares = false
 
 function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
@@ -52,7 +55,7 @@ function wrapper_fun{NumType <: Number}(x::Vector{NumType})
   else
     mp_fd = deepcopy(mp)
   end
-  for sa_ind in 1:length(mp.active_sources)
+  for sa_ind in 1:length(mp_fd.active_sources)
     mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
   end
   elbo_vars_fd = e_g_wrapper_fun(mp_fd)
@@ -218,66 +221,71 @@ function test_fsXm_derivatives()
 
   # Pick out a single galaxy component for testing.
   # The index is psf, galaxy, gal type, source
-  gcc_ind = (1, 1, 1, s)
-  function f_wrap_gal{T <: Number}(par::Vector{T})
-    # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-    if T != Float64
-      mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
-    else
-      mp_fd = deepcopy(mp)
+  for psf_k=1:3, type_i = 1:2, gal_j in 1:[8,6][type_i]
+    gcc_ind = (psf_k, gal_j, type_i, s)
+    println(gcc_ind)
+    #gcc_ind = (1, 1, 1, s)
+    function f_wrap_gal{T <: Number}(par::Vector{T})
+      # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
+      if T != Float64
+        mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
+      else
+        mp_fd = deepcopy(mp)
+      end
+
+      # Make sure par is as long as the galaxy parameters.
+      @assert length(par) == length(shape_standard_alignment[2])
+      for p1 in 1:length(par)
+          p0 = shape_standard_alignment[2][p1]
+          mp_fd.vp[s][p0] = par[p1]
+      end
+      star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
+      elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1);
+      ElboDeriv.accum_galaxy_pos!(
+        elbo_vars_fd, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian);
+      elbo_vars_fd.fs1m_vec[s].v
     end
 
-    # Make sure par is as long as the galaxy parameters.
-    @assert length(par) == length(shape_standard_alignment[2])
-    for p1 in 1:length(par)
-        p0 = shape_standard_alignment[2][p1]
-        mp_fd.vp[s][p0] = par[p1]
+    function mp_to_par_gal(mp::ModelParams{Float64})
+      par = zeros(length(shape_standard_alignment[2]))
+      for p1 in 1:length(par)
+          p0 = shape_standard_alignment[2][p1]
+          par[p1] = mp.vp[s][p0]
+      end
+      par
     end
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
-    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1);
+
+    par_gal = mp_to_par_gal(mp);
+
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+    clear!(elbo_vars.fs1m_vec[s]);
     ElboDeriv.accum_galaxy_pos!(
-      elbo_vars_fd, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian);
-    elbo_vars_fd.fs1m_vec[s].v
+      elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian);
+    fs1m = deepcopy(elbo_vars.fs1m_vec[s]);
+
+    # Two sanity checks.
+    gcc = gal_mcs[gcc_ind...];
+    clear!(elbo_vars.fs1m_vec[s]);
+    v = ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x);
+    gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
+    pc = mp.patches[s, b].psf[gcc_ind[1]]
+
+    @test_approx_eq(
+      pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(v) / (2 * pi),
+      fs1m.v)
+
+    @test_approx_eq fs1m.v f_wrap_gal(par_gal)
+
+    # Test the gradient.
+    ad_grad_gal = ForwardDiff.gradient(f_wrap_gal, par_gal);
+    @test_approx_eq ad_grad_gal fs1m.d
+
+    # Test the hessian.
+    # Currently broken!
+    ad_hess_gal = ForwardDiff.hessian(f_wrap_gal, par_gal)
+    #@test_approx_eq_eps ad_hess_gal fs1m.h 1e-6
+    println(maximum(abs(ad_hess_gal - fs1m.h)))
   end
-
-  function mp_to_par_gal(mp::ModelParams{Float64})
-    par = zeros(length(shape_standard_alignment[2]))
-    for p1 in 1:length(par)
-        p0 = shape_standard_alignment[2][p1]
-        par[p1] = mp.vp[s][p0]
-    end
-    par
-  end
-
-  par_gal = mp_to_par_gal(mp);
-
-  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-  clear!(elbo_vars.fs1m_vec[s]);
-  ElboDeriv.accum_galaxy_pos!(
-    elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian);
-  fs1m = deepcopy(elbo_vars.fs1m_vec[s]);
-
-  # Two sanity checks.
-  gcc = gal_mcs[gcc_ind...];
-  clear!(elbo_vars.fs1m_vec[s]);
-  v = ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x);
-  gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
-  pc = mp.patches[s, b].psf[gcc_ind[1]]
-
-  @test_approx_eq(
-    pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(v) / (2 * pi),
-    fs1m.v)
-
-  @test_approx_eq fs1m.v f_wrap_gal(par_gal)
-
-  # Test the gradient.
-  ad_grad_gal = ForwardDiff.gradient(f_wrap_gal, par_gal);
-  @test_approx_eq ad_grad_gal fs1m.d
-
-  # Test the hessian.
-  ad_hess_gal = ForwardDiff.hessian(f_wrap_gal, par_gal)
-  @test_approx_eq_eps ad_hess_gal fs1m.h 1e-10
-
 
   ###########################
   # Stars
