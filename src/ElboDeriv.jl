@@ -322,7 +322,6 @@ function combine_pixel_sources!{NumType <: Number}(
     #E_G2.v += E_G2_s_v
 
     for i in 1:Ia # Stars and galaxies
-    #for i in 1:1 # For debugging
       lf = sb.E_l_a[b, i].v * fsm[i].v
       llff = sb.E_ll_a[b, i].v * fsm[i].v^2
       E_G.v += a[i] * lf
