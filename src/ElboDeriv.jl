@@ -310,19 +310,25 @@ function combine_pixel_sources!{NumType <: Number}(
     a = mp.vp[sa][ids.a]
     fsm = (elbo_vars.fs0m_vec[sa], elbo_vars.fs1m_vec[sa]);
     sb = sbs[sa];
-    lf = (sb.E_l_a[b, 1].v * fsm[1].v, sb.E_l_a[b, 2].v * fsm[2].v);
     s_inds = get_source_indices(sa_ind)
 
-    E_G_s_v = a[1] * lf[1] + a[2] * lf[2]
-    E_G.v += E_G_s_v
+    #lf = (sb.E_l_a[b, 1].v * fsm[1].v, sb.E_l_a[b, 2].v * fsm[2].v);
 
-    llff = (sb.E_ll_a[b, 1].v * fsm[1].v^2, sb.E_ll_a[b, 2].v * fsm[2].v^2)
-    E_G2_s_v = a[1] * llff[1] + a[2] * llff[2]
-    E_G2.v += E_G2_s_v
+    #E_G_s_v = a[1] * lf[1] + a[2] * lf[2]
+    #E_G.v += E_G_s_v
+
+    #llff = (sb.E_ll_a[b, 1].v * fsm[1].v^2, sb.E_ll_a[b, 2].v * fsm[2].v^2)
+    #E_G2_s_v = a[1] * llff[1] + a[2] * llff[2]
+    #E_G2.v += E_G2_s_v
 
     for i in 1:Ia # Stars and galaxies
-      E_G.d[ids.a[i], sa] += lf[i]
-      E_G2.d[ids.a[i], sa] += llff[i]
+    #for i in 1:1 # For debugging
+      lf = sb.E_l_a[b, i].v * fsm[i].v
+      llff = sb.E_ll_a[b, i].v * fsm[i].v^2
+      E_G.v += a[i] * lf
+
+      E_G.d[ids.a[i], sa] += lf
+      E_G2.d[ids.a[i], sa] += llff
 
       p0_shape = shape_standard_alignment[i]
       p0_bright = brightness_standard_alignment[i]
@@ -335,28 +341,12 @@ function combine_pixel_sources!{NumType <: Number}(
 
       # Derivatives with respect to the spatial parameters
       a_fd = a[i] * fsm[i].d[:, 1]
-      a_El_fd = sb.E_l_a[b, i].v * a_fd
-      E_G.d[p0_shape, sa] += a_El_fd
+      E_G.d[p0_shape, sa] += sb.E_l_a[b, i].v * a_fd
       E_G2.d[p0_shape, sa] += sb.E_ll_a[b, i].v * 2 * fsm[i].v * a_fd
-
-      # for p1 in 1:length(shape_standard_alignment[i])
-      #     p0 = shape_standard_alignment[i][p1]
-      #     a_fd = a[i] * fsm[i].d[p1]
-      #     a_El_fd = sb.E_l_a[b, i].v * a_fd
-      #     E_G.d[p0, sa] += a_El_fd
-      #     E_G2.d[p0, sa] += a_fd * sb.E_ll_a[b, i].v * 2 * fsm[i].v
-      # end
 
       # Derivatives with respect to the brightness parameters.
       E_G.d[p0_bright, sa] += a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
       E_G2.d[p0_bright, sa] += a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[p0_bright, 1]
-      # for p1 in 1:length(brightness_standard_alignment[i])
-      #     p0 = brightness_standard_alignment[i][p1]
-      #     # TODO: use p1 to index E_l_a and E_ll_a once using BrightnessParams type
-      #     a_f_Eld = a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0]
-      #     E_G.d[p0, sa] += a_f_Eld
-      #     E_G2.d[p0, sa] += a[i] * fsm[i].v^2 * sb.E_ll_a[b, i].d[p0]
-      # end
 
       ######################
       # Hessians.
@@ -366,10 +356,13 @@ function combine_pixel_sources!{NumType <: Number}(
       # The (bright, bright) block:
       E_G.h[p0_bright_hess, p0_bright_hess] +=
         a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
+
+      # Wrong:
       E_G2.h[p0_bright_hess, p0_bright_hess] +=
         a[i] * fsm[i].v * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
 
       # The (shape, shape) block:
+      # Wrong:
       E_G.h[p0_shape_hess, p0_shape_hess] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
       E_G2.h[p0_shape_hess, p0_shape_hess] +=
         2 * a[i] * sb.E_l_a[b, i].v * (fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
@@ -380,6 +373,7 @@ function combine_pixel_sources!{NumType <: Number}(
       E_G.h[p0_bright_hess, ids.a[i]] = E_G.h[p0_bright_hess, ids.a[i]] + h_a_bright
       E_G.h[ids.a[i], p0_bright_hess] =  E_G.h[p0_bright_hess, ids.a[i]]'
 
+      # Wrong:
       h2_a_bright = fsm[i].v * sb.E_ll_a[b, i].d[p0_bright, 1]
       E_G2.h[p0_bright_hess, ids.a[i]] += h2_a_bright
       E_G2.h[ids.a[i], p0_bright_hess] = E_G2.h[p0_bright_hess, ids.a[i]]'
@@ -389,6 +383,7 @@ function combine_pixel_sources!{NumType <: Number}(
       E_G.h[p0_shape_hess, ids.a[i]] += h_a_shape
       E_G.h[ids.a[i], p0_shape_hess] = E_G.h[p0_shape_hess, ids.a[i]]'
 
+      # Wrong:
       h2_a_shape = 2 * sb.E_l_a[b, i].v * fsm[i].v * fsm[i].d
       E_G2.h[p0_shape_hess, ids.a[i]] += h2_a_shape
       E_G2.h[ids.a[i], p0_shape_hess] = E_G2.h[p0_shape_hess, ids.a[i]]'
