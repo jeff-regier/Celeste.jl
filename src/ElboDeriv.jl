@@ -199,6 +199,7 @@ function accum_galaxy_pos!{NumType <: Number}(
   # The Hessians:
 
   # Hessian terms involving only the shape parameters.
+  # TODO: tests suggest that this might be broken.
   for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
     s1 = gal_shape_alignment[shape_id1]
     s2 = gal_shape_alignment[shape_id2]
