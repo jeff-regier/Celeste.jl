@@ -265,29 +265,32 @@ immutable GalaxyCacheComponent{NumType <: Number}
     bmc::BvnComponent{NumType}
     sig_sf::GalaxySigmaDerivs{NumType}
     # [Sigma11, Sigma12, Sigma22] x [e_axis, e_angle, e_scale]
-
-    GalaxyCacheComponent(e_dev_dir::Float64, e_dev_i::NumType,
-            gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
-            e_axis::NumType, e_angle::NumType, e_scale::NumType) = begin
-        XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
-        mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
-        var_s = pc.tauBar + gc.nuBar * XiXi
-        weight = pc.alphaBar * gc.etaBar  # excludes e_dev
-        bmc = BvnComponent(mean_s, var_s, weight)
-
-        sig_sf = GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
-        sig_sf.j .*= gc.nuBar
-        sig_sf.t .*= gc.nuBar
-
-        new(e_dev_dir, e_dev_i, bmc, sig_sf)
-    end
 end
 
-GalaxyCacheComponent{NumType <: Number}(e_dev_dir::Float64, e_dev_i::NumType,
-                     gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
-                     e_axis::NumType, e_angle::NumType, e_scale::NumType) =
-    GalaxyCacheComponent{NumType}(
-      e_dev_dir, e_dev_i, gc, pc, u, e_axis, e_angle, e_scale)
+
+GalaxyCacheComponent{NumType <: Number}(
+    e_dev_dir::Float64, e_dev_i::NumType,
+    gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
+    e_axis::NumType, e_angle::NumType, e_scale::NumType) = begin
+
+  XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+  mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
+  var_s = pc.tauBar + gc.nuBar * XiXi
+  weight = pc.alphaBar * gc.etaBar  # excludes e_dev
+  bmc = BvnComponent(mean_s, var_s, weight)
+
+  sig_sf = GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
+  sig_sf.j .*= gc.nuBar
+  sig_sf.t .*= gc.nuBar
+
+  GalaxyCacheComponent(e_dev_dir, e_dev_i, bmc, sig_sf)
+end
+
+# GalaxyCacheComponent{NumType <: Number}(e_dev_dir::Float64, e_dev_i::NumType,
+#                      gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
+#                      e_axis::NumType, e_angle::NumType, e_scale::NumType) =
+#     GalaxyCacheComponent{NumType}(
+#       e_dev_dir, e_dev_i, gc, pc, u, e_axis, e_angle, e_scale)
 
 
 @doc """
@@ -433,6 +436,7 @@ function transform_bvn_derivs!{NumType <: Number}(
     # Hessian calculations.
 
     # Second derviatives involving only shape parameters.
+    # TODO: this is broken, I think.  See test_hessians.jl
     # TODO: eliminate redundancies.
     for shape_id1 in 1:length(gal_shape_ids),
         shape_id2 in 1:length(gal_shape_ids)
