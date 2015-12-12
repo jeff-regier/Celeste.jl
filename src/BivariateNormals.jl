@@ -16,28 +16,55 @@ immutable BvnComponent{NumType <: Number}
     the_mean::Vector{NumType}
     precision::Matrix{NumType}
     z::NumType
+    dsiginv_dsig::Matrix{NumType}
+end
 
-    BvnComponent(the_mean, the_cov, weight) = begin
-        the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
-        c = 1 ./ (the_det^.5 * 2pi)
-        new(the_mean, the_cov^-1, c * weight)
-    end
+
+function GenerateBvnComponent{NumType <: Number}(
+    the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType)
+
+  # It is necessary to have this separately named function to allow
+  # a BvnComponent to be instantiated with all the below combinations of
+  # NumTypes and Float64 shown below.
+  the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
+  c = 1 ./ (the_det^.5 * 2pi)
+
+  precision = the_cov^-1
+
+  # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
+  # derivatives of log|Sigma| with respect to sigma.
+  # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
+  dsiginv_dsig = zeros(NumType, 3, 3)
+
+  dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
+  dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
+  dsiginv_dsig[1, 3] = -precision[1, 2] ^ 2
+
+  dsiginv_dsig[2, 1] = -precision[1, 1] * precision[2, 1]
+  dsiginv_dsig[2, 2] = -(precision[1, 1] * precision[2, 2] + precision[1, 2] ^ 2)
+  dsiginv_dsig[2, 3] = -precision[2, 2] * precision[1, 2]
+
+  dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
+  dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
+  dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
+
+  BvnComponent{NumType}(the_mean, precision, c * weight, dsiginv_dsig)
+end
+
+BvnComponent{NumType <: Number}(
+    the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType) = begin
+  GenerateBvnComponent(the_mean, the_cov, weight)
 end
 
 BvnComponent{NumType <: Number}(
   the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64) = begin
-    BvnComponent{NumType}(
-      the_mean, convert(Array{NumType}, the_cov), convert(NumType, weight))
+    GenerateBvnComponent(
+      the_mean, convert(Matrix{NumType}, the_cov), convert(NumType, weight))
 end
 
 BvnComponent{NumType <: Number}(
   the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64) = begin
-    BvnComponent{NumType}(the_mean, the_cov, convert(NumType, weight))
-end
-
-BvnComponent{NumType <: Number}(
-  the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType) = begin
-    BvnComponent{NumType}(the_mean, the_cov, weight)
+    GenerateBvnComponent(the_mean, the_cov, convert(NumType, weight))
 end
 
 
@@ -116,20 +143,6 @@ function get_bvn_derivs!{NumType <: Number}(
   dpy2_dsig[1] = -py1 * bvn.precision[1,2]
   dpy2_dsig[2] = -py1 * bvn.precision[1,1] - py2 * bvn.precision[1,2]
   dpy2_dsig[3] = -py2 * bvn.precision[2,2]
-
-  # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
-  # derivatives of log|Sigma| with respect to sigma.
-  # TODO: store this with the bvn since it's the same every time.
-  dsiginv_dsig = elbo_vars.dsiginv_dsig
-  dsiginv_dsig[1, 1] = -bvn.precision[1, 1] ^ 2
-  dsiginv_dsig[1, 2] = dsiginv_dsig[2, 1] =
-    -2.0 * bvn.precision[1, 1] * bvn.precision[2, 1]
-  dsiginv_dsig[1, 3] = dsiginv_dsig[3, 1] = -bvn.precision[1, 2] ^ 2
-  dsiginv_dsig[2, 2] =
-    -2.0 * (bvn.precision[1, 1] * bvn.precision[2, 2] + bvn.precision[1, 2] ^ 2)
-  dsiginv_dsig[2, 3] = dsiginv_dsig[3, 2] =
-    -2.0 * bvn.precision[2, 2] * bvn.precision[1, 2]
-  dsiginv_dsig[3, 3] = -bvn.precision[2, 2] ^ 2
 
   # Hessian terms involving only sigma
   bvn_sigsig_h = elbo_vars.bvn_sigsig_h

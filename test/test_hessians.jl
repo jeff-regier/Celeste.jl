@@ -14,6 +14,35 @@ import WCS
 
 
 
+function test_dsiginv_dsig()
+  e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # elbo_vars.bvn_sigsig_h is large
+  the_cov = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+  the_mean = Float64[0., 0.]
+  bvn = ElboDeriv.BvnComponent(the_mean, the_cov, 1.0);
+  sigma_vec = Float64[ the_cov[1, 1], the_cov[1, 2], the_cov[2, 2] ]
+
+  for component_index = 1:3
+    components = [(1, 1), (1, 2), (2, 2)]
+    println(component_index)
+    function invert_sigma{NumType <: Number}(sigma_vec::Vector{NumType})
+      sigma_loc = NumType[sigma_vec[1] sigma_vec[2]; sigma_vec[2] sigma_vec[3]]
+      sigma_inv = inv(sigma_loc)
+      sigma_inv[components[component_index]...]
+    end
+
+    ad_grad = ForwardDiff.gradient(invert_sigma, sigma_vec);
+    @test_approx_eq ad_grad bvn.dsiginv_dsig[component_index, :][:]
+
+  end
+end
+
+
+
+
+
+
+
+
 #function test_galaxy_variable_transform()
 # This is testing transform_bvn_derivs!
 
@@ -352,6 +381,9 @@ function test_fs1m_derivatives()
     ad_hess_gal - fs1m.h
   #end # gcc_ind is currently set to a troublesome value for testing
 end
+
+
+
 
 
 
