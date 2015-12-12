@@ -13,81 +13,77 @@ import WCS
 
 
 println("Running hessian tests.")
-#function test_e_g_functions()
-# Currently broken.
 
-blob, mp, bodies, tiled_blob = gen_sample_galaxy_dataset();
 
-S = length(mp.active_sources)
-P = length(CanonicalParams)
-b = 3
-h = 10
-w = 10
-tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
+function test_e_g_functions()
+  blob, mp, bodies, tiled_blob = gen_sample_galaxy_dataset();
 
-# For debugging.  Only the galaxy hessian is wrong for E_G.
-mp.vp[1][ids.a] = [0. 1.]
+  S = length(mp.active_sources)
+  P = length(CanonicalParams)
+  b = 3
+  h = 10
+  w = 10
+  tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
 
-test_squares = false
+  # For debugging.  Only the galaxy hessian is wrong for E_G.
+  mp.vp[1][ids.a] = [0. 1.]
 
-function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
-  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-  sbs = ElboDeriv.SourceBrightness{NumType}[
-    ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+  test_squares = false
 
-  elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S);
-  ElboDeriv.populate_fsm_vecs!(
-    elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
+  function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+    sbs = ElboDeriv.SourceBrightness{NumType}[
+      ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
 
-  E_G = elbo_vars_loc.E_G;
-  E_G2 = elbo_vars_loc.E_G2;
+    elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S);
+    ElboDeriv.populate_fsm_vecs!(
+      elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
 
-  clear!(E_G);
-  clear!(E_G2);
+    E_G = elbo_vars_loc.E_G;
+    E_G2 = elbo_vars_loc.E_G2;
 
-  ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
-  elbo_vars_loc
-end
+    clear!(E_G);
+    clear!(E_G2);
 
-function wrapper_fun{NumType <: Number}(x::Vector{NumType})
-  @assert length(x) == S * P
-  x_mat = reshape(x, (P, S))
-  if NumType != Float64
-    mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-  else
-    mp_fd = deepcopy(mp)
+    ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
+    elbo_vars_loc
   end
-  for sa_ind in 1:length(mp_fd.active_sources)
-    mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
+
+  function wrapper_fun{NumType <: Number}(x::Vector{NumType})
+    @assert length(x) == S * P
+    x_mat = reshape(x, (P, S))
+    if NumType != Float64
+      mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
+    else
+      mp_fd = deepcopy(mp)
+    end
+    for sa_ind in 1:length(mp_fd.active_sources)
+      mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
+    end
+    elbo_vars_fd = e_g_wrapper_fun(mp_fd)
+    test_squares ? elbo_vars_fd.E_G2.v : elbo_vars_fd.E_G.v
   end
-  elbo_vars_fd = e_g_wrapper_fun(mp_fd)
-  test_squares ? elbo_vars_fd.E_G2.v : elbo_vars_fd.E_G.v
+
+
+  x_mat = zeros(Float64, P, S);
+  for sa_ind in 1:S
+    x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
+  end
+  x = x_mat[:];
+
+  elbo_vars = e_g_wrapper_fun(mp);
+  sf = test_squares ? deepcopy(elbo_vars.E_G2) : deepcopy(elbo_vars.E_G);
+
+  v = wrapper_fun(x)
+  @test_approx_eq v sf.v
+
+  ad_grad = ForwardDiff.gradient(wrapper_fun, x);
+  @test_approx_eq ad_grad sf.d
+
+  # This is still broken for the e_dev terms.
+  ad_hess = ForwardDiff.hessian(wrapper_fun, x);
+  @test_approx_eq ad_hess elbo_vars.E_G.h
 end
-
-
-x_mat = zeros(Float64, P, S);
-for sa_ind in 1:S
-  x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
-end
-x = x_mat[:];
-
-elbo_vars = e_g_wrapper_fun(mp);
-sf = test_squares ? deepcopy(elbo_vars.E_G2) : deepcopy(elbo_vars.E_G);
-
-v = wrapper_fun(x)
-@test_approx_eq v sf.v
-
-ad_grad = ForwardDiff.gradient(wrapper_fun, x);
-@test_approx_eq ad_grad sf.d
-
-# This is still broken for the e_dev terms.
-ad_hess = ForwardDiff.hessian(wrapper_fun, x);
-#@test_approx_eq hess elbo_vars.E_G.h
-#matshow(abs(sf.h - ad_hess) .> 1e-6)
-
-sf.h[1:6, 1:6]
-ad_hess[1:6, 1:6]
-#end
 
 
 
@@ -137,7 +133,8 @@ function test_fs1m_derivatives()
 
   # Pick out a single galaxy component for testing.
   # The index is (psf, galaxy, gal type, source)
-  for psf_k=1:3, type_i = 1:2, gal_j in 1:[8,6][type_i]
+  #for psf_k=1:3, type_i = 1:2, gal_j in 1:[8,6][type_i]
+    psf_k = 1; type_i = 1; gal_j = 2
     gcc_ind = (psf_k, gal_j, type_i, s)
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
@@ -726,3 +723,4 @@ test_galaxy_cache_component()
 test_bvn_derivatives()
 test_fs0m_derivatives()
 test_fs1m_derivatives()
+test_e_g_functions()
