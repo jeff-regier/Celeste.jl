@@ -15,7 +15,7 @@ import WCS
 println("Running hessian tests.")
 
 
-function test_e_g_functions()
+#function test_e_g_functions()
   blob, mp, bodies, tiled_blob = gen_sample_galaxy_dataset();
 
   S = length(mp.active_sources)
@@ -26,9 +26,9 @@ function test_e_g_functions()
   tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
 
   # For debugging.  Only the galaxy hessian is wrong for E_G.
-  mp.vp[1][ids.a] = [0. 1.]
+  mp.vp[1][ids.a] = [0.5 0.5]
 
-  test_squares = false
+  test_squares = true
 
   function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
@@ -80,35 +80,18 @@ function test_e_g_functions()
   ad_grad = ForwardDiff.gradient(wrapper_fun, x);
   @test_approx_eq ad_grad sf.d
 
-  # This is still broken for the e_dev terms.
   ad_hess = ForwardDiff.hessian(wrapper_fun, x);
-  @test_approx_eq ad_hess elbo_vars.E_G.h
-end
+  if test_squares
+    @test_approx_eq ad_hess elbo_vars.E_G2.h
+    matshow(abs(ad_hess - elbo_vars.E_G2.h) .> 1e-9)
+    (ad_hess[ids.a, 1:20])
+    (elbo_vars.E_G2.h[ids.a, 1:20])
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  else
+    @test_approx_eq ad_hess elbo_vars.E_G.h
+  end
+#end
 
 
 function test_fs1m_derivatives()
