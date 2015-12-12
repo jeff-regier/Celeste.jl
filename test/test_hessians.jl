@@ -23,7 +23,6 @@ function test_dsiginv_dsig()
 
   for component_index = 1:3
     components = [(1, 1), (1, 2), (2, 2)]
-    println(component_index)
     function invert_sigma{NumType <: Number}(sigma_vec::Vector{NumType})
       sigma_loc = NumType[sigma_vec[1] sigma_vec[2]; sigma_vec[2] sigma_vec[3]]
       sigma_inv = inv(sigma_loc)
@@ -32,7 +31,6 @@ function test_dsiginv_dsig()
 
     ad_grad = ForwardDiff.gradient(invert_sigma, sigma_vec);
     @test_approx_eq ad_grad bvn.dsiginv_dsig[component_index, :][:]
-
   end
 end
 
@@ -404,7 +402,8 @@ function test_bvn_derivatives()
 
   # Note that get_bvn_derivs doesn't use the weight, so set it to something
   # strange to check that it doesn't matter.
-  weight = 0.724
+  #weight = 0.724
+  weight = 1.0
 
   bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
@@ -452,6 +451,9 @@ function test_bvn_derivatives()
 
   elbo_vars.bvn_sigsig_h
   ad_h[sig_ids, sig_ids]
+
+  v = ElboDeriv.get_bvn_derivs!(elbo_vars, bvn, x);
+
 end
 
 
