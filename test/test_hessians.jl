@@ -64,7 +64,6 @@ function test_e_g_functions()
       test_squares ? elbo_vars_fd.E_G2.v : elbo_vars_fd.E_G.v
     end
 
-
     x_mat = zeros(Float64, P, S);
     for sa_ind in 1:S
       x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
@@ -409,6 +408,38 @@ end
 
 
 function test_galaxy_cache_component()
+  # TODO: eliminate some of the redundancy in these tests.
+
+  # TODO: test with a real and asymmetric wcs jacobian.
+  # We only need this for a psf and jacobian.
+  blob, mp, three_bodies = gen_three_body_dataset();
+
+  # Pick a single source and band for testing.
+  s = 1
+  b = 3
+
+  # The pixel and world centers shouldn't matter for derivatives.
+  patch = mp.patches[s, b];
+  psf = patch.psf[1];
+
+  # Pick out a single galaxy component for testing.
+  gp = galaxy_prototypes[2][4];
+  e_dev_dir = -1.0;
+  e_dev_i = 0.85;
+
+  # Test the variable transformation.
+  e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
+
+  u = Float64[5.3, 2.9]
+  x = Float64[7.0, 5.0]
+
+  # The indices in par of each variable.
+  par_ids_u = [1, 2]
+  par_ids_e_axis = 3
+  par_ids_e_angle = 4
+  par_ids_e_scale = 5
+  par_ids_length = 5
+
   function f_wrap{T <: Number}(par::Vector{T})
     u = par[par_ids_u]
     e_angle = par[par_ids_e_angle]
@@ -424,6 +455,16 @@ function test_galaxy_cache_component()
     py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x);
 
     log(f_pre)
+  end
+
+  function wrap_par{T <: Number}(
+      u::Vector{T}, e_angle::T, e_axis::T, e_scale::T)
+    par = zeros(T, par_ids_length)
+    par[par_ids_u] = u
+    par[par_ids_e_angle] = e_angle
+    par[par_ids_e_axis] = e_axis
+    par[par_ids_e_scale] = e_scale
+    par
   end
 
   par = wrap_par(u, e_angle, e_axis, e_scale)
