@@ -224,14 +224,19 @@ function accum_galaxy_pos!{NumType <: Number}(
     fs1m.h[ui, si] +=
       f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
     fs1m.h[si, ui] = fs1m.h[ui, si]
+  end
 
-    # Do the e_dev hessians while we're here.
-    # This is currently wrong:
-    devi = gal_ids.e_dev
+  # Do the e_dev hessian terms.
+  devi = gal_ids.e_dev
+  for u_id in 1:2
+    ui = gal_ids.u[u_id]
     fs1m.h[ui, devi] += f_pre * gcc.e_dev_dir * bvn_u_d[u_id]
-    fs1m.h[devi, ui] += fs1m.h[ui, devi]
+    fs1m.h[devi, ui] = fs1m.h[ui, devi]
+  end
+  for shape_id in 1:length(gal_shape_ids)
+    si = gal_shape_alignment[shape_id]
     fs1m.h[si, devi] += f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
-    fs1m.h[devi, si] += fs1m.h[si, devi]
+    fs1m.h[devi, si] = fs1m.h[si, devi]
   end
 end
 
