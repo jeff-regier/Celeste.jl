@@ -141,19 +141,25 @@ function get_bvn_derivs!{NumType <: Number}(
 
   dpy2_dsig = elbo_vars.dpy2_dsig
   dpy2_dsig[1] = -py1 * bvn.precision[1,2]
-  dpy2_dsig[2] = -py1 * bvn.precision[1,1] - py2 * bvn.precision[1,2]
+  dpy2_dsig[2] = -py1 * bvn.precision[2,2] - py2 * bvn.precision[1,2]
   dpy2_dsig[3] = -py2 * bvn.precision[2,2]
 
   # Hessian terms involving only sigma
   bvn_sigsig_h = elbo_vars.bvn_sigsig_h
   for s_ind=1:3
-    bvn_sigsig_h[1, s_ind] = bvn_sigsig_h[s_ind, 1] =
-      py1 * dpy1_dsig[s_ind] - 0.5 * dsiginv_dsig[s_ind, 1]
-    bvn_sigsig_h[2, s_ind] = bvn_sigsig_h[s_ind, 2] =
+    # # d log|sigma| / dsigma12 is twice lambda12.
+
+    # Differentiate with respect to s_ind second.
+    bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
+      py1 * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
+
+    # d log|sigma| / dsigma12 is twice lambda12.
+    bvn_sigsig_h[2, s_ind] =
       py1 * dpy2_dsig[s_ind] + py2 * dpy1_dsig[s_ind] -
-      0.5 * dsiginv_dsig[s_ind, 2]
-    bvn_sigsig_h[3, s_ind] = bvn_sigsig_h[s_ind, 3] =
-      py2 * dpy2_dsig[s_ind] - 0.5 * dsiginv_dsig[s_ind, 3]
+      bvn.dsiginv_dsig[2, s_ind]
+
+    bvn_sigsig_h[3, s_ind] = #bvn_sigsig_h[s_ind, 3] =
+      py2 * dpy2_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[3, s_ind]
   end
 
   # Hessian terms involving both x and sigma.
