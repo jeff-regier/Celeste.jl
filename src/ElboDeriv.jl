@@ -327,12 +327,12 @@ function combine_pixel_sources!{NumType <: Number}(
 
     #llff = (sb.E_ll_a[b, 1].v * fsm[1].v^2, sb.E_ll_a[b, 2].v * fsm[2].v^2)
     #E_G2_s_v = a[1] * llff[1] + a[2] * llff[2]
-    #E_G2.v += E_G2_s_v
 
     for i in 1:Ia # Stars and galaxies
       lf = sb.E_l_a[b, i].v * fsm[i].v
       llff = sb.E_ll_a[b, i].v * fsm[i].v^2
       E_G.v += a[i] * lf
+      E_G2.v += a[i] * llff
 
       E_G.d[ids.a[i], sa] += lf
       E_G2.d[ids.a[i], sa] += llff
@@ -363,16 +363,14 @@ function combine_pixel_sources!{NumType <: Number}(
       # The (bright, bright) block:
       E_G.h[p0_bright_hess, p0_bright_hess] +=
         a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
-
-      # Wrong:
       E_G2.h[p0_bright_hess, p0_bright_hess] +=
-        a[i] * fsm[i].v * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
+        a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
 
       # The (shape, shape) block:
-      # Wrong:
       E_G.h[p0_shape_hess, p0_shape_hess] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
       E_G2.h[p0_shape_hess, p0_shape_hess] +=
-        2 * a[i] * sb.E_l_a[b, i].v * (fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
+        2 * a[i] * sb.E_ll_a[b, i].v *
+        (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
 
       # TODO: eliminate redundancy.
       # The (a, bright) blocks:
@@ -380,8 +378,7 @@ function combine_pixel_sources!{NumType <: Number}(
       E_G.h[p0_bright_hess, ids.a[i]] = E_G.h[p0_bright_hess, ids.a[i]] + h_a_bright
       E_G.h[ids.a[i], p0_bright_hess] =  E_G.h[p0_bright_hess, ids.a[i]]'
 
-      # Wrong:
-      h2_a_bright = fsm[i].v * sb.E_ll_a[b, i].d[p0_bright, 1]
+      h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[p0_bright, 1]
       E_G2.h[p0_bright_hess, ids.a[i]] += h2_a_bright
       E_G2.h[ids.a[i], p0_bright_hess] = E_G2.h[p0_bright_hess, ids.a[i]]'
 
@@ -390,8 +387,7 @@ function combine_pixel_sources!{NumType <: Number}(
       E_G.h[p0_shape_hess, ids.a[i]] += h_a_shape
       E_G.h[ids.a[i], p0_shape_hess] = E_G.h[p0_shape_hess, ids.a[i]]'
 
-      # Wrong:
-      h2_a_shape = 2 * sb.E_l_a[b, i].v * fsm[i].v * fsm[i].d
+      h2_a_shape = sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[:, 1]
       E_G2.h[p0_shape_hess, ids.a[i]] += h2_a_shape
       E_G2.h[ids.a[i], p0_shape_hess] = E_G2.h[p0_shape_hess, ids.a[i]]'
 
