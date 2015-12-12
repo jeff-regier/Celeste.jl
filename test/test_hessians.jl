@@ -37,8 +37,8 @@ e_dev_dir = -1.0;
 e_dev_i = 0.85;
 
 # Test the variable transformation.
-e_angle, e_axis, e_scale = (1.1, 0.75, 4.8)
-#e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
+#e_angle, e_axis, e_scale = (1.1, 0.75, 4.8)
+e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # elbo_vars.bvn_sigsig_h is large
 
 u = Float64[5.3, 2.9]
 x = Float64[7.0, 5.0]
@@ -92,7 +92,7 @@ elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
 ElboDeriv.get_bvn_derivs!(elbo_vars, bmc, x);
 ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
 
-# When the hessian is large the result has the wrong sign.  Maube that
+# When the hessian is large the result has the wrong sign.  Maybe that
 # sign is wrong?
 elbo_vars.bvn_sigsig_h
 elbo_vars.bvn_sig_d
@@ -356,10 +356,18 @@ end
 
 
 function test_bvn_derivatives()
+  # Currently broken
+
   # Test log(bvn prob) / d(mean, sigma)
 
   x = Float64[2.0, 3.0]
-  sigma = Float64[1.0 0.5; 0.5 1.0]
+
+  #sigma = Float64[1.0 0.5; 0.5 1.0] # Test passes
+
+  # Test fails:
+  e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # elbo_vars.bvn_sigsig_h is large
+  sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+
   offset = Float64[0.5, 0.25]
 
   # Note that get_bvn_derivs doesn't use the weight, so set it to something
@@ -409,6 +417,9 @@ function test_bvn_derivatives()
   @test_approx_eq elbo_vars.bvn_xx_h ad_h[x_ids, x_ids]
   @test_approx_eq elbo_vars.bvn_xsig_h ad_h[x_ids, sig_ids]
   @test_approx_eq elbo_vars.bvn_sigsig_h ad_h[sig_ids, sig_ids]
+
+  elbo_vars.bvn_sigsig_h
+  ad_h[sig_ids, sig_ids]
 end
 
 
