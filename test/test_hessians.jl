@@ -12,8 +12,107 @@ import Synthetic
 import WCS
 
 
-
 println("Running hessian tests.")
+#function test_e_g_functions()
+# Currently broken.
+
+blob, mp, bodies, tiled_blob = gen_sample_galaxy_dataset();
+
+S = length(mp.active_sources)
+P = length(CanonicalParams)
+b = 3
+h = 10
+w = 10
+tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
+
+# For debugging.  Only the galaxy hessian is wrong for E_G.
+mp.vp[1][ids.a] = [0. 1.]
+
+test_squares = false
+
+function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  sbs = ElboDeriv.SourceBrightness{NumType}[
+    ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+
+  elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S);
+  ElboDeriv.populate_fsm_vecs!(
+    elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
+
+  E_G = elbo_vars_loc.E_G;
+  E_G2 = elbo_vars_loc.E_G2;
+
+  clear!(E_G);
+  clear!(E_G2);
+
+  ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
+  elbo_vars_loc
+end
+
+function wrapper_fun{NumType <: Number}(x::Vector{NumType})
+  @assert length(x) == S * P
+  x_mat = reshape(x, (P, S))
+  if NumType != Float64
+    mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
+  else
+    mp_fd = deepcopy(mp)
+  end
+  for sa_ind in 1:length(mp_fd.active_sources)
+    mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
+  end
+  elbo_vars_fd = e_g_wrapper_fun(mp_fd)
+  test_squares ? elbo_vars_fd.E_G2.v : elbo_vars_fd.E_G.v
+end
+
+
+x_mat = zeros(Float64, P, S);
+for sa_ind in 1:S
+  x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
+end
+x = x_mat[:];
+
+elbo_vars = e_g_wrapper_fun(mp);
+sf = test_squares ? deepcopy(elbo_vars.E_G2) : deepcopy(elbo_vars.E_G);
+
+v = wrapper_fun(x)
+@test_approx_eq v sf.v
+
+ad_grad = ForwardDiff.gradient(wrapper_fun, x);
+@test_approx_eq ad_grad sf.d
+
+# This is still broken for the e_dev terms.
+ad_hess = ForwardDiff.hessian(wrapper_fun, x);
+#@test_approx_eq hess elbo_vars.E_G.h
+#matshow(abs(sf.h - ad_hess) .> 1e-6)
+
+sf.h[1:6, 1:6]
+ad_hess[1:6, 1:6]
+#end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 function test_fs1m_derivatives()
@@ -108,6 +207,78 @@ function test_fs1m_derivatives()
   end
 end
 
+
+function test_fs0m_derivatives()
+  # TODO: test with a real and asymmetric wcs jacobian.
+  blob, mp, three_bodies = gen_three_body_dataset();
+  omitted_ids = Int64[];
+  kept_ids = setdiff(1:length(ids), omitted_ids);
+
+  s = 1
+  b = 3
+
+  patch = mp.patches[s, b];
+  u = mp.vp[s][ids.u]
+  u_pix = WCS.world_to_pixel(
+    patch.wcs_jacobian, patch.center, patch.pixel_center, u)
+  x = ceil(u_pix + [1.0, 2.0])
+
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
+
+  ###########################
+  # Stars
+
+  # Pick out a single star component for testing.
+  # The index is psf, source
+  bmc_ind = (1, s)
+  function f_wrap_star{T <: Number}(par::Vector{T})
+    # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
+    if T != Float64
+      mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
+    else
+      mp_fd = deepcopy(mp)
+    end
+
+    # Make sure par is as long as the galaxy parameters.
+    @assert length(par) == length(ids.u)
+    for p1 in 1:2
+        p0 = ids.u[p1]
+        mp_fd.vp[s][p0] = par[p1]
+    end
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
+    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1);
+    ElboDeriv.accum_star_pos!(
+      elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
+    elbo_vars_fd.fs0m_vec[s].v
+  end
+
+  function mp_to_par_star(mp::ModelParams{Float64})
+    par = zeros(2)
+    for p1 in 1:length(par)
+        par[p1] = mp.vp[s][ids.u[p1]]
+    end
+    par
+  end
+
+  par_star = mp_to_par_star(mp)
+
+  clear!(elbo_vars.fs0m_vec[s])
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  ElboDeriv.accum_star_pos!(
+    elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
+  fs0m = deepcopy(elbo_vars.fs0m_vec[s])
+
+  # One sanity check.
+  @test_approx_eq fs0m.v f_wrap_star(par_star)
+
+  # Test the gradient.
+  ad_grad_star = ForwardDiff.gradient(f_wrap_star, par_star);
+  @test_approx_eq ad_grad_star fs0m.d
+
+  # Test the hessian.
+  ad_hess_star = ForwardDiff.hessian(f_wrap_star, par_star)
+  @test_approx_eq_eps ad_hess_star fs0m.h 1e-10
+end
 
 
 function test_bvn_derivatives()
@@ -317,80 +488,6 @@ end
 
 
 
-function test_e_g_functions()
-  # Currently broken due to broken fs1m derivatives.
-
-  blob, mp, bodies, tiled_blob = gen_sample_galaxy_dataset();
-
-  S = length(mp.active_sources)
-  P = length(CanonicalParams)
-  b = 3
-  h = 10
-  w = 10
-  tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
-
-  # For debugging.  Only the galaxy hessian is wrong for E_G.
-  mp.vp[1][ids.a] = [0. 1.]
-
-  test_squares = false
-
-  function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-    sbs = ElboDeriv.SourceBrightness{NumType}[
-      ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
-
-    elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S);
-    ElboDeriv.populate_fsm_vecs!(
-      elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
-
-    E_G = elbo_vars_loc.E_G;
-    E_G2 = elbo_vars_loc.E_G2;
-
-    clear!(E_G);
-    clear!(E_G2);
-
-    ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
-    elbo_vars_loc
-  end
-
-  function wrapper_fun{NumType <: Number}(x::Vector{NumType})
-    @assert length(x) == S * P
-    x_mat = reshape(x, (P, S))
-    if NumType != Float64
-      mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-    else
-      mp_fd = deepcopy(mp)
-    end
-    for sa_ind in 1:length(mp_fd.active_sources)
-      mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
-    end
-    elbo_vars_fd = e_g_wrapper_fun(mp_fd)
-    test_squares ? elbo_vars_fd.E_G2.v : elbo_vars_fd.E_G.v
-  end
-
-
-  x_mat = zeros(Float64, P, S);
-  for sa_ind in 1:S
-    x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
-  end
-  x = x_mat[:];
-
-  elbo_vars = e_g_wrapper_fun(mp);
-  sf = test_squares ? deepcopy(elbo_vars.E_G2) : deepcopy(elbo_vars.E_G);
-
-  v = wrapper_fun(x)
-  @test_approx_eq v sf.v
-
-  grad = ForwardDiff.gradient(wrapper_fun, x);
-  @test_approx_eq grad sf.d
-
-  hess = ForwardDiff.hessian(wrapper_fun, x);
-  @test_approx_eq hess elbo_vars.E_G.h
-  matshow(abs(sf.h - hess) .> 1e-6)
-
-end
-
-
 function test_combine_sfs()
   # TODO: this test was designed for multiply_sf.  Make it more general.
 
@@ -499,79 +596,6 @@ function test_combine_sfs()
   @test_approx_eq sf1.h hess
 end
 
-
-
-function test_fs0m_derivatives()
-  # TODO: test with a real and asymmetric wcs jacobian.
-  blob, mp, three_bodies = gen_three_body_dataset();
-  omitted_ids = Int64[];
-  kept_ids = setdiff(1:length(ids), omitted_ids);
-
-  s = 1
-  b = 3
-
-  patch = mp.patches[s, b];
-  u = mp.vp[s][ids.u]
-  u_pix = WCS.world_to_pixel(
-    patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-  x = ceil(u_pix + [1.0, 2.0])
-
-  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
-
-  ###########################
-  # Stars
-
-  # Pick out a single star component for testing.
-  # The index is psf, source
-  bmc_ind = (1, s)
-  function f_wrap_star{T <: Number}(par::Vector{T})
-    # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-    if T != Float64
-      mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
-    else
-      mp_fd = deepcopy(mp)
-    end
-
-    # Make sure par is as long as the galaxy parameters.
-    @assert length(par) == length(ids.u)
-    for p1 in 1:2
-        p0 = ids.u[p1]
-        mp_fd.vp[s][p0] = par[p1]
-    end
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
-    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1);
-    ElboDeriv.accum_star_pos!(
-      elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
-    elbo_vars_fd.fs0m_vec[s].v
-  end
-
-  function mp_to_par_star(mp::ModelParams{Float64})
-    par = zeros(2)
-    for p1 in 1:length(par)
-        par[p1] = mp.vp[s][ids.u[p1]]
-    end
-    par
-  end
-
-  par_star = mp_to_par_star(mp)
-
-  clear!(elbo_vars.fs0m_vec[s])
-  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-  ElboDeriv.accum_star_pos!(
-    elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
-  fs0m = deepcopy(elbo_vars.fs0m_vec[s])
-
-  # One sanity check.
-  @test_approx_eq fs0m.v f_wrap_star(par_star)
-
-  # Test the gradient.
-  ad_grad_star = ForwardDiff.gradient(f_wrap_star, par_star);
-  @test_approx_eq ad_grad_star fs0m.d
-
-  # Test the hessian.
-  ad_hess_star = ForwardDiff.hessian(f_wrap_star, par_star)
-  @test_approx_eq_eps ad_hess_star fs0m.h 1e-10
-end
 
 
 function test_galaxy_sigma_derivs()
@@ -691,10 +715,14 @@ function test_set_hess()
 end
 
 
+test_dsiginv_dsig()
 test_combine_sfs()
 test_set_hess()
 test_brightness_hessian()
 test_bvn_derivatives()
 test_galaxy_sigma_derivs()
 test_galaxy_variable_transform()
-test_fsXm_derivatives()
+test_galaxy_cache_component()
+test_bvn_derivatives()
+test_fs0m_derivatives()
+test_fs1m_derivatives()

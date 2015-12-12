@@ -201,7 +201,6 @@ function accum_galaxy_pos!{NumType <: Number}(
   # The Hessians:
 
   # Hessian terms involving only the shape parameters.
-  # TODO: tests suggest that this might be broken.
   for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
     s1 = gal_shape_alignment[shape_id1]
     s2 = gal_shape_alignment[shape_id2]
@@ -218,7 +217,7 @@ function accum_galaxy_pos!{NumType <: Number}(
       f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
   end
 
-  # Hessian terms involving both the shape and locaiton parameters.
+  # Hessian terms involving both the shape and location parameters.
   for u_id in 1:2, shape_id in 1:length(gal_shape_ids)
     ui = gal_ids.u[u_id]
     si = gal_shape_alignment[shape_id]
@@ -227,11 +226,12 @@ function accum_galaxy_pos!{NumType <: Number}(
     fs1m.h[si, ui] = fs1m.h[ui, si]
 
     # Do the e_dev hessians while we're here.
+    # This is currently wrong:
     devi = gal_ids.e_dev
-    fs1m.h[ui, devi] = f_pre * gcc.e_dev_dir * bvn_u_d[u_id]
-    fs1m.h[devi, ui] = fs1m.h[ui, devi]
-    fs1m.h[si, devi] = f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
-    fs1m.h[devi, si] = fs1m.h[si, devi]
+    fs1m.h[ui, devi] += f_pre * gcc.e_dev_dir * bvn_u_d[u_id]
+    fs1m.h[devi, ui] += fs1m.h[ui, devi]
+    fs1m.h[si, devi] += f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
+    fs1m.h[devi, si] += fs1m.h[si, devi]
   end
 end
 
