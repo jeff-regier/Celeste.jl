@@ -1,7 +1,6 @@
 Compat 0 0.7.5
 DataFrames
 Distributions
-Docile
 DualNumbers
 FITSIO
 ForwardDiff # Currently only required for testing.
