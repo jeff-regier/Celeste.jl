@@ -30,6 +30,8 @@ type ElboIntermediateVariables{NumType <: Number}
   # intermediate values used in d bvn / d(x, sig)
   dpy1_dsig::Array{NumType, 1}
   dpy2_dsig::Array{NumType, 1}
+
+  # TODO: delete this, it is now in BvnComponent
   dsiginv_dsig::Array{NumType, 2}
 
   # Derivatives of a bvn with respect to (u, shape)
