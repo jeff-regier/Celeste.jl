@@ -13,272 +13,6 @@ import WCS
 
 
 
-
-function test_dsiginv_dsig()
-  e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # elbo_vars.bvn_sigsig_h is large
-  the_cov = Util.get_bvn_cov(e_axis, e_angle, e_scale)
-  the_mean = Float64[0., 0.]
-  bvn = ElboDeriv.BvnComponent(the_mean, the_cov, 1.0);
-  sigma_vec = Float64[ the_cov[1, 1], the_cov[1, 2], the_cov[2, 2] ]
-
-  for component_index = 1:3
-    components = [(1, 1), (1, 2), (2, 2)]
-    function invert_sigma{NumType <: Number}(sigma_vec::Vector{NumType})
-      sigma_loc = NumType[sigma_vec[1] sigma_vec[2]; sigma_vec[2] sigma_vec[3]]
-      sigma_inv = inv(sigma_loc)
-      sigma_inv[components[component_index]...]
-    end
-
-    ad_grad = ForwardDiff.gradient(invert_sigma, sigma_vec);
-    @test_approx_eq ad_grad bvn.dsiginv_dsig[component_index, :][:]
-  end
-end
-
-
-
-
-
-
-
-
-#function test_galaxy_variable_transform()
-# This is testing transform_bvn_derivs!
-
-# TODO: this is not passing with certain components.
-
-# TODO: test with a real and asymmetric wcs jacobian.
-# We only need this for a psf and jacobian.
-blob, mp, three_bodies = gen_three_body_dataset();
-
-# Pick a single source and band for testing.
-s = 1
-b = 3
-
-# The pixel and world centers shouldn't matter for derivatives.
-patch = mp.patches[s, b];
-psf = patch.psf[1];
-
-# Pick out a single galaxy component for testing.
-gp = galaxy_prototypes[2][4];
-e_dev_dir = -1.0;
-e_dev_i = 0.85;
-
-# Test the variable transformation.
-#e_angle, e_axis, e_scale = (1.1, 0.75, 4.8)
-e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # elbo_vars.bvn_sigsig_h is large
-
-u = Float64[5.3, 2.9]
-x = Float64[7.0, 5.0]
-#x = Float64[5.4, 3.0]
-
-# The indices in par of each variable.
-par_ids_u = [1, 2]
-par_ids_e_axis = 3
-par_ids_e_angle = 4
-par_ids_e_scale = 5
-par_ids_length = 5
-
-function wrap_par{T <: Number}(
-    u::Vector{T}, e_angle::T, e_axis::T, e_scale::T)
-  par = zeros(T, par_ids_length)
-  par[par_ids_u] = u
-  par[par_ids_e_angle] = e_angle
-  par[par_ids_e_axis] = e_axis
-  par[par_ids_e_scale] = e_scale
-  par
-end
-
-
-function f_bvn_wrap{T <: Number}(par::Vector{T})
-  u = par[par_ids_u]
-  e_angle = par[par_ids_e_angle]
-  e_axis = par[par_ids_e_axis]
-  e_scale = par[par_ids_e_scale]
-  u_pix = WCS.world_to_pixel(
-    patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-
-  sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
-
-  function bvn_function{T <: Number}(u_pix::Vector{T}, sigma::Matrix{T})
-    local_x = x - u_pix
-    -0.5 * ((local_x' * (sigma \ local_x))[1,1] + log(det(sigma)))
-  end
-
-  bvn_function(u_pix, sigma)
-end
-
-# First just test the bvn function itself
-par = wrap_par(u, e_angle, e_axis, e_scale)
-u_pix = WCS.world_to_pixel(
-  patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
-bmc = ElboDeriv.BvnComponent(u_pix, sigma, 1.0);
-sig_sf = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma);
-gcc = ElboDeriv.GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf);
-elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
-ElboDeriv.get_bvn_derivs!(elbo_vars, bmc, x);
-ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
-
-# When the hessian is large the result has the wrong sign.  Maybe that
-# sign is wrong?
-elbo_vars.bvn_sigsig_h
-elbo_vars.bvn_sig_d
-
-f_bvn_wrap(par)
-
-# Check the gradient.
-ad_grad = ForwardDiff.gradient(f_bvn_wrap, par);
-@test_approx_eq ad_grad [elbo_vars.bvn_u_d; elbo_vars.bvn_s_d]
-
-ad_hess = ForwardDiff.hessian(f_bvn_wrap, par);
-@test_approx_eq ad_hess[1:2, 1:2] elbo_vars.bvn_uu_h
-@test_approx_eq ad_hess[1:2, 3:5] elbo_vars.bvn_us_h
-
-# Broken:
-celeste_bvn_ss_h = deepcopy(elbo_vars.bvn_ss_h);
-ad_bvn_ss_h = deepcopy(ad_hess[3:5, 3:5])
-@test_approx_eq ad_hess[3:5, 3:5] elbo_vars.bvn_ss_h
-ad_hess[3:5, 3:5] - elbo_vars.bvn_ss_h
-celeste_bvn_ss_h
-
-
-
-
-
-
-
-###########
-# Now test the whole GalaxyCacheComponent
-function f_wrap{T <: Number}(par::Vector{T})
-  u = par[par_ids_u]
-  e_angle = par[par_ids_e_angle]
-  e_axis = par[par_ids_e_axis]
-  e_scale = par[par_ids_e_scale]
-  u_pix = WCS.world_to_pixel(
-    patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-  elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1)
-  e_dev_i_fd = convert(T, e_dev_i)
-  gcc = ElboDeriv.GalaxyCacheComponent(
-          e_dev_dir, e_dev_i_fd, gp, psf, u_pix, e_axis, e_angle, e_scale);
-
-  py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x);
-
-  log(f_pre)
-end
-
-par = wrap_par(u, e_angle, e_axis, e_scale)
-u_pix = WCS.world_to_pixel(
-  patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-gcc = ElboDeriv.GalaxyCacheComponent(
-        e_dev_dir, e_dev_i, gp, psf, u_pix, e_axis, e_angle, e_scale);
-elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
-ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x);
-ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
-
-# Sanity check the wrapper.
-@test_approx_eq(
-  -0.5 *((x - gcc.bmc.the_mean)' * gcc.bmc.precision * (x - gcc.bmc.the_mean) -
-         log(det(gcc.bmc.precision)))[1,1] - log(2pi) +
-         log(psf.alphaBar * gp.etaBar),
-  f_wrap(par))
-
-# Check the gradient.
-ad_grad_fun = ForwardDiff.gradient(f_wrap);
-ad_grad = ad_grad_fun(par)
-@test_approx_eq ad_grad [elbo_vars.bvn_u_d; elbo_vars.bvn_s_d]
-
-ad_hess_fun = ForwardDiff.hessian(f_wrap);
-ad_hess = ad_hess_fun(par);
-
-@test_approx_eq ad_hess[1:2, 1:2] elbo_vars.bvn_uu_h
-@test_approx_eq ad_hess[1:2, 3:5] elbo_vars.bvn_us_h
-
-# I'm not sure why this requires less precision for this test.
-celeste_bvn_ss_h = deepcopy(elbo_vars.bvn_ss_h);
-ad_bvn_ss_h = deepcopy(ad_hess[3:5, 3:5])
-@test_approx_eq_eps ad_hess[3:5, 3:5] elbo_vars.bvn_ss_h 1e-10
-ad_hess[3:5, 3:5] - elbo_vars.bvn_ss_h
-celeste_bvn_ss_h
-
-#end
-
-
-##############################
-# transform_bvn_derivs!
-##############################
-
-wcs_jacobian = mp.patches[s, b].wcs_jacobian
-gcc = ElboDeriv.GalaxyCacheComponent(
-        e_dev_dir, e_dev_i, gp, psf, u_pix, e_axis, e_angle, e_scale);
-elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
-ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x);
-
-bvn_s_d = elbo_vars.bvn_s_d
-bvn_ss_h = elbo_vars.bvn_ss_h
-bvn_us_h = elbo_vars.bvn_us_h
-
-fill!(bvn_s_d, 0.0)
-fill!(bvn_ss_h, 0.0)
-fill!(bvn_us_h, 0.0)
-
-# These values should already have been set using get_bvn_derivs!()
-bvn_x_d = elbo_vars.bvn_x_d
-bvn_xx_h = elbo_vars.bvn_xx_h
-bvn_sig_d = elbo_vars.bvn_sig_d
-bvn_sigsig_h = elbo_vars.bvn_sigsig_h
-bvn_xsig_h = elbo_vars.bvn_xsig_h
-
-# Transform the u derivates first.
-ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc.bmc, wcs_jacobian)
-
-# Gradient calculations.
-
-# Use the chain rule for the shape derviatives.
-for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
-  bvn_s_d[shape_id] +=
-    bvn_sig_d[sig_id] * gcc.sig_sf.j[sig_id, shape_id]
-end
-
-# Hessian calculations.
-
-# Second derviatives involving only shape parameters.
-# TODO: this is broken, I think.
-# TODO: eliminate redundancies.
-for shape_id1 in 1:length(gal_shape_ids),
-    shape_id2 in 1:length(gal_shape_ids)
-  println("-----------------------")
-  for sig_id1 in 1:3
-    bvn_ss_h[shape_id1, shape_id2] +=
-      bvn_sig_d[sig_id1] * gcc.sig_sf.t[sig_id1, shape_id1, shape_id2]
-    for sig_id2 in 1:3
-      bvn_ss_h[shape_id1, shape_id2] +=
-        bvn_sigsig_h[sig_id1, sig_id2] *
-        gcc.sig_sf.j[sig_id1, shape_id1] *
-        gcc.sig_sf.j[sig_id2, shape_id2]
-    end
-  end
-end
-
-# Second derivates involving both a shape term and a u term.
-for shape_id in 1:length(gal_shape_ids), u_id in 1:2,
-    sig_id in 1:3, x_id in 1:2
-  bvn_us_h[u_id, shape_id] += bvn_xsig_h[x_id, sig_id] *
-    gcc.sig_sf.j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
-end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 println("Running hessian tests.")
 
 
@@ -304,11 +38,8 @@ function test_fs1m_derivatives()
 
   # Pick out a single galaxy component for testing.
   # The index is (psf, galaxy, gal type, source)
-  #for psf_k=1:3, type_i = 1:2, gal_j in 1:[8,6][type_i]
-    #psf_k = 1; type_i = 1; gal_j = 1
-    #gcc_ind = (psf_k, gal_j, type_i, s)
-    gcc_ind = (1, 4, 2, s)
-    println(gcc_ind)
+  for psf_k=1:3, type_i = 1:2, gal_j in 1:[8,6][type_i]
+    gcc_ind = (psf_k, gal_j, type_i, s)
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
       if T != Float64
@@ -330,7 +61,7 @@ function test_fs1m_derivatives()
       py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x)
       f_pre * gcc.e_dev_i
 
-      # Through accum_galaxy_pos!
+      # Alternatively: test through accum_galaxy_pos!
       # elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1);
       # ElboDeriv.accum_galaxy_pos!(
       #   elbo_vars_fd, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian);
@@ -372,30 +103,19 @@ function test_fs1m_derivatives()
     @test_approx_eq ad_grad_gal fs1m.d
 
     # Test the hessian.
-    # Currently broken!
     ad_hess_gal = ForwardDiff.hessian(f_wrap_gal, par_gal)
-    #@test_approx_eq_eps ad_hess_gal fs1m.h 1e-6
-    println(maximum(abs(ad_hess_gal - fs1m.h)))
-    ad_hess_gal - fs1m.h
-  #end # gcc_ind is currently set to a troublesome value for testing
+    @test_approx_eq ad_hess_gal fs1m.h
+  end
 end
 
 
 
-
-
-
 function test_bvn_derivatives()
-  # Currently broken
-
   # Test log(bvn prob) / d(mean, sigma)
 
   x = Float64[2.0, 3.0]
 
-  #sigma = Float64[1.0 0.5; 0.5 1.0] # Test passes
-
-  # Test fails:
-  e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # elbo_vars.bvn_sigsig_h is large
+  e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
   sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
 
   offset = Float64[0.5, 0.25]
@@ -413,11 +133,6 @@ function test_bvn_derivatives()
     local_x = offset - x
     -0.5 * ((local_x' * (sigma \ local_x))[1,1] + log(det(sigma)))
   end
-
-  # function f{T <: Number}(x::Vector{T}, sigma::Matrix{T})
-  #   local_x = x - offset
-  #   -0.5 * ((local_x' * (sigma \ local_x))[1,1] + log(det(sigma)))
-  # end
 
   x_ids = 1:2
   sig_ids = 3:5
@@ -448,30 +163,155 @@ function test_bvn_derivatives()
   @test_approx_eq elbo_vars.bvn_xx_h ad_h[x_ids, x_ids]
   @test_approx_eq elbo_vars.bvn_xsig_h ad_h[x_ids, sig_ids]
   @test_approx_eq elbo_vars.bvn_sigsig_h ad_h[sig_ids, sig_ids]
-
-  elbo_vars.bvn_sigsig_h
-  ad_h[sig_ids, sig_ids]
-
-  v = ElboDeriv.get_bvn_derivs!(elbo_vars, bvn, x);
-
 end
 
 
+function test_galaxy_variable_transform()
+  # This is testing transform_bvn_derivs!
+
+  # TODO: test with a real and asymmetric wcs jacobian.
+  # We only need this for a psf and jacobian.
+  blob, mp, three_bodies = gen_three_body_dataset();
+
+  # Pick a single source and band for testing.
+  s = 1
+  b = 3
+
+  # The pixel and world centers shouldn't matter for derivatives.
+  patch = mp.patches[s, b];
+  psf = patch.psf[1];
+
+  # Pick out a single galaxy component for testing.
+  gp = galaxy_prototypes[2][4];
+  e_dev_dir = -1.0;
+  e_dev_i = 0.85;
+
+  # Test the variable transformation.
+  e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
+
+  u = Float64[5.3, 2.9]
+  x = Float64[7.0, 5.0]
+
+  # The indices in par of each variable.
+  par_ids_u = [1, 2]
+  par_ids_e_axis = 3
+  par_ids_e_angle = 4
+  par_ids_e_scale = 5
+  par_ids_length = 5
+
+  function wrap_par{T <: Number}(
+      u::Vector{T}, e_angle::T, e_axis::T, e_scale::T)
+    par = zeros(T, par_ids_length)
+    par[par_ids_u] = u
+    par[par_ids_e_angle] = e_angle
+    par[par_ids_e_axis] = e_axis
+    par[par_ids_e_scale] = e_scale
+    par
+  end
 
 
+  function f_bvn_wrap{T <: Number}(par::Vector{T})
+    u = par[par_ids_u]
+    e_angle = par[par_ids_e_angle]
+    e_axis = par[par_ids_e_axis]
+    e_scale = par[par_ids_e_scale]
+    u_pix = WCS.world_to_pixel(
+      patch.wcs_jacobian, patch.center, patch.pixel_center, u)
+
+    sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+
+    function bvn_function{T <: Number}(u_pix::Vector{T}, sigma::Matrix{T})
+      local_x = x - u_pix
+      -0.5 * ((local_x' * (sigma \ local_x))[1,1] + log(det(sigma)))
+    end
+
+    bvn_function(u_pix, sigma)
+  end
+
+  # First just test the bvn function itself
+  par = wrap_par(u, e_angle, e_axis, e_scale)
+  u_pix = WCS.world_to_pixel(
+    patch.wcs_jacobian, patch.center, patch.pixel_center, u)
+  sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+  bmc = ElboDeriv.BvnComponent(u_pix, sigma, 1.0);
+  sig_sf = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma);
+  gcc = ElboDeriv.GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
+  ElboDeriv.get_bvn_derivs!(elbo_vars, bmc, x);
+  ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
+
+  # When the hessian is large the result has the wrong sign.  Maybe that
+  # sign is wrong?
+  elbo_vars.bvn_sigsig_h
+  elbo_vars.bvn_sig_d
+
+  f_bvn_wrap(par)
+
+  # Check the gradient.
+  ad_grad = ForwardDiff.gradient(f_bvn_wrap, par);
+  @test_approx_eq ad_grad [elbo_vars.bvn_u_d; elbo_vars.bvn_s_d]
+
+  ad_hess = ForwardDiff.hessian(f_bvn_wrap, par);
+  @test_approx_eq ad_hess[1:2, 1:2] elbo_vars.bvn_uu_h
+  @test_approx_eq ad_hess[1:2, 3:5] elbo_vars.bvn_us_h
+
+  celeste_bvn_ss_h = deepcopy(elbo_vars.bvn_ss_h);
+  ad_bvn_ss_h = deepcopy(ad_hess[3:5, 3:5])
+  @test_approx_eq ad_hess[3:5, 3:5] elbo_vars.bvn_ss_h
+end
 
 
+function test_galaxy_cache_component()
+  function f_wrap{T <: Number}(par::Vector{T})
+    u = par[par_ids_u]
+    e_angle = par[par_ids_e_angle]
+    e_axis = par[par_ids_e_axis]
+    e_scale = par[par_ids_e_scale]
+    u_pix = WCS.world_to_pixel(
+      patch.wcs_jacobian, patch.center, patch.pixel_center, u)
+    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1)
+    e_dev_i_fd = convert(T, e_dev_i)
+    gcc = ElboDeriv.GalaxyCacheComponent(
+            e_dev_dir, e_dev_i_fd, gp, psf, u_pix, e_axis, e_angle, e_scale);
 
+    py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x);
 
+    log(f_pre)
+  end
 
+  par = wrap_par(u, e_angle, e_axis, e_scale)
+  u_pix = WCS.world_to_pixel(
+    patch.wcs_jacobian, patch.center, patch.pixel_center, u)
+  gcc = ElboDeriv.GalaxyCacheComponent(
+          e_dev_dir, e_dev_i, gp, psf, u_pix, e_axis, e_angle, e_scale);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1);
+  ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x);
+  ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
 
+  # Sanity check the wrapper.
+  @test_approx_eq(
+    -0.5 *((x - gcc.bmc.the_mean)' * gcc.bmc.precision * (x - gcc.bmc.the_mean) -
+           log(det(gcc.bmc.precision)))[1,1] - log(2pi) +
+           log(psf.alphaBar * gp.etaBar),
+    f_wrap(par))
 
+  # Check the gradient.
+  ad_grad_fun = ForwardDiff.gradient(f_wrap);
+  ad_grad = ad_grad_fun(par)
+  @test_approx_eq ad_grad [elbo_vars.bvn_u_d; elbo_vars.bvn_s_d]
 
+  ad_hess_fun = ForwardDiff.hessian(f_wrap);
+  ad_hess = ad_hess_fun(par);
 
+  @test_approx_eq ad_hess[1:2, 1:2] elbo_vars.bvn_uu_h
+  @test_approx_eq ad_hess[1:2, 3:5] elbo_vars.bvn_us_h
 
+  # I'm not sure why this requires less precision for this test.
+  celeste_bvn_ss_h = deepcopy(elbo_vars.bvn_ss_h);
+  ad_bvn_ss_h = deepcopy(ad_hess[3:5, 3:5])
+  @test_approx_eq ad_hess[3:5, 3:5] elbo_vars.bvn_ss_h
 
-
-
+end
 
 
 
@@ -545,7 +385,7 @@ function test_e_g_functions()
   @test_approx_eq grad sf.d
 
   hess = ForwardDiff.hessian(wrapper_fun, x);
-  #@test_approx_eq hess elbo_vars.E_G.h
+  @test_approx_eq hess elbo_vars.E_G.h
   matshow(abs(sf.h - hess) .> 1e-6)
 
 end
@@ -815,6 +655,27 @@ function test_brightness_hessian()
     ad_hess_fun = ForwardDiff.hessian(wrap_source_brightness_value);
     ad_hess = ad_hess_fun(mp.vp[1]);
     @test_approx_eq ad_hess bright.h
+  end
+end
+
+
+function test_dsiginv_dsig()
+  e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # elbo_vars.bvn_sigsig_h is large
+  the_cov = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+  the_mean = Float64[0., 0.]
+  bvn = ElboDeriv.BvnComponent(the_mean, the_cov, 1.0);
+  sigma_vec = Float64[ the_cov[1, 1], the_cov[1, 2], the_cov[2, 2] ]
+
+  for component_index = 1:3
+    components = [(1, 1), (1, 2), (2, 2)]
+    function invert_sigma{NumType <: Number}(sigma_vec::Vector{NumType})
+      sigma_loc = NumType[sigma_vec[1] sigma_vec[2]; sigma_vec[2] sigma_vec[3]]
+      sigma_inv = inv(sigma_loc)
+      sigma_inv[components[component_index]...]
+    end
+
+    ad_grad = ForwardDiff.gradient(invert_sigma, sigma_vec);
+    @test_approx_eq ad_grad bvn.dsiginv_dsig[component_index, :][:]
   end
 end
 
