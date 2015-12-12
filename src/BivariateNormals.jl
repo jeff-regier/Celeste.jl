@@ -147,8 +147,6 @@ function get_bvn_derivs!{NumType <: Number}(
   # Hessian terms involving only sigma
   bvn_sigsig_h = elbo_vars.bvn_sigsig_h
   for s_ind=1:3
-    # # d log|sigma| / dsigma12 is twice lambda12.
-
     # Differentiate with respect to s_ind second.
     bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
       py1 * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
