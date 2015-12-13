@@ -334,6 +334,8 @@ function load_bvn_mixtures{NumType <: Number}(mp::ModelParams{NumType}, b::Int64
     star_mcs = Array(BvnComponent{NumType}, 3, mp.S)
     gal_mcs = Array(GalaxyCacheComponent{NumType}, 3, 8, 2, mp.S)
 
+    # TODO: do not keep derviative information if the sources are not in
+    # active_sources.
     for s in 1:mp.S
         psf = mp.patches[s, b].psf
         vs = mp.vp[s]
