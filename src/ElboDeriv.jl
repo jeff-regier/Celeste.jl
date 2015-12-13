@@ -56,7 +56,15 @@ type ElboIntermediateVariables{NumType <: Number}
   accum::SensitiveFloat{CanonicalParams, NumType}
 end
 
-ElboIntermediateVariables(NumType::DataType, num_sources::Int64) = begin
+
+@doc """
+Args:
+  - S: The total number of sources
+  - num_active_sources: The number of actives sources (with deriviatives)
+""" ->
+ElboIntermediateVariables(
+    NumType::DataType, S::Int64, num_active_sources::Int64) = begin
+
   @assert NumType <: Number
 
   bvn_x_d = zeros(NumType, 2)
@@ -80,15 +88,19 @@ ElboIntermediateVariables(NumType::DataType, num_sources::Int64) = begin
   bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
   bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
 
-  # fs0m and fs1m accumulate contributions from all sources.
-  fs0m_vec = fill(zero_sensitive_float(StarPosParams, NumType), num_sources)
-  fs1m_vec = fill(zero_sensitive_float(GalaxyPosParams, NumType), num_sources)
+  # fs0m and fs1m accumulate contributions from all bvn components
+  # for a given source.
 
-  E_G = zero_sensitive_float(CanonicalParams, NumType, num_sources)
-  E_G2 = zero_sensitive_float(CanonicalParams, NumType, num_sources)
-  var_G = zero_sensitive_float(CanonicalParams, NumType, num_sources)
+  # TODO: this needs to be re-done, since we will need the values (but not
+  # derivatives) from sources that are not in active_sources.
+  fs0m_vec = fill(zero_sensitive_float(StarPosParams, NumType), S)
+  fs1m_vec = fill(zero_sensitive_float(GalaxyPosParams, NumType), S)
 
-  accum = zero_sensitive_float(CanonicalParams, NumType, num_sources)
+  E_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
+  E_G2 = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
+  var_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
+
+  accum = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
 
   ElboIntermediateVariables{NumType}(
     bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
@@ -253,32 +265,31 @@ function populate_fsm_vecs!{NumType <: Number}(
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     star_mcs::Array{BvnComponent{NumType}, 2})
 
+  # TODO: Only accumuate the values for sources not in active_sources.
   tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
-
-  for sa in tile_sources
-    s = mp.active_sources[sa]
+  for s in tile_sources
     wcs_jacobian = mp.patches[s, tile.b].wcs_jacobian;
     sb = sbs[s];
 
     m_pos = Float64[tile.h_range[h], tile.w_range[w]]
 
-    clear!(elbo_vars.fs0m_vec[sa])
-    for star_mc in star_mcs[:, sa]
-        accum_star_pos!(elbo_vars, sa, star_mc, m_pos, wcs_jacobian)
+    clear!(elbo_vars.fs0m_vec[s])
+    for star_mc in star_mcs[:, s]
+        accum_star_pos!(elbo_vars, s, star_mc, m_pos, wcs_jacobian)
     end
 
-    clear!(elbo_vars.fs1m_vec[sa])
+    clear!(elbo_vars.fs1m_vec[s])
     for i = 1:2 # Galaxy types
         for j in 1:[8,6][i] # Galaxy component
             for k = 1:3 # PSF component
-                gal_mc = gal_mcs[k, j, i, sa];
-                accum_galaxy_pos!(elbo_vars, sa, gal_mc, m_pos, wcs_jacobian)
+                gal_mc = gal_mcs[k, j, i, s];
+                accum_galaxy_pos!(elbo_vars, s, gal_mc, m_pos, wcs_jacobian)
             end
         end
     end
 
     # accum_pixel_source_stats!(
-    #     elbo_vars, sbs[s], star_mcs, gal_mcs, mp.vp[sa],
+    #     elbo_vars, sbs[s], star_mcs, gal_mcs, mp.vp[s],
     #     Float64[tile.h_range[h], tile.w_range[w]], tile.b,
     #     mp.patches[s, tile.b].wcs_jacobian)
   end
@@ -313,11 +324,12 @@ function combine_pixel_sources!{NumType <: Number}(
 
   clear!(E_G);
   clear!(E_G2);
-  for sa_ind in 1:length(tile_sources)
-    sa = tile_sources[sa_ind]
-    a = mp.vp[sa][ids.a]
-    fsm = (elbo_vars.fs0m_vec[sa], elbo_vars.fs1m_vec[sa]);
-    sb = sbs[sa];
+  for s in tile_sources
+    a = mp.vp[s][ids.a]
+    fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
+    sb = sbs[s];
+
+    # TODO: left off here changing sa_ind to index actual sources.
     s_inds = get_source_indices(sa_ind)
 
     #lf = (sb.E_l_a[b, 1].v * fsm[1].v, sb.E_l_a[b, 2].v * fsm[2].v);
@@ -341,10 +353,10 @@ function combine_pixel_sources!{NumType <: Number}(
       p0_bright = brightness_standard_alignment[i]
 
       # The indicies of the brightness parameters in the Hessian for this source.
-      p0_bright_hess = s_inds[p0_bright]
+      p0_bright_s = s_inds[p0_bright]
 
       # The indicies of the shape parameters in the Hessian for this source.
-      p0_shape_hess = s_inds[p0_shape]
+      p0_shape_s = s_inds[p0_shape]
 
       # Derivatives with respect to the spatial parameters
       a_fd = a[i] * fsm[i].d[:, 1]
@@ -361,44 +373,44 @@ function combine_pixel_sources!{NumType <: Number}(
       # The (a, a) block of the hessian is zero.
 
       # The (bright, bright) block:
-      E_G.h[p0_bright_hess, p0_bright_hess] +=
+      E_G.h[p0_bright_s, p0_bright_s] +=
         a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
-      E_G2.h[p0_bright_hess, p0_bright_hess] +=
+      E_G2.h[p0_bright_s, p0_bright_s] +=
         a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
 
       # The (shape, shape) block:
-      E_G.h[p0_shape_hess, p0_shape_hess] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
-      E_G2.h[p0_shape_hess, p0_shape_hess] +=
+      E_G.h[p0_shape_s, p0_shape_s] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
+      E_G2.h[p0_shape_s, p0_shape_s] +=
         2 * a[i] * sb.E_ll_a[b, i].v *
         (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
 
       # TODO: eliminate redundancy.
       # The (a, bright) blocks:
       h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
-      E_G.h[p0_bright_hess, ids.a[i]] = E_G.h[p0_bright_hess, ids.a[i]] + h_a_bright
-      E_G.h[ids.a[i], p0_bright_hess] =  E_G.h[p0_bright_hess, ids.a[i]]'
+      E_G.h[p0_bright_s, ids.a[i]] = E_G.h[p0_bright_s, ids.a[i]] + h_a_bright
+      E_G.h[ids.a[i], p0_bright_s] =  E_G.h[p0_bright_s, ids.a[i]]'
 
       h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[p0_bright, 1]
-      E_G2.h[p0_bright_hess, ids.a[i]] += h2_a_bright
-      E_G2.h[ids.a[i], p0_bright_hess] = E_G2.h[p0_bright_hess, ids.a[i]]'
+      E_G2.h[p0_bright_s, ids.a[i]] += h2_a_bright
+      E_G2.h[ids.a[i], p0_bright_s] = E_G2.h[p0_bright_s, ids.a[i]]'
 
       # The (a, shape) blocks.
       h_a_shape = sb.E_l_a[b, i].v * fsm[i].d
-      E_G.h[p0_shape_hess, ids.a[i]] += h_a_shape
-      E_G.h[ids.a[i], p0_shape_hess] = E_G.h[p0_shape_hess, ids.a[i]]'
+      E_G.h[p0_shape_s, ids.a[i]] += h_a_shape
+      E_G.h[ids.a[i], p0_shape_s] = E_G.h[p0_shape_s, ids.a[i]]'
 
       h2_a_shape = sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[:, 1]
-      E_G2.h[p0_shape_hess, ids.a[i]] += h2_a_shape
-      E_G2.h[ids.a[i], p0_shape_hess] = E_G2.h[p0_shape_hess, ids.a[i]]'
+      E_G2.h[p0_shape_s, ids.a[i]] += h2_a_shape
+      E_G2.h[ids.a[i], p0_shape_s] = E_G2.h[p0_shape_s, ids.a[i]]'
 
       # The (shape, bright) blocks.
       h_bright_shape = a[i] * sb.E_l_a[b, i].d[p0_bright, 1] * fsm[i].d'
-      E_G.h[p0_bright_hess, p0_shape_hess] += h_bright_shape
-      E_G.h[p0_shape_hess, p0_bright_hess] = E_G.h[p0_bright_hess, p0_shape_hess]'
+      E_G.h[p0_bright_s, p0_shape_s] += h_bright_shape
+      E_G.h[p0_shape_s, p0_bright_s] = E_G.h[p0_bright_s, p0_shape_s]'
 
       h2_bright_shape = 2 * a[i] * sb.E_ll_a[b, i].d[p0_bright, 1] * fsm[i].v * fsm[i].d'
-      E_G2.h[p0_bright_hess, p0_shape_hess] += h2_bright_shape
-      E_G2.h[p0_shape_hess, p0_bright_hess] = E_G2.h[p0_bright_hess, p0_shape_hess]'
+      E_G2.h[p0_bright_s, p0_shape_s] += h2_bright_shape
+      E_G2.h[p0_shape_s, p0_bright_s] = E_G2.h[p0_bright_s, p0_shape_s]'
     end
   end
 end
@@ -559,7 +571,6 @@ function get_expected_pixel_brightness!{NumType <: Number}(
 
   clear!(E_G)
   clear!(var_G)
-
 
   if include_epsilon
     E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
@@ -735,7 +746,7 @@ function tile_predicted_image{NumType <: Number}(
   star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
   sbs = SourceBrightness{NumType}[SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
-  elbo_vars = ElboIntermediateVariables(NumType);
+  elbo_vars = ElboIntermediateVariables(NumType, mp.S, length(mp.active_sources));
 
   tile_predicted_image(elbo_vars,
                        tile,
@@ -796,7 +807,7 @@ of the sky.
 function elbo_likelihood{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType})
 
-  elbo_vars = ElboIntermediateVariables(NumType, length(mp.active_sources));
+  elbo_vars = ElboIntermediateVariables(NumType, mp.S, length(mp.active_sources));
   for b in 1:length(tiled_blob)
       elbo_likelihood!(elbo_vars, tiled_blob[b], mp, b)
   end
