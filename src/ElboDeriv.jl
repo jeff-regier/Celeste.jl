@@ -120,7 +120,7 @@ by updating fs0m in place.
 
 Args:
   - elbo_vars: Elbo intermediate values.
-  - sa: The index of the current source in mp.active_sources
+  - s: The index of the current source in 1:S
   - bmc: The component to be added
   - x: An offset for the component in pixel coordinates (e.g. a pixel location)
   - fs0m: A SensitiveFloat to which the value of the bvn likelihood
@@ -129,7 +129,7 @@ Args:
 """ ->
 function accum_star_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    sa::Int64,
+    s::Int64,
     bmc::BvnComponent{NumType},
     x::Vector{Float64},
     wcs_jacobian::Array{Float64, 2})
@@ -138,10 +138,13 @@ function accum_star_pos!{NumType <: Number}(
 
   # TODO: This wastes a _lot_ of calculation.  Make a version for
   # stars that only calculates the x derivatives.
+
+  # TODO: Also make a version that doesn't calculate any derivatives
+  # if the object isn't in active_sources.
   get_bvn_derivs!(elbo_vars, bmc, x);
   transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
 
-  fs0m = elbo_vars.fs0m_vec[sa]
+  fs0m = elbo_vars.fs0m_vec[s]
   bvn_u_d = elbo_vars.bvn_u_d
   bvn_uu_h = elbo_vars.bvn_uu_h
 
@@ -167,7 +170,7 @@ updating fs1m in place.
 
 Args:
   - elbo_vars: Elbo intermediate variables
-  - sa: The index of the current source in active_sources
+  - s: The index of the current source in 1:S
   - gcc: The galaxy component to be added
   - x: An offset for the component in pixel coordinates (e.g. a pixel location)
   - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
@@ -176,7 +179,7 @@ Updates elbo_vars.fs1m_vec[sa] in place.
 """ ->
 function accum_galaxy_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    sa::Int64,
+    s::Int64,
     gcc::GalaxyCacheComponent{NumType},
     x::Vector{Float64},
     wcs_jacobian::Array{Float64, 2})
@@ -187,7 +190,7 @@ function accum_galaxy_pos!{NumType <: Number}(
   get_bvn_derivs!(elbo_vars, gcc.bmc, x);
   transform_bvn_derivs!(elbo_vars, gcc, wcs_jacobian)
 
-  fs1m = elbo_vars.fs1m_vec[sa];
+  fs1m = elbo_vars.fs1m_vec[s];
   bvn_u_d = elbo_vars.bvn_u_d
   bvn_uu_h = elbo_vars.bvn_uu_h
   bvn_s_d = elbo_vars.bvn_s_d
@@ -265,7 +268,6 @@ function populate_fsm_vecs!{NumType <: Number}(
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     star_mcs::Array{BvnComponent{NumType}, 2})
 
-  # TODO: Only accumuate the values for sources not in active_sources.
   tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
   for s in tile_sources
     wcs_jacobian = mp.patches[s, tile.b].wcs_jacobian;
@@ -287,11 +289,6 @@ function populate_fsm_vecs!{NumType <: Number}(
             end
         end
     end
-
-    # accum_pixel_source_stats!(
-    #     elbo_vars, sbs[s], star_mcs, gal_mcs, mp.vp[s],
-    #     Float64[tile.h_range[h], tile.w_range[w]], tile.b,
-    #     mp.patches[s, tile.b].wcs_jacobian)
   end
 end
 
@@ -329,8 +326,12 @@ function combine_pixel_sources!{NumType <: Number}(
     fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
     sb = sbs[s];
 
-    # TODO: left off here changing sa_ind to index actual sources.
-    s_inds = get_source_indices(sa_ind)
+    sa = findfirst(mp.active_sources, s)
+    active_source = sa == 0
+
+    if active_source
+      sa_inds = get_source_indices(sa)
+    end
 
     #lf = (sb.E_l_a[b, 1].v * fsm[1].v, sb.E_l_a[b, 2].v * fsm[2].v);
 
@@ -346,71 +347,80 @@ function combine_pixel_sources!{NumType <: Number}(
       E_G.v += a[i] * lf
       E_G2.v += a[i] * llff
 
-      E_G.d[ids.a[i], sa] += lf
-      E_G2.d[ids.a[i], sa] += llff
+      # Only calculate derivatives for active sources.
+      if active_source
+        ######################
+        # Gradients.
 
-      p0_shape = shape_standard_alignment[i]
-      p0_bright = brightness_standard_alignment[i]
+        E_G.d[ids.a[i], sa] += lf
+        E_G2.d[ids.a[i], sa] += llff
 
-      # The indicies of the brightness parameters in the Hessian for this source.
-      p0_bright_s = s_inds[p0_bright]
+        p0_shape = shape_standard_alignment[i]
+        p0_bright = brightness_standard_alignment[i]
 
-      # The indicies of the shape parameters in the Hessian for this source.
-      p0_shape_s = s_inds[p0_shape]
+        # The indicies of the brightness parameters in the Hessian for this source.
+        p0_bright_s = sa_inds[p0_bright]
 
-      # Derivatives with respect to the spatial parameters
-      a_fd = a[i] * fsm[i].d[:, 1]
-      E_G.d[p0_shape, sa] += sb.E_l_a[b, i].v * a_fd
-      E_G2.d[p0_shape, sa] += sb.E_ll_a[b, i].v * 2 * fsm[i].v * a_fd
+        # The indicies of the shape parameters in the Hessian for this source.
+        p0_shape_s = sa_inds[p0_shape]
 
-      # Derivatives with respect to the brightness parameters.
-      E_G.d[p0_bright, sa] += a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
-      E_G2.d[p0_bright, sa] += a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[p0_bright, 1]
+        # Derivatives with respect to the spatial parameters
+        a_fd = a[i] * fsm[i].d[:, 1]
+        E_G.d[p0_shape, sa] += sb.E_l_a[b, i].v * a_fd
+        E_G2.d[p0_shape, sa] += sb.E_ll_a[b, i].v * 2 * fsm[i].v * a_fd
 
-      ######################
-      # Hessians.
+        # Derivatives with respect to the brightness parameters.
+        E_G.d[p0_bright, sa] +=
+          a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
+        E_G2.d[p0_bright, sa] +=
+          a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[p0_bright, 1]
 
-      # The (a, a) block of the hessian is zero.
+        ######################
+        # Hessians.
 
-      # The (bright, bright) block:
-      E_G.h[p0_bright_s, p0_bright_s] +=
-        a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
-      E_G2.h[p0_bright_s, p0_bright_s] +=
-        a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
+        # The (a, a) block of the hessian is zero.
 
-      # The (shape, shape) block:
-      E_G.h[p0_shape_s, p0_shape_s] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
-      E_G2.h[p0_shape_s, p0_shape_s] +=
-        2 * a[i] * sb.E_ll_a[b, i].v *
-        (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
+        # The (bright, bright) block:
+        E_G.h[p0_bright_s, p0_bright_s] +=
+          a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
+        E_G2.h[p0_bright_s, p0_bright_s] +=
+          a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
 
-      # TODO: eliminate redundancy.
-      # The (a, bright) blocks:
-      h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
-      E_G.h[p0_bright_s, ids.a[i]] = E_G.h[p0_bright_s, ids.a[i]] + h_a_bright
-      E_G.h[ids.a[i], p0_bright_s] =  E_G.h[p0_bright_s, ids.a[i]]'
+        # The (shape, shape) block:
+        E_G.h[p0_shape_s, p0_shape_s] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
+        E_G2.h[p0_shape_s, p0_shape_s] +=
+          2 * a[i] * sb.E_ll_a[b, i].v *
+          (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
 
-      h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[p0_bright, 1]
-      E_G2.h[p0_bright_s, ids.a[i]] += h2_a_bright
-      E_G2.h[ids.a[i], p0_bright_s] = E_G2.h[p0_bright_s, ids.a[i]]'
+        # TODO: eliminate redundancy.
+        # The (a, bright) blocks:
+        h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
+        E_G.h[p0_bright_s, ids.a[i]] = E_G.h[p0_bright_s, ids.a[i]] + h_a_bright
+        E_G.h[ids.a[i], p0_bright_s] =  E_G.h[p0_bright_s, ids.a[i]]'
 
-      # The (a, shape) blocks.
-      h_a_shape = sb.E_l_a[b, i].v * fsm[i].d
-      E_G.h[p0_shape_s, ids.a[i]] += h_a_shape
-      E_G.h[ids.a[i], p0_shape_s] = E_G.h[p0_shape_s, ids.a[i]]'
+        h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[p0_bright, 1]
+        E_G2.h[p0_bright_s, ids.a[i]] += h2_a_bright
+        E_G2.h[ids.a[i], p0_bright_s] = E_G2.h[p0_bright_s, ids.a[i]]'
 
-      h2_a_shape = sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[:, 1]
-      E_G2.h[p0_shape_s, ids.a[i]] += h2_a_shape
-      E_G2.h[ids.a[i], p0_shape_s] = E_G2.h[p0_shape_s, ids.a[i]]'
+        # The (a, shape) blocks.
+        h_a_shape = sb.E_l_a[b, i].v * fsm[i].d
+        E_G.h[p0_shape_s, ids.a[i]] += h_a_shape
+        E_G.h[ids.a[i], p0_shape_s] = E_G.h[p0_shape_s, ids.a[i]]'
 
-      # The (shape, bright) blocks.
-      h_bright_shape = a[i] * sb.E_l_a[b, i].d[p0_bright, 1] * fsm[i].d'
-      E_G.h[p0_bright_s, p0_shape_s] += h_bright_shape
-      E_G.h[p0_shape_s, p0_bright_s] = E_G.h[p0_bright_s, p0_shape_s]'
+        h2_a_shape = sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[:, 1]
+        E_G2.h[p0_shape_s, ids.a[i]] += h2_a_shape
+        E_G2.h[ids.a[i], p0_shape_s] = E_G2.h[p0_shape_s, ids.a[i]]'
 
-      h2_bright_shape = 2 * a[i] * sb.E_ll_a[b, i].d[p0_bright, 1] * fsm[i].v * fsm[i].d'
-      E_G2.h[p0_bright_s, p0_shape_s] += h2_bright_shape
-      E_G2.h[p0_shape_s, p0_bright_s] = E_G2.h[p0_bright_s, p0_shape_s]'
+        # The (shape, bright) blocks.
+        h_bright_shape = a[i] * sb.E_l_a[b, i].d[p0_bright, 1] * fsm[i].d'
+        E_G.h[p0_bright_s, p0_shape_s] += h_bright_shape
+        E_G.h[p0_shape_s, p0_bright_s] = E_G.h[p0_bright_s, p0_shape_s]'
+
+        h2_bright_shape =
+          2 * a[i] * sb.E_ll_a[b, i].d[p0_bright, 1] * fsm[i].v * fsm[i].d'
+        E_G2.h[p0_bright_s, p0_shape_s] += h2_bright_shape
+        E_G2.h[p0_shape_s, p0_bright_s] = E_G2.h[p0_bright_s, p0_shape_s]'
+      end
     end
   end
 end
