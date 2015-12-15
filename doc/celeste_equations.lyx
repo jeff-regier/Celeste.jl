@@ -704,9 +704,25 @@ We approximate
 \end_inset
 
 :
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\log\left(x\right) & = & \log\mathbb{E}_{q}\left[x\right]+\frac{1}{\mathbb{E}_{q}\left[x\right]}\left(x-\mathbb{E}_{q}\left[x\right]\right)-\frac{1}{2\mathbb{E}_{q}\left[x\right]^{2}}\left(x-\mathbb{E}_{q}\left[x\right]\right)^{2}+...\\
+ & = & \log\mathbb{E}_{q}\left[x\right]-\frac{\textrm{Var}\left(x\right)}{2\mathbb{E}_{q}\left[x\right]^{2}}+...
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+So that
 \begin_inset Formula 
 \begin{align}
-\mathbb{E}_{q}\left[\log F_{nbm}\right] & \approx\log\mathbb{E}_{q}\left[F_{nbm}\right]^{2}-\frac{\mathbb{V}_{q}\left[F_{nbm}\right]}{2\mathbb{E}_{q}\left[F_{nbm}\right]^{2}}
+\mathbb{E}_{q}\left[\log F_{nbm}\right] & \approx\log\mathbb{E}_{q}\left[F_{nbm}\right]-\frac{\mathbb{V}_{q}\left[F_{nbm}\right]}{2\mathbb{E}_{q}\left[F_{nbm}\right]^{2}}
 \end{align}
 
 \end_inset
@@ -1507,7 +1523,82 @@ p_{y} & = & \Sigma^{-1}x\\
 
 \end_inset
 
-.
+
+\end_layout
+
+\begin_layout Subsection
+Log term
+\end_layout
+
+\begin_layout Standard
+We need the Hessians of
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{align}
+\mathbb{E}_{q}\left[\log F_{nbm}\right] & \approx\log\mathbb{E}_{q}\left[F_{nbm}\right]-\frac{\mathbb{V}_{q}\left[F_{nbm}\right]}{2\mathbb{E}_{q}\left[F_{nbm}\right]^{2}}
+\end{align}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+In order to easily calculate the Hessians, we will write this as a composition
+ of two-argument functions.
+ Define
+\begin_inset Formula 
+\begin{eqnarray*}
+E_{g} & = & \mathbb{E}_{q}\left[F_{nbm}\right]\\
+E_{g2} & = & \mathbb{E}_{q}\left[F_{nbm}^{2}\right]
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Then
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathbb{E}_{q}\left[\log F_{nbm}\right] & \approx & \log E_{g}-\frac{E_{g2}-E_{g}^{2}}{2E_{g}^{2}}
+\end{eqnarray*}
+
+\end_inset
+
+We can define
+\begin_inset Formula 
+\begin{eqnarray*}
+f\left(x,y\right) & = & \log y-\frac{x-y^{2}}{2y^{2}}=\log y-\frac{x}{2y^{2}}+\frac{1}{2}\\
+\nabla f & = & \left(\begin{array}{c}
+-\frac{1}{2y^{2}}\\
+\frac{1}{y}+\frac{x}{y^{3}}
+\end{array}\right)\\
+\frac{\partial^{2}f}{\partial\left(x,y\right)^{2}} & = & \left(\begin{array}{cc}
+0 & \frac{1}{y^{3}}\\
+\frac{1}{y^{3}} & -\left(\frac{1}{y^{2}}+\frac{3x}{y^{4}}\right)
+\end{array}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Also,
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d}{dx}\log\left(x\right) & = & \frac{1}{x}\\
+\frac{d^{2}}{dx^{2}}\log\left(x\right) & = & -\frac{1}{x^{2}}
+\end{eqnarray*}
+
+\end_inset
+
+
 \end_layout
 
 \end_body
