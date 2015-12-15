@@ -15,6 +15,16 @@ import WCS
 println("Running hessian tests.")
 
 
+blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+
+
+
+
+
+
+
+
+
 function test_e_g_functions()
   #blob, mp, bodies, tiled_blob = gen_sample_galaxy_dataset();
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
@@ -25,11 +35,6 @@ function test_e_g_functions()
   h = 10
   w = 10
   tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
-
-  # # For debugging.  Only the galaxy hessian is wrong for E_G.
-  #mp.vp[1][ids.a] = [1.0, 0.0]
-
-  #NumType = Float64
 
   for test_squares = [true, false]
     if test_squares
