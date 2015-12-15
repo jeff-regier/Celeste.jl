@@ -455,7 +455,6 @@ function transform_bvn_derivs!{NumType <: Number}(
     # Hessian calculations.
 
     # Second derviatives involving only shape parameters.
-    # TODO: this is broken, I think.  See test_hessians.jl
     # TODO: eliminate redundancies.
     for shape_id1 in 1:length(gal_shape_ids),
         shape_id2 in 1:length(gal_shape_ids)
