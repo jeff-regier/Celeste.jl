@@ -27,12 +27,16 @@ function test_e_g_functions()
   tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
 
   # # For debugging.  Only the galaxy hessian is wrong for E_G.
-  mp.vp[1][ids.a] = [1.0, 0.0]
+  #mp.vp[1][ids.a] = [1.0, 0.0]
 
-  NumType = Float64
+  #NumType = Float64
 
   for test_squares = [true, false]
-    test_squares = true
+    if test_squares
+      println("Testing E_G2")
+    else
+      println("Testing E_G")
+    end
     function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
       star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
       sbs = ElboDeriv.SourceBrightness{NumType}[
