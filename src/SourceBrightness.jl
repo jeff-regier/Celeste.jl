@@ -99,7 +99,12 @@ SourceBrightness{NumType <: Number}(
         set_hess!(E_l_a[1, i], ids.c2[1, i], ids.c2[1, i], E_l_a[1, i].v * 0.25)
         multiply_sfs!(E_l_a[1, i], E_l_a[2, i],
                       ids1=ids_color_1, ids2=union(ids_band_3, ids_color_2))
-
+      else
+        # Simply update the values.
+        E_l_a[4, i].v *= E_l_a[3, i].v
+        E_l_a[5, i].v *= E_l_a[4, i].v
+        E_l_a[2, i].v *= E_l_a[3, i].v
+        E_l_a[1, i].v *= E_l_a[2, i].v
       end # Derivs
 
       ################################
@@ -172,6 +177,12 @@ SourceBrightness{NumType <: Number}(
                   E_ll_a[1, i].v * -4.0)
         multiply_sfs!(E_ll_a[1, i], E_ll_a[2, i],
                       ids1=ids_color_1, ids2=union(ids_band_3, ids_color_2))
+      else
+        # Simply update the values.
+        E_ll_a[4, i].v *= E_ll_a[3, i].v
+        E_ll_a[5, i].v *= E_ll_a[4, i].v
+        E_ll_a[2, i].v *= E_ll_a[3, i].v
+        E_ll_a[1, i].v *= E_ll_a[2, i].v
       end # calculate_derivs
   end
 

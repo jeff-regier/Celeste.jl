@@ -516,7 +516,7 @@ function add_elbo_log_term!{NumType <: Number}(
     clear!(E_G2) # This may be unnecessary but prevents accidents downstream.
   else
     # If not calculating derivatives, add the values directly.
-    elbo.v += log_term_value
+    elbo.v += x_nbm * (log(iota) + log_term_value)
   end
 end
 

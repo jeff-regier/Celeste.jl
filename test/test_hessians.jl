@@ -15,49 +15,74 @@ import WCS
 println("Running hessian tests.")
 
 
-blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+function test_add_log_term()
+  blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 
-function add_log_term_wrapper_fun{NumType <: Number}(
-    mp::ModelParams{NumType}, calculate_derivs::Bool)
+  for b = 1:5
+    x_nbm = 70.
+    iota = blob[b].iota
 
-  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs);
-  sbs = ElboDeriv.SourceBrightness{NumType}[
-    ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
-    for s in 1:mp.S];
+    function add_log_term_wrapper_fun{NumType <: Number}(
+        mp::ModelParams{NumType}, calculate_derivs::Bool)
 
-  elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
-  ElboDeriv.populate_fsm_vecs!(
-    elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
-  ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
+      star_mcs, gal_mcs =
+        ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
+      sbs = ElboDeriv.SourceBrightness{NumType}[
+        ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
+        for s in 1:mp.S];
 
-  ElboDeriv.add_elbo_log_term!(elbo_vars, x_nbm, iota)
+      elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
+      elbo_vars_loc.calculate_derivs = calculate_derivs
+      ElboDeriv.populate_fsm_vecs!(
+        elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
+      ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
 
-  deepcopy(elbo_vars_loc)
-end
+      ElboDeriv.add_elbo_log_term!(elbo_vars_loc, x_nbm, iota)
 
-function wrapper_fun{NumType <: Number}(x::Vector{NumType})
-  @assert length(x) == S * P
-  x_mat = reshape(x, (P, S))
-  if NumType != Float64
-    mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-  else
-    mp_fd = deepcopy(mp)
+      deepcopy(elbo_vars_loc.elbo)
+    end
+
+    function ad_wrapper_fun{NumType <: Number}(x::Vector{NumType})
+      @assert length(x) == S * P
+      x_mat = reshape(x, (P, S))
+      if NumType != Float64
+        mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
+      else
+        mp_fd = deepcopy(mp)
+      end
+      for sa_ind in 1:length(mp_fd.active_sources)
+        mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
+      end
+      add_log_term_wrapper_fun(mp_fd, false).v
+    end
+
+
+    P = length(ids)
+    S = mp.S
+    x_mat = zeros(Float64, P, S);
+    for sa_ind in 1:S
+      x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
+    end
+    x = x_mat[:];
+
+    elbo = add_log_term_wrapper_fun(mp, true);
+
+    @test_approx_eq elbo.v ad_wrapper_fun(x)
+
+    ad_grad = ForwardDiff.gradient(ad_wrapper_fun, x);
+    @test_approx_eq ad_grad elbo.d[:]
+
+    ad_hess = ForwardDiff.hessian(ad_wrapper_fun, x);
+    @test_approx_eq ad_hess elbo.h[:]
   end
-  for sa_ind in 1:length(mp_fd.active_sources)
-    mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
-  end
-  elbo_vars_fd = e_g_wrapper_fun(mp_fd)
-  test_squares ? elbo_vars_fd.E_G2.v : elbo_vars_fd.E_G.v
 end
 
-x_mat = zeros(Float64, P, S);
-for sa_ind in 1:S
-  x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
-end
-x = x_mat[:];
 
-elbo_vars = e_g_wrapper_fun(mp);
-sf = test_squares ? deepcopy(elbo_vars.E_G2) : deepcopy(elbo_vars.E_G);
+
+
+
+
+
 
 
 
@@ -72,17 +97,14 @@ function test_e_g_functions()
 
   S = length(mp.active_sources)
   P = length(CanonicalParams)
-  b = 3
   h = 10
   w = 10
-  tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
 
-  for test_squares = [true, false]
-    if test_squares
-      println("Testing E_G2")
-    else
-      println("Testing E_G")
-    end
+  for test_squares = [false, true], b=1:5
+    test_squares_string = test_squares ? "E_G" : "E_G2"
+    println("Testing $(test_squares_string), band $b")
+
+    tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
     function e_g_wrapper_fun{NumType <: Number}(
         mp::ModelParams{NumType}; calculate_derivs=true)
 
@@ -153,7 +175,7 @@ function test_fs1m_derivatives()
   kept_ids = setdiff(1:length(ids), omitted_ids);
 
   s = 1
-  b = 3
+  b = 1
 
   patch = mp.patches[s, b];
   u = mp.vp[s][ids.u]
@@ -248,7 +270,7 @@ function test_fs0m_derivatives()
   kept_ids = setdiff(1:length(ids), omitted_ids);
 
   s = 1
-  b = 3
+  b = 1
 
   patch = mp.patches[s, b];
   u = mp.vp[s][ids.u]
@@ -379,7 +401,7 @@ function test_galaxy_variable_transform()
 
   # Pick a single source and band for testing.
   s = 1
-  b = 3
+  b = 5
 
   # The pixel and world centers shouldn't matter for derivatives.
   patch = mp.patches[s, b];
@@ -474,7 +496,7 @@ function test_galaxy_cache_component()
 
   # Pick a single source and band for testing.
   s = 1
-  b = 3
+  b = 5
 
   # The pixel and world centers shouldn't matter for derivatives.
   patch = mp.patches[s, b];
@@ -620,7 +642,6 @@ function test_combine_sfs()
     g_d, g_h
   end
 
-
   s_ind = Array(UnitRange{Int64}, 2);
   s_ind[1] = 1:p
   s_ind[2] = (1:p) + p
@@ -721,10 +742,11 @@ function test_brightness_hessian()
   blob, mp, star_cat = gen_sample_star_dataset();
   kept_ids = [ ids.r1; ids.r2; ids.c1[:]; ids.c2[:] ];
   omitted_ids = setdiff(1:length(ids), kept_ids);
-  b = 3
   i = 1
 
-  for squares in [false, true]
+  for squares in [false, true], b in 1:5, i in 1:2
+    squares_string = squares ? "E_G" : "E_G2"
+    println("Testing brightness $(squares_string) for band $b, type $i")
     function wrap_source_brightness{NumType <: Number}(
         vp::Vector{NumType}, calculate_derivs::Bool)
       ret = zero_sensitive_float(CanonicalParams, NumType);
@@ -748,8 +770,9 @@ function test_brightness_hessian()
 
     bright = wrap_source_brightness(mp.vp[1], true);
 
-    ad_grad_fun = ForwardDiff.gradient(wrap_source_brightness_value);
-    ad_grad = ad_grad_fun(mp.vp[1]);
+    @test_approx_eq bright.v wrap_source_brightness_value(mp.vp[1]);
+
+    ad_grad = ForwardDiff.gradient(wrap_source_brightness_value, mp.vp[1]);
     @test_approx_eq ad_grad bright.d[:, 1]
 
     ad_hess_fun = ForwardDiff.hessian(wrap_source_brightness_value);
@@ -803,3 +826,4 @@ test_bvn_derivatives()
 test_fs0m_derivatives()
 test_fs1m_derivatives()
 test_e_g_functions()
+test_add_log_term()
