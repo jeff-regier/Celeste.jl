@@ -15,59 +15,61 @@ import WCS
 println("Running hessian tests.")
 
 
-blob, mp, bodies, tiled_blob = gen_two_body_dataset();
-b = 1
-tile = tiled_blob[b][1, 1];
+#function test_tile_likelihood()
+  blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+  b = 1
+  tile = tiled_blob[b][1, 1];
 
-function tile_lik_wrapper_fun{NumType <: Number}(
-    mp::ModelParams{NumType}, calculate_derivs::Bool)
+  function tile_lik_wrapper_fun{NumType <: Number}(
+      mp::ModelParams{NumType}, calculate_derivs::Bool)
 
-  elbo_vars = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
-  star_mcs, gal_mcs =
-    ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=elbo_vars.calculate_derivs);
-  sbs = ElboDeriv.load_source_brightnesses(mp, elbo_vars.calculate_derivs);
-  ElboDeriv.tile_likelihood!(elbo_vars, tile, mp, sbs, star_mcs, gal_mcs)
-  deepcopy(elbo_vars.elbo)
-end
-
-function tile_lik_value_wrapper{NumType <: Number}(x::Vector{NumType})
-  @assert length(x) == S * P
-  x_mat = reshape(x, (P, S))
-  if NumType != Float64
-    mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-  else
-    mp_fd = deepcopy(mp)
+    elbo_vars = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
+    star_mcs, gal_mcs =
+      ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=elbo_vars.calculate_derivs);
+    sbs = ElboDeriv.load_source_brightnesses(mp, elbo_vars.calculate_derivs);
+    ElboDeriv.tile_likelihood!(elbo_vars, tile, mp, sbs, star_mcs, gal_mcs)
+    deepcopy(elbo_vars.elbo)
   end
-  for sa_ind in 1:length(mp_fd.active_sources)
-    mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
+
+  function tile_lik_value_wrapper{NumType <: Number}(x::Vector{NumType})
+    @assert length(x) == S * P
+    x_mat = reshape(x, (P, S))
+    if NumType != Float64
+      mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
+    else
+      mp_fd = deepcopy(mp)
+    end
+    for sa_ind in 1:length(mp_fd.active_sources)
+      mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
+    end
+    tile_lik_wrapper_fun(mp_fd, false).v
   end
-  tile_lik_wrapper_fun(mp_fd, false).v
-end
+
+  elbo = tile_lik_wrapper_fun(mp, true);
+
+  P = length(ids)
+  S = mp.S
+  x_mat = zeros(Float64, P, S);
+  for sa_ind in 1:S
+    x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
+  end
+  x = x_mat[:];
+
+  @test_approx_eq tile_lik_value_wrapper(x) elbo.v
+
+  # These are very slow.
+  ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x, chunk_size=8);
+  @test_approx_eq ad_grad elbo.d
+
+  @time ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x, chunk_size=1);
+  @time ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x, chunk_size=2);
+  @time ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x, chunk_size=4);
+  @time ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x, chunk_size=8);
 
 
-elbo = tile_lik_wrapper_fun(mp, true);
-
-P = length(ids)
-S = mp.S
-x_mat = zeros(Float64, P, S);
-for sa_ind in 1:S
-  x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
-end
-x = x_mat[:];
-
-@test_approx_eq tile_lik_value_wrapper(x) elbo.v
-
-# These are very slow.
-ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x);
-@test_approx_eq ad_grad elbo.d
-
-ad_hess = ForwardDiff.hessian(tile_lik_value_wrapper, x);
-@test_approx_eq ad_hess elbo.h
-
-
-
-
-
+  ad_hess = ForwardDiff.hessian(tile_lik_value_wrapper, x, chunk_size=8);
+  @test_approx_eq ad_hess elbo.h
+#end
 
 
 function test_add_log_term()
