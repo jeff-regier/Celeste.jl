@@ -439,7 +439,7 @@ Args:
   tile_sources: The indices within active_sources that are present in the tile.
 
 Returns:
-  - Iota.
+  - Updates elbo_vars.E_G and elbo_vars.E_G2 in place.
 """ ->
 function get_expected_pixel_brightness!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
@@ -448,31 +448,27 @@ function get_expected_pixel_brightness!{NumType <: Number}(
     star_mcs::Array{BvnComponent{NumType}, 2},
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     tile::ImageTile,
-    mp::ModelParams{NumType},
-    tile_sources::Vector{Int64},
+    mp::ModelParams{NumType};
     include_epsilon::Bool=true)
 
-  populate_fsm_vecs!(elbo_vars, mp, tile, h, w, gal_mcs, star_mcs)
+  populate_fsm_vecs!(elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs)
 
-  E_G = elbo_vars.E_G;
-  var_G = elbo_vars.var_G;
-
-  clear!(E_G)
-  clear!(var_G)
-
+  clear!(elbo_vars.E_G)
+  clear!(elbo_vars.E_G2)
   if include_epsilon
-    E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
+    elbo_vars.E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
   else
-    E_G.v = 0.0
+    elbo_vars.E_G.v = 0.0
   end
+  elbo_vars.E_G2.v = elbo_vars.E_G.v ^ 2
 
-  # Return the appropriate value of iota.
-  tile.constant_background ? tile.iota : tile.iota_vec[h]
+  combine_pixel_sources!(elbo_vars, mp, tile, sbs);
 end
 
 
 @doc """
-Add the lower bound to the log term to the elbo.  Clears E_G2 along the way.
+Add the lower bound to the log term to the elbo for a single pixel.
+As a side effect, elbo_vars.E_G2 is cleared.
 
 Args:
    - elbo_vars: Intermediate variables
@@ -513,63 +509,12 @@ function add_elbo_log_term!{NumType <: Number}(
     add_hess = NumType[0 0; 0 0]
     CelesteTypes.combine_sfs!(elbo, E_G2, add_value, add_grad, add_hess)
 
-    clear!(E_G2) # This may be unnecessary but prevents accidents downstream.
+    clear!(E_G2) # This is unnecessary but prevents accidents downstream.
   else
     # If not calculating derivatives, add the values directly.
     elbo.v += x_nbm * (log(iota) + log_term_value)
   end
 end
-
-
-@doc """
-Add the contributions of the expected value of a E_G and var_G term to the ELBO.
-
-Args:
-  - elbo_vars: Intermediate values for the ELBO
-  - tile_sources: A vector of source ids influencing this tile
-  - x_nbm: The photon count at this pixel
-  - iota: The optical sensitivity
-  - elbo: A SensitiveFloat for the ELBO which is updated
-
-Returns:
-  - Adds the contributions of E_G and var_G to elbo in place.
-""" ->
-function accum_pixel_elbo_terms!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
-    x_nbm::Float64, iota::Float64)
-
-  #######################################
-  # TODO: needs to be redone
-  #######################################
-
-  E_G = elbo_vars.E_G
-  var_G = elbo_vars.var_G
-
-  # Accumulate the values.
-  # Add the lower bound to the E_q[log(F_{nbm})] term
-  ret.v += x_nbm * (log(iota) + log(E_G.v) - var_G.v / (2. * E_G.v^2))
-
-  # Subtract the E_q[F_{nbm}] term.
-  ret.v -= iota * E_G.v
-
-  tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
-
-  # Accumulate the derivatives.
-  for child_s in 1:length(tile_sources), p in 1:size(E_G.d, 1)
-      parent_s = tile_sources[child_s]
-
-      # Derivative of the log term lower bound.
-      ret.d[p, parent_s] +=
-          x_nbm * (E_G.d[p, child_s] / E_G.v
-                   - 0.5 * (E_G.v^2 * var_G.d[p, child_s]
-                            - var_G.v * 2 * E_G.v * E_G.d[p, child_s])
-                      ./  E_G.v^4)
-
-      # Derivative of the linear term.
-      ret.d[p, parent_s] -= iota * E_G.d[p, child_s]
-  end
-end
-
 
 
 ############################################
@@ -626,14 +571,17 @@ function tile_likelihood!{NumType <: Number}(
   for w in 1:tile.w_width, h in 1:tile.h_width
       this_pixel = tile.pixels[h, w]
       if !Base.isnan(this_pixel)
-          iota = expected_pixel_brightness!(
+          get_expected_pixel_brightness!(
             elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
             mp, include_epsilon=include_epsilon)
-          accum_pixel_elbo_terms!(elbo_vars, this_pixel, iota)
+          iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
+          add_elbo_log_term!(elbo_vars, this_pixel, iota)
+          CelesteTypes.add_scaled_sfs!(elbo_vars.elbo, elbo_vars.E_G, scale=-iota)
       end
   end
 
-  # Subtract the log factorial term
+  # Subtract the log factorial term.  This is not a function of the
+  # parameters so the derivatives don't need to be updated.
   elbo.v += -sum(lfact(tile.pixels[!Base.isnan(tile.pixels)]))
 end
 
@@ -666,9 +614,10 @@ function tile_predicted_image{NumType <: Number}(
     for w in 1:tile.w_width, h in 1:tile.h_width
         this_pixel = tile.pixels[h, w]
         if !Base.isnan(this_pixel)
-            iota = expected_pixel_brightness!(
+            get_expected_pixel_brightness!(
               elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
               mp, include_epsilon=include_epsilon)
+            iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
             predicted_pixels[h, w] = E_G.v * iota
         end
     end
@@ -730,6 +679,22 @@ end
 
 
 @doc """
+Load the source brightnesses for these model params.  Each SourceBrightness
+object has information for all bands and object types.
+""" ->
+function load_source_brightnesses{NumType <: Number}(
+    mp::ModelParams{NumType}, calculate_derivs::Bool)
+
+  sbs = Array(SourceBrightness{NumType}, mp.S)
+  for s in 1:mp.S
+    calculate_this_deriv = (s in mp.active_sources) && calculate_derivs
+    sbs[s] = SourceBrightness(mp.vp[s], calculate_derivs=calculate_this_deriv)
+  end
+  sbs
+end
+
+
+@doc """
 Add the expected log likelihood ELBO term for an image to elbo.
 
 Args:
@@ -740,15 +705,11 @@ Args:
 """ ->
 function elbo_likelihood!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64)
+    tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64,
+    sbs::Vector{SourceBrightness{NumType}})
 
   star_mcs, gal_mcs =
     load_bvn_mixtures(mp, b, calculate_derivs=elbo_vars.calculate_derivs)
-  sbs = Array(SourceBrightness{NumType}, mp.S)
-  for s in 1:mp.S
-    calculate_deriv = (s in mp.active_sources) && elbo_vars.calculate_derivs
-    sbs[s] = SourceBrightness(mp.vp[s], calculate_deriv)
-  end
   elbo_likelihood!(elbo_vars, tiles, mp, sbs, star_mcs, gal_mcs)
 end
 
@@ -761,8 +722,9 @@ function elbo_likelihood{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType})
 
   elbo_vars = ElboIntermediateVariables(NumType, mp.S, length(mp.active_sources));
+  sbs = load_source_brightnesses(mp, elbo_vars.calculate_derivs)
   for b in 1:length(tiled_blob)
-      elbo_likelihood!(elbo_vars, tiled_blob[b], mp, b)
+      elbo_likelihood!(elbo_vars, tiled_blob[b], mp, b, sbs)
   end
   elbo_vars.elbo
 end
