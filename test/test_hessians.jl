@@ -17,10 +17,13 @@ println("Running hessian tests.")
 
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 
-function add_log_term_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
-  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+function add_log_term_wrapper_fun{NumType <: Number}(
+    mp::ModelParams{NumType}, calculate_derivs::Bool)
+
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs);
   sbs = ElboDeriv.SourceBrightness{NumType}[
-    ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+    ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
+    for s in 1:mp.S];
 
   elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
   ElboDeriv.populate_fsm_vecs!(
@@ -86,7 +89,8 @@ function test_e_g_functions()
       star_mcs, gal_mcs =
         ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
       sbs = ElboDeriv.SourceBrightness{NumType}[
-        ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+        ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
+        for s in 1:mp.S];
 
       elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
       elbo_vars_loc.calculate_derivs = calculate_derivs;
@@ -722,9 +726,9 @@ function test_brightness_hessian()
 
   for squares in [false, true]
     function wrap_source_brightness{NumType <: Number}(
-        vp::Vector{NumType})
+        vp::Vector{NumType}, calculate_derivs::Bool)
       ret = zero_sensitive_float(CanonicalParams, NumType);
-      sb = ElboDeriv.SourceBrightness(vp);
+      sb = ElboDeriv.SourceBrightness(vp, calculate_derivs=calculate_derivs);
       if squares
         ret.v = sb.E_ll_a[b, i].v;
         ret.d[:, 1] = sb.E_ll_a[b, i].d;
@@ -739,10 +743,10 @@ function test_brightness_hessian()
 
     function wrap_source_brightness_value{NumType <: Number}(
         vp::Vector{NumType})
-      wrap_source_brightness(vp).v
+      wrap_source_brightness(vp, false).v
     end
 
-    bright = wrap_source_brightness(mp.vp[1]);
+    bright = wrap_source_brightness(mp.vp[1], true);
 
     ad_grad_fun = ForwardDiff.gradient(wrap_source_brightness_value);
     ad_grad = ad_grad_fun(mp.vp[1]);

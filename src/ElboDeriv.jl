@@ -690,9 +690,11 @@ function tile_predicted_image{NumType <: Number}(
   b = tile.b
   star_mcs, gal_mcs =
     load_bvn_mixtures(mp, b, calculate_derivs=false)
-  sbs = SourceBrightness{NumType}[SourceBrightness(mp.vp[s]) for s in 1:mp.S]
+  sbs = SourceBrightness{NumType}[
+    SourceBrightness(mp.vp[s], false) for s in 1:mp.S]
 
   elbo_vars = ElboIntermediateVariables(NumType, mp.S, length(mp.active_sources));
+  elbo_vars.calculate_derivs = false
 
   tile_predicted_image(elbo_vars,
                        tile,
@@ -742,7 +744,11 @@ function elbo_likelihood!{NumType <: Number}(
 
   star_mcs, gal_mcs =
     load_bvn_mixtures(mp, b, calculate_derivs=elbo_vars.calculate_derivs)
-  sbs = SourceBrightness{NumType}[SourceBrightness(mp.vp[s]) for s in 1:mp.S]
+  sbs = Array(SourceBrightness{NumType}, mp.S)
+  for s in 1:mp.S
+    calculate_deriv = (s in mp.active_sources) && elbo_vars.calculate_derivs
+    sbs[s] = SourceBrightness(mp.vp[s], calculate_deriv)
+  end
   elbo_likelihood!(elbo_vars, tiles, mp, sbs, star_mcs, gal_mcs)
 end
 
