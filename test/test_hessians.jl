@@ -15,19 +15,25 @@ import WCS
 println("Running hessian tests.")
 
 
-#function test_tile_likelihood()
+function test_tile_likelihood()
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
   b = 1
+  # Only keep a few pixels to make the autodiff results faster.
+  keep_pixels = 10:11
   tile = tiled_blob[b][1, 1];
+  tile.pixels[setdiff(1:tile.h_width, keep_pixels), :] = NaN;
+  tile.pixels[:, setdiff(1:tile.w_width, keep_pixels)] = NaN;
+
 
   function tile_lik_wrapper_fun{NumType <: Number}(
       mp::ModelParams{NumType}, calculate_derivs::Bool)
 
     elbo_vars = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
+    elbo_vars.calculate_derivs = calculate_derivs
     star_mcs, gal_mcs =
       ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=elbo_vars.calculate_derivs);
     sbs = ElboDeriv.load_source_brightnesses(mp, elbo_vars.calculate_derivs);
-    ElboDeriv.tile_likelihood!(elbo_vars, tile, mp, sbs, star_mcs, gal_mcs)
+    ElboDeriv.tile_likelihood!(elbo_vars, tile, mp, sbs, star_mcs, gal_mcs);
     deepcopy(elbo_vars.elbo)
   end
 
@@ -57,19 +63,12 @@ println("Running hessian tests.")
 
   @test_approx_eq tile_lik_value_wrapper(x) elbo.v
 
-  # These are very slow.
-  ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x, chunk_size=8);
+  ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x);
   @test_approx_eq ad_grad elbo.d
 
-  @time ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x, chunk_size=1);
-  @time ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x, chunk_size=2);
-  @time ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x, chunk_size=4);
-  @time ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x, chunk_size=8);
-
-
-  ad_hess = ForwardDiff.hessian(tile_lik_value_wrapper, x, chunk_size=8);
+  ad_hess = ForwardDiff.hessian(tile_lik_value_wrapper, x);
   @test_approx_eq ad_hess elbo.h
-#end
+end
 
 
 function test_add_log_term()
