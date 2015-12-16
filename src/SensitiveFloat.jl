@@ -2,7 +2,7 @@
 #using CelesteTypes.getids
 #using CelesteTypes.HessianEntry
 
-export multiply_sf!
+export multiply_sf!, add_scaled_sfs!, combine_sfs!
 
 @doc """
 A function value and its derivative with respect to its arguments.
@@ -168,4 +168,18 @@ function multiply_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   g_h = NumType[0 1; 1 0]
 
   combine_sfs!(sf1, sf2, v, g_d, g_h)
+end
+
+
+@doc """
+Update sf1 in place with (sf1 + scale * sf2).
+""" ->
+function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+    sf1::SensitiveFloat{ParamType, NumType},
+    sf2::SensitiveFloat{ParamType, NumType};
+    scale::Float64=1.0)
+
+  sf1.v = sf1.v + scale * sf2.v
+  sf1.d = sf1.d + scale * sf2.d
+  sf1.h = sf1.h + scale * sf2.h
 end
