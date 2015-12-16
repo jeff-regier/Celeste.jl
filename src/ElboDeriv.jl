@@ -53,6 +53,9 @@ type ElboIntermediateVariables{NumType <: Number}
 
   # The ELBO itself.
   elbo::SensitiveFloat{CanonicalParams, NumType}
+
+  # A boolean.  If false, do not calculate hessians or derivatives.
+  calculate_derivs::Bool
 end
 
 
@@ -106,7 +109,7 @@ ElboIntermediateVariables(
     bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
     dpy1_dsig, dpy2_dsig, dsiginv_dsig,
     bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h,
-    fs0m_vec, fs1m_vec, E_G, E_G2, var_G, elbo)
+    fs0m_vec, fs1m_vec, E_G, E_G2, elbo, true)
 end
 
 
@@ -136,30 +139,31 @@ function accum_star_pos!{NumType <: Number}(
 
   py1, py2, f = eval_bvn_pdf(bmc, x)
 
-  # TODO: This wastes a _lot_ of calculation.  Make a version for
-  # stars that only calculates the x derivatives.
-
   # TODO: Also make a version that doesn't calculate any derivatives
   # if the object isn't in active_sources.
-  get_bvn_derivs!(elbo_vars, bmc, x);
-  transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
+  get_bvn_derivs!(elbo_vars, bmc, x, false);
 
   fs0m = elbo_vars.fs0m_vec[s]
-  bvn_u_d = elbo_vars.bvn_u_d
-  bvn_uu_h = elbo_vars.bvn_uu_h
-
   fs0m.v += f
 
-  # Accumulate the derivatives.
-  for u_id in 1:2
-    fs0m.d[star_ids.u[u_id]] += f * bvn_u_d[u_id]
-  end
+  if elbo_vars.calculate_derivs
+    # TODO: This wastes a _lot_ of calculation.  Make a version for
+    # stars that only calculates the x derivatives.
+    transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
+    bvn_u_d = elbo_vars.bvn_u_d
+    bvn_uu_h = elbo_vars.bvn_uu_h
 
-  # Hessian terms involving only the location parameters.
-  # TODO: redundant term
-  for u_id1 in 1:2, u_id2 in 1:2
-    fs0m.h[star_ids.u[u_id1], star_ids.u[u_id2]] +=
-      f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
+    # Accumulate the derivatives.
+    for u_id in 1:2
+      fs0m.d[star_ids.u[u_id]] += f * bvn_u_d[u_id]
+    end
+
+    # Hessian terms involving only the location parameters.
+    # TODO: redundant term
+    for u_id1 in 1:2, u_id2 in 1:2
+      fs0m.h[star_ids.u[u_id1], star_ids.u[u_id2]] +=
+        f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
+    end
   end
 end
 
@@ -186,73 +190,76 @@ function accum_galaxy_pos!{NumType <: Number}(
 
   py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
   f = f_pre * gcc.e_dev_i
-
-  get_bvn_derivs!(elbo_vars, gcc.bmc, x);
-  transform_bvn_derivs!(elbo_vars, gcc, wcs_jacobian)
-
   fs1m = elbo_vars.fs1m_vec[s];
-  bvn_u_d = elbo_vars.bvn_u_d
-  bvn_uu_h = elbo_vars.bvn_uu_h
-  bvn_s_d = elbo_vars.bvn_s_d
-  bvn_ss_h = elbo_vars.bvn_ss_h
-  bvn_us_h = elbo_vars.bvn_us_h
-
   fs1m.v += f
 
-  # Accumulate the derivatives.
-  for u_id in 1:2
-    fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]
-  end
+  if elbo_vars.calculate_derivs
 
-  for gal_id in 1:length(gal_shape_ids)
-    fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
-  end
+    get_bvn_derivs!(elbo_vars, gcc.bmc, x, true);
+    transform_bvn_derivs!(elbo_vars, gcc, wcs_jacobian)
 
-  # The e_dev derivative.  e_dev just scales the entire component.
-  # The direction is positive or negative depending on whether this
-  # is an exp or dev component.
-  fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
+    bvn_u_d = elbo_vars.bvn_u_d
+    bvn_uu_h = elbo_vars.bvn_uu_h
+    bvn_s_d = elbo_vars.bvn_s_d
+    bvn_ss_h = elbo_vars.bvn_ss_h
+    bvn_us_h = elbo_vars.bvn_us_h
 
-  # The Hessians:
 
-  # Hessian terms involving only the shape parameters.
-  for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
-    s1 = gal_shape_alignment[shape_id1]
-    s2 = gal_shape_alignment[shape_id2]
-    fs1m.h[s1, s2] +=
-      f * (bvn_ss_h[shape_id1, shape_id2] +
-           bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
-  end
+    # Accumulate the derivatives.
+    for u_id in 1:2
+      fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]
+    end
 
-  # Hessian terms involving only the location parameters.
-  for u_id1 in 1:2, u_id2 in 1:2
-    u1 = gal_ids.u[u_id1]
-    u2 = gal_ids.u[u_id2]
-    fs1m.h[u1, u2] +=
-      f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
-  end
+    for gal_id in 1:length(gal_shape_ids)
+      fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
+    end
 
-  # Hessian terms involving both the shape and location parameters.
-  for u_id in 1:2, shape_id in 1:length(gal_shape_ids)
-    ui = gal_ids.u[u_id]
-    si = gal_shape_alignment[shape_id]
-    fs1m.h[ui, si] +=
-      f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
-    fs1m.h[si, ui] = fs1m.h[ui, si]
-  end
+    # The e_dev derivative.  e_dev just scales the entire component.
+    # The direction is positive or negative depending on whether this
+    # is an exp or dev component.
+    fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
 
-  # Do the e_dev hessian terms.
-  devi = gal_ids.e_dev
-  for u_id in 1:2
-    ui = gal_ids.u[u_id]
-    fs1m.h[ui, devi] += f_pre * gcc.e_dev_dir * bvn_u_d[u_id]
-    fs1m.h[devi, ui] = fs1m.h[ui, devi]
-  end
-  for shape_id in 1:length(gal_shape_ids)
-    si = gal_shape_alignment[shape_id]
-    fs1m.h[si, devi] += f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
-    fs1m.h[devi, si] = fs1m.h[si, devi]
-  end
+    # The Hessians:
+
+    # Hessian terms involving only the shape parameters.
+    for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
+      s1 = gal_shape_alignment[shape_id1]
+      s2 = gal_shape_alignment[shape_id2]
+      fs1m.h[s1, s2] +=
+        f * (bvn_ss_h[shape_id1, shape_id2] +
+             bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
+    end
+
+    # Hessian terms involving only the location parameters.
+    for u_id1 in 1:2, u_id2 in 1:2
+      u1 = gal_ids.u[u_id1]
+      u2 = gal_ids.u[u_id2]
+      fs1m.h[u1, u2] +=
+        f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
+    end
+
+    # Hessian terms involving both the shape and location parameters.
+    for u_id in 1:2, shape_id in 1:length(gal_shape_ids)
+      ui = gal_ids.u[u_id]
+      si = gal_shape_alignment[shape_id]
+      fs1m.h[ui, si] +=
+        f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
+      fs1m.h[si, ui] = fs1m.h[ui, si]
+    end
+
+    # Do the e_dev hessian terms.
+    devi = gal_ids.e_dev
+    for u_id in 1:2
+      ui = gal_ids.u[u_id]
+      fs1m.h[ui, devi] += f_pre * gcc.e_dev_dir * bvn_u_d[u_id]
+      fs1m.h[devi, ui] = fs1m.h[ui, devi]
+    end
+    for shape_id in 1:length(gal_shape_ids)
+      si = gal_shape_alignment[shape_id]
+      fs1m.h[si, devi] += f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
+      fs1m.h[devi, si] = fs1m.h[si, devi]
+    end
+  end # if calculate_derivs
 end
 
 
@@ -296,7 +303,8 @@ end
 
 
 @doc """
-An a-weighted combination of bvn * brightness for a particular pixel across all sources.
+An a-weighted combination of bvn * brightness for a particular pixel across
+all sources.
 
 Updates E_G and E_G2 in place.
 """ ->
@@ -340,7 +348,7 @@ function combine_pixel_sources!{NumType <: Number}(
       E_G2.v += a[i] * llff
 
       # Only calculate derivatives for active sources.
-      if active_source
+      if active_source && elbo_vars.calculate_derivs
         ######################
         # Gradients.
 
@@ -487,21 +495,29 @@ function add_elbo_log_term!{NumType <: Number}(
   # log E[G] - Var(G) / (2 * E[G] ^2 )
 
   # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
-  value = log(E_G.v) - 0.5 * (E_G2.v - E_G.v ^ 2)  / (E_G.v ^ 2)
-  grad = NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + E_G2.v / (E_G.v ^ 3)]
-  hess = NumType[0             1 / E_G.v^3;
-                 1 / E_G.v^3   -(1 / E_G.v ^ 2 + 3  * E_G2.v / (E_G.v ^ 4))]
+  log_term_value = log(E_G.v) - 0.5 * (E_G2.v - E_G.v ^ 2)  / (E_G.v ^ 2)
 
-  # Desipte the variable name,
-  # this step briefly updates E_G2 to contain the lower bound of the log term.
-  CelesteTypes.combine_sfs!(E_G2, E_G, value, grad, hess)
+  if elbo_vars.calculate_derivs
+    log_term_grad = NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + E_G2.v / (E_G.v ^ 3)]
+    log_term_hess =
+      NumType[0             1 / E_G.v^3;
+              1 / E_G.v^3   -(1 / E_G.v ^ 2 + 3  * E_G2.v / (E_G.v ^ 4))]
 
-  add_value = elbo.v + x_nbm * (log(iota) + E_G2.v)
-  add_grad = NumType[1, x_nbm]
-  add_hess = NumType[0 0; 0 0]
-  CelesteTypes.combine_sfs!(elbo, E_G2, add_value, add_grad, add_hess)
+    # Desipte the variable name,
+    # this step briefly updates E_G2 to contain the lower bound of the log term.
+    CelesteTypes.combine_sfs!(
+      E_G2, E_G, log_term_value, log_term_grad, log_term_hess)
 
-  clear!(E_G2) # This may be unnecessary but prevents accidents downstream.
+    add_value = elbo.v + x_nbm * (log(iota) + log_term_value)
+    add_grad = NumType[1, x_nbm]
+    add_hess = NumType[0 0; 0 0]
+    CelesteTypes.combine_sfs!(elbo, E_G2, add_value, add_grad, add_hess)
+
+    clear!(E_G2) # This may be unnecessary but prevents accidents downstream.
+  else
+    # If not calculating derivatives, add the values directly.
+    elbo.v += log_term_value
+  end
 end
 
 
@@ -522,7 +538,10 @@ function accum_pixel_elbo_terms!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     x_nbm::Float64, iota::Float64)
 
+  #######################################
   # TODO: needs to be redone
+  #######################################
+
   E_G = elbo_vars.E_G
   var_G = elbo_vars.var_G
 
@@ -669,7 +688,8 @@ function tile_predicted_image{NumType <: Number}(
     include_epsilon::Bool=false)
 
   b = tile.b
-  star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
+  star_mcs, gal_mcs =
+    load_bvn_mixtures(mp, b, calculate_derivs=false)
   sbs = SourceBrightness{NumType}[SourceBrightness(mp.vp[s]) for s in 1:mp.S]
 
   elbo_vars = ElboIntermediateVariables(NumType, mp.S, length(mp.active_sources));
@@ -720,7 +740,8 @@ function elbo_likelihood!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64)
 
-  star_mcs, gal_mcs = load_bvn_mixtures(mp, b)
+  star_mcs, gal_mcs =
+    load_bvn_mixtures(mp, b, calculate_derivs=elbo_vars.calculate_derivs)
   sbs = SourceBrightness{NumType}[SourceBrightness(mp.vp[s]) for s in 1:mp.S]
   elbo_likelihood!(elbo_vars, tiles, mp, sbs, star_mcs, gal_mcs)
 end

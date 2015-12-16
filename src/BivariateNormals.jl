@@ -21,7 +21,8 @@ end
 
 
 function GenerateBvnComponent{NumType <: Number}(
-    the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType)
+    the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType,
+    calculate_siginv_deriv::Bool)
 
   # It is necessary to have this separately named function to allow
   # a BvnComponent to be instantiated with all the below combinations of
@@ -31,40 +32,50 @@ function GenerateBvnComponent{NumType <: Number}(
 
   precision = the_cov^-1
 
-  # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
-  # derivatives of log|Sigma| with respect to sigma.
-  # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
-  dsiginv_dsig = zeros(NumType, 3, 3)
+  if calculate_siginv_deriv
+    # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
+    # derivatives of log|Sigma| with respect to sigma.
+    # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
+    dsiginv_dsig = zeros(NumType, 3, 3)
 
-  dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
-  dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
-  dsiginv_dsig[1, 3] = -precision[1, 2] ^ 2
+    dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
+    dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
+    dsiginv_dsig[1, 3] = -precision[1, 2] ^ 2
 
-  dsiginv_dsig[2, 1] = -precision[1, 1] * precision[2, 1]
-  dsiginv_dsig[2, 2] = -(precision[1, 1] * precision[2, 2] + precision[1, 2] ^ 2)
-  dsiginv_dsig[2, 3] = -precision[2, 2] * precision[1, 2]
+    dsiginv_dsig[2, 1] = -precision[1, 1] * precision[2, 1]
+    dsiginv_dsig[2, 2] =
+      -(precision[1, 1] * precision[2, 2] + precision[1, 2] ^ 2)
+    dsiginv_dsig[2, 3] = -precision[2, 2] * precision[1, 2]
 
-  dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
-  dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
-  dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
+    dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
+    dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
+    dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
+  else
+    dsiginv_dsig = zeros(NumType, 0, 0)
+  end
 
   BvnComponent{NumType}(the_mean, precision, c * weight, dsiginv_dsig)
 end
 
 BvnComponent{NumType <: Number}(
-    the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType) = begin
-  GenerateBvnComponent(the_mean, the_cov, weight)
+    the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType;
+    calculate_siginv_deriv::Bool=true) = begin
+  GenerateBvnComponent(the_mean, the_cov, weight, calculate_siginv_deriv)
 end
 
 BvnComponent{NumType <: Number}(
-  the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64) = begin
+  the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64;
+  calculate_siginv_deriv::Bool=true) = begin
     GenerateBvnComponent(
-      the_mean, convert(Matrix{NumType}, the_cov), convert(NumType, weight))
+      the_mean, convert(Matrix{NumType}, the_cov), convert(NumType, weight),
+      calculate_siginv_deriv)
 end
 
 BvnComponent{NumType <: Number}(
-  the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64) = begin
-    GenerateBvnComponent(the_mean, the_cov, convert(NumType, weight))
+  the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64;
+  calculate_siginv_deriv::Bool=true) = begin
+    GenerateBvnComponent(
+      the_mean, the_cov, convert(NumType, weight), calculate_siginv_deriv)
 end
 
 
@@ -81,15 +92,15 @@ Returns:
   - The density of the bivariate normal times the weight.
 """ ->
 function eval_bvn_pdf{NumType <: Number}(
-  bmc::BvnComponent{NumType}, x::Vector{Float64})
+    bmc::BvnComponent{NumType}, x::Vector{Float64})
 
-    y1 = x[1] - bmc.the_mean[1]
-    y2 = x[2] - bmc.the_mean[2]
-    py1 = bmc.precision[1,1] * y1 + bmc.precision[1,2] * y2
-    py2 = bmc.precision[2,1] * y1 + bmc.precision[2,2] * y2
-    c_ytpy = -0.5 * (y1 * py1 + y2 * py2)
-    f_denorm = exp(c_ytpy)
-    py1, py2, bmc.z * f_denorm
+  y1 = x[1] - bmc.the_mean[1]
+  y2 = x[2] - bmc.the_mean[2]
+  py1 = bmc.precision[1,1] * y1 + bmc.precision[1,2] * y2
+  py2 = bmc.precision[2,1] * y1 + bmc.precision[2,2] * y2
+  c_ytpy = -0.5 * (y1 * py1 + y2 * py2)
+  f_denorm = exp(c_ytpy)
+  py1, py2, bmc.z * f_denorm
 end
 
 
@@ -100,10 +111,17 @@ end
 Calculate the value, gradient, and hessian of
   -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
 with respect to x and sigma.
+
+Args:
+  - elbo_vars: A data structure with pre-allocated intermediate variables.
+  - bvn: A bivariate normal component to get derivatives for.
+  - calculate_sigma_derivs: Whether to also calculate derivatives with
+      respect to sigma.  If false, only calculate x derivatives.
 """ ->
 function get_bvn_derivs!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    bvn::BvnComponent{NumType}, x::Vector{Float64})
+    bvn::BvnComponent{NumType}, x::Vector{Float64},
+    calculate_sigma_derivs::Bool)
 
   py1, py2, f_pre = eval_bvn_pdf(bvn, x);
 
@@ -113,18 +131,10 @@ function get_bvn_derivs!{NumType <: Number}(
     (x[1] - bvn.the_mean[1]) * py1 + (x[2] - bvn.the_mean[2]) * py2 -
     log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
 
+  # Gradient with respect to x.
   bvn_x_d = elbo_vars.bvn_x_d
   bvn_x_d[1] = -py1
   bvn_x_d[2] = -py2
-
-  # The first term is the derivative of -0.5 * x' Sigma^{-1} x
-  # The second term is the derivative of -0.5 * log|Sigma|
-  bvn_sig_d = elbo_vars.bvn_sig_d
-  bvn_sig_d[1] = 0.5 * py1 * py1 - 0.5 * bvn.precision[1, 1]
-  bvn_sig_d[2] = py1 * py2             - bvn.precision[1, 2]
-  bvn_sig_d[3] = 0.5 * py2 * py2 - 0.5 * bvn.precision[2, 2]
-
-  # Hessian calculation.
 
   # Hessian terms involving only x
   bvn_xx_h = elbo_vars.bvn_xx_h
@@ -132,42 +142,53 @@ function get_bvn_derivs!{NumType <: Number}(
   bvn_xx_h[2, 2] = -bvn.precision[2,2]
   bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1,2]
 
-  # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
-  # These are used for the hessian calculations.
-  dpy1_dsig = elbo_vars.dpy1_dsig
-  dpy1_dsig[1] = -py1 * bvn.precision[1,1]
-  dpy1_dsig[2] = -py2 * bvn.precision[1,1] - py1 * bvn.precision[1,2]
-  dpy1_dsig[3] = -py2 * bvn.precision[1,2]
+  if calculate_sigma_derivs
+    # The first term is the derivative of -0.5 * x' Sigma^{-1} x
+    # The second term is the derivative of -0.5 * log|Sigma|
+    bvn_sig_d = elbo_vars.bvn_sig_d
+    bvn_sig_d[1] = 0.5 * py1 * py1 - 0.5 * bvn.precision[1, 1]
+    bvn_sig_d[2] = py1 * py2             - bvn.precision[1, 2]
+    bvn_sig_d[3] = 0.5 * py2 * py2 - 0.5 * bvn.precision[2, 2]
 
-  dpy2_dsig = elbo_vars.dpy2_dsig
-  dpy2_dsig[1] = -py1 * bvn.precision[1,2]
-  dpy2_dsig[2] = -py1 * bvn.precision[2,2] - py2 * bvn.precision[1,2]
-  dpy2_dsig[3] = -py2 * bvn.precision[2,2]
+    # Hessian calculation for terms containing sigma.
 
-  # Hessian terms involving only sigma
-  bvn_sigsig_h = elbo_vars.bvn_sigsig_h
-  for s_ind=1:3
-    # Differentiate with respect to s_ind second.
-    bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
-      py1 * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
+    # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
+    # These are used for the hessian calculations.
+    dpy1_dsig = elbo_vars.dpy1_dsig
+    dpy1_dsig[1] = -py1 * bvn.precision[1,1]
+    dpy1_dsig[2] = -py2 * bvn.precision[1,1] - py1 * bvn.precision[1,2]
+    dpy1_dsig[3] = -py2 * bvn.precision[1,2]
 
-    # d log|sigma| / dsigma12 is twice lambda12.
-    bvn_sigsig_h[2, s_ind] =
-      py1 * dpy2_dsig[s_ind] + py2 * dpy1_dsig[s_ind] -
-      bvn.dsiginv_dsig[2, s_ind]
+    dpy2_dsig = elbo_vars.dpy2_dsig
+    dpy2_dsig[1] = -py1 * bvn.precision[1,2]
+    dpy2_dsig[2] = -py1 * bvn.precision[2,2] - py2 * bvn.precision[1,2]
+    dpy2_dsig[3] = -py2 * bvn.precision[2,2]
 
-    bvn_sigsig_h[3, s_ind] = #bvn_sigsig_h[s_ind, 3] =
-      py2 * dpy2_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[3, s_ind]
-  end
+    # Hessian terms involving only sigma
+    bvn_sigsig_h = elbo_vars.bvn_sigsig_h
+    for s_ind=1:3
+      # Differentiate with respect to s_ind second.
+      bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
+        py1 * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
 
-  # Hessian terms involving both x and sigma.
-  # Note that dpyA / dxB = bvn.precision[A, B]
-  bvn_xsig_h = elbo_vars.bvn_xsig_h
-  for x_ind=1:2
-    bvn_xsig_h[x_ind, 1] = py1 * bvn.precision[1, x_ind]
-    bvn_xsig_h[x_ind, 2] =
-      py1 * bvn.precision[2, x_ind] + py2 * bvn.precision[1, x_ind]
-    bvn_xsig_h[x_ind, 3] = py2 * bvn.precision[2, x_ind]
+      # d log|sigma| / dsigma12 is twice lambda12.
+      bvn_sigsig_h[2, s_ind] =
+        py1 * dpy2_dsig[s_ind] + py2 * dpy1_dsig[s_ind] -
+        bvn.dsiginv_dsig[2, s_ind]
+
+      bvn_sigsig_h[3, s_ind] = #bvn_sigsig_h[s_ind, 3] =
+        py2 * dpy2_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[3, s_ind]
+    end
+
+    # Hessian terms involving both x and sigma.
+    # Note that dpyA / dxB = bvn.precision[A, B]
+    bvn_xsig_h = elbo_vars.bvn_xsig_h
+    for x_ind=1:2
+      bvn_xsig_h[x_ind, 1] = py1 * bvn.precision[1, x_ind]
+      bvn_xsig_h[x_ind, 2] =
+        py1 * bvn.precision[2, x_ind] + py2 * bvn.precision[1, x_ind]
+      bvn_xsig_h[x_ind, 3] = py2 * bvn.precision[2, x_ind]
+    end
   end
 
   v
@@ -191,6 +212,7 @@ type GalaxySigmaDerivs{NumType <: Number}
   j::Matrix{NumType}
   t::Array{NumType, 3}
 end
+
 
 @doc """
 Args:
@@ -288,88 +310,25 @@ end
 GalaxyCacheComponent{NumType <: Number}(
     e_dev_dir::Float64, e_dev_i::NumType,
     gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
-    e_axis::NumType, e_angle::NumType, e_scale::NumType) = begin
+    e_axis::NumType, e_angle::NumType, e_scale::NumType,
+    calculate_derivs::Bool) = begin
 
   XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
   var_s = pc.tauBar + gc.nuBar * XiXi
   weight = pc.alphaBar * gc.etaBar  # excludes e_dev
-  bmc = BvnComponent(mean_s, var_s, weight)
+  bmc = BvnComponent(mean_s, var_s, weight,
+                     calculate_siginv_deriv=calculate_derivs)
 
-  sig_sf = GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
-  sig_sf.j .*= gc.nuBar
-  sig_sf.t .*= gc.nuBar
+  if calculate_derivs
+    sig_sf = GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
+    sig_sf.j .*= gc.nuBar
+    sig_sf.t .*= gc.nuBar
+  else
+    sig_sf = GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0))
+  end
 
   GalaxyCacheComponent(e_dev_dir, e_dev_i, bmc, sig_sf)
-end
-
-# GalaxyCacheComponent{NumType <: Number}(e_dev_dir::Float64, e_dev_i::NumType,
-#                      gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
-#                      e_axis::NumType, e_angle::NumType, e_scale::NumType) =
-#     GalaxyCacheComponent{NumType}(
-#       e_dev_dir, e_dev_i, gc, pc, u, e_axis, e_angle, e_scale)
-
-
-@doc """
-Convolve the current locations and galaxy shapes with the PSF.
-
-Args:
- - psf: A vector of PSF components
- - mp: The current ModelParams
- - b: The current band
-
-Returns:
- - star_mcs: An array of BvnComponents with indices
-    - PSF component
-    - Source (index within active_sources)
- - gal_mcs: An array of BvnComponents with indices
-    - PSF component
-    - Galaxy component
-    - Galaxy type
-    - Source (index within active_sources)
-
-The PSF contains three components, so you see lots of 3's below.
-""" ->
-function load_bvn_mixtures{NumType <: Number}(mp::ModelParams{NumType}, b::Int64)
-    star_mcs = Array(BvnComponent{NumType}, 3, mp.S)
-    gal_mcs = Array(GalaxyCacheComponent{NumType}, 3, 8, 2, mp.S)
-
-    # TODO: do not keep derviative information if the sources are not in
-    # active_sources.
-    for s in 1:mp.S
-        psf = mp.patches[s, b].psf
-        vs = mp.vp[s]
-
-        world_loc = vs[[ids.u[1], ids.u[2]]]
-        m_pos = WCS.world_to_pixel(mp.patches[s, b].wcs_jacobian,
-                                   mp.patches[s, b].center,
-                                   mp.patches[s, b].pixel_center, world_loc)
-
-        # Convolve the star locations with the PSF.
-        for k in 1:3
-            pc = psf[k]
-            mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
-            star_mcs[k, s] = BvnComponent(mean_s, pc.tauBar, pc.alphaBar)
-        end
-
-        # Convolve the galaxy representations with the PSF.
-        for i = 1:2 # i indexes dev vs exp galaxy types.
-            e_dev_dir = (i == 1) ? 1. : -1.
-            e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
-
-            # Galaxies of type 1 have 8 components, and type 2 have
-            # 6 components.
-            for j in 1:[8,6][i]
-                for k = 1:3
-                    gal_mcs[k, j, i, s] = GalaxyCacheComponent(
-                        e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
-                        m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale])
-                end
-            end
-        end
-    end
-
-    star_mcs, gal_mcs
 end
 
 
@@ -476,4 +435,75 @@ function transform_bvn_derivs!{NumType <: Number}(
       bvn_us_h[u_id, shape_id] += bvn_xsig_h[x_id, sig_id] *
         gcc.sig_sf.j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
     end
+end
+
+
+@doc """
+Convolve the current locations and galaxy shapes with the PSF.  If
+calculate_derivs is true, also calculate derivatives and hessians for
+active sources.
+
+Args:
+ - psf: A vector of PSF components
+ - mp: The current ModelParams
+ - b: The current band
+ - calculate_derivs: Whether to calculate derivatives for active sources.
+
+Returns:
+ - star_mcs: An array of BvnComponents with indices
+    - PSF component
+    - Source (index within active_sources)
+ - gal_mcs: An array of BvnComponents with indices
+    - PSF component
+    - Galaxy component
+    - Galaxy type
+    - Source (index within active_sources)
+
+The PSF contains three components, so you see lots of 3's below.
+""" ->
+function load_bvn_mixtures{NumType <: Number}(
+    mp::ModelParams{NumType}, b::Int64; calculate_derivs::Bool=true)
+
+  star_mcs = Array(BvnComponent{NumType}, 3, mp.S)
+  gal_mcs = Array(GalaxyCacheComponent{NumType}, 3, 8, 2, mp.S)
+
+  # TODO: do not keep derviative information if the sources are not in
+  # active_sources.
+  for s in 1:mp.S
+      psf = mp.patches[s, b].psf
+      vs = mp.vp[s]
+
+      world_loc = vs[[ids.u[1], ids.u[2]]]
+      m_pos = WCS.world_to_pixel(mp.patches[s, b].wcs_jacobian,
+                                 mp.patches[s, b].center,
+                                 mp.patches[s, b].pixel_center, world_loc)
+
+      # Convolve the star locations with the PSF.
+      for k in 1:3
+          pc = psf[k]
+          mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
+          star_mcs[k, s] =
+            BvnComponent(mean_s, pc.tauBar, pc.alphaBar,
+                         calculate_siginv_deriv=false)
+      end
+
+      # Convolve the galaxy representations with the PSF.
+      for i = 1:2 # i indexes dev vs exp galaxy types.
+          e_dev_dir = (i == 1) ? 1. : -1.
+          e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
+
+          # Galaxies of type 1 have 8 components, and type 2 have
+          # 6 components.
+          for j in 1:[8,6][i]
+              for k = 1:3
+                  gal_mcs[k, j, i, s] = GalaxyCacheComponent(
+                      e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
+                      m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],
+                      calculate_derivs && (s in mp.active_sources))
+              end
+          end
+      end
+  end
+
+  star_mcs, gal_mcs
 end

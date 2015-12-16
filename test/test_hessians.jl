@@ -17,6 +17,44 @@ println("Running hessian tests.")
 
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 
+function add_log_term_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  sbs = ElboDeriv.SourceBrightness{NumType}[
+    ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+
+  elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
+  ElboDeriv.populate_fsm_vecs!(
+    elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
+  ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
+
+  ElboDeriv.add_elbo_log_term!(elbo_vars, x_nbm, iota)
+
+  deepcopy(elbo_vars_loc)
+end
+
+function wrapper_fun{NumType <: Number}(x::Vector{NumType})
+  @assert length(x) == S * P
+  x_mat = reshape(x, (P, S))
+  if NumType != Float64
+    mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
+  else
+    mp_fd = deepcopy(mp)
+  end
+  for sa_ind in 1:length(mp_fd.active_sources)
+    mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
+  end
+  elbo_vars_fd = e_g_wrapper_fun(mp_fd)
+  test_squares ? elbo_vars_fd.E_G2.v : elbo_vars_fd.E_G.v
+end
+
+x_mat = zeros(Float64, P, S);
+for sa_ind in 1:S
+  x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
+end
+x = x_mat[:];
+
+elbo_vars = e_g_wrapper_fun(mp);
+sf = test_squares ? deepcopy(elbo_vars.E_G2) : deepcopy(elbo_vars.E_G);
 
 
 
@@ -42,12 +80,16 @@ function test_e_g_functions()
     else
       println("Testing E_G")
     end
-    function e_g_wrapper_fun{NumType <: Number}(mp::ModelParams{NumType})
-      star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+    function e_g_wrapper_fun{NumType <: Number}(
+        mp::ModelParams{NumType}; calculate_derivs=true)
+
+      star_mcs, gal_mcs =
+        ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
       sbs = ElboDeriv.SourceBrightness{NumType}[
         ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
 
       elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
+      elbo_vars_loc.calculate_derivs = calculate_derivs;
       ElboDeriv.populate_fsm_vecs!(
         elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
       E_G = elbo_vars_loc.E_G;
@@ -71,7 +113,7 @@ function test_e_g_functions()
       for sa_ind in 1:length(mp_fd.active_sources)
         mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
       end
-      elbo_vars_fd = e_g_wrapper_fun(mp_fd)
+      elbo_vars_fd = e_g_wrapper_fun(mp_fd, calculate_derivs=false)
       test_squares ? elbo_vars_fd.E_G2.v : elbo_vars_fd.E_G.v
     end
 
@@ -139,7 +181,8 @@ function test_fs1m_derivatives()
           p0 = shape_standard_alignment[2][p1]
           mp_fd.vp[s][p0] = par[p1]
       end
-      star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
+      star_mcs, gal_mcs =
+        ElboDeriv.load_bvn_mixtures(mp_fd, b, calculate_derivs=false);
 
       # Raw:
       gcc = gal_mcs[gcc_ind...];
@@ -173,7 +216,7 @@ function test_fs1m_derivatives()
     # Two sanity checks.
     gcc = gal_mcs[gcc_ind...];
     clear!(elbo_vars.fs1m_vec[s]);
-    v = ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x);
+    v = ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x, true);
     gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
     pc = mp.patches[s, b].psf[gcc_ind[1]]
 
@@ -284,7 +327,7 @@ function test_bvn_derivatives()
 
   bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  v = ElboDeriv.get_bvn_derivs!(elbo_vars, bvn, x);
+  v = ElboDeriv.get_bvn_derivs!(elbo_vars, bvn, x, true);
 
   function bvn_function{T <: Number}(x::Vector{T}, sigma::Matrix{T})
     local_x = offset - x
@@ -394,7 +437,7 @@ function test_galaxy_variable_transform()
   sig_sf = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma);
   gcc = ElboDeriv.GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  ElboDeriv.get_bvn_derivs!(elbo_vars, bmc, x);
+  ElboDeriv.get_bvn_derivs!(elbo_vars, bmc, x, true);
   ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
 
   # When the hessian is large the result has the wrong sign.  Maybe that
@@ -461,7 +504,8 @@ function test_galaxy_cache_component()
     elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1)
     e_dev_i_fd = convert(T, e_dev_i)
     gcc = ElboDeriv.GalaxyCacheComponent(
-            e_dev_dir, e_dev_i_fd, gp, psf, u_pix, e_axis, e_angle, e_scale);
+            e_dev_dir, e_dev_i_fd, gp, psf,
+            u_pix, e_axis, e_angle, e_scale, false);
 
     py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x);
 
@@ -482,9 +526,9 @@ function test_galaxy_cache_component()
   u_pix = WCS.world_to_pixel(
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   gcc = ElboDeriv.GalaxyCacheComponent(
-          e_dev_dir, e_dev_i, gp, psf, u_pix, e_axis, e_angle, e_scale);
+          e_dev_dir, e_dev_i, gp, psf, u_pix, e_axis, e_angle, e_scale, true);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x);
+  ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x, true);
   ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
 
   # Sanity check the wrapper.
