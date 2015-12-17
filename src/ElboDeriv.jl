@@ -6,7 +6,6 @@ VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
 import KL
 import Util
-import Polygons
 import SloanDigitalSkySurvey: WCS
 import WCSLIB
 
