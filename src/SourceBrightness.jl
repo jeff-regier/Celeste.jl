@@ -209,3 +209,19 @@ function get_brightness{NumType <: Number}(mp::ModelParams{NumType})
 
     brightness_vals, brightness_squares
 end
+
+
+@doc """
+Load the source brightnesses for these model params.  Each SourceBrightness
+object has information for all bands and object types.
+""" ->
+function load_source_brightnesses{NumType <: Number}(
+    mp::ModelParams{NumType}, calculate_derivs::Bool)
+
+  sbs = Array(SourceBrightness{NumType}, mp.S)
+  for s in 1:mp.S
+    calculate_this_deriv = (s in mp.active_sources) && calculate_derivs
+    sbs[s] = SourceBrightness(mp.vp[s], calculate_derivs=calculate_this_deriv)
+  end
+  sbs
+end

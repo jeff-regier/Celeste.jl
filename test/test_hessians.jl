@@ -1,18 +1,56 @@
 using Celeste
 using CelesteTypes
 using Base.Test
-using Distributions
+# using Distributions
 using SampleData
-using Transform
-using PyPlot
+# using Transform
+# using PyPlot
 
-using ForwardDiff
+# using ForwardDiff
 
 import Synthetic
-import WCS
+# import WCS
 
 
 println("Running hessian tests.")
+
+
+# Checking if the ELBO is different between the two versions.
+include("test/debug_with_master.jl")
+
+
+using Debug
+
+function evaluate_their_elbo()
+  blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
+  Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp)
+end
+
+function evaluate_our_elbo()
+  blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+  ElboDeriv.elbo_likelihood(tiled_blob, mp)
+end
+
+@time their_elbo = evaluate_their_elbo();
+@time our_elbo = evaluate_our_elbo();
+
+# Different:
+our_elbo.v
+their_elbo.v
+
+# NB: before coming with with the clever debug module, I had checked that
+# sbs, gal_mcs, and star_mcs were the same.
+
+
+# Ok
+
+
+
+
+
+
+
+
 
 
 
@@ -25,7 +63,6 @@ function test_tile_likelihood()
   tile = tiled_blob[b][1, 1];
   tile.pixels[setdiff(1:tile.h_width, keep_pixels), :] = NaN;
   tile.pixels[:, setdiff(1:tile.w_width, keep_pixels)] = NaN;
-
 
   function tile_lik_wrapper_fun{NumType <: Number}(
       mp::ModelParams{NumType}, calculate_derivs::Bool)
