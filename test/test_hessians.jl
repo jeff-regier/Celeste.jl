@@ -112,36 +112,66 @@ for s=1:length(our_sbs), b=1:5, i=1:2
 end
 
 
-# Check a pixel accumlations.
+##################################
+# Check a pixel accumlation.
 s = 1
 b = 1
-m_pos = [10., 9.]
-
+h = 10
+w = 10
+wcs_jacobian = Float64[1 0; 0 1]
 
 function their_accumulate_pixel_stats()
   blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
-
-  star_mcs, gal_mcs = Debug.ElboDeriv.load_bvn_mixtures(mp, b);
-  fs0m = Debug.CelesteTypes.zero_sensitive_float(StarPosParams, Float64);
-  fs1m = Debug.CelesteTypes.zero_sensitive_float(GalaxyPosParams, Float64);
-  E_G = Debug.CelesteTypes.zero_sensitive_float(CanonicalParams, Float64, mp.S);
-  var_G = Debug.CelesteTypes.zero_sensitive_float(CanonicalParams, Float64, mp.S);
-
   tile = tiled_blob[b][1,1];
 
-  E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
+  #zsf = Debug.CelesteTypes.zero_sensitive_float;
+  zsf = zero_sensitive_float;
 
+  star_mcs, gal_mcs = Debug.ElboDeriv.load_bvn_mixtures(mp, b);
+  # I don't understand this:
+  # fs0m = zsf(Debug.CelesteTypes.StarPosParams, Float64);
+  # fs1m = zsf(Debug.CelesteTypes.GalaxyPosParams, Float64);
+  # E_G = zsf(Debug.CelesteTypes.CanonicalParams, Float64, mp.S);
+  # var_G = zsf(Debug.CelesteTypes.CanonicalParams, Float64, mp.S);
+  fs0m = zsf(CelesteTypes.StarPosParams, Float64);
+  fs1m = zsf(CelesteTypes.GalaxyPosParams, Float64);
+  E_G = zsf(CelesteTypes.CanonicalParams, Float64, mp.S);
+  var_G = zsf(CelesteTypes.CanonicalParams, Float64, mp.S);
+
+  sbs = [Debug.ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+
+  m_pos = Float64[tile.h_range[h], tile.w_range[w]]
   Debug.ElboDeriv.accum_pixel_source_stats!(
       sbs[s], star_mcs, gal_mcs,
-      mp.vp[s], s, 1:mp.S, m_pos, s, fs0m, fs1m, E_G, var_G, wcs_jacobian)
+      mp.vp[s], s, s, m_pos, b, fs0m, fs1m, E_G, var_G, wcs_jacobian)
 
-  E_G
+  deepcopy(E_G)
 end
 
 
-E_G = their_accumulate_pixel_stats();
+function our_accumulate_pixel_stats()
+  blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+  tile = tiled_blob[b][1,1];
+
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  sbs = ElboDeriv.load_source_brightnesses(mp, true);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
+  ElboDeriv.populate_fsm_vecs!(
+    elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs);
+  clear!(elbo_vars.E_G);
+  clear!(elbo_vars.E_G2);
+
+  ElboDeriv.accumulate_source_brightness!(elbo_vars, mp, sbs, s, b);
+  deepcopy(elbo_vars.E_G);
+end
 
 
+
+their_E_G = their_accumulate_pixel_stats();
+our_E_G = our_accumulate_pixel_stats();
+
+@test_approx_eq their_E_G.v our_E_G.v
+@test_approx_eq their_E_G.d our_E_G.d
 
 
 

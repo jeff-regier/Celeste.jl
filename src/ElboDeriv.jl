@@ -300,6 +300,125 @@ end
 
 
 
+@doc """
+Add the contributions of a source to E_G and E_G2, which are updated in place.
+
+""" ->
+function accumulate_source_brightness!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    mp::ModelParams{NumType},
+    sbs::Vector{SourceBrightness{NumType}},
+    s::Int64, b::Int64)
+
+  # The indices in the sf hessian for source sa.
+  function get_source_indices(sa_ind::Int64)
+    P = length(CanonicalParams)
+    (1:P) + P * (sa_ind - 1)
+  end
+
+  # E[G] and E{G ^ 2}
+  E_G = elbo_vars.E_G;
+  E_G2 = elbo_vars.E_G2;
+
+  a = mp.vp[s][ids.a]
+  fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
+  sb = sbs[s];
+
+  sa = findfirst(mp.active_sources, s)
+  active_source = (sa != 0)
+
+  if active_source
+    sa_inds = get_source_indices(sa)
+  end
+
+  for i in 1:Ia # Stars and galaxies
+    lf = sb.E_l_a[b, i].v * fsm[i].v
+    llff = sb.E_ll_a[b, i].v * fsm[i].v^2
+
+    println(a[i] * lf)
+    E_G.v += a[i] * lf
+    E_G2.v += a[i] * llff
+
+    # Only calculate derivatives for active sources.
+    if active_source && elbo_vars.calculate_derivs
+      ######################
+      # Gradients.
+
+      E_G.d[ids.a[i], sa] += lf
+      E_G2.d[ids.a[i], sa] += llff
+
+      p0_shape = shape_standard_alignment[i]
+      p0_bright = brightness_standard_alignment[i]
+
+      # The indicies of the brightness parameters in the Hessian for this source.
+      p0_bright_s = sa_inds[p0_bright]
+
+      # The indicies of the shape parameters in the Hessian for this source.
+      p0_shape_s = sa_inds[p0_shape]
+
+      # The indicies of the a parameters in the Hessian for this source.
+      p0_a_s = sa_inds[ids.a]
+
+      # Derivatives with respect to the spatial parameters
+      a_fd = a[i] * fsm[i].d[:, 1]
+      E_G.d[p0_shape, sa] += sb.E_l_a[b, i].v * a_fd
+      E_G2.d[p0_shape, sa] += sb.E_ll_a[b, i].v * 2 * fsm[i].v * a_fd
+
+      # Derivatives with respect to the brightness parameters.
+      E_G.d[p0_bright, sa] +=
+        a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
+      E_G2.d[p0_bright, sa] +=
+        a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[p0_bright, 1]
+
+      ######################
+      # Hessians.
+
+      # The (a, a) block of the hessian is zero.
+
+      # The (bright, bright) block:
+      E_G.h[p0_bright_s, p0_bright_s] +=
+        a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
+      E_G2.h[p0_bright_s, p0_bright_s] +=
+        a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
+
+      # The (shape, shape) block:
+      E_G.h[p0_shape_s, p0_shape_s] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
+      E_G2.h[p0_shape_s, p0_shape_s] +=
+        2 * a[i] * sb.E_ll_a[b, i].v *
+        (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
+
+      # TODO: eliminate redundancy.
+      # The (a, bright) blocks:
+      h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
+      E_G.h[p0_bright_s, p0_a_s[i]] += h_a_bright
+      E_G.h[p0_a_s[i], p0_bright_s] =  E_G.h[p0_bright_s, p0_a_s[i]]'
+
+      h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[p0_bright, 1]
+      E_G2.h[p0_bright_s, p0_a_s[i]] += h2_a_bright
+      E_G2.h[p0_a_s[i], p0_bright_s] = E_G2.h[p0_bright_s, p0_a_s[i]]'
+
+      # The (a, shape) blocks.
+      h_a_shape = sb.E_l_a[b, i].v * fsm[i].d
+      E_G.h[p0_shape_s, p0_a_s[i]] += h_a_shape
+      E_G.h[p0_a_s[i], p0_shape_s] = E_G.h[p0_shape_s, p0_a_s[i]]'
+
+      h2_a_shape = sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[:, 1]
+      E_G2.h[p0_shape_s, p0_a_s[i]] += h2_a_shape
+      E_G2.h[p0_a_s[i], p0_shape_s] = E_G2.h[p0_shape_s, p0_a_s[i]]'
+
+      # The (shape, bright) blocks.
+      h_bright_shape = a[i] * sb.E_l_a[b, i].d[p0_bright, 1] * fsm[i].d'
+      E_G.h[p0_bright_s, p0_shape_s] += h_bright_shape
+      E_G.h[p0_shape_s, p0_bright_s] = E_G.h[p0_bright_s, p0_shape_s]'
+
+      h2_bright_shape =
+        2 * a[i] * sb.E_ll_a[b, i].d[p0_bright, 1] * fsm[i].v * fsm[i].d'
+      E_G2.h[p0_bright_s, p0_shape_s] += h2_bright_shape
+      E_G2.h[p0_shape_s, p0_bright_s] = E_G2.h[p0_bright_s, p0_shape_s]'
+    end
+  end
+end
+
 
 @doc """
 An a-weighted combination of bvn * brightness for a particular pixel across
@@ -314,116 +433,11 @@ function combine_pixel_sources!{NumType <: Number}(
     sbs::Vector{SourceBrightness{NumType}})
 
   tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww];
-  b = tile.b
 
-  # The indices in the sf hessian for source sa.
-  function get_source_indices(sa_ind::Int64)
-    P = length(CanonicalParams)
-    (1:P) + P * (sa_ind - 1)
-  end
-
-  # E[G] and E{G ^ 2}
-  E_G = elbo_vars.E_G;
-  E_G2 = elbo_vars.E_G2;
-
-  clear!(E_G);
-  clear!(E_G2);
+  clear!(elbo_vars.E_G);
+  clear!(elbo_vars.E_G2);
   for s in tile_sources
-    a = mp.vp[s][ids.a]
-    fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
-    sb = sbs[s];
-
-    sa = findfirst(mp.active_sources, s)
-    active_source = (sa != 0)
-
-    if active_source
-      sa_inds = get_source_indices(sa)
-    end
-
-    for i in 1:Ia # Stars and galaxies
-      lf = sb.E_l_a[b, i].v * fsm[i].v
-      llff = sb.E_ll_a[b, i].v * fsm[i].v^2
-      E_G.v += a[i] * lf
-      E_G2.v += a[i] * llff
-
-      # Only calculate derivatives for active sources.
-      if active_source && elbo_vars.calculate_derivs
-        ######################
-        # Gradients.
-
-        E_G.d[ids.a[i], sa] += lf
-        E_G2.d[ids.a[i], sa] += llff
-
-        p0_shape = shape_standard_alignment[i]
-        p0_bright = brightness_standard_alignment[i]
-
-        # The indicies of the brightness parameters in the Hessian for this source.
-        p0_bright_s = sa_inds[p0_bright]
-
-        # The indicies of the shape parameters in the Hessian for this source.
-        p0_shape_s = sa_inds[p0_shape]
-
-        # The indicies of the a parameters in the Hessian for this source.
-        p0_a_s = sa_inds[ids.a]
-
-        # Derivatives with respect to the spatial parameters
-        a_fd = a[i] * fsm[i].d[:, 1]
-        E_G.d[p0_shape, sa] += sb.E_l_a[b, i].v * a_fd
-        E_G2.d[p0_shape, sa] += sb.E_ll_a[b, i].v * 2 * fsm[i].v * a_fd
-
-        # Derivatives with respect to the brightness parameters.
-        E_G.d[p0_bright, sa] +=
-          a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
-        E_G2.d[p0_bright, sa] +=
-          a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[p0_bright, 1]
-
-        ######################
-        # Hessians.
-
-        # The (a, a) block of the hessian is zero.
-
-        # The (bright, bright) block:
-        E_G.h[p0_bright_s, p0_bright_s] +=
-          a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
-        E_G2.h[p0_bright_s, p0_bright_s] +=
-          a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
-
-        # The (shape, shape) block:
-        E_G.h[p0_shape_s, p0_shape_s] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
-        E_G2.h[p0_shape_s, p0_shape_s] +=
-          2 * a[i] * sb.E_ll_a[b, i].v *
-          (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
-
-        # TODO: eliminate redundancy.
-        # The (a, bright) blocks:
-        h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
-        E_G.h[p0_bright_s, p0_a_s[i]] += h_a_bright
-        E_G.h[p0_a_s[i], p0_bright_s] =  E_G.h[p0_bright_s, p0_a_s[i]]'
-
-        h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[p0_bright, 1]
-        E_G2.h[p0_bright_s, p0_a_s[i]] += h2_a_bright
-        E_G2.h[p0_a_s[i], p0_bright_s] = E_G2.h[p0_bright_s, p0_a_s[i]]'
-
-        # The (a, shape) blocks.
-        h_a_shape = sb.E_l_a[b, i].v * fsm[i].d
-        E_G.h[p0_shape_s, p0_a_s[i]] += h_a_shape
-        E_G.h[p0_a_s[i], p0_shape_s] = E_G.h[p0_shape_s, p0_a_s[i]]'
-
-        h2_a_shape = sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[:, 1]
-        E_G2.h[p0_shape_s, p0_a_s[i]] += h2_a_shape
-        E_G2.h[p0_a_s[i], p0_shape_s] = E_G2.h[p0_shape_s, p0_a_s[i]]'
-
-        # The (shape, bright) blocks.
-        h_bright_shape = a[i] * sb.E_l_a[b, i].d[p0_bright, 1] * fsm[i].d'
-        E_G.h[p0_bright_s, p0_shape_s] += h_bright_shape
-        E_G.h[p0_shape_s, p0_bright_s] = E_G.h[p0_bright_s, p0_shape_s]'
-
-        h2_bright_shape =
-          2 * a[i] * sb.E_ll_a[b, i].d[p0_bright, 1] * fsm[i].v * fsm[i].d'
-        E_G2.h[p0_bright_s, p0_shape_s] += h2_bright_shape
-        E_G2.h[p0_shape_s, p0_bright_s] = E_G2.h[p0_bright_s, p0_shape_s]'
-      end
-    end
+    accumulate_source_brightness!(elbo_vars, mp, sbs, s, tile.b)
   end
 end
 
