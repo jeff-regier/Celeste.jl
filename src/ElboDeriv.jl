@@ -119,7 +119,7 @@ include(joinpath(Pkg.dir("Celeste"), "src/BivariateNormals.jl"))
 
 @doc """
 Add the contributions of a star's bivariate normal term to the ELBO,
-by updating fs0m in place.
+by updating elbo_vars.fs0m_vec[s] in place.
 
 Args:
   - elbo_vars: Elbo intermediate values.
@@ -670,27 +670,10 @@ function elbo_likelihood!{NumType <: Number}(
   for tile in tiled_image[:]
     tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
     if length(intersect(tile_sources, mp.active_sources)) > 0
-      tile_likelihood!(
-        elbo_vars, tile, tile_sources, mp, sbs, star_mcs, gal_mcs);
+      tile_likelihood!(elbo_vars, tile, mp, sbs, star_mcs, gal_mcs);
     end
   end
 
-end
-
-
-@doc """
-Load the source brightnesses for these model params.  Each SourceBrightness
-object has information for all bands and object types.
-""" ->
-function load_source_brightnesses{NumType <: Number}(
-    mp::ModelParams{NumType}, calculate_derivs::Bool)
-
-  sbs = Array(SourceBrightness{NumType}, mp.S)
-  for s in 1:mp.S
-    calculate_this_deriv = (s in mp.active_sources) && calculate_derivs
-    sbs[s] = SourceBrightness(mp.vp[s], calculate_derivs=calculate_this_deriv)
-  end
-  sbs
 end
 
 
