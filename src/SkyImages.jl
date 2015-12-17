@@ -14,7 +14,6 @@ import ElboDeriv # For stitch_object_tiles
 import FITSIO
 import GaussianMixtures
 import Grid
-import Polygons
 import PSF
 import Util
 import WCS
