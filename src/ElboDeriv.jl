@@ -204,7 +204,6 @@ function accum_galaxy_pos!{NumType <: Number}(
     bvn_ss_h = elbo_vars.bvn_ss_h
     bvn_us_h = elbo_vars.bvn_us_h
 
-
     # Accumulate the derivatives.
     for u_id in 1:2
       fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]

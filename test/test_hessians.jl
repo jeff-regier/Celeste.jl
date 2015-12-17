@@ -42,8 +42,104 @@ their_elbo.v
 # sbs, gal_mcs, and star_mcs were the same.
 
 
-# Ok
+# fsXm looks good.
+b = 1
+x = [10., 9.]
+wcs_jacobian = eye(Float64, 2);
 
+function get_their_fs0m()
+  blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
+
+  star_mcs, gal_mcs = Debug.ElboDeriv.load_bvn_mixtures(mp, b);
+  fs0m = zero_sensitive_float(StarPosParams, Float64);
+  Debug.ElboDeriv.accum_star_pos!(star_mcs[1], x, fs0m, wcs_jacobian);
+  fs0m
+end
+
+function get_our_fs0m()
+  blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+
+  s = 1
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
+  ElboDeriv.accum_star_pos!(elbo_vars, s, star_mcs[1], x, wcs_jacobian);
+  elbo_vars.fs0m_vec[s]
+end
+
+@time their_fs0m = get_their_fs0m();
+@time our_fs0m = get_our_fs0m();
+
+@test_approx_eq their_fs0m.v our_fs0m.v
+@test_approx_eq their_fs0m.d our_fs0m.d
+
+
+function get_their_fs1m()
+  blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
+
+  star_mcs, gal_mcs = Debug.ElboDeriv.load_bvn_mixtures(mp, b);
+  fs1m = zero_sensitive_float(GalaxyPosParams, Float64);
+  Debug.ElboDeriv.accum_galaxy_pos!(gal_mcs[1], x, fs1m, wcs_jacobian);
+  fs1m
+end
+
+function get_our_fs1m()
+  blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+
+  s = 1
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
+  ElboDeriv.accum_galaxy_pos!(elbo_vars, s, gal_mcs[1], x, wcs_jacobian);
+  elbo_vars.fs1m_vec[s]
+end
+
+@time their_fs1m = get_their_fs1m();
+@time our_fs1m = get_our_fs1m();
+
+@test_approx_eq their_fs1m.v our_fs1m.v
+@test_approx_eq their_fs1m.d our_fs1m.d
+
+
+# Check the brightnesses.  Looks good.
+
+@time their_sbs = [Debug.ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+@time our_sbs = ElboDeriv.load_source_brightnesses(mp, true);
+
+for s=1:length(our_sbs), b=1:5, i=1:2
+  @test_approx_eq our_sbs[s].E_l_a[b, i].v their_sbs[s].E_l_a[b, i].v
+  @test_approx_eq our_sbs[s].E_l_a[b, i].d their_sbs[s].E_l_a[b, i].d
+  @test_approx_eq our_sbs[s].E_ll_a[b, i].v their_sbs[s].E_ll_a[b, i].v
+  @test_approx_eq our_sbs[s].E_ll_a[b, i].d their_sbs[s].E_ll_a[b, i].d
+end
+
+
+# Check a pixel accumlations.
+s = 1
+b = 1
+m_pos = [10., 9.]
+
+
+function their_accumulate_pixel_stats()
+  blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
+
+  star_mcs, gal_mcs = Debug.ElboDeriv.load_bvn_mixtures(mp, b);
+  fs0m = Debug.CelesteTypes.zero_sensitive_float(StarPosParams, Float64);
+  fs1m = Debug.CelesteTypes.zero_sensitive_float(GalaxyPosParams, Float64);
+  E_G = Debug.CelesteTypes.zero_sensitive_float(CanonicalParams, Float64, mp.S);
+  var_G = Debug.CelesteTypes.zero_sensitive_float(CanonicalParams, Float64, mp.S);
+
+  tile = tiled_blob[b][1,1];
+
+  E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
+
+  Debug.ElboDeriv.accum_pixel_source_stats!(
+      sbs[s], star_mcs, gal_mcs,
+      mp.vp[s], s, 1:mp.S, m_pos, s, fs0m, fs1m, E_G, var_G, wcs_jacobian)
+
+  E_G
+end
+
+
+E_G = their_accumulate_pixel_stats();
 
 
 
