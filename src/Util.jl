@@ -21,8 +21,10 @@ function get_bvn_cov{NumType <: Number}(ab::NumType, angle::NumType, scale::NumT
     #    The 2x2 covariance matrix parameterized by the inputs.
 
     #@assert -pi/2 <= angle < pi/2
-    @assert 0 < convert(Float64, scale)
-    @assert 0 < convert(Float64, ab) <= 1.
+    if NumType <: AbstractFloat
+        @assert 0 < scale
+        @assert 0 < ab <= 1.
+    end
     cp, sp = cos(angle), sin(angle)
     R = [[cp -sp]; [sp cp]]  # rotates
     D = diagm([1., ab])  # shrinks the minor axis
