@@ -348,64 +348,6 @@ function maximize_f(
     iter_count, max_f, max_x, nm_result
 end
 
-@doc """
-Maximize using BFGS and unconstrained coordinates.
-
-Args:
-  - f: A function that takes a tiled_blob and constrained coordinates
-       (e.g. ElboDeriv.elbo)
-  - tiled_blob: Input for f
-  - mp: Constrained initial ModelParams
-  - transform: The data transform to be applied before optimizing.
-  - lbs: An array of lower bounds (in the transformed space)
-  - ubs: An array of upper bounds (in the transformed space)
-  - omitted_ids: Omitted ids from the _unconstrained_ parameterization
-       (i.e. elements of free_ids).
-  - xtol_rel: X convergence
-  - ftol_abs: F convergence
-  - verbose: Print detailed output
-
-Returns:
-  - iter_count: The number of iterations taken
-  - max_f: The maximum function value achieved
-  - max_x: The optimal function input
-  - ret: The return code of optimize()
-""" ->
-function maximize_f_bfgs(
-  f::Function, tiled_blob::TiledBlob, mp::ModelParams,
-  transform::DataTransform,
-  lbs::Union{Float64, Vector{Float64}},
-  ubs::Union{Float64, Vector{Float64}};
-  omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
-
-    kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    x0 = transform.vp_to_array(mp.vp, omitted_ids)[:]
-
-    obj_wrapper = ObjectiveWrapperFunctions(
-      mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
-    obj_wrapper.state.verbose = verbose
-
-    opt = Opt(:LD_LBFGS, length(x0))
-    for i in 1:length(x0)
-        if !(lbs[i] <= x0[i] <= ubs[i])
-            println("coordinate $i falsity: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
-            if x0[i] >= ubs[i]
-              x0[i] = ubs[i] - 1e-6
-            elseif x0[i] <= lbs[i]
-              x0[i] = lbs[i] + 1e-6
-            end
-        end
-    end
-    lower_bounds!(opt, lbs)
-    upper_bounds!(opt, ubs)
-    max_objective!(opt, obj_wrapper.f_value_grad!)
-    xtol_rel!(opt, xtol_rel)
-    ftol_abs!(opt, ftol_abs)
-    (max_f, max_x, ret) = optimize(opt, x0)
-
-    obj_wrapper.state.f_evals, max_f, max_x, ret
-end
-
 
 function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
     omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
