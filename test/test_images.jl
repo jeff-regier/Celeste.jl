@@ -59,7 +59,7 @@ function test_blob()
     @test 2 * width <= cropped_blob[b][1].h_width <= 2 * (width + 1)
     @test 2 * width <= cropped_blob[b][1].w_width <= 2 * (width + 1)
     tile_sources =
-      SkyImages.local_sources(cropped_blob[b][1], mp.patches[:,b][:], blob[b].wcs)
+      SkyImages.get_local_sources(cropped_blob[b][1], mp.patches[:,b][:])
     @test obj_row in tile_sources
   end
 
@@ -218,6 +218,24 @@ function test_set_patch_size()
     end
   end
 end
+
+
+function test_get_local_sources()
+  world_radius = 2.0
+  wcs_jacobian = Float64[0.5 0.1; 0.2 0.6]
+  pixel_center = Float64[0, 0]
+  world_center = Float64[0, 0]
+  patch1 = SkyPatch(world_center, world_radius,
+                    PsfComponent[], wcs_jacobian, pixel_center);
+
+  h_width = 10
+  w_width = 20
+  tile = ImageTile(1, 1, 1, 1:h_width, 1:w_width, h_width, w_width,
+                   rand(h_width, w_width), true, 0.5, Array(Float64, 0, 0),
+                   0.5, Array(Float64, 0));
+  SkyImages.get_local_sources(tile, [ patch ])
+end
+
 
 test_blob()
 test_stamp_get_object_psf()
