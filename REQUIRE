@@ -5,7 +5,6 @@ DualNumbers
 FITSIO
 ForwardDiff # Currently only required for testing.
 JLD
-NLopt
 Optim
 GaussianMixtures
 Grid
