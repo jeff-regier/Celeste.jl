@@ -2,7 +2,6 @@
 
 module ElboDeriv
 
-VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
 import KL
 import Util
@@ -14,6 +13,7 @@ using DualNumbers.Dual
 
 export tile_predicted_image
 export ParameterMessage, update_parameter_message!
+
 
 @doc """
 Subtract the KL divergence from the prior for c

@@ -1,8 +1,6 @@
 module SkyImages
 
-VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
-using Compat
 import SloanDigitalSkySurvey: SDSS
 import SloanDigitalSkySurvey: WCS
 import SloanDigitalSkySurvey: PSF
@@ -234,7 +232,7 @@ Returns:
 """ ->
 function crop_blob_to_location(
   blob::Array{Image, 1},
-  width::@compat(Union{Float64, Int64}),
+  width::Union{Float64, Int64},
   wcs_center::Vector{Float64})
     @assert length(wcs_center) == 2
     @assert width > 0

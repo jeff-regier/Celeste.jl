@@ -3,7 +3,6 @@
 # For various reasons, e.g. the need to access the global scope when
 # communicating to subprocesses, I have not made this into a module.
 
-VERSION < v"0.4.0-dev" && using Docile
 using Celeste
 using CelesteTypes
 using JLD

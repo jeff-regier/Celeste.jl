@@ -1,9 +1,5 @@
-# written by Jeffrey Regier
-# jeff [at] stat [dot] berkeley [dot] edu
-
 module Util
 
-VERSION < v"0.4.0-dev" && using Docile
 
 export matvec222, logit, inv_logit
 
