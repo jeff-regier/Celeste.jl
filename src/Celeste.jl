@@ -2,7 +2,6 @@ module Celeste
 
 push!(LOAD_PATH, joinpath(Pkg.dir("Celeste"), "src"))
 
-import Polygons
 import SkyImages
 import ElboDeriv
 import OptimizeElbo
