@@ -24,6 +24,8 @@ export D, B, Ia
 
 export print_params
 
+export TheirGradNum, Differentiable
+
 using Util
 using SloanDigitalSkySurvey.PSF.RawPSFComponents
 using Compat
@@ -34,11 +36,16 @@ import Distributions
 import FITSIO
 import DualNumbers
 import WCSLIB
+import ForwardDiff
 
 import Base.length
 
-const band_letters = ['u', 'g', 'r', 'i', 'z']
 
+typealias TheirGradNum ForwardDiff.GradientNumber{1,Float64,Tuple{Float64}}
+typealias Differentiable Union{AbstractFloat, TheirGradNum}
+
+
+const band_letters = ['u', 'g', 'r', 'i', 'z']
 
 # The number of components in the color prior.
 const D = 2
@@ -644,5 +651,26 @@ function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
 
   sf3
 end
+
+##################################################33
+
+function convert(::Type{ModelParams{TheirGradNum}}, 
+        base_mp::ModelParams{Float64})
+    S = length(base_mp.vp)
+    P = length(base_mp.vp[1])
+    mp_fd = ModelParams{TheirGradNum}([ zeros(TheirGradNum, P) for s=1:S ], 
+            base_mp.pp);
+    # Set the values (but not gradient numbers) for parameters other
+    # than the galaxy parameters.
+    for s=1:base_mp.S, i=1:length(ids)
+        mp_fd.vp[s][i] = base_mp.vp[s][i]
+    end
+    mp_fd.patches = base_mp.patches;
+    mp_fd.tile_sources = base_mp.tile_sources;
+    mp_fd.active_sources = base_mp.active_sources;
+    mp_fd.objids = base_mp.objids;
+    mp_fd
+end
+
 
 end
