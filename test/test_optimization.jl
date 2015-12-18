@@ -445,10 +445,15 @@ end
 test_quadratic_optimization()
 test_objective_wrapper()
 test_objective_hessians()
-#test_kappa_finding()
-#test_bad_a_init()
 test_star_optimization()
 test_galaxy_optimization()
 test_single_source_optimization()
 test_full_elbo_optimization()
 test_real_stamp_optimization()
+
+# These tests are commented out because they mainly test NLopt,
+# which we are no longer using. It isn't straightforward to convert
+# them to testing trust region optimization because they are 1D
+# optimization problems.
+#test_kappa_finding()
+#test_bad_a_init()
