@@ -1,7 +1,5 @@
 module CelesteTypes
 
-VERSION < v"0.4.0-dev" && using Docile
-
 export CatalogEntry
 export band_letters
 
@@ -28,7 +26,6 @@ export TheirGradNum, Differentiable
 
 using Util
 using SloanDigitalSkySurvey.PSF.RawPSFComponents
-using Compat
 
 import Base.convert
 import Base.+
@@ -463,7 +460,7 @@ const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 # TODO: maybe these should be incorporated into the framework above
 # (which I don't really understand.)
 function get_id_names(
-  ids::@compat(Union{CanonicalParams, UnconstrainedParams}))
+  ids::Union{CanonicalParams, UnconstrainedParams})
   ids_names = Array(ASCIIString, length(ids))
   for (name in fieldnames(ids))
     inds = ids.(name)

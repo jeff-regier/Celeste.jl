@@ -1,6 +1,5 @@
 # TODO: This is intended to be used in Optim.jl.  Until that is submitted
 # and merged, I'll include the working file in Celeste so the build passes.
-using Compat
 using Optim.update!
 using Optim.OptimizationTrace
 using Optim._dot
@@ -415,7 +414,7 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
     return MultivariateOptimizationResults("Newton's Method with Trust Region",
                                            initial_x,
                                            x,
-                                           @compat(Float64(f_x)),
+                                           Float64(f_x),
                                            iteration,
                                            iteration == iterations,
                                            x_converged,

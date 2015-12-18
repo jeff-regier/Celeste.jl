@@ -1,9 +1,5 @@
-# written by Jeffrey Regier
-# jeff [at] stat [dot] berkeley [dot] edu
-
 module OptimizeElbo
 
-VERSION < v"0.4.0-dev" && using Docile
 
 using NLopt
 using CelesteTypes
@@ -203,8 +199,8 @@ type ObjectiveWrapperFunctions
 
             # Vectors of the (source, component) indices for the rows
             # and columns of the Hessian.
-            hess_i = @compat(Tuple{Int64, Int64}[])
-            hess_j = @compat(Tuple{Int64, Int64}[])
+            hess_i = Tuple{Int64, Int64}[]
+            hess_j = Tuple{Int64, Int64}[]
 
             # Values of the hessian in the (hess_i, hess_j) locations.
             hess_val = Float64[]
@@ -264,10 +260,10 @@ Args:
 Returns:
   - A symmetric sparse matrix corresponding to the inputs.
 """ ->
-function unpack_hessian_vals(hess_i::@compat(Vector{Tuple{Int64, Int64}}),
-                             hess_j::@compat(Vector{Tuple{Int64, Int64}}),
+function unpack_hessian_vals(hess_i::Vector{Tuple{Int64, Int64}},
+                             hess_j::Vector{Tuple{Int64, Int64}},
                              hess_val::Vector{Float64},
-                             dims::@compat(Tuple{Int64, Int64}))
+                             dims::Tuple{Int64, Int64})
   # TODO: make this function part of the transform.
   hess_i_vec = Array(Int64, length(hess_i));
   hess_j_vec = Array(Int64, length(hess_j));
@@ -407,8 +403,8 @@ Returns:
 function maximize_f_bfgs(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::DataTransform,
-  lbs::@compat(Union{Float64, Vector{Float64}}),
-  ubs::@compat(Union{Float64, Vector{Float64}});
+  lbs::Union{Float64, Vector{Float64}},
+  ubs::Union{Float64, Vector{Float64}};
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
