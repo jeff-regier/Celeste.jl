@@ -18,7 +18,9 @@ function do_deriv_test(f::Function, x::Float64, claimed_dx)
     # vector of x values, rather than once per parameter to test
     fwd_deriv = ForwardDiff.gradient(f)([x,])[1]
 
-    info("got $fwd_deriv; expected $claimed_dx")
+    if abs(fwd_deriv - claimed_dx) > 1e-8
+        info("got $fwd_deriv; expected $claimed_dx")
+    end
 
     @test_approx_eq_eps significand(fwd_deriv) significand(claimed_dx) 1e-4
     @test((fwd_deriv == claimed_dx == 0.) || 
