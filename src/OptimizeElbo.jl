@@ -1,7 +1,6 @@
 module OptimizeElbo
 
 
-using NLopt
 using CelesteTypes
 using Transform
 
@@ -276,34 +275,6 @@ function unpack_hessian_vals(hess_i::Vector{Tuple{Int64, Int64}},
 
   # Guarantee exact symmetry.
   new_hess = 0.5 * (new_hess_sparse + new_hess_sparse')
-end
-
-
-function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
-                                        omitted_ids::Vector{Int64},
-                                        transform::DataTransform)
-    # Set reasonable bounds for unconstrained parameters.
-    #
-    # vp: Variational parameters.
-    # omitted_ids: Ids of _unconstrained_ variational parameters to be omitted.
-    # transform: A DataTransform object.
-
-    kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    lbs = fill(-15.0, length(ids_free), length(vp))
-    ubs = fill(15.0, length(ids_free), length(vp))
-
-    # Change the bounds to match the scaling
-    for s=1:length(vp)
-      for (param, bounds) in transform.bounds[s]
-        if (bounds.ub == Inf)
-          # Hack: higher bounds for upper-unconstrained params.
-          ubs[collect(ids_free.(param)), s] = 20.0
-        end
-        lbs[collect(ids_free.(param)), s] .*= bounds.rescaling
-        ubs[collect(ids_free.(param)), s] .*= bounds.rescaling
-      end
-    end
-    reduce(vcat, lbs[kept_ids, :]), reduce(vcat, ubs[kept_ids, :])
 end
 
 
