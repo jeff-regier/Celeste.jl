@@ -8,7 +8,7 @@ notifications:
 
 before_install:
 #  - sudo apt-get update -qq -y
-  - sudo apt-get install libgsl0-dev -y
+#  - sudo apt-get install libgsl0-dev -y
   - sudo apt-get install libwcs4 -y
 
 script:
@@ -17,5 +17,5 @@ script:
   - julia -e 'Pkg.test("Celeste"; coverage=(VERSION < v"0.4"))'
 
 after_success:
-  - julia -e 'if VERSION < v"0.4" cd(Pkg.dir("Celeste")); Pkg.add("Coverage"); 
+  - julia -e 'if VERSION < v"0.4" cd(Pkg.dir("Celeste")); Pkg.add("Coverage");
         using Coverage; Coveralls.submit(Coveralls.process_folder()) end'
