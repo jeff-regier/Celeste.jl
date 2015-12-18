@@ -8,7 +8,6 @@ notifications:
 
 before_install:
 #  - sudo apt-get update -qq -y
-  - sudo apt-get install libgsl0-dev -y
   - sudo apt-get install libwcs4 -y
 
 script:

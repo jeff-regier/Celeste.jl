@@ -60,9 +60,6 @@ end
 function test_by_fwd_diff(fun_to_test::Function, x::Vector{Float64})
     value, claimed_grad = fun_to_test(x)
 
-    # ForwardDiff needs GradientNumbers, not Float64s
-    mp2 = CelesteTypes.convert(ModelParams{TheirGradNum}, mp);
-
     for s in 1:length(x)
         fun_to_test_2(epsilon_vec::Vector) = begin
             @assert(length(epsilon_vec) == 1)
@@ -307,5 +304,5 @@ test_brightness_derivs()
 test_kl_divergence_derivs()
 test_accum_pixel_source_derivs()
 test_elbo_derivs()
-test_derivative_transform()
-test_elbo_derivs_with_transform()
+#test_derivative_transform()
+#test_elbo_derivs_with_transform()

@@ -1,9 +1,12 @@
 using Celeste
 using Base.Test
 using Distributions
-import GSL.deriv_central
 
 println("Running KL tests.")
+
+
+typealias TheirGradNum ForwardDiff.GradientNumber{1,Float64,Tuple{Float64}}
+
 
 function verify_kl(q_dist, p_dist, claimed_kl::Float64)
     sample_size = 4_000_000
@@ -20,18 +23,22 @@ end
 function verify_derivs(f::Function, x::Vector{Float64})
     claimed_dx = f(x)[2]
 
+    x2::Vector{TheirGradNum} = x
+
     for i in 1:length(x)
-        f2(epsilon::Float64) = begin
-            x_local = deepcopy(x)
-            x_local[i] += epsilon
+        f2(epsilon_vec) = begin
+            x_local = deepcopy(x2)
+            x_local[i] += epsilon_vec[1]
             f(x_local)[1]
         end
 
-        numeric_deriv, abs_err = deriv_central(f2, 0., 1e-3)
-        info("deriv #$i: $numeric_deriv vs $(claimed_dx[i]) [tol: $abs_err]")
-        obs_err = abs(numeric_deriv - claimed_dx[i])
-        @test obs_err < 1e-11 || abs_err < 1e-4 || abs_err / abs(numeric_deriv) < 1e-4
-        @test_approx_eq_eps numeric_deriv claimed_dx[i] 10abs_err
+        fwd_deriv = ForwardDiff.gradient(f2)([0.,])[1]
+        claimed_dx_i = claimed_dx[i]
+        info("got $fwd_deriv; expected $claimed_dx_i")
+
+        @test_approx_eq_eps significand(fwd_deriv) significand(claimed_dx_i) 1e-4
+        @test((fwd_deriv == claimed_dx_i == 0.) ||
+              (exponent(fwd_deriv) == exponent(claimed_dx_i)))
     end
 end
 
@@ -52,9 +59,9 @@ function test_beta()
     claimed_kl = KL.gen_beta_kl(0.5, 0.5)(2., 5.)[1]
     verify_kl(q, p, claimed_kl)
 
-    x = [2., 5.]
     f(x) = KL.gen_beta_kl(0.5, 0.5)(x[1], x[2])
-    verify_derivs(f, x)
+    x0 = [2., 5.]
+    verify_derivs(f, x0)
 end
 
 
