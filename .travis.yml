@@ -8,12 +8,11 @@ notifications:
 
 before_install:
   - sudo apt-get update -qq -y
-  - sudo apt-get install libgsl0-dev -y
   - sudo apt-get install libwcs4 -y
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia -e 'Pkg.clone(pwd()); Pkg.build("GSL"); Pkg.build("Celeste")'
+  - julia -e 'Pkg.clone(pwd()); Pkg.build("Celeste")'
   - julia -e 'Pkg.test("Celeste"; coverage=(VERSION < v"0.4"))'
 
 after_success:
