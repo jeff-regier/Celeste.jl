@@ -1,11 +1,8 @@
 module Synthetic
 
-VERSION < v"0.4.0-dev" && using Docile
-
 export gen_blob
 
 using CelesteTypes
-using Compat
 import ModelInit
 import Util
 import WCS
