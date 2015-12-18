@@ -341,7 +341,7 @@ function get_tiled_image_sources(
     # Only look for sources within the candidate set.
     cand_patches = patches[candidates[h, w]]
     if length(cand_patches) > 0
-      cand_sources = SkyImages.local_sources(tiled_image[h, w], cand_patches, wcs)
+      cand_sources = SkyImages.get_local_sources(tiled_image[h, w], cand_patches)
       tile_sources[h, w] = candidates[h, w][cand_sources]
     else
       tile_sources[h, w] = Int64[]
@@ -410,7 +410,7 @@ function initialize_model_params(
 
   println("Processing the bands.")
   for b = 1:length(blob)
-    print("  Band $b patches...")
+    print("  Initializing band $b patches.")
     for s=1:mp.S
       (s % 10  == 0) && print(".")
       mp.patches[s, b] = radius_from_cat ?
@@ -418,7 +418,7 @@ function initialize_model_params(
                  scale_patch_size=scale_patch_size):
         SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
     end
-    print("Band $b tiled image sources...")
+    println("  Initializing band $b tiled image sources.")
     mp.tile_sources[b] =
       get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
   end

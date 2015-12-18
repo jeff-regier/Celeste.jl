@@ -12,7 +12,6 @@ import ElboDeriv # For stitch_object_tiles
 import FITSIO
 import GaussianMixtures
 import Grid
-import Polygons
 import PSF
 import Util
 import WCS
@@ -21,7 +20,7 @@ export load_stamp_blob, load_sdss_blob, crop_image!
 export convert_gmm_to_celeste, get_psf_at_point
 export convert_catalog_to_celeste, load_stamp_catalog
 export break_blob_into_tiles, break_image_into_tiles
-export local_sources
+export get_local_sources
 
 
 @doc """
@@ -374,11 +373,21 @@ function pixel_radius_to_world(pix_radius::Float64,
   pix_radius / minimum(abs(eig(wcs_jacobian)[1]));
 end
 
+
 # A world circle maps locally to a pixel ellipse.  Return the major
 # axis of that ellipse.
 function world_radius_to_pixel(world_radius::Float64,
                                wcs_jacobian::Matrix{Float64})
-  world_radius * minimum(abs(eig(wcs_jacobian)[1]));
+  world_radius * maximum(abs(eig(wcs_jacobian)[1]));
+end
+
+
+import WCS.world_to_pixel
+function world_to_pixel{NumType <: Number}(
+    patch::SkyPatch, world_loc::Vector{NumType})
+
+  WCS.world_to_pixel(patch.wcs_jacobian, patch.center,
+                     patch.pixel_center, world_loc)
 end
 
 
@@ -426,32 +435,33 @@ end
 Args:
   - tile: An ImageTile (containing tile coordinates)
   - patches: A vector of SkyPatch objects to be matched with the tile.
-  - wcs: A WCS object for the image in question.
 
 Returns:
   - A vector of source ids (from 1 to length(patches)) that influence
     pixels in the tile.  A patch influences a tile if
     there is any overlap in their squares of influence.
 """ ->
-function local_sources(
-  tile::ImageTile, patches::Vector{SkyPatch}, wcs::WCSLIB.wcsprm)
-    # Corners of the tile in pixel coordinates.
-    if length(patches) == 0
-      return Int64[]
+function get_local_sources(tile::ImageTile, patches::Vector{SkyPatch})
+
+    tile_sources = Int64[]
+    tile_center = Float64[mean(tile.h_range), mean(tile.w_range)]
+
+    for patch_index in 1:length(patches)
+      patch = patches[patch_index]
+      patch_radius_px = world_radius_to_pixel(patch.radius, patch.wcs_jacobian)
+
+      # This is a "ball" in the infinity norm.
+      if (abs(tile_center[1] - patch.pixel_center[1]) <
+          patch_radius_px + 0.5 * tile.h_width) &&
+         (abs(tile_center[2] - patch.pixel_center[2]) <
+          patch_radius_px + 0.5 * tile.w_width)
+        push!(tile_sources, patch_index)
+      end
     end
 
-    tc11 = Float64[minimum(tile.h_range), minimum(tile.w_range)]
-    tc12 = Float64[minimum(tile.h_range), maximum(tile.w_range) + 1]
-    tc22 = Float64[maximum(tile.h_range) + 1, maximum(tile.w_range) + 1]
-    tc21 = Float64[maximum(tile.h_range) + 1, minimum(tile.w_range)]
-    tile_quad = vcat(tc11', tc12', tc22', tc21')
-
-    pc = reduce(vcat, [ patches[s].center' for s=1:length(patches) ])
-    pr = Float64[ patches[s].radius for s=1:length(patches) ]
-    bool_vec = Polygons.sources_near_quadrilateral(pc, pr, tile_quad, wcs)
-
-    (collect(1:length(patches)))[bool_vec]
+    tile_sources
 end
+
 
 @doc """
 Return a vector of (h, w) indices of tiles that contain this source.
