@@ -304,5 +304,10 @@ test_brightness_derivs()
 test_kl_divergence_derivs()
 test_accum_pixel_source_derivs()
 test_elbo_derivs()
+
+# I (JCR) commented these out while converting the rest of the tests to use
+# ForwardDiff rather than GSL. These remaining tests have the types of
+# some variables set to "Float64" rather than "Differentiable", and
+# therefore require modification to work with ForwardDiff.
 #test_derivative_transform()
 #test_elbo_derivs_with_transform()
