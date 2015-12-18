@@ -1,9 +1,5 @@
-# written by Jeffrey Regier
-# jeff [at] stat [dot] berkeley [dot] edu
-
 module ModelInit
 
-VERSION < v"0.4.0-dev" && using Docile
 
 export sample_prior, peak_init
 
@@ -13,7 +9,6 @@ using FITSIO
 using Distributions
 using Util
 using CelesteTypes
-using Compat
 
 import ElboDeriv # For trim_source_tiles
 import SloanDigitalSkySurvey: WCS
@@ -243,10 +238,10 @@ function choose_patch_radius(
     else
       # Get the average sky noise in a rectangle of the width of the psf.
       h_max, w_max = size(img.epsilon_mat)
-      h_lim = @compat([Int(floor((pixel_center[1] - obj_width))),
-                       Int(ceil((pixel_center[1] + obj_width)))])
-      w_lim = @compat([Int(floor((pixel_center[2] - obj_width))),
-                       Int(ceil((pixel_center[2] + obj_width)))])
+      h_lim = [Int(floor((pixel_center[1] - obj_width))),
+                       Int(ceil((pixel_center[1] + obj_width)))]
+      w_lim = [Int(floor((pixel_center[2] - obj_width))),
+                       Int(ceil((pixel_center[2] + obj_width)))]
       h_range = max(h_lim[1], 1):min(h_lim[2], h_max)
       w_range = max(w_lim[1], 1):min(w_lim[2], w_max)
       epsilon = mean(img.epsilon_mat[h_range, w_range])
