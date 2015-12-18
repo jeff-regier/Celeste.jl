@@ -17,14 +17,10 @@ function do_deriv_test(f::Function, x::Float64, claimed_dx)
     # TODO: really should call ForwardDiff.gradient just once, with a whole
     # vector of x values, rather than once per parameter to test
     fwd_deriv = ForwardDiff.gradient(f)([x,])[1]
-
-    if abs(fwd_deriv - claimed_dx) > 1e-8
-        info("got $fwd_deriv; expected $claimed_dx")
+    if fwd_deriv != claimed_dx
+        info("deriv: got $claimed_dx; expected $fwd_deriv")
     end
-
-    @test_approx_eq_eps significand(fwd_deriv) significand(claimed_dx) 1e-4
-    @test((fwd_deriv == claimed_dx == 0.) || 
-          (exponent(fwd_deriv) == exponent(claimed_dx)))
+    @test_approx_eq fwd_deriv claimed_dx
 end
 
 

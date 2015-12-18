@@ -25,6 +25,8 @@ function verify_derivs(f::Function, x::Vector{Float64})
 
     x2::Vector{TheirGradNum} = x
 
+    # TODO: evaluate the derivatives for all x at once with
+    # ForwardDiff.gradient (without this loop)
     for i in 1:length(x)
         f2(epsilon_vec) = begin
             x_local = deepcopy(x2)
@@ -34,8 +36,9 @@ function verify_derivs(f::Function, x::Vector{Float64})
 
         fwd_deriv = ForwardDiff.gradient(f2)([0.,])[1]
         claimed_dx_i = claimed_dx[i]
-        info("got $fwd_deriv; expected $claimed_dx_i")
+        info("kl deriv: got $fwd_deriv; expected $claimed_dx_i")
 
+        @test_approx_eq fwd_deriv claimed_dx_i
         @test_approx_eq_eps significand(fwd_deriv) significand(claimed_dx_i) 1e-4
         @test((fwd_deriv == claimed_dx_i == 0.) ||
               (exponent(fwd_deriv) == exponent(claimed_dx_i)))
