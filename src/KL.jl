@@ -4,8 +4,6 @@
 
 module KL
 
-VERSION < v"0.4.0-dev" && using Docile
-
 export gen_beta_kl, gen_isobvnormal_improper
 export gen_wrappedcauchy_uniform_kl, gen_categorical_kl, gen_gamma_kl
 export gen_normal_kl, gen_isobvnormal_kl, gen_diagmvn_mvn_kl
