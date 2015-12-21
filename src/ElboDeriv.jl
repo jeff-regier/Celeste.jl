@@ -12,7 +12,7 @@ import WCSLIB
 
 using DualNumbers.Dual
 
-export tile_predicted_image
+export tile_predicted_imagecom
 
 
 ####################################################
@@ -335,7 +335,6 @@ function accumulate_source_brightness!{NumType <: Number}(
     lf = sb.E_l_a[b, i].v * fsm[i].v
     llff = sb.E_ll_a[b, i].v * fsm[i].v^2
 
-    println(a[i] * lf)
     E_G.v += a[i] * lf
     E_G2.v += a[i] * llff
 
@@ -433,14 +432,10 @@ function combine_pixel_sources!{NumType <: Number}(
     sbs::Vector{SourceBrightness{NumType}})
 
   tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww];
-
-  clear!(elbo_vars.E_G);
-  clear!(elbo_vars.E_G2);
   for s in tile_sources
     accumulate_source_brightness!(elbo_vars, mp, sbs, s, tile.b)
   end
 end
-
 
 
 @doc """
@@ -469,7 +464,8 @@ function get_expected_pixel_brightness!{NumType <: Number}(
   clear!(elbo_vars.E_G)
   clear!(elbo_vars.E_G2)
   if include_epsilon
-    elbo_vars.E_G.v = tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
+    elbo_vars.E_G.v =
+      tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
   else
     elbo_vars.E_G.v = 0.0
   end
@@ -505,6 +501,9 @@ function add_elbo_log_term!{NumType <: Number}(
 
   # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
   log_term_value = log(E_G.v) - 0.5 * (E_G2.v - E_G.v ^ 2)  / (E_G.v ^ 2)
+  println("Log term value: ", log_term_value)
+  println("E_G.v ", E_G.v)
+  println("E_G2.v ", E_G2.v)
 
   if elbo_vars.calculate_derivs
     log_term_grad = NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + E_G2.v / (E_G.v ^ 3)]
