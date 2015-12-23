@@ -10,7 +10,6 @@ import Synthetic
 
 
 include(joinpath(Pkg.dir("Celeste"), "test", "test_misc.jl"))
-include(joinpath(Pkg.dir("Celeste"), "test", "test_polygons.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_kl.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_transforms.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_elbo_values.jl"))
