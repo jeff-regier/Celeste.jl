@@ -1,7 +1,5 @@
 module CelesteTypes
 
-VERSION < v"0.4.0-dev" && using Docile
-
 export CatalogEntry
 export band_letters
 
@@ -30,8 +28,6 @@ export print_params
 
 using Util
 using SloanDigitalSkySurvey.PSF.RawPSFComponents
-using Compat
-using ForwardDiff
 
 import Base.convert
 import Base.+
@@ -39,8 +35,14 @@ import Distributions
 import FITSIO
 import DualNumbers
 import WCSLIB
+import ForwardDiff
 
 import Base.length
+
+
+typealias TheirGradNum ForwardDiff.GradientNumber{1,Float64,Tuple{Float64}}
+typealias Differentiable Union{AbstractFloat, TheirGradNum}
+
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -390,8 +392,8 @@ abstract ParamSet
 #           (formerly kappa)
 
 # Parameters for location and galaxy shape.
-gal_shape_params = ((:e_axis, 1), (:e_angle, 1), (:e_scale, 1))
-ue_params = ((:u, 2), (:e_dev, 1), gal_shape_params...)
+ue_params = ((:u, 2), (:e_dev, 1), (:e_axis, 1), (:e_angle, 1),
+        (:e_scale, 1))
 
 # Parameters for the colors.
 rc_params1 = ((:r1, 1), (:r2, 1), (:c1, B - 1), (:c2, B - 1))
@@ -404,7 +406,6 @@ ak_free = ((:a, Ia - 1), (:k, (D - 1, Ia)))
 
 const param_specs = [
     (:StarPosParams, :star_ids, ((:u, 2),)),
-    (:GalaxyShapeParams, :gal_shape_ids, gal_shape_params),
     (:GalaxyPosParams, :gal_ids, ue_params),
     (:BrightnessParams, :bids, rc_params1),
     (:CanonicalParams, :ids, tuple(ue_params..., rc_params2..., ak_simplex...)),
@@ -469,7 +470,7 @@ const gal_shape_alignment = align(gal_shape_ids, gal_ids)
 # TODO: maybe these should be incorporated into the framework above
 # (which I don't really understand.)
 function get_id_names(
-  ids::@compat(Union{CanonicalParams, UnconstrainedParams}))
+  ids::Union{CanonicalParams, UnconstrainedParams})
   ids_names = Array(ASCIIString, length(ids))
   for (name in fieldnames(ids))
     inds = ids.(name)
@@ -551,40 +552,6 @@ function convert(::Type{ModelParams{DualNumbers.Dual{Float64}}},
     mp_dual
 end
 
-
-# TODO: test this, and maybe write it as a convert()?
-function forward_diff_model_params{T <: Number}(
-    FDType::Type{T},
-    base_mp::ModelParams{Float64})
-  S = length(base_mp.vp)
-  P = length(base_mp.vp[1])
-  mp_fd = ModelParams{FDType}([ zeros(FDType, P) for s=1:S ], base_mp.pp);
-  # Set the values (but not gradient numbers) for parameters other
-  # than the galaxy parameters.
-  for s=1:base_mp.S, i=1:length(ids)
-    mp_fd.vp[s][i] = base_mp.vp[s][i]
-  end
-  mp_fd.patches = base_mp.patches;
-  mp_fd.tile_sources = base_mp.tile_sources;
-  mp_fd.active_sources = base_mp.active_sources;
-  mp_fd.objids = base_mp.objids;
-  mp_fd
-end
-
-function convert(FDType::Type{ForwardDiff.GradientNumber},
-                 mp::ModelParams{Float64})
-    x = mp.vp[1]
-    P = length(x)
-    FDType = ForwardDiff.GradientNumber{length(mp.vp[1]), Float64}
-
-    fd_x = [ ForwardDiff.GradientNumber(x[i], zeros(Float64, P)...) for i=1:P ]
-    convert(FDType, x[1])
-
-    vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
-    mp_fd = ModelParams(vp_fd, mp.pp)
-end
-
-
 @doc """
 Display model parameters with the variable names.
 """ ->
@@ -624,6 +591,7 @@ function print_cat_entry(cat_entry::CatalogEntry)
             fieldnames(cat_entry)]
 end
 
+#########################################################
 
 # TODO: wrap this into its own module?
 include(joinpath(Pkg.dir("Celeste"), "src/SensitiveFloat.jl"))

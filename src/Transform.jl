@@ -4,16 +4,14 @@ module Transform
 
 using Celeste
 using CelesteTypes
-using Compat
 
 import Util
-VERSION < v"0.4.0-dev" && using Docile
 
 export DataTransform, ParamBounds, ParamBox
 export get_mp_transform, generate_valid_parameters
 
 
-immutable ParamBox{T <: @compat(Union{Float64, Vector{Float64}})}
+immutable ParamBox{T <: Union{Float64, Vector{Float64}}}
     lb::T
     ub::T
     rescaling::T
@@ -82,10 +80,10 @@ end
 # Functions for a "free transform".
 
 function unbox_parameter{NumType <: Number}(
-  param::@compat(Union{NumType, Array{NumType}}),
-  lower_bound::@compat(Union{Float64, Array{Float64}}),
-  upper_bound::@compat(Union{Float64, Array{Float64}}),
-  scale::@compat(Union{Float64, Array{Float64}}))
+  param::Union{NumType, Array{NumType}},
+  lower_bound::Union{Float64, Array{Float64}},
+  upper_bound::Union{Float64, Array{Float64}},
+  scale::Union{Float64, Array{Float64}})
 
     positive_constraint = any(upper_bound .== Inf)
     if positive_constraint && !all(upper_bound .== Inf)
@@ -107,10 +105,10 @@ function unbox_parameter{NumType <: Number}(
 end
 
 function box_parameter{NumType <: Number}(
-  free_param::@compat(Union{NumType, Array{NumType}}),
-  lower_bound::@compat(Union{Float64, Array{Float64}}),
-  upper_bound::@compat(Union{Float64, Array{Float64}}),
-  scale::@compat(Union{Float64, Array{Float64}}))
+  free_param::Union{NumType, Array{NumType}},
+  lower_bound::Union{Float64, Array{Float64}},
+  upper_bound::Union{Float64, Array{Float64}},
+  scale::Union{Float64, Array{Float64}})
 
   positive_constraint = any(upper_bound .== Inf)
   if positive_constraint && !all(upper_bound .== Inf)
@@ -130,11 +128,11 @@ within the box constrains, and <deriv> is the derivative with respect
 to these paraemters.
 """ ->
 function unbox_derivative{NumType <: Number}(
-  param::@compat(Union{NumType, Array{NumType}}),
-  deriv::@compat(Union{NumType, Array{NumType}}),
-  lower_bound::@compat(Union{Float64, Array{Float64}}),
-  upper_bound::@compat(Union{Float64, Array{Float64}}),
-  scale::@compat(Union{Float64, Array{Float64}}))
+  param::Union{NumType, Array{NumType}},
+  deriv::Union{NumType, Array{NumType}},
+  lower_bound::Union{Float64, Array{Float64}},
+  upper_bound::Union{Float64, Array{Float64}},
+  scale::Union{Float64, Array{Float64}})
     @assert(length(param) == length(deriv),
             "Wrong length parameters for unbox_sensitive_float")
 

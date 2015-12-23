@@ -1,14 +1,11 @@
-Compat 0 0.7.5
 DataFrames
 Distributions
 DualNumbers
 FITSIO
 ForwardDiff # Currently only required for testing.
 JLD
-NLopt
 Optim
 GaussianMixtures
 Grid
-GSL 0.1.2 0.2
 SloanDigitalSkySurvey
 WCSLIB

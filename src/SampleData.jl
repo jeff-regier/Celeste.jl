@@ -1,10 +1,7 @@
-
 module SampleData
 
-VERSION < v"0.4.0-dev" && using Docile
 using Distributions
 using CelesteTypes
-using Compat
 
 import SloanDigitalSkySurvey: WCS
 import SkyImages
@@ -148,7 +145,7 @@ function gen_n_body_dataset(S::Int64; patch_pixel_radius=20., tile_width=50)
 
   fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
 
-  locations = rand(S, 2) .* @compat([ float(img_size_h) float(img_size_w) ])
+  locations = rand(S, 2) .* [ float(img_size_h) float(img_size_w) ]
   world_locations = WCS.pixel_to_world(blob0[3].wcs, locations)
 
   S_bodies = CatalogEntry[CatalogEntry(world_locations[s, :][:], true,
