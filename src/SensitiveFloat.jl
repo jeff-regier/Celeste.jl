@@ -121,6 +121,39 @@ function multiply_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 end
 
 
+@doc """
+Updates sf_result in place with g(sf1, sf2), where
+g_d = (g_1, g_2) is the gradient of g and
+g_h = (g_11, g_12; g_12, g_22) is the hessian of g,
+each evaluated at (sf1, sf2).
+
+The result is stored in sf_result.  The order is done in such a way that
+it can overwrite sf1 or sf2 and still be accurate.
+""" ->
+function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+    sf1::SensitiveFloat{ParamType, NumType},
+    sf2::SensitiveFloat{ParamType, NumType},
+    sf_result::SensitiveFloat{ParamType, NumType},
+    v::NumType, g_d::Vector{NumType}, g_h::Matrix{NumType})
+
+  S = size(sf1.d)[2]
+  @assert g_h[1, 2] == g_h[2, 1]
+
+  # You have to do this in the right order to not overwrite needed terms.
+
+  # Chain rule for second derivatives.
+  sf_result.h[:, :] = g_d[1] * sf1.h + g_d[2] * sf2.h
+  sf_result.h[:, :] +=
+    g_h[1, 1] * sf1.d[:] * sf1.d[:]' +
+    g_h[2, 2] * sf2.d[:] * sf2.d[:]' +
+    g_h[1, 2] * (sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]')
+  for s=1:S
+    sf_result.d[:, s] = g_d[1] * sf1.d[:, s] + g_d[2] * sf2.d[:, s]
+  end
+
+  sf_result.v = v
+end
+
 
 @doc """
 Updates sf1 in place with g(sf1, sf2), where
@@ -135,22 +168,7 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf2::SensitiveFloat{ParamType, NumType},
     v::NumType, g_d::Vector{NumType}, g_h::Matrix{NumType})
 
-  S = size(sf1.d)[2]
-  @assert g_h[1, 2] == g_h[2, 1]
-
-  # You have to do this in the right order to not overwrite needed terms.
-
-  # Chain rule for second derivatives.
-  sf1.h[:, :] = g_d[1] * sf1.h + g_d[2] * sf2.h
-  sf1.h[:, :] +=
-    g_h[1, 1] * sf1.d[:] * sf1.d[:]' +
-    g_h[2, 2] * sf2.d[:] * sf2.d[:]' +
-    g_h[1, 2] * (sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]')
-  for s=1:S
-    sf1.d[:, s] = g_d[1] * sf1.d[:, s] + g_d[2] * sf2.d[:, s]
-  end
-
-  sf1.v = v
+  combine_sfs!(sf1, sf2, sf1, v, g_d, g_h)
 end
 
 

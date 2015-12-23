@@ -47,9 +47,14 @@ type ElboIntermediateVariables{NumType <: Number}
   fs0m_vec::Vector{SensitiveFloat{StarPosParams, NumType}}
   fs1m_vec::Vector{SensitiveFloat{GalaxyPosParams, NumType}}
 
+  # Brightness values for a single source
+  E_G_s::SensitiveFloat{CanonicalParams, NumType}
+  E_G2_s::SensitiveFloat{CanonicalParams, NumType}
+  var_G_s::SensitiveFloat{CanonicalParams, NumType}
+
   # Expected pixel intensity and variance for a pixel from all sources.
   E_G::SensitiveFloat{CanonicalParams, NumType}
-  E_G2::SensitiveFloat{CanonicalParams, NumType}
+  var_G::SensitiveFloat{CanonicalParams, NumType}
 
   # The ELBO itself.
   elbo::SensitiveFloat{CanonicalParams, NumType}
@@ -99,8 +104,11 @@ ElboIntermediateVariables(
     fs1m_vec[s] = zero_sensitive_float(GalaxyPosParams, NumType)
   end
 
+  E_G_s = zero_sensitive_float(CanonicalParams, NumType, 1)
+  E_G2_s = zero_sensitive_float(CanonicalParams, NumType, 1)
+  var_G_s = zero_sensitive_float(CanonicalParams, NumType, 1)
+
   E_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-  E_G2 = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
   var_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
 
   elbo = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
@@ -109,7 +117,8 @@ ElboIntermediateVariables(
     bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
     dpy1_dsig, dpy2_dsig, dsiginv_dsig,
     bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h,
-    fs0m_vec, fs1m_vec, E_G, E_G2, elbo, true)
+    fs0m_vec, fs1m_vec, E_G_s, E_G2_s, var_G_s,
+    E_G, var_G, elbo, true)
 end
 
 
@@ -316,9 +325,12 @@ function accumulate_source_brightness!{NumType <: Number}(
     (1:P) + P * (sa_ind - 1)
   end
 
-  # E[G] and E{G ^ 2}
-  E_G = elbo_vars.E_G;
-  E_G2 = elbo_vars.E_G2;
+  # E[G] and E{G ^ 2} for a single source
+  E_G = elbo_vars.E_G_s;
+  E_G2 = elbo_vars.E_G2_s;
+
+  clear!(E_G)
+  clear!(E_G2)
 
   a = mp.vp[s][ids.a]
   fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
@@ -415,6 +427,18 @@ function accumulate_source_brightness!{NumType <: Number}(
       E_G2.h[p0_bright_s, p0_shape_s] += h2_bright_shape
       E_G2.h[p0_shape_s, p0_bright_s] = E_G2.h[p0_bright_s, p0_shape_s]'
     end
+  end
+
+  clear!(elbo_vars.var_G_s)
+  # Write the variance as a function of (E_G, E_G2)
+  var_v = E_G2.v - (E_G.v ^ 2);
+
+  if active_source && elbo_vars.calculate_derivs
+    var_grad = NumType[-2 * E_G.v, 1];
+    var_hess = NumType[-2  0; 0 0];
+    combine_sfs!(E_G, E_G2, elbo_vars.var_G_s, var_v, var_grad, var_hess)
+  else
+    elbo_vars.var_G_s.v = var_v
   end
 end
 

@@ -239,6 +239,8 @@ their_E_G, their_var_G = their_expected_pixel_brightness();
 our_E_G, their_E_G2 = our_expected_pixel_brightness();
 
 @test_approx_eq their_E_G.v our_E_G.v
+our_var_G = (our_E_G2.v - our_E_G.v ^ 2);
+@test_approx_eq their_var_G.v our_var_G
 
 
 
@@ -452,7 +454,6 @@ end
 
 
 function test_e_g_functions()
-  #blob, mp, bodies, tiled_blob = gen_sample_galaxy_dataset();
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 
   S = length(mp.active_sources)
@@ -460,8 +461,8 @@ function test_e_g_functions()
   h = 10
   w = 10
 
-  for test_squares = [false, true], b=1:5
-    test_squares_string = test_squares ? "E_G" : "E_G2"
+  for test_var = [false, true], b=1:5
+    test_var_string = test_squares ? "E_G" : "var_G"
     println("Testing $(test_squares_string), band $b")
 
     tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
@@ -478,11 +479,8 @@ function test_e_g_functions()
       elbo_vars_loc.calculate_derivs = calculate_derivs;
       ElboDeriv.populate_fsm_vecs!(
         elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
-      E_G = elbo_vars_loc.E_G;
-      E_G2 = elbo_vars_loc.E_G2;
-
-      clear!(E_G);
-      clear!(E_G2);
+      E_G = elbo_vars_loc.E_G_s;
+      var_G = elbo_vars_loc.var_G_s;
 
       ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
       deepcopy(elbo_vars_loc)
@@ -523,6 +521,77 @@ function test_e_g_functions()
       @test_approx_eq ad_hess elbo_vars.E_G2.h
     else
       @test_approx_eq ad_hess elbo_vars.E_G.h
+    end
+  end
+end
+
+
+function test_e_g_functions()
+  blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+
+  S = length(mp.active_sources)
+  P = length(CanonicalParams)
+  h = 10
+  w = 10
+  s = 1
+
+  for test_var = [false, true], b=1:5
+    test_var_string = test_var ? "E_G" : "var_G"
+    println("Testing $(test_var_string), band $b")
+
+    #tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
+    function e_g_wrapper_fun{NumType <: Number}(
+        mp::ModelParams{NumType}; calculate_derivs=true)
+
+      star_mcs, gal_mcs =
+        ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
+      sbs = ElboDeriv.SourceBrightness{NumType}[
+        ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
+        for s in 1:mp.S];
+
+      elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
+      elbo_vars_loc.calculate_derivs = calculate_derivs;
+      ElboDeriv.populate_fsm_vecs!(
+        elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
+      ElboDeriv.accumulate_source_brightness!(elbo_vars_loc, mp, sbs, s, b);
+      deepcopy(elbo_vars_loc)
+    end
+
+    function wrapper_fun{NumType <: Number}(x::Vector{NumType})
+      @assert length(x) == S * P
+      x_mat = reshape(x, (P, S))
+      if NumType != Float64
+        mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
+      else
+        mp_fd = deepcopy(mp)
+      end
+      for sa_ind in 1:length(mp_fd.active_sources)
+        mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
+      end
+      elbo_vars_fd = e_g_wrapper_fun(mp_fd, calculate_derivs=false)
+      test_var ? elbo_vars_fd.var_G_s.v : elbo_vars_fd.E_G_s.v
+    end
+
+    x_mat = zeros(Float64, P, S);
+    for sa_ind in 1:S
+      x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
+    end
+    x = x_mat[:];
+
+    elbo_vars = e_g_wrapper_fun(mp);
+    sf = test_var ? deepcopy(elbo_vars.var_G_s) : deepcopy(elbo_vars.E_G_s);
+
+    v = wrapper_fun(x)
+    @test_approx_eq v sf.v
+
+    ad_grad = ForwardDiff.gradient(wrapper_fun, x);
+    @test_approx_eq ad_grad sf.d
+
+    ad_hess = ForwardDiff.hessian(wrapper_fun, x);
+    if test_var
+      @test_approx_eq ad_hess elbo_vars.var_G_s.h
+    else
+      @test_approx_eq ad_hess elbo_vars.E_G_s.h
     end
   end
 end
