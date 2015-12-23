@@ -1,11 +1,6 @@
-# written by Jeffrey Regier
-# jeff [at] stat [dot] berkeley [dot] edu
-
 module OptimizeElbo
 
-VERSION < v"0.4.0-dev" && using Docile
 
-using NLopt
 using CelesteTypes
 using Transform
 
@@ -241,8 +236,8 @@ type ObjectiveWrapperFunctions
 
             # Vectors of the (source, component) indices for the rows
             # and columns of the Hessian.
-            hess_i = @compat(Tuple{Int64, Int64}[])
-            hess_j = @compat(Tuple{Int64, Int64}[])
+            hess_i = Tuple{Int64, Int64}[]
+            hess_j = Tuple{Int64, Int64}[]
 
             # Values of the hessian in the (hess_i, hess_j) locations.
             hess_val = Float64[]
@@ -302,10 +297,10 @@ Args:
 Returns:
   - A symmetric sparse matrix corresponding to the inputs.
 """ ->
-function unpack_hessian_vals(hess_i::@compat(Vector{Tuple{Int64, Int64}}),
-                             hess_j::@compat(Vector{Tuple{Int64, Int64}}),
+function unpack_hessian_vals(hess_i::Vector{Tuple{Int64, Int64}},
+                             hess_j::Vector{Tuple{Int64, Int64}},
                              hess_val::Vector{Float64},
-                             dims::@compat(Tuple{Int64, Int64}))
+                             dims::Tuple{Int64, Int64})
   # TODO: make this function part of the transform.
   hess_i_vec = Array(Int64, length(hess_i));
   hess_j_vec = Array(Int64, length(hess_j));
@@ -318,34 +313,6 @@ function unpack_hessian_vals(hess_i::@compat(Vector{Tuple{Int64, Int64}}),
 
   # Guarantee exact symmetry.
   new_hess = 0.5 * (new_hess_sparse + new_hess_sparse')
-end
-
-
-function get_nlopt_unconstrained_bounds(vp::Vector{Vector{Float64}},
-                                        omitted_ids::Vector{Int64},
-                                        transform::DataTransform)
-    # Set reasonable bounds for unconstrained parameters.
-    #
-    # vp: Variational parameters.
-    # omitted_ids: Ids of _unconstrained_ variational parameters to be omitted.
-    # transform: A DataTransform object.
-
-    kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    lbs = fill(-15.0, length(ids_free), length(vp))
-    ubs = fill(15.0, length(ids_free), length(vp))
-
-    # Change the bounds to match the scaling
-    for s=1:length(vp)
-      for (param, bounds) in transform.bounds[s]
-        if (bounds.ub == Inf)
-          # Hack: higher bounds for upper-unconstrained params.
-          ubs[collect(ids_free.(param)), s] = 20.0
-        end
-        lbs[collect(ids_free.(param)), s] .*= bounds.rescaling
-        ubs[collect(ids_free.(param)), s] .*= bounds.rescaling
-      end
-    end
-    reduce(vcat, lbs[kept_ids, :]), reduce(vcat, ubs[kept_ids, :])
 end
 
 
@@ -417,64 +384,6 @@ function maximize_f(
     println("got $max_f at $max_x after $iter_count function evaluations ",
             "($(nm_result.iterations) Newton steps)\n")
     iter_count, max_f, max_x, nm_result
-end
-
-@doc """
-Maximize using BFGS and unconstrained coordinates.
-
-Args:
-  - f: A function that takes a tiled_blob and constrained coordinates
-       (e.g. ElboDeriv.elbo)
-  - tiled_blob: Input for f
-  - mp: Constrained initial ModelParams
-  - transform: The data transform to be applied before optimizing.
-  - lbs: An array of lower bounds (in the transformed space)
-  - ubs: An array of upper bounds (in the transformed space)
-  - omitted_ids: Omitted ids from the _unconstrained_ parameterization
-       (i.e. elements of free_ids).
-  - xtol_rel: X convergence
-  - ftol_abs: F convergence
-  - verbose: Print detailed output
-
-Returns:
-  - iter_count: The number of iterations taken
-  - max_f: The maximum function value achieved
-  - max_x: The optimal function input
-  - ret: The return code of optimize()
-""" ->
-function maximize_f_bfgs(
-  f::Function, tiled_blob::TiledBlob, mp::ModelParams,
-  transform::DataTransform,
-  lbs::@compat(Union{Float64, Vector{Float64}}),
-  ubs::@compat(Union{Float64, Vector{Float64}});
-  omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false)
-
-    kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    x0 = transform.vp_to_array(mp.vp, omitted_ids)[:]
-
-    obj_wrapper = ObjectiveWrapperFunctions(
-      mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids);
-    obj_wrapper.state.verbose = verbose
-
-    opt = Opt(:LD_LBFGS, length(x0))
-    for i in 1:length(x0)
-        if !(lbs[i] <= x0[i] <= ubs[i])
-            println("coordinate $i falsity: $(lbs[i]) <= $(x0[i]) <= $(ubs[i])")
-            if x0[i] >= ubs[i]
-              x0[i] = ubs[i] - 1e-6
-            elseif x0[i] <= lbs[i]
-              x0[i] = lbs[i] + 1e-6
-            end
-        end
-    end
-    lower_bounds!(opt, lbs)
-    upper_bounds!(opt, ubs)
-    max_objective!(opt, obj_wrapper.f_value_grad!)
-    xtol_rel!(opt, xtol_rel)
-    ftol_abs!(opt, ftol_abs)
-    (max_f, max_x, ret) = optimize(opt, x0)
-
-    obj_wrapper.state.f_evals, max_f, max_x, ret
 end
 
 

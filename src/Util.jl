@@ -1,9 +1,5 @@
-# written by Jeffrey Regier
-# jeff [at] stat [dot] berkeley [dot] edu
-
 module Util
 
-VERSION < v"0.4.0-dev" && using Docile
 
 export matvec222, logit, inv_logit
 
@@ -27,8 +23,10 @@ Args:
 function get_bvn_cov{NumType <: Number}(ab::NumType, angle::NumType, scale::NumType)
 
     #@assert -pi/2 <= angle < pi/2
-    @assert 0 < scale
-    @assert 0 < ab <= 1.
+    if NumType <: AbstractFloat
+        @assert 0 < scale
+        @assert 0 < ab <= 1.
+    end
     cp, sp = cos(angle), sin(angle)
     R = [[cp -sp]; [sp cp]]  # rotates
     D = diagm([1., ab])  # shrinks the minor axis
