@@ -43,6 +43,8 @@ type ElboIntermediateVariables{NumType <: Number}
   # Vectors of star and galaxy bvn quantities from all sources for a pixel.
   # The vector has one element for each active source, in the same order
   # as mp.active_sources.
+
+  # TODO: you can treat this the same way as E_G_s and not keep a vector around.
   fs0m_vec::Vector{SensitiveFloat{StarPosParams, NumType}}
   fs1m_vec::Vector{SensitiveFloat{GalaxyPosParams, NumType}}
 
@@ -54,6 +56,9 @@ type ElboIntermediateVariables{NumType <: Number}
   # Expected pixel intensity and variance for a pixel from all sources.
   E_G::SensitiveFloat{CanonicalParams, NumType}
   var_G::SensitiveFloat{CanonicalParams, NumType}
+
+  # A placeholder for the log term in the ELBO.
+  elbo_log_term::SensitiveFloat{CanonicalParams, NumType}
 
   # The ELBO itself.
   elbo::SensitiveFloat{CanonicalParams, NumType}
@@ -110,6 +115,8 @@ ElboIntermediateVariables(
   E_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
   var_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
 
+  elbo_log_term =
+    zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
   elbo = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
 
   ElboIntermediateVariables{NumType}(
@@ -117,7 +124,7 @@ ElboIntermediateVariables(
     dpy1_dsig, dpy2_dsig, dsiginv_dsig,
     bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h,
     fs0m_vec, fs1m_vec, E_G_s, E_G2_s, var_G_s,
-    E_G, var_G, elbo, true)
+    E_G, var_G, elbo_log_term, elbo, true)
 end
 
 
@@ -460,8 +467,8 @@ function combine_pixel_sources!{NumType <: Number}(
   tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww];
   for s in tile_sources
     accumulate_source_brightness!(elbo_vars, mp, sbs, s, tile.b)
-    add_scaled_sfs!(elbo_vars.E_G, elbo_vars.E_G_s)
-    add_scaled_sfs!(elbo_vars.var_G, elbo_vars.var_G_s)
+    add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, s)
+    add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, s)
   end
 end
 
@@ -475,7 +482,7 @@ Args:
   tile_sources: The indices within active_sources that are present in the tile.
 
 Returns:
-  - Updates elbo_vars.E_G and elbo_vars.E_G2 in place.
+  - Updates elbo_vars.E_G and elbo_vars.var_G in place.
 """ ->
 function get_expected_pixel_brightness!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
@@ -490,14 +497,11 @@ function get_expected_pixel_brightness!{NumType <: Number}(
   populate_fsm_vecs!(elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs)
 
   clear!(elbo_vars.E_G)
-  clear!(elbo_vars.E_G2)
+  clear!(elbo_vars.var_G)
   if include_epsilon
     elbo_vars.E_G.v =
       tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
-  else
-    elbo_vars.E_G.v = 0.0
   end
-  elbo_vars.E_G2.v = elbo_vars.E_G.v ^ 2
 
   combine_pixel_sources!(elbo_vars, mp, tile, sbs);
 end
@@ -520,36 +524,32 @@ function add_elbo_log_term!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     x_nbm::Float64, iota::Float64)
 
-  E_G = elbo_vars.E_G
-  E_G2 = elbo_vars.E_G2
-  elbo = elbo_vars.elbo
-
   # See notes for a derivation.  The log term is
   # log E[G] - Var(G) / (2 * E[G] ^2 )
 
   # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
-  log_term_value = log(E_G.v) - 0.5 * (E_G2.v - E_G.v ^ 2)  / (E_G.v ^ 2)
+  log_term_value = log(E_G.v) - 0.5 * var_G.v  / (E_G.v ^ 2)
   println("Log term value: ", log_term_value)
   println("E_G.v ", E_G.v)
-  println("E_G2.v ", E_G2.v)
+  println("var_G.v ", var_G.v)
 
   if elbo_vars.calculate_derivs
-    log_term_grad = NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + E_G2.v / (E_G.v ^ 3)]
+    log_term_grad = NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + var_G.v / (E_G.v ^ 3)]
     log_term_hess =
       NumType[0             1 / E_G.v^3;
-              1 / E_G.v^3   -(1 / E_G.v ^ 2 + 3  * E_G2.v / (E_G.v ^ 4))]
+              1 / E_G.v^3   -(1 / E_G.v ^ 2 + 3  * var_G.v / (E_G.v ^ 4))]
 
     # Desipte the variable name,
     # this step briefly updates E_G2 to contain the lower bound of the log term.
     CelesteTypes.combine_sfs!(
-      E_G2, E_G, log_term_value, log_term_grad, log_term_hess)
+      elbo_vars.var_G, elbo_vars.E_G, elbo_vars.elbo_log_term,
+      log_term_value, log_term_grad, log_term_hess)
 
     add_value = elbo.v + x_nbm * (log(iota) + log_term_value)
     add_grad = NumType[1, x_nbm]
     add_hess = NumType[0 0; 0 0]
-    CelesteTypes.combine_sfs!(elbo, E_G2, add_value, add_grad, add_hess)
-
-    clear!(E_G2) # This is unnecessary but prevents accidents downstream.
+    CelesteTypes.combine_sfs!(
+      elbo, elbo_vars.elbo_log_term, add_value, add_grad, add_hess)
   else
     # If not calculating derivatives, add the values directly.
     elbo.v += x_nbm * (log(iota) + log_term_value)
