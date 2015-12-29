@@ -80,7 +80,7 @@ function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
   # Simply asserting equality of the ids doesn't work for some reason.
   @assert typeof(sf1.ids) == typeof(sf2.ids)
   @assert length(sf1.ids) == length(sf2.ids)
-  [ @assert size(sf1.hs[s]) == size(sf2.hs[s]) for s=1:S ]
+  [ @assert size(sf1.h[s]) == size(sf2.h[s]) for s=1:S ]
 
   @assert size(sf1.d) == size(sf2.d)
 
@@ -142,14 +142,30 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   # You have to do this in the right order to not overwrite needed terms.
 
   # Chain rule for second derivatives.
-  sf_result.h[:, :] = g_d[1] * sf1.h + g_d[2] * sf2.h
-  sf_result.h[:, :] +=
-    g_h[1, 1] * sf1.d[:] * sf1.d[:]' +
-    g_h[2, 2] * sf2.d[:] * sf2.d[:]' +
-    g_h[1, 2] * (sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]')
-  for s=1:S
-    sf_result.d[:, s] = g_d[1] * sf1.d[:, s] + g_d[2] * sf2.d[:, s]
-  end
+  # BLAS for
+  # sf_result.h[:, :] = g_d[1] * sf1.h + g_d[2] * sf2.h
+  BLAS.blascopy!(prod(size(sf_result.h)), sf1.h, 1, sf_result.h, 1);
+  BLAS.scal!(prod(size(sf_result.h)), g_d[1], sf_result.h, 1);
+  BLAS.axpy!(g_d[2], sf2.h, sf_result.h)
+
+  # TODO: use syr! instead?
+  # BLAS for
+  # sf_result.h[:, :] +=
+  #   g_h[1, 1] * sf1.d[:] * sf1.d[:]' +
+  #   g_h[2, 2] * sf2.d[:] * sf2.d[:]' +
+  #   g_h[1, 2] * (sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]')
+  sf1d = sf1.d[:];
+  sf2d = sf2.d[:];
+  BLAS.ger!(g_h[1, 1], sf1d, sf1d, sf_result.h);
+  BLAS.ger!(g_h[2, 2], sf2d, sf2d, sf_result.h);
+  BLAS.ger!(g_h[1, 2], sf1d, sf2d, sf_result.h);
+  BLAS.ger!(g_h[1, 2], sf2d, sf1d, sf_result.h);
+
+  # BLAS for
+  # sf_result.d[ = g_d[1] * sf1.d + g_d[2] * sf2.d
+  BLAS.blascopy!(prod(size(sf_result.d)), sf1.d, 1, sf_result.d, 1);
+  BLAS.scal!(prod(size(sf_result.d)), g_d[1], sf_result.d, 1);
+  BLAS.axpy!(g_d[2], sf2.d, sf_result.d);
 
   sf_result.v = v
 end
@@ -199,7 +215,9 @@ function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 
   sf1.v = sf1.v + scale * sf2.v
   sf1.d = sf1.d + scale * sf2.d
-  sf1.h = sf1.h + scale * sf2.h
+  # BLAS for
+  #sf1.h = sf1.h + scale * sf2.h
+  BLAS.axpy!(scale, sf2.h, sf1.h)
 end
 
 

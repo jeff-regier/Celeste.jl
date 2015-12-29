@@ -1,19 +1,10 @@
 using Celeste
 using CelesteTypes
 using Base.Test
-# using Distributions
 using SampleData
-# using Transform
-# using PyPlot
-
-# using ForwardDiff
-
 import Synthetic
-# import WCS
-
 
 println("Running hessian tests.")
-
 
 function test_tile_likelihood()
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
