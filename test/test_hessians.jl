@@ -15,26 +15,6 @@ import Synthetic
 println("Running hessian tests.")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Checking if the ELBO is different between the two versions.
 include("test/debug_with_master.jl"); include("src/ElboDeriv.jl")
 
@@ -244,23 +224,20 @@ function our_expected_pixel_brightness()
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
   ElboDeriv.populate_fsm_vecs!(
     elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs);
-  clear!(elbo_vars.E_G);
-  clear!(elbo_vars.E_G2);
 
   this_pixel = tile.pixels[h, w]
   ElboDeriv.get_expected_pixel_brightness!(
     elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
     mp, include_epsilon=true)
 
-  deepcopy(elbo_vars.E_G), deepcopy(elbo_vars.E_G2)
+  deepcopy(elbo_vars.E_G), deepcopy(elbo_vars.var_G)
 end
 
 their_E_G, their_var_G = their_expected_pixel_brightness();
-our_E_G, their_E_G2 = our_expected_pixel_brightness();
+our_E_G, our_var_G = our_expected_pixel_brightness();
 
 @test_approx_eq their_E_G.v our_E_G.v
-our_var_G = (our_E_G2.v - our_E_G.v ^ 2);
-@test_approx_eq their_var_G.v our_var_G
+@test_approx_eq their_var_G.v our_var_G.v
 
 
 
@@ -318,7 +295,7 @@ function our_accum_pixel_ret()
   ElboDeriv.populate_fsm_vecs!(
     elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs);
   clear!(elbo_vars.E_G);
-  clear!(elbo_vars.E_G2);
+  clear!(elbo_vars.var_G);
 
   this_pixel = tile.pixels[h, w]
   ElboDeriv.get_expected_pixel_brightness!(
@@ -339,11 +316,7 @@ end
 their_accum = their_accum_pixel_ret();
 our_accum = our_accum_pixel_ret();
 
-
-
-# Different!
-their_accum.v
-our_accum.v
+@test_approx_eq their_accum.v our_accum.v
 
 
 
