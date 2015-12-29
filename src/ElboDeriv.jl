@@ -375,10 +375,18 @@ function accumulate_source_brightness!{NumType <: Number}(
       # The (a, a) block of the hessian is zero.
 
       # The (bright, bright) block:
-      E_G.h[p0_bright, p0_bright] +=
-        a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
-      E_G2.h[p0_bright, p0_bright] +=
-        a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
+
+      # BLAS for
+      # E_G.h[p0_bright, p0_bright] +=
+      #   a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
+      # E_G2.h[p0_bright, p0_bright] +=
+      #   a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
+      BLAS.axpy!(a[i] * fsm[i].v,
+                 sb.E_l_a[b, i].h[p0_bright, p0_bright],
+                 E_G.h[p0_bright, p0_bright]);
+      BLAS.axpy!(a[i] * (fsm[i].v^2),
+                 sb.E_ll_a[b, i].h[p0_bright, p0_bright],
+                 E_G2.h[p0_bright, p0_bright]);
 
       # The (shape, shape) block:
       E_G.h[p0_shape, p0_shape] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
