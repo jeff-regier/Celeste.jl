@@ -482,6 +482,8 @@ function get_expected_pixel_brightness!{NumType <: Number}(
   combine_pixel_sources!(elbo_vars, mp, tile, sbs);
 
   if include_epsilon
+    # There are no derivatives with respect to epsilon, so can safely add
+    # to the value.
     elbo_vars.E_G.v +=
       tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
   end
