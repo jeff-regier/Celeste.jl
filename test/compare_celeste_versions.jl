@@ -303,22 +303,3 @@ their_accum = their_accum_pixel_ret();
 our_accum = our_accum_pixel_ret();
 
 @test_approx_eq their_accum.v our_accum.v
-
-
-#####################
-# Test the likelihood
-
-function their_elbo_likelihood()
-  blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
-  deepcopy(Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp))
-end
-
-
-function our_elbo_likelihood()
-  blob, mp, bodies, tiled_blob = gen_two_body_dataset();
-  deepcopy(ElboDeriv.elbo_likelihood!(tiled_blob, mp))
-end
-
-
-their_lik = their_elbo_likelihood();
-our_lik = our_elbo_likelihood();

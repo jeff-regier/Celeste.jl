@@ -72,10 +72,13 @@ end
 
 function test_add_log_term()
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+  h = 10
+  w = 10
 
   for b = 1:5
     println("Testing log term for band $b.")
     x_nbm = 70.
+    tile = tiled_blob[b][1,1];
     iota = blob[b].iota
 
     function add_log_term_wrapper_fun{NumType <: Number}(
