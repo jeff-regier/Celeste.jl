@@ -2,7 +2,7 @@
 #using CelesteTypes.getids
 #using CelesteTypes.HessianEntry
 
-export multiply_sf!, add_scaled_sfs!, combine_sfs!
+export multiply_sf!, add_scaled_sfs!, combine_sfs!, add_sources_sf!
 
 @doc """
 A function value and its derivative with respect to its arguments.
@@ -206,25 +206,22 @@ end
 @doc """
 Adds sf2_s to sf1, where sf1 is sensitive to multiple sources and sf2_s is only
 sensitive to source s.
-
-
 """ ->
 function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf_all::SensitiveFloat{ParamType, NumType},
     sf_s::SensitiveFloat{ParamType, NumType},
-    s::Int64;
-    scale::Float64=1.0)
+    s::Int64)
 
-  sf_all.v = sf_all.v + scale * sf_s.v
+  sf_all.v = sf_all.v + sf_s.v
 
   P = length(ParamType)
   for s_ind1 in 1:P
     s_all_ind1 = P * (s - 1) + s_ind1
-    sf_all.d[s_all_ind1] = sf_all.d[s_all_ind1] + scale * sf_s.d[s_ind1]
+    sf_all.d[s_all_ind1] = sf_all.d[s_all_ind1] + sf_s.d[s_ind1]
     for s_ind2 in 1:P
       s_all_ind2 = P * (s - 1) + s_ind2
       sf_all.h[s_all_ind1, s_all_ind2] =
-        sf_all.h[s_all_ind1, s_all_ind2] + scale * sf_s.h[s_ind1, s_ind2]
+        sf_all.h[s_all_ind1, s_all_ind2] + sf_s.h[s_ind1, s_ind2]
     end
   end
 end

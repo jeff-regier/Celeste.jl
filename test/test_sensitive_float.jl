@@ -224,6 +224,6 @@ function test_add_sources_sf()
 end
 
 
-
 test_combine_sfs()
 test_add_sensitive_floats()
+test_add_sources_sf()

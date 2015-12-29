@@ -1552,7 +1552,7 @@ In order to easily calculate the Hessians, we will write this as a composition
 \begin_inset Formula 
 \begin{eqnarray*}
 E_{g} & = & \mathbb{E}_{q}\left[F_{nbm}\right]\\
-E_{g2} & = & \mathbb{E}_{q}\left[F_{nbm}^{2}\right]
+V_{g} & = & \mathbb{V}_{q}\left[F_{nbm}\right]
 \end{eqnarray*}
 
 \end_inset
@@ -1564,7 +1564,7 @@ E_{g2} & = & \mathbb{E}_{q}\left[F_{nbm}^{2}\right]
 Then
 \begin_inset Formula 
 \begin{eqnarray*}
-\mathbb{E}_{q}\left[\log F_{nbm}\right] & \approx & \log E_{g}-\frac{E_{g2}-E_{g}^{2}}{2E_{g}^{2}}
+\mathbb{E}_{q}\left[\log F_{nbm}\right] & \approx & \log E_{g}-\frac{V_{g}}{2E_{g}^{2}}
 \end{eqnarray*}
 
 \end_inset
@@ -1572,7 +1572,7 @@ Then
 We can define
 \begin_inset Formula 
 \begin{eqnarray*}
-f\left(x,y\right) & = & \log y-\frac{x-y^{2}}{2y^{2}}=\log y-\frac{x}{2y^{2}}+\frac{1}{2}\\
+f\left(x,y\right) & = & \log y-\frac{x}{2y^{2}}\\
 \nabla f & = & \left(\begin{array}{c}
 -\frac{1}{2y^{2}}\\
 \frac{1}{y}+\frac{x}{y^{3}}
@@ -1594,6 +1594,98 @@ Also,
 \begin{eqnarray*}
 \frac{d}{dx}\log\left(x\right) & = & \frac{1}{x}\\
 \frac{d^{2}}{dx^{2}}\log\left(x\right) & = & -\frac{1}{x^{2}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection*
+Notes that you can delete later
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathbb{E}\left[G\right] & = & \sum_{b}\mathbb{E}\left[r_{b}\right]\phi_{b}\\
+\mathbb{E}\left[G^{2}\right] & = & \mathbb{E}\left[\left(\sum_{b}r_{b}\phi_{b}\right)^{2}\right]\\
+ & = & \mathbb{E}\left[\sum_{b}\sum_{b'}r_{b}\phi_{b}r_{b'}\phi_{b'}\right]\\
+ & = & \mathbb{E}\left[\sum_{b}r_{b}^{2}\phi_{b}^{2}\right]+2\mathbb{E}\left[\sum_{b\ne b'}r_{b}r_{b'}\phi_{b'}\phi_{b}\right]\\
+ & = & \sum_{b}\mathbb{E}\left[r_{b}^{2}\right]\phi_{b}^{2}+2\sum_{b\ne b'}\mathbb{E}\left[r_{b}\right]\mathbb{E}\left[r_{b'}\right]\phi_{b'}\phi_{b}\\
+\mathbb{E}\left[G\right]^{2} & = & \sum_{b}\sum_{b'}\mathbb{E}\left[r_{b}\right]\mathbb{E}\left[r_{b'}\right]\phi_{b}\phi_{b'}\\
+ & = & \sum_{b}\mathbb{E}\left[r_{b}\right]^{2}\phi_{b}^{2}+\sum_{b\ne b'}\mathbb{E}\left[r_{b}\right]\mathbb{E}\left[r_{b'}\right]\phi_{b'}\phi_{b}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+On the other hand,
+\begin_inset Formula 
+\begin{eqnarray*}
+\textrm{Var}\left[G\right] & = & \sum_{b}\textrm{Var}\left[r_{b}\right]\phi_{b}^{2}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+And
+\begin_inset Formula 
+\begin{eqnarray*}
+\textrm{Var}\left[r_{b}\right]\phi_{b}^{2} & = & \phi_{b}^{2}\left(\mathbb{E}\left[r_{b}^{2}\right]-\mathbb{E}\left[r_{b}\right]^{2}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+and um actually
+\begin_inset Formula 
+\begin{eqnarray*}
+\textrm{Var}\left[a_{1}r_{b1}\phi_{b1}+a_{2}r_{b2}\phi_{b2}\right] & = & \mathbb{E}\left[\left(a_{1}r_{b1}\phi_{b1}+a_{2}r_{b2}\phi_{b2}\right)^{2}\right]-\mathbb{E}\left[a_{1}r_{b1}\phi_{b1}+a_{2}r_{b2}\phi_{b2}\right]^{2}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+...
+ so you may as well get the expectation of the square and subtract.
+\end_layout
+
+\begin_layout Standard
+Dig that
+\begin_inset Formula 
+\begin{eqnarray*}
+\textrm{Var}\left(G\right) & = & E_{G^{2}}-E_{G}^{2}=y-x^{2}\\
+\nabla\textrm{Var}\left(G\right) & = & \left(-2x,1\right)\\
+\frac{\partial^{2}}{\partial\left(x,y\right)^{2}}\textrm{Var}\left(G\right) & = & \left[\begin{array}{cc}
+-2 & 0\\
+0 & 0
+\end{array}\right]
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Um also
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathbb{E}\left[\left(G+\epsilon\right)^{2}\right] & = & \mathbb{E}\left[G^{2}\right]+2\epsilon\mathbb{E}\left[G\right]+\epsilon^{2}\\
+\textrm{Var}\left(G\right) & = & \textrm{Var}\left(G+\epsilon\right)
 \end{eqnarray*}
 
 \end_inset

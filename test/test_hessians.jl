@@ -473,7 +473,7 @@ function test_add_log_term()
 end
 
 
-function test_e_g_functions()
+function test_combine_pixel_sources()
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 
   S = length(mp.active_sources)
@@ -515,7 +515,7 @@ function test_e_g_functions()
         mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
       end
       elbo_vars_fd = e_g_wrapper_fun(mp_fd, calculate_derivs=false)
-      test_squares ? elbo_vars_fd.E_G2.v : elbo_vars_fd.E_G.v
+      test_var ? elbo_vars_fd.var_G.v : elbo_vars_fd.E_G.v
     end
 
     x_mat = zeros(Float64, P, S);
@@ -1153,5 +1153,5 @@ test_bvn_derivatives()
 test_fs0m_derivatives()
 test_fs1m_derivatives()
 test_e_g_s_functions()
-test_e_g_functions()
+test_combine_pixel_sources()
 test_add_log_term()
