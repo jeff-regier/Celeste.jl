@@ -381,6 +381,7 @@ function accumulate_source_brightness!{NumType <: Number}(
       #   a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
       # E_G2.h[p0_bright, p0_bright] +=
       #   a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
+      # TODO: I think sub-indexing sb.E_l_a[b, i].h is allocating a lot of memory.
       BLAS.axpy!(a[i] * fsm[i].v,
                  sb.E_l_a[b, i].h[p0_bright, p0_bright],
                  E_G.h[p0_bright, p0_bright]);
@@ -389,10 +390,17 @@ function accumulate_source_brightness!{NumType <: Number}(
                  E_G2.h[p0_bright, p0_bright]);
 
       # The (shape, shape) block:
-      E_G.h[p0_shape, p0_shape] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
-      E_G2.h[p0_shape, p0_shape] +=
-        2 * a[i] * sb.E_ll_a[b, i].v *
-        (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
+      # BLAS for
+      # E_G.h[p0_shape, p0_shape] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
+      # E_G2.h[p0_shape, p0_shape] +=
+      #   2 * a[i] * sb.E_ll_a[b, i].v *
+      #   (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
+      BLAS.axpy!(a[i] * sb.E_l_a[b, i].v,
+                 fsm[i].h, E_G.h[p0_shape, p0_shape]);
+      BLAS.axpy!(2 * a[i] * sb.E_ll_a[b, i].v * fsm[i].v,
+                 fsm[i].h, E_G2.h[p0_shape, p0_shape]);
+      BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v,
+                fsm[i].d[:, 1], fsm[i].d[:, 1], E_G2.h[p0_shape, p0_shape]);
 
       # TODO: eliminate redundancy.
       # The (a, bright) blocks:

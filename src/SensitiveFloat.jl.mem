@@ -215,7 +215,9 @@
         - 
    220800   sf1.v = sf1.v + scale * sf2.v
   2723200   sf1.d = sf1.d + scale * sf2.d
-151100800   sf1.h = sf1.h + scale * sf2.h
+        -   # BLAS for
+        -   #sf1.h = sf1.h + scale * sf2.h
+        0   BLAS.axpy!(scale, sf2.h, sf1.h)
         - end
         - 
         - 

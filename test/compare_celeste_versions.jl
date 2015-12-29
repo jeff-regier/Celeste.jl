@@ -399,3 +399,15 @@ y = zeros(n, n);
 @test_approx_eq x y
 
 @time x = deepcopy(y);
+
+
+n = 1000;
+y = rand(2 * n, 2 * n);
+y_sub = y[1:n, 1:n];
+
+x = zeros(n, n);
+@time x[:, :] += 3.0 * y[1:n, 1:n];
+x = zeros(n, n);
+@time BLAS.axpy!(3.0, y[1:n, 1:n], x);
+x = zeros(n, n);
+@time BLAS.axpy!(3.0, y_sub, x);
