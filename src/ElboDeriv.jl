@@ -508,11 +508,15 @@ function add_elbo_log_term!{NumType <: Number}(
   # See notes for a derivation.  The log term is
   # log E[G] - Var(G) / (2 * E[G] ^2 )
 
+  E_G = elbo_vars.E_G
+  var_G = elbo_vars.var_G
+  elbo = elbo_vars.elbo
+
   # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
   log_term_value = log(E_G.v) - 0.5 * var_G.v  / (E_G.v ^ 2)
-  println("Log term value: ", log_term_value)
-  println("E_G.v ", E_G.v)
-  println("var_G.v ", var_G.v)
+  # println("Log term value: ", log_term_value)
+  # println("E_G.v ", E_G.v)
+  # println("var_G.v ", var_G.v)
 
   if elbo_vars.calculate_derivs
     log_term_grad = NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + var_G.v / (E_G.v ^ 3)]
@@ -526,6 +530,7 @@ function add_elbo_log_term!{NumType <: Number}(
       elbo_vars.var_G, elbo_vars.E_G, elbo_vars.elbo_log_term,
       log_term_value, log_term_grad, log_term_hess)
 
+    # Add to the elbo.
     add_value = elbo.v + x_nbm * (log(iota) + log_term_value)
     add_grad = NumType[1, x_nbm]
     add_hess = NumType[0 0; 0 0]
