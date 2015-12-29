@@ -479,12 +479,12 @@ function get_expected_pixel_brightness!{NumType <: Number}(
 
   clear!(elbo_vars.E_G)
   clear!(elbo_vars.var_G)
+  combine_pixel_sources!(elbo_vars, mp, tile, sbs);
+
   if include_epsilon
-    elbo_vars.E_G.v =
+    elbo_vars.E_G.v +=
       tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
   end
-
-  combine_pixel_sources!(elbo_vars, mp, tile, sbs);
 end
 
 
