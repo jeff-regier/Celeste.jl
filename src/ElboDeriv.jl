@@ -309,7 +309,8 @@ end
 
 
 @doc """
-Add the contributions of a source to E_G and E_G2, which are updated in place.
+Add the contributions of a single source to E_G_s and var_G_s, which are cleared
+and then updated in place.
 
 """ ->
 function accumulate_source_brightness!{NumType <: Number}(
@@ -443,10 +444,9 @@ end
 
 
 @doc """
-An a-weighted combination of bvn * brightness for a particular pixel across
-all sources.
+Adds up E_G and var_G across all sources.
 
-Updates E_G and E_G2 in place.
+Updates elbo_vars.E_G and elbo_vars.var_G in place.
 """ ->
 function combine_pixel_sources!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
@@ -454,9 +454,14 @@ function combine_pixel_sources!{NumType <: Number}(
     tile::ImageTile,
     sbs::Vector{SourceBrightness{NumType}})
 
+  clear!(elbo_vars.E_G)
+  clear!(elbo_vars.var_G)
+
   tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww];
   for s in tile_sources
     accumulate_source_brightness!(elbo_vars, mp, sbs, s, tile.b)
+    add_scaled_sfs!(elbo_vars.E_G, elbo_vars.E_G_s)
+    add_scaled_sfs!(elbo_vars.var_G, elbo_vars.var_G_s)
   end
 end
 

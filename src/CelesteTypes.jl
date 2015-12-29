@@ -392,8 +392,8 @@ abstract ParamSet
 #           (formerly kappa)
 
 # Parameters for location and galaxy shape.
-ue_params = ((:u, 2), (:e_dev, 1), (:e_axis, 1), (:e_angle, 1),
-        (:e_scale, 1))
+gal_shape_params = ((:e_axis, 1), (:e_angle, 1), (:e_scale, 1))
+ue_params = ((:u, 2), (:e_dev, 1), gal_shape_params...)
 
 # Parameters for the colors.
 rc_params1 = ((:r1, 1), (:r2, 1), (:c1, B - 1), (:c2, B - 1))
@@ -406,6 +406,7 @@ ak_free = ((:a, Ia - 1), (:k, (D - 1, Ia)))
 
 const param_specs = [
     (:StarPosParams, :star_ids, ((:u, 2),)),
+    (:GalaxyShapeParams, :gal_shape_ids, gal_shape_params),
     (:GalaxyPosParams, :gal_ids, ue_params),
     (:BrightnessParams, :bids, rc_params1),
     (:CanonicalParams, :ids, tuple(ue_params..., rc_params2..., ak_simplex...)),
@@ -551,6 +552,53 @@ function convert(::Type{ModelParams{DualNumbers.Dual{Float64}}},
     mp_dual.objids = mp.objids
     mp_dual
 end
+
+function convert(FDType::Type{ForwardDiff.GradientNumber},
+                 mp::ModelParams{Float64})
+    x = mp.vp[1]
+    P = length(x)
+    FDType = ForwardDiff.GradientNumber{length(mp.vp[1]), Float64}
+
+    fd_x = [ ForwardDiff.GradientNumber(x[i], zeros(Float64, P)...) for i=1:P ]
+    convert(FDType, x[1])
+
+    vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
+    mp_fd = ModelParams(vp_fd, mp.pp)
+end
+
+function convert(FDType::Type{ForwardDiff.HessianNumber},
+                 mp::ModelParams{Float64})
+    x = mp.vp[1]
+    P = length(x)
+    FDType = ForwardDiff.HessianNumber{length(mp.vp[1]), Float64}
+
+    fd_x = [ ForwardDiff.HessianNumber(x[i], zeros(Float64, P)...) for i=1:P ]
+    convert(FDType, x[1])
+
+    vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
+    mp_fd = ModelParams(vp_fd, mp.pp)
+end
+
+
+# TODO: test this, and maybe write it as a convert()?
+function forward_diff_model_params{T <: Number}(
+    FDType::Type{T},
+    base_mp::ModelParams{Float64})
+  S = length(base_mp.vp)
+  P = length(base_mp.vp[1])
+  mp_fd = ModelParams{FDType}([ zeros(FDType, P) for s=1:S ], base_mp.pp);
+  # Set the values (but not gradient numbers) for parameters other
+  # than the galaxy parameters.
+  for s=1:base_mp.S, i=1:length(ids)
+    mp_fd.vp[s][i] = base_mp.vp[s][i]
+  end
+  mp_fd.patches = base_mp.patches;
+  mp_fd.tile_sources = base_mp.tile_sources;
+  mp_fd.active_sources = base_mp.active_sources;
+  mp_fd.objids = base_mp.objids;
+  mp_fd
+end
+
 
 @doc """
 Display model parameters with the variable names.

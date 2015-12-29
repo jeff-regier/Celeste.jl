@@ -14,80 +14,6 @@ import Synthetic
 
 println("Running hessian tests.")
 
-#function test_e_g_functions()
-  blob, mp, bodies, tiled_blob = gen_two_body_dataset();
-
-  S = length(mp.active_sources)
-  P = length(CanonicalParams)
-  h = 10
-  w = 10
-  s = 1
-
-  test_var = false
-  b = 1
-
-  #for test_var = [false, true], b=1:5
-    test_var_string = test_var ? "E_G" : "var_G"
-    println("Testing $(test_var_string), band $b")
-
-    tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
-    function e_g_wrapper_fun{NumType <: Number}(
-        mp::ModelParams{NumType}; calculate_derivs=true)
-
-      star_mcs, gal_mcs =
-        ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
-      sbs = ElboDeriv.SourceBrightness{NumType}[
-        ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
-        for s in 1:mp.S];
-
-      elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
-      elbo_vars_loc.calculate_derivs = calculate_derivs;
-      ElboDeriv.populate_fsm_vecs!(
-        elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
-      ElboDeriv.accumulate_source_brightness!(elbo_vars_loc, mp, sbs, s, b);
-      deepcopy(elbo_vars_loc)
-    end
-
-    function wrapper_fun{NumType <: Number}(x::Vector{NumType})
-      @assert length(x) == S * P
-      x_mat = reshape(x, (P, S))
-      if NumType != Float64
-        mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-      else
-        mp_fd = deepcopy(mp)
-      end
-      for sa_ind in 1:length(mp_fd.active_sources)
-        mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
-      end
-      elbo_vars_fd = e_g_wrapper_fun(mp_fd, calculate_derivs=false)
-      test_var ? elbo_vars_fd.var_G_s.v : elbo_vars_fd.E_G_s.v
-    end
-
-    x_mat = zeros(Float64, P, S);
-    for sa_ind in 1:S
-      x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
-    end
-    x = x_mat[:];
-
-    elbo_vars = e_g_wrapper_fun(mp);
-    sf = test_var ? deepcopy(elbo_vars.var_G_s) : deepcopy(elbo_vars.E_G_s);
-
-    v = wrapper_fun(x)
-    @test_approx_eq v sf.v
-
-    ad_grad = ForwardDiff.gradient(wrapper_fun, x);
-    @test_approx_eq ad_grad sf.d
-
-    ad_hess = ForwardDiff.hessian(wrapper_fun, x);
-    if test_var
-      @test_approx_eq ad_hess elbo_vars.var_G_s.h
-    else
-      @test_approx_eq ad_hess elbo_vars.E_G_s.h
-    end
-#  end
-#end
-
-
 
 
 
@@ -556,8 +482,8 @@ function test_e_g_functions()
   w = 10
 
   for test_var = [false, true], b=1:5
-    test_var_string = test_squares ? "E_G" : "var_G"
-    println("Testing $(test_squares_string), band $b")
+    test_var_string = test_var ? "E_G" : "var_G"
+    println("Testing $(test_var_string), band $b")
 
     tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
     function e_g_wrapper_fun{NumType <: Number}(
@@ -573,9 +499,6 @@ function test_e_g_functions()
       elbo_vars_loc.calculate_derivs = calculate_derivs;
       ElboDeriv.populate_fsm_vecs!(
         elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
-      E_G = elbo_vars_loc.E_G_s;
-      var_G = elbo_vars_loc.var_G_s;
-
       ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
       deepcopy(elbo_vars_loc)
     end
@@ -602,7 +525,7 @@ function test_e_g_functions()
     x = x_mat[:];
 
     elbo_vars = e_g_wrapper_fun(mp);
-    sf = test_squares ? deepcopy(elbo_vars.E_G2) : deepcopy(elbo_vars.E_G);
+    sf = test_var ? deepcopy(elbo_vars.var_G) : deepcopy(elbo_vars.E_G);
 
     v = wrapper_fun(x)
     @test_approx_eq v sf.v
@@ -611,14 +534,78 @@ function test_e_g_functions()
     @test_approx_eq ad_grad sf.d
 
     ad_hess = ForwardDiff.hessian(wrapper_fun, x);
-    if test_squares
-      @test_approx_eq ad_hess elbo_vars.E_G2.h
-    else
-      @test_approx_eq ad_hess elbo_vars.E_G.h
-    end
+    @test_approx_eq ad_hess sf.h
+
   end
 end
 
+
+function test_e_g_s_functions()
+  blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+
+  S = length(mp.active_sources)
+  P = length(CanonicalParams)
+  h = 10
+  w = 10
+  s = 1
+
+  test_var = false
+  b = 1
+
+  for test_var = [false, true], b=1:5
+    test_var_string = test_var ? "E_G" : "var_G"
+    println("Testing $(test_var_string), band $b")
+
+    tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
+    function e_g_wrapper_fun{NumType <: Number}(
+        mp::ModelParams{NumType}; calculate_derivs=true)
+
+      star_mcs, gal_mcs =
+        ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
+      sbs = ElboDeriv.SourceBrightness{NumType}[
+        ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
+        for s in 1:mp.S];
+
+      elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
+      elbo_vars_loc.calculate_derivs = calculate_derivs;
+      ElboDeriv.populate_fsm_vecs!(
+        elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
+      ElboDeriv.accumulate_source_brightness!(elbo_vars_loc, mp, sbs, s, b);
+      deepcopy(elbo_vars_loc)
+    end
+
+    function wrapper_fun{NumType <: Number}(x::Vector{NumType})
+      @assert length(x) == P
+      if NumType != Float64
+        mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
+      else
+        mp_fd = deepcopy(mp)
+      end
+      mp_fd.vp[s] = x
+      elbo_vars_fd = e_g_wrapper_fun(mp_fd, calculate_derivs=false)
+      test_var ? elbo_vars_fd.var_G_s.v : elbo_vars_fd.E_G_s.v
+    end
+
+    x = mp.vp[s];
+
+    elbo_vars = e_g_wrapper_fun(mp);
+
+    # Sanity check
+    @test_approx_eq(elbo_vars.var_G_s.v,
+                    elbo_vars.E_G2_s.v - (elbo_vars.E_G_s.v ^ 2))
+
+    sf = test_var ? deepcopy(elbo_vars.var_G_s) : deepcopy(elbo_vars.E_G_s);
+
+    v = wrapper_fun(x)
+    @test_approx_eq v sf.v
+
+    ad_grad = ForwardDiff.gradient(wrapper_fun, x);
+    @test_approx_eq ad_grad sf.d
+
+    ad_hess = ForwardDiff.hessian(wrapper_fun, x);
+    @test_approx_eq ad_hess sf.h
+  end
+end
 
 
 function test_fs1m_derivatives()
@@ -1036,118 +1023,6 @@ function test_galaxy_cache_component()
 end
 
 
-
-
-
-function test_combine_sfs()
-  # TODO: this test was designed for multiply_sf.  Make it more general.
-
-  # Two sets of ids with some overlap and some disjointness.
-  p = length(ids)
-  S = 2
-
-  ids1 = find((1:p) .% 2 .== 0)
-  ids2 = setdiff(1:p, ids1)
-  ids1 = union(ids1, 1:5)
-  ids2 = union(ids2, 1:5)
-
-  l1 = zeros(Float64, S * p);
-  l2 = zeros(Float64, S * p);
-  l1[ids1] = rand(length(ids1))
-  l2[ids2] = rand(length(ids2))
-  l1[ids1 + p] = rand(length(ids1))
-  l2[ids2 + p] = rand(length(ids2))
-
-  sigma1 = zeros(Float64, S * p, S * p);
-  sigma2 = zeros(Float64, S * p, S * p);
-  sigma1[ids1, ids1] = rand(length(ids1), length(ids1));
-  sigma2[ids2, ids2] = rand(length(ids2), length(ids2));
-  sigma1[ids1 + p, ids1 + p] = rand(length(ids1), length(ids1));
-  sigma2[ids2 + p, ids2 + p] = rand(length(ids2), length(ids2));
-  sigma1 = 0.5 * (sigma1 + sigma1');
-  sigma2 = 0.5 * (sigma2 + sigma2');
-
-  x = 0.1 * rand(S * p);
-
-  function base_fun1{T <: Number}(x::Vector{T})
-    (l1' * x + 0.5 * x' * sigma1 * x)[1,1]
-  end
-
-  function base_fun2{T <: Number}(x::Vector{T})
-    (l2' * x + 0.5 * x' * sigma2 * x)[1,1]
-  end
-
-  function multiply_fun{T <: Number}(x::Vector{T})
-    base_fun1(x) * base_fun1(x)
-  end
-
-  function combine_fun{T <: Number}(x::Vector{T})
-    (base_fun1(x) ^ 2) * sqrt(base_fun2(x))
-  end
-
-  function combine_fun_derivatives{T <: Number}(x::Vector{T})
-    g_d = T[2 * base_fun1(x) * sqrt(base_fun2(x)),
-            0.5 * (base_fun1(x) ^ 2) / sqrt(base_fun2(x)) ]
-    g_h = zeros(T, 2, 2)
-    g_h[1, 1] = 2 * sqrt(base_fun2(x))
-    g_h[2, 2] = -0.25 * (base_fun1(x) ^ 2) * (base_fun2(x) ^(-3/2))
-    g_h[1, 2] = g_h[2, 1] = base_fun1(x) / sqrt(base_fun2(x))
-    g_d, g_h
-  end
-
-  s_ind = Array(UnitRange{Int64}, 2);
-  s_ind[1] = 1:p
-  s_ind[2] = (1:p) + p
-
-  ret1 = zero_sensitive_float(CanonicalParams, Float64, S);
-  ret1.v = base_fun1(x)
-  fill!(ret1.d, 0.0);
-  fill!(ret1.h, 0.0);
-  for s=1:S
-    ret1.d[:, s] = l1[s_ind[s]] + sigma1[s_ind[s], s_ind[s]] * x[s_ind[s]];
-    ret1.h[s_ind[s], s_ind[s]] = sigma1[s_ind[s], s_ind[s]];
-  end
-
-  ret2 = zero_sensitive_float(CanonicalParams, Float64, S);
-  ret2.v = base_fun2(x)
-  fill!(ret2.d, 0.0);
-  fill!(ret2.h, 0.0);
-  for s=1:S
-    ret2.d[:, s] = l2[s_ind[s]] + sigma2[s_ind[s], s_ind[s]] * x[s_ind[s]];
-    ret2.h[s_ind[s], s_ind[s]] = sigma2[s_ind[s], s_ind[s]];
-  end
-
-  grad = ForwardDiff.gradient(base_fun1, x);
-  hess = ForwardDiff.hessian(base_fun1, x);
-  for s=1:S
-    @test_approx_eq(ret1.d[:, s], grad[s_ind[s]])
-  end
-  @test_approx_eq(ret1.h, hess)
-
-  grad = ForwardDiff.gradient(base_fun2, x);
-  hess = ForwardDiff.hessian(base_fun2, x);
-  for s=1:S
-    @test_approx_eq(ret2.d[:, s], grad[s_ind[s]])
-  end
-  @test_approx_eq(ret2.h, hess)
-
-  # Test the combinations.
-  v = combine_fun(x);
-  grad = ForwardDiff.gradient(combine_fun, x);
-  hess = ForwardDiff.hessian(combine_fun, x);
-
-  sf1 = deepcopy(ret1);
-  sf2 = deepcopy(ret2);
-  g_d, g_h = combine_fun_derivatives(x)
-  CelesteTypes.combine_sfs!(sf1, sf2, sf1.v ^ 2 * sqrt(sf2.v), g_d, g_h);
-
-  @test_approx_eq sf1.v v
-  @test_approx_eq sf1.d[:] grad
-  @test_approx_eq sf1.h hess
-end
-
-
-
 function test_galaxy_sigma_derivs()
   # Test d sigma / d shape
 
@@ -1268,7 +1143,6 @@ end
 
 
 test_dsiginv_dsig()
-test_combine_sfs()
 test_set_hess()
 test_brightness_hessian()
 test_bvn_derivatives()
@@ -1278,5 +1152,6 @@ test_galaxy_cache_component()
 test_bvn_derivatives()
 test_fs0m_derivatives()
 test_fs1m_derivatives()
+test_e_g_s_functions()
 test_e_g_functions()
 test_add_log_term()
