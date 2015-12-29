@@ -375,16 +375,31 @@
         -       # The (a, a) block of the hessian is zero.
         - 
         -       # The (bright, bright) block:
- 34003200       E_G.h[p0_bright, p0_bright] +=
-        -         a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
- 34003200       E_G2.h[p0_bright, p0_bright] +=
-        -         a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
+        - 
+        -       # BLAS for
+        -       # E_G.h[p0_bright, p0_bright] +=
+        -       #   a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
+        -       # E_G2.h[p0_bright, p0_bright] +=
+        -       #   a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
+ 17222400       BLAS.axpy!(a[i] * fsm[i].v,
+        -                  sb.E_l_a[b, i].h[p0_bright, p0_bright],
+        -                  E_G.h[p0_bright, p0_bright]);
+ 17222400       BLAS.axpy!(a[i] * (fsm[i].v^2),
+        -                  sb.E_ll_a[b, i].h[p0_bright, p0_bright],
+        -                  E_G2.h[p0_bright, p0_bright]);
         - 
         -       # The (shape, shape) block:
-  7433600       E_G.h[p0_shape, p0_shape] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
- 18841600       E_G2.h[p0_shape, p0_shape] +=
-        -         2 * a[i] * sb.E_ll_a[b, i].v *
-        -         (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
+        -       # BLAS for
+        -       # E_G.h[p0_shape, p0_shape] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
+        -       # E_G2.h[p0_shape, p0_shape] +=
+        -       #   2 * a[i] * sb.E_ll_a[b, i].v *
+        -       #   (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
+  2576000       BLAS.axpy!(a[i] * sb.E_l_a[b, i].v,
+        -                  fsm[i].h, E_G.h[p0_shape, p0_shape]);
+  2723200       BLAS.axpy!(2 * a[i] * sb.E_ll_a[b, i].v * fsm[i].v,
+        -                  fsm[i].h, E_G2.h[p0_shape, p0_shape]);
+  4636800       BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v,
+        -                 fsm[i].d[:, 1], fsm[i].d[:, 1], E_G2.h[p0_shape, p0_shape]);
         - 
         -       # TODO: eliminate redundancy.
         -       # The (a, bright) blocks:
