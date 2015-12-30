@@ -37,11 +37,11 @@ SourceBrightness{NumType <: Number}(
   E_ll_a = Array(SensitiveFloat{BrightnessParams, NumType}, B, Ia)
 
   for i = 1:Ia
-      ids_band_3 = Int64[bids.r1[i], bids.r2[i]]
-      ids_color_1 = Int64[bids.c1[1, i], bids.c2[1, i]]
-      ids_color_2 = Int64[bids.c1[2, i], bids.c2[2, i]]
-      ids_color_3 = Int64[bids.c1[3, i], bids.c2[3, i]]
-      ids_color_4 = Int64[bids.c1[4, i], bids.c2[4, i]]
+      ids_band_3 = Int64[bids.r1, bids.r2]
+      ids_color_1 = Int64[bids.c1[1], bids.c2[1]]
+      ids_color_2 = Int64[bids.c1[2], bids.c2[2]]
+      ids_color_3 = Int64[bids.c1[3], bids.c2[3]]
+      ids_color_4 = Int64[bids.c1[4], bids.c2[4]]
 
       for b = 1:B
           E_l_a[b, i] = zero_sensitive_float(BrightnessParams, NumType)
@@ -57,46 +57,46 @@ SourceBrightness{NumType <: Number}(
         # band 3 is the reference band, relative to which the colors are
         # specified.
         # It is denoted r_s and has a lognormal expectation.
-        E_l_a[3, i].d[bids.r1[i]] = E_l_a[3, i].v
-        E_l_a[3, i].d[bids.r2[i]] = E_l_a[3, i].v * .5
-        set_hess!(E_l_a[3, i], bids.r1[i], bids.r1[i], E_l_a[3, i].v)
-        set_hess!(E_l_a[3, i], bids.r1[i], bids.r2[i], E_l_a[3, i].v * 0.5)
-        set_hess!(E_l_a[3, i], bids.r2[i], bids.r2[i], E_l_a[3, i].v * 0.25)
+        E_l_a[3, i].d[bids.r1] = E_l_a[3, i].v
+        E_l_a[3, i].d[bids.r2] = E_l_a[3, i].v * .5
+        set_hess!(E_l_a[3, i], bids.r1, bids.r1, E_l_a[3, i].v)
+        set_hess!(E_l_a[3, i], bids.r1, bids.r2, E_l_a[3, i].v * 0.5)
+        set_hess!(E_l_a[3, i], bids.r2, bids.r2, E_l_a[3, i].v * 0.25)
 
         # The remaining indices involve c_s and have lognormal
         # expectations times E_c_3.
 
         # band 4 = band 3 * color 3.
-        E_l_a[4, i].d[bids.c1[3, i]] = E_l_a[4, i].v
-        E_l_a[4, i].d[bids.c2[3, i]] = E_l_a[4, i].v * .5
-        set_hess!(E_l_a[4, i], bids.c1[3, i], bids.c1[3, i], E_l_a[4, i].v)
-        set_hess!(E_l_a[4, i], bids.c1[3, i], bids.c2[3, i], E_l_a[4, i].v * 0.5)
-        set_hess!(E_l_a[4, i], bids.c2[3, i], bids.c2[3, i], E_l_a[4, i].v * 0.25)
+        E_l_a[4, i].d[bids.c1[3]] = E_l_a[4, i].v
+        E_l_a[4, i].d[bids.c2[3]] = E_l_a[4, i].v * .5
+        set_hess!(E_l_a[4, i], bids.c1[3], bids.c1[3], E_l_a[4, i].v)
+        set_hess!(E_l_a[4, i], bids.c1[3], bids.c2[3], E_l_a[4, i].v * 0.5)
+        set_hess!(E_l_a[4, i], bids.c2[3], bids.c2[3], E_l_a[4, i].v * 0.25)
         multiply_sfs!(E_l_a[4, i], E_l_a[3, i], ids1=ids_color_3, ids2=ids_band_3)
 
         # Band 5 = band 4 * color 4.
-        E_l_a[5, i].d[bids.c1[4, i]] = E_l_a[5, i].v
-        E_l_a[5, i].d[bids.c2[4, i]] = E_l_a[5, i].v * .5
-        set_hess!(E_l_a[5, i], bids.c1[4, i], bids.c1[4, i], E_l_a[5, i].v)
-        set_hess!(E_l_a[5, i], bids.c1[4, i], bids.c2[4, i], E_l_a[5, i].v * 0.5)
-        set_hess!(E_l_a[5, i], bids.c2[4, i], bids.c2[4, i], E_l_a[5, i].v * 0.25)
+        E_l_a[5, i].d[bids.c1[4]] = E_l_a[5, i].v
+        E_l_a[5, i].d[bids.c2[4]] = E_l_a[5, i].v * .5
+        set_hess!(E_l_a[5, i], bids.c1[4], bids.c1[4], E_l_a[5, i].v)
+        set_hess!(E_l_a[5, i], bids.c1[4], bids.c2[4], E_l_a[5, i].v * 0.5)
+        set_hess!(E_l_a[5, i], bids.c2[4], bids.c2[4], E_l_a[5, i].v * 0.25)
         multiply_sfs!(E_l_a[5, i], E_l_a[4, i],
                       ids1=ids_color_4, ids2=union(ids_band_3, ids_color_3))
 
         # Band 2 = band 3 * color 2.
-        E_l_a[2, i].d[bids.c1[2, i]] = E_l_a[2, i].v * -1.
-        E_l_a[2, i].d[bids.c2[2, i]] = E_l_a[2, i].v * .5
-        set_hess!(E_l_a[2, i], bids.c1[2, i], bids.c1[2, i], E_l_a[2, i].v)
-        set_hess!(E_l_a[2, i], bids.c1[2, i], bids.c2[2, i], E_l_a[2, i].v * -0.5)
-        set_hess!(E_l_a[2, i], bids.c2[2, i], bids.c2[2, i], E_l_a[2, i].v * 0.25)
+        E_l_a[2, i].d[bids.c1[2]] = E_l_a[2, i].v * -1.
+        E_l_a[2, i].d[bids.c2[2]] = E_l_a[2, i].v * .5
+        set_hess!(E_l_a[2, i], bids.c1[2], bids.c1[2], E_l_a[2, i].v)
+        set_hess!(E_l_a[2, i], bids.c1[2], bids.c2[2], E_l_a[2, i].v * -0.5)
+        set_hess!(E_l_a[2, i], bids.c2[2], bids.c2[2], E_l_a[2, i].v * 0.25)
         multiply_sfs!(E_l_a[2, i], E_l_a[3, i], ids1=ids_color_2, ids2=ids_band_3)
 
         # Band 1 = band 2 * color 1.
-        E_l_a[1, i].d[bids.c1[1, i]] = E_l_a[1, i].v * -1.
-        E_l_a[1, i].d[bids.c2[1, i]] = E_l_a[1, i].v * .5
-        set_hess!(E_l_a[1, i], bids.c1[1, i], bids.c1[1, i], E_l_a[1, i].v)
-        set_hess!(E_l_a[1, i], bids.c1[1, i], bids.c2[1, i], E_l_a[1, i].v * -0.5)
-        set_hess!(E_l_a[1, i], bids.c2[1, i], bids.c2[1, i], E_l_a[1, i].v * 0.25)
+        E_l_a[1, i].d[bids.c1[1]] = E_l_a[1, i].v * -1.
+        E_l_a[1, i].d[bids.c2[1]] = E_l_a[1, i].v * .5
+        set_hess!(E_l_a[1, i], bids.c1[1], bids.c1[1], E_l_a[1, i].v)
+        set_hess!(E_l_a[1, i], bids.c1[1], bids.c2[1], E_l_a[1, i].v * -0.5)
+        set_hess!(E_l_a[1, i], bids.c2[1], bids.c2[1], E_l_a[1, i].v * 0.25)
         multiply_sfs!(E_l_a[1, i], E_l_a[2, i],
                       ids1=ids_color_1, ids2=union(ids_band_3, ids_color_2))
       else
@@ -122,20 +122,20 @@ SourceBrightness{NumType <: Number}(
 
       if calculate_derivs
         # Band 3, the reference band.
-        E_ll_a[3, i].d[bids.r1[i]] = 2 * E_ll_a[3, i].v
-        E_ll_a[3, i].d[bids.r2[i]] = 2 * E_ll_a[3, i].v
-        for hess_ids in [(bids.r1[i], bids.r1[i]),
-                         (bids.r1[i], bids.r2[i]),
-                         (bids.r2[i], bids.r2[i])]
+        E_ll_a[3, i].d[bids.r1] = 2 * E_ll_a[3, i].v
+        E_ll_a[3, i].d[bids.r2] = 2 * E_ll_a[3, i].v
+        for hess_ids in [(bids.r1, bids.r1),
+                         (bids.r1, bids.r2),
+                         (bids.r2, bids.r2)]
           set_hess!(E_ll_a[3, i], hess_ids..., 4.0 * E_ll_a[3, i].v)
         end
 
         # Band 4 = band 3 * color 3.
-        E_ll_a[4, i].d[bids.c1[3, i]] = E_ll_a[4, i].v * 2.
-        E_ll_a[4, i].d[bids.c2[3, i]] = E_ll_a[4, i].v * 2.
-        for hess_ids in [(bids.c1[3, i], bids.c1[3, i]),
-                         (bids.c1[3, i], bids.c2[3, i]),
-                         (bids.c2[3, i], bids.c2[3, i])]
+        E_ll_a[4, i].d[bids.c1[3]] = E_ll_a[4, i].v * 2.
+        E_ll_a[4, i].d[bids.c2[3]] = E_ll_a[4, i].v * 2.
+        for hess_ids in [(bids.c1[3], bids.c1[3]),
+                         (bids.c1[3], bids.c2[3]),
+                         (bids.c2[3], bids.c2[3])]
           set_hess!(E_ll_a[4, i], hess_ids..., E_ll_a[4, i].v * 4.0)
         end
         multiply_sfs!(E_ll_a[4, i], E_ll_a[3, i],
@@ -143,11 +143,11 @@ SourceBrightness{NumType <: Number}(
 
         # Band 5 = band 4 * color 4.
         tmp4 = exp(2 * c1[4, i] + 2 * c2[4, i])
-        E_ll_a[5, i].d[bids.c1[4, i]] = E_ll_a[5, i].v * 2.
-        E_ll_a[5, i].d[bids.c2[4, i]] = E_ll_a[5, i].v * 2.
-        for hess_ids in [(bids.c1[4, i], bids.c1[4, i]),
-                         (bids.c1[4, i], bids.c2[4, i]),
-                         (bids.c2[4, i], bids.c2[4, i])]
+        E_ll_a[5, i].d[bids.c1[4]] = E_ll_a[5, i].v * 2.
+        E_ll_a[5, i].d[bids.c2[4]] = E_ll_a[5, i].v * 2.
+        for hess_ids in [(bids.c1[4], bids.c1[4]),
+                         (bids.c1[4], bids.c2[4]),
+                         (bids.c2[4], bids.c2[4])]
           set_hess!(E_ll_a[5, i], hess_ids..., E_ll_a[5, i].v * 4.0)
         end
         multiply_sfs!(E_ll_a[5, i], E_ll_a[4, i],
@@ -155,25 +155,25 @@ SourceBrightness{NumType <: Number}(
 
         # Band 2 = band 3 * color 2
         tmp2 = exp(-2 * c1[2, i] + 2 * c2[2, i])
-        E_ll_a[2, i].d[bids.c1[2, i]] = E_ll_a[2, i].v * -2.
-        E_ll_a[2, i].d[bids.c2[2, i]] = E_ll_a[2, i].v * 2.
-        for hess_ids in [(bids.c1[2, i], bids.c1[2, i]),
-                         (bids.c2[2, i], bids.c2[2, i])]
+        E_ll_a[2, i].d[bids.c1[2]] = E_ll_a[2, i].v * -2.
+        E_ll_a[2, i].d[bids.c2[2]] = E_ll_a[2, i].v * 2.
+        for hess_ids in [(bids.c1[2], bids.c1[2]),
+                         (bids.c2[2], bids.c2[2])]
           set_hess!(E_ll_a[2, i], hess_ids..., E_ll_a[2, i].v * 4.0)
         end
-        set_hess!(E_ll_a[2, i], bids.c1[2, i], bids.c2[2, i],
+        set_hess!(E_ll_a[2, i], bids.c1[2], bids.c2[2],
                   E_ll_a[2, i].v * -4.0)
         multiply_sfs!(E_ll_a[2, i], E_ll_a[3, i],
                       ids1=ids_color_2, ids2=ids_band_3)
 
         # Band 1 = band 2 * color 1
-        E_ll_a[1, i].d[bids.c1[1, i]] = E_ll_a[1, i].v * -2.
-        E_ll_a[1, i].d[bids.c2[1, i]] = E_ll_a[1, i].v * 2.
-        for hess_ids in [(bids.c1[1, i], bids.c1[1, i]),
-                         (bids.c2[1, i], bids.c2[1, i])]
+        E_ll_a[1, i].d[bids.c1[1]] = E_ll_a[1, i].v * -2.
+        E_ll_a[1, i].d[bids.c2[1]] = E_ll_a[1, i].v * 2.
+        for hess_ids in [(bids.c1[1], bids.c1[1]),
+                         (bids.c2[1], bids.c2[1])]
           set_hess!(E_ll_a[1, i], hess_ids..., E_ll_a[1, i].v * 4.0)
         end
-        set_hess!(E_ll_a[1, i], bids.c1[1, i], bids.c2[1, i],
+        set_hess!(E_ll_a[1, i], bids.c1[1], bids.c2[1],
                   E_ll_a[1, i].v * -4.0)
         multiply_sfs!(E_ll_a[1, i], E_ll_a[2, i],
                       ids1=ids_color_1, ids2=union(ids_band_3, ids_color_2))

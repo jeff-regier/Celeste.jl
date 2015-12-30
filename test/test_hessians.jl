@@ -732,36 +732,32 @@ function test_brightness_hessian()
     println("Testing brightness $(squares_string) for band $b, type $i")
     function wrap_source_brightness{NumType <: Number}(
         vp::Vector{NumType}, calculate_derivs::Bool)
-      ret = zero_sensitive_float(BrightnessParams, NumType);
       sb = ElboDeriv.SourceBrightness(vp, calculate_derivs=calculate_derivs);
       if squares
-        ret.v = sb.E_ll_a[b, i].v;
-        ret.d[:, 1] = sb.E_ll_a[b, i].d;
-        ret.h[:, :] = sb.E_ll_a[b, i].h[:, :];
+        return deepcopy(sb.E_ll_a[b, i])
       else
-        ret.v = sb.E_l_a[b, i].v;
-        ret.d[:, 1] = sb.E_l_a[b, i].d;
-        ret.h[:, :] = sb.E_l_a[b, i].h[:, :];
+        return deepcopy(sb.E_l_a[b, i])
       end
-      ret
     end
 
     function wrap_source_brightness_value{NumType <: Number}(
         bright_vp::Vector{NumType})
       vp = zeros(NumType, length(CanonicalParams))
-      for
+      for b_i in 1:length(brightness_standard_alignment[i])
+        vp[brightness_standard_alignment[i][b_i]] = bright_vp[b_i]
+      end
       wrap_source_brightness(vp, false).v
     end
 
+    bright_vp = mp.vp[1][brightness_standard_alignment[i]];
     bright = wrap_source_brightness(mp.vp[1], true);
 
-    @test_approx_eq bright.v wrap_source_brightness_value(mp.vp[1]);
+    @test_approx_eq bright.v wrap_source_brightness_value(bright_vp);
 
-    ad_grad = ForwardDiff.gradient(wrap_source_brightness_value, mp.vp[1]);
+    ad_grad = ForwardDiff.gradient(wrap_source_brightness_value, bright_vp);
     @test_approx_eq ad_grad bright.d[:, 1]
 
-    ad_hess_fun = ForwardDiff.hessian(wrap_source_brightness_value);
-    ad_hess = ad_hess_fun(mp.vp[1]);
+    ad_hess = ForwardDiff.hessian(wrap_source_brightness_value, bright_vp);
     @test_approx_eq ad_hess bright.h
   end
 end
