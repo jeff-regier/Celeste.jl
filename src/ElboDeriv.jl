@@ -33,7 +33,7 @@ i: The type of celestial source, from 1:Ia
 """ ->
 HessianSubmatrices(NumType::DataType, i::Int64) = begin
   @assert 1 <= i <= Ia
-  shape_p = shape_standard_alignment[i]
+  shape_p = length(shape_standard_alignment[i])
   bright_p = length(brightness_standard_alignment[i])
 
   bright_bright = zeros(NumType, bright_p, bright_p);
@@ -41,7 +41,7 @@ HessianSubmatrices(NumType::DataType, i::Int64) = begin
   shape_bright = zeros(NumType, shape_p, bright_p);
   a_bright = zeros(NumType, bright_p);
   a_shape = zeros(NumType, shape_p);
-  HessianSubmatricesI{NumType}(
+  HessianSubmatrices{NumType}(
     bright_bright, shape_shape, shape_bright, a_bright, a_shape)
 end
 
@@ -411,59 +411,67 @@ function accumulate_source_brightness!{NumType <: Number}(
       ######################
       # Hessians.
 
+      # Data structures to accumulate submatrices of the Hessian.
+      E_G_s_hsub = elbo_vars.E_G_s_hsub_vec[i];
+      E_G2_s_hsub = elbo_vars.E_G2_s_hsub_vec[i];
+
       # The (a, a) block of the hessian is zero.
 
       # The (bright, bright) block:
-      # BLAS for
-      # E_G_s.h[p0_bright, p0_bright] += a[i] * fsm[i].v * sb.E_l_a[b, i].h
-      # E_G2_s.h[p0_bright, p0_bright] += a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h
+      E_G_s.h[p0_bright, p0_bright] = a[i] * fsm[i].v * sb.E_l_a[b, i].h
+      E_G2_s.h[p0_bright, p0_bright] = a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h
+      # BLAS version:
       # TODO: broken!  You can't assign a subset with BLAS.axpy!.
-      BLAS.axpy!(a[i] * fsm[i].v, sb.E_l_a[b, i].h,
-                 E_G_s.h[p0_bright, p0_bright]);
-      BLAS.axpy!(a[i] * (fsm[i].v^2), sb.E_ll_a[b, i].h,
-                 E_G2_s.h[p0_bright, p0_bright]);
+      # BLAS.axpy!(a[i] * fsm[i].v, sb.E_l_a[b, i].h,
+      #            E_G_s.h[p0_bright, p0_bright]);
+      # BLAS.axpy!(a[i] * (fsm[i].v^2), sb.E_ll_a[b, i].h,
+      #            E_G2_s.h[p0_bright, p0_bright]);
 
       # The (shape, shape) block:
-      # BLAS for
-      # E_G_s.h[p0_shape, p0_shape] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
+      E_G_s.h[p0_shape, p0_shape] = a[i] * sb.E_l_a[b, i].v * fsm[i].h
       # E_G2_s.h[p0_shape, p0_shape] +=
       #   2 * a[i] * sb.E_ll_a[b, i].v *
       #   (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
-      BLAS.axpy!(a[i] * sb.E_l_a[b, i].v, fsm[i].h,
-                 E_G_s.h[p0_shape, p0_shape]);
 
-      BLAS.axpy!(2 * a[i] * sb.E_ll_a[b, i].v * fsm[i].v, fsm[i].h,
-                 E_G2_s.h[p0_shape, p0_shape]);
+      # BLAS verison:
+      # BLAS.axpy!(a[i] * sb.E_l_a[b, i].v, fsm[i].h,
+      #            E_G_s.h[p0_shape, p0_shape]);
+
+      E_G2_s_hsub.shape_shape =
+        2 * a[i] * sb.E_ll_a[b, i].v * fsm[i].v * fsm[i].h
+      # BLAS.axpy!(2 * a[i] * sb.E_ll_a[b, i].v * fsm[i].v, fsm[i].h,
+      #            E_G2_s.h[p0_shape, p0_shape]);
       BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v, fsm[i].d[:, 1], fsm[i].d[:, 1],
-                E_G2_s.h[p0_shape, p0_shape]);
+                E_G2_s_hsub.shape_shape);
+      E_G2_s.h[p0_shape, p0_shape] = E_G2_s_hsub.shape_shape;
 
       # TODO: eliminate redundancy.
       # The (a, bright) blocks:
       h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[:, 1]
-      E_G_s.h[p0_bright, ids.a[i]] += h_a_bright
+      E_G_s.h[p0_bright, ids.a[i]] = h_a_bright
       E_G_s.h[ids.a[i], p0_bright] =  E_G_s.h[p0_bright, ids.a[i]]'
 
       h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[:, 1]
-      E_G2_s.h[p0_bright, ids.a[i]] += h2_a_bright
+      E_G2_s.h[p0_bright, ids.a[i]] = h2_a_bright
       E_G2_s.h[ids.a[i], p0_bright] = E_G2_s.h[p0_bright, ids.a[i]]'
 
       # The (a, shape) blocks.
       h_a_shape = sb.E_l_a[b, i].v * fsm[i].d
-      E_G_s.h[p0_shape, ids.a[i]] += h_a_shape
+      E_G_s.h[p0_shape, ids.a[i]] = h_a_shape
       E_G_s.h[ids.a[i], p0_shape] = E_G_s.h[p0_shape, ids.a[i]]'
 
       h2_a_shape = sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[:, 1]
-      E_G2_s.h[p0_shape, ids.a[i]] += h2_a_shape
+      E_G2_s.h[p0_shape, ids.a[i]] = h2_a_shape
       E_G2_s.h[ids.a[i], p0_shape] = E_G2_s.h[p0_shape, ids.a[i]]'
 
       # The (shape, bright) blocks.
       h_bright_shape = a[i] * sb.E_l_a[b, i].d[:, 1] * fsm[i].d'
-      E_G_s.h[p0_bright, p0_shape] += h_bright_shape
+      E_G_s.h[p0_bright, p0_shape] = h_bright_shape
       E_G_s.h[p0_shape, p0_bright] = E_G_s.h[p0_bright, p0_shape]'
 
       h2_bright_shape =
         2 * a[i] * sb.E_ll_a[b, i].d[:, 1] * fsm[i].v * fsm[i].d'
-      E_G2_s.h[p0_bright, p0_shape] += h2_bright_shape
+      E_G2_s.h[p0_bright, p0_shape] = h2_bright_shape
       E_G2_s.h[p0_shape, p0_bright] = E_G2_s.h[p0_bright, p0_shape]'
     end
   end
@@ -475,7 +483,7 @@ function accumulate_source_brightness!{NumType <: Number}(
   if active_source && elbo_vars.calculate_derivs
     var_grad = NumType[-2 * E_G_s.v, 1];
     var_hess = NumType[-2  0; 0 0];
-    combine_sfs!(E_G, E_G2, elbo_vars.var_G_s, var_v, var_grad, var_hess)
+    combine_sfs!(E_G_s, E_G2_s, elbo_vars.var_G_s, var_v, var_grad, var_hess)
   else
     elbo_vars.var_G_s.v = var_v
   end
