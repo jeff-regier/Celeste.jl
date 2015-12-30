@@ -428,6 +428,7 @@ function accumulate_source_brightness!{NumType <: Number}(
       #            E_G2_s.h[p0_bright, p0_bright]);
 
       # The (shape, shape) block:
+      # TODO: this actually accumulates when there is overlap.
       E_G_s.h[p0_shape, p0_shape] = a[i] * sb.E_l_a[b, i].v * fsm[i].h
       # E_G2_s.h[p0_shape, p0_shape] +=
       #   2 * a[i] * sb.E_ll_a[b, i].v *
