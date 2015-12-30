@@ -18,6 +18,33 @@ export tile_predicted_imagecom
 # Store pre-allocated memory in this data structures, which contains
 # intermediate values used in the ELBO calculation.
 
+type HessianSubmatrices{NumType <: Number}
+  bright_bright::Matrix{NumType}
+  shape_shape::Matrix{NumType}
+  shape_bright::Matrix{NumType}
+  a_bright::Vector{NumType}
+  a_shape::Vector{NumType}
+end
+
+
+@doc """
+NumType: The numeric type of the hessian.
+i: The type of celestial source, from 1:Ia
+""" ->
+HessianSubmatrices(NumType::DataType, i::Int64) = begin
+  @assert 1 <= i <= Ia
+  shape_p = shape_standard_alignment[i]
+  bright_p = length(brightness_standard_alignment[i])
+
+  bright_bright = zeros(NumType, bright_p, bright_p);
+  shape_shape = zeros(NumType, shape_p, shape_p);
+  shape_bright = zeros(NumType, shape_p, bright_p);
+  a_bright = zeros(NumType, bright_p);
+  a_shape = zeros(NumType, shape_p);
+  HessianSubmatricesI{NumType}(
+    bright_bright, shape_shape, shape_bright, a_bright, a_shape)
+end
+
 type ElboIntermediateVariables{NumType <: Number}
   # Derivatives of a bvn with respect to (x, sig).
   bvn_x_d::Array{NumType, 1}
@@ -52,6 +79,12 @@ type ElboIntermediateVariables{NumType <: Number}
   E_G_s::SensitiveFloat{CanonicalParams, NumType}
   E_G2_s::SensitiveFloat{CanonicalParams, NumType}
   var_G_s::SensitiveFloat{CanonicalParams, NumType}
+
+  # Subsets of the Hessian of E_G_s and E_G2_s that allow us to use BLAS
+  # functions to accumulate Hessian terms.  There is one submatrix for
+  # each celestial object type in 1:Ia
+  E_G_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
+  E_G2_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
 
   # Expected pixel intensity and variance for a pixel from all sources.
   E_G::SensitiveFloat{CanonicalParams, NumType}
@@ -112,6 +145,11 @@ ElboIntermediateVariables(
   E_G2_s = zero_sensitive_float(CanonicalParams, NumType, 1)
   var_G_s = zero_sensitive_float(CanonicalParams, NumType, 1)
 
+  E_G_s_hsub_vec =
+    HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
+  E_G2_s_hsub_vec =
+    HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
+
   E_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
   var_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
 
@@ -123,7 +161,8 @@ ElboIntermediateVariables(
     bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
     dpy1_dsig, dpy2_dsig, dsiginv_dsig,
     bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h,
-    fs0m_vec, fs1m_vec, E_G_s, E_G2_s, var_G_s,
+    fs0m_vec, fs1m_vec,
+    E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
     E_G, var_G, elbo_log_term, elbo, true)
 end
 
@@ -328,11 +367,11 @@ function accumulate_source_brightness!{NumType <: Number}(
     s::Int64, b::Int64)
 
   # E[G] and E{G ^ 2} for a single source
-  E_G = elbo_vars.E_G_s;
-  E_G2 = elbo_vars.E_G2_s;
+  E_G_s = elbo_vars.E_G_s;
+  E_G2_s = elbo_vars.E_G2_s;
 
-  clear!(E_G)
-  clear!(E_G2)
+  clear!(E_G_s)
+  clear!(E_G2_s)
 
   a = mp.vp[s][ids.a]
   fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
@@ -344,29 +383,29 @@ function accumulate_source_brightness!{NumType <: Number}(
     lf = sb.E_l_a[b, i].v * fsm[i].v
     llff = sb.E_ll_a[b, i].v * fsm[i].v^2
 
-    E_G.v += a[i] * lf
-    E_G2.v += a[i] * llff
+    E_G_s.v += a[i] * lf
+    E_G2_s.v += a[i] * llff
 
     # Only calculate derivatives for active sources.
     if active_source && elbo_vars.calculate_derivs
       ######################
       # Gradients.
 
-      E_G.d[ids.a[i], 1] += lf
-      E_G2.d[ids.a[i], 1] += llff
+      E_G_s.d[ids.a[i], 1] += lf
+      E_G2_s.d[ids.a[i], 1] += llff
 
       p0_shape = shape_standard_alignment[i]
       p0_bright = brightness_standard_alignment[i]
 
       # Derivatives with respect to the spatial parameters
       a_fd = a[i] * fsm[i].d[:, 1]
-      E_G.d[p0_shape, 1] += sb.E_l_a[b, i].v * a_fd
-      E_G2.d[p0_shape, 1] += sb.E_ll_a[b, i].v * 2 * fsm[i].v * a_fd
+      E_G_s.d[p0_shape, 1] += sb.E_l_a[b, i].v * a_fd
+      E_G2_s.d[p0_shape, 1] += sb.E_ll_a[b, i].v * 2 * fsm[i].v * a_fd
 
       # Derivatives with respect to the brightness parameters.
-      E_G.d[p0_bright, 1] +=
+      E_G_s.d[p0_bright, 1] +=
         a[i] * fsm[i].v * sb.E_l_a[b, i].d[:, 1]
-      E_G2.d[p0_bright, 1] +=
+      E_G2_s.d[p0_bright, 1] +=
         a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[:, 1]
 
       ######################
@@ -375,68 +414,66 @@ function accumulate_source_brightness!{NumType <: Number}(
       # The (a, a) block of the hessian is zero.
 
       # The (bright, bright) block:
-
       # BLAS for
-      # E_G.h[p0_bright, p0_bright] +=
-      #   a[i] * fsm[i].v * sb.E_l_a[b, i].h
-      # E_G2.h[p0_bright, p0_bright] +=
-      #   a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h
-      # TODO: I think sub-indexing sb.E_l_a[b, i].h is allocating a lot of memory.
-      BLAS.axpy!(a[i] * fsm[i].v,
-                 sb.E_l_a[b, i].h, E_G.h[p0_bright, p0_bright]);
-      BLAS.axpy!(a[i] * (fsm[i].v^2),
-                 sb.E_ll_a[b, i].h, E_G2.h[p0_bright, p0_bright]);
+      # E_G_s.h[p0_bright, p0_bright] += a[i] * fsm[i].v * sb.E_l_a[b, i].h
+      # E_G2_s.h[p0_bright, p0_bright] += a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h
+      # TODO: broken!  You can't assign a subset with BLAS.axpy!.
+      BLAS.axpy!(a[i] * fsm[i].v, sb.E_l_a[b, i].h,
+                 E_G_s.h[p0_bright, p0_bright]);
+      BLAS.axpy!(a[i] * (fsm[i].v^2), sb.E_ll_a[b, i].h,
+                 E_G2_s.h[p0_bright, p0_bright]);
 
       # The (shape, shape) block:
       # BLAS for
-      # E_G.h[p0_shape, p0_shape] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
-      # E_G2.h[p0_shape, p0_shape] +=
+      # E_G_s.h[p0_shape, p0_shape] += a[i] * sb.E_l_a[b, i].v * fsm[i].h
+      # E_G2_s.h[p0_shape, p0_shape] +=
       #   2 * a[i] * sb.E_ll_a[b, i].v *
       #   (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
-      BLAS.axpy!(a[i] * sb.E_l_a[b, i].v,
-                 fsm[i].h, E_G.h[p0_shape, p0_shape]);
-      BLAS.axpy!(2 * a[i] * sb.E_ll_a[b, i].v * fsm[i].v,
-                 fsm[i].h, E_G2.h[p0_shape, p0_shape]);
-      BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v,
-                fsm[i].d[:, 1], fsm[i].d[:, 1], E_G2.h[p0_shape, p0_shape]);
+      BLAS.axpy!(a[i] * sb.E_l_a[b, i].v, fsm[i].h,
+                 E_G_s.h[p0_shape, p0_shape]);
+
+      BLAS.axpy!(2 * a[i] * sb.E_ll_a[b, i].v * fsm[i].v, fsm[i].h,
+                 E_G2_s.h[p0_shape, p0_shape]);
+      BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v, fsm[i].d[:, 1], fsm[i].d[:, 1],
+                E_G2_s.h[p0_shape, p0_shape]);
 
       # TODO: eliminate redundancy.
       # The (a, bright) blocks:
       h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[:, 1]
-      E_G.h[p0_bright, ids.a[i]] += h_a_bright
-      E_G.h[ids.a[i], p0_bright] =  E_G.h[p0_bright, ids.a[i]]'
+      E_G_s.h[p0_bright, ids.a[i]] += h_a_bright
+      E_G_s.h[ids.a[i], p0_bright] =  E_G_s.h[p0_bright, ids.a[i]]'
 
       h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[:, 1]
-      E_G2.h[p0_bright, ids.a[i]] += h2_a_bright
-      E_G2.h[ids.a[i], p0_bright] = E_G2.h[p0_bright, ids.a[i]]'
+      E_G2_s.h[p0_bright, ids.a[i]] += h2_a_bright
+      E_G2_s.h[ids.a[i], p0_bright] = E_G2_s.h[p0_bright, ids.a[i]]'
 
       # The (a, shape) blocks.
       h_a_shape = sb.E_l_a[b, i].v * fsm[i].d
-      E_G.h[p0_shape, ids.a[i]] += h_a_shape
-      E_G.h[ids.a[i], p0_shape] = E_G.h[p0_shape, ids.a[i]]'
+      E_G_s.h[p0_shape, ids.a[i]] += h_a_shape
+      E_G_s.h[ids.a[i], p0_shape] = E_G_s.h[p0_shape, ids.a[i]]'
 
       h2_a_shape = sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[:, 1]
-      E_G2.h[p0_shape, ids.a[i]] += h2_a_shape
-      E_G2.h[ids.a[i], p0_shape] = E_G2.h[p0_shape, ids.a[i]]'
+      E_G2_s.h[p0_shape, ids.a[i]] += h2_a_shape
+      E_G2_s.h[ids.a[i], p0_shape] = E_G2_s.h[p0_shape, ids.a[i]]'
 
       # The (shape, bright) blocks.
       h_bright_shape = a[i] * sb.E_l_a[b, i].d[:, 1] * fsm[i].d'
-      E_G.h[p0_bright, p0_shape] += h_bright_shape
-      E_G.h[p0_shape, p0_bright] = E_G.h[p0_bright, p0_shape]'
+      E_G_s.h[p0_bright, p0_shape] += h_bright_shape
+      E_G_s.h[p0_shape, p0_bright] = E_G_s.h[p0_bright, p0_shape]'
 
       h2_bright_shape =
         2 * a[i] * sb.E_ll_a[b, i].d[:, 1] * fsm[i].v * fsm[i].d'
-      E_G2.h[p0_bright, p0_shape] += h2_bright_shape
-      E_G2.h[p0_shape, p0_bright] = E_G2.h[p0_bright, p0_shape]'
+      E_G2_s.h[p0_bright, p0_shape] += h2_bright_shape
+      E_G2_s.h[p0_shape, p0_bright] = E_G2_s.h[p0_bright, p0_shape]'
     end
   end
 
   # Write the variance as a function of (E_G, E_G2)
   clear!(elbo_vars.var_G_s)
-  var_v = E_G2.v - (E_G.v ^ 2);
+  var_v = E_G2_s.v - (E_G_s.v ^ 2);
 
   if active_source && elbo_vars.calculate_derivs
-    var_grad = NumType[-2 * E_G.v, 1];
+    var_grad = NumType[-2 * E_G_s.v, 1];
     var_hess = NumType[-2  0; 0 0];
     combine_sfs!(E_G, E_G2, elbo_vars.var_G_s, var_v, var_grad, var_hess)
   else
