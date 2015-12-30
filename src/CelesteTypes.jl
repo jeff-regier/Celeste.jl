@@ -396,7 +396,10 @@ gal_shape_params = ((:e_axis, 1), (:e_angle, 1), (:e_scale, 1))
 ue_params = ((:u, 2), (:e_dev, 1), gal_shape_params...)
 
 # Parameters for the colors.
+# Only one set of brightness parameters.
 rc_params1 = ((:r1, 1), (:r2, 1), (:c1, B - 1), (:c2, B - 1))
+
+# All Ia set of brightness parameters.
 rc_params2 = ((:r1, Ia), (:r2, Ia), (:c1, (B - 1,  Ia)),
         (:c2, (B - 1,  Ia)))
 
