@@ -365,9 +365,9 @@ function accumulate_source_brightness!{NumType <: Number}(
 
       # Derivatives with respect to the brightness parameters.
       E_G.d[p0_bright, 1] +=
-        a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
+        a[i] * fsm[i].v * sb.E_l_a[b, i].d[:, 1]
       E_G2.d[p0_bright, 1] +=
-        a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[p0_bright, 1]
+        a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[:, 1]
 
       ######################
       # Hessians.
@@ -378,16 +378,14 @@ function accumulate_source_brightness!{NumType <: Number}(
 
       # BLAS for
       # E_G.h[p0_bright, p0_bright] +=
-      #   a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_bright, p0_bright]
+      #   a[i] * fsm[i].v * sb.E_l_a[b, i].h
       # E_G2.h[p0_bright, p0_bright] +=
-      #   a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_bright, p0_bright]
+      #   a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h
       # TODO: I think sub-indexing sb.E_l_a[b, i].h is allocating a lot of memory.
       BLAS.axpy!(a[i] * fsm[i].v,
-                 sb.E_l_a[b, i].h[p0_bright, p0_bright],
-                 E_G.h[p0_bright, p0_bright]);
+                 sb.E_l_a[b, i].h, E_G.h[p0_bright, p0_bright]);
       BLAS.axpy!(a[i] * (fsm[i].v^2),
-                 sb.E_ll_a[b, i].h[p0_bright, p0_bright],
-                 E_G2.h[p0_bright, p0_bright]);
+                 sb.E_ll_a[b, i].h, E_G2.h[p0_bright, p0_bright]);
 
       # The (shape, shape) block:
       # BLAS for
@@ -404,11 +402,11 @@ function accumulate_source_brightness!{NumType <: Number}(
 
       # TODO: eliminate redundancy.
       # The (a, bright) blocks:
-      h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[p0_bright, 1]
+      h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[:, 1]
       E_G.h[p0_bright, ids.a[i]] += h_a_bright
       E_G.h[ids.a[i], p0_bright] =  E_G.h[p0_bright, ids.a[i]]'
 
-      h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[p0_bright, 1]
+      h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[:, 1]
       E_G2.h[p0_bright, ids.a[i]] += h2_a_bright
       E_G2.h[ids.a[i], p0_bright] = E_G2.h[p0_bright, ids.a[i]]'
 
@@ -422,12 +420,12 @@ function accumulate_source_brightness!{NumType <: Number}(
       E_G2.h[ids.a[i], p0_shape] = E_G2.h[p0_shape, ids.a[i]]'
 
       # The (shape, bright) blocks.
-      h_bright_shape = a[i] * sb.E_l_a[b, i].d[p0_bright, 1] * fsm[i].d'
+      h_bright_shape = a[i] * sb.E_l_a[b, i].d[:, 1] * fsm[i].d'
       E_G.h[p0_bright, p0_shape] += h_bright_shape
       E_G.h[p0_shape, p0_bright] = E_G.h[p0_bright, p0_shape]'
 
       h2_bright_shape =
-        2 * a[i] * sb.E_ll_a[b, i].d[p0_bright, 1] * fsm[i].v * fsm[i].d'
+        2 * a[i] * sb.E_ll_a[b, i].d[:, 1] * fsm[i].v * fsm[i].d'
       E_G2.h[p0_bright, p0_shape] += h2_bright_shape
       E_G2.h[p0_shape, p0_bright] = E_G2.h[p0_bright, p0_shape]'
     end

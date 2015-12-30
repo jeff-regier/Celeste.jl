@@ -18,7 +18,7 @@ export gal_shape_alignment, align
 export SensitiveFloat, zero_sensitive_float, clear!
 export print_params
 
-export ids, ids_free, star_ids, gal_ids, gal_shape_ids
+export ids, ids_free, star_ids, gal_ids, gal_shape_ids, bids
 export ids_names, ids_free_names
 export D, B, Ia
 
@@ -404,6 +404,8 @@ rc_params2 = ((:r1, Ia), (:r2, Ia), (:c1, (B - 1,  Ia)),
 ak_simplex = ((:a, Ia), (:k, (D, Ia)))
 ak_free = ((:a, Ia - 1), (:k, (D - 1, Ia)))
 
+# TODO: the brightness params are screwed up.  Need to think about what they
+# mean.
 const param_specs = [
     (:StarPosParams, :star_ids, ((:u, 2),)),
     (:GalaxyShapeParams, :gal_shape_ids, gal_shape_params),

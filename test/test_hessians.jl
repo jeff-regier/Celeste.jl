@@ -732,7 +732,7 @@ function test_brightness_hessian()
     println("Testing brightness $(squares_string) for band $b, type $i")
     function wrap_source_brightness{NumType <: Number}(
         vp::Vector{NumType}, calculate_derivs::Bool)
-      ret = zero_sensitive_float(CanonicalParams, NumType);
+      ret = zero_sensitive_float(BrightnessParams, NumType);
       sb = ElboDeriv.SourceBrightness(vp, calculate_derivs=calculate_derivs);
       if squares
         ret.v = sb.E_ll_a[b, i].v;
@@ -747,7 +747,9 @@ function test_brightness_hessian()
     end
 
     function wrap_source_brightness_value{NumType <: Number}(
-        vp::Vector{NumType})
+        bright_vp::Vector{NumType})
+      vp = zeros(NumType, length(CanonicalParams))
+      for
       wrap_source_brightness(vp, false).v
     end
 
