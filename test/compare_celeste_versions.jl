@@ -411,3 +411,50 @@ x = zeros(n, n);
 @time BLAS.axpy!(3.0, y[1:n, 1:n], x);
 x = zeros(n, n);
 @time BLAS.axpy!(3.0, y_sub, x);
+
+######
+n = 1000;
+x = rand(n, n);
+sub_ind = 2 * (1:n)
+sub_ind_col = collect(sub_ind);
+
+y = zeros(2 * n, 2 * n);
+@time y[sub_ind, sub_ind] += 3.0 * x;
+y = zeros(2 * n, 2 * n);
+
+# These each allocate less memory as you go down.
+@time y[sub_ind_col, sub_ind_col] += 3.0 * x;
+@time y[sub_ind_col, sub_ind_col] = 3.0 * x;
+@time y[sub_ind, sub_ind] = x;
+@time y[sub_ind_col, sub_ind_col] = x;
+
+# Dig that this doesn't work.
+y = zeros(2 * n, 2 * n);
+@time BLAS.axpy!(3.0, x, y[sub_ind, sub_ind]);
+
+# Neither does this.
+y = zeros(2 * n, 2 * n);
+y_sub = y[sub_ind, sub_ind];
+@time BLAS.axpy!(3.0, x, y_sub);
+
+# This allocates a ton of memory.
+y = zeros(2 * n, 2 * n);
+@time begin
+  for i1 in 1:length(sub_ind), i2 in 1:length(sub_ind)
+    j1 = sub_ind[i1]
+    j2 = sub_ind[i2]
+    y[j1, j2] += 3 * x[i1, i2]
+  end
+end
+
+
+# This allocates a ton of memory.
+y = zeros(2 * n, 2 * n);
+@time begin
+  for i in eachindex(x)
+    i1, i2 = ind2sub(size(x), i)
+    j1 = sub_ind[i1]
+    j2 = sub_ind[i2]
+    y[j1, j2] += 3 * x[i1, i2]
+  end
+end

@@ -245,7 +245,7 @@ function test_e_g_s_functions()
 
     elbo_vars = e_g_wrapper_fun(mp);
 
-    # Sanity check
+    # Sanity check the variance value.
     @test_approx_eq(elbo_vars.var_G_s.v,
                     elbo_vars.E_G2_s.v - (elbo_vars.E_G_s.v ^ 2))
 
