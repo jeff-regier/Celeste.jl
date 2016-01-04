@@ -12,7 +12,7 @@ const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 srand(1)
 println("Loading data.")
 
-S = 100
+S = 3
 blob, mp, body, tiled_blob =
   SampleData.gen_n_body_dataset(S, tile_width=10);
 

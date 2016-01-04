@@ -8,11 +8,23 @@ using Base.Test
 using SampleData
 import Synthetic
 
+blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+Profile.clear_malloc_data()
+Profile.clear()
+@profile ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
+
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=true);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
+
+
+
+
+
 # Checking if the ELBO is different between the two versions.
 include("test/debug_with_master.jl"); include("src/ElboDeriv.jl")
 
 using Debug
-
 
 function evaluate_their_elbo()
   blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
@@ -32,11 +44,15 @@ our_elbo = evaluate_our_elbo();
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 @time Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
 
 Profile.clear_malloc_data()
 Profile.clear()
-@profile ElboDeriv.elbo_likelihood(tiled_blob, mp);
-#Profile.print()
+@profile ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+#@profile Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
+Profile.print(format=:flat)
+
 
 # To see memory, quit and run
 using Coverage
@@ -107,7 +123,7 @@ end
 
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 @time their_sbs = [Debug.ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
-@time our_sbs = ElboDeriv.load_source_brightnesses(mp, true);
+@time our_sbs = ElboDeriv.load_source_brightnesses(mp);
 
 for s=1:length(our_sbs), b=1:5, i=1:2
   @test_approx_eq our_sbs[s].E_l_a[b, i].v their_sbs[s].E_l_a[b, i].v
@@ -159,7 +175,7 @@ function our_accumulate_pixel_stats()
   tile = tiled_blob[b][1,1];
 
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-  sbs = ElboDeriv.load_source_brightnesses(mp, true);
+  sbs = ElboDeriv.load_source_brightnesses(mp);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
   ElboDeriv.populate_fsm_vecs!(
     elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs);
@@ -224,7 +240,7 @@ function our_expected_pixel_brightness()
   tile = tiled_blob[b][1,1];
 
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-  sbs = ElboDeriv.load_source_brightnesses(mp, true);
+  sbs = ElboDeriv.load_source_brightnesses(mp);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
   ElboDeriv.populate_fsm_vecs!(
     elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs);
@@ -294,7 +310,7 @@ function our_accum_pixel_ret()
   tile = tiled_blob[b][1,1];
 
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-  sbs = ElboDeriv.load_source_brightnesses(mp, true);
+  sbs = ElboDeriv.load_source_brightnesses(mp);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
   ElboDeriv.populate_fsm_vecs!(
     elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs);
