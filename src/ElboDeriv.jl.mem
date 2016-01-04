@@ -1,34 +1,34 @@
         - # Calculate values and partial derivatives of the variational ELBO.
-        - 
+        -
         - module ElboDeriv
-        - 
+        -
         - VERSION < v"0.4.0-dev" && using Docile
         - using CelesteTypes
         - import KL
         - import Util
         - import SloanDigitalSkySurvey: WCS
         - import WCSLIB
-        - 
+        -
         - using DualNumbers.Dual
-        - 
+        -
         - export tile_predicted_imagecom
-        - 
-        - 
+        -
+        -
         - ####################################################
         - # Store pre-allocated memory in this data structures, which contains
         - # intermediate values used in the ELBO calculation.
-        - 
+        -
         - type HessianSubmatrices{NumType <: Number}
       128   u_u::Matrix{NumType}
         -   shape_shape::Matrix{NumType}
         -   bright_shape::Matrix{NumType}
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Pre-allocated memory for efficiently accumulating certain sub-matrices
         - of the E_G_s and E_G2_s Hessian.
-        - 
+        -
         - Args:
         -   NumType: The numeric type of the hessian.
         -   i: The type of celestial source, from 1:Ia
@@ -37,13 +37,13 @@
         0   @assert 1 <= i <= Ia
         0   bright_p = length(brightness_standard_alignment[i])
         0   shape_p = length(shape_standard_alignment[i])
-        - 
+        -
       448   u_u = zeros(NumType, 2, 2);
      1056   shape_shape = zeros(NumType, shape_p, shape_p);
      1600   bright_shape = zeros(NumType, bright_p, shape_p);
         0   HessianSubmatrices{NumType}(u_u, shape_shape, bright_shape)
         - end
-        - 
+        -
         - type ElboIntermediateVariables{NumType <: Number}
       208   # Derivatives of a bvn with respect to (x, sig).
         -   bvn_x_d::Array{NumType, 1}
@@ -51,55 +51,55 @@
         -   bvn_xx_h::Array{NumType, 2}
         -   bvn_xsig_h::Array{NumType, 2}
         -   bvn_sigsig_h::Array{NumType, 2}
-        - 
+        -
         -   # intermediate values used in d bvn / d(x, sig)
         -   dpy1_dsig::Array{NumType, 1}
         -   dpy2_dsig::Array{NumType, 1}
-        - 
+        -
         -   # TODO: delete this, it is now in BvnComponent
         -   dsiginv_dsig::Array{NumType, 2}
-        - 
+        -
         -   # Derivatives of a bvn with respect to (u, shape)
         -   bvn_u_d::Array{NumType, 1}
         -   bvn_uu_h::Array{NumType, 2}
         -   bvn_s_d::Array{NumType, 1}
         -   bvn_ss_h::Array{NumType, 2}
         -   bvn_us_h::Array{NumType, 2}
-        - 
+        -
         -   # Vectors of star and galaxy bvn quantities from all sources for a pixel.
         -   # The vector has one element for each active source, in the same order
         -   # as mp.active_sources.
-        - 
+        -
         -   # TODO: you can treat this the same way as E_G_s and not keep a vector around.
         -   fs0m_vec::Vector{SensitiveFloat{StarPosParams, NumType}}
         -   fs1m_vec::Vector{SensitiveFloat{GalaxyPosParams, NumType}}
-        - 
+        -
         -   # Brightness values for a single source
         -   E_G_s::SensitiveFloat{CanonicalParams, NumType}
         -   E_G2_s::SensitiveFloat{CanonicalParams, NumType}
         -   var_G_s::SensitiveFloat{CanonicalParams, NumType}
-        - 
+        -
         -   # Subsets of the Hessian of E_G_s and E_G2_s that allow us to use BLAS
         -   # functions to accumulate Hessian terms.  There is one submatrix for
         -   # each celestial object type in 1:Ia
         -   E_G_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
         -   E_G2_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
-        - 
+        -
         -   # Expected pixel intensity and variance for a pixel from all sources.
         -   E_G::SensitiveFloat{CanonicalParams, NumType}
         -   var_G::SensitiveFloat{CanonicalParams, NumType}
-        - 
+        -
         -   # A placeholder for the log term in the ELBO.
         -   elbo_log_term::SensitiveFloat{CanonicalParams, NumType}
-        - 
+        -
         -   # The ELBO itself.
         -   elbo::SensitiveFloat{CanonicalParams, NumType}
-        - 
+        -
         -   # A boolean.  If false, do not calculate hessians or derivatives.
         -   calculate_derivs::Bool
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Args:
         -   - S: The total number of sources
@@ -107,30 +107,30 @@
         0 """ ->
         - ElboIntermediateVariables(
         -     NumType::DataType, S::Int64, num_active_sources::Int64) = begin
-        - 
+        -
         0   @assert NumType <: Number
-        - 
+        -
        96   bvn_x_d = zeros(NumType, 2)
       112   bvn_sig_d = zeros(NumType, 3)
       112   bvn_xx_h = zeros(NumType, 2, 2)
       128   bvn_xsig_h = zeros(NumType, 2, 3)
       160   bvn_sigsig_h = zeros(NumType, 3, 3)
-        - 
+        -
       112   dpy1_dsig = zeros(NumType, 3)
       112   dpy2_dsig = zeros(NumType, 3)
       160   dsiginv_dsig = zeros(NumType, 3, 3)
-        - 
+        -
         -   # Derivatives wrt u.
        96   bvn_u_d = zeros(NumType, 2)
       112   bvn_uu_h = zeros(NumType, 2, 2)
-        - 
+        -
         -   # Shape deriviatives.  Here, s stands for "shape".
       112   bvn_s_d = zeros(NumType, length(gal_shape_ids))
-        - 
+        -
         -   # The hessians.
       160   bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
       128   bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
-        - 
+        -
         -   # fs0m and fs1m accumulate contributions from all bvn components
         -   # for a given source.
        80   fs0m_vec = Array(SensitiveFloat{StarPosParams, NumType}, S)
@@ -139,23 +139,23 @@
         0     fs0m_vec[s] = zero_sensitive_float(StarPosParams, NumType)
         0     fs1m_vec[s] = zero_sensitive_float(GalaxyPosParams, NumType)
         -   end
-        - 
+        -
         0   E_G_s = zero_sensitive_float(CanonicalParams, NumType, 1)
         0   E_G2_s = zero_sensitive_float(CanonicalParams, NumType, 1)
         0   var_G_s = zero_sensitive_float(CanonicalParams, NumType, 1)
-        - 
+        -
        80   E_G_s_hsub_vec =
         -     HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
        80   E_G2_s_hsub_vec =
         -     HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
-        - 
+        -
         0   E_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
         0   var_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-        - 
+        -
         0   elbo_log_term =
         -     zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
         0   elbo = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-        - 
+        -
         0   ElboIntermediateVariables{NumType}(
         -     bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
         -     dpy1_dsig, dpy2_dsig, dsiginv_dsig,
@@ -164,16 +164,16 @@
         -     E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
         -     E_G, var_G, elbo_log_term, elbo, true)
         - end
-        - 
-        - 
+        -
+        -
         - include(joinpath(Pkg.dir("Celeste"), "src/ElboKL.jl"))
         - include(joinpath(Pkg.dir("Celeste"), "src/SourceBrightness.jl"))
         - include(joinpath(Pkg.dir("Celeste"), "src/BivariateNormals.jl"))
-        - 
+        -
         - @doc """
         - Add the contributions of a star's bivariate normal term to the ELBO,
         - by updating elbo_vars.fs0m_vec[s] in place.
-        - 
+        -
         - Args:
         -   - elbo_vars: Elbo intermediate values.
         -   - s: The index of the current source in 1:S
@@ -189,28 +189,28 @@
         -     bmc::BvnComponent{NumType},
         -     x::Vector{Float64},
         -     wcs_jacobian::Array{Float64, 2})
-        - 
+        -
         0   py1, py2, f = eval_bvn_pdf(bmc, x)
-        - 
+        -
         -   # TODO: Also make a version that doesn't calculate any derivatives
         -   # if the object isn't in active_sources.
         0   get_bvn_derivs!(elbo_vars, bmc, x, false);
-        - 
+        -
         0   fs0m = elbo_vars.fs0m_vec[s]
         0   fs0m.v += f
-        - 
+        -
         0   if elbo_vars.calculate_derivs
         -     # TODO: This wastes a _lot_ of calculation.  Make a version for
         -     # stars that only calculates the x derivatives.
         0     transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
         0     bvn_u_d = elbo_vars.bvn_u_d
         0     bvn_uu_h = elbo_vars.bvn_uu_h
-        - 
+        -
         -     # Accumulate the derivatives.
         0     for u_id in 1:2
         0       fs0m.d[star_ids.u[u_id]] += f * bvn_u_d[u_id]
         -     end
-        - 
+        -
         -     # Hessian terms involving only the location parameters.
         -     # TODO: redundant term
         0     for u_id1 in 1:2, u_id2 in 1:2
@@ -219,19 +219,19 @@
         -     end
         -   end
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Add the contributions of a galaxy component term to the ELBO by
         - updating fs1m in place.
-        - 
+        -
         - Args:
         -   - elbo_vars: Elbo intermediate variables
         -   - s: The index of the current source in 1:S
         -   - gcc: The galaxy component to be added
         -   - x: An offset for the component in pixel coordinates (e.g. a pixel location)
         -   - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-        - 
+        -
         - Updates elbo_vars.fs1m_vec[sa] in place.
         - """ ->
         - function accum_galaxy_pos!{NumType <: Number}(
@@ -240,39 +240,39 @@
         -     gcc::GalaxyCacheComponent{NumType},
         -     x::Vector{Float64},
         -     wcs_jacobian::Array{Float64, 2})
-        - 
+        -
         0   py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
         0   f = f_pre * gcc.e_dev_i
         0   fs1m = elbo_vars.fs1m_vec[s];
         0   fs1m.v += f
-        - 
+        -
         0   if elbo_vars.calculate_derivs
-        - 
+        -
         0     get_bvn_derivs!(elbo_vars, gcc.bmc, x, true);
         0     transform_bvn_derivs!(elbo_vars, gcc, wcs_jacobian)
-        - 
+        -
         0     bvn_u_d = elbo_vars.bvn_u_d
         0     bvn_uu_h = elbo_vars.bvn_uu_h
         0     bvn_s_d = elbo_vars.bvn_s_d
         0     bvn_ss_h = elbo_vars.bvn_ss_h
         0     bvn_us_h = elbo_vars.bvn_us_h
-        - 
+        -
         -     # Accumulate the derivatives.
         0     for u_id in 1:2
         0       fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]
         -     end
-        - 
+        -
         0     for gal_id in 1:length(gal_shape_ids)
         0       fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
         -     end
-        - 
+        -
         -     # The e_dev derivative.  e_dev just scales the entire component.
         -     # The direction is positive or negative depending on whether this
         -     # is an exp or dev component.
         0     fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
-        - 
+        -
         -     # The Hessians:
-        - 
+        -
         -     # Hessian terms involving only the shape parameters.
         0     for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
         0       s1 = gal_shape_alignment[shape_id1]
@@ -281,7 +281,7 @@
         -         f * (bvn_ss_h[shape_id1, shape_id2] +
         -              bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
         -     end
-        - 
+        -
         -     # Hessian terms involving only the location parameters.
         0     for u_id1 in 1:2, u_id2 in 1:2
         0       u1 = gal_ids.u[u_id1]
@@ -289,7 +289,7 @@
         0       fs1m.h[u1, u2] +=
         -         f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
         -     end
-        - 
+        -
         -     # Hessian terms involving both the shape and location parameters.
         0     for u_id in 1:2, shape_id in 1:length(gal_shape_ids)
         0       ui = gal_ids.u[u_id]
@@ -298,7 +298,7 @@
         -         f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
         0       fs1m.h[si, ui] = fs1m.h[ui, si]
         -     end
-        - 
+        -
         -     # Do the e_dev hessian terms.
         0     devi = gal_ids.e_dev
         0     for u_id in 1:2
@@ -313,8 +313,8 @@
         -     end
         -   end # if calculate_derivs
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Populate fs0m_vec and fs1m_vec for all sources.
         - """ ->
@@ -326,19 +326,19 @@
         -     sbs::Vector{SourceBrightness{NumType}},
         -     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
         -     star_mcs::Array{BvnComponent{NumType}, 2})
-        - 
+        -
    184000   tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
         0   for s in tile_sources
         0     wcs_jacobian = mp.patches[s, tile.b].wcs_jacobian;
         0     sb = sbs[s];
-        - 
+        -
    368000     m_pos = Float64[tile.h_range[h], tile.w_range[w]]
-        - 
+        -
         0     clear!(elbo_vars.fs0m_vec[s])
    515200     for star_mc in star_mcs[:, s]
         0         accum_star_pos!(elbo_vars, s, star_mc, m_pos, wcs_jacobian)
         -     end
-        - 
+        -
         0     clear!(elbo_vars.fs1m_vec[s])
         0     for i = 1:2 # Galaxy types
    736000         for j in 1:[8,6][i] # Galaxy component
@@ -350,13 +350,13 @@
         -     end
         -   end
         - end
-        - 
-        - 
-        - 
+        -
+        -
+        -
         - @doc """
         - Add the contributions of a single source to E_G_s and var_G_s, which are cleared
         - and then updated in place.
-        - 
+        -
         - Updates elbo_vars.E_G_s and elbo_vars.var_G_s in place.
         - """ ->
         - function accumulate_source_brightness!{NumType <: Number}(
@@ -364,59 +364,59 @@
         -     mp::ModelParams{NumType},
         -     sbs::Vector{SourceBrightness{NumType}},
         -     s::Int64, b::Int64)
-        - 
+        -
         -   # E[G] and E{G ^ 2} for a single source
         0   E_G_s = elbo_vars.E_G_s;
         0   E_G2_s = elbo_vars.E_G2_s;
-        - 
+        -
         0   clear!(E_G_s)
         0   clear!(E_G2_s)
-        - 
+        -
    441600   a = mp.vp[s][ids.a]
    147200   fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
         0   sb = sbs[s];
-        - 
+        -
         0   active_source = (s in mp.active_sources)
-        - 
+        -
         0   for i in 1:Ia # Stars and galaxies
    147200     lf = sb.E_l_a[b, i].v * fsm[i].v
    147200     llff = sb.E_ll_a[b, i].v * fsm[i].v^2
-        - 
+        -
         0     E_G_s.v += a[i] * lf
         0     E_G2_s.v += a[i] * llff
-        - 
+        -
         -     # Only calculate derivatives for active sources.
         0     if active_source && elbo_vars.calculate_derivs
         -       ######################
         -       # Gradients.
-        - 
+        -
         0       E_G_s.d[ids.a[i], 1] += lf
         0       E_G2_s.d[ids.a[i], 1] += llff
-        - 
+        -
         0       p0_shape = shape_standard_alignment[i]
         0       p0_bright = brightness_standard_alignment[i]
         0       u_ind = i == 1 ? star_ids.u : gal_ids.u
-        - 
+        -
         -       # Derivatives with respect to the spatial parameters
   1913600       a_fd = a[i] * fsm[i].d[:, 1]
   2944000       E_G_s.d[p0_shape, 1] += sb.E_l_a[b, i].v * a_fd
   3091200       E_G2_s.d[p0_shape, 1] += sb.E_ll_a[b, i].v * 2 * fsm[i].v * a_fd
-        - 
+        -
         -       # Derivatives with respect to the brightness parameters.
   5888000       E_G_s.d[p0_bright, 1] +=
         -         a[i] * fsm[i].v * sb.E_l_a[b, i].d[:, 1]
   5888000       E_G2_s.d[p0_bright, 1] +=
         -         a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[:, 1]
-        - 
+        -
         -       ######################
         -       # Hessians.
-        - 
+        -
         -       # Data structures to accumulate certain submatrices of the Hessian.
         0       E_G_s_hsub = elbo_vars.E_G_s_hsub_vec[i];
         0       E_G2_s_hsub = elbo_vars.E_G2_s_hsub_vec[i];
-        - 
+        -
         -       # The (a, a) block of the hessian is zero.
-        - 
+        -
         -       # The (bright, bright) block:
   8390400       E_G_s.h[p0_bright, p0_bright] = a[i] * fsm[i].v * sb.E_l_a[b, i].h
   8390400       E_G2_s.h[p0_bright, p0_bright] = a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h
@@ -426,22 +426,22 @@
         -       #            E_G_s.h[p0_bright, p0_bright]);
         -       # BLAS.axpy!(a[i] * (fsm[i].v^2), sb.E_ll_a[b, i].h,
         -       #            E_G2_s.h[p0_bright, p0_bright]);
-        - 
+        -
         -       # The (shape, shape) block:
         -       # TODO: this actually accumulates when there is overlap.
   2281600       E_G_s_hsub.shape_shape = a[i] * sb.E_l_a[b, i].v * fsm[i].h
-        - 
+        -
         -       # The u_u submatrix of this assignment will be overwritten after
         -       # the loop.
   2281600       E_G_s.h[p0_shape, p0_shape] = a[i] * sb.E_l_a[b, i].v * fsm[i].h
         -       # E_G2_s.h[p0_shape, p0_shape] +=
         -       #   2 * a[i] * sb.E_ll_a[b, i].v *
         -       #   (fsm[i].v * fsm[i].h + fsm[i].d[:, 1] * fsm[i].d[:, 1]')
-        - 
+        -
         -       # BLAS verison:
         -       # BLAS.axpy!(a[i] * sb.E_l_a[b, i].v, fsm[i].h,
         -       #            E_G_s.h[p0_shape, p0_shape]);
-        - 
+        -
         -       # The shape_shape block has several terms which we accumulate efficiently
         -       # using BLAS.
   2428800       E_G2_s_hsub.shape_shape =
@@ -451,35 +451,35 @@
   2060800       BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v, fsm[i].d[:, 1], fsm[i].d[:, 1],
         -                 E_G2_s_hsub.shape_shape);
         0       E_G2_s.h[p0_shape, p0_shape] = E_G2_s_hsub.shape_shape;
-        - 
+        -
         -       # Since the u_u submatrix is not disjoint between different i, accumulate
         -       # it separate and add it at the end.
   1177600       E_G_s_hsub.u_u = E_G_s_hsub.shape_shape[u_ind, u_ind]
   1177600       E_G2_s_hsub.u_u = E_G2_s_hsub.shape_shape[u_ind, u_ind]
-        - 
+        -
         -       # All other terms are disjoint between different i and don't involve
         -       # addition, so we can just assign their values (which is efficient in
         -       # native julia).
-        - 
+        -
         -       # TODO: eliminate redundancy.
         -       # The (a, bright) blocks:
   2944000       h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[:, 1]
         0       E_G_s.h[p0_bright, ids.a[i]] = h_a_bright
   2796800       E_G_s.h[ids.a[i], p0_bright] =  E_G_s.h[p0_bright, ids.a[i]]'
-        - 
+        -
   2944000       h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[:, 1]
         0       E_G2_s.h[p0_bright, ids.a[i]] = h2_a_bright
   2796800       E_G2_s.h[ids.a[i], p0_bright] = E_G2_s.h[p0_bright, ids.a[i]]'
-        - 
+        -
         -       # The (a, shape) blocks.
    883200       h_a_shape = sb.E_l_a[b, i].v * fsm[i].d
         0       E_G_s.h[p0_shape, ids.a[i]] = h_a_shape
   1913600       E_G_s.h[ids.a[i], p0_shape] = E_G_s.h[p0_shape, ids.a[i]]'
-        - 
+        -
   2060800       h2_a_shape = sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[:, 1]
         0       E_G2_s.h[p0_shape, ids.a[i]] = h2_a_shape
   1913600       E_G2_s.h[ids.a[i], p0_shape] = E_G2_s.h[p0_shape, ids.a[i]]'
-        - 
+        -
         -       # The (shape, bright) blocks.
         -       # BLAS for
         -       # E_G_s.h[p0_bright, p0_shape] = a[i] * sb.E_l_a[b, i].d[:, 1] * fsm[i].d'
@@ -487,7 +487,7 @@
         -                  0.0, E_G_s_hsub.bright_shape)
         0       E_G_s.h[p0_bright, p0_shape] = E_G_s_hsub.bright_shape
   3827200       E_G_s.h[p0_shape, p0_bright] = E_G_s_hsub.bright_shape'
-        - 
+        -
         -       # BLAS for
         -       # h2_bright_shape =
         -       #   2 * a[i] * sb.E_ll_a[b, i].d[:, 1] * fsm[i].v * fsm[i].d'
@@ -498,7 +498,7 @@
   3827200       E_G2_s.h[p0_shape, p0_bright] = E_G2_s_hsub.bright_shape'
         -     end
         -   end # i loop
-        - 
+        -
         -   # Accumulate the u Hessian.  u is the only parameter that is shared between
         -   # different values of i.
    441600   E_G_u_u_hess = zeros(2, 2);
@@ -509,11 +509,11 @@
         -   end
         0   E_G_s.h[ids.u, ids.u] = E_G_u_u_hess
         0   E_G2_s.h[ids.u, ids.u] = E_G2_u_u_hess
-        - 
+        -
         -   # Write the variance as a function of (E_G, E_G2)
         0   clear!(elbo_vars.var_G_s)
         0   var_v = E_G2_s.v - (E_G_s.v ^ 2);
-        - 
+        -
         0   if active_source && elbo_vars.calculate_derivs
    441600     var_grad = NumType[-2 * E_G_s.v, 1];
    809600     var_hess = NumType[-2  0; 0 0];
@@ -522,11 +522,11 @@
         0     elbo_vars.var_G_s.v = var_v
         -   end
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Adds up E_G and var_G across all sources.
-        - 
+        -
         - Updates elbo_vars.E_G and elbo_vars.var_G in place.
         - """ ->
         - function combine_pixel_sources!{NumType <: Number}(
@@ -534,10 +534,10 @@
         -     mp::ModelParams{NumType},
         -     tile::ImageTile,
         -     sbs::Vector{SourceBrightness{NumType}})
-        - 
+        -
         0   clear!(elbo_vars.E_G)
         0   clear!(elbo_vars.var_G)
-        - 
+        -
         0   tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww];
         0   for s in tile_sources
         0     accumulate_source_brightness!(elbo_vars, mp, sbs, s, tile.b)
@@ -545,8 +545,8 @@
         0     add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, s)
         -   end
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Expected pixel brightness.
         - Args:
@@ -554,7 +554,7 @@
         -   w: The column of the tile
         -   ...the rest are the same as elsewhere.
         -   tile_sources: The indices within active_sources that are present in the tile.
-        - 
+        -
         - Returns:
         -   - Updates elbo_vars.E_G and elbo_vars.var_G in place.
         - """ ->
@@ -567,13 +567,13 @@
         -     tile::ImageTile,
         -     mp::ModelParams{NumType};
         -     include_epsilon::Bool=true)
-        - 
+        -
         0   populate_fsm_vecs!(elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs)
-        - 
+        -
         0   clear!(elbo_vars.E_G)
         0   clear!(elbo_vars.var_G)
         0   combine_pixel_sources!(elbo_vars, mp, tile, sbs);
-        - 
+        -
         0   if include_epsilon
         -     # There are no derivatives with respect to epsilon, so can safely add
         -     # to the value.
@@ -581,17 +581,17 @@
         -       tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
         -   end
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Add the lower bound to the log term to the elbo for a single pixel.
         - As a side effect, elbo_vars.E_G2 is cleared.
-        - 
+        -
         - Args:
         -    - elbo_vars: Intermediate variables
         -    - x_nbm: The photon count at this pixel
         -    - iota: The optical sensitivity
-        - 
+        -
         -  Returns:
         -   Updates elbo_vars.elbo in place by adding the lower bound to the log
         -   term and clears E_G2.
@@ -599,32 +599,32 @@
         - function add_elbo_log_term!{NumType <: Number}(
         -     elbo_vars::ElboIntermediateVariables{NumType},
         -     x_nbm::Float64, iota::Float64)
-        - 
+        -
         -   # See notes for a derivation.  The log term is
         -   # log E[G] - Var(G) / (2 * E[G] ^2 )
-        - 
+        -
         0   E_G = elbo_vars.E_G
         0   var_G = elbo_vars.var_G
         0   elbo = elbo_vars.elbo
-        - 
+        -
         -   # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
         0   log_term_value = log(E_G.v) - 0.5 * var_G.v  / (E_G.v ^ 2)
         -   # println("Log term value: ", log_term_value)
         -   # println("E_G.v ", E_G.v)
         -   # println("var_G.v ", var_G.v)
-        - 
+        -
         0   if elbo_vars.calculate_derivs
    257600     log_term_grad = NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + var_G.v / (E_G.v ^ 3)]
   1067200     log_term_hess =
         -       NumType[0             1 / E_G.v^3;
         -               1 / E_G.v^3   -(1 / E_G.v ^ 2 + 3  * var_G.v / (E_G.v ^ 4))]
-        - 
+        -
         -     # Desipte the variable name,
         -     # this step briefly updates E_G2 to contain the lower bound of the log term.
         0     CelesteTypes.combine_sfs!(
         -       elbo_vars.var_G, elbo_vars.E_G, elbo_vars.elbo_log_term,
         -       log_term_value, log_term_grad, log_term_hess)
-        - 
+        -
         -     # Add to the elbo.
         0     add_value = elbo.v + x_nbm * (log(iota) + log_term_value)
    220800     add_grad = NumType[1, x_nbm]
@@ -636,15 +636,15 @@
         0     elbo.v += x_nbm * (log(iota) + log_term_value)
         -   end
         - end
-        - 
-        - 
+        -
+        -
         - ############################################
         - # The remaining functions loop over tiles, sources, and pixels.
-        - 
+        -
         - @doc """
         - Add a tile's contribution to the ELBO likelihood term by
         - modifying elbo in place.
-        - 
+        -
         - Args:
         -   - tile: An image tile.
         -   - mp: The current model parameters.
@@ -661,10 +661,10 @@
         -     star_mcs::Array{BvnComponent{NumType}, 2},
         -     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
         -     include_epsilon::Bool=true)
-        - 
+        -
         0   elbo = elbo_vars.elbo
         0   tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
-        - 
+        -
         -   # For speed, if there are no sources, add the noise
         -   # contribution directly.
         0   if (length(tile_sources) == 0) && include_epsilon
@@ -687,7 +687,7 @@
         -       end
         0       return
         -   end
-        - 
+        -
         -   # Iterate over pixels that are not NaN.
         0   for w in 1:tile.w_width, h in 1:tile.h_width
         0       this_pixel = tile.pixels[h, w]
@@ -700,16 +700,16 @@
         0           CelesteTypes.add_scaled_sfs!(elbo_vars.elbo, elbo_vars.E_G, scale=-iota)
         -       end
         -   end
-        - 
+        -
         -   # Subtract the log factorial term.  This is not a function of the
         -   # parameters so the derivatives don't need to be updated.
     43200   elbo.v += -sum(lfact(tile.pixels[!Base.isnan(tile.pixels)]))
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Return the image predicted for the tile given the current parameters.
-        - 
+        -
         - Args:
         -   - tile: An image tile.
         -   - mp: The current model parameters.
@@ -717,7 +717,7 @@
         -   - star_mcs: All the star * PCF components.
         -   - gal_mcs: All the galaxy * PCF components.
         -   - elbo: The ELBO log likelihood to be updated.
-        - 
+        -
         - Returns:
         -   A matrix of the same size as the tile with the predicted brightnesses.
         - """ ->
@@ -729,7 +729,7 @@
         -         star_mcs::Array{BvnComponent{NumType}, 2},
         -         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
         -         include_epsilon::Bool=true)
-        - 
+        -
         -     predicted_pixels = copy(tile.pixels)
         -     # Iterate over pixels that are not NaN.
         -     for w in 1:tile.w_width, h in 1:tile.h_width
@@ -742,30 +742,30 @@
         -             predicted_pixels[h, w] = E_G.v * iota
         -         end
         -     end
-        - 
+        -
         -     predicted_pixels
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Produce a predicted image for a given tile and model parameters.
-        - 
+        -
         - If include_epsilon is true, then the background is also rendered.
         - Otherwise, only pixels from the object are rendered.
         - """ ->
         - function tile_predicted_image{NumType <: Number}(
         -     tile::ImageTile, mp::ModelParams{NumType};
         -     include_epsilon::Bool=false)
-        - 
+        -
         -   b = tile.b
         -   star_mcs, gal_mcs =
         -     load_bvn_mixtures(mp, b, calculate_derivs=false)
         -   sbs = SourceBrightness{NumType}[
         -     SourceBrightness(mp.vp[s], false) for s in 1:mp.S]
-        - 
+        -
         -   elbo_vars = ElboIntermediateVariables(NumType, mp.S, length(mp.active_sources));
         -   elbo_vars.calculate_derivs = false
-        - 
+        -
         -   tile_predicted_image(elbo_vars,
         -                        tile,
         -                        mp,
@@ -774,8 +774,8 @@
         -                        gal_mcs,
         -                        include_epsilon=include_epsilon)
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - The ELBO likelihood for given brighntess and bvn components.
         - """ ->
@@ -786,7 +786,7 @@
         -   sbs::Vector{SourceBrightness{NumType}},
         -   star_mcs::Array{BvnComponent{NumType}, 2},
         -   gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
-        - 
+        -
         0   @assert maximum(mp.active_sources) <= mp.S
       400   for tile in tiled_image[:]
         0     tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
@@ -794,13 +794,13 @@
         0       tile_likelihood!(elbo_vars, tile, mp, sbs, star_mcs, gal_mcs);
         -     end
         -   end
-        - 
+        -
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Add the expected log likelihood ELBO term for an image to elbo.
-        - 
+        -
         - Args:
         -   - tiles: An array of ImageTiles
         -   - mp: The current model parameters.
@@ -811,20 +811,20 @@
         -     elbo_vars::ElboIntermediateVariables{NumType},
         -     tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64,
         -     sbs::Vector{SourceBrightness{NumType}})
-        - 
+        -
         0   star_mcs, gal_mcs =
         -     load_bvn_mixtures(mp, b, calculate_derivs=elbo_vars.calculate_derivs)
         0   elbo_likelihood!(elbo_vars, tiles, mp, sbs, star_mcs, gal_mcs)
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Return the expected log likelihood for all bands in a section
         - of the sky.
         - """ ->
         - function elbo_likelihood{NumType <: Number}(
         -     tiled_blob::TiledBlob, mp::ModelParams{NumType})
-        - 
+        -
         0   elbo_vars = ElboIntermediateVariables(NumType, mp.S, length(mp.active_sources));
         0   sbs = load_source_brightnesses(mp, elbo_vars.calculate_derivs)
         0   for b in 1:length(tiled_blob)
@@ -832,12 +832,12 @@
         -   end
         0   elbo_vars.elbo
         - end
-        - 
-        - 
+        -
+        -
         - @doc """
         - Calculates and returns the ELBO and its derivatives for all the bands
         - of an image.
-        - 
+        -
         - Args:
         -   - tiled_blob: A TiledBlob.
         -   - mp: Model parameters.
@@ -845,13 +845,13 @@
         - function elbo{NumType <: Number}(
         -     tiled_blob::TiledBlob, mp::ModelParams{NumType})
         -   elbo = elbo_likelihood(tiled_blob, mp)
-        - 
+        -
         -   # TODO: subtract the kl with the hessian.
         -   subtract_kl!(mp, elbo)
         -   elbo
         - end
-        - 
-        - 
-        - 
+        -
+        -
+        -
         - end
-        - 
+        -

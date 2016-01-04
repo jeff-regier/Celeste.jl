@@ -22,7 +22,8 @@ function test_tile_likelihood()
     elbo_vars.calculate_derivs = calculate_derivs
     star_mcs, gal_mcs =
       ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=elbo_vars.calculate_derivs);
-    sbs = ElboDeriv.load_source_brightnesses(mp, elbo_vars.calculate_derivs);
+    sbs = ElboDeriv.load_source_brightnesses(
+      mp, calculate_derivs=elbo_vars.calculate_derivs);
     ElboDeriv.tile_likelihood!(elbo_vars, tile, mp, sbs, star_mcs, gal_mcs);
     deepcopy(elbo_vars.elbo)
   end
@@ -337,7 +338,7 @@ function test_fs1m_derivatives()
     # Two sanity checks.
     gcc = gal_mcs[gcc_ind...];
     clear!(elbo_vars.fs1m_vec[s]);
-    v = ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x, true);
+    v = ElboDeriv.eval_bvn_log_density(gcc.bmc, x);
     gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
     pc = mp.patches[s, b].psf[gcc_ind[1]]
 
@@ -443,12 +444,11 @@ function test_bvn_derivatives()
 
   # Note that get_bvn_derivs doesn't use the weight, so set it to something
   # strange to check that it doesn't matter.
-  #weight = 0.724
-  weight = 1.0
+  weight = 0.724
 
   bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  v = ElboDeriv.get_bvn_derivs!(elbo_vars, bvn, x, true);
+  ElboDeriv.get_bvn_derivs!(elbo_vars, bvn, x, true, true);
 
   function bvn_function{T <: Number}(x::Vector{T}, sigma::Matrix{T})
     local_x = offset - x
@@ -472,18 +472,17 @@ function test_bvn_derivatives()
   end
 
   par = wrap(x, sigma);
-  @test_approx_eq v f_wrap(par)
 
-  ad_grad_fun = ForwardDiff.gradient(f_wrap);
-  ad_d = ad_grad_fun(par);
-  @test_approx_eq elbo_vars.bvn_x_d ad_d[x_ids]
-  @test_approx_eq elbo_vars.bvn_sig_d ad_d[sig_ids]
+  @test_approx_eq ElboDeriv.eval_bvn_log_density(bvn, x) f_wrap(par)
 
-  ad_hess_fun = ForwardDiff.hessian(f_wrap);
-  ad_h = ad_hess_fun(par);
-  @test_approx_eq elbo_vars.bvn_xx_h ad_h[x_ids, x_ids]
-  @test_approx_eq elbo_vars.bvn_xsig_h ad_h[x_ids, sig_ids]
-  @test_approx_eq elbo_vars.bvn_sigsig_h ad_h[sig_ids, sig_ids]
+  ad_grad = ForwardDiff.gradient(f_wrap, par);
+  @test_approx_eq elbo_vars.bvn_x_d ad_grad[x_ids]
+  @test_approx_eq elbo_vars.bvn_sig_d ad_grad[sig_ids]
+
+  ad_hess = ForwardDiff.hessian(f_wrap, par);
+  @test_approx_eq elbo_vars.bvn_xx_h ad_hess[x_ids, x_ids]
+  @test_approx_eq elbo_vars.bvn_xsig_h ad_hess[x_ids, sig_ids]
+  @test_approx_eq elbo_vars.bvn_sigsig_h ad_hess[sig_ids, sig_ids]
 end
 
 
@@ -558,7 +557,7 @@ function test_galaxy_variable_transform()
   sig_sf = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma);
   gcc = ElboDeriv.GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  ElboDeriv.get_bvn_derivs!(elbo_vars, bmc, x, true);
+  ElboDeriv.get_bvn_derivs!(elbo_vars, bmc, x, true, true);
   ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
 
   # When the hessian is large the result has the wrong sign.  Maybe that
@@ -626,7 +625,7 @@ function test_galaxy_cache_component()
     e_dev_i_fd = convert(T, e_dev_i)
     gcc = ElboDeriv.GalaxyCacheComponent(
             e_dev_dir, e_dev_i_fd, gp, psf,
-            u_pix, e_axis, e_angle, e_scale, false);
+            u_pix, e_axis, e_angle, e_scale, false, false);
 
     py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x);
 
@@ -647,9 +646,10 @@ function test_galaxy_cache_component()
   u_pix = WCS.world_to_pixel(
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   gcc = ElboDeriv.GalaxyCacheComponent(
-          e_dev_dir, e_dev_i, gp, psf, u_pix, e_axis, e_angle, e_scale, true);
+          e_dev_dir, e_dev_i, gp, psf,
+          u_pix, e_axis, e_angle, e_scale, true, true);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x, true);
+  ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x, true, true);
   ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
 
   # Sanity check the wrapper.

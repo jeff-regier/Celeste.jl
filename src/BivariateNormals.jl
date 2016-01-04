@@ -121,26 +121,46 @@ Args:
 function get_bvn_derivs!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     bvn::BvnComponent{NumType}, x::Vector{Float64},
+    calculate_x_hess::Bool,
     calculate_sigma_derivs::Bool)
 
   py1, py2, f_pre = eval_bvn_pdf(bvn, x);
+  get_bvn_derivs!(
+    elbo_vars, py1, py2, f_pre, bvn, calculate_x_hess, calculate_sigma_derivs)
+end
 
-  # TODO: the value is not really neccessary except for testing,
-  # I think, and if it is, you should get the determinant from the bvn.
-  v = -0.5 * (
+
+function eval_bvn_log_density{NumType <: Number}(
+    bvn::BvnComponent{NumType}, x::Vector{Float64})
+  # This is the function of which get_bvn_derivs!() returns the derivatives.
+  # It is only used for testing.
+
+  py1, py2, f_pre = eval_bvn_pdf(bvn, x);
+  -0.5 * (
     (x[1] - bvn.the_mean[1]) * py1 + (x[2] - bvn.the_mean[2]) * py2 -
     log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
+end
+
+
+function get_bvn_derivs!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    py1::NumType, py2::NumType, f_pre::NumType,
+    bvn::BvnComponent{NumType},
+    calculate_x_hess::Bool,
+    calculate_sigma_derivs::Bool)
 
   # Gradient with respect to x.
   bvn_x_d = elbo_vars.bvn_x_d
   bvn_x_d[1] = -py1
   bvn_x_d[2] = -py2
 
-  # Hessian terms involving only x
-  bvn_xx_h = elbo_vars.bvn_xx_h
-  bvn_xx_h[1, 1] = -bvn.precision[1,1]
-  bvn_xx_h[2, 2] = -bvn.precision[2,2]
-  bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1,2]
+  if calculate_x_hess
+    # Hessian terms involving only x
+    bvn_xx_h = elbo_vars.bvn_xx_h
+    bvn_xx_h[1, 1] = -bvn.precision[1,1]
+    bvn_xx_h[2, 2] = -bvn.precision[2,2]
+    bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1,2]
+  end
 
   if calculate_sigma_derivs
     # The first term is the derivative of -0.5 * x' Sigma^{-1} x
@@ -191,7 +211,7 @@ function get_bvn_derivs!{NumType <: Number}(
     end
   end
 
-  v
+  #v
 end
 
 
@@ -225,7 +245,7 @@ Note that nubar is not included.
 """ ->
 GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
-    XiXi::Matrix{NumType}) = begin
+    XiXi::Matrix{NumType}; calculate_tensor::Bool=true) = begin
 
   cos_sin = cos(e_angle)sin(e_angle)
   sin_sq = sin(e_angle)^2
@@ -238,34 +258,38 @@ GalaxySigmaDerivs{NumType <: Number}(
     e_scale^2 * (e_axis^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
   j[:, gal_shape_ids.e_scale] = (2XiXi ./ e_scale)[[1, 2, 4]]
 
-  # Second derivatives.
   t = Array(NumType, 3, length(gal_shape_ids), length(gal_shape_ids))
+  if calculate_tensor
+    # Second derivatives.
 
-  # Second derivatives involving e_scale
-  t[:, gal_shape_ids.e_scale, gal_shape_ids.e_scale] =
-    (2 * XiXi ./ (e_scale ^ 2))[[1, 2, 4]]
-  t[:, gal_shape_ids.e_scale, gal_shape_ids.e_axis] =
-    (2 * j[:, gal_shape_ids.e_axis] ./ e_scale)
-  t[:, gal_shape_ids.e_scale, gal_shape_ids.e_angle] =
-    (2 * j[:, gal_shape_ids.e_angle] ./ e_scale)
+    # Second derivatives involving e_scale
+    t[:, gal_shape_ids.e_scale, gal_shape_ids.e_scale] =
+      (2 * XiXi ./ (e_scale ^ 2))[[1, 2, 4]]
+    t[:, gal_shape_ids.e_scale, gal_shape_ids.e_axis] =
+      (2 * j[:, gal_shape_ids.e_axis] ./ e_scale)
+    t[:, gal_shape_ids.e_scale, gal_shape_ids.e_angle] =
+      (2 * j[:, gal_shape_ids.e_angle] ./ e_scale)
 
-  t[:, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
-    t[:, gal_shape_ids.e_scale, gal_shape_ids.e_axis]
-  t[:, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
-    t[:, gal_shape_ids.e_scale, gal_shape_ids.e_angle]
+    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
+      t[:, gal_shape_ids.e_scale, gal_shape_ids.e_axis]
+    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
+      t[:, gal_shape_ids.e_scale, gal_shape_ids.e_angle]
 
-  # Remaining second derivatives involving e_angle
-  t[:, gal_shape_ids.e_angle, gal_shape_ids.e_angle] =
-    2 * e_scale^2 * (e_axis^2 - 1) *
-    [cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq]
-  t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
-    2 * e_scale^2 * e_axis * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
-  t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle] =
-    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis]
+    # Remaining second derivatives involving e_angle
+    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_angle] =
+      2 * e_scale^2 * (e_axis^2 - 1) *
+      [cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq]
+    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
+      2 * e_scale^2 * e_axis * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
+    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle] =
+      t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis]
 
-  # The second derivative involving only e_axis.
-  t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
-    2 * e_scale^2 * [sin_sq, -cos_sin, cos_sq]
+    # The second derivative involving only e_axis.
+    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
+      2 * e_scale^2 * [sin_sq, -cos_sin, cos_sq]
+  else
+    fill!(t, 0.0)
+  end
 
   GalaxySigmaDerivs(j, t)
 end
@@ -311,17 +335,21 @@ GalaxyCacheComponent{NumType <: Number}(
     e_dev_dir::Float64, e_dev_i::NumType,
     gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
-    calculate_derivs::Bool) = begin
+    calculate_derivs::Bool, calculate_hessian::Bool) = begin
 
   XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
   var_s = pc.tauBar + gc.nuBar * XiXi
   weight = pc.alphaBar * gc.etaBar  # excludes e_dev
+
+  # d siginv / dsigma is only necessary for the Hessian.
   bmc = BvnComponent(mean_s, var_s, weight,
-                     calculate_siginv_deriv=calculate_derivs)
+                     calculate_siginv_deriv=calculate_derivs && calculate_hessian)
 
   if calculate_derivs
-    sig_sf = GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
+    # The tensor is only needed for the Hessian.
+    sig_sf = GalaxySigmaDerivs(
+      e_angle, e_axis, e_scale, XiXi, calculate_tensor=calculate_hessian)
     sig_sf.j .*= gc.nuBar
     sig_sf.t .*= gc.nuBar
   else
@@ -341,25 +369,27 @@ function transform_bvn_derivs!{NumType <: Number}(
     bmc::BvnComponent{NumType},
     wcs_jacobian::Array{Float64, 2})
 
-    bvn_u_d = elbo_vars.bvn_u_d
-    bvn_uu_h = elbo_vars.bvn_uu_h
+  bvn_u_d = elbo_vars.bvn_u_d
+  bvn_uu_h = elbo_vars.bvn_uu_h
 
-    fill!(bvn_u_d, 0.0)
-    fill!(bvn_uu_h, 0.0)
+  fill!(bvn_u_d, 0.0)
+  fill!(bvn_uu_h, 0.0)
 
-    # These values should already have been set using get_bvn_derivs!()
-    bvn_x_d = elbo_vars.bvn_x_d
-    bvn_xx_h = elbo_vars.bvn_xx_h
+  # These values should already have been set using get_bvn_derivs!()
+  bvn_x_d = elbo_vars.bvn_x_d
+  bvn_xx_h = elbo_vars.bvn_xx_h
 
-    # Gradient calculations.
+  # Gradient calculations.
 
-    # Note that dxA_duB = -wcs_jacobian[A, B].  (It is minus the jacobian
-    # because the object position affects the bvn.the_mean term, which is
-    # subtracted from the pixel location as defined in bvn_sf.d.)
-    for x_id in 1:2, u_id in 1:2
-      bvn_u_d[u_id] += -bvn_x_d[x_id] * wcs_jacobian[x_id, u_id]
-    end
+  # Note that dxA_duB = -wcs_jacobian[A, B].  (It is minus the jacobian
+  # because the object position affects the bvn.the_mean term, which is
+  # subtracted from the pixel location as defined in bvn_sf.d.)
+  # TODO: vectorize?
+  for x_id in 1:2, u_id in 1:2
+    bvn_u_d[u_id] += -bvn_x_d[x_id] * wcs_jacobian[x_id, u_id]
+  end
 
+  if elbo_vars.calculate_hessian
     # Hessian calculations.
 
     # Second derivatives involving only u.
@@ -369,6 +399,7 @@ function transform_bvn_derivs!{NumType <: Number}(
       bvn_uu_h[u_id1, u_id2] += bvn_xx_h[x_id1, x_id2] *
         wcs_jacobian[x_id1, u_id1] * wcs_jacobian[x_id2, u_id2]
     end
+  end
 end
 
 
@@ -385,33 +416,36 @@ function transform_bvn_derivs!{NumType <: Number}(
     gcc::GalaxyCacheComponent{NumType},
     wcs_jacobian::Array{Float64, 2})
 
-    bvn_s_d = elbo_vars.bvn_s_d
-    bvn_ss_h = elbo_vars.bvn_ss_h
-    bvn_us_h = elbo_vars.bvn_us_h
+  bvn_s_d = elbo_vars.bvn_s_d
+  bvn_ss_h = elbo_vars.bvn_ss_h
+  bvn_us_h = elbo_vars.bvn_us_h
 
-    fill!(bvn_s_d, 0.0)
+  # These values should already have been set using get_bvn_derivs!()
+  bvn_x_d = elbo_vars.bvn_x_d
+  bvn_xx_h = elbo_vars.bvn_xx_h
+  bvn_sig_d = elbo_vars.bvn_sig_d
+  bvn_sigsig_h = elbo_vars.bvn_sigsig_h
+  bvn_xsig_h = elbo_vars.bvn_xsig_h
+
+  # Transform the u derivates first.
+  transform_bvn_derivs!(elbo_vars, gcc.bmc, wcs_jacobian)
+
+  # Gradient calculations.
+
+  fill!(bvn_s_d, 0.0)
+
+  # Use the chain rule for the shape derviatives.
+  # TODO: vectorize?
+  for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
+    bvn_s_d[shape_id] +=
+      bvn_sig_d[sig_id] * gcc.sig_sf.j[sig_id, shape_id]
+  end
+
+  if elbo_vars.calculate_hessian
+    # Hessian calculations.
+
     fill!(bvn_ss_h, 0.0)
     fill!(bvn_us_h, 0.0)
-
-    # These values should already have been set using get_bvn_derivs!()
-    bvn_x_d = elbo_vars.bvn_x_d
-    bvn_xx_h = elbo_vars.bvn_xx_h
-    bvn_sig_d = elbo_vars.bvn_sig_d
-    bvn_sigsig_h = elbo_vars.bvn_sigsig_h
-    bvn_xsig_h = elbo_vars.bvn_xsig_h
-
-    # Transform the u derivates first.
-    transform_bvn_derivs!(elbo_vars, gcc.bmc, wcs_jacobian)
-
-    # Gradient calculations.
-
-    # Use the chain rule for the shape derviatives.
-    for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
-      bvn_s_d[shape_id] +=
-        bvn_sig_d[sig_id] * gcc.sig_sf.j[sig_id, shape_id]
-    end
-
-    # Hessian calculations.
 
     # Second derviatives involving only shape parameters.
     # TODO: eliminate redundancies.
@@ -435,6 +469,7 @@ function transform_bvn_derivs!{NumType <: Number}(
       bvn_us_h[u_id, shape_id] += bvn_xsig_h[x_id, sig_id] *
         gcc.sig_sf.j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
     end
+  end
 end
 
 
@@ -462,7 +497,8 @@ Returns:
 The PSF contains three components, so you see lots of 3's below.
 """ ->
 function load_bvn_mixtures{NumType <: Number}(
-    mp::ModelParams{NumType}, b::Int64; calculate_derivs::Bool=true)
+    mp::ModelParams{NumType}, b::Int64;
+    calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
   star_mcs = Array(BvnComponent{NumType}, 3, mp.S)
   gal_mcs = Array(GalaxyCacheComponent{NumType}, 3, 8, 2, mp.S)
@@ -499,7 +535,8 @@ function load_bvn_mixtures{NumType <: Number}(
                   gal_mcs[k, j, i, s] = GalaxyCacheComponent(
                       e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
                       m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],
-                      calculate_derivs && (s in mp.active_sources))
+                      calculate_derivs && (s in mp.active_sources),
+                      calculate_hessian)
               end
           end
       end
