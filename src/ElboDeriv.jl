@@ -19,30 +19,26 @@ export tile_predicted_imagecom
 # intermediate values used in the ELBO calculation.
 
 type HessianSubmatrices{NumType <: Number}
-  bright_bright::Matrix{NumType}
+  u_u::Matrix{NumType}
   shape_shape::Matrix{NumType}
-  shape_bright::Matrix{NumType}
-  a_bright::Vector{NumType}
-  a_shape::Vector{NumType}
 end
 
 
 @doc """
-NumType: The numeric type of the hessian.
-i: The type of celestial source, from 1:Ia
+Pre-allocated memory for efficiently accumulating certain sub-matrices
+of the E_G_s and E_G2_s Hessian.
+
+Args:
+  NumType: The numeric type of the hessian.
+  i: The type of celestial source, from 1:Ia
 """ ->
 HessianSubmatrices(NumType::DataType, i::Int64) = begin
   @assert 1 <= i <= Ia
   shape_p = length(shape_standard_alignment[i])
-  bright_p = length(brightness_standard_alignment[i])
 
-  bright_bright = zeros(NumType, bright_p, bright_p);
+  u_u = zeros(NumType, 2, 2);
   shape_shape = zeros(NumType, shape_p, shape_p);
-  shape_bright = zeros(NumType, shape_p, bright_p);
-  a_bright = zeros(NumType, bright_p);
-  a_shape = zeros(NumType, shape_p);
-  HessianSubmatrices{NumType}(
-    bright_bright, shape_shape, shape_bright, a_bright, a_shape)
+  HessianSubmatrices{NumType}(u_u, shape_shape)
 end
 
 type ElboIntermediateVariables{NumType <: Number}
@@ -396,6 +392,7 @@ function accumulate_source_brightness!{NumType <: Number}(
 
       p0_shape = shape_standard_alignment[i]
       p0_bright = brightness_standard_alignment[i]
+      u_ind = i == 1 ? star_ids.u : gal_ids.u
 
       # Derivatives with respect to the spatial parameters
       a_fd = a[i] * fsm[i].d[:, 1]
@@ -411,7 +408,7 @@ function accumulate_source_brightness!{NumType <: Number}(
       ######################
       # Hessians.
 
-      # Data structures to accumulate submatrices of the Hessian.
+      # Data structures to accumulate certain submatrices of the Hessian.
       E_G_s_hsub = elbo_vars.E_G_s_hsub_vec[i];
       E_G2_s_hsub = elbo_vars.E_G2_s_hsub_vec[i];
 
@@ -429,6 +426,10 @@ function accumulate_source_brightness!{NumType <: Number}(
 
       # The (shape, shape) block:
       # TODO: this actually accumulates when there is overlap.
+      E_G_s_hsub.shape_shape = a[i] * sb.E_l_a[b, i].v * fsm[i].h
+
+      # The u_u submatrix of this assignment will be overwritten after
+      # the loop.
       E_G_s.h[p0_shape, p0_shape] = a[i] * sb.E_l_a[b, i].v * fsm[i].h
       # E_G2_s.h[p0_shape, p0_shape] +=
       #   2 * a[i] * sb.E_ll_a[b, i].v *
@@ -438,6 +439,8 @@ function accumulate_source_brightness!{NumType <: Number}(
       # BLAS.axpy!(a[i] * sb.E_l_a[b, i].v, fsm[i].h,
       #            E_G_s.h[p0_shape, p0_shape]);
 
+      # The shape_shape block has several terms which we accumulate efficiently
+      # using BLAS.
       E_G2_s_hsub.shape_shape =
         2 * a[i] * sb.E_ll_a[b, i].v * fsm[i].v * fsm[i].h
       # BLAS.axpy!(2 * a[i] * sb.E_ll_a[b, i].v * fsm[i].v, fsm[i].h,
@@ -445,6 +448,15 @@ function accumulate_source_brightness!{NumType <: Number}(
       BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v, fsm[i].d[:, 1], fsm[i].d[:, 1],
                 E_G2_s_hsub.shape_shape);
       E_G2_s.h[p0_shape, p0_shape] = E_G2_s_hsub.shape_shape;
+
+      # Since the u_u submatrix is not disjoint between different i, accumulate
+      # it separate and add it at the end.
+      E_G_s_hsub.u_u = E_G_s_hsub.shape_shape[u_ind, u_ind]
+      E_G2_s_hsub.u_u = E_G2_s_hsub.shape_shape[u_ind, u_ind]
+
+      # All other terms are disjoint between different i and don't involve
+      # addition, so we can just assign their values (which is efficient in
+      # native julia).
 
       # TODO: eliminate redundancy.
       # The (a, bright) blocks:
@@ -475,7 +487,18 @@ function accumulate_source_brightness!{NumType <: Number}(
       E_G2_s.h[p0_bright, p0_shape] = h2_bright_shape
       E_G2_s.h[p0_shape, p0_bright] = E_G2_s.h[p0_bright, p0_shape]'
     end
+  end # i loop
+
+  # Accumulate the u Hessian.  u is the only parameter that is shared between
+  # different values of i.
+  E_G_u_u_hess = zeros(2, 2);
+  E_G2_u_u_hess = zeros(2, 2);
+  for i = 1:Ia
+    E_G_u_u_hess += elbo_vars.E_G_s_hsub_vec[i].u_u
+    E_G2_u_u_hess += elbo_vars.E_G2_s_hsub_vec[i].u_u
   end
+  E_G_s.h[ids.u, ids.u] = E_G_u_u_hess
+  E_G2_s.h[ids.u, ids.u] = E_G2_u_u_hess
 
   # Write the variance as a function of (E_G, E_G2)
   clear!(elbo_vars.var_G_s)
