@@ -413,7 +413,7 @@ x = zeros(n, n);
 @time BLAS.axpy!(3.0, y_sub, x);
 
 ######
-n = 1000;
+n = 100;
 x = rand(n, n);
 sub_ind = 2 * (1:n)
 sub_ind_col = collect(sub_ind);
@@ -443,10 +443,13 @@ y = zeros(2 * n, 2 * n);
   for i1 in 1:length(sub_ind), i2 in 1:length(sub_ind)
     j1 = sub_ind[i1]
     j2 = sub_ind[i2]
-    y[j1, j2] += 3 * x[i1, i2]
+    z = 3 * x[i1, i2] + y[j1, j2]
+    #y[j1, j2] += 3 * x[i1, i2]
+    y[j1, j2] = z
   end
 end
-
+# n = 1000;   0.726820 seconds (7.47 M allocations: 129.318 MB, 12.70% gc time)
+# n = 100;   0.005881 seconds (50.20 k allocations: 943.781 KB)
 
 # This allocates a ton of memory.
 y = zeros(2 * n, 2 * n);
@@ -458,3 +461,40 @@ y = zeros(2 * n, 2 * n);
     y[j1, j2] += 3 * x[i1, i2]
   end
 end
+
+
+
+
+n = 10000
+y = ones(n);
+x = rand(n);
+
+@time begin
+  for i1 = 1:n
+    y[i1] += x[i1] * 3
+  end
+end
+
+z = 0.0
+@time begin
+  for i1 = 1:n
+    z = x[i1] * 3 + y[i1]
+    y[i1] = z
+  end
+end
+
+z = 0.0
+@time begin
+  for i1 = 1:n
+    global z
+    z = x[i1] * 3 + y[i1]
+    y[i1] = z
+  end
+end
+
+
+
+
+
+
+#
