@@ -21,6 +21,7 @@ export tile_predicted_imagecom
 type HessianSubmatrices{NumType <: Number}
   u_u::Matrix{NumType}
   shape_shape::Matrix{NumType}
+  bright_shape::Matrix{NumType}
 end
 
 
@@ -34,11 +35,13 @@ Args:
 """ ->
 HessianSubmatrices(NumType::DataType, i::Int64) = begin
   @assert 1 <= i <= Ia
+  bright_p = length(brightness_standard_alignment[i])
   shape_p = length(shape_standard_alignment[i])
 
   u_u = zeros(NumType, 2, 2);
   shape_shape = zeros(NumType, shape_p, shape_p);
-  HessianSubmatrices{NumType}(u_u, shape_shape)
+  bright_shape = zeros(NumType, bright_p, shape_p);
+  HessianSubmatrices{NumType}(u_u, shape_shape, bright_shape)
 end
 
 type ElboIntermediateVariables{NumType <: Number}
@@ -478,14 +481,21 @@ function accumulate_source_brightness!{NumType <: Number}(
       E_G2_s.h[ids.a[i], p0_shape] = E_G2_s.h[p0_shape, ids.a[i]]'
 
       # The (shape, bright) blocks.
-      h_bright_shape = a[i] * sb.E_l_a[b, i].d[:, 1] * fsm[i].d'
-      E_G_s.h[p0_bright, p0_shape] = h_bright_shape
-      E_G_s.h[p0_shape, p0_bright] = E_G_s.h[p0_bright, p0_shape]'
+      # BLAS for
+      # E_G_s.h[p0_bright, p0_shape] = a[i] * sb.E_l_a[b, i].d[:, 1] * fsm[i].d'
+      BLAS.gemm!('N', 'T', a[i], sb.E_l_a[b, i].d[:, 1], fsm[i].d,
+                 0.0, E_G_s_hsub.bright_shape)
+      E_G_s.h[p0_bright, p0_shape] = E_G_s_hsub.bright_shape
+      E_G_s.h[p0_shape, p0_bright] = E_G_s_hsub.bright_shape'
 
-      h2_bright_shape =
-        2 * a[i] * sb.E_ll_a[b, i].d[:, 1] * fsm[i].v * fsm[i].d'
-      E_G2_s.h[p0_bright, p0_shape] = h2_bright_shape
-      E_G2_s.h[p0_shape, p0_bright] = E_G2_s.h[p0_bright, p0_shape]'
+      # BLAS for
+      # h2_bright_shape =
+      #   2 * a[i] * sb.E_ll_a[b, i].d[:, 1] * fsm[i].v * fsm[i].d'
+      BLAS.gemm!('N', 'T', 2 * a[i] * fsm[i].v,
+                 sb.E_ll_a[b, i].d[:, 1], fsm[i].d,
+                 0.0, E_G2_s_hsub.bright_shape)
+      E_G2_s.h[p0_bright, p0_shape] = E_G2_s_hsub.bright_shape
+      E_G2_s.h[p0_shape, p0_bright] = E_G2_s_hsub.bright_shape'
     end
   end # i loop
 
