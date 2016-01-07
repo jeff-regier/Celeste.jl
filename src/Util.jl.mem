@@ -28,10 +28,10 @@
         0         @assert 0 < ab <= 1.
         -     end
         0     cp, sp = cos(angle), sin(angle)
-   228480     R = [[cp -sp]; [sp cp]]  # rotates
-    80640     D = diagm([1., ab])  # shrinks the minor axis
-   147840     W = scale * D * R'
-    53760     W' * W  # XiXi
+    45696     R = [[cp -sp]; [sp cp]]  # rotates
+    16128     D = diagm([1., ab])  # shrinks the minor axis
+    29568     W = scale * D * R'
+    10752     W' * W  # XiXi
         - end
         - 
         - function inv_logit(x)

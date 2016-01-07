@@ -89,9 +89,9 @@ type ElboIntermediateVariables{NumType <: Number}
   E_G::SensitiveFloat{CanonicalParams, NumType}
   var_G::SensitiveFloat{CanonicalParams, NumType}
 
-  # Log term function gradient and Hessian.
-  log_term_grad::Vector{NumType}
-  log_term_hess::Matrix{NumType}
+  # Pre-allocated memory for the gradient and Hessian of combine functions.
+  combine_grad::Vector{NumType}
+  combine_hess::Matrix{NumType}
 
   # A placeholder for the log term in the ELBO.
   elbo_log_term::SensitiveFloat{CanonicalParams, NumType}
@@ -160,9 +160,8 @@ ElboIntermediateVariables(
   E_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
   var_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
 
-  log_term_grad = zeros(NumType, length(CanonicalParams))
-  log_term_hess = zeros(NumType,
-                        length(CanonicalParams), length(CanonicalParams))
+  combine_grad = zeros(NumType, 2)
+  combine_hess = zeros(NumType, 2, 2)
 
   elbo_log_term =
     zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
@@ -174,7 +173,7 @@ ElboIntermediateVariables(
     bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h,
     fs0m_vec, fs1m_vec,
     E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
-    E_G, var_G, log_term_grad, log_term_hess,
+    E_G, var_G, combine_grad, combine_hess,
     elbo_log_term, elbo, calculate_derivs, calculate_hessian)
 end
 
@@ -344,24 +343,23 @@ function populate_fsm_vecs!{NumType <: Number}(
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     star_mcs::Array{BvnComponent{NumType}, 2})
 
-  tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
-  for s in tile_sources
+  for s in mp.tile_sources[tile.b][tile.hh, tile.ww]
     wcs_jacobian = mp.patches[s, tile.b].wcs_jacobian;
-    sb = sbs[s];
-
-    m_pos = Float64[tile.h_range[h], tile.w_range[w]]
 
     clear!(elbo_vars.fs0m_vec[s])
     for star_mc in star_mcs[:, s]
-        accum_star_pos!(elbo_vars, s, star_mc, m_pos, wcs_jacobian)
+        accum_star_pos!(
+          elbo_vars, s, star_mc, Float64[tile.h_range[h], tile.w_range[w]],
+          wcs_jacobian)
     end
 
     clear!(elbo_vars.fs1m_vec[s])
     for i = 1:2 # Galaxy types
         for j in 1:[8,6][i] # Galaxy component
             for k = 1:3 # PSF component
-                gal_mc = gal_mcs[k, j, i, s];
-                accum_galaxy_pos!(elbo_vars, s, gal_mc, m_pos, wcs_jacobian)
+                accum_galaxy_pos!(
+                  elbo_vars, s, gal_mcs[k, j, i, s], Float64[tile.h_range[h],
+                  tile.w_range[w]], wcs_jacobian)
             end
         end
     end
@@ -531,15 +529,27 @@ function accumulate_source_brightness!{NumType <: Number}(
     E_G2_s.h[ids.u, ids.u] = E_G2_u_u_hess
   end
 
-  # Write the variance as a function of (E_G, E_G2)
+  calculate_var_G_s!(elbo_vars, active_source)
+end
+
+# Declare outside so that memory is not allocated every function call.
+const variance_hess = Float64[-2  0; 0 0]
+
+@doc """
+Calculate the variance var_G_s as a function of (E_G_s, E_G2_s).
+""" ->
+function calculate_var_G_s!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType}, active_source::Bool)
+
   clear!(elbo_vars.var_G_s)
-  var_v = E_G2_s.v - (E_G_s.v ^ 2);
+  var_v = elbo_vars.E_G2_s.v - (elbo_vars.E_G_s.v ^ 2);
 
   if active_source && elbo_vars.calculate_derivs
-    var_grad = NumType[-2 * E_G_s.v, 1];
-    var_hess = NumType[-2  0; 0 0];
+    elbo_vars.combine_grad[:] = NumType[-2 * elbo_vars.E_G_s.v, 1];
+    elbo_vars.combine_hess[:, :] = variance_hess;
     combine_sfs!(
-      E_G_s, E_G2_s, elbo_vars.var_G_s, var_v, var_grad, var_hess,
+      elbo_vars.E_G_s, elbo_vars.E_G2_s, elbo_vars.var_G_s,
+      var_v, elbo_vars.combine_grad, elbo_vars.combine_hess,
       calculate_hessian=elbo_vars.calculate_hessian)
   else
     elbo_vars.var_G_s.v = var_v
@@ -561,8 +571,7 @@ function combine_pixel_sources!{NumType <: Number}(
   clear!(elbo_vars.E_G)
   clear!(elbo_vars.var_G)
 
-  tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww];
-  for s in tile_sources
+  for s in mp.tile_sources[tile.b][tile.hh, tile.ww]
     calculate_hessian =
       elbo_vars.calculate_hessian && elbo_vars.calculate_derivs &&
       s in mp.active_sources
@@ -643,25 +652,31 @@ function add_elbo_log_term!{NumType <: Number}(
 
   if elbo_vars.calculate_derivs
     # TODO: pre-allocate these.
-    elbo_vars.log_term_grad =
+    elbo_vars.combine_grad =
       NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + var_G.v / (E_G.v ^ 3)]
-    elbo_vars.log_term_hess =
-      NumType[0             1 / E_G.v^3;
-              1 / E_G.v^3   -(1 / E_G.v ^ 2 + 3  * var_G.v / (E_G.v ^ 4))]
+
+    if elbo_vars.calculate_hessian
+      elbo_vars.combine_hess =
+        NumType[0             1 / E_G.v^3;
+                1 / E_G.v^3   -(1 / E_G.v ^ 2 + 3  * var_G.v / (E_G.v ^ 4))]
+    else
+      fill!(elbo_vars.combine_hess, 0.0)
+    end
 
     # Desipte the variable name, this step briefly updates elbo_vars.var_G
     # to contain the lower bound of the log term.
     combine_sfs!(
       elbo_vars.var_G, elbo_vars.E_G, elbo_vars.elbo_log_term,
-      log_term_value, elbo_vars.log_term_grad, elbo_vars.log_term_hess,
+      log_term_value, elbo_vars.combine_grad, elbo_vars.combine_hess,
       calculate_hessian=elbo_vars.calculate_hessian)
 
     # Add to the elbo.
     add_value = elbo.v + x_nbm * (log(iota) + log_term_value)
-    add_grad = NumType[1, x_nbm]
-    add_hess = NumType[0 0; 0 0]
+    elbo_vars.combine_grad = NumType[1, x_nbm]
+    fill!(elbo_vars.combine_hess, 0.0)
     combine_sfs!(
-      elbo, elbo_vars.elbo_log_term, add_value, add_grad, add_hess,
+      elbo_vars.elbo, elbo_vars.elbo_log_term,
+      add_value, elbo_vars.combine_grad, elbo_vars.combine_hess,
       calculate_hessian=elbo_vars.calculate_hessian)
   else
     # If not calculating derivatives, add the values directly.
@@ -695,11 +710,10 @@ function tile_likelihood!{NumType <: Number}(
     include_epsilon::Bool=true)
 
   elbo = elbo_vars.elbo
-  tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
 
   # For speed, if there are no sources, add the noise
   # contribution directly.
-  if (length(tile_sources) == 0) && include_epsilon
+  if (length(mp.tile_sources[tile.b][tile.hh, tile.ww]) == 0) && include_epsilon
       # NB: not using the delta-method approximation here
       if tile.constant_background
           nan_pixels = Base.isnan(tile.pixels)
@@ -823,8 +837,8 @@ function elbo_likelihood!{NumType <: Number}(
 
   @assert maximum(mp.active_sources) <= mp.S
   for tile in tiled_image[:]
-    tile_sources = mp.tile_sources[tile.b][tile.hh, tile.ww]
-    if length(intersect(tile_sources, mp.active_sources)) > 0
+    if length(intersect(mp.tile_sources[tile.b][tile.hh, tile.ww],
+                        mp.active_sources)) > 0
       tile_likelihood!(elbo_vars, tile, mp, sbs, star_mcs, gal_mcs);
     end
   end

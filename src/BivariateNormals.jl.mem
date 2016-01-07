@@ -27,16 +27,16 @@
         -   # It is necessary to have this separately named function to allow
         -   # a BvnComponent to be instantiated with all the below combinations of
         -   # NumTypes and Float64 shown below.
-    43200   the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
+     8640   the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
         0   c = 1 ./ (the_det^.5 * 2pi)
-        - 
-   849600   precision = the_cov^-1
         - 
         0   if calculate_siginv_deriv
         -     # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
         -     # derivatives of log|Sigma| with respect to sigma.
         -     # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
         0     dsiginv_dsig = zeros(NumType, 3, 3)
+        - 
+        0     precision = the_cov^-1
         - 
         0     dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
         0     dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
@@ -50,11 +50,11 @@
         0     dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
         0     dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
         0     dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
+        0     return(BvnComponent{NumType}(the_mean, precision, c * weight, dsiginv_dsig))
         -   else
-    28800     dsiginv_dsig = zeros(NumType, 0, 0)
+   180000     return(BvnComponent{NumType}(the_mean, the_cov^-1, c * weight, zeros(NumType, 0, 0)))
         -   end
         - 
-    21600   BvnComponent{NumType}(the_mean, precision, c * weight, dsiginv_dsig)
         - end
         - 
         - BvnComponent{NumType <: Number}(
@@ -94,7 +94,7 @@
         - function eval_bvn_pdf{NumType <: Number}(
         -     bmc::BvnComponent{NumType}, x::Vector{Float64})
         - 
-        0   y1 = x[1] - bmc.the_mean[1]
+     7200   y1 = x[1] - bmc.the_mean[1]
         0   y2 = x[2] - bmc.the_mean[2]
         0   py1 = bmc.precision[1,1] * y1 + bmc.precision[1,2] * y2
         0   py2 = bmc.precision[2,1] * y1 + bmc.precision[2,2] * y2
@@ -242,7 +242,7 @@
         -   - XiXi: The value of sigma.
         - 
         - Note that nubar is not included.
-    53760 """ ->
+    10752 """ ->
         - GalaxySigmaDerivs{NumType <: Number}(
         -     e_angle::NumType, e_axis::NumType, e_scale::NumType,
         -     XiXi::Matrix{NumType}; calculate_tensor::Bool=true) = begin
@@ -251,14 +251,14 @@
         0   sin_sq = sin(e_angle)^2
         0   cos_sq = cos(e_angle)^2
         - 
-    60480   j = Array(NumType, 3, length(gal_shape_ids))
-   100800   j[:, gal_shape_ids.e_axis] =
+    12096   j = Array(NumType, 3, length(gal_shape_ids))
+    20160   j[:, gal_shape_ids.e_axis] =
         -     2 * e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq]
-   100800   j[:, gal_shape_ids.e_angle] =
+    20160   j[:, gal_shape_ids.e_angle] =
         -     e_scale^2 * (e_axis^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
-   208320   j[:, gal_shape_ids.e_scale] = (2XiXi ./ e_scale)[[1, 2, 4]]
+    41664   j[:, gal_shape_ids.e_scale] = (2XiXi ./ e_scale)[[1, 2, 4]]
         - 
-   141120   t = Array(NumType, 3, length(gal_shape_ids), length(gal_shape_ids))
+    28224   t = Array(NumType, 3, length(gal_shape_ids), length(gal_shape_ids))
         0   if calculate_tensor
         -     # Second derivatives.
         - 
@@ -291,7 +291,7 @@
         0     fill!(t, 0.0)
         -   end
         - 
-    13440   GalaxySigmaDerivs(j, t)
+     2688   GalaxySigmaDerivs(j, t)
         - end
         - 
         - 
@@ -323,7 +323,7 @@
         -      [e_axis, e_angle, e_scale] (in the columns)
         - """ ->
         - immutable GalaxyCacheComponent{NumType <: Number}
-    33600     e_dev_dir::Float64
+     6720     e_dev_dir::Float64
         -     e_dev_i::NumType
         -     bmc::BvnComponent{NumType}
         -     sig_sf::GalaxySigmaDerivs{NumType}
@@ -331,15 +331,15 @@
         - end
         - 
         - 
-    47040 GalaxyCacheComponent{NumType <: Number}(
+     9408 GalaxyCacheComponent{NumType <: Number}(
         -     e_dev_dir::Float64, e_dev_i::NumType,
         -     gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
         -     e_axis::NumType, e_angle::NumType, e_scale::NumType,
         -     calculate_derivs::Bool, calculate_hessian::Bool) = begin
         - 
         0   XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
-    47040   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
-    94080   var_s = pc.tauBar + gc.nuBar * XiXi
+     9408   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
+    18816   var_s = pc.tauBar + gc.nuBar * XiXi
         0   weight = pc.alphaBar * gc.etaBar  # excludes e_dev
         - 
         -   # d siginv / dsigma is only necessary for the Hessian.
@@ -350,8 +350,8 @@
         -     # The tensor is only needed for the Hessian.
         0     sig_sf = GalaxySigmaDerivs(
         -       e_angle, e_axis, e_scale, XiXi, calculate_tensor=calculate_hessian)
-    67200     sig_sf.j .*= gc.nuBar
-   161280     sig_sf.t .*= gc.nuBar
+    13440     sig_sf.j .*= gc.nuBar
+    32256     sig_sf.t .*= gc.nuBar
         -   else
         0     sig_sf = GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0))
         -   end
@@ -508,8 +508,8 @@
         -     mp::ModelParams{NumType}, b::Int64;
         -     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
         - 
-     1040   star_mcs = Array(BvnComponent{NumType}, 3, mp.S)
-     4720   gal_mcs = Array(GalaxyCacheComponent{NumType}, 3, 8, 2, mp.S)
+      208   star_mcs = Array(BvnComponent{NumType}, 3, mp.S)
+      944   gal_mcs = Array(GalaxyCacheComponent{NumType}, 3, 8, 2, mp.S)
         - 
         -   # TODO: do not keep derviative information if the sources are not in
         -   # active_sources.
@@ -517,7 +517,7 @@
         0       psf = mp.patches[s, b].psf
         0       vs = mp.vp[s]
         - 
-     1760       world_loc = vs[[ids.u[1], ids.u[2]]]
+      352       world_loc = vs[[ids.u[1], ids.u[2]]]
         0       m_pos = WCS.world_to_pixel(mp.patches[s, b].wcs_jacobian,
         -                                  mp.patches[s, b].center,
         -                                  mp.patches[s, b].pixel_center, world_loc)
@@ -525,7 +525,7 @@
         -       # Convolve the star locations with the PSF.
         0       for k in 1:3
         0           pc = psf[k]
-     4320           mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
+      864           mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
         0           star_mcs[k, s] =
         -             BvnComponent(mean_s, pc.tauBar, pc.alphaBar,
         -                          calculate_siginv_deriv=false)
@@ -538,7 +538,7 @@
         - 
         -           # Galaxies of type 1 have 8 components, and type 2 have
         -           # 6 components.
-     1600           for j in 1:[8,6][i]
+      320           for j in 1:[8,6][i]
         0               for k = 1:3
         0                   gal_mcs[k, j, i, s] = GalaxyCacheComponent(
         -                       e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
@@ -550,6 +550,6 @@
         -       end
         -   end
         - 
-      160   star_mcs, gal_mcs
+       32   star_mcs, gal_mcs
         - end
         - 

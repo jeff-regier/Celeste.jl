@@ -124,6 +124,38 @@ end
 
 
 @doc """
+Factor out the hessian part of combine_sfs! to help the compiler.
+
+TODO: I think this is a red herring and this can be put back in
+""" ->
+function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+    sf1::SensitiveFloat{ParamType, NumType},
+    sf2::SensitiveFloat{ParamType, NumType},
+    sf_result::SensitiveFloat{ParamType, NumType},
+    g_d::Vector{NumType}, g_h::Matrix{NumType})
+
+  # Chain rule for second derivatives.
+  # BLAS for
+  # sf_result.h[:, :] = g_d[1] * sf1.h + g_d[2] * sf2.h
+  BLAS.blascopy!(prod(size(sf_result.h)), sf1.h, 1, sf_result.h, 1);
+  BLAS.scal!(prod(size(sf_result.h)), g_d[1], sf_result.h, 1);
+  BLAS.axpy!(g_d[2], sf2.h, sf_result.h)
+
+  # BLAS for
+  # sf_result.h[:, :] +=
+  #   g_h[1, 1] * sf1.d[:] * sf1.d[:]' +
+  #   g_h[2, 2] * sf2.d[:] * sf2.d[:]' +
+  #   g_h[1, 2] * (sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]')
+  # sf1d = sf1.d[:];
+  # sf2d = sf2.d[:];
+  BLAS.ger!(g_h[1, 1], sf1.d[:], sf1.d[:], sf_result.h);
+  BLAS.ger!(g_h[2, 2], sf2.d[:], sf2.d[:], sf_result.h);
+  BLAS.ger!(g_h[1, 2], sf1.d[:], sf2.d[:], sf_result.h);
+  BLAS.ger!(g_h[1, 2], sf2.d[:], sf1.d[:], sf_result.h);
+end
+
+
+@doc """
 Updates sf_result in place with g(sf1, sf2), where
 g_d = (g_1, g_2) is the gradient of g and
 g_h = (g_11, g_12; g_12, g_22) is the hessian of g,
@@ -139,36 +171,24 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     v::NumType, g_d::Vector{NumType}, g_h::Matrix{NumType};
     calculate_hessian::Bool=true)
 
+  # TODO: this line is allocating a lot of memory and I don't know why.
+  # Commenting this line out attributes the same allocation to the next line.
+  # Is memory being allocated lazily or misattributed?
   @assert g_h[1, 2] == g_h[2, 1]
 
   # You have to do this in the right order to not overwrite needed terms.
-
   if calculate_hessian
-    # Chain rule for second derivatives.
-    # BLAS for
-    # sf_result.h[:, :] = g_d[1] * sf1.h + g_d[2] * sf2.h
-    BLAS.blascopy!(prod(size(sf_result.h)), sf1.h, 1, sf_result.h, 1);
-    BLAS.scal!(prod(size(sf_result.h)), g_d[1], sf_result.h, 1);
-    BLAS.axpy!(g_d[2], sf2.h, sf_result.h)
-
-    # BLAS for
-    # sf_result.h[:, :] +=
-    #   g_h[1, 1] * sf1.d[:] * sf1.d[:]' +
-    #   g_h[2, 2] * sf2.d[:] * sf2.d[:]' +
-    #   g_h[1, 2] * (sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]')
-    sf1d = sf1.d[:];
-    sf2d = sf2.d[:];
-    BLAS.ger!(g_h[1, 1], sf1d, sf1d, sf_result.h);
-    BLAS.ger!(g_h[2, 2], sf2d, sf2d, sf_result.h);
-    BLAS.ger!(g_h[1, 2], sf1d, sf2d, sf_result.h);
-    BLAS.ger!(g_h[1, 2], sf2d, sf1d, sf_result.h);
+    combine_sfs_hessian!(sf1, sf2, sf_result, g_d, g_h);
   end
 
   # BLAS for
-  # sf_result.d[ = g_d[1] * sf1.d + g_d[2] * sf2.d
-  BLAS.blascopy!(prod(size(sf_result.d)), sf1.d, 1, sf_result.d, 1);
-  BLAS.scal!(prod(size(sf_result.d)), g_d[1], sf_result.d, 1);
-  BLAS.axpy!(g_d[2], sf2.d, sf_result.d);
+  # sf_result.d = g_d[1] * sf1.d + g_d[2] * sf2.d
+  # BLAS.blascopy!(prod(size(sf_result.d)), sf1.d, 1, sf_result.d, 1);
+  # BLAS.scal!(prod(size(sf_result.d)), g_d[1], sf_result.d, 1);
+  # BLAS.axpy!(g_d[2], sf2.d, sf_result.d);
+  for ind in eachindex(sf_result.d)
+    sf_result.d[ind] = g_d[1] * sf1.d[ind] + g_d[2] * sf2.d[ind]
+  end
 
   sf_result.v = v
 end
@@ -191,6 +211,8 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   combine_sfs!(sf1, sf2, sf1, v, g_d, g_h, calculate_hessian=calculate_hessian)
 end
 
+# Decalare outside to avoid allocating memory.
+const multiply_sfs_hess = Float64[0 1; 1 0]
 
 @doc """
 TODO: don't ignore the ids arguments and test.
@@ -204,9 +226,9 @@ function multiply_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 
   v = sf1.v * sf2.v
   g_d = NumType[sf2.v, sf1.v]
-  g_h = NumType[0 1; 1 0]
+  #const g_h = NumType[0 1; 1 0]
 
-  combine_sfs!(sf1, sf2, v, g_d, g_h, calculate_hessian=calculate_hessian)
+  combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess, calculate_hessian=calculate_hessian)
 end
 
 
@@ -241,6 +263,7 @@ function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf_s::SensitiveFloat{ParamType, NumType},
     s::Int64; calculate_hessian::Bool=true)
 
+  # TODO: This line, too, allocates a lot of memory.
   sf_all.v = sf_all.v + sf_s.v
 
   P = length(ParamType)
