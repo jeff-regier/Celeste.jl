@@ -287,7 +287,8 @@ function test_fs1m_derivatives()
   # Pick out a single galaxy component for testing.
   # The index is (psf, galaxy, gal type, source)
   for psf_k=1:3, type_i = 1:2, gal_j in 1:[8,6][type_i]
-    #psf_k = 1; type_i = 1; gal_j = 2
+    #psf_k = 1; type_i = 1; gal_j = 1 # For debugging
+    #println(gcc_ind)
     gcc_ind = (psf_k, gal_j, type_i, s)
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
@@ -559,11 +560,6 @@ function test_galaxy_variable_transform()
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
   ElboDeriv.get_bvn_derivs!(elbo_vars, bmc, x, true, true);
   ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
-
-  # When the hessian is large the result has the wrong sign.  Maybe that
-  # sign is wrong?
-  elbo_vars.bvn_sigsig_h
-  elbo_vars.bvn_sig_d
 
   f_bvn_wrap(par)
 
