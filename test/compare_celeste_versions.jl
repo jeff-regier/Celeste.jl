@@ -10,7 +10,10 @@ using SampleData
 import Synthetic
 
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
+##########
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
 
 Profile.clear_malloc_data()
 Profile.clear()
@@ -19,13 +22,10 @@ Profile.clear()
 # To see memory, quit and run
 using Coverage
 res = analyze_malloc("src");
-res[(end - 20):end]
+pn = 40; [ println(res[end - (pn - i)]) for i=1:pn ];
 
 
 
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=true);
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
 
 
 
@@ -35,6 +35,27 @@ res[(end - 20):end]
 include("test/debug_with_master.jl"); include("src/ElboDeriv.jl")
 
 using Debug
+
+blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+@time Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
+#@time ElboDeriv.elbo_likelihood(tiled_blob, mp);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
+
+Profile.clear_malloc_data()
+Profile.clear()
+@profile ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+#@profile Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
+Profile.print(format=:flat)
+
+# To see memory, quit and run
+using Coverage
+res = analyze_malloc("src")
+#res = analyze_malloc("/home/rgiordan/Documents/git_repos/debugging_branch_Celeste.jl/CelesteDebug.jl/src");
+pn = 40; [ println(res[end - (pn - i)]) for i=1:pn ];
+
+
+
 
 function evaluate_their_elbo()
   blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
@@ -50,20 +71,6 @@ their_elbo = evaluate_their_elbo();
 our_elbo = evaluate_our_elbo();
 
 @test_approx_eq our_elbo.v their_elbo.v
-
-blob, mp, bodies, tiled_blob = gen_two_body_dataset();
-@time Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp);
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
-
-Profile.clear_malloc_data()
-Profile.clear()
-@profile ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
-#@profile Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
-Profile.print(format=:flat)
-
-
 
 
 

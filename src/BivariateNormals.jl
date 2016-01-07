@@ -30,13 +30,13 @@ function GenerateBvnComponent{NumType <: Number}(
   the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
   c = 1 ./ (the_det^.5 * 2pi)
 
-  precision = the_cov^-1
-
   if calculate_siginv_deriv
     # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
     # derivatives of log|Sigma| with respect to sigma.
     # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
     dsiginv_dsig = zeros(NumType, 3, 3)
+
+    precision = the_cov^-1
 
     dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
     dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
@@ -50,11 +50,11 @@ function GenerateBvnComponent{NumType <: Number}(
     dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
     dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
     dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
+    return(BvnComponent{NumType}(the_mean, precision, c * weight, dsiginv_dsig))
   else
-    dsiginv_dsig = zeros(NumType, 0, 0)
+    return(BvnComponent{NumType}(the_mean, the_cov^-1, c * weight, zeros(NumType, 0, 0)))
   end
 
-  BvnComponent{NumType}(the_mean, precision, c * weight, dsiginv_dsig)
 end
 
 BvnComponent{NumType <: Number}(
