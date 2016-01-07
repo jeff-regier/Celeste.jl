@@ -89,6 +89,10 @@ type ElboIntermediateVariables{NumType <: Number}
   E_G::SensitiveFloat{CanonicalParams, NumType}
   var_G::SensitiveFloat{CanonicalParams, NumType}
 
+  # Log term function gradient and Hessian.
+  log_term_grad::Vector{NumType}
+  log_term_hess::Matrix{NumType}
+
   # A placeholder for the log term in the ELBO.
   elbo_log_term::SensitiveFloat{CanonicalParams, NumType}
 
@@ -156,6 +160,10 @@ ElboIntermediateVariables(
   E_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
   var_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
 
+  log_term_grad = zeros(NumType, length(CanonicalParams))
+  log_term_hess = zeros(NumType,
+                        length(CanonicalParams), length(CanonicalParams))
+
   elbo_log_term =
     zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
   elbo = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
@@ -166,7 +174,8 @@ ElboIntermediateVariables(
     bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h,
     fs0m_vec, fs1m_vec,
     E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
-    E_G, var_G, elbo_log_term, elbo, calculate_derivs, calculate_hessian)
+    E_G, var_G, log_term_grad, log_term_hess,
+    elbo_log_term, elbo, calculate_derivs, calculate_hessian)
 end
 
 
@@ -406,15 +415,21 @@ function accumulate_source_brightness!{NumType <: Number}(
       u_ind = i == 1 ? star_ids.u : gal_ids.u
 
       # Derivatives with respect to the spatial parameters
-      a_fd = a[i] * fsm[i].d[:, 1]
-      E_G_s.d[p0_shape, 1] += sb.E_l_a[b, i].v * a_fd
-      E_G2_s.d[p0_shape, 1] += sb.E_ll_a[b, i].v * 2 * fsm[i].v * a_fd
+      #a_fd = a[i] * fsm[i].d[:, 1]
+      for p0_shape_ind in 1:length(p0_shape)
+        E_G_s.d[p0_shape[p0_shape_ind], 1] +=
+          sb.E_l_a[b, i].v * a[i] * fsm[i].d[p0_shape_ind, 1]
+        E_G2_s.d[p0_shape[p0_shape_ind], 1] +=
+          sb.E_ll_a[b, i].v * 2 * fsm[i].v * a[i] * fsm[i].d[p0_shape_ind, 1]
+      end
 
       # Derivatives with respect to the brightness parameters.
-      E_G_s.d[p0_bright, 1] +=
-        a[i] * fsm[i].v * sb.E_l_a[b, i].d[:, 1]
-      E_G2_s.d[p0_bright, 1] +=
-        a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[:, 1]
+      for p0_bright_ind in 1:length(p0_bright)
+        E_G_s.d[p0_bright[p0_bright_ind], 1] +=
+          a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0_bright_ind, 1]
+        E_G2_s.d[p0_bright[p0_bright_ind], 1] +=
+          a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
+      end
 
       if elbo_vars.calculate_hessian
         ######################
@@ -495,12 +510,23 @@ function accumulate_source_brightness!{NumType <: Number}(
   if elbo_vars.calculate_hessian
     # Accumulate the u Hessian.  u is the only parameter that is shared between
     # different values of i.
-    E_G_u_u_hess = zeros(2, 2);
-    E_G2_u_u_hess = zeros(2, 2);
-    for i = 1:Ia
-      E_G_u_u_hess += elbo_vars.E_G_s_hsub_vec[i].u_u
-      E_G2_u_u_hess += elbo_vars.E_G2_s_hsub_vec[i].u_u
-    end
+    # E_G_u_u_hess = zeros(2, 2);
+    # E_G2_u_u_hess = zeros(2, 2);
+
+    # For each value in 1:Ia, written this way for speed.
+    @assert Ia == 2
+    E_G_u_u_hess =
+      elbo_vars.E_G_s_hsub_vec[1].u_u +
+      elbo_vars.E_G_s_hsub_vec[2].u_u
+
+    E_G2_u_u_hess =
+      elbo_vars.E_G2_s_hsub_vec[1].u_u +
+      elbo_vars.E_G2_s_hsub_vec[2].u_u
+
+    # for i = 1:Ia
+    #   E_G_u_u_hess += elbo_vars.E_G_s_hsub_vec[i].u_u
+    #   E_G2_u_u_hess += elbo_vars.E_G2_s_hsub_vec[i].u_u
+    # end
     E_G_s.h[ids.u, ids.u] = E_G_u_u_hess
     E_G2_s.h[ids.u, ids.u] = E_G2_u_u_hess
   end
@@ -616,8 +642,10 @@ function add_elbo_log_term!{NumType <: Number}(
   # println("var_G.v ", var_G.v)
 
   if elbo_vars.calculate_derivs
-    log_term_grad = NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + var_G.v / (E_G.v ^ 3)]
-    log_term_hess =
+    # TODO: pre-allocate these.
+    elbo_vars.log_term_grad =
+      NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + var_G.v / (E_G.v ^ 3)]
+    elbo_vars.log_term_hess =
       NumType[0             1 / E_G.v^3;
               1 / E_G.v^3   -(1 / E_G.v ^ 2 + 3  * var_G.v / (E_G.v ^ 4))]
 
@@ -625,7 +653,7 @@ function add_elbo_log_term!{NumType <: Number}(
     # to contain the lower bound of the log term.
     combine_sfs!(
       elbo_vars.var_G, elbo_vars.E_G, elbo_vars.elbo_log_term,
-      log_term_value, log_term_grad, log_term_hess,
+      log_term_value, elbo_vars.log_term_grad, elbo_vars.log_term_hess,
       calculate_hessian=elbo_vars.calculate_hessian)
 
     # Add to the elbo.

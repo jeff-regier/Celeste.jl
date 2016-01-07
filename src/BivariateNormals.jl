@@ -372,8 +372,8 @@ function transform_bvn_derivs!{NumType <: Number}(
   bvn_u_d = elbo_vars.bvn_u_d
   bvn_uu_h = elbo_vars.bvn_uu_h
 
-  fill!(bvn_u_d, 0.0)
-  fill!(bvn_uu_h, 0.0)
+  # We assign, not accumulate.
+  # fill!(bvn_u_d, 0.0)
 
   # These values should already have been set using get_bvn_derivs!()
   bvn_x_d = elbo_vars.bvn_x_d
@@ -385,13 +385,19 @@ function transform_bvn_derivs!{NumType <: Number}(
   # because the object position affects the bvn.the_mean term, which is
   # subtracted from the pixel location as defined in bvn_sf.d.)
   # TODO: vectorize?
-  for x_id in 1:2, u_id in 1:2
-    bvn_u_d[u_id] += -bvn_x_d[x_id] * wcs_jacobian[x_id, u_id]
-  end
+  # for x_id in 1:2, u_id in 1:2
+  #   bvn_u_d[u_id] += -bvn_x_d[x_id] * wcs_jacobian[x_id, u_id]
+  # end
+  bvn_u_d[1] =
+    -(bvn_x_d[1] * wcs_jacobian[1, 1] + bvn_x_d[2] * wcs_jacobian[2, 1])
+  bvn_u_d[2] =
+    -(bvn_x_d[1] * wcs_jacobian[1, 2] + bvn_x_d[2] * wcs_jacobian[2, 2])
+
 
   if elbo_vars.calculate_hessian
     # Hessian calculations.
 
+    fill!(bvn_uu_h, 0.0)
     # Second derivatives involving only u.
     # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.
     # TODO: eliminate the redundant term.
@@ -403,7 +409,7 @@ function transform_bvn_derivs!{NumType <: Number}(
 end
 
 
-# Pre-allocate memory for sensitivey floats.
+# Pre-allocate memory for sensitivity floats.
 
 @doc """
 Transform the bvn derivatives and hessians from (x, sigma) to the
@@ -432,13 +438,15 @@ function transform_bvn_derivs!{NumType <: Number}(
 
   # Gradient calculations.
 
-  fill!(bvn_s_d, 0.0)
+  #fill!(bvn_s_d, 0.0)
 
   # Use the chain rule for the shape derviatives.
   # TODO: vectorize?
-  for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
-    bvn_s_d[shape_id] +=
-      bvn_sig_d[sig_id] * gcc.sig_sf.j[sig_id, shape_id]
+  for shape_id in 1:length(gal_shape_ids),
+    bvn_s_d[shape_id] =
+      bvn_sig_d[1] * gcc.sig_sf.j[1, shape_id] +
+      bvn_sig_d[2] * gcc.sig_sf.j[2, shape_id] +
+      bvn_sig_d[3] * gcc.sig_sf.j[3, shape_id]
   end
 
   if elbo_vars.calculate_hessian

@@ -57,7 +57,7 @@
         - const B = 5
         - 
         - type CatalogEntry
-        0     pos::Vector{Float64}
+        -     pos::Vector{Float64}
         -     is_star::Bool
         -     star_fluxes::Vector{Float64}
         -     gal_fluxes::Vector{Float64}
@@ -147,15 +147,15 @@
         -     tauBarInv::Matrix{Float64}
         -     tauBarLd::Float64
         - 
-        0     PsfComponent(alphaBar::Float64, xiBar::Vector{Float64},
+        -     PsfComponent(alphaBar::Float64, xiBar::Vector{Float64},
         -             tauBar::Matrix{Float64}) = begin
-        0         new(alphaBar, xiBar, tauBar, tauBar^-1, logdet(tauBar))
+        -         new(alphaBar, xiBar, tauBar, tauBar^-1, logdet(tauBar))
         -     end
         - end
         - 
         - @doc """An image, taken though a particular filter band""" ->
         - type Image
-        0     # The image height.
+        -     # The image height.
         -     H::Int64
         - 
         -     # The image width.
@@ -195,12 +195,12 @@
         - 
         - # Initialization for an image with noise and background parameters that are
         - # constant across the image.
-        0 Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
+        - Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
         -       epsilon::Float64, iota::Float64, psf::Vector{PsfComponent},
         -       run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
-        0     empty_psf_comp =
+        -     empty_psf_comp =
         -       RawPSFComponents(Array(Float64, 0, 0), -1, -1, Array(Float64, 0, 0, 0))
-        0     Image(H, W, pixels, b, wcs, epsilon, iota, psf,
+        -     Image(H, W, pixels, b, wcs, epsilon, iota, psf,
         -           run_num, camcol_num, field_num,
         -           true, Array(Float64, 0, 0), Array(Float64, 0), empty_psf_comp)
         - end
@@ -240,7 +240,7 @@
         - - remainder: the same as in the Image type.
         - """ ->
         - immutable ImageTile
-        0     hh::Int64
+        -     hh::Int64
         -     ww::Int64
         -     b::Int64
         - 
@@ -269,11 +269,11 @@
         -   - tile_width: The width and height of a tile in pixels
         - """ ->
         - function tile_range(hh::Int64, ww::Int64, H::Int64, W::Int64, tile_width::Int64)
-        0     h1 = 1 + (hh - 1) * tile_width
-        0     h2 = min(hh * tile_width, H)
-        0     w1 = 1 + (ww - 1) * tile_width
-        0     w2 = min(ww * tile_width, W)
-        0     h1:h2, w1:w2
+        -     h1 = 1 + (hh - 1) * tile_width
+        -     h2 = min(hh * tile_width, H)
+        -     w1 = 1 + (ww - 1) * tile_width
+        -     w2 = min(ww * tile_width, W)
+        -     h1:h2, w1:w2
         - end
         - 
         - 
@@ -285,10 +285,10 @@
         -   - hh: The tile row index (in 1:number of tile rows)
         -   - ww: The tile column index (in 1:number of tile columns)
         -   - tile_width: The width and height of a tile in pixels
-        0 """ ->
+        - """ ->
         - ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
-        0   h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
-        0   ImageTile(img, h_range, w_range; hh=hh, ww=ww)
+        -   h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
+        -   ImageTile(img, h_range, w_range; hh=hh, ww=ww)
         - end
         - 
         - @doc """
@@ -300,25 +300,25 @@
         -   - w_range: A UnitRange for the w pixels
         -   - hh: Optional h index in tile coordinates
         -   - ww: Optional w index in tile coordinates
-        0 """ ->
+        - """ ->
         - ImageTile(img::Image,
         -           h_range::UnitRange{Int64}, w_range::UnitRange{Int64};
         -           hh::Int64=1, ww::Int64=1) = begin
-        0   b = img.b
-        0   h_width = maximum(h_range) - minimum(h_range) + 1
-        0   w_width = maximum(w_range) - minimum(w_range) + 1
-        0   pixels = img.pixels[h_range, w_range]
+        -   b = img.b
+        -   h_width = maximum(h_range) - minimum(h_range) + 1
+        -   w_width = maximum(w_range) - minimum(w_range) + 1
+        -   pixels = img.pixels[h_range, w_range]
         - 
-        0   if img.constant_background
-        0     epsilon_mat = img.epsilon_mat
-        0     iota_vec = img.iota_vec
+        -   if img.constant_background
+        -     epsilon_mat = img.epsilon_mat
+        -     iota_vec = img.iota_vec
         -   else
         -     # TODO: this subsetting doesn't seem to be working.
-        0     epsilon_mat = img.epsilon_mat[h_range, w_range]
-        0     iota_vec = img.iota_vec[h_range]
+        -     epsilon_mat = img.epsilon_mat[h_range, w_range]
+        -     iota_vec = img.iota_vec[h_range]
         -   end
         - 
-        0   ImageTile(hh, ww, b, h_range, w_range, h_width, w_width, pixels,
+        -   ImageTile(hh, ww, b, h_range, w_range, h_width, w_width, pixels,
         -             img.constant_background, img.epsilon, epsilon_mat,
         -             img.iota, iota_vec)
         - end
@@ -342,7 +342,7 @@
         -   - pixel_center: The pixel location of center in each band.
         - """ ->
         - immutable SkyPatch
-        0     center::Vector{Float64}
+        -     center::Vector{Float64}
         -     radius::Float64
         - 
         -     psf::Vector{PsfComponent}
@@ -528,15 +528,15 @@
         - 
         -     S::Int64
         - 
-        0     ModelParams(vp, pp) = begin
+        -     ModelParams(vp, pp) = begin
         -         # There must be one patch for each celestial object.
-        0         S = length(vp)
-        0         all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)
-        0         patches = Array(SkyPatch, S, 5)
-        0         active_sources = collect(1:S)
-        0         objids = ASCIIString[string(s) for s in 1:S]
+        -         S = length(vp)
+        -         all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)
+        -         patches = Array(SkyPatch, S, 5)
+        -         active_sources = collect(1:S)
+        -         objids = ASCIIString[string(s) for s in 1:S]
         - 
-        0         new(vp, pp, patches, all_tile_sources, active_sources, objids, S)
+        -         new(vp, pp, patches, all_tile_sources, active_sources, objids, S)
         -     end
         - end
         - 

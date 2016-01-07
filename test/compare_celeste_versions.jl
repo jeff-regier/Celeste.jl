@@ -1,6 +1,7 @@
 # Compare the new Celeste version to an old version in another repo.
 
-# Consider julia --track-allocation=user
+# To track memory, use:
+# julia --track-allocation=user
 
 using Celeste
 using CelesteTypes
@@ -9,9 +10,18 @@ using SampleData
 import Synthetic
 
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+
 Profile.clear_malloc_data()
 Profile.clear()
-@profile ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+
+# To see memory, quit and run
+using Coverage
+res = analyze_malloc("src");
+res[(end - 20):end]
+
+
 
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=true);
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
@@ -54,10 +64,6 @@ Profile.clear()
 Profile.print(format=:flat)
 
 
-# To see memory, quit and run
-using Coverage
-res = analyze_malloc("src");
-res[(end - 20):end]
 
 
 

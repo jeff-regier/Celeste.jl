@@ -139,7 +139,6 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     v::NumType, g_d::Vector{NumType}, g_h::Matrix{NumType};
     calculate_hessian::Bool=true)
 
-  S = size(sf1.d)[2]
   @assert g_h[1, 2] == g_h[2, 1]
 
   # You have to do this in the right order to not overwrite needed terms.
@@ -220,7 +219,10 @@ function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     scale::Float64=1.0, calculate_hessian::Bool=true)
 
   sf1.v = sf1.v + scale * sf2.v
-  sf1.d = sf1.d + scale * sf2.d
+
+  for i in eachindex(sf1.d)
+    sf1.d[i] = sf1.d[i] + scale * sf2.d[i]
+  end
 
   if calculate_hessian
     # BLAS for
