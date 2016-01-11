@@ -447,7 +447,7 @@ function test_bvn_derivatives()
   # strange to check that it doesn't matter.
   weight = 0.724
 
-  bvn = ElboDeriv.BvnComponent(offset, sigma, weight);
+  bvn = ElboDeriv.BvnComponent{Float64}(offset, sigma, weight);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
   ElboDeriv.get_bvn_derivs!(elbo_vars, bvn, x, true, true);
 
@@ -554,7 +554,7 @@ function test_galaxy_variable_transform()
   u_pix = WCS.world_to_pixel(
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
-  bmc = ElboDeriv.BvnComponent(u_pix, sigma, 1.0);
+  bmc = ElboDeriv.BvnComponent{Float64}(u_pix, sigma, 1.0);
   sig_sf = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma);
   gcc = ElboDeriv.GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
@@ -763,7 +763,7 @@ function test_dsiginv_dsig()
   e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # elbo_vars.bvn_sigsig_h is large
   the_cov = Util.get_bvn_cov(e_axis, e_angle, e_scale)
   the_mean = Float64[0., 0.]
-  bvn = ElboDeriv.BvnComponent(the_mean, the_cov, 1.0);
+  bvn = ElboDeriv.BvnComponent{Float64}(the_mean, the_cov, 1.0);
   sigma_vec = Float64[ the_cov[1, 1], the_cov[1, 2], the_cov[2, 2] ]
 
   for component_index = 1:3

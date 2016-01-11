@@ -17,66 +17,103 @@ immutable BvnComponent{NumType <: Number}
     precision::Matrix{NumType}
     z::NumType
     dsiginv_dsig::Matrix{NumType}
-end
 
+    BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
+        the_mean::Vector{T1}, the_cov::Matrix{T2}, weight::T3;
+        calculate_siginv_deriv::Bool=true) = begin
 
-function GenerateBvnComponent{NumType <: Number}(
-    the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType,
-    calculate_siginv_deriv::Bool)
+      NumType = promote_type(T1, T2, T3);
+      the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
+      c = 1 ./ (the_det^.5 * 2pi)
 
-  # It is necessary to have this separately named function to allow
-  # a BvnComponent to be instantiated with all the below combinations of
-  # NumTypes and Float64 shown below.
-  the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
-  c = 1 ./ (the_det^.5 * 2pi)
+      if calculate_siginv_deriv
+        # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
+        # derivatives of log|Sigma| with respect to sigma.
+        # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
+        dsiginv_dsig = zeros(3, 3)
 
-  if calculate_siginv_deriv
-    # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
-    # derivatives of log|Sigma| with respect to sigma.
-    # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
-    dsiginv_dsig = zeros(NumType, 3, 3)
+        precision = the_cov^-1
 
-    precision = the_cov^-1
+        dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
+        dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
+        dsiginv_dsig[1, 3] = -precision[1, 2] ^ 2
 
-    dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
-    dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
-    dsiginv_dsig[1, 3] = -precision[1, 2] ^ 2
+        dsiginv_dsig[2, 1] = -precision[1, 1] * precision[2, 1]
+        dsiginv_dsig[2, 2] =
+          -(precision[1, 1] * precision[2, 2] + precision[1, 2] ^ 2)
+        dsiginv_dsig[2, 3] = -precision[2, 2] * precision[1, 2]
 
-    dsiginv_dsig[2, 1] = -precision[1, 1] * precision[2, 1]
-    dsiginv_dsig[2, 2] =
-      -(precision[1, 1] * precision[2, 2] + precision[1, 2] ^ 2)
-    dsiginv_dsig[2, 3] = -precision[2, 2] * precision[1, 2]
+        dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
+        dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
+        dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
+        new{NumType}(the_mean, precision, c * weight, dsiginv_dsig)
+      else
+        new{NumType}(the_mean, the_cov^-1, c * weight, zeros(0, 0))
+      end
 
-    dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
-    dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
-    dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
-    return(BvnComponent{NumType}(the_mean, precision, c * weight, dsiginv_dsig))
-  else
-    return(BvnComponent{NumType}(the_mean, the_cov^-1, c * weight, zeros(NumType, 0, 0)))
-  end
+    end
 
 end
 
-BvnComponent{NumType <: Number}(
-    the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType;
-    calculate_siginv_deriv::Bool=true) = begin
-  GenerateBvnComponent(the_mean, the_cov, weight, calculate_siginv_deriv)
-end
+# # TODO: is the fact that the constructor isn't inside the method causing problems?
+# function GenerateBvnComponent{NumType <: Number}(
+#     the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType,
+#     calculate_siginv_deriv::Bool)
+#
+#   # It is necessary to have this separately named function to allow
+#   # a BvnComponent to be instantiated with all the below combinations of
+#   # NumTypes and Float64 shown below.
+#   the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
+#   c = 1 ./ (the_det^.5 * 2pi)
+#
+#   if calculate_siginv_deriv
+#     # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
+#     # derivatives of log|Sigma| with respect to sigma.
+#     # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
+#     dsiginv_dsig = zeros(NumType, 3, 3)
+#
+#     precision = the_cov^-1
+#
+#     dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
+#     dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
+#     dsiginv_dsig[1, 3] = -precision[1, 2] ^ 2
+#
+#     dsiginv_dsig[2, 1] = -precision[1, 1] * precision[2, 1]
+#     dsiginv_dsig[2, 2] =
+#       -(precision[1, 1] * precision[2, 2] + precision[1, 2] ^ 2)
+#     dsiginv_dsig[2, 3] = -precision[2, 2] * precision[1, 2]
+#
+#     dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
+#     dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
+#     dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
+#     return(BvnComponent{NumType}(the_mean, precision, c * weight, dsiginv_dsig))
+#   else
+#     return(BvnComponent{NumType}(the_mean, the_cov^-1, c * weight, zeros(NumType, 0, 0)))
+#   end
+#
+# end
+#
+# BvnComponent{NumType <: Number}(
+#     the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType;
+#     calculate_siginv_deriv::Bool=true) = begin
+#   GenerateBvnComponent(the_mean, the_cov, weight, calculate_siginv_deriv)
+# end
+#
+# BvnComponent{NumType <: Number}(
+#   the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64;
+#   calculate_siginv_deriv::Bool=true) = begin
+#     GenerateBvnComponent(
+#       the_mean, the_cov, convert(NumType, weight), calculate_siginv_deriv)
+# end
+#
+# BvnComponent{NumType <: Number}(
+#   the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64;
+#   calculate_siginv_deriv::Bool=true) = begin
+#     GenerateBvnComponent(
+#       the_mean, convert(Matrix{NumType}, the_cov), convert(NumType, weight),
+#       calculate_siginv_deriv)
+# end
 
-BvnComponent{NumType <: Number}(
-  the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64;
-  calculate_siginv_deriv::Bool=true) = begin
-    GenerateBvnComponent(
-      the_mean, convert(Matrix{NumType}, the_cov), convert(NumType, weight),
-      calculate_siginv_deriv)
-end
-
-BvnComponent{NumType <: Number}(
-  the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64;
-  calculate_siginv_deriv::Bool=true) = begin
-    GenerateBvnComponent(
-      the_mean, the_cov, convert(NumType, weight), calculate_siginv_deriv)
-end
 
 
 @doc """
@@ -94,6 +131,9 @@ Returns:
 function eval_bvn_pdf{NumType <: Number}(
     bmc::BvnComponent{NumType}, x::Vector{Float64})
 
+  z = 1 + 2
+  z2 = 3 + x[1]
+  z3 = 3 + bmc.the_mean[2]
   y1 = x[1] - bmc.the_mean[1]
   y2 = x[2] - bmc.the_mean[2]
   py1 = bmc.precision[1,1] * y1 + bmc.precision[1,2] * y2
@@ -252,11 +292,13 @@ GalaxySigmaDerivs{NumType <: Number}(
   cos_sq = cos(e_angle)^2
 
   j = Array(NumType, 3, length(gal_shape_ids))
-  j[:, gal_shape_ids.e_axis] =
-    2 * e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq]
-  j[:, gal_shape_ids.e_angle] =
-    e_scale^2 * (e_axis^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin]
-  j[:, gal_shape_ids.e_scale] = (2XiXi ./ e_scale)[[1, 2, 4]]
+  for i = 1:3
+    j[i, gal_shape_ids.e_axis] =
+      2 * e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq][i]
+    j[i, gal_shape_ids.e_angle] =
+      e_scale^2 * (e_axis^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin][i]
+    j[i, gal_shape_ids.e_scale] = (2XiXi ./ e_scale)[[1, 2, 4][i]]
+  end
 
   t = Array(NumType, 3, length(gal_shape_ids), length(gal_shape_ids))
   if calculate_tensor
@@ -343,15 +385,18 @@ GalaxyCacheComponent{NumType <: Number}(
   weight = pc.alphaBar * gc.etaBar  # excludes e_dev
 
   # d siginv / dsigma is only necessary for the Hessian.
-  bmc = BvnComponent(mean_s, var_s, weight,
-                     calculate_siginv_deriv=calculate_derivs && calculate_hessian)
+  bmc = BvnComponent{NumType}(
+    mean_s, var_s, weight,
+    calculate_siginv_deriv=calculate_derivs && calculate_hessian)
 
   if calculate_derivs
-    # The tensor is only needed for the Hessian.
     sig_sf = GalaxySigmaDerivs(
       e_angle, e_axis, e_scale, XiXi, calculate_tensor=calculate_hessian)
     sig_sf.j .*= gc.nuBar
-    sig_sf.t .*= gc.nuBar
+    # The tensor is only needed for the Hessian.
+    if calculate_hessian
+      sig_sf.t .*= gc.nuBar
+    end
   else
     sig_sf = GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0))
   end
@@ -527,8 +572,8 @@ function load_bvn_mixtures{NumType <: Number}(
           pc = psf[k]
           mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
           star_mcs[k, s] =
-            BvnComponent(mean_s, pc.tauBar, pc.alphaBar,
-                         calculate_siginv_deriv=false)
+            BvnComponent{NumType}(
+              mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
       end
 
       # Convolve the galaxy representations with the PSF.
