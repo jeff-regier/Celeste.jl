@@ -440,7 +440,7 @@ function accumulate_source_brightness!{NumType <: Number}(
         # The (a, a) block of the hessian is zero.
 
         # The (bright, bright) block:
-        for p0_ind1 in p0_bright, p0_ind2 in p0_bright
+        for p0_ind1 in 1:length(p0_bright), p0_ind2 in 1:length(p0_bright)
           E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
             a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_ind1, p0_ind2]
           E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
@@ -450,17 +450,22 @@ function accumulate_source_brightness!{NumType <: Number}(
         # The (shape, shape) block:
         E_G_s_hsub.shape_shape = a[i] * sb.E_l_a[b, i].v * fsm[i].h
 
-        # The u_u submatrix of this assignment will be overwritten after
-        # the loop.
-        E_G_s.h[p0_shape, p0_shape] = a[i] * sb.E_l_a[b, i].v * fsm[i].h
-
         # The shape_shape block has several terms which we accumulate efficiently
         # using BLAS.
         E_G2_s_hsub.shape_shape =
           2 * a[i] * sb.E_ll_a[b, i].v * fsm[i].v * fsm[i].h
         BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v, fsm[i].d[:, 1], fsm[i].d[:, 1],
                   E_G2_s_hsub.shape_shape);
-        E_G2_s.h[p0_shape, p0_shape] = E_G2_s_hsub.shape_shape;
+
+        # The u_u submatrix of this assignment will be overwritten after
+        # the loop.
+        for p0_ind1 in 1:length(p0_shape), p0_ind2 in 1:length(p0_shape)
+          E_G_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
+            a[i] * sb.E_l_a[b, i].v * fsm[i].h[p0_ind1, p0_ind2]
+          E_G2_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
+            E_G2_s_hsub.shape_shape[p0_ind1, p0_ind2];
+        end
+
 
         # Since the u_u submatrix is not disjoint between different i, accumulate
         # it separate and add it at the end.
@@ -472,22 +477,24 @@ function accumulate_source_brightness!{NumType <: Number}(
         # native julia).
 
         # The (a, bright) blocks:
-        h_a_bright = fsm[i].v * sb.E_l_a[b, i].d[:, 1]
-        E_G_s.h[p0_bright, ids.a[i]] = h_a_bright
-        E_G_s.h[ids.a[i], p0_bright] =  E_G_s.h[p0_bright, ids.a[i]]'
-
-        h2_a_bright = (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[:, 1]
-        E_G2_s.h[p0_bright, ids.a[i]] = h2_a_bright
+        for p0_ind in 1:length(p0_bright)
+          E_G_s.h[p0_bright[p0_ind], ids.a[i]] =
+            fsm[i].v * sb.E_l_a[b, i].d[p0_ind, 1]
+          E_G2_s.h[p0_bright[p0_ind], ids.a[i]] =
+            (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[p0_ind, 1]
+        end
         E_G2_s.h[ids.a[i], p0_bright] = E_G2_s.h[p0_bright, ids.a[i]]'
+        E_G_s.h[ids.a[i], p0_bright] = E_G_s.h[p0_bright, ids.a[i]]'
 
         # The (a, shape) blocks.
-        h_a_shape = sb.E_l_a[b, i].v * fsm[i].d
-        E_G_s.h[p0_shape, ids.a[i]] = h_a_shape
-        E_G_s.h[ids.a[i], p0_shape] = E_G_s.h[p0_shape, ids.a[i]]'
-
-        h2_a_shape = sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[:, 1]
-        E_G2_s.h[p0_shape, ids.a[i]] = h2_a_shape
+        for p0_ind in 1:length(p0_shape)
+          E_G_s.h[p0_shape[p0_ind], ids.a[i]] =
+            sb.E_l_a[b, i].v * fsm[i].d[p0_ind, 1]
+          E_G2_s.h[p0_shape[p0_ind], ids.a[i]] =
+            sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[p0_ind, 1]
+        end
         E_G2_s.h[ids.a[i], p0_shape] = E_G2_s.h[p0_shape, ids.a[i]]'
+        E_G_s.h[ids.a[i], p0_shape] = E_G_s.h[p0_shape, ids.a[i]]'
 
         # The (shape, bright) blocks.
         # BLAS for

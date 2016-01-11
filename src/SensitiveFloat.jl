@@ -146,12 +146,12 @@ function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet, NumType <: Num
   #   g_h[1, 1] * sf1.d[:] * sf1.d[:]' +
   #   g_h[2, 2] * sf2.d[:] * sf2.d[:]' +
   #   g_h[1, 2] * (sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]')
-  # sf1d = sf1.d[:];
-  # sf2d = sf2.d[:];
-  BLAS.ger!(g_h[1, 1], sf1.d[:], sf1.d[:], sf_result.h);
-  BLAS.ger!(g_h[2, 2], sf2.d[:], sf2.d[:], sf_result.h);
-  BLAS.ger!(g_h[1, 2], sf1.d[:], sf2.d[:], sf_result.h);
-  BLAS.ger!(g_h[1, 2], sf2.d[:], sf1.d[:], sf_result.h);
+  sf1d = sf1.d[:];
+  sf2d = sf2.d[:];
+  BLAS.ger!(g_h[1, 1], sf1d, sf1d, sf_result.h);
+  BLAS.ger!(g_h[2, 2], sf2d, sf2d, sf_result.h);
+  BLAS.ger!(g_h[1, 2], sf1d, sf2d, sf_result.h);
+  BLAS.ger!(g_h[1, 2], sf2d, sf1d, sf_result.h);
 end
 
 
