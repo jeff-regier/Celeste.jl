@@ -9,6 +9,8 @@ using Base.Test
 using SampleData
 import Synthetic
 
+profile_n = 3
+
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
 ##########
@@ -17,17 +19,15 @@ blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 
 Profile.clear_malloc_data()
 Profile.clear()
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+@profile for i = 1:profile_n
+  ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=true);
+  #Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
+end
 
 # To see memory, quit and run
 using Coverage
 res = analyze_malloc("src");
 pn = 40; [ println(res[end - (pn - i)]) for i=1:pn ];
-
-
-
-
-
 
 
 
@@ -44,9 +44,11 @@ blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 
 Profile.clear_malloc_data()
 Profile.clear()
-@profile ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
-#@profile Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
-Profile.print(format=:flat)
+@profile for i = 1:profile_n
+  #ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+  Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
+end
+#Profile.print(format=:tree, sortedby = :count)
 
 # To see memory, quit and run
 using Coverage
@@ -54,6 +56,23 @@ res = analyze_malloc("src")
 #res = analyze_malloc("/home/rgiordan/Documents/git_repos/debugging_branch_Celeste.jl/CelesteDebug.jl/src");
 pn = 40; [ println(res[end - (pn - i)]) for i=1:pn ];
 
+
+
+b = 1
+Profile.clear_malloc_data()
+Profile.clear()
+@profile for i = 1:1000
+  star_mcs, gal_mcs = Debug.ElboDeriv.load_bvn_mixtures(mp, b);
+end
+Profile.print(format=:flat, sortedby = :count)
+
+
+Profile.clear_malloc_data()
+Profile.clear()
+@profile for i = 1:1000
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b; calculate_hessian=false);
+end
+Profile.print(format=:flat, sortedby = :count)
 
 
 

@@ -19,7 +19,7 @@
         -       for the Hessian of brightness values that depend only on one source.
         - """ ->
         - type SensitiveFloat{ParamType <: CelesteTypes.ParamSet, NumType <: Number}
-   161888     v::NumType
+   485664     v::NumType
         -     d::Matrix{NumType} # local_P x local_S
         -     # h is ordered so that p changes fastest.  For example, the indices
         -     # of a column of h correspond to the indices of d's stacked columns.
@@ -148,10 +148,10 @@
         -   #   g_h[1, 2] * (sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]')
         -   # sf1d = sf1.d[:];
         -   # sf2d = sf2.d[:];
-        0   BLAS.ger!(g_h[1, 1], sf1.d[:], sf1.d[:], sf_result.h);
-        0   BLAS.ger!(g_h[2, 2], sf2.d[:], sf2.d[:], sf_result.h);
-        0   BLAS.ger!(g_h[1, 2], sf1.d[:], sf2.d[:], sf_result.h);
-        0   BLAS.ger!(g_h[1, 2], sf2.d[:], sf1.d[:], sf_result.h);
+ 25198848   BLAS.ger!(g_h[1, 1], sf1.d[:], sf1.d[:], sf_result.h);
+ 25198848   BLAS.ger!(g_h[2, 2], sf2.d[:], sf2.d[:], sf_result.h);
+ 25198848   BLAS.ger!(g_h[1, 2], sf1.d[:], sf2.d[:], sf_result.h);
+ 25198848   BLAS.ger!(g_h[1, 2], sf2.d[:], sf1.d[:], sf_result.h);
         - end
         - 
         - 
@@ -174,7 +174,7 @@
         -   # TODO: this line is allocating a lot of memory and I don't know why.
         -   # Commenting this line out attributes the same allocation to the next line.
         -   # Is memory being allocated lazily or misattributed?
-    23040   @assert g_h[1, 2] == g_h[2, 1]
+  3381120   @assert g_h[1, 2] == g_h[2, 1]
         - 
         -   # You have to do this in the right order to not overwrite needed terms.
         0   if calculate_hessian
@@ -240,7 +240,7 @@
         -     sf2::SensitiveFloat{ParamType, NumType};
         -     scale::Float64=1.0, calculate_hessian::Bool=true)
         - 
-        0   sf1.v = sf1.v + scale * sf2.v
+   772800   sf1.v = sf1.v + scale * sf2.v
         - 
         0   for i in eachindex(sf1.d)
         0     sf1.d[i] = sf1.d[i] + scale * sf2.d[i]
@@ -264,7 +264,7 @@
         -     s::Int64; calculate_hessian::Bool=true)
         - 
         -   # TODO: This line, too, allocates a lot of memory.
-        0   sf_all.v = sf_all.v + sf_s.v
+  2208000   sf_all.v = sf_all.v + sf_s.v
         - 
         0   P = length(ParamType)
         0   for s_ind1 in 1:P

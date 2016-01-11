@@ -11,7 +11,7 @@ import WCSLIB
 
 using DualNumbers.Dual
 
-export tile_predicted_imagecom
+export tile_predicted_image
 
 
 ####################################################
@@ -440,8 +440,12 @@ function accumulate_source_brightness!{NumType <: Number}(
         # The (a, a) block of the hessian is zero.
 
         # The (bright, bright) block:
-        E_G_s.h[p0_bright, p0_bright] = a[i] * fsm[i].v * sb.E_l_a[b, i].h
-        E_G2_s.h[p0_bright, p0_bright] = a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h
+        for p0_ind1 in p0_bright, p0_ind2 in p0_bright
+          E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
+            a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_ind1, p0_ind2]
+          E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
+            a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
+        end
 
         # The (shape, shape) block:
         E_G_s_hsub.shape_shape = a[i] * sb.E_l_a[b, i].v * fsm[i].h
@@ -652,11 +656,11 @@ function add_elbo_log_term!{NumType <: Number}(
 
   if elbo_vars.calculate_derivs
     # TODO: pre-allocate these.
-    elbo_vars.combine_grad =
+    elbo_vars.combine_grad[:] =
       NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + var_G.v / (E_G.v ^ 3)]
 
     if elbo_vars.calculate_hessian
-      elbo_vars.combine_hess =
+      elbo_vars.combine_hess[:,:] =
         NumType[0             1 / E_G.v^3;
                 1 / E_G.v^3   -(1 / E_G.v ^ 2 + 3  * var_G.v / (E_G.v ^ 4))]
     else
@@ -672,7 +676,7 @@ function add_elbo_log_term!{NumType <: Number}(
 
     # Add to the elbo.
     add_value = elbo.v + x_nbm * (log(iota) + log_term_value)
-    elbo_vars.combine_grad = NumType[1, x_nbm]
+    elbo_vars.combine_grad[:] = NumType[1, x_nbm]
     fill!(elbo_vars.combine_hess, 0.0)
     combine_sfs!(
       elbo_vars.elbo, elbo_vars.elbo_log_term,
