@@ -173,4 +173,24 @@ z = fill(0.0, 1, 1);
 
 
 
+# eachindex doens't make loops faster.
+n = collect(1:10) + 20
+@time begin
+  for i = 1:100000
+    for j=1:length(n)
+      x = 2 * n[j]
+    end
+  end
+end
+
+@time begin
+  for i = 1:100000
+    for j in eachindex(n)
+      x = 2 * n[j]
+    end
+  end
+end
+
+
+
 #
