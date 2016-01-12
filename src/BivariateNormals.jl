@@ -485,16 +485,17 @@ function transform_bvn_derivs!{NumType <: Number}(
 
   # Gradient calculations.
 
-  #fill!(bvn_s_d, 0.0)
+  const use_vectorization = true
 
   # Use the chain rule for the shape derviatives.
   # TODO: vectorize?
-  for shape_id in 1:length(gal_shape_ids)
-    # Sum over sig_id in 1:3
-    bvn_s_d[shape_id] =
-      bvn_sig_d[1] * gcc.sig_sf.j[1, shape_id] +
-      bvn_sig_d[2] * gcc.sig_sf.j[2, shape_id] +
-      bvn_sig_d[3] * gcc.sig_sf.j[3, shape_id]
+  if use_vectorization
+    bvn_s_d[:] = (gcc.sig_sf.j') * bvn_sig_d
+  else
+    fill!(bvn_s_d, 0.0)
+    for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
+      bvn_s_d[shape_id] += bvn_sig_d[sig_id] * gcc.sig_sf.j[sig_id, shape_id]
+    end
   end
 
   if elbo_vars.calculate_hessian
@@ -504,7 +505,9 @@ function transform_bvn_derivs!{NumType <: Number}(
     fill!(bvn_us_h, 0.0)
 
     # Second derviatives involving only shape parameters.
-    # TODO: This section takes a lot of time.
+    # TODO: This section takes a lot of time.  Note that this for loop is faster
+    # than writing the expanded sum in sig_id1 and sig_id2 out explicitly for
+    # some reason.
     for shape_id1 in 1:length(gal_shape_ids),
         shape_id2 in 1:length(gal_shape_ids)
       for sig_id1 in 1:3
@@ -537,8 +540,8 @@ function transform_bvn_derivs!{NumType <: Number}(
     # TODO: This section takes a lot of time.
     for shape_id in 1:length(gal_shape_ids), u_id in 1:2, sig_id in 1:3, x_id in 1:2
       bvn_us_h[u_id, shape_id] +=
-        # x_id = 1, sig_id in 1:3
-        bvn_xsig_h[x_id, sig_id] * gcc.sig_sf.j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
+        bvn_xsig_h[x_id, sig_id] * gcc.sig_sf.j[sig_id, shape_id] *
+        (-wcs_jacobian[x_id, u_id])
     end
   end
 end

@@ -1,4 +1,90 @@
 
+
+
+# Matrix multiplication is faster than for loops.
+trials = 100
+n = 100
+x = rand(n, n);
+y = rand(n);
+z = zeros(n);
+
+@time begin
+for t in 1:trials
+  fill!(z, 0.0);
+  for i = 1:n, j = 1:n
+    z[i] += x[j, i] * y[j]
+  end
+end
+end
+
+@time begin
+for t in 1:trials
+  fill!(z, 0.0);
+  z = (x') * y;
+end
+end
+
+
+
+# For loops are comparable to direct computations, but slightly slower here.
+# (In BivariateNormals for loops are faster for some reason.)
+trials = 10000
+n = 10
+x = rand(3, n);
+y = rand(3);
+z = zeros(n);
+
+@time begin
+for t in 1:trials
+  fill!(z, 0.0);
+  for i = 1:n, j = 1:3
+    z[i] += x[j, i] * y[j]
+  end
+end
+end
+
+@time begin
+for t in 1:trials
+  for i = 1:n
+    z[i] = x[1, i] * y[1] + x[2, i] * y[2] + x[2, i] * y[2]
+  end
+end
+end
+
+
+
+# Broadcasting.
+trials = 10000
+n = 10
+x = rand(3, n);
+y = rand(3);
+z = zeros(n);
+
+@time begin
+for t in 1:trials
+  fill!(z, 0.0);
+  for i = 1:n, j = 1:3
+    z[i] += x[j, i] * y[j]
+  end
+end
+end
+
+@time begin
+for t in 1:trials
+  for i = 1:n
+    z[i] = x[1, i] * y[1] + x[2, i] * y[2] + x[2, i] * y[2]
+  end
+end
+end
+
+
+
+
+
+
+
+
+
 ################# Experimenting with BLAS and timing and memory
 
 n = 1000
