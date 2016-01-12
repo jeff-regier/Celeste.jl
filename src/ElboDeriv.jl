@@ -441,7 +441,7 @@ function accumulate_source_brightness!{NumType <: Number}(
 
         # The (bright, bright) block:
         for p0_ind1 in 1:length(p0_bright), p0_ind2 in 1:length(p0_bright)
-          # TODO : speed this up?
+          # TODO: time consuming **************
           E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
             a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_ind1, p0_ind2]
           E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =

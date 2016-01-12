@@ -1,19 +1,24 @@
 
 
 
-# Matrix multiplication is faster than for loops.
-trials = 100
-n = 100
-x = rand(n, n);
-y = rand(n);
-z = zeros(n);
+# Matrix multiplication is faster than for loops even with a transpose.
+trials = 100000
+n1 = 7
+n2 = 3
+x = rand(n2, n1);
+y = rand(n2);
+z = zeros(n1);
+
+function TransMult!(z, x, y)
+  fill!(z, 0.0);
+  for i = 1:n1, j = 1:n2
+    z[i] += x[j, i] * y[j]
+  end
+end
 
 @time begin
 for t in 1:trials
-  fill!(z, 0.0);
-  for i = 1:n, j = 1:n
-    z[i] += x[j, i] * y[j]
-  end
+  TransMult!(z, x, y)
 end
 end
 
@@ -21,6 +26,29 @@ end
 for t in 1:trials
   fill!(z, 0.0);
   z = (x') * y;
+end
+end
+
+# Tensor multiplication
+trials = 100000
+n = 3
+
+x = rand(n, n, n);
+y = rand(n);
+z = zeros(n, n);
+
+@time begin
+for t in 1:trials
+  fill!(z, 0.0)
+  for i=1:n, j=1:n, k=1:n
+    z[i, j] += x[i, j, k] * y[k]
+  end
+end
+end
+
+@time begin
+for t in 1:trials
+  z = Float64[ dot(y, x[i, j, :][:]) for i=1:n, j=1:n]
 end
 end
 
@@ -53,27 +81,33 @@ end
 
 
 
-# Broadcasting.
-trials = 10000
+# Are types making it slower?
+trials = 100000
 n = 10
-x = rand(3, n);
-y = rand(3);
+type MyType
+  z::Vector{Float64}
+end
+
+type MyType2
+  x::Matrix{Float64}
+end
+
+x = rand(n, n);
+y = rand(n);
 z = zeros(n);
 
+ztype = MyType(z);
+xtype = MyType2(x);
+
 @time begin
 for t in 1:trials
-  fill!(z, 0.0);
-  for i = 1:n, j = 1:3
-    z[i] += x[j, i] * y[j]
-  end
+  ztype.z[:] = x * y
 end
 end
 
 @time begin
 for t in 1:trials
-  for i = 1:n
-    z[i] = x[1, i] * y[1] + x[2, i] * y[2] + x[2, i] * y[2]
-  end
+    ztype.z[:] = xtype.x * y
 end
 end
 

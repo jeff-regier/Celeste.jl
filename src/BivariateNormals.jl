@@ -456,8 +456,6 @@ function transform_bvn_derivs!{NumType <: Number}(
 end
 
 
-# Pre-allocate memory for sensitivity floats.
-
 @doc """
 Transform the bvn derivatives and hessians from (x, sigma) to the
 galaxy parameters (u, gal_shape_ids).
@@ -485,11 +483,12 @@ function transform_bvn_derivs!{NumType <: Number}(
 
   # Gradient calculations.
 
-  const use_vectorization = true
+  const use_vectorization = false
 
   # Use the chain rule for the shape derviatives.
-  # TODO: vectorize?
+  # TODO: time consuming **************
   if use_vectorization
+    # TODO: For some unknown reason, this isn't faster.
     bvn_s_d[:] = (gcc.sig_sf.j') * bvn_sig_d
   else
     fill!(bvn_s_d, 0.0)
@@ -508,8 +507,10 @@ function transform_bvn_derivs!{NumType <: Number}(
     # TODO: This section takes a lot of time.  Note that this for loop is faster
     # than writing the expanded sum in sig_id1 and sig_id2 out explicitly for
     # some reason.
+    # TODO: time consuming **************
     for shape_id1 in 1:length(gal_shape_ids),
         shape_id2 in 1:length(gal_shape_ids)
+
       for sig_id1 in 1:3
         bvn_ss_h[shape_id1, shape_id2] +=
           bvn_sig_d[sig_id1] * gcc.sig_sf.t[sig_id1, shape_id1, shape_id2]
@@ -537,7 +538,7 @@ function transform_bvn_derivs!{NumType <: Number}(
     # end
 
     # Second derivates involving both a shape term and a u term.
-    # TODO: This section takes a lot of time.
+    # TODO: time consuming **************
     for shape_id in 1:length(gal_shape_ids), u_id in 1:2, sig_id in 1:3, x_id in 1:2
       bvn_us_h[u_id, shape_id] +=
         bvn_xsig_h[x_id, sig_id] * gcc.sig_sf.j[sig_id, shape_id] *
