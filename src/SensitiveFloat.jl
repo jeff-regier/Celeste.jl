@@ -113,9 +113,14 @@ function multiply_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   # You have to do this in the right order to not overwrite needed terms.
 
   if calculate_hessian
+    p1, p2 = size(sf1.h)
     # Second derivate terms involving second derivates.
-    sf1.h[:, :] = sf1.v * sf2.h + sf2.v * sf1.h
-    sf1.h[:, :] += sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]'
+    for ind1 = 1:p1, ind2 = 1:ind1
+      sf1.h[ind1, ind2] =
+        sf1.v * sf2.h[ind1, ind2] + sf2.v * sf1.h[ind1, ind2] +
+        sf1.d[ind1] * sf2.d[ind2] + sf2.d[ind1] * sf1.d[ind2]
+      sf1.h[ind2, ind1] = sf1.h[ind1, ind2]
+    end
   end
   sf1.d[:, :] = sf2.v * sf1.d + sf1.v * sf2.d
 
@@ -157,12 +162,13 @@ function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet, NumType <: Num
     BLAS.ger!(g_h[1, 2], sf2d, sf1d, sf_result.h);
   else
     p1, p2 = size(sf_result.h)
-    for ind1 = 1:p1, ind2 = 1:p2
+    for ind1 = 1:p1, ind2 = 1:ind1
       sf_result.h[ind1, ind2] =
         g_d[1] * sf1.h[ind1, ind2] + g_d[2] * sf2.h[ind1, ind2] +
         g_h[1, 1] * sf1.d[ind1] * sf1.d[ind2] +
         g_h[2, 2] * sf2.d[ind1] * sf2.d[ind2] +
         g_h[1, 2] * (sf1.d[ind1] * sf2.d[ind2] + sf2.d[ind1] * sf1.d[ind2])
+      sf_result.h[ind2, ind1] = sf_result.h[ind1, ind2]
     end
   end
 end
@@ -270,8 +276,9 @@ function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
       BLAS.axpy!(scale, sf2.h, sf1.h)
     else
       p1, p2 = size(sf1.h)
-      for ind1=1:p1, ind2=1:p2
+      for ind1=1:p1, ind2=1:ind1
         sf1.h[ind1, ind2] += scale * sf2.h[ind1, ind2]
+        sf1.h[ind2, ind1] += sf1.h[ind1, ind2]
       end
     end
   end
