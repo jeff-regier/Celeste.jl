@@ -9,7 +9,7 @@ using Base.Test
 using SampleData
 import Synthetic
 
-profile_n = 3
+profile_n = 5
 
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
@@ -21,10 +21,11 @@ blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 Profile.clear_malloc_data()
 Profile.clear()
 @profile for i = 1:profile_n
+  println(".")
   ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=true);
   #Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
 end
-# Profile.print()
+Profile.print()
 
 # To see memory, quit and run
 using Coverage
