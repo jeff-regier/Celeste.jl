@@ -42,7 +42,7 @@ function test_tile_likelihood()
     tile_lik_wrapper_fun(mp_fd, false).v
   end
 
-  elbo = tile_lik_wrapper_fun(mp, true);
+  @time elbo = tile_lik_wrapper_fun(mp, true);
 
   P = length(ids)
   S = mp.S
@@ -54,10 +54,10 @@ function test_tile_likelihood()
 
   @test_approx_eq tile_lik_value_wrapper(x) elbo.v
 
-  ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x);
+  @time ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x);
   @test_approx_eq ad_grad elbo.d
 
-  ad_hess = ForwardDiff.hessian(tile_lik_value_wrapper, x);
+  @time ad_hess = ForwardDiff.hessian(tile_lik_value_wrapper, x);
   @test_approx_eq ad_hess elbo.h
 end
 

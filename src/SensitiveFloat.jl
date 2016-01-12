@@ -171,6 +171,8 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     v::NumType, g_d::Vector{NumType}, g_h::Matrix{NumType};
     calculate_hessian::Bool=true)
 
+  # TODO: time consuming **************
+
   # TODO: this line is allocating a lot of memory and I don't know why.
   # Commenting this line out attributes the same allocation to the next line.
   # Is memory being allocated lazily or misattributed?
@@ -263,9 +265,10 @@ function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf_s::SensitiveFloat{ParamType, NumType},
     s::Int64; calculate_hessian::Bool=true)
 
-  # TODO: This line, too, allocates a lot of memory.
+  # TODO: This line, too, allocates a lot of memory.  Why?
   sf_all.v = sf_all.v + sf_s.v
 
+  # TODO: time consuming **************
   P = length(ParamType)
   for s_ind1 in 1:P
     s_all_ind1 = P * (s - 1) + s_ind1
