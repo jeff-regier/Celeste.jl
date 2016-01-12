@@ -448,8 +448,9 @@ function transform_bvn_derivs!{NumType <: Number}(
     # Second derivatives involving only u.
     # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.
     # TODO: eliminate the redundant term.
+    # TODO: time consuming **************
     for u_id1 in 1:2, u_id2 in 1:2, x_id1 in 1:2, x_id2 in 1:2
-      bvn_uu_h[u_id1, u_id2] += bvn_xx_h[x_id1, x_id2] * # TODO :much time on this line
+      bvn_uu_h[u_id1, u_id2] += bvn_xx_h[x_id1, x_id2] *
         wcs_jacobian[x_id1, u_id1] * wcs_jacobian[x_id2, u_id2]
     end
   end
@@ -509,7 +510,7 @@ function transform_bvn_derivs!{NumType <: Number}(
     # some reason.
     # TODO: time consuming **************
     for shape_id1 in 1:length(gal_shape_ids),
-        shape_id2 in 1:length(gal_shape_ids)
+        shape_id2 in 1:shape_id1
 
       for sig_id1 in 1:3
         bvn_ss_h[shape_id1, shape_id2] +=
@@ -520,6 +521,7 @@ function transform_bvn_derivs!{NumType <: Number}(
             gcc.sig_sf.j[sig_id1, shape_id1] *
             gcc.sig_sf.j[sig_id2, shape_id2]
         end
+        bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
       end
     end
 

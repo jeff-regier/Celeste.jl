@@ -2,7 +2,7 @@
 #using CelesteTypes.getids
 #using CelesteTypes.HessianEntry
 
-export multiply_sf!, add_scaled_sfs!, combine_sfs!, add_sources_sf!
+export multiply_sfs!, add_scaled_sfs!, combine_sfs!, add_sources_sf!
 
 @doc """
 A function value and its derivative with respect to its arguments.
@@ -93,39 +93,39 @@ function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
 end
 
 
-@doc """
-Updates sf1 in place with sf1 * sf2.
-
-ids1 and ids2 are the ids for which sf1 and sf2 have nonzero derivatives,
-respectively.
-""" ->
-function multiply_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
-    sf1::SensitiveFloat{ParamType, NumType},
-    sf2::SensitiveFloat{ParamType, NumType};
-    ids1::Array{Int64}=collect(1:length(sf1.ids)),
-    ids2::Array{Int64}=collect(1:length(sf2.ids)),
-    calculate_hessian::Bool=true)
-
-  S = size(sf1.d)[2]
-  @assert S == 1 # For now this is only for the brightness calculations.
-  # TODO: replace this with combine_sfs!.
-
-  # You have to do this in the right order to not overwrite needed terms.
-
-  if calculate_hessian
-    p1, p2 = size(sf1.h)
-    # Second derivate terms involving second derivates.
-    for ind1 = 1:p1, ind2 = 1:ind1
-      sf1.h[ind1, ind2] =
-        sf1.v * sf2.h[ind1, ind2] + sf2.v * sf1.h[ind1, ind2] +
-        sf1.d[ind1] * sf2.d[ind2] + sf2.d[ind1] * sf1.d[ind2]
-      sf1.h[ind2, ind1] = sf1.h[ind1, ind2]
-    end
-  end
-  sf1.d[:, :] = sf2.v * sf1.d + sf1.v * sf2.d
-
-  sf1.v = sf1.v * sf2.v
-end
+# @doc """
+# Updates sf1 in place with sf1 * sf2.
+#
+# ids1 and ids2 are the ids for which sf1 and sf2 have nonzero derivatives,
+# respectively.
+# """ ->
+# function multiply_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+#     sf1::SensitiveFloat{ParamType, NumType},
+#     sf2::SensitiveFloat{ParamType, NumType};
+#     ids1::Array{Int64}=collect(1:length(sf1.ids)),
+#     ids2::Array{Int64}=collect(1:length(sf2.ids)),
+#     calculate_hessian::Bool=true)
+#
+#   S = size(sf1.d)[2]
+#   @assert S == 1 # For now this is only for the brightness calculations.
+#   # TODO: replace this with combine_sfs!.
+#
+#   # You have to do this in the right order to not overwrite needed terms.
+#
+#   if calculate_hessian
+#     p1, p2 = size(sf1.h)
+#     # Second derivate terms involving second derivates.
+#     for ind1 = 1:p1, ind2 = 1:ind1
+#       sf1.h[ind1, ind2] =
+#         sf1.v * sf2.h[ind1, ind2] + sf2.v * sf1.h[ind1, ind2] +
+#         sf1.d[ind1] * sf2.d[ind2] + sf2.d[ind1] * sf1.d[ind2]
+#       sf1.h[ind2, ind1] = sf1.h[ind1, ind2]
+#     end
+#   end
+#   sf1.d[:, :] = sf2.v * sf1.d + sf1.v * sf2.d
+#
+#   sf1.v = sf1.v * sf2.v
+# end
 
 
 @doc """
@@ -163,6 +163,7 @@ function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet, NumType <: Num
   else
     p1, p2 = size(sf_result.h)
     for ind1 = 1:p1, ind2 = 1:ind1
+      # TODO: time consuming **************
       sf_result.h[ind1, ind2] =
         g_d[1] * sf1.h[ind1, ind2] + g_d[2] * sf2.h[ind1, ind2] +
         g_h[1, 1] * sf1.d[ind1] * sf1.d[ind2] +
