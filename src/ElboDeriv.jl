@@ -682,7 +682,7 @@ function add_elbo_log_term!{NumType <: Number}(
   # println("var_G.v ", var_G.v)
 
   if elbo_vars.calculate_derivs
-    # TODO: pre-allocate these.
+
     elbo_vars.combine_grad[:] =
       NumType[ -0.5 / (E_G.v ^ 2), 1 / E_G.v + var_G.v / (E_G.v ^ 3)]
 
