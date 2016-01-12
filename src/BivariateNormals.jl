@@ -502,51 +502,60 @@ function transform_bvn_derivs!{NumType <: Number}(
     fill!(bvn_ss_h, 0.0)
     fill!(bvn_us_h, 0.0)
 
+    const use_for_loop = false
+
+    if use_for_loop
     # Second derviatives involving only shape parameters.
-    # TODO: eliminate redundancies.
-    #          1036 /home/rgiordan/.julia/v0.4/Celeste/src/BivariateNormals.jl; transform_bvn_derivs!; line: 513 *********
-    # for shape_id1 in 1:length(gal_shape_ids),
-    #     shape_id2 in 1:length(gal_shape_ids)
-    #   for sig_id1 in 1:3
-    #     bvn_ss_h[shape_id1, shape_id2] += # TODO: much time on this line
-    #       bvn_sig_d[sig_id1] * gcc.sig_sf.t[sig_id1, shape_id1, shape_id2]
-    #     for sig_id2 in 1:3
-    #       bvn_ss_h[shape_id1, shape_id2] += # TODO: Much time on this line
-    #         bvn_sigsig_h[sig_id1, sig_id2] *
-    #         gcc.sig_sf.j[sig_id1, shape_id1] *
-    #         gcc.sig_sf.j[sig_id2, shape_id2]
-    #     end
-    #   end
-    # end
+      for shape_id1 in 1:length(gal_shape_ids),
+          shape_id2 in 1:length(gal_shape_ids)
+        for sig_id1 in 1:3
+          bvn_ss_h[shape_id1, shape_id2] += # TODO: much time on this line
+            bvn_sig_d[sig_id1] * gcc.sig_sf.t[sig_id1, shape_id1, shape_id2]
+          for sig_id2 in 1:3
+            bvn_ss_h[shape_id1, shape_id2] += # TODO: Much time on this line
+              bvn_sigsig_h[sig_id1, sig_id2] *
+              gcc.sig_sf.j[sig_id1, shape_id1] *
+              gcc.sig_sf.j[sig_id2, shape_id2]
+          end
+        end
+      end
+    else
+      for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
+        # This line accounts for much of the Hessian computation time.
+        bvn_ss_h[shape_id1, shape_id2] =
+          bvn_sig_d[1] * gcc.sig_sf.t[1, shape_id1, shape_id2] +
+          bvn_sig_d[2] * gcc.sig_sf.t[2, shape_id1, shape_id2] +
+          bvn_sig_d[3] * gcc.sig_sf.t[3, shape_id1, shape_id2] +
 
-    for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
-      bvn_ss_h[shape_id1, shape_id2] = # TODO: much time on this line
-        bvn_sig_d[1] * gcc.sig_sf.t[1, shape_id1, shape_id2] +
-        bvn_sig_d[1] * gcc.sig_sf.t[2, shape_id1, shape_id2] +
-        bvn_sig_d[1] * gcc.sig_sf.t[3, shape_id1, shape_id2]
+          # sig_id2 = 1
+          bvn_sigsig_h[1, 1] * gcc.sig_sf.j[1, shape_id1] * gcc.sig_sf.j[1, shape_id2] +
+          bvn_sigsig_h[2, 1] * gcc.sig_sf.j[2, shape_id1] * gcc.sig_sf.j[1, shape_id2] +
+          bvn_sigsig_h[3, 1] * gcc.sig_sf.j[3, shape_id1] * gcc.sig_sf.j[1, shape_id2] +
 
-      bvn_ss_h[shape_id1, shape_id2] = # TODO: Much time on this line
-        # sig_id2 = 1
-        bvn_sigsig_h[1, 1] * gcc.sig_sf.j[1, shape_id1] * gcc.sig_sf.j[1, shape_id2] +
-        bvn_sigsig_h[2, 1] * gcc.sig_sf.j[2, shape_id1] * gcc.sig_sf.j[1, shape_id2] +
-        bvn_sigsig_h[3, 1] * gcc.sig_sf.j[3, shape_id1] * gcc.sig_sf.j[1, shape_id2] +
+          # sig_id2 = 2
+          bvn_sigsig_h[1, 2] * gcc.sig_sf.j[1, shape_id1] * gcc.sig_sf.j[2, shape_id2] +
+          bvn_sigsig_h[2, 2] * gcc.sig_sf.j[2, shape_id1] * gcc.sig_sf.j[2, shape_id2] +
+          bvn_sigsig_h[3, 2] * gcc.sig_sf.j[3, shape_id1] * gcc.sig_sf.j[2, shape_id2] +
 
-        # sig_id2 = 2
-        bvn_sigsig_h[1, 2] * gcc.sig_sf.j[1, shape_id1] * gcc.sig_sf.j[2, shape_id2] +
-        bvn_sigsig_h[2, 2] * gcc.sig_sf.j[2, shape_id1] * gcc.sig_sf.j[2, shape_id2] +
-        bvn_sigsig_h[3, 2] * gcc.sig_sf.j[3, shape_id1] * gcc.sig_sf.j[2, shape_id2] +
-
-        # sig_id2 = 3
-        bvn_sigsig_h[1, 3] * gcc.sig_sf.j[1, shape_id1] * gcc.sig_sf.j[3, shape_id2] +
-        bvn_sigsig_h[2, 3] * gcc.sig_sf.j[2, shape_id1] * gcc.sig_sf.j[3, shape_id2] +
-        bvn_sigsig_h[3, 3] * gcc.sig_sf.j[3, shape_id1] * gcc.sig_sf.j[3, shape_id2]
+          # sig_id2 = 3
+          bvn_sigsig_h[1, 3] * gcc.sig_sf.j[1, shape_id1] * gcc.sig_sf.j[3, shape_id2] +
+          bvn_sigsig_h[2, 3] * gcc.sig_sf.j[2, shape_id1] * gcc.sig_sf.j[3, shape_id2] +
+          bvn_sigsig_h[3, 3] * gcc.sig_sf.j[3, shape_id1] * gcc.sig_sf.j[3, shape_id2]
+      end
     end
 
     # Second derivates involving both a shape term and a u term.
-    for shape_id in 1:length(gal_shape_ids), u_id in 1:2,
-        sig_id in 1:3, x_id in 1:2
-      bvn_us_h[u_id, shape_id] += bvn_xsig_h[x_id, sig_id] * # TODO :much time on this line
-        gcc.sig_sf.j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
+    for shape_id in 1:length(gal_shape_ids), u_id in 1:2
+      # for sig_id in 1:3, x_id in 1:2
+      bvn_us_h[u_id, shape_id] =
+        # x_id = 1, sig_id in 1:3
+        bvn_xsig_h[1, 1] * gcc.sig_sf.j[1, shape_id] * (-wcs_jacobian[1, u_id]) +
+        bvn_xsig_h[1, 2] * gcc.sig_sf.j[2, shape_id] * (-wcs_jacobian[1, u_id]) +
+        bvn_xsig_h[1, 3] * gcc.sig_sf.j[3, shape_id] * (-wcs_jacobian[1, u_id]) +
+        # x_id = 2, sig_id in 1:3
+        bvn_xsig_h[2, 1] * gcc.sig_sf.j[1, shape_id] * (-wcs_jacobian[2, u_id]) +
+        bvn_xsig_h[2, 2] * gcc.sig_sf.j[2, shape_id] * (-wcs_jacobian[2, u_id]) +
+        bvn_xsig_h[2, 3] * gcc.sig_sf.j[3, shape_id] * (-wcs_jacobian[2, u_id])
     end
   end
 end
