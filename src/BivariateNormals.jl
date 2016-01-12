@@ -449,7 +449,7 @@ function transform_bvn_derivs!{NumType <: Number}(
     # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.
     # TODO: eliminate the redundant term.
     for u_id1 in 1:2, u_id2 in 1:2, x_id1 in 1:2, x_id2 in 1:2
-      bvn_uu_h[u_id1, u_id2] += bvn_xx_h[x_id1, x_id2] *
+      bvn_uu_h[u_id1, u_id2] += bvn_xx_h[x_id1, x_id2] * # TODO :much time on this line
         wcs_jacobian[x_id1, u_id1] * wcs_jacobian[x_id2, u_id2]
     end
   end
@@ -504,24 +504,48 @@ function transform_bvn_derivs!{NumType <: Number}(
 
     # Second derviatives involving only shape parameters.
     # TODO: eliminate redundancies.
-    for shape_id1 in 1:length(gal_shape_ids),
-        shape_id2 in 1:length(gal_shape_ids)
-      for sig_id1 in 1:3
-        bvn_ss_h[shape_id1, shape_id2] +=
-          bvn_sig_d[sig_id1] * gcc.sig_sf.t[sig_id1, shape_id1, shape_id2]
-        for sig_id2 in 1:3
-          bvn_ss_h[shape_id1, shape_id2] +=
-            bvn_sigsig_h[sig_id1, sig_id2] *
-            gcc.sig_sf.j[sig_id1, shape_id1] *
-            gcc.sig_sf.j[sig_id2, shape_id2]
-        end
-      end
+    #          1036 /home/rgiordan/.julia/v0.4/Celeste/src/BivariateNormals.jl; transform_bvn_derivs!; line: 513 *********
+    # for shape_id1 in 1:length(gal_shape_ids),
+    #     shape_id2 in 1:length(gal_shape_ids)
+    #   for sig_id1 in 1:3
+    #     bvn_ss_h[shape_id1, shape_id2] += # TODO: much time on this line
+    #       bvn_sig_d[sig_id1] * gcc.sig_sf.t[sig_id1, shape_id1, shape_id2]
+    #     for sig_id2 in 1:3
+    #       bvn_ss_h[shape_id1, shape_id2] += # TODO: Much time on this line
+    #         bvn_sigsig_h[sig_id1, sig_id2] *
+    #         gcc.sig_sf.j[sig_id1, shape_id1] *
+    #         gcc.sig_sf.j[sig_id2, shape_id2]
+    #     end
+    #   end
+    # end
+
+    for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
+      bvn_ss_h[shape_id1, shape_id2] = # TODO: much time on this line
+        bvn_sig_d[1] * gcc.sig_sf.t[1, shape_id1, shape_id2] +
+        bvn_sig_d[1] * gcc.sig_sf.t[2, shape_id1, shape_id2] +
+        bvn_sig_d[1] * gcc.sig_sf.t[3, shape_id1, shape_id2]
+
+      bvn_ss_h[shape_id1, shape_id2] = # TODO: Much time on this line
+        # sig_id2 = 1
+        bvn_sigsig_h[1, 1] * gcc.sig_sf.j[1, shape_id1] * gcc.sig_sf.j[1, shape_id2] +
+        bvn_sigsig_h[2, 1] * gcc.sig_sf.j[2, shape_id1] * gcc.sig_sf.j[1, shape_id2] +
+        bvn_sigsig_h[3, 1] * gcc.sig_sf.j[3, shape_id1] * gcc.sig_sf.j[1, shape_id2] +
+
+        # sig_id2 = 2
+        bvn_sigsig_h[1, 2] * gcc.sig_sf.j[1, shape_id1] * gcc.sig_sf.j[2, shape_id2] +
+        bvn_sigsig_h[2, 2] * gcc.sig_sf.j[2, shape_id1] * gcc.sig_sf.j[2, shape_id2] +
+        bvn_sigsig_h[3, 2] * gcc.sig_sf.j[3, shape_id1] * gcc.sig_sf.j[2, shape_id2] +
+
+        # sig_id2 = 3
+        bvn_sigsig_h[1, 3] * gcc.sig_sf.j[1, shape_id1] * gcc.sig_sf.j[3, shape_id2] +
+        bvn_sigsig_h[2, 3] * gcc.sig_sf.j[2, shape_id1] * gcc.sig_sf.j[3, shape_id2] +
+        bvn_sigsig_h[3, 3] * gcc.sig_sf.j[3, shape_id1] * gcc.sig_sf.j[3, shape_id2]
     end
 
     # Second derivates involving both a shape term and a u term.
     for shape_id in 1:length(gal_shape_ids), u_id in 1:2,
         sig_id in 1:3, x_id in 1:2
-      bvn_us_h[u_id, shape_id] += bvn_xsig_h[x_id, sig_id] *
+      bvn_us_h[u_id, shape_id] += bvn_xsig_h[x_id, sig_id] * # TODO :much time on this line
         gcc.sig_sf.j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
     end
   end

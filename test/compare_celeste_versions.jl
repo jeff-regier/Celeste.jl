@@ -14,8 +14,9 @@ profile_n = 3
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
 ##########
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=true);
 
 Profile.clear_malloc_data()
 Profile.clear()
@@ -23,6 +24,7 @@ Profile.clear()
   ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=true);
   #Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
 end
+# Profile.print()
 
 # To see memory, quit and run
 using Coverage
@@ -39,8 +41,9 @@ using Debug
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 @time Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
 #@time ElboDeriv.elbo_likelihood(tiled_blob, mp);
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
 Profile.clear_malloc_data()
 Profile.clear()
