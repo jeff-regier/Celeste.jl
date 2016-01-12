@@ -134,24 +134,37 @@ function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet, NumType <: Num
     sf_result::SensitiveFloat{ParamType, NumType},
     g_d::Vector{NumType}, g_h::Matrix{NumType})
 
-  # Chain rule for second derivatives.
-  # BLAS for
-  # sf_result.h[:, :] = g_d[1] * sf1.h + g_d[2] * sf2.h
-  BLAS.blascopy!(prod(size(sf_result.h)), sf1.h, 1, sf_result.h, 1);
-  BLAS.scal!(prod(size(sf_result.h)), g_d[1], sf_result.h, 1);
-  BLAS.axpy!(g_d[2], sf2.h, sf_result.h)
+  const use_blas = false
 
-  # BLAS for
-  # sf_result.h[:, :] +=
-  #   g_h[1, 1] * sf1.d[:] * sf1.d[:]' +
-  #   g_h[2, 2] * sf2.d[:] * sf2.d[:]' +
-  #   g_h[1, 2] * (sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]')
-  sf1d = sf1.d[:];
-  sf2d = sf2.d[:];
-  BLAS.ger!(g_h[1, 1], sf1d, sf1d, sf_result.h);
-  BLAS.ger!(g_h[2, 2], sf2d, sf2d, sf_result.h);
-  BLAS.ger!(g_h[1, 2], sf1d, sf2d, sf_result.h);
-  BLAS.ger!(g_h[1, 2], sf2d, sf1d, sf_result.h);
+  if use_blas
+    # Chain rule for second derivatives.
+    # BLAS for
+    # sf_result.h[:, :] = g_d[1] * sf1.h + g_d[2] * sf2.h
+    BLAS.blascopy!(prod(size(sf_result.h)), sf1.h, 1, sf_result.h, 1);
+    BLAS.scal!(prod(size(sf_result.h)), g_d[1], sf_result.h, 1);
+    BLAS.axpy!(g_d[2], sf2.h, sf_result.h)
+
+    # BLAS for
+    # sf_result.h[:, :] +=
+    #   g_h[1, 1] * sf1.d[:] * sf1.d[:]' +
+    #   g_h[2, 2] * sf2.d[:] * sf2.d[:]' +
+    #   g_h[1, 2] * (sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]')
+    sf1d = sf1.d[:];
+    sf2d = sf2.d[:];
+    BLAS.ger!(g_h[1, 1], sf1d, sf1d, sf_result.h);
+    BLAS.ger!(g_h[2, 2], sf2d, sf2d, sf_result.h);
+    BLAS.ger!(g_h[1, 2], sf1d, sf2d, sf_result.h);
+    BLAS.ger!(g_h[1, 2], sf2d, sf1d, sf_result.h);
+  else
+    p1, p2 = size(sf_result.h)
+    for ind1 = 1:p1, ind2 = 1:p2
+      sf_result.h[ind1, ind2] =
+        g_d[1] * sf1.h[ind1, ind2] + g_d[2] * sf2.h[ind1, ind2] +
+        g_h[1, 1] * sf1.d[ind1] * sf1.d[ind2] +
+        g_h[2, 2] * sf2.d[ind1] * sf2.d[ind2] +
+        g_h[1, 2] * (sf1.d[ind1] * sf2.d[ind2] + sf2.d[ind1] * sf1.d[ind2])
+    end
+  end
 end
 
 
@@ -249,9 +262,18 @@ function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   end
 
   if calculate_hessian
-    # BLAS for
-    #sf1.h = sf1.h + scale * sf2.h
-    BLAS.axpy!(scale, sf2.h, sf1.h)
+    const use_blas = false
+
+    if use_blas
+      # BLAS for
+      #sf1.h = sf1.h + scale * sf2.h
+      BLAS.axpy!(scale, sf2.h, sf1.h)
+    else
+      p1, p2 = size(sf1.h)
+      for ind1=1:p1, ind2=1:p2
+        sf1.h[ind1, ind2] += scale * sf2.h[ind1, ind2]
+      end
+    end
   end
 end
 
