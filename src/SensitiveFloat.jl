@@ -157,12 +157,17 @@ function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet, NumType <: Num
     BLAS.ger!(g_h[1, 2], sf2d, sf1d, sf_result.h);
   else
     p1, p2 = size(sf_result.h)
-    for ind1 = 1:p1, ind2 = 1:p2
-      sf_result.h[ind1, ind2] =
-        g_d[1] * sf1.h[ind1, ind2] + g_d[2] * sf2.h[ind1, ind2] +
-        g_h[1, 1] * sf1.d[ind1] * sf1.d[ind2] +
-        g_h[2, 2] * sf2.d[ind1] * sf2.d[ind2] +
-        g_h[1, 2] * (sf1.d[ind1] * sf2.d[ind2] + sf2.d[ind1] * sf1.d[ind2])
+    for ind2 = 1:p2
+      sf11_factor = g_h[1, 1] * sf1.d[ind2] + g_h[1, 2] * sf2.d[ind2]
+      sf21_factor = g_h[1, 2] * sf1.d[ind2] + g_h[2, 2] * sf2.d[ind2]
+
+      @inbounds for ind1 = 1:p1
+        sf_result.h[ind1, ind2] = 
+          g_d[1] * sf1.h[ind1, ind2] +
+          g_d[2] * sf2.h[ind1, ind2] +
+          sf11_factor * sf1.d[ind1] +
+          sf21_factor * sf2.d[ind1]
+      end
     end
   end
 end
