@@ -1,7 +1,4 @@
 
-#using CelesteTypes.getids
-#using CelesteTypes.HessianEntry
-
 export multiply_sfs!, add_scaled_sfs!, combine_sfs!, add_sources_sf!
 
 @doc """
@@ -74,59 +71,6 @@ function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
     zero_sensitive_float(param_arg, Float64, 1)
 end
 
-# function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
-#   S = size(sf1.d)[2]
-#
-#   # Simply asserting equality of the ids doesn't work for some reason.
-#   @assert typeof(sf1.ids) == typeof(sf2.ids)
-#   @assert length(sf1.ids) == length(sf2.ids)
-#   [ @assert size(sf1.h[s]) == size(sf2.h[s]) for s=1:S ]
-#
-#   @assert size(sf1.d) == size(sf2.d)
-#
-#   sf3 = deepcopy(sf1)
-#   sf3.v = sf1.v + sf2.v
-#   sf3.d = sf1.d + sf2.d
-#   sf3.h = sf1.h + sf2.h
-#
-#   sf3
-# end
-
-
-# @doc """
-# Updates sf1 in place with sf1 * sf2.
-#
-# ids1 and ids2 are the ids for which sf1 and sf2 have nonzero derivatives,
-# respectively.
-# """ ->
-# function multiply_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
-#     sf1::SensitiveFloat{ParamType, NumType},
-#     sf2::SensitiveFloat{ParamType, NumType};
-#     ids1::Array{Int64}=collect(1:length(sf1.ids)),
-#     ids2::Array{Int64}=collect(1:length(sf2.ids)),
-#     calculate_hessian::Bool=true)
-#
-#   S = size(sf1.d)[2]
-#   @assert S == 1 # For now this is only for the brightness calculations.
-#   # TODO: replace this with combine_sfs!.
-#
-#   # You have to do this in the right order to not overwrite needed terms.
-#
-#   if calculate_hessian
-#     p1, p2 = size(sf1.h)
-#     # Second derivate terms involving second derivates.
-#     for ind1 = 1:p1, ind2 = 1:ind1
-#       sf1.h[ind1, ind2] =
-#         sf1.v * sf2.h[ind1, ind2] + sf2.v * sf1.h[ind1, ind2] +
-#         sf1.d[ind1] * sf2.d[ind2] + sf2.d[ind1] * sf1.d[ind2]
-#       sf1.h[ind2, ind1] = sf1.h[ind1, ind2]
-#     end
-#   end
-#   sf1.d[:, :] = sf2.v * sf1.d + sf1.v * sf2.d
-#
-#   sf1.v = sf1.v * sf2.v
-# end
-
 
 @doc """
 Factor out the hessian part of combine_sfs! to help the compiler.
@@ -139,43 +83,20 @@ function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet, NumType <: Num
     sf_result::SensitiveFloat{ParamType, NumType},
     g_d::Vector{NumType}, g_h::Matrix{NumType})
 
-  const use_blas = false
+  p1, p2 = size(sf_result.h)
+  @assert size(sf_result.h) == size(sf1.h) == size(sf2.h)
+  @assert p1 == p2 == prod(size(sf1.d)) == prod(size(sf2.d))
+  for ind2 = 1:p2
+    sf11_factor = g_h[1, 1] * sf1.d[ind2] + g_h[1, 2] * sf2.d[ind2]
+    sf21_factor = g_h[1, 2] * sf1.d[ind2] + g_h[2, 2] * sf2.d[ind2]
 
-  if use_blas
-    # Chain rule for second derivatives.
-    # BLAS for
-    # sf_result.h[:, :] = g_d[1] * sf1.h + g_d[2] * sf2.h
-    BLAS.blascopy!(prod(size(sf_result.h)), sf1.h, 1, sf_result.h, 1);
-    BLAS.scal!(prod(size(sf_result.h)), g_d[1], sf_result.h, 1);
-    BLAS.axpy!(g_d[2], sf2.h, sf_result.h)
-
-    # BLAS for
-    # sf_result.h[:, :] +=
-    #   g_h[1, 1] * sf1.d[:] * sf1.d[:]' +
-    #   g_h[2, 2] * sf2.d[:] * sf2.d[:]' +
-    #   g_h[1, 2] * (sf1.d[:] * sf2.d[:]' + sf2.d[:] * sf1.d[:]')
-    sf1d = sf1.d[:];
-    sf2d = sf2.d[:];
-    BLAS.ger!(g_h[1, 1], sf1d, sf1d, sf_result.h);
-    BLAS.ger!(g_h[2, 2], sf2d, sf2d, sf_result.h);
-    BLAS.ger!(g_h[1, 2], sf1d, sf2d, sf_result.h);
-    BLAS.ger!(g_h[1, 2], sf2d, sf1d, sf_result.h);
-  else
-    p1, p2 = size(sf_result.h)
-    @assert size(sf_result.h) == size(sf1.h) == size(sf2.h)
-    @assert p1 == p2 == prod(size(sf1.d)) == prod(size(sf2.d))
-    for ind2 = 1:p2
-      sf11_factor = g_h[1, 1] * sf1.d[ind2] + g_h[1, 2] * sf2.d[ind2]
-      sf21_factor = g_h[1, 2] * sf1.d[ind2] + g_h[2, 2] * sf2.d[ind2]
-
-      @inbounds for ind1 = 1:ind2
-        sf_result.h[ind1, ind2] =
-          g_d[1] * sf1.h[ind1, ind2] +
-          g_d[2] * sf2.h[ind1, ind2] +
-          sf11_factor * sf1.d[ind1] +
-          sf21_factor * sf2.d[ind1]
-        sf_result.h[ind2, ind1] = sf_result.h[ind1, ind2]
-      end
+    @inbounds for ind1 = 1:ind2
+      sf_result.h[ind1, ind2] =
+        g_d[1] * sf1.h[ind1, ind2] +
+        g_d[2] * sf2.h[ind1, ind2] +
+        sf11_factor * sf1.d[ind1] +
+        sf21_factor * sf2.d[ind1]
+      sf_result.h[ind2, ind1] = sf_result.h[ind1, ind2]
     end
   end
 end
@@ -209,11 +130,6 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     combine_sfs_hessian!(sf1, sf2, sf_result, g_d, g_h);
   end
 
-  # BLAS for
-  # sf_result.d = g_d[1] * sf1.d + g_d[2] * sf2.d
-  # BLAS.blascopy!(prod(size(sf_result.d)), sf1.d, 1, sf_result.d, 1);
-  # BLAS.scal!(prod(size(sf_result.d)), g_d[1], sf_result.d, 1);
-  # BLAS.axpy!(g_d[2], sf2.d, sf_result.d);
   for ind in eachindex(sf_result.d)
     sf_result.d[ind] = g_d[1] * sf1.d[ind] + g_d[2] * sf2.d[ind]
   end
@@ -275,19 +191,11 @@ function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   end
 
   if calculate_hessian
-    const use_blas = false
-
-    if use_blas
-      # BLAS for
-      #sf1.h = sf1.h + scale * sf2.h
-      BLAS.axpy!(scale, sf2.h, sf1.h)
-    else
-      p1, p2 = size(sf1.h)
-      @assert (p1, p2) == size(sf2.h)
-      @inbounds for ind2=1:p2, ind1=1:ind2
-        sf1.h[ind1, ind2] += scale * sf2.h[ind1, ind2]
-        sf1.h[ind2, ind1] = sf1.h[ind1, ind2]
-      end
+    p1, p2 = size(sf1.h)
+    @assert (p1, p2) == size(sf2.h)
+    @inbounds for ind2=1:p2, ind1=1:ind2
+      sf1.h[ind1, ind2] += scale * sf2.h[ind1, ind2]
+      sf1.h[ind2, ind1] = sf1.h[ind1, ind2]
     end
   end
 end
