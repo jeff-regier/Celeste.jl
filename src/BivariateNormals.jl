@@ -444,12 +444,14 @@ function transform_bvn_derivs!{NumType <: Number}(
     fill!(bvn_uu_h, 0.0)
     # Second derivatives involving only u.
     # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.
-    # TODO: eliminate the redundant term.
     # TODO: time consuming **************
-    for u_id1 in 1:2, u_id2 in 1:2, x_id1 in 1:2, x_id2 in 1:2
-      bvn_uu_h[u_id1, u_id2] += bvn_xx_h[x_id1, x_id2] *
-        wcs_jacobian[x_id1, u_id1] * wcs_jacobian[x_id2, u_id2]
+    @inbounds for x_id2 in 1:2, x_id1 in 1:2, u_id2 in 1:2
+      inner_term = bvn_xx_h[x_id1, x_id2] * wcs_jacobian[x_id2, u_id2]
+      @inbounds for u_id1 in 1:u_id2
+        bvn_uu_h[u_id1, u_id2] += inner_term * wcs_jacobian[x_id1, u_id1]
+      end
     end
+    bvn_uu_h[2, 1] = bvn_uu_h[1, 2]
   end
 end
 
@@ -490,7 +492,7 @@ function transform_bvn_derivs!{NumType <: Number}(
     bvn_s_d[:] = (gcc.sig_sf.j') * bvn_sig_d
   else
     fill!(bvn_s_d, 0.0)
-    for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
+    @inbounds for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
       bvn_s_d[shape_id] += bvn_sig_d[sig_id] * gcc.sig_sf.j[sig_id, shape_id]
     end
   end
@@ -506,20 +508,23 @@ function transform_bvn_derivs!{NumType <: Number}(
     # than writing the expanded sum in sig_id1 and sig_id2 out explicitly for
     # some reason.
     # TODO: time consuming **************
-    for shape_id1 in 1:length(gal_shape_ids),
-        shape_id2 in 1:shape_id1
-
-      for sig_id1 in 1:3
+    @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
+      @inbounds for sig_id1 in 1:3
         bvn_ss_h[shape_id1, shape_id2] +=
           bvn_sig_d[sig_id1] * gcc.sig_sf.t[sig_id1, shape_id1, shape_id2]
-        for sig_id2 in 1:3
-          bvn_ss_h[shape_id1, shape_id2] +=
-            bvn_sigsig_h[sig_id1, sig_id2] *
-            gcc.sig_sf.j[sig_id1, shape_id1] *
-            gcc.sig_sf.j[sig_id2, shape_id2]
-        end
-        bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
       end
+    end
+
+    @inbounds for sig_id1 in 1:3, sig_id2 in 1:3, shape_id2 in 1:length(gal_shape_ids)
+      inner_term = bvn_sigsig_h[sig_id1, sig_id2] * gcc.sig_sf.j[sig_id2, shape_id2]
+      @inbounds for shape_id1 in 1:shape_id2
+        bvn_ss_h[shape_id1, shape_id2] +=
+          inner_term * gcc.sig_sf.j[sig_id1, shape_id1]
+      end
+    end
+
+    @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
+      bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
     end
 
     # Second derivates involving both a shape term and a u term.
@@ -538,7 +543,7 @@ function transform_bvn_derivs!{NumType <: Number}(
 
     # Second derivates involving both a shape term and a u term.
     # TODO: time consuming **************
-    for shape_id in 1:length(gal_shape_ids), u_id in 1:2, sig_id in 1:3, x_id in 1:2
+    @inbounds for shape_id in 1:length(gal_shape_ids), u_id in 1:2, sig_id in 1:3, x_id in 1:2
       bvn_us_h[u_id, shape_id] +=
         bvn_xsig_h[x_id, sig_id] * gcc.sig_sf.j[sig_id, shape_id] *
         (-wcs_jacobian[x_id, u_id])
