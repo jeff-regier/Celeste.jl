@@ -4,7 +4,6 @@ module ElboDeriv
 
 VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
-import KL
 import Util
 import SloanDigitalSkySurvey: WCS
 import WCSLIB
@@ -927,11 +926,17 @@ Args:
   - mp: Model parameters.
 """ ->
 function elbo{NumType <: Number}(
-    tiled_blob::TiledBlob, mp::ModelParams{NumType})
-  elbo = elbo_likelihood(tiled_blob, mp)
+    tiled_blob::TiledBlob, mp::ModelParams{NumType};
+    calculate_derivs::Bool=true, calculate_hessian::Bool=true)
+
+  elbo = elbo_likelihood(
+    tiled_blob, mp,
+    calculate_derivs=calculate_derivs, calculate_hessian=calculate_hessian)
 
   # TODO: subtract the kl with the hessian.
-  subtract_kl!(mp, elbo)
+  subtract_kl!(
+    mp, elbo,
+    calculate_derivs=calculate_derivs, calculate_hessian=calculate_hessian)
   elbo
 end
 

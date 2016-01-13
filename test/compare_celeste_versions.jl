@@ -3,16 +3,27 @@
 # To track memory, use:
 # julia --track-allocation=user
 
+include("test/debug_with_master.jl");
+import Debug
+
 using Celeste
 using CelesteTypes
 using Base.Test
 using SampleData
 import Synthetic
 
-profile_n = 5
+profile_n = 0
+
+blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
+@time debug_elbo = Debug.ElboDeriv.elbo(tiled_blob, mp);
 
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
+@time elbo = ElboDeriv.elbo(tiled_blob, mp);
+
+@test_approx_eq elbo.v debug_elbo.v
+@test_approx_eq elbo.d debug_elbo.d
+
+
 ##########
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
@@ -25,7 +36,7 @@ Profile.clear()
   ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=true);
   #Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
 end
-Profile.print()
+#Profile.print()
 
 # To see memory, quit and run
 using Coverage
@@ -35,19 +46,18 @@ pn = 40; [ println(res[end - (pn - i)]) for i=1:pn ];
 
 
 # Checking if the ELBO is different between the two versions.
-include("test/debug_with_master.jl"); include("src/ElboDeriv.jl")
-
-using Debug
-
-blob, mp, bodies, tiled_blob = gen_two_body_dataset();
-@time Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
+#include("src/ElboDeriv.jl")
 
 
-@time Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp);
+blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
+@time debug_elbo = Debug.ElboDeriv.elbo(tiled_blob, mp);
+
+
+@time Debug.ElboDeriv.elbo(tiled_blob, mp);
 #@time ElboDeriv.elbo_likelihood(tiled_blob, mp);
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp);
+@time ElboDeriv.elbo(tiled_blob, mp, calculate_derivs=false);
+@time ElboDeriv.elbo(tiled_blob, mp, calculate_hessian=false);
+@time ElboDeriv.elbo(tiled_blob, mp);
 
 Profile.clear_malloc_data()
 Profile.clear()
@@ -65,32 +75,16 @@ pn = 40; [ println(res[end - (pn - i)]) for i=1:pn ];
 
 
 
-b = 1
-Profile.clear_malloc_data()
-Profile.clear()
-@profile for i = 1:1000
-  star_mcs, gal_mcs = Debug.ElboDeriv.load_bvn_mixtures(mp, b);
-end
-Profile.print(format=:flat, sortedby = :count)
-
-
-Profile.clear_malloc_data()
-Profile.clear()
-@profile for i = 1:1000
-  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b; calculate_hessian=false);
-end
-Profile.print(format=:flat, sortedby = :count)
-
 
 
 function evaluate_their_elbo()
   blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
-  Debug.ElboDeriv.elbo_likelihood(tiled_blob, mp)
+  Debug.ElboDeriv.elbo(tiled_blob, mp)
 end
 
 function evaluate_our_elbo()
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
-  ElboDeriv.elbo_likelihood(tiled_blob, mp)
+  ElboDeriv.elbo(tiled_blob, mp)
 end
 
 their_elbo = evaluate_their_elbo();
