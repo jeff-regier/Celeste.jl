@@ -8,5 +8,7 @@ module Debug
   include(joinpath(master_path, "src/Celeste.jl"))
   include(joinpath(master_path, "src/CelesteTypes.jl"))
   include(joinpath(master_path, "src/SampleData.jl"))
+  include(joinpath(master_path, "src/KL.jl"))
   include(joinpath(master_path, "src/ElboDeriv.jl"))
+
 end
