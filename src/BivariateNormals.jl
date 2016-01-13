@@ -419,9 +419,6 @@ function transform_bvn_derivs!{NumType <: Number}(
   bvn_u_d = elbo_vars.bvn_u_d
   bvn_uu_h = elbo_vars.bvn_uu_h
 
-  # We assign, not accumulate.
-  # fill!(bvn_u_d, 0.0)
-
   # These values should already have been set using get_bvn_derivs!()
   bvn_x_d = elbo_vars.bvn_x_d
   bvn_xx_h = elbo_vars.bvn_xx_h

@@ -836,9 +836,7 @@ function tile_predicted_image{NumType <: Number}(
     tile::ImageTile, mp::ModelParams{NumType};
     include_epsilon::Bool=false)
 
-  b = tile.b
-  star_mcs, gal_mcs =
-    load_bvn_mixtures(mp, b, calculate_derivs=false)
+  star_mcs, gal_mcs = load_bvn_mixtures(mp, tile.b, calculate_derivs=false)
   sbs = SourceBrightness{NumType}[
     SourceBrightness(mp.vp[s], false) for s in 1:mp.S]
 
