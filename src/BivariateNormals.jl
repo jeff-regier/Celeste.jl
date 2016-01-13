@@ -55,66 +55,6 @@ immutable BvnComponent{NumType <: Number}
 
 end
 
-# # TODO: is the fact that the constructor isn't inside the method causing problems?
-# function GenerateBvnComponent{NumType <: Number}(
-#     the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType,
-#     calculate_siginv_deriv::Bool)
-#
-#   # It is necessary to have this separately named function to allow
-#   # a BvnComponent to be instantiated with all the below combinations of
-#   # NumTypes and Float64 shown below.
-#   the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
-#   c = 1 ./ (the_det^.5 * 2pi)
-#
-#   if calculate_siginv_deriv
-#     # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
-#     # derivatives of log|Sigma| with respect to sigma.
-#     # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
-#     dsiginv_dsig = zeros(NumType, 3, 3)
-#
-#     precision = the_cov^-1
-#
-#     dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
-#     dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
-#     dsiginv_dsig[1, 3] = -precision[1, 2] ^ 2
-#
-#     dsiginv_dsig[2, 1] = -precision[1, 1] * precision[2, 1]
-#     dsiginv_dsig[2, 2] =
-#       -(precision[1, 1] * precision[2, 2] + precision[1, 2] ^ 2)
-#     dsiginv_dsig[2, 3] = -precision[2, 2] * precision[1, 2]
-#
-#     dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
-#     dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
-#     dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
-#     return(BvnComponent{NumType}(the_mean, precision, c * weight, dsiginv_dsig))
-#   else
-#     return(BvnComponent{NumType}(the_mean, the_cov^-1, c * weight, zeros(NumType, 0, 0)))
-#   end
-#
-# end
-#
-# BvnComponent{NumType <: Number}(
-#     the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::NumType;
-#     calculate_siginv_deriv::Bool=true) = begin
-#   GenerateBvnComponent(the_mean, the_cov, weight, calculate_siginv_deriv)
-# end
-#
-# BvnComponent{NumType <: Number}(
-#   the_mean::Vector{NumType}, the_cov::Matrix{NumType}, weight::Float64;
-#   calculate_siginv_deriv::Bool=true) = begin
-#     GenerateBvnComponent(
-#       the_mean, the_cov, convert(NumType, weight), calculate_siginv_deriv)
-# end
-#
-# BvnComponent{NumType <: Number}(
-#   the_mean::Vector{NumType}, the_cov::Matrix{Float64}, weight::Float64;
-#   calculate_siginv_deriv::Bool=true) = begin
-#     GenerateBvnComponent(
-#       the_mean, convert(Matrix{NumType}, the_cov), convert(NumType, weight),
-#       calculate_siginv_deriv)
-# end
-
-
 
 @doc """
 Return quantities related to the pdf of an offset bivariate normal.
@@ -395,8 +335,8 @@ GalaxyCacheComponent{NumType <: Number}(
     sig_sf = GalaxySigmaDerivs(
       e_angle, e_axis, e_scale, XiXi, calculate_tensor=calculate_hessian)
     sig_sf.j .*= gc.nuBar
-    # The tensor is only needed for the Hessian.
     if calculate_hessian
+      # The tensor is only needed for the Hessian.
       sig_sf.t .*= gc.nuBar
     end
   else
@@ -428,10 +368,6 @@ function transform_bvn_derivs!{NumType <: Number}(
   # Note that dxA_duB = -wcs_jacobian[A, B].  (It is minus the jacobian
   # because the object position affects the bvn.the_mean term, which is
   # subtracted from the pixel location as defined in bvn_sf.d.)
-  # TODO: vectorize?
-  # for x_id in 1:2, u_id in 1:2
-  #   bvn_u_d[u_id] += -bvn_x_d[x_id] * wcs_jacobian[x_id, u_id]
-  # end
   bvn_u_d[1] =
     -(bvn_x_d[1] * wcs_jacobian[1, 1] + bvn_x_d[2] * wcs_jacobian[2, 1])
   bvn_u_d[2] =
@@ -483,18 +419,11 @@ function transform_bvn_derivs!{NumType <: Number}(
 
   # Gradient calculations.
 
-  const use_vectorization = false
-
   # Use the chain rule for the shape derviatives.
   # TODO: time consuming **************
-  if use_vectorization
-    # TODO: For some unknown reason, this isn't faster.
-    bvn_s_d[:] = (gcc.sig_sf.j') * bvn_sig_d
-  else
-    fill!(bvn_s_d, 0.0)
-    @inbounds for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
-      bvn_s_d[shape_id] += bvn_sig_d[sig_id] * gcc.sig_sf.j[sig_id, shape_id]
-    end
+  fill!(bvn_s_d, 0.0)
+  @inbounds for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
+    bvn_s_d[shape_id] += bvn_sig_d[sig_id] * gcc.sig_sf.j[sig_id, shape_id]
   end
 
   if elbo_vars.calculate_hessian
@@ -504,9 +433,6 @@ function transform_bvn_derivs!{NumType <: Number}(
     fill!(bvn_us_h, 0.0)
 
     # Second derviatives involving only shape parameters.
-    # TODO: This section takes a lot of time.  Note that this for loop is faster
-    # than writing the expanded sum in sig_id1 and sig_id2 out explicitly for
-    # some reason.
     # TODO: time consuming **************
     @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
       @inbounds for sig_id1 in 1:3
@@ -526,20 +452,6 @@ function transform_bvn_derivs!{NumType <: Number}(
     @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
       bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
     end
-
-    # Second derivates involving both a shape term and a u term.
-    # for shape_id in 1:length(gal_shape_ids), u_id in 1:2
-    #   # for sig_id in 1:3, x_id in 1:2
-    #   bvn_us_h[u_id, shape_id] =
-    #     # x_id = 1, sig_id in 1:3
-    #     bvn_xsig_h[1, 1] * gcc.sig_sf.j[1, shape_id] * (-wcs_jacobian[1, u_id]) +
-    #     bvn_xsig_h[1, 2] * gcc.sig_sf.j[2, shape_id] * (-wcs_jacobian[1, u_id]) +
-    #     bvn_xsig_h[1, 3] * gcc.sig_sf.j[3, shape_id] * (-wcs_jacobian[1, u_id]) +
-    #     # x_id = 2, sig_id in 1:3
-    #     bvn_xsig_h[2, 1] * gcc.sig_sf.j[1, shape_id] * (-wcs_jacobian[2, u_id]) +
-    #     bvn_xsig_h[2, 2] * gcc.sig_sf.j[2, shape_id] * (-wcs_jacobian[2, u_id]) +
-    #     bvn_xsig_h[2, 3] * gcc.sig_sf.j[3, shape_id] * (-wcs_jacobian[2, u_id])
-    # end
 
     # Second derivates involving both a shape term and a u term.
     # TODO: time consuming **************
@@ -607,8 +519,7 @@ function load_bvn_mixtures{NumType <: Number}(
           e_dev_dir = (i == 1) ? 1. : -1.
           e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
 
-          # Galaxies of type 1 have 8 components, and type 2 have
-          # 6 components.
+          # Galaxies of type 1 have 8 components, and type 2 have 6 components.
           for j in 1:[8,6][i]
               for k = 1:3
                   gal_mcs[k, j, i, s] = GalaxyCacheComponent(
