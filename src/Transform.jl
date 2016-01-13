@@ -244,6 +244,9 @@ function unbox_param_derivative{NumType <: Number}(
   d_free
 end
 
+
+
+
 @doc """
 Generate parameters within the given bounds.
 """ ->
@@ -392,6 +395,10 @@ DataTransform(bounds::Vector{ParamBounds};
 
       sf_free = zero_sensitive_float(UnconstrainedParams, NumType, active_S)
       sf_free.v = sf.v
+
+      function unbox_wrapper{NumType <: Number}(vp_vec::Vector{NumType})
+        vp = reshape()
+      end
 
       for si in 1:active_S
         s = active_sources[si]
