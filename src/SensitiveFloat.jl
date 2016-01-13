@@ -74,23 +74,23 @@ function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
     zero_sensitive_float(param_arg, Float64, 1)
 end
 
-function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
-  S = size(sf1.d)[2]
-
-  # Simply asserting equality of the ids doesn't work for some reason.
-  @assert typeof(sf1.ids) == typeof(sf2.ids)
-  @assert length(sf1.ids) == length(sf2.ids)
-  [ @assert size(sf1.h[s]) == size(sf2.h[s]) for s=1:S ]
-
-  @assert size(sf1.d) == size(sf2.d)
-
-  sf3 = deepcopy(sf1)
-  sf3.v = sf1.v + sf2.v
-  sf3.d = sf1.d + sf2.d
-  sf3.h = sf1.h + sf2.h
-
-  sf3
-end
+# function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
+#   S = size(sf1.d)[2]
+#
+#   # Simply asserting equality of the ids doesn't work for some reason.
+#   @assert typeof(sf1.ids) == typeof(sf2.ids)
+#   @assert length(sf1.ids) == length(sf2.ids)
+#   [ @assert size(sf1.h[s]) == size(sf2.h[s]) for s=1:S ]
+#
+#   @assert size(sf1.d) == size(sf2.d)
+#
+#   sf3 = deepcopy(sf1)
+#   sf3.v = sf1.v + sf2.v
+#   sf3.d = sf1.d + sf2.d
+#   sf3.h = sf1.h + sf2.h
+#
+#   sf3
+# end
 
 
 # @doc """
@@ -162,6 +162,8 @@ function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet, NumType <: Num
     BLAS.ger!(g_h[1, 2], sf2d, sf1d, sf_result.h);
   else
     p1, p2 = size(sf_result.h)
+    @assert size(sf_result.h) == size(sf1.h) == size(sf2.h)
+    @assert p1 == p2 == prod(size(sf1.d)) == prod(size(sf2.d))
     for ind2 = 1:p2
       sf11_factor = g_h[1, 1] * sf1.d[ind2] + g_h[1, 2] * sf2.d[ind2]
       sf21_factor = g_h[1, 2] * sf1.d[ind2] + g_h[2, 2] * sf2.d[ind2]
@@ -268,7 +270,7 @@ function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 
   sf1.v = sf1.v + scale * sf2.v
 
-  for i in eachindex(sf1.d)
+  @inbounds for i in eachindex(sf1.d)
     sf1.d[i] = sf1.d[i] + scale * sf2.d[i]
   end
 
@@ -281,9 +283,10 @@ function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
       BLAS.axpy!(scale, sf2.h, sf1.h)
     else
       p1, p2 = size(sf1.h)
-      for ind1=1:p1, ind2=1:ind1
+      @assert (p1, p2) == size(sf2.h)
+      @inbounds for ind2=1:p2, ind1=1:ind2
         sf1.h[ind1, ind2] += scale * sf2.h[ind1, ind2]
-        sf1.h[ind2, ind1] += sf1.h[ind1, ind2]
+        sf1.h[ind2, ind1] = sf1.h[ind1, ind2]
       end
     end
   end
@@ -304,14 +307,23 @@ function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 
   # TODO: time consuming **************
   P = length(ParamType)
-  for s_ind1 in 1:P
+  Ph = size(sf_all.h)[1]
+
+  @assert Ph == prod(size(sf_all.d))
+  @assert Ph == size(sf_all.h)[2]
+  @assert Ph >= P * s
+  @assert size(sf_s.d) == (P, 1)
+  @assert size(sf_s.h) == (P, P)
+
+  @inbounds for s_ind1 in 1:P
     s_all_ind1 = P * (s - 1) + s_ind1
     sf_all.d[s_all_ind1] = sf_all.d[s_all_ind1] + sf_s.d[s_ind1]
     if calculate_hessian
-      for s_ind2 in 1:P
+      @inbounds for s_ind2 in 1:s_ind1
         s_all_ind2 = P * (s - 1) + s_ind2
-        sf_all.h[s_all_ind1, s_all_ind2] =
-          sf_all.h[s_all_ind1, s_all_ind2] + sf_s.h[s_ind1, s_ind2]
+        sf_all.h[s_all_ind2, s_all_ind1] =
+          sf_all.h[s_all_ind2, s_all_ind1] + sf_s.h[s_ind2, s_ind1]
+        sf_all.h[s_all_ind1, s_all_ind2] = sf_all.h[s_all_ind2, s_all_ind1]
       end
     end
   end

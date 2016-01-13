@@ -16,7 +16,7 @@ blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 ##########
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=true);
+@time ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
 Profile.clear_malloc_data()
 Profile.clear()
