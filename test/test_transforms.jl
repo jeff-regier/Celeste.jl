@@ -11,84 +11,60 @@ using Compat
 using DualNumbers
 import ModelInit
 
-println("Running constraint tests.")
 
-function test_transform_box_functions()
-	function box_and_unbox(param, lower_bound, upper_bound; scale=1.0)
-		param_free = Transform.unbox_parameter(param, lower_bound, upper_bound, scale)
-		new_param = Transform.box_parameter(param_free, lower_bound, upper_bound, scale)
-		@test_approx_eq_eps param new_param 1e-6
+println("Running transform tests.")
+
+
+function test_transform_simplex_functions()
+	function box_and_unbox{NumType <: Number}(param::NumType, param_box::ParamBox)
+		param_free = Transform.unbox_parameter(param, param_box)
+		new_param = Transform.box_parameter(param_free, param_box)
+		@test_approx_eq param new_param
 	end
 
-	for this_scale = [ 1.0, 2.0 ]
-		box_and_unbox(1.0, -1.0, 2.0, scale=this_scale)
-		box_and_unbox(1.0, -1.0, Inf, scale=this_scale)
+	for this_scale = [ 1.0, 2.0 ], lb = [-10.0, 0.1], ub = [0.5, Inf]
+		#println(this_scale, " ", lb, " ", ub)
+		param = 0.2
+		param_box = Transform.ParamBox(lb, ub, this_scale, false)
+		box_and_unbox(param, param_box)
+		box_and_unbox(Dual(param), param_box)
 
 		# Test that the edges work.
-		box_and_unbox(-1.0, -1.0, 2.0, scale=this_scale)
-		box_and_unbox(2.0, -1.0, 2.0, scale=this_scale)
-		box_and_unbox(-1.0, -1.0, Inf, scale=this_scale)
-		box_and_unbox(Dual(1.0), -1.0, 2.0, scale=this_scale)
+		box_and_unbox(lb, param_box)
+		ub < Inf && box_and_unbox(ub, param_box)
+
+		# Test the scaling
+		unscaled_param_box = Transform.ParamBox(lb, ub, 1.0, false)
+		@test_approx_eq(
+			Transform.unbox_parameter(param, param_box),
+			this_scale * Transform.unbox_parameter(param, unscaled_param_box))
+
+		# Test the bound checking
+		@test_throws Exception Transform.unbox_parameter(lb - 1.0, param_box)
+		ub < Inf &&
+			@test_throws Exception Transform.unbox_parameter(ub + 1.0, param_box)
 	end
-
-	for this_scale = (1.0, 2.0, [2.0, 3.0])
-		box_and_unbox([1.0, 1.5], -1.0, 2.0, scale=this_scale)
-		box_and_unbox([1.0, 1.5], -1.0, Inf, scale=this_scale)
-
-		box_and_unbox([1.0, 10.0], [-1.0, 9.0], [2.0, 12.0], scale=this_scale)
-		box_and_unbox([1.0, 10.0], [-1.0, 9.0], [Inf, Inf], scale=this_scale)
-
-		box_and_unbox([Dual(1.0), Dual(1.5)], -1.0, 2.0, scale=this_scale)
-		box_and_unbox([Dual(1.0), Dual(10.0)], [-1.0, 9.0], [2.0, 12.0],
-									scale=this_scale)
-	end
-
-
-	# Just check that these run.  The derivatives themselves
-	# will be checked elsewhere.
-	this_scale = 1.0
-	Transform.unbox_derivative(1.0, 2.0, -1.0, 2.0, this_scale)
-	Transform.unbox_derivative(1.0, 2.0, -1.0, Inf, this_scale)
-	Transform.unbox_derivative(
-		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [2.0, 12.0], this_scale)
-	Transform.unbox_derivative(
-		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [Inf, Inf], this_scale)
-	Transform.unbox_derivative(Dual(1.0), Dual(2.0), -1.0, 2.0, this_scale)
-	Transform.unbox_derivative(
-		[Dual(1.0), Dual(10.0)], [Dual(2.0), Dual(3.0)], [-1.0, 9.0], [2.0, 12.0],
-		this_scale)
-
-	# Check that the scaling is working.
-	@test_approx_eq_eps(Transform.unbox_parameter(1.0, -1.0, 2.0, 2.0),
-											Transform.unbox_parameter(1.0, -1.0, 2.0, 1.0) * 2.0,
-											1e-6)
-	@test_approx_eq_eps(Transform.unbox_parameter(1.0, -1.0, Inf, 2.0),
-											Transform.unbox_parameter(1.0, -1.0, Inf, 1.0) * 2.0,
-											1e-6)
-	@test_approx_eq_eps(
-		Transform.unbox_derivative(1.0, 2.0, -1.0, 2.0, 2.0),
-	  Transform.unbox_derivative(1.0, 2.0, -1.0, 2.0, 1.0) * 0.5,
-		1e-6)
-	@test_approx_eq_eps(
-		Transform.unbox_derivative(1.0, 2.0, -1.0, Inf, 2.0),
-	  Transform.unbox_derivative(1.0, 2.0, -1.0, Inf, 1.0) * 0.5,
-		1e-6)
-
-	# Check the bounds checking errors.
-	@test_throws Exception Transform.unbox_parameter(1.0, 2.0, 3.0)
-	@test_throws Exception Transform.unbox_parameter([1.0, 1.5], 2.0, 3.0)
-	@test_throws Exception Transform.unbox_parameter(
-		[1.0, 10.0], [2.0, 3.0], [9.0, 12.0])
-
-	# Check that mixed bound types throws an error.
-	@test_throws Exception Transform.unbox_parameter(
-		[1.0, 10.0], [-1.0, 9.0], [2.0, Inf])
-	@test_throws Exception Transform.box_parameter(
-		[1.0, 10.0], [-1.0, 9.0], [2.0, Inf])
-	@test_throws Exception Transform.unbox_derivative(
-		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [2.0, Inf])
 end
 
+
+
+
+# function test_box_derivatives()
+# 	# Just check that these run.  The derivatives themselves
+# 	# will be checked elsewhere.
+# 	this_scale = 1.0
+# 	Transform.unbox_derivative(1.0, 2.0, -1.0, 2.0, this_scale)
+# 	Transform.unbox_derivative(1.0, 2.0, -1.0, Inf, this_scale)
+# 	Transform.unbox_derivative(
+# 		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [2.0, 12.0], this_scale)
+# 	Transform.unbox_derivative(
+# 		[1.0, 10.0], [2.0, 3.0], [-1.0, 9.0], [Inf, Inf], this_scale)
+# 	Transform.unbox_derivative(Dual(1.0), Dual(2.0), -1.0, 2.0, this_scale)
+# 	Transform.unbox_derivative(
+# 		[Dual(1.0), Dual(10.0)], [Dual(2.0), Dual(3.0)], [-1.0, 9.0], [2.0, 12.0],
+# 		this_scale)
+# end
+#
 
 function test_parameter_conversion()
 	blob, mp, body = gen_three_body_dataset();
@@ -160,6 +136,68 @@ function test_identity_transform()
 end
 
 
+function test_transform_box_functions()
+	function box_and_unbox{NumType <: Number}(param::NumType, param_box::ParamBox)
+		param_free = Transform.unbox_parameter(param, param_box)
+		new_param = Transform.box_parameter(param_free, param_box)
+		@test_approx_eq param new_param
+	end
+
+	for this_scale = [ 1.0, 2.0 ], lb = [-10.0, 0.1], ub = [0.5, Inf]
+		#println(this_scale, " ", lb, " ", ub)
+		param = 0.2
+		param_box = Transform.ParamBox(lb, ub, this_scale, false)
+		box_and_unbox(param, param_box)
+		box_and_unbox(Dual(param), param_box)
+
+		# Test that the edges work.
+		box_and_unbox(lb, param_box)
+		ub < Inf && box_and_unbox(ub, param_box)
+
+		# Test the scaling
+		unscaled_param_box = Transform.ParamBox(lb, ub, 1.0, false)
+		@test_approx_eq(
+			Transform.unbox_parameter(param, param_box),
+			this_scale * Transform.unbox_parameter(param, unscaled_param_box))
+
+		# Test the bound checking
+		@test_throws Exception Transform.unbox_parameter(lb - 1.0, param_box)
+		ub < Inf &&
+			@test_throws Exception Transform.unbox_parameter(ub + 1.0, param_box)
+	end
+end
+
+
+function test_basic_transforms()
+	@test_approx_eq 0.99 Transform.logit(Transform.inv_logit(0.99))
+	@test_approx_eq -6.0 Transform.inv_logit(Transform.logit(-6.0))
+
+	@test_approx_eq(
+		[ 0.99, 0.001 ], Transform.logit(Transform.inv_logit([ 0.99, 0.001 ])))
+	@test_approx_eq(
+		[ -6.0, 0.5 ], Transform.inv_logit(Transform.logit([ -6.0, 0.5 ])))
+
+	z = Float64[ 2.0, 4.0 ]
+	z ./= sum(z)
+	x = Transform.unconstrain_simplex(z)
+
+	@test_approx_eq Transform.constrain_to_simplex(x) z
+
+	@test Transform.inv_logit(1.0) == Inf
+	@test Transform.inv_logit(0.0) == -Inf
+
+	@test Transform.logit(Inf) == 1.0
+	@test Transform.logit(-Inf) == 0.0
+
+	@test_approx_eq Transform.constrain_to_simplex([-Inf]) [0.0, 1.0]
+	@test_approx_eq Transform.unconstrain_simplex([1.0, 0.0]) [Inf]
+end
+
+
+
+
+
 test_transform_box_functions()
 test_parameter_conversion()
 test_identity_transform()
+test_basic_transforms()

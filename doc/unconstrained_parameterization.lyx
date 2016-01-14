@@ -69,7 +69,59 @@
 \begin_body
 
 \begin_layout Standard
-Indicators can be unconstrained with the parameterization
+We use three different but related parameterizations: simplicial constraints,
+ box constraints, and positivity constraints.
+\begin_inset Formula 
+\begin{eqnarray*}
+f & = & \textrm{Function to be differentiated}\\
+x & = & \textrm{Unconstrained parameter for optimization }\in\mathbb{R}\\
+y & = & \textrm{Constrained variational parameter}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+We are given 
+\begin_inset Formula $\frac{df}{d\vec{y}}$
+\end_inset
+
+ and 
+\begin_inset Formula $\frac{d^{2}f}{d\vec{y}d\vec{y}}$
+\end_inset
+
+ and need to convert to 
+\begin_inset Formula $\frac{df}{d\vec{x}}$
+\end_inset
+
+ and 
+\begin_inset Formula $\frac{d^{2}f}{d\vec{x}d\vec{x}}$
+\end_inset
+
+.
+ This requires the Jacobian 
+\begin_inset Formula $\frac{d\vec{y}}{d\vec{x}}$
+\end_inset
+
+ and the vector of Hessians 
+\begin_inset Formula $\frac{d^{2}\vec{y}}{d\vec{x}d\vec{x}}$
+\end_inset
+
+, that is 
+\begin_inset Formula $\frac{d\textrm{Constrained}}{d\textrm{Unconstrained}}$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Section
+Base transforms
+\end_layout
+
+\begin_layout Standard
+Simplex constraints can be unconstrained with the parameterization
 \begin_inset Formula 
 \begin{eqnarray*}
 z_{i} & \in & [0,1]\\
@@ -86,17 +138,29 @@ r_{i} & = & \log z_{i}-\log z_{n}
 \end_layout
 
 \begin_layout Standard
-Derivatives can be calculated with:
+The derivatives are:
 \end_layout
 
 \begin_layout Standard
 \begin_inset Formula 
 \begin{eqnarray*}
-\frac{df}{dr_{i}} & = & \sum_{j=1}^{n}\frac{df}{dz_{j}}\frac{dz_{j}}{dr_{i}}\\
-\frac{dz_{i}}{dr_{j}} & = & \left(\frac{e^{r_{i}}}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)\left(\frac{-e^{r_{j}}}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)=-z_{i}z_{j}\textrm{ for }j\ne i\\
-\frac{dz_{i}}{dr_{i}} & = & =\left(\frac{e^{r_{i}}}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)-\left(\frac{e^{r_{i}}}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)^{2}=z_{i}\left(1-z_{i}\right)\textrm{ for }j\ne i<n\\
-\frac{dz_{n}}{dr_{i}} & = & \left(\frac{1}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)\left(\frac{-e^{r_{j}}}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)=z_{n}z_{i}\textrm{ for }i<n\\
-\frac{df}{dr_{i}} & = & \frac{df}{dz_{i}}z_{i}\left(1-z_{i}\right)-\sum_{j\ne i}\frac{df}{dz_{j}}z_{j}z_{i}
+\frac{dz_{i}}{dr_{j}} & = & \left(\frac{e^{r_{i}}}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)\left(\frac{-e^{r_{j}}}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)=-z_{i}z_{j}\textrm{ for }j\ne i\textrm{ and }i,j<n\\
+\frac{dz_{i}}{dr_{i}} & = & =\left(\frac{e^{r_{i}}}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)-\left(\frac{e^{r_{i}}}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)^{2}=z_{i}\left(1-z_{i}\right)\textrm{ for }i<n\\
+\frac{dz_{n}}{dr_{i}} & = & \left(\frac{1}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)\left(\frac{-e^{r_{j}}}{\sum_{i=1}^{n-1}e^{r_{i}}+1}\right)=-z_{n}z_{i}\textrm{ for }i<n
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Second derivatives are given by
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d^{2}z_{i}}{dr_{j}dr_{k}} & = & \frac{d}{dr_{k}}\left(-z_{i}z_{j}\right)=-\left(-z_{i}z_{k}\right)z_{j}-\left(-z_{j}z_{k}\right)z_{i}=2z_{i}z_{j}z_{k}\textrm{ for }i\ne j\ne k\ne i\\
+\frac{d^{2}z_{i}}{dr_{i}dr_{k}} & = & \frac{d}{dr_{i}}\left(-z_{i}z_{k}\right)=-z_{i}\left(1-z_{i}\right)z_{k}-\left(-z_{i}z_{k}\right)z_{i}=-z_{i}z_{k}\left(\left(1-z_{i}\right)+z_{i}\right)=-z_{i}z_{k}\\
+\frac{d^{2}z_{i}}{dr_{i}dr_{i}} & = & \frac{d}{dr_{i}}\left(z_{i}-z_{i}^{2}\right)=z_{i}\left(1-z_{i}\right)-2z_{i}z_{i}\left(1-z_{i}\right)=z_{i}\left(\left(1-z_{i}\right)-2z_{i}\left(1-z_{i}\right)\right)=z_{i}\left(1-z_{i}\right)\left(1-2z_{i}\right)
 \end{eqnarray*}
 
 \end_inset
@@ -126,13 +190,63 @@ In the binary case,
 Positive numbers can be parameterized with
 \begin_inset Formula 
 \begin{eqnarray*}
-\beta & = & \exp b\\
-\frac{df}{db} & = & \frac{df}{d\beta}\frac{d\beta}{db}=\frac{df}{d\beta}\beta
+z & = & \exp r\\
+\frac{dz}{dr}=\frac{d^{2}z}{dr^{2}} & = & z
 \end{eqnarray*}
 
 \end_inset
 
 
+\end_layout
+
+\begin_layout Section
+Scaled and boxed transforms
+\end_layout
+
+\begin_layout Standard
+The transforms from the previous section are boxed and scaled to give the
+ final constrained parameter.
+\begin_inset Formula 
+\begin{eqnarray*}
+r & = & \alpha x\\
+\frac{dr}{dx} & = & \alpha
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+For simplexes,
+\begin_inset Formula 
+\begin{eqnarray*}
+y_{i} & = & z_{i}\left(z_{max}-z_{min}\right)+z_{min}\\
+\frac{dy_{i}}{dx_{j}} & = & \frac{dy_{i}}{dz_{i}}\frac{dz_{i}}{dr_{j}}\frac{dr_{j}}{dx_{j}}=\alpha_{j}\left(z_{max}-z_{min}\right)\frac{dz_{i}}{dr_{j}}\\
+\frac{d^{2}y_{i}}{dx_{j}dx_{k}} & = & \alpha_{j}z_{max}\frac{d}{x_{k}}\left(\frac{dz_{i}}{dr_{j}}\right)=\alpha_{j}\alpha_{k}\left(z_{max}-z_{min}\right)\frac{d^{2}z_{i}}{dr_{j}dr_{k}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+And for positivity constraints:
+\begin_inset Formula 
+\begin{eqnarray*}
+y_{i} & = & z_{i}+z_{min}\\
+\frac{dy_{i}}{dx_{j}} & = & \alpha_{j}\frac{dz_{i}}{dr_{j}}\\
+\frac{d^{2}y_{i}}{dx_{j}dx_{k}} & = & \alpha_{j}\alpha_{k}\frac{d^{2}z_{i}}{dr_{j}dr_{k}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Old notes
 \end_layout
 
 \begin_layout Standard
@@ -234,6 +348,20 @@ Since, as above
 \begin{eqnarray*}
 \frac{dy_{0}}{dx} & = & \frac{\exp\left(-x\right)}{\left(1+\exp\left(-x\right)\right)^{2}}\\
  & = & y_{0}\left(1-y_{0}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The second derivative is
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{d^{2}y}{dxdx} & = & \frac{d}{dx}\left(y_{max}-y_{min}\right)y_{0}\left(1-y_{0}\right)\\
+ & = & \left(y_{max}-y_{min}\right)\left(1-2y_{0}\right)\frac{dy_{0}}{dx}\\
+ & = & \left(y_{max}-y_{min}\right)\left(1-2y_{0}\right)y_{0}\left(1-y_{0}\right)
 \end{eqnarray*}
 
 \end_inset
