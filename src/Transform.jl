@@ -102,7 +102,7 @@ end
 
 # The box bounds for a symbol.  The tuple contains
 # (lower bounds, upper bound, scale).
-typealias ParamBounds Dict{Symbol, ParamBox}
+typealias ParamBounds Dict{Tuple{Symbol, Int64}, Union{ParamBox, SimplexBox}}
 
 
 @doc """
@@ -128,7 +128,7 @@ type TransformDerivatives{NumType <: Number}
 end
 
 #####################
-# Conversion to and from vectors.
+# Conversion to and from variational parameter vectors and arrays.
 
 @doc """
 Transform VariationalParams to an array.
@@ -361,90 +361,135 @@ end
 ######################
 # Functions to take actual parameter vectors.
 
-# Treat the simplex bounds separately.
-const simplex_min = 0.005
 
 @doc """
-Convert a variational parameter vector to an unconstrained version using
-the lower bounds lbs and ubs.
+Convert a variational parameter vector to an unconstrained version.
 """ ->
-function vp_to_free!{NumType <: Number}(
-  vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds)
-    # Simplicial constriants.
+function perform_transform!{NumType <: Number}(
+    vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds,
+    to_unconstrained::Bool)
+  # Simplicial constriants.
 
-    # The original script used "a" to only
-    # refer to the probability of being a galaxy, which is now the
-    # second component of a.
-    vp_free[ids_free.a[1]] =
-      unbox_parameter(vp[ids.a[2]], simplex_min, 1 - simplex_min, 1.0)
+  # # The original script used "a" to only
+  # # refer to the probability of being a galaxy, which is now the
+  # # second component of a.
+  # vp_free[ids_free.a[1]] =
+  #   unbox_parameter(vp[ids.a[2]], simplex_min, 1 - simplex_min, 1.0)
+  #
+  # # Each column of k is different simplicial parameter.
+  # # In contrast, the original script used the last component of k
+  # # as the free parameter.
+  # vp_free[ids_free.k[1, :]] =
+  #   unbox_parameter(vp[ids.k[1, :]], simplex_min, 1 - simplex_min, 1.0)
 
-    # Each column of k is different simplicial parameter.
-    # In contrast, the original script used the last component of k
-    # as the free parameter.
-    vp_free[ids_free.k[1, :]] =
-      unbox_parameter(vp[ids.k[1, :]], simplex_min, 1 - simplex_min, 1.0)
-
+  for ((param, index), constraints) in bounds
     # Box constraints.
-    for (param, limits) in bounds
-        vp_free[ids_free.(param)] =
-          unbox_parameter(vp[ids.(param)], limits.lb, limits.ub, limits.scale)
+    if typeof(constraints) == ParamBox
+      @assert length(ids.(param)) == length(ids_free.(param))
+      for ind in 1:length(ids.(param))
+        free_ind = ids_free.(param)[ind]
+        vp_ind = ids.(param)[ind]
+        if to_unconstrained
+          vp_free[free_ind] = unbox_parameter(vp[vp_ind], constraint)
+        else
+          vp[vp_ind] = box_parameter(vp_free[free_ind], constraint)
+        end
+      end
+    # Simplex contraints.
+    elseif typeof(constraints) == SimplexBox
+      # Some simplicial parameters are vectors, some are matrices.
+      param_size = size(ids.(param))
+      if length(param_size) == 2
+        # If it is a matrix, then each column is a simplex.
+        for col in 1:(param_size[2])
+          free_ind = ids_free.(param)[:, col]
+          vp_ind = ids.(param)[:, col]
+          if to_unconstrained
+            vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint)
+          else
+            vp[vp_ind] = unsimplexify_parameter(vp_free[free_ind], constraint)
+          end
+        end
+      else
+        # It is simply a simplex vector.
+        free_ind = ids_free.(param)
+        vp_ind = ids.(param)
+        if to_unconstrained
+          vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint)
+        else
+          vp[vp_ind] = unsimplexify_parameter(vp_free[free_ind], constraint)
+        end
+      end
+    else
+      error("Unknown constraint type ", typeof(constraints))
     end
+  end
 end
 
 
 function free_to_vp!{NumType <: Number}(
-  vp_free::Vector{NumType}, vp::Vector{NumType}, bounds::ParamBounds)
-    # Convert an unconstrained to an constrained variational parameterization.
+    vp_free::Vector{NumType}, vp::Vector{NumType}, bounds::ParamBounds)
 
-    # Simplicial constriants.
-    vp[ids.a[2]] =
-      box_parameter(vp_free[ids_free.a[1]], simplex_min, 1.0 - simplex_min, 1.0)
-    vp[ids.a[1]] = 1.0 - vp[ids.a[2]]
+  perform_transform!(vp, vp_free, bounds, false)
 
-    vp[ids.k[1, :]] =
-      box_parameter(vp_free[ids_free.k[1, :]], simplex_min, 1.0 - simplex_min, 1.0)
-    vp[ids.k[2, :]] = 1.0 - vp[ids.k[1, :]]
-
-    # Box constraints.
-    for (param, limits) in bounds
-        vp[ids.(param)] =
-          box_parameter(vp_free[ids_free.(param)], limits.lb, limits.ub, limits.scale)
-    end
+    # # Convert an unconstrained to an constrained variational parameterization.
+    #
+    # # Simplicial constriants.
+    # vp[ids.a[2]] =
+    #   box_parameter(vp_free[ids_free.a[1]], simplex_min, 1.0 - simplex_min, 1.0)
+    # vp[ids.a[1]] = 1.0 - vp[ids.a[2]]
+    #
+    # vp[ids.k[1, :]] =
+    #   box_parameter(vp_free[ids_free.k[1, :]], simplex_min, 1.0 - simplex_min, 1.0)
+    # vp[ids.k[2, :]] = 1.0 - vp[ids.k[1, :]]
+    #
+    # # Box constraints.
+    # for (param, limits) in bounds
+    #     vp[ids.(param)] =
+    #       box_parameter(vp_free[ids_free.(param)], limits.lb, limits.ub, limits.scale)
+    # end
 end
 
 
-@doc """
-Return the derviatives with respect to the unboxed
-parameters given derivatives with respect to the boxed parameters.
-""" ->
-function unbox_param_derivative{NumType <: Number}(
-  vp::Vector{NumType}, d::Vector{NumType}, bounds::ParamBounds)
+function vp_to_free!{NumType <: Number}(
+    vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds)
 
-  d_free = zeros(NumType, length(UnconstrainedParams))
-
-  # TODO: write in general form.  Note that the old "a" is now a[2].
-  # Simplicial constriants.
-  d_free[ids_free.a[1]] =
-    unbox_derivative(vp[ids.a[2]], d[ids.a[2]] - d[ids.a[1]],
-                     simplex_min, 1.0 - simplex_min, 1.0)
-
-  this_k = collect(vp[ids.k[1, :]])
-  d_free[collect(ids_free.k[1, :])] =
-      (d[collect(ids.k[1, :])] -
-       d[collect(ids.k[2, :])]) .* this_k .* (1.0 - this_k)
-  d_free[collect(ids_free.k[1, :])] =
-    unbox_derivative(collect(vp[ids.k[1, :]]),
-                     d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])],
-                     simplex_min, 1.0 - simplex_min, 1.0)
-
-  for (param, limits) in bounds
-      d_free[ids_free.(param)] =
-        unbox_derivative(vp[ids.(param)], d[ids.(param)],
-                         limits.lb, limits.ub, limits.scale)
-  end
-
-  d_free
+  perform_transform!(vp, vp_free, bounds, true)
 end
+
+
+# @doc """
+# Return the derviatives with respect to the unboxed
+# parameters given derivatives with respect to the boxed parameters.
+# """ ->
+# function unbox_param_derivative{NumType <: Number}(
+#   vp::Vector{NumType}, d::Vector{NumType}, bounds::ParamBounds)
+#
+#   d_free = zeros(NumType, length(UnconstrainedParams))
+#
+#   # TODO: write in general form.  Note that the old "a" is now a[2].
+#   # Simplicial constriants.
+#   d_free[ids_free.a[1]] =
+#     unbox_derivative(vp[ids.a[2]], d[ids.a[2]] - d[ids.a[1]],
+#                      simplex_min, 1.0 - simplex_min, 1.0)
+#
+#   this_k = collect(vp[ids.k[1, :]])
+#   d_free[collect(ids_free.k[1, :])] =
+#       (d[collect(ids.k[1, :])] -
+#        d[collect(ids.k[2, :])]) .* this_k .* (1.0 - this_k)
+#   d_free[collect(ids_free.k[1, :])] =
+#     unbox_derivative(collect(vp[ids.k[1, :]]),
+#                      d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])],
+#                      simplex_min, 1.0 - simplex_min, 1.0)
+#
+#   for (param, limits) in bounds
+#       d_free[ids_free.(param)] =
+#         unbox_derivative(vp[ids.(param)], d[ids.(param)],
+#                          limits.lb, limits.ub, limits.scale)
+#   end
+#
+#   d_free
+# end
 
 
 
@@ -624,15 +669,28 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
     s = mp.active_sources[si]
     bounds[si] = ParamBounds()
     u = mp.vp[s][ids.u]
-    bounds[si][:u] = ParamBox(u - loc_width, u + loc_width, ones(2))
-    bounds[si][:r1] = ParamBox(-1.0, 10., 1.0)
-    bounds[si][:r2] = ParamBox(1e-4, 0.1, 1.0)
-    bounds[si][:c1] = ParamBox(-10., 10., 1.0)
-    bounds[si][:c2] = ParamBox(1e-4, 1., 1.0)
-    bounds[si][:e_dev] = ParamBox(1e-2, 1 - 1e-2, 1.0)
-    bounds[si][:e_axis] = ParamBox(1e-2, 1 - 1e-2, 1.0)
-    bounds[si][:e_angle] = ParamBox(-10.0, 10.0, 1.0)
-    bounds[si][:e_scale] = ParamBox(0.1, 70., 1.0)
+    for axis in 1:2
+      bounds[si][(:u, axis)] =
+        ParamBox(u[axis] - loc_width, u[axis] + loc_width, 1.0)
+    end
+    for ind in 1:length(ids.r1)
+      bounds[si][(:r1, ind)] = ParamBox(-1.0, 10., 1.0)
+      bounds[si][(:r2, ind)] = ParamBox(1e-4, 0.1, 1.0)
+    end
+    for ind in 1:length(ids.c1)
+      bounds[si][(:c1, ind)] = ParamBox(-10., 10., 1.0)
+      bounds[si][(:c2, ind)] = ParamBox(1e-4, 1., 1.0)
+    end
+    bounds[si][(:e_dev, 1)] = ParamBox(1e-2, 1 - 1e-2, 1.0)
+    bounds[si][(:e_axis, 1)] = ParamBox(1e-2, 1 - 1e-2, 1.0)
+    bounds[si][(:e_angle, 1)] = ParamBox(-10.0, 10.0, 1.0)
+    bounds[si][(:e_scale, 1)] = ParamBox(0.1, 70., 1.0)
+
+    const simplex_min = 0.005
+    bounds[si][(:a, 0)] = SimplexBox(simplex_min, 1.0, 2)
+    for d in 1:D
+      bounds[si][(:k, d)] = SimplexBox(simplex_min, 1.0, 2)
+    end
   end
   DataTransform(bounds, active_sources=mp.active_sources, S=mp.S)
 end
