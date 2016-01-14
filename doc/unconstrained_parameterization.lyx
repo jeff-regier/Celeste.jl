@@ -218,12 +218,12 @@ r & = & \alpha x\\
 \end_layout
 
 \begin_layout Standard
-For simplexes,
+For positivity constraints:
 \begin_inset Formula 
 \begin{eqnarray*}
-y_{i} & = & z_{i}\left(z_{max}-z_{min}\right)+z_{min}\\
-\frac{dy_{i}}{dx_{j}} & = & \frac{dy_{i}}{dz_{i}}\frac{dz_{i}}{dr_{j}}\frac{dr_{j}}{dx_{j}}=\alpha_{j}\left(z_{max}-z_{min}\right)\frac{dz_{i}}{dr_{j}}\\
-\frac{d^{2}y_{i}}{dx_{j}dx_{k}} & = & \alpha_{j}z_{max}\frac{d}{x_{k}}\left(\frac{dz_{i}}{dr_{j}}\right)=\alpha_{j}\alpha_{k}\left(z_{max}-z_{min}\right)\frac{d^{2}z_{i}}{dr_{j}dr_{k}}
+y_{i} & = & z_{i}+z_{min}\\
+\frac{dy_{i}}{dx_{j}} & = & \alpha_{j}\frac{dz_{i}}{dr_{j}}\\
+\frac{d^{2}y_{i}}{dx_{j}dx_{k}} & = & \alpha_{j}\alpha_{k}\frac{d^{2}z_{i}}{dr_{j}dr_{k}}
 \end{eqnarray*}
 
 \end_inset
@@ -232,12 +232,77 @@ y_{i} & = & z_{i}\left(z_{max}-z_{min}\right)+z_{min}\\
 \end_layout
 
 \begin_layout Standard
-And for positivity constraints:
+If 
+\begin_inset Formula $y_{i}$
+\end_inset
+
+ is not in a simplex but simply constrained to be in a box, then:
+\end_layout
+
+\begin_layout Standard
 \begin_inset Formula 
 \begin{eqnarray*}
-y_{i} & = & z_{i}+z_{min}\\
-\frac{dy_{i}}{dx_{j}} & = & \alpha_{j}\frac{dz_{i}}{dr_{j}}\\
-\frac{d^{2}y_{i}}{dx_{j}dx_{k}} & = & \alpha_{j}\alpha_{k}\frac{d^{2}z_{i}}{dr_{j}dr_{k}}
+y_{i} & = & z_{i}\left(z_{max}-z_{min}\right)+z_{min}\\
+\frac{dy_{i}}{dx_{i}} & = & \frac{dy_{i}}{dz_{i}}\frac{dz_{i}}{dr_{i}}\frac{dr_{i}}{dx_{i}}=\alpha_{j}\left(z_{max}-z_{min}\right)\frac{dz_{i}}{dr_{i}}\\
+\frac{d^{2}y_{i}}{dx_{i}dx_{i}} & = & \alpha_{j}z_{max}\frac{d}{x_{i}}\left(\frac{dz_{i}}{dr_{i}}\right)=\alpha_{i}^{2}\left(z_{max}-z_{min}\right)\frac{d^{2}z_{i}}{dr_{i}dr_{i}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+For simplexes, the situation is a little more complex.
+ We want to require
+\begin_inset Formula 
+\begin{eqnarray*}
+y_{i} & \ge & z_{min}\\
+\sum_{i=1}^{n}y_{i} & = & 1
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+However, this describes a somewhat complicated shape in dimensions greater
+ than two.
+ Consequently, we write
+\begin_inset Formula 
+\begin{eqnarray*}
+z_{i} & \in & \textrm{Unconstrained }n-\textrm{simplex}\\
+y_{i} & = & \left(1-nz_{min}\right)z_{i}+z_{min}\\
+\sum_{i=1}^{n}y_{i} & = & 1-nz_{min}+nz_{min}=1\\
+z_{min}\le & y_{i} & \le1-nz_{min}\\
+nz_{min} & < & 1
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Then
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{y_{i}-z_{min}}{\left(1-nz_{min}\right)} & = & z_{i}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The derivatives are
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{dy_{i}}{dx_{j}} & = & \frac{dy_{i}}{dz_{i}}\frac{dz_{i}}{dr_{j}}\frac{dr_{j}}{dx_{j}}\\
+ & = & \alpha_{j}\left(1-nz_{min}\right)\frac{dz_{i}}{dr_{j}}\\
+\frac{d^{2}y_{i}}{dx_{j}dx_{k}} & = & \alpha_{j}\alpha_{k}\left(1-nz_{min}\right)\frac{d^{2}z_{i}}{dr_{j}dr_{k}}
 \end{eqnarray*}
 
 \end_inset

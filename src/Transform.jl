@@ -47,11 +47,18 @@ Convert an (n - 1)-vector of real numbers to an n-vector on the simplex, where
 the last entry implicitly has the untransformed value 1.
 """ ->
 function constrain_to_simplex{NumType <: Number}(x::Vector{NumType})
-  z = exp(x)
-  z_sum = sum(z) + 1
-  z ./= z_sum
-  push!(z, 1 / z_sum)
-  z
+  if any(x .== Inf)
+    z = NumType[ x_entry .== Inf ? one(NumType) : zero(NumType) for x_entry in x]
+    z ./ sum(z)
+    push!(z, 0)
+    return(z)
+  else
+    z = exp(x)
+    z_sum = sum(z) + 1
+    z ./= z_sum
+    push!(z, 1 / z_sum)
+    return(z)
+  end
 end
 
 
@@ -72,16 +79,24 @@ immutable ParamBox
   lower_bound::Float64
   upper_bound::Float64
   scale::Float64
-  simplex::Bool
 
-  ParamBox(lower_bound, upper_bound, scale, simplex) = begin
+  ParamBox(lower_bound, upper_bound, scale) = begin
     @assert lower_bound > -Inf # Not supported
     @assert scale > 0.0
     @assert lower_bound < upper_bound
-    if simplex
-      @assert upper_bound < Inf
-    end
-    new(lower_bound, upper_bound, scale, simplex)
+    new(lower_bound, upper_bound, scale)
+  end
+end
+
+immutable SimplexBox
+  lower_bound::Float64
+  scale::Float64
+  n::Int64
+
+  SimplexBox(lower_bound, scale, n) = begin
+    @assert n >= 2
+    @assert 0.0 <= lower_bound < 1 / n
+    new(lower_bound, scale, n)
   end
 end
 
@@ -210,29 +225,55 @@ function box_parameter{NumType <: Number}(
 end
 
 
+@doc """
+Convert an unconstrained (n-1)-vector to a simplicial n-vector, z, such that
+  - sum(z) = 1
+  - z >= simplex_box.lower_bound
+See notes for a derivation and reasoning.
+""" ->
 function simplexify_parameter{NumType <: Number}(
-    free_param::Vector{NumType}, param_box::ParamBox)
+    free_param::Vector{NumType}, simplex_box::SimplexBox)
 
-  lower_bound = param_box.lower_bound
-  upper_bound = param_box.upper_bound
-  scale = param_box.scale
+  n = simplex_box.n
+  lower_bound = simplex_box.lower_bound
+  scale = simplex_box.scale
 
-  constrain_to_simplex(free_param ./ scale) *
-    (upper_bound - lower_bound) + lower_bound
+  @assert length(free_param) == (n - 1)
+
+  # Broadcasting doesn't work with DualNumbers and Floats. :(
+  # z_sim is on an unconstrained simplex.
+  z_sim = constrain_to_simplex(NumType[ p / scale for p in free_param ])
+  param = NumType[ (1 - n * lower_bound) * p + lower_bound for p in z_sim ]
+
+  param
 end
 
 
+@doc """
+Invert the transformation simplexify_parameter()
+""" ->
 function unsimplexify_parameter{NumType <: Number}(
-    param::Vector{NumType}, param_box::ParamBox)
+    param::Vector{NumType}, simplex_box::SimplexBox)
 
-  lower_bound = param_box.lower_bound
-  upper_bound = param_box.upper_bound
-  scale = param_box.scale
+  n = simplex_box.n
+  lower_bound = simplex_box.lower_bound
+  scale = simplex_box.scale
 
-  param_bounded = (param - lower_bound) / (upper_bound - lower_bound)
-  unconstrain_simplex(param_bounded) * scale
+  @assert length(param) == n
+  @assert all(param .>= lower_bound)
+  @assert abs(sum(param) - 1) < 1e-16
+
+  # z_sim is on an unconstrained simplex.
+  # Broadcasting doesn't work with DualNumbers and Floats. :(
+  z_sim = NumType[ (p - lower_bound) / (1 - n * lower_bound) for p in param ]
+  free_param = NumType[ p * scale for p in unconstrain_simplex(z_sim) ]
+
+  free_param
 end
 
+
+##################
+# Derivatives
 
 @doc """
 Return the derivative of a function that turns a free parameter into a
