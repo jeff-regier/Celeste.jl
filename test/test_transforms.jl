@@ -15,36 +15,42 @@ import ModelInit
 println("Running transform tests.")
 
 
-function test_transform_simplex_functions()
-	function box_and_unbox{NumType <: Number}(param::NumType, param_box::ParamBox)
-		param_free = Transform.unbox_parameter(param, param_box)
-		new_param = Transform.box_parameter(param_free, param_box)
-		@test_approx_eq param new_param
-	end
+#function test_transform_simplex_functions()
+function simplex_and_unsimplex{NumType <: Number}(
+		param::Vector{NumType}, param_box::ParamBox)
 
-	for this_scale = [ 1.0, 2.0 ], lb = [-10.0, 0.1], ub = [0.5, Inf]
-		#println(this_scale, " ", lb, " ", ub)
-		param = 0.2
-		param_box = Transform.ParamBox(lb, ub, this_scale, false)
-		box_and_unbox(param, param_box)
-		box_and_unbox(Dual(param), param_box)
-
-		# Test that the edges work.
-		box_and_unbox(lb, param_box)
-		ub < Inf && box_and_unbox(ub, param_box)
-
-		# Test the scaling
-		unscaled_param_box = Transform.ParamBox(lb, ub, 1.0, false)
-		@test_approx_eq(
-			Transform.unbox_parameter(param, param_box),
-			this_scale * Transform.unbox_parameter(param, unscaled_param_box))
-
-		# Test the bound checking
-		@test_throws Exception Transform.unbox_parameter(lb - 1.0, param_box)
-		ub < Inf &&
-			@test_throws Exception Transform.unbox_parameter(ub + 1.0, param_box)
-	end
+	param_free = Transform.unsimplexify_parameter(param, param_box)
+	new_param = Transform.simplexify_parameter(param_free, param_box)
+	@test_approx_eq param new_param
 end
+
+#for this_scale = [ 1.0, 2.0 ], lb = [-10.0, 0.1 ], ub = [0.5, 1.0]
+	this_scale = 1.0; lb = -10.; ub = 0.5;
+	#println(this_scale, " ", lb, " ", ub)
+	param = Float64[ 0.2, 0.8 ]
+	# param_free = Transform.unconstrain_simplex(param)
+	# param_free = Transform.constrain_to_simplex(param_free)
+
+	param_box = Transform.ParamBox(lb, ub, this_scale, true)
+	simplex_and_unsimplex(param, param_box)
+	simplex_and_unsimplex(Dual(param), param_box)
+
+	# Test that the edges work.
+	box_and_unbox(lb, param_box)
+	ub < Inf && box_and_unbox(ub, param_box)
+
+	# Test the scaling
+	unscaled_param_box = Transform.ParamBox(lb, ub, 1.0, false)
+	@test_approx_eq(
+		Transform.unbox_parameter(param, param_box),
+		this_scale * Transform.unbox_parameter(param, unscaled_param_box))
+
+	# Test the bound checking
+	@test_throws Exception Transform.unbox_parameter(lb - 1.0, param_box)
+	ub < Inf &&
+		@test_throws Exception Transform.unbox_parameter(ub + 1.0, param_box)
+#end
+#end
 
 
 
@@ -146,7 +152,7 @@ function test_transform_box_functions()
 	for this_scale = [ 1.0, 2.0 ], lb = [-10.0, 0.1], ub = [0.5, Inf]
 		#println(this_scale, " ", lb, " ", ub)
 		param = 0.2
-		param_box = Transform.ParamBox(lb, ub, this_scale, false)
+		param_box = Transform.ParamBox(lb, ub, this_scale)
 		box_and_unbox(param, param_box)
 		box_and_unbox(Dual(param), param_box)
 
@@ -155,7 +161,7 @@ function test_transform_box_functions()
 		ub < Inf && box_and_unbox(ub, param_box)
 
 		# Test the scaling
-		unscaled_param_box = Transform.ParamBox(lb, ub, 1.0, false)
+		unscaled_param_box = Transform.ParamBox(lb, ub, 1.0)
 		@test_approx_eq(
 			Transform.unbox_parameter(param, param_box),
 			this_scale * Transform.unbox_parameter(param, unscaled_param_box))
