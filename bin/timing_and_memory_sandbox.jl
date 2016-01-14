@@ -1,4 +1,58 @@
 
+using Celeste
+using CelesteTypes
+using Base.Test
+using SampleData
+import Synthetic
+import Transform
+import ForwardDiff
+
+
+
+function foo{VecType <: Union{Number, Array{Number}}}(
+  x::VecType)
+  sum(x)
+end
+
+
+
+blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+
+trans = Transform.get_mp_transform(mp);
+
+function unwrap_param_vector{NumType <: Number}(
+    vp_vec::Vector{NumType}, S::Int64, P::Int64)
+
+  function source_indices(s::Int64)
+    s1 = P * (s - 1) + 1
+    s1:(s1 + P - 1)
+  end
+
+  Array{NumType, 1}[ vp_vec[source_indices(s)] for s=1:S ]
+end
+
+vp_vec = reduce(vcat, mp.vp)
+function from_vp_wrapper{NumType <: Number}(vp_vec::Vector{NumType})
+  vp = unwrap_param_vector(vp_vec, mp.S, length(CanonicalParams))
+  reduce(vcat, trans.from_vp(vp))
+end
+
+function from_vp_component_wrapper{NumType <: Number}(vp_vec::Vector{NumType}, i::Int64)
+  vp = unwrap_param_vector(vp_vec, mp.S, length(CanonicalParams))
+  reduce(vcat, trans.from_vp(vp))[i]
+end
+
+
+trans_derivs = TransformDerivatives{Float64}(mp.S);
+for (param, limits) in trans.bounds
+    d_free[ids_free.(param)] =
+      unbox_derivative(vp[ids.(param)], d[ids.(param)],
+                       limits.lb, limits.ub, limits.rescaling)
+end
+
+
+
+
 
 
 # Matrix multiplication is faster than for loops even with a transpose.

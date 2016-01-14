@@ -5,21 +5,112 @@ module Transform
 using Celeste
 using CelesteTypes
 
-import Util
-
 export DataTransform, ParamBounds, ParamBox
 export get_mp_transform, generate_valid_parameters
 
 
-immutable ParamBox{T <: Union{Float64, Vector{Float64}}}
-    lb::T
-    ub::T
-    rescaling::T
+################################
+# Elementary functions.
+
+@doc """
+Unconstrain x in the unit interval to lie in R.
+""" ->
+function inv_logit{NumType <: Number}(x::NumType)
+    @assert(x >= 0)
+    @assert(x <= 1)
+    -log(1.0 / x - 1)
+end
+
+
+function inv_logit{NumType <: Number}(x::Array{NumType})
+    @assert(all(x .>= 0))
+    @assert(all(x .<= 1))
+    -log(1.0 ./ x - 1)
+end
+
+
+@doc """
+Convert x in R to lie in the unit interval.
+""" ->
+function logit{NumType <: Number}(x::NumType)
+    1.0 / (1.0 + exp(-x))
+end
+
+
+function logit{NumType <: Number}(x::Array{NumType})
+    1.0 ./ (1.0 + exp(-x))
+end
+
+
+@doc """
+Convert an (n - 1)-vector of real numbers to an n-vector on the simplex, where
+the last entry implicitly has the untransformed value 1.
+""" ->
+function constrain_to_simplex{NumType <: Number}(x::Vector{NumType})
+  z = exp(x)
+  z_sum = sum(z) + 1
+  z ./= z_sum
+  push!(z, 1 / z_sum)
+  z
+end
+
+
+@doc """
+Convert an n-vector on the simplex to an (n - 1)-vector in R^{n -1}, where
+the last entry implicitly has the untransformed value 1.
+""" ->
+function unconstrain_simplex{NumType <: Number}(z::Vector{NumType})
+  n = length(z)
+  NumType[ log(z[i]) - log(z[n]) for i = 1:(n - 1)]
+end
+
+
+################################
+# The transforms for Celeste.
+
+immutable ParamBox
+  lower_bound::Float64
+  upper_bound::Float64
+  scale::Float64
+  simplex::Bool
+
+  ParamBox(lower_bound, upper_bound, scale, simplex) = begin
+    @assert lower_bound > -Inf # Not supported
+    @assert scale > 0.0
+    @assert lower_bound < upper_bound
+    if simplex
+      @assert upper_bound < Inf
+    end
+    new(lower_bound, upper_bound, scale, simplex)
+  end
 end
 
 # The box bounds for a symbol.  The tuple contains
-# (lower bounds, upper bound, rescaling).
+# (lower bounds, upper bound, scale).
 typealias ParamBounds Dict{Symbol, ParamBox}
+
+
+@doc """
+Derivatives of the transform from free to constrained parameters.
+""" ->
+type TransformDerivatives{NumType <: Number}
+  dparam_dfree::Matrix{NumType}
+  d2param_dfree2::Array{Matrix{NumType}}
+
+  # TODO: use sparse matrices?
+  TransformDerivatives(S::Int64) = begin
+    dparam_dfree =
+      zeros(NumType,
+            S * length(CanonicalParams), S * length(UnconstrainedParams))
+    d2param_dfree2 = Array(Matrix{NumType}, S * length(CanonicalParams))
+    for i in 1:(S * length(CanonicalParams))
+      d2param_dfree2[i] =
+        zeros(NumType,
+              S * length(UnconstrainedParams), S * length(UnconstrainedParams))
+    end
+    new(dparam_dfree, d2param_dfree2)
+  end
+end
 
 #####################
 # Conversion to and from vectors.
@@ -79,62 +170,88 @@ end
 ###############################################
 # Functions for a "free transform".
 
-function unbox_parameter{NumType <: Number}(
-  param::Union{NumType, Array{NumType}},
-  lower_bound::Union{Float64, Array{Float64}},
-  upper_bound::Union{Float64, Array{Float64}},
-  scale::Union{Float64, Array{Float64}})
+function unbox_parameter{NumType <: Number}(param::NumType, param_box::ParamBox)
 
-    positive_constraint = any(upper_bound .== Inf)
-    if positive_constraint && !all(upper_bound .== Inf)
-      error("unbox_parameter: Some but not all upper bounds are Inf: $upper_bound")
-    end
+  lower_bound = param_box.lower_bound
+  upper_bound = param_box.upper_bound
+  scale = param_box.scale
 
-    # exp and the logit functions handle infinities correctly, so
-    # parameters can equal the bounds.
-    @assert(all(lower_bound .<= real(param) .<= upper_bound),
-            string("unbox_parameter: param outside bounds: ",
-                   "$param ($lower_bound, $upper_bound)"))
+  positive_constraint = (upper_bound == Inf)
 
-    if positive_constraint
-      return log(param - lower_bound) .* scale
-    else
-      param_bounded = (param - lower_bound) ./ (upper_bound - lower_bound)
-      return Util.inv_logit(param_bounded) .* scale
-    end
+  # exp and the logit functions handle infinities correctly, so
+  # parameters can equal the bounds.
+  @assert(lower_bound .<= real(param) .<= upper_bound,
+          string("unbox_parameter: param outside bounds: ",
+                 "$param ($lower_bound, $upper_bound)"))
+
+  if positive_constraint
+    return log(param - lower_bound) * scale
+  else
+    param_bounded = (param - lower_bound) / (upper_bound - lower_bound)
+    return inv_logit(param_bounded) * scale
+  end
 end
+
 
 function box_parameter{NumType <: Number}(
-  free_param::Union{NumType, Array{NumType}},
-  lower_bound::Union{Float64, Array{Float64}},
-  upper_bound::Union{Float64, Array{Float64}},
-  scale::Union{Float64, Array{Float64}})
+    free_param::NumType, param_box::ParamBox)
 
-  positive_constraint = any(upper_bound .== Inf)
-  if positive_constraint && !all(upper_bound .== Inf)
-    error("box_parameter: Some but not all upper bounds are Inf: $upper_bound")
-  end
+  lower_bound = param_box.lower_bound
+  upper_bound = param_box.upper_bound
+  scale = param_box.scale
+
+  positive_constraint = (upper_bound == Inf)
   if positive_constraint
-    return (exp(free_param ./ scale) + lower_bound)
+    return (exp(free_param / scale) + lower_bound)
   else
-    return Util.logit(free_param ./ scale) .*
-           (upper_bound - lower_bound) + lower_bound
+    return(
+      logit(free_param / scale) * (upper_bound - lower_bound) + lower_bound)
   end
 end
 
+
+function simplexify_parameter{NumType <: Number}(
+    free_param::Vector{NumType}, param_box::ParamBox)
+
+  lower_bound = param_box.lower_bound
+  upper_bound = param_box.upper_bound
+  scale = param_box.scale
+
+  constrain_to_simplex(free_param ./ scale) *
+    (upper_bound - lower_bound) + lower_bound
+end
+
+
+function unsimplexify_parameter{NumType <: Number}(
+    param::Vector{NumType}, param_box::ParamBox)
+
+  lower_bound = param_box.lower_bound
+  upper_bound = param_box.upper_bound
+  scale = param_box.scale
+
+  param_bounded = (param - lower_bound) / (upper_bound - lower_bound)
+  unconstrain_simplex(param_bounded) * scale
+end
+
+
 @doc """
-Updates free_deriv in place.  <param> is the parameter that lies
-within the box constrains, and <deriv> is the derivative with respect
-to these paraemters.
+Return the derivative of a function that turns a free parameter into a
+box-constrained parameter.
+
+Args:
+ - param: The value of the paramter that lies within the box constraints.
+ - lower_bound: The lower bound of the box
+ - upper_bound: The upper bound of the box
+ - scale: The rescaling parameter of the unconstrained variable.
+
+Returns:
+  d(constrained parameter) / d (free parameter)
 """ ->
 function unbox_derivative{NumType <: Number}(
   param::Union{NumType, Array{NumType}},
-  deriv::Union{NumType, Array{NumType}},
   lower_bound::Union{Float64, Array{Float64}},
   upper_bound::Union{Float64, Array{Float64}},
   scale::Union{Float64, Array{Float64}})
-    @assert(length(param) == length(deriv),
-            "Wrong length parameters for unbox_sensitive_float")
 
     positive_constraint = any(upper_bound .== Inf)
     if positive_constraint && !all(upper_bound .== Inf)
@@ -148,14 +265,57 @@ function unbox_derivative{NumType <: Number}(
                    "$param ($lower_bound, $upper_bound)"))
 
     if positive_constraint
-      return deriv .* (param - lower_bound) ./ scale
+      return (param - lower_bound) ./ scale
     else
       # Box constraints.
       param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
-      return (deriv .* param_scaled .*
+      return (param_scaled .*
               (1 - param_scaled) .* (upper_bound - lower_bound) ./ scale)
     end
 end
+
+
+@doc """
+Return the derivative of a function that turns a free parameter into a
+simplex-constrained parameter.
+
+Args:
+ - param: The value of the paramter that lies within the simplex.
+ - lower_bound: The lower bound of the simplex (not necessarily zero)
+ - upper_bound: The upper bound of the simplex (not necessarily one)
+ - scale: The rescaling parameter of the unconstrained variable.
+
+Returns:
+  d(constrained parameter) / d (free parameter)
+""" ->
+function inverse_simplex_derivative{NumType <: Number}(
+  param::Union{NumType, Array{NumType}},
+  lower_bound::Union{Float64, Array{Float64}},
+  upper_bound::Union{Float64, Array{Float64}},
+  scale::Union{Float64, Array{Float64}})
+
+    positive_constraint = any(upper_bound .== Inf)
+    if positive_constraint && !all(upper_bound .== Inf)
+      error(string("unbox_derivative: Some but not all upper bounds are Inf: ",
+                   "$upper_bound"))
+    end
+
+    # Strict inequality is not required for derivatives.
+    @assert(all(lower_bound .<= real(param) .<= upper_bound),
+            string("unbox_derivative: param outside bounds: ",
+                   "$param ($lower_bound, $upper_bound)"))
+
+    if positive_constraint
+      return (param - lower_bound) ./ scale
+    else
+      # Box constraints.
+      param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
+      return (param_scaled .*
+              (1 - param_scaled) .* (upper_bound - lower_bound) ./ scale)
+    end
+end
+
+
 
 ######################
 # Functions to take actual parameter vectors.
@@ -177,6 +337,7 @@ function vp_to_free!{NumType <: Number}(
     vp_free[ids_free.a[1]] =
       unbox_parameter(vp[ids.a[2]], simplex_min, 1 - simplex_min, 1.0)
 
+    # Each column of k is different simplicial parameter.
     # In contrast, the original script used the last component of k
     # as the free parameter.
     vp_free[ids_free.k[1, :]] =
@@ -185,7 +346,7 @@ function vp_to_free!{NumType <: Number}(
     # Box constraints.
     for (param, limits) in bounds
         vp_free[ids_free.(param)] =
-          unbox_parameter(vp[ids.(param)], limits.lb, limits.ub, limits.rescaling)
+          unbox_parameter(vp[ids.(param)], limits.lb, limits.ub, limits.scale)
     end
 end
 
@@ -206,7 +367,7 @@ function free_to_vp!{NumType <: Number}(
     # Box constraints.
     for (param, limits) in bounds
         vp[ids.(param)] =
-          box_parameter(vp_free[ids_free.(param)], limits.lb, limits.ub, limits.rescaling)
+          box_parameter(vp_free[ids_free.(param)], limits.lb, limits.ub, limits.scale)
     end
 end
 
@@ -238,7 +399,7 @@ function unbox_param_derivative{NumType <: Number}(
   for (param, limits) in bounds
       d_free[ids_free.(param)] =
         unbox_derivative(vp[ids.(param)], d[ids.(param)],
-                         limits.lb, limits.ub, limits.rescaling)
+                         limits.lb, limits.ub, limits.scale)
   end
 
   d_free

@@ -34,14 +34,5 @@ function get_bvn_cov{NumType <: Number}(ab::NumType, angle::NumType, scale::NumT
     W' * W  # XiXi
 end
 
-function inv_logit(x)
-    # TODO: bounds checking
-    -log(1.0 ./ x - 1)
-end
-
-function logit(x)
-    # TODO: bounds checking
-    1.0 ./ (1.0 + exp(-x))
-end
 
 end
