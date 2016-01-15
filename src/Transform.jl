@@ -102,7 +102,7 @@ end
 
 # The box bounds for a symbol.  The tuple contains
 # (lower bounds, upper bound, scale).
-typealias ParamBounds Dict{Tuple{Symbol, Int64}, Union{ParamBox, SimplexBox}}
+typealias ParamBounds Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
 
 
 @doc """
@@ -382,46 +382,53 @@ function perform_transform!{NumType <: Number}(
   # vp_free[ids_free.k[1, :]] =
   #   unbox_parameter(vp[ids.k[1, :]], simplex_min, 1 - simplex_min, 1.0)
 
-  for ((param, index), constraints) in bounds
-    # Box constraints.
-    if typeof(constraints) == ParamBox
-      @assert length(ids.(param)) == length(ids_free.(param))
+  for (param, constraint_vec) in bounds
+
+    is_box = isa(bounds[param], Array{ParamBox})
+    if is_box
+      # Apply a box constraint to each parameter.
+      @assert(length(ids.(param)) == length(ids_free.(param)) ==
+        length(bounds[param]))
       for ind in 1:length(ids.(param))
+        constraint = constraint_vec[ind]
         free_ind = ids_free.(param)[ind]
         vp_ind = ids.(param)[ind]
-        if to_unconstrained
-          vp_free[free_ind] = unbox_parameter(vp[vp_ind], constraint)
-        else
+        to_unconstrained ?
+          vp_free[free_ind] = unbox_parameter(vp[vp_ind], constraint):
           vp[vp_ind] = box_parameter(vp_free[free_ind], constraint)
-        end
       end
-    # Simplex contraints.
-    elseif typeof(constraints) == SimplexBox
-      # Some simplicial parameters are vectors, some are matrices.
+    else
+      # Apply a simplex constraint to each parameter.
+      @assert isa(bounds[param], Array{SimplexBox})
+      # Some simplicial parameters are vectors, some are matrices.  Which is
+      # which is determined by the size of the ids.
       param_size = size(ids.(param))
       if length(param_size) == 2
-        # If it is a matrix, then each column is a simplex.
+        # If the ids are a matrix, then each column is a simplex.
+        # Each column should have its own simplicial constrains.
+        @assert length(bounds[param]) == param_size[2]
         for col in 1:(param_size[2])
           free_ind = ids_free.(param)[:, col]
           vp_ind = ids.(param)[:, col]
-          if to_unconstrained
-            vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint)
-          else
-            vp[vp_ind] = unsimplexify_parameter(vp_free[free_ind], constraint)
-          end
+          constraint = constraint_vec[col]
+          to_unconstrained ?
+            vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint):
+            vp[vp_ind] = simplexify_parameter(vp_free[free_ind], constraint)
         end
       else
         # It is simply a simplex vector.
+        @assert length(bounds[param]) == 1
         free_ind = ids_free.(param)
         vp_ind = ids.(param)
-        if to_unconstrained
-          vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint)
-        else
-          vp[vp_ind] = unsimplexify_parameter(vp_free[free_ind], constraint)
+        # Hack, see TODO in CelesteTypes.
+        if length(free_ind) == 1
+          free_ind = Int64[ free_ind ]
         end
+        constraint = constraint_vec[1]
+        to_unconstrained ?
+          vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint):
+          vp[vp_ind] = simplexify_parameter(vp_free[free_ind], constraint)
       end
-    else
-      error("Unknown constraint type ", typeof(constraints))
     end
   end
 end
@@ -504,17 +511,31 @@ function generate_valid_parameters(
   S = length(bounds)
   vp = convert(VariationalParams{NumType},
 	             [ zeros(NumType, length(ids)) for s = 1:S ])
-	for s=1:S
-		for (param, limits) in bounds[s]
-			if (limits.ub == Inf)
-	    	vp[s][ids.(param)] = limits.lb + 1.0
-			else
-				vp[s][ids.(param)] = 0.5 * (limits.ub - limits.lb) + limits.lb
-			end
-	  end
-    # Simplex parameters
-    vp[s][ids.a] = 1 / Ia
-    vp[s][collect(ids.k)] = 1 / D
+	for s=1:S, (param, constraint_vec) in bounds[s]
+    is_box = isa(bounds[param], Array{ParamBox})
+    if is_box
+      # Box parameters
+      for ind in 1:length(ids.(param))
+        constraint = constraint_vec[ind]
+        constraint.upper_bound == Inf ?
+          vp[s][ids.(param)[ind]] = constraint.lower_bound + 1.0:
+          vp[s][ids.(param)[ind]] =
+            0.5 * (constraint.upper_bound - constraint.lower_bound) +
+            constraint.lower_bound
+      end
+    else
+      # Simplex parameters
+      param_size = size(ids.(param))
+      if length(param_size) == 2
+        # matrix simplex
+        for col in 1:param_size[2]
+          vp[s][ids.(param)[:, col]] = 1 / param_size[1]
+        end
+      else
+        # vector simplex
+        vp[s][ids.(param)] = 1 / length(ids.(param))
+      end
+    end
 	end
 
   vp
@@ -573,7 +594,7 @@ DataTransform(bounds::Vector{ParamBounds};
   # Make sure that each variable has its bounds set.  The simplicial variables
   # :a and :k don't have bounds.
   for s=1:length(bounds)
-    @assert Set(keys(bounds[s])) == Set(setdiff(fieldnames(ids), [:a, :k]))
+    @assert Set(keys(bounds[s])) == Set(fieldnames(ids))
   end
 
   function from_vp!{NumType <: Number}(
@@ -668,28 +689,35 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
   for si in 1:length(mp.active_sources)
     s = mp.active_sources[si]
     bounds[si] = ParamBounds()
+    bounds[si][:u] = Array(ParamBox, 2)
     u = mp.vp[s][ids.u]
     for axis in 1:2
-      bounds[si][(:u, axis)] =
+      bounds[si][:u][axis] =
         ParamBox(u[axis] - loc_width, u[axis] + loc_width, 1.0)
     end
-    for ind in 1:length(ids.r1)
-      bounds[si][(:r1, ind)] = ParamBox(-1.0, 10., 1.0)
-      bounds[si][(:r2, ind)] = ParamBox(1e-4, 0.1, 1.0)
+    bounds[si][:r1] = Array(ParamBox, Ia)
+    bounds[si][:r2] = Array(ParamBox, Ia)
+    for i in 1:Ia
+      bounds[si][:r1][i] = ParamBox(-1.0, 10., 1.0)
+      bounds[si][:r2][i] = ParamBox(1e-4, 0.1, 1.0)
     end
+    bounds[si][:c1] = Array(ParamBox, 4 * Ia)
+    bounds[si][:c2] = Array(ParamBox, 4 * Ia)
     for ind in 1:length(ids.c1)
-      bounds[si][(:c1, ind)] = ParamBox(-10., 10., 1.0)
-      bounds[si][(:c2, ind)] = ParamBox(1e-4, 1., 1.0)
+      bounds[si][:c1][ind] = ParamBox(-10., 10., 1.0)
+      bounds[si][:c2][ind] = ParamBox(1e-4, 1., 1.0)
     end
-    bounds[si][(:e_dev, 1)] = ParamBox(1e-2, 1 - 1e-2, 1.0)
-    bounds[si][(:e_axis, 1)] = ParamBox(1e-2, 1 - 1e-2, 1.0)
-    bounds[si][(:e_angle, 1)] = ParamBox(-10.0, 10.0, 1.0)
-    bounds[si][(:e_scale, 1)] = ParamBox(0.1, 70., 1.0)
+    bounds[si][:e_dev] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
+    bounds[si][:e_axis] = ParamBox[ ParamBox(1e-2, 1 - 1e-2, 1.0) ]
+    bounds[si][:e_angle] = ParamBox[ ParamBox(-10.0, 10.0, 1.0) ]
+    bounds[si][:e_scale] = ParamBox[ ParamBox(0.1, 70., 1.0) ]
 
     const simplex_min = 0.005
-    bounds[si][(:a, 0)] = SimplexBox(simplex_min, 1.0, 2)
+    bounds[si][:a] = SimplexBox[ SimplexBox(simplex_min, 1.0, 2) ]
+
+    bounds[si][:k] = Array(SimplexBox, D)
     for d in 1:D
-      bounds[si][(:k, d)] = SimplexBox(simplex_min, 1.0, 2)
+      bounds[si][:k][d] = SimplexBox(simplex_min, 1.0, 2)
     end
   end
   DataTransform(bounds, active_sources=mp.active_sources, S=mp.S)

@@ -425,6 +425,10 @@ for (pn, ids_name, pf) in param_specs
 
     prev_end = 0
     for (n, ll) in pf
+        # TODO: it would be better if a particular symbol were the same type
+        # in both unconstrained and constrianted parameterizations (e.g.
+        # a when Ia == 2, which is an integer in UnconstraintedParams but
+        # a vector in CanonicalParams.)
         id_field = ll == 1 ? :(Int64) : :(Array{Int64, $(length(ll))})
         push!(ids_fields, :($n::$id_field))
 
