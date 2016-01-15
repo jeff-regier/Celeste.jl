@@ -505,16 +505,16 @@ end
 Generate parameters within the given bounds.
 """ ->
 function generate_valid_parameters(
-  NumType::DataType, bounds::Vector{ParamBounds})
+  NumType::DataType, bounds_vec::Vector{ParamBounds})
 
   @assert NumType <: Number
-  S = length(bounds)
+  S = length(bounds_vec)
   vp = convert(VariationalParams{NumType},
 	             [ zeros(NumType, length(ids)) for s = 1:S ])
-	for s=1:S, (param, constraint_vec) in bounds[s]
-    is_box = isa(bounds[param], Array{ParamBox})
+	for s=1:S, (param, constraint_vec) in bounds_vec[s]
+    is_box = isa(constraint_vec, Array{ParamBox})
     if is_box
-      # Box parameters
+      # Box parameters.
       for ind in 1:length(ids.(param))
         constraint = constraint_vec[ind]
         constraint.upper_bound == Inf ?
@@ -524,7 +524,7 @@ function generate_valid_parameters(
             constraint.lower_bound
       end
     else
-      # Simplex parameters
+      # Simplex parameters can ignore the bounds.
       param_size = size(ids.(param))
       if length(param_size) == 2
         # matrix simplex
