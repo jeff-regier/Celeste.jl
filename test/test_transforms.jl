@@ -20,51 +20,50 @@ println("Running transform tests.")
 # using Transform.ParamBounds
 # loc_width = 1.5e-3
 
-#function test_parameter_conversion()
-blob, mp, body = gen_three_body_dataset();
+function test_parameter_conversion()
+	blob, mp, body = gen_three_body_dataset();
 
-transform = get_mp_transform(mp, loc_width=1.0);
+	transform = get_mp_transform(mp, loc_width=1.0);
 
-#function check_transform(transform::DataTransform, mp::ModelParams)
-original_vp = deepcopy(mp.vp);
-mp_check = deepcopy(mp);
+	function check_transform(transform::DataTransform, mp::ModelParams)
+		original_vp = deepcopy(mp.vp);
+		mp_check = deepcopy(mp);
 
-# Check that the constrain and unconstrain operations undo each other.
-vp_free = transform.from_vp(mp.vp)
-transform.to_vp!(vp_free, mp_check.vp)
+		# Check that the constrain and unconstrain operations undo each other.
+		vp_free = transform.from_vp(mp.vp)
+		transform.to_vp!(vp_free, mp_check.vp)
 
-for id in fieldnames(ids), s in 1:mp.S
-	@test_approx_eq_eps(original_vp[s][ids.(id)],
-	                    mp_check.vp[s][ids.(id)], 1e-6)
-end
+		for id in fieldnames(ids), s in 1:mp.S
+			@test_approx_eq_eps(original_vp[s][ids.(id)],
+			                    mp_check.vp[s][ids.(id)], 1e-6)
+		end
 
-# Check conversion to and from a vector.
-omitted_ids = Array(Int64, 0)
-vp = deepcopy(mp.vp)
-x = transform.vp_to_array(vp, omitted_ids)
-@test length(x) == length(vp_free[1]) * length(mp.active_sources)
+		# Check conversion to and from a vector.
+		omitted_ids = Array(Int64, 0)
+		vp = deepcopy(mp.vp)
+		x = transform.vp_to_array(vp, omitted_ids)
+		@test length(x) == length(vp_free[1]) * length(mp.active_sources)
 
-vp2 = generate_valid_parameters(Float64, transform.bounds)
-transform.array_to_vp!(x, vp2, omitted_ids)
-for id in fieldnames(ids), si in 1:transform.active_S
-	s = transform.active_sources[si]
-	@test_approx_eq_eps(original_vp[s][ids.(id)], vp2[si][ids.(id)], 1e-6)
-end
+		vp2 = generate_valid_parameters(Float64, transform.bounds)
+		transform.array_to_vp!(x, vp2, omitted_ids)
+		for id in fieldnames(ids), si in 1:transform.active_S
+			s = transform.active_sources[si]
+			@test_approx_eq_eps(original_vp[s][ids.(id)], vp2[si][ids.(id)], 1e-6)
+		end
 
-	# TODO: test transforming sensitive floats.
-#end
+	end
 
-transform = get_mp_transform(mp, loc_width=1.0);
-check_transform(transform, mp)
+	transform = get_mp_transform(mp, loc_width=1.0);
+	check_transform(transform, mp)
 
-# Test transforming only active sources.
-mp1 = deepcopy(mp);
-mp1.active_sources = [1]
-transform1 = Transform.get_mp_transform(mp1)
+	# Test transforming only active sources.
+	mp1 = deepcopy(mp);
+	mp1.active_sources = [1]
+	transform1 = Transform.get_mp_transform(mp1)
 
-@assert transform1.S == mp.S
-@assert transform1.active_S == 1
-check_transform(transform1, mp1)
+	@assert transform1.S == mp.S
+	@assert transform1.active_S == 1
+	check_transform(transform1, mp1)
 
 end
 
@@ -88,7 +87,7 @@ function test_identity_transform()
 	sf_new = transform.transform_sensitive_float(sf, mp);
 	@test_approx_eq sf_new.v sf.v
 	@test_approx_eq sf_new.d sf.d
-	[ @test_approx_eq sf_new.hs[s] sf.hs[s] for s=1:mp.S]
+	[ @test_approx_eq sf_new.h[s] sf.h[s] for s=1:mp.S]
 end
 
 
@@ -193,10 +192,8 @@ function test_basic_transforms()
 end
 
 
-
-
+test_identity_transform()
+test_parameter_conversion()
 test_transform_simplex_functions()
 test_transform_box_functions()
-test_parameter_conversion()
-test_identity_transform()
 test_basic_transforms()
