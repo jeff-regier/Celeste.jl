@@ -15,6 +15,10 @@ import ModelInit
 println("Running transform tests.")
 
 
+# using Transform.ParamBox
+# using Transform.SimplexBox
+# using Transform.ParamBounds
+# loc_width = 1.5e-3
 
 #function test_parameter_conversion()
 blob, mp, body = gen_three_body_dataset();
