@@ -357,6 +357,35 @@ function inverse_simplex_derivative{NumType <: Number}(
 end
 
 
+@doc """
+Return the derivative and hessian of a box transform given the constrained
+parameters.
+
+Args:
+  - param: The constrained parameter (NB: the derivatives are expressed
+		       as a function of the constrained parameterd despite being
+					 the derivative of the function unconstrained -> constrained)
+	- param_box: A box constraint
+""" ->
+function box_derivatives{NumType <: Number}(param::NumType, param_box::ParamBox)
+	lower_bound = param_box.lower_bound
+  upper_bound = param_box.upper_bound
+  scale = param_box.scale
+
+	if upper_bound == Inf
+		centered_param = param - lower_bound
+		return scale * centered_param, scale ^ 2 * centered_param
+	else
+		param_range = upper_bound - lower_bound
+		centered_param = (param - lower_bound) / param_range
+		derivative = param_range * centered_param * (1 - centered_param) / scale
+		return derivative, derivative * (1 - 2 * centered_param) / scale
+	end
+end
+
+
+
+
 
 ######################
 # Functions to take actual parameter vectors.
@@ -626,7 +655,7 @@ DataTransform(bounds::Vector{ParamBounds};
       @assert(active_S == S,
               string("to_vp is not supported when active_sources is a ",
                      "strict subset of all sources."))
-      vp = [ zeros(length(CanonicalParams)) for s = 1:S]
+      vp = [ zeros(NumType, length(CanonicalParams)) for s = 1:S]
       to_vp!(vp_free, vp)
       vp
   end
