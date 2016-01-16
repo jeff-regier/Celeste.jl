@@ -159,7 +159,6 @@ Second derivatives are given by
 \begin_inset Formula 
 \begin{eqnarray*}
 \frac{d^{2}z_{i}}{dr_{j}dr_{k}} & = & \frac{d}{dr_{k}}\left(-z_{i}z_{j}\right)=-\left(-z_{i}z_{k}\right)z_{j}-\left(-z_{j}z_{k}\right)z_{i}=2z_{i}z_{j}z_{k}\textrm{ for }i\ne j\ne k\ne i\\
-\frac{d^{2}z_{i}}{dr_{j}dr_{j}} & = & \frac{d}{dr_{j}}\left(-z_{i}z_{j}\right)=z_{i}z_{j}^{2}-z_{i}=z_{i}\left(z_{j}^{2}-1\right)\\
 \frac{d^{2}z_{i}}{dr_{i}dr_{k}} & = & \frac{d}{dr_{i}}\left(-z_{i}z_{k}\right)=-z_{i}\left(1-z_{i}\right)z_{k}-\left(-z_{i}z_{k}\right)z_{i}=-z_{i}z_{k}\left(\left(1-z_{i}\right)+z_{i}\right)=-z_{i}z_{k}\\
 \frac{d^{2}z_{i}}{dr_{i}dr_{i}} & = & \frac{d}{dr_{i}}\left(z_{i}-z_{i}^{2}\right)=z_{i}\left(1-z_{i}\right)-2z_{i}z_{i}\left(1-z_{i}\right)=z_{i}\left(\left(1-z_{i}\right)-2z_{i}\left(1-z_{i}\right)\right)=z_{i}\left(1-z_{i}\right)\left(1-2z_{i}\right)
 \end{eqnarray*}
