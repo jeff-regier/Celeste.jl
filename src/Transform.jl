@@ -128,61 +128,6 @@ type TransformDerivatives{NumType <: Number}
   end
 end
 
-#####################
-# Conversion to and from variational parameter vectors and arrays.
-
-@doc """
-Transform VariationalParams to an array.
-
-vp = variational parameters
-omitted_ids = ids in ParamIndex
-
-There is probably no use for this function, since you'll only be passing
-trasformations to the optimizer, but I'll include it for completeness.""" ->
-function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
-                                             omitted_ids::Vector{Int64})
-
-    left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    new_P = length(left_ids)
-    S = length(vp)
-    x_new = zeros(NumType, new_P, S)
-
-    for p1 in 1:length(left_ids), s=1:S
-        p0 = left_ids[p1]
-        x_new[p1, s] = vp[s][p0]
-    end
-
-    x_new
-end
-
-@doc """
-Transform a parameter vector to variational parameters in place.
-
-Args:
- - xs: A (param x sources) matrix created from free variational parameters.
- - vp_free: Free variational parameters.  Only the ids not in omitted_ids
-            will be updated.
- - omitted_ids: Ids to omit (from ids_free)
-
-Returns:
- - Update vp_free in place.
-""" ->
-function array_to_free_vp!{NumType <: Number}(
-    xs::Matrix{NumType}, vp_free::FreeVariationalParams{NumType},
-    omitted_ids::Vector{Int64})
-
-    left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    P = length(left_ids)
-    S = length(vp_free)
-    @assert size(xs) == (P, S)
-
-    for s in 1:S, p1 in 1:P
-        p0 = left_ids[p1]
-        vp_free[s][p0] = xs[p1, s]
-    end
-end
-
-
 ###############################################
 # Functions for a "free transform".
 
@@ -467,12 +412,8 @@ function box_derivatives{NumType <: Number}(param::NumType, param_box::ParamBox)
 end
 
 
-
-
-
 ######################
 # Functions to take actual parameter vectors.
-
 
 @doc """
 Convert a variational parameter vector to an unconstrained version.
@@ -480,19 +421,6 @@ Convert a variational parameter vector to an unconstrained version.
 function perform_transform!{NumType <: Number}(
     vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds,
     to_unconstrained::Bool)
-  # Simplicial constriants.
-
-  # # The original script used "a" to only
-  # # refer to the probability of being a galaxy, which is now the
-  # # second component of a.
-  # vp_free[ids_free.a[1]] =
-  #   unbox_parameter(vp[ids.a[2]], simplex_min, 1 - simplex_min, 1.0)
-  #
-  # # Each column of k is different simplicial parameter.
-  # # In contrast, the original script used the last component of k
-  # # as the free parameter.
-  # vp_free[ids_free.k[1, :]] =
-  #   unbox_parameter(vp[ids.k[1, :]], simplex_min, 1 - simplex_min, 1.0)
 
   for (param, constraint_vec) in bounds
 
@@ -550,23 +478,6 @@ function free_to_vp!{NumType <: Number}(
     vp_free::Vector{NumType}, vp::Vector{NumType}, bounds::ParamBounds)
 
   perform_transform!(vp, vp_free, bounds, false)
-
-    # # Convert an unconstrained to an constrained variational parameterization.
-    #
-    # # Simplicial constriants.
-    # vp[ids.a[2]] =
-    #   box_parameter(vp_free[ids_free.a[1]], simplex_min, 1.0 - simplex_min, 1.0)
-    # vp[ids.a[1]] = 1.0 - vp[ids.a[2]]
-    #
-    # vp[ids.k[1, :]] =
-    #   box_parameter(vp_free[ids_free.k[1, :]], simplex_min, 1.0 - simplex_min, 1.0)
-    # vp[ids.k[2, :]] = 1.0 - vp[ids.k[1, :]]
-    #
-    # # Box constraints.
-    # for (param, limits) in bounds
-    #     vp[ids.(param)] =
-    #       box_parameter(vp_free[ids_free.(param)], limits.lb, limits.ub, limits.scale)
-    # end
 end
 
 
@@ -577,40 +488,59 @@ function vp_to_free!{NumType <: Number}(
 end
 
 
-# @doc """
-# Return the derviatives with respect to the unboxed
-# parameters given derivatives with respect to the boxed parameters.
-# """ ->
-# function unbox_param_derivative{NumType <: Number}(
-#   vp::Vector{NumType}, d::Vector{NumType}, bounds::ParamBounds)
-#
-#   d_free = zeros(NumType, length(UnconstrainedParams))
-#
-#   # TODO: write in general form.  Note that the old "a" is now a[2].
-#   # Simplicial constriants.
-#   d_free[ids_free.a[1]] =
-#     unbox_derivative(vp[ids.a[2]], d[ids.a[2]] - d[ids.a[1]],
-#                      simplex_min, 1.0 - simplex_min, 1.0)
-#
-#   this_k = collect(vp[ids.k[1, :]])
-#   d_free[collect(ids_free.k[1, :])] =
-#       (d[collect(ids.k[1, :])] -
-#        d[collect(ids.k[2, :])]) .* this_k .* (1.0 - this_k)
-#   d_free[collect(ids_free.k[1, :])] =
-#     unbox_derivative(collect(vp[ids.k[1, :]]),
-#                      d[collect(ids.k[1, :])] - d[collect(ids.k[2, :])],
-#                      simplex_min, 1.0 - simplex_min, 1.0)
-#
-#   for (param, limits) in bounds
-#       d_free[ids_free.(param)] =
-#         unbox_derivative(vp[ids.(param)], d[ids.(param)],
-#                          limits.lb, limits.ub, limits.scale)
-#   end
-#
-#   d_free
-# end
+#####################
+# Conversion to and from variational parameter vectors and arrays.
 
+@doc """
+Transform VariationalParams to an array.
 
+vp = variational parameters
+omitted_ids = ids in ParamIndex
+
+There is probably no use for this function, since you'll only be passing
+trasformations to the optimizer, but I'll include it for completeness.""" ->
+function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
+                                             omitted_ids::Vector{Int64})
+
+    left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
+    new_P = length(left_ids)
+    S = length(vp)
+    x_new = zeros(NumType, new_P, S)
+
+    for p1 in 1:length(left_ids), s=1:S
+        p0 = left_ids[p1]
+        x_new[p1, s] = vp[s][p0]
+    end
+
+    x_new
+end
+
+@doc """
+Transform a parameter vector to variational parameters in place.
+
+Args:
+ - xs: A (param x sources) matrix created from free variational parameters.
+ - vp_free: Free variational parameters.  Only the ids not in omitted_ids
+            will be updated.
+ - omitted_ids: Ids to omit (from ids_free)
+
+Returns:
+ - Update vp_free in place.
+""" ->
+function array_to_free_vp!{NumType <: Number}(
+    xs::Matrix{NumType}, vp_free::FreeVariationalParams{NumType},
+    omitted_ids::Vector{Int64})
+
+    left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
+    P = length(left_ids)
+    S = length(vp_free)
+    @assert size(xs) == (P, S)
+
+    for s in 1:S, p1 in 1:P
+        p0 = left_ids[p1]
+        vp_free[s][p0] = xs[p1, s]
+    end
+end
 
 
 @doc """
