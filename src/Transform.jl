@@ -4,6 +4,7 @@ module Transform
 
 using Celeste
 using CelesteTypes
+import DualNumbers
 
 export DataTransform, ParamBounds, ParamBox
 export get_mp_transform, generate_valid_parameters
@@ -195,7 +196,12 @@ function unbox_parameter{NumType <: Number}(param::NumType, param_box::ParamBox)
 
   # exp and the logit functions handle infinities correctly, so
   # parameters can equal the bounds.
-  @assert(lower_bound .<= real(param) .<= upper_bound,
+  if isa(param, DualNumbers.Dual)
+    param_val = DualNumbers.realpart(param)
+  else
+    param_val = param
+  end
+  @assert(lower_bound .<= param_val .<= upper_bound,
           string("unbox_parameter: param outside bounds: ",
                  "$param ($lower_bound, $upper_bound)"))
 

@@ -213,6 +213,10 @@ function test_transform_simplex_functions()
 
 		param_free = Transform.unsimplexify_parameter(param, simplex_box)
 		new_param = Transform.simplexify_parameter(param_free, simplex_box)
+		if NumType <: DualNumbers.Dual
+			param = realpart(param)
+			new_param = realpart(new_param)
+		end
 		@test_approx_eq param new_param
 	end
 
@@ -249,6 +253,10 @@ function test_transform_box_functions()
 	function box_and_unbox{NumType <: Number}(param::NumType, param_box::ParamBox)
 		param_free = Transform.unbox_parameter(param, param_box)
 		new_param = Transform.box_parameter(param_free, param_box)
+		if NumType <: DualNumbers.Dual
+			param = realpart(param)
+			new_param = realpart(new_param)
+		end
 		@test_approx_eq param new_param
 	end
 
@@ -307,6 +315,8 @@ function test_basic_transforms()
 	@test_approx_eq Transform.constrain_to_simplex([Inf, 5]) [1.0, 0.0, 0.0]
 end
 
+test_transform_box_functions()
+
 
 test_box_derivatives()
 test_box_simplex_derivatives()
@@ -314,5 +324,4 @@ test_simplex_derivatives()
 test_identity_transform()
 test_parameter_conversion()
 test_transform_simplex_functions()
-test_transform_box_functions()
 test_basic_transforms()
