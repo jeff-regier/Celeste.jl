@@ -12,216 +12,128 @@ using DualNumbers
 import ModelInit
 
 
-function simplex_hessian{NumType <: Number}(z_sim::Vector{NumType})
-	n = length(z_sim)
-	hessian_vec = Array(Array{NumType}, n)
-  for i = 1:n
-    hessian_vec[i] = Array(NumType, n - 1, n - 1)
-    for j=1:(n - 1), k=1:(n - 1)
-      if j != k
-        if (j == i)
-          hessian_vec[i][j, k] = -z_sim[i] * z_sim[k]
-        elseif (k == i)
-          hessian_vec[i][j, k] = -z_sim[i] * z_sim[j]
-        else
-          hessian_vec[i][j, k] = 2 * z_sim[i] * z_sim[j] * z_sim[k]
-        end
-      else # j == k
-        if i == j
-          hessian_vec[i][j, k] = z_sim[i] * (1 - z_sim[j]) * (1 - 2 * z_sim[k])
-        else
-          hessian_vec[i][j, k] = z_sim[i] * (z_sim[j] * z_sim[k] - 1)
-        end
-      end
-    end
-  end
-	hessian_vec
-end
-
-using Transform.SimplexBox
-@doc """
-Return the derivative and hessian of a simplex transform given the constrained
-parameters.
-
-Args:
-  - param: The constrained parameter (NB: the derivatives are expressed
-		       as a function of the constrained parameterd despite being
-					 the derivative of the function unconstrained -> constrained)
-	- param_box: A box constraint
-""" ->
-function box_simplex_derivatives{NumType <: Number}(
-    param::Vector{NumType}, simplex_box::SimplexBox)
-	lower_bound = simplex_box.lower_bound
-  scale = simplex_box.scale
-  n = simplex_box.n
-
-  @assert length(param) == n
-
-  # z_sim is on an unconstrained simplex.
-  # Broadcasting doesn't work with DualNumbers and Floats. :(
-  z_sim = NumType[ (p - lower_bound) / (1 - n * lower_bound) for p in param ]
-
-	jacobian = scale * (1 - n * lower_bound) *
-    [ z_sim[i] * (i == j) - z_sim[i] * z_sim[j] for i=1:n, j=1:(n - 1) ]
-	hessian_vec = simplex_derivatives(z_sim)
-
-	for i in 1:n
-		hessian_vec[i] *= (scale ^ 2) * (1 - n * lower_bound)
-	end
-  jacobian, hessian_vec
-end
-
-
-
-
-blob, mp, body = gen_three_body_dataset();
-transform = get_mp_transform(mp, loc_width=1.0);
-
-box_params = setdiff(fieldnames(ids), [:a, :k])
-vp_free = transform.from_vp(mp.vp)
-
-
-# for sa = 1:length(mp.active_sources), param in box_params, ind in length(ids.(param))
-sa = 1
-param = :k
-col = 1 # For k only
-ind = 1 # Index within the simplex
-
-s = mp.active_sources[sa]
-vp_ind = ids.(param)[:, ind]
-free_ind = ids_free.(param)[:, ind]
-
-ad_d = Array(Float64, 2, 1)
-ad_h = Array(Array{Float64}, 2)
-for ind = 1:2
-  function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
-  	local_vp_free =
-  		Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
-  	                  sa = 1:length(mp.active_sources) ]
-  	local_vp_free[s] = vp_free_s
-  	vp = transform.to_vp(local_vp_free)
-  	vp[s][ids.(param)[ind, col]]
-  end
-
-  ad_d[ind, :]  = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind]
-  ad_h[ind] = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind]
-end
-
-d, h = box_simplex_derivatives(mp.vp[s][vp_ind], transform.bounds[s][param][col])
-@test_approx_eq ad_d d
-@test_approx_eq ad_h h
-#end
-
-
-# Simple simplex tests
-basic_simplex_box = Transform.SimplexBox(0, 1, 3)
-z = Float64[1, 2, 4]
-z /= sum(z)
-r = Transform.unsimplexify_parameter(z, basic_simplex_box)
-Transform.simplexify_parameter(r, basic_simplex_box)
-
-ad_d = Array(Array{Float64}, 3)
-ad_h = Array(Array{Float64}, 3)
-
-for ind = 1:3
-  function wrap_simplex{NumType <: Number}(r::Vector{NumType})
-    local z = Transform.simplexify_parameter(r, basic_simplex_box)
-    z[ind]
-  end
-  ad_d[ind] = ForwardDiff.gradient(wrap_simplex, r)
-  ad_h[ind] = ForwardDiff.hessian(wrap_simplex, r)
-end
-
-
-d, h = simplex_derivatives(z)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-using Transform.TransformDerivatives
-
-transform_derivs = TransformDerivatives{Float64}(mp.S);
-
 println("Running transform tests.")
 
 
-blob, mp, body = gen_three_body_dataset();
-transform = get_mp_transform(mp, loc_width=1.0);
+function test_box_derivatives()
+	blob, mp, body = gen_three_body_dataset();
+	transform = get_mp_transform(mp, loc_width=1.0);
 
-box_params = setdiff(fieldnames(ids), [:a, :k])
-vp_free = transform.from_vp(mp.vp)
-for sa = 1:length(mp.active_sources), param in box_params, ind in length(ids.(param))
-	# sa = 1
-	# param = box_params[1]
-	# ind = 1
+	box_params = setdiff(fieldnames(ids), [:a, :k])
+	vp_free = transform.from_vp(mp.vp)
+	for sa = 1:length(mp.active_sources), param in box_params, ind in length(ids.(param))
+		# sa = 1
+		# param = box_params[1]
+		# ind = 1
 
-	s = mp.active_sources[sa]
-	vp_ind = ids.(param)[ind]
-	free_ind = [ids_free.(param)[ind]]
+		s = mp.active_sources[sa]
+		vp_ind = ids.(param)[ind]
+		free_ind = [ids_free.(param)[ind]]
 
-	function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
-		local_vp_free =
-			Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
-		                  sa = 1:length(mp.active_sources) ]
-		local_vp_free[s] = vp_free_s
-		vp = transform.to_vp(local_vp_free)
-		vp[s][ids.(param)[ind]]
+		function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
+			local_vp_free =
+				Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
+			                  sa = 1:length(mp.active_sources) ]
+			local_vp_free[s] = vp_free_s
+			vp = transform.to_vp(local_vp_free)
+			vp[s][ids.(param)[ind]]
+		end
+
+		ad_d  = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind][1]
+		ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind][1,1]
+
+		d, h = Transform.box_derivatives(
+			mp.vp[s][vp_ind][1], transform.bounds[s][param][ind])
+		@test_approx_eq ad_d d
+		@test_approx_eq ad_h h
 	end
-
-	ad_d  = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind][1]
-	ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind][1,1]
-
-	d, h = Transform.box_derivatives(
-		mp.vp[s][vp_ind][1], transform.bounds[s][param][ind])
-	@test_approx_eq ad_d d
-	@test_approx_eq ad_h h
 end
 
 
+function test_box_simplex_derivatives()
+	blob, mp, body = gen_three_body_dataset();
+	for s = 1:mp.S
+		delta = 0.01 * s # Make the parameters different for each one
+		mp.vp[s][ids.a] = Float64[ 0.2 - delta, 0.8 + delta ]
+		mp.vp[s][ids.k] = Float64[ 0.2- delta 0.2- delta; 0.8 + delta 0.8 + delta ]
+	end
+	transform = get_mp_transform(mp, loc_width=1.0);
+
+	simplex_params = [:a, :k]
+	vp_free = transform.from_vp(mp.vp)
+
+	for sa = 1:length(mp.active_sources), param in simplex_params
+		# sa = 1
+		# param = :k
+		# col = 1 # For k only
+		# ind = 1 # Index within the simplex
+
+		s = mp.active_sources[sa]
+		num_cols = length(size(ids.(param)))
+		@assert num_cols == 1 || num_cols == 2
+
+		for col = 1:num_cols
+			vp_ind = ids.(param)[:, col]
+
+			if length(size(ids_free.(param))) == 0
+				# Hack to handle ids_free.a
+				@assert col == 1
+				free_ind = [ ids_free.(param) ]
+			else
+				free_ind = ids_free.(param)[:, col]
+			end
+
+			d, h = Transform.box_simplex_derivatives(
+				mp.vp[s][vp_ind], transform.bounds[s][param][col])
+
+			for row = 1:2
+				# Write with a univariate output so we can take autodiff hessians.
+			  function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
+			  	local_vp_free =
+			  		Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
+			  	                     sa = 1:length(mp.active_sources) ]
+			  	local_vp_free[s] = vp_free_s
+			  	vp = transform.to_vp(local_vp_free)
+			  	vp[s][ids.(param)[row, col]]
+			  end
+
+			  ad_d = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind]
+			  ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind]
+				@test_approx_eq ad_d d[row, :][1]
+				@test_approx_eq ad_h h[row]
+			end
+		end
+	end
+end
 
 
+function test_simplex_derivatives()
+	n = 4
+	basic_simplex_box = Transform.SimplexBox(0, 1, n)
+	z = Float64[1, 2, 4, 3]
+	z /= sum(z)
+	r = Transform.unsimplexify_parameter(z, basic_simplex_box)
+	Transform.simplexify_parameter(r, basic_simplex_box)
 
+	ad_d = Array(Array{Float64}, n)
+	ad_h = Array(Array{Float64}, n)
 
+	for ind = 1:n
+	  function wrap_simplex{NumType <: Number}(r::Vector{NumType})
+	    local z = Transform.simplexify_parameter(r, basic_simplex_box)
+	    z[ind]
+	  end
+	  ad_d[ind] = ForwardDiff.gradient(wrap_simplex, r)
+	  ad_h[ind] = ForwardDiff.hessian(wrap_simplex, r)
+	end
 
+	jacobian, hessian_vec = Transform.simplex_derivatives(z)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+	@test_approx_eq jacobian' reduce(hcat, ad_d)
+	for ind = 1:n
+		@test_approx_eq(hessian_vec[ind], ad_h[ind])
+	end
+end
 
 
 function test_parameter_conversion()
@@ -396,6 +308,9 @@ function test_basic_transforms()
 end
 
 
+test_box_derivatives()
+test_box_simplex_derivatives()
+test_simplex_derivatives()
 test_identity_transform()
 test_parameter_conversion()
 test_transform_simplex_functions()

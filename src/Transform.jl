@@ -276,6 +276,83 @@ end
 # Derivatives
 
 @doc """
+Return derivatives of an unscaled transform from free parameters to a simplex.
+
+Args:
+  - z_sim: A vector in a simplex (NB: the function returns derivatives of the
+           function f(unconstrained) = simplex, but it the answer is expressed
+           in terms of the output of the function.)
+
+Returns:
+  - jacobian: n by (n -1) matrix of derivatives of the simplex output (in rows)
+              wrt the free parameters (in columns)
+  - hessian_vec: An n-length vector of the hessian of each simplex output
+                 parameter with respect to the (n-1) free input parameters.
+""" ->
+function simplex_derivatives{NumType <: Number}(z_sim::Vector{NumType})
+	n = length(z_sim)
+	hessian_vec = Array(Array{NumType}, n)
+  for i = 1:n
+    hessian_vec[i] = Array(NumType, n - 1, n - 1)
+    for j=1:(n - 1), k=1:(n - 1)
+      if j != k
+        if (j == i)
+          hessian_vec[i][j, k] = -z_sim[i] * z_sim[k] * (1 - 2 * z_sim[i])
+        elseif (k == i)
+					hessian_vec[i][j, k] = -z_sim[i] * z_sim[j] * (1 - 2 * z_sim[i])
+        else
+          hessian_vec[i][j, k] = 2 * z_sim[i] * z_sim[j] * z_sim[k]
+        end
+      else # j == k
+        if i == j # All equal
+          hessian_vec[i][j, k] = z_sim[i] * (1 - z_sim[j]) * (1 - 2 * z_sim[k])
+        else # j == k, but both are different from i
+          hessian_vec[i][j, k] = - z_sim[i] * z_sim[j] * (1 - 2 * z_sim[j])
+        end
+      end
+    end
+  end
+
+	jacobian =
+		NumType[ z_sim[i] * (i == j) - z_sim[i] * z_sim[j] for i=1:n, j=1:(n - 1) ]
+
+	jacobian, hessian_vec
+end
+
+
+@doc """
+Return the derivative and hessian of a simplex transform given the constrained
+parameters.
+
+Args:
+  - param: The constrained parameter (NB: the derivatives are expressed
+		       as a function of the constrained parameterd despite being
+					 the derivative of the function unconstrained -> constrained)
+	- simplex_box: A box simplex constraint
+""" ->
+function box_simplex_derivatives{NumType <: Number}(
+    param::Vector{NumType}, simplex_box::SimplexBox)
+	lower_bound = simplex_box.lower_bound
+  scale = simplex_box.scale
+  n = simplex_box.n
+
+  @assert length(param) == n
+
+  # z_sim is on an unconstrained simplex.
+  # Broadcasting doesn't work with DualNumbers and Floats. :(
+  z_sim = NumType[ (p - lower_bound) / (1 - n * lower_bound) for p in param ]
+
+	jacobian, hessian_vec = simplex_derivatives(z_sim)
+
+	for i in 1:n
+		hessian_vec[i] *= (scale ^ 2) * (1 - n * lower_bound)
+	end
+	jacobian *= scale * (1 - n * lower_bound)
+  jacobian, hessian_vec
+end
+
+
+@doc """
 Return the derivative of a function that turns a free parameter into a
 box-constrained parameter.
 
