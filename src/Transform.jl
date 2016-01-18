@@ -101,13 +101,13 @@ immutable SimplexBox
   end
 end
 
-# The box bounds for a symbol.  The tuple contains
-# (lower bounds, upper bound, scale).
+# The vector of transform parameters for a symbol.
 typealias ParamBounds Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
 
 
 @doc """
-Derivatives of the transform from free to constrained parameters.
+A datatype containing derivatives of the transform from free to constrained
+parameters.
 """ ->
 type TransformDerivatives{NumType <: Number}
   dparam_dfree::Matrix{NumType}
@@ -303,86 +303,86 @@ function box_simplex_derivatives{NumType <: Number}(
 end
 
 
-@doc """
-Return the derivative of a function that turns a free parameter into a
-box-constrained parameter.
+# @doc """
+# Return the derivative of a function that turns a free parameter into a
+# box-constrained parameter.
+#
+# Args:
+#  - param: The value of the paramter that lies within the box constraints.
+#  - lower_bound: The lower bound of the box
+#  - upper_bound: The upper bound of the box
+#  - scale: The rescaling parameter of the unconstrained variable.
+#
+# Returns:
+#   d(constrained parameter) / d (free parameter)
+# """ ->
+# function unbox_derivative{NumType <: Number}(
+#   param::Union{NumType, Array{NumType}},
+#   lower_bound::Union{Float64, Array{Float64}},
+#   upper_bound::Union{Float64, Array{Float64}},
+#   scale::Union{Float64, Array{Float64}})
+#
+#     positive_constraint = any(upper_bound .== Inf)
+#     if positive_constraint && !all(upper_bound .== Inf)
+#       error(string("unbox_derivative: Some but not all upper bounds are Inf: ",
+#                    "$upper_bound"))
+#     end
+#
+#     # Strict inequality is not required for derivatives.
+#     @assert(all(lower_bound .<= real(param) .<= upper_bound),
+#             string("unbox_derivative: param outside bounds: ",
+#                    "$param ($lower_bound, $upper_bound)"))
+#
+#     if positive_constraint
+#       return (param - lower_bound) ./ scale
+#     else
+#       # Box constraints.
+#       param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
+#       return (param_scaled .*
+#               (1 - param_scaled) .* (upper_bound - lower_bound) ./ scale)
+#     end
+# end
 
-Args:
- - param: The value of the paramter that lies within the box constraints.
- - lower_bound: The lower bound of the box
- - upper_bound: The upper bound of the box
- - scale: The rescaling parameter of the unconstrained variable.
 
-Returns:
-  d(constrained parameter) / d (free parameter)
-""" ->
-function unbox_derivative{NumType <: Number}(
-  param::Union{NumType, Array{NumType}},
-  lower_bound::Union{Float64, Array{Float64}},
-  upper_bound::Union{Float64, Array{Float64}},
-  scale::Union{Float64, Array{Float64}})
-
-    positive_constraint = any(upper_bound .== Inf)
-    if positive_constraint && !all(upper_bound .== Inf)
-      error(string("unbox_derivative: Some but not all upper bounds are Inf: ",
-                   "$upper_bound"))
-    end
-
-    # Strict inequality is not required for derivatives.
-    @assert(all(lower_bound .<= real(param) .<= upper_bound),
-            string("unbox_derivative: param outside bounds: ",
-                   "$param ($lower_bound, $upper_bound)"))
-
-    if positive_constraint
-      return (param - lower_bound) ./ scale
-    else
-      # Box constraints.
-      param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
-      return (param_scaled .*
-              (1 - param_scaled) .* (upper_bound - lower_bound) ./ scale)
-    end
-end
-
-
-@doc """
-Return the derivative of a function that turns a free parameter into a
-simplex-constrained parameter.
-
-Args:
- - param: The value of the paramter that lies within the simplex.
- - lower_bound: The lower bound of the simplex (not necessarily zero)
- - upper_bound: The upper bound of the simplex (not necessarily one)
- - scale: The rescaling parameter of the unconstrained variable.
-
-Returns:
-  d(constrained parameter) / d (free parameter)
-""" ->
-function inverse_simplex_derivative{NumType <: Number}(
-  param::Union{NumType, Array{NumType}},
-  lower_bound::Union{Float64, Array{Float64}},
-  upper_bound::Union{Float64, Array{Float64}},
-  scale::Union{Float64, Array{Float64}})
-
-    positive_constraint = any(upper_bound .== Inf)
-    if positive_constraint && !all(upper_bound .== Inf)
-      error(string("unbox_derivative: Some but not all upper bounds are Inf: ",
-                   "$upper_bound"))
-    end
-
-    # Strict inequality is not required for derivatives.
-    @assert(all(lower_bound .<= real(param) .<= upper_bound),
-            string("unbox_derivative: param outside bounds: ",
-                   "$param ($lower_bound, $upper_bound)"))
-
-    if positive_constraint
-      return (param - lower_bound) ./ scale
-    else
-      # Box constraints.
-      param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
-      return (param_scaled .*
-              (1 - param_scaled) .* (upper_bound - lower_bound) ./ scale)
-    end
-end
+# @doc """
+# Return the derivative of a function that turns a free parameter into a
+# simplex-constrained parameter.
+#
+# Args:
+#  - param: The value of the paramter that lies within the simplex.
+#  - lower_bound: The lower bound of the simplex (not necessarily zero)
+#  - upper_bound: The upper bound of the simplex (not necessarily one)
+#  - scale: The rescaling parameter of the unconstrained variable.
+#
+# Returns:
+#   d(constrained parameter) / d (free parameter)
+# """ ->
+# function inverse_simplex_derivative{NumType <: Number}(
+#   param::Union{NumType, Array{NumType}},
+#   lower_bound::Union{Float64, Array{Float64}},
+#   upper_bound::Union{Float64, Array{Float64}},
+#   scale::Union{Float64, Array{Float64}})
+#
+#     positive_constraint = any(upper_bound .== Inf)
+#     if positive_constraint && !all(upper_bound .== Inf)
+#       error(string("unbox_derivative: Some but not all upper bounds are Inf: ",
+#                    "$upper_bound"))
+#     end
+#
+#     # Strict inequality is not required for derivatives.
+#     @assert(all(lower_bound .<= real(param) .<= upper_bound),
+#             string("unbox_derivative: param outside bounds: ",
+#                    "$param ($lower_bound, $upper_bound)"))
+#
+#     if positive_constraint
+#       return (param - lower_bound) ./ scale
+#     else
+#       # Box constraints.
+#       param_scaled = (param - lower_bound) ./ (upper_bound - lower_bound)
+#       return (param_scaled .*
+#               (1 - param_scaled) .* (upper_bound - lower_bound) ./ scale)
+#     end
+# end
 
 
 @doc """
