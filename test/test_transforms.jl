@@ -12,7 +12,7 @@ using DualNumbers
 import ModelInit
 
 
-function test_transform_derivatives()
+function test_transform_sensitve_float()
 	blob, mp, body, tiled_blob = gen_two_body_dataset();
 
 	# Only keep a few pixels to make the autodiff results faster.
