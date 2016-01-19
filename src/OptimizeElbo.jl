@@ -40,6 +40,8 @@ type ObjectiveWrapperFunctions
     f_value::Function
     f_grad::Function
     f_grad!::Function
+    f_hessian::Function
+    f_hessian!::Function
     f_ad_grad::Function
     f_ad_hessian!::Function
     f_ad_hessian_sparse::Function
@@ -152,6 +154,15 @@ type ObjectiveWrapperFunctions
 
         function f_grad!{T <: Number}(x::Vector{T}, grad::Vector{T})
             grad[:,:] = f_grad(x)
+        end
+
+        function f_hessian{T <: Number}(x::Vector{T})
+            @assert length(x) == x_length
+            f_value_grad(x)[2]
+        end
+
+        function f_hessian!{T <: Number}(x::Vector{T}, hess::Vector{T})
+            hess[:,:] = f_hessian(x)
         end
 
         # Compute a forward AD gradient.  This is mostly useful
@@ -277,8 +288,8 @@ type ObjectiveWrapperFunctions
         end
 
         new(f_objective, f_value_grad, f_value_grad!,
-            f_value, f_grad, f_grad!, f_ad_grad,
-            f_ad_hessian!, f_ad_hessian_sparse,
+            f_value, f_grad, f_grad!, f_hessian, f_hessian!,
+            f_ad_grad, f_ad_hessian!, f_ad_hessian_sparse,
             state, transform, mp, kept_ids, omitted_ids, DualType)
     end
 end

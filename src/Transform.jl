@@ -605,6 +605,7 @@ function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
     x_new
 end
 
+
 @doc """
 Transform a parameter vector to variational parameters in place.
 

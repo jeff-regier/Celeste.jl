@@ -31,11 +31,7 @@ function test_tile_likelihood()
   function tile_lik_value_wrapper{NumType <: Number}(x::Vector{NumType})
     @assert length(x) == S * P
     x_mat = reshape(x, (P, S))
-    if NumType != Float64
-      mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-    else
-      mp_fd = deepcopy(mp)
-    end
+    mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
     for sa_ind in 1:length(mp_fd.active_sources)
       mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
     end
@@ -96,11 +92,7 @@ function test_add_log_term()
     function ad_wrapper_fun{NumType <: Number}(x::Vector{NumType})
       @assert length(x) == S * P
       x_mat = reshape(x, (P, S))
-      if NumType != Float64
-        mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-      else
-        mp_fd = deepcopy(mp)
-      end
+      mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
       for sa_ind in 1:length(mp_fd.active_sources)
         mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
       end
@@ -162,11 +154,7 @@ function test_combine_pixel_sources()
     function wrapper_fun{NumType <: Number}(x::Vector{NumType})
       @assert length(x) == S * P
       x_mat = reshape(x, (P, S))
-      if NumType != Float64
-        mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-      else
-        mp_fd = deepcopy(mp)
-      end
+      mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
       for sa_ind in 1:length(mp_fd.active_sources)
         mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
       end
@@ -232,11 +220,7 @@ function test_e_g_s_functions()
 
     function wrapper_fun{NumType <: Number}(x::Vector{NumType})
       @assert length(x) == P
-      if NumType != Float64
-        mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-      else
-        mp_fd = deepcopy(mp)
-      end
+      mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
       mp_fd.vp[s] = x
       elbo_vars_fd = e_g_wrapper_fun(mp_fd, calculate_derivs=false)
       test_var ? elbo_vars_fd.var_G_s.v : elbo_vars_fd.E_G_s.v
@@ -292,11 +276,7 @@ function test_fs1m_derivatives()
     gcc_ind = (psf_k, gal_j, type_i, s)
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-      if T != Float64
-        mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
-      else
-        mp_fd = deepcopy(mp);
-      end
+      mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
 
       # Make sure par is as long as the galaxy parameters.
       @assert length(par) == length(shape_standard_alignment[2])
@@ -385,11 +365,7 @@ function test_fs0m_derivatives()
   bmc_ind = (1, s)
   function f_wrap_star{T <: Number}(par::Vector{T})
     # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-    if T != Float64
-      mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
-    else
-      mp_fd = deepcopy(mp)
-    end
+    mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
 
     # Make sure par is as long as the galaxy parameters.
     @assert length(par) == length(ids.u)
