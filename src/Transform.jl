@@ -435,7 +435,7 @@ function get_transform_derivatives!{NumType <: Number}(
   			vp_ind = ids.(param)[ind]
   			vp_free_ind = ids_free.(param)[ind]
 
-  			jac, hess = box_derivatives(mp.vp[s][vp_ind], constraint_vec[ind]);
+  			jac, hess = box_derivatives(mp.vp[sa][vp_ind], constraint_vec[ind]);
 
   			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
   			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
@@ -459,7 +459,7 @@ function get_transform_derivatives!{NumType <: Number}(
   				vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
   				jac, hess = Transform.box_simplex_derivatives(
-  					mp.vp[s][vp_ind], constraint_vec[col])
+  					mp.vp[sa][vp_ind], constraint_vec[col])
 
   				transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
   				for row in 1:(param_size[1])
@@ -472,14 +472,14 @@ function get_transform_derivatives!{NumType <: Number}(
   			vp_free_ind = ids_free.(param)
   			vp_ind = ids.(param)
   			# Hack, see TODO in CelesteTypes.
-  			if length(free_ind) == 1
+  			if length(vp_free_ind) == 1
   				vp_free_ind = Int64[ vp_free_ind ]
   			end
   			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
   			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
   			jac, hess = Transform.box_simplex_derivatives(
-  				mp.vp[s][vp_ind], constraint_vec[1])
+  				mp.vp[sa][vp_ind], constraint_vec[1])
 
   			transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
   			for ind in 1:length(vp_ind)
@@ -493,11 +493,11 @@ end
 
 
 function get_transform_derivatives{NumType <: Number}(
-    mp::ModelParams{NumType}, transform::DataTransform)
+    mp::ModelParams{NumType}, bounds::Vector{ParamBounds})
 
   transform_derivatives =
     TransformDerivatives{Float64}(length(mp.active_sources));
-  get_transform_derivatives!(mp, transform, transform_derivatives)
+  get_transform_derivatives!(mp, bounds, transform_derivatives)
   transform_derivatives
 end
 
@@ -786,32 +786,36 @@ DataTransform(bounds::Vector{ParamBounds};
   # Note that all the other functions in ElboDeriv calculated derivatives with
   # respect to the constrained parameterization.
   function transform_sensitive_float{NumType <: Number}(
-    sf::SensitiveFloat, mp::ModelParams{NumType})
+  		sf::SensitiveFloat, mp::ModelParams{NumType})
 
-      # Require that the input have all derivatives defined, even for the
-      # non-active sources.
-      @assert size(sf.d) == (length(CanonicalParams), S)
-      @assert mp.S == S
+  	@assert size(sf.d) == (length(CanonicalParams), length(mp.active_sources))
+  	@assert length(mp.active_sources) == active_S
 
-      sf_free = zero_sensitive_float(UnconstrainedParams, NumType, active_S)
-      sf_free.v = sf.v
+    transform_derivatives = get_transform_derivatives(mp, bounds);
 
-      function unbox_wrapper{NumType <: Number}(vp_vec::Vector{NumType})
-        vp = reshape()
-      end
+  	sf_free =
+  		zero_sensitive_float(UnconstrainedParams, NumType, active_S);
 
-      for si in 1:active_S
-        s = active_sources[si]
-        sf_free.d[:, si] =
-          unbox_param_derivative(mp.vp[s], sf.d[:, s][:], bounds[si])
-      end
+  	sf_d_vec = sf.d[:];
+  	sf_free.v = sf.v
+  	sf_free.d =
+      reshape(transform_derivatives.dparam_dfree' * sf_d_vec,
+              length(UnconstrainedParams), active_S);
 
-      sf_free
+  	sf_free.h =
+  		transform_derivatives.dparam_dfree' *
+      sf.h * transform_derivatives.dparam_dfree;
+  	for ind in 1:length(sf_d_vec)
+  		sf_free.h += transform_derivatives.d2param_dfree2[ind] * sf_d_vec[ind]
+  	end
+
+  	sf_free
   end
 
   DataTransform(to_vp, from_vp, to_vp!, from_vp!, vp_to_array, array_to_vp!,
                 transform_sensitive_float, bounds, active_sources, active_S, S)
 end
+
 
 function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
   bounds = Array(ParamBounds, length(mp.active_sources))

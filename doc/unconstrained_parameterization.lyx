@@ -312,6 +312,23 @@ The derivatives are
 \end_layout
 
 \begin_layout Section
+Derivative transform
+\end_layout
+
+\begin_layout Standard
+A reminder:
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{dE}{dxdx^{T}} & = & \frac{d}{dx}\left(\left(\frac{dy}{dx^{T}}\right)^{T}\frac{dE}{dy}\right)\\
+ & = & \left(\frac{dy}{dx^{T}}\right)^{T}\frac{d^{2}E}{dydy^{T}}\frac{dy}{dx}+\sum_{i}\frac{dy_{i}}{dxdx^{T}}\frac{dE}{dy_{i}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
 Old notes
 \end_layout
 
