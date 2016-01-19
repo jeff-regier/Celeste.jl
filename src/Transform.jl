@@ -105,28 +105,6 @@ end
 typealias ParamBounds Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
 
 
-@doc """
-A datatype containing derivatives of the transform from free to constrained
-parameters.
-""" ->
-type TransformDerivatives{NumType <: Number}
-  dparam_dfree::Matrix{NumType}
-  d2param_dfree2::Array{Matrix{NumType}}
-
-  # TODO: use sparse matrices?
-  TransformDerivatives(S::Int64) = begin
-    dparam_dfree =
-      zeros(NumType,
-            S * length(CanonicalParams), S * length(UnconstrainedParams))
-    d2param_dfree2 = Array(Matrix{NumType}, S * length(CanonicalParams))
-    for i in 1:(S * length(CanonicalParams))
-      d2param_dfree2[i] =
-        zeros(NumType,
-              S * length(UnconstrainedParams), S * length(UnconstrainedParams))
-    end
-    new(dparam_dfree, d2param_dfree2)
-  end
-end
 
 ###############################################
 # Functions for a "free transform".
@@ -409,6 +387,118 @@ function box_derivatives{NumType <: Number}(param::NumType, param_box::ParamBox)
 		derivative = param_range * centered_param * (1 - centered_param) / scale
 		return derivative, derivative * (1 - 2 * centered_param) / scale
 	end
+end
+
+
+@doc """
+A datatype containing derivatives of the transform from free to constrained
+parameters.
+""" ->
+type TransformDerivatives{NumType <: Number}
+  dparam_dfree::Matrix{NumType}
+  d2param_dfree2::Array{Matrix{NumType}}
+  Sa::Int64
+
+  # TODO: use sparse matrices?
+  TransformDerivatives(Sa::Int64) = begin
+    dparam_dfree =
+      zeros(NumType,
+            Sa * length(CanonicalParams), Sa * length(UnconstrainedParams))
+    d2param_dfree2 = Array(Matrix{NumType}, Sa * length(CanonicalParams))
+    for i in 1:(Sa * length(CanonicalParams))
+      d2param_dfree2[i] =
+        zeros(NumType,
+              Sa * length(UnconstrainedParams), Sa * length(UnconstrainedParams))
+    end
+    new(dparam_dfree, d2param_dfree2, Sa)
+  end
+end
+
+
+function get_transform_derivatives!{NumType <: Number}(
+    mp::ModelParams{NumType}, bounds::Vector{ParamBounds},
+    transform_derivatives::TransformDerivatives)
+
+  @assert transform_derivatives.Sa == length(mp.active_sources)
+
+  for param in fieldnames(ids), sa = 1:length(mp.active_sources)
+
+  	#println(param, " ", sa)
+  	constraint_vec = bounds[sa][param]
+
+  	if isa(constraint_vec[1], ParamBox) # It is a box constraint
+  		@assert length(constraint_vec) == length(ids_free.(param)) == length(ids.(param))
+
+  		# Get each components' derivatives one by one.
+  		for ind = 1:length(constraint_vec)
+  			@assert isa(constraint_vec[ind], ParamBox)
+  			vp_ind = ids.(param)[ind]
+  			vp_free_ind = ids_free.(param)[ind]
+
+  			jac, hess = box_derivatives(mp.vp[s][vp_ind], constraint_vec[ind]);
+
+  			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
+  			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
+
+  			transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
+  			transform_derivatives.d2param_dfree2[
+  				vp_sf_ind][vp_free_sf_ind, vp_free_sf_ind] = hess
+  		end
+  	else # It is a simplex constraint
+
+  			# If a param is not a box constraint, it must have all simplex constraints.
+  		@assert all([ isa(constraint, SimplexBox)  for constraint in constraint_vec])
+
+  		param_size = size(ids.(param))
+  		if length(param_size) == 2 # It's a simplex matrix
+  			@assert length(constraint_vec) == param_size[2]
+  			for col=1:(param_size[2])
+  				vp_free_ind = ids_free.(param)[:, col]
+  				vp_ind = ids.(param)[:, col]
+  				vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
+  				vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
+
+  				jac, hess = Transform.box_simplex_derivatives(
+  					mp.vp[s][vp_ind], constraint_vec[col])
+
+  				transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
+  				for row in 1:(param_size[1])
+  					transform_derivatives.d2param_dfree2[
+  						vp_sf_ind[row]][vp_free_sf_ind, vp_free_sf_ind] = hess[row]
+  				end
+  			end
+  		else # It is simply a single simplex vector.
+  			@assert length(constraint_vec) == 1
+  			vp_free_ind = ids_free.(param)
+  			vp_ind = ids.(param)
+  			# Hack, see TODO in CelesteTypes.
+  			if length(free_ind) == 1
+  				vp_free_ind = Int64[ vp_free_ind ]
+  			end
+  			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
+  			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
+
+  			jac, hess = Transform.box_simplex_derivatives(
+  				mp.vp[s][vp_ind], constraint_vec[1])
+
+  			transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
+  			for ind in 1:length(vp_ind)
+  				transform_derivatives.d2param_dfree2[
+  					vp_sf_ind[ind]][vp_free_sf_ind, vp_free_sf_ind] = hess[ind]
+  			end
+  		end
+  	end
+  end
+end
+
+
+function get_transform_derivatives{NumType <: Number}(
+    mp::ModelParams{NumType}, transform::DataTransform)
+
+  transform_derivatives =
+    TransformDerivatives{Float64}(length(mp.active_sources));
+  get_transform_derivatives!(mp, transform, transform_derivatives)
+  transform_derivatives
 end
 
 

@@ -12,86 +12,9 @@ using DualNumbers
 import ModelInit
 
 
-
-
-using Transform.TransformDerivatives
-using Transform.ParamBox
-using Transform.box_derivatives
-
 blob, mp, body = gen_three_body_dataset();
-transform = get_mp_transform(mp, loc_width=1.0);
-
-transform_derivatives = TransformDerivatives{Float64}(length(mp.active_sources));
-
-for param in fieldnames(ids), sa = 1:length(mp.active_sources)
-
-	#println(param, " ", sa)
-	constraint_vec = transform.bounds[sa][param]
-
-	if isa(constraint_vec[1], ParamBox) # It is a box constraint
-		@assert length(constraint_vec) == length(ids_free.(param)) == length(ids.(param))
-
-		# Get each components' derivatives one by one.
-		for ind = 1:length(constraint_vec)
-			@assert isa(constraint_vec[ind], ParamBox)
-			vp_ind = ids.(param)[ind]
-			vp_free_ind = ids_free.(param)[ind]
-
-			jac, hess = box_derivatives(mp.vp[s][vp_ind], constraint_vec[ind]);
-
-			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
-			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
-
-			transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
-			transform_derivatives.d2param_dfree2[
-				vp_sf_ind][vp_free_sf_ind, vp_free_sf_ind] = hess
-		end
-	else # It is a simplex constraint
-
-			# If a param is not a box constraint, it must have all simplex constraints.
-		@assert all([ isa(constraint, SimplexBox)  for constraint in constraint_vec])
-
-		param_size = size(ids.(param))
-		if length(param_size) == 2 # It's a simplex matrix
-			@assert length(constraint_vec) == param_size[2]
-			for col=1:(param_size[2])
-				vp_free_ind = ids_free.(param)[:, col]
-				vp_ind = ids.(param)[:, col]
-				vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
-				vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
-
-				jac, hess = Transform.box_simplex_derivatives(
-					mp.vp[s][vp_ind], constraint_vec[col])
-
-				transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
-				for row in 1:(param_size[1])
-					transform_derivatives.d2param_dfree2[
-						vp_sf_ind[row]][vp_free_sf_ind, vp_free_sf_ind] = hess[row]
-				end
-			end
-		else # It is simply a single simplex vector.
-			@assert length(constraint_vec) == 1
-			vp_free_ind = ids_free.(param)
-			vp_ind = ids.(param)
-			# Hack, see TODO in CelesteTypes.
-			if length(free_ind) == 1
-				vp_free_ind = Int64[ vp_free_ind ]
-			end
-			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
-			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
-
-			jac, hess = Transform.box_simplex_derivatives(
-				mp.vp[s][vp_ind], constraint_vec[1])
-
-			transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
-			for ind in 1:length(vp_ind)
-				transform_derivatives.d2param_dfree2[
-					vp_sf_ind[ind]][vp_free_sf_ind, vp_free_sf_ind] = hess[ind]
-			end
-		end
-	end
-end
-
+transform = Transform.get_mp_transform(mp, loc_width=1.0);
+transform_derivatives = Transform.get_transform_derivatives(mp, transform.bounds);
 
 
 
