@@ -12,8 +12,18 @@ using DualNumbers
 import ModelInit
 
 
-test_transform_derivatives()
+function test_transform_derivatives()
 	blob, mp, body, tiled_blob = gen_two_body_dataset();
+
+	# Only keep a few pixels to make the autodiff results faster.
+  keep_pixels = 10:11
+	for b = 1:length(tiled_blob)
+	  tiled_blob[b][1,1].pixels[
+			setdiff(1:tiled_blob[b][1,1].h_width, keep_pixels), :] = NaN;
+	  tiled_blob[b][1,1].pixels[
+			:, setdiff(1:tiled_blob[b][1,1].w_width, keep_pixels)] = NaN;
+	end
+
 	transform = Transform.get_mp_transform(mp, loc_width=1.0);
 	elbo = ElboDeriv.elbo(tiled_blob, mp);
 	elbo_trans = transform.transform_sensitive_float(elbo, mp);
@@ -344,9 +354,9 @@ function test_basic_transforms()
 	@test_approx_eq Transform.constrain_to_simplex([Inf, 5]) [1.0, 0.0, 0.0]
 end
 
+
+test_transform_derivatives()
 test_transform_box_functions()
-
-
 test_box_derivatives()
 test_box_simplex_derivatives()
 test_simplex_derivatives()
