@@ -246,6 +246,10 @@ end
 @doc """
 Load the source brightnesses for these model params.  Each SourceBrightness
 object has information for all bands and object types.
+
+Returns:
+  - An array of SourceBrightness objects for each object in 1:mp.S.  Only
+    sources in mp.active_sources will have derivative information.
 """ ->
 function load_source_brightnesses{NumType <: Number}(
     mp::ModelParams{NumType};

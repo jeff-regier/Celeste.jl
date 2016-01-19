@@ -135,11 +135,15 @@ function get_bvn_derivs!{NumType <: Number}(
   bvn_x_d[2] = -py2
 
   if calculate_x_hess
-    # Hessian terms involving only x
     bvn_xx_h = elbo_vars.bvn_xx_h
-    bvn_xx_h[1, 1] = -bvn.precision[1,1]
-    bvn_xx_h[2, 2] = -bvn.precision[2,2]
-    bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1,2]
+    # println("-------------")
+    # println(bvn_xx_h)
+    # println(bvn.precision)
+
+    # Hessian terms involving only x
+    bvn_xx_h[1, 1] = -bvn.precision[1, 1]
+    bvn_xx_h[2, 2] = -bvn.precision[2, 2]
+    bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1 ,2]
   end
 
   if calculate_sigma_derivs
@@ -167,6 +171,9 @@ function get_bvn_derivs!{NumType <: Number}(
     # Hessian terms involving only sigma
     bvn_sigsig_h = elbo_vars.bvn_sigsig_h
     for s_ind=1:3
+      # println("=============")
+      # println(bvn_sigsig_h)
+      # println(bvn.dsiginv_dsig)
       # Differentiate with respect to s_ind second.
       bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
         py1 * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
@@ -484,6 +491,7 @@ Returns:
     - Galaxy component
     - Galaxy type
     - Source (index within active_sources)
+  Hessians are only populated for s in mp.active_sources.
 
 The PSF contains three components, so you see lots of 3's below.
 """ ->
@@ -494,7 +502,7 @@ function load_bvn_mixtures{NumType <: Number}(
   star_mcs = Array(BvnComponent{NumType}, 3, mp.S)
   gal_mcs = Array(GalaxyCacheComponent{NumType}, 3, 8, 2, mp.S)
 
-  # TODO: do not keep derviative information if the sources are not in
+  # TODO: do not keep any derviative information if the sources are not in
   # active_sources.
   for s in 1:mp.S
       psf = mp.patches[s, b].psf

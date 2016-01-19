@@ -6,14 +6,128 @@ import Synthetic
 
 println("Running hessian tests.")
 
+
+@doc """
+Set all but a few pixels to NaN to speed up autodiff Hessian testing.
+""" ->
+function trim_tiles!(tiled_blob::TiledBlob, keep_pixels)
+  for b = 1:length(tiled_blob)
+	  tiled_blob[b][1,1].pixels[
+			setdiff(1:tiled_blob[b][1,1].h_width, keep_pixels), :] = NaN;
+	  tiled_blob[b][1,1].pixels[
+			:, setdiff(1:tiled_blob[b][1,1].w_width, keep_pixels)] = NaN;
+	end
+end
+
+
+function test_active_sources()
+  # Test that the derivatives of the expected brightnesses partition in
+  # active_sources.
+
+  blob, mp, body, tiled_blob = gen_two_body_dataset();
+  keep_pixels = 10:11
+  trim_tiles!(tiled_blob, keep_pixels)
+  b = 1
+  tile = tiled_blob[b][1,1];
+  h, w = 10, 10
+
+  function get_e_g{NumType}(mp::ModelParams{NumType})
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, tile.b);
+    sbs = ElboDeriv.SourceBrightness{NumType}[
+      ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+
+    elbo_vars = ElboDeriv.ElboIntermediateVariables(
+      NumType, mp.S, length(mp.active_sources));
+
+    clear!(elbo_vars.E_G);
+    clear!(elbo_vars.var_G);
+    ElboDeriv.get_expected_pixel_brightness!(
+      elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile, mp)
+    elbo_vars.E_G, elbo_vars.var_G
+  end
+
+  mp.active_sources = [1, 2]
+  E_G_12, var_G_12 = get_e_g(mp);
+
+  mp.active_sources = [1]
+  E_G_1, var_G_1 = get_e_g(mp);
+
+  mp.active_sources = [2]
+  E_G_2, var_G_2 = get_e_g(mp);
+
+  @test_approx_eq E_G_12.v E_G_1.v
+  @test_approx_eq E_G_12.v E_G_2.v
+
+  @test_approx_eq var_G_12.v (var_G_1.v + var_G_2.v)
+
+  @test_approx_eq E_G_12.d[:, 1] E_G_1.d[:, 1]
+  @test_approx_eq E_G_12.d[:, 2] E_G_2.d[:, 1]
+  @test_approx_eq var_G_12.d[:, 1] var_G_1.d[:, 1]
+  @test_approx_eq var_G_12.d[:, 2] var_G_2.d[:, 1]
+
+  P = length(CanonicalParams)
+  @test_approx_eq E_G_12.h[1:P, 1:P] E_G_1.h
+  @test_approx_eq E_G_12.h[(1:P) + P, (1:P) + P] E_G_2.h
+  @test_approx_eq var_G_12.h[1:P, 1:P] var_G_1.h
+  @test_approx_eq var_G_12.h[(1:P) + P, (1:P) + P] var_G_2.h
+
+end
+
+
+
+function test_elbo()
+  blob, mp, body, tiled_blob = gen_two_body_dataset();
+  keep_pixels = 10:11
+  trim_tiles!(tiled_blob, keep_pixels)
+
+  # vp_vec is a vector of the parameters from all the active sources.
+  function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
+    vp_array = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
+    mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
+    for sa = 1:length(mp.active_sources)
+      mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
+    end
+    elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
+    elbo.v
+  end
+
+  function test_elbo_mp(mp::ModelParams, elbo::SensitiveFloat)
+    vp_vec = reduce(vcat, [ mp.vp[sa] for sa in mp.active_sources ]);
+    ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
+    ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
+
+    @test_approx_eq ad_grad reduce(vcat, elbo.d)
+    @test_approx_eq ad_hess elbo.h
+  end
+
+
+  mp.active_sources = [1];
+  elbo_1 = ElboDeriv.elbo(tiled_blob, mp);
+  test_elbo_mp(mp, elbo_1)
+
+  mp.active_sources = [2];
+  elbo_2 = ElboDeriv.elbo(tiled_blob, mp);
+  test_elbo_mp(mp, elbo_2)
+
+  mp.active_sources = [1, 2];
+  elbo_12 = ElboDeriv.elbo(tiled_blob, mp);
+  test_elbo_mp(mp, elbo_12)
+
+  P = length(CanonicalParams)
+  @test size(elbo_1.d) == size(elbo_2.d) == (P, 1)
+  @test size(elbo_12.d) == (length(CanonicalParams), 2)
+
+  @test size(elbo_1.h) == size(elbo_2.h) == (P, P)
+  @test size(elbo_12.h) == size(elbo_12.h) == (2 * P, 2 * P)
+end
+
+
 function test_tile_likelihood()
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
   b = 1
-  # Only keep a few pixels to make the autodiff results faster.
   keep_pixels = 10:11
+  trim_tiles!(tiled_blob, keep_pixels)
   tile = tiled_blob[b][1, 1];
-  tile.pixels[setdiff(1:tile.h_width, keep_pixels), :] = NaN;
-  tile.pixels[:, setdiff(1:tile.w_width, keep_pixels)] = NaN;
 
   function tile_lik_wrapper_fun{NumType <: Number}(
       mp::ModelParams{NumType}, calculate_derivs::Bool)
@@ -779,3 +893,5 @@ test_fs1m_derivatives()
 test_e_g_s_functions()
 test_combine_pixel_sources()
 test_add_log_term()
+test_elbo()
+test_active_sources()
