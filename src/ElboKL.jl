@@ -97,7 +97,7 @@ function subtract_kl!{NumType <: Number}(
   end
 
 
-  vp_vec = reduce(vcat, mp.vp)
+  vp_vec = reduce(vcat, Vector{NumType}[ mp.vp[sa] for sa in mp.active_sources ])
 
   const P = length(CanonicalParams)
   Sa = length(mp.active_sources)

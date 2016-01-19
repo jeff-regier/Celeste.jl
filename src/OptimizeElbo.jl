@@ -53,6 +53,9 @@ type ObjectiveWrapperFunctions
     omitted_ids::Array{Int64}
     DualType::DataType
 
+    # Caching
+    last_sf::SensitiveFloat
+
     # Arguments:
     #  f: A function that takes in ModelParams and returns a SensitiveFloat.
     #  mp: Initial ModelParams
@@ -71,6 +74,9 @@ type ObjectiveWrapperFunctions
         DualType = DualNumbers.Dual{Float64}
         mp_dual = CelesteTypes.convert(ModelParams{DualType}, mp);
         @assert transform.active_sources == mp.active_sources
+
+        last_sf =
+          zero_sensitive_float(UnconstrainedParams, length(mp.active_sources))
 
         state = WrapperState(0, false, 10, 1.0)
         function print_status{T <: Number}(
@@ -290,7 +296,7 @@ type ObjectiveWrapperFunctions
         new(f_objective, f_value_grad, f_value_grad!,
             f_value, f_grad, f_grad!, f_hessian, f_hessian!,
             f_ad_grad, f_ad_hessian!, f_ad_hessian_sparse,
-            state, transform, mp, kept_ids, omitted_ids, DualType)
+            state, transform, mp, kept_ids, omitted_ids, DualType, last_sf)
     end
 end
 

@@ -6,6 +6,9 @@
 include("test/debug_with_master.jl");
 import Debug
 
+blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
+@time debug_elbo = Debug.ElboDeriv.elbo(tiled_blob, mp);
+
 using Celeste
 using CelesteTypes
 using Base.Test
@@ -14,14 +17,24 @@ import Synthetic
 
 profile_n = 0
 
-blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
-@time debug_elbo = Debug.ElboDeriv.elbo(tiled_blob, mp);
-
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+mp.active_sources = [2];
 @time elbo = ElboDeriv.elbo(tiled_blob, mp);
+elbo.v
+size(elbo.d)
 
+mp.active_sources = [1, 2];
+@time elbo = ElboDeriv.elbo(tiled_blob, mp);
+elbo.v
+size(elbo.d)
+
+
+
+println(elbo.d[1, 1])
 @test_approx_eq elbo.v debug_elbo.v
 @test_approx_eq elbo.d debug_elbo.d
+
+
 
 
 ##########

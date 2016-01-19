@@ -199,7 +199,8 @@ function accum_star_pos!{NumType <: Number}(
     s::Int64,
     bmc::BvnComponent{NumType},
     x::Vector{Float64},
-    wcs_jacobian::Array{Float64, 2})
+    wcs_jacobian::Array{Float64, 2};
+    calculate_derivs::Bool=true)
 
   py1, py2, f = eval_bvn_pdf(bmc, x)
 
@@ -210,7 +211,7 @@ function accum_star_pos!{NumType <: Number}(
   fs0m = elbo_vars.fs0m_vec[s]
   fs0m.v += f
 
-  if elbo_vars.calculate_derivs
+  if elbo_vars.calculate_derivs && calculate_derivs
     transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
     bvn_u_d = elbo_vars.bvn_u_d
     bvn_uu_h = elbo_vars.bvn_uu_h
@@ -250,14 +251,15 @@ function accum_galaxy_pos!{NumType <: Number}(
     s::Int64,
     gcc::GalaxyCacheComponent{NumType},
     x::Vector{Float64},
-    wcs_jacobian::Array{Float64, 2})
+    wcs_jacobian::Array{Float64, 2};
+    calculate_derivs::Bool=true)
 
   py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
   f = f_pre * gcc.e_dev_i
   fs1m = elbo_vars.fs1m_vec[s];
   fs1m.v += f
 
-  if elbo_vars.calculate_derivs
+  if elbo_vars.calculate_derivs && calculate_derivs
 
     get_bvn_derivs!(
       elbo_vars, py1, py2, f_pre, gcc.bmc,
@@ -344,12 +346,13 @@ function populate_fsm_vecs!{NumType <: Number}(
 
   for s in mp.tile_sources[tile.b][tile.hh, tile.ww]
     wcs_jacobian = mp.patches[s, tile.b].wcs_jacobian;
+    active_source = s in mp.active_sources
 
     clear!(elbo_vars.fs0m_vec[s])
     for star_mc in star_mcs[:, s]
         accum_star_pos!(
           elbo_vars, s, star_mc, Float64[tile.h_range[h], tile.w_range[w]],
-          wcs_jacobian)
+          wcs_jacobian, calculate_derivs=active_source)
     end
 
     clear!(elbo_vars.fs1m_vec[s])
@@ -358,7 +361,8 @@ function populate_fsm_vecs!{NumType <: Number}(
             for k = 1:3 # PSF component
                 accum_galaxy_pos!(
                   elbo_vars, s, gal_mcs[k, j, i, s], Float64[tile.h_range[h],
-                  tile.w_range[w]], wcs_jacobian)
+                  tile.w_range[w]], wcs_jacobian,
+                  calculate_derivs=active_source)
             end
         end
     end
@@ -602,14 +606,21 @@ function combine_pixel_sources!{NumType <: Number}(
   clear!(elbo_vars.var_G)
 
   for s in mp.tile_sources[tile.b][tile.hh, tile.ww]
+    active_source = s in mp.active_sources
     calculate_hessian =
       elbo_vars.calculate_hessian && elbo_vars.calculate_derivs &&
-      s in mp.active_sources
+      active_source
     accumulate_source_brightness!(elbo_vars, mp, sbs, s, tile.b)
-    add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, s,
-      calculate_hessian=calculate_hessian)
-    add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, s,
-      calculate_hessian=calculate_hessian)
+    if active_source
+      sa = findfirst(mp.active_sources, s)[1]
+      add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa,
+        calculate_hessian=calculate_hessian)
+      add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa,
+        calculate_hessian=calculate_hessian)
+    else
+      # If it is an inactive source, add only to the expected brightness.
+      elbo_vars.E_G.v += elbo_vars.E_G_s.v
+    end
   end
 end
 
@@ -635,8 +646,11 @@ function get_expected_pixel_brightness!{NumType <: Number}(
     mp::ModelParams{NumType};
     include_epsilon::Bool=true)
 
+  # This combines the bvn components to get the brightness for each
+  # source separately.
   populate_fsm_vecs!(elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs)
 
+  # This combines the sources into a single brightness value for the pixel.
   clear!(elbo_vars.E_G)
   clear!(elbo_vars.var_G)
   combine_pixel_sources!(elbo_vars, mp, tile, sbs);
@@ -744,39 +758,42 @@ function tile_likelihood!{NumType <: Number}(
   # For speed, if there are no sources, add the noise
   # contribution directly.
   if (length(mp.tile_sources[tile.b][tile.hh, tile.ww]) == 0) && include_epsilon
-      # NB: not using the delta-method approximation here
-      if tile.constant_background
-          nan_pixels = Base.isnan(tile.pixels)
-          num_pixels =
-            length(tile.h_range) * length(tile.w_range) - sum(nan_pixels)
-          tile_x = sum(tile.pixels[!nan_pixels])
-          ep = tile.epsilon
-          elbo.v += tile_x * log(ep) - num_pixels * ep
-      else
-          for w in 1:tile.w_width, h in 1:tile.h_width
-              this_pixel = tile.pixels[h, w]
-              if !Base.isnan(this_pixel)
-                  ep = tile.epsilon_mat[h, w]
-                  elbo.v += this_pixel * log(ep) - ep
-              end
-          end
-      end
-      return
+    # NB: not using the delta-method approximation here
+    if tile.constant_background
+        nan_pixels = Base.isnan(tile.pixels)
+        num_pixels =
+          length(tile.h_range) * length(tile.w_range) - sum(nan_pixels)
+        tile_x = sum(tile.pixels[!nan_pixels])
+        ep = tile.epsilon
+        elbo.v += tile_x * log(ep) - num_pixels * ep
+    else
+        for w in 1:tile.w_width, h in 1:tile.h_width
+            this_pixel = tile.pixels[h, w]
+            if !Base.isnan(this_pixel)
+                ep = tile.epsilon_mat[h, w]
+                elbo.v += this_pixel * log(ep) - ep
+            end
+        end
+    end
+    return
   end
 
   # Iterate over pixels that are not NaN.
   for w in 1:tile.w_width, h in 1:tile.h_width
-      this_pixel = tile.pixels[h, w]
-      if !Base.isnan(this_pixel)
-          get_expected_pixel_brightness!(
-            elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-            mp, include_epsilon=include_epsilon)
-          iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
-          add_elbo_log_term!(elbo_vars, this_pixel, iota)
-          CelesteTypes.add_scaled_sfs!(
-            elbo_vars.elbo, elbo_vars.E_G, scale=-iota,
-            calculate_hessian=elbo_vars.calculate_hessian)
-      end
+    this_pixel = tile.pixels[h, w]
+    if !Base.isnan(this_pixel)
+      # Get the brightness.
+      get_expected_pixel_brightness!(
+        elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
+        mp, include_epsilon=include_epsilon)
+
+      # Add the terms to the elbo given the brightness.
+      iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
+      add_elbo_log_term!(elbo_vars, this_pixel, iota)
+      CelesteTypes.add_scaled_sfs!(
+        elbo_vars.elbo, elbo_vars.E_G, scale=-iota,
+        calculate_hessian=elbo_vars.calculate_hessian)
+    end
   end
 
   # Subtract the log factorial term.  This is not a function of the
@@ -837,7 +854,7 @@ function tile_predicted_image{NumType <: Number}(
 
   star_mcs, gal_mcs = load_bvn_mixtures(mp, tile.b, calculate_derivs=false)
   sbs = SourceBrightness{NumType}[
-    SourceBrightness(mp.vp[s], false) for s in 1:mp.S]
+    SourceBrightness{NumType}(mp.vp[s], false) for s in 1:mp.S]
 
   elbo_vars = ElboIntermediateVariables(NumType, mp.S, length(mp.active_sources));
   elbo_vars.calculate_derivs = false
@@ -863,6 +880,7 @@ function elbo_likelihood!{NumType <: Number}(
   star_mcs::Array{BvnComponent{NumType}, 2},
   gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
 
+  @assert length(mp.active_sources) > 0
   @assert maximum(mp.active_sources) <= mp.S
   for tile in tiled_image[:]
     if length(intersect(mp.tile_sources[tile.b][tile.hh, tile.ww],
@@ -929,13 +947,11 @@ function elbo{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType};
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
-  elbo = elbo_likelihood(
-    tiled_blob, mp,
+  elbo = elbo_likelihood(tiled_blob, mp,
     calculate_derivs=calculate_derivs, calculate_hessian=calculate_hessian)
 
   # TODO: subtract the kl with the hessian.
-  subtract_kl!(
-    mp, elbo,
+  subtract_kl!(mp, elbo,
     calculate_derivs=calculate_derivs, calculate_hessian=calculate_hessian)
   elbo
 end
