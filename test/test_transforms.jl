@@ -12,20 +12,32 @@ using DualNumbers
 import ModelInit
 
 
-blob, mp, body = gen_three_body_dataset();
-transform = Transform.get_mp_transform(mp, loc_width=1.0);
-transform_derivatives = Transform.get_transform_derivatives(mp, transform.bounds);
+test_transform_derivatives()
+	blob, mp, body, tiled_blob = gen_two_body_dataset();
+	transform = Transform.get_mp_transform(mp, loc_width=1.0);
+	elbo = ElboDeriv.elbo(tiled_blob, mp);
+	elbo_trans = transform.transform_sensitive_float(elbo, mp);
 
+	function wrap_elbo{NumType <: Number}(vp_free_vec::Vector{NumType})
+		vp_free_array = reshape(vp_free_vec, length(UnconstrainedParams), length(mp.active_sources))
+		vp_free = Vector{NumType}[ zeros(NumType, length(UnconstrainedParams)) for
+		                           sa in mp.active_sources ];
+		#vp_free = convert(FreeVariationalParams{NumType}, vp_free)
+		Transform.array_to_free_vp!(vp_free_array, vp_free, Int64[])
+		mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
+		mp_local.vp = transform.to_vp(vp_free)
+		elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
+		elbo.v
+	end
 
+	# The AD Hessian is super slow.
+	free_vp_vec = reduce(vcat, transform.from_vp(mp.vp));
+	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
+	ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec);
 
-
-
-
-
-
-
-
-
+	@test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
+	@test_approx_eq ad_hess elbo_trans.h
+end
 
 
 
