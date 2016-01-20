@@ -390,8 +390,8 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
             end
         else
             # The improvement is too small and we won't take it.
-            verbose_println("Rejecting improvement from $(x_previous) to ",
-                    "$x, f=$f_x (f_prev = $(f_x_previous))")
+            verbose_println(
+              "Rejecting improvement from f_prev = $(f_x_previous) to f=$f_x")
 
             # If you reject an interior solution, make sure that the next
             # delta is smaller than the current step.  Otherwise you waste

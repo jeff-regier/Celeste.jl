@@ -3,8 +3,19 @@ using CelesteTypes
 using Base.Test
 using SampleData
 import Synthetic
+import DualNumbers
 
 println("Running hessian tests.")
+
+
+function test_dual_numbers()
+  # Simply check that the likelihood can be used with dual numbers.
+  # Due to the autodiff parts of the KL divergence and transform,
+  # these parts of the ELBO will currently not work with dual numbers.
+  blob, mp, body, tiled_blob = gen_sample_star_dataset();
+  mp_dual = CelesteTypes.forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
+  elbo_dual = ElboDeriv.elbo_likelihood(tiled_blob, mp_dual);
+end
 
 
 @doc """
@@ -909,3 +920,4 @@ test_elbo()
 test_active_sources()
 test_derivative_flags()
 test_tile_predicted_image()
+test_dual_numbers()
