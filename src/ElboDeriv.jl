@@ -618,7 +618,8 @@ function combine_pixel_sources!{NumType <: Number}(
       add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa,
         calculate_hessian=calculate_hessian)
     else
-      # If it is an inactive source, add only to the expected brightness.
+      # If the source is inactive, add only to the expected brightness, not
+      # the variance.
       elbo_vars.E_G.v += elbo_vars.E_G_s.v
     end
   end
@@ -822,20 +823,20 @@ function tile_predicted_image{NumType <: Number}(
         mp::ModelParams{NumType},
         sbs::Vector{SourceBrightness{NumType}},
         star_mcs::Array{BvnComponent{NumType}, 2},
-        gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+        gal_mcs::Array{GalaxyCacheComponent{NumType}, 4};
         include_epsilon::Bool=true)
 
     predicted_pixels = copy(tile.pixels)
     # Iterate over pixels that are not NaN.
     for w in 1:tile.w_width, h in 1:tile.h_width
-        this_pixel = tile.pixels[h, w]
-        if !Base.isnan(this_pixel)
-            get_expected_pixel_brightness!(
-              elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-              mp, include_epsilon=include_epsilon)
-            iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
-            predicted_pixels[h, w] = E_G.v * iota
-        end
+      this_pixel = tile.pixels[h, w]
+      if !Base.isnan(this_pixel)
+        get_expected_pixel_brightness!(
+          elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
+          mp, include_epsilon=include_epsilon)
+        iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
+        predicted_pixels[h, w] = elbo_vars.E_G.v * iota
+      end
     end
 
     predicted_pixels
@@ -852,20 +853,16 @@ function tile_predicted_image{NumType <: Number}(
     tile::ImageTile, mp::ModelParams{NumType};
     include_epsilon::Bool=false)
 
-  star_mcs, gal_mcs = load_bvn_mixtures(mp, tile.b, calculate_derivs=false)
-  sbs = SourceBrightness{NumType}[
-    SourceBrightness{NumType}(mp.vp[s], false) for s in 1:mp.S]
+  star_mcs, gal_mcs = load_bvn_mixtures(mp, tile.b, calculate_derivs=false);
+  sbs = load_source_brightnesses(mp, calculate_derivs=false);
 
-  elbo_vars = ElboIntermediateVariables(NumType, mp.S, length(mp.active_sources));
+  elbo_vars =
+    ElboIntermediateVariables(NumType, mp.S, length(mp.active_sources));
   elbo_vars.calculate_derivs = false
 
-  tile_predicted_image(elbo_vars,
-                       tile,
-                       mp,
-                       sbs,
-                       star_mcs,
-                       gal_mcs,
-                       include_epsilon=include_epsilon)
+  tile_predicted_image(
+    elbo_vars, tile, mp, sbs, star_mcs, gal_mcs,
+    include_epsilon=include_epsilon)
 end
 
 
