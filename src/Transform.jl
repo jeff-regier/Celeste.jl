@@ -190,7 +190,7 @@ function unsimplexify_parameter{NumType <: Number}(
 
   @assert length(param) == n
   @assert all(param .>= lower_bound)
-  @assert abs(sum(param) - 1) < 1e-16
+  @assert(abs(sum(param) - 1) < 1e-14, abs(sum(param) - 1))
 
   # z_sim is on an unconstrained simplex.
   # Broadcasting doesn't work with DualNumbers and Floats. :(
@@ -809,6 +809,9 @@ DataTransform(bounds::Vector{ParamBounds};
   	for ind in 1:length(sf_d_vec)
   		sf_free.h += transform_derivatives.d2param_dfree2[ind] * sf_d_vec[ind]
   	end
+    # Ensure exact symmetry, which is necessary for some numerical linear
+    # algebra routines.
+    sf_free.h = 0.5 * (sf_free.h' + sf_free.h)
 
   	sf_free
   end
