@@ -20,23 +20,39 @@ function trim_tiles!(tiled_blob::TiledBlob, keep_pixels)
 end
 
 
+function test_tile_predicted_image()
+  blob, mp, body, tiled_blob = gen_sample_star_dataset(perturb=false);
+  tile = tiled_blob[1][1, 1];
+  pred_image = ElboDeriv.tile_predicted_image(tile, mp; include_epsilon=true);
+
+  # Regress the tile pixels onto the predicted image
+  # TODO: Why isn't the regression closer to one?  Something in the sample data
+  # generation?
+  reg_coeff = dot(tile.pixels, pred_image) / dot(pred_image, pred_image)
+  residuals = pred_image * reg_coeff - tile.pixels;
+  residual_sd = sqrt(mean(residuals .^ 2))
+
+  @test residual_sd / mean(tile.pixels) < 0.05
+end
 
 
-blob, mp, body, tiled_blob = gen_two_body_dataset();
-keep_pixels = 10:11
-trim_tiles!(tiled_blob, keep_pixels)
+function test_derivative_flags()
+  blob, mp, body, tiled_blob = gen_two_body_dataset();
+  keep_pixels = 10:11
+  trim_tiles!(tiled_blob, keep_pixels)
 
-elbo = ElboDeriv.elbo(tiled_blob, mp);
+  elbo = ElboDeriv.elbo(tiled_blob, mp);
 
-elbo_noderiv = ElboDeriv.elbo(tiled_blob, mp; calculate_derivs=false);
-@test_approx_eq elbo.v elbo_noderiv.v
-@test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
-@test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
+  elbo_noderiv = ElboDeriv.elbo(tiled_blob, mp; calculate_derivs=false);
+  @test_approx_eq elbo.v elbo_noderiv.v
+  @test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
+  @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
 
-elbo_nohess = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
-@test_approx_eq elbo.v elbo_nohess.v
-@test_approx_eq elbo.d elbo_nohess.d
-
+  elbo_nohess = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
+  @test_approx_eq elbo.v elbo_nohess.v
+  @test_approx_eq elbo.d elbo_nohess.d
+  @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
+end
 
 
 function test_active_sources()
@@ -913,3 +929,5 @@ test_combine_pixel_sources()
 test_add_log_term()
 test_elbo()
 test_active_sources()
+test_derivative_flags()
+test_tile_predicted_image()

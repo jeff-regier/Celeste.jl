@@ -344,32 +344,6 @@ function test_elbo_with_nan()
 end
 
 
-function test_active_sources()
-  blob, mp, three_bodies, tiled_blob = gen_three_body_dataset();
-
-  # Change the tile size.
-  tiled_blob, mp = ModelInit.initialize_celeste(
-    blob, three_bodies, tile_width=10, fit_psf=false);
-
-  # To ensure a valid test make sure object 3 is partially overlapping.
-  @assert any(Bool[ (2 in sources) & (3 in sources) for
-                    sources in mp.tile_sources[3]])
-  @assert any(Bool[ !(2 in sources) & (3 in sources) for
-                    sources in mp.tile_sources[3]])
-  @assert !any(Bool[ (1 in sources) & (3 in sources) for
-                     sources in mp.tile_sources[3]])
-
-  mp.active_sources = 1:mp.S
-  elbo_all = ElboDeriv.elbo(tiled_blob, mp);
-
-  mp.active_sources = [3];
-  elbo_3 = ElboDeriv.elbo(tiled_blob, mp);
-
-  @test elbo_3.v != elbo_all.v
-  @test_approx_eq elbo_all.d[:,3] elbo_3.d[:,3]
-  @test_approx_eq elbo_3.d[:,1] zeros(size(elbo_3.d)[1])
-end
-
 function test_trim_source_tiles()
   blob, mp, bodies, tiled_blob = gen_n_body_dataset(3);
 
