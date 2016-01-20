@@ -87,21 +87,25 @@ end
 
 function test_that_variance_is_low()
     # very peaked variational distribution---variance for F(m) should be low
-    blob, mp, body, tiled_blob = true_star_init()
+    blob, mp, body, tiled_blob = true_star_init();
 
     test_b = 3
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, test_b)
-    fs0m = zero_sensitive_float(StarPosParams)
-    fs1m = zero_sensitive_float(GalaxyPosParams)
-    E_G = zero_sensitive_float(CanonicalParams)
-    var_G = zero_sensitive_float(CanonicalParams)
-    sb = ElboDeriv.SourceBrightness(mp.vp[1])
-    m_pos = Float64[10, 12]
-    wcs_jacobian = WCS.pixel_world_jacobian(blob[test_b].wcs, m_pos)
-    ElboDeriv.accum_pixel_source_stats!(sb, star_mcs, gal_mcs,
-        mp.vp[1], 1, 1, m_pos, 3, fs0m, fs1m, E_G, var_G, wcs_jacobian)
+    tile = tiled_blob[test_b][1,1];
 
-    @test 0 < var_G.v < 1e-2 * E_G.v^2
+    h, w = 10, 12
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, tile.b);
+    sbs = ElboDeriv.SourceBrightness{Float64}[
+      ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+
+    elbo_vars = ElboDeriv.ElboIntermediateVariables(
+      Float64, mp.S, length(mp.active_sources));
+
+    clear!(elbo_vars.E_G);
+    clear!(elbo_vars.var_G);
+    ElboDeriv.get_expected_pixel_brightness!(
+      elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile, mp);
+
+    @test 0 < elbo_vars.var_G.v < 1e-2 * elbo_vars.E_G.v^2
 end
 
 
@@ -221,7 +225,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         mp.vp[s][ids.a[2]] = cat_entries[s].is_star ? 0.01 : 0.99
         mp.vp[s][ids.a[1]] = 1.0 - mp.vp[s][ids.a[2]]
     end
-    best = ElboDeriv.elbo_likelihood(tiled_blob, mp)
+    best = ElboDeriv.elbo_likelihood(tiled_blob, mp; calculate_derivs=false);
 
     # s is the brightest source.
     s = 1
@@ -229,7 +233,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     for bad_scale in [.7, 1.3]
         mp_r1 = deepcopy(mp)
         mp_r1.vp[s][ids.r1] += 2 * log(bad_scale)
-        bad_r1 = ElboDeriv.elbo_likelihood(tiled_blob, mp_r1)
+        bad_r1 = ElboDeriv.elbo_likelihood(
+          tiled_blob, mp_r1; calculate_derivs=false)
         @test best.v > bad_r1.v
     end
 
@@ -237,7 +242,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         for bad_scale in [.6, 1.8]
             mp_bad = deepcopy(mp)
             mp_bad.vp[s][ids.(n)] *= bad_scale
-            bad_elbo = ElboDeriv.elbo_likelihood(tiled_blob, mp_bad)
+            bad_elbo = ElboDeriv.elbo_likelihood(
+              tiled_blob, mp_bad; calculate_derivs=false)
             @test best.v > bad_elbo.v
         end
     end
@@ -246,7 +252,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         mp_a = deepcopy(mp)
         mp_a.vp[s][ids.a] = [ 1.0 - bad_a, bad_a ]
 
-        bad_a = ElboDeriv.elbo_likelihood(tiled_blob, mp_a)
+        bad_a = ElboDeriv.elbo_likelihood(
+          tiled_blob, mp_a; calculate_derivs=false)
         @test best.v > bad_a.v
     end
 
@@ -255,7 +262,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
             if !(h2 == 0 && w2 == 0)
                 mp_mu = deepcopy(mp)
                 mp_mu.vp[s][ids.u] += [0.5h2, 0.5w2]
-                bad_mu = ElboDeriv.elbo_likelihood(tiled_blob, mp_mu)
+                bad_mu = ElboDeriv.elbo_likelihood(
+                  tiled_blob, mp_mu; calculate_derivs=false)
                 @test best.v > bad_mu.v
             end
         end
@@ -265,7 +273,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         for delta in [-2., 2.]
             mp_c1 = deepcopy(mp)
             mp_c1.vp[s][ids.c1[b, :]] += delta
-            bad_c1 = ElboDeriv.elbo_likelihood(tiled_blob, mp_c1)
+            bad_c1 = ElboDeriv.elbo_likelihood(
+              tiled_blob, mp_c1; calculate_derivs=false)
             info("$(best.v)  >  $(bad_c1.v)")
             @test best.v > bad_c1.v
         end
@@ -286,26 +295,30 @@ function test_tiny_image_tiling()
   catalog = [sample_ce([100., 1], true),]
   catalog[1].star_fluxes = ones(5) * 1e5
 
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(
+    Float64, mp.S, length(mp.active_sources), calculate_derivs=false);
+  sbs = ElboDeriv.load_source_brightnesses(mp, calculate_derivs=false);
+
   tiled_blob0, mp0 = ModelInit.initialize_celeste(
     fill(img, 5), catalog, patch_radius=Inf)
-  accum0 = zero_sensitive_float(CanonicalParams)
-  ElboDeriv.elbo_likelihood!(tiled_blob0[3], mp0, 3, accum0)
+  ElboDeriv.elbo_likelihood!(elbo_vars, tiled_blob0[3], mp0, 3, sbs);
+  elbo_lik = deepcopy(elbo_vars.elbo);
 
   tile_width = 2
   tiled_blob1, mp0 = ModelInit.initialize_celeste(
     fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.)
-  accum_tiles = zero_sensitive_float(CanonicalParams)
-  ElboDeriv.elbo_likelihood!(tiled_blob1[3], mp0, 3, accum_tiles)
+  ElboDeriv.elbo_likelihood!(elbo_vars, tiled_blob0[3], mp0, 3, sbs);
+  elbo_lik_tiles = deepcopy(elbo_vars.elbo);
 
   tile_width = 5
   tiled_blob2, mp0 =
     ModelInit.initialize_celeste(
-      fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.)
-  accum_tiles2 = zero_sensitive_float(CanonicalParams)
-  ElboDeriv.elbo_likelihood!(tiled_blob2[3], mp0, 3, accum_tiles2)
+      fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.);
+  ElboDeriv.elbo_likelihood!(elbo_vars, tiled_blob0[3], mp0, 3, sbs);
+  elbo_lik_tiles2 = deepcopy(elbo_vars.elbo);
 
-  @test_approx_eq accum_tiles.v accum_tiles2.v
-  @test_approx_eq_eps accum0.v accum_tiles.v 100.
+  @test_approx_eq elbo_lik_tiles.v elbo_lik_tiles2.v
+  @test_approx_eq_eps elbo_lik.v elbo_lik_tiles.v 100.
 
 end
 
@@ -315,7 +328,7 @@ function test_elbo_with_nan()
 
     # Set tile width to 5 to test the code for tiles with no sources.
     tiled_blob, mp = ModelInit.initialize_celeste(blob, body, tile_width=5);
-    initial_elbo = ElboDeriv.elbo(tiled_blob, mp);
+    initial_elbo = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
 
     for b in 1:5
         blob[b].pixels[1,1] = NaN
@@ -335,14 +348,16 @@ function test_elbo_likelihood_flavors()
   # Test that the different argument combinations ot elbo_likelihood give the
   # same answer.
   blob, mp, body, tiled_blob = gen_sample_star_dataset(perturb=false);
-  original_accum = ElboDeriv.elbo_likelihood(tiled_blob, mp);
+  original_accum = ElboDeriv.elbo_likelihood(
+    tiled_blob, mp; calculate_hessian=false);
 
   param_msg = ElboDeriv.ParameterMessage(mp);
   ElboDeriv.update_parameter_message!(mp, param_msg);
 
   accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
   for b = 1:5
-    ElboDeriv.elbo_likelihood!(tiled_blob[b], mp, b, accum)
+    ElboDeriv.elbo_likelihood!(
+      tiled_blob[b], mp, b, accum; calculate_hessian=false)
   end
   @test_approx_eq_eps(accum.v, original_accum.v, 1e-16)
   @test_approx_eq_eps(accum.d, original_accum.d, 1e-16)
