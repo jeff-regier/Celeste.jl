@@ -422,12 +422,13 @@ function get_transform_derivatives!{NumType <: Number}(
   @assert transform_derivatives.Sa == length(mp.active_sources)
 
   for param in fieldnames(ids), sa = 1:length(mp.active_sources)
-
+    s = mp.active_sources[sa]
   	#println(param, " ", sa)
   	constraint_vec = bounds[sa][param]
 
   	if isa(constraint_vec[1], ParamBox) # It is a box constraint
-  		@assert length(constraint_vec) == length(ids_free.(param)) == length(ids.(param))
+  		@assert(length(constraint_vec) == length(ids_free.(param)) ==
+        length(ids.(param)))
 
   		# Get each components' derivatives one by one.
   		for ind = 1:length(constraint_vec)
@@ -435,7 +436,7 @@ function get_transform_derivatives!{NumType <: Number}(
   			vp_ind = ids.(param)[ind]
   			vp_free_ind = ids_free.(param)[ind]
 
-  			jac, hess = box_derivatives(mp.vp[sa][vp_ind], constraint_vec[ind]);
+  			jac, hess = box_derivatives(mp.vp[s][vp_ind], constraint_vec[ind]);
 
   			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
   			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
@@ -459,7 +460,7 @@ function get_transform_derivatives!{NumType <: Number}(
   				vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
   				jac, hess = Transform.box_simplex_derivatives(
-  					mp.vp[sa][vp_ind], constraint_vec[col])
+  					mp.vp[s][vp_ind], constraint_vec[col])
 
   				transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
   				for row in 1:(param_size[1])
@@ -479,7 +480,7 @@ function get_transform_derivatives!{NumType <: Number}(
   			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
   			jac, hess = Transform.box_simplex_derivatives(
-  				mp.vp[sa][vp_ind], constraint_vec[1])
+  				mp.vp[s][vp_ind], constraint_vec[1])
 
   			transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
   			for ind in 1:length(vp_ind)
@@ -717,27 +718,27 @@ end
 # custom bounds.  Or maybe it should be part of ModelParams with one transform
 # per celestial object rather than a single object containing an array of
 # transforms.
-DataTransform(bounds::Vector{ParamBounds};
-              active_sources=collect(1:length(bounds)), S=length(bounds)) = begin
+DataTransform(
+    bounds::Vector{ParamBounds};
+    active_sources=collect(1:length(bounds)), S=length(bounds)) = begin
 
   @assert length(bounds) == length(active_sources)
   @assert maximum(active_sources) <= S
   active_S = length(active_sources)
 
-  # Make sure that each variable has its bounds set.  The simplicial variables
-  # :a and :k don't have bounds.
+  # Make sure that each variable has its bounds set.
   for s=1:length(bounds)
     @assert Set(keys(bounds[s])) == Set(fieldnames(ids))
   end
 
   function from_vp!{NumType <: Number}(
-    vp::VariationalParams{NumType}, vp_free::VariationalParams{NumType})
-      S = length(vp)
-      @assert length(vp_free) == active_S
-      for si=1:active_S
-        s = active_sources[si]
-        vp_to_free!(vp[s], vp_free[si], bounds[si])
-      end
+      vp::VariationalParams{NumType}, vp_free::VariationalParams{NumType})
+    S = length(vp)
+    @assert length(vp_free) == active_S
+    for si=1:active_S
+      s = active_sources[si]
+      vp_to_free!(vp[s], vp_free[si], bounds[si])
+    end
   end
 
   function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
@@ -747,12 +748,12 @@ DataTransform(bounds::Vector{ParamBounds};
   end
 
   function to_vp!{NumType <: Number}(
-    vp_free::FreeVariationalParams{NumType}, vp::VariationalParams{NumType})
-      @assert length(vp_free) == active_S
-      for si=1:active_S
-        s = active_sources[si]
-        free_to_vp!(vp_free[si], vp[s], bounds[si])
-      end
+      vp_free::FreeVariationalParams{NumType}, vp::VariationalParams{NumType})
+    @assert length(vp_free) == active_S
+    for si=1:active_S
+      s = active_sources[si]
+      free_to_vp!(vp_free[si], vp[s], bounds[si])
+    end
   end
 
   function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})

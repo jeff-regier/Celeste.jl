@@ -4,7 +4,7 @@
 # julia --track-allocation=user
 
 include("test/debug_with_master.jl");
-import Debug
+using Debug
 
 blob, mp, bodies, tiled_blob = Debug.SampleData.gen_two_body_dataset();
 @time debug_elbo = Debug.ElboDeriv.elbo(tiled_blob, mp);
