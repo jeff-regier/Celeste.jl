@@ -90,12 +90,12 @@ function test_objective_wrapper()
     @test_approx_eq(w_grad, wrapper.f_grad(x[:]))
 
     this_iter = wrapper.state.f_evals;
-    wrapper.f_value(x[:]);
+    wrapper.f_value(x[:] + 1.0);
     @test wrapper.state.f_evals == this_iter + 1
 
-    # Check the AD gradient.
-    ad_grad = wrapper.f_ad_grad(x[:]);
-    @test_approx_eq ad_grad[:] w_grad
+    # # Check the AD gradient.
+    # ad_grad = wrapper.f_ad_grad(x[:]);
+    # @test_approx_eq ad_grad[:] w_grad
 end
 
 function test_objective_hessians()
@@ -148,8 +148,8 @@ function test_star_optimization()
     # Newton's method converges on a small galaxy unless we start with
     # a high star probability.
     mp.vp[1][ids.a] = [0.8, 0.2]
-    trans = get_mp_transform(mp, loc_width=1.0);
-    OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
+    transform = get_mp_transform(mp, loc_width=1.0);
+    OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=false)
     verify_sample_star(mp.vp[1], [10.1, 12.2])
 end
 

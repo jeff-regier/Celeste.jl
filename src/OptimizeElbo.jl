@@ -42,7 +42,7 @@ type ObjectiveWrapperFunctions
     f_grad!::Function
     f_hessian::Function
     f_hessian!::Function
-    f_ad_grad::Function
+    # f_ad_grad::Function
     f_ad_hessian!::Function
     f_ad_hessian_sparse::Function
 
@@ -55,6 +55,7 @@ type ObjectiveWrapperFunctions
 
     # Caching
     last_sf::SensitiveFloat
+    last_x::Vector{Float64}
 
     # Arguments:
     #  f: A function that takes in ModelParams and returns a SensitiveFloat.
@@ -77,6 +78,7 @@ type ObjectiveWrapperFunctions
 
         last_sf =
           zero_sensitive_float(UnconstrainedParams, length(mp.active_sources))
+        last_x = [ NaN ]
 
         state = WrapperState(0, false, 10, 1.0)
         function print_status{T <: Number}(
@@ -114,6 +116,10 @@ type ObjectiveWrapperFunctions
         end
 
         function f_objective(x::Vector{Float64})
+          if x == last_x
+            # Return the cached result.
+            return(last_sf)
+          else
             state.f_evals += 1
             # Evaluate in the constrained space and then unconstrain again.
             transform.array_to_vp!(reshape(x, x_size), mp.vp, omitted_ids)
@@ -122,10 +128,14 @@ type ObjectiveWrapperFunctions
             # TODO: Add an option to print either the transformed or
             # free parameterizations.
             print_status(mp.vp[mp.active_sources],
-                         f_res.v, f_res.d[:, mp.active_sources])
+                         f_res.v, f_res.d)
             f_res_trans = transform.transform_sensitive_float(f_res, mp)
-            #print_status(transform.from_vp(mp.vp), f_res_trans.v, f_res_trans.d)
-            f_res_trans
+
+            # Cache the result.
+            last_x = deepcopy(x)
+            last_sf = deepcopy(f_res_trans)
+            return(f_res_trans)
+          end
         end
 
         function f_value_grad{T <: Number}(x::Vector{T})
@@ -147,7 +157,6 @@ type ObjectiveWrapperFunctions
             value
         end
 
-        # TODO: Add caching.
         function f_value{T <: Number}(x::Vector{T})
             @assert length(x) == x_length
             f_value_grad(x)[1]
@@ -163,44 +172,50 @@ type ObjectiveWrapperFunctions
         end
 
         function f_hessian{T <: Number}(x::Vector{T})
-            @assert length(x) == x_length
-            f_value_grad(x)[2]
-        end
-
-        function f_hessian!{T <: Number}(x::Vector{T}, hess::Vector{T})
-            hess[:,:] = f_hessian(x)
-        end
-
-        # Compute a forward AD gradient.  This is mostly useful
-        # for debugging and testing.
-        function f_ad_grad(x_vec::Array{Float64})
-          # TODO: combine this and the Hessian into a single function.
-          @assert length(x_vec) == x_length
-          x = reshape(x_vec, x_size)
-          k = length(x_vec)
-
-          x_dual = DualType[
-            DualType(x[i, j], 0.) for i = 1:(x_size[1]), j=1:(x_size[2])];
-
-          grad = zeros(Float64, x_size...)
-          print("Getting autodiff gradient ($k components): ")
-          mp_dual.active_sources = mp.active_sources
-          for si in 1:length(mp.active_sources)
-            s = mp.active_sources[si]
-            for index in 1:x_size[1]
-              index == 1 ? print("+"): print("-")
-              original_x = x[index, si]
-              x_dual[index, si] = DualType(original_x, 1.)
-
-              value = f_value(x_dual[:])
-              # This goes through deriv in column-major order.
-              grad[index, si] = Float64(DualNumbers.epsilon(value))
-              x_dual[index, si] = DualType(original_x, 0.)
-            end
+          @assert length(x) == x_length
+          res = f_objective(x)
+          all_kept_ids = Int64[]
+          for sa=1:transform.active_S
+            append!(all_kept_ids, kept_ids + (sa - 1) * length(kept_ids))
           end
-          print("Done.\n")
-          grad
+          sub_hess = res.h[all_kept_ids, all_kept_ids]
+          state.scale .* 0.5 * (sub_hess + sub_hess')
+      end
+
+        function f_hessian!{T <: Number}(x::Vector{T}, hess::Matrix{T})
+          hess[:, :] = f_hessian(x)
         end
+
+        # # Compute a forward AD gradient.  This is mostly useful
+        # # for debugging and testing.
+        # function f_ad_grad(x_vec::Array{Float64})
+        #   # TODO: combine this and the Hessian into a single function.
+        #   @assert length(x_vec) == x_length
+        #   x = reshape(x_vec, x_size)
+        #   k = length(x_vec)
+        #
+        #   x_dual = DualType[
+        #     DualType(x[i, j], 0.) for i = 1:(x_size[1]), j=1:(x_size[2])];
+        #
+        #   grad = zeros(Float64, x_size...)
+        #   print("Getting autodiff gradient ($k components): ")
+        #   mp_dual.active_sources = mp.active_sources
+        #   for si in 1:length(mp.active_sources)
+        #     s = mp.active_sources[si]
+        #     for index in 1:x_size[1]
+        #       index == 1 ? print("+"): print("-")
+        #       original_x = x[index, si]
+        #       x_dual[index, si] = DualType(original_x, 1.)
+        #
+        #       value = f_value(x_dual[:])
+        #       # This goes through deriv in column-major order.
+        #       grad[index, si] = Float64(DualNumbers.epsilon(value))
+        #       x_dual[index, si] = DualType(original_x, 0.)
+        #     end
+        #   end
+        #   print("Done.\n")
+        #   grad
+        # end
 
         # Update <hess> in place with an autodiff hessian.
         function f_ad_hessian!(x_vec::Array{Float64}, hess::Matrix{Float64})
@@ -295,7 +310,7 @@ type ObjectiveWrapperFunctions
 
         new(f_objective, f_value_grad, f_value_grad!,
             f_value, f_grad, f_grad!, f_hessian, f_hessian!,
-            f_ad_grad, f_ad_hessian!, f_ad_hessian_sparse,
+            f_ad_hessian!, f_ad_hessian_sparse,
             state, transform, mp, kept_ids, omitted_ids, DualType, last_sf)
     end
 end
@@ -376,7 +391,7 @@ function maximize_f(
     x0 = transform.vp_to_array(mp.vp, omitted_ids);
     d = Optim.TwiceDifferentiableFunction(
       optim_obj_wrap.f_value, optim_obj_wrap.f_grad!,
-      optim_obj_wrap.f_ad_hessian!)
+      optim_obj_wrap.f_hessian!)
 
     # TODO: use the Optim version after newton_tr is merged.
     nm_result = newton_tr(d,
