@@ -420,15 +420,17 @@ function test_quadratic_optimization()
         val = zero_sensitive_float(CanonicalParams, NumType)
         val.v = -sum((mp.vp[1] - centers) .^ 2)
         val.d[:] = -2.0 * (mp.vp[1] - centers)
-
+        val.h[:, :] = diagm(fill(-2.0, length(CanonicalParams)))
         val
     end
 
     bounds = Array(ParamBounds, 1)
     bounds[1] = ParamBounds()
     for param in setdiff(fieldnames(ids), [:a, :k])
-      bounds[1][symbol(param)] = ParamBox(0., 1.0, 1.0)
+      bounds[1][symbol(param)] = fill(ParamBox(0., 1.0, 1.0), length(ids.(param)))
     end
+    bounds[1][:a] = [ SimplexBox(0.0, 1.0, 2) ]
+    bounds[1][:k] = fill(SimplexBox(0.0, 1.0, 2), 2)
     trans = DataTransform(bounds);
 
     mp = empty_model_params(1);

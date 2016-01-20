@@ -6,7 +6,7 @@ using Celeste
 using CelesteTypes
 import DualNumbers
 
-export DataTransform, ParamBounds, ParamBox
+export DataTransform, ParamBounds, ParamBox, SimplexBox
 export get_mp_transform, generate_valid_parameters
 
 
