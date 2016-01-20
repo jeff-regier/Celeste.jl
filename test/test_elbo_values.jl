@@ -354,14 +354,17 @@ end
 
 
 function test_trim_source_tiles()
-  blob, mp, bodies, tiled_blob = gen_n_body_dataset(3);
+  # Set a seed to avoid a flaky test.
+  blob, mp, bodies, tiled_blob = gen_n_body_dataset(3, seed=42);
 
+  # With the above seed, this is near the middle of the image.
   s = 1
-  trimmed_tiled_blob = ModelInit.trim_source_tiles(s, mp, tiled_blob);
-
+  trimmed_tiled_blob = ModelInit.trim_source_tiles(
+    s, mp, tiled_blob, noise_fraction=0.1);
   loc_ids = ids.u
   non_loc_ids = setdiff(1:length(ids), ids.u)
   for b=1:5
+    println("Testing b = $b")
     # Make sure pixels got NaN-ed out
     @test(
       sum([ sum(!Base.isnan(tile.pixels)) for tile in trimmed_tiled_blob[b]]) <
@@ -371,10 +374,10 @@ function test_trim_source_tiles()
     elbo_full = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
     elbo_trim = ElboDeriv.elbo(trimmed_tiled_blob, mp; calculate_hessian=false);
     @test_approx_eq_eps(
-      elbo_full.d[loc_ids, s] ./ elbo_trim.d[loc_ids, s],
-      fill(1.0, length(loc_ids)), 3e-2)
+      elbo_full.d[loc_ids, 1] ./ elbo_trim.d[loc_ids, 1],
+      fill(1.0, length(loc_ids)), 0.06)
     @test_approx_eq_eps(
-      elbo_full.d[non_loc_ids, s] ./ elbo_trim.d[non_loc_ids, s],
+      elbo_full.d[non_loc_ids, 1] ./ elbo_trim.d[non_loc_ids, 1],
       fill(1.0, length(non_loc_ids)), 2e-3)
   end
 end

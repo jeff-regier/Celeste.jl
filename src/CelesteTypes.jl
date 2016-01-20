@@ -589,7 +589,7 @@ function convert(FDType::Type{ForwardDiff.HessianNumber},
 end
 
 
-# TODO: test this, and maybe write it as a convert()?
+# TODO: Maybe write it as a convert()?
 function forward_diff_model_params{T <: Number}(
     FDType::Type{T},
     base_mp::ModelParams{Float64})
