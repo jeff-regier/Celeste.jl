@@ -33,14 +33,12 @@ function test_kl_divergence_values()
     d = 1
     sample_size = 2_000_000
 
-    function test_kl(q_dist, p_dist, subtract_kl_fun!)
+    function test_kl(q_dist, p_dist, kl_fun)
         q_samples = rand(q_dist, sample_size)
         empirical_kl_samples =
           logpdf(q_dist, q_samples) - logpdf(p_dist, q_samples)
         empirical_kl = mean(empirical_kl_samples)
-        accum = zero_sensitive_float(CanonicalParams)
-        subtract_kl_fun!(accum)
-        exact_kl = -accum.v
+        exact_kl = -kl_fun()
         tol = 4 * std(empirical_kl_samples) / sqrt(sample_size)
         min_diff = 1e-2 * std(empirical_kl_samples) / sqrt(sample_size)
 
@@ -53,15 +51,14 @@ function test_kl_divergence_values()
     # a
     q_a = Bernoulli(vs[ids.a[2]])
     p_a = Bernoulli(mp.pp.a[2])
-    test_kl(q_a, p_a, (accum) -> ElboDeriv.subtract_kl_a(mp.vp[s], mp.pp))
+    test_kl(q_a, p_a, () -> ElboDeriv.subtract_kl_a(mp.vp[s], mp.pp))
 
     # k
     q_k = Categorical(vs[ids.k[:, i]])
     p_k = Categorical(mp.pp.k[:, i])
-    function sklk(accum)
-        ElboDeriv.subtract_kl_k(i, mp.vp[s], mp.pp)
+    function sklk()
         @assert i == 1
-        accum.v /= vs[ids.a[i]]
+        ElboDeriv.subtract_kl_k(i, mp.vp[s], mp.pp) / vs[ids.a[i]]
     end
     test_kl(q_k, p_k, sklk)
 
@@ -70,19 +67,18 @@ function test_kl_divergence_values()
     mp.pp.c_cov[:,:,d,i] = diagm(vs[ids.c2[:, i]])
     q_c = MvNormal(vs[ids.c1[:, i]], diagm(vs[ids.c2[:, i]]))
     p_c = MvNormal(mp.pp.c_mean[:, d, i], mp.pp.c_cov[:, :, d, i])
-    function sklc(accum)
-        ElboDeriv.subtract_kl_c(d, i, mp.vp[s], mp.pp)
-        accum.v /= vs[ids.a[i]] * vs[ids.k[d, i]]
+    function sklc()
+        ElboDeriv.subtract_kl_c(d, i, mp.vp[s], mp.pp) /
+          vs[ids.a[i]] * vs[ids.k[d, i]]
     end
     test_kl(q_c, p_c, sklc)
 
     # r
     q_r = Normal(vs[ids.r1[i]], sqrt(vs[ids.r2[i]]))
     p_r = Normal(mp.pp.r_mean[i], sqrt(mp.pp.r_var[i]))
-    function sklr(accum)
-        ElboDeriv.subtract_kl_r(i, mp.vp[s], mp.pp)
+    function sklr()
         @assert i == 1
-        accum.v /= vs[ids.a[i]]
+        ElboDeriv.subtract_kl_r(i, mp.vp[s], mp.pp) / vs[ids.a[i]]
     end
     test_kl(q_r, p_r, sklr)
 
