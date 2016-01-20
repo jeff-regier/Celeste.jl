@@ -63,8 +63,7 @@ end
 @doc """
 Subtract the KL divergence from the prior for a
 """ ->
-function subtract_kl_a{NumType <: Number}(
-  vs::Vector{NumType}, pp::PriorParams)
+function subtract_kl_a{NumType <: Number}(vs::Vector{NumType}, pp::PriorParams)
     pp_kl_a = KL.gen_categorical_kl(pp.a)
     # (v, (d_a,)) = pp_kl_a(vs[ids.a])
     # accum.v -= v

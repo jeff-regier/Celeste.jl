@@ -250,7 +250,7 @@ function test_kappa_finding()
     get_kl_gal_c() = begin
         accum = zero_sensitive_float(CanonicalParams)
         for d in 1:D
-            ElboDeriv.subtract_kl_c!(d, 2, 1, mp, accum)
+            ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
         end
         -accum.v
     end
@@ -274,7 +274,7 @@ function test_kappa_finding()
         tiled_blob::TiledBlob, mp::ModelParams{NumType}) = begin
       accum = zero_sensitive_float(CanonicalParams, NumType)
       for d in 1:D
-          ElboDeriv.subtract_kl_c!(d, 2, 1, mp, accum)
+          ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
       end
       accum
     end
@@ -391,7 +391,7 @@ function test_color()
         tiled_blob::TiledBlob, mp::ModelParams{NumType}) = begin
       accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
       for s in 1:mp.S, i in 1:2, d in 1:D
-          ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
+          ElboDeriv.subtract_kl_c(d, i, s, mp, accum)
       end
       accum
     end

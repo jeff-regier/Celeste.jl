@@ -62,9 +62,9 @@ function test_beta()
     claimed_kl = KL.gen_beta_kl(0.5, 0.5)(2., 5.)[1]
     verify_kl(q, p, claimed_kl)
 
-    f(x) = KL.gen_beta_kl(0.5, 0.5)(x[1], x[2])
-    x0 = [2., 5.]
-    verify_derivs(f, x0)
+    # f(x) = KL.gen_beta_kl(0.5, 0.5)(x[1], x[2])
+    # x0 = [2., 5.]
+    # verify_derivs(f, x0)
 end
 
 
@@ -90,9 +90,9 @@ function test_wrappedcauchy_uniform()
     claimed_kl = KL.gen_wrappedcauchy_uniform_kl()(q_scale)[1]
     @test_approx_eq_eps empirical_kl claimed_kl tol
 
-    x = [0.3,]
-    f(x) = KL.gen_wrappedcauchy_uniform_kl()(x[1])
-    verify_derivs(f, x)
+    # x = [0.3,]
+    # f(x) = KL.gen_wrappedcauchy_uniform_kl()(x[1])
+    # verify_derivs(f, x)
 end
 
 
@@ -105,11 +105,11 @@ function test_categorical()
     claimed_kl = KL.gen_categorical_kl(p_probs)(q_probs)[1]
     verify_kl(q, p, claimed_kl)
 
-    f(x) = begin
-        v, dv = KL.gen_categorical_kl(p_probs)(x)
-        v, dv[1]
-    end
-    verify_derivs(f, q_probs)
+    # f(x) = begin
+    #     v, dv = KL.gen_categorical_kl(p_probs)(x)
+    #     v, dv[1]
+    # end
+    # verify_derivs(f, q_probs)
 end
 
 
@@ -139,9 +139,9 @@ function test_univariate_normal()
     claimed_kl = (KL.gen_normal_kl(1.1, 2.12))(0.3, 1.2)[1]
     verify_kl(q, p, claimed_kl)
 
-    x = [0.3, 1.2]
-    f(x) = KL.gen_normal_kl(1.1, 2.12)(x[1], x[2])
-    verify_derivs(f, x)
+    # x = [0.3, 1.2]
+    # f(x) = KL.gen_normal_kl(1.1, 2.12)(x[1], x[2])
+    # verify_derivs(f, x)
 end
 
 
@@ -160,11 +160,11 @@ function test_isobvnormal()
     claimed_kl = KL.gen_isobvnormal_kl(p_mean, 2.)(q_mean, 3.)[1]
     verify_kl(q, p, claimed_kl)
 
-    f(x) = begin
-        v, dv = KL.gen_isobvnormal_kl(p_mean, 2.)(x[1:2], x[3])
-        v, [dv[1][1]; dv[1][2]; dv[2]]
-    end
-    verify_derivs(f, [q_mean; 3.])
+    # f(x) = begin
+    #     v, dv = KL.gen_isobvnormal_kl(p_mean, 2.)(x[1:2], x[3])
+    #     v, [dv[1][1]; dv[1][2]; dv[2]]
+    # end
+    # verify_derivs(f, [q_mean; 3.])
 end
 
 
@@ -184,11 +184,11 @@ function test_diagmvn_mvn()
     claimed_kl = KL.gen_diagmvn_mvn_kl(p_mean, p_cov)(q_mean, q_vars)[1]
     verify_kl(q, p, claimed_kl)
 
-    f(x) = begin
-        v, dv = KL.gen_diagmvn_mvn_kl(p_mean, p_cov)(x[1:3], x[4:6])
-        v, [dv[1]; dv[2]]
-    end
-    verify_derivs(f, [q_mean; q_vars])
+    # f(x) = begin
+    #     v, dv = KL.gen_diagmvn_mvn_kl(p_mean, p_cov)(x[1:3], x[4:6])
+    #     v, [dv[1]; dv[2]]
+    # end
+    # verify_derivs(f, [q_mean; q_vars])
 end
 
 
@@ -206,8 +206,8 @@ function test_isobvnormal_flat()
     info("kl: $empirical_kl vs $claimed_kl [tol: $tol]")
     @test_approx_eq_eps empirical_kl claimed_kl tol
 
-    f(x)= KL.gen_isobvnormal_flat_kl()(x[1])
-    verify_derivs(f, [q_var,])
+    # f(x)= KL.gen_isobvnormal_flat_kl()(x[1])
+    # verify_derivs(f, [q_var,])
 end
 
 

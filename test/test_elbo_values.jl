@@ -43,6 +43,8 @@ function test_kl_divergence_values()
         exact_kl = -accum.v
         tol = 4 * std(empirical_kl_samples) / sqrt(sample_size)
         min_diff = 1e-2 * std(empirical_kl_samples) / sqrt(sample_size)
+
+        # TODO: fix this test, which assumes an in-place update.
         @test_approx_eq_eps empirical_kl exact_kl tol
     end
 
@@ -51,13 +53,13 @@ function test_kl_divergence_values()
     # a
     q_a = Bernoulli(vs[ids.a[2]])
     p_a = Bernoulli(mp.pp.a[2])
-    test_kl(q_a, p_a, (accum) -> ElboDeriv.subtract_kl_a!(s, mp, accum))
+    test_kl(q_a, p_a, (accum) -> ElboDeriv.subtract_kl_a(mp.vp[s], mp.pp))
 
     # k
     q_k = Categorical(vs[ids.k[:, i]])
     p_k = Categorical(mp.pp.k[:, i])
     function sklk(accum)
-        ElboDeriv.subtract_kl_k!(i, s, mp, accum)
+        ElboDeriv.subtract_kl_k(i, mp.vp[s], mp.pp)
         @assert i == 1
         accum.v /= vs[ids.a[i]]
     end
@@ -69,7 +71,7 @@ function test_kl_divergence_values()
     q_c = MvNormal(vs[ids.c1[:, i]], diagm(vs[ids.c2[:, i]]))
     p_c = MvNormal(mp.pp.c_mean[:, d, i], mp.pp.c_cov[:, :, d, i])
     function sklc(accum)
-        ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
+        ElboDeriv.subtract_kl_c(d, i, mp.vp[s], mp.pp)
         accum.v /= vs[ids.a[i]] * vs[ids.k[d, i]]
     end
     test_kl(q_c, p_c, sklc)
@@ -78,7 +80,7 @@ function test_kl_divergence_values()
     q_r = Normal(vs[ids.r1[i]], sqrt(vs[ids.r2[i]]))
     p_r = Normal(mp.pp.r_mean[i], sqrt(mp.pp.r_var[i]))
     function sklr(accum)
-        ElboDeriv.subtract_kl_r!(i, s, mp, accum)
+        ElboDeriv.subtract_kl_r(i, mp.vp[s], mp.pp)
         @assert i == 1
         accum.v /= vs[ids.a[i]]
     end
