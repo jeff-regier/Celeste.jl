@@ -5,42 +5,42 @@ using CelesteTypes
 using Compat
 
 
-function test_add_sensitive_floats()
-  # TODO: test the new Hessian functionality
-
-  S = 3
-  function generate_random_sf()
-      sf1 = zero_sensitive_float(CanonicalParams, Float64, S)
-      sf1.v = rand()
-      sf1.d = rand(size(sf1.d))
-      sf1.h = rand(size(sf1.h))
-      sf1
-  end
-
-  sf1 = generate_random_sf();
-  sf2 = generate_random_sf();
-
-  sf3 = sf1 + sf2
-  @test sf3.v == sf1.v + sf2.v
-  @test sf3.d == sf1.d + sf2.d
-  @test sf3.h == sf1.h + sf2.h
-
-  sf_bad_size = zero_sensitive_float(CanonicalParams, Float64, S + 1);
-  sf_bad_type = zero_sensitive_float(UnconstrainedParams, Float64, S);
-
-  @test_throws AssertionError sf_bad_size + sf1
-  @test_throws AssertionError sf_bad_type + sf1
-
-  function sf_equal(sf1::SensitiveFloat, sf2::SensitiveFloat)
-    sf1.v == sf2.v && sf2.d == sf2.d && sf1.h == sf2.h
-  end
-
-  # Check that recursive summing works.
-  sf_vector = [ generate_random_sf() for i=1:3 ]
-  @test sf_equal(sum(sf_vector), reduce(+, sf_vector))
-  @test sf_equal(sum(sf_vector), sf_vector[1] + sf_vector[2] + sf_vector[3])
-
-end
+# function test_add_sensitive_floats()
+#   # TODO: test the new Hessian functionality
+#
+#   S = 3
+#   function generate_random_sf()
+#       sf1 = zero_sensitive_float(CanonicalParams, Float64, S)
+#       sf1.v = rand()
+#       sf1.d = rand(size(sf1.d))
+#       sf1.h = rand(size(sf1.h))
+#       sf1
+#   end
+#
+#   sf1 = generate_random_sf();
+#   sf2 = generate_random_sf();
+#
+#   sf3 = sf1 + sf2
+#   @test sf3.v == sf1.v + sf2.v
+#   @test sf3.d == sf1.d + sf2.d
+#   @test sf3.h == sf1.h + sf2.h
+#
+#   sf_bad_size = zero_sensitive_float(CanonicalParams, Float64, S + 1);
+#   sf_bad_type = zero_sensitive_float(UnconstrainedParams, Float64, S);
+#
+#   @test_throws AssertionError sf_bad_size + sf1
+#   @test_throws AssertionError sf_bad_type + sf1
+#
+#   function sf_equal(sf1::SensitiveFloat, sf2::SensitiveFloat)
+#     sf1.v == sf2.v && sf2.d == sf2.d && sf1.h == sf2.h
+#   end
+#
+#   # Check that recursive summing works.
+#   sf_vector = [ generate_random_sf() for i=1:3 ]
+#   @test sf_equal(sum(sf_vector), reduce(+, sf_vector))
+#   @test sf_equal(sum(sf_vector), sf_vector[1] + sf_vector[2] + sf_vector[3])
+#
+# end
 
 
 function test_combine_sfs()
@@ -225,5 +225,5 @@ end
 
 
 test_combine_sfs()
-test_add_sensitive_floats()
+# test_add_sensitive_floats()
 test_add_sources_sf()
