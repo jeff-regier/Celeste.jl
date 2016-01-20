@@ -7,6 +7,7 @@ using Compat
 
 import OptimizeElbo
 
+
 println("Running optimization tests.")
 
 function verify_sample_star(vs, pos)
@@ -168,6 +169,8 @@ function test_single_source_optimization()
 
   f = ElboDeriv.elbo;
   omitted_ids = Int64[]
+
+  ElboDeriv.elbo_likelihood(tiled_blob, mp).v
 
   OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=true)
 

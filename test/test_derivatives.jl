@@ -66,46 +66,24 @@ function test_active_sources()
   tile = tiled_blob[b][1,1];
   h, w = 10, 10
 
-  function get_e_g{NumType}(mp::ModelParams{NumType})
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, tile.b);
-    sbs = ElboDeriv.SourceBrightness{NumType}[
-      ElboDeriv.SourceBrightness(mp.vp[s]) for s in 1:mp.S];
-
-    elbo_vars = ElboDeriv.ElboIntermediateVariables(
-      NumType, mp.S, length(mp.active_sources));
-
-    clear!(elbo_vars.E_G);
-    clear!(elbo_vars.var_G);
-    ElboDeriv.get_expected_pixel_brightness!(
-      elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile, mp)
-    elbo_vars.E_G, elbo_vars.var_G
-  end
-
   mp.active_sources = [1, 2]
-  E_G_12, var_G_12 = get_e_g(mp);
+  elbo_lik_12 = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
   mp.active_sources = [1]
-  E_G_1, var_G_1 = get_e_g(mp);
+  elbo_lik_1 = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
   mp.active_sources = [2]
-  E_G_2, var_G_2 = get_e_g(mp);
+  elbo_lik_2 = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
-  @test_approx_eq E_G_12.v E_G_1.v
-  @test_approx_eq E_G_12.v E_G_2.v
+  @test_approx_eq elbo_lik_12.v elbo_lik_1.v
+  @test_approx_eq elbo_lik_12.v elbo_lik_2.v
 
-  @test_approx_eq var_G_12.v (var_G_1.v + var_G_2.v)
-
-  @test_approx_eq E_G_12.d[:, 1] E_G_1.d[:, 1]
-  @test_approx_eq E_G_12.d[:, 2] E_G_2.d[:, 1]
-  @test_approx_eq var_G_12.d[:, 1] var_G_1.d[:, 1]
-  @test_approx_eq var_G_12.d[:, 2] var_G_2.d[:, 1]
+  @test_approx_eq elbo_lik_12.d[:, 1] elbo_lik_1.d[:, 1]
+  @test_approx_eq elbo_lik_12.d[:, 2] elbo_lik_2.d[:, 1]
 
   P = length(CanonicalParams)
-  @test_approx_eq E_G_12.h[1:P, 1:P] E_G_1.h
-  @test_approx_eq E_G_12.h[(1:P) + P, (1:P) + P] E_G_2.h
-  @test_approx_eq var_G_12.h[1:P, 1:P] var_G_1.h
-  @test_approx_eq var_G_12.h[(1:P) + P, (1:P) + P] var_G_2.h
-
+  @test_approx_eq elbo_lik_12.h[1:P, 1:P] elbo_lik_1.h
+  @test_approx_eq elbo_lik_12.h[(1:P) + P, (1:P) + P] elbo_lik_2.h
 end
 
 

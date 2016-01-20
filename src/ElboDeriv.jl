@@ -618,9 +618,9 @@ function combine_pixel_sources!{NumType <: Number}(
       add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa,
         calculate_hessian=calculate_hessian)
     else
-      # If the source is inactive, add only to the expected brightness, not
-      # the variance.
+      # If the sources is inactives, simply accumulate the values.
       elbo_vars.E_G.v += elbo_vars.E_G_s.v
+      elbo_vars.var_G.v += elbo_vars.var_G_s.v
     end
   end
 end

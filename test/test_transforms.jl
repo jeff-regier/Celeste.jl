@@ -24,9 +24,6 @@ function test_transform_sensitive_float()
 			:, setdiff(1:tiled_blob[b][1,1].w_width, keep_pixels)] = NaN;
 	end
 
-	transform = Transform.get_mp_transform(mp, loc_width=1.0);
-	elbo = ElboDeriv.elbo(tiled_blob, mp);
-	elbo_trans = transform.transform_sensitive_float(elbo, mp);
 
 	function wrap_elbo{NumType <: Number}(vp_free_vec::Vector{NumType})
 		vp_free_array = reshape(vp_free_vec, length(UnconstrainedParams), length(mp.active_sources))
@@ -35,12 +32,28 @@ function test_transform_sensitive_float()
 		#vp_free = convert(FreeVariationalParams{NumType}, vp_free)
 		Transform.array_to_free_vp!(vp_free_array, vp_free, Int64[])
 		mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
-		mp_local.vp = transform.to_vp(vp_free)
+		transform.to_vp!(vp_free, mp_local.vp)
 		elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
 		elbo.v
 	end
 
-	# The AD Hessian is super slow.
+	transform = Transform.get_mp_transform(mp, loc_width=1.0);
+	elbo = ElboDeriv.elbo(tiled_blob, mp);
+	elbo_trans = transform.transform_sensitive_float(elbo, mp);
+
+	free_vp_vec = reduce(vcat, transform.from_vp(mp.vp));
+	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
+	ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec);
+
+	@test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
+	@test_approx_eq ad_hess elbo_trans.h
+
+  # Test with a subset of sources.
+	mp.active_sources = [2]
+	transform = Transform.get_mp_transform(mp, loc_width=1.0);
+	elbo = ElboDeriv.elbo(tiled_blob, mp);
+	elbo_trans = transform.transform_sensitive_float(elbo, mp);
+
 	free_vp_vec = reduce(vcat, transform.from_vp(mp.vp));
 	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
 	ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec);
