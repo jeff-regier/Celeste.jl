@@ -344,31 +344,6 @@ function test_elbo_with_nan()
 end
 
 
-function test_elbo_likelihood_flavors()
-  # Test that the different argument combinations ot elbo_likelihood give the
-  # same answer.
-  blob, mp, body, tiled_blob = gen_sample_star_dataset(perturb=false);
-  original_accum = ElboDeriv.elbo_likelihood(
-    tiled_blob, mp; calculate_hessian=false);
-
-  param_msg = ElboDeriv.ParameterMessage(mp);
-  ElboDeriv.update_parameter_message!(mp, param_msg);
-
-  accum = zero_sensitive_float(CanonicalParams, Float64, mp.S);
-  for b = 1:5
-    ElboDeriv.elbo_likelihood!(
-      tiled_blob[b], mp, b, accum; calculate_hessian=false)
-  end
-  @test_approx_eq_eps(accum.v, original_accum.v, 1e-16)
-  @test_approx_eq_eps(accum.d, original_accum.d, 1e-16)
-
-  clear!(accum);
-  ElboDeriv.elbo_likelihood!(tiled_blob, param_msg, mp, accum);
-  @test_approx_eq_eps(accum.v, original_accum.v, 1e-16)
-  @test_approx_eq_eps(accum.d, original_accum.d, 1e-16)
-end
-
-
 function test_active_sources()
   blob, mp, three_bodies, tiled_blob = gen_three_body_dataset();
 
