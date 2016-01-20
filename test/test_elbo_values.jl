@@ -158,7 +158,8 @@ function test_that_galaxy_truth_is_most_likely()
     for bad_a in [.3, .5, .9]
         mp_a = deepcopy(mp);
         mp_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ];
-        bad_a = ElboDeriv.elbo_likelihood(tiled_blob, mp_a);
+        bad_a =
+          ElboDeriv.elbo_likelihood(tiled_blob, mp_a; calculate_derivs=false);
         @test best.v > bad_a.v;
     end
 
@@ -167,7 +168,8 @@ function test_that_galaxy_truth_is_most_likely()
             if !(h2 == 0 && w2 == 0)
                 mp_mu = deepcopy(mp)
                 mp_mu.vp[1][ids.u] += [h2 * .5, w2 * .5]
-                bad_mu = ElboDeriv.elbo_likelihood(tiled_blob, mp_mu)
+                bad_mu = ElboDeriv.elbo_likelihood(
+                  tiled_blob, mp_mu; calculate_derivs=false)
                 @test best.v > bad_mu.v
             end
         end
@@ -176,7 +178,8 @@ function test_that_galaxy_truth_is_most_likely()
     for bad_scale in [.8, 1.2]
         mp_r1 = deepcopy(mp)
         mp_r1.vp[1][ids.r1] += 2 * log(bad_scale)
-        bad_r1 = ElboDeriv.elbo_likelihood(tiled_blob, mp_r1)
+        bad_r1 = ElboDeriv.elbo_likelihood(
+          tiled_blob, mp_r1; calculate_derivs=false)
         @test best.v > bad_r1.v
     end
 
@@ -184,7 +187,8 @@ function test_that_galaxy_truth_is_most_likely()
         for bad_scale in [.8, 1.2]
             mp_bad = deepcopy(mp)
             mp_bad.vp[1][ids.(n)] *= bad_scale
-            bad_elbo = ElboDeriv.elbo_likelihood(tiled_blob, mp_bad)
+            bad_elbo = ElboDeriv.elbo_likelihood(
+              tiled_blob, mp_bad; calculate_derivs=false)
             @test best.v > bad_elbo.v
         end
     end
@@ -193,7 +197,8 @@ function test_that_galaxy_truth_is_most_likely()
         for delta in [-.3, .3]
             mp_c1 = deepcopy(mp)
             mp_c1.vp[1][ids.c1[b, 2]] += delta
-            bad_c1 = ElboDeriv.elbo_likelihood(tiled_blob, mp_c1)
+            bad_c1 = ElboDeriv.elbo_likelihood(
+              tiled_blob, mp_c1; calculate_derivs=false)
             @test best.v > bad_c1.v
         end
     end
@@ -295,12 +300,16 @@ function test_tiny_image_tiling()
   catalog = [sample_ce([100., 1], true),]
   catalog[1].star_fluxes = ones(5) * 1e5
 
-  elbo_vars = ElboDeriv.ElboIntermediateVariables(
-    Float64, mp.S, length(mp.active_sources), calculate_derivs=false);
-  sbs = ElboDeriv.load_source_brightnesses(mp, calculate_derivs=false);
 
   tiled_blob0, mp0 = ModelInit.initialize_celeste(
     fill(img, 5), catalog, patch_radius=Inf)
+
+  # These will be reused for all the subsequent tests because only
+  # the tile sources change.
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(
+    Float64, mp0.S, length(mp0.active_sources), calculate_derivs=false);
+  sbs = ElboDeriv.load_source_brightnesses(mp0, calculate_derivs=false);
+
   ElboDeriv.elbo_likelihood!(elbo_vars, tiled_blob0[3], mp0, 3, sbs);
   elbo_lik = deepcopy(elbo_vars.elbo);
 
@@ -359,8 +368,8 @@ function test_trim_source_tiles()
       sum([ sum(!Base.isnan(tile.pixels)) for tile in tiled_blob[b]]))
     s_tiles = SkyImages.find_source_tiles(s, b, mp)
     mp.active_sources = [s];
-    elbo_full = ElboDeriv.elbo(tiled_blob, mp);
-    elbo_trim = ElboDeriv.elbo(trimmed_tiled_blob, mp);
+    elbo_full = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
+    elbo_trim = ElboDeriv.elbo(trimmed_tiled_blob, mp; calculate_hessian=false);
     @test_approx_eq_eps(
       elbo_full.d[loc_ids, s] ./ elbo_trim.d[loc_ids, s],
       fill(1.0, length(loc_ids)), 3e-2)
@@ -381,6 +390,4 @@ test_that_galaxy_truth_is_most_likely()
 test_coadd_cat_init_is_most_likely()
 test_tiny_image_tiling()
 test_elbo_with_nan()
-test_elbo_likelihood_flavors()
-test_active_sources()
 test_trim_source_tiles()
