@@ -99,48 +99,47 @@ function test_objective_wrapper()
     # @test_approx_eq ad_grad[:] w_grad
 end
 
-function test_objective_hessians()
-    blob, mp, bodies, tiled_blob = SampleData.gen_three_body_dataset();
-    # Change the tile size.
-    tiled_blob, mp = ModelInit.initialize_celeste(
-      blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
-    mp.active_sources = Int64[2, 3]
-    trans = Transform.get_mp_transform(mp, loc_width=1.0);
-    omitted_ids = Int64[];
-    kept_ids = setdiff(1:length(ids_free), omitted_ids);
-    x = trans.vp_to_array(mp.vp, omitted_ids);
-
-    wrapper =
-      OptimizeElbo.ObjectiveWrapperFunctions(
-        mp -> ElboDeriv.elbo(tiled_blob, mp),
-        mp, trans, kept_ids, omitted_ids);
-
-    # Test that the Hessian works in its various flavors.
-    println("Testing autodiff Hessian...")
-    w_hess = zeros(Float64, length(x), length(x));
-    wrapper.f_ad_hessian!(x[:], w_hess);
-
-    hess_i, hess_j, hess_val = wrapper.f_ad_hessian_sparse(x[:]);
-    w_hess_sparse =
-      OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
-    @test_approx_eq(w_hess, full(w_hess_sparse))
-
-    println("Testing slow autodiff Hessian...")
-    wrapper_slow_hess =
-      OptimizeElbo.ObjectiveWrapperFunctions(
-        mp -> ElboDeriv.elbo(tiled_blob, mp),
-        mp, trans, kept_ids, omitted_ids, fast_hessian=false);
-
-    slow_w_hess = zeros(Float64, length(x), length(x));
-    wrapper_slow_hess.f_ad_hessian!(x[:], slow_w_hess);
-    @test_approx_eq(slow_w_hess, w_hess)
-
-    hess_i, hess_j, hess_val = wrapper_slow_hess.f_ad_hessian_sparse(x[:]);
-    slow_w_hess_sparse =
-      OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
-    @test_approx_eq(slow_w_hess, full(slow_w_hess_sparse))
-end
-
+# function test_objective_hessians()
+#     blob, mp, bodies, tiled_blob = SampleData.gen_three_body_dataset();
+#     # Change the tile size.
+#     tiled_blob, mp = ModelInit.initialize_celeste(
+#       blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
+#     mp.active_sources = Int64[2, 3]
+#     trans = Transform.get_mp_transform(mp, loc_width=1.0);
+#     omitted_ids = Int64[];
+#     kept_ids = setdiff(1:length(ids_free), omitted_ids);
+#     x = trans.vp_to_array(mp.vp, omitted_ids);
+#
+#     wrapper =
+#       OptimizeElbo.ObjectiveWrapperFunctions(
+#         mp -> ElboDeriv.elbo(tiled_blob, mp),
+#         mp, trans, kept_ids, omitted_ids);
+#
+#     # Test that the Hessian works in its various flavors.
+#     println("Testing autodiff Hessian...")
+#     w_hess = zeros(Float64, length(x), length(x));
+#     wrapper.f_ad_hessian!(x[:], w_hess);
+#
+#     hess_i, hess_j, hess_val = wrapper.f_ad_hessian_sparse(x[:]);
+#     w_hess_sparse =
+#       OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+#     @test_approx_eq(w_hess, full(w_hess_sparse))
+#
+#     println("Testing slow autodiff Hessian...")
+#     wrapper_slow_hess =
+#       OptimizeElbo.ObjectiveWrapperFunctions(
+#         mp -> ElboDeriv.elbo(tiled_blob, mp),
+#         mp, trans, kept_ids, omitted_ids, fast_hessian=false);
+#
+#     slow_w_hess = zeros(Float64, length(x), length(x));
+#     wrapper_slow_hess.f_ad_hessian!(x[:], slow_w_hess);
+#     @test_approx_eq(slow_w_hess, w_hess)
+#
+#     hess_i, hess_j, hess_val = wrapper_slow_hess.f_ad_hessian_sparse(x[:]);
+#     slow_w_hess_sparse =
+#       OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+#     @test_approx_eq(slow_w_hess, full(slow_w_hess_sparse))
+# end
 
 
 function test_star_optimization()
@@ -453,7 +452,7 @@ end
 
 test_quadratic_optimization()
 test_objective_wrapper()
-test_objective_hessians()
+#test_objective_hessians()
 test_star_optimization()
 test_galaxy_optimization()
 test_single_source_optimization()

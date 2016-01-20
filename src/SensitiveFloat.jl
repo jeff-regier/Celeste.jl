@@ -77,11 +77,12 @@ Factor out the hessian part of combine_sfs! to help the compiler.
 
 TODO: I think this is a red herring and this can be put back in
 """ ->
-function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
-    sf1::SensitiveFloat{ParamType, NumType},
-    sf2::SensitiveFloat{ParamType, NumType},
-    sf_result::SensitiveFloat{ParamType, NumType},
-    g_d::Vector{NumType}, g_h::Matrix{NumType})
+function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet,
+                              T1 <: Number, T2 <: Number, T3 <: Number}(
+    sf1::SensitiveFloat{ParamType, T1},
+    sf2::SensitiveFloat{ParamType, T1},
+    sf_result::SensitiveFloat{ParamType, T1},
+    g_d::Vector{T2}, g_h::Matrix{T3})
 
   p1, p2 = size(sf_result.h)
   @assert size(sf_result.h) == size(sf1.h) == size(sf2.h)
@@ -111,11 +112,12 @@ each evaluated at (sf1, sf2).
 The result is stored in sf_result.  The order is done in such a way that
 it can overwrite sf1 or sf2 and still be accurate.
 """ ->
-function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
-    sf1::SensitiveFloat{ParamType, NumType},
-    sf2::SensitiveFloat{ParamType, NumType},
-    sf_result::SensitiveFloat{ParamType, NumType},
-    v::NumType, g_d::Vector{NumType}, g_h::Matrix{NumType};
+function combine_sfs!{ParamType <: CelesteTypes.ParamSet,
+                      T1 <: Number, T2 <: Number, T3 <: Number}(
+    sf1::SensitiveFloat{ParamType, T1},
+    sf2::SensitiveFloat{ParamType, T1},
+    sf_result::SensitiveFloat{ParamType, T1},
+    v::T1, g_d::Vector{T2}, g_h::Matrix{T3};
     calculate_hessian::Bool=true)
 
   # TODO: time consuming **************
@@ -146,10 +148,11 @@ each evaluated at (sf1, sf2).
 
 The result is stored in sf1.
 """ ->
-function combine_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
-    sf1::SensitiveFloat{ParamType, NumType},
-    sf2::SensitiveFloat{ParamType, NumType},
-    v::NumType, g_d::Vector{NumType}, g_h::Matrix{NumType};
+function combine_sfs!{ParamType <: CelesteTypes.ParamSet,
+                      T1 <: Number, T2 <: Number, T3 <: Number}(
+    sf1::SensitiveFloat{ParamType, T1},
+    sf2::SensitiveFloat{ParamType, T1},
+    v::T1, g_d::Vector{T2}, g_h::Matrix{T3};
     calculate_hessian::Bool=true)
 
   combine_sfs!(sf1, sf2, sf1, v, g_d, g_h, calculate_hessian=calculate_hessian)
