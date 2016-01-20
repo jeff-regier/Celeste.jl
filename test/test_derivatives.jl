@@ -20,6 +20,25 @@ function trim_tiles!(tiled_blob::TiledBlob, keep_pixels)
 end
 
 
+
+
+blob, mp, body, tiled_blob = gen_two_body_dataset();
+keep_pixels = 10:11
+trim_tiles!(tiled_blob, keep_pixels)
+
+elbo = ElboDeriv.elbo(tiled_blob, mp);
+
+elbo_noderiv = ElboDeriv.elbo(tiled_blob, mp; calculate_derivs=false);
+@test_approx_eq elbo.v elbo_noderiv.v
+@test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
+@test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
+
+elbo_nohess = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
+@test_approx_eq elbo.v elbo_nohess.v
+@test_approx_eq elbo.d elbo_nohess.d
+
+
+
 function test_active_sources()
   # Test that the derivatives of the expected brightnesses partition in
   # active_sources.
@@ -72,7 +91,6 @@ function test_active_sources()
   @test_approx_eq var_G_12.h[(1:P) + P, (1:P) + P] var_G_2.h
 
 end
-
 
 
 function test_elbo()

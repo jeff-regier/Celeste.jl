@@ -95,18 +95,18 @@ with respect to x and sigma.
 Args:
   - elbo_vars: A data structure with pre-allocated intermediate variables.
   - bvn: A bivariate normal component to get derivatives for.
-  - calculate_sigma_derivs: Whether to also calculate derivatives with
+  - calculate_sigma_hessian: Whether to also calculate derivatives with
       respect to sigma.  If false, only calculate x derivatives.
 """ ->
 function get_bvn_derivs!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     bvn::BvnComponent{NumType}, x::Vector{Float64},
     calculate_x_hess::Bool,
-    calculate_sigma_derivs::Bool)
+    calculate_sigma_hessian::Bool)
 
   py1, py2, f_pre = eval_bvn_pdf(bvn, x);
   get_bvn_derivs!(
-    elbo_vars, py1, py2, f_pre, bvn, calculate_x_hess, calculate_sigma_derivs)
+    elbo_vars, py1, py2, f_pre, bvn, calculate_x_hess, calculate_sigma_hessian)
 end
 
 
@@ -127,7 +127,7 @@ function get_bvn_derivs!{NumType <: Number}(
     py1::NumType, py2::NumType, f_pre::NumType,
     bvn::BvnComponent{NumType},
     calculate_x_hess::Bool,
-    calculate_sigma_derivs::Bool)
+    calculate_sigma_hessian::Bool)
 
   # Gradient with respect to x.
   bvn_x_d = elbo_vars.bvn_x_d
@@ -146,13 +146,14 @@ function get_bvn_derivs!{NumType <: Number}(
     bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1 ,2]
   end
 
-  if calculate_sigma_derivs
-    # The first term is the derivative of -0.5 * x' Sigma^{-1} x
-    # The second term is the derivative of -0.5 * log|Sigma|
-    bvn_sig_d = elbo_vars.bvn_sig_d
-    bvn_sig_d[1] = 0.5 * py1 * py1 - 0.5 * bvn.precision[1, 1]
-    bvn_sig_d[2] = py1 * py2             - bvn.precision[1, 2]
-    bvn_sig_d[3] = 0.5 * py2 * py2 - 0.5 * bvn.precision[2, 2]
+  # The first term is the derivative of -0.5 * x' Sigma^{-1} x
+  # The second term is the derivative of -0.5 * log|Sigma|
+  bvn_sig_d = elbo_vars.bvn_sig_d
+  bvn_sig_d[1] = 0.5 * py1 * py1 - 0.5 * bvn.precision[1, 1]
+  bvn_sig_d[2] = py1 * py2             - bvn.precision[1, 2]
+  bvn_sig_d[3] = 0.5 * py2 * py2 - 0.5 * bvn.precision[2, 2]
+
+  if calculate_sigma_hessian
 
     # Hessian calculation for terms containing sigma.
 
