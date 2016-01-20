@@ -274,7 +274,7 @@ function test_convert_dual_mp()
 
   # Test the variational parameters.
   for s in 1:mp.S
-    @test_approx_eq DualNumbers.real(mp_dual.vp[s]) mp.vp[s]
+    @test_approx_eq DualNumbers.realpart(mp_dual.vp[s]) mp.vp[s]
     @test_approx_eq DualNumbers.epsilon(mp_dual.vp[s]) fill(0.0, length(mp.vp[s]))
   end
 
