@@ -198,14 +198,10 @@ function get_bvn_derivs!{NumType <: Number}(
       bvn_xsig_h[x_ind, 3] = py2 * bvn.precision[2, x_ind]
     end
   end
-
-  #v
 end
 
 
-
-
-###############################
+##############################
 
 @doc """
 The derivatives of sigma with respect to the galaxy shape parameters.  In
