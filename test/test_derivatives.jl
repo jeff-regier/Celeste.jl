@@ -11,90 +11,84 @@ import SloanDigitalSkySurvey: SDSS
 println("Running hessian tests.")
 
 function test_real_image()
-using PyPlot
+  using PyPlot
 
-field_dir = joinpath(dat_dir, "sample_field")
-run_num = "003900"
-camcol_num = "6"
-field_num = "0269"
+  field_dir = joinpath(dat_dir, "sample_field")
+  run_num = "003900"
+  camcol_num = "6"
+  field_num = "0269"
 
-blob = SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
-cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
-cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
-tiled_blob, mp =
-  ModelInit.initialize_celeste(blob, cat_entries, fit_psf=false, tile_width=20);
+  blob = SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
+  cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+  cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
+  tiled_blob, mp =
+    ModelInit.initialize_celeste(blob, cat_entries, fit_psf=false, tile_width=20);
 
-# #cat_df[ cat_df[:psfflux_r] .> 1000, :]
+  # #cat_df[ cat_df[:psfflux_r] .> 1000, :]
 
+  objid = "1237662226208063499"
+  s_original = findfirst(mp.objids .== objid)
+  mp.active_sources = [ s_original ]
 
-
-
-
-
-objid = "1237662226208063499"
-s_original = findfirst(mp.objids .== objid)
-mp.active_sources = [ s_original ]
-
-relevant_sources = Int64[]
-for b = 1:5, tile_sources in mp.tile_sources[b]
-  if length(intersect(mp.active_sources, tile_sources)) > 0
-    println("Found sources in band $b: ", tile_sources)
-    relevant_sources = union(relevant_sources, tile_sources);
+  relevant_sources = Int64[]
+  for b = 1:5, tile_sources in mp.tile_sources[b]
+    if length(intersect(mp.active_sources, tile_sources)) > 0
+      println("Found sources in band $b: ", tile_sources)
+      relevant_sources = union(relevant_sources, tile_sources);
+    end
   end
-end
 
-trimmed_mp = ModelInit.initialize_model_params(
-  tiled_blob, blob, cat_entries[relevant_sources], fit_psf=true);
-original_tiled_sources = deepcopy(trimmed_mp.tile_sources);
+  trimmed_mp = ModelInit.initialize_model_params(
+    tiled_blob, blob, cat_entries[relevant_sources], fit_psf=true);
+  original_tiled_sources = deepcopy(trimmed_mp.tile_sources);
 
-s = findfirst(trimmed_mp.objids .== objid)
-trimmed_mp.active_sources = [ s ]
+  s = findfirst(trimmed_mp.objids .== objid)
+  trimmed_mp.active_sources = [ s ]
 
-trimmed_tiled_blob = Array(Array{ImageTile}, 5);
-for b=1:5
-  hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
-    find([ s in sources for sources in original_tiled_sources[b]]))
+  trimmed_tiled_blob = Array(Array{ImageTile}, 5);
+  for b=1:5
+    hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
+      find([ s in sources for sources in original_tiled_sources[b]]))
 
-  hh_range = minimum(hh_vec):maximum(hh_vec);
-  ww_range = minimum(ww_vec):maximum(ww_vec);
-  trimmed_tiled_blob[b] = tiled_blob[b][hh_range, ww_range];
-  trimmed_mp.tile_sources[b] =
-    deepcopy(original_tiled_sources[b][hh_range, ww_range]);
-end
-trimmed_tiled_blob = convert(TiledBlob, trimmed_tiled_blob);
-
-# Limit to very few pixels so that the autodiff is reasonably fast.
-very_trimmed_tiled_blob = ModelInit.trim_source_tiles(
-  s, trimmed_mp, trimmed_tiled_blob, noise_fraction=10.);
-
-#matshow(SkyImages.stitch_object_tiles(s, 3, trimmed_mp, very_trimmed_tiled_blob))
-
-
-elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, trimmed_mp);
-
-function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
-  vp_array =
-    reshape(vp_vec, length(CanonicalParams), length(trimmed_mp.active_sources))
-  mp_local = CelesteTypes.forward_diff_model_params(NumType, trimmed_mp);
-  for sa = 1:length(trimmed_mp.active_sources)
-    mp_local.vp[trimmed_mp.active_sources[sa]] = vp_array[:, sa]
+    hh_range = minimum(hh_vec):maximum(hh_vec);
+    ww_range = minimum(ww_vec):maximum(ww_vec);
+    trimmed_tiled_blob[b] = tiled_blob[b][hh_range, ww_range];
+    trimmed_mp.tile_sources[b] =
+      deepcopy(original_tiled_sources[b][hh_range, ww_range]);
   end
-  elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, mp_local, calculate_derivs=false)
-  elbo.v
-end
+  trimmed_tiled_blob = convert(TiledBlob, trimmed_tiled_blob);
 
-vp_vec = trimmed_mp.vp[s];
-ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
-ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
+  # Limit to very few pixels so that the autodiff is reasonably fast.
+  very_trimmed_tiled_blob = ModelInit.trim_source_tiles(
+    s, trimmed_mp, trimmed_tiled_blob, noise_fraction=10.);
 
-hcat(ad_grad, elbo.d[:, 1])
-@test_approx_eq ad_grad elbo.d[:, 1]
-@test_approx_eq ad_hess elbo.h
+  #matshow(SkyImages.stitch_object_tiles(s, 3, trimmed_mp, very_trimmed_tiled_blob))
 
 
+  elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, trimmed_mp);
 
+  function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
+    vp_array =
+      reshape(vp_vec, length(CanonicalParams), length(trimmed_mp.active_sources))
+    mp_local = CelesteTypes.forward_diff_model_params(NumType, trimmed_mp);
+    for sa = 1:length(trimmed_mp.active_sources)
+      mp_local.vp[trimmed_mp.active_sources[sa]] = vp_array[:, sa]
+    end
+    elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, mp_local, calculate_derivs=false)
+    elbo.v
+  end
 
+  vp_vec = trimmed_mp.vp[s];
+  ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
+  ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
 
+  # Sanity check
+  ad_v = wrap_elbo(vp_vec);
+  @test_approx_eq ad_v elbo.v
+
+  hcat(ad_grad, elbo.d[:, 1])
+  @test_approx_eq ad_grad elbo.d[:, 1]
+  @test_approx_eq ad_hess elbo.h
 
 end
 
