@@ -444,6 +444,58 @@ Returns:
   be the same as the original tiles but with NaN where the expected source
   electron counts are below <noise_fraction> of the noise at that pixel.
 """ ->
+# function trim_source_tiles(
+#     s::Int64, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
+#     noise_fraction::Float64=0.1)
+#
+#   trimmed_tiled_blob =
+#     Array{ImageTile, 2}[ Array(ImageTile, size(tiled_blob[b])...) for
+#                          b=1:length(tiled_blob)];
+#
+#   for b = 1:5
+#     println("Processing band $b...")
+#
+#     H, W = size(tiled_blob[b])
+#     @assert size(mp.tile_sources[b]) == size(tiled_blob[b])
+#     for h=1:H, w=1:W
+#       if s in mp.tile_sources[b][h, w]
+#         tile = deepcopy(tiled_blob[b][h, w]);
+#         println("Tiles $h $w has source $s")
+#         pred_tile_pixels =
+#           ElboDeriv.tile_predicted_image(tile, mp, include_epsilon=false);
+#         if tile.constant_background
+#           dim_pixels = pred_tile_pixels .<
+#             (tile.iota * tile.epsilon .* noise_fraction)
+#           tile.pixels[dim_pixels] = NaN
+#         else
+#           dim_pixels =
+#             pred_tile_pixels .<
+#               (tile.iota_vec .* tile.epsilon_mat .* noise_fraction)
+#           tile.pixels[dim_pixels] = NaN
+#         end
+#         trimmed_tiled_blob[b][h, w] = tile;
+#       else
+#         # This tile does not contain the source.  Replace the tile with a
+#         # pseudo-tile that does not have any data in it.
+#         # TODO: Make a TiledBlob simply an array of an array of tiles
+#         # rather than a 2d array to avoid this hack.
+#         tile = tiled_blob[b][h, w];
+#         empty_tile = ImageTile(tile.hh, tile.ww, tile.b,
+#                                tile.h_range, tile.w_range,
+#                                tile.h_width, tile.w_width,
+#                                Array(Float64, 0, 0), tile.constant_background,
+#                                tile.epsilon, Array(Float64, 0, 0), tile.iota,
+#                                Array(Float64, 0))
+#
+#         trimmed_tiled_blob[b][h, w] = empty_tile;
+#       end
+#     end
+#   end
+#   println("Done trimming.")
+#
+#   trimmed_tiled_blob
+# end
+#
 function trim_source_tiles(
     s::Int64, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
     noise_fraction::Float64=0.1)
@@ -454,21 +506,29 @@ function trim_source_tiles(
 
   for b = 1:5
     println("Processing band $b...")
+
     H, W = size(tiled_blob[b])
     @assert size(mp.tile_sources[b]) == size(tiled_blob[b])
     for h=1:H, w=1:W
-      tile = deepcopy(tiled_blob[b][h, w]);
-      if s in mp.tile_sources[b][h, w]
-        pred_tile =
+      tile = tiled_blob[b][h, w];
+      has_source = s in mp.tile_sources[b][h, w]
+      bright_pixels = Bool[];
+      if has_source
+        println("Tiles $h $w has source $s")
+        pred_tile_pixels =
           ElboDeriv.tile_predicted_image(tile, mp, include_epsilon=false);
         if tile.constant_background
-          dim_pixels = pred_tile .< (tile.iota * tile.epsilon .* noise_fraction)
-          tile.pixels[dim_pixels] = NaN
+          bright_pixels = pred_tile_pixels .>
+            (tile.iota * tile.epsilon .* noise_fraction)
         else
-          dim_pixels =
-            pred_tile .< (tile.iota_vec .* tile.epsilon_mat .* noise_fraction)
-          tile.pixels[dim_pixels] = NaN
+          bright_pixels = pred_tile_pixels .>
+              (tile.iota_vec .* tile.epsilon_mat .* noise_fraction)
         end
+      end
+
+      if any(bright_pixels) && has_source
+        tile_copy = deepcopy(tiled_blob[b][h, w]);
+        tile_copy.pixels[!bright_pixels] = NaN
         trimmed_tiled_blob[b][h, w] = tile;
       else
         # This tile does not contain the source.  Replace the tile with a
@@ -481,10 +541,12 @@ function trim_source_tiles(
                                Array(Float64, 0, 0), tile.constant_background,
                                tile.epsilon, Array(Float64, 0, 0), tile.iota,
                                Array(Float64, 0))
+
         trimmed_tiled_blob[b][h, w] = empty_tile;
       end
     end
   end
+  println("Done trimming.")
 
   trimmed_tiled_blob
 end

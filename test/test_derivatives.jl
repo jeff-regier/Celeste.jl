@@ -5,7 +5,115 @@ using SampleData
 import Synthetic
 import DualNumbers
 
+import SkyImages
+import SloanDigitalSkySurvey: SDSS
+
 println("Running hessian tests.")
+
+
+using PyPlot
+
+field_dir = joinpath(dat_dir, "sample_field")
+run_num = "003900"
+camcol_num = "6"
+field_num = "0269"
+
+blob = SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
+cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
+tiled_blob, mp =
+  ModelInit.initialize_celeste(blob, cat_entries, patch_radius=1e-6,
+                               fit_psf=false, tile_width=20);
+
+#cat_df[ cat_df[:psfflux_r] .> 1000, :]
+
+objid = "1237662226208063499"
+s = findfirst(mp.objids .== objid)
+mp.active_sources = [ s ]
+
+# Limit to very few pixels so that the autodiff is reasonably fast.
+trimmed_tiled_blob = ModelInit.trim_source_tiles(
+  s, mp, tiled_blob, noise_fraction=0.99);
+
+
+
+#matshow(SkyImages.stitch_object_tiles(s, 3, mp, trimmed_tiled_blob))
+
+elbo = ElboDeriv.elbo(trimmed_tiled_blob, mp);
+
+function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
+  vp_array = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
+  mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
+  for sa = 1:length(mp.active_sources)
+    mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
+  end
+  elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
+  elbo.v
+end
+
+vp_vec = mp.vp[s];
+ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
+ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
+
+hcat(ad_grad, elbo.d[:, 1])
+@test_approx_eq ad_grad elbo.d[:, 1]
+@test_approx_eq ad_hess elbo.h
+
+
+
+
+
+
+
+objid = "1237662226208063499"
+s_original = findfirst(mp.objids .== objid)
+mp.active_sources = [ s_original ]
+
+relevant_sources = Int64[]
+for b = 1:5, tile_sources in mp.tile_sources[b]
+  if length(intersect(mp.active_sources, tile_sources)) > 0
+    println(tile_sources)
+    relevant_sources = union(relevant_sources, tile_sources);
+  end
+end
+
+trimmed_mp = ModelInit.initialize_model_params(
+  tiled_blob, blob, cat_entries[relevant_sources], fit_psf=true);
+original_tiled_sources = deepcopy(trimmed_mp.tile_sources);
+
+s = findfirst(trimmed_mp.objids .== objid)
+trimmed_mp.active_sources = [ s ]
+
+trimmed_tiled_blob = Array(Array{ImageTile}, 5);
+for b=1:5
+  hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
+    find([ s in sources for sources in original_tiled_sources[b]]))
+
+  hh_range = minimum(hh_vec):maximum(hh_vec);
+  ww_range = minimum(ww_vec):maximum(ww_vec);
+  trimmed_tiled_blob[b] = tiled_blob[b][hh_range, ww_range];
+  trimmed_mp.tile_sources[b] =
+    deepcopy(original_tiled_sources[b][hh_range, ww_range]);
+
+  for hh in 1:size(trimmed_tiled_blob[b])[1], ww in 1:size(trimmed_tiled_blob[b])[2]
+    trimmed_tiled_blob[b][hh, ww].hh = hh
+    trimmed_tiled_blob[b][hh, ww].hh = ww
+  end
+end
+trimmed_tiled_blob = convert(TiledBlob, trimmed_tiled_blob);
+
+# Limit to very few pixels so that the autodiff is reasonably fast.
+trimmed_tiled_blob2 = ModelInit.trim_source_tiles(
+  s, trimmed_mp, trimmed_tiled_blob, noise_fraction=0.01);
+
+matshow(SkyImages.stitch_object_tiles(s, 3, trimmed_mp, trimmed_tiled_blob2))
+
+
+# function test_real_image_derivatives()
+#
+#
+# end
+
 
 
 function test_dual_numbers()

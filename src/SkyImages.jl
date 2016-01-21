@@ -21,6 +21,7 @@ export convert_gmm_to_celeste, get_psf_at_point
 export convert_catalog_to_celeste, load_stamp_catalog
 export break_blob_into_tiles, break_image_into_tiles
 export get_local_sources
+export stitch_object_tiles
 
 
 @doc """
