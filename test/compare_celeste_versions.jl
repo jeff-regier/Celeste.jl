@@ -284,6 +284,7 @@ end
 function our_expected_pixel_brightness()
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
   tile = tiled_blob[b][1,1];
+  tile_sources = mp.tile_sources[b][1,1];
 
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
   sbs = ElboDeriv.load_source_brightnesses(mp);
@@ -294,7 +295,7 @@ function our_expected_pixel_brightness()
   this_pixel = tile.pixels[h, w]
   ElboDeriv.get_expected_pixel_brightness!(
     elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-    mp, include_epsilon=true)
+    mp, tile_sources, include_epsilon=true)
 
   deepcopy(elbo_vars.E_G), deepcopy(elbo_vars.var_G)
 end
@@ -354,6 +355,7 @@ end
 function our_accum_pixel_ret()
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
   tile = tiled_blob[b][1,1];
+  tile_sources = mp.tile_sources[b][1,1];
 
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
   sbs = ElboDeriv.load_source_brightnesses(mp);
@@ -366,7 +368,7 @@ function our_accum_pixel_ret()
   this_pixel = tile.pixels[h, w]
   ElboDeriv.get_expected_pixel_brightness!(
     elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-    mp, include_epsilon=true)
+    mp, tile_sources, include_epsilon=true)
 
 
   println(elbo_vars.elbo.v)
