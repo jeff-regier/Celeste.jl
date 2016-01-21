@@ -25,31 +25,6 @@ tiled_blob, mp =
   ModelInit.initialize_celeste(blob, cat_entries, fit_psf=false, tile_width=20);
 
 # #cat_df[ cat_df[:psfflux_r] .> 1000, :]
-#
-# objid = "1237662226208063499"
-# s = findfirst(mp.objids .== objid)
-# mp.active_sources = [ s ]
-#
-# elbo = ElboDeriv.elbo(trimmed_tiled_blob, mp);
-#
-# function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
-#   vp_array = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
-#   mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
-#   for sa = 1:length(mp.active_sources)
-#     mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
-#   end
-#   elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
-#   elbo.v
-# end
-#
-# vp_vec = mp.vp[s];
-# ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
-# ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
-#
-# hcat(ad_grad, elbo.d[:, 1])
-# @test_approx_eq ad_grad elbo.d[:, 1]
-# @test_approx_eq ad_hess elbo.h
-#
 
 
 
@@ -89,10 +64,37 @@ end
 trimmed_tiled_blob = convert(TiledBlob, trimmed_tiled_blob);
 
 # Limit to very few pixels so that the autodiff is reasonably fast.
-trimmed_tiled_blob2 = ModelInit.trim_source_tiles(
-  s, trimmed_mp, trimmed_tiled_blob, noise_fraction=0.01);
+very_trimmed_tiled_blob = ModelInit.trim_source_tiles(
+  s, trimmed_mp, trimmed_tiled_blob, noise_fraction=10.);
 
-matshow(SkyImages.stitch_object_tiles(s, 3, trimmed_mp, trimmed_tiled_blob2))
+#matshow(SkyImages.stitch_object_tiles(s, 3, trimmed_mp, very_trimmed_tiled_blob))
+
+
+elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, trimmed_mp);
+
+function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
+  vp_array =
+    reshape(vp_vec, length(CanonicalParams), length(trimmed_mp.active_sources))
+  mp_local = CelesteTypes.forward_diff_model_params(NumType, trimmed_mp);
+  for sa = 1:length(trimmed_mp.active_sources)
+    mp_local.vp[trimmed_mp.active_sources[sa]] = vp_array[:, sa]
+  end
+  elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, mp_local, calculate_derivs=false)
+  elbo.v
+end
+
+vp_vec = trimmed_mp.vp[s];
+ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
+ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
+
+hcat(ad_grad, elbo.d[:, 1])
+@test_approx_eq ad_grad elbo.d[:, 1]
+@test_approx_eq ad_hess elbo.h
+
+
+
+
+
 
 end
 

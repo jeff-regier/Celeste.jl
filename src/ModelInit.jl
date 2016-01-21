@@ -463,9 +463,9 @@ function trim_source_tiles(
       has_source = s in tile_sources
       bright_pixels = Bool[];
       if has_source
-        println("Tiles $h $w has source $s")
+        #println("Tiles $h $w has source $s")
         pred_tile_pixels =
-          ElboDeriv.tile_predicted_image(tile, mp, tile_sources,
+          ElboDeriv.tile_predicted_image(tile, mp, [ s ],
                                          include_epsilon=false);
         if tile.constant_background
           bright_pixels = pred_tile_pixels .>
@@ -482,7 +482,7 @@ function trim_source_tiles(
       if has_source
         tile_copy = deepcopy(tiled_blob[b][h, w]);
         tile_copy.pixels[!bright_pixels] = NaN
-        trimmed_tiled_blob[b][h, w] = tile;
+        trimmed_tiled_blob[b][h, w] = tile_copy;
       else
         # This tile does not contain the source.  Replace the tile with a
         # pseudo-tile that does not have any data in it.
