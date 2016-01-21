@@ -209,8 +209,12 @@ function test_two_body_optimization_newton()
       elbo_function, tiled_blob, mp_bfgs, trans,
       omitted_ids=omitted_ids, verbose=true);
 
-    newton_image = ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], mp_newton);
-    bfgs_image = ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], mp_bfgs);
+    newton_image =
+      ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], mp_newton,
+                                     mp_newton.tile_sources[3][1,1]);
+    bfgs_image =
+      ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], mp_bfgs,
+                                     mp_bfgs.tile_sources[3][1,1]);
     original_image = tiled_blob[3][1,1].pixels;
 
     PyPlot.figure()

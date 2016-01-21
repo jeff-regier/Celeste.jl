@@ -10,7 +10,7 @@ import SloanDigitalSkySurvey: SDSS
 
 println("Running hessian tests.")
 
-
+function test_real_image()
 using PyPlot
 
 field_dir = joinpath(dat_dir, "sample_field")
@@ -22,43 +22,34 @@ blob = SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
 cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
 cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
 tiled_blob, mp =
-  ModelInit.initialize_celeste(blob, cat_entries, patch_radius=1e-6,
-                               fit_psf=false, tile_width=20);
+  ModelInit.initialize_celeste(blob, cat_entries, fit_psf=false, tile_width=20);
 
-#cat_df[ cat_df[:psfflux_r] .> 1000, :]
-
-objid = "1237662226208063499"
-s = findfirst(mp.objids .== objid)
-mp.active_sources = [ s ]
-
-# Limit to very few pixels so that the autodiff is reasonably fast.
-trimmed_tiled_blob = ModelInit.trim_source_tiles(
-  s, mp, tiled_blob, noise_fraction=0.99);
-
-
-
-#matshow(SkyImages.stitch_object_tiles(s, 3, mp, trimmed_tiled_blob))
-
-elbo = ElboDeriv.elbo(trimmed_tiled_blob, mp);
-
-function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
-  vp_array = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
-  mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
-  for sa = 1:length(mp.active_sources)
-    mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
-  end
-  elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
-  elbo.v
-end
-
-vp_vec = mp.vp[s];
-ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
-ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
-
-hcat(ad_grad, elbo.d[:, 1])
-@test_approx_eq ad_grad elbo.d[:, 1]
-@test_approx_eq ad_hess elbo.h
-
+# #cat_df[ cat_df[:psfflux_r] .> 1000, :]
+#
+# objid = "1237662226208063499"
+# s = findfirst(mp.objids .== objid)
+# mp.active_sources = [ s ]
+#
+# elbo = ElboDeriv.elbo(trimmed_tiled_blob, mp);
+#
+# function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
+#   vp_array = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
+#   mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
+#   for sa = 1:length(mp.active_sources)
+#     mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
+#   end
+#   elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
+#   elbo.v
+# end
+#
+# vp_vec = mp.vp[s];
+# ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
+# ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
+#
+# hcat(ad_grad, elbo.d[:, 1])
+# @test_approx_eq ad_grad elbo.d[:, 1]
+# @test_approx_eq ad_hess elbo.h
+#
 
 
 
@@ -72,7 +63,7 @@ mp.active_sources = [ s_original ]
 relevant_sources = Int64[]
 for b = 1:5, tile_sources in mp.tile_sources[b]
   if length(intersect(mp.active_sources, tile_sources)) > 0
-    println(tile_sources)
+    println("Found sources in band $b: ", tile_sources)
     relevant_sources = union(relevant_sources, tile_sources);
   end
 end
@@ -94,11 +85,6 @@ for b=1:5
   trimmed_tiled_blob[b] = tiled_blob[b][hh_range, ww_range];
   trimmed_mp.tile_sources[b] =
     deepcopy(original_tiled_sources[b][hh_range, ww_range]);
-
-  for hh in 1:size(trimmed_tiled_blob[b])[1], ww in 1:size(trimmed_tiled_blob[b])[2]
-    trimmed_tiled_blob[b][hh, ww].hh = hh
-    trimmed_tiled_blob[b][hh, ww].hh = ww
-  end
 end
 trimmed_tiled_blob = convert(TiledBlob, trimmed_tiled_blob);
 
@@ -108,11 +94,7 @@ trimmed_tiled_blob2 = ModelInit.trim_source_tiles(
 
 matshow(SkyImages.stitch_object_tiles(s, 3, trimmed_mp, trimmed_tiled_blob2))
 
-
-# function test_real_image_derivatives()
-#
-#
-# end
+end
 
 
 
@@ -142,7 +124,9 @@ end
 function test_tile_predicted_image()
   blob, mp, body, tiled_blob = gen_sample_star_dataset(perturb=false);
   tile = tiled_blob[1][1, 1];
-  pred_image = ElboDeriv.tile_predicted_image(tile, mp; include_epsilon=true);
+  tile_sources = mp.tile_sources[1][1, 1];
+  pred_image =
+    ElboDeriv.tile_predicted_image(tile, mp, tile_sources; include_epsilon=true);
 
   # Regress the tile pixels onto the predicted image
   # TODO: Why isn't the regression closer to one?  Something in the sample data
@@ -259,6 +243,7 @@ function test_tile_likelihood()
   keep_pixels = 10:11
   trim_tiles!(tiled_blob, keep_pixels)
   tile = tiled_blob[b][1, 1];
+  tile_sources = mp.tile_sources[b][1, 1];
 
   function tile_lik_wrapper_fun{NumType <: Number}(
       mp::ModelParams{NumType}, calculate_derivs::Bool)
@@ -269,7 +254,8 @@ function test_tile_likelihood()
       ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=elbo_vars.calculate_derivs);
     sbs = ElboDeriv.load_source_brightnesses(
       mp, calculate_derivs=elbo_vars.calculate_derivs);
-    ElboDeriv.tile_likelihood!(elbo_vars, tile, mp, sbs, star_mcs, gal_mcs);
+    ElboDeriv.tile_likelihood!(
+      elbo_vars, tile, mp, tile_sources, sbs, star_mcs, gal_mcs);
     deepcopy(elbo_vars.elbo)
   end
 
@@ -312,6 +298,8 @@ function test_add_log_term()
     println("Testing log term for band $b.")
     x_nbm = 70.
     tile = tiled_blob[b][1,1];
+    tile_sources = mp.tile_sources[b][1,1];
+
     iota = blob[b].iota
 
     function add_log_term_wrapper_fun{NumType <: Number}(
@@ -326,8 +314,9 @@ function test_add_log_term()
       elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
       elbo_vars_loc.calculate_derivs = calculate_derivs
       ElboDeriv.populate_fsm_vecs!(
-        elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
-      ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
+        elbo_vars_loc, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
+      ElboDeriv.combine_pixel_sources!(
+        elbo_vars_loc, mp, tile_sources, tile, sbs);
 
       ElboDeriv.add_elbo_log_term!(elbo_vars_loc, x_nbm, iota)
 
@@ -379,6 +368,8 @@ function test_combine_pixel_sources()
     println("Testing $(test_var_string), band $b")
 
     tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
+    tile_sources = mp.tile_sources[b][1,1];
+
     function e_g_wrapper_fun{NumType <: Number}(
         mp::ModelParams{NumType}; calculate_derivs=true)
 
@@ -391,8 +382,9 @@ function test_combine_pixel_sources()
       elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
       elbo_vars_loc.calculate_derivs = calculate_derivs;
       ElboDeriv.populate_fsm_vecs!(
-        elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
-      ElboDeriv.combine_pixel_sources!(elbo_vars_loc, mp, tile, sbs);
+        elbo_vars_loc, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
+      ElboDeriv.combine_pixel_sources!(
+        elbo_vars_loc, mp, tile_sources, tile, sbs);
       deepcopy(elbo_vars_loc)
     end
 
@@ -446,6 +438,8 @@ function test_e_g_s_functions()
     println("Testing $(test_var_string), band $b")
 
     tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
+    tile_sources = mp.tile_sources[b][1,1];
+
     function e_g_wrapper_fun{NumType <: Number}(
         mp::ModelParams{NumType}; calculate_derivs=true)
 
@@ -458,7 +452,7 @@ function test_e_g_s_functions()
       elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
       elbo_vars_loc.calculate_derivs = calculate_derivs;
       ElboDeriv.populate_fsm_vecs!(
-        elbo_vars_loc, mp, tile, h, w, sbs, gal_mcs, star_mcs);
+        elbo_vars_loc, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
       ElboDeriv.accumulate_source_brightness!(elbo_vars_loc, mp, sbs, s, b);
       deepcopy(elbo_vars_loc)
     end

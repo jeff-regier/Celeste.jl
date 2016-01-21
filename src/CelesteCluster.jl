@@ -107,8 +107,8 @@ and mp are globally defined.
 function node_sources()
   sources = Int64[]
   for b in 1:5
-    for tile in tiled_blob[b][:]
-      append!(sources, mp.tile_sources[b][tile.hh, tile.ww])
+    for tile_ind in 1:length(tiled_blob[b])
+      append!(sources, mp.tile_sources[b][tile_ind])
     end
   end
   unique(sources)

@@ -230,8 +230,6 @@ because the raw wcs object is a C++ pointer which julia resonably
 refuses to parallelize.
 
 Attributes:
-- hh: The tile row index (in 1:number of tile rows)
-- ww: The tile column index (in 1:number of tile columns)
 - h_range: The h pixel locations of the tile in the original image
 - w_range: The w pixel locations of the tile in the original image
 - h_width: The width of the tile in the h direction
@@ -240,8 +238,6 @@ Attributes:
 - remainder: the same as in the Image type.
 """ ->
 immutable ImageTile
-    hh::Int64
-    ww::Int64
     b::Int64
 
     h_range::UnitRange{Int64}
@@ -318,7 +314,7 @@ ImageTile(img::Image,
     iota_vec = img.iota_vec[h_range]
   end
 
-  ImageTile(hh, ww, b, h_range, w_range, h_width, w_width, pixels,
+  ImageTile(b, h_range, w_range, h_width, w_width, pixels,
             img.constant_background, img.epsilon, epsilon_mat,
             img.iota, iota_vec)
 end

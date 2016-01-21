@@ -338,13 +338,14 @@ Populate fs0m_vec and fs1m_vec for all sources.
 function populate_fsm_vecs!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     mp::ModelParams{NumType},
+    tile_sources::Vector{Int64},
     tile::ImageTile,
     h::Int64, w::Int64,
     sbs::Vector{SourceBrightness{NumType}},
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     star_mcs::Array{BvnComponent{NumType}, 2})
 
-  for s in mp.tile_sources[tile.b][tile.hh, tile.ww]
+  for s in tile_sources
     wcs_jacobian = mp.patches[s, tile.b].wcs_jacobian;
     active_source = s in mp.active_sources
 
@@ -599,13 +600,14 @@ Updates elbo_vars.E_G and elbo_vars.var_G in place.
 function combine_pixel_sources!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     mp::ModelParams{NumType},
+    tile_sources::Vector{Int64},
     tile::ImageTile,
     sbs::Vector{SourceBrightness{NumType}})
 
   clear!(elbo_vars.E_G)
   clear!(elbo_vars.var_G)
 
-  for s in mp.tile_sources[tile.b][tile.hh, tile.ww]
+  for s in tile_sources
     active_source = s in mp.active_sources
     calculate_hessian =
       elbo_vars.calculate_hessian && elbo_vars.calculate_derivs &&
@@ -644,17 +646,19 @@ function get_expected_pixel_brightness!{NumType <: Number}(
     star_mcs::Array{BvnComponent{NumType}, 2},
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     tile::ImageTile,
-    mp::ModelParams{NumType};
+    mp::ModelParams{NumType},
+    tile_sources::Vector{Int64};
     include_epsilon::Bool=true)
 
   # This combines the bvn components to get the brightness for each
   # source separately.
-  populate_fsm_vecs!(elbo_vars, mp, tile, h, w, sbs, gal_mcs, star_mcs)
+  populate_fsm_vecs!(
+    elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
 
   # This combines the sources into a single brightness value for the pixel.
   clear!(elbo_vars.E_G)
   clear!(elbo_vars.var_G)
-  combine_pixel_sources!(elbo_vars, mp, tile, sbs);
+  combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
 
   if include_epsilon
     # There are no derivatives with respect to epsilon, so can safely add
@@ -749,6 +753,7 @@ function tile_likelihood!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     tile::ImageTile,
     mp::ModelParams{NumType},
+    tile_sources::Vector{Int64},
     sbs::Vector{SourceBrightness{NumType}},
     star_mcs::Array{BvnComponent{NumType}, 2},
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
@@ -758,7 +763,7 @@ function tile_likelihood!{NumType <: Number}(
 
   # For speed, if there are no sources, add the noise
   # contribution directly.
-  if (length(mp.tile_sources[tile.b][tile.hh, tile.ww]) == 0) && include_epsilon
+  if (length(tile_sources) == 0) && include_epsilon
     # NB: not using the delta-method approximation here
     if tile.constant_background
         nan_pixels = Base.isnan(tile.pixels)
@@ -786,7 +791,7 @@ function tile_likelihood!{NumType <: Number}(
       # Get the brightness.
       get_expected_pixel_brightness!(
         elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-        mp, include_epsilon=include_epsilon)
+        mp, tile_sources, include_epsilon=include_epsilon)
 
       # Add the terms to the elbo given the brightness.
       iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
@@ -821,6 +826,7 @@ function tile_predicted_image{NumType <: Number}(
         elbo_vars::ElboIntermediateVariables{NumType},
         tile::ImageTile,
         mp::ModelParams{NumType},
+        tile_sources::Vector{Int64},
         sbs::Vector{SourceBrightness{NumType}},
         star_mcs::Array{BvnComponent{NumType}, 2},
         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4};
@@ -833,7 +839,7 @@ function tile_predicted_image{NumType <: Number}(
       if !Base.isnan(this_pixel)
         get_expected_pixel_brightness!(
           elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-          mp, include_epsilon=include_epsilon)
+          mp, tile_sources, include_epsilon=include_epsilon)
         iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
         predicted_pixels[h, w] = elbo_vars.E_G.v * iota
       end
@@ -850,7 +856,7 @@ If include_epsilon is true, then the background is also rendered.
 Otherwise, only pixels from the object are rendered.
 """ ->
 function tile_predicted_image{NumType <: Number}(
-    tile::ImageTile, mp::ModelParams{NumType};
+    tile::ImageTile, mp::ModelParams{NumType}, tile_sources::Vector{Int64};
     include_epsilon::Bool=false)
 
   star_mcs, gal_mcs = load_bvn_mixtures(mp, tile.b, calculate_derivs=false);
@@ -861,7 +867,7 @@ function tile_predicted_image{NumType <: Number}(
   elbo_vars.calculate_derivs = false
 
   tile_predicted_image(
-    elbo_vars, tile, mp, sbs, star_mcs, gal_mcs,
+    elbo_vars, tile, mp, tile_sources, sbs, star_mcs, gal_mcs,
     include_epsilon=include_epsilon)
 end
 
@@ -879,10 +885,13 @@ function elbo_likelihood!{NumType <: Number}(
 
   @assert length(mp.active_sources) > 0
   @assert maximum(mp.active_sources) <= mp.S
-  for tile in tiled_image[:]
-    if length(intersect(mp.tile_sources[tile.b][tile.hh, tile.ww],
-                        mp.active_sources)) > 0
-      tile_likelihood!(elbo_vars, tile, mp, sbs, star_mcs, gal_mcs);
+  for tile_ind in 1:length(tiled_image)
+    b = tiled_image[tile_ind].b
+    tile_sources = mp.tile_sources[b][tile_ind]
+    if length(intersect(tile_sources, mp.active_sources)) > 0
+      tile_likelihood!(
+        elbo_vars, tiled_image[tile_ind], mp, tile_sources, sbs,
+        star_mcs, gal_mcs);
     end
   end
 
