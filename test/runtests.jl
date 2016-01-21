@@ -16,5 +16,3 @@ include(joinpath(Pkg.dir("Celeste"), "test", "test_elbo_values.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_derivatives.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_images.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "test_optimization.jl"))
-# This will be changing substantially soon, so comment it out for now.
-# include(joinpath(Pkg.dir("Celeste"), "test", "test_distributed_celeste.jl"))
