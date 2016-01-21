@@ -54,10 +54,12 @@ function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
 end
 
 function clear!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
-  sp::SensitiveFloat{ParamType, NumType})
+  sp::SensitiveFloat{ParamType, NumType}; clear_hessian::Bool=true)
     sp.v = zero(NumType)
     fill!(sp.d, zero(NumType))
-    fill!(sp.h, zero(NumType))
+    if clear_hessian
+      fill!(sp.h, zero(NumType))
+    end
 end
 
 # If no type is specified, default to using Float64.
