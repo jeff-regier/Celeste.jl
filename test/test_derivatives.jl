@@ -10,6 +10,66 @@ import SloanDigitalSkySurvey: SDSS
 
 println("Running hessian tests.")
 
+
+@doc """
+Wrap a vector of canonical parameters for active sources into a ModelParams
+object of the appropriate type.  Used for testing with forward
+autodifferentiation.
+""" ->
+function unwrap_vp_vector{NumType <: Number}(
+    vp_vec::Vector{NumType}, mp::ModelParams)
+
+  vp_array = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
+  mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
+  for sa = 1:length(mp.active_sources)
+    mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
+  end
+  mp_local
+end
+
+
+@doc """
+Convert the variational params into a vector for autodiff.
+""" ->
+function wrap_vp_vector(mp::ModelParams, use_active_sources::Bool)
+  P = length(CanonicalParams)
+  S = use_active_sources ? length(mp.active_sources) : mp.S
+  x_mat = zeros(Float64, P, S);
+  for s in 1:S
+    ind = use_active_sources ? mp.active_sources[s] : s
+    x_mat[:, s] = mp.vp[ind]
+  end
+  x_mat[:];
+end
+
+
+@doc """
+Use ForwardDiff to test that fun(x) = sf (to abuse some notation)
+""" ->
+function test_with_autodiff(fun::Function, x::Vector{Float64}, sf::SensitiveFloat)
+  ad_grad = ForwardDiff.gradient(fun, x)
+  ad_hess = ForwardDiff.hessian(fun, x)
+  @test_approx_eq fun(x) sf.v
+  @test_approx_eq ad_grad sf.d[:]
+  @test_approx_eq ad_hess sf.h
+end
+
+
+@doc """
+Set all but a few pixels to NaN to speed up autodiff Hessian testing.
+""" ->
+function trim_tiles!(tiled_blob::TiledBlob, keep_pixels)
+  for b = 1:length(tiled_blob)
+	  tiled_blob[b][1,1].pixels[
+			setdiff(1:tiled_blob[b][1,1].h_width, keep_pixels), :] = NaN;
+	  tiled_blob[b][1,1].pixels[
+			:, setdiff(1:tiled_blob[b][1,1].w_width, keep_pixels)] = NaN;
+	end
+end
+
+
+#######################
+
 function test_real_image()
   using PyPlot
 
@@ -93,7 +153,6 @@ function test_real_image()
 end
 
 
-
 function test_dual_numbers()
   # Simply check that the likelihood can be used with dual numbers.
   # Due to the autodiff parts of the KL divergence and transform,
@@ -101,19 +160,6 @@ function test_dual_numbers()
   blob, mp, body, tiled_blob = gen_sample_star_dataset();
   mp_dual = CelesteTypes.forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
   elbo_dual = ElboDeriv.elbo_likelihood(tiled_blob, mp_dual);
-end
-
-
-@doc """
-Set all but a few pixels to NaN to speed up autodiff Hessian testing.
-""" ->
-function trim_tiles!(tiled_blob::TiledBlob, keep_pixels)
-  for b = 1:length(tiled_blob)
-	  tiled_blob[b][1,1].pixels[
-			setdiff(1:tiled_blob[b][1,1].h_width, keep_pixels), :] = NaN;
-	  tiled_blob[b][1,1].pixels[
-			:, setdiff(1:tiled_blob[b][1,1].w_width, keep_pixels)] = NaN;
-	end
 end
 
 
@@ -193,36 +239,28 @@ function test_elbo()
 
   # vp_vec is a vector of the parameters from all the active sources.
   function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
-    vp_array = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
-    mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
-    for sa = 1:length(mp.active_sources)
-      mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
-    end
+    mp_local = unwrap_vp_vector(vp_vec, mp)
     elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
     elbo.v
   end
 
-  function test_elbo_mp(mp::ModelParams, elbo::SensitiveFloat)
-    vp_vec = reduce(vcat, [ mp.vp[sa] for sa in mp.active_sources ]);
-    ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
-    ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
-
-    @test_approx_eq ad_grad reduce(vcat, elbo.d)
-    @test_approx_eq ad_hess elbo.h
-  end
-
-
   mp.active_sources = [1];
+  vp_vec = wrap_vp_vector(mp, true);
   elbo_1 = ElboDeriv.elbo(tiled_blob, mp);
-  test_elbo_mp(mp, elbo_1)
+  test_with_autodiff(wrap_elbo, vp_vec, elbo_1)
+  #test_elbo_mp(mp, elbo_1)
 
   mp.active_sources = [2];
+  vp_vec = wrap_vp_vector(mp, true);
   elbo_2 = ElboDeriv.elbo(tiled_blob, mp);
-  test_elbo_mp(mp, elbo_2)
+  test_with_autodiff(wrap_elbo, vp_vec, elbo_2)
+  #test_elbo_mp(mp, elbo_2)
 
   mp.active_sources = [1, 2];
+  vp_vec = wrap_vp_vector(mp, true);
   elbo_12 = ElboDeriv.elbo(tiled_blob, mp);
-  test_elbo_mp(mp, elbo_12)
+  test_with_autodiff(wrap_elbo, vp_vec, elbo_12)
+  #test_elbo_mp(mp, elbo_12)
 
   P = length(CanonicalParams)
   @test size(elbo_1.d) == size(elbo_2.d) == (P, 1)
@@ -244,10 +282,11 @@ function test_tile_likelihood()
   function tile_lik_wrapper_fun{NumType <: Number}(
       mp::ModelParams{NumType}, calculate_derivs::Bool)
 
-    elbo_vars = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
+    elbo_vars = ElboDeriv.ElboIntermediateVariables(
+      NumType, mp.S, length(mp.active_sources));
     elbo_vars.calculate_derivs = calculate_derivs
-    star_mcs, gal_mcs =
-      ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=elbo_vars.calculate_derivs);
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(
+      mp, b, calculate_derivs=elbo_vars.calculate_derivs);
     sbs = ElboDeriv.load_source_brightnesses(
       mp, calculate_derivs=elbo_vars.calculate_derivs);
     ElboDeriv.tile_likelihood!(
@@ -256,39 +295,22 @@ function test_tile_likelihood()
   end
 
   function tile_lik_value_wrapper{NumType <: Number}(x::Vector{NumType})
-    @assert length(x) == S * P
-    x_mat = reshape(x, (P, S))
-    mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-    for sa_ind in 1:length(mp_fd.active_sources)
-      mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
-    end
-    tile_lik_wrapper_fun(mp_fd, false).v
+    mp_local = unwrap_vp_vector(x, mp)
+    tile_lik_wrapper_fun(mp_local, false).v
   end
 
-  @time elbo = tile_lik_wrapper_fun(mp, true);
+  elbo = tile_lik_wrapper_fun(mp, true);
 
-  P = length(ids)
-  S = mp.S
-  x_mat = zeros(Float64, P, S);
-  for sa_ind in 1:S
-    x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
-  end
-  x = x_mat[:];
-
-  @test_approx_eq tile_lik_value_wrapper(x) elbo.v
-
-  @time ad_grad = ForwardDiff.gradient(tile_lik_value_wrapper, x);
-  @test_approx_eq ad_grad elbo.d
-
-  @time ad_hess = ForwardDiff.hessian(tile_lik_value_wrapper, x);
-  @test_approx_eq ad_hess elbo.h
+  x = wrap_vp_vector(mp, true);
+  test_with_autodiff(tile_lik_value_wrapper, x, elbo);
 end
 
 
 function test_add_log_term()
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
-  h = 10
-  w = 10
+
+  # Test this pixel
+  h, w = (10, 10)
 
   for b = 1:5
     println("Testing log term for band $b.")
@@ -320,33 +342,13 @@ function test_add_log_term()
     end
 
     function ad_wrapper_fun{NumType <: Number}(x::Vector{NumType})
-      @assert length(x) == S * P
-      x_mat = reshape(x, (P, S))
-      mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-      for sa_ind in 1:length(mp_fd.active_sources)
-        mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
-      end
-      add_log_term_wrapper_fun(mp_fd, false).v
+      mp_local = unwrap_vp_vector(x, mp)
+      add_log_term_wrapper_fun(mp_local, false).v
     end
 
-
-    P = length(ids)
-    S = mp.S
-    x_mat = zeros(Float64, P, S);
-    for sa_ind in 1:S
-      x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
-    end
-    x = x_mat[:];
-
+    x = wrap_vp_vector(mp, true);
     elbo = add_log_term_wrapper_fun(mp, true);
-
-    @test_approx_eq elbo.v ad_wrapper_fun(x)
-
-    ad_grad = ForwardDiff.gradient(ad_wrapper_fun, x);
-    @test_approx_eq ad_grad elbo.d[:]
-
-    ad_hess = ForwardDiff.hessian(ad_wrapper_fun, x);
-    @test_approx_eq ad_hess elbo.h[:]
+    test_with_autodiff(ad_wrapper_fun, x, elbo);
   end
 end
 
@@ -385,34 +387,16 @@ function test_combine_pixel_sources()
     end
 
     function wrapper_fun{NumType <: Number}(x::Vector{NumType})
-      @assert length(x) == S * P
-      x_mat = reshape(x, (P, S))
-      mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-      for sa_ind in 1:length(mp_fd.active_sources)
-        mp_fd.vp[mp.active_sources[sa_ind]] = x_mat[:, sa_ind]
-      end
-      elbo_vars_fd = e_g_wrapper_fun(mp_fd, calculate_derivs=false)
-      test_var ? elbo_vars_fd.var_G.v : elbo_vars_fd.E_G.v
+      mp_local = unwrap_vp_vector(x, mp)
+      elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
+      test_var ? elbo_vars_local.var_G.v : elbo_vars_local.E_G.v
     end
 
-    x_mat = zeros(Float64, P, S);
-    for sa_ind in 1:S
-      x_mat[:, sa_ind] = mp.vp[mp.active_sources[sa_ind]]
-    end
-    x = x_mat[:];
-
+    x = wrap_vp_vector(mp, true)
     elbo_vars = e_g_wrapper_fun(mp);
     sf = test_var ? deepcopy(elbo_vars.var_G) : deepcopy(elbo_vars.E_G);
 
-    v = wrapper_fun(x)
-    @test_approx_eq v sf.v
-
-    ad_grad = ForwardDiff.gradient(wrapper_fun, x);
-    @test_approx_eq ad_grad sf.d
-
-    ad_hess = ForwardDiff.hessian(wrapper_fun, x);
-    @test_approx_eq ad_hess sf.h
-
+    test_with_autodiff(wrapper_fun, x, sf)
   end
 end
 
@@ -420,14 +404,11 @@ end
 function test_e_g_s_functions()
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 
-  S = length(mp.active_sources)
+  # S = length(mp.active_sources)
   P = length(CanonicalParams)
   h = 10
   w = 10
   s = 1
-
-  test_var = false
-  b = 1
 
   for test_var = [false, true], b=1:5
     test_var_string = test_var ? "E_G" : "var_G"
@@ -445,7 +426,8 @@ function test_e_g_s_functions()
         ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
         for s in 1:mp.S];
 
-      elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
+      elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(
+        NumType, mp.S, length(mp.active_sources));
       elbo_vars_loc.calculate_derivs = calculate_derivs;
       ElboDeriv.populate_fsm_vecs!(
         elbo_vars_loc, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
@@ -455,10 +437,10 @@ function test_e_g_s_functions()
 
     function wrapper_fun{NumType <: Number}(x::Vector{NumType})
       @assert length(x) == P
-      mp_fd = CelesteTypes.forward_diff_model_params(NumType, mp);
-      mp_fd.vp[s] = x
-      elbo_vars_fd = e_g_wrapper_fun(mp_fd, calculate_derivs=false)
-      test_var ? elbo_vars_fd.var_G_s.v : elbo_vars_fd.E_G_s.v
+      mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
+      mp_local.vp[s] = x
+      elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
+      test_var ? elbo_vars_local.var_G_s.v : elbo_vars_local.E_G_s.v
     end
 
     x = mp.vp[s];
@@ -471,14 +453,7 @@ function test_e_g_s_functions()
 
     sf = test_var ? deepcopy(elbo_vars.var_G_s) : deepcopy(elbo_vars.E_G_s);
 
-    v = wrapper_fun(x)
-    @test_approx_eq v sf.v
-
-    ad_grad = ForwardDiff.gradient(wrapper_fun, x);
-    @test_approx_eq ad_grad sf.d
-
-    ad_hess = ForwardDiff.hessian(wrapper_fun, x);
-    @test_approx_eq ad_hess sf.h
+    test_with_autodiff(wrapper_fun, x, sf)
   end
 end
 
@@ -506,8 +481,6 @@ function test_fs1m_derivatives()
   # Pick out a single galaxy component for testing.
   # The index is (psf, galaxy, gal type, source)
   for psf_k=1:3, type_i = 1:2, gal_j in 1:[8,6][type_i]
-    #psf_k = 1; type_i = 1; gal_j = 1 # For debugging
-    #println(gcc_ind)
     gcc_ind = (psf_k, gal_j, type_i, s)
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
@@ -526,12 +499,6 @@ function test_fs1m_derivatives()
       gcc = gal_mcs[gcc_ind...];
       py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x)
       f_pre * gcc.e_dev_i
-
-      # Alternatively: test through accum_galaxy_pos!
-      # elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
-      # ElboDeriv.accum_galaxy_pos!(
-      #   elbo_vars_fd, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian);
-      # elbo_vars_fd.fs1m_vec[s].v
     end
 
     function mp_to_par_gal(mp::ModelParams{Float64})
@@ -562,15 +529,7 @@ function test_fs1m_derivatives()
       pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(v) / (2 * pi),
       fs1m.v)
 
-    @test_approx_eq fs1m.v f_wrap_gal(par_gal)
-
-    # Test the gradient.
-    ad_grad_gal = ForwardDiff.gradient(f_wrap_gal, par_gal);
-    @test_approx_eq ad_grad_gal fs1m.d
-
-    # Test the hessian.
-    ad_hess_gal = ForwardDiff.hessian(f_wrap_gal, par_gal)
-    @test_approx_eq ad_hess_gal fs1m.h
+    test_with_autodiff(f_wrap_gal, par_gal, fs1m)
   end
 end
 
@@ -597,50 +556,43 @@ function test_fs0m_derivatives()
 
   # Pick out a single star component for testing.
   # The index is psf, source
-  bmc_ind = (1, s)
-  function f_wrap_star{T <: Number}(par::Vector{T})
-    # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-    mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
+  for psf_k=1:3
+    bmc_ind = (psf_k, s)
+    function f_wrap_star{T <: Number}(par::Vector{T})
+      # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
+      mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
 
-    # Make sure par is as long as the galaxy parameters.
-    @assert length(par) == length(ids.u)
-    for p1 in 1:2
-        p0 = ids.u[p1]
-        mp_fd.vp[s][p0] = par[p1]
+      # Make sure par is as long as the galaxy parameters.
+      @assert length(par) == length(ids.u)
+      for p1 in 1:2
+          p0 = ids.u[p1]
+          mp_fd.vp[s][p0] = par[p1]
+      end
+      star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
+      elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
+      ElboDeriv.accum_star_pos!(
+        elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
+      elbo_vars_fd.fs0m_vec[s].v
     end
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
-    elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
+
+    function mp_to_par_star(mp::ModelParams{Float64})
+      par = zeros(2)
+      for p1 in 1:length(par)
+          par[p1] = mp.vp[s][ids.u[p1]]
+      end
+      par
+    end
+
+    par_star = mp_to_par_star(mp)
+
+    clear!(elbo_vars.fs0m_vec[s])
+    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
     ElboDeriv.accum_star_pos!(
-      elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
-    elbo_vars_fd.fs0m_vec[s].v
+      elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
+    fs0m = deepcopy(elbo_vars.fs0m_vec[s])
+
+    test_with_autodiff(f_wrap_star, par_star, fs0m)
   end
-
-  function mp_to_par_star(mp::ModelParams{Float64})
-    par = zeros(2)
-    for p1 in 1:length(par)
-        par[p1] = mp.vp[s][ids.u[p1]]
-    end
-    par
-  end
-
-  par_star = mp_to_par_star(mp)
-
-  clear!(elbo_vars.fs0m_vec[s])
-  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-  ElboDeriv.accum_star_pos!(
-    elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
-  fs0m = deepcopy(elbo_vars.fs0m_vec[s])
-
-  # One sanity check.
-  @test_approx_eq fs0m.v f_wrap_star(par_star)
-
-  # Test the gradient.
-  ad_grad_star = ForwardDiff.gradient(f_wrap_star, par_star);
-  @test_approx_eq ad_grad_star fs0m.d
-
-  # Test the hessian.
-  ad_hess_star = ForwardDiff.hessian(f_wrap_star, par_star)
-  @test_approx_eq_eps ad_hess_star fs0m.h 1e-10
 end
 
 
@@ -685,6 +637,7 @@ function test_bvn_derivatives()
 
   par = wrap(x, sigma);
 
+  # Sanity check
   @test_approx_eq ElboDeriv.eval_bvn_log_density(bvn, x) f_wrap(par)
 
   ad_grad = ForwardDiff.gradient(f_wrap, par);
