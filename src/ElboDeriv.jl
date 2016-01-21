@@ -327,7 +327,7 @@ function accum_galaxy_pos!{NumType <: Number}(
         fs1m.h[si, devi] += f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
         fs1m.h[devi, si] = fs1m.h[si, devi]
       end
-    end # if calcualte hessian
+    end # if calculate hessian
   end # if calculate_derivs
 end
 
@@ -349,14 +349,16 @@ function populate_fsm_vecs!{NumType <: Number}(
     wcs_jacobian = mp.patches[s, tile.b].wcs_jacobian;
     active_source = s in mp.active_sources
 
-    clear!(elbo_vars.fs0m_vec[s])
+    calculate_hessian =
+      elbo_vars.calculate_hessian && elbo_vars.calculate_derivs && active_source
+    clear!(elbo_vars.fs0m_vec[s], clear_hessian=calculate_hessian)
     for star_mc in star_mcs[:, s]
         accum_star_pos!(
           elbo_vars, s, star_mc, Float64[tile.h_range[h], tile.w_range[w]],
           wcs_jacobian, calculate_derivs=active_source)
     end
 
-    clear!(elbo_vars.fs1m_vec[s])
+    clear!(elbo_vars.fs1m_vec[s], clear_hessian=calculate_hessian)
     for i = 1:2 # Galaxy types
         for j in 1:[8,6][i] # Galaxy component
             for k = 1:3 # PSF component
@@ -388,8 +390,9 @@ function accumulate_source_brightness!{NumType <: Number}(
   E_G_s = elbo_vars.E_G_s;
   E_G2_s = elbo_vars.E_G2_s;
 
-  clear!(E_G_s)
-  clear!(E_G2_s)
+  clear_hessian = elbo_vars.calculate_hessian && elbo_vars.calculate_derivs
+  clear!(E_G_s, clear_hessian=clear_hessian)
+  clear!(E_G2_s, clear_hessian=clear_hessian)
 
   a = mp.vp[s][ids.a]
   fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
@@ -576,7 +579,9 @@ Calculate the variance var_G_s as a function of (E_G_s, E_G2_s).
 function calculate_var_G_s!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType}, active_source::Bool)
 
-  clear!(elbo_vars.var_G_s)
+  clear!(elbo_vars.var_G_s,
+    clear_hessian=elbo_vars.calculate_hessian &&
+      elbo_vars.calculate_derivs && active_source)
   var_v = elbo_vars.E_G2_s.v - (elbo_vars.E_G_s.v ^ 2);
 
   if active_source && elbo_vars.calculate_derivs
@@ -604,8 +609,10 @@ function combine_pixel_sources!{NumType <: Number}(
     tile::ImageTile,
     sbs::Vector{SourceBrightness{NumType}})
 
-  clear!(elbo_vars.E_G)
-  clear!(elbo_vars.var_G)
+  clear!(elbo_vars.E_G,
+    clear_hessian=elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
+  clear!(elbo_vars.var_G,
+    clear_hessian=elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
 
   for s in tile_sources
     active_source = s in mp.active_sources
@@ -655,9 +662,11 @@ function get_expected_pixel_brightness!{NumType <: Number}(
   populate_fsm_vecs!(
     elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
 
-  # This combines the sources into a single brightness value for the pixel.
-  clear!(elbo_vars.E_G)
-  clear!(elbo_vars.var_G)
+  # # This combines the sources into a single brightness value for the pixel.
+  # clear!(elbo_vars.E_G,
+  #   clear_hessian=elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
+  # clear!(elbo_vars.var_G,
+  #   clear_hessian=elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
   combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
 
   if include_epsilon
@@ -798,7 +807,8 @@ function tile_likelihood!{NumType <: Number}(
       add_elbo_log_term!(elbo_vars, this_pixel, iota)
       CelesteTypes.add_scaled_sfs!(
         elbo_vars.elbo, elbo_vars.E_G, scale=-iota,
-        calculate_hessian=elbo_vars.calculate_hessian)
+        calculate_hessian=
+          elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
     end
   end
 
