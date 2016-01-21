@@ -91,6 +91,7 @@ function test_that_variance_is_low()
 
     test_b = 3
     tile = tiled_blob[test_b][1,1];
+    tile_sources = mp.tile_sources[test_b][1,1];
 
     h, w = 10, 12
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, tile.b);
@@ -103,7 +104,7 @@ function test_that_variance_is_low()
     clear!(elbo_vars.E_G);
     clear!(elbo_vars.var_G);
     ElboDeriv.get_expected_pixel_brightness!(
-      elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile, mp);
+      elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile, mp, tile_sources);
 
     @test 0 < elbo_vars.var_G.v < 1e-2 * elbo_vars.E_G.v^2
 end
