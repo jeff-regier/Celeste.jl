@@ -194,7 +194,8 @@ function test_set_patch_size()
 
     for b=1:5
       @assert size(tiled_blob[b]) == (1, 1)
-      tile_image = ElboDeriv.tile_predicted_image(tiled_blob[b][1,1], mp);
+      tile_image = ElboDeriv.tile_predicted_image(
+        tiled_blob[b][1,1], mp, mp.tile_sources[b][1,1]);
 
       pixel_center = WCS.world_to_pixel(blob[b].wcs, cat[1].pos)
       radius = ModelInit.choose_patch_radius(
