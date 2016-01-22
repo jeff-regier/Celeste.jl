@@ -110,6 +110,11 @@ end
 Args:
   - S: The total number of sources
   - num_active_sources: The number of actives sources (with deriviatives)
+  - calculate_derivs: If false, only calculate values
+  - calculate_hessian: If false, only calculate gradients.  Note that if
+                       calculate_derivs = false, then hessians will not be
+                       calculated irrespective of the value of
+                       calculate_hessian.
 """ ->
 ElboIntermediateVariables(
     NumType::DataType, S::Int64, num_active_sources::Int64;
@@ -190,9 +195,11 @@ Args:
   - s: The index of the current source in 1:S
   - bmc: The component to be added
   - x: An offset for the component in pixel coordinates (e.g. a pixel location)
-  - fs0m: A SensitiveFloat to which the value of the bvn likelihood
-       and its derivatives with respect to x are added.
- - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
+  - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
+  - calculate_derivs: Whether to calculate derivatives.
+
+Returns:
+  Updates elbo_vars.fs0m_vec[s] in place.
 """ ->
 function accum_star_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
@@ -243,8 +250,10 @@ Args:
   - gcc: The galaxy component to be added
   - x: An offset for the component in pixel coordinates (e.g. a pixel location)
   - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
+  - calculate_derivs: Whether to calculate derivatives.
 
-Updates elbo_vars.fs1m_vec[sa] in place.
+Returns:
+  Updates elbo_vars.fs1m_vec[s] in place.
 """ ->
 function accum_galaxy_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
@@ -333,7 +342,21 @@ end
 
 
 @doc """
-Populate fs0m_vec and fs1m_vec for all sources.
+Populate fs0m_vec and fs1m_vec for all sources for a given pixel.
+
+Args:
+  - elbo_vars: Elbo intermediate values.
+  - mp: Model parameters
+  - tile_sources: A vector of integers of sources in 1:mp.S affecting the tile
+  - tile: An ImageTile
+  - h, w: The integer locations of the pixel within the tile
+  - sbs: Source brightnesses
+  - gal_mcs: Galaxy components
+  - star_mcs: Star components
+
+Returns:
+  Updates elbo_vars.fs0m_vec and elbo_vars.fs1m_vec in place with the total
+  shape contributions to this pixel's brightness.
 """ ->
 function populate_fsm_vecs!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
@@ -378,7 +401,16 @@ end
 Add the contributions of a single source to E_G_s and var_G_s, which are cleared
 and then updated in place.
 
-Updates elbo_vars.E_G_s and elbo_vars.var_G_s in place.
+Args:
+  - elbo_vars: Elbo intermediate values, with updated fs1m_vec and fs0m_vec.
+  - mp: Model parameters
+  - sbs: Source brightnesses
+  - s: The source, in 1:mp.S
+  - b: The band
+
+Returns:
+  Updates elbo_vars.E_G_s and elbo_vars.var_G_s in place with the brightness
+  for this sourve at this pixel.
 """ ->
 function accumulate_source_brightness!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
@@ -570,11 +602,19 @@ function accumulate_source_brightness!{NumType <: Number}(
   calculate_var_G_s!(elbo_vars, active_source)
 end
 
+
 # Declare outside so that memory is not allocated every function call.
 const variance_hess = Float64[-2  0; 0 0]
 
 @doc """
 Calculate the variance var_G_s as a function of (E_G_s, E_G2_s).
+
+Args:
+  - elbo_vars: Elbo intermediate values.
+  - active_source: Whether this is an active source that requires derivatives
+
+Returns:
+  Updates elbo_vars.var_G_s in place.
 """ ->
 function calculate_var_G_s!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType}, active_source::Bool)
@@ -599,6 +639,13 @@ end
 
 @doc """
 Adds up E_G and var_G across all sources.
+
+Args:
+  - elbo_vars: Elbo intermediate values, with updated fs1m_vec and fs0m_vec.
+  - mp: Model parameters
+  - tile_sources: A vector of integers of sources in 1:mp.S affecting the tile
+  - tile: An ImageTile
+  - sbs: Source brightnesses
 
 Updates elbo_vars.E_G and elbo_vars.var_G in place.
 """ ->
@@ -636,12 +683,18 @@ end
 
 
 @doc """
-Expected pixel brightness.
+Expected brightness for a single pixel.
+
 Args:
-  h: The row of the tile
-  w: The column of the tile
-  ...the rest are the same as elsewhere.
-  tile_sources: The indices within active_sources that are present in the tile.
+  - elbo_vars: Elbo intermediate values.
+  - h, w: The integer locations of the pixel within the tile
+  - sbs: Source brightnesses
+  - star_mcs: Star components
+  - gal_mcs: Galaxy components
+  - tile: An ImageTile
+  - mp: Model parameters
+  - tile_sources: A vector of integers of sources in 1:mp.S affecting the tile
+  - include_epsilon: Whether the background noise should be included
 
 Returns:
   - Updates elbo_vars.E_G and elbo_vars.var_G in place.
@@ -663,10 +716,6 @@ function get_expected_pixel_brightness!{NumType <: Number}(
     elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
 
   # # This combines the sources into a single brightness value for the pixel.
-  # clear!(elbo_vars.E_G,
-  #   clear_hessian=elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
-  # clear!(elbo_vars.var_G,
-  #   clear_hessian=elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
   combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
 
   if include_epsilon
@@ -704,9 +753,6 @@ function add_elbo_log_term!{NumType <: Number}(
 
   # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
   log_term_value = log(E_G.v) - 0.5 * var_G.v  / (E_G.v ^ 2)
-  # println("Log term value: ", log_term_value)
-  # println("E_G.v ", E_G.v)
-  # println("var_G.v ", var_G.v)
 
   if elbo_vars.calculate_derivs
 
@@ -751,12 +797,17 @@ Add a tile's contribution to the ELBO likelihood term by
 modifying elbo in place.
 
 Args:
-  - tile: An image tile.
-  - mp: The current model parameters.
-  - sbs: The current source brightnesses.
-  - star_mcs: All the star * PCF components.
-  - gal_mcs: All the galaxy * PCF components.
-  - elbo: The ELBO log likelihood to be updated.
+  - elbo_vars: Elbo intermediate values.
+  - tile: An ImageTile
+  - mp: Model parameters
+  - tile_sources: A vector of integers of sources in 1:mp.S affecting the tile
+  - sbs: Source brightnesses
+  - star_mcs: Star components
+  - gal_mcs: Galaxy components
+  - include_epsilon: Whether the background noise should be included
+
+Returns:
+  Adds to the elbo_vars.elbo in place.
 """ ->
 function tile_likelihood!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
@@ -822,12 +873,14 @@ end
 Return the image predicted for the tile given the current parameters.
 
 Args:
-  - tile: An image tile.
-  - mp: The current model parameters.
-  - sbs: The current source brightnesses.
-  - star_mcs: All the star * PCF components.
-  - gal_mcs: All the galaxy * PCF components.
-  - elbo: The ELBO log likelihood to be updated.
+  - elbo_vars: Elbo intermediate values.
+  - tile: An ImageTile
+  - mp: Model parameters
+  - tile_sources: A vector of integers of sources in 1:mp.S affecting the tile
+  - sbs: Source brightnesses
+  - star_mcs: Star components
+  - gal_mcs: Galaxy components
+  - include_epsilon: Whether the background noise should be included
 
 Returns:
   A matrix of the same size as the tile with the predicted brightnesses.
@@ -862,6 +915,12 @@ end
 @doc """
 Produce a predicted image for a given tile and model parameters.
 
+Args:
+  - tile: An ImageTile
+  - mp: Model parameters
+  - tile_sources: A vector of integers of sources in 1:mp.S affecting the tile
+  - include_epsilon: Whether the background noise should be included
+
 If include_epsilon is true, then the background is also rendered.
 Otherwise, only pixels from the object are rendered.
 """ ->
@@ -883,19 +942,32 @@ end
 
 
 @doc """
-The ELBO likelihood for given brighntess and bvn components.
+Updates the ELBO likelihood for given brighntess and bvn components.
+
+Args:
+  - elbo_vars: Elbo intermediate values.
+  - tiled_image: An array of ImageTiles
+  - mp: Model parameters
+  - sbs: Source brightnesses
+  - star_mcs: Star components
+  - gal_mcs: Galaxy components
+
+Returns:
+  Updates elbo_vars.elbo in place.
 """ ->
 function elbo_likelihood!{NumType <: Number}(
-  elbo_vars::ElboIntermediateVariables{NumType},
-  tiled_image::Array{ImageTile},
-  mp::ModelParams{NumType},
-  sbs::Vector{SourceBrightness{NumType}},
-  star_mcs::Array{BvnComponent{NumType}, 2},
-  gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
+    elbo_vars::ElboIntermediateVariables{NumType},
+    tiled_image::Array{ImageTile},
+    mp::ModelParams{NumType},
+    sbs::Vector{SourceBrightness{NumType}},
+    star_mcs::Array{BvnComponent{NumType}, 2},
+    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
 
   @assert length(mp.active_sources) > 0
   @assert maximum(mp.active_sources) <= mp.S
   for tile_ind in 1:length(tiled_image)
+    # TODO: this band must be the same as the band that was used to
+    # populate star_mcs and gal_mcs.  Assert here?
     b = tiled_image[tile_ind].b
     tile_sources = mp.tile_sources[b][tile_ind]
     if length(intersect(tile_sources, mp.active_sources)) > 0
@@ -909,13 +981,18 @@ end
 
 
 @doc """
-Add the expected log likelihood ELBO term for an image to elbo.
+Add the expected log likelihood ELBO term for an image to elbo given the
+brightnesses.
 
 Args:
+  - elbo_vars: Elbo intermediate values.
   - tiles: An array of ImageTiles
-  - mp: The current model parameters.
-  - elbo: A sensitive float containing the ELBO.
-  - b: The current band
+  - mp: Model parameters
+  - b: The band of the tiles
+  - sbs: Source brightnesses
+
+Returns:
+  Updates elbo_vars.elbo in place.
 """ ->
 function elbo_likelihood!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
@@ -933,6 +1010,18 @@ end
 @doc """
 Return the expected log likelihood for all bands in a section
 of the sky.
+
+Args:
+  - tiled_blob: A TiledBlob
+  - mp: Model parameters
+  - calculate_derivs: Whether or not any gradient or hessian information will
+                      be calculated
+  - calculate_hessian: Whether to calculate a Hessian.  If calculate_derivs is
+                       false, a Hessian will not be calculated irrespective of
+                       the value of calculate_hessian.
+
+Returns:
+  A sensitive float with the log likelihood.
 """ ->
 function elbo_likelihood{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType};
@@ -958,6 +1047,14 @@ of an image.
 Args:
   - tiled_blob: A TiledBlob.
   - mp: Model parameters.
+  - calculate_derivs: Whether or not any gradient or hessian information will
+                      be calculated
+  - calculate_hessian: Whether to calculate a Hessian.  If calculate_derivs is
+                       false, a Hessian will not be calculated irrespective of
+                       the value of calculate_hessian.
+
+Returns:
+  A sensitive float containing the ELBO for the image.
 """ ->
 function elbo{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType};
