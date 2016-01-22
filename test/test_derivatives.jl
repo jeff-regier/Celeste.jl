@@ -71,7 +71,8 @@ end
 #######################
 
 function test_real_image()
-  using PyPlot
+  # TODO: replace this with stamp tests having non-trivial WCS transforms.
+  # TODO: streamline the creation of small real images.
 
   field_dir = joinpath(dat_dir, "sample_field")
   run_num = "003900"
@@ -84,12 +85,12 @@ function test_real_image()
   tiled_blob, mp =
     ModelInit.initialize_celeste(blob, cat_entries, fit_psf=false, tile_width=20);
 
-  # #cat_df[ cat_df[:psfflux_r] .> 1000, :]
-
+  # Pick an object.
   objid = "1237662226208063499"
   s_original = findfirst(mp.objids .== objid)
   mp.active_sources = [ s_original ]
 
+  # Get the sources that overlap with this object.
   relevant_sources = Int64[]
   for b = 1:5, tile_sources in mp.tile_sources[b]
     if length(intersect(mp.active_sources, tile_sources)) > 0
@@ -105,6 +106,7 @@ function test_real_image()
   s = findfirst(trimmed_mp.objids .== objid)
   trimmed_mp.active_sources = [ s ]
 
+  # Trim to a smaller tiled blob.
   trimmed_tiled_blob = Array(Array{ImageTile}, 5);
   for b=1:5
     hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
@@ -122,8 +124,9 @@ function test_real_image()
   very_trimmed_tiled_blob = ModelInit.trim_source_tiles(
     s, trimmed_mp, trimmed_tiled_blob, noise_fraction=10.);
 
-  #matshow(SkyImages.stitch_object_tiles(s, 3, trimmed_mp, very_trimmed_tiled_blob))
-
+  # To see:
+  # using PyPlot
+  # matshow(SkyImages.stitch_object_tiles(s, 3, trimmed_mp, very_trimmed_tiled_blob))
 
   elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, trimmed_mp);
 
@@ -149,7 +152,6 @@ function test_real_image()
   hcat(ad_grad, elbo.d[:, 1])
   @test_approx_eq ad_grad elbo.d[:, 1]
   @test_approx_eq ad_hess elbo.h
-
 end
 
 
@@ -972,3 +974,4 @@ test_active_sources()
 test_derivative_flags()
 test_tile_predicted_image()
 test_dual_numbers()
+test_real_image()

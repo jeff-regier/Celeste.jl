@@ -75,9 +75,7 @@ end
 
 
 @doc """
-Factor out the hessian part of combine_sfs! to help the compiler.
-
-TODO: I think this is a red herring and this can be put back in
+Factor out the hessian part of combine_sfs!.
 """ ->
 function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet,
                               T1 <: Number, T2 <: Number, T3 <: Number}(
@@ -164,7 +162,7 @@ end
 const multiply_sfs_hess = Float64[0 1; 1 0]
 
 @doc """
-TODO: don't ignore the ids arguments and test.
+TODO: don't ignore the ids arguments.
 """ ->
 function multiply_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf1::SensitiveFloat{ParamType, NumType},
