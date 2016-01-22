@@ -344,7 +344,7 @@ function test_elbo_with_nan()
         blob[b].pixels[1,1] = NaN
     end
 
-    nan_elbo = ElboDeriv.elbo(tiled_blob, mp)
+    nan_elbo = ElboDeriv.elbo(tiled_blob, mp);
 
     # We deleted a pixel, so there's reason to expect them to be different,
     # but importantly they're reasonably close and not NaN.
