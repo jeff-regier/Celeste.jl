@@ -311,6 +311,12 @@ end
 @doc """
 A datatype containing derivatives of the transform from free to constrained
 parameters.
+
+Members:
+  dparam_dfree: The Jacobian of the transformation
+                contrainted_param = f(free param)
+  d2param_dfree2: A vector of hessians.  Each element is the Hessian of one
+                  component of the aforementioned f()
 """ ->
 type TransformDerivatives{NumType <: Number}
   dparam_dfree::Matrix{NumType}
@@ -333,6 +339,18 @@ type TransformDerivatives{NumType <: Number}
 end
 
 
+@doc """
+Populate a TransformDerivatives object in place.
+
+Args:
+  - mp: ModelParams
+  - bounds: A vector containing one ParamBounds for each active source in the
+            same order as mp.active_sources.
+  - transform_derivatives: TransformDerivatives to be populated.
+
+Returns:
+  Update transform_derivatives in place.
+""" ->
 function get_transform_derivatives!{NumType <: Number}(
     mp::ModelParams{NumType}, bounds::Vector{ParamBounds},
     transform_derivatives::TransformDerivatives)
@@ -425,7 +443,18 @@ end
 # Functions to take actual parameter vectors.
 
 @doc """
-Convert a variational parameter vector to an unconstrained version.
+Convert between variational parameter vectors and unconstrained parameters.
+
+Args:
+  - vp: The vector of contrainted variationl parameters
+  - vp_free: The vector of uncontrainted parameters for optimization
+  - bounds: ParamBounds describing the transformation
+  - to_unconstrained: If true, converts vp to vp_free.  If false, converts
+                      vp_free to vp.
+
+Returns:
+  If to_unconstrained is true, updates vp_free in place.
+  If to_unconstrained is false, updates vp in place.
 """ ->
 function perform_transform!{NumType <: Number}(
     vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds,
@@ -503,8 +532,9 @@ end
 @doc """
 Transform VariationalParams to an array.
 
-vp = variational parameters
-omitted_ids = ids in ParamIndex
+Args:
+  - vp = variational parameters
+  - omitted_ids = ids in ParamIndex
 
 There is probably no use for this function, since you'll only be passing
 trasformations to the optimizer, but I'll include it for completeness.""" ->
