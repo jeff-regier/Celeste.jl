@@ -7,6 +7,7 @@ using Compat
 
 import OptimizeElbo
 
+
 println("Running optimization tests.")
 
 function verify_sample_star(vs, pos)
@@ -90,52 +91,55 @@ function test_objective_wrapper()
     @test_approx_eq(w_grad, wrapper.f_grad(x[:]))
 
     this_iter = wrapper.state.f_evals;
-    wrapper.f_value(x[:]);
+    wrapper.f_value(x[:] + 1.0);
     @test wrapper.state.f_evals == this_iter + 1
+
+    # # Check the AD gradient.
+    # ad_grad = wrapper.f_ad_grad(x[:]);
+    # @test_approx_eq ad_grad[:] w_grad
 end
 
-function test_objective_hessians()
-    blob, mp, bodies, tiled_blob = SampleData.gen_three_body_dataset();
-    # Change the tile size.
-    tiled_blob, mp = ModelInit.initialize_celeste(
-      blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
-    mp.active_sources = Int64[2, 3]
-    trans = Transform.get_mp_transform(mp, loc_width=1.0);
-    omitted_ids = Int64[];
-    kept_ids = setdiff(1:length(ids_free), omitted_ids);
-    x = trans.vp_to_array(mp.vp, omitted_ids);
-
-    wrapper =
-      OptimizeElbo.ObjectiveWrapperFunctions(
-        mp -> ElboDeriv.elbo(tiled_blob, mp),
-        mp, trans, kept_ids, omitted_ids);
-
-    # Test that the Hessian works in its various flavors.
-    println("Testing autodiff Hessian...")
-    w_hess = zeros(Float64, length(x), length(x));
-    wrapper.f_ad_hessian!(x[:], w_hess);
-
-    hess_i, hess_j, hess_val = wrapper.f_ad_hessian_sparse(x[:]);
-    w_hess_sparse =
-      OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
-    @test_approx_eq(w_hess, full(w_hess_sparse))
-
-    println("Testing slow autodiff Hessian...")
-    wrapper_slow_hess =
-      OptimizeElbo.ObjectiveWrapperFunctions(
-        mp -> ElboDeriv.elbo(tiled_blob, mp),
-        mp, trans, kept_ids, omitted_ids, fast_hessian=false);
-
-    slow_w_hess = zeros(Float64, length(x), length(x));
-    wrapper_slow_hess.f_ad_hessian!(x[:], slow_w_hess);
-    @test_approx_eq(slow_w_hess, w_hess)
-
-    hess_i, hess_j, hess_val = wrapper_slow_hess.f_ad_hessian_sparse(x[:]);
-    slow_w_hess_sparse =
-      OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
-    @test_approx_eq(slow_w_hess, full(slow_w_hess_sparse))
-end
-
+# function test_objective_hessians()
+#     blob, mp, bodies, tiled_blob = SampleData.gen_three_body_dataset();
+#     # Change the tile size.
+#     tiled_blob, mp = ModelInit.initialize_celeste(
+#       blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
+#     mp.active_sources = Int64[2, 3]
+#     trans = Transform.get_mp_transform(mp, loc_width=1.0);
+#     omitted_ids = Int64[];
+#     kept_ids = setdiff(1:length(ids_free), omitted_ids);
+#     x = trans.vp_to_array(mp.vp, omitted_ids);
+#
+#     wrapper =
+#       OptimizeElbo.ObjectiveWrapperFunctions(
+#         mp -> ElboDeriv.elbo(tiled_blob, mp),
+#         mp, trans, kept_ids, omitted_ids);
+#
+#     # Test that the Hessian works in its various flavors.
+#     println("Testing autodiff Hessian...")
+#     w_hess = zeros(Float64, length(x), length(x));
+#     wrapper.f_ad_hessian!(x[:], w_hess);
+#
+#     hess_i, hess_j, hess_val = wrapper.f_ad_hessian_sparse(x[:]);
+#     w_hess_sparse =
+#       OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+#     @test_approx_eq(w_hess, full(w_hess_sparse))
+#
+#     println("Testing slow autodiff Hessian...")
+#     wrapper_slow_hess =
+#       OptimizeElbo.ObjectiveWrapperFunctions(
+#         mp -> ElboDeriv.elbo(tiled_blob, mp),
+#         mp, trans, kept_ids, omitted_ids, fast_hessian=false);
+#
+#     slow_w_hess = zeros(Float64, length(x), length(x));
+#     wrapper_slow_hess.f_ad_hessian!(x[:], slow_w_hess);
+#     @test_approx_eq(slow_w_hess, w_hess)
+#
+#     hess_i, hess_j, hess_val = wrapper_slow_hess.f_ad_hessian_sparse(x[:]);
+#     slow_w_hess_sparse =
+#       OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
+#     @test_approx_eq(slow_w_hess, full(slow_w_hess_sparse))
+# end
 
 
 function test_star_optimization()
@@ -144,8 +148,8 @@ function test_star_optimization()
     # Newton's method converges on a small galaxy unless we start with
     # a high star probability.
     mp.vp[1][ids.a] = [0.8, 0.2]
-    trans = get_mp_transform(mp, loc_width=1.0);
-    OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
+    transform = get_mp_transform(mp, loc_width=1.0);
+    OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=false)
     verify_sample_star(mp.vp[1], [10.1, 12.2])
 end
 
@@ -164,6 +168,8 @@ function test_single_source_optimization()
 
   f = ElboDeriv.elbo;
   omitted_ids = Int64[]
+
+  ElboDeriv.elbo_likelihood(tiled_blob, mp).v
 
   OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=true)
 
@@ -203,8 +209,12 @@ function test_two_body_optimization_newton()
       elbo_function, tiled_blob, mp_bfgs, trans,
       omitted_ids=omitted_ids, verbose=true);
 
-    newton_image = ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], mp_newton);
-    bfgs_image = ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], mp_bfgs);
+    newton_image =
+      ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], mp_newton,
+                                     mp_newton.tile_sources[3][1,1]);
+    bfgs_image =
+      ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], mp_bfgs,
+                                     mp_bfgs.tile_sources[3][1,1]);
     original_image = tiled_blob[3][1,1].pixels;
 
     PyPlot.figure()
@@ -246,7 +256,7 @@ function test_kappa_finding()
     get_kl_gal_c() = begin
         accum = zero_sensitive_float(CanonicalParams)
         for d in 1:D
-            ElboDeriv.subtract_kl_c!(d, 2, 1, mp, accum)
+            ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
         end
         -accum.v
     end
@@ -270,7 +280,7 @@ function test_kappa_finding()
         tiled_blob::TiledBlob, mp::ModelParams{NumType}) = begin
       accum = zero_sensitive_float(CanonicalParams, NumType)
       for d in 1:D
-          ElboDeriv.subtract_kl_c!(d, 2, 1, mp, accum)
+          ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
       end
       accum
     end
@@ -387,7 +397,7 @@ function test_color()
         tiled_blob::TiledBlob, mp::ModelParams{NumType}) = begin
       accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
       for s in 1:mp.S, i in 1:2, d in 1:D
-          ElboDeriv.subtract_kl_c!(d, i, s, mp, accum)
+          ElboDeriv.subtract_kl_c(d, i, s, mp, accum)
       end
       accum
     end
@@ -416,15 +426,17 @@ function test_quadratic_optimization()
         val = zero_sensitive_float(CanonicalParams, NumType)
         val.v = -sum((mp.vp[1] - centers) .^ 2)
         val.d[:] = -2.0 * (mp.vp[1] - centers)
-
+        val.h[:, :] = diagm(fill(-2.0, length(CanonicalParams)))
         val
     end
 
     bounds = Array(ParamBounds, 1)
     bounds[1] = ParamBounds()
     for param in setdiff(fieldnames(ids), [:a, :k])
-      bounds[1][symbol(param)] = ParamBox(0., 1.0, 1.0)
+      bounds[1][symbol(param)] = fill(ParamBox(0., 1.0, 1.0), length(ids.(param)))
     end
+    bounds[1][:a] = [ SimplexBox(0.0, 1.0, 2) ]
+    bounds[1][:k] = fill(SimplexBox(0.0, 1.0, 2), 2)
     trans = DataTransform(bounds);
 
     mp = empty_model_params(1);
@@ -444,7 +456,7 @@ end
 
 test_quadratic_optimization()
 test_objective_wrapper()
-test_objective_hessians()
+#test_objective_hessians()
 test_star_optimization()
 test_galaxy_optimization()
 test_single_source_optimization()

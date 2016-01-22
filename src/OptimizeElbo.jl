@@ -40,8 +40,11 @@ type ObjectiveWrapperFunctions
     f_value::Function
     f_grad::Function
     f_grad!::Function
-    f_ad_hessian!::Function
-    f_ad_hessian_sparse::Function
+    f_hessian::Function
+    f_hessian!::Function
+    # f_ad_grad::Function
+    # f_ad_hessian!::Function
+    # f_ad_hessian_sparse::Function
 
     state::WrapperState
     transform::DataTransform
@@ -50,8 +53,18 @@ type ObjectiveWrapperFunctions
     omitted_ids::Array{Int64}
     DualType::DataType
 
-    # if fast_hessian is true, set the ModelParams active sources to
-    # include only the dual number currently being set.
+    # Caching
+    last_sf::SensitiveFloat
+    last_x::Vector{Float64}
+
+    # Arguments:
+    #  f: A function that takes in ModelParams and returns a SensitiveFloat.
+    #  mp: Initial ModelParams
+    #  transform: A DataTransform that matches ModelParams
+    #  kept_ids: The free parameter ids to keep
+    #  omitted_ids: The free parameter ids to omit (TODO: this is redundant)
+    #  fast_hessian: Evaluate the forward autodiff Hessian using only
+    #                mp.active_sources to speed up computation.
     ObjectiveWrapperFunctions(
       f::Function, mp::ModelParams{Float64}, transform::DataTransform,
       kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1};
@@ -62,6 +75,10 @@ type ObjectiveWrapperFunctions
         DualType = DualNumbers.Dual{Float64}
         mp_dual = CelesteTypes.convert(ModelParams{DualType}, mp);
         @assert transform.active_sources == mp.active_sources
+
+        last_sf =
+          zero_sensitive_float(UnconstrainedParams, length(mp.active_sources))
+        last_x = [ NaN ]
 
         state = WrapperState(0, false, 10, 1.0)
         function print_status{T <: Number}(
@@ -99,6 +116,10 @@ type ObjectiveWrapperFunctions
         end
 
         function f_objective(x::Vector{Float64})
+          if x == last_x
+            # Return the cached result.
+            return(last_sf)
+          else
             state.f_evals += 1
             # Evaluate in the constrained space and then unconstrain again.
             transform.array_to_vp!(reshape(x, x_size), mp.vp, omitted_ids)
@@ -107,10 +128,14 @@ type ObjectiveWrapperFunctions
             # TODO: Add an option to print either the transformed or
             # free parameterizations.
             print_status(mp.vp[mp.active_sources],
-                         f_res.v, f_res.d[:, mp.active_sources])
+                         f_res.v, f_res.d)
             f_res_trans = transform.transform_sensitive_float(f_res, mp)
-            #print_status(transform.from_vp(mp.vp), f_res_trans.v, f_res_trans.d)
-            f_res_trans
+
+            # Cache the result.
+            last_x = deepcopy(x)
+            last_sf = deepcopy(f_res_trans)
+            return(f_res_trans)
+          end
         end
 
         function f_value_grad{T <: Number}(x::Vector{T})
@@ -132,7 +157,6 @@ type ObjectiveWrapperFunctions
             value
         end
 
-        # TODO: Add caching.
         function f_value{T <: Number}(x::Vector{T})
             @assert length(x) == x_length
             f_value_grad(x)[1]
@@ -147,134 +171,26 @@ type ObjectiveWrapperFunctions
             grad[:,:] = f_grad(x)
         end
 
-        # Update <hess> in place with an autodiff hessian.
-        function f_ad_hessian!(x_vec::Array{Float64}, hess::Matrix{Float64})
-            @assert length(x_vec) == x_length
-            x = reshape(x_vec, x_size)
-            k = length(x_vec)
+        function f_hessian{T <: Number}(x::Vector{T})
+          @assert length(x) == x_length
+          res = f_objective(x)
+          all_kept_ids = Int64[]
+          for sa=1:transform.active_S
+            append!(all_kept_ids, kept_ids + (sa - 1) * length(kept_ids))
+          end
+          sub_hess = res.h[all_kept_ids, all_kept_ids]
+          state.scale .* 0.5 * (sub_hess + sub_hess')
+      end
 
-            x_dual = DualType[
-              DualType(x[i, j], 0.) for i = 1:(x_size[1]), j=1:(x_size[2])];
-
-            @assert size(hess) == (k, k)
-
-            print("Getting Hessian ($k components): ")
-            mp_dual.active_sources = mp.active_sources
-            for si in 1:length(mp.active_sources)
-              s = mp.active_sources[si]
-              if fast_hessian
-                # We only need to calculate the derivatives in tiles where
-                # epsilon != 0.  The values of the derivatives themselves (that
-                # is, the real part of the dual numbers) will be wrong but the
-                # second derivatives with respect to source s will be right.
-                mp_dual.active_sources = [s]
-              end
-              for index in 1:x_size[1]
-                index == 1 ? print("o"): print(".")
-                original_x = x[index, si]
-                x_dual[index, si] = DualType(original_x, 1.)
-
-                deriv = f_grad(x_dual[:])
-                # This goes through deriv in column-major order.
-                hess[:, sub2ind(x_size, index, si)] =
-                  Float64[ DualNumbers.epsilon(x_val) for x_val in deriv ]
-                x_dual[index, si] = DualType(original_x, 0.)
-              end
-            end
-            print("Done.\n")
-            # Assure that the hessian is exactly symmetric.
-            hess[:,:] = 0.5 * (hess + hess')
-        end
-
-        # Returns the row and column indices and value of a sparse Hessian
-        # computed with autodifferentiation.
-        function f_ad_hessian_sparse(x_vec::Array{Float64})
-            @assert length(x_vec) == x_length
-            x = reshape(x_vec, x_size)
-            k = length(x_vec)
-
-            x_dual = DualType[DualType(x[i, j], 0.) for
-                              i = 1:x_size[1], j=1:x_size[2]];
-
-            # Vectors of the (source, component) indices for the rows
-            # and columns of the Hessian.
-            hess_i = Tuple{Int64, Int64}[]
-            hess_j = Tuple{Int64, Int64}[]
-
-            # Values of the hessian in the (hess_i, hess_j) locations.
-            hess_val = Float64[]
-
-            print("Getting sparse Hessian ($k components): ")
-            mp_dual.active_sources = mp.active_sources
-            for s1i in 1:length(mp.active_sources)
-              s1 = mp.active_sources[s1i]
-              if fast_hessian
-                # We only need to calculate the derivatives in tiles where
-                # epsilon != 0.  The values of the derivatives themselves (that
-                # is, the real part of the dual numbers) will be wrong but the
-                # second derivatives with respect to source s will be right.
-                mp_dual.active_sources = [s1]
-              end
-              for index1 in 1:x_size[1]
-                index1 == 1 ? print("o"): print(".")
-                original_x = x[index1, s1i]
-                x_dual[index1, s1i] = DualType(original_x, 1.)
-                deriv = reshape(f_grad(x_dual[:]), x_size)
-                x_dual[index1, s1i] = DualType(original_x, 0.)
-
-                # Record the hessian terms.
-                for s2i in 1:length(mp.active_sources), index2=1:size(x)[1]
-                  s2 = mp.active_sources[s2i]
-                  this_hess_val = DualNumbers.epsilon(deriv[index2, s2i])
-                  if (this_hess_val != 0)
-                    push!(hess_i, (s1i, index1))
-                    push!(hess_j, (s2i, index2))
-                    push!(hess_val, this_hess_val)
-                  end # index2 for
-                end # s2 for
-              end # index for
-            end # s1 for
-            print("Done.\n")
-            hess_i, hess_j, hess_val
+        function f_hessian!{T <: Number}(x::Vector{T}, hess::Matrix{T})
+          hess[:, :] = f_hessian(x)
         end
 
         new(f_objective, f_value_grad, f_value_grad!,
-            f_value, f_grad, f_grad!,
-            f_ad_hessian!, f_ad_hessian_sparse,
-            state, transform, mp, kept_ids, omitted_ids, DualType)
+            f_value, f_grad, f_grad!, f_hessian, f_hessian!,
+            # f_ad_hessian!, f_ad_hessian_sparse,
+            state, transform, mp, kept_ids, omitted_ids, DualType, last_sf)
     end
-end
-
-
-@doc """
-Convert the indices and values of a sparse Hessian matrix to an actual
-sparse matrix.
-
-Args:
-  - hess_i: A vector of (source, component) tuples for the Hessian rows
-  - hess_j: A vector of (source, component) tuples for the Hessian columns
-  - hess_val: The values of the Hessian corresponding to (hess_i, hess_j)
-  - dims: The dimensions of the parameter matrix (#components, #sources)
-
-Returns:
-  - A symmetric sparse matrix corresponding to the inputs.
-""" ->
-function unpack_hessian_vals(hess_i::Vector{Tuple{Int64, Int64}},
-                             hess_j::Vector{Tuple{Int64, Int64}},
-                             hess_val::Vector{Float64},
-                             dims::Tuple{Int64, Int64})
-  # TODO: make this function part of the transform.
-  hess_i_vec = Array(Int64, length(hess_i));
-  hess_j_vec = Array(Int64, length(hess_j));
-  for entry in 1:length(hess_i)
-    hess_i_vec[entry] = sub2ind(dims, hess_i[entry][2], hess_i[entry][1])
-    hess_j_vec[entry] = sub2ind(dims, hess_j[entry][2], hess_j[entry][1])
-  end
-  new_hess_sparse =
-    sparse(hess_i_vec, hess_j_vec, hess_val, prod(dims), prod(dims));
-
-  # Guarantee exact symmetry.
-  new_hess = 0.5 * (new_hess_sparse + new_hess_sparse')
 end
 
 
@@ -321,7 +237,7 @@ function maximize_f(
     x0 = transform.vp_to_array(mp.vp, omitted_ids);
     d = Optim.TwiceDifferentiableFunction(
       optim_obj_wrap.f_value, optim_obj_wrap.f_grad!,
-      optim_obj_wrap.f_ad_hessian!)
+      optim_obj_wrap.f_hessian!)
 
     # TODO: use the Optim version after newton_tr is merged.
     nm_result = newton_tr(d,

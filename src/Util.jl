@@ -9,16 +9,18 @@ function matvec222(mat::Matrix, vec::Vector)
             (mat[2,1] * vec[1] + mat[2,2] * vec[2]) * vec[2]
 end
 
+@doc """
+Unpack a rotation-parameterized BVN covariance matrix.
+
+Args:
+  - ab: The ratio of the minor to the major axis.
+  - angle: Rotation angle (in radians)
+  - scale: The major axis.
+
+ Returns:
+   The 2x2 covariance matrix parameterized by the inputs.
+""" ->
 function get_bvn_cov{NumType <: Number}(ab::NumType, angle::NumType, scale::NumType)
-    # Unpack a rotation-parameterized BVN covariance matrix.
-    #
-    # Args:
-    #   - ab: The ratio of the minor to the major axis.
-    #   - angle: Rotation angle (in radians)
-    #   - scale: The major axis.
-    #
-    #  Returns:
-    #    The 2x2 covariance matrix parameterized by the inputs.
 
     #@assert -pi/2 <= angle < pi/2
     if NumType <: AbstractFloat
@@ -32,14 +34,5 @@ function get_bvn_cov{NumType <: Number}(ab::NumType, angle::NumType, scale::NumT
     W' * W  # XiXi
 end
 
-function inv_logit(x)
-    # TODO: bounds checking
-    -log(1.0 ./ x - 1)
-end
-
-function logit(x)
-    # TODO: bounds checking
-    1.0 ./ (1.0 + exp(-x))
-end
 
 end

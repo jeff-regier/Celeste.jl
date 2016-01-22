@@ -9,6 +9,7 @@ import SDSS
 import Util
 import WCS
 
+
 println("Running misc tests.")
 
 function test_tile_image()
@@ -265,42 +266,6 @@ function test_util_bvn_cov()
 end
 
 
-function test_add_sensitive_floats()
-  S = 3
-  function generate_random_sf()
-      sf1 = zero_sensitive_float(CanonicalParams, Float64, S)
-      sf1.v = rand()
-      sf1.d = rand(size(sf1.d))
-      sf1.h = rand(size(sf1.h))
-      sf1
-  end
-
-  sf1 = generate_random_sf();
-  sf2 = generate_random_sf();
-
-  sf3 = sf1 + sf2
-  @test sf3.v == sf1.v + sf2.v
-  @test sf3.d == sf1.d + sf2.d
-  @test sf3.h == sf1.h + sf2.h
-
-  sf_bad_size = zero_sensitive_float(CanonicalParams, Float64, S + 1);
-  sf_bad_type = zero_sensitive_float(UnconstrainedParams, Float64, S);
-
-  @test_throws AssertionError sf_bad_size + sf1
-  @test_throws AssertionError sf_bad_type + sf1
-
-  function sf_equal(sf1::SensitiveFloat, sf2::SensitiveFloat)
-    sf1.v == sf2.v && sf2.d == sf2.d && sf1.h == sf2.h
-  end
-
-  # Check that recursive summing works.
-  sf_vector = [ generate_random_sf() for i=1:3 ]
-  @test sf_equal(sum(sf_vector), reduce(+, sf_vector))
-  @test sf_equal(sum(sf_vector), sf_vector[1] + sf_vector[2] + sf_vector[3])
-
-end
-
-
 function test_convert_dual_mp()
   blob, mp, body, tiled_blob = gen_three_body_dataset(perturb=true);
   tiled_blob, mp_original =
@@ -309,7 +274,7 @@ function test_convert_dual_mp()
 
   # Test the variational parameters.
   for s in 1:mp.S
-    @test_approx_eq DualNumbers.real(mp_dual.vp[s]) mp.vp[s]
+    @test_approx_eq DualNumbers.realpart(mp_dual.vp[s]) mp.vp[s]
     @test_approx_eq DualNumbers.epsilon(mp_dual.vp[s]) fill(0.0, length(mp.vp[s]))
   end
 
@@ -327,5 +292,4 @@ test_sky_noise_estimates()
 test_local_sources()
 test_local_sources_2()
 test_local_sources_3()
-test_add_sensitive_floats()
 test_convert_dual_mp()

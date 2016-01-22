@@ -8,21 +8,23 @@ export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
 export effective_radii
 
 export ModelParams, PriorParams, UnconstrainedParams
-export CanonicalParams, BrightnessParams, StarPosParams, GalaxyPosParams
+export CanonicalParams, BrightnessParams, StarPosParams
+export GalaxyPosParams, GalaxyShapeParams
 export VariationalParams, FreeVariationalParams, RectVariationalParams
 
-export shape_standard_alignment, brightness_standard_alignment, align
+export shape_standard_alignment, brightness_standard_alignment
+export gal_shape_alignment, align
 
 export SensitiveFloat, zero_sensitive_float, clear!
 export print_params
 
-export ids, ids_free, star_ids, gal_ids
+export ids, ids_free, star_ids, gal_ids, gal_shape_ids, bids
 export ids_names, ids_free_names
 export D, B, Ia
 
-export print_params
+export set_hess!, multiply_sfs!, combine_sfs!
 
-export TheirGradNum, Differentiable
+export print_params
 
 using Util
 using SloanDigitalSkySurvey.PSF.RawPSFComponents
@@ -43,6 +45,7 @@ typealias Differentiable Union{AbstractFloat, TheirGradNum}
 
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
+
 
 # The number of components in the color prior.
 const D = 2
@@ -227,8 +230,6 @@ because the raw wcs object is a C++ pointer which julia resonably
 refuses to parallelize.
 
 Attributes:
-- hh: The tile row index (in 1:number of tile rows)
-- ww: The tile column index (in 1:number of tile columns)
 - h_range: The h pixel locations of the tile in the original image
 - w_range: The w pixel locations of the tile in the original image
 - h_width: The width of the tile in the h direction
@@ -237,8 +238,6 @@ Attributes:
 - remainder: the same as in the Image type.
 """ ->
 immutable ImageTile
-    hh::Int64
-    ww::Int64
     b::Int64
 
     h_range::UnitRange{Int64}
@@ -315,7 +314,7 @@ ImageTile(img::Image,
     iota_vec = img.iota_vec[h_range]
   end
 
-  ImageTile(hh, ww, b, h_range, w_range, h_width, w_width, pixels,
+  ImageTile(b, h_range, w_range, h_width, w_width, pixels,
             img.constant_background, img.epsilon, epsilon_mat,
             img.iota, iota_vec)
 end
@@ -389,11 +388,14 @@ abstract ParamSet
 #           (formerly kappa)
 
 # Parameters for location and galaxy shape.
-ue_params = ((:u, 2), (:e_dev, 1), (:e_axis, 1), (:e_angle, 1),
-        (:e_scale, 1))
+gal_shape_params = ((:e_axis, 1), (:e_angle, 1), (:e_scale, 1))
+ue_params = ((:u, 2), (:e_dev, 1), gal_shape_params...)
 
 # Parameters for the colors.
+# Only one set of brightness parameters.
 rc_params1 = ((:r1, 1), (:r2, 1), (:c1, B - 1), (:c2, B - 1))
+
+# All Ia set of brightness parameters.
 rc_params2 = ((:r1, Ia), (:r2, Ia), (:c1, (B - 1,  Ia)),
         (:c2, (B - 1,  Ia)))
 
@@ -401,8 +403,11 @@ rc_params2 = ((:r1, Ia), (:r2, Ia), (:c1, (B - 1,  Ia)),
 ak_simplex = ((:a, Ia), (:k, (D, Ia)))
 ak_free = ((:a, Ia - 1), (:k, (D - 1, Ia)))
 
+# TODO: the brightness params are screwed up.  Need to think about what they
+# mean.
 const param_specs = [
     (:StarPosParams, :star_ids, ((:u, 2),)),
+    (:GalaxyShapeParams, :gal_shape_ids, gal_shape_params),
     (:GalaxyPosParams, :gal_ids, ue_params),
     (:BrightnessParams, :bids, rc_params1),
     (:CanonicalParams, :ids, tuple(ue_params..., rc_params2..., ak_simplex...)),
@@ -416,6 +421,10 @@ for (pn, ids_name, pf) in param_specs
 
     prev_end = 0
     for (n, ll) in pf
+        # TODO: it would be better if a particular symbol were the same type
+        # in both unconstrained and constrianted parameterizations (e.g.
+        # a when Ia == 2, which is an integer in UnconstraintedParams but
+        # a vector in CanonicalParams.)
         id_field = ll == 1 ? :(Int64) : :(Array{Int64, $(length(ll))})
         push!(ids_fields, :($n::$id_field))
 
@@ -451,11 +460,18 @@ align(::StarPosParams, CanonicalParams) = ids.u
 align(::GalaxyPosParams, CanonicalParams) =
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
 align(::CanonicalParams, CanonicalParams) = collect(1:length(CanonicalParams))
+align(::GalaxyShapeParams, GalaxyPosParams) =
+  [gal_ids.e_axis; gal_ids.e_angle; gal_ids.e_scale]
 
+# The shape and brightness parameters for stars and galaxies respectively.
 const shape_standard_alignment = (ids.u,
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale])
 bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
 const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
+
+# Note that gal_shape_alignment aligns the shape ids with the GalaxyPosParams,
+# not the CanonicalParams.
+const gal_shape_alignment = align(gal_shape_ids, gal_ids)
 
 # TODO: maybe these should be incorporated into the framework above
 # (which I don't really understand.)
@@ -542,6 +558,53 @@ function convert(::Type{ModelParams{DualNumbers.Dual{Float64}}},
     mp_dual
 end
 
+function convert(FDType::Type{ForwardDiff.GradientNumber},
+                 mp::ModelParams{Float64})
+    x = mp.vp[1]
+    P = length(x)
+    FDType = ForwardDiff.GradientNumber{length(mp.vp[1]), Float64}
+
+    fd_x = [ ForwardDiff.GradientNumber(x[i], zeros(Float64, P)...) for i=1:P ]
+    convert(FDType, x[1])
+
+    vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
+    mp_fd = ModelParams(vp_fd, mp.pp)
+end
+
+function convert(FDType::Type{ForwardDiff.HessianNumber},
+                 mp::ModelParams{Float64})
+    x = mp.vp[1]
+    P = length(x)
+    FDType = ForwardDiff.HessianNumber{length(mp.vp[1]), Float64}
+
+    fd_x = [ ForwardDiff.HessianNumber(x[i], zeros(Float64, P)...) for i=1:P ]
+    convert(FDType, x[1])
+
+    vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
+    mp_fd = ModelParams(vp_fd, mp.pp)
+end
+
+
+# TODO: Maybe write it as a convert()?
+function forward_diff_model_params{T <: Number}(
+    FDType::Type{T},
+    base_mp::ModelParams{Float64})
+  S = length(base_mp.vp)
+  P = length(base_mp.vp[1])
+  mp_fd = ModelParams{FDType}([ zeros(FDType, P) for s=1:S ], base_mp.pp);
+  # Set the values (but not gradient numbers) for parameters other
+  # than the galaxy parameters.
+  for s=1:base_mp.S, i=1:length(ids)
+    mp_fd.vp[s][i] = base_mp.vp[s][i]
+  end
+  mp_fd.patches = base_mp.patches;
+  mp_fd.tile_sources = base_mp.tile_sources;
+  mp_fd.active_sources = base_mp.active_sources;
+  mp_fd.objids = base_mp.objids;
+  mp_fd
+end
+
+
 @doc """
 Display model parameters with the variable names.
 """ ->
@@ -583,91 +646,7 @@ end
 
 #########################################################
 
-@doc """
-A function value and its derivative with respect to its arguments.
-
-Attributes:
-  v: The value
-  d: The derivative with respect to each variable in
-     P-dimensional VariationalParams for each of S celestial objects
-     in a local_P x local_S matrix.
-  h: The second derivative with respect to each variational parameter,
-     in the same format as d.
-""" ->
-type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
-    v::NumType
-    d::Matrix{NumType} # local_P x local_S
-    h::Matrix{NumType} # local_P x local_S
-    ids::ParamType
-end
-
-#########################################################
-
-function zero_sensitive_float{ParamType <: ParamSet}(
-  ::Type{ParamType}, NumType::DataType, local_S::Int64)
-    local_P = length(ParamType)
-    d = zeros(NumType, local_P, local_S)
-    h = zeros(NumType, local_P, local_S)
-    SensitiveFloat{ParamType, NumType}(zero(NumType), d, h, getids(ParamType))
-end
-
-function zero_sensitive_float{ParamType <: ParamSet}(
-  ::Type{ParamType}, NumType::DataType)
-    # Default to a single source.
-    zero_sensitive_float(ParamType, NumType, 1)
-end
-
-function clear!{ParamType <: ParamSet, NumType <: Number}(
-  sp::SensitiveFloat{ParamType, NumType})
-    sp.v = zero(NumType)
-    fill!(sp.d, zero(NumType))
-end
-
-# If no type is specified, default to using Float64.
-function zero_sensitive_float{ParamType <: ParamSet}(
-  param_arg::Type{ParamType}, local_S::Int64)
-    zero_sensitive_float(param_arg, Float64, local_S)
-end
-
-function zero_sensitive_float{ParamType <: ParamSet}(param_arg::Type{ParamType})
-    zero_sensitive_float(param_arg, Float64, 1)
-end
-
-function +(sf1::SensitiveFloat, sf2::SensitiveFloat)
-  # Simply asserting equality of the ids doesn't work for some reason.
-  @assert typeof(sf1.ids) == typeof(sf2.ids)
-  @assert length(sf1.ids) == length(sf2.ids)
-
-  @assert size(sf1.d) == size(sf2.d)
-  @assert size(sf1.h) == size(sf2.h)
-
-  sf3 = deepcopy(sf1)
-  sf3.v = sf1.v + sf2.v
-  sf3.d = sf1.d + sf2.d
-  sf3.h = sf1.h + sf2.h
-
-  sf3
-end
-
-##################################################33
-
-function convert(::Type{ModelParams{TheirGradNum}}, 
-        base_mp::ModelParams{Float64})
-    S = length(base_mp.vp)
-    P = length(base_mp.vp[1])
-    mp_fd = ModelParams{TheirGradNum}([ zeros(TheirGradNum, P) for s=1:S ], 
-            base_mp.pp);
-    # Set the values (but not gradient numbers) for parameters other
-    # than the galaxy parameters.
-    for s=1:base_mp.S, i=1:length(ids)
-        mp_fd.vp[s][i] = base_mp.vp[s][i]
-    end
-    mp_fd.patches = base_mp.patches;
-    mp_fd.tile_sources = base_mp.tile_sources;
-    mp_fd.active_sources = base_mp.active_sources;
-    mp_fd.objids = base_mp.objids;
-    mp_fd
-end
-
+# TODO: wrap this into its own module?
+include(joinpath(Pkg.dir("Celeste"), "src/SensitiveFloat.jl"))
 
 end

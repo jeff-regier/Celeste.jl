@@ -3,6 +3,79 @@
 # For various reasons, e.g. the need to access the global scope when
 # communicating to subprocesses, I have not made this into a module.
 
+
+# TODO: this used to be in ElboDeriv and everything that uses it needs
+# to be fixed.
+@doc """
+A type containing all the information that needs to be communicated
+to worker nodes at each iteration.  This currently consists of pre-computed
+information about each source.
+
+Attributes:
+  vp: The VariationalParams for the ModelParams object
+  star_mcs_vec: A vector of star BVN components, one for each band
+  gal_mcs_vec: A vector of galaxy BVN components, one for each band
+  sbs_vec: A vector of brightness vectors, one for each band
+""" ->
+type ParameterMessage{NumType <: Number}
+  vp::VariationalParams{NumType}
+  star_mcs_vec::Vector{Array{BvnComponent{NumType},2}}
+  gal_mcs_vec::Vector{Array{GalaxyCacheComponent{NumType},4}}
+  sbs_vec::Vector{Vector{SourceBrightness{NumType}}}
+end
+
+@doc """
+This allocates memory for but does not initialize the source parameters.
+""" ->
+ParameterMessage{NumType <: Number}(mp::ModelParams{NumType}) = begin
+  num_bands = size(mp.patches)[2]
+  star_mcs_vec = Array(Array{BvnComponent{NumType},2}, num_bands)
+  gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType},4}, num_bands)
+  sbs_vec = Array(Vector{SourceBrightness{NumType}}, num_bands)
+  ParameterMessage(mp.vp, star_mcs_vec, gal_mcs_vec, sbs_vec)
+end
+
+
+@doc """
+Update a ParameterMessage in place using mp.
+
+Args:
+  - mp: A ModelParams object
+  - param_msg: A ParameterMessage that is updated using the parameter values
+               in mp.
+""" ->
+function update_parameter_message!{NumType <: Number}(
+    mp::ModelParams{NumType}, param_msg::ParameterMessage{NumType})
+  for b=1:5
+    param_msg.star_mcs_vec[b], param_msg.gal_mcs_vec[b] =
+      load_bvn_mixtures(mp, b);
+    param_msg.sbs_vec[b] = SourceBrightness{NumType}[
+      SourceBrightness(mp.vp[s]) for s in 1:mp.S];
+  end
+end
+
+@doc """
+Evaluate the ELBO with pre-computed brightnesses and components
+stored in ParameterMessage.
+""" ->
+function elbo_likelihood!{NumType <: Number}(
+    tiled_blob::TiledBlob,
+    param_msg::ParameterMessage{NumType},
+    mp::ModelParams{NumType},
+    accum::SensitiveFloat{CanonicalParams, NumType})
+
+  clear!(accum)
+  mp.vp = param_msg.vp
+  for b in 1:5
+    sbs = param_msg.sbs_vec[b]
+    star_mcs = param_msg.star_mcs_vec[b]
+    gal_mcs = param_msg.gal_mcs_vec[b]
+    elbo_likelihood!(tiled_blob[b], mp, sbs, star_mcs, gal_mcs, accum)
+  end
+end
+
+
+VERSION < v"0.4.0-dev" && using Docile
 using Celeste
 using CelesteTypes
 using JLD
@@ -34,8 +107,8 @@ and mp are globally defined.
 function node_sources()
   sources = Int64[]
   for b in 1:5
-    for tile in tiled_blob[b][:]
-      append!(sources, mp.tile_sources[b][tile.hh, tile.ww])
+    for tile_ind in 1:length(tiled_blob[b])
+      append!(sources, mp.tile_sources[b][tile_ind])
     end
   end
   unique(sources)
