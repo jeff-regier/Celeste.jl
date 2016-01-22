@@ -137,8 +137,9 @@ function test_real_image()
     for sa = 1:length(trimmed_mp.active_sources)
       mp_local.vp[trimmed_mp.active_sources[sa]] = vp_array[:, sa]
     end
-    elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, mp_local, calculate_derivs=false)
-    elbo.v
+    local_elbo = ElboDeriv.elbo(
+      very_trimmed_tiled_blob, mp_local, calculate_derivs=false)
+    local_elbo.v
   end
 
   vp_vec = trimmed_mp.vp[s];
