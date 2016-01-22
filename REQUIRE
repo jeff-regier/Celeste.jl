@@ -2,7 +2,7 @@ DataFrames
 Distributions
 DualNumbers
 FITSIO
-ForwardDiff # Currently only required for testing.
+ForwardDiff
 JLD
 Optim
 GaussianMixtures

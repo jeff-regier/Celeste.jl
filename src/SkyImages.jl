@@ -21,6 +21,7 @@ export convert_gmm_to_celeste, get_psf_at_point
 export convert_catalog_to_celeste, load_stamp_catalog
 export break_blob_into_tiles, break_image_into_tiles
 export get_local_sources
+export stitch_object_tiles
 
 
 @doc """
@@ -494,6 +495,7 @@ function stitch_object_tiles(
   H, W = size(tiled_blob[b])
   has_s = Bool[ s in mp.tile_sources[b][h, w] for h=1:H, w=1:W ];
   tiles_s = tiled_blob[b][has_s];
+  tile_sources_s = mp.tile_sources[b][has_s];
   h_range = Int[typemax(Int), typemin(Int)]
   w_range = Int[typemax(Int), typemin(Int)]
   print("Stitching...")
@@ -507,7 +509,9 @@ function stitch_object_tiles(
   println("Done.")
 
   image_s = fill(0.0, diff(h_range)[1] + 1, diff(w_range)[1] + 1);
-  for tile in tiles_s
+  for tile_ind in 1:length(tiles_s)
+    tile = tiles_s[tile_ind]
+    tile_sources = tile_sources_s[tile_ind]
     image_s[tile.h_range - h_range[1] + 1, tile.w_range - w_range[1] + 1] =
       predicted ?
       ElboDeriv.tile_predicted_image(tile, mp, include_epsilon=false):
