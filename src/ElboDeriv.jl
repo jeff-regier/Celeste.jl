@@ -636,8 +636,8 @@ function calculate_var_G_s!{NumType <: Number}(
           E_G2_s.h[ind1, ind2] - 2 * (
             E_G_s.v * E_G_s.h[ind1, ind2] +
             E_G_s.d[ind1, 1] * E_G_s.d[ind2, 1])
+        var_G_s.h[ind2, ind1] = var_G_s.h[ind1, ind2]
       end
-      var_G_s.h[ind2, ind1] = var_G_s.h[ind1, ind2]
     end
   end
 end
@@ -735,7 +735,6 @@ end
 
 @doc """
 Add the lower bound to the log term to the elbo for a single pixel.
-As a side effect, elbo_vars.E_G2 is cleared.
 
 Args:
    - elbo_vars: Intermediate variables
@@ -744,7 +743,7 @@ Args:
 
  Returns:
   Updates elbo_vars.elbo in place by adding the lower bound to the log
-  term and clears E_G2.
+  term.
 """ ->
 function add_elbo_log_term!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
@@ -760,6 +759,10 @@ function add_elbo_log_term!{NumType <: Number}(
   # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
   log_term_value = log(E_G.v) - 0.5 * var_G.v  / (E_G.v ^ 2)
 
+  # Add x_nbm * (log term * log(iota)) to the elbo.
+  # If not calculating derivatives, add the values directly.
+  elbo.v += x_nbm * (log(iota) + log_term_value)
+
   if elbo_vars.calculate_derivs
 
     elbo_vars.combine_grad[:] =
@@ -769,28 +772,22 @@ function add_elbo_log_term!{NumType <: Number}(
       elbo_vars.combine_hess[:,:] =
         NumType[0             1 / E_G.v^3;
                 1 / E_G.v^3   -(1 / E_G.v ^ 2 + 3  * var_G.v / (E_G.v ^ 4))]
-    else
-      fill!(elbo_vars.combine_hess, 0.0)
+    # else
+    #   fill!(elbo_vars.combine_hess, 0.0)
     end
 
-    # Desipte the variable name, this step briefly updates elbo_vars.var_G
-    # to contain the lower bound of the log term.
+    # Calculate the log term.
     combine_sfs!(
       elbo_vars.var_G, elbo_vars.E_G, elbo_vars.elbo_log_term,
       log_term_value, elbo_vars.combine_grad, elbo_vars.combine_hess,
       calculate_hessian=elbo_vars.calculate_hessian)
 
-    # Add to the elbo.
-    add_value = elbo.v + x_nbm * (log(iota) + log_term_value)
-    elbo_vars.combine_grad[:] = NumType[1, x_nbm]
-    fill!(elbo_vars.combine_hess, 0.0)
-    combine_sfs!(
-      elbo_vars.elbo, elbo_vars.elbo_log_term,
-      add_value, elbo_vars.combine_grad, elbo_vars.combine_hess,
-      calculate_hessian=elbo_vars.calculate_hessian)
-  else
-    # If not calculating derivatives, add the values directly.
-    elbo.v += x_nbm * (log(iota) + log_term_value)
+    # Add to the ELBO.
+    elbo.d += x_nbm * elbo_vars.elbo_log_term.d
+
+    if elbo_vars.calculate_hessian
+      elbo.h += x_nbm * elbo_vars.elbo_log_term.h
+    end
   end
 end
 
