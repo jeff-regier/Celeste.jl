@@ -603,9 +603,6 @@ function accumulate_source_brightness!{NumType <: Number}(
 end
 
 
-# Declare outside so that memory is not allocated every function call.
-const variance_hess = Float64[-2  0; 0 0]
-
 @doc """
 Calculate the variance var_G_s as a function of (E_G_s, E_G2_s).
 
@@ -619,20 +616,29 @@ Returns:
 function calculate_var_G_s!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType}, active_source::Bool)
 
-  clear!(elbo_vars.var_G_s,
+  var_G_s = elbo_vars.var_G_s
+  E_G_s = elbo_vars.E_G_s
+  E_G2_s = elbo_vars.E_G2_s
+
+  clear!(var_G_s,
     clear_hessian=elbo_vars.calculate_hessian &&
       elbo_vars.calculate_derivs && active_source)
-  var_v = elbo_vars.E_G2_s.v - (elbo_vars.E_G_s.v ^ 2);
+
+  elbo_vars.var_G_s.v = E_G2_s.v - (E_G_s.v ^ 2);
 
   if active_source && elbo_vars.calculate_derivs
-    elbo_vars.combine_grad[:] = NumType[-2 * elbo_vars.E_G_s.v, 1];
-    elbo_vars.combine_hess[:, :] = variance_hess;
-    combine_sfs!(
-      elbo_vars.E_G_s, elbo_vars.E_G2_s, elbo_vars.var_G_s,
-      var_v, elbo_vars.combine_grad, elbo_vars.combine_hess,
-      calculate_hessian=elbo_vars.calculate_hessian)
-  else
-    elbo_vars.var_G_s.v = var_v
+    var_G_s.d = E_G2_s.d - 2 * E_G_s.v * E_G_s.d
+
+    if elbo_vars.calculate_hessian
+      p1, p2 = size(var_G_s.h)
+      @inbounds for ind2 = 1:p2, ind1 = 1:ind2
+        var_G_s.h[ind1, ind2] =
+          E_G2_s.h[ind1, ind2] - 2 * (
+            E_G_s.v * E_G_s.h[ind1, ind2] +
+            E_G_s.d[ind1, 1] * E_G_s.d[ind2, 1])
+      end
+      var_G_s.h[ind2, ind1] = var_G_s.h[ind1, ind2]
+    end
   end
 end
 
