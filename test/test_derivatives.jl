@@ -8,6 +8,17 @@ import DualNumbers
 import SkyImages
 import SloanDigitalSkySurvey: SDSS
 
+if VERSION > v"0.5.0-dev"
+    using Base.Threads
+else
+    # Pre-Julia 0.5 there are no threads
+    nthreads() = 1
+    threadid() = 1
+    macro threads(x)
+        x
+    end
+end
+
 println("Running hessian tests.")
 
 
@@ -285,16 +296,31 @@ function test_tile_likelihood()
   function tile_lik_wrapper_fun{NumType <: Number}(
       mp::ModelParams{NumType}, calculate_derivs::Bool)
 
-    elbo_vars = ElboDeriv.ElboIntermediateVariables(
-      NumType, mp.S, length(mp.active_sources));
-    elbo_vars.calculate_derivs = calculate_derivs
+    if ElboDeriv.Threaded
+      elbo_vars_array = [ ElboDeriv.ElboIntermediateVariables(
+          NumType, mp.S, length(mp.active_sources),
+          calculate_derivs=calculate_derivs)
+        for i in 1:nthreads() ]
+    else
+      elbo_vars_array = [ ElboDeriv.ElboIntermediateVariables(
+          NumType, mp.S, length(mp.active_sources),
+          calculate_derivs=calculate_derivs) ]
+    end
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(
-      mp, b, calculate_derivs=elbo_vars.calculate_derivs);
+      mp, b, calculate_derivs=elbo_vars_array[1].calculate_derivs);
     sbs = ElboDeriv.load_source_brightnesses(
-      mp, calculate_derivs=elbo_vars.calculate_derivs);
+      mp, calculate_derivs=elbo_vars_array[1].calculate_derivs);
     ElboDeriv.tile_likelihood!(
-      elbo_vars, tile, mp, tile_sources, sbs, star_mcs, gal_mcs);
-    deepcopy(elbo_vars.elbo)
+      elbo_vars_array, tile, mp, tile_sources, sbs, star_mcs, gal_mcs);
+    if ElboDerivs.Threaded
+      for i in 2:nthreads()
+        CelesteTypes.add_scaled_sfs!(
+          elbo_vars_array[1].elbo, elbo_vars_array[i].elbo,
+          calculate_hessian=elbo_vars_array[1].calculate_hessian &&
+            elbo_vars_array[1].calculate_derivs)
+      end
+    end
+    deepcopy(elbo_vars_array[1].elbo)
   end
 
   function tile_lik_value_wrapper{NumType <: Number}(x::Vector{NumType})

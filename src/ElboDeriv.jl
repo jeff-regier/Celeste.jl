@@ -10,6 +10,18 @@ import WCSLIB
 
 using DualNumbers.Dual
 
+Threaded = true
+if VERSION > v"0.5.0-dev"
+    using Base.Threads
+else
+    # Pre-Julia 0.5 there are no threads
+    nthreads() = 1
+    threadid() = 1
+    macro threads(x)
+        x
+    end
+end
+
 export tile_predicted_image
 
 
@@ -800,7 +812,7 @@ Add a tile's contribution to the ELBO likelihood term by
 modifying elbo in place.
 
 Args:
-  - elbo_vars: Elbo intermediate values.
+  - elbo_vars_array: Array of per-thread Elbo intermediate values.
   - tile: An ImageTile
   - mp: Model parameters
   - tile_sources: A vector of integers of sources in 1:mp.S affecting the tile
@@ -810,10 +822,10 @@ Args:
   - include_epsilon: Whether the background noise should be included
 
 Returns:
-  Adds to the elbo_vars.elbo in place.
+  Adds to the elbo_vars_array[:].elbo in place.
 """ ->
 function tile_likelihood!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
+    elbo_vars_array,
     tile::ImageTile,
     mp::ModelParams{NumType},
     tile_sources::Vector{Int64},
@@ -822,7 +834,7 @@ function tile_likelihood!{NumType <: Number}(
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     include_epsilon::Bool=true)
 
-  elbo = elbo_vars.elbo
+  elbo = elbo_vars_array[1].elbo
 
   # For speed, if there are no sources, add the noise
   # contribution directly.
@@ -848,21 +860,44 @@ function tile_likelihood!{NumType <: Number}(
   end
 
   # Iterate over pixels that are not NaN.
-  for w in 1:tile.w_width, h in 1:tile.h_width
-    this_pixel = tile.pixels[h, w]
-    if !Base.isnan(this_pixel)
-      # Get the brightness.
-      get_expected_pixel_brightness!(
-        elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-        mp, tile_sources, include_epsilon=include_epsilon)
+  if Threaded
+    @threads for w = 1:tile.w_width
+      tid = threadid()
+      for h = 1:tile.h_width
+        this_pixel = tile.pixels[h, w]
+        if !Base.isnan(this_pixel)
+          # Get the brightness.
+          get_expected_pixel_brightness!(
+            elbo_vars_array[tid], h, w, sbs, star_mcs, gal_mcs, tile,
+            mp, tile_sources, include_epsilon=include_epsilon)
 
-      # Add the terms to the elbo given the brightness.
-      iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
-      add_elbo_log_term!(elbo_vars, this_pixel, iota)
-      CelesteTypes.add_scaled_sfs!(
-        elbo_vars.elbo, elbo_vars.E_G, scale=-iota,
-        calculate_hessian=
-          elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
+          # Add the terms to the elbo given the brightness.
+          iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
+          add_elbo_log_term!(elbo_vars_array[tid], this_pixel, iota)
+          CelesteTypes.add_scaled_sfs!(
+            elbo_vars_array[tid].elbo, elbo_vars_array[tid].E_G, scale=-iota,
+            calculate_hessian=elbo_vars_array[tid].calculate_hessian &&
+              elbo_vars_array[tid].calculate_derivs)
+        end
+      end
+    end
+  else
+    for w in 1:tile.w_width, h in 1:tile.h_width
+      this_pixel = tile.pixels[h, w]
+      if !Base.isnan(this_pixel)
+        # Get the brightness.
+        get_expected_pixel_brightness!(
+          elbo_vars_array[1], h, w, sbs, star_mcs, gal_mcs, tile,
+          mp, tile_sources, include_epsilon=include_epsilon)
+
+        # Add the terms to the elbo given the brightness.
+        iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
+        add_elbo_log_term!(elbo_vars_array[1], this_pixel, iota)
+        CelesteTypes.add_scaled_sfs!(
+          elbo_vars_array[1].elbo, elbo_vars_array[1].E_G, scale=-iota,
+          calculate_hessian=elbo_vars_array[1].calculate_hessian &&
+            elbo_vars_array[1].calculate_derivs)
+      end
     end
   end
 
@@ -948,7 +983,7 @@ end
 Updates the ELBO likelihood for given brighntess and bvn components.
 
 Args:
-  - elbo_vars: Elbo intermediate values.
+  - elbo_vars_array: Array for per-thread Elbo intermediate values.
   - tiled_image: An array of ImageTiles
   - mp: Model parameters
   - sbs: Source brightnesses
@@ -956,10 +991,10 @@ Args:
   - gal_mcs: Galaxy components
 
 Returns:
-  Updates elbo_vars.elbo in place.
+  Updates elbo_vars_array[:].elbo in place.
 """ ->
 function elbo_likelihood!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
+    elbo_vars_array,
     tiled_image::Array{ImageTile},
     mp::ModelParams{NumType},
     sbs::Vector{SourceBrightness{NumType}},
@@ -975,7 +1010,7 @@ function elbo_likelihood!{NumType <: Number}(
     tile_sources = mp.tile_sources[b][tile_ind]
     if length(intersect(tile_sources, mp.active_sources)) > 0
       tile_likelihood!(
-        elbo_vars, tiled_image[tile_ind], mp, tile_sources, sbs,
+        elbo_vars_array, tiled_image[tile_ind], mp, tile_sources, sbs,
         star_mcs, gal_mcs);
     end
   end
@@ -988,25 +1023,25 @@ Add the expected log likelihood ELBO term for an image to elbo given the
 brightnesses.
 
 Args:
-  - elbo_vars: Elbo intermediate values.
+  - elbo_vars_array: Array for per-thread Elbo intermediate values.
   - tiles: An array of ImageTiles
   - mp: Model parameters
   - b: The band of the tiles
   - sbs: Source brightnesses
 
 Returns:
-  Updates elbo_vars.elbo in place.
+  Updates elbo_vars_array[:].elbo in place.
 """ ->
 function elbo_likelihood!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
+    elbo_vars_array,
     tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64,
     sbs::Vector{SourceBrightness{NumType}})
 
   star_mcs, gal_mcs =
     load_bvn_mixtures(mp, b,
-      calculate_derivs=elbo_vars.calculate_derivs,
-      calculate_hessian=elbo_vars.calculate_hessian)
-  elbo_likelihood!(elbo_vars, tiles, mp, sbs, star_mcs, gal_mcs)
+      calculate_derivs=elbo_vars_array[1].calculate_derivs,
+      calculate_hessian=elbo_vars_array[1].calculate_hessian)
+  elbo_likelihood!(elbo_vars_array, tiles, mp, sbs, star_mcs, gal_mcs)
 end
 
 
@@ -1030,16 +1065,32 @@ function elbo_likelihood{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType};
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
-  elbo_vars =
-    ElboIntermediateVariables(NumType, mp.S, length(mp.active_sources),
-      calculate_derivs=calculate_derivs, calculate_hessian=calculate_hessian);
-  sbs = load_source_brightnesses(mp,
-    calculate_derivs=elbo_vars.calculate_derivs,
-    calculate_hessian=elbo_vars.calculate_hessian)
-  for b in 1:length(tiled_blob)
-      elbo_likelihood!(elbo_vars, tiled_blob[b], mp, b, sbs)
+  elbo_vars_array = []
+  if Threaded
+    elbo_vars_array = [ ElboIntermediateVariables(NumType, mp.S,
+        length(mp.active_sources), calculate_derivs=calculate_derivs,
+        calculate_hessian=calculate_hessian)
+      for i in 1:nthreads() ]
+  else
+    elbo_vars_array = [ ElboIntermediateVariables(NumType, mp.S,
+        length(mp.active_sources), calculate_derivs=calculate_derivs,
+        calculate_hessian=calculate_hessian) ]
   end
-  elbo_vars.elbo
+  sbs = load_source_brightnesses(mp,
+    calculate_derivs=elbo_vars_array[1].calculate_derivs,
+    calculate_hessian=elbo_vars_array[1].calculate_hessian)
+  for b in 1:length(tiled_blob)
+      elbo_likelihood!(elbo_vars_array, tiled_blob[b], mp, b, sbs)
+  end
+  if Threaded
+    for i in 2:nthreads()
+      CelesteTypes.add_scaled_sfs!(
+        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo,
+        calculate_hessian=elbo_vars_array[1].calculate_hessian &&
+          elbo_vars_array[1].calculate_derivs)
+    end
+  end
+  elbo_vars_array[1].elbo
 end
 
 
