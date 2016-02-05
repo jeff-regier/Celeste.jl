@@ -7,6 +7,17 @@ using SampleData
 import SloanDigitalSkySurvey: SDSS
 import SloanDigitalSkySurvey: WCS
 
+if VERSION > v"0.5.0-dev"
+    using Base.Threads
+else
+    # Pre-Julia 0.5 there are no threads
+    nthreads() = 1
+    threadid() = 1
+    macro threads(x)
+        x
+    end
+end
+
 println("Running ELBO value tests.")
 
 
@@ -307,25 +318,57 @@ function test_tiny_image_tiling()
 
   # These will be reused for all the subsequent tests because only
   # the tile sources change.
-  elbo_vars = ElboDeriv.ElboIntermediateVariables(
-    Float64, mp0.S, length(mp0.active_sources), calculate_derivs=false);
+  if ElboDeriv.Threaded
+    elbo_vars_array = [ ElboDeriv.ElboIntermediateVariables(Float64, mp0.S,
+        length(mp0.active_sources), calculate_derivs=false)
+      for i in 1:nthreads() ]
+  else
+    elbo_vars_array = [ ElboDeriv.ElboIntermediateVariables(Float64, mp0.S,
+        length(mp0.active_sources), calculate_derivs=false) ]
+  end
   sbs = ElboDeriv.load_source_brightnesses(mp0, calculate_derivs=false);
+  ElboDeriv.elbo_likelihood!(elbo_vars_array, tiled_blob0[3], mp0, 3, sbs);
 
-  ElboDeriv.elbo_likelihood!(elbo_vars, tiled_blob0[3], mp0, 3, sbs);
-  elbo_lik = deepcopy(elbo_vars.elbo);
+  if ElboDeriv.Threaded
+    for i in 2:nthreads()
+      CelesteTypes.add_scaled_sfs!(
+        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo,
+        calculate_hessian=elbo_vars_array[1].calculate_hessian &&
+          elbo_vars_array[1].calculate_derivs)
+    end
+  end
+  elbo_lik = deepcopy(elbo_vars_array[1].elbo);
 
   tile_width = 2
   tiled_blob1, mp0 = ModelInit.initialize_celeste(
     fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.)
-  ElboDeriv.elbo_likelihood!(elbo_vars, tiled_blob0[3], mp0, 3, sbs);
-  elbo_lik_tiles = deepcopy(elbo_vars.elbo);
+  ElboDeriv.elbo_likelihood!(elbo_vars_array, tiled_blob0[3], mp0, 3, sbs);
+
+  if ElboDeriv.Threaded
+    for i in 2:nthreads()
+      CelesteTypes.add_scaled_sfs!(
+        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo,
+        calculate_hessian=elbo_vars_array[1].calculate_hessian &&
+          elbo_vars_array[1].calculate_derivs)
+    end
+  end
+  elbo_lik_tiles = deepcopy(elbo_vars_array[1].elbo);
 
   tile_width = 5
   tiled_blob2, mp0 =
     ModelInit.initialize_celeste(
       fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.);
-  ElboDeriv.elbo_likelihood!(elbo_vars, tiled_blob0[3], mp0, 3, sbs);
-  elbo_lik_tiles2 = deepcopy(elbo_vars.elbo);
+  ElboDeriv.elbo_likelihood!(elbo_vars_array, tiled_blob0[3], mp0, 3, sbs);
+
+  if ElboDeriv.Threaded
+    for i in 2:nthreads()
+      CelesteTypes.add_scaled_sfs!(
+        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo,
+        calculate_hessian=elbo_vars_array[1].calculate_hessian &&
+          elbo_vars_array[1].calculate_derivs)
+    end
+  end
+  elbo_lik_tiles2 = deepcopy(elbo_vars_array[1].elbo);
 
   @test_approx_eq elbo_lik_tiles.v elbo_lik_tiles2.v
   @test_approx_eq_eps elbo_lik.v elbo_lik_tiles.v 100.
