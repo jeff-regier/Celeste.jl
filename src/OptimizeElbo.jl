@@ -32,6 +32,9 @@ type WrapperState
 end
 
 
+typealias DualType DualNumbers.Dual{Float64}
+
+
 type ObjectiveWrapperFunctions
 
     f_objective::Function
@@ -72,7 +75,6 @@ type ObjectiveWrapperFunctions
 
         x_length = length(kept_ids) * transform.active_S
         x_size = (length(kept_ids), transform.active_S)
-        DualType = DualNumbers.Dual{Float64}
         mp_dual = CelesteTypes.convert(ModelParams{DualType}, mp);
         @assert transform.active_sources == mp.active_sources
 
