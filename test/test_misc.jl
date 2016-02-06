@@ -265,25 +265,6 @@ function test_util_bvn_cov()
     @test_approx_eq util_22 manual_22
 end
 
-
-function test_convert_dual_mp()
-  blob, mp, body, tiled_blob = gen_three_body_dataset(perturb=true);
-  tiled_blob, mp_original =
-    ModelInit.initialize_celeste(blob, body, tile_width=30);
-  mp_dual = CelesteTypes.convert(ModelParams{DualNumbers.Dual{Float64}}, mp);
-
-  # Test the variational parameters.
-  for s in 1:mp.S
-    @test_approx_eq DualNumbers.realpart(mp_dual.vp[s]) mp.vp[s]
-    @test_approx_eq DualNumbers.epsilon(mp_dual.vp[s]) fill(0.0, length(mp.vp[s]))
-  end
-
-  # Test the remaining fields.
-  for field_name in setdiff(fieldnames(mp), [:vp])
-    @test mp_dual.(field_name) == mp.(field_name)
-  end
-end
-
 ####################################################
 
 test_tile_image()
@@ -292,4 +273,3 @@ test_sky_noise_estimates()
 test_local_sources()
 test_local_sources_2()
 test_local_sources_3()
-test_convert_dual_mp()
