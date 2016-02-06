@@ -8,7 +8,6 @@ using SampleData
 using Transform
 using Compat
 
-using DualNumbers
 import ModelInit
 
 
@@ -265,10 +264,6 @@ function test_transform_simplex_functions()
 
 		param_free = Transform.unsimplexify_parameter(param, simplex_box)
 		new_param = Transform.simplexify_parameter(param_free, simplex_box)
-		if NumType <: DualNumbers.Dual
-			param = realpart(param)
-			new_param = realpart(new_param)
-		end
 		@test_approx_eq param new_param
 	end
 
@@ -277,7 +272,6 @@ function test_transform_simplex_functions()
 
 		simplex_box = Transform.SimplexBox(lb, this_scale, length(param))
 		simplex_and_unsimplex(param, simplex_box)
-		simplex_and_unsimplex([ Dual(p) for p in param], simplex_box)
 
 		# Test that the edges work.
 		simplex_and_unsimplex(Float64[ lb, 1 - lb ], simplex_box)
@@ -305,10 +299,6 @@ function test_transform_box_functions()
 	function box_and_unbox{NumType <: Number}(param::NumType, param_box::ParamBox)
 		param_free = Transform.unbox_parameter(param, param_box)
 		new_param = Transform.box_parameter(param_free, param_box)
-		if NumType <: DualNumbers.Dual
-			param = realpart(param)
-			new_param = realpart(new_param)
-		end
 		@test_approx_eq param new_param
 	end
 
@@ -317,7 +307,6 @@ function test_transform_box_functions()
 		param = 0.2
 		param_box = Transform.ParamBox(lb, ub, this_scale)
 		box_and_unbox(param, param_box)
-		box_and_unbox(Dual(param), param_box)
 
 		# Test that the edges work.
 		box_and_unbox(lb, param_box)
