@@ -33,7 +33,6 @@ import Base.convert
 import Base.+
 import Distributions
 import FITSIO
-import DualNumbers
 import WCSLIB
 import ForwardDiff
 
@@ -544,18 +543,6 @@ end
 ModelParams{NumType <: Number}(
   vp::VariationalParams{NumType}, pp::PriorParams) = begin
     ModelParams{NumType}(vp, pp)
-end
-
-function convert(::Type{ModelParams{DualNumbers.Dual{Float64}}},
-                 mp::ModelParams{Float64})
-    mp_dual =
-      ModelParams(convert(Array{Array{DualNumbers.Dual{Float64}, 1}, 1}, mp.vp),
-                  mp.pp)
-    mp_dual.patches = mp.patches
-    mp_dual.tile_sources = mp.tile_sources
-    mp_dual.active_sources = mp.active_sources
-    mp_dual.objids = mp.objids
-    mp_dual
 end
 
 function convert(FDType::Type{ForwardDiff.GradientNumber},

@@ -6,12 +6,7 @@ using Transform
 
 import ElboDeriv
 import DataFrames
-import DualNumbers
 import Optim
-
-using DualNumbers.Dual
-using DualNumbers.epsilon
-using DualNumbers.real
 
 export ObjectiveWrapperFunctions, WrapperState
 
@@ -32,9 +27,6 @@ type WrapperState
 end
 
 
-typealias DualType DualNumbers.Dual{Float64}
-
-
 type ObjectiveWrapperFunctions
 
     f_objective::Function
@@ -45,16 +37,12 @@ type ObjectiveWrapperFunctions
     f_grad!::Function
     f_hessian::Function
     f_hessian!::Function
-    # f_ad_grad::Function
-    # f_ad_hessian!::Function
-    # f_ad_hessian_sparse::Function
 
     state::WrapperState
     transform::DataTransform
     mp::ModelParams{Float64}
     kept_ids::Array{Int64}
     omitted_ids::Array{Int64}
-    DualType::DataType
 
     # Caching
     last_sf::SensitiveFloat
@@ -75,7 +63,6 @@ type ObjectiveWrapperFunctions
 
         x_length = length(kept_ids) * transform.active_S
         x_size = (length(kept_ids), transform.active_S)
-        mp_dual = CelesteTypes.convert(ModelParams{DualType}, mp);
         @assert transform.active_sources == mp.active_sources
 
         last_sf =
@@ -107,14 +94,6 @@ type ObjectiveWrapperFunctions
               println(state_df)
               println("\n=======================================\n")
             end
-        end
-
-        function f_objective(x_dual::Vector{DualType})
-            state.f_evals += 1
-            # Evaluate in the constrained space and then unconstrain again.
-            transform.array_to_vp!(reshape(x_dual, x_size), mp_dual.vp, omitted_ids)
-            f_res = f(mp_dual)
-            f_res_trans = transform.transform_sensitive_float(f_res, mp_dual)
         end
 
         function f_objective(x::Vector{Float64})
@@ -191,7 +170,7 @@ type ObjectiveWrapperFunctions
         new(f_objective, f_value_grad, f_value_grad!,
             f_value, f_grad, f_grad!, f_hessian, f_hessian!,
             # f_ad_hessian!, f_ad_hessian_sparse,
-            state, transform, mp, kept_ids, omitted_ids, DualType, last_sf)
+            state, transform, mp, kept_ids, omitted_ids, last_sf)
     end
 end
 
