@@ -2,13 +2,10 @@
 
 module ElboDeriv
 
-VERSION < v"0.4.0-dev" && using Docile
 using CelesteTypes
 import Util
 import SloanDigitalSkySurvey: WCS
 import WCSLIB
-
-using DualNumbers.Dual
 
 Threaded = true
 if VERSION > v"0.5.0-dev"
