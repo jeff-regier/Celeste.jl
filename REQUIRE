@@ -1,10 +1,10 @@
 DataFrames
 Distributions
-FITSIO
 ForwardDiff
 JLD
 Optim
 GaussianMixtures
 Grid
-SloanDigitalSkySurvey
+FITSIO
 WCSLIB
+SloanDigitalSkySurvey
