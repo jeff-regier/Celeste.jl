@@ -3,6 +3,7 @@ using CelesteTypes
 using Base.Test
 using SampleData
 import Synthetic
+import DualNumbers
 
 import SkyImages
 import SloanDigitalSkySurvey: SDSS
@@ -97,40 +98,11 @@ function test_real_image()
 
   # Pick an object.
   objid = "1237662226208063499"
-  s_original = findfirst(mp.objids .== objid)
-  mp.active_sources = [ s_original ]
-
-  # Get the sources that overlap with this object.
-  relevant_sources = Int64[]
-  for b = 1:5, tile_sources in mp.tile_sources[b]
-    if length(intersect(mp.active_sources, tile_sources)) > 0
-      println("Found sources in band $b: ", tile_sources)
-      relevant_sources = union(relevant_sources, tile_sources);
-    end
-  end
-
-  trimmed_mp = ModelInit.initialize_model_params(
-    tiled_blob, blob, cat_entries[relevant_sources], fit_psf=true);
-  original_tiled_sources = deepcopy(trimmed_mp.tile_sources);
-
-  s = findfirst(trimmed_mp.objids .== objid)
-  trimmed_mp.active_sources = [ s ]
-
-  # Trim to a smaller tiled blob.
-  trimmed_tiled_blob = Array(Array{ImageTile}, 5);
-  for b=1:5
-    hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
-      find([ s in sources for sources in original_tiled_sources[b]]))
-
-    hh_range = minimum(hh_vec):maximum(hh_vec);
-    ww_range = minimum(ww_vec):maximum(ww_vec);
-    trimmed_tiled_blob[b] = tiled_blob[b][hh_range, ww_range];
-    trimmed_mp.tile_sources[b] =
-      deepcopy(original_tiled_sources[b][hh_range, ww_range]);
-  end
-  trimmed_tiled_blob = convert(TiledBlob, trimmed_tiled_blob);
+  trimmed_mp, trimmed_tiled_blob = ModelInit.limit_to_object_data(
+    objid, mp, tiled_blob, blob, cat_entries);
 
   # Limit to very few pixels so that the autodiff is reasonably fast.
+  s = trimmed_mp.active_sources[1]
   very_trimmed_tiled_blob = ModelInit.trim_source_tiles(
     s, trimmed_mp, trimmed_tiled_blob, noise_fraction=10.);
 
@@ -163,6 +135,16 @@ function test_real_image()
   hcat(ad_grad, elbo.d[:, 1])
   @test_approx_eq ad_grad elbo.d[:, 1]
   @test_approx_eq ad_hess elbo.h
+end
+
+
+function test_dual_numbers()
+  # Simply check that the likelihood can be used with dual numbers.
+  # Due to the autodiff parts of the KL divergence and transform,
+  # these parts of the ELBO will currently not work with dual numbers.
+  blob, mp, body, tiled_blob = gen_sample_star_dataset();
+  mp_dual = CelesteTypes.forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
+  elbo_dual = ElboDeriv.elbo_likelihood(tiled_blob, mp_dual);
 end
 
 
@@ -989,4 +971,5 @@ test_elbo()
 test_active_sources()
 test_derivative_flags()
 test_tile_predicted_image()
+test_dual_numbers()
 test_real_image()

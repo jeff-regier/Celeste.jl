@@ -16,7 +16,7 @@ println("Loading libraries.")
 @everywhere begin
   using Celeste
   include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
-  frame_jld_file = "initialzed_celeste_003900-6-0269.JLD"
+  frame_jld_file = "initialzed_celeste_003900-6-0269.jld"
   S = 20
   synthetic = true
 end
@@ -131,7 +131,7 @@ num_sources = [ remotecall_fetch(w, () -> length(node_sources())) for w in worke
 
 elbo_times ./ num_sources
 
-result_filename = joinpath(dat_dir, "parallel_results_$(int(time())).JLD")
+result_filename = joinpath(dat_dir, "parallel_results_$(int(time())).jld")
 result_dict = Dict()
 result_dict["elbo_time"] = elbo_time;
 result_dict["elbo_times"] = elbo_times;
