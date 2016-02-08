@@ -5,6 +5,9 @@ println(versioninfo())
 using Celeste
 using ArgParse
 using Compat
+using CelesteTypes
+
+const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
 # Command line arguments
 s = ArgParseSettings()
@@ -15,7 +18,7 @@ s = ArgParseSettings()
         default = "[1]"
     "--image_file"
         help = "The image JLD file"
-        default = "stripe82_fields/initialzed_celeste_000211_4_0227_20px.JLD"
+        default = "initialzed_celeste_000211_4_0227_20px.jld"
 end
 
 parsed_args = parse_args(s)
@@ -24,9 +27,10 @@ eval(parse(string("sources = Int64", parsed_args["sources"])))
 
 frame_jld_file = parsed_args["image_file"]
 
-include(joinpath(Pkg.dir("Celeste"), "src/CelesteCluster.jl"))
-sim_S = 20
+# To simulate, set synthetic = true, and sim_S to the number of bodies
+# to simulate.
 synthetic = false
+sim_S = 20
 
 println("Loading data with sources = $(sources).")
 
@@ -47,6 +51,8 @@ mp = deepcopy(original_mp);
 @assert minimum(sources) >= 1
 source = unique(sources)
 
+# Set this to determine which parameters are estimated.  An empty array
+# optimizes all parameters.
 omitted_ids = Int64[]
 
 analysis_name = "iters_20"
@@ -68,6 +74,10 @@ for s in sources
   end
 
   transform = Transform.get_mp_transform(mp_s);
+
+  # TODO: This is slow but would run much faster if you had run
+  # limit_to_object_data() first.  Currently that requires the original
+  # blob which cannot be saved to an HDF5 file.
   trimmed_tiled_blob =
     ModelInit.trim_source_tiles(s, mp_s, tiled_blob, noise_fraction=0.1);
   #imshow(stitch_object_tiles(s, b, mp, trimmed_tiled_blob))
@@ -78,7 +88,7 @@ for s in sources
                             verbose=true, max_iters=max_iters);
   fit_time = time() - fit_time
 
-  JLD.save("$dat_dir/elbo_fit_$(analysis_name)_s$(s)_$(time()).JLD",
+  JLD.save("$dat_dir/elbo_fit_$(analysis_name)_s$(s)_$(time()).jld",
            @compat(Dict("vp[s]" => mp_s.vp[s],
                         "s" => s,
                         "result" => result,
@@ -88,8 +98,11 @@ end
 println("All done!")
 
 
+
+
 if false
-  # Stuff for interactive exploration
+  ###################################
+  # Some code to interactively explore the results.
   [ sum([ s in tile for tile in mp.tile_sources[b]]) for b in 1:5]
   [ sum([ s in tile for tile in mp_s.tile_sources[b]]) for b in 1:5]
 

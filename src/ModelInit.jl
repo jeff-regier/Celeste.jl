@@ -429,6 +429,74 @@ end
 
 
 @doc """
+Return a reduced Celeste dataset useful for a single object.
+
+Args:
+  - objid: An object id in mp_original.objids that you want to fit.
+  - mp_original: The original model params with all objects.
+  - tiled_blob: The original tiled blob with all the image.
+  - blob: The original blob with all the image.
+  - cat_entries: The original catalog entries with all the sources.
+
+Returns:
+  - trimmed_mp: A ModelParams object containing only the objid source and
+      all the sources that co-occur with it.  Its active_sources will be set
+      to the objid object.
+  - trimmed_tiled_blob: A new TiledBlob with the tiled arrays shrunk to only
+      include those necessary for the objid source.
+
+Note that the resulting dataset is only good for fitting the objid source.
+The ModelParams object will contain other sources that overlap with the
+objid source, but the trimmed_tiled_blob may be missing tiles in which these
+overlapping sources occur.
+
+TODO: test!
+""" ->
+function limit_to_object_data(
+    objid::ASCIIString, mp_original::ModelParams,
+    tiled_blob::TiledBlob, blob::Blob, cat_entries::Vector{CatalogEntry})
+
+  mp = deepcopy(mp_original)
+
+  s_original = findfirst(mp_original.objids .== objid)
+  @assert(s_original > 0, "objid $objid not found in mp_original.")
+  mp_original.active_sources = [ s_original ]
+
+  # Get the sources that overlap with this object.
+  relevant_sources = Int64[]
+  for b = 1:length(blob), tile_sources in mp.tile_sources[b]
+    if s_original in tile_sources > 0
+      relevant_sources = union(relevant_sources, tile_sources);
+    end
+  end
+
+  trimmed_mp = ModelInit.initialize_model_params(
+    tiled_blob, blob, cat_entries[relevant_sources], fit_psf=true);
+
+  s = findfirst(trimmed_mp.objids .== objid)
+  trimmed_mp.active_sources = [ s ]
+
+  # Trim to a smaller tiled blob.
+  trimmed_tiled_blob = Array(Array{ImageTile}, 5);
+  original_tiled_sources = deepcopy(trimmed_mp.tile_sources);
+  for b=1:5
+    hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
+      find([ s in sources for sources in original_tiled_sources[b]]))
+
+    hh_range = minimum(hh_vec):maximum(hh_vec);
+    ww_range = minimum(ww_vec):maximum(ww_vec);
+    trimmed_tiled_blob[b] = tiled_blob[b][hh_range, ww_range];
+    trimmed_mp.tile_sources[b] =
+      deepcopy(original_tiled_sources[b][hh_range, ww_range]);
+  end
+  trimmed_tiled_blob = convert(TiledBlob, trimmed_tiled_blob);
+
+  trimmed_mp, trimmed_tiled_blob
+end
+
+
+
+@doc """
 Set any pixels significantly below background noise for the
 specified source to NaN.
 
