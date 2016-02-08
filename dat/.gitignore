@@ -1,4 +1,4 @@
-*.JLD
+*.jld
 window_flist.fits
 
 # Only allow fits files by force add.
