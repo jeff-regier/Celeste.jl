@@ -6,7 +6,6 @@
 using Celeste
 using CelesteTypes
 
-import WCSLIB
 import Base.convert
 using DataFrames
 

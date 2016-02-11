@@ -1,3 +1,4 @@
+julia 0.4
 DataFrames
 Distributions
 ForwardDiff
@@ -6,5 +7,5 @@ Optim
 GaussianMixtures
 Grid
 FITSIO
-WCSLIB
-SloanDigitalSkySurvey
+WCS
+SloanDigitalSkySurvey 0.0.4

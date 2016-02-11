@@ -11,9 +11,9 @@ using Util
 using CelesteTypes
 
 import ElboDeriv # For trim_source_tiles
-import SloanDigitalSkySurvey: WCS
+import SloanDigitalSkySurvey.WCSUtils
 import SkyImages
-import WCSLIB
+import WCS.WCSTransform
 import CelesteTypes.SkyPatch
 
 
@@ -280,8 +280,8 @@ SkyPatch(world_center::Vector{Float64},
       psf = img.psf
     end
 
-    pixel_center = WCS.world_to_pixel(img.wcs, world_center)
-    wcs_jacobian = WCS.pixel_world_jacobian(img.wcs, pixel_center)
+    pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
+    wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
 
     SkyPatch(world_center, radius, psf, wcs_jacobian, pixel_center)
 end
@@ -307,8 +307,8 @@ SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true, scale_patch_size=1.0) = beg
       psf = img.psf
     end
 
-    pixel_center = WCS.world_to_pixel(img.wcs, world_center)
-    wcs_jacobian = WCS.pixel_world_jacobian(img.wcs, pixel_center)
+    pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
+    wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
 
     pix_radius = choose_patch_radius(pixel_center, ce, psf, img)
     sky_radius = SkyImages.pixel_radius_to_world(pix_radius, wcs_jacobian)
@@ -332,7 +332,7 @@ Returns:
     in the tiles.
 """ ->
 function get_tiled_image_sources(
-  tiled_image::TiledImage, wcs::WCSLIB.wcsprm, patches::Vector{SkyPatch})
+  tiled_image::TiledImage, wcs::WCSTransform, patches::Vector{SkyPatch})
 
   H, W = size(tiled_image)
   tile_sources = fill(Int64[], H, W)

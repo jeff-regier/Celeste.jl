@@ -5,9 +5,8 @@ using CelesteTypes
 using Compat
 
 import SkyImages
-import SDSS
+import SloanDigitalSkySurvey: SDSS, WCSUtils
 import Util
-import WCS
 
 
 println("Running misc tests.")
@@ -61,7 +60,7 @@ function test_local_sources()
     blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
-        blob0[b].wcs = WCS.wcs_id
+        blob0[b].wcs = WCSUtils.wcs_id
     end
 
     three_bodies = [
@@ -108,7 +107,7 @@ function test_local_sources_2()
     srand(1)
     blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
     one_body = [sample_ce([50., 50.], true),]
-    for b in 1:5 blob0[b].wcs = WCS.wcs_id end
+    for b in 1:5 blob0[b].wcs = WCSUtils.wcs_id end
 
     for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
     small_blob = Synthetic.gen_blob(blob0, one_body);
@@ -137,7 +136,7 @@ function test_local_sources_3()
     test_b = 3 # Will test using this band only
     pix_loc = Float64[50., 50.]
     blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
-    body_loc = WCS.pixel_to_world(blob0[test_b].wcs, pix_loc)
+    body_loc = WCSUtils.pix_to_world(blob0[test_b].wcs, pix_loc)
     one_body = [sample_ce(body_loc, true),]
 
     # Get synthetic blobs but with the original world coordinates.
@@ -150,12 +149,10 @@ function test_local_sources_3()
 
     # Get a patch radius in world coordinates by looking at the world diagonals of
     # a pixel square of a certain size.
-    world_quad = WCS.pixel_to_world(blob[test_b].wcs,
-        [0. 0.;
-         0. patch_radius_pix;
-         patch_radius_pix 0;
-         patch_radius_pix patch_radius_pix])
-    diags = [ world_quad[i, :]' - world_quad[i + 2, :]' for i=1:2 ]
+    pix_quad = [0. 0.               patch_radius_pix patch_radius_pix;
+                0. patch_radius_pix 0.               patch_radius_pix]
+    world_quad = WCSUtils.pix_to_world(blob[test_b].wcs, pix_quad)
+    diags = [world_quad[:, i] - world_quad[:, i+2] for i=1:2]
     patch_radius = maximum([sqrt(dot(d, d)) for d in diags])
 
     tiled_blob, mp = ModelInit.initialize_celeste(
