@@ -30,6 +30,6 @@ for testfile in testfiles
     catch e
         anyerrors = true
         println("\t\033[1m\033[31mFAILED\033[0m: $(testfile)")
-        throw("tests failed")  # Fail fast.
+        rethrow()  # Fail fast.
     end
 end
