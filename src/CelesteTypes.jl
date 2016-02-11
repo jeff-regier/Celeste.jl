@@ -33,7 +33,7 @@ import Base.convert
 import Base.+
 import Distributions
 import FITSIO
-import WCSLIB
+import WCS.WCSTransform
 import ForwardDiff
 
 import Base.length
@@ -167,7 +167,7 @@ type Image
     b::Int64
 
     # World coordinates
-    wcs::WCSLIB.wcsprm
+    wcs::WCSTransform
 
     # The background noise in nanomaggies.
     epsilon::Float64
@@ -194,7 +194,7 @@ end
 
 # Initialization for an image with noise and background parameters that are
 # constant across the image.
-Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
+Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSTransform,
       epsilon::Float64, iota::Float64, psf::Vector{PsfComponent},
       run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
     empty_psf_comp =
@@ -206,7 +206,7 @@ end
 
 # Initialization for an image with noise and background parameters that vary
 # across the image.
-Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSLIB.wcsprm,
+Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSTransform,
       epsilon_mat::Array{Float64, 1}, iota_vec::Array{Float64, 2},
        psf::Vector{PsfComponent}, raw_psf_comp::RawPSFComponents,
       run_num::Int64, camcol_num::Int64, field_num::Int64) = begin

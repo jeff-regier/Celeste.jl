@@ -4,8 +4,7 @@ using Base.Test
 using Distributions
 using SampleData
 
-import SloanDigitalSkySurvey: SDSS
-import SloanDigitalSkySurvey: WCS
+import SloanDigitalSkySurvey: SDSS, WCSUtils
 
 if VERSION > v"0.5.0-dev"
     using Base.Threads
@@ -226,11 +225,11 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     cat_entries = filter(bright, cat_entries)
 
     ce_pix_locs =
-      [ [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ]
+      [ [ WCSUtils.world_to_pix(blob[b].wcs, ce.pos) for b=1:5 ]
         for ce in cat_entries ]
 
     function ce_inbounds(ce)
-        pix_locs = [ WCS.world_to_pixel(blob[b].wcs, ce.pos) for b=1:5 ]
+        pix_locs = [ WCSUtils.world_to_pix(blob[b].wcs, ce.pos) for b=1:5 ]
         inbounds(pos) = pos[1] > -10. && pos[2] > -10 &&
                         pos[1] < 61 && pos[2] < 61
         reduce(&, [inbounds(pos) for pos in pix_locs])
@@ -422,7 +421,7 @@ function test_trim_source_tiles()
       fill(1.0, length(loc_ids)), 0.06)
     @test_approx_eq_eps(
       elbo_full.d[non_loc_ids, 1] ./ elbo_trim.d[non_loc_ids, 1],
-      fill(1.0, length(non_loc_ids)), 2e-3)
+      fill(1.0, length(non_loc_ids)), 4e-3)
   end
 end
 

@@ -4,8 +4,7 @@ module ElboDeriv
 
 using CelesteTypes
 import Util
-import SloanDigitalSkySurvey: WCS
-import WCSLIB
+import SloanDigitalSkySurvey.WCSUtils
 
 Threaded = true
 if VERSION > v"0.5.0-dev"

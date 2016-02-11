@@ -3,7 +3,7 @@ module SampleData
 using Distributions
 using CelesteTypes
 
-import SloanDigitalSkySurvey: WCS
+import SloanDigitalSkySurvey.WCSUtils
 import SkyImages
 
 import ModelInit
@@ -58,7 +58,7 @@ function gen_sample_star_dataset(; perturb=true)
     blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
-        blob0[b].wcs = WCS.wcs_id
+        blob0[b].wcs = WCSUtils.wcs_id
     end
     one_body = [sample_ce([10.1, 12.2], true),]
     blob = Synthetic.gen_blob(blob0, one_body)
@@ -75,7 +75,7 @@ function gen_sample_galaxy_dataset(; perturb=true)
     blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
-        blob0[b].wcs = WCS.wcs_id
+        blob0[b].wcs = WCSUtils.wcs_id
     end
     one_body = [sample_ce([8.5, 9.6], false),]
     blob = Synthetic.gen_blob(blob0, one_body)
@@ -94,7 +94,7 @@ function gen_two_body_dataset(; perturb=true)
     blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
-        blob0[b].wcs = WCS.wcs_id
+        blob0[b].wcs = WCSUtils.wcs_id
     end
     two_bodies = [
         sample_ce([4.5, 3.6], false),
@@ -115,7 +115,7 @@ function gen_three_body_dataset(; perturb=true)
     blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359")
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
-        blob0[b].wcs = WCS.wcs_id
+        blob0[b].wcs = WCSUtils.wcs_id
     end
     three_bodies = [
         sample_ce([4.5, 3.6], false),
@@ -151,10 +151,10 @@ function gen_n_body_dataset(
 
   fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
 
-  locations = rand(S, 2) .* [ float(img_size_h) float(img_size_w) ]
-  world_locations = WCS.pixel_to_world(blob0[3].wcs, locations)
+  locations = rand(2, S) .* [img_size_h, img_size_w]
+  world_locations = WCSUtils.pix_to_world(blob0[3].wcs, locations)
 
-  S_bodies = CatalogEntry[CatalogEntry(world_locations[s, :][:], true,
+  S_bodies = CatalogEntry[CatalogEntry(world_locations[:, s], true,
       fluxes, fluxes, 0.1, .7, pi/4, 4., string(s)) for s in 1:S];
 
   blob = Synthetic.gen_blob(blob0, S_bodies);
@@ -166,10 +166,9 @@ function gen_n_body_dataset(
     blob[b].epsilon_mat = fill(blob[b].epsilon, blob[b].H, blob[b].W)
   end
 
-  world_radius_pts =
-    WCS.pixel_to_world(blob[3].wcs,
-                       [patch_pixel_radius patch_pixel_radius; 0. 0.])
-  world_radius = maximum(abs(world_radius_pts[1,:] - world_radius_pts[2,:]))
+  world_radius_pts = WCSUtils.pix_to_world(
+      blob[3].wcs, [patch_pixel_radius 0.; patch_pixel_radius 0.])
+  world_radius = maxabs(world_radius_pts[:, 1] - world_radius_pts[:, 2])
   tiled_blob, mp = ModelInit.initialize_celeste(
     blob, S_bodies, tile_width=tile_width, patch_radius=world_radius)
 
