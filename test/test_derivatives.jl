@@ -6,7 +6,7 @@ import Synthetic
 import DualNumbers
 
 import SkyImages
-import SloanDigitalSkySurvey: SDSS
+import SloanDigitalSkySurvey: SDSS, WCSUtils
 
 if VERSION > v"0.5.0-dev"
     using Base.Threads
@@ -469,7 +469,7 @@ function test_fs1m_derivatives()
 
   patch = mp.patches[s, b];
   u = mp.vp[s][ids.u]
-  u_pix = WCS.world_to_pixel(
+  u_pix = WCSUtils.world_to_pix(
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   x = ceil(u_pix + [1.0, 2.0])
 
@@ -545,7 +545,7 @@ function test_fs0m_derivatives()
 
   patch = mp.patches[s, b];
   u = mp.vp[s][ids.u]
-  u_pix = WCS.world_to_pixel(
+  u_pix = WCSUtils.world_to_pix(
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   x = ceil(u_pix + [1.0, 2.0])
 
@@ -700,7 +700,7 @@ function test_galaxy_variable_transform()
     e_angle = par[par_ids_e_angle]
     e_axis = par[par_ids_e_axis]
     e_scale = par[par_ids_e_scale]
-    u_pix = WCS.world_to_pixel(
+    u_pix = WCSUtils.world_to_pix(
       patch.wcs_jacobian, patch.center, patch.pixel_center, u)
 
     sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
@@ -715,7 +715,7 @@ function test_galaxy_variable_transform()
 
   # First just test the bvn function itself
   par = wrap_par(u, e_angle, e_axis, e_scale)
-  u_pix = WCS.world_to_pixel(
+  u_pix = WCSUtils.world_to_pix(
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
   bmc = ElboDeriv.BvnComponent{Float64}(u_pix, sigma, 1.0);
@@ -779,7 +779,7 @@ function test_galaxy_cache_component()
     e_angle = par[par_ids_e_angle]
     e_axis = par[par_ids_e_axis]
     e_scale = par[par_ids_e_scale]
-    u_pix = WCS.world_to_pixel(
+    u_pix = WCSUtils.world_to_pix(
       patch.wcs_jacobian, patch.center, patch.pixel_center, u)
     elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1)
     e_dev_i_fd = convert(T, e_dev_i)
@@ -803,7 +803,7 @@ function test_galaxy_cache_component()
   end
 
   par = wrap_par(u, e_angle, e_axis, e_scale)
-  u_pix = WCS.world_to_pixel(
+  u_pix = WCSUtils.world_to_pix(
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   gcc = ElboDeriv.GalaxyCacheComponent(
           e_dev_dir, e_dev_i, gp, psf,

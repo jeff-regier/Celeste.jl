@@ -1,20 +1,16 @@
 module SkyImages
 
 using CelesteTypes
-import SloanDigitalSkySurvey: SDSS
-import SloanDigitalSkySurvey: WCS
-import SloanDigitalSkySurvey: PSF
+import SloanDigitalSkySurvey: PSF, SDSS, WCSUtils
 import SloanDigitalSkySurvey.PSF.get_psf_at_point
 
-import WCSLIB
+import WCS
 import DataFrames
 import ElboDeriv # For stitch_object_tiles
 import FITSIO
 import GaussianMixtures
 import Grid
-import PSF
 import Util
-import WCS
 
 export load_stamp_blob, load_sdss_blob, crop_image!
 export convert_gmm_to_celeste, get_psf_at_point
@@ -107,7 +103,7 @@ function load_stamp_blob(stamp_dir, stamp_id)
         nelec = convert(Array{Float64}, nelec_f32)
 
         header_str = FITSIO.read_header(fits[1], ASCIIString)
-        ((wcs,),nrejected) = WCSLIB.wcspih(header_str)
+        wcs = WCS.from_header(header_str)[1]
         close(fits)
 
         alphaBar = [hdr["PSF_P0"]; hdr["PSF_P1"]; hdr["PSF_P2"]]
@@ -240,7 +236,7 @@ function crop_blob_to_location(
     tiled_blob = Array(TiledImage, length(blob))
     for b=1:5
         # Get the pixels that are near enough to the wcs_center.
-        pix_center = WCS.world_to_pixel(blob[b].wcs, wcs_center)
+        pix_center = WCSUtils.world_to_pix(blob[b].wcs, wcs_center)
         h_min = max(floor(Int, pix_center[1] - width), 1)
         h_max = min(ceil(Int, pix_center[1] + width), blob[b].H)
         sub_rows_h = h_min:h_max
@@ -327,7 +323,7 @@ function get_source_psf(world_loc::Vector{Float64}, img::Image)
     if size(img.raw_psf_comp.rrows) == (0, 0)
       return img.psf
     else
-      pixel_loc = WCS.world_to_pixel(img.wcs, world_loc)
+      pixel_loc = WCSUtils.world_to_pix(img.wcs, world_loc)
       raw_psf =
         PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
       fit_psf, scale = PSF.fit_psf_gaussians(raw_psf)
@@ -383,13 +379,10 @@ function world_radius_to_pixel(world_radius::Float64,
 end
 
 
-import WCS.world_to_pixel
-function world_to_pixel{NumType <: Number}(
-    patch::SkyPatch, world_loc::Vector{NumType})
-
-  WCS.world_to_pixel(patch.wcs_jacobian, patch.center,
-                     patch.pixel_center, world_loc)
-end
+import SloanDigitalSkySurvey.WCSUtils.world_to_pix
+world_to_pix{T <: Number}(patch::SkyPatch, world_loc::Vector{T}) =
+    world_to_pix(patch.wcs_jacobian, patch.center, patch.pixel_center,
+                 world_loc)
 
 
 @doc """
