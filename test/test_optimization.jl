@@ -4,6 +4,7 @@ using Base.Test
 using SampleData
 using Transform
 using Compat
+import SloanDigitalSkySurvey.WCSUtils
 
 import OptimizeElbo
 
@@ -323,7 +324,7 @@ function test_bad_a_init()
     blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
-        blob0[b].wcs = WCS.wcs_id
+        blob0[b].wcs = WCSUtils.wcs_id
     end
     blob = Synthetic.gen_blob(blob0, [ce,])
 

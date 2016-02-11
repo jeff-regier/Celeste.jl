@@ -5,7 +5,7 @@ export gen_blob
 using CelesteTypes
 import ModelInit
 import Util
-import WCS
+import SloanDigitalSkySurvey.WCSUtils
 
 import Distributions
 
@@ -51,7 +51,7 @@ end
 function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                     expectation=false)
     for k in 1:length(img0.psf)
-        the_mean = WCS.world_to_pixel(img0.wcs, ce.pos) + img0.psf[k].xiBar
+        the_mean = WCSUtils.world_to_pix(img0.wcs, ce.pos) + img0.psf[k].xiBar
         the_cov = img0.psf[k].tauBar
         intensity = ce.star_fluxes[img0.b] * img0.iota * img0.psf[k].alphaBar
         write_gaussian(the_mean, the_cov, intensity, pixels,
@@ -69,7 +69,7 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
     for i in 1:2
         for gproto in galaxy_prototypes[i]
             for k in 1:length(img0.psf)
-                the_mean = WCS.world_to_pixel(img0.wcs, ce.pos) +
+                the_mean = WCSUtils.world_to_pix(img0.wcs, ce.pos) +
                            img0.psf[k].xiBar
                 the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
                 intensity = ce.gal_fluxes[img0.b] * img0.iota *

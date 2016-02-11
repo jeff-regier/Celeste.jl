@@ -6,7 +6,7 @@ using DataFrames
 
 import ModelInit
 import SkyImages
-import SloanDigitalSkySurvey: SDSS
+import SloanDigitalSkySurvey: SDSS, WCSUtils, PSF
 
 println("Running SkyImages tests.")
 
@@ -40,7 +40,7 @@ function test_blob()
   # Find an object near the middle of the image.
   #img_center = Float64[ median(cat_df[:ra]), median(cat_df[:dec]) ]
   img_center =
-    WCS.pixel_to_world(blob[3].wcs, Float64[blob[3].H / 2, blob[3].W / 2])
+    WCSUtils.pix_to_world(blob[3].wcs, Float64[blob[3].H / 2, blob[3].W / 2])
   dist = by(cat_df, :objid,
      df -> DataFrame(dist=(df[:ra] - img_center[1]).^2 +
                           (df[:dec] - img_center[2]).^2))
@@ -69,7 +69,7 @@ function test_blob()
   obj_index = find(obj_rows)
   mp_obj = ModelInit.initialize_model_params(
     tiled_blob, blob, cat_entries[obj_index]);
-  pixel_loc = WCS.world_to_pixel(img.wcs, obj_loc);
+  pixel_loc = WCSUtils.world_to_pix(img.wcs, obj_loc);
   original_psf_val =
     PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
   original_psf_gmm, scale = PSF.fit_psf_gaussians(original_psf_val);
@@ -99,7 +99,7 @@ function test_stamp_get_object_psf()
   stamp_blob, stamp_mp, body = gen_sample_star_dataset();
   img = stamp_blob[3];
   obj_loc =  stamp_mp.vp[1][ids.u]
-  pixel_loc = WCS.world_to_pixel(img.wcs, obj_loc)
+  pixel_loc = WCSUtils.world_to_pix(img.wcs, obj_loc)
   original_psf_val = PSF.get_psf_at_point(img.psf);
 
   obj_psf_val =
@@ -183,8 +183,8 @@ function test_set_patch_size()
   end
   fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
 
-  world_location = WCS.pixel_to_world(blob0[3].wcs,
-                                      Float64[img_size / 2, img_size / 2])
+  world_location = WCSUtils.pix_to_world(blob0[3].wcs,
+                                         Float64[img_size / 2, img_size / 2])
 
   for gal_scale in [1.0, 10.0], flux_scale in [0.1, 10.0]
     cat = gal_catalog_from_scale(gal_scale, flux_scale);
@@ -197,7 +197,7 @@ function test_set_patch_size()
       tile_image = ElboDeriv.tile_predicted_image(
         tiled_blob[b][1,1], mp, mp.tile_sources[b][1,1]);
 
-      pixel_center = WCS.world_to_pixel(blob[b].wcs, cat[1].pos)
+      pixel_center = WCSUtils.world_to_pix(blob[b].wcs, cat[1].pos)
       radius = ModelInit.choose_patch_radius(
         pixel_center, cat[1], blob[b].psf, blob[b])
 
