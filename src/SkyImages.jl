@@ -19,6 +19,88 @@ export break_blob_into_tiles, break_image_into_tiles
 export get_local_sources
 export stitch_object_tiles
 
+const band_letters = ['u', 'g', 'r', 'i', 'z']
+
+"""
+interp_sky(data, xcoords, ycoords)
+
+Interpolate the 2-d array `data` at the grid of array coordinates spanned
+by the vectors `xcoords` and `ycoords` using bilinear interpolation.
+The output array will have size `(length(xcoords), length(ycoords))`.
+For example, if `x[1] = 3.3` and `y[2] = 4.7`, the element `out[1, 2]`
+will be a result of linear interpolation between the values
+`data[3:4, 4:5]`.
+
+Assumes that coordinates extend less than 1 element past size of data.
+"""
+function interp_sky{T}(data::Array{T, 2}, xcoords::Vector{T},
+                       ycoords::Vector{T})
+    out = Array(T, length(xcoords), length(ycoords))
+    for j=1:length(ycoords)
+        y0 = floor(Int, ycoords[j])
+        y1 = y0 + 1
+        yw0 = ycoords[j] - y0
+        yw1 = one(T) - yw0
+        y0 = max(y0, 1)
+        y1 = min(y1, size(data, 2))
+        for i=1:length(xcoords)
+            x0 = floor(Int, xcoords[i])
+            x1 = x0 + 1
+            xw0 = xcoords[i] - x0
+            xw1 = one(T) - xw0
+            x0 = max(x0, 1)
+            x1 = min(x1, size(data, 1))
+            out[i, j] = (xw0 * yw0 * data[x0, y0] + xw1 * yw0 * data[x1, y0] +
+                         xw0 * yw1 * data[x0, y1] + xw1 * yw1 * data[x1, y1])
+        end
+    end
+    return out
+end
+
+function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
+    b_letter = band_letters[b]
+
+    fname = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$field_num.fits"
+    f = FITSIO.FITS(fname)
+
+    # This is the sky-subtracted and calibrated image.
+    image = read(f[1])::Array{Float32, 2}
+
+    # Read in the sky background.
+    sky_small = squeeze(read(f[3], "ALLSKY"), 3)::Array{Float32, 2}
+    sky_x = vec(read(f[3], "XINTERP"))::Vector{Float32}
+    sky_y = vec(read(f[3], "YINTERP"))::Vector{Float32}
+
+    # convert sky interpolation coordinates from 0-indexed to 1-indexed
+    for i=1:length(sky_x)
+        sky_x[i] += 1.0f0
+    end
+    for i=1:length(sky_y)
+        sky_y[i] += 1.0f0
+    end
+
+    # Load the WCSTransform
+    header_str = FITSIO.read_header(f[1], ASCIIString)::ASCIIString
+    wcs = WCS.from_header(header_str)[1]
+
+    # Calibration vector
+    calibration = read(f[2])::Vector{Float32}
+
+    close(f)
+
+    # interpolate to full sky image
+    sky = interp_sky(sky_small, sky_x, sky_y)
+
+    # Convert image to raw electron counts.  Note that these may not
+    # be close to integers due to the analog to digital conversion
+    # process in the telescope.
+    for j=1:size(image, 2), i=1:size(image, 1)
+        image[i, j] = gain * (image[i, j] / calibration[i] + sky[i, j])
+    end
+
+    image, calibration, sky, wcs
+end
+
 
 @doc """
 Load a stamp catalog.
@@ -161,9 +243,9 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
     blob = Array(Image, 5)
     for b=1:5
         print("Reading band $b image data...")
-        nelec, calib_col, sky_grid, sky_x, sky_y, sky_image, wcs =
-            SDSS.load_raw_field(field_dir, run_num, camcol_num,
-                                field_num, b, band_gain[b]);
+        nelec, calib_col, sky_image, wcs =
+            load_raw_field(field_dir, run_num, camcol_num,
+                           field_num, b, band_gain[b])
 
         print("Masking image...")
         SDSS.mask_image!(nelec, field_dir, run_num, camcol_num, field_num, b,
