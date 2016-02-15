@@ -177,6 +177,43 @@ function load_sdss_mask(fname, mask_planes=DEFAULT_MASK_PLANES)
 end
 
 
+"""
+load_sdss_psf(fname, b)
+
+Read a `RawPSFComponents` for band number `b` from the SDSS \"psField\"
+file `fname`. `b` must be in range 1:5.
+"""
+function load_sdss_psf(fname, b::Integer)
+    @assert b in 1:5
+
+    f = FITSIO.FITS(fname)
+    hdu = f[b + 1]
+    nrows = FITSIO.read_key(hdu, "NAXIS2")[1]::Int
+    nrow_b = (read(hdu, "nrow_b")::Vector{Int32})[1]
+    ncol_b = (read(hdu, "ncol_b")::Vector{Int32})[1]
+    rnrow = (read(hdu, "rnrow")::Vector{Int32})[1]
+    rncol = (read(hdu, "rncol")::Vector{Int32})[1]
+    cmat_raw = read(hdu, "c")::Array{Float32, 3}
+    rrows_raw = read(hdu, "rrows")::Array{Array{Float32,1},1}
+    close(f)
+
+    # Only the first (nrow_b, ncol_b) submatrix of cmat is used for reasons obscure
+    # to the author.
+    cmat = Array(Float64, nrow_b, ncol_b, size(cmat_raw, 3))
+    for k=1:size(cmat_raw, 3), j=1:nrow_b, i=1:ncol_b
+        cmat[i, j, k] = cmat_raw[i, j, k]
+    end
+
+    # convert rrows to Array{Float64, 2}, assuming each row is the same length.
+    rrows = Array(Float64, length(rrows_raw[1]), length(rrows_raw))
+    for i=1:length(rrows_raw)
+        rrows[:, i] = rrows_raw[i]
+    end
+
+    return PSF.RawPSFComponents(rrows, rnrow, rncol, cmat)
+end
+
+
 @doc """
 Load a stamp catalog.
 """ ->
@@ -355,9 +392,10 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
         end
 
         # Load and fit the psf.
-        println("reading psf...")
-        raw_psf_comp =
-          SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
+        print("reading psf... ")
+        psf_fname = "$field_dir/psField-$run_num-$camcol_num-$field_num.fit"
+        raw_psf_comp = load_sdss_psf(psf_fname, b)
+        println("done.")
 
         # For now, evaluate the psf at the middle of the image.
         psf_point_x = H / 2
