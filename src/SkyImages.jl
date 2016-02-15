@@ -19,7 +19,11 @@ export break_blob_into_tiles, break_image_into_tiles
 export get_local_sources
 export stitch_object_tiles
 
-const band_letters = ['u', 'g', 'r', 'i', 'z']
+# The default mask planes are those used in the astrometry.net code.
+const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
+                             "S_MASK_SATUR",  # saturated
+                             "S_MASK_CR",  # cosmic ray
+                             "S_MASK_GHOST"]  # electronics artifacts
 
 """
 interp_sky(data, xcoords, ycoords)
@@ -31,27 +35,42 @@ For example, if `x[1] = 3.3` and `y[2] = 4.7`, the element `out[1, 2]`
 will be a result of linear interpolation between the values
 `data[3:4, 4:5]`.
 
-Assumes that coordinates extend less than 1 element past size of data.
+Coordinates should not extend more than 1 element past size of data.
 """
-function interp_sky{T}(data::Array{T, 2}, xcoords::Vector{T},
-                       ycoords::Vector{T})
+function interp_sky{T, S}(data::Array{T, 2}, xcoords::Vector{S},
+                          ycoords::Vector{S})
+    # We assume below that 0 <= floor(x) <= size(data, 1)
+    # and similarly for y. Check this.
+    for xc in xcoords
+        if xc < zero(S) || xc >= size(data, 1) + 1
+            error("x coordinates out of bounds")
+        end
+    end
+    for yc in ycoords
+        if yc < zero(S) || yc >= size(data, 2) + 1
+            error("y coordinates out of bounds")
+        end
+    end
+
     out = Array(T, length(xcoords), length(ycoords))
     for j=1:length(ycoords)
         y0 = floor(Int, ycoords[j])
         y1 = y0 + 1
         yw0 = ycoords[j] - y0
-        yw1 = one(T) - yw0
+        yw1 = one(S) - yw0
         y0 = max(y0, 1)
         y1 = min(y1, size(data, 2))
         for i=1:length(xcoords)
             x0 = floor(Int, xcoords[i])
             x1 = x0 + 1
             xw0 = xcoords[i] - x0
-            xw1 = one(T) - xw0
+            xw1 = one(S) - xw0
             x0 = max(x0, 1)
             x1 = min(x1, size(data, 1))
-            out[i, j] = (xw0 * yw0 * data[x0, y0] + xw1 * yw0 * data[x1, y0] +
-                         xw0 * yw1 * data[x0, y1] + xw1 * yw1 * data[x1, y1])
+            @inbounds out[i, j] = (xw0 * yw0 * data[x0, y0] +
+                                   xw1 * yw0 * data[x1, y0] +
+                                   xw0 * yw1 * data[x0, y1] +
+                                   xw1 * yw1 * data[x1, y1])
         end
     end
     return out
@@ -99,6 +118,114 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     end
 
     image, calibration, sky, wcs
+end
+
+"""
+load_sdss_field_gains(fname, fieldnum)
+
+Return the image gains for field number `fieldnum` in an SDSS
+\"photoField\" file `fname`.
+"""
+function load_sdss_field_gains(fname, fieldnum::Integer)
+
+    f = FITSIO.FITS(fname)
+    fieldnums = read(f[2], "FIELD")::Vector{Int32}
+    gains = read(f[2], "GAIN")::Array{Float32, 2}
+    close(f)
+
+    # Find first occurance of `fieldnum` and return the corresponding gain.
+    for i=1:length(fieldnums)
+        fieldnums[i] == fieldnum && return gains[:, i]
+    end
+
+    error("field number $fieldnum not found in file: $fname")
+end
+
+
+"""
+load_sdss_mask(fname[, mask_planes])
+
+Read a \"fpM\"-format SDSS file and return masked image ranges,
+based on `mask_planes`. Returns two `Vector{UnitRange{Int}}`,
+giving the range of x and y indicies to be masked.
+"""
+function load_sdss_mask(fname, mask_planes=DEFAULT_MASK_PLANES)
+    f = FITSIO.FITS(fname)
+
+    # The last (12th) HDU contains a key describing what each of the
+    # other HDUs are. Use this to find the indicies of all the relevant
+    # HDUs (those with attributeName matching a value in `mask_planes`).
+    value = read(f[12], "Value")::Vector{Int32}
+    def = read(f[12], "defName")::Vector{ASCIIString}
+    attribute = read(f[12], "attributeName")::Vector{ASCIIString}
+
+    # initialize return values
+    xranges = UnitRange{Int}[]
+    yranges = UnitRange{Int}[]
+
+    # Loop over keys and check if each is a mask plane we're interested in
+    # (those with defName == "S_MASKTYPE" and "attributeName" in mask_planes).
+    # If so, read from the corresponding HDU and construct ranges to mask.
+    for i=1:length(value)
+        if (def[i] == "S_MASKTYPE" && attribute[i] in mask_planes)
+
+            # `value` starts from 0, but first table hdu is hdu number 2
+            hdunum = value[i] + 2
+
+            cmin = read(f[hdunum], "cmin")::Vector{Int32}
+            cmax = read(f[hdunum], "cmax")::Vector{Int32}
+            rmin = read(f[hdunum], "rmin")::Vector{Int32}
+            rmax = read(f[hdunum], "rmax")::Vector{Int32}
+
+            # "c" ("column") refers to mask's NAXIS1 (x axis);
+            # "r" ("row") refers to mask's NAXIS2 (y axis).
+            # cmin/cmax and rmin/rmax are 0-based and inclusive, so we add 1
+            # to both.
+            for j=1:length(cmin)
+                push!(xranges, (cmin[j] + 1):(cmax[j] + 1))
+                push!(yranges, (rmin[j] + 1):(rmax[j] + 1))
+            end
+        end
+    end
+
+    return xranges, yranges
+end
+
+
+"""
+load_sdss_psf(fname, b)
+
+Read a `RawPSFComponents` for band number `b` from the SDSS \"psField\"
+file `fname`. `b` must be in range 1:5.
+"""
+function load_sdss_psf(fname, b::Integer)
+    @assert b in 1:5
+
+    f = FITSIO.FITS(fname)
+    hdu = f[b + 1]
+    nrows = FITSIO.read_key(hdu, "NAXIS2")[1]::Int
+    nrow_b = (read(hdu, "nrow_b")::Vector{Int32})[1]
+    ncol_b = (read(hdu, "ncol_b")::Vector{Int32})[1]
+    rnrow = (read(hdu, "rnrow")::Vector{Int32})[1]
+    rncol = (read(hdu, "rncol")::Vector{Int32})[1]
+    cmat_raw = read(hdu, "c")::Array{Float32, 3}
+    rrows_raw = read(hdu, "rrows")::Array{Array{Float32,1},1}
+    close(f)
+
+    # Only the first (nrow_b, ncol_b) submatrix of cmat is used for reasons obscure
+    # to the author.
+    cmat = Array(Float64, nrow_b, ncol_b, size(cmat_raw, 3))
+    for k=1:size(cmat_raw, 3), j=1:nrow_b, i=1:ncol_b
+        cmat[i, j, k] = cmat_raw[i, j, k]
+    end
+
+    # convert rrows to Array{Float64, 2}, assuming each row is the same length.
+    rrows = Array(Float64, length(rrows_raw[1]), length(rrows_raw))
+    for i=1:length(rrows_raw)
+        rrows[:, i] = rrows_raw[i]
+    end
+
+    return PSF.RawPSFComponents(rrows, rnrow, rncol, cmat)
 end
 
 
@@ -237,20 +364,30 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
   mask_planes =
     Set(["S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"]))
 
-    band_gain, band_dark_variance =
-      SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
+    # Read gain for each band from "photoField" file.
+    pf_fname = "$field_dir/photoField-$run_num-$camcol_num.fits"
+    gains = load_sdss_field_gains(pf_fname, parse(Int, field_num))
 
     blob = Array(Image, 5)
     for b=1:5
-        print("Reading band $b image data...")
+        print("Reading band $b image data... ")
         nelec, calib_col, sky_image, wcs =
             load_raw_field(field_dir, run_num, camcol_num,
-                           field_num, b, band_gain[b])
+                           field_num, b, gains[b])
 
-        print("Masking image...")
-        SDSS.mask_image!(nelec, field_dir, run_num, camcol_num, field_num, b,
-                         mask_planes=mask_planes);
-        println("done.")
+
+        letter = band_letters[b]
+        mask_fname = joinpath(field_dir,
+                              "fpM-$run_num-$letter$camcol_num-$field_num.fit")
+
+        print("masking image... ")
+        mask_xranges, mask_yranges = load_sdss_mask(mask_fname, mask_planes)
+
+        # apply mask
+        for i=1:length(mask_xranges)
+            nelec[mask_xranges[i], mask_yranges[i]] = NaN
+        end
+
         H = size(nelec, 1)
         W = size(nelec, 2)
 
@@ -258,21 +395,22 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
         # epsilon * iota needs to be in units comparable to nelec
         # electron counts.
         # Note that each are actuall pretty variable.
-        iota = convert(Float64, band_gain[b] / median(calib_col))
+        iota = convert(Float64, gains[b] / median(calib_col))
         epsilon = convert(Float64, median(sky_image) * median(calib_col))
         epsilon_mat = Array(Float64, H, W)
         iota_vec = Array(Float64, H)
         for h=1:H
-            iota_vec[h] = band_gain[b] / calib_col[h]
+            iota_vec[h] = gains[b] / calib_col[h]
             for w=1:W
                 epsilon_mat[h, w] = sky_image[h, w] * calib_col[h]
             end
         end
 
         # Load and fit the psf.
-        println("reading psf...")
-        raw_psf_comp =
-          SDSS.load_psf_data(field_dir, run_num, camcol_num, field_num, b);
+        print("reading psf... ")
+        psf_fname = "$field_dir/psField-$run_num-$camcol_num-$field_num.fit"
+        raw_psf_comp = load_sdss_psf(psf_fname, b)
+        println("done.")
 
         # For now, evaluate the psf at the middle of the image.
         psf_point_x = H / 2
