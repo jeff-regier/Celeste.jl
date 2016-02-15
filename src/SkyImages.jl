@@ -19,7 +19,11 @@ export break_blob_into_tiles, break_image_into_tiles
 export get_local_sources
 export stitch_object_tiles
 
-const band_letters = ['u', 'g', 'r', 'i', 'z']
+# The default mask planes are those used in the astrometry.net code.
+const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
+                             "S_MASK_SATUR",  # saturated
+                             "S_MASK_CR",  # cosmic ray
+                             "S_MASK_GHOST"]  # electronics artifacts
 
 """
 interp_sky(data, xcoords, ycoords)
@@ -99,6 +103,55 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     end
 
     image, calibration, sky, wcs
+end
+
+"""
+load_sdss_mask(fname[, mask_planes])
+
+Read a \"fpM\"-format SDSS file and return masked image ranges,
+based on `mask_planes`. Returns two `Vector{UnitRange{Int}}`,
+giving the range of x and y indicies to be masked.
+"""
+function load_sdss_mask(fname, mask_planes=DEFAULT_MASK_PLANES)
+    f = FITSIO.FITS(fname)
+
+    # The last (12th) HDU contains a key describing what each of the
+    # other HDUs are. Use this to find the indicies of all the relevant
+    # HDUs (those with attributeName matching a value in `mask_planes`).
+    value = read(f[12], "Value")::Vector{Int32}
+    def = read(f[12], "defName")::Vector{ASCIIString}
+    attribute = read(f[12], "attributeName")::Vector{ASCIIString}
+
+    # initialize return values
+    xranges = UnitRange{Int}[]
+    yranges = UnitRange{Int}[]
+
+    # Loop over keys and check if each is a mask plane we're interested in
+    # (those with defName == "S_MASKTYPE" and "attributeName" in mask_planes).
+    # If so, read from the corresponding HDU and construct ranges to mask.
+    for i=1:length(value)
+        if (def[i] == "S_MASKTYPE" && attribute[i] in mask_planes)
+
+            # `value` starts from 0, but first table hdu is hdu number 2
+            hdunum = value[i] + 2
+
+            cmin = read(f[hdunum], "cmin")::Vector{Int32}
+            cmax = read(f[hdunum], "cmax")::Vector{Int32}
+            rmin = read(f[hdunum], "rmin")::Vector{Int32}
+            rmax = read(f[hdunum], "rmax")::Vector{Int32}
+
+            # "c" ("column") refers to mask's NAXIS1 (x axis);
+            # "r" ("row") refers to mask's NAXIS2 (y axis).
+            # cmin/cmax and rmin/rmax are 0-based and inclusive, so we add 1
+            # to both.
+            for j=1:length(cmin)
+                push!(xranges, (cmin[j] + 1):(cmax[j] + 1))
+                push!(yranges, (rmin[j] + 1):(rmax[j] + 1))
+            end
+        end
+    end
+
+    return xranges, yranges
 end
 
 
@@ -242,15 +295,24 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
 
     blob = Array(Image, 5)
     for b=1:5
-        print("Reading band $b image data...")
+        print("Reading band $b image data... ")
         nelec, calib_col, sky_image, wcs =
             load_raw_field(field_dir, run_num, camcol_num,
                            field_num, b, band_gain[b])
 
-        print("Masking image...")
-        SDSS.mask_image!(nelec, field_dir, run_num, camcol_num, field_num, b,
-                         mask_planes=mask_planes);
-        println("done.")
+
+        letter = band_letters[b]
+        mask_fname = joinpath(field_dir,
+                              "fpM-$run_num-$letter$camcol_num-$field_num.fit")
+
+        print("masking image... ")
+        mask_xranges, mask_yranges = load_sdss_mask(mask_fname, mask_planes)
+
+        # apply mask
+        for i=1:length(mask_xranges)
+            nelec[mask_xranges[i], mask_yranges[i]] = NaN
+        end
+
         H = size(nelec, 1)
         W = size(nelec, 2)
 
