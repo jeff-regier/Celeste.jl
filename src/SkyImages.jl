@@ -35,27 +35,42 @@ For example, if `x[1] = 3.3` and `y[2] = 4.7`, the element `out[1, 2]`
 will be a result of linear interpolation between the values
 `data[3:4, 4:5]`.
 
-Assumes that coordinates extend less than 1 element past size of data.
+Coordinates should not extend more than 1 element past size of data.
 """
-function interp_sky{T}(data::Array{T, 2}, xcoords::Vector{T},
-                       ycoords::Vector{T})
+function interp_sky{T, S}(data::Array{T, 2}, xcoords::Vector{S},
+                          ycoords::Vector{S})
+    # We assume below that 0 <= floor(x) <= size(data, 1)
+    # and similarly for y. Check this.
+    for xc in xcoords
+        if xc < zero(S) || xc >= size(data, 1) + 1
+            error("x coordinates out of bounds")
+        end
+    end
+    for yc in ycoords
+        if yc < zero(S) || yc >= size(data, 2) + 1
+            error("y coordinates out of bounds")
+        end
+    end
+
     out = Array(T, length(xcoords), length(ycoords))
     for j=1:length(ycoords)
         y0 = floor(Int, ycoords[j])
         y1 = y0 + 1
         yw0 = ycoords[j] - y0
-        yw1 = one(T) - yw0
+        yw1 = one(S) - yw0
         y0 = max(y0, 1)
         y1 = min(y1, size(data, 2))
         for i=1:length(xcoords)
             x0 = floor(Int, xcoords[i])
             x1 = x0 + 1
             xw0 = xcoords[i] - x0
-            xw1 = one(T) - xw0
+            xw1 = one(S) - xw0
             x0 = max(x0, 1)
             x1 = min(x1, size(data, 1))
-            out[i, j] = (xw0 * yw0 * data[x0, y0] + xw1 * yw0 * data[x1, y0] +
-                         xw0 * yw1 * data[x0, y1] + xw1 * yw1 * data[x1, y1])
+            @inbounds out[i, j] = (xw0 * yw0 * data[x0, y0] +
+                                   xw1 * yw0 * data[x1, y0] +
+                                   xw0 * yw1 * data[x0, y1] +
+                                   xw1 * yw1 * data[x1, y1])
         end
     end
     return out
