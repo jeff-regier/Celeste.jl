@@ -9,7 +9,6 @@ import DataFrames
 import ElboDeriv # For stitch_object_tiles
 import FITSIO
 import GaussianMixtures
-import Grid
 import Util
 
 export load_stamp_blob, load_sdss_blob, crop_image!
