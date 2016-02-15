@@ -106,6 +106,28 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
 end
 
 """
+load_sdss_field_gains(fname, fieldnum)
+
+Return the image gains for field number `fieldnum` in an SDSS
+\"photoField\" file `fname`.
+"""
+function load_sdss_field_gains(fname, fieldnum::Integer)
+
+    f = FITSIO.FITS(fname)
+    fieldnums = read(f[2], "FIELD")::Vector{Int32}
+    gains = read(f[2], "GAIN")::Array{Float32, 2}
+    close(f)
+
+    # Find first occurance of `fieldnum` and return the corresponding gain.
+    for i=1:length(fieldnums)
+        fieldnums[i] == fieldnum && return gains[:, i]
+    end
+
+    error("field number $fieldnum not found in file: $fname")
+end
+
+
+"""
 load_sdss_mask(fname[, mask_planes])
 
 Read a \"fpM\"-format SDSS file and return masked image ranges,
@@ -290,15 +312,16 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
   mask_planes =
     Set(["S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"]))
 
-    band_gain, band_dark_variance =
-      SDSS.load_photo_field(field_dir, run_num, camcol_num, field_num)
+    # Read gain for each band from "photoField" file.
+    pf_fname = "$field_dir/photoField-$run_num-$camcol_num.fits"
+    gains = load_sdss_field_gains(pf_fname, parse(Int, field_num))
 
     blob = Array(Image, 5)
     for b=1:5
         print("Reading band $b image data... ")
         nelec, calib_col, sky_image, wcs =
             load_raw_field(field_dir, run_num, camcol_num,
-                           field_num, b, band_gain[b])
+                           field_num, b, gains[b])
 
 
         letter = band_letters[b]
@@ -320,12 +343,12 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
         # epsilon * iota needs to be in units comparable to nelec
         # electron counts.
         # Note that each are actuall pretty variable.
-        iota = convert(Float64, band_gain[b] / median(calib_col))
+        iota = convert(Float64, gains[b] / median(calib_col))
         epsilon = convert(Float64, median(sky_image) * median(calib_col))
         epsilon_mat = Array(Float64, H, W)
         iota_vec = Array(Float64, H)
         for h=1:H
-            iota_vec[h] = band_gain[b] / calib_col[h]
+            iota_vec[h] = gains[b] / calib_col[h]
             for w=1:W
                 epsilon_mat[h, w] = sky_image[h, w] * calib_col[h]
             end
