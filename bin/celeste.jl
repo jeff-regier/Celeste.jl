@@ -6,11 +6,12 @@ using DocOpt
 import JLD
 import SloanDigitalSkySurvey: SDSS
 
-const doc =
+const DOC =
 """Run Celeste.
 
 Usage:
-  celeste.jl <dir> <run> <camcol> <field> [--outdir=<outdir> --part=<k/n>]
+  celeste.jl fit <dir> <run> <camcol> <field> [--outdir=<outdir> --part=<k/n>]
+  celeste.jl score <dir> <run> <camcol> <field>
   celeste.jl -h | --help
   celeste.jl --version
 
@@ -38,17 +39,8 @@ function parse_part(s)
     end
 end
 
-function main()
-    args = docopt(doc, version=v"0.0.0")
 
-    dir = args["<dir>"]
-    run = @sprintf "%06d" parse(Int, args["<run>"])
-    camcol = string(parse(Int, args["<camcol>"]))
-    field = @sprintf "%04d" parse(Int, args["<field>"])
-
-    outdir = (args["--outdir"] === nothing)? dir: args["--outdir"]
-    part = (args["--part"] === nothing)? "1/1": args["--part"]
-    partnum, parts = parse_part(part)
+function fit(dir, run, camcol, field, outdir, partnum, parts)
 
     # get images
     images = SkyImages.load_sdss_blob(dir, run, camcol, field;
@@ -108,7 +100,38 @@ function main()
                                "result" => result,
                                "fit_time" => fit_time))
     end
+end
 
-end # main function
+
+"""
+Score all the celeste results for sources in the given (run, camcol, field).
+This is done by finding all files with names matching
+`dir/celeste-RUN-CAMCOL-FIELD-[0-9]*.jld`
+"""
+function score(dir, run, camcol, field)
+    println("score not yet implemented")
+end
+
+
+function main()
+    args = docopt(DOC, version=v"0.0.0")
+
+    if args["fit"] || args["score"]
+        dir = args["<dir>"]
+        run = @sprintf "%06d" parse(Int, args["<run>"])
+        camcol = string(parse(Int, args["<camcol>"]))
+        field = @sprintf "%04d" parse(Int, args["<field>"])
+
+        if args["fit"]
+            outdir = (args["--outdir"] === nothing)? dir: args["--outdir"]
+            part = (args["--part"] === nothing)? "1/1": args["--part"]
+            partnum, parts = parse_part(part)
+            fit(dir, run, camcol, field, outdir, partnum, parts)
+        elseif args["score"]
+            score(dir, run, camcol, field)
+        end
+    end
+end
+
 
 main()
