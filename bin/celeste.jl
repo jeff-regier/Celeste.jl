@@ -10,14 +10,33 @@ const doc =
 """Run Celeste.
 
 Usage:
-  celeste.jl <dir> <run> <camcol> <field> [--outdir=<outdir>]
+  celeste.jl <dir> <run> <camcol> <field> [--outdir=<outdir> --part=<k/n>]
   celeste.jl -h | --help
   celeste.jl --version
+
+Options:
+  -h, --help         Show this screen.
+  --version          Show the version.
+  --outdir=<outdir>  Write output files for each source to this directory.
+                     Default is to write to input directory.
+  --part=<k/n>       Split sources into `n` parts and only process the
+                     `k`th part.
 """
-# E.g., celeste.jl ../dat/sample_field 3900 6 269
 
 const TILE_WIDTH = 20
 const MAX_ITERS = 20
+
+"""
+Parse a string like \"1/3\" and return (1, 3).
+"""
+function parse_part(s)
+    words = split(s, '/', keep=false)
+    if length(words) == 2
+        return (parse(Int, words[1]), parse(Int, words[2]))
+    else
+        error("part must be two integers separated by `/`.")
+    end
+end
 
 function main()
     args = docopt(doc, version=v"0.0.0")
@@ -28,6 +47,8 @@ function main()
     field = @sprintf "%04d" parse(Int, args["<field>"])
 
     outdir = (args["--outdir"] === nothing)? dir: args["--outdir"]
+    part = (args["--part"] === nothing)? "1/1": args["--part"]
+    partnum, parts = parse_part(part)
 
     # get images
     images = SkyImages.load_sdss_blob(dir, run, camcol, field;
@@ -37,10 +58,16 @@ function main()
     cat_df = SDSS.load_catalog_df(dir, run, camcol, field)
     cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, images)
 
+    # limit to just the part of the catalog specified.
+    partsize = length(cat_entries) / parts
+    minidx = round(Int, partsize*(partnum-1)) + 1
+    maxidx = round(Int, partsize*partnum)
+    cat_entries = cat_entries[minidx:maxidx]
+
     # initialize tiled images and model parameters
     tiled_blob, mp = ModelInit.initialize_celeste(images, cat_entries,
                                                   tile_width=TILE_WIDTH,
-                                                  fit_psf=false)
+                                                  fit_psf=true)
 
     # Loop over sources in model
     for i in 1:mp.S
