@@ -798,10 +798,14 @@ function add_elbo_log_term!{NumType <: Number}(
       calculate_hessian=elbo_vars.calculate_hessian)
 
     # Add to the ELBO.
-    elbo.d += x_nbm * elbo_vars.elbo_log_term.d
+    for ind in 1:length(elbo.d)
+      elbo.d[ind] += x_nbm * elbo_vars.elbo_log_term.d[ind]
+    end
 
     if elbo_vars.calculate_hessian
-      elbo.h += x_nbm * elbo_vars.elbo_log_term.h
+      for ind in 1:length(elbo.h)
+        elbo.h[ind] += x_nbm * elbo_vars.elbo_log_term.h[ind]
+      end
     end
   end
 end
