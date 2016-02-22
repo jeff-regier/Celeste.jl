@@ -356,7 +356,7 @@ function test_bad_a_init()
     elbo_true2 = ElboDeriv.elbo_likelihood(tiled_blob, mp2)
     mp2.vp[1][ids.a] = [ 0.99, 0.01 ]
     elbo_bad2 = ElboDeriv.elbo_likelihood(tiled_blob, mp2)
-    @test elbo_true2.v > elbo_bad2.v
+    @test elbo_true2.v[1] > elbo_bad2.v
     @test elbo_bad2.d[ids.a[2], 1] > 0
 end
 
@@ -425,7 +425,7 @@ function test_quadratic_optimization()
           unused_blob::TiledBlob, mp::ModelParams{NumType})
 
         val = zero_sensitive_float(CanonicalParams, NumType)
-        val.v = -sum((mp.vp[1] - centers) .^ 2)
+        val.v[1] = -sum((mp.vp[1] - centers) .^ 2)
         val.d[:] = -2.0 * (mp.vp[1] - centers)
         val.h[:, :] = diagm(fill(-2.0, length(CanonicalParams)))
         val
@@ -450,7 +450,7 @@ function test_quadratic_optimization()
         xtol_rel=1e-16, ftol_abs=1e-16)
 
     @test_approx_eq_eps mp.vp[1] centers 1e-6
-    @test_approx_eq_eps quadratic_function(unused_blob, mp).v 0.0 1e-15
+    @test_approx_eq_eps quadratic_function(unused_blob, mp).v[1] 0.0 1e-15
 end
 
 ####################################################

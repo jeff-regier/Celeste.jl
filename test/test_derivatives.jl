@@ -174,12 +174,12 @@ function test_derivative_flags()
   elbo = ElboDeriv.elbo(tiled_blob, mp);
 
   elbo_noderiv = ElboDeriv.elbo(tiled_blob, mp; calculate_derivs=false);
-  @test_approx_eq elbo.v elbo_noderiv.v
+  @test_approx_eq elbo.v[1] elbo_noderiv.v
   @test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
   @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
 
   elbo_nohess = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
-  @test_approx_eq elbo.v elbo_nohess.v
+  @test_approx_eq elbo.v[1] elbo_nohess.v
   @test_approx_eq elbo.d elbo_nohess.d
   @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
 end
@@ -205,8 +205,8 @@ function test_active_sources()
   mp.active_sources = [2]
   elbo_lik_2 = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
-  @test_approx_eq elbo_lik_12.v elbo_lik_1.v
-  @test_approx_eq elbo_lik_12.v elbo_lik_2.v
+  @test_approx_eq elbo_lik_12.v[1] elbo_lik_1.v
+  @test_approx_eq elbo_lik_12.v[1] elbo_lik_2.v
 
   @test_approx_eq elbo_lik_12.d[:, 1] elbo_lik_1.d[:, 1]
   @test_approx_eq elbo_lik_12.d[:, 2] elbo_lik_2.d[:, 1]
@@ -389,7 +389,7 @@ function test_combine_pixel_sources()
     function wrapper_fun{NumType <: Number}(x::Vector{NumType})
       mp_local = unwrap_vp_vector(x, mp)
       elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
-      test_var ? elbo_vars_local.var_G.v : elbo_vars_local.E_G.v
+      test_var ? elbo_vars_local.var_G.v[1] : elbo_vars_local.E_G.v
     end
 
     x = wrap_vp_vector(mp, true)
@@ -440,7 +440,7 @@ function test_e_g_s_functions()
       mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
       mp_local.vp[s] = x
       elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
-      test_var ? elbo_vars_local.var_G_s.v : elbo_vars_local.E_G_s.v
+      test_var ? elbo_vars_local.var_G_s.v[1] : elbo_vars_local.E_G_s.v
     end
 
     x = mp.vp[s];
@@ -449,7 +449,7 @@ function test_e_g_s_functions()
 
     # Sanity check the variance value.
     @test_approx_eq(elbo_vars.var_G_s.v,
-                    elbo_vars.E_G2_s.v - (elbo_vars.E_G_s.v ^ 2))
+                    elbo_vars.E_G2_s.v[1] - (elbo_vars.E_G_s.v[1] ^ 2))
 
     sf = test_var ? deepcopy(elbo_vars.var_G_s) : deepcopy(elbo_vars.E_G_s);
 
@@ -912,7 +912,7 @@ function test_brightness_hessian()
     bright_vp = mp.vp[1][brightness_standard_alignment[i]];
     bright = wrap_source_brightness(mp.vp[1], true);
 
-    @test_approx_eq bright.v wrap_source_brightness_value(bright_vp);
+    @test_approx_eq bright.v[1] wrap_source_brightness_value(bright_vp);
 
     ad_grad = ForwardDiff.gradient(wrap_source_brightness_value, bright_vp);
     @test_approx_eq ad_grad bright.d[:, 1]

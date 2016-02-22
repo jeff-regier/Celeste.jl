@@ -121,7 +121,7 @@ end;
 # end
 
 # Make sure they match.
-@assert abs(accum.v / accum_par.v - 1) < 1e-6
+@assert abs(accum.v[1] / accum_par.v[1] - 1) < 1e-6
 @assert maximum(abs((accum.d .+ 1e-8) ./ (accum_par.d .+ 1e-8) - 1)) < 1e-6
 
 elbo_times = [ remotecall_fetch(w, () -> elbo_time) for w in workers() ]
