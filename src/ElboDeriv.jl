@@ -443,6 +443,12 @@ function accumulate_source_brightness!{NumType <: Number}(
   const use_blas = false
 
   for i in 1:Ia # Stars and galaxies
+    fsm_i = i == 1 ? elbo_vars.fs0m_vec[s] : elbo_vars.fs1m_vec[s]
+    println("========")
+    @time x = fsm_i.v
+    @time y = fsm_i.d[1,1]
+    println("========")
+
     lf = sb.E_l_a[b, i].v * fsm[i].v
     llff = sb.E_ll_a[b, i].v * fsm[i].v^2
 
@@ -491,10 +497,11 @@ function accumulate_source_brightness!{NumType <: Number}(
         # The (bright, bright) block:
         for p0_ind1 in 1:length(p0_bright), p0_ind2 in 1:length(p0_bright)
           # TODO: time consuming **************
-          E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-            a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_ind1, p0_ind2]
-          E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-            a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
+          println("------------")
+          @time x1 = fsm_i.v
+          @time E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] = a[i] * sb.E_l_a[b, i].h[p0_ind1, p0_ind2] * x1
+          @time x1 = a[i] * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
+          @time E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] = (fsm[i].v^2) * x1
         end
 
         # The (shape, shape) block:
