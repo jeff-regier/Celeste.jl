@@ -58,11 +58,11 @@ SourceBrightness{NumType <: Number}(
         # band 3 is the reference band, relative to which the colors are
         # specified.
         # It is denoted r_s and has a lognormal expectation.
-        E_l_a[3, i].d[bids.r1] = E_l_a[3, i].v
+        E_l_a[3, i].d[bids.r1] = E_l_a[3, i].v[1]
         E_l_a[3, i].d[bids.r2] = E_l_a[3, i].v[1] * .5
 
         if calculate_hessian
-          set_hess!(E_l_a[3, i], bids.r1, bids.r1, E_l_a[3, i].v)
+          set_hess!(E_l_a[3, i], bids.r1, bids.r1, E_l_a[3, i].v[1])
           set_hess!(E_l_a[3, i], bids.r1, bids.r2, E_l_a[3, i].v[1] * 0.5)
           set_hess!(E_l_a[3, i], bids.r2, bids.r2, E_l_a[3, i].v[1] * 0.25)
         end
@@ -71,10 +71,10 @@ SourceBrightness{NumType <: Number}(
         # expectations times E_c_3.
 
         # band 4 = band 3 * color 3.
-        E_l_a[4, i].d[bids.c1[3]] = E_l_a[4, i].v
+        E_l_a[4, i].d[bids.c1[3]] = E_l_a[4, i].v[1]
         E_l_a[4, i].d[bids.c2[3]] = E_l_a[4, i].v[1] * .5
         if calculate_hessian
-          set_hess!(E_l_a[4, i], bids.c1[3], bids.c1[3], E_l_a[4, i].v)
+          set_hess!(E_l_a[4, i], bids.c1[3], bids.c1[3], E_l_a[4, i].v[1])
           set_hess!(E_l_a[4, i], bids.c1[3], bids.c2[3], E_l_a[4, i].v[1] * 0.5)
           set_hess!(E_l_a[4, i], bids.c2[3], bids.c2[3], E_l_a[4, i].v[1] * 0.25)
         end
@@ -83,10 +83,10 @@ SourceBrightness{NumType <: Number}(
           calculate_hessian=calculate_hessian)
 
         # Band 5 = band 4 * color 4.
-        E_l_a[5, i].d[bids.c1[4]] = E_l_a[5, i].v
+        E_l_a[5, i].d[bids.c1[4]] = E_l_a[5, i].v[1]
         E_l_a[5, i].d[bids.c2[4]] = E_l_a[5, i].v[1] * .5
         if calculate_hessian
-          set_hess!(E_l_a[5, i], bids.c1[4], bids.c1[4], E_l_a[5, i].v)
+          set_hess!(E_l_a[5, i], bids.c1[4], bids.c1[4], E_l_a[5, i].v[1])
           set_hess!(E_l_a[5, i], bids.c1[4], bids.c2[4], E_l_a[5, i].v[1] * 0.5)
           set_hess!(E_l_a[5, i], bids.c2[4], bids.c2[4], E_l_a[5, i].v[1] * 0.25)
         end
@@ -98,7 +98,7 @@ SourceBrightness{NumType <: Number}(
         E_l_a[2, i].d[bids.c1[2]] = E_l_a[2, i].v[1] * -1.
         E_l_a[2, i].d[bids.c2[2]] = E_l_a[2, i].v[1] * .5
         if calculate_hessian
-          set_hess!(E_l_a[2, i], bids.c1[2], bids.c1[2], E_l_a[2, i].v)
+          set_hess!(E_l_a[2, i], bids.c1[2], bids.c1[2], E_l_a[2, i].v[1])
           set_hess!(E_l_a[2, i], bids.c1[2], bids.c2[2], E_l_a[2, i].v[1] * -0.5)
           set_hess!(E_l_a[2, i], bids.c2[2], bids.c2[2], E_l_a[2, i].v[1] * 0.25)
         end
@@ -110,7 +110,7 @@ SourceBrightness{NumType <: Number}(
         E_l_a[1, i].d[bids.c1[1]] = E_l_a[1, i].v[1] * -1.
         E_l_a[1, i].d[bids.c2[1]] = E_l_a[1, i].v[1] * .5
         if calculate_hessian
-          set_hess!(E_l_a[1, i], bids.c1[1], bids.c1[1], E_l_a[1, i].v)
+          set_hess!(E_l_a[1, i], bids.c1[1], bids.c1[1], E_l_a[1, i].v[1])
           set_hess!(E_l_a[1, i], bids.c1[1], bids.c2[1], E_l_a[1, i].v[1] * -0.5)
           set_hess!(E_l_a[1, i], bids.c2[1], bids.c2[1], E_l_a[1, i].v[1] * 0.25)
         end
@@ -119,10 +119,10 @@ SourceBrightness{NumType <: Number}(
                       calculate_hessian=calculate_hessian)
       else
         # Simply update the values if not calculating derivatives.
-        E_l_a[4, i].v[1] *= E_l_a[3, i].v
-        E_l_a[5, i].v[1] *= E_l_a[4, i].v
-        E_l_a[2, i].v[1] *= E_l_a[3, i].v
-        E_l_a[1, i].v[1] *= E_l_a[2, i].v
+        E_l_a[4, i].v[1] *= E_l_a[3, i].v[1]
+        E_l_a[5, i].v[1] *= E_l_a[4, i].v[1]
+        E_l_a[2, i].v[1] *= E_l_a[3, i].v[1]
+        E_l_a[1, i].v[1] *= E_l_a[2, i].v[1]
       end # Derivs
 
       ################################
@@ -140,13 +140,13 @@ SourceBrightness{NumType <: Number}(
 
       if calculate_derivs
         # Band 3, the reference band.
-        E_ll_a[3, i].d[bids.r1] = 2 * E_ll_a[3, i].v
-        E_ll_a[3, i].d[bids.r2] = 2 * E_ll_a[3, i].v
+        E_ll_a[3, i].d[bids.r1] = 2 * E_ll_a[3, i].v[1]
+        E_ll_a[3, i].d[bids.r2] = 2 * E_ll_a[3, i].v[1]
         if calculate_hessian
           for hess_ids in [(bids.r1, bids.r1),
                            (bids.r1, bids.r2),
                            (bids.r2, bids.r2)]
-            set_hess!(E_ll_a[3, i], hess_ids..., 4.0 * E_ll_a[3, i].v)
+            set_hess!(E_ll_a[3, i], hess_ids..., 4.0 * E_ll_a[3, i].v[1])
           end
         end
 
@@ -211,10 +211,10 @@ SourceBrightness{NumType <: Number}(
                       calculate_hessian=calculate_hessian)
       else
         # Simply update the values if not calculating derivatives.
-        E_ll_a[4, i].v[1] *= E_ll_a[3, i].v
-        E_ll_a[5, i].v[1] *= E_ll_a[4, i].v
-        E_ll_a[2, i].v[1] *= E_ll_a[3, i].v
-        E_ll_a[1, i].v[1] *= E_ll_a[2, i].v
+        E_ll_a[4, i].v[1] *= E_ll_a[3, i].v[1]
+        E_ll_a[5, i].v[1] *= E_ll_a[4, i].v[1]
+        E_ll_a[2, i].v[1] *= E_ll_a[3, i].v[1]
+        E_ll_a[1, i].v[1] *= E_ll_a[2, i].v[1]
       end # calculate_derivs
   end
 

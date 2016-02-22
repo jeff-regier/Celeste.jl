@@ -116,7 +116,7 @@ function test_that_variance_is_low()
     ElboDeriv.get_expected_pixel_brightness!(
       elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile, mp, tile_sources);
 
-    @test 0 < elbo_vars.var_G.v[1] < 1e-2 * elbo_vars.E_G.v^2
+    @test 0 < elbo_vars.var_G.v[1] < 1e-2 * elbo_vars.E_G.v[1]^2
 end
 
 
@@ -128,7 +128,7 @@ function test_that_star_truth_is_most_likely()
         mp_a = deepcopy(mp)
         mp_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ]
         bad_a_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp_a)
-        @test best.v[1] > bad_a_lik.v
+        @test best.v[1] > bad_a_lik.v[1]
     end
 
     for h2 in -2:2
@@ -137,7 +137,7 @@ function test_that_star_truth_is_most_likely()
                 mp_mu = deepcopy(mp)
                 mp_mu.vp[1][ids.u] += [h2 * .5, w2 * .5]
                 bad_mu = ElboDeriv.elbo_likelihood(tiled_blob, mp_mu)
-                @test best.v[1] > bad_mu.v
+                @test best.v[1] > bad_mu.v[1]
             end
         end
     end
@@ -146,7 +146,7 @@ function test_that_star_truth_is_most_likely()
         mp_r1 = deepcopy(mp)
         mp_r1.vp[1][ids.r1] += log(delta)
         bad_r1 = ElboDeriv.elbo_likelihood(tiled_blob, mp_r1)
-        @test best.v[1] > bad_r1.v
+        @test best.v[1] > bad_r1.v[1]
     end
 
     for b in 1:4
@@ -154,7 +154,7 @@ function test_that_star_truth_is_most_likely()
             mp_c1 = deepcopy(mp)
             mp_c1.vp[1][ids.c1[b, 1]] += delta
             bad_c1 = ElboDeriv.elbo_likelihood(tiled_blob, mp_c1)
-            @test best.v[1] > bad_c1.v
+            @test best.v[1] > bad_c1.v[1]
         end
     end
 
@@ -171,7 +171,7 @@ function test_that_galaxy_truth_is_most_likely()
         mp_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ];
         bad_a =
           ElboDeriv.elbo_likelihood(tiled_blob, mp_a; calculate_derivs=false);
-        @test best.v[1] > bad_a.v;
+        @test best.v[1] > bad_a.v[1];
     end
 
     for h2 in -2:2
@@ -181,7 +181,7 @@ function test_that_galaxy_truth_is_most_likely()
                 mp_mu.vp[1][ids.u] += [h2 * .5, w2 * .5]
                 bad_mu = ElboDeriv.elbo_likelihood(
                   tiled_blob, mp_mu; calculate_derivs=false)
-                @test best.v[1] > bad_mu.v
+                @test best.v[1] > bad_mu.v[1]
             end
         end
     end
@@ -191,7 +191,7 @@ function test_that_galaxy_truth_is_most_likely()
         mp_r1.vp[1][ids.r1] += 2 * log(bad_scale)
         bad_r1 = ElboDeriv.elbo_likelihood(
           tiled_blob, mp_r1; calculate_derivs=false)
-        @test best.v[1] > bad_r1.v
+        @test best.v[1] > bad_r1.v[1]
     end
 
     for n in [:e_axis, :e_angle, :e_scale]
@@ -200,7 +200,7 @@ function test_that_galaxy_truth_is_most_likely()
             mp_bad.vp[1][ids.(n)] *= bad_scale
             bad_elbo = ElboDeriv.elbo_likelihood(
               tiled_blob, mp_bad; calculate_derivs=false)
-            @test best.v[1] > bad_elbo.v
+            @test best.v[1] > bad_elbo.v[1]
         end
     end
 
@@ -210,7 +210,7 @@ function test_that_galaxy_truth_is_most_likely()
             mp_c1.vp[1][ids.c1[b, 2]] += delta
             bad_c1 = ElboDeriv.elbo_likelihood(
               tiled_blob, mp_c1; calculate_derivs=false)
-            @test best.v[1] > bad_c1.v
+            @test best.v[1] > bad_c1.v[1]
         end
     end
 end
@@ -251,7 +251,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         mp_r1.vp[s][ids.r1] += 2 * log(bad_scale)
         bad_r1 = ElboDeriv.elbo_likelihood(
           tiled_blob, mp_r1; calculate_derivs=false)
-        @test best.v[1] > bad_r1.v
+        @test best.v[1] > bad_r1.v[1]
     end
 
     for n in [:e_axis, :e_angle, :e_scale]
@@ -260,7 +260,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
             mp_bad.vp[s][ids.(n)] *= bad_scale
             bad_elbo = ElboDeriv.elbo_likelihood(
               tiled_blob, mp_bad; calculate_derivs=false)
-            @test best.v[1] > bad_elbo.v
+            @test best.v[1] > bad_elbo.v[1]
         end
     end
 
@@ -270,7 +270,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
 
         bad_a = ElboDeriv.elbo_likelihood(
           tiled_blob, mp_a; calculate_derivs=false)
-        @test best.v[1] > bad_a.v
+        @test best.v[1] > bad_a.v[1]
     end
 
     for h2 in -2:2
@@ -280,7 +280,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
                 mp_mu.vp[s][ids.u] += [0.5h2, 0.5w2]
                 bad_mu = ElboDeriv.elbo_likelihood(
                   tiled_blob, mp_mu; calculate_derivs=false)
-                @test best.v[1] > bad_mu.v
+                @test best.v[1] > bad_mu.v[1]
             end
         end
     end
@@ -291,8 +291,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
             mp_c1.vp[s][ids.c1[b, :]] += delta
             bad_c1 = ElboDeriv.elbo_likelihood(
               tiled_blob, mp_c1; calculate_derivs=false)
-            info("$(best.v)  >  $(bad_c1.v)")
-            @test best.v[1] > bad_c1.v
+            info("$(best.v[1])  >  $(bad_c1.v[1])")
+            @test best.v[1] > bad_c1.v[1]
         end
     end
 end
@@ -369,7 +369,7 @@ function test_tiny_image_tiling()
   end
   elbo_lik_tiles2 = deepcopy(elbo_vars_array[1].elbo);
 
-  @test_approx_eq elbo_lik_tiles.v[1] elbo_lik_tiles2.v
+  @test_approx_eq elbo_lik_tiles.v[1] elbo_lik_tiles2.v[1]
   @test_approx_eq_eps elbo_lik.v[1] elbo_lik_tiles.v[1] 100.
 
 end
@@ -390,7 +390,7 @@ function test_elbo_with_nan()
 
     # We deleted a pixel, so there's reason to expect them to be different,
     # but importantly they're reasonably close and not NaN.
-    @test_approx_eq_eps (nan_elbo.v[1] - initial_elbo.v) / initial_elbo.v[1] 0. 1e-4
+    @test_approx_eq_eps (nan_elbo.v[1] - initial_elbo.v[1]) / initial_elbo.v[1] 0. 1e-4
     deriv_rel_err = (nan_elbo.d - initial_elbo.d) ./ initial_elbo.d
     @test_approx_eq_eps deriv_rel_err fill(0., length(mp.vp[1])) 0.05
 end

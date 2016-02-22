@@ -84,7 +84,7 @@ function test_objective_wrapper()
     w_grad2 = zeros(Float64, length(x));
     wrapper.f_value_grad!(x[:], w_grad2);
 
-    @test_approx_eq(w_v, elbo_result.v)
+    @test_approx_eq(w_v, elbo_result.v[1])
     @test_approx_eq(w_grad, elbo_grad)
     @test_approx_eq(w_grad, w_grad2)
 
@@ -170,7 +170,7 @@ function test_single_source_optimization()
   f = ElboDeriv.elbo;
   omitted_ids = Int64[]
 
-  ElboDeriv.elbo_likelihood(tiled_blob, mp).v
+  ElboDeriv.elbo_likelihood(tiled_blob, mp).v[1]
 
   OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=true)
 
@@ -235,8 +235,8 @@ function test_two_body_optimization_newton()
     sum((bfgs_image .- original_image) .^ 2)
 
     # newton beats bfgs on the elbo, though not on the likelihood.
-    elbo_function(tiled_blob, mp_bfgs).v
-    elbo_function(tiled_blob, mp_newton).v
+    elbo_function(tiled_blob, mp_bfgs).v[1]
+    elbo_function(tiled_blob, mp_newton).v[1]
 end
 
 
@@ -259,7 +259,7 @@ function test_kappa_finding()
         for d in 1:D
             ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
         end
-        -accum.v
+        -accum.v[1]
     end
 
     mp.vp[1][ids.k[:, 2]] = [0.01, 0.99]
@@ -356,7 +356,7 @@ function test_bad_a_init()
     elbo_true2 = ElboDeriv.elbo_likelihood(tiled_blob, mp2)
     mp2.vp[1][ids.a] = [ 0.99, 0.01 ]
     elbo_bad2 = ElboDeriv.elbo_likelihood(tiled_blob, mp2)
-    @test elbo_true2.v[1] > elbo_bad2.v
+    @test elbo_true2.v[1] > elbo_bad2.v[1]
     @test elbo_bad2.d[ids.a[2], 1] > 0
 end
 

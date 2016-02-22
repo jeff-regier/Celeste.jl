@@ -444,13 +444,13 @@ function accumulate_source_brightness!{NumType <: Number}(
 
   for i in 1:Ia # Stars and galaxies
     fsm_i = i == 1 ? elbo_vars.fs0m_vec[s] : elbo_vars.fs1m_vec[s]
-    println("========")
-    @time x = fsm_i.v
-    @time y = fsm_i.d[1,1]
-    println("========")
+    # println("========")
+    # @time x = fsm_i.v[1]
+    # @time y = fsm_i.d[1,1]
+    # println("========")
 
-    lf = sb.E_l_a[b, i].v[1] * fsm[i].v
-    llff = sb.E_ll_a[b, i].v[1] * fsm[i].v^2
+    lf = sb.E_l_a[b, i].v[1] * fsm[i].v[1]
+    llff = sb.E_ll_a[b, i].v[1] * fsm[i].v[1]^2
 
     E_G_s.v[1] += a[i] * lf
     E_G2_s.v[1] += a[i] * llff
@@ -481,7 +481,7 @@ function accumulate_source_brightness!{NumType <: Number}(
         E_G_s.d[p0_bright[p0_bright_ind], 1] +=
           a[i] * fsm[i].v[1] * sb.E_l_a[b, i].d[p0_bright_ind, 1]
         E_G2_s.d[p0_bright[p0_bright_ind], 1] +=
-          a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
+          a[i] * (fsm[i].v[1]^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
       end
 
       if elbo_vars.calculate_hessian
@@ -497,11 +497,11 @@ function accumulate_source_brightness!{NumType <: Number}(
         # The (bright, bright) block:
         for p0_ind1 in 1:length(p0_bright), p0_ind2 in 1:length(p0_bright)
           # TODO: time consuming **************
-          println("------------")
-          @time x1 = fsm_i.v
-          @time E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] = a[i] * sb.E_l_a[b, i].h[p0_ind1, p0_ind2] * x1
-          @time x1 = a[i] * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
-          @time E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] = (fsm[i].v^2) * x1
+          # println("------------")
+          x1 = fsm_i.v[1]
+          E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] = a[i] * sb.E_l_a[b, i].h[p0_ind1, p0_ind2] * x1
+          x1 = a[i] * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
+          E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] = (fsm[i].v[1]^2) * x1
         end
 
         # The (shape, shape) block:
@@ -511,7 +511,7 @@ function accumulate_source_brightness!{NumType <: Number}(
           # using BLAS.
           E_G2_s_hsub.shape_shape =
             2 * a[i] * sb.E_ll_a[b, i].v[1] * fsm[i].v[1] * fsm[i].h
-          BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v, fsm[i].d[:, 1], fsm[i].d[:, 1],
+          BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v[1], fsm[i].d[:, 1], fsm[i].d[:, 1],
                     E_G2_s_hsub.shape_shape);
         else
           p1, p2 = size(E_G_s_hsub.shape_shape)
@@ -571,7 +571,7 @@ function accumulate_source_brightness!{NumType <: Number}(
           # BLAS for
           # h2_bright_shape =
           #   2 * a[i] * sb.E_ll_a[b, i].d[:, 1] * fsm[i].v[1] * fsm[i].d'
-          BLAS.gemm!('N', 'T', 2 * a[i] * fsm[i].v,
+          BLAS.gemm!('N', 'T', 2 * a[i] * fsm[i].v[1],
                      sb.E_ll_a[b, i].d[:, 1], fsm[i].d,
                      0.0, E_G2_s_hsub.bright_shape)
         else
@@ -696,8 +696,8 @@ function combine_pixel_sources!{NumType <: Number}(
         calculate_hessian=calculate_hessian)
     else
       # If the sources is inactives, simply accumulate the values.
-      elbo_vars.E_G.v[1] += elbo_vars.E_G_s.v
-      elbo_vars.var_G.v[1] += elbo_vars.var_G_s.v
+      elbo_vars.E_G.v[1] += elbo_vars.E_G_s.v[1]
+      elbo_vars.var_G.v[1] += elbo_vars.var_G_s.v[1]
     end
   end
 end
@@ -772,7 +772,7 @@ function add_elbo_log_term!{NumType <: Number}(
   elbo = elbo_vars.elbo
 
   # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
-  log_term_value = log(E_G.v) - 0.5 * var_G.v[1]  / (E_G.v[1] ^ 2)
+  log_term_value = log(E_G.v[1]) - 0.5 * var_G.v[1]  / (E_G.v[1] ^ 2)
 
   # Add x_nbm * (log term * log(iota)) to the elbo.
   # If not calculating derivatives, add the values directly.
@@ -785,8 +785,8 @@ function add_elbo_log_term!{NumType <: Number}(
 
     if elbo_vars.calculate_hessian
       elbo_vars.combine_hess[:,:] =
-        NumType[0             1 / E_G.v^3;
-                1 / E_G.v^3   -(1 / E_G.v[1] ^ 2 + 3  * var_G.v[1] / (E_G.v[1] ^ 4))]
+        NumType[0                1 / E_G.v[1]^3;
+                1 / E_G.v[1]^3   -(1 / E_G.v[1] ^ 2 + 3  * var_G.v[1] / (E_G.v[1] ^ 4))]
     # else
     #   fill!(elbo_vars.combine_hess, 0.0)
     end

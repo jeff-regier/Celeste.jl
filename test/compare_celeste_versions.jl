@@ -20,18 +20,18 @@ profile_n = 0
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 mp.active_sources = [2];
 @time elbo = ElboDeriv.elbo(tiled_blob, mp);
-elbo.v
+elbo.v[1]
 size(elbo.d)
 
 mp.active_sources = [1, 2];
 @time elbo = ElboDeriv.elbo(tiled_blob, mp);
-elbo.v
+elbo.v[1]
 size(elbo.d)
 
 
 
 println(elbo.d[1, 1])
-@test_approx_eq elbo.v[1] debug_elbo.v
+@test_approx_eq elbo.v[1] debug_elbo.v[1]
 @test_approx_eq elbo.d debug_elbo.d
 
 
@@ -103,7 +103,7 @@ end
 their_elbo = evaluate_their_elbo();
 our_elbo = evaluate_our_elbo();
 
-@test_approx_eq our_elbo.v[1] their_elbo.v
+@test_approx_eq our_elbo.v[1] their_elbo.v[1]
 
 
 
@@ -135,7 +135,7 @@ end
 @time their_fs0m = get_their_fs0m();
 @time our_fs0m = get_our_fs0m();
 
-@test_approx_eq their_fs0m.v[1] our_fs0m.v
+@test_approx_eq their_fs0m.v[1] our_fs0m.v[1]
 @test_approx_eq their_fs0m.d our_fs0m.d
 
 
@@ -161,7 +161,7 @@ end
 @time their_fs1m = get_their_fs1m();
 @time our_fs1m = get_our_fs1m();
 
-@test_approx_eq their_fs1m.v[1] our_fs1m.v
+@test_approx_eq their_fs1m.v[1] our_fs1m.v[1]
 @test_approx_eq their_fs1m.d our_fs1m.d
 
 
@@ -172,9 +172,9 @@ blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 @time our_sbs = ElboDeriv.load_source_brightnesses(mp);
 
 for s=1:length(our_sbs), b=1:5, i=1:2
-  @test_approx_eq our_sbs[s].E_l_a[b, i].v[1] their_sbs[s].E_l_a[b, i].v
+  @test_approx_eq our_sbs[s].E_l_a[b, i].v[1] their_sbs[s].E_l_a[b, i].v[1]
   @test_approx_eq our_sbs[s].E_l_a[b, i].d their_sbs[s].E_l_a[b, i].d
-  @test_approx_eq our_sbs[s].E_ll_a[b, i].v[1] their_sbs[s].E_ll_a[b, i].v
+  @test_approx_eq our_sbs[s].E_ll_a[b, i].v[1] their_sbs[s].E_ll_a[b, i].v[1]
   @test_approx_eq our_sbs[s].E_ll_a[b, i].d their_sbs[s].E_ll_a[b, i].d
 end
 
@@ -238,7 +238,7 @@ end
 #@time their_E_G, their_var_G = their_accumulate_pixel_stats();
 @time our_E_G, our_var_G = our_accumulate_pixel_stats();
 
-@test_approx_eq their_E_G.v[1] our_E_G.v
+@test_approx_eq their_E_G.v[1] our_E_G.v[1]
 @test_approx_eq their_E_G.d our_E_G.d
 
 @test_approx_eq their_var_G.v[1] our_E_G2.v[1] - (our_E_G.v[1] ^ 2)
@@ -304,8 +304,8 @@ end
 #their_E_G, their_var_G = their_expected_pixel_brightness();
 @time our_E_G, our_var_G = our_expected_pixel_brightness();
 
-@test_approx_eq their_E_G.v[1] our_E_G.v
-@test_approx_eq their_var_G.v[1] our_var_G.v
+@test_approx_eq their_E_G.v[1] our_E_G.v[1]
+@test_approx_eq their_var_G.v[1] our_var_G.v[1]
 
 
 
@@ -372,12 +372,12 @@ function our_accum_pixel_ret()
     mp, tile_sources, include_epsilon=true)
 
 
-  println(elbo_vars.elbo.v)
+  println(elbo_vars.elbo.v[1])
   iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
   ElboDeriv.add_elbo_log_term!(elbo_vars, this_pixel, iota)
-  println("Log term: ", elbo_vars.elbo.v)
+  println("Log term: ", elbo_vars.elbo.v[1])
   CelesteTypes.add_scaled_sfs!(elbo_vars.elbo, elbo_vars.E_G, scale=-iota)
-  println(elbo_vars.elbo.v)
+  println(elbo_vars.elbo.v[1])
 
   deepcopy(elbo_vars.elbo)
 end
@@ -385,7 +385,7 @@ end
 #their_accum = their_accum_pixel_ret();
 @time our_accum = our_accum_pixel_ret();
 
-@test_approx_eq their_accum.v[1] our_accum.v
+@test_approx_eq their_accum.v[1] our_accum.v[1]
 
 
 ############################
@@ -483,8 +483,8 @@ clear!(E_G2_s, clear_hessian=clear_hessian);
 active_source = (s in mp.active_sources)
 
 for i in 1:Ia # Stars and galaxies
-  @time lf = sb.E_l_a[b, i].v[1] * fsm[i].v
-  @time llff = sb.E_ll_a[b, i].v[1] * fsm[i].v^2
+  @time lf = sb.E_l_a[b, i].v[1] * fsm[i].v[1]
+  @time llff = sb.E_ll_a[b, i].v[1] * fsm[i].v[1]^2
 
   @time E_G_s.v[1] += a[i] * lf
   @time E_G2_s.v[1] += a[i] * llff
@@ -515,7 +515,7 @@ for i in 1:Ia # Stars and galaxies
       @time E_G_s.d[p0_bright[p0_bright_ind], 1] +=
         a[i] * fsm[i].v[1] * sb.E_l_a[b, i].d[p0_bright_ind, 1]
       @time E_G2_s.d[p0_bright[p0_bright_ind], 1] +=
-        a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
+        a[i] * (fsm[i].v[1]^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
     end
 
     if elbo_vars.calculate_hessian
@@ -534,7 +534,7 @@ for i in 1:Ia # Stars and galaxies
         @time E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
           a[i] * fsm[i].v[1] * sb.E_l_a[b, i].h[p0_ind1, p0_ind2]
         @time E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-          a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
+          a[i] * (fsm[i].v[1]^2) * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
       end
 
       # The (shape, shape) block:
