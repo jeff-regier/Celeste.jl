@@ -5,7 +5,6 @@ ForwardDiff
 JLD
 Optim
 GaussianMixtures
-Grid
 FITSIO
 WCS
 SloanDigitalSkySurvey 0.1.0
