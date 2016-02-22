@@ -143,7 +143,7 @@ function test_combine_sfs()
   sf1 = deepcopy(ret1);
   sf2 = deepcopy(ret2);
   g_d, g_h = combine_fun_derivatives(x)
-  CelesteTypes.combine_sfs!(sf1, sf2, sf1.v[1] ^ 2 * sqrt(sf2.v), g_d, g_h);
+  CelesteTypes.combine_sfs!(sf1, sf2, sf1.v[1] ^ 2 * sqrt(sf2.v[1]), g_d, g_h);
 
   @test_approx_eq sf1.v[1] v
   @test_approx_eq sf1.d[:] grad
