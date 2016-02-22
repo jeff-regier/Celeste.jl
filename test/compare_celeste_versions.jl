@@ -20,12 +20,12 @@ profile_n = 0
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 mp.active_sources = [2];
 @time elbo = ElboDeriv.elbo(tiled_blob, mp);
-elbo.v[1]
+elbo.v
 size(elbo.d)
 
 mp.active_sources = [1, 2];
 @time elbo = ElboDeriv.elbo(tiled_blob, mp);
-elbo.v[1]
+elbo.v
 size(elbo.d)
 
 
@@ -399,7 +399,7 @@ using Base.Test
 using SampleData
 import Synthetic
 
-include("src/ElboDeriv.jl")
+#include("src/ElboDeriv.jl")
 
 s = 1
 b = 1
@@ -421,7 +421,7 @@ clear!(elbo_vars.var_G);
 
 this_pixel = tile.pixels[h, w]
 
-ElboDeriv.get_expected_pixel_brightness!(
+@time ElboDeriv.get_expected_pixel_brightness!(
   elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
   mp, tile_sources, include_epsilon=true);
 
@@ -464,170 +464,3 @@ s = tile_sources[1]
   calculate_hessian=calculate_hessian);
 @time ElboDeriv.add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa,
   calculate_hessian=calculate_hessian);
-
-
-# Dig into accumulate_source_brightness!
-
-# E[G] and E{G ^ 2} for a single source
-E_G_s = elbo_vars.E_G_s;
-E_G2_s = elbo_vars.E_G2_s;
-
-clear_hessian = elbo_vars.calculate_hessian && elbo_vars.calculate_derivs
-clear!(E_G_s, clear_hessian=clear_hessian)
-clear!(E_G2_s, clear_hessian=clear_hessian);
-
-@time a = mp.vp[s][ids.a]
-@time fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
-@time sb = sbs[s];
-
-active_source = (s in mp.active_sources)
-
-for i in 1:Ia # Stars and galaxies
-  @time lf = sb.E_l_a[b, i].v[1] * fsm[i].v[1]
-  @time llff = sb.E_ll_a[b, i].v[1] * fsm[i].v[1]^2
-
-  @time E_G_s.v[1] += a[i] * lf
-  @time E_G2_s.v[1] += a[i] * llff
-
-  # Only calculate derivatives for active sources.
-  if active_source && elbo_vars.calculate_derivs
-    ######################
-    # Gradients.
-
-    @time E_G_s.d[ids.a[i], 1] += lf
-    @time E_G2_s.d[ids.a[i], 1] += llff
-
-    @time p0_shape = shape_standard_alignment[i]
-    @time p0_bright = brightness_standard_alignment[i]
-    @time u_ind = i == 1 ? star_ids.u : gal_ids.u
-
-    # Derivatives with respect to the spatial parameters
-    #a_fd = a[i] * fsm[i].d[:, 1]
-    for p0_shape_ind in 1:length(p0_shape)
-      @time E_G_s.d[p0_shape[p0_shape_ind], 1] +=
-        sb.E_l_a[b, i].v[1] * a[i] * fsm[i].d[p0_shape_ind, 1]
-      @time E_G2_s.d[p0_shape[p0_shape_ind], 1] +=
-        sb.E_ll_a[b, i].v[1] * 2 * fsm[i].v[1] * a[i] * fsm[i].d[p0_shape_ind, 1]
-    end
-
-    # Derivatives with respect to the brightness parameters.
-    for p0_bright_ind in 1:length(p0_bright)
-      @time E_G_s.d[p0_bright[p0_bright_ind], 1] +=
-        a[i] * fsm[i].v[1] * sb.E_l_a[b, i].d[p0_bright_ind, 1]
-      @time E_G2_s.d[p0_bright[p0_bright_ind], 1] +=
-        a[i] * (fsm[i].v[1]^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
-    end
-
-    if elbo_vars.calculate_hessian
-      ######################
-      # Hessians.
-      println("Hessian")
-      # Data structures to accumulate certain submatrices of the Hessian.
-      @time E_G_s_hsub = elbo_vars.E_G_s_hsub_vec[i];
-      @time E_G2_s_hsub = elbo_vars.E_G2_s_hsub_vec[i];
-
-      # The (a, a) block of the hessian is zero.
-
-      # The (bright, bright) block:
-      for p0_ind1 in 1:length(p0_bright), p0_ind2 in 1:length(p0_bright)
-        # TODO: time consuming **************
-        @time E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-          a[i] * fsm[i].v[1] * sb.E_l_a[b, i].h[p0_ind1, p0_ind2]
-        @time E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-          a[i] * (fsm[i].v[1]^2) * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
-      end
-
-      # The (shape, shape) block:
-      println("shape shape:")
-      @time E_G_s_hsub.shape_shape = a[i] * sb.E_l_a[b, i].v[1] * fsm[i].h;
-
-      @time p1, p2 = size(E_G_s_hsub.shape_shape);
-      for ind1 = 1:p1, ind2 = 1:p2
-        @time E_G2_s_hsub.shape_shape[ind1, ind2] =
-          2 * a[i] * sb.E_ll_a[b, i].v[1] * (
-            fsm[i].v[1] * fsm[i].h[ind1, ind2] +
-            fsm[i].d[ind1, 1] * fsm[i].d[ind2, 1])
-      end
-
-      # The u_u submatrix of this assignment will be overwritten after
-      # the loop.
-      for p0_ind1 in 1:length(p0_shape), p0_ind2 in 1:length(p0_shape)
-        @time E_G_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
-          a[i] * sb.E_l_a[b, i].v[1] * fsm[i].h[p0_ind1, p0_ind2]
-        @time E_G2_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
-          E_G2_s_hsub.shape_shape[p0_ind1, p0_ind2];
-      end
-
-      # Since the u_u submatrix is not disjoint between different i, accumulate
-      # it separate and add it at the end.
-      @time E_G_s_hsub.u_u = E_G_s_hsub.shape_shape[u_ind, u_ind];
-      @time E_G2_s_hsub.u_u = E_G2_s_hsub.shape_shape[u_ind, u_ind];
-
-      # All other terms are disjoint between different i and don't involve
-      # addition, so we can just assign their values (which is efficient in
-      # native julia).
-
-      # The (a, bright) blocks:
-      for p0_ind in 1:length(p0_bright)
-        @time E_G_s.h[p0_bright[p0_ind], ids.a[i]] =
-          fsm[i].v[1] * sb.E_l_a[b, i].d[p0_ind, 1]
-        @time E_G2_s.h[p0_bright[p0_ind], ids.a[i]] =
-          (fsm[i].v[1] ^ 2) * sb.E_ll_a[b, i].d[p0_ind, 1]
-      end
-      @time E_G2_s.h[ids.a[i], p0_bright] = E_G2_s.h[p0_bright, ids.a[i]]';
-      @time E_G_s.h[ids.a[i], p0_bright] = E_G_s.h[p0_bright, ids.a[i]]';
-
-      # The (a, shape) blocks.
-      for p0_ind in 1:length(p0_shape)
-        @time E_G_s.h[p0_shape[p0_ind], ids.a[i]] =
-          sb.E_l_a[b, i].v[1] * fsm[i].d[p0_ind, 1]
-        @time E_G2_s.h[p0_shape[p0_ind], ids.a[i]] =
-          sb.E_ll_a[b, i].v[1] * 2 * fsm[i].v[1] * fsm[i].d[p0_ind, 1]
-      end
-      @time E_G2_s.h[ids.a[i], p0_shape] = E_G2_s.h[p0_shape, ids.a[i]]';
-      @time E_G_s.h[ids.a[i], p0_shape] = E_G_s.h[p0_shape, ids.a[i]]';
-
-      for ind_b in 1:length(p0_bright), ind_s in 1:length(p0_shape)
-        @time E_G_s_hsub.bright_shape[ind_b, ind_s] =
-          a[i] * sb.E_l_a[b, i].d[ind_b, 1] * fsm[i].d[ind_s, 1]
-        @time E_G2_s_hsub.bright_shape[ind_b, ind_s] =
-          2 * a[i] * sb.E_ll_a[b, i].d[ind_b, 1] * fsm[i].v[1] * fsm[i].d[ind_s]
-      end
-
-      @time E_G_s.h[p0_bright, p0_shape] = E_G_s_hsub.bright_shape;
-      @time E_G_s.h[p0_shape, p0_bright] = E_G_s_hsub.bright_shape';
-      @time E_G2_s.h[p0_bright, p0_shape] = E_G2_s_hsub.bright_shape;
-      @time E_G2_s.h[p0_shape, p0_bright] = E_G2_s_hsub.bright_shape';
-    end # if calculate hessian
-  end # if calculate derivatives
-end # i loop
-
-if elbo_vars.calculate_hessian
-  # Accumulate the u Hessian.  u is the only parameter that is shared between
-  # different values of i.
-  # E_G_u_u_hess = zeros(2, 2);
-  # E_G2_u_u_hess = zeros(2, 2);
-
-  # For each value in 1:Ia, written this way for speed.
-  @assert Ia == 2
-  @time begin
-    E_G_u_u_hess =
-      elbo_vars.E_G_s_hsub_vec[1].u_u +
-      elbo_vars.E_G_s_hsub_vec[2].u_u
-  end
-
-  @time begin
-     E_G2_u_u_hess =
-      elbo_vars.E_G2_s_hsub_vec[1].u_u +
-      elbo_vars.E_G2_s_hsub_vec[2].u_u
-  end
-
-  # for i = 1:Ia
-  #   E_G_u_u_hess += elbo_vars.E_G_s_hsub_vec[i].u_u
-  #   E_G2_u_u_hess += elbo_vars.E_G2_s_hsub_vec[i].u_u
-  # end
-  @time E_G_s.h[ids.u, ids.u] = E_G_u_u_hess;
-  @time E_G2_s.h[ids.u, ids.u] = E_G2_u_u_hess;
-end
-
-@time ElboDeriv.calculate_var_G_s!(elbo_vars, active_source)
