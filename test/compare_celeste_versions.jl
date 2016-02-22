@@ -31,7 +31,7 @@ size(elbo.d)
 
 
 println(elbo.d[1, 1])
-@test_approx_eq elbo.v debug_elbo.v
+@test_approx_eq elbo.v[1] debug_elbo.v
 @test_approx_eq elbo.d debug_elbo.d
 
 
@@ -103,7 +103,7 @@ end
 their_elbo = evaluate_their_elbo();
 our_elbo = evaluate_our_elbo();
 
-@test_approx_eq our_elbo.v their_elbo.v
+@test_approx_eq our_elbo.v[1] their_elbo.v
 
 
 
@@ -135,7 +135,7 @@ end
 @time their_fs0m = get_their_fs0m();
 @time our_fs0m = get_our_fs0m();
 
-@test_approx_eq their_fs0m.v our_fs0m.v
+@test_approx_eq their_fs0m.v[1] our_fs0m.v
 @test_approx_eq their_fs0m.d our_fs0m.d
 
 
@@ -161,7 +161,7 @@ end
 @time their_fs1m = get_their_fs1m();
 @time our_fs1m = get_our_fs1m();
 
-@test_approx_eq their_fs1m.v our_fs1m.v
+@test_approx_eq their_fs1m.v[1] our_fs1m.v
 @test_approx_eq their_fs1m.d our_fs1m.d
 
 
@@ -172,9 +172,9 @@ blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 @time our_sbs = ElboDeriv.load_source_brightnesses(mp);
 
 for s=1:length(our_sbs), b=1:5, i=1:2
-  @test_approx_eq our_sbs[s].E_l_a[b, i].v their_sbs[s].E_l_a[b, i].v
+  @test_approx_eq our_sbs[s].E_l_a[b, i].v[1] their_sbs[s].E_l_a[b, i].v
   @test_approx_eq our_sbs[s].E_l_a[b, i].d their_sbs[s].E_l_a[b, i].d
-  @test_approx_eq our_sbs[s].E_ll_a[b, i].v their_sbs[s].E_ll_a[b, i].v
+  @test_approx_eq our_sbs[s].E_ll_a[b, i].v[1] their_sbs[s].E_ll_a[b, i].v
   @test_approx_eq our_sbs[s].E_ll_a[b, i].d their_sbs[s].E_ll_a[b, i].d
 end
 
@@ -238,10 +238,10 @@ end
 #@time their_E_G, their_var_G = their_accumulate_pixel_stats();
 @time our_E_G, our_var_G = our_accumulate_pixel_stats();
 
-@test_approx_eq their_E_G.v our_E_G.v
+@test_approx_eq their_E_G.v[1] our_E_G.v
 @test_approx_eq their_E_G.d our_E_G.d
 
-@test_approx_eq their_var_G.v our_E_G2.v - (our_E_G.v ^ 2)
+@test_approx_eq their_var_G.v[1] our_E_G2.v[1] - (our_E_G.v[1] ^ 2)
 
 ################################
 # It might be in the accumulation of E_G2 across multiple sources.
@@ -304,8 +304,8 @@ end
 #their_E_G, their_var_G = their_expected_pixel_brightness();
 @time our_E_G, our_var_G = our_expected_pixel_brightness();
 
-@test_approx_eq their_E_G.v our_E_G.v
-@test_approx_eq their_var_G.v our_var_G.v
+@test_approx_eq their_E_G.v[1] our_E_G.v
+@test_approx_eq their_var_G.v[1] our_var_G.v
 
 
 
@@ -385,7 +385,7 @@ end
 #their_accum = their_accum_pixel_ret();
 @time our_accum = our_accum_pixel_ret();
 
-@test_approx_eq their_accum.v our_accum.v
+@test_approx_eq their_accum.v[1] our_accum.v
 
 
 ############################
@@ -483,11 +483,11 @@ clear!(E_G2_s, clear_hessian=clear_hessian);
 active_source = (s in mp.active_sources)
 
 for i in 1:Ia # Stars and galaxies
-  @time lf = sb.E_l_a[b, i].v * fsm[i].v
-  @time llff = sb.E_ll_a[b, i].v * fsm[i].v^2
+  @time lf = sb.E_l_a[b, i].v[1] * fsm[i].v
+  @time llff = sb.E_ll_a[b, i].v[1] * fsm[i].v^2
 
-  @time E_G_s.v += a[i] * lf
-  @time E_G2_s.v += a[i] * llff
+  @time E_G_s.v[1] += a[i] * lf
+  @time E_G2_s.v[1] += a[i] * llff
 
   # Only calculate derivatives for active sources.
   if active_source && elbo_vars.calculate_derivs
@@ -505,15 +505,15 @@ for i in 1:Ia # Stars and galaxies
     #a_fd = a[i] * fsm[i].d[:, 1]
     for p0_shape_ind in 1:length(p0_shape)
       @time E_G_s.d[p0_shape[p0_shape_ind], 1] +=
-        sb.E_l_a[b, i].v * a[i] * fsm[i].d[p0_shape_ind, 1]
+        sb.E_l_a[b, i].v[1] * a[i] * fsm[i].d[p0_shape_ind, 1]
       @time E_G2_s.d[p0_shape[p0_shape_ind], 1] +=
-        sb.E_ll_a[b, i].v * 2 * fsm[i].v * a[i] * fsm[i].d[p0_shape_ind, 1]
+        sb.E_ll_a[b, i].v[1] * 2 * fsm[i].v[1] * a[i] * fsm[i].d[p0_shape_ind, 1]
     end
 
     # Derivatives with respect to the brightness parameters.
     for p0_bright_ind in 1:length(p0_bright)
       @time E_G_s.d[p0_bright[p0_bright_ind], 1] +=
-        a[i] * fsm[i].v * sb.E_l_a[b, i].d[p0_bright_ind, 1]
+        a[i] * fsm[i].v[1] * sb.E_l_a[b, i].d[p0_bright_ind, 1]
       @time E_G2_s.d[p0_bright[p0_bright_ind], 1] +=
         a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
     end
@@ -532,20 +532,20 @@ for i in 1:Ia # Stars and galaxies
       for p0_ind1 in 1:length(p0_bright), p0_ind2 in 1:length(p0_bright)
         # TODO: time consuming **************
         @time E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-          a[i] * fsm[i].v * sb.E_l_a[b, i].h[p0_ind1, p0_ind2]
+          a[i] * fsm[i].v[1] * sb.E_l_a[b, i].h[p0_ind1, p0_ind2]
         @time E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
           a[i] * (fsm[i].v^2) * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
       end
 
       # The (shape, shape) block:
       println("shape shape:")
-      @time E_G_s_hsub.shape_shape = a[i] * sb.E_l_a[b, i].v * fsm[i].h;
+      @time E_G_s_hsub.shape_shape = a[i] * sb.E_l_a[b, i].v[1] * fsm[i].h;
 
       @time p1, p2 = size(E_G_s_hsub.shape_shape);
       for ind1 = 1:p1, ind2 = 1:p2
         @time E_G2_s_hsub.shape_shape[ind1, ind2] =
-          2 * a[i] * sb.E_ll_a[b, i].v * (
-            fsm[i].v * fsm[i].h[ind1, ind2] +
+          2 * a[i] * sb.E_ll_a[b, i].v[1] * (
+            fsm[i].v[1] * fsm[i].h[ind1, ind2] +
             fsm[i].d[ind1, 1] * fsm[i].d[ind2, 1])
       end
 
@@ -553,7 +553,7 @@ for i in 1:Ia # Stars and galaxies
       # the loop.
       for p0_ind1 in 1:length(p0_shape), p0_ind2 in 1:length(p0_shape)
         @time E_G_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
-          a[i] * sb.E_l_a[b, i].v * fsm[i].h[p0_ind1, p0_ind2]
+          a[i] * sb.E_l_a[b, i].v[1] * fsm[i].h[p0_ind1, p0_ind2]
         @time E_G2_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
           E_G2_s_hsub.shape_shape[p0_ind1, p0_ind2];
       end
@@ -570,9 +570,9 @@ for i in 1:Ia # Stars and galaxies
       # The (a, bright) blocks:
       for p0_ind in 1:length(p0_bright)
         @time E_G_s.h[p0_bright[p0_ind], ids.a[i]] =
-          fsm[i].v * sb.E_l_a[b, i].d[p0_ind, 1]
+          fsm[i].v[1] * sb.E_l_a[b, i].d[p0_ind, 1]
         @time E_G2_s.h[p0_bright[p0_ind], ids.a[i]] =
-          (fsm[i].v ^ 2) * sb.E_ll_a[b, i].d[p0_ind, 1]
+          (fsm[i].v[1] ^ 2) * sb.E_ll_a[b, i].d[p0_ind, 1]
       end
       @time E_G2_s.h[ids.a[i], p0_bright] = E_G2_s.h[p0_bright, ids.a[i]]';
       @time E_G_s.h[ids.a[i], p0_bright] = E_G_s.h[p0_bright, ids.a[i]]';
@@ -580,9 +580,9 @@ for i in 1:Ia # Stars and galaxies
       # The (a, shape) blocks.
       for p0_ind in 1:length(p0_shape)
         @time E_G_s.h[p0_shape[p0_ind], ids.a[i]] =
-          sb.E_l_a[b, i].v * fsm[i].d[p0_ind, 1]
+          sb.E_l_a[b, i].v[1] * fsm[i].d[p0_ind, 1]
         @time E_G2_s.h[p0_shape[p0_ind], ids.a[i]] =
-          sb.E_ll_a[b, i].v * 2 * fsm[i].v * fsm[i].d[p0_ind, 1]
+          sb.E_ll_a[b, i].v[1] * 2 * fsm[i].v[1] * fsm[i].d[p0_ind, 1]
       end
       @time E_G2_s.h[ids.a[i], p0_shape] = E_G2_s.h[p0_shape, ids.a[i]]';
       @time E_G_s.h[ids.a[i], p0_shape] = E_G_s.h[p0_shape, ids.a[i]]';
@@ -591,7 +591,7 @@ for i in 1:Ia # Stars and galaxies
         @time E_G_s_hsub.bright_shape[ind_b, ind_s] =
           a[i] * sb.E_l_a[b, i].d[ind_b, 1] * fsm[i].d[ind_s, 1]
         @time E_G2_s_hsub.bright_shape[ind_b, ind_s] =
-          2 * a[i] * sb.E_ll_a[b, i].d[ind_b, 1] * fsm[i].v * fsm[i].d[ind_s]
+          2 * a[i] * sb.E_ll_a[b, i].d[ind_b, 1] * fsm[i].v[1] * fsm[i].d[ind_s]
       end
 
       @time E_G_s.h[p0_bright, p0_shape] = E_G_s_hsub.bright_shape;

@@ -204,11 +204,11 @@ function test_tiling()
 
     mp2 = ModelInit.cat_init(three_bodies, tile_width=10)
     elbo_tiles = ElboDeriv.elbo(blob, mp2)
-    @test_approx_eq_eps elbo_tiles.v elbo.v 1e-5
+    @test_approx_eq_eps elbo_tiles.v[1] elbo.v[1] 1e-5
 
     mp3 = ModelInit.cat_init(three_bodies, patch_radius=30.)
     elbo_patches = ElboDeriv.elbo(blob, mp3)
-    @test_approx_eq_eps elbo_patches.v elbo.v 1e-5
+    @test_approx_eq_eps elbo_patches.v[1] elbo.v[1] 1e-5
 
     for s in 1:mp.S
         for i in 1:length(1:length(CanonicalParams))
@@ -219,7 +219,7 @@ function test_tiling()
 
     mp4 = ModelInit.cat_init(three_bodies, patch_radius=35., tile_width=10)
     elbo_both = ElboDeriv.elbo(blob, mp4)
-    @test_approx_eq_eps elbo_both.v elbo.v 1e-1
+    @test_approx_eq_eps elbo_both.v[1] elbo.v[1] 1e-1
 
     for s in 1:mp.S
         for i in 1:length(1:length(CanonicalParams))

@@ -11,7 +11,7 @@ using Compat
 #   S = 3
 #   function generate_random_sf()
 #       sf1 = zero_sensitive_float(CanonicalParams, Float64, S)
-#       sf1.v = rand()
+#       sf1.v[1] = rand()
 #       sf1.d = rand(size(sf1.d))
 #       sf1.h = rand(size(sf1.h))
 #       sf1
@@ -21,7 +21,7 @@ using Compat
 #   sf2 = generate_random_sf();
 #
 #   sf3 = sf1 + sf2
-#   @test sf3.v == sf1.v + sf2.v
+#   @test sf3.v[1] == sf1.v[1] + sf2.v
 #   @test sf3.d == sf1.d + sf2.d
 #   @test sf3.h == sf1.h + sf2.h
 #
@@ -32,7 +32,7 @@ using Compat
 #   @test_throws AssertionError sf_bad_type + sf1
 #
 #   function sf_equal(sf1::SensitiveFloat, sf2::SensitiveFloat)
-#     sf1.v == sf2.v && sf2.d == sf2.d && sf1.h == sf2.h
+#     sf1.v[1] == sf2.v[1] && sf2.d == sf2.d && sf1.h == sf2.h
 #   end
 #
 #   # Check that recursive summing works.
@@ -104,7 +104,7 @@ function test_combine_sfs()
   s_ind[2] = (1:p) + p
 
   ret1 = zero_sensitive_float(CanonicalParams, Float64, S);
-  ret1.v = base_fun1(x)
+  ret1.v[1] = base_fun1(x)
   fill!(ret1.d, 0.0);
   fill!(ret1.h, 0.0);
   for s=1:S
@@ -113,7 +113,7 @@ function test_combine_sfs()
   end
 
   ret2 = zero_sensitive_float(CanonicalParams, Float64, S);
-  ret2.v = base_fun2(x)
+  ret2.v[1] = base_fun2(x)
   fill!(ret2.d, 0.0);
   fill!(ret2.h, 0.0);
   for s=1:S
@@ -143,9 +143,9 @@ function test_combine_sfs()
   sf1 = deepcopy(ret1);
   sf2 = deepcopy(ret2);
   g_d, g_h = combine_fun_derivatives(x)
-  CelesteTypes.combine_sfs!(sf1, sf2, sf1.v ^ 2 * sqrt(sf2.v), g_d, g_h);
+  CelesteTypes.combine_sfs!(sf1, sf2, sf1.v[1] ^ 2 * sqrt(sf2.v), g_d, g_h);
 
-  @test_approx_eq sf1.v v
+  @test_approx_eq sf1.v[1] v
   @test_approx_eq sf1.d[:] grad
   @test_approx_eq sf1.h hess
 end
@@ -162,13 +162,13 @@ function test_add_sources_sf()
       sf::SensitiveFloat{CanonicalParams, NumType},
       x::Vector{NumType}, a::Vector{Float64})
 
-    sf.v = one(NumType)
+    sf.v[1] = one(NumType)
     for p in 1:P
-      sf.v *= exp(sum(x[p] * a[p]))
+      sf.v[1] *= exp(sum(x[p] * a[p]))
     end
     if NumType == Float64
-      sf.d[:, 1] = sf.v * a
-      sf.h[:, :] = sf.v * (a * a')
+      sf.d[:, 1] = sf.v[1] * a
+      sf.h[:, :] = sf.v[1] * (a * a')
     end
   end
 

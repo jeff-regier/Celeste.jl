@@ -252,7 +252,7 @@ function test_identity_transform()
 	sf = zero_sensitive_float(CanonicalParams, Float64, mp.S);
 	sf.d = rand(length(ids), mp.S)
 	sf_new = transform.transform_sensitive_float(sf, mp);
-	@test_approx_eq sf_new.v sf.v
+	@test_approx_eq sf_new.v[1] sf.v
 	@test_approx_eq sf_new.d sf.d
 	[ @test_approx_eq sf_new.h[s] sf.h[s] for s=1:mp.S]
 end
