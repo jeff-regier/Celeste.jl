@@ -16,8 +16,12 @@ Attributes:
       for the Hessian of brightness values that depend only on one source.
 """ ->
 type SensitiveFloat{ParamType <: CelesteTypes.ParamSet, NumType <: Number}
-    v::NumType
-    d::Matrix{NumType} # local_P x local_S
+    # Actually a single value, but an Array to avoid memory allocation
+    v::Vector{NumType}
+
+    # local_P x local_S matrix of gradients
+    d::Matrix{NumType}
+
     # h is ordered so that p changes fastest.  For example, the indices
     # of a column of h correspond to the indices of d's stacked columns.
     h::Matrix{NumType} # (local_P * local_S) x (local_P * local_S)
@@ -41,10 +45,12 @@ end
 function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
   ::Type{ParamType}, NumType::DataType, local_S::Int64)
     local_P = length(ParamType)
+
+    v = zeros(NumType, 1)
     d = zeros(NumType, local_P, local_S)
     h = zeros(NumType, local_P * local_S, local_P * local_S)
     SensitiveFloat{ParamType, NumType}(
-      zero(NumType), d, h, getids(ParamType))
+      v, d, h, getids(ParamType))
 end
 
 function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
@@ -55,7 +61,8 @@ end
 
 function clear!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   sp::SensitiveFloat{ParamType, NumType}; clear_hessian::Bool=true)
-    sp.v = zero(NumType)
+
+    fill!(sp.v, zero(NumType))
     fill!(sp.d, zero(NumType))
     if clear_hessian
       fill!(sp.h, zero(NumType))
@@ -136,7 +143,7 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet,
     sf_result.d[ind] = g_d[1] * sf1.d[ind] + g_d[2] * sf2.d[ind]
   end
 
-  sf_result.v = v
+  sf_result.v[1] = v
 end
 
 
@@ -171,7 +178,7 @@ function multiply_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     ids2::Vector{Int64}=collect(1:length(ParamType)),
     calculate_hessian::Bool=true)
 
-  v = sf1.v * sf2.v
+  v = sf1.v[1] * sf2.v[1]
   g_d = NumType[sf2.v, sf1.v]
   #const g_h = NumType[0 1; 1 0]
 
@@ -187,7 +194,7 @@ function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf2::SensitiveFloat{ParamType, NumType};
     scale::Float64=1.0, calculate_hessian::Bool=true)
 
-  sf1.v = sf1.v + scale * sf2.v
+  sf1.v[1] = sf1.v[1] + scale * sf2.v[1]
 
   @inbounds for i in eachindex(sf1.d)
     sf1.d[i] = sf1.d[i] + scale * sf2.d[i]
@@ -214,7 +221,7 @@ function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     s::Int64; calculate_hessian::Bool=true)
 
   # TODO: This line, too, allocates a lot of memory.  Why?
-  sf_all.v = sf_all.v + sf_s.v
+  sf_all.v[1] = sf_all.v[1] + sf_s.v[1]
 
   # TODO: time consuming **************
   P = length(ParamType)
