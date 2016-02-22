@@ -15,7 +15,6 @@ using Base.Test
 using SampleData
 import Synthetic
 
-profile_n = 0
 
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 mp.active_sources = [2];
@@ -28,20 +27,17 @@ mp.active_sources = [1, 2];
 elbo.v
 size(elbo.d)
 
-
-
 println(elbo.d[1, 1])
-@test_approx_eq elbo.v[1] debug_elbo.v[1]
-@test_approx_eq elbo.d debug_elbo.d
-
-
+# @test_approx_eq elbo.v[1] debug_elbo.v[1]
+# @test_approx_eq elbo.d debug_elbo.d
 
 
 ##########
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
-@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+#@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
+#@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
+profile_n = 1
 Profile.clear_malloc_data()
 Profile.clear()
 @profile for i = 1:profile_n
@@ -55,7 +51,7 @@ end
 using Coverage
 res = analyze_malloc("src");
 pn = 40; [ println(res[end - (pn - i)]) for i=1:pn ];
-
+sum([r.bytes for r in res]) / 1e6
 
 
 # Checking if the ELBO is different between the two versions.
@@ -426,41 +422,28 @@ this_pixel = tile.pixels[h, w]
   mp, tile_sources, include_epsilon=true);
 
 
-
-Profile.clear_malloc_data()
-Profile.clear()
-profile_n = 50
-@profile for i = 1:profile_n
-  print(".")
-  ElboDeriv.get_expected_pixel_brightness!(
-    elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-    mp, tile_sources, include_epsilon=true);
-end
-println("Done.")
-
-
 @time ElboDeriv.populate_fsm_vecs!(
   elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
 
 # # This combines the sources into a single brightness value for the pixel.
 @time ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
 
-# Dig into combine_pixel_sources/.  We expect 31k of allocations.
-clear!(elbo_vars.E_G,
-  clear_hessian=elbo_vars.calculate_hessian && elbo_vars.calculate_derivs);
-clear!(elbo_vars.var_G,
-  clear_hessian=elbo_vars.calculate_hessian && elbo_vars.calculate_derivs);
+Profile.clear()
+@profile for i=1:50000
+  ElboDeriv.accum_galaxy_pos!(elbo_vars, s, gal_mcs[1], x, wcs_jacobian);
+end
+Profile.print()
 
-# This would get run twice.
-s = tile_sources[1]
-@time active_source = s in mp.active_sources
-@time calculate_hessian =
-  elbo_vars.calculate_hessian && elbo_vars.calculate_derivs &&
-  active_source
-# It's all in here:
-@time ElboDeriv.accumulate_source_brightness!(elbo_vars, mp, sbs, s, tile.b)
-@time sa = findfirst(mp.active_sources, s)[1]
-@time ElboDeriv.add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa,
-  calculate_hessian=calculate_hessian);
-@time ElboDeriv.add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa,
-  calculate_hessian=calculate_hessian);
+b = 1
+x = [10., 9.]
+wcs_jacobian = eye(Float64, 2);
+
+Profile.clear_malloc_data()
+Profile.clear()
+profile_n = 1000
+@profile for i = 1:profile_n
+  print(".")
+  ElboDeriv.accum_galaxy_pos!(elbo_vars, s, gal_mcs[1], x, wcs_jacobian);
+  #elbo = ElboDeriv.elbo(tiled_blob, mp);
+end
+println("Done.")
