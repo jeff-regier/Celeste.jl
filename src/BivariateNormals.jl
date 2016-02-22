@@ -71,9 +71,9 @@ Returns:
 function eval_bvn_pdf{NumType <: Number}(
     bmc::BvnComponent{NumType}, x::Vector{Float64})
 
-  z = 1 + 2
-  z2 = 3 + x[1]
-  z3 = 3 + bmc.the_mean[2]
+  # z = 1 + 2
+  # z2 = 3 + x[1]
+  # z3 = 3 + bmc.the_mean[2]
   y1 = x[1] - bmc.the_mean[1]
   y2 = x[2] - bmc.the_mean[2]
   py1 = bmc.precision[1,1] * y1 + bmc.precision[1,2] * y2
