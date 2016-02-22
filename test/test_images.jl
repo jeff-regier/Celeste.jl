@@ -15,6 +15,22 @@ run_num = "003900"
 camcol_num = "6"
 field_num = "0269"
 
+function test_interp_sky()
+    data = [1.  2.  3.  4.;
+            5.  6.  7.  8.;
+            9. 10. 11. 12]
+    xcoords = [0.1, 2.5]
+    ycoords = [0.5, 2.5, 4.]
+    result = SkyImages.interp_sky(data, xcoords, ycoords)
+    @test size(result) == (2, 3)
+    @test_approx_eq result[1, 1] 1.0
+    @test_approx_eq result[2, 1] 7.0
+    @test_approx_eq result[1, 2] 2.5
+    @test_approx_eq result[2, 2] 8.5
+    @test_approx_eq result[1, 3] 4.0
+    @test_approx_eq result[2, 3] 10.0
+end
+
 function test_blob()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
@@ -238,6 +254,7 @@ function test_get_local_sources()
 end
 
 
+test_interp_sky()
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
