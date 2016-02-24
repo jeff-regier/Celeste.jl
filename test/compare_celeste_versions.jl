@@ -402,11 +402,22 @@ s = 1
 b = 1
 h = 10
 w = 10
+
+b = 1
+x = [10., 9.]
+wcs_jacobian = eye(Float64, 2);
+
+
 blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 tile = tiled_blob[b][1,1];
 tile_sources = mp.tile_sources[b][1,1];
+num_pixels = length(tiled_blob) * prod(size(tiled_blob[1][1,1].pixels))
 
-#@time elbo = ElboDeriv.elbo(tiled_blob, mp);
+# 104 MB
+@time elbo = ElboDeriv.elbo(tiled_blob, mp);
+
+# 88.6 MB, 1.97s
+@time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
 @time star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
 @time sbs = ElboDeriv.load_source_brightnesses(mp);
@@ -418,26 +429,94 @@ clear!(elbo_vars.var_G);
 
 this_pixel = tile.pixels[h, w]
 
+# 85 MB (for all pixels)
+# 37.2Kb per pixel
 @time ElboDeriv.get_expected_pixel_brightness!(
   elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
   mp, tile_sources, include_epsilon=true);
 
+iota = tile.constant_background ? tile.iota : tile.iota_vec[h];
+@time ElboDeriv.add_elbo_log_term!(elbo_vars, this_pixel, iota);
+@time CelesteTypes.add_scaled_sfs!(
+  elbo_vars.elbo, elbo_vars.E_G, scale=-iota,
+  calculate_hessian=elbo_vars.calculate_hessian &&
+    elbo_vars.calculate_derivs);
 
+
+
+##################
+
+# 26.3 / 38.6
 @time ElboDeriv.populate_fsm_vecs!(
   elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
 
+# 105 MB
+@time elbo = ElboDeriv.elbo(tiled_blob, mp);
+
+# 92 MB
+@time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
+
+@time star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+@time sbs = ElboDeriv.load_source_brightnesses(mp);
+@time elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
+@time ElboDeriv.populate_fsm_vecs!(
+  elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
+clear!(elbo_vars.E_G);
+clear!(elbo_vars.var_G);
+
+this_pixel = tile.pixels[h, w]
+
+# 85 MB (for all pixels)
+# 37.2Kb per pixel
+@time ElboDeriv.get_expected_pixel_brightness!(
+  elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
+  mp, tile_sources, include_epsilon=true);
+
+@code_warntype ElboDeriv.get_expected_pixel_brightness!(
+  elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
+  mp, tile_sources, include_epsilon=true)
+
+
+iota = tile.constant_background ? tile.iota : tile.iota_vec[h];
+@time ElboDeriv.add_elbo_log_term!(elbo_vars, this_pixel, iota);
+@time CelesteTypes.add_scaled_sfs!(
+  elbo_vars.elbo, elbo_vars.E_G, scale=-iota,
+  calculate_hessian=elbo_vars.calculate_hessian &&
+    elbo_vars.calculate_derivs);
+
+
+
+##################
+
+# 26.3 / 38.6
+# According to memory profiling, populate_fsm_vecs! is allocating no memory.
+@time ElboDeriv.populate_fsm_vecs!(
+  elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
+
+@code_warntype ElboDeriv.populate_fsm_vecs!(
+  elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
+
+
+@time ElboDeriv.accum_galaxy_pos!(elbo_vars, s, gal_mcs[1], x, wcs_jacobian);
+
 # # This combines the sources into a single brightness value for the pixel.
+# 12.4 / 38.6
 @time ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
 
+Profile.clear_malloc_data()
 Profile.clear()
 @profile for i=1:50000
-  ElboDeriv.accum_galaxy_pos!(elbo_vars, s, gal_mcs[1], x, wcs_jacobian);
+  ElboDeriv.populate_fsm_vecs!(
+    elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
 end
-Profile.print()
+#Profile.print()
 
-b = 1
-x = [10., 9.]
-wcs_jacobian = eye(Float64, 2);
+using Coverage
+res = analyze_malloc("src");
+pn = 40; [ println(res[end - (pn - i)]) for i=1:pn ];
+sum([r.bytes for r in res]) / 1e6
+
+
 
 Profile.clear_malloc_data()
 Profile.clear()

@@ -392,7 +392,7 @@ function transform_bvn_derivs!{NumType <: Number}(
         bvn_uu_h[u_id1, u_id2] += inner_term * wcs_jacobian[x_id1, u_id1]
       end
     end
-    bvn_uu_h[2, 1] = bvn_uu_h[1, 2]
+    @inbounds bvn_uu_h[2, 1] = bvn_uu_h[1, 2]
   end
 end
 
