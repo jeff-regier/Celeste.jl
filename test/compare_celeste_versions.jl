@@ -35,6 +35,7 @@ println(elbo.d[1, 1])
 ##########
 #@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_derivs=false);
 #@time ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
+# 3.206593 seconds (1.04 M allocations: 70.450 MB, 0.95% gc time)
 @time ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
 profile_n = 1
