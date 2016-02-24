@@ -383,9 +383,9 @@ function populate_fsm_vecs!{NumType <: Number}(
     calculate_hessian =
       elbo_vars.calculate_hessian && elbo_vars.calculate_derivs && active_source
     clear!(elbo_vars.fs0m_vec[s], clear_hessian=calculate_hessian)
-    for star_mc in star_mcs[:, s]
+    for k = 1:3 # PSF component
         accum_star_pos!(
-          elbo_vars, s, star_mc, Float64[tile.h_range[h], tile.w_range[w]],
+          elbo_vars, s, star_mcs[k, s], Float64[tile.h_range[h], tile.w_range[w]],
           wcs_jacobian, calculate_derivs=active_source)
     end
 

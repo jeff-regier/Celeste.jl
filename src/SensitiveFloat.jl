@@ -40,6 +40,8 @@ function set_hess!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   i != j ?
     sf.h[i, j] = sf.h[j, i] = v:
     sf.h[i, j] = v
+
+    true # Set definite return type
 end
 
 function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
@@ -49,15 +51,29 @@ function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
     v = zeros(NumType, 1)
     d = zeros(NumType, local_P, local_S)
     h = zeros(NumType, local_P * local_S, local_P * local_S)
-    SensitiveFloat{ParamType, NumType}(
-      v, d, h, getids(ParamType))
+    SensitiveFloat{ParamType, NumType}(v, d, h, getids(ParamType))
 end
+
 
 function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
   ::Type{ParamType}, NumType::DataType)
     # Default to a single source.
     zero_sensitive_float(ParamType, NumType, 1)
 end
+
+
+# If no type is specified, default to using Float64.
+function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
+  param_arg::Type{ParamType}, local_S::Int64)
+    zero_sensitive_float(param_arg, Float64, local_S)
+end
+
+
+function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
+  param_arg::Type{ParamType})
+    zero_sensitive_float(param_arg, Float64, 1)
+end
+
 
 function clear!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   sp::SensitiveFloat{ParamType, NumType}; clear_hessian::Bool=true)
@@ -67,17 +83,8 @@ function clear!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     if clear_hessian
       fill!(sp.h, zero(NumType))
     end
-end
 
-# If no type is specified, default to using Float64.
-function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
-  param_arg::Type{ParamType}, local_S::Int64)
-    zero_sensitive_float(param_arg, Float64, local_S)
-end
-
-function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
-  param_arg::Type{ParamType})
-    zero_sensitive_float(param_arg, Float64, 1)
+    true # Set definite return type
 end
 
 
@@ -107,6 +114,8 @@ function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet,
       sf_result.h[ind2, ind1] = sf_result.h[ind1, ind2]
     end
   end
+
+  true # Set definite return type
 end
 
 
@@ -144,6 +153,8 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet,
   end
 
   sf_result.v[1] = v
+
+  true # Set definite return type
 end
 
 
@@ -163,6 +174,8 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet,
     calculate_hessian::Bool=true)
 
   combine_sfs!(sf1, sf2, sf1, v, g_d, g_h, calculate_hessian=calculate_hessian)
+
+  true # Set definite return type
 end
 
 # Decalare outside to avoid allocating memory.
@@ -183,6 +196,8 @@ function multiply_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   #const g_h = NumType[0 1; 1 0]
 
   combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess, calculate_hessian=calculate_hessian)
+
+  true # Set definite return type
 end
 
 
@@ -208,6 +223,8 @@ function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
       sf1.h[ind2, ind1] = sf1.h[ind1, ind2]
     end
   end
+
+  true # Set definite return type
 end
 
 
@@ -245,4 +262,6 @@ function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
       end
     end
   end
+
+  true # Set definite return type
 end
