@@ -391,12 +391,16 @@ function populate_fsm_vecs!{NumType <: Number}(
 
     clear!(elbo_vars.fs1m_vec[s], clear_hessian=calculate_hessian)
     for i = 1:2 # Galaxy types
-        for j in 1:[8,6][i] # Galaxy component
-            for k = 1:3 # PSF component
-                accum_galaxy_pos!(
-                  elbo_vars, s, gal_mcs[k, j, i, s], Float64[tile.h_range[h],
-                  tile.w_range[w]], wcs_jacobian,
-                  calculate_derivs=active_source)
+        for j in 1:8 # Galaxy component
+        #for j in 1:[8,6][i] # Galaxy component
+            # If i == 2 then there are only six galaxy components.
+            if (i == 1) || (j <= 6)
+              for k = 1:3 # PSF component
+                  accum_galaxy_pos!(
+                    elbo_vars, s, gal_mcs[k, j, i, s], Float64[tile.h_range[h],
+                    tile.w_range[w]], wcs_jacobian,
+                    calculate_derivs=active_source)
+              end
             end
         end
     end
@@ -745,6 +749,8 @@ function get_expected_pixel_brightness!{NumType <: Number}(
     elbo_vars.E_G.v[1] +=
       tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
   end
+
+  true
 end
 
 
