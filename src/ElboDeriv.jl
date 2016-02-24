@@ -439,7 +439,7 @@ function accumulate_source_brightness!{NumType <: Number}(
   clear!(E_G2_s, clear_hessian=clear_hessian)
 
   a = mp.vp[s][ids.a]
-  fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
+  #fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
   sb = sbs[s];
 
   active_source = (s in mp.active_sources)
@@ -453,8 +453,8 @@ function accumulate_source_brightness!{NumType <: Number}(
     # @time y = fsm_i.d[1,1]
     # println("========")
 
-    lf = sb.E_l_a[b, i].v[1] * fsm[i].v[1]
-    llff = sb.E_ll_a[b, i].v[1] * fsm[i].v[1]^2
+    lf = sb.E_l_a[b, i].v[1] * fsm_i.v[1]
+    llff = sb.E_ll_a[b, i].v[1] * fsm_i.v[1]^2
 
     E_G_s.v[1] += a[i] * lf
     E_G2_s.v[1] += a[i] * llff
@@ -472,20 +472,20 @@ function accumulate_source_brightness!{NumType <: Number}(
       u_ind = i == 1 ? star_ids.u : gal_ids.u
 
       # Derivatives with respect to the spatial parameters
-      #a_fd = a[i] * fsm[i].d[:, 1]
+      #a_fd = a[i] * fsm_i.d[:, 1]
       for p0_shape_ind in 1:length(p0_shape)
         E_G_s.d[p0_shape[p0_shape_ind], 1] +=
-          sb.E_l_a[b, i].v[1] * a[i] * fsm[i].d[p0_shape_ind, 1]
+          sb.E_l_a[b, i].v[1] * a[i] * fsm_i.d[p0_shape_ind, 1]
         E_G2_s.d[p0_shape[p0_shape_ind], 1] +=
-          sb.E_ll_a[b, i].v[1] * 2 * fsm[i].v[1] * a[i] * fsm[i].d[p0_shape_ind, 1]
+          sb.E_ll_a[b, i].v[1] * 2 * fsm_i.v[1] * a[i] * fsm_i.d[p0_shape_ind, 1]
       end
 
       # Derivatives with respect to the brightness parameters.
       for p0_bright_ind in 1:length(p0_bright)
         E_G_s.d[p0_bright[p0_bright_ind], 1] +=
-          a[i] * fsm[i].v[1] * sb.E_l_a[b, i].d[p0_bright_ind, 1]
+          a[i] * fsm_i.v[1] * sb.E_l_a[b, i].d[p0_bright_ind, 1]
         E_G2_s.d[p0_bright[p0_bright_ind], 1] +=
-          a[i] * (fsm[i].v[1]^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
+          a[i] * (fsm_i.v[1]^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
       end
 
       if elbo_vars.calculate_hessian
@@ -505,25 +505,25 @@ function accumulate_source_brightness!{NumType <: Number}(
           x1 = fsm_i.v[1]
           E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] = a[i] * sb.E_l_a[b, i].h[p0_ind1, p0_ind2] * x1
           x1 = a[i] * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
-          E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] = (fsm[i].v[1]^2) * x1
+          E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] = (fsm_i.v[1]^2) * x1
         end
 
         # The (shape, shape) block:
-        E_G_s_hsub.shape_shape = a[i] * sb.E_l_a[b, i].v[1] * fsm[i].h
+        E_G_s_hsub.shape_shape = a[i] * sb.E_l_a[b, i].v[1] * fsm_i.h
         if use_blas
           # The shape_shape block has several terms which we accumulate efficiently
           # using BLAS.
           E_G2_s_hsub.shape_shape =
-            2 * a[i] * sb.E_ll_a[b, i].v[1] * fsm[i].v[1] * fsm[i].h
-          BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v[1], fsm[i].d[:, 1], fsm[i].d[:, 1],
+            2 * a[i] * sb.E_ll_a[b, i].v[1] * fsm_i.v[1] * fsm_i.h
+          BLAS.ger!(2 * a[i] * sb.E_ll_a[b, i].v[1], fsm_i.d[:, 1], fsm_i.d[:, 1],
                     E_G2_s_hsub.shape_shape);
         else
           p1, p2 = size(E_G_s_hsub.shape_shape)
           for ind1 = 1:p1, ind2 = 1:p2
             E_G2_s_hsub.shape_shape[ind1, ind2] =
               2 * a[i] * sb.E_ll_a[b, i].v[1] * (
-                fsm[i].v[1] * fsm[i].h[ind1, ind2] +
-                fsm[i].d[ind1, 1] * fsm[i].d[ind2, 1])
+                fsm_i.v[1] * fsm_i.h[ind1, ind2] +
+                fsm_i.d[ind1, 1] * fsm_i.d[ind2, 1])
           end
         end
 
@@ -531,7 +531,7 @@ function accumulate_source_brightness!{NumType <: Number}(
         # the loop.
         for p0_ind1 in 1:length(p0_shape), p0_ind2 in 1:length(p0_shape)
           E_G_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
-            a[i] * sb.E_l_a[b, i].v[1] * fsm[i].h[p0_ind1, p0_ind2]
+            a[i] * sb.E_l_a[b, i].v[1] * fsm_i.h[p0_ind1, p0_ind2]
           E_G2_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
             E_G2_s_hsub.shape_shape[p0_ind1, p0_ind2];
         end
@@ -548,9 +548,9 @@ function accumulate_source_brightness!{NumType <: Number}(
         # The (a, bright) blocks:
         for p0_ind in 1:length(p0_bright)
           E_G_s.h[p0_bright[p0_ind], ids.a[i]] =
-            fsm[i].v[1] * sb.E_l_a[b, i].d[p0_ind, 1]
+            fsm_i.v[1] * sb.E_l_a[b, i].d[p0_ind, 1]
           E_G2_s.h[p0_bright[p0_ind], ids.a[i]] =
-            (fsm[i].v[1] ^ 2) * sb.E_ll_a[b, i].d[p0_ind, 1]
+            (fsm_i.v[1] ^ 2) * sb.E_ll_a[b, i].d[p0_ind, 1]
         end
         E_G2_s.h[ids.a[i], p0_bright] = E_G2_s.h[p0_bright, ids.a[i]]'
         E_G_s.h[ids.a[i], p0_bright] = E_G_s.h[p0_bright, ids.a[i]]'
@@ -558,9 +558,9 @@ function accumulate_source_brightness!{NumType <: Number}(
         # The (a, shape) blocks.
         for p0_ind in 1:length(p0_shape)
           E_G_s.h[p0_shape[p0_ind], ids.a[i]] =
-            sb.E_l_a[b, i].v[1] * fsm[i].d[p0_ind, 1]
+            sb.E_l_a[b, i].v[1] * fsm_i.d[p0_ind, 1]
           E_G2_s.h[p0_shape[p0_ind], ids.a[i]] =
-            sb.E_ll_a[b, i].v[1] * 2 * fsm[i].v[1] * fsm[i].d[p0_ind, 1]
+            sb.E_ll_a[b, i].v[1] * 2 * fsm_i.v[1] * fsm_i.d[p0_ind, 1]
         end
         E_G2_s.h[ids.a[i], p0_shape] = E_G2_s.h[p0_shape, ids.a[i]]'
         E_G_s.h[ids.a[i], p0_shape] = E_G_s.h[p0_shape, ids.a[i]]'
@@ -568,22 +568,22 @@ function accumulate_source_brightness!{NumType <: Number}(
         if use_blas
           # The (shape, bright) blocks.
           # BLAS for
-          # E_G_s.h[p0_bright, p0_shape] = a[i] * sb.E_l_a[b, i].d[:, 1] * fsm[i].d'
-          BLAS.gemm!('N', 'T', a[i], sb.E_l_a[b, i].d[:, 1], fsm[i].d,
+          # E_G_s.h[p0_bright, p0_shape] = a[i] * sb.E_l_a[b, i].d[:, 1] * fsm_i.d'
+          BLAS.gemm!('N', 'T', a[i], sb.E_l_a[b, i].d[:, 1], fsm_i.d,
                      0.0, E_G_s_hsub.bright_shape)
 
           # BLAS for
           # h2_bright_shape =
-          #   2 * a[i] * sb.E_ll_a[b, i].d[:, 1] * fsm[i].v[1] * fsm[i].d'
-          BLAS.gemm!('N', 'T', 2 * a[i] * fsm[i].v[1],
-                     sb.E_ll_a[b, i].d[:, 1], fsm[i].d,
+          #   2 * a[i] * sb.E_ll_a[b, i].d[:, 1] * fsm_i.v[1] * fsm_i.d'
+          BLAS.gemm!('N', 'T', 2 * a[i] * fsm_i.v[1],
+                     sb.E_ll_a[b, i].d[:, 1], fsm_i.d,
                      0.0, E_G2_s_hsub.bright_shape)
         else
           for ind_b in 1:length(p0_bright), ind_s in 1:length(p0_shape)
             E_G_s_hsub.bright_shape[ind_b, ind_s] =
-              a[i] * sb.E_l_a[b, i].d[ind_b, 1] * fsm[i].d[ind_s, 1]
+              a[i] * sb.E_l_a[b, i].d[ind_b, 1] * fsm_i.d[ind_s, 1]
             E_G2_s_hsub.bright_shape[ind_b, ind_s] =
-              2 * a[i] * sb.E_ll_a[b, i].d[ind_b, 1] * fsm[i].v[1] * fsm[i].d[ind_s]
+              2 * a[i] * sb.E_ll_a[b, i].d[ind_b, 1] * fsm_i.v[1] * fsm_i.d[ind_s]
           end
         end
         E_G_s.h[p0_bright, p0_shape] = E_G_s_hsub.bright_shape
@@ -619,6 +619,8 @@ function accumulate_source_brightness!{NumType <: Number}(
   end
 
   calculate_var_G_s!(elbo_vars, active_source)
+
+  true # Set default return type
 end
 
 
@@ -662,6 +664,22 @@ function calculate_var_G_s!{NumType <: Number}(
 end
 
 
+# @doc """
+# A lower-memory version of findfirst?
+# """ ->
+# function find_source(active_sources::Vector{Int64}, s::Int64)
+#   i = 1
+#   while i <= length(active_sources)
+#     if active_sources[i] == s
+#       return i
+#     else
+#       i = i + 1
+#     end
+#   end
+#   return -1
+# end
+
+
 @doc """
 Adds up E_G and var_G across all sources.
 
@@ -693,7 +711,8 @@ function combine_pixel_sources!{NumType <: Number}(
       active_source
     accumulate_source_brightness!(elbo_vars, mp, sbs, s, tile.b)
     if active_source
-      sa = findfirst(mp.active_sources, s)[1]
+      sa = findfirst(mp.active_sources, s)
+      #sa = find_source(mp.active_sources, s)
       add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa,
         calculate_hessian=calculate_hessian)
       add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa,
@@ -704,6 +723,8 @@ function combine_pixel_sources!{NumType <: Number}(
       elbo_vars.var_G.v[1] += elbo_vars.var_G_s.v[1]
     end
   end
+
+  true # Set default return type
 end
 
 
@@ -785,14 +806,17 @@ function add_elbo_log_term!{NumType <: Number}(
   elbo.v[1] += x_nbm * (log(iota) + log_term_value)
 
   if elbo_vars.calculate_derivs
-
-    elbo_vars.combine_grad[:] =
-      NumType[ -0.5 / (E_G.v[1] ^ 2), 1 / E_G.v[1] + var_G.v[1] / (E_G.v[1] ^ 3)]
+    elbo_vars.combine_grad[1] = -0.5 / (E_G.v[1] ^ 2)
+    elbo_vars.combine_grad[2] = 1 / E_G.v[1] + var_G.v[1] / (E_G.v[1] ^ 3)
 
     if elbo_vars.calculate_hessian
-      elbo_vars.combine_hess[:,:] =
-        NumType[0                1 / E_G.v[1]^3;
-                1 / E_G.v[1]^3   -(1 / E_G.v[1] ^ 2 + 3  * var_G.v[1] / (E_G.v[1] ^ 4))]
+      elbo_vars.combine_hess[1, 1] = 0.0
+      elbo_vars.combine_hess[1, 2] = elbo_vars.combine_hess[2, 1] = 1 / E_G.v[1]^3
+      elbo_vars.combine_hess[2, 2] = -(1 / E_G.v[1] ^ 2 + 3  * var_G.v[1] / (E_G.v[1] ^ 4))
+
+      # elbo_vars.combine_hess[:,:] =
+      #   NumType[0                1 / E_G.v[1]^3;
+      #           1 / E_G.v[1]^3   -(1 / E_G.v[1] ^ 2 + 3  * var_G.v[1] / (E_G.v[1] ^ 4))]
     # else
     #   fill!(elbo_vars.combine_hess, 0.0)
     end
