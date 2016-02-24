@@ -499,7 +499,7 @@ iota = tile.constant_background ? tile.iota : tile.iota_vec[h];
 
 @time ElboDeriv.accum_galaxy_pos!(elbo_vars, s, gal_mcs[1], x, wcs_jacobian);
 
-# # This combines the sources into a single brightness value for the pixel.
+# This combines the sources into a single brightness value for the pixel.
 # 12.4 / 38.6
 @time ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
 
