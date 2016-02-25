@@ -475,11 +475,24 @@ sa = findfirst(mp.active_sources, s)
 @code_warntype ElboDeriv.eval_bvn_pdf(star_mcs[1,1], [0., 0.])
 
 
+bmc = star_mcs[1,1];
+py1, py2, f = ElboDeriv.eval_bvn_pdf(bmc, x)
+
+# TODO: Also make a version that doesn't calculate any derivatives
+# if the object isn't in active_sources.
+@code_warntype ElboDeriv.get_bvn_derivs!(elbo_vars, py1, py2, f, bmc, true, false);
+
+
+
 Profile.clear_malloc_data()
 Profile.clear()
 @profile for i=1:5000
-  ElboDeriv.populate_fsm_vecs!(
-    elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
+  ElboDeriv.accum_star_pos!(
+    elbo_vars, s, star_mcs[1, s], Float64[tile.h_range[h], tile.w_range[w]],
+    wcs_jacobian, calculate_derivs=true)
+
+  # ElboDeriv.populate_fsm_vecs!(
+  #   elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
 
   # ElboDeriv.get_expected_pixel_brightness!(
   #   elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
