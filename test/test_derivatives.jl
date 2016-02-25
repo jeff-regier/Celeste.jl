@@ -121,7 +121,7 @@ function test_real_image()
     end
     local_elbo = ElboDeriv.elbo(
       very_trimmed_tiled_blob, mp_local, calculate_derivs=false)
-    local_elbo.v
+    local_elbo.v[1]
   end
 
   vp_vec = trimmed_mp.vp[s];
@@ -145,6 +145,8 @@ function test_dual_numbers()
   blob, mp, body, tiled_blob = gen_sample_star_dataset();
   mp_dual = CelesteTypes.forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
   elbo_dual = ElboDeriv.elbo_likelihood(tiled_blob, mp_dual);
+
+  true
 end
 
 
@@ -515,7 +517,7 @@ function test_fs1m_derivatives()
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
     clear!(elbo_vars.fs1m_vec[s]);
     ElboDeriv.accum_galaxy_pos!(
-      elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian);
+      elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian, true);
     fs1m = deepcopy(elbo_vars.fs1m_vec[s]);
 
     # Two sanity checks.
@@ -571,7 +573,7 @@ function test_fs0m_derivatives()
       star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
       elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
       ElboDeriv.accum_star_pos!(
-        elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
+        elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true);
       elbo_vars_fd.fs0m_vec[s].v
     end
 
@@ -588,7 +590,7 @@ function test_fs0m_derivatives()
     clear!(elbo_vars.fs0m_vec[s])
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
     ElboDeriv.accum_star_pos!(
-      elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
+      elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true);
     fs0m = deepcopy(elbo_vars.fs0m_vec[s])
 
     test_with_autodiff(f_wrap_star, par_star, fs0m)
@@ -892,6 +894,7 @@ function test_brightness_hessian()
     println("Testing brightness $(squares_string) for band $b, type $i")
     function wrap_source_brightness{NumType <: Number}(
         vp::Vector{NumType}, calculate_derivs::Bool)
+
       sb = ElboDeriv.SourceBrightness(vp, calculate_derivs=calculate_derivs);
       if squares
         return deepcopy(sb.E_ll_a[b, i])
@@ -906,7 +909,7 @@ function test_brightness_hessian()
       for b_i in 1:length(brightness_standard_alignment[i])
         vp[brightness_standard_alignment[i][b_i]] = bright_vp[b_i]
       end
-      wrap_source_brightness(vp, false).v
+      wrap_source_brightness(vp, false).v[1]
     end
 
     bright_vp = mp.vp[1][brightness_standard_alignment[i]];

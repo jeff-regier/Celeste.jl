@@ -310,7 +310,7 @@ function get_bvn_derivs_in_place!{NumType <: Number}(
     # These are used for the hessian calculations.
     dpy1_dsig = elbo_vars.dpy1_dsig
     dpy1_dsig[1] = -elbo_vars.py1[1] * bvn.precision[1,1]
-    dpy1_dsig[2] = -elbo_vars.py2[2] * bvn.precision[1,1] - elbo_vars.py1[1] * bvn.precision[1,2]
+    dpy1_dsig[2] = -elbo_vars.py2[1] * bvn.precision[1,1] - elbo_vars.py1[1] * bvn.precision[1,2]
     dpy1_dsig[3] = -elbo_vars.py2[1] * bvn.precision[1,2]
 
     dpy2_dsig = elbo_vars.dpy2_dsig

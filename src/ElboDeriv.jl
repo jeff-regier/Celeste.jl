@@ -302,7 +302,7 @@ function accum_galaxy_pos!{NumType <: Number}(
 
   if elbo_vars.calculate_derivs && calculate_derivs
 
-    get_bvn_derivs_in_place!(elbo_vars, bmc,
+    get_bvn_derivs_in_place!(elbo_vars, gcc.bmc,
       elbo_vars.calculate_hessian, elbo_vars.calculate_hessian);
 
     # get_bvn_derivs!(
@@ -594,26 +594,11 @@ function accumulate_source_brightness!{NumType <: Number}(
         E_G2_s.h[ids.a[i], p0_shape] = E_G2_s.h[p0_shape, ids.a[i]]'
         E_G_s.h[ids.a[i], p0_shape] = E_G_s.h[p0_shape, ids.a[i]]'
 
-        if use_blas
-          # The (shape, bright) blocks.
-          # BLAS for
-          # E_G_s.h[p0_bright, p0_shape] = a[i] * sb.E_l_a[b, i].d[:, 1] * fsm_i.d'
-          BLAS.gemm!('N', 'T', a[i], sb.E_l_a[b, i].d[:, 1], fsm_i.d,
-                     0.0, E_G_s_hsub.bright_shape)
-
-          # BLAS for
-          # h2_bright_shape =
-          #   2 * a[i] * sb.E_ll_a[b, i].d[:, 1] * fsm_i.v[1] * fsm_i.d'
-          BLAS.gemm!('N', 'T', 2 * a[i] * fsm_i.v[1],
-                     sb.E_ll_a[b, i].d[:, 1], fsm_i.d,
-                     0.0, E_G2_s_hsub.bright_shape)
-        else
-          for ind_b in 1:length(p0_bright), ind_s in 1:length(p0_shape)
-            E_G_s_hsub.bright_shape[ind_b, ind_s] =
-              a[i] * sb.E_l_a[b, i].d[ind_b, 1] * fsm_i.d[ind_s, 1]
-            E_G2_s_hsub.bright_shape[ind_b, ind_s] =
-              2 * a[i] * sb.E_ll_a[b, i].d[ind_b, 1] * fsm_i.v[1] * fsm_i.d[ind_s]
-          end
+        for ind_b in 1:length(p0_bright), ind_s in 1:length(p0_shape)
+          E_G_s_hsub.bright_shape[ind_b, ind_s] =
+            a[i] * sb.E_l_a[b, i].d[ind_b, 1] * fsm_i.d[ind_s, 1]
+          E_G2_s_hsub.bright_shape[ind_b, ind_s] =
+            2 * a[i] * sb.E_ll_a[b, i].d[ind_b, 1] * fsm_i.v[1] * fsm_i.d[ind_s]
         end
         E_G_s.h[p0_bright, p0_shape] = E_G_s_hsub.bright_shape
         E_G_s.h[p0_shape, p0_bright] = E_G_s_hsub.bright_shape'
