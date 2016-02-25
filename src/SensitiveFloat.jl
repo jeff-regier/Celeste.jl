@@ -78,7 +78,8 @@ end
 function clear!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   sp::SensitiveFloat{ParamType, NumType}; clear_hessian::Bool=true)
 
-    fill!(sp.v, zero(NumType))
+    #fill!(sp.v, zero(NumType))
+    sp.v[1] = 0
     fill!(sp.d, zero(NumType))
     if clear_hessian
       fill!(sp.h, zero(NumType))
@@ -258,6 +259,7 @@ function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
         s_all_ind2 = P * (s - 1) + s_ind2
         sf_all.h[s_all_ind2, s_all_ind1] =
           sf_all.h[s_all_ind2, s_all_ind1] + sf_s.h[s_ind2, s_ind1]
+        # TODO: move outside the loop?
         sf_all.h[s_all_ind1, s_all_ind2] = sf_all.h[s_all_ind2, s_all_ind1]
       end
     end
