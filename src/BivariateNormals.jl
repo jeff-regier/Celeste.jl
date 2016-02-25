@@ -140,6 +140,19 @@ function eval_bvn_pdf_in_place!{NumType <: Number}(
 end
 
 
+function touch_py1!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType})
+  elbo_vars.py1[1] = 5.0
+
+  true
+end
+
+function touch_bmc{NumType <: Number}(bmc::BvnComponent{NumType})
+  bmc.the_mean[1] * bmc.precision[1, 1]
+
+  true
+end
+
+
 
 ##################
 # Derivatives

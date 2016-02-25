@@ -484,21 +484,59 @@ py1, py2, f = ElboDeriv.eval_bvn_pdf(bmc, x)
 
 
 
-Profile.clear_malloc_data()
-Profile.clear()
-@profile for i=1:5000
+
+
+
+using Celeste
+using CelesteTypes
+using Base.Test
+using SampleData
+import Synthetic
+
+function profile_stuff()
+  s = 1
+  b = 1
+  h = 10
+  w = 10
+
+  b = 1
+  x = [10., 9.]
+  wcs_jacobian = eye(Float64, 2);
+
+  println("Initializing.")
+
+  blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+  tile = tiled_blob[b][1,1];
+  tile_sources = mp.tile_sources[b][1,1];
+  num_pixels = length(tiled_blob) * prod(size(tiled_blob[1][1,1].pixels))
+  this_pixel = tile.pixels[h, w]
+
+  # These startup processes don't use much memory or time.
+  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  sbs = ElboDeriv.load_source_brightnesses(mp);
+  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
+
+  x = deepcopy(Float64[tile.h_range[h], tile.w_range[w]])
+  bmc = deepcopy(star_mcs[1, s])
   ElboDeriv.accum_star_pos!(
-    elbo_vars, s, star_mcs[1, s], Float64[tile.h_range[h], tile.w_range[w]],
+    elbo_vars, s, bmc, x,
     wcs_jacobian, calculate_derivs=true)
 
-  # ElboDeriv.populate_fsm_vecs!(
-  #   elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
-
-  # ElboDeriv.get_expected_pixel_brightness!(
-  #   elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-  #   mp, tile_sources, include_epsilon=true);
+  println("Beginning profiler.")
+  Profile.clear_malloc_data()
+  Profile.clear()
+  for i=1:5000
+    ElboDeriv.fake_accum_star_pos!(
+      elbo_vars, s, bmc, x,
+      wcs_jacobian)
+    # ElboDeriv.accum_star_pos!(
+    #   elbo_vars, s, bmc, x,
+    #   wcs_jacobian, calculate_derivs=true)
+  end
 end
-#Profile.print()
+
+profile_stuff()
+
 
 using Coverage
 res = analyze_malloc("src");

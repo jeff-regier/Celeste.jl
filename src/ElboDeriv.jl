@@ -227,6 +227,14 @@ function accum_star_pos!{NumType <: Number}(
     wcs_jacobian::Array{Float64, 2};
     calculate_derivs::Bool=true)
 
+  # Note: if this line is included, then no other line gets memory allocation
+  # attributed to it.
+  foo = zeros(1)
+  #
+  # touch_py1!(elbo_vars)
+  #
+  # foo[1] = touch_bmc(bmc)
+  #
   # Note: evaluating this and passing in may cause a lot of memory allocation?
   #elbo_vars.py1[1], elbo_vars.py2[1], elbo_vars.f_pre[1] = eval_bvn_pdf(bmc, x)
   eval_bvn_pdf_in_place!(elbo_vars, bmc, x)
@@ -261,6 +269,32 @@ function accum_star_pos!{NumType <: Number}(
 
   true # Set return type?
 end
+
+
+function fake_accum_star_pos!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    s::Int64,
+    bmc::BvnComponent{NumType},
+    x::Vector{Float64},
+    wcs_jacobian::Array{Float64, 2};
+    calculate_derivs::Bool=true)
+
+  touch_py1!(elbo_vars)
+  #
+  foo = zeros(1)
+  foo[1] = touch_bmc(bmc)
+  #
+  # Note: evaluating this and passing in may cause a lot of memory allocation?
+  #elbo_vars.py1[1], elbo_vars.py2[1], elbo_vars.f_pre[1] = eval_bvn_pdf(bmc, x)
+  #eval_bvn_pdf_in_place!(elbo_vars, bmc, x)
+
+  # Note: if this line is included, then no other line gets memory allocation
+  # attributed to it.
+  true # Set return type?
+end
+
+
+
 
 
 @doc """
@@ -399,8 +433,9 @@ function populate_fsm_vecs!{NumType <: Number}(
       elbo_vars.calculate_hessian && elbo_vars.calculate_derivs && active_source
     clear!(elbo_vars.fs0m_vec[s], clear_hessian=calculate_hessian)
     for k = 1:3 # PSF component
+        x = Float64[tile.h_range[h], tile.w_range[w]]
         accum_star_pos!(
-          elbo_vars, s, star_mcs[k, s], Float64[tile.h_range[h], tile.w_range[w]],
+          elbo_vars, s, star_mcs[k, s], x,
           wcs_jacobian, calculate_derivs=active_source)
     end
 
