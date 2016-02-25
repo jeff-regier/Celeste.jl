@@ -411,102 +411,79 @@ blob, mp, bodies, tiled_blob = gen_two_body_dataset();
 tile = tiled_blob[b][1,1];
 tile_sources = mp.tile_sources[b][1,1];
 num_pixels = length(tiled_blob) * prod(size(tiled_blob[1][1,1].pixels))
+this_pixel = tile.pixels[h, w]
 
+# These are bad benchmarks: their time can vary randomly quite a lot.
 # 104 MB
 @time elbo = ElboDeriv.elbo(tiled_blob, mp);
 
-# 86.8 MB, 1.93s
+# 86.8 MB, 1.93s with --track-allocation on
 @time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 @time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
 
+# These startup processes don't use much memory or time.
 @time star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
 @time sbs = ElboDeriv.load_source_brightnesses(mp);
 @time elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
-@time ElboDeriv.populate_fsm_vecs!(
-  elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
-clear!(elbo_vars.E_G);
-clear!(elbo_vars.var_G);
-
-this_pixel = tile.pixels[h, w]
 
 # 85 MB (for all pixels)
-# 37.2Kb per pixel
+# 36.6Kb per pixel
 @time ElboDeriv.get_expected_pixel_brightness!(
   elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
   mp, tile_sources, include_epsilon=true);
 
-iota = tile.constant_background ? tile.iota : tile.iota_vec[h];
-@time ElboDeriv.add_elbo_log_term!(elbo_vars, this_pixel, iota);
-@time CelesteTypes.add_scaled_sfs!(
-  elbo_vars.elbo, elbo_vars.E_G, scale=-iota,
-  calculate_hessian=elbo_vars.calculate_hessian &&
-    elbo_vars.calculate_derivs);
-
-
-
-##################
-
-# 26.3 / 38.6
-@time ElboDeriv.populate_fsm_vecs!(
-  elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
-
-@time star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-@time sbs = ElboDeriv.load_source_brightnesses(mp);
-@time elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
-@time ElboDeriv.populate_fsm_vecs!(
-  elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
-clear!(elbo_vars.E_G);
-clear!(elbo_vars.var_G);
-
-this_pixel = tile.pixels[h, w]
-
-# 85 MB (for all pixels)
-# 36.7Kb per pixel
-@time ElboDeriv.get_expected_pixel_brightness!(
+# Better to benchmark this?
+# 1.327434 seconds (693.58 k allocations: 60.032 MB, 1.55% gc time)
+@time for sim=1:num_pixels
+  ElboDeriv.get_expected_pixel_brightness!(
   elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
   mp, tile_sources, include_epsilon=true);
-
-@code_warntype ElboDeriv.get_expected_pixel_brightness!(
-  elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-  mp, tile_sources, include_epsilon=true)
-
+end
 
 iota = tile.constant_background ? tile.iota : tile.iota_vec[h];
-@time ElboDeriv.add_elbo_log_term!(elbo_vars, this_pixel, iota);
-@time CelesteTypes.add_scaled_sfs!(
-  elbo_vars.elbo, elbo_vars.E_G, scale=-iota,
-  calculate_hessian=elbo_vars.calculate_hessian &&
-    elbo_vars.calculate_derivs);
 
+@time for sim=1:num_pixels
+  ElboDeriv.add_elbo_log_term!(elbo_vars, this_pixel, iota);
+  CelesteTypes.add_scaled_sfs!(
+    elbo_vars.elbo, elbo_vars.E_G, scale=-iota,
+    calculate_hessian=elbo_vars.calculate_hessian &&
+      elbo_vars.calculate_derivs);
+end
 
 
 ##################
 
-# 26.3 / 38.6
-# According to memory profiling, populate_fsm_vecs! is allocating no memory.
+# What takes time and memory in get_expected_pixel_brightness!:
+
+# 24.3 / 36.6
 @time ElboDeriv.populate_fsm_vecs!(
   elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
 
 # This combines the sources into a single brightness value for the pixel.
-# 12.4 / 38.6
+# 12.35 / 36.6
 @time ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
+
+
+##################
+
 
 sa = findfirst(mp.active_sources, s)
 @code_warntype CelesteTypes.add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa,
         calculate_hessian=calculate_hessian)
 
+@code_warntype ElboDeriv.eval_bvn_pdf(star_mcs[1,1], [0., 0.])
+
 
 Profile.clear_malloc_data()
 Profile.clear()
-@profile for i=1:50000
-  #CelesteTypes.add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa, calculate_hessian=true)
-  #ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs)
-  # ElboDeriv.populate_fsm_vecs!(
-  #   elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
-  @time ElboDeriv.get_expected_pixel_brightness!(
-    elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-    mp, tile_sources, include_epsilon=true)
+@profile for i=1:5000
+  ElboDeriv.populate_fsm_vecs!(
+    elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
+
+  # ElboDeriv.get_expected_pixel_brightness!(
+  #   elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
+  #   mp, tile_sources, include_epsilon=true);
 end
 #Profile.print()
 

@@ -71,17 +71,31 @@ Returns:
 function eval_bvn_pdf{NumType <: Number}(
     bmc::BvnComponent{NumType}, x::Vector{Float64})
 
-  # z = 1 + 2
-  # z2 = 3 + x[1]
-  # z3 = 3 + bmc.the_mean[2]
-  y = NumType[x[1] - bmc.the_mean[1], x[2] - bmc.the_mean[2]]
-  # y1 = x[1] - bmc.the_mean[1]
-  # y2 = x[2] - bmc.the_mean[2]
-  py1 = bmc.precision[1,1] * y[1] + bmc.precision[1,2] * y[2]
-  py2 = bmc.precision[2,1] * y[1] + bmc.precision[2,2] * y[2]
-  c_ytpy = -0.5 * (y[1] * py1 + y[2] * py2)
-  f_denorm = exp(c_ytpy)
-  py1, py2, bmc.z * f_denorm
+  # Coverage.MallocInfo(122400000,"src/BivariateNormals.jl.mem",74)
+  # y = NumType[x[1] - bmc.the_mean[1], x[2] - bmc.the_mean[2]]
+  # py1 = bmc.precision[1,1] * y[1] + bmc.precision[1,2] * y[2]
+  # py2 = bmc.precision[2,1] * y[1] + bmc.precision[2,2] * y[2]
+  # c_ytpy = -0.5 * (y[1] * py1 + y[2] * py2)
+
+  # Is it better to allocate the memory than re-do the calculations?
+  # This doesn't seem slower and allocates much less memory.
+  #Coverage.MallocInfo(72000000,"src/BivariateNormals.jl.mem",82)
+  # py1 = bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
+  #       bmc.precision[1,2] * (x[2] - bmc.the_mean[2])
+  # py2 = bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
+  #       bmc.precision[2,2] * (x[2] - bmc.the_mean[2])
+  # c_ytpy = -0.5 * ((x[1] - bmc.the_mean[1]) * py1 +
+  #                  (x[2] - bmc.the_mean[2]) * py2)
+
+  #f_denorm = exp(c_ytpy)
+  #py1, py2, bmc.z * exp(c_ytpy)
+  bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
+        bmc.precision[1,2] * (x[2] - bmc.the_mean[2]),
+  bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
+        bmc.precision[2,2] * (x[2] - bmc.the_mean[2]),
+  bmc.z * exp(
+    -0.5 * ((x[1] - bmc.the_mean[1]) * py1 +
+            (x[2] - bmc.the_mean[2]) * py2))
 end
 
 
