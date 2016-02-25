@@ -417,7 +417,7 @@ this_pixel = tile.pixels[h, w]
 # 104 MB
 @time elbo = ElboDeriv.elbo(tiled_blob, mp);
 
-# 86.8 MB, 1.93s with --track-allocation on
+# 33.3 MB, 1.70s with --track-allocation on
 @time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 @time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
@@ -427,14 +427,14 @@ this_pixel = tile.pixels[h, w]
 @time sbs = ElboDeriv.load_source_brightnesses(mp);
 @time elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
 
-# 85 MB (for all pixels)
-# 36.6Kb per pixel
+# 29 MB (for all pixels)
+# 12.8Kb per pixel
 @time ElboDeriv.get_expected_pixel_brightness!(
   elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
   mp, tile_sources, include_epsilon=true);
 
 # Better to benchmark this?
-# 1.327434 seconds (693.58 k allocations: 60.032 MB, 1.55% gc time)
+# 1.349047 seconds (281.88 k allocations: 28.622 MB, 1.24% gc time)
 @time for sim=1:num_pixels
   ElboDeriv.get_expected_pixel_brightness!(
   elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
@@ -456,12 +456,12 @@ end
 
 # What takes time and memory in get_expected_pixel_brightness!:
 
-# 24.3 / 36.6
+# No memory allocation
 @time ElboDeriv.populate_fsm_vecs!(
   elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
 
 # This combines the sources into a single brightness value for the pixel.
-# 12.35 / 36.6
+# All the allocation is here
 @time ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
 
 
@@ -515,20 +515,13 @@ function profile_stuff()
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
   sbs = ElboDeriv.load_source_brightnesses(mp);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
-
-  x = deepcopy(Float64[tile.h_range[h], tile.w_range[w]])
-  bmc = deepcopy(star_mcs[1, s])
-  ElboDeriv.accum_star_pos!(elbo_vars, s, bmc, x, wcs_jacobian, true)
-
-  # Setting the keyword allocates memory!!!
-  #ElboDeriv.fake_accum_star_pos_v2!(elbo_vars, s, bmc, x, wcs_jacobian, true)
+  ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
 
   println("Beginning profiler.")
   Profile.clear_malloc_data()
   Profile.clear()
   for i=1:5000
-    #ElboDeriv.fake_accum_star_pos_v2!(elbo_vars, s, bmc, x, wcs_jacobian, true)
-    ElboDeriv.accum_star_pos!(elbo_vars, s, bmc, x, wcs_jacobian, true)
+    ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
   end
 end
 
