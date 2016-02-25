@@ -229,7 +229,7 @@ function accum_star_pos!{NumType <: Number}(
 
   # Note: if this line is included, then no other line gets memory allocation
   # attributed to it.
-  foo = zeros(1)
+  #foo = zeros(1)
   #
   # touch_py1!(elbo_vars)
   #
@@ -241,8 +241,7 @@ function accum_star_pos!{NumType <: Number}(
 
   # TODO: Also make a version that doesn't calculate any derivatives
   # if the object isn't in active_sources.
-  get_bvn_derivs_in_place!(
-    elbo_vars, bmc, true, false);
+  get_bvn_derivs_in_place!(elbo_vars, bmc, true, false);
 
   fs0m = elbo_vars.fs0m_vec[s]
   fs0m.v[1] += elbo_vars.f_pre[1]
@@ -271,7 +270,7 @@ function accum_star_pos!{NumType <: Number}(
 end
 
 
-function fake_accum_star_pos!{NumType <: Number}(
+function fake_accum_star_pos_v2!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     s::Int64,
     bmc::BvnComponent{NumType},
@@ -279,17 +278,36 @@ function fake_accum_star_pos!{NumType <: Number}(
     wcs_jacobian::Array{Float64, 2};
     calculate_derivs::Bool=true)
 
-  touch_py1!(elbo_vars)
-  #
-  foo = zeros(1)
-  foo[1] = touch_bmc(bmc)
-  #
-  # Note: evaluating this and passing in may cause a lot of memory allocation?
-  #elbo_vars.py1[1], elbo_vars.py2[1], elbo_vars.f_pre[1] = eval_bvn_pdf(bmc, x)
-  #eval_bvn_pdf_in_place!(elbo_vars, bmc, x)
+  # elbo_vars.py1[1] = 5.0 # No memory allocatd with this line alone
+  # elbo_vars.py1[1] = bmc.the_mean[1]  # No memory allocated with this line too
+  eval_bvn_pdf_in_place!(elbo_vars, bmc, x) # None with this line
+  get_bvn_derivs_in_place!(elbo_vars, bmc, true, false); # None with this line
 
-  # Note: if this line is included, then no other line gets memory allocation
-  # attributed to it.
+  fs0m = elbo_vars.fs0m_vec[s] # None with this
+  fs0m.v[1] += elbo_vars.f_pre[1]  # None with this
+
+  # With the wcs_jacobian added as an argument no allocation
+
+  if elbo_vars.calculate_derivs && calculate_derivs # None with this
+#  if calculate_derivs  # None with this
+    transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian) # None with this here
+    bvn_u_d = elbo_vars.bvn_u_d
+    bvn_uu_h = elbo_vars.bvn_uu_h
+
+    # Accumulate the derivatives.
+    for u_id in 1:2
+      fs0m.d[star_ids.u[u_id]] += elbo_vars.f_pre[1] * bvn_u_d[u_id]
+    end
+
+    # None up to this point!
+    if elbo_vars.calculate_hessian # with this?
+      for u_id1 in 1:2, u_id2 in 1:2
+        fs0m.h[star_ids.u[u_id1], star_ids.u[u_id2]] +=
+          elbo_vars.f_pre[1] * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
+      end
+    end
+  end
+
   true # Set return type?
 end
 

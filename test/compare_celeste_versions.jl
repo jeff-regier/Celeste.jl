@@ -522,13 +522,14 @@ function profile_stuff()
     elbo_vars, s, bmc, x,
     wcs_jacobian, calculate_derivs=true)
 
+  # Setting the keyword allocates memory!!!
+  ElboDeriv.fake_accum_star_pos_v2!(elbo_vars, s, bmc, x, wcs_jacobian, true)
+
   println("Beginning profiler.")
   Profile.clear_malloc_data()
   Profile.clear()
   for i=1:5000
-    ElboDeriv.fake_accum_star_pos!(
-      elbo_vars, s, bmc, x,
-      wcs_jacobian)
+    ElboDeriv.fake_accum_star_pos_v2!(elbo_vars, s, bmc, x, wcs_jacobian, true)
     # ElboDeriv.accum_star_pos!(
     #   elbo_vars, s, bmc, x,
     #   wcs_jacobian, calculate_derivs=true)
@@ -540,5 +541,5 @@ profile_stuff()
 
 using Coverage
 res = analyze_malloc("src");
-pn = 40; [ println(res[end - (pn - i)]) for i=1:pn ];
+pn = 10; [ println(res[end - (pn - i)]) for i=1:pn ];
 sum([r.bytes for r in res]) / 1e6
