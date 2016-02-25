@@ -115,7 +115,7 @@ function get_their_fs0m()
 
   star_mcs, gal_mcs = Debug.ElboDeriv.load_bvn_mixtures(mp, b);
   fs0m = zero_sensitive_float(StarPosParams, Float64);
-  Debug.ElboDeriv.accum_star_pos!(star_mcs[1], x, fs0m, wcs_jacobian);
+  Debug.ElboDeriv.accum_star_pos!(star_mcs[1], x, fs0m, wcs_jacobian, true);
   fs0m
 end
 
@@ -125,7 +125,7 @@ function get_our_fs0m()
   s = 1
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  ElboDeriv.accum_star_pos!(elbo_vars, s, star_mcs[1], x, wcs_jacobian);
+  ElboDeriv.accum_star_pos!(elbo_vars, s, star_mcs[1], x, wcs_jacobian, true);
   elbo_vars.fs0m_vec[s]
 end
 
@@ -141,7 +141,7 @@ function get_their_fs1m()
 
   star_mcs, gal_mcs = Debug.ElboDeriv.load_bvn_mixtures(mp, b);
   fs1m = zero_sensitive_float(GalaxyPosParams, Float64);
-  Debug.ElboDeriv.accum_galaxy_pos!(gal_mcs[1], x, fs1m, wcs_jacobian);
+  Debug.ElboDeriv.accum_galaxy_pos!(gal_mcs[1], x, fs1m, wcs_jacobian, true);
   fs1m
 end
 
@@ -151,7 +151,7 @@ function get_our_fs1m()
   s = 1
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  ElboDeriv.accum_galaxy_pos!(elbo_vars, s, gal_mcs[1], x, wcs_jacobian);
+  ElboDeriv.accum_galaxy_pos!(elbo_vars, s, gal_mcs[1], x, wcs_jacobian, true);
   elbo_vars.fs1m_vec[s]
 end
 
@@ -518,21 +518,17 @@ function profile_stuff()
 
   x = deepcopy(Float64[tile.h_range[h], tile.w_range[w]])
   bmc = deepcopy(star_mcs[1, s])
-  ElboDeriv.accum_star_pos!(
-    elbo_vars, s, bmc, x,
-    wcs_jacobian, calculate_derivs=true)
+  ElboDeriv.accum_star_pos!(elbo_vars, s, bmc, x, wcs_jacobian, true)
 
   # Setting the keyword allocates memory!!!
-  ElboDeriv.fake_accum_star_pos_v2!(elbo_vars, s, bmc, x, wcs_jacobian, true)
+  #ElboDeriv.fake_accum_star_pos_v2!(elbo_vars, s, bmc, x, wcs_jacobian, true)
 
   println("Beginning profiler.")
   Profile.clear_malloc_data()
   Profile.clear()
   for i=1:5000
-    ElboDeriv.fake_accum_star_pos_v2!(elbo_vars, s, bmc, x, wcs_jacobian, true)
-    # ElboDeriv.accum_star_pos!(
-    #   elbo_vars, s, bmc, x,
-    #   wcs_jacobian, calculate_derivs=true)
+    #ElboDeriv.fake_accum_star_pos_v2!(elbo_vars, s, bmc, x, wcs_jacobian, true)
+    ElboDeriv.accum_star_pos!(elbo_vars, s, bmc, x, wcs_jacobian, true)
   end
 end
 

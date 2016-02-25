@@ -224,8 +224,8 @@ function accum_star_pos!{NumType <: Number}(
     s::Int64,
     bmc::BvnComponent{NumType},
     x::Vector{Float64},
-    wcs_jacobian::Array{Float64, 2};
-    calculate_derivs::Bool=true)
+    wcs_jacobian::Array{Float64, 2},
+    calculate_derivs::Bool)
 
   # Note: if this line is included, then no other line gets memory allocation
   # attributed to it.
@@ -266,52 +266,8 @@ function accum_star_pos!{NumType <: Number}(
     end
   end
 
-  true # Set return type?
+  true # Set return type
 end
-
-
-function fake_accum_star_pos_v2!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
-    s::Int64,
-    bmc::BvnComponent{NumType},
-    x::Vector{Float64},
-    wcs_jacobian::Array{Float64, 2};
-    calculate_derivs::Bool=true)
-
-  # elbo_vars.py1[1] = 5.0 # No memory allocatd with this line alone
-  # elbo_vars.py1[1] = bmc.the_mean[1]  # No memory allocated with this line too
-  eval_bvn_pdf_in_place!(elbo_vars, bmc, x) # None with this line
-  get_bvn_derivs_in_place!(elbo_vars, bmc, true, false); # None with this line
-
-  fs0m = elbo_vars.fs0m_vec[s] # None with this
-  fs0m.v[1] += elbo_vars.f_pre[1]  # None with this
-
-  # With the wcs_jacobian added as an argument no allocation
-
-  if elbo_vars.calculate_derivs && calculate_derivs # None with this
-#  if calculate_derivs  # None with this
-    transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian) # None with this here
-    bvn_u_d = elbo_vars.bvn_u_d
-    bvn_uu_h = elbo_vars.bvn_uu_h
-
-    # Accumulate the derivatives.
-    for u_id in 1:2
-      fs0m.d[star_ids.u[u_id]] += elbo_vars.f_pre[1] * bvn_u_d[u_id]
-    end
-
-    # None up to this point!
-    if elbo_vars.calculate_hessian # with this?
-      for u_id1 in 1:2, u_id2 in 1:2
-        fs0m.h[star_ids.u[u_id1], star_ids.u[u_id2]] +=
-          elbo_vars.f_pre[1] * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
-      end
-    end
-  end
-
-  true # Set return type?
-end
-
-
 
 
 
@@ -335,19 +291,23 @@ function accum_galaxy_pos!{NumType <: Number}(
     s::Int64,
     gcc::GalaxyCacheComponent{NumType},
     x::Vector{Float64},
-    wcs_jacobian::Array{Float64, 2};
-    calculate_derivs::Bool=true)
+    wcs_jacobian::Array{Float64, 2},
+    calculate_derivs::Bool)
 
-  py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
-  f = f_pre * gcc.e_dev_i
+  eval_bvn_pdf_in_place!(elbo_vars, gcc.bmc, x)
+  #py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
+  f = elbo_vars.f_pre[1] * gcc.e_dev_i
   fs1m = elbo_vars.fs1m_vec[s];
   fs1m.v[1] += f
 
   if elbo_vars.calculate_derivs && calculate_derivs
 
-    get_bvn_derivs!(
-      elbo_vars, py1, py2, f_pre, gcc.bmc,
+    get_bvn_derivs_in_place!(elbo_vars, bmc,
       elbo_vars.calculate_hessian, elbo_vars.calculate_hessian);
+
+    # get_bvn_derivs!(
+    #   elbo_vars, py1, py2, f_pre, gcc.bmc,
+    #   elbo_vars.calculate_hessian, elbo_vars.calculate_hessian);
     transform_bvn_derivs!(elbo_vars, gcc, wcs_jacobian)
 
     bvn_u_d = elbo_vars.bvn_u_d
@@ -368,7 +328,7 @@ function accum_galaxy_pos!{NumType <: Number}(
     # The e_dev derivative.  e_dev just scales the entire component.
     # The direction is positive or negative depending on whether this
     # is an exp or dev component.
-    fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * f_pre
+    fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * elbo_vars.f_pre[1]
 
     if elbo_vars.calculate_hessian
       # The Hessians:
@@ -403,16 +363,18 @@ function accum_galaxy_pos!{NumType <: Number}(
       devi = gal_ids.e_dev
       for u_id in 1:2
         ui = gal_ids.u[u_id]
-        fs1m.h[ui, devi] += f_pre * gcc.e_dev_dir * bvn_u_d[u_id]
+        fs1m.h[ui, devi] += elbo_vars.f_pre[1] * gcc.e_dev_dir * bvn_u_d[u_id]
         fs1m.h[devi, ui] = fs1m.h[ui, devi]
       end
       for shape_id in 1:length(gal_shape_ids)
         si = gal_shape_alignment[shape_id]
-        fs1m.h[si, devi] += f_pre * gcc.e_dev_dir * bvn_s_d[shape_id]
+        fs1m.h[si, devi] += elbo_vars.f_pre[1] * gcc.e_dev_dir * bvn_s_d[shape_id]
         fs1m.h[devi, si] = fs1m.h[si, devi]
       end
     end # if calculate hessian
   end # if calculate_derivs
+
+  true # Set return type
 end
 
 
@@ -443,6 +405,7 @@ function populate_fsm_vecs!{NumType <: Number}(
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     star_mcs::Array{BvnComponent{NumType}, 2})
 
+  x = Float64[tile.h_range[h], tile.w_range[w]]
   for s in tile_sources
     wcs_jacobian = mp.patches[s, tile.b].wcs_jacobian;
     active_source = s in mp.active_sources
@@ -451,10 +414,9 @@ function populate_fsm_vecs!{NumType <: Number}(
       elbo_vars.calculate_hessian && elbo_vars.calculate_derivs && active_source
     clear!(elbo_vars.fs0m_vec[s], clear_hessian=calculate_hessian)
     for k = 1:3 # PSF component
-        x = Float64[tile.h_range[h], tile.w_range[w]]
         accum_star_pos!(
           elbo_vars, s, star_mcs[k, s], x,
-          wcs_jacobian, calculate_derivs=active_source)
+          wcs_jacobian, active_source)
     end
 
     clear!(elbo_vars.fs1m_vec[s], clear_hessian=calculate_hessian)
@@ -465,9 +427,8 @@ function populate_fsm_vecs!{NumType <: Number}(
             if (i == 1) || (j <= 6)
               for k = 1:3 # PSF component
                   accum_galaxy_pos!(
-                    elbo_vars, s, gal_mcs[k, j, i, s], Float64[tile.h_range[h],
-                    tile.w_range[w]], wcs_jacobian,
-                    calculate_derivs=active_source)
+                    elbo_vars, s, gal_mcs[k, j, i, s], x, wcs_jacobian,
+                    active_source)
               end
             end
         end
