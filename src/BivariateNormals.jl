@@ -71,6 +71,9 @@ Returns:
 function eval_bvn_pdf{NumType <: Number}(
     bmc::BvnComponent{NumType}, x::Vector{Float64})
 
+  # The memory allocation attribed to this may not actually be here.  See
+  # https://github.com/JuliaLang/julia/issues/11753
+
   # Coverage.MallocInfo(122400000,"src/BivariateNormals.jl.mem",74)
   # y = NumType[x[1] - bmc.the_mean[1], x[2] - bmc.the_mean[2]]
   # py1 = bmc.precision[1,1] * y[1] + bmc.precision[1,2] * y[2]
@@ -80,22 +83,29 @@ function eval_bvn_pdf{NumType <: Number}(
   # Is it better to allocate the memory than re-do the calculations?
   # This doesn't seem slower and allocates much less memory.
   #Coverage.MallocInfo(72000000,"src/BivariateNormals.jl.mem",82)
-  # py1 = bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
-  #       bmc.precision[1,2] * (x[2] - bmc.the_mean[2])
-  # py2 = bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
-  #       bmc.precision[2,2] * (x[2] - bmc.the_mean[2])
-  # c_ytpy = -0.5 * ((x[1] - bmc.the_mean[1]) * py1 +
-  #                  (x[2] - bmc.the_mean[2]) * py2)
+  py1 = bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
+        bmc.precision[1,2] * (x[2] - bmc.the_mean[2])
+  py2 = bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
+        bmc.precision[2,2] * (x[2] - bmc.the_mean[2])
+  c_ytpy = -0.5 * ((x[1] - bmc.the_mean[1]) * py1 +
+                   (x[2] - bmc.the_mean[2]) * py2)
 
   #f_denorm = exp(c_ytpy)
-  #py1, py2, bmc.z * exp(c_ytpy)
-  bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
-        bmc.precision[1,2] * (x[2] - bmc.the_mean[2]),
-  bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
-        bmc.precision[2,2] * (x[2] - bmc.the_mean[2]),
-  bmc.z * exp(
-    -0.5 * ((x[1] - bmc.the_mean[1]) * py1 +
-            (x[2] - bmc.the_mean[2]) * py2))
+  py1, py2, bmc.z * exp(c_ytpy)
+
+  # This doesn't save any memory over allocating for py1 and py2.
+  # Coverage.MallocInfo(72000000,"src/BivariateNormals.jl.mem",92)
+  # bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
+  #       bmc.precision[1,2] * (x[2] - bmc.the_mean[2]),
+  # bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
+  #       bmc.precision[2,2] * (x[2] - bmc.the_mean[2]),
+  # bmc.z * exp(
+  #   -0.5 * ((x[1] - bmc.the_mean[1]) *
+  #            bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
+  #            bmc.precision[1,2] * (x[2] - bmc.the_mean[2]) +
+  #           (x[2] - bmc.the_mean[2]) *
+  #            bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
+  #            bmc.precision[2,2] * (x[2] - bmc.the_mean[2])))
 end
 
 

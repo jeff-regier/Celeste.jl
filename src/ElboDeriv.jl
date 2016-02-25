@@ -52,6 +52,12 @@ HessianSubmatrices(NumType::DataType, i::Int64) = begin
 end
 
 type ElboIntermediateVariables{NumType <: Number}
+
+  # Pre-allocated memory for py1, py2, and f when evaluating BVNs
+  py1::Array{NumType, 1}
+  py2::Array{NumType, 1}
+  f_pre::Array{NumType, 1}
+
   # Derivatives of a bvn with respect to (x, sig).
   bvn_x_d::Array{NumType, 1}
   bvn_sig_d::Array{NumType, 1}
@@ -130,6 +136,10 @@ ElboIntermediateVariables(
 
   @assert NumType <: Number
 
+  py1 = zeros(NumType, 1)
+  py2 = zeros(NumType, 1)
+  f_pre = zeros(NumType, 1)
+
   bvn_x_d = zeros(NumType, 2)
   bvn_sig_d = zeros(NumType, 3)
   bvn_xx_h = zeros(NumType, 2, 2)
@@ -180,7 +190,7 @@ ElboIntermediateVariables(
   elbo = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
 
   ElboIntermediateVariables{NumType}(
-    bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
+    py1, py2, f_pre, bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
     dpy1_dsig, dpy2_dsig, dsiginv_dsig,
     bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h,
     fs0m_vec, fs1m_vec,
@@ -217,14 +227,17 @@ function accum_star_pos!{NumType <: Number}(
     wcs_jacobian::Array{Float64, 2};
     calculate_derivs::Bool=true)
 
-  py1, py2, f = eval_bvn_pdf(bmc, x)
+  # Note: evaluating this and passing in may cause a lot of memory allocation?
+  elbo_vars.py1[1], elbo_vars.py2[1], elbo_vars.f_pre[1] = eval_bvn_pdf(bmc, x)
 
   # TODO: Also make a version that doesn't calculate any derivatives
   # if the object isn't in active_sources.
-  get_bvn_derivs!(elbo_vars, py1, py2, f, bmc, true, false);
+  get_bvn_derivs!(
+    elbo_vars, elbo_vars.py1[1], elbo_vars.py2[1], elbo_vars.f_pre[1],
+    bmc, true, false);
 
   fs0m = elbo_vars.fs0m_vec[s]
-  fs0m.v[1] += f
+  fs0m.v[1] += elbo_vars.f_pre[1]
 
   if elbo_vars.calculate_derivs && calculate_derivs
     transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
@@ -233,7 +246,7 @@ function accum_star_pos!{NumType <: Number}(
 
     # Accumulate the derivatives.
     for u_id in 1:2
-      fs0m.d[star_ids.u[u_id]] += f * bvn_u_d[u_id]
+      fs0m.d[star_ids.u[u_id]] += elbo_vars.f_pre[1] * bvn_u_d[u_id]
     end
 
     if elbo_vars.calculate_hessian
@@ -241,7 +254,7 @@ function accum_star_pos!{NumType <: Number}(
       # TODO: redundant term
       for u_id1 in 1:2, u_id2 in 1:2
         fs0m.h[star_ids.u[u_id1], star_ids.u[u_id2]] +=
-          f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
+          elbo_vars.f_pre[1] * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
       end
     end
   end
