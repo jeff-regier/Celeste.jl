@@ -228,13 +228,13 @@ function accum_star_pos!{NumType <: Number}(
     calculate_derivs::Bool=true)
 
   # Note: evaluating this and passing in may cause a lot of memory allocation?
-  elbo_vars.py1[1], elbo_vars.py2[1], elbo_vars.f_pre[1] = eval_bvn_pdf(bmc, x)
+  #elbo_vars.py1[1], elbo_vars.py2[1], elbo_vars.f_pre[1] = eval_bvn_pdf(bmc, x)
+  eval_bvn_pdf_in_place!(elbo_vars, bmc, x)
 
   # TODO: Also make a version that doesn't calculate any derivatives
   # if the object isn't in active_sources.
-  get_bvn_derivs!(
-    elbo_vars, elbo_vars.py1[1], elbo_vars.py2[1], elbo_vars.f_pre[1],
-    bmc, true, false);
+  get_bvn_derivs_in_place!(
+    elbo_vars, bmc, true, false);
 
   fs0m = elbo_vars.fs0m_vec[s]
   fs0m.v[1] += elbo_vars.f_pre[1]
@@ -258,6 +258,8 @@ function accum_star_pos!{NumType <: Number}(
       end
     end
   end
+
+  true # Set return type?
 end
 
 
