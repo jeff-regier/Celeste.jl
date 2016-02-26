@@ -741,7 +741,7 @@ DataTransform(
   		zero_sensitive_float(UnconstrainedParams, NumType, active_S);
 
   	sf_d_vec = sf.d[:];
-  	sf_free.v[1] = sf.v
+  	sf_free.v[1] = sf.v[1]
   	sf_free.d =
       reshape(transform_derivatives.dparam_dfree' * sf_d_vec,
               length(UnconstrainedParams), active_S);
