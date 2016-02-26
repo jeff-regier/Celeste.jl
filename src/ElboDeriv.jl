@@ -412,14 +412,14 @@ function populate_fsm_vecs!{NumType <: Number}(
 
     calculate_hessian =
       elbo_vars.calculate_hessian && elbo_vars.calculate_derivs && active_source
-    clear!(elbo_vars.fs0m_vec[s], clear_hessian=calculate_hessian)
+    clear!(elbo_vars.fs0m_vec[s], calculate_hessian)
     for k = 1:3 # PSF component
         accum_star_pos!(
           elbo_vars, s, star_mcs[k, s], x,
           wcs_jacobian, active_source)
     end
 
-    clear!(elbo_vars.fs1m_vec[s], clear_hessian=calculate_hessian)
+    clear!(elbo_vars.fs1m_vec[s], calculate_hessian)
     for i = 1:2 # Galaxy types
         for j in 1:8 # Galaxy component
         #for j in 1:[8,6][i] # Galaxy component
@@ -464,10 +464,10 @@ function accumulate_source_brightness!{NumType <: Number}(
   E_G2_s = elbo_vars.E_G2_s;
 
   clear_hessian = elbo_vars.calculate_hessian && elbo_vars.calculate_derivs
-  clear!(E_G_s, clear_hessian=clear_hessian)
-  clear!(E_G2_s, clear_hessian=clear_hessian)
+  clear!(E_G_s, clear_hessian)
+  clear!(E_G2_s, clear_hessian)
 
-  a = mp.vp[s][ids.a]
+  #a = mp.vp[s][ids.a]
   #fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
   sb = sbs[s];
 
@@ -475,6 +475,7 @@ function accumulate_source_brightness!{NumType <: Number}(
 
   for i in 1:Ia # Stars and galaxies
     fsm_i = (i == 1) ? elbo_vars.fs0m_vec[s] : elbo_vars.fs1m_vec[s]
+    a_i = mp.vp[s][ids.a[i]]
     # println("========")
     # @time x = fsm_i.v[1]
     # @time y = fsm_i.d[1,1]
@@ -483,8 +484,8 @@ function accumulate_source_brightness!{NumType <: Number}(
     lf = sb.E_l_a[b, i].v[1] * fsm_i.v[1]
     llff = sb.E_ll_a[b, i].v[1] * fsm_i.v[1]^2
 
-    E_G_s.v[1] += a[i] * lf
-    E_G2_s.v[1] += a[i] * llff
+    E_G_s.v[1] += a_i * lf
+    E_G2_s.v[1] += a_i * llff
 
     # Only calculate derivatives for active sources.
     if active_source && elbo_vars.calculate_derivs
@@ -499,20 +500,20 @@ function accumulate_source_brightness!{NumType <: Number}(
       u_ind = i == 1 ? star_ids.u : gal_ids.u
 
       # Derivatives with respect to the spatial parameters
-      #a_fd = a[i] * fsm_i.d[:, 1]
+      #a_fd = a_i * fsm_i.d[:, 1]
       for p0_shape_ind in 1:length(p0_shape)
         E_G_s.d[p0_shape[p0_shape_ind], 1] +=
-          sb.E_l_a[b, i].v[1] * a[i] * fsm_i.d[p0_shape_ind, 1]
+          sb.E_l_a[b, i].v[1] * a_i * fsm_i.d[p0_shape_ind, 1]
         E_G2_s.d[p0_shape[p0_shape_ind], 1] +=
-          sb.E_ll_a[b, i].v[1] * 2 * fsm_i.v[1] * a[i] * fsm_i.d[p0_shape_ind, 1]
+          sb.E_ll_a[b, i].v[1] * 2 * fsm_i.v[1] * a_i * fsm_i.d[p0_shape_ind, 1]
       end
 
       # Derivatives with respect to the brightness parameters.
       for p0_bright_ind in 1:length(p0_bright)
         E_G_s.d[p0_bright[p0_bright_ind], 1] +=
-          a[i] * fsm_i.v[1] * sb.E_l_a[b, i].d[p0_bright_ind, 1]
+          a_i * fsm_i.v[1] * sb.E_l_a[b, i].d[p0_bright_ind, 1]
         E_G2_s.d[p0_bright[p0_bright_ind], 1] +=
-          a[i] * (fsm_i.v[1]^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
+          a_i * (fsm_i.v[1]^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
       end
 
       if elbo_vars.calculate_hessian
@@ -530,18 +531,20 @@ function accumulate_source_brightness!{NumType <: Number}(
           # TODO: time consuming **************
           # println("------------")
           x1 = fsm_i.v[1]
-          E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] = a[i] * sb.E_l_a[b, i].h[p0_ind1, p0_ind2] * x1
-          x1 = a[i] * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
-          E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] = (fsm_i.v[1]^2) * x1
+          E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
+            a_i * sb.E_l_a[b, i].h[p0_ind1, p0_ind2] * x1
+          x1 = a_i * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
+          E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
+            (fsm_i.v[1]^2) * x1
         end
 
         # The (shape, shape) block:
         p1, p2 = size(E_G_s_hsub.shape_shape)
         for ind1 = 1:p1, ind2 = 1:p2
           E_G_s_hsub.shape_shape[ind1, ind2] =
-            a[i] * sb.E_l_a[b, i].v[1] * fsm_i.h[ind1, ind2]
+            a_i * sb.E_l_a[b, i].v[1] * fsm_i.h[ind1, ind2]
           E_G2_s_hsub.shape_shape[ind1, ind2] =
-            2 * a[i] * sb.E_ll_a[b, i].v[1] * (
+            2 * a_i * sb.E_ll_a[b, i].v[1] * (
               fsm_i.v[1] * fsm_i.h[ind1, ind2] +
               fsm_i.d[ind1, 1] * fsm_i.d[ind2, 1])
         end
@@ -550,15 +553,19 @@ function accumulate_source_brightness!{NumType <: Number}(
         # the loop.
         for p0_ind1 in 1:length(p0_shape), p0_ind2 in 1:length(p0_shape)
           E_G_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
-            a[i] * sb.E_l_a[b, i].v[1] * fsm_i.h[p0_ind1, p0_ind2]
+            a_i * sb.E_l_a[b, i].v[1] * fsm_i.h[p0_ind1, p0_ind2]
           E_G2_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
             E_G2_s_hsub.shape_shape[p0_ind1, p0_ind2];
         end
 
         # Since the u_u submatrix is not disjoint between different i, accumulate
         # it separate and add it at the end.
-        E_G_s_hsub.u_u = E_G_s_hsub.shape_shape[u_ind, u_ind]
-        E_G2_s_hsub.u_u = E_G2_s_hsub.shape_shape[u_ind, u_ind]
+        for u_ind1 = 1:2, u_ind2 = 1:2
+          E_G_s_hsub.u_u[u_ind1, u_ind2] =
+            E_G_s_hsub.shape_shape[u_ind[u_ind1], u_ind[u_ind2]]
+          E_G2_s_hsub.u_u[u_ind1, u_ind2] =
+            E_G2_s_hsub.shape_shape[u_ind[u_ind1], u_ind[u_ind2]]
+        end
 
         # All other terms are disjoint between different i and don't involve
         # addition, so we can just assign their values (which is efficient in
@@ -583,15 +590,17 @@ function accumulate_source_brightness!{NumType <: Number}(
             sb.E_l_a[b, i].v[1] * fsm_i.d[p0_ind, 1]
           E_G2_s.h[p0_shape[p0_ind], ids.a[i]] =
             sb.E_ll_a[b, i].v[1] * 2 * fsm_i.v[1] * fsm_i.d[p0_ind, 1]
+          E_G_s.h[ids.a[i], p0_shape[p0_ind]] =
+            E_G_s.h[p0_shape[p0_ind], ids.a[i]]
+          E_G2_s.h[ids.a[i], p0_shape[p0_ind]] =
+            E_G2_s.h[p0_shape[p0_ind], ids.a[i]]
         end
-        E_G2_s.h[ids.a[i], p0_shape] = E_G2_s.h[p0_shape, ids.a[i]]'
-        E_G_s.h[ids.a[i], p0_shape] = E_G_s.h[p0_shape, ids.a[i]]'
 
         for ind_b in 1:length(p0_bright), ind_s in 1:length(p0_shape)
           E_G_s.h[p0_bright[ind_b], p0_shape[ind_s]] =
-            a[i] * sb.E_l_a[b, i].d[ind_b, 1] * fsm_i.d[ind_s, 1]
+            a_i * sb.E_l_a[b, i].d[ind_b, 1] * fsm_i.d[ind_s, 1]
           E_G2_s.h[p0_bright[ind_b], p0_shape[ind_s]] =
-            2 * a[i] * sb.E_ll_a[b, i].d[ind_b, 1] * fsm_i.v[1] * fsm_i.d[ind_s]
+            2 * a_i * sb.E_ll_a[b, i].d[ind_b, 1] * fsm_i.v[1] * fsm_i.d[ind_s]
 
           E_G_s.h[p0_shape[ind_s], p0_bright[ind_b]] =
             E_G_s.h[p0_bright[ind_b], p0_shape[ind_s]]
@@ -599,9 +608,9 @@ function accumulate_source_brightness!{NumType <: Number}(
             E_G2_s.h[p0_bright[ind_b], p0_shape[ind_s]]
 
           # E_G_s_hsub.bright_shape[ind_b, ind_s] =
-          #   a[i] * sb.E_l_a[b, i].d[ind_b, 1] * fsm_i.d[ind_s, 1]
+          #   a_i * sb.E_l_a[b, i].d[ind_b, 1] * fsm_i.d[ind_s, 1]
           # E_G2_s_hsub.bright_shape[ind_b, ind_s] =
-          #   2 * a[i] * sb.E_ll_a[b, i].d[ind_b, 1] * fsm_i.v[1] * fsm_i.d[ind_s]
+          #   2 * a_i * sb.E_ll_a[b, i].d[ind_b, 1] * fsm_i.v[1] * fsm_i.d[ind_s]
         end
       end # if calculate hessian
     end # if calculate derivatives
@@ -613,22 +622,22 @@ function accumulate_source_brightness!{NumType <: Number}(
     # E_G_u_u_hess = zeros(2, 2);
     # E_G2_u_u_hess = zeros(2, 2);
 
-    # For each value in 1:Ia, written this way for speed.
-    @assert Ia == 2
-    E_G_u_u_hess =
-      elbo_vars.E_G_s_hsub_vec[1].u_u +
-      elbo_vars.E_G_s_hsub_vec[2].u_u
-
-    E_G2_u_u_hess =
-      elbo_vars.E_G2_s_hsub_vec[1].u_u +
-      elbo_vars.E_G2_s_hsub_vec[2].u_u
-
+    # This is
     # for i = 1:Ia
     #   E_G_u_u_hess += elbo_vars.E_G_s_hsub_vec[i].u_u
     #   E_G2_u_u_hess += elbo_vars.E_G2_s_hsub_vec[i].u_u
     # end
-    E_G_s.h[ids.u, ids.u] = E_G_u_u_hess
-    E_G2_s.h[ids.u, ids.u] = E_G2_u_u_hess
+    # For each value in 1:Ia, written this way for speed.
+    @assert Ia == 2
+    for u_ind1 = 1:2, u_ind2 = 1:2
+      E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+      elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
+      elbo_vars.E_G_s_hsub_vec[2].u_u[u_ind1, u_ind2]
+
+      E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+        elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
+        elbo_vars.E_G2_s_hsub_vec[2].u_u[u_ind1, u_ind2]
+    end
   end
 
   calculate_var_G_s!(elbo_vars, active_source)
@@ -655,7 +664,7 @@ function calculate_var_G_s!{NumType <: Number}(
   E_G2_s = elbo_vars.E_G2_s
 
   clear!(var_G_s,
-    clear_hessian=elbo_vars.calculate_hessian &&
+    elbo_vars.calculate_hessian &&
       elbo_vars.calculate_derivs && active_source)
 
   elbo_vars.var_G_s.v[1] = E_G2_s.v[1] - (E_G_s.v[1] ^ 2);
@@ -716,9 +725,9 @@ function combine_pixel_sources!{NumType <: Number}(
     sbs::Vector{SourceBrightness{NumType}})
 
   clear!(elbo_vars.E_G,
-    clear_hessian=elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
+    elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
   clear!(elbo_vars.var_G,
-    clear_hessian=elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
+    elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
 
   for s in tile_sources
     active_source = s in mp.active_sources
@@ -729,10 +738,8 @@ function combine_pixel_sources!{NumType <: Number}(
     if active_source
       sa = findfirst(mp.active_sources, s)
       #sa = find_source(mp.active_sources, s)
-      add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa,
-        calculate_hessian=calculate_hessian)
-      add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa,
-        calculate_hessian=calculate_hessian)
+      add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa, calculate_hessian)
+      add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa, calculate_hessian)
     else
       # If the sources is inactives, simply accumulate the values.
       elbo_vars.E_G.v[1] += elbo_vars.E_G_s.v[1]
@@ -928,8 +935,8 @@ function tile_likelihood!{NumType <: Number}(
           iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
           add_elbo_log_term!(elbo_vars_array[tid], this_pixel, iota)
           CelesteTypes.add_scaled_sfs!(
-            elbo_vars_array[tid].elbo, elbo_vars_array[tid].E_G, scale=-iota,
-            calculate_hessian=elbo_vars_array[tid].calculate_hessian &&
+            elbo_vars_array[tid].elbo, elbo_vars_array[tid].E_G, -iota,
+            elbo_vars_array[tid].calculate_hessian &&
               elbo_vars_array[tid].calculate_derivs)
         end
       end
@@ -947,8 +954,8 @@ function tile_likelihood!{NumType <: Number}(
         iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
         add_elbo_log_term!(elbo_vars_array[1], this_pixel, iota)
         CelesteTypes.add_scaled_sfs!(
-          elbo_vars_array[1].elbo, elbo_vars_array[1].E_G, scale=-iota,
-          calculate_hessian=elbo_vars_array[1].calculate_hessian &&
+          elbo_vars_array[1].elbo, elbo_vars_array[1].E_G, -iota,
+          elbo_vars_array[1].calculate_hessian &&
             elbo_vars_array[1].calculate_derivs)
       end
     end
@@ -1138,8 +1145,8 @@ function elbo_likelihood{NumType <: Number}(
   if Threaded
     for i in 2:nthreads()
       CelesteTypes.add_scaled_sfs!(
-        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo,
-        calculate_hessian=elbo_vars_array[1].calculate_hessian &&
+        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
+        elbo_vars_array[1].calculate_hessian &&
           elbo_vars_array[1].calculate_derivs)
     end
   end
