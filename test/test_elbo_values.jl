@@ -318,12 +318,16 @@ function test_tiny_image_tiling()
   # These will be reused for all the subsequent tests because only
   # the tile sources change.
   if ElboDeriv.Threaded
-    elbo_vars_array = [ ElboDeriv.ElboIntermediateVariables(Float64, mp0.S,
+    elbo_vars_array =
+    ElboDeriv.ElboIntermediateVariables{Float64}[
+      ElboDeriv.ElboIntermediateVariables(Float64, mp0.S,
         length(mp0.active_sources), calculate_derivs=false)
       for i in 1:nthreads() ]
   else
-    elbo_vars_array = [ ElboDeriv.ElboIntermediateVariables(Float64, mp0.S,
-        length(mp0.active_sources), calculate_derivs=false) ]
+    elbo_vars_array =
+      ElboDeriv.ElboIntermediateVariables{Float64}[
+        ElboDeriv.ElboIntermediateVariables(Float64, mp0.S,
+          length(mp0.active_sources), calculate_derivs=false) ]
   end
   sbs = ElboDeriv.load_source_brightnesses(mp0, calculate_derivs=false);
   ElboDeriv.elbo_likelihood!(elbo_vars_array, tiled_blob0[3], mp0, 3, sbs);
