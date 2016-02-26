@@ -146,7 +146,9 @@ end
 This is the function of which get_bvn_derivs!() returns the derivatives.
 It is only used for testing.""" ->
 function eval_bvn_log_density{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
     bvn::BvnComponent{NumType}, x::Vector{Float64})
+
   eval_bvn_pdf_in_place!(elbo_vars, bvn, x);
 
   -0.5 * (
