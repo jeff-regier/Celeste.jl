@@ -153,7 +153,7 @@ function eval_bvn_log_density{NumType <: Number}(
 
   -0.5 * (
     (x[1] - bvn.the_mean[1]) * elbo_vars.py1[1] +
-    (x[2] - bvn.the_mean[2]) * elbo_vars.py2[2] -
+    (x[2] - bvn.the_mean[2]) * elbo_vars.py2[1] -
     log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
 end
 
