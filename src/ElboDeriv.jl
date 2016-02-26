@@ -28,7 +28,6 @@ export tile_predicted_image
 type HessianSubmatrices{NumType <: Number}
   u_u::Matrix{NumType}
   shape_shape::Matrix{NumType}
-  bright_shape::Matrix{NumType}
 end
 
 
@@ -42,13 +41,11 @@ Args:
 """ ->
 HessianSubmatrices(NumType::DataType, i::Int64) = begin
   @assert 1 <= i <= Ia
-  bright_p = length(brightness_standard_alignment[i])
   shape_p = length(shape_standard_alignment[i])
 
   u_u = zeros(NumType, 2, 2);
   shape_shape = zeros(NumType, shape_p, shape_p);
-  bright_shape = zeros(NumType, bright_p, shape_p);
-  HessianSubmatrices{NumType}(u_u, shape_shape, bright_shape)
+  HessianSubmatrices{NumType}(u_u, shape_shape)
 end
 
 type ElboIntermediateVariables{NumType <: Number}
@@ -227,16 +224,6 @@ function accum_star_pos!{NumType <: Number}(
     wcs_jacobian::Array{Float64, 2},
     calculate_derivs::Bool)
 
-  # Note: if this line is included, then no other line gets memory allocation
-  # attributed to it.
-  #foo = zeros(1)
-  #
-  # touch_py1!(elbo_vars)
-  #
-  # foo[1] = touch_bmc(bmc)
-  #
-  # Note: evaluating this and passing in may cause a lot of memory allocation?
-  #elbo_vars.py1[1], elbo_vars.py2[1], elbo_vars.f_pre[1] = eval_bvn_pdf(bmc, x)
   eval_bvn_pdf_in_place!(elbo_vars, bmc, x)
 
   # TODO: Also make a version that doesn't calculate any derivatives
@@ -261,7 +248,8 @@ function accum_star_pos!{NumType <: Number}(
       # TODO: redundant term
       for u_id1 in 1:2, u_id2 in 1:2
         fs0m.h[star_ids.u[u_id1], star_ids.u[u_id2]] +=
-          elbo_vars.f_pre[1] * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
+          elbo_vars.f_pre[1] * (bvn_uu_h[u_id1, u_id2] +
+          bvn_u_d[u_id1] * bvn_u_d[u_id2])
       end
     end
   end
@@ -295,7 +283,6 @@ function accum_galaxy_pos!{NumType <: Number}(
     calculate_derivs::Bool)
 
   eval_bvn_pdf_in_place!(elbo_vars, gcc.bmc, x)
-  #py1, py2, f_pre = eval_bvn_pdf(gcc.bmc, x)
   f = elbo_vars.f_pre[1] * gcc.e_dev_i
   fs1m = elbo_vars.fs1m_vec[s];
   fs1m.v[1] += f
@@ -304,10 +291,6 @@ function accum_galaxy_pos!{NumType <: Number}(
 
     get_bvn_derivs_in_place!(elbo_vars, gcc.bmc,
       elbo_vars.calculate_hessian, elbo_vars.calculate_hessian);
-
-    # get_bvn_derivs!(
-    #   elbo_vars, py1, py2, f_pre, gcc.bmc,
-    #   elbo_vars.calculate_hessian, elbo_vars.calculate_hessian);
     transform_bvn_derivs!(elbo_vars, gcc, wcs_jacobian)
 
     bvn_u_d = elbo_vars.bvn_u_d
@@ -414,24 +397,22 @@ function populate_fsm_vecs!{NumType <: Number}(
       elbo_vars.calculate_hessian && elbo_vars.calculate_derivs && active_source
     clear!(elbo_vars.fs0m_vec[s], calculate_hessian)
     for k = 1:3 # PSF component
-        accum_star_pos!(
-          elbo_vars, s, star_mcs[k, s], x,
-          wcs_jacobian, active_source)
+      accum_star_pos!(
+        elbo_vars, s, star_mcs[k, s], x, wcs_jacobian, active_source)
     end
 
     clear!(elbo_vars.fs1m_vec[s], calculate_hessian)
     for i = 1:2 # Galaxy types
-        for j in 1:8 # Galaxy component
-        #for j in 1:[8,6][i] # Galaxy component
-            # If i == 2 then there are only six galaxy components.
-            if (i == 1) || (j <= 6)
-              for k = 1:3 # PSF component
-                  accum_galaxy_pos!(
-                    elbo_vars, s, gal_mcs[k, j, i, s], x, wcs_jacobian,
-                    active_source)
-              end
-            end
+      for j in 1:8 # Galaxy component
+        # If i == 2 then there are only six galaxy components.
+        if (i == 1) || (j <= 6)
+          for k = 1:3 # PSF component
+              accum_galaxy_pos!(
+                elbo_vars, s, gal_mcs[k, j, i, s], x, wcs_jacobian,
+                active_source)
+          end
         end
+      end
     end
   end
 end
@@ -467,8 +448,6 @@ function accumulate_source_brightness!{NumType <: Number}(
   clear!(E_G_s, clear_hessian)
   clear!(E_G2_s, clear_hessian)
 
-  #a = mp.vp[s][ids.a]
-  #fsm = (elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s]);
   sb = sbs[s];
 
   active_source = (s in mp.active_sources)
@@ -476,10 +455,6 @@ function accumulate_source_brightness!{NumType <: Number}(
   for i in 1:Ia # Stars and galaxies
     fsm_i = (i == 1) ? elbo_vars.fs0m_vec[s] : elbo_vars.fs1m_vec[s]
     a_i = mp.vp[s][ids.a[i]]
-    # println("========")
-    # @time x = fsm_i.v[1]
-    # @time y = fsm_i.d[1,1]
-    # println("========")
 
     lf = sb.E_l_a[b, i].v[1] * fsm_i.v[1]
     llff = sb.E_ll_a[b, i].v[1] * fsm_i.v[1]^2
@@ -500,7 +475,6 @@ function accumulate_source_brightness!{NumType <: Number}(
       u_ind = i == 1 ? star_ids.u : gal_ids.u
 
       # Derivatives with respect to the spatial parameters
-      #a_fd = a_i * fsm_i.d[:, 1]
       for p0_shape_ind in 1:length(p0_shape)
         E_G_s.d[p0_shape[p0_shape_ind], 1] +=
           sb.E_l_a[b, i].v[1] * a_i * fsm_i.d[p0_shape_ind, 1]
@@ -529,13 +503,10 @@ function accumulate_source_brightness!{NumType <: Number}(
         # The (bright, bright) block:
         for p0_ind1 in 1:length(p0_bright), p0_ind2 in 1:length(p0_bright)
           # TODO: time consuming **************
-          # println("------------")
-          x1 = fsm_i.v[1]
           E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-            a_i * sb.E_l_a[b, i].h[p0_ind1, p0_ind2] * x1
-          x1 = a_i * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
+            a_i * sb.E_l_a[b, i].h[p0_ind1, p0_ind2] * fsm_i.v[1]
           E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-            (fsm_i.v[1]^2) * x1
+            (fsm_i.v[1]^2) * a_i * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
         end
 
         # The (shape, shape) block:
@@ -606,11 +577,6 @@ function accumulate_source_brightness!{NumType <: Number}(
             E_G_s.h[p0_bright[ind_b], p0_shape[ind_s]]
           E_G2_s.h[p0_shape[ind_s], p0_bright[ind_b]] =
             E_G2_s.h[p0_bright[ind_b], p0_shape[ind_s]]
-
-          # E_G_s_hsub.bright_shape[ind_b, ind_s] =
-          #   a_i * sb.E_l_a[b, i].d[ind_b, 1] * fsm_i.d[ind_s, 1]
-          # E_G2_s_hsub.bright_shape[ind_b, ind_s] =
-          #   2 * a_i * sb.E_ll_a[b, i].d[ind_b, 1] * fsm_i.v[1] * fsm_i.d[ind_s]
         end
       end # if calculate hessian
     end # if calculate derivatives
@@ -619,8 +585,6 @@ function accumulate_source_brightness!{NumType <: Number}(
   if elbo_vars.calculate_hessian
     # Accumulate the u Hessian.  u is the only parameter that is shared between
     # different values of i.
-    # E_G_u_u_hess = zeros(2, 2);
-    # E_G2_u_u_hess = zeros(2, 2);
 
     # This is
     # for i = 1:Ia
@@ -689,22 +653,6 @@ function calculate_var_G_s!{NumType <: Number}(
 end
 
 
-# @doc """
-# A lower-memory version of findfirst?
-# """ ->
-# function find_source(active_sources::Vector{Int64}, s::Int64)
-#   i = 1
-#   while i <= length(active_sources)
-#     if active_sources[i] == s
-#       return i
-#     else
-#       i = i + 1
-#     end
-#   end
-#   return -1
-# end
-
-
 @doc """
 Adds up E_G and var_G across all sources.
 
@@ -737,7 +685,6 @@ function combine_pixel_sources!{NumType <: Number}(
     accumulate_source_brightness!(elbo_vars, mp, sbs, s, tile.b)
     if active_source
       sa = findfirst(mp.active_sources, s)
-      #sa = find_source(mp.active_sources, s)
       add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa, calculate_hessian)
       add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa, calculate_hessian)
     else
@@ -835,13 +782,8 @@ function add_elbo_log_term!{NumType <: Number}(
     if elbo_vars.calculate_hessian
       elbo_vars.combine_hess[1, 1] = 0.0
       elbo_vars.combine_hess[1, 2] = elbo_vars.combine_hess[2, 1] = 1 / E_G.v[1]^3
-      elbo_vars.combine_hess[2, 2] = -(1 / E_G.v[1] ^ 2 + 3  * var_G.v[1] / (E_G.v[1] ^ 4))
-
-      # elbo_vars.combine_hess[:,:] =
-      #   NumType[0                1 / E_G.v[1]^3;
-      #           1 / E_G.v[1]^3   -(1 / E_G.v[1] ^ 2 + 3  * var_G.v[1] / (E_G.v[1] ^ 4))]
-    # else
-    #   fill!(elbo_vars.combine_hess, 0.0)
+      elbo_vars.combine_hess[2, 2] =
+        -(1 / E_G.v[1] ^ 2 + 3  * var_G.v[1] / (E_G.v[1] ^ 4))
     end
 
     # Calculate the log term.
@@ -885,7 +827,7 @@ Returns:
   Adds to the elbo_vars_array[:].elbo in place.
 """ ->
 function tile_likelihood!{NumType <: Number}(
-    elbo_vars_array,
+    elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
     tile::ImageTile,
     mp::ModelParams{NumType},
     tile_sources::Vector{Int64},
@@ -1054,7 +996,7 @@ Returns:
   Updates elbo_vars_array[:].elbo in place.
 """ ->
 function elbo_likelihood!{NumType <: Number}(
-    elbo_vars_array,
+    elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
     tiled_image::Array{ImageTile},
     mp::ModelParams{NumType},
     sbs::Vector{SourceBrightness{NumType}},
@@ -1093,7 +1035,7 @@ Returns:
   Updates elbo_vars_array[:].elbo in place.
 """ ->
 function elbo_likelihood!{NumType <: Number}(
-    elbo_vars_array,
+    elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
     tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64,
     sbs::Vector{SourceBrightness{NumType}})
 
@@ -1125,14 +1067,18 @@ function elbo_likelihood{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType};
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
-  elbo_vars_array = []
+  elbo_vars_array = ElboIntermediateVariables{NumType}[]
   if Threaded
-    elbo_vars_array = [ ElboIntermediateVariables(NumType, mp.S,
-        length(mp.active_sources), calculate_derivs=calculate_derivs,
-        calculate_hessian=calculate_hessian)
-      for i in 1:nthreads() ]
+    elbo_vars_array =
+      ElboIntermediateVariables{NumType}[
+        ElboIntermediateVariables(NumType, mp.S,
+          length(mp.active_sources), calculate_derivs=calculate_derivs,
+          calculate_hessian=calculate_hessian)
+          for i in 1:nthreads() ]
   else
-    elbo_vars_array = [ ElboIntermediateVariables(NumType, mp.S,
+    elbo_vars_array =
+    ElboIntermediateVariables{NumType}[
+      ElboIntermediateVariables(NumType, mp.S,
         length(mp.active_sources), calculate_derivs=calculate_derivs,
         calculate_hessian=calculate_hessian) ]
   end

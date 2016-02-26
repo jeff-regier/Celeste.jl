@@ -417,16 +417,17 @@ this_pixel = tile.pixels[h, w]
 # 20.9 MB
 @time elbo = ElboDeriv.elbo(tiled_blob, mp);
 
-# 4.8 MB, 1.63s with --track-allocation on
-@time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
-@time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
+# 4.8 MB, 1.63s with --track-allocation on
+# 0.630015 seconds (74.72 k allocations: 4.701 MB)  with no tracking
+@time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
+@time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
 # These startup processes don't use much memory or time.
 @time star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
 @time sbs = ElboDeriv.load_source_brightnesses(mp);
 @time elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
-
+elbo_vars_array = [ elbo_vars ]
 # Very little memory allocation now
 @time ElboDeriv.get_expected_pixel_brightness!(
   elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
@@ -465,24 +466,6 @@ end
 
 
 ##################
-
-
-sa = findfirst(mp.active_sources, s)
-@code_warntype CelesteTypes.add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa,
-        calculate_hessian=calculate_hessian)
-
-@code_warntype ElboDeriv.eval_bvn_pdf(star_mcs[1,1], [0., 0.])
-
-
-bmc = star_mcs[1,1];
-py1, py2, f = ElboDeriv.eval_bvn_pdf(bmc, x)
-
-# TODO: Also make a version that doesn't calculate any derivatives
-# if the object isn't in active_sources.
-@code_warntype ElboDeriv.get_bvn_derivs!(elbo_vars, py1, py2, f, bmc, true, false);
-
-
-
 
 
 
