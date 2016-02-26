@@ -4,6 +4,7 @@ using Celeste
 using CelesteTypes
 using SampleData
 import JLD
+import SloanDigitalSkySurvey: SDSS
 
 # field_dir = joinpath(dat_dir, "sample_field")
 # run_num = "003900"

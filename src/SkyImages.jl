@@ -79,6 +79,7 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     b_letter = band_letters[b]
 
     fname = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$field_num.fits"
+    @assert(isfile(fname), "Cannot find $(fname)")
     f = FITSIO.FITS(fname)
 
     # This is the sky-subtracted and calibrated image.
@@ -365,6 +366,7 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
 
     # Read gain for each band from "photoField" file.
     pf_fname = "$field_dir/photoField-$run_num-$camcol_num.fits"
+    @assert(isfile(pf_fname), "Cannot find $(pf_fname)")
     gains = load_sdss_field_gains(pf_fname, parse(Int, field_num))
 
     blob = Array(Image, 5)
@@ -374,10 +376,10 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
             load_raw_field(field_dir, run_num, camcol_num,
                            field_num, b, gains[b])
 
-
         letter = band_letters[b]
         mask_fname = joinpath(field_dir,
                               "fpM-$run_num-$letter$camcol_num-$field_num.fit")
+        @assert(isfile(mask_fname), "Cannot find mask file $(mask_fname)")
 
         print("masking image... ")
         mask_xranges, mask_yranges = load_sdss_mask(mask_fname, mask_planes)
@@ -408,6 +410,7 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
         # Load and fit the psf.
         print("reading psf... ")
         psf_fname = "$field_dir/psField-$run_num-$camcol_num-$field_num.fit"
+        @assert(isfile(psf_fname), "Cannot find mask file $(psf_fname)")
         raw_psf_comp = load_sdss_psf(psf_fname, b)
         println("done.")
 
