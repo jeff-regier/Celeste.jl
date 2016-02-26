@@ -414,10 +414,10 @@ num_pixels = length(tiled_blob) * prod(size(tiled_blob[1][1,1].pixels))
 this_pixel = tile.pixels[h, w]
 
 # These are bad benchmarks: their time can vary randomly quite a lot.
-# 104 MB
+# 20.9 MB
 @time elbo = ElboDeriv.elbo(tiled_blob, mp);
 
-# 33.3 MB, 1.70s with --track-allocation on
+# 4.8 MB, 1.63s with --track-allocation on
 @time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 @time elbo_lik = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
@@ -427,8 +427,7 @@ this_pixel = tile.pixels[h, w]
 @time sbs = ElboDeriv.load_source_brightnesses(mp);
 @time elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
 
-# 29 MB (for all pixels)
-# 12.8Kb per pixel
+# Very little memory allocation now
 @time ElboDeriv.get_expected_pixel_brightness!(
   elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
   mp, tile_sources, include_epsilon=true);
@@ -446,8 +445,8 @@ iota = tile.constant_background ? tile.iota : tile.iota_vec[h];
 @time for sim=1:num_pixels
   ElboDeriv.add_elbo_log_term!(elbo_vars, this_pixel, iota);
   CelesteTypes.add_scaled_sfs!(
-    elbo_vars.elbo, elbo_vars.E_G, scale=-iota,
-    calculate_hessian=elbo_vars.calculate_hessian &&
+    elbo_vars.elbo, elbo_vars.E_G, -iota,
+    elbo_vars.calculate_hessian &&
       elbo_vars.calculate_derivs);
 end
 
@@ -506,26 +505,27 @@ function profile_stuff()
   println("Initializing.")
 
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
-  tile = tiled_blob[b][1,1];
-  tile_sources = mp.tile_sources[b][1,1];
-  num_pixels = length(tiled_blob) * prod(size(tiled_blob[1][1,1].pixels))
-  this_pixel = tile.pixels[h, w]
+  # tile = tiled_blob[b][1,1];
+  # tile_sources = mp.tile_sources[b][1,1];
+  # num_pixels = length(tiled_blob) * prod(size(tiled_blob[1][1,1].pixels))
+  # this_pixel = tile.pixels[h, w]
 
   # These startup processes don't use much memory or time.
-  star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
-  sbs = ElboDeriv.load_source_brightnesses(mp);
-  elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
-  ElboDeriv.populate_fsm_vecs!(
-    elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
+  # star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+  # sbs = ElboDeriv.load_source_brightnesses(mp);
+  # elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
+  # ElboDeriv.populate_fsm_vecs!(
+  #   elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
+  #
+  # ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
 
-  ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
-
+  ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
   println("Beginning profiler.")
   Profile.clear_malloc_data()
   Profile.clear()
-  for i=1:5000
-    ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
+  for i=1:3
+    @time ElboDeriv.elbo_likelihood(tiled_blob, mp);
   end
 end
 
