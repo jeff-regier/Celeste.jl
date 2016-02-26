@@ -523,7 +523,7 @@ function test_fs1m_derivatives()
     # Two sanity checks.
     gcc = gal_mcs[gcc_ind...];
     clear!(elbo_vars.fs1m_vec[s]);
-    v = ElboDeriv.eval_bvn_log_density(gcc.bmc, x);
+    v = ElboDeriv.eval_bvn_log_density(elbo_vars, gcc.bmc, x);
     gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
     pc = mp.patches[s, b].psf[gcc_ind[1]]
 
@@ -640,7 +640,7 @@ function test_bvn_derivatives()
   par = wrap(x, sigma);
 
   # Sanity check
-  @test_approx_eq ElboDeriv.eval_bvn_log_density(bvn, x) f_wrap(par)
+  @test_approx_eq ElboDeriv.eval_bvn_log_density(elbo_vars, bvn, x) f_wrap(par)
 
   ad_grad = ForwardDiff.gradient(f_wrap, par);
   @test_approx_eq elbo_vars.bvn_x_d ad_grad[x_ids]
