@@ -499,8 +499,8 @@ function test_fs1m_derivatives()
 
       # Raw:
       gcc = gal_mcs[gcc_ind...];
-      py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x)
-      f_pre * gcc.e_dev_i
+      ElboDeriv.eval_bvn_pdf_in_place!(elbo_vars, gcc.bmc, x)
+      elbo_vars.f_pre[1] * gcc.e_dev_i
     end
 
     function mp_to_par_gal(mp::ModelParams{Float64})
@@ -789,9 +789,9 @@ function test_galaxy_cache_component()
             e_dev_dir, e_dev_i_fd, gp, psf,
             u_pix, e_axis, e_angle, e_scale, false, false);
 
-    py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x);
+    ElboDeriv.eval_bvn_pdf_in_place!(elbo_vars_fd, gcc.bmc, x);
 
-    log(f_pre)
+    log(elbo_vars_fd.f_pre[1])
   end
 
   function wrap_par{T <: Number}(

@@ -33,7 +33,7 @@ immutable BvnComponent{NumType <: Number}
         dsiginv_dsig = Array(NumType, 3, 3)
 
         precision = the_cov^-1
-        
+
         dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
         dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
         dsiginv_dsig[1, 3] = -precision[1, 2] ^ 2
@@ -56,57 +56,30 @@ immutable BvnComponent{NumType <: Number}
 end
 
 
-@doc """
-Return quantities related to the pdf of an offset bivariate normal.
-
-Args:
-  - bmc: A bivariate normal component
-  - x: A 2x1 vector containing a mean offset to be applied to bmc
-
-Returns:
-  - py1: The first row of the precision times (x - the_mean)
-  - py2: The second row of the precision times (x - the_mean)
-  - The density of the bivariate normal times the weight.
-""" ->
-function eval_bvn_pdf{NumType <: Number}(
-    bmc::BvnComponent{NumType}, x::Vector{Float64})
-
-  # The memory allocation attribed to this may not actually be here.  See
-  # https://github.com/JuliaLang/julia/issues/11753
-
-  # Coverage.MallocInfo(122400000,"src/BivariateNormals.jl.mem",74)
-  # y = NumType[x[1] - bmc.the_mean[1], x[2] - bmc.the_mean[2]]
-  # py1 = bmc.precision[1,1] * y[1] + bmc.precision[1,2] * y[2]
-  # py2 = bmc.precision[2,1] * y[1] + bmc.precision[2,2] * y[2]
-  # c_ytpy = -0.5 * (y[1] * py1 + y[2] * py2)
-
-  # Is it better to allocate the memory than re-do the calculations?
-  # This doesn't seem slower and allocates much less memory.
-  #Coverage.MallocInfo(72000000,"src/BivariateNormals.jl.mem",82)
-  py1 = bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
-        bmc.precision[1,2] * (x[2] - bmc.the_mean[2])
-  py2 = bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
-        bmc.precision[2,2] * (x[2] - bmc.the_mean[2])
-  c_ytpy = -0.5 * ((x[1] - bmc.the_mean[1]) * py1 +
-                   (x[2] - bmc.the_mean[2]) * py2)
-
-  #f_denorm = exp(c_ytpy)
-  py1, py2, bmc.z * exp(c_ytpy)
-
-  # This doesn't save any memory over allocating for py1 and py2.
-  # Coverage.MallocInfo(72000000,"src/BivariateNormals.jl.mem",92)
-  # bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
-  #       bmc.precision[1,2] * (x[2] - bmc.the_mean[2]),
-  # bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
-  #       bmc.precision[2,2] * (x[2] - bmc.the_mean[2]),
-  # bmc.z * exp(
-  #   -0.5 * ((x[1] - bmc.the_mean[1]) *
-  #            bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
-  #            bmc.precision[1,2] * (x[2] - bmc.the_mean[2]) +
-  #           (x[2] - bmc.the_mean[2]) *
-  #            bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
-  #            bmc.precision[2,2] * (x[2] - bmc.the_mean[2])))
-end
+# @doc """
+# Return quantities related to the pdf of an offset bivariate normal.
+#
+# Args:
+#   - bmc: A bivariate normal component
+#   - x: A 2x1 vector containing a mean offset to be applied to bmc
+#
+# Returns:
+#   - py1: The first row of the precision times (x - the_mean)
+#   - py2: The second row of the precision times (x - the_mean)
+#   - The density of the bivariate normal times the weight.
+# """ ->
+# function eval_bvn_pdf{NumType <: Number}(
+#     bmc::BvnComponent{NumType}, x::Vector{Float64})
+#
+#   py1 = bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
+#         bmc.precision[1,2] * (x[2] - bmc.the_mean[2])
+#   py2 = bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
+#         bmc.precision[2,2] * (x[2] - bmc.the_mean[2])
+#   c_ytpy = -0.5 * ((x[1] - bmc.the_mean[1]) * py1 +
+#                    (x[2] - bmc.the_mean[2]) * py2)
+#
+#   py1, py2, bmc.z * exp(c_ytpy)
+# end
 
 
 
@@ -118,6 +91,7 @@ Args:
   - x: A 2x1 vector containing a mean offset to be applied to bmc
 
 Returns:
+  In elbo_vars, sets these values in place:
   - py1: The first row of the precision times (x - the_mean)
   - py2: The second row of the precision times (x - the_mean)
   - The density of the bivariate normal times the weight.
@@ -140,20 +114,6 @@ function eval_bvn_pdf_in_place!{NumType <: Number}(
 end
 
 
-function touch_py1!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType})
-  elbo_vars.py1[1] = 5.0
-
-  true
-end
-
-function touch_bmc{NumType <: Number}(bmc::BvnComponent{NumType})
-  bmc.the_mean[1] * bmc.precision[1, 1]
-
-  true
-end
-
-
-
 ##################
 # Derivatives
 
@@ -174,9 +134,10 @@ function get_bvn_derivs!{NumType <: Number}(
     calculate_x_hess::Bool,
     calculate_sigma_hessian::Bool)
 
-  py1, py2, f_pre = eval_bvn_pdf(bvn, x);
+  eval_bvn_pdf_in_place!(elbo_vars, bvn, x);
   get_bvn_derivs!(
-    elbo_vars, py1, py2, f_pre, bvn, calculate_x_hess, calculate_sigma_hessian)
+    elbo_vars, elbo_vars.py1[1], elbo_vars.py2[1], elbo_vars.f_pre[1],
+    bvn, calculate_x_hess, calculate_sigma_hessian)
 end
 
 
@@ -185,9 +146,11 @@ function eval_bvn_log_density{NumType <: Number}(
   # This is the function of which get_bvn_derivs!() returns the derivatives.
   # It is only used for testing.
 
-  py1, py2, f_pre = eval_bvn_pdf(bvn, x);
+  eval_bvn_pdf_in_place!(elbo_vars, bvn, x);
+
   -0.5 * (
-    (x[1] - bvn.the_mean[1]) * py1 + (x[2] - bvn.the_mean[2]) * py2 -
+    (x[1] - bvn.the_mean[1]) * elbo_vars.py1[1] +
+    (x[2] - bvn.the_mean[2]) * elbo_vars.py2[2] -
     log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
 end
 
