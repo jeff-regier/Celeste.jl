@@ -27,13 +27,13 @@ immutable BvnComponent{NumType <: Number}
       c = 1 ./ (the_det^.5 * 2pi)
 
       if calculate_siginv_deriv
-        # Derivatives of Sigma^{-1} with repsect to sigma.  These are the second
+        # Derivatives of Sigma^{-1} with respect to sigma.  These are the second
         # derivatives of log|Sigma| with respect to sigma.
         # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
-        dsiginv_dsig = zeros(3, 3)
+        dsiginv_dsig = Array(NumType, 3, 3)
 
         precision = the_cov^-1
-
+        
         dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
         dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
         dsiginv_dsig[1, 3] = -precision[1, 2] ^ 2
