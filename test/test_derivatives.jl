@@ -288,8 +288,8 @@ function test_tile_likelihood()
     if ElboDerivs.Threaded
       for i in 2:nthreads()
         CelesteTypes.add_scaled_sfs!(
-          elbo_vars_array[1].elbo, elbo_vars_array[i].elbo,
-          calculate_hessian=elbo_vars_array[1].calculate_hessian &&
+          elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
+          elbo_vars_array[1].calculate_hessian &&
             elbo_vars_array[1].calculate_derivs)
       end
     end

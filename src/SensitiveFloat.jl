@@ -76,10 +76,16 @@ end
 
 
 function clear!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
-  sp::SensitiveFloat{ParamType, NumType}; clear_hessian::Bool=true)
+  sp::SensitiveFloat{ParamType, NumType})
 
-    #fill!(sp.v, zero(NumType))
-    sp.v[1] = 0
+  clear!(sp, true)
+end
+
+
+function clear!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+  sp::SensitiveFloat{ParamType, NumType}, clear_hessian::Bool)
+
+    fill!(sp.v, zero(NumType))
     fill!(sp.d, zero(NumType))
     if clear_hessian
       fill!(sp.h, zero(NumType))
@@ -207,8 +213,8 @@ Update sf1 in place with (sf1 + scale * sf2).
 """ ->
 function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf1::SensitiveFloat{ParamType, NumType},
-    sf2::SensitiveFloat{ParamType, NumType};
-    scale::Float64=1.0, calculate_hessian::Bool=true)
+    sf2::SensitiveFloat{ParamType, NumType},
+    scale::Float64, calculate_hessian::Bool)
 
   sf1.v[1] = sf1.v[1] + scale * sf2.v[1]
 
@@ -236,7 +242,7 @@ sensitive to source s.
 function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf_all::SensitiveFloat{ParamType, NumType},
     sf_s::SensitiveFloat{ParamType, NumType},
-    s::Int64; calculate_hessian::Bool=true)
+    s::Int64, calculate_hessian::Bool)
 
   # TODO: This line, too, allocates a lot of memory.  Why?
   sf_all.v[1] = sf_all.v[1] + sf_s.v[1]
