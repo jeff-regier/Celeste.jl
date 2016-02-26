@@ -515,7 +515,11 @@ function profile_stuff()
   star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
   sbs = ElboDeriv.load_source_brightnesses(mp);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, mp.S, mp.S);
+  ElboDeriv.populate_fsm_vecs!(
+    elbo_vars, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
+
   ElboDeriv.combine_pixel_sources!(elbo_vars, mp, tile_sources, tile, sbs);
+
 
   println("Beginning profiler.")
   Profile.clear_malloc_data()
@@ -530,5 +534,5 @@ profile_stuff()
 
 using Coverage
 res = analyze_malloc("src");
-pn = 10; [ println(res[end - (pn - i)]) for i=1:pn ];
+pn = 20; [ println(res[end - (pn - i)]) for i=1:pn ];
 sum([r.bytes for r in res]) / 1e6
