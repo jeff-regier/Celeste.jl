@@ -228,7 +228,7 @@ function test_elbo()
   function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
     mp_local = unwrap_vp_vector(vp_vec, mp)
     elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
-    elbo.v
+    elbo.v[1]
   end
 
   mp.active_sources = [1];
@@ -298,7 +298,7 @@ function test_tile_likelihood()
 
   function tile_lik_value_wrapper{NumType <: Number}(x::Vector{NumType})
     mp_local = unwrap_vp_vector(x, mp)
-    tile_lik_wrapper_fun(mp_local, false).v
+    tile_lik_wrapper_fun(mp_local, false).v[1]
   end
 
   elbo = tile_lik_wrapper_fun(mp, true);
@@ -345,7 +345,7 @@ function test_add_log_term()
 
     function ad_wrapper_fun{NumType <: Number}(x::Vector{NumType})
       mp_local = unwrap_vp_vector(x, mp)
-      add_log_term_wrapper_fun(mp_local, false).v
+      add_log_term_wrapper_fun(mp_local, false).v[1]
     end
 
     x = wrap_vp_vector(mp, true);
@@ -391,7 +391,7 @@ function test_combine_pixel_sources()
     function wrapper_fun{NumType <: Number}(x::Vector{NumType})
       mp_local = unwrap_vp_vector(x, mp)
       elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
-      test_var ? elbo_vars_local.var_G.v[1] : elbo_vars_local.E_G.v
+      test_var ? elbo_vars_local.var_G.v[1] : elbo_vars_local.E_G.v[1]
     end
 
     x = wrap_vp_vector(mp, true)
@@ -442,7 +442,7 @@ function test_e_g_s_functions()
       mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
       mp_local.vp[s] = x
       elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
-      test_var ? elbo_vars_local.var_G_s.v[1] : elbo_vars_local.E_G_s.v
+      test_var ? elbo_vars_local.var_G_s.v[1] : elbo_vars_local.E_G_s.v[1]
     end
 
     x = mp.vp[s];
@@ -487,6 +487,7 @@ function test_fs1m_derivatives()
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
       mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
+      elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
 
       # Make sure par is as long as the galaxy parameters.
       @assert length(par) == length(shape_standard_alignment[2])
@@ -499,8 +500,8 @@ function test_fs1m_derivatives()
 
       # Raw:
       gcc = gal_mcs[gcc_ind...];
-      ElboDeriv.eval_bvn_pdf_in_place!(elbo_vars, gcc.bmc, x)
-      elbo_vars.f_pre[1] * gcc.e_dev_i
+      ElboDeriv.eval_bvn_pdf_in_place!(elbo_vars_fd, gcc.bmc, x)
+      elbo_vars_fd.f_pre[1] * gcc.e_dev_i
     end
 
     function mp_to_par_gal(mp::ModelParams{Float64})
@@ -574,7 +575,7 @@ function test_fs0m_derivatives()
       elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
       ElboDeriv.accum_star_pos!(
         elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true);
-      elbo_vars_fd.fs0m_vec[s].v
+      elbo_vars_fd.fs0m_vec[s].v[1]
     end
 
     function mp_to_par_star(mp::ModelParams{Float64})
