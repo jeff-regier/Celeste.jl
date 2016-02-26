@@ -84,7 +84,7 @@ function test_objective_wrapper()
     w_grad2 = zeros(Float64, length(x));
     wrapper.f_value_grad!(x[:], w_grad2);
 
-    @test_approx_eq(w_v, elbo_result.v)
+    @test_approx_eq(w_v, elbo_result.v[1])
     @test_approx_eq(w_grad, elbo_grad)
     @test_approx_eq(w_grad, w_grad2)
 
@@ -94,53 +94,7 @@ function test_objective_wrapper()
     this_iter = wrapper.state.f_evals;
     wrapper.f_value(x[:] + 1.0);
     @test wrapper.state.f_evals == this_iter + 1
-
-    # # Check the AD gradient.
-    # ad_grad = wrapper.f_ad_grad(x[:]);
-    # @test_approx_eq ad_grad[:] w_grad
 end
-
-# function test_objective_hessians()
-#     blob, mp, bodies, tiled_blob = SampleData.gen_three_body_dataset();
-#     # Change the tile size.
-#     tiled_blob, mp = ModelInit.initialize_celeste(
-#       blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
-#     mp.active_sources = Int64[2, 3]
-#     trans = Transform.get_mp_transform(mp, loc_width=1.0);
-#     omitted_ids = Int64[];
-#     kept_ids = setdiff(1:length(ids_free), omitted_ids);
-#     x = trans.vp_to_array(mp.vp, omitted_ids);
-#
-#     wrapper =
-#       OptimizeElbo.ObjectiveWrapperFunctions(
-#         mp -> ElboDeriv.elbo(tiled_blob, mp),
-#         mp, trans, kept_ids, omitted_ids);
-#
-#     # Test that the Hessian works in its various flavors.
-#     println("Testing autodiff Hessian...")
-#     w_hess = zeros(Float64, length(x), length(x));
-#     wrapper.f_ad_hessian!(x[:], w_hess);
-#
-#     hess_i, hess_j, hess_val = wrapper.f_ad_hessian_sparse(x[:]);
-#     w_hess_sparse =
-#       OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
-#     @test_approx_eq(w_hess, full(w_hess_sparse))
-#
-#     println("Testing slow autodiff Hessian...")
-#     wrapper_slow_hess =
-#       OptimizeElbo.ObjectiveWrapperFunctions(
-#         mp -> ElboDeriv.elbo(tiled_blob, mp),
-#         mp, trans, kept_ids, omitted_ids, fast_hessian=false);
-#
-#     slow_w_hess = zeros(Float64, length(x), length(x));
-#     wrapper_slow_hess.f_ad_hessian!(x[:], slow_w_hess);
-#     @test_approx_eq(slow_w_hess, w_hess)
-#
-#     hess_i, hess_j, hess_val = wrapper_slow_hess.f_ad_hessian_sparse(x[:]);
-#     slow_w_hess_sparse =
-#       OptimizeElbo.unpack_hessian_vals(hess_i, hess_j, hess_val, size(x));
-#     @test_approx_eq(slow_w_hess, full(slow_w_hess_sparse))
-# end
 
 
 function test_star_optimization()
@@ -170,7 +124,7 @@ function test_single_source_optimization()
   f = ElboDeriv.elbo;
   omitted_ids = Int64[]
 
-  ElboDeriv.elbo_likelihood(tiled_blob, mp).v
+  ElboDeriv.elbo_likelihood(tiled_blob, mp).v[1]
 
   OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=true)
 
@@ -235,8 +189,8 @@ function test_two_body_optimization_newton()
     sum((bfgs_image .- original_image) .^ 2)
 
     # newton beats bfgs on the elbo, though not on the likelihood.
-    elbo_function(tiled_blob, mp_bfgs).v
-    elbo_function(tiled_blob, mp_newton).v
+    elbo_function(tiled_blob, mp_bfgs).v[1]
+    elbo_function(tiled_blob, mp_newton).v[1]
 end
 
 
@@ -259,7 +213,7 @@ function test_kappa_finding()
         for d in 1:D
             ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
         end
-        -accum.v
+        -accum.v[1]
     end
 
     mp.vp[1][ids.k[:, 2]] = [0.01, 0.99]
@@ -283,7 +237,7 @@ function test_kappa_finding()
       for d in 1:D
           ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
       end
-      accum
+      accum.v[1]
     end
 
     mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 1, 2]
@@ -356,7 +310,7 @@ function test_bad_a_init()
     elbo_true2 = ElboDeriv.elbo_likelihood(tiled_blob, mp2)
     mp2.vp[1][ids.a] = [ 0.99, 0.01 ]
     elbo_bad2 = ElboDeriv.elbo_likelihood(tiled_blob, mp2)
-    @test elbo_true2.v > elbo_bad2.v
+    @test elbo_true2.v[1] > elbo_bad2.v[1]
     @test elbo_bad2.d[ids.a[2], 1] > 0
 end
 
@@ -425,7 +379,7 @@ function test_quadratic_optimization()
           unused_blob::TiledBlob, mp::ModelParams{NumType})
 
         val = zero_sensitive_float(CanonicalParams, NumType)
-        val.v = -sum((mp.vp[1] - centers) .^ 2)
+        val.v[1] = -sum((mp.vp[1] - centers) .^ 2)
         val.d[:] = -2.0 * (mp.vp[1] - centers)
         val.h[:, :] = diagm(fill(-2.0, length(CanonicalParams)))
         val
@@ -450,7 +404,7 @@ function test_quadratic_optimization()
         xtol_rel=1e-16, ftol_abs=1e-16)
 
     @test_approx_eq_eps mp.vp[1] centers 1e-6
-    @test_approx_eq_eps quadratic_function(unused_blob, mp).v 0.0 1e-15
+    @test_approx_eq_eps quadratic_function(unused_blob, mp).v[1] 0.0 1e-15
 end
 
 ####################################################

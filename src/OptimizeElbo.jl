@@ -109,7 +109,7 @@ type ObjectiveWrapperFunctions
             # TODO: Add an option to print either the transformed or
             # free parameterizations.
             print_status(mp.vp[mp.active_sources],
-                         f_res.v, f_res.d)
+                         f_res.v[1], f_res.d)
             f_res_trans = transform.transform_sensitive_float(f_res, mp)
 
             # Cache the result.
@@ -127,7 +127,7 @@ type ObjectiveWrapperFunctions
                 svs = [res.d[kept_ids, si] for si in 1:transform.active_S]
                 grad[:] = reduce(vcat, svs)
             end
-            state.scale * res.v, state.scale .* grad
+            state.scale * res.v[1], state.scale .* grad
         end
 
         # The remaining functions are scaled and take matrices.

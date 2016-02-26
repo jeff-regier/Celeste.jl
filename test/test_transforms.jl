@@ -33,7 +33,7 @@ function test_transform_sensitive_float()
 		mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
 		transform.to_vp!(vp_free, mp_local.vp)
 		elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
-		elbo.v
+		elbo.v[1]
 	end
 
 	transform = Transform.get_mp_transform(mp, loc_width=1.0);
@@ -252,7 +252,7 @@ function test_identity_transform()
 	sf = zero_sensitive_float(CanonicalParams, Float64, mp.S);
 	sf.d = rand(length(ids), mp.S)
 	sf_new = transform.transform_sensitive_float(sf, mp);
-	@test_approx_eq sf_new.v sf.v
+	@test_approx_eq sf_new.v[1] sf.v
 	@test_approx_eq sf_new.d sf.d
 	[ @test_approx_eq sf_new.h[s] sf.h[s] for s=1:mp.S]
 end
