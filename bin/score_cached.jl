@@ -1,7 +1,6 @@
 #!/usr/bin/env julia
 
-# This script post-processes the VB results to produce test scores
-# and csv files.
+# This script post-processes the inference results to produce test scores
 
 using Celeste
 using CelesteTypes
@@ -14,41 +13,21 @@ import SloanDigitalSkySurvey: SDSS
 const color_names = ["$(band_letters[i])$(band_letters[i+1])" for i in 1:4]
 
 
-function load_celeste_predictions(model_dir, stamp_id)
-    f = open("$model_dir/$(ARGS[2])-$stamp_id.dat")
-    mp = deserialize(f)
-    close(f)
-    mp
-end
-
-
 type DistanceException <: Exception
 end
 
 
-function center_obj(vp::Vector{Vector{Float64}})
-    distances = [norm(vs[ids.u] .- 51/2) for vs in vp]
-    s = findmin(distances)[2]
-    if distances[s] > 2.
-        throw(DistanceException())
-    end
-    vp[s]
-end
-
-
-function center_obj(catalog_ce::Vector{CatalogEntry}, catalog_df::DataFrame)
-    @assert length(catalog_ce) == size(catalog_df, 1)
-    distances = [norm(ce.pos .- 26.) for ce in catalog_ce]
-    idx = findmin(distances)[2]
-    catalog_ce[idx], catalog_df[idx,:]
-end
-
-
-function init_results_df(stamp_ids)
-    N = length(stamp_ids)
+"""
+Initialize and return a data frame that stores the results for one
+method (i.e., Celeste, Primary, or Coadd) for a collection of objects,
+in standardized units.
+Let's call the type of the returned value a "results data frame".
+"""
+function init_results_df(object_ids)
+    N = length(object_ids)
     color_col_names = ["color_$cn" for cn in color_names]
     color_sd_col_names = ["color_$(cn)_sd" for cn in color_names]
-    col_names = ["stamp_id", "pos1", "pos2", "is_star",
+    col_names = ["objid", "pos1", "pos2", "is_star",
             "star_flux_r", "star_flux_r_sd",
             "gal_flux_r", "gal_flux_r_sd",
             ["star_$c" for c in color_col_names],
@@ -59,15 +38,20 @@ function init_results_df(stamp_ids)
     col_symbols = Symbol[symbol(cn) for cn in col_names]
     col_types = Array(DataType, length(col_names))
     fill!(col_types, Float64)
-    col_types[1] = String
+    col_types[1] = ASCIIString
     df = DataFrame(col_types, N)
     names!(df, col_symbols)
-    df[:stamp_id] = stamp_ids
+    df[:objid] = object_ids
     df
 end
 
 
-function load_ce!(i::Int64, ce::CatalogEntry, stamp_id::String, df::DataFrame)
+"""
+This function loads one catalog entry into row of i of df, a results data
+frame.
+ce = Catalog Entry, a row of an astronomical catalog
+"""
+function load_ce!(i::Int64, ce::CatalogEntry, df::DataFrame)
     df[i, :pos1] = ce.pos[1]
     df[i, :pos2] = ce.pos[2]
     df[i, :is_star] = ce.is_star ? 1. : 0.
@@ -92,25 +76,11 @@ function load_ce!(i::Int64, ce::CatalogEntry, stamp_id::String, df::DataFrame)
 end
 
 
-function load_photo_obj!(i::Int64, stamp_id::String,
-            is_s82::Bool, is_synth::Bool, df::DataFrame)
-    blob = Images.load_stamp_blob(ENV["STAMP"], stamp_id)
-    cat_df = is_s82 ?
-        SDSS.load_stamp_catalog_df(ENV["STAMP"], "s82-$stamp_id", blob) :
-        SDSS.load_stamp_catalog_df(ENV["STAMP"], stamp_id, blob, match_blob=true)
-    cat_ce = is_synth ? begin
-            f = open(ENV["STAMP"]"/cat-synth-$stamp_id.dat")
-            the_cat_ce = deserialize(f)
-            close(f)
-            the_cat_ce
-        end : is_s82 ?
-        SDSS.load_stamp_catalog(ENV["STAMP"], "s82-$stamp_id", blob) :
-        SDSS.load_stamp_catalog(ENV["STAMP"], stamp_id, blob, match_blob=true)
-    ce, ce_df = center_obj(cat_ce, cat_df)
-    load_ce!(i, ce, stamp_id, df)
-end
-
-
+"""
+This function converts the parameters from Celeste for one light source
+to a CatalogEntry. (which can be passed to load_ce!)
+It only needs to be called by load_celeste_obj!
+"""
 function convert(::Type{CatalogEntry}, vs::Vector{Float64}; objid="converted")
     function get_fluxes(i::Int64)
         ret = Array(Float64, 5)
@@ -135,11 +105,19 @@ function convert(::Type{CatalogEntry}, vs::Vector{Float64}; objid="converted")
 end
 
 
-function load_celeste_obj!(i::Int64, stamp_id::String, df::DataFrame)
-    mp = load_celeste_predictions(ARGS[1], stamp_id)
-    vs = center_obj(mp.vp)
+"""
+This function is a wrapper around `load_ce!`, for use when loading
+the Celeste catalog (rather than Primary or Coadd, which can call load_ce!
+directly).
+
+i is the row number in df.
+In typical use:
+    df = celeste_df
+    vs = mp.vp[s] and s is an integer identifying a particular source.
+"""
+function load_celeste_obj!(i::Int64, vs::Vector{Float64}, df::DataFrame)
     ce = convert(CatalogEntry, vs)
-    load_ce!(i, ce, stamp_id, df)
+    load_ce!(i, ce, df)
 
     df[i, :is_star] = vs[ids.a[1]]
 
@@ -155,39 +133,26 @@ function load_celeste_obj!(i::Int64, stamp_id::String, df::DataFrame)
 end
 
 
-function load_df(stamp_ids, per_stamp_callback::Function)
-    N = length(stamp_ids)
-    df = init_results_df(stamp_ids)
-
-    for i in 1:N
-        stamp_id = stamp_ids[i]
-        df[i, :stamp_id] = stamp_id
-        per_stamp_callback(i, stamp_id, df)
-    end
-
-    df
-end
-
-
-function degrees_to_diff(a, b)
-    angle_between = abs(a - b) % 180
-    min(angle_between, 180 - angle_between)
-end
-
-
+"""
+Given two results data frame, one containing ground truth (i.e Coadd)
+and one containing predictions (i.e., either Primary of Celeste),
+compute an a data frame containing each prediction's error.
+(It's not an average of the errors, it's each error.)
+Let's call the return type of this function an "error data frame".
+"""
 function get_err_df(truth::DataFrame, predicted::DataFrame)
     color_cols = [symbol("color_$cn") for cn in color_names]
     abs_err_cols = [:gal_fracdev, :gal_ab, :gal_scale]
-    col_symbols = [:stamp_id, :position, :missed_stars, :missed_gals,
+    col_symbols = [:objid, :position, :missed_stars, :missed_gals,
         :flux_r, color_cols, abs_err_cols, :gal_angle]
 
     col_types = Array(DataType, length(col_symbols))
     fill!(col_types, Float64)
-    col_types[1] = String
+    col_types[1] = ASCIIString
     col_types[[3,4]] = Bool
     ret = DataFrame(col_types, size(truth, 1))
     names!(ret, col_symbols)
-    ret[:stamp_id] = truth[:stamp_id]
+    ret[:objid] = truth[:objid]
 
     predicted_gal = convert(BitArray, predicted[:is_star] .< .5)
     true_gal = convert(BitArray, truth[:is_star] .< .5)
@@ -215,35 +180,33 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
         ret[n] = abs(predicted[n] - truth[n])
     end
 
+    function degrees_to_diff(a, b)
+        angle_between = abs(a - b) % 180
+        min(angle_between, 180 - angle_between)
+    end
+
     ret[:gal_angle] = degrees_to_diff(truth[:gal_angle], predicted[:gal_angle])
 
     ret
 end
 
 
-function print_latex_table(df)
-    for i in 1:size(df, 1)
-        is_num_wrong = (df[i, :field] in [:missed_stars, :missed_gals])::Bool
-        @printf("%-12s & %5.2f & %5.2f & %5.2f (%.2f) & %d \\\\\n",
-            df[i, :field],
-            df[i, :primary] * (is_num_wrong ? df[i, :N] : 1.),
-            df[i, :celeste] * (is_num_wrong ? df[i, :N] : 1.),
-            df[i, :diff],
-            df[i, :diff_sd],
-            df[i, :N])
-    end
-    println("")
-end
+"""
+For the particular field, this method
+evaluates cached results for both Celeste and Primary,
+with ground truth from Coadd.
+The returned value is a data frame.
+"""
+function score_field(run_num, camcol_num, field_num)
+    #TODO: load the object ids for this field, the object ids from
+    #Primary (not Coadd) that is.
 
+    coadd_df = init_results_df(object_ids)
+    primary_df = init_results_df(object_ids)
+    celeste_df = init_results_df(object_ids)
 
-function df_score(stamp_ids)
-    coadd_callback(i, stamp_id, df) = ARGS[2] == "V" ?
-        load_photo_obj!(i, stamp_id, true, false, df) :
-        load_photo_obj!(i, stamp_id, true, true, df)
-    coadd_df = load_df(stamp_ids, coadd_callback)
-    primary_callback(i, stamp_id, df) = load_photo_obj!(i, stamp_id, false, false, df)
-    primary_df = load_df(stamp_ids, primary_callback)
-    celeste_df = load_df(stamp_ids, load_celeste_obj!)
+    # TODO: populate coadd_df and primary_df through calls to `load_ce!`
+    # TODO: populate celeste_df through calls to 'load_celeste_obj!`
 
     primary_err = get_err_df(coadd_df, primary_df)
     celeste_err = get_err_df(coadd_df, celeste_df)
@@ -253,7 +216,7 @@ function df_score(stamp_ids)
     names!(scores_df, [:field, :primary, :celeste, :diff, :diff_sd, :N])
     for i in 1:(size(celeste_err, 2) - 1)
         n = names(celeste_err)[i + 1]
-        if n == :stamp_id
+        if n == :objid
             continue
         end
         good_row = !isna(primary_err[:, n]) & !isna(celeste_err[:, n])
@@ -284,29 +247,14 @@ function df_score(stamp_ids)
         end
     end
 
-    if length(ARGS) >= 3 && ARGS[3] == "--csv"
-        writetable("coadd.csv", coadd_df)
-        writetable("primary.csv", primary_df)
-        writetable("celeste_$(ARGS[2]).csv", celeste_df)
-    end
-    if length(ARGS) >= 3 && ARGS[3] == "--latex"
-        print_latex_table(scores_df)
-    end
     scores_df
 end
 
 
-function filter_filenames(rx, filenames)
-    s_filenames = filter((fn)->ismatch(rx, fn), filenames)
-    String[match(rx, fn).captures[1] for fn in s_filenames]
+# This script scores predictions by for a particular field
+# by calling the script's top-level function, "score_field".
+if length(ARGS) == 3
+    run_num, camcol_num, field_num = ARGS
+    println( score_field(run_num, camcol_num, field_num) )
 end
 
-
-if length(ARGS) >= 2
-    filenames = readdir(ARGS[1])
-    s_ids = filter_filenames(r"S-(.*)\.dat", filenames)
-    v_ids = filter_filenames(r"V-(.*)\.dat", filenames)
-    stamp_ids = intersect(s_ids, v_ids)
-
-    println(df_score(stamp_ids))
-end
