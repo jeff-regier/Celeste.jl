@@ -121,7 +121,7 @@ function test_real_image()
     end
     local_elbo = ElboDeriv.elbo(
       very_trimmed_tiled_blob, mp_local, calculate_derivs=false)
-    local_elbo.v
+    local_elbo.v[1]
   end
 
   vp_vec = trimmed_mp.vp[s];
@@ -145,6 +145,8 @@ function test_dual_numbers()
   blob, mp, body, tiled_blob = gen_sample_star_dataset();
   mp_dual = CelesteTypes.forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
   elbo_dual = ElboDeriv.elbo_likelihood(tiled_blob, mp_dual);
+
+  true
 end
 
 
@@ -174,12 +176,12 @@ function test_derivative_flags()
   elbo = ElboDeriv.elbo(tiled_blob, mp);
 
   elbo_noderiv = ElboDeriv.elbo(tiled_blob, mp; calculate_derivs=false);
-  @test_approx_eq elbo.v elbo_noderiv.v
+  @test_approx_eq elbo.v[1] elbo_noderiv.v
   @test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
   @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
 
   elbo_nohess = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
-  @test_approx_eq elbo.v elbo_nohess.v
+  @test_approx_eq elbo.v[1] elbo_nohess.v
   @test_approx_eq elbo.d elbo_nohess.d
   @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
 end
@@ -205,8 +207,8 @@ function test_active_sources()
   mp.active_sources = [2]
   elbo_lik_2 = ElboDeriv.elbo_likelihood(tiled_blob, mp);
 
-  @test_approx_eq elbo_lik_12.v elbo_lik_1.v
-  @test_approx_eq elbo_lik_12.v elbo_lik_2.v
+  @test_approx_eq elbo_lik_12.v[1] elbo_lik_1.v
+  @test_approx_eq elbo_lik_12.v[1] elbo_lik_2.v
 
   @test_approx_eq elbo_lik_12.d[:, 1] elbo_lik_1.d[:, 1]
   @test_approx_eq elbo_lik_12.d[:, 2] elbo_lik_2.d[:, 1]
@@ -226,7 +228,7 @@ function test_elbo()
   function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
     mp_local = unwrap_vp_vector(vp_vec, mp)
     elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
-    elbo.v
+    elbo.v[1]
   end
 
   mp.active_sources = [1];
@@ -286,8 +288,8 @@ function test_tile_likelihood()
     if ElboDerivs.Threaded
       for i in 2:nthreads()
         CelesteTypes.add_scaled_sfs!(
-          elbo_vars_array[1].elbo, elbo_vars_array[i].elbo,
-          calculate_hessian=elbo_vars_array[1].calculate_hessian &&
+          elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
+          elbo_vars_array[1].calculate_hessian &&
             elbo_vars_array[1].calculate_derivs)
       end
     end
@@ -296,7 +298,7 @@ function test_tile_likelihood()
 
   function tile_lik_value_wrapper{NumType <: Number}(x::Vector{NumType})
     mp_local = unwrap_vp_vector(x, mp)
-    tile_lik_wrapper_fun(mp_local, false).v
+    tile_lik_wrapper_fun(mp_local, false).v[1]
   end
 
   elbo = tile_lik_wrapper_fun(mp, true);
@@ -343,7 +345,7 @@ function test_add_log_term()
 
     function ad_wrapper_fun{NumType <: Number}(x::Vector{NumType})
       mp_local = unwrap_vp_vector(x, mp)
-      add_log_term_wrapper_fun(mp_local, false).v
+      add_log_term_wrapper_fun(mp_local, false).v[1]
     end
 
     x = wrap_vp_vector(mp, true);
@@ -389,7 +391,7 @@ function test_combine_pixel_sources()
     function wrapper_fun{NumType <: Number}(x::Vector{NumType})
       mp_local = unwrap_vp_vector(x, mp)
       elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
-      test_var ? elbo_vars_local.var_G.v : elbo_vars_local.E_G.v
+      test_var ? elbo_vars_local.var_G.v[1] : elbo_vars_local.E_G.v[1]
     end
 
     x = wrap_vp_vector(mp, true)
@@ -440,7 +442,7 @@ function test_e_g_s_functions()
       mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
       mp_local.vp[s] = x
       elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
-      test_var ? elbo_vars_local.var_G_s.v : elbo_vars_local.E_G_s.v
+      test_var ? elbo_vars_local.var_G_s.v[1] : elbo_vars_local.E_G_s.v[1]
     end
 
     x = mp.vp[s];
@@ -449,7 +451,7 @@ function test_e_g_s_functions()
 
     # Sanity check the variance value.
     @test_approx_eq(elbo_vars.var_G_s.v,
-                    elbo_vars.E_G2_s.v - (elbo_vars.E_G_s.v ^ 2))
+                    elbo_vars.E_G2_s.v[1] - (elbo_vars.E_G_s.v[1] ^ 2))
 
     sf = test_var ? deepcopy(elbo_vars.var_G_s) : deepcopy(elbo_vars.E_G_s);
 
@@ -485,6 +487,7 @@ function test_fs1m_derivatives()
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
       mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
+      elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
 
       # Make sure par is as long as the galaxy parameters.
       @assert length(par) == length(shape_standard_alignment[2])
@@ -497,8 +500,8 @@ function test_fs1m_derivatives()
 
       # Raw:
       gcc = gal_mcs[gcc_ind...];
-      py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x)
-      f_pre * gcc.e_dev_i
+      ElboDeriv.eval_bvn_pdf_in_place!(elbo_vars_fd, gcc.bmc, x)
+      elbo_vars_fd.f_pre[1] * gcc.e_dev_i
     end
 
     function mp_to_par_gal(mp::ModelParams{Float64})
@@ -515,13 +518,13 @@ function test_fs1m_derivatives()
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
     clear!(elbo_vars.fs1m_vec[s]);
     ElboDeriv.accum_galaxy_pos!(
-      elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian);
+      elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian, true);
     fs1m = deepcopy(elbo_vars.fs1m_vec[s]);
 
     # Two sanity checks.
     gcc = gal_mcs[gcc_ind...];
     clear!(elbo_vars.fs1m_vec[s]);
-    v = ElboDeriv.eval_bvn_log_density(gcc.bmc, x);
+    v = ElboDeriv.eval_bvn_log_density(elbo_vars, gcc.bmc, x);
     gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
     pc = mp.patches[s, b].psf[gcc_ind[1]]
 
@@ -571,8 +574,8 @@ function test_fs0m_derivatives()
       star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
       elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
       ElboDeriv.accum_star_pos!(
-        elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
-      elbo_vars_fd.fs0m_vec[s].v
+        elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true);
+      elbo_vars_fd.fs0m_vec[s].v[1]
     end
 
     function mp_to_par_star(mp::ModelParams{Float64})
@@ -588,7 +591,7 @@ function test_fs0m_derivatives()
     clear!(elbo_vars.fs0m_vec[s])
     star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
     ElboDeriv.accum_star_pos!(
-      elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian);
+      elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true);
     fs0m = deepcopy(elbo_vars.fs0m_vec[s])
 
     test_with_autodiff(f_wrap_star, par_star, fs0m)
@@ -638,7 +641,7 @@ function test_bvn_derivatives()
   par = wrap(x, sigma);
 
   # Sanity check
-  @test_approx_eq ElboDeriv.eval_bvn_log_density(bvn, x) f_wrap(par)
+  @test_approx_eq ElboDeriv.eval_bvn_log_density(elbo_vars, bvn, x) f_wrap(par)
 
   ad_grad = ForwardDiff.gradient(f_wrap, par);
   @test_approx_eq elbo_vars.bvn_x_d ad_grad[x_ids]
@@ -787,9 +790,9 @@ function test_galaxy_cache_component()
             e_dev_dir, e_dev_i_fd, gp, psf,
             u_pix, e_axis, e_angle, e_scale, false, false);
 
-    py1, py2, f_pre = ElboDeriv.eval_bvn_pdf(gcc.bmc, x);
+    ElboDeriv.eval_bvn_pdf_in_place!(elbo_vars_fd, gcc.bmc, x);
 
-    log(f_pre)
+    log(elbo_vars_fd.f_pre[1])
   end
 
   function wrap_par{T <: Number}(
@@ -892,6 +895,7 @@ function test_brightness_hessian()
     println("Testing brightness $(squares_string) for band $b, type $i")
     function wrap_source_brightness{NumType <: Number}(
         vp::Vector{NumType}, calculate_derivs::Bool)
+
       sb = ElboDeriv.SourceBrightness(vp, calculate_derivs=calculate_derivs);
       if squares
         return deepcopy(sb.E_ll_a[b, i])
@@ -906,13 +910,13 @@ function test_brightness_hessian()
       for b_i in 1:length(brightness_standard_alignment[i])
         vp[brightness_standard_alignment[i][b_i]] = bright_vp[b_i]
       end
-      wrap_source_brightness(vp, false).v
+      wrap_source_brightness(vp, false).v[1]
     end
 
     bright_vp = mp.vp[1][brightness_standard_alignment[i]];
     bright = wrap_source_brightness(mp.vp[1], true);
 
-    @test_approx_eq bright.v wrap_source_brightness_value(bright_vp);
+    @test_approx_eq bright.v[1] wrap_source_brightness_value(bright_vp);
 
     ad_grad = ForwardDiff.gradient(wrap_source_brightness_value, bright_vp);
     @test_approx_eq ad_grad bright.d[:, 1]

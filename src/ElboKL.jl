@@ -13,7 +13,7 @@ function subtract_kl_c{NumType <: Number}(
 
   pp_kl_cid = KL.gen_diagmvn_mvn_kl(pp.c_mean[:, d, i], pp.c_cov[:, :, d, i])
   # (v, (d_c1, d_c2)) = pp_kl_cid(vs[ids.c1[:, i]], vs[ids.c2[:, i]])
-  # accum.v -= v * a * k
+  # accum.v[1] -= v * a * k
   -pp_kl_cid(vs[ids.c1[:, i]], vs[ids.c2[:, i]]) * a * k
 
   # accum.d[ids.k[d, i], s] -= a * v
@@ -30,7 +30,7 @@ function subtract_kl_k{NumType <: Number}(
 
     pp_kl_ki = KL.gen_categorical_kl(pp.k[:, i])
     # (v, (d_k,)) = pp_kl_ki(vs[ids.k[:, i]])
-    # accum.v -= v * vs[ids.a[i]]
+    # accum.v[1] -= v * vs[ids.a[i]]
     # accum.d[ids.k[:, i], s] -= d_k .* vs[ids.a[i]]
     # accum.d[ids.a[i], s] -= v
 
@@ -49,7 +49,7 @@ function subtract_kl_r{NumType <: Number}(
     pp_kl_r = KL.gen_normal_kl(pp.r_mean[i], pp.r_var[i])
     # (v, (d_r1, d_r2)) = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
 
-    # accum.v -= v * a
+    # accum.v[1] -= v * a
     # accum.d[ids.r1[i], s] -= d_r1 .* a
     # accum.d[ids.r2[i], s] -= d_r2 .* a
     # accum.d[ids.a[i], s] -= v
@@ -66,7 +66,7 @@ Subtract the KL divergence from the prior for a
 function subtract_kl_a{NumType <: Number}(vs::Vector{NumType}, pp::PriorParams)
     pp_kl_a = KL.gen_categorical_kl(pp.a)
     # (v, (d_a,)) = pp_kl_a(vs[ids.a])
-    # accum.v -= v
+    # accum.v[1] -= v
     # accum.d[ids.a, s] -= d_a
     -pp_kl_a(vs[ids.a])
 end
@@ -107,14 +107,14 @@ function subtract_kl!{NumType <: Number}(
         ForwardDiff.hessian(subtract_kl_value_wrapper, vp_vec, ForwardDiff.AllResults)
       accum.h += hess
       accum.d += reshape(ForwardDiff.gradient(all_results), P, Sa);
-      accum.v += ForwardDiff.value(all_results)
+      accum.v[1] += ForwardDiff.value(all_results)
     else
       grad, all_results =
         ForwardDiff.gradient(subtract_kl_value_wrapper, vp_vec, ForwardDiff.AllResults)
       accum.d += reshape(grad, P, Sa);
-      accum.v += ForwardDiff.value(all_results)
+      accum.v[1] += ForwardDiff.value(all_results)
     end
   else
-    accum.v += subtract_kl_value_wrapper(vp_vec)
+    accum.v[1] += subtract_kl_value_wrapper(vp_vec)
   end
 end

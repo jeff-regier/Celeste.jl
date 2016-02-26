@@ -23,7 +23,10 @@ println("Calculating ELBO.")
 
 # let's time it without any overhead from profiling
 @time elbo = ElboDeriv.elbo(tiled_blob, mp, calculate_hessian=true);
+@time elbo = ElboDeriv.elbo(tiled_blob, mp, calculate_hessian=true);
 
 Profile.init(10^8, 0.001)
-@profile elbo = ElboDeriv.elbo(tiled_blob, mp, calculate_hessian=false);
+Profile.clear_malloc_data()
+#@profile elbo = ElboDeriv.elbo(tiled_blob, mp, calculate_hessian=false);
+@profile elbo = ElboDeriv.elbo_likelihood(tiled_blob, mp, calculate_hessian=false);
 Profile.print(format=:flat)

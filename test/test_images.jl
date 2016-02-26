@@ -45,7 +45,7 @@ function test_blob()
         convert(Vector{ASCIIString}, cat_df[:objid])
   tiled_blob, mp =
     ModelInit.initialize_celeste(blob, cat_entries, patch_radius=1e-6,
-                                 fit_psf=false);
+                                 fit_psf=false, tile_width=20);
 
   # Just check some basic facts about the catalog.
   @test size(cat_df)[1] == 805

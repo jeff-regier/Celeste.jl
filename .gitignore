@@ -6,3 +6,6 @@
 
 # omit converage files
 *.cov
+
+# Omit memory profiling output
+**/*.mem
