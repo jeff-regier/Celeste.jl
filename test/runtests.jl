@@ -11,8 +11,9 @@ import Synthetic
 anyerrors = false
 
 # Ensure that test images are available.
+const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
 wd = pwd()
-cd(joinpath(Pkg.dir("Celeste"), "dat", "sample_field"))
+cd(datadir)
 run(`make`)
 cd(wd)
 
