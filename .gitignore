@@ -11,4 +11,4 @@
 **/*.mem
 
 # Require force to add any data
-dat/*
+test/data/*

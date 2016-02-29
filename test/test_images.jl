@@ -35,11 +35,11 @@ function test_blob()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
 
-  blob = SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
+  blob = SkyImages.load_sdss_blob(datadir, run_num, camcol_num, field_num);
   for b=1:5
     @test !blob[b].constant_background
   end
-  cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+  cat_df = SDSS.load_catalog_df(datadir, run_num, camcol_num, field_num);
   cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
   @test ASCIIString[cat_entry.objid for cat_entry in cat_entries ] ==
         convert(Vector{ASCIIString}, cat_df[:objid])

@@ -85,13 +85,12 @@ function test_real_image()
   # TODO: replace this with stamp tests having non-trivial WCS transforms.
   # TODO: streamline the creation of small real images.
 
-  field_dir = joinpath(dat_dir, "sample_field")
   run_num = "003900"
   camcol_num = "6"
   field_num = "0269"
 
-  blob = SkyImages.load_sdss_blob(field_dir, run_num, camcol_num, field_num);
-  cat_df = SDSS.load_catalog_df(field_dir, run_num, camcol_num, field_num);
+  blob = SkyImages.load_sdss_blob(datadir, run_num, camcol_num, field_num);
+  cat_df = SDSS.load_catalog_df(datadir, run_num, camcol_num, field_num);
   cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
   tiled_blob, mp =
     ModelInit.initialize_celeste(blob, cat_entries, fit_psf=false, tile_width=20);
