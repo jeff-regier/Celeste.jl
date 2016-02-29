@@ -9,3 +9,6 @@
 
 # Omit memory profiling output
 **/*.mem
+
+# Require force to add any data
+dat/*

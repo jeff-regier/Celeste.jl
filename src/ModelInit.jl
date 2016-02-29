@@ -386,45 +386,51 @@ function initialize_model_params(
     fit_psf::Bool=true, patch_radius::Float64=-1., radius_from_cat::Bool=true,
     scale_patch_size::Float64=1.0)
 
-  println("Intializing ModelParams.")
-  @assert length(tiled_blob) == length(blob)
-  @assert(length(cat) > 0,
-          "Cannot initilize model parameters with no catalog entries")
+    println("Intializing ModelParams.")
+    @assert length(tiled_blob) == length(blob)
+    @assert(length(cat) > 0,
+            "Cannot initilize model parameters with no catalog entries")
 
-  # If patch_radius is set by the caller, don't use the radius from the catalog.
-  if patch_radius != -1.
-    radius_from_cat = false
-  end
-  if !radius_from_cat
-    @assert(patch_radius > 0.,
-            "If !radius_from_cat, you must specify a positive patch_radius.")
-  end
-
-  println("Getting VP from sources.")
-  vp = Array{Float64, 1}[init_source(ce) for ce in cat]
-  mp = ModelParams(vp, sample_prior())
-  mp.objids = ASCIIString[ cat_entry.objid for cat_entry in cat]
-
-  mp.patches = Array(SkyPatch, mp.S, length(blob))
-  mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
-
-  println("Processing the bands.")
-  for b = 1:length(blob)
-    print("  Initializing band $b patches.")
-    for s=1:mp.S
-      (s % 10  == 0) && print(".")
-      mp.patches[s, b] = radius_from_cat ?
-        SkyPatch(cat[s], blob[b], fit_psf=fit_psf,
-                 scale_patch_size=scale_patch_size):
-        SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
+    # If patch_radius is set by the caller, don't use the radius from
+    # the catalog.
+    if patch_radius != -1.
+        radius_from_cat = false
     end
-    println("  Initializing band $b tiled image sources.")
-    mp.tile_sources[b] =
-      get_tiled_image_sources(tiled_blob[b], blob[b].wcs, mp.patches[:, b][:])
-  end
-  print("\n")
+    if !radius_from_cat
+        @assert(patch_radius > 0.,
+                "If !radius_from_cat, you must specify a positive patch_radius.")
+    end
 
-  mp
+    println("Getting VP from sources.")
+    vp = Array{Float64, 1}[init_source(ce) for ce in cat]
+    mp = ModelParams(vp, sample_prior())
+    mp.objids = ASCIIString[ cat_entry.objid for cat_entry in cat]
+
+    mp.patches = Array(SkyPatch, mp.S, length(blob))
+    mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
+
+    for b = 1:length(blob)
+        println("Initializing band $b patches.")
+        for s=1:mp.S
+            mp.patches[s, b] = radius_from_cat ?
+            SkyPatch(cat[s], blob[b], fit_psf=fit_psf,
+                     scale_patch_size=scale_patch_size):
+            SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
+        end
+        println("Initializing band $b tiled image sources.")
+        mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b],
+                                                     blob[b].wcs,
+                                                     mp.patches[:, b][:])
+    end
+    print("\n")
+
+    # improved initializations
+    for i=1:length(mp.vp)
+        mp.vp[i][ids.a[1]] = cat[i].is_star ? 0.8: 0.2
+        mp.vp[i][ids.a[2]] = 1.0 - mp.vp[i][ids.a][1]
+    end
+
+    return mp
 end
 
 
