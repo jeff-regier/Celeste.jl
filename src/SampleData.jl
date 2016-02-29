@@ -15,7 +15,7 @@ export sample_star_fluxes, sample_galaxy_fluxes
 export gen_sample_star_dataset, gen_sample_galaxy_dataset
 export gen_two_body_dataset, gen_three_body_dataset, gen_n_body_dataset
 
-const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
+const dat_dir = joinpath(Pkg.dir("Celeste"), "test", "data")
 
 const sample_star_fluxes = [
     4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]

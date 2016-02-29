@@ -16,9 +16,9 @@ import SkyImages
 import WCS.WCSTransform
 import CelesteTypes.SkyPatch
 
+const cfgdir = joinpath(Pkg.dir("Celeste"), "cfg")
 
 function sample_prior()
-    const dat_dir = joinpath(Pkg.dir("Celeste"), "dat")
 
     # set a = [.99, .01] if stars are underrepresented
     # due to the greater flexibility of the galaxy model
@@ -29,11 +29,11 @@ function sample_prior()
     c_mean = Array(Float64, B - 1, D, Ia)
     c_cov = Array(Float64, B - 1, B - 1, D, Ia)
 
-    stars_file = open("$dat_dir/priors/stars$D.dat")
+    stars_file = open(joinpath(cfgdir, "stars$D.dat"))
     r_fit1, k[:, 1], c_mean[:,:,1], c_cov[:,:,:,1] = deserialize(stars_file)
     close(stars_file)
 
-    gals_file = open("$dat_dir/priors/gals$D.dat")
+    gals_file = open(joinpath(cfgdir, "gals$D.dat"))
     r_fit2, k[:, 2], c_mean[:,:,2], c_cov[:,:,:,2] = deserialize(gals_file)
     close(gals_file)
 
