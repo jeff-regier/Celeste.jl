@@ -10,6 +10,12 @@ import Synthetic
 
 anyerrors = false
 
+# Ensure that test images are available.
+wd = pwd()
+cd(joinpath(Pkg.dir("Celeste"), "dat", "sample_field"))
+run(`make`)
+cd(wd)
+
 if length(ARGS) > 0
     testfiles = ["test_$(arg).jl" for arg in ARGS]
 else
