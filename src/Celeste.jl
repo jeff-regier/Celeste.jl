@@ -12,4 +12,11 @@ import KL
 
 using CelesteTypes
 
+using DataFrames
+using JLD
+using FITSIO
+import SloanDigitalSkySurvey.SDSS
+
+include("score.jl")
+
 end # module
