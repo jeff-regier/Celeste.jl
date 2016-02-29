@@ -3,15 +3,16 @@
 using Celeste
 using CelesteTypes
 using DocOpt
-import JLD
+using JLD
 import SloanDigitalSkySurvey: SDSS
+import Base: convert
 
 const DOC =
 """Run Celeste.
 
 Usage:
-  celeste.jl fit <dir> <run> <camcol> <field> [--outdir=<outdir> --part=<k/n>]
-  celeste.jl score <dir> <run> <camcol> <field>
+  celeste.jl infer <dir> <run> <camcol> <field> [--outdir=<outdir> --part=<k/n>]
+  celeste.jl score <dir> <run> <camcol> <field> <reffile> [--outdir=<outdir>]
   celeste.jl -h | --help
   celeste.jl --version
 
@@ -19,9 +20,25 @@ Options:
   -h, --help         Show this screen.
   --version          Show the version.
   --outdir=<outdir>  Write output files for each source to this directory.
-                     Default is to write to input directory.
-  --part=<k/n>       Split sources into `n` parts and only process the
-                     `k`th part.
+                     Default is to write to input directory. When scoring,
+                     this is where celeste result files are read *from*.
+  --part=<k/n>       In inferences, split sources into `n` parts and only
+                     process the `k`th part.
+
+The `infer` step creates files in the output directory `<outdir>` with
+filename format `celeste-<run>-<camcol>-<field>--part-K-M.jld`. The ability
+to process only subsets of sources in a run/camcol/field is simply a
+low-effort way to parallelize and to run shorter jobs.
+
+In the `infer` step, `<outdir>` is searched for output files matching
+`celeste-<run>-<camcol>-<field>-*.jld` and all sources are
+concatenated.  A \"truth\" catalog from `<reffile>`, a FITS file
+manually created by running a CasJobs query on the Stripe82 database,
+based on RA/Dec (see Celeste README for the query). It is expected
+that every Celeste source should have a match in this \"truth\"
+catalog, otherwise an error is thrown. So, we need to use (run,
+camcol, field) combinations fall entirely within the RA/Dec patch used
+in that query.
 """
 
 const TILE_WIDTH = 20
@@ -39,8 +56,7 @@ function parse_part(s)
     end
 end
 
-
-function fit(dir, run, camcol, field, outdir, partnum, parts)
+function infer(dir, run, camcol, field, outdir, partnum, parts)
 
     # get images
     images = SkyImages.load_sdss_blob(dir, run, camcol, field;
@@ -61,6 +77,13 @@ function fit(dir, run, camcol, field, outdir, partnum, parts)
                                                   tile_width=TILE_WIDTH,
                                                   fit_psf=true)
 
+    # Initialize output dictionary
+    nsources = length(minidx:maxidx)
+    out = Dict("obj" => minidx:maxidx,  # index within field
+               "objid" => Array(ASCIIString, nsources),
+               "vp" => Array(Vector{Float64}, nsources),
+               "fit_time"=> Array(Float64, nsources))
+
     # Loop over sources in model
     for i in 1:mp.S
         println("Processing source $i.")
@@ -75,13 +98,6 @@ function fit(dir, run, camcol, field, outdir, partnum, parts)
         mp_s.vp[i][ids.a[1]] = is_star ? 0.8: 0.2
         mp_s.vp[i][ids.a[2]] = 1.0 - mp_s.vp[i][ids.a][1]
 
-        # Skip dim sources
-        if cat_df[cat_row, :psfflux_r][1] < 10
-            continue
-        end
-
-        transform = Transform.get_mp_transform(mp_s);
-
         # TODO: This is slow but would run much faster if you had run
         # limit_to_object_data() first.  Currently that requires the original
         # blob which cannot be saved to an HDF5 file.
@@ -94,41 +110,37 @@ function fit(dir, run, camcol, field, outdir, partnum, parts)
                                     verbose=true, max_iters=MAX_ITERS)
         fit_time = time() - fit_time
 
-        outfile = "$outdir/celeste-$run-$camcol-$field-$i.jld"
-        JLD.save(outfile, Dict("i" => i,
-                               "vp[i]" => mp_s.vp[i],
-                               "result" => result,
-                               "fit_time" => fit_time))
+        out["objid"][i] = objid
+        out["vp"][i] = mp_s.vp[i]
+        out["fit_time"][i] = fit_time
     end
-end
 
-
-"""
-Score all the celeste results for sources in the given (run, camcol, field).
-This is done by finding all files with names matching
-`dir/celeste-RUN-CAMCOL-FIELD-[0-9]*.jld`
-"""
-function score(dir, run, camcol, field)
-    println("score not yet implemented")
+    outfile = "$outdir/celeste-$run-$camcol-$field--part-$partnum-$parts.jld"
+    JLD.save(outfile, out)
 end
 
 
 function main()
     args = docopt(DOC, version=v"0.0.0")
 
-    if args["fit"] || args["score"]
+    if args["infer"] || args["score"]
         dir = args["<dir>"]
         run = @sprintf "%06d" parse(Int, args["<run>"])
         camcol = string(parse(Int, args["<camcol>"]))
         field = @sprintf "%04d" parse(Int, args["<field>"])
+        outdir = (args["--outdir"] === nothing)? dir: args["--outdir"]
 
-        if args["fit"]
+        if args["infer"]
             outdir = (args["--outdir"] === nothing)? dir: args["--outdir"]
             part = (args["--part"] === nothing)? "1/1": args["--part"]
             partnum, parts = parse_part(part)
-            fit(dir, run, camcol, field, outdir, partnum, parts)
+            infer(dir, run, camcol, field, outdir, partnum, parts)
+
         elseif args["score"]
-            score(dir, run, camcol, field)
+            scores = Celeste.score_field(dir, run, camcol, field, outdir,
+                                         args["<reffile>"])
+            println(scores)
+
         end
     end
 end
