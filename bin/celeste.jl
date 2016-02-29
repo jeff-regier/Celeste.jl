@@ -91,16 +91,8 @@ function infer(dir, run, camcol, field, outdir, partnum, parts)
         mp_s = deepcopy(mp);
         mp_s.active_sources = [i]
 
-        # Some sanity checks and improved initialization.
-        objid = mp.objids[i]
-        cat_row = cat_df[:objid] .== objid;
-        is_star = cat_df[cat_row, :is_star][1]
-        mp_s.vp[i][ids.a[1]] = is_star ? 0.8: 0.2
-        mp_s.vp[i][ids.a[2]] = 1.0 - mp_s.vp[i][ids.a][1]
-
         # TODO: This is slow but would run much faster if you had run
-        # limit_to_object_data() first.  Currently that requires the original
-        # blob which cannot be saved to an HDF5 file.
+        # limit_to_object_data() first.
         trimmed_tiled_blob = ModelInit.trim_source_tiles(i, mp_s, tiled_blob;
                                                          noise_fraction=0.1);
 
@@ -110,7 +102,7 @@ function infer(dir, run, camcol, field, outdir, partnum, parts)
                                     verbose=true, max_iters=MAX_ITERS)
         fit_time = time() - fit_time
 
-        out["objid"][i] = objid
+        out["objid"][i] = mp_s.objids[i]
         out["vp"][i] = mp_s.vp[i]
         out["fit_time"][i] = fit_time
     end
