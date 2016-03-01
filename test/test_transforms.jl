@@ -356,6 +356,26 @@ function test_basic_transforms()
 	@test_approx_eq Transform.constrain_to_simplex([Inf, 5]) [1.0, 0.0, 0.0]
 end
 
+function test_enforce_bounds()
+
+
+using Celeste
+using CelesteTypes
+using Base.Test
+using SampleData
+using Transform
+using Compat
+
+import ModelInit
+
+blob, mp, three_bodies = gen_three_body_dataset();
+transform = get_mp_transform(mp);
+
+Transform.enforce_bounds!(mp, transform)
+
+end
+
+
 
 #test_transform_derivatives()
 test_transform_sensitive_float()
