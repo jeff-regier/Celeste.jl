@@ -781,7 +781,7 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
     bounds[si][:r1] = Array(ParamBox, Ia)
     bounds[si][:r2] = Array(ParamBox, Ia)
     for i in 1:Ia
-      bounds[si][:r1][i] = ParamBox(-1.0, 10., 1.0)
+      bounds[si][:r1][i] = ParamBox(-3.0, 10., 1.0)
       bounds[si][:r2][i] = ParamBox(1e-4, 0.1, 1.0)
     end
     bounds[si][:c1] = Array(ParamBox, 4 * Ia)
