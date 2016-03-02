@@ -56,11 +56,26 @@ function parse_part(s)
     end
 end
 
+
+"""
+Fit the Celeste model to a set of sources and write the output to a JLD file.
+
+Args:
+  dir: The directory containing the FITS files.
+  run: An ASCIIstring with the six-digit run number, e.g. "003900"
+  camcol: An ASCIIstring with the camcol, e.g. "6"
+  field: An ASCIIstring with the four-digit field, e.g. "0269"
+  outdir: The directory to write the output jld file.
+  partnum: Which of the 1:parts catalog entries to fit.
+  parts: How many parts to divide the catalog entries into
+
+Returns:
+  Writes a jld file to outdir containing the optimization output.
+"""
 function infer(dir, run, camcol, field, outdir, partnum, parts)
 
     # get images
-    images = SkyImages.load_sdss_blob(dir, run, camcol, field;
-                                      mask_planes=[])
+    images = SkyImages.load_sdss_blob(dir, run, camcol, field)
 
     # load catalog and convert to Array of `CatalogEntry`s.
     cat_df = SDSS.load_catalog_df(dir, run, camcol, field)
@@ -75,7 +90,7 @@ function infer(dir, run, camcol, field, outdir, partnum, parts)
     # initialize tiled images and model parameters
     tiled_blob, mp = ModelInit.initialize_celeste(images, cat_entries,
                                                   tile_width=TILE_WIDTH,
-                                                  fit_psf=true)
+                                                  fit_psf=true);
 
     # Initialize output dictionary
     nsources = length(minidx:maxidx)

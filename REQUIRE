@@ -1,6 +1,7 @@
 julia 0.4
 DataFrames
 Distributions
+DocOpt
 ForwardDiff
 JLD
 Optim
