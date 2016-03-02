@@ -7,16 +7,16 @@ using JLD
 import SloanDigitalSkySurvey: SDSS
 
 const TILE_WIDTH = 20
-const MAX_ITERS = 20
+const MAX_ITERS = 50
 
 """
 Fit the Celeste model to a set of sources and write the output to a JLD file.
 
 Args:
   dir: The directory containing the FITS files.
-  run: An ASCIIstring with the six-digit run number, e.g. "003900"
-  camcol: An ASCIIstring with the camcol, e.g. "6"
-  field: An ASCIIstring with the four-digit field, e.g. "0269"
+  run: An ASCIIString with the six-digit run number, e.g. "003900"
+  camcol: An ASCIIString with the camcol, e.g. "6"
+  field: An ASCIIString with the four-digit field, e.g. "0269"
   outdir: The directory to write the output jld file.
   partnum: Which of the 1:parts catalog entries to fit.
   parts: How many parts to divide the catalog entries into
@@ -24,9 +24,10 @@ Args:
 Returns:
   Writes a jld file to outdir containing the optimization output.
 """
-function infer(dir::ASCIIstring, run::ASCIIstring, camcol::ASCIIstring,
-               field::ASCIIstring, outdir::ASCIIstring,
-               partnum::Int64, parts::Int64)
+function infer(
+      dir::AbstractString, run::AbstractString, camcol::AbstractString,
+      field::AbstractString, outdir::AbstractString,
+      partnum::Int64, parts::Int64)
 
     # get images
     images = SkyImages.load_sdss_blob(dir, run, camcol, field)
