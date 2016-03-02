@@ -41,8 +41,7 @@ camcol, field) combinations fall entirely within the RA/Dec patch used
 in that query.
 """
 
-const TILE_WIDTH = 20
-const MAX_ITERS = 20
+import joinpath(Pkg.dir("Celeste"), "src/api.jl"
 
 """
 Parse a string like \"1/3\" and return (1, 3).
@@ -54,61 +53,6 @@ function parse_part(s)
     else
         error("part must be two integers separated by `/`.")
     end
-end
-
-function infer(dir, run, camcol, field, outdir, partnum, parts)
-
-    # get images
-    images = SkyImages.load_sdss_blob(dir, run, camcol, field;
-                                      mask_planes=[])
-
-    # load catalog and convert to Array of `CatalogEntry`s.
-    cat_df = SDSS.load_catalog_df(dir, run, camcol, field)
-    cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, images)
-
-    # limit to just the part of the catalog specified.
-    partsize = length(cat_entries) / parts
-    minidx = round(Int, partsize*(partnum-1)) + 1
-    maxidx = round(Int, partsize*partnum)
-    cat_entries = cat_entries[minidx:maxidx]
-
-    # initialize tiled images and model parameters
-    tiled_blob, mp = ModelInit.initialize_celeste(images, cat_entries,
-                                                  tile_width=TILE_WIDTH,
-                                                  fit_psf=true)
-
-    # Initialize output dictionary
-    nsources = length(minidx:maxidx)
-    out = Dict("obj" => minidx:maxidx,  # index within field
-               "objid" => Array(ASCIIString, nsources),
-               "vp" => Array(Vector{Float64}, nsources),
-               "fit_time"=> Array(Float64, nsources))
-
-    # Loop over sources in model
-    for i in 1:mp.S
-        println("Processing source $i.")
-
-        mp_s = deepcopy(mp);
-        mp_s.active_sources = [i]
-
-        # TODO: This is slow but would run much faster if you had run
-        # limit_to_object_data() first.
-        trimmed_tiled_blob = ModelInit.trim_source_tiles(i, mp_s, tiled_blob;
-                                                         noise_fraction=0.1);
-
-        fit_time = time()
-        iter_count, max_f, max_x, result =
-            OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_blob, mp_s;
-                                    verbose=true, max_iters=MAX_ITERS)
-        fit_time = time() - fit_time
-
-        out["objid"][i] = mp_s.objids[i]
-        out["vp"][i] = mp_s.vp[i]
-        out["fit_time"][i] = fit_time
-    end
-
-    outfile = "$outdir/celeste-$run-$camcol-$field--part-$partnum-$parts.jld"
-    JLD.save(outfile, out)
 end
 
 
