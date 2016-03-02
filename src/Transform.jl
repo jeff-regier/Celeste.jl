@@ -893,7 +893,7 @@ function enforce_bounds!{NumType <: Number}(
   @assert mp.S == transform.S
   @assert length(mp.active_sources) == transform.active_S
 
-	for sa=1:transform.active_S, (param, constraint_vec) in transform.bounds[sa]
+  for sa=1:transform.active_S, (param, constraint_vec) in transform.bounds[sa]
     s = mp.active_sources[sa]
     is_box = isa(constraint_vec, Array{ParamBox})
     if is_box
