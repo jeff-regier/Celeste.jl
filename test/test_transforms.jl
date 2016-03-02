@@ -357,27 +357,21 @@ function test_basic_transforms()
 end
 
 function test_enforce_bounds()
+	blob, mp, three_bodies = gen_three_body_dataset();
+	transform = get_mp_transform(mp);
 
+	mp.vp[1][ids.a[1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
+	mp.vp[2][ids.r1[1]] = transform.bounds[2][:r1][1].lower_bound - 1.0
+	mp.vp[2][ids.r1[2]] = transform.bounds[2][:r1][1].upper_bound + 1.0
+	mp.vp[3][ids.k[1, 1]] = transform.bounds[3][:k][1, 1].lower_bound - 0.00001
 
-using Celeste
-using CelesteTypes
-using Base.Test
-using SampleData
-using Transform
-using Compat
-
-import ModelInit
-
-blob, mp, three_bodies = gen_three_body_dataset();
-transform = get_mp_transform(mp);
-
-Transform.enforce_bounds!(mp, transform)
+	@test_throws Exception transform.from_vp(mp.vp)
+	Transform.enforce_bounds!(mp, transform)
+	transform.from_vp(mp.vp) # Check that it now works
 
 end
 
 
-
-#test_transform_derivatives()
 test_transform_sensitive_float()
 test_transform_box_functions()
 test_box_derivatives()
@@ -387,3 +381,4 @@ test_identity_transform()
 test_parameter_conversion()
 test_transform_simplex_functions()
 test_basic_transforms()
+test_enforce_bounds()

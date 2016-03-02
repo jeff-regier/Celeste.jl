@@ -60,13 +60,17 @@ end
 """
 Fit the Celeste model to a set of sources and write the output to a JLD file.
 
-run, camcol, and field should be strings, e.g.
-run = "003900"
-camcol = "6"
-field = "0269"
-dir = joinpath(Pkg.dir("Celeste"), "dat")
+Args:
+  dir: The directory containing the FITS files.
+  run: An ASCIIstring with the six-digit run number, e.g. "003900"
+  camcol: An ASCIIstring with the camcol, e.g. "6"
+  field: An ASCIIstring with the four-digit field, e.g. "0269"
+  outdir: The directory to write the output jld file.
+  partnum: Which of the 1:parts catalog entries to fit.
+  parts: How many parts to divide the catalog entries into
 
-
+Returns:
+  Writes a jld file to outdir containing the optimization output.
 """
 function infer(dir, run, camcol, field, outdir, partnum, parts)
 
