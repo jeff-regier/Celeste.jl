@@ -369,6 +369,20 @@ function test_enforce_bounds()
 	Transform.enforce_bounds!(mp, transform)
 	transform.from_vp(mp.vp) # Check that it now works
 
+	# Test with only one active source.
+	sa = 2
+	mp.active_sources = [sa]
+	transform = get_mp_transform(mp);
+
+	mp.vp[sa][ids.a[1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
+	mp.vp[sa][ids.r1[1]] = transform.bounds[1][:r1][1].lower_bound - 1.0
+	mp.vp[sa][ids.r1[2]] = transform.bounds[1][:r1][1].upper_bound + 1.0
+	mp.vp[sa][ids.k[1, 1]] = transform.bounds[1][:k][1, 1].lower_bound - 0.00001
+
+	@test_throws Exception transform.from_vp(mp.vp)
+	Transform.enforce_bounds!(mp, transform)
+	transform.from_vp(mp.vp) # Check that it now works
+
 end
 
 

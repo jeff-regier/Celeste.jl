@@ -876,17 +876,25 @@ function get_identity_transform(P::Int64, S::Int64)
                 transform_sensitive_float, bounds, active_sources, active_S, S)
 end
 
-
-@doc """
+"""
 Put the variational parameters within the bounds of the transform.
-""" ->
+
+Args:
+  - mp: A ModelParms whose vp parameters are updated to be within the bounds
+        allowed by the transform.
+  - transform: A DataTransform that will be used for optimization.
+
+Returns:
+  Updates mp.vp in place.
+"""
 function enforce_bounds!{NumType <: Number}(
   mp::ModelParams{NumType}, transform::DataTransform)
 
   @assert mp.S == transform.S
   @assert length(mp.active_sources) == transform.active_S
 
-	for s=1:transform.S, (param, constraint_vec) in transform.bounds[s]
+	for sa=1:transform.active_S, (param, constraint_vec) in transform.bounds[sa]
+    s = mp.active_sources[sa]
     is_box = isa(constraint_vec, Array{ParamBox})
     if is_box
       # Box parameters.
