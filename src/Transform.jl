@@ -948,7 +948,7 @@ function enforce_bounds!{NumType <: Number}(
         end
       end
     end
-	end
+  end
 end
 
 
