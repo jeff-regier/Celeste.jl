@@ -6,7 +6,7 @@ using Celeste
 using CelesteTypes
 
 export DataTransform, ParamBounds, ParamBox, SimplexBox
-export get_mp_transform, generate_valid_parameters
+export get_mp_transform, generate_valid_parameters, enforce_bounds!
 
 
 ################################
@@ -618,6 +618,7 @@ function generate_valid_parameters(
 end
 
 
+
 #########################
 # Define the exported variables.
 
@@ -874,6 +875,82 @@ function get_identity_transform(P::Int64, S::Int64)
   DataTransform(to_vp, from_vp, to_vp!, from_vp!, vp_to_array, array_to_vp!,
                 transform_sensitive_float, bounds, active_sources, active_S, S)
 end
+
+"""
+Put the variational parameters within the bounds of the transform.
+
+Args:
+  - mp: A ModelParms whose vp parameters are updated to be within the bounds
+        allowed by the transform.
+  - transform: A DataTransform that will be used for optimization.
+
+Returns:
+  Updates mp.vp in place.
+"""
+function enforce_bounds!{NumType <: Number}(
+  mp::ModelParams{NumType}, transform::DataTransform)
+
+  @assert mp.S == transform.S
+  @assert length(mp.active_sources) == transform.active_S
+
+  for sa=1:transform.active_S, (param, constraint_vec) in transform.bounds[sa]
+    s = mp.active_sources[sa]
+    is_box = isa(constraint_vec, Array{ParamBox})
+    if is_box
+      # Box parameters.
+      for ind in 1:length(ids.(param))
+        constraint = constraint_vec[ind]
+        if !(constraint.lower_bound <=
+             mp.vp[s][ids.(param)[ind]] <=
+             constraint.upper_bound)
+          println("Warning: $param[$s][$ind] was out of bounds.")
+          mp.vp[s][ids.(param)[ind]] =
+            min(mp.vp[s][ids.(param)[ind]], constraint.upper_bound)
+          mp.vp[s][ids.(param)[ind]] =
+            max(mp.vp[s][ids.(param)[ind]], constraint.lower_bound)
+        end
+      end
+    else
+      param_size = size(ids.(param))
+      if length(param_size) == 2
+        # matrix simplex
+        for col in 1:param_size[2]
+          constraint = constraint_vec[col]
+          for row in 1:param_size[1]
+            if !(constraint.lower_bound <= mp.vp[s][ids.(param)[row, col]] <= 1.0)
+              println("Warning: $param[$s][$row, $col] was out of bounds.")
+              mp.vp[s][ids.(param)[row, col]] =
+                min(mp.vp[s][ids.(param)[row, col]], 1.0)
+              mp.vp[s][ids.(param)[row, col]] =
+                max(mp.vp[s][ids.(param)[row, col]], constraint.lower_bound)
+            end
+          end
+          if sum(mp.vp[s][ids.(param)[:, col]]) != 1.0
+            println("Warning: $param[$s][:, $col] is not normalized.")
+            mp.vp[s][ids.(param)[:, col]] =
+              mp.vp[s][ids.(param)[:, col]] / sum(mp.vp[s][ids.(param)[:, col]])
+          end
+        end
+      else
+        # vector simplex
+        constraint = constraint_vec[1]
+        for row in 1:param_size[1]
+          if !(constraint.lower_bound <= mp.vp[s][ids.(param)[row]] <= 1.0)
+            println("Warning: $param[$s][$row] was out of bounds.")
+            mp.vp[s][ids.(param)[row]] = min(mp.vp[s][ids.(param)[row]], 1.0)
+            mp.vp[s][ids.(param)[row]] =
+              max(mp.vp[s][ids.(param)[row]], constraint.lower_bound)
+          end
+        end
+        if sum(mp.vp[s][ids.(param)]) != 1.0
+          println("Warning: $param[$s] is not normalized.")
+          mp.vp[s][ids.(param)] = mp.vp[s][ids.(param)] / sum(mp.vp[s][ids.(param)])
+        end
+      end
+    end
+  end
+end
+
 
 
 
