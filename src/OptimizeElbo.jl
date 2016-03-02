@@ -205,6 +205,9 @@ function maximize_f(
   omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
   max_iters=100, rho_lower=0.25, fast_hessian=true)
 
+    # Make sure the model parameters are within the transform bounds
+    enforce_bounds!(mp, transform)
+
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
       OptimizeElbo.ObjectiveWrapperFunctions(
