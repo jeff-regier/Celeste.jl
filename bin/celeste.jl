@@ -41,7 +41,6 @@ camcol, field) combinations fall entirely within the RA/Dec patch used
 in that query.
 """
 
-include(joinpath(Pkg.dir("Celeste"), "src/api.jl"))
 
 """
 Parse a string like \"1/3\" and return (1, 3).
