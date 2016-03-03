@@ -6,8 +6,6 @@ using DocOpt
 using JLD
 import SloanDigitalSkySurvey: SDSS
 
-include(joinpath(Pkg.dir("Celeste"), "src/api.jl"))
-
 dat_dir = joinpath(Pkg.dir("Celeste"), "test/data")
 
 run = "003900"
