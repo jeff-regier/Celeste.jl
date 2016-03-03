@@ -12,4 +12,4 @@ run = "003900"
 camcol = "6"
 field = "0269"
 
-infer(dat_dir, run, camcol, field, "/tmp/", 1, 1000)
+Celeste.infer(dat_dir, run, camcol, field, "/tmp/", 1, 1000)
