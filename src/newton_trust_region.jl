@@ -2,11 +2,10 @@
 # and merged, I'll include the working file in Celeste so the build passes.
 using Optim.update!
 using Optim.OptimizationTrace
-using Optim._dot
-using Optim.norm2
 using Optim.assess_convergence
 using Optim.MultivariateOptimizationResults
 using Optim.TwiceDifferentiableFunction
+
 
 function verbose_println(x...)
   println(x...)
@@ -119,7 +118,7 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
     # Cache the inner products between the eigenvectors and the gradient.
     qg = Array(T, n)
     for i=1:n
-      qg[i] = _dot(H_eig[:vectors][:, i], gr)
+      qg[i] = vecdot(H_eig[:vectors][:, i], gr)
     end
 
     # Function 4.39 in N&W
@@ -209,10 +208,10 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
           R = chol(B)
           s[:] = -R \ (R' \ gr)
           q_l = R' \ s
-          norm2_s = norm2(s)
+          norm2_s = vecdot(s, s)
           lambda_previous = lambda
           lambda = (lambda_previous +
-                    norm2_s * (sqrt(norm2_s) - delta) / (delta * norm2(q_l)))
+                    norm2_s * (sqrt(norm2_s) - delta) / (delta * vecdot(q_l, q_l)))
 
           # Check that lambda is not less than min_lambda, and if so, go half the
           # distance to min_lambda.
@@ -237,20 +236,20 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
     end # Getting s
     m = zero(T)
     if interior || hard_case
-      m = _dot(gr, s) + 0.5 * _dot(s, H * s)
+      m = vecdot(gr, s) + 0.5 * vecdot(s, H * s)
     else
-      m = _dot(gr, s) + 0.5 * _dot(s, B * s)
+      m = vecdot(gr, s) + 0.5 * vecdot(s, B * s)
     end
 
     if !interior
-        if abs(delta2 - norm2(s)) > 1e-6
-          warn("The norm of s is not close to delta: s2=$(norm2(s)) delta2=$delta2. ",
+        if abs(delta2 - vecdot(s, s)) > 1e-6
+          warn("The norm of s is not close to delta: s2=$(vecdot(s, s)) delta2=$delta2. ",
                "This may occur when the Hessian is badly conditioned.  ",
                "max_ev=$(max_lambda), min_ev=$(lambda_1)")
         end
     end
     verbose_println("Root finding got m=$m, interior=$interior with ",
-            "delta^2=$delta2 and ||s||^2=$(norm2(s))")
+            "delta^2=$delta2 and ||s||^2=$(vecdot(s, s))")
     return m, interior, lambda
 end
 
@@ -397,7 +396,8 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
             # delta is smaller than the current step.  Otherwise you waste
             # steps reducing delta by constant factors while each solution
             # will be the same.
-            delta = 0.25 * sqrt(norm2(x - x_previous))
+            x_diff = x - x_previous
+            delta = 0.25 * sqrt(vecdot(x_diff, x_diff))
 
             f_x = f_x_previous
             copy!(x, x_previous)
