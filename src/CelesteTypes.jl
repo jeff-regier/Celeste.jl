@@ -362,9 +362,8 @@ typealias RectVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 
 #########################################################
-
-abstract ParamSet
-
+# ParamSet types
+#
 # The variable names are:
 # u       = Location in world coordinates (formerly mu)
 # e_dev   = Weight given to a galaxy of type 1 (formerly theta)
@@ -382,73 +381,110 @@ abstract ParamSet
 # k       = {D|D-1}xIa matrix of color prior component indicators.
 #           (formerly kappa)
 
-# Parameters for location and galaxy shape.
-gal_shape_params = ((:e_axis, 1), (:e_angle, 1), (:e_scale, 1))
-ue_params = ((:u, 2), (:e_dev, 1), gal_shape_params...)
+abstract ParamSet
 
-# Parameters for the colors.
-# Only one set of brightness parameters.
-rc_params1 = ((:r1, 1), (:r2, 1), (:c1, B - 1), (:c2, B - 1))
-
-# All Ia set of brightness parameters.
-rc_params2 = ((:r1, Ia), (:r2, Ia), (:c1, (B - 1,  Ia)),
-        (:c2, (B - 1,  Ia)))
-
-# Simplicial variables, either in constrained or free parameterizations.
-ak_simplex = ((:a, Ia), (:k, (D, Ia)))
-ak_free = ((:a, Ia - 1), (:k, (D - 1, Ia)))
-
-# TODO: the brightness params are screwed up.  Need to think about what they
-# mean.
-const param_specs = [
-    (:StarPosParams, :star_ids, ((:u, 2),)),
-    (:GalaxyShapeParams, :gal_shape_ids, gal_shape_params),
-    (:GalaxyPosParams, :gal_ids, ue_params),
-    (:BrightnessParams, :bids, rc_params1),
-    (:CanonicalParams, :ids, tuple(ue_params..., rc_params2..., ak_simplex...)),
-    (:UnconstrainedParams, :ids_free,
-     tuple(ue_params..., rc_params2..., ak_free...)),
-]
-
-for (pn, ids_name, pf) in param_specs
-    ids_fields = Any[]
-    ids_init = Any[]
-
-    prev_end = 0
-    for (n, ll) in pf
-        # TODO: it would be better if a particular symbol were the same type
-        # in both unconstrained and constrianted parameterizations (e.g.
-        # a when Ia == 2, which is an integer in UnconstraintedParams but
-        # a vector in CanonicalParams.)
-        id_field = ll == 1 ? :(Int64) : :(Array{Int64, $(length(ll))})
-        push!(ids_fields, :($n::$id_field))
-
-        field_len = *(ll...)
-
-        ids_array = ll == 1 ? prev_end + 1 :
-            collect( (prev_end + 1):(prev_end + field_len) )
-        if length(ll) >= 2
-            ids_array = :(reshape($ids_array, $ll))
-        end
-        push!(ids_init, ids_array)
-
-        prev_end += field_len
-    end
-
-    new_call = Expr(:call, :new, ids_init...)
-    constructor = Expr(:(=),:($pn()), new_call)
-    push!(ids_fields, constructor)
-    fields_block = Expr(:block, ids_fields...)
-    struct_sig = Expr(:(<:), pn, :ParamSet)
-    struct_dec = Expr(:type, false, struct_sig, fields_block)
-    eval(struct_dec)
-
-    eval(:(const $ids_name = $pn()))
-    eval(:(getids(::Type{$pn}) = $ids_name))
-    eval(:(length(::Type{$pn}) = $prev_end))
-    eval(:(length(an_ids::$pn) = $prev_end))
+type StarPosParams <: ParamSet
+    u::Vector{Int}
+    StarPosParams() = new([1, 2])
 end
+const star_ids = StarPosParams()
+getids(::Type{StarPosParams}) = star_ids
+length(::Type{StarPosParams}) = 2
 
+
+type GalaxyShapeParams <: ParamSet
+    e_axis::Int
+    e_angle::Int
+    e_scale::Int
+    GalaxyShapeParams() = new(1, 2, 3)
+end
+const gal_shape_ids = GalaxyShapeParams()
+getids(::Type{GalaxyShapeParams}) = gal_shape_ids
+length(::Type{GalaxyShapeParams}) = 3
+
+
+type GalaxyPosParams <: ParamSet
+    u::Vector{Int}
+    e_dev::Int
+    e_axis::Int
+    e_angle::Int
+    e_scale::Int
+    GalaxyPosParams() = new([1, 2], 3, 4, 5, 6)
+end
+const gal_ids = GalaxyPosParams()
+getids(::Type{GalaxyPosParams}) = gal_ids
+length(::Type{GalaxyPosParams}) = 6
+
+
+type BrightnessParams <: ParamSet
+    r1::Int
+    r2::Int
+    c1::Vector{Int}
+    c2::Vector{Int}
+    BrightnessParams() = new(1, 2,
+                             collect(3:(3+(B-1)-1)),
+                             collect((3+B-1):(3+2*(B-1)-1)))
+end
+const bids = BrightnessParams()
+getids(::Type{BrightnessParams}) = bids
+length(::Type{BrightnessParams}) = 2 + 2 * (B-1)
+
+
+type CanonicalParams <: ParamSet
+    u::Vector{Int}
+    e_dev::Int
+    e_axis::Int
+    e_angle::Int
+    e_scale::Int
+    r1::Vector{Int}
+    r2::Vector{Int}
+    c1::Matrix{Int}
+    c2::Matrix{Int}
+    a::Vector{Int}
+    k::Matrix{Int}
+    CanonicalParams() = 
+        new([1, 2], 3, 4, 5, 6,
+            collect(7:(7+Ia-1)),  # r1
+            collect((7+Ia):(7+2Ia-1)), # r2
+            reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
+            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
+            collect((7+2Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia-1)),  # a
+            reshape((7+3Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia+D*Ia-1), (D, Ia))) # k
+end
+const ids = CanonicalParams()
+getids(::Type{CanonicalParams}) = ids
+length(::Type{CanonicalParams}) = 6 + 3*Ia + 2*(B-1)*Ia + D*Ia
+
+
+type UnconstrainedParams <: ParamSet
+    u::Vector{Int}
+    e_dev::Int
+    e_axis::Int
+    e_angle::Int
+    e_scale::Int
+    r1::Vector{Int}
+    r2::Vector{Int}
+    c1::Matrix{Int}
+    c2::Matrix{Int}
+    a::Vector{Int}
+    k::Matrix{Int}
+    UnconstrainedParams() = 
+        new([1, 2], 3, 4, 5, 6,
+            collect(7:(7+Ia-1)),  # r1
+            collect((7+Ia):(7+2Ia-1)), # r2
+            reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
+            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
+            collect((7+2Ia+2*(B-1)*Ia):(7+2Ia+2*(B-1)*Ia+(Ia-1)-1)),  # a
+            reshape((7+2Ia+2*(B-1)*Ia+(Ia-1)):
+                    (7+2Ia+2*(B-1)*Ia+(Ia-1)+(D-1)*Ia-1), (D-1, Ia))) # k
+end
+const ids_free = UnconstrainedParams()
+getids(::Type{UnconstrainedParams}) = ids_free
+length(::Type{UnconstrainedParams}) =  6 + 2*Ia + 2*(B-1)*Ia + (D-1)*Ia + Ia-1
+
+
+# define length(value) in addition to length(Type) for ParamSets
+length{T<:ParamSet}(::T) = length(T)
 
 #TODO: build these from ue_align, etc., here.
 align(::StarPosParams, CanonicalParams) = ids.u

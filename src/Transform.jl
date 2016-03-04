@@ -402,10 +402,6 @@ function get_transform_derivatives!{NumType <: Number}(
   			@assert length(constraint_vec) == 1
   			vp_free_ind = ids_free.(param)
   			vp_ind = ids.(param)
-  			# Hack, see TODO in CelesteTypes.
-  			if length(vp_free_ind) == 1
-  				vp_free_ind = Int64[ vp_free_ind ]
-  			end
   			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
   			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
@@ -492,10 +488,6 @@ function perform_transform!{NumType <: Number}(
         @assert length(bounds[param]) == 1
         free_ind = ids_free.(param)
         vp_ind = ids.(param)
-        # Hack, see TODO in CelesteTypes.
-        if length(free_ind) == 1
-          free_ind = Int64[ free_ind ]
-        end
         constraint = constraint_vec[1]
         to_unconstrained ?
           vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint):
