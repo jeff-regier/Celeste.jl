@@ -208,7 +208,7 @@ to a CatalogEntry. (which can be passed to load_ce!)
 It only needs to be called by load_celeste_obj!
 """
 function convert(::Type{CatalogEntry}, vs::Vector{Float64}, objid)
-    function get_fluxes(i::Int64)
+    function get_fluxes(i::Int)
         ret = Array(Float64, 5)
         ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
         ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
@@ -237,7 +237,7 @@ This function loads one catalog entry into row of i of df, a results data
 frame.
 ce = Catalog Entry, a row of an astronomical catalog
 """
-function load_ce!(i::Int64, ce::CatalogEntry, df::DataFrame)
+function load_ce!(i::Int, ce::CatalogEntry, df::DataFrame)
     df[i, :ra] = ce.pos[1]
     df[i, :dec] = ce.pos[2]
     df[i, :is_star] = ce.is_star ? 1. : 0.
@@ -433,7 +433,7 @@ function score_field(dir, run, camcol, field, outdir, reffile)
     primary_err = get_err_df(coadd_df, primary_df)
 
     # create scores
-    ttypes = [Symbol, Float64, Float64, Float64, Float64, Int64]
+    ttypes = [Symbol, Float64, Float64, Float64, Float64, Int]
     scores_df = DataFrame(ttypes, size(celeste_err, 2) - 1)
     names!(scores_df, [:field, :primary, :celeste, :diff, :diff_sd, :N])
     for i in 1:(size(celeste_err, 2) - 1)

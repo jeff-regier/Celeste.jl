@@ -39,7 +39,7 @@ Args:
   NumType: The numeric type of the hessian.
   i: The type of celestial source, from 1:Ia
 """
-HessianSubmatrices(NumType::DataType, i::Int64) = begin
+HessianSubmatrices(NumType::DataType, i::Int) = begin
   @assert 1 <= i <= Ia
   shape_p = length(shape_standard_alignment[i])
 
@@ -128,7 +128,7 @@ Args:
                        calculate_hessian.
 """
 ElboIntermediateVariables(
-    NumType::DataType, S::Int64, num_active_sources::Int64;
+    NumType::DataType, S::Int, num_active_sources::Int;
     calculate_derivs::Bool=true, calculate_hessian::Bool=true) = begin
 
   @assert NumType <: Number
@@ -218,7 +218,7 @@ Returns:
 """
 function accum_star_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    s::Int64,
+    s::Int,
     bmc::BvnComponent{NumType},
     x::Vector{Float64},
     wcs_jacobian::Array{Float64, 2},
@@ -276,7 +276,7 @@ Returns:
 """
 function accum_galaxy_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    s::Int64,
+    s::Int,
     gcc::GalaxyCacheComponent{NumType},
     x::Vector{Float64},
     wcs_jacobian::Array{Float64, 2},
@@ -381,9 +381,9 @@ Returns:
 function populate_fsm_vecs!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     mp::ModelParams{NumType},
-    tile_sources::Vector{Int64},
+    tile_sources::Vector{Int},
     tile::ImageTile,
-    h::Int64, w::Int64,
+    h::Int, w::Int,
     sbs::Vector{SourceBrightness{NumType}},
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     star_mcs::Array{BvnComponent{NumType}, 2})
@@ -438,7 +438,7 @@ function accumulate_source_brightness!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     mp::ModelParams{NumType},
     sbs::Vector{SourceBrightness{NumType}},
-    s::Int64, b::Int64)
+    s::Int, b::Int)
 
   # E[G] and E{G ^ 2} for a single source
   E_G_s = elbo_vars.E_G_s;
@@ -668,7 +668,7 @@ Updates elbo_vars.E_G and elbo_vars.var_G in place.
 function combine_pixel_sources!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     mp::ModelParams{NumType},
-    tile_sources::Vector{Int64},
+    tile_sources::Vector{Int},
     tile::ImageTile,
     sbs::Vector{SourceBrightness{NumType}})
 
@@ -717,13 +717,13 @@ Returns:
 """
 function get_expected_pixel_brightness!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    h::Int64, w::Int64,
+    h::Int, w::Int,
     sbs::Vector{SourceBrightness{NumType}},
     star_mcs::Array{BvnComponent{NumType}, 2},
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     tile::ImageTile,
     mp::ModelParams{NumType},
-    tile_sources::Vector{Int64};
+    tile_sources::Vector{Int};
     include_epsilon::Bool=true)
 
   # This combines the bvn components to get the brightness for each
@@ -830,7 +830,7 @@ function tile_likelihood!{NumType <: Number}(
     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
     tile::ImageTile,
     mp::ModelParams{NumType},
-    tile_sources::Vector{Int64},
+    tile_sources::Vector{Int},
     sbs::Vector{SourceBrightness{NumType}},
     star_mcs::Array{BvnComponent{NumType}, 2},
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
@@ -929,7 +929,7 @@ function tile_predicted_image{NumType <: Number}(
         elbo_vars::ElboIntermediateVariables{NumType},
         tile::ImageTile,
         mp::ModelParams{NumType},
-        tile_sources::Vector{Int64},
+        tile_sources::Vector{Int},
         sbs::Vector{SourceBrightness{NumType}},
         star_mcs::Array{BvnComponent{NumType}, 2},
         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4};
@@ -965,7 +965,7 @@ If include_epsilon is true, then the background is also rendered.
 Otherwise, only pixels from the object are rendered.
 """
 function tile_predicted_image{NumType <: Number}(
-    tile::ImageTile, mp::ModelParams{NumType}, tile_sources::Vector{Int64};
+    tile::ImageTile, mp::ModelParams{NumType}, tile_sources::Vector{Int};
     include_epsilon::Bool=false)
 
   star_mcs, gal_mcs = load_bvn_mixtures(mp, tile.b, calculate_derivs=false);
@@ -1036,7 +1036,7 @@ Returns:
 """
 function elbo_likelihood!{NumType <: Number}(
     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
-    tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64,
+    tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int,
     sbs::Vector{SourceBrightness{NumType}})
 
   star_mcs, gal_mcs =

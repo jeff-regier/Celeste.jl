@@ -517,7 +517,7 @@ Returns:
 The PSF contains three components, so you see lots of 3's below.
 """
 function load_bvn_mixtures{NumType <: Number}(
-    mp::ModelParams{NumType}, b::Int64;
+    mp::ModelParams{NumType}, b::Int;
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
   star_mcs = Array(BvnComponent{NumType}, 3, mp.S)

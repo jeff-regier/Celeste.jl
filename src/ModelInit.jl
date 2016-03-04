@@ -335,7 +335,7 @@ function get_tiled_image_sources(
   tiled_image::TiledImage, wcs::WCSTransform, patches::Vector{SkyPatch})
 
   H, W = size(tiled_image)
-  tile_sources = fill(Int64[], H, W)
+  tile_sources = fill(Int[], H, W)
   candidates = SkyImages.local_source_candidates(tiled_image, patches)
   for h in 1:H, w in 1:W
     # Only look for sources within the candidate set.
@@ -344,7 +344,7 @@ function get_tiled_image_sources(
       cand_sources = SkyImages.get_local_sources(tiled_image[h, w], cand_patches)
       tile_sources[h, w] = candidates[h, w][cand_sources]
     else
-      tile_sources[h, w] = Int64[]
+      tile_sources[h, w] = Int[]
     end
   end
   tile_sources
@@ -357,7 +357,7 @@ parameters that can be used with Celeste.
 """
 function initialize_celeste(
     blob::Blob, cat::Vector{CatalogEntry};
-    tile_width::Int64=typemax(Int64), fit_psf::Bool=true,
+    tile_width::Int=typemax(Int), fit_psf::Bool=true,
     patch_radius::Float64=-1., radius_from_cat::Bool=true)
 
   tiled_blob = SkyImages.break_blob_into_tiles(blob, tile_width)
@@ -407,7 +407,7 @@ function initialize_model_params(
     mp.objids = ASCIIString[ cat_entry.objid for cat_entry in cat]
 
     mp.patches = Array(SkyPatch, mp.S, length(blob))
-    mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
+    mp.tile_sources = Array(Array{Array{Int}}, length(blob))
 
     for b = 1:length(blob)
         println("Initializing band $b patches.")
@@ -469,7 +469,7 @@ function limit_to_object_data(
   mp_original.active_sources = [ s_original ]
 
   # Get the sources that overlap with this object.
-  relevant_sources = Int64[]
+  relevant_sources = Int[]
   for b = 1:length(blob), tile_sources in mp.tile_sources[b]
     if s_original in tile_sources > 0
       relevant_sources = union(relevant_sources, tile_sources);
@@ -519,7 +519,7 @@ Returns:
   electron counts are below <noise_fraction> of the noise at that pixel.
 """
 function trim_source_tiles(
-    s::Int64, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
+    s::Int, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
     noise_fraction::Float64=0.1)
 
   trimmed_tiled_blob =
