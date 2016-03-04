@@ -175,7 +175,7 @@ type ObjectiveWrapperFunctions
 end
 
 
-@doc """
+"""
 Optimizes f using Newton's method and exact Hessians.  For now, it is
 not clear whether this or BFGS is better, so it is kept as a separate function.
 
@@ -198,7 +198,7 @@ Returns:
   - max_f: The maximum function value achieved
   - max_x: The optimal function input
   - ret: The return code of optimize()
-""" ->
+"""
 function maximize_f(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::Transform.DataTransform;

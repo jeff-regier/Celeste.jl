@@ -12,9 +12,9 @@ export get_mp_transform, generate_valid_parameters, enforce_bounds!
 ################################
 # Elementary functions.
 
-@doc """
+"""
 Unconstrain x in the unit interval to lie in R.
-""" ->
+"""
 function inv_logit{NumType <: Number}(x::NumType)
     @assert(x >= 0)
     @assert(x <= 1)
@@ -29,9 +29,9 @@ function inv_logit{NumType <: Number}(x::Array{NumType})
 end
 
 
-@doc """
+"""
 Convert x in R to lie in the unit interval.
-""" ->
+"""
 function logit{NumType <: Number}(x::NumType)
     1.0 / (1.0 + exp(-x))
 end
@@ -42,10 +42,10 @@ function logit{NumType <: Number}(x::Array{NumType})
 end
 
 
-@doc """
+"""
 Convert an (n - 1)-vector of real numbers to an n-vector on the simplex, where
 the last entry implicitly has the untransformed value 1.
-""" ->
+"""
 function constrain_to_simplex{NumType <: Number}(x::Vector{NumType})
   if any(x .== Inf)
     z = NumType[ x_entry .== Inf ? one(NumType) : zero(NumType) for x_entry in x]
@@ -62,10 +62,10 @@ function constrain_to_simplex{NumType <: Number}(x::Vector{NumType})
 end
 
 
-@doc """
+"""
 Convert an n-vector on the simplex to an (n - 1)-vector in R^{n -1}, where
 the last entry implicitly has the untransformed value 1.
-""" ->
+"""
 function unconstrain_simplex{NumType <: Number}(z::Vector{NumType})
   n = length(z)
   NumType[ log(z[i]) - log(z[n]) for i = 1:(n - 1)]
@@ -148,12 +148,12 @@ function box_parameter{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Convert an unconstrained (n-1)-vector to a simplicial n-vector, z, such that
   - sum(z) = 1
   - z >= simplex_box.lower_bound
 See notes for a derivation and reasoning.
-""" ->
+"""
 function simplexify_parameter{NumType <: Number}(
     free_param::Vector{NumType}, simplex_box::SimplexBox)
 
@@ -172,9 +172,9 @@ function simplexify_parameter{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Invert the transformation simplexify_parameter()
-""" ->
+"""
 function unsimplexify_parameter{NumType <: Number}(
     param::Vector{NumType}, simplex_box::SimplexBox)
 
@@ -198,7 +198,7 @@ end
 ##################
 # Derivatives
 
-@doc """
+"""
 Return derivatives of an unscaled transform from free parameters to a simplex.
 
 Args:
@@ -211,7 +211,7 @@ Returns:
               wrt the free parameters (in columns)
   - hessian_vec: An n-length vector of the hessian of each simplex output
                  parameter with respect to the (n-1) free input parameters.
-""" ->
+"""
 function simplex_derivatives{NumType <: Number}(z_sim::Vector{NumType})
 	n = length(z_sim)
 	hessian_vec = Array(Array{NumType}, n)
@@ -243,7 +243,7 @@ function simplex_derivatives{NumType <: Number}(z_sim::Vector{NumType})
 end
 
 
-@doc """
+"""
 Return the derivative and hessian of a simplex transform given the constrained
 parameters.
 
@@ -252,7 +252,7 @@ Args:
 		       as a function of the constrained parameterd despite being
 					 the derivative of the function unconstrained -> constrained)
 	- simplex_box: A box simplex constraint
-""" ->
+"""
 function box_simplex_derivatives{NumType <: Number}(
     param::Vector{NumType}, simplex_box::SimplexBox)
 	lower_bound = simplex_box.lower_bound
@@ -275,7 +275,7 @@ function box_simplex_derivatives{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Return the derivative and hessian of a box transform given the constrained
 parameters.
 
@@ -284,7 +284,7 @@ Args:
 		       as a function of the constrained parameterd despite being
 					 the derivative of the function unconstrained -> constrained)
 	- param_box: A box constraint
-""" ->
+"""
 function box_derivatives{NumType <: Number}(param::NumType, param_box::ParamBox)
 	lower_bound = param_box.lower_bound
   upper_bound = param_box.upper_bound
@@ -302,7 +302,7 @@ function box_derivatives{NumType <: Number}(param::NumType, param_box::ParamBox)
 end
 
 
-@doc """
+"""
 A datatype containing derivatives of the transform from free to constrained
 parameters.
 
@@ -311,7 +311,7 @@ Members:
                 contrainted_param = f(free param)
   d2param_dfree2: A vector of hessians.  Each element is the Hessian of one
                   component of the aforementioned f()
-""" ->
+"""
 type TransformDerivatives{NumType <: Number}
   dparam_dfree::Matrix{NumType}
   d2param_dfree2::Array{Matrix{NumType}}
@@ -333,7 +333,7 @@ type TransformDerivatives{NumType <: Number}
 end
 
 
-@doc """
+"""
 Populate a TransformDerivatives object in place.
 
 Args:
@@ -344,7 +344,7 @@ Args:
 
 Returns:
   Update transform_derivatives in place.
-""" ->
+"""
 function get_transform_derivatives!{NumType <: Number}(
     mp::ModelParams{NumType}, bounds::Vector{ParamBounds},
     transform_derivatives::TransformDerivatives)
@@ -432,7 +432,7 @@ end
 ######################
 # Functions to take actual parameter vectors.
 
-@doc """
+"""
 Convert between variational parameter vectors and unconstrained parameters.
 
 Args:
@@ -445,7 +445,7 @@ Args:
 Returns:
   If to_unconstrained is true, updates vp_free in place.
   If to_unconstrained is false, updates vp in place.
-""" ->
+"""
 function perform_transform!{NumType <: Number}(
     vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds,
     to_unconstrained::Bool)
@@ -515,7 +515,7 @@ end
 #####################
 # Conversion to and from variational parameter vectors and arrays.
 
-@doc """
+"""
 Transform VariationalParams to an array.
 
 Args:
@@ -523,7 +523,7 @@ Args:
   - omitted_ids = ids in ParamIndex
 
 There is probably no use for this function, since you'll only be passing
-trasformations to the optimizer, but I'll include it for completeness.""" ->
+trasformations to the optimizer, but I'll include it for completeness."""
 function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
                                              omitted_ids::Vector{Int64})
 
@@ -541,7 +541,7 @@ function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
 end
 
 
-@doc """
+"""
 Transform a parameter vector to variational parameters in place.
 
 Args:
@@ -552,7 +552,7 @@ Args:
 
 Returns:
  - Update vp_free in place.
-""" ->
+"""
 function array_to_free_vp!{NumType <: Number}(
     xs::Matrix{NumType}, vp_free::FreeVariationalParams{NumType},
     omitted_ids::Vector{Int64})
@@ -569,9 +569,9 @@ function array_to_free_vp!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Generate parameters within the given bounds.
-""" ->
+"""
 function generate_valid_parameters(
   NumType::DataType, bounds_vec::Vector{ParamBounds})
 
@@ -614,7 +614,7 @@ end
 #########################
 # Define the exported variables.
 
-@doc """
+"""
 Functions to move between a single source's variational parameters and a
 transformation of the data for optimization.
 
@@ -634,7 +634,7 @@ transform_sensitive_float: A function that takes (sensitive float, model
 bounds: The bounds for each parameter and each object in ModelParams.
 active_sources: The sources that are being optimized.  Only these sources'
   parameters are transformed into the parameter vector.
-  """ ->
+  """
 type DataTransform
 	to_vp::Function
 	from_vp::Function

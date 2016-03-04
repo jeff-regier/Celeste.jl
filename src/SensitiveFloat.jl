@@ -1,7 +1,7 @@
 
 export multiply_sfs!, add_scaled_sfs!, combine_sfs!, add_sources_sf!
 
-@doc """
+"""
 A function value and its derivative with respect to its arguments.
 
 Attributes:
@@ -14,7 +14,7 @@ Attributes:
       with respect to all the sources.
   hs: An array of per-source Hessians.  This will generally be reserved
       for the Hessian of brightness values that depend only on one source.
-""" ->
+"""
 type SensitiveFloat{ParamType <: CelesteTypes.ParamSet, NumType <: Number}
     # Actually a single value, but an Array to avoid memory allocation
     v::Vector{NumType}
@@ -31,9 +31,9 @@ end
 
 #########################################################
 
-@doc """
+"""
 Set a SensitiveFloat's hessian term, maintaining symmetry.
-""" ->
+"""
 function set_hess!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf::SensitiveFloat{ParamType, NumType},
     i::Int64, j::Int64, v::NumType)
@@ -95,9 +95,9 @@ function clear!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 end
 
 
-@doc """
+"""
 Factor out the hessian part of combine_sfs!.
-""" ->
+"""
 function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet,
                               T1 <: Number, T2 <: Number, T3 <: Number}(
     sf1::SensitiveFloat{ParamType, T1},
@@ -126,7 +126,7 @@ function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet,
 end
 
 
-@doc """
+"""
 Updates sf_result in place with g(sf1, sf2), where
 g_d = (g_1, g_2) is the gradient of g and
 g_h = (g_11, g_12; g_12, g_22) is the hessian of g,
@@ -134,7 +134,7 @@ each evaluated at (sf1, sf2).
 
 The result is stored in sf_result.  The order is done in such a way that
 it can overwrite sf1 or sf2 and still be accurate.
-""" ->
+"""
 function combine_sfs!{ParamType <: CelesteTypes.ParamSet,
                       T1 <: Number, T2 <: Number, T3 <: Number}(
     sf1::SensitiveFloat{ParamType, T1},
@@ -165,14 +165,14 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet,
 end
 
 
-@doc """
+"""
 Updates sf1 in place with g(sf1, sf2), where
 g_d = (g_1, g_2) is the gradient of g and
 g_h = (g_11, g_12; g_12, g_22) is the hessian of g,
 each evaluated at (sf1, sf2).
 
 The result is stored in sf1.
-""" ->
+"""
 function combine_sfs!{ParamType <: CelesteTypes.ParamSet,
                       T1 <: Number, T2 <: Number, T3 <: Number}(
     sf1::SensitiveFloat{ParamType, T1},
@@ -188,9 +188,9 @@ end
 # Decalare outside to avoid allocating memory.
 const multiply_sfs_hess = Float64[0 1; 1 0]
 
-@doc """
+"""
 TODO: don't ignore the ids arguments.
-""" ->
+"""
 function multiply_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf1::SensitiveFloat{ParamType, NumType},
     sf2::SensitiveFloat{ParamType, NumType};
@@ -208,9 +208,9 @@ function multiply_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 end
 
 
-@doc """
+"""
 Update sf1 in place with (sf1 + scale * sf2).
-""" ->
+"""
 function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf1::SensitiveFloat{ParamType, NumType},
     sf2::SensitiveFloat{ParamType, NumType},
@@ -235,10 +235,10 @@ function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 end
 
 
-@doc """
+"""
 Adds sf2_s to sf1, where sf1 is sensitive to multiple sources and sf2_s is only
 sensitive to source s.
-""" ->
+"""
 function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf_all::SensitiveFloat{ParamType, NumType},
     sf_s::SensitiveFloat{ParamType, NumType},

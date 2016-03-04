@@ -22,11 +22,11 @@ end
 println("Running hessian tests.")
 
 
-@doc """
+"""
 Wrap a vector of canonical parameters for active sources into a ModelParams
 object of the appropriate type.  Used for testing with forward
 autodifferentiation.
-""" ->
+"""
 function unwrap_vp_vector{NumType <: Number}(
     vp_vec::Vector{NumType}, mp::ModelParams)
 
@@ -39,9 +39,9 @@ function unwrap_vp_vector{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Convert the variational params into a vector for autodiff.
-""" ->
+"""
 function wrap_vp_vector(mp::ModelParams, use_active_sources::Bool)
   P = length(CanonicalParams)
   S = use_active_sources ? length(mp.active_sources) : mp.S
@@ -54,9 +54,9 @@ function wrap_vp_vector(mp::ModelParams, use_active_sources::Bool)
 end
 
 
-@doc """
+"""
 Use ForwardDiff to test that fun(x) = sf (to abuse some notation)
-""" ->
+"""
 function test_with_autodiff(fun::Function, x::Vector{Float64}, sf::SensitiveFloat)
   ad_grad = ForwardDiff.gradient(fun, x)
   ad_hess = ForwardDiff.hessian(fun, x)
@@ -66,9 +66,9 @@ function test_with_autodiff(fun::Function, x::Vector{Float64}, sf::SensitiveFloa
 end
 
 
-@doc """
+"""
 Set all but a few pixels to NaN to speed up autodiff Hessian testing.
-""" ->
+"""
 function trim_tiles!(tiled_blob::TiledBlob, keep_pixels)
   for b = 1:length(tiled_blob)
 	  tiled_blob[b][1,1].pixels[

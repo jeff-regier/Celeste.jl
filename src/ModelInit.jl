@@ -52,9 +52,9 @@ function sample_prior()
     PriorParams(a, r_mean, r_var, k, c_mean, c_cov)
 end
 
-@doc """
+"""
 Return a default-initialized VariationalParams object.
-""" ->
+"""
 function init_source(init_pos::Vector{Float64})
     #TODO: use blob (and perhaps priors) to initialize these sensibly
     ret = Array(Float64, length(CanonicalParams))
@@ -74,9 +74,9 @@ function init_source(init_pos::Vector{Float64})
     ret
 end
 
-@doc """
+"""
 Return a VariationalParams object initialized form a catalog entry.
-""" ->
+"""
 function init_source(ce::CatalogEntry)
     # TODO: sync this up with the transform bounds
     ret = init_source(ce.pos)
@@ -205,7 +205,7 @@ function get_psf_width(psf::Array{PsfComponent}; width_scale=1.0)
 end
 
 
-@doc """
+"""
 Choose a reasonable patch radius based on the catalog.
 TODO: Select this by rendering the object and solving an optimization
 problem.
@@ -220,7 +220,7 @@ Args:
 
 Returns:
   - A radius in pixels chosen from the catalog entry.
-""" ->
+"""
 function choose_patch_radius(
   pixel_center::Vector{Float64}, ce::CatalogEntry,
   psf::Array{PsfComponent}, img::Image; width_scale=1.0, max_radius=100)
@@ -260,7 +260,7 @@ function choose_patch_radius(
 end
 
 
-@doc """
+"""
 Initialize a SkyPatch object at a particular location.
 
 Args:
@@ -271,7 +271,7 @@ Args:
 
 Returns:
   A SkyPatch object.
-""" ->
+"""
 SkyPatch(world_center::Vector{Float64},
          radius::Float64, img::Image; fit_psf=true) = begin
     if fit_psf
@@ -287,7 +287,7 @@ SkyPatch(world_center::Vector{Float64},
 end
 
 
-@doc """
+"""
 Initialize a SkyPatch object for a catalog entry.
 
 Args:
@@ -298,7 +298,7 @@ Args:
 
 Returns:
   A SkyPatch object with a radius chosen based on the catalog.
-""" ->
+"""
 SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true, scale_patch_size=1.0) = begin
     world_center = ce.pos
     if fit_psf
@@ -318,7 +318,7 @@ SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true, scale_patch_size=1.0) = beg
 end
 
 
-@doc """
+"""
 Get the sources associated with each tile in a TiledImage.
 
 Args:
@@ -330,7 +330,7 @@ Returns:
   - An array (same dimensions as the tiles) of vectors of indices
     into patches indicating which patches are affected by any pixels
     in the tiles.
-""" ->
+"""
 function get_tiled_image_sources(
   tiled_image::TiledImage, wcs::WCSTransform, patches::Vector{SkyPatch})
 
@@ -351,10 +351,10 @@ function get_tiled_image_sources(
 end
 
 
-@doc """
+"""
 Turn a blob and vector of catalog entries into a tiled_blob and model
 parameters that can be used with Celeste.
-""" ->
+"""
 function initialize_celeste(
     blob::Blob, cat::Vector{CatalogEntry};
     tile_width::Int64=typemax(Int64), fit_psf::Bool=true,
@@ -368,7 +368,7 @@ function initialize_celeste(
 end
 
 
-@doc """
+"""
 Initilize the model params to the given catalog and tiled image.
 
 Args:
@@ -380,7 +380,7 @@ Args:
                   the radius in world coordinates of each patch.
   - radius_from_cat: If true, choose the patch radius from the catalog.
                      If false, use patch_radius for each patch.
-""" ->
+"""
 function initialize_model_params(
     tiled_blob::TiledBlob, blob::Blob, cat::Vector{CatalogEntry};
     fit_psf::Bool=true, patch_radius::Float64=-1., radius_from_cat::Bool=true,
@@ -434,7 +434,7 @@ function initialize_model_params(
 end
 
 
-@doc """
+"""
 Return a reduced Celeste dataset useful for a single object.
 
 Args:
@@ -457,7 +457,7 @@ objid source, but the trimmed_tiled_blob may be missing tiles in which these
 overlapping sources occur.
 
 TODO: test!
-""" ->
+"""
 function limit_to_object_data(
     objid::ASCIIString, mp_original::ModelParams,
     tiled_blob::TiledBlob, blob::Blob, cat_entries::Vector{CatalogEntry})
@@ -502,7 +502,7 @@ end
 
 
 
-@doc """
+"""
 Set any pixels significantly below background noise for the
 specified source to NaN.
 
@@ -517,7 +517,7 @@ Returns:
   with empty pixel and noise arrays.  Tiles that contain the source will
   be the same as the original tiles but with NaN where the expected source
   electron counts are below <noise_fraction> of the noise at that pixel.
-""" ->
+"""
 function trim_source_tiles(
     s::Int64, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
     noise_fraction::Float64=0.1)

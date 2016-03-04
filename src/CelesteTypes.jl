@@ -65,13 +65,13 @@ end
 
 ############################################
 
-@doc """
+"""
 Parameters of a single normal component of a galaxy.
 
 Attributes:
   etaBar: The weight of the galaxy component
   nuBar: The scale of the galaxy component
-""" ->
+"""
 immutable GalaxyComponent
     etaBar::Float64
     nuBar::Float64
@@ -79,13 +79,13 @@ end
 
 typealias GalaxyPrototype Vector{GalaxyComponent}
 
-@doc """
+"""
 Pre-defined shapes for galaxies.
 
 Returns:
   dev_prototype: An array of GalaxyComponent for de Vaucouleurs galaxy types
   exp_prototype: An array of GalaxyComponent for exponenttial galaxy types
-""" ->
+"""
 function get_galaxy_prototypes()
     dev_amp = [
         4.26347652e-2, 2.40127183e-1, 6.85907632e-1, 1.51937350,
@@ -118,7 +118,7 @@ end
 const galaxy_prototypes = get_galaxy_prototypes()
 
 
-@doc """
+"""
 A single normal component of the point spread function.
 All quantities are in pixel coordinates.
 
@@ -133,7 +133,7 @@ Attributes:
   tauBar: The 2x2 covariance (tau_bar in the ICML paper)
   tauBarInv: The 2x2 precision
   tauBarLd: The log determinant of the covariance
-""" ->
+"""
 immutable PsfComponent
     alphaBar::Float64  # TODO: use underscore
     xiBar::Vector{Float64}
@@ -148,7 +148,7 @@ immutable PsfComponent
     end
 end
 
-@doc """An image, taken though a particular filter band""" ->
+"""An image, taken though a particular filter band"""
 type Image
     # The image height.
     H::Int64
@@ -211,11 +211,11 @@ Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSTransform,
 end
 
 
-@doc """A vector of images, one for each filter band""" ->
+"""A vector of images, one for each filter band"""
 typealias Blob Vector{Image}
 
 
-@doc """
+"""
 Tiles of pixels that share the same set of
 relevant sources (or other calculations).  It contains all the information
 necessary to compute the ELBO and derivatives in this patch of sky.
@@ -231,7 +231,7 @@ Attributes:
 - w_width: The width of the tile in the w direction
 - pixels: The pixel values
 - remainder: the same as in the Image type.
-""" ->
+"""
 immutable ImageTile
     b::Int64
 
@@ -249,7 +249,7 @@ immutable ImageTile
 end
 
 
-@doc """
+"""
 Return the range of image pixels in an ImageTile.
 
 Args:
@@ -258,7 +258,7 @@ Args:
   - H: The number of pixel rows in the image
   - W: The number of pixel columns in the image
   - tile_width: The width and height of a tile in pixels
-""" ->
+"""
 function tile_range(hh::Int64, ww::Int64, H::Int64, W::Int64, tile_width::Int64)
     h1 = 1 + (hh - 1) * tile_width
     h2 = min(hh * tile_width, H)
@@ -268,7 +268,7 @@ function tile_range(hh::Int64, ww::Int64, H::Int64, W::Int64, tile_width::Int64)
 end
 
 
-@doc """
+"""
 Constructs an image tile from an image.
 
 Args:
@@ -276,13 +276,13 @@ Args:
   - hh: The tile row index (in 1:number of tile rows)
   - ww: The tile column index (in 1:number of tile columns)
   - tile_width: The width and height of a tile in pixels
-""" ->
+"""
 ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
   h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
   ImageTile(img, h_range, w_range; hh=hh, ww=ww)
 end
 
-@doc """
+"""
 Constructs an image tile from specific image pixels.
 
 Args:
@@ -291,7 +291,7 @@ Args:
   - w_range: A UnitRange for the w pixels
   - hh: Optional h index in tile coordinates
   - ww: Optional w index in tile coordinates
-""" ->
+"""
 ImageTile(img::Image,
           h_range::UnitRange{Int64}, w_range::UnitRange{Int64};
           hh::Int64=1, ww::Int64=1) = begin
@@ -319,7 +319,7 @@ typealias TiledImage Array{ImageTile, 2}
 typealias TiledBlob Vector{TiledImage}
 
 
-@doc """
+"""
 Attributes of the patch of sky surrounding a single
 celestial object in a single image.
 
@@ -331,7 +331,7 @@ Attributes:
   - wcs_jacobian: The jacobian of the WCS transform in this region of the
                   sky for each band
   - pixel_center: The pixel location of center in each band.
-""" ->
+"""
 immutable SkyPatch
     center::Vector{Float64}
     radius::Float64
@@ -533,7 +533,7 @@ const ids_free_names = get_id_names(ids_free)
 
 #########################################################
 
-@doc """
+"""
 The parameters for a particular image.
 
 Attributes:
@@ -548,7 +548,7 @@ Attributes:
  - objids: Global object ids for the sources in this ModelParams object.
 
  - S: The number of sources.
-""" ->
+"""
 type ModelParams{NumType <: Number}
     vp::VariationalParams{NumType}
     pp::PriorParams
@@ -624,9 +624,9 @@ function forward_diff_model_params{T <: Number}(
 end
 
 
-@doc """
+"""
 Display model parameters with the variable names.
-""" ->
+"""
 function print_params(mp::ModelParams)
     for s in mp.active_sources
         println("=======================\n Object $(s):")
@@ -637,9 +637,9 @@ function print_params(mp::ModelParams)
     end
 end
 
-@doc """
+"""
 Display several model parameters side by side.
-""" ->
+"""
 function print_params(mp_tuple::ModelParams...)
     println("Printing for $(length(mp_tuple)) parameters.")
     for s in mp_tuple[1].active_sources
@@ -655,9 +655,9 @@ function print_params(mp_tuple::ModelParams...)
 end
 
 
-@doc """
+"""
 Display a Celeste catalog entry.
-""" ->
+"""
 function print_cat_entry(cat_entry::CatalogEntry)
     [println("$name: $(cat_entry.(name))") for name in
             fieldnames(cat_entry)]
