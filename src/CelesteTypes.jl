@@ -39,10 +39,6 @@ import ForwardDiff
 import Base.length
 
 
-typealias TheirGradNum ForwardDiff.GradientNumber{1,Float64,Tuple{Float64}}
-typealias Differentiable Union{AbstractFloat, TheirGradNum}
-
-
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
 
