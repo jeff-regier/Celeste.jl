@@ -2,9 +2,9 @@ import ForwardDiff
 import KL
 
 
-@doc """
+"""
 Subtract the KL divergence from the prior for c
-""" ->
+"""
 function subtract_kl_c{NumType <: Number}(
     d::Int64, i::Int64, vs::Vector{NumType}, pp::PriorParams)
 
@@ -22,9 +22,9 @@ function subtract_kl_c{NumType <: Number}(
   # accum.d[ids.a[i], s] -= k * v
 end
 
-@doc """
+"""
 Subtract the KL divergence from the prior for k
-""" ->
+"""
 function subtract_kl_k{NumType <: Number}(
   i::Int64, vs::Vector{NumType}, pp::PriorParams)
 
@@ -38,9 +38,9 @@ function subtract_kl_k{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Subtract the KL divergence from the prior for r for object type i.
-""" ->
+"""
 function subtract_kl_r{NumType <: Number}(
   i::Int64, vs::Vector{NumType}, pp::PriorParams)
 
@@ -60,9 +60,9 @@ function subtract_kl_r{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Subtract the KL divergence from the prior for a
-""" ->
+"""
 function subtract_kl_a{NumType <: Number}(vs::Vector{NumType}, pp::PriorParams)
     pp_kl_a = KL.gen_categorical_kl(pp.a)
     # (v, (d_a,)) = pp_kl_a(vs[ids.a])

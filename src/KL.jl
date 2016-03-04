@@ -13,7 +13,7 @@ export gen_normal_kl, gen_isobvnormal_kl, gen_diagmvn_mvn_kl
 # e.g. if the prior is a float and the parameter is a dual number.
 
 
-@doc """
+"""
 KL divergence between a pair of beta distributions
 
 Args:
@@ -23,7 +23,7 @@ Args:
 Returns:
 - a function the takes shape and scale parameters for the first
   beta distribution, and returns the KL divergence and its derivatives
-""" ->
+"""
 function gen_beta_kl{NumType <: Number}(alpha2::NumType, beta2::NumType)
     function this_beta_kl{NumType2 <: Number}(alpha1::NumType2, beta1::NumType2)
         alpha_diff = alpha1 - alpha2
@@ -50,14 +50,14 @@ function gen_beta_kl{NumType <: Number}(alpha2::NumType, beta2::NumType)
 end
 
 
-@doc """
+"""
 KL divergence between a wrapped Cauchy distribution
 and a uniform distribution on the unit circle.
 
 Returns:
 - a function the takes scale parameter for the wrapped Cauchy distribution,
   the returns the KL divergence and its derivatives
-""" ->
+"""
 function gen_wrappedcauchy_uniform_kl()
     function(scale1)
         v = -log(1 - exp(-2scale1))
@@ -85,7 +85,7 @@ function gen_categorical_kl{NumType <: Number}(p2::Vector{NumType})
 end
 
 
-@doc """
+"""
 KL divergence between a pair of gamma distributions
 NB: This is currently not used in the Celeste model.
 
@@ -96,7 +96,7 @@ Args:
 Returns:
 - a function the takes shape and scale parameters for the first
   gamma distribution, and returns the KL divergence and its derivatives
-""" ->
+"""
 function gen_gamma_kl{NumType <: Number}(k2::NumType, theta2::NumType)
     function this_gamma_lk{NumType2 <: Number}(k1::NumType2, theta1::NumType2)
         digamma_k1 = digamma(k1)
@@ -120,7 +120,7 @@ function gen_gamma_kl{NumType <: Number}(k2::NumType, theta2::NumType)
 end
 
 
-@doc """
+"""
 KL divergence between a pair of univariate Gaussian distributions
 
 Args:
@@ -131,7 +131,7 @@ Returns:
 - a function the takes mean and variance parameters for the first
   Gaussian distribution, and returns the KL divergence and
   its derivatives
-""" ->
+"""
 function gen_normal_kl{NumType <: Number}(mu2::NumType, sigma2Sq::NumType)
     const log_sigma2Sq = log(sigma2Sq)
     function this_normal_lk{NumType2 <: Number}(mu1::NumType2, sigma1Sq::NumType2)
@@ -147,7 +147,7 @@ function gen_normal_kl{NumType <: Number}(mu2::NumType, sigma2Sq::NumType)
 end
 
 
-@doc """
+"""
 KL divergence between a pair of bivariate normal distributions
 with isotropic covariance.
 
@@ -159,7 +159,7 @@ Returns:
 - a function the takes mean and variance parameters for the first
   bivariate normal distribution, and returns the KL divergence
   and its derivatives
-""" ->
+"""
 function gen_isobvnormal_kl{NumType <: Number}(
   mean2::Vector{NumType}, var2::NumType)
     function this_isobvnormal_kl{NumType2 <: Number}(
@@ -176,7 +176,7 @@ function gen_isobvnormal_kl{NumType <: Number}(
 end
 
 
-@doc """
+"""
 KL divergence between a pair of multivariate normal distributions,
 the first having a diagonal covariance matrix
 
@@ -187,7 +187,7 @@ Args:
 Returns:
 - a function the takes mean and variance parameters for the first normal
   distribution, and returns the KL divergence and its derivatives
-""" ->
+"""
 function gen_diagmvn_mvn_kl{NumType <: Number}(
   mean2::Vector{NumType}, cov2::Matrix{NumType})
     const precision2 = cov2^-1
@@ -214,14 +214,14 @@ function gen_diagmvn_mvn_kl{NumType <: Number}(
 end
 
 
-@doc """
+"""
 KL divergence between a bivariate normal distribution with isotropic covariance
 and flat (improper) distribution
 
 Returns:
 - a function the takes variance for the normal distribution,
   and returns the KL divergence its derivatives
-""" ->
+"""
 function gen_isobvnormal_flat_kl()
     function(var1)
         v = -(1 + log(2pi) + log(var1))

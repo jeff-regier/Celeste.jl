@@ -97,10 +97,10 @@ function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=fals
                  img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
 end
 
-@doc """
+"""
 Generate a simulated blob based on a vector of catalog entries using
 identity world coordinates.
-""" ->
+"""
 function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry}; expectation=false)
     [gen_image(blob0[b], n_bodies, expectation=expectation) for b in 1:5]
 end
