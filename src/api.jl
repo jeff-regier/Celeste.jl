@@ -27,7 +27,7 @@ Returns:
 function infer(
       dir::AbstractString, run::AbstractString, camcol::AbstractString,
       field::AbstractString, outdir::AbstractString,
-      partnum::Int64, parts::Int64)
+      partnum::Int, parts::Int)
 
     # get images
     images = SkyImages.load_sdss_blob(dir, run, camcol, field)

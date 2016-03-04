@@ -61,7 +61,7 @@ function test_combine_sfs()
     g_d, g_h
   end
 
-  s_ind = Array(UnitRange{Int64}, 2);
+  s_ind = Array(UnitRange{Int}, 2);
   s_ind[1] = 1:p
   s_ind[2] = (1:p) + p
 

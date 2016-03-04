@@ -105,7 +105,7 @@ Return a vector of the sources that affect the node.  Assumes tiled_blob
 and mp are globally defined.
 """
 function node_sources()
-  sources = Int64[]
+  sources = Int[]
   for b in 1:5
     for tile_ind in 1:length(tiled_blob[b])
       append!(sources, mp.tile_sources[b][tile_ind])
@@ -117,7 +117,7 @@ end
 """
 Close all but the current worker and then add nw of them.
 """
-function create_workers(nw::Int64)
+function create_workers(nw::Int)
   println("Adding workers.")
   for worker in workers()
     if worker != myid()
@@ -253,7 +253,7 @@ end
 
 
 function eval_worker_hessian()
-  omitted_ids = Int64[]
+  omitted_ids = Int[]
 
   global hess_i, hess_j, hess_val, new_hess_time
 

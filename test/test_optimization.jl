@@ -54,14 +54,14 @@ end
 #########################################################
 
 function test_objective_wrapper()
-    omitted_ids = Int64[];
+    omitted_ids = Int[];
     kept_ids = setdiff(1:length(ids_free), omitted_ids);
 
     blob, mp, bodies, tiled_blob = SampleData.gen_three_body_dataset();
     # Change the tile size.
     tiled_blob, mp = ModelInit.initialize_celeste(
       blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
-    mp.active_sources = Int64[2, 3]
+    mp.active_sources = Int[2, 3]
     trans = Transform.get_mp_transform(mp, loc_width=1.0);
 
     wrapper =
@@ -118,11 +118,11 @@ function test_single_source_optimization()
   mp_original = deepcopy(mp);
 
   s = 2
-  mp.active_sources = Int64[s]
+  mp.active_sources = Int[s]
   transform = get_mp_transform(mp, loc_width=1.0);
 
   f = ElboDeriv.elbo;
-  omitted_ids = Int64[]
+  omitted_ids = Int[]
 
   ElboDeriv.elbo_likelihood(tiled_blob, mp).v[1]
 
@@ -152,7 +152,7 @@ function test_two_body_optimization_newton()
     function elbo_function(tiled_blob::TiledBlob, mp::ModelParams)
       ElboDeriv.elbo(tiled_blob, mp)
     end
-    omitted_ids = Int64[]
+    omitted_ids = Int[]
 
     mp_newton = deepcopy(mp);
     newton_iter_count = OptimizeElbo.maximize_f_newton(

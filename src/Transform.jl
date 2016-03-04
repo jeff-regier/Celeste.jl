@@ -91,7 +91,7 @@ end
 immutable SimplexBox
   lower_bound::Float64
   scale::Float64
-  n::Int64
+  n::Int
 
   SimplexBox(lower_bound, scale, n) = begin
     @assert n >= 2
@@ -315,10 +315,10 @@ Members:
 type TransformDerivatives{NumType <: Number}
   dparam_dfree::Matrix{NumType}
   d2param_dfree2::Array{Matrix{NumType}}
-  Sa::Int64
+  Sa::Int
 
   # TODO: use sparse matrices?
-  TransformDerivatives(Sa::Int64) = begin
+  TransformDerivatives(Sa::Int) = begin
     dparam_dfree =
       zeros(NumType,
             Sa * length(CanonicalParams), Sa * length(UnconstrainedParams))
@@ -525,7 +525,7 @@ Args:
 There is probably no use for this function, since you'll only be passing
 trasformations to the optimizer, but I'll include it for completeness."""
 function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
-                                             omitted_ids::Vector{Int64})
+                                             omitted_ids::Vector{Int})
 
     left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     new_P = length(left_ids)
@@ -555,7 +555,7 @@ Returns:
 """
 function array_to_free_vp!{NumType <: Number}(
     xs::Matrix{NumType}, vp_free::FreeVariationalParams{NumType},
-    omitted_ids::Vector{Int64})
+    omitted_ids::Vector{Int})
 
     left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     P = length(left_ids)
@@ -644,9 +644,9 @@ type DataTransform
   array_to_vp!::Function
 	transform_sensitive_float::Function
   bounds::Vector{ParamBounds}
-  active_sources::Vector{Int64}
-  active_S::Int64
-  S::Int64
+  active_sources::Vector{Int}
+  active_S::Int
+  S::Int
 end
 
 # TODO: Maybe this should be initialized with ModelParams with optional
@@ -701,14 +701,14 @@ DataTransform(
   end
 
   function vp_to_array{NumType <: Number}(vp::VariationalParams{NumType},
-                                          omitted_ids::Vector{Int64})
+                                          omitted_ids::Vector{Int})
       vp_trans = from_vp(vp)
       free_vp_to_array(vp_trans, omitted_ids)
   end
 
   function array_to_vp!{NumType <: Number}(xs::Matrix{NumType},
                                            vp::VariationalParams{NumType},
-                                           omitted_ids::Vector{Int64})
+                                           omitted_ids::Vector{Int})
       # This needs to update vp in place so that variables in omitted_ids
       # stay at their original values.
       vp_trans = from_vp(vp)
@@ -802,7 +802,7 @@ end
 # An identity transform that does not enforce any bounds nor reduce
 # the dimension of the variational params.  This is mostly useful
 # for testing.
-function get_identity_transform(P::Int64, S::Int64)
+function get_identity_transform(P::Int, S::Int)
 
   active_S = S
   active_sources = 1:S
@@ -839,7 +839,7 @@ function get_identity_transform(P::Int64, S::Int64)
   end
 
   function vp_to_array{NumType <: Number}(vp::VariationalParams{NumType},
-                                          omitted_ids::Vector{Int64})
+                                          omitted_ids::Vector{Int})
       kept_ids = setdiff(1:P, omitted_ids)
       xs = zeros(length(kept_ids), S)
       for s=1:S
@@ -850,7 +850,7 @@ function get_identity_transform(P::Int64, S::Int64)
 
   function array_to_vp!{NumType <: Number}(xs::Matrix{NumType},
                                            vp::VariationalParams{NumType},
-                                           omitted_ids::Vector{Int64})
+                                           omitted_ids::Vector{Int})
       # This needs to update vp in place so that variables in omitted_ids
       # stay at their original values.
       kept_ids = setdiff(1:P, omitted_ids)

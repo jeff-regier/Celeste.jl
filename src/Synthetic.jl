@@ -16,7 +16,7 @@ function wrapped_poisson(rate::Float64)
 end
 
 
-function get_patch(the_mean::Vector{Float64}, H::Int64, W::Int64)
+function get_patch(the_mean::Vector{Float64}, H::Int, W::Int)
     const radius = 50
     hm = round(Int, the_mean[1])
     wm = round(Int, the_mean[2])
@@ -111,7 +111,7 @@ end
 const pp = ModelInit.sample_prior()
 
 
-function sample_fluxes(i::Int64, r_s)
+function sample_fluxes(i::Int, r_s)
 #    r_s = rand(Distributions.Normal(pp.r_mean[i], pp.r_var[i]))
     k_s = rand(Distributions.Categorical(pp.k[i]))
     c_s = rand(Distributions.MvNormal(pp.c[i][:, k_s], pp.c[i][:, :, k_s]))

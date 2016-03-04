@@ -6,7 +6,7 @@ import KL
 Subtract the KL divergence from the prior for c
 """
 function subtract_kl_c{NumType <: Number}(
-    d::Int64, i::Int64, vs::Vector{NumType}, pp::PriorParams)
+    d::Int, i::Int, vs::Vector{NumType}, pp::PriorParams)
 
   a = vs[ids.a[i]]
   k = vs[ids.k[d, i]]
@@ -26,7 +26,7 @@ end
 Subtract the KL divergence from the prior for k
 """
 function subtract_kl_k{NumType <: Number}(
-  i::Int64, vs::Vector{NumType}, pp::PriorParams)
+  i::Int, vs::Vector{NumType}, pp::PriorParams)
 
     pp_kl_ki = KL.gen_categorical_kl(pp.k[:, i])
     # (v, (d_k,)) = pp_kl_ki(vs[ids.k[:, i]])
@@ -42,7 +42,7 @@ end
 Subtract the KL divergence from the prior for r for object type i.
 """
 function subtract_kl_r{NumType <: Number}(
-  i::Int64, vs::Vector{NumType}, pp::PriorParams)
+  i::Int, vs::Vector{NumType}, pp::PriorParams)
 
     a = vs[ids.a[i]]
 

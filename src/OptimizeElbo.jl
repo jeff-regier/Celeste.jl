@@ -20,9 +20,9 @@ include(joinpath(Pkg.dir("Celeste"), "src", "newton_trust_region.jl"))
 # track of function evaluations, but we can keep other metadata
 # in it as well.
 type WrapperState
-    f_evals::Int64
+    f_evals::Int
     verbose::Bool
-    print_every_n::Int64
+    print_every_n::Int
     scale::Float64
 end
 
@@ -41,8 +41,8 @@ type ObjectiveWrapperFunctions
     state::WrapperState
     transform::DataTransform
     mp::ModelParams{Float64}
-    kept_ids::Array{Int64}
-    omitted_ids::Array{Int64}
+    kept_ids::Array{Int}
+    omitted_ids::Array{Int}
 
     # Caching
     last_sf::SensitiveFloat
@@ -58,7 +58,7 @@ type ObjectiveWrapperFunctions
     #                mp.active_sources to speed up computation.
     ObjectiveWrapperFunctions(
       f::Function, mp::ModelParams{Float64}, transform::DataTransform,
-      kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1};
+      kept_ids::Array{Int, 1}, omitted_ids::Array{Int, 1};
       fast_hessian::Bool=true) = begin
 
         x_length = length(kept_ids) * transform.active_S
@@ -155,7 +155,7 @@ type ObjectiveWrapperFunctions
         function f_hessian{T <: Number}(x::Vector{T})
           @assert length(x) == x_length
           res = f_objective(x)
-          all_kept_ids = Int64[]
+          all_kept_ids = Int[]
           for sa=1:transform.active_S
             append!(all_kept_ids, kept_ids + (sa - 1) * length(kept_ids))
           end
@@ -202,7 +202,7 @@ Returns:
 function maximize_f(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::Transform.DataTransform;
-  omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
+  omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
   max_iters=100, rho_lower=0.25, fast_hessian=true)
 
     # Make sure the model parameters are within the transform bounds
@@ -250,7 +250,7 @@ end
 
 
 function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
+    omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
     max_iters = 100)
     # Use the default transform.
 

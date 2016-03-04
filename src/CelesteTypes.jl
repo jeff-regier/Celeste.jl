@@ -151,16 +151,16 @@ end
 """An image, taken though a particular filter band"""
 type Image
     # The image height.
-    H::Int64
+    H::Int
 
     # The image width.
-    W::Int64
+    W::Int
 
     # An HxW matrix of pixel intensities.
     pixels::Matrix{Float64}
 
     # The band id (takes on values from 1 to 5).
-    b::Int64
+    b::Int
 
     # World coordinates
     wcs::WCSTransform
@@ -177,9 +177,9 @@ type Image
 
     # SDSS-specific identifiers. A field is a particular region of the sky.
     # A Camcol is the output of one camera column as part of a Run.
-    run_num::Int64
-    camcol_num::Int64
-    field_num::Int64
+    run_num::Int
+    camcol_num::Int
+    field_num::Int
 
     # # Field-varying parameters.
     constant_background::Bool
@@ -190,9 +190,9 @@ end
 
 # Initialization for an image with noise and background parameters that are
 # constant across the image.
-Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSTransform,
+Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int, wcs::WCSTransform,
       epsilon::Float64, iota::Float64, psf::Vector{PsfComponent},
-      run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
+      run_num::Int, camcol_num::Int, field_num::Int) = begin
     empty_psf_comp =
       RawPSFComponents(Array(Float64, 0, 0), -1, -1, Array(Float64, 0, 0, 0))
     Image(H, W, pixels, b, wcs, epsilon, iota, psf,
@@ -202,10 +202,10 @@ end
 
 # Initialization for an image with noise and background parameters that vary
 # across the image.
-Image(H::Int64, W::Int64, pixels::Matrix{Float64}, b::Int64, wcs::WCSTransform,
+Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int, wcs::WCSTransform,
       epsilon_mat::Array{Float64, 1}, iota_vec::Array{Float64, 2},
        psf::Vector{PsfComponent}, raw_psf_comp::RawPSFComponents,
-      run_num::Int64, camcol_num::Int64, field_num::Int64) = begin
+      run_num::Int, camcol_num::Int, field_num::Int) = begin
     Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num, field_num,
           false, epsilon_mat, iota_vec, raw_psf_comp)
 end
@@ -233,12 +233,12 @@ Attributes:
 - remainder: the same as in the Image type.
 """
 immutable ImageTile
-    b::Int64
+    b::Int
 
-    h_range::UnitRange{Int64}
-    w_range::UnitRange{Int64}
-    h_width::Int64
-    w_width::Int64
+    h_range::UnitRange{Int}
+    w_range::UnitRange{Int}
+    h_width::Int
+    w_width::Int
     pixels::Matrix{Float64}
 
     constant_background::Bool
@@ -259,7 +259,7 @@ Args:
   - W: The number of pixel columns in the image
   - tile_width: The width and height of a tile in pixels
 """
-function tile_range(hh::Int64, ww::Int64, H::Int64, W::Int64, tile_width::Int64)
+function tile_range(hh::Int, ww::Int, H::Int, W::Int, tile_width::Int)
     h1 = 1 + (hh - 1) * tile_width
     h2 = min(hh * tile_width, H)
     w1 = 1 + (ww - 1) * tile_width
@@ -277,7 +277,7 @@ Args:
   - ww: The tile column index (in 1:number of tile columns)
   - tile_width: The width and height of a tile in pixels
 """
-ImageTile(hh::Int64, ww::Int64, img::Image, tile_width::Int64) = begin
+ImageTile(hh::Int, ww::Int, img::Image, tile_width::Int) = begin
   h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
   ImageTile(img, h_range, w_range; hh=hh, ww=ww)
 end
@@ -293,8 +293,8 @@ Args:
   - ww: Optional w index in tile coordinates
 """
 ImageTile(img::Image,
-          h_range::UnitRange{Int64}, w_range::UnitRange{Int64};
-          hh::Int64=1, ww::Int64=1) = begin
+          h_range::UnitRange{Int}, w_range::UnitRange{Int};
+          hh::Int=1, ww::Int=1) = begin
   b = img.b
   h_width = maximum(h_range) - minimum(h_range) + 1
   w_width = maximum(w_range) - minimum(w_range) + 1
@@ -553,11 +553,11 @@ type ModelParams{NumType <: Number}
     vp::VariationalParams{NumType}
     pp::PriorParams
     patches::Array{SkyPatch, 2}
-    tile_sources::Vector{Array{Array{Int64}}}
-    active_sources::Vector{Int64}
+    tile_sources::Vector{Array{Array{Int}}}
+    active_sources::Vector{Int}
     objids::Vector{ASCIIString}
 
-    S::Int64
+    S::Int
 
     ModelParams(vp, pp) = begin
         # There must be one patch for each celestial object.

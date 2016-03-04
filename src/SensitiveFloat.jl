@@ -36,7 +36,7 @@ Set a SensitiveFloat's hessian term, maintaining symmetry.
 """
 function set_hess!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf::SensitiveFloat{ParamType, NumType},
-    i::Int64, j::Int64, v::NumType)
+    i::Int, j::Int, v::NumType)
   i != j ?
     sf.h[i, j] = sf.h[j, i] = v:
     sf.h[i, j] = v
@@ -45,7 +45,7 @@ function set_hess!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 end
 
 function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
-  ::Type{ParamType}, NumType::DataType, local_S::Int64)
+  ::Type{ParamType}, NumType::DataType, local_S::Int)
     local_P = length(ParamType)
 
     v = zeros(NumType, 1)
@@ -64,7 +64,7 @@ end
 
 # If no type is specified, default to using Float64.
 function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
-  param_arg::Type{ParamType}, local_S::Int64)
+  param_arg::Type{ParamType}, local_S::Int)
     zero_sensitive_float(param_arg, Float64, local_S)
 end
 
@@ -194,8 +194,8 @@ TODO: don't ignore the ids arguments.
 function multiply_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf1::SensitiveFloat{ParamType, NumType},
     sf2::SensitiveFloat{ParamType, NumType};
-    ids1::Vector{Int64}=collect(1:length(ParamType)),
-    ids2::Vector{Int64}=collect(1:length(ParamType)),
+    ids1::Vector{Int}=collect(1:length(ParamType)),
+    ids2::Vector{Int}=collect(1:length(ParamType)),
     calculate_hessian::Bool=true)
 
   v = sf1.v[1] * sf2.v[1]
@@ -242,7 +242,7 @@ sensitive to source s.
 function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     sf_all::SensitiveFloat{ParamType, NumType},
     sf_s::SensitiveFloat{ParamType, NumType},
-    s::Int64, calculate_hessian::Bool)
+    s::Int, calculate_hessian::Bool)
 
   # TODO: This line, too, allocates a lot of memory.  Why?
   sf_all.v[1] = sf_all.v[1] + sf_s.v[1]

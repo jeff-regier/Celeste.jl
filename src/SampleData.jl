@@ -136,7 +136,7 @@ Generate a large dataset with S randomly placed bodies and non-constant
 background.
 """
 function gen_n_body_dataset(
-    S::Int64; patch_pixel_radius=20., tile_width=50, seed=NaN)
+    S::Int; patch_pixel_radius=20., tile_width=50, seed=NaN)
 
   if !isnan(seed)
     srand(seed)

@@ -462,7 +462,7 @@ end
 function test_fs1m_derivatives()
   # TODO: test with a real and asymmetric wcs jacobian.
   blob, mp, three_bodies = gen_three_body_dataset();
-  omitted_ids = Int64[];
+  omitted_ids = Int[];
   kept_ids = setdiff(1:length(ids), omitted_ids);
 
   s = 1
@@ -539,7 +539,7 @@ end
 function test_fs0m_derivatives()
   # TODO: test with a real and asymmetric wcs jacobian.
   blob, mp, three_bodies = gen_three_body_dataset();
-  omitted_ids = Int64[];
+  omitted_ids = Int[];
   kept_ids = setdiff(1:length(ids), omitted_ids);
 
   s = 1
