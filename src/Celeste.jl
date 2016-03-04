@@ -17,6 +17,7 @@ using JLD
 using FITSIO
 import SloanDigitalSkySurvey.SDSS
 
+include("api.jl")
 include("score.jl")
 
 end # module
