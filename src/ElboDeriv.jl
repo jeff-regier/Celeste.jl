@@ -2,8 +2,12 @@
 
 module ElboDeriv
 
-using CelesteTypes
-import Util
+using ..Types
+using ..SensitiveFloats
+import ..Util
+import ..KL
+
+import ForwardDiff
 import SloanDigitalSkySurvey.WCSUtils
 
 Threaded = true
@@ -18,8 +22,6 @@ else
     end
 end
 
-export tile_predicted_image
-
 
 ####################################################
 # Store pre-allocated memory in this data structures, which contains
@@ -31,15 +33,15 @@ type HessianSubmatrices{NumType <: Number}
 end
 
 
-@doc """
+"""
 Pre-allocated memory for efficiently accumulating certain sub-matrices
 of the E_G_s and E_G2_s Hessian.
 
 Args:
   NumType: The numeric type of the hessian.
   i: The type of celestial source, from 1:Ia
-""" ->
-HessianSubmatrices(NumType::DataType, i::Int64) = begin
+"""
+function HessianSubmatrices(NumType::DataType, i::Int)
   @assert 1 <= i <= Ia
   shape_p = length(shape_standard_alignment[i])
 
@@ -117,7 +119,7 @@ type ElboIntermediateVariables{NumType <: Number}
 end
 
 
-@doc """
+"""
 Args:
   - S: The total number of sources
   - num_active_sources: The number of actives sources (with deriviatives)
@@ -126,10 +128,10 @@ Args:
                        calculate_derivs = false, then hessians will not be
                        calculated irrespective of the value of
                        calculate_hessian.
-""" ->
-ElboIntermediateVariables(
-    NumType::DataType, S::Int64, num_active_sources::Int64;
-    calculate_derivs::Bool=true, calculate_hessian::Bool=true) = begin
+"""
+function ElboIntermediateVariables(
+    NumType::DataType, S::Int, num_active_sources::Int;
+    calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
   @assert NumType <: Number
 
@@ -197,11 +199,11 @@ ElboIntermediateVariables(
 end
 
 
-include(joinpath(Pkg.dir("Celeste"), "src/ElboKL.jl"))
-include(joinpath(Pkg.dir("Celeste"), "src/SourceBrightness.jl"))
-include(joinpath(Pkg.dir("Celeste"), "src/BivariateNormals.jl"))
+include("elbo_kl.jl")
+include("source_brightness.jl")
+include("bivariate_normals.jl")
 
-@doc """
+"""
 Add the contributions of a star's bivariate normal term to the ELBO,
 by updating elbo_vars.fs0m_vec[s] in place.
 
@@ -215,10 +217,10 @@ Args:
 
 Returns:
   Updates elbo_vars.fs0m_vec[s] in place.
-""" ->
+"""
 function accum_star_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    s::Int64,
+    s::Int,
     bmc::BvnComponent{NumType},
     x::Vector{Float64},
     wcs_jacobian::Array{Float64, 2},
@@ -259,7 +261,7 @@ end
 
 
 
-@doc """
+"""
 Add the contributions of a galaxy component term to the ELBO by
 updating fs1m in place.
 
@@ -273,10 +275,10 @@ Args:
 
 Returns:
   Updates elbo_vars.fs1m_vec[s] in place.
-""" ->
+"""
 function accum_galaxy_pos!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    s::Int64,
+    s::Int,
     gcc::GalaxyCacheComponent{NumType},
     x::Vector{Float64},
     wcs_jacobian::Array{Float64, 2},
@@ -361,7 +363,7 @@ function accum_galaxy_pos!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Populate fs0m_vec and fs1m_vec for all sources for a given pixel.
 
 Args:
@@ -377,13 +379,13 @@ Args:
 Returns:
   Updates elbo_vars.fs0m_vec and elbo_vars.fs1m_vec in place with the total
   shape contributions to this pixel's brightness.
-""" ->
+"""
 function populate_fsm_vecs!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     mp::ModelParams{NumType},
-    tile_sources::Vector{Int64},
+    tile_sources::Vector{Int},
     tile::ImageTile,
-    h::Int64, w::Int64,
+    h::Int, w::Int,
     sbs::Vector{SourceBrightness{NumType}},
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     star_mcs::Array{BvnComponent{NumType}, 2})
@@ -419,7 +421,7 @@ end
 
 
 
-@doc """
+"""
 Add the contributions of a single source to E_G_s and var_G_s, which are cleared
 and then updated in place.
 
@@ -433,12 +435,12 @@ Args:
 Returns:
   Updates elbo_vars.E_G_s and elbo_vars.var_G_s in place with the brightness
   for this sourve at this pixel.
-""" ->
+"""
 function accumulate_source_brightness!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     mp::ModelParams{NumType},
     sbs::Vector{SourceBrightness{NumType}},
-    s::Int64, b::Int64)
+    s::Int, b::Int)
 
   # E[G] and E{G ^ 2} for a single source
   E_G_s = elbo_vars.E_G_s;
@@ -610,7 +612,7 @@ function accumulate_source_brightness!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Calculate the variance var_G_s as a function of (E_G_s, E_G2_s).
 
 Args:
@@ -619,7 +621,7 @@ Args:
 
 Returns:
   Updates elbo_vars.var_G_s in place.
-""" ->
+"""
 function calculate_var_G_s!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType}, active_source::Bool)
 
@@ -653,7 +655,7 @@ function calculate_var_G_s!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Adds up E_G and var_G across all sources.
 
 Args:
@@ -664,11 +666,11 @@ Args:
   - sbs: Source brightnesses
 
 Updates elbo_vars.E_G and elbo_vars.var_G in place.
-""" ->
+"""
 function combine_pixel_sources!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     mp::ModelParams{NumType},
-    tile_sources::Vector{Int64},
+    tile_sources::Vector{Int},
     tile::ImageTile,
     sbs::Vector{SourceBrightness{NumType}})
 
@@ -698,7 +700,7 @@ function combine_pixel_sources!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Expected brightness for a single pixel.
 
 Args:
@@ -714,16 +716,16 @@ Args:
 
 Returns:
   - Updates elbo_vars.E_G and elbo_vars.var_G in place.
-""" ->
+"""
 function get_expected_pixel_brightness!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    h::Int64, w::Int64,
+    h::Int, w::Int,
     sbs::Vector{SourceBrightness{NumType}},
     star_mcs::Array{BvnComponent{NumType}, 2},
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
     tile::ImageTile,
     mp::ModelParams{NumType},
-    tile_sources::Vector{Int64};
+    tile_sources::Vector{Int};
     include_epsilon::Bool=true)
 
   # This combines the bvn components to get the brightness for each
@@ -745,7 +747,7 @@ function get_expected_pixel_brightness!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Add the lower bound to the log term to the elbo for a single pixel.
 
 Args:
@@ -756,7 +758,7 @@ Args:
  Returns:
   Updates elbo_vars.elbo in place by adding the lower bound to the log
   term.
-""" ->
+"""
 function add_elbo_log_term!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     x_nbm::Float64, iota::Float64)
@@ -809,7 +811,7 @@ end
 ############################################
 # The remaining functions loop over tiles, sources, and pixels.
 
-@doc """
+"""
 Add a tile's contribution to the ELBO likelihood term by
 modifying elbo in place.
 
@@ -825,12 +827,12 @@ Args:
 
 Returns:
   Adds to the elbo_vars_array[:].elbo in place.
-""" ->
+"""
 function tile_likelihood!{NumType <: Number}(
     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
     tile::ImageTile,
     mp::ModelParams{NumType},
-    tile_sources::Vector{Int64},
+    tile_sources::Vector{Int},
     sbs::Vector{SourceBrightness{NumType}},
     star_mcs::Array{BvnComponent{NumType}, 2},
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
@@ -876,10 +878,10 @@ function tile_likelihood!{NumType <: Number}(
           # Add the terms to the elbo given the brightness.
           iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
           add_elbo_log_term!(elbo_vars_array[tid], this_pixel, iota)
-          CelesteTypes.add_scaled_sfs!(
-            elbo_vars_array[tid].elbo, elbo_vars_array[tid].E_G, -iota,
-            elbo_vars_array[tid].calculate_hessian &&
-              elbo_vars_array[tid].calculate_derivs)
+          add_scaled_sfs!(elbo_vars_array[tid].elbo,
+                          elbo_vars_array[tid].E_G, -iota,
+                          elbo_vars_array[tid].calculate_hessian &&
+                          elbo_vars_array[tid].calculate_derivs)
         end
       end
     end
@@ -895,10 +897,10 @@ function tile_likelihood!{NumType <: Number}(
         # Add the terms to the elbo given the brightness.
         iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
         add_elbo_log_term!(elbo_vars_array[1], this_pixel, iota)
-        CelesteTypes.add_scaled_sfs!(
-          elbo_vars_array[1].elbo, elbo_vars_array[1].E_G, -iota,
-          elbo_vars_array[1].calculate_hessian &&
-            elbo_vars_array[1].calculate_derivs)
+        add_scaled_sfs!(elbo_vars_array[1].elbo,
+                        elbo_vars_array[1].E_G, -iota,
+                        elbo_vars_array[1].calculate_hessian &&
+                        elbo_vars_array[1].calculate_derivs)
       end
     end
   end
@@ -909,7 +911,7 @@ function tile_likelihood!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Return the image predicted for the tile given the current parameters.
 
 Args:
@@ -924,12 +926,12 @@ Args:
 
 Returns:
   A matrix of the same size as the tile with the predicted brightnesses.
-""" ->
+"""
 function tile_predicted_image{NumType <: Number}(
         elbo_vars::ElboIntermediateVariables{NumType},
         tile::ImageTile,
         mp::ModelParams{NumType},
-        tile_sources::Vector{Int64},
+        tile_sources::Vector{Int},
         sbs::Vector{SourceBrightness{NumType}},
         star_mcs::Array{BvnComponent{NumType}, 2},
         gal_mcs::Array{GalaxyCacheComponent{NumType}, 4};
@@ -952,7 +954,7 @@ function tile_predicted_image{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Produce a predicted image for a given tile and model parameters.
 
 Args:
@@ -963,9 +965,9 @@ Args:
 
 If include_epsilon is true, then the background is also rendered.
 Otherwise, only pixels from the object are rendered.
-""" ->
+"""
 function tile_predicted_image{NumType <: Number}(
-    tile::ImageTile, mp::ModelParams{NumType}, tile_sources::Vector{Int64};
+    tile::ImageTile, mp::ModelParams{NumType}, tile_sources::Vector{Int};
     include_epsilon::Bool=false)
 
   star_mcs, gal_mcs = load_bvn_mixtures(mp, tile.b, calculate_derivs=false);
@@ -981,7 +983,7 @@ function tile_predicted_image{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Updates the ELBO likelihood for given brighntess and bvn components.
 
 Args:
@@ -994,7 +996,7 @@ Args:
 
 Returns:
   Updates elbo_vars_array[:].elbo in place.
-""" ->
+"""
 function elbo_likelihood!{NumType <: Number}(
     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
     tiled_image::Array{ImageTile},
@@ -1020,7 +1022,7 @@ function elbo_likelihood!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Add the expected log likelihood ELBO term for an image to elbo given the
 brightnesses.
 
@@ -1033,10 +1035,10 @@ Args:
 
 Returns:
   Updates elbo_vars_array[:].elbo in place.
-""" ->
+"""
 function elbo_likelihood!{NumType <: Number}(
     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
-    tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int64,
+    tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int,
     sbs::Vector{SourceBrightness{NumType}})
 
   star_mcs, gal_mcs =
@@ -1047,7 +1049,7 @@ function elbo_likelihood!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Return the expected log likelihood for all bands in a section
 of the sky.
 
@@ -1062,7 +1064,7 @@ Args:
 
 Returns:
   A sensitive float with the log likelihood.
-""" ->
+"""
 function elbo_likelihood{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType};
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
@@ -1090,17 +1092,17 @@ function elbo_likelihood{NumType <: Number}(
   end
   if Threaded
     for i in 2:nthreads()
-      CelesteTypes.add_scaled_sfs!(
-        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
-        elbo_vars_array[1].calculate_hessian &&
-          elbo_vars_array[1].calculate_derivs)
+      add_scaled_sfs!(elbo_vars_array[1].elbo,
+                      elbo_vars_array[i].elbo, 1.0,
+                      elbo_vars_array[1].calculate_hessian &&
+                      elbo_vars_array[1].calculate_derivs)
     end
   end
   elbo_vars_array[1].elbo
 end
 
 
-@doc """
+"""
 Calculates and returns the ELBO and its derivatives for all the bands
 of an image.
 
@@ -1115,7 +1117,7 @@ Args:
 
 Returns:
   A sensitive float containing the ELBO for the image.
-""" ->
+"""
 function elbo{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType};
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)

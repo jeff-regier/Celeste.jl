@@ -1,12 +1,9 @@
-using Celeste
 using Base.Test
-using SampleData
-using CelesteTypes
-using Compat
 
-import SkyImages
 import SloanDigitalSkySurvey: SDSS, WCSUtils
-import Util
+
+using Celeste: Types, SampleData
+import Celeste: SkyImages, Util, ModelInit
 
 
 println("Running misc tests.")

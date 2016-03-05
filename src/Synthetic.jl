@@ -2,9 +2,9 @@ module Synthetic
 
 export gen_blob
 
-using CelesteTypes
-import ModelInit
-import Util
+using ..Types
+import ..ModelInit
+import ..Util
 import SloanDigitalSkySurvey.WCSUtils
 
 import Distributions
@@ -16,7 +16,7 @@ function wrapped_poisson(rate::Float64)
 end
 
 
-function get_patch(the_mean::Vector{Float64}, H::Int64, W::Int64)
+function get_patch(the_mean::Vector{Float64}, H::Int, W::Int)
     const radius = 50
     hm = round(Int, the_mean[1])
     wm = round(Int, the_mean[2])
@@ -97,10 +97,10 @@ function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=fals
                  img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
 end
 
-@doc """
+"""
 Generate a simulated blob based on a vector of catalog entries using
 identity world coordinates.
-""" ->
+"""
 function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry}; expectation=false)
     [gen_image(blob0[b], n_bodies, expectation=expectation) for b in 1:5]
 end
@@ -111,7 +111,7 @@ end
 const pp = ModelInit.sample_prior()
 
 
-function sample_fluxes(i::Int64, r_s)
+function sample_fluxes(i::Int, r_s)
 #    r_s = rand(Distributions.Normal(pp.r_mean[i], pp.r_var[i]))
     k_s = rand(Distributions.Categorical(pp.k[i]))
     c_s = rand(Distributions.MvNormal(pp.c[i][:, k_s], pp.c[i][:, :, k_s]))

@@ -2,19 +2,19 @@
 
 module Transform
 
-using Celeste
-using CelesteTypes
+using ..Types
+using ..SensitiveFloats
 
-export DataTransform, ParamBounds, ParamBox, SimplexBox
-export get_mp_transform, generate_valid_parameters, enforce_bounds!
+export DataTransform, ParamBounds, ParamBox, SimplexBox,
+       get_mp_transform, generate_valid_parameters, enforce_bounds!
 
 
 ################################
 # Elementary functions.
 
-@doc """
+"""
 Unconstrain x in the unit interval to lie in R.
-""" ->
+"""
 function inv_logit{NumType <: Number}(x::NumType)
     @assert(x >= 0)
     @assert(x <= 1)
@@ -29,9 +29,9 @@ function inv_logit{NumType <: Number}(x::Array{NumType})
 end
 
 
-@doc """
+"""
 Convert x in R to lie in the unit interval.
-""" ->
+"""
 function logit{NumType <: Number}(x::NumType)
     1.0 / (1.0 + exp(-x))
 end
@@ -42,10 +42,10 @@ function logit{NumType <: Number}(x::Array{NumType})
 end
 
 
-@doc """
+"""
 Convert an (n - 1)-vector of real numbers to an n-vector on the simplex, where
 the last entry implicitly has the untransformed value 1.
-""" ->
+"""
 function constrain_to_simplex{NumType <: Number}(x::Vector{NumType})
   if any(x .== Inf)
     z = NumType[ x_entry .== Inf ? one(NumType) : zero(NumType) for x_entry in x]
@@ -62,10 +62,10 @@ function constrain_to_simplex{NumType <: Number}(x::Vector{NumType})
 end
 
 
-@doc """
+"""
 Convert an n-vector on the simplex to an (n - 1)-vector in R^{n -1}, where
 the last entry implicitly has the untransformed value 1.
-""" ->
+"""
 function unconstrain_simplex{NumType <: Number}(z::Vector{NumType})
   n = length(z)
   NumType[ log(z[i]) - log(z[n]) for i = 1:(n - 1)]
@@ -80,7 +80,7 @@ immutable ParamBox
   upper_bound::Float64
   scale::Float64
 
-  ParamBox(lower_bound, upper_bound, scale) = begin
+  function ParamBox(lower_bound, upper_bound, scale)
     @assert lower_bound > -Inf # Not supported
     @assert scale > 0.0
     @assert lower_bound < upper_bound
@@ -91,9 +91,9 @@ end
 immutable SimplexBox
   lower_bound::Float64
   scale::Float64
-  n::Int64
+  n::Int
 
-  SimplexBox(lower_bound, scale, n) = begin
+  function SimplexBox(lower_bound, scale, n)
     @assert n >= 2
     @assert 0.0 <= lower_bound < 1 / n
     new(lower_bound, scale, n)
@@ -148,12 +148,12 @@ function box_parameter{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Convert an unconstrained (n-1)-vector to a simplicial n-vector, z, such that
   - sum(z) = 1
   - z >= simplex_box.lower_bound
 See notes for a derivation and reasoning.
-""" ->
+"""
 function simplexify_parameter{NumType <: Number}(
     free_param::Vector{NumType}, simplex_box::SimplexBox)
 
@@ -172,9 +172,9 @@ function simplexify_parameter{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Invert the transformation simplexify_parameter()
-""" ->
+"""
 function unsimplexify_parameter{NumType <: Number}(
     param::Vector{NumType}, simplex_box::SimplexBox)
 
@@ -198,7 +198,7 @@ end
 ##################
 # Derivatives
 
-@doc """
+"""
 Return derivatives of an unscaled transform from free parameters to a simplex.
 
 Args:
@@ -211,7 +211,7 @@ Returns:
               wrt the free parameters (in columns)
   - hessian_vec: An n-length vector of the hessian of each simplex output
                  parameter with respect to the (n-1) free input parameters.
-""" ->
+"""
 function simplex_derivatives{NumType <: Number}(z_sim::Vector{NumType})
 	n = length(z_sim)
 	hessian_vec = Array(Array{NumType}, n)
@@ -243,7 +243,7 @@ function simplex_derivatives{NumType <: Number}(z_sim::Vector{NumType})
 end
 
 
-@doc """
+"""
 Return the derivative and hessian of a simplex transform given the constrained
 parameters.
 
@@ -252,7 +252,7 @@ Args:
 		       as a function of the constrained parameterd despite being
 					 the derivative of the function unconstrained -> constrained)
 	- simplex_box: A box simplex constraint
-""" ->
+"""
 function box_simplex_derivatives{NumType <: Number}(
     param::Vector{NumType}, simplex_box::SimplexBox)
 	lower_bound = simplex_box.lower_bound
@@ -275,7 +275,7 @@ function box_simplex_derivatives{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Return the derivative and hessian of a box transform given the constrained
 parameters.
 
@@ -284,7 +284,7 @@ Args:
 		       as a function of the constrained parameterd despite being
 					 the derivative of the function unconstrained -> constrained)
 	- param_box: A box constraint
-""" ->
+"""
 function box_derivatives{NumType <: Number}(param::NumType, param_box::ParamBox)
 	lower_bound = param_box.lower_bound
   upper_bound = param_box.upper_bound
@@ -302,7 +302,7 @@ function box_derivatives{NumType <: Number}(param::NumType, param_box::ParamBox)
 end
 
 
-@doc """
+"""
 A datatype containing derivatives of the transform from free to constrained
 parameters.
 
@@ -311,14 +311,14 @@ Members:
                 contrainted_param = f(free param)
   d2param_dfree2: A vector of hessians.  Each element is the Hessian of one
                   component of the aforementioned f()
-""" ->
+"""
 type TransformDerivatives{NumType <: Number}
   dparam_dfree::Matrix{NumType}
   d2param_dfree2::Array{Matrix{NumType}}
-  Sa::Int64
+  Sa::Int
 
   # TODO: use sparse matrices?
-  TransformDerivatives(Sa::Int64) = begin
+  function TransformDerivatives(Sa::Int)
     dparam_dfree =
       zeros(NumType,
             Sa * length(CanonicalParams), Sa * length(UnconstrainedParams))
@@ -333,7 +333,7 @@ type TransformDerivatives{NumType <: Number}
 end
 
 
-@doc """
+"""
 Populate a TransformDerivatives object in place.
 
 Args:
@@ -344,7 +344,7 @@ Args:
 
 Returns:
   Update transform_derivatives in place.
-""" ->
+"""
 function get_transform_derivatives!{NumType <: Number}(
     mp::ModelParams{NumType}, bounds::Vector{ParamBounds},
     transform_derivatives::TransformDerivatives)
@@ -402,10 +402,6 @@ function get_transform_derivatives!{NumType <: Number}(
   			@assert length(constraint_vec) == 1
   			vp_free_ind = ids_free.(param)
   			vp_ind = ids.(param)
-  			# Hack, see TODO in CelesteTypes.
-  			if length(vp_free_ind) == 1
-  				vp_free_ind = Int64[ vp_free_ind ]
-  			end
   			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
   			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
@@ -436,7 +432,7 @@ end
 ######################
 # Functions to take actual parameter vectors.
 
-@doc """
+"""
 Convert between variational parameter vectors and unconstrained parameters.
 
 Args:
@@ -449,7 +445,7 @@ Args:
 Returns:
   If to_unconstrained is true, updates vp_free in place.
   If to_unconstrained is false, updates vp in place.
-""" ->
+"""
 function perform_transform!{NumType <: Number}(
     vp::Vector{NumType}, vp_free::Vector{NumType}, bounds::ParamBounds,
     to_unconstrained::Bool)
@@ -492,10 +488,6 @@ function perform_transform!{NumType <: Number}(
         @assert length(bounds[param]) == 1
         free_ind = ids_free.(param)
         vp_ind = ids.(param)
-        # Hack, see TODO in CelesteTypes.
-        if length(free_ind) == 1
-          free_ind = Int64[ free_ind ]
-        end
         constraint = constraint_vec[1]
         to_unconstrained ?
           vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint):
@@ -523,7 +515,7 @@ end
 #####################
 # Conversion to and from variational parameter vectors and arrays.
 
-@doc """
+"""
 Transform VariationalParams to an array.
 
 Args:
@@ -531,9 +523,9 @@ Args:
   - omitted_ids = ids in ParamIndex
 
 There is probably no use for this function, since you'll only be passing
-trasformations to the optimizer, but I'll include it for completeness.""" ->
+trasformations to the optimizer, but I'll include it for completeness."""
 function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
-                                             omitted_ids::Vector{Int64})
+                                             omitted_ids::Vector{Int})
 
     left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     new_P = length(left_ids)
@@ -549,7 +541,7 @@ function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
 end
 
 
-@doc """
+"""
 Transform a parameter vector to variational parameters in place.
 
 Args:
@@ -560,10 +552,10 @@ Args:
 
 Returns:
  - Update vp_free in place.
-""" ->
+"""
 function array_to_free_vp!{NumType <: Number}(
     xs::Matrix{NumType}, vp_free::FreeVariationalParams{NumType},
-    omitted_ids::Vector{Int64})
+    omitted_ids::Vector{Int})
 
     left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     P = length(left_ids)
@@ -577,9 +569,9 @@ function array_to_free_vp!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Generate parameters within the given bounds.
-""" ->
+"""
 function generate_valid_parameters(
   NumType::DataType, bounds_vec::Vector{ParamBounds})
 
@@ -622,7 +614,7 @@ end
 #########################
 # Define the exported variables.
 
-@doc """
+"""
 Functions to move between a single source's variational parameters and a
 transformation of the data for optimization.
 
@@ -642,7 +634,7 @@ transform_sensitive_float: A function that takes (sensitive float, model
 bounds: The bounds for each parameter and each object in ModelParams.
 active_sources: The sources that are being optimized.  Only these sources'
   parameters are transformed into the parameter vector.
-  """ ->
+  """
 type DataTransform
 	to_vp::Function
 	from_vp::Function
@@ -652,19 +644,17 @@ type DataTransform
   array_to_vp!::Function
 	transform_sensitive_float::Function
   bounds::Vector{ParamBounds}
-  active_sources::Vector{Int64}
-  active_S::Int64
-  S::Int64
+  active_sources::Vector{Int}
+  active_S::Int
+  S::Int
 end
 
 # TODO: Maybe this should be initialized with ModelParams with optional
 # custom bounds.  Or maybe it should be part of ModelParams with one transform
 # per celestial object rather than a single object containing an array of
 # transforms.
-DataTransform(
-    bounds::Vector{ParamBounds};
-    active_sources=collect(1:length(bounds)), S=length(bounds)) = begin
-
+function DataTransform(bounds::Vector{ParamBounds};
+                       active_sources=collect(1:length(bounds)), S=length(bounds))
   @assert length(bounds) == length(active_sources)
   @assert maximum(active_sources) <= S
   active_S = length(active_sources)
@@ -709,14 +699,14 @@ DataTransform(
   end
 
   function vp_to_array{NumType <: Number}(vp::VariationalParams{NumType},
-                                          omitted_ids::Vector{Int64})
+                                          omitted_ids::Vector{Int})
       vp_trans = from_vp(vp)
       free_vp_to_array(vp_trans, omitted_ids)
   end
 
   function array_to_vp!{NumType <: Number}(xs::Matrix{NumType},
                                            vp::VariationalParams{NumType},
-                                           omitted_ids::Vector{Int64})
+                                           omitted_ids::Vector{Int})
       # This needs to update vp in place so that variables in omitted_ids
       # stay at their original values.
       vp_trans = from_vp(vp)
@@ -810,7 +800,7 @@ end
 # An identity transform that does not enforce any bounds nor reduce
 # the dimension of the variational params.  This is mostly useful
 # for testing.
-function get_identity_transform(P::Int64, S::Int64)
+function get_identity_transform(P::Int, S::Int)
 
   active_S = S
   active_sources = 1:S
@@ -847,7 +837,7 @@ function get_identity_transform(P::Int64, S::Int64)
   end
 
   function vp_to_array{NumType <: Number}(vp::VariationalParams{NumType},
-                                          omitted_ids::Vector{Int64})
+                                          omitted_ids::Vector{Int})
       kept_ids = setdiff(1:P, omitted_ids)
       xs = zeros(length(kept_ids), S)
       for s=1:S
@@ -858,7 +848,7 @@ function get_identity_transform(P::Int64, S::Int64)
 
   function array_to_vp!{NumType <: Number}(xs::Matrix{NumType},
                                            vp::VariationalParams{NumType},
-                                           omitted_ids::Vector{Int64})
+                                           omitted_ids::Vector{Int})
       # This needs to update vp in place so that variables in omitted_ids
       # stay at their original values.
       kept_ids = setdiff(1:P, omitted_ids)

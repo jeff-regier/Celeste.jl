@@ -1,5 +1,5 @@
 
-@doc """
+"""
 Relevant parameters of a bivariate normal distribution.
 
 Args:
@@ -11,16 +11,16 @@ Attributes:
    the_mean: The mean argument
    precision: The inverse of the_cov
    z: The weight times the normalizing constant.
-""" ->
+"""
 immutable BvnComponent{NumType <: Number}
     the_mean::Vector{NumType}
     precision::Matrix{NumType}
     z::NumType
     dsiginv_dsig::Matrix{NumType}
 
-    BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
+    function BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
         the_mean::Vector{T1}, the_cov::Matrix{T2}, weight::T3;
-        calculate_siginv_deriv::Bool=true) = begin
+        calculate_siginv_deriv::Bool=true)
 
       NumType = promote_type(T1, T2, T3);
       the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
@@ -56,7 +56,7 @@ immutable BvnComponent{NumType <: Number}
 end
 
 
-@doc """
+"""
 Return quantities related to the pdf of an offset bivariate normal.
 
 Args:
@@ -68,7 +68,7 @@ Returns:
   - py1: The first row of the precision times (x - the_mean)
   - py2: The second row of the precision times (x - the_mean)
   - The density of the bivariate normal times the weight.
-""" ->
+"""
 function eval_bvn_pdf_in_place!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     bmc::BvnComponent{NumType}, x::Vector{Float64})
@@ -90,7 +90,7 @@ end
 ##################
 # Derivatives
 
-@doc """
+"""
 Calculate the value, gradient, and hessian of
   -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
 with respect to x and sigma.
@@ -101,7 +101,7 @@ Args:
   - x: The vector at which to evaluate the bvn derivs.
   - calculate_x_hess: Whether to calcualte x Hessian terms.
   - calculate_sigma_hess: Whether to calcualte sigma Hessian terms.
-""" ->
+"""
 function get_bvn_derivs!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     bvn::BvnComponent{NumType},
@@ -115,9 +115,9 @@ function get_bvn_derivs!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 This is the function of which get_bvn_derivs!() returns the derivatives.
-It is only used for testing.""" ->
+It is only used for testing."""
 function eval_bvn_log_density{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     bvn::BvnComponent{NumType}, x::Vector{Float64})
@@ -131,7 +131,7 @@ function eval_bvn_log_density{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Calculate the value, gradient, and hessian of
   -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
 with respect to x and sigma.  This assumes that
@@ -143,7 +143,7 @@ Args:
   - bvn: A bivariate normal component to get derivatives for.
   - calculate_x_hess: Whether to calcualte x Hessian terms.
   - calculate_sigma_hess: Whether to calcualte sigma Hessian terms.
-""" ->
+"""
 function get_bvn_derivs_in_place!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     bvn::BvnComponent{NumType},
@@ -224,7 +224,7 @@ end
 
 ##############################
 
-@doc """
+"""
 The derivatives of sigma with respect to the galaxy shape parameters.  In
 each case, sigma is [Sigma11, Sigma12, Sigma22], and the galaxy shape
 parameters are indexed by GalaxyShapeParams.
@@ -232,14 +232,14 @@ parameters are indexed by GalaxyShapeParams.
       d Sigma / d GalaxyShapeParams
  - t: A Sigma x GalaxyShapeParams x GalaxyShapeParams tensor of second
       derivatives d2 Sigma / d GalaxyShapeParams d GalaxyShapeParams.
-""" ->
+"""
 type GalaxySigmaDerivs{NumType <: Number}
   j::Matrix{NumType}
   t::Array{NumType, 3}
 end
 
 
-@doc """
+"""
 Args:
   - e_angle: Phi in the notes
   - e_axis: Rho in the notes
@@ -247,10 +247,10 @@ Args:
   - XiXi: The value of sigma.
 
 Note that nubar is not included.
-""" ->
-GalaxySigmaDerivs{NumType <: Number}(
+"""
+function GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
-    XiXi::Matrix{NumType}; calculate_tensor::Bool=true) = begin
+    XiXi::Matrix{NumType}; calculate_tensor::Bool=true)
 
   cos_sin = cos(e_angle)sin(e_angle)
   sin_sq = sin(e_angle)^2
@@ -304,7 +304,7 @@ GalaxySigmaDerivs{NumType <: Number}(
 end
 
 
-@doc """
+"""
 The convolution of a one galaxy component with one PSF component.
 It also contains the derivatives of sigma with respect to the shape parameters.
 It does not contain the derivatives with respect to other parameters
@@ -330,7 +330,7 @@ Attributes:
  - dSigma: A 3x3 matrix containing the derivates of
      [Sigma11, Sigma12, Sigma22] (in the rows) with respect to
      [e_axis, e_angle, e_scale] (in the columns)
-""" ->
+"""
 immutable GalaxyCacheComponent{NumType <: Number}
     e_dev_dir::Float64
     e_dev_i::NumType
@@ -340,11 +340,11 @@ immutable GalaxyCacheComponent{NumType <: Number}
 end
 
 
-GalaxyCacheComponent{NumType <: Number}(
+function GalaxyCacheComponent{NumType <: Number}(
     e_dev_dir::Float64, e_dev_i::NumType,
     gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
-    calculate_derivs::Bool, calculate_hessian::Bool) = begin
+    calculate_derivs::Bool, calculate_hessian::Bool)
 
   XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
@@ -372,10 +372,10 @@ GalaxyCacheComponent{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Transform the bvn derivatives and hessians from (x) to the
 galaxy parameters (u).
-""" ->
+"""
 function transform_bvn_derivs!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     bmc::BvnComponent{NumType},
@@ -417,12 +417,12 @@ function transform_bvn_derivs!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Transform the bvn derivatives and hessians from (x, sigma) to the
 galaxy parameters (u, gal_shape_ids).
 
 You must have already called get_bvn_derivs!() before calling this.
-""" ->
+"""
 function transform_bvn_derivs!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     gcc::GalaxyCacheComponent{NumType},
@@ -492,7 +492,7 @@ function transform_bvn_derivs!{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Convolve the current locations and galaxy shapes with the PSF.  If
 calculate_derivs is true, also calculate derivatives and hessians for
 active sources.
@@ -515,9 +515,9 @@ Returns:
   Hessians are only populated for s in mp.active_sources.
 
 The PSF contains three components, so you see lots of 3's below.
-""" ->
+"""
 function load_bvn_mixtures{NumType <: Number}(
-    mp::ModelParams{NumType}, b::Int64;
+    mp::ModelParams{NumType}, b::Int;
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
   star_mcs = Array(BvnComponent{NumType}, 3, mp.S)

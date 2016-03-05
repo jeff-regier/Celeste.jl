@@ -1,8 +1,9 @@
-using Celeste
-using CelesteTypes
+using Celeste: Types, SampleData, ElboDeriv, SensitiveFloats
+import Celeste: SkyImages, ModelInit
+
 using Base.Test
 using Distributions
-using SampleData
+
 
 import SloanDigitalSkySurvey: SDSS, WCSUtils
 

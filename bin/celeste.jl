@@ -1,11 +1,7 @@
 #!/usr/bin/env julia
 
-using Celeste
-using CelesteTypes
 using DocOpt
-using JLD
-import SloanDigitalSkySurvey: SDSS
-import Base: convert
+import Celeste
 
 const DOC =
 """Run Celeste.
