@@ -44,15 +44,23 @@ K = 2
 using Celeste
 import ElboDeriv
 
-bvn = ElboDeriv.BvnComponent(mu_vec[1], inv(sigma_vec[1]), weight_vec[1], true)
-comp = ElboDeriv.GalaxyCacheComponent()
+mu = Float64[0, 0]
+sigma = Float64[2 0 ; 0 2]
+weight = 0.7
 
 
 
 
+e_angle = pi / 4
+e_axis = 0.8
+e_scale = 5.0
 
 
-
+sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+ElboDeriv.GalaxySigmaDerivs(
+  e_angle, e_axis, e_scale, sigma, calculate_tensor=true)
+bvn = ElboDeriv.BvnComponent{Float64}(
+  mu, inv(sigma), weight, calculate_siginv_deriv=true)
 
 
 
