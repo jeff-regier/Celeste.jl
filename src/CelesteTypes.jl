@@ -550,8 +550,8 @@ Attributes:
 
  - S: The number of sources.
 """
-type ModelParams{NumType <: Number}
-    vp::VariationalParams{NumType}
+type ModelParams{T <: Number}
+    vp::VariationalParams{T}
     pp::PriorParams
     patches::Array{SkyPatch, 2}
     tile_sources::Vector{Array{Array{Int}}}
@@ -560,7 +560,7 @@ type ModelParams{NumType <: Number}
 
     S::Int
 
-    function ModelParams(vp, pp)
+    function ModelParams(vp::VariationalParams{T}, pp::PriorParams)
         # There must be one patch for each celestial object.
         S = length(vp)
         all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)
@@ -571,12 +571,9 @@ type ModelParams{NumType <: Number}
         new(vp, pp, patches, all_tile_sources, active_sources, objids, S)
     end
 end
+ModelParams{T <: Number}(vp::VariationalParams{T}, pp::PriorParams) =
+    ModelParams{T}(vp, pp)
 
-# TODO: Is this second initialization function necessary?
-ModelParams{NumType <: Number}(
-  vp::VariationalParams{NumType}, pp::PriorParams) = begin
-    ModelParams{NumType}(vp, pp)
-end
 
 function convert(FDType::Type{ForwardDiff.GradientNumber},
                  mp::ModelParams{Float64})
