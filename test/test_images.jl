@@ -1,12 +1,11 @@
-using Celeste
 using Base.Test
-using CelesteTypes
-using SampleData
 using DataFrames
 
-import ModelInit
-import SkyImages
 import SloanDigitalSkySurvey: SDSS, WCSUtils, PSF
+
+using Celeste: Types, SampleData
+import Celeste: ModelInit, SkyImages, ElboDeriv
+
 
 println("Running SkyImages tests.")
 

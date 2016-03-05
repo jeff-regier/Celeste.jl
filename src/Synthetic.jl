@@ -2,9 +2,9 @@ module Synthetic
 
 export gen_blob
 
-using CelesteTypes
-import ModelInit
-import Util
+using ..Types
+import ..ModelInit
+import ..Util
 import SloanDigitalSkySurvey.WCSUtils
 
 import Distributions

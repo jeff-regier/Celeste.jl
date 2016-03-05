@@ -1,32 +1,29 @@
-module CelesteTypes
+module Types
 
-export CatalogEntry
-export band_letters
+export CatalogEntry,
+       Image, Blob,
+       TiledImage, TiledBlob,
+       ImageTile, SkyPatch, PsfComponent,
+       GalaxyComponent, GalaxyPrototype
 
-export Image, Blob, TiledImage, TiledBlob, ImageTile, SkyPatch, PsfComponent
-export GalaxyComponent, GalaxyPrototype, galaxy_prototypes
-export effective_radii
+# parameter types
+export ModelParams, PriorParams, UnconstrainedParams,
+       CanonicalParams, BrightnessParams, StarPosParams,
+       GalaxyPosParams, GalaxyShapeParams,
+       VariationalParams, FreeVariationalParams, RectVariationalParams
 
-export ModelParams, PriorParams, UnconstrainedParams
-export CanonicalParams, BrightnessParams, StarPosParams
-export GalaxyPosParams, GalaxyShapeParams
-export VariationalParams, FreeVariationalParams, RectVariationalParams
+# functions
+export print_params, align
 
-export shape_standard_alignment, brightness_standard_alignment
-export gal_shape_alignment, align
+# constants
+export band_letters, D, Ia, B, galaxy_prototypes,
+       shape_standard_alignment,
+       brightness_standard_alignment,
+       gal_shape_alignment,
+       ids_names,
+       ids_free_names,
+       ids, ids_free, star_ids, gal_ids, gal_shape_ids, bids
 
-export SensitiveFloat, zero_sensitive_float, clear!
-export print_params
-
-export ids, ids_free, star_ids, gal_ids, gal_shape_ids, bids
-export ids_names, ids_free_names
-export D, B, Ia
-
-export set_hess!, multiply_sfs!, combine_sfs!
-
-export print_params
-
-using Util
 using SloanDigitalSkySurvey.PSF.RawPSFComponents
 
 import Base.convert
@@ -41,7 +38,6 @@ import Base.length
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
-
 # The number of components in the color prior.
 const D = 2
 
@@ -49,7 +45,7 @@ const D = 2
 const Ia = 2
 
 # The number of bands (colors).
-const B = 5
+const B = length(band_letters)
 
 type CatalogEntry
     pos::Vector{Float64}
@@ -661,9 +657,4 @@ function print_cat_entry(cat_entry::CatalogEntry)
             fieldnames(cat_entry)]
 end
 
-#########################################################
-
-# TODO: wrap this into its own module?
-include(joinpath(Pkg.dir("Celeste"), "src/SensitiveFloat.jl"))
-
-end
+end  # module
