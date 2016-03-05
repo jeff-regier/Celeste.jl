@@ -9,12 +9,10 @@ import Celeste: ModelInit, SkyImages, ElboDeriv, Synthetic
 
 println("Running SkyImages tests.")
 
-const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
 
-field_dir = joinpath(datadir, "sample_field")
-run_num = "003900"
-camcol_num = "6"
-field_num = "0269"
+const run_num = "003900"
+const camcol_num = "6"
+const field_num = "0269"
 
 function test_interp_sky()
     data = [1.  2.  3.  4.;

@@ -1,12 +1,5 @@
 #!/usr/bin/env julia
 
-if VERSION > v"0.5.0-dev"
-    Pkg.checkout("Optim")
-    Pkg.checkout("DataFrames")
-    Pkg.rm("GaussianMixtures")
-    Pkg.clone("https://github.com/jeff-regier/GaussianMixtures.jl.git")
-end
-
 using Celeste: Types, SampleData, Transform
 import Celeste.Synthetic
 
