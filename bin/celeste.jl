@@ -41,7 +41,6 @@ camcol, field) combinations fall entirely within the RA/Dec patch used
 in that query.
 """
 
-include(joinpath(Pkg.dir("Celeste"), "src/api.jl"))
 
 """
 Parse a string like \"1/3\" and return (1, 3).
@@ -70,7 +69,7 @@ function main()
             outdir = (args["--outdir"] === nothing)? dir: args["--outdir"]
             part = (args["--part"] === nothing)? "1/1": args["--part"]
             partnum, parts = parse_part(part)
-            infer(dir, run, camcol, field, outdir, partnum, parts)
+            Celeste.infer(dir, run, camcol, field, outdir, partnum, parts)
 
         elseif args["score"]
             scores = Celeste.score_field(dir, run, camcol, field, outdir,

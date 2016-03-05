@@ -1,10 +1,10 @@
 # Functions for interacting with Celeste from the command line.
 
-using Celeste
-using CelesteTypes
-using DocOpt
-using JLD
-import SloanDigitalSkySurvey: SDSS
+# using Celeste
+# using CelesteTypes
+# using DocOpt
+# using JLD
+# import SloanDigitalSkySurvey: SDSS
 
 const TILE_WIDTH = 20
 const MAX_ITERS = 50
