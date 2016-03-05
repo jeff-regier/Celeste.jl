@@ -525,16 +525,16 @@ function transform_bvn_derivs!{NumType <: Number}(
     bvn_x_d::Array{NumType}, bvn_xx_h::Array{NumType},
     bvn_s_d::Array{NumType}, bvn_ss_h::Array{NumType},
     bvn_us_h::Array{NumType},
-    bvn_x_d::Array{NumType}, bvn_xx_h::Array{NumType},
     bvn_sig_d::Array{NumType}, bvn_sigsig_h::Array{NumType},
     bvn_xsig_h::Array{NumType},
+    sig_sf::GalaxySigmaDerivs{NumType},
     wcs_jacobian::Array{Float64, 2}, calculate_hessian::Bool)
 
   # Transform the u derivates first.
   # bvn_x_d and bvn_xx_h should already have been set using get_bvn_derivs!()
   transform_bvn_derivs!(
     bvn_u_d, bvn_uu_h, bvn_x_d, bvn_xx_h,
-    wcs_jacobian, elbo_vars.calculate_hessian)
+    wcs_jacobian, calculate_hessian)
 
   # transform_bvn_derivs!(elbo_vars, gcc.bmc, wcs_jacobian)
 
@@ -544,7 +544,7 @@ function transform_bvn_derivs!{NumType <: Number}(
   # TODO: time consuming **************
   fill!(bvn_s_d, 0.0)
   @inbounds for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
-    bvn_s_d[shape_id] += bvn_sig_d[sig_id] * gcc.sig_sf.j[sig_id, shape_id]
+    bvn_s_d[shape_id] += bvn_sig_d[sig_id] * sig_sf.j[sig_id, shape_id]
   end
 
   if calculate_hessian
@@ -558,17 +558,17 @@ function transform_bvn_derivs!{NumType <: Number}(
     @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
       @inbounds for sig_id1 in 1:3
         bvn_ss_h[shape_id1, shape_id2] +=
-          bvn_sig_d[sig_id1] * gcc.sig_sf.t[sig_id1, shape_id1, shape_id2]
+          bvn_sig_d[sig_id1] * sig_sf.t[sig_id1, shape_id1, shape_id2]
       end
     end
 
     @inbounds for sig_id1 in 1:3, sig_id2 in 1:3,
                   shape_id2 in 1:length(gal_shape_ids)
       inner_term =
-        bvn_sigsig_h[sig_id1, sig_id2] * gcc.sig_sf.j[sig_id2, shape_id2]
+        bvn_sigsig_h[sig_id1, sig_id2] * sig_sf.j[sig_id2, shape_id2]
       @inbounds for shape_id1 in 1:shape_id2
         bvn_ss_h[shape_id1, shape_id2] +=
-          inner_term * gcc.sig_sf.j[sig_id1, shape_id1]
+          inner_term * sig_sf.j[sig_id1, shape_id1]
       end
     end
 
@@ -581,7 +581,7 @@ function transform_bvn_derivs!{NumType <: Number}(
     @inbounds for shape_id in 1:length(gal_shape_ids),
                   u_id in 1:2, sig_id in 1:3, x_id in 1:2
       bvn_us_h[u_id, shape_id] +=
-        bvn_xsig_h[x_id, sig_id] * gcc.sig_sf.j[sig_id, shape_id] *
+        bvn_xsig_h[x_id, sig_id] * sig_sf.j[sig_id, shape_id] *
         (-wcs_jacobian[x_id, u_id])
     end
   end
@@ -602,9 +602,8 @@ function transform_bvn_derivs!{NumType <: Number}(
     elbo_vars.bvn_u_d, elbo_vars.bvn_uu_h,
     elbo_vars.bvn_x_d, elbo_vars.bvn_xx_h,
     elbo_vars.bvn_s_d, elbo_vars.bvn_ss_h, elbo_vars.bvn_us_h,
-    elbo_vars.bvn_x_d, elbo_vars.bvn_xx_h,
     elbo_vars.bvn_sig_d, elbo_vars.bvn_sigsig_h, elbo_vars.bvn_xsig_h,
-    wcs_jacobian, elbo_vars.calculate_hessian)
+    gcc.sig_sf, wcs_jacobian, elbo_vars.calculate_hessian)
 
 
 
