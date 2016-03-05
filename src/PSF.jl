@@ -61,6 +61,8 @@ ElboDeriv.GalaxySigmaDerivs(
   e_angle, e_axis, e_scale, sigma, calculate_tensor=true)
 bvn = ElboDeriv.BvnComponent{Float64}(
   mu, inv(sigma), weight, calculate_siginv_deriv=true)
+sig_sf = GalaxySigmaDerivs(
+  e_angle, e_axis, e_scale, sigma, calculate_tensor=true)
 
 
 
