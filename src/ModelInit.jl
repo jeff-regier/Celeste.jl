@@ -273,7 +273,7 @@ Args:
 Returns:
   A SkyPatch object.
 """
-function SkyPatch(world_center::Vector{Float64}, radius::Float64
+function SkyPatch(world_center::Vector{Float64}, radius::Float64,
                   img::Image; fit_psf=true)
     psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
