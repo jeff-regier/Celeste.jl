@@ -2,11 +2,11 @@
 
 module Transform
 
-using Celeste
-using CelesteTypes
+using ..Types
+using ..SensitiveFloats
 
-export DataTransform, ParamBounds, ParamBox, SimplexBox
-export get_mp_transform, generate_valid_parameters, enforce_bounds!
+export DataTransform, ParamBounds, ParamBox, SimplexBox,
+       get_mp_transform, generate_valid_parameters, enforce_bounds!
 
 
 ################################

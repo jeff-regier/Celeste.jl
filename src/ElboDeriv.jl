@@ -2,8 +2,12 @@
 
 module ElboDeriv
 
-using CelesteTypes
-import Util
+using ..Types
+using ..SensitiveFloats
+import ..Util
+import ..KL
+
+import ForwardDiff
 import SloanDigitalSkySurvey.WCSUtils
 
 Threaded = true
@@ -17,8 +21,6 @@ else
         x
     end
 end
-
-export tile_predicted_image
 
 
 ####################################################
@@ -197,9 +199,9 @@ function ElboIntermediateVariables(
 end
 
 
-include(joinpath(Pkg.dir("Celeste"), "src/ElboKL.jl"))
-include(joinpath(Pkg.dir("Celeste"), "src/SourceBrightness.jl"))
-include(joinpath(Pkg.dir("Celeste"), "src/BivariateNormals.jl"))
+include("elbo_kl.jl")
+include("source_brightness.jl")
+include("bivariate_normals.jl")
 
 """
 Add the contributions of a star's bivariate normal term to the ELBO,
@@ -876,10 +878,10 @@ function tile_likelihood!{NumType <: Number}(
           # Add the terms to the elbo given the brightness.
           iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
           add_elbo_log_term!(elbo_vars_array[tid], this_pixel, iota)
-          CelesteTypes.add_scaled_sfs!(
-            elbo_vars_array[tid].elbo, elbo_vars_array[tid].E_G, -iota,
-            elbo_vars_array[tid].calculate_hessian &&
-              elbo_vars_array[tid].calculate_derivs)
+          add_scaled_sfs!(elbo_vars_array[tid].elbo,
+                          elbo_vars_array[tid].E_G, -iota,
+                          elbo_vars_array[tid].calculate_hessian &&
+                          elbo_vars_array[tid].calculate_derivs)
         end
       end
     end
@@ -895,10 +897,10 @@ function tile_likelihood!{NumType <: Number}(
         # Add the terms to the elbo given the brightness.
         iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
         add_elbo_log_term!(elbo_vars_array[1], this_pixel, iota)
-        CelesteTypes.add_scaled_sfs!(
-          elbo_vars_array[1].elbo, elbo_vars_array[1].E_G, -iota,
-          elbo_vars_array[1].calculate_hessian &&
-            elbo_vars_array[1].calculate_derivs)
+        add_scaled_sfs!(elbo_vars_array[1].elbo,
+                        elbo_vars_array[1].E_G, -iota,
+                        elbo_vars_array[1].calculate_hessian &&
+                        elbo_vars_array[1].calculate_derivs)
       end
     end
   end
@@ -1090,10 +1092,10 @@ function elbo_likelihood{NumType <: Number}(
   end
   if Threaded
     for i in 2:nthreads()
-      CelesteTypes.add_scaled_sfs!(
-        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
-        elbo_vars_array[1].calculate_hessian &&
-          elbo_vars_array[1].calculate_derivs)
+      add_scaled_sfs!(elbo_vars_array[1].elbo,
+                      elbo_vars_array[i].elbo, 1.0,
+                      elbo_vars_array[1].calculate_hessian &&
+                      elbo_vars_array[1].calculate_derivs)
     end
   end
   elbo_vars_array[1].elbo

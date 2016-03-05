@@ -1,20 +1,21 @@
 module ModelInit
 
-
-export sample_prior, peak_init
-
-export intialize_celeste, initialize_model_params
+export sample_prior,
+       peak_init,
+       intialize_celeste,
+       initialize_model_params
 
 using FITSIO
 using Distributions
-using Util
-using CelesteTypes
-
-import ElboDeriv # For trim_source_tiles
 import SloanDigitalSkySurvey.WCSUtils
-import SkyImages
 import WCS.WCSTransform
-import CelesteTypes.SkyPatch
+
+using ..Util
+using ..Types
+import ..ElboDeriv  # for trim_source_tiles
+import ..SkyImages
+import ..Types: SkyPatch
+
 
 const cfgdir = joinpath(Pkg.dir("Celeste"), "cfg")
 

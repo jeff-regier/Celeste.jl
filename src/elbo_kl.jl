@@ -1,7 +1,3 @@
-import ForwardDiff
-import KL
-
-
 """
 Subtract the KL divergence from the prior for c
 """

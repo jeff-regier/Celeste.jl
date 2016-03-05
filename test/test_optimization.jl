@@ -1,12 +1,9 @@
-using Celeste
-using CelesteTypes
 using Base.Test
-using SampleData
-using Transform
-using Compat
+
 import SloanDigitalSkySurvey.WCSUtils
 
-import OptimizeElbo
+using Celeste: Types, Transform, SensitiveFloats
+import Celeste: OptimizeElbo, ModelInit, ElboDeriv, SkyImages, SampleData
 
 
 println("Running optimization tests.")

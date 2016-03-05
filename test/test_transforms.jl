@@ -1,14 +1,10 @@
 # Test the functions that move between constrained and unconstrained
 # parameterizations.
 
-using Celeste
-using CelesteTypes
 using Base.Test
-using SampleData
-using Transform
-using Compat
 
-import ModelInit
+using Celeste: Types, SampleData, Transform, SensitiveFloats
+import Celeste: ModelInit, ElboDeriv
 
 
 function test_transform_sensitive_float()
@@ -30,7 +26,7 @@ function test_transform_sensitive_float()
 		                           sa in mp.active_sources ];
 		#vp_free = convert(FreeVariationalParams{NumType}, vp_free)
 		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
-		mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
+		mp_local = Types.forward_diff_model_params(NumType, mp);
 		transform.to_vp!(vp_free, mp_local.vp)
 		elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
 		elbo.v[1]

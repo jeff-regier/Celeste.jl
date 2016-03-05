@@ -1,22 +1,22 @@
 module SkyImages
 
-using CelesteTypes
+using ..Types
 import SloanDigitalSkySurvey: PSF, SDSS, WCSUtils
 import SloanDigitalSkySurvey.PSF.get_psf_at_point
 
 import WCS
 import DataFrames
-import ElboDeriv # For stitch_object_tiles
+import ..ElboDeriv # For stitch_object_tiles
 import FITSIO
 import GaussianMixtures
-import Util
+import ..Util
 
-export load_stamp_blob, load_sdss_blob, crop_image!
-export convert_gmm_to_celeste, get_psf_at_point
-export convert_catalog_to_celeste, load_stamp_catalog
-export break_blob_into_tiles, break_image_into_tiles
-export get_local_sources
-export stitch_object_tiles
+export load_stamp_blob, load_sdss_blob, crop_image!,
+       convert_gmm_to_celeste, get_psf_at_point,
+       convert_catalog_to_celeste, load_stamp_catalog,
+       break_blob_into_tiles, break_image_into_tiles,
+       get_local_sources,
+       stitch_object_tiles
 
 # The default mask planes are those used in the astrometry.net code.
 const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
@@ -486,13 +486,12 @@ Args:
 """
 function convert_gmm_to_celeste(gmm::GaussianMixtures.GMM, scale::Float64)
     function convert_gmm_component_to_celeste(gmm::GaussianMixtures.GMM, d)
-        CelesteTypes.PsfComponent(scale * gmm.w[d],
-            collect(GaussianMixtures.means(gmm)[d, :]),
-            GaussianMixtures.covars(gmm)[d])
+        PsfComponent(scale * gmm.w[d],
+                     collect(GaussianMixtures.means(gmm)[d, :]),
+                     GaussianMixtures.covars(gmm)[d])
     end
 
-    CelesteTypes.PsfComponent[
-      convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n ]
+    PsfComponent[convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n]
 end
 
 
@@ -512,11 +511,10 @@ Note that the point in the image at which the PSF is evaluated --
 that is, the center of the image returned by this function -- is
 already implicit in the value of psf_array.
 """
-function get_psf_at_point(psf_array::Array{CelesteTypes.PsfComponent, 1};
+function get_psf_at_point(psf_array::Array{PsfComponent, 1};
                           rows=collect(-25:25), cols=collect(-25:25))
 
-    function get_psf_value(
-      psf::CelesteTypes.PsfComponent, row::Float64, col::Float64)
+    function get_psf_value(psf::PsfComponent, row::Float64, col::Float64)
         x = Float64[row, col] - psf.xiBar
         exp_term = exp(-0.5 * x' * psf.tauBarInv * x - 0.5 * psf.tauBarLd)
         (psf.alphaBar * exp_term / (2 * pi))[1]
@@ -736,4 +734,4 @@ function stitch_object_tiles(
 end
 
 
-end
+end  # module

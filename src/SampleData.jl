@@ -1,19 +1,19 @@
 module SampleData
 
 using Distributions
-using CelesteTypes
+using ..Types
 
 import SloanDigitalSkySurvey.WCSUtils
-import SkyImages
+import ..SkyImages
 
-import ModelInit
-import Synthetic
+import ..ModelInit
+import ..Synthetic
 
-export empty_model_params
-export dat_dir, sample_ce, perturb_params
-export sample_star_fluxes, sample_galaxy_fluxes
-export gen_sample_star_dataset, gen_sample_galaxy_dataset
-export gen_two_body_dataset, gen_three_body_dataset, gen_n_body_dataset
+export empty_model_params, dat_dir,
+       sample_ce, perturb_params,
+       sample_star_fluxes, sample_galaxy_fluxes,
+       gen_sample_star_dataset, gen_sample_galaxy_dataset,
+       gen_two_body_dataset, gen_three_body_dataset, gen_n_body_dataset
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "test", "data")
 

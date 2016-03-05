@@ -1,10 +1,10 @@
 module OptimizeElbo
 
+using ..Types
+using ..SensitiveFloats
+using ..Transform
+import ..ElboDeriv
 
-using CelesteTypes
-using Transform
-
-import ElboDeriv
 import DataFrames
 import Optim
 
@@ -14,7 +14,7 @@ export ObjectiveWrapperFunctions, WrapperState
 const debug = false
 
 # Only include until this is merged with Optim.jl.
-include(joinpath(Pkg.dir("Celeste"), "src", "newton_trust_region.jl"))
+include("newton_trust_region.jl")
 
 # The main reason we need this is to have a mutable type to keep
 # track of function evaluations, but we can keep other metadata

@@ -76,10 +76,9 @@ end
 
 
 VERSION < v"0.4.0-dev" && using Docile
-using Celeste
-using CelesteTypes
+using Celeste.Types
 using JLD
-import SampleData.dat_dir
+import Celeste.SampleData.dat_dir
 
 # Like @everywhere but for remote workers only.
 macro everywhereelse(ex)

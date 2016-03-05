@@ -1,11 +1,9 @@
-using Celeste
 using Base.Test
 using Distributions
 
+using Celeste.KL
+
 println("Running KL tests.")
-
-
-typealias TheirGradNum ForwardDiff.GradientNumber{1,Float64,Tuple{Float64}}
 
 
 function verify_kl(q_dist, p_dist, claimed_kl::Float64)
