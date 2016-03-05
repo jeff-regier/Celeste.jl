@@ -4,12 +4,14 @@ using DataFrames
 import SloanDigitalSkySurvey: SDSS, WCSUtils, PSF
 
 using Celeste: Types, SampleData
-import Celeste: ModelInit, SkyImages, ElboDeriv
+import Celeste: ModelInit, SkyImages, ElboDeriv, Synthetic
 
 
 println("Running SkyImages tests.")
 
-field_dir = joinpath(dat_dir, "sample_field")
+const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
+
+field_dir = joinpath(datadir, "sample_field")
 run_num = "003900"
 camcol_num = "6"
 field_num = "0269"
@@ -191,7 +193,7 @@ function test_set_patch_size()
   end
 
   srand(1)
-  blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
+  blob0 = SkyImages.load_stamp_blob(datadir, "164.4311-39.0359");
   img_size = 150
   for b in 1:5
       blob0[b].H, blob0[b].W = img_size, img_size

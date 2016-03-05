@@ -464,7 +464,7 @@ function limit_to_object_data(
   # Get the sources that overlap with this object.
   relevant_sources = Int[]
   for b = 1:length(blob), tile_sources in mp.tile_sources[b]
-    if s_original in tile_sources > 0
+    if s_original in tile_sources
       relevant_sources = union(relevant_sources, tile_sources);
     end
   end

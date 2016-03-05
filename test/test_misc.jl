@@ -3,7 +3,7 @@ using Base.Test
 import SloanDigitalSkySurvey: SDSS, WCSUtils
 
 using Celeste: Types, SampleData
-import Celeste: SkyImages, Util, ModelInit
+import Celeste: SkyImages, Util, ModelInit, Synthetic
 
 
 println("Running misc tests.")
