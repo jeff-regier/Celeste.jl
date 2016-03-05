@@ -1,14 +1,10 @@
 # Test the functions that move between constrained and unconstrained
 # parameterizations.
 
-using Celeste
-using CelesteTypes
 using Base.Test
-using SampleData
-using Transform
-using Compat
 
-import ModelInit
+using Celeste: Types, SampleData, Transform, SensitiveFloats
+import Celeste: ModelInit, ElboDeriv
 
 
 function test_transform_sensitive_float()
@@ -29,8 +25,8 @@ function test_transform_sensitive_float()
 		vp_free = Vector{NumType}[ zeros(NumType, length(UnconstrainedParams)) for
 		                           sa in mp.active_sources ];
 		#vp_free = convert(FreeVariationalParams{NumType}, vp_free)
-		Transform.array_to_free_vp!(vp_free_array, vp_free, Int64[])
-		mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
+		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
+		mp_local = Types.forward_diff_model_params(NumType, mp);
 		transform.to_vp!(vp_free, mp_local.vp)
 		elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
 		elbo.v[1]
@@ -206,7 +202,7 @@ function test_parameter_conversion()
 		end
 
 		# Check conversion to and from a vector.
-		omitted_ids = Array(Int64, 0)
+		omitted_ids = Array(Int, 0)
 		vp = deepcopy(mp.vp)
 		x = transform.vp_to_array(vp, omitted_ids)
 		@test length(x) == length(vp_free[1]) * length(mp.active_sources)
@@ -237,7 +233,7 @@ end
 
 function test_identity_transform()
 	blob, mp, three_bodies = gen_three_body_dataset();
-	omitted_ids = Int64[];
+	omitted_ids = Int[];
 	kept_ids = setdiff(1:length(ids_free), omitted_ids);
 
 	transform = Transform.get_identity_transform(length(ids), mp.S);

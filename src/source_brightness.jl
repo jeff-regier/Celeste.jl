@@ -1,4 +1,4 @@
-@doc """
+"""
 SensitiveFloat objects for expectations involving r_s and c_s.
 
 Args:
@@ -14,7 +14,7 @@ and all other rows are lognormal offsets.
 - E_ll_a: A B x Ia matrix of expectations and derivatives of
   squared color terms.  The rows are bands, and the columns
   are star / galaxy.
-""" ->
+"""
 immutable SourceBrightness{NumType <: Number}
     # [E[l|a=0], E[l]|a=1]]
     E_l_a::Matrix{SensitiveFloat{BrightnessParams, NumType}}
@@ -24,9 +24,9 @@ immutable SourceBrightness{NumType <: Number}
 end
 
 
-SourceBrightness{NumType <: Number}(
+function SourceBrightness{NumType <: Number}(
     vs::Vector{NumType};
-    calculate_derivs::Bool=true, calculate_hessian::Bool=true) = begin
+    calculate_derivs::Bool=true, calculate_hessian::Bool=true)
   r1 = vs[ids.r1]
   r2 = vs[ids.r2]
   c1 = vs[ids.c1]
@@ -38,11 +38,11 @@ SourceBrightness{NumType <: Number}(
   E_ll_a = Array(SensitiveFloat{BrightnessParams, NumType}, B, Ia)
 
   for i = 1:Ia
-      ids_band_3 = Int64[bids.r1, bids.r2]
-      ids_color_1 = Int64[bids.c1[1], bids.c2[1]]
-      ids_color_2 = Int64[bids.c1[2], bids.c2[2]]
-      ids_color_3 = Int64[bids.c1[3], bids.c2[3]]
-      ids_color_4 = Int64[bids.c1[4], bids.c2[4]]
+      ids_band_3 = Int[bids.r1, bids.r2]
+      ids_color_1 = Int[bids.c1[1], bids.c2[1]]
+      ids_color_2 = Int[bids.c1[2], bids.c2[2]]
+      ids_color_3 = Int[bids.c1[3], bids.c2[3]]
+      ids_color_4 = Int[bids.c1[4], bids.c2[4]]
 
       for b = 1:B
           E_l_a[b, i] = zero_sensitive_float(BrightnessParams, NumType)
@@ -222,7 +222,7 @@ SourceBrightness{NumType <: Number}(
 end
 
 
-@doc """
+"""
 A convenience function for getting only the brightness parameters
 from model parameters.
 
@@ -231,7 +231,7 @@ Args:
 
 Returns:
   An array of E_l_a and E_ll_a for each source.
-""" ->
+"""
 function get_brightness{NumType <: Number}(mp::ModelParams{NumType})
     brightness = [SourceBrightness(mp.vp[s]) for s in mp.S];
     brightness_vals = [ Float64[b.E_l_a[i, j].v[1] for
@@ -243,14 +243,14 @@ function get_brightness{NumType <: Number}(mp::ModelParams{NumType})
 end
 
 
-@doc """
+"""
 Load the source brightnesses for these model params.  Each SourceBrightness
 object has information for all bands and object types.
 
 Returns:
   - An array of SourceBrightness objects for each object in 1:mp.S.  Only
     sources in mp.active_sources will have derivative information.
-""" ->
+"""
 function load_source_brightnesses{NumType <: Number}(
     mp::ModelParams{NumType};
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)

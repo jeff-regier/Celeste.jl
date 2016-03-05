@@ -6,7 +6,7 @@
 
 # TODO: this used to be in ElboDeriv and everything that uses it needs
 # to be fixed.
-@doc """
+"""
 A type containing all the information that needs to be communicated
 to worker nodes at each iteration.  This currently consists of pre-computed
 information about each source.
@@ -16,7 +16,7 @@ Attributes:
   star_mcs_vec: A vector of star BVN components, one for each band
   gal_mcs_vec: A vector of galaxy BVN components, one for each band
   sbs_vec: A vector of brightness vectors, one for each band
-""" ->
+"""
 type ParameterMessage{NumType <: Number}
   vp::VariationalParams{NumType}
   star_mcs_vec::Vector{Array{BvnComponent{NumType},2}}
@@ -24,10 +24,10 @@ type ParameterMessage{NumType <: Number}
   sbs_vec::Vector{Vector{SourceBrightness{NumType}}}
 end
 
-@doc """
+"""
 This allocates memory for but does not initialize the source parameters.
-""" ->
-ParameterMessage{NumType <: Number}(mp::ModelParams{NumType}) = begin
+"""
+function ParameterMessage{NumType <: Number}(mp::ModelParams{NumType})
   num_bands = size(mp.patches)[2]
   star_mcs_vec = Array(Array{BvnComponent{NumType},2}, num_bands)
   gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType},4}, num_bands)
@@ -36,14 +36,14 @@ ParameterMessage{NumType <: Number}(mp::ModelParams{NumType}) = begin
 end
 
 
-@doc """
+"""
 Update a ParameterMessage in place using mp.
 
 Args:
   - mp: A ModelParams object
   - param_msg: A ParameterMessage that is updated using the parameter values
                in mp.
-""" ->
+"""
 function update_parameter_message!{NumType <: Number}(
     mp::ModelParams{NumType}, param_msg::ParameterMessage{NumType})
   for b=1:5
@@ -54,10 +54,10 @@ function update_parameter_message!{NumType <: Number}(
   end
 end
 
-@doc """
+"""
 Evaluate the ELBO with pre-computed brightnesses and components
 stored in ParameterMessage.
-""" ->
+"""
 function elbo_likelihood!{NumType <: Number}(
     tiled_blob::TiledBlob,
     param_msg::ParameterMessage{NumType},
@@ -76,10 +76,9 @@ end
 
 
 VERSION < v"0.4.0-dev" && using Docile
-using Celeste
-using CelesteTypes
+using Celeste.Types
 using JLD
-import SampleData.dat_dir
+import Celeste.SampleData.dat_dir
 
 # Like @everywhere but for remote workers only.
 macro everywhereelse(ex)
@@ -100,12 +99,12 @@ macro runat(p, ex)
 end
 
 
-@doc """
+"""
 Return a vector of the sources that affect the node.  Assumes tiled_blob
 and mp are globally defined.
-""" ->
+"""
 function node_sources()
-  sources = Int64[]
+  sources = Int[]
   for b in 1:5
     for tile_ind in 1:length(tiled_blob[b])
       append!(sources, mp.tile_sources[b][tile_ind])
@@ -114,10 +113,10 @@ function node_sources()
   unique(sources)
 end
 
-@doc """
+"""
 Close all but the current worker and then add nw of them.
-""" ->
-function create_workers(nw::Int64)
+"""
+function create_workers(nw::Int)
   println("Adding workers.")
   for worker in workers()
     if worker != myid()
@@ -129,7 +128,7 @@ function create_workers(nw::Int64)
 end
 
 
-@doc """
+"""
 Load synthetic or actual data across the cluster of workers.
 
 This requires certain variables to be defined in the global scope.
@@ -139,7 +138,7 @@ This requires certain variables to be defined in the global scope.
 
 If synthetic is false, the file frame_jld_file must contain a dictionary
 with an initialized TiledBlob and ModelParams object.
-""" ->
+"""
 function load_cluster_data()
   println("Loading data.")
   @everywhere begin
@@ -157,7 +156,7 @@ function load_cluster_data()
 end
 
 
-@doc """
+"""
 Perform a number of initialization tasks across the cluster.  The result
 is a set of globally defined variables on each worker.  It assumes that
 each worker has its own identical copy of mp and tiled_blob as global
@@ -169,7 +168,7 @@ The tasks are:
 - Initialize the ParameterMessage objects and define RemoteRefs for
   communicating updates.
 - Initialize the sensitive floats and define RemoteRefs for communicating them.
-""" ->
+"""
 function initialize_cluster()
   # It's more convenient to define global variables than
   # to make RemoteRefs for everything.  Eventually maybe we should wrap
@@ -253,7 +252,7 @@ end
 
 
 function eval_worker_hessian()
-  omitted_ids = Int64[]
+  omitted_ids = Int[]
 
   global hess_i, hess_j, hess_val, new_hess_time
 
