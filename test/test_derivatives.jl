@@ -16,8 +16,6 @@ else
     end
 end
 
-const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
-
 
 println("Running hessian tests.")
 
