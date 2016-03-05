@@ -39,7 +39,7 @@ Args:
   NumType: The numeric type of the hessian.
   i: The type of celestial source, from 1:Ia
 """
-HessianSubmatrices(NumType::DataType, i::Int) = begin
+function HessianSubmatrices(NumType::DataType, i::Int)
   @assert 1 <= i <= Ia
   shape_p = length(shape_standard_alignment[i])
 
@@ -127,9 +127,9 @@ Args:
                        calculated irrespective of the value of
                        calculate_hessian.
 """
-ElboIntermediateVariables(
+function ElboIntermediateVariables(
     NumType::DataType, S::Int, num_active_sources::Int;
-    calculate_derivs::Bool=true, calculate_hessian::Bool=true) = begin
+    calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
   @assert NumType <: Number
 
