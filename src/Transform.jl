@@ -80,7 +80,7 @@ immutable ParamBox
   upper_bound::Float64
   scale::Float64
 
-  ParamBox(lower_bound, upper_bound, scale) = begin
+  function ParamBox(lower_bound, upper_bound, scale)
     @assert lower_bound > -Inf # Not supported
     @assert scale > 0.0
     @assert lower_bound < upper_bound
@@ -93,7 +93,7 @@ immutable SimplexBox
   scale::Float64
   n::Int
 
-  SimplexBox(lower_bound, scale, n) = begin
+  function SimplexBox(lower_bound, scale, n)
     @assert n >= 2
     @assert 0.0 <= lower_bound < 1 / n
     new(lower_bound, scale, n)
@@ -318,7 +318,7 @@ type TransformDerivatives{NumType <: Number}
   Sa::Int
 
   # TODO: use sparse matrices?
-  TransformDerivatives(Sa::Int) = begin
+  function TransformDerivatives(Sa::Int)
     dparam_dfree =
       zeros(NumType,
             Sa * length(CanonicalParams), Sa * length(UnconstrainedParams))
@@ -653,10 +653,8 @@ end
 # custom bounds.  Or maybe it should be part of ModelParams with one transform
 # per celestial object rather than a single object containing an array of
 # transforms.
-DataTransform(
-    bounds::Vector{ParamBounds};
-    active_sources=collect(1:length(bounds)), S=length(bounds)) = begin
-
+function DataTransform(bounds::Vector{ParamBounds};
+                       active_sources=collect(1:length(bounds)), S=length(bounds))
   @assert length(bounds) == length(active_sources)
   @assert maximum(active_sources) <= S
   active_S = length(active_sources)

@@ -27,7 +27,7 @@ end
 """
 This allocates memory for but does not initialize the source parameters.
 """
-ParameterMessage{NumType <: Number}(mp::ModelParams{NumType}) = begin
+function ParameterMessage{NumType <: Number}(mp::ModelParams{NumType})
   num_bands = size(mp.patches)[2]
   star_mcs_vec = Array(Array{BvnComponent{NumType},2}, num_bands)
   gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType},4}, num_bands)

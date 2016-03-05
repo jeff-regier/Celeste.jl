@@ -24,9 +24,9 @@ immutable SourceBrightness{NumType <: Number}
 end
 
 
-SourceBrightness{NumType <: Number}(
+function SourceBrightness{NumType <: Number}(
     vs::Vector{NumType};
-    calculate_derivs::Bool=true, calculate_hessian::Bool=true) = begin
+    calculate_derivs::Bool=true, calculate_hessian::Bool=true)
   r1 = vs[ids.r1]
   r2 = vs[ids.r2]
   c1 = vs[ids.c1]

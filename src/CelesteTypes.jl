@@ -142,8 +142,8 @@ immutable PsfComponent
     tauBarInv::Matrix{Float64}
     tauBarLd::Float64
 
-    PsfComponent(alphaBar::Float64, xiBar::Vector{Float64},
-            tauBar::Matrix{Float64}) = begin
+    function PsfComponent(alphaBar::Float64, xiBar::Vector{Float64},
+                          tauBar::Matrix{Float64})
         new(alphaBar, xiBar, tauBar, tauBar^-1, logdet(tauBar))
     end
 end
@@ -190,11 +190,12 @@ end
 
 # Initialization for an image with noise and background parameters that are
 # constant across the image.
-Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int, wcs::WCSTransform,
-      epsilon::Float64, iota::Float64, psf::Vector{PsfComponent},
-      run_num::Int, camcol_num::Int, field_num::Int) = begin
-    empty_psf_comp =
-      RawPSFComponents(Array(Float64, 0, 0), -1, -1, Array(Float64, 0, 0, 0))
+function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int,
+               wcs::WCSTransform, epsilon::Float64, iota::Float64,
+               psf::Vector{PsfComponent}, run_num::Int, camcol_num::Int,
+               field_num::Int)
+    empty_psf_comp = RawPSFComponents(Array(Float64, 0, 0), -1, -1,
+                                      Array(Float64, 0, 0, 0))
     Image(H, W, pixels, b, wcs, epsilon, iota, psf,
           run_num, camcol_num, field_num,
           true, Array(Float64, 0, 0), Array(Float64, 0), empty_psf_comp)
@@ -202,12 +203,13 @@ end
 
 # Initialization for an image with noise and background parameters that vary
 # across the image.
-Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int, wcs::WCSTransform,
-      epsilon_mat::Array{Float64, 1}, iota_vec::Array{Float64, 2},
-       psf::Vector{PsfComponent}, raw_psf_comp::RawPSFComponents,
-      run_num::Int, camcol_num::Int, field_num::Int) = begin
-    Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num, field_num,
-          false, epsilon_mat, iota_vec, raw_psf_comp)
+function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int,
+               wcs::WCSTransform, epsilon_mat::Vector{Float64},
+               iota_vec::Matrix{Float64}, psf::Vector{PsfComponent},
+               raw_psf_comp::RawPSFComponents, run_num::Int, camcol_num::Int,
+               field_num::Int)
+    Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num,
+          field_num, false, epsilon_mat, iota_vec, raw_psf_comp)
 end
 
 
@@ -277,7 +279,7 @@ Args:
   - ww: The tile column index (in 1:number of tile columns)
   - tile_width: The width and height of a tile in pixels
 """
-ImageTile(hh::Int, ww::Int, img::Image, tile_width::Int) = begin
+function ImageTile(hh::Int, ww::Int, img::Image, tile_width::Int)
   h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
   ImageTile(img, h_range, w_range; hh=hh, ww=ww)
 end
@@ -292,9 +294,8 @@ Args:
   - hh: Optional h index in tile coordinates
   - ww: Optional w index in tile coordinates
 """
-ImageTile(img::Image,
-          h_range::UnitRange{Int}, w_range::UnitRange{Int};
-          hh::Int=1, ww::Int=1) = begin
+function ImageTile(img::Image, h_range::UnitRange{Int},
+                   w_range::UnitRange{Int}; hh::Int=1, ww::Int=1)
   b = img.b
   h_width = maximum(h_range) - minimum(h_range) + 1
   w_width = maximum(w_range) - minimum(w_range) + 1
@@ -559,7 +560,7 @@ type ModelParams{NumType <: Number}
 
     S::Int
 
-    ModelParams(vp, pp) = begin
+    function ModelParams(vp, pp)
         # There must be one patch for each celestial object.
         S = length(vp)
         all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)

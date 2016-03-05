@@ -56,10 +56,10 @@ type ObjectiveWrapperFunctions
     #  omitted_ids: The free parameter ids to omit (TODO: this is redundant)
     #  fast_hessian: Evaluate the forward autodiff Hessian using only
     #                mp.active_sources to speed up computation.
-    ObjectiveWrapperFunctions(
+    function ObjectiveWrapperFunctions(
       f::Function, mp::ModelParams{Float64}, transform::DataTransform,
       kept_ids::Array{Int, 1}, omitted_ids::Array{Int, 1};
-      fast_hessian::Bool=true) = begin
+      fast_hessian::Bool=true)
 
         x_length = length(kept_ids) * transform.active_S
         x_size = (length(kept_ids), transform.active_S)

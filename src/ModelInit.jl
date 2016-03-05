@@ -84,12 +84,13 @@ function init_source(ce::CatalogEntry)
     ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
     ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))
 
-    get_color(c2, c1) = begin
+    function get_color(c2, c1)
         c2 > 0 && c1 > 0 ? min(max(log(c2 / c1), -9.), 9.) :
             c2 > 0 && c1 <= 0 ? 3.0 :
                 c2 <= 0 && c1 > 0 ? -3.0 : 0.0
     end
-    get_colors(raw_fluxes) = begin
+
+    function get_colors(raw_fluxes)
         [get_color(raw_fluxes[c+1], raw_fluxes[c]) for c in 1:4]
     end
 
@@ -272,14 +273,9 @@ Args:
 Returns:
   A SkyPatch object.
 """
-SkyPatch(world_center::Vector{Float64},
-         radius::Float64, img::Image; fit_psf=true) = begin
-    if fit_psf
-      psf = SkyImages.get_source_psf(world_center, img)
-    else
-      psf = img.psf
-    end
-
+function SkyPatch(world_center::Vector{Float64}, radius::Float64
+                  img::Image; fit_psf=true)
+    psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
 
@@ -299,14 +295,10 @@ Args:
 Returns:
   A SkyPatch object with a radius chosen based on the catalog.
 """
-SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true, scale_patch_size=1.0) = begin
+function SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true,
+                  scale_patch_size=1.0)
     world_center = ce.pos
-    if fit_psf
-      psf = SkyImages.get_source_psf(world_center, img)
-    else
-      psf = img.psf
-    end
-
+    psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
 
