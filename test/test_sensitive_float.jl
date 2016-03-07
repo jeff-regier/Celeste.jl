@@ -1,8 +1,6 @@
-using Celeste
 using Base.Test
-using SampleData
-using CelesteTypes
-using Compat
+
+using Celeste: Types, SampleData, SensitiveFloats
 
 
 function test_combine_sfs()
@@ -61,7 +59,7 @@ function test_combine_sfs()
     g_d, g_h
   end
 
-  s_ind = Array(UnitRange{Int64}, 2);
+  s_ind = Array(UnitRange{Int}, 2);
   s_ind[1] = 1:p
   s_ind[2] = (1:p) + p
 
@@ -105,7 +103,7 @@ function test_combine_sfs()
   sf1 = deepcopy(ret1);
   sf2 = deepcopy(ret2);
   g_d, g_h = combine_fun_derivatives(x)
-  CelesteTypes.combine_sfs!(sf1, sf2, sf1.v[1] ^ 2 * sqrt(sf2.v[1]), g_d, g_h);
+  combine_sfs!(sf1, sf2, sf1.v[1] ^ 2 * sqrt(sf2.v[1]), g_d, g_h);
 
   @test_approx_eq sf1.v[1] v
   @test_approx_eq sf1.d[:] grad
@@ -159,7 +157,7 @@ function test_add_sources_sf()
   fd_hess1 = ForwardDiff.hessian(f1, x1);
   @test_approx_eq sf_s.h fd_hess1
 
-  CelesteTypes.add_sources_sf!(sf_all, sf_s, 1, true)
+  add_sources_sf!(sf_all, sf_s, 1, true)
 
   x2 = rand(P);
   clear!(sf_s);
@@ -172,7 +170,7 @@ function test_add_sources_sf()
   fd_hess2 = ForwardDiff.hessian(f2, x2);
   @test_approx_eq sf_s.h fd_hess2
 
-  CelesteTypes.add_sources_sf!(sf_all, sf_s, 2, true)
+  add_sources_sf!(sf_all, sf_s, 2, true)
 
   @test_approx_eq (v1 + v2) sf_all.v
 

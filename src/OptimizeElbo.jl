@@ -1,10 +1,10 @@
 module OptimizeElbo
 
+using ..Types
+using ..SensitiveFloats
+using ..Transform
+import ..ElboDeriv
 
-using CelesteTypes
-using Transform
-
-import ElboDeriv
 import DataFrames
 import Optim
 
@@ -14,15 +14,15 @@ export ObjectiveWrapperFunctions, WrapperState
 const debug = false
 
 # Only include until this is merged with Optim.jl.
-include(joinpath(Pkg.dir("Celeste"), "src", "newton_trust_region.jl"))
+include("newton_trust_region.jl")
 
 # The main reason we need this is to have a mutable type to keep
 # track of function evaluations, but we can keep other metadata
 # in it as well.
 type WrapperState
-    f_evals::Int64
+    f_evals::Int
     verbose::Bool
-    print_every_n::Int64
+    print_every_n::Int
     scale::Float64
 end
 
@@ -41,8 +41,8 @@ type ObjectiveWrapperFunctions
     state::WrapperState
     transform::DataTransform
     mp::ModelParams{Float64}
-    kept_ids::Array{Int64}
-    omitted_ids::Array{Int64}
+    kept_ids::Array{Int}
+    omitted_ids::Array{Int}
 
     # Caching
     last_sf::SensitiveFloat
@@ -56,10 +56,10 @@ type ObjectiveWrapperFunctions
     #  omitted_ids: The free parameter ids to omit (TODO: this is redundant)
     #  fast_hessian: Evaluate the forward autodiff Hessian using only
     #                mp.active_sources to speed up computation.
-    ObjectiveWrapperFunctions(
+    function ObjectiveWrapperFunctions(
       f::Function, mp::ModelParams{Float64}, transform::DataTransform,
-      kept_ids::Array{Int64, 1}, omitted_ids::Array{Int64, 1};
-      fast_hessian::Bool=true) = begin
+      kept_ids::Array{Int, 1}, omitted_ids::Array{Int, 1};
+      fast_hessian::Bool=true)
 
         x_length = length(kept_ids) * transform.active_S
         x_size = (length(kept_ids), transform.active_S)
@@ -155,7 +155,7 @@ type ObjectiveWrapperFunctions
         function f_hessian{T <: Number}(x::Vector{T})
           @assert length(x) == x_length
           res = f_objective(x)
-          all_kept_ids = Int64[]
+          all_kept_ids = Int[]
           for sa=1:transform.active_S
             append!(all_kept_ids, kept_ids + (sa - 1) * length(kept_ids))
           end
@@ -175,7 +175,7 @@ type ObjectiveWrapperFunctions
 end
 
 
-@doc """
+"""
 Optimizes f using Newton's method and exact Hessians.  For now, it is
 not clear whether this or BFGS is better, so it is kept as a separate function.
 
@@ -198,11 +198,11 @@ Returns:
   - max_f: The maximum function value achieved
   - max_x: The optimal function input
   - ret: The return code of optimize()
-""" ->
+"""
 function maximize_f(
   f::Function, tiled_blob::TiledBlob, mp::ModelParams,
   transform::Transform.DataTransform;
-  omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
+  omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
   max_iters=100, rho_lower=0.25, fast_hessian=true)
 
     # Make sure the model parameters are within the transform bounds
@@ -250,7 +250,7 @@ end
 
 
 function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
-    omitted_ids=Int64[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
+    omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
     max_iters = 100)
     # Use the default transform.
 

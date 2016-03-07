@@ -1,7 +1,17 @@
+module SensitiveFloats
 
-export multiply_sfs!, add_scaled_sfs!, combine_sfs!, add_sources_sf!
+export SensitiveFloat,
+       zero_sensitive_float,
+       clear!,
+       multiply_sfs!,
+       add_scaled_sfs!,
+       combine_sfs!,
+       add_sources_sf!,
+       set_hess!
 
-@doc """
+import ..Types: ParamSet, getids
+
+"""
 A function value and its derivative with respect to its arguments.
 
 Attributes:
@@ -14,8 +24,8 @@ Attributes:
       with respect to all the sources.
   hs: An array of per-source Hessians.  This will generally be reserved
       for the Hessian of brightness values that depend only on one source.
-""" ->
-type SensitiveFloat{ParamType <: CelesteTypes.ParamSet, NumType <: Number}
+"""
+type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
     # Actually a single value, but an Array to avoid memory allocation
     v::Vector{NumType}
 
@@ -31,12 +41,12 @@ end
 
 #########################################################
 
-@doc """
+"""
 Set a SensitiveFloat's hessian term, maintaining symmetry.
-""" ->
-function set_hess!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+"""
+function set_hess!{ParamType <: ParamSet, NumType <: Number}(
     sf::SensitiveFloat{ParamType, NumType},
-    i::Int64, j::Int64, v::NumType)
+    i::Int, j::Int, v::NumType)
   i != j ?
     sf.h[i, j] = sf.h[j, i] = v:
     sf.h[i, j] = v
@@ -44,8 +54,8 @@ function set_hess!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
     true # Set definite return type
 end
 
-function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
-  ::Type{ParamType}, NumType::DataType, local_S::Int64)
+function zero_sensitive_float{ParamType <: ParamSet}(
+  ::Type{ParamType}, NumType::DataType, local_S::Int)
     local_P = length(ParamType)
 
     v = zeros(NumType, 1)
@@ -55,7 +65,7 @@ function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
 end
 
 
-function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
+function zero_sensitive_float{ParamType <: ParamSet}(
   ::Type{ParamType}, NumType::DataType)
     # Default to a single source.
     zero_sensitive_float(ParamType, NumType, 1)
@@ -63,26 +73,26 @@ end
 
 
 # If no type is specified, default to using Float64.
-function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
-  param_arg::Type{ParamType}, local_S::Int64)
+function zero_sensitive_float{ParamType <: ParamSet}(
+  param_arg::Type{ParamType}, local_S::Int)
     zero_sensitive_float(param_arg, Float64, local_S)
 end
 
 
-function zero_sensitive_float{ParamType <: CelesteTypes.ParamSet}(
+function zero_sensitive_float{ParamType <: ParamSet}(
   param_arg::Type{ParamType})
     zero_sensitive_float(param_arg, Float64, 1)
 end
 
 
-function clear!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+function clear!{ParamType <: ParamSet, NumType <: Number}(
   sp::SensitiveFloat{ParamType, NumType})
 
   clear!(sp, true)
 end
 
 
-function clear!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+function clear!{ParamType <: ParamSet, NumType <: Number}(
   sp::SensitiveFloat{ParamType, NumType}, clear_hessian::Bool)
 
     fill!(sp.v, zero(NumType))
@@ -95,10 +105,10 @@ function clear!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 end
 
 
-@doc """
+"""
 Factor out the hessian part of combine_sfs!.
-""" ->
-function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet,
+"""
+function combine_sfs_hessian!{ParamType <: ParamSet,
                               T1 <: Number, T2 <: Number, T3 <: Number}(
     sf1::SensitiveFloat{ParamType, T1},
     sf2::SensitiveFloat{ParamType, T1},
@@ -126,7 +136,7 @@ function combine_sfs_hessian!{ParamType <: CelesteTypes.ParamSet,
 end
 
 
-@doc """
+"""
 Updates sf_result in place with g(sf1, sf2), where
 g_d = (g_1, g_2) is the gradient of g and
 g_h = (g_11, g_12; g_12, g_22) is the hessian of g,
@@ -134,8 +144,8 @@ each evaluated at (sf1, sf2).
 
 The result is stored in sf_result.  The order is done in such a way that
 it can overwrite sf1 or sf2 and still be accurate.
-""" ->
-function combine_sfs!{ParamType <: CelesteTypes.ParamSet,
+"""
+function combine_sfs!{ParamType <: ParamSet,
                       T1 <: Number, T2 <: Number, T3 <: Number}(
     sf1::SensitiveFloat{ParamType, T1},
     sf2::SensitiveFloat{ParamType, T1},
@@ -165,15 +175,15 @@ function combine_sfs!{ParamType <: CelesteTypes.ParamSet,
 end
 
 
-@doc """
+"""
 Updates sf1 in place with g(sf1, sf2), where
 g_d = (g_1, g_2) is the gradient of g and
 g_h = (g_11, g_12; g_12, g_22) is the hessian of g,
 each evaluated at (sf1, sf2).
 
 The result is stored in sf1.
-""" ->
-function combine_sfs!{ParamType <: CelesteTypes.ParamSet,
+"""
+function combine_sfs!{ParamType <: ParamSet,
                       T1 <: Number, T2 <: Number, T3 <: Number}(
     sf1::SensitiveFloat{ParamType, T1},
     sf2::SensitiveFloat{ParamType, T1},
@@ -188,14 +198,14 @@ end
 # Decalare outside to avoid allocating memory.
 const multiply_sfs_hess = Float64[0 1; 1 0]
 
-@doc """
+"""
 TODO: don't ignore the ids arguments.
-""" ->
-function multiply_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+"""
+function multiply_sfs!{ParamType <: ParamSet, NumType <: Number}(
     sf1::SensitiveFloat{ParamType, NumType},
     sf2::SensitiveFloat{ParamType, NumType};
-    ids1::Vector{Int64}=collect(1:length(ParamType)),
-    ids2::Vector{Int64}=collect(1:length(ParamType)),
+    ids1::Vector{Int}=collect(1:length(ParamType)),
+    ids2::Vector{Int}=collect(1:length(ParamType)),
     calculate_hessian::Bool=true)
 
   v = sf1.v[1] * sf2.v[1]
@@ -208,10 +218,10 @@ function multiply_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 end
 
 
-@doc """
+"""
 Update sf1 in place with (sf1 + scale * sf2).
-""" ->
-function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+"""
+function add_scaled_sfs!{ParamType <: ParamSet, NumType <: Number}(
     sf1::SensitiveFloat{ParamType, NumType},
     sf2::SensitiveFloat{ParamType, NumType},
     scale::Float64, calculate_hessian::Bool)
@@ -235,14 +245,14 @@ function add_scaled_sfs!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
 end
 
 
-@doc """
+"""
 Adds sf2_s to sf1, where sf1 is sensitive to multiple sources and sf2_s is only
 sensitive to source s.
-""" ->
-function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
+"""
+function add_sources_sf!{ParamType <: ParamSet, NumType <: Number}(
     sf_all::SensitiveFloat{ParamType, NumType},
     sf_s::SensitiveFloat{ParamType, NumType},
-    s::Int64, calculate_hessian::Bool)
+    s::Int, calculate_hessian::Bool)
 
   # TODO: This line, too, allocates a lot of memory.  Why?
   sf_all.v[1] = sf_all.v[1] + sf_s.v[1]
@@ -272,4 +282,6 @@ function add_sources_sf!{ParamType <: CelesteTypes.ParamSet, NumType <: Number}(
   end
 
   true # Set definite return type
+end
+
 end

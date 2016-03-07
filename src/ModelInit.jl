@@ -1,20 +1,21 @@
 module ModelInit
 
-
-export sample_prior, peak_init
-
-export intialize_celeste, initialize_model_params
+export sample_prior,
+       peak_init,
+       intialize_celeste,
+       initialize_model_params
 
 using FITSIO
 using Distributions
-using Util
-using CelesteTypes
-
-import ElboDeriv # For trim_source_tiles
 import SloanDigitalSkySurvey.WCSUtils
-import SkyImages
 import WCS.WCSTransform
-import CelesteTypes.SkyPatch
+
+using ..Util
+using ..Types
+import ..ElboDeriv  # for trim_source_tiles
+import ..SkyImages
+import ..Types: SkyPatch
+
 
 const cfgdir = joinpath(Pkg.dir("Celeste"), "cfg")
 
@@ -52,9 +53,9 @@ function sample_prior()
     PriorParams(a, r_mean, r_var, k, c_mean, c_cov)
 end
 
-@doc """
+"""
 Return a default-initialized VariationalParams object.
-""" ->
+"""
 function init_source(init_pos::Vector{Float64})
     #TODO: use blob (and perhaps priors) to initialize these sensibly
     ret = Array(Float64, length(CanonicalParams))
@@ -74,9 +75,9 @@ function init_source(init_pos::Vector{Float64})
     ret
 end
 
-@doc """
+"""
 Return a VariationalParams object initialized form a catalog entry.
-""" ->
+"""
 function init_source(ce::CatalogEntry)
     # TODO: sync this up with the transform bounds
     ret = init_source(ce.pos)
@@ -84,12 +85,13 @@ function init_source(ce::CatalogEntry)
     ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
     ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))
 
-    get_color(c2, c1) = begin
+    function get_color(c2, c1)
         c2 > 0 && c1 > 0 ? min(max(log(c2 / c1), -9.), 9.) :
             c2 > 0 && c1 <= 0 ? 3.0 :
                 c2 <= 0 && c1 > 0 ? -3.0 : 0.0
     end
-    get_colors(raw_fluxes) = begin
+
+    function get_colors(raw_fluxes)
         [get_color(raw_fluxes[c+1], raw_fluxes[c]) for c in 1:4]
     end
 
@@ -205,7 +207,7 @@ function get_psf_width(psf::Array{PsfComponent}; width_scale=1.0)
 end
 
 
-@doc """
+"""
 Choose a reasonable patch radius based on the catalog.
 TODO: Select this by rendering the object and solving an optimization
 problem.
@@ -220,7 +222,7 @@ Args:
 
 Returns:
   - A radius in pixels chosen from the catalog entry.
-""" ->
+"""
 function choose_patch_radius(
   pixel_center::Vector{Float64}, ce::CatalogEntry,
   psf::Array{PsfComponent}, img::Image; width_scale=1.0, max_radius=100)
@@ -260,7 +262,7 @@ function choose_patch_radius(
 end
 
 
-@doc """
+"""
 Initialize a SkyPatch object at a particular location.
 
 Args:
@@ -271,15 +273,10 @@ Args:
 
 Returns:
   A SkyPatch object.
-""" ->
-SkyPatch(world_center::Vector{Float64},
-         radius::Float64, img::Image; fit_psf=true) = begin
-    if fit_psf
-      psf = SkyImages.get_source_psf(world_center, img)
-    else
-      psf = img.psf
-    end
-
+"""
+function SkyPatch(world_center::Vector{Float64}, radius::Float64,
+                  img::Image; fit_psf=true)
+    psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
 
@@ -287,7 +284,7 @@ SkyPatch(world_center::Vector{Float64},
 end
 
 
-@doc """
+"""
 Initialize a SkyPatch object for a catalog entry.
 
 Args:
@@ -298,15 +295,11 @@ Args:
 
 Returns:
   A SkyPatch object with a radius chosen based on the catalog.
-""" ->
-SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true, scale_patch_size=1.0) = begin
+"""
+function SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true,
+                  scale_patch_size=1.0)
     world_center = ce.pos
-    if fit_psf
-      psf = SkyImages.get_source_psf(world_center, img)
-    else
-      psf = img.psf
-    end
-
+    psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
 
@@ -318,7 +311,7 @@ SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true, scale_patch_size=1.0) = beg
 end
 
 
-@doc """
+"""
 Get the sources associated with each tile in a TiledImage.
 
 Args:
@@ -330,12 +323,12 @@ Returns:
   - An array (same dimensions as the tiles) of vectors of indices
     into patches indicating which patches are affected by any pixels
     in the tiles.
-""" ->
+"""
 function get_tiled_image_sources(
   tiled_image::TiledImage, wcs::WCSTransform, patches::Vector{SkyPatch})
 
   H, W = size(tiled_image)
-  tile_sources = fill(Int64[], H, W)
+  tile_sources = fill(Int[], H, W)
   candidates = SkyImages.local_source_candidates(tiled_image, patches)
   for h in 1:H, w in 1:W
     # Only look for sources within the candidate set.
@@ -344,20 +337,20 @@ function get_tiled_image_sources(
       cand_sources = SkyImages.get_local_sources(tiled_image[h, w], cand_patches)
       tile_sources[h, w] = candidates[h, w][cand_sources]
     else
-      tile_sources[h, w] = Int64[]
+      tile_sources[h, w] = Int[]
     end
   end
   tile_sources
 end
 
 
-@doc """
+"""
 Turn a blob and vector of catalog entries into a tiled_blob and model
 parameters that can be used with Celeste.
-""" ->
+"""
 function initialize_celeste(
     blob::Blob, cat::Vector{CatalogEntry};
-    tile_width::Int64=typemax(Int64), fit_psf::Bool=true,
+    tile_width::Int=typemax(Int), fit_psf::Bool=true,
     patch_radius::Float64=-1., radius_from_cat::Bool=true)
 
   tiled_blob = SkyImages.break_blob_into_tiles(blob, tile_width)
@@ -368,7 +361,7 @@ function initialize_celeste(
 end
 
 
-@doc """
+"""
 Initilize the model params to the given catalog and tiled image.
 
 Args:
@@ -380,7 +373,7 @@ Args:
                   the radius in world coordinates of each patch.
   - radius_from_cat: If true, choose the patch radius from the catalog.
                      If false, use patch_radius for each patch.
-""" ->
+"""
 function initialize_model_params(
     tiled_blob::TiledBlob, blob::Blob, cat::Vector{CatalogEntry};
     fit_psf::Bool=true, patch_radius::Float64=-1., radius_from_cat::Bool=true,
@@ -407,7 +400,7 @@ function initialize_model_params(
     mp.objids = ASCIIString[ cat_entry.objid for cat_entry in cat]
 
     mp.patches = Array(SkyPatch, mp.S, length(blob))
-    mp.tile_sources = Array(Array{Array{Int64}}, length(blob))
+    mp.tile_sources = Array(Array{Array{Int}}, length(blob))
 
     for b = 1:length(blob)
         println("Initializing band $b patches.")
@@ -434,7 +427,7 @@ function initialize_model_params(
 end
 
 
-@doc """
+"""
 Return a reduced Celeste dataset useful for a single object.
 
 Args:
@@ -457,7 +450,7 @@ objid source, but the trimmed_tiled_blob may be missing tiles in which these
 overlapping sources occur.
 
 TODO: test!
-""" ->
+"""
 function limit_to_object_data(
     objid::ASCIIString, mp_original::ModelParams,
     tiled_blob::TiledBlob, blob::Blob, cat_entries::Vector{CatalogEntry})
@@ -469,9 +462,9 @@ function limit_to_object_data(
   mp_original.active_sources = [ s_original ]
 
   # Get the sources that overlap with this object.
-  relevant_sources = Int64[]
+  relevant_sources = Int[]
   for b = 1:length(blob), tile_sources in mp.tile_sources[b]
-    if s_original in tile_sources > 0
+    if s_original in tile_sources
       relevant_sources = union(relevant_sources, tile_sources);
     end
   end
@@ -502,7 +495,7 @@ end
 
 
 
-@doc """
+"""
 Set any pixels significantly below background noise for the
 specified source to NaN.
 
@@ -517,9 +510,9 @@ Returns:
   with empty pixel and noise arrays.  Tiles that contain the source will
   be the same as the original tiles but with NaN where the expected source
   electron counts are below <noise_fraction> of the noise at that pixel.
-""" ->
+"""
 function trim_source_tiles(
-    s::Int64, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
+    s::Int, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
     noise_fraction::Float64=0.1)
 
   trimmed_tiled_blob =

@@ -1,22 +1,22 @@
 module SkyImages
 
-using CelesteTypes
+using ..Types
 import SloanDigitalSkySurvey: PSF, SDSS, WCSUtils
 import SloanDigitalSkySurvey.PSF.get_psf_at_point
 
 import WCS
 import DataFrames
-import ElboDeriv # For stitch_object_tiles
+import ..ElboDeriv # For stitch_object_tiles
 import FITSIO
 import GaussianMixtures
-import Util
+import ..Util
 
-export load_stamp_blob, load_sdss_blob, crop_image!
-export convert_gmm_to_celeste, get_psf_at_point
-export convert_catalog_to_celeste, load_stamp_catalog
-export break_blob_into_tiles, break_image_into_tiles
-export get_local_sources
-export stitch_object_tiles
+export load_stamp_blob, load_sdss_blob, crop_image!,
+       convert_gmm_to_celeste, get_psf_at_point,
+       convert_catalog_to_celeste, load_stamp_catalog,
+       break_blob_into_tiles, break_image_into_tiles,
+       get_local_sources,
+       stitch_object_tiles
 
 # The default mask planes are those used in the astrometry.net code.
 const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
@@ -229,9 +229,9 @@ function load_sdss_psf(fname, b::Integer)
 end
 
 
-@doc """
+"""
 Load a stamp catalog.
-""" ->
+"""
 function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
     df = SDSS.load_stamp_catalog_df(cat_dir, stamp_id, blob,
                                     match_blob=match_blob)
@@ -240,7 +240,7 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
 end
 
 
-@doc """
+"""
 Convert a dataframe catalog (e.g. as returned by
 SloanDigitalSkySurvey.SDSS.load_catalog_df) to an array of Celeste CatalogEntry
 objects.
@@ -250,7 +250,7 @@ Args:
   - blob: The blob that the catalog corresponds to
   - match_blob: If false, changes the direction of phi to match tractor,
                 not Celeste.
-""" ->
+"""
 function convert_catalog_to_celeste(
   df::DataFrames.DataFrame, blob::Array{Image, 1}; match_blob=false)
     function row_to_ce(row)
@@ -296,9 +296,9 @@ function convert_catalog_to_celeste(
 end
 
 
-@doc """
+"""
 Load a stamp into a Celeste blob.
-""" ->
+"""
 function load_stamp_blob(stamp_dir, stamp_id)
     function fetch_image(b)
         band_letter = band_letters[b]
@@ -348,7 +348,7 @@ function load_stamp_blob(stamp_dir, stamp_id)
 end
 
 
-@doc """
+"""
 Read a blob from SDSS.
 
 Args:
@@ -359,7 +359,7 @@ Args:
 
 Returns:
  - A blob (array of Image objects).
-""" ->
+"""
 function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
   mask_planes =
     Set(["S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"]))
@@ -434,7 +434,7 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
 end
 
 
-@doc """
+"""
 Crop an image in place to a (2 * width) x (2 * width) - pixel square centered
 at the world coordinates wcs_center.
 Args:
@@ -447,10 +447,10 @@ Returns:
   - A tiled blob with a single tile in each image centered at wcs_center.
     This can be used to investigate a certain celestial object in a single
     tiled blob, for example.
-""" ->
+"""
 function crop_blob_to_location(
   blob::Array{Image, 1},
-  width::Union{Float64, Int64},
+  width::Union{Float64, Int},
   wcs_center::Vector{Float64})
     @assert length(wcs_center) == 2
     @assert width > 0
@@ -475,7 +475,7 @@ end
 ############################################
 # PSF functions
 
-@doc """
+"""
 Convert a GaussianMixtures.GMM object to an array of Celect PsfComponents.
 
 Args:
@@ -483,20 +483,19 @@ Args:
 
  Returns:
   - An array of PsfComponent objects.
-""" ->
+"""
 function convert_gmm_to_celeste(gmm::GaussianMixtures.GMM, scale::Float64)
     function convert_gmm_component_to_celeste(gmm::GaussianMixtures.GMM, d)
-        CelesteTypes.PsfComponent(scale * gmm.w[d],
-            collect(GaussianMixtures.means(gmm)[d, :]),
-            GaussianMixtures.covars(gmm)[d])
+        PsfComponent(scale * gmm.w[d],
+                     collect(GaussianMixtures.means(gmm)[d, :]),
+                     GaussianMixtures.covars(gmm)[d])
     end
 
-    CelesteTypes.PsfComponent[
-      convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n ]
+    PsfComponent[convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n]
 end
 
 
-@doc """
+"""
 Return an image of a Celeste GMM PSF evaluated at rows, cols.
 
 Args:
@@ -511,12 +510,11 @@ Args:
 Note that the point in the image at which the PSF is evaluated --
 that is, the center of the image returned by this function -- is
 already implicit in the value of psf_array.
-""" ->
-function get_psf_at_point(psf_array::Array{CelesteTypes.PsfComponent, 1};
+"""
+function get_psf_at_point(psf_array::Array{PsfComponent, 1};
                           rows=collect(-25:25), cols=collect(-25:25))
 
-    function get_psf_value(
-      psf::CelesteTypes.PsfComponent, row::Float64, col::Float64)
+    function get_psf_value(psf::PsfComponent, row::Float64, col::Float64)
         x = Float64[row, col] - psf.xiBar
         exp_term = exp(-0.5 * x' * psf.tauBarInv * x - 0.5 * psf.tauBarLd)
         (psf.alphaBar * exp_term / (2 * pi))[1]
@@ -528,7 +526,7 @@ function get_psf_at_point(psf_array::Array{CelesteTypes.PsfComponent, 1};
 end
 
 
-@doc """
+"""
 Get the PSF located at a particular world location in an image.
 
 Args:
@@ -538,7 +536,7 @@ Args:
 Returns:
   - An array of PsfComponent objects that represents the PSF as a mixture
     of Gaussians.
-""" ->
+"""
 function get_source_psf(world_loc::Vector{Float64}, img::Image)
     # Some stamps or simulated data have no raw psf information.  In that case,
     # just use the psf from the image.
@@ -557,7 +555,7 @@ end
 #######################################
 # Tiling functions
 
-@doc """
+"""
 Convert an image to an array of tiles of a given width.
 
 Args:
@@ -566,18 +564,18 @@ Args:
 
 Returns:
   An array of tiles containing the image.
-""" ->
-function break_image_into_tiles(img::Image, tile_width::Int64)
+"""
+function break_image_into_tiles(img::Image, tile_width::Int)
   WW = ceil(Int, img.W / tile_width)
   HH = ceil(Int, img.H / tile_width)
   ImageTile[ ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW ]
 end
 
 
-@doc """
+"""
 Break a blob into tiles.
-""" ->
-function break_blob_into_tiles(blob::Blob, tile_width::Int64)
+"""
+function break_blob_into_tiles(blob::Blob, tile_width::Int)
   [ break_image_into_tiles(img, tile_width) for img in blob ]
 end
 
@@ -607,7 +605,7 @@ world_to_pix{T <: Number}(patch::SkyPatch, world_loc::Vector{T}) =
                  world_loc)
 
 
-@doc """
+"""
 A fast function to determine which sources might belong to which tiles.
 
 Args:
@@ -618,7 +616,7 @@ Returns:
   - An array (over tiles) of a vector of candidate
     source patches.  If a patch is a candidate, it may be within the patch radius
     of a point in the tile, though it might not.
-""" ->
+"""
 function local_source_candidates(
     tiles::TiledImage, patches::Vector{SkyPatch})
 
@@ -628,7 +626,7 @@ function local_source_candidates(
     Float64[patches[s].radius * maximum(abs(eig(patches[s].wcs_jacobian)[1]))
             for s=1:length(patches)];
 
-  candidates = fill(Int64[], size(tiles));
+  candidates = fill(Int[], size(tiles));
   for h=1:size(tiles)[1], w=1:size(tiles)[2]
     # Find the patches that are less than the radius plus diagonal from the
     # center of the tile.  These are candidates for having some
@@ -647,7 +645,7 @@ function local_source_candidates(
 end
 
 
-@doc """
+"""
 Args:
   - tile: An ImageTile (containing tile coordinates)
   - patches: A vector of SkyPatch objects to be matched with the tile.
@@ -656,10 +654,10 @@ Returns:
   - A vector of source ids (from 1 to length(patches)) that influence
     pixels in the tile.  A patch influences a tile if
     there is any overlap in their squares of influence.
-""" ->
+"""
 function get_local_sources(tile::ImageTile, patches::Vector{SkyPatch})
 
-    tile_sources = Int64[]
+    tile_sources = Int[]
     tile_center = Float64[mean(tile.h_range), mean(tile.w_range)]
 
     for patch_index in 1:length(patches)
@@ -679,15 +677,15 @@ function get_local_sources(tile::ImageTile, patches::Vector{SkyPatch})
 end
 
 
-@doc """
+"""
 Return a vector of (h, w) indices of tiles that contain this source.
-""" ->
-function find_source_tiles(s::Int64, b::Int64, mp::ModelParams)
+"""
+function find_source_tiles(s::Int, b::Int, mp::ModelParams)
   [ ind2sub(size(mp.tile_sources[b]), ind) for ind in
     find([ s in sources for sources in mp.tile_sources[b]]) ]
 end
 
-@doc """
+"""
 Combine the tiles associated with a single source into an image.
 
 Args:
@@ -702,9 +700,9 @@ Returns:
   A matrix of pixel values for the particular object using only tiles in
   which it is found according to the ModelParams tile_sources field.  Pixels
   from tiles that do not have this source will be marked as 0.0.
-""" ->
+"""
 function stitch_object_tiles(
-    s::Int64, b::Int64, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
+    s::Int, b::Int, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
     predicted::Bool=false)
 
   H, W = size(tiled_blob[b])
@@ -736,4 +734,4 @@ function stitch_object_tiles(
 end
 
 
-end
+end  # module
