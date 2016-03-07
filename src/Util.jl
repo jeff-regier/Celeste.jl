@@ -9,7 +9,7 @@ function matvec222(mat::Matrix, vec::Vector)
             (mat[2,1] * vec[1] + mat[2,2] * vec[2]) * vec[2]
 end
 
-@doc """
+"""
 Unpack a rotation-parameterized BVN covariance matrix.
 
 Args:
@@ -19,7 +19,7 @@ Args:
 
  Returns:
    The 2x2 covariance matrix parameterized by the inputs.
-""" ->
+"""
 function get_bvn_cov{NumType <: Number}(ab::NumType, angle::NumType, scale::NumType)
   # TODO: put in BivariateNormals
 

@@ -1,15 +1,11 @@
 # Test the functions that move between constrained and unconstrained
 # parameterizations.
 
-using Celeste
-using CelesteTypes
 using Base.Test
-using SampleData
-using Transform
+
+using Celeste: Types, SampleData, Transform, SensitiveFloats
+import Celeste: ModelInit, ElboDeriv
 using Compat
-
-import ModelInit
-
 
 function test_transform_sensitive_float()
 	blob, mp, body, tiled_blob = gen_two_body_dataset();
@@ -29,8 +25,8 @@ function test_transform_sensitive_float()
 		vp_free = Vector{NumType}[ zeros(NumType, length(UnconstrainedParams)) for
 		                           sa in mp.active_sources ];
 		#vp_free = convert(FreeVariationalParams{NumType}, vp_free)
-		Transform.array_to_free_vp!(vp_free_array, vp_free, Int64[])
-		mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
+		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
+		mp_local = Types.forward_diff_model_params(NumType, mp);
 		transform.to_vp!(vp_free, mp_local.vp)
 		elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
 		elbo.v[1]
@@ -206,7 +202,7 @@ function test_parameter_conversion()
 		end
 
 		# Check conversion to and from a vector.
-		omitted_ids = Array(Int64, 0)
+		omitted_ids = Array(Int, 0)
 		vp = deepcopy(mp.vp)
 		x = transform.vp_to_array(vp, omitted_ids)
 		@test length(x) == length(vp_free[1]) * length(mp.active_sources)
@@ -237,7 +233,7 @@ end
 
 function test_identity_transform()
 	blob, mp, three_bodies = gen_three_body_dataset();
-	omitted_ids = Int64[];
+	omitted_ids = Int[];
 	kept_ids = setdiff(1:length(ids_free), omitted_ids);
 
 	transform = Transform.get_identity_transform(length(ids), mp.S);
@@ -284,13 +280,13 @@ function test_transform_simplex_functions()
 			this_scale * Transform.unsimplexify_parameter(param, unscaled_simplex_box))
 
 		# Test the bound checking
-		@test_throws(Exception,
+		@test_throws(AssertionError,
 			Transform.unsimplexify_parameter([ lb - 1e-6, 1 - lb + 1e-6 ], simplex_box))
-		@test_throws(Exception,
+		@test_throws(AssertionError,
 			Transform.unsimplexify_parameter([ 0.3, 0.8 ], simplex_box))
-		@test_throws(Exception,
+		@test_throws(AssertionError,
 			Transform.unsimplexify_parameter([ 0.2, 0.3, 0.5 ], simplex_box))
-		@test_throws(Exception, Transform.simplexify_parameter([ 1., 2. ], simplex_box))
+		@test_throws(AssertionError, Transform.simplexify_parameter([ 1., 2. ], simplex_box))
 	end
 end
 
@@ -319,9 +315,9 @@ function test_transform_box_functions()
 			this_scale * Transform.unbox_parameter(param, unscaled_param_box))
 
 		# Test the bound checking
-		@test_throws Exception Transform.unbox_parameter(lb - 1.0, param_box)
+		@test_throws AssertionError Transform.unbox_parameter(lb - 1.0, param_box)
 		ub < Inf &&
-			@test_throws Exception Transform.unbox_parameter(ub + 1.0, param_box)
+			@test_throws AssertionError Transform.unbox_parameter(ub + 1.0, param_box)
 	end
 end
 
@@ -365,7 +361,7 @@ function test_enforce_bounds()
 	mp.vp[2][ids.r1[2]] = transform.bounds[2][:r1][1].upper_bound + 1.0
 	mp.vp[3][ids.k[1, 1]] = transform.bounds[3][:k][1, 1].lower_bound - 0.00001
 
-	@test_throws Exception transform.from_vp(mp.vp)
+	@test_throws AssertionError transform.from_vp(mp.vp)
 	Transform.enforce_bounds!(mp, transform)
 	transform.from_vp(mp.vp) # Check that it now works
 
@@ -379,15 +375,15 @@ function test_enforce_bounds()
 	mp.vp[sa][ids.r1[2]] = transform.bounds[1][:r1][1].upper_bound + 1.0
 	mp.vp[sa][ids.k[1, 1]] = transform.bounds[1][:k][1, 1].lower_bound - 0.00001
 
-	@test_throws Exception transform.from_vp(mp.vp)
+	@test_throws AssertionError transform.from_vp(mp.vp)
 	Transform.enforce_bounds!(mp, transform)
 	transform.from_vp(mp.vp) # Check that it now works
 
 end
 
 
-test_transform_sensitive_float()
 test_transform_box_functions()
+test_transform_sensitive_float()
 test_box_derivatives()
 test_box_simplex_derivatives()
 test_simplex_derivatives()

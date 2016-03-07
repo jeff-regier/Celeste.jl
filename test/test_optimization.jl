@@ -1,12 +1,9 @@
-using Celeste
-using CelesteTypes
 using Base.Test
-using SampleData
-using Transform
-using Compat
+
 import SloanDigitalSkySurvey.WCSUtils
 
-import OptimizeElbo
+using Celeste: Types, Transform, SensitiveFloats
+import Celeste: OptimizeElbo, ModelInit, ElboDeriv, SkyImages, SampleData
 
 
 println("Running optimization tests.")
@@ -54,14 +51,14 @@ end
 #########################################################
 
 function test_objective_wrapper()
-    omitted_ids = Int64[];
+    omitted_ids = Int[];
     kept_ids = setdiff(1:length(ids_free), omitted_ids);
 
     blob, mp, bodies, tiled_blob = SampleData.gen_three_body_dataset();
     # Change the tile size.
     tiled_blob, mp = ModelInit.initialize_celeste(
       blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
-    mp.active_sources = Int64[2, 3]
+    mp.active_sources = Int[2, 3]
     trans = Transform.get_mp_transform(mp, loc_width=1.0);
 
     wrapper =
@@ -118,11 +115,11 @@ function test_single_source_optimization()
   mp_original = deepcopy(mp);
 
   s = 2
-  mp.active_sources = Int64[s]
+  mp.active_sources = Int[s]
   transform = get_mp_transform(mp, loc_width=1.0);
 
   f = ElboDeriv.elbo;
-  omitted_ids = Int64[]
+  omitted_ids = Int[]
 
   ElboDeriv.elbo_likelihood(tiled_blob, mp).v[1]
 
@@ -152,7 +149,7 @@ function test_two_body_optimization_newton()
     function elbo_function(tiled_blob::TiledBlob, mp::ModelParams)
       ElboDeriv.elbo(tiled_blob, mp)
     end
-    omitted_ids = Int64[]
+    omitted_ids = Int[]
 
     mp_newton = deepcopy(mp);
     newton_iter_count = OptimizeElbo.maximize_f_newton(
@@ -275,7 +272,7 @@ function test_bad_a_init()
     ce = CatalogEntry([7.2, 8.3], false, gal_color_mode, gal_color_mode,
             0.5, .7, pi/4, .5, "test")
 
-    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359");
+    blob0 = SkyImages.load_stamp_blob(datadir, "164.4311-39.0359");
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
         blob0[b].wcs = WCSUtils.wcs_id
@@ -324,8 +321,8 @@ end
 
 
 function test_real_stamp_optimization()
-    blob = SkyImages.load_stamp_blob(dat_dir, "5.0073-0.0739");
-    cat_entries = SkyImages.load_stamp_catalog(dat_dir, "s82-5.0073-0.0739", blob);
+    blob = SkyImages.load_stamp_blob(datadir, "5.0073-0.0739");
+    cat_entries = SkyImages.load_stamp_catalog(datadir, "s82-5.0073-0.0739", blob);
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries);
     inbounds(ce) = ce.pos[1] > -10. && ce.pos[2] > -10 &&

@@ -1,23 +1,20 @@
 module Celeste
 
-push!(LOAD_PATH, joinpath(Pkg.dir("Celeste"), "src"))
+# submodules
+include("Types.jl")
+include("SensitiveFloats.jl")
+include("Util.jl")
+include("KL.jl")
+include("ElboDeriv.jl")
+include("SkyImages.jl")
+include("Transform.jl")
+include("OptimizeElbo.jl")
+include("ModelInit.jl")
+include("Synthetic.jl")
+include("SampleData.jl")
 
-import SkyImages
-import ElboDeriv
-import OptimizeElbo
-import ModelInit
-import SampleData
-import Transform
-import KL
-
-using CelesteTypes
-
-using DataFrames
-using JLD
-using FITSIO
-import SloanDigitalSkySurvey.SDSS
-
+# public API
+export infer, score_field
 include("api.jl")
-include("score.jl")
 
 end # module

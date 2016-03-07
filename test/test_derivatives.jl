@@ -1,11 +1,8 @@
-using Celeste
-using CelesteTypes
 using Base.Test
-using SampleData
-import Synthetic
 import DualNumbers
 
-import SkyImages
+using Celeste: Types, SampleData, SensitiveFloats
+import Celeste: Synthetic, SkyImages, Util, ElboDeriv, ModelInit
 import SloanDigitalSkySurvey: SDSS, WCSUtils
 
 if VERSION > v"0.5.0-dev"
@@ -19,19 +16,20 @@ else
     end
 end
 
+
 println("Running hessian tests.")
 
 
-@doc """
+"""
 Wrap a vector of canonical parameters for active sources into a ModelParams
 object of the appropriate type.  Used for testing with forward
 autodifferentiation.
-""" ->
+"""
 function unwrap_vp_vector{NumType <: Number}(
     vp_vec::Vector{NumType}, mp::ModelParams)
 
   vp_array = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
-  mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
+  mp_local = Types.forward_diff_model_params(NumType, mp);
   for sa = 1:length(mp.active_sources)
     mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
   end
@@ -39,9 +37,9 @@ function unwrap_vp_vector{NumType <: Number}(
 end
 
 
-@doc """
+"""
 Convert the variational params into a vector for autodiff.
-""" ->
+"""
 function wrap_vp_vector(mp::ModelParams, use_active_sources::Bool)
   P = length(CanonicalParams)
   S = use_active_sources ? length(mp.active_sources) : mp.S
@@ -54,9 +52,9 @@ function wrap_vp_vector(mp::ModelParams, use_active_sources::Bool)
 end
 
 
-@doc """
+"""
 Use ForwardDiff to test that fun(x) = sf (to abuse some notation)
-""" ->
+"""
 function test_with_autodiff(fun::Function, x::Vector{Float64}, sf::SensitiveFloat)
   ad_grad = ForwardDiff.gradient(fun, x)
   ad_hess = ForwardDiff.hessian(fun, x)
@@ -66,9 +64,9 @@ function test_with_autodiff(fun::Function, x::Vector{Float64}, sf::SensitiveFloa
 end
 
 
-@doc """
+"""
 Set all but a few pixels to NaN to speed up autodiff Hessian testing.
-""" ->
+"""
 function trim_tiles!(tiled_blob::TiledBlob, keep_pixels)
   for b = 1:length(tiled_blob)
 	  tiled_blob[b][1,1].pixels[
@@ -114,7 +112,7 @@ function test_real_image()
   function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
     vp_array =
       reshape(vp_vec, length(CanonicalParams), length(trimmed_mp.active_sources))
-    mp_local = CelesteTypes.forward_diff_model_params(NumType, trimmed_mp);
+    mp_local = Types.forward_diff_model_params(NumType, trimmed_mp);
     for sa = 1:length(trimmed_mp.active_sources)
       mp_local.vp[trimmed_mp.active_sources[sa]] = vp_array[:, sa]
     end
@@ -142,7 +140,7 @@ function test_dual_numbers()
   # Due to the autodiff parts of the KL divergence and transform,
   # these parts of the ELBO will currently not work with dual numbers.
   blob, mp, body, tiled_blob = gen_sample_star_dataset();
-  mp_dual = CelesteTypes.forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
+  mp_dual = Types.forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
   elbo_dual = ElboDeriv.elbo_likelihood(tiled_blob, mp_dual);
 
   true
@@ -286,10 +284,10 @@ function test_tile_likelihood()
       elbo_vars_array, tile, mp, tile_sources, sbs, star_mcs, gal_mcs);
     if ElboDerivs.Threaded
       for i in 2:nthreads()
-        CelesteTypes.add_scaled_sfs!(
-          elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
-          elbo_vars_array[1].calculate_hessian &&
-            elbo_vars_array[1].calculate_derivs)
+        add_scaled_sfs!(elbo_vars_array[1].elbo,
+                        elbo_vars_array[i].elbo, 1.0,
+                        elbo_vars_array[1].calculate_hessian &&
+                        elbo_vars_array[1].calculate_derivs)
       end
     end
     deepcopy(elbo_vars_array[1].elbo)
@@ -438,7 +436,7 @@ function test_e_g_s_functions()
 
     function wrapper_fun{NumType <: Number}(x::Vector{NumType})
       @assert length(x) == P
-      mp_local = CelesteTypes.forward_diff_model_params(NumType, mp);
+      mp_local = Types.forward_diff_model_params(NumType, mp);
       mp_local.vp[s] = x
       elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
       test_var ? elbo_vars_local.var_G_s.v[1] : elbo_vars_local.E_G_s.v[1]
@@ -462,7 +460,7 @@ end
 function test_fs1m_derivatives()
   # TODO: test with a real and asymmetric wcs jacobian.
   blob, mp, three_bodies = gen_three_body_dataset();
-  omitted_ids = Int64[];
+  omitted_ids = Int[];
   kept_ids = setdiff(1:length(ids), omitted_ids);
 
   s = 1
@@ -485,7 +483,7 @@ function test_fs1m_derivatives()
     gcc_ind = (psf_k, gal_j, type_i, s)
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-      mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
+      mp_fd = Types.forward_diff_model_params(T, mp);
       elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
 
       # Make sure par is as long as the galaxy parameters.
@@ -539,7 +537,7 @@ end
 function test_fs0m_derivatives()
   # TODO: test with a real and asymmetric wcs jacobian.
   blob, mp, three_bodies = gen_three_body_dataset();
-  omitted_ids = Int64[];
+  omitted_ids = Int[];
   kept_ids = setdiff(1:length(ids), omitted_ids);
 
   s = 1
@@ -562,7 +560,7 @@ function test_fs0m_derivatives()
     bmc_ind = (psf_k, s)
     function f_wrap_star{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-      mp_fd = CelesteTypes.forward_diff_model_params(T, mp);
+      mp_fd = Types.forward_diff_model_params(T, mp);
 
       # Make sure par is as long as the galaxy parameters.
       @assert length(par) == length(ids.u)
@@ -952,11 +950,11 @@ end
 
 function test_set_hess()
   sf = zero_sensitive_float(CanonicalParams);
-  CelesteTypes.set_hess!(sf, 2, 3, 5.0);
+  set_hess!(sf, 2, 3, 5.0);
   @test_approx_eq sf.h[2, 3] 5.0
   @test_approx_eq sf.h[3, 2] 5.0
 
-  CelesteTypes.set_hess!(sf, 4, 4, 6.0);
+  set_hess!(sf, 4, 4, 6.0);
   @test_approx_eq sf.h[4, 4] 6.0
 end
 

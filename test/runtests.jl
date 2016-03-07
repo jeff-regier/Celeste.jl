@@ -1,12 +1,10 @@
 #!/usr/bin/env julia
 
-using Celeste
-using CelesteTypes
+using Celeste: Types, SampleData, Transform
+import Celeste.Synthetic
+
 using Base.Test
 using Distributions
-using SampleData
-using Transform
-import Synthetic
 
 anyerrors = false
 
