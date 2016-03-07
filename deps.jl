@@ -19,6 +19,6 @@ const PyInt_FromSize_t = :PyInt_FromSize_t
 const PyInt_FromSsize_t = :PyInt_FromSsize_t
 const PyInt_AsSsize_t = :PyInt_AsSsize_t
 
-const Py_hash_t = Int
+const Py_hash_t = Int64
 
 const pyunicode_literals = false
