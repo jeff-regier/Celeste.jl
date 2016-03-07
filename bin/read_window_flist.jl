@@ -65,7 +65,7 @@ df[:DIST] = dist_to_loc;
 top_n = sortperm(dist_to_loc)[1:10];
 df[top_n, [:RUN, :RERUN, :CAMCOL, :FIELD, :DIST]]
 
-function download_command(df_row::Int64)
+function download_command(df_row::Int)
   run = df[df_row, :RUN]
   camcol = df[df_row, :CAMCOL]
   field = df[df_row, :FIELD]
