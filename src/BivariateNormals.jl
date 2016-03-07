@@ -73,15 +73,15 @@ function eval_bvn_pdf_in_place!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     bmc::BvnComponent{NumType}, x::Vector{Float64})
 
-  elbo_vars.py1[1] =
+  elbo_vars.bvn_derivs.py1[1] =
     bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
     bmc.precision[1,2] * (x[2] - bmc.the_mean[2])
-  elbo_vars.py2[1] =
+  elbo_vars.bvn_derivs.py2[1] =
     bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
     bmc.precision[2,2] * (x[2] - bmc.the_mean[2])
-  elbo_vars.f_pre[1] =
-    bmc.z * exp(-0.5 * ((x[1] - bmc.the_mean[1]) * elbo_vars.py1[1] +
-                        (x[2] - bmc.the_mean[2]) * elbo_vars.py2[1]))
+  elbo_vars.bvn_derivs.f_pre[1] =
+    bmc.z * exp(-0.5 * ((x[1] - bmc.the_mean[1]) * elbo_vars.bvn_derivs.py1[1] +
+                        (x[2] - bmc.the_mean[2]) * elbo_vars.bvn_derivs.py2[1]))
 
   true # return type
 end
@@ -125,8 +125,8 @@ function eval_bvn_log_density{NumType <: Number}(
   eval_bvn_pdf_in_place!(elbo_vars, bvn, x);
 
   -0.5 * (
-    (x[1] - bvn.the_mean[1]) * elbo_vars.py1[1] +
-    (x[2] - bvn.the_mean[2]) * elbo_vars.py2[1] -
+    (x[1] - bvn.the_mean[1]) * elbo_vars.bvn_derivs.py1[1] +
+    (x[2] - bvn.the_mean[2]) * elbo_vars.bvn_derivs.py2[1] -
     log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
 end
 
@@ -221,7 +221,7 @@ end
 Calculate the value, gradient, and hessian of
   -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
 with respect to x and sigma.  This assumes that
-  elbo_vars.py1, elbo_vars.py2, and elbo_vars.f_pre have already been populated
+  elbo_vars..bvn_derivs.py1, .py2, and .f_pre have already been populated
   witha call to eval_bvn_pdf_in_place!.
 
 Args:
@@ -471,7 +471,7 @@ galaxy parameters (u). Updates bvn_u_d and bvn_uu_h in place.
 
 bvn_x_d and bvn_xx_h should already have been set using get_bvn_derivs!()
 """ ->
-function transform_bvn_derivs!{NumType <: Number}(
+function transform_bvn_ux_derivs!{NumType <: Number}(
     bvn_derivs::BivariateNormalDerivatives{NumType},
     wcs_jacobian::Array{Float64, 2}, calculate_hessian::Bool)
 
@@ -509,15 +509,16 @@ function transform_bvn_derivs!{NumType <: Number}(
 end
 
 
-function transform_bvn_derivs!{NumType <: Number}(
+function transform_bvn_ux_derivs!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    bmc::BvnComponent{NumType},
+    # bmc::BvnComponent{NumType},
     wcs_jacobian::Array{Float64, 2})
   # TODO: bmc is not used here except for dispatching, fix this.
 
-  transform_bvn_derivs!(
+  transform_bvn_ux_derivs!(
     elbo_vars.bvn_derivs, wcs_jacobian, elbo_vars.calculate_hessian)
 end
+
 
 @doc """
 Transform all the bvn derivatives from x and sigma to u and the model
@@ -537,7 +538,7 @@ function transform_bvn_derivs!{NumType <: Number}(
 
   # Transform the u derivates first.
   # bvn_x_d and bvn_xx_h should already have been set using get_bvn_derivs!()
-  transform_bvn_derivs!(bvn_derivs, wcs_jacobian, calculate_hessian)
+  transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, calculate_hessian)
 
   # transform_bvn_derivs!(elbo_vars, gcc.bmc, wcs_jacobian)
 
@@ -556,6 +557,9 @@ function transform_bvn_derivs!{NumType <: Number}(
   if calculate_hessian
     # Hessian calculations.
 
+    bvn_ss_h = bvn_derivs.bvn_ss_h
+    bvn_us_h = bvn_derivs.bvn_us_h
+
     fill!(bvn_ss_h, 0.0)
     fill!(bvn_us_h, 0.0)
 
@@ -568,6 +572,7 @@ function transform_bvn_derivs!{NumType <: Number}(
       end
     end
 
+    bvn_sigsig_h = bvn_derivs.bvn_sigsig_h
     @inbounds for sig_id1 in 1:3, sig_id2 in 1:3,
                   shape_id2 in 1:length(gal_shape_ids)
       inner_term =
@@ -584,6 +589,7 @@ function transform_bvn_derivs!{NumType <: Number}(
 
     # Second derivates involving both a shape term and a u term.
     # TODO: time consuming **************
+    bvn_xsig_h = bvn_derivs.bvn_xsig_h
     @inbounds for shape_id in 1:length(gal_shape_ids),
                   u_id in 1:2, sig_id in 1:3, x_id in 1:2
       bvn_us_h[u_id, shape_id] +=
@@ -608,11 +614,7 @@ function transform_bvn_derivs!{NumType <: Number}(
     wcs_jacobian::Array{Float64, 2})
 
   transform_bvn_derivs!(
-    elbo_vars.bvn_u_d, elbo_vars.bvn_uu_h,
-    elbo_vars.bvn_x_d, elbo_vars.bvn_xx_h,
-    elbo_vars.bvn_s_d, elbo_vars.bvn_ss_h, elbo_vars.bvn_us_h,
-    elbo_vars.bvn_sig_d, elbo_vars.bvn_sigsig_h, elbo_vars.bvn_xsig_h,
-    gcc.sig_sf, wcs_jacobian, elbo_vars.calculate_hessian)
+    elbo_vars.bvn_derivs, gcc.sig_sf, wcs_jacobian, elbo_vars.calculate_hessian)
 end
 
 
