@@ -1,8 +1,8 @@
 URLBASE := http://data.sdss3.org/sas/dr12/boss
-RUN_SHORT := 4263
+RUN_SHORT := 3900
 RUN := $(shell printf '%06d' $(RUN_SHORT))
-CAMCOL := 5
-FIELD := 0117
+CAMCOL := 6
+FIELD := 0269
 
 all : fpM-$(RUN)-u$(CAMCOL)-$(FIELD).fit \
       fpM-$(RUN)-g$(CAMCOL)-$(FIELD).fit \
