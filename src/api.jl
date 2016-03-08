@@ -474,7 +474,7 @@ function score_field(dir, run, camcol, field, outdir, reffile)
     objid = ASCIIString[]
     vp = Vector{Float64}[]
     for path in paths
-        d = load(path)
+        d = JLD.load(path)
         append!(objid, d["objid"])
         append!(vp, d["vp"])
     end
