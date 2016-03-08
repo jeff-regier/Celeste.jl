@@ -21,6 +21,7 @@ Args:
    The 2x2 covariance matrix parameterized by the inputs.
 """
 function get_bvn_cov{NumType <: Number}(ab::NumType, angle::NumType, scale::NumType)
+  # TODO: put in BivariateNormals
 
     #@assert -pi/2 <= angle < pi/2
     if NumType <: AbstractFloat

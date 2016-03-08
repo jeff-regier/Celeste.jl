@@ -22,7 +22,6 @@ else
     end
 end
 
-
 ####################################################
 # Store pre-allocated memory in this data structures, which contains
 # intermediate values used in the ELBO calculation.
@@ -34,23 +33,10 @@ end
 
 
 """
-Pre-allocated memory for efficiently accumulating certain sub-matrices
-of the E_G_s and E_G2_s Hessian.
-
-Args:
-  NumType: The numeric type of the hessian.
-  i: The type of celestial source, from 1:Ia
+Pre-allocated memory for quantities related to derivatives of bivariate
+normals.
 """
-function HessianSubmatrices(NumType::DataType, i::Int)
-  @assert 1 <= i <= Ia
-  shape_p = length(shape_standard_alignment[i])
-
-  u_u = zeros(NumType, 2, 2);
-  shape_shape = zeros(NumType, shape_p, shape_p);
-  HessianSubmatrices{NumType}(u_u, shape_shape)
-end
-
-type ElboIntermediateVariables{NumType <: Number}
+type BivariateNormalDerivatives{NumType <: Number}
 
   # Pre-allocated memory for py1, py2, and f when evaluating BVNs
   py1::Array{NumType, 1}
@@ -77,6 +63,63 @@ type ElboIntermediateVariables{NumType <: Number}
   bvn_s_d::Array{NumType, 1}
   bvn_ss_h::Array{NumType, 2}
   bvn_us_h::Array{NumType, 2}
+
+  BivariateNormalDerivatives(ThisNumType::DataType) = begin
+    py1 = zeros(ThisNumType, 1)
+    py2 = zeros(ThisNumType, 1)
+    f_pre = zeros(ThisNumType, 1)
+
+    bvn_x_d = zeros(ThisNumType, 2)
+    bvn_sig_d = zeros(ThisNumType, 3)
+    bvn_xx_h = zeros(ThisNumType, 2, 2)
+    bvn_xsig_h = zeros(ThisNumType, 2, 3)
+    bvn_sigsig_h = zeros(ThisNumType, 3, 3)
+
+    dpy1_dsig = zeros(ThisNumType, 3)
+    dpy2_dsig = zeros(ThisNumType, 3)
+    dsiginv_dsig = zeros(ThisNumType, 3, 3)
+
+    # Derivatives wrt u.
+    bvn_u_d = zeros(ThisNumType, 2)
+    bvn_uu_h = zeros(ThisNumType, 2, 2)
+
+    # Shape deriviatives.  Here, s stands for "shape".
+    bvn_s_d = zeros(ThisNumType, length(gal_shape_ids))
+
+    # The hessians.
+    bvn_ss_h = zeros(ThisNumType, length(gal_shape_ids), length(gal_shape_ids))
+    bvn_us_h = zeros(ThisNumType, 2, length(gal_shape_ids))
+
+    new(py1, py2, f_pre,
+        bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
+        dpy1_dsig, dpy2_dsig,
+        dsiginv_dsig,
+        bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h)
+  end
+end
+
+
+"""
+Pre-allocated memory for efficiently accumulating certain sub-matrices
+of the E_G_s and E_G2_s Hessian.
+
+Args:
+  NumType: The numeric type of the hessian.
+  i: The type of celestial source, from 1:Ia
+"""
+function HessianSubmatrices(NumType::DataType, i::Int)
+  @assert 1 <= i <= Ia
+  shape_p = length(shape_standard_alignment[i])
+
+  u_u = zeros(NumType, 2, 2);
+  shape_shape = zeros(NumType, shape_p, shape_p);
+  HessianSubmatrices{NumType}(u_u, shape_shape)
+end
+
+
+type ElboIntermediateVariables{NumType <: Number}
+
+  bvn_derivs::BivariateNormalDerivatives{NumType}
 
   # Vectors of star and galaxy bvn quantities from all sources for a pixel.
   # The vector has one element for each active source, in the same order
@@ -135,30 +178,7 @@ function ElboIntermediateVariables(
 
   @assert NumType <: Number
 
-  py1 = zeros(NumType, 1)
-  py2 = zeros(NumType, 1)
-  f_pre = zeros(NumType, 1)
-
-  bvn_x_d = zeros(NumType, 2)
-  bvn_sig_d = zeros(NumType, 3)
-  bvn_xx_h = zeros(NumType, 2, 2)
-  bvn_xsig_h = zeros(NumType, 2, 3)
-  bvn_sigsig_h = zeros(NumType, 3, 3)
-
-  dpy1_dsig = zeros(NumType, 3)
-  dpy2_dsig = zeros(NumType, 3)
-  dsiginv_dsig = zeros(NumType, 3, 3)
-
-  # Derivatives wrt u.
-  bvn_u_d = zeros(NumType, 2)
-  bvn_uu_h = zeros(NumType, 2, 2)
-
-  # Shape deriviatives.  Here, s stands for "shape".
-  bvn_s_d = zeros(NumType, length(gal_shape_ids))
-
-  # The hessians.
-  bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
-  bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
+  bvn_derivs = BivariateNormalDerivatives{NumType}(NumType)
 
   # fs0m and fs1m accumulate contributions from all bvn components
   # for a given source.
@@ -189,10 +209,7 @@ function ElboIntermediateVariables(
   elbo = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
 
   ElboIntermediateVariables{NumType}(
-    py1, py2, f_pre, bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
-    dpy1_dsig, dpy2_dsig, dsiginv_dsig,
-    bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h,
-    fs0m_vec, fs1m_vec,
+    bvn_derivs, fs0m_vec, fs1m_vec,
     E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
     E_G, var_G, combine_grad, combine_hess,
     elbo_log_term, elbo, calculate_derivs, calculate_hessian)
@@ -202,6 +219,7 @@ end
 include("elbo_kl.jl")
 include("source_brightness.jl")
 include("bivariate_normals.jl")
+
 
 """
 Add the contributions of a star's bivariate normal term to the ELBO,
@@ -233,16 +251,17 @@ function accum_star_pos!{NumType <: Number}(
   get_bvn_derivs_in_place!(elbo_vars, bmc, true, false);
 
   fs0m = elbo_vars.fs0m_vec[s]
-  fs0m.v[1] += elbo_vars.f_pre[1]
+  fs0m.v[1] += elbo_vars.bvn_derivs.f_pre[1]
 
   if elbo_vars.calculate_derivs && calculate_derivs
-    transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
-    bvn_u_d = elbo_vars.bvn_u_d
-    bvn_uu_h = elbo_vars.bvn_uu_h
+    # transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
+    transform_bvn_ux_derivs!(elbo_vars, wcs_jacobian)
+    bvn_u_d = elbo_vars.bvn_derivs.bvn_u_d
+    bvn_uu_h = elbo_vars.bvn_derivs.bvn_uu_h
 
     # Accumulate the derivatives.
     for u_id in 1:2
-      fs0m.d[star_ids.u[u_id]] += elbo_vars.f_pre[1] * bvn_u_d[u_id]
+      fs0m.d[star_ids.u[u_id]] += elbo_vars.bvn_derivs.f_pre[1] * bvn_u_d[u_id]
     end
 
     if elbo_vars.calculate_hessian
@@ -250,7 +269,7 @@ function accum_star_pos!{NumType <: Number}(
       # TODO: redundant term
       for u_id1 in 1:2, u_id2 in 1:2
         fs0m.h[star_ids.u[u_id1], star_ids.u[u_id2]] +=
-          elbo_vars.f_pre[1] * (bvn_uu_h[u_id1, u_id2] +
+          elbo_vars.bvn_derivs.f_pre[1] * (bvn_uu_h[u_id1, u_id2] +
           bvn_u_d[u_id1] * bvn_u_d[u_id2])
       end
     end
@@ -285,7 +304,7 @@ function accum_galaxy_pos!{NumType <: Number}(
     calculate_derivs::Bool)
 
   eval_bvn_pdf_in_place!(elbo_vars, gcc.bmc, x)
-  f = elbo_vars.f_pre[1] * gcc.e_dev_i
+  f = elbo_vars.bvn_derivs.f_pre[1] * gcc.e_dev_i
   fs1m = elbo_vars.fs1m_vec[s];
   fs1m.v[1] += f
 
@@ -295,11 +314,11 @@ function accum_galaxy_pos!{NumType <: Number}(
       elbo_vars.calculate_hessian, elbo_vars.calculate_hessian);
     transform_bvn_derivs!(elbo_vars, gcc, wcs_jacobian)
 
-    bvn_u_d = elbo_vars.bvn_u_d
-    bvn_uu_h = elbo_vars.bvn_uu_h
-    bvn_s_d = elbo_vars.bvn_s_d
-    bvn_ss_h = elbo_vars.bvn_ss_h
-    bvn_us_h = elbo_vars.bvn_us_h
+    bvn_u_d = elbo_vars.bvn_derivs.bvn_u_d
+    bvn_uu_h = elbo_vars.bvn_derivs.bvn_uu_h
+    bvn_s_d = elbo_vars.bvn_derivs.bvn_s_d
+    bvn_ss_h = elbo_vars.bvn_derivs.bvn_ss_h
+    bvn_us_h = elbo_vars.bvn_derivs.bvn_us_h
 
     # Accumulate the derivatives.
     for u_id in 1:2
@@ -313,7 +332,7 @@ function accum_galaxy_pos!{NumType <: Number}(
     # The e_dev derivative.  e_dev just scales the entire component.
     # The direction is positive or negative depending on whether this
     # is an exp or dev component.
-    fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * elbo_vars.f_pre[1]
+    fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * elbo_vars.bvn_derivs.f_pre[1]
 
     if elbo_vars.calculate_hessian
       # The Hessians:
@@ -348,12 +367,14 @@ function accum_galaxy_pos!{NumType <: Number}(
       devi = gal_ids.e_dev
       for u_id in 1:2
         ui = gal_ids.u[u_id]
-        fs1m.h[ui, devi] += elbo_vars.f_pre[1] * gcc.e_dev_dir * bvn_u_d[u_id]
+        fs1m.h[ui, devi] +=
+          elbo_vars.bvn_derivs.f_pre[1] * gcc.e_dev_dir * bvn_u_d[u_id]
         fs1m.h[devi, ui] = fs1m.h[ui, devi]
       end
       for shape_id in 1:length(gal_shape_ids)
         si = gal_shape_alignment[shape_id]
-        fs1m.h[si, devi] += elbo_vars.f_pre[1] * gcc.e_dev_dir * bvn_s_d[shape_id]
+        fs1m.h[si, devi] +=
+          elbo_vars.bvn_derivs.f_pre[1] * gcc.e_dev_dir * bvn_s_d[shape_id]
         fs1m.h[devi, si] = fs1m.h[si, devi]
       end
     end # if calculate hessian
