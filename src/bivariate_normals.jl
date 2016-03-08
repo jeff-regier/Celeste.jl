@@ -1,4 +1,6 @@
 
+
+
 """
 Relevant parameters of a bivariate normal distribution.
 
@@ -18,9 +20,9 @@ immutable BvnComponent{NumType <: Number}
     z::NumType
     dsiginv_dsig::Matrix{NumType}
 
-    function BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
+    BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
         the_mean::Vector{T1}, the_cov::Matrix{T2}, weight::T3;
-        calculate_siginv_deriv::Bool=true)
+        calculate_siginv_deriv::Bool=true) = begin
 
       NumType = promote_type(T1, T2, T3);
       the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
@@ -73,15 +75,15 @@ function eval_bvn_pdf_in_place!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     bmc::BvnComponent{NumType}, x::Vector{Float64})
 
-  elbo_vars.py1[1] =
+  elbo_vars.bvn_derivs.py1[1] =
     bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
     bmc.precision[1,2] * (x[2] - bmc.the_mean[2])
-  elbo_vars.py2[1] =
+  elbo_vars.bvn_derivs.py2[1] =
     bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
     bmc.precision[2,2] * (x[2] - bmc.the_mean[2])
-  elbo_vars.f_pre[1] =
-    bmc.z * exp(-0.5 * ((x[1] - bmc.the_mean[1]) * elbo_vars.py1[1] +
-                        (x[2] - bmc.the_mean[2]) * elbo_vars.py2[1]))
+  elbo_vars.bvn_derivs.f_pre[1] =
+    bmc.z * exp(-0.5 * ((x[1] - bmc.the_mean[1]) * elbo_vars.bvn_derivs.py1[1] +
+                        (x[2] - bmc.the_mean[2]) * elbo_vars.bvn_derivs.py2[1]))
 
   true # return type
 end
@@ -117,7 +119,8 @@ end
 
 """
 This is the function of which get_bvn_derivs!() returns the derivatives.
-It is only used for testing."""
+It is only used for testing.
+"""
 function eval_bvn_log_density{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
     bvn::BvnComponent{NumType}, x::Vector{Float64})
@@ -125,9 +128,93 @@ function eval_bvn_log_density{NumType <: Number}(
   eval_bvn_pdf_in_place!(elbo_vars, bvn, x);
 
   -0.5 * (
-    (x[1] - bvn.the_mean[1]) * elbo_vars.py1[1] +
-    (x[2] - bvn.the_mean[2]) * elbo_vars.py2[1] -
+    (x[1] - bvn.the_mean[1]) * elbo_vars.bvn_derivs.py1[1] +
+    (x[2] - bvn.the_mean[2]) * elbo_vars.bvn_derivs.py2[1] -
     log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
+end
+
+
+"""
+Updates bvn_x_d, bvn_xx_h,
+ bvn_sig_d, bvn_sigsig_h, bvn_xsig_h, in place.
+ Overwrites dpy1_dsig and dpy2_dsig.
+
+ Requires py1 and py2 to be set in advance.
+"""
+function get_bvn_derivs!{NumType <: Number}(
+    bvn_derivs::BivariateNormalDerivatives{NumType},
+    bvn::BvnComponent{NumType}, calculate_x_hess::Bool,
+    calculate_sigma_hessian::Bool)
+
+  # Gradient with respect to x.
+  bvn_x_d = bvn_derivs.bvn_x_d
+  bvn_x_d[1] = -bvn_derivs.py1[1]
+  bvn_x_d[2] = -bvn_derivs.py2[1]
+
+  if calculate_x_hess
+    bvn_xx_h = bvn_derivs.bvn_xx_h
+
+    # Hessian terms involving only x
+    bvn_xx_h[1, 1] = -bvn.precision[1, 1]
+    bvn_xx_h[2, 2] = -bvn.precision[2, 2]
+    bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1 ,2]
+  end
+
+  # The first term is the derivative of -0.5 * x' Sigma^{-1} x
+  # The second term is the derivative of -0.5 * log|Sigma|
+  bvn_sig_d = bvn_derivs.bvn_sig_d
+  bvn_sig_d[1] =
+    0.5 * bvn_derivs.py1[1] * bvn_derivs.py1[1] - 0.5 * bvn.precision[1, 1]
+  bvn_sig_d[2] =
+    bvn_derivs.py1[1] * bvn_derivs.py2[1]             - bvn.precision[1, 2]
+  bvn_sig_d[3] =
+    0.5 * bvn_derivs.py2[1] * bvn_derivs.py2[1] - 0.5 * bvn.precision[2, 2]
+
+  if calculate_sigma_hessian
+
+    # Hessian calculation for terms containing sigma.
+
+    # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
+    # These are used for the hessian calculations.
+    dpy1_dsig = bvn_derivs.dpy1_dsig
+    dpy1_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,1]
+    dpy1_dsig[2] = -bvn_derivs.py2[1] * bvn.precision[1,1] -
+                    bvn_derivs.py1[1] * bvn.precision[1,2]
+    dpy1_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[1,2]
+
+    dpy2_dsig = bvn_derivs.dpy2_dsig
+    dpy2_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,2]
+    dpy2_dsig[2] = -bvn_derivs.py1[1] * bvn.precision[2,2] -
+                    bvn_derivs.py2[1] * bvn.precision[1,2]
+    dpy2_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[2,2]
+
+    # Hessian terms involving only sigma
+    bvn_sigsig_h = bvn_derivs.bvn_sigsig_h
+    for s_ind=1:3
+      # Differentiate with respect to s_ind second.
+      bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
+        bvn_derivs.py1[1] * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
+
+      # d log|sigma| / dsigma12 is twice lambda12.
+      bvn_sigsig_h[2, s_ind] =
+        bvn_derivs.py1[1] * dpy2_dsig[s_ind] + bvn_derivs.py2[1] * dpy1_dsig[s_ind] -
+        bvn.dsiginv_dsig[2, s_ind]
+
+      bvn_sigsig_h[3, s_ind] = #bvn_sigsig_h[s_ind, 3] =
+        bvn_derivs.py2[1] * dpy2_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[3, s_ind]
+    end
+
+    # Hessian terms involving both x and sigma.
+    # Note that dpyA / dxB = bvn.precision[A, B]
+    bvn_xsig_h = bvn_derivs.bvn_xsig_h
+    for x_ind=1:2
+      bvn_xsig_h[x_ind, 1] = bvn_derivs.py1[1] * bvn.precision[1, x_ind]
+      bvn_xsig_h[x_ind, 2] =
+        bvn_derivs.py1[1] * bvn.precision[2, x_ind] +
+        bvn_derivs.py2[1] * bvn.precision[1, x_ind]
+      bvn_xsig_h[x_ind, 3] = bvn_derivs.py2[1] * bvn.precision[2, x_ind]
+    end
+  end
 end
 
 
@@ -135,7 +222,7 @@ end
 Calculate the value, gradient, and hessian of
   -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
 with respect to x and sigma.  This assumes that
-  elbo_vars.py1, elbo_vars.py2, and elbo_vars.f_pre have already been populated
+  elbo_vars..bvn_derivs.py1, .py2, and .f_pre have already been populated
   witha call to eval_bvn_pdf_in_place!.
 
 Args:
@@ -150,75 +237,9 @@ function get_bvn_derivs_in_place!{NumType <: Number}(
     calculate_x_hess::Bool,
     calculate_sigma_hessian::Bool)
 
-  # Gradient with respect to x.
-  bvn_x_d = elbo_vars.bvn_x_d
-  bvn_x_d[1] = -elbo_vars.py1[1]
-  bvn_x_d[2] = -elbo_vars.py2[1]
-
-  if calculate_x_hess
-    bvn_xx_h = elbo_vars.bvn_xx_h
-
-    # Hessian terms involving only x
-    bvn_xx_h[1, 1] = -bvn.precision[1, 1]
-    bvn_xx_h[2, 2] = -bvn.precision[2, 2]
-    bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1 ,2]
-  end
-
-  # The first term is the derivative of -0.5 * x' Sigma^{-1} x
-  # The second term is the derivative of -0.5 * log|Sigma|
-  bvn_sig_d = elbo_vars.bvn_sig_d
-  bvn_sig_d[1] =
-    0.5 * elbo_vars.py1[1] * elbo_vars.py1[1] - 0.5 * bvn.precision[1, 1]
-  bvn_sig_d[2] =
-    elbo_vars.py1[1] * elbo_vars.py2[1]             - bvn.precision[1, 2]
-  bvn_sig_d[3] =
-    0.5 * elbo_vars.py2[1] * elbo_vars.py2[1] - 0.5 * bvn.precision[2, 2]
-
-  if calculate_sigma_hessian
-
-    # Hessian calculation for terms containing sigma.
-
-    # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
-    # These are used for the hessian calculations.
-    dpy1_dsig = elbo_vars.dpy1_dsig
-    dpy1_dsig[1] = -elbo_vars.py1[1] * bvn.precision[1,1]
-    dpy1_dsig[2] = -elbo_vars.py2[1] * bvn.precision[1,1] -
-                    elbo_vars.py1[1] * bvn.precision[1,2]
-    dpy1_dsig[3] = -elbo_vars.py2[1] * bvn.precision[1,2]
-
-    dpy2_dsig = elbo_vars.dpy2_dsig
-    dpy2_dsig[1] = -elbo_vars.py1[1] * bvn.precision[1,2]
-    dpy2_dsig[2] = -elbo_vars.py1[1] * bvn.precision[2,2] -
-                    elbo_vars.py2[1] * bvn.precision[1,2]
-    dpy2_dsig[3] = -elbo_vars.py2[1] * bvn.precision[2,2]
-
-    # Hessian terms involving only sigma
-    bvn_sigsig_h = elbo_vars.bvn_sigsig_h
-    for s_ind=1:3
-      # Differentiate with respect to s_ind second.
-      bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
-        elbo_vars.py1[1] * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
-
-      # d log|sigma| / dsigma12 is twice lambda12.
-      bvn_sigsig_h[2, s_ind] =
-        elbo_vars.py1[1] * dpy2_dsig[s_ind] + elbo_vars.py2[1] * dpy1_dsig[s_ind] -
-        bvn.dsiginv_dsig[2, s_ind]
-
-      bvn_sigsig_h[3, s_ind] = #bvn_sigsig_h[s_ind, 3] =
-        elbo_vars.py2[1] * dpy2_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[3, s_ind]
-    end
-
-    # Hessian terms involving both x and sigma.
-    # Note that dpyA / dxB = bvn.precision[A, B]
-    bvn_xsig_h = elbo_vars.bvn_xsig_h
-    for x_ind=1:2
-      bvn_xsig_h[x_ind, 1] = elbo_vars.py1[1] * bvn.precision[1, x_ind]
-      bvn_xsig_h[x_ind, 2] =
-        elbo_vars.py1[1] * bvn.precision[2, x_ind] +
-        elbo_vars.py2[1] * bvn.precision[1, x_ind]
-      bvn_xsig_h[x_ind, 3] = elbo_vars.py2[1] * bvn.precision[2, x_ind]
-    end
-  end
+  # TODO: get rid of redundant function when you're sure it's working
+  get_bvn_derivs!(
+    elbo_vars.bvn_derivs, bvn, calculate_x_hess, calculate_sigma_hessian)
 end
 
 
@@ -248,9 +269,9 @@ Args:
 
 Note that nubar is not included.
 """
-function GalaxySigmaDerivs{NumType <: Number}(
+GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
-    XiXi::Matrix{NumType}; calculate_tensor::Bool=true)
+    XiXi::Matrix{NumType}; calculate_tensor::Bool=true) = begin
 
   cos_sin = cos(e_angle)sin(e_angle)
   sin_sq = sin(e_angle)^2
@@ -340,11 +361,11 @@ immutable GalaxyCacheComponent{NumType <: Number}
 end
 
 
-function GalaxyCacheComponent{NumType <: Number}(
+GalaxyCacheComponent{NumType <: Number}(
     e_dev_dir::Float64, e_dev_i::NumType,
     gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
-    calculate_derivs::Bool, calculate_hessian::Bool)
+    calculate_derivs::Bool, calculate_hessian::Bool) = begin
 
   XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
@@ -372,36 +393,36 @@ function GalaxyCacheComponent{NumType <: Number}(
 end
 
 
+###################################################
+# Transform derivatives into the model parameterization.
+
 """
 Transform the bvn derivatives and hessians from (x) to the
-galaxy parameters (u).
+galaxy parameters (u). Updates bvn_u_d and bvn_uu_h in place.
+
+bvn_x_d and bvn_xx_h should already have been set using get_bvn_derivs!()
 """
-function transform_bvn_derivs!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
-    bmc::BvnComponent{NumType},
-    wcs_jacobian::Array{Float64, 2})
-
-  bvn_u_d = elbo_vars.bvn_u_d
-  bvn_uu_h = elbo_vars.bvn_uu_h
-
-  # These values should already have been set using get_bvn_derivs!()
-  bvn_x_d = elbo_vars.bvn_x_d
-  bvn_xx_h = elbo_vars.bvn_xx_h
+function transform_bvn_ux_derivs!{NumType <: Number}(
+    bvn_derivs::BivariateNormalDerivatives{NumType},
+    wcs_jacobian::Array{Float64, 2}, calculate_hessian::Bool)
 
   # Gradient calculations.
 
   # Note that dxA_duB = -wcs_jacobian[A, B].  (It is minus the jacobian
   # because the object position affects the bvn.the_mean term, which is
   # subtracted from the pixel location as defined in bvn_sf.d.)
+  bvn_u_d = bvn_derivs.bvn_u_d
+  bvn_x_d = bvn_derivs.bvn_x_d
   bvn_u_d[1] =
     -(bvn_x_d[1] * wcs_jacobian[1, 1] + bvn_x_d[2] * wcs_jacobian[2, 1])
   bvn_u_d[2] =
     -(bvn_x_d[1] * wcs_jacobian[1, 2] + bvn_x_d[2] * wcs_jacobian[2, 2])
 
-
-  if elbo_vars.calculate_hessian
+  if calculate_hessian
     # Hessian calculations.
 
+    bvn_uu_h = bvn_derivs.bvn_uu_h
+    bvn_xx_h = bvn_derivs.bvn_xx_h
     fill!(bvn_uu_h, 0.0)
     # Second derivatives involving only u.
     # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.
@@ -414,6 +435,99 @@ function transform_bvn_derivs!{NumType <: Number}(
     end
     @inbounds bvn_uu_h[2, 1] = bvn_uu_h[1, 2]
   end
+
+  true # Set return type
+end
+
+
+function transform_bvn_ux_derivs!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    wcs_jacobian::Array{Float64, 2})
+
+  transform_bvn_ux_derivs!(
+    elbo_vars.bvn_derivs, wcs_jacobian, elbo_vars.calculate_hessian)
+end
+
+
+"""
+Transform all the bvn derivatives from x and sigma to u and the model
+parameters.
+
+These values should already have been set using get_bvn_derivs!():
+bvn_x_d
+bvn_xx_h
+bvn_sig_d
+bvn_sigsig_h
+bvn_xsig_h
+"""
+function transform_bvn_derivs!{NumType <: Number}(
+    bvn_derivs::BivariateNormalDerivatives{NumType},
+    sig_sf::GalaxySigmaDerivs{NumType},
+    wcs_jacobian::Array{Float64, 2}, calculate_hessian::Bool)
+
+  # Transform the u derivates first.
+  # bvn_x_d and bvn_xx_h should already have been set using get_bvn_derivs!()
+  transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, calculate_hessian)
+
+  # transform_bvn_derivs!(elbo_vars, gcc.bmc, wcs_jacobian)
+
+  # Gradient calculations.
+
+  # Use the chain rule for the shape derviatives.
+  # TODO: time consuming **************
+  bvn_s_d = bvn_derivs.bvn_s_d
+  bvn_sig_d = bvn_derivs.bvn_sig_d
+
+  fill!(bvn_s_d, 0.0)
+  @inbounds for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
+    bvn_s_d[shape_id] += bvn_sig_d[sig_id] * sig_sf.j[sig_id, shape_id]
+  end
+
+  if calculate_hessian
+    # Hessian calculations.
+
+    bvn_ss_h = bvn_derivs.bvn_ss_h
+    bvn_us_h = bvn_derivs.bvn_us_h
+
+    fill!(bvn_ss_h, 0.0)
+    fill!(bvn_us_h, 0.0)
+
+    # Second derviatives involving only shape parameters.
+    # TODO: time consuming **************
+    @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
+      @inbounds for sig_id1 in 1:3
+        bvn_ss_h[shape_id1, shape_id2] +=
+          bvn_sig_d[sig_id1] * sig_sf.t[sig_id1, shape_id1, shape_id2]
+      end
+    end
+
+    bvn_sigsig_h = bvn_derivs.bvn_sigsig_h
+    @inbounds for sig_id1 in 1:3, sig_id2 in 1:3,
+                  shape_id2 in 1:length(gal_shape_ids)
+      inner_term =
+        bvn_sigsig_h[sig_id1, sig_id2] * sig_sf.j[sig_id2, shape_id2]
+      @inbounds for shape_id1 in 1:shape_id2
+        bvn_ss_h[shape_id1, shape_id2] +=
+          inner_term * sig_sf.j[sig_id1, shape_id1]
+      end
+    end
+
+    @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
+      bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
+    end
+
+    # Second derivates involving both a shape term and a u term.
+    # TODO: time consuming **************
+    bvn_xsig_h = bvn_derivs.bvn_xsig_h
+    @inbounds for shape_id in 1:length(gal_shape_ids),
+                  u_id in 1:2, sig_id in 1:3, x_id in 1:2
+      bvn_us_h[u_id, shape_id] +=
+        bvn_xsig_h[x_id, sig_id] * sig_sf.j[sig_id, shape_id] *
+        (-wcs_jacobian[x_id, u_id])
+    end
+  end
+
+  true # Set return type
 end
 
 
@@ -428,67 +542,8 @@ function transform_bvn_derivs!{NumType <: Number}(
     gcc::GalaxyCacheComponent{NumType},
     wcs_jacobian::Array{Float64, 2})
 
-  bvn_s_d = elbo_vars.bvn_s_d
-  bvn_ss_h = elbo_vars.bvn_ss_h
-  bvn_us_h = elbo_vars.bvn_us_h
-
-  # These values should already have been set using get_bvn_derivs!()
-  bvn_x_d = elbo_vars.bvn_x_d
-  bvn_xx_h = elbo_vars.bvn_xx_h
-  bvn_sig_d = elbo_vars.bvn_sig_d
-  bvn_sigsig_h = elbo_vars.bvn_sigsig_h
-  bvn_xsig_h = elbo_vars.bvn_xsig_h
-
-  # Transform the u derivates first.
-  transform_bvn_derivs!(elbo_vars, gcc.bmc, wcs_jacobian)
-
-  # Gradient calculations.
-
-  # Use the chain rule for the shape derviatives.
-  # TODO: time consuming **************
-  fill!(bvn_s_d, 0.0)
-  @inbounds for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
-    bvn_s_d[shape_id] += bvn_sig_d[sig_id] * gcc.sig_sf.j[sig_id, shape_id]
-  end
-
-  if elbo_vars.calculate_hessian
-    # Hessian calculations.
-
-    fill!(bvn_ss_h, 0.0)
-    fill!(bvn_us_h, 0.0)
-
-    # Second derviatives involving only shape parameters.
-    # TODO: time consuming **************
-    @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
-      @inbounds for sig_id1 in 1:3
-        bvn_ss_h[shape_id1, shape_id2] +=
-          bvn_sig_d[sig_id1] * gcc.sig_sf.t[sig_id1, shape_id1, shape_id2]
-      end
-    end
-
-    @inbounds for sig_id1 in 1:3, sig_id2 in 1:3,
-                  shape_id2 in 1:length(gal_shape_ids)
-      inner_term =
-        bvn_sigsig_h[sig_id1, sig_id2] * gcc.sig_sf.j[sig_id2, shape_id2]
-      @inbounds for shape_id1 in 1:shape_id2
-        bvn_ss_h[shape_id1, shape_id2] +=
-          inner_term * gcc.sig_sf.j[sig_id1, shape_id1]
-      end
-    end
-
-    @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
-      bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
-    end
-
-    # Second derivates involving both a shape term and a u term.
-    # TODO: time consuming **************
-    @inbounds for shape_id in 1:length(gal_shape_ids),
-                  u_id in 1:2, sig_id in 1:3, x_id in 1:2
-      bvn_us_h[u_id, shape_id] +=
-        bvn_xsig_h[x_id, sig_id] * gcc.sig_sf.j[sig_id, shape_id] *
-        (-wcs_jacobian[x_id, u_id])
-    end
-  end
+  transform_bvn_derivs!(
+    elbo_vars.bvn_derivs, gcc.sig_sf, wcs_jacobian, elbo_vars.calculate_hessian)
 end
 
 

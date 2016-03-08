@@ -57,7 +57,7 @@ end
 
 # Set up a transform
 @everywhere begin
-  omitted_ids = Int64[];
+  omitted_ids = Int[];
   worker_sources = node_sources();
   transform = Transform.get_mp_transform(mp);
   x = transform.vp_to_array(mp.vp, omitted_ids);

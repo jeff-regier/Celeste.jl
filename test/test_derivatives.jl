@@ -498,7 +498,7 @@ function test_fs1m_derivatives()
       # Raw:
       gcc = gal_mcs[gcc_ind...];
       ElboDeriv.eval_bvn_pdf_in_place!(elbo_vars_fd, gcc.bmc, x)
-      elbo_vars_fd.f_pre[1] * gcc.e_dev_i
+      elbo_vars_fd.bvn_derivs.f_pre[1] * gcc.e_dev_i
     end
 
     function mp_to_par_gal(mp::ModelParams{Float64})
@@ -640,14 +640,15 @@ function test_bvn_derivatives()
   # Sanity check
   @test_approx_eq ElboDeriv.eval_bvn_log_density(elbo_vars, bvn, x) f_wrap(par)
 
+  bvn_derivs = elbo_vars.bvn_derivs
   ad_grad = ForwardDiff.gradient(f_wrap, par);
-  @test_approx_eq elbo_vars.bvn_x_d ad_grad[x_ids]
-  @test_approx_eq elbo_vars.bvn_sig_d ad_grad[sig_ids]
+  @test_approx_eq bvn_derivs.bvn_x_d ad_grad[x_ids]
+  @test_approx_eq bvn_derivs.bvn_sig_d ad_grad[sig_ids]
 
   ad_hess = ForwardDiff.hessian(f_wrap, par);
-  @test_approx_eq elbo_vars.bvn_xx_h ad_hess[x_ids, x_ids]
-  @test_approx_eq elbo_vars.bvn_xsig_h ad_hess[x_ids, sig_ids]
-  @test_approx_eq elbo_vars.bvn_sigsig_h ad_hess[sig_ids, sig_ids]
+  @test_approx_eq bvn_derivs.bvn_xx_h ad_hess[x_ids, x_ids]
+  @test_approx_eq bvn_derivs.bvn_xsig_h ad_hess[x_ids, sig_ids]
+  @test_approx_eq bvn_derivs.bvn_sigsig_h ad_hess[sig_ids, sig_ids]
 end
 
 
@@ -729,15 +730,16 @@ function test_galaxy_variable_transform()
 
   # Check the gradient.
   ad_grad = ForwardDiff.gradient(f_bvn_wrap, par);
-  @test_approx_eq ad_grad [elbo_vars.bvn_u_d; elbo_vars.bvn_s_d]
+  bvn_derivs = elbo_vars.bvn_derivs
+  @test_approx_eq ad_grad [bvn_derivs.bvn_u_d; bvn_derivs.bvn_s_d]
 
   ad_hess = ForwardDiff.hessian(f_bvn_wrap, par);
-  @test_approx_eq ad_hess[1:2, 1:2] elbo_vars.bvn_uu_h
-  @test_approx_eq ad_hess[1:2, 3:5] elbo_vars.bvn_us_h
+  @test_approx_eq ad_hess[1:2, 1:2] bvn_derivs.bvn_uu_h
+  @test_approx_eq ad_hess[1:2, 3:5] bvn_derivs.bvn_us_h
 
-  celeste_bvn_ss_h = deepcopy(elbo_vars.bvn_ss_h);
+  celeste_bvn_ss_h = deepcopy(bvn_derivs.bvn_ss_h);
   ad_bvn_ss_h = deepcopy(ad_hess[3:5, 3:5])
-  @test_approx_eq ad_hess[3:5, 3:5] elbo_vars.bvn_ss_h
+  @test_approx_eq ad_hess[3:5, 3:5] bvn_derivs.bvn_ss_h
 end
 
 
@@ -789,7 +791,7 @@ function test_galaxy_cache_component()
 
     ElboDeriv.eval_bvn_pdf_in_place!(elbo_vars_fd, gcc.bmc, x);
 
-    log(elbo_vars_fd.f_pre[1])
+    log(elbo_vars_fd.bvn_derivs.f_pre[1])
   end
 
   function wrap_par{T <: Number}(
@@ -822,18 +824,19 @@ function test_galaxy_cache_component()
   # Check the gradient.
   ad_grad_fun = ForwardDiff.gradient(f_wrap);
   ad_grad = ad_grad_fun(par)
-  @test_approx_eq ad_grad [elbo_vars.bvn_u_d; elbo_vars.bvn_s_d]
+  bvn_derivs = elbo_vars.bvn_derivs
+  @test_approx_eq ad_grad [bvn_derivs.bvn_u_d; bvn_derivs.bvn_s_d]
 
   ad_hess_fun = ForwardDiff.hessian(f_wrap);
   ad_hess = ad_hess_fun(par);
 
-  @test_approx_eq ad_hess[1:2, 1:2] elbo_vars.bvn_uu_h
-  @test_approx_eq ad_hess[1:2, 3:5] elbo_vars.bvn_us_h
+  @test_approx_eq ad_hess[1:2, 1:2] bvn_derivs.bvn_uu_h
+  @test_approx_eq ad_hess[1:2, 3:5] bvn_derivs.bvn_us_h
 
   # I'm not sure why this requires less precision for this test.
-  celeste_bvn_ss_h = deepcopy(elbo_vars.bvn_ss_h);
+  celeste_bvn_ss_h = deepcopy(bvn_derivs.bvn_ss_h);
   ad_bvn_ss_h = deepcopy(ad_hess[3:5, 3:5])
-  @test_approx_eq ad_hess[3:5, 3:5] elbo_vars.bvn_ss_h
+  @test_approx_eq ad_hess[3:5, 3:5] bvn_derivs.bvn_ss_h
 
 end
 
@@ -925,7 +928,7 @@ end
 
 
 function test_dsiginv_dsig()
-  e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # elbo_vars.bvn_sigsig_h is large
+  e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # bvn_derivs.bvn_sigsig_h is large
   the_cov = Util.get_bvn_cov(e_axis, e_angle, e_scale)
   the_mean = Float64[0., 0.]
   bvn = ElboDeriv.BvnComponent{Float64}(the_mean, the_cov, 1.0);
