@@ -719,7 +719,6 @@ function stitch_object_tiles(
     w_range[1] = min(minimum(tile.w_range), w_range[1])
     w_range[2] = max(maximum(tile.w_range), w_range[2])
   end
-  println("Done.")
 
   image_s = fill(0.0, diff(h_range)[1] + 1, diff(w_range)[1] + 1);
   for tile_ind in 1:length(tiles_s)
@@ -730,7 +729,8 @@ function stitch_object_tiles(
       ElboDeriv.tile_predicted_image(tile, mp, include_epsilon=false):
       tile.pixels
   end
-  image_s
+  println("Done.")
+  image_s, h_range, w_range
 end
 
 
