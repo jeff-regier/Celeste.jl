@@ -205,7 +205,7 @@ function test_kappa_finding()
     trans = get_mp_transform(mp, loc_width=1.0);
     omitted_ids = setdiff(1:length(UnconstrainedParams), ids_free.k[:])
 
-    get_kl_gal_c() = begin
+    funciton get_kl_gal_c()
         accum = zero_sensitive_float(CanonicalParams)
         for d in 1:D
             ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
@@ -228,8 +228,8 @@ function test_kappa_finding()
     @test lower_klc < higher_klc
 
     mp.pp.c_cov[:, :, 1, 2] = mp.pp.c_cov[:, :, 2, 2] = eye(4)
-    klc_wrapper{NumType <: Number}(
-        tiled_blob::TiledBlob, mp::ModelParams{NumType}) = begin
+    function klc_wrapper{NumType <: Number}(
+        tiled_blob::TiledBlob, mp::ModelParams{NumType})
       accum = zero_sensitive_float(CanonicalParams, NumType)
       for d in 1:D
           ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
@@ -345,8 +345,8 @@ function test_color()
     mp.vp[1][ids.c1[:, 1]] = [2.42824, 1.13996, 0.475603, 0.283062]
     mp.vp[1][ids.c1[:, 2]] = [2.42824, 1.13996, 0.475603, 0.283062]
 
-    klc_wrapper{NumType <: Number}(
-        tiled_blob::TiledBlob, mp::ModelParams{NumType}) = begin
+    function klc_wrapper{NumType <: Number}(
+        tiled_blob::TiledBlob, mp::ModelParams{NumType})
       accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
       for s in 1:mp.S, i in 1:2, d in 1:D
           ElboDeriv.subtract_kl_c(d, i, s, mp, accum)

@@ -269,9 +269,9 @@ Args:
 
 Note that nubar is not included.
 """
-GalaxySigmaDerivs{NumType <: Number}(
+function GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
-    XiXi::Matrix{NumType}; calculate_tensor::Bool=true) = begin
+    XiXi::Matrix{NumType}; calculate_tensor::Bool=true)
 
   cos_sin = cos(e_angle)sin(e_angle)
   sin_sq = sin(e_angle)^2
@@ -361,11 +361,11 @@ immutable GalaxyCacheComponent{NumType <: Number}
 end
 
 
-GalaxyCacheComponent{NumType <: Number}(
+function GalaxyCacheComponent{NumType <: Number}(
     e_dev_dir::Float64, e_dev_i::NumType,
     gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
-    calculate_derivs::Bool, calculate_hessian::Bool) = begin
+    calculate_derivs::Bool, calculate_hessian::Bool)
 
   XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
