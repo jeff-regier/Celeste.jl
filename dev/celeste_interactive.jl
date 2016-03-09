@@ -35,16 +35,16 @@ end
 
 images = SkyImages.load_sdss_blob(dir, run, camcol, field);
 
-# initialize tiled images and model parameters.  Don't fit the psf for now --
-# we just need the tile_sources from mp.
-tiled_blob, mp_all = ModelInit.initialize_celeste(images, cat_entries,
-                                                  tile_width=20,
-                                                  fit_psf=false);
 
 # load catalog and convert to Array of `CatalogEntry`s.
 cat_df = SDSS.load_catalog_df(dir, run, camcol, field);
 cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, images);
 
+# initialize tiled images and model parameters.  Don't fit the psf for now --
+# we just need the tile_sources from mp.
+tiled_blob, mp_all = ModelInit.initialize_celeste(images, cat_entries,
+                                                  tile_width=20,
+                                                  fit_psf=false);
 
 ## Look at fluxes
 MAX_FLUX = 2
@@ -59,26 +59,32 @@ sum(good_rows) / length(good_rows)
 
 bad_objids = cat_df[:objid][!good_rows];
 
-objid = "1237663784734359863" # Maybe a false rejection?
-objid = "1237663784734359835" # Maybe a false rejection?
+# objid = "1237663784734359863" # Maybe a false rejection?
+# objid = "1237663784734359835" # Maybe a false rejection?
 
 objid = "1237663784734359803" # An unnecessarily big field?
-for objid in bad_objids
-  trimmed_tiled_blob, mp, active_s, s = initialze_objid(objid, mp_all, cat_entries, images);
-  band = 3
-  stitched_image, h_range, w_range =
-    SkyImages.stitch_object_tiles(active_s, band, mp, tiled_blob);
 
-  pix_loc =
-    WCSUtils.world_to_pix(mp.patches[active_s, band] , mp.vp[active_s][ids.u])
-  matshow(stitched_image, vmax=1200);
-  PyPlot.plot(pix_loc[2] - w_range[1] + 1, pix_loc[1] - h_range[1] + 1, "wo", markersize=5)
-  PyPlot.colorbar()
-  PyPlot.title(objid)
-  PyPlot.savefig("/tmp/celeste_images/celeste_$objid.png")
-  PyPlot.close()
+#for objid in bad_objids
+trimmed_tiled_blob, mp, active_s, s =
+  Celeste.initialze_objid(objid, mp_all, cat_entries, images);
+band = 3
+# has_source = find(Bool[ active_s in tile_sources for tile_sources in mp.tile_sources[band] ])
+stitched_image, h_range, w_range =
+  Celeste.SkyImages.stitch_object_tiles(active_s, band, mp, tiled_blob, predicted=true);
 
-end
+# img = ElboDeriv.tile_predicted_image(
+#   tiled_blob[band][has_source[1]], mp, Int[ active_s ], include_epsilon=false);
+
+pix_loc = WCSUtils.world_to_pix(
+  mp.patches[active_s, band], mp.vp[active_s][ids.u])
+matshow(stitched_image, vmax=1200);
+PyPlot.plot(pix_loc[2] - w_range[1] + 1, pix_loc[1] - h_range[1] + 1, "wo", markersize=5)
+PyPlot.colorbar()
+PyPlot.title(objid)
+# PyPlot.savefig("/tmp/celeste_images/celeste_$objid.png")
+# PyPlot.close()
+
+#end
 
 # A borderline object:
 objid = mp_all.objids[findmin(max_fluxes[good_rows])[2]]

@@ -317,7 +317,6 @@ Get the sources associated with each tile in a TiledImage.
 
 Args:
   - tiled_image: A TiledImage
-  - wcs: The world coordinate system for the object.
   - patches: A vector of SkyPatch objects, one for each celestial object.
 
 Returns:
@@ -326,7 +325,7 @@ Returns:
     in the tiles.
 """
 function get_tiled_image_sources(
-  tiled_image::TiledImage, wcs::WCSTransform, patches::Vector{SkyPatch})
+  tiled_image::TiledImage, patches::Vector{SkyPatch})
 
   H, W = size(tiled_image)
   tile_sources = fill(Int[], H, W)
@@ -413,7 +412,6 @@ function initialize_model_params(
         end
         println("Initializing band $b tiled image sources.")
         mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b],
-                                                     blob[b].wcs,
                                                      mp.patches[:, b][:])
     end
     print("\n")

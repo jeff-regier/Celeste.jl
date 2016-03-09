@@ -265,7 +265,7 @@ function test_get_relevant_sources()
   mp = ModelInit.initialize_model_params(tiled_blob, blob, body);
 
   target_s = 1
-  relevant_sources = get_relevant_sources(mp, target_s);
+  relevant_sources = ModelInit.get_relevant_sources(mp, target_s);
   @test length(relevant_sources) > 1 # Just to make sure the test is valid
 
   @test target_s in relevant_sources

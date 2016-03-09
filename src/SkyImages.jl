@@ -726,7 +726,7 @@ function stitch_object_tiles(
     tile_sources = tile_sources_s[tile_ind]
     image_s[tile.h_range - h_range[1] + 1, tile.w_range - w_range[1] + 1] =
       predicted ?
-      ElboDeriv.tile_predicted_image(tile, mp, include_epsilon=false):
+      ElboDeriv.tile_predicted_image(tile, mp, Int[ s ], include_epsilon=false):
       tile.pixels
   end
   println("Done.")
