@@ -74,13 +74,15 @@ min_fluxes = Float64[ minimum([ cat_df[row, flux_col] for flux_col in flux_cols 
 max_fluxes = Float64[ maximum([ cat_df[row, flux_col] for flux_col in flux_cols ])
                       for row in 1:size(cat_df, 1) ];
 #PyPlot.plt[:hist](max_fluxes, 200)
-good_rows = max_fluxes .> MIN_FLUX;
+good_rows = max_fluxes .> 3;
 sum(good_rows) / length(good_rows)
 
 bad_objids = cat_df[:objid][!good_rows];
 
-objid = "1237663784734359863" # Maybe a false rejection
-objid = "1237663784734359835" # Maybe a false rejection
+objid = "1237663784734359863" # Maybe a false rejection?
+objid = "1237663784734359835" # Maybe a false rejection?
+
+objid = "1237663784734359803" # An unnecessarily big field?
 for objid in bad_objids
   trimmed_tiled_blob, mp, active_s, s = initialze_objid(objid, mp_all, cat_entries, images);
   band = 3
@@ -93,18 +95,20 @@ for objid in bad_objids
   PyPlot.plot(pix_loc[2] - w_range[1] + 1, pix_loc[1] - h_range[1] + 1, "wo", markersize=5)
   PyPlot.colorbar()
   PyPlot.title(objid)
-  PyPlot.savefig("/tmp/celeste_$objid.png")
+  PyPlot.savefig("/tmp/celeste_images/celeste_$objid.png")
   PyPlot.close()
+
 end
+
+# A borderline object:
+objid = mp_all.objids[findmin(max_fluxes[good_rows])[2]]
 
 #objid = "1237663784734359574" # Good
 #objid = "1237663784734359622" # Bad
 
 
-trimmed_tiled_blob, mp, active_s = initialze_objid(objid, mp_all, cat_entries, images);
-matshow(SkyImages.stitch_object_tiles(active_s, 3, mp, tiled_blob));
-PyPlot.colorbar()
-
+trimmed_tiled_blob, mp, active_s, s = initialze_objid(objid, mp_all, cat_entries, images);
+cat_df[s, :]
 
 fit_time = time()
 iter_count, max_f, max_x, result =
