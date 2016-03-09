@@ -8,6 +8,8 @@ using PyPlot
 import FITSIO
 import JLD
 import SloanDigitalSkySurvey: SDSS
+import SloanDigitalSkySurvey: WCSUtils
+
 
 using Celeste.Types
 import Celeste.SkyImages
@@ -59,7 +61,7 @@ function initialze_objid(
   # limit_to_object_data() first.
   trimmed_tiled_blob = ModelInit.trim_source_tiles(active_s, mp, tiled_blob;
                                                    noise_fraction=0.1);
-  trimmed_tiled_blob, mp, active_s
+  trimmed_tiled_blob, mp, active_s, s
 end
 
 
@@ -77,11 +79,22 @@ sum(good_rows) / length(good_rows)
 
 bad_objids = cat_df[:objid][!good_rows];
 
-for objid in bad_objids[1:10]
-  trimmed_tiled_blob, mp, active_s = initialze_objid(objid, mp_all, cat_entries, images);
-  matshow(SkyImages.stitch_object_tiles(active_s, 3, mp, tiled_blob));
+objid = "1237663784734359863" # Maybe a false rejection
+objid = "1237663784734359835" # Maybe a false rejection
+for objid in bad_objids
+  trimmed_tiled_blob, mp, active_s, s = initialze_objid(objid, mp_all, cat_entries, images);
+  band = 3
+  stitched_image, h_range, w_range =
+    SkyImages.stitch_object_tiles(active_s, band, mp, tiled_blob);
+
+  pix_loc =
+    WCSUtils.world_to_pix(mp.patches[active_s, band] , mp.vp[active_s][ids.u])
+  matshow(stitched_image, vmax=1200);
+  PyPlot.plot(pix_loc[2] - w_range[1] + 1, pix_loc[1] - h_range[1] + 1, "wo", markersize=5)
   PyPlot.colorbar()
   PyPlot.title(objid)
+  PyPlot.savefig("/tmp/celeste_$objid.png")
+  PyPlot.close()
 end
 
 #objid = "1237663784734359574" # Good
