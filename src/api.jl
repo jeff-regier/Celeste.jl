@@ -12,6 +12,7 @@ import .OptimizeElbo
 
 const TILE_WIDTH = 20
 const MAX_ITERS = 50
+const MIN_FLUX = 10
 
 
 """
@@ -39,6 +40,7 @@ function infer(
 
     # load catalog and convert to Array of `CatalogEntry`s.
     cat_df = SDSS.load_catalog_df(dir, run, camcol, field)
+    # TODO: fliter bad objects
     cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, images)
 
     # limit to just the part of the catalog specified.
