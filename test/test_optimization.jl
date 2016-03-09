@@ -205,7 +205,7 @@ function test_kappa_finding()
     trans = get_mp_transform(mp, loc_width=1.0);
     omitted_ids = setdiff(1:length(UnconstrainedParams), ids_free.k[:])
 
-    funciton get_kl_gal_c()
+    function get_kl_gal_c()
         accum = zero_sensitive_float(CanonicalParams)
         for d in 1:D
             ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
