@@ -18,32 +18,6 @@ function verify_kl(q_dist, p_dist, claimed_kl::Float64)
 end
 
 
-# function verify_derivs(f::Function, x::Vector{Float64})
-#     claimed_dx = f(x)[2]
-#
-#     x2::Vector{TheirGradNum} = x
-#
-#     # TODO: evaluate the derivatives for all x at once with
-#     # ForwardDiff.gradient (without this loop)
-#     for i in 1:length(x)
-#         f2(epsilon_vec) = begin
-#             x_local = deepcopy(x2)
-#             x_local[i] += epsilon_vec[1]
-#             f(x_local)[1]
-#         end
-#
-#         fwd_deriv = ForwardDiff.gradient(f2)([0.,])[1]
-#         claimed_dx_i = claimed_dx[i]
-#         info("kl deriv: got $fwd_deriv; expected $claimed_dx_i")
-#
-#         @test_approx_eq fwd_deriv claimed_dx_i
-#         @test_approx_eq_eps significand(fwd_deriv) significand(claimed_dx_i) 1e-4
-#         @test((fwd_deriv == claimed_dx_i == 0.) ||
-#               (exponent(fwd_deriv) == exponent(claimed_dx_i)))
-#     end
-# end
-
-
 function test_beta()
     q = Beta(2., 5.)
     p = Beta(2., 5.)
@@ -59,10 +33,6 @@ function test_beta()
     p = Beta(0.5, 0.5)
     claimed_kl = KL.gen_beta_kl(0.5, 0.5)(2., 5.)[1]
     verify_kl(q, p, claimed_kl)
-
-    # f(x) = KL.gen_beta_kl(0.5, 0.5)(x[1], x[2])
-    # x0 = [2., 5.]
-    # verify_derivs(f, x0)
 end
 
 
@@ -71,7 +41,7 @@ function test_wrappedcauchy_uniform()
     q_scale = 0.3
     q_dist = Cauchy(0., q_scale)
     raw_q_samples = rand(q_dist, sample_size)
-    wrap(x::Float64) = begin
+    function wrap(x::Float64)
         y::Float64 = (x % 2pi + 2pi) % 2pi
         (y < pi ? y : y - 2pi)::Float64
     end
@@ -87,10 +57,6 @@ function test_wrappedcauchy_uniform()
 
     claimed_kl = KL.gen_wrappedcauchy_uniform_kl()(q_scale)[1]
     @test_approx_eq_eps empirical_kl claimed_kl tol
-
-    # x = [0.3,]
-    # f(x) = KL.gen_wrappedcauchy_uniform_kl()(x[1])
-    # verify_derivs(f, x)
 end
 
 
@@ -102,28 +68,7 @@ function test_categorical()
 
     claimed_kl = KL.gen_categorical_kl(p_probs)(q_probs)[1]
     verify_kl(q, p, claimed_kl)
-
-    # f(x) = begin
-    #     v, dv = KL.gen_categorical_kl(p_probs)(x)
-    #     v, dv[1]
-    # end
-    # verify_derivs(f, q_probs)
 end
-
-
-# function test_gamma()
-#     q_k, q_theta = 3., 2.
-#     q = Gamma(q_k, q_theta)
-#     p_k, p_theta = 7.5, 1.
-#     p = Gamma(p_k, p_theta)
-#
-#     claimed_kl = KL.gen_gamma_kl(p_k, p_theta)(q_k, q_theta)[1]
-#     verify_kl(q, p, claimed_kl)
-#
-#     x = [q_k, q_theta]
-#     f(x) = KL.gen_gamma_kl(p_k, p_theta)(x[1], x[2])
-#     verify_derivs(f, x)
-# end
 
 
 function test_univariate_normal()
@@ -136,10 +81,6 @@ function test_univariate_normal()
     p = Normal(1.1, sqrt(2.12))
     claimed_kl = (KL.gen_normal_kl(1.1, 2.12))(0.3, 1.2)[1]
     verify_kl(q, p, claimed_kl)
-
-    # x = [0.3, 1.2]
-    # f(x) = KL.gen_normal_kl(1.1, 2.12)(x[1], x[2])
-    # verify_derivs(f, x)
 end
 
 
@@ -181,12 +122,6 @@ function test_diagmvn_mvn()
     p = MvNormal(p_mean, p_cov)
     claimed_kl = KL.gen_diagmvn_mvn_kl(p_mean, p_cov)(q_mean, q_vars)[1]
     verify_kl(q, p, claimed_kl)
-
-    # f(x) = begin
-    #     v, dv = KL.gen_diagmvn_mvn_kl(p_mean, p_cov)(x[1:3], x[4:6])
-    #     v, [dv[1]; dv[2]]
-    # end
-    # verify_derivs(f, [q_mean; q_vars])
 end
 
 
@@ -203,16 +138,12 @@ function test_isobvnormal_flat()
     min_diff = 1e-2 * std(empirical_kl_samples) / sqrt(sample_size)
     info("kl: $empirical_kl vs $claimed_kl [tol: $tol]")
     @test_approx_eq_eps empirical_kl claimed_kl tol
-
-    # f(x)= KL.gen_isobvnormal_flat_kl()(x[1])
-    # verify_derivs(f, [q_var,])
 end
 
 
 test_beta()
 test_wrappedcauchy_uniform()
 test_categorical()
-#test_gamma()
 test_univariate_normal()
 test_isobvnormal()
 test_diagmvn_mvn()

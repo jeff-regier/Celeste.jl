@@ -20,7 +20,7 @@ println("Calculating ELBO.")
 @time elbo = ElboDeriv.elbo(tiled_blob, mp, calculate_hessian=CALC_HESS);
 
 # let's time it without any overhead from profiling
-# median runtime is consistently 23 seconds with Julia 0.4
+# median runtime is consistently 24 seconds with Julia 0.4
 @time elbo = ElboDeriv.elbo(tiled_blob, mp, calculate_hessian=CALC_HESS);
 
 # on a intel core i7 processor,

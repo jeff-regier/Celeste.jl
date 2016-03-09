@@ -64,7 +64,7 @@ type BivariateNormalDerivatives{NumType <: Number}
   bvn_ss_h::Array{NumType, 2}
   bvn_us_h::Array{NumType, 2}
 
-  BivariateNormalDerivatives(ThisNumType::DataType) = begin
+  function BivariateNormalDerivatives(ThisNumType::DataType)
     py1 = zeros(ThisNumType, 1)
     py2 = zeros(ThisNumType, 1)
     f_pre = zeros(ThisNumType, 1)
