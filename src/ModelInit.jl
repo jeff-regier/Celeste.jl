@@ -3,7 +3,8 @@ module ModelInit
 export sample_prior,
        peak_init,
        intialize_celeste,
-       initialize_model_params
+       initialize_model_params,
+       get_relevant_sources
 
 using FITSIO
 using Distributions
@@ -428,6 +429,31 @@ end
 
 
 """
+Return an array of source indices that have some overlap with target_s.
+
+Args:
+  - mp: The ModelParams
+  - target_s: The index of the source of interest
+
+Returns:
+  - An array of integers that index into mp.s representing all sources that
+    co-occur in at least one tile with target_s, including target_s itself.
+"""
+function get_relevant_sources{NumType <: Number}(
+    mp::ModelParams{NumType}, target_s::Int)
+
+  relevant_sources = Int[]
+  for b = 1:length(mp.tile_sources), tile_sources in mp.tile_sources[b]
+    if target_s in tile_sources
+      relevant_sources = union(relevant_sources, tile_sources);
+    end
+  end
+
+  relevant_sources
+end
+
+
+"""
 Return a reduced Celeste dataset useful for a single object.
 
 Args:
@@ -462,12 +488,7 @@ function limit_to_object_data(
   mp_original.active_sources = [ s_original ]
 
   # Get the sources that overlap with this object.
-  relevant_sources = Int[]
-  for b = 1:length(blob), tile_sources in mp.tile_sources[b]
-    if s_original in tile_sources
-      relevant_sources = union(relevant_sources, tile_sources);
-    end
-  end
+  relevant_sources = get_relevant_sources(mp, s_original)
 
   trimmed_mp = ModelInit.initialize_model_params(
     tiled_blob, blob, cat_entries[relevant_sources], fit_psf=true);

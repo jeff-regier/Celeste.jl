@@ -61,7 +61,7 @@ function infer(
 
     # Loop over sources in model
     for i in 1:mp.S
-        println("Processing source $i.")
+        println("Processing source $i, objid $(mp.objids[i])")
 
         mp_s = deepcopy(mp);
         mp_s.active_sources = [i]
