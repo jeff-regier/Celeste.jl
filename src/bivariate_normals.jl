@@ -20,9 +20,9 @@ immutable BvnComponent{NumType <: Number}
     z::NumType
     dsiginv_dsig::Matrix{NumType}
 
-    BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
+    function BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
         the_mean::Vector{T1}, the_cov::Matrix{T2}, weight::T3;
-        calculate_siginv_deriv::Bool=true) = begin
+        calculate_siginv_deriv::Bool=true)
 
       NumType = promote_type(T1, T2, T3);
       the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
