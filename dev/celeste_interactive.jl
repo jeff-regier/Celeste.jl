@@ -35,16 +35,15 @@ end
 
 images = SkyImages.load_sdss_blob(dir, run, camcol, field);
 
-# load catalog and convert to Array of `CatalogEntry`s.
-cat_df = SDSS.load_catalog_df(dir, run, camcol, field);
-cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, images);
-
 # initialize tiled images and model parameters.  Don't fit the psf for now --
 # we just need the tile_sources from mp.
 tiled_blob, mp_all = ModelInit.initialize_celeste(images, cat_entries,
                                                   tile_width=20,
                                                   fit_psf=false);
 
+# load catalog and convert to Array of `CatalogEntry`s.
+cat_df = SDSS.load_catalog_df(dir, run, camcol, field);
+cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, images);
 
 
 ## Look at fluxes
