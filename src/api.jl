@@ -12,7 +12,30 @@ import .OptimizeElbo
 
 const TILE_WIDTH = 20
 const MAX_ITERS = 50
-const MIN_FLUX = 10
+const MIN_FLUX = 2
+
+
+function initialze_objid(
+    objid::ASCIIString, mp_all::ModelParams{Float64},
+    cat_entries::Array{Celeste.Types.CatalogEntry},
+    images::Array{Celeste.Types.Image})
+
+  s = findfirst(mp_all.objids, objid)
+
+  relevant_sources = ModelInit.get_relevant_sources(mp_all, s);
+  cat_entries_s = cat_entries[relevant_sources];
+  tiled_blob, mp = ModelInit.initialize_celeste(images, cat_entries_s,
+                                                tile_width=20,
+                                                fit_psf=true);
+  active_s = findfirst(mp.objids, objid)
+  mp.active_sources = [ active_s ]
+
+  # TODO: This is slow but would run much faster if you had run
+  # limit_to_object_data() first.
+  trimmed_tiled_blob = ModelInit.trim_source_tiles(active_s, mp, tiled_blob;
+                                                   noise_fraction=0.1);
+  trimmed_tiled_blob, mp, active_s, s
+end
 
 
 """
@@ -40,19 +63,30 @@ function infer(
 
     # load catalog and convert to Array of `CatalogEntry`s.
     cat_df = SDSS.load_catalog_df(dir, run, camcol, field)
-    # TODO: fliter bad objects
-    cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, images)
+    cat_entries_all = SkyImages.convert_catalog_to_celeste(cat_df, images)
+
+    # Filter low-flux objects.
+    flux_cols = [ symbol("psfflux_$b") for b in band_letters ]
+    max_fluxes =
+      Float64[ maximum([ cat_df[row, flux_col] for flux_col in flux_cols ])
+               for row in 1:size(cat_df, 1) ];
+    good_rows = max_fluxes .> 2;
+    println("Keeping $(sum(good_rows) / length(good_rows)) of the objects.")
+    cat_entries = cat_entries_all[good_rows]
 
     # limit to just the part of the catalog specified.
     partsize = length(cat_entries) / parts
     minidx = round(Int, partsize * (partnum - 1)) + 1
     maxidx = round(Int, partsize * partnum)
-    cat_entries = cat_entries[minidx:maxidx]
 
-    # initialize tiled images and model parameters
-    tiled_blob, mp = ModelInit.initialize_celeste(images, cat_entries,
-                                                  tile_width=TILE_WIDTH,
-                                                  fit_psf=true)
+    objids = [ entry.objid for entry in cat_entries[minidx:maxidx] ]
+
+    # initialize tiled images and model parameters for trimming.  We will
+    # initialize the psf again before fitting, so don't do it here.
+    tiled_blob, mp_all =
+      ModelInit.initialize_celeste(images, cat_entries,
+                                   tile_width=TILE_WIDTH,
+                                   fit_psf=false)
 
     # Initialize output dictionary
     nsources = length(minidx:maxidx)
@@ -62,26 +96,22 @@ function infer(
                "fit_time"=> Array(Float64, nsources))
 
     # Loop over sources in model
-    for i in 1:mp.S
-        println("Processing source $i, objid $(mp.objids[i])")
+    for i in 1:length(objids)
+      objid = objids[i]
+      trimmed_tiled_blob, mp, active_s, s =
+        initialze_objid(objid, mp_all, cat_entries, images);
 
-        mp_s = deepcopy(mp);
-        mp_s.active_sources = [i]
+      println("Processing source $s, objid $(objid)")
 
-        # TODO: This is slow but would run much faster if you had run
-        # limit_to_object_data() first.
-        trimmed_tiled_blob = ModelInit.trim_source_tiles(i, mp_s, tiled_blob;
-                                                         noise_fraction=0.1);
+      fit_time = time()
+      iter_count, max_f, max_x, result =
+          OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_blob, mp;
+                                  verbose=true, max_iters=MAX_ITERS)
+      fit_time = time() - fit_time
 
-        fit_time = time()
-        iter_count, max_f, max_x, result =
-            OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_blob, mp_s;
-                                    verbose=true, max_iters=MAX_ITERS)
-        fit_time = time() - fit_time
-
-        out["objid"][i] = mp_s.objids[i]
-        out["vp"][i] = mp_s.vp[i]
-        out["fit_time"][i] = fit_time
+      out["objid"][i] = objid
+      out["vp"][i] = mp.vp[active_s]
+      out["fit_time"][i] = fit_time
     end
 
     outfile = "$outdir/celeste-$run-$camcol-$field--part-$partnum-$parts.jld"
