@@ -6,6 +6,7 @@ DocOpt
 ForwardDiff
 JLD
 Optim
+GaussianMixtures
 FITSIO
 WCS
 SloanDigitalSkySurvey 0.0.1+
