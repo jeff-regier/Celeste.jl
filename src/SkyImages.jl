@@ -478,9 +478,9 @@ function fit_raw_psf_for_celeste(raw_psf::Matrix{Float64})
   # TODO: this is very slow, and we should do it in Celeste rather
   # than rely on Optim.
   opt_result, mu_vec, sigma_vec, weight_vec =
-    PSF.fit_psf_gaussians_least_squares(raw_psf);
+    PSF.fit_psf_gaussians_least_squares(raw_psf, K=psf_K);
   PsfComponent[ PsfComponent(weight_vec[k], mu_vec[k], sigma_vec[k])
-    for k=1:length(mu_vec)]
+    for k=1:psf_K]
 end
 
 """

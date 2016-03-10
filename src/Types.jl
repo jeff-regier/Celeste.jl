@@ -16,7 +16,7 @@ export ModelParams, PriorParams, UnconstrainedParams,
 export print_params, align
 
 # constants
-export band_letters, D, Ia, B, galaxy_prototypes,
+export band_letters, D, Ia, B, psf_K, galaxy_prototypes,
        shape_standard_alignment,
        brightness_standard_alignment,
        gal_shape_alignment,
@@ -46,6 +46,9 @@ const Ia = 2
 
 # The number of bands (colors).
 const B = length(band_letters)
+
+# The number of Gaussian components in the PSF.
+const psf_K = 2
 
 type CatalogEntry
     pos::Vector{Float64}
@@ -439,7 +442,7 @@ type CanonicalParams <: ParamSet
     c2::Matrix{Int}
     a::Vector{Int}
     k::Matrix{Int}
-    CanonicalParams() = 
+    CanonicalParams() =
         new([1, 2], 3, 4, 5, 6,
             collect(7:(7+Ia-1)),  # r1
             collect((7+Ia):(7+2Ia-1)), # r2
@@ -465,7 +468,7 @@ type UnconstrainedParams <: ParamSet
     c2::Matrix{Int}
     a::Vector{Int}
     k::Matrix{Int}
-    UnconstrainedParams() = 
+    UnconstrainedParams() =
         new([1, 2], 3, 4, 5, 6,
             collect(7:(7+Ia-1)),  # r1
             collect((7+Ia):(7+2Ia-1)), # r2
