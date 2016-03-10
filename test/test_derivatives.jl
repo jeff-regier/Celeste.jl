@@ -479,7 +479,7 @@ function test_fs1m_derivatives()
 
   # Pick out a single galaxy component for testing.
   # The index is (psf, galaxy, gal type, source)
-  for psf_k=1:3, type_i = 1:2, gal_j in 1:[8,6][type_i]
+  for psf_k=1:psf_K, type_i = 1:2, gal_j in 1:[8,6][type_i]
     gcc_ind = (psf_k, gal_j, type_i, s)
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
