@@ -419,7 +419,7 @@ function populate_fsm_vecs!{NumType <: Number}(
     calculate_hessian =
       elbo_vars.calculate_hessian && elbo_vars.calculate_derivs && active_source
     clear!(elbo_vars.fs0m_vec[s], calculate_hessian)
-    for k = 1:3 # PSF component
+    for k = 1:psf_K # PSF component
       accum_star_pos!(
         elbo_vars, s, star_mcs[k, s], x, wcs_jacobian, active_source)
     end
@@ -429,7 +429,7 @@ function populate_fsm_vecs!{NumType <: Number}(
       for j in 1:8 # Galaxy component
         # If i == 2 then there are only six galaxy components.
         if (i == 1) || (j <= 6)
-          for k = 1:3 # PSF component
+          for k = 1:psf_K # PSF component
               accum_galaxy_pos!(
                 elbo_vars, s, gal_mcs[k, j, i, s], x, wcs_jacobian,
                 active_source)

@@ -575,8 +575,8 @@ function load_bvn_mixtures{NumType <: Number}(
     mp::ModelParams{NumType}, b::Int;
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
-  star_mcs = Array(BvnComponent{NumType}, 3, mp.S)
-  gal_mcs = Array(GalaxyCacheComponent{NumType}, 3, 8, 2, mp.S)
+  star_mcs = Array(BvnComponent{NumType}, psf_K, mp.S)
+  gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, mp.S)
 
   # TODO: do not keep any derviative information if the sources are not in
   # active_sources.
@@ -590,7 +590,7 @@ function load_bvn_mixtures{NumType <: Number}(
                                     mp.patches[s, b].pixel_center, world_loc)
 
       # Convolve the star locations with the PSF.
-      for k in 1:3
+      for k in 1:psf_K
           pc = psf[k]
           mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
           star_mcs[k, s] =
@@ -605,7 +605,7 @@ function load_bvn_mixtures{NumType <: Number}(
 
           # Galaxies of type 1 have 8 components, and type 2 have 6 components.
           for j in 1:[8,6][i]
-              for k = 1:3
+              for k = 1:psf_K
                   gal_mcs[k, j, i, s] = GalaxyCacheComponent(
                       e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
                       m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],

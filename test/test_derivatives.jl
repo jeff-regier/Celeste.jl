@@ -157,11 +157,11 @@ function test_tile_predicted_image()
   # Regress the tile pixels onto the predicted image
   # TODO: Why isn't the regression closer to one?  Something in the sample data
   # generation?
-  reg_coeff = dot(tile.pixels, pred_image) / dot(pred_image, pred_image)
+  reg_coeff = dot(tile.pixels[:], pred_image[:]) / dot(pred_image[:], pred_image[:])
   residuals = pred_image * reg_coeff - tile.pixels;
   residual_sd = sqrt(mean(residuals .^ 2))
 
-  @test residual_sd / mean(tile.pixels) < 0.05
+  @test residual_sd / mean(tile.pixels) < 0.1
 end
 
 
@@ -479,7 +479,7 @@ function test_fs1m_derivatives()
 
   # Pick out a single galaxy component for testing.
   # The index is (psf, galaxy, gal type, source)
-  for psf_k=1:3, type_i = 1:2, gal_j in 1:[8,6][type_i]
+  for psf_k=1:psf_K, type_i = 1:2, gal_j in 1:[8,6][type_i]
     gcc_ind = (psf_k, gal_j, type_i, s)
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
@@ -556,7 +556,7 @@ function test_fs0m_derivatives()
 
   # Pick out a single star component for testing.
   # The index is psf, source
-  for psf_k=1:3
+  for psf_k=1:psf_K
     bmc_ind = (psf_k, s)
     function f_wrap_star{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
