@@ -8,11 +8,10 @@ import WCS
 import DataFrames
 import ..ElboDeriv # For stitch_object_tiles
 import FITSIO
-import GaussianMixtures
 import ..Util
 
 export load_stamp_blob, load_sdss_blob, crop_image!,
-       convert_gmm_to_celeste, get_psf_at_point,
+       get_psf_at_point,
        convert_catalog_to_celeste, load_stamp_catalog,
        break_blob_into_tiles, break_image_into_tiles,
        get_local_sources,
@@ -419,8 +418,7 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
         psf_point_y = W / 2
 
         raw_psf = get_psf_at_point(psf_point_x, psf_point_y, raw_psf_comp);
-        psf_gmm, scale = PSF.fit_psf_gaussians(raw_psf);
-        psf = convert_gmm_to_celeste(psf_gmm, scale)
+        psf = fit_raw_psf_for_celeste(raw_psf);
 
         # Set it to use a constant background but include the non-constant data.
         blob[b] = Image(H, W, nelec, b, wcs, epsilon, iota, psf,
@@ -475,25 +473,15 @@ end
 ############################################
 # PSF functions
 
-"""
-Convert a GaussianMixtures.GMM object to an array of Celect PsfComponents.
 
-Args:
- - gmm: A GaussianMixtures.GMM object (e.g. as returned by fit_psf_gaussians)
-
- Returns:
-  - An array of PsfComponent objects.
-"""
-function convert_gmm_to_celeste(gmm::GaussianMixtures.GMM, scale::Float64)
-    function convert_gmm_component_to_celeste(gmm::GaussianMixtures.GMM, d)
-        PsfComponent(scale * gmm.w[d],
-                     collect(GaussianMixtures.means(gmm)[d, :]),
-                     GaussianMixtures.covars(gmm)[d])
-    end
-
-    PsfComponent[convert_gmm_component_to_celeste(gmm, d) for d=1:gmm.n]
+function fit_raw_psf_for_celeste(raw_psf::Matrix{Float64})
+  # TODO: this is very slow, and we should do it in Celeste rather
+  # than rely on Optim.
+  opt_result, mu_vec, sigma_vec, weight_vec =
+    PSF.fit_psf_gaussians_least_squares(raw_psf, K=psf_K);
+  PsfComponent[ PsfComponent(weight_vec[k], mu_vec[k], sigma_vec[k])
+    for k=1:psf_K]
 end
-
 
 """
 Return an image of a Celeste GMM PSF evaluated at rows, cols.
@@ -546,8 +534,7 @@ function get_source_psf(world_loc::Vector{Float64}, img::Image)
       pixel_loc = WCSUtils.world_to_pix(img.wcs, world_loc)
       raw_psf =
         PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
-      fit_psf, scale = PSF.fit_psf_gaussians(raw_psf)
-      return SkyImages.convert_gmm_to_celeste(fit_psf, scale)
+      return fit_raw_psf_for_celeste(raw_psf);
     end
 end
 
