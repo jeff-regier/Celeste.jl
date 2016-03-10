@@ -1,6 +1,7 @@
 module Celeste
 
 # submodules
+include("SDSSIO.jl")
 include("Types.jl")
 include("SensitiveFloats.jl")
 include("Util.jl")
