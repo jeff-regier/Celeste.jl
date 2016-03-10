@@ -556,7 +556,7 @@ function test_fs0m_derivatives()
 
   # Pick out a single star component for testing.
   # The index is psf, source
-  for psf_k=1:3
+  for psf_k=1:psf_K
     bmc_ind = (psf_k, s)
     function f_wrap_star{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
