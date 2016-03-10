@@ -140,8 +140,7 @@ function test_get_tiled_image_source()
       mp.patches[1, b] = SkyPatch(loc, 1e-6, blob[b], fit_psf=false)
     end
     patches = mp.patches[:, 3][:]
-    local_sources =
-      ModelInit.get_tiled_image_sources(tiled_img, img.wcs, patches)
+    local_sources = ModelInit.get_tiled_image_sources(tiled_img, patches)
     @test local_sources[hh, ww] == Int[1]
     for hh2 in 1:size(tiled_img)[1], ww2 in 1:size(tiled_img)[2]
       if (hh2 != hh) || (ww2 != ww)
@@ -162,8 +161,7 @@ function test_local_source_candidate()
   for b=1:length(tiled_blob)
     # Get the sources by iterating over everything.
     patches = mp.patches[:,b][:]
-    tile_sources =
-      ModelInit.get_tiled_image_sources(tiled_blob[b], blob[b].wcs, patches)
+    tile_sources = ModelInit.get_tiled_image_sources(tiled_blob[b], patches)
 
     # Get a set of candidates.
     candidates = SkyImages.local_source_candidates(tiled_blob[b], patches);
@@ -253,9 +251,23 @@ function test_get_local_sources()
 end
 
 
+function test_stitch_object_tiles()
+  # Just test that these functions run without errors.
+  blob, mp, body, tiled_blob = gen_n_body_dataset(100, seed=42);
+
+  image, h_range, w_range =
+    SkyImages.stitch_object_tiles(1, 3, mp, tiled_blob);
+  @test size(image) == (diff(h_range)[1] + 1, diff(w_range)[1] + 1)
+
+  image, h_range, w_range =
+    SkyImages.stitch_object_tiles(1, 3, mp, tiled_blob, predicted = true);
+  @test size(image) == (diff(h_range)[1] + 1, diff(w_range)[1] + 1)
+end
+
 test_interp_sky()
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
 test_local_source_candidate()
 test_set_patch_size()
+test_stitch_object_tiles()
