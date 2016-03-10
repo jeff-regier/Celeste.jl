@@ -205,8 +205,12 @@ function test_that_galaxy_truth_is_most_likely()
         end
     end
 
+    # TODO: this test is failling because the stamps use three psf
+    # components.
     for b in 1:4
+        println("b: $b")
         for delta in [-.3, .3]
+            println("delta: $delta")
             mp_c1 = deepcopy(mp)
             mp_c1.vp[1][ids.c1[b, 2]] += delta
             bad_c1 = ElboDeriv.elbo_likelihood(
