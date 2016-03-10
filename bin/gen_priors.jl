@@ -1,5 +1,7 @@
 #!/usr/bin/env julia
 
+# Note!  This requires GuassianMixtures, which is not in REQURE.
+
 using FITSIO
 using GaussianMixtures
 using Distributions
