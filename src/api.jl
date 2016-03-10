@@ -12,110 +12,80 @@ import .OptimizeElbo
 
 const TILE_WIDTH = 20
 const MAX_ITERS = 50
-const MIN_FLUX = 2
-
-
-function initialze_objid(
-    objid::ASCIIString, mp_all::ModelParams{Float64},
-    cat_entries::Array{Celeste.Types.CatalogEntry},
-    images::Array{Celeste.Types.Image})
-
-  s = findfirst(mp_all.objids, objid)
-
-  relevant_sources = ModelInit.get_relevant_sources(mp_all, s);
-  cat_entries_s = cat_entries[relevant_sources];
-  tiled_blob, mp = ModelInit.initialize_celeste(images, cat_entries_s,
-                                                tile_width=20,
-                                                fit_psf=true);
-  active_s = findfirst(mp.objids, objid)
-  mp.active_sources = [ active_s ]
-
-  # TODO: This is slow but would run much faster if you had run
-  # limit_to_object_data() first.
-  trimmed_tiled_blob = ModelInit.trim_source_tiles(active_s, mp, tiled_blob;
-                                                   noise_fraction=0.1);
-  trimmed_tiled_blob, mp, active_s, s
-end
+const MIN_FLUX = 2.0
 
 
 """
-Fit the Celeste model to a set of sources and write the output to a JLD file.
+infer(fieldids, objids, framedirs, outfile; ...)
 
-Args:
-  - dir: The directory containing the FITS files.
-  - run: An ASCIIString with the six-digit run number, e.g. "003900"
-  - camcol: An ASCIIString with the camcol, e.g. "6"
-  - field: An ASCIIString with the four-digit field, e.g. "0269"
-  - outdir: The directory to write the output jld file.
+Fit the Celeste model to a single source and write a JLD file with the result.
+
+- fieldids: Array of run, camcol, field triplets that the source occurs in.
+- objids: Array of object ids corresponding to this source in each field.
+  run/camcol/field combination.
+- run: Run number
+- outfile: The directory to write the output jld file.
   - partnum: Which of the 1:parts catalog entries to fit.
   - parts: How many parts to divide the catalog entries into
 
 Returns:
   Writes a jld file to outdir containing the optimization output.
 """
-function infer(
-      dir::AbstractString, run::AbstractString, camcol::AbstractString,
-      field::AbstractString, outdir::AbstractString,
-      partnum::Int, parts::Int)
+function infer(fieldids::Vector{Tuple{Int, Int, Int}},
+               objids::Vector, frame_dirs::Vector;
+               fpm_dirs=frame_dirs,
+               psfield_dirs=frame_dirs,
+               photofield_dirs=frame_dirs,
+               photoobj_dirs=frame_dirs)
 
-    # get images
-    images = SkyImages.load_sdss_blob(dir, run, camcol, field)
+    # For initialization, we'll just use the catalog entry for this
+    # source from the **first** (run, camcol, field).
+    run, camcol, field = fieldids[1]
+    dir = photoobj_dirs[1]
+    objid = objids[1]
+    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
+    catalog = SkyImages.read_photoobj_celeste(fname)
 
-    # load catalog and convert to Array of `CatalogEntry`s.
-    cat_df = SDSS.load_catalog_df(dir, run, camcol, field)
-    cat_entries_all = SkyImages.convert_catalog_to_celeste(cat_df, images)
+    # Filter low-flux objects in the catalog. (We need to use the
+    # whole catalog, not just the entry for the source of interest.)
+    catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
 
-    # Filter low-flux objects.
-    flux_cols = [ symbol("psfflux_$b") for b in band_letters ]
-    max_fluxes =
-      Float64[ maximum([ cat_df[row, flux_col] for flux_col in flux_cols ])
-               for row in 1:size(cat_df, 1) ];
-    good_rows = max_fluxes .> 2;
-    println("Keeping $(sum(good_rows) / length(good_rows)) of the objects.")
-    cat_entries = cat_entries_all[good_rows]
+    # find the matching objid
+    idx = findfirst(entry->(entry.objid == objid), catalog)
 
-    # limit to just the part of the catalog specified.
-    partsize = length(cat_entries) / parts
-    minidx = round(Int, partsize * (partnum - 1)) + 1
-    maxidx = round(Int, partsize * partnum)
+    # Exit if the entry of interest is not in the trimmed catalog (it might
+    # have just been a low flux source, which we want to skip).
+    idx == 0 && return Nullable{Dict}()
+    entry = catalog[idx]
 
-    objids = [ entry.objid for entry in cat_entries[minidx:maxidx] ]
+    # Read in images for all (run, camcol, field).
+    images = Image[]
+    for i in 1:length(fieldids)
+        run, camcol, field = fieldids[i]
+        fieldims = SkyImages.read_sdss_field(run, camcol, field, frame_dirs[i],
+                                             fpm_dir=fpm_dirs[i],
+                                             psfield_dir=psfield_dirs[i],
+                                             photofield_dir=photofield_dirs[i])
+        append!(images, fieldims)
+    end
 
     # initialize tiled images and model parameters for trimming.  We will
     # initialize the psf again before fitting, so don't do it here.
-    tiled_blob, mp_all =
-      ModelInit.initialize_celeste(images, cat_entries,
-                                   tile_width=TILE_WIDTH,
-                                   fit_psf=false)
+    tiled_images, mp_all = ModelInit.initialize_celeste(images, catalog,
+                                                        tile_width=TILE_WIDTH,
+                                                        fit_psf=false)
 
-    # Initialize output dictionary
-    nsources = length(minidx:maxidx)
-    out = Dict("obj" => minidx:maxidx,  # index within field
-               "objid" => Array(ASCIIString, nsources),
-               "vp" => Array(Vector{Float64}, nsources),
-               "fit_time"=> Array(Float64, nsources))
+    trimmed_tiled_images, mp, active_s, s =
+        ModelInit.initialize_objid(objid, mp_all, catalog, images)
 
-    # Loop over sources in model
-    for i in 1:length(objids)
-      objid = objids[i]
-      trimmed_tiled_blob, mp, active_s, s =
-        initialze_objid(objid, mp_all, cat_entries, images);
+    fit_time = time()
+    iter_count, max_f, max_x, result =
+        OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
+                                verbose=true, max_iters=MAX_ITERS)
+    fit_time = time() - fit_time
 
-      println("Processing source $s, objid $(objid)")
-
-      fit_time = time()
-      iter_count, max_f, max_x, result =
-          OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_blob, mp;
-                                  verbose=true, max_iters=MAX_ITERS)
-      fit_time = time() - fit_time
-
-      out["objid"][i] = objid
-      out["vp"][i] = mp.vp[active_s]
-      out["fit_time"][i] = fit_time
-    end
-
-    outfile = "$outdir/celeste-$run-$camcol-$field--part-$partnum-$parts.jld"
-    JLD.save(outfile, out)
+    return Nullable(Dict("vp"=> mp.vp[active_s],
+                         "fit_time"=>fit_time))
 end
 
 
@@ -268,7 +238,7 @@ end
 """
 load_primary(dir, run, camcol, field)
 
-Load the SDSS photObj catalog used to initialize celeste, and reformat column
+Load the SDSS photoObj catalog used to initialize celeste, and reformat column
 names to match what the rest of the scoring code expects.
 """
 function load_primary(dir, run, camcol, field)
@@ -529,7 +499,7 @@ function score_field(dir, run, camcol, field, outdir, reffile)
     # limit coadd to matched objects
     coadd_df = coadd_full_df[matchidx, :]
 
-    # load "primary" catalog (the SDSS photObj catalog used to initialize
+    # load "primary" catalog (the SDSS photoObj catalog used to initialize
     # celeste).
     primary_full_df = load_primary(dir, run, camcol, field)
     println("primary catalog: $(size(primary_full_df, 1)) objects")

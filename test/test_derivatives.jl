@@ -83,20 +83,18 @@ function test_real_image()
   # TODO: replace this with stamp tests having non-trivial WCS transforms.
   # TODO: streamline the creation of small real images.
 
-  run_num = "003900"
-  camcol_num = "6"
-  field_num = "0269"
+  run, camcol, field = (3900, 6, 269)
 
-  blob = SkyImages.load_sdss_blob(datadir, run_num, camcol_num, field_num);
-  cat_df = SDSS.load_catalog_df(datadir, run_num, camcol_num, field_num);
-  cat_entries = SkyImages.convert_catalog_to_celeste(cat_df, blob);
+  images = SkyImages.read_sdss_field(run, camcol, field, datadir)
+  fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir run camcol field
+  cat_entries = SkyImages.read_photoobj_celeste(fname)
   tiled_blob, mp =
-    ModelInit.initialize_celeste(blob, cat_entries, fit_psf=false, tile_width=20);
+    ModelInit.initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
 
   # Pick an object.
   objid = "1237662226208063499"
   trimmed_mp, trimmed_tiled_blob = ModelInit.limit_to_object_data(
-    objid, mp, tiled_blob, blob, cat_entries);
+    objid, mp, tiled_blob, images, cat_entries);
 
   # Limit to very few pixels so that the autodiff is reasonably fast.
   s = trimmed_mp.active_sources[1]
