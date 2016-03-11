@@ -12,12 +12,13 @@ using PyPlot
 
 # Ensure that test images are available.
 stamp_dir = joinpath(Pkg.dir("Celeste"), "test", "data")
-#stamp_id = "164.4311-39.0359"
-stamp_id = ""5.0073-0.0739""
+stamp_id = "164.4311-39.0359"
+#stamp_id = "5.0073-0.0739"
 new_stamp_id = "$(stamp_id)_2kpsf"
 
 for band_letter in band_letters
 
+  # Load in the old stamp data.
   println("Processing band $band_letter")
   filename = "$stamp_dir/stamp-$band_letter-$stamp_id.fits"
   filename_out = "$stamp_dir/stamp-$band_letter-$(new_stamp_id).fits"
@@ -50,9 +51,10 @@ for band_letter in band_letters
   psf_original_rendered =
     SkyImages.get_psf_at_point(psf_original, rows=rows, cols=cols);
 
+  print("Fitting ... ")
   optim_result, mu_vec, sigma_vec, weight_vec =
-    PSF.fit_psf_gaussians_least_squares(psf_original_rendered, K=2, verbose=true);
-
+    PSF.fit_psf_gaussians_least_squares(psf_original_rendered, K=2, verbose=false);
+  println("done.")
   # Return to the original scale.  Note that since it is a density, the
   # weights need to change as well.
   psf_new = [PsfComponent(weight_vec[k] * (scale ^ 2),
@@ -62,9 +64,9 @@ for band_letter in band_letters
   psf_new_rendered =
     SkyImages.get_psf_at_point(psf_new, rows=rows, cols=cols);
 
-  matshow(psf_original_rendered); colorbar()
-  matshow(psf_new_rendered); colorbar()
-  matshow(psf_new_rendered - psf_original_rendered); colorbar()
+  # matshow(psf_original_rendered); colorbar()
+  # matshow(psf_new_rendered); colorbar()
+  # matshow(psf_new_rendered - psf_original_rendered); colorbar()
 
   @assert sqrt(mean((psf_original_rendered - psf_new_rendered) .^ 2)) < 0.005
 
@@ -95,7 +97,7 @@ for band_letter in band_letters
       # The order is (xx), (yy), (xy)
       new_header["PSF_P$(sigma_ind)"] = 1.0
       new_header["PSF_P$(sigma_ind + 1)"] = 1.0
-      new_header["PSF_P$(sigma_ind + 2)"] = 1.0
+      new_header["PSF_P$(sigma_ind + 2)"] = 0.0
     end
   end
 
@@ -108,7 +110,9 @@ end
 
 # See if it works (test_real_stamp_optimization)
 
-blob = SkyImages.load_stamp_blob(datadir, "5.0073-0.0739");
+# Intended for stamp_id "5.0073-0.0739"
+datadir = stamp_dir
+blob = SkyImages.load_stamp_blob(datadir, new_stamp_id);
 cat_entries = SkyImages.load_stamp_catalog(datadir, "s82-5.0073-0.0739", blob);
 bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
 cat_entries = filter(bright, cat_entries);
@@ -118,4 +122,4 @@ cat_entries = filter(inbounds, cat_entries);
 
 tiled_blob, mp = ModelInit.initialize_celeste(blob, cat_entries);
 trans = get_mp_transform(mp, loc_width=1.0);
-OptimizeElbo.maximize_elbo(tiled_blob, mp, trans, xtol_rel=0.0);
+Celeste.OptimizeElbo.maximize_elbo(tiled_blob, mp, trans, xtol_rel=0.0);
