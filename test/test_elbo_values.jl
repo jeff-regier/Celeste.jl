@@ -222,7 +222,7 @@ end
 
 
 function test_coadd_cat_init_is_most_likely()  # on a real stamp
-    stamp_id = "5.0073-0.0739"
+    stamp_id = "5.0073-0.0739_2kpsf"
     blob = SkyImages.load_stamp_blob(datadir, stamp_id);
 
     cat_entries = SkyImages.load_stamp_catalog(datadir, "s82-$stamp_id", blob);
@@ -307,7 +307,7 @@ function test_tiny_image_tiling()
   # Test that the tilling doesn't matter much for a body that is nearly a
   # point with a narrow psf.
 
-  blob0 = SkyImages.load_stamp_blob(datadir, "164.4311-39.0359");
+  blob0 = SkyImages.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
   pc = PsfComponent(1./3, zeros(2), 1e-4 * eye(2))
   trivial_psf = [pc, pc, pc]
   pixels = ones(100, 1) * 12
