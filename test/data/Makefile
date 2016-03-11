@@ -1,36 +1,42 @@
 URLBASE := http://data.sdss3.org/sas/dr12/boss
-RUN_SHORT := 3900
-RUN := $(shell printf '%06d' $(RUN_SHORT))
+RUN := 3900
 CAMCOL := 6
-FIELD := 0269
+FIELD := 269
 
-all : fpM-$(RUN)-u$(CAMCOL)-$(FIELD).fit \
-      fpM-$(RUN)-g$(CAMCOL)-$(FIELD).fit \
-      fpM-$(RUN)-r$(CAMCOL)-$(FIELD).fit \
-      fpM-$(RUN)-i$(CAMCOL)-$(FIELD).fit \
-      fpM-$(RUN)-z$(CAMCOL)-$(FIELD).fit \
-      frame-u-$(RUN)-$(CAMCOL)-$(FIELD).fits \
-      frame-g-$(RUN)-$(CAMCOL)-$(FIELD).fits \
-      frame-r-$(RUN)-$(CAMCOL)-$(FIELD).fits \
-      frame-i-$(RUN)-$(CAMCOL)-$(FIELD).fits \
-      frame-z-$(RUN)-$(CAMCOL)-$(FIELD).fits \
-      psField-$(RUN)-$(CAMCOL)-$(FIELD).fit \
-      photoObj-$(RUN)-$(CAMCOL)-$(FIELD).fits \
-      photoField-$(RUN)-$(CAMCOL).fits
+# strip leading zeros
+RUN_STRIPPED := $(shell echo $(RUN) | sed 's/^0*//')
+FIELD_STRIPPED := $(shell echo $(FIELD) | sed 's/^0*//')
 
-fpM-$(RUN)-%$(CAMCOL)-$(FIELD).fit :
-	wget --quiet $(URLBASE)/photo/redux/301/$(RUN_SHORT)/objcs/$(CAMCOL)/fpM-$(RUN)-$*$(CAMCOL)-$(FIELD).fit.gz
-	gunzip fpM-$(RUN)-$*$(CAMCOL)-$(FIELD).fit.gz
+RUN6 := $(shell printf '%06d' $(RUN_STRIPPED))
+FIELD4 := $(shell printf '%04d' $(FIELD_STRIPPED))
 
-psField-$(RUN)-$(CAMCOL)-$(FIELD).fit :
-	wget --quiet $(URLBASE)/photo/redux/301/$(RUN_SHORT)/objcs/$(CAMCOL)/psField-$(RUN)-$(CAMCOL)-$(FIELD).fit
+all : fpM-$(RUN6)-u$(CAMCOL)-$(FIELD4).fit \
+      fpM-$(RUN6)-g$(CAMCOL)-$(FIELD4).fit \
+      fpM-$(RUN6)-r$(CAMCOL)-$(FIELD4).fit \
+      fpM-$(RUN6)-i$(CAMCOL)-$(FIELD4).fit \
+      fpM-$(RUN6)-z$(CAMCOL)-$(FIELD4).fit \
+      frame-u-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
+      frame-g-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
+      frame-r-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
+      frame-i-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
+      frame-z-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
+      psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit \
+      photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
+      photoField-$(RUN6)-$(CAMCOL).fits
 
-frame-%-$(RUN)-$(CAMCOL)-$(FIELD).fits :
-	wget --quiet $(URLBASE)/photoObj/frames/301/$(RUN_SHORT)/$(CAMCOL)/frame-$*-$(RUN)-$(CAMCOL)-$(FIELD).fits.bz2
-	bunzip2 frame-$*-$(RUN)-$(CAMCOL)-$(FIELD).fits.bz2
+fpM-$(RUN6)-%$(CAMCOL)-$(FIELD4).fit :
+	wget --quiet $(URLBASE)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz
+	gunzip fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz
 
-photoObj-$(RUN)-$(CAMCOL)-$(FIELD).fits :
-	wget --quiet $(URLBASE)/photoObj/301/$(RUN_SHORT)/$(CAMCOL)/photoObj-$(RUN)-$(CAMCOL)-$(FIELD).fits
+psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit :
+	wget --quiet $(URLBASE)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit
 
-photoField-$(RUN)-$(CAMCOL).fits :
-	wget --quiet $(URLBASE)/photoObj/301/$(RUN_SHORT)/photoField-$(RUN)-$(CAMCOL).fits
+frame-%-$(RUN6)-$(CAMCOL)-$(FIELD4).fits :
+	wget --quiet $(URLBASE)/photoObj/frames/301/$(RUN_STRIPPED)/$(CAMCOL)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2
+	bunzip2 frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2
+
+photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits :
+	wget --quiet $(URLBASE)/photoObj/301/$(RUN_STRIPPED)/$(CAMCOL)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits
+
+photoField-$(RUN6)-$(CAMCOL).fits :
+	wget --quiet $(URLBASE)/photoObj/301/$(RUN_STRIPPED)/photoField-$(RUN6)-$(CAMCOL).fits
