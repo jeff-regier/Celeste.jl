@@ -12,8 +12,8 @@ using PyPlot
 
 # Ensure that test images are available.
 stamp_dir = joinpath(Pkg.dir("Celeste"), "test", "data")
-stamp_id = "164.4311-39.0359"
-#stamp_id = "5.0073-0.0739"
+stamp_id = "164.4311-39.0359_2kpsf"
+#stamp_id = "5.0073-0.0739_2kpsf"
 new_stamp_id = "$(stamp_id)_2kpsf"
 
 for band_letter in band_letters
@@ -88,7 +88,7 @@ for band_letter in band_letters
       new_header["PSF_P$(sigma_ind + 1)"] = psf_new[k].tauBar[2, 2]
       new_header["PSF_P$(sigma_ind + 2)"] = psf_new[k].tauBar[1, 2]
     else
-      # Set the third component to zero to avoid changing the stamp file format..
+      # Set the third component to zero to avoid changing the stamp file format.
       new_header["PSF_P$(weight_ind)"] = 0.0
 
       new_header["PSF_P$(mean_ind)"] = 0.0
@@ -110,10 +110,10 @@ end
 
 # See if it works (test_real_stamp_optimization)
 
-# Intended for stamp_id "5.0073-0.0739"
+# Intended for stamp_id "5.0073-0.0739_2kpsf"
 datadir = stamp_dir
 blob = SkyImages.load_stamp_blob(datadir, new_stamp_id);
-cat_entries = SkyImages.load_stamp_catalog(datadir, "s82-5.0073-0.0739", blob);
+cat_entries = SkyImages.load_stamp_catalog(datadir, "s82-5.0073-0.0739_2kpsf", blob);
 bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
 cat_entries = filter(bright, cat_entries);
 inbounds(ce) = ce.pos[1] > -10. && ce.pos[2] > -10 &&
