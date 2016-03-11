@@ -411,7 +411,6 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
         psf_fname = "$field_dir/psField-$run_num-$camcol_num-$field_num.fit"
         @assert(isfile(psf_fname), "Cannot find mask file $(psf_fname)")
         raw_psf_comp = load_sdss_psf(psf_fname, b)
-        println("done.")
 
         # For now, evaluate the psf at the middle of the image.
         psf_point_x = H / 2
@@ -419,6 +418,8 @@ function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
 
         raw_psf = get_psf_at_point(psf_point_x, psf_point_y, raw_psf_comp);
         psf = fit_raw_psf_for_celeste(raw_psf);
+
+        println("done.")
 
         # Set it to use a constant background but include the non-constant data.
         blob[b] = Image(H, W, nelec, b, wcs, epsilon, iota, psf,

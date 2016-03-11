@@ -48,7 +48,7 @@ const Ia = 2
 const B = length(band_letters)
 
 # The number of Gaussian components in the PSF.
-const psf_K = 3
+const psf_K = 2
 
 type CatalogEntry
     pos::Vector{Float64}
