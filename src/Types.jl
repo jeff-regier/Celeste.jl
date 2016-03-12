@@ -60,6 +60,7 @@ type CatalogEntry
     gal_angle::Float64
     gal_scale::Float64
     objid::ASCIIString
+    thing_id::Int
 end
 
 ############################################

@@ -31,32 +31,78 @@ Fit the Celeste model to a single source and write a JLD file with the result.
 Returns:
   Writes a jld file to outdir containing the optimization output.
 """
-function infer(fieldids::Vector{Tuple{Int, Int, Int}},
-               objids::Vector, frame_dirs::Vector;
+function infer(ra_range::Tuple{Float64, Float64},
+               dec_range::Tuple{Float64, Float64},
+               fieldids::Vector{Tuple{Int, Int, Int}},
+               frame_dirs::Vector;
                fpm_dirs=frame_dirs,
                psfield_dirs=frame_dirs,
                photofield_dirs=frame_dirs,
                photoobj_dirs=frame_dirs)
 
-    # For initialization, we'll just use the catalog entry for this
-    # source from the **first** (run, camcol, field).
-    run, camcol, field = fieldids[1]
-    dir = photoobj_dirs[1]
-    objid = objids[1]
-    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
-    catalog = SkyImages.read_photoobj_celeste(fname)
+    # Read in all photoobj catalogs.
+    rawcatalogs = Array(Dict, length(fieldids))
+    for i in eachindex(fieldids)
+        run, camcol, field = fieldids[i]
+        dir = photoobj_dirs[i]
+        fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
+        info("field $i: reading $fname")
+        rawcatalogs[i] = SDSSIO.read_photoobj(fname)
+    end
 
-    # Filter low-flux objects in the catalog. (We need to use the
-    # whole catalog, not just the entry for the source of interest.)
+    for i in eachindex(fieldids)
+        info(string("field ", i, ": ", length(rawcatalogs[i]["objid"]), " entries"))
+    end
+
+    # Limit each catalog to primary objects
+    for cat in rawcatalogs
+        mask = cat["mode"] .== 0x01
+        for key in keys(cat)
+            cat[key] = cat[key][mask]
+        end
+    end
+
+    for i in eachindex(fieldids)
+        info(string("field ", i, ": ", length(rawcatalogs[i]["objid"]),
+                    " primary entries"))
+    end
+
+    # Merge all catalogs together (there should be no duplicate objects,
+    # because for each object there should only be one "primary" occurance.)
+    rawcatalog = deepcopy(rawcatalogs[1])
+    for i=2:length(rawcatalogs)
+        for key in keys(rawcatalog)
+            append!(rawcatalog[key], rawcatalogs[i][key])
+        end
+    end
+
+    # Limit catalog to ra, dec range.
+    mask = ((rawcatalog["ra"] .> ra_range[1]) &
+            (rawcatalog["ra"] .< ra_range[2]) &
+            (rawcatalog["dec"] .> dec_range[1]) &
+            (rawcatalog["dec"] .< dec_range[2]))
+    for key in keys(rawcatalog)
+        rawcatalog[key] = rawcatalog[key][mask]
+    end
+
+    # check that there are no duplicate thing_ids (see above comment)
+    if length(Set(rawcatalog["thing_id"])) < length(rawcatalog["thing_id"])
+        error("Found one or more duplicate primary thing_ids in photoobj " *
+              "catalogs")
+    end
+
+    # convert to celeste format catalog
+    catalog = SkyImages.convert(Vector{CatalogEntry}, rawcatalog)
+
+    # Filter out low-flux objects in the catalog.
     catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
 
-    # find the matching objid
-    idx = findfirst(entry->(entry.objid == objid), catalog)
+    info("processing $(length(catalog)) sources")
 
-    # Exit if the entry of interest is not in the trimmed catalog (it might
-    # have just been a low flux source, which we want to skip).
-    idx == 0 && return Nullable{Dict}()
-    entry = catalog[idx]
+    # If there are no objects in catalog, return early.
+    if length(catalog) == 0
+        return Dict{Int, Dict}()
+    end
 
     # Read in images for all (run, camcol, field).
     images = Image[]
@@ -70,22 +116,32 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     end
 
     # initialize tiled images and model parameters for trimming.  We will
-    # initialize the psf again before fitting, so don't do it here.
+    # initialize the psf again before fitting, so we don't do it here.
     tiled_images, mp_all = ModelInit.initialize_celeste(images, catalog,
                                                         tile_width=TILE_WIDTH,
                                                         fit_psf=false)
 
-    trimmed_tiled_images, mp, active_s, s =
-        ModelInit.initialize_objid(objid, mp_all, catalog, images)
+    results = Dict{Int, Dict}()
+    for i, entry in enumerate(catalog)
+        info("processing source $i: objid= $(entry.objid)")
 
-    fit_time = time()
-    iter_count, max_f, max_x, result =
-        OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
-                                verbose=true, max_iters=MAX_ITERS)
-    fit_time = time() - fit_time
+        trimmed_tiled_images, mp, active_s, s =
+            ModelInit.initialize_objid(entry.objid, mp_all, catalog, images)
 
-    return Nullable(Dict("vp"=> mp.vp[active_s],
-                         "fit_time"=>fit_time))
+        fit_time = time()
+        iter_count, max_f, max_x, result =
+            OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
+                                    verbose=true, max_iters=MAX_ITERS)
+        fit_time = time() - fit_time
+
+        results[entry.thing_id] = Dict("objid"=>entry.objid,
+                                       "ra"=>entry.pos[1],
+                                       "dec"=>entry.pos[2],
+                                       "vp"=>mp.vp[active_s],  # should be 's'?
+                                       "fit_time"=>fit_time)
+    end
+
+    return results
 end
 
 
@@ -295,7 +351,7 @@ This function converts the parameters from Celeste for one light source
 to a CatalogEntry. (which can be passed to load_ce!)
 It only needs to be called by load_celeste_obj!
 """
-function convert(::Type{CatalogEntry}, vs::Vector{Float64}, objid)
+function convert(::Type{CatalogEntry}, vs::Vector{Float64}, objid::ASCIIString)
     function get_fluxes(i::Int)
         ret = Array(Float64, 5)
         ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])

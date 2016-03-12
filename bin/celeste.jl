@@ -7,7 +7,7 @@ const DOC =
 """Run Celeste.
 
 Usage:
-  celeste.jl infer <dir> <run> <camcol> <field> [--outdir=<outdir> --part=<k/n>]
+  celeste.jl infer single <run> <camcol> <field> <objid> <dir> [--outdir=<outdir>]
   celeste.jl score <dir> <run> <camcol> <field> <reffile> [--outdir=<outdir>]
   celeste.jl -h | --help
   celeste.jl --version
@@ -18,8 +18,6 @@ Options:
   --outdir=<outdir>  Write output files for each source to this directory.
                      Default is to write to input directory. When scoring,
                      this is where celeste result files are read *from*.
-  --part=<k/n>       In inferences, split sources into `n` parts and only
-                     process the `k`th part.
 
 The `infer` step creates files in the output directory `<outdir>` with
 filename format `celeste-<run>-<camcol>-<field>--part-K-M.jld`. The ability
@@ -37,17 +35,35 @@ camcol, field) combinations fall entirely within the RA/Dec patch used
 in that query.
 """
 
+"""
+Query the SDSS database for all fields that overlap the given RA, Dec range.
+"""
+function query_ra_dec_range(ramin, ramax, decmin, decmax)
 
-"""
-Parse a string like \"1/3\" and return (1, 3).
-"""
-function parse_part(s)
-    words = split(s, '/', keep=false)
-    if length(words) == 2
-        return (parse(Int, words[1]), parse(Int, words[2]))
-    else
-        error("part must be two integers separated by `/`.")
-    end
+    # The ramin, ramax, etc is a bit unintuitive because we're looking
+    # for any overlap.
+    q = """select distinct run, camcol, field, ramin, ramax, decmin, decmax
+    from frame
+    where
+      rerun = 301 and
+      ramax > $(ramin) and ramin < $(ramax) and
+      decmax > $(decmin) and decmin < $(decmax)
+    order by run"""
+
+    iobuf = Celeste.SDSSIO.query_sql(q)
+    seekstart(iobuf)
+    data, colnames = readcsv(iobuf; header=true)
+
+    out = Dict{ASCIIString, Vector}()
+    out["run"] = Vector{Int}(data[:, 1])
+    out["camcol"] = Vector{Int}(data[:, 2])
+    out["field"] = Vector{Int}(data[:, 3])
+    out["ramin"] = data[:, 4]
+    out["ramax"] = data[:, 5]
+    out["decmin"] = data[:, 6]
+    out["decmax"] = data[:, 7]
+
+    return out
 end
 
 
@@ -77,4 +93,10 @@ function main()
 end
 
 
-main()
+#const S82_INDEX_DIR = "/project/projectdirs/dasrepo/celeste-sc16/S82-index"
+
+    
+
+
+
+#main()
