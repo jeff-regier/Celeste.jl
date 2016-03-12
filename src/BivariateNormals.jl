@@ -1,5 +1,5 @@
 
-
+module BivariateNormals
 
 """
 Relevant parameters of a bivariate normal distribution.
@@ -618,3 +618,6 @@ function load_bvn_mixtures{NumType <: Number}(
 
   star_mcs, gal_mcs
 end
+
+
+end # End module
