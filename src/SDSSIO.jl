@@ -3,6 +3,8 @@ module SDSSIO
 
 import FITSIO
 import WCS
+using HTTPClient: get
+import JSON
 
 # types of things to mask in read_mask().
 const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
@@ -340,7 +342,9 @@ function read_photoobj(fname, band::Char='r')
     objid = read(hdu, "objid")::Vector{ASCIIString}
     ra = read(hdu, "ra")::Vector{Float64}
     dec = read(hdu, "dec")::Vector{Float64}
-
+    mode = read(hdu, "mode")::Vector{UInt8}
+    thing_id = read(hdu, "thing_id")::Vector{Int32}
+    
     # Get "bright" objects.
     # (In objc_flags, the bit pattern Int32(2) corresponds to bright objects.)
     is_bright = read(hdu, "objc_flags")::Vector{Int32} & Int32(2) .!= 0
@@ -369,16 +373,17 @@ function read_photoobj(fname, band::Char='r')
     devflux = read(hdu, "devflux")::Matrix{Float32}
     expflux = read(hdu, "expflux")::Matrix{Float32}
 
-    # Only collect the following properties for the given band
-    # NB: the phi quantites in tractor are multiplied by -1.
-    phi_dev_deg = vec((read(hdu, "phi_dev_deg")::Matrix{Float32})[bandnum, mask])
-    phi_exp_deg = vec((read(hdu, "phi_exp_deg")::Matrix{Float32})[bandnum, mask])
+    # We actually only store the following properties for the given band
+    # (see below in Dict construction) NB: the phi quantites in tractor are
+    # multiplied by -1.
+    phi_dev_deg = read(hdu, "phi_dev_deg")::Matrix{Float32}
+    phi_exp_deg = read(hdu, "phi_exp_deg")::Matrix{Float32}
 
-    theta_dev = vec((read(hdu, "theta_dev")::Matrix{Float32})[bandnum, mask])
-    theta_exp = vec((read(hdu, "theta_exp")::Matrix{Float32})[bandnum, mask])
+    theta_dev = read(hdu, "theta_dev")::Matrix{Float32}
+    theta_exp = read(hdu, "theta_exp")::Matrix{Float32}
 
-    ab_exp = vec((read(hdu, "ab_exp")::Matrix{Float32})[bandnum, mask])
-    ab_dev = vec((read(hdu, "ab_dev")::Matrix{Float32})[bandnum, mask])
+    ab_exp = read(hdu, "ab_exp")::Matrix{Float32}
+    ab_dev = read(hdu, "ab_dev")::Matrix{Float32}
 
     close(f)
 
@@ -387,16 +392,17 @@ function read_photoobj(fname, band::Char='r')
     catalog = Dict("objid"=>objid[mask],
                    "ra"=>ra[mask],
                    "dec"=>dec[mask],
+                   "thing_id"=>thing_id[mask],
+                   "mode"=>mode[mask],
                    "is_star"=>is_star[mask],
                    "is_gal"=>is_gal[mask],
                    "frac_dev"=>fracdev[mask],
-                   "ab_exp"=>ab_exp,
-                   "theta_exp"=>theta_exp,
-                   "phi_exp"=>phi_exp_deg,
-                   "ab_dev"=>ab_dev,
-                   "theta_dev"=>theta_dev,
-                   "phi_dev"=>phi_dev_deg)
-
+                   "ab_exp"=>vec(ab_exp[bandnum, mask]),
+                   "theta_exp"=>vec(theta_exp[bandnum, mask]),
+                   "phi_exp"=>vec(phi_exp_deg[bandnum, mask]),
+                   "ab_dev"=>vec(ab_dev[bandnum, mask]),
+                   "theta_dev"=>vec(theta_dev[bandnum, mask]),
+                   "phi_dev"=>vec(phi_dev_deg[bandnum, mask]))
     for (b, n) in BAND_CHAR_TO_NUM
         catalog["psfflux_$b"] = vec(psfflux[n, mask])
         catalog["compflux_$b"] = vec(cmodelflux[n, mask])
@@ -409,5 +415,54 @@ function read_photoobj(fname, band::Char='r')
 
     return catalog
 end
+
+# ------------------------------------------------------------------------------
+# Database queries
+
+const TIMEOUT = 60.0
+
+"Base URL for catalog-related queries like SQL and Cross-ID."
+const SKYSERVER_BASEURL = "http://skyserver.sdss.org"
+
+
+function get_query_url(data_release)
+    suffix = (data_release < 11)? "sql.asp": "x_sql.aspx"
+    return string(SKYSERVER_BASEURL, "/dr$(data_release)/en/tools/search/",
+                  suffix)
+end
+
+
+"""Remove comments and newlines from SQL statement."""
+function sanitize_query(stmt::AbstractString)
+    lines = split(stmt, '\n')
+    for i in 1:length(lines)
+        r = search(lines[i], "--")
+        if r != 0:-1
+            lines[i] = lines[i][1:(first(r)-1)]
+        end
+    end
+    return join(lines, ' ')
+end
+
+
+"""
+query_sdss_sql(sql_query; data_release=12, timeout=60.0)
+
+Query the SDSS database. Returns an IOBuffer with the contents.
+Use `bytestring()` to convert this to a string if desired.
+"""
+function query_sql(sql_query::AbstractString;
+                   data_release=12, timeout=TIMEOUT)
+
+    url = get_query_url(data_release)
+    payload = [("cmd", sanitize_query(sql_query)), ("format", "csv")]
+    res = get(url; query_params=payload, request_timeout=timeout)
+    if res.http_code != 200
+        error("request for $url returned status $(res.http_code)")
+    end
+
+    return res.body
+end
+
 
 end  # module

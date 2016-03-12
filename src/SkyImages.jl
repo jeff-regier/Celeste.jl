@@ -11,6 +11,8 @@ import ..ElboDeriv # For stitch_object_tiles
 import FITSIO
 import ..Util
 
+import Base.convert
+
 export load_stamp_blob, crop_image!, get_psf_at_point,
        convert_catalog_to_celeste, load_stamp_catalog,
        break_blob_into_tiles, break_image_into_tiles,
@@ -18,15 +20,11 @@ export load_stamp_blob, crop_image!, get_psf_at_point,
        stitch_object_tiles
 
 """
-read_photoobj_celeste(fname)
-
-Read a SDSS \"photoobj\" FITS catalog into a Vector{CatalogEntry}.
+Convert from a catalog in dictionary-of-arrays, as returned by
+SDSSIO.read_photoobj to Vector{CatalogEntry}.
 """
-function read_photoobj_celeste(fname)
-    catalog = SDSSIO.read_photoobj(fname)
-
-    # initialize result
-    result = Array(CatalogEntry, length(catalog["objid"]))
+function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{ASCIIString, Any})
+    out = Array(CatalogEntry, length(catalog["objid"]))
 
     for i=1:length(catalog["objid"])
         worldcoords = [catalog["ra"][i], catalog["dec"][i]]
@@ -67,14 +65,22 @@ function read_photoobj_celeste(fname)
 
         entry = CatalogEntry(worldcoords, catalog["is_star"][i], star_fluxes,
                              gal_fluxes, frac_dev, fits_ab, phi90, re_pixel,
-                             catalog["objid"][i])
-        result[i] = entry
+                             catalog["objid"][i], Int(catalog["thing_id"][i]))
+        out[i] = entry
     end
 
-    return result
+    return out
 end
 
+"""
+read_photoobj_celeste(fname)
 
+Read a SDSS \"photoobj\" FITS catalog into a Vector{CatalogEntry}.
+"""
+function read_photoobj_celeste(fname)
+    catalog = SDSSIO.read_photoobj(fname)
+    return Vector{CatalogEntry}(catalog)
+end
 
 #
 # The fname in the old `load_raw_field`:
