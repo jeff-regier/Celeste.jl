@@ -16,20 +16,50 @@ const MIN_FLUX = 2.0
 
 
 """
-infer(fieldids, objids, framedirs, outfile; ...)
+Query the SDSS database for all fields that overlap the given RA, Dec range.
+"""
+function query_overlapping_fields(ramin, ramax, decmin, decmax)
 
-Fit the Celeste model to a single source and write a JLD file with the result.
+    # The ramin, ramax, etc is a bit unintuitive because we're looking
+    # for any overlap.
+    q = """select distinct run, camcol, field, ramin, ramax, decmin, decmax
+    from frame
+    where
+      rerun = 301 and
+      ramax > $(ramin) and ramin < $(ramax) and
+      decmax > $(decmin) and decmin < $(decmax)
+    order by run"""
 
+    iobuf = Celeste.SDSSIO.query_sql(q)
+    seekstart(iobuf)
+    data, colnames = readcsv(iobuf; header=true)
+
+    out = Dict{ASCIIString, Vector}()
+    out["run"] = Vector{Int}(data[:, 1])
+    out["camcol"] = Vector{Int}(data[:, 2])
+    out["field"] = Vector{Int}(data[:, 3])
+    out["ramin"] = data[:, 4]
+    out["ramax"] = data[:, 5]
+    out["decmin"] = data[:, 6]
+    out["decmax"] = data[:, 7]
+
+    return out
+end
+
+
+"""
+infer(ra_range, dec_range, fieldids, frame_dirs; ...)
+
+Fit the Celeste model to sources in a given ra, dec range.
+
+- ra_range: minimum and maximum RA of sources to consider.
+- dec_range: minimum and maximum Dec of sources to consider.
 - fieldids: Array of run, camcol, field triplets that the source occurs in.
-- objids: Array of object ids corresponding to this source in each field.
-  run/camcol/field combination.
-- run: Run number
-- outfile: The directory to write the output jld file.
-  - partnum: Which of the 1:parts catalog entries to fit.
-  - parts: How many parts to divide the catalog entries into
+- frame_dirs: Directories in which to find each field's frame FITS files.
 
 Returns:
-  Writes a jld file to outdir containing the optimization output.
+
+- Dictionary of results, keyed by SDSS thing_id.
 """
 function infer(ra_range::Tuple{Float64, Float64},
                dec_range::Tuple{Float64, Float64},
@@ -39,6 +69,11 @@ function infer(ra_range::Tuple{Float64, Float64},
                psfield_dirs=frame_dirs,
                photofield_dirs=frame_dirs,
                photoobj_dirs=frame_dirs)
+
+    # the code below assumes there is at least one field.
+    if length(fieldids) == 0
+        return Dict{Int, Dict}()
+    end
 
     # Read in all photoobj catalogs.
     rawcatalogs = Array(Dict, length(fieldids))
@@ -51,7 +86,8 @@ function infer(ra_range::Tuple{Float64, Float64},
     end
 
     for i in eachindex(fieldids)
-        info(string("field ", i, ": ", length(rawcatalogs[i]["objid"]), " entries"))
+        info(string("field ", i, ": ", length(rawcatalogs[i]["objid"]),
+                    " entries"))
     end
 
     # Limit each catalog to primary objects
@@ -125,25 +161,108 @@ function infer(ra_range::Tuple{Float64, Float64},
     for i, entry in enumerate(catalog)
         info("processing source $i: objid= $(entry.objid)")
 
+        t0 = time()
         trimmed_tiled_images, mp, active_s, s =
             ModelInit.initialize_objid(entry.objid, mp_all, catalog, images)
+        init_time = time() - t0
 
-        fit_time = time()
+        t0 = time()
         iter_count, max_f, max_x, result =
             OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
                                     verbose=true, max_iters=MAX_ITERS)
-        fit_time = time() - fit_time
+        fit_time = time() - t0
 
         results[entry.thing_id] = Dict("objid"=>entry.objid,
                                        "ra"=>entry.pos[1],
                                        "dec"=>entry.pos[2],
                                        "vp"=>mp.vp[active_s],  # should be 's'?
+                                       "init_time"=>init_time,
                                        "fit_time"=>fit_time)
     end
 
     return results
 end
 
+
+"""
+NERSC-specific infer function, called from main entry point.
+"""
+function infer_nersc(ramin, ramax, decmin, decmax)
+    ROOT_DIR = "/global/projecta/projectdirs/sdss/data/sdss/dr12/boss"
+    SCRATCH_DIR = joinpath(ENV["SCRATCH"], "celeste")
+
+    fields = query_overlapping_fields(ramin, ramax, decmin, decmax)
+
+    # (run, camcol, field) triplets
+    fieldids = [(fields["run"][i], fields["camcol"][i], fields["field"][i])
+                for i in eachindex(fields["run"])]
+
+    # build list of relevant directories for each field
+    frame_dirs = Vector(ASCIIString, length(fieldids))
+    fpm_dirs = Vector(ASCIIString, length(fieldids))
+    psfield_dirs = Vector(ASCIIString, length(fieldids))
+    photofield_dirs = Vector(ASCIIString, length(fieldids))
+    photoobj_dirs = Vector(ASCIIString, length(fieldids))
+    for i in eachindex(fieldids)
+        run, camcol, field = fieldids[i]
+        photoobj_dirs[i] = "$(ROOT_DIR)/photoObj/301/$(run)/$(camcol)"
+        psfield_dirs[i] = "$(ROOT_DIR)/photo/redux/301/$(run)/objcs/$(camcol)"
+        photofield_dirs[i] = "$(ROOT_DIR)/photoObj/301/$(run)"
+
+        # Uncompress the frame (bz2) files to scratch
+        srcdir = "$(ROOT_DIR)/photoObj/frames/301/$(run)/$(camcol)"
+        dstdir = joinpath(SCRATCH_DIR, "frames", "$(run)-$(camcol)")
+        isdir(dstdir) || mkpath(dstdir)
+        for band in ['u', 'g', 'r', 'i', 'z']
+            srcfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits.bz2",
+                               srcdir, band, run, camcol, field)
+            dstfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
+                               dstdir, band, run, camcol, field)
+            if !isfile(dstfile)
+                cmd = `bzcat --keep $srcfile > $dstfile`
+                println(cmd)
+                run(cmd)
+            end
+        end
+        frame_dirs[i] = dstdir
+
+        # Uncompress the fpm (gz) files to scratch
+        # It isn't strictly necessary to uncompress these, because FITSIO can handle
+        # gzipped files. However, the celeste code assumes the filename ends with
+        # ".fit", so we have to at least symlink the files to a new name.
+        srcdir = "$(ROOT_DIR)/photo/redux/301/$(run)/objcs/$(camcol)"
+        dstdir = joinpath(SCRATCH_DIR, "fpm", "$(run)-$(camcol)")
+        isdir(dstdir) || mkpath(dstdir)
+        for band in ['u', 'g', 'r', 'i', 'z']
+            srcfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit.gz",
+                               srcdir, run, band, camcol, field)
+            dstfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
+                               dstdir, run, band, camcol, field)
+            if !isfile(dstfile)
+                cmd = `gunzip --stdout $srcfile > $dstfile`
+                println(cmd)
+                run(cmd)
+            end
+        end
+        fpm_dirs[i] = dstdir
+    end
+
+    results = infer((ramin, ramax), (decmin, decmax), fieldids,
+                    frame_dirs;
+                    fpm_dirs=fpm_dirs,
+                    psfield_dirs=psfield_dirs,
+                    photofield_dirs=photofield_dirs,
+                    photoobj_dirs=photoobj_dirs)
+
+    OUT_DIR = "/project/projectdirs/dasrepo/celeste-sc16/results"
+    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
+                     OUT_DIR, ramin, ramax, decmin, decmax) 
+    JLD.save(fname, "results", results)
+end
+
+
+# -----------------------------------------------------------------------------
+# Scoring
 
 """
 mag_to_flux(m)
