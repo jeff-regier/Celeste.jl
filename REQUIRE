@@ -9,4 +9,5 @@ Optim
 GaussianMixtures
 FITSIO
 WCS
+HTTPClient
 SloanDigitalSkySurvey 0.1.1

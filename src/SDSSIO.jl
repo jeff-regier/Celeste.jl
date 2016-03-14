@@ -4,7 +4,6 @@ module SDSSIO
 import FITSIO
 import WCS
 using HTTPClient: get
-import JSON
 
 # types of things to mask in read_mask().
 const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)

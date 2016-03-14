@@ -158,7 +158,7 @@ function infer(ra_range::Tuple{Float64, Float64},
                                                         fit_psf=false)
 
     results = Dict{Int, Dict}()
-    for i, entry in enumerate(catalog)
+    for (i, entry) in enumerate(catalog)
         info("processing source $i: objid= $(entry.objid)")
 
         t0 = time()
