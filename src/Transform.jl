@@ -524,7 +524,8 @@ Args:
   - omitted_ids = ids in ParamIndex
 
 There is probably no use for this function, since you'll only be passing
-trasformations to the optimizer, but I'll include it for completeness."""
+trasformations to the optimizer, but I'll include it for completeness.
+"""
 function free_vp_to_array{NumType <: Number}(vp::FreeVariationalParams{NumType},
                                              omitted_ids::Vector{Int})
 
@@ -571,7 +572,7 @@ end
 
 
 """
-Generate parameters within the given bounds.
+Generate parameters within the given bounds.  Currently used for testing only.
 """
 function generate_valid_parameters(
   NumType::DataType, bounds_vec::Vector{ParamBounds})
@@ -635,7 +636,7 @@ transform_sensitive_float: A function that takes (sensitive float, model
 bounds: The bounds for each parameter and each object in ModelParams.
 active_sources: The sources that are being optimized.  Only these sources'
   parameters are transformed into the parameter vector.
-  """
+"""
 type DataTransform
 	to_vp::Function
 	from_vp::Function
@@ -895,10 +896,13 @@ function enforce_bounds!{NumType <: Number}(
              mp.vp[s][ids.(param)[ind]] <=
              constraint.upper_bound)
           println("Warning: $param[$s][$ind] was out of bounds.")
+          # Don't set the value to exactly the lower bound to avoid Inf
+          diff = constraint.upper_bound - constraint.lower_bound
+          epsilon = diff == Inf ? 1e-12: diff * 1e-12
           mp.vp[s][ids.(param)[ind]] =
-            min(mp.vp[s][ids.(param)[ind]], constraint.upper_bound)
+            min(mp.vp[s][ids.(param)[ind]], constraint.upper_bound - epsilon)
           mp.vp[s][ids.(param)[ind]] =
-            max(mp.vp[s][ids.(param)[ind]], constraint.lower_bound)
+            max(mp.vp[s][ids.(param)[ind]], constraint.lower_bound + epsilon)
         end
       end
     else
@@ -910,10 +914,13 @@ function enforce_bounds!{NumType <: Number}(
           for row in 1:param_size[1]
             if !(constraint.lower_bound <= mp.vp[s][ids.(param)[row, col]] <= 1.0)
               println("Warning: $param[$s][$row, $col] was out of bounds.")
+              # Don't set the value to exactly the lower bound to avoid Inf
+              epsilon = (1.0 - constraint.lower_bound) * 1e-12
               mp.vp[s][ids.(param)[row, col]] =
-                min(mp.vp[s][ids.(param)[row, col]], 1.0)
+                min(mp.vp[s][ids.(param)[row, col]], 1.0 - epsilon)
               mp.vp[s][ids.(param)[row, col]] =
-                max(mp.vp[s][ids.(param)[row, col]], constraint.lower_bound)
+                max(mp.vp[s][ids.(param)[row, col]],
+                    constraint.lower_bound + epsilon)
             end
           end
           if sum(mp.vp[s][ids.(param)[:, col]]) != 1.0
@@ -928,9 +935,12 @@ function enforce_bounds!{NumType <: Number}(
         for row in 1:param_size[1]
           if !(constraint.lower_bound <= mp.vp[s][ids.(param)[row]] <= 1.0)
             println("Warning: $param[$s][$row] was out of bounds.")
-            mp.vp[s][ids.(param)[row]] = min(mp.vp[s][ids.(param)[row]], 1.0)
+            # Don't set the value to exactly the lower bound to avoid Inf
+            epsilon = (1.0 - constraint.lower_bound) * 1e-12
             mp.vp[s][ids.(param)[row]] =
-              max(mp.vp[s][ids.(param)[row]], constraint.lower_bound)
+              min(mp.vp[s][ids.(param)[row]], 1.0 - epsilon)
+            mp.vp[s][ids.(param)[row]] =
+              max(mp.vp[s][ids.(param)[row]], constraint.lower_bound + epsilon)
           end
         end
         if sum(mp.vp[s][ids.(param)]) != 1.0
