@@ -363,7 +363,12 @@ function test_enforce_bounds()
 
 	@test_throws AssertionError transform.from_vp(mp.vp)
 	Transform.enforce_bounds!(mp, transform)
-	transform.from_vp(mp.vp) # Check that it now works
+
+	# Check that it now works and all values are finite.
+	x_trans = transform.from_vp(mp.vp)
+	for s = 1:mp.S
+		@test !any(Bool[ isinf(x) for x in x_trans[1] ])
+	end
 
 	# Test with only one active source.
 	sa = 2
@@ -377,7 +382,12 @@ function test_enforce_bounds()
 
 	@test_throws AssertionError transform.from_vp(mp.vp)
 	Transform.enforce_bounds!(mp, transform)
-	transform.from_vp(mp.vp) # Check that it now works
+
+	# Check that it now works and all values are finite.
+	x_trans = transform.from_vp(mp.vp)
+	for s = 1:mp.S
+		@test !any(Bool[ isinf(x) for x in x_trans[1] ])
+	end
 
 end
 
