@@ -4,7 +4,6 @@ import Celeste: SkyImages, ModelInit
 using Base.Test
 using Distributions
 
-
 import SloanDigitalSkySurvey: SDSS, WCSUtils
 
 if VERSION > v"0.5.0-dev"
