@@ -155,78 +155,6 @@ include("elbo_kl.jl")
 include("source_brightness.jl")
 
 
-##############################################
-# Version of BVN functions that use ElboIntermediateVariables
-
-
-# function eval_bvn_pdf!{NumType <: Number}(
-#     elbo_vars::ElboIntermediateVariables{NumType},
-#     bmc::BvnComponent{NumType}, x::Vector{Float64})
-#
-#   eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x)
-# end
-
-
-# function get_bvn_derivs_in_place!{NumType <: Number}(
-#     elbo_vars::ElboIntermediateVariables{NumType},
-#     bvn::BvnComponent{NumType},
-#     calculate_x_hess::Bool,
-#     calculate_sigma_hessian::Bool)
-#
-#   # TODO: get rid of redundant function when you're sure it's working
-#   get_bvn_derivs!(
-#     elbo_vars.bvn_derivs, bvn, calculate_x_hess, calculate_sigma_hessian)
-# end
-
-
-# function transform_bvn_ux_derivs!{NumType <: Number}(
-#     elbo_vars::ElboIntermediateVariables{NumType},
-#     wcs_jacobian::Array{Float64, 2})
-#
-#   transform_bvn_ux_derivs!(
-#     elbo_vars.bvn_derivs, wcs_jacobian, elbo_vars.calculate_hessian)
-# end
-
-
-# function transform_bvn_derivs!{NumType <: Number}(
-#     elbo_vars::ElboIntermediateVariables{NumType},
-#     gcc::GalaxyCacheComponent{NumType},
-#     wcs_jacobian::Array{Float64, 2})
-#
-#   transform_bvn_derivs!(
-#     elbo_vars.bvn_derivs, gcc.sig_sf, wcs_jacobian, elbo_vars.calculate_hessian)
-# end
-
-
-
-#################################################
-# Elbo-specific functions
-
-# """
-# Calculate the value, gradient, and hessian of
-#   -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
-# with respect to x and sigma.
-#
-# Args:
-#   - elbo_vars: A data structure with pre-allocated intermediate variables.
-#   - bvn: A bivariate normal component to get derivatives for.
-#   - x: The vector at which to evaluate the bvn derivs.
-#   - calculate_x_hess: Whether to calcualte x Hessian terms.
-#   - calculate_sigma_hess: Whether to calcualte sigma Hessian terms.
-# """
-# function get_bvn_derivs!{NumType <: Number}(
-#     elbo_vars::ElboIntermediateVariables{NumType},
-#     bvn::BvnComponent{NumType},
-#     x::Vector{Float64},
-#     calculate_x_hess::Bool,
-#     calculate_sigma_hessian::Bool)
-#
-#   eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x);
-#   get_bvn_derivs!(
-#     elbo_vars.bvn_derivs, bvn, calculate_x_hess, calculate_sigma_hessian)
-# end
-#
-
 """
 Add the contributions of a star's bivariate normal term to the ELBO,
 by updating elbo_vars.fs0m_vec[s] in place.
@@ -283,7 +211,6 @@ function accum_star_pos!{NumType <: Number}(
 
   true # Set return type
 end
-
 
 
 """
