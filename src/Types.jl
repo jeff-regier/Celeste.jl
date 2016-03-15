@@ -10,7 +10,8 @@ export CatalogEntry,
 export ModelParams, PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,
-       VariationalParams, FreeVariationalParams, RectVariationalParams
+       VariationalParams, FreeVariationalParams, RectVariationalParams,
+       PsfParams
 
 # functions
 export print_params, align
@@ -22,7 +23,7 @@ export band_letters, D, Ia, B, psf_K, galaxy_prototypes,
        gal_shape_alignment,
        ids_names,
        ids_free_names,
-       ids, ids_free, star_ids, gal_ids, gal_shape_ids, bids
+       ids, ids_free, star_ids, gal_ids, gal_shape_ids, psf_ids, bids
 
 
 import Base.convert
@@ -486,22 +487,19 @@ length(::Type{UnconstrainedParams}) =  6 + 2*Ia + 2*(B-1)*Ia + (D-1)*Ia + Ia-1
 # Parameters for a representation of the PSF
 # TODO: have each component be a "source"?
 type PsfParams <: Types.ParamSet
-    mu_vec::Vector{Vector{Int}}
-    e_axis_vec::Vector{Int}
-    e_angle_vec::Vector{Int}
-    e_scale_vec::Vector{Int}
-    weight_vec::Vector{Int}
+    mu::Vector{Int}
+    e_axis::Int
+    e_angle::Int
+    e_scale::Int
+    weight::Int
 
     function PsfParams()
-      mu_ids = Array(Vector{Int}, 2)
-      mu_ids[1] = Int64[1, 2]
-      mu_ids[2] = Int64[3, 4]
-      new(mu_ids, [5, 6], [7, 8], [9, 10], [11, 12])
+      new([1, 2], 3, 4, 5, 6)
     end
 end
 const psf_ids = PsfParams()
 getids(::Type{PsfParams}) = psf_ids
-length(::Type{PsfParams}) = 12
+length(::Type{PsfParams}) = 6
 
 
 # define length(value) in addition to length(Type) for ParamSets
