@@ -108,24 +108,14 @@ function evaluate_psf_at_point{T <: Number}(
   @assert length(mu_vec) == length(sigma_vec) == length(weight_vec)
   local K = length(mu_vec)
 
-  println("In evaluate_psf_at_point")
-  println(x)
-  println(mu_vec)
-  println(sigma_vec)
-  println(weight_vec)
-
   @assert length(x) == 2
   local pdf = 0.0
   for k = 1:K
-    println("k = $k")
     z = x - mu_vec[k]
-    println("z = $z")
-    println(sigma_vec[k])
     log_pdf = -0.5 * dot(z, sigma_vec[k] \ z) -
                0.5 * logdet(sigma_vec[k]) - log(2 * pi)
     pdf += weight_vec[k] * exp(log_pdf)
   end
-  println("---------------")
 
   pdf
 end
@@ -197,9 +187,6 @@ function fit_psf_gaussians_least_squares(
     end
     if verbose
       println("Using default initialization:")
-      println(mu_vec)
-      println(sigma_vec)
-      println(weight_vec)
     end
     initial_par = wrap_parameters(mu_vec, sigma_vec, weight_vec)
   end
@@ -213,9 +200,6 @@ function fit_psf_gaussians_least_squares(
       println("-------------------")
       println("Fit: $fit")
       mu_vec, sigma_vec, weight_vec = unwrap_parameters(par)
-      println(mu_vec)
-      println(sigma_vec)
-      println(weight_vec)
     end
     fit
   end
