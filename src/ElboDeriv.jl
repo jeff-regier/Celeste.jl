@@ -1091,7 +1091,7 @@ function elbo_likelihood{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType};
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
-  # Pre-process a list of active pixels
+  # Pre-process a list of active pixels.  TODO: put this in pre-processing.
   active_pixels = ActivePixel[]
   for b in 1:length(tiled_blob), tile_ind in 1:length(tiled_blob[b])
     tile_sources = mp.tile_sources[b][tile_ind]
@@ -1104,7 +1104,6 @@ function elbo_likelihood{NumType <: Number}(
       end
     end
   end
-  println("There are $(length(active_pixels)) active pixels.")
 
   elbo_vars_array = ElboIntermediateVariables{NumType}[]
   if Threaded
