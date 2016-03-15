@@ -150,7 +150,7 @@ function convert_catalog_to_celeste(
 
         CatalogEntry(x_y, row[1, :is_star], star_fluxes,
             gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_pixel,
-            row[1, :objid])
+            row[1, :objid], 0)
     end
 
     CatalogEntry[row_to_ce(df[i, :]) for i in 1:size(df, 1)]

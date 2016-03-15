@@ -15,10 +15,6 @@ function test_infer_single()
     dirs = [datadir]
 
     result = Celeste.infer(ra_range, dec_range, fieldids, dirs)
-
-    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
-                     datadir, ramin, ramax, decmin, decmax) 
-    JLD.save(fname, "result", result)
 end
 
 test_infer_single()
