@@ -162,7 +162,7 @@ function test_set_patch_size()
   function gal_catalog_from_scale(gal_scale::Float64, flux_scale::Float64)
     CatalogEntry[CatalogEntry(world_location, false,
                               flux_scale * fluxes, flux_scale * fluxes,
-                              0.1, .01, pi/4, gal_scale, "sample") ]
+                              0.1, .01, pi/4, gal_scale, "sample", 0) ]
   end
 
   srand(1)
