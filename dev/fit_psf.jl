@@ -42,19 +42,21 @@ end
 
 # Functions
 
-function evaluate_log_pdf!{NumType <: Number}(
-    log_pdf::SensitiveFloat{NumType}, x_mat::Array{Vector{Float64, 1}, 2},
-    psf_params::Matrix{NumType})
 
-  bvn_derivs = BivariateNormalDerivatives{Float64}(Float64);
-  sig_sf = GalaxySigmaDerivs(
-    e_angle, e_axis, e_scale, sigma, calculate_tensor=true);
+bvn_derivs = BivariateNormalDerivatives{Float64}(Float64);
+sig_sf = GalaxySigmaDerivs(
+  e_angle, e_axis, e_scale, sigma, calculate_tensor=true);
+
+for k=1:K
+  sigma = Util.get_bvn_cov(psf_params[psf_ids.e_axis, k],
+                           psf_params[psf_ids.e_angle, k],
+                           psf_params[psf_ids.e_scale, k])
+
+function evaluate_log_pdf!{NumType <: Number}(
+    log_pdf::SensitiveFloat{NumType}, psf_params::Matrix{NumType},
+    x::Vector{Float64})
 
   K = size(psf_params, 2)
-  for k=1:K
-    sigma = Util.get_bvn_cov(psf_params[psf_ids.e_axis, k],
-                             psf_params[psf_ids.e_angle, k],
-                             psf_params[psf_ids.e_scale, k])
 
     # Note: bvn is immutable and so must be redefined at each iteration
     bvn = BvnComponent{NumType}(mu, sigma, w);
