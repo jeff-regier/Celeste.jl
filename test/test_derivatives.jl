@@ -2,7 +2,8 @@ using Base.Test
 import DualNumbers
 
 using Celeste: Types, SampleData, SensitiveFloats
-import Celeste: Synthetic, SkyImages, Util, ElboDeriv, ModelInit
+import Celeste: Synthetic, SkyImages, Util,
+                ElboDeriv, ModelInit, BivariateNormals
 import SloanDigitalSkySurvey: SDSS, WCSUtils
 
 if VERSION > v"0.5.0-dev"
@@ -18,6 +19,23 @@ end
 
 
 println("Running hessian tests.")
+
+
+"""
+This is the function of which get_bvn_derivs!() returns the derivatives.
+It is only used for testing.
+"""
+function eval_bvn_log_density{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    bvn::BvnComponent{NumType}, x::Vector{Float64})
+
+  eval_bvn_pdf_in_place!(elbo_vars, bvn, x);
+
+  -0.5 * (
+    (x[1] - bvn.the_mean[1]) * elbo_vars.bvn_derivs.py1[1] +
+    (x[2] - bvn.the_mean[2]) * elbo_vars.bvn_derivs.py2[1] -
+    log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
+end
 
 
 """
@@ -276,7 +294,7 @@ function test_tile_likelihood()
           NumType, mp.S, length(mp.active_sources),
           calculate_derivs=calculate_derivs) ]
     end
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(
+    star_mcs, gal_mcs = BivariateNormals.load_bvn_mixtures(
       mp, b, calculate_derivs=elbo_vars_array[1].calculate_derivs);
     sbs = ElboDeriv.load_source_brightnesses(
       mp, calculate_derivs=elbo_vars_array[1].calculate_derivs);
@@ -323,7 +341,7 @@ function test_add_log_term()
         mp::ModelParams{NumType}, calculate_derivs::Bool)
 
       star_mcs, gal_mcs =
-        ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
+        BivariateNormals.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
       sbs = ElboDeriv.SourceBrightness{NumType}[
         ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
         for s in 1:mp.S];
@@ -371,7 +389,7 @@ function test_combine_pixel_sources()
         mp::ModelParams{NumType}; calculate_derivs=true)
 
       star_mcs, gal_mcs =
-        ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
+        BivariateNormals.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
       sbs = ElboDeriv.SourceBrightness{NumType}[
         ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
         for s in 1:mp.S];
@@ -420,7 +438,7 @@ function test_e_g_s_functions()
         mp::ModelParams{NumType}; calculate_derivs=true)
 
       star_mcs, gal_mcs =
-        ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
+        BivariateNormals.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
       sbs = ElboDeriv.SourceBrightness{NumType}[
         ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
         for s in 1:mp.S];
@@ -493,11 +511,11 @@ function test_fs1m_derivatives()
           mp_fd.vp[s][p0] = par[p1]
       end
       star_mcs, gal_mcs =
-        ElboDeriv.load_bvn_mixtures(mp_fd, b, calculate_derivs=false);
+        BivariateNormals.load_bvn_mixtures(mp_fd, b, calculate_derivs=false);
 
       # Raw:
       gcc = gal_mcs[gcc_ind...];
-      ElboDeriv.eval_bvn_pdf_in_place!(elbo_vars_fd, gcc.bmc, x)
+      BivariateNormals.eval_bvn_pdf_in_place!(elbo_vars_fd, gcc.bmc, x)
       elbo_vars_fd.bvn_derivs.f_pre[1] * gcc.e_dev_i
     end
 
@@ -512,7 +530,7 @@ function test_fs1m_derivatives()
 
     par_gal = mp_to_par_gal(mp);
 
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+    star_mcs, gal_mcs = BivariateNormals.load_bvn_mixtures(mp, b);
     clear!(elbo_vars.fs1m_vec[s]);
     ElboDeriv.accum_galaxy_pos!(
       elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian, true);
@@ -521,7 +539,7 @@ function test_fs1m_derivatives()
     # Two sanity checks.
     gcc = gal_mcs[gcc_ind...];
     clear!(elbo_vars.fs1m_vec[s]);
-    v = ElboDeriv.eval_bvn_log_density(elbo_vars, gcc.bmc, x);
+    v = BivariateNormals.eval_bvn_log_density(elbo_vars, gcc.bmc, x);
     gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
     pc = mp.patches[s, b].psf[gcc_ind[1]]
 
@@ -568,7 +586,7 @@ function test_fs0m_derivatives()
           p0 = ids.u[p1]
           mp_fd.vp[s][p0] = par[p1]
       end
-      star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
+      star_mcs, gal_mcs = BivariateNormals.load_bvn_mixtures(mp_fd, b);
       elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
       ElboDeriv.accum_star_pos!(
         elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true);
@@ -586,7 +604,7 @@ function test_fs0m_derivatives()
     par_star = mp_to_par_star(mp)
 
     clear!(elbo_vars.fs0m_vec[s])
-    star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+    star_mcs, gal_mcs = BivariateNormals.load_bvn_mixtures(mp, b);
     ElboDeriv.accum_star_pos!(
       elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true);
     fs0m = deepcopy(elbo_vars.fs0m_vec[s])
@@ -610,7 +628,7 @@ function test_bvn_derivatives()
   # strange to check that it doesn't matter.
   weight = 0.724
 
-  bvn = ElboDeriv.BvnComponent{Float64}(offset, sigma, weight);
+  bvn = BvnComponent{Float64}(offset, sigma, weight);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
   ElboDeriv.get_bvn_derivs!(elbo_vars, bvn, x, true, true);
 
@@ -719,7 +737,7 @@ function test_galaxy_variable_transform()
   u_pix = WCSUtils.world_to_pix(
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
   sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
-  bmc = ElboDeriv.BvnComponent{Float64}(u_pix, sigma, 1.0);
+  bmc = BvnComponent{Float64}(u_pix, sigma, 1.0);
   sig_sf = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma);
   gcc = ElboDeriv.GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
@@ -931,7 +949,7 @@ function test_dsiginv_dsig()
   e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # bvn_derivs.bvn_sigsig_h is large
   the_cov = Util.get_bvn_cov(e_axis, e_angle, e_scale)
   the_mean = Float64[0., 0.]
-  bvn = ElboDeriv.BvnComponent{Float64}(the_mean, the_cov, 1.0);
+  bvn = BvnComponent{Float64}(the_mean, the_cov, 1.0);
   sigma_vec = Float64[ the_cov[1, 1], the_cov[1, 2], the_cov[2, 2] ]
 
   for component_index = 1:3

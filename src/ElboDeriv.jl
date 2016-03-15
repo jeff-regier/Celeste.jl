@@ -35,73 +35,6 @@ end
 
 
 """
-Pre-allocated memory for quantities related to derivatives of bivariate
-normals.
-"""
-type BivariateNormalDerivatives{NumType <: Number}
-
-  # Pre-allocated memory for py1, py2, and f when evaluating BVNs
-  py1::Array{NumType, 1}
-  py2::Array{NumType, 1}
-  f_pre::Array{NumType, 1}
-
-  # Derivatives of a bvn with respect to (x, sig).
-  bvn_x_d::Array{NumType, 1}
-  bvn_sig_d::Array{NumType, 1}
-  bvn_xx_h::Array{NumType, 2}
-  bvn_xsig_h::Array{NumType, 2}
-  bvn_sigsig_h::Array{NumType, 2}
-
-  # intermediate values used in d bvn / d(x, sig)
-  dpy1_dsig::Array{NumType, 1}
-  dpy2_dsig::Array{NumType, 1}
-
-  # TODO: delete this, it is now in BvnComponent
-  dsiginv_dsig::Array{NumType, 2}
-
-  # Derivatives of a bvn with respect to (u, shape)
-  bvn_u_d::Array{NumType, 1}
-  bvn_uu_h::Array{NumType, 2}
-  bvn_s_d::Array{NumType, 1}
-  bvn_ss_h::Array{NumType, 2}
-  bvn_us_h::Array{NumType, 2}
-
-  function BivariateNormalDerivatives(ThisNumType::DataType)
-    py1 = zeros(ThisNumType, 1)
-    py2 = zeros(ThisNumType, 1)
-    f_pre = zeros(ThisNumType, 1)
-
-    bvn_x_d = zeros(ThisNumType, 2)
-    bvn_sig_d = zeros(ThisNumType, 3)
-    bvn_xx_h = zeros(ThisNumType, 2, 2)
-    bvn_xsig_h = zeros(ThisNumType, 2, 3)
-    bvn_sigsig_h = zeros(ThisNumType, 3, 3)
-
-    dpy1_dsig = zeros(ThisNumType, 3)
-    dpy2_dsig = zeros(ThisNumType, 3)
-    dsiginv_dsig = zeros(ThisNumType, 3, 3)
-
-    # Derivatives wrt u.
-    bvn_u_d = zeros(ThisNumType, 2)
-    bvn_uu_h = zeros(ThisNumType, 2, 2)
-
-    # Shape deriviatives.  Here, s stands for "shape".
-    bvn_s_d = zeros(ThisNumType, length(gal_shape_ids))
-
-    # The hessians.
-    bvn_ss_h = zeros(ThisNumType, length(gal_shape_ids), length(gal_shape_ids))
-    bvn_us_h = zeros(ThisNumType, 2, length(gal_shape_ids))
-
-    new(py1, py2, f_pre,
-        bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
-        dpy1_dsig, dpy2_dsig,
-        dsiginv_dsig,
-        bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h)
-  end
-end
-
-
-"""
 Pre-allocated memory for efficiently accumulating certain sub-matrices
 of the E_G_s and E_G2_s Hessian.
 
@@ -220,7 +153,78 @@ end
 
 include("elbo_kl.jl")
 include("source_brightness.jl")
-include("bivariate_normals.jl")
+
+
+##############################################
+# Version of BVN functions that use ElboIntermediateVariables
+
+
+function eval_bvn_pdf_in_place!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    bmc::BvnComponent{NumType}, x::Vector{Float64})
+
+  eval_bvn_pdf_in_place!(elbo_vars.bvn_derivs, bmc, x)
+end
+
+
+function get_bvn_derivs_in_place!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    bvn::BvnComponent{NumType},
+    calculate_x_hess::Bool,
+    calculate_sigma_hessian::Bool)
+
+  # TODO: get rid of redundant function when you're sure it's working
+  get_bvn_derivs!(
+    elbo_vars.bvn_derivs, bvn, calculate_x_hess, calculate_sigma_hessian)
+end
+
+
+function transform_bvn_ux_derivs!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    wcs_jacobian::Array{Float64, 2})
+
+  transform_bvn_ux_derivs!(
+    elbo_vars.bvn_derivs, wcs_jacobian, elbo_vars.calculate_hessian)
+end
+
+
+function transform_bvn_derivs!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    gcc::GalaxyCacheComponent{NumType},
+    wcs_jacobian::Array{Float64, 2})
+
+  transform_bvn_derivs!(
+    elbo_vars.bvn_derivs, gcc.sig_sf, wcs_jacobian, elbo_vars.calculate_hessian)
+end
+
+
+
+#################################################
+# Elbo-specific functions
+
+"""
+Calculate the value, gradient, and hessian of
+  -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
+with respect to x and sigma.
+
+Args:
+  - elbo_vars: A data structure with pre-allocated intermediate variables.
+  - bvn: A bivariate normal component to get derivatives for.
+  - x: The vector at which to evaluate the bvn derivs.
+  - calculate_x_hess: Whether to calcualte x Hessian terms.
+  - calculate_sigma_hess: Whether to calcualte sigma Hessian terms.
+"""
+function get_bvn_derivs!{NumType <: Number}(
+    elbo_vars::ElboIntermediateVariables{NumType},
+    bvn::BvnComponent{NumType},
+    x::Vector{Float64},
+    calculate_x_hess::Bool,
+    calculate_sigma_hessian::Bool)
+
+  eval_bvn_pdf_in_place!(elbo_vars, bvn, x);
+  get_bvn_derivs_in_place!(
+    elbo_vars, bvn, calculate_x_hess, calculate_sigma_hessian)
+end
 
 
 """
