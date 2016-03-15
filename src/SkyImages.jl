@@ -1,7 +1,8 @@
 module SkyImages
 
 using ..Types
-import SloanDigitalSkySurvey: PSF, SDSS, WCSUtils
+import ..SDSSIO
+import SloanDigitalSkySurvey: PSF, SDSS
 import SloanDigitalSkySurvey.PSF.get_psf_at_point
 
 import WCS
@@ -10,222 +11,83 @@ import ..ElboDeriv # For stitch_object_tiles
 import FITSIO
 import ..Util
 
-export load_stamp_blob, load_sdss_blob, crop_image!,
-       get_psf_at_point,
+import Base.convert
+
+export load_stamp_blob, crop_image!, get_psf_at_point,
        convert_catalog_to_celeste, load_stamp_catalog,
        break_blob_into_tiles, break_image_into_tiles,
        get_local_sources,
        stitch_object_tiles
 
-# The default mask planes are those used in the astrometry.net code.
-const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
-                             "S_MASK_SATUR",  # saturated
-                             "S_MASK_CR",  # cosmic ray
-                             "S_MASK_GHOST"]  # electronics artifacts
-
 """
-interp_sky(data, xcoords, ycoords)
-
-Interpolate the 2-d array `data` at the grid of array coordinates spanned
-by the vectors `xcoords` and `ycoords` using bilinear interpolation.
-The output array will have size `(length(xcoords), length(ycoords))`.
-For example, if `x[1] = 3.3` and `y[2] = 4.7`, the element `out[1, 2]`
-will be a result of linear interpolation between the values
-`data[3:4, 4:5]`.
-
-Coordinates should not extend more than 1 element past size of data.
+Convert from a catalog in dictionary-of-arrays, as returned by
+SDSSIO.read_photoobj to Vector{CatalogEntry}.
 """
-function interp_sky{T, S}(data::Array{T, 2}, xcoords::Vector{S},
-                          ycoords::Vector{S})
-    # We assume below that 0 <= floor(x) <= size(data, 1)
-    # and similarly for y. Check this.
-    for xc in xcoords
-        if xc < zero(S) || xc >= size(data, 1) + 1
-            error("x coordinates out of bounds")
+function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{ASCIIString, Any})
+    out = Array(CatalogEntry, length(catalog["objid"]))
+
+    for i=1:length(catalog["objid"])
+        worldcoords = [catalog["ra"][i], catalog["dec"][i]]
+        frac_dev = catalog["frac_dev"][i]
+
+        # Fill star and galaxy flux
+        star_fluxes = zeros(5)
+        gal_fluxes = zeros(5)
+        for (j, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
+            
+            # Make negative fluxes positive.
+            # TODO: How can there be negative fluxes?
+            psfflux = max(catalog["psfflux_$band"][i], 1e-6)
+            devflux = max(catalog["devflux_$band"][i], 1e-6)
+            expflux = max(catalog["expflux_$band"][i], 1e-6)
+
+            # galaxy flux is a weighted sum of the two components.
+            star_fluxes[j] = psfflux
+            gal_fluxes[j] = frac_dev * devflux + (1.0 - frac_dev) * expflux
         end
-    end
-    for yc in ycoords
-        if yc < zero(S) || yc >= size(data, 2) + 1
-            error("y coordinates out of bounds")
-        end
+
+        # For shape parameters, we use the dominant component (dev or exp)
+        usedev = frac_dev > 0.5
+        fits_ab = usedev? catalog["ab_dev"][i] : catalog["ab_exp"][i]
+        fits_phi = usedev? catalog["phi_dev"][i] : catalog["phi_exp"][i]
+        fits_theta = usedev? catalog["theta_dev"][i] : catalog["theta_exp"][i]
+
+        # use tractor convention of defining phi as -1 * the phi catalog
+        fits_phi *= -1.0
+
+        # effective radius
+        re_arcsec = max(fits_theta, 1. / 30)
+        re_pixel = re_arcsec / 0.396
+
+        phi90 = 90 - fits_phi
+        phi90 -= floor(phi90 / 180) * 180
+        phi90 *= (pi / 180)
+
+        entry = CatalogEntry(worldcoords, catalog["is_star"][i], star_fluxes,
+                             gal_fluxes, frac_dev, fits_ab, phi90, re_pixel,
+                             catalog["objid"][i], Int(catalog["thing_id"][i]))
+        out[i] = entry
     end
 
-    out = Array(T, length(xcoords), length(ycoords))
-    for j=1:length(ycoords)
-        y0 = floor(Int, ycoords[j])
-        y1 = y0 + 1
-        yw0 = ycoords[j] - y0
-        yw1 = one(S) - yw0
-        y0 = max(y0, 1)
-        y1 = min(y1, size(data, 2))
-        for i=1:length(xcoords)
-            x0 = floor(Int, xcoords[i])
-            x1 = x0 + 1
-            xw0 = xcoords[i] - x0
-            xw1 = one(S) - xw0
-            x0 = max(x0, 1)
-            x1 = min(x1, size(data, 1))
-            @inbounds out[i, j] = (xw0 * yw0 * data[x0, y0] +
-                                   xw1 * yw0 * data[x1, y0] +
-                                   xw0 * yw1 * data[x0, y1] +
-                                   xw1 * yw1 * data[x1, y1])
-        end
-    end
     return out
 end
 
-function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
-    b_letter = band_letters[b]
+"""
+read_photoobj_celeste(fname)
 
-    fname = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$field_num.fits"
-    @assert(isfile(fname), "Cannot find $(fname)")
-    f = FITSIO.FITS(fname)
-
-    # This is the sky-subtracted and calibrated image.
-    image = read(f[1])::Array{Float32, 2}
-
-    # Read in the sky background.
-    sky_small = squeeze(read(f[3], "ALLSKY"), 3)::Array{Float32, 2}
-    sky_x = vec(read(f[3], "XINTERP"))::Vector{Float32}
-    sky_y = vec(read(f[3], "YINTERP"))::Vector{Float32}
-
-    # convert sky interpolation coordinates from 0-indexed to 1-indexed
-    for i=1:length(sky_x)
-        sky_x[i] += 1.0f0
-    end
-    for i=1:length(sky_y)
-        sky_y[i] += 1.0f0
-    end
-
-    # Load the WCSTransform
-    header_str = FITSIO.read_header(f[1], ASCIIString)::ASCIIString
-    wcs = WCS.from_header(header_str)[1]
-
-    # Calibration vector
-    calibration = read(f[2])::Vector{Float32}
-
-    close(f)
-
-    # interpolate to full sky image
-    sky = interp_sky(sky_small, sky_x, sky_y)
-
-    # Convert image to raw electron counts.  Note that these may not
-    # be close to integers due to the analog to digital conversion
-    # process in the telescope.
-    for j=1:size(image, 2), i=1:size(image, 1)
-        image[i, j] = gain * (image[i, j] / calibration[i] + sky[i, j])
-    end
-
-    image, calibration, sky, wcs
+Read a SDSS \"photoobj\" FITS catalog into a Vector{CatalogEntry}.
+"""
+function read_photoobj_celeste(fname)
+    catalog = SDSSIO.read_photoobj(fname)
+    return Vector{CatalogEntry}(catalog)
 end
 
-"""
-load_sdss_field_gains(fname, fieldnum)
-
-Return the image gains for field number `fieldnum` in an SDSS
-\"photoField\" file `fname`.
-"""
-function load_sdss_field_gains(fname, fieldnum::Integer)
-
-    f = FITSIO.FITS(fname)
-    fieldnums = read(f[2], "FIELD")::Vector{Int32}
-    gains = read(f[2], "GAIN")::Array{Float32, 2}
-    close(f)
-
-    # Find first occurance of `fieldnum` and return the corresponding gain.
-    for i=1:length(fieldnums)
-        fieldnums[i] == fieldnum && return gains[:, i]
-    end
-
-    error("field number $fieldnum not found in file: $fname")
-end
-
-
-"""
-load_sdss_mask(fname[, mask_planes])
-
-Read a \"fpM\"-format SDSS file and return masked image ranges,
-based on `mask_planes`. Returns two `Vector{UnitRange{Int}}`,
-giving the range of x and y indicies to be masked.
-"""
-function load_sdss_mask(fname, mask_planes=DEFAULT_MASK_PLANES)
-    f = FITSIO.FITS(fname)
-
-    # The last (12th) HDU contains a key describing what each of the
-    # other HDUs are. Use this to find the indicies of all the relevant
-    # HDUs (those with attributeName matching a value in `mask_planes`).
-    value = read(f[12], "Value")::Vector{Int32}
-    def = read(f[12], "defName")::Vector{ASCIIString}
-    attribute = read(f[12], "attributeName")::Vector{ASCIIString}
-
-    # initialize return values
-    xranges = UnitRange{Int}[]
-    yranges = UnitRange{Int}[]
-
-    # Loop over keys and check if each is a mask plane we're interested in
-    # (those with defName == "S_MASKTYPE" and "attributeName" in mask_planes).
-    # If so, read from the corresponding HDU and construct ranges to mask.
-    for i=1:length(value)
-        if (def[i] == "S_MASKTYPE" && attribute[i] in mask_planes)
-
-            # `value` starts from 0, but first table hdu is hdu number 2
-            hdunum = value[i] + 2
-
-            cmin = read(f[hdunum], "cmin")::Vector{Int32}
-            cmax = read(f[hdunum], "cmax")::Vector{Int32}
-            rmin = read(f[hdunum], "rmin")::Vector{Int32}
-            rmax = read(f[hdunum], "rmax")::Vector{Int32}
-
-            # "c" ("column") refers to mask's NAXIS1 (x axis);
-            # "r" ("row") refers to mask's NAXIS2 (y axis).
-            # cmin/cmax and rmin/rmax are 0-based and inclusive, so we add 1
-            # to both.
-            for j=1:length(cmin)
-                push!(xranges, (cmin[j] + 1):(cmax[j] + 1))
-                push!(yranges, (rmin[j] + 1):(rmax[j] + 1))
-            end
-        end
-    end
-
-    return xranges, yranges
-end
-
-
-"""
-load_sdss_psf(fname, b)
-
-Read a `RawPSFComponents` for band number `b` from the SDSS \"psField\"
-file `fname`. `b` must be in range 1:5.
-"""
-function load_sdss_psf(fname, b::Integer)
-    @assert b in 1:5
-
-    f = FITSIO.FITS(fname)
-    hdu = f[b + 1]
-    nrows = FITSIO.read_key(hdu, "NAXIS2")[1]::Int
-    nrow_b = (read(hdu, "nrow_b")::Vector{Int32})[1]
-    ncol_b = (read(hdu, "ncol_b")::Vector{Int32})[1]
-    rnrow = (read(hdu, "rnrow")::Vector{Int32})[1]
-    rncol = (read(hdu, "rncol")::Vector{Int32})[1]
-    cmat_raw = read(hdu, "c")::Array{Float32, 3}
-    rrows_raw = read(hdu, "rrows")::Array{Array{Float32,1},1}
-    close(f)
-
-    # Only the first (nrow_b, ncol_b) submatrix of cmat is used for reasons obscure
-    # to the author.
-    cmat = Array(Float64, nrow_b, ncol_b, size(cmat_raw, 3))
-    for k=1:size(cmat_raw, 3), j=1:nrow_b, i=1:ncol_b
-        cmat[i, j, k] = cmat_raw[i, j, k]
-    end
-
-    # convert rrows to Array{Float64, 2}, assuming each row is the same length.
-    rrows = Array(Float64, length(rrows_raw[1]), length(rrows_raw))
-    for i=1:length(rrows_raw)
-        rrows[:, i] = rrows_raw[i]
-    end
-
-    return PSF.RawPSFComponents(rrows, rnrow, rncol, cmat)
-end
+#
+# The fname in the old `load_raw_field`:
+#
+#     b_letter = band_letters[b]
+#     fname = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$field_num.fits"
+#
 
 
 """
@@ -288,7 +150,7 @@ function convert_catalog_to_celeste(
 
         CatalogEntry(x_y, row[1, :is_star], star_fluxes,
             gal_fluxes, row[1, :frac_dev], fits_ab, phi90, re_pixel,
-            row[1, :objid])
+            row[1, :objid], 0)
     end
 
     CatalogEntry[row_to_ce(df[i, :]) for i in 1:size(df, 1)]
@@ -348,88 +210,77 @@ end
 
 
 """
-Read a blob from SDSS.
+read_sdss_field(run, camcol, field, frame_dir; ...)
 
-Args:
- - field_dir: The directory of the file
- - run_num: The run number
- - camcol_num: The camcol number
- - field_num: The field number
-
-Returns:
- - A blob (array of Image objects).
+Read a SDSS run/camcol/field into an array of Images. `frame_dir` is the
+directory in which to find SDSS \"frame\" files. This function accepts
+optional keyword arguments `fpm_dir`, `psfield_dir` and `photofield_dir`
+giving the directories of fpM, psField and photoField files. The defaults
+for these arguments is `frame_dir`.
 """
-function load_sdss_blob(field_dir, run_num, camcol_num, field_num;
-  mask_planes =
-    Set(["S_MASK_INTERP", "S_MASK_SATUR", "S_MASK_CR", "S_MASK_GHOST"]))
+function read_sdss_field(run::Integer, camcol::Integer, field::Integer,
+                         frame_dir::ByteString;
+                         fpm_dir::ByteString=frame_dir,
+                         psfield_dir::ByteString=frame_dir,
+                         photofield_dir::ByteString=frame_dir)
 
-    # Read gain for each band from "photoField" file.
-    pf_fname = "$field_dir/photoField-$run_num-$camcol_num.fits"
-    @assert(isfile(pf_fname), "Cannot find $(pf_fname)")
-    gains = load_sdss_field_gains(pf_fname, parse(Int, field_num))
+    # read gain for each band
+    photofield_name = @sprintf("%s/photoField-%06d-%d.fits",
+                               photofield_dir, run, camcol)
+    gains = SDSSIO.read_field_gains(photofield_name, field)
 
-    blob = Array(Image, 5)
-    for b=1:5
-        print("Reading band $b image data... ")
-        nelec, calib_col, sky_image, wcs =
-            load_raw_field(field_dir, run_num, camcol_num,
-                           field_num, b, gains[b])
+    # open FITS file containing PSF for each band
+    psf_name = @sprintf("%s/psField-%06d-%d-%04d.fit",
+                        psfield_dir, run, camcol, field)
+    psffile = FITSIO.FITS(psf_name)
 
-        letter = band_letters[b]
-        mask_fname = joinpath(field_dir,
-                              "fpM-$run_num-$letter$camcol_num-$field_num.fit")
-        @assert(isfile(mask_fname), "Cannot find mask file $(mask_fname)")
+    result = Array(Image, 5)
 
-        print("masking image... ")
-        mask_xranges, mask_yranges = load_sdss_mask(mask_fname, mask_planes)
+    for (bandnum, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
+
+        # load image data
+        frame_name = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
+                              frame_dir, band, run, camcol, field)
+        data, calibration, sky, wcs = SDSSIO.read_frame(frame_name)
+
+        # scale data to raw electron counts
+        SDSSIO.decalibrate!(data, sky, calibration, gains[band])
+
+        # read mask
+        mask_name = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
+                             fpm_dir, run, band, camcol, field)
+        mask_xranges, mask_yranges = SDSSIO.read_mask(mask_name)
 
         # apply mask
         for i=1:length(mask_xranges)
-            nelec[mask_xranges[i], mask_yranges[i]] = NaN
+            data[mask_xranges[i], mask_yranges[i]] = NaN
         end
 
-        H = size(nelec, 1)
-        W = size(nelec, 2)
+        H, W = size(data)
 
-        # For now, use the median noise and sky image.  Here,
+        # read the psf
+        sdsspsf = SDSSIO.read_psf(psffile, band)
+
+        # evalute the psf in the center of the image and then fit it.
+        psfstamp = sdsspsf(H / 2., W / 2.)
+        psf = fit_raw_psf_for_celeste(psfstamp)
+
+        # For now, use the median noise and sky.  Here,
         # epsilon * iota needs to be in units comparable to nelec
         # electron counts.
         # Note that each are actuall pretty variable.
-        iota = convert(Float64, gains[b] / median(calib_col))
-        epsilon = convert(Float64, median(sky_image) * median(calib_col))
-        epsilon_mat = Array(Float64, H, W)
-        iota_vec = Array(Float64, H)
-        for h=1:H
-            iota_vec[h] = gains[b] / calib_col[h]
-            for w=1:W
-                epsilon_mat[h, w] = sky_image[h, w] * calib_col[h]
-            end
-        end
-
-        # Load and fit the psf.
-        print("reading psf... ")
-        psf_fname = "$field_dir/psField-$run_num-$camcol_num-$field_num.fit"
-        @assert(isfile(psf_fname), "Cannot find mask file $(psf_fname)")
-        raw_psf_comp = load_sdss_psf(psf_fname, b)
-
-        # For now, evaluate the psf at the middle of the image.
-        psf_point_x = H / 2
-        psf_point_y = W / 2
-
-        raw_psf = get_psf_at_point(psf_point_x, psf_point_y, raw_psf_comp);
-        psf = fit_raw_psf_for_celeste(raw_psf);
-
-        println("done.")
+        iota = Float64(gains[band] / median(calibration))
+        epsilon = Float64(median(sky) * median(calibration))
+        iota_vec = convert(Vector{Float64}, gains[band] ./ calibration)
+        epsilon_mat = convert(Array{Float64, 2}, sky .* calibration)
 
         # Set it to use a constant background but include the non-constant data.
-        blob[b] = Image(H, W, nelec, b, wcs, epsilon, iota, psf,
-                      parse(Int, run_num),
-                      parse(Int, camcol_num),
-                      parse(Int, field_num),
-                      false, epsilon_mat, iota_vec, raw_psf_comp)
+        result[bandnum] = Image(H, W, data, bandnum, wcs, epsilon, iota, psf,
+                                run, camcol, field, false, epsilon_mat,
+                                iota_vec, sdsspsf)
     end
 
-    blob
+    return result
 end
 
 
@@ -457,7 +308,7 @@ function crop_blob_to_location(
     tiled_blob = Array(TiledImage, length(blob))
     for b=1:5
         # Get the pixels that are near enough to the wcs_center.
-        pix_center = WCSUtils.world_to_pix(blob[b].wcs, wcs_center)
+        pix_center = WCS.world_to_pix(blob[b].wcs, wcs_center)
         h_min = max(floor(Int, pix_center[1] - width), 1)
         h_max = min(ceil(Int, pix_center[1] + width), blob[b].H)
         sub_rows_h = h_min:h_max
@@ -532,10 +383,9 @@ function get_source_psf(world_loc::Vector{Float64}, img::Image)
     if size(img.raw_psf_comp.rrows) == (0, 0)
       return img.psf
     else
-      pixel_loc = WCSUtils.world_to_pix(img.wcs, world_loc)
-      raw_psf =
-        PSF.get_psf_at_point(pixel_loc[1], pixel_loc[2], img.raw_psf_comp);
-      return fit_raw_psf_for_celeste(raw_psf);
+      pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
+      psfstamp = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
+      return fit_raw_psf_for_celeste(psfstamp)
     end
 end
 
@@ -587,7 +437,7 @@ function world_radius_to_pixel(world_radius::Float64,
 end
 
 
-import SloanDigitalSkySurvey.WCSUtils.world_to_pix
+import WCS.world_to_pix
 world_to_pix{T <: Number}(patch::SkyPatch, world_loc::Vector{T}) =
     world_to_pix(patch.wcs_jacobian, patch.center, patch.pixel_center,
                  world_loc)
