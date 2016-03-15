@@ -483,6 +483,27 @@ getids(::Type{UnconstrainedParams}) = ids_free
 length(::Type{UnconstrainedParams}) =  6 + 2*Ia + 2*(B-1)*Ia + (D-1)*Ia + Ia-1
 
 
+# Parameters for a representation of the PSF
+# TODO: have each component be a "source"?
+type PsfParams <: Types.ParamSet
+    mu_vec::Vector{Vector{Int}}
+    e_axis_vec::Vector{Int}
+    e_angle_vec::Vector{Int}
+    e_scale_vec::Vector{Int}
+    weight_vec::Vector{Int}
+
+    function PsfParams()
+      mu_ids = Array(Vector{Int}, 2)
+      mu_ids[1] = Int64[1, 2]
+      mu_ids[2] = Int64[3, 4]
+      new(mu_ids, [5, 6], [7, 8], [9, 10], [11, 12])
+    end
+end
+const psf_ids = PsfParams()
+getids(::Type{PsfParams}) = psf_ids
+length(::Type{PsfParams}) = 12
+
+
 # define length(value) in addition to length(Type) for ParamSets
 length{T<:ParamSet}(::T) = length(T)
 
