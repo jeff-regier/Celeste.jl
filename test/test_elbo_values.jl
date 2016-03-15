@@ -3,7 +3,6 @@ import Celeste: SkyImages, ModelInit
 
 using Base.Test
 using Distributions
-using BivariateNormals
 
 import SloanDigitalSkySurvey: SDSS, WCSUtils
 
