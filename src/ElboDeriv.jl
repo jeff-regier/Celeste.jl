@@ -821,7 +821,7 @@ function process_active_pixels!{NumType <: Number}(
       mp, tile_sources, include_epsilon=true)
 
     # Add the terms to the elbo given the brightness.
-    iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
+    iota = tile.constant_background ? tile.iota : tile.iota_vec[pixel.h]
     add_elbo_log_term!(elbo_vars_array[1], this_pixel, iota)
     add_scaled_sfs!(elbo_vars_array[1].elbo,
                     elbo_vars_array[1].E_G, -iota,
