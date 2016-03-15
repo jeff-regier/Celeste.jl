@@ -2,7 +2,6 @@ module SkyImages
 
 using ..Types
 import ..SDSSIO
-import ..ModelInit
 import SloanDigitalSkySurvey: PSF, SDSS
 import SloanDigitalSkySurvey.PSF.get_psf_at_point
 
@@ -14,7 +13,6 @@ import ..Util
 
 import Base.convert
 
-
 export load_stamp_blob, crop_image!, get_psf_at_point,
        convert_catalog_to_celeste, load_stamp_catalog,
        break_blob_into_tiles, break_image_into_tiles,
@@ -22,8 +20,6 @@ export load_stamp_blob, crop_image!, get_psf_at_point,
        stitch_object_tiles
 
 include("psf.jl")
-
-export fit_psf_gaussians_least_squares
 
 """
 Convert from a catalog in dictionary-of-arrays, as returned by
@@ -332,23 +328,11 @@ end
 # PSF functions
 
 
-"""
-A wrapper around the SloanDigitalSkySurvey least squares fit and conversion
-to a Celeste psf object.
-
-Args:
-  - raw_psf: A matrix with the image of a psf
-  - ftol: The tolerance to which to fit the psf.  Note that you get improvements
-          up to 1e-8 or 1e-9, but at the cost of a big slowdown.
-
-Returns:
-  - An array of Celeste PSF objects.
-"""
-function fit_raw_psf_for_celeste(raw_psf::Matrix{Float64}; ftol=1e-5)
+function fit_raw_psf_for_celeste(raw_psf::Matrix{Float64})
   # TODO: this is very slow, and we should do it in Celeste rather
   # than rely on Optim.
   opt_result, mu_vec, sigma_vec, weight_vec =
-    ModelInit.fit_psf_gaussians_least_squares(raw_psf, K=psf_K, ftol=ftol);
+    fit_psf_gaussians_least_squares(raw_psf, K=psf_K, ftol=1e-5);
   PsfComponent[ PsfComponent(weight_vec[k], mu_vec[k], sigma_vec[k])
     for k=1:psf_K]
 end
