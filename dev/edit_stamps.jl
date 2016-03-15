@@ -53,7 +53,7 @@ for band_letter in band_letters
 
   print("Fitting ... ")
   optim_result, mu_vec, sigma_vec, weight_vec =
-    PSF.fit_psf_gaussians_least_squares(psf_original_rendered, K=2, verbose=false);
+    ModelInit.fit_psf_gaussians_least_squares(psf_original_rendered, K=2, verbose=false);
   println("done.")
   # Return to the original scale.  Note that since it is a density, the
   # weights need to change as well.
