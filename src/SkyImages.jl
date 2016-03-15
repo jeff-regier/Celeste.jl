@@ -425,7 +425,7 @@ end
 # axis of that ellipse.
 function pixel_radius_to_world(pix_radius::Float64,
                                wcs_jacobian::Matrix{Float64})
-  pix_radius / minimum(abs(eig(wcs_jacobian)[1]));
+  pix_radius / minimum(abs(eigvals(wcs_jacobian)));
 end
 
 
@@ -433,7 +433,7 @@ end
 # axis of that ellipse.
 function world_radius_to_pixel(world_radius::Float64,
                                wcs_jacobian::Matrix{Float64})
-  world_radius * maximum(abs(eig(wcs_jacobian)[1]));
+  world_radius * maximum(abs(eigvals(wcs_jacobian)));
 end
 
 
@@ -465,16 +465,19 @@ function local_source_candidates(
             for s=1:length(patches)];
 
   candidates = fill(Int[], size(tiles));
-  for h=1:size(tiles)[1], w=1:size(tiles)[2]
+  for h=1:size(tiles, 1), w=1:size(tiles, 2)
     # Find the patches that are less than the radius plus diagonal from the
     # center of the tile.  These are candidates for having some
     # overlap with the tile.
     tile = tiles[h, w]
     tile_center = [ mean(tile.h_range), mean(tile.w_range)]
     tile_diag = (0.5 ^ 2) * (tile.h_width ^ 2 + tile.w_width ^ 2)
-    patch_distances =
-      [ sum((tile_center .- patches[s].pixel_center) .^ 2) for
-        s=1:length(patches)]
+
+    patch_distances = zeros(length(patches))
+    for s in 1:length(patches)
+        patch_distances[s] += (tile_center[1] - patches[s].pixel_center[1])^2
+        patch_distances[s] += (tile_center[2] - patches[s].pixel_center[2])^2
+    end
     candidates[h, w] =
       find(patch_distances .<= (tile_diag .+ patch_pixel_radii) .^ 2)
   end
