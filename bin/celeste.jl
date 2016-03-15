@@ -7,7 +7,7 @@ const DOC =
 """Run Celeste.
 
 Usage:
-  celeste.jl infer-nersc <ramin> <ramax> <decmin> <decmax>
+  celeste.jl infer-nersc <ramin> <ramax> <decmin> <decmax> <outdir>
   celeste.jl score
   celeste.jl -h | --help
   celeste.jl --version
@@ -30,7 +30,8 @@ function main()
         ramax = parse(Float64, args["<ramax>"])
         decmin = parse(Float64, args["<decmin>"])
         decmax = parse(Float64, args["<decmax>"])
-        Celeste.infer_nersc(ramin, ramax, decmin, decmax)
+        outdir = args["<outdir>"]
+        Celeste.infer_nersc(ramin, ramax, decmin, decmax, outdir)
     elseif args["score"]
         error("score not yet implemented for infer-nersc")
     end
