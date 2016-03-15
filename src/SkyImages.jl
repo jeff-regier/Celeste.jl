@@ -34,7 +34,7 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{ASCIIString, Any})
         star_fluxes = zeros(5)
         gal_fluxes = zeros(5)
         for (j, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
-            
+
             # Make negative fluxes positive.
             # TODO: How can there be negative fluxes?
             psfflux = max(catalog["psfflux_$band"][i], 1e-6)
@@ -326,11 +326,23 @@ end
 # PSF functions
 
 
-function fit_raw_psf_for_celeste(raw_psf::Matrix{Float64})
+"""
+A wrapper around the SloanDigitalSkySurvey least squares fit and conversion
+to a Celeste psf object.
+
+Args:
+  - raw_psf: A matrix with the image of a psf
+  - ftol: The tolerance to which to fit the psf.  Note that you get improvements
+          up to 1e-8 or 1e-9, but at the cost of a big slowdown.
+
+Returns:
+  - An array of Celeste PSF objects.
+"""
+function fit_raw_psf_for_celeste(raw_psf::Matrix{Float64}; ftol=1e-5)
   # TODO: this is very slow, and we should do it in Celeste rather
   # than rely on Optim.
   opt_result, mu_vec, sigma_vec, weight_vec =
-    PSF.fit_psf_gaussians_least_squares(raw_psf, K=psf_K);
+    PSF.fit_psf_gaussians_least_squares(raw_psf, K=psf_K, ftol=ftol);
   PsfComponent[ PsfComponent(weight_vec[k], mu_vec[k], sigma_vec[k])
     for k=1:psf_K]
 end
