@@ -741,7 +741,7 @@ function test_galaxy_variable_transform()
   sig_sf = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma);
   gcc = GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x);
+  eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x);
   get_bvn_derivs!(elbo_vars.bvn_derivs, bmc, true, true);
   transform_bvn_derivs!(
     elbo_vars.bvn_derivs, gcc.sig_sf, patch.wcs_jacobian, true);
@@ -831,7 +831,7 @@ function test_galaxy_cache_component()
           e_dev_dir, e_dev_i, gp, psf,
           u_pix, e_axis, e_angle, e_scale, true, true);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x);
+  eval_bvn_pdf!(elbo_vars.bvn_derivs, gcc.bmc, x);
   get_bvn_derivs!(elbo_vars.bvn_derivs, gcc.bmc, true, true);
   transform_bvn_derivs!(elbo_vars.bvn_derivs, gcc.sig_sf, patch.wcs_jacobian, true);
 
