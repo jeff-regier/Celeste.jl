@@ -4,6 +4,8 @@ module ElboDeriv
 
 using ..Types
 using ..SensitiveFloats
+using ..BivariateNormals
+
 import ..Util
 import ..KL
 
@@ -29,73 +31,6 @@ end
 type HessianSubmatrices{NumType <: Number}
   u_u::Matrix{NumType}
   shape_shape::Matrix{NumType}
-end
-
-
-"""
-Pre-allocated memory for quantities related to derivatives of bivariate
-normals.
-"""
-type BivariateNormalDerivatives{NumType <: Number}
-
-  # Pre-allocated memory for py1, py2, and f when evaluating BVNs
-  py1::Array{NumType, 1}
-  py2::Array{NumType, 1}
-  f_pre::Array{NumType, 1}
-
-  # Derivatives of a bvn with respect to (x, sig).
-  bvn_x_d::Array{NumType, 1}
-  bvn_sig_d::Array{NumType, 1}
-  bvn_xx_h::Array{NumType, 2}
-  bvn_xsig_h::Array{NumType, 2}
-  bvn_sigsig_h::Array{NumType, 2}
-
-  # intermediate values used in d bvn / d(x, sig)
-  dpy1_dsig::Array{NumType, 1}
-  dpy2_dsig::Array{NumType, 1}
-
-  # TODO: delete this, it is now in BvnComponent
-  dsiginv_dsig::Array{NumType, 2}
-
-  # Derivatives of a bvn with respect to (u, shape)
-  bvn_u_d::Array{NumType, 1}
-  bvn_uu_h::Array{NumType, 2}
-  bvn_s_d::Array{NumType, 1}
-  bvn_ss_h::Array{NumType, 2}
-  bvn_us_h::Array{NumType, 2}
-
-  function BivariateNormalDerivatives(ThisNumType::DataType)
-    py1 = zeros(ThisNumType, 1)
-    py2 = zeros(ThisNumType, 1)
-    f_pre = zeros(ThisNumType, 1)
-
-    bvn_x_d = zeros(ThisNumType, 2)
-    bvn_sig_d = zeros(ThisNumType, 3)
-    bvn_xx_h = zeros(ThisNumType, 2, 2)
-    bvn_xsig_h = zeros(ThisNumType, 2, 3)
-    bvn_sigsig_h = zeros(ThisNumType, 3, 3)
-
-    dpy1_dsig = zeros(ThisNumType, 3)
-    dpy2_dsig = zeros(ThisNumType, 3)
-    dsiginv_dsig = zeros(ThisNumType, 3, 3)
-
-    # Derivatives wrt u.
-    bvn_u_d = zeros(ThisNumType, 2)
-    bvn_uu_h = zeros(ThisNumType, 2, 2)
-
-    # Shape deriviatives.  Here, s stands for "shape".
-    bvn_s_d = zeros(ThisNumType, length(gal_shape_ids))
-
-    # The hessians.
-    bvn_ss_h = zeros(ThisNumType, length(gal_shape_ids), length(gal_shape_ids))
-    bvn_us_h = zeros(ThisNumType, 2, length(gal_shape_ids))
-
-    new(py1, py2, f_pre,
-        bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
-        dpy1_dsig, dpy2_dsig,
-        dsiginv_dsig,
-        bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h)
-  end
 end
 
 
@@ -218,7 +153,6 @@ end
 
 include("elbo_kl.jl")
 include("source_brightness.jl")
-include("bivariate_normals.jl")
 
 
 """
@@ -244,18 +178,18 @@ function accum_star_pos!{NumType <: Number}(
     wcs_jacobian::Array{Float64, 2},
     calculate_derivs::Bool)
 
-  eval_bvn_pdf_in_place!(elbo_vars, bmc, x)
+  eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x)
 
   # TODO: Also make a version that doesn't calculate any derivatives
   # if the object isn't in active_sources.
-  get_bvn_derivs_in_place!(elbo_vars, bmc, true, false);
+  get_bvn_derivs!(elbo_vars.bvn_derivs, bmc, true, false);
 
   fs0m = elbo_vars.fs0m_vec[s]
   fs0m.v[1] += elbo_vars.bvn_derivs.f_pre[1]
 
   if elbo_vars.calculate_derivs && calculate_derivs
-    # transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
-    transform_bvn_ux_derivs!(elbo_vars, wcs_jacobian)
+    transform_bvn_ux_derivs!(
+      elbo_vars.bvn_derivs, wcs_jacobian, elbo_vars.calculate_hessian)
     bvn_u_d = elbo_vars.bvn_derivs.bvn_u_d
     bvn_uu_h = elbo_vars.bvn_derivs.bvn_uu_h
 
@@ -277,7 +211,6 @@ function accum_star_pos!{NumType <: Number}(
 
   true # Set return type
 end
-
 
 
 """
@@ -303,16 +236,17 @@ function accum_galaxy_pos!{NumType <: Number}(
     wcs_jacobian::Array{Float64, 2},
     calculate_derivs::Bool)
 
-  eval_bvn_pdf_in_place!(elbo_vars, gcc.bmc, x)
+  eval_bvn_pdf!(elbo_vars.bvn_derivs, gcc.bmc, x)
   f = elbo_vars.bvn_derivs.f_pre[1] * gcc.e_dev_i
   fs1m = elbo_vars.fs1m_vec[s];
   fs1m.v[1] += f
 
   if elbo_vars.calculate_derivs && calculate_derivs
 
-    get_bvn_derivs_in_place!(elbo_vars, gcc.bmc,
+    get_bvn_derivs!(elbo_vars.bvn_derivs, gcc.bmc,
       elbo_vars.calculate_hessian, elbo_vars.calculate_hessian);
-    transform_bvn_derivs!(elbo_vars, gcc, wcs_jacobian)
+    transform_bvn_derivs!(
+      elbo_vars.bvn_derivs, gcc.sig_sf, wcs_jacobian, elbo_vars.calculate_hessian)
 
     bvn_u_d = elbo_vars.bvn_derivs.bvn_u_d
     bvn_uu_h = elbo_vars.bvn_derivs.bvn_uu_h
