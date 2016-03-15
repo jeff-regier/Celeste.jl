@@ -135,15 +135,6 @@ function infer(ra_range::Tuple{Float64, Float64},
         end
     end
 
-    # Limit catalog to ra, dec range.
-    mask = ((rawcatalog["ra"] .> ra_range[1]) &
-            (rawcatalog["ra"] .< ra_range[2]) &
-            (rawcatalog["dec"] .> dec_range[1]) &
-            (rawcatalog["dec"] .< dec_range[2]))
-    for key in keys(rawcatalog)
-        rawcatalog[key] = rawcatalog[key][mask]
-    end
-
     # check that there are no duplicate thing_ids (see above comment)
     if length(Set(rawcatalog["thing_id"])) < length(rawcatalog["thing_id"])
         error("Found one or more duplicate primary thing_ids in photoobj " *
@@ -156,10 +147,15 @@ function infer(ra_range::Tuple{Float64, Float64},
     # Filter out low-flux objects in the catalog.
     catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
 
-    info("processing $(length(catalog)) sources")
+    # Get indicies of entries in the  RA/Dec range of interest.
+    entry_in_range = entry->((ra_range[1] < entry.pos[1] < ra_range[2]) &&
+                             (dec_range[1] < entry.pos[2] < dec_range[2]))
+    idx = find(entry_in_range, catalog)
 
-    # If there are no objects in catalog, return early.
-    if length(catalog) == 0
+    info("processing $(length(idx)) sources")
+
+    # If there are no objects of interest, return early.
+    if length(idx) == 0
         return Dict{Int, Dict}()
     end
 
@@ -181,7 +177,8 @@ function infer(ra_range::Tuple{Float64, Float64},
                                                         fit_psf=false)
 
     results = Dict{Int, Dict}()
-    for (i, entry) in enumerate(catalog)
+    for i in idx
+        entry = catalog[i]
         info("processing source $i: objid= $(entry.objid)")
 
         t0 = time()
