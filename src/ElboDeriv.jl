@@ -159,73 +159,73 @@ include("source_brightness.jl")
 # Version of BVN functions that use ElboIntermediateVariables
 
 
-function eval_bvn_pdf_in_place!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
-    bmc::BvnComponent{NumType}, x::Vector{Float64})
-
-  eval_bvn_pdf_in_place!(elbo_vars.bvn_derivs, bmc, x)
-end
-
-
-function get_bvn_derivs_in_place!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
-    bvn::BvnComponent{NumType},
-    calculate_x_hess::Bool,
-    calculate_sigma_hessian::Bool)
-
-  # TODO: get rid of redundant function when you're sure it's working
-  get_bvn_derivs!(
-    elbo_vars.bvn_derivs, bvn, calculate_x_hess, calculate_sigma_hessian)
-end
+# function eval_bvn_pdf!{NumType <: Number}(
+#     elbo_vars::ElboIntermediateVariables{NumType},
+#     bmc::BvnComponent{NumType}, x::Vector{Float64})
+#
+#   eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x)
+# end
 
 
-function transform_bvn_ux_derivs!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
-    wcs_jacobian::Array{Float64, 2})
+# function get_bvn_derivs_in_place!{NumType <: Number}(
+#     elbo_vars::ElboIntermediateVariables{NumType},
+#     bvn::BvnComponent{NumType},
+#     calculate_x_hess::Bool,
+#     calculate_sigma_hessian::Bool)
+#
+#   # TODO: get rid of redundant function when you're sure it's working
+#   get_bvn_derivs!(
+#     elbo_vars.bvn_derivs, bvn, calculate_x_hess, calculate_sigma_hessian)
+# end
 
-  transform_bvn_ux_derivs!(
-    elbo_vars.bvn_derivs, wcs_jacobian, elbo_vars.calculate_hessian)
-end
+
+# function transform_bvn_ux_derivs!{NumType <: Number}(
+#     elbo_vars::ElboIntermediateVariables{NumType},
+#     wcs_jacobian::Array{Float64, 2})
+#
+#   transform_bvn_ux_derivs!(
+#     elbo_vars.bvn_derivs, wcs_jacobian, elbo_vars.calculate_hessian)
+# end
 
 
-function transform_bvn_derivs!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
-    gcc::GalaxyCacheComponent{NumType},
-    wcs_jacobian::Array{Float64, 2})
-
-  transform_bvn_derivs!(
-    elbo_vars.bvn_derivs, gcc.sig_sf, wcs_jacobian, elbo_vars.calculate_hessian)
-end
+# function transform_bvn_derivs!{NumType <: Number}(
+#     elbo_vars::ElboIntermediateVariables{NumType},
+#     gcc::GalaxyCacheComponent{NumType},
+#     wcs_jacobian::Array{Float64, 2})
+#
+#   transform_bvn_derivs!(
+#     elbo_vars.bvn_derivs, gcc.sig_sf, wcs_jacobian, elbo_vars.calculate_hessian)
+# end
 
 
 
 #################################################
 # Elbo-specific functions
 
-"""
-Calculate the value, gradient, and hessian of
-  -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
-with respect to x and sigma.
-
-Args:
-  - elbo_vars: A data structure with pre-allocated intermediate variables.
-  - bvn: A bivariate normal component to get derivatives for.
-  - x: The vector at which to evaluate the bvn derivs.
-  - calculate_x_hess: Whether to calcualte x Hessian terms.
-  - calculate_sigma_hess: Whether to calcualte sigma Hessian terms.
-"""
-function get_bvn_derivs!{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
-    bvn::BvnComponent{NumType},
-    x::Vector{Float64},
-    calculate_x_hess::Bool,
-    calculate_sigma_hessian::Bool)
-
-  eval_bvn_pdf_in_place!(elbo_vars, bvn, x);
-  get_bvn_derivs_in_place!(
-    elbo_vars, bvn, calculate_x_hess, calculate_sigma_hessian)
-end
-
+# """
+# Calculate the value, gradient, and hessian of
+#   -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
+# with respect to x and sigma.
+#
+# Args:
+#   - elbo_vars: A data structure with pre-allocated intermediate variables.
+#   - bvn: A bivariate normal component to get derivatives for.
+#   - x: The vector at which to evaluate the bvn derivs.
+#   - calculate_x_hess: Whether to calcualte x Hessian terms.
+#   - calculate_sigma_hess: Whether to calcualte sigma Hessian terms.
+# """
+# function get_bvn_derivs!{NumType <: Number}(
+#     elbo_vars::ElboIntermediateVariables{NumType},
+#     bvn::BvnComponent{NumType},
+#     x::Vector{Float64},
+#     calculate_x_hess::Bool,
+#     calculate_sigma_hessian::Bool)
+#
+#   eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x);
+#   get_bvn_derivs!(
+#     elbo_vars.bvn_derivs, bvn, calculate_x_hess, calculate_sigma_hessian)
+# end
+#
 
 """
 Add the contributions of a star's bivariate normal term to the ELBO,
@@ -250,18 +250,18 @@ function accum_star_pos!{NumType <: Number}(
     wcs_jacobian::Array{Float64, 2},
     calculate_derivs::Bool)
 
-  eval_bvn_pdf_in_place!(elbo_vars, bmc, x)
+  eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x)
 
   # TODO: Also make a version that doesn't calculate any derivatives
   # if the object isn't in active_sources.
-  get_bvn_derivs_in_place!(elbo_vars, bmc, true, false);
+  get_bvn_derivs!(elbo_vars.bvn_derivs, bmc, true, false);
 
   fs0m = elbo_vars.fs0m_vec[s]
   fs0m.v[1] += elbo_vars.bvn_derivs.f_pre[1]
 
   if elbo_vars.calculate_derivs && calculate_derivs
-    # transform_bvn_derivs!(elbo_vars, bmc, wcs_jacobian)
-    transform_bvn_ux_derivs!(elbo_vars, wcs_jacobian)
+    transform_bvn_ux_derivs!(
+      elbo_vars.bvn_derivs, wcs_jacobian, elbo_vars.calculate_hessian)
     bvn_u_d = elbo_vars.bvn_derivs.bvn_u_d
     bvn_uu_h = elbo_vars.bvn_derivs.bvn_uu_h
 
@@ -309,16 +309,17 @@ function accum_galaxy_pos!{NumType <: Number}(
     wcs_jacobian::Array{Float64, 2},
     calculate_derivs::Bool)
 
-  eval_bvn_pdf_in_place!(elbo_vars, gcc.bmc, x)
+  eval_bvn_pdf!(elbo_vars.bvn_derivs, gcc.bmc, x)
   f = elbo_vars.bvn_derivs.f_pre[1] * gcc.e_dev_i
   fs1m = elbo_vars.fs1m_vec[s];
   fs1m.v[1] += f
 
   if elbo_vars.calculate_derivs && calculate_derivs
 
-    get_bvn_derivs_in_place!(elbo_vars, gcc.bmc,
+    get_bvn_derivs!(elbo_vars.bvn_derivs, gcc.bmc,
       elbo_vars.calculate_hessian, elbo_vars.calculate_hessian);
-    transform_bvn_derivs!(elbo_vars, gcc, wcs_jacobian)
+    transform_bvn_derivs!(
+      elbo_vars.bvn_derivs, gcc.sig_sf, wcs_jacobian, elbo_vars.calculate_hessian)
 
     bvn_u_d = elbo_vars.bvn_derivs.bvn_u_d
     bvn_uu_h = elbo_vars.bvn_derivs.bvn_uu_h

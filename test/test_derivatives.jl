@@ -1,9 +1,8 @@
 using Base.Test
 import DualNumbers
 
-using Celeste: Types, SampleData, SensitiveFloats
-import Celeste: Synthetic, SkyImages, Util,
-                ElboDeriv, ModelInit, BivariateNormals
+using Celeste: Types, SampleData, SensitiveFloats, BivariateNormals, ElboDeriv
+import Celeste: Synthetic, SkyImages, Util, ModelInit
 import SloanDigitalSkySurvey: SDSS, WCSUtils
 
 if VERSION > v"0.5.0-dev"
@@ -26,10 +25,10 @@ This is the function of which get_bvn_derivs!() returns the derivatives.
 It is only used for testing.
 """
 function eval_bvn_log_density{NumType <: Number}(
-    elbo_vars::ElboIntermediateVariables{NumType},
+    elbo_vars::ElboDeriv.ElboIntermediateVariables{NumType},
     bvn::BvnComponent{NumType}, x::Vector{Float64})
 
-  eval_bvn_pdf_in_place!(elbo_vars, bvn, x);
+  eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x);
 
   -0.5 * (
     (x[1] - bvn.the_mean[1]) * elbo_vars.bvn_derivs.py1[1] +
@@ -515,7 +514,7 @@ function test_fs1m_derivatives()
 
       # Raw:
       gcc = gal_mcs[gcc_ind...];
-      BivariateNormals.eval_bvn_pdf_in_place!(elbo_vars_fd, gcc.bmc, x)
+      eval_bvn_pdf!(elbo_vars_fd.bvn_derivs, gcc.bmc, x)
       elbo_vars_fd.bvn_derivs.f_pre[1] * gcc.e_dev_i
     end
 
@@ -539,7 +538,7 @@ function test_fs1m_derivatives()
     # Two sanity checks.
     gcc = gal_mcs[gcc_ind...];
     clear!(elbo_vars.fs1m_vec[s]);
-    v = BivariateNormals.eval_bvn_log_density(elbo_vars, gcc.bmc, x);
+    v = eval_bvn_log_density(elbo_vars, gcc.bmc, x);
     gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
     pc = mp.patches[s, b].psf[gcc_ind[1]]
 
@@ -630,7 +629,8 @@ function test_bvn_derivatives()
 
   bvn = BvnComponent{Float64}(offset, sigma, weight);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  ElboDeriv.get_bvn_derivs!(elbo_vars, bvn, x, true, true);
+  eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x);
+  get_bvn_derivs!(elbo_vars.bvn_derivs, bvn, true, true);
 
   function bvn_function{T <: Number}(x::Vector{T}, sigma::Matrix{T})
     local_x = offset - x
@@ -656,7 +656,7 @@ function test_bvn_derivatives()
   par = wrap(x, sigma);
 
   # Sanity check
-  @test_approx_eq ElboDeriv.eval_bvn_log_density(elbo_vars, bvn, x) f_wrap(par)
+  @test_approx_eq eval_bvn_log_density(elbo_vars, bvn, x) f_wrap(par)
 
   bvn_derivs = elbo_vars.bvn_derivs
   ad_grad = ForwardDiff.gradient(f_wrap, par);
@@ -739,10 +739,12 @@ function test_galaxy_variable_transform()
   sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
   bmc = BvnComponent{Float64}(u_pix, sigma, 1.0);
   sig_sf = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma);
-  gcc = ElboDeriv.GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf);
+  gcc = GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  ElboDeriv.get_bvn_derivs!(elbo_vars, bmc, x, true, true);
-  ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
+  eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x);
+  get_bvn_derivs!(elbo_vars.bvn_derivs, bmc, true, true);
+  transform_bvn_derivs!(
+    elbo_vars.bvn_derivs, gcc.sig_sf, patch.wcs_jacobian, true);
 
   f_bvn_wrap(par)
 
@@ -803,11 +805,11 @@ function test_galaxy_cache_component()
       patch.wcs_jacobian, patch.center, patch.pixel_center, u)
     elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1)
     e_dev_i_fd = convert(T, e_dev_i)
-    gcc = ElboDeriv.GalaxyCacheComponent(
+    gcc = GalaxyCacheComponent(
             e_dev_dir, e_dev_i_fd, gp, psf,
             u_pix, e_axis, e_angle, e_scale, false, false);
 
-    ElboDeriv.eval_bvn_pdf_in_place!(elbo_vars_fd, gcc.bmc, x);
+    eval_bvn_pdf!(elbo_vars_fd.bvn_derivs, gcc.bmc, x);
 
     log(elbo_vars_fd.bvn_derivs.f_pre[1])
   end
@@ -825,12 +827,13 @@ function test_galaxy_cache_component()
   par = wrap_par(u, e_angle, e_axis, e_scale)
   u_pix = WCSUtils.world_to_pix(
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-  gcc = ElboDeriv.GalaxyCacheComponent(
+  gcc = GalaxyCacheComponent(
           e_dev_dir, e_dev_i, gp, psf,
           u_pix, e_axis, e_angle, e_scale, true, true);
   elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1);
-  ElboDeriv.get_bvn_derivs!(elbo_vars, gcc.bmc, x, true, true);
-  ElboDeriv.transform_bvn_derivs!(elbo_vars, gcc, patch.wcs_jacobian);
+  eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x);
+  get_bvn_derivs!(elbo_vars.bvn_derivs, gcc.bmc, true, true);
+  transform_bvn_derivs!(elbo_vars.bvn_derivs, gcc.sig_sf, patch.wcs_jacobian, true);
 
   # Sanity check the wrapper.
   @test_approx_eq(
@@ -979,11 +982,11 @@ end
 
 test_set_hess()
 test_dsiginv_dsig()
-test_brightness_hessian()
 test_bvn_derivatives()
 test_galaxy_sigma_derivs()
 test_galaxy_variable_transform()
 test_galaxy_cache_component()
+test_brightness_hessian()
 test_fs0m_derivatives()
 test_fs1m_derivatives()
 test_e_g_s_functions()

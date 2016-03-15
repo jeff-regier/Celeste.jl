@@ -12,7 +12,7 @@ export BivariateNormalDerivatives, BvnComponent, GalaxySigmaDerivs,
        GalaxyCacheComponent
 
 # Functions:
-export eval_bvn_pdf_in_place!, get_bvn_derivs!, transform_bvn_ux_derivs!,
+export eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_ux_derivs!,
        transform_bvn_derivs!, load_bvn_mixtures
 
 
@@ -152,7 +152,7 @@ Returns:
   - py2: The second row of the precision times (x - the_mean)
   - The density of the bivariate normal times the weight.
 """
-function eval_bvn_pdf_in_place!{NumType <: Number}(
+function eval_bvn_pdf!{NumType <: Number}(
     bvn_derivs::BivariateNormalDerivatives{NumType},
     bmc::BvnComponent{NumType}, x::Vector{Float64})
 
@@ -178,7 +178,7 @@ Calculate the value, gradient, and hessian of
   -0.5 * x' sigma^-1 x - 0.5 * log|sigma|
 with respect to x and sigma.  This assumes that
   bvn_derivs.py1, .py2, and .f_pre have already been populated
-  witha call to eval_bvn_pdf_in_place!.
+  witha call to eval_bvn_pdf!.
 
 Args:
   - elbo_vars: A data structure with pre-allocated intermediate variables.
