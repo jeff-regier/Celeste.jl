@@ -32,7 +32,7 @@ end
 
 function sample_ce(pos, is_star::Bool)
     CatalogEntry(pos, is_star, sample_star_fluxes, sample_galaxy_fluxes,
-        0.1, .7, pi/4, 4., "sample")
+        0.1, .7, pi/4, 4., "sample", 0)
 end
 
 
@@ -155,7 +155,7 @@ function gen_n_body_dataset(
   world_locations = WCSUtils.pix_to_world(blob0[3].wcs, locations)
 
   S_bodies = CatalogEntry[CatalogEntry(world_locations[:, s], true,
-      fluxes, fluxes, 0.1, .7, pi/4, 4., string(s)) for s in 1:S];
+      fluxes, fluxes, 0.1, .7, pi/4, 4., string(s), s) for s in 1:S];
 
   blob = Synthetic.gen_blob(blob0, S_bodies);
 

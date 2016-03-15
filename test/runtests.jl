@@ -24,8 +24,10 @@ else
                  "test_kl.jl",
                  "test_misc.jl",
                  "test_optimization.jl",
+                 "test_sdssio.jl",
                  "test_sensitive_float.jl",
-                 "test_transforms.jl"]
+                 "test_transforms.jl",
+                 "test_infer.jl"]
 end
 
 for testfile in testfiles

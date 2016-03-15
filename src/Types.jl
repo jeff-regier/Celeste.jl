@@ -24,7 +24,6 @@ export band_letters, D, Ia, B, psf_K, galaxy_prototypes,
        ids_free_names,
        ids, ids_free, star_ids, gal_ids, gal_shape_ids, bids
 
-using SloanDigitalSkySurvey.PSF.RawPSFComponents
 
 import Base.convert
 import Base.+
@@ -35,6 +34,7 @@ import ForwardDiff
 
 import Base.length
 
+import ..SDSSIO: SDSSPSF
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -60,6 +60,7 @@ type CatalogEntry
     gal_angle::Float64
     gal_scale::Float64
     objid::ASCIIString
+    thing_id::Int
 end
 
 ############################################
@@ -184,7 +185,7 @@ type Image
     constant_background::Bool
     epsilon_mat::Array{Float64, 2}
     iota_vec::Array{Float64, 1}
-    raw_psf_comp::RawPSFComponents
+    raw_psf_comp::SDSSPSF
 end
 
 # Initialization for an image with noise and background parameters that are
@@ -193,8 +194,8 @@ function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int,
                wcs::WCSTransform, epsilon::Float64, iota::Float64,
                psf::Vector{PsfComponent}, run_num::Int, camcol_num::Int,
                field_num::Int)
-    empty_psf_comp = RawPSFComponents(Array(Float64, 0, 0), -1, -1,
-                                      Array(Float64, 0, 0, 0))
+    empty_psf_comp = SDSSPSF(Array(Float64, 0, 0), 0, 0,
+                             Array(Float64, 0, 0, 0))
     Image(H, W, pixels, b, wcs, epsilon, iota, psf,
           run_num, camcol_num, field_num,
           true, Array(Float64, 0, 0), Array(Float64, 0), empty_psf_comp)
@@ -205,7 +206,7 @@ end
 function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int,
                wcs::WCSTransform, epsilon_mat::Vector{Float64},
                iota_vec::Matrix{Float64}, psf::Vector{PsfComponent},
-               raw_psf_comp::RawPSFComponents, run_num::Int, camcol_num::Int,
+               raw_psf_comp::SDSSPSF, run_num::Int, camcol_num::Int,
                field_num::Int)
     Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num,
           field_num, false, epsilon_mat, iota_vec, raw_psf_comp)
