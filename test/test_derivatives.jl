@@ -982,11 +982,11 @@ end
 
 test_set_hess()
 test_dsiginv_dsig()
+test_brightness_hessian()
 test_bvn_derivatives()
 test_galaxy_sigma_derivs()
 test_galaxy_variable_transform()
 test_galaxy_cache_component()
-test_brightness_hessian()
 test_fs0m_derivatives()
 test_fs1m_derivatives()
 test_e_g_s_functions()
