@@ -24,6 +24,21 @@ else
     end
 end
 
+
+# TODO: the identification of active pixels should go in pre-processing
+type ActivePixel
+  # Band:
+  b::Int
+
+  # Linear tile index:
+  tile_ind::Int
+
+  # Location in tile:
+  h::Int
+  w::Int
+end
+
+
 ####################################################
 # Store pre-allocated memory in this data structures, which contains
 # intermediate values used in the ELBO calculation.
@@ -766,6 +781,58 @@ end
 ############################################
 # The remaining functions loop over tiles, sources, and pixels.
 
+function process_active_pixels!{NumType <: Number}(
+    elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
+    tiled_blob::TiledBlob,
+    mp::ModelParams{NumType},
+    active_pixels::Array{ActivePixel})
+
+  println("Processing active pixels")
+
+  sbs = load_source_brightnesses(mp,
+    calculate_derivs=elbo_vars_array[1].calculate_derivs,
+    calculate_hessian=elbo_vars_array[1].calculate_hessian)
+
+  star_mcs_vec = Array(Array{BvnComponent{NumType}, 2}, length(tiled_blob))
+  gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType}, 4}, length(tiled_blob))
+
+  for b=1:length(tiled_blob)
+    # TODO: every elbo_vars should not get to decide its own calculate_*
+    star_mcs_vec[b], gal_mcs_vec[b] =
+      load_bvn_mixtures(mp, b,
+        calculate_derivs=elbo_vars_array[1].calculate_derivs,
+        calculate_hessian=elbo_vars_array[1].calculate_hessian)
+  end
+
+  # Kiran: parallelize this
+  for pixel in active_pixels
+    # Note: include_epsilon is not used and the background does not get
+    # added, in contrast to the tiled version.  I also don't add the log
+    # factorial of the count.
+    elbo = elbo_vars_array[1].elbo
+    tile = tiled_blob[pixel.b][pixel.tile_ind]
+    tile_sources = mp.tile_sources[pixel.b][pixel.tile_ind]
+    this_pixel = tile.pixels[pixel.h, pixel.w]
+
+    # Get the brightness.
+    get_expected_pixel_brightness!(
+      elbo_vars_array[1], pixel.h, pixel.w, sbs,
+      star_mcs_vec[pixel.b], gal_mcs_vec[pixel.b], tile,
+      mp, tile_sources, include_epsilon=true)
+
+    # Add the terms to the elbo given the brightness.
+    iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
+    add_elbo_log_term!(elbo_vars_array[1], this_pixel, iota)
+    add_scaled_sfs!(elbo_vars_array[1].elbo,
+                    elbo_vars_array[1].E_G, -iota,
+                    elbo_vars_array[1].calculate_hessian &&
+                    elbo_vars_array[1].calculate_derivs)
+  end
+end
+
+
+
+
 """
 Add a tile's contribution to the ELBO likelihood term by
 modifying elbo in place.
@@ -1024,6 +1091,21 @@ function elbo_likelihood{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType};
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
+  # Pre-process a list of active pixels
+  active_pixels = ActivePixel[]
+  for b in 1:length(tiled_blob), tile_ind in 1:length(tiled_blob[b])
+    tile_sources = mp.tile_sources[b][tile_ind]
+    if length(intersect(tile_sources, mp.active_sources)) > 0
+      tile = tiled_blob[b][tile_ind]
+      for w in 1:tile.w_width, h in 1:tile.h_width
+        if !Base.isnan(tile.pixels[h, w])
+          push!(active_pixels, ActivePixel(b, tile_ind, h, w))
+        end
+      end
+    end
+  end
+  println("There are $(length(active_pixels)) active pixels.")
+
   elbo_vars_array = ElboIntermediateVariables{NumType}[]
   if Threaded
     elbo_vars_array =
@@ -1039,12 +1121,9 @@ function elbo_likelihood{NumType <: Number}(
         length(mp.active_sources), calculate_derivs=calculate_derivs,
         calculate_hessian=calculate_hessian) ]
   end
-  sbs = load_source_brightnesses(mp,
-    calculate_derivs=elbo_vars_array[1].calculate_derivs,
-    calculate_hessian=elbo_vars_array[1].calculate_hessian)
-  for b in 1:length(tiled_blob)
-      elbo_likelihood!(elbo_vars_array, tiled_blob[b], mp, b, sbs)
-  end
+
+  process_active_pixels!(elbo_vars_array, tiled_blob, mp, active_pixels)
+
   if Threaded
     for i in 2:nthreads()
       add_scaled_sfs!(elbo_vars_array[1].elbo,
