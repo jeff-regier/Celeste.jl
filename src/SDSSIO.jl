@@ -3,7 +3,6 @@ module SDSSIO
 
 import FITSIO
 import WCS
-using HTTPClient: get
 
 # types of things to mask in read_mask().
 const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
@@ -413,54 +412,6 @@ function read_photoobj(fname, band::Char='r')
     # galaxy is composite, otherwise use the flux for the appropriate type.
 
     return catalog
-end
-
-# ------------------------------------------------------------------------------
-# Database queries
-
-const TIMEOUT = 60.0
-
-"Base URL for catalog-related queries like SQL and Cross-ID."
-const SKYSERVER_BASEURL = "http://skyserver.sdss.org"
-
-
-function get_query_url(data_release)
-    suffix = (data_release < 11)? "sql.asp": "x_sql.aspx"
-    return string(SKYSERVER_BASEURL, "/dr$(data_release)/en/tools/search/",
-                  suffix)
-end
-
-
-"""Remove comments and newlines from SQL statement."""
-function sanitize_query(stmt::AbstractString)
-    lines = split(stmt, '\n')
-    for i in 1:length(lines)
-        r = search(lines[i], "--")
-        if r != 0:-1
-            lines[i] = lines[i][1:(first(r)-1)]
-        end
-    end
-    return join(lines, ' ')
-end
-
-
-"""
-query_sdss_sql(sql_query; data_release=12, timeout=60.0)
-
-Query the SDSS database. Returns an IOBuffer with the contents.
-Use `bytestring()` to convert this to a string if desired.
-"""
-function query_sql(sql_query::AbstractString;
-                   data_release=12, timeout=TIMEOUT)
-
-    url = get_query_url(data_release)
-    payload = [("cmd", sanitize_query(sql_query)), ("format", "csv")]
-    res = get(url; query_params=payload, request_timeout=timeout)
-    if res.http_code != 200
-        error("request for $url returned status $(res.http_code)")
-    end
-
-    return res.body
 end
 
 
