@@ -8,6 +8,12 @@ import Celeste.SDSSIO
 
 using SloanDigitalSkySurvey.PSF
 using PyPlot
+using Celeste.SensitiveFloats.SensitiveFloat
+
+
+using Base.Test
+
+include("src/PSF.jl")
 
 
 field_dir = joinpath(Pkg.dir("Celeste"), "test/data")
@@ -45,69 +51,44 @@ for k=1:K
   psf_params[psf_ids.weight, k] = 1/ K
 end
 
+# For debugging
 NumType = Float64
 
-# Functions
-bvn_derivs = BivariateNormalDerivatives{Float64}(Float64);
+bvn_derivs = BivariateNormalDerivatives{Float64}(NumType);
+log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
+pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
 
-sigma_vec = Array(Matrix{Float64}, K);
+pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
+squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
+
+sigma_vec = Array(Matrix{NumType}, K);
+sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
+
 for k = 1:K
   sigma_vec[k] = Util.get_bvn_cov(psf_params[psf_ids.e_axis, k],
                                   psf_params[psf_ids.e_angle, k],
                                   psf_params[psf_ids.e_scale, k])
+  sig_sf_vec[k] = GalaxySigmaDerivs(
+    psf_params[psf_ids.e_angle, k],
+    psf_params[psf_ids.e_axis, k],
+    psf_params[psf_ids.e_scale, k], sigma_vec[k], calculate_tensor=true);
+
 end
 
-psf_image = zeros(size(x_mat));
+x_ind = 1508
+x = x_mat[x_ind]
+x = Float64[1.0, 0.0]
 
-# Get the value of the log pdf at one point
-log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1);
-pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1);
-pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
-squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
+psf_components =
+  PsfComponent[ PsfComponent(psf_params[psf_ids.weight, k], psf_params[psf_ids.mu, k], sigma_vec[k])
+                for k = 1:K ];
 
-#x_ind = 1508
-SensitiveFloats.clear!(squared_error)
-for x_ind in 1:length(x_mat)
-  x = x_mat[x_ind]
-  SensitiveFloats.clear!(pixel_value)
+clear!(pixel_value)
+evaluate_psf_pixel_fit!(
+    x, psf_params, sigma_vec, sig_sf_vec,
+    bvn_derivs, log_pdf, pdf, pixel_value)
 
-  for k = 1:K
-    bvn = BvnComponent{NumType}(
-      psf_params[psf_ids.mu, k], sigma_vec[k], psf_params[psf_ids.weight, k]);
-    eval_bvn_pdf!(bvn_derivs, bvn, x)
-    get_bvn_derivs!(bvn_derivs, bvn, true, true)
-    sig_sf = GalaxySigmaDerivs(
-      psf_params[psf_ids.e_angle, k],
-      psf_params[psf_ids.e_axis, k],
-      psf_params[psf_ids.e_scale, k], sigma_vec[k], calculate_tensor=true);
-    transform_bvn_derivs!(bvn_derivs, sig_sf, wcs_jacobian, true)
+psf_rendered = get_psf_at_point(psf_components, rows=[ x[1] ], cols=[ x[2] ])[1]
+@test_approx_eq psf_rendered pixel_value.v[1]
 
-    # This is redundant, but it's what eval_bvn_pdf returns.
-    log_pdf.v[1] = log(bvn_derivs.f_pre[1])
-    log_pdf.d[psf_ids.mu] = bvn_derivs.bvn_u_d
-    log_pdf.d[[psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale]] =
-      bvn_derivs.bvn_s_d
-    log_pdf.d[psf_ids.weight] = 0
-
-    # TODO: probably not right interpretation of f_pre
-    pdf_val = exp(bvn_derivs.f_pre[1])
-    combine_grad = NumType[1.0, pdf_val]
-    combine_hess = NumType[0 0; 0 pdf_val]
-    SensitiveFloats.combine_sfs!(pdf, log_pdf, pdf_val, combine_grad, combine_hess)
-
-    pdf.v *= psf_params[psf_ids.weight, k]
-    pdf.d *= psf_params[psf_ids.weight, k]
-    pdf.h *= psf_params[psf_ids.weight, k]
-    pdf.d[psf_ids.weight] = pdf_val
-
-    SensitiveFloats.add_sources_sf!(pixel_value, pdf, k, true)
-  end
-
-  psf_image[x_ind] = pixel_value.v[1]
-  squared_error.v += (pixel_value.v[1] - raw_psf[x_ind]) ^ 2
-  squared_error.d += 2 * (pixel_value.v[1] - raw_psf[x_ind]) * pixel_value.d
-  squared_error.h += 2 * pixel_value.h
-end
-
-
-matshow(psf_image)
+#matshow(psf_image)
