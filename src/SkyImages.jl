@@ -328,7 +328,19 @@ end
 # PSF functions
 
 
-function fit_raw_psf_for_celeste(raw_psf::Matrix{Float64})
+"""
+A wrapper around the SloanDigitalSkySurvey least squares fit and conversion
+to a Celeste psf object.
+
+Args:
+  - raw_psf: A matrix with the image of a psf
+  - ftol: The tolerance to which to fit the psf.  Note that you get improvements
+          up to 1e-8 or 1e-9, but at the cost of a big slowdown.
+
+Returns:
+  - An array of Celeste PSF objects.
+"""
+function fit_raw_psf_for_celeste(raw_psf::Matrix{Float64}; ftol=1e-5)
   # TODO: this is very slow, and we should do it in Celeste rather
   # than rely on Optim.
   opt_result, mu_vec, sigma_vec, weight_vec =
