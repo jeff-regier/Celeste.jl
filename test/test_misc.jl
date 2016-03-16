@@ -79,6 +79,7 @@ function test_local_sources()
     tile = ImageTile(1, 1, blob[3], tile_width);
     ModelInit.initialize_model_params(
       fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
+    println(length(mp.patches[:,3]))
     subset10 = SkyImages.get_local_sources(tile, mp.patches[:,3][:])
     @test subset10 == [1]
 

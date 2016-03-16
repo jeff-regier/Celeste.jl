@@ -7,7 +7,6 @@ import WCS
 using Celeste: Types, SampleData
 import Celeste: ModelInit, SkyImages, ElboDeriv, Synthetic, SDSSIO
 
-
 println("Running SkyImages tests.")
 
 const RUN = 3900
@@ -117,7 +116,7 @@ function test_get_tiled_image_source()
       mp.patches[1, b] = SkyPatch(loc, 1e-6, blob[b], fit_psf=false)
     end
     patches = mp.patches[:, 3][:]
-    local_sources = ModelInit.get_tiled_image_sources(tiled_img, patches)
+    local_sources = ModelInit.get_tiled_image_sources(img, tiled_img, patches)
     @test local_sources[hh, ww] == Int[1]
     for hh2 in 1:size(tiled_img)[1], ww2 in 1:size(tiled_img)[2]
       if (hh2 != hh) || (ww2 != ww)
@@ -138,7 +137,8 @@ function test_local_source_candidate()
   for b=1:length(tiled_blob)
     # Get the sources by iterating over everything.
     patches = mp.patches[:,b][:]
-    tile_sources = ModelInit.get_tiled_image_sources(tiled_blob[b], patches)
+    tile_sources = ModelInit.get_tiled_image_sources(blob[b],
+                                tiled_blob[b], patches)
 
     # Get a set of candidates.
     candidates = SkyImages.local_source_candidates(tiled_blob[b], patches);
