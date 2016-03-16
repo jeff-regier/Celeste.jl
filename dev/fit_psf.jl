@@ -38,13 +38,14 @@ raw_psf = raw_psf_comp(500., 500.);
 x_mat = PSF.get_x_matrix_from_psf(raw_psf);
 
 # Initialize params
-psf_params = zeros(length(Types.PsfParams), K)
+psf_params = Array(Vector{Float64}, K)
 for k=1:K
-  psf_params[psf_ids.mu, k] = [0., 0.]
-  psf_params[psf_ids.e_axis, k] = 0.8
-  psf_params[psf_ids.e_angle, k] = pi / 4
-  psf_params[psf_ids.e_scale, k] = sqrt(2 * k)
-  psf_params[psf_ids.weight, k] = 1/ K
+  psf_params[k] = zeros(length(Types.PsfParams))
+  psf_params[k][psf_ids.mu] = [0., 0.]
+  psf_params[k][psf_ids.e_axis] = 0.8
+  psf_params[k][psf_ids.e_angle] = pi / 4
+  psf_params[k][psf_ids.e_scale] = sqrt(2 * k)
+  psf_params[k][psf_ids.weight] = 1/ K
 end
 
 
@@ -53,7 +54,7 @@ using Celeste.Transform.ParamBounds
 using Celeste.Transform.ParamBox
 using Celeste.Transform.DataTransform
 
-function get_psf_transform(psf_params::Matrix{Float64})
+function get_psf_transform(psf_params::Vector{Vector{Float64}})
 
   bounds = Array(ParamBounds, size(psf_params, 2))
 
@@ -74,3 +75,5 @@ end
 
 
 psf_transform = get_psf_transform(psf_params)
+
+get_transform_derivatives
