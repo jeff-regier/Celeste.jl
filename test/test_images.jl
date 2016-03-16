@@ -17,9 +17,9 @@ const FIELD = 269
 function test_blob()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
-    run = 3900
-    camcol = 6
-    field = 269
+  run = 3900
+  camcol = 6
+  field = 269
 
   blob = SkyImages.read_sdss_field(run, camcol, field, datadir)
 

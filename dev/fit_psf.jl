@@ -86,3 +86,22 @@ for k = 1:K
     ((jacobian_diag * jacobian_diag') .* sf.h[hess_inds, hess_inds]) +
     diagm(hessian_values .* sf_free.d[:, k])
 end
+
+
+function transform_psf_params!{NumType <: Number}(
+    psf_params::Vector{Vector{NumType}}, psf_params_free::Vector{Vector{NumType}},
+    psf_transform::DataTransform, to_constrained::Bool)
+
+  for k=1:length(psf_params)
+    for (param, constraint_vec) in psf_transform.bounds[k]
+      for ind in 1:length(psf_ids.(param))
+        constraint = constraint_vec[ind]
+        to_unconstrained ?
+          psf_params_free[k][ind] = unbox_parameter(psf_params[k][ind], constraint):
+          psf_params[k][ind] = box_parameter(psf_params_free[k][ind], constraint)
+      end
+    end
+  end
+
+  true # return type
+end
