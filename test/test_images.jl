@@ -52,7 +52,7 @@ function test_blob()
     @test 2 * width <= cropped_blob[b][1].h_width <= 2 * (width + 1)
     @test 2 * width <= cropped_blob[b][1].w_width <= 2 * (width + 1)
     tile_sources =
-      SkyImages.get_local_sources(cropped_blob[b][1], mp.patches[:,b][:], 42.)
+      SkyImages.get_local_sources(cropped_blob[b][1], mp.patches[:,b][:])
     @test obj_index in tile_sources
   end
 
@@ -224,7 +224,7 @@ function test_get_local_sources()
   tile = ImageTile(1, 1, 1, 1:h_width, 1:w_width, h_width, w_width,
                    rand(h_width, w_width), true, 0.5, Array(Float64, 0, 0),
                    0.5, Array(Float64, 0));
-  SkyImages.get_local_sources(tile, [ patch ], 42.)
+  SkyImages.get_local_sources(tile, [ patch ])
 end
 
 

@@ -72,26 +72,27 @@ function test_local_sources()
     mp = ModelInit.initialize_model_params(
       fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
     @test mp.S == 3
-    subset1000 = SkyImages.get_local_sources(tile, mp.patches[:,3][:], 42.);
+    subset1000 = SkyImages.get_local_sources(tile, mp.patches[:,3][:]);
     @test subset1000 == [1,2,3]
 
     tile_width = 10
     tile = ImageTile(1, 1, blob[3], tile_width);
     ModelInit.initialize_model_params(
       fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
-    subset10 = SkyImages.get_local_sources(tile, mp.patches[:,3][:], 42.)
+    println(length(mp.patches[:,3]))
+    subset10 = SkyImages.get_local_sources(tile, mp.patches[:,3][:])
     @test subset10 == [1]
 
     last_tile = ImageTile(11, 24, blob[3], tile_width)
     ModelInit.initialize_model_params(
       fill(fill(last_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
-    last_subset =SkyImages.get_local_sources(last_tile, mp.patches[:,3][:], 42.)
+    last_subset =SkyImages.get_local_sources(last_tile, mp.patches[:,3][:])
     @test length(last_subset) == 0
 
     pop_tile = ImageTile(7, 9, blob[3], tile_width)
     ModelInit.initialize_model_params(
       fill(fill(pop_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
-    pop_subset = SkyImages.get_local_sources(pop_tile, mp.patches[:,3][:], 42.)
+    pop_subset = SkyImages.get_local_sources(pop_tile, mp.patches[:,3][:])
     @test pop_subset == [2,3]
 end
 
@@ -161,7 +162,7 @@ function test_local_sources_3()
         round(Int, pix_loc[2] / tile_width),
         blob[test_b],
         tile_width);
-    @test SkyImages.get_local_sources(tile, mp.patches[:,test_b][:], 42.) == [1]
+    @test SkyImages.get_local_sources(tile, mp.patches[:,test_b][:]) == [1]
 
     # Source should not match when you're 1 tile and a half away along the diagonal plus
     # the pixel radius from the center of the tile.
@@ -171,7 +172,7 @@ function test_local_sources_3()
         round(Int, pix_loc[2] / tile_width),
         blob[test_b],
         tile_width)
-    @test SkyImages.get_local_sources(tile, mp.patches[:,test_b][:], 42.) == []
+    @test SkyImages.get_local_sources(tile, mp.patches[:,test_b][:]) == []
 
     tile = ImageTile(
         round(Int, (pix_loc[1]) / tile_width),
@@ -179,7 +180,7 @@ function test_local_sources_3()
                            patch_radius_pix) / tile_width),
         blob[test_b],
         tile_width)
-    @test SkyImages.get_local_sources(tile, mp.patches[:,test_b][:], 42.) == []
+    @test SkyImages.get_local_sources(tile, mp.patches[:,test_b][:]) == []
 end
 
 
