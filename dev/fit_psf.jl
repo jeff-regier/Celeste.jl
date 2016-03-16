@@ -59,61 +59,52 @@ for k = 1:K
                                   psf_params[psf_ids.e_scale, k])
 end
 
+psf_image = zeros(size(x_mat));
 
 # Get the value of the log pdf at one point
 log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1);
-pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
+pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1);
+pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
 
-x = x_mat[29, 28]
+#x_ind = 1508
+for x_ind in 1:length(x_mat)
+  x = x_mat[x_ind]
+  SensitiveFloats.clear!(pixel_value)
 
-for k = 1:K
-  bvn = BvnComponent{NumType}(
-    psf_params[psf_ids.mu, k], sigma_vec[k], psf_params[psf_ids.weight, k]);
-  eval_bvn_pdf!(bvn_derivs, bvn, x)
-  get_bvn_derivs!(bvn_derivs, bvn, true, true)
-  sig_sf = GalaxySigmaDerivs(
-    psf_params[psf_ids.e_angle, k],
-    psf_params[psf_ids.e_axis, k],
-    psf_params[psf_ids.e_scale, k], sigma_vec[k], calculate_tensor=true);
-  transform_bvn_derivs!(bvn_derivs, sig_sf, wcs_jacobian, true)
-
-  log_pdf.v[1] = bvn_derivs.f_pre[1]
-  log_pdf.d[psf_ids.mu] = bvn_derivs.bvn_u_d
-  log_pdf.d[[psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale]] =
-    bvn_derivs.bvn_s_d
-
-end
-
-
-
-
-function evaluate_pdf!{NumType <: Number}(
-    psf_fit::SensitiveFloat{NumType}, x_mat::Array{Vector{Float64, 1}, 2})
-
-  K =
-  for i=1:length(x_mat)
-    for k=1:
-    eval_bvn_pdf!(bvn_derivs, bvn, x_mat[i])
+  for k = 1:K
+    bvn = BvnComponent{NumType}(
+      psf_params[psf_ids.mu, k], sigma_vec[k], psf_params[psf_ids.weight, k]);
+    eval_bvn_pdf!(bvn_derivs, bvn, x)
     get_bvn_derivs!(bvn_derivs, bvn, true, true)
+    sig_sf = GalaxySigmaDerivs(
+      psf_params[psf_ids.e_angle, k],
+      psf_params[psf_ids.e_axis, k],
+      psf_params[psf_ids.e_scale, k], sigma_vec[k], calculate_tensor=true);
     transform_bvn_derivs!(bvn_derivs, sig_sf, wcs_jacobian, true)
-    bvn_pdf[i] = bvn_derivs.f_pre[1]
+
+    # This is redundant, but it's what eval_bvn_pdf returns.
+    log_pdf.v[1] = log(bvn_derivs.f_pre[1])
+    log_pdf.d[psf_ids.mu] = bvn_derivs.bvn_u_d
+    log_pdf.d[[psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale]] =
+      bvn_derivs.bvn_s_d
+    log_pdf.d[psf_ids.weight] = 0
+
+    # TODO: probably not right interpretation of f_pre
+    pdf_val = exp(bvn_derivs.f_pre[1])
+    combine_grad = NumType[1.0, pdf_val]
+    combine_hess = NumType[0 0; 0 pdf_val]
+    SensitiveFloats.combine_sfs!(pdf, log_pdf, pdf_val, combine_grad, combine_hess)
+
+    pdf.v *= psf_params[psf_ids.weight, k]
+    pdf.d *= psf_params[psf_ids.weight, k]
+    pdf.h *= psf_params[psf_ids.weight, k]
+    pdf.d[psf_ids.weight] = pdf_val
+
+    SensitiveFloats.add_sources_sf!(pixel_value, pdf, k, true)
   end
+
+  psf_image[x_ind] = pixel_value.v[1]
+  
 end
 
-mu = Float64[1.0, 2.0]
-w = 0.5
-e_axis = 0.5
-e_angle = pi / 4
-e_scale = 10.0
-
-
-
-bvn_pdf = zeros(size(x_mat));
-
-for i=1:length(x_mat)
-  eval_bvn_pdf!(bvn_derivs, bvn, x_mat[i])
-  get_bvn_derivs!(bvn_derivs, bvn, true, true)
-  transform_bvn_derivs!(bvn_derivs, sig_sf, wcs_jacobian, true)
-  bvn_pdf[i] = bvn_derivs.f_pre[1]
-end
-matshow(bvn_pdf)
+matshow(psf_image)
