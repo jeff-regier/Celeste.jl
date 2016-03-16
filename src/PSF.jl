@@ -77,6 +77,7 @@ function evaluate_psf_fit{NumType <: Number}(
     psf_params::Matrix{NumType}, raw_psf::Matrix{Float64}, calculate_derivs::Bool)
 
   K = size(psf_params, 2)
+  x_mat = PSF.get_x_matrix_from_psf(raw_psf);
 
   #psf_image = zeros(size(x_mat));
 
@@ -111,11 +112,16 @@ function evaluate_psf_fit{NumType <: Number}(
         bvn_derivs, log_pdf, pdf, pixel_value, calculate_derivs)
 
     #psf_image[x_ind] = pixel_value.v[1]
-    squared_error.v += (pixel_value.v[1] - raw_psf[x_ind]) ^ 2
-
+    diff = (pixel_value.v[1] - raw_psf[x_ind])
+    squared_error.v +=  diff ^ 2
+    # println("Iter $x_ind:")
+    # println(squared_error.v)
+    # println("----------------")
     if calculate_derivs
-      squared_error.d += 2 * (pixel_value.v[1] - raw_psf[x_ind]) * pixel_value.d
-      squared_error.h += 2 * pixel_value.h
+
+      squared_error.d += 2 * diff * pixel_value.d
+      squared_error.h +=
+        2 * (diff * pixel_value.h + pixel_value.d[:] * pixel_value.d[:]')
     end
     # if x_ind == 1508
     #   println("----------------------------- pixel_value:")
