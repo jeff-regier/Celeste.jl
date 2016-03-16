@@ -269,7 +269,7 @@ function get_tiled_image_sources(img::Image,
     cand_patches = patches[candidates[hh, ww]]
     if length(cand_patches) > 0
       cand_sources = SkyImages.get_local_sources(tiled_image[hh, ww],
-                               cand_patches, wcs_jacobian_ev)
+                               cand_patches, ev=wcs_jacobian_ev)
       tile_sources[hh, ww] = candidates[hh, ww][cand_sources]
     else
       tile_sources[hh, ww] = Int[]

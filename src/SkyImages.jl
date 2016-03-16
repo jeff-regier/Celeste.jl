@@ -481,21 +481,24 @@ end
 Args:
   - tile: An ImageTile (containing tile coordinates)
   - patches: A vector of SkyPatch objects to be matched with the tile.
-
+  - ev : the maximum absolute value of any eigenvalue of the WCS Jacobian
+         for all the patches
 Returns:
   - A vector of source ids (from 1 to length(patches)) that influence
     pixels in the tile.  A patch influences a tile if
     there is any overlap in their squares of influence.
 """
 function get_local_sources(tile::ImageTile,
-                patches::Vector{SkyPatch},
-                wcs_jacobian_ev::Float64)
+                patches::Vector{SkyPatch};
+                ev=-1.)
 
     tile_sources = Int[]
     tile_center = Float64[mean(tile.h_range), mean(tile.w_range)]
 
     for patch_index in 1:length(patches)
       patch = patches[patch_index]
+      wcs_jacobian_ev = ev > 0 ? ev :
+            maximum(abs(eigvals(patch.wcs_jacobian)))
       patch_radius_px = patch.radius * wcs_jacobian_ev
 
       # This is a "ball" in the infinity norm.
