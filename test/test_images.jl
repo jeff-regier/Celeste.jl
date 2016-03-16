@@ -274,8 +274,8 @@ function test_psf_transforms()
   sigma_vec[3] = Float64[ 0.5 0.2; 0.2 0.5]
   weight_vec = Float64[0.4, 0.6, 0.1]
 
-  par = wrap_parameters(mu_vec, sigma_vec, weight_vec)
-  mu_vec_test, sigma_vec_test, weight_vec_test = unwrap_parameters(par)
+  par = SkyImages.wrap_parameters(mu_vec, sigma_vec, weight_vec)
+  mu_vec_test, sigma_vec_test, weight_vec_test = SkyImages.unwrap_parameters(par)
 
   for k=1:3
     @test_approx_eq mu_vec_test[k] mu_vec[k]
