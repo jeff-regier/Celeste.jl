@@ -20,8 +20,9 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
     pdf::SensitiveFloat{PsfParams, NumType},
     pixel_value::SensitiveFloat{PsfParams, NumType})
 
-  SensitiveFloats.clear!(pixel_value)
+  clear!(pixel_value)
 
+  sigma_ids = [psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale]
   for k = 1:K
     # I will put in the weights later so that the log pdf sensitive float
     # is accurate.
@@ -30,24 +31,33 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
     get_bvn_derivs!(bvn_derivs, bvn, true, true)
     transform_bvn_derivs!(bvn_derivs, sig_sf_vec[k], eye(Float64, 2), true)
 
-    SensitiveFloats.clear!(log_pdf)
+    clear!(log_pdf)
+    clear!(pdf)
+
     # This is redundant, but it's what eval_bvn_pdf returns.
     log_pdf.v[1] = log(bvn_derivs.f_pre[1])
     log_pdf.d[psf_ids.mu] = bvn_derivs.bvn_u_d
-    log_pdf.d[[psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale]] =
-      bvn_derivs.bvn_s_d
+    log_pdf.d[sigma_ids] = bvn_derivs.bvn_s_d
     log_pdf.d[psf_ids.weight] = 0
 
-    # TODO: check the interpretation of f_pre
+    log_pdf.h[psf_ids.mu, psf_ids.mu] = bvn_derivs.bvn_uu_h
+    log_pdf.h[psf_ids.mu, sigma_ids] = bvn_derivs.bvn_us_h
+    log_pdf.h[sigma_ids, psf_ids.mu] = log_pdf.h[psf_ids.mu, sigma_ids]'
+    log_pdf.h[sigma_ids, sigma_ids] = bvn_derivs.bvn_ss_h
+
     pdf_val = exp(log_pdf.v[1])
-    combine_grad = NumType[1.0, pdf_val]
-    combine_hess = NumType[0 0; 0 pdf_val]
-    SensitiveFloats.combine_sfs!(pdf, log_pdf, pdf_val, combine_grad, combine_hess)
+    pdf.v[1] = pdf_val
+    pdf.d = pdf_val * log_pdf.d
+    pdf.h = pdf_val * (log_pdf.h + log_pdf.d * log_pdf.d')
+
+    # Now multiply by the weight.
+    pdf.h *= psf_params[psf_ids.weight, k]
+    pdf.h[psf_ids.weight, :] = pdf.h[:, psf_ids.weight] = pdf.d
+
+    pdf.d *= psf_params[psf_ids.weight, k]
+    pdf.d[psf_ids.weight] = pdf_val
 
     pdf.v *= psf_params[psf_ids.weight, k]
-    pdf.d *= psf_params[psf_ids.weight, k]
-    pdf.h *= psf_params[psf_ids.weight, k]
-    pdf.d[psf_ids.weight] = pdf_val
 
     SensitiveFloats.add_sources_sf!(pixel_value, pdf, k, true)
   end
@@ -85,7 +95,6 @@ function evaluate_psf_fit{NumType <: Number}(
 
   end
 
-  #x_ind = 1508
   SensitiveFloats.clear!(squared_error)
 
   for x_ind in 1:length(x_mat)
