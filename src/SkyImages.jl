@@ -442,15 +442,6 @@ function pixel_radius_to_world(pix_radius::Float64,
   pix_radius / minimum(abs(eigvals(wcs_jacobian)));
 end
 
-
-# A world circle maps locally to a pixel ellipse.  Return the major
-# axis of that ellipse.
-function world_radius_to_pixel(world_radius::Float64,
-                               wcs_jacobian::Matrix{Float64})
-  world_radius * maximum(abs(eigvals(wcs_jacobian)));
-end
-
-
 import WCS.world_to_pix
 world_to_pix{T <: Number}(patch::SkyPatch, world_loc::Vector{T}) =
     world_to_pix(patch.wcs_jacobian, patch.center, patch.pixel_center,
@@ -504,20 +495,25 @@ end
 Args:
   - tile: An ImageTile (containing tile coordinates)
   - patches: A vector of SkyPatch objects to be matched with the tile.
-
+  - ev : the maximum absolute value of any eigenvalue of the WCS Jacobian
+         for all the patches
 Returns:
   - A vector of source ids (from 1 to length(patches)) that influence
     pixels in the tile.  A patch influences a tile if
     there is any overlap in their squares of influence.
 """
-function get_local_sources(tile::ImageTile, patches::Vector{SkyPatch})
+function get_local_sources(tile::ImageTile,
+                patches::Vector{SkyPatch};
+                ev=-1.)
 
     tile_sources = Int[]
     tile_center = Float64[mean(tile.h_range), mean(tile.w_range)]
 
     for patch_index in 1:length(patches)
       patch = patches[patch_index]
-      patch_radius_px = world_radius_to_pixel(patch.radius, patch.wcs_jacobian)
+      wcs_jacobian_ev = ev > 0 ? ev :
+            maximum(abs(eigvals(patch.wcs_jacobian)))
+      patch_radius_px = patch.radius * wcs_jacobian_ev
 
       # This is a "ball" in the infinity norm.
       if (abs(tile_center[1] - patch.pixel_center[1]) <
