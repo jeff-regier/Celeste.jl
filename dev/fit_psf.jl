@@ -40,10 +40,42 @@ x_mat = PSF.get_x_matrix_from_psf(raw_psf);
 # Initialize params
 psf_params = Array(Vector{Float64}, K)
 for k=1:K
-  psf_params[k] = zeros(length(Types.PsfParams))
+  psf_params[k] = zeros(length(PsfParams))
   psf_params[k][psf_ids.mu] = [0., 0.]
   psf_params[k][psf_ids.e_axis] = 0.8
   psf_params[k][psf_ids.e_angle] = pi / 4
   psf_params[k][psf_ids.e_scale] = sqrt(2 * k)
   psf_params[k][psf_ids.weight] = 1/ K
+end
+
+sf = evaluate_psf_fit(psf_params, raw_psf, true);
+sf_free = deepcopy(sf);
+
+k = 1
+using Celeste.Transform
+psf_transform = PSF.get_psf_transform(psf_params);
+
+# This is the diagonal of the Jacobian transform.
+jacobian_diag = zeros(length(PsfParams));
+
+# These are the hessians of each individual parameter's transform.  We
+# can represent it this way since each parameter's transform only depends on
+# its own value and not on others.
+hessian_values = zeros(length(PsfParams));
+
+for ind = 1:2
+  mu_ind = psf_ids.mu[ind]
+  jac, hess =
+    Transform.box_derivatives(psf_params[k][mu_ind], psf_transform.bounds[k][:mu][ind]);
+  jacobian_diag[mu_ind] = jac
+  hessian_values[mu_ind] = hess
+end
+
+# The rest are one-dimensional.
+for field in setdiff(fieldnames(PsfParams), [ :mu ])
+  ind = psf_ids.(field)
+  jac, hess =
+    Transform.box_derivatives(psf_params[k][1], psf_transform.bounds[k][field][1]);
+  jacobian_diag[ind] = jac
+  hessian_values[ind] = hess
 end

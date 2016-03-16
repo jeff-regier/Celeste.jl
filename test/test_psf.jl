@@ -26,7 +26,7 @@ end
 
 
 function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
-  local psf_params_mat = zeros(NumType, length(psf_params) * length(PsfParams))
+  local psf_params_mat = zeros(NumType, length(psf_params), length(PsfParams))
   for k=1:length(psf_params)
     psf_params_mat[:, k] = psf_params[k]
   end
@@ -50,13 +50,14 @@ function test_psf_fit()
 
   # Initialize params
   K = 2
-  psf_params = zeros(length(Types.PsfParams), K)
+  psf_params = Array(Vector{Float64}, K)
   for k=1:K
-    psf_params[psf_ids.mu, k] = [0., 0.]
-    psf_params[psf_ids.e_axis, k] = 0.8
-    psf_params[psf_ids.e_angle, k] = pi / 4
-    psf_params[psf_ids.e_scale, k] = sqrt(2 * k)
-    psf_params[psf_ids.weight, k] = 1/ K
+    psf_params[k] = zeros(length(PsfParams))
+    psf_params[k][psf_ids.mu] = [0., 0.]
+    psf_params[k][psf_ids.e_axis] = 0.8
+    psf_params[k][psf_ids.e_angle] = pi / 4
+    psf_params[k][psf_ids.e_scale] = sqrt(2 * k)
+    psf_params[k][psf_ids.weight] = 1/ K
   end
   psf_param_vec = wrap_psf_params(psf_params)
 
