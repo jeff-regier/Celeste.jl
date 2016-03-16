@@ -8,7 +8,7 @@ const DOC =
 
 Usage:
   celeste.jl infer-nersc <ramin> <ramax> <decmin> <decmax> <outdir>
-  celeste.jl score
+  celeste.jl score-nersc <ramin> <ramax> <decmin> <decmax> <resultdir> <reffile>
   celeste.jl -h | --help
   celeste.jl --version
 
@@ -19,7 +19,7 @@ Options:
 The `infer-nersc` subcommand runs Celeste on all sources in the given
 RA/Dec range.
 
-The `score` step is not yet implemented for the new API.
+The `score-nersc` subcommand is not yet implemented for the new API.
 """
 
 
@@ -32,8 +32,8 @@ function main()
         decmax = parse(Float64, args["<decmax>"])
         outdir = args["<outdir>"]
         Celeste.infer_nersc(ramin, ramax, decmin, decmax, outdir)
-    elseif args["score"]
-        error("score not yet implemented for infer-nersc")
+    elseif args["score-nersc"]
+        Celeste.score_nersc(ramargs["<resultdir>"], args["<reffile>"])
     end
 
 end
