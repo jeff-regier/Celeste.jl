@@ -20,8 +20,8 @@ export evaluate_psf_fit, psf_params_to_array, psf_array_to_params!,
 
 function get_psf_transform(psf_params::Vector{Vector{Float64}})
 
+  K = length(psf_params)
   bounds = Array(ParamBounds, length(psf_params))
-
   # Note that, for numerical reasons, the bounds must be on the scale
   # of reasonably meaningful changes.
   for k in 1:K
@@ -32,13 +32,10 @@ function get_psf_transform(psf_params::Vector{Vector{Float64}})
     bounds[k][:e_scale] = ParamBox[ ParamBox(0.25, Inf, 1.0) ]
 
     # Note that the weights do not need to sum to one.
-    bounds[k][:e_weight] = ParamBox[ ParamBox(0.05, 2.0, 1.0) ]
+    bounds[k][:weight] = ParamBox[ ParamBox(0.05, 2.0, 1.0) ]
   end
   DataTransform(bounds, active_sources=collect(1:K), S=K)
 end
-
-
-psf_transform = get_psf_transform(psf_params)
 
 
 function psf_params_to_array{NumType <: Number}(psf_params::Vector{Vector{NumType}})
