@@ -35,45 +35,56 @@ wcs_jacobian = eye(2);
 
 K = 2
 psf_fit = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
-log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
 
 
 # Initialize params
 psf_params = zeros(length(Types.PsfParams), K)
 for k=1:K
   psf_params[psf_ids.mu, k] = [0., 0.]
-  psf_params[psf_ids.e_axis, k] = 1.0
-  psf_params[psf_ids.e_angle, k] = 0.0
-  psf_params[psf_ids.e_scale, k] = sqrt(k)
+  psf_params[psf_ids.e_axis, k] = 0.8
+  psf_params[psf_ids.e_angle, k] = pi / 4
+  psf_params[psf_ids.e_scale, k] = sqrt(2 * k)
   psf_params[psf_ids.weight, k] = 1/ K
 end
 
+NumType = Float64
+
 # Functions
-
 bvn_derivs = BivariateNormalDerivatives{Float64}(Float64);
-sig_sf = GalaxySigmaDerivs(
-  e_angle, e_axis, e_scale, sigma, calculate_tensor=true);
 
-for k=1:K
-  sigma = Util.get_bvn_cov(psf_params[psf_ids.e_axis, k],
-                           psf_params[psf_ids.e_angle, k],
-                           psf_params[psf_ids.e_scale, k])
-
-function evaluate_log_pdf!{NumType <: Number}(
-    log_pdf::SensitiveFloat{NumType}, psf_params::Matrix{NumType},
-    x::Vector{Float64})
-
-  K = size(psf_params, 2)
-
-    # Note: bvn is immutable and so must be redefined at each iteration
-    bvn = BvnComponent{NumType}(mu, sigma, w);
-
-    eval_bvn_pdf!(bvn_derivs, bvn, x_mat[i])
-    get_bvn_derivs!(bvn_derivs, bvn, true, true)
-    transform_bvn_derivs!(bvn_derivs, sig_sf, wcs_jacobian, true)
-    bvn_pdf[i] = bvn_derivs.f_pre[1]
-  end
+sigma_vec = Array(Matrix{Float64}, K);
+for k = 1:K
+  sigma_vec[k] = Util.get_bvn_cov(psf_params[psf_ids.e_axis, k],
+                                  psf_params[psf_ids.e_angle, k],
+                                  psf_params[psf_ids.e_scale, k])
 end
+
+
+# Get the value of the log pdf at one point
+log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1);
+pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
+
+x = x_mat[29, 28]
+
+for k = 1:K
+  bvn = BvnComponent{NumType}(
+    psf_params[psf_ids.mu, k], sigma_vec[k], psf_params[psf_ids.weight, k]);
+  eval_bvn_pdf!(bvn_derivs, bvn, x)
+  get_bvn_derivs!(bvn_derivs, bvn, true, true)
+  sig_sf = GalaxySigmaDerivs(
+    psf_params[psf_ids.e_angle, k],
+    psf_params[psf_ids.e_axis, k],
+    psf_params[psf_ids.e_scale, k], sigma_vec[k], calculate_tensor=true);
+  transform_bvn_derivs!(bvn_derivs, sig_sf, wcs_jacobian, true)
+
+  log_pdf.v[1] = bvn_derivs.f_pre[1]
+  log_pdf.d[psf_ids.mu] = bvn_derivs.bvn_u_d
+  log_pdf.d[[psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale]] =
+    bvn_derivs.bvn_s_d
+
+end
+
+
 
 
 function evaluate_pdf!{NumType <: Number}(
