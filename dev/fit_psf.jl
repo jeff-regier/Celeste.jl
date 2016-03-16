@@ -126,7 +126,18 @@ ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_params[:]);
 
 
 
-function evaluate_psf_fit_wrapper{NumType <: Number}(psf_param_vec::Vector{NumType})
-
-
+function evaluate_psf_fit_wrapper_sf{NumType <: Number}(psf_param_vec::Vector{NumType})
+  psf_params = reshape(psf_param_vec, length(PsfParams), 2)
+  evaluate_psf_fit(psf_params, raw_psf)
 end
+
+function evaluate_psf_fit_wrapper_value{NumType <: Number}(psf_param_vec::Vector{NumType})
+  evaluate_psf_fit_wrapper_sf(psf_param_vec).v[1]
+end
+
+
+ad_grad = ForwardDiff.gradient(evaluate_psf_fit_wrapper_value, psf_params[:]);
+ad_hess = ForwardDiff.hessian(evaluate_psf_fit_wrapper_value, psf_params[:]);
+
+@test_approx_eq ad_grad pixel_value.d[:]
+@test_approx_eq ad_hess[:] pixel_value.h[:]
