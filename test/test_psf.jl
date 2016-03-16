@@ -13,7 +13,7 @@ using ForwardDiff
 using Base.Test
 
 
-function unwrap_psf_params{NumType <: Number}(psf_params_vec::Vector{NumType})
+function unwrap_psf_params{NumType <: Number}(psf_param_vec::Vector{NumType})
   @assert length(psf_param_vec) % length(PsfParams) == 0
   K = round(Int, length(psf_param_vec) / length(PsfParams))
   local psf_param_mat = reshape(psf_param_vec, length(PsfParams), K)
@@ -26,11 +26,11 @@ end
 
 
 function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
-  local psf_params_mat = zeros(NumType, length(psf_params), length(PsfParams))
+  local psf_params_mat = zeros(NumType, length(PsfParams), length(psf_params))
   for k=1:length(psf_params)
     psf_params_mat[:, k] = psf_params[k]
   end
-  psf_params_mat
+  psf_params_mat[:]
 end
 
 
@@ -75,13 +75,13 @@ function test_psf_fit()
     sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
 
     for k = 1:K
-      sigma_vec[k] = Util.get_bvn_cov(psf_params[psf_ids.e_axis, k],
-                                      psf_params[psf_ids.e_angle, k],
-                                      psf_params[psf_ids.e_scale, k])
+      sigma_vec[k] = Util.get_bvn_cov(psf_params[k][psf_ids.e_axis],
+                                      psf_params[k][psf_ids.e_angle],
+                                      psf_params[k][psf_ids.e_scale])
       sig_sf_vec[k] = GalaxySigmaDerivs(
-        psf_params[psf_ids.e_angle, k],
-        psf_params[psf_ids.e_axis, k],
-        psf_params[psf_ids.e_scale, k], sigma_vec[k], calculate_tensor=calculate_derivs);
+        psf_params[k][psf_ids.e_angle],
+        psf_params[k][psf_ids.e_axis],
+        psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_tensor=calculate_derivs);
 
     end
 
@@ -106,14 +106,14 @@ function test_psf_fit()
 
   sigma_vec = Array(Matrix{Float64}, K);
   for k = 1:K
-    sigma_vec[k] = Util.get_bvn_cov(psf_params[psf_ids.e_axis, k],
-                                    psf_params[psf_ids.e_angle, k],
-                                    psf_params[psf_ids.e_scale, k])
+    sigma_vec[k] = Util.get_bvn_cov(psf_params[k][psf_ids.e_axis],
+                                    psf_params[k][psf_ids.e_angle],
+                                    psf_params[k][psf_ids.e_scale])
   end
 
   println("Testing single pixel value")
   psf_components = PsfComponent[
-    PsfComponent(psf_params[psf_ids.weight, k], psf_params[psf_ids.mu, k], sigma_vec[k])
+    PsfComponent(psf_params[k][psf_ids.weight], psf_params[k][psf_ids.mu], sigma_vec[k])
                   for k = 1:K ];
 
   psf_rendered = get_psf_at_point(psf_components, rows=[ x[1] ], cols=[ x[2] ])[1];
@@ -159,8 +159,12 @@ end
 
 function test_least_squares_psf()
   # open FITS file containing PSF for each band
+  run = 3900
+  camcol = 6
+  field = 269
+
   psf_filename =
-    @sprintf("%s/psField-%06d-%d-%04d.fit", datadir, RUN, CAMCOL, FIELD)
+    @sprintf("%s/psField-%06d-%d-%04d.fit", datadir, run, camcol, field)
   psf_fits = FITSIO.FITS(psf_filename);
   raw_psf_comp = SDSSIO.read_psf(psf_fits, band_letters[1]);
   close(psf_fits)

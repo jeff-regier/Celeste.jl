@@ -51,31 +51,38 @@ end
 sf = evaluate_psf_fit(psf_params, raw_psf, true);
 sf_free = deepcopy(sf);
 
-k = 1
 using Celeste.Transform
 psf_transform = PSF.get_psf_transform(psf_params);
 
-# This is the diagonal of the Jacobian transform.
-jacobian_diag = zeros(length(PsfParams));
+for k = 1:K
+  # This is the diagonal of the Jacobian transform.
+  jacobian_diag = zeros(length(PsfParams));
 
-# These are the hessians of each individual parameter's transform.  We
-# can represent it this way since each parameter's transform only depends on
-# its own value and not on others.
-hessian_values = zeros(length(PsfParams));
+  # These are the hessians of each individual parameter's transform.  We
+  # can represent it this way since each parameter's transform only depends on
+  # its own value and not on others.
+  hessian_values = zeros(length(PsfParams));
 
-for ind = 1:2
-  mu_ind = psf_ids.mu[ind]
-  jac, hess =
-    Transform.box_derivatives(psf_params[k][mu_ind], psf_transform.bounds[k][:mu][ind]);
-  jacobian_diag[mu_ind] = jac
-  hessian_values[mu_ind] = hess
-end
+  for ind = 1:2
+    mu_ind = psf_ids.mu[ind]
+    jac, hess =
+      Transform.box_derivatives(psf_params[k][mu_ind], psf_transform.bounds[k][:mu][ind]);
+    jacobian_diag[mu_ind] = jac
+    hessian_values[mu_ind] = hess
+  end
 
-# The rest are one-dimensional.
-for field in setdiff(fieldnames(PsfParams), [ :mu ])
-  ind = psf_ids.(field)
-  jac, hess =
-    Transform.box_derivatives(psf_params[k][1], psf_transform.bounds[k][field][1]);
-  jacobian_diag[ind] = jac
-  hessian_values[ind] = hess
+  # The rest are one-dimensional.
+  for field in setdiff(fieldnames(PsfParams), [ :mu ])
+    ind = psf_ids.(field)
+    jac, hess =
+      Transform.box_derivatives(psf_params[k][1], psf_transform.bounds[k][field][1]);
+    jacobian_diag[ind] = jac
+    hessian_values[ind] = hess
+  end
+
+  hess_inds = (1:length(PsfParams)) + length(PsfParams) * (k - 1)
+  sf_free.d[:, k] = jacobian_diag .* sf.d[:, k]
+  sf_free.h[hess_inds, hess_inds] =
+    ((jacobian_diag * jacobian_diag') .* sf.h[hess_inds, hess_inds]) +
+    diagm(hessian_values .* sf_free.d[:, k])
 end
