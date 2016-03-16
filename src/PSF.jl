@@ -74,7 +74,7 @@ function evaluate_psf_fit{NumType <: Number}(
   #psf_image = zeros(size(x_mat));
 
   # TODO: allocate these outside?
-  bvn_derivs = BivariateNormalDerivatives{Float64}(NumType);
+  bvn_derivs = BivariateNormalDerivatives{NumType}(NumType);
   log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
   pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
 
