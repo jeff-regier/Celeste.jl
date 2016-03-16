@@ -79,7 +79,7 @@ function pixel_value_wrapper_sf{NumType <: Number}(
     sig_sf_vec[k] = GalaxySigmaDerivs(
       psf_params[psf_ids.e_angle, k],
       psf_params[psf_ids.e_axis, k],
-      psf_params[psf_ids.e_scale, k], sigma_vec[k], calculate_tensor=true);
+      psf_params[psf_ids.e_scale, k], sigma_vec[k], calculate_tensor=calculate_derivs);
 
   end
 
@@ -114,7 +114,7 @@ psf_components = PsfComponent[
 psf_rendered = get_psf_at_point(psf_components, rows=[ x[1] ], cols=[ x[2] ])[1];
 @test_approx_eq psf_rendered pixel_value_wrapper_value(psf_params[:])
 
-pixel_value = pixel_value_wrapper_sf(psf_params[:]);
+pixel_value = pixel_value_wrapper_sf(psf_params[:], true);
 
 ad_grad = ForwardDiff.gradient(pixel_value_wrapper_value, psf_params[:]);
 ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_params[:]);
@@ -124,13 +124,14 @@ ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_params[:]);
 
 
 
-
-
+# Fewer pixels for quick testing.  Also, ForwardDiff.hessian runs into strange
+# problems on the whole image.
+keep_pixels = 20:30
 
 function evaluate_psf_fit_wrapper_sf{NumType <: Number}(
       psf_param_vec::Vector{NumType}, calculate_derivs::Bool)
   psf_params = reshape(psf_param_vec, length(PsfParams), 2)
-  evaluate_psf_fit(psf_params, raw_psf)
+  evaluate_psf_fit(psf_params, raw_psf[keep_pixels, keep_pixels], calculate_derivs)
 end
 
 function evaluate_psf_fit_wrapper_value{NumType <: Number}(psf_param_vec::Vector{NumType})
