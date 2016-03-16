@@ -54,6 +54,7 @@ function sample_prior()
     PriorParams(a, r_mean, r_var, k, c_mean, c_cov)
 end
 
+
 """
 Return a default-initialized VariationalParams object.
 """
@@ -107,79 +108,6 @@ function init_source(ce::CatalogEntry)
 
     ret
 end
-
-
-function matched_filter(img::Image)
-    H, W = 5, 5
-    kernel = zeros(Float64, H, W)
-    for k in 1:3
-        mvn = MvNormal(img.psf[k].xiBar, img.psf[k].tauBar)
-        for h in 1:H
-            for w in 1:W
-                x = [h - (H + 1) / 2., w - (W + 1) / 2.]
-                kernel[h, w] += img.psf[k].alphaBar * pdf(mvn, x)
-            end
-        end
-    end
-    kernel /= sum(kernel)
-end
-
-
-function convolve_image(img::Image)
-    # Not totally sure why this is helpful,
-    # but it may help find
-    # peaks in an image that has already been gaussian-blurred.
-    # (Ref in ICML & NIPS papers).
-    kernel = matched_filter(img)
-    H, W = size(img.pixels)
-    padded_pixels = Array(Float64, H + 8, W + 8)
-    fill!(padded_pixels, median(img.pixels))
-    padded_pixels[5:H+4,5:W+4] = img.pixels
-    conv2(padded_pixels, kernel)[7:H+6, 7:W+6]
-end
-
-
-function peak_starts(blob::Blob)
-    # Heuristically find the peaks in the blob.  (Blob == field)
-    H, W = size(blob[1].pixels)
-    added_pixels = zeros(Float64, H, W)
-    for b in 1:5
-        added_pixels += convolve_image(blob[b])
-    end
-    spread = quantile(added_pixels[:], .7) - quantile(added_pixels[:], .2)
-    threshold = median(added_pixels) + 3spread
-
-    peaks = Array(Vector{Float64}, 0)
-    i = 0
-    for h=3:(H-3), w=3:(W-3)
-        if added_pixels[h, w] > threshold &&
-                added_pixels[h, w] > maximum(added_pixels[h-2:h+2, w-2:w+2]) - .1
-            i += 1
-#            println("found peak $i: ", h, " ", w)
-#            println(added_pixels[h-3:min(h+3,99), w-3:min(w+3,99)])
-            push!(peaks, [h, w])
-        end
-    end
-
-    R = length(peaks)
-    peaks_mat = Array(Float64, 2, R)
-    for i in 1:R
-        peaks_mat[:, i] = peaks[i]
-    end
-
-    peaks_mat
-#    wcsp2s(img.wcs, peaks_mat)
-end
-
-
-function peak_init(blob::Blob)
-    v1 = peak_starts(blob)
-    S = size(v1)[2]
-    vp = [init_source(v1[:, s]) for s in 1:S]
-    twice_radius = float(max(blob[1].H, blob[1].W))
-    ModelParams(vp, sample_prior())
-end
-
 
 
 #############################
@@ -324,20 +252,27 @@ Returns:
     into patches indicating which patches are affected by any pixels
     in the tiles.
 """
-function get_tiled_image_sources(
+function get_tiled_image_sources(img::Image,
   tiled_image::TiledImage, patches::Vector{SkyPatch})
 
-  H, W = size(tiled_image)
-  tile_sources = fill(Int[], H, W)
+  # HH * WW is the number of tiles in the image (not the number of pixels)
+  HH, WW = size(tiled_image)
+  tile_sources = Array(Vector{Int}, HH, WW)
   candidates = SkyImages.local_source_candidates(tiled_image, patches)
-  for h in 1:H, w in 1:W
+
+  pixel_center = [img.H / 2, img.W / 2]
+  wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
+  wcs_jacobian_ev = maximum(abs(eigvals(wcs_jacobian)))
+
+  for hh in 1:HH, ww in 1:WW
     # Only look for sources within the candidate set.
-    cand_patches = patches[candidates[h, w]]
+    cand_patches = patches[candidates[hh, ww]]
     if length(cand_patches) > 0
-      cand_sources = SkyImages.get_local_sources(tiled_image[h, w], cand_patches)
-      tile_sources[h, w] = candidates[h, w][cand_sources]
+      cand_sources = SkyImages.get_local_sources(tiled_image[hh, ww],
+                               cand_patches, wcs_jacobian_ev)
+      tile_sources[hh, ww] = candidates[hh, ww][cand_sources]
     else
-      tile_sources[h, w] = Int[]
+      tile_sources[hh, ww] = Int[]
     end
   end
   tile_sources
@@ -411,7 +346,7 @@ function initialize_model_params(
             SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
         end
         println("Initializing band $b tiled image sources.")
-        mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b],
+        mp.tile_sources[b] = get_tiled_image_sources(blob[b], tiled_blob[b],
                                                      mp.patches[:, b][:])
     end
     print("\n")
