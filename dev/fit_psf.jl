@@ -99,6 +99,13 @@ end
 x_ind = 1508
 x = x_mat[x_ind]
 
+sigma_vec = Array(Matrix{Float64}, K);
+for k = 1:K
+  sigma_vec[k] = Util.get_bvn_cov(psf_params[psf_ids.e_axis, k],
+                                  psf_params[psf_ids.e_angle, k],
+                                  psf_params[psf_ids.e_scale, k])
+end
+
 psf_components = PsfComponent[
   PsfComponent(psf_params[psf_ids.weight, k], psf_params[psf_ids.mu, k], sigma_vec[k])
                 for k = 1:K ];
@@ -108,10 +115,10 @@ psf_rendered = get_psf_at_point(psf_components, rows=[ x[1] ], cols=[ x[2] ])[1]
 
 pixel_value = pixel_value_wrapper_sf(psf_params[:]);
 
-ad_grad = ForwardDiff.gradient(pixel_value_wrapper_value, psf_params[:])
-ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_params[:])
+ad_grad = ForwardDiff.gradient(pixel_value_wrapper_value, psf_params[:]);
+ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_params[:]);
 
-hcat(ad_grad, pixel_value.d[:])
-hcat(ad_hess[:], pixel_value.h[:])
+@test_approx_eq ad_grad pixel_value.d[:]
+@test_approx_eq ad_hess[:] pixel_value.h[:]
 
 #matshow(psf_image)
