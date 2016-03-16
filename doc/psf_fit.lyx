@@ -69,7 +69,7 @@
 \begin_body
 
 \begin_layout Standard
-If
+The pdf derivatives are
 \begin_inset Formula 
 \begin{eqnarray*}
 \phi & = & -\frac{1}{2}\left(x-\mu\right)^{T}\Sigma^{-1}\left(x-\mu\right)-\frac{1}{2}\log\left|\Sigma\right|\\
@@ -78,6 +78,37 @@ a & = & b+w\exp\left(\phi\right)\\
 \frac{da}{db} & = & 1\\
 \frac{d^{2}a}{db^{2}} & = & \frac{d^{2}a}{dbd\phi}=0\\
 \frac{d^{2}a}{d\phi^{2}} & = & w\exp\left(\phi\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Then the squared loss errors are
+\begin_inset Formula 
+\begin{eqnarray*}
+\ell & = & \left(p-a\right)^{2}\\
+\frac{d\ell}{dp} & = & 2\left(p-a\right)\\
+\frac{d^{2}\ell}{dp^{2}} & = & 2
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Recall that if 
+\begin_inset Formula $E\left(x\right)=E\left(y\left(x\right)\right)$
+\end_inset
+
+: 
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{dE}{dxdx^{T}} & = & \frac{d}{dx}\left(\left(\frac{dy}{dx^{T}}\right)^{T}\frac{dE}{dy}\right)\\
+ & = & \left(\frac{dy}{dx^{T}}\right)^{T}\frac{d^{2}E}{dydy^{T}}\frac{dy}{dx}+\sum_{i}\frac{dy_{i}}{dxdx^{T}}\frac{dE}{dy_{i}}
 \end{eqnarray*}
 
 \end_inset

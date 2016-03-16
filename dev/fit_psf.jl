@@ -34,8 +34,6 @@ x_mat = PSF.get_x_matrix_from_psf(raw_psf);
 wcs_jacobian = eye(2);
 
 K = 2
-psf_fit = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
-
 
 # Initialize params
 psf_params = zeros(length(Types.PsfParams), K)
@@ -65,8 +63,10 @@ psf_image = zeros(size(x_mat));
 log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1);
 pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1);
 pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
+squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
 
 #x_ind = 1508
+SensitiveFloats.clear!(squared_error)
 for x_ind in 1:length(x_mat)
   x = x_mat[x_ind]
   SensitiveFloats.clear!(pixel_value)
@@ -104,7 +104,10 @@ for x_ind in 1:length(x_mat)
   end
 
   psf_image[x_ind] = pixel_value.v[1]
-  
+  squared_error.v += (pixel_value.v[1] - raw_psf[x_ind]) ^ 2
+  squared_error.d += 2 * (pixel_value.v[1] - raw_psf[x_ind]) * pixel_value.d
+  squared_error.h += 2 * pixel_value.h
 end
+
 
 matshow(psf_image)
