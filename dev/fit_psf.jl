@@ -120,5 +120,3 @@ ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_params[:]);
 
 @test_approx_eq ad_grad pixel_value.d[:]
 @test_approx_eq ad_hess[:] pixel_value.h[:]
-
-#matshow(psf_image)
