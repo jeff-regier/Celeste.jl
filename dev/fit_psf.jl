@@ -57,7 +57,8 @@ NumType = Float64
 
 
 
-function pixel_value_wrapper_sf{NumType <: Number}(psf_param_vec::Vector{NumType})
+function pixel_value_wrapper_sf{NumType <: Number}(
+    psf_param_vec::Vector{NumType}, calculate_derivs::Bool)
 
   psf_params = reshape(psf_param_vec, length(PsfParams), 2)
 
@@ -85,13 +86,13 @@ function pixel_value_wrapper_sf{NumType <: Number}(psf_param_vec::Vector{NumType
   clear!(pixel_value)
   evaluate_psf_pixel_fit!(
       x, psf_params, sigma_vec, sig_sf_vec,
-      bvn_derivs, log_pdf, pdf, pixel_value)
+      bvn_derivs, log_pdf, pdf, pixel_value, calculate_derivs)
 
   pixel_value
 end
 
 function pixel_value_wrapper_value{NumType <: Number}(psf_param_vec::Vector{NumType})
-  pixel_value_wrapper_sf(psf_param_vec).v[1]
+  pixel_value_wrapper_sf(psf_param_vec, false).v[1]
 end
 
 
@@ -126,18 +127,23 @@ ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_params[:]);
 
 
 
-function evaluate_psf_fit_wrapper_sf{NumType <: Number}(psf_param_vec::Vector{NumType})
+function evaluate_psf_fit_wrapper_sf{NumType <: Number}(
+      psf_param_vec::Vector{NumType}, calculate_derivs::Bool)
   psf_params = reshape(psf_param_vec, length(PsfParams), 2)
   evaluate_psf_fit(psf_params, raw_psf)
 end
 
 function evaluate_psf_fit_wrapper_value{NumType <: Number}(psf_param_vec::Vector{NumType})
-  evaluate_psf_fit_wrapper_sf(psf_param_vec).v[1]
+  squared_error = evaluate_psf_fit_wrapper_sf(psf_param_vec, false);
+  squared_error.v[1]
 end
 
+
+squared_error = evaluate_psf_fit_wrapper_sf(psf_params[:], true);
+squared_error.v[1]
 
 ad_grad = ForwardDiff.gradient(evaluate_psf_fit_wrapper_value, psf_params[:]);
 ad_hess = ForwardDiff.hessian(evaluate_psf_fit_wrapper_value, psf_params[:]);
 
-@test_approx_eq ad_grad pixel_value.d[:]
-@test_approx_eq ad_hess[:] pixel_value.h[:]
+@test_approx_eq ad_grad squared_error.d[:]
+@test_approx_eq ad_hess[:] squared_error.h[:]
