@@ -28,7 +28,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
     bvn = BvnComponent{NumType}(psf_params[psf_ids.mu, k], sigma_vec[k], 1.0);
     eval_bvn_pdf!(bvn_derivs, bvn, x)
     get_bvn_derivs!(bvn_derivs, bvn, true, true)
-    transform_bvn_derivs!(bvn_derivs, sig_sf_vec[k], eye(NumType, 2), true)
+    transform_bvn_derivs!(bvn_derivs, sig_sf_vec[k], eye(Float64, 2), true)
 
     SensitiveFloats.clear!(log_pdf)
     # This is redundant, but it's what eval_bvn_pdf returns.
