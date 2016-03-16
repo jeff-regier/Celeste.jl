@@ -4,6 +4,7 @@ using Celeste.SkyImages
 using Celeste.BivariateNormals
 import Celeste.Util
 import Celeste.SensitiveFloats
+import Celeste.SDSSIO
 
 using SloanDigitalSkySurvey.PSF
 using PyPlot
@@ -11,16 +12,23 @@ using PyPlot
 
 field_dir = joinpath(Pkg.dir("Celeste"), "test/data")
 
-run_num = "004263"
-camcol_num = "5"
-field_num = "0117"
+run_num = 4263
+camcol_num = 5
+field_num = 117
+
+run_str = "004263"
+camcol_str = "5"
+field_str = "0117"
 b = 3
 
-psf_fname = "$field_dir/psField-$run_num-$camcol_num-$field_num.fit"
-@assert(isfile(psf_fname), "Cannot find mask file $(psf_fname)")
-raw_psf_comp = SkyImages.load_sdss_psf(psf_fname, b);
+psf_filename =
+  @sprintf("%s/psField-%06d-%d-%04d.fit", field_dir, run_num, camcol_num, field_num)
+psf_fits = FITSIO.FITS(psf_filename);
+raw_psf_comp = SDSSIO.read_psf(psf_fits, band_letters[b]);
+close(psf_fits)
 
-raw_psf = get_psf_at_point(500., 500., raw_psf_comp);
+
+raw_psf = raw_psf_comp(500., 500.);
 #psf = SkyImages.fit_raw_psf_for_celeste(raw_psf);
 x_mat = PSF.get_x_matrix_from_psf(raw_psf);
 wcs_jacobian = eye(2);
@@ -41,7 +49,6 @@ for k=1:K
 end
 
 # Functions
-
 
 bvn_derivs = BivariateNormalDerivatives{Float64}(Float64);
 sig_sf = GalaxySigmaDerivs(
