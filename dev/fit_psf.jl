@@ -120,3 +120,13 @@ ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_params[:]);
 
 @test_approx_eq ad_grad pixel_value.d[:]
 @test_approx_eq ad_hess[:] pixel_value.h[:]
+
+
+
+
+
+
+function evaluate_psf_fit_wrapper{NumType <: Number}(psf_param_vec::Vector{NumType})
+
+
+end
