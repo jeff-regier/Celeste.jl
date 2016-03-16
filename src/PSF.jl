@@ -1,14 +1,18 @@
+module PSF
+
 using Celeste
 using Celeste.Types
-using Celeste.SkyImages
 using Celeste.BivariateNormals
 import Celeste.Util
 import Celeste.SensitiveFloats
 import Celeste.SDSSIO
 
-using SloanDigitalSkySurvey.PSF
 using Celeste.SensitiveFloats.SensitiveFloat
 using Celeste.SensitiveFloats.clear!
+
+export evaluate_psf_fit
+
+include("psf.jl")
 
 
 function evaluate_psf_pixel_fit!{NumType <: Number}(
@@ -23,6 +27,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
 
   clear!(pixel_value)
 
+  K = size(psf_params, 2)
   sigma_ids = [psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale]
   for k = 1:K
     # I will put in the weights later so that the log pdf sensitive float
@@ -77,9 +82,7 @@ function evaluate_psf_fit{NumType <: Number}(
     psf_params::Matrix{NumType}, raw_psf::Matrix{Float64}, calculate_derivs::Bool)
 
   K = size(psf_params, 2)
-  x_mat = PSF.get_x_matrix_from_psf(raw_psf);
-
-  #psf_image = zeros(size(x_mat));
+  x_mat = get_x_matrix_from_psf(raw_psf);
 
   # TODO: allocate these outside?
   bvn_derivs = BivariateNormalDerivatives{NumType}(NumType);
@@ -111,25 +114,17 @@ function evaluate_psf_fit{NumType <: Number}(
         x_mat[x_ind], psf_params, sigma_vec, sig_sf_vec,
         bvn_derivs, log_pdf, pdf, pixel_value, calculate_derivs)
 
-    #psf_image[x_ind] = pixel_value.v[1]
     diff = (pixel_value.v[1] - raw_psf[x_ind])
     squared_error.v +=  diff ^ 2
-    # println("Iter $x_ind:")
-    # println(squared_error.v)
-    # println("----------------")
     if calculate_derivs
 
       squared_error.d += 2 * diff * pixel_value.d
       squared_error.h +=
         2 * (diff * pixel_value.h + pixel_value.d[:] * pixel_value.d[:]')
     end
-    # if x_ind == 1508
-    #   println("----------------------------- pixel_value:")
-    #   println(pixel_value.h)
-    #   println("----------------------------- squared_error:")
-    #   println(squared_error.h)
-    # end
   end
 
   squared_error
 end
+
+end # module
