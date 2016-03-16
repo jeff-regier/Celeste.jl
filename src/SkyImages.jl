@@ -16,10 +16,8 @@ import Base.convert
 export load_stamp_blob, crop_image!, get_psf_at_point,
        convert_catalog_to_celeste, load_stamp_catalog,
        break_blob_into_tiles, break_image_into_tiles,
-       get_local_sources,
-       stitch_object_tiles
+       get_local_sources, stitch_object_tiles
 
-include("psf.jl")
 
 """
 Convert from a catalog in dictionary-of-arrays, as returned by
