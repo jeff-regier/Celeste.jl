@@ -10,6 +10,7 @@ using SloanDigitalSkySurvey.PSF
 using PyPlot
 using Celeste.SensitiveFloats.SensitiveFloat
 
+using ForwardDiff
 
 using Base.Test
 
@@ -54,41 +55,63 @@ end
 # For debugging
 NumType = Float64
 
-bvn_derivs = BivariateNormalDerivatives{Float64}(NumType);
-log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
-pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
 
-pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
-squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
 
-sigma_vec = Array(Matrix{NumType}, K);
-sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
+function pixel_value_wrapper_sf{NumType <: Number}(psf_param_vec::Vector{NumType})
 
-for k = 1:K
-  sigma_vec[k] = Util.get_bvn_cov(psf_params[psf_ids.e_axis, k],
-                                  psf_params[psf_ids.e_angle, k],
-                                  psf_params[psf_ids.e_scale, k])
-  sig_sf_vec[k] = GalaxySigmaDerivs(
-    psf_params[psf_ids.e_angle, k],
-    psf_params[psf_ids.e_axis, k],
-    psf_params[psf_ids.e_scale, k], sigma_vec[k], calculate_tensor=true);
+  psf_params = reshape(psf_param_vec, length(PsfParams), 2)
 
+  bvn_derivs = BivariateNormalDerivatives{NumType}(NumType);
+  log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
+  pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
+
+  pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
+  squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
+
+  sigma_vec = Array(Matrix{NumType}, K);
+  sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
+
+  for k = 1:K
+    sigma_vec[k] = Util.get_bvn_cov(psf_params[psf_ids.e_axis, k],
+                                    psf_params[psf_ids.e_angle, k],
+                                    psf_params[psf_ids.e_scale, k])
+    sig_sf_vec[k] = GalaxySigmaDerivs(
+      psf_params[psf_ids.e_angle, k],
+      psf_params[psf_ids.e_axis, k],
+      psf_params[psf_ids.e_scale, k], sigma_vec[k], calculate_tensor=true);
+
+  end
+
+  clear!(pixel_value)
+  evaluate_psf_pixel_fit!(
+      x, psf_params, sigma_vec, sig_sf_vec,
+      bvn_derivs, log_pdf, pdf, pixel_value)
+
+  pixel_value
 end
 
+function pixel_value_wrapper_value{NumType <: Number}(psf_param_vec::Vector{NumType})
+  pixel_value_wrapper_sf(psf_param_vec).v[1]
+end
+
+
+# Pick a point for testing
 x_ind = 1508
 x = x_mat[x_ind]
-x = Float64[1.0, 0.0]
 
-psf_components =
-  PsfComponent[ PsfComponent(psf_params[psf_ids.weight, k], psf_params[psf_ids.mu, k], sigma_vec[k])
+psf_components = PsfComponent[
+  PsfComponent(psf_params[psf_ids.weight, k], psf_params[psf_ids.mu, k], sigma_vec[k])
                 for k = 1:K ];
 
-clear!(pixel_value)
-evaluate_psf_pixel_fit!(
-    x, psf_params, sigma_vec, sig_sf_vec,
-    bvn_derivs, log_pdf, pdf, pixel_value)
+psf_rendered = get_psf_at_point(psf_components, rows=[ x[1] ], cols=[ x[2] ])[1];
+@test_approx_eq psf_rendered pixel_value_wrapper_value(psf_params[:])
 
-psf_rendered = get_psf_at_point(psf_components, rows=[ x[1] ], cols=[ x[2] ])[1]
-@test_approx_eq psf_rendered pixel_value.v[1]
+pixel_value = pixel_value_wrapper_sf(psf_params[:]);
+
+ad_grad = ForwardDiff.gradient(pixel_value_wrapper_value, psf_params[:])
+ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_params[:])
+
+hcat(ad_grad, pixel_value.d[:])
+hcat(ad_hess[:], pixel_value.h[:])
 
 #matshow(psf_image)
