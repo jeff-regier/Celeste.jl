@@ -4,6 +4,7 @@ using DataFrames
 import FITSIO
 import JLD
 import SloanDigitalSkySurvey: SDSS
+using Logging  # just for testing right now
 
 using .Types
 import .SkyImages
@@ -14,6 +15,164 @@ const TILE_WIDTH = 20
 const MAX_ITERS = 50
 const MIN_FLUX = 2.0
 
+Logging.configure(level=INFO)
+
+"""
+read_photoobj_primary(fieldids, dirs) -> Vector{CatalogEntry}
+
+Combine photoobj catalogs for the given overlapping fields, returning a single
+joined catalog containing only primary objects.
+"""
+function read_photoobj_primary(fieldids::Vector{Tuple{Int, Int, Int}}, dirs)
+    @assert length(fieldids) == length(dirs)
+
+    info("reading photoobj catalogs for ", length(fieldids), " fields")
+
+    # the code below assumes there is at least one field.
+    if length(fieldids) == 0
+        return CatalogEntry[]
+    end
+
+    # Read in all photoobj catalogs.
+    rawcatalogs = Array(Dict, length(fieldids))
+    for i in eachindex(fieldids)
+        run, camcol, field = fieldids[i]
+        dir = dirs[i]
+        fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
+        info("field $(fieldids[i]): reading $fname")
+        rawcatalogs[i] = SDSSIO.read_photoobj(fname)
+    end
+
+    for i in eachindex(fieldids)
+        info("field ", fieldids[i], ": ", length(rawcatalogs[i]["objid"]),
+             " entries")
+    end
+
+    # Limit each catalog to primary objects and objects where thing_id != -1
+    # (thing_id == -1 indicates that the matching process failed)
+    for cat in rawcatalogs
+        mask = (cat["mode"] .== 0x01) & (cat["thing_id"] .!= -1)
+        for key in keys(cat)
+            cat[key] = cat[key][mask]
+        end
+    end
+
+    for i in eachindex(fieldids)
+        info("field ", fieldids[i], ": ", length(rawcatalogs[i]["objid"]),
+             " primary entries")
+    end
+
+    # Merge all catalogs together (there should be no duplicate objects,
+    # because for each object there should only be one "primary" occurance.)
+    rawcatalog = deepcopy(rawcatalogs[1])
+    for i=2:length(rawcatalogs)
+        for key in keys(rawcatalog)
+            append!(rawcatalog[key], rawcatalogs[i][key])
+        end
+    end
+
+    # check that there are no duplicate thing_ids (see above comment)
+    if length(Set(rawcatalog["thing_id"])) < length(rawcatalog["thing_id"])
+        error("Found one or more duplicate primary thing_ids in photoobj " *
+              "catalogs")
+    end
+
+    # convert to celeste format catalog
+    catalog = SkyImages.convert(Vector{CatalogEntry}, rawcatalog)
+
+    return catalog
+end
+
+
+"""
+infer(ra_range, dec_range, fieldids, frame_dirs; ...)
+
+Fit the Celeste model to sources in a given ra, dec range.
+
+- ra_range: minimum and maximum RA of sources to consider.
+- dec_range: minimum and maximum Dec of sources to consider.
+- fieldids: Array of run, camcol, field triplets that the source occurs in.
+- frame_dirs: Directories in which to find each field's frame FITS files.
+
+Returns:
+
+- Dictionary of results, keyed by SDSS thing_id.
+"""
+function infer(ra_range::Tuple{Float64, Float64},
+               dec_range::Tuple{Float64, Float64},
+               fieldids::Vector{Tuple{Int, Int, Int}},
+               frame_dirs::Vector;
+               fpm_dirs=frame_dirs,
+               psfield_dirs=frame_dirs,
+               photofield_dirs=frame_dirs,
+               photoobj_dirs=frame_dirs)
+    # Read all primary objects in these fields.
+    catalog = read_photoobj_primary(fieldids, photoobj_dirs)
+    info("$(length(catalog)) primary sources")
+
+    # Filter out low-flux objects in the catalog.
+    catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
+    info("$(length(catalog)) primary sources after MIN_FLUX cut")
+
+    # Get indicies of entries in the  RA/Dec range of interest.
+    entry_in_range = entry->((ra_range[1] < entry.pos[1] < ra_range[2]) &&
+                             (dec_range[1] < entry.pos[2] < dec_range[2]))
+    idx = find(entry_in_range, catalog)
+
+    info("processing $(length(idx)) sources in RA/Dec range")
+
+    # If there are no objects of interest, return early.
+    if length(idx) == 0
+        return Dict{Int, Dict}()
+    end
+
+    # Read in images for all (run, camcol, field).
+    images = Image[]
+    for i in 1:length(fieldids)
+        info("reading field ", fieldids[i])
+        run, camcol, field = fieldids[i]
+        fieldims = SkyImages.read_sdss_field(run, camcol, field, frame_dirs[i],
+                                             fpm_dir=fpm_dirs[i],
+                                             psfield_dir=psfield_dirs[i],
+                                             photofield_dir=photofield_dirs[i])
+        append!(images, fieldims)
+    end
+
+    # initialize tiled images and model parameters for trimming.  We will
+    # initialize the psf again before fitting, so we don't do it here.
+    tiled_images, mp_all = ModelInit.initialize_celeste(images, catalog,
+                                                        tile_width=TILE_WIDTH,
+                                                        fit_psf=false)
+
+    results = Dict{Int, Dict}()
+    for i in idx
+        entry = catalog[i]
+        info("processing source $i: objid= $(entry.objid)")
+
+        t0 = time()
+        trimmed_tiled_images, mp, active_s, s =
+            ModelInit.initialize_objid(entry.objid, mp_all, catalog, images)
+        init_time = time() - t0
+
+        t0 = time()
+        iter_count, max_f, max_x, result =
+            OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
+                                    verbose=true, max_iters=MAX_ITERS)
+        fit_time = time() - t0
+
+        results[entry.thing_id] = Dict("objid"=>entry.objid,
+                                       "ra"=>entry.pos[1],
+                                       "dec"=>entry.pos[2],
+                                       "vp"=>mp.vp[active_s],  # should be 's'?
+                                       "init_time"=>init_time,
+                                       "fit_time"=>fit_time)
+    end
+
+    return results
+end
+
+# -----------------------------------------------------------------------------
+# NERSC-specific functions
 
 """
 Query the SDSS database for all fields that overlap the given RA, Dec range.
@@ -69,138 +228,78 @@ function query_overlapping_fields(ramin, ramax, decmin, decmax)
     return out
 end
 
+"""
+query_overlapping_fieldids(ramin, ramax, decmin, decmax) -> (Int, Int, Int)
+
+Like `query_overlapping_fields`, but return a Vector of
+(run, camcol, field) triplets.
+"""
+function query_overlapping_fieldids(ramin, ramax, decmin, decmax)
+    fields = query_overlapping_fields(ramin, ramax, decmin, decmax)
+    return Tuple{Int, Int, Int}[(fields["run"][i],
+                                 fields["camcol"][i],
+                                 fields["field"][i])
+                                for i in eachindex(fields["run"])]
+end
+
+
+
+const NERSC_DATA_ROOT = "/global/projecta/projectdirs/sdss/data/sdss/dr12/boss"
+nersc_photoobj_dir(run::Integer, camcol::Integer) = 
+    "$(NERSC_DATA_ROOT)/photoObj/301/$(run)/$(camcol)"
+nersc_psfield_dir(run::Integer, camcol::Integer) =
+    "$(NERSC_DATA_ROOT)/photo/redux/301/$(run)/objcs/$(camcol)"
+nersc_photofield_dir(run::Integer) = "$(NERSC_DATA_ROOT)/photoObj/301/$(run)"
 
 """
-infer(ra_range, dec_range, fieldids, frame_dirs; ...)
+nersc_frame_dir(run, camcol, field)
 
-Fit the Celeste model to sources in a given ra, dec range.
-
-- ra_range: minimum and maximum RA of sources to consider.
-- dec_range: minimum and maximum Dec of sources to consider.
-- fieldids: Array of run, camcol, field triplets that the source occurs in.
-- frame_dirs: Directories in which to find each field's frame FITS files.
-
-Returns:
-
-- Dictionary of results, keyed by SDSS thing_id.
+Uncompress the frame files to user's scratch and return the directory on
+scratch containing the uncompressed files.
 """
-function infer(ra_range::Tuple{Float64, Float64},
-               dec_range::Tuple{Float64, Float64},
-               fieldids::Vector{Tuple{Int, Int, Int}},
-               frame_dirs::Vector;
-               fpm_dirs=frame_dirs,
-               psfield_dirs=frame_dirs,
-               photofield_dirs=frame_dirs,
-               photoobj_dirs=frame_dirs)
-
-    # the code below assumes there is at least one field.
-    if length(fieldids) == 0
-        return Dict{Int, Dict}()
-    end
-
-    # Read in all photoobj catalogs.
-    rawcatalogs = Array(Dict, length(fieldids))
-    for i in eachindex(fieldids)
-        run, camcol, field = fieldids[i]
-        dir = photoobj_dirs[i]
-        fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
-        info("field $i: reading $fname")
-        rawcatalogs[i] = SDSSIO.read_photoobj(fname)
-    end
-
-    for i in eachindex(fieldids)
-        info(string("field ", i, ": ", length(rawcatalogs[i]["objid"]),
-                    " entries"))
-    end
-
-    # Limit each catalog to primary objects
-    for cat in rawcatalogs
-        mask = cat["mode"] .== 0x01
-        for key in keys(cat)
-            cat[key] = cat[key][mask]
+function nersc_frame_dir(run::Integer, camcol::Integer, field::Integer)
+    # Uncompress the frame (bz2) files to scratch
+    srcdir = "$(NERSC_DATA_ROOT)/photoObj/frames/301/$(run)/$(camcol)"
+    dstdir = joinpath(ENV["SCRATCH"], "celeste", "frames", "$(run)-$(camcol)")
+    isdir(dstdir) || mkpath(dstdir)
+    for band in ['u', 'g', 'r', 'i', 'z']
+        srcfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits.bz2",
+                           srcdir, band, run, camcol, field)
+        dstfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
+                           dstdir, band, run, camcol, field)
+        if !isfile(dstfile)
+            println("bzcat --keep $srcfile > $dstfile")
+            Base.run(pipeline(`bzcat --keep $srcfile`, stdout=dstfile))
         end
     end
+    return dstdir
+end
 
-    for i in eachindex(fieldids)
-        info(string("field ", i, ": ", length(rawcatalogs[i]["objid"]),
-                    " primary entries"))
-    end
 
-    # Merge all catalogs together (there should be no duplicate objects,
-    # because for each object there should only be one "primary" occurance.)
-    rawcatalog = deepcopy(rawcatalogs[1])
-    for i=2:length(rawcatalogs)
-        for key in keys(rawcatalog)
-            append!(rawcatalog[key], rawcatalogs[i][key])
+"""
+nersc_fpm_dir(run, camcol, field)
+
+Uncompress the fpM files to user's scratch and return the directory on
+scratch containing the uncompressed files.
+"""
+function nersc_fpm_dir(run::Integer, camcol::Integer, field::Integer)
+    # It isn't strictly necessary to uncompress these, because FITSIO can handle
+    # gzipped files. However, the celeste code assumes the filename ends with
+    # ".fit", so we have to at least symlink the files to a new name.
+    srcdir = "$(NERSC_DATA_ROOT)/photo/redux/301/$(run)/objcs/$(camcol)"
+    dstdir = joinpath(ENV["SCRATCH"], "celeste", "fpm", "$(run)-$(camcol)")
+    isdir(dstdir) || mkpath(dstdir)
+    for band in ['u', 'g', 'r', 'i', 'z']
+        srcfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit.gz",
+                           srcdir, run, band, camcol, field)
+        dstfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
+                           dstdir, run, band, camcol, field)
+        if !isfile(dstfile)
+            println("gunzip --stdout $srcfile > $dstfile")
+            Base.run(pipeline(`gunzip --stdout $srcfile`, stdout=dstfile))
         end
     end
-
-    # check that there are no duplicate thing_ids (see above comment)
-    if length(Set(rawcatalog["thing_id"])) < length(rawcatalog["thing_id"])
-        error("Found one or more duplicate primary thing_ids in photoobj " *
-              "catalogs")
-    end
-
-    # convert to celeste format catalog
-    catalog = SkyImages.convert(Vector{CatalogEntry}, rawcatalog)
-
-    # Filter out low-flux objects in the catalog.
-    catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
-
-    # Get indicies of entries in the  RA/Dec range of interest.
-    entry_in_range = entry->((ra_range[1] < entry.pos[1] < ra_range[2]) &&
-                             (dec_range[1] < entry.pos[2] < dec_range[2]))
-    idx = find(entry_in_range, catalog)
-
-    info("processing $(length(idx)) sources")
-
-    # If there are no objects of interest, return early.
-    if length(idx) == 0
-        return Dict{Int, Dict}()
-    end
-
-    # Read in images for all (run, camcol, field).
-    images = Image[]
-    for i in 1:length(fieldids)
-        run, camcol, field = fieldids[i]
-        fieldims = SkyImages.read_sdss_field(run, camcol, field, frame_dirs[i],
-                                             fpm_dir=fpm_dirs[i],
-                                             psfield_dir=psfield_dirs[i],
-                                             photofield_dir=photofield_dirs[i])
-        append!(images, fieldims)
-    end
-
-    # initialize tiled images and model parameters for trimming.  We will
-    # initialize the psf again before fitting, so we don't do it here.
-    tiled_images, mp_all = ModelInit.initialize_celeste(images, catalog,
-                                                        tile_width=TILE_WIDTH,
-                                                        fit_psf=false)
-
-    results = Dict{Int, Dict}()
-    for i in idx
-        entry = catalog[i]
-        info("processing source $i: objid= $(entry.objid)")
-
-        t0 = time()
-        trimmed_tiled_images, mp, active_s, s =
-            ModelInit.initialize_objid(entry.objid, mp_all, catalog, images)
-        init_time = time() - t0
-
-        t0 = time()
-        iter_count, max_f, max_x, result =
-            OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
-                                    verbose=true, max_iters=MAX_ITERS)
-        fit_time = time() - t0
-
-        results[entry.thing_id] = Dict("objid"=>entry.objid,
-                                       "ra"=>entry.pos[1],
-                                       "dec"=>entry.pos[2],
-                                       "vp"=>mp.vp[active_s],  # should be 's'?
-                                       "init_time"=>init_time,
-                                       "fit_time"=>fit_time)
-    end
-
-    return results
+    return dstdir
 end
 
 
@@ -208,64 +307,15 @@ end
 NERSC-specific infer function, called from main entry point.
 """
 function infer_nersc(ramin, ramax, decmin, decmax, outdir)
-    ROOT_DIR = "/global/projecta/projectdirs/sdss/data/sdss/dr12/boss"
-    SCRATCH_DIR = joinpath(ENV["SCRATCH"], "celeste")
+    # Get vector of (run, camcol, field) triplets overlapping this patch
+    fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
 
-    fields = query_overlapping_fields(ramin, ramax, decmin, decmax)
-
-    # (run, camcol, field) triplets
-    fieldids = Tuple{Int, Int, Int}[(fields["run"][i],
-                                     fields["camcol"][i],
-                                     fields["field"][i])
-                                    for i in eachindex(fields["run"])]
-
-    # build list of relevant directories for each field
-    frame_dirs = Array(ASCIIString, length(fieldids))
-    fpm_dirs = Array(ASCIIString, length(fieldids))
-    psfield_dirs = Array(ASCIIString, length(fieldids))
-    photofield_dirs = Array(ASCIIString, length(fieldids))
-    photoobj_dirs = Array(ASCIIString, length(fieldids))
-    for i in eachindex(fieldids)
-        run, camcol, field = fieldids[i]
-        photoobj_dirs[i] = "$(ROOT_DIR)/photoObj/301/$(run)/$(camcol)"
-        psfield_dirs[i] = "$(ROOT_DIR)/photo/redux/301/$(run)/objcs/$(camcol)"
-        photofield_dirs[i] = "$(ROOT_DIR)/photoObj/301/$(run)"
-
-        # Uncompress the frame (bz2) files to scratch
-        srcdir = "$(ROOT_DIR)/photoObj/frames/301/$(run)/$(camcol)"
-        dstdir = joinpath(SCRATCH_DIR, "frames", "$(run)-$(camcol)")
-        isdir(dstdir) || mkpath(dstdir)
-        for band in ['u', 'g', 'r', 'i', 'z']
-            srcfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits.bz2",
-                               srcdir, band, run, camcol, field)
-            dstfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
-                               dstdir, band, run, camcol, field)
-            if !isfile(dstfile)
-                println("bzcat --keep $srcfile > $dstfile")
-                Base.run(pipeline(`bzcat --keep $srcfile`, stdout=dstfile))
-            end
-        end
-        frame_dirs[i] = dstdir
-
-        # Uncompress the fpm (gz) files to scratch
-        # It isn't strictly necessary to uncompress these, because FITSIO can handle
-        # gzipped files. However, the celeste code assumes the filename ends with
-        # ".fit", so we have to at least symlink the files to a new name.
-        srcdir = "$(ROOT_DIR)/photo/redux/301/$(run)/objcs/$(camcol)"
-        dstdir = joinpath(SCRATCH_DIR, "fpm", "$(run)-$(camcol)")
-        isdir(dstdir) || mkpath(dstdir)
-        for band in ['u', 'g', 'r', 'i', 'z']
-            srcfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit.gz",
-                               srcdir, run, band, camcol, field)
-            dstfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
-                               dstdir, run, band, camcol, field)
-            if !isfile(dstfile)
-                println("gunzip --stdout $srcfile > $dstfile")
-                Base.run(pipeline(`gunzip --stdout $srcfile`, stdout=dstfile))
-            end
-        end
-        fpm_dirs[i] = dstdir
-    end
+    # Get relevant directories corresponding to each field.
+    frame_dirs = [nersc_frame_dir(x[1], x[2], x[3]) for x in fieldids]
+    fpm_dirs = [nersc_fpm_dir(x[1], x[2], x[3]) for x in fieldids]
+    psfield_dirs = [nersc_psfield_dir(x[1], x[2]) for x in fieldids]
+    photoobj_dirs = [nersc_photoobj_dir(x[1], x[2]) for x in fieldids]
+    photofield_dirs = [nersc_photofield_dir(x[1]) for x in fieldids]
 
     results = infer((ramin, ramax), (decmin, decmax), fieldids,
                     frame_dirs;
@@ -275,7 +325,7 @@ function infer_nersc(ramin, ramax, decmin, decmax, outdir)
                     photoobj_dirs=photoobj_dirs)
 
     fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
-                     outdir, ramin, ramax, decmin, decmax) 
+                     outdir, ramin, ramax, decmin, decmax)
     JLD.save(fname, "results", results)
 end
 
@@ -489,7 +539,8 @@ This function converts the parameters from Celeste for one light source
 to a CatalogEntry. (which can be passed to load_ce!)
 It only needs to be called by load_celeste_obj!
 """
-function convert(::Type{CatalogEntry}, vs::Vector{Float64}, objid::ASCIIString)
+function convert(::Type{CatalogEntry}, vs::Vector{Float64}, objid::ASCIIString,
+                 thingid::Int)
     function get_fluxes(i::Int)
         ret = Array(Float64, 5)
         ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
@@ -510,7 +561,7 @@ function convert(::Type{CatalogEntry}, vs::Vector{Float64}, objid::ASCIIString)
         vs[ids.e_angle],
         vs[ids.e_scale],
         objid,
-        0)
+        thingid)
 end
 
 const color_names = ["ug", "gr", "ri", "iz"]
@@ -550,12 +601,13 @@ end
 """
 Convert Celeste results to a dataframe.
 """
-function celeste_to_df(vp::Vector{Vector{Float64}},
-                       objid::Vector{ASCIIString})
-    @assert length(vp) == length(objid)
+function celeste_to_df(results::Dict{Int, Dict})
+#vp::Vector{Vector{Float64}},
+#                       objid::Vector{ASCIIString})
+#    @assert length(vp) == length(objid)
 
     # Initialize dataframe
-    N = length(vp)
+    N = length(results)
     color_col_names = ["color_$cn" for cn in color_names]
     color_sd_col_names = ["color_$(cn)_sd" for cn in color_names]
     col_names = vcat(["objid", "ra", "dec", "is_star", "star_flux_r",
@@ -573,8 +625,9 @@ function celeste_to_df(vp::Vector{Vector{Float64}},
     names!(df, col_symbols)
 
     # Fill dataframe row-by-row.
-    for i=1:N
-        ce = convert(CatalogEntry, vp[i], objid[i])
+    for (thingid, result) in results
+        vp = result["vp"]
+        ce = convert(CatalogEntry, vp, result["objid"], thingid)
         load_ce!(i, ce, df)
 
         df[i, :is_star] = vp[i][ids.a[1]]
@@ -660,24 +713,22 @@ Score all the celeste results for sources in the given
 This is done by finding all files with names matching
 `DIR/celeste-RUN-CAMCOL-FIELD-*.jld`
 """
-function score_field(dir, run, camcol, field, outdir, reffile)
+function score_nersc(ramin, ramax, decmin, decmax, resultdir, reffile)
 
     # find celeste result files matching the pattern
-    re = Regex("celeste-$run-$camcol-$field-.*\.jld")
-    fnames = filter(x->ismatch(re, x), readdir(outdir))
+    re = Regex("celeste-.*\.jld")
+    fnames = filter(x->ismatch(re, x), readdir(dirname))
     paths = [joinpath(outdir, name) for name in fnames]
 
-    # collect Celeste results for the field
-    objid = ASCIIString[]
-    vp = Vector{Float64}[]
+    # collect all Celeste results into a single dictionary keyed by
+    # thing_id
+    results = Dict{Int, Dict}()
     for path in paths
-        d = JLD.load(path)
-        append!(objid, d["objid"])
-        append!(vp, d["vp"])
+        merge!(results, JLD.load(path, "results"))
     end
 
     # convert Celeste results to a DataFrame.
-    celeste_df = celeste_to_df(vp, objid)
+    celeste_df = celeste_to_df(results, objid)
     println("celeste: $(size(celeste_df, 1)) objects")
 
     # load coadd catalog
@@ -696,7 +747,11 @@ function score_field(dir, run, camcol, field, outdir, reffile)
 
     # load "primary" catalog (the SDSS photoObj catalog used to initialize
     # celeste).
-    primary_full_df = load_primary(dir, run, camcol, field)
+    fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
+    photoobj_dirs =  [nersc_photoobj_dir(x[1], x[2]) for x in fieldids]
+    primary_catalog = read_photoobj_primary(fieldids, photoobj_dirs)
+    primary_full_df = celeste_to_df(primary_catalog)
+
     println("primary catalog: $(size(primary_full_df, 1)) objects")
 
     # match by object id
