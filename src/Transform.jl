@@ -661,11 +661,6 @@ function DataTransform(bounds::Vector{ParamBounds};
   @assert maximum(active_sources) <= S
   active_S = length(active_sources)
 
-  # Make sure that each variable has its bounds set.
-  for s=1:length(bounds)
-    @assert Set(keys(bounds[s])) == Set(fieldnames(ids))
-  end
-
   function from_vp!{NumType <: Number}(
       vp::VariationalParams{NumType}, vp_free::VariationalParams{NumType})
     S = length(vp)
