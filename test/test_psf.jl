@@ -13,6 +13,27 @@ using ForwardDiff
 using Base.Test
 
 
+function unwrap_psf_params{NumType <: Number}(psf_params_vec::Vector{NumType})
+  @assert length(psf_param_vec) % length(PsfParams) == 0
+  K = round(Int, length(psf_param_vec) / length(PsfParams))
+  local psf_param_mat = reshape(psf_param_vec, length(PsfParams), K)
+  local psf_params = Array(Vector{NumType}, K)
+  for k = 1:K
+    psf_params[k] = psf_param_mat[:, k]
+  end
+  psf_params
+end
+
+
+function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
+  local psf_params_mat = zeros(NumType, length(psf_params) * length(PsfParams))
+  for k=1:length(psf_params)
+    psf_params_mat[:, k] = psf_params[k]
+  end
+  psf_params_mat
+end
+
+
 function test_psf_fit()
   run_num = 4263
   camcol_num = 5
@@ -37,12 +58,12 @@ function test_psf_fit()
     psf_params[psf_ids.e_scale, k] = sqrt(2 * k)
     psf_params[psf_ids.weight, k] = 1/ K
   end
+  psf_param_vec = wrap_psf_params(psf_params)
 
   function pixel_value_wrapper_sf{NumType <: Number}(
       psf_param_vec::Vector{NumType}, calculate_derivs::Bool)
 
-    local psf_params = reshape(psf_param_vec, length(PsfParams), 2)
-
+    local psf_params = unwrap_psf_params(psf_param_vec)
     bvn_derivs = BivariateNormalDerivatives{NumType}(NumType);
     log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
     pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
@@ -95,12 +116,12 @@ function test_psf_fit()
                   for k = 1:K ];
 
   psf_rendered = get_psf_at_point(psf_components, rows=[ x[1] ], cols=[ x[2] ])[1];
-  @test_approx_eq psf_rendered pixel_value_wrapper_value(psf_params[:])
+  @test_approx_eq psf_rendered pixel_value_wrapper_value(psf_param_vec)
 
-  pixel_value = deepcopy(pixel_value_wrapper_sf(psf_params[:], true));
+  pixel_value = deepcopy(pixel_value_wrapper_sf(psf_param_vec, true));
 
-  ad_grad = ForwardDiff.gradient(pixel_value_wrapper_value, psf_params[:]);
-  ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_params[:]);
+  ad_grad = ForwardDiff.gradient(pixel_value_wrapper_value, psf_param_vec);
+  ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_param_vec);
 
   @test_approx_eq ad_grad pixel_value.d[:]
   @test_approx_eq ad_hess[:] pixel_value.h[:]
@@ -114,7 +135,7 @@ function test_psf_fit()
 
   function evaluate_psf_fit_wrapper_sf{NumType <: Number}(
         psf_param_vec::Vector{NumType}, calculate_derivs::Bool)
-    local psf_params = reshape(psf_param_vec, length(PsfParams), 2)
+    local psf_params = unwrap_psf_params(psf_param_vec)
     local squared_error =
       evaluate_psf_fit(psf_params, raw_psf[keep_pixels, keep_pixels], calculate_derivs)
     squared_error
@@ -125,10 +146,10 @@ function test_psf_fit()
     squared_error.v[1]
   end
 
-  squared_error = deepcopy(evaluate_psf_fit_wrapper_sf(psf_params[:], true));
+  squared_error = deepcopy(evaluate_psf_fit_wrapper_sf(psf_param_vec, true));
 
-  ad_grad = ForwardDiff.gradient(evaluate_psf_fit_wrapper_value, psf_params[:]);
-  ad_hess = ForwardDiff.hessian(evaluate_psf_fit_wrapper_value, psf_params[:]);
+  ad_grad = ForwardDiff.gradient(evaluate_psf_fit_wrapper_value, psf_param_vec);
+  ad_hess = ForwardDiff.hessian(evaluate_psf_fit_wrapper_value, psf_param_vec);
 
   @test_approx_eq ad_grad squared_error.d[:]
   @test_approx_eq ad_hess[:] squared_error.h[:]

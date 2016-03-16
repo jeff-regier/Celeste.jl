@@ -47,33 +47,3 @@ for k=1:K
   psf_params[k][psf_ids.e_scale] = sqrt(2 * k)
   psf_params[k][psf_ids.weight] = 1/ K
 end
-
-
-
-using Celeste.Transform.ParamBounds
-using Celeste.Transform.ParamBox
-using Celeste.Transform.DataTransform
-
-function get_psf_transform(psf_params::Vector{Vector{Float64}})
-
-  bounds = Array(ParamBounds, size(psf_params, 2))
-
-  # Note that, for numerical reasons, the bounds must be on the scale
-  # of reasonably meaningful changes.
-  for k in 1:K
-    bounds[k] = ParamBounds()
-    bounds[k][:mu] = fill(ParamBox(-5.0, 5.0, 1.0), 2)
-    bounds[k][:e_axis] = ParamBox[ ParamBox(0.1, 1.0, 1.0) ]
-    bounds[k][:e_angle] = ParamBox[ ParamBox(0.0, 4 * pi, 1.0) ]
-    bounds[k][:e_scale] = ParamBox[ ParamBox(0.25, Inf, 1.0) ]
-
-    # Note that the weights do not need to sum to one.
-    bounds[k][:e_weight] = ParamBox[ ParamBox(0.05, 2.0, 1.0) ]
-  end
-  DataTransform(bounds, active_sources=collect(1:K), S=K)
-end
-
-
-psf_transform = get_psf_transform(psf_params)
-
-get_transform_derivatives
