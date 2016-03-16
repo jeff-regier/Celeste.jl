@@ -5,6 +5,7 @@ Distributions
 DocOpt
 ForwardDiff
 JLD
+Logging
 Optim
 FITSIO
 WCS
