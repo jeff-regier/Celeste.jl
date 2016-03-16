@@ -14,7 +14,7 @@ export evaluate_psf_fit
 
 
 function evaluate_psf_pixel_fit!{NumType <: Number}(
-    x::Vector{Float64}, psf_params::Matrix{NumType},
+    x::Vector{Float64}, psf_params::Vector{Vector{NumType}},
     sigma_vec::Vector{Matrix{NumType}},
     sig_sf_vec::Vector{GalaxySigmaDerivs{NumType}},
     bvn_derivs::BivariateNormalDerivatives{NumType},
@@ -25,12 +25,12 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
 
   clear!(pixel_value)
 
-  K = size(psf_params, 2)
+  K = length(psf_params)
   sigma_ids = [psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale]
   for k = 1:K
     # I will put in the weights later so that the log pdf sensitive float
     # is accurate.
-    bvn = BvnComponent{NumType}(psf_params[psf_ids.mu, k], sigma_vec[k], 1.0);
+    bvn = BvnComponent{NumType}(psf_params[k][psf_ids.mu], sigma_vec[k], 1.0);
     eval_bvn_pdf!(bvn_derivs, bvn, x)
     get_bvn_derivs!(bvn_derivs, bvn, true, true)
     transform_bvn_derivs!(bvn_derivs, sig_sf_vec[k], eye(Float64, 2), true)
@@ -60,14 +60,14 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
       pdf.h = pdf_val * (log_pdf.h + log_pdf.d * log_pdf.d')
 
       # Now multiply by the weight.
-      pdf.h *= psf_params[psf_ids.weight, k]
+      pdf.h *= psf_params[k][psf_ids.weight]
       pdf.h[psf_ids.weight, :] = pdf.h[:, psf_ids.weight] = pdf.d
 
-      pdf.d *= psf_params[psf_ids.weight, k]
+      pdf.d *= psf_params[k][psf_ids.weight]
       pdf.d[psf_ids.weight] = pdf_val
     end
 
-    pdf.v *= psf_params[psf_ids.weight, k]
+    pdf.v *= psf_params[k][psf_ids.weight]
 
     SensitiveFloats.add_sources_sf!(pixel_value, pdf, k, calculate_derivs)
   end
@@ -77,9 +77,9 @@ end
 
 
 function evaluate_psf_fit{NumType <: Number}(
-    psf_params::Matrix{NumType}, raw_psf::Matrix{Float64}, calculate_derivs::Bool)
+    psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64}, calculate_derivs::Bool)
 
-  K = size(psf_params, 2)
+  K = length(psf_params)
   x_mat = get_x_matrix_from_psf(raw_psf);
 
   # TODO: allocate these outside?
@@ -94,13 +94,13 @@ function evaluate_psf_fit{NumType <: Number}(
   sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
 
   for k = 1:K
-    sigma_vec[k] = Util.get_bvn_cov(psf_params[psf_ids.e_axis, k],
-                                    psf_params[psf_ids.e_angle, k],
-                                    psf_params[psf_ids.e_scale, k])
+    sigma_vec[k] = Util.get_bvn_cov(psf_params[k][psf_ids.e_axis],
+                                    psf_params[k][psf_ids.e_angle],
+                                    psf_params[k][psf_ids.e_scale])
     sig_sf_vec[k] = GalaxySigmaDerivs(
-      psf_params[psf_ids.e_angle, k],
-      psf_params[psf_ids.e_axis, k],
-      psf_params[psf_ids.e_scale, k], sigma_vec[k], calculate_tensor=true);
+      psf_params[k][psf_ids.e_angle],
+      psf_params[k][psf_ids.e_axis],
+      psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_tensor=true);
 
   end
 
