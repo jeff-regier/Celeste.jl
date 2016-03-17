@@ -39,13 +39,13 @@ x_mat = PSF.get_x_matrix_from_psf(raw_psf);
 
 psf_params = initialize_psf_params(K);
 
+
+using Celeste.Transform.DataTransform
 using Celeste.Transform
-using Celeste.Transform.box_parameter
-using Celeste.Transform.unbox_parameter
 
 function transform_psf_sensitive_float!{NumType <: Number}(
     psf_params::Vector{Vector{Float64}}, transform::DataTransform,
-    sf::SensitiveFloat{NumType}, sf_free::SensitiveFloat{NumType},
+    sf::SensitiveFloat{PsfParams, NumType}, sf_free::SensitiveFloat{PsfParams, NumType},
     calculate_derivs::Bool)
 
   sf_free.v[1] = sf.v[1]
@@ -89,37 +89,31 @@ function transform_psf_sensitive_float!{NumType <: Number}(
 end
 
 
-function transform_psf_params!{NumType <: Number}(
-    psf_params::Vector{Vector{NumType}}, psf_params_free::Vector{Vector{NumType}},
-    psf_transform::DataTransform, to_unconstrained::Bool)
-
-  for k=1:length(psf_params)
-    for (param, constraint_vec) in psf_transform.bounds[k]
-      for ind in 1:length(psf_ids.(param))
-        constraint = constraint_vec[ind]
-        to_unconstrained ?
-          psf_params_free[k][ind] = unbox_parameter(psf_params[k][ind], constraint):
-          psf_params[k][ind] = box_parameter(psf_params_free[k][ind], constraint)
-      end
-    end
-  end
-
-  true # return type
-end
+using SensitiveFloats
 
 
-
-
-function psf_fit_for_optim{NumType <: Number}(psf_params_vec::Vector{NumType})
-  psf_array_to_params!()
-end
-
-sf = evaluate_psf_fit(psf_params, raw_psf, true);
-sf_free = deepcopy(sf);
-psf_transform = PSF.get_psf_transform(psf_params);
-
+psf_params = initialize_psf_params(K);
 psf_params_original = deepcopy(psf_params);
 psf_params_free = deepcopy(psf_params);
+psf_transform = PSF.get_psf_transform(psf_params);
+psf_params_free_vec = wrap_psf_params(psf_params_free)[:];
+sf = zero_sensitive_float(PsfParams, Float64, K);
+sf_free = deepcopy(sf);
 
-transform_psf_params!(psf_params, psf_params_free, psf_transform, true);
-transform_psf_params!(psf_params, psf_params_free, psf_transform, false);
+function psf_fit_for_optim{NumType <: Number}(
+    psf_params_free_vec::Vector{NumType}, calculate_derivs::Bool)
+
+  psf_params_free = unwrap_psf_params(psf_params_free_vec)
+  transform_psf_params!(psf_params, psf_params_free, psf_transform, false)
+  sf = evaluate_psf_fit(psf_params, raw_psf, calculate_derivs);
+  transform_psf_sensitive_float!(psf_params, psf_transform, sf, sf_free, calculate_derivs)
+end
+
+
+function psf_fit_for_optim_val{NumType <: Number}(
+    psf_params_free_vec::Vector{NumType})
+
+  psf_fit_for_optim(psf_params_free_vec, false).v[1]
+end
+
+psf_fit_for_optim(psf_params_free_vec)
