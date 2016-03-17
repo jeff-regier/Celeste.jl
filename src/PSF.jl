@@ -7,15 +7,20 @@ import Celeste.Util
 import Celeste.SensitiveFloats
 import Celeste.SDSSIO
 
-using Celeste.Transform.ParamBounds
-using Celeste.Transform.ParamBox
-using Celeste.Transform.DataTransform
+using Celeste.Transform
+#
+# using Celeste.Transform.ParamBounds
+# using Celeste.Transform.ParamBox
+# using Celeste.Transform.DataTransform
+# using Celeste.Transform.box_parameter
+# using Celeste.Transform.unbox_parameter
 
 using Celeste.SensitiveFloats.SensitiveFloat
 using Celeste.SensitiveFloats.clear!
 
-export evaluate_psf_fit, psf_params_to_array, psf_array_to_params!,
-       get_psf_transform, initialize_psf_params
+export evaluate_psf_fit, psf_params_to_array, psf_array_to_params,
+       get_psf_transform, initialize_psf_params, transform_psf_params!,
+       unwrap_psf_params, wrap_psf_params
 
 
 function initialize_psf_params(K::Int; for_test::Bool=false)
@@ -52,26 +57,68 @@ function get_psf_transform(psf_params::Vector{Vector{Float64}})
 end
 
 
-function psf_params_to_array{NumType <: Number}(psf_params::Vector{Vector{NumType}})
-  K = length(psf_params)
-  psf_params_mat = zeros(NumType, length(PsfParams), K)
-  for k=1:K
+function transform_psf_params!{NumType <: Number}(
+    psf_params::Vector{Vector{NumType}}, psf_params_free::Vector{Vector{NumType}},
+    psf_transform::DataTransform, to_unconstrained::Bool)
+
+  for k=1:length(psf_params)
+    for (param, constraint_vec) in psf_transform.bounds[k]
+      for ind in 1:length(psf_ids.(param))
+        param_ind = psf_ids.(param)[ind]
+        constraint = constraint_vec[ind]
+        to_unconstrained ?
+          psf_params_free[k][param_ind] =
+            Transform.unbox_parameter(psf_params[k][param_ind], constraint):
+          psf_params[k][param_ind] =
+            Transform.box_parameter(psf_params_free[k][param_ind], constraint)
+      end
+    end
+  end
+
+  true # return type
+end
+
+
+function unwrap_psf_params{NumType <: Number}(psf_param_vec::Vector{NumType})
+  @assert length(psf_param_vec) % length(PsfParams) == 0
+  K = round(Int, length(psf_param_vec) / length(PsfParams))
+  psf_param_mat = reshape(psf_param_vec, length(PsfParams), K)
+  psf_params = Array(Vector{NumType}, K)
+  for k = 1:K
+    psf_params[k] = psf_param_mat[:, k]
+  end
+  psf_params
+end
+
+
+function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
+  psf_params_mat = zeros(NumType, length(PsfParams), length(psf_params))
+  for k=1:length(psf_params)
     psf_params_mat[:, k] = psf_params[k]
   end
-  psf_params_mat
+  psf_params_mat[:]
 end
 
-
-function psf_array_to_params{NumType <: Number}(psf_params_mat::Matrix{NumType})
-  K = size(psf_params_mat, 2)
-  @assert size(psf_params_mat, 1) == length(PsfParams)
-  psf_params = Array(Vector{NumType}, K)
-  for k=1:K
-    # psf_params[k] = zeros(NumType, length(PsfParams))
-    psf_params[k] = psf_params_mat[:, k]
-  end
-end
-
+# function psf_params_to_vec{NumType <: Number}(psf_params::Vector{Vector{NumType}})
+#   K = length(psf_params)
+#   psf_params_mat = zeros(NumType, length(PsfParams), K)
+#   for k=1:K
+#     psf_params_mat[:, k] = psf_params[k]
+#   end
+#   psf_params_mat
+# end
+#
+#
+# function psf_vec_to_params{NumType <: Number}(psf_params_mat::Matrix{NumType})
+#   K = size(psf_params_mat, 2)
+#   @assert size(psf_params_mat, 1) == length(PsfParams)
+#   psf_params = Array(Vector{NumType}, K)
+#   for k=1:K
+#     # psf_params[k] = zeros(NumType, length(PsfParams))
+#     psf_params[k] = psf_params_mat[:, k]
+#   end
+# end
+#
 
 function evaluate_psf_pixel_fit!{NumType <: Number}(
     x::Vector{Float64}, psf_params::Vector{Vector{NumType}},
