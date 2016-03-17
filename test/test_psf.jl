@@ -13,25 +13,6 @@ using ForwardDiff
 using Base.Test
 
 
-function unwrap_psf_params{NumType <: Number}(psf_param_vec::Vector{NumType})
-  @assert length(psf_param_vec) % length(PsfParams) == 0
-  K = round(Int, length(psf_param_vec) / length(PsfParams))
-  local psf_param_mat = reshape(psf_param_vec, length(PsfParams), K)
-  local psf_params = Array(Vector{NumType}, K)
-  for k = 1:K
-    psf_params[k] = psf_param_mat[:, k]
-  end
-  psf_params
-end
-
-
-function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
-  local psf_params_mat = zeros(NumType, length(PsfParams), length(psf_params))
-  for k=1:length(psf_params)
-    psf_params_mat[:, k] = psf_params[k]
-  end
-  psf_params_mat[:]
-end
 
 
 function test_transform_psf_params()
