@@ -15,8 +15,22 @@ using Celeste.SensitiveFloats.SensitiveFloat
 using Celeste.SensitiveFloats.clear!
 
 export evaluate_psf_fit, psf_params_to_array, psf_array_to_params!,
-       get_psf_transform
+       get_psf_transform, initialize_psf_params
 
+
+function initialize_psf_params(K::Int; for_test::Bool=false)
+  psf_params = Array(Vector{Float64}, K)
+  for k=1:K
+    psf_params[k] = zeros(length(PsfParams))
+    psf_params[k][psf_ids.mu] = [0., 0.]
+    psf_params[k][psf_ids.e_axis] = 0.8
+    psf_params[k][psf_ids.e_angle] = pi / 4
+    psf_params[k][psf_ids.e_scale] = sqrt(2 * k)
+    psf_params[k][psf_ids.weight] = 1 / K
+  end
+
+  psf_params
+end
 
 function get_psf_transform(psf_params::Vector{Vector{Float64}})
 
@@ -48,12 +62,12 @@ function psf_params_to_array{NumType <: Number}(psf_params::Vector{Vector{NumTyp
 end
 
 
-function psf_array_to_params!{NumType <: Number}(
-    psf_params_mat::Matrix{NumType}, psf_params)
-
+function psf_array_to_params{NumType <: Number}(psf_params_mat::Matrix{NumType})
   K = size(psf_params_mat, 2)
   @assert size(psf_params_mat, 1) == length(PsfParams)
+  psf_params = Array(Vector{NumType}, K)
   for k=1:K
+    # psf_params[k] = zeros(NumType, length(PsfParams))
     psf_params[k] = psf_params_mat[:, k]
   end
 end
