@@ -33,7 +33,7 @@ close(psf_fits)
 
 raw_psf = raw_psf_comp(500., 500.);
 
-psf_params_original = initialize_psf_params(K, for_test=true);
+psf_params_original = initialize_psf_params(K, for_test=false);
 psf_params = deepcopy(psf_params_original)
 psf_transform = PSF.get_psf_transform(psf_params);
 psf_params_free = unconstrain_psf_params(psf_params, psf_transform);
@@ -43,10 +43,10 @@ psf_params_free_vec = wrap_psf_params(psf_params_free)[:];
 function psf_fit_for_optim{NumType <: Number}(
     psf_params_free_vec::Vector{NumType}, calculate_derivs::Bool)
 
-  local sf_free = zero_sensitive_float(PsfParams, NumType, K);
-  local psf_params_free = unwrap_psf_params(psf_params_free_vec)
-  local psf_params = constrain_psf_params(psf_params_free, psf_transform)
-  local sf = evaluate_psf_fit(psf_params, raw_psf, calculate_derivs);
+  sf_free = zero_sensitive_float(PsfParams, NumType, K);
+  psf_params_free = unwrap_psf_params(psf_params_free_vec)
+  psf_params = constrain_psf_params(psf_params_free, psf_transform)
+  sf = evaluate_psf_fit(psf_params, raw_psf, calculate_derivs);
   if verbose
     println(psf_params)
   end
@@ -77,7 +77,7 @@ d = Optim.TwiceDifferentiableFunction(
 # Only include until this is merged with Optim.jl.
 include("src/newton_trust_region.jl")
 
-max_iters = 1000
+max_iters = 100
 verbose = true
 rho_lower = 0.2
 
@@ -87,9 +87,19 @@ nm_result = newton_tr(d,
                       ftol = 1e-9,
                       grtol = 1e-9,
                       iterations = max_iters,
-                      store_trace = verbose,
+                      store_trace = false,
                       show_trace = false,
                       extended_trace = verbose,
                       initial_delta=10.0,
                       delta_hat=1e9,
                       rho_lower = rho_lower)
+
+psf_params_fit =
+  constrain_psf_params(unwrap_psf_params(nm_result.minimum), psf_transform)
+psf_params_free_vec_fit =
+  wrap_psf_params(unconstrain_psf_params(psf_params_fit, psf_transform));
+PSF.get_sigma_from_params(psf_params_fit)
+
+sf = evaluate_psf_fit(psf_params, raw_psf, true);
+hess = zeros(length(psf_params_free_vec), length(psf_params_free_vec));
+psf_fit_hess!(psf_params_free_vec_fit, hess)
