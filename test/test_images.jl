@@ -241,7 +241,6 @@ function test_stitch_object_tiles()
   @test size(image) == (diff(h_range)[1] + 1, diff(w_range)[1] + 1)
 end
 
-
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
