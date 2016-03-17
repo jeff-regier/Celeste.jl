@@ -20,7 +20,9 @@ using Celeste.SensitiveFloats.clear!
 
 export evaluate_psf_fit, psf_params_to_array, psf_array_to_params,
        get_psf_transform, initialize_psf_params, transform_psf_params!,
-       unwrap_psf_params, wrap_psf_params, unconstrain_psf_params
+       unwrap_psf_params, wrap_psf_params,
+       unconstrain_psf_params, constrain_psf_params,
+       transform_psf_sensitive_float!
 
 
 function initialize_psf_params(K::Int; for_test::Bool=false)
@@ -79,7 +81,7 @@ function transform_psf_params!{NumType <: Number}(
 end
 
 
-function unconstrain_psf_params{NumType <: Number}(
+function constrain_psf_params{NumType <: Number}(
     psf_params_free::Vector{Vector{NumType}}, psf_transform::DataTransform)
 
   K = length(psf_params_free)
@@ -91,6 +93,21 @@ function unconstrain_psf_params{NumType <: Number}(
   transform_psf_params!(psf_params, psf_params_free, psf_transform, false)
 
   psf_params
+end
+
+
+function unconstrain_psf_params{NumType <: Number}(
+    psf_params::Vector{Vector{NumType}}, psf_transform::DataTransform)
+
+  K = length(psf_params)
+  psf_params_free = Array(Vector{NumType}, K)
+  for k=1:K
+    psf_params_free[k] = zeros(NumType, length(PsfParams))
+  end
+
+  transform_psf_params!(psf_params, psf_params_free, psf_transform, true)
+
+  psf_params_free
 end
 
 
@@ -246,6 +263,81 @@ function evaluate_psf_fit{NumType <: Number}(
 
   squared_error
 end
+
+
+function transform_psf_sensitive_float!{NumType <: Number}(
+    psf_params::Vector{Vector{NumType}}, psf_transform::Transform.DataTransform,
+    sf::SensitiveFloat{PsfParams, NumType}, sf_free::SensitiveFloat{PsfParams, NumType},
+    calculate_derivs::Bool)
+
+  sf_free.v[1] = sf.v[1]
+  if calculate_derivs
+    K = length(psf_params)
+
+    # These are the hessians of each individual parameter's transform.  We
+    # can represent it this way since each parameter's transform only depends on
+    # its own value and not on others.
+
+    # This is the diagonal of the Jacobian transform.
+    jacobian_diag = zeros(length(PsfParams) * K);
+
+    # These are hte Hessians of the each parameter's transform.
+    hessian_values = zeros(length(PsfParams) * K);
+
+    for k = 1:K
+      offset = length(PsfParams) * (k - 1)
+      for ind = 1:2
+        mu_ind = psf_ids.mu[ind]
+        jac, hess = Transform.box_derivatives(
+          psf_params[k][mu_ind], psf_transform.bounds[k][:mu][ind]);
+        jacobian_diag[offset + mu_ind] = jac
+        hessian_values[offset + mu_ind] = hess
+      end
+
+      # The rest are one-dimensional.
+      for field in setdiff(fieldnames(PsfParams), [ :mu ])
+        ind = psf_ids.(field)
+        jac, hess = Transform.box_derivatives(
+          psf_params[k][ind], psf_transform.bounds[k][field][1]);
+        jacobian_diag[offset + ind] = jac
+        hessian_values[offset + ind] = hess
+      end
+    end
+
+    # Apply the transformations.
+    sf_free.d = reshape(jacobian_diag .* sf.d[:], length(PsfParams), K)
+
+    # Calculate the Hessian
+    sf_free.h =
+      ((jacobian_diag * jacobian_diag') .* sf.h) +
+      diagm(hessian_values .* sf.d[:])
+  end
+
+  true # return type
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 #############################################
