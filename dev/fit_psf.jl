@@ -37,60 +37,61 @@ raw_psf = raw_psf_comp(500., 500.);
 #psf = SkyImages.fit_raw_psf_for_celeste(raw_psf);
 x_mat = PSF.get_x_matrix_from_psf(raw_psf);
 
-# Initialize params
-psf_params = Array(Vector{Float64}, K)
-for k=1:K
-  psf_params[k] = zeros(length(PsfParams))
-  psf_params[k][psf_ids.mu] = [0., 0.]
-  psf_params[k][psf_ids.e_axis] = 0.8
-  psf_params[k][psf_ids.e_angle] = pi / 4
-  psf_params[k][psf_ids.e_scale] = sqrt(2 * k)
-  psf_params[k][psf_ids.weight] = 1/ K
-end
-
-sf = evaluate_psf_fit(psf_params, raw_psf, true);
-sf_free = deepcopy(sf);
+psf_params = initialize_psf_params(K);
 
 using Celeste.Transform
-psf_transform = PSF.get_psf_transform(psf_params);
+using Celeste.Transform.box_parameter
+using Celeste.Transform.unbox_parameter
 
-for k = 1:K
-  # This is the diagonal of the Jacobian transform.
-  jacobian_diag = zeros(length(PsfParams));
+function transform_psf_sensitive_float!{NumType <: Number}(
+    psf_params::Vector{Vector{Float64}}, transform::DataTransform,
+    sf::SensitiveFloat{NumType}, sf_free::SensitiveFloat{NumType},
+    calculate_derivs::Bool)
 
-  # These are the hessians of each individual parameter's transform.  We
-  # can represent it this way since each parameter's transform only depends on
-  # its own value and not on others.
-  hessian_values = zeros(length(PsfParams));
+  sf_free.v[1] = sf.v[1]
+  if calculate_derivs
+    K = length(psf_params)
+    for k = 1:K
+      # This is the diagonal of the Jacobian transform.
+      jacobian_diag = zeros(length(PsfParams));
 
-  for ind = 1:2
-    mu_ind = psf_ids.mu[ind]
-    jac, hess =
-      Transform.box_derivatives(psf_params[k][mu_ind], psf_transform.bounds[k][:mu][ind]);
-    jacobian_diag[mu_ind] = jac
-    hessian_values[mu_ind] = hess
+      # These are the hessians of each individual parameter's transform.  We
+      # can represent it this way since each parameter's transform only depends on
+      # its own value and not on others.
+      hessian_values = zeros(length(PsfParams));
+
+      for ind = 1:2
+        mu_ind = psf_ids.mu[ind]
+        jac, hess =
+          Transform.box_derivatives(psf_params[k][mu_ind], psf_transform.bounds[k][:mu][ind]);
+        jacobian_diag[mu_ind] = jac
+        hessian_values[mu_ind] = hess
+      end
+
+      # The rest are one-dimensional.
+      for field in setdiff(fieldnames(PsfParams), [ :mu ])
+        ind = psf_ids.(field)
+        jac, hess =
+          Transform.box_derivatives(psf_params[k][1], psf_transform.bounds[k][field][1]);
+        jacobian_diag[ind] = jac
+        hessian_values[ind] = hess
+      end
+
+      hess_inds = (1:length(PsfParams)) + length(PsfParams) * (k - 1)
+      sf_free.d[:, k] = jacobian_diag .* sf.d[:, k]
+      sf_free.h[hess_inds, hess_inds] =
+        ((jacobian_diag * jacobian_diag') .* sf.h[hess_inds, hess_inds]) +
+        diagm(hessian_values .* sf_free.d[:, k])
+    end
   end
 
-  # The rest are one-dimensional.
-  for field in setdiff(fieldnames(PsfParams), [ :mu ])
-    ind = psf_ids.(field)
-    jac, hess =
-      Transform.box_derivatives(psf_params[k][1], psf_transform.bounds[k][field][1]);
-    jacobian_diag[ind] = jac
-    hessian_values[ind] = hess
-  end
-
-  hess_inds = (1:length(PsfParams)) + length(PsfParams) * (k - 1)
-  sf_free.d[:, k] = jacobian_diag .* sf.d[:, k]
-  sf_free.h[hess_inds, hess_inds] =
-    ((jacobian_diag * jacobian_diag') .* sf.h[hess_inds, hess_inds]) +
-    diagm(hessian_values .* sf_free.d[:, k])
+  true # return type
 end
 
 
 function transform_psf_params!{NumType <: Number}(
     psf_params::Vector{Vector{NumType}}, psf_params_free::Vector{Vector{NumType}},
-    psf_transform::DataTransform, to_constrained::Bool)
+    psf_transform::DataTransform, to_unconstrained::Bool)
 
   for k=1:length(psf_params)
     for (param, constraint_vec) in psf_transform.bounds[k]
@@ -105,3 +106,20 @@ function transform_psf_params!{NumType <: Number}(
 
   true # return type
 end
+
+
+
+
+function psf_fit_for_optim{NumType <: Number}(psf_params_vec::Vector{NumType})
+  psf_array_to_params!()
+end
+
+sf = evaluate_psf_fit(psf_params, raw_psf, true);
+sf_free = deepcopy(sf);
+psf_transform = PSF.get_psf_transform(psf_params);
+
+psf_params_original = deepcopy(psf_params);
+psf_params_free = deepcopy(psf_params);
+
+transform_psf_params!(psf_params, psf_params_free, psf_transform, true);
+transform_psf_params!(psf_params, psf_params_free, psf_transform, false);
