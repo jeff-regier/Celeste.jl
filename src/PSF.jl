@@ -59,7 +59,7 @@ function get_psf_transform(psf_params::Vector{Vector{Float64}})
     bounds[k] = ParamBounds()
     bounds[k][:mu] = fill(ParamBox(-5.0, 5.0, 1.0), 2)
     bounds[k][:e_axis] = ParamBox[ ParamBox(0.1, 1.0, 1.0) ]
-    bounds[k][:e_angle] = ParamBox[ ParamBox(0.0, 4 * pi, 1.0) ]
+    bounds[k][:e_angle] = ParamBox[ ParamBox(-4 * pi, 4 * pi, 1.0) ]
     bounds[k][:e_scale] = ParamBox[ ParamBox(0.25, Inf, 1.0) ]
 
     # Note that the weights do not need to sum to one.
@@ -225,8 +225,29 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
 end
 
 
+function get_sigma_from_params{NumType <: Number}(
+    psf_params::Vector{Vector{NumType}})
+
+  K = length(psf_params)
+  sigma_vec = Array(Matrix{NumType}, K);
+  sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
+  for k = 1:K
+    sigma_vec[k] = Util.get_bvn_cov(psf_params[k][psf_ids.e_axis],
+                                    psf_params[k][psf_ids.e_angle],
+                                    psf_params[k][psf_ids.e_scale])
+    sig_sf_vec[k] = GalaxySigmaDerivs(
+      psf_params[k][psf_ids.e_angle],
+      psf_params[k][psf_ids.e_axis],
+      psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_tensor=true);
+
+  end
+  sigma_vec, sig_sf_vec
+end
+
+
 function evaluate_psf_fit{NumType <: Number}(
-    psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64}, calculate_derivs::Bool)
+    psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64},
+    calculate_derivs::Bool)
 
   K = length(psf_params)
   x_mat = get_x_matrix_from_psf(raw_psf);
@@ -239,19 +260,7 @@ function evaluate_psf_fit{NumType <: Number}(
   pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
   squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
 
-  sigma_vec = Array(Matrix{NumType}, K);
-  sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
-
-  for k = 1:K
-    sigma_vec[k] = Util.get_bvn_cov(psf_params[k][psf_ids.e_axis],
-                                    psf_params[k][psf_ids.e_angle],
-                                    psf_params[k][psf_ids.e_scale])
-    sig_sf_vec[k] = GalaxySigmaDerivs(
-      psf_params[k][psf_ids.e_angle],
-      psf_params[k][psf_ids.e_axis],
-      psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_tensor=true);
-
-  end
+  sigma_vec, sig_sf_vec = get_sigma_from_params(psf_params)
 
   SensitiveFloats.clear!(squared_error)
 
