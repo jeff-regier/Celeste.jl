@@ -6,6 +6,7 @@ import WCS
 
 using Celeste: Types, SampleData
 import Celeste: ModelInit, SkyImages, ElboDeriv, Synthetic, SDSSIO
+import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
 
 println("Running SkyImages tests.")
 
@@ -51,8 +52,10 @@ function test_blob()
     @assert length(cropped_blob[b]) == 1
     @test 2 * width <= cropped_blob[b][1].h_width <= 2 * (width + 1)
     @test 2 * width <= cropped_blob[b][1].w_width <= 2 * (width + 1)
+    patches = vec(mp.patches[:, b])
     tile_sources =
-      SkyImages.get_local_sources(cropped_blob[b][1], mp.patches[:,b][:])
+      ModelInit.get_local_sources(cropped_blob[b][1], patch_ctrs_pix(patches),
+                                  patch_radii_pix(patches, blob[b]))
     @test obj_index in tile_sources
   end
 
@@ -115,8 +118,9 @@ function test_get_tiled_image_source()
       mp.vp[1][ids.u] = loc
       mp.patches[1, b] = SkyPatch(loc, 1e-6, blob[b], fit_psf=false)
     end
-    patches = mp.patches[:, 3][:]
-    local_sources = ModelInit.get_tiled_image_sources(img, tiled_img, patches)
+    patches = vec(mp.patches[:, 3])
+    local_sources = ModelInit.get_tiled_image_sources(
+      tiled_img, patch_ctrs_pix(patches), patch_radii_pix(patches, img))
     @test local_sources[hh, ww] == Int[1]
     for hh2 in 1:size(tiled_img)[1], ww2 in 1:size(tiled_img)[2]
       if (hh2 != hh) || (ww2 != ww)
@@ -136,12 +140,16 @@ function test_local_source_candidate()
 
   for b=1:length(tiled_blob)
     # Get the sources by iterating over everything.
-    patches = mp.patches[:,b][:]
-    tile_sources = ModelInit.get_tiled_image_sources(blob[b],
-                                tiled_blob[b], patches)
+    patches = vec(mp.patches[:,b])
+      
+    tile_sources = ModelInit.get_tiled_image_sources(
+      tiled_blob[b], patch_ctrs_pix(patches),
+      patch_radii_pix(patches, blob[b]))
 
     # Get a set of candidates.
-    candidates = SkyImages.local_source_candidates(tiled_blob[b], patches);
+    candidates = ModelInit.local_source_candidates(
+      tiled_blob[b], patch_ctrs_pix(patches),
+      patch_radii_pix(patches, blob[b]))
 
     # Check that all the actual sources are candidates and that this is the
     # same as what is returned by initialize_model_params.
@@ -208,23 +216,6 @@ function test_set_patch_size()
       # imshow(circle_pts, alpha=0.4)
     end
   end
-end
-
-
-function test_get_local_sources()
-  world_radius = 2.0
-  wcs_jacobian = Float64[0.5 0.1; 0.2 0.6]
-  pixel_center = Float64[0, 0]
-  world_center = Float64[0, 0]
-  patch1 = SkyPatch(world_center, world_radius,
-                    PsfComponent[], wcs_jacobian, pixel_center);
-
-  h_width = 10
-  w_width = 20
-  tile = ImageTile(1, 1, 1, 1:h_width, 1:w_width, h_width, w_width,
-                   rand(h_width, w_width), true, 0.5, Array(Float64, 0, 0),
-                   0.5, Array(Float64, 0));
-  SkyImages.get_local_sources(tile, [ patch ])
 end
 
 
