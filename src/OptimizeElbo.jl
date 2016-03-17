@@ -169,7 +169,6 @@ type ObjectiveWrapperFunctions
 
         new(f_objective, f_value_grad, f_value_grad!,
             f_value, f_grad, f_grad!, f_hessian, f_hessian!,
-            # f_ad_hessian!, f_ad_hessian_sparse,
             state, transform, mp, kept_ids, omitted_ids, last_sf)
     end
 end
