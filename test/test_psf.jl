@@ -2,10 +2,10 @@ using Celeste
 using Celeste.Types
 using Celeste.SkyImages
 using Celeste.BivariateNormals
-using  Celeste.PSF
+using Celeste.PSF
+using Celeste.SensitiveFloats
 
 import Celeste.Util
-import Celeste.SensitiveFloats
 import Celeste.SDSSIO
 
 using ForwardDiff
@@ -13,9 +13,8 @@ using ForwardDiff
 using Base.Test
 
 
-
-
 function test_transform_psf_params()
+  K = 2
   psf_params = initialize_psf_params(K);
   psf_params_original = deepcopy(psf_params);
   psf_params_free = deepcopy(psf_params);
@@ -24,10 +23,16 @@ function test_transform_psf_params()
   transform_psf_params!(psf_params, psf_params_free, psf_transform, true);
   transform_psf_params!(psf_params, psf_params_free, psf_transform, false);
 
+  psf_params_free_2 = unconstrain_psf_params(psf_params, psf_transform)
+  psf_params_2 = constrain_psf_params(psf_params_free, psf_transform)
+
   for k=1:K
     @test_approx_eq psf_params[k] psf_params_original[k]
+    @test_approx_eq psf_params_free[k] psf_params_free_2[k]
+    @test_approx_eq psf_params[k] psf_params_2[k]
   end
 end
+
 
 function test_psf_fit()
   run_num = 4263
@@ -53,10 +58,10 @@ function test_psf_fit()
 
     local psf_params = unwrap_psf_params(psf_param_vec)
     bvn_derivs = BivariateNormalDerivatives{NumType}(NumType);
-    log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
-    pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
+    log_pdf = zero_sensitive_float(PsfParams, NumType, 1);
+    pdf = zero_sensitive_float(PsfParams, NumType, 1);
 
-    local pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
+    local pixel_value = zero_sensitive_float(PsfParams, NumType, K);
 
     sigma_vec = Array(Matrix{NumType}, K);
     sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
@@ -72,7 +77,7 @@ function test_psf_fit()
 
     end
 
-    SensitiveFloats.clear!(pixel_value)
+    clear!(pixel_value)
     PSF.evaluate_psf_pixel_fit!(
         x, psf_params, sigma_vec, sig_sf_vec,
         bvn_derivs, log_pdf, pdf, pixel_value, calculate_derivs)
@@ -83,7 +88,6 @@ function test_psf_fit()
   function pixel_value_wrapper_value{NumType <: Number}(psf_param_vec::Vector{NumType})
     pixel_value_wrapper_sf(psf_param_vec, false).v[1]
   end
-
 
   # Pick a point for testing
   # x_ind = 1508
@@ -172,7 +176,6 @@ end
 
 
 function test_psf_transforms()
-
   mu_vec = Vector{Float64}[ Float64[1, 2], Float64[-1, -2], Float64[1, -1] ]
   sigma_vec = Array(Matrix{Float64}, 3)
   sigma_vec[1] = Float64[ 1 0.1; 0.1 1]
@@ -188,11 +191,69 @@ function test_psf_transforms()
     @test_approx_eq sigma_vec_test[k] sigma_vec[k]
     @test_approx_eq weight_vec_test[k] weight_vec[k]
   end
-
 end
 
 
+function test_transform_psf_sensitive_float()
+  run_num = 4263
+  camcol_num = 5
+  field_num = 117
+  b = 3
+
+  psf_filename =
+    @sprintf("%s/psField-%06d-%d-%04d.fit", datadir, run_num, camcol_num, field_num)
+  psf_fits = FITSIO.FITS(psf_filename);
+  raw_psf_comp = SDSSIO.read_psf(psf_fits, band_letters[b]);
+  close(psf_fits)
+
+  raw_psf = raw_psf_comp(500., 500.);
+
+  K = 2
+  psf_params = initialize_psf_params(K);
+  psf_transform = PSF.get_psf_transform(psf_params);
+  psf_params_free = unconstrain_psf_params(psf_params, psf_transform);
+  psf_params_free_vec = wrap_psf_params(psf_params_free)[:];
+
+
+  # Fewer pixels for quick testing.  Also, ForwardDiff.hessian runs into strange
+  # problems on the whole image.
+  keep_pixels = 20:30
+
+  function psf_fit_for_optim{NumType <: Number}(
+      psf_params_free_vec::Vector{NumType}, calculate_derivs::Bool)
+
+    local sf_free = zero_sensitive_float(PsfParams, NumType, K);
+    local psf_params_free = unwrap_psf_params(psf_params_free_vec)
+    local psf_params = constrain_psf_params(psf_params_free, psf_transform)
+    local sf = evaluate_psf_fit(
+      psf_params, raw_psf[keep_pixels, keep_pixels], calculate_derivs);
+    transform_psf_sensitive_float!(
+      psf_params, psf_transform, sf, sf_free, calculate_derivs)
+
+    sf_free
+  end
+
+  function psf_fit_for_optim_val{NumType <: Number}(
+      psf_params_free_vec::Vector{NumType})
+
+    psf_fit_for_optim(psf_params_free_vec, false).v[1]
+  end
+
+  sf_free = deepcopy(psf_fit_for_optim(psf_params_free_vec, true));
+
+  expected_value =
+    evaluate_psf_fit(psf_params, raw_psf[keep_pixels, keep_pixels], false).v[1];
+  ad_grad = ForwardDiff.gradient(psf_fit_for_optim_val, psf_params_free_vec);
+  ad_hess = ForwardDiff.hessian(psf_fit_for_optim_val, psf_params_free_vec);
+
+  @test_approx_eq expected_value sf_free.v[1]
+  @test_approx_eq sf_free.d[:] ad_grad
+  @test_approx_eq sf_free.h ad_hess
+end
+
+
+test_transform_psf_sensitive_float()
+test_transform_psf_params()
+test_psf_transforms()
 test_psf_fit()
 test_least_squares_psf()
-test_psf_transforms()
-test_transform_psf_params()
