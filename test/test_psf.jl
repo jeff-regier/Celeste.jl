@@ -15,7 +15,7 @@ using Base.Test
 
 function test_transform_psf_params()
   K = 2
-  psf_params = initialize_psf_params(K);
+  psf_params = initialize_psf_params(K, for_test=true);
   psf_params_original = deepcopy(psf_params);
   psf_params_free = deepcopy(psf_params);
   psf_transform = PSF.get_psf_transform(psf_params);
@@ -209,7 +209,7 @@ function test_transform_psf_sensitive_float()
   raw_psf = raw_psf_comp(500., 500.);
 
   K = 2
-  psf_params = initialize_psf_params(K);
+  psf_params = initialize_psf_params(K, for_test=true);
   psf_transform = PSF.get_psf_transform(psf_params);
   psf_params_free = unconstrain_psf_params(psf_params, psf_transform);
   psf_params_free_vec = wrap_psf_params(psf_params_free)[:];
