@@ -34,6 +34,20 @@ function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
 end
 
 
+function test_transform_psf_params()
+  psf_params = initialize_psf_params(K);
+  psf_params_original = deepcopy(psf_params);
+  psf_params_free = deepcopy(psf_params);
+  psf_transform = PSF.get_psf_transform(psf_params);
+
+  transform_psf_params!(psf_params, psf_params_free, psf_transform, true);
+  transform_psf_params!(psf_params, psf_params_free, psf_transform, false);
+
+  for k=1:K
+    @test_approx_eq psf_params[k] psf_params_original[k]
+  end
+end
+
 function test_psf_fit()
   run_num = 4263
   camcol_num = 5
@@ -200,3 +214,4 @@ end
 test_psf_fit()
 test_least_squares_psf()
 test_psf_transforms()
+test_transform_psf_params()
