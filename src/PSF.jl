@@ -27,11 +27,11 @@ function initialize_psf_params(K::Int; for_test::Bool=false)
   psf_params = Array(Vector{Float64}, K)
   for k=1:K
     psf_params[k] = zeros(length(PsfParams))
-    psf_params[k][psf_ids.mu] = [0., 0.]
+    psf_params[k][psf_ids.mu] = [0.1, 0.2]
     psf_params[k][psf_ids.e_axis] = 0.8
     psf_params[k][psf_ids.e_angle] = pi / 4
     psf_params[k][psf_ids.e_scale] = sqrt(2 * k)
-    psf_params[k][psf_ids.weight] = 1 / K
+    psf_params[k][psf_ids.weight] = 1 / K + k / 10
   end
 
   psf_params
@@ -82,8 +82,9 @@ end
 function unconstrain_psf_params{NumType <: Number}(
     psf_params_free::Vector{Vector{NumType}}, psf_transform::DataTransform)
 
+  K = length(psf_params_free)
   psf_params = Array(Vector{NumType}, K)
-  for k=1:length(psf_params_free)
+  for k=1:K
     psf_params[k] = zeros(NumType, length(PsfParams))
   end
 
