@@ -241,41 +241,111 @@ end
 
 
 """
+A fast function to determine which sources might belong to which tiles.
+
+Args:
+  - tiles: A TiledImage
+  - patch_ctrs: Vector of length-2 vectors, giving pixel center of each patch.
+  - patch_radii_px: Radius of each patch.
+
+Returns:
+  - An array (over tiles) of a vector of candidate
+    source patches.  If a patch is a candidate, it may be within the patch
+    radius of a point in the tile, though it might not.
+"""
+function local_source_candidates(tiles::TiledImage,
+                                 patch_ctrs::Vector{Vector{Float64}},
+                                 patch_radii_px::Vector{Float64})
+    @assert length(patch_ctrs) == length(patch_radii_px)
+
+    candidates = similar(tiles, Vector{Int})
+
+    for h=1:size(tiles, 1), w=1:size(tiles, 2)
+        # Find the patches that are less than the radius plus diagonal from the
+        # center of the tile.  These are candidates for having some
+        # overlap with the tile.
+        tile = tiles[h, w]
+        tile_center = (mean(tile.h_range), mean(tile.w_range))
+        tile_diag = (0.5 ^ 2) * (tile.h_width ^ 2 + tile.w_width ^ 2)
+
+        patch_distances = zeros(length(patch_ctrs))
+        for s in 1:length(patch_ctrs)
+            patch_distances[s] += (tile_center[1] - patch_ctrs[s][1])^2
+            patch_distances[s] += (tile_center[2] - patch_ctrs[s][2])^2
+        end
+        candidates[h, w] =
+            find(patch_distances .<= (tile_diag .+ patch_radii_px) .^ 2)
+    end
+
+    return candidates
+end
+
+
+"""
+Args:
+  - tile: An ImageTile (containing tile coordinates)
+  - patch_ctrs: Vector of length-2 vectors, giving pixel center of each patch.
+  - patch_radii_px: Radius of each patch.
+
+Returns:
+  - A vector of source ids (from 1 to length(patches)) that influence
+    pixels in the tile.  A patch influences a tile if
+    there is any overlap in their squares of influence.
+"""
+function get_local_sources(tile::ImageTile,
+                           patch_ctrs::Vector{Vector{Float64}},
+                           patch_radii_px::Vector{Float64})
+    @assert length(patch_ctrs) == length(patch_radii_px)
+    tile_sources = Int[]
+    tile_ctr = (mean(tile.h_range), mean(tile.w_range))
+
+    for i in eachindex(patch_ctrs)
+        patch_ctr = patch_ctrs[i]
+        patch_r = patch_radii_px[i]
+
+        # This is a "ball" in the infinity norm.
+        if ((abs(tile_ctr[1] - patch_ctr[1]) < patch_r + 0.5 * tile.h_width) &&
+            (abs(tile_ctr[2] - patch_ctr[2]) < patch_r + 0.5 * tile.w_width))
+            push!(tile_sources, i)
+        end
+
+
+    end
+
+    tile_sources
+end
+
+
+"""
 Get the sources associated with each tile in a TiledImage.
 
 Args:
   - tiled_image: A TiledImage
-  - patches: A vector of SkyPatch objects, one for each celestial object.
-
+  - patch_ctrs: Vector of length-2 vectors, giving pixel center of each patch.
+  - patch_radii_px: Radius of each patch.
 Returns:
   - An array (same dimensions as the tiles) of vectors of indices
     into patches indicating which patches are affected by any pixels
     in the tiles.
 """
-function get_tiled_image_sources(img::Image,
-  tiled_image::TiledImage, patches::Vector{SkyPatch})
+function get_tiled_image_sources(tiled_image::TiledImage,
+                                 patch_ctrs::Vector{Vector{Float64}},
+                                 patch_radii_px::Vector{Float64})
+    candidates = local_source_candidates(tiled_image, patch_ctrs,
+                                         patch_radii_px)
 
-  # HH * WW is the number of tiles in the image (not the number of pixels)
-  HH, WW = size(tiled_image)
-  tile_sources = Array(Vector{Int}, HH, WW)
-  candidates = SkyImages.local_source_candidates(tiled_image, patches)
+    out = similar(tiled_image, Vector{Int})
+    for hh in 1:size(tiled_image, 1), ww in 1:size(tiled_image, 2)
+        cands = candidates[hh, ww]  # patches indicies that might overlap tile
 
-  pixel_center = [img.H / 2, img.W / 2]
-  wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
-  wcs_jacobian_ev = maximum(abs(eigvals(wcs_jacobian)))
-
-  for hh in 1:HH, ww in 1:WW
-    # Only look for sources within the candidate set.
-    cand_patches = patches[candidates[hh, ww]]
-    if length(cand_patches) > 0
-      cand_sources = SkyImages.get_local_sources(tiled_image[hh, ww],
-                               cand_patches, ev=wcs_jacobian_ev)
-      tile_sources[hh, ww] = candidates[hh, ww][cand_sources]
-    else
-      tile_sources[hh, ww] = Int[]
+        # get indicies in cands that truly overlap the tile.
+        idx = get_local_sources(tiled_image[hh, ww],
+                                patch_ctrs[cands],
+                                patch_radii_px[cands])
+        out[hh, ww] = cands[idx]
     end
-  end
-  tile_sources
+
+    return out
 end
 
 
@@ -295,6 +365,17 @@ function initialize_celeste(
   tiled_blob, mp
 end
 
+"""Centers of patches in pixel coordinates"""
+patch_ctrs_pix(patches::Vector{SkyPatch}) = [p.pixel_center for p in patches]
+
+"""Radii of patches in pixel coordinates"""
+function patch_radii_pix(patches::Vector{SkyPatch}, img::Image)
+    # NOTE: We scale patch radii to pixels based on linearized WCS in the
+    # center of image, not at the location of the patch.
+    wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, [img.H/2, img.W/2])
+    wcs_jacobian_ev = maxabs(eigvals(wcs_jacobian))
+    return [wcs_jacobian_ev * p.radius for p in patches]
+end
 
 """
 Initilize the model params to the given catalog and tiled image.
@@ -335,7 +416,7 @@ function initialize_model_params(
     mp.objids = ASCIIString[ cat_entry.objid for cat_entry in cat]
 
     mp.patches = Array(SkyPatch, mp.S, length(blob))
-    mp.tile_sources = Array(Array{Array{Int}}, length(blob))
+    mp.tile_sources = Array(Array{Vector{Int}, 2}, length(blob))
 
     for b = 1:length(blob)
         println("Initializing band $b patches.")
@@ -346,8 +427,10 @@ function initialize_model_params(
             SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
         end
         println("Initializing band $b tiled image sources.")
-        mp.tile_sources[b] = get_tiled_image_sources(blob[b], tiled_blob[b],
-                                                     mp.patches[:, b][:])
+        patches = vec(mp.patches[:, b])
+        mp.tile_sources[b] = get_tiled_image_sources(
+            tiled_blob[b], patch_ctrs_pix(patches),
+            patch_radii_pix(patches, blob[b]))
     end
     print("\n")
 

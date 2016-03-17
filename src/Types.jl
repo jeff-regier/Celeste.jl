@@ -554,7 +554,7 @@ type ModelParams{T <: Number}
     vp::VariationalParams{T}
     pp::PriorParams
     patches::Array{SkyPatch, 2}
-    tile_sources::Vector{Array{Array{Int}}}
+    tile_sources::Vector{Array{Vector{Int}, 2}}
     active_sources::Vector{Int}
     objids::Vector{ASCIIString}
 
