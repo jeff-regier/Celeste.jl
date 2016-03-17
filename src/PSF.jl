@@ -39,7 +39,7 @@ function initialize_psf_params(K::Int; for_test::Bool=false)
     else
       psf_params[k] = zeros(length(PsfParams))
       psf_params[k][psf_ids.mu] = [0.0, 0.0]
-      psf_params[k][psf_ids.e_axis] = 1.0
+      psf_params[k][psf_ids.e_axis] = 0.95
       psf_params[k][psf_ids.e_angle] = 0.0
       psf_params[k][psf_ids.e_scale] = sqrt(2 * k)
       psf_params[k][psf_ids.weight] = 1 / K
@@ -58,9 +58,9 @@ function get_psf_transform(psf_params::Vector{Vector{Float64}})
   for k in 1:K
     bounds[k] = ParamBounds()
     bounds[k][:mu] = fill(ParamBox(-5.0, 5.0, 1.0), 2)
-    bounds[k][:e_axis] = ParamBox[ ParamBox(0.1, 1.0, 1.0) ]
+    bounds[k][:e_axis] = ParamBox[ ParamBox(0.1, 1.0, 100.0) ]
     bounds[k][:e_angle] = ParamBox[ ParamBox(-4 * pi, 4 * pi, 1.0) ]
-    bounds[k][:e_scale] = ParamBox[ ParamBox(0.25, Inf, 1.0) ]
+    bounds[k][:e_scale] = ParamBox[ ParamBox(0.05, 10.0, 1.0) ]
 
     # Note that the weights do not need to sum to one.
     bounds[k][:weight] = ParamBox[ ParamBox(0.05, 2.0, 1.0) ]
@@ -260,9 +260,28 @@ function evaluate_psf_fit{NumType <: Number}(
   pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
   squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
 
+  evaluate_psf_fit!(
+      psf_params, raw_psf, x_mat, bvn_derivs,
+      log_pdf, pdf, pixel_value, squared_error, calculate_derivs)
+
+  squared_error
+end
+
+
+function evaluate_psf_fit!{NumType <: Number}(
+    psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64},
+    x_mat::Matrix{Vector{Float64}},
+    bvn_derivs::BivariateNormalDerivatives{NumType},
+    log_pdf::SensitiveFloat{PsfParams, NumType},
+    pdf::SensitiveFloat{PsfParams, NumType},
+    pixel_value::SensitiveFloat{PsfParams, NumType},
+    squared_error::SensitiveFloat{PsfParams, NumType},
+    calculate_derivs::Bool)
+
+  K = length(psf_params)
   sigma_vec, sig_sf_vec = get_sigma_from_params(psf_params)
 
-  SensitiveFloats.clear!(squared_error)
+  clear!(squared_error)
 
   for x_ind in 1:length(x_mat)
     clear!(pixel_value)
@@ -273,15 +292,21 @@ function evaluate_psf_fit{NumType <: Number}(
     diff = (pixel_value.v[1] - raw_psf[x_ind])
     squared_error.v +=  diff ^ 2
     if calculate_derivs
-
-      squared_error.d += 2 * diff * pixel_value.d
-      squared_error.h +=
-        2 * (diff * pixel_value.h + pixel_value.d[:] * pixel_value.d[:]')
+      for ind1 = 1:length(squared_error.d)
+        squared_error.d[ind1] += 2 * diff * pixel_value.d[ind1]
+        for ind1 = 1:ind2
+          squared_error.h[ind1, ind2] +=
+            2 * (diff * pixel_value.h[ind1, ind2] +
+                 pixel_value.d[ind1] * pixel_value.d[ind2]')
+          squared_error.h[ind2, ind1] = squared_error.h[ind1, ind2]
+        end
+      end
     end
   end
 
   squared_error
 end
+
 
 
 function transform_psf_sensitive_float!{NumType <: Number}(

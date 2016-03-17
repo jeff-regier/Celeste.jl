@@ -33,13 +33,6 @@ close(psf_fits)
 
 raw_psf = raw_psf_comp(500., 500.);
 
-psf_params_original = initialize_psf_params(K, for_test=false);
-psf_params = deepcopy(psf_params_original)
-psf_transform = PSF.get_psf_transform(psf_params);
-psf_params_free = unconstrain_psf_params(psf_params, psf_transform);
-psf_params_free_vec = wrap_psf_params(psf_params_free)[:];
-
-
 function psf_fit_for_optim{NumType <: Number}(
     psf_params_free_vec::Vector{NumType}, calculate_derivs::Bool)
 
@@ -48,7 +41,10 @@ function psf_fit_for_optim{NumType <: Number}(
   psf_params = constrain_psf_params(psf_params_free, psf_transform)
   sf = evaluate_psf_fit(psf_params, raw_psf, calculate_derivs);
   if verbose
+    println("------------------- Params:")
     println(psf_params)
+    println(psf_params_free)
+    println("------------------- ok ok ")
   end
   transform_psf_sensitive_float!(
     psf_params, psf_transform, sf, sf_free, calculate_derivs)
@@ -62,7 +58,6 @@ end
 
 function psf_fit_grad!(
     psf_params_free_vec::Vector{Float64}, grad::Vector{Float64})
-  println(psf_params_free_vec)
   grad[:] = psf_fit_for_optim(psf_params_free_vec, true).d[:]
 end
 
@@ -77,7 +72,16 @@ d = Optim.TwiceDifferentiableFunction(
 # Only include until this is merged with Optim.jl.
 include("src/newton_trust_region.jl")
 
-max_iters = 100
+include("src/PSF.jl")
+
+psf_params_original = PSF.initialize_psf_params(K, for_test=false);
+psf_params = deepcopy(psf_params_original)
+psf_transform = PSF.get_psf_transform(psf_params);
+psf_params_free = unconstrain_psf_params(psf_params, psf_transform)
+psf_params_free_vec = wrap_psf_params(psf_params_free)[:];
+
+
+max_iters = 50
 verbose = true
 rho_lower = 0.2
 
@@ -93,13 +97,17 @@ nm_result = newton_tr(d,
                       initial_delta=10.0,
                       delta_hat=1e9,
                       rho_lower = rho_lower)
+nm_result.f_minimum
 
 psf_params_fit =
   constrain_psf_params(unwrap_psf_params(nm_result.minimum), psf_transform)
+PSF.get_sigma_from_params(psf_params_fit)[1]
 psf_params_free_vec_fit =
   wrap_psf_params(unconstrain_psf_params(psf_params_fit, psf_transform));
-PSF.get_sigma_from_params(psf_params_fit)
 
 sf = evaluate_psf_fit(psf_params, raw_psf, true);
+diag(sf.h)
 hess = zeros(length(psf_params_free_vec), length(psf_params_free_vec));
-psf_fit_hess!(psf_params_free_vec_fit, hess)
+psf_fit_hess!(psf_params_free_vec_fit, hess);
+diag(hess)
+hess_old
