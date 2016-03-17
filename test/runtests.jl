@@ -13,6 +13,7 @@ const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
 wd = pwd()
 cd(datadir)
 run(`make`)
+run(`make RUN=4263 CAMCOL=5 FIELD=119`)
 cd(wd)
 
 if length(ARGS) > 0
