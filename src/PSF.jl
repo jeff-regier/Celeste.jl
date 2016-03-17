@@ -20,7 +20,7 @@ using Celeste.SensitiveFloats.clear!
 
 export evaluate_psf_fit, psf_params_to_array, psf_array_to_params,
        get_psf_transform, initialize_psf_params, transform_psf_params!,
-       unwrap_psf_params, wrap_psf_params
+       unwrap_psf_params, wrap_psf_params, unconstrain_psf_params
 
 
 function initialize_psf_params(K::Int; for_test::Bool=false)
@@ -76,6 +76,20 @@ function transform_psf_params!{NumType <: Number}(
   end
 
   true # return type
+end
+
+
+function unconstrain_psf_params{NumType <: Number}(
+    psf_params_free::Vector{Vector{NumType}}, psf_transform::DataTransform)
+
+  psf_params = Array(Vector{NumType}, K)
+  for k=1:length(psf_params_free)
+    psf_params[k] = zeros(NumType, length(PsfParams))
+  end
+
+  transform_psf_params!(psf_params, psf_params_free, psf_transform, false)
+
+  psf_params
 end
 
 
