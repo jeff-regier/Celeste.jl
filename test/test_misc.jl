@@ -74,9 +74,8 @@ function test_local_sources()
     @test mp.S == 3
 
     patches = vec(mp.patches[:, 3])
-    subset1000 = ModelInit.get_local_sources(
-      tile, patch_ctrs_pix(patches),
-      patch_radii_pix(patches, blob[3]))
+    subset1000 = ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+                                             patch_radii_pix(patches))
     @test subset1000 == [1,2,3]
 
     tile_width = 10
@@ -85,9 +84,8 @@ function test_local_sources()
       fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
 
     patches = vec(mp.patches[:, 3])
-    subset10 = ModelInit.get_local_sources(
-      tile, patch_ctrs_pix(patches),
-      patch_radii_pix(patches, blob[3]))
+    subset10 = ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+                                           patch_radii_pix(patches))
     @test subset10 == [1]
 
     last_tile = ImageTile(11, 24, blob[3], tile_width)
@@ -95,9 +93,9 @@ function test_local_sources()
       fill(fill(last_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.)
 
     patches = vec(mp.patches[:, 3])
-    last_subset = ModelInit.get_local_sources(
-      last_tile, patch_ctrs_pix(patches),
-      patch_radii_pix(patches, blob[3]))
+    last_subset = ModelInit.get_local_sources(last_tile,
+                                              patch_ctrs_pix(patches),
+                                              patch_radii_pix(patches))
     @test length(last_subset) == 0
 
     pop_tile = ImageTile(7, 9, blob[3], tile_width)
@@ -105,9 +103,8 @@ function test_local_sources()
       fill(fill(pop_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
 
     patches = vec(mp.patches[:, 3])
-    pop_subset = ModelInit.get_local_sources(
-      pop_tile, patch_ctrs_pix(patches),
-      patch_radii_pix(patches, blob[3]))
+    pop_subset = ModelInit.get_local_sources(pop_tile, patch_ctrs_pix(patches),
+                                             patch_radii_pix(patches))
 
     @test pop_subset == [2,3]
 end
@@ -181,7 +178,7 @@ function test_local_sources_3()
 
     patches = vec(mp.patches[:,test_b])
     @test ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
-                                      patch_radii_pix(patches, blob[test_b])) == [1]
+                                      patch_radii_pix(patches)) == [1]
 
     # Source should not match when you're 1 tile and a half away along the diagonal plus
     # the pixel radius from the center of the tile.
@@ -192,7 +189,7 @@ function test_local_sources_3()
         blob[test_b],
         tile_width)
     @test ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
-                                      patch_radii_pix(patches, blob[test_b])) == []
+                                      patch_radii_pix(patches)) == []
 
     tile = ImageTile(
         round(Int, (pix_loc[1]) / tile_width),
@@ -201,7 +198,7 @@ function test_local_sources_3()
         blob[test_b],
         tile_width)
     @test ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
-                                      patch_radii_pix(patches, blob[test_b])) == []
+                                      patch_radii_pix(patches)) == []
 
 end
 
