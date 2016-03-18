@@ -308,7 +308,6 @@ function evaluate_psf_fit!{NumType <: Number}(
 end
 
 
-
 function transform_psf_sensitive_float!{NumType <: Number}(
     psf_params::Vector{Vector{NumType}}, psf_transform::Transform.DataTransform,
     sf::SensitiveFloat{PsfParams, NumType}, sf_free::SensitiveFloat{PsfParams, NumType},
@@ -349,12 +348,19 @@ function transform_psf_sensitive_float!{NumType <: Number}(
     end
 
     # Apply the transformations.
-    sf_free.d = reshape(jacobian_diag .* sf.d[:], length(PsfParams), K)
+    for ind1 = 1:length(sf_free.d)
+      sf_free.d[ind1] = jacobian_diag[ind1] * sf.d[ind1]
 
-    # Calculate the Hessian
-    sf_free.h =
-      ((jacobian_diag * jacobian_diag') .* sf.h) +
-      diagm(hessian_values .* sf.d[:])
+      for ind2 = 1:ind1
+        # Calculate the Hessian
+        sf_free.h[ind1, ind2] =
+          (jacobian_diag[ind1] * jacobian_diag[ind2]) * sf.h[ind1, ind2])
+        if ind1 == ind2
+          sf_free.h[ind1, ind2] +=  hessian_values[ind1] * sf.d[ind1]
+          diagm(hessian_values .* sf.d[:])
+        end
+      end
+    end
   end
 
   true # return type
