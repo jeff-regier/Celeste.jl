@@ -472,6 +472,20 @@ function get_relevant_sources{NumType <: Number}(
   relevant_sources
 end
 
+
+"""
+Union of source indicies that have some overlap with any of the input indicies.
+
+Args:
+
+- `mp`: ModelParams
+- `idx`: Vector of target source indicies
+
+Returns:
+
+- Array of integers that index into mp.s representing all sources that
+  co-occur in at least one tile with *any* of the sources in `idx`.
+"""
 function get_all_relevant_sources{NumType <: Number}(
     mp::ModelParams{NumType}, idx::Vector{Int})
     out = Int[]
