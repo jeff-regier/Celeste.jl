@@ -196,8 +196,8 @@ Initialize a SkyPatch object at a particular location.
 
 Args:
   - world_center: The location of the patch
-  - radius: The radius, in world coordinates, of the circle of pixels that
-            affect this patch of sky.
+  - world_radius: The radius, in world coordinates, of the circle of pixels
+                  that affect this patch of sky.
   - img: An Image object.
 
 Returns:
@@ -205,14 +205,14 @@ Returns:
 
 Note: this is only used in tests.
 """
-function SkyPatch(world_center::Vector{Float64}, radius::Float64,
+function SkyPatch(world_center::Vector{Float64}, world_radius::Float64,
                   img::Image; fit_psf=true)
     psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
-    radius_pix = maxabs(eigvals(wcs_jacobian)) * radius
+    radius_pix = maxabs(eigvals(wcs_jacobian)) * world_radius
 
-    SkyPatch(world_center, radius, radius_pix, psf, wcs_jacobian, pixel_center)
+    SkyPatch(world_center, radius_pix, psf, wcs_jacobian, pixel_center)
 end
 
 
@@ -234,20 +234,18 @@ function SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true,
     psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
+    radius_pix = choose_patch_radius(pixel_center, ce, psf, img)
 
-    pix_radius = choose_patch_radius(pixel_center, ce, psf, img)
-    sky_radius = SkyImages.pixel_radius_to_world(pix_radius, wcs_jacobian)
-
-    SkyPatch(world_center, scale_patch_size * sky_radius,
-             scale_patch_size * pix_radius, psf, wcs_jacobian, pixel_center)
+    SkyPatch(world_center, scale_patch_size * radius_pix, psf,
+             wcs_jacobian, pixel_center)
 end
 
 """
 Initialize a SkyPatch from an existing SkyPatch and a new PSF.
 """
 SkyPatch(patch::SkyPatch, psf::Vector{PsfComponent}) =
-    SkyPatch(patch.center, patch.radius, patch.radius_pix,
-             psf, patch.wcs_jacobian, patch.pixel_center)
+    SkyPatch(patch.center, patch.radius_pix, psf, patch.wcs_jacobian,
+             patch.pixel_center)
 
 
 """
