@@ -33,6 +33,12 @@ close(psf_fits)
 
 raw_psf = raw_psf_comp(500., 500.);
 
+
+
+
+
+include("src/PSF.jl")
+
 function psf_fit_for_optim{NumType <: Number}(
     psf_params_free_vec::Vector{NumType}, calculate_derivs::Bool)
 
@@ -41,11 +47,11 @@ function psf_fit_for_optim{NumType <: Number}(
   psf_params = constrain_psf_params(psf_params_free, psf_transform)
   sf = evaluate_psf_fit(psf_params, raw_psf, calculate_derivs);
   if verbose
-    println("------------------- Params:")
-    println(psf_params)
-    println(psf_params_free)
-    println(PSF.get_sigma_from_params(psf_params)[1])
-    println("------------------- ok ok ")
+    # println("------------------- Params:")
+    # println(psf_params)
+    # println(psf_params_free)
+    # println(PSF.get_sigma_from_params(psf_params)[1])
+    # println("------------------- ok ok ")
   end
   transform_psf_sensitive_float!(
     psf_params, psf_transform, sf, sf_free, calculate_derivs)
@@ -65,6 +71,7 @@ end
 function psf_fit_hess!(
     psf_params_free_vec::Vector{Float64}, hess::Matrix{Float64})
   hess[:] = psf_fit_for_optim(psf_params_free_vec, true).h
+  hess[:] = 0.5 * (hess + hess')
 end
 
 d = Optim.TwiceDifferentiableFunction(
@@ -72,8 +79,6 @@ d = Optim.TwiceDifferentiableFunction(
 
 # Only include until this is merged with Optim.jl.
 include("src/newton_trust_region.jl")
-
-include("src/PSF.jl")
 
 psf_params_original = PSF.initialize_psf_params(K, for_test=false);
 psf_params = deepcopy(psf_params_original)
