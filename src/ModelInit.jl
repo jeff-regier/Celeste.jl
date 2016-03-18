@@ -196,20 +196,23 @@ Initialize a SkyPatch object at a particular location.
 
 Args:
   - world_center: The location of the patch
-  - radius: The radius, in world coordinates, of the circle of pixels that
-            affect this patch of sky.
+  - world_radius: The radius, in world coordinates, of the circle of pixels
+                  that affect this patch of sky.
   - img: An Image object.
 
 Returns:
   A SkyPatch object.
+
+Note: this is only used in tests.
 """
-function SkyPatch(world_center::Vector{Float64}, radius::Float64,
+function SkyPatch(world_center::Vector{Float64}, world_radius::Float64,
                   img::Image; fit_psf=true)
     psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
+    radius_pix = maxabs(eigvals(wcs_jacobian)) * world_radius
 
-    SkyPatch(world_center, radius, psf, wcs_jacobian, pixel_center)
+    SkyPatch(world_center, radius_pix, psf, wcs_jacobian, pixel_center)
 end
 
 
@@ -231,13 +234,18 @@ function SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true,
     psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
+    radius_pix = choose_patch_radius(pixel_center, ce, psf, img)
 
-    pix_radius = choose_patch_radius(pixel_center, ce, psf, img)
-    sky_radius = SkyImages.pixel_radius_to_world(pix_radius, wcs_jacobian)
-
-    SkyPatch(world_center, scale_patch_size * sky_radius,
-             psf, wcs_jacobian, pixel_center)
+    SkyPatch(world_center, scale_patch_size * radius_pix, psf,
+             wcs_jacobian, pixel_center)
 end
+
+"""
+Initialize a SkyPatch from an existing SkyPatch and a new PSF.
+"""
+SkyPatch(patch::SkyPatch, psf::Vector{PsfComponent}) =
+    SkyPatch(patch.center, patch.radius_pix, psf, patch.wcs_jacobian,
+             patch.pixel_center)
 
 
 """
@@ -369,13 +377,7 @@ end
 patch_ctrs_pix(patches::Vector{SkyPatch}) = [p.pixel_center for p in patches]
 
 """Radii of patches in pixel coordinates"""
-function patch_radii_pix(patches::Vector{SkyPatch}, img::Image)
-    # NOTE: We scale patch radii to pixels based on linearized WCS in the
-    # center of image, not at the location of the patch.
-    wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, [img.H/2, img.W/2])
-    wcs_jacobian_ev = maxabs(eigvals(wcs_jacobian))
-    return [wcs_jacobian_ev * p.radius for p in patches]
-end
+patch_radii_pix(patches::Vector{SkyPatch}) = [p.radius_pix for p in patches]
 
 """
 Initilize the model params to the given catalog and tiled image.
@@ -428,9 +430,9 @@ function initialize_model_params(
         end
         println("Initializing band $b tiled image sources.")
         patches = vec(mp.patches[:, b])
-        mp.tile_sources[b] = get_tiled_image_sources(
-            tiled_blob[b], patch_ctrs_pix(patches),
-            patch_radii_pix(patches, blob[b]))
+        mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b],
+                                                     patch_ctrs_pix(patches),
+                                                     patch_radii_pix(patches))
     end
     print("\n")
 
@@ -466,6 +468,29 @@ function get_relevant_sources{NumType <: Number}(
   end
 
   relevant_sources
+end
+
+
+"""
+Union of source indicies that have some overlap with any of the input indicies.
+
+Args:
+
+- `mp`: ModelParams
+- `idx`: Vector of target source indicies
+
+Returns:
+
+- Array of integers that index into mp.s representing all sources that
+  co-occur in at least one tile with *any* of the sources in `idx`.
+"""
+function get_all_relevant_sources{NumType <: Number}(
+    mp::ModelParams{NumType}, idx::Vector{Int})
+    out = Int[]
+    for s in idx
+        out = union(out, get_relevant_sources(mp, s))
+    end
+    return out
 end
 
 
@@ -633,6 +658,5 @@ function initialize_objid(objid::ASCIIString, mp_all::ModelParams{Float64},
                                            noise_fraction=0.1)
   return trimmed_tiled_images, mp, active_s, s
 end
-
 
 end # module

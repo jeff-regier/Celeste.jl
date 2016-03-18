@@ -326,8 +326,7 @@ celestial object in a single image.
 
 Attributes:
   - center: The approximate source location in world coordinates
-  - radius: The width of the influence of the object in world coordinates
-
+  - radius_pix: The width of the influence of the object in pixel coordinates
   - psf: The point spread function in this region of the sky
   - wcs_jacobian: The jacobian of the WCS transform in this region of the
                   sky for each band
@@ -335,7 +334,7 @@ Attributes:
 """
 immutable SkyPatch
     center::Vector{Float64}
-    radius::Float64
+    radius_pix::Float64
 
     psf::Vector{PsfComponent}
     wcs_jacobian::Matrix{Float64}
