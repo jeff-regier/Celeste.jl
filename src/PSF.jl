@@ -58,7 +58,7 @@ function get_psf_transform(psf_params::Vector{Vector{Float64}})
   for k in 1:K
     bounds[k] = ParamBounds()
     bounds[k][:mu] = fill(ParamBox(-5.0, 5.0, 1.0), 2)
-    bounds[k][:e_axis] = ParamBox[ ParamBox(0.1, 1.0, 100.0) ]
+    bounds[k][:e_axis] = ParamBox[ ParamBox(0.1, 1.0, 1.0) ]
     bounds[k][:e_angle] = ParamBox[ ParamBox(-4 * pi, 4 * pi, 1.0) ]
     bounds[k][:e_scale] = ParamBox[ ParamBox(0.05, 10.0, 1.0) ]
 
@@ -191,29 +191,61 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
     log_pdf.v[1] = log(bvn_derivs.f_pre[1])
 
     if calculate_derivs
-      log_pdf.d[psf_ids.mu] = bvn_derivs.bvn_u_d
-      log_pdf.d[sigma_ids] = bvn_derivs.bvn_s_d
+      for ind=1:2
+        log_pdf.d[psf_ids.mu[ind]] = bvn_derivs.bvn_u_d[ind]
+      end
+      for ind=1:3
+        log_pdf.d[sigma_ids[ind]] = bvn_derivs.bvn_s_d[ind]
+      end
       log_pdf.d[psf_ids.weight] = 0
 
-      log_pdf.h[psf_ids.mu, psf_ids.mu] = bvn_derivs.bvn_uu_h
-      log_pdf.h[psf_ids.mu, sigma_ids] = bvn_derivs.bvn_us_h
-      log_pdf.h[sigma_ids, psf_ids.mu] = log_pdf.h[psf_ids.mu, sigma_ids]'
-      log_pdf.h[sigma_ids, sigma_ids] = bvn_derivs.bvn_ss_h
+      for ind1 = 1:2, ind2 = 1:2
+        log_pdf.h[psf_ids.mu[ind1], psf_ids.mu[ind2]] =
+          bvn_derivs.bvn_uu_h[ind1, ind2]
+      end
+      for mu_ind = 1:2, sig_ind = 1:3
+        log_pdf.h[psf_ids.mu[mu_ind], sigma_ids[sig_ind]] =
+        log_pdf.h[sigma_ids[sig_ind], psf_ids.mu[mu_ind]] =
+          bvn_derivs.bvn_us_h[mu_ind, sig_ind]
+      end
+      for ind1 = 1:3, ind2 = 1:3
+        log_pdf.h[sigma_ids[ind1], sigma_ids[ind2]] =
+          bvn_derivs.bvn_ss_h[ind1, ind2]
+      end
     end
 
     pdf_val = exp(log_pdf.v[1])
     pdf.v[1] = pdf_val
 
     if calculate_derivs
-      pdf.d = pdf_val * log_pdf.d
-      pdf.h = pdf_val * (log_pdf.h + log_pdf.d * log_pdf.d')
+      for ind1 = 1:length(PsfParams)
+        if ind1 == psf_ids.weight
+          pdf.d[ind1] = pdf_val
+        else
+          pdf.d[ind1] = psf_params[k][psf_ids.weight] * pdf_val * log_pdf.d[ind1]
+        end
+
+        # pdf.d[ind1] = pdf_val * log_pdf.d[ind1]
+
+        for ind2 = 1:ind1
+          pdf.h[ind1, ind2] = pdf.h[ind2, ind1] =
+            psf_params[k][psf_ids.weight] * pdf_val *
+            (log_pdf.h[ind1, ind2] + log_pdf.d[ind1] * log_pdf.d[ind2])
+        end
+      end
+
+      # Weight hessian terms.
+      for ind1 = 1:length(PsfParams)
+        pdf.h[psf_ids.weight, ind1] = pdf.h[ind1, psf_ids.weight] =
+          pdf_val * log_pdf.d[ind1]
+      end
 
       # Now multiply by the weight.
-      pdf.h *= psf_params[k][psf_ids.weight]
-      pdf.h[psf_ids.weight, :] = pdf.h[:, psf_ids.weight] = pdf.d
-
-      pdf.d *= psf_params[k][psf_ids.weight]
-      pdf.d[psf_ids.weight] = pdf_val
+      # pdf.h *= psf_params[k][psf_ids.weight]
+      # pdf.h[psf_ids.weight, :] = pdf.h[:, psf_ids.weight] = pdf.d
+      #
+      # pdf.d *= psf_params[k][psf_ids.weight]
+      # pdf.d[psf_ids.weight] = pdf_val
     end
 
     pdf.v *= psf_params[k][psf_ids.weight]
@@ -301,7 +333,7 @@ function evaluate_psf_fit!{NumType <: Number}(
           squared_error.h[ind2, ind1] = squared_error.h[ind1, ind2]
         end
       end
-    end
+    end # if calculate_derivs
   end
 
   squared_error
@@ -353,7 +385,7 @@ function transform_psf_sensitive_float!{NumType <: Number}(
 
       for ind2 = 1:ind1
         # Calculate the Hessian
-        sf_free.h[ind1, ind2] =
+        sf_free.h[ind1, ind2] = sf_free.h[ind2, ind1] =
           (jacobian_diag[ind1] * jacobian_diag[ind2]) * sf.h[ind1, ind2]
         if ind1 == ind2
           sf_free.h[ind1, ind2] +=  hessian_values[ind1] * sf.d[ind1]

@@ -89,10 +89,6 @@ function test_psf_fit()
     pixel_value_wrapper_sf(psf_param_vec, false).v[1]
   end
 
-  # Pick a point for testing
-  # x_ind = 1508
-  # x_mat = PSF.get_x_matrix_from_psf(raw_psf);
-  # x = x_mat[x_ind]
   x = Float64[1.0, 2.0]
 
   sigma_vec = Array(Matrix{Float64}, K);
