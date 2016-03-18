@@ -486,7 +486,6 @@ length(::Type{UnconstrainedParams}) =  6 + 2*Ia + 2*(B-1)*Ia + (D-1)*Ia + Ia-1
 
 
 # Parameters for a representation of the PSF
-# TODO: have each component be a "source"?
 type PsfParams <: Types.ParamSet
     mu::Vector{Int}
     e_axis::Int
