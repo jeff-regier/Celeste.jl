@@ -242,6 +242,13 @@ function SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true,
              scale_patch_size * pix_radius, psf, wcs_jacobian, pixel_center)
 end
 
+"""
+Initialize a SkyPatch from an existing SkyPatch and a new PSF.
+"""
+SkyPatch(patch::SkyPatch, psf::Vector{PsfComponent}) =
+    SkyPatch(patch.center, patch.radius, patch.radius_pix,
+             psf, patch.wcs_jacobian, patch.pixel_center)
+
 
 """
 A fast function to determine which sources might belong to which tiles.
@@ -465,6 +472,15 @@ function get_relevant_sources{NumType <: Number}(
   relevant_sources
 end
 
+function get_all_relevant_sources{NumType <: Number}(
+    mp::ModelParams{NumType}, idx::Vector{Int})
+    out = Int[]
+    for i in idx
+        out = union(out, get_relevant_sources(mp, i))
+    end
+    return out
+end
+
 
 """
 Return a reduced Celeste dataset useful for a single object.
@@ -630,6 +646,5 @@ function initialize_objid(objid::ASCIIString, mp_all::ModelParams{Float64},
                                            noise_fraction=0.1)
   return trimmed_tiled_images, mp, active_s, s
 end
-
 
 end # module

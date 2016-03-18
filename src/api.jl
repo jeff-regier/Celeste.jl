@@ -140,18 +140,34 @@ function infer(ra_range::Tuple{Float64, Float64},
 
     # initialize tiled images and model parameters for trimming.  We will
     # initialize the psf again before fitting, so we don't do it here.
-    tiled_images, mp_all = ModelInit.initialize_celeste(images, catalog,
-                                                        tile_width=TILE_WIDTH,
-                                                        fit_psf=false)
+    info("initializing celeste without PSF fit")
+    tiled_images = SkyImages.break_blob_into_tiles(images, TILE_WIDTH)
+    mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
+                                           fit_psf=false)
+
+    # get indicies of all sources relevant to those we're actually
+    # interested in, and fit a local PSF for those sources (since we skipped
+    # fitting the PSF for the whole catalog above)
+    info("fitting PSF for all relevant sources")
+    relevant_idx = ModelInit.get_all_relevant_sources(mp, idx)
+    for j in 1:size(mp.patches, 2)  # loop over images
+        for i in relevant_idx  # loop over relevant sources
+            patch = mp.patches[i, j]
+            psf = SkyImages.get_source_psf(patch.center, images[j])
+            mp.patches[i, j] = ModelInit.SkyPatch(patch, psf)
+        end
+    end
 
     results = Dict{Int, Dict}()
     for i in idx
         entry = catalog[i]
+        mp.active_sources = [i]
+
         info("processing source $i: objid= $(entry.objid)")
 
         t0 = time()
-        trimmed_tiled_images, mp, active_s, s =
-            ModelInit.initialize_objid(entry.objid, mp_all, catalog, images)
+        trimmed_tiled_images = ModelInit.trim_source_tiles(i, mp, tiled_images;
+                                                           noise_fraction=0.1)
         init_time = time() - t0
 
         t0 = time()
@@ -163,7 +179,7 @@ function infer(ra_range::Tuple{Float64, Float64},
         results[entry.thing_id] = Dict("objid"=>entry.objid,
                                        "ra"=>entry.pos[1],
                                        "dec"=>entry.pos[2],
-                                       "vp"=>mp.vp[active_s],  # should be 's'?
+                                       "vp"=>mp.vp[i],
                                        "init_time"=>init_time,
                                        "fit_time"=>fit_time)
     end
