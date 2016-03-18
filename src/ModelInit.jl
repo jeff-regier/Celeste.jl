@@ -202,14 +202,17 @@ Args:
 
 Returns:
   A SkyPatch object.
+
+Note: this is only used in tests.
 """
 function SkyPatch(world_center::Vector{Float64}, radius::Float64,
                   img::Image; fit_psf=true)
     psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
+    radius_pix = maxabs(eigvals(wcs_jacobian)) * radius
 
-    SkyPatch(world_center, radius, psf, wcs_jacobian, pixel_center)
+    SkyPatch(world_center, radius, radius_pix, psf, wcs_jacobian, pixel_center)
 end
 
 
@@ -236,7 +239,7 @@ function SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true,
     sky_radius = SkyImages.pixel_radius_to_world(pix_radius, wcs_jacobian)
 
     SkyPatch(world_center, scale_patch_size * sky_radius,
-             psf, wcs_jacobian, pixel_center)
+             scale_patch_size * pix_radius, psf, wcs_jacobian, pixel_center)
 end
 
 
@@ -369,13 +372,7 @@ end
 patch_ctrs_pix(patches::Vector{SkyPatch}) = [p.pixel_center for p in patches]
 
 """Radii of patches in pixel coordinates"""
-function patch_radii_pix(patches::Vector{SkyPatch}, img::Image)
-    # NOTE: We scale patch radii to pixels based on linearized WCS in the
-    # center of image, not at the location of the patch.
-    wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, [img.H/2, img.W/2])
-    wcs_jacobian_ev = maxabs(eigvals(wcs_jacobian))
-    return [wcs_jacobian_ev * p.radius for p in patches]
-end
+patch_radii_pix(patches::Vector{SkyPatch}) = [p.radius_pix for p in patches]
 
 """
 Initilize the model params to the given catalog and tiled image.
@@ -428,9 +425,9 @@ function initialize_model_params(
         end
         println("Initializing band $b tiled image sources.")
         patches = vec(mp.patches[:, b])
-        mp.tile_sources[b] = get_tiled_image_sources(
-            tiled_blob[b], patch_ctrs_pix(patches),
-            patch_radii_pix(patches, blob[b]))
+        mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b],
+                                                     patch_ctrs_pix(patches),
+                                                     patch_radii_pix(patches))
     end
     print("\n")
 
