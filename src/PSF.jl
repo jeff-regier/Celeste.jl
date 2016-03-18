@@ -8,13 +8,6 @@ import Celeste.SensitiveFloats
 import Celeste.SDSSIO
 
 using Celeste.Transform
-#
-# using Celeste.Transform.ParamBounds
-# using Celeste.Transform.ParamBox
-# using Celeste.Transform.DataTransform
-# using Celeste.Transform.box_parameter
-# using Celeste.Transform.unbox_parameter
-
 using Celeste.SensitiveFloats.SensitiveFloat
 using Celeste.SensitiveFloats.clear!
 
@@ -49,7 +42,9 @@ function initialize_psf_params(K::Int; for_test::Bool=false)
   psf_params
 end
 
-function get_psf_transform(psf_params::Vector{Vector{Float64}})
+function get_psf_transform(
+    psf_params::Vector{Vector{Float64}};
+    scale::Vector{Float64}=ones(length(PsfParams)))
 
   K = length(psf_params)
   bounds = Array(ParamBounds, length(psf_params))
@@ -57,13 +52,16 @@ function get_psf_transform(psf_params::Vector{Vector{Float64}})
   # of reasonably meaningful changes.
   for k in 1:K
     bounds[k] = ParamBounds()
-    bounds[k][:mu] = fill(ParamBox(-5.0, 5.0, 1.0), 2)
-    bounds[k][:e_axis] = ParamBox[ ParamBox(0.1, 1.0, 1.0) ]
-    bounds[k][:e_angle] = ParamBox[ ParamBox(-4 * pi, 4 * pi, 1.0) ]
-    bounds[k][:e_scale] = ParamBox[ ParamBox(0.05, 10.0, 1.0) ]
+    bounds[k][:mu] = ParamBox[ ParamBox(-5.0, 5.0, scale[psf_ids.mu[1]]),
+                               ParamBox(-5.0, 5.0, scale[psf_ids.mu[2]]) ]
+    bounds[k][:e_axis] = ParamBox[ ParamBox(0.1, 1.0, scale[psf_ids.e_axis] ) ]
+    bounds[k][:e_angle] =
+      ParamBox[ ParamBox(-4 * pi, 4 * pi, scale[psf_ids.e_angle] ) ]
+    bounds[k][:e_scale] =
+      ParamBox[ ParamBox(0.05, 10.0, scale[psf_ids.e_scale] ) ]
 
     # Note that the weights do not need to sum to one.
-    bounds[k][:weight] = ParamBox[ ParamBox(0.05, 2.0, 1.0) ]
+    bounds[k][:weight] = ParamBox[ ParamBox(0.05, 2.0, scale[psf_ids.weight] ) ]
   end
   DataTransform(bounds, active_sources=collect(1:K), S=K)
 end
@@ -141,26 +139,6 @@ function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
   psf_params_mat[:]
 end
 
-# function psf_params_to_vec{NumType <: Number}(psf_params::Vector{Vector{NumType}})
-#   K = length(psf_params)
-#   psf_params_mat = zeros(NumType, length(PsfParams), K)
-#   for k=1:K
-#     psf_params_mat[:, k] = psf_params[k]
-#   end
-#   psf_params_mat
-# end
-#
-#
-# function psf_vec_to_params{NumType <: Number}(psf_params_mat::Matrix{NumType})
-#   K = size(psf_params_mat, 2)
-#   @assert size(psf_params_mat, 1) == length(PsfParams)
-#   psf_params = Array(Vector{NumType}, K)
-#   for k=1:K
-#     # psf_params[k] = zeros(NumType, length(PsfParams))
-#     psf_params[k] = psf_params_mat[:, k]
-#   end
-# end
-#
 
 function evaluate_psf_pixel_fit!{NumType <: Number}(
     x::Vector{Float64}, psf_params::Vector{Vector{NumType}},
@@ -225,8 +203,6 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
           pdf.d[ind1] = psf_params[k][psf_ids.weight] * pdf_val * log_pdf.d[ind1]
         end
 
-        # pdf.d[ind1] = pdf_val * log_pdf.d[ind1]
-
         for ind2 = 1:ind1
           pdf.h[ind1, ind2] = pdf.h[ind2, ind1] =
             psf_params[k][psf_ids.weight] * pdf_val *
@@ -240,12 +216,6 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
           pdf_val * log_pdf.d[ind1]
       end
 
-      # Now multiply by the weight.
-      # pdf.h *= psf_params[k][psf_ids.weight]
-      # pdf.h[psf_ids.weight, :] = pdf.h[:, psf_ids.weight] = pdf.d
-      #
-      # pdf.d *= psf_params[k][psf_ids.weight]
-      # pdf.d[psf_ids.weight] = pdf_val
     end
 
     pdf.v *= psf_params[k][psf_ids.weight]
