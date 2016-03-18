@@ -489,8 +489,8 @@ Returns:
 function get_all_relevant_sources{NumType <: Number}(
     mp::ModelParams{NumType}, idx::Vector{Int})
     out = Int[]
-    for i in idx
-        out = union(out, get_relevant_sources(mp, i))
+    for s in idx
+        out = union(out, get_relevant_sources(mp, s))
     end
     return out
 end
