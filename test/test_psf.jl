@@ -248,8 +248,35 @@ function test_transform_psf_sensitive_float()
 end
 
 
+function test_psf_optimizer()
+  run_num = 4263
+  camcol_num = 5
+  field_num = 117
+
+  b = 3
+  K = 2
+
+  psf_filename =
+    @sprintf("%s/psField-%06d-%d-%04d.fit", datadir, run_num, camcol_num, field_num)
+  psf_fits = FITSIO.FITS(psf_filename);
+  raw_psf_comp = SDSSIO.read_psf(psf_fits, band_letters[b]);
+  close(psf_fits)
+
+  raw_psf = raw_psf_comp(500., 500.);
+  psf_params = PSF.initialize_psf_params(K, for_test=false);
+  psf_transform = PSF.get_psf_transform(psf_params);
+  psf_optimizer = PsfOptimizer(psf_transform, K);
+
+  nm_result = psf_optimizer.fit_psf(raw_psf, psf_params)
+
+  # Could this test be tighter?
+  @test 0.0 < nm_result.f_minimum < 1e-3
+end
+
+
 test_transform_psf_sensitive_float()
 test_transform_psf_params()
 test_psf_transforms()
 test_psf_fit()
 test_least_squares_psf()
+test_psf_optimizer()
