@@ -144,52 +144,6 @@ function test_psf_fit()
 end
 
 
-function test_least_squares_psf()
-  # open FITS file containing PSF for each band
-  run = 3900
-  camcol = 6
-  field = 269
-
-  psf_filename =
-    @sprintf("%s/psField-%06d-%d-%04d.fit", datadir, run, camcol, field)
-  psf_fits = FITSIO.FITS(psf_filename);
-  raw_psf_comp = SDSSIO.read_psf(psf_fits, band_letters[1]);
-  close(psf_fits)
-
-  # psf = PSF.get_psf_at_point(500.0, 500.0, raw_psf_comp);
-  psf = raw_psf_comp(500., 500.);
-
-  opt_result, mu_vec, sigma_vec, weight_vec =
-    PSF.fit_psf_gaussians_least_squares(psf, K=2, ftol=1e-5);
-
-  x_mat = PSF.get_x_matrix_from_psf(psf);
-  psf_fit = PSF.render_psf(opt_result.minimum, x_mat);
-
-  @test_approx_eq sum((psf_fit - psf) .^ 2) opt_result.f_minimum
-  @test 0 < opt_result.f_minimum < 1e-3
-
-end
-
-
-function test_psf_transforms()
-  mu_vec = Vector{Float64}[ Float64[1, 2], Float64[-1, -2], Float64[1, -1] ]
-  sigma_vec = Array(Matrix{Float64}, 3)
-  sigma_vec[1] = Float64[ 1 0.1; 0.1 1]
-  sigma_vec[2] = Float64[ 1 0.3; 0.3 2]
-  sigma_vec[3] = Float64[ 0.5 0.2; 0.2 0.5]
-  weight_vec = Float64[0.4, 0.6, 0.1]
-
-  par = PSF.wrap_parameters(mu_vec, sigma_vec, weight_vec)
-  mu_vec_test, sigma_vec_test, weight_vec_test = PSF.unwrap_parameters(par)
-
-  for k=1:3
-    @test_approx_eq mu_vec_test[k] mu_vec[k]
-    @test_approx_eq sigma_vec_test[k] sigma_vec[k]
-    @test_approx_eq weight_vec_test[k] weight_vec[k]
-  end
-end
-
-
 function test_transform_psf_sensitive_float()
   run_num = 4263
   camcol_num = 5
@@ -268,15 +222,21 @@ function test_psf_optimizer()
   psf_optimizer = PsfOptimizer(psf_transform, K);
 
   nm_result = psf_optimizer.fit_psf(raw_psf, psf_params)
+  psf_params_fit =
+    constrain_psf_params(unwrap_psf_params(nm_result.minimum), psf_transform)
 
   # Could this test be tighter?
   @test 0.0 < nm_result.f_minimum < 1e-3
+
+  celeste_psf = fit_raw_psf_for_celeste(raw_psf)
+  rendered_psf = get_psf_at_point(celeste_psf);
+
+  @test_approx_eq nm_result.f_minimum sum((raw_psf - rendered_psf) .^ 2)
 end
 
 
+test_least_squares_psf()
 test_transform_psf_sensitive_float()
 test_transform_psf_params()
-test_psf_transforms()
 test_psf_fit()
-test_least_squares_psf()
 test_psf_optimizer()
