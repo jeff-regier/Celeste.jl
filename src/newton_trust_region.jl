@@ -201,10 +201,10 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
           B[i, i] = H[i, i] + lambda
         end
         while (root_finding_diff > tolerance) && (iter <= max_iters)
-          #verbose_println("---")
-          #verbose_println("lambda=$lambda min_lambda=$(min_lambda)")
+          verbose_println("---")
+          verbose_println("lambda=$lambda min_lambda=$(min_lambda)")
           b_eigv = eigfact(B)[:values]
-          #verbose_println("lambda_1=$(lambda_1) $(b_eigv)")
+          verbose_println("lambda_1=$(lambda_1) $(b_eigv)")
           R = chol(B)
           s[:] = -R \ (R' \ gr)
           q_l = R' \ s

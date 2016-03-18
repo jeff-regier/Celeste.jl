@@ -44,6 +44,7 @@ function psf_fit_for_optim{NumType <: Number}(
     println("------------------- Params:")
     println(psf_params)
     println(psf_params_free)
+    println(PSF.get_sigma_from_params(psf_params)[1])
     println("------------------- ok ok ")
   end
   transform_psf_sensitive_float!(

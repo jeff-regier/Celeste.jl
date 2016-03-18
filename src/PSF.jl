@@ -294,7 +294,7 @@ function evaluate_psf_fit!{NumType <: Number}(
     if calculate_derivs
       for ind1 = 1:length(squared_error.d)
         squared_error.d[ind1] += 2 * diff * pixel_value.d[ind1]
-        for ind1 = 1:ind2
+        for ind2 = 1:ind1
           squared_error.h[ind1, ind2] +=
             2 * (diff * pixel_value.h[ind1, ind2] +
                  pixel_value.d[ind1] * pixel_value.d[ind2]')
@@ -354,7 +354,7 @@ function transform_psf_sensitive_float!{NumType <: Number}(
       for ind2 = 1:ind1
         # Calculate the Hessian
         sf_free.h[ind1, ind2] =
-          (jacobian_diag[ind1] * jacobian_diag[ind2]) * sf.h[ind1, ind2])
+          (jacobian_diag[ind1] * jacobian_diag[ind2]) * sf.h[ind1, ind2]
         if ind1 == ind2
           sf_free.h[ind1, ind2] +=  hessian_values[ind1] * sf.d[ind1]
           diagm(hessian_values .* sf.d[:])
