@@ -25,6 +25,121 @@ export evaluate_psf_fit, psf_params_to_array, psf_array_to_params,
  # Only include until this is merged with Optim.jl.
 include("newton_trust_region.jl")
 
+
+"""
+A data type to store functions related to optimizing a PSF fit.  Initialize
+using the transform and number of components, and then call fit_psf
+to perform a fit to a specificed psf and initial parameters.
+"""
+type PsfOptimizer
+  psf_transform::DataTransform
+  ftol::Float64
+  grtol::Float64
+  num_iters::Int
+  raw_psf::Matrix{Float64}
+  K::Int
+
+  # Variable that will be allocated in optimization:
+  x_mat::Matrix{Float64}
+  bvn_derivs::BivariateNormalDerivatives{Float64};
+
+  log_pdf::SensitiveFloat{PsfParams, Float64};
+  pdf::SensitiveFloat{PsfParams, Float64};
+  pixel_value::SensitiveFloat{PsfParams, Float64};
+  squared_error::SensitiveFloat{PsfParams, Float64};
+  sf_free::SensitiveFloat{PsfParams, Float64};
+
+  psf_params_free_vec_cache::Vector{Float64}
+
+  # functions
+  psf_2df::Optim.TwiceDifferentiableFunction
+  fit_psf::Function
+
+  function PsfOptimizer(psf_transform::DataTransform, K::Int)
+
+    ftol = grtol = 1e-9
+    num_iters = 50
+
+    bvn_derivs = BivariateNormalDerivatives{Float64}(Float64);
+
+    log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1);
+    pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1);
+    pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
+    squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
+    sf_free = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
+
+    x_mat = Array(Float64, 0, 0)
+    raw_psf = Array(Float64, 0, 0)
+    psf_params_free_vec_cache = fill(NaN, K * length(PsfParams))
+
+    function psf_fit_for_optim{NumType <: Number}(
+        psf_params_free_vec::Vector{NumType})
+
+      if psf_params_free_vec == psf_params_free_vec_cache
+        return sf_free
+      else
+        psf_params_free_vec_cache = deepcopy(psf_params_free_vec)
+      end
+      psf_params_free = unwrap_psf_params(psf_params_free_vec)
+      psf_params = constrain_psf_params(psf_params_free, psf_transform)
+
+      # Update squared_error in place.
+      evaluate_psf_fit!(
+          psf_params, raw_psf, x_mat, bvn_derivs,
+          log_pdf, pdf, pixel_value, squared_error, true)
+
+      # Update sf_free in place.
+      transform_psf_sensitive_float!(
+        psf_params, psf_transform, squared_error, sf_free, true)
+
+      sf_free
+    end
+
+    function psf_fit_value{NumType <: Number}(psf_params_free_vec::Vector{NumType})
+      psf_fit_for_optim(psf_params_free_vec).v[1]
+    end
+
+    function psf_fit_grad!(
+        psf_params_free_vec::Vector{Float64}, grad::Vector{Float64})
+      grad[:] = psf_fit_for_optim(psf_params_free_vec).d[:]
+    end
+
+    function psf_fit_hess!(
+        psf_params_free_vec::Vector{Float64}, hess::Matrix{Float64})
+      hess[:] = psf_fit_for_optim(psf_params_free_vec).h
+      hess[:] = 0.5 * (hess + hess')
+    end
+
+    psf_2df = Optim.TwiceDifferentiableFunction(
+      psf_fit_value, psf_fit_grad!, psf_fit_hess!)
+
+    function fit_psf(psf::Matrix{Float64}, initial_params::Vector{Vector{Float64}})
+      raw_psf = psf
+      x_mat = get_x_matrix_from_psf(raw_psf);
+      psf_params_free = unconstrain_psf_params(initial_params, psf_transform);
+      psf_params_free_vec = vec(wrap_psf_params(psf_params_free));
+      nm_result = newton_tr(psf_2df,
+                            psf_params_free_vec,
+                            xtol = 0.0,
+                            grtol = grtol,
+                            ftol = ftol,
+                            iterations = num_iters,
+                            store_trace = false,
+                            show_trace = false,
+                            extended_trace = false,
+                            initial_delta=10.0,
+                            delta_hat=1e9,
+                            rho_lower = 0.2)
+      nm_result
+    end
+
+    new(psf_transform, ftol, grtol, num_iters, raw_psf, K,
+      x_mat, bvn_derivs, log_pdf, pdf, pixel_value, squared_error, sf_free,
+      psf_params_free_vec_cache, psf_2df, fit_psf)
+  end
+end
+
+
 """
 Return an image of a Celeste GMM PSF evaluated at rows, cols.
 
@@ -76,6 +191,33 @@ function get_source_psf(world_loc::Vector{Float64}, img::Image)
     pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
     psfstamp = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
     return PSF.fit_raw_psf_for_celeste(psfstamp)
+  end
+end
+
+
+"""
+Get the PSF located at a particular world location in an image.
+
+Args:
+ - world_loc: A location in world coordinates.
+ - img: An Image
+
+Returns:
+ - An array of PsfComponent objects that represents the PSF as a mixture
+   of Gaussians.
+"""
+function get_source_psf(
+    world_loc::Vector{Float64}, img::Image,
+    psf_optimizer::PSF.PsfOptimizer, initial_psf_params::Vector{Vector{Float64}})
+
+  # Some stamps or simulated data have no raw psf information.  In that case,
+  # just use the psf from the image.
+  if size(img.raw_psf_comp.rrows) == (0, 0)
+    return img.psf
+  else
+    pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
+    psfstamp = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
+    return PSF.fit_raw_psf_for_celeste(psfstamp, psf_optimizer, initial_psf_params)
   end
 end
 
@@ -525,120 +667,6 @@ end
 
 
 """
-A data type to store functions related to optimizing a PSF fit.  Initialize
-using the transform and number of components, and then call fit_psf
-to perform a fit to a specificed psf and initial parameters.
-"""
-type PsfOptimizer
-  psf_transform::DataTransform
-  ftol::Float64
-  grtol::Float64
-  num_iters::Int
-  raw_psf::Matrix{Float64}
-  K::Int
-
-  # Variable that will be allocated in optimization:
-  x_mat::Matrix{Float64}
-  bvn_derivs::BivariateNormalDerivatives{Float64};
-
-  log_pdf::SensitiveFloat{PsfParams, Float64};
-  pdf::SensitiveFloat{PsfParams, Float64};
-  pixel_value::SensitiveFloat{PsfParams, Float64};
-  squared_error::SensitiveFloat{PsfParams, Float64};
-  sf_free::SensitiveFloat{PsfParams, Float64};
-
-  psf_params_free_vec_cache::Vector{Float64}
-
-  # functions
-  psf_2df::Optim.TwiceDifferentiableFunction
-  fit_psf::Function
-
-  function PsfOptimizer(psf_transform::DataTransform, K::Int)
-
-    ftol = grtol = 1e-9
-    num_iters = 50
-
-    bvn_derivs = BivariateNormalDerivatives{Float64}(Float64);
-
-    log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1);
-    pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1);
-    pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
-    squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
-    sf_free = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K);
-
-    x_mat = Array(Float64, 0, 0)
-    raw_psf = Array(Float64, 0, 0)
-    psf_params_free_vec_cache = fill(NaN, K * length(PsfParams))
-
-    function psf_fit_for_optim{NumType <: Number}(
-        psf_params_free_vec::Vector{NumType})
-
-      if psf_params_free_vec == psf_params_free_vec_cache
-        return sf_free
-      else
-        psf_params_free_vec_cache = deepcopy(psf_params_free_vec)
-      end
-      psf_params_free = unwrap_psf_params(psf_params_free_vec)
-      psf_params = constrain_psf_params(psf_params_free, psf_transform)
-
-      # Update squared_error in place.
-      evaluate_psf_fit!(
-          psf_params, raw_psf, x_mat, bvn_derivs,
-          log_pdf, pdf, pixel_value, squared_error, true)
-
-      # Update sf_free in place.
-      transform_psf_sensitive_float!(
-        psf_params, psf_transform, squared_error, sf_free, true)
-
-      sf_free
-    end
-
-    function psf_fit_value{NumType <: Number}(psf_params_free_vec::Vector{NumType})
-      psf_fit_for_optim(psf_params_free_vec).v[1]
-    end
-
-    function psf_fit_grad!(
-        psf_params_free_vec::Vector{Float64}, grad::Vector{Float64})
-      grad[:] = psf_fit_for_optim(psf_params_free_vec).d[:]
-    end
-
-    function psf_fit_hess!(
-        psf_params_free_vec::Vector{Float64}, hess::Matrix{Float64})
-      hess[:] = psf_fit_for_optim(psf_params_free_vec).h
-      hess[:] = 0.5 * (hess + hess')
-    end
-
-    psf_2df = Optim.TwiceDifferentiableFunction(
-      psf_fit_value, psf_fit_grad!, psf_fit_hess!)
-
-    function fit_psf(psf::Matrix{Float64}, initial_params::Vector{Vector{Float64}})
-      raw_psf = psf
-      x_mat = get_x_matrix_from_psf(raw_psf);
-      psf_params_free = unconstrain_psf_params(initial_params, psf_transform);
-      psf_params_free_vec = vec(wrap_psf_params(psf_params_free));
-      nm_result = newton_tr(psf_2df,
-                            psf_params_free_vec,
-                            xtol = 0.0,
-                            grtol = grtol,
-                            ftol = ftol,
-                            iterations = num_iters,
-                            store_trace = false,
-                            show_trace = false,
-                            extended_trace = false,
-                            initial_delta=10.0,
-                            delta_hat=1e9,
-                            rho_lower = 0.2)
-      nm_result
-    end
-
-    new(psf_transform, ftol, grtol, num_iters, raw_psf, K,
-      x_mat, bvn_derivs, log_pdf, pdf, pixel_value, squared_error, sf_free,
-      psf_params_free_vec_cache, psf_2df, fit_psf)
-  end
-end
-
-
-"""
 Given a psf matrix, return a matrix of the same size, where each element of
 the matrix is a 2-length vector of the [x1, x2] location of that matrix cell.
 The locations are chosen so that the scale is pixels, but the center of the
@@ -654,20 +682,22 @@ end
 Fit a mixture of 2d Gaussians to a PSF image (evaluated at a single point).
 
 Args:
- - raw_psf: An matrix image of the point spread function.
- - K: The number of components to fit.
+  - raw_psf: An matrix image of the point spread function.
+  - psf_optimizer: A PsfOptimizer object for the fit.
 
-TODO: For more efficiency, you could make a version that doesn't reinitialize
-psf_optimizer each time.
+Returns:
+  - A vector of PsfComponents fit to the raw_psf.
 """
-function fit_raw_psf_for_celeste(raw_psf::Array{Float64, 2}; K=2, ftol=1e-9)
-  psf_params = PSF.initialize_psf_params(K, for_test=false);
-  psf_transform = PSF.get_psf_transform(psf_params);
-  psf_optimizer = PsfOptimizer(psf_transform, K);
-  psf_optimizer.ftol = ftol
-  optim_result = psf_optimizer.fit_psf(raw_psf, psf_params)
+function fit_raw_psf_for_celeste(
+    raw_psf::Array{Float64, 2}, psf_optimizer::PsfOptimizer,
+    initial_psf_params::Vector{Vector{Float64}})
+
+  K = length(initial_psf_params)
+  @assert K == psf_optimizer.K
+  optim_result = psf_optimizer.fit_psf(raw_psf, initial_psf_params)
   psf_params_fit =
-    constrain_psf_params(unwrap_psf_params(optim_result.minimum), psf_transform)
+    constrain_psf_params(
+      unwrap_psf_params(optim_result.minimum), psf_optimizer.psf_transform)
 
   sigma_vec = get_sigma_from_params(psf_params_fit)[1]
   celeste_psf = Array(PsfComponent, K)
@@ -677,7 +707,26 @@ function fit_raw_psf_for_celeste(raw_psf::Array{Float64, 2}; K=2, ftol=1e-9)
     celeste_psf[k] = PsfComponent(weight, mu, sigma_vec[k])
   end
 
-  celeste_psf
+  celeste_psf, psf_params_fit
+end
+
+
+"""
+Fit a mixture of 2d Gaussians to a PSF image (evaluated at a single point).
+
+Args:
+ - raw_psf: An matrix image of the point spread function.
+ - K: The number of components to fit.
+
+ Returns:
+   - A vector of PsfComponents fit to the raw_psf.
+"""
+function fit_raw_psf_for_celeste(raw_psf::Array{Float64, 2}; K=psf_K, ftol=1e-9)
+  psf_params = PSF.initialize_psf_params(K, for_test=false);
+  psf_transform = PSF.get_psf_transform(psf_params);
+  psf_optimizer = PsfOptimizer(psf_transform, K);
+  psf_optimizer.ftol = ftol
+  fit_raw_psf_for_celeste(raw_psf, psf_optimizer, psf_params)
 end
 
 end # module

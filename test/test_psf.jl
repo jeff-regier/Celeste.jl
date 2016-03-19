@@ -13,10 +13,10 @@ using ForwardDiff
 using Base.Test
 
 
-function load_raw_psf()
-  run_num = 4263
-  camcol_num = 5
-  field_num = 117
+function load_raw_psf(; x::Float64=500., y::Float64=500.)
+  run_num = 3900
+  camcol_num = 6
+  field_num = 269
   b = 3
 
   psf_filename =
@@ -25,7 +25,7 @@ function load_raw_psf()
   raw_psf_comp = SDSSIO.read_psf(psf_fits, band_letters[b]);
   close(psf_fits)
 
-  raw_psf_comp(500., 500.);
+  raw_psf_comp(x, y);
 end
 
 
@@ -199,7 +199,7 @@ end
 function test_psf_optimizer()
   raw_psf = load_raw_psf();
 
-  K = 2
+  K = psf_K
   psf_params = initialize_psf_params(K, for_test=false);
   psf_transform = get_psf_transform(psf_params);
   psf_optimizer = PsfOptimizer(psf_transform, K);
@@ -211,10 +211,22 @@ function test_psf_optimizer()
   # Could this test be tighter?
   @test 0.0 < nm_result.f_minimum < 1e-3
 
-  celeste_psf = fit_raw_psf_for_celeste(raw_psf)
+  celeste_psf = fit_raw_psf_for_celeste(raw_psf)[1]
   rendered_psf = get_psf_at_point(celeste_psf);
 
   @test_approx_eq nm_result.f_minimum sum((raw_psf - rendered_psf) .^ 2)
+
+  # Make sure that re-using the optimizer gets the same results.
+  raw_psf_10_10 = load_raw_psf(x=10., y=10.);
+  celeste_psf_10_10_v1, psf_params_10_10_v1 = fit_raw_psf_for_celeste(raw_psf_10_10)
+  celeste_psf_10_10_v2, psf_params_10_10_v2 =
+    fit_raw_psf_for_celeste(raw_psf_10_10, psf_optimizer, psf_params)
+  for k=1:K
+    @test_approx_eq psf_params_10_10_v1[k] psf_params_10_10_v2[k]
+    for field in fieldnames(celeste_psf_10_10_v1[k])
+      @test_approx_eq celeste_psf_10_10_v1[k].(field) celeste_psf_10_10_v2[k].(field)
+    end
+  end
 end
 
 

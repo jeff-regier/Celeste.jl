@@ -209,7 +209,7 @@ Note: this is only used in tests.
 """
 function SkyPatch(world_center::Vector{Float64}, world_radius::Float64,
                   img::Image; fit_psf=true)
-    psf = fit_psf ? PSF.get_source_psf(world_center, img) : img.psf
+    psf = fit_psf ? PSF.get_source_psf(world_center, img)[1] : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
     radius_pix = maxabs(eigvals(wcs_jacobian)) * world_radius
@@ -233,7 +233,7 @@ Returns:
 function SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true,
                   scale_patch_size=1.0)
     world_center = ce.pos
-    psf = fit_psf ? PSF.get_source_psf(world_center, img) : img.psf
+    psf = fit_psf ? PSF.get_source_psf(world_center, img)[1] : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
     radius_pix = choose_patch_radius(pixel_center, ce, psf, img)
@@ -249,6 +249,46 @@ SkyPatch(patch::SkyPatch, psf::Vector{PsfComponent}) =
     SkyPatch(patch.center, patch.radius_pix, psf, patch.wcs_jacobian,
              patch.pixel_center)
 
+
+"""
+Update ModelParams with the PSFs for a range of object ids.
+
+Args:
+  - mp: A ModelParams whose patches will be updated.
+  - relevant_sources: A vector of source ids that index into mp.patches
+  - blob: A vector of images.
+
+Returns:
+  - Updates mp.patches in place with fitted psfs for each source in
+    relevant_sources.
+"""
+function fit_object_psfs!{NumType <: Number}(
+    mp::ModelParams{NumType}, relevant_sources::Vector{Int}, blob::Blob)
+
+  # Initialize an optimizer
+  initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
+  psf_transform = PSF.get_psf_transform(initial_psf_params);
+  psf_optimizer = PsfOptimizer(psf_transform, psf_K);
+  @assert size(mp.patches, 2) == length(blob)
+  for b in 1:length(blob)  # loop over images
+    # Get a starting point in the middle of the image.
+    pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
+    raw_central_psf = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
+    central_psf, central_psf_params =
+      fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
+    for s in relevant_sources
+      patch = mp.patches[s, b]
+      # Set the starting point at the center's PSF.
+      psf, psf_params =
+        PSF.get_source_psf(
+          patch.center, blob[b], psf_optimizer, central_psf_params)
+      mp.patches[s, b] = ModelInit.SkyPatch(patch, psf)
+    end
+  end
+end
+
+##########################
+# Local sources
 
 """
 A fast function to determine which sources might belong to which tiles.
