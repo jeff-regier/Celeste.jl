@@ -2,9 +2,7 @@ module SkyImages
 
 using ..Types
 import ..SDSSIO
-#import SloanDigitalSkySurvey: PSF, SDSS
 import SloanDigitalSkySurvey: SDSS
-#import SloanDigitalSkySurvey.PSF.get_psf_at_point
 import Celeste.PSF
 
 import WCS

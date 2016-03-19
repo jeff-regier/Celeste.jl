@@ -1,11 +1,9 @@
 using Base.Test
 using DataFrames
 
-#import SloanDigitalSkySurvey.PSF
 import WCS
 
 using Celeste: Types, SampleData
-#import SloanDigitalSkySurvey
 import Celeste: ModelInit, SkyImages, ElboDeriv, Synthetic, SDSSIO, PSF
 import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
 

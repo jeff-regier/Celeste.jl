@@ -80,6 +80,17 @@ function get_source_psf(world_loc::Vector{Float64}, img::Image)
 end
 
 
+"""
+Get initial values for a set of PSF parameters.
+
+Args:
+  - K: The number of components.
+  - for_test: If true, return a set of slightly asymmetric parameters so that
+              derivatives are interesting for testing.
+
+Returns:
+  - A vector of PSF parameters, one for each component.
+"""
 function initialize_psf_params(K::Int; for_test::Bool=false)
   psf_params = Array(Vector{Float64}, K)
   for k=1:K
@@ -104,6 +115,18 @@ function initialize_psf_params(K::Int; for_test::Bool=false)
   psf_params
 end
 
+
+"""
+Given PSF parameters, return a DataTransform to transfrom them to and from
+an unconstrained parameterization.
+
+Args:
+  - psf_params: The parameters to be transformed
+  - scale: A vector as long as PsfParams to define a linear rescaling.
+
+Returns:
+  - A DataTransform object.
+"""
 function get_psf_transform(
     psf_params::Vector{Vector{Float64}};
     scale::Vector{Float64}=ones(length(PsfParams)))
@@ -129,6 +152,20 @@ function get_psf_transform(
 end
 
 
+"""
+Transform psf_params to and from psf_params_free in place.
+
+Args:
+  - psf_params, psf_params_free: The constrained and unconstrained parameters,
+      respectively.
+  - psf_transform: The DataTransform to be applied.
+  - to_unconstrained: If true, then update psf_params_free with the unconstrained
+      representation of psf_params.  If false, update psf_params with the
+      constrained version of psf_params_free.
+
+Returns:
+  - Updates psf_params or psf_params_free in place.
+"""
 function transform_psf_params!{NumType <: Number}(
     psf_params::Vector{Vector{NumType}}, psf_params_free::Vector{Vector{NumType}},
     psf_transform::DataTransform, to_unconstrained::Bool)
@@ -151,6 +188,9 @@ function transform_psf_params!{NumType <: Number}(
 end
 
 
+"""
+Allocate memory for and return a constrained parameter set.
+"""
 function constrain_psf_params{NumType <: Number}(
     psf_params_free::Vector{Vector{NumType}}, psf_transform::DataTransform)
 
@@ -166,6 +206,9 @@ function constrain_psf_params{NumType <: Number}(
 end
 
 
+"""
+Allocate memory for and return an unconstrained parameter set.
+"""
 function unconstrain_psf_params{NumType <: Number}(
     psf_params::Vector{Vector{NumType}}, psf_transform::DataTransform)
 
@@ -181,6 +224,9 @@ function unconstrain_psf_params{NumType <: Number}(
 end
 
 
+"""
+Convert a single vector of psf parameters to a vector of vectors.
+"""
 function unwrap_psf_params{NumType <: Number}(psf_param_vec::Vector{NumType})
   @assert length(psf_param_vec) % length(PsfParams) == 0
   K = round(Int, length(psf_param_vec) / length(PsfParams))
@@ -193,6 +239,9 @@ function unwrap_psf_params{NumType <: Number}(psf_param_vec::Vector{NumType})
 end
 
 
+"""
+Convert a vector of vectors of psf parameters to a single vector.
+"""
 function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
   psf_params_mat = zeros(NumType, length(PsfParams), length(psf_params))
   for k=1:length(psf_params)
@@ -202,6 +251,20 @@ function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
 end
 
 
+"""
+Return a sensitive float representing the value of the psf at pixel x
+with all its associated derivatives (with respect to the constrained
+parameterization).  Note that "fit" is a bad name -- it is just the pixel value.
+TODO: fix the name.
+
+Args:
+  - x: The 2d location at which to evaluate the pdf
+  - calculate_derivs: If false, only update the value of pixel_value
+  - other values: Pre-allocated memory for intermediate calculations
+
+Returns:
+  - Updates pixel_value in place (and all the other placeholder values as well)
+"""
 function evaluate_psf_pixel_fit!{NumType <: Number}(
     x::Vector{Float64}, psf_params::Vector{Vector{NumType}},
     sigma_vec::Vector{Matrix{NumType}},
@@ -289,6 +352,9 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
 end
 
 
+"""
+Convert PSF parameters to covariance matrices and derivatives.
+"""
 function get_sigma_from_params{NumType <: Number}(
     psf_params::Vector{Vector{NumType}})
 
@@ -309,6 +375,14 @@ function get_sigma_from_params{NumType <: Number}(
 end
 
 
+"""
+Evaluate the sum of squared difference between the raw_psf and the psf
+represented by psf_params, as well as the derivatives and hessians with
+respect to unconstrained parameters.
+
+Returns:
+  - A sensitive float for the sum of squared differences.
+"""
 function evaluate_psf_fit{NumType <: Number}(
     psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64},
     calculate_derivs::Bool)
@@ -332,6 +406,9 @@ function evaluate_psf_fit{NumType <: Number}(
 end
 
 
+"""
+evaluate_psf_fit but with pre-allocated memory for intermediate calculations.
+"""
 function evaluate_psf_fit!{NumType <: Number}(
     psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64},
     x_mat::Matrix{Vector{Float64}},
@@ -372,6 +449,22 @@ function evaluate_psf_fit!{NumType <: Number}(
 end
 
 
+"""
+Transform a sf, a SensitiveFloat that has derivatives with respect to
+constrianed parameters, into sf_free, a SensitiveFloat that has derivatives
+with respect to unconstrained parameteres.
+
+Args:
+  - psf_params: The constrianed parameters
+  - psf_transform: The data transform to be applied
+  - sf: The SensitiveFloat with derivatives with respect to the constrained params
+  - sf_free: Updated in place.  The SensitiveFloat with derivatives with respect
+             to the unconstrained parameters.
+  - calculate_derivs: If false, only calculate the value.
+
+Returns:
+  - Updates sf_free in place.
+"""
 function transform_psf_sensitive_float!{NumType <: Number}(
     psf_params::Vector{Vector{NumType}}, psf_transform::Transform.DataTransform,
     sf::SensitiveFloat{PsfParams, NumType}, sf_free::SensitiveFloat{PsfParams, NumType},
@@ -431,6 +524,11 @@ function transform_psf_sensitive_float!{NumType <: Number}(
 end
 
 
+"""
+A data type to store functions related to optimizing a PSF fit.  Initialize
+using the transform and number of components, and then call fit_psf
+to perform a fit to a specificed psf and initial parameters.
+"""
 type PsfOptimizer
   psf_transform::DataTransform
   ftol::Float64
