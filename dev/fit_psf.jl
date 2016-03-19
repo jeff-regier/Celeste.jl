@@ -43,11 +43,13 @@ psf_transform = PSF.get_psf_transform(psf_params);
 psf_optimizer = PsfOptimizer(psf_transform, K);
 
 @time celeste_psf, psf_params_fit =
-    PSF.fit_raw_psf_for_celeste(raw_psf, psf_optimizer, psf_params)
+    PSF.fit_raw_psf_for_celeste(raw_psf, psf_optimizer, psf_params_original)
 # @time nm_result = psf_optimizer.fit_psf(raw_psf, psf_params)
 
 # Try with a better init
 raw_psf_2 = raw_psf_comp(10., 10.);
+@time celeste_psf, psf_params_fit_2 =
+    PSF.fit_raw_psf_for_celeste(raw_psf_2, psf_optimizer, psf_params_original)
 @time celeste_psf, psf_params_fit_2 =
     PSF.fit_raw_psf_for_celeste(raw_psf_2, psf_optimizer, psf_params_fit)
 
