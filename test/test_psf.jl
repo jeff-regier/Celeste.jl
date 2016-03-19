@@ -68,23 +68,26 @@ function test_psf_fit()
 
     local pixel_value = zero_sensitive_float(PsfParams, NumType, K);
 
-    sigma_vec = Array(Matrix{NumType}, K);
-    sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
+    local sigma_vec, sig_sf_vec, bvn_vec
+    sigma_vec, sig_sf_vec, bvn_vec = PSF.get_sigma_from_params(psf_params);
 
-    for k = 1:K
-      sigma_vec[k] = Util.get_bvn_cov(psf_params[k][psf_ids.e_axis],
-                                      psf_params[k][psf_ids.e_angle],
-                                      psf_params[k][psf_ids.e_scale])
-      sig_sf_vec[k] = GalaxySigmaDerivs(
-        psf_params[k][psf_ids.e_angle],
-        psf_params[k][psf_ids.e_axis],
-        psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_tensor=calculate_derivs);
-
-    end
+    # sigma_vec = Array(Matrix{NumType}, K);
+    # sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
+    #
+    # for k = 1:K
+    #   sigma_vec[k] = Util.get_bvn_cov(psf_params[k][psf_ids.e_axis],
+    #                                   psf_params[k][psf_ids.e_angle],
+    #                                   psf_params[k][psf_ids.e_scale])
+    #   sig_sf_vec[k] = GalaxySigmaDerivs(
+    #     psf_params[k][psf_ids.e_angle],
+    #     psf_params[k][psf_ids.e_axis],
+    #     psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_tensor=calculate_derivs);
+    #
+    # end
 
     clear!(pixel_value)
     PSF.evaluate_psf_pixel_fit!(
-        x, psf_params, sigma_vec, sig_sf_vec,
+        x, psf_params, sigma_vec, sig_sf_vec, bvn_vec,
         bvn_derivs, log_pdf, pdf, pixel_value, calculate_derivs)
 
     pixel_value
