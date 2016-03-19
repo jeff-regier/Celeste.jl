@@ -268,14 +268,14 @@ function fit_object_psfs!{NumType <: Number}(
   # Initialize an optimizer
   initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
   psf_transform = PSF.get_psf_transform(initial_psf_params);
-  psf_optimizer = PsfOptimizer(psf_transform, psf_K);
+  psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K);
   @assert size(mp.patches, 2) == length(blob)
   for b in 1:length(blob)  # loop over images
     # Get a starting point in the middle of the image.
     pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
-    raw_central_psf = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
+    raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
     central_psf, central_psf_params =
-      fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
+      PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
     for s in relevant_sources
       patch = mp.patches[s, b]
       # Set the starting point at the center's PSF.
@@ -405,7 +405,7 @@ parameters that can be used with Celeste.
 """
 function initialize_celeste(
     blob::Blob, cat::Vector{CatalogEntry};
-    tile_width::Int=typemax(Int), fit_psf::Bool=true,
+    tile_width::Int=20, fit_psf::Bool=true,
     patch_radius::Float64=-1., radius_from_cat::Bool=true)
 
   tiled_blob = SkyImages.break_blob_into_tiles(blob, tile_width)

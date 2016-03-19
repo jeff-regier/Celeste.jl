@@ -186,7 +186,8 @@ function get_source_psf(world_loc::Vector{Float64}, img::Image)
   # Some stamps or simulated data have no raw psf information.  In that case,
   # just use the psf from the image.
   if size(img.raw_psf_comp.rrows) == (0, 0)
-    return img.psf
+    # Also return a vector of empty psf params
+    return img.psf, fill(fill(NaN, length(PsfParams)), psf_K)
   else
     pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
     psfstamp = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
