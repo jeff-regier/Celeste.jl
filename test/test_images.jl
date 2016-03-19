@@ -16,16 +16,12 @@ const FIELD = 269
 function test_blob()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
-  run = 3900
-  camcol = 6
-  field = 269
-
-  blob = SkyImages.read_sdss_field(run, camcol, field, datadir)
+  blob = SkyImages.read_sdss_field(RUN, CAMCOL, FIELD, datadir)
 
   for b=1:5
     @test !blob[b].constant_background
   end
-  fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir run camcol field
+  fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
   cat_entries = SkyImages.read_photoobj_celeste(fname)
 
   tiled_blob, mp = ModelInit.initialize_celeste(blob, cat_entries,
@@ -85,6 +81,30 @@ function test_blob()
   # The second set of vp is the object of interest
   point_patch_psf = PSF.get_psf_at_point(mp_several.patches[2, test_b].psf);
   @test_approx_eq_eps(obj_psf_val, point_patch_psf, 1e-6)
+end
+
+
+function test_fit_object_psfs()
+  blob = SkyImages.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
+  fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
+  cat_entries = SkyImages.read_photoobj_celeste(fname);
+
+  # Only test a few catalog entries.
+  relevant_sources = collect(3:4)
+  test_sources = collect(1:5)
+
+  tiled_blob, mp = ModelInit.initialize_celeste(
+    blob, cat_entries[test_sources], fit_psf=false);
+  ModelInit.fit_object_psfs!(mp, relevant_sources, blob);
+
+  tiled_blob, mp_psf_init = ModelInit.initialize_celeste(
+    blob, cat_entries[test_sources], fit_psf=true);
+
+  for b in 1:length(blob), s in relevant_sources
+    @test_approx_eq(
+      blob[b].raw_psf_comp(mp.patches[s, b].pixel_center...),
+      blob[b].raw_psf_comp(mp_psf_init.patches[s, b].pixel_center...))
+  end
 end
 
 
