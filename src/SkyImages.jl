@@ -263,7 +263,7 @@ function read_sdss_field(run::Integer, camcol::Integer, field::Integer,
 
         # evalute the psf in the center of the image and then fit it.
         psfstamp = sdsspsf(H / 2., W / 2.)
-        psf = fit_raw_psf_for_celeste(psfstamp)
+        psf = PSF.fit_raw_psf_for_celeste(psfstamp)
 
         # For now, use the median noise and sky.  Here,
         # epsilon * iota needs to be in units comparable to nelec
@@ -376,7 +376,7 @@ function get_source_psf(world_loc::Vector{Float64}, img::Image)
     else
       pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
       psfstamp = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
-      return fit_raw_psf_for_celeste(psfstamp)
+      return PSF.fit_raw_psf_for_celeste(psfstamp)
     end
 end
 
