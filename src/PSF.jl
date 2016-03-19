@@ -394,6 +394,7 @@ function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
 end
 
 
+
 """
 Return a sensitive float representing the value of the psf at pixel x
 with all its associated derivatives (with respect to the constrained
@@ -412,6 +413,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
     x::Vector{Float64}, psf_params::Vector{Vector{NumType}},
     sigma_vec::Vector{Matrix{NumType}},
     sig_sf_vec::Vector{GalaxySigmaDerivs{NumType}},
+    bvn_vec::Vector{BvnComponent{NumType}},
     bvn_derivs::BivariateNormalDerivatives{NumType},
     log_pdf::SensitiveFloat{PsfParams, NumType},
     pdf::SensitiveFloat{PsfParams, NumType},
@@ -425,7 +427,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
   for k = 1:K
     # I will put in the weights later so that the log pdf sensitive float
     # is accurate.
-    bvn = BvnComponent{NumType}(psf_params[k][psf_ids.mu], sigma_vec[k], 1.0);
+    bvn = bvn_vec[k];
     eval_bvn_pdf!(bvn_derivs, bvn, x)
     get_bvn_derivs!(bvn_derivs, bvn, true, true)
     transform_bvn_derivs!(bvn_derivs, sig_sf_vec[k], eye(Float64, 2), true)
@@ -496,7 +498,7 @@ end
 
 
 """
-Convert PSF parameters to covariance matrices and derivatives.
+Convert PSF parameters to covariance matrices and derivatives and BvnComponents.
 """
 function get_sigma_from_params{NumType <: Number}(
     psf_params::Vector{Vector{NumType}})
@@ -504,6 +506,7 @@ function get_sigma_from_params{NumType <: Number}(
   K = length(psf_params)
   sigma_vec = Array(Matrix{NumType}, K);
   sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
+  bvn_vec = Array(BvnComponent{NumType}, K);
   for k = 1:K
     sigma_vec[k] = Util.get_bvn_cov(psf_params[k][psf_ids.e_axis],
                                     psf_params[k][psf_ids.e_angle],
@@ -513,8 +516,10 @@ function get_sigma_from_params{NumType <: Number}(
       psf_params[k][psf_ids.e_axis],
       psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_tensor=true);
 
+    bvn_vec[k] =
+      BvnComponent{NumType}(psf_params[k][psf_ids.mu], sigma_vec[k], 1.0);
   end
-  sigma_vec, sig_sf_vec
+  sigma_vec, sig_sf_vec, bvn_vec
 end
 
 
@@ -563,14 +568,13 @@ function evaluate_psf_fit!{NumType <: Number}(
     calculate_derivs::Bool)
 
   K = length(psf_params)
-  sigma_vec, sig_sf_vec = get_sigma_from_params(psf_params)
-
+  sigma_vec, sig_sf_vec, bvn_vec = get_sigma_from_params(psf_params)
   clear!(squared_error)
 
   for x_ind in 1:length(x_mat)
     clear!(pixel_value)
     evaluate_psf_pixel_fit!(
-        x_mat[x_ind], psf_params, sigma_vec, sig_sf_vec,
+        x_mat[x_ind], psf_params, sigma_vec, sig_sf_vec, bvn_vec,
         bvn_derivs, log_pdf, pdf, pixel_value, calculate_derivs)
 
     diff = (pixel_value.v[1] - raw_psf[x_ind])
