@@ -8,11 +8,11 @@ using Optim.TwiceDifferentiableFunction
 
 
 function verbose_println(x...)
-  println(x...)
+  #println(x...)
 end
 
 function verbose_println(x)
-  println(x)
+  #println(x)
 end
 
 
@@ -161,8 +161,8 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
 
         # Formula 4.45 in N&W
         p_lambda2 = p_mag2(lambda, lambda_1_multiplicity + 1)
-        verbose_println("lambda_1 = $(lambda_1), p_lambda2 = $(p_lambda2), ",
-                "$delta2, $lambda_1_multiplicity")
+        # verbose_println("lambda_1 = $(lambda_1), p_lambda2 = $(p_lambda2), ",
+        #         "$delta2, $lambda_1_multiplicity")
         if p_lambda2 > delta2
           # Then we can simply solve using root finding.  Set a starting point
           # between the minimum and largest eigenvalues.

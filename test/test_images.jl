@@ -67,7 +67,7 @@ function test_blob()
   pixel_loc = WCS.world_to_pix(img.wcs, obj_loc);
   original_psf_val = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
 
-  original_psf_celeste = SkyImages.fit_raw_psf_for_celeste(original_psf_val);
+  original_psf_celeste = PSF.fit_raw_psf_for_celeste(original_psf_val);
   fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
   obj_psf = SkyImages.get_source_psf(mp_obj.vp[1][ids.u], img);
