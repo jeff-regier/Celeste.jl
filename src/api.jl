@@ -153,7 +153,7 @@ function infer(ra_range::Tuple{Float64, Float64},
     for j in 1:size(mp.patches, 2)  # loop over images
         for s in relevant_idx  # loop over relevant sources
             patch = mp.patches[s, j]
-            psf = SkyImages.get_source_psf(patch.center, images[j])
+            psf = PSF.get_source_psf(patch.center, images[j])
             mp.patches[s, j] = ModelInit.SkyPatch(patch, psf)
         end
     end
