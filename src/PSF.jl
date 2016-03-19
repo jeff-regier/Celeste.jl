@@ -394,7 +394,6 @@ function wrap_psf_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
 end
 
 
-
 """
 Return a sensitive float representing the value of the psf at pixel x
 with all its associated derivatives (with respect to the constrained
@@ -420,6 +419,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
     pixel_value::SensitiveFloat{PsfParams, NumType},
     calculate_derivs::Bool)
 
+  const ID_MAT_2D = eye(Float64, 2)
   clear!(pixel_value)
 
   K = length(psf_params)
@@ -430,7 +430,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
     bvn = bvn_vec[k];
     eval_bvn_pdf!(bvn_derivs, bvn, x)
     get_bvn_derivs!(bvn_derivs, bvn, true, true)
-    transform_bvn_derivs!(bvn_derivs, sig_sf_vec[k], eye(Float64, 2), true)
+    transform_bvn_derivs!(bvn_derivs, sig_sf_vec[k], ID_MAT_2D, true)
 
     clear!(log_pdf)
     clear!(pdf)
