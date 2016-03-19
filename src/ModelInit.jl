@@ -674,31 +674,5 @@ function trim_source_tiles(
   trimmed_tiled_blob
 end
 
-"""
-initialize_objid(objid, mp_all, catalog, images)
-
-Initialize
-"""
-function initialize_objid(objid::ASCIIString, mp_all::ModelParams{Float64},
-                          catalog::Vector{CatalogEntry},
-                          images::Vector{Image};
-                          tile_width::Int=typemax(Int))
-
-  s = findfirst(mp_all.objids, objid)
-
-  relevant_sources = get_relevant_sources(mp_all, s)
-  catalog_s = catalog[relevant_sources]
-  tiled_images, mp = initialize_celeste(images, catalog_s;
-                                        tile_width=tile_width, fit_psf=true)
-
-  active_s = findfirst(mp.objids, objid)
-  mp.active_sources = [ active_s ]
-
-  # TODO: This is slow but would run much faster if you had run
-  # limit_to_object_data() first.
-  trimmed_tiled_images = trim_source_tiles(active_s, mp, tiled_images;
-                                           noise_fraction=0.1)
-  return trimmed_tiled_images, mp, active_s, s
-end
 
 end # module
