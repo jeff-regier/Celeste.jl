@@ -241,13 +241,13 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
       m = vecdot(gr, s) + 0.5 * vecdot(s, B * s)
     end
 
-    if !interior
-        if abs(delta2 - vecdot(s, s)) > 1e-6
-          warn("The norm of s is not close to delta: s2=$(vecdot(s, s)) delta2=$delta2. ",
-               "This may occur when the Hessian is badly conditioned.  ",
-               "max_ev=$(max_lambda), min_ev=$(lambda_1)")
-        end
-    end
+    # if !interior
+    #     if abs(delta2 - vecdot(s, s)) > 1e-6
+    #       warn("The norm of s is not close to delta: s2=$(vecdot(s, s)) delta2=$delta2. ",
+    #            "This may occur when the Hessian is badly conditioned.  ",
+    #            "max_ev=$(max_lambda), min_ev=$(lambda_1)")
+    #     end
+    # end
     verbose_println("Root finding got m=$m, interior=$interior with ",
             "delta^2=$delta2 and ||s||^2=$(vecdot(s, s))")
     return m, interior, lambda

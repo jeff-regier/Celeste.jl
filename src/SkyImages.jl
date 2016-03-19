@@ -2,8 +2,9 @@ module SkyImages
 
 using ..Types
 import ..SDSSIO
-import SloanDigitalSkySurvey: PSF, SDSS
-import SloanDigitalSkySurvey.PSF.get_psf_at_point
+#import SloanDigitalSkySurvey: PSF, SDSS
+import SloanDigitalSkySurvey: SDSS
+#import SloanDigitalSkySurvey.PSF.get_psf_at_point
 import Celeste.PSF
 
 import WCS
@@ -14,7 +15,7 @@ import ..Util
 
 import Base.convert
 
-export load_stamp_blob, crop_image!, get_psf_at_point,
+export load_stamp_blob, crop_image!,
        convert_catalog_to_celeste, load_stamp_catalog,
        break_blob_into_tiles, break_image_into_tiles,
        get_local_sources, stitch_object_tiles
@@ -320,65 +321,6 @@ function crop_blob_to_location(
         tiled_blob[b] = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
     end
     tiled_blob
-end
-
-
-############################################
-# PSF functions
-
-
-"""
-Return an image of a Celeste GMM PSF evaluated at rows, cols.
-
-Args:
- - psf_array: The PSF to be evaluated as an array of PsfComponent
- - rows: The rows in the image (usually in pixel coordinates)
- - cols: The column in the image (usually in pixel coordinates)
-
- Returns:
-  - The PSF values at rows and cols.  The default size is the same as
-    that returned by get_psf_at_point applied to FITS header values.
-
-Note that the point in the image at which the PSF is evaluated --
-that is, the center of the image returned by this function -- is
-already implicit in the value of psf_array.
-"""
-function get_psf_at_point(psf_array::Array{PsfComponent, 1};
-                          rows=collect(-25:25), cols=collect(-25:25))
-
-    function get_psf_value(psf::PsfComponent, row::Float64, col::Float64)
-        x = Float64[row, col] - psf.xiBar
-        exp_term = exp(-0.5 * x' * psf.tauBarInv * x - 0.5 * psf.tauBarLd)
-        (psf.alphaBar * exp_term / (2 * pi))[1]
-    end
-
-    Float64[
-      sum([ get_psf_value(psf, float(row), float(col)) for psf in psf_array ])
-        for row in rows, col in cols ]
-end
-
-
-"""
-Get the PSF located at a particular world location in an image.
-
-Args:
-  - world_loc: A location in world coordinates.
-  - img: An Image
-
-Returns:
-  - An array of PsfComponent objects that represents the PSF as a mixture
-    of Gaussians.
-"""
-function get_source_psf(world_loc::Vector{Float64}, img::Image)
-    # Some stamps or simulated data have no raw psf information.  In that case,
-    # just use the psf from the image.
-    if size(img.raw_psf_comp.rrows) == (0, 0)
-      return img.psf
-    else
-      pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
-      psfstamp = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
-      return PSF.fit_raw_psf_for_celeste(psfstamp)
-    end
 end
 
 
