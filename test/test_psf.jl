@@ -14,9 +14,9 @@ using Base.Test
 
 
 function load_raw_psf()
-  run_num = 4263
-  camcol_num = 5
-  field_num = 117
+  run_num = 3900
+  camcol_num = 6
+  field_num = 269
   b = 3
 
   psf_filename =
