@@ -145,18 +145,14 @@ function infer(ra_range::Tuple{Float64, Float64},
     mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
                                            fit_psf=false)
 
+
     # get indicies of all sources relevant to those we're actually
     # interested in, and fit a local PSF for those sources (since we skipped
     # fitting the PSF for the whole catalog above)
     info("fitting PSF for all relevant sources")
     relevant_idx = ModelInit.get_all_relevant_sources(mp, idx)
-    for j in 1:size(mp.patches, 2)  # loop over images
-        for s in relevant_idx  # loop over relevant sources
-            patch = mp.patches[s, j]
-            psf = PSF.get_source_psf(patch.center, images[j])
-            mp.patches[s, j] = ModelInit.SkyPatch(patch, psf)
-        end
-    end
+
+    ModelInit.fit_object_psfs!(mp, relevant_idx, images)
 
     results = Dict{Int, Dict}()
     for s in idx
@@ -261,7 +257,7 @@ end
 
 
 const NERSC_DATA_ROOT = "/global/projecta/projectdirs/sdss/data/sdss/dr12/boss"
-nersc_photoobj_dir(run::Integer, camcol::Integer) = 
+nersc_photoobj_dir(run::Integer, camcol::Integer) =
     "$(NERSC_DATA_ROOT)/photoObj/301/$(run)/$(camcol)"
 nersc_psfield_dir(run::Integer, camcol::Integer) =
     "$(NERSC_DATA_ROOT)/photo/redux/301/$(run)/objcs/$(camcol)"

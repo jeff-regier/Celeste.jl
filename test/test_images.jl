@@ -66,10 +66,10 @@ function test_blob()
   pixel_loc = WCS.world_to_pix(img.wcs, obj_loc);
   original_psf_val = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
 
-  original_psf_celeste = PSF.fit_raw_psf_for_celeste(original_psf_val);
+  original_psf_celeste = PSF.fit_raw_psf_for_celeste(original_psf_val)[1];
   fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
-  obj_psf = PSF.get_source_psf(mp_obj.vp[1][ids.u], img);
+  obj_psf = PSF.get_source_psf(mp_obj.vp[1][ids.u], img)[1];
   obj_psf_val = PSF.get_psf_at_point(obj_psf);
 
   # The fits should match exactly.
@@ -96,7 +96,7 @@ function test_stamp_get_object_psf()
   original_psf_val = PSF.get_psf_at_point(img.psf);
 
   obj_psf_val =
-    PSF.get_psf_at_point(PSF.get_source_psf(stamp_mp.vp[1][ids.u], img))
+    PSF.get_psf_at_point(PSF.get_source_psf(stamp_mp.vp[1][ids.u], img)[1])
   @test_approx_eq_eps(obj_psf_val, original_psf_val, 1e-6)
 end
 
