@@ -439,7 +439,6 @@ function initialize_model_params(
     fit_psf::Bool=true, patch_radius::Float64=-1., radius_from_cat::Bool=true,
     scale_patch_size::Float64=1.0)
 
-    println("Intializing ModelParams.")
     @assert length(tiled_blob) == length(blob)
     @assert(length(cat) > 0,
             "Cannot initilize model parameters with no catalog entries")
