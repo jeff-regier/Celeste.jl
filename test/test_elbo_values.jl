@@ -338,7 +338,7 @@ function test_tiny_image_tiling()
 
   if ElboDeriv.Threaded
     for i in 2:nthreads()
-      CelesteTypes.add_scaled_sfs!(
+      Types.add_scaled_sfs!(
         elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
         elbo_vars_array[1].calculate_hessian &&
           elbo_vars_array[1].calculate_derivs)
@@ -353,7 +353,7 @@ function test_tiny_image_tiling()
 
   if ElboDeriv.Threaded
     for i in 2:nthreads()
-      CelesteTypes.add_scaled_sfs!(
+      Types.add_scaled_sfs!(
         elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
         elbo_vars_array[1].calculate_hessian &&
           elbo_vars_array[1].calculate_derivs)
@@ -369,7 +369,7 @@ function test_tiny_image_tiling()
 
   if ElboDeriv.Threaded
     for i in 2:nthreads()
-      CelesteTypes.add_scaled_sfs!(
+      Types.add_scaled_sfs!(
         elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
         elbo_vars_array[1].calculate_hessian &&
           elbo_vars_array[1].calculate_derivs)
