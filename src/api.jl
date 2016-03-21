@@ -18,7 +18,7 @@ const MIN_FLUX = 2.0
 
 function set_logging_level(level)
     if level == "OFF"
-        Logging.configure(level=OFF)
+      Logging.configure(level=OFF)
     elseif level == "DEBUG"
       Logging.configure(level=DEBUG)
     elseif level == "INFO"
@@ -199,6 +199,7 @@ function infer(ra_range::Tuple{Float64, Float64},
 
     return results
 end
+
 
 # -----------------------------------------------------------------------------
 # NERSC-specific functions
