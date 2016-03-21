@@ -204,10 +204,10 @@ end
 function infer(
     run::Int, camcol::Int, field::Int, objid::AbstractString,
     dir::AbstractString)
-    
+
   images = SkyImages.read_sdss_field(run, camcol, field, dir);
 
-  cat_filename = "photoObj-$run_string-$camcol_string-$field_string.fits"
+  cat_filename = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
   cat_entries = SkyImages.read_photoobj_celeste(joinpath(dir, cat_filename));
 
   # initialize tiled images and model parameters.  Don't fit the psf for now --
