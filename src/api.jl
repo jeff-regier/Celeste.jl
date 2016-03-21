@@ -15,7 +15,24 @@ const TILE_WIDTH = 20
 const MAX_ITERS = 50
 const MIN_FLUX = 2.0
 
-Logging.configure(level=INFO)
+
+function set_logging_level(level)
+    if level == "OFF"
+        Logging.configure(level=OFF)
+    elseif level == "DEBUG"
+      Logging.configure(level=DEBUG)
+    elseif level == "INFO"
+      Logging.configure(level=INFO)
+    elseif level == "WARNING"
+      Logging.configure(level=WARNING)
+    elseif level == "ERROR"
+      Logging.configure(level=ERROR)
+    elseif level == "CRITICAL"
+      Logging.configure(level=CRITICAL)
+    else
+      err("Unknown logging level $(level)")
+    end
+end
 
 """
 read_photoobj_primary(fieldids, dirs) -> Vector{CatalogEntry}
@@ -150,9 +167,9 @@ function infer(ra_range::Tuple{Float64, Float64},
     # interested in, and fit a local PSF for those sources (since we skipped
     # fitting the PSF for the whole catalog above)
     info("fitting PSF for all relevant sources")
-    relevant_idx = ModelInit.get_all_relevant_sources(mp, idx)
+    relevant_sources = ModelInit.get_all_relevant_sources(mp, idx)
 
-    ModelInit.fit_object_psfs!(mp, relevant_idx, images)
+    ModelInit.fit_object_psfs!(mp, relevant_sources, images)
 
     results = Dict{Int, Dict}()
     for s in idx

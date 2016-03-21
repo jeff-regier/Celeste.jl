@@ -8,6 +8,7 @@ export sample_prior,
 
 using FITSIO
 using Distributions
+using Logging
 
 import SloanDigitalSkySurvey.WCSUtils
 import WCS.WCSTransform
@@ -271,12 +272,14 @@ function fit_object_psfs!{NumType <: Number}(
   psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K);
   @assert size(mp.patches, 2) == length(blob)
   for b in 1:length(blob)  # loop over images
+    debug("Fitting PSFS for band $b")
     # Get a starting point in the middle of the image.
     pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
     raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
     central_psf, central_psf_params =
       PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
     for s in relevant_sources
+      debug("Fitting PSF for band=$b, source=$s, objid=$(mp.objids[s])")
       patch = mp.patches[s, b]
       # Set the starting point at the center's PSF.
       psf, psf_params =
