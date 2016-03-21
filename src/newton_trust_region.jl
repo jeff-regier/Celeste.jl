@@ -6,14 +6,7 @@ using Optim.assess_convergence
 using Optim.MultivariateOptimizationResults
 using Optim.TwiceDifferentiableFunction
 
-
-function verbose_println(x...)
-  #println(x...)
-end
-
-function verbose_println(x)
-  #println(x)
-end
+import Logging
 
 
 macro newton_tr_trace()
@@ -135,10 +128,10 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
       s[:] = -(H_eig[:vectors] ./ H_eig[:values]') * H_eig[:vectors]' * gr
       lambda = 0.0
       interior = true
-      verbose_println("Interior")
+      Logging.debug("Interior")
     else
       interior = false
-      verbose_println("Boundary")
+      Logging.debug("Boundary")
 
       # The hard case is when the gradient is orthogonal to all
       # eigenvectors associated with the lowest eigenvalue.
@@ -161,8 +154,8 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
 
         # Formula 4.45 in N&W
         p_lambda2 = p_mag2(lambda, lambda_1_multiplicity + 1)
-        # verbose_println("lambda_1 = $(lambda_1), p_lambda2 = $(p_lambda2), ",
-        #         "$delta2, $lambda_1_multiplicity")
+        Logging.debug("lambda_1 = $(lambda_1), p_lambda2 = $(p_lambda2), ",
+                "$delta2, $lambda_1_multiplicity")
         if p_lambda2 > delta2
           # Then we can simply solve using root finding.  Set a starting point
           # between the minimum and largest eigenvalues.
@@ -170,10 +163,10 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
           hard_case = false
           lambda = min_lambda + 0.01 * (max_lambda - min_lambda)
         else
-          verbose_println("Hard case!")
+          Logging.debug("Hard case!")
           hard_case = true
           tau = sqrt(delta2 - p_lambda2)
-          verbose_println("Tau = $tau delta2 = $delta2 p_lambda2 = $(p_lambda2)")
+          Logging.debug("Tau = $tau delta2 = $delta2 p_lambda2 = $(p_lambda2)")
 
           # I don't think it matters which eigenvector we pick so take the first..
           for i=1:n
@@ -187,7 +180,7 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
       end
 
       if !hard_case
-        verbose_println("Easy case")
+        Logging.debug("Easy case")
         # The "easy case".
         # Algorithim 4.3 of N&W, with s insted of p_l to be consistent with
         # the rest of the library.
@@ -201,10 +194,10 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
           B[i, i] = H[i, i] + lambda
         end
         while (root_finding_diff > tolerance) && (iter <= max_iters)
-          # verbose_println("---")
-          # verbose_println("lambda=$lambda min_lambda=$(min_lambda)")
+          Logging.debug("---")
+          Logging.debug("lambda=$lambda min_lambda=$(min_lambda)")
           b_eigv = eigfact(B)[:values]
-          # verbose_println("lambda_1=$(lambda_1) $(b_eigv)")
+          Logging.debug("lambda_1=$(lambda_1) $(b_eigv)")
           R = chol(B)
           s[:] = -R \ (R' \ gr)
           q_l = R' \ s
@@ -218,7 +211,7 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
           if lambda < min_lambda
             # TODO: add a unit test for this
             lambda = 0.5 * (lambda_previous - min_lambda) + min_lambda
-            verbose_println("Step too low.  Using $(lambda) from $(lambda_previous).")
+            Logging.debug("Step too low.  Using $(lambda) from $(lambda_previous).")
           end
           root_finding_diff = abs(lambda - lambda_previous)
           iter = iter + 1
@@ -248,7 +241,7 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
     #            "max_ev=$(max_lambda), min_ev=$(lambda_1)")
     #     end
     # end
-    verbose_println("Root finding got m=$m, interior=$interior with ",
+    Logging.debug("Root finding got m=$m, interior=$interior with ",
             "delta^2=$delta2 and ||s||^2=$(vecdot(s, s))")
     return m, interior, lambda
 end
@@ -320,7 +313,7 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
     # Iterate until convergence
     converged = false
     while !converged && iteration <= iterations
-        verbose_println("\n-----------------Iter $iteration")
+        Logging.debug("\n-----------------Iter $iteration")
 
         # Find the next step direction.
         m, interior = solve_tr_subproblem!(gr, H, delta, s)
@@ -351,24 +344,24 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
           rho = f_x_diff / (0 - m)
         end
 
-        verbose_println("Got rho = $rho from $(f_x) - $(f_x_previous) ",
+        Logging.debug("Got rho = $rho from $(f_x) - $(f_x_previous) ",
                 "(diff = $(f_x - f_x_previous)), and m = $m")
-        verbose_println("Interior = $interior, delta = $delta.")
+        Logging.debug("Interior = $interior, delta = $delta.")
 
         if rho < rho_lower
-            verbose_println("Shrinking trust region.")
+            Logging.debug("Shrinking trust region.")
             delta *= 0.25
         elseif (rho > rho_upper) && (!interior)
-            verbose_println("Growing trust region.")
+            Logging.debug("Growing trust region.")
             delta = min(2 * delta, delta_hat)
         else
           # else leave delta unchanged.
-          verbose_println("Keeping trust region the same.")
+          Logging.debug("Keeping trust region the same.")
         end
 
         if rho > eta
             # Accept the point and check convergence
-            verbose_println("Accepting improvement from f_prev=$(f_x_previous) f=$(f_x).")
+            Logging.debug("Accepting improvement from f_prev=$(f_x_previous) f=$(f_x).")
 
             x_converged,
             f_converged,
@@ -385,11 +378,11 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
               # Only compute the next Hessian if we haven't converged
               d.h!(x, H)
             else
-              verbose_println("Converged.")
+              Logging.info("Converged.")
             end
         else
             # The improvement is too small and we won't take it.
-            verbose_println(
+            Logging.debug(
               "Rejecting improvement from f_prev = $(f_x_previous) to f=$f_x")
 
             # If you reject an interior solution, make sure that the next

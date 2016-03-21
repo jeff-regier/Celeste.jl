@@ -8,6 +8,7 @@ export sample_prior,
 
 using FITSIO
 using Distributions
+import Logging
 
 import SloanDigitalSkySurvey.WCSUtils
 import WCS.WCSTransform
@@ -271,12 +272,14 @@ function fit_object_psfs!{NumType <: Number}(
   psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K);
   @assert size(mp.patches, 2) == length(blob)
   for b in 1:length(blob)  # loop over images
+    Logging.debug("Fitting PSFS for band $b")
     # Get a starting point in the middle of the image.
     pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
     raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
     central_psf, central_psf_params =
       PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
     for s in relevant_sources
+      Logging.debug("Fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
       patch = mp.patches[s, b]
       # Set the starting point at the center's PSF.
       psf, psf_params =
@@ -561,6 +564,7 @@ function limit_to_object_data(
     objid::ASCIIString, mp_original::ModelParams,
     tiled_blob::TiledBlob, blob::Blob, cat_entries::Vector{CatalogEntry})
 
+  @assert length(tiled_blob) == length(blob)
   mp = deepcopy(mp_original)
 
   s_original = findfirst(mp_original.objids .== objid)
@@ -579,7 +583,7 @@ function limit_to_object_data(
   # Trim to a smaller tiled blob.
   trimmed_tiled_blob = Array(Array{ImageTile}, 5);
   original_tiled_sources = deepcopy(trimmed_mp.tile_sources);
-  for b=1:5
+  for b=1:length(tiled_blob)
     hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
       find([ s in sources for sources in original_tiled_sources[b]]))
 
@@ -620,7 +624,7 @@ function trim_source_tiles(
     Array{ImageTile, 2}[ Array(ImageTile, size(tiled_blob[b])...) for
                          b=1:length(tiled_blob)];
 
-  for b = 1:5
+  for b = 1:length(tiled_blob)
     println("Processing band $b...")
 
     H, W = size(tiled_blob[b])
