@@ -347,13 +347,13 @@ Returns:
   Update transform_derivatives in place.
 """
 function get_transform_derivatives!{NumType <: Number}(
-    mp::ModelParams{NumType}, bounds::Vector{ParamBounds},
-    transform_derivatives::TransformDerivatives)
+    vp::VariationalParams{NumType}, active_sources::Vector{Int},
+    bounds::Vector{ParamBounds}, transform_derivatives::TransformDerivatives)
 
-  @assert transform_derivatives.Sa == length(mp.active_sources)
+  @assert transform_derivatives.Sa == length(active_sources)
 
-  for param in fieldnames(ids), sa = 1:length(mp.active_sources)
-    s = mp.active_sources[sa]
+  for param in fieldnames(ids), sa = 1:length(active_sources)
+    s = active_sources[sa]
   	#println(param, " ", sa)
   	constraint_vec = bounds[sa][param]
 
@@ -367,7 +367,7 @@ function get_transform_derivatives!{NumType <: Number}(
   			vp_ind = ids.(param)[ind]
   			vp_free_ind = ids_free.(param)[ind]
 
-  			jac, hess = box_derivatives(mp.vp[s][vp_ind], constraint_vec[ind]);
+  			jac, hess = box_derivatives(vp[s][vp_ind], constraint_vec[ind]);
 
   			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
   			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
@@ -391,7 +391,7 @@ function get_transform_derivatives!{NumType <: Number}(
   				vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
   				jac, hess = Transform.box_simplex_derivatives(
-  					mp.vp[s][vp_ind], constraint_vec[col])
+  					vp[s][vp_ind], constraint_vec[col])
 
   				transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
   				for row in 1:(param_size[1])
@@ -407,7 +407,7 @@ function get_transform_derivatives!{NumType <: Number}(
   			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
   			jac, hess = Transform.box_simplex_derivatives(
-  				mp.vp[s][vp_ind], constraint_vec[1])
+  				vp[s][vp_ind], constraint_vec[1])
 
   			transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
   			for ind in 1:length(vp_ind)
@@ -425,7 +425,7 @@ function get_transform_derivatives{NumType <: Number}(
 
   transform_derivatives =
     TransformDerivatives{Float64}(length(mp.active_sources));
-  get_transform_derivatives!(mp, bounds, transform_derivatives)
+  get_transform_derivatives!(mp.vp, mp.active_sources, bounds, transform_derivatives)
   transform_derivatives
 end
 
@@ -660,11 +660,6 @@ function DataTransform(bounds::Vector{ParamBounds};
   @assert length(bounds) == length(active_sources)
   @assert maximum(active_sources) <= S
   active_S = length(active_sources)
-
-  # Make sure that each variable has its bounds set.
-  for s=1:length(bounds)
-    @assert Set(keys(bounds[s])) == Set(fieldnames(ids))
-  end
 
   function from_vp!{NumType <: Number}(
       vp::VariationalParams{NumType}, vp_free::VariationalParams{NumType})

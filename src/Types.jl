@@ -10,7 +10,8 @@ export CatalogEntry,
 export ModelParams, PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,
-       VariationalParams, FreeVariationalParams, RectVariationalParams
+       VariationalParams, FreeVariationalParams, RectVariationalParams,
+       PsfParams
 
 # functions
 export print_params, align
@@ -22,7 +23,7 @@ export band_letters, D, Ia, B, psf_K, galaxy_prototypes,
        gal_shape_alignment,
        ids_names,
        ids_free_names,
-       ids, ids_free, star_ids, gal_ids, gal_shape_ids, bids
+       ids, ids_free, star_ids, gal_ids, gal_shape_ids, psf_ids, bids
 
 
 import Base.convert
@@ -483,6 +484,23 @@ getids(::Type{UnconstrainedParams}) = ids_free
 length(::Type{UnconstrainedParams}) =  6 + 2*Ia + 2*(B-1)*Ia + (D-1)*Ia + Ia-1
 
 
+# Parameters for a representation of the PSF
+type PsfParams <: ParamSet
+    mu::Vector{Int}
+    e_axis::Int
+    e_angle::Int
+    e_scale::Int
+    weight::Int
+
+    function PsfParams()
+      new([1, 2], 3, 4, 5, 6)
+    end
+end
+const psf_ids = PsfParams()
+getids(::Type{PsfParams}) = psf_ids
+length(::Type{PsfParams}) = 6
+
+
 # define length(value) in addition to length(Type) for ParamSets
 length{T<:ParamSet}(::T) = length(T)
 
@@ -504,12 +522,10 @@ const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 # not the CanonicalParams.
 const gal_shape_alignment = align(gal_shape_ids, gal_ids)
 
-# TODO: maybe these should be incorporated into the framework above
-# (which I don't really understand.)
 function get_id_names(
   ids::Union{CanonicalParams, UnconstrainedParams})
   ids_names = Array(ASCIIString, length(ids))
-  for (name in fieldnames(ids))
+  for name in fieldnames(ids)
     inds = ids.(name)
     if length(size(inds)) == 0
       ids_names[inds] = "$(name)"

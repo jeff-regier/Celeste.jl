@@ -35,7 +35,7 @@ cat_entries = SkyImages.read_photoobj_celeste(joinpath(dir, cat_filename));
 
 # initialize tiled images and model parameters.  Don't fit the psf for now --
 # we just need the tile_sources from mp.
-tiled_blob, mp_all =
+tiled_blob, mp =
   ModelInit.initialize_celeste(images, cat_entries, tile_width=20, fit_psf=false);
 
 # Limit to bright objects
@@ -47,8 +47,12 @@ good_rows = max_fluxes .> 3;
 
 # Choose an object:
 objid = "1237662226208063491"
-trimmed_tiled_blob, mp, active_s, s =
-  ModelInit.initialize_objid(objid, mp_all, cat_entries, images, tile_width=20);
+s = findfirst(mp.objids, objid)
+relevant_sources = ModelInit.get_relevant_sources(mp, s);
+ModelInit.fit_object_psfs!(mp, relevant_sources, images);
+mp.active_sources = [ s ];
+trimmed_tiled_blob =
+  ModelInit.trim_source_tiles(s, mp, tiled_blob, noise_fraction=0.1);
 
 # Perform the actual fit
 fit_time = time()
