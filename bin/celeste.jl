@@ -26,8 +26,8 @@ The `score-nersc` subcommand is not yet implemented for the new API.
 
 function main()
     args = docopt(DOC, version=v"0.0.0")
-    Celeste.set_logging_level(args["logging"])
     if args["infer-nersc"]
+        Celeste.set_logging_level(args["logging"])
         ramin = parse(Float64, args["<ramin>"])
         ramax = parse(Float64, args["<ramax>"])
         decmin = parse(Float64, args["<decmin>"])
@@ -35,6 +35,7 @@ function main()
         outdir = args["<outdir>"]
         Celeste.infer_nersc(ramin, ramax, decmin, decmax, outdir)
     elseif args["score-nersc"]
+        Celeste.set_logging_level(args["logging"])
         Celeste.score_nersc(ramargs["<resultdir>"], args["<reffile>"])
     end
 
