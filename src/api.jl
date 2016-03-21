@@ -15,7 +15,24 @@ const TILE_WIDTH = 20
 const MAX_ITERS = 50
 const MIN_FLUX = 2.0
 
-Logging.configure(level=INFO)
+
+function set_logging_level(level)
+    if level == "OFF"
+      Logging.configure(level=OFF)
+    elseif level == "DEBUG"
+      Logging.configure(level=DEBUG)
+    elseif level == "INFO"
+      Logging.configure(level=INFO)
+    elseif level == "WARNING"
+      Logging.configure(level=WARNING)
+    elseif level == "ERROR"
+      Logging.configure(level=ERROR)
+    elseif level == "CRITICAL"
+      Logging.configure(level=CRITICAL)
+    else
+      err("Unknown logging level $(level)")
+    end
+end
 
 """
 read_photoobj_primary(fieldids, dirs) -> Vector{CatalogEntry}
@@ -128,6 +145,8 @@ function infer(ra_range::Tuple{Float64, Float64},
 
     # Read in images for all (run, camcol, field).
     images = Image[]
+    image_names = ASCIIString[]
+    image_count = 0
     for i in 1:length(fieldids)
         info("reading field ", fieldids[i])
         run, camcol, field = fieldids[i]
@@ -135,8 +154,16 @@ function infer(ra_range::Tuple{Float64, Float64},
                                              fpm_dir=fpm_dirs[i],
                                              psfield_dir=psfield_dirs[i],
                                              photofield_dir=photofield_dirs[i])
+        for b=1:length(fieldims)
+          image_count += 1
+          push!(image_names,
+                "$image_count run=$run camcol=$camcol $field=field b=$b")
+        end
         append!(images, fieldims)
     end
+
+    debug("Image names:")
+    debug(image_names)
 
     # initialize tiled images and model parameters for trimming.  We will
     # initialize the psf again before fitting, so we don't do it here.
@@ -150,9 +177,9 @@ function infer(ra_range::Tuple{Float64, Float64},
     # interested in, and fit a local PSF for those sources (since we skipped
     # fitting the PSF for the whole catalog above)
     info("fitting PSF for all relevant sources")
-    relevant_idx = ModelInit.get_all_relevant_sources(mp, idx)
+    relevant_sources = ModelInit.get_all_relevant_sources(mp, idx)
 
-    ModelInit.fit_object_psfs!(mp, relevant_idx, images)
+    ModelInit.fit_object_psfs!(mp, relevant_sources, images)
 
     results = Dict{Int, Dict}()
     for s in idx
@@ -182,6 +209,44 @@ function infer(ra_range::Tuple{Float64, Float64},
 
     return results
 end
+
+
+"""
+Infer a single objid in a single run, camcol, and field.
+"""
+function infer(
+    run::Int, camcol::Int, field::Int, objid::AbstractString,
+    dir::AbstractString)
+
+  images = SkyImages.read_sdss_field(run, camcol, field, dir);
+
+  cat_filename = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
+  cat_entries = SkyImages.read_photoobj_celeste(joinpath(dir, cat_filename));
+
+  # initialize tiled images and model parameters.  Don't fit the psf for now --
+  # we just need the tile_sources from mp.
+  tiled_blob, mp = ModelInit.initialize_celeste(images, cat_entries,
+                                                tile_width=20,
+                                                fit_psf=false);
+  s = findfirst(mp.objids, objid)
+  @assert(s > 0, "Objid $objid not found in the catalog.")
+  relevant_sources = ModelInit.get_relevant_sources(mp, s);
+  ModelInit.fit_object_psfs!(mp, relevant_sources, images);
+  mp.active_sources = [ s ];
+
+  #for objid in bad_objids
+  trimmed_tiled_blob =
+    ModelInit.trim_source_tiles(s, mp, tiled_blob, noise_fraction=0.1);
+
+  fit_time = time()
+  iter_count, max_f, max_x, result =
+      OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_blob, mp;
+                              verbose=true, max_iters=50)
+  fit_time = time() - fit_time
+
+  info("Fit in $fit_time seconds.")
+end
+
 
 # -----------------------------------------------------------------------------
 # NERSC-specific functions

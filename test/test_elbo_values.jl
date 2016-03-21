@@ -414,7 +414,7 @@ function test_trim_source_tiles()
     s, mp, tiled_blob, noise_fraction=0.1);
   loc_ids = ids.u
   non_loc_ids = setdiff(1:length(ids), ids.u)
-  for b=1:5
+  for b=1:length(blob)
     println("Testing b = $b")
     # Make sure pixels got NaN-ed out
     @test(
