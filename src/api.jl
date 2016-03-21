@@ -211,6 +211,9 @@ function infer(ra_range::Tuple{Float64, Float64},
 end
 
 
+"""
+Infer a single objid in a single run, camcol, and field.
+"""
 function infer(
     run::Int, camcol::Int, field::Int, objid::AbstractString,
     dir::AbstractString)

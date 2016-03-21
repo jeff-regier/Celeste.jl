@@ -623,7 +623,7 @@ function trim_source_tiles(
     Array{ImageTile, 2}[ Array(ImageTile, size(tiled_blob[b])...) for
                          b=1:length(tiled_blob)];
 
-  for b = 1:5
+  for b = 1:length(tiled_blob)
     println("Processing band $b...")
 
     H, W = size(tiled_blob[b])
