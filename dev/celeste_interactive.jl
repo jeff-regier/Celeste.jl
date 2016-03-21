@@ -27,11 +27,6 @@ run = 3900
 camcol = 6
 field = 269
 
-if false
-  Celeste.infer(dir, run, camcol, field, "/tmp/", 4, 100)
-end
-
-
 images = SkyImages.read_sdss_field(run, camcol, field, dir);
 
 # load catalog and convert to Array of `CatalogEntry`s.
