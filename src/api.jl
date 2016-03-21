@@ -145,6 +145,8 @@ function infer(ra_range::Tuple{Float64, Float64},
 
     # Read in images for all (run, camcol, field).
     images = Image[]
+    image_names = ASCIIString[]
+    image_count = 0
     for i in 1:length(fieldids)
         info("reading field ", fieldids[i])
         run, camcol, field = fieldids[i]
@@ -152,8 +154,16 @@ function infer(ra_range::Tuple{Float64, Float64},
                                              fpm_dir=fpm_dirs[i],
                                              psfield_dir=psfield_dirs[i],
                                              photofield_dir=photofield_dirs[i])
+        for b=1:length(fieldims)
+          image_count += 1
+          append!(image_names,
+                  "$image_count run=$run camcol=$camcol $field=field b=$b")
+        end
         append!(images, fieldims)
     end
+
+    debug("Image names:")
+    debug(image_names)
 
     # initialize tiled images and model parameters for trimming.  We will
     # initialize the psf again before fitting, so we don't do it here.
