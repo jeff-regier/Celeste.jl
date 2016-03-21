@@ -564,6 +564,7 @@ function limit_to_object_data(
     objid::ASCIIString, mp_original::ModelParams,
     tiled_blob::TiledBlob, blob::Blob, cat_entries::Vector{CatalogEntry})
 
+  @assert length(tiled_blob) == length(blob)
   mp = deepcopy(mp_original)
 
   s_original = findfirst(mp_original.objids .== objid)
@@ -582,7 +583,7 @@ function limit_to_object_data(
   # Trim to a smaller tiled blob.
   trimmed_tiled_blob = Array(Array{ImageTile}, 5);
   original_tiled_sources = deepcopy(trimmed_mp.tile_sources);
-  for b=1:5
+  for b=1:length(tiled_blob)
     hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
       find([ s in sources for sources in original_tiled_sources[b]]))
 
