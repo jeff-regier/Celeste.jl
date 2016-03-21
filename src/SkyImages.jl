@@ -2,8 +2,8 @@ module SkyImages
 
 using ..Types
 import ..SDSSIO
-import SloanDigitalSkySurvey: PSF, SDSS
-import SloanDigitalSkySurvey.PSF.get_psf_at_point
+import SloanDigitalSkySurvey: SDSS
+import Celeste.PSF
 
 import WCS
 import DataFrames
@@ -13,13 +13,11 @@ import ..Util
 
 import Base.convert
 
-export load_stamp_blob, crop_image!, get_psf_at_point,
+export load_stamp_blob, crop_image!,
        convert_catalog_to_celeste, load_stamp_catalog,
        break_blob_into_tiles, break_image_into_tiles,
-       get_local_sources,
-       stitch_object_tiles
+       get_local_sources, stitch_object_tiles
 
-include("psf.jl")
 
 """
 Convert from a catalog in dictionary-of-arrays, as returned by
@@ -265,7 +263,7 @@ function read_sdss_field(run::Integer, camcol::Integer, field::Integer,
 
         # evalute the psf in the center of the image and then fit it.
         psfstamp = sdsspsf(H / 2., W / 2.)
-        psf = fit_raw_psf_for_celeste(psfstamp)
+        psf = PSF.fit_raw_psf_for_celeste(psfstamp)[1]
 
         # For now, use the median noise and sky.  Here,
         # epsilon * iota needs to be in units comparable to nelec
@@ -324,86 +322,6 @@ function crop_blob_to_location(
 end
 
 
-############################################
-# PSF functions
-
-
-"""
-A wrapper around the SloanDigitalSkySurvey least squares fit and conversion
-to a Celeste psf object.
-
-Args:
-  - raw_psf: A matrix with the image of a psf
-  - ftol: The tolerance to which to fit the psf.  Note that you get improvements
-          up to 1e-8 or 1e-9, but at the cost of a big slowdown.
-
-Returns:
-  - An array of Celeste PSF objects.
-"""
-function fit_raw_psf_for_celeste(raw_psf::Matrix{Float64}; ftol=1e-5)
-  # TODO: this is very slow, and we should do it in Celeste rather
-  # than rely on Optim.
-  opt_result, mu_vec, sigma_vec, weight_vec =
-    fit_psf_gaussians_least_squares(raw_psf, K=psf_K, ftol=1e-5);
-  PsfComponent[ PsfComponent(weight_vec[k], mu_vec[k], sigma_vec[k])
-    for k=1:psf_K]
-end
-
-"""
-Return an image of a Celeste GMM PSF evaluated at rows, cols.
-
-Args:
- - psf_array: The PSF to be evaluated as an array of PsfComponent
- - rows: The rows in the image (usually in pixel coordinates)
- - cols: The column in the image (usually in pixel coordinates)
-
- Returns:
-  - The PSF values at rows and cols.  The default size is the same as
-    that returned by get_psf_at_point applied to FITS header values.
-
-Note that the point in the image at which the PSF is evaluated --
-that is, the center of the image returned by this function -- is
-already implicit in the value of psf_array.
-"""
-function get_psf_at_point(psf_array::Array{PsfComponent, 1};
-                          rows=collect(-25:25), cols=collect(-25:25))
-
-    function get_psf_value(psf::PsfComponent, row::Float64, col::Float64)
-        x = Float64[row, col] - psf.xiBar
-        exp_term = exp(-0.5 * x' * psf.tauBarInv * x - 0.5 * psf.tauBarLd)
-        (psf.alphaBar * exp_term / (2 * pi))[1]
-    end
-
-    Float64[
-      sum([ get_psf_value(psf, float(row), float(col)) for psf in psf_array ])
-        for row in rows, col in cols ]
-end
-
-
-"""
-Get the PSF located at a particular world location in an image.
-
-Args:
-  - world_loc: A location in world coordinates.
-  - img: An Image
-
-Returns:
-  - An array of PsfComponent objects that represents the PSF as a mixture
-    of Gaussians.
-"""
-function get_source_psf(world_loc::Vector{Float64}, img::Image)
-    # Some stamps or simulated data have no raw psf information.  In that case,
-    # just use the psf from the image.
-    if size(img.raw_psf_comp.rrows) == (0, 0)
-      return img.psf
-    else
-      pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
-      psfstamp = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
-      return fit_raw_psf_for_celeste(psfstamp)
-    end
-end
-
-
 #######################################
 # Tiling functions
 
@@ -446,86 +364,6 @@ import WCS.world_to_pix
 world_to_pix{T <: Number}(patch::SkyPatch, world_loc::Vector{T}) =
     world_to_pix(patch.wcs_jacobian, patch.center, patch.pixel_center,
                  world_loc)
-
-
-"""
-A fast function to determine which sources might belong to which tiles.
-
-Args:
-  - tiles: A TiledImage
-  - patches: A vector of patches (e.g. for a particular band)
-
-Returns:
-  - An array (over tiles) of a vector of candidate
-    source patches.  If a patch is a candidate, it may be within the patch radius
-    of a point in the tile, though it might not.
-"""
-function local_source_candidates(
-    tiles::TiledImage, patches::Vector{SkyPatch})
-
-  # Get the largest size of the pixel ellipse defined by the patch
-  # world coordinate circle.
-  patch_pixel_radii =
-    Float64[patches[s].radius * maximum(abs(eig(patches[s].wcs_jacobian)[1]))
-            for s=1:length(patches)];
-
-  candidates = fill(Int[], size(tiles));
-  for h=1:size(tiles, 1), w=1:size(tiles, 2)
-    # Find the patches that are less than the radius plus diagonal from the
-    # center of the tile.  These are candidates for having some
-    # overlap with the tile.
-    tile = tiles[h, w]
-    tile_center = [ mean(tile.h_range), mean(tile.w_range)]
-    tile_diag = (0.5 ^ 2) * (tile.h_width ^ 2 + tile.w_width ^ 2)
-
-    patch_distances = zeros(length(patches))
-    for s in 1:length(patches)
-        patch_distances[s] += (tile_center[1] - patches[s].pixel_center[1])^2
-        patch_distances[s] += (tile_center[2] - patches[s].pixel_center[2])^2
-    end
-    candidates[h, w] =
-      find(patch_distances .<= (tile_diag .+ patch_pixel_radii) .^ 2)
-  end
-
-  candidates
-end
-
-
-"""
-Args:
-  - tile: An ImageTile (containing tile coordinates)
-  - patches: A vector of SkyPatch objects to be matched with the tile.
-  - ev : the maximum absolute value of any eigenvalue of the WCS Jacobian
-         for all the patches
-Returns:
-  - A vector of source ids (from 1 to length(patches)) that influence
-    pixels in the tile.  A patch influences a tile if
-    there is any overlap in their squares of influence.
-"""
-function get_local_sources(tile::ImageTile,
-                patches::Vector{SkyPatch};
-                ev=-1.)
-
-    tile_sources = Int[]
-    tile_center = Float64[mean(tile.h_range), mean(tile.w_range)]
-
-    for patch_index in 1:length(patches)
-      patch = patches[patch_index]
-      wcs_jacobian_ev = ev > 0 ? ev :
-            maximum(abs(eigvals(patch.wcs_jacobian)))
-      patch_radius_px = patch.radius * wcs_jacobian_ev
-
-      # This is a "ball" in the infinity norm.
-      if (abs(tile_center[1] - patch.pixel_center[1]) <
-          patch_radius_px + 0.5 * tile.h_width) &&
-         (abs(tile_center[2] - patch.pixel_center[2]) <
-          patch_radius_px + 0.5 * tile.w_width)
-        push!(tile_sources, patch_index)
-      end
-    end
-
-    tile_sources
-end
 
 
 """

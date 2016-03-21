@@ -4,7 +4,7 @@ import SloanDigitalSkySurvey: SDSS, WCSUtils
 
 using Celeste: Types, SampleData
 import Celeste: SkyImages, Util, ModelInit, Synthetic
-
+import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
 
 println("Running misc tests.")
 
@@ -72,27 +72,40 @@ function test_local_sources()
     mp = ModelInit.initialize_model_params(
       fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
     @test mp.S == 3
-    subset1000 = SkyImages.get_local_sources(tile, mp.patches[:,3][:]);
+
+    patches = vec(mp.patches[:, 3])
+    subset1000 = ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+                                             patch_radii_pix(patches))
     @test subset1000 == [1,2,3]
 
     tile_width = 10
     tile = ImageTile(1, 1, blob[3], tile_width);
     ModelInit.initialize_model_params(
       fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
-    println(length(mp.patches[:,3]))
-    subset10 = SkyImages.get_local_sources(tile, mp.patches[:,3][:])
+
+    patches = vec(mp.patches[:, 3])
+    subset10 = ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+                                           patch_radii_pix(patches))
     @test subset10 == [1]
 
     last_tile = ImageTile(11, 24, blob[3], tile_width)
     ModelInit.initialize_model_params(
-      fill(fill(last_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
-    last_subset =SkyImages.get_local_sources(last_tile, mp.patches[:,3][:])
+      fill(fill(last_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.)
+
+    patches = vec(mp.patches[:, 3])
+    last_subset = ModelInit.get_local_sources(last_tile,
+                                              patch_ctrs_pix(patches),
+                                              patch_radii_pix(patches))
     @test length(last_subset) == 0
 
     pop_tile = ImageTile(7, 9, blob[3], tile_width)
     ModelInit.initialize_model_params(
       fill(fill(pop_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
-    pop_subset = SkyImages.get_local_sources(pop_tile, mp.patches[:,3][:])
+
+    patches = vec(mp.patches[:, 3])
+    pop_subset = ModelInit.get_local_sources(pop_tile, patch_ctrs_pix(patches),
+                                             patch_radii_pix(patches))
+
     @test pop_subset == [2,3]
 end
 
@@ -162,7 +175,10 @@ function test_local_sources_3()
         round(Int, pix_loc[2] / tile_width),
         blob[test_b],
         tile_width);
-    @test SkyImages.get_local_sources(tile, mp.patches[:,test_b][:]) == [1]
+
+    patches = vec(mp.patches[:,test_b])
+    @test ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+                                      patch_radii_pix(patches)) == [1]
 
     # Source should not match when you're 1 tile and a half away along the diagonal plus
     # the pixel radius from the center of the tile.
@@ -172,7 +188,8 @@ function test_local_sources_3()
         round(Int, pix_loc[2] / tile_width),
         blob[test_b],
         tile_width)
-    @test SkyImages.get_local_sources(tile, mp.patches[:,test_b][:]) == []
+    @test ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+                                      patch_radii_pix(patches)) == []
 
     tile = ImageTile(
         round(Int, (pix_loc[1]) / tile_width),
@@ -180,7 +197,9 @@ function test_local_sources_3()
                            patch_radius_pix) / tile_width),
         blob[test_b],
         tile_width)
-    @test SkyImages.get_local_sources(tile, mp.patches[:,test_b][:]) == []
+    @test ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+                                      patch_radii_pix(patches)) == []
+
 end
 
 

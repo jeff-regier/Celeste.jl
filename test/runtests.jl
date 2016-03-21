@@ -21,6 +21,7 @@ if length(ARGS) > 0
 else
     testfiles = ["test_derivatives.jl",
                  "test_elbo_values.jl",
+                 "test_psf.jl",
                  "test_images.jl",
                  "test_kl.jl",
                  "test_misc.jl",
