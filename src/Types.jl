@@ -522,12 +522,10 @@ const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 # not the CanonicalParams.
 const gal_shape_alignment = align(gal_shape_ids, gal_ids)
 
-# TODO: maybe these should be incorporated into the framework above
-# (which I don't really understand.)
 function get_id_names(
   ids::Union{CanonicalParams, UnconstrainedParams})
   ids_names = Array(ASCIIString, length(ids))
-  for (name in fieldnames(ids))
+  for name in fieldnames(ids)
     inds = ids.(name)
     if length(size(inds)) == 0
       ids_names[inds] = "$(name)"
