@@ -201,6 +201,39 @@ function infer(ra_range::Tuple{Float64, Float64},
 end
 
 
+function infer(
+    run::Int, camcol::Int, field::Int, objid::AbstractString,
+    dir::AbstractString)
+    
+  images = SkyImages.read_sdss_field(run, camcol, field, dir);
+
+  cat_filename = "photoObj-$run_string-$camcol_string-$field_string.fits"
+  cat_entries = SkyImages.read_photoobj_celeste(joinpath(dir, cat_filename));
+
+  # initialize tiled images and model parameters.  Don't fit the psf for now --
+  # we just need the tile_sources from mp.
+  tiled_blob, mp = ModelInit.initialize_celeste(images, cat_entries,
+                                                tile_width=20,
+                                                fit_psf=false);
+  s = findfirst(mp.objids, objid)
+  relevant_sources = ModelInit.get_relevant_sources(mp, s);
+  ModelInit.fit_object_psfs!(mp, relevant_sources, images);
+  mp.active_sources = [ s ];
+
+  #for objid in bad_objids
+  trimmed_tiled_blob =
+    ModelInit.trim_source_tiles(s, mp, tiled_blob, noise_fraction=0.1);
+
+  fit_time = time()
+  iter_count, max_f, max_x, result =
+      OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_blob, mp;
+                              verbose=true, max_iters=50)
+  fit_time = time() - fit_time
+
+  info("Fit in $fit_time seconds.")
+end
+
+
 # -----------------------------------------------------------------------------
 # NERSC-specific functions
 
