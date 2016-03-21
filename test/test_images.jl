@@ -1,11 +1,11 @@
 using Base.Test
 using DataFrames
 
-import SloanDigitalSkySurvey.PSF
 import WCS
 
 using Celeste: Types, SampleData
-import Celeste: ModelInit, SkyImages, ElboDeriv, Synthetic, SDSSIO
+import Celeste: ModelInit, SkyImages, ElboDeriv, Synthetic, SDSSIO, PSF
+import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
 
 println("Running SkyImages tests.")
 
@@ -16,16 +16,12 @@ const FIELD = 269
 function test_blob()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
-    run = 3900
-    camcol = 6
-    field = 269
-
-  blob = SkyImages.read_sdss_field(run, camcol, field, datadir)
+  blob = SkyImages.read_sdss_field(RUN, CAMCOL, FIELD, datadir)
 
   for b=1:5
     @test !blob[b].constant_background
   end
-  fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir run camcol field
+  fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
   cat_entries = SkyImages.read_photoobj_celeste(fname)
 
   tiled_blob, mp = ModelInit.initialize_celeste(blob, cat_entries,
@@ -51,8 +47,10 @@ function test_blob()
     @assert length(cropped_blob[b]) == 1
     @test 2 * width <= cropped_blob[b][1].h_width <= 2 * (width + 1)
     @test 2 * width <= cropped_blob[b][1].w_width <= 2 * (width + 1)
-    tile_sources =
-      SkyImages.get_local_sources(cropped_blob[b][1], mp.patches[:,b][:])
+    patches = vec(mp.patches[:, b])
+    tile_sources = ModelInit.get_local_sources(cropped_blob[b][1],
+                                               patch_ctrs_pix(patches),
+                                               patch_radii_pix(patches))
     @test obj_index in tile_sources
   end
 
@@ -64,10 +62,10 @@ function test_blob()
   pixel_loc = WCS.world_to_pix(img.wcs, obj_loc);
   original_psf_val = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
 
-  original_psf_celeste = SkyImages.fit_raw_psf_for_celeste(original_psf_val);
+  original_psf_celeste = PSF.fit_raw_psf_for_celeste(original_psf_val)[1];
   fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
-  obj_psf = SkyImages.get_source_psf(mp_obj.vp[1][ids.u], img);
+  obj_psf = PSF.get_source_psf(mp_obj.vp[1][ids.u], img)[1];
   obj_psf_val = PSF.get_psf_at_point(obj_psf);
 
   # The fits should match exactly.
@@ -86,6 +84,30 @@ function test_blob()
 end
 
 
+function test_fit_object_psfs()
+  blob = SkyImages.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
+  fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
+  cat_entries = SkyImages.read_photoobj_celeste(fname);
+
+  # Only test a few catalog entries.
+  relevant_sources = collect(3:4)
+  test_sources = collect(1:5)
+
+  tiled_blob, mp = ModelInit.initialize_celeste(
+    blob, cat_entries[test_sources], fit_psf=false);
+  ModelInit.fit_object_psfs!(mp, relevant_sources, blob);
+
+  tiled_blob, mp_psf_init = ModelInit.initialize_celeste(
+    blob, cat_entries[test_sources], fit_psf=true);
+
+  for b in 1:length(blob), s in relevant_sources
+    @test_approx_eq(
+      blob[b].raw_psf_comp(mp.patches[s, b].pixel_center...),
+      blob[b].raw_psf_comp(mp_psf_init.patches[s, b].pixel_center...))
+  end
+end
+
+
 function test_stamp_get_object_psf()
   stamp_blob, stamp_mp, body = gen_sample_star_dataset();
   img = stamp_blob[3];
@@ -94,7 +116,7 @@ function test_stamp_get_object_psf()
   original_psf_val = PSF.get_psf_at_point(img.psf);
 
   obj_psf_val =
-    PSF.get_psf_at_point(SkyImages.get_source_psf(stamp_mp.vp[1][ids.u], img))
+    PSF.get_psf_at_point(PSF.get_source_psf(stamp_mp.vp[1][ids.u], img)[1])
   @test_approx_eq_eps(obj_psf_val, original_psf_val, 1e-6)
 end
 
@@ -115,8 +137,10 @@ function test_get_tiled_image_source()
       mp.vp[1][ids.u] = loc
       mp.patches[1, b] = SkyPatch(loc, 1e-6, blob[b], fit_psf=false)
     end
-    patches = mp.patches[:, 3][:]
-    local_sources = ModelInit.get_tiled_image_sources(img, tiled_img, patches)
+    patches = vec(mp.patches[:, 3])
+    local_sources = ModelInit.get_tiled_image_sources(tiled_img,
+                                                      patch_ctrs_pix(patches),
+                                                      patch_radii_pix(patches))
     @test local_sources[hh, ww] == Int[1]
     for hh2 in 1:size(tiled_img)[1], ww2 in 1:size(tiled_img)[2]
       if (hh2 != hh) || (ww2 != ww)
@@ -136,12 +160,16 @@ function test_local_source_candidate()
 
   for b=1:length(tiled_blob)
     # Get the sources by iterating over everything.
-    patches = mp.patches[:,b][:]
-    tile_sources = ModelInit.get_tiled_image_sources(blob[b],
-                                tiled_blob[b], patches)
+    patches = vec(mp.patches[:,b])
+
+    tile_sources = ModelInit.get_tiled_image_sources(tiled_blob[b],
+                                                     patch_ctrs_pix(patches),
+                                                     patch_radii_pix(patches))
 
     # Get a set of candidates.
-    candidates = SkyImages.local_source_candidates(tiled_blob[b], patches);
+    candidates = ModelInit.local_source_candidates(tiled_blob[b],
+                                                   patch_ctrs_pix(patches),
+                                                   patch_radii_pix(patches))
 
     # Check that all the actual sources are candidates and that this is the
     # same as what is returned by initialize_model_params.
@@ -211,23 +239,6 @@ function test_set_patch_size()
 end
 
 
-function test_get_local_sources()
-  world_radius = 2.0
-  wcs_jacobian = Float64[0.5 0.1; 0.2 0.6]
-  pixel_center = Float64[0, 0]
-  world_center = Float64[0, 0]
-  patch1 = SkyPatch(world_center, world_radius,
-                    PsfComponent[], wcs_jacobian, pixel_center);
-
-  h_width = 10
-  w_width = 20
-  tile = ImageTile(1, 1, 1, 1:h_width, 1:w_width, h_width, w_width,
-                   rand(h_width, w_width), true, 0.5, Array(Float64, 0, 0),
-                   0.5, Array(Float64, 0));
-  SkyImages.get_local_sources(tile, [ patch ])
-end
-
-
 function test_stitch_object_tiles()
   # Just test that these functions run without errors.
   blob, mp, body, tiled_blob = gen_n_body_dataset(100, seed=42);
@@ -242,52 +253,6 @@ function test_stitch_object_tiles()
 end
 
 
-function test_least_squares_psf()
-  # open FITS file containing PSF for each band
-  psf_filename =
-    @sprintf("%s/psField-%06d-%d-%04d.fit", datadir, RUN, CAMCOL, FIELD)
-  psf_fits = FITSIO.FITS(psf_filename);
-  raw_psf_comp = SDSSIO.read_psf(psf_fits, band_letters[1]);
-  close(psf_fits)
-
-  # psf = PSF.get_psf_at_point(500.0, 500.0, raw_psf_comp);
-  psf = raw_psf_comp(500., 500.);
-
-  opt_result, mu_vec, sigma_vec, weight_vec =
-    SkyImages.fit_psf_gaussians_least_squares(psf, K=2, ftol=1e-5);
-
-  x_mat = SkyImages.get_x_matrix_from_psf(psf);
-  psf_fit = SkyImages.render_psf(opt_result.minimum, x_mat);
-
-  @test_approx_eq sum((psf_fit - psf) .^ 2) opt_result.f_minimum
-  @test 0 < opt_result.f_minimum < 1e-3
-
-end
-
-
-function test_psf_transforms()
-
-  mu_vec = Vector{Float64}[ Float64[1, 2], Float64[-1, -2], Float64[1, -1] ]
-  sigma_vec = Array(Matrix{Float64}, 3)
-  sigma_vec[1] = Float64[ 1 0.1; 0.1 1]
-  sigma_vec[2] = Float64[ 1 0.3; 0.3 2]
-  sigma_vec[3] = Float64[ 0.5 0.2; 0.2 0.5]
-  weight_vec = Float64[0.4, 0.6, 0.1]
-
-  par = SkyImages.wrap_parameters(mu_vec, sigma_vec, weight_vec)
-  mu_vec_test, sigma_vec_test, weight_vec_test = SkyImages.unwrap_parameters(par)
-
-  for k=1:3
-    @test_approx_eq mu_vec_test[k] mu_vec[k]
-    @test_approx_eq sigma_vec_test[k] sigma_vec[k]
-    @test_approx_eq weight_vec_test[k] weight_vec[k]
-  end
-
-end
-
-
-test_least_squares_psf()
-test_psf_transforms()
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
