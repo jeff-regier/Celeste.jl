@@ -8,11 +8,13 @@ export sample_prior,
 
 using FITSIO
 using Distributions
+
 import SloanDigitalSkySurvey.WCSUtils
 import WCS.WCSTransform
 
 using ..Util
 using ..Types
+import ..PSF
 import ..ElboDeriv  # for trim_source_tiles
 import ..SkyImages
 import ..Types: SkyPatch
@@ -207,7 +209,7 @@ Note: this is only used in tests.
 """
 function SkyPatch(world_center::Vector{Float64}, world_radius::Float64,
                   img::Image; fit_psf=true)
-    psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
+    psf = fit_psf ? PSF.get_source_psf(world_center, img)[1] : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
     radius_pix = maxabs(eigvals(wcs_jacobian)) * world_radius
@@ -231,7 +233,7 @@ Returns:
 function SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true,
                   scale_patch_size=1.0)
     world_center = ce.pos
-    psf = fit_psf ? SkyImages.get_source_psf(world_center, img) : img.psf
+    psf = fit_psf ? PSF.get_source_psf(world_center, img)[1] : img.psf
     pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
     wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
     radius_pix = choose_patch_radius(pixel_center, ce, psf, img)
@@ -247,6 +249,46 @@ SkyPatch(patch::SkyPatch, psf::Vector{PsfComponent}) =
     SkyPatch(patch.center, patch.radius_pix, psf, patch.wcs_jacobian,
              patch.pixel_center)
 
+
+"""
+Update ModelParams with the PSFs for a range of object ids.
+
+Args:
+  - mp: A ModelParams whose patches will be updated.
+  - relevant_sources: A vector of source ids that index into mp.patches
+  - blob: A vector of images.
+
+Returns:
+  - Updates mp.patches in place with fitted psfs for each source in
+    relevant_sources.
+"""
+function fit_object_psfs!{NumType <: Number}(
+    mp::ModelParams{NumType}, relevant_sources::Vector{Int}, blob::Blob)
+
+  # Initialize an optimizer
+  initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
+  psf_transform = PSF.get_psf_transform(initial_psf_params);
+  psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K);
+  @assert size(mp.patches, 2) == length(blob)
+  for b in 1:length(blob)  # loop over images
+    # Get a starting point in the middle of the image.
+    pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
+    raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
+    central_psf, central_psf_params =
+      PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
+    for s in relevant_sources
+      patch = mp.patches[s, b]
+      # Set the starting point at the center's PSF.
+      psf, psf_params =
+        PSF.get_source_psf(
+          patch.center, blob[b], psf_optimizer, central_psf_params)
+      mp.patches[s, b] = ModelInit.SkyPatch(patch, psf)
+    end
+  end
+end
+
+##########################
+# Local sources
 
 """
 A fast function to determine which sources might belong to which tiles.
@@ -363,7 +405,7 @@ parameters that can be used with Celeste.
 """
 function initialize_celeste(
     blob::Blob, cat::Vector{CatalogEntry};
-    tile_width::Int=typemax(Int), fit_psf::Bool=true,
+    tile_width::Int=20, fit_psf::Bool=true,
     patch_radius::Float64=-1., radius_from_cat::Bool=true)
 
   tiled_blob = SkyImages.break_blob_into_tiles(blob, tile_width)
@@ -397,7 +439,6 @@ function initialize_model_params(
     fit_psf::Bool=true, patch_radius::Float64=-1., radius_from_cat::Bool=true,
     scale_patch_size::Float64=1.0)
 
-    println("Intializing ModelParams.")
     @assert length(tiled_blob) == length(blob)
     @assert(length(cat) > 0,
             "Cannot initilize model parameters with no catalog entries")
@@ -421,14 +462,12 @@ function initialize_model_params(
     mp.tile_sources = Array(Array{Vector{Int}, 2}, length(blob))
 
     for b = 1:length(blob)
-        println("Initializing band $b patches.")
         for s=1:mp.S
             mp.patches[s, b] = radius_from_cat ?
             SkyPatch(cat[s], blob[b], fit_psf=fit_psf,
                      scale_patch_size=scale_patch_size):
             SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
         end
-        println("Initializing band $b tiled image sources.")
         patches = vec(mp.patches[:, b])
         mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b],
                                                      patch_ctrs_pix(patches),
@@ -632,31 +671,5 @@ function trim_source_tiles(
   trimmed_tiled_blob
 end
 
-"""
-initialize_objid(objid, mp_all, catalog, images)
-
-Initialize
-"""
-function initialize_objid(objid::ASCIIString, mp_all::ModelParams{Float64},
-                          catalog::Vector{CatalogEntry},
-                          images::Vector{Image};
-                          tile_width::Int=typemax(Int))
-
-  s = findfirst(mp_all.objids, objid)
-
-  relevant_sources = get_relevant_sources(mp_all, s)
-  catalog_s = catalog[relevant_sources]
-  tiled_images, mp = initialize_celeste(images, catalog_s;
-                                        tile_width=tile_width, fit_psf=true)
-
-  active_s = findfirst(mp.objids, objid)
-  mp.active_sources = [ active_s ]
-
-  # TODO: This is slow but would run much faster if you had run
-  # limit_to_object_data() first.
-  trimmed_tiled_images = trim_source_tiles(active_s, mp, tiled_images;
-                                           noise_fraction=0.1)
-  return trimmed_tiled_images, mp, active_s, s
-end
 
 end # module

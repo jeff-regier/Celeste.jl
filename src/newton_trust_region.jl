@@ -8,11 +8,11 @@ using Optim.TwiceDifferentiableFunction
 
 
 function verbose_println(x...)
-  println(x...)
+  #println(x...)
 end
 
 function verbose_println(x)
-  println(x)
+  #println(x)
 end
 
 
@@ -161,8 +161,8 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
 
         # Formula 4.45 in N&W
         p_lambda2 = p_mag2(lambda, lambda_1_multiplicity + 1)
-        verbose_println("lambda_1 = $(lambda_1), p_lambda2 = $(p_lambda2), ",
-                "$delta2, $lambda_1_multiplicity")
+        # verbose_println("lambda_1 = $(lambda_1), p_lambda2 = $(p_lambda2), ",
+        #         "$delta2, $lambda_1_multiplicity")
         if p_lambda2 > delta2
           # Then we can simply solve using root finding.  Set a starting point
           # between the minimum and largest eigenvalues.
@@ -201,10 +201,10 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
           B[i, i] = H[i, i] + lambda
         end
         while (root_finding_diff > tolerance) && (iter <= max_iters)
-          #verbose_println("---")
-          #verbose_println("lambda=$lambda min_lambda=$(min_lambda)")
+          # verbose_println("---")
+          # verbose_println("lambda=$lambda min_lambda=$(min_lambda)")
           b_eigv = eigfact(B)[:values]
-          #verbose_println("lambda_1=$(lambda_1) $(b_eigv)")
+          # verbose_println("lambda_1=$(lambda_1) $(b_eigv)")
           R = chol(B)
           s[:] = -R \ (R' \ gr)
           q_l = R' \ s
@@ -241,13 +241,13 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
       m = vecdot(gr, s) + 0.5 * vecdot(s, B * s)
     end
 
-    if !interior
-        if abs(delta2 - vecdot(s, s)) > 1e-6
-          warn("The norm of s is not close to delta: s2=$(vecdot(s, s)) delta2=$delta2. ",
-               "This may occur when the Hessian is badly conditioned.  ",
-               "max_ev=$(max_lambda), min_ev=$(lambda_1)")
-        end
-    end
+    # if !interior
+    #     if abs(delta2 - vecdot(s, s)) > 1e-6
+    #       warn("The norm of s is not close to delta: s2=$(vecdot(s, s)) delta2=$delta2. ",
+    #            "This may occur when the Hessian is badly conditioned.  ",
+    #            "max_ev=$(max_lambda), min_ev=$(lambda_1)")
+    #     end
+    # end
     verbose_println("Root finding got m=$m, interior=$interior with ",
             "delta^2=$delta2 and ||s||^2=$(vecdot(s, s))")
     return m, interior, lambda
