@@ -19,13 +19,17 @@ import Celeste.ElboDeriv
 
 dir = joinpath(Pkg.dir("Celeste"), "test/data")
 
-# run = 3900
-# camcol = 6
-# field = 269
+#http://skyserver.sdss.org/dr8/en/tools/explore/obj.asp?id=1237662226208063623
+# 164.39678593,39.13884552
+
+run = 3900
+camcol = 6
+field = 269
 
 run = 3840
 camcol = 1
 field = 70
+
 objid = "1237662226208063623"
 
 make_cmd = "make RUN=$run CAMCOL=$camcol FIELD=$field"
@@ -47,16 +51,18 @@ cat_entries = SkyImages.read_photoobj_celeste(joinpath(dir, cat_filename));
 tiled_blob, mp = ModelInit.initialize_celeste(images, cat_entries,
                                               tile_width=20,
                                               fit_psf=false);
+WCSUtils.pix_to_world(images[3].wcs, [0., 0.])
 
 # Choose an object:
 s = findfirst(mp.objids, objid)
+@assert s > 0
 relevant_sources = ModelInit.get_relevant_sources(mp, s);
 ModelInit.fit_object_psfs!(mp, relevant_sources, images);
 mp.active_sources = [ s ];
 
 # View
 trimmed_tiled_blob =
-  ModelInit.trim_source_tiles(s, mp, tiled_blob, noise_fraction=0.1);
+  ModelInit.trim_source_tiles(s, mp, tiled_blob, noise_fraction=0.01);
 band = 3
 stitched_image, h_range, w_range =
   Celeste.SkyImages.stitch_object_tiles(s, band, mp, trimmed_tiled_blob, predicted=true);

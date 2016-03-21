@@ -226,6 +226,7 @@ function infer(
                                                 tile_width=20,
                                                 fit_psf=false);
   s = findfirst(mp.objids, objid)
+  @assert(s > 0, "Objid $objid not found in the catalog.")
   relevant_sources = ModelInit.get_relevant_sources(mp, s);
   ModelInit.fit_object_psfs!(mp, relevant_sources, images);
   mp.active_sources = [ s ];

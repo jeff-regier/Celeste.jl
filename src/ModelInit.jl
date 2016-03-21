@@ -279,7 +279,7 @@ function fit_object_psfs!{NumType <: Number}(
     central_psf, central_psf_params =
       PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
     for s in relevant_sources
-      Logging.debug("Fitting PSF for band=$b, source=$s, objid=$(mp.objids[s])")
+      Logging.debug("Fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
       patch = mp.patches[s, b]
       # Set the starting point at the center's PSF.
       psf, psf_params =
