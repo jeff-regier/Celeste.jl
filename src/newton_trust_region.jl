@@ -313,7 +313,7 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
     # Iterate until convergence
     converged = false
     while !converged && iteration <= iterations
-        Logging.info("\n-----------------Iter $iteration")
+        Logging.debug("\n-----------------Iter $iteration")
 
         # Find the next step direction.
         m, interior = solve_tr_subproblem!(gr, H, delta, s)
