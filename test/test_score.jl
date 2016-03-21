@@ -1,12 +1,7 @@
-## test the main entry point in Celeste: the `infer` function
 import Celeste
-import JLD
 
-"""
-test infer with a single (run, camcol, field).
-This is basically just to make sure it runs at all.
-"""
-function test_infer_single()
+
+function test_score()
     # very small patch of sky that turns out to have 4 sources.
     # We checked that this patch is in the given field.
     ra_range = (0.5, 0.52)
@@ -19,4 +14,4 @@ function test_infer_single()
     Celeste.score(ra_range, dec_range, inferences, coadd_path)
 end
 
-test_infer_single()
+test_score()
