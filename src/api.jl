@@ -12,7 +12,7 @@ import .ModelInit
 import .OptimizeElbo
 
 const TILE_WIDTH = 20
-const MAX_ITERS = 50
+const DEFAULT_MAX_ITERS = 50
 const MIN_FLUX = 2.0
 
 Logging.configure(level=INFO)
@@ -105,7 +105,8 @@ function infer(ra_range::Tuple{Float64, Float64},
                fpm_dirs=frame_dirs,
                psfield_dirs=frame_dirs,
                photofield_dirs=frame_dirs,
-               photoobj_dirs=frame_dirs)
+               photoobj_dirs=frame_dirs,
+               max_iters=DEFAULT_MAX_ITERS)
     # Read all primary objects in these fields.
     catalog = read_photoobj_primary(fieldids, photoobj_dirs)
     info("$(length(catalog)) primary sources")
@@ -169,7 +170,7 @@ function infer(ra_range::Tuple{Float64, Float64},
         t0 = time()
         iter_count, max_f, max_x, result =
             OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
-                                    verbose=true, max_iters=MAX_ITERS)
+                                    verbose=true, max_iters=max_iters)
         fit_time = time() - t0
 
         results[entry.thing_id] = Dict("objid"=>entry.objid,
@@ -508,7 +509,6 @@ function load_primary(dir, run, camcol, field)
     gal_flux_i = where(usedev, objs[:devflux_i], objs[:expflux_i])
     gal_flux_z = where(usedev, objs[:devflux_z], objs[:expflux_z])
 
-
     result = DataFrame()
     result[:objid] = objs[:objid]
     result[:ra] = objs[:ra]
@@ -719,28 +719,15 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
     ret
 end
 
-"""
-Score all the celeste results for sources in the given
-(`run`, `camcol`, `field`).
-This is done by finding all files with names matching
-`DIR/celeste-RUN-CAMCOL-FIELD-*.jld`
-"""
-function score_nersc(ramin, ramax, decmin, decmax, resultdir, reffile)
 
-    # find celeste result files matching the pattern
-    re = Regex("celeste-.*\.jld")
-    fnames = filter(x->ismatch(re, x), readdir(dirname))
-    paths = [joinpath(outdir, name) for name in fnames]
-
-    # collect all Celeste results into a single dictionary keyed by
-    # thing_id
-    results = Dict{Int, Dict}()
-    for path in paths
-        merge!(results, JLD.load(path, "results"))
-    end
-
+function score(ra_range::Tuple{Float64, Float64},
+               dec_range::Tuple{Float64, Float64},
+               fieldid::Tuple{Int, Int, Int},
+               results,
+               reffile,
+               photoobj_dir)
     # convert Celeste results to a DataFrame.
-    celeste_df = celeste_to_df(results, objid)
+    celeste_df = celeste_to_df(results)
     println("celeste: $(size(celeste_df, 1)) objects")
 
     # load coadd catalog
@@ -759,12 +746,9 @@ function score_nersc(ramin, ramax, decmin, decmax, resultdir, reffile)
 
     # load "primary" catalog (the SDSS photoObj catalog used to initialize
     # celeste).
-    fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
-    photoobj_dirs =  [nersc_photoobj_dir(x[1], x[2]) for x in fieldids]
-    primary_catalog = read_photoobj_primary(fieldids, photoobj_dirs)
-    primary_full_df = celeste_to_df(primary_catalog)
+    primary_catalog = read_photoobj_primary([fieldid], [photoobj_dir])
 
-    println("primary catalog: $(size(primary_full_df, 1)) objects")
+    println("primary catalog: $(size(primary_catalog, 1)) objects")
 
     # match by object id
     matchidx = Int[findfirst(primary_full_df[:objid], objid)
@@ -820,4 +804,33 @@ function score_nersc(ramin, ramax, decmin, decmax, resultdir, reffile)
     end
 
     scores_df
+end 
+
+
+"""
+Score all the celeste results for sources in the given
+(`run`, `camcol`, `field`).
+This is done by finding all files with names matching
+`DIR/celeste-RUN-CAMCOL-FIELD-*.jld`
+"""
+function score_nersc(ramin, ramax, decmin, decmax, resultdir, reffile)
+    # Get vector of (run, camcol, field) triplets overlapping this patch
+    fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
+
+    # find celeste result files matching the pattern
+    re = Regex("celeste-.*\.jld")
+    fnames = filter(x->ismatch(re, x), readdir(dirname))
+    paths = [joinpath(outdir, name) for name in fnames]
+
+    # collect all Celeste results into a single dictionary keyed by
+    # thing_id
+    results = Dict{Int, Dict}()
+    for path in paths
+        merge!(results, JLD.load(path, "results"))
+    end
+
+    score((ramin, ramax), (decmin, decmax), fieldids,
+          results,
+          reffile,
+          nersc_photoobjdir(fieldid[1], fieldid[2]))
 end
