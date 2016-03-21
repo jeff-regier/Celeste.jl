@@ -156,8 +156,8 @@ function infer(ra_range::Tuple{Float64, Float64},
                                              photofield_dir=photofield_dirs[i])
         for b=1:length(fieldims)
           image_count += 1
-          append!(image_names,
-                  "$image_count run=$run camcol=$camcol $field=field b=$b")
+          push!(image_names,
+                "$image_count run=$run camcol=$camcol $field=field b=$b")
         end
         append!(images, fieldims)
     end
