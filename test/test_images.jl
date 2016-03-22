@@ -18,7 +18,7 @@ function test_blob()
   # the full image multiple times.
   blob = SkyImages.read_sdss_field(RUN, CAMCOL, FIELD, datadir)
 
-  for b=1:5
+  for b=1:length(blob)
     @test !blob[b].constant_background
   end
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
@@ -42,7 +42,7 @@ function test_blob()
   # Test cropping.
   width = 5.0
   cropped_blob = SkyImages.crop_blob_to_location(blob, width, obj_loc);
-  for b=1:5
+  for b=1:length(blob)
     # Check that it only has one tile of the right size containing the object.
     @assert length(cropped_blob[b]) == 1
     @test 2 * width <= cropped_blob[b][1].h_width <= 2 * (width + 1)
@@ -210,7 +210,7 @@ function test_set_patch_size()
     tiled_blob, mp =
       ModelInit.initialize_celeste(blob, cat, tile_width=typemax(Int));
 
-    for b=1:5
+    for b=1:length(blob)
       @assert size(tiled_blob[b]) == (1, 1)
       tile_image = ElboDeriv.tile_predicted_image(
         tiled_blob[b][1,1], mp, mp.tile_sources[b][1,1]);

@@ -306,7 +306,7 @@ function crop_blob_to_location(
     @assert width > 0
 
     tiled_blob = Array(TiledImage, length(blob))
-    for b=1:5
+    for b=1:length(blob)
         # Get the pixels that are near enough to the wcs_center.
         pix_center = WCS.world_to_pix(blob[b].wcs, wcs_center)
         h_min = max(floor(Int, pix_center[1] - width), 1)
