@@ -312,7 +312,17 @@ Returns:
  This is based on the function get_sources in tractor/sdss.py:
  https://github.com/dstndstn/tractor/
 """
-function load_catalog_df(field_dir, run_num, camcol_num, field_num; bandnum=3)
+function load_catalog_df(field_dir, run::ASCIIString, camcol::ASCIIString,
+            field::ASCIIString; bandnum=3)
+    load_catalog_df(field_dir, 
+        parse(Int, run),
+        parse(Int, camcol),
+        parse(Int, field),
+        bandnum=bandnum)
+end
+
+function load_catalog_df(field_dir, run_num::Int, camcol_num::Int,
+        field_num::Int; bandnum=3)
     cat_filename = @sprintf("%s/photoObj-%06d-%d-%04d.fits", field_dir, 
                             run_num, camcol_num, field_num)
     cat_fits = FITSIO.FITS(cat_filename)
