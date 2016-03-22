@@ -1,4 +1,4 @@
-julia 0.4
+julia 0.4+
 Compat
 DataFrames
 Distributions
@@ -9,4 +9,4 @@ Logging
 Optim
 FITSIO
 WCS
-SloanDigitalSkySurvey 0.1.1
+Grid

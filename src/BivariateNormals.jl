@@ -5,7 +5,7 @@ using ..Types
 using ..SensitiveFloats
 import ..Util
 
-import SloanDigitalSkySurvey.WCSUtils
+import ..WCSUtils
 
 # Types:
 export BivariateNormalDerivatives, BvnComponent, GalaxySigmaDerivs,
