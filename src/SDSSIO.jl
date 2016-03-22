@@ -22,38 +22,34 @@ For example, if `x[1] = 3.3` and `y[2] = 4.7`, the element `out[1, 2]`
 will be a result of linear interpolation between the values
 `data[3:4, 4:5]`.
 
-Coordinates should not extend more than 1 element past size of data.
+For coordinates that are out-of-bounds (e.g., `xcoords[i] < 1.0` or
+`xcoords[i] > size(data,1)` where the interpolation would index data values
+outside the array, the nearest values in the data array are used. (This is
+constant extrapolation.)
 """
 function interp_sky{T, S}(data::Array{T, 2}, xcoords::Vector{S},
                           ycoords::Vector{S})
-    # We assume below that 0 <= floor(x) <= size(data, 1)
-    # and similarly for y. Check this.
-    for xc in xcoords
-        if xc < zero(S) || xc >= size(data, 1) + 1
-            error("x coordinates out of bounds")
-        end
-    end
-    for yc in ycoords
-        if yc < zero(S) || yc >= size(data, 2) + 1
-            error("y coordinates out of bounds")
-        end
-    end
-
+    nx, ny = size(data)
     out = Array(T, length(xcoords), length(ycoords))
     for j=1:length(ycoords)
         y0 = floor(Int, ycoords[j])
         y1 = y0 + 1
         yw0 = ycoords[j] - y0
         yw1 = one(S) - yw0
-        y0 = max(y0, 1)
-        y1 = min(y1, size(data, 2))
+
+        # modify out-of-bounds indicies to 1 or ny
+        y0 = min(max(y0, 1), ny)
+        y1 = min(max(y1, 1), ny)
+        
         for i=1:length(xcoords)
             x0 = floor(Int, xcoords[i])
             x1 = x0 + 1
             xw0 = xcoords[i] - x0
             xw1 = one(S) - xw0
-            x0 = max(x0, 1)
-            x1 = min(x1, size(data, 1))
+
+            # modify out-of-bounds indicies to 1 or nx
+            x0 = min(max(x0, 1), nx)
+            x1 = min(max(x1, 1), nx)
             @inbounds out[i, j] = (xw0 * yw0 * data[x0, y0] +
                                    xw1 * yw0 * data[x1, y0] +
                                    xw0 * yw1 * data[x0, y1] +
