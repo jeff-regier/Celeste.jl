@@ -466,9 +466,6 @@ an exception is raised.
 """
 function match_position(ras, decs, ra, dec, maxdist)
     @assert length(ras) == length(decs)
-    println(ra, " ", dec)
-    println(ras)
-    println(decs)
     for i in 1:length(ras)
         dist(ra, dec, ras[i], decs[i]) < maxdist && return i
     end
@@ -807,8 +804,31 @@ function score(ra_range::Tuple{Float64, Float64},
                reffile,
                primary_dir)
     # convert Celeste results to a DataFrame.
-    celeste_df = celeste_to_df(results)
-    println("celeste: $(size(celeste_df, 1)) objects")
+    celeste_full_df = celeste_to_df(results)
+    println("celeste: $(size(celeste_full_df, 1)) objects")
+
+    # load coadd catalog
+    coadd_full_df = load_s82(reffile)
+    println("coadd catalog: $(size(coadd_full_df, 1)) objects")
+
+    # find matches in coadd catalog by position
+    disttol = 1.0 / 3600.0  # 1 arcsec
+    good_coadd_indexes = Int[]
+    good_celeste_indexes = Int[]
+    for i in 1:size(celeste_full_df, 1)
+        try
+            j = match_position(coadd_full_df[:ra], coadd_full_df[:dec],
+                         celeste_full_df[i, :ra], celeste_full_df[i, :dec],
+                         disttol)
+            push!(good_celeste_indexes, i)
+            push!(good_coadd_indexes, j)
+        catch e
+            println(e)
+        end
+    end
+
+    celeste_df = celeste_full_df[good_celeste_indexes, :]
+    coadd_df = coadd_full_df[good_coadd_indexes, :]
 
     # load "primary" catalog (the SDSS photoObj catalog used to initialize
     # celeste).
@@ -817,36 +837,23 @@ function score(ra_range::Tuple{Float64, Float64},
     println("primary catalog: $(size(primary_full_df, 1)) objects")
 
     # match by object id
-    matchidx = Int[findfirst(primary_full_df[:objid], objid)
+    good_primary_indexes = Int[findfirst(primary_full_df[:objid], objid)
                    for objid in celeste_df[:objid]]
 
-    # load coadd catalog
-    coadd_full_df = load_s82(reffile)
-    println("coadd catalog: $(size(coadd_full_df, 1)) objects")
+    # limit primary to matched items
+    primary_df = primary_full_df[good_primary_indexes, :]
 
-    # find matches in coadd catalog by position
-    disttol = 1.0 / 3600.0  # 1 arcsec
-    matchidx = Int[]
-    for i in 1:size(celeste_df, 1)
-        midx = match_position(coadd_full_df[:ra], coadd_full_df[:dec],
-                                  celeste_df[i, :ra], celeste_df[i, :dec],
-                                  disttol)
-        push!(matchidx, midx)
-    end
-
-    # limit coadd to matched objects
-    coadd_df = coadd_full_df[matchidx, :]
     # ensure that all objects are matched
-    if countnz(matchidx) != size(celeste_df, 1)
+    if size(primary_df, 1) != size(celeste_df, 1)
         error("catalog mismatch between celeste and primary")
     end
-
-    # limit primary to matched items
-    primary_df = primary_full_df[matchidx, :]
 
     # difference between celeste and coadd
     celeste_err = get_err_df(coadd_df, celeste_df)
     primary_err = get_err_df(coadd_df, primary_df)
+
+    println(celeste_err)
+    println(primary_err)
 
     # create scores
     ttypes = [Symbol, Float64, Float64, Float64, Float64, Int]
