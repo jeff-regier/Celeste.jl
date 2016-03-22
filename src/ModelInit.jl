@@ -264,13 +264,15 @@ Returns:
     relevant_sources.
 """
 function fit_object_psfs!{NumType <: Number}(
-    mp::ModelParams{NumType}, relevant_sources::Vector{Int}, blob::Blob)
+    mp::ModelParams{NumType}, target_sources::Vector{Int}, blob::Blob)
 
   # Initialize an optimizer
   initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
   psf_transform = PSF.get_psf_transform(initial_psf_params);
   psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K);
+
   @assert size(mp.patches, 2) == length(blob)
+
   for b in 1:length(blob)  # loop over images
     Logging.debug("Fitting PSFS for band $b")
     # Get a starting point in the middle of the image.
@@ -278,6 +280,10 @@ function fit_object_psfs!{NumType <: Number}(
     raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
     central_psf, central_psf_params =
       PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
+
+    # Get all relevant sources *in this image*
+    relevant_sources = get_all_relevant_sources_in_image(mp, target_sources, b)
+
     for s in relevant_sources
       Logging.debug("Fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
       patch = mp.patches[s, b]
@@ -535,6 +541,37 @@ function get_all_relevant_sources{NumType <: Number}(
     return out
 end
 
+"""
+    get_all_relevant_sources_in_image(mp, b, idx)
+
+Return indicies of all sources relevant to any of a set of target sources
+in the given image.
+
+# Arguments
+
+* `mp::ModelParams`: Model parameters.
+* `targets::Vector{Int}`: Indicies of target sources.
+* `b::Int`: Index of image.
+
+# Returns
+
+* `Vector{Int}`: Array of integers that index into mp.s. These represent
+  all sources that co-occur in at least one tile with *any* of the sources
+  in `targets`.
+"""
+function get_all_relevant_sources_in_image{NumType <: Number}(
+    mp::ModelParams{NumType}, target_sources::Vector{Int}, b::Int)
+
+    out = Int[]
+    for tile_sources in mp.tile_sources[b]  # loop over image tiles
+        # check if *any* of this tile's sources are a target, and
+        # if so, add *all* the tile sources to the output.
+        if length(intersect(target_sources, tile_sources)) > 0
+            out = union(out, tile_sources)
+        end
+    end
+    out
+end
 
 """
 Return a reduced Celeste dataset useful for a single object.

@@ -134,12 +134,12 @@ function infer(ra_range::Tuple{Float64, Float64},
     # Get indicies of entries in the  RA/Dec range of interest.
     entry_in_range = entry->((ra_range[1] < entry.pos[1] < ra_range[2]) &&
                              (dec_range[1] < entry.pos[2] < dec_range[2]))
-    idx = find(entry_in_range, catalog)
+    target_sources = find(entry_in_range, catalog)
 
-    info("processing $(length(idx)) sources in RA/Dec range")
+    info("processing $(length(target_sources)) sources in RA/Dec range")
 
     # If there are no objects of interest, return early.
-    if length(idx) == 0
+    if length(target_sources) == 0
         return Dict{Int, Dict}()
     end
 
@@ -177,12 +177,10 @@ function infer(ra_range::Tuple{Float64, Float64},
     # interested in, and fit a local PSF for those sources (since we skipped
     # fitting the PSF for the whole catalog above)
     info("fitting PSF for all relevant sources")
-    relevant_sources = ModelInit.get_all_relevant_sources(mp, idx)
-
-    ModelInit.fit_object_psfs!(mp, relevant_sources, images)
+    ModelInit.fit_object_psfs!(mp, target_sources, images)
 
     results = Dict{Int, Dict}()
-    for s in idx
+    for s in target_sources
         entry = catalog[s]
         mp.active_sources = [s]
 
