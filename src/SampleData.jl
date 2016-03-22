@@ -3,7 +3,7 @@ module SampleData
 using Distributions
 using ..Types
 
-import SloanDigitalSkySurvey.WCSUtils
+import ..WCSUtils
 import ..SkyImages
 
 import ..ModelInit

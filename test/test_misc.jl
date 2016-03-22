@@ -1,7 +1,5 @@
 using Base.Test
 
-import SloanDigitalSkySurvey: SDSS, WCSUtils
-
 using Celeste: Types, SampleData
 import Celeste: SkyImages, Util, ModelInit, Synthetic
 import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
