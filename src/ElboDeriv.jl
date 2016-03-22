@@ -10,7 +10,7 @@ import ..Util
 import ..KL
 
 import ForwardDiff
-import SloanDigitalSkySurvey.WCSUtils
+import ..WCSUtils
 
 Threaded = true
 if VERSION > v"0.5.0-dev"

@@ -3,10 +3,10 @@
 using DataFrames
 import FITSIO
 import JLD
-import SloanDigitalSkySurvey: SDSS
 using Logging  # just for testing right now
 
 using .Types
+import .SDSS
 import .SkyImages
 import .ModelInit
 import .OptimizeElbo
@@ -17,14 +17,24 @@ const MIN_FLUX = 2.0
 
 Logging.configure(level=INFO)
 
+
+immutable MatchException <: Exception
+    msg::ASCIIString
+end
+
+
 """
 read_photoobj_primary(fieldids, dirs) -> Vector{CatalogEntry}
 
 Combine photoobj catalogs for the given overlapping fields, returning a single
 joined catalog containing only primary objects.
 """
-function read_photoobj_primary(fieldids::Vector{Tuple{Int, Int, Int}}, dirs)
+function read_photoobj_primary(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
+    ignore_primary_mask=false)
     @assert length(fieldids) == length(dirs)
+
+    # if we're treating any detection as primary, limit processing to one field
+    @assert !ignore_primary_mask || length(fieldids) == 1
 
     info("reading photoobj catalogs for ", length(fieldids), " fields")
 
@@ -51,7 +61,10 @@ function read_photoobj_primary(fieldids::Vector{Tuple{Int, Int, Int}}, dirs)
     # Limit each catalog to primary objects and objects where thing_id != -1
     # (thing_id == -1 indicates that the matching process failed)
     for cat in rawcatalogs
-        mask = (cat["mode"] .== 0x01) & (cat["thing_id"] .!= -1)
+        mask = (cat["thing_id"] .!= -1)
+        if !ignore_primary_mask
+            mask &= (cat["mode"] .== 0x01)
+        end
         for key in keys(cat)
             cat[key] = cat[key][mask]
         end
@@ -106,9 +119,11 @@ function infer(ra_range::Tuple{Float64, Float64},
                psfield_dirs=frame_dirs,
                photofield_dirs=frame_dirs,
                photoobj_dirs=frame_dirs,
-               max_iters=DEFAULT_MAX_ITERS)
+               max_iters=DEFAULT_MAX_ITERS,
+               ignore_primary_mask=false)
     # Read all primary objects in these fields.
-    catalog = read_photoobj_primary(fieldids, photoobj_dirs)
+    catalog = read_photoobj_primary(fieldids, photoobj_dirs,
+                      ignore_primary_mask=ignore_primary_mask)
     info("$(length(catalog)) primary sources")
 
     # Filter out low-flux objects in the catalog.
@@ -176,7 +191,7 @@ function infer(ra_range::Tuple{Float64, Float64},
         results[entry.thing_id] = Dict("objid"=>entry.objid,
                                        "ra"=>entry.pos[1],
                                        "dec"=>entry.pos[2],
-                                       "vp"=>mp.vp[s],
+                                       "vs"=>mp.vp[s],
                                        "init_time"=>init_time,
                                        "fit_time"=>fit_time)
     end
@@ -386,10 +401,13 @@ an exception is raised.
 """
 function match_position(ras, decs, ra, dec, maxdist)
     @assert length(ras) == length(decs)
+    println(ra, " ", dec)
+    println(ras)
+    println(decs)
     for i in 1:length(ras)
         dist(ra, dec, ras[i], decs[i]) < maxdist && return i
     end
-    error("No matching position found")
+    throw(MatchException(@sprintf("No source found at %f  %f", ra, dec)))
 end
 
 
@@ -499,7 +517,6 @@ Load the SDSS photoObj catalog used to initialize celeste, and reformat column
 names to match what the rest of the scoring code expects.
 """
 function load_primary(dir, run, camcol, field)
-
     objs = SDSS.load_catalog_df(dir, run, camcol, field)
 
     usedev = objs[:frac_dev] .> 0.5  # true=> use dev, false=> use exp
@@ -614,10 +631,6 @@ end
 Convert Celeste results to a dataframe.
 """
 function celeste_to_df(results::Dict{Int, Dict})
-#vp::Vector{Vector{Float64}},
-#                       objid::Vector{ASCIIString})
-#    @assert length(vp) == length(objid)
-
     # Initialize dataframe
     N = length(results)
     color_col_names = ["color_$cn" for cn in color_names]
@@ -637,20 +650,22 @@ function celeste_to_df(results::Dict{Int, Dict})
     names!(df, col_symbols)
 
     # Fill dataframe row-by-row.
+    i = 0
     for (thingid, result) in results
-        vp = result["vp"]
-        ce = convert(CatalogEntry, vp, result["objid"], thingid)
+        i += 1
+        vs = result["vs"]
+        ce = convert(CatalogEntry, vs, result["objid"], thingid)
         load_ce!(i, ce, df)
 
-        df[i, :is_star] = vp[i][ids.a[1]]
+        df[i, :is_star] = vs[ids.a[1]]
 
         for j in 1:2
             s_type = ["star", "gal"][j]
             df[i, symbol("$(s_type)_flux_r_sd")] =
-                sqrt(df[i, symbol("$(s_type)_flux_r")]) * vp[i][ids.r2[j]]
+                sqrt(df[i, symbol("$(s_type)_flux_r")]) * vs[ids.r2[j]]
             for c in 1:4
                 cc_sd = symbol("$(s_type)_color_$(color_names[c])_sd")
-                df[i, cc_sd] = 2.5 * log10(e) * vp[i][ids.c2[c, j]]
+                df[i, cc_sd] = 2.5 * log10(e) * vs[ids.c2[c, j]]
             end
         end
     end
@@ -725,10 +740,20 @@ function score(ra_range::Tuple{Float64, Float64},
                fieldid::Tuple{Int, Int, Int},
                results,
                reffile,
-               photoobj_dir)
+               primary_dir)
     # convert Celeste results to a DataFrame.
     celeste_df = celeste_to_df(results)
     println("celeste: $(size(celeste_df, 1)) objects")
+
+    # load "primary" catalog (the SDSS photoObj catalog used to initialize
+    # celeste).
+    primary_full_df = load_primary(primary_dir, fieldid...)
+
+    println("primary catalog: $(size(primary_full_df, 1)) objects")
+
+    # match by object id
+    matchidx = Int[findfirst(primary_full_df[:objid], objid)
+                   for objid in celeste_df[:objid]]
 
     # load coadd catalog
     coadd_full_df = load_s82(reffile)
@@ -736,24 +761,16 @@ function score(ra_range::Tuple{Float64, Float64},
 
     # find matches in coadd catalog by position
     disttol = 1.0 / 3600.0  # 1 arcsec
-    matchidx = Int[match_position(coadd_full_df[:ra], coadd_full_df[:dec],
+    matchidx = Int[]
+    for i in 1:size(celeste_df, 1)
+        midx = match_position(coadd_full_df[:ra], coadd_full_df[:dec],
                                   celeste_df[i, :ra], celeste_df[i, :dec],
                                   disttol)
-                   for i=1:size(celeste_df, 1)]
+        push!(matchidx, midx)
+    end
 
     # limit coadd to matched objects
     coadd_df = coadd_full_df[matchidx, :]
-
-    # load "primary" catalog (the SDSS photoObj catalog used to initialize
-    # celeste).
-    primary_catalog = read_photoobj_primary([fieldid], [photoobj_dir])
-
-    println("primary catalog: $(size(primary_catalog, 1)) objects")
-
-    # match by object id
-    matchidx = Int[findfirst(primary_full_df[:objid], objid)
-                   for objid in celeste_df[:objid]]
-
     # ensure that all objects are matched
     if countnz(matchidx) != size(celeste_df, 1)
         error("catalog mismatch between celeste and primary")

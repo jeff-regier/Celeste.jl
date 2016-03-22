@@ -9,7 +9,7 @@ export sample_prior,
 using FITSIO
 using Distributions
 
-import SloanDigitalSkySurvey.WCSUtils
+import ..WCSUtils
 import WCS.WCSTransform
 
 using ..Util

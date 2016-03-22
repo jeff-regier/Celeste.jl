@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 using Celeste: Types, SampleData, Transform
-import Celeste.Synthetic
+import Celeste: Synthetic, SDSS, WCSUtils
 
 using Base.Test
 using Distributions
