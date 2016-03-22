@@ -2,7 +2,7 @@ module SkyImages
 
 using ..Types
 import ..SDSSIO
-import SloanDigitalSkySurvey: SDSS
+import ..SDSS
 import Celeste.PSF
 
 import WCS
@@ -103,11 +103,11 @@ end
 
 """
 Convert a dataframe catalog (e.g. as returned by
-SloanDigitalSkySurvey.SDSS.load_catalog_df) to an array of Celeste CatalogEntry
+SDSS.load_catalog_df) to an array of Celeste CatalogEntry
 objects.
 
 Args:
-  - df: The dataframe output of SloanDigitalSkySurvey.SDSS.load_catalog_df
+  - df: The dataframe output of SDSS.load_catalog_df
   - blob: The blob that the catalog corresponds to
   - match_blob: If false, changes the direction of phi to match tractor,
                 not Celeste.

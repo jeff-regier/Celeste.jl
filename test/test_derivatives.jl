@@ -3,7 +3,6 @@ import DualNumbers
 
 using Celeste: Types, SampleData, SensitiveFloats, BivariateNormals, ElboDeriv
 import Celeste: Synthetic, SkyImages, Util, ModelInit
-import SloanDigitalSkySurvey: SDSS, WCSUtils
 
 if VERSION > v"0.5.0-dev"
     using Base.Threads

@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 using Celeste: Types, SampleData, Transform
-import Celeste.Synthetic
+import Celeste: Synthetic, SDSS, WCSUtils
 
 using Base.Test
 using Distributions
@@ -13,6 +13,7 @@ const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
 wd = pwd()
 cd(datadir)
 run(`make`)
+run(`make RUN=4263 CAMCOL=5 FIELD=119`)
 cd(wd)
 
 if length(ARGS) > 0
@@ -28,6 +29,9 @@ else
                  "test_sdssio.jl",
                  "test_sensitive_float.jl",
                  "test_transforms.jl",
+                 "test_wcs.jl",
+#                 "test_sdss.jl",
+                 "test_score.jl",
                  "test_infer.jl"]
 end
 

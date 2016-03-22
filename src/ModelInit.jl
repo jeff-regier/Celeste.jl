@@ -10,7 +10,7 @@ using FITSIO
 using Distributions
 import Logging
 
-import SloanDigitalSkySurvey.WCSUtils
+import ..WCSUtils
 import WCS.WCSTransform
 
 using ..Util
