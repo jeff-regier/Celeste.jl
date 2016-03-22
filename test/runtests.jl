@@ -29,6 +29,9 @@ else
                  "test_sdssio.jl",
                  "test_sensitive_float.jl",
                  "test_transforms.jl",
+                 "test_wcs.jl",
+                 "test_sdss.jl",
+                 "test_score.jl",
                  "test_infer.jl"]
 end
 
