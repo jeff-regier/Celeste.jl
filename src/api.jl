@@ -852,8 +852,11 @@ function score(ra_range::Tuple{Float64, Float64},
     celeste_err = get_err_df(coadd_df, celeste_df)
     primary_err = get_err_df(coadd_df, primary_df)
 
-    println(celeste_err)
-    println(primary_err)
+    println(primary_df[4,:])
+    println(primary_err[4,:])
+    println("------------------------------")
+    println(celeste_df[4,:])
+    println(celeste_err[4,:])
 
     # create scores
     ttypes = [Symbol, Float64, Float64, Float64, Float64, Int]
