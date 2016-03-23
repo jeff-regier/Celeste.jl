@@ -421,6 +421,7 @@ function infer_nersc(ramin, ramax, decmin, decmax, outdir)
     fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
                      outdir, ramin, ramax, decmin, decmax)
     JLD.save(fname, "results", results)
+    debug("infer_nersc finished successfully")
 end
 
 
