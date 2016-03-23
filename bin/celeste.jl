@@ -26,7 +26,7 @@ The `score-nersc` subcommand is not yet implemented for the new API.
 
 
 function main()
-    args = docopt(DOC, version=v"0.0.0")
+    args = docopt(DOC, version=v"0.1.0", options_first=true)
     if args["infer-nersc"]
         Celeste.set_logging_level(args["--logging"])
         ramin = parse(Float64, args["<ramin>"])
