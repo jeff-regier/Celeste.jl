@@ -456,7 +456,7 @@ function initialize_model_params(
                 "If !radius_from_cat, you must specify a positive patch_radius.")
     end
 
-    println("Getting VP from sources.")
+    println("Loading variational parameters from catalogs.")
     vp = Array{Float64, 1}[init_source(ce) for ce in cat]
     mp = ModelParams(vp, sample_prior())
     mp.objids = ASCIIString[ cat_entry.objid for cat_entry in cat]
