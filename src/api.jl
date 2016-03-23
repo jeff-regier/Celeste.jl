@@ -381,6 +381,7 @@ function nersc_fpm_dir(run::Integer, camcol::Integer, field::Integer)
     # ".fit", so we have to at least symlink the files to a new name.
     srcdir = "$(NERSC_DATA_ROOT)/photo/redux/301/$(run)/objcs/$(camcol)"
     dstdir = joinpath(ENV["SCRATCH"], "celeste", "fpm", "$(run)-$(camcol)")
+    debug(dstdir)
     isdir(dstdir) || mkpath(dstdir)
     for band in ['u', 'g', 'r', 'i', 'z']
         srcfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit.gz",
