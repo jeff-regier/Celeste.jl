@@ -781,6 +781,19 @@ end
 ############################################
 # The remaining functions loop over tiles, sources, and pixels.
 
+"""
+Add an array of pixels' contribution to the ELBO likelihood term by
+modifying elbo in place.
+
+Args:
+  - elbo_vars_array: Array of per-thread Elbo intermediate values.
+  - tiled_blob: An Array of images
+  - mp: Model parameters
+  - active_pixels: An array of ActivePixels to be processed.
+
+Returns:
+  Adds to the elbo_vars_array[:].elbo in place.
+"""
 function process_active_pixels!{NumType <: Number}(
     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
     tiled_blob::TiledBlob,
@@ -809,7 +822,6 @@ function process_active_pixels!{NumType <: Number}(
     # Note: include_epsilon is not used and the background does not get
     # added, in contrast to the tiled version.  I also don't add the log
     # factorial of the count.
-    elbo = elbo_vars_array[1].elbo
     tile = tiled_blob[pixel.b][pixel.tile_ind]
     tile_sources = mp.tile_sources[pixel.b][pixel.tile_ind]
     this_pixel = tile.pixels[pixel.h, pixel.w]
@@ -827,10 +839,12 @@ function process_active_pixels!{NumType <: Number}(
                     elbo_vars_array[1].E_G, -iota,
                     elbo_vars_array[1].calculate_hessian &&
                     elbo_vars_array[1].calculate_derivs)
+
+    # Subtract the log factorial term.  This is not a function of the
+    # parameters so the derivatives don't need to be updated.
+    elbo_vars_array[1].elbo.v[1] -= lfact(this_pixel)
   end
 end
-
-
 
 
 """
