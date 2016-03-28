@@ -7,9 +7,9 @@ const DOC =
 """Run Celeste.
 
 Usage:
-  celeste.jl infer-nersc <ramin> <ramax> <decmin> <decmax> <outdir> [--logging=<LEVEL>]
-  celeste.jl score-nersc <ramin> <ramax> <decmin> <decmax> <resultdir> <reffile> [--logging=<LEVEL>]
-  celeste.jl infer <run> <camcol> <field> <objid> <datadir> [--logging=<LEVEL>]
+  celeste.jl [options] infer-box <ramin> <ramax> <decmin> <decmax> <outdir>
+  celeste.jl [options] infer-field <run> <camcol> <field> <outdir>
+  celeste.jl [options] score-field <run> <camcol> <field> <resultdir> <truthfile>
   celeste.jl -h | --help
   celeste.jl --version
 
@@ -18,36 +18,34 @@ Options:
   --version          Show the version.
   --logging=<LEVEL>   Level for the Logging package (OFF, DEBUG, INFO, WARNING, ERROR, or CRITICAL). [default: INFO]
 
-The `infer-nersc` subcommand runs Celeste on all sources in the given
-RA/Dec range.
+The `infer-box` subcommand runs Celeste on all sources in the given
+RA/Dec range, using all available images.
 
-The `score-nersc` subcommand is not yet implemented for the new API.
+The `infer-field` subcommand runs Celeste on all sources in the given
+field, using only that field.
+
+The `score-field` subcommand is not yet implemented for the new API.
 """
-
 
 function main()
     args = docopt(DOC, version=v"0.1.0", options_first=true)
-    if args["infer-nersc"]
-        Celeste.set_logging_level(args["--logging"])
+    Celeste.set_logging_level(args["--logging"])
+    if args["infer-box"]
         ramin = parse(Float64, args["<ramin>"])
         ramax = parse(Float64, args["<ramax>"])
         decmin = parse(Float64, args["<decmin>"])
         decmax = parse(Float64, args["<decmax>"])
         outdir = args["<outdir>"]
-        Celeste.infer_nersc(ramin, ramax, decmin, decmax, outdir)
-    elseif args["score-nersc"]
-        Celeste.set_logging_level(args["--logging"])
-        Celeste.score_nersc(ramargs["<resultdir>"], args["<reffile>"])
-    elseif args["infer"]
-        Celeste.set_logging_level(args["--logging"])
+        Celeste.infer_box_nersc(ramin, ramax, decmin, decmax, outdir)
+    elseif args["infer-field"]
         run = parse(Int, args["<run>"])
         camcol = parse(Int, args["<camcol>"])
         field = parse(Int, args["<field>"])
-        dir = args["<datadir>"]
-        objid = args["<objid>"]
-        Celeste.infer(run, camcol, field, objid, dir)
+        outdir = args["<outdir>"]
+        Celeste.infer_field_nersc(run, camcol, field, outdir)
+    elseif args["score-field"]
+        Celeste.score_field_nersc(args["<resultdir>"], args["<truthfile>"])
     end
-
 end
 
 
