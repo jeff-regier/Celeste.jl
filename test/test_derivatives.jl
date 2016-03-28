@@ -270,13 +270,21 @@ function test_elbo()
 end
 
 
-function test_tile_likelihood()
+function test_process_active_pixels()
   blob, mp, bodies, tiled_blob = gen_two_body_dataset();
-  b = 1
-  keep_pixels = 10:11
-  trim_tiles!(tiled_blob, keep_pixels)
-  tile = tiled_blob[b][1, 1];
-  tile_sources = mp.tile_sources[b][1, 1];
+  # b = 1
+  # keep_pixels = 10:11
+  # trim_tiles!(tiled_blob, keep_pixels)
+  # tile = tiled_blob[b][1, 1];
+  # tile_sources = mp.tile_sources[b][1, 1];
+
+  # Choose four pixels only to keep the test fast.
+  active_pixels = Array(ElboDeriv.ActivePixel, 4)
+  active_pixels[1] = ActivePixel(1, 1, 10, 11)
+  active_pixels[2] = ActivePixel(1, 1, 11, 10)
+  active_pixels[3] = ActivePixel(5, 1, 10, 11)
+  active_pixels[4] = ActivePixel(5, 1, 11, 10)
+
 
   function tile_lik_wrapper_fun{NumType <: Number}(
       mp::ModelParams{NumType}, calculate_derivs::Bool)
@@ -291,12 +299,15 @@ function test_tile_likelihood()
           NumType, mp.S, length(mp.active_sources),
           calculate_derivs=calculate_derivs) ]
     end
-    star_mcs, gal_mcs = BivariateNormals.load_bvn_mixtures(
-      mp, b, calculate_derivs=elbo_vars_array[1].calculate_derivs);
-    sbs = ElboDeriv.load_source_brightnesses(
-      mp, calculate_derivs=elbo_vars_array[1].calculate_derivs);
-    ElboDeriv.tile_likelihood!(
-      elbo_vars_array, tile, mp, tile_sources, sbs, star_mcs, gal_mcs);
+    # star_mcs, gal_mcs = BivariateNormals.load_bvn_mixtures(
+    #   mp, b, calculate_derivs=elbo_vars_array[1].calculate_derivs);
+    # sbs = ElboDeriv.load_source_brightnesses(
+    #   mp, calculate_derivs=elbo_vars_array[1].calculate_derivs);
+    # ElboDeriv.tile_likelihood!(
+    #   elbo_vars_array, tile, mp, tile_sources, sbs, star_mcs, gal_mcs);
+    ElboDeriv.process_active_pixels!(
+      elbo_vars_array, tiled_blob, mp, active_pixels);
+
     if ElboDerivs.Threaded
       for i in 2:nthreads()
         add_scaled_sfs!(elbo_vars_array[1].elbo,

@@ -800,8 +800,6 @@ function process_active_pixels!{NumType <: Number}(
     mp::ModelParams{NumType},
     active_pixels::Array{ActivePixel})
 
-  println("Processing active pixels")
-
   sbs = load_source_brightnesses(mp,
     calculate_derivs=elbo_vars_array[1].calculate_derivs,
     calculate_hessian=elbo_vars_array[1].calculate_hessian)
@@ -847,104 +845,104 @@ function process_active_pixels!{NumType <: Number}(
 end
 
 
-"""
-Add a tile's contribution to the ELBO likelihood term by
-modifying elbo in place.
-
-Args:
-  - elbo_vars_array: Array of per-thread Elbo intermediate values.
-  - tile: An ImageTile
-  - mp: Model parameters
-  - tile_sources: A vector of integers of sources in 1:mp.S affecting the tile
-  - sbs: Source brightnesses
-  - star_mcs: Star components
-  - gal_mcs: Galaxy components
-  - include_epsilon: Whether the background noise should be included
-
-Returns:
-  Adds to the elbo_vars_array[:].elbo in place.
-"""
-function tile_likelihood!{NumType <: Number}(
-    elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
-    tile::ImageTile,
-    mp::ModelParams{NumType},
-    tile_sources::Vector{Int},
-    sbs::Vector{SourceBrightness{NumType}},
-    star_mcs::Array{BvnComponent{NumType}, 2},
-    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-    include_epsilon::Bool=true)
-
-  elbo = elbo_vars_array[1].elbo
-
-  # For speed, if there are no sources, add the noise
-  # contribution directly.
-  if (length(tile_sources) == 0) && include_epsilon
-    # NB: not using the delta-method approximation here
-    if tile.constant_background
-        nan_pixels = Base.isnan(tile.pixels)
-        num_pixels =
-          length(tile.h_range) * length(tile.w_range) - sum(nan_pixels)
-        tile_x = sum(tile.pixels[!nan_pixels])
-        ep = tile.epsilon
-        elbo.v[1] += tile_x * log(ep) - num_pixels * ep
-    else
-        for w in 1:tile.w_width, h in 1:tile.h_width
-            this_pixel = tile.pixels[h, w]
-            if !Base.isnan(this_pixel)
-                ep = tile.epsilon_mat[h, w]
-                elbo.v[1] += this_pixel * log(ep) - ep
-            end
-        end
-    end
-    return
-  end
-
-  # Iterate over pixels that are not NaN.
-  if Threaded
-    @threads for w = 1:tile.w_width
-      tid = threadid()
-      for h = 1:tile.h_width
-        this_pixel = tile.pixels[h, w]
-        if !Base.isnan(this_pixel)
-          # Get the brightness.
-          get_expected_pixel_brightness!(
-            elbo_vars_array[tid], h, w, sbs, star_mcs, gal_mcs, tile,
-            mp, tile_sources, include_epsilon=include_epsilon)
-
-          # Add the terms to the elbo given the brightness.
-          iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
-          add_elbo_log_term!(elbo_vars_array[tid], this_pixel, iota)
-          add_scaled_sfs!(elbo_vars_array[tid].elbo,
-                          elbo_vars_array[tid].E_G, -iota,
-                          elbo_vars_array[tid].calculate_hessian &&
-                          elbo_vars_array[tid].calculate_derivs)
-        end
-      end
-    end
-  else
-    for w in 1:tile.w_width, h in 1:tile.h_width
-      this_pixel = tile.pixels[h, w]
-      if !Base.isnan(this_pixel)
-        # Get the brightness.
-        get_expected_pixel_brightness!(
-          elbo_vars_array[1], h, w, sbs, star_mcs, gal_mcs, tile,
-          mp, tile_sources, include_epsilon=include_epsilon)
-
-        # Add the terms to the elbo given the brightness.
-        iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
-        add_elbo_log_term!(elbo_vars_array[1], this_pixel, iota)
-        add_scaled_sfs!(elbo_vars_array[1].elbo,
-                        elbo_vars_array[1].E_G, -iota,
-                        elbo_vars_array[1].calculate_hessian &&
-                        elbo_vars_array[1].calculate_derivs)
-      end
-    end
-  end
-
-  # Subtract the log factorial term.  This is not a function of the
-  # parameters so the derivatives don't need to be updated.
-  elbo.v[1] += -sum(lfact(tile.pixels[!Base.isnan(tile.pixels)]))
-end
+# """
+# Add a tile's contribution to the ELBO likelihood term by
+# modifying elbo in place.
+#
+# Args:
+#   - elbo_vars_array: Array of per-thread Elbo intermediate values.
+#   - tile: An ImageTile
+#   - mp: Model parameters
+#   - tile_sources: A vector of integers of sources in 1:mp.S affecting the tile
+#   - sbs: Source brightnesses
+#   - star_mcs: Star components
+#   - gal_mcs: Galaxy components
+#   - include_epsilon: Whether the background noise should be included
+#
+# Returns:
+#   Adds to the elbo_vars_array[:].elbo in place.
+# """
+# function tile_likelihood!{NumType <: Number}(
+#     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
+#     tile::ImageTile,
+#     mp::ModelParams{NumType},
+#     tile_sources::Vector{Int},
+#     sbs::Vector{SourceBrightness{NumType}},
+#     star_mcs::Array{BvnComponent{NumType}, 2},
+#     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+#     include_epsilon::Bool=true)
+#
+#   elbo = elbo_vars_array[1].elbo
+#
+#   # For speed, if there are no sources, add the noise
+#   # contribution directly.
+#   if (length(tile_sources) == 0) && include_epsilon
+#     # NB: not using the delta-method approximation here
+#     if tile.constant_background
+#         nan_pixels = Base.isnan(tile.pixels)
+#         num_pixels =
+#           length(tile.h_range) * length(tile.w_range) - sum(nan_pixels)
+#         tile_x = sum(tile.pixels[!nan_pixels])
+#         ep = tile.epsilon
+#         elbo.v[1] += tile_x * log(ep) - num_pixels * ep
+#     else
+#         for w in 1:tile.w_width, h in 1:tile.h_width
+#             this_pixel = tile.pixels[h, w]
+#             if !Base.isnan(this_pixel)
+#                 ep = tile.epsilon_mat[h, w]
+#                 elbo.v[1] += this_pixel * log(ep) - ep
+#             end
+#         end
+#     end
+#     return
+#   end
+#
+#   # Iterate over pixels that are not NaN.
+#   if Threaded
+#     @threads for w = 1:tile.w_width
+#       tid = threadid()
+#       for h = 1:tile.h_width
+#         this_pixel = tile.pixels[h, w]
+#         if !Base.isnan(this_pixel)
+#           # Get the brightness.
+#           get_expected_pixel_brightness!(
+#             elbo_vars_array[tid], h, w, sbs, star_mcs, gal_mcs, tile,
+#             mp, tile_sources, include_epsilon=include_epsilon)
+#
+#           # Add the terms to the elbo given the brightness.
+#           iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
+#           add_elbo_log_term!(elbo_vars_array[tid], this_pixel, iota)
+#           add_scaled_sfs!(elbo_vars_array[tid].elbo,
+#                           elbo_vars_array[tid].E_G, -iota,
+#                           elbo_vars_array[tid].calculate_hessian &&
+#                           elbo_vars_array[tid].calculate_derivs)
+#         end
+#       end
+#     end
+#   else
+#     for w in 1:tile.w_width, h in 1:tile.h_width
+#       this_pixel = tile.pixels[h, w]
+#       if !Base.isnan(this_pixel)
+#         # Get the brightness.
+#         get_expected_pixel_brightness!(
+#           elbo_vars_array[1], h, w, sbs, star_mcs, gal_mcs, tile,
+#           mp, tile_sources, include_epsilon=include_epsilon)
+#
+#         # Add the terms to the elbo given the brightness.
+#         iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
+#         add_elbo_log_term!(elbo_vars_array[1], this_pixel, iota)
+#         add_scaled_sfs!(elbo_vars_array[1].elbo,
+#                         elbo_vars_array[1].E_G, -iota,
+#                         elbo_vars_array[1].calculate_hessian &&
+#                         elbo_vars_array[1].calculate_derivs)
+#       end
+#     end
+#   end
+#
+#   # Subtract the log factorial term.  This is not a function of the
+#   # parameters so the derivatives don't need to be updated.
+#   elbo.v[1] += -sum(lfact(tile.pixels[!Base.isnan(tile.pixels)]))
+# end
 
 
 """
@@ -1019,43 +1017,43 @@ function tile_predicted_image{NumType <: Number}(
 end
 
 
-"""
-Updates the ELBO likelihood for given brighntess and bvn components.
-
-Args:
-  - elbo_vars_array: Array for per-thread Elbo intermediate values.
-  - tiled_image: An array of ImageTiles
-  - mp: Model parameters
-  - sbs: Source brightnesses
-  - star_mcs: Star components
-  - gal_mcs: Galaxy components
-
-Returns:
-  Updates elbo_vars_array[:].elbo in place.
-"""
-function elbo_likelihood!{NumType <: Number}(
-    elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
-    tiled_image::Array{ImageTile},
-    mp::ModelParams{NumType},
-    sbs::Vector{SourceBrightness{NumType}},
-    star_mcs::Array{BvnComponent{NumType}, 2},
-    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
-
-  @assert length(mp.active_sources) > 0
-  @assert maximum(mp.active_sources) <= mp.S
-  for tile_ind in 1:length(tiled_image)
-    # TODO: this band must be the same as the band that was used to
-    # populate star_mcs and gal_mcs.  Assert here?
-    b = tiled_image[tile_ind].b
-    tile_sources = mp.tile_sources[b][tile_ind]
-    if length(intersect(tile_sources, mp.active_sources)) > 0
-      tile_likelihood!(
-        elbo_vars_array, tiled_image[tile_ind], mp, tile_sources, sbs,
-        star_mcs, gal_mcs);
-    end
-  end
-
-end
+# """
+# Updates the ELBO likelihood for given brighntess and bvn components.
+#
+# Args:
+#   - elbo_vars_array: Array for per-thread Elbo intermediate values.
+#   - tiled_image: An array of ImageTiles
+#   - mp: Model parameters
+#   - sbs: Source brightnesses
+#   - star_mcs: Star components
+#   - gal_mcs: Galaxy components
+#
+# Returns:
+#   Updates elbo_vars_array[:].elbo in place.
+# """
+# function elbo_likelihood!{NumType <: Number}(
+#     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
+#     tiled_image::Array{ImageTile},
+#     mp::ModelParams{NumType},
+#     sbs::Vector{SourceBrightness{NumType}},
+#     star_mcs::Array{BvnComponent{NumType}, 2},
+#     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
+#
+#   @assert length(mp.active_sources) > 0
+#   @assert maximum(mp.active_sources) <= mp.S
+#   for tile_ind in 1:length(tiled_image)
+#     # TODO: this band must be the same as the band that was used to
+#     # populate star_mcs and gal_mcs.  Assert here?
+#     b = tiled_image[tile_ind].b
+#     tile_sources = mp.tile_sources[b][tile_ind]
+#     if length(intersect(tile_sources, mp.active_sources)) > 0
+#       tile_likelihood!(
+#         elbo_vars_array, tiled_image[tile_ind], mp, tile_sources, sbs,
+#         star_mcs, gal_mcs);
+#     end
+#   end
+#
+# end
 
 
 """
@@ -1086,6 +1084,33 @@ end
 
 
 """
+Get the active pixels (pixels for which the active sources are present)
+for a tiled blob.
+
+TODO: move this to pre-processing and use it instead of setting low-signal
+pixels to NaN.
+"""
+function get_active_pixels{NumType <: Number}(
+    tiled_blob::TiledBlob, mp::ModelParams{NumType})
+
+  active_pixels = ActivePixel[]
+  for b in 1:length(tiled_blob), tile_ind in 1:length(tiled_blob[b])
+    tile_sources = mp.tile_sources[b][tile_ind]
+    if length(intersect(tile_sources, mp.active_sources)) > 0
+      tile = tiled_blob[b][tile_ind]
+      for w in 1:tile.w_width, h in 1:tile.h_width
+        if !Base.isnan(tile.pixels[h, w])
+          push!(active_pixels, ActivePixel(b, tile_ind, h, w))
+        end
+      end
+    end
+  end
+
+  active_pixels
+end
+
+
+"""
 Return the expected log likelihood for all bands in a section
 of the sky.
 
@@ -1105,19 +1130,7 @@ function elbo_likelihood{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType};
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
-  # Pre-process a list of active pixels.  TODO: put this in pre-processing.
-  active_pixels = ActivePixel[]
-  for b in 1:length(tiled_blob), tile_ind in 1:length(tiled_blob[b])
-    tile_sources = mp.tile_sources[b][tile_ind]
-    if length(intersect(tile_sources, mp.active_sources)) > 0
-      tile = tiled_blob[b][tile_ind]
-      for w in 1:tile.w_width, h in 1:tile.h_width
-        if !Base.isnan(tile.pixels[h, w])
-          push!(active_pixels, ActivePixel(b, tile_ind, h, w))
-        end
-      end
-    end
-  end
+  active_pixels = get_active_pixels(tiled_blob, mp)
 
   elbo_vars_array = ElboIntermediateVariables{NumType}[]
   if Threaded
