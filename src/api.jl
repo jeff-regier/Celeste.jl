@@ -198,25 +198,29 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
         entry = catalog[s]
         mp.active_sources = [s]
 
-        info("processing source $s: objid= $(entry.objid)")
+        try
+            info("processing source $s: objid= $(entry.objid)")
 
-        t0 = time()
-        trimmed_tiled_images = ModelInit.trim_source_tiles(s, mp, tiled_images;
-                                                           noise_fraction=0.1)
-        init_time = time() - t0
+            t0 = time()
+            trimmed_tiled_images = ModelInit.trim_source_tiles(s, mp, tiled_images;
+                                                               noise_fraction=0.1)
+            init_time = time() - t0
 
-        t0 = time()
-        iter_count, max_f, max_x, result =
-            OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
-                                    verbose=true, max_iters=max_iters)
-        fit_time = time() - t0
+            t0 = time()
+            iter_count, max_f, max_x, result =
+                OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
+                                        verbose=true, max_iters=max_iters)
+            fit_time = time() - t0
 
-        results[entry.thing_id] = Dict("objid"=>entry.objid,
-                                       "ra"=>entry.pos[1],
-                                       "dec"=>entry.pos[2],
-                                       "vs"=>mp.vp[s],
-                                       "init_time"=>init_time,
-                                       "fit_time"=>fit_time)
+            results[entry.thing_id] = Dict("objid"=>entry.objid,
+                                           "ra"=>entry.pos[1],
+                                           "dec"=>entry.pos[2],
+                                           "vs"=>mp.vp[s],
+                                           "init_time"=>init_time,
+                                           "fit_time"=>fit_time)
+        catch ex
+            err(ex)
+        end
     end
 
     results
