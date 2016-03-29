@@ -41,17 +41,22 @@ end
 
 
 """
-read_photoobj_primary(fieldids, dirs) -> Vector{CatalogEntry}
+read_photoobj_files(fieldids, dirs) -> Vector{CatalogEntry}
 
 Combine photoobj catalogs for the given overlapping fields, returning a single
-joined catalog containing only primary objects.
-"""
-function read_photoobj_primary(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
-    ignore_primary_mask=false)
-    @assert length(fieldids) == length(dirs)
+joined catalog.
 
-    # if we're treating any detection as primary, limit processing to one field
-    @assert !ignore_primary_mask || length(fieldids) == 1
+The `duplicate_policy` argument controls how catalogs are joined.
+With `duplicate_policy = :primary`, only primary objects are included in the
+combined catalog.
+With `duplicate_policy = :first`, only the first detection is included in the
+combined catalog.
+"""
+function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
+        duplicate_policy=:primary)
+    @assert length(fieldids) == length(dirs)
+    @assert duplicate_policy == :primary || duplicate_policy == :first
+    @assert duplicate_policy == :primary || length(dirs) == 1
 
     info("reading photoobj catalogs for ", length(fieldids), " fields")
 
@@ -79,7 +84,7 @@ function read_photoobj_primary(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
     # (thing_id == -1 indicates that the matching process failed)
     for cat in rawcatalogs
         mask = (cat["thing_id"] .!= -1)
-        if !ignore_primary_mask
+        if duplicate_policy == :primary
             mask &= (cat["mode"] .== 0x01)
         end
         for key in keys(cat)
@@ -89,7 +94,7 @@ function read_photoobj_primary(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
 
     for i in eachindex(fieldids)
         info("field ", fieldids[i], ": ", length(rawcatalogs[i]["objid"]),
-             " primary entries")
+             " filtered entries")
     end
 
     # Merge all catalogs together (there should be no duplicate objects,
@@ -115,9 +120,8 @@ end
 
 
 """
-infer(ra_range, dec_range, fieldids, frame_dirs; ...)
-
-Fit the Celeste model to sources in a given ra, dec range.
+Fit the Celeste model to sources in a given ra, dec range,
+based on data from specified fields
 
 - ra_range: minimum and maximum RA of sources to consider.
 - dec_range: minimum and maximum Dec of sources to consider.
@@ -128,19 +132,20 @@ Returns:
 
 - Dictionary of results, keyed by SDSS thing_id.
 """
-function infer(ra_range::Tuple{Float64, Float64},
-               dec_range::Tuple{Float64, Float64},
-               fieldids::Vector{Tuple{Int, Int, Int}},
+function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                frame_dirs::Vector;
                fpm_dirs=frame_dirs,
                psfield_dirs=frame_dirs,
                photofield_dirs=frame_dirs,
                photoobj_dirs=frame_dirs,
-               max_iters=DEFAULT_MAX_ITERS,
-               ignore_primary_mask=false)
+               ra_range=(-1000., 1000.),
+               dec_range=(-1000., 1000.),
+               primary_initialization=true,
+               max_iters=DEFAULT_MAX_ITERS)
     # Read all primary objects in these fields.
-    catalog = read_photoobj_primary(fieldids, photoobj_dirs,
-                      ignore_primary_mask=ignore_primary_mask)
+    duplicate_policy = primary_initialization ? :primary : :first
+    catalog = read_photoobj_files(fieldids, photoobj_dirs,
+                        duplicate_policy=duplicate_policy)
     info("$(length(catalog)) primary sources")
 
     # Filter out low-flux objects in the catalog.
@@ -188,7 +193,6 @@ function infer(ra_range::Tuple{Float64, Float64},
     mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
                                            fit_psf=false)
 
-
     # get indicies of all sources relevant to those we're actually
     # interested in, and fit a local PSF for those sources (since we skipped
     # fitting the PSF for the whole catalog above)
@@ -200,65 +204,33 @@ function infer(ra_range::Tuple{Float64, Float64},
         entry = catalog[s]
         mp.active_sources = [s]
 
-        info("processing source $s: objid= $(entry.objid)")
+        try
+            info("===================================================")
+            info("processing source $s: objid= $(entry.objid)")
 
-        t0 = time()
-        trimmed_tiled_images = ModelInit.trim_source_tiles(s, mp, tiled_images;
-                                                           noise_fraction=0.1)
-        init_time = time() - t0
+            t0 = time()
+            trimmed_tiled_images = ModelInit.trim_source_tiles(s, mp, tiled_images;
+                                                               noise_fraction=0.1)
+            init_time = time() - t0
 
-        t0 = time()
-        iter_count, max_f, max_x, result =
-            OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
-                                    verbose=true, max_iters=max_iters)
-        fit_time = time() - t0
+            t0 = time()
+            iter_count, max_f, max_x, result =
+                OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
+                                        verbose=true, max_iters=max_iters)
+            fit_time = time() - t0
 
-        results[entry.thing_id] = Dict("objid"=>entry.objid,
-                                       "ra"=>entry.pos[1],
-                                       "dec"=>entry.pos[2],
-                                       "vs"=>mp.vp[s],
-                                       "init_time"=>init_time,
-                                       "fit_time"=>fit_time)
+            results[entry.thing_id] = Dict("objid"=>entry.objid,
+                                           "ra"=>entry.pos[1],
+                                           "dec"=>entry.pos[2],
+                                           "vs"=>mp.vp[s],
+                                           "init_time"=>init_time,
+                                           "fit_time"=>fit_time)
+        catch ex
+            err(ex)
+        end
     end
 
-    return results
-end
-
-
-"""
-Infer a single objid in a single run, camcol, and field.
-"""
-function infer(
-    run::Int, camcol::Int, field::Int, objid::AbstractString,
-    dir::AbstractString)
-
-  images = SkyImages.read_sdss_field(run, camcol, field, dir);
-
-  cat_filename = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
-  cat_entries = SkyImages.read_photoobj_celeste(joinpath(dir, cat_filename));
-
-  # initialize tiled images and model parameters.  Don't fit the psf for now --
-  # we just need the tile_sources from mp.
-  tiled_blob, mp = ModelInit.initialize_celeste(images, cat_entries,
-                                                tile_width=20,
-                                                fit_psf=false);
-  s = findfirst(mp.objids, objid)
-  @assert(s > 0, "Objid $objid not found in the catalog.")
-  relevant_sources = ModelInit.get_relevant_sources(mp, s);
-  ModelInit.fit_object_psfs!(mp, relevant_sources, images);
-  mp.active_sources = [ s ];
-
-  #for objid in bad_objids
-  trimmed_tiled_blob =
-    ModelInit.trim_source_tiles(s, mp, tiled_blob, noise_fraction=0.1);
-
-  fit_time = time()
-  iter_count, max_f, max_x, result =
-      OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_blob, mp;
-                              verbose=true, max_iters=50)
-  fit_time = time() - fit_time
-
-  info("Fit in $fit_time seconds.")
+    results
 end
 
 
@@ -392,7 +364,7 @@ end
 """
 NERSC-specific infer function, called from main entry point.
 """
-function infer_nersc(ramin, ramax, decmin, decmax, outdir)
+function infer_box_nersc(ramin, ramax, decmin, decmax, outdir)
     # Get vector of (run, camcol, field) triplets overlapping this patch
     fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
 
@@ -403,8 +375,9 @@ function infer_nersc(ramin, ramax, decmin, decmax, outdir)
     photoobj_dirs = [nersc_photoobj_dir(x[1], x[2]) for x in fieldids]
     photofield_dirs = [nersc_photofield_dir(x[1]) for x in fieldids]
 
-    results = infer((ramin, ramax), (decmin, decmax), fieldids,
-                    frame_dirs;
+    results = infer(fieldids, frame_dirs;
+                    ra_range=(ramin, ramax),
+                    dec_range=(decmin, decmax), 
                     fpm_dirs=fpm_dirs,
                     psfield_dirs=psfield_dirs,
                     photofield_dirs=photofield_dirs,
@@ -413,7 +386,26 @@ function infer_nersc(ramin, ramax, decmin, decmax, outdir)
     fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
                      outdir, ramin, ramax, decmin, decmax)
     JLD.save(fname, "results", results)
-    debug("infer_nersc finished successfully")
+    debug("infer_box_nersc finished successfully")
+end
+
+
+"""
+NERSC-specific infer function, called from main entry point.
+"""
+function infer_field_nersc(run::Int, camcol::Int, field::Int,
+        outdir::AbstractString)
+    results = infer([(run, camcol, field)],
+                    [nersc_frame_dir(run, camcol, field)];
+                    fpm_dirs=[nersc_fpm_dir(run, camcol, field)],
+                    psfield_dirs=[nersc_psfield_dir(run, camcol)],
+                    photofield_dirs=[nersc_photofield_dir(run)],
+                    photoobj_dirs=[nersc_photoobj_dir(run, camcol)],
+                    primary_initialization=false)
+
+    fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir run camcol field
+    JLD.save(fname, "results", results)
+    debug("infer_field_nersc finished successfully")
 end
 
 
@@ -890,7 +882,7 @@ function score(ra_range::Tuple{Float64, Float64},
     end
 
     scores_df
-end 
+end
 
 
 """
@@ -899,7 +891,7 @@ Score all the celeste results for sources in the given
 This is done by finding all files with names matching
 `DIR/celeste-RUN-CAMCOL-FIELD-*.jld`
 """
-function score_nersc(ramin, ramax, decmin, decmax, resultdir, reffile)
+function score_field_nersc(ramin, ramax, decmin, decmax, resultdir, reffile)
     # Get vector of (run, camcol, field) triplets overlapping this patch
     fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
 
