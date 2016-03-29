@@ -3,7 +3,6 @@ module PSF
 using Celeste
 using Celeste.Types
 using Celeste.BivariateNormals
-import Celeste.Util
 import Celeste.SensitiveFloats
 import Celeste.SDSSIO
 
@@ -508,7 +507,7 @@ function get_sigma_from_params{NumType <: Number}(
   sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
   bvn_vec = Array(BvnComponent{NumType}, K);
   for k = 1:K
-    sigma_vec[k] = Util.get_bvn_cov(psf_params[k][psf_ids.e_axis],
+    sigma_vec[k] = BivariateNormals.get_bvn_cov(psf_params[k][psf_ids.e_axis],
                                     psf_params[k][psf_ids.e_angle],
                                     psf_params[k][psf_ids.e_scale])
     sig_sf_vec[k] = GalaxySigmaDerivs(
