@@ -33,11 +33,14 @@ function get_bvn_cov{NumType <: Number}(
        @assert 0 < scale
        @assert 0 < ab <= 1.
    end
-   cp, sp = cos(angle), sin(angle)
-   R = [[cp -sp]; [sp cp]]  # rotates
-   D = diagm([1., ab])  # shrinks the minor axis
-   W = scale * D * R'
-   W' * W  # XiXi
+
+   cp = cos(angle)
+   sp = sin(angle)
+   ab_term = (ab ^ 2 - 1)
+   scale_squared = scale ^ 2
+   off_diag_term = -scale_squared * cp * sp * ab_term
+   NumType[ scale_squared * (1 + ab_term * (sp ^ 2))    off_diag_term;
+            off_diag_term    scale_squared * (1 + ab_term * (cp ^ 2))]
 end
 
 
