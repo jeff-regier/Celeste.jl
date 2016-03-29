@@ -3,7 +3,6 @@ module BivariateNormals
 
 using ..Types
 using ..SensitiveFloats
-import ..Util
 
 import ..WCSUtils
 
@@ -13,7 +12,34 @@ export BivariateNormalDerivatives, BvnComponent, GalaxySigmaDerivs,
 
 # Functions:
 export eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_ux_derivs!,
-       transform_bvn_derivs!, load_bvn_mixtures
+       transform_bvn_derivs!, load_bvn_mixtures, get_bvn_cov
+
+
+"""
+Unpack a rotation-parameterized BVN covariance matrix.
+
+Args:
+ - ab: The ratio of the minor to the major axis.
+ - angle: Rotation angle (in radians)
+ - scale: The major axis.
+
+Returns:
+  The 2x2 covariance matrix parameterized by the inputs.
+"""
+function get_bvn_cov{NumType <: Number}(
+    ab::NumType, angle::NumType, scale::NumType)
+
+   if NumType <: AbstractFloat
+       @assert 0 < scale
+       @assert 0 < ab <= 1.
+   end
+   cp, sp = cos(angle), sin(angle)
+   R = [[cp -sp]; [sp cp]]  # rotates
+   D = diagm([1., ab])  # shrinks the minor axis
+   W = scale * D * R'
+   W' * W  # XiXi
+end
+
 
 
 """
@@ -389,7 +415,7 @@ function GalaxyCacheComponent{NumType <: Number}(
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
     calculate_derivs::Bool, calculate_hessian::Bool)
 
-  XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+  XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
   var_s = pc.tauBar + gc.nuBar * XiXi
   weight = pc.alphaBar * gc.etaBar  # excludes e_dev

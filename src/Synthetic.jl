@@ -4,8 +4,8 @@ export gen_blob
 
 using ..Types
 import ..ModelInit
-import ..Util
-import ..WCSUtils
+import ..BivariateNormals
+import SloanDigitalSkySurvey.WCSUtils
 
 import Distributions
 
