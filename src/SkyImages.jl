@@ -9,7 +9,6 @@ import WCS
 import DataFrames
 import ..ElboDeriv # For stitch_object_tiles
 import FITSIO
-import ..Util
 
 import Base.convert
 

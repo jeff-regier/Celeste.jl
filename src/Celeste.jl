@@ -4,7 +4,6 @@ module Celeste
 include("SDSSIO.jl")
 include("Types.jl")
 include("SensitiveFloats.jl")
-include("Util.jl")
 include("KL.jl")
 include("BivariateNormals.jl")
 include("Transform.jl")
