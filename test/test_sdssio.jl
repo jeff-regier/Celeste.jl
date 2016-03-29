@@ -29,5 +29,20 @@ function test_interp_sky_oob()
                             9.0 12.0]
 end
 
+# test that read_photoobj handles missing table extensions.
+function test_read_photoobj_missing()
+
+    # get an example of a photoobj file with a missing table
+    fname = joinpath(Pkg.dir("Celeste"), "test", "data",
+                     "photoObj-006597-4-0025.fits")
+    if !isfile(fname)
+        run(`wget --quiet -O $(fname) http://data.sdss3.org/sas/dr12/boss/photoObj/301/6597/4/photoObj-006597-4-0025.fits`)
+    end
+
+    catalog = SDSSIO.read_photoobj(fname)
+
+end
+
 test_interp_sky()
 test_interp_sky_oob()
+test_read_photoobj_missing()
