@@ -962,33 +962,6 @@ function tile_predicted_image{NumType <: Number}(
 end
 
 
-# """
-# Add the expected log likelihood ELBO term for an image to elbo given the
-# brightnesses.
-#
-# Args:
-#   - elbo_vars_array: Array for per-thread Elbo intermediate values.
-#   - tiles: An array of ImageTiles
-#   - mp: Model parameters
-#   - b: The band of the tiles
-#   - sbs: Source brightnesses
-#
-# Returns:
-#   Updates elbo_vars_array[:].elbo in place.
-# """
-# function elbo_likelihood!{NumType <: Number}(
-#     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
-#     tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int,
-#     sbs::Vector{SourceBrightness{NumType}})
-#
-#   star_mcs, gal_mcs =
-#     load_bvn_mixtures(mp, b,
-#       calculate_derivs=elbo_vars_array[1].calculate_derivs,
-#       calculate_hessian=elbo_vars_array[1].calculate_hessian)
-#   elbo_likelihood!(elbo_vars_array, tiles, mp, sbs, star_mcs, gal_mcs)
-# end
-
-
 """
 Get the active pixels (pixels for which the active sources are present)
 for a tiled blob.
