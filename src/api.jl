@@ -875,10 +875,6 @@ function get_scores_df(celeste_err, primary_err, coadd_df)
             end
         end
 
-        good_row &= coadd_df[:is_star] .> .5
-        good_row &= celeste_err[:missed_stars] .== false
-        good_row &= coadd_df[:star_flux_r] .> 10
-
         scores_df[i, :field] = row
         N_good = sum(good_row)
         scores_df[i, :N] = N_good
