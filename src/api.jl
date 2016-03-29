@@ -134,6 +134,7 @@ Returns:
 """
 function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                frame_dirs::Vector;
+               objid="",
                fpm_dirs=frame_dirs,
                psfield_dirs=frame_dirs,
                photofield_dirs=frame_dirs,
@@ -151,6 +152,12 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # Filter out low-flux objects in the catalog.
     catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
     info("$(length(catalog)) primary sources after MIN_FLUX cut")
+
+    # Filter any object not specified, if an objid is specified
+    if objid != ""
+        println(catalog[1].objid)
+        catalog = filter(entry->(entry.objid == objid), catalog)
+    end
 
     # Get indicies of entries in the  RA/Dec range of interest.
     entry_in_range = entry->((ra_range[1] < entry.pos[1] < ra_range[2]) &&
@@ -394,16 +401,21 @@ end
 NERSC-specific infer function, called from main entry point.
 """
 function infer_field_nersc(run::Int, camcol::Int, field::Int,
-        outdir::AbstractString)
+        outdir::AbstractString; objid="")
     results = infer([(run, camcol, field)],
                     [nersc_frame_dir(run, camcol, field)];
+                    objid=objid,
                     fpm_dirs=[nersc_fpm_dir(run, camcol, field)],
                     psfield_dirs=[nersc_psfield_dir(run, camcol)],
                     photofield_dirs=[nersc_photofield_dir(run)],
                     photoobj_dirs=[nersc_photoobj_dir(run, camcol)],
                     primary_initialization=false)
 
-    fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir run camcol field
+    fname = if objid == ""
+        @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir run camcol field
+    else
+        @sprintf "%s/celeste-objid-%s.jld" outdir objid
+    end
     JLD.save(fname, "results", results)
     debug("infer_field_nersc finished successfully")
 end
@@ -437,11 +449,11 @@ end
 
 
 """
-Return distance in degrees using small-distance approximation. Falls
+Return distance in pixels using small-distance approximation. Falls
 apart at poles and RA boundary.
 """
-dist(ra1, dec1, ra2, dec2) = sqrt((dec2 - dec1).^2 +
-                                  (cos(dec1) .* (ra2 - ra1)).^2)
+dist(ra1, dec1, ra2, dec2) = (3600 / 0.396) * (sqrt((dec2 - dec1).^2 +
+                                  (cos(dec1) .* (ra2 - ra1)).^2))
 
 """
 match_position(ras, decs, ra, dec, dist)
@@ -567,6 +579,7 @@ names to match what the rest of the scoring code expects.
 function load_primary(dir, run, camcol, field)
     objs = SDSS.load_catalog_df(dir, run, camcol, field)
 
+    # TODO: not right, should add fluxes.
     usedev = objs[:frac_dev] .> 0.5  # true=> use dev, false=> use exp
     gal_flux_u = where(usedev, objs[:devflux_u], objs[:expflux_u])
     gal_flux_g = where(usedev, objs[:devflux_g], objs[:expflux_g])
@@ -783,22 +796,18 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
 end
 
 
-function score(ra_range::Tuple{Float64, Float64},
-               dec_range::Tuple{Float64, Float64},
-               fieldid::Tuple{Int, Int, Int},
-               results,
-               reffile,
-               primary_dir)
+function match_catalogs(fieldid::Tuple{Int, Int, Int},
+               results, truthfile, primary_dir)
     # convert Celeste results to a DataFrame.
     celeste_full_df = celeste_to_df(results)
     println("celeste: $(size(celeste_full_df, 1)) objects")
 
     # load coadd catalog
-    coadd_full_df = load_s82(reffile)
+    coadd_full_df = load_s82(truthfile)
     println("coadd catalog: $(size(coadd_full_df, 1)) objects")
 
     # find matches in coadd catalog by position
-    disttol = 1.0 / 3600.0  # 1 arcsec
+    disttol = 1.0 / 0.396  # 1 arcsec
     good_coadd_indexes = Int[]
     good_celeste_indexes = Int[]
     for i in 1:size(celeste_full_df, 1)
@@ -808,8 +817,8 @@ function score(ra_range::Tuple{Float64, Float64},
                          disttol)
             push!(good_celeste_indexes, i)
             push!(good_coadd_indexes, j)
-        catch e
-            println(e)
+        catch y
+            isa(y, MatchException) || throw(y)
         end
     end
 
@@ -820,7 +829,7 @@ function score(ra_range::Tuple{Float64, Float64},
     # celeste).
     primary_full_df = load_primary(primary_dir, fieldid...)
 
-    println("primary catalog: $(size(primary_full_df, 1)) objects")
+    info("primary catalog: $(size(primary_full_df, 1)) objects")
 
     # match by object id
     good_primary_indexes = Int[findfirst(primary_full_df[:objid], objid)
@@ -829,86 +838,115 @@ function score(ra_range::Tuple{Float64, Float64},
     # limit primary to matched items
     primary_df = primary_full_df[good_primary_indexes, :]
 
+    # show that all catalogs have same size, and (hopefully)
+    # that not too many sources were filtered
+    info("matched celeste catalog: $(size(celeste_df, 1)) objects")
+    info("matched coadd catalog: $(size(coadd_df, 1)) objects")
+    info("matched primary catalog: $(size(primary_df, 1)) objects")
+
     # ensure that all objects are matched
     if size(primary_df, 1) != size(celeste_df, 1)
         error("catalog mismatch between celeste and primary")
     end
 
-    # difference between celeste and coadd
-    celeste_err = get_err_df(coadd_df, celeste_df)
-    primary_err = get_err_df(coadd_df, primary_df)
+    (celeste_df, primary_df, coadd_df)
+end
 
-    println(primary_df[4,:])
-    println(primary_err[4,:])
-    println("------------------------------")
-    println(celeste_df[4,:])
-    println(celeste_err[4,:])
 
-    # create scores
+function get_scores_df(celeste_err, primary_err, coadd_df)
     ttypes = [Symbol, Float64, Float64, Float64, Float64, Int]
     scores_df = DataFrame(ttypes, size(celeste_err, 2) - 1)
     names!(scores_df, [:field, :primary, :celeste, :diff, :diff_sd, :N])
+
     for i in 1:(size(celeste_err, 2) - 1)
-        n = names(celeste_err)[i + 1]
-        if n == :objid
-            continue
-        end
-        good_row = !isna(primary_err[:, n]) & !isna(celeste_err[:, n])
-        if string(n)[1:5] == "star_"
+        row = names(celeste_err)[i + 1]
+        row != :objid || continue
+
+        good_row = !isna(primary_err[:, row]) & !isna(celeste_err[:, row])
+        if string(row)[1:5] == "star_"
             good_row &= (coadd_df[:is_star] .> 0.5)
-        elseif string(n)[1:4] == "gal_"
+        elseif string(row)[1:4] == "gal_"
             good_row &= (coadd_df[:is_star] .< 0.5)
-            if n in [:gal_ab, :gal_scale, :gal_angle, :gal_fracdev]
+            if row in [:gal_ab, :gal_scale, :gal_angle, :gal_fracdev]
                 good_row &= !(0.05 .< coadd_df[:gal_fracdev] .< 0.95)
             end
-            if in == :gal_angle
+            if row == :gal_angle
                 good_row &= coadd_df[:gal_ab] .< .6
             end
         end
 
-        if sum(good_row) == 0
-            continue
-        end
-        celeste_mean_err = mean(celeste_err[good_row, n])
-        scores_df[i, :field] = n
-        scores_df[i, :N] = sum(good_row)
-        scores_df[i, :primary] = mean(primary_err[good_row, n])
-        scores_df[i, :celeste] = mean(celeste_err[good_row, n])
-        if sum(good_row) > 1
-            scores_df[i, :diff] = scores_df[i, :primary] - scores_df[i, :celeste]
-            scores_df[i, :diff_sd] =
-                std(Float64[abs(x) for x in primary_err[good_row, n] - celeste_err[good_row, n]]) / sqrt(sum(good_row))
-        end
+        good_row &= coadd_df[:is_star] .> .5
+        good_row &= celeste_err[:missed_stars] .== false
+        good_row &= coadd_df[:star_flux_r] .> 10
+
+        scores_df[i, :field] = row
+        N_good = sum(good_row)
+        scores_df[i, :N] = N_good
+        N_good > 0 || continue
+
+        scores_df[i, :primary] = mean(primary_err[good_row, row])
+        scores_df[i, :celeste] = mean(celeste_err[good_row, row])
+
+        diffs = primary_err[good_row, row] .- celeste_err[good_row, row]
+        scores_df[i, :diff] = mean(diffs)
+
+        # compute the difference in error rates between celeste and primary
+        # if we have enough data to get confidence intervals
+        N_good > 1 || continue
+        abs_errs = Float64[abs(x) for x in diffs]
+        scores_df[i, :diff_sd] = std(abs_errs) / sqrt(N_good)
     end
 
     scores_df
 end
 
 
-"""
-Score all the celeste results for sources in the given
-(`run`, `camcol`, `field`).
-This is done by finding all files with names matching
-`DIR/celeste-RUN-CAMCOL-FIELD-*.jld`
-"""
-function score_field_nersc(ramin, ramax, decmin, decmax, resultdir, reffile)
-    # Get vector of (run, camcol, field) triplets overlapping this patch
-    fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
+function score_field(fieldid::Tuple{Int, Int, Int},
+               results, truthfile, primary_dir)
+    (celeste_df, primary_df, coadd_df) = match_catalogs(fieldid, 
+                                results, truthfile, primary_dir)
+    # difference between celeste and coadd
+    celeste_err = get_err_df(coadd_df, celeste_df)
+    primary_err = get_err_df(coadd_df, primary_df)
 
-    # find celeste result files matching the pattern
-    re = Regex("celeste-.*\.jld")
-    fnames = filter(x->ismatch(re, x), readdir(dirname))
-    paths = [joinpath(outdir, name) for name in fnames]
-
-    # collect all Celeste results into a single dictionary keyed by
-    # thing_id
-    results = Dict{Int, Dict}()
-    for path in paths
-        merge!(results, JLD.load(path, "results"))
-    end
-
-    score((ramin, ramax), (decmin, decmax), fieldids,
-          results,
-          reffile,
-          nersc_photoobjdir(fieldid[1], fieldid[2]))
+    # create scores
+    get_scores_df(celeste_err, primary_err, coadd_df)
 end
+
+
+"""
+Score the celeste results for a particular field
+"""
+function score_field_nersc(run, camcol, field, resultdir, truthfile)
+    fieldid = (run, camcol, field)
+    fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" resultdir run camcol field
+    results = JLD.load(fname, "results")
+    primary_dir = nersc_photoobj_dir(run, camcol)
+
+    println( score_field(fieldid, results, truthfile, primary_dir) )
+end
+
+
+"""
+Display results from Celeste, Primary, and Coadd for a particular object
+"""
+function score_object_nersc(run, camcol, field, objid, resultdir, truthfile)
+    fieldid = (run, camcol, field)
+    fname = @sprintf "%s/celeste-objid-%s.jld" resultdir objid
+    results = JLD.load(fname, "results")
+    primary_dir = nersc_photoobj_dir(run, camcol)
+
+
+    (celeste_df, primary_df, coadd_df) = match_catalogs(fieldid, 
+                                results, truthfile, primary_dir)
+
+    println("\n\nceleste results:\n")
+    println(celeste_df)
+    println("\n\nprimary results:\n")
+    println(primary_df)
+    println("\n\ncoadd results:\n")
+    println(coadd_df)
+end
+
+
+
