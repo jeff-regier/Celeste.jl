@@ -2,8 +2,7 @@ using Base.Test
 import DualNumbers
 
 using Celeste: Types, SampleData, SensitiveFloats, BivariateNormals, ElboDeriv
-import Celeste: Synthetic, SkyImages, ModelInit
-import SloanDigitalSkySurvey: SDSS, WCSUtils
+import Celeste: Synthetic, SkyImages, ModelInit, SDSS, WCSUtils
 
 if VERSION > v"0.5.0-dev"
     using Base.Threads

@@ -6,7 +6,7 @@ using Celeste
 using CelesteTypes
 import Synthetic
 
-import SloanDigitalSkySurvey: SDSS
+import ..SDSS
 
 function peak_infer_and_cache(stamp_id)
 	blob = Images.load_stamp_blob(ENV["STAMP"], stamp_id);
