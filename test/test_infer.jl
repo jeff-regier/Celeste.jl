@@ -14,7 +14,7 @@ function test_infer_single()
     fieldids = [(3900, 6, 269)]
     dirs = [datadir]
 
-    result = Celeste.infer(fieldids, dirs;
+    result, tm = Celeste.infer(fieldids, dirs;
                     ra_range=ra_range, dec_range=dec_range)
 end
 

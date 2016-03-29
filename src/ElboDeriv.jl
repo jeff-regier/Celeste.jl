@@ -11,8 +11,8 @@ import ..KL
 import ForwardDiff
 import ..WCSUtils
 
-Threaded = true
-if VERSION > v"0.5.0-dev"
+Threaded = false
+if Threaded && VERSION > v"0.5.0-dev"
     using Base.Threads
 else
     # Pre-Julia 0.5 there are no threads
@@ -170,17 +170,14 @@ Add all the elbo values for an elbo_vars_array in the first element.
 After a value is added, it is cleared.
 """
 function reduce_elbo_vars_array!{NumType <: Number}(
-    elbo_vars_array::Array{ElboIntermediateVariables{NumType}};
-    num_threads::Int=nthreads())
+    elbo_vars_array::Array{ElboIntermediateVariables{NumType}})
 
-  if Threaded
-    for i in 2:num_threads
-      SensitiveFloats.add_scaled_sfs!(
-        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
-        elbo_vars_array[1].calculate_hessian &&
-          elbo_vars_array[1].calculate_derivs)
-      clear!(elbo_vars_array[i].elbo)
-    end
+  for i in 2:length(elbo_vars_array)
+    SensitiveFloats.add_scaled_sfs!(
+      elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
+      elbo_vars_array[1].calculate_hessian &&
+        elbo_vars_array[1].calculate_derivs)
+    clear!(elbo_vars_array[i].elbo)
   end
 end
 
@@ -837,7 +834,7 @@ Args:
   - active_pixels: An array of ActivePixels to be processed.
 
 Returns:
-  Adds to the elbo_vars_array[:].elbo in place.
+  Adds to elbo_vars.elbo in place.
 """
 function process_active_pixels!{NumType <: Number}(
     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},

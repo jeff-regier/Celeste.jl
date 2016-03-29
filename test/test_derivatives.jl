@@ -4,17 +4,6 @@ import DualNumbers
 using Celeste: Types, SampleData, SensitiveFloats, BivariateNormals, ElboDeriv
 import Celeste: Synthetic, SkyImages, ModelInit, SDSS, WCSUtils
 
-if VERSION > v"0.5.0-dev"
-    using Base.Threads
-else
-    # Pre-Julia 0.5 there are no threads
-    nthreads() = 1
-    threadid() = 1
-    macro threads(x)
-        x
-    end
-end
-
 
 println("Running derivative tests.")
 

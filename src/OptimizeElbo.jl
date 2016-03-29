@@ -73,7 +73,7 @@ type ObjectiveWrapperFunctions
         function print_status{T <: Number}(
           iter_vp::VariationalParams{T}, value::T, grad::Array{T})
             if state.verbose || (state.f_evals % state.print_every_n == 0)
-                println("f_evals: $(state.f_evals) value: $(value)")
+                info("f_evals: $(state.f_evals) value: $(value)")
             end
             if state.verbose
               S = length(iter_vp)
@@ -242,7 +242,7 @@ function maximize_f(
     max_f = -1.0 * nm_result.f_minimum
     max_x = nm_result.minimum
 
-    println("got $max_f at $max_x after $iter_count function evaluations ",
+    info("got $max_f at $max_x after $iter_count function evaluations ",
             "($(nm_result.iterations) Newton steps)\n")
     iter_count, max_f, max_x, nm_result
 end

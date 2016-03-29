@@ -8,7 +8,7 @@ function test_score()
     dec_range = (0.5, 0.52)
     fieldid = (4263, 5, 119)
 
-    inferences = Celeste.infer(ra_range, dec_range, [fieldid], [datadir],
+    inferences, tm = Celeste.infer(ra_range, dec_range, [fieldid], [datadir],
                     max_iters=0, ignore_primary_mask=true)
 
     coadd_path = joinpath(datadir, "coadd_test_catalog.fit")
