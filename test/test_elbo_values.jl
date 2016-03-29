@@ -306,75 +306,34 @@ function test_tiny_image_tiling()
   # point with a narrow psf.
 
   blob0 = SkyImages.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
-  pc = PsfComponent(1./3, zeros(2), 1e-4 * eye(2))
+  pc = PsfComponent(1./3, zeros(2), 1e-4 * eye(2));
   trivial_psf = [pc, pc, pc]
   pixels = ones(100, 1) * 12
   pixels[98:100, 1] = [1e3, 1e4, 1e5]
-  img = Image(3, 1, pixels, 3, blob0[3].wcs, 3., 4., trivial_psf, 1, 1, 1)
-  catalog = [sample_ce([100., 1], true),]
+  img = Image(3, 1, pixels, 3, blob0[3].wcs, 3., 4., trivial_psf, 1, 1, 1);
+  catalog = [sample_ce([100., 1], true),];
   catalog[1].star_fluxes = ones(5) * 1e5
 
-
-  tiled_blob0, mp0 = ModelInit.initialize_celeste(
+  tiled_blob, mp0 = ModelInit.initialize_celeste(
     fill(img, 5), catalog, patch_radius=Inf)
 
-  # These will be reused for all the subsequent tests because only
-  # the tile sources change.
-  if ElboDeriv.Threaded
-    elbo_vars_array =
-    ElboDeriv.ElboIntermediateVariables{Float64}[
-      ElboDeriv.ElboIntermediateVariables(Float64, mp0.S,
-        length(mp0.active_sources), calculate_derivs=false)
-      for i in 1:nthreads() ]
-  else
-    elbo_vars_array =
-      ElboDeriv.ElboIntermediateVariables{Float64}[
-        ElboDeriv.ElboIntermediateVariables(Float64, mp0.S,
-          length(mp0.active_sources), calculate_derivs=false) ]
-  end
-  sbs = ElboDeriv.load_source_brightnesses(mp0, calculate_derivs=false);
-  ElboDeriv.elbo_likelihood!(elbo_vars_array, tiled_blob0[3], mp0, 3, sbs);
-
-  if ElboDeriv.Threaded
-    for i in 2:nthreads()
-      SensitiveFloats.add_scaled_sfs!(
-        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
-        elbo_vars_array[1].calculate_hessian &&
-          elbo_vars_array[1].calculate_derivs)
-    end
-  end
-  elbo_lik = deepcopy(elbo_vars_array[1].elbo);
+  elbo_lik = ElboDeriv.elbo_likelihood(
+    TiledImage[ tiled_blob[3] ], mp0, calculate_derivs=false, calculate_hessian=false);
 
   tile_width = 2
   tiled_blob1, mp0 = ModelInit.initialize_celeste(
-    fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.)
-  ElboDeriv.elbo_likelihood!(elbo_vars_array, tiled_blob0[3], mp0, 3, sbs);
-
-  if ElboDeriv.Threaded
-    for i in 2:nthreads()
-      SensitiveFloats.add_scaled_sfs!(
-        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
-        elbo_vars_array[1].calculate_hessian &&
-          elbo_vars_array[1].calculate_derivs)
-    end
-  end
-  elbo_lik_tiles = deepcopy(elbo_vars_array[1].elbo);
+    fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.);
+  elbo_lik_tiles =
+    ElboDeriv.elbo_likelihood(
+      TiledImage[ tiled_blob1[3] ], mp0, calculate_derivs=false, calculate_hessian=false);
 
   tile_width = 5
   tiled_blob2, mp0 =
     ModelInit.initialize_celeste(
       fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.);
-  ElboDeriv.elbo_likelihood!(elbo_vars_array, tiled_blob0[3], mp0, 3, sbs);
-
-  if ElboDeriv.Threaded
-    for i in 2:nthreads()
-      SensitiveFloats.add_scaled_sfs!(
-        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
-        elbo_vars_array[1].calculate_hessian &&
-          elbo_vars_array[1].calculate_derivs)
-    end
-  end
-  elbo_lik_tiles2 = deepcopy(elbo_vars_array[1].elbo);
+  elbo_lik_tiles2 =
+    ElboDeriv.elbo_likelihood(
+      TiledImage[ tiled_blob2[3] ], mp0, calculate_derivs=false, calculate_hessian=false);
 
   @test_approx_eq elbo_lik_tiles.v[1] elbo_lik_tiles2.v[1]
   @test_approx_eq_eps elbo_lik.v[1] elbo_lik_tiles.v[1] 100.
@@ -433,6 +392,40 @@ function test_trim_source_tiles()
 end
 
 
+function test_reduce_elbo_vars_array()
+  blob, mp, three_bodies, tiled_blob = gen_three_body_dataset();
+
+  array_length = 3;
+  elbo_vars_array =
+    ElboDeriv.ElboIntermediateVariables{Float64}[
+      ElboDeriv.ElboIntermediateVariables(Float64, mp.S,
+        length(mp.active_sources), calculate_derivs=true,
+        calculate_hessian=true)
+        for i in 1:array_length ];
+
+  total_elbo =
+    zero_sensitive_float(CanonicalParams, Float64, length(mp.active_sources));
+  for i = 1:array_length
+    println(i)
+    this_elbo = ElboDeriv.elbo(TiledImage[ tiled_blob[i] ], mp);
+    elbo_vars_array[i].elbo = deepcopy(this_elbo)
+    total_elbo.v += this_elbo.v
+    total_elbo.d += this_elbo.d
+    total_elbo.h += this_elbo.h
+  end
+
+  ElboDeriv.reduce_elbo_vars_array!(elbo_vars_array, num_threads=array_length);
+  @test_approx_eq elbo_vars_array[1].elbo.v total_elbo.v;
+  @test_approx_eq elbo_vars_array[1].elbo.d total_elbo.d;
+  @test_approx_eq elbo_vars_array[1].elbo.h total_elbo.h;
+
+  # Check that running it twice doesn't double count.
+  ElboDeriv.reduce_elbo_vars_array!(elbo_vars_array, num_threads=array_length);
+  @test_approx_eq elbo_vars_array[1].elbo.v total_elbo.v;
+  @test_approx_eq elbo_vars_array[1].elbo.d total_elbo.d;
+  @test_approx_eq elbo_vars_array[1].elbo.h total_elbo.h;
+end
+
 
 ####################################################
 
@@ -444,3 +437,4 @@ test_coadd_cat_init_is_most_likely()
 test_tiny_image_tiling()
 test_elbo_with_nan()
 test_trim_source_tiles()
+test_reduce_elbo_vars_array()
