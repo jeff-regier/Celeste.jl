@@ -6,7 +6,6 @@ using ..Types
 using ..SensitiveFloats
 using ..BivariateNormals
 
-import ..Util
 import ..KL
 
 import ForwardDiff

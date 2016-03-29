@@ -3,7 +3,6 @@ using Celeste.Types
 using Celeste.SkyImages
 using Celeste.PSF
 
-import Celeste.Util
 import Celeste.SDSSIO
 
 using Celeste.SensitiveFloats

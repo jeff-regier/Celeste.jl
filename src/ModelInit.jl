@@ -12,7 +12,6 @@ using Distributions
 import SloanDigitalSkySurvey.WCSUtils
 import WCS.WCSTransform
 
-using ..Util
 using ..Types
 import ..PSF
 import ..ElboDeriv  # for trim_source_tiles

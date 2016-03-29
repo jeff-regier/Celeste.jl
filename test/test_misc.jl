@@ -3,7 +3,7 @@ using Base.Test
 import SloanDigitalSkySurvey: SDSS, WCSUtils
 
 using Celeste: Types, SampleData
-import Celeste: SkyImages, Util, ModelInit, Synthetic
+import Celeste: SkyImages, ModelInit, Synthetic
 import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
 
 println("Running misc tests.")
@@ -261,25 +261,6 @@ function test_sky_noise_estimates()
 end
 
 
-function test_util_bvn_cov()
-    e_axis = .7
-    e_angle = pi/5
-    e_scale = 2.
-
-    manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
-    util_11 = Util.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
-    @test_approx_eq util_11 manual_11
-
-    manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
-    util_12 = Util.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
-    @test_approx_eq util_12 manual_12
-
-    manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
-    util_22 = Util.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
-    @test_approx_eq util_22 manual_22
-end
-
-
 function test_get_relevant_sources()
   blob, mp, body, tiled_blob = gen_n_body_dataset(100; seed=42);
   mp = ModelInit.initialize_model_params(tiled_blob, blob, body);
@@ -299,7 +280,6 @@ end
 ####################################################
 
 test_tile_image()
-test_util_bvn_cov()
 test_sky_noise_estimates()
 test_local_sources()
 test_local_sources_2()
