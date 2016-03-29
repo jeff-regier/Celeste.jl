@@ -2,7 +2,8 @@ using Base.Test
 import DualNumbers
 
 using Celeste: Types, SampleData, SensitiveFloats, BivariateNormals, ElboDeriv
-import Celeste: Synthetic, SkyImages, Util, ModelInit
+import Celeste: Synthetic, SkyImages, ModelInit
+import SloanDigitalSkySurvey: SDSS, WCSUtils
 
 if VERSION > v"0.5.0-dev"
     using Base.Threads
@@ -16,7 +17,7 @@ else
 end
 
 
-println("Running hessian tests.")
+println("Running derivative tests.")
 
 
 """
@@ -94,6 +95,25 @@ end
 
 
 #######################
+
+function test_bvn_cov()
+    e_axis = .7
+    e_angle = pi/5
+    e_scale = 2.
+
+    manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
+    util_11 = BivariateNormals.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
+    @test_approx_eq util_11 manual_11
+
+    manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
+    util_12 = BivariateNormals.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
+    @test_approx_eq util_12 manual_12
+
+    manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
+    util_22 = BivariateNormals.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
+    @test_approx_eq util_22 manual_22
+end
+
 
 function test_real_image()
   # TODO: replace this with stamp tests having non-trivial WCS transforms.
@@ -605,7 +625,7 @@ function test_bvn_derivatives()
   x = Float64[2.0, 3.0]
 
   e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
-  sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+  sigma = BivariateNormals.get_bvn_cov(e_axis, e_angle, e_scale)
 
   offset = Float64[0.5, 0.25]
 
@@ -708,7 +728,7 @@ function test_galaxy_variable_transform()
     u_pix = WCSUtils.world_to_pix(
       patch.wcs_jacobian, patch.center, patch.pixel_center, u)
 
-    sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+    sigma = BivariateNormals.get_bvn_cov(e_axis, e_angle, e_scale)
 
     function bvn_function{T <: Number}(u_pix::Vector{T}, sigma::Matrix{T})
       local_x = x - u_pix
@@ -722,7 +742,7 @@ function test_galaxy_variable_transform()
   par = wrap_par(u, e_angle, e_axis, e_scale)
   u_pix = WCSUtils.world_to_pix(
     patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-  sigma = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+  sigma = BivariateNormals.get_bvn_cov(e_axis, e_angle, e_scale)
   bmc = BvnComponent{Float64}(u_pix, sigma, 1.0);
   sig_sf = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma);
   gcc = GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf);
@@ -868,12 +888,12 @@ function test_galaxy_sigma_derivs()
       e_angle_fd = par[gal_shape_ids.e_angle]
       e_axis_fd = par[gal_shape_ids.e_axis]
       e_scale_fd = par[gal_shape_ids.e_scale]
-      this_cov = Util.get_bvn_cov(e_axis_fd, e_angle_fd, e_scale_fd)
+      this_cov = BivariateNormals.get_bvn_cov(e_axis_fd, e_angle_fd, e_scale_fd)
       this_cov[sig_i...]
     end
 
     par = wrap_par(e_angle, e_axis, e_scale)
-    XiXi = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+    XiXi = BivariateNormals.get_bvn_cov(e_axis, e_angle, e_scale)
 
     gal_derivs = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi);
 
@@ -936,7 +956,7 @@ end
 
 function test_dsiginv_dsig()
   e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # bvn_derivs.bvn_sigsig_h is large
-  the_cov = Util.get_bvn_cov(e_axis, e_angle, e_scale)
+  the_cov = BivariateNormals.get_bvn_cov(e_axis, e_angle, e_scale)
   the_mean = Float64[0., 0.]
   bvn = BvnComponent{Float64}(the_mean, the_cov, 1.0);
   sigma_vec = Float64[ the_cov[1, 1], the_cov[1, 2], the_cov[2, 2] ]
@@ -966,6 +986,7 @@ function test_set_hess()
 end
 
 
+test_bvn_cov()
 test_set_hess()
 test_dsiginv_dsig()
 test_brightness_hessian()
