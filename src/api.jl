@@ -199,6 +199,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
         mp.active_sources = [s]
 
         try
+            info("===================================================")
             info("processing source $s: objid= $(entry.objid)")
 
             t0 = time()
