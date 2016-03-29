@@ -418,6 +418,10 @@ function GalaxyCacheComponent{NumType <: Number}(
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
     calculate_derivs::Bool, calculate_hessian::Bool)
 
+  # Declare in advance to save memory allocation.
+  const empty_sig_sf =
+    GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0));
+
   XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
   var_s = pc.tauBar + gc.nuBar * XiXi
@@ -437,7 +441,7 @@ function GalaxyCacheComponent{NumType <: Number}(
       sig_sf.t .*= gc.nuBar
     end
   else
-    sig_sf = GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0))
+    sig_sf = empty_sig_sf
   end
 
   GalaxyCacheComponent(e_dev_dir, e_dev_i, bmc, sig_sf)
