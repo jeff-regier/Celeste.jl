@@ -289,33 +289,11 @@ function test_process_active_pixels()
   function tile_lik_wrapper_fun{NumType <: Number}(
       mp::ModelParams{NumType}, calculate_derivs::Bool)
 
-    if ElboDeriv.Threaded
-      elbo_vars_array = [ ElboDeriv.ElboIntermediateVariables(
-          NumType, mp.S, length(mp.active_sources),
-          calculate_derivs=calculate_derivs)
-        for i in 1:nthreads() ]
-    else
-      elbo_vars_array = [ ElboDeriv.ElboIntermediateVariables(
-          NumType, mp.S, length(mp.active_sources),
-          calculate_derivs=calculate_derivs) ]
-    end
-    # star_mcs, gal_mcs = BivariateNormals.load_bvn_mixtures(
-    #   mp, b, calculate_derivs=elbo_vars_array[1].calculate_derivs);
-    # sbs = ElboDeriv.load_source_brightnesses(
-    #   mp, calculate_derivs=elbo_vars_array[1].calculate_derivs);
-    # ElboDeriv.tile_likelihood!(
-    #   elbo_vars_array, tile, mp, tile_sources, sbs, star_mcs, gal_mcs);
+    elbo_vars_array =
+      ElboDeriv.initialize_elbo_vars_array(mp, calculate_derivs, calculate_derivs)
     ElboDeriv.process_active_pixels!(
       elbo_vars_array, tiled_blob, mp, active_pixels);
-
-    if ElboDerivs.Threaded
-      for i in 2:nthreads()
-        add_scaled_sfs!(elbo_vars_array[1].elbo,
-                        elbo_vars_array[i].elbo, 1.0,
-                        elbo_vars_array[1].calculate_hessian &&
-                        elbo_vars_array[1].calculate_derivs)
-      end
-    end
+    ElboDeriv.reduce_elbo_vars_array!(elbo_vars_array)
     deepcopy(elbo_vars_array[1].elbo)
   end
 
