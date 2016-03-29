@@ -41,17 +41,22 @@ end
 
 
 """
-read_photoobj_primary(fieldids, dirs) -> Vector{CatalogEntry}
+read_photoobj_files(fieldids, dirs) -> Vector{CatalogEntry}
 
 Combine photoobj catalogs for the given overlapping fields, returning a single
-joined catalog containing only primary objects.
-"""
-function read_photoobj_primary(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
-            ignore_primary_mask=false)
-    @assert length(fieldids) == length(dirs)
+joined catalog.
 
-    # if we're treating any detection as primary, limit processing to one field
-    @assert !ignore_primary_mask || length(fieldids) == 1
+The `duplicate_policy` argument controls how catalogs are joined.
+With `duplicate_policy = :primary`, only primary objects are included in the
+combined catalog.
+With `duplicate_policy = :first`, only the first detection is included in the
+combined catalog.
+"""
+function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
+        duplicate_policy=:primary)
+    @assert length(fieldids) == length(dirs)
+    @assert duplicate_policy == :primary || duplicate_policy == :first
+    @assert duplicate_policy == :primary || length(dirs) == 1
 
     info("reading photoobj catalogs for ", length(fieldids), " fields")
 
@@ -79,7 +84,7 @@ function read_photoobj_primary(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
     # (thing_id == -1 indicates that the matching process failed)
     for cat in rawcatalogs
         mask = (cat["thing_id"] .!= -1)
-        if !ignore_primary_mask
+        if duplicate_policy == :primary
             mask &= (cat["mode"] .== 0x01)
         end
         for key in keys(cat)
@@ -89,7 +94,7 @@ function read_photoobj_primary(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
 
     for i in eachindex(fieldids)
         info("field ", fieldids[i], ": ", length(rawcatalogs[i]["objid"]),
-             " primary entries")
+             " filtered entries")
     end
 
     # Merge all catalogs together (there should be no duplicate objects,
@@ -135,11 +140,12 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                photoobj_dirs=frame_dirs,
                ra_range=(-1000., 1000.),
                dec_range=(-1000., 1000.),
-               ignore_primary_mask=false,
+               primary_initialization=true,
                max_iters=DEFAULT_MAX_ITERS)
     # Read all primary objects in these fields.
-    catalog = read_photoobj_primary(fieldids, photoobj_dirs,
-                        ignore_primary_mask=ignore_primary_mask)
+    duplicate_policy = primary_initialization ? :primary : :first
+    catalog = read_photoobj_files(fieldids, photoobj_dirs,
+                        duplicate_policy=duplicate_policy)
     info("$(length(catalog)) primary sources")
 
     # Filter out low-flux objects in the catalog.
@@ -401,7 +407,7 @@ function infer_field_nersc(run::Int, camcol::Int, field::Int,
                     psfield_dirs=[nersc_psfield_dir(run, camcol)],
                     photofield_dirs=[nersc_photofield_dir(run)],
                     photoobj_dirs=[nersc_photoobj_dir(run, camcol)],
-                    ignore_primary_mask=true)
+                    primary_initialization=false)
 
     fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir run camcol field
     JLD.save(fname, "results", results)
