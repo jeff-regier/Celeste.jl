@@ -331,6 +331,34 @@ function read_photoobj(fname, band::Char='r')
     bandnum = BAND_CHAR_TO_NUM[band]
 
     f = FITSIO.FITS(fname)
+
+    # sometimes the expected table extension is only an empty generic FITS
+    # header, indicating no objects. We check explicitly for this case here
+    # and return an empty table
+    if (length(f) < 2) || (!isa(f[2], FITSIO.TableHDU))
+        catalog = Dict("objid"=>ASCIIString[],
+                       "ra"=>Float64[],
+                       "dec"=>Float64[],
+                       "thing_id"=>Int32[],
+                       "mode"=>UInt8[],
+                       "is_star"=>BitVector(),
+                       "is_gal"=>BitVector(),
+                       "frac_dev"=>Float32[],
+                       "ab_exp"=>Float32[],
+                       "theta_exp"=>Float32[],
+                       "phi_exp"=>Float32[],
+                       "ab_dev"=>Float32[],
+                       "theta_dev"=>Float32[],
+                       "phi_dev"=>Float32[])
+        for (b, n) in BAND_CHAR_TO_NUM
+            catalog["psfflux_$b"] = Float32[]
+            catalog["compflux_$b"] = Float32[]
+            catalog["expflux_$b"] = Float32[]
+            catalog["devflux_$b"] = Float32[]
+        end
+        return catalog
+    end
+ 
     hdu = f[2]::FITSIO.TableHDU
 
     objid = read(hdu, "objid")::Vector{ASCIIString}
