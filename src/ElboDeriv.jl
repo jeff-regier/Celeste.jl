@@ -171,10 +171,11 @@ Add all the elbo values for an elbo_vars_array in the first element.
 After a value is added, it is cleared.
 """
 function reduce_elbo_vars_array!{NumType <: Number}(
-    elbo_vars_array::Array{ElboIntermediateVariables{NumType}})
+    elbo_vars_array::Array{ElboIntermediateVariables{NumType}};
+    num_threads::Int=nthreads())
 
   if Threaded
-    for i in 2:nthreads()
+    for i in 2:num_threads
       SensitiveFloats.add_scaled_sfs!(
         elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
         elbo_vars_array[1].calculate_hessian &&

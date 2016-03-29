@@ -393,6 +393,40 @@ function test_trim_source_tiles()
 end
 
 
+function test_reduce_elbo_vars_array()
+  blob, mp, three_bodies, tiled_blob = gen_three_body_dataset();
+
+  array_length = 3;
+  elbo_vars_array =
+    ElboDeriv.ElboIntermediateVariables{Float64}[
+      ElboDeriv.ElboIntermediateVariables(Float64, mp.S,
+        length(mp.active_sources), calculate_derivs=true,
+        calculate_hessian=true)
+        for i in 1:array_length ];
+
+  total_elbo =
+    zero_sensitive_float(CanonicalParams, Float64, length(mp.active_sources));
+  for i = 1:array_length
+    println(i)
+    this_elbo = ElboDeriv.elbo(TiledImage[ tiled_blob[i] ], mp);
+    elbo_vars_array[i].elbo = deepcopy(this_elbo)
+    total_elbo.v += this_elbo.v
+    total_elbo.d += this_elbo.d
+    total_elbo.h += this_elbo.h
+  end
+
+  ElboDeriv.reduce_elbo_vars_array!(elbo_vars_array, num_threads=array_length);
+  @test_approx_eq elbo_vars_array[1].elbo.v total_elbo.v;
+  @test_approx_eq elbo_vars_array[1].elbo.d total_elbo.d;
+  @test_approx_eq elbo_vars_array[1].elbo.h total_elbo.h;
+
+  # Check that running it twice doesn't double count.
+  ElboDeriv.reduce_elbo_vars_array!(elbo_vars_array, num_threads=array_length);
+  @test_approx_eq elbo_vars_array[1].elbo.v total_elbo.v;
+  @test_approx_eq elbo_vars_array[1].elbo.d total_elbo.d;
+  @test_approx_eq elbo_vars_array[1].elbo.h total_elbo.h;
+end
+
 
 ####################################################
 
@@ -404,3 +438,4 @@ test_coadd_cat_init_is_most_likely()
 test_tiny_image_tiling()
 test_elbo_with_nan()
 test_trim_source_tiles()
+test_reduce_elbo_vars_array()
