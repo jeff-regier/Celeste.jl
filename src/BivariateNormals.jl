@@ -33,11 +33,14 @@ function get_bvn_cov{NumType <: Number}(
        @assert 0 < scale
        @assert 0 < ab <= 1.
    end
-   cp, sp = cos(angle), sin(angle)
-   R = [[cp -sp]; [sp cp]]  # rotates
-   D = diagm([1., ab])  # shrinks the minor axis
-   W = scale * D * R'
-   W' * W  # XiXi
+
+   cp = cos(angle)
+   sp = sin(angle)
+   ab_term = (ab ^ 2 - 1)
+   scale_squared = scale ^ 2
+   off_diag_term = -scale_squared * cp * sp * ab_term
+   NumType[ scale_squared * (1 + ab_term * (sp ^ 2))    off_diag_term;
+            off_diag_term    scale_squared * (1 + ab_term * (cp ^ 2))]
 end
 
 
@@ -415,6 +418,10 @@ function GalaxyCacheComponent{NumType <: Number}(
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
     calculate_derivs::Bool, calculate_hessian::Bool)
 
+  # Declare in advance to save memory allocation.
+  const empty_sig_sf =
+    GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0));
+
   XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
   var_s = pc.tauBar + gc.nuBar * XiXi
@@ -434,7 +441,7 @@ function GalaxyCacheComponent{NumType <: Number}(
       sig_sf.t .*= gc.nuBar
     end
   else
-    sig_sf = GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0))
+    sig_sf = empty_sig_sf
   end
 
   GalaxyCacheComponent(e_dev_dir, e_dev_i, bmc, sig_sf)
