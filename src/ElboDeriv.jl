@@ -24,6 +24,21 @@ else
     end
 end
 
+
+# TODO: the identification of active pixels should go in pre-processing
+type ActivePixel
+  # Band:
+  b::Int
+
+  # Linear tile index:
+  tile_ind::Int
+
+  # Location in tile:
+  h::Int
+  w::Int
+end
+
+
 ####################################################
 # Store pre-allocated memory in this data structures, which contains
 # intermediate values used in the ELBO calculation.
@@ -148,6 +163,52 @@ function ElboIntermediateVariables(
     E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
     E_G, var_G, combine_grad, combine_hess,
     elbo_log_term, elbo, calculate_derivs, calculate_hessian)
+end
+
+
+"""
+Add all the elbo values for an elbo_vars_array in the first element.
+After a value is added, it is cleared.
+"""
+function reduce_elbo_vars_array!{NumType <: Number}(
+    elbo_vars_array::Array{ElboIntermediateVariables{NumType}};
+    num_threads::Int=nthreads())
+
+  if Threaded
+    for i in 2:num_threads
+      SensitiveFloats.add_scaled_sfs!(
+        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
+        elbo_vars_array[1].calculate_hessian &&
+          elbo_vars_array[1].calculate_derivs)
+      clear!(elbo_vars_array[i].elbo)
+    end
+  end
+end
+
+
+"""
+Initialize an ElboIntermediateVariables array based on the number of threads.
+"""
+function initialize_elbo_vars_array{NumType <: Number}(
+    mp::ModelParams{NumType}, calculate_derivs::Bool, calculate_hessian::Bool)
+
+  elbo_vars_array = ElboIntermediateVariables{NumType}[]
+  if Threaded
+    elbo_vars_array =
+      ElboIntermediateVariables{NumType}[
+        ElboIntermediateVariables(NumType, mp.S,
+          length(mp.active_sources), calculate_derivs=calculate_derivs,
+          calculate_hessian=calculate_hessian)
+          for i in 1:nthreads() ]
+  else
+    elbo_vars_array =
+      ElboIntermediateVariables{NumType}[
+        ElboIntermediateVariables(NumType, mp.S,
+          length(mp.active_sources), calculate_derivs=calculate_derivs,
+          calculate_hessian=calculate_hessian) ]
+  end
+
+  return elbo_vars_array
 end
 
 
@@ -767,102 +828,65 @@ end
 # The remaining functions loop over tiles, sources, and pixels.
 
 """
-Add a tile's contribution to the ELBO likelihood term by
+Add an array of pixels' contribution to the ELBO likelihood term by
 modifying elbo in place.
 
 Args:
   - elbo_vars_array: Array of per-thread Elbo intermediate values.
-  - tile: An ImageTile
+  - tiled_blob: An Array of images
   - mp: Model parameters
-  - tile_sources: A vector of integers of sources in 1:mp.S affecting the tile
-  - sbs: Source brightnesses
-  - star_mcs: Star components
-  - gal_mcs: Galaxy components
-  - include_epsilon: Whether the background noise should be included
+  - active_pixels: An array of ActivePixels to be processed.
 
 Returns:
   Adds to the elbo_vars_array[:].elbo in place.
 """
-function tile_likelihood!{NumType <: Number}(
+function process_active_pixels!{NumType <: Number}(
     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
-    tile::ImageTile,
+    tiled_blob::TiledBlob,
     mp::ModelParams{NumType},
-    tile_sources::Vector{Int},
-    sbs::Vector{SourceBrightness{NumType}},
-    star_mcs::Array{BvnComponent{NumType}, 2},
-    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-    include_epsilon::Bool=true)
+    active_pixels::Array{ActivePixel})
 
-  elbo = elbo_vars_array[1].elbo
+  sbs = load_source_brightnesses(mp,
+    calculate_derivs=elbo_vars_array[1].calculate_derivs,
+    calculate_hessian=elbo_vars_array[1].calculate_hessian)
 
-  # For speed, if there are no sources, add the noise
-  # contribution directly.
-  if (length(tile_sources) == 0) && include_epsilon
-    # NB: not using the delta-method approximation here
-    if tile.constant_background
-        nan_pixels = Base.isnan(tile.pixels)
-        num_pixels =
-          length(tile.h_range) * length(tile.w_range) - sum(nan_pixels)
-        tile_x = sum(tile.pixels[!nan_pixels])
-        ep = tile.epsilon
-        elbo.v[1] += tile_x * log(ep) - num_pixels * ep
-    else
-        for w in 1:tile.w_width, h in 1:tile.h_width
-            this_pixel = tile.pixels[h, w]
-            if !Base.isnan(this_pixel)
-                ep = tile.epsilon_mat[h, w]
-                elbo.v[1] += this_pixel * log(ep) - ep
-            end
-        end
-    end
-    return
+  star_mcs_vec = Array(Array{BvnComponent{NumType}, 2}, length(tiled_blob))
+  gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType}, 4}, length(tiled_blob))
+
+  for b=1:length(tiled_blob)
+    # TODO: every elbo_vars should not get to decide its own calculate_*
+    star_mcs_vec[b], gal_mcs_vec[b] =
+      load_bvn_mixtures(mp, b,
+        calculate_derivs=elbo_vars_array[1].calculate_derivs,
+        calculate_hessian=elbo_vars_array[1].calculate_hessian)
   end
 
-  # Iterate over pixels that are not NaN.
-  if Threaded
-    @threads for w = 1:tile.w_width
-      tid = threadid()
-      for h = 1:tile.h_width
-        this_pixel = tile.pixels[h, w]
-        if !Base.isnan(this_pixel)
-          # Get the brightness.
-          get_expected_pixel_brightness!(
-            elbo_vars_array[tid], h, w, sbs, star_mcs, gal_mcs, tile,
-            mp, tile_sources, include_epsilon=include_epsilon)
+  # Kiran: parallelize this
+  for pixel in active_pixels
+    tile = tiled_blob[pixel.b][pixel.tile_ind]
+    tile_sources = mp.tile_sources[pixel.b][pixel.tile_ind]
+    this_pixel = tile.pixels[pixel.h, pixel.w]
 
-          # Add the terms to the elbo given the brightness.
-          iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
-          add_elbo_log_term!(elbo_vars_array[tid], this_pixel, iota)
-          add_scaled_sfs!(elbo_vars_array[tid].elbo,
-                          elbo_vars_array[tid].E_G, -iota,
-                          elbo_vars_array[tid].calculate_hessian &&
-                          elbo_vars_array[tid].calculate_derivs)
-        end
-      end
-    end
-  else
-    for w in 1:tile.w_width, h in 1:tile.h_width
-      this_pixel = tile.pixels[h, w]
-      if !Base.isnan(this_pixel)
-        # Get the brightness.
-        get_expected_pixel_brightness!(
-          elbo_vars_array[1], h, w, sbs, star_mcs, gal_mcs, tile,
-          mp, tile_sources, include_epsilon=include_epsilon)
+    # Get the brightness.
+    get_expected_pixel_brightness!(
+      elbo_vars_array[1], pixel.h, pixel.w, sbs,
+      star_mcs_vec[pixel.b], gal_mcs_vec[pixel.b], tile,
+      mp, tile_sources, include_epsilon=true)
 
-        # Add the terms to the elbo given the brightness.
-        iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
-        add_elbo_log_term!(elbo_vars_array[1], this_pixel, iota)
-        add_scaled_sfs!(elbo_vars_array[1].elbo,
-                        elbo_vars_array[1].E_G, -iota,
-                        elbo_vars_array[1].calculate_hessian &&
-                        elbo_vars_array[1].calculate_derivs)
-      end
-    end
+    # Add the terms to the elbo given the brightness.
+    iota = tile.constant_background ? tile.iota : tile.iota_vec[pixel.h]
+    add_elbo_log_term!(elbo_vars_array[1], this_pixel, iota)
+    add_scaled_sfs!(elbo_vars_array[1].elbo,
+                    elbo_vars_array[1].E_G, -iota,
+                    elbo_vars_array[1].calculate_hessian &&
+                    elbo_vars_array[1].calculate_derivs)
+
+    # Subtract the log factorial term.  This is not a function of the
+    # parameters so the derivatives don't need to be updated.  Note that
+    # even though this does not affect the ELBO's maximum, it affects
+    # the optimization convergence criterion, so I will leave it in for now.
+    elbo_vars_array[1].elbo.v[1] -= lfact(this_pixel)
   end
-
-  # Subtract the log factorial term.  This is not a function of the
-  # parameters so the derivatives don't need to be updated.
-  elbo.v[1] += -sum(lfact(tile.pixels[!Base.isnan(tile.pixels)]))
 end
 
 
@@ -939,68 +963,29 @@ end
 
 
 """
-Updates the ELBO likelihood for given brighntess and bvn components.
+Get the active pixels (pixels for which the active sources are present)
+for a tiled blob.
 
-Args:
-  - elbo_vars_array: Array for per-thread Elbo intermediate values.
-  - tiled_image: An array of ImageTiles
-  - mp: Model parameters
-  - sbs: Source brightnesses
-  - star_mcs: Star components
-  - gal_mcs: Galaxy components
-
-Returns:
-  Updates elbo_vars_array[:].elbo in place.
+TODO: move this to pre-processing and use it instead of setting low-signal
+pixels to NaN.
 """
-function elbo_likelihood!{NumType <: Number}(
-    elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
-    tiled_image::Array{ImageTile},
-    mp::ModelParams{NumType},
-    sbs::Vector{SourceBrightness{NumType}},
-    star_mcs::Array{BvnComponent{NumType}, 2},
-    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
+function get_active_pixels{NumType <: Number}(
+    tiled_blob::TiledBlob, mp::ModelParams{NumType})
 
-  @assert length(mp.active_sources) > 0
-  @assert maximum(mp.active_sources) <= mp.S
-  for tile_ind in 1:length(tiled_image)
-    # TODO: this band must be the same as the band that was used to
-    # populate star_mcs and gal_mcs.  Assert here?
-    b = tiled_image[tile_ind].b
+  active_pixels = ActivePixel[]
+  for b in 1:length(tiled_blob), tile_ind in 1:length(tiled_blob[b])
     tile_sources = mp.tile_sources[b][tile_ind]
     if length(intersect(tile_sources, mp.active_sources)) > 0
-      tile_likelihood!(
-        elbo_vars_array, tiled_image[tile_ind], mp, tile_sources, sbs,
-        star_mcs, gal_mcs);
+      tile = tiled_blob[b][tile_ind]
+      for w in 1:tile.w_width, h in 1:tile.h_width
+        if !Base.isnan(tile.pixels[h, w])
+          push!(active_pixels, ActivePixel(b, tile_ind, h, w))
+        end
+      end
     end
   end
 
-end
-
-
-"""
-Add the expected log likelihood ELBO term for an image to elbo given the
-brightnesses.
-
-Args:
-  - elbo_vars_array: Array for per-thread Elbo intermediate values.
-  - tiles: An array of ImageTiles
-  - mp: Model parameters
-  - b: The band of the tiles
-  - sbs: Source brightnesses
-
-Returns:
-  Updates elbo_vars_array[:].elbo in place.
-"""
-function elbo_likelihood!{NumType <: Number}(
-    elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
-    tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int,
-    sbs::Vector{SourceBrightness{NumType}})
-
-  star_mcs, gal_mcs =
-    load_bvn_mixtures(mp, b,
-      calculate_derivs=elbo_vars_array[1].calculate_derivs,
-      calculate_hessian=elbo_vars_array[1].calculate_hessian)
-  elbo_likelihood!(elbo_vars_array, tiles, mp, sbs, star_mcs, gal_mcs)
+  active_pixels
 end
 
 
@@ -1024,35 +1009,13 @@ function elbo_likelihood{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType};
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
-  elbo_vars_array = ElboIntermediateVariables{NumType}[]
-  if Threaded
-    elbo_vars_array =
-      ElboIntermediateVariables{NumType}[
-        ElboIntermediateVariables(NumType, mp.S,
-          length(mp.active_sources), calculate_derivs=calculate_derivs,
-          calculate_hessian=calculate_hessian)
-          for i in 1:nthreads() ]
-  else
-    elbo_vars_array =
-    ElboIntermediateVariables{NumType}[
-      ElboIntermediateVariables(NumType, mp.S,
-        length(mp.active_sources), calculate_derivs=calculate_derivs,
-        calculate_hessian=calculate_hessian) ]
-  end
-  sbs = load_source_brightnesses(mp,
-    calculate_derivs=elbo_vars_array[1].calculate_derivs,
-    calculate_hessian=elbo_vars_array[1].calculate_hessian)
-  for b in 1:length(tiled_blob)
-      elbo_likelihood!(elbo_vars_array, tiled_blob[b], mp, b, sbs)
-  end
-  if Threaded
-    for i in 2:nthreads()
-      add_scaled_sfs!(elbo_vars_array[1].elbo,
-                      elbo_vars_array[i].elbo, 1.0,
-                      elbo_vars_array[1].calculate_hessian &&
-                      elbo_vars_array[1].calculate_derivs)
-    end
-  end
+  active_pixels = get_active_pixels(tiled_blob, mp)
+
+  elbo_vars_array =
+    initialize_elbo_vars_array(mp, calculate_derivs, calculate_hessian);
+
+  process_active_pixels!(elbo_vars_array, tiled_blob, mp, active_pixels)
+  reduce_elbo_vars_array!(elbo_vars_array)
   elbo_vars_array[1].elbo
 end
 
