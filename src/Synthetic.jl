@@ -4,7 +4,7 @@ export gen_blob
 
 using ..Types
 import ..ModelInit
-import ..Util
+import ..BivariateNormals
 import ..WCSUtils
 
 import Distributions
@@ -35,10 +35,16 @@ function write_gaussian(the_mean, the_cov, intensity, pixels;
     H, W = size(pixels)
     w_range, h_range = get_patch(the_mean, H, W)
 
+    function matvec222(mat::Matrix, vec::Vector)
+        # x' A x in a slightly more efficient form.
+        (mat[1,1] * vec[1] + mat[1,2] * vec[2]) * vec[1] +
+                (mat[2,1] * vec[1] + mat[2,2] * vec[2]) * vec[2]
+    end
+
     for w in w_range, h in h_range
         y[1] = the_mean[1] - h
         y[2] = the_mean[2] - w
-        ypy = Util.matvec222(the_precision, y)
+        ypy = matvec222(the_precision, y)
         pdf_hw = c * exp(-0.5 * ypy)
         pixel_rate = intensity * pdf_hw
         pixels[h, w] += expectation ? pixel_rate : wrapped_poisson(pixel_rate)
@@ -64,7 +70,7 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                       expectation=false)
     e_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
 
-    XiXi = Util.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
+    XiXi = BivariateNormals.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
 
     for i in 1:2
         for gproto in galaxy_prototypes[i]
