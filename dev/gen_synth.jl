@@ -4,7 +4,7 @@ using Celeste
 using CelesteTypes
 
 import Synthetic
-import SloanDigitalSkySurvey: SDSS
+import ..SDSS
 
 function gen_synth_cat(stamp_id)
     blob0 = Images.load_stamp_blob(ENV["STAMP"], stamp_id)

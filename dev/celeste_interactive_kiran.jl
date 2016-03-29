@@ -6,8 +6,8 @@ using DataFrames
 
 import FITSIO
 import JLD
-import SloanDigitalSkySurvey: SDSS
-import SloanDigitalSkySurvey: WCSUtils
+import ..SDSS
+import ..WCSUtils
 
 using Celeste.Types
 import Celeste.SkyImages
