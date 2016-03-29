@@ -166,6 +166,51 @@ function ElboIntermediateVariables(
 end
 
 
+"""
+Add all the elbo values for an elbo_vars_array in the first element.
+After a value is added, it is cleared.
+"""
+function reduce_elbo_vars_array!{NumType <: Number}(
+    elbo_vars_array::Array{ElboIntermediateVariables{NumType}})
+
+  if Threaded
+    for i in 2:nthreads()
+      SensitiveFloats.add_scaled_sfs!(
+        elbo_vars_array[1].elbo, elbo_vars_array[i].elbo, 1.0,
+        elbo_vars_array[1].calculate_hessian &&
+          elbo_vars_array[1].calculate_derivs)
+      clear!(elbo_vars_array[i].elbo)
+    end
+  end
+end
+
+
+"""
+Initialize an ElboIntermediateVariables array based on the number of threads.
+"""
+function initialize_elbo_vars_array{NumType <: Number}(
+    mp::ModelParams{NumType}, calculate_derivs::Bool, calculate_hessian::Bool)
+
+  elbo_vars_array = ElboIntermediateVariables{NumType}[]
+  if Threaded
+    elbo_vars_array =
+      ElboIntermediateVariables{NumType}[
+        ElboIntermediateVariables(NumType, mp.S,
+          length(mp.active_sources), calculate_derivs=calculate_derivs,
+          calculate_hessian=calculate_hessian)
+          for i in 1:nthreads() ]
+  else
+    elbo_vars_array =
+      ElboIntermediateVariables{NumType}[
+        ElboIntermediateVariables(NumType, mp.S,
+          length(mp.active_sources), calculate_derivs=calculate_derivs,
+          calculate_hessian=calculate_hessian) ]
+  end
+
+  return elbo_vars_array
+end
+
+
 include("elbo_kl.jl")
 include("source_brightness.jl")
 
@@ -916,31 +961,31 @@ function tile_predicted_image{NumType <: Number}(
 end
 
 
-"""
-Add the expected log likelihood ELBO term for an image to elbo given the
-brightnesses.
-
-Args:
-  - elbo_vars_array: Array for per-thread Elbo intermediate values.
-  - tiles: An array of ImageTiles
-  - mp: Model parameters
-  - b: The band of the tiles
-  - sbs: Source brightnesses
-
-Returns:
-  Updates elbo_vars_array[:].elbo in place.
-"""
-function elbo_likelihood!{NumType <: Number}(
-    elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
-    tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int,
-    sbs::Vector{SourceBrightness{NumType}})
-
-  star_mcs, gal_mcs =
-    load_bvn_mixtures(mp, b,
-      calculate_derivs=elbo_vars_array[1].calculate_derivs,
-      calculate_hessian=elbo_vars_array[1].calculate_hessian)
-  elbo_likelihood!(elbo_vars_array, tiles, mp, sbs, star_mcs, gal_mcs)
-end
+# """
+# Add the expected log likelihood ELBO term for an image to elbo given the
+# brightnesses.
+#
+# Args:
+#   - elbo_vars_array: Array for per-thread Elbo intermediate values.
+#   - tiles: An array of ImageTiles
+#   - mp: Model parameters
+#   - b: The band of the tiles
+#   - sbs: Source brightnesses
+#
+# Returns:
+#   Updates elbo_vars_array[:].elbo in place.
+# """
+# function elbo_likelihood!{NumType <: Number}(
+#     elbo_vars_array::Array{ElboIntermediateVariables{NumType}},
+#     tiles::Array{ImageTile}, mp::ModelParams{NumType}, b::Int,
+#     sbs::Vector{SourceBrightness{NumType}})
+#
+#   star_mcs, gal_mcs =
+#     load_bvn_mixtures(mp, b,
+#       calculate_derivs=elbo_vars_array[1].calculate_derivs,
+#       calculate_hessian=elbo_vars_array[1].calculate_hessian)
+#   elbo_likelihood!(elbo_vars_array, tiles, mp, sbs, star_mcs, gal_mcs)
+# end
 
 
 """
@@ -992,32 +1037,11 @@ function elbo_likelihood{NumType <: Number}(
 
   active_pixels = get_active_pixels(tiled_blob, mp)
 
-  elbo_vars_array = ElboIntermediateVariables{NumType}[]
-  if Threaded
-    elbo_vars_array =
-      ElboIntermediateVariables{NumType}[
-        ElboIntermediateVariables(NumType, mp.S,
-          length(mp.active_sources), calculate_derivs=calculate_derivs,
-          calculate_hessian=calculate_hessian)
-          for i in 1:nthreads() ]
-  else
-    elbo_vars_array =
-    ElboIntermediateVariables{NumType}[
-      ElboIntermediateVariables(NumType, mp.S,
-        length(mp.active_sources), calculate_derivs=calculate_derivs,
-        calculate_hessian=calculate_hessian) ]
-  end
+  elbo_vars_array =
+    initialize_elbo_vars_array(mp, calculate_derivs, calculate_hessian);
 
   process_active_pixels!(elbo_vars_array, tiled_blob, mp, active_pixels)
-
-  if Threaded
-    for i in 2:nthreads()
-      add_scaled_sfs!(elbo_vars_array[1].elbo,
-                      elbo_vars_array[i].elbo, 1.0,
-                      elbo_vars_array[1].calculate_hessian &&
-                      elbo_vars_array[1].calculate_derivs)
-    end
-  end
+  reduce_elbo_vars_array!(elbo_vars_array)
   elbo_vars_array[1].elbo
 end
 
