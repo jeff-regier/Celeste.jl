@@ -11,10 +11,12 @@ before_install:
   - sudo apt-get update -qq -y
   - sudo apt-get install libwcs4 -y
   - sudo apt-get install libcfitsio3 -y
+  - sudo apt-get install openmpi-bin openmpi-common libopenmpi-dev -qq -y
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
   - julia -e 'Pkg.clone(pwd()); Pkg.build("Celeste")'
+  - julia -e 'Pkg.clone("https://github.com/kpamnany/Dtree.jl"); Pkg.build("Dtree")'
   - julia -e 'if VERSION >= v"0.5.0-dev"
         Pkg.checkout("Optim");
         Pkg.checkout("DataFrames");
