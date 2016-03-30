@@ -293,7 +293,7 @@ function query_overlapping_fields(ramin, ramax, decmin, decmax)
 end
 
 """
-query_overlapping_fieldids(ramin, ramax, decmin, decmax) -> (Int, Int, Int)
+query_overlapping_fieldids(ramin, ramax, decmin, decmax) -> Vector{Tuple{Int, Int, Int}}
 
 Like `query_overlapping_fields`, but return a Vector of
 (run, camcol, field) triplets.
@@ -307,25 +307,40 @@ function query_overlapping_fieldids(ramin, ramax, decmin, decmax)
 end
 
 
-
+# NERSC source directories
 const NERSC_DATA_ROOT = "/global/projecta/projectdirs/sdss/data/sdss/dr12/boss"
 nersc_photoobj_dir(run::Integer, camcol::Integer) =
     "$(NERSC_DATA_ROOT)/photoObj/301/$(run)/$(camcol)"
 nersc_psfield_dir(run::Integer, camcol::Integer) =
     "$(NERSC_DATA_ROOT)/photo/redux/301/$(run)/objcs/$(camcol)"
-nersc_photofield_dir(run::Integer) = "$(NERSC_DATA_ROOT)/photoObj/301/$(run)"
+nersc_photofield_dir(run::Integer) =
+    "$(NERSC_DATA_ROOT)/photoObj/301/$(run)"
+nersc_frame_dir(run::Integer, camcol::Integer) = 
+    "$(NERSC_DATA_ROOT)/photoObj/frames/301/$(run)/$(camcol)"
+nersc_fpm_dir(run::Integer, camcol::Integer) =
+    "$(NERSC_DATA_ROOT)/photo/redux/301/$(run)/objcs/$(camcol)"
+
+
+# NERSC scratch directories
+nersc_field_scratchdir(run::Integer, camcol::Integer, field::Integer) =
+    joinpath(ENV["SCRATCH"], "celeste/$(run)/$(camcol)/$(field)")
+nersc_photofield_scratchdir(run::Integer, camcol::Integer) =
+    joinpath(ENV["SCRATCH"], "celeste/$(run)/$(camcol)")
 
 """
-nersc_frame_dir(run, camcol, field)
+    nersc_stage_field(run, camcol, field)
 
-Uncompress the frame files to user's scratch and return the directory on
-scratch containing the uncompressed files.
+Stage all relevant files for the given run, camcol, field to user's SCRATCH
+directory. The target locations are given by `nersc_field_scratchdir` and 
+`nersc_photofield_scratchdir`.
 """
-function nersc_frame_dir(run::Integer, camcol::Integer, field::Integer)
-    # Uncompress the frame (bz2) files to scratch
-    srcdir = "$(NERSC_DATA_ROOT)/photoObj/frames/301/$(run)/$(camcol)"
-    dstdir = joinpath(ENV["SCRATCH"], "celeste", "frames", "$(run)-$(camcol)")
+function nersc_stage_field(run::Integer, camcol::Integer, field::Integer)
+    # destination directory for all files except photofield.
+    dstdir = nersc_field_scratchdir(run, camcol, field)
     isdir(dstdir) || mkpath(dstdir)
+
+    # frame files: uncompress bz2 files
+    srcdir = nersc_frame_dir(run, camcol)
     for band in ['u', 'g', 'r', 'i', 'z']
         srcfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits.bz2",
                            srcdir, band, run, camcol, field)
@@ -336,23 +351,14 @@ function nersc_frame_dir(run::Integer, camcol::Integer, field::Integer)
             Base.run(pipeline(`bzcat --keep $srcfile`, stdout=dstfile))
         end
     end
-    return dstdir
-end
 
-
-"""
-nersc_fpm_dir(run, camcol, field)
-
-Uncompress the fpM files to user's scratch and return the directory on
-scratch containing the uncompressed files.
-"""
-function nersc_fpm_dir(run::Integer, camcol::Integer, field::Integer)
+    # fpm files
     # It isn't strictly necessary to uncompress these, because FITSIO can handle
     # gzipped files. However, the celeste code assumes the filename ends with
-    # ".fit", so we have to at least symlink the files to a new name.
-    srcdir = "$(NERSC_DATA_ROOT)/photo/redux/301/$(run)/objcs/$(camcol)"
-    dstdir = joinpath(ENV["SCRATCH"], "celeste", "fpm", "$(run)-$(camcol)")
-    debug(dstdir)
+    # ".fit", so we would have to at least change the name. It seems clearer
+    # to simply uncompress here.
+    srcdir = nersc_fpm_dir(run, camcol)
+    dstdir = nersc_field_scratchdir(run, camcol, field)
     isdir(dstdir) || mkpath(dstdir)
     for band in ['u', 'g', 'r', 'i', 'z']
         srcfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit.gz",
@@ -364,31 +370,68 @@ function nersc_fpm_dir(run::Integer, camcol::Integer, field::Integer)
             Base.run(pipeline(`gunzip --stdout $srcfile`, stdout=dstfile))
         end
     end
-    return dstdir
+
+    # photoobj: simply copy
+    srcfile = @sprintf("%s/photoObj-%06d-%d-%04d.fits",
+                       nersc_photoobj_dir(run, camcol), run, camcol, field)
+    dstfile = @sprintf("%s/photoObj-%06d-%d-%04d.fits",
+                       nersc_field_scratchdir(run, camcol, field), run,
+                       camcol, field)
+    isfile(dstfile) || cp(srcfile, dstfile)
+
+    # psField: simply copy
+    srcfile = @sprintf("%s/psField-%06d-%d-%04d.fit",
+                       nersc_psfield_dir(run, camcol), run, camcol, field)
+    dstfile = @sprintf("%s/psField-%06d-%d-%04d.fit",
+                       nersc_field_scratchdir(run, camcol, field), run,
+                       camcol, field)
+    isfile(dstfile) || cp(srcfile, dstfile)
+
+    # photofield: simply copy
+    srcfile = @sprintf("%s/photoField-%06d-%d.fits",
+                       nersc_photofield_dir(run), run, camcol)
+    dstfile = @sprintf("%s/photoField-%06d-%d.fits",
+                       nersc_photofield_scratchdir(run, camcol), run, camcol)
+    isfile(dstfile) || cp(srcfile, dstfile)
 end
 
 
 """
+Stage all relevant files for the given sky patch to user's SCRATCH.
+"""
+function stage_box_nersc(ramin, ramax, decmin, decmax)
+    fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
+    for (run, camcol, field) in fieldids
+        nersc_stage_field(run, camcol, field)
+    end
+end
+
+"""
 NERSC-specific infer function, called from main entry point.
 """
-function infer_box_nersc(ramin, ramax, decmin, decmax, outdir)
+function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
+                         stage::Bool=false)
     # Get vector of (run, camcol, field) triplets overlapping this patch
     fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
 
+    if stage
+        for (run, camcol, field) in fieldids
+            nersc_stage_field(run, camcol, field)
+        end
+    end
+
     # Get relevant directories corresponding to each field.
-    frame_dirs = [nersc_frame_dir(x[1], x[2], x[3]) for x in fieldids]
-    fpm_dirs = [nersc_fpm_dir(x[1], x[2], x[3]) for x in fieldids]
-    psfield_dirs = [nersc_psfield_dir(x[1], x[2]) for x in fieldids]
-    photoobj_dirs = [nersc_photoobj_dir(x[1], x[2]) for x in fieldids]
-    photofield_dirs = [nersc_photofield_dir(x[1]) for x in fieldids]
+    frame_dirs = [nersc_field_scratchdir(x[1], x[2], x[3]) for x in fieldids]
+    photofield_dirs = [nersc_photofield_scratchdir(x[1], x[2])
+                       for x in fieldids]
 
     results = infer(fieldids, frame_dirs;
                     ra_range=(ramin, ramax),
                     dec_range=(decmin, decmax), 
-                    fpm_dirs=fpm_dirs,
-                    psfield_dirs=psfield_dirs,
-                    photofield_dirs=photofield_dirs,
-                    photoobj_dirs=photoobj_dirs)
+                    fpm_dirs=frame_dirs,
+                    psfield_dirs=frame_dirs,
+                    photoobj_dirs=frame_dirs,
+                    photofield_dirs=photofield_dirs)
 
     fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
                      outdir, ramin, ramax, decmin, decmax)
@@ -401,14 +444,18 @@ end
 NERSC-specific infer function, called from main entry point.
 """
 function infer_field_nersc(run::Int, camcol::Int, field::Int,
-        outdir::AbstractString; objid="")
-    results = infer([(run, camcol, field)],
-                    [nersc_frame_dir(run, camcol, field)];
+                           outdir::AbstractString; objid="")
+    # ensure that files are staged and set up paths.
+    nersc_stage_field(run, camcol, field)
+    field_dirs = [nersc_field_scratchdir(run, camcol, field)]
+    photofield_dirs = [nersc_photofield_scratchdir(run, camcol)]
+
+    results = infer([(run, camcol, field)], field_dirs;
                     objid=objid,
-                    fpm_dirs=[nersc_fpm_dir(run, camcol, field)],
-                    psfield_dirs=[nersc_psfield_dir(run, camcol)],
-                    photofield_dirs=[nersc_photofield_dir(run)],
-                    photoobj_dirs=[nersc_photoobj_dir(run, camcol)],
+                    fpm_dirs=field_dirs,
+                    psfield_dirs=field_dirs,
+                    photoobj_dirs=field_dirs,
+                    photofield_dirs=photofield_dirs,
                     primary_initialization=false)
 
     fname = if objid == ""
