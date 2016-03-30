@@ -322,12 +322,10 @@ nersc_fpm_dir(run::Integer, camcol::Integer) =
 
 
 # NERSC scratch directories
-const NERSC_SCRATCH_ROOT = joinpath(ENV["SCRATCH"], "celeste")
 nersc_field_scratchdir(run::Integer, camcol::Integer, field::Integer) =
-    "$(NERSC_SCRATCH_ROOT)/$(run)/$(camcol)/$(field)"
+    joinpath(ENV["SCRATCH"], "celeste/$(run)/$(camcol)/$(field)")
 nersc_photofield_scratchdir(run::Integer, camcol::Integer) =
-    "$(NERSC_SCRATCH_ROOT)/$(run)/$(camcol)"
-
+    joinpath(ENV["SCRATCH"], "celeste/$(run)/$(camcol)")
 
 """
     nersc_stage_field(run, camcol, field)
