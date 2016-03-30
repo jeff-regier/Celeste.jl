@@ -905,6 +905,12 @@ function score_field(fieldid::Tuple{Int, Int, Int},
     celeste_err = get_err_df(coadd_df, celeste_df)
     primary_err = get_err_df(coadd_df, primary_df)
 
+    JLD.save("df.jld", "celeste_df", celeste_df, 
+                       "primary_df", primary_df,
+                       "coadd_df", coadd_df,
+                       "celeste_err", celeste_err,
+                       "primary_err", primary_err)
+
     # create scores
     get_scores_df(celeste_err, primary_err, coadd_df)
 end
