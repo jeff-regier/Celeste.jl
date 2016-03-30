@@ -5,6 +5,9 @@ import FITSIO
 import JLD
 using Logging  # just for testing right now
 
+# We will either multi-thread the loop over sources here, or the
+# active pixels loop in ElboDeriv.jl. When that is decided, one of
+# these will be removed.
 Threaded = false
 if Threaded && VERSION > v"0.5.0-dev"
     using Base.Threads

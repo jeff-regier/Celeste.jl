@@ -6,6 +6,7 @@ import Celeste
 
 const cpu_hz = 2.3e9
 
+# A workitem is of this ra / dec size
 const wira = 0.015
 const widec = 0.015
 

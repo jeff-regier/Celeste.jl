@@ -11,6 +11,9 @@ import ..KL
 import ForwardDiff
 import ..WCSUtils
 
+# We will either multi-thread the active pixels loop here, or the
+# loop over sources in api.jl. When that is decided, one of these
+# will be removed.
 Threaded = false
 if Threaded && VERSION > v"0.5.0-dev"
     using Base.Threads

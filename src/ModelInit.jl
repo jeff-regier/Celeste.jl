@@ -676,7 +676,6 @@ function trim_source_tiles(
       has_source = s in tile_sources
       bright_pixels = Bool[];
       if has_source
-        info("Tiles $h $w has source $s")
         pred_tile_pixels =
           ElboDeriv.tile_predicted_image(tile, mp, [ s ],
                                          include_epsilon=false);
