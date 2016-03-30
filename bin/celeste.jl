@@ -50,7 +50,7 @@ function main()
             Celeste.infer_box_nersc(ramin, ramax, decmin, decmax, outdir,
                                     stage=args["--stage"])
         end
-    elseif args["infer-field"]
+    else
         run = parse(Int, args["<run>"])
         camcol = parse(Int, args["<camcol>"])
         field = parse(Int, args["<field>"])
