@@ -667,7 +667,6 @@ function trim_source_tiles(
     println("Processing band $b...")
 
     pix_loc = WCSUtils.world_to_pix(mp.patches[s, b], mp.vp[s][ids.u]);
-    println(pix_loc)
 
     H, W = size(tiled_blob[b])
     @assert size(mp.tile_sources[b]) == size(tiled_blob[b])
@@ -697,20 +696,9 @@ function trim_source_tiles(
           close_pixel =
             (h - pix_loc[1]) ^ 2 + (w - pix_loc[2]) ^ 2 < min_radius_pix_sq
 
-          if close_pixel
-            println("Close pixel.  Bright = $bright_pixel")
-          end
           if !(bright_pixel || close_pixel)
             tile_copy.pixels[h_im, w_im] = NaN
           end
-          # if tile.constant_background
-          #   bright_pixels = pred_tile_pixels .>
-          #     (tile.iota * tile.epsilon .* noise_fraction)
-          # else
-          #   bright_pixels = pred_tile_pixels .>
-          #       (tile.iota_vec .* tile.epsilon_mat .* noise_fraction)
-          # end
-
         end
 
         trimmed_tiled_blob[b][hh, ww] = tile_copy;
