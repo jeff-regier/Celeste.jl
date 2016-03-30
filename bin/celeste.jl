@@ -7,6 +7,7 @@ const DOC =
 """Run Celeste.
 
 Usage:
+  celeste.jl [options] stage-box <ramin> <ramax> <decmin> <decmax>
   celeste.jl [options] infer-box <ramin> <ramax> <decmin> <decmax> <outdir>
   celeste.jl [options] infer-field <run> <camcol> <field> <outdir>
   celeste.jl [options] infer-object <run> <camcol> <field> <objid> <outdir>
@@ -19,9 +20,14 @@ Options:
   -h, --help         Show this screen.
   --version          Show the version.
   --logging=<LEVEL>  Level for the Logging package (OFF, DEBUG, INFO, WARNING, ERROR, or CRITICAL). [default: INFO]
+  --stage            In `infer-box`, automatically stage files. Default: false.
+
+The `stage-box` subcommand copies and/or uncompresses all files covering the
+given RA/Dec range from /project to user's SCRATCH directory.
 
 The `infer-box` subcommand runs Celeste on all sources in the given
-RA/Dec range, using all available images.
+RA/Dec range, using all available images. It depends on `stage-box` having
+already been run on the same patch of sky.
 
 The `infer-field` subcommand runs Celeste on all sources in the given
 field, using only that field.
@@ -32,14 +38,19 @@ The `score-field` subcommand is not yet implemented for the new API.
 function main()
     args = docopt(DOC, version=v"0.1.0", options_first=true)
     Celeste.set_logging_level(args["--logging"])
-    if args["infer-box"]
+    if args["stage-box"] || args["infer-box"]
         ramin = parse(Float64, args["<ramin>"])
         ramax = parse(Float64, args["<ramax>"])
         decmin = parse(Float64, args["<decmin>"])
         decmax = parse(Float64, args["<decmax>"])
-        outdir = args["<outdir>"]
-        Celeste.infer_box_nersc(ramin, ramax, decmin, decmax, outdir)
-    else
+        if args["stage-box"]
+            Celeste.stage_box_nersc(ramin, ramax, decmin, decmax)
+        elseif args["infer-box"]
+            outdir = args["<outdir>"]
+            Celeste.infer_box_nersc(ramin, ramax, decmin, decmax, outdir,
+                                    stage=args["--stage"])
+        end
+    elseif args["infer-field"]
         run = parse(Int, args["<run>"])
         camcol = parse(Int, args["<camcol>"])
         field = parse(Int, args["<field>"])
