@@ -479,6 +479,9 @@ convert SDSS mags to SDSS flux
 mag_to_flux(m::AbstractFloat) = 10.^(0.4 * (22.5 - m))
 @vectorize_1arg AbstractFloat mag_to_flux
 
+flux_to_mag(nm::AbstractFloat) = nm > 0 ? 22.5 - 2.5 * log10(nm) : NaN
+@vectorize_1arg AbstractFloat flux_to_mag
+
 """
 where(condition, x, y)
 
@@ -563,26 +566,19 @@ function load_s82(fname)
     close(f)
 
     # Convert to "celeste" style results.
-    # Note that the SDSS photo pipeline doesn't constrain the de Vaucouleur
-    # profile parameters and exponential disk parameters (A/B, angle, scale)
-    # to be the same, whereas Celeste does. Here, we pick one or the other
-    # from SDSS, based on fracdev - we'll get the parameters corresponding
-    # to the dominant component. Later, we limit comparison to objects with
-    # fracdev close to 0 or 1 to ensure that we're comparing apples to apples.
-    usedev = objs[:fracdev_r] .> 0.5  # true=> use dev, false=> use exp
-    gal_mag_u = where(usedev, objs[:devmag_u], objs[:expmag_u])
-    gal_mag_g = where(usedev, objs[:devmag_g], objs[:expmag_g])
-    gal_mag_r = where(usedev, objs[:devmag_r], objs[:expmag_r])
-    gal_mag_i = where(usedev, objs[:devmag_i], objs[:expmag_i])
-    gal_mag_z = where(usedev, objs[:devmag_z], objs[:expmag_z])
+    gal_mag_u = objs[:devmag_u] + objs[:expmag_u]
+    gal_mag_g = objs[:devmag_g] + objs[:expmag_g]
+    gal_mag_r = objs[:devmag_r] + objs[:expmag_r]
+    gal_mag_i = objs[:devmag_i] + objs[:expmag_i]
+    gal_mag_z = objs[:devmag_z] + objs[:expmag_z]
 
     result = DataFrame()
     result[:objid] = objs[:objid]
     result[:ra] = objs[:ra]
     result[:dec] = objs[:dec]
     result[:is_star] = [x != 0 for x in objs[:probpsf]]
-    result[:star_flux_r] = mag_to_flux(objs[:psfmag_r])
-    result[:gal_flux_r] = mag_to_flux(gal_mag_r)
+    result[:star_mag_r] = objs[:psfmag_r]
+    result[:gal_mag_r] = gal_mag_r
 
     # star colors
     result[:star_color_ug] = objs[:psfmag_u] .- objs[:psfmag_g]
@@ -596,11 +592,33 @@ function load_s82(fname)
     result[:gal_color_ri] = gal_mag_r .- gal_mag_i
     result[:gal_color_iz] = gal_mag_i .- gal_mag_z
 
-    # gal shape
+    # gal shape -- fracdev
     result[:gal_fracdev] = objs[:fracdev_r]
+
+    # Note that the SDSS photo pipeline doesn't constrain the de Vaucouleur
+    # profile parameters and exponential disk parameters (A/B, angle, scale)
+    # to be the same, whereas Celeste does. Here, we pick one or the other
+    # from SDSS, based on fracdev - we'll get the parameters corresponding
+    # to the dominant component. Later, we limit comparison to objects with
+    # fracdev close to 0 or 1 to ensure that we're comparing apples to apples.
+    usedev = objs[:fracdev_r] .> 0.5  # true=> use dev, false=> use exp
+
+    
     result[:gal_ab] = where(usedev, objs[:devab_r], objs[:expab_r])
-    result[:gal_angle] = where(usedev, objs[:devphi_r], objs[:expphi_r])
-    result[:gal_scale] = where(usedev, objs[:devrad_r], objs[:exprad_r])
+
+    # gal effective radius (re)
+    re_arcsec = where(usedev, objs[:devrad_r], objs[:exprad_r])
+#    re_arcsec = where(usedev, objs[:theta_dev], objs[:theta_exp])
+    re_pixel = re_arcsec / 0.396
+    result[:gal_scale] = re_pixel
+
+    # gal angle (degrees)
+    fits_phi = where(usedev, objs[:devphi_r], objs[:expphi_r])
+    fits_phi *= 1 # only for casjobs, not primary!!!
+    phi90 = 90 - fits_phi
+    phi90 -= floor(phi90 / 180) * 180
+    phi90 *= (pi / 180)
+    result[:gal_angle] = phi90
 
     return result
 end
@@ -626,21 +644,19 @@ names to match what the rest of the scoring code expects.
 function load_primary(dir, run, camcol, field)
     objs = SDSS.load_catalog_df(dir, run, camcol, field)
 
-    # TODO: not right, should add fluxes.
-    usedev = objs[:frac_dev] .> 0.5  # true=> use dev, false=> use exp
-    gal_flux_u = where(usedev, objs[:devflux_u], objs[:expflux_u])
-    gal_flux_g = where(usedev, objs[:devflux_g], objs[:expflux_g])
-    gal_flux_r = where(usedev, objs[:devflux_r], objs[:expflux_r])
-    gal_flux_i = where(usedev, objs[:devflux_i], objs[:expflux_i])
-    gal_flux_z = where(usedev, objs[:devflux_z], objs[:expflux_z])
+    gal_flux_u = objs[:devflux_u] + objs[:expflux_u]
+    gal_flux_g = objs[:devflux_g] + objs[:expflux_g]
+    gal_flux_r = objs[:devflux_r] + objs[:expflux_r]
+    gal_flux_i = objs[:devflux_i] + objs[:expflux_i]
+    gal_flux_z = objs[:devflux_z] + objs[:expflux_z]
 
     result = DataFrame()
     result[:objid] = objs[:objid]
     result[:ra] = objs[:ra]
     result[:dec] = objs[:dec]
     result[:is_star] = objs[:is_star]
-    result[:star_flux_r] = objs[:psfflux_r]
-    result[:gal_flux_r] = gal_flux_r
+    result[:star_mag_r] = flux_to_mag(objs[:psfflux_r])
+    result[:gal_mag_r] = flux_to_mag(gal_flux_r)
 
     # star colors
     result[:star_color_ug] = fluxes_to_color(objs[:psfflux_u], objs[:psfflux_g])
@@ -654,18 +670,26 @@ function load_primary(dir, run, camcol, field)
     result[:gal_color_ri] = fluxes_to_color(gal_flux_r, gal_flux_i)
     result[:gal_color_iz] = fluxes_to_color(gal_flux_i, gal_flux_z)
 
-    # gal shape
+    # gal shape -- fracdev
     result[:gal_fracdev] = objs[:frac_dev]
-    result[:gal_ab] = where(usedev, objs[:ab_dev], objs[:ab_exp])
 
-    # TODO: the catalog contains both theta_[exp,dev] and phi_[exp,dev]!
-    # which do we use?
-    #result[:gal_angle] = where(usedev, objs[:theta_dev], objs[:theta_exp])
-    result[:gal_angle] = fill(NaN, size(objs, 1))
+    # gal shape -- axis ratio
+    #TODO: filter when 0.5 < frac_dev < .95
+    usedev = objs[:frac_dev] .> 0.5  # true=> use dev, false=> use exp
+    fits_ab = where(usedev, objs[:ab_dev], objs[:ab_exp])
+    result[:gal_ab] = fits_ab
 
-    # TODO: No scale parameters in catalog.
-    #result[:gal_scale] = where(usedev, objs[?], objs[?])
-    result[:gal_scale] = fill(NaN, size(objs, 1))
+    # gal effective radius (re)
+    re_arcsec = where(usedev, objs[:theta_dev], objs[:theta_exp])
+    re_pixel = re_arcsec / 0.396
+    result[:gal_scale] = re_pixel
+
+    # gal angle (degrees)
+    fits_phi = where(usedev, objs[:phi_dev], objs[:phi_exp])
+    phi90 = 90 - fits_phi
+    phi90 -= floor(phi90 / 180) * 180
+    phi90 *= (pi / 180)
+    result[:gal_angle] = phi90
 
     return result
 end
@@ -716,12 +740,14 @@ function load_ce!(i::Int, ce::CatalogEntry, df::DataFrame)
     for j in 1:2
         s_type = ["star", "gal"][j]
         fluxes = j == 1 ? ce.star_fluxes : ce.gal_fluxes
-        df[i, symbol("$(s_type)_flux_r")] = fluxes[3]
+        df[i, symbol("$(s_type)_mag_r")] = flux_to_mag(fluxes[3])
         for c in 1:4
             cc = symbol("$(s_type)_color_$(color_names[c])")
             cc_sd = symbol("$(s_type)_color_$(color_names[c])_sd")
             if fluxes[c] > 0 && fluxes[c + 1] > 0  # leave as NA otherwise
                 df[i, cc] = -2.5log10(fluxes[c] / fluxes[c + 1])
+            else
+                df[i, cc] = NaN
             end
         end
     end
@@ -743,8 +769,8 @@ function celeste_to_df(results::Dict{Int, Dict})
     N = length(results)
     color_col_names = ["color_$cn" for cn in color_names]
     color_sd_col_names = ["color_$(cn)_sd" for cn in color_names]
-    col_names = vcat(["objid", "ra", "dec", "is_star", "star_flux_r",
-                      "star_flux_r_sd", "gal_flux_r", "gal_flux_r_sd"],
+    col_names = vcat(["objid", "ra", "dec", "is_star", "star_mag_r",
+                      "star_mag_r_sd", "gal_mag_r", "gal_mag_r_sd"],
                      ["star_$c" for c in color_col_names],
                      ["star_$c" for c in color_sd_col_names],
                      ["gal_$c" for c in color_col_names],
@@ -767,15 +793,16 @@ function celeste_to_df(results::Dict{Int, Dict})
 
         df[i, :is_star] = vs[ids.a[1]]
 
-        for j in 1:2
-            s_type = ["star", "gal"][j]
-            df[i, symbol("$(s_type)_flux_r_sd")] =
-                sqrt(df[i, symbol("$(s_type)_flux_r")]) * vs[ids.r2[j]]
-            for c in 1:4
-                cc_sd = symbol("$(s_type)_color_$(color_names[c])_sd")
-                df[i, cc_sd] = 2.5 * log10(e) * vs[ids.c2[c, j]]
-            end
-        end
+        #TODO: update UQ to mag units not flux. Also, log-normal now, not gamma.
+#        for j in 1:2
+#            s_type = ["star", "gal"][j]
+#            df[i, symbol("$(s_type)_flux_r_sd")] =
+#                sqrt(df[i, symbol("$(s_type)_flux_r")]) * vs[ids.r2[j]]
+#            for c in 1:4
+#                cc_sd = symbol("$(s_type)_color_$(color_names[c])_sd")
+#                df[i, cc_sd] = 2.5 * log10(e) * vs[ids.c2[c, j]]
+#            end
+#        end
     end
 
     return df
@@ -794,7 +821,7 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
     color_cols = [symbol("color_$cn") for cn in color_names]
     abs_err_cols = [:gal_fracdev, :gal_ab, :gal_scale]
     col_symbols = vcat([:objid, :position, :missed_stars,
-                        :missed_gals, :flux_r],
+                        :missed_gals, :mag_r],
                        color_cols,
                        abs_err_cols,
                        :gal_angle)
@@ -814,10 +841,10 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
     ret[:position] = dist(truth[:ra], truth[:dec],
                           predicted[:ra], predicted[:dec])
 
-    ret[true_gal, :flux_r] =
-        abs(truth[true_gal, :gal_flux_r] - predicted[true_gal, :gal_flux_r])
-    ret[!true_gal, :flux_r] =
-        abs(truth[!true_gal, :star_flux_r] - predicted[!true_gal, :star_flux_r])
+    ret[true_gal, :mag_r] =
+        abs(truth[true_gal, :gal_mag_r] - predicted[true_gal, :gal_mag_r])
+    ret[!true_gal, :mag_r] =
+        abs(truth[!true_gal, :star_mag_r] - predicted[!true_gal, :star_mag_r])
 
     for cn in color_names
         ret[true_gal, symbol("color_$cn")] =
@@ -906,31 +933,33 @@ function get_scores_df(celeste_err, primary_err, coadd_df)
     names!(scores_df, [:field, :primary, :celeste, :diff, :diff_sd, :N])
 
     for i in 1:(size(celeste_err, 2) - 1)
-        row = names(celeste_err)[i + 1]
-        row != :objid || continue
+        nm = names(celeste_err)[i + 1]
+        nm != :objid || continue
 
-        good_row = !isna(primary_err[:, row]) & !isna(celeste_err[:, row])
-        if string(row)[1:5] == "star_"
+        pe_good = Bool[!isnan(x) for x in primary_err[:, nm]]
+        ce_good = Bool[!isnan(x) for x in celeste_err[:, nm]]
+        good_row = pe_good & ce_good
+        if string(nm)[1:5] == "star_"
             good_row &= (coadd_df[:is_star] .> 0.5)
-        elseif string(row)[1:4] == "gal_"
+        elseif string(nm)[1:4] == "gal_"
             good_row &= (coadd_df[:is_star] .< 0.5)
-            if row in [:gal_ab, :gal_scale, :gal_angle, :gal_fracdev]
+            if nm in [:gal_ab, :gal_scale, :gal_angle, :gal_fracdev]
                 good_row &= !(0.05 .< coadd_df[:gal_fracdev] .< 0.95)
             end
-            if row == :gal_angle
+            if nm == :gal_angle
                 good_row &= coadd_df[:gal_ab] .< .6
             end
         end
 
-        scores_df[i, :field] = row
+        scores_df[i, :field] = nm
         N_good = sum(good_row)
         scores_df[i, :N] = N_good
         N_good > 0 || continue
 
-        scores_df[i, :primary] = mean(primary_err[good_row, row])
-        scores_df[i, :celeste] = mean(celeste_err[good_row, row])
+        scores_df[i, :primary] = mean(primary_err[good_row, nm])
+        scores_df[i, :celeste] = mean(celeste_err[good_row, nm])
 
-        diffs = primary_err[good_row, row] .- celeste_err[good_row, row]
+        diffs = primary_err[good_row, nm] .- celeste_err[good_row, nm]
         scores_df[i, :diff] = mean(diffs)
 
         # compute the difference in error rates between celeste and primary
