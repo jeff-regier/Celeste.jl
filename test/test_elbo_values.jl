@@ -389,6 +389,37 @@ function test_trim_source_tiles()
       elbo_full.d[non_loc_ids, 1] ./ elbo_trim.d[non_loc_ids, 1],
       fill(1.0, length(non_loc_ids)), 4e-3)
   end
+
+  # Test min_radius_pix on just one tile.
+  b = 3
+  s_tiles = SkyImages.find_source_tiles(s, b, mp)
+
+  # Set the source to be very dim:
+  mp.vp[s][ids.r1] = 0.01
+  mp.vp[s][ids.r2] = 0.01
+
+  min_radius_pix = 6.0
+  trimmed_tiled_blob = ModelInit.trim_source_tiles(
+    s, mp, tiled_blob, noise_fraction=0.1, min_radius_pix = min_radius_pix);
+
+  total_nonempty_pixels = 0.0
+  for tile_index in s_tiles
+    tile = trimmed_tiled_blob[b][tile_index...]
+    total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
+  end
+  @test_approx_eq_eps total_nonempty_pixels pi * min_radius_pix ^ 2 2.0
+
+  min_radius_pix = 0.0
+  trimmed_tiled_blob = ModelInit.trim_source_tiles(
+    s, mp, tiled_blob, noise_fraction=0.1, min_radius_pix = min_radius_pix);
+
+  total_nonempty_pixels = 0.0
+  for tile_index in s_tiles
+    tile = trimmed_tiled_blob[b][tile_index...]
+    total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
+  end
+  @test total_nonempty_pixels == 0.0
+
 end
 
 
