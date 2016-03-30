@@ -14,7 +14,7 @@ import ..WCSUtils
 # We will either multi-thread the active pixels loop here, or the
 # loop over sources in api.jl. When that is decided, one of these
 # will be removed.
-Threaded = false
+Threaded = true
 if Threaded && VERSION > v"0.5.0-dev"
     using Base.Threads
 else
@@ -860,32 +860,35 @@ function process_active_pixels!{NumType <: Number}(
         calculate_hessian=elbo_vars_array[1].calculate_hessian)
   end
 
-  # Kiran: parallelize this
-  for pixel in active_pixels
+  # iterate over the pixels
+  tic()
+  @threads for pixel in active_pixels
+    tid = threadid()
     tile = tiled_blob[pixel.b][pixel.tile_ind]
     tile_sources = mp.tile_sources[pixel.b][pixel.tile_ind]
     this_pixel = tile.pixels[pixel.h, pixel.w]
 
     # Get the brightness.
     get_expected_pixel_brightness!(
-      elbo_vars_array[1], pixel.h, pixel.w, sbs,
+      elbo_vars_array[tid], pixel.h, pixel.w, sbs,
       star_mcs_vec[pixel.b], gal_mcs_vec[pixel.b], tile,
       mp, tile_sources, include_epsilon=true)
 
     # Add the terms to the elbo given the brightness.
     iota = tile.constant_background ? tile.iota : tile.iota_vec[pixel.h]
-    add_elbo_log_term!(elbo_vars_array[1], this_pixel, iota)
-    add_scaled_sfs!(elbo_vars_array[1].elbo,
-                    elbo_vars_array[1].E_G, -iota,
-                    elbo_vars_array[1].calculate_hessian &&
-                    elbo_vars_array[1].calculate_derivs)
+    add_elbo_log_term!(elbo_vars_array[tid], this_pixel, iota)
+    add_scaled_sfs!(elbo_vars_array[tid].elbo,
+                    elbo_vars_array[tid].E_G, -iota,
+                    elbo_vars_array[tid].calculate_hessian &&
+                    elbo_vars_array[tid].calculate_derivs)
 
     # Subtract the log factorial term.  This is not a function of the
     # parameters so the derivatives don't need to be updated.  Note that
     # even though this does not affect the ELBO's maximum, it affects
     # the optimization convergence criterion, so I will leave it in for now.
-    elbo_vars_array[1].elbo.v[1] -= lfact(this_pixel)
+    elbo_vars_array[tid].elbo.v[1] -= lfact(this_pixel)
   end
+  toc()
 end
 
 

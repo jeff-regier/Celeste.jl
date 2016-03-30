@@ -250,7 +250,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     for s in target_sources
         tid = threadid()
         entry = catalog[s]
-        mp.active_sources = [s]
+        mp_array[tid].active_sources = [s]
 
         try
             nputs(nid, "processing source $s: objid = $(entry.objid)")
