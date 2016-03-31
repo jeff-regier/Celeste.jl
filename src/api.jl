@@ -8,7 +8,7 @@ using Logging  # just for testing right now
 # We will either multi-thread the loop over sources here, or the
 # active pixels loop in ElboDeriv.jl. When that is decided, one of
 # these will be removed.
-Threaded = false
+Threaded = true
 if Threaded && VERSION > v"0.5.0-dev"
     using Base.Threads
 else
@@ -247,7 +247,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     results = Dict{Int, Dict}()
     results_lock = SpinLock()
     tic()
-    for s in target_sources
+    @threads for s in target_sources
         tid = threadid()
         entry = catalog[s]
         mp_array[tid].active_sources = [s]

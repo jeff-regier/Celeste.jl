@@ -14,7 +14,7 @@ import ..WCSUtils
 # We will either multi-thread the active pixels loop here, or the
 # loop over sources in api.jl. When that is decided, one of these
 # will be removed.
-Threaded = true
+Threaded = false
 if Threaded && VERSION > v"0.5.0-dev"
     using Base.Threads
 else
@@ -861,7 +861,6 @@ function process_active_pixels!{NumType <: Number}(
   end
 
   # iterate over the pixels
-  tic()
   @threads for pixel in active_pixels
     tid = threadid()
     tile = tiled_blob[pixel.b][pixel.tile_ind]
@@ -888,7 +887,6 @@ function process_active_pixels!{NumType <: Number}(
     # the optimization convergence criterion, so I will leave it in for now.
     elbo_vars_array[tid].elbo.v[1] -= lfact(this_pixel)
   end
-  toc()
 end
 
 
