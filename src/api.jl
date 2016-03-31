@@ -5,6 +5,24 @@ import FITSIO
 import JLD
 using Logging  # just for testing right now
 
+# We will either multi-thread the loop over sources here, or the
+# active pixels loop in ElboDeriv.jl. When that is decided, one of
+# these will be removed.
+Threaded = true
+if Threaded && VERSION > v"0.5.0-dev"
+    using Base.Threads
+else
+    # Pre-Julia 0.5 there are no threads
+    nthreads() = 1
+    threadid() = 1
+    macro threads(x)
+        x
+    end
+    SpinLock() = 1
+    lock!(l) = ()
+    unlock!(l) = ()
+end
+
 using .Types
 import .SDSS
 import .SkyImages
@@ -15,6 +33,7 @@ const TILE_WIDTH = 20
 const DEFAULT_MAX_ITERS = 50
 const MIN_FLUX = 2.0
 
+@inline nputs(nid, s) = ccall(:puts, Cint, (Ptr{Int8},), string("[$nid] ", s))
 
 function set_logging_level(level)
     if level == "OFF"
@@ -142,15 +161,20 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                ra_range=(-1000., 1000.),
                dec_range=(-1000., 1000.),
                primary_initialization=true,
-               max_iters=DEFAULT_MAX_ITERS)
+               max_iters=DEFAULT_MAX_ITERS,
+               nid=1, nnodes=1)
     # Read all primary objects in these fields.
+    tic()
     duplicate_policy = primary_initialization ? :primary : :first
     catalog = read_photoobj_files(fieldids, photoobj_dirs,
                         duplicate_policy=duplicate_policy)
+    tm_rdprim = toq()
     info("$(length(catalog)) primary sources")
 
     # Filter out low-flux objects in the catalog.
+    tic()
     catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
+    tm_filcat = toq()
     info("$(length(catalog)) primary sources after MIN_FLUX cut")
 
     # Filter any object not specified, if an objid is specified
@@ -168,13 +192,14 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
     # If there are no objects of interest, return early.
     if length(target_sources) == 0
-        return Dict{Int, Dict}()
+        return Dict{Int, Dict}(), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)
     end
 
     # Read in images for all (run, camcol, field).
     images = Image[]
     image_names = ASCIIString[]
     image_count = 0
+    tic()
     for i in 1:length(fieldids)
         info("reading field ", fieldids[i])
         run, camcol, field = fieldids[i]
@@ -189,6 +214,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
         end
         append!(images, fieldims)
     end
+    tm_rdimg = toq()
 
     debug("Image names:")
     debug(image_names)
@@ -196,48 +222,76 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # initialize tiled images and model parameters for trimming.  We will
     # initialize the psf again before fitting, so we don't do it here.
     info("initializing celeste without PSF fit")
+    tic()
     tiled_images = SkyImages.break_blob_into_tiles(images, TILE_WIDTH)
     mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
                                            fit_psf=false)
+    tm_imp = toq()
 
     # get indicies of all sources relevant to those we're actually
     # interested in, and fit a local PSF for those sources (since we skipped
     # fitting the PSF for the whole catalog above)
     info("fitting PSF for all relevant sources")
+    tic()
     ModelInit.fit_object_psfs!(mp, target_sources, images)
+    tm_psf = toq()
 
+    # need a ModelParams per thread
+    mp_array = Array(ModelParams, nthreads())
+    mp_array[1] = mp
+    for i = 2:nthreads()
+        mp_array[i] = deepcopy(mp)
+    end
+
+    # iterate over sources
     results = Dict{Int, Dict}()
-    for s in target_sources
+    results_lock = SpinLock()
+    tic()
+    @threads for s in target_sources
+        tid = threadid()
         entry = catalog[s]
-        mp.active_sources = [s]
+        mp_array[tid].active_sources = [s]
 
         try
-            info("===================================================")
-            info("processing source $s: objid= $(entry.objid)")
+            nputs(nid, "processing source $s: objid = $(entry.objid)")
+            tic()
 
             t0 = time()
-            trimmed_tiled_images = ModelInit.trim_source_tiles(s, mp, tiled_images;
-                                                               noise_fraction=0.1)
+            trimmed_tiled_images =
+                    ModelInit.trim_source_tiles(s, mp_array[tid], tiled_images;
+                                                noise_fraction=0.1)
             init_time = time() - t0
+
+            t = toq()
+            nputs(nid, "trimmed $s in $t secs, optimizing")
+            tic()
 
             t0 = time()
             iter_count, max_f, max_x, result =
-                OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
-                                        verbose=true, max_iters=max_iters)
+                    OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images,
+                                            mp_array[tid];
+                                            verbose=false, max_iters=max_iters)
             fit_time = time() - t0
 
+            t = toq()
+            nputs(nid, "optimized $s in $t secs, writing results")
+
+            lock!(results_lock)
             results[entry.thing_id] = Dict("objid"=>entry.objid,
                                            "ra"=>entry.pos[1],
                                            "dec"=>entry.pos[2],
-                                           "vs"=>mp.vp[s],
+                                           "vs"=>mp_array[tid].vp[s],
                                            "init_time"=>init_time,
                                            "fit_time"=>fit_time)
+            unlock!(results_lock)
         catch ex
             err(ex)
         end
     end
+    tm_fit = toq()
+    n_fits = length(target_sources)
 
-    results
+    return results, (tm_rdprim, tm_filcat, tm_rdimg, tm_imp, tm_psf, tm_fit, n_fits)
 end
 
 
@@ -410,9 +464,12 @@ end
 NERSC-specific infer function, called from main entry point.
 """
 function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
-                         stage::Bool=false)
+                         stage::Bool=false,
+                         nid=1, nnodes=1)
     # Get vector of (run, camcol, field) triplets overlapping this patch
+    tic()
     fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
+    tm_fldids = toq()
 
     if stage
         for (run, camcol, field) in fieldids
@@ -425,7 +482,8 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
     photofield_dirs = [nersc_photofield_scratchdir(x[1], x[2])
                        for x in fieldids]
 
-    results = infer(fieldids, frame_dirs;
+    results, (tm_rdprim, tm_filcat, tm_rdimg, tm_imp, tm_psf, tm_fit, n_fits) =
+              infer(fieldids, frame_dirs;
                     ra_range=(ramin, ramax),
                     dec_range=(decmin, decmax), 
                     fpm_dirs=frame_dirs,
@@ -433,10 +491,13 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
                     photoobj_dirs=frame_dirs,
                     photofield_dirs=photofield_dirs)
 
+    tic()
     fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
                      outdir, ramin, ramax, decmin, decmax)
     JLD.save(fname, "results", results)
+    tm_out = toq()
     debug("infer_box_nersc finished successfully")
+    return (tm_fldids, tm_rdprim, tm_filcat, tm_rdimg, tm_imp, tm_psf, tm_fit, n_fits, tm_out)
 end
 
 
@@ -450,13 +511,14 @@ function infer_field_nersc(run::Int, camcol::Int, field::Int,
     field_dirs = [nersc_field_scratchdir(run, camcol, field)]
     photofield_dirs = [nersc_photofield_scratchdir(run, camcol)]
 
-    results = infer([(run, camcol, field)], field_dirs;
-                    objid=objid,
-                    fpm_dirs=field_dirs,
-                    psfield_dirs=field_dirs,
-                    photoobj_dirs=field_dirs,
-                    photofield_dirs=photofield_dirs,
-                    primary_initialization=false)
+    results, (tm_rdprim, tm_filcat, tm_rdimg, tm_imp, tm_psf, tm_fit, n_fits) =
+            infer([(run, camcol, field)], field_dirs;
+                  objid=objid,
+                  fpm_dirs=field_dirs,
+                  psfield_dirs=field_dirs,
+                  photoobj_dirs=field_dirs,
+                  photofield_dirs=photofield_dirs,
+                  primary_initialization=false)
 
     fname = if objid == ""
         @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir run camcol field
@@ -465,6 +527,7 @@ function infer_field_nersc(run::Int, camcol::Int, field::Int,
     end
     JLD.save(fname, "results", results)
     debug("infer_field_nersc finished successfully")
+    return (tm_fldids, tm_rdprim, tm_filcat, tm_rdimg, tm_imp, tm_psf, tm_fit, n_fits, tm_out)
 end
 
 

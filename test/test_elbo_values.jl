@@ -5,17 +5,6 @@ using Base.Test
 using Distributions
 
 
-if VERSION > v"0.5.0-dev"
-    using Base.Threads
-else
-    # Pre-Julia 0.5 there are no threads
-    nthreads() = 1
-    threadid() = 1
-    macro threads(x)
-        x
-    end
-end
-
 println("Running ELBO value tests.")
 
 
@@ -445,13 +434,13 @@ function test_reduce_elbo_vars_array()
     total_elbo.h += this_elbo.h
   end
 
-  ElboDeriv.reduce_elbo_vars_array!(elbo_vars_array, num_threads=array_length);
+  ElboDeriv.reduce_elbo_vars_array!(elbo_vars_array);
   @test_approx_eq elbo_vars_array[1].elbo.v total_elbo.v;
   @test_approx_eq elbo_vars_array[1].elbo.d total_elbo.d;
   @test_approx_eq elbo_vars_array[1].elbo.h total_elbo.h;
 
   # Check that running it twice doesn't double count.
-  ElboDeriv.reduce_elbo_vars_array!(elbo_vars_array, num_threads=array_length);
+  ElboDeriv.reduce_elbo_vars_array!(elbo_vars_array);
   @test_approx_eq elbo_vars_array[1].elbo.v total_elbo.v;
   @test_approx_eq elbo_vars_array[1].elbo.d total_elbo.d;
   @test_approx_eq elbo_vars_array[1].elbo.h total_elbo.h;

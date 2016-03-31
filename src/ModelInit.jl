@@ -462,7 +462,7 @@ function initialize_model_params(
                 "If !radius_from_cat, you must specify a positive patch_radius.")
     end
 
-    println("Loading variational parameters from catalogs.")
+    info("Loading variational parameters from catalogs.")
     vp = Array{Float64, 1}[init_source(ce) for ce in cat]
     mp = ModelParams(vp, sample_prior())
     mp.objids = ASCIIString[ cat_entry.objid for cat_entry in cat]
@@ -664,7 +664,7 @@ function trim_source_tiles(
 
   min_radius_pix_sq = min_radius_pix ^ 2
   for b = 1:length(tiled_blob)
-    println("Processing band $b...")
+    info("Processing band $b...")
 
     pix_loc = WCSUtils.world_to_pix(mp.patches[s, b], mp.vp[s][ids.u]);
 
@@ -676,7 +676,6 @@ function trim_source_tiles(
       has_source = s in tile_sources
       bright_pixels = Bool[];
       if has_source
-        #println("Tiles $h $w has source $s")
         pred_tile_pixels =
           ElboDeriv.tile_predicted_image(tile, mp, [ s ],
                                          include_epsilon=false);
@@ -719,7 +718,7 @@ function trim_source_tiles(
       end
     end
   end
-  println("Done trimming.")
+  info("Done trimming.")
 
   trimmed_tiled_blob
 end
