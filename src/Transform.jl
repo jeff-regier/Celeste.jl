@@ -672,7 +672,7 @@ function DataTransform(bounds::Vector{ParamBounds};
   end
 
   function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
-      vp_free = NumType[ zeros(NumType, length(ids_free)) for si = 1:active_S]
+      vp_free = Array{NumType}[ zeros(NumType, length(ids_free)) for si = 1:active_S]
       from_vp!(vp, vp_free)
       vp_free
   end
@@ -690,7 +690,7 @@ function DataTransform(bounds::Vector{ParamBounds};
       @assert(active_S == S,
               string("to_vp is not supported when active_sources is a ",
                      "strict subset of all sources."))
-      vp = NumType[ zeros(NumType, length(CanonicalParams)) for s = 1:S]
+      vp = Array{NumType}[ zeros(NumType, length(CanonicalParams)) for s = 1:S]
       to_vp!(vp_free, vp)
       vp
   end
@@ -813,7 +813,7 @@ function get_identity_transform(P::Int, S::Int)
   end
 
   function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
-      vp_free = NumType[ zeros(NumType, P) for si = 1:active_S]
+      vp_free = Array{NumType}[ zeros(NumType, P) for si = 1:active_S]
       from_vp!(vp, vp_free)
       vp_free
   end
@@ -828,7 +828,7 @@ function get_identity_transform(P::Int, S::Int)
   end
 
   function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
-      vp = NumType[ zeros(P) for s = 1:S]
+      vp = Array{NumType}[ zeros(P) for s = 1:S]
       to_vp!(vp_free, vp)
       vp
   end
