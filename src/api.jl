@@ -565,12 +565,14 @@ function load_s82(fname)
     objs = [key=>read(f[2], string(key)) for key in keys]
     close(f)
 
+    usedev = objs[:fracdev_r] .> 0.5  # true=> use dev, false=> use exp
+
     # Convert to "celeste" style results.
-    gal_mag_u = objs[:devmag_u] + objs[:expmag_u]
-    gal_mag_g = objs[:devmag_g] + objs[:expmag_g]
-    gal_mag_r = objs[:devmag_r] + objs[:expmag_r]
-    gal_mag_i = objs[:devmag_i] + objs[:expmag_i]
-    gal_mag_z = objs[:devmag_z] + objs[:expmag_z]
+    gal_mag_u = where(usedev, objs[:devmag_u], objs[:expmag_u])
+    gal_mag_g = where(usedev, objs[:devmag_g], objs[:expmag_g])
+    gal_mag_r = where(usedev, objs[:devmag_r], objs[:expmag_r])
+    gal_mag_i = where(usedev, objs[:devmag_i], objs[:expmag_i])
+    gal_mag_z = where(usedev, objs[:devmag_z], objs[:expmag_z])
 
     result = DataFrame()
     result[:objid] = objs[:objid]
@@ -601,8 +603,6 @@ function load_s82(fname)
     # from SDSS, based on fracdev - we'll get the parameters corresponding
     # to the dominant component. Later, we limit comparison to objects with
     # fracdev close to 0 or 1 to ensure that we're comparing apples to apples.
-    usedev = objs[:fracdev_r] .> 0.5  # true=> use dev, false=> use exp
-
     
     result[:gal_ab] = where(usedev, objs[:devab_r], objs[:expab_r])
 
@@ -614,7 +614,6 @@ function load_s82(fname)
 
     # gal angle (degrees)
     fits_phi = where(usedev, objs[:devphi_r], objs[:expphi_r])
-    fits_phi *= 1 # only for casjobs, not primary!!!
     phi90 = 90 - fits_phi
     phi90 -= floor(phi90 / 180) * 180
     result[:gal_angle] = phi90
@@ -642,12 +641,13 @@ names to match what the rest of the scoring code expects.
 """
 function load_primary(dir, run, camcol, field)
     objs = SDSS.load_catalog_df(dir, run, camcol, field)
+    usedev = objs[:frac_dev] .> 0.5  # true=> use dev, false=> use exp
 
-    gal_flux_u = objs[:devflux_u] + objs[:expflux_u]
-    gal_flux_g = objs[:devflux_g] + objs[:expflux_g]
-    gal_flux_r = objs[:devflux_r] + objs[:expflux_r]
-    gal_flux_i = objs[:devflux_i] + objs[:expflux_i]
-    gal_flux_z = objs[:devflux_z] + objs[:expflux_z]
+    gal_flux_u = where(usedev, objs[:devflux_u], objs[:expflux_u])
+    gal_flux_g = where(usedev, objs[:devflux_g], objs[:expflux_g])
+    gal_flux_r = where(usedev, objs[:devflux_r], objs[:expflux_r])
+    gal_flux_i = where(usedev, objs[:devflux_i], objs[:expflux_i])
+    gal_flux_z = where(usedev, objs[:devflux_z], objs[:expflux_z])
 
     result = DataFrame()
     result[:objid] = objs[:objid]
@@ -674,7 +674,6 @@ function load_primary(dir, run, camcol, field)
 
     # gal shape -- axis ratio
     #TODO: filter when 0.5 < frac_dev < .95
-    usedev = objs[:frac_dev] .> 0.5  # true=> use dev, false=> use exp
     fits_ab = where(usedev, objs[:ab_dev], objs[:ab_exp])
     result[:gal_ab] = fits_ab
 
