@@ -613,10 +613,8 @@ function load_s82(fname)
     result[:gal_scale] = re_pixel
 
     # gal angle (degrees)
-    fits_phi = where(usedev, objs[:devphi_r], objs[:expphi_r])
-    phi90 = 90 - fits_phi
-    phi90 -= floor(phi90 / 180) * 180
-    result[:gal_angle] = phi90
+    raw_phi = where(usedev, objs[:devphi_r], objs[:expphi_r])
+    result[:gal_angle] = raw_phi - floor(raw_phi / 180) * 180
 
     return result
 end
@@ -683,10 +681,8 @@ function load_primary(dir, run, camcol, field)
     result[:gal_scale] = re_pixel
 
     # gal angle (degrees)
-    fits_phi = where(usedev, objs[:phi_dev], objs[:phi_exp])
-    phi90 = 90 - fits_phi
-    phi90 -= floor(phi90 / 180) * 180
-    result[:gal_angle] = phi90
+    raw_phi = where(usedev, objs[:phi_dev], objs[:phi_exp])
+    result[:gal_angle] = raw_phi - floor(raw_phi / 180) * 180
 
     return result
 end
