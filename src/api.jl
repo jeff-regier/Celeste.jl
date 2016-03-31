@@ -617,7 +617,6 @@ function load_s82(fname)
     fits_phi *= 1 # only for casjobs, not primary!!!
     phi90 = 90 - fits_phi
     phi90 -= floor(phi90 / 180) * 180
-    phi90 *= (pi / 180)
     result[:gal_angle] = phi90
 
     return result
@@ -688,7 +687,6 @@ function load_primary(dir, run, camcol, field)
     fits_phi = where(usedev, objs[:phi_dev], objs[:phi_exp])
     phi90 = 90 - fits_phi
     phi90 -= floor(phi90 / 180) * 180
-    phi90 *= (pi / 180)
     result[:gal_angle] = phi90
 
     return result
