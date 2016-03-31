@@ -161,7 +161,8 @@ immutable BvnComponent{NumType <: Number}
         dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
         new{NumType}(the_mean, precision, c * weight, dsiginv_dsig)
       else
-        new{NumType}(the_mean, the_cov^-1, c * weight, zeros(0, 0))
+        # TODO: it might be better to use 0, 0 to not allocate memory.
+        new{NumType}(the_mean, the_cov^-1, c * weight, zeros(NunType, 3, 3))
       end
     end
 end
