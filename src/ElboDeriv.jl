@@ -211,6 +211,30 @@ function initialize_elbo_vars_array{NumType <: Number}(
 end
 
 
+"""
+Return an array of source indices that have some overlap with mp.active_sources.
+
+Args:
+  - mp: The ModelParams
+
+Returns:
+  - An array of integers that index into mp.s representing all sources that
+    co-occur in at least one tile with mp.active_sources, including
+    mp.active_sources itself.
+"""
+function get_relevant_sources{NumType <: Number}(mp::ModelParams{NumType})
+  relevant_sources = Int[]
+  for b = 1:length(mp.tile_sources), tile_sources in mp.tile_sources[b]
+    s_intersect = intersect(tile_sources, mp.active_sources)
+    if length(s_intersect) > 0
+      relevant_sources = union(relevant_sources, tile_sources);
+    end
+  end
+
+  relevant_sources
+end
+
+
 include("elbo_kl.jl")
 include("source_brightness.jl")
 
