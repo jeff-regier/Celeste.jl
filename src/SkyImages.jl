@@ -51,19 +51,27 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{ASCIIString, Any})
         fits_phi = usedev? catalog["phi_dev"][i] : catalog["phi_exp"][i]
         fits_theta = usedev? catalog["theta_dev"][i] : catalog["theta_exp"][i]
 
-        # use tractor convention of defining phi as -1 * the phi catalog
-        fits_phi *= -1.0
-
         # effective radius
         re_arcsec = max(fits_theta, 1. / 30)
         re_pixel = re_arcsec / 0.396
 
-        phi90 = 90 - fits_phi
-        phi90 -= floor(phi90 / 180) * 180
-        phi90 *= (pi / 180)
+        fits_phi -= catalog["phi_offset"][i]
+
+        # fits_phi is now degrees counter-clockwise from vertical
+        # in pixel coordinates.
+
+        # use tractor convention of defining phi as -1 * the phi catalog
+        #fits_phi *= -1.0
+
+        #phi90 = 90 - fits_phi
+        #phi90 -= floor(phi90 / 180) * 180
+        #phi90 *= (pi / 180)
+
+        # Celeste's phi measures radians counter-clockwise from vertical.
+        celeste_phi_rad = fits_phi * (pi / 180)
 
         entry = CatalogEntry(worldcoords, catalog["is_star"][i], star_fluxes,
-                             gal_fluxes, frac_dev, fits_ab, phi90, re_pixel,
+                             gal_fluxes, frac_dev, fits_ab, celeste_phi_rad, re_pixel,
                              catalog["objid"][i], Int(catalog["thing_id"][i]))
         out[i] = entry
     end

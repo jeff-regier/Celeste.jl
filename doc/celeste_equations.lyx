@@ -1205,6 +1205,35 @@ W_{s} & =\begin{bmatrix}\cos\varphi_{s} & -\sin\varphi_{s}\\
 \end_layout
 
 \begin_layout Standard
+These parameters are in pixel coordinates.
+ Recall that in Celeste, we parameterize pixel locations as 
+\begin_inset Formula $\left(h,w\right)$
+\end_inset
+
+, which means the first coordinate is the vertical direction and the second
+ is the horizontal direction.
+ When 
+\begin_inset Formula $\varphi_{s}=0$
+\end_inset
+
+, 
+\begin_inset Formula $\rho_{s}$
+\end_inset
+
+ shrinks the second coordinate, i.e.
+ the horizontal direction.
+ That means that if you take 
+\begin_inset Formula $\varphi_{s}$
+\end_inset
+
+ to be the angle of the major axis (the axis not shrunk by 
+\begin_inset Formula $\rho_{s}$
+\end_inset
+
+), it is measured from a vertical line in a counter-clockwise direction.
+\end_layout
+
+\begin_layout Standard
 So that
 \begin_inset Formula 
 \begin{eqnarray*}
