@@ -1,6 +1,7 @@
 # Functions for interacting with Celeste from the command line.
 
 using DataFrames
+import Base.+
 import FITSIO
 import JLD
 using Logging  # just for testing right now
@@ -15,6 +16,131 @@ const TILE_WIDTH = 20
 const DEFAULT_MAX_ITERS = 50
 const MIN_FLUX = 2.0
 
+# Use distributed parallelism (with Dtree)
+const Distributed = true
+if Distributed && VERSION > v"0.5.0-dev"
+    using Dtree
+else
+    const dt_nodeid = 1
+    const dt_nnodes = 1
+    DtreeScheduler(n, f) = ()
+    initwork(dt) = 0, (1, 0)
+    getwork(dt) = 0, (1, 0)
+    runtree(dt) = 0
+    cpu_pause() = ()
+end
+
+# Use threads (on the loop over sources)
+const Threaded = true
+if Threaded && VERSION > v"0.5.0-dev"
+    using Base.Threads
+else
+    # Pre-Julia 0.5 there are no threads
+    nthreads() = 1
+    threadid() = 1
+    macro threads(x)
+        x
+    end
+    SpinLock() = 1
+    lock!(l) = ()
+    unlock!(l) = ()
+end
+
+# A workitem is of this ra / dec size
+const wira = 0.05
+const widec = 0.05
+
+"""
+Timing information.
+"""
+type InferTiming
+    num_infers::Int64
+    read_photoobj::Float64
+    read_img::Float64
+    init_mp::Float64
+    fit_psf::Float64
+    opt_srcs::Float64
+    num_srcs::Int64
+    write_results::Float64
+    wait_done::Float64
+
+    InferTiming() = new(0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
+end
+
+function +(i1::InferTiming, i2::InferTiming)
+    j = InferTiming()
+    j.num_infers = i1.num_infers + i2.num_infers
+    j.read_photoobj = i1.read_photoobj + i2.read_photoobj
+    j.read_img = i1.read_img + i2.read_img
+    j.init_mp = i1.init_mp + i2.init_mp
+    j.fit_psf = i1.fit_psf + i2.fit_psf
+    j.opt_srcs = i1.opt_srcs + i2.opt_srcs
+    j.num_srcs = i1.num_srcs + i2.num_srcs
+    j.write_results = i1.write_results + i2.write_results
+    j.wait_done = i1.wait_done + i2.wait_done
+    return j
+end
+
+"""
+An area of the sky subtended by `ramin`, `ramax`, `decmin`, and `decmax`.
+"""
+type SkyArea
+    ramin::Float64
+    ramax::Float64
+    decmin::Float64
+    decmax::Float64
+    nra::Int64
+    ndec::Int64
+end
+
+"""
+Given a SkyArea that is to be divided into `skya.nra` x `skya.ndec` patches,
+return the `i`th patch. `i` is a linear index between 1 and
+`skya.nra * skya.ndec`.
+
+This function assumes a cartesian (rather than spherical) coordinate system!
+"""
+function divide_skyarea(skya::SkyArea, i)
+    global wira, widec
+    ix, iy = ind2sub((skya.nra, skya.ndec), i)
+
+    return (skya.ramin + (ix - 1) * wira,
+            min(skya.ramin + ix * wira, skya.ramax),
+            skya.decmin + (iy - 1) * widec,
+            min(skya.decmin + iy * widec, skya.decmax))
+end
+
+@inline nputs(nid, s) = ccall(:puts, Cint, (Ptr{Int8},), string("[$nid] ", s))
+
+function time_puts(elapsedtime, bytes, gctime, allocs)
+    s = @sprintf("%10.6f seconds", elapsedtime/1e9)
+    if bytes != 0 || allocs != 0
+        bytes, mb = Base.prettyprint_getunits(bytes, length(Base._mem_units),
+                            Int64(1024))
+        allocs, ma = Base.prettyprint_getunits(allocs, length(Base._cnt_units),
+                            Int64(1000))
+        if ma == 1
+            s = string(s, @sprintf(" (%d%s allocation%s: ", allocs,
+                                   Base._cnt_units[ma], allocs==1 ? "" : "s"))
+        else
+            s = string(s, @sprintf(" (%.2f%s allocations: ", allocs,
+                                   Base._cnt_units[ma]))
+        end
+        if mb == 1
+            s = string(s, @sprintf("%d %s%s", bytes,
+                                   Base._mem_units[mb], bytes==1 ? "" : "s"))
+        else
+            s = string(s, @sprintf("%.3f %s", bytes, Base._mem_units[mb]))
+        end
+        if gctime > 0
+            s = string(s, @sprintf(", %.2f%% gc time", 100*gctime/elapsedtime))
+        end
+        s = string(s, ")")
+    elseif gctime > 0
+        s = string(s, @sprintf(", %.2f%% gc time", 100*gctime/elapsedtime))
+    end
+    nputs(dt_nodeid, s)
+end
 
 function set_logging_level(level)
     if level == "OFF"
@@ -120,6 +246,97 @@ end
 
 
 """
+Divide the given ra, dec range into sky areas of `wira`x`widec` and
+use Dtree to distribute these sky areas to nodes. Within each node
+use `infer()` to fit the Celeste model to sources in each sky area.
+"""
+function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
+                          frame_dirs::Vector;
+                          objid="",
+                          fpm_dirs=frame_dirs,
+                          psfield_dirs=frame_dirs,
+                          photofield_dirs=frame_dirs,
+                          photoobj_dirs=frame_dirs,
+                          ra_range=(-1000., 1000.),
+                          dec_range=(-1000., 1000.),
+                          primary_initialization=true,
+                          max_iters=DEFAULT_MAX_ITERS,
+                          times=InferTiming(),
+                          outdir=".",
+                          output_results=save_results)
+    if dt_nodeid == 1
+        nputs(dt_nodeid, "running on $dt_nnodes nodes")
+    end
+
+    # how many `wira` X `widec` sky areas (work items)?
+    global wira, widec
+    nra = ceil(Int64, (ramax - ramin) / wira)
+    ndec = ceil(Int64, (decmax - decmin) / widec)
+    skya = SkyArea(ramin, ramax, decmin, decmax, nra, ndec)
+
+    num_work_items = nra * ndec
+    each = ceil(Int64, num_work_items / dt_nnodes)
+
+    if dt_nodeid == 1
+        nputs(dt_nodeid, "work item dimensions: $wira X $widec")
+        nputs(dt_nodeid, "$num_work_items work items, ~$each per node")
+    end
+
+    # create Dtree and get the initial allocation
+    dt = DtreeScheduler(num_work_items, 0.4)
+    ni, (ci, li) = initwork(dt)
+    rundt = runtree(dt) > 0
+    function rundtree()
+        if rundt
+            rundt = runtree(dt) > 0
+            cpu_pause()
+        end
+    end
+
+    # work item processing loop
+    nputs(dt_nodeid, "initially $ni work items ($ci to $li)")
+    itimes = InferTiming()
+    while ni > 0
+        li == 0 && break
+        if ci > li
+            nputs(dt_nodeid, "consumed allocation (last was $li)")
+            ni, (ci, li) = getwork(dt)
+            nputs(dt_nodeid, "got $ni work items ($ci to $li)")
+            continue
+        end
+        item = ci
+        ci = ci + 1
+
+        # map item to subarea
+        iramin, iramax, idecmin, idecmax = sky_subarea(skya, item)
+
+        # run inference for this subarea
+        nputs(dt_nodeid, "running inference for $iramin, $iramax, $idecmin, $idecmax")
+        results = infer(fieldids, frame_dirs;
+                        ra_range=(iramin, iramax),
+                        dec_range=(idecmin, idecmax),
+                        fpm_dirs=frame_dirs,
+                        psfield_dirs=frame_dirs,
+                        photoobj_dirs=frame_dirs,
+                        photofield_dirs=photofield_dirs,
+                        times=itimes)
+        tic()
+        output_results(outdir, iramin, iramax, idecmin, idecmax, results)
+        itimes.write_results = toq()
+
+        times += itimes
+    end
+    nputs(dt_nodeid, "out of work")
+    tic()
+    while rundt
+        rundtree()
+    end
+    finalize(dt)
+    times.work_done = toq()
+end
+
+
+"""
 Fit the Celeste model to sources in a given ra, dec range,
 based on data from specified fields
 
@@ -142,11 +359,14 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                ra_range=(-1000., 1000.),
                dec_range=(-1000., 1000.),
                primary_initialization=true,
-               max_iters=DEFAULT_MAX_ITERS)
+               max_iters=DEFAULT_MAX_ITERS,
+               times=InferTiming())
     # Read all primary objects in these fields.
+    tic()
     duplicate_policy = primary_initialization ? :primary : :first
     catalog = read_photoobj_files(fieldids, photoobj_dirs,
                         duplicate_policy=duplicate_policy)
+    times.read_photoobj = toq()
     info("$(length(catalog)) primary sources")
 
     # Filter out low-flux objects in the catalog.
@@ -155,7 +375,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
     # Filter any object not specified, if an objid is specified
     if objid != ""
-        println(catalog[1].objid)
+        info(catalog[1].objid)
         catalog = filter(entry->(entry.objid == objid), catalog)
     end
 
@@ -168,13 +388,14 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
     # If there are no objects of interest, return early.
     if length(target_sources) == 0
-        return Dict{Int, Dict}()
+        return Dict{Int, Dict}(), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)
     end
 
     # Read in images for all (run, camcol, field).
     images = Image[]
     image_names = ASCIIString[]
     image_count = 0
+    tic()
     for i in 1:length(fieldids)
         info("reading field ", fieldids[i])
         run, camcol, field = fieldids[i]
@@ -189,6 +410,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
         end
         append!(images, fieldims)
     end
+    times.read_img = toq()
 
     debug("Image names:")
     debug(image_names)
@@ -196,51 +418,78 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # initialize tiled images and model parameters for trimming.  We will
     # initialize the psf again before fitting, so we don't do it here.
     info("initializing celeste without PSF fit")
+    tic()
     tiled_images = SkyImages.break_blob_into_tiles(images, TILE_WIDTH)
     mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
                                            fit_psf=false)
+    times.init_mp = toq()
 
     # get indicies of all sources relevant to those we're actually
     # interested in, and fit a local PSF for those sources (since we skipped
     # fitting the PSF for the whole catalog above)
     info("fitting PSF for all relevant sources")
+    tic()
     ModelInit.fit_object_psfs!(mp, target_sources, images)
+    times.fit_psf = toq()
 
+    # need a ModelParams per thread
+    mp_array = Array(ModelParams, nthreads())
+    mp_array[1] = mp
+    for i = 2:nthreads()
+        mp_array[i] = deepcopy(mp)
+    end
+
+    # iterate over sources
     results = Dict{Int, Dict}()
-    for s in target_sources
+    results_lock = SpinLock()
+    tic()
+    @threads for s in target_sources
+        tid = threadid()
         entry = catalog[s]
-        mp.active_sources = [s]
+        mp_array[tid].active_sources = [s]
 
         try
-            info("===================================================")
-            info("processing source $s: objid= $(entry.objid)")
+            nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
+            tic()
 
             t0 = time()
-            relevant_sources = ModelInit.get_relevant_sources(mp, s)
-            mp_source = ModelParams(mp, relevant_sources)
+            relevant_sources = ModelInit.get_relevant_sources(mp_array[tid], s)
+            mp_source = ModelParams(mp_array[tid], relevant_sources)
             sa = findfirst(relevant_sources, s)
             trimmed_tiled_images =
               ModelInit.trim_source_tiles(sa, mp_source, tiled_images;
                                           noise_fraction=0.1)
             init_time = time() - t0
 
+            t = toq()
+            nputs(dt_nodeid, "trimmed $s in $t secs, optimizing")
+            tic()
+
             t0 = time()
             iter_count, max_f, max_x, result =
                 OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images,
                                         mp_source;
-                                        verbose=true, max_iters=max_iters)
+                                        verbose=false, max_iters=max_iters)
             fit_time = time() - t0
 
+            t = toq()
+            nputs(dt_nodeid, "optimized $s in $t secs, writing results")
+
+            lock!(results_lock)
             results[entry.thing_id] = Dict("objid"=>entry.objid,
                                            "ra"=>entry.pos[1],
                                            "dec"=>entry.pos[2],
                                            "vs"=>mp_source.vp[sa],
                                            "init_time"=>init_time,
                                            "fit_time"=>fit_time)
+            unlock!(results_lock)
         catch ex
             err(ex)
         end
     end
+    times.opt_srcs = toq()
+    times.num_srcs = length(target_sources)
+    times.num_infers = 1
 
     results
 end
@@ -411,11 +660,23 @@ function stage_box_nersc(ramin, ramax, decmin, decmax)
     end
 end
 
+
+"""
+Save provided results to a JLD file.
+"""
+function save_results(outdir, ramin, ramax, decmin, decmax, results)
+    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
+                     outdir, ramin, ramax, decmin, decmax)
+    JLD.save(fname, "results", results)
+end
+
+
 """
 NERSC-specific infer function, called from main entry point.
 """
 function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
-                         stage::Bool=false)
+                         stage::Bool=false,
+                         show_timing::Bool=true)
     # Get vector of (run, camcol, field) triplets overlapping this patch
     fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
 
@@ -430,18 +691,61 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
     photofield_dirs = [nersc_photofield_scratchdir(x[1], x[2])
                        for x in fieldids]
 
-    results = infer(fieldids, frame_dirs;
-                    ra_range=(ramin, ramax),
-                    dec_range=(decmin, decmax),
-                    fpm_dirs=frame_dirs,
-                    psfield_dirs=frame_dirs,
-                    photoobj_dirs=frame_dirs,
-                    photofield_dirs=photofield_dirs)
+    #= Base.@time hack for distributed environment
+    gc_stats = ()
+    gc_diff_stats = ()
+    elapsed_time = 0.0
+    if show_timing
+        gc_stats = Base.gc_num()
+        elapsed_time = time_ns()
+    end
+    =#
 
-    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
-                     outdir, ramin, ramax, decmin, decmax)
-    JLD.save(fname, "results", results)
-    debug("infer_box_nersc finished successfully")
+    times = InferTiming()
+    if Distributed && dt_nnodes > 1
+        divide_and_infer(fieldids, frame_dirs;
+                         ra_range=(ramin, ramax),
+                         dec_range=(decmin, decmax),
+                         fpm_dirs=frame_dirs,
+                         psfield_dirs=frame_dirs,
+                         photoobj_dirs=frame_dirs,
+                         photofield_dirs=photofield_dirs,
+                         times=times,
+                         outdir=outdir)
+    else
+        results = infer(fieldids, frame_dirs;
+                        ra_range=(ramin, ramax),
+                        dec_range=(decmin, decmax),
+                        fpm_dirs=frame_dirs,
+                        psfield_dirs=frame_dirs,
+                        photoobj_dirs=frame_dirs,
+                        photofield_dirs=photofield_dirs,
+                        times=times)
+
+        tic()
+        save_results(outdir, ramin, ramax, decmin, decmax, results)
+        times.write_results = toq()
+    end
+
+    if show_timing
+        #= Base.@time hack for distributed environment
+        elapsed_time = time_ns() - elapsed_time
+        gc_diff_stats = Base.GC_Diff(Base.gc_num(), gc_stats)
+        time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
+                  Base.gc_alloc_count(gc_diff_stats))
+        =#
+
+        times.num_srcs = max(1, times.num_srcs)
+        nputs(dt_nodeid, "timing: read_photoobj=$(times.read_photoobj)")
+        nputs(dt_nodeid, "timing: read_img=$(times.read_img)")
+        nputs(dt_nodeid, "timing: init_mp=$(times.init_mp)")
+        nputs(dt_nodeid, "timing: fit_psf=$(times.fit_psf)")
+        nputs(dt_nodeid, "timing: opt_srcs=$(times.opt_srcs)")
+        nputs(dt_nodeid, "timing: num_srcs=$(times.num_srcs)")
+        nputs(dt_nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
+        nputs(dt_nodeid, "timing: write_results=$(times.write_results)")
+        nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
+    end
 end
 
 
