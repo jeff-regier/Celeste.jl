@@ -135,7 +135,7 @@ immutable BvnComponent{NumType <: Number}
         the_mean::Vector{T1}, the_cov::Matrix{T2}, weight::T3;
         calculate_siginv_deriv::Bool=true)
 
-      NumType = promote_type(T1, T2, T3);
+      ThisNumType = promote_type(T1, T2, T3);
       the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
       c = 1 ./ (the_det^.5 * 2pi)
 
@@ -143,7 +143,7 @@ immutable BvnComponent{NumType <: Number}
         # Derivatives of Sigma^{-1} with respect to sigma.  These are the second
         # derivatives of log|Sigma| with respect to sigma.
         # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
-        dsiginv_dsig = Array(NumType, 3, 3)
+        dsiginv_dsig = Array(ThisNumType, 3, 3)
 
         precision = the_cov^-1
 
@@ -159,9 +159,9 @@ immutable BvnComponent{NumType <: Number}
         dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
         dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
         dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
-        new{NumType}(the_mean, precision, c * weight, dsiginv_dsig)
+        new{ThisNumType}(the_mean, precision, c * weight, dsiginv_dsig)
       else
-        new{NumType}(the_mean, the_cov^-1, c * weight, zeros(0, 0))
+        new{ThisNumType}(the_mean, the_cov^-1, c * weight, zeros(ThisNumType, 0, 0))
       end
     end
 end
