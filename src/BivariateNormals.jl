@@ -162,7 +162,7 @@ immutable BvnComponent{NumType <: Number}
         new{ThisNumType}(the_mean, precision, c * weight, dsiginv_dsig)
       else
         # TODO: it might be better to use 0, 0 to not allocate memory.
-        new{ThisNumType}(the_mean, the_cov^-1, c * weight, zeros(ThisNumType, 3, 3))
+        new{ThisNumType}(the_mean, the_cov^-1, c * weight, zeros(ThisNumType, 0, 0))
       end
     end
 end
