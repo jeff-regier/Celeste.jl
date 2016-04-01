@@ -70,19 +70,7 @@ mp = ModelParams(mp_all, relevant_sources);
 s = findfirst(mp.objids, objid)
 @assert s > 0
 
-using Base.Test
-@test mp.S == length(relevant_sources)
-
-for sa in 1:length(relevant_sources)
-  s = relevant_sources[sa]
-  @test_approx_eq mp.vp[sa] mp_all.vp[s]
-end
-
-
-
-
-
-ModelInit.fit_object_psfs!(mp, relevant_sources, images);
+ModelInit.fit_object_psfs!(mp, collect(1:mp.S), images);
 
 # View
 trimmed_tiled_blob =

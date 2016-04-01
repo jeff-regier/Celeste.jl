@@ -216,20 +216,25 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
             info("processing source $s: objid= $(entry.objid)")
 
             t0 = time()
-            trimmed_tiled_images = ModelInit.trim_source_tiles(s, mp, tiled_images;
-                                                               noise_fraction=0.1)
+            relevant_sources = ModelInit.get_relevant_sources(mp, s)
+            mp_source = ModelParams(mp, relevant_sources)
+            sa = findfirst(relevant_sources, s)
+            trimmed_tiled_images =
+              ModelInit.trim_source_tiles(sa, mp_source, tiled_images;
+                                          noise_fraction=0.1)
             init_time = time() - t0
 
             t0 = time()
             iter_count, max_f, max_x, result =
-                OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images, mp;
+                OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images,
+                                        mp_source;
                                         verbose=true, max_iters=max_iters)
             fit_time = time() - t0
 
             results[entry.thing_id] = Dict("objid"=>entry.objid,
                                            "ra"=>entry.pos[1],
                                            "dec"=>entry.pos[2],
-                                           "vs"=>mp.vp[s],
+                                           "vs"=>mp_source.vp[s],
                                            "init_time"=>init_time,
                                            "fit_time"=>fit_time)
         catch ex
@@ -315,7 +320,7 @@ nersc_psfield_dir(run::Integer, camcol::Integer) =
     "$(NERSC_DATA_ROOT)/photo/redux/301/$(run)/objcs/$(camcol)"
 nersc_photofield_dir(run::Integer) =
     "$(NERSC_DATA_ROOT)/photoObj/301/$(run)"
-nersc_frame_dir(run::Integer, camcol::Integer) = 
+nersc_frame_dir(run::Integer, camcol::Integer) =
     "$(NERSC_DATA_ROOT)/photoObj/frames/301/$(run)/$(camcol)"
 nersc_fpm_dir(run::Integer, camcol::Integer) =
     "$(NERSC_DATA_ROOT)/photo/redux/301/$(run)/objcs/$(camcol)"
@@ -331,7 +336,7 @@ nersc_photofield_scratchdir(run::Integer, camcol::Integer) =
     nersc_stage_field(run, camcol, field)
 
 Stage all relevant files for the given run, camcol, field to user's SCRATCH
-directory. The target locations are given by `nersc_field_scratchdir` and 
+directory. The target locations are given by `nersc_field_scratchdir` and
 `nersc_photofield_scratchdir`.
 """
 function nersc_stage_field(run::Integer, camcol::Integer, field::Integer)
@@ -427,7 +432,7 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
 
     results = infer(fieldids, frame_dirs;
                     ra_range=(ramin, ramax),
-                    dec_range=(decmin, decmax), 
+                    dec_range=(decmin, decmax),
                     fpm_dirs=frame_dirs,
                     psfield_dirs=frame_dirs,
                     photoobj_dirs=frame_dirs,
@@ -603,7 +608,7 @@ function load_s82(fname)
     # from SDSS, based on fracdev - we'll get the parameters corresponding
     # to the dominant component. Later, we limit comparison to objects with
     # fracdev close to 0 or 1 to ensure that we're comparing apples to apples.
-    
+
     result[:gal_ab] = where(usedev, objs[:devab_r], objs[:expab_r])
 
     # gal effective radius (re)
@@ -968,13 +973,13 @@ end
 
 function score_field(fieldid::Tuple{Int, Int, Int},
                results, truthfile, primary_dir)
-    (celeste_df, primary_df, coadd_df) = match_catalogs(fieldid, 
+    (celeste_df, primary_df, coadd_df) = match_catalogs(fieldid,
                                 results, truthfile, primary_dir)
     # difference between celeste and coadd
     celeste_err = get_err_df(coadd_df, celeste_df)
     primary_err = get_err_df(coadd_df, primary_df)
 
-    JLD.save("df.jld", "celeste_df", celeste_df, 
+    JLD.save("df.jld", "celeste_df", celeste_df,
                        "primary_df", primary_df,
                        "coadd_df", coadd_df,
                        "celeste_err", celeste_err,
@@ -1008,7 +1013,7 @@ function score_object_nersc(run, camcol, field, objid, resultdir, truthfile)
     primary_dir = nersc_photoobj_dir(run, camcol)
 
 
-    (celeste_df, primary_df, coadd_df) = match_catalogs(fieldid, 
+    (celeste_df, primary_df, coadd_df) = match_catalogs(fieldid,
                                 results, truthfile, primary_dir)
 
     println("\n\nceleste results:\n")
@@ -1018,6 +1023,3 @@ function score_object_nersc(run, camcol, field, objid, resultdir, truthfile)
     println("\n\ncoadd results:\n")
     println(coadd_df)
 end
-
-
-
