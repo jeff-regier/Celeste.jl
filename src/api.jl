@@ -1,7 +1,6 @@
 # Functions for interacting with Celeste from the command line.
 
 using DataFrames
-using Dtree
 import Base.+
 import FITSIO
 import JLD
@@ -19,6 +18,17 @@ const MIN_FLUX = 2.0
 
 # Use distributed parallelism (with Dtree)
 const Distributed = true
+if Distributed && VERSION > v"0.5.0-dev"
+    using Dtree
+else
+    const dt_nodeid = 1
+    const dt_nnodes = 1
+    DtreeScheduler(n, f) = ()
+    initwork(dt) = 0, (1, 0)
+    getwork(dt) = 0, (1, 0)
+    runtree(dt) = 0
+    cpu_pause() = ()
+end
 
 # Use threads (on the loop over sources)
 const Threaded = true
@@ -279,7 +289,7 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
     function rundtree()
         if rundt
             rundt = runtree(dt) > 0
-            Dtree.cpu_pause()
+            cpu_pause()
         end
     end
 
@@ -309,7 +319,7 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
                         psfield_dirs=frame_dirs,
                         photoobj_dirs=frame_dirs,
                         photofield_dirs=photofield_dirs,
-                        timing=itimes)
+                        times=itimes)
         tic()
         output_results(outdir, iramin, iramax, idecmin, idecmax, results)
         itimes.write_results = toq()
@@ -692,7 +702,7 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
     =#
 
     times = InferTiming()
-    if Distributed && Dtree.dt_nnodes > 1
+    if Distributed && dt_nnodes > 1
         divide_and_infer(fieldids, frame_dirs;
                          ra_range=(ramin, ramax),
                          dec_range=(decmin, decmax),
@@ -700,7 +710,7 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
                          psfield_dirs=frame_dirs,
                          photoobj_dirs=frame_dirs,
                          photofield_dirs=photofield_dirs,
-                         timing=times,
+                         times=times,
                          outdir=outdir)
     else
         results = infer(fieldids, frame_dirs;
@@ -710,7 +720,7 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
                         psfield_dirs=frame_dirs,
                         photoobj_dirs=frame_dirs,
                         photofield_dirs=photofield_dirs,
-                        timing=times)
+                        times=times)
 
         tic()
         save_results(outdir, ramin, ramax, decmin, decmax, results)
