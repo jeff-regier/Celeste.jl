@@ -256,7 +256,6 @@ function load_source_brightnesses{NumType <: Number}(
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
   sbs = Array(SourceBrightness{NumType}, mp.S)
-  relevant_sources = 
   for s in 1:mp.S
     calculate_this_deriv = (s in mp.active_sources) && calculate_derivs
     sbs[s] = SourceBrightness(mp.vp[s],
