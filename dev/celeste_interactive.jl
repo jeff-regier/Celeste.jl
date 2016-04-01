@@ -56,17 +56,21 @@ cat_entries = SkyImages.read_photoobj_celeste(joinpath(dir, cat_filename));
 
 # initialize tiled images and model parameters.  Don't fit the psf for now --
 # we just need the tile_sources from mp.
-tiled_blob, mp = ModelInit.initialize_celeste(images, cat_entries,
-                                              tile_width=20,
-                                              fit_psf=false);
+tiled_blob, mp_all = ModelInit.initialize_celeste(images, cat_entries,
+                                                  tile_width=20,
+                                                  fit_psf=false);
 Celeste.WCSUtils.pix_to_world(images[3].wcs, [0., 0.])
 
 # Choose an object:
+obj_s = findfirst(mp_all.objids, objid)
+@assert obj_s > 0
+relevant_sources = ModelInit.get_relevant_sources(mp_all, obj_s);
+mp_all.active_sources = [ obj_s ];
+mp = ModelParams(mp_all, relevant_sources);
 s = findfirst(mp.objids, objid)
 @assert s > 0
-relevant_sources = ModelInit.get_relevant_sources(mp, s);
-ModelInit.fit_object_psfs!(mp, relevant_sources, images);
-mp.active_sources = [ s ];
+
+ModelInit.fit_object_psfs!(mp, collect(1:mp.S), images);
 
 # View
 trimmed_tiled_blob =
