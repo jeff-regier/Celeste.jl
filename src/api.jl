@@ -234,7 +234,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
             results[entry.thing_id] = Dict("objid"=>entry.objid,
                                            "ra"=>entry.pos[1],
                                            "dec"=>entry.pos[2],
-                                           "vs"=>mp_source.vp[s],
+                                           "vs"=>mp_source.vp[sa],
                                            "init_time"=>init_time,
                                            "fit_time"=>fit_time)
         catch ex
