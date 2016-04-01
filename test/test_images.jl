@@ -253,9 +253,49 @@ function test_stitch_object_tiles()
 end
 
 
+function test_copy_model_params()
+  # A lot of tests are in a single function to avoid having to reload
+  # the full image multiple times.
+  images = SkyImages.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
+  fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
+  cat_entries = SkyImages.read_photoobj_celeste(fname);
+
+  tiled_images, mp_all =
+    ModelInit.initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
+
+  # Pick a single object of interest.
+  obj_s = 100
+  objid = mp_all.objids[obj_s]
+  relevant_sources = ModelInit.get_relevant_sources(mp_all, obj_s);
+  mp_all.active_sources = [ obj_s ];
+  mp = ModelParams(mp_all, relevant_sources);
+
+  s = findfirst(mp.objids, objid)
+  @test s > 0
+
+  # Fit with both and make sure you get the same answer.
+  ModelInit.fit_object_psfs!(mp_all, relevant_sources, images);
+  ModelInit.fit_object_psfs!(mp, collect(1:mp.S), images);
+
+  @test mp.S == length(relevant_sources)
+  for sa in 1:length(relevant_sources)
+    s = relevant_sources[sa]
+    @test_approx_eq mp.vp[sa] mp_all.vp[s]
+  end
+
+  @time elbo_all = ElboDeriv.elbo(tiled_images, mp_all);
+  @time elbo = ElboDeriv.elbo(tiled_images, mp);
+
+  @test_approx_eq elbo_all.v elbo.v
+  @test_approx_eq elbo_all.d elbo.d
+  @test_approx_eq elbo_all.h elbo.h
+end
+
+
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
 test_local_source_candidate()
 test_set_patch_size()
 test_stitch_object_tiles()
+test_copy_model_params()
