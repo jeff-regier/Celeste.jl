@@ -40,7 +40,7 @@ function interp_sky{T, S}(data::Array{T, 2}, xcoords::Vector{S},
         # modify out-of-bounds indicies to 1 or ny
         y0 = min(max(y0, 1), ny)
         y1 = min(max(y1, 1), ny)
-        
+
         for i=1:length(xcoords)
             x0 = floor(Int, xcoords[i])
             x1 = x0 + 1
@@ -230,7 +230,7 @@ immutable SDSSPSF
         # The second dimension is the number of eigen images, which should
         # match the number of coefficient arrays.
         @assert size(rrows, 2) == size(cmat, 3)
-        
+
         return new(rrows, Int(rnrow), Int(rncol), cmat)
     end
 end
@@ -349,7 +349,8 @@ function read_photoobj(fname, band::Char='r')
                        "phi_exp"=>Float32[],
                        "ab_dev"=>Float32[],
                        "theta_dev"=>Float32[],
-                       "phi_dev"=>Float32[])
+                       "phi_dev"=>Float32[],
+                       "phi_offset"=>Float32[])
         for (b, n) in BAND_CHAR_TO_NUM
             catalog["psfflux_$b"] = Float32[]
             catalog["compflux_$b"] = Float32[]
@@ -358,7 +359,7 @@ function read_photoobj(fname, band::Char='r')
         end
         return catalog
     end
- 
+
     hdu = f[2]::FITSIO.TableHDU
 
     objid = read(hdu, "objid")::Vector{ASCIIString}
@@ -366,7 +367,7 @@ function read_photoobj(fname, band::Char='r')
     dec = read(hdu, "dec")::Vector{Float64}
     mode = read(hdu, "mode")::Vector{UInt8}
     thing_id = read(hdu, "thing_id")::Vector{Int32}
-    
+
     # Get "bright" objects.
     # (In objc_flags, the bit pattern Int32(2) corresponds to bright objects.)
     is_bright = read(hdu, "objc_flags")::Vector{Int32} & Int32(2) .!= 0
@@ -400,6 +401,7 @@ function read_photoobj(fname, band::Char='r')
     # multiplied by -1.
     phi_dev_deg = read(hdu, "phi_dev_deg")::Matrix{Float32}
     phi_exp_deg = read(hdu, "phi_exp_deg")::Matrix{Float32}
+    phi_offset = read(hdu, "phi_offset")::Matrix{Float32}
 
     theta_dev = read(hdu, "theta_dev")::Matrix{Float32}
     theta_exp = read(hdu, "theta_exp")::Matrix{Float32}
@@ -424,7 +426,8 @@ function read_photoobj(fname, band::Char='r')
                    "phi_exp"=>vec(phi_exp_deg[bandnum, mask]),
                    "ab_dev"=>vec(ab_dev[bandnum, mask]),
                    "theta_dev"=>vec(theta_dev[bandnum, mask]),
-                   "phi_dev"=>vec(phi_dev_deg[bandnum, mask]))
+                   "phi_dev"=>vec(phi_dev_deg[bandnum, mask]),
+                   "phi_offset"=>vec(phi_offset[bandnum, mask]))
     for (b, n) in BAND_CHAR_TO_NUM
         catalog["psfflux_$b"] = vec(psfflux[n, mask])
         catalog["compflux_$b"] = vec(cmodelflux[n, mask])
