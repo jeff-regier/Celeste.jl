@@ -573,6 +573,7 @@ function get_all_relevant_sources_in_image{NumType <: Number}(
     out
 end
 
+
 """
 Return a reduced Celeste dataset useful for a single object.
 

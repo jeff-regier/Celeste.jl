@@ -35,7 +35,7 @@ import ForwardDiff
 
 import Base.length
 
-import ..SDSSIO: SDSSPSF
+import Celeste.SDSSIO: SDSSPSF
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -586,6 +586,41 @@ type ModelParams{T <: Number}
         new(vp, pp, patches, all_tile_sources, active_sources, objids, S)
     end
 end
+
+
+# Make a copy of a ModelParams keeping only some sources.
+function ModelParams{T <: Number}(mp_all::ModelParams{T}, keep_s::Vector{Int})
+    mp = ModelParams{T}(mp_all.vp[keep_s], mp_all.pp);
+
+  mp.active_sources = Int[]
+  mp.objids = Array(ASCIIString, length(keep_s))
+
+  # Indices of sources in the new model params
+  for sa in 1:length(keep_s)
+    s = keep_s[sa]
+    mp.objids[sa] = mp_all.objids[s]
+    mp.patches[sa, :] = mp_all.patches[s, :]
+    if s in mp_all.active_sources
+      push!(mp.active_sources, sa)
+    end
+  end
+
+  @assert length(mp_all.tile_sources) == size(mp_all.patches, 2)
+  num_bands = length(mp_all.tile_sources)
+  mp.tile_sources = Array(Matrix{Vector{Int}}, num_bands)
+  for b=1:num_bands
+    mp.tile_sources[b] = Array(Vector{Int}, size(mp_all.tile_sources[b]))
+    for tile_ind in 1:length(mp_all.tile_sources[b])
+        tile_s = intersect(mp_all.tile_sources[b][tile_ind], keep_s)
+        mp.tile_sources[b][tile_ind] =
+          Int[ findfirst(keep_s, s) for s in tile_s ]
+    end
+  end
+
+  mp
+end
+
+
 ModelParams{T <: Number}(vp::VariationalParams{T}, pp::PriorParams) =
     ModelParams{T}(vp, pp)
 
