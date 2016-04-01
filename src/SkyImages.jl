@@ -60,13 +60,6 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{ASCIIString, Any})
         # fits_phi is now degrees counter-clockwise from vertical
         # in pixel coordinates.
 
-        # use tractor convention of defining phi as -1 * the phi catalog
-        #fits_phi *= -1.0
-
-        #phi90 = 90 - fits_phi
-        #phi90 -= floor(phi90 / 180) * 180
-        #phi90 *= (pi / 180)
-
         # Celeste's phi measures radians counter-clockwise from vertical.
         celeste_phi_rad = fits_phi * (pi / 180)
 
