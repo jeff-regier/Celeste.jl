@@ -11,7 +11,8 @@ before_install:
   - sudo apt-get update -qq -y
   - sudo apt-get install libwcs4 -y
   - sudo apt-get install libcfitsio3 -y
-  - sudo apt-get install openmpi-bin openmpi-common libopenmpi-dev -qq -y
+  - sudo apt-get install mpich2 libmpich2-3 libmpich2-dev -y
+#  - sudo apt-get install openmpi-bin openmpi-common libopenmpi-dev -qq -y
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
