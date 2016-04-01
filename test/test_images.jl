@@ -257,6 +257,9 @@ function test_copy_model_params()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
   images = SkyImages.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
+
+  # Make sure that ModelParams can handle more than five images (issue #203)
+  push!(images, deepcopy(images[1]));
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
   cat_entries = SkyImages.read_photoobj_celeste(fname);
 
@@ -283,8 +286,8 @@ function test_copy_model_params()
     @test_approx_eq mp.vp[sa] mp_all.vp[s]
   end
 
-  @time elbo_all = ElboDeriv.elbo(tiled_images, mp_all);
-  @time elbo = ElboDeriv.elbo(tiled_images, mp);
+  elbo_all = ElboDeriv.elbo(tiled_images, mp_all);
+  elbo = ElboDeriv.elbo(tiled_images, mp);
 
   @test_approx_eq elbo_all.v elbo.v
   @test_approx_eq elbo_all.d elbo.d

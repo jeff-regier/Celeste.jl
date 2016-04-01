@@ -594,7 +594,7 @@ function ModelParams{T <: Number}(mp_all::ModelParams{T}, keep_s::Vector{Int})
   mp = ModelParams{T}(deepcopy(mp_all.vp[keep_s]), mp_all.pp);
   mp.active_sources = Int[]
   mp.objids = Array(ASCIIString, length(keep_s))
-  mp.patches = Array(SkyPaths, mp.S, size(mp_all.patches, 2))
+  mp.patches = Array(SkyPatch, mp.S, size(mp_all.patches, 2))
 
   # Indices of sources in the new model params
   for sa in 1:length(keep_s)
