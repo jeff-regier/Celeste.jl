@@ -19,7 +19,7 @@ Usage:
 Options:
   -h, --help         Show this screen.
   --version          Show the version.
-  --logging=<LEVEL>  Level for the Logging package (OFF, DEBUG, INFO, WARNING, ERROR, or CRITICAL). [default: INFO]
+  --logging=<LEVEL>  Level for the Logging package (OFF, DEBUG, INFO, WARNING, ERROR, or CRITICAL). [default: WARNING]
   --stage            In `infer-box`, automatically stage files. Default: false.
 
 The `stage-box` subcommand copies and/or uncompresses all files covering the
@@ -36,6 +36,7 @@ The `score-field` subcommand is not yet implemented for the new API.
 """
 
 function main()
+    Celeste.set_logging_level("WARNING")
     args = docopt(DOC, version=v"0.1.0", options_first=true)
     Celeste.set_logging_level(args["--logging"])
     if args["stage-box"] || args["infer-box"]
@@ -47,7 +48,7 @@ function main()
             Celeste.stage_box_nersc(ramin, ramax, decmin, decmax)
         elseif args["infer-box"]
             outdir = args["<outdir>"]
-            Celeste.infer_box_nersc(ramin, ramax, decmin, decmax, outdir,
+            Celeste.infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
                                     stage=args["--stage"])
         end
     else

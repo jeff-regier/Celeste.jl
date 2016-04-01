@@ -4,17 +4,6 @@ import DualNumbers
 using Celeste: Types, SampleData, SensitiveFloats, BivariateNormals, ElboDeriv
 import Celeste: Synthetic, SkyImages, ModelInit, SDSS, WCSUtils
 
-if VERSION > v"0.5.0-dev"
-    using Base.Threads
-else
-    # Pre-Julia 0.5 there are no threads
-    nthreads() = 1
-    threadid() = 1
-    macro threads(x)
-        x
-    end
-end
-
 
 println("Running derivative tests.")
 
@@ -307,12 +296,12 @@ function test_process_active_pixels()
   function tile_lik_wrapper_fun{NumType <: Number}(
       mp::ModelParams{NumType}, calculate_derivs::Bool)
 
-    elbo_vars_array =
-      ElboDeriv.initialize_elbo_vars_array(mp, calculate_derivs, calculate_derivs)
-    ElboDeriv.process_active_pixels!(
-      elbo_vars_array, tiled_blob, mp, active_pixels);
-    ElboDeriv.reduce_elbo_vars_array!(elbo_vars_array)
-    deepcopy(elbo_vars_array[1].elbo)
+    elbo_vars = ElboIntermediateVariables(NumType, mp.S,
+                      length(mp.active_sources),
+                      calculate_derivs=calculate_derivs,
+                      calculate_hessian=calculate_hessian)
+    ElboDeriv.process_active_pixels!(elbo_vars, tiled_blob, mp, active_pixels);
+    deepcopy(elbo_vars.elbo)
   end
 
   function tile_lik_value_wrapper{NumType <: Number}(x::Vector{NumType})
