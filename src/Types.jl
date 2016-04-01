@@ -372,8 +372,8 @@ typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 # e_angle = Galaxy angle (formerly phi)
 # e_scale = Galaxy scale (sigma)
 # For r1 and r2, the first row is stars, and the second is galaxies.
-# r1      = Iax1 shape parameter for r_s. (formerly gamma)
-# r2      = Iax1 scale parameter for r_s. (formerly zeta)
+# r1      = Iax1 lognormal mean parameter for r_s.
+# r2      = Iax1 lognormal variance parameter for r_s.
 # c1      = C_s means (formerly beta)
 # c2      = C_s variances (formerly lambda)
 # a       = probability of being a star or galaxy.  a[1] is the
@@ -590,8 +590,8 @@ end
 
 # Make a copy of a ModelParams keeping only some sources.
 function ModelParams{T <: Number}(mp_all::ModelParams{T}, keep_s::Vector{Int})
-    mp = ModelParams{T}(mp_all.vp[keep_s], mp_all.pp);
 
+  mp = ModelParams{T}(deepcopy(mp_all.vp[keep_s]), mp_all.pp);
   mp.active_sources = Int[]
   mp.objids = Array(ASCIIString, length(keep_s))
 
