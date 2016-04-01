@@ -574,14 +574,6 @@ function get_all_relevant_sources_in_image{NumType <: Number}(
 end
 
 
-function copy_model_params_for_source{NumType <: Number}(
-    mp_all::ModelParams, active_sources::Vector{Int})
-
-  relevant_sources = get_all_relevant_sources(mp_all, active_sources)
-
-end
-
-
 """
 Return a reduced Celeste dataset useful for a single object.
 
