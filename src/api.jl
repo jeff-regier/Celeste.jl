@@ -432,13 +432,6 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     ModelInit.fit_object_psfs!(mp, target_sources, images)
     times.fit_psf = toq()
 
-    # need a ModelParams per thread
-    mp_array = Array(ModelParams, nthreads())
-    mp_array[1] = mp
-    for i = 2:nthreads()
-        mp_array[i] = deepcopy(mp)
-    end
-
     # iterate over sources
     results = Dict{Int, Dict}()
     results_lock = SpinLock()
@@ -446,16 +439,16 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     @threads for s in target_sources
         tid = threadid()
         entry = catalog[s]
-        mp_array[tid].active_sources = [s]
 
         try
             nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
             tic()
 
             t0 = time()
-            relevant_sources = ModelInit.get_relevant_sources(mp_array[tid], s)
-            mp_source = ModelParams(mp_array[tid], relevant_sources)
+            relevant_sources = ModelInit.get_relevant_sources(mp, s)
+            mp_source = ModelParams(mp, relevant_sources)
             sa = findfirst(relevant_sources, s)
+            mp_source.active_sources = Int[ sa ]
             trimmed_tiled_images =
               ModelInit.trim_source_tiles(sa, mp_source, tiled_images;
                                           noise_fraction=0.1)
