@@ -35,7 +35,7 @@ import ForwardDiff
 
 import Base.length
 
-import ..SDSSIO: SDSSPSF
+import Celeste.SDSSIO: SDSSPSF
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -589,38 +589,35 @@ end
 
 
 # Make a copy of a ModelParams keeping only some sources.
-function ModelParams(mp_all::ModelParams{T}, keep_s::Vector{Int})
-    mp = ModelParams(mp_all.vp[keep_s], mp_all.pp);
-    mp.active_sources = Int[]
-    mp.objids = Array(ASCIIString, length(keep_s))
+function ModelParams{T <: Number}(mp_all::ModelParams{T}, keep_s::Vector{Int})
+    mp = ModelParams{T}(mp_all.vp[keep_s], mp_all.pp);
 
-    # Indices of sources in the new model params
-    new_s = Dict{Int, Int}()
-    for s in keep_s
-      sa = findfirst(keep_s, s)
-      mp.objids[sa] = mp_all.objids[s]
-      if s in mp_all.active_sources
-        push!(mp.active_sources, sa)
-      end
-      new_s[s] = sa
+  mp.active_sources = Int[]
+  mp.objids = Array(ASCIIString, length(keep_s))
+
+  # Indices of sources in the new model params
+  for sa in 1:length(keep_s)
+    s = keep_s[sa]
+    mp.objids[sa] = mp_all.objids[s]
+    mp.patches[sa, :] = mp_all.patches[s, :]
+    if s in mp_all.active_sources
+      push!(mp.active_sources, sa)
     end
+  end
 
-    @assert length(mp_all.tile_sources) == size(mp_all.patches, 2)
-    num_bands = length(mp_all.tile_sources)
-    mp.tile_sources = Array(Matrix{Vector{Int}}, num_bands)
-    for b=1:num_bands
-      mp.tile_sources[b] = Array(Vector{Int}, size(mp_all.tile_sources[b]))
-      for tile_ind in 1:length(mp_all.tile_sources)
-        findin(relevant_sources, relevant_sources)
-      end
+  @assert length(mp_all.tile_sources) == size(mp_all.patches, 2)
+  num_bands = length(mp_all.tile_sources)
+  mp.tile_sources = Array(Matrix{Vector{Int}}, num_bands)
+  for b=1:num_bands
+    mp.tile_sources[b] = Array(Vector{Int}, size(mp_all.tile_sources[b]))
+    for tile_ind in 1:length(mp_all.tile_sources[b])
+        tile_s = intersect(mp_all.tile_sources[b][tile_ind], keep_s)
+        mp.tile_sources[b][tile_ind] =
+          Int[ findfirst(keep_s, s) for s in tile_s ]
     end
+  end
 
-    all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)
-    patches = Array(SkyPatch, S, 5)
-    active_sources = collect(1:S)
-    objids = ASCIIString[string(s) for s in 1:S]
-
-    new(vp, pp, patches, all_tile_sources, active_sources, objids, S)
+  mp
 end
 
 
