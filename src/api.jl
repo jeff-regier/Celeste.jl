@@ -421,6 +421,9 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                primary_initialization=true,
                max_iters=DEFAULT_MAX_ITERS,
                times=InferTiming())
+
+    Logging.info("Running with $(nthreads()) threads")
+
     # Read all primary objects in these fields.
     tic()
     duplicate_policy = primary_initialization ? :primary : :first
