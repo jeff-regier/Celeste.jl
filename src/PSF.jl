@@ -54,7 +54,7 @@ type PsfOptimizer
   psf_2df::Optim.TwiceDifferentiableFunction
   fit_psf::Function
 
-  function PsfOptimizer(psf_transform::DataTransform, K::Int)
+  function PsfOptimizer(psf_transform::DataTransform, K::Int; verbose::Bool=false)
 
     ftol = grtol = 1e-9
     num_iters = 50
@@ -123,9 +123,9 @@ type PsfOptimizer
                             grtol = grtol,
                             ftol = ftol,
                             iterations = num_iters,
-                            store_trace = false,
-                            show_trace = false,
-                            extended_trace = false,
+                            store_trace = verbose,
+                            show_trace = verbose,
+                            extended_trace = verbose,
                             initial_delta=10.0,
                             delta_hat=1e9,
                             rho_lower = 0.2)
