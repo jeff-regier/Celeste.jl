@@ -39,7 +39,13 @@ raw_psf = raw_psf_comp(500., 500.);
 psf_params_original = PSF.initialize_psf_params(K, for_test=false);
 psf_params = deepcopy(psf_params_original)
 psf_transform = PSF.get_psf_transform(psf_params);
-psf_optimizer = PsfOptimizer(psf_transform, K);
+psf_optimizer = PsfOptimizer(psf_transform, K, verbose=true);
+
+optim_result = psf_optimizer.fit_psf(raw_psf, psf_params_original);
+psf_params_fit =
+  constrain_psf_params(
+    unwrap_psf_params(optim_result.minimum), psf_optimizer.psf_transform);
+
 
 @time celeste_psf, psf_params_fit =
     PSF.fit_raw_psf_for_celeste(raw_psf, psf_optimizer, psf_params_original)
