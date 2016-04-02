@@ -353,10 +353,6 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
           rho = f_x_diff / (0 - m)
         end
 
-        # Logging.debug("m= $m")
-        # Logging.debug("f_x_diff = $f_x_diff")
-        # Logging.debug("rho = $rho")
-
         # Logging.debug("Got rho = $rho from $(f_x) - $(f_x_previous) ",
         #         "(diff = $(f_x - f_x_previous)), and m = $m")
         # Logging.debug("Interior = $interior, delta = $delta.")
@@ -374,13 +370,7 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
 
         if rho > eta
             # Accept the point and check convergence
-            # Logging.debug("Accepting improvement from f_prev=$(f_x_previous) f=$(f_x).")
-            # Logging.debug(abs(f_x - f_x_previous) / (abs(f_x) + ftol) < ftol)
-            # Logging.debug(nextfloat(f_x) >= f_x_previous)
-            # Logging.debug(f_x)
-            # Logging.debug(nextfloat(f_x))
-            # Logging.debug(f_x_previous)
-
+        
             x_converged,
             f_converged,
             gr_converged,
