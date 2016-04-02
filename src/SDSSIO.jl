@@ -247,7 +247,7 @@ This function was originally based on the function sdss_psf_at_points
 in astrometry.net:
 https://github.com/dstndstn/astrometry.net/blob/master/util/sdss_psf.py
 """
-function (psf::SDSSPSF)(x::Real, y::Real)
+function call(psf::SDSSPSF, x::Real, y::Real)
     const RCS = 0.001  # A coordinate transform to keep polynomial
                        # coefficients to a reasonable size.
     nk = size(psf.rrows, 2)  # number of eigen images.
