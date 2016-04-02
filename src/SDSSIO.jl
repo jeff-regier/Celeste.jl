@@ -371,6 +371,10 @@ function read_photoobj(fname, band::Char='r')
     # Get "bright" objects.
     # (In objc_flags, the bit pattern Int32(2) corresponds to bright objects.)
     is_bright = read(hdu, "objc_flags")::Vector{Int32} & Int32(2) .!= 0
+    is_saturated = read(hdu, "objc_flags")::Vector{Int32} & Int32(18) .!= 0
+    is_too_large = read(hdu, "objc_flags")::Vector{Int32} & Int32(24) .!= 0
+    has_bad_flag = is_bright #| is_saturated | is_too_large
+
     has_child = read(hdu, "nchild")::Vector{Int16} .> 0
 
     # 6 = star, 3 = galaxy, others can be ignored.
@@ -386,7 +390,7 @@ function read_photoobj(fname, band::Char='r')
     has_exp = fracdev .< 1.
     is_comp = has_dev & has_exp
     is_bad_fracdev = (fracdev .< 0.) | (fracdev .> 1)
-    mask = !(is_bad_fracdev | is_bad_obj | is_bright | has_child)
+    mask = !(is_bad_fracdev | is_bad_obj | has_bad_flag | has_child)
 
     # Read the fluxes.
     # Record the cmodelflux if the galaxy is composite, otherwise use

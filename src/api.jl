@@ -3,10 +3,10 @@
 import Base.+
 import FITSIO
 import JLD
-using Logging  # just for testing right now
+import Logging  # just for testing right now
 
 using .Types
-import .SDSS
+import .SDSSIO
 import .SkyImages
 import .ModelInit
 import .OptimizeElbo
@@ -144,19 +144,19 @@ end
 
 function set_logging_level(level)
     if level == "OFF"
-      Logging.configure(level=OFF)
+      Logging.configure(level=Logging.OFF)
     elseif level == "DEBUG"
-      Logging.configure(level=DEBUG)
+      Logging.configure(level=Logging.DEBUG)
     elseif level == "INFO"
-      Logging.configure(level=INFO)
+      Logging.configure(level=Logging.INFO)
     elseif level == "WARNING"
-      Logging.configure(level=WARNING)
+      Logging.configure(level=Logging.WARNING)
     elseif level == "ERROR"
-      Logging.configure(level=ERROR)
+      Logging.configure(level=Logging.ERROR)
     elseif level == "CRITICAL"
-      Logging.configure(level=CRITICAL)
+      Logging.configure(level=Logging.CRITICAL)
     else
-      err("Unknown logging level $(level)")
+      Logging.err("Unknown logging level $(level)")
     end
 end
 
@@ -179,7 +179,7 @@ function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
     @assert duplicate_policy == :primary || duplicate_policy == :first
     @assert duplicate_policy == :primary || length(dirs) == 1
 
-    info("reading photoobj catalogs for ", length(fieldids), " fields")
+    Logging.info("reading photoobj catalogs for ", length(fieldids), " fields")
 
     # the code below assumes there is at least one field.
     if length(fieldids) == 0
@@ -192,12 +192,12 @@ function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
         run, camcol, field = fieldids[i]
         dir = dirs[i]
         fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
-        info("field $(fieldids[i]): reading $fname")
+        Logging.info("field $(fieldids[i]): reading $fname")
         rawcatalogs[i] = SDSSIO.read_photoobj(fname)
     end
 
     for i in eachindex(fieldids)
-        info("field ", fieldids[i], ": ", length(rawcatalogs[i]["objid"]),
+        Logging.info("field ", fieldids[i], ": ", length(rawcatalogs[i]["objid"]),
              " entries")
     end
 
@@ -214,7 +214,7 @@ function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
     end
 
     for i in eachindex(fieldids)
-        info("field ", fieldids[i], ": ", length(rawcatalogs[i]["objid"]),
+        Logging.info("field ", fieldids[i], ": ", length(rawcatalogs[i]["objid"]),
              " filtered entries")
     end
 
@@ -370,17 +370,17 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     catalog = read_photoobj_files(fieldids, photoobj_dirs,
                         duplicate_policy=duplicate_policy)
     times.read_photoobj = toq()
-    info("$(length(catalog)) primary sources")
+    Logging.info("$(length(catalog)) primary sources")
 
     reserve_thread[] && thread_fun(reserve_thread)
 
     # Filter out low-flux objects in the catalog.
     catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
-    info("$(length(catalog)) primary sources after MIN_FLUX cut")
+    Logging.info("$(length(catalog)) primary sources after MIN_FLUX cut")
 
     # Filter any object not specified, if an objid is specified
     if objid != ""
-        info(catalog[1].objid)
+        Logging.info(catalog[1].objid)
         catalog = filter(entry->(entry.objid == objid), catalog)
     end
 
@@ -405,7 +405,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     image_count = 0
     tic()
     for i in 1:length(fieldids)
-        info("reading field ", fieldids[i])
+        Logging.info("reading field ", fieldids[i])
         run, camcol, field = fieldids[i]
         fieldims = SkyImages.read_sdss_field(run, camcol, field, frame_dirs[i],
                                              fpm_dir=fpm_dirs[i],
@@ -422,12 +422,12 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
     reserve_thread[] && thread_fun(reserve_thread)
 
-    debug("Image names:")
-    debug(image_names)
+    Logging.debug("Image names:")
+    Logging.debug(image_names)
 
     # initialize tiled images and model parameters for trimming.  We will
     # initialize the psf again before fitting, so we don't do it here.
-    info("initializing celeste without PSF fit")
+    Logging.info("initializing celeste without PSF fit")
     tic()
     tiled_images = SkyImages.break_blob_into_tiles(images, TILE_WIDTH)
     mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
@@ -439,7 +439,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # get indicies of all sources relevant to those we're actually
     # interested in, and fit a local PSF for those sources (since we skipped
     # fitting the PSF for the whole catalog above)
-    info("fitting PSF for all relevant sources")
+    Logging.info("fitting PSF for all relevant sources")
     tic()
     ModelInit.fit_object_psfs!(mp, target_sources, images)
     times.fit_psf = toq()
@@ -501,7 +501,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                                                "fit_time"=>fit_time)
                 unlock!(results_lock)
             catch ex
-                err(ex)
+                Logging.err(ex)
             end
         end
     end
@@ -619,7 +619,7 @@ function nersc_stage_field(run::Integer, camcol::Integer, field::Integer)
         dstfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
                            dstdir, band, run, camcol, field)
         if !isfile(dstfile)
-            println("bzcat --keep $srcfile > $dstfile")
+            Logging.info("bzcat --keep $srcfile > $dstfile")
             Base.run(pipeline(`bzcat --keep $srcfile`, stdout=dstfile))
         end
     end
@@ -638,7 +638,7 @@ function nersc_stage_field(run::Integer, camcol::Integer, field::Integer)
         dstfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
                            dstdir, run, band, camcol, field)
         if !isfile(dstfile)
-            println("gunzip --stdout $srcfile > $dstfile")
+            Logging.info("gunzip --stdout $srcfile > $dstfile")
             Base.run(pipeline(`gunzip --stdout $srcfile`, stdout=dstfile))
         end
     end
@@ -789,6 +789,6 @@ function infer_field_nersc(run::Int, camcol::Int, field::Int,
         @sprintf "%s/celeste-objid-%s.jld" outdir objid
     end
     JLD.save(fname, "results", results)
-    debug("infer_field_nersc finished successfully")
+    Logging.debug("infer_field_nersc finished successfully")
 end
 
