@@ -47,8 +47,8 @@ else
 end
 
 # A workitem is of this ra / dec size
-const wira = 0.05
-const widec = 0.05
+const wira = 0.04
+const widec = 0.04
 
 """
 Timing information.
@@ -271,9 +271,9 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
     # how many `wira` X `widec` sky areas (work items)?
     global wira, widec
-    nra = ceil(Int64, (ramax - ramin) / wira)
-    ndec = ceil(Int64, (decmax - decmin) / widec)
-    skya = SkyArea(ramin, ramax, decmin, decmax, nra, ndec)
+    nra = ceil(Int64, (ra_range[2] - ra_range[1]) / wira)
+    ndec = ceil(Int64, (dec_range[2] - dec_range[1]) / widec)
+    skya = SkyArea(ra_range[1], ra_range[2], dec_range[1], dec_range[2], nra, ndec)
 
     num_work_items = nra * ndec
     each = ceil(Int64, num_work_items / dt_nnodes)
@@ -311,7 +311,7 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
         ci = ci + 1
 
         # map item to subarea
-        iramin, iramax, idecmin, idecmax = sky_subarea(skya, item)
+        iramin, iramax, idecmin, idecmax = divide_skyarea(skya, item)
 
         # run inference for this subarea
         nputs(dt_nodeid, "running inference for $iramin, $iramax, $idecmin, $idecmax")
@@ -339,7 +339,7 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
         cpu_pause()
     end
     finalize(dt)
-    times.work_done = toq()
+    times.wait_done = toq()
 end
 
 
@@ -462,6 +462,10 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
             while reserve_thread[]
                 thread_fun(reserve_thread)
                 cpu_pause()
+
+                # hack for Julia's GC
+                gc_state = ccall(:jl_gc_safe_enter, Int8, ())
+                ccall(:jl_gc_safe_leave, Void, (Int8,), gc_state)
             end
         else
             entry = catalog[s]
