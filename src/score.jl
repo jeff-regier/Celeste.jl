@@ -145,7 +145,6 @@ function load_s82(fname)
 
     # gal effective radius (re)
     re_arcsec = where(usedev, objs[:devrad_r], objs[:exprad_r])
-#    re_arcsec = where(usedev, objs[:theta_dev], objs[:theta_exp])
     re_pixel = re_arcsec / 0.396
     result[:gal_scale] = re_pixel
 
@@ -175,28 +174,30 @@ Load the SDSS photoObj catalog used to initialize celeste, and reformat column
 names to match what the rest of the scoring code expects.
 """
 function load_primary(dir, run, camcol, field)
-    objs = SDSS.load_catalog_df(dir, run, camcol, field)
-    usedev = objs[:frac_dev] .> 0.5  # true=> use dev, false=> use exp
+    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
+    objs = SDSSIO.read_photoobj(fname)
 
-    gal_flux_u = where(usedev, objs[:devflux_u], objs[:expflux_u])
-    gal_flux_g = where(usedev, objs[:devflux_g], objs[:expflux_g])
-    gal_flux_r = where(usedev, objs[:devflux_r], objs[:expflux_r])
-    gal_flux_i = where(usedev, objs[:devflux_i], objs[:expflux_i])
-    gal_flux_z = where(usedev, objs[:devflux_z], objs[:expflux_z])
+    usedev = objs["frac_dev"] .> 0.5  # true=> use dev, false=> use exp
+
+    gal_flux_u = where(usedev, objs["devflux_u"], objs["expflux_u"])
+    gal_flux_g = where(usedev, objs["devflux_g"], objs["expflux_g"])
+    gal_flux_r = where(usedev, objs["devflux_r"], objs["expflux_r"])
+    gal_flux_i = where(usedev, objs["devflux_i"], objs["expflux_i"])
+    gal_flux_z = where(usedev, objs["devflux_z"], objs["expflux_z"])
 
     result = DataFrame()
-    result[:objid] = objs[:objid]
-    result[:ra] = objs[:ra]
-    result[:dec] = objs[:dec]
-    result[:is_star] = objs[:is_star]
-    result[:star_mag_r] = flux_to_mag(objs[:psfflux_r])
+    result[:objid] = objs["objid"]
+    result[:ra] = objs["ra"]
+    result[:dec] = objs["dec"]
+    result[:is_star] = objs["is_star"]
+    result[:star_mag_r] = flux_to_mag(objs["psfflux_r"])
     result[:gal_mag_r] = flux_to_mag(gal_flux_r)
 
     # star colors
-    result[:star_color_ug] = fluxes_to_color(objs[:psfflux_u], objs[:psfflux_g])
-    result[:star_color_gr] = fluxes_to_color(objs[:psfflux_g], objs[:psfflux_r])
-    result[:star_color_ri] = fluxes_to_color(objs[:psfflux_r], objs[:psfflux_i])
-    result[:star_color_iz] = fluxes_to_color(objs[:psfflux_i], objs[:psfflux_z])
+    result[:star_color_ug] = fluxes_to_color(objs["psfflux_u"], objs["psfflux_g"])
+    result[:star_color_gr] = fluxes_to_color(objs["psfflux_g"], objs["psfflux_r"])
+    result[:star_color_ri] = fluxes_to_color(objs["psfflux_r"], objs["psfflux_i"])
+    result[:star_color_iz] = fluxes_to_color(objs["psfflux_i"], objs["psfflux_z"])
 
     # gal colors
     result[:gal_color_ug] = fluxes_to_color(gal_flux_u, gal_flux_g)
@@ -205,55 +206,23 @@ function load_primary(dir, run, camcol, field)
     result[:gal_color_iz] = fluxes_to_color(gal_flux_i, gal_flux_z)
 
     # gal shape -- fracdev
-    result[:gal_fracdev] = objs[:frac_dev]
+    result[:gal_fracdev] = objs["frac_dev"]
 
     # gal shape -- axis ratio
     #TODO: filter when 0.5 < frac_dev < .95
-    fits_ab = where(usedev, objs[:ab_dev], objs[:ab_exp])
-    result[:gal_ab] = fits_ab
+    result[:gal_ab] = where(usedev, objs["ab_dev"], objs["ab_exp"])
 
     # gal effective radius (re)
-    re_arcsec = where(usedev, objs[:theta_dev], objs[:theta_exp])
-    re_pixel = re_arcsec / 0.396
-    result[:gal_scale] = re_pixel
+    re_arcsec = where(usedev, objs["theta_dev"], objs["theta_exp"])
+    result[:gal_scale] = re_arcsec / 0.396 #pixel scale
 
     # gal angle (degrees)
-    raw_phi = where(usedev, objs[:phi_dev], objs[:phi_exp])
+    raw_phi = where(usedev, objs["phi_dev"], objs["phi_exp"])
     result[:gal_angle] = raw_phi - floor(raw_phi / 180) * 180
 
     return result
 end
 
-
-"""
-This function converts the parameters from Celeste for one light source
-to a CatalogEntry. (which can be passed to load_ce!)
-It only needs to be called by load_celeste_obj!
-"""
-function convert(::Type{CatalogEntry}, vs::Vector{Float64}, objid::ASCIIString,
-                 thingid::Int)
-    function get_fluxes(i::Int)
-        ret = Array(Float64, 5)
-        ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
-        ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
-        ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
-        ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
-        ret[1] = ret[2] / exp(vs[ids.c1[1, i]])
-        ret
-    end
-
-    CatalogEntry(
-        vs[ids.u],
-        vs[ids.a[1]] > 0.5,
-        get_fluxes(1),
-        get_fluxes(2),
-        vs[ids.e_dev],
-        vs[ids.e_axis],
-        vs[ids.e_angle],
-        vs[ids.e_scale],
-        objid,
-        thingid)
-end
 
 const color_names = ["ug", "gr", "ri", "iz"]
 
@@ -318,7 +287,28 @@ function celeste_to_df(results::Dict{Int, Dict})
     for (thingid, result) in results
         i += 1
         vs = result["vs"]
-        ce = convert(CatalogEntry, vs, result["objid"], thingid)
+
+        function get_fluxes(i::Int)
+            ret = Array(Float64, 5)
+            ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
+            ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
+            ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
+            ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
+            ret[1] = ret[2] / exp(vs[ids.c1[1, i]])
+            ret
+        end
+
+        ce = CatalogEntry(
+            vs[ids.u],
+            vs[ids.a[1]] > 0.5,
+            get_fluxes(1),
+            get_fluxes(2),
+            vs[ids.e_dev],
+            vs[ids.e_axis],
+            vs[ids.e_angle],
+            vs[ids.e_scale],
+            result["objid"],
+            thingid)
         load_ce!(i, ce, df)
 
         df[i, :is_star] = vs[ids.a[1]]
