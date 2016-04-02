@@ -111,6 +111,7 @@ function divide_skyarea(skya::SkyArea, i)
 end
 
 @inline nputs(nid, s) = ccall(:puts, Cint, (Ptr{Int8},), string("[$nid] ", s))
+@inline phalse(b) = b[] = false
 
 function time_puts(elapsedtime, bytes, gctime, allocs)
     s = @sprintf("%10.6f seconds", elapsedtime/1e9)
@@ -285,13 +286,15 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # create Dtree and get the initial allocation
     dt = DtreeScheduler(num_work_items, 0.4)
     ni, (ci, li) = initwork(dt)
-    rundt = runtree(dt) > 0
-    function rundtree()
-        if rundt
-            rundt = runtree(dt) > 0
+    rundt = Ref(runtree(dt))
+    @inline function rundtree(again)
+        if again[]
+            again[] = runtree(dt)
             cpu_pause()
         end
+        again[]
     end
+
 
     # work item processing loop
     nputs(dt_nodeid, "initially $ni work items ($ci to $li)")
@@ -319,17 +322,21 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
                         psfield_dirs=frame_dirs,
                         photoobj_dirs=frame_dirs,
                         photofield_dirs=photofield_dirs,
+                        reserve_thread=rundt,
+                        thread_fun=rundtree,
                         times=itimes)
         tic()
         output_results(outdir, iramin, iramax, idecmin, idecmax, results)
         itimes.write_results = toq()
 
         times += itimes
+        rundtree(rundt)
     end
     nputs(dt_nodeid, "out of work")
     tic()
-    while rundt
-        rundtree()
+    while rundt[]
+        rundtree(rundt)
+        cpu_pause()
     end
     finalize(dt)
     times.work_done = toq()
@@ -360,6 +367,8 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                dec_range=(-1000., 1000.),
                primary_initialization=true,
                max_iters=DEFAULT_MAX_ITERS,
+               reserve_thread=Ref(false),
+               thread_fun=phalse,
                times=InferTiming())
     # Read all primary objects in these fields.
     tic()
@@ -368,6 +377,8 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                         duplicate_policy=duplicate_policy)
     times.read_photoobj = toq()
     info("$(length(catalog)) primary sources")
+
+    reserve_thread[] && thread_fun(reserve_thread)
 
     # Filter out low-flux objects in the catalog.
     catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
@@ -384,12 +395,15 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                              (dec_range[1] < entry.pos[2] < dec_range[2]))
     target_sources = find(entry_in_range, catalog)
 
-    info("processing $(length(target_sources)) sources in RA/Dec range")
+    nputs(dt_nodeid, string("processing $(length(target_sources)) sources in ",
+          "$(ra_range[1]), $(ra_range[2]), $(dec_range[1]), $(dec_range[2])"))
 
     # If there are no objects of interest, return early.
     if length(target_sources) == 0
-        return Dict{Int, Dict}(), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)
+        return Dict{Int, Dict}()
     end
+
+    reserve_thread[] && thread_fun(reserve_thread)
 
     # Read in images for all (run, camcol, field).
     images = Image[]
@@ -412,6 +426,8 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     end
     times.read_img = toq()
 
+    reserve_thread[] && thread_fun(reserve_thread)
+
     debug("Image names:")
     debug(image_names)
 
@@ -424,6 +440,8 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                                            fit_psf=false)
     times.init_mp = toq()
 
+    reserve_thread[] && thread_fun(reserve_thread)
+
     # get indicies of all sources relevant to those we're actually
     # interested in, and fit a local PSF for those sources (since we skipped
     # fitting the PSF for the whole catalog above)
@@ -432,52 +450,61 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     ModelInit.fit_object_psfs!(mp, target_sources, images)
     times.fit_psf = toq()
 
+    reserve_thread[] && thread_fun(reserve_thread)
+
     # iterate over sources
     results = Dict{Int, Dict}()
     results_lock = SpinLock()
     tic()
     @threads for s in target_sources
         tid = threadid()
-        entry = catalog[s]
+        if reserve_thread[] && tid == 1
+            while reserve_thread[]
+                thread_fun(reserve_thread)
+                cpu_pause()
+            end
+        else
+            entry = catalog[s]
 
-        try
-            nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
-            tic()
+            try
+                nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
+                tic()
 
-            t0 = time()
-            relevant_sources = ModelInit.get_relevant_sources(mp, s)
-            mp_source = ModelParams(mp, relevant_sources)
-            sa = findfirst(relevant_sources, s)
-            mp_source.active_sources = Int[ sa ]
-            trimmed_tiled_images =
-              ModelInit.trim_source_tiles(sa, mp_source, tiled_images;
-                                          noise_fraction=0.1)
-            init_time = time() - t0
+                t0 = time()
+                relevant_sources = ModelInit.get_relevant_sources(mp, s)
+                mp_source = ModelParams(mp, relevant_sources)
+                sa = findfirst(relevant_sources, s)
+                mp_source.active_sources = Int[ sa ]
+                trimmed_tiled_images =
+                  ModelInit.trim_source_tiles(sa, mp_source, tiled_images;
+                                              noise_fraction=0.1)
+                init_time = time() - t0
 
-            t = toq()
-            nputs(dt_nodeid, "trimmed $s in $t secs, optimizing")
-            tic()
+                t = toq()
+                nputs(dt_nodeid, "trimmed $s in $t secs, optimizing")
+                tic()
 
-            t0 = time()
-            iter_count, max_f, max_x, result =
-                OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images,
-                                        mp_source;
-                                        verbose=false, max_iters=max_iters)
-            fit_time = time() - t0
+                t0 = time()
+                iter_count, max_f, max_x, result =
+                    OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images,
+                                            mp_source;
+                                            verbose=false, max_iters=max_iters)
+                fit_time = time() - t0
 
-            t = toq()
-            nputs(dt_nodeid, "optimized $s in $t secs, writing results")
+                t = toq()
+                nputs(dt_nodeid, "optimized $s in $t secs, writing results")
 
-            lock!(results_lock)
-            results[entry.thing_id] = Dict("objid"=>entry.objid,
-                                           "ra"=>entry.pos[1],
-                                           "dec"=>entry.pos[2],
-                                           "vs"=>mp_source.vp[sa],
-                                           "init_time"=>init_time,
-                                           "fit_time"=>fit_time)
-            unlock!(results_lock)
-        catch ex
-            err(ex)
+                lock!(results_lock)
+                results[entry.thing_id] = Dict("objid"=>entry.objid,
+                                               "ra"=>entry.pos[1],
+                                               "dec"=>entry.pos[2],
+                                               "vs"=>mp_source.vp[sa],
+                                               "init_time"=>init_time,
+                                               "fit_time"=>fit_time)
+                unlock!(results_lock)
+            catch ex
+                err(ex)
+            end
         end
     end
     times.opt_srcs = toq()
@@ -684,7 +711,7 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
     photofield_dirs = [nersc_photofield_scratchdir(x[1], x[2])
                        for x in fieldids]
 
-    #= Base.@time hack for distributed environment
+    # Base.@time hack for distributed environment
     gc_stats = ()
     gc_diff_stats = ()
     elapsed_time = 0.0
@@ -692,7 +719,6 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
         gc_stats = Base.gc_num()
         elapsed_time = time_ns()
     end
-    =#
 
     times = InferTiming()
     if Distributed && dt_nnodes > 1
@@ -721,12 +747,11 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
     end
 
     if show_timing
-        #= Base.@time hack for distributed environment
+        # Base.@time hack for distributed environment
         elapsed_time = time_ns() - elapsed_time
         gc_diff_stats = Base.GC_Diff(Base.gc_num(), gc_stats)
         time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
                   Base.gc_alloc_count(gc_diff_stats))
-        =#
 
         times.num_srcs = max(1, times.num_srcs)
         nputs(dt_nodeid, "timing: read_photoobj=$(times.read_photoobj)")
