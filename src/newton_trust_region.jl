@@ -386,7 +386,7 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
               # Only compute the next Hessian if we haven't converged
               d.h!(x, H)
             else
-              Logging.info("Converged.")
+              Logging.debug("Converged.")
             end
         else
             # The improvement is too small and we won't take it.

@@ -8,6 +8,7 @@ using ..SensitiveFloats
 export DataTransform, ParamBounds, ParamBox, SimplexBox,
        get_mp_transform, generate_valid_parameters, enforce_bounds!
 
+import Logging
 
 
 ################################
@@ -354,7 +355,6 @@ function get_transform_derivatives!{NumType <: Number}(
 
   for param in fieldnames(ids), sa = 1:length(active_sources)
     s = active_sources[sa]
-  	#println(param, " ", sa)
   	constraint_vec = bounds[sa][param]
 
   	if isa(constraint_vec[1], ParamBox) # It is a box constraint
@@ -892,7 +892,7 @@ function enforce_bounds!{NumType <: Number}(
         if !(constraint.lower_bound <=
              mp.vp[s][ids.(param)[ind]] <=
              constraint.upper_bound)
-          info("Warning: $param[$s][$ind] was out of bounds.")
+          Logging.debug("param[$s][$ind] was out of bounds.")
           # Don't set the value to exactly the lower bound to avoid Inf
           diff = constraint.upper_bound - constraint.lower_bound
           epsilon = diff == Inf ? 1e-12: diff * 1e-12
@@ -910,7 +910,7 @@ function enforce_bounds!{NumType <: Number}(
           constraint = constraint_vec[col]
           for row in 1:param_size[1]
             if !(constraint.lower_bound <= mp.vp[s][ids.(param)[row, col]] <= 1.0)
-              info("Warning: $param[$s][$row, $col] was out of bounds.")
+              Logging.debug("param[$s][$row, $col] was out of bounds.")
               # Don't set the value to exactly the lower bound to avoid Inf
               epsilon = (1.0 - constraint.lower_bound) * 1e-12
               mp.vp[s][ids.(param)[row, col]] =
@@ -921,7 +921,7 @@ function enforce_bounds!{NumType <: Number}(
             end
           end
           if sum(mp.vp[s][ids.(param)[:, col]]) != 1.0
-            info("Warning: $param[$s][:, $col] is not normalized.")
+            Logging.debug("param[$s][:, $col] is not normalized.")
             mp.vp[s][ids.(param)[:, col]] =
               mp.vp[s][ids.(param)[:, col]] / sum(mp.vp[s][ids.(param)[:, col]])
           end
@@ -931,7 +931,7 @@ function enforce_bounds!{NumType <: Number}(
         constraint = constraint_vec[1]
         for row in 1:param_size[1]
           if !(constraint.lower_bound <= mp.vp[s][ids.(param)[row]] <= 1.0)
-            info("Warning: $param[$s][$row] was out of bounds.")
+            Logging.debug("param[$s][$row] was out of bounds.")
             # Don't set the value to exactly the lower bound to avoid Inf
             epsilon = (1.0 - constraint.lower_bound) * 1e-12
             mp.vp[s][ids.(param)[row]] =
@@ -941,7 +941,7 @@ function enforce_bounds!{NumType <: Number}(
           end
         end
         if sum(mp.vp[s][ids.(param)]) != 1.0
-          info("Warning: $param[$s] is not normalized.")
+          Logging.debug("param[$s] is not normalized.")
           mp.vp[s][ids.(param)] = mp.vp[s][ids.(param)] / sum(mp.vp[s][ids.(param)])
         end
       end
