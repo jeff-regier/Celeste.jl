@@ -18,6 +18,7 @@ macro newton_tr_trace()
                 dt["g(x)"] = copy(gr)
                 dt["h(x)"] = copy(H)
                 dt["delta"] = copy(delta)
+                dt["interior"] = interior
             end
             grnorm = norm(gr, Inf)
             update!(tr,
@@ -301,6 +302,9 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
 
     # Keep track of trust region sizes
     delta = copy(initial_delta)
+
+    # Record whether the point is interior in the trace.
+    interior = false
 
     # Trace the history of states visited
     tr = OptimizationTrace()
