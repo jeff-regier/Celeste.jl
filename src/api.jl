@@ -370,7 +370,7 @@ function fit_object_psfs_threaded!{NumType <: Number}(
     pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
     raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
     central_psf, central_psf_params =
-      PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
+      PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer_vec[1], initial_psf_params)
 
     # Get all relevant sources *in this image*
     relevant_sources = get_all_relevant_sources_in_image(mp, target_sources, b)
