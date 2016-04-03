@@ -220,7 +220,7 @@ function load_primary(dir, run, camcol, field)
     raw_phi = where(usedev, objs["phi_dev"], objs["phi_exp"])
     result[:gal_angle] = raw_phi - floor(raw_phi / 180) * 180
 
-    return result
+    return result#[!objs["is_saturated"], :]
 end
 
 
@@ -422,21 +422,26 @@ function match_catalogs(fieldid::Tuple{Int, Int, Int},
     # load "primary" catalog (the SDSS photoObj catalog used to initialize
     # celeste).
     primary_full_df = load_primary(primary_dir, fieldid...)
+    println("primary catalog: $(size(primary_full_df, 1)) objects")
 
-    info("primary catalog: $(size(primary_full_df, 1)) objects")
-
-    # match by object id
-    good_primary_indexes = Int[findfirst(primary_full_df[:objid], objid)
+    # match Primary to Celeste by object id
+    pc_matches = Int[findfirst(primary_full_df[:objid], objid)
                    for objid in celeste_df[:objid]]
+    pc_matches = filter(x->x!=0, pc_matches)
+    primary_df = primary_full_df[pc_matches, :]
 
-    # limit primary to matched items
-    primary_df = primary_full_df[good_primary_indexes, :]
+    # match Celeste to Primary by object id
+    cp_matches = Int[findfirst(celeste_df[:objid], objid)
+                   for objid in primary_df[:objid]]
+    cp_matches = filter(x->x!=0, cp_matches)
+    celeste_df = celeste_df[cp_matches, :]
+    coadd_df = coadd_df[cp_matches, :]
 
     # show that all catalogs have same size, and (hopefully)
     # that not too many sources were filtered
-    info("matched celeste catalog: $(size(celeste_df, 1)) objects")
-    info("matched coadd catalog: $(size(coadd_df, 1)) objects")
-    info("matched primary catalog: $(size(primary_df, 1)) objects")
+    println("matched celeste catalog: $(size(celeste_df, 1)) objects")
+    println("matched coadd catalog: $(size(coadd_df, 1)) objects")
+    println("matched primary catalog: $(size(primary_df, 1)) objects")
 
     # ensure that all objects are matched
     if size(primary_df, 1) != size(celeste_df, 1)
