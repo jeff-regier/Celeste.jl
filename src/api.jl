@@ -338,6 +338,66 @@ end
 
 
 """
+Update ModelParams with the PSFs for a range of object ids.
+
+Args:
+  - mp: A ModelParams whose patches will be updated.
+  - relevant_sources: A vector of source ids that index into mp.patches
+  - blob: A vector of images.
+
+Returns:
+  - Updates mp.patches in place with fitted psfs for each source in
+    relevant_sources.
+
+TODO: Unify with ModelInit.fit_object_psfs! when threading is part of all of
+      Celeste.
+"""
+function fit_object_psfs_threaded!{NumType <: Number}(
+    mp::ModelParams{NumType}, target_sources::Vector{Int}, blob::Blob)
+
+  # Initialize a vector of optimizers and transforms.
+  initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
+  psf_transform = PSF.get_psf_transform(initial_psf_params);
+  psf_optimizer_vec = Array(PSF.PsfOptimizer, nthreads())
+  for tid in 1:nthreads()
+    psf_optimizer_vec[tid] = PSF.PsfOptimizer(deepcopy(psf_transform), psf_K);
+  end
+
+  @assert size(mp.patches, 2) == length(blob)
+
+  for b in 1:length(blob)  # loop over images
+    Logging.debug("Fitting PSFS for band $b")
+    # Get a starting point in the middle of the image.
+    pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
+    raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
+    central_psf, central_psf_params =
+      PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer_vec[1], initial_psf_params)
+
+    # Get all relevant sources *in this image*
+    relevant_sources = ModelInit.get_all_relevant_sources_in_image(mp, target_sources, b)
+
+    mp_lock = SpinLock()
+    @threads for s in relevant_sources
+      tid = threadid()
+      Logging.debug("Thread $tid: fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
+      patch = mp.patches[s, b]
+
+      # Set the starting point at the center's PSF.
+      psf, psf_params =
+        PSF.get_source_psf(
+          patch.center, blob[b], psf_optimizer_vec[tid], central_psf_params)
+      new_patch = ModelInit.SkyPatch(patch, psf);
+
+      # Copy to the global array of patches.
+      lock!(mp_lock)
+      mp.patches[s, b] = new_patch
+      unlock!(mp_lock)
+    end
+  end
+end
+
+
+"""
 Fit the Celeste model to sources in a given ra, dec range,
 based on data from specified fields
 
@@ -364,6 +424,9 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                reserve_thread=Ref(false),
                thread_fun=phalse,
                times=InferTiming())
+
+    Logging.info("Running with $(nthreads()) threads")
+
     # Read all primary objects in these fields.
     tic()
     duplicate_policy = primary_initialization ? :primary : :first
@@ -441,7 +504,11 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # fitting the PSF for the whole catalog above)
     info("fitting PSF for all relevant sources")
     tic()
-    ModelInit.fit_object_psfs!(mp, target_sources, images)
+    if Threaded
+      fit_object_psfs_threaded!(mp, target_sources, images)
+    else
+      ModelInit.fit_object_psfs!(mp, target_sources, images)
+    end
     times.fit_psf = toq()
 
     reserve_thread[] && thread_fun(reserve_thread)
