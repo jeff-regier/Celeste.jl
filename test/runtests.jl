@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 using Celeste: Types, SampleData, Transform
-import Celeste: Synthetic, SDSS, WCSUtils
+import Celeste: Synthetic, WCSUtils
 
 using Base.Test
 using Distributions
@@ -30,7 +30,6 @@ else
                  "test_sensitive_float.jl",
                  "test_transforms.jl",
                  "test_wcs.jl",
-                 "test_sdss.jl",
 #                 "test_score.jl",
                  "test_infer.jl"]
 end

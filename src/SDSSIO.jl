@@ -371,6 +371,10 @@ function read_photoobj(fname, band::Char='r')
     # Get "bright" objects.
     # (In objc_flags, the bit pattern Int32(2) corresponds to bright objects.)
     is_bright = read(hdu, "objc_flags")::Vector{Int32} & Int32(2) .!= 0
+    is_saturated = read(hdu, "objc_flags")::Vector{Int32} & Int32(18) .!= 0
+    is_too_large = read(hdu, "objc_flags")::Vector{Int32} & Int32(24) .!= 0
+    has_bad_flag = is_bright | is_too_large
+
     has_child = read(hdu, "nchild")::Vector{Int16} .> 0
 
     # 6 = star, 3 = galaxy, others can be ignored.
@@ -411,7 +415,6 @@ function read_photoobj(fname, band::Char='r')
 
     close(f)
 
-
     # construct result catalog
     catalog = Dict("objid"=>objid[mask],
                    "ra"=>ra[mask],
@@ -427,7 +430,8 @@ function read_photoobj(fname, band::Char='r')
                    "ab_dev"=>vec(ab_dev[bandnum, mask]),
                    "theta_dev"=>vec(theta_dev[bandnum, mask]),
                    "phi_dev"=>vec(phi_dev_deg[bandnum, mask]),
-                   "phi_offset"=>vec(phi_offset[bandnum, mask]))
+                   "phi_offset"=>vec(phi_offset[bandnum, mask]),
+                   "is_saturated"=>vec(is_saturated[mask]))
     for (b, n) in BAND_CHAR_TO_NUM
         catalog["psfflux_$b"] = vec(psfflux[n, mask])
         catalog["compflux_$b"] = vec(cmodelflux[n, mask])
