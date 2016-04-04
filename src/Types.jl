@@ -32,6 +32,7 @@ import Distributions
 import FITSIO
 import WCS.WCSTransform
 import ForwardDiff
+import Logging
 
 import Base.length
 
@@ -678,10 +679,10 @@ Display model parameters with the variable names.
 """
 function print_params(mp::ModelParams)
     for s in mp.active_sources
-        println("=======================\n Object $(s):")
+        Logging.info("=======================\n Object $(s):")
         for var_name in fieldnames(ids)
-            println(var_name)
-            println(mp.vp[s][ids.(var_name)])
+            Logging.info(var_name)
+            Logging.info(mp.vp[s][ids.(var_name)])
         end
     end
 end
@@ -690,15 +691,15 @@ end
 Display several model parameters side by side.
 """
 function print_params(mp_tuple::ModelParams...)
-    println("Printing for $(length(mp_tuple)) parameters.")
+    Logging.info("Printing for $(length(mp_tuple)) parameters.")
     for s in mp_tuple[1].active_sources
-        println("=======================\n Object $(s):")
+        Logging.info("=======================\n Object $(s):")
         for var_name in fieldnames(ids)
-            println(var_name)
+            Logging.info(var_name)
             mp_vars =
               [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for
                 index in 1:length(mp_tuple) ]
-            println(reduce(hcat, mp_vars))
+            Logging.info(reduce(hcat, mp_vars))
         end
     end
 end
@@ -708,7 +709,7 @@ end
 Display a Celeste catalog entry.
 """
 function print_cat_entry(cat_entry::CatalogEntry)
-    [println("$name: $(cat_entry.(name))") for name in
+    [Logging.info("$name: $(cat_entry.(name))") for name in
             fieldnames(cat_entry)]
 end
 

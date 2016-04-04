@@ -462,7 +462,7 @@ function initialize_model_params(
                 "If !radius_from_cat, you must specify a positive patch_radius.")
     end
 
-    info("Loading variational parameters from catalogs.")
+    Logging.info("Loading variational parameters from catalogs.")
     vp = Array{Float64, 1}[init_source(ce) for ce in cat]
     mp = ModelParams(vp, sample_prior())
     mp.objids = ASCIIString[ cat_entry.objid for cat_entry in cat]
@@ -665,7 +665,7 @@ function trim_source_tiles(
 
   min_radius_pix_sq = min_radius_pix ^ 2
   for b = 1:length(tiled_blob)
-    info("Processing band $b...")
+    Logging.debug("Processing band $b...")
 
     pix_loc = WCSUtils.world_to_pix(mp.patches[s, b], mp.vp[s][ids.u]);
 
@@ -719,7 +719,7 @@ function trim_source_tiles(
       end
     end
   end
-  info("Done trimming.")
+  Logging.info("Done trimming.")
 
   trimmed_tiled_blob
 end

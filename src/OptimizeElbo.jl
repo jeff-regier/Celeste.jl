@@ -7,6 +7,7 @@ import ..ElboDeriv
 
 import DataFrames
 import Optim
+import Logging
 
 export ObjectiveWrapperFunctions, WrapperState
 
@@ -91,8 +92,8 @@ type ObjectiveWrapperFunctions
               for s=1:S
                 state_df[symbol(string("grad", s))] = grad[:, s]
               end
-              println(state_df)
-              println("\n=======================================\n")
+              Logging.info(state_df)
+              Logging.info("\n=======================================\n")
             end
         end
 

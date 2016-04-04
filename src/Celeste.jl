@@ -1,7 +1,6 @@
 module Celeste
 
 # submodules
-include("SDSS.jl")
 include("WCSUtils.jl")
 include("SDSSIO.jl")
 include("Types.jl")
@@ -20,5 +19,6 @@ include("SampleData.jl")
 # public API
 export infer, score_field
 include("api.jl")
+include("score.jl")
 
 end # module
