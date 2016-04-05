@@ -17,16 +17,6 @@ import ..PSF
 import ..SDSSIO
 import ..ElboDeriv  # for trim_source_tiles and stitch_object_tiles
 
-export sample_prior,
-       peak_init,
-       intialize_celeste,
-       initialize_model_params,
-       get_relevant_sources
-       load_stamp_blob, crop_image!,
-       load_stamp_catalog,
-       break_blob_into_tiles, break_image_into_tiles,
-       get_local_sources, stitch_object_tiles
-
 const cfgdir = joinpath(Pkg.dir("Celeste"), "cfg")
 
 
