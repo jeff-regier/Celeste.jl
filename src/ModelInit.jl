@@ -894,7 +894,6 @@ function initialize_model_params(
                                                      patch_ctrs_pix(patches),
                                                      patch_radii_pix(patches))
     end
-    print("\n")
 
     # improved initializations
     for i=1:length(mp.vp)

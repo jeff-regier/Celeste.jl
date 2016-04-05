@@ -1,6 +1,5 @@
 # Functions for interacting with Celeste from the command line.
 
-import Base.+
 import FITSIO
 import JLD
 import Logging  # just for testing right now
@@ -29,7 +28,7 @@ else
 end
 
 # Use threads (on the loop over sources)
-const Threaded = true
+const Threaded = false
 if Threaded && VERSION > v"0.5.0-dev"
     using Base.Threads
 else
@@ -45,8 +44,8 @@ else
 end
 
 # A workitem is of this ra / dec size
-const wira = 0.05
-const widec = 0.05
+const wira = 0.03
+const widec = 0.03
 
 """
 Timing information.
@@ -65,18 +64,16 @@ type InferTiming
     InferTiming() = new(0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
 end
 
-function +(i1::InferTiming, i2::InferTiming)
-    j = InferTiming()
-    j.num_infers = i1.num_infers + i2.num_infers
-    j.read_photoobj = i1.read_photoobj + i2.read_photoobj
-    j.read_img = i1.read_img + i2.read_img
-    j.init_mp = i1.init_mp + i2.init_mp
-    j.fit_psf = i1.fit_psf + i2.fit_psf
-    j.opt_srcs = i1.opt_srcs + i2.opt_srcs
-    j.num_srcs = i1.num_srcs + i2.num_srcs
-    j.write_results = i1.write_results + i2.write_results
-    j.wait_done = i1.wait_done + i2.wait_done
-    return j
+function add_timing!(i::InferTiming, j::InferTiming)
+    i.num_infers = i.num_infers + j.num_infers
+    i.read_photoobj = i.read_photoobj + j.read_photoobj
+    i.read_img = i.read_img + j.read_img
+    i.init_mp = i.init_mp + j.init_mp
+    i.fit_psf = i.fit_psf + j.fit_psf
+    i.opt_srcs = i.opt_srcs + j.opt_srcs
+    i.num_srcs = i.num_srcs + j.num_srcs
+    i.write_results = i.write_results + j.write_results
+    i.wait_done = i.wait_done + j.wait_done
 end
 
 """
@@ -255,7 +252,7 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
                           dec_range=(-1000., 1000.),
                           primary_initialization=true,
                           max_iters=DEFAULT_MAX_ITERS,
-                          times=InferTiming(),
+                          timing=InferTiming(),
                           outdir=".",
                           output_results=save_results)
     if dt_nodeid == 1
@@ -288,7 +285,6 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
         again[]
     end
 
-
     # work item processing loop
     nputs(dt_nodeid, "initially $ni work items ($ci to $li)")
     itimes = InferTiming()
@@ -317,12 +313,12 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
                         photofield_dirs=photofield_dirs,
                         reserve_thread=rundt,
                         thread_fun=rundtree,
-                        times=itimes)
+                        timing=itimes)
         tic()
         output_results(outdir, iramin, iramax, idecmin, idecmax, results)
         itimes.write_results = toq()
 
-        times += itimes
+        add_timing!(timing, itimes)
         rundtree(rundt)
     end
     nputs(dt_nodeid, "out of work")
@@ -332,7 +328,7 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
         cpu_pause()
     end
     finalize(dt)
-    times.wait_done = toq()
+    timing.wait_done = toq()
 end
 
 
@@ -422,7 +418,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                max_iters=DEFAULT_MAX_ITERS,
                reserve_thread=Ref(false),
                thread_fun=phalse,
-               times=InferTiming())
+               timing=InferTiming())
 
     Logging.info("Running with $(nthreads()) threads")
 
@@ -431,7 +427,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     duplicate_policy = primary_initialization ? :primary : :first
     catalog = read_photoobj_files(fieldids, photoobj_dirs,
                         duplicate_policy=duplicate_policy)
-    times.read_photoobj = toq()
+    timing.read_photoobj = toq()
     Logging.info("$(length(catalog)) primary sources")
 
     reserve_thread[] && thread_fun(reserve_thread)
@@ -480,7 +476,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
         end
         append!(images, fieldims)
     end
-    times.read_img = toq()
+    timing.read_img = toq()
 
     reserve_thread[] && thread_fun(reserve_thread)
 
@@ -494,7 +490,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     tiled_images = ModelInit.break_blob_into_tiles(images, TILE_WIDTH)
     mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
                                            fit_psf=false)
-    times.init_mp = toq()
+    timing.init_mp = toq()
 
     reserve_thread[] && thread_fun(reserve_thread)
 
@@ -508,7 +504,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     else
       ModelInit.fit_object_psfs!(mp, target_sources, images)
     end
-    times.fit_psf = toq()
+    timing.fit_psf = toq()
 
     reserve_thread[] && thread_fun(reserve_thread)
 
@@ -522,10 +518,6 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
             while reserve_thread[]
                 thread_fun(reserve_thread)
                 cpu_pause()
-
-                # hack for Julia's GC
-                gc_state = ccall(:jl_gc_safe_enter, Int8, ())
-                ccall(:jl_gc_safe_leave, Void, (Int8,), gc_state)
             end
         else
             entry = catalog[s]
@@ -571,9 +563,9 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
             end
         end
     end
-    times.opt_srcs = toq()
-    times.num_srcs = length(target_sources)
-    times.num_infers = 1
+    timing.opt_srcs = toq()
+    timing.num_srcs = length(target_sources)
+    timing.num_infers = 1
 
     results
 end
@@ -793,7 +785,7 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
                          psfield_dirs=frame_dirs,
                          photoobj_dirs=frame_dirs,
                          photofield_dirs=photofield_dirs,
-                         times=times,
+                         timing=times,
                          outdir=outdir)
     else
         results = infer(fieldids, frame_dirs;
@@ -803,7 +795,7 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
                         psfield_dirs=frame_dirs,
                         photoobj_dirs=frame_dirs,
                         photofield_dirs=photofield_dirs,
-                        times=times)
+                        timing=times)
 
         tic()
         save_results(outdir, ramin, ramax, decmin, decmax, results)
