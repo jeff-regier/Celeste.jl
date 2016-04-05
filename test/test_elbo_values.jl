@@ -1,4 +1,4 @@
-using Celeste: Types, SampleData, ElboDeriv, SensitiveFloats
+using Celeste: Types, ElboDeriv, SensitiveFloats
 import Celeste: ModelInit
 
 using Base.Test
