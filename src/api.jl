@@ -303,7 +303,6 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
         iramin, iramax, idecmin, idecmax = divide_skyarea(skya, item)
 
         # run inference for this subarea
-        nputs(dt_nodeid, "running inference for $iramin, $iramax, $idecmin, $idecmax")
         results = infer(fieldids, frame_dirs;
                         ra_range=(iramin, iramax),
                         dec_range=(idecmin, idecmax),
@@ -524,7 +523,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
             try
                 nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
-                tic()
+                #tic()
 
                 t0 = time()
                 relevant_sources = ModelInit.get_relevant_sources(mp, s)
@@ -536,9 +535,9 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                                               noise_fraction=0.1)
                 init_time = time() - t0
 
-                t = toq()
-                nputs(dt_nodeid, "trimmed $s in $t secs, optimizing")
-                tic()
+                #t = toq()
+                #nputs(dt_nodeid, "trimmed $s in $t secs, optimizing")
+                #tic()
 
                 t0 = time()
                 iter_count, max_f, max_x, result =
@@ -547,8 +546,8 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                                             verbose=false, max_iters=max_iters)
                 fit_time = time() - t0
 
-                t = toq()
-                nputs(dt_nodeid, "optimized $s in $t secs, writing results")
+                #t = toq()
+                #nputs(dt_nodeid, "optimized $s in $t secs, writing results")
 
                 lock!(results_lock)
                 results[entry.thing_id] = Dict("objid"=>entry.objid,
