@@ -393,10 +393,7 @@ function read_photoobj(fname, band::Char='r')
     # TODO: We don't really want to exclude objects entirely just for being
     # bright: we just don't want to use for scoring (since
     # they're very saturated, presumably).
-    # TODO: We don't want to exclude objects for being large: we just don't
-    # want to optimize them because they take too long. We still would like
-    # to know about them when optimizing sources near them (or on top of them)
-    mask = !(is_bad_fracdev | is_bad_obj | is_bright | is_large | has_child)
+    mask = !(is_bad_fracdev | is_bad_obj | is_bright | has_child)
 
     # Read the fluxes.
     # Record the cmodelflux if the galaxy is composite, otherwise use
