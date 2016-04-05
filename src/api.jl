@@ -16,7 +16,7 @@ const MIN_FLUX = 2.0
 
 # Use distributed parallelism (with Dtree)
 const Distributed = true
-if Distributed && VERSION > v"0.5.0-dev"
+if Distributed
     using Dtree
 else
     const dt_nodeid = 1
@@ -45,8 +45,8 @@ else
 end
 
 # A workitem is of this ra / dec size
-const wira = 0.04
-const widec = 0.04
+const wira = 0.05
+const widec = 0.05
 
 """
 Timing information.
@@ -277,7 +277,7 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
     end
 
     # create Dtree and get the initial allocation
-    dt = DtreeScheduler(num_work_items, 0.4)
+    dt, is_parent = DtreeScheduler(num_work_items, 0.4)
     ni, (ci, li) = initwork(dt)
     rundt = Ref(runtree(dt))
     @inline function rundtree(again)
