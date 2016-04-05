@@ -372,8 +372,7 @@ function read_photoobj(fname, band::Char='r')
     # (In objc_flags, the bit pattern Int32(2) corresponds to bright objects.)
     is_bright = read(hdu, "objc_flags")::Vector{Int32} & Int32(2) .!= 0
     is_saturated = read(hdu, "objc_flags")::Vector{Int32} & Int32(18) .!= 0
-    is_too_large = read(hdu, "objc_flags")::Vector{Int32} & Int32(24) .!= 0
-    has_bad_flag = is_bright | is_too_large
+    is_large = read(hdu, "objc_flags")::Vector{Int32} & Int32(24) .!= 0
 
     has_child = read(hdu, "nchild")::Vector{Int16} .> 0
 
@@ -390,6 +389,10 @@ function read_photoobj(fname, band::Char='r')
     has_exp = fracdev .< 1.
     is_comp = has_dev & has_exp
     is_bad_fracdev = (fracdev .< 0.) | (fracdev .> 1)
+
+    # TODO: I don't think we want to exclude objects entirely just for being
+    # bright...we just don't want to use the for scoring (since they're very
+    # saturated, presumably).
     mask = !(is_bad_fracdev | is_bad_obj | is_bright | has_child)
 
     # Read the fluxes.
@@ -431,6 +434,7 @@ function read_photoobj(fname, band::Char='r')
                    "theta_dev"=>vec(theta_dev[bandnum, mask]),
                    "phi_dev"=>vec(phi_dev_deg[bandnum, mask]),
                    "phi_offset"=>vec(phi_offset[bandnum, mask]),
+                   "is_large"=>vec(is_large[mask]),
                    "is_saturated"=>vec(is_saturated[mask]))
     for (b, n) in BAND_CHAR_TO_NUM
         catalog["psfflux_$b"] = vec(psfflux[n, mask])

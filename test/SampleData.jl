@@ -5,7 +5,7 @@ using Celeste, Celeste.Types
 
 import Celeste: WCSUtils, ModelInit
 import Synthetic
-import WCS, FITSIO
+import WCS, FITSIO, DataFrames
 
 
 export empty_model_params, dat_dir,
