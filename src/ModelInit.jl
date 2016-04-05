@@ -429,7 +429,7 @@ function stitch_object_tiles(
 end
 
 
-function sample_prior()
+function load_prior()
 
     # set a = [.99, .01] if stars are underrepresented
     # due to the greater flexibility of the galaxy model
@@ -876,7 +876,7 @@ function initialize_model_params(
 
     Logging.info("Loading variational parameters from catalogs.")
     vp = Array{Float64, 1}[init_source(ce) for ce in cat]
-    mp = ModelParams(vp, sample_prior())
+    mp = ModelParams(vp, load_prior())
     mp.objids = ASCIIString[ cat_entry.objid for cat_entry in cat]
 
     mp.patches = Array(SkyPatch, mp.S, length(blob))
