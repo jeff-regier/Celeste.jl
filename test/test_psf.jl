@@ -1,6 +1,5 @@
 using Celeste
 using Celeste.Types
-using Celeste.SkyImages
 using Celeste.BivariateNormals
 using Celeste.PSF
 using Celeste.SensitiveFloats
