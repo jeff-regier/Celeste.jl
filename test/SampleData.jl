@@ -1,13 +1,12 @@
 module SampleData
 
 using Distributions
-using ..Types
+using Celeste, Celeste.Types
 
-import ..WCSUtils
-import ..SkyImages
+import Celeste: WCSUtils, ModelInit
+import Synthetic
+import WCS
 
-import ..ModelInit
-import ..Synthetic
 
 export empty_model_params, dat_dir,
        sample_ce, perturb_params,
@@ -22,6 +21,13 @@ const sample_star_fluxes = [
 const sample_galaxy_fluxes = [
     1.377666E+01, 5.635334E+01, 1.258656E+02,
     1.884264E+02, 2.351820E+02] * 100  # 1x wasn't bright enough
+
+# A world coordinate system where the world and pixel coordinates are the same.
+const wcs_id = WCS.WCSTransform(2,
+                    cd = Float64[1 0; 0 1],
+                    ctype = ["none", "none"],
+                    crpix = Float64[1, 1],
+                    crval = Float64[1, 1]);
 
 
 function empty_model_params(S::Int)
@@ -55,10 +61,10 @@ end
 
 function gen_sample_star_dataset(; perturb=true)
     srand(1)
-    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf")
+    blob0 = ModelInit.load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
-        blob0[b].wcs = WCSUtils.wcs_id
+        blob0[b].wcs = wcs_id
     end
     one_body = [sample_ce([10.1, 12.2], true),]
     blob = Synthetic.gen_blob(blob0, one_body)
@@ -72,10 +78,10 @@ end
 
 function gen_sample_galaxy_dataset(; perturb=true)
     srand(1)
-    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf")
+    blob0 = ModelInit.load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
-        blob0[b].wcs = WCSUtils.wcs_id
+        blob0[b].wcs = wcs_id
     end
     one_body = [sample_ce([8.5, 9.6], false),]
     blob = Synthetic.gen_blob(blob0, one_body)
@@ -91,10 +97,10 @@ function gen_two_body_dataset(; perturb=true)
     # will be too close to be identifiable.
 
     srand(1)
-    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf")
+    blob0 = ModelInit.load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf")
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
-        blob0[b].wcs = WCSUtils.wcs_id
+        blob0[b].wcs = wcs_id
     end
     two_bodies = [
         sample_ce([4.5, 3.6], false),
@@ -112,10 +118,10 @@ end
 
 function gen_three_body_dataset(; perturb=true)
     srand(1)
-    blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf")
+    blob0 = ModelInit.load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf")
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
-        blob0[b].wcs = WCSUtils.wcs_id
+        blob0[b].wcs = wcs_id
     end
     three_bodies = [
         sample_ce([4.5, 3.6], false),
@@ -142,7 +148,7 @@ function gen_n_body_dataset(
     srand(seed)
   end
 
-  blob0 = SkyImages.load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf");
+  blob0 = ModelInit.load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf");
   img_size_h = 900
   img_size_w = 1000
   for b in 1:5

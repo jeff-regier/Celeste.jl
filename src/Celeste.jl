@@ -10,11 +10,8 @@ include("BivariateNormals.jl")
 include("Transform.jl")
 include("PSF.jl")
 include("ElboDeriv.jl")
-include("SkyImages.jl")
 include("OptimizeElbo.jl")
 include("ModelInit.jl")
-include("Synthetic.jl")
-include("SampleData.jl")
 
 # public API
 export infer, score_field

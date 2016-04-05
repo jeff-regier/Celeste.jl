@@ -3,8 +3,8 @@ using DataFrames
 
 import WCS
 
-using Celeste: Types, SampleData
-import Celeste: ModelInit, SkyImages, ElboDeriv, Synthetic, SDSSIO, PSF
+using Celeste: Types
+import Celeste: ModelInit, ElboDeriv, SDSSIO, PSF
 import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
 
 println("Running SkyImages tests.")
@@ -16,13 +16,13 @@ const FIELD = 269
 function test_blob()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
-  blob = SkyImages.read_sdss_field(RUN, CAMCOL, FIELD, datadir)
+  blob = ModelInit.read_sdss_field(RUN, CAMCOL, FIELD, datadir)
 
   for b=1:length(blob)
     @test !blob[b].constant_background
   end
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-  cat_entries = SkyImages.read_photoobj_celeste(fname)
+  cat_entries = ModelInit.read_photoobj_celeste(fname)
 
   tiled_blob, mp = ModelInit.initialize_celeste(blob, cat_entries,
                                                 patch_radius=1e-6,
@@ -41,7 +41,7 @@ function test_blob()
 
   # Test cropping.
   width = 5.0
-  cropped_blob = SkyImages.crop_blob_to_location(blob, width, obj_loc);
+  cropped_blob = ModelInit.crop_blob_to_location(blob, width, obj_loc);
   for b=1:length(blob)
     # Check that it only has one tile of the right size containing the object.
     @assert length(cropped_blob[b]) == 1
@@ -85,9 +85,9 @@ end
 
 
 function test_fit_object_psfs()
-  blob = SkyImages.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
+  blob = ModelInit.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-  cat_entries = SkyImages.read_photoobj_celeste(fname);
+  cat_entries = ModelInit.read_photoobj_celeste(fname);
 
   # Only test a few catalog entries.
   relevant_sources = collect(3:4)
@@ -129,7 +129,7 @@ function test_get_tiled_image_source()
   mp = ModelInit.initialize_model_params(
     tiled_blob, blob, body; patch_radius=1e-6)
 
-  tiled_img = SkyImages.break_image_into_tiles(img, 10);
+  tiled_img = ModelInit.break_image_into_tiles(img, 10);
   for hh in 1:size(tiled_img)[1], ww in 1:size(tiled_img)[2]
     tile = tiled_img[hh, ww]
     loc = Float64[mean(tile.h_range), mean(tile.w_range)]
@@ -194,7 +194,7 @@ function test_set_patch_size()
   end
 
   srand(1)
-  blob0 = SkyImages.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
+  blob0 = ModelInit.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
   img_size = 150
   for b in 1:5
       blob0[b].H, blob0[b].W = img_size, img_size
@@ -244,11 +244,11 @@ function test_stitch_object_tiles()
   blob, mp, body, tiled_blob = gen_n_body_dataset(100, seed=42);
 
   image, h_range, w_range =
-    SkyImages.stitch_object_tiles(1, 3, mp, tiled_blob);
+    ModelInit.stitch_object_tiles(1, 3, mp, tiled_blob);
   @test size(image) == (diff(h_range)[1] + 1, diff(w_range)[1] + 1)
 
   image, h_range, w_range =
-    SkyImages.stitch_object_tiles(1, 3, mp, tiled_blob, predicted = true);
+    ModelInit.stitch_object_tiles(1, 3, mp, tiled_blob, predicted = true);
   @test size(image) == (diff(h_range)[1] + 1, diff(w_range)[1] + 1)
 end
 
@@ -256,12 +256,12 @@ end
 function test_copy_model_params()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
-  images = SkyImages.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
+  images = ModelInit.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
 
   # Make sure that ModelParams can handle more than five images (issue #203)
   push!(images, deepcopy(images[1]));
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-  cat_entries = SkyImages.read_photoobj_celeste(fname);
+  cat_entries = ModelInit.read_photoobj_celeste(fname);
 
   tiled_images, mp_all =
     ModelInit.initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);

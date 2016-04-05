@@ -7,7 +7,6 @@ import Logging  # just for testing right now
 
 using .Types
 import .SDSSIO
-import .SkyImages
 import .ModelInit
 import .OptimizeElbo
 
@@ -234,7 +233,7 @@ function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
     end
 
     # convert to celeste format catalog
-    catalog = SkyImages.convert(Vector{CatalogEntry}, rawcatalog)
+    catalog = ModelInit.convert(Vector{CatalogEntry}, rawcatalog)
 
     return catalog
 end
@@ -470,7 +469,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     for i in 1:length(fieldids)
         Logging.info("reading field ", fieldids[i])
         run, camcol, field = fieldids[i]
-        fieldims = SkyImages.read_sdss_field(run, camcol, field, frame_dirs[i],
+        fieldims = ModelInit.read_sdss_field(run, camcol, field, frame_dirs[i],
                                              fpm_dir=fpm_dirs[i],
                                              psfield_dir=psfield_dirs[i],
                                              photofield_dir=photofield_dirs[i])
@@ -492,7 +491,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # initialize the psf again before fitting, so we don't do it here.
     Logging.info("initializing celeste without PSF fit")
     tic()
-    tiled_images = SkyImages.break_blob_into_tiles(images, TILE_WIDTH)
+    tiled_images = ModelInit.break_blob_into_tiles(images, TILE_WIDTH)
     mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
                                            fit_psf=false)
     times.init_mp = toq()

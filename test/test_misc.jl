@@ -1,7 +1,7 @@
 using Base.Test
 
-using Celeste: Types, SampleData
-import Celeste: SkyImages, ModelInit, Synthetic
+using Celeste: Types
+import Celeste: ModelInit
 import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
 
 println("Running misc tests.")
@@ -14,7 +14,7 @@ function test_tile_image()
   tile_width = 20;
   tile = ImageTile(1, 1, img, tile_width);
 
-  tiles = SkyImages.break_image_into_tiles(img, tile_width);
+  tiles = ModelInit.break_image_into_tiles(img, tile_width);
   @test size(tiles) ==
     (round(Int, ceil(img.H  / tile_width)),
      round(Int, ceil(img.W / tile_width)))
@@ -30,7 +30,7 @@ function test_tile_image()
   img.constant_background = false
   img.epsilon_mat = rand(size(img.pixels));
   img.iota_vec = rand(size(img.pixels)[1]);
-  tiles = SkyImages.break_image_into_tiles(img, tile_width);
+  tiles = ModelInit.break_image_into_tiles(img, tile_width);
   @test size(tiles) == (
     ceil(Int, img.H  / tile_width),
     ceil(Int, img.W / tile_width))
@@ -52,10 +52,10 @@ function test_local_sources()
     # Coarse test that local_sources gets the right objects.
 
     srand(1)
-    blob0 = SkyImages.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
+    blob0 = ModelInit.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
-        blob0[b].wcs = WCSUtils.wcs_id
+        blob0[b].wcs = SampleData.wcs_id
     end
 
     three_bodies = [
@@ -114,9 +114,9 @@ function test_local_sources_2()
     # the polygon logic.)
 
     srand(1)
-    blob0 = SkyImages.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
+    blob0 = ModelInit.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
     one_body = [sample_ce([50., 50.], true),]
-    for b in 1:5 blob0[b].wcs = WCSUtils.wcs_id end
+    for b in 1:5 blob0[b].wcs = SampleData.wcs_id end
 
     for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
     small_blob = Synthetic.gen_blob(blob0, one_body);
@@ -144,7 +144,7 @@ function test_local_sources_3()
     srand(1)
     test_b = 3 # Will test using this band only
     pix_loc = Float64[50., 50.]
-    blob0 = SkyImages.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
+    blob0 = ModelInit.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
     body_loc = WCSUtils.pix_to_world(blob0[test_b].wcs, pix_loc)
     one_body = [sample_ce(body_loc, true),]
 
@@ -203,7 +203,7 @@ end
 
 function test_tiling()
     srand(1)
-    blob0 =SkyImages.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")
+    blob0 =ModelInit.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
     end
@@ -247,7 +247,7 @@ end
 function test_sky_noise_estimates()
     blobs = Array(Blob, 2)
     blobs[1], mp, three_bodies = gen_three_body_dataset()  # synthetic
-    blobs[2] = SkyImages.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")  # real
+    blobs[2] = ModelInit.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")  # real
 
     for blob in blobs
         for b in 1:5
