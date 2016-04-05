@@ -4,7 +4,6 @@ import Base.convert
 
 using Distributions
 import Logging
-import DataFrames
 using FITSIO
 import WCS
 
