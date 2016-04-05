@@ -15,8 +15,10 @@ const MIN_FLUX = 2.0
 
 # Use distributed parallelism (with Dtree)
 if haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
+    const Distributed = true
     using Dtree
 else
+    const Distributed = false
     const dt_nodeid = 1
     const dt_nnodes = 1
     DtreeScheduler(n, f) = ()
