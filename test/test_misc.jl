@@ -1,7 +1,7 @@
 using Base.Test
 
-using Celeste: Types, SampleData
-import Celeste: ModelInit, Synthetic
+using Celeste: Types
+import Celeste: ModelInit
 import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
 
 println("Running misc tests.")
@@ -55,7 +55,7 @@ function test_local_sources()
     blob0 = ModelInit.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
-        blob0[b].wcs = WCSUtils.wcs_id
+        blob0[b].wcs = SampleData.wcs_id
     end
 
     three_bodies = [
@@ -116,7 +116,7 @@ function test_local_sources_2()
     srand(1)
     blob0 = ModelInit.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
     one_body = [sample_ce([50., 50.], true),]
-    for b in 1:5 blob0[b].wcs = WCSUtils.wcs_id end
+    for b in 1:5 blob0[b].wcs = SampleData.wcs_id end
 
     for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
     small_blob = Synthetic.gen_blob(blob0, one_body);

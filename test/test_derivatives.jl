@@ -1,8 +1,8 @@
 using Base.Test
 import DualNumbers
 
-using Celeste: Types, SampleData, SensitiveFloats, BivariateNormals, ElboDeriv
-import Celeste: Synthetic, ModelInit, WCSUtils
+using Celeste: Types, SensitiveFloats, BivariateNormals, ElboDeriv
+import Celeste: ModelInit, WCSUtils
 
 
 println("Running derivative tests.")

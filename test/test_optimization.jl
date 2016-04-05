@@ -1,7 +1,7 @@
 using Base.Test
 
 using Celeste: Types, Transform, SensitiveFloats
-import Celeste: OptimizeElbo, ModelInit, ElboDeriv, SampleData
+import Celeste: OptimizeElbo, ModelInit, ElboDeriv
 import Celeste.WCSUtils
 
 
@@ -274,7 +274,7 @@ function test_bad_a_init()
     blob0 = ModelInit.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
-        blob0[b].wcs = WCSUtils.wcs_id
+        blob0[b].wcs = SampleData.wcs_id
     end
     blob = Synthetic.gen_blob(blob0, [ce,])
 

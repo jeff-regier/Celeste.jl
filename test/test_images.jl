@@ -3,8 +3,8 @@ using DataFrames
 
 import WCS
 
-using Celeste: Types, SampleData
-import Celeste: ModelInit, ElboDeriv, Synthetic, SDSSIO, PSF
+using Celeste: Types
+import Celeste: ModelInit, ElboDeriv, SDSSIO, PSF
 import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
 
 println("Running SkyImages tests.")

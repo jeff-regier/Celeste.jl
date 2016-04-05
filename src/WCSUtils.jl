@@ -2,7 +2,7 @@ module WCSUtils
 
 import WCS: WCSTransform, world_to_pix, pix_to_world
 
-export pixel_deriv_to_world_deriv, wcs_id
+export pixel_deriv_to_world_deriv
 
 """
 Convert a world location to a 1-indexed pixel location using a linear
@@ -78,13 +78,5 @@ function pixel_deriv_to_world_deriv(
     trans = pixel_world_jacobian(wcs, pix_loc, pixel_delt=pixel_delt)
     trans' * df_dpix
 end
-
-
-# A world coordinate system where the world and pixel coordinates are the same.
-const wcs_id = WCSTransform(2,
-                            cd = Float64[1 0; 0 1],
-                            ctype = ["none", "none"],
-                            crpix = Float64[1, 1],
-                            crval = Float64[1, 1]);
 
 end

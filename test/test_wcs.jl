@@ -94,8 +94,8 @@ end
 "Test that the identity WCSTransform works as expected."
 function test_id_wcs()
     rand_coord = rand(2, 10)
-    @test pix_to_world(WCSUtils.wcs_id, rand_coord) == rand_coord
-    @test world_to_pix(WCSUtils.wcs_id, rand_coord) == rand_coord
+    @test pix_to_world(SampleData.wcs_id, rand_coord) == rand_coord
+    @test world_to_pix(SampleData.wcs_id, rand_coord) == rand_coord
 end
 
 
@@ -169,7 +169,7 @@ function test_world_to_pix()
       @test_approx_eq_eps(pix_loc_test2, pix_loc, 1e-2)
     end
 
-    @test WCSUtils.pixel_world_jacobian(WCSUtils.wcs_id, pix_center) == [1.0 0.0; 0.0 1.0];
+    @test WCSUtils.pixel_world_jacobian(SampleData.wcs_id, pix_center) == [1.0 0.0; 0.0 1.0];
 
     test_jacobian(wcs, pix_center, world_center)
 end
