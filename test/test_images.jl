@@ -194,7 +194,7 @@ function test_set_patch_size()
   end
 
   srand(1)
-  blob0 = ModelInit.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
+  blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
   img_size = 150
   for b in 1:5
       blob0[b].H, blob0[b].W = img_size, img_size
