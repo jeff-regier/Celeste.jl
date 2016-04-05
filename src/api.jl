@@ -14,7 +14,7 @@ const DEFAULT_MAX_ITERS = 50
 const MIN_FLUX = 2.0
 
 # Use distributed parallelism (with Dtree)
-if haskey(ENV, "USE_DTREE") & ENV["USE_DTREE"] != ""
+if haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
     using Dtree
 else
     const dt_nodeid = 1
