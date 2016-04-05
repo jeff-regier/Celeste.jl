@@ -2,10 +2,8 @@ module Synthetic
 
 export gen_blob
 
-using ..Types
-import ..ModelInit
-import ..BivariateNormals
-import ..WCSUtils
+using Celeste, Celeste.Types
+import Celeste: ModelInit, BivariateNormals, WCSUtils
 
 import Distributions
 

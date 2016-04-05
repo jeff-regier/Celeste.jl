@@ -3,7 +3,7 @@
 
 using Base.Test
 
-using Celeste: Types, SampleData, Transform, SensitiveFloats
+using Celeste: Types, Transform, SensitiveFloats
 import Celeste: ModelInit, ElboDeriv
 using Compat
 

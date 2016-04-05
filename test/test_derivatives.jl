@@ -1,8 +1,8 @@
 using Base.Test
 import DualNumbers
 
-using Celeste: Types, SampleData, SensitiveFloats, BivariateNormals, ElboDeriv
-import Celeste: Synthetic, SkyImages, ModelInit, SDSS, WCSUtils
+using Celeste: Types, SensitiveFloats, BivariateNormals, ElboDeriv
+import Celeste: ModelInit, WCSUtils
 
 
 println("Running derivative tests.")
@@ -109,9 +109,9 @@ function test_real_image()
 
   run, camcol, field = (3900, 6, 269)
 
-  images = SkyImages.read_sdss_field(run, camcol, field, datadir)
+  images = ModelInit.read_sdss_field(run, camcol, field, datadir)
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir run camcol field
-  cat_entries = SkyImages.read_photoobj_celeste(fname)
+  cat_entries = ModelInit.read_photoobj_celeste(fname)
   tiled_blob, mp =
     ModelInit.initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
 
@@ -127,7 +127,7 @@ function test_real_image()
 
   # To see:
   # using PyPlot
-  # matshow(SkyImages.stitch_object_tiles(s, 3, trimmed_mp, very_trimmed_tiled_blob))
+  # matshow(ModelInit.stitch_object_tiles(s, 3, trimmed_mp, very_trimmed_tiled_blob))
 
   elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, trimmed_mp);
 

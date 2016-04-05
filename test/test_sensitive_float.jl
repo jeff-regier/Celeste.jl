@@ -1,6 +1,6 @@
 using Base.Test
 
-using Celeste: Types, SampleData, SensitiveFloats
+using Celeste: Types, SensitiveFloats
 
 
 function test_combine_sfs()

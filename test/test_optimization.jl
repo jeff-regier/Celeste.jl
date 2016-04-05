@@ -1,7 +1,7 @@
 using Base.Test
 
 using Celeste: Types, Transform, SensitiveFloats
-import Celeste: OptimizeElbo, ModelInit, ElboDeriv, SkyImages, SampleData
+import Celeste: OptimizeElbo, ModelInit, ElboDeriv
 import Celeste.WCSUtils
 
 
@@ -271,10 +271,10 @@ function test_bad_a_init()
     ce = CatalogEntry([7.2, 8.3], false, gal_color_mode, gal_color_mode,
             0.5, .7, pi/4, .5, "test", 0)
 
-    blob0 = SkyImages.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
+    blob0 = ModelInit.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
     for b in 1:5
         blob0[b].H, blob0[b].W = 20, 23
-        blob0[b].wcs = WCSUtils.wcs_id
+        blob0[b].wcs = SampleData.wcs_id
     end
     blob = Synthetic.gen_blob(blob0, [ce,])
 
@@ -320,8 +320,8 @@ end
 
 
 function test_real_stamp_optimization()
-    blob = SkyImages.load_stamp_blob(datadir, "5.0073-0.0739_2kpsf");
-    cat_entries = SkyImages.load_stamp_catalog(datadir, "s82-5.0073-0.0739_2kpsf", blob);
+    blob = ModelInit.load_stamp_blob(datadir, "5.0073-0.0739_2kpsf");
+    cat_entries = ModelInit.load_stamp_catalog(datadir, "s82-5.0073-0.0739_2kpsf", blob);
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries);
     inbounds(ce) = ce.pos[1] > -10. && ce.pos[2] > -10 &&
