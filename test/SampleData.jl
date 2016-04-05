@@ -32,7 +32,7 @@ const wcs_id = WCS.WCSTransform(2,
 
 function empty_model_params(S::Int)
     vp = [ ModelInit.init_source([ 0., 0. ]) for s in 1:S ]
-    ModelParams(vp, ModelInit.sample_prior())
+    ModelParams(vp, ModelInit.load_prior())
 end
 
 
