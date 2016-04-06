@@ -43,13 +43,15 @@ else
 end
 
 # A workitem is of this ra / dec size
-const wira = 0.03
-const widec = 0.03
+const wira = 0.025
+const widec = 0.025
 
 """
 Timing information.
 """
 type InferTiming
+    query_fids::Float64
+    get_dirs::Float64
     num_infers::Int64
     read_photoobj::Float64
     read_img::Float64
@@ -60,10 +62,12 @@ type InferTiming
     write_results::Float64
     wait_done::Float64
 
-    InferTiming() = new(0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
+    InferTiming() = new(0.0, 0.0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
 end
 
 function add_timing!(i::InferTiming, j::InferTiming)
+    i.query_fids = i.query_fids + j.query_fids
+    i.get_dirs = i.get_dirs + j.get_dirs
     i.num_infers = i.num_infers + j.num_infers
     i.read_photoobj = i.read_photoobj + j.read_photoobj
     i.read_img = i.read_img + j.read_img
@@ -240,17 +244,8 @@ Divide the given ra, dec range into sky areas of `wira`x`widec` and
 use Dtree to distribute these sky areas to nodes. Within each node
 use `infer()` to fit the Celeste model to sources in each sky area.
 """
-function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
-                          frame_dirs::Vector;
-                          objid="",
-                          fpm_dirs=frame_dirs,
-                          psfield_dirs=frame_dirs,
-                          photofield_dirs=frame_dirs,
-                          photoobj_dirs=frame_dirs,
-                          ra_range=(-1000., 1000.),
-                          dec_range=(-1000., 1000.),
-                          primary_initialization=true,
-                          max_iters=DEFAULT_MAX_ITERS,
+function divide_and_infer(ra_range::Tuple{Float64, Float64},
+                          dec_range::Tuple{Float64, Float64};
                           timing=InferTiming(),
                           outdir=".",
                           output_results=save_results)
@@ -301,6 +296,18 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
         # map item to subarea
         iramin, iramax, idecmin, idecmax = divide_skyarea(skya, item)
 
+        # Get vector of (run, camcol, field) triplets overlapping this patch
+        tic()
+        fieldids = query_overlapping_fieldids(iramin, iramax,
+                                              idecmin, idecmax)
+        itimes.query_fids = toq()
+
+        # Get relevant directories corresponding to each field.
+        tic()
+        frame_dirs = query_frame_dirs(fieldids)
+        photofield_dirs = query_photofield_dirs(fieldids)
+        itimes.get_dirs = toq()
+
         # run inference for this subarea
         results = infer(fieldids, frame_dirs;
                         ra_range=(iramin, iramax),
@@ -316,6 +323,7 @@ function divide_and_infer(fieldids::Vector{Tuple{Int, Int, Int}},
         output_results(outdir, iramin, iramax, idecmin, idecmax, results)
         itimes.write_results = toq()
 
+        timing.num_infers = timing.num_infers+1
         add_timing!(timing, itimes)
         rundtree(rundt)
     end
@@ -563,7 +571,6 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     end
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
-    timing.num_infers = 1
 
     results
 end
@@ -634,6 +641,10 @@ function query_overlapping_fieldids(ramin, ramax, decmin, decmax)
                                 for i in eachindex(fields["run"])]
 end
 
+query_frame_dirs(fieldids) =
+    [nersc_field_scratchdir(x[1], x[2], x[3]) for x in fieldids]
+query_photofield_dirs(fieldids) =
+    [nersc_photofield_scratchdir(x[1], x[2]) for x in fieldids]
 
 # NERSC source directories
 const NERSC_DATA_ROOT = "/global/projecta/projectdirs/sdss/data/sdss/dr12/boss"
@@ -748,44 +759,33 @@ end
 """
 NERSC-specific infer function, called from main entry point.
 """
-function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
-                         stage::Bool=false,
-                         show_timing::Bool=true)
-    # Get vector of (run, camcol, field) triplets overlapping this patch
-    fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
-
-    if stage
-        for (run, camcol, field) in fieldids
-            nersc_stage_field(run, camcol, field)
-        end
-    end
-
-    # Get relevant directories corresponding to each field.
-    frame_dirs = [nersc_field_scratchdir(x[1], x[2], x[3]) for x in fieldids]
-    photofield_dirs = [nersc_photofield_scratchdir(x[1], x[2])
-                       for x in fieldids]
-
+function infer_box_nersc(ramin, ramax, decmin, decmax, outdir)
     # Base.@time hack for distributed environment
     gc_stats = ()
     gc_diff_stats = ()
     elapsed_time = 0.0
-    if show_timing
-        gc_stats = Base.gc_num()
-        elapsed_time = time_ns()
-    end
+    gc_stats = Base.gc_num()
+    elapsed_time = time_ns()
 
     times = InferTiming()
-    if Distributed && dt_nnodes > 1
-        divide_and_infer(fieldids, frame_dirs;
-                         ra_range=(ramin, ramax),
-                         dec_range=(decmin, decmax),
-                         fpm_dirs=frame_dirs,
-                         psfield_dirs=frame_dirs,
-                         photoobj_dirs=frame_dirs,
-                         photofield_dirs=photofield_dirs,
+    if dt_nnodes > 1
+        divide_and_infer((ramin, ramax),
+                         (decmin, decmax),
                          timing=times,
                          outdir=outdir)
     else
+        # Get vector of (run, camcol, field) triplets overlapping this patch
+        tic()
+        fieldids = query_overlapping_fieldids(ramin, ramax,
+                                              decmin, decmax)
+        times.query_fids = toq()
+
+        # Get relevant directories corresponding to each field.
+        tic()
+        frame_dirs = query_frame_dirs(fieldids)
+        photofield_dirs = query_photofield_dirs(fieldids)
+        times.get_dirs = toq()
+
         results = infer(fieldids, frame_dirs;
                         ra_range=(ramin, ramax),
                         dec_range=(decmin, decmax),
@@ -800,24 +800,25 @@ function infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
         times.write_results = toq()
     end
 
-    if show_timing
-        # Base.@time hack for distributed environment
-        elapsed_time = time_ns() - elapsed_time
-        gc_diff_stats = Base.GC_Diff(Base.gc_num(), gc_stats)
-        time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
-                  Base.gc_alloc_count(gc_diff_stats))
+    # Base.@time hack for distributed environment
+    elapsed_time = time_ns() - elapsed_time
+    gc_diff_stats = Base.GC_Diff(Base.gc_num(), gc_stats)
+    time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
+              Base.gc_alloc_count(gc_diff_stats))
 
-        times.num_srcs = max(1, times.num_srcs)
-        nputs(dt_nodeid, "timing: read_photoobj=$(times.read_photoobj)")
-        nputs(dt_nodeid, "timing: read_img=$(times.read_img)")
-        nputs(dt_nodeid, "timing: init_mp=$(times.init_mp)")
-        nputs(dt_nodeid, "timing: fit_psf=$(times.fit_psf)")
-        nputs(dt_nodeid, "timing: opt_srcs=$(times.opt_srcs)")
-        nputs(dt_nodeid, "timing: num_srcs=$(times.num_srcs)")
-        nputs(dt_nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
-        nputs(dt_nodeid, "timing: write_results=$(times.write_results)")
-        nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
-    end
+    times.num_srcs = max(1, times.num_srcs)
+    nputs(dt_nodeid, "timing: query_fids=$(times.query_fids)")
+    nputs(dt_nodeid, "timing: get_dirs=$(times.get_dirs)")
+    nputs(dt_nodeid, "timing: num_infers=$(times.num_infers)")
+    nputs(dt_nodeid, "timing: read_photoobj=$(times.read_photoobj)")
+    nputs(dt_nodeid, "timing: read_img=$(times.read_img)")
+    nputs(dt_nodeid, "timing: init_mp=$(times.init_mp)")
+    nputs(dt_nodeid, "timing: fit_psf=$(times.fit_psf)")
+    nputs(dt_nodeid, "timing: opt_srcs=$(times.opt_srcs)")
+    nputs(dt_nodeid, "timing: num_srcs=$(times.num_srcs)")
+    nputs(dt_nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
+    nputs(dt_nodeid, "timing: write_results=$(times.write_results)")
+    nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
 end
 
 
