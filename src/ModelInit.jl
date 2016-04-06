@@ -597,7 +597,6 @@ function local_source_candidates(tiles::TiledImage,
     @assert length(patch_ctrs) == length(patch_radii_px)
 
     candidates = similar(tiles, Vector{Int})
-    patch_distances = zeros(length(patch_ctrs))
 
     for h=1:size(tiles, 1), w=1:size(tiles, 2)
         # Find the patches that are less than the radius plus diagonal from the
@@ -607,13 +606,14 @@ function local_source_candidates(tiles::TiledImage,
         tile_center = (mean(tile.h_range), mean(tile.w_range))
         tile_diag = (0.5 ^ 2) * (tile.h_width ^ 2 + tile.w_width ^ 2)
 
-        fill!(patch_distances, 0.0)
+        candidates[h, w] = Int64[]
         for s in 1:length(patch_ctrs)
-            patch_distances[s] += (tile_center[1] - patch_ctrs[s][1])^2
-            patch_distances[s] += (tile_center[2] - patch_ctrs[s][2])^2
+            patch_dist = (tile_center[1] - patch_ctrs[s][1])^2
+                        + (tile_center[2] - patch_ctrs[s][2])^2
+            if patch_dist <= (tile_diag + patch_radii_px[s])^2
+                push!(candidates[h, w], s)
+            end
         end
-        candidates[h, w] =
-            find(patch_distances .<= (tile_diag .+ patch_radii_px) .^ 2)
     end
 
     return candidates
