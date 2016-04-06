@@ -20,7 +20,6 @@ Options:
   -h, --help         Show this screen.
   --version          Show the version.
   --logging=<LEVEL>  Level for the Logging package (OFF, DEBUG, INFO, WARNING, ERROR, or CRITICAL). [default: WARNING]
-  --stage            In `infer-box`, automatically stage files. Default: false.
 
 The `stage-box` subcommand copies and/or uncompresses all files covering the
 given RA/Dec range from /project to user's SCRATCH directory.
@@ -48,8 +47,7 @@ function main()
             Celeste.stage_box_nersc(ramin, ramax, decmin, decmax)
         elseif args["infer-box"]
             outdir = args["<outdir>"]
-            Celeste.infer_box_nersc(ramin, ramax, decmin, decmax, outdir;
-                                    stage=args["--stage"])
+            Celeste.infer_box_nersc(ramin, ramax, decmin, decmax, outdir)
         end
     else
         run = parse(Int, args["<run>"])
