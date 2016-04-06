@@ -577,7 +577,7 @@ function evaluate_psf_fit!{NumType <: Number}(
         bvn_derivs, log_pdf, pdf, pixel_value, calculate_derivs)
 
     diff = (pixel_value.v[1] - raw_psf[x_ind])
-    squared_error.v +=  diff ^ 2
+    squared_error.v[1] +=  diff ^ 2
     if calculate_derivs
       for ind1 = 1:length(squared_error.d)
         squared_error.d[ind1] += 2 * diff * pixel_value.d[ind1]
