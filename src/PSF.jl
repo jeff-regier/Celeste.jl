@@ -25,6 +25,8 @@ export evaluate_psf_fit, psf_params_to_array, psf_array_to_params,
 include("newton_trust_region.jl")
 
 
+const ID_MAT_2D = eye(Float64, 2)
+
 """
 A data type to store functions related to optimizing a PSF fit.  Initialize
 using the transform and number of components, and then call fit_psf
@@ -418,11 +420,10 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
     pixel_value::SensitiveFloat{PsfParams, NumType},
     calculate_derivs::Bool)
 
-  const ID_MAT_2D = eye(Float64, 2)
   clear!(pixel_value)
 
   K = length(psf_params)
-  sigma_ids = [psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale]
+  sigma_ids = (psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale)
   for k = 1:K
     # I will put in the weights later so that the log pdf sensitive float
     # is accurate.
