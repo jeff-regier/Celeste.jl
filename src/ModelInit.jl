@@ -606,13 +606,14 @@ function local_source_candidates(tiles::TiledImage,
         tile_center = (mean(tile.h_range), mean(tile.w_range))
         tile_diag = (0.5 ^ 2) * (tile.h_width ^ 2 + tile.w_width ^ 2)
 
-        patch_distances = zeros(length(patch_ctrs))
+        candidates[h, w] = Int64[]
         for s in 1:length(patch_ctrs)
-            patch_distances[s] += (tile_center[1] - patch_ctrs[s][1])^2
-            patch_distances[s] += (tile_center[2] - patch_ctrs[s][2])^2
+            patch_dist = (tile_center[1] - patch_ctrs[s][1])^2
+                        + (tile_center[2] - patch_ctrs[s][2])^2
+            if patch_dist <= (tile_diag + patch_radii_px[s])^2
+                push!(candidates[h, w], s)
+            end
         end
-        candidates[h, w] =
-            find(patch_distances .<= (tile_diag .+ patch_radii_px) .^ 2)
     end
 
     return candidates
@@ -755,9 +756,9 @@ function initialize_model_params(
     for b = 1:length(blob)
         for s=1:mp.S
             mp.patches[s, b] = radius_from_cat ?
-            SkyPatch(cat[s], blob[b], fit_psf=fit_psf,
-                     scale_patch_size=scale_patch_size):
-            SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
+                SkyPatch(cat[s], blob[b], fit_psf=fit_psf,
+                         scale_patch_size=scale_patch_size):
+                SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
         end
         patches = vec(mp.patches[:, b])
         mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b],
