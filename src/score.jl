@@ -502,15 +502,22 @@ function score_field(fieldid::Tuple{Int, Int, Int},
                results, truthfile, primary_dir)
     (celeste_df, primary_df, coadd_df) = match_catalogs(fieldid,
                                 results, truthfile, primary_dir)
+
+    suffix = @sprintf "%06d-%d-%04d.csv" fieldid[1] fieldid[2] fieldid[3]
+    writetable("celeste_results_"suffix, celeste_df)
+    writetable("primary_results_"suffix, primary_df)
+    writetable("coadd_results_"suffix, coadd_df)
+
     # difference between celeste and coadd
     celeste_err = get_err_df(coadd_df, celeste_df)
     primary_err = get_err_df(coadd_df, primary_df)
 
-    JLD.save("df.jld", "celeste_df", celeste_df,
-                       "primary_df", primary_df,
-                       "coadd_df", coadd_df,
-                       "celeste_err", celeste_err,
-                       "primary_err", primary_err)
+    JLD.save("results_and_errors.jld",
+             "celeste_df", celeste_df,
+             "primary_df", primary_df,
+             "coadd_df", coadd_df,
+             "celeste_err", celeste_err,
+             "primary_err", primary_err)
 
     # create scores
     get_scores_df(celeste_err, primary_err, coadd_df)
@@ -538,7 +545,6 @@ function score_object_nersc(run, camcol, field, objid, resultdir, truthfile)
     fname = @sprintf "%s/celeste-objid-%s.jld" resultdir objid
     results = JLD.load(fname, "results")
     primary_dir = nersc_photoobj_dir(run, camcol)
-
 
     (celeste_df, primary_df, coadd_df) = match_catalogs(fieldid,
                                 results, truthfile, primary_dir)
