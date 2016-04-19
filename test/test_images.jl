@@ -124,18 +124,24 @@ end
 function test_get_tiled_image_source()
   # Test that an object only occurs the appropriate tile's local sources.
   blob, mp, body, tiled_blob = gen_sample_star_dataset();
-  img = blob[3];
 
   mp = ModelInit.initialize_model_params(
     tiled_blob, blob, body; patch_radius=1e-6)
 
-  tiled_img = ModelInit.break_image_into_tiles(img, 10);
+  tiled_img = ModelInit.break_image_into_tiles(blob[3], 10);
   for hh in 1:size(tiled_img)[1], ww in 1:size(tiled_img)[2]
     tile = tiled_img[hh, ww]
     loc = Float64[mean(tile.h_range), mean(tile.w_range)]
     for b = 1:5
       mp.vp[1][ids.u] = loc
-      mp.patches[1, b] = SkyPatch(loc, 1e-6, blob[b], fit_psf=false)
+      pixel_center = WCSUtils.world_to_pix(blob[b].wcs, loc)
+      wcs_jacobian = WCSUtils.pixel_world_jacobian(blob[b].wcs, pixel_center)
+      radius_pix = maxabs(eigvals(wcs_jacobian)) * 1e-6
+      mp.patches[1, b] = SkyPatch(loc,
+                                  radius_pix,
+                                  blob[b].psf,
+                                  wcs_jacobian,
+                                  pixel_center)
     end
     patches = vec(mp.patches[:, 3])
     local_sources = ModelInit.get_tiled_image_sources(tiled_img,
@@ -166,16 +172,16 @@ function test_local_source_candidate()
                                                      patch_ctrs_pix(patches),
                                                      patch_radii_pix(patches))
 
-    # Get a set of candidates.
-    candidates = ModelInit.local_source_candidates(tiled_blob[b],
-                                                   patch_ctrs_pix(patches),
-                                                   patch_radii_pix(patches))
-
     # Check that all the actual sources are candidates and that this is the
     # same as what is returned by initialize_model_params.
-    @test size(candidates) == size(tile_sources)
-    for h=1:size(candidates)[1], w=1:size(candidates)[2]
-      @test setdiff(tile_sources[h, w], candidates[h, w]) == []
+    HH, WW = size(tile_sources)
+    for h=1:HH, w=1:WW
+      # Get a set of candidates.
+      candidates = ModelInit.local_source_candidates(
+                        tiled_blob[b][h, w],
+                        patch_ctrs_pix(patches),
+                        patch_radii_pix(patches))
+      @test setdiff(tile_sources[h, w], candidates) == []
       @test tile_sources[h, w] == mp.tile_sources[b][h, w]
     end
   end
