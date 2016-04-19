@@ -11,7 +11,6 @@ import ..WCSUtils
 import WCS.WCSTransform
 
 using ..Types
-import ..Types: SkyPatch
 import ..PSF
 import ..SDSSIO
 import ..ElboDeriv  # for trim_source_tiles and stitch_object_tiles
@@ -339,7 +338,6 @@ end
 Return a default-initialized VariationalParams object.
 """
 function init_source(init_pos::Vector{Float64})
-    #TODO: use blob (and perhaps priors) to initialize these sensibly
     ret = Array(Float64, length(CanonicalParams))
     ret[ids.a[2]] = 0.5
     ret[ids.a[1]] = 1.0 - ret[ids.a[2]]
@@ -364,6 +362,9 @@ Return a VariationalParams object initialized form a catalog entry.
 function init_source(ce::CatalogEntry)
     # TODO: sync this up with the transform bounds
     ret = init_source(ce.pos)
+
+    ret[ids.a[1]] = ce.is_star ? 0.8: 0.2
+    ret[ids.a[2]] = ce.is_star ? 0.2: 0.8
 
     ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
     ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))
@@ -473,55 +474,6 @@ end
 
 
 """
-Initialize a SkyPatch object at a particular location.
-
-Args:
-  - world_center: The location of the patch
-  - world_radius: The radius, in world coordinates, of the circle of pixels
-                  that affect this patch of sky.
-  - img: An Image object.
-
-Returns:
-  A SkyPatch object.
-
-Note: this is only used in tests.
-"""
-function SkyPatch(world_center::Vector{Float64}, world_radius::Float64,
-                  img::Image; fit_psf=true)
-    psf = fit_psf ? PSF.get_source_psf(world_center, img)[1] : img.psf
-    pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
-    wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
-    radius_pix = maxabs(eigvals(wcs_jacobian)) * world_radius
-
-    SkyPatch(world_center, radius_pix, psf, wcs_jacobian, pixel_center)
-end
-
-
-"""
-Initialize a SkyPatch object for a catalog entry.
-
-Args:
-  - ce: The catalog entry for the object.
-  - img: An Image object.
-  - fit_psf: Whether to fit the psf at this location.
-  - scale_patch_size: A hack.  Scale the catalog-chosen patch size.
-
-Returns:
-  A SkyPatch object with a radius chosen based on the catalog.
-"""
-function SkyPatch(ce::CatalogEntry, img::Image; fit_psf=true,
-                  scale_patch_size=1.0)
-    world_center = ce.pos
-    psf = fit_psf ? PSF.get_source_psf(world_center, img)[1] : img.psf
-    pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
-    wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
-    radius_pix = choose_patch_radius(pixel_center, ce, psf, img)
-
-    SkyPatch(world_center, scale_patch_size * radius_pix, psf,
-             wcs_jacobian, pixel_center)
-end
-
-"""
 Initialize a SkyPatch from an existing SkyPatch and a new PSF.
 """
 SkyPatch(patch::SkyPatch, psf::Vector{PsfComponent}) =
@@ -591,32 +543,28 @@ Returns:
     source patches.  If a patch is a candidate, it may be within the patch
     radius of a point in the tile, though it might not.
 """
-function local_source_candidates(tiles::TiledImage,
+function local_source_candidates(tile::ImageTile,
                                  patch_ctrs::Vector{Vector{Float64}},
                                  patch_radii_px::Vector{Float64})
     @assert length(patch_ctrs) == length(patch_radii_px)
 
-    candidates = similar(tiles, Vector{Int})
+    ret = Int[]
 
-    for h=1:size(tiles, 1), w=1:size(tiles, 2)
-        # Find the patches that are less than the radius plus diagonal from the
-        # center of the tile.  These are candidates for having some
-        # overlap with the tile.
-        tile = tiles[h, w]
-        tile_center = (mean(tile.h_range), mean(tile.w_range))
-        tile_diag = (0.5 ^ 2) * (tile.h_width ^ 2 + tile.w_width ^ 2)
+    # Find the patches that are less than the radius plus diagonal from the
+    # center of the tile.  These are candidates for having some
+    # overlap with the tile.
+    tile_center = (mean(tile.h_range), mean(tile.w_range))
+    tile_diag = (0.5 ^ 2) * (tile.h_width ^ 2 + tile.w_width ^ 2)
 
-        candidates[h, w] = Int64[]
-        for s in 1:length(patch_ctrs)
-            patch_dist = (tile_center[1] - patch_ctrs[s][1])^2
-                        + (tile_center[2] - patch_ctrs[s][2])^2
-            if patch_dist <= (tile_diag + patch_radii_px[s])^2
-                push!(candidates[h, w], s)
-            end
+    for s in 1:length(patch_ctrs)
+        patch_dist = (tile_center[1] - patch_ctrs[s][1])^2
+                    + (tile_center[2] - patch_ctrs[s][2])^2
+        if patch_dist <= (tile_diag + patch_radii_px[s])^2
+            push!(ret, s)
         end
     end
 
-    return candidates
+    return ret
 end
 
 
@@ -670,13 +618,13 @@ Returns:
 function get_tiled_image_sources(tiled_image::TiledImage,
                                  patch_ctrs::Vector{Vector{Float64}},
                                  patch_radii_px::Vector{Float64})
-    candidates = local_source_candidates(tiled_image, patch_ctrs,
-                                         patch_radii_px)
-
     out = similar(tiled_image, Vector{Int})
-    for hh in 1:size(tiled_image, 1), ww in 1:size(tiled_image, 2)
-        cands = candidates[hh, ww]  # patches indicies that might overlap tile
 
+    HH, WW = size(tiled_image)
+    for ww in 1:WW, hh in 1:HH
+        cands = local_source_candidates(tiled_image[hh, ww], 
+                                        patch_ctrs,
+                                        patch_radii_px)
         # get indicies in cands that truly overlap the tile.
         idx = get_local_sources(tiled_image[hh, ww],
                                 patch_ctrs[cands],
@@ -695,12 +643,11 @@ parameters that can be used with Celeste.
 function initialize_celeste(
     blob::Blob, cat::Vector{CatalogEntry};
     tile_width::Int=20, fit_psf::Bool=true,
-    patch_radius::Float64=-1., radius_from_cat::Bool=true)
+    patch_radius::Float64=NaN)
 
   tiled_blob = break_blob_into_tiles(blob, tile_width)
   mp = initialize_model_params(tiled_blob, blob, cat,
-                               fit_psf=fit_psf, patch_radius=patch_radius,
-                               radius_from_cat=radius_from_cat)
+                               fit_psf=fit_psf, patch_radius=patch_radius)
   tiled_blob, mp
 end
 
@@ -727,49 +674,54 @@ Args:
                      If false, use patch_radius for each patch.
 """
 function initialize_model_params(
-    tiled_blob::TiledBlob, blob::Blob, cat::Vector{CatalogEntry};
-    fit_psf::Bool=true, patch_radius::Float64=-1., radius_from_cat::Bool=true,
-    scale_patch_size::Float64=1.0)
+            tiled_blob::TiledBlob,
+            blob::Blob,
+            cat::Vector{CatalogEntry};
+            fit_psf::Bool=true,
+            patch_radius::Float64=NaN)
 
     @assert length(tiled_blob) == length(blob)
-    @assert(length(cat) > 0,
-            "Cannot initilize model parameters with no catalog entries")
-
-    # If patch_radius is set by the caller, don't use the radius from
-    # the catalog.
-    if patch_radius != -1.
-        radius_from_cat = false
-    end
-    if !radius_from_cat
-        @assert(patch_radius > 0.,
-                "If !radius_from_cat, you must specify a positive patch_radius.")
-    end
+    @assert length(cat) > 0
 
     Logging.info("Loading variational parameters from catalogs.")
+
     vp = Array{Float64, 1}[init_source(ce) for ce in cat]
     mp = ModelParams(vp, load_prior())
-    mp.objids = ASCIIString[ cat_entry.objid for cat_entry in cat]
+    mp.objids = ASCIIString[cat_entry.objid for cat_entry in cat]
 
     mp.patches = Array(SkyPatch, mp.S, length(blob))
     mp.tile_sources = Array(Array{Vector{Int}, 2}, length(blob))
 
     for b = 1:length(blob)
-        for s=1:mp.S
-            mp.patches[s, b] = radius_from_cat ?
-                SkyPatch(cat[s], blob[b], fit_psf=fit_psf,
-                         scale_patch_size=scale_patch_size):
-                SkyPatch(mp.vp[s][ids.u], patch_radius, blob[b], fit_psf=fit_psf)
-        end
-        patches = vec(mp.patches[:, b])
-        mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b],
-                                                     patch_ctrs_pix(patches),
-                                                     patch_radii_pix(patches))
-    end
+        img = blob[b]
 
-    # improved initializations
-    for i=1:length(mp.vp)
-        mp.vp[i][ids.a[1]] = cat[i].is_star ? 0.8: 0.2
-        mp.vp[i][ids.a[2]] = 1.0 - mp.vp[i][ids.a][1]
+        for s=1:mp.S
+            world_center = cat[s].pos
+
+            pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
+            wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
+            psf = fit_psf ? PSF.get_source_psf(world_center, img)[1] : img.psf
+
+            if isnan(patch_radius) # typical case
+                radius_pix = choose_patch_radius(pixel_center, cat[s], psf, img)
+            else  # for testing
+                radius_pix = maxabs(eigvals(wcs_jacobian)) * patch_radius
+            end
+
+            mp.patches[s, b] = SkyPatch(world_center,
+                                        radius_pix,
+                                        psf,
+                                        wcs_jacobian,
+                                        pixel_center)
+        end
+
+        patches = vec(mp.patches[:, b])
+        patch_centers = patch_ctrs_pix(patches)
+        patch_radii = patch_radii_pix(patches)
+
+        mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b],
+                                                     patch_centers,
+                                                     patch_radii)
     end
 
     return mp
