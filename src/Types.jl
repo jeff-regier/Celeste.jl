@@ -14,7 +14,7 @@ export ModelParams, PriorParams, UnconstrainedParams,
        PsfParams
 
 # functions
-export print_params, align
+export align
 
 # constants
 export band_letters, D, Ia, B, psf_K, galaxy_prototypes,
@@ -591,126 +591,37 @@ end
 
 # Make a copy of a ModelParams keeping only some sources.
 function ModelParams{T <: Number}(mp_all::ModelParams{T}, keep_s::Vector{Int})
+    mp = ModelParams{T}(deepcopy(mp_all.vp[keep_s]), mp_all.pp);
+    mp.active_sources = Int[]
+    mp.objids = Array(ASCIIString, length(keep_s))
+    mp.patches = Array(SkyPatch, mp.S, size(mp_all.patches, 2))
 
-  mp = ModelParams{T}(deepcopy(mp_all.vp[keep_s]), mp_all.pp);
-  mp.active_sources = Int[]
-  mp.objids = Array(ASCIIString, length(keep_s))
-  mp.patches = Array(SkyPatch, mp.S, size(mp_all.patches, 2))
-
-  # Indices of sources in the new model params
-  for sa in 1:length(keep_s)
-    s = keep_s[sa]
-    mp.objids[sa] = mp_all.objids[s]
-    mp.patches[sa, :] = mp_all.patches[s, :]
-    if s in mp_all.active_sources
-      push!(mp.active_sources, sa)
+    # Indices of sources in the new model params
+    for sa in 1:length(keep_s)
+        s = keep_s[sa]
+        mp.objids[sa] = mp_all.objids[s]
+        mp.patches[sa, :] = mp_all.patches[s, :]
+        if s in mp_all.active_sources
+            push!(mp.active_sources, sa)
+        end
     end
-  end
 
-  @assert length(mp_all.tile_sources) == size(mp_all.patches, 2)
-  num_bands = length(mp_all.tile_sources)
-  mp.tile_sources = Array(Matrix{Vector{Int}}, num_bands)
-  for b=1:num_bands
-    mp.tile_sources[b] = Array(Vector{Int}, size(mp_all.tile_sources[b]))
-    for tile_ind in 1:length(mp_all.tile_sources[b])
-        tile_s = intersect(mp_all.tile_sources[b][tile_ind], keep_s)
-        mp.tile_sources[b][tile_ind] =
-          Int[ findfirst(keep_s, s) for s in tile_s ]
+    @assert length(mp_all.tile_sources) == size(mp_all.patches, 2)
+    num_bands = length(mp_all.tile_sources)
+    mp.tile_sources = Array(Matrix{Vector{Int}}, num_bands)
+    for b=1:num_bands
+        mp.tile_sources[b] = Array(Vector{Int}, size(mp_all.tile_sources[b]))
+        for tile_ind in 1:length(mp_all.tile_sources[b])
+                tile_s = intersect(mp_all.tile_sources[b][tile_ind], keep_s)
+                mp.tile_sources[b][tile_ind] =
+                    Int[ findfirst(keep_s, s) for s in tile_s ]
+        end
     end
-  end
 
-  mp
+    mp
 end
-
 
 ModelParams{T <: Number}(vp::VariationalParams{T}, pp::PriorParams) =
     ModelParams{T}(vp, pp)
-
-
-function convert(FDType::Type{ForwardDiff.GradientNumber},
-                 mp::ModelParams{Float64})
-    x = mp.vp[1]
-    P = length(x)
-    FDType = ForwardDiff.GradientNumber{length(mp.vp[1]), Float64}
-
-    fd_x = [ ForwardDiff.GradientNumber(x[i], zeros(Float64, P)...) for i=1:P ]
-    convert(FDType, x[1])
-
-    vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
-    mp_fd = ModelParams(vp_fd, mp.pp)
-end
-
-function convert(FDType::Type{ForwardDiff.HessianNumber},
-                 mp::ModelParams{Float64})
-    x = mp.vp[1]
-    P = length(x)
-    FDType = ForwardDiff.HessianNumber{length(mp.vp[1]), Float64}
-
-    fd_x = [ ForwardDiff.HessianNumber(x[i], zeros(Float64, P)...) for i=1:P ]
-    convert(FDType, x[1])
-
-    vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
-    mp_fd = ModelParams(vp_fd, mp.pp)
-end
-
-
-# TODO: Maybe write it as a convert()?
-function forward_diff_model_params{T <: Number}(
-    FDType::Type{T},
-    base_mp::ModelParams{Float64})
-  S = length(base_mp.vp)
-  P = length(base_mp.vp[1])
-  mp_fd = ModelParams{FDType}([ zeros(FDType, P) for s=1:S ], base_mp.pp);
-  # Set the values (but not gradient numbers) for parameters other
-  # than the galaxy parameters.
-  for s=1:base_mp.S, i=1:length(ids)
-    mp_fd.vp[s][i] = base_mp.vp[s][i]
-  end
-  mp_fd.patches = base_mp.patches;
-  mp_fd.tile_sources = base_mp.tile_sources;
-  mp_fd.active_sources = base_mp.active_sources;
-  mp_fd.objids = base_mp.objids;
-  mp_fd
-end
-
-
-"""
-Display model parameters with the variable names.
-"""
-function print_params(mp::ModelParams)
-    for s in mp.active_sources
-        Logging.info("=======================\n Object $(s):")
-        for var_name in fieldnames(ids)
-            Logging.info(var_name)
-            Logging.info(mp.vp[s][ids.(var_name)])
-        end
-    end
-end
-
-"""
-Display several model parameters side by side.
-"""
-function print_params(mp_tuple::ModelParams...)
-    Logging.info("Printing for $(length(mp_tuple)) parameters.")
-    for s in mp_tuple[1].active_sources
-        Logging.info("=======================\n Object $(s):")
-        for var_name in fieldnames(ids)
-            Logging.info(var_name)
-            mp_vars =
-              [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for
-                index in 1:length(mp_tuple) ]
-            Logging.info(reduce(hcat, mp_vars))
-        end
-    end
-end
-
-
-"""
-Display a Celeste catalog entry.
-"""
-function print_cat_entry(cat_entry::CatalogEntry)
-    [Logging.info("$name: $(cat_entry.(name))") for name in
-            fieldnames(cat_entry)]
-end
 
 end  # module

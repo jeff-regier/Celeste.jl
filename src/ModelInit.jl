@@ -702,9 +702,10 @@ function initialize_model_params(
             wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
             psf = fit_psf ? PSF.get_source_psf(world_center, img)[1] : img.psf
 
-            if isnan(patch_radius) # typical case
-                radius_pix = choose_patch_radius(pixel_center, cat[s], psf, img)
-            else  # for testing
+            radius_pix = choose_patch_radius(pixel_center, cat[s], psf, img)
+
+            # for testing
+            if !isnan(patch_radius)
                 radius_pix = maxabs(eigvals(wcs_jacobian)) * patch_radius
             end
 
