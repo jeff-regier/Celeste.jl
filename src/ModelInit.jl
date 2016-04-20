@@ -1,18 +1,12 @@
 module ModelInit
 
-import Base.convert
-
-using Distributions
+import Distributions
 import Logging
-using FITSIO
 import WCS
 
-import ..WCSUtils
-import WCS.WCSTransform
-
 using ..Types
+import ..WCSUtils
 import ..PSF
-import ..SDSSIO
 import ..ElboDeriv  # for trim_source_tiles
 
 const cfgdir = joinpath(Pkg.dir("Celeste"), "cfg")
@@ -259,17 +253,17 @@ function choose_patch_radius(
       ce.is_star ? psf_width: width_scale * ce.gal_scale / 0.67 + psf_width
 
     if img.constant_background
-      epsilon = img.epsilon
+        epsilon = img.epsilon
     else
-      # Get the average sky noise in a rectangle of the width of the psf.
-      h_max, w_max = size(img.epsilon_mat)
-      h_lim = [Int(floor((pixel_center[1] - obj_width))),
+        # Get the average sky noise in a rectangle of the width of the psf.
+        h_max, w_max = size(img.epsilon_mat)
+        h_lim = [Int(floor((pixel_center[1] - obj_width))),
                        Int(ceil((pixel_center[1] + obj_width)))]
-      w_lim = [Int(floor((pixel_center[2] - obj_width))),
+        w_lim = [Int(floor((pixel_center[2] - obj_width))),
                        Int(ceil((pixel_center[2] + obj_width)))]
-      h_range = max(h_lim[1], 1):min(h_lim[2], h_max)
-      w_range = max(w_lim[1], 1):min(w_lim[2], w_max)
-      epsilon = mean(img.epsilon_mat[h_range, w_range])
+        h_range = max(h_lim[1], 1):min(h_lim[2], h_max)
+        w_range = max(w_lim[1], 1):min(w_lim[2], w_max)
+        epsilon = mean(img.epsilon_mat[h_range, w_range])
     end
     flux = ce.is_star ? ce.star_fluxes[img.b] : ce.gal_fluxes[img.b]
     @assert flux > 0.
