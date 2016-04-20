@@ -190,30 +190,6 @@ type Image
     raw_psf_comp::SDSSPSF
 end
 
-# Initialization for an image with noise and background parameters that are
-# constant across the image.
-function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int,
-               wcs::WCSTransform, epsilon::Float64, iota::Float64,
-               psf::Vector{PsfComponent}, run_num::Int, camcol_num::Int,
-               field_num::Int)
-    empty_psf_comp = SDSSPSF(Array(Float64, 0, 0), 0, 0,
-                             Array(Float64, 0, 0, 0))
-    Image(H, W, pixels, b, wcs, epsilon, iota, psf,
-          run_num, camcol_num, field_num,
-          true, Array(Float64, 0, 0), Array(Float64, 0), empty_psf_comp)
-end
-
-# Initialization for an image with noise and background parameters that vary
-# across the image.
-function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int,
-               wcs::WCSTransform, epsilon_mat::Vector{Float64},
-               iota_vec::Matrix{Float64}, psf::Vector{PsfComponent},
-               raw_psf_comp::SDSSPSF, run_num::Int, camcol_num::Int,
-               field_num::Int)
-    Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num,
-          field_num, false, epsilon_mat, iota_vec, raw_psf_comp)
-end
-
 
 """A vector of images, one for each filter band"""
 typealias Blob Vector{Image}
