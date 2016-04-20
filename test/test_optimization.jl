@@ -55,7 +55,7 @@ function test_objective_wrapper()
 
     blob, mp, bodies, tiled_blob = SampleData.gen_three_body_dataset();
     # Change the tile size.
-    tiled_blob, mp = ModelInit.initialize_celeste(
+    tiled_blob, mp = initialize_celeste(
       blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
     mp.active_sources = Int[2, 3]
     trans = Transform.get_mp_transform(mp, loc_width=1.0);
@@ -109,7 +109,7 @@ function test_single_source_optimization()
   blob, mp, three_bodies, tiled_blob = gen_three_body_dataset();
 
   # Change the tile size.
-  tiled_blob, mp = ModelInit.initialize_celeste(
+  tiled_blob, mp = initialize_celeste(
   blob, three_bodies, tile_width=10, fit_psf=false);
   mp_original = deepcopy(mp);
 
@@ -278,7 +278,7 @@ function test_bad_a_init()
     end
     blob = Synthetic.gen_blob(blob0, [ce,])
 
-    tiled_blob, mp = ModelInit.initialize_celeste(blob, [ce,])
+    tiled_blob, mp = initialize_celeste(blob, [ce,])
     trans = get_mp_transform(mp, loc_width=1.0);
 
     mp.vp[1][ids.a] = [ 0.5, 0.5 ]
@@ -328,7 +328,7 @@ function test_real_stamp_optimization()
         ce.pos[1] < 61 && ce.pos[2] < 61
     cat_entries = filter(inbounds, cat_entries);
 
-    tiled_blob, mp = ModelInit.initialize_celeste(blob, cat_entries);
+    tiled_blob, mp = initialize_celeste(blob, cat_entries);
     trans = get_mp_transform(mp, loc_width=1.0);
     OptimizeElbo.maximize_elbo(tiled_blob, mp, trans, xtol_rel=0.0);
 end

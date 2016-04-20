@@ -2,10 +2,14 @@ using Base.Test
 import DualNumbers
 
 using Celeste: Types, SensitiveFloats, BivariateNormals, ElboDeriv
-import Celeste: ModelInit, WCSUtils
+import Celeste: ModelInit, WCSUtils, SDSSIO
+import ForwardDiff
 
 
 println("Running derivative tests.")
+
+
+include("derivative_utils.jl")
 
 
 """
@@ -34,7 +38,7 @@ function unwrap_vp_vector{NumType <: Number}(
     vp_vec::Vector{NumType}, mp::ModelParams)
 
   vp_array = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
-  mp_local = Types.forward_diff_model_params(NumType, mp);
+  mp_local = forward_diff_model_params(NumType, mp);
   for sa = 1:length(mp.active_sources)
     mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
   end
@@ -103,21 +107,85 @@ function test_bvn_cov()
 end
 
 
+        -
+"""
+Return a reduced Celeste dataset useful for a single object.
+        -
+Args:
+  - objid: An object id in mp_original.objids that you want to fit.
+  - mp_original: The original model params with all objects.
+  - tiled_blob: The original tiled blob with all the image.
+  - blob: The original blob with all the image.
+  - cat_entries: The original catalog entries with all the sources.
+        -
+Returns:
+  - trimmed_mp: A ModelParams object containing only the objid source and
+      all the sources that co-occur with it.  Its active_sources will be set
+      to the objid object.
+  - trimmed_tiled_blob: A new TiledBlob with the tiled arrays shrunk to only
+      include those necessary for the objid source.
+        -
+Note that the resulting dataset is only good for fitting the objid source.
+The ModelParams object will contain other sources that overlap with the
+objid source, but the trimmed_tiled_blob may be missing tiles in which these
+overlapping sources occur.
+        -
+TODO: test!
+"""
+function limit_to_object_data(
+    objid::ASCIIString, mp_original::ModelParams,
+    tiled_blob::TiledBlob, blob::Blob, cat_entries::Vector{CatalogEntry})
+        -
+  @assert length(tiled_blob) == length(blob)
+  mp = deepcopy(mp_original)
+        -
+  s_original = findfirst(mp_original.objids .== objid)
+  @assert(s_original > 0, "objid $objid not found in mp_original.")
+  mp_original.active_sources = [ s_original ]
+        -
+  # Get the sources that overlap with this object.
+  relevant_sources = ModelInit.get_relevant_sources(mp, s_original)
+        -
+  trimmed_mp = ModelInit.initialize_model_params(
+    tiled_blob, blob, cat_entries[relevant_sources], fit_psf=true);
+        -
+  s = findfirst(trimmed_mp.objids .== objid)
+  trimmed_mp.active_sources = [ s ]
+        -
+  # Trim to a smaller tiled blob.
+  trimmed_tiled_blob = Array(Array{ImageTile}, 5);
+  original_tiled_sources = deepcopy(trimmed_mp.tile_sources);
+  for b=1:length(tiled_blob)
+    hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
+      find([ s in sources for sources in original_tiled_sources[b]]))
+        -
+    hh_range = minimum(hh_vec):maximum(hh_vec);
+    ww_range = minimum(ww_vec):maximum(ww_vec);
+    trimmed_tiled_blob[b] = tiled_blob[b][hh_range, ww_range];
+    trimmed_mp.tile_sources[b] =
+      deepcopy(original_tiled_sources[b][hh_range, ww_range]);
+  end
+  trimmed_tiled_blob = convert(TiledBlob, trimmed_tiled_blob);
+        -
+  trimmed_mp, trimmed_tiled_blob
+end
+
+
 function test_real_image()
   # TODO: replace this with stamp tests having non-trivial WCS transforms.
   # TODO: streamline the creation of small real images.
 
   run, camcol, field = (3900, 6, 269)
 
-  images = ModelInit.read_sdss_field(run, camcol, field, datadir)
+  images = SDSSIO.load_field_images(run, camcol, field, datadir)
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir run camcol field
-  cat_entries = ModelInit.read_photoobj_celeste(fname)
+  cat_entries = SDSSIO.read_photoobj_celeste(fname)
   tiled_blob, mp =
-    ModelInit.initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
+      initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
 
   # Pick an object.
   objid = "1237662226208063499"
-  trimmed_mp, trimmed_tiled_blob = ModelInit.limit_to_object_data(
+  trimmed_mp, trimmed_tiled_blob = limit_to_object_data(
     objid, mp, tiled_blob, images, cat_entries);
 
   # Limit to very few pixels so that the autodiff is reasonably fast.
@@ -134,7 +202,7 @@ function test_real_image()
   function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
     vp_array =
       reshape(vp_vec, length(CanonicalParams), length(trimmed_mp.active_sources))
-    mp_local = Types.forward_diff_model_params(NumType, trimmed_mp);
+    mp_local = forward_diff_model_params(NumType, trimmed_mp);
     for sa = 1:length(trimmed_mp.active_sources)
       mp_local.vp[trimmed_mp.active_sources[sa]] = vp_array[:, sa]
     end
@@ -162,7 +230,7 @@ function test_dual_numbers()
   # Due to the autodiff parts of the KL divergence and transform,
   # these parts of the ELBO will currently not work with dual numbers.
   blob, mp, body, tiled_blob = gen_sample_star_dataset();
-  mp_dual = Types.forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
+  mp_dual = forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
   elbo_dual = ElboDeriv.elbo_likelihood(tiled_blob, mp_dual);
 
   true
@@ -447,7 +515,7 @@ function test_e_g_s_functions()
 
     function wrapper_fun{NumType <: Number}(x::Vector{NumType})
       @assert length(x) == P
-      mp_local = Types.forward_diff_model_params(NumType, mp);
+      mp_local = forward_diff_model_params(NumType, mp);
       mp_local.vp[s] = x
       elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
       test_var ? elbo_vars_local.var_G_s.v[1] : elbo_vars_local.E_G_s.v[1]
@@ -494,7 +562,7 @@ function test_fs1m_derivatives()
     gcc_ind = (psf_k, gal_j, type_i, s)
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-      mp_fd = Types.forward_diff_model_params(T, mp);
+      mp_fd = forward_diff_model_params(T, mp);
       elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
 
       # Make sure par is as long as the galaxy parameters.
@@ -571,7 +639,7 @@ function test_fs0m_derivatives()
     bmc_ind = (psf_k, s)
     function f_wrap_star{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-      mp_fd = Types.forward_diff_model_params(T, mp);
+      mp_fd = forward_diff_model_params(T, mp);
 
       # Make sure par is as long as the galaxy parameters.
       @assert length(par) == length(ids.u)

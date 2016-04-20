@@ -1,8 +1,14 @@
-# Functions for reading FITS files from the SloanDigitalSkySurvey.
+# Functions for loading FITS files from the SloanDigitalSkySurvey.
 module SDSSIO
 
 import FITSIO
 import WCS
+import Logging
+
+import ..Types: RawPSF, Image, CatalogEntry
+import ..PSF
+import Base.convert
+
 
 # types of things to mask in read_mask().
 const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
@@ -199,42 +205,84 @@ function read_mask(fname, mask_planes=DEFAULT_MASK_PLANES)
     return xranges, yranges
 end
 
-# -----------------------------------------------------------------------------
-# PSF-related functions
 
 """
-SDSSPSF
-
-SDSS representation of a spatially variable PSF. The PSF is represented as
-a weighted combination of eigenimages (stored in `rrows`), where the weights
-vary smoothly across the image as a polynomial of the form
-
-```
-weight[k](x, y) = sum_{i,j} cmat[i, j, k] * (rcs * x)^i (rcs * y)^j
-```
-
-where `rcs` is a coordinate transformation and `x` and `y` are zero-indexed.
+Read a SDSS run/camcol/field into an array of Images. `frame_dir` is the
+directory in which to find SDSS \"frame\" files. This function accepts
+optional keyword arguments `fpm_dir`, `psfield_dir` and `photofield_dir`
+giving the directories of fpM, psField and photoField files. The defaults
+for these arguments is `frame_dir`.
 """
-immutable SDSSPSF
-    rrows::Array{Float64,2}  # A matrix of flattened eigenimages.
-    rnrow::Int  # The number of rows in an eigenimage.
-    rncol::Int  # The number of columns in an eigenimage.
-    cmat::Array{Float64,3}  # The coefficients of the weight polynomial
+function load_field_images(
+           run::Integer,
+           camcol::Integer,
+           field::Integer,
+           frame_dir::ByteString;
+           fpm_dir::ByteString=frame_dir,
+           psfield_dir::ByteString=frame_dir,
+           photofield_dir::ByteString=frame_dir)
 
-    function SDSSPSF(rrows::Array{Float64, 2}, rnrow::Integer, rncol::Integer,
-                     cmat::Array{Float64, 3})
-        # rrows contains eigen images. Each eigen image is along the first
-        # dimension in a flattened form. Check that dimensions match up.
-        @assert size(rrows, 1) == rnrow * rncol
+    # read gain for each band
+    photofield_name = @sprintf("%s/photoField-%06d-%d.fits",
+                               photofield_dir, run, camcol)
+    gains = SDSSIO.read_field_gains(photofield_name, field)
 
-        # The second dimension is the number of eigen images, which should
-        # match the number of coefficient arrays.
-        @assert size(rrows, 2) == size(cmat, 3)
+    # open FITS file containing PSF for each band
+    psf_name = @sprintf("%s/psField-%06d-%d-%04d.fit",
+                        psfield_dir, run, camcol, field)
+    psffile = FITSIO.FITS(psf_name)
 
-        return new(rrows, Int(rnrow), Int(rncol), cmat)
+    result = Array(Image, 5)
+
+    for (bandnum, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
+
+        # load image data
+        frame_name = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
+                              frame_dir, band, run, camcol, field)
+        data, calibration, sky, wcs = SDSSIO.read_frame(frame_name)
+
+        # scale data to raw electron counts
+        SDSSIO.decalibrate!(data, sky, calibration, gains[band])
+
+        # read mask
+        mask_name = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
+                             fpm_dir, run, band, camcol, field)
+        mask_xranges, mask_yranges = SDSSIO.read_mask(mask_name)
+
+        # apply mask
+        for i=1:length(mask_xranges)
+            data[mask_xranges[i], mask_yranges[i]] = NaN
+        end
+
+        H, W = size(data)
+
+        # read the psf
+        sdsspsf = SDSSIO.read_psf(psffile, band)
+
+        # evalute the psf in the center of the image and then fit it.
+        psfstamp = sdsspsf(H / 2., W / 2.)
+        psf = PSF.fit_raw_psf_for_celeste(psfstamp)[1]
+
+        # For now, use the median noise and sky.  Here,
+        # epsilon * iota needs to be in units comparable to nelec
+        # electron counts.
+        # Note that each are actuall pretty variable.
+        iota = Float64(gains[band] / median(calibration))
+        epsilon = Float64(median(sky) * median(calibration))
+        iota_vec = convert(Vector{Float64}, gains[band] ./ calibration)
+        epsilon_mat = convert(Array{Float64, 2}, sky .* calibration)
+
+        # Set it to use a constant background but include the non-constant data.
+        result[bandnum] = Image(H, W, data, bandnum, wcs, epsilon, iota, psf,
+                                run, camcol, field, false, epsilon_mat,
+                                iota_vec, sdsspsf)
     end
+
+    return result
 end
 
+# -----------------------------------------------------------------------------
+# PSF-related functions
 
 """
 psf(x, y)
@@ -247,7 +295,7 @@ This function was originally based on the function sdss_psf_at_points
 in astrometry.net:
 https://github.com/dstndstn/astrometry.net/blob/master/util/sdss_psf.py
 """
-function call(psf::SDSSPSF, x::Real, y::Real)
+function call(psf::RawPSF, x::Real, y::Real)
     const RCS = 0.001  # A coordinate transform to keep polynomial
                        # coefficients to a reasonable size.
     nk = size(psf.rrows, 2)  # number of eigen images.
@@ -281,7 +329,7 @@ read_psf(fitsfile, band)
 
 Read PSF components for the given band ('u', 'g', 'r', 'i', or 'z')
 from the open FITSIO.FITS instance `fitsfile`, which should be a SDSS
-\"psField\" file, and return a SDSSPSF instance representing the spatially
+\"psField\" file, and return a RawPSF instance representing the spatially
 variable PSF.
 """
 function read_psf(fitsfile::FITSIO.FITS, band::Char)
@@ -311,13 +359,11 @@ function read_psf(fitsfile::FITSIO.FITS, band::Char)
         rrows[:, i] = rrows_raw[i]
     end
 
-    return SDSSPSF(rrows, rnrow, rncol, cmat)
+    return RawPSF(rrows, rnrow, rncol, cmat)
 end
 
 
 """
-read_photoobj(fname)
-
 Read a source catalog from an SDSS \"photoObj\" FITS file for a given
 run/camcol/field combination, returning a Vector of columns and a Vector
 of column names.
@@ -449,5 +495,149 @@ function read_photoobj(fname, band::Char='r')
     return catalog
 end
 
+
+"""
+Convert from a catalog in dictionary-of-arrays, as returned by
+SDSSIO.read_photoobj to Vector{CatalogEntry}.
+"""
+function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{ASCIIString, Any})
+    out = Array(CatalogEntry, length(catalog["objid"]))
+
+    for i=1:length(catalog["objid"])
+        worldcoords = [catalog["ra"][i], catalog["dec"][i]]
+        frac_dev = catalog["frac_dev"][i]
+
+        # Fill star and galaxy flux
+        star_fluxes = zeros(5)
+        gal_fluxes = zeros(5)
+        for (j, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
+
+            # Make negative fluxes positive.
+            # TODO: How can there be negative fluxes?
+            psfflux = max(catalog["psfflux_$band"][i], 1e-6)
+            devflux = max(catalog["devflux_$band"][i], 1e-6)
+            expflux = max(catalog["expflux_$band"][i], 1e-6)
+
+            # galaxy flux is a weighted sum of the two components.
+            star_fluxes[j] = psfflux
+            gal_fluxes[j] = frac_dev * devflux + (1.0 - frac_dev) * expflux
+        end
+
+        # For shape parameters, we use the dominant component (dev or exp)
+        usedev = frac_dev > 0.5
+        fits_ab = usedev? catalog["ab_dev"][i] : catalog["ab_exp"][i]
+        fits_phi = usedev? catalog["phi_dev"][i] : catalog["phi_exp"][i]
+        fits_theta = usedev? catalog["theta_dev"][i] : catalog["theta_exp"][i]
+
+        # effective radius
+        re_arcsec = max(fits_theta, 1. / 30)
+        re_pixel = re_arcsec / 0.396
+
+        fits_phi -= catalog["phi_offset"][i]
+
+        # fits_phi is now degrees counter-clockwise from vertical
+        # in pixel coordinates.
+
+        # Celeste's phi measures radians counter-clockwise from vertical.
+        celeste_phi_rad = fits_phi * (pi / 180)
+
+        entry = CatalogEntry(worldcoords, catalog["is_star"][i], star_fluxes,
+                             gal_fluxes, frac_dev, fits_ab, celeste_phi_rad, re_pixel,
+                             catalog["objid"][i], Int(catalog["thing_id"][i]))
+        out[i] = entry
+    end
+
+    return out
+end
+
+
+"""
+read_photoobj_files(fieldids, dirs) -> Vector{CatalogEntry}
+
+Combine photoobj catalogs for the given overlapping fields, returning a single
+joined catalog.
+
+The `duplicate_policy` argument controls how catalogs are joined.
+With `duplicate_policy = :primary`, only primary objects are included in the
+combined catalog.
+With `duplicate_policy = :first`, only the first detection is included in the
+combined catalog.
+"""
+function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
+        duplicate_policy=:primary)
+    @assert length(fieldids) == length(dirs)
+    @assert duplicate_policy == :primary || duplicate_policy == :first
+    @assert duplicate_policy == :primary || length(dirs) == 1
+
+    Logging.info("reading photoobj catalogs for ", length(fieldids), " fields")
+
+    # the code below assumes there is at least one field.
+    if length(fieldids) == 0
+        return CatalogEntry[]
+    end
+
+    # Read in all photoobj catalogs.
+    rawcatalogs = Array(Dict, length(fieldids))
+    for i in eachindex(fieldids)
+        run, camcol, field = fieldids[i]
+        dir = dirs[i]
+        fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
+        Logging.info("field $(fieldids[i]): reading $fname")
+        rawcatalogs[i] = SDSSIO.read_photoobj(fname)
+    end
+
+    for i in eachindex(fieldids)
+        Logging.info("field ", fieldids[i], ": ", length(rawcatalogs[i]["objid"]),
+             " entries")
+    end
+
+    # Limit each catalog to primary objects and objects where thing_id != -1
+    # (thing_id == -1 indicates that the matching process failed)
+    for cat in rawcatalogs
+        mask = (cat["thing_id"] .!= -1)
+        if duplicate_policy == :primary
+            mask &= (cat["mode"] .== 0x01)
+        end
+        for key in keys(cat)
+            cat[key] = cat[key][mask]
+        end
+    end
+
+    for i in eachindex(fieldids)
+        Logging.info("field ", fieldids[i], ": ", length(rawcatalogs[i]["objid"]),
+             " filtered entries")
+    end
+
+    # Merge all catalogs together (there should be no duplicate objects,
+    # because for each object there should only be one "primary" occurance.)
+    rawcatalog = deepcopy(rawcatalogs[1])
+    for i=2:length(rawcatalogs)
+        for key in keys(rawcatalog)
+            append!(rawcatalog[key], rawcatalogs[i][key])
+        end
+    end
+
+    # check that there are no duplicate thing_ids (see above comment)
+    if length(Set(rawcatalog["thing_id"])) < length(rawcatalog["thing_id"])
+        error("Found one or more duplicate primary thing_ids in photoobj " *
+              "catalogs")
+    end
+
+    # convert to celeste format catalog
+    catalog = convert(Vector{CatalogEntry}, rawcatalog)
+
+    return catalog
+end
+
+
+"""
+read_photoobj_celeste(fname)
+
+Read a SDSS \"photoobj\" FITS catalog into a Vector{CatalogEntry}.
+"""
+function read_photoobj_celeste(fname)
+    rawcatalog = SDSSIO.read_photoobj(fname)
+    convert(Vector{CatalogEntry}, rawcatalog)
+end
 
 end  # module

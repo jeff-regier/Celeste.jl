@@ -11,10 +11,10 @@ export ModelParams, PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,
        VariationalParams, FreeVariationalParams, RectVariationalParams,
-       PsfParams
+       PsfParams, RawPSF, CatalogEntry
 
 # functions
-export print_params, align
+export align
 
 # constants
 export band_letters, D, Ia, B, psf_K, galaxy_prototypes,
@@ -35,8 +35,6 @@ import ForwardDiff
 import Logging
 
 import Base.length
-
-import Celeste.SDSSIO: SDSSPSF
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -150,6 +148,41 @@ immutable PsfComponent
     end
 end
 
+
+"""
+SDSS representation of a spatially variable PSF. The PSF is represented as
+a weighted combination of eigenimages (stored in `rrows`), where the weights
+vary smoothly across the image as a polynomial of the form
+
+```
+weight[k](x, y) = sum_{i,j} cmat[i, j, k] * (rcs * x)^i (rcs * y)^j
+```
+
+where `rcs` is a coordinate transformation and `x` and `y` are zero-indexed.
+"""
+immutable RawPSF
+    rrows::Array{Float64,2}  # A matrix of flattened eigenimages.
+    rnrow::Int  # The number of rows in an eigenimage.
+    rncol::Int  # The number of columns in an eigenimage.
+    cmat::Array{Float64,3}  # The coefficients of the weight polynomial
+
+    function RawPSF(rrows::Array{Float64, 2}, rnrow::Integer, rncol::Integer,
+                     cmat::Array{Float64, 3})
+        # rrows contains eigen images. Each eigen image is along the first
+        # dimension in a flattened form. Check that dimensions match up.
+        @assert size(rrows, 1) == rnrow * rncol
+
+        # The second dimension is the number of eigen images, which should
+        # match the number of coefficient arrays.
+        @assert size(rrows, 2) == size(cmat, 3)
+
+        return new(rrows, Int(rnrow), Int(rncol), cmat)
+    end
+end
+
+
+
+
 """An image, taken though a particular filter band"""
 type Image
     # The image height.
@@ -187,31 +220,7 @@ type Image
     constant_background::Bool
     epsilon_mat::Array{Float64, 2}
     iota_vec::Array{Float64, 1}
-    raw_psf_comp::SDSSPSF
-end
-
-# Initialization for an image with noise and background parameters that are
-# constant across the image.
-function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int,
-               wcs::WCSTransform, epsilon::Float64, iota::Float64,
-               psf::Vector{PsfComponent}, run_num::Int, camcol_num::Int,
-               field_num::Int)
-    empty_psf_comp = SDSSPSF(Array(Float64, 0, 0), 0, 0,
-                             Array(Float64, 0, 0, 0))
-    Image(H, W, pixels, b, wcs, epsilon, iota, psf,
-          run_num, camcol_num, field_num,
-          true, Array(Float64, 0, 0), Array(Float64, 0), empty_psf_comp)
-end
-
-# Initialization for an image with noise and background parameters that vary
-# across the image.
-function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int,
-               wcs::WCSTransform, epsilon_mat::Vector{Float64},
-               iota_vec::Matrix{Float64}, psf::Vector{PsfComponent},
-               raw_psf_comp::SDSSPSF, run_num::Int, camcol_num::Int,
-               field_num::Int)
-    Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num,
-          field_num, false, epsilon_mat, iota_vec, raw_psf_comp)
+    raw_psf_comp::RawPSF
 end
 
 
@@ -591,126 +600,37 @@ end
 
 # Make a copy of a ModelParams keeping only some sources.
 function ModelParams{T <: Number}(mp_all::ModelParams{T}, keep_s::Vector{Int})
+    mp = ModelParams{T}(deepcopy(mp_all.vp[keep_s]), mp_all.pp);
+    mp.active_sources = Int[]
+    mp.objids = Array(ASCIIString, length(keep_s))
+    mp.patches = Array(SkyPatch, mp.S, size(mp_all.patches, 2))
 
-  mp = ModelParams{T}(deepcopy(mp_all.vp[keep_s]), mp_all.pp);
-  mp.active_sources = Int[]
-  mp.objids = Array(ASCIIString, length(keep_s))
-  mp.patches = Array(SkyPatch, mp.S, size(mp_all.patches, 2))
-
-  # Indices of sources in the new model params
-  for sa in 1:length(keep_s)
-    s = keep_s[sa]
-    mp.objids[sa] = mp_all.objids[s]
-    mp.patches[sa, :] = mp_all.patches[s, :]
-    if s in mp_all.active_sources
-      push!(mp.active_sources, sa)
+    # Indices of sources in the new model params
+    for sa in 1:length(keep_s)
+        s = keep_s[sa]
+        mp.objids[sa] = mp_all.objids[s]
+        mp.patches[sa, :] = mp_all.patches[s, :]
+        if s in mp_all.active_sources
+            push!(mp.active_sources, sa)
+        end
     end
-  end
 
-  @assert length(mp_all.tile_sources) == size(mp_all.patches, 2)
-  num_bands = length(mp_all.tile_sources)
-  mp.tile_sources = Array(Matrix{Vector{Int}}, num_bands)
-  for b=1:num_bands
-    mp.tile_sources[b] = Array(Vector{Int}, size(mp_all.tile_sources[b]))
-    for tile_ind in 1:length(mp_all.tile_sources[b])
-        tile_s = intersect(mp_all.tile_sources[b][tile_ind], keep_s)
-        mp.tile_sources[b][tile_ind] =
-          Int[ findfirst(keep_s, s) for s in tile_s ]
+    @assert length(mp_all.tile_sources) == size(mp_all.patches, 2)
+    num_bands = length(mp_all.tile_sources)
+    mp.tile_sources = Array(Matrix{Vector{Int}}, num_bands)
+    for b=1:num_bands
+        mp.tile_sources[b] = Array(Vector{Int}, size(mp_all.tile_sources[b]))
+        for tile_ind in 1:length(mp_all.tile_sources[b])
+                tile_s = intersect(mp_all.tile_sources[b][tile_ind], keep_s)
+                mp.tile_sources[b][tile_ind] =
+                    Int[ findfirst(keep_s, s) for s in tile_s ]
+        end
     end
-  end
 
-  mp
+    mp
 end
-
 
 ModelParams{T <: Number}(vp::VariationalParams{T}, pp::PriorParams) =
     ModelParams{T}(vp, pp)
-
-
-function convert(FDType::Type{ForwardDiff.GradientNumber},
-                 mp::ModelParams{Float64})
-    x = mp.vp[1]
-    P = length(x)
-    FDType = ForwardDiff.GradientNumber{length(mp.vp[1]), Float64}
-
-    fd_x = [ ForwardDiff.GradientNumber(x[i], zeros(Float64, P)...) for i=1:P ]
-    convert(FDType, x[1])
-
-    vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
-    mp_fd = ModelParams(vp_fd, mp.pp)
-end
-
-function convert(FDType::Type{ForwardDiff.HessianNumber},
-                 mp::ModelParams{Float64})
-    x = mp.vp[1]
-    P = length(x)
-    FDType = ForwardDiff.HessianNumber{length(mp.vp[1]), Float64}
-
-    fd_x = [ ForwardDiff.HessianNumber(x[i], zeros(Float64, P)...) for i=1:P ]
-    convert(FDType, x[1])
-
-    vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
-    mp_fd = ModelParams(vp_fd, mp.pp)
-end
-
-
-# TODO: Maybe write it as a convert()?
-function forward_diff_model_params{T <: Number}(
-    FDType::Type{T},
-    base_mp::ModelParams{Float64})
-  S = length(base_mp.vp)
-  P = length(base_mp.vp[1])
-  mp_fd = ModelParams{FDType}([ zeros(FDType, P) for s=1:S ], base_mp.pp);
-  # Set the values (but not gradient numbers) for parameters other
-  # than the galaxy parameters.
-  for s=1:base_mp.S, i=1:length(ids)
-    mp_fd.vp[s][i] = base_mp.vp[s][i]
-  end
-  mp_fd.patches = base_mp.patches;
-  mp_fd.tile_sources = base_mp.tile_sources;
-  mp_fd.active_sources = base_mp.active_sources;
-  mp_fd.objids = base_mp.objids;
-  mp_fd
-end
-
-
-"""
-Display model parameters with the variable names.
-"""
-function print_params(mp::ModelParams)
-    for s in mp.active_sources
-        Logging.info("=======================\n Object $(s):")
-        for var_name in fieldnames(ids)
-            Logging.info(var_name)
-            Logging.info(mp.vp[s][ids.(var_name)])
-        end
-    end
-end
-
-"""
-Display several model parameters side by side.
-"""
-function print_params(mp_tuple::ModelParams...)
-    Logging.info("Printing for $(length(mp_tuple)) parameters.")
-    for s in mp_tuple[1].active_sources
-        Logging.info("=======================\n Object $(s):")
-        for var_name in fieldnames(ids)
-            Logging.info(var_name)
-            mp_vars =
-              [ collect(mp_tuple[index].vp[s][ids.(var_name)]) for
-                index in 1:length(mp_tuple) ]
-            Logging.info(reduce(hcat, mp_vars))
-        end
-    end
-end
-
-
-"""
-Display a Celeste catalog entry.
-"""
-function print_cat_entry(cat_entry::CatalogEntry)
-    [Logging.info("$name: $(cat_entry.(name))") for name in
-            fieldnames(cat_entry)]
-end
 
 end  # module
