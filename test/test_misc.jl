@@ -124,12 +124,12 @@ function test_local_sources_2()
     for b in 1:5 blob0[b].H, blob0[b].W = 400, 400 end
     big_blob = Synthetic.gen_blob(blob0, one_body);
 
-    small_tiled_blob, mp_small = ModelInit.initialize_celeste(
+    small_tiled_blob, mp_small = initialize_celeste(
       small_blob, one_body, patch_radius=35.);
     small_source_tiles =
       [ sum([ length(s) > 0 for s in source ]) for source in mp_small.tile_sources ]
 
-    big_tiled_blob, mp_big = ModelInit.initialize_celeste(
+    big_tiled_blob, mp_big = initialize_celeste(
       big_blob, one_body, patch_radius=35.);
     big_source_tiles =
       [ sum([ length(s) > 0 for s in source ]) for source in mp_big.tile_sources ]
@@ -164,7 +164,7 @@ function test_local_sources_3()
     diags = [world_quad[:, i] - world_quad[:, i+2] for i=1:2]
     patch_radius = maximum([sqrt(dot(d, d)) for d in diags])
 
-    tiled_blob, mp = ModelInit.initialize_celeste(
+    tiled_blob, mp = initialize_celeste(
       blob, one_body, patch_radius=patch_radius);
 
     # Source should be present

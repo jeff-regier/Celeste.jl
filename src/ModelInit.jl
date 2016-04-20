@@ -13,7 +13,7 @@ import WCS.WCSTransform
 using ..Types
 import ..PSF
 import ..SDSSIO
-import ..ElboDeriv  # for trim_source_tiles and stitch_object_tiles
+import ..ElboDeriv  # for trim_source_tiles
 
 const cfgdir = joinpath(Pkg.dir("Celeste"), "cfg")
 
@@ -235,6 +235,7 @@ function pixel_radius_to_world(pix_radius::Float64,
   pix_radius / minimum(abs(eigvals(wcs_jacobian)));
 end
 
+
 import WCS.world_to_pix
 world_to_pix{T <: Number}(patch::SkyPatch, world_loc::Vector{T}) =
     world_to_pix(patch.wcs_jacobian, patch.center, patch.pixel_center,
@@ -247,54 +248,6 @@ Return a vector of (h, w) indices of tiles that contain this source.
 function find_source_tiles(s::Int, b::Int, mp::ModelParams)
   [ ind2sub(size(mp.tile_sources[b]), ind) for ind in
     find([ s in sources for sources in mp.tile_sources[b]]) ]
-end
-
-"""
-Combine the tiles associated with a single source into an image.
-
-Args:
-  s: The source index
-  b: The band
-  mp: The ModelParams object
-  tiled_blob: The original tiled blob
-  predicted: If true, render the object based on the values in ModelParams.
-             Otherwise, show the image from tiled_blob.
-
-Returns:
-  A matrix of pixel values for the particular object using only tiles in
-  which it is found according to the ModelParams tile_sources field.  Pixels
-  from tiles that do not have this source will be marked as 0.0.
-"""
-function stitch_object_tiles(
-    s::Int, b::Int, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
-    predicted::Bool=false)
-
-  H, W = size(tiled_blob[b])
-  has_s = Bool[ s in mp.tile_sources[b][h, w] for h=1:H, w=1:W ];
-  tiles_s = tiled_blob[b][has_s];
-  tile_sources_s = mp.tile_sources[b][has_s];
-  h_range = Int[typemax(Int), typemin(Int)]
-  w_range = Int[typemax(Int), typemin(Int)]
-  print("Stitching...")
-  for tile in tiles_s
-    print(".")
-    h_range[1] = min(minimum(tile.h_range), h_range[1])
-    h_range[2] = max(maximum(tile.h_range), h_range[2])
-    w_range[1] = min(minimum(tile.w_range), w_range[1])
-    w_range[2] = max(maximum(tile.w_range), w_range[2])
-  end
-
-  image_s = fill(0.0, diff(h_range)[1] + 1, diff(w_range)[1] + 1);
-  for tile_ind in 1:length(tiles_s)
-    tile = tiles_s[tile_ind]
-    tile_sources = tile_sources_s[tile_ind]
-    image_s[tile.h_range - h_range[1] + 1, tile.w_range - w_range[1] + 1] =
-      predicted ?
-      ElboDeriv.tile_predicted_image(tile, mp, Int[ s ], include_epsilon=false):
-      tile.pixels
-  end
-  println("Done.")
-  image_s, h_range, w_range
 end
 
 
@@ -496,34 +449,34 @@ Returns:
 function fit_object_psfs!{NumType <: Number}(
     mp::ModelParams{NumType}, target_sources::Vector{Int}, blob::Blob)
 
-  # Initialize an optimizer
-  initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
-  psf_transform = PSF.get_psf_transform(initial_psf_params);
-  psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K);
+    # Initialize an optimizer
+    initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
+    psf_transform = PSF.get_psf_transform(initial_psf_params);
+    psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K);
 
-  @assert size(mp.patches, 2) == length(blob)
+    @assert size(mp.patches, 2) == length(blob)
 
-  for b in 1:length(blob)  # loop over images
-    Logging.debug("Fitting PSFS for band $b")
-    # Get a starting point in the middle of the image.
-    pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
-    raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
-    central_psf, central_psf_params =
-      PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
+    for b in 1:length(blob)    # loop over images
+        Logging.debug("Fitting PSFS for band $b")
+        # Get a starting point in the middle of the image.
+        pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
+        raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
+        central_psf, central_psf_params =
+            PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
 
-    # Get all relevant sources *in this image*
-    relevant_sources = get_all_relevant_sources_in_image(mp, target_sources, b)
+        # Get all relevant sources *in this image*
+        relevant_sources = get_all_relevant_sources_in_image(mp, target_sources, b)
 
-    for s in relevant_sources
-      Logging.debug("Fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
-      patch = mp.patches[s, b]
-      # Set the starting point at the center's PSF.
-      psf, psf_params =
-        PSF.get_source_psf(
-          patch.center, blob[b], psf_optimizer, central_psf_params)
-      mp.patches[s, b] = SkyPatch(patch, psf)
+        for s in relevant_sources
+            Logging.debug("Fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
+            patch = mp.patches[s, b]
+            # Set the starting point at the center's PSF.
+            psf, psf_params =
+                PSF.get_source_psf(
+                    patch.center, blob[b], psf_optimizer, central_psf_params)
+            mp.patches[s, b] = SkyPatch(patch, psf)
+        end
     end
-  end
 end
 
 
@@ -636,22 +589,6 @@ function get_tiled_image_sources(tiled_image::TiledImage,
 end
 
 
-"""
-Turn a blob and vector of catalog entries into a tiled_blob and model
-parameters that can be used with Celeste.
-"""
-function initialize_celeste(
-    blob::Blob, cat::Vector{CatalogEntry};
-    tile_width::Int=20, fit_psf::Bool=true,
-    patch_radius::Float64=NaN)
-
-  tiled_blob = break_blob_into_tiles(blob, tile_width)
-  mp = initialize_model_params(tiled_blob, blob, cat,
-                               fit_psf=fit_psf, patch_radius=patch_radius)
-  tiled_blob, mp
-end
-
-
 """Centers of patches in pixel coordinates"""
 patch_ctrs_pix(patches::Vector{SkyPatch}) = [p.pixel_center for p in patches]
 
@@ -743,53 +680,27 @@ Returns:
 function get_relevant_sources{NumType <: Number}(
     mp::ModelParams{NumType}, target_s::Int)
 
-  relevant_sources = Int[]
-  for b = 1:length(mp.tile_sources), tile_sources in mp.tile_sources[b]
-    if target_s in tile_sources
-      relevant_sources = union(relevant_sources, tile_sources);
+    relevant_sources = Int[]
+    for b = 1:length(mp.tile_sources), tile_sources in mp.tile_sources[b]
+        if target_s in tile_sources
+            relevant_sources = union(relevant_sources, tile_sources);
+        end
     end
-  end
 
-  relevant_sources
+    relevant_sources
 end
 
 
 """
-Union of source indicies that have some overlap with any of the input indicies.
-
-Args:
-
-- `mp`: ModelParams
-- `idx`: Vector of target source indicies
-
-Returns:
-
-- Array of integers that index into mp.s representing all sources that
-  co-occur in at least one tile with *any* of the sources in `idx`.
-"""
-function get_all_relevant_sources{NumType <: Number}(
-    mp::ModelParams{NumType}, idx::Vector{Int})
-    out = Int[]
-    for s in idx
-        out = union(out, get_relevant_sources(mp, s))
-    end
-    return out
-end
-
-"""
-    get_all_relevant_sources_in_image(mp, b, idx)
-
 Return indicies of all sources relevant to any of a set of target sources
 in the given image.
 
 # Arguments
-
 * `mp::ModelParams`: Model parameters.
 * `targets::Vector{Int}`: Indicies of target sources.
 * `b::Int`: Index of image.
 
 # Returns
-
 * `Vector{Int}`: Array of integers that index into mp.s. These represent
   all sources that co-occur in at least one tile with *any* of the sources
   in `targets`.
@@ -806,69 +717,6 @@ function get_all_relevant_sources_in_image{NumType <: Number}(
         end
     end
     out
-end
-
-
-"""
-Return a reduced Celeste dataset useful for a single object.
-
-Args:
-  - objid: An object id in mp_original.objids that you want to fit.
-  - mp_original: The original model params with all objects.
-  - tiled_blob: The original tiled blob with all the image.
-  - blob: The original blob with all the image.
-  - cat_entries: The original catalog entries with all the sources.
-
-Returns:
-  - trimmed_mp: A ModelParams object containing only the objid source and
-      all the sources that co-occur with it.  Its active_sources will be set
-      to the objid object.
-  - trimmed_tiled_blob: A new TiledBlob with the tiled arrays shrunk to only
-      include those necessary for the objid source.
-
-Note that the resulting dataset is only good for fitting the objid source.
-The ModelParams object will contain other sources that overlap with the
-objid source, but the trimmed_tiled_blob may be missing tiles in which these
-overlapping sources occur.
-
-TODO: test!
-"""
-function limit_to_object_data(
-    objid::ASCIIString, mp_original::ModelParams,
-    tiled_blob::TiledBlob, blob::Blob, cat_entries::Vector{CatalogEntry})
-
-  @assert length(tiled_blob) == length(blob)
-  mp = deepcopy(mp_original)
-
-  s_original = findfirst(mp_original.objids .== objid)
-  @assert(s_original > 0, "objid $objid not found in mp_original.")
-  mp_original.active_sources = [ s_original ]
-
-  # Get the sources that overlap with this object.
-  relevant_sources = get_relevant_sources(mp, s_original)
-
-  trimmed_mp = initialize_model_params(
-    tiled_blob, blob, cat_entries[relevant_sources], fit_psf=true);
-
-  s = findfirst(trimmed_mp.objids .== objid)
-  trimmed_mp.active_sources = [ s ]
-
-  # Trim to a smaller tiled blob.
-  trimmed_tiled_blob = Array(Array{ImageTile}, 5);
-  original_tiled_sources = deepcopy(trimmed_mp.tile_sources);
-  for b=1:length(tiled_blob)
-    hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
-      find([ s in sources for sources in original_tiled_sources[b]]))
-
-    hh_range = minimum(hh_vec):maximum(hh_vec);
-    ww_range = minimum(ww_vec):maximum(ww_vec);
-    trimmed_tiled_blob[b] = tiled_blob[b][hh_range, ww_range];
-    trimmed_mp.tile_sources[b] =
-      deepcopy(original_tiled_sources[b][hh_range, ww_range]);
-  end
-  trimmed_tiled_blob = convert(TiledBlob, trimmed_tiled_blob);
-
-  trimmed_mp, trimmed_tiled_blob
 end
 
 
@@ -890,72 +738,72 @@ Returns:
   electron counts are below <noise_fraction> of the noise at that pixel.
 """
 function trim_source_tiles(
-    s::Int, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
-    noise_fraction::Float64=0.1, min_radius_pix::Float64=8.0)
+        s::Int, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
+        noise_fraction::Float64=0.1, min_radius_pix::Float64=8.0)
 
-  trimmed_tiled_blob =
-    Array{ImageTile, 2}[ Array(ImageTile, size(tiled_blob[b])...) for
-                         b=1:length(tiled_blob)];
+    trimmed_tiled_blob =
+        Array{ImageTile, 2}[ Array(ImageTile, size(tiled_blob[b])...) for
+                                                 b=1:length(tiled_blob)];
 
-  min_radius_pix_sq = min_radius_pix ^ 2
-  for b = 1:length(tiled_blob)
-    Logging.debug("Processing band $b...")
+    min_radius_pix_sq = min_radius_pix ^ 2
+    for b = 1:length(tiled_blob)
+        Logging.debug("Processing band $b...")
 
-    pix_loc = WCSUtils.world_to_pix(mp.patches[s, b], mp.vp[s][ids.u]);
+        pix_loc = WCSUtils.world_to_pix(mp.patches[s, b], mp.vp[s][ids.u]);
 
-    H, W = size(tiled_blob[b])
-    @assert size(mp.tile_sources[b]) == size(tiled_blob[b])
-    for hh=1:H, ww=1:W
-      tile = tiled_blob[b][hh, ww];
-      tile_sources = mp.tile_sources[b][hh, ww]
-      has_source = s in tile_sources
-      bright_pixels = Bool[];
-      if has_source
-        pred_tile_pixels =
-          ElboDeriv.tile_predicted_image(tile, mp, [ s ],
-                                         include_epsilon=false);
-        tile_copy = deepcopy(tiled_blob[b][hh, ww]);
+        H, W = size(tiled_blob[b])
+        @assert size(mp.tile_sources[b]) == size(tiled_blob[b])
+        for hh=1:H, ww=1:W
+            tile = tiled_blob[b][hh, ww];
+            tile_sources = mp.tile_sources[b][hh, ww]
+            has_source = s in tile_sources
+            bright_pixels = Bool[];
+            if has_source
+                pred_tile_pixels =
+                    ElboDeriv.tile_predicted_image(tile, mp, [ s ],
+                                                   include_epsilon=false);
+                tile_copy = deepcopy(tiled_blob[b][hh, ww]);
 
-        for h in tile.h_range, w in tile.w_range
-          # The pixel location in the rendered image.
-          h_im = h - minimum(tile.h_range) + 1
-          w_im = w - minimum(tile.w_range) + 1
+                for h in tile.h_range, w in tile.w_range
+                    # The pixel location in the rendered image.
+                    h_im = h - minimum(tile.h_range) + 1
+                    w_im = w - minimum(tile.w_range) + 1
 
-          keep_pixel = false
-          bright_pixel = tile.constant_background ?
-            pred_tile_pixels[h_im, w_im] >
-              tile.iota * tile.epsilon * noise_fraction:
-            pred_tile_pixels[h_im, w_im] >
-              tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
-          close_pixel =
-            (h - pix_loc[1]) ^ 2 + (w - pix_loc[2]) ^ 2 < min_radius_pix_sq
+                    keep_pixel = false
+                    bright_pixel = tile.constant_background ?
+                        pred_tile_pixels[h_im, w_im] >
+                            tile.iota * tile.epsilon * noise_fraction:
+                        pred_tile_pixels[h_im, w_im] >
+                            tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
+                    close_pixel =
+                        (h - pix_loc[1]) ^ 2 + (w - pix_loc[2]) ^ 2 < min_radius_pix_sq
 
-          if !(bright_pixel || close_pixel)
-            tile_copy.pixels[h_im, w_im] = NaN
-          end
+                    if !(bright_pixel || close_pixel)
+                        tile_copy.pixels[h_im, w_im] = NaN
+                    end
+                end
+
+                trimmed_tiled_blob[b][hh, ww] = tile_copy;
+            else
+                # This tile does not contain the source.    Replace the tile with a
+                # pseudo-tile that does not have any data in it.
+                # The problem is with mp.tile_sources, which can't be allowed to
+                # say that an empty tile has a source.
+                # TODO: Make a TiledBlob simply an array of an array of tiles
+                # rather than a 2d array to avoid this hack.
+                empty_tile = ImageTile(b, tile.h_range, tile.w_range,
+                                       tile.h_width, tile.w_width,
+                                       Array(Float64, 0, 0), tile.constant_background,
+                                       tile.epsilon, Array(Float64, 0, 0), tile.iota,
+                                       Array(Float64, 0))
+
+                trimmed_tiled_blob[b][hh, ww] = empty_tile;
+            end
         end
-
-        trimmed_tiled_blob[b][hh, ww] = tile_copy;
-      else
-        # This tile does not contain the source.  Replace the tile with a
-        # pseudo-tile that does not have any data in it.
-        # The problem is with mp.tile_sources, which can't be allowed to
-        # say that an empty tile has a source.
-        # TODO: Make a TiledBlob simply an array of an array of tiles
-        # rather than a 2d array to avoid this hack.
-        empty_tile = ImageTile(b, tile.h_range, tile.w_range,
-                               tile.h_width, tile.w_width,
-                               Array(Float64, 0, 0), tile.constant_background,
-                               tile.epsilon, Array(Float64, 0, 0), tile.iota,
-                               Array(Float64, 0))
-
-        trimmed_tiled_blob[b][hh, ww] = empty_tile;
-      end
     end
-  end
-  Logging.info("Done trimming.")
+    Logging.info("Done trimming.")
 
-  trimmed_tiled_blob
+    trimmed_tiled_blob
 end
 
 end  # module

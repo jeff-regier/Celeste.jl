@@ -228,7 +228,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     end
     cat_entries = filter(ce_inbounds, cat_entries)
 
-    tiled_blob, mp = ModelInit.initialize_celeste(blob, cat_entries)
+    tiled_blob, mp = initialize_celeste(blob, cat_entries)
     for s in 1:length(cat_entries)
         mp.vp[s][ids.a[2]] = cat_entries[s].is_star ? 0.01 : 0.99
         mp.vp[s][ids.a[1]] = 1.0 - mp.vp[s][ids.a[2]]
@@ -303,14 +303,14 @@ function test_tiny_image_tiling()
   catalog = [sample_ce([100., 1], true),];
   catalog[1].star_fluxes = ones(5) * 1e5
 
-  tiled_blob, mp0 = ModelInit.initialize_celeste(
+  tiled_blob, mp0 = initialize_celeste(
     fill(img, 5), catalog, patch_radius=Inf)
 
   elbo_lik = ElboDeriv.elbo_likelihood(
     TiledImage[ tiled_blob[3] ], mp0, calculate_derivs=false, calculate_hessian=false);
 
   tile_width = 2
-  tiled_blob1, mp0 = ModelInit.initialize_celeste(
+  tiled_blob1, mp0 = initialize_celeste(
     fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.);
   elbo_lik_tiles =
     ElboDeriv.elbo_likelihood(
@@ -318,7 +318,7 @@ function test_tiny_image_tiling()
 
   tile_width = 5
   tiled_blob2, mp0 =
-    ModelInit.initialize_celeste(
+    initialize_celeste(
       fill(img, 5), catalog, tile_width=tile_width, patch_radius=10.);
   elbo_lik_tiles2 =
     ElboDeriv.elbo_likelihood(
@@ -334,7 +334,7 @@ function test_elbo_with_nan()
     blob, mp, body = gen_sample_star_dataset(perturb=false);
 
     # Set tile width to 5 to test the code for tiles with no sources.
-    tiled_blob, mp = ModelInit.initialize_celeste(blob, body, tile_width=5);
+    tiled_blob, mp = initialize_celeste(blob, body, tile_width=5);
     initial_elbo = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
 
     for b in 1:5

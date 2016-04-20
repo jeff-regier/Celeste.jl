@@ -107,6 +107,70 @@ function test_bvn_cov()
 end
 
 
+        -
+"""
+Return a reduced Celeste dataset useful for a single object.
+        -
+Args:
+  - objid: An object id in mp_original.objids that you want to fit.
+  - mp_original: The original model params with all objects.
+  - tiled_blob: The original tiled blob with all the image.
+  - blob: The original blob with all the image.
+  - cat_entries: The original catalog entries with all the sources.
+        -
+Returns:
+  - trimmed_mp: A ModelParams object containing only the objid source and
+      all the sources that co-occur with it.  Its active_sources will be set
+      to the objid object.
+  - trimmed_tiled_blob: A new TiledBlob with the tiled arrays shrunk to only
+      include those necessary for the objid source.
+        -
+Note that the resulting dataset is only good for fitting the objid source.
+The ModelParams object will contain other sources that overlap with the
+objid source, but the trimmed_tiled_blob may be missing tiles in which these
+overlapping sources occur.
+        -
+TODO: test!
+"""
+function limit_to_object_data(
+    objid::ASCIIString, mp_original::ModelParams,
+    tiled_blob::TiledBlob, blob::Blob, cat_entries::Vector{CatalogEntry})
+        -
+  @assert length(tiled_blob) == length(blob)
+  mp = deepcopy(mp_original)
+        -
+  s_original = findfirst(mp_original.objids .== objid)
+  @assert(s_original > 0, "objid $objid not found in mp_original.")
+  mp_original.active_sources = [ s_original ]
+        -
+  # Get the sources that overlap with this object.
+  relevant_sources = ModelInit.get_relevant_sources(mp, s_original)
+        -
+  trimmed_mp = ModelInit.initialize_model_params(
+    tiled_blob, blob, cat_entries[relevant_sources], fit_psf=true);
+        -
+  s = findfirst(trimmed_mp.objids .== objid)
+  trimmed_mp.active_sources = [ s ]
+        -
+  # Trim to a smaller tiled blob.
+  trimmed_tiled_blob = Array(Array{ImageTile}, 5);
+  original_tiled_sources = deepcopy(trimmed_mp.tile_sources);
+  for b=1:length(tiled_blob)
+    hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
+      find([ s in sources for sources in original_tiled_sources[b]]))
+        -
+    hh_range = minimum(hh_vec):maximum(hh_vec);
+    ww_range = minimum(ww_vec):maximum(ww_vec);
+    trimmed_tiled_blob[b] = tiled_blob[b][hh_range, ww_range];
+    trimmed_mp.tile_sources[b] =
+      deepcopy(original_tiled_sources[b][hh_range, ww_range]);
+  end
+  trimmed_tiled_blob = convert(TiledBlob, trimmed_tiled_blob);
+        -
+  trimmed_mp, trimmed_tiled_blob
+end
+
+
 function test_real_image()
   # TODO: replace this with stamp tests having non-trivial WCS transforms.
   # TODO: streamline the creation of small real images.
@@ -117,11 +181,11 @@ function test_real_image()
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir run camcol field
   cat_entries = ModelInit.read_photoobj_celeste(fname)
   tiled_blob, mp =
-    ModelInit.initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
+      initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
 
   # Pick an object.
   objid = "1237662226208063499"
-  trimmed_mp, trimmed_tiled_blob = ModelInit.limit_to_object_data(
+  trimmed_mp, trimmed_tiled_blob = limit_to_object_data(
     objid, mp, tiled_blob, images, cat_entries);
 
   # Limit to very few pixels so that the autodiff is reasonably fast.
