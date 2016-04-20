@@ -3,9 +3,13 @@ import DualNumbers
 
 using Celeste: Types, SensitiveFloats, BivariateNormals, ElboDeriv
 import Celeste: ModelInit, WCSUtils
+import ForwardDiff
 
 
 println("Running derivative tests.")
+
+
+include("derivative_utils.jl")
 
 
 """
@@ -34,7 +38,7 @@ function unwrap_vp_vector{NumType <: Number}(
     vp_vec::Vector{NumType}, mp::ModelParams)
 
   vp_array = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
-  mp_local = Types.forward_diff_model_params(NumType, mp);
+  mp_local = forward_diff_model_params(NumType, mp);
   for sa = 1:length(mp.active_sources)
     mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
   end
@@ -134,7 +138,7 @@ function test_real_image()
   function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
     vp_array =
       reshape(vp_vec, length(CanonicalParams), length(trimmed_mp.active_sources))
-    mp_local = Types.forward_diff_model_params(NumType, trimmed_mp);
+    mp_local = forward_diff_model_params(NumType, trimmed_mp);
     for sa = 1:length(trimmed_mp.active_sources)
       mp_local.vp[trimmed_mp.active_sources[sa]] = vp_array[:, sa]
     end
@@ -162,7 +166,7 @@ function test_dual_numbers()
   # Due to the autodiff parts of the KL divergence and transform,
   # these parts of the ELBO will currently not work with dual numbers.
   blob, mp, body, tiled_blob = gen_sample_star_dataset();
-  mp_dual = Types.forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
+  mp_dual = forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
   elbo_dual = ElboDeriv.elbo_likelihood(tiled_blob, mp_dual);
 
   true
@@ -447,7 +451,7 @@ function test_e_g_s_functions()
 
     function wrapper_fun{NumType <: Number}(x::Vector{NumType})
       @assert length(x) == P
-      mp_local = Types.forward_diff_model_params(NumType, mp);
+      mp_local = forward_diff_model_params(NumType, mp);
       mp_local.vp[s] = x
       elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
       test_var ? elbo_vars_local.var_G_s.v[1] : elbo_vars_local.E_G_s.v[1]
@@ -494,7 +498,7 @@ function test_fs1m_derivatives()
     gcc_ind = (psf_k, gal_j, type_i, s)
     function f_wrap_gal{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-      mp_fd = Types.forward_diff_model_params(T, mp);
+      mp_fd = forward_diff_model_params(T, mp);
       elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
 
       # Make sure par is as long as the galaxy parameters.
@@ -571,7 +575,7 @@ function test_fs0m_derivatives()
     bmc_ind = (psf_k, s)
     function f_wrap_star{T <: Number}(par::Vector{T})
       # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-      mp_fd = Types.forward_diff_model_params(T, mp);
+      mp_fd = forward_diff_model_params(T, mp);
 
       # Make sure par is as long as the galaxy parameters.
       @assert length(par) == length(ids.u)

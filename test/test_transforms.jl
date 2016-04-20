@@ -7,6 +7,10 @@ using Celeste: Types, Transform, SensitiveFloats
 import Celeste: ModelInit, ElboDeriv
 using Compat
 
+
+include("derivative_utils.jl")
+
+
 function test_transform_sensitive_float()
 	blob, mp, body, tiled_blob = gen_two_body_dataset();
 
@@ -26,7 +30,7 @@ function test_transform_sensitive_float()
 		                           sa in mp.active_sources ];
 		#vp_free = convert(FreeVariationalParams{NumType}, vp_free)
 		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
-		mp_local = Types.forward_diff_model_params(NumType, mp);
+		mp_local = forward_diff_model_params(NumType, mp);
 		transform.to_vp!(vp_free, mp_local.vp)
 		elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
 		elbo.v[1]
