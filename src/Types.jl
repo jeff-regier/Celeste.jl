@@ -11,7 +11,7 @@ export ModelParams, PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,
        VariationalParams, FreeVariationalParams, RectVariationalParams,
-       PsfParams
+       PsfParams, RawPSF, CatalogEntry
 
 # functions
 export align
@@ -35,8 +35,6 @@ import ForwardDiff
 import Logging
 
 import Base.length
-
-import Celeste.SDSSIO: SDSSPSF
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -150,6 +148,41 @@ immutable PsfComponent
     end
 end
 
+
+"""
+SDSS representation of a spatially variable PSF. The PSF is represented as
+a weighted combination of eigenimages (stored in `rrows`), where the weights
+vary smoothly across the image as a polynomial of the form
+
+```
+weight[k](x, y) = sum_{i,j} cmat[i, j, k] * (rcs * x)^i (rcs * y)^j
+```
+
+where `rcs` is a coordinate transformation and `x` and `y` are zero-indexed.
+"""
+immutable RawPSF
+    rrows::Array{Float64,2}  # A matrix of flattened eigenimages.
+    rnrow::Int  # The number of rows in an eigenimage.
+    rncol::Int  # The number of columns in an eigenimage.
+    cmat::Array{Float64,3}  # The coefficients of the weight polynomial
+
+    function RawPSF(rrows::Array{Float64, 2}, rnrow::Integer, rncol::Integer,
+                     cmat::Array{Float64, 3})
+        # rrows contains eigen images. Each eigen image is along the first
+        # dimension in a flattened form. Check that dimensions match up.
+        @assert size(rrows, 1) == rnrow * rncol
+
+        # The second dimension is the number of eigen images, which should
+        # match the number of coefficient arrays.
+        @assert size(rrows, 2) == size(cmat, 3)
+
+        return new(rrows, Int(rnrow), Int(rncol), cmat)
+    end
+end
+
+
+
+
 """An image, taken though a particular filter band"""
 type Image
     # The image height.
@@ -187,7 +220,7 @@ type Image
     constant_background::Bool
     epsilon_mat::Array{Float64, 2}
     iota_vec::Array{Float64, 1}
-    raw_psf_comp::SDSSPSF
+    raw_psf_comp::RawPSF
 end
 
 

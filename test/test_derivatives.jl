@@ -2,7 +2,7 @@ using Base.Test
 import DualNumbers
 
 using Celeste: Types, SensitiveFloats, BivariateNormals, ElboDeriv
-import Celeste: ModelInit, WCSUtils
+import Celeste: ModelInit, WCSUtils, SDSSIO
 import ForwardDiff
 
 
@@ -177,9 +177,9 @@ function test_real_image()
 
   run, camcol, field = (3900, 6, 269)
 
-  images = ModelInit.read_sdss_field(run, camcol, field, datadir)
+  images = SDSSIO.load_field_images(run, camcol, field, datadir)
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir run camcol field
-  cat_entries = ModelInit.read_photoobj_celeste(fname)
+  cat_entries = SDSSIO.read_photoobj_celeste(fname)
   tiled_blob, mp =
       initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
 
