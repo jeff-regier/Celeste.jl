@@ -34,6 +34,21 @@ const wcs_id = WCS.WCSTransform(2,
                     crval = Float64[1, 1]);
 
 
+"""
+Turn a blob and vector of catalog entries into a tiled_blob and model
+parameters that can be used with Celeste.
+"""
+function initialize_celeste(
+        blob::Blob, cat::Vector{CatalogEntry};
+        tile_width::Int=20, fit_psf::Bool=true,
+        patch_radius::Float64=NaN)
+
+    tiled_blob = ModelInit.break_blob_into_tiles(blob, tile_width)
+    mp = ModelInit.initialize_model_params(tiled_blob, blob, cat,
+                               fit_psf=fit_psf, patch_radius=patch_radius)
+    tiled_blob, mp
+end
+
 # Initialization for an image with noise and background parameters that are 
 # constant across the image. 
 function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int, 
@@ -227,7 +242,7 @@ function gen_sample_star_dataset(; perturb=true)
     end
     one_body = [sample_ce([10.1, 12.2], true),]
     blob = Synthetic.gen_blob(blob0, one_body)
-    tiled_blob, mp = ModelInit.initialize_celeste(blob, one_body)
+    tiled_blob, mp = initialize_celeste(blob, one_body)
     if perturb
         perturb_params(mp)
     end
@@ -244,7 +259,7 @@ function gen_sample_galaxy_dataset(; perturb=true)
     end
     one_body = [sample_ce([8.5, 9.6], false),]
     blob = Synthetic.gen_blob(blob0, one_body)
-    tiled_blob, mp = ModelInit.initialize_celeste(blob, one_body)
+    tiled_blob, mp = initialize_celeste(blob, one_body)
     if perturb
         perturb_params(mp)
     end
@@ -266,7 +281,7 @@ function gen_two_body_dataset(; perturb=true)
         sample_ce([10.1, 12.1], true)
     ]
     blob = Synthetic.gen_blob(blob0, two_bodies)
-    tiled_blob, mp = ModelInit.initialize_celeste(blob, two_bodies)
+    tiled_blob, mp = initialize_celeste(blob, two_bodies)
     if perturb
         perturb_params(mp)
     end
@@ -288,7 +303,7 @@ function gen_three_body_dataset(; perturb=true)
         sample_ce([71.3, 100.4], false),
     ];
     blob = Synthetic.gen_blob(blob0, three_bodies);
-    tiled_blob, mp = ModelInit.initialize_celeste(blob, three_bodies);
+    tiled_blob, mp = initialize_celeste(blob, three_bodies);
     if perturb
         perturb_params(mp)
     end
@@ -334,7 +349,7 @@ function gen_n_body_dataset(
   world_radius_pts = WCSUtils.pix_to_world(
       blob[3].wcs, [patch_pixel_radius 0.; patch_pixel_radius 0.])
   world_radius = maxabs(world_radius_pts[:, 1] - world_radius_pts[:, 2])
-  tiled_blob, mp = ModelInit.initialize_celeste(
+  tiled_blob, mp = initialize_celeste(
     blob, S_bodies, tile_width=tile_width, patch_radius=world_radius)
 
   blob, mp, S_bodies, tiled_blob
