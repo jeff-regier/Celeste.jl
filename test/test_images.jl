@@ -16,13 +16,13 @@ const FIELD = 269
 function test_blob()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
-  blob = ModelInit.read_sdss_field(RUN, CAMCOL, FIELD, datadir)
+  blob = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir)
 
   for b=1:length(blob)
     @test !blob[b].constant_background
   end
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-  cat_entries = ModelInit.read_photoobj_celeste(fname)
+  cat_entries = SDSSIO.read_photoobj_celeste(fname)
 
   tiled_blob, mp = initialize_celeste(blob, cat_entries,
                                                 patch_radius=1e-6,
@@ -85,9 +85,9 @@ end
 
 
 function test_fit_object_psfs()
-  blob = ModelInit.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
+  blob = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir);
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-  cat_entries = ModelInit.read_photoobj_celeste(fname);
+  cat_entries = SDSSIO.read_photoobj_celeste(fname);
 
   # Only test a few catalog entries.
   relevant_sources = collect(3:4)
@@ -248,12 +248,12 @@ end
 function test_copy_model_params()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
-  images = ModelInit.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
+  images = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir);
 
   # Make sure that ModelParams can handle more than five images (issue #203)
   push!(images, deepcopy(images[1]));
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-  cat_entries = ModelInit.read_photoobj_celeste(fname);
+  cat_entries = SDSSIO.read_photoobj_celeste(fname);
 
   tiled_images, mp_all =
     initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);

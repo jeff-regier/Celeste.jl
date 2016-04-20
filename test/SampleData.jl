@@ -8,7 +8,6 @@ import Synthetic
 import WCS, FITSIO, DataFrames
 
 import WCS.WCSTransform
-import Celeste.SDSSIO: SDSSPSF
 import Celeste.Types: Image
 
 
@@ -55,7 +54,7 @@ function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int,
                wcs::WCSTransform, epsilon::Float64, iota::Float64, 
                psf::Vector{PsfComponent}, run_num::Int, camcol_num::Int, 
                field_num::Int) 
-    empty_psf_comp = SDSSPSF(Array(Float64, 0, 0), 0, 0, 
+    empty_psf_comp = RawPSF(Array(Float64, 0, 0), 0, 0, 
                              Array(Float64, 0, 0, 0)) 
     Image(H, W, pixels, b, wcs, epsilon, iota, psf, 
           run_num, camcol_num, field_num, 
@@ -67,7 +66,7 @@ end
 function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int, 
                wcs::WCSTransform, epsilon_mat::Vector{Float64}, 
                iota_vec::Matrix{Float64}, psf::Vector{PsfComponent}, 
-               raw_psf_comp::SDSSPSF, run_num::Int, camcol_num::Int, 
+               raw_psf_comp::RawPSF, run_num::Int, camcol_num::Int, 
                field_num::Int) 
     Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num, 
           field_num, false, epsilon_mat, iota_vec, raw_psf_comp) 

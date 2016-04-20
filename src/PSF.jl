@@ -4,7 +4,6 @@ using Celeste
 using Celeste.Types
 using Celeste.BivariateNormals
 import Celeste.SensitiveFloats
-import Celeste.SDSSIO
 
 using Celeste.Transform
 using Celeste.SensitiveFloats.SensitiveFloat
