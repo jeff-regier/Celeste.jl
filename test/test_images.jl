@@ -16,15 +16,15 @@ const FIELD = 269
 function test_blob()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
-  blob = ModelInit.read_sdss_field(RUN, CAMCOL, FIELD, datadir)
+  blob = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir)
 
   for b=1:length(blob)
     @test !blob[b].constant_background
   end
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-  cat_entries = ModelInit.read_photoobj_celeste(fname)
+  cat_entries = SDSSIO.read_photoobj_celeste(fname)
 
-  tiled_blob, mp = ModelInit.initialize_celeste(blob, cat_entries,
+  tiled_blob, mp = initialize_celeste(blob, cat_entries,
                                                 patch_radius=1e-6,
                                                 fit_psf=false, tile_width=20)
 
@@ -85,19 +85,19 @@ end
 
 
 function test_fit_object_psfs()
-  blob = ModelInit.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
+  blob = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir);
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-  cat_entries = ModelInit.read_photoobj_celeste(fname);
+  cat_entries = SDSSIO.read_photoobj_celeste(fname);
 
   # Only test a few catalog entries.
   relevant_sources = collect(3:4)
   test_sources = collect(1:5)
 
-  tiled_blob, mp = ModelInit.initialize_celeste(
+  tiled_blob, mp = initialize_celeste(
     blob, cat_entries[test_sources], fit_psf=false);
   ModelInit.fit_object_psfs!(mp, relevant_sources, blob);
 
-  tiled_blob, mp_psf_init = ModelInit.initialize_celeste(
+  tiled_blob, mp_psf_init = initialize_celeste(
     blob, cat_entries[test_sources], fit_psf=true);
 
   for b in 1:length(blob), s in relevant_sources
@@ -214,7 +214,7 @@ function test_set_patch_size()
     cat = gal_catalog_from_scale(gal_scale, flux_scale);
     blob = Synthetic.gen_blob(blob0, cat);
     tiled_blob, mp =
-      ModelInit.initialize_celeste(blob, cat, tile_width=typemax(Int));
+      initialize_celeste(blob, cat, tile_width=typemax(Int));
 
     for b=1:length(blob)
       @assert size(tiled_blob[b]) == (1, 1)
@@ -245,32 +245,18 @@ function test_set_patch_size()
 end
 
 
-function test_stitch_object_tiles()
-  # Just test that these functions run without errors.
-  blob, mp, body, tiled_blob = gen_n_body_dataset(100, seed=42);
-
-  image, h_range, w_range =
-    ModelInit.stitch_object_tiles(1, 3, mp, tiled_blob);
-  @test size(image) == (diff(h_range)[1] + 1, diff(w_range)[1] + 1)
-
-  image, h_range, w_range =
-    ModelInit.stitch_object_tiles(1, 3, mp, tiled_blob, predicted = true);
-  @test size(image) == (diff(h_range)[1] + 1, diff(w_range)[1] + 1)
-end
-
-
 function test_copy_model_params()
   # A lot of tests are in a single function to avoid having to reload
   # the full image multiple times.
-  images = ModelInit.read_sdss_field(RUN, CAMCOL, FIELD, datadir);
+  images = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir);
 
   # Make sure that ModelParams can handle more than five images (issue #203)
   push!(images, deepcopy(images[1]));
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-  cat_entries = ModelInit.read_photoobj_celeste(fname);
+  cat_entries = SDSSIO.read_photoobj_celeste(fname);
 
   tiled_images, mp_all =
-    ModelInit.initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
+    initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
 
   # Pick a single object of interest.
   obj_s = 100
@@ -306,5 +292,4 @@ test_stamp_get_object_psf()
 test_get_tiled_image_source()
 test_local_source_candidate()
 test_set_patch_size()
-test_stitch_object_tiles()
 test_copy_model_params()

@@ -1,14 +1,14 @@
 module Celeste
 
 # submodules
-include("WCSUtils.jl")
-include("SDSSIO.jl")
 include("Types.jl")
+include("WCSUtils.jl")
 include("SensitiveFloats.jl")
-include("KL.jl")
 include("BivariateNormals.jl")
 include("Transform.jl")
 include("PSF.jl")
+include("SDSSIO.jl")
+include("KL.jl")
 include("ElboDeriv.jl")
 include("OptimizeElbo.jl")
 include("ModelInit.jl")
