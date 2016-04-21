@@ -4,7 +4,7 @@ import FITSIO
 import JLD
 import Logging  # just for testing right now
 
-using .Types
+using .Model
 import .SDSSIO
 import .ModelInit
 import .OptimizeElbo
@@ -300,7 +300,7 @@ function fit_object_psfs_threaded!{NumType <: Number}(
       PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer_vec[1], initial_psf_params)
 
     # Get all relevant sources *in this image*
-    relevant_sources = Types.get_all_relevant_sources_in_image(
+    relevant_sources = Model.get_all_relevant_sources_in_image(
                                     mp.tiles_sources[b], target_sources)
 
     mp_lock = SpinLock()
@@ -419,7 +419,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # initialize the psf again before fitting, so we don't do it here.
     Logging.info("initializing celeste without PSF fit")
     tic()
-    tiled_images = Types.break_blob_into_tiles(images, TILE_WIDTH)
+    tiled_images = Model.break_blob_into_tiles(images, TILE_WIDTH)
     mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
                                            fit_psf=false)
     timing.init_mp = toq()
@@ -464,7 +464,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                 sa = findfirst(relevant_sources, s)
                 mp_source.active_sources = Int[ sa ]
                 trimmed_tiled_images =
-                  TrimSourceTiles.trim_source_tiles(sa, mp_source, tiled_images;
+                  ModelInit.trim_source_tiles(sa, mp_source, tiled_images;
                                               noise_fraction=0.1)
                 init_time = time() - t0
 

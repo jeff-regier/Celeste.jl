@@ -176,7 +176,7 @@ function choose_patch_radius(
             width_scale=1.0,
             max_radius=100)
 
-    psf_width = Types.get_psf_width(psf, width_scale=width_scale)
+    psf_width = Model.get_psf_width(psf, width_scale=width_scale)
 
     # The galaxy scale is the point with half the light -- if the light
     # were entirely in a univariate normal, this would be at 0.67 standard
