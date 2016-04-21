@@ -1,8 +1,8 @@
 module Celeste
 
 # submodules
-include("Types.jl")
 include("WCSUtils.jl")
+include("Types.jl")
 include("SensitiveFloats.jl")
 include("BivariateNormals.jl")
 include("Transform.jl")
