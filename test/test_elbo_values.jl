@@ -1,5 +1,5 @@
 using Celeste: Types, ElboDeriv, SensitiveFloats
-import Celeste: ModelInit
+import Celeste: ModelInit, TrimSourceTiles
 
 using Base.Test
 using Distributions

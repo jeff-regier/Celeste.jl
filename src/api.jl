@@ -9,6 +9,8 @@ import .SDSSIO
 import .ModelInit
 import .OptimizeElbo
 
+import .TrimSourceTiles
+
 const TILE_WIDTH = 20
 const DEFAULT_MAX_ITERS = 50
 const MIN_FLUX = 2.0
@@ -461,7 +463,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                 sa = findfirst(relevant_sources, s)
                 mp_source.active_sources = Int[ sa ]
                 trimmed_tiled_images =
-                  ModelInit.trim_source_tiles(sa, mp_source, tiled_images;
+                  TrimSourceTiles.trim_source_tiles(sa, mp_source, tiled_images;
                                               noise_fraction=0.1)
                 init_time = time() - t0
 

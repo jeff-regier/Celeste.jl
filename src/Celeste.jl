@@ -10,6 +10,7 @@ include("PSF.jl")
 include("SDSSIO.jl")
 include("KL.jl")
 include("ElboDeriv.jl")
+include("TrimSourceTiles.jl")
 include("OptimizeElbo.jl")
 include("ModelInit.jl")
 
