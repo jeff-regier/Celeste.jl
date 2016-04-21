@@ -112,7 +112,7 @@ end
 
 #######################################
 
-const pp = ModelInit.load_prior()
+const pp = Types.load_prior()
 
 
 function sample_fluxes(i::Int, r_s)

@@ -5,13 +5,52 @@ import WCS
 
 using Celeste: Types
 import Celeste: ModelInit, ElboDeriv, SDSSIO, PSF
-import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
 
 println("Running SkyImages tests.")
 
 const RUN = 3900
 const CAMCOL = 6
 const FIELD = 269
+
+
+
+"""
+Crop an image in place to a (2 * width) x (2 * width) - pixel square centered
+at the world coordinates wcs_center.
+Args:
+  - blob: The field to crop
+  - width: The width in pixels of each quadrant
+  - wcs_center: A location in world coordinates (e.g. the location of a
+                celestial body)
+
+Returns:
+  - A tiled blob with a single tile in each image centered at wcs_center.
+    This can be used to investigate a certain celestial object in a single
+    tiled blob, for example.
+"""
+function crop_blob_to_location(
+  blob::Array{Image, 1},
+  width::Union{Float64, Int},
+  wcs_center::Vector{Float64})
+    @assert length(wcs_center) == 2
+    @assert width > 0
+
+    tiled_blob = Array(TiledImage, length(blob))
+    for b=1:length(blob)
+        # Get the pixels that are near enough to the wcs_center.
+        pix_center = WCS.world_to_pix(blob[b].wcs, wcs_center)
+        h_min = max(floor(Int, pix_center[1] - width), 1)
+        h_max = min(ceil(Int, pix_center[1] + width), blob[b].H)
+        sub_rows_h = h_min:h_max
+
+        w_min = max(floor(Int, (pix_center[2] - width)), 1)
+        w_max = min(ceil(Int, pix_center[2] + width), blob[b].W)
+        sub_rows_w = w_min:w_max
+        tiled_blob[b] = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
+    end
+    tiled_blob
+end
+
 
 function test_blob()
   # A lot of tests are in a single function to avoid having to reload
@@ -41,16 +80,16 @@ function test_blob()
 
   # Test cropping.
   width = 5.0
-  cropped_blob = ModelInit.crop_blob_to_location(blob, width, obj_loc);
+  cropped_blob = crop_blob_to_location(blob, width, obj_loc);
   for b=1:length(blob)
     # Check that it only has one tile of the right size containing the object.
     @assert length(cropped_blob[b]) == 1
     @test 2 * width <= cropped_blob[b][1].h_width <= 2 * (width + 1)
     @test 2 * width <= cropped_blob[b][1].w_width <= 2 * (width + 1)
     patches = vec(mp.patches[:, b])
-    tile_sources = ModelInit.get_local_sources(cropped_blob[b][1],
-                                               patch_ctrs_pix(patches),
-                                               patch_radii_pix(patches))
+    tile_sources = Types.get_local_sources(cropped_blob[b][1],
+                                           Types.patch_ctrs_pix(patches),
+                                           Types.patch_radii_pix(patches))
     @test obj_index in tile_sources
   end
 
@@ -128,7 +167,7 @@ function test_get_tiled_image_source()
   mp = ModelInit.initialize_model_params(
     tiled_blob, blob, body; patch_radius=1e-6)
 
-  tiled_img = ModelInit.break_image_into_tiles(blob[3], 10);
+  tiled_img = Types.break_image_into_tiles(blob[3], 10);
   for hh in 1:size(tiled_img)[1], ww in 1:size(tiled_img)[2]
     tile = tiled_img[hh, ww]
     loc = Float64[mean(tile.h_range), mean(tile.w_range)]
@@ -144,9 +183,9 @@ function test_get_tiled_image_source()
                                   pixel_center)
     end
     patches = vec(mp.patches[:, 3])
-    local_sources = ModelInit.get_tiled_image_sources(tiled_img,
-                                                      patch_ctrs_pix(patches),
-                                                      patch_radii_pix(patches))
+    local_sources = Types.get_tiled_image_sources(tiled_img,
+                                                  Types.patch_ctrs_pix(patches),
+                                                  Types.patch_radii_pix(patches))
     @test local_sources[hh, ww] == Int[1]
     for hh2 in 1:size(tiled_img)[1], ww2 in 1:size(tiled_img)[2]
       if (hh2 != hh) || (ww2 != ww)
@@ -168,19 +207,19 @@ function test_local_source_candidate()
     # Get the sources by iterating over everything.
     patches = vec(mp.patches[:,b])
 
-    tile_sources = ModelInit.get_tiled_image_sources(tiled_blob[b],
-                                                     patch_ctrs_pix(patches),
-                                                     patch_radii_pix(patches))
+    tile_sources = Types.get_tiled_image_sources(tiled_blob[b],
+                                                 Types.patch_ctrs_pix(patches),
+                                                 Types.patch_radii_pix(patches))
 
     # Check that all the actual sources are candidates and that this is the
     # same as what is returned by initialize_model_params.
     HH, WW = size(tile_sources)
     for h=1:HH, w=1:WW
       # Get a set of candidates.
-      candidates = ModelInit.local_source_candidates(
+      candidates = Types.local_source_candidates(
                         tiled_blob[b][h, w],
-                        patch_ctrs_pix(patches),
-                        patch_radii_pix(patches))
+                        Types.patch_ctrs_pix(patches),
+                        Types.patch_radii_pix(patches))
       @test setdiff(tile_sources[h, w], candidates) == []
       @test tile_sources[h, w] == mp.tile_sources[b][h, w]
     end
@@ -222,7 +261,7 @@ function test_set_patch_size()
         tiled_blob[b][1,1], mp, mp.tile_sources[b][1,1]);
 
       pixel_center = WCS.world_to_pix(blob[b].wcs, cat[1].pos)
-      radius = ModelInit.choose_patch_radius(
+      radius = Types.choose_patch_radius(
         pixel_center, cat[1], blob[b].psf, blob[b])
 
       circle_pts = fill(false, blob[b].H, blob[b].W);

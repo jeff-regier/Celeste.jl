@@ -1,290 +1,74 @@
 module ModelInit
 
-import Distributions
 import Logging
-import WCS
 
 using ..Types
 import ..WCSUtils
 import ..PSF
-import ..ElboDeriv  # for trim_source_tiles
-
-const cfgdir = joinpath(Pkg.dir("Celeste"), "cfg")
 
 
 """
-Crop an image in place to a (2 * width) x (2 * width) - pixel square centered
-at the world coordinates wcs_center.
-Args:
-  - blob: The field to crop
-  - width: The width in pixels of each quadrant
-  - wcs_center: A location in world coordinates (e.g. the location of a
-                celestial body)
-
-Returns:
-  - A tiled blob with a single tile in each image centered at wcs_center.
-    This can be used to investigate a certain celestial object in a single
-    tiled blob, for example.
-"""
-function crop_blob_to_location(
-  blob::Array{Image, 1},
-  width::Union{Float64, Int},
-  wcs_center::Vector{Float64})
-    @assert length(wcs_center) == 2
-    @assert width > 0
-
-    tiled_blob = Array(TiledImage, length(blob))
-    for b=1:length(blob)
-        # Get the pixels that are near enough to the wcs_center.
-        pix_center = WCS.world_to_pix(blob[b].wcs, wcs_center)
-        h_min = max(floor(Int, pix_center[1] - width), 1)
-        h_max = min(ceil(Int, pix_center[1] + width), blob[b].H)
-        sub_rows_h = h_min:h_max
-
-        w_min = max(floor(Int, (pix_center[2] - width)), 1)
-        w_max = min(ceil(Int, pix_center[2] + width), blob[b].W)
-        sub_rows_w = w_min:w_max
-        tiled_blob[b] = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
-    end
-    tiled_blob
-end
-
-
-#######################################
-# Tiling functions
-
-"""
-Convert an image to an array of tiles of a given width.
+Initilize the model params to the given catalog and tiled image.
 
 Args:
-  - img: An image to be broken into tiles
-  - tile_width: The size in pixels of each tile
-
-Returns:
-  An array of tiles containing the image.
+  - tiled_blob: A TiledBlob
+  - blob: The original Blob
+  - cat: A vector of catalog entries
+  - fit_psf: Whether to give each patch its own local PSF
+  - patch_radius: If set less than Inf or if radius_from_cat=false,
+                  the radius in world coordinates of each patch.
+  - radius_from_cat: If true, choose the patch radius from the catalog.
+                     If false, use patch_radius for each patch.
 """
-function break_image_into_tiles(img::Image, tile_width::Int)
-  WW = ceil(Int, img.W / tile_width)
-  HH = ceil(Int, img.H / tile_width)
-  ImageTile[ ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW ]
-end
+function initialize_model_params(
+            tiled_blob::TiledBlob,
+            blob::Blob,
+            cat::Vector{CatalogEntry};
+            fit_psf::Bool=true,
+            patch_radius::Float64=NaN)
 
+    @assert length(tiled_blob) == length(blob)
+    @assert length(cat) > 0
 
-"""
-Break a blob into tiles.
-"""
-function break_blob_into_tiles(blob::Blob, tile_width::Int)
-  [ break_image_into_tiles(img, tile_width) for img in blob ]
-end
+    Logging.info("Loading variational parameters from catalogs.")
 
+    vp = Array{Float64, 1}[Types.init_source(ce) for ce in cat]
+    mp = ModelParams(vp, Types.load_prior())
+    mp.objids = ASCIIString[cat_entry.objid for cat_entry in cat]
 
-#######################################
-# Functions for matching sources to tiles.
+    mp.patches = Array(SkyPatch, mp.S, length(blob))
+    mp.tile_sources = Array(Array{Vector{Int}, 2}, length(blob))
 
-# A pixel circle maps locally to a world ellipse.  Return the major
-# axis of that ellipse.
-function pixel_radius_to_world(pix_radius::Float64,
-                               wcs_jacobian::Matrix{Float64})
-  pix_radius / minimum(abs(eigvals(wcs_jacobian)));
-end
+    for b = 1:length(blob)
+        img = blob[b]
 
+        for s=1:mp.S
+            world_center = cat[s].pos
 
-import WCS.world_to_pix
-world_to_pix{T <: Number}(patch::SkyPatch, world_loc::Vector{T}) =
-    world_to_pix(patch.wcs_jacobian, patch.center, patch.pixel_center,
-                 world_loc)
+            pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
+            wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
+            psf = fit_psf ? PSF.get_source_psf(world_center, img)[1] : img.psf
 
+            radius_pix = Types.choose_patch_radius(pixel_center, cat[s], psf, img)
 
-"""
-Return a vector of (h, w) indices of tiles that contain this source.
-"""
-function find_source_tiles(s::Int, b::Int, mp::ModelParams)
-  [ ind2sub(size(mp.tile_sources[b]), ind) for ind in
-    find([ s in sources for sources in mp.tile_sources[b]]) ]
-end
+            # for testing
+            if !isnan(patch_radius)
+                radius_pix = maxabs(eigvals(wcs_jacobian)) * patch_radius
+            end
 
+            mp.patches[s, b] = SkyPatch(world_center,
+                                        radius_pix,
+                                        psf,
+                                        wcs_jacobian,
+                                        pixel_center)
+        end
 
-function load_prior()
-
-    # set a = [.99, .01] if stars are underrepresented
-    # due to the greater flexibility of the galaxy model
-    #a = [0.28, 0.72]
-    a = [0.99, 0.01]
-    r_mean = Array(Float64, Ia)
-    r_var = Array(Float64, Ia)
-    k = Array(Float64, D, Ia)
-    c_mean = Array(Float64, B - 1, D, Ia)
-    c_cov = Array(Float64, B - 1, B - 1, D, Ia)
-
-    stars_file = open(joinpath(cfgdir, "stars$D.dat"))
-    r_fit1, k[:, 1], c_mean[:,:,1], c_cov[:,:,:,1] = deserialize(stars_file)
-    close(stars_file)
-
-    gals_file = open(joinpath(cfgdir, "gals$D.dat"))
-    r_fit2, k[:, 2], c_mean[:,:,2], c_cov[:,:,:,2] = deserialize(gals_file)
-    close(gals_file)
-
-    # These "magic numbers" have been in use for a while.
-    # They were initially gamma parameters, and now they are log normal
-    # parameters.  TODO: Get rid of these and use an empirical prior.
-    # r = [0.47 1.28; 1/0.012 1/0.11] # These were gamma (shape, scale)
-
-    mean_brightness = [0.47 / 0.012, 1.28 / 0.11 ]
-    var_brightness = [0.47 / (0.012 ^ 2), 1.28 / (0.11 ^ 2) ]
-
-    # The prior contains parameters of a lognormal distribution with
-    # the desired means.
-    r_var = log(var_brightness ./ (mean_brightness .^ 2) + 1)
-    r_mean = log(mean_brightness) - 0.5 * r_var
-    PriorParams(a, r_mean, r_var, k, c_mean, c_cov)
-end
-
-
-"""
-Return a default-initialized VariationalParams object.
-"""
-function init_source(init_pos::Vector{Float64})
-    ret = Array(Float64, length(CanonicalParams))
-    ret[ids.a[2]] = 0.5
-    ret[ids.a[1]] = 1.0 - ret[ids.a[2]]
-    ret[ids.u[1]] = init_pos[1]
-    ret[ids.u[2]] = init_pos[2]
-    ret[ids.r1] = log(2.0)
-    ret[ids.r2] = 1e-3
-    ret[ids.e_dev] = 0.5
-    ret[ids.e_axis] = 0.5
-    ret[ids.e_angle] = 0.
-    ret[ids.e_scale] = 1.
-    ret[ids.k] = 1. / size(ids.k, 1)
-    ret[ids.c1] = 0.
-    ret[ids.c2] =  1e-2
-    ret
-end
-
-
-"""
-Return a VariationalParams object initialized form a catalog entry.
-"""
-function init_source(ce::CatalogEntry)
-    # TODO: sync this up with the transform bounds
-    ret = init_source(ce.pos)
-
-    ret[ids.a[1]] = ce.is_star ? 0.8: 0.2
-    ret[ids.a[2]] = ce.is_star ? 0.2: 0.8
-
-    ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
-    ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))
-
-    function get_color(c2, c1)
-        c2 > 0 && c1 > 0 ? min(max(log(c2 / c1), -9.), 9.) :
-            c2 > 0 && c1 <= 0 ? 3.0 :
-                c2 <= 0 && c1 > 0 ? -3.0 : 0.0
+        mp.tile_sources[b] = Types.get_tiled_image_sources(tiled_blob[b],
+                                                           mp.patches[:, b])
     end
 
-    function get_colors(raw_fluxes)
-        [get_color(raw_fluxes[c+1], raw_fluxes[c]) for c in 1:4]
-    end
-
-    ret[ids.c1[:, 1]] = get_colors(ce.star_fluxes)
-    ret[ids.c1[:, 2]] = get_colors(ce.gal_fluxes)
-
-    ret[ids.e_dev] = min(max(ce.gal_frac_dev, 0.015), 0.985)
-
-    ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.015), 0.985)
-    ret[ids.e_angle] = ce.gal_angle
-    ret[ids.e_scale] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
-
-    ret
+    return mp
 end
-
-
-#############################
-# Set patch sizes using the catalog.
-
-function get_psf_width(psf::Array{PsfComponent}; width_scale=1.0)
-  # A heuristic measure of the PSF width based on an anology
-  # with it being a mixture of normals.  Note that it is not an actual
-  # mixture of normals, and in particular that sum(alphaBar) \ne 1.
-
-  # The PSF is not necessarily centered at (0, 0), but we want a measure
-  # of its maximal width around (0, 0), not around its center.
-  # Approximate this by finding the covariance of a point randomly drawn
-  # from a mixture of gaussians.
-  alpha_norm = sum([ psf_comp.alphaBar for psf_comp in psf ])
-  cov_est = zeros(Float64, 2, 2)
-  for psf_comp in psf
-    cov_est +=
-      psf_comp.alphaBar * (psf_comp.xiBar * psf_comp.xiBar' + psf_comp.tauBar) /
-      alpha_norm
-  end
-
-  # Return the twice the sd of the most spread direction, scaled by the total
-  # mass in the PSF.
-  width_scale * sqrt(eigs(cov_est; nev=1)[1][1]) * alpha_norm
-end
-
-
-"""
-Choose a reasonable patch radius based on the catalog.
-TODO: Select this by rendering the object and solving an optimization
-problem.
-
-Args:
-  - pixel_center: The pixel location of the object
-  - ce: The catalog entry for the object
-  - psf: The psf at this location
-  - img: The image
-  - width_scale: A multiple of standard deviations to use
-  - max_radius: The maximum radius in pixels.
-
-Returns:
-  - A radius in pixels chosen from the catalog entry.
-"""
-function choose_patch_radius(
-  pixel_center::Vector{Float64}, ce::CatalogEntry,
-  psf::Array{PsfComponent}, img::Image; width_scale=1.0, max_radius=100)
-
-    psf_width = get_psf_width(psf, width_scale=width_scale)
-
-    # The galaxy scale is the point with half the light -- if the light
-    # were entirely in a univariate normal, this would be at 0.67 standard
-    # deviations.  We are being a bit conservative here.
-    obj_width =
-      ce.is_star ? psf_width: width_scale * ce.gal_scale / 0.67 + psf_width
-
-    if img.constant_background
-        epsilon = img.epsilon
-    else
-        # Get the average sky noise in a rectangle of the width of the psf.
-        h_max, w_max = size(img.epsilon_mat)
-        h_lim = [Int(floor((pixel_center[1] - obj_width))),
-                       Int(ceil((pixel_center[1] + obj_width)))]
-        w_lim = [Int(floor((pixel_center[2] - obj_width))),
-                       Int(ceil((pixel_center[2] + obj_width)))]
-        h_range = max(h_lim[1], 1):min(h_lim[2], h_max)
-        w_range = max(w_lim[1], 1):min(w_lim[2], w_max)
-        epsilon = mean(img.epsilon_mat[h_range, w_range])
-    end
-    flux = ce.is_star ? ce.star_fluxes[img.b] : ce.gal_fluxes[img.b]
-    @assert flux > 0.
-
-    # Choose enough pixels that the light is either 90% of the light
-    # would be captured from a 1d gaussian or 5% of the sky noise,
-    # whichever is a larger radius.
-    pdf_90 = exp(-0.5 * (1.64)^2) / (sqrt(2pi) * obj_width)
-    pdf_target = min(pdf_90, epsilon / (20 * flux))
-    rhs = log(pdf_target) + 0.5 * log(2pi) + log(obj_width)
-    radius_req = sqrt(-2 * (obj_width ^ 2) * rhs)
-    min(radius_req, max_radius)
-end
-
-
-"""
-Initialize a SkyPatch from an existing SkyPatch and a new PSF.
-"""
-SkyPatch(patch::SkyPatch, psf::Vector{PsfComponent}) =
-    SkyPatch(patch.center, patch.radius_pix, psf, patch.wcs_jacobian,
-             patch.pixel_center)
 
 
 """
@@ -318,7 +102,8 @@ function fit_object_psfs!{NumType <: Number}(
             PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
 
         # Get all relevant sources *in this image*
-        relevant_sources = get_all_relevant_sources_in_image(mp, target_sources, b)
+        relevant_sources = get_all_relevant_sources_in_image(mp.tile_sources[b],
+                                                             target_sources)
 
         for s in relevant_sources
             Logging.debug("Fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
@@ -333,190 +118,6 @@ function fit_object_psfs!{NumType <: Number}(
 end
 
 
-##########################
-# Local sources
-
-"""
-A fast function to determine which sources might belong to which tiles.
-
-Args:
-  - tiles: A TiledImage
-  - patch_ctrs: Vector of length-2 vectors, giving pixel center of each patch.
-  - patch_radii_px: Radius of each patch.
-
-Returns:
-  - An array (over tiles) of a vector of candidate
-    source patches.  If a patch is a candidate, it may be within the patch
-    radius of a point in the tile, though it might not.
-"""
-function local_source_candidates(tile::ImageTile,
-                                 patch_ctrs::Vector{Vector{Float64}},
-                                 patch_radii_px::Vector{Float64})
-    @assert length(patch_ctrs) == length(patch_radii_px)
-
-    ret = Int[]
-
-    # Find the patches that are less than the radius plus diagonal from the
-    # center of the tile.  These are candidates for having some
-    # overlap with the tile.
-    tile_center = (mean(tile.h_range), mean(tile.w_range))
-    tile_diag = (0.5 ^ 2) * (tile.h_width ^ 2 + tile.w_width ^ 2)
-
-    for s in 1:length(patch_ctrs)
-        patch_dist = (tile_center[1] - patch_ctrs[s][1])^2
-                    + (tile_center[2] - patch_ctrs[s][2])^2
-        if patch_dist <= (tile_diag + patch_radii_px[s])^2
-            push!(ret, s)
-        end
-    end
-
-    return ret
-end
-
-
-"""
-Args:
-  - tile: An ImageTile (containing tile coordinates)
-  - patch_ctrs: Vector of length-2 vectors, giving pixel center of each patch.
-  - patch_radii_px: Radius of each patch.
-
-Returns:
-  - A vector of source ids (from 1 to length(patches)) that influence
-    pixels in the tile.  A patch influences a tile if
-    there is any overlap in their squares of influence.
-"""
-function get_local_sources(tile::ImageTile,
-                           patch_ctrs::Vector{Vector{Float64}},
-                           patch_radii_px::Vector{Float64})
-    @assert length(patch_ctrs) == length(patch_radii_px)
-    tile_sources = Int[]
-    tile_ctr = (mean(tile.h_range), mean(tile.w_range))
-
-    for i in eachindex(patch_ctrs)
-        patch_ctr = patch_ctrs[i]
-        patch_r = patch_radii_px[i]
-
-        # This is a "ball" in the infinity norm.
-        if ((abs(tile_ctr[1] - patch_ctr[1]) < patch_r + 0.5 * tile.h_width) &&
-            (abs(tile_ctr[2] - patch_ctr[2]) < patch_r + 0.5 * tile.w_width))
-            push!(tile_sources, i)
-        end
-    end
-
-    tile_sources
-end
-
-
-"""
-Get the sources associated with each tile in a TiledImage.
-
-Args:
-  - tiled_image: A TiledImage
-  - patch_ctrs: Vector of length-2 vectors, giving pixel center of each patch.
-  - patch_radii_px: Radius of each patch.
-Returns:
-  - An array (same dimensions as the tiles) of vectors of indices
-    into patches indicating which patches are affected by any pixels
-    in the tiles.
-"""
-function get_tiled_image_sources(tiled_image::TiledImage,
-                                 patch_ctrs::Vector{Vector{Float64}},
-                                 patch_radii_px::Vector{Float64})
-    out = similar(tiled_image, Vector{Int})
-
-    HH, WW = size(tiled_image)
-    for ww in 1:WW, hh in 1:HH
-        cands = local_source_candidates(tiled_image[hh, ww], 
-                                        patch_ctrs,
-                                        patch_radii_px)
-        # get indicies in cands that truly overlap the tile.
-        idx = get_local_sources(tiled_image[hh, ww],
-                                patch_ctrs[cands],
-                                patch_radii_px[cands])
-        out[hh, ww] = cands[idx]
-    end
-
-    return out
-end
-
-
-"""Centers of patches in pixel coordinates"""
-patch_ctrs_pix(patches::Vector{SkyPatch}) = [p.pixel_center for p in patches]
-
-
-"""Radii of patches in pixel coordinates"""
-patch_radii_pix(patches::Vector{SkyPatch}) = [p.radius_pix for p in patches]
-
-
-"""
-Initilize the model params to the given catalog and tiled image.
-
-Args:
-  - tiled_blob: A TiledBlob
-  - blob: The original Blob
-  - cat: A vector of catalog entries
-  - fit_psf: Whether to give each patch its own local PSF
-  - patch_radius: If set less than Inf or if radius_from_cat=false,
-                  the radius in world coordinates of each patch.
-  - radius_from_cat: If true, choose the patch radius from the catalog.
-                     If false, use patch_radius for each patch.
-"""
-function initialize_model_params(
-            tiled_blob::TiledBlob,
-            blob::Blob,
-            cat::Vector{CatalogEntry};
-            fit_psf::Bool=true,
-            patch_radius::Float64=NaN)
-
-    @assert length(tiled_blob) == length(blob)
-    @assert length(cat) > 0
-
-    Logging.info("Loading variational parameters from catalogs.")
-
-    vp = Array{Float64, 1}[init_source(ce) for ce in cat]
-    mp = ModelParams(vp, load_prior())
-    mp.objids = ASCIIString[cat_entry.objid for cat_entry in cat]
-
-    mp.patches = Array(SkyPatch, mp.S, length(blob))
-    mp.tile_sources = Array(Array{Vector{Int}, 2}, length(blob))
-
-    for b = 1:length(blob)
-        img = blob[b]
-
-        for s=1:mp.S
-            world_center = cat[s].pos
-
-            pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
-            wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
-            psf = fit_psf ? PSF.get_source_psf(world_center, img)[1] : img.psf
-
-            radius_pix = choose_patch_radius(pixel_center, cat[s], psf, img)
-
-            # for testing
-            if !isnan(patch_radius)
-                radius_pix = maxabs(eigvals(wcs_jacobian)) * patch_radius
-            end
-
-            mp.patches[s, b] = SkyPatch(world_center,
-                                        radius_pix,
-                                        psf,
-                                        wcs_jacobian,
-                                        pixel_center)
-        end
-
-        patches = vec(mp.patches[:, b])
-        patch_centers = patch_ctrs_pix(patches)
-        patch_radii = patch_radii_pix(patches)
-
-        mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b],
-                                                     patch_centers,
-                                                     patch_radii)
-    end
-
-    return mp
-end
-
-
 """
 Return an array of source indices that have some overlap with target_s.
 
@@ -528,9 +129,8 @@ Returns:
   - An array of integers that index into mp.s representing all sources that
     co-occur in at least one tile with target_s, including target_s itself.
 """
-function get_relevant_sources{NumType <: Number}(
-    mp::ModelParams{NumType}, target_s::Int)
-
+function get_relevant_sources{NumType <: Number}(mp::ModelParams{NumType},
+                                                 target_s::Int)
     relevant_sources = Int[]
     for b = 1:length(mp.tile_sources), tile_sources in mp.tile_sources[b]
         if target_s in tile_sources
@@ -547,114 +147,31 @@ Return indicies of all sources relevant to any of a set of target sources
 in the given image.
 
 # Arguments
-* `mp::ModelParams`: Model parameters.
-* `targets::Vector{Int}`: Indicies of target sources.
-* `b::Int`: Index of image.
+  * `mp::ModelParams`: Model parameters.
+  * `targets::Vector{Int}`: Indicies of target sources.
+  * `b::Int`: Index of image.
 
 # Returns
 * `Vector{Int}`: Array of integers that index into mp.s. These represent
   all sources that co-occur in at least one tile with *any* of the sources
   in `targets`.
 """
-function get_all_relevant_sources_in_image{NumType <: Number}(
-    mp::ModelParams{NumType}, target_sources::Vector{Int}, b::Int)
-
+function get_all_relevant_sources_in_image(
+                    sources_by_tile::Matrix{Vector{Int}},
+                    target_sources::Vector{Int})
     out = Int[]
-    for tile_sources in mp.tile_sources[b]  # loop over image tiles
+
+    for tile_sources in sources_by_tile  # loop over image tiles
         # check if *any* of this tile's sources are a target, and
         # if so, add *all* the tile sources to the output.
         if length(intersect(target_sources, tile_sources)) > 0
             out = union(out, tile_sources)
         end
     end
+
     out
 end
 
 
-"""
-Set any pixels significantly below background noise for the
-specified source to NaN.
-
-Arguments:
-  s: The source index that we are trimming to
-  mp: The ModelParams object
-  tiled_blob: The original tiled blob
-  noise_fraction: The proportion of the noise below which we will remove pixels.
-  min_radius_pix: A minimum pixel radius to be included.
-
-Returns:
-  A new TiledBlob.  Tiles that do not contain the source will be pseudo-tiles
-  with empty pixel and noise arrays.  Tiles that contain the source will
-  be the same as the original tiles but with NaN where the expected source
-  electron counts are below <noise_fraction> of the noise at that pixel.
-"""
-function trim_source_tiles(
-        s::Int, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
-        noise_fraction::Float64=0.1, min_radius_pix::Float64=8.0)
-
-    trimmed_tiled_blob =
-        Array{ImageTile, 2}[ Array(ImageTile, size(tiled_blob[b])...) for
-                                                 b=1:length(tiled_blob)];
-
-    min_radius_pix_sq = min_radius_pix ^ 2
-    for b = 1:length(tiled_blob)
-        Logging.debug("Processing band $b...")
-
-        pix_loc = WCSUtils.world_to_pix(mp.patches[s, b], mp.vp[s][ids.u]);
-
-        H, W = size(tiled_blob[b])
-        @assert size(mp.tile_sources[b]) == size(tiled_blob[b])
-        for hh=1:H, ww=1:W
-            tile = tiled_blob[b][hh, ww];
-            tile_sources = mp.tile_sources[b][hh, ww]
-            has_source = s in tile_sources
-            bright_pixels = Bool[];
-            if has_source
-                pred_tile_pixels =
-                    ElboDeriv.tile_predicted_image(tile, mp, [ s ],
-                                                   include_epsilon=false);
-                tile_copy = deepcopy(tiled_blob[b][hh, ww]);
-
-                for h in tile.h_range, w in tile.w_range
-                    # The pixel location in the rendered image.
-                    h_im = h - minimum(tile.h_range) + 1
-                    w_im = w - minimum(tile.w_range) + 1
-
-                    keep_pixel = false
-                    bright_pixel = tile.constant_background ?
-                        pred_tile_pixels[h_im, w_im] >
-                            tile.iota * tile.epsilon * noise_fraction:
-                        pred_tile_pixels[h_im, w_im] >
-                            tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
-                    close_pixel =
-                        (h - pix_loc[1]) ^ 2 + (w - pix_loc[2]) ^ 2 < min_radius_pix_sq
-
-                    if !(bright_pixel || close_pixel)
-                        tile_copy.pixels[h_im, w_im] = NaN
-                    end
-                end
-
-                trimmed_tiled_blob[b][hh, ww] = tile_copy;
-            else
-                # This tile does not contain the source.    Replace the tile with a
-                # pseudo-tile that does not have any data in it.
-                # The problem is with mp.tile_sources, which can't be allowed to
-                # say that an empty tile has a source.
-                # TODO: Make a TiledBlob simply an array of an array of tiles
-                # rather than a 2d array to avoid this hack.
-                empty_tile = ImageTile(b, tile.h_range, tile.w_range,
-                                       tile.h_width, tile.w_width,
-                                       Array(Float64, 0, 0), tile.constant_background,
-                                       tile.epsilon, Array(Float64, 0, 0), tile.iota,
-                                       Array(Float64, 0))
-
-                trimmed_tiled_blob[b][hh, ww] = empty_tile;
-            end
-        end
-    end
-    Logging.info("Done trimming.")
-
-    trimmed_tiled_blob
-end
-
 end  # module
+
