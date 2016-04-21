@@ -300,7 +300,8 @@ function fit_object_psfs_threaded!{NumType <: Number}(
       PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer_vec[1], initial_psf_params)
 
     # Get all relevant sources *in this image*
-    relevant_sources = ModelInit.get_all_relevant_sources_in_image(mp, target_sources, b)
+    relevant_sources = Types.get_all_relevant_sources_in_image(
+                                    mp.tiles_sources[b], target_sources)
 
     mp_lock = SpinLock()
     @threads for s in relevant_sources
