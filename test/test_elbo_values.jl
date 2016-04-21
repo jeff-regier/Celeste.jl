@@ -1,5 +1,5 @@
 using Celeste: Types, ElboDeriv, SensitiveFloats
-import Celeste: ModelInit
+import Celeste: ModelInit, TrimSourceTiles
 
 using Base.Test
 using Distributions
@@ -20,6 +20,14 @@ function true_star_init()
     blob, mp, body, tiled_blob
 end
 
+
+"""
+Return a vector of (h, w) indices of tiles that contain this source.
+"""
+function find_source_tiles(s::Int, b::Int, mp::ModelParams)
+    [ind2sub(size(mp.tile_sources[b]), ind) for ind in
+        find([ s in sources for sources in mp.tile_sources[b]])]
+end
 
 #################################
 
@@ -357,7 +365,7 @@ function test_trim_source_tiles()
 
   # With the above seed, this is near the middle of the image.
   s = 1
-  trimmed_tiled_blob = ModelInit.trim_source_tiles(
+  trimmed_tiled_blob = TrimSourceTiles.trim_source_tiles(
     s, mp, tiled_blob, noise_fraction=0.1);
   loc_ids = ids.u
   non_loc_ids = setdiff(1:length(ids), ids.u)
@@ -367,7 +375,7 @@ function test_trim_source_tiles()
     @test(
       sum([ sum(!Base.isnan(tile.pixels)) for tile in trimmed_tiled_blob[b]]) <
       sum([ sum(!Base.isnan(tile.pixels)) for tile in tiled_blob[b]]))
-    s_tiles = ModelInit.find_source_tiles(s, b, mp)
+    s_tiles = find_source_tiles(s, b, mp)
     mp.active_sources = [s];
     elbo_full = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
     elbo_trim = ElboDeriv.elbo(trimmed_tiled_blob, mp; calculate_hessian=false);
@@ -381,14 +389,14 @@ function test_trim_source_tiles()
 
   # Test min_radius_pix on just one tile.
   b = 3
-  s_tiles = ModelInit.find_source_tiles(s, b, mp)
+  s_tiles = find_source_tiles(s, b, mp)
 
   # Set the source to be very dim:
   mp.vp[s][ids.r1] = 0.01
   mp.vp[s][ids.r2] = 0.01
 
   min_radius_pix = 6.0
-  trimmed_tiled_blob = ModelInit.trim_source_tiles(
+  trimmed_tiled_blob = TrimSourceTiles.trim_source_tiles(
     s, mp, tiled_blob, noise_fraction=0.1, min_radius_pix = min_radius_pix);
 
   total_nonempty_pixels = 0.0
@@ -399,7 +407,7 @@ function test_trim_source_tiles()
   @test_approx_eq_eps total_nonempty_pixels pi * min_radius_pix ^ 2 2.0
 
   min_radius_pix = 0.0
-  trimmed_tiled_blob = ModelInit.trim_source_tiles(
+  trimmed_tiled_blob = TrimSourceTiles.trim_source_tiles(
     s, mp, tiled_blob, noise_fraction=0.1, min_radius_pix = min_radius_pix);
 
   total_nonempty_pixels = 0.0
