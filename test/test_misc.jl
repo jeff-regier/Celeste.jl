@@ -2,7 +2,7 @@ using Base.Test
 
 using Celeste: Types
 import Celeste: ModelInit
-import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
+import Celeste.Types: patch_ctrs_pix, patch_radii_pix
 
 println("Running misc tests.")
 
