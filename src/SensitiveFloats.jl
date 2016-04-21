@@ -9,7 +9,7 @@ export SensitiveFloat,
        add_sources_sf!,
        set_hess!
 
-import ..Types: ParamSet, getids
+import ..Model: ParamSet, getids
 
 """
 A function value and its derivative with respect to its arguments.

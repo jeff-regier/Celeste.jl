@@ -1,12 +1,12 @@
 
 module BivariateNormals
 
-using ..Types
+using ..Model
 using ..SensitiveFloats
 
 import ..WCSUtils
 
-# Types:
+# Model:
 export BivariateNormalDerivatives, BvnComponent, GalaxySigmaDerivs,
        GalaxyCacheComponent
 
