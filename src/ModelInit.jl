@@ -72,59 +72,6 @@ end
 
 
 """
-Return an array of source indices that have some overlap with target_s.
-
-Args:
-  - mp: The ModelParams
-  - target_s: The index of the source of interest
-
-Returns:
-  - An array of integers that index into mp.s representing all sources that
-    co-occur in at least one tile with target_s, including target_s itself.
-"""
-function get_relevant_sources{NumType <: Number}(mp::ModelParams{NumType},
-                                                 target_s::Int)
-    relevant_sources = Int[]
-    for b = 1:length(mp.tile_sources), tile_sources in mp.tile_sources[b]
-        if target_s in tile_sources
-            relevant_sources = union(relevant_sources, tile_sources);
-        end
-    end
-
-    relevant_sources
-end
-
-
-"""
-Return indicies of all sources relevant to any of a set of target sources
-in the given image.
-
-# Arguments
-* `mp::ModelParams`: Model parameters.
-* `targets::Vector{Int}`: Indicies of target sources.
-* `b::Int`: Index of image.
-
-# Returns
-* `Vector{Int}`: Array of integers that index into mp.s. These represent
-  all sources that co-occur in at least one tile with *any* of the sources
-  in `targets`.
-"""
-function get_all_relevant_sources_in_image{NumType <: Number}(
-    mp::ModelParams{NumType}, target_sources::Vector{Int}, b::Int)
-
-    out = Int[]
-    for tile_sources in mp.tile_sources[b]  # loop over image tiles
-        # check if *any* of this tile's sources are a target, and
-        # if so, add *all* the tile sources to the output.
-        if length(intersect(target_sources, tile_sources)) > 0
-            out = union(out, tile_sources)
-        end
-    end
-    out
-end
-
-
-"""
 Update ModelParams with the PSFs for a range of object ids.
 
 Args:
@@ -155,7 +102,8 @@ function fit_object_psfs!{NumType <: Number}(
             PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
 
         # Get all relevant sources *in this image*
-        relevant_sources = get_all_relevant_sources_in_image(mp, target_sources, b)
+        relevant_sources = get_all_relevant_sources_in_image(mp.tile_sources[b],
+                                                             target_sources)
 
         for s in relevant_sources
             Logging.debug("Fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
@@ -167,6 +115,61 @@ function fit_object_psfs!{NumType <: Number}(
             mp.patches[s, b] = SkyPatch(patch, psf)
         end
     end
+end
+
+
+"""
+Return an array of source indices that have some overlap with target_s.
+
+Args:
+  - mp: The ModelParams
+  - target_s: The index of the source of interest
+
+Returns:
+  - An array of integers that index into mp.s representing all sources that
+    co-occur in at least one tile with target_s, including target_s itself.
+"""
+function get_relevant_sources{NumType <: Number}(mp::ModelParams{NumType},
+                                                 target_s::Int)
+    relevant_sources = Int[]
+    for b = 1:length(mp.tile_sources), tile_sources in mp.tile_sources[b]
+        if target_s in tile_sources
+            relevant_sources = union(relevant_sources, tile_sources);
+        end
+    end
+
+    relevant_sources
+end
+
+
+"""
+Return indicies of all sources relevant to any of a set of target sources
+in the given image.
+
+# Arguments
+  * `mp::ModelParams`: Model parameters.
+  * `targets::Vector{Int}`: Indicies of target sources.
+  * `b::Int`: Index of image.
+
+# Returns
+* `Vector{Int}`: Array of integers that index into mp.s. These represent
+  all sources that co-occur in at least one tile with *any* of the sources
+  in `targets`.
+"""
+function get_all_relevant_sources_in_image(
+                    sources_by_tile::Matrix{Vector{Int}},
+                    target_sources::Vector{Int})
+    out = Int[]
+
+    for tile_sources in sources_by_tile  # loop over image tiles
+        # check if *any* of this tile's sources are a target, and
+        # if so, add *all* the tile sources to the output.
+        if length(intersect(target_sources, tile_sources)) > 0
+            out = union(out, tile_sources)
+        end
+    end
+
+    out
 end
 
 
