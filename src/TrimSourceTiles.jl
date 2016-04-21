@@ -48,7 +48,12 @@ function trim_source_tiles(
     for b = 1:length(tiled_blob)
         Logging.debug("Processing band $b...")
 
-        pix_loc = WCSUtils.world_to_pix(mp.patches[s, b], mp.vp[s][ids.u]);
+        patch = mp.patches[s, b]
+        world_loc = mp.vp[s][ids.u]
+        pix_loc = WCSUtils.world_to_pix(patch.wcs_jacobian, 
+                                        patch.center,
+                                        patch.pixel_center,
+                                        world_loc)
 
         H, W = size(tiled_blob[b])
         @assert size(mp.tile_sources[b]) == size(tiled_blob[b])

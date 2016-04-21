@@ -36,6 +36,9 @@ type Image
     constant_background::Bool
     epsilon_mat::Array{Float64, 2}
     iota_vec::Array{Float64, 1}
+
+    # storing a RawPSF here isn't ideal, because it's an SDSS type
+    # not a Celeste type
     raw_psf_comp::RawPSF
 end
 
