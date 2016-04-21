@@ -12,72 +12,6 @@ import ..ElboDeriv  # for trim_source_tiles
 const cfgdir = joinpath(Pkg.dir("Celeste"), "cfg")
 
 
-"""
-Crop an image in place to a (2 * width) x (2 * width) - pixel square centered
-at the world coordinates wcs_center.
-Args:
-  - blob: The field to crop
-  - width: The width in pixels of each quadrant
-  - wcs_center: A location in world coordinates (e.g. the location of a
-                celestial body)
-
-Returns:
-  - A tiled blob with a single tile in each image centered at wcs_center.
-    This can be used to investigate a certain celestial object in a single
-    tiled blob, for example.
-"""
-function crop_blob_to_location(
-  blob::Array{Image, 1},
-  width::Union{Float64, Int},
-  wcs_center::Vector{Float64})
-    @assert length(wcs_center) == 2
-    @assert width > 0
-
-    tiled_blob = Array(TiledImage, length(blob))
-    for b=1:length(blob)
-        # Get the pixels that are near enough to the wcs_center.
-        pix_center = WCS.world_to_pix(blob[b].wcs, wcs_center)
-        h_min = max(floor(Int, pix_center[1] - width), 1)
-        h_max = min(ceil(Int, pix_center[1] + width), blob[b].H)
-        sub_rows_h = h_min:h_max
-
-        w_min = max(floor(Int, (pix_center[2] - width)), 1)
-        w_max = min(ceil(Int, pix_center[2] + width), blob[b].W)
-        sub_rows_w = w_min:w_max
-        tiled_blob[b] = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
-    end
-    tiled_blob
-end
-
-
-#######################################
-# Tiling functions
-
-"""
-Convert an image to an array of tiles of a given width.
-
-Args:
-  - img: An image to be broken into tiles
-  - tile_width: The size in pixels of each tile
-
-Returns:
-  An array of tiles containing the image.
-"""
-function break_image_into_tiles(img::Image, tile_width::Int)
-  WW = ceil(Int, img.W / tile_width)
-  HH = ceil(Int, img.H / tile_width)
-  ImageTile[ ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW ]
-end
-
-
-"""
-Break a blob into tiles.
-"""
-function break_blob_into_tiles(blob::Blob, tile_width::Int)
-  [ break_image_into_tiles(img, tile_width) for img in blob ]
-end
-
-
 #######################################
 # Functions for matching sources to tiles.
 
@@ -101,42 +35,6 @@ Return a vector of (h, w) indices of tiles that contain this source.
 function find_source_tiles(s::Int, b::Int, mp::ModelParams)
   [ ind2sub(size(mp.tile_sources[b]), ind) for ind in
     find([ s in sources for sources in mp.tile_sources[b]]) ]
-end
-
-
-function load_prior()
-
-    # set a = [.99, .01] if stars are underrepresented
-    # due to the greater flexibility of the galaxy model
-    #a = [0.28, 0.72]
-    a = [0.99, 0.01]
-    r_mean = Array(Float64, Ia)
-    r_var = Array(Float64, Ia)
-    k = Array(Float64, D, Ia)
-    c_mean = Array(Float64, B - 1, D, Ia)
-    c_cov = Array(Float64, B - 1, B - 1, D, Ia)
-
-    stars_file = open(joinpath(cfgdir, "stars$D.dat"))
-    r_fit1, k[:, 1], c_mean[:,:,1], c_cov[:,:,:,1] = deserialize(stars_file)
-    close(stars_file)
-
-    gals_file = open(joinpath(cfgdir, "gals$D.dat"))
-    r_fit2, k[:, 2], c_mean[:,:,2], c_cov[:,:,:,2] = deserialize(gals_file)
-    close(gals_file)
-
-    # These "magic numbers" have been in use for a while.
-    # They were initially gamma parameters, and now they are log normal
-    # parameters.  TODO: Get rid of these and use an empirical prior.
-    # r = [0.47 1.28; 1/0.012 1/0.11] # These were gamma (shape, scale)
-
-    mean_brightness = [0.47 / 0.012, 1.28 / 0.11 ]
-    var_brightness = [0.47 / (0.012 ^ 2), 1.28 / (0.11 ^ 2) ]
-
-    # The prior contains parameters of a lognormal distribution with
-    # the desired means.
-    r_var = log(var_brightness ./ (mean_brightness .^ 2) + 1)
-    r_mean = log(mean_brightness) - 0.5 * r_var
-    PriorParams(a, r_mean, r_var, k, c_mean, c_cov)
 end
 
 
@@ -474,7 +372,7 @@ function initialize_model_params(
     Logging.info("Loading variational parameters from catalogs.")
 
     vp = Array{Float64, 1}[init_source(ce) for ce in cat]
-    mp = ModelParams(vp, load_prior())
+    mp = ModelParams(vp, Types.load_prior())
     mp.objids = ASCIIString[cat_entry.objid for cat_entry in cat]
 
     mp.patches = Array(SkyPatch, mp.S, length(blob))

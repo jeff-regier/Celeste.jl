@@ -416,7 +416,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # initialize the psf again before fitting, so we don't do it here.
     Logging.info("initializing celeste without PSF fit")
     tic()
-    tiled_images = ModelInit.break_blob_into_tiles(images, TILE_WIDTH)
+    tiled_images = Types.break_blob_into_tiles(images, TILE_WIDTH)
     mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
                                            fit_psf=false)
     timing.init_mp = toq()

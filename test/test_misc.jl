@@ -14,7 +14,7 @@ function test_tile_image()
   tile_width = 20;
   tile = ImageTile(1, 1, img, tile_width);
 
-  tiles = ModelInit.break_image_into_tiles(img, tile_width);
+  tiles = Types.break_image_into_tiles(img, tile_width);
   @test size(tiles) ==
     (round(Int, ceil(img.H  / tile_width)),
      round(Int, ceil(img.W / tile_width)))
@@ -30,7 +30,7 @@ function test_tile_image()
   img.constant_background = false
   img.epsilon_mat = rand(size(img.pixels));
   img.iota_vec = rand(size(img.pixels)[1]);
-  tiles = ModelInit.break_image_into_tiles(img, tile_width);
+  tiles = Types.break_image_into_tiles(img, tile_width);
   @test size(tiles) == (
     ceil(Int, img.H  / tile_width),
     ceil(Int, img.W / tile_width))

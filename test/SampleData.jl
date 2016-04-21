@@ -42,7 +42,7 @@ function initialize_celeste(
         tile_width::Int=20, fit_psf::Bool=true,
         patch_radius::Float64=NaN)
 
-    tiled_blob = ModelInit.break_blob_into_tiles(blob, tile_width)
+    tiled_blob = Types.break_blob_into_tiles(blob, tile_width)
     mp = ModelInit.initialize_model_params(tiled_blob, blob, cat,
                                fit_psf=fit_psf, patch_radius=patch_radius)
     tiled_blob, mp
@@ -205,7 +205,7 @@ end
 
 function empty_model_params(S::Int)
     vp = [ ModelInit.init_source([ 0., 0. ]) for s in 1:S ]
-    ModelParams(vp, ModelInit.load_prior())
+    ModelParams(vp, Types.load_prior())
 end
 
 
