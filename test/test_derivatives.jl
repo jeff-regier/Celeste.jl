@@ -2,7 +2,7 @@ using Base.Test
 import DualNumbers
 
 using Celeste: Types, SensitiveFloats, BivariateNormals, ElboDeriv
-import Celeste: ModelInit, WCSUtils, SDSSIO
+import Celeste: ModelInit, WCSUtils, SDSSIO, TrimSourceTiles
 import ForwardDiff
 
 
