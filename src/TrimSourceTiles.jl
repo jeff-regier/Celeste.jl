@@ -13,9 +13,11 @@ trim_source_tiles in it's own module.)
 
 module TrimSourceTiles
 
+import Logging
+
 using ..Types
 import ..ElboDeriv
-
+import ..WCSUtils
 
 """
 Set any pixels significantly below background noise for the

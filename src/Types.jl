@@ -48,31 +48,8 @@ include("light_source_model.jl")
 include("psf_model.jl")
 include("image_model.jl")
 include("param_set.jl")
+include("imaged_sources.jl")
 
-
-"""
-Attributes of the patch of sky surrounding a single
-celestial object in a single image.
-
-Attributes:
-  - center: The approximate source location in world coordinates
-  - radius_pix: The width of the influence of the object in pixel coordinates
-  - psf: The point spread function in this region of the sky
-  - wcs_jacobian: The jacobian of the WCS transform in this region of the
-                  sky for each band
-  - pixel_center: The pixel location of center in each band.
-"""
-immutable SkyPatch
-    center::Vector{Float64}
-    radius_pix::Float64
-
-    psf::Vector{PsfComponent}
-    wcs_jacobian::Matrix{Float64}
-    pixel_center::Vector{Float64}
-end
-
-
-#########################################################
 
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual
@@ -82,7 +59,6 @@ typealias VariationalParams{NumType <: Number} Vector{Vector{NumType}}
 typealias RectVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 
-#########################################################
 
 """
 The parameters for a particular image.
