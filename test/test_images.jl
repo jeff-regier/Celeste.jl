@@ -5,7 +5,6 @@ import WCS
 
 using Celeste: Types
 import Celeste: ModelInit, ElboDeriv, SDSSIO, PSF
-import Celeste.ModelInit: patch_ctrs_pix, patch_radii_pix
 
 println("Running SkyImages tests.")
 
@@ -88,9 +87,9 @@ function test_blob()
     @test 2 * width <= cropped_blob[b][1].h_width <= 2 * (width + 1)
     @test 2 * width <= cropped_blob[b][1].w_width <= 2 * (width + 1)
     patches = vec(mp.patches[:, b])
-    tile_sources = ModelInit.get_local_sources(cropped_blob[b][1],
-                                               patch_ctrs_pix(patches),
-                                               patch_radii_pix(patches))
+    tile_sources = Types.get_local_sources(cropped_blob[b][1],
+                                           Types.patch_ctrs_pix(patches),
+                                           Types.patch_radii_pix(patches))
     @test obj_index in tile_sources
   end
 
@@ -184,9 +183,9 @@ function test_get_tiled_image_source()
                                   pixel_center)
     end
     patches = vec(mp.patches[:, 3])
-    local_sources = ModelInit.get_tiled_image_sources(tiled_img,
-                                                      patch_ctrs_pix(patches),
-                                                      patch_radii_pix(patches))
+    local_sources = Types.get_tiled_image_sources(tiled_img,
+                                                  Types.patch_ctrs_pix(patches),
+                                                  Types.patch_radii_pix(patches))
     @test local_sources[hh, ww] == Int[1]
     for hh2 in 1:size(tiled_img)[1], ww2 in 1:size(tiled_img)[2]
       if (hh2 != hh) || (ww2 != ww)
@@ -208,19 +207,19 @@ function test_local_source_candidate()
     # Get the sources by iterating over everything.
     patches = vec(mp.patches[:,b])
 
-    tile_sources = ModelInit.get_tiled_image_sources(tiled_blob[b],
-                                                     patch_ctrs_pix(patches),
-                                                     patch_radii_pix(patches))
+    tile_sources = Types.get_tiled_image_sources(tiled_blob[b],
+                                                 Types.patch_ctrs_pix(patches),
+                                                 Types.patch_radii_pix(patches))
 
     # Check that all the actual sources are candidates and that this is the
     # same as what is returned by initialize_model_params.
     HH, WW = size(tile_sources)
     for h=1:HH, w=1:WW
       # Get a set of candidates.
-      candidates = ModelInit.local_source_candidates(
+      candidates = Types.local_source_candidates(
                         tiled_blob[b][h, w],
-                        patch_ctrs_pix(patches),
-                        patch_radii_pix(patches))
+                        Types.patch_ctrs_pix(patches),
+                        Types.patch_radii_pix(patches))
       @test setdiff(tile_sources[h, w], candidates) == []
       @test tile_sources[h, w] == mp.tile_sources[b][h, w]
     end

@@ -32,66 +32,8 @@ world_to_pix{T <: Number}(patch::SkyPatch, world_loc::Vector{T}) =
 Return a vector of (h, w) indices of tiles that contain this source.
 """
 function find_source_tiles(s::Int, b::Int, mp::ModelParams)
-  [ ind2sub(size(mp.tile_sources[b]), ind) for ind in
-    find([ s in sources for sources in mp.tile_sources[b]]) ]
-end
-
-
-"""
-Return a default-initialized VariationalParams object.
-"""
-function init_source(init_pos::Vector{Float64})
-    ret = Array(Float64, length(CanonicalParams))
-    ret[ids.a[2]] = 0.5
-    ret[ids.a[1]] = 1.0 - ret[ids.a[2]]
-    ret[ids.u[1]] = init_pos[1]
-    ret[ids.u[2]] = init_pos[2]
-    ret[ids.r1] = log(2.0)
-    ret[ids.r2] = 1e-3
-    ret[ids.e_dev] = 0.5
-    ret[ids.e_axis] = 0.5
-    ret[ids.e_angle] = 0.
-    ret[ids.e_scale] = 1.
-    ret[ids.k] = 1. / size(ids.k, 1)
-    ret[ids.c1] = 0.
-    ret[ids.c2] =  1e-2
-    ret
-end
-
-
-"""
-Return a VariationalParams object initialized form a catalog entry.
-"""
-function init_source(ce::CatalogEntry)
-    # TODO: sync this up with the transform bounds
-    ret = init_source(ce.pos)
-
-    ret[ids.a[1]] = ce.is_star ? 0.8: 0.2
-    ret[ids.a[2]] = ce.is_star ? 0.2: 0.8
-
-    ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
-    ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))
-
-    function get_color(c2, c1)
-        c2 > 0 && c1 > 0 ? min(max(log(c2 / c1), -9.), 9.) :
-            c2 > 0 && c1 <= 0 ? 3.0 :
-                c2 <= 0 && c1 > 0 ? -3.0 : 0.0
-    end
-
-    function get_colors(raw_fluxes)
-        [get_color(raw_fluxes[c+1], raw_fluxes[c]) for c in 1:4]
-    end
-
-    ret[ids.c1[:, 1]] = get_colors(ce.star_fluxes)
-    ret[ids.c1[:, 2]] = get_colors(ce.gal_fluxes)
-
-    ret[ids.e_dev] = min(max(ce.gal_frac_dev, 0.015), 0.985)
-
-    ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.015), 0.985)
-    ret[ids.e_angle] = ce.gal_angle
-    ret[ids.e_scale] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
-
-    ret
+    [ind2sub(size(mp.tile_sources[b]), ind) for ind in
+        find([ s in sources for sources in mp.tile_sources[b]])]
 end
 
 
@@ -234,121 +176,6 @@ function fit_object_psfs!{NumType <: Number}(
 end
 
 
-##########################
-# Local sources
-
-"""
-A fast function to determine which sources might belong to which tiles.
-
-Args:
-  - tiles: A TiledImage
-  - patch_ctrs: Vector of length-2 vectors, giving pixel center of each patch.
-  - patch_radii_px: Radius of each patch.
-
-Returns:
-  - An array (over tiles) of a vector of candidate
-    source patches.  If a patch is a candidate, it may be within the patch
-    radius of a point in the tile, though it might not.
-"""
-function local_source_candidates(tile::ImageTile,
-                                 patch_ctrs::Vector{Vector{Float64}},
-                                 patch_radii_px::Vector{Float64})
-    @assert length(patch_ctrs) == length(patch_radii_px)
-
-    ret = Int[]
-
-    # Find the patches that are less than the radius plus diagonal from the
-    # center of the tile.  These are candidates for having some
-    # overlap with the tile.
-    tile_center = (mean(tile.h_range), mean(tile.w_range))
-    tile_diag = (0.5 ^ 2) * (tile.h_width ^ 2 + tile.w_width ^ 2)
-
-    for s in 1:length(patch_ctrs)
-        patch_dist = (tile_center[1] - patch_ctrs[s][1])^2
-                    + (tile_center[2] - patch_ctrs[s][2])^2
-        if patch_dist <= (tile_diag + patch_radii_px[s])^2
-            push!(ret, s)
-        end
-    end
-
-    return ret
-end
-
-
-"""
-Args:
-  - tile: An ImageTile (containing tile coordinates)
-  - patch_ctrs: Vector of length-2 vectors, giving pixel center of each patch.
-  - patch_radii_px: Radius of each patch.
-
-Returns:
-  - A vector of source ids (from 1 to length(patches)) that influence
-    pixels in the tile.  A patch influences a tile if
-    there is any overlap in their squares of influence.
-"""
-function get_local_sources(tile::ImageTile,
-                           patch_ctrs::Vector{Vector{Float64}},
-                           patch_radii_px::Vector{Float64})
-    @assert length(patch_ctrs) == length(patch_radii_px)
-    tile_sources = Int[]
-    tile_ctr = (mean(tile.h_range), mean(tile.w_range))
-
-    for i in eachindex(patch_ctrs)
-        patch_ctr = patch_ctrs[i]
-        patch_r = patch_radii_px[i]
-
-        # This is a "ball" in the infinity norm.
-        if ((abs(tile_ctr[1] - patch_ctr[1]) < patch_r + 0.5 * tile.h_width) &&
-            (abs(tile_ctr[2] - patch_ctr[2]) < patch_r + 0.5 * tile.w_width))
-            push!(tile_sources, i)
-        end
-    end
-
-    tile_sources
-end
-
-
-"""
-Get the sources associated with each tile in a TiledImage.
-
-Args:
-  - tiled_image: A TiledImage
-  - patch_ctrs: Vector of length-2 vectors, giving pixel center of each patch.
-  - patch_radii_px: Radius of each patch.
-Returns:
-  - An array (same dimensions as the tiles) of vectors of indices
-    into patches indicating which patches are affected by any pixels
-    in the tiles.
-"""
-function get_tiled_image_sources(tiled_image::TiledImage,
-                                 patch_ctrs::Vector{Vector{Float64}},
-                                 patch_radii_px::Vector{Float64})
-    out = similar(tiled_image, Vector{Int})
-
-    HH, WW = size(tiled_image)
-    for ww in 1:WW, hh in 1:HH
-        cands = local_source_candidates(tiled_image[hh, ww], 
-                                        patch_ctrs,
-                                        patch_radii_px)
-        # get indicies in cands that truly overlap the tile.
-        idx = get_local_sources(tiled_image[hh, ww],
-                                patch_ctrs[cands],
-                                patch_radii_px[cands])
-        out[hh, ww] = cands[idx]
-    end
-
-    return out
-end
-
-
-"""Centers of patches in pixel coordinates"""
-patch_ctrs_pix(patches::Vector{SkyPatch}) = [p.pixel_center for p in patches]
-
-
-"""Radii of patches in pixel coordinates"""
-patch_radii_pix(patches::Vector{SkyPatch}) = [p.radius_pix for p in patches]
-
-
 """
 Initilize the model params to the given catalog and tiled image.
 
@@ -374,7 +201,7 @@ function initialize_model_params(
 
     Logging.info("Loading variational parameters from catalogs.")
 
-    vp = Array{Float64, 1}[init_source(ce) for ce in cat]
+    vp = Array{Float64, 1}[Types.init_source(ce) for ce in cat]
     mp = ModelParams(vp, Types.load_prior())
     mp.objids = ASCIIString[cat_entry.objid for cat_entry in cat]
 
@@ -405,13 +232,8 @@ function initialize_model_params(
                                         pixel_center)
         end
 
-        patches = vec(mp.patches[:, b])
-        patch_centers = patch_ctrs_pix(patches)
-        patch_radii = patch_radii_pix(patches)
-
-        mp.tile_sources[b] = get_tiled_image_sources(tiled_blob[b],
-                                                     patch_centers,
-                                                     patch_radii)
+        mp.tile_sources[b] = Types.get_tiled_image_sources(tiled_blob[b],
+                                                           mp.patches[:, b])
     end
 
     return mp
@@ -429,9 +251,8 @@ Returns:
   - An array of integers that index into mp.s representing all sources that
     co-occur in at least one tile with target_s, including target_s itself.
 """
-function get_relevant_sources{NumType <: Number}(
-    mp::ModelParams{NumType}, target_s::Int)
-
+function get_relevant_sources{NumType <: Number}(mp::ModelParams{NumType},
+                                                 target_s::Int)
     relevant_sources = Int[]
     for b = 1:length(mp.tile_sources), tile_sources in mp.tile_sources[b]
         if target_s in tile_sources
@@ -472,3 +293,4 @@ function get_all_relevant_sources_in_image{NumType <: Number}(
 end
 
 end  # module
+

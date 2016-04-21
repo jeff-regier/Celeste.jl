@@ -72,7 +72,7 @@ function test_local_sources()
     @test mp.S == 3
 
     patches = vec(mp.patches[:, 3])
-    subset1000 = ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+    subset1000 = Types.get_local_sources(tile, patch_ctrs_pix(patches),
                                              patch_radii_pix(patches))
     @test subset1000 == [1,2,3]
 
@@ -82,7 +82,7 @@ function test_local_sources()
       fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
 
     patches = vec(mp.patches[:, 3])
-    subset10 = ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+    subset10 = Types.get_local_sources(tile, patch_ctrs_pix(patches),
                                            patch_radii_pix(patches))
     @test subset10 == [1]
 
@@ -91,7 +91,7 @@ function test_local_sources()
       fill(fill(last_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.)
 
     patches = vec(mp.patches[:, 3])
-    last_subset = ModelInit.get_local_sources(last_tile,
+    last_subset = Types.get_local_sources(last_tile,
                                               patch_ctrs_pix(patches),
                                               patch_radii_pix(patches))
     @test length(last_subset) == 0
@@ -101,7 +101,7 @@ function test_local_sources()
       fill(fill(pop_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
 
     patches = vec(mp.patches[:, 3])
-    pop_subset = ModelInit.get_local_sources(pop_tile, patch_ctrs_pix(patches),
+    pop_subset = Types.get_local_sources(pop_tile, patch_ctrs_pix(patches),
                                              patch_radii_pix(patches))
 
     @test pop_subset == [2,3]
@@ -175,7 +175,7 @@ function test_local_sources_3()
         tile_width);
 
     patches = vec(mp.patches[:,test_b])
-    @test ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+    @test Types.get_local_sources(tile, patch_ctrs_pix(patches),
                                       patch_radii_pix(patches)) == [1]
 
     # Source should not match when you're 1 tile and a half away along the diagonal plus
@@ -186,7 +186,7 @@ function test_local_sources_3()
         round(Int, pix_loc[2] / tile_width),
         blob[test_b],
         tile_width)
-    @test ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+    @test Types.get_local_sources(tile, patch_ctrs_pix(patches),
                                       patch_radii_pix(patches)) == []
 
     tile = ImageTile(
@@ -195,7 +195,7 @@ function test_local_sources_3()
                            patch_radius_pix) / tile_width),
         blob[test_b],
         tile_width)
-    @test ModelInit.get_local_sources(tile, patch_ctrs_pix(patches),
+    @test Types.get_local_sources(tile, patch_ctrs_pix(patches),
                                       patch_radii_pix(patches)) == []
 
 end

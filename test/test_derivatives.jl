@@ -190,7 +190,7 @@ function test_real_image()
 
   # Limit to very few pixels so that the autodiff is reasonably fast.
   s = trimmed_mp.active_sources[1]
-  very_trimmed_tiled_blob = ModelInit.trim_source_tiles(
+  very_trimmed_tiled_blob = TrimSourceTiles.trim_source_tiles(
     s, trimmed_mp, trimmed_tiled_blob, noise_fraction=10., min_radius_pix=1.0);
 
   # To see:

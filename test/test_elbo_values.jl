@@ -357,7 +357,7 @@ function test_trim_source_tiles()
 
   # With the above seed, this is near the middle of the image.
   s = 1
-  trimmed_tiled_blob = ModelInit.trim_source_tiles(
+  trimmed_tiled_blob = TrimSourceTiles.trim_source_tiles(
     s, mp, tiled_blob, noise_fraction=0.1);
   loc_ids = ids.u
   non_loc_ids = setdiff(1:length(ids), ids.u)
@@ -388,7 +388,7 @@ function test_trim_source_tiles()
   mp.vp[s][ids.r2] = 0.01
 
   min_radius_pix = 6.0
-  trimmed_tiled_blob = ModelInit.trim_source_tiles(
+  trimmed_tiled_blob = TrimSourceTiles.trim_source_tiles(
     s, mp, tiled_blob, noise_fraction=0.1, min_radius_pix = min_radius_pix);
 
   total_nonempty_pixels = 0.0
@@ -399,7 +399,7 @@ function test_trim_source_tiles()
   @test_approx_eq_eps total_nonempty_pixels pi * min_radius_pix ^ 2 2.0
 
   min_radius_pix = 0.0
-  trimmed_tiled_blob = ModelInit.trim_source_tiles(
+  trimmed_tiled_blob = TrimSourceTiles.trim_source_tiles(
     s, mp, tiled_blob, noise_fraction=0.1, min_radius_pix = min_radius_pix);
 
   total_nonempty_pixels = 0.0

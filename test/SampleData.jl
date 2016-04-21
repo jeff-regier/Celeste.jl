@@ -204,7 +204,7 @@ end
 
 
 function empty_model_params(S::Int)
-    vp = [ ModelInit.init_source([ 0., 0. ]) for s in 1:S ]
+    vp = [Types.init_source([ 0., 0. ]) for s in 1:S]
     ModelParams(vp, Types.load_prior())
 end
 
