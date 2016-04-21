@@ -2,7 +2,7 @@ module Synthetic
 
 export gen_blob
 
-using Celeste, Celeste.Types
+using Celeste, Celeste.Model
 import Celeste: ModelInit, BivariateNormals, WCSUtils
 
 import Distributions
@@ -112,7 +112,7 @@ end
 
 #######################################
 
-const pp = Types.load_prior()
+const pp = Model.load_prior()
 
 
 function sample_fluxes(i::Int, r_s)

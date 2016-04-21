@@ -1,14 +1,14 @@
 module SampleData
 
 using Distributions
-using Celeste, Celeste.Types
+using Celeste, Celeste.Model
 
 import Celeste: WCSUtils, ModelInit
 import Synthetic
 import WCS, FITSIO, DataFrames
 
 import WCS.WCSTransform
-import Celeste.Types: Image
+import Celeste.Model: Image
 
 
 export empty_model_params, dat_dir,
@@ -42,7 +42,7 @@ function initialize_celeste(
         tile_width::Int=20, fit_psf::Bool=true,
         patch_radius::Float64=NaN)
 
-    tiled_blob = Types.break_blob_into_tiles(blob, tile_width)
+    tiled_blob = Model.break_blob_into_tiles(blob, tile_width)
     mp = ModelInit.initialize_model_params(tiled_blob, blob, cat,
                                fit_psf=fit_psf, patch_radius=patch_radius)
     tiled_blob, mp
@@ -204,8 +204,8 @@ end
 
 
 function empty_model_params(S::Int)
-    vp = [Types.init_source([ 0., 0. ]) for s in 1:S]
-    ModelParams(vp, Types.load_prior())
+    vp = [Model.init_source([ 0., 0. ]) for s in 1:S]
+    ModelParams(vp, Model.load_prior())
 end
 
 

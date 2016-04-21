@@ -1,6 +1,6 @@
 module OptimizeElbo
 
-using ..Types
+using ..Model
 using ..SensitiveFloats
 using ..Transform
 import ..ElboDeriv

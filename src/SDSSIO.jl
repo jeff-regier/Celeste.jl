@@ -5,7 +5,7 @@ import FITSIO
 import WCS
 import Logging
 
-import ..Types: RawPSF, Image, CatalogEntry
+import ..Model: RawPSF, Image, CatalogEntry
 import ..PSF
 import Base.convert
 

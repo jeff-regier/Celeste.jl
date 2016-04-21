@@ -1,6 +1,6 @@
 using Base.Test
 
-using Celeste: Types, Transform, SensitiveFloats
+using Celeste: Model, Transform, SensitiveFloats
 import Celeste: OptimizeElbo, ModelInit, ElboDeriv
 import Celeste.WCSUtils
 
