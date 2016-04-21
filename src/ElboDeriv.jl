@@ -2,7 +2,7 @@
 
 module ElboDeriv
 
-using ..Types
+using ..Model
 using ..SensitiveFloats
 using ..BivariateNormals
 

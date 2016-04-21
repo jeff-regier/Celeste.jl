@@ -1,6 +1,6 @@
 #!/usr/bin/env julia
 
-using Celeste: Types, Transform
+using Celeste: Model, Transform
 import Celeste: WCSUtils, ModelInit
 
 include("Synthetic.jl")
@@ -31,7 +31,7 @@ function initialize_celeste(
         blob::Blob, cat::Vector{CatalogEntry};
         tile_width::Int=20, fit_psf::Bool=true,
         patch_radius::Float64=NaN)
-    tiled_blob = Types.break_blob_into_tiles(blob, tile_width)
+    tiled_blob = Model.break_blob_into_tiles(blob, tile_width)
     mp = ModelInit.initialize_model_params(tiled_blob, blob, cat,
                                fit_psf=fit_psf, patch_radius=patch_radius)
     tiled_blob, mp

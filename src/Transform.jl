@@ -2,7 +2,7 @@
 
 module Transform
 
-using ..Types
+using ..Model
 using ..SensitiveFloats
 
 export DataTransform, ParamBounds, ParamBox, SimplexBox,

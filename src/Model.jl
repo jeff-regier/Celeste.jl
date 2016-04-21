@@ -1,4 +1,4 @@
-module Types
+module Model
 
 export CatalogEntry,
        Image, Blob,

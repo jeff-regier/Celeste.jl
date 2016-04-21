@@ -1,7 +1,7 @@
 module PSF
 
 using Celeste
-using Celeste.Types
+using Celeste.Model
 using Celeste.BivariateNormals
 import Celeste.SensitiveFloats
 

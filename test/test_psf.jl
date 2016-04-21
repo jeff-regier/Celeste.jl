@@ -1,5 +1,5 @@
 using Celeste
-using Celeste.Types
+using Celeste.Model
 using Celeste.BivariateNormals
 using Celeste.PSF
 using Celeste.SensitiveFloats
