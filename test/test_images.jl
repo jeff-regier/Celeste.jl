@@ -261,7 +261,7 @@ function test_set_patch_size()
         tiled_blob[b][1,1], mp, mp.tile_sources[b][1,1]);
 
       pixel_center = WCS.world_to_pix(blob[b].wcs, cat[1].pos)
-      radius = ModelInit.choose_patch_radius(
+      radius = Types.choose_patch_radius(
         pixel_center, cat[1], blob[b].psf, blob[b])
 
       circle_pts = fill(false, blob[b].H, blob[b].W);
