@@ -1,17 +1,161 @@
-            catch ex
-                Logging.err(ex)
-            end
+# NERSC-specific functions
+
+# TODO: make a config file for NERSC-specific paths, and make everything else
+# in here not specific to NERSC
+
+
+# NERSC scratch directories
+nersc_field_scratchdir(run::Integer, camcol::Integer, field::Integer) =
+    joinpath(ENV["SCRATCH"], "celeste/$(run)/$(camcol)/$(field)")
+nersc_photofield_scratchdir(run::Integer, camcol::Integer) =
+    joinpath(ENV["SCRATCH"], "celeste/$(run)/$(camcol)")
+
+"""
+    nersc_stage_field(run, camcol, field)
+
+Stage all relevant files for the given run, camcol, field to user's SCRATCH
+directory. The target locations are given by `nersc_field_scratchdir` and
+`nersc_photofield_scratchdir`.
+"""
+function nersc_stage_field(run::Integer, camcol::Integer, field::Integer)
+    # destination directory for all files except photofield.
+    dstdir = nersc_field_scratchdir(run, camcol, field)
+    isdir(dstdir) || mkpath(dstdir)
+
+    # frame files: uncompress bz2 files
+    srcdir = nersc_frame_dir(run, camcol)
+    for band in ['u', 'g', 'r', 'i', 'z']
+        srcfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits.bz2",
+                           srcdir, band, run, camcol, field)
+        dstfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
+                           dstdir, band, run, camcol, field)
+        if !isfile(dstfile)
+            Logging.info("bzcat --keep $srcfile > $dstfile")
+            Base.run(pipeline(`bzcat --keep $srcfile`, stdout=dstfile))
         end
     end
-    timing.opt_srcs = toq()
-    timing.num_srcs = length(target_sources)
 
-    results
+    # fpm files
+    # It isn't strictly necessary to uncompress these, because FITSIO can handle
+    # gzipped files. However, the celeste code assumes the filename ends with
+    # ".fit", so we would have to at least change the name. It seems clearer
+    # to simply uncompress here.
+    srcdir = nersc_fpm_dir(run, camcol)
+    dstdir = nersc_field_scratchdir(run, camcol, field)
+    isdir(dstdir) || mkpath(dstdir)
+    for band in ['u', 'g', 'r', 'i', 'z']
+        srcfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit.gz",
+                           srcdir, run, band, camcol, field)
+        dstfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
+                           dstdir, run, band, camcol, field)
+        if !isfile(dstfile)
+            Logging.info("gunzip --stdout $srcfile > $dstfile")
+            Base.run(pipeline(`gunzip --stdout $srcfile`, stdout=dstfile))
+        end
+    end
+
+    # photoobj: simply copy
+    srcfile = @sprintf("%s/photoObj-%06d-%d-%04d.fits",
+                       nersc_photoobj_dir(run, camcol), run, camcol, field)
+    dstfile = @sprintf("%s/photoObj-%06d-%d-%04d.fits",
+                       nersc_field_scratchdir(run, camcol, field), run,
+                       camcol, field)
+    isfile(dstfile) || cp(srcfile, dstfile)
+
+    # psField: simply copy
+    srcfile = @sprintf("%s/psField-%06d-%d-%04d.fit",
+                       nersc_psfield_dir(run, camcol), run, camcol, field)
+    dstfile = @sprintf("%s/psField-%06d-%d-%04d.fit",
+                       nersc_field_scratchdir(run, camcol, field), run,
+                       camcol, field)
+    isfile(dstfile) || cp(srcfile, dstfile)
+
+    # photofield: simply copy
+    srcfile = @sprintf("%s/photoField-%06d-%d.fits",
+                       nersc_photofield_dir(run), run, camcol)
+    dstfile = @sprintf("%s/photoField-%06d-%d.fits",
+                       nersc_photofield_scratchdir(run, camcol), run, camcol)
+    isfile(dstfile) || cp(srcfile, dstfile)
 end
 
 
-# -----------------------------------------------------------------------------
-# NERSC-specific functions
+"""
+Stage all relevant files for the given sky patch to user's SCRATCH.
+"""
+function stage_box_nersc(ramin, ramax, decmin, decmax)
+    fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
+    for (run, camcol, field) in fieldids
+        nersc_stage_field(run, camcol, field)
+    end
+end
+
+
+"""
+NERSC-specific infer function, called from main entry point.
+"""
+function infer_box_nersc(ramin, ramax, decmin, decmax, outdir)
+    # Base.@time hack for distributed environment
+    gc_stats = ()
+    gc_diff_stats = ()
+    elapsed_time = 0.0
+    gc_stats = Base.gc_num()
+    elapsed_time = time_ns()
+
+    times = InferTiming()
+    if dt_nnodes > 1
+        divide_and_infer((ramin, ramax),
+                         (decmin, decmax),
+                         timing=times,
+                         outdir=outdir)
+    else
+        # Get vector of (run, camcol, field) triplets overlapping this patch
+        tic()
+        fieldids = query_overlapping_fieldids(ramin, ramax,
+                                              decmin, decmax)
+        times.query_fids = toq()
+
+        # Get relevant directories corresponding to each field.
+        tic()
+        frame_dirs = query_frame_dirs(fieldids)
+        photofield_dirs = query_photofield_dirs(fieldids)
+        times.get_dirs = toq()
+
+        results = infer(fieldids,
+                        frame_dirs;
+                        ra_range=(ramin, ramax),
+                        dec_range=(decmin, decmax),
+                        fpm_dirs=frame_dirs,
+                        psfield_dirs=frame_dirs,
+                        photoobj_dirs=frame_dirs,
+                        photofield_dirs=photofield_dirs,
+                        timing=times)
+
+        tic()
+        save_results(outdir, ramin, ramax, decmin, decmax, results)
+        times.write_results = toq()
+    end
+
+    # Base.@time hack for distributed environment
+    elapsed_time = time_ns() - elapsed_time
+    gc_diff_stats = Base.GC_Diff(Base.gc_num(), gc_stats)
+    time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
+              Base.gc_alloc_count(gc_diff_stats))
+
+    times.num_srcs = max(1, times.num_srcs)
+    nputs(dt_nodeid, "timing: query_fids=$(times.query_fids)")
+    nputs(dt_nodeid, "timing: get_dirs=$(times.get_dirs)")
+    nputs(dt_nodeid, "timing: num_infers=$(times.num_infers)")
+    nputs(dt_nodeid, "timing: read_photoobj=$(times.read_photoobj)")
+    nputs(dt_nodeid, "timing: read_img=$(times.read_img)")
+    nputs(dt_nodeid, "timing: init_mp=$(times.init_mp)")
+    nputs(dt_nodeid, "timing: fit_psf=$(times.fit_psf)")
+    nputs(dt_nodeid, "timing: opt_srcs=$(times.opt_srcs)")
+    nputs(dt_nodeid, "timing: num_srcs=$(times.num_srcs)")
+    nputs(dt_nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
+    nputs(dt_nodeid, "timing: write_results=$(times.write_results)")
+    nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
+end
+
 
 """
 Query the SDSS database for all fields that overlap the given RA, Dec range.
@@ -181,16 +325,6 @@ end
 
 
 """
-Save provided results to a JLD file.
-"""
-function save_results(outdir, ramin, ramax, decmin, decmax, results)
-    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
-                     outdir, ramin, ramax, decmin, decmax)
-    JLD.save(fname, "results", results)
-end
-
-
-"""
 NERSC-specific infer function, called from main entry point.
 """
 function infer_box_nersc(ramin, ramax, decmin, decmax, outdir)
@@ -282,4 +416,15 @@ function infer_field_nersc(run::Int, camcol::Int, field::Int,
     JLD.save(fname, "results", results)
     Logging.debug("infer_field_nersc finished successfully")
 end
+
+
+"""
+Save provided results to a JLD file.
+"""
+function save_results(outdir, ramin, ramax, decmin, decmax, results)
+    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
+                     outdir, ramin, ramax, decmin, decmax)
+    JLD.save(fname, "results", results)
+end
+
 

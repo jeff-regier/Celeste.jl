@@ -19,7 +19,7 @@ Usage:
 Options:
   -h, --help         Show this screen.
   --version          Show the version.
-  --logging=<LEVEL>  Level for the Logging package (OFF, DEBUG, INFO, WARNING, ERROR, or CRITICAL). [default: WARNING]
+  --logging=<LEVEL>  Level for the Logging package (OFF, DEBUG, INFO, WARNING, ERROR, or CRITICAL). [default: INFO]
 
 The `stage-box` subcommand copies and/or uncompresses all files covering the
 given RA/Dec range from /project to user's SCRATCH directory.
@@ -34,10 +34,28 @@ field, using only that field.
 The `score-field` subcommand is not yet implemented for the new API.
 """
 
+function set_logging_level(level)
+    if level == "OFF"
+      Logging.configure(level=Logging.OFF)
+    elseif level == "DEBUG"
+      Logging.configure(level=Logging.DEBUG)
+    elseif level == "INFO"
+      Logging.configure(level=Logging.INFO)
+    elseif level == "WARNING"
+      Logging.configure(level=Logging.WARNING)
+    elseif level == "ERROR"
+      Logging.configure(level=Logging.ERROR)
+    elseif level == "CRITICAL"
+      Logging.configure(level=Logging.CRITICAL)
+    else
+      Logging.err("Unknown logging level $(level)")
+    end
+end
+
+
 function main()
-    Celeste.set_logging_level("WARNING")
     args = docopt(DOC, version=v"0.1.0", options_first=true)
-    Celeste.set_logging_level(args["--logging"])
+    set_logging_level(args["--logging"])
     if args["stage-box"] || args["infer-box"]
         ramin = parse(Float64, args["<ramin>"])
         ramax = parse(Float64, args["<ramax>"])
