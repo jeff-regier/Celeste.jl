@@ -47,7 +47,7 @@ function initialize_model_params(
     Logging.info("Loading variational parameters from catalogs.")
 
     vp = Array{Float64, 1}[Model.init_source(ce) for ce in cat]
-    mp = ModelParams(vp, Model.load_prior())
+    mp = ModelParams(vp, Model.prior)
     mp.objids = ASCIIString[cat_entry.objid for cat_entry in cat]
 
     mp.patches = Array(SkyPatch, mp.S, length(blob))
@@ -82,53 +82,6 @@ function initialize_model_params(
     end
 
     return mp
-end
-
-
-"""
-Update ModelParams with the PSFs for a range of object ids.
-
-Args:
-  - mp: A ModelParams whose patches will be updated.
-  - relevant_sources: A vector of source ids that index into mp.patches
-  - blob: A vector of images.
-
-Returns:
-  - Updates mp.patches in place with fitted psfs for each source in
-    relevant_sources.
-"""
-function fit_object_psfs!{NumType <: Number}(
-    mp::ModelParams{NumType}, target_sources::Vector{Int}, blob::Blob)
-
-    # Initialize an optimizer
-    initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
-    psf_transform = PSF.get_psf_transform(initial_psf_params);
-    psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K);
-
-    @assert size(mp.patches, 2) == length(blob)
-
-    for b in 1:length(blob)    # loop over images
-        Logging.debug("Fitting PSFS for band $b")
-        # Get a starting point in the middle of the image.
-        pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
-        raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
-        central_psf, central_psf_params =
-            PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
-
-        # Get all relevant sources *in this image*
-        relevant_sources = get_all_relevant_sources_in_image(mp.tile_sources[b],
-                                                             target_sources)
-
-        for s in relevant_sources
-            Logging.debug("Fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
-            patch = mp.patches[s, b]
-            # Set the starting point at the center's PSF.
-            psf, psf_params =
-                PSF.get_source_psf(
-                    patch.center, blob[b], psf_optimizer, central_psf_params)
-            mp.patches[s, b] = SkyPatch(patch, psf)
-        end
-    end
 end
 
 
@@ -187,7 +140,53 @@ function get_all_relevant_sources_in_image(
 end
 
 
+"""
+Args:
+  - mp: A ModelParams whose patches will be updated.
+  - relevant_sources: A vector of source ids that index into mp.patches
+  - blob: A vector of images.
+
+Returns:
+  - Updates mp.patches in place with fitted psfs for each source in
+    relevant_sources.
+"""
+function fit_object_psfs!{NumType <: Number}(
+    mp::ModelParams{NumType}, target_sources::Vector{Int}, blob::Blob)
+
+    # Initialize an optimizer
+    initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
+    psf_transform = PSF.get_psf_transform(initial_psf_params);
+    psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K);
+
+    @assert size(mp.patches, 2) == length(blob)
+
+    for b in 1:length(blob)    # loop over images
+        Logging.debug("Fitting PSFS for band $b")
+        # Get a starting point in the middle of the image.
+        pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
+        raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
+        central_psf, central_psf_params =
+            PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
+
+        # Get all relevant sources *in this image*
+        relevant_sources = get_all_relevant_sources_in_image(mp.tile_sources[b],
+                                                             target_sources)
+
+        for s in relevant_sources
+            Logging.debug("Fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
+            patch = mp.patches[s, b]
+            # Set the starting point at the center's PSF.
+            psf, psf_params =
+                PSF.get_source_psf(
+                    patch.center, blob[b], psf_optimizer, central_psf_params)
+            mp.patches[s, b] = SkyPatch(patch, psf)
+        end
+    end
+end
+
+
 import ..ElboDeriv
+
 
 """
 Set any pixels significantly below background noise for the
@@ -206,18 +205,17 @@ Returns:
   be the same as the original tiles but with NaN where the expected source
   electron counts are below <noise_fraction> of the noise at that pixel.
 """
-function trim_source_tiles(
-        s::Int, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
-        noise_fraction::Float64=0.1, min_radius_pix::Float64=8.0)
-
+function trim_source_tiles(s::Int,
+                           mp::ModelParams{Float64},
+                           tiled_blob::TiledBlob;
+                           noise_fraction::Float64=0.1,
+                           min_radius_pix::Float64=8.0)
     trimmed_tiled_blob =
         Array{ImageTile, 2}[ Array(ImageTile, size(tiled_blob[b])...) for
                                                  b=1:length(tiled_blob)];
 
     min_radius_pix_sq = min_radius_pix ^ 2
     for b = 1:length(tiled_blob)
-        Logging.debug("Processing band $b...")
-
         patch = mp.patches[s, b]
         world_loc = mp.vp[s][ids.u]
         pix_loc = WCSUtils.world_to_pix(patch.wcs_jacobian, 
@@ -275,7 +273,6 @@ function trim_source_tiles(
             end
         end
     end
-    Logging.info("Done trimming.")
 
     trimmed_tiled_blob
 end

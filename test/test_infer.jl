@@ -1,5 +1,4 @@
 ## test the main entry point in Celeste: the `infer` function
-import Celeste
 import JLD
 
 """

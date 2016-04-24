@@ -1,10 +1,16 @@
 using Celeste
 using Celeste.Model
 using Celeste.BivariateNormals
-using Celeste.PSF
 using Celeste.SensitiveFloats
 
-import Celeste.SDSSIO
+import Celeste.PSF: evaluate_psf_fit, psf_params_to_array, psf_array_to_params,
+       get_psf_transform, initialize_psf_params, transform_psf_params!,
+       unwrap_psf_params, wrap_psf_params,
+       unconstrain_psf_params, constrain_psf_params,
+       transform_psf_sensitive_float!,
+       PsfOptimizer, fit_raw_psf_for_celeste,
+       get_psf_at_point, get_source_psf
+
 
 using ForwardDiff
 

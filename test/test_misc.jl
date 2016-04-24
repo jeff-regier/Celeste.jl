@@ -1,8 +1,7 @@
 using Base.Test
 
-using Celeste: Model
-import Celeste: ModelInit
 import Celeste.Model: patch_ctrs_pix, patch_radii_pix
+
 
 println("Running misc tests.")
 

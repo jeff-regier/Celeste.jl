@@ -1,10 +1,7 @@
 # Test the functions that move between constrained and unconstrained
 # parameterizations.
 
-using Base.Test
-
-using Celeste: Model, Transform, SensitiveFloats
-import Celeste: ModelInit, ElboDeriv
+using Celeste: Transform, SensitiveFloats
 using Compat
 
 

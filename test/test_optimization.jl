@@ -1,8 +1,6 @@
 using Base.Test
 
 using Celeste: Model, Transform, SensitiveFloats
-import Celeste: OptimizeElbo, ModelInit, ElboDeriv
-import Celeste.WCSUtils
 
 
 println("Running optimization tests.")

@@ -1,5 +1,4 @@
-using Celeste: Model, ElboDeriv, SensitiveFloats
-import Celeste: ModelInit, ModelInit
+using Celeste: ElboDeriv, SensitiveFloats
 
 using Base.Test
 using Distributions
