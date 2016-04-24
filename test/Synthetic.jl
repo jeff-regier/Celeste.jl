@@ -97,8 +97,14 @@ function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=fals
         body.is_star ? write_star(img0, body, pixels) : write_galaxy(img0, body, pixels)
     end
 
-    return Image(img0.H, img0.W, pixels, img0.b, img0.wcs, img0.epsilon,
-                 img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
+    epsilon_mat = fill(img0.epsilon_mat[1], img0.H, img0.W)
+    iota_vec = fill(img0.iota_vec[1], img0.H)
+
+    return Image(img0.H, img0.W, pixels, img0.b, img0.wcs,
+                 img0.epsilon, img0.iota, img0.psf,
+                 img0.run_num, img0.camcol_num, img0.field_num,
+                 img0.constant_background,
+                 epsilon_mat, iota_vec, img0.raw_psf_comp)
 end
 
 """

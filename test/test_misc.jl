@@ -200,49 +200,6 @@ function test_local_sources_3()
 end
 
 
-function test_tiling()
-    srand(1)
-    blob0 =SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")
-    for b in 1:5
-        blob0[b].H, blob0[b].W = 112, 238
-    end
-    three_bodies = [
-        sample_ce([4.5, 3.6], false),
-        sample_ce([60.1, 82.2], true),
-        sample_ce([71.3, 100.4], false),
-    ]
-   blob = Synthetic.gen_blob(blob0, three_bodies)
-
-    mp = ModelInit.cat_init(three_bodies)
-    elbo = ElboDeriv.elbo(blob, mp)
-
-    mp2 = ModelInit.cat_init(three_bodies, tile_width=10)
-    elbo_tiles = ElboDeriv.elbo(blob, mp2)
-    @test_approx_eq_eps elbo_tiles.v[1] elbo.v[1] 1e-5
-
-    mp3 = ModelInit.cat_init(three_bodies, patch_radius=30.)
-    elbo_patches = ElboDeriv.elbo(blob, mp3)
-    @test_approx_eq_eps elbo_patches.v[1] elbo.v[1] 1e-5
-
-    for s in 1:mp.S
-        for i in 1:length(1:length(CanonicalParams))
-            @test_approx_eq_eps elbo_tiles.d[i, s] elbo.d[i, s] 1e-5
-            @test_approx_eq_eps elbo_patches.d[i, s] elbo.d[i, s] 1e-5
-        end
-    end
-
-    mp4 = ModelInit.cat_init(three_bodies, patch_radius=35., tile_width=10)
-    elbo_both = ElboDeriv.elbo(blob, mp4)
-    @test_approx_eq_eps elbo_both.v[1] elbo.v[1] 1e-1
-
-    for s in 1:mp.S
-        for i in 1:length(1:length(CanonicalParams))
-            @test_approx_eq_eps elbo_both.d[i, s] elbo.d[i, s] 1e-1
-        end
-    end
-end
-
-
 function test_sky_noise_estimates()
     blobs = Array(Blob, 2)
     blobs[1], mp, three_bodies = gen_three_body_dataset()  # synthetic

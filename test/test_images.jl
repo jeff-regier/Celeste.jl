@@ -119,30 +119,6 @@ function test_blob()
 end
 
 
-function test_fit_object_psfs()
-  blob = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir);
-  fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-  cat_entries = SDSSIO.read_photoobj_celeste(fname);
-
-  # Only test a few catalog entries.
-  relevant_sources = collect(3:4)
-  test_sources = collect(1:5)
-
-  tiled_blob, mp = initialize_celeste(
-    blob, cat_entries[test_sources], fit_psf=false);
-  ModelInit.fit_object_psfs!(mp, relevant_sources, blob);
-
-  tiled_blob, mp_psf_init = initialize_celeste(
-    blob, cat_entries[test_sources], fit_psf=true);
-
-  for b in 1:length(blob), s in relevant_sources
-    @test_approx_eq(
-      blob[b].raw_psf_comp(mp.patches[s, b].pixel_center...),
-      blob[b].raw_psf_comp(mp_psf_init.patches[s, b].pixel_center...))
-  end
-end
-
-
 function test_stamp_get_object_psf()
   stamp_blob, stamp_mp, body = gen_sample_star_dataset();
   img = stamp_blob[3];
