@@ -123,8 +123,11 @@ Args:
     - hh: Optional h index in tile coordinates
     - ww: Optional w index in tile coordinates
 """
-function ImageTile(img::Image, h_range::UnitRange{Int},
-                                     w_range::UnitRange{Int}; hh::Int=1, ww::Int=1)
+function ImageTile(img::Image,
+                   h_range::UnitRange{Int},
+                   w_range::UnitRange{Int};
+                   hh::Int=1,
+                   ww::Int=1)
     b = img.b
     h_width = maximum(h_range) - minimum(h_range) + 1
     w_width = maximum(w_range) - minimum(w_range) + 1

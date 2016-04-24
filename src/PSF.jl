@@ -12,13 +12,6 @@ using Celeste.SensitiveFloats.clear!
 import Optim
 import WCS
 
-export evaluate_psf_fit, psf_params_to_array, psf_array_to_params,
-       get_psf_transform, initialize_psf_params, transform_psf_params!,
-       unwrap_psf_params, wrap_psf_params,
-       unconstrain_psf_params, constrain_psf_params,
-       transform_psf_sensitive_float!,
-       PsfOptimizer, fit_raw_psf_for_celeste,
-       get_psf_at_point, get_source_psf
 
  # Only include until this is merged with Optim.jl.
 include("newton_trust_region.jl")

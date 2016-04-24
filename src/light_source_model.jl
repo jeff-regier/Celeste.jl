@@ -121,6 +121,9 @@ function load_prior()
 end
 
 
+prior = load_prior()
+
+
 """
 Return a default-initialized VariationalParams object.
 """

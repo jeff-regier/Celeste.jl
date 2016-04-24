@@ -1,9 +1,7 @@
-using Base.Test
 import DualNumbers
+import ForwardDiff
 
 using Celeste: Model, SensitiveFloats, BivariateNormals, ElboDeriv
-import Celeste: ModelInit, WCSUtils, SDSSIO
-import ForwardDiff
 
 
 println("Running derivative tests.")

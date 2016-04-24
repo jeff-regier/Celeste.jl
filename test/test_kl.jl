@@ -1,4 +1,3 @@
-using Base.Test
 using Distributions
 
 using Celeste.KL

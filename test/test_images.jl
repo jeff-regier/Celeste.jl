@@ -1,10 +1,6 @@
 using Base.Test
 using DataFrames
-
 import WCS
-
-using Celeste: Model
-import Celeste: ModelInit, ElboDeriv, SDSSIO, PSF
 
 println("Running SkyImages tests.")
 
