@@ -53,9 +53,6 @@ function test_blob()
   # the full image multiple times.
   blob = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir)
 
-  for b=1:length(blob)
-    @test !blob[b].constant_background
-  end
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
   cat_entries = SDSSIO.read_photoobj_celeste(fname)
 

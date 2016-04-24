@@ -8,27 +8,9 @@ println("Running misc tests.")
 function test_tile_image()
   blob, mp, three_bodies = gen_three_body_dataset();
   img = blob[3];
-
-  # First with constant background
   tile_width = 20;
-  tile = ImageTile(1, 1, img, tile_width);
-
-  tiles = Model.break_image_into_tiles(img, tile_width);
-  @test size(tiles) ==
-    (round(Int, ceil(img.H  / tile_width)),
-     round(Int, ceil(img.W / tile_width)))
-  for tile in tiles
-    @test tile.b == img.b
-    @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
-    @test tile.epsilon == img.epsilon
-    @test tile.iota == img.iota
-    @test tile.constant_background == img.constant_background
-  end
-
-  # Then with varying background
-  img.constant_background = false
   img.epsilon_mat = rand(size(img.pixels));
-  img.iota_vec = rand(size(img.pixels)[1]);
+  img.iota_vec = rand(size(img.pixels, 1));
   tiles = Model.break_image_into_tiles(img, tile_width);
   @test size(tiles) == (
     ceil(Int, img.H  / tile_width),
@@ -36,9 +18,8 @@ function test_tile_image()
   for tile in tiles
     @test tile.b == img.b
     @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
-    @test tile.epsilon_mat == img.epsilon_mat[tile.h_range, tile.w_range]
-    @test tile.iota_vec == img.iota_vec[tile.h_range]
-    @test tile.constant_background == img.constant_background
+    @test tile.epsilon_mat[2,3] == img.epsilon_mat[tile.h_range, tile.w_range][2,3]
+    @test tile.iota_vec[3] == img.iota_vec[tile.h_range][3]
   end
 
   tile = tiles[2, 2]
@@ -207,7 +188,7 @@ function test_sky_noise_estimates()
 
     for blob in blobs
         for b in 1:5
-            sdss_sky_estimate = blob[b].epsilon * blob[b].iota
+            sdss_sky_estimate = median(blob[b].epsilon_mat) * median(blob[b].iota_vec)
             crude_estimate = median(blob[b].pixels)
             @test_approx_eq_eps sdss_sky_estimate / crude_estimate 1. .3
         end

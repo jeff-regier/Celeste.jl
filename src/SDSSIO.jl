@@ -267,14 +267,12 @@ function load_field_images(
         # epsilon * iota needs to be in units comparable to nelec
         # electron counts.
         # Note that each are actuall pretty variable.
-        iota = Float64(gains[band] / median(calibration))
-        epsilon = Float64(median(sky) * median(calibration))
         iota_vec = convert(Vector{Float64}, gains[band] ./ calibration)
         epsilon_mat = convert(Array{Float64, 2}, sky .* calibration)
 
         # Set it to use a constant background but include the non-constant data.
-        result[bandnum] = Image(H, W, data, bandnum, wcs, epsilon, iota, psf,
-                                run, camcol, field, false, epsilon_mat,
+        result[bandnum] = Image(H, W, data, bandnum, wcs, psf,
+                                run, camcol, field, epsilon_mat,
                                 iota_vec, sdsspsf)
     end
 

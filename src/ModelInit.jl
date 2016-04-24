@@ -242,11 +242,8 @@ function trim_source_tiles(s::Int,
                     w_im = w - minimum(tile.w_range) + 1
 
                     keep_pixel = false
-                    bright_pixel = tile.constant_background ?
-                        pred_tile_pixels[h_im, w_im] >
-                            tile.iota * tile.epsilon * noise_fraction:
-                        pred_tile_pixels[h_im, w_im] >
-                            tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
+                    bright_pixel = pred_tile_pixels[h_im, w_im] >
+                       tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
                     close_pixel =
                         (h - pix_loc[1]) ^ 2 + (w - pix_loc[2]) ^ 2 < min_radius_pix_sq
 
@@ -263,10 +260,13 @@ function trim_source_tiles(s::Int,
                 # say that an empty tile has a source.
                 # TODO: Make a TiledBlob simply an array of an array of tiles
                 # rather than a 2d array to avoid this hack.
-                empty_tile = ImageTile(b, tile.h_range, tile.w_range,
-                                       tile.h_width, tile.w_width,
-                                       Array(Float64, 0, 0), tile.constant_background,
-                                       tile.epsilon, Array(Float64, 0, 0), tile.iota,
+                empty_tile = ImageTile(b,
+                                       tile.h_range,
+                                       tile.w_range,
+                                       tile.h_width,
+                                       tile.w_width,
+                                       Array(Float64, 0, 0),
+                                       Array(Float64, 0, 0),
                                        Array(Float64, 0))
 
                 trimmed_tiled_blob[b][hh, ww] = empty_tile;

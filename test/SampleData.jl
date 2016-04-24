@@ -97,8 +97,8 @@ function load_stamp_blob(stamp_dir, stamp_id)
         empty_psf_comp = RawPSF(Array(Float64, 0, 0), 0, 0, 
                                  Array(Float64, 0, 0, 0)) 
 
-        Image(H, W, nelec, b, wcs, epsilon, iota, psf,
-              run_num, camcol_num, field_num, false, epsilon_mat, iota_vec,
+        Image(H, W, nelec, b, wcs, psf,
+              run_num, camcol_num, field_num, epsilon_mat, iota_vec,
               empty_psf_comp)
     end
 
@@ -321,9 +321,8 @@ function gen_n_body_dataset(
 
   # Make non-constant background.
   for b=1:5
-    blob[b].constant_background = false
-    blob[b].iota_vec = fill(blob[b].iota, blob[b].H)
-    blob[b].epsilon_mat = fill(blob[b].epsilon, blob[b].H, blob[b].W)
+    blob[b].iota_vec = fill(blob[b].iota_vec[1], blob[b].H)
+    blob[b].epsilon_mat = fill(blob[b].epsilon_mat[1], blob[b].H, blob[b].W)
   end
 
   world_radius_pts = WCSUtils.pix_to_world(
