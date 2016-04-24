@@ -225,7 +225,7 @@ function load_field_images(
     # read gain for each band
     photofield_name = @sprintf("%s/photoField-%06d-%d.fits",
                                photofield_dir, run, camcol)
-    gains = SDSSIO.read_field_gains(photofield_name, field)
+    gains = read_field_gains(photofield_name, field)
 
     # open FITS file containing PSF for each band
     psf_name = @sprintf("%s/psField-%06d-%d-%04d.fit",
@@ -239,15 +239,15 @@ function load_field_images(
         # load image data
         frame_name = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
                               frame_dir, band, run, camcol, field)
-        data, calibration, sky, wcs = SDSSIO.read_frame(frame_name)
+        data, calibration, sky, wcs = read_frame(frame_name)
 
         # scale data to raw electron counts
-        SDSSIO.decalibrate!(data, sky, calibration, gains[band])
+        decalibrate!(data, sky, calibration, gains[band])
 
         # read mask
         mask_name = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
                              fpm_dir, run, band, camcol, field)
-        mask_xranges, mask_yranges = SDSSIO.read_mask(mask_name)
+        mask_xranges, mask_yranges = read_mask(mask_name)
 
         # apply mask
         for i=1:length(mask_xranges)
@@ -257,7 +257,7 @@ function load_field_images(
         H, W = size(data)
 
         # read the psf
-        sdsspsf = SDSSIO.read_psf(psffile, band)
+        sdsspsf = read_psf(psffile, band)
 
         # evalute the psf in the center of the image and then fit it.
         psfstamp = sdsspsf(H / 2., W / 2.)
@@ -498,7 +498,7 @@ end
 
 """
 Convert from a catalog in dictionary-of-arrays, as returned by
-SDSSIO.read_photoobj to Vector{CatalogEntry}.
+read_photoobj to Vector{CatalogEntry}.
 """
 function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{ASCIIString, Any})
     out = Array(CatalogEntry, length(catalog["objid"]))
@@ -583,7 +583,7 @@ function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
         dir = dirs[i]
         fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
         Logging.info("field $(fieldids[i]): reading $fname")
-        rawcatalogs[i] = SDSSIO.read_photoobj(fname)
+        rawcatalogs[i] = read_photoobj(fname)
     end
 
     for i in eachindex(fieldids)
@@ -636,7 +636,7 @@ read_photoobj_celeste(fname)
 Read a SDSS \"photoobj\" FITS catalog into a Vector{CatalogEntry}.
 """
 function read_photoobj_celeste(fname)
-    rawcatalog = SDSSIO.read_photoobj(fname)
+    rawcatalog = read_photoobj(fname)
     convert(Vector{CatalogEntry}, rawcatalog)
 end
 
