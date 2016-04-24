@@ -306,8 +306,8 @@ function test_tiny_image_tiling()
   trivial_psf = [pc, pc, pc]
   pixels = ones(100, 1) * 12
   pixels[98:100, 1] = [1e3, 1e4, 1e5]
-  img = Image(3, 1, pixels, 3, blob0[3].wcs, 3., 4., trivial_psf, 1, 1, 1,
-              false, fill(3., size(pixels)), fill(4., size(pixels, 1)),
+  img = Image(3, 1, pixels, 3, blob0[3].wcs, trivial_psf, 1, 1, 1,
+              fill(3., size(pixels)), fill(4., size(pixels, 1)),
               blob0[3].raw_psf_comp);
   catalog = [sample_ce([100., 1], true),];
   catalog[1].star_fluxes = ones(5) * 1e5

@@ -696,8 +696,7 @@ function get_expected_pixel_brightness!{NumType <: Number}(
   if include_epsilon
     # There are no derivatives with respect to epsilon, so can safely add
     # to the value.
-    elbo_vars.E_G.v[1] +=
-      tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
+    elbo_vars.E_G.v[1] += tile.epsilon_mat[h, w]
   end
 
   true
@@ -815,7 +814,7 @@ function process_active_pixels!{NumType <: Number}(
       mp, tile_sources, include_epsilon=true)
 
     # Add the terms to the elbo given the brightness.
-    iota = tile.constant_background ? tile.iota : tile.iota_vec[pixel.h]
+    iota = tile.iota_vec[pixel.h]
     add_elbo_log_term!(elbo_vars, this_pixel, iota)
     add_scaled_sfs!(elbo_vars.elbo,
                     elbo_vars.E_G, -iota,
@@ -865,7 +864,7 @@ function tile_predicted_image{NumType <: Number}(
         get_expected_pixel_brightness!(
           elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
           mp, tile_sources, include_epsilon=include_epsilon)
-        iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
+        iota = tile.iota_vec[h]
         predicted_pixels[h, w] = elbo_vars.E_G.v[1] * iota
       end
     end

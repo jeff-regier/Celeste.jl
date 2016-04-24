@@ -16,13 +16,6 @@ type Image
     # World coordinates
     wcs::WCSTransform
 
-    # The background noise in nanomaggies.
-    epsilon::Float64
-
-    # The expected number of photons contributed to this image
-    # by a source 1 nanomaggie in brightness.
-    iota::Float64
-  
     # The components of the point spread function.
     psf::Vector{PsfComponent}
 
@@ -32,9 +25,11 @@ type Image
     camcol_num::Int
     field_num::Int
 
-    # # Field-varying parameters.
-    constant_background::Bool
+    # The background noise in nanomaggies. (varies by position)
     epsilon_mat::Array{Float64, 2}
+
+    # The expected number of photons contributed to this image
+    # by a source 1 nanomaggie in brightness. (varies by row)
     iota_vec::Array{Float64, 1}
 
     # storing a RawPSF here isn't ideal, because it's an SDSS type
@@ -72,10 +67,7 @@ immutable ImageTile
     w_width::Int
     pixels::Matrix{Float64}
 
-    constant_background::Bool
-    epsilon::Float64
     epsilon_mat::Matrix{Float64}
-    iota::Float64
     iota_vec::Vector{Float64}
 end
 
@@ -128,23 +120,16 @@ function ImageTile(img::Image,
                    w_range::UnitRange{Int};
                    hh::Int=1,
                    ww::Int=1)
-    b = img.b
     h_width = maximum(h_range) - minimum(h_range) + 1
     w_width = maximum(w_range) - minimum(w_range) + 1
+
     pixels = img.pixels[h_range, w_range]
+    epsilon_mat = img.epsilon_mat[h_range, w_range]
+    iota_vec = img.iota_vec[h_range]
 
-    if img.constant_background
-        epsilon_mat = img.epsilon_mat
-        iota_vec = img.iota_vec
-    else
-        # TODO: this subsetting doesn't seem to be working.
-        epsilon_mat = img.epsilon_mat[h_range, w_range]
-        iota_vec = img.iota_vec[h_range]
-    end
-
-    ImageTile(b, h_range, w_range, h_width, w_width, pixels,
-                        img.constant_background, img.epsilon, epsilon_mat,
-                        img.iota, iota_vec)
+    ImageTile(img.b,
+              h_range, w_range, h_width, w_width,
+              pixels, epsilon_mat, iota_vec)
 end
 
 

@@ -394,7 +394,7 @@ function test_add_log_term()
     tile = tiled_blob[b][1,1];
     tile_sources = mp.tile_sources[b][1,1];
 
-    iota = blob[b].iota
+    iota = median(blob[b].iota_vec)
 
     function add_log_term_wrapper_fun{NumType <: Number}(
         mp::ModelParams{NumType}, calculate_derivs::Bool)
