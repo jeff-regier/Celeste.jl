@@ -205,37 +205,28 @@ Returns:
   be the same as the original tiles but with NaN where the expected source
   electron counts are below <noise_fraction> of the noise at that pixel.
 """
-function trim_source_tiles(s::Int,
+function trim_source_tiles!(s::Int,
                            mp::ModelParams{Float64},
                            tiled_blob::TiledBlob;
                            noise_fraction::Float64=0.1,
                            min_radius_pix::Float64=8.0)
-    trimmed_tiled_blob =
-        Array{ImageTile, 2}[ Array(ImageTile, size(tiled_blob[b])...) for
-                                                 b=1:length(tiled_blob)];
-
     min_radius_pix_sq = min_radius_pix ^ 2
     for b = 1:length(tiled_blob)
         patch = mp.patches[s, b]
-        world_loc = mp.vp[s][ids.u]
         pix_loc = WCSUtils.world_to_pix(patch.wcs_jacobian, 
                                         patch.center,
                                         patch.pixel_center,
-                                        world_loc)
+                                        mp.vp[s][ids.u])
 
         H, W = size(tiled_blob[b])
         @assert size(mp.tile_sources[b]) == size(tiled_blob[b])
         for hh=1:H, ww=1:W
             tile = tiled_blob[b][hh, ww];
             tile_sources = mp.tile_sources[b][hh, ww]
-            has_source = s in tile_sources
-            bright_pixels = Bool[];
-            if has_source
+            if s in tile_sources
                 pred_tile_pixels =
                     ElboDeriv.tile_predicted_image(tile, mp, [ s ],
                                                    include_epsilon=false);
-                tile_copy = deepcopy(tiled_blob[b][hh, ww]);
-
                 for h in tile.h_range, w in tile.w_range
                     # The pixel location in the rendered image.
                     h_im = h - minimum(tile.h_range) + 1
@@ -248,11 +239,9 @@ function trim_source_tiles(s::Int,
                         (h - pix_loc[1]) ^ 2 + (w - pix_loc[2]) ^ 2 < min_radius_pix_sq
 
                     if !(bright_pixel || close_pixel)
-                        tile_copy.pixels[h_im, w_im] = NaN
+                        tiled_blob[b][hh, ww].pixels[h_im, w_im] = NaN
                     end
                 end
-
-                trimmed_tiled_blob[b][hh, ww] = tile_copy;
             else
                 # This tile does not contain the source.    Replace the tile with a
                 # pseudo-tile that does not have any data in it.
@@ -260,21 +249,17 @@ function trim_source_tiles(s::Int,
                 # say that an empty tile has a source.
                 # TODO: Make a TiledBlob simply an array of an array of tiles
                 # rather than a 2d array to avoid this hack.
-                empty_tile = ImageTile(b,
-                                       tile.h_range,
-                                       tile.w_range,
-                                       tile.h_width,
-                                       tile.w_width,
-                                       Array(Float64, 0, 0),
-                                       Array(Float64, 0, 0),
-                                       Array(Float64, 0))
-
-                trimmed_tiled_blob[b][hh, ww] = empty_tile;
+                tiled_blob[b][hh, ww] = ImageTile(b,
+                                          tile.h_range,
+                                          tile.w_range,
+                                          tile.h_width,
+                                          tile.w_width,
+                                          Array(Float64, 0, 0),
+                                          Array(Float64, 0, 0),
+                                          Array(Float64, 0))
             end
         end
     end
-
-    trimmed_tiled_blob
 end
 
 end
