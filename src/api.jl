@@ -383,8 +383,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                 mp_source = ModelParams(mp, relevant_sources)
                 sa = findfirst(relevant_sources, s)
                 mp_source.active_sources = Int[ sa ]
-                trimmed_tiled_images =
-                  ModelInit.trim_source_tiles(sa, mp_source, tiled_images;
+                ModelInit.trim_source_tiles(sa, mp_source, tiled_images;
                                               noise_fraction=0.1)
                 init_time = time() - t0
 
@@ -394,7 +393,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
                 t0 = time()
                 iter_count, max_f, max_x, result =
-                    OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images,
+                    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_images,
                                             mp_source;
                                             verbose=false, max_iters=max_iters)
                 fit_time = time() - t0
