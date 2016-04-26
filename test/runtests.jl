@@ -5,7 +5,6 @@ import Celeste: WCSUtils, ModelInit, ElboDeriv, Model, ModelInit
 import Celeste: PSF, OptimizeElbo, SDSSIO, SensitiveFloats, Transform
 import Celeste: BivariateNormals
 
-
 include("Synthetic.jl")
 include("SampleData.jl")
 
@@ -14,6 +13,9 @@ using SampleData
 
 using Base.Test
 using Distributions
+
+import Logging
+Logging.configure(level=Logging.INFO)
 
 anyerrors = false
 

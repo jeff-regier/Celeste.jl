@@ -238,9 +238,9 @@ function trim_source_tiles(s::Int,
                     end
                 end
             else
-                # This tile does not contain the source.    Replace the tile with a
+                # This tile does not contain the source. Replace the tile with a
                 # pseudo-tile that does not have any data in it.
-                # The problem is with mp.tile_sources, which can't be allowed to
+                # TThe problem is with mp.tile_sources, which can't be allowed to
                 # say that an empty tile has a source.
                 # TODO: Make a TiledBlob simply an array of an array of tiles
                 # rather than a 2d array to avoid this hack.
@@ -258,5 +258,58 @@ function trim_source_tiles(s::Int,
 
     trimmed
 end
+
+
+function find_neighbors(target_sources::Vector{Int64},
+                        catalog::Vector{CatalogEntry},
+                        images::Vector{TiledImage})
+    psf_width_ub = zeros(B)
+    for img in images
+        psf_width = Model.get_psf_width(img.psf)
+        psf_width_ub[img.b] = max(psf_width_ub[img.b], psf_width)
+    end
+        
+    epsilon_lb = fill(Inf, B)
+    for img in images
+        Ht, Wt = size(img.tiles)
+        epsilon = mean(img.tiles[ceil(Int, Ht/2), ceil(Int, Wt/2)].epsilon_mat)
+        epsilon_lb[img.b] = min(epsilon_lb[img.b], epsilon)
+    end
+
+    radii_map = zeros(length(catalog))
+    for s in 1:length(catalog)
+        ce = catalog[s]
+        for b in 1:B
+            radius_pix = Model.choose_patch_radius(ce, b, psf_width_ub[b],
+                                                             epsilon_lb[b])
+            radii_map[s] = max(radii_map[s], radius_pix)
+        end
+    end
+
+    # compute distance in pixels using small-distance approximation
+    dist(ra1, dec1, ra2, dec2) = (3600 / 0.396) * (sqrt((dec2 - dec1)^2 +
+                                  (cos(dec1) * (ra2 - ra1))^2))
+
+    neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
+
+    # If this loop isn't super fast in pratice, we can tile (the sky, not the
+    # images) or build a spatial index with a library before distributing
+    for ts in 1:length(target_sources)
+        s = target_sources[ts]
+        ce = catalog[s]
+
+        for s2 in 1:length(catalog)
+            ce2 = catalog[s2]
+            ctrs_dist = dist(ce.pos[1], ce.pos[2], ce2.pos[1], ce2.pos[2])
+
+            if s2 != s && ctrs_dist < radii_map[s] + radii_map[s2]
+                push!(neighbor_map[ts], s2)
+            end
+        end
+    end
+
+    neighbor_map
+end
+
 
 end
