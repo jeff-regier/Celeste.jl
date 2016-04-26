@@ -195,22 +195,30 @@ function trim_source_tiles(s::Int,
                            tiled_blob::TiledBlob;
                            noise_fraction::Float64=0.1,
                            min_radius_pix::Float64=8.0)
-    trimmed = deepcopy(tiled_blob)
+    N = length(tiled_blob)
+    trimmed = Array(TiledImage, N)
 
-    min_radius_pix_sq = min_radius_pix ^ 2
-    for b = 1:length(tiled_blob)
-        patch = mp.patches[s, b]
+    for i = 1:N
+        img = tiled_blob[i]
+        trimmed_tiles = Array(ImageTile, size(tiled_blob[i].tiles)...)
+        trimmed[i] = TiledImage(img.H, img.W, trimmed_tiles, img.tile_width,
+                                img.b, img.wcs,
+                                img.psf, img.run_num, img.camcol_num, 
+                                img.field_num, img.raw_psf_comp)
+
+        patch = mp.patches[s, i]
         pix_loc = WCSUtils.world_to_pix(patch.wcs_jacobian, 
                                         patch.center,
                                         patch.pixel_center,
                                         mp.vp[s][ids.u])
 
-        Ht, Wt = size(tiled_blob[b].tiles)
-        @assert size(mp.tile_sources[b]) == size(tiled_blob[b].tiles)
+        Ht, Wt = size(tiled_blob[i].tiles)
+        @assert size(mp.tile_sources[i]) == size(tiled_blob[i].tiles)
         for hh=1:Ht, ww=1:Wt
-            tile = tiled_blob[b].tiles[hh, ww];
-            tile_sources = mp.tile_sources[b][hh, ww]
+            tile = tiled_blob[i].tiles[hh, ww];
+            tile_sources = mp.tile_sources[i][hh, ww]
             if s in tile_sources
+                trimmed_tiles[hh, ww] = deepcopy(tile)
                 pred_tile_pixels =
                     ElboDeriv.tile_predicted_image(tile, mp, [ s ],
                                                    include_epsilon=false);
@@ -223,10 +231,10 @@ function trim_source_tiles(s::Int,
                     bright_pixel = pred_tile_pixels[h_im, w_im] >
                        tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
                     close_pixel =
-                        (h - pix_loc[1]) ^ 2 + (w - pix_loc[2]) ^ 2 < min_radius_pix_sq
+                        (h - pix_loc[1]) ^ 2 + (w - pix_loc[2])^2 < min_radius_pix^2
 
                     if !(bright_pixel || close_pixel)
-                        trimmed[b].tiles[hh, ww].pixels[h_im, w_im] = NaN
+                        trimmed_tiles[hh, ww].pixels[h_im, w_im] = NaN
                     end
                 end
             else
@@ -236,7 +244,7 @@ function trim_source_tiles(s::Int,
                 # say that an empty tile has a source.
                 # TODO: Make a TiledBlob simply an array of an array of tiles
                 # rather than a 2d array to avoid this hack.
-                trimmed[b].tiles[hh, ww] = ImageTile(b,
+                trimmed_tiles[hh, ww] = ImageTile(i,
                                               tile.h_range,
                                               tile.w_range,
                                               tile.h_width,
