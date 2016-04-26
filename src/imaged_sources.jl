@@ -123,32 +123,24 @@ Returns:
     into patches indicating which patches are affected by any pixels
     in the tiles.
 """
-function get_tiled_image_sources(tiled_image::TiledImage,
-                                 patch_ctrs::Vector{Vector{Float64}},
-                                 patch_radii_px::Vector{Float64})
-    out = similar(tiled_image, Vector{Int})
+function get_sources_per_tile(image_tiles::Matrix{ImageTile},
+                              patch_ctrs::Vector{Vector{Float64}},
+                              patch_radii_px::Vector{Float64})
+    out = similar(image_tiles, Vector{Int})
 
-    HH, WW = size(tiled_image)
+    HH, WW = size(image_tiles)
     for ww in 1:WW, hh in 1:HH
-        cands = local_source_candidates(tiled_image[hh, ww],
+        cands = local_source_candidates(image_tiles[hh, ww],
                                         patch_ctrs,
                                         patch_radii_px)
         # get indicies in cands that truly overlap the tile.
-        idx = get_local_sources(tiled_image[hh, ww],
+        idx = get_local_sources(image_tiles[hh, ww],
                                 patch_ctrs[cands],
                                 patch_radii_px[cands])
         out[hh, ww] = cands[idx]
     end
 
     return out
-end
-
-
-function get_tiled_image_sources(tiled_image::TiledImage,
-                                 patches::Vector{SkyPatch})
-    patch_centers = patch_ctrs_pix(patches)
-    patch_radii = patch_radii_pix(patches)
-    get_tiled_image_sources(tiled_image, patch_centers, patch_radii)
 end
 
 
@@ -172,7 +164,7 @@ function choose_patch_radius(
             pixel_center::Vector{Float64},
             ce::CatalogEntry,
             psf::Array{PsfComponent},
-            img::Image;
+            img::TiledImage;
             width_scale=1.0,
             max_radius=100)
 
@@ -184,19 +176,10 @@ function choose_patch_radius(
     obj_width =
       ce.is_star ? psf_width: width_scale * ce.gal_scale / 0.67 + psf_width
 
-    if img.constant_background
-        epsilon = img.epsilon
-    else
-        # Get the average sky noise in a rectangle of the width of the psf.
-        h_max, w_max = size(img.epsilon_mat)
-        h_lim = [Int(floor((pixel_center[1] - obj_width))),
-                       Int(ceil((pixel_center[1] + obj_width)))]
-        w_lim = [Int(floor((pixel_center[2] - obj_width))),
-                       Int(ceil((pixel_center[2] + obj_width)))]
-        h_range = max(h_lim[1], 1):min(h_lim[2], h_max)
-        w_range = max(w_lim[1], 1):min(w_lim[2], w_max)
-        epsilon = mean(img.epsilon_mat[h_range, w_range])
-    end
+    # Get the average sky noise around a source
+    close_tile = get_containing_tile(pixel_center, img)
+    epsilon = mean(close_tile.epsilon_mat)
+
     flux = ce.is_star ? ce.star_fluxes[img.b] : ce.gal_fluxes[img.b]
     @assert flux > 0.
 

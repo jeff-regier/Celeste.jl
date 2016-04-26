@@ -54,10 +54,11 @@ end
 
 function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                     expectation=false)
+    iota = median(img0.iota_vec)
     for k in 1:length(img0.psf)
         the_mean = WCSUtils.world_to_pix(img0.wcs, ce.pos) + img0.psf[k].xiBar
         the_cov = img0.psf[k].tauBar
-        intensity = ce.star_fluxes[img0.b] * img0.iota * img0.psf[k].alphaBar
+        intensity = ce.star_fluxes[img0.b] * iota * img0.psf[k].alphaBar
         write_gaussian(the_mean, the_cov, intensity, pixels,
             expectation = expectation)
     end
@@ -66,8 +67,8 @@ end
 
 function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                       expectation=false)
+    iota = median(img0.iota_vec)
     e_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
-
     XiXi = BivariateNormals.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
 
     for i in 1:2
@@ -76,7 +77,7 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                 the_mean = WCSUtils.world_to_pix(img0.wcs, ce.pos) +
                            img0.psf[k].xiBar
                 the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
-                intensity = ce.gal_fluxes[img0.b] * img0.iota *
+                intensity = ce.gal_fluxes[img0.b] * iota *
                     img0.psf[k].alphaBar * e_devs[i] * gproto.etaBar
                 write_gaussian(the_mean, the_cov, intensity, pixels,
                     expectation=expectation)
@@ -86,10 +87,13 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
 end
 
 function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=false)
+    epsilon = img0.epsilon_mat[1]
+    iota = img0.iota_vec[1]
+
     if expectation
-        pixels = [ img0.epsilon * img0.iota for h=1:img0.H, w=1:img0.W ]
+        pixels = [epsilon * iota for h=1:img0.H, w=1:img0.W]
     else
-        pixels = reshape(float(rand(Distributions.Poisson(img0.epsilon * img0.iota),
+        pixels = reshape(float(rand(Distributions.Poisson(epsilon * iota),
                          img0.H * img0.W)), img0.H, img0.W)
     end
 
@@ -97,8 +101,14 @@ function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=fals
         body.is_star ? write_star(img0, body, pixels) : write_galaxy(img0, body, pixels)
     end
 
-    return Image(img0.H, img0.W, pixels, img0.b, img0.wcs, img0.epsilon,
-                 img0.iota, img0.psf, img0.run_num, img0.camcol_num, img0.field_num)
+    epsilon_mat = fill(epsilon, img0.H, img0.W)
+    iota_vec = fill(iota, img0.H)
+
+    return Image(img0.H, img0.W, pixels, img0.b, img0.wcs,
+                 img0.psf,
+                 img0.run_num, img0.camcol_num, img0.field_num,
+                 epsilon_mat, iota_vec,
+                 img0.raw_psf_comp)
 end
 
 """

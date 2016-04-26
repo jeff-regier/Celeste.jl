@@ -1,5 +1,3 @@
-import Celeste.SDSSIO
-
 function test_interp_sky()
     data = [1.  2.  3.  4.;
             5.  6.  7.  8.;

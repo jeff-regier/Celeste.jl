@@ -1,6 +1,4 @@
-using Base.Test
-
-using Celeste: Model, SensitiveFloats
+using Celeste: SensitiveFloats
 
 
 function test_combine_sfs()

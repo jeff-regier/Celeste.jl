@@ -1,7 +1,10 @@
 #!/usr/bin/env julia
 
 using Celeste: Model, Transform
-import Celeste: WCSUtils, ModelInit
+import Celeste: WCSUtils, ModelInit, ElboDeriv, Model, ModelInit
+import Celeste: PSF, OptimizeElbo, SDSSIO, SensitiveFloats, Transform
+import Celeste: BivariateNormals
+
 
 include("Synthetic.jl")
 include("SampleData.jl")
@@ -31,8 +34,8 @@ function initialize_celeste(
         blob::Blob, cat::Vector{CatalogEntry};
         tile_width::Int=20, fit_psf::Bool=true,
         patch_radius::Float64=NaN)
-    tiled_blob = Model.break_blob_into_tiles(blob, tile_width)
-    mp = ModelInit.initialize_model_params(tiled_blob, blob, cat,
+    tiled_blob = TiledImage[TiledImage(img, tile_width=tile_width) for img in blob]
+    mp = ModelInit.initialize_model_params(tiled_blob, cat,
                                fit_psf=fit_psf, patch_radius=patch_radius)
     tiled_blob, mp
 end
