@@ -1,10 +1,7 @@
 # Test the functions that move between constrained and unconstrained
 # parameterizations.
 
-using Base.Test
-
-using Celeste: Model, Transform, SensitiveFloats
-import Celeste: ModelInit, ElboDeriv
+using Celeste: Transform, SensitiveFloats
 using Compat
 
 
@@ -17,10 +14,10 @@ function test_transform_sensitive_float()
 	# Only keep a few pixels to make the autodiff results faster.
   keep_pixels = 10:11
 	for b = 1:length(tiled_blob)
-	  tiled_blob[b][1,1].pixels[
-			setdiff(1:tiled_blob[b][1,1].h_width, keep_pixels), :] = NaN;
-	  tiled_blob[b][1,1].pixels[
-			:, setdiff(1:tiled_blob[b][1,1].w_width, keep_pixels)] = NaN;
+	  tiled_blob[b].tiles[1,1].pixels[
+			setdiff(1:tiled_blob[b].tiles[1,1].h_width, keep_pixels), :] = NaN;
+	  tiled_blob[b].tiles[1,1].pixels[
+			:, setdiff(1:tiled_blob[b].tiles[1,1].w_width, keep_pixels)] = NaN;
 	end
 
 

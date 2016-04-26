@@ -1,45 +1,25 @@
 using Base.Test
 
-using Celeste: Model
-import Celeste: ModelInit
 import Celeste.Model: patch_ctrs_pix, patch_radii_pix
+
 
 println("Running misc tests.")
 
 function test_tile_image()
   blob, mp, three_bodies = gen_three_body_dataset();
   img = blob[3];
-
-  # First with constant background
   tile_width = 20;
-  tile = ImageTile(1, 1, img, tile_width);
-
-  tiles = Model.break_image_into_tiles(img, tile_width);
-  @test size(tiles) ==
-    (round(Int, ceil(img.H  / tile_width)),
-     round(Int, ceil(img.W / tile_width)))
-  for tile in tiles
-    @test tile.b == img.b
-    @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
-    @test tile.epsilon == img.epsilon
-    @test tile.iota == img.iota
-    @test tile.constant_background == img.constant_background
-  end
-
-  # Then with varying background
-  img.constant_background = false
   img.epsilon_mat = rand(size(img.pixels));
-  img.iota_vec = rand(size(img.pixels)[1]);
-  tiles = Model.break_image_into_tiles(img, tile_width);
+  img.iota_vec = rand(size(img.pixels, 1));
+  tiles = Model.TiledImage(img; tile_width=tile_width).tiles;
   @test size(tiles) == (
     ceil(Int, img.H  / tile_width),
     ceil(Int, img.W / tile_width))
   for tile in tiles
     @test tile.b == img.b
     @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
-    @test tile.epsilon_mat == img.epsilon_mat[tile.h_range, tile.w_range]
-    @test tile.iota_vec == img.iota_vec[tile.h_range]
-    @test tile.constant_background == img.constant_background
+    @test tile.epsilon_mat[2,3] == img.epsilon_mat[tile.h_range, tile.w_range][2,3]
+    @test tile.iota_vec[3] == img.iota_vec[tile.h_range][3]
   end
 
   tile = tiles[2, 2]
@@ -65,10 +45,12 @@ function test_local_sources()
     ]
 
     blob = Synthetic.gen_blob(blob0, three_bodies);
+    tiled_blob = TiledImage[TiledImage(img; tile_width=20) for img in blob]
 
     tile = ImageTile(1, 1, blob[3], 1000);
+
     mp = ModelInit.initialize_model_params(
-      fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
+      tiled_blob, three_bodies; patch_radius=20.);
     @test mp.S == 3
 
     patches = vec(mp.patches[:, 3])
@@ -79,7 +61,7 @@ function test_local_sources()
     tile_width = 10
     tile = ImageTile(1, 1, blob[3], tile_width);
     ModelInit.initialize_model_params(
-      fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
+      tiled_blob, three_bodies; patch_radius=20.);
 
     patches = vec(mp.patches[:, 3])
     subset10 = Model.get_local_sources(tile, patch_ctrs_pix(patches),
@@ -88,7 +70,7 @@ function test_local_sources()
 
     last_tile = ImageTile(11, 24, blob[3], tile_width)
     ModelInit.initialize_model_params(
-      fill(fill(last_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.)
+      tiled_blob, three_bodies; patch_radius=20.)
 
     patches = vec(mp.patches[:, 3])
     last_subset = Model.get_local_sources(last_tile,
@@ -98,7 +80,7 @@ function test_local_sources()
 
     pop_tile = ImageTile(7, 9, blob[3], tile_width)
     ModelInit.initialize_model_params(
-      fill(fill(pop_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
+      tiled_blob, three_bodies; patch_radius=20.);
 
     patches = vec(mp.patches[:, 3])
     pop_subset = Model.get_local_sources(pop_tile, patch_ctrs_pix(patches),
@@ -201,49 +183,6 @@ function test_local_sources_3()
 end
 
 
-function test_tiling()
-    srand(1)
-    blob0 =SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")
-    for b in 1:5
-        blob0[b].H, blob0[b].W = 112, 238
-    end
-    three_bodies = [
-        sample_ce([4.5, 3.6], false),
-        sample_ce([60.1, 82.2], true),
-        sample_ce([71.3, 100.4], false),
-    ]
-   blob = Synthetic.gen_blob(blob0, three_bodies)
-
-    mp = ModelInit.cat_init(three_bodies)
-    elbo = ElboDeriv.elbo(blob, mp)
-
-    mp2 = ModelInit.cat_init(three_bodies, tile_width=10)
-    elbo_tiles = ElboDeriv.elbo(blob, mp2)
-    @test_approx_eq_eps elbo_tiles.v[1] elbo.v[1] 1e-5
-
-    mp3 = ModelInit.cat_init(three_bodies, patch_radius=30.)
-    elbo_patches = ElboDeriv.elbo(blob, mp3)
-    @test_approx_eq_eps elbo_patches.v[1] elbo.v[1] 1e-5
-
-    for s in 1:mp.S
-        for i in 1:length(1:length(CanonicalParams))
-            @test_approx_eq_eps elbo_tiles.d[i, s] elbo.d[i, s] 1e-5
-            @test_approx_eq_eps elbo_patches.d[i, s] elbo.d[i, s] 1e-5
-        end
-    end
-
-    mp4 = ModelInit.cat_init(three_bodies, patch_radius=35., tile_width=10)
-    elbo_both = ElboDeriv.elbo(blob, mp4)
-    @test_approx_eq_eps elbo_both.v[1] elbo.v[1] 1e-1
-
-    for s in 1:mp.S
-        for i in 1:length(1:length(CanonicalParams))
-            @test_approx_eq_eps elbo_both.d[i, s] elbo.d[i, s] 1e-1
-        end
-    end
-end
-
-
 function test_sky_noise_estimates()
     blobs = Array(Blob, 2)
     blobs[1], mp, three_bodies = gen_three_body_dataset()  # synthetic
@@ -251,7 +190,7 @@ function test_sky_noise_estimates()
 
     for blob in blobs
         for b in 1:5
-            sdss_sky_estimate = blob[b].epsilon * blob[b].iota
+            sdss_sky_estimate = median(blob[b].epsilon_mat) * median(blob[b].iota_vec)
             crude_estimate = median(blob[b].pixels)
             @test_approx_eq_eps sdss_sky_estimate / crude_estimate 1. .3
         end
@@ -261,7 +200,7 @@ end
 
 function test_get_relevant_sources()
   blob, mp, body, tiled_blob = gen_n_body_dataset(100; seed=42);
-  mp = ModelInit.initialize_model_params(tiled_blob, blob, body);
+  mp = ModelInit.initialize_model_params(tiled_blob, body);
 
   target_s = 1
   relevant_sources = ModelInit.get_relevant_sources(mp, target_s);

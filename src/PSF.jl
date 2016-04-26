@@ -12,13 +12,6 @@ using Celeste.SensitiveFloats.clear!
 import Optim
 import WCS
 
-export evaluate_psf_fit, psf_params_to_array, psf_array_to_params,
-       get_psf_transform, initialize_psf_params, transform_psf_params!,
-       unwrap_psf_params, wrap_psf_params,
-       unconstrain_psf_params, constrain_psf_params,
-       transform_psf_sensitive_float!,
-       PsfOptimizer, fit_raw_psf_for_celeste,
-       get_psf_at_point, get_source_psf
 
  # Only include until this is merged with Optim.jl.
 include("newton_trust_region.jl")
@@ -176,13 +169,13 @@ Get the PSF located at a particular world location in an image.
 
 Args:
  - world_loc: A location in world coordinates.
- - img: An Image
+ - img: An TiledImage
 
 Returns:
  - An array of PsfComponent objects that represents the PSF as a mixture
    of Gaussians.
 """
-function get_source_psf(world_loc::Vector{Float64}, img::Image)
+function get_source_psf(world_loc::Vector{Float64}, img::TiledImage)
   # Some stamps or simulated data have no raw psf information.  In that case,
   # just use the psf from the image.
   if size(img.raw_psf_comp.rrows) == (0, 0)
@@ -201,14 +194,14 @@ Get the PSF located at a particular world location in an image.
 
 Args:
  - world_loc: A location in world coordinates.
- - img: An Image
+ - img: An TiledImage
 
 Returns:
  - An array of PsfComponent objects that represents the PSF as a mixture
    of Gaussians.
 """
 function get_source_psf(
-    world_loc::Vector{Float64}, img::Image,
+    world_loc::Vector{Float64}, img::TiledImage,
     psf_optimizer::PSF.PsfOptimizer, initial_psf_params::Vector{Vector{Float64}})
 
   # Some stamps or simulated data have no raw psf information.  In that case,

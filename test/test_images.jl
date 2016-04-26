@@ -1,10 +1,6 @@
 using Base.Test
 using DataFrames
-
 import WCS
-
-using Celeste: Model
-import Celeste: ModelInit, ElboDeriv, SDSSIO, PSF
 
 println("Running SkyImages tests.")
 
@@ -30,7 +26,7 @@ Returns:
 """
 function crop_blob_to_location(
   blob::Array{Image, 1},
-  width::Union{Float64, Int},
+  width::Int,
   wcs_center::Vector{Float64})
     @assert length(wcs_center) == 2
     @assert width > 0
@@ -46,7 +42,8 @@ function crop_blob_to_location(
         w_min = max(floor(Int, (pix_center[2] - width)), 1)
         w_max = min(ceil(Int, pix_center[2] + width), blob[b].W)
         sub_rows_w = w_min:w_max
-        tiled_blob[b] = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
+        tiled_blob[b] = TiledImage(blob[b], tile_width=width)
+        tiled_blob[b].tiles = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
     end
     tiled_blob
 end
@@ -57,9 +54,6 @@ function test_blob()
   # the full image multiple times.
   blob = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir)
 
-  for b=1:length(blob)
-    @test !blob[b].constant_background
-  end
   fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
   cat_entries = SDSSIO.read_photoobj_celeste(fname)
 
@@ -79,15 +73,13 @@ function test_blob()
   obj_loc = cat_entries[obj_index].pos  # location of closest object
 
   # Test cropping.
-  width = 5.0
+  width = 5
   cropped_blob = crop_blob_to_location(blob, width, obj_loc);
   for b=1:length(blob)
     # Check that it only has one tile of the right size containing the object.
-    @assert length(cropped_blob[b]) == 1
-    @test 2 * width <= cropped_blob[b][1].h_width <= 2 * (width + 1)
-    @test 2 * width <= cropped_blob[b][1].w_width <= 2 * (width + 1)
+    @assert length(cropped_blob[b].tiles) == 1
     patches = vec(mp.patches[:, b])
-    tile_sources = Model.get_local_sources(cropped_blob[b][1],
+    tile_sources = Model.get_local_sources(cropped_blob[b].tiles[1],
                                            Model.patch_ctrs_pix(patches),
                                            Model.patch_radii_pix(patches))
     @test obj_index in tile_sources
@@ -95,8 +87,8 @@ function test_blob()
 
   # Test get_source_psf at point while we have the blob loaded.
   test_b = 3
-  img = blob[test_b]
-  mp_obj = ModelInit.initialize_model_params(tiled_blob, blob,
+  img = tiled_blob[test_b]
+  mp_obj = ModelInit.initialize_model_params(tiled_blob,
                                              cat_entries[obj_index:obj_index])
   pixel_loc = WCS.world_to_pix(img.wcs, obj_loc);
   original_psf_val = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
@@ -115,7 +107,7 @@ function test_blob()
 
   mp_several =
     ModelInit.initialize_model_params(
-      tiled_blob, blob, [cat_entries[1]; cat_entries[obj_index]]);
+      tiled_blob, [cat_entries[1]; cat_entries[obj_index]]);
 
   # The second set of vp is the object of interest
   point_patch_psf = PSF.get_psf_at_point(mp_several.patches[2, test_b].psf);
@@ -123,33 +115,9 @@ function test_blob()
 end
 
 
-function test_fit_object_psfs()
-  blob = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir);
-  fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-  cat_entries = SDSSIO.read_photoobj_celeste(fname);
-
-  # Only test a few catalog entries.
-  relevant_sources = collect(3:4)
-  test_sources = collect(1:5)
-
-  tiled_blob, mp = initialize_celeste(
-    blob, cat_entries[test_sources], fit_psf=false);
-  ModelInit.fit_object_psfs!(mp, relevant_sources, blob);
-
-  tiled_blob, mp_psf_init = initialize_celeste(
-    blob, cat_entries[test_sources], fit_psf=true);
-
-  for b in 1:length(blob), s in relevant_sources
-    @test_approx_eq(
-      blob[b].raw_psf_comp(mp.patches[s, b].pixel_center...),
-      blob[b].raw_psf_comp(mp_psf_init.patches[s, b].pixel_center...))
-  end
-end
-
-
 function test_stamp_get_object_psf()
   stamp_blob, stamp_mp, body = gen_sample_star_dataset();
-  img = stamp_blob[3];
+  img = TiledImage(stamp_blob[3]);
   obj_index =  stamp_mp.vp[1][ids.u]
   pixel_loc = WCS.world_to_pix(img.wcs, obj_index)
   original_psf_val = PSF.get_psf_at_point(img.psf);
@@ -165,11 +133,11 @@ function test_get_tiled_image_source()
   blob, mp, body, tiled_blob = gen_sample_star_dataset();
 
   mp = ModelInit.initialize_model_params(
-    tiled_blob, blob, body; patch_radius=1e-6)
+    tiled_blob, body; patch_radius=1e-6)
 
-  tiled_img = Model.break_image_into_tiles(blob[3], 10);
-  for hh in 1:size(tiled_img)[1], ww in 1:size(tiled_img)[2]
-    tile = tiled_img[hh, ww]
+  tiled_img = TiledImage(blob[3], tile_width=10);
+  for hh in 1:size(tiled_img.tiles, 1), ww in 1:size(tiled_img.tiles, 2)
+    tile = tiled_img.tiles[hh, ww]
     loc = Float64[mean(tile.h_range), mean(tile.w_range)]
     for b = 1:5
       mp.vp[1][ids.u] = loc
@@ -183,11 +151,11 @@ function test_get_tiled_image_source()
                                   pixel_center)
     end
     patches = vec(mp.patches[:, 3])
-    local_sources = Model.get_tiled_image_sources(tiled_img,
-                                                  Model.patch_ctrs_pix(patches),
-                                                  Model.patch_radii_pix(patches))
+    local_sources = Model.get_sources_per_tile(tiled_img.tiles,
+                                               Model.patch_ctrs_pix(patches),
+                                               Model.patch_radii_pix(patches))
     @test local_sources[hh, ww] == Int[1]
-    for hh2 in 1:size(tiled_img)[1], ww2 in 1:size(tiled_img)[2]
+    for hh2 in 1:size(tiled_img.tiles, 1), ww2 in 1:size(tiled_img.tiles, 2)
       if (hh2 != hh) || (ww2 != ww)
         @test local_sources[hh2, ww2] == Int[]
       end
@@ -201,15 +169,15 @@ function test_local_source_candidate()
 
   # This is run by gen_n_body_dataset but put it here for safe testing in
   # case that changes.
-  mp = ModelInit.initialize_model_params(tiled_blob, blob, body);
+  mp = ModelInit.initialize_model_params(tiled_blob, body);
 
   for b=1:length(tiled_blob)
     # Get the sources by iterating over everything.
     patches = vec(mp.patches[:,b])
 
-    tile_sources = Model.get_tiled_image_sources(tiled_blob[b],
-                                                 Model.patch_ctrs_pix(patches),
-                                                 Model.patch_radii_pix(patches))
+    tile_sources = Model.get_sources_per_tile(tiled_blob[b].tiles,
+                                              Model.patch_ctrs_pix(patches),
+                                              Model.patch_radii_pix(patches))
 
     # Check that all the actual sources are candidates and that this is the
     # same as what is returned by initialize_model_params.
@@ -217,7 +185,7 @@ function test_local_source_candidate()
     for h=1:HH, w=1:WW
       # Get a set of candidates.
       candidates = Model.local_source_candidates(
-                        tiled_blob[b][h, w],
+                        tiled_blob[b].tiles[h, w],
                         Model.patch_ctrs_pix(patches),
                         Model.patch_radii_pix(patches))
       @test setdiff(tile_sources[h, w], candidates) == []
@@ -256,13 +224,13 @@ function test_set_patch_size()
       initialize_celeste(blob, cat, tile_width=typemax(Int));
 
     for b=1:length(blob)
-      @assert size(tiled_blob[b]) == (1, 1)
+      @assert size(tiled_blob[b].tiles) == (1, 1)
       tile_image = ElboDeriv.tile_predicted_image(
-        tiled_blob[b][1,1], mp, mp.tile_sources[b][1,1]);
+        tiled_blob[b].tiles[1,1], mp, mp.tile_sources[b][1,1]);
 
       pixel_center = WCS.world_to_pix(blob[b].wcs, cat[1].pos)
       radius = Model.choose_patch_radius(
-        pixel_center, cat[1], blob[b].psf, blob[b])
+        pixel_center, cat[1], blob[b].psf, tiled_blob[b])
 
       circle_pts = fill(false, blob[b].H, blob[b].W);
       in_circle = 0.0
@@ -308,8 +276,8 @@ function test_copy_model_params()
   @test s > 0
 
   # Fit with both and make sure you get the same answer.
-  ModelInit.fit_object_psfs!(mp_all, relevant_sources, images);
-  ModelInit.fit_object_psfs!(mp, collect(1:mp.S), images);
+  ModelInit.fit_object_psfs!(mp_all, relevant_sources, tiled_images);
+  ModelInit.fit_object_psfs!(mp, collect(1:mp.S), tiled_images);
 
   @test mp.S == length(relevant_sources)
   for sa in 1:length(relevant_sources)

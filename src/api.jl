@@ -1,15 +1,12 @@
-# Functions for interacting with Celeste from the command line.
-
 import FITSIO
 import JLD
-import Logging  # just for testing right now
+import Logging
 
 using .Model
 import .SDSSIO
 import .ModelInit
 import .OptimizeElbo
 
-import .TrimSourceTiles
 
 const TILE_WIDTH = 20
 const DEFAULT_MAX_ITERS = 50
@@ -115,6 +112,7 @@ end
 @inline nputs(nid, s) = ccall(:puts, Cint, (Ptr{Int8},), string("[$nid] ", s))
 @inline phalse(b) = b[] = false
 
+
 function time_puts(elapsedtime, bytes, gctime, allocs)
     s = @sprintf("%10.6f seconds", elapsedtime/1e9)
     if bytes != 0 || allocs != 0
@@ -143,24 +141,6 @@ function time_puts(elapsedtime, bytes, gctime, allocs)
         s = string(s, @sprintf(", %.2f%% gc time", 100*gctime/elapsedtime))
     end
     nputs(dt_nodeid, s)
-end
-
-function set_logging_level(level)
-    if level == "OFF"
-      Logging.configure(level=Logging.OFF)
-    elseif level == "DEBUG"
-      Logging.configure(level=Logging.DEBUG)
-    elseif level == "INFO"
-      Logging.configure(level=Logging.INFO)
-    elseif level == "WARNING"
-      Logging.configure(level=Logging.WARNING)
-    elseif level == "ERROR"
-      Logging.configure(level=Logging.ERROR)
-    elseif level == "CRITICAL"
-      Logging.configure(level=Logging.CRITICAL)
-    else
-      Logging.err("Unknown logging level $(level)")
-    end
 end
 
 
@@ -234,7 +214,8 @@ function divide_and_infer(ra_range::Tuple{Float64, Float64},
         itimes.get_dirs = toq()
 
         # run inference for this subarea
-        results = infer(fieldids, frame_dirs;
+        results = infer(fieldids,
+                        frame_dirs;
                         ra_range=(iramin, iramax),
                         dec_range=(idecmin, idecmax),
                         fpm_dirs=frame_dirs,
@@ -263,64 +244,32 @@ function divide_and_infer(ra_range::Tuple{Float64, Float64},
 end
 
 
-"""
-Update ModelParams with the PSFs for a range of object ids.
+function load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_dirs)
+    images = TiledImage[]
+    image_names = ASCIIString[]
+    image_count = 0
 
-Args:
-  - mp: A ModelParams whose patches will be updated.
-  - relevant_sources: A vector of source ids that index into mp.patches
-  - blob: A vector of images.
-
-Returns:
-  - Updates mp.patches in place with fitted psfs for each source in
-    relevant_sources.
-
-TODO: Unify with ModelInit.fit_object_psfs! when threading is part of all of
-      Celeste.
-"""
-function fit_object_psfs_threaded!{NumType <: Number}(
-    mp::ModelParams{NumType}, target_sources::Vector{Int}, blob::Blob)
-
-  # Initialize a vector of optimizers and transforms.
-  initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
-  psf_transform = PSF.get_psf_transform(initial_psf_params);
-  psf_optimizer_vec = Array(PSF.PsfOptimizer, nthreads())
-  for tid in 1:nthreads()
-    psf_optimizer_vec[tid] = PSF.PsfOptimizer(deepcopy(psf_transform), psf_K);
-  end
-
-  @assert size(mp.patches, 2) == length(blob)
-
-  for b in 1:length(blob)  # loop over images
-    Logging.debug("Fitting PSFS for band $b")
-    # Get a starting point in the middle of the image.
-    pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
-    raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
-    central_psf, central_psf_params =
-      PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer_vec[1], initial_psf_params)
-
-    # Get all relevant sources *in this image*
-    relevant_sources = Model.get_all_relevant_sources_in_image(
-                                    mp.tiles_sources[b], target_sources)
-
-    mp_lock = SpinLock()
-    @threads for s in relevant_sources
-      tid = threadid()
-      Logging.debug("Thread $tid: fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
-      patch = mp.patches[s, b]
-
-      # Set the starting point at the center's PSF.
-      psf, psf_params =
-        PSF.get_source_psf(
-          patch.center, blob[b], psf_optimizer_vec[tid], central_psf_params)
-      new_patch = ModelInit.SkyPatch(patch, psf);
-
-      # Copy to the global array of patches.
-      lock!(mp_lock)
-      mp.patches[s, b] = new_patch
-      unlock!(mp_lock)
+    for i in 1:length(fieldids)
+        Logging.info("reading field ", fieldids[i])
+        run, camcol, field = fieldids[i]
+        field_images = SDSSIO.load_field_images(run, camcol, field, frame_dirs[i],
+                                             fpm_dir=fpm_dirs[i],
+                                             psfield_dir=psfield_dirs[i],
+                                             photofield_dir=photofield_dirs[i])
+        for b=1:length(field_images)
+            image_count += 1
+            push!(image_names,
+                "$image_count run=$run camcol=$camcol $field=field b=$b")
+            tiled_image = TiledImage(field_images[b])
+            push!(images, tiled_image)
+        end
     end
-  end
+    gc()
+
+    Logging.debug("Image names:")
+    Logging.debug(image_names)
+
+    images
 end
 
 
@@ -390,38 +339,17 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     reserve_thread[] && thread_fun(reserve_thread)
 
     # Read in images for all (run, camcol, field).
-    images = Image[]
-    image_names = ASCIIString[]
-    image_count = 0
     tic()
-    for i in 1:length(fieldids)
-        Logging.info("reading field ", fieldids[i])
-        run, camcol, field = fieldids[i]
-        fieldims = SDSSIO.load_field_images(run, camcol, field, frame_dirs[i],
-                                             fpm_dir=fpm_dirs[i],
-                                             psfield_dir=psfield_dirs[i],
-                                             photofield_dir=photofield_dirs[i])
-        for b=1:length(fieldims)
-          image_count += 1
-          push!(image_names,
-                "$image_count run=$run camcol=$camcol $field=field b=$b")
-        end
-        append!(images, fieldims)
-    end
+    images = load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_dirs)
     timing.read_img = toq()
 
     reserve_thread[] && thread_fun(reserve_thread)
-
-    Logging.debug("Image names:")
-    Logging.debug(image_names)
 
     # initialize tiled images and model parameters for trimming.  We will
     # initialize the psf again before fitting, so we don't do it here.
     Logging.info("initializing celeste without PSF fit")
     tic()
-    tiled_images = Model.break_blob_into_tiles(images, TILE_WIDTH)
-    mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
-                                           fit_psf=false)
+    mp = ModelInit.initialize_model_params(images, catalog, fit_psf=false)
     timing.init_mp = toq()
 
     reserve_thread[] && thread_fun(reserve_thread)
@@ -456,6 +384,8 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
             try
                 nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
+                gc()
+
                 #tic()
 
                 t0 = time()
@@ -463,8 +393,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                 mp_source = ModelParams(mp, relevant_sources)
                 sa = findfirst(relevant_sources, s)
                 mp_source.active_sources = Int[ sa ]
-                trimmed_tiled_images =
-                  ModelInit.trim_source_tiles(sa, mp_source, tiled_images;
+                trimmed = ModelInit.trim_source_tiles(sa, mp_source, images;
                                               noise_fraction=0.1)
                 init_time = time() - t0
 
@@ -474,7 +403,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
                 t0 = time()
                 iter_count, max_f, max_x, result =
-                    OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed_tiled_images,
+                    OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed,
                                             mp_source;
                                             verbose=false, max_iters=max_iters)
                 fit_time = time() - t0
@@ -502,276 +431,6 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 end
 
 
-# -----------------------------------------------------------------------------
-# NERSC-specific functions
-
-"""
-Query the SDSS database for all fields that overlap the given RA, Dec range.
-"""
-function query_overlapping_fields(ramin, ramax, decmin, decmax)
-
-    fname = "/project/projectdirs/dasrepo/celeste-sc16/field_extents.fits"
-
-    f = FITSIO.FITS(fname)
-    hdu = f[2]::FITSIO.TableHDU
-
-    # read in the entire table.
-    all_run = read(hdu, "run")::Vector{Int16}
-    all_camcol = read(hdu, "camcol")::Vector{UInt8}
-    all_field = read(hdu, "field")::Vector{Int16}
-    all_ramin = read(hdu, "ramin")::Vector{Float64}
-    all_ramax = read(hdu, "ramax")::Vector{Float64}
-    all_decmin = read(hdu, "decmin")::Vector{Float64}
-    all_decmax = read(hdu, "decmax")::Vector{Float64}
-
-    close(f)
-
-    # initialize output "table"
-    out = Dict{ASCIIString, Vector}("run"=>Int[],
-                                    "camcol"=>Int[],
-                                    "field"=>Int[],
-                                    "ramin"=>Float64[],
-                                    "ramax"=>Float64[],
-                                    "decmin"=>Float64[],
-                                    "decmax"=>Float64[])
-
-    # The ramin, ramax, etc is a bit unintuitive because we're looking
-    # for any overlap.
-    for i in eachindex(all_ramin)
-        if (all_ramax[i] > ramin && all_ramin[i] < ramax &&
-            all_decmax[i] > decmin && all_decmin[i] < decmax)
-            push!(out["run"], all_run[i])
-            push!(out["camcol"], all_camcol[i])
-            push!(out["field"], all_field[i])
-            push!(out["ramin"], all_ramin[i])
-            push!(out["ramax"], all_ramax[i])
-            push!(out["decmin"], all_decmin[i])
-            push!(out["decmax"], all_decmax[i])
-        end
-    end
-
-    return out
-end
-
-"""
-query_overlapping_fieldids(ramin, ramax, decmin, decmax) -> Vector{Tuple{Int, Int, Int}}
-
-Like `query_overlapping_fields`, but return a Vector of
-(run, camcol, field) triplets.
-"""
-function query_overlapping_fieldids(ramin, ramax, decmin, decmax)
-    fields = query_overlapping_fields(ramin, ramax, decmin, decmax)
-    return Tuple{Int, Int, Int}[(fields["run"][i],
-                                 fields["camcol"][i],
-                                 fields["field"][i])
-                                for i in eachindex(fields["run"])]
-end
-
-query_frame_dirs(fieldids) =
-    [nersc_field_scratchdir(x[1], x[2], x[3]) for x in fieldids]
-query_photofield_dirs(fieldids) =
-    [nersc_photofield_scratchdir(x[1], x[2]) for x in fieldids]
-
-# NERSC source directories
-const NERSC_DATA_ROOT = "/global/projecta/projectdirs/sdss/data/sdss/dr12/boss"
-nersc_photoobj_dir(run::Integer, camcol::Integer) =
-    "$(NERSC_DATA_ROOT)/photoObj/301/$(run)/$(camcol)"
-nersc_psfield_dir(run::Integer, camcol::Integer) =
-    "$(NERSC_DATA_ROOT)/photo/redux/301/$(run)/objcs/$(camcol)"
-nersc_photofield_dir(run::Integer) =
-    "$(NERSC_DATA_ROOT)/photoObj/301/$(run)"
-nersc_frame_dir(run::Integer, camcol::Integer) =
-    "$(NERSC_DATA_ROOT)/photoObj/frames/301/$(run)/$(camcol)"
-nersc_fpm_dir(run::Integer, camcol::Integer) =
-    "$(NERSC_DATA_ROOT)/photo/redux/301/$(run)/objcs/$(camcol)"
-
-
-# NERSC scratch directories
-nersc_field_scratchdir(run::Integer, camcol::Integer, field::Integer) =
-    joinpath(ENV["SCRATCH"], "celeste/$(run)/$(camcol)/$(field)")
-nersc_photofield_scratchdir(run::Integer, camcol::Integer) =
-    joinpath(ENV["SCRATCH"], "celeste/$(run)/$(camcol)")
-
-"""
-    nersc_stage_field(run, camcol, field)
-
-Stage all relevant files for the given run, camcol, field to user's SCRATCH
-directory. The target locations are given by `nersc_field_scratchdir` and
-`nersc_photofield_scratchdir`.
-"""
-function nersc_stage_field(run::Integer, camcol::Integer, field::Integer)
-    # destination directory for all files except photofield.
-    dstdir = nersc_field_scratchdir(run, camcol, field)
-    isdir(dstdir) || mkpath(dstdir)
-
-    # frame files: uncompress bz2 files
-    srcdir = nersc_frame_dir(run, camcol)
-    for band in ['u', 'g', 'r', 'i', 'z']
-        srcfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits.bz2",
-                           srcdir, band, run, camcol, field)
-        dstfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
-                           dstdir, band, run, camcol, field)
-        if !isfile(dstfile)
-            Logging.info("bzcat --keep $srcfile > $dstfile")
-            Base.run(pipeline(`bzcat --keep $srcfile`, stdout=dstfile))
-        end
-    end
-
-    # fpm files
-    # It isn't strictly necessary to uncompress these, because FITSIO can handle
-    # gzipped files. However, the celeste code assumes the filename ends with
-    # ".fit", so we would have to at least change the name. It seems clearer
-    # to simply uncompress here.
-    srcdir = nersc_fpm_dir(run, camcol)
-    dstdir = nersc_field_scratchdir(run, camcol, field)
-    isdir(dstdir) || mkpath(dstdir)
-    for band in ['u', 'g', 'r', 'i', 'z']
-        srcfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit.gz",
-                           srcdir, run, band, camcol, field)
-        dstfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
-                           dstdir, run, band, camcol, field)
-        if !isfile(dstfile)
-            Logging.info("gunzip --stdout $srcfile > $dstfile")
-            Base.run(pipeline(`gunzip --stdout $srcfile`, stdout=dstfile))
-        end
-    end
-
-    # photoobj: simply copy
-    srcfile = @sprintf("%s/photoObj-%06d-%d-%04d.fits",
-                       nersc_photoobj_dir(run, camcol), run, camcol, field)
-    dstfile = @sprintf("%s/photoObj-%06d-%d-%04d.fits",
-                       nersc_field_scratchdir(run, camcol, field), run,
-                       camcol, field)
-    isfile(dstfile) || cp(srcfile, dstfile)
-
-    # psField: simply copy
-    srcfile = @sprintf("%s/psField-%06d-%d-%04d.fit",
-                       nersc_psfield_dir(run, camcol), run, camcol, field)
-    dstfile = @sprintf("%s/psField-%06d-%d-%04d.fit",
-                       nersc_field_scratchdir(run, camcol, field), run,
-                       camcol, field)
-    isfile(dstfile) || cp(srcfile, dstfile)
-
-    # photofield: simply copy
-    srcfile = @sprintf("%s/photoField-%06d-%d.fits",
-                       nersc_photofield_dir(run), run, camcol)
-    dstfile = @sprintf("%s/photoField-%06d-%d.fits",
-                       nersc_photofield_scratchdir(run, camcol), run, camcol)
-    isfile(dstfile) || cp(srcfile, dstfile)
-end
-
-
-"""
-Stage all relevant files for the given sky patch to user's SCRATCH.
-"""
-function stage_box_nersc(ramin, ramax, decmin, decmax)
-    fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
-    for (run, camcol, field) in fieldids
-        nersc_stage_field(run, camcol, field)
-    end
-end
-
-
-"""
-Save provided results to a JLD file.
-"""
-function save_results(outdir, ramin, ramax, decmin, decmax, results)
-    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
-                     outdir, ramin, ramax, decmin, decmax)
-    JLD.save(fname, "results", results)
-end
-
-
-"""
-NERSC-specific infer function, called from main entry point.
-"""
-function infer_box_nersc(ramin, ramax, decmin, decmax, outdir)
-    # Base.@time hack for distributed environment
-    gc_stats = ()
-    gc_diff_stats = ()
-    elapsed_time = 0.0
-    gc_stats = Base.gc_num()
-    elapsed_time = time_ns()
-
-    times = InferTiming()
-    if dt_nnodes > 1
-        divide_and_infer((ramin, ramax),
-                         (decmin, decmax),
-                         timing=times,
-                         outdir=outdir)
-    else
-        # Get vector of (run, camcol, field) triplets overlapping this patch
-        tic()
-        fieldids = query_overlapping_fieldids(ramin, ramax,
-                                              decmin, decmax)
-        times.query_fids = toq()
-
-        # Get relevant directories corresponding to each field.
-        tic()
-        frame_dirs = query_frame_dirs(fieldids)
-        photofield_dirs = query_photofield_dirs(fieldids)
-        times.get_dirs = toq()
-
-        results = infer(fieldids, frame_dirs;
-                        ra_range=(ramin, ramax),
-                        dec_range=(decmin, decmax),
-                        fpm_dirs=frame_dirs,
-                        psfield_dirs=frame_dirs,
-                        photoobj_dirs=frame_dirs,
-                        photofield_dirs=photofield_dirs,
-                        timing=times)
-
-        tic()
-        save_results(outdir, ramin, ramax, decmin, decmax, results)
-        times.write_results = toq()
-    end
-
-    # Base.@time hack for distributed environment
-    elapsed_time = time_ns() - elapsed_time
-    gc_diff_stats = Base.GC_Diff(Base.gc_num(), gc_stats)
-    time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
-              Base.gc_alloc_count(gc_diff_stats))
-
-    times.num_srcs = max(1, times.num_srcs)
-    nputs(dt_nodeid, "timing: query_fids=$(times.query_fids)")
-    nputs(dt_nodeid, "timing: get_dirs=$(times.get_dirs)")
-    nputs(dt_nodeid, "timing: num_infers=$(times.num_infers)")
-    nputs(dt_nodeid, "timing: read_photoobj=$(times.read_photoobj)")
-    nputs(dt_nodeid, "timing: read_img=$(times.read_img)")
-    nputs(dt_nodeid, "timing: init_mp=$(times.init_mp)")
-    nputs(dt_nodeid, "timing: fit_psf=$(times.fit_psf)")
-    nputs(dt_nodeid, "timing: opt_srcs=$(times.opt_srcs)")
-    nputs(dt_nodeid, "timing: num_srcs=$(times.num_srcs)")
-    nputs(dt_nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
-    nputs(dt_nodeid, "timing: write_results=$(times.write_results)")
-    nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
-end
-
-
-"""
-NERSC-specific infer function, called from main entry point.
-"""
-function infer_field_nersc(run::Int, camcol::Int, field::Int,
-                           outdir::AbstractString; objid="")
-    # ensure that files are staged and set up paths.
-    nersc_stage_field(run, camcol, field)
-    field_dirs = [nersc_field_scratchdir(run, camcol, field)]
-    photofield_dirs = [nersc_photofield_scratchdir(run, camcol)]
-
-    results = infer([(run, camcol, field)], field_dirs;
-                    objid=objid,
-                    fpm_dirs=field_dirs,
-                    psfield_dirs=field_dirs,
-                    photoobj_dirs=field_dirs,
-                    photofield_dirs=photofield_dirs,
-                    primary_initialization=false)
-
-    fname = if objid == ""
-        @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir run camcol field
-    else
-        @sprintf "%s/celeste-objid-%s.jld" outdir objid
-    end
-    JLD.save(fname, "results", results)
-    Logging.debug("infer_field_nersc finished successfully")
-end
+# NERSC-specific functions, for input and output to the routines above
+include("nersc_io.jl")
 

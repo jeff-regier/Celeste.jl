@@ -696,8 +696,7 @@ function get_expected_pixel_brightness!{NumType <: Number}(
   if include_epsilon
     # There are no derivatives with respect to epsilon, so can safely add
     # to the value.
-    elbo_vars.E_G.v[1] +=
-      tile.constant_background ? tile.epsilon : tile.epsilon_mat[h, w]
+    elbo_vars.E_G.v[1] += tile.epsilon_mat[h, w]
   end
 
   true
@@ -718,7 +717,7 @@ Args:
 """
 function add_elbo_log_term!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    x_nbm::Float64, iota::Float64)
+    x_nbm::AbstractFloat, iota::AbstractFloat)
 
   # See notes for a derivation.  The log term is
   # log E[G] - Var(G) / (2 * E[G] ^2 )
@@ -804,7 +803,7 @@ function process_active_pixels!{NumType <: Number}(
 
   # iterate over the pixels
   for pixel in active_pixels
-    tile = tiled_blob[pixel.b][pixel.tile_ind]
+    tile = tiled_blob[pixel.b].tiles[pixel.tile_ind]
     tile_sources = mp.tile_sources[pixel.b][pixel.tile_ind]
     this_pixel = tile.pixels[pixel.h, pixel.w]
 
@@ -815,7 +814,7 @@ function process_active_pixels!{NumType <: Number}(
       mp, tile_sources, include_epsilon=true)
 
     # Add the terms to the elbo given the brightness.
-    iota = tile.constant_background ? tile.iota : tile.iota_vec[pixel.h]
+    iota = tile.iota_vec[pixel.h]
     add_elbo_log_term!(elbo_vars, this_pixel, iota)
     add_scaled_sfs!(elbo_vars.elbo,
                     elbo_vars.E_G, -iota,
@@ -865,7 +864,7 @@ function tile_predicted_image{NumType <: Number}(
         get_expected_pixel_brightness!(
           elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
           mp, tile_sources, include_epsilon=include_epsilon)
-        iota = tile.constant_background ? tile.iota : tile.iota_vec[h]
+        iota = tile.iota_vec[h]
         predicted_pixels[h, w] = elbo_vars.E_G.v[1] * iota
       end
     end
@@ -914,10 +913,10 @@ function get_active_pixels{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType})
 
   active_pixels = ActivePixel[]
-  for b in 1:length(tiled_blob), tile_ind in 1:length(tiled_blob[b])
+  for b in 1:length(tiled_blob), tile_ind in 1:length(tiled_blob[b].tiles)
     tile_sources = mp.tile_sources[b][tile_ind]
     if length(intersect(tile_sources, mp.active_sources)) > 0
-      tile = tiled_blob[b][tile_ind]
+      tile = tiled_blob[b].tiles[tile_ind]
       for w in 1:tile.w_width, h in 1:tile.h_width
         if !Base.isnan(tile.pixels[h, w])
           push!(active_pixels, ActivePixel(b, tile_ind, h, w))

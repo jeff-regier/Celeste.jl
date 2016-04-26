@@ -41,37 +41,12 @@ function initialize_celeste(
         blob::Blob, cat::Vector{CatalogEntry};
         tile_width::Int=20, fit_psf::Bool=true,
         patch_radius::Float64=NaN)
-
-    tiled_blob = Model.break_blob_into_tiles(blob, tile_width)
-    mp = ModelInit.initialize_model_params(tiled_blob, blob, cat,
+    tiled_blob = TiledImage[TiledImage(img, tile_width=tile_width) for img in blob]
+    mp = ModelInit.initialize_model_params(tiled_blob, cat,
                                fit_psf=fit_psf, patch_radius=patch_radius)
     tiled_blob, mp
 end
 
-# Initialization for an image with noise and background parameters that are 
-# constant across the image. 
-function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int, 
-               wcs::WCSTransform, epsilon::Float64, iota::Float64, 
-               psf::Vector{PsfComponent}, run_num::Int, camcol_num::Int, 
-               field_num::Int) 
-    empty_psf_comp = RawPSF(Array(Float64, 0, 0), 0, 0, 
-                             Array(Float64, 0, 0, 0)) 
-    Image(H, W, pixels, b, wcs, epsilon, iota, psf, 
-          run_num, camcol_num, field_num, 
-          true, Array(Float64, 0, 0), Array(Float64, 0), empty_psf_comp) 
-end 
- 
-# Initialization for an image with noise and background parameters that vary 
-# across the image. 
-function Image(H::Int, W::Int, pixels::Matrix{Float64}, b::Int, 
-               wcs::WCSTransform, epsilon_mat::Vector{Float64}, 
-               iota_vec::Matrix{Float64}, psf::Vector{PsfComponent}, 
-               raw_psf_comp::RawPSF, run_num::Int, camcol_num::Int, 
-               field_num::Int) 
-    Image(H, W, pixels, b, wcs, 0.0, 0.0, psf, run_num, camcol_num, 
-          field_num, false, epsilon_mat, iota_vec, raw_psf_comp) 
-end 
- 
 
 """
 Load a stamp into a Celeste blob.
@@ -117,8 +92,14 @@ function load_stamp_blob(stamp_dir, stamp_id)
         camcol_num = round(Int, hdr["CAMCOL"])
         field_num = round(Int, hdr["FIELD"])
 
-        Image(H, W, nelec, b, wcs, epsilon, iota, psf,
-              run_num, camcol_num, field_num)
+        epsilon_mat = fill(epsilon, H, W)
+        iota_vec = fill(iota, H)
+        empty_psf_comp = RawPSF(Array(Float64, 0, 0), 0, 0, 
+                                 Array(Float64, 0, 0, 0)) 
+
+        Image(H, W, nelec, b, wcs, psf,
+              run_num, camcol_num, field_num, epsilon_mat, iota_vec,
+              empty_psf_comp)
     end
 
     blob = map(fetch_image, 1:5)
@@ -340,9 +321,8 @@ function gen_n_body_dataset(
 
   # Make non-constant background.
   for b=1:5
-    blob[b].constant_background = false
-    blob[b].iota_vec = fill(blob[b].iota, blob[b].H)
-    blob[b].epsilon_mat = fill(blob[b].epsilon, blob[b].H, blob[b].W)
+    blob[b].iota_vec = fill(blob[b].iota_vec[1], blob[b].H)
+    blob[b].epsilon_mat = fill(blob[b].epsilon_mat[1], blob[b].H, blob[b].W)
   end
 
   world_radius_pts = WCSUtils.pix_to_world(

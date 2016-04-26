@@ -1,17 +1,3 @@
-"""
-This module contains code that necessary to initialize the model,
-but that couldn't go in Model because of dependence on modules 
-that import Model (i.e. PSF and ElboDeriv)
-
-Eventually the dependency on ElboDeriv will be severed when we
-move to using blob detection algorithms to decide what pixels
-are relevant, rather than rendering the image ElboDeriv to
-screen pixels. (Eventually we won't have a good initial catalog.)
-
-The PSF module should eventually be included in Model, once
-we're learning the PSF outselves, rather than fitting SDSS.
-Until then, we have both Model and ModelInit.
-"""
 module ModelInit
 
 import Logging
@@ -25,9 +11,6 @@ import ..PSF
 Initilize the model params to the given catalog and tiled image.
 
 Args:
-  - tiled_blob: A TiledBlob
-  - blob: The original Blob
-  - cat: A vector of catalog entries
   - fit_psf: Whether to give each patch its own local PSF
   - patch_radius: If set less than Inf or if radius_from_cat=false,
                   the radius in world coordinates of each patch.
@@ -35,26 +18,24 @@ Args:
                      If false, use patch_radius for each patch.
 """
 function initialize_model_params(
-            tiled_blob::TiledBlob,
-            blob::Blob,
+            images::Vector{TiledImage},
             cat::Vector{CatalogEntry};
             fit_psf::Bool=true,
             patch_radius::Float64=NaN)
-
-    @assert length(tiled_blob) == length(blob)
     @assert length(cat) > 0
 
     Logging.info("Loading variational parameters from catalogs.")
 
     vp = Array{Float64, 1}[Model.init_source(ce) for ce in cat]
-    mp = ModelParams(vp, Model.load_prior())
+    mp = ModelParams(vp, Model.prior)
     mp.objids = ASCIIString[cat_entry.objid for cat_entry in cat]
 
-    mp.patches = Array(SkyPatch, mp.S, length(blob))
-    mp.tile_sources = Array(Array{Vector{Int}, 2}, length(blob))
+    N = length(images)
+    mp.patches = Array(SkyPatch, mp.S, N)
+    mp.tile_sources = Array(Array{Vector{Int}, 2}, N)
 
-    for b = 1:length(blob)
-        img = blob[b]
+    for i = 1:N
+        img = images[i]
 
         for s=1:mp.S
             world_center = cat[s].pos
@@ -70,65 +51,22 @@ function initialize_model_params(
                 radius_pix = maxabs(eigvals(wcs_jacobian)) * patch_radius
             end
 
-            mp.patches[s, b] = SkyPatch(world_center,
+            mp.patches[s, i] = SkyPatch(world_center,
                                         radius_pix,
                                         psf,
                                         wcs_jacobian,
                                         pixel_center)
         end
 
-        mp.tile_sources[b] = Model.get_tiled_image_sources(tiled_blob[b],
-                                                           mp.patches[:, b])
+        # TODO: get rid of these puny methods
+        patch_centers = Model.patch_ctrs_pix(mp.patches[:, i])
+        patch_radii = Model.patch_radii_pix(mp.patches[:, i])
+
+        mp.tile_sources[i] = Model.get_sources_per_tile(images[i].tiles,
+                                               patch_centers, patch_radii)
     end
 
     return mp
-end
-
-
-"""
-Update ModelParams with the PSFs for a range of object ids.
-
-Args:
-  - mp: A ModelParams whose patches will be updated.
-  - relevant_sources: A vector of source ids that index into mp.patches
-  - blob: A vector of images.
-
-Returns:
-  - Updates mp.patches in place with fitted psfs for each source in
-    relevant_sources.
-"""
-function fit_object_psfs!{NumType <: Number}(
-    mp::ModelParams{NumType}, target_sources::Vector{Int}, blob::Blob)
-
-    # Initialize an optimizer
-    initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
-    psf_transform = PSF.get_psf_transform(initial_psf_params);
-    psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K);
-
-    @assert size(mp.patches, 2) == length(blob)
-
-    for b in 1:length(blob)    # loop over images
-        Logging.debug("Fitting PSFS for band $b")
-        # Get a starting point in the middle of the image.
-        pixel_loc = Float64[ blob[b].H / 2.0, blob[b].W / 2.0 ]
-        raw_central_psf = blob[b].raw_psf_comp(pixel_loc[1], pixel_loc[2])
-        central_psf, central_psf_params =
-            PSF.fit_raw_psf_for_celeste(raw_central_psf, psf_optimizer, initial_psf_params)
-
-        # Get all relevant sources *in this image*
-        relevant_sources = get_all_relevant_sources_in_image(mp.tile_sources[b],
-                                                             target_sources)
-
-        for s in relevant_sources
-            Logging.debug("Fitting PSF for b=$b, source=$s, objid=$(mp.objids[s])")
-            patch = mp.patches[s, b]
-            # Set the starting point at the center's PSF.
-            psf, psf_params =
-                PSF.get_source_psf(
-                    patch.center, blob[b], psf_optimizer, central_psf_params)
-            mp.patches[s, b] = SkyPatch(patch, psf)
-        end
-    end
 end
 
 
@@ -187,7 +125,53 @@ function get_all_relevant_sources_in_image(
 end
 
 
+"""
+Args:
+  - relevant_sources: A vector of source ids that index into mp.patches
+
+Returns:
+  - Updates mp.patches in place with fitted psfs for each source in
+    relevant_sources.
+"""
+function fit_object_psfs!{NumType <: Number}(
+                        mp::ModelParams{NumType}, 
+                        target_sources::Vector{Int},
+                        images::Vector{TiledImage})
+    # Initialize an optimizer
+    initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false);
+    psf_transform = PSF.get_psf_transform(initial_psf_params);
+    psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K);
+
+    @assert size(mp.patches, 2) == length(images)
+
+    for i in 1:length(images)
+        Logging.debug("Fitting PSFS for band $i")
+        # Get a starting point in the middle of the image.
+        pixel_loc = Float64[ images[i].H / 2.0, images[i].W / 2.0 ]
+        raw_central_psf = images[i].raw_psf_comp(pixel_loc[1], pixel_loc[2])
+        central_psf, central_psf_params =
+            PSF.fit_raw_psf_for_celeste(raw_central_psf,
+                                psf_optimizer, initial_psf_params)
+
+        # Get all relevant sources *in this image*
+        relevant_sources = get_all_relevant_sources_in_image(mp.tile_sources[i],
+                                                             target_sources)
+
+        for s in relevant_sources
+            Logging.debug("Fitting PSF for b=$i, source=$s, objid=$(mp.objids[s])")
+            patch = mp.patches[s, i]
+            # Set the starting point at the center's PSF.
+            psf, psf_params =
+                PSF.get_source_psf(
+                    patch.center, images[i], psf_optimizer, central_psf_params)
+            mp.patches[s, i] = SkyPatch(patch, psf)
+        end
+    end
+end
+
+
 import ..ElboDeriv
+
 
 """
 Set any pixels significantly below background noise for the
@@ -206,58 +190,45 @@ Returns:
   be the same as the original tiles but with NaN where the expected source
   electron counts are below <noise_fraction> of the noise at that pixel.
 """
-function trim_source_tiles(
-        s::Int, mp::ModelParams{Float64}, tiled_blob::TiledBlob;
-        noise_fraction::Float64=0.1, min_radius_pix::Float64=8.0)
-
-    trimmed_tiled_blob =
-        Array{ImageTile, 2}[ Array(ImageTile, size(tiled_blob[b])...) for
-                                                 b=1:length(tiled_blob)];
+function trim_source_tiles(s::Int,
+                           mp::ModelParams{Float64},
+                           tiled_blob::TiledBlob;
+                           noise_fraction::Float64=0.1,
+                           min_radius_pix::Float64=8.0)
+    trimmed = deepcopy(tiled_blob)
 
     min_radius_pix_sq = min_radius_pix ^ 2
     for b = 1:length(tiled_blob)
-        Logging.debug("Processing band $b...")
-
         patch = mp.patches[s, b]
-        world_loc = mp.vp[s][ids.u]
         pix_loc = WCSUtils.world_to_pix(patch.wcs_jacobian, 
                                         patch.center,
                                         patch.pixel_center,
-                                        world_loc)
+                                        mp.vp[s][ids.u])
 
-        H, W = size(tiled_blob[b])
-        @assert size(mp.tile_sources[b]) == size(tiled_blob[b])
-        for hh=1:H, ww=1:W
-            tile = tiled_blob[b][hh, ww];
+        Ht, Wt = size(tiled_blob[b].tiles)
+        @assert size(mp.tile_sources[b]) == size(tiled_blob[b].tiles)
+        for hh=1:Ht, ww=1:Wt
+            tile = tiled_blob[b].tiles[hh, ww];
             tile_sources = mp.tile_sources[b][hh, ww]
-            has_source = s in tile_sources
-            bright_pixels = Bool[];
-            if has_source
+            if s in tile_sources
                 pred_tile_pixels =
                     ElboDeriv.tile_predicted_image(tile, mp, [ s ],
                                                    include_epsilon=false);
-                tile_copy = deepcopy(tiled_blob[b][hh, ww]);
-
                 for h in tile.h_range, w in tile.w_range
                     # The pixel location in the rendered image.
                     h_im = h - minimum(tile.h_range) + 1
                     w_im = w - minimum(tile.w_range) + 1
 
                     keep_pixel = false
-                    bright_pixel = tile.constant_background ?
-                        pred_tile_pixels[h_im, w_im] >
-                            tile.iota * tile.epsilon * noise_fraction:
-                        pred_tile_pixels[h_im, w_im] >
-                            tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
+                    bright_pixel = pred_tile_pixels[h_im, w_im] >
+                       tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
                     close_pixel =
                         (h - pix_loc[1]) ^ 2 + (w - pix_loc[2]) ^ 2 < min_radius_pix_sq
 
                     if !(bright_pixel || close_pixel)
-                        tile_copy.pixels[h_im, w_im] = NaN
+                        trimmed[b].tiles[hh, ww].pixels[h_im, w_im] = NaN
                     end
                 end
-
-                trimmed_tiled_blob[b][hh, ww] = tile_copy;
             else
                 # This tile does not contain the source.    Replace the tile with a
                 # pseudo-tile that does not have any data in it.
@@ -265,19 +236,19 @@ function trim_source_tiles(
                 # say that an empty tile has a source.
                 # TODO: Make a TiledBlob simply an array of an array of tiles
                 # rather than a 2d array to avoid this hack.
-                empty_tile = ImageTile(b, tile.h_range, tile.w_range,
-                                       tile.h_width, tile.w_width,
-                                       Array(Float64, 0, 0), tile.constant_background,
-                                       tile.epsilon, Array(Float64, 0, 0), tile.iota,
-                                       Array(Float64, 0))
-
-                trimmed_tiled_blob[b][hh, ww] = empty_tile;
+                trimmed[b].tiles[hh, ww] = ImageTile(b,
+                                              tile.h_range,
+                                              tile.w_range,
+                                              tile.h_width,
+                                              tile.w_width,
+                                              Array(Float64, 0, 0),
+                                              Array(Float64, 0, 0),
+                                              Array(Float64, 0))
             end
         end
     end
-    Logging.info("Done trimming.")
 
-    trimmed_tiled_blob
+    trimmed
 end
 
 end
