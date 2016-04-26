@@ -244,6 +244,35 @@ function divide_and_infer(ra_range::Tuple{Float64, Float64},
 end
 
 
+function load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_dirs)
+    images = TiledImage[]
+    image_names = ASCIIString[]
+    image_count = 0
+
+    for i in 1:length(fieldids)
+        Logging.info("reading field ", fieldids[i])
+        run, camcol, field = fieldids[i]
+        field_images = SDSSIO.load_field_images(run, camcol, field, frame_dirs[i],
+                                             fpm_dir=fpm_dirs[i],
+                                             psfield_dir=psfield_dirs[i],
+                                             photofield_dir=photofield_dirs[i])
+        for b=1:length(field_images)
+            image_count += 1
+            push!(image_names,
+                "$image_count run=$run camcol=$camcol $field=field b=$b")
+            tiled_image = TiledImage(field_images[b])
+            push!(images, tiled_image)
+        end
+    end
+    gc()
+
+    Logging.debug("Image names:")
+    Logging.debug(image_names)
+
+    images
+end
+
+
 """
 Fit the Celeste model to sources in a given ra, dec range,
 based on data from specified fields
@@ -310,38 +339,17 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     reserve_thread[] && thread_fun(reserve_thread)
 
     # Read in images for all (run, camcol, field).
-    images = Image[]
-    image_names = ASCIIString[]
-    image_count = 0
     tic()
-    for i in 1:length(fieldids)
-        Logging.info("reading field ", fieldids[i])
-        run, camcol, field = fieldids[i]
-        fieldims = SDSSIO.load_field_images(run, camcol, field, frame_dirs[i],
-                                             fpm_dir=fpm_dirs[i],
-                                             psfield_dir=psfield_dirs[i],
-                                             photofield_dir=photofield_dirs[i])
-        for b=1:length(fieldims)
-          image_count += 1
-          push!(image_names,
-                "$image_count run=$run camcol=$camcol $field=field b=$b")
-        end
-        append!(images, fieldims)
-    end
+    images = load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_dirs)
     timing.read_img = toq()
 
     reserve_thread[] && thread_fun(reserve_thread)
-
-    Logging.debug("Image names:")
-    Logging.debug(image_names)
 
     # initialize tiled images and model parameters for trimming.  We will
     # initialize the psf again before fitting, so we don't do it here.
     Logging.info("initializing celeste without PSF fit")
     tic()
-    tiled_images = Model.break_blob_into_tiles(images, TILE_WIDTH)
-    mp = ModelInit.initialize_model_params(tiled_images, images, catalog,
-                                           fit_psf=false)
+    mp = ModelInit.initialize_model_params(images, catalog, fit_psf=false)
     timing.init_mp = toq()
 
     reserve_thread[] && thread_fun(reserve_thread)
@@ -383,7 +391,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                 mp_source = ModelParams(mp, relevant_sources)
                 sa = findfirst(relevant_sources, s)
                 mp_source.active_sources = Int[ sa ]
-                ModelInit.trim_source_tiles(sa, mp_source, tiled_images;
+                trimmed = ModelInit.trim_source_tiles(sa, mp_source, images;
                                               noise_fraction=0.1)
                 init_time = time() - t0
 
@@ -393,7 +401,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
                 t0 = time()
                 iter_count, max_f, max_x, result =
-                    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_images,
+                    OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed,
                                             mp_source;
                                             verbose=false, max_iters=max_iters)
                 fit_time = time() - t0

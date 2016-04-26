@@ -95,7 +95,7 @@ function test_that_variance_is_low()
     blob, mp, body, tiled_blob = true_star_init();
 
     test_b = 3
-    tile = tiled_blob[test_b][1,1];
+    tile = tiled_blob[test_b].tiles[1,1];
     tile_sources = mp.tile_sources[test_b][1,1];
 
     h, w = 10, 12
@@ -366,16 +366,16 @@ function test_trim_source_tiles()
 
   # With the above seed, this is near the middle of the image.
   s = 1
-  trimmed_tiled_blob = deepcopy(tiled_blob)
-  ModelInit.trim_source_tiles!(s, mp, trimmed_tiled_blob, noise_fraction=0.1);
+  trimmed_tiled_blob = 
+      ModelInit.trim_source_tiles(s, mp, tiled_blob, noise_fraction=0.1);
   loc_ids = ids.u
   non_loc_ids = setdiff(1:length(ids), ids.u)
   for b=1:length(blob)
     println("Testing b = $b")
     # Make sure pixels got NaN-ed out
     @test(
-      sum([ sum(!Base.isnan(tile.pixels)) for tile in trimmed_tiled_blob[b]]) <
-      sum([ sum(!Base.isnan(tile.pixels)) for tile in tiled_blob[b]]))
+      sum([ sum(!Base.isnan(tile.pixels)) for tile in trimmed_tiled_blob[b].tiles]) <
+      sum([ sum(!Base.isnan(tile.pixels)) for tile in tiled_blob[b].tiles]))
     s_tiles = find_source_tiles(s, b, mp)
     mp.active_sources = [s];
     elbo_full = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
@@ -397,25 +397,26 @@ function test_trim_source_tiles()
   mp.vp[s][ids.r2] = 0.01
 
   min_radius_pix = 6.0
-  trimmed_tiled_blob = deepcopy(tiled_blob)
-  ModelInit.trim_source_tiles!(
-    s, mp, trimmed_tiled_blob, noise_fraction=0.1, min_radius_pix = min_radius_pix);
+  trimmed_tiled_blob = 
+      ModelInit.trim_source_tiles(
+        s, mp, tiled_blob, noise_fraction=0.1, min_radius_pix = min_radius_pix);
 
   total_nonempty_pixels = 0.0
   for tile_index in s_tiles
-    tile = trimmed_tiled_blob[b][tile_index...]
+    tile = trimmed_tiled_blob[b].tiles[tile_index...]
     total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
   end
   @test_approx_eq_eps total_nonempty_pixels pi * min_radius_pix ^ 2 2.0
 
   min_radius_pix = 0.0
-  trimmed_tiled_blob = deepcopy(tiled_blob)
-  ModelInit.trim_source_tiles!(
-    s, mp, trimmed_tiled_blob, noise_fraction=0.1, min_radius_pix = min_radius_pix);
+  trimmed_tiled_blob = 
+      ModelInit.trim_source_tiles(
+        s, mp, trimmed_tiled_blob, noise_fraction=0.1,
+            min_radius_pix = min_radius_pix);
 
   total_nonempty_pixels = 0.0
   for tile_index in s_tiles
-    tile = trimmed_tiled_blob[b][tile_index...]
+    tile = trimmed_tiled_blob[b].tiles[tile_index...]
     total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
   end
   @test total_nonempty_pixels == 0.0
