@@ -717,7 +717,7 @@ Args:
 """
 function add_elbo_log_term!{NumType <: Number}(
     elbo_vars::ElboIntermediateVariables{NumType},
-    x_nbm::Float64, iota::Float64)
+    x_nbm::AbstractFloat, iota::AbstractFloat)
 
   # See notes for a derivation.  The log term is
   # log E[G] - Var(G) / (2 * E[G] ^2 )

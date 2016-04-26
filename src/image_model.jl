@@ -7,7 +7,7 @@ type Image
     W::Int
 
     # An HxW matrix of pixel intensities.
-    pixels::Matrix{Float64}
+    pixels::Matrix{Float32}
 
     # The band id (takes on values from 1 to 5).
     b::Int
@@ -25,11 +25,11 @@ type Image
     field_num::Int
 
     # The background noise in nanomaggies. (varies by position)
-    epsilon_mat::Array{Float64, 2}
+    epsilon_mat::Array{Float32, 2}
 
     # The expected number of photons contributed to this image
     # by a source 1 nanomaggie in brightness. (varies by row)
-    iota_vec::Array{Float64, 1}
+    iota_vec::Array{Float32, 1}
 
     # storing a RawPSF here isn't ideal, because it's an SDSS type
     # not a Celeste type
@@ -61,10 +61,10 @@ immutable ImageTile
     w_range::UnitRange{Int}
     h_width::Int
     w_width::Int
-    pixels::Matrix{Float64}
+    pixels::Matrix{Float32}
 
-    epsilon_mat::Matrix{Float64}
-    iota_vec::Vector{Float64}
+    epsilon_mat::Matrix{Float32}
+    iota_vec::Vector{Float32}
 end
 
 

@@ -382,7 +382,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
         else
             entry = catalog[s]
 
-            try
+#            try
                 nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
                 #tic()
 
@@ -406,6 +406,8 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                                             verbose=false, max_iters=max_iters)
                 fit_time = time() - t0
 
+                gc()
+
                 #t = toq()
                 #nputs(dt_nodeid, "optimized $s in $t secs, writing results")
 
@@ -417,9 +419,9 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                                                "init_time"=>init_time,
                                                "fit_time"=>fit_time)
                 unlock!(results_lock)
-            catch ex
-                Logging.err(ex)
-            end
+#            catch ex
+#                Logging.err(ex)
+#            end
         end
     end
     timing.opt_srcs = toq()

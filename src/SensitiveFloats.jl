@@ -224,7 +224,7 @@ Update sf1 in place with (sf1 + scale * sf2).
 function add_scaled_sfs!{ParamType <: ParamSet, NumType <: Number}(
     sf1::SensitiveFloat{ParamType, NumType},
     sf2::SensitiveFloat{ParamType, NumType},
-    scale::Float64, calculate_hessian::Bool)
+    scale::AbstractFloat, calculate_hessian::Bool)
 
   sf1.v[1] = sf1.v[1] + scale * sf2.v[1]
 
