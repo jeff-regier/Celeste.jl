@@ -384,6 +384,8 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
 #            try
                 nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
+                gc()
+
                 #tic()
 
                 t0 = time()
@@ -405,8 +407,6 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                                             mp_source;
                                             verbose=false, max_iters=max_iters)
                 fit_time = time() - t0
-
-                gc()
 
                 #t = toq()
                 #nputs(dt_nodeid, "optimized $s in $t secs, writing results")
