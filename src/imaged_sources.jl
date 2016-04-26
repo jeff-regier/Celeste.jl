@@ -144,6 +144,30 @@ function get_sources_per_tile(image_tiles::Matrix{ImageTile},
 end
 
 
+function choose_patch_radius(ce::CatalogEntry,
+                             b::Int64,
+                             psf_width::AbstractFloat,
+                             epsilon::AbstractFloat;
+                             width_scale=1.0)
+    # The galaxy scale is the point with half the light -- if the light
+    # were entirely in a univariate normal, this would be at 0.67 standard
+    # deviations.  We are being a bit conservative here.
+    obj_width =
+      ce.is_star ? psf_width: width_scale * ce.gal_scale / 0.67 + psf_width
+
+    flux = ce.is_star ? ce.star_fluxes[b] : ce.gal_fluxes[b]
+    @assert flux > 0.
+
+    # Choose enough pixels that the light is either 90% of the light
+    # would be captured from a 1d gaussian or 5% of the sky noise,
+    # whichever is a larger radius.
+    pdf_90 = exp(-0.5 * (1.64)^2) / (sqrt(2pi) * obj_width)
+    pdf_target = min(pdf_90, epsilon / (20 * flux))
+    rhs = log(pdf_target) + 0.5 * log(2pi) + log(obj_width)
+    sqrt(-2 * (obj_width ^ 2) * rhs)
+end
+
+
 """
 Choose a reasonable patch radius based on the catalog.
 TODO: Select this by rendering the object and solving an optimization
@@ -167,29 +191,14 @@ function choose_patch_radius(
             img::TiledImage;
             width_scale=1.0,
             max_radius=100)
-
     psf_width = Model.get_psf_width(psf, width_scale=width_scale)
-
-    # The galaxy scale is the point with half the light -- if the light
-    # were entirely in a univariate normal, this would be at 0.67 standard
-    # deviations.  We are being a bit conservative here.
-    obj_width =
-      ce.is_star ? psf_width: width_scale * ce.gal_scale / 0.67 + psf_width
 
     # Get the average sky noise around a source
     close_tile = get_containing_tile(pixel_center, img)
     epsilon = mean(close_tile.epsilon_mat)
 
-    flux = ce.is_star ? ce.star_fluxes[img.b] : ce.gal_fluxes[img.b]
-    @assert flux > 0.
-
-    # Choose enough pixels that the light is either 90% of the light
-    # would be captured from a 1d gaussian or 5% of the sky noise,
-    # whichever is a larger radius.
-    pdf_90 = exp(-0.5 * (1.64)^2) / (sqrt(2pi) * obj_width)
-    pdf_target = min(pdf_90, epsilon / (20 * flux))
-    rhs = log(pdf_target) + 0.5 * log(2pi) + log(obj_width)
-    radius_req = sqrt(-2 * (obj_width ^ 2) * rhs)
+    radius_req = choose_patch_radius(ce, img.b, psf_width, epsilon;
+                                        width_scale=width_scale)
     min(radius_req, max_radius)
 end
 
