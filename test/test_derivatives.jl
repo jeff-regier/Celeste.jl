@@ -76,10 +76,10 @@ Set all but a few pixels to NaN to speed up autodiff Hessian testing.
 """
 function trim_tiles!(tiled_blob::TiledBlob, keep_pixels)
   for b = 1:length(tiled_blob)
-	  tiled_blob[b][1,1].pixels[
-			setdiff(1:tiled_blob[b][1,1].h_width, keep_pixels), :] = NaN;
-	  tiled_blob[b][1,1].pixels[
-			:, setdiff(1:tiled_blob[b][1,1].w_width, keep_pixels)] = NaN;
+	  tiled_blob[b].tiles[1,1].pixels[
+			setdiff(1:tiled_blob[b].tiles[1,1].h_width, keep_pixels), :] = NaN;
+	  tiled_blob[b].tiles[1,1].pixels[
+			:, setdiff(1:tiled_blob[b].tiles[1,1].w_width, keep_pixels)] = NaN;
 	end
 end
 
@@ -133,38 +133,37 @@ TODO: test!
 function limit_to_object_data(
     objid::ASCIIString, mp_original::ModelParams,
     tiled_blob::TiledBlob, blob::Blob, cat_entries::Vector{CatalogEntry})
-        -
+
   @assert length(tiled_blob) == length(blob)
   mp = deepcopy(mp_original)
-        -
+
   s_original = findfirst(mp_original.objids .== objid)
   @assert(s_original > 0, "objid $objid not found in mp_original.")
   mp_original.active_sources = [ s_original ]
-        -
+
   # Get the sources that overlap with this object.
   relevant_sources = ModelInit.get_relevant_sources(mp, s_original)
-        -
+
   trimmed_mp = ModelInit.initialize_model_params(
-    tiled_blob, blob, cat_entries[relevant_sources], fit_psf=true);
-        -
+    tiled_blob, cat_entries[relevant_sources], fit_psf=true);
+
   s = findfirst(trimmed_mp.objids .== objid)
   trimmed_mp.active_sources = [ s ]
-        -
+
   # Trim to a smaller tiled blob.
-  trimmed_tiled_blob = Array(Array{ImageTile}, 5);
+  trimmed_tiled_blob = deepcopy(tiled_blob)
   original_tiled_sources = deepcopy(trimmed_mp.tile_sources);
   for b=1:length(tiled_blob)
     hh_vec, ww_vec = ind2sub(size(original_tiled_sources[b]),
       find([ s in sources for sources in original_tiled_sources[b]]))
-        -
+
     hh_range = minimum(hh_vec):maximum(hh_vec);
     ww_range = minimum(ww_vec):maximum(ww_vec);
-    trimmed_tiled_blob[b] = tiled_blob[b][hh_range, ww_range];
+    trimmed_tiled_blob[b].tiles = tiled_blob[b].tiles[hh_range, ww_range];
     trimmed_mp.tile_sources[b] =
       deepcopy(original_tiled_sources[b][hh_range, ww_range]);
   end
-  trimmed_tiled_blob = convert(TiledBlob, trimmed_tiled_blob);
-        -
+
   trimmed_mp, trimmed_tiled_blob
 end
 
@@ -188,9 +187,8 @@ function test_real_image()
 
   # Limit to very few pixels so that the autodiff is reasonably fast.
   s = trimmed_mp.active_sources[1]
-  ModelInit.trim_source_tiles!(
+  very_trimmed_tiled_blob = ModelInit.trim_source_tiles(
     s, trimmed_mp, trimmed_tiled_blob, noise_fraction=10., min_radius_pix=1.0);
-  very_trimmed_tiled_blob = trimmed_tiled_blob
 
   # To see:
   # using PyPlot
@@ -238,7 +236,7 @@ end
 
 function test_tile_predicted_image()
   blob, mp, body, tiled_blob = gen_sample_star_dataset(perturb=false);
-  tile = tiled_blob[1][1, 1];
+  tile = tiled_blob[1].tiles[1, 1];
   tile_sources = mp.tile_sources[1][1, 1];
   pred_image =
     ElboDeriv.tile_predicted_image(tile, mp, tile_sources; include_epsilon=true);
@@ -281,7 +279,7 @@ function test_active_sources()
   keep_pixels = 10:11
   trim_tiles!(tiled_blob, keep_pixels)
   b = 1
-  tile = tiled_blob[b][1,1];
+  tile = tiled_blob[b].tiles[1,1];
   h, w = 10, 10
 
   mp.active_sources = [1, 2]
@@ -392,7 +390,7 @@ function test_add_log_term()
   for b = 1:5
     println("Testing log term for band $b.")
     x_nbm = 70.
-    tile = tiled_blob[b][1,1];
+    tile = tiled_blob[b].tiles[1,1];
     tile_sources = mp.tile_sources[b][1,1];
 
     iota = median(blob[b].iota_vec)
@@ -442,7 +440,7 @@ function test_combine_pixel_sources()
     test_var_string = test_var ? "E_G" : "var_G"
     println("Testing $(test_var_string), band $b")
 
-    tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
+    tile = tiled_blob[b].tiles[1,1]; # Note: only one tile in this simulated dataset.
     tile_sources = mp.tile_sources[b][1,1];
 
     function e_g_wrapper_fun{NumType <: Number}(
@@ -491,7 +489,7 @@ function test_e_g_s_functions()
     test_var_string = test_var ? "E_G" : "var_G"
     println("Testing $(test_var_string), band $b")
 
-    tile = tiled_blob[b][1,1]; # Note: only one tile in this simulated dataset.
+    tile = tiled_blob[b].tiles[1,1]; # Note: only one tile in this simulated dataset.
     tile_sources = mp.tile_sources[b][1,1];
 
     function e_g_wrapper_fun{NumType <: Number}(

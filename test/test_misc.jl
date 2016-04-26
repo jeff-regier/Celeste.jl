@@ -11,7 +11,7 @@ function test_tile_image()
   tile_width = 20;
   img.epsilon_mat = rand(size(img.pixels));
   img.iota_vec = rand(size(img.pixels, 1));
-  tiles = Model.break_image_into_tiles(img, tile_width);
+  tiles = Model.TiledImage(img; tile_width=tile_width).tiles;
   @test size(tiles) == (
     ceil(Int, img.H  / tile_width),
     ceil(Int, img.W / tile_width))
@@ -45,10 +45,12 @@ function test_local_sources()
     ]
 
     blob = Synthetic.gen_blob(blob0, three_bodies);
+    tiled_blob = TiledImage[TiledImage(img; tile_width=20) for img in blob]
 
     tile = ImageTile(1, 1, blob[3], 1000);
+
     mp = ModelInit.initialize_model_params(
-      fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
+      tiled_blob, three_bodies; patch_radius=20.);
     @test mp.S == 3
 
     patches = vec(mp.patches[:, 3])
@@ -59,7 +61,7 @@ function test_local_sources()
     tile_width = 10
     tile = ImageTile(1, 1, blob[3], tile_width);
     ModelInit.initialize_model_params(
-      fill(fill(tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
+      tiled_blob, three_bodies; patch_radius=20.);
 
     patches = vec(mp.patches[:, 3])
     subset10 = Model.get_local_sources(tile, patch_ctrs_pix(patches),
@@ -68,7 +70,7 @@ function test_local_sources()
 
     last_tile = ImageTile(11, 24, blob[3], tile_width)
     ModelInit.initialize_model_params(
-      fill(fill(last_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.)
+      tiled_blob, three_bodies; patch_radius=20.)
 
     patches = vec(mp.patches[:, 3])
     last_subset = Model.get_local_sources(last_tile,
@@ -78,7 +80,7 @@ function test_local_sources()
 
     pop_tile = ImageTile(7, 9, blob[3], tile_width)
     ModelInit.initialize_model_params(
-      fill(fill(pop_tile, 1, 1), 5), blob, three_bodies; patch_radius=20.);
+      tiled_blob, three_bodies; patch_radius=20.);
 
     patches = vec(mp.patches[:, 3])
     pop_subset = Model.get_local_sources(pop_tile, patch_ctrs_pix(patches),
@@ -198,7 +200,7 @@ end
 
 function test_get_relevant_sources()
   blob, mp, body, tiled_blob = gen_n_body_dataset(100; seed=42);
-  mp = ModelInit.initialize_model_params(tiled_blob, blob, body);
+  mp = ModelInit.initialize_model_params(tiled_blob, body);
 
   target_s = 1
   relevant_sources = ModelInit.get_relevant_sources(mp, target_s);

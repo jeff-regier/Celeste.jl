@@ -1,4 +1,3 @@
-
 """An image, taken though a particular filter band"""
 type Image
     # The image height.
@@ -37,9 +36,6 @@ type Image
     raw_psf_comp::RawPSF
 end
 
-
-"""A vector of images, one for each filter band"""
-typealias Blob Vector{Image}
 
 """
 Tiles of pixels that share the same set of
@@ -92,20 +88,6 @@ end
 
 
 """
-Constructs an image tile from an image.
-
-Args:
-    - img: The Image to be broken into tiles
-    - hh: The tile row index (in 1:number of tile rows)
-    - ww: The tile column index (in 1:number of tile columns)
-    - tile_width: The width and height of a tile in pixels
-"""
-function ImageTile(hh::Int, ww::Int, img::Image, tile_width::Int)
-    h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
-    ImageTile(img, h_range, w_range; hh=hh, ww=ww)
-end
-
-"""
 Constructs an image tile from specific image pixels.
 
 Args:
@@ -133,30 +115,79 @@ function ImageTile(img::Image,
 end
 
 
-typealias TiledImage Array{ImageTile, 2}
-typealias TiledBlob Vector{TiledImage}
-
 """
-Convert an image to an array of tiles of a given width.
+Constructs an image tile from an image.
 
 Args:
-    - img: An image to be broken into tiles
-    - tile_width: The size in pixels of each tile
-
-Returns:
-    An array of tiles containing the image.
+    - img: The Image to be broken into tiles
+    - hh: The tile row index (in 1:number of tile rows)
+    - ww: The tile column index (in 1:number of tile columns)
+    - tile_width: The width and height of a tile in pixels
 """
-function break_image_into_tiles(img::Image, tile_width::Int)
+function ImageTile(hh::Int, ww::Int, img::Image, tile_width::Int)
+    h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
+    ImageTile(img, h_range, w_range; hh=hh, ww=ww)
+end
+
+
+"""An image, taken though a particular filter band"""
+type TiledImage
+    # The image height.
+    H::Int
+
+    # The image width.
+    W::Int
+
+    # subimages
+    # TODO: use Float32 instead
+    tiles::Matrix{ImageTile}
+
+    # all tiles have the same height and width
+    tile_width::Int
+
+    # The band id (takes on values from 1 to 5).
+    b::Int
+
+    # World coordinates
+    wcs::WCSTransform
+
+    # The components of the point spread function.
+    psf::Vector{PsfComponent}
+
+    # SDSS-specific identifiers. A field is a particular region of the sky.
+    # A Camcol is the output of one camera column as part of a Run.
+    run_num::Int
+    camcol_num::Int
+    field_num::Int
+
+    # storing a RawPSF here isn't ideal, because it's an SDSS type
+    # not a Celeste type
+    raw_psf_comp::RawPSF
+end
+
+
+function TiledImage(img::Image; tile_width=20)
     WW = ceil(Int, img.W / tile_width)
     HH = ceil(Int, img.H / tile_width)
-    ImageTile[ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW]
+    tiles = ImageTile[ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW]
+    TiledImage(img.H, img.W, tiles, tile_width, img.b, img.wcs, img.psf,
+               img.run_num, img.camcol_num, img.field_num,
+               img.raw_psf_comp)
 end
 
 
-"""
-Break a blob into tiles.
-"""
-function break_blob_into_tiles(blob::Blob, tile_width::Int)
-    [break_image_into_tiles(img, tile_width) for img in blob]
+""" Returns the tile containing (or nearest to) the specified pixel"""
+function get_containing_tile(pixel_crds::Vector{Float64}, img::TiledImage)
+    ht0 = ceil(Int, pixel_crds[1] / img.tile_width)
+    wt0 = ceil(Int, pixel_crds[2] / img.tile_width)
+    ht = max(1, min(size(img.tiles, 1), ht0))
+    wt = max(1, min(size(img.tiles, 2), wt0))
+    img.tiles[ht, wt]
 end
+
+
+# TODO: remove these types...they don't make anything more clear
+typealias Blob Vector{Image}
+typealias TiledBlob Vector{TiledImage}
+
 

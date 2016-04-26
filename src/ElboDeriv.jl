@@ -803,7 +803,7 @@ function process_active_pixels!{NumType <: Number}(
 
   # iterate over the pixels
   for pixel in active_pixels
-    tile = tiled_blob[pixel.b][pixel.tile_ind]
+    tile = tiled_blob[pixel.b].tiles[pixel.tile_ind]
     tile_sources = mp.tile_sources[pixel.b][pixel.tile_ind]
     this_pixel = tile.pixels[pixel.h, pixel.w]
 
@@ -913,10 +913,10 @@ function get_active_pixels{NumType <: Number}(
     tiled_blob::TiledBlob, mp::ModelParams{NumType})
 
   active_pixels = ActivePixel[]
-  for b in 1:length(tiled_blob), tile_ind in 1:length(tiled_blob[b])
+  for b in 1:length(tiled_blob), tile_ind in 1:length(tiled_blob[b].tiles)
     tile_sources = mp.tile_sources[b][tile_ind]
     if length(intersect(tile_sources, mp.active_sources)) > 0
-      tile = tiled_blob[b][tile_ind]
+      tile = tiled_blob[b].tiles[tile_ind]
       for w in 1:tile.w_width, h in 1:tile.h_width
         if !Base.isnan(tile.pixels[h, w])
           push!(active_pixels, ActivePixel(b, tile_ind, h, w))
