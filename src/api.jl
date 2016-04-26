@@ -345,26 +345,10 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
     reserve_thread[] && thread_fun(reserve_thread)
 
-    # initialize tiled images and model parameters for trimming.  We will
-    # initialize the psf again before fitting, so we don't do it here.
-    Logging.info("initializing celeste without PSF fit")
+    Logging.info("finding neighbors")
     tic()
-    mp = ModelInit.initialize_model_params(images, catalog, fit_psf=false)
-    timing.init_mp = toq()
-
-    reserve_thread[] && thread_fun(reserve_thread)
-
-    # get indicies of all sources relevant to those we're actually
-    # interested in, and fit a local PSF for those sources (since we skipped
-    # fitting the PSF for the whole catalog above)
-    Logging.info("fitting PSF for all relevant sources")
-    tic()
-    if Threaded
-      fit_object_psfs_threaded!(mp, target_sources, images)
-    else
-      ModelInit.fit_object_psfs!(mp, target_sources, images)
-    end
-    timing.fit_psf = toq()
+    neighbor_map = ModelInit.find_neighbors(target_sources, catalog, images)
+    Logging.info("neighbors found in ", toq(), " seconds")
 
     reserve_thread[] && thread_fun(reserve_thread)
 
@@ -372,7 +356,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     results = Dict{Int, Dict}()
     results_lock = SpinLock()
     tic()
-    @threads for s in target_sources
+    @threads for ts in 1:length(target_sources)
         tid = threadid()
         if reserve_thread[] && tid == 1
             while reserve_thread[]
@@ -380,44 +364,45 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                 cpu_pause()
             end
         else
+            s = target_sources[ts]
             entry = catalog[s]
 
             try
                 nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
                 gc()
 
-                #tic()
-
                 t0 = time()
-                relevant_sources = ModelInit.get_relevant_sources(mp, s)
-                mp_source = ModelParams(mp, relevant_sources)
+                relevant_sources = vcat(s, neighbor_map[ts])
+                cat_local = catalog[relevant_sources]
+                mp = ModelInit.initialize_model_params(images, cat_local, fit_psf=false)
                 sa = findfirst(relevant_sources, s)
-                mp_source.active_sources = Int[ sa ]
-                trimmed = ModelInit.trim_source_tiles(sa, mp_source, images;
-                                              noise_fraction=0.1)
+                mp.active_sources = Int[ sa ]
                 init_time = time() - t0
 
-                #t = toq()
-                #nputs(dt_nodeid, "trimmed $s in $t secs, optimizing")
-                #tic()
+                t0 = time()
+                ModelInit.fit_object_psfs!(mp, mp.active_sources, images)
+                psf_time = time() - t0
+
+                t0 = time()
+                trimmed = ModelInit.trim_source_tiles(sa, mp, images;
+                                              noise_fraction=0.1)
+                trim_time = time() - t0
 
                 t0 = time()
                 iter_count, max_f, max_x, result =
-                    OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed,
-                                            mp_source;
+                    OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed, mp;
                                             verbose=false, max_iters=max_iters)
-                fit_time = time() - t0
-
-                #t = toq()
-                #nputs(dt_nodeid, "optimized $s in $t secs, writing results")
+                opt_time = time() - t0
 
                 lock!(results_lock)
                 results[entry.thing_id] = Dict("objid"=>entry.objid,
                                                "ra"=>entry.pos[1],
                                                "dec"=>entry.pos[2],
-                                               "vs"=>mp_source.vp[sa],
+                                               "vs"=>mp.vp[sa],
                                                "init_time"=>init_time,
-                                               "fit_time"=>fit_time)
+                                               "psf_time"=>psf_time,
+                                               "trim_time"=>trim_time,
+                                               "opt_time"=>opt_time)
                 unlock!(results_lock)
             catch ex
                 Logging.err(ex)
