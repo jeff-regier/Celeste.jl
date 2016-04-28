@@ -38,3 +38,9 @@ end
 
 ModelParams{T <: Number}(vp::VariationalParams{T}) = ModelParams{T}(vp)
 
+
+function ModelParams(catalog::Vector{CatalogEntry})
+    vp = Array{Float64, 1}[init_source(ce) for ce in catalog]
+    ModelParams(vp)
+end
+
