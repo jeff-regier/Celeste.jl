@@ -44,7 +44,6 @@ function forward_diff_model_params{T <: Number}(
     mp_fd.patches = base_mp.patches;
     mp_fd.tile_sources = base_mp.tile_sources;
     mp_fd.active_sources = base_mp.active_sources;
-    mp_fd.objids = base_mp.objids;
     mp_fd
 end
 

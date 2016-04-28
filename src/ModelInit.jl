@@ -28,7 +28,6 @@ function initialize_model_params(
 
     vp = Array{Float64, 1}[Model.init_source(ce) for ce in cat]
     mp = ModelParams(vp)
-    mp.objids = ASCIIString[cat_entry.objid for cat_entry in cat]
 
     N = length(images)
     mp.patches = Array(SkyPatch, mp.S, N)
@@ -158,7 +157,6 @@ function fit_object_psfs!{NumType <: Number}(
                                                              target_sources)
 
         for s in relevant_sources
-            Logging.debug("Fitting PSF for b=$i, source=$s, objid=$(mp.objids[s])")
             patch = mp.patches[s, i]
             # Set the starting point at the center's PSF.
             psf, psf_params =
