@@ -233,7 +233,7 @@ Returns:
   An array of E_l_a and E_ll_a for each source.
 """
 function get_brightness{NumType <: Number}(mp::ModelParams{NumType})
-    brightness = [SourceBrightness(mp.vp[s]) for s in mp.S];
+    brightness = [SourceBrightness(mp.vp[s]) for s in mp.S]
     brightness_vals = [ Float64[b.E_l_a[i, j].v[1] for
         i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
     brightness_squares = [ Float64[b.E_l_a[i, j].v[1] for
