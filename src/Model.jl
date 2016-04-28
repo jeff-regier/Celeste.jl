@@ -8,7 +8,7 @@ export CatalogEntry,
        ModelParams, PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,
-       VariationalParams, FreeVariationalParams, RectVariationalParams,
+       VariationalParams, FreeVariationalParams,
        PsfParams, RawPSF, CatalogEntry
 
 # functions
