@@ -571,48 +571,6 @@ function array_to_free_vp!{NumType <: Number}(
 end
 
 
-"""
-Generate parameters within the given bounds.  Currently used for testing only.
-"""
-function generate_valid_parameters(
-  NumType::DataType, bounds_vec::Vector{ParamBounds})
-
-  @assert NumType <: Number
-  S = length(bounds_vec)
-  vp = convert(VariationalParams{NumType},
-	             [ zeros(NumType, length(ids)) for s = 1:S ])
-	for s=1:S, (param, constraint_vec) in bounds_vec[s]
-    is_box = isa(constraint_vec, Array{ParamBox})
-    if is_box
-      # Box parameters.
-      for ind in 1:length(ids.(param))
-        constraint = constraint_vec[ind]
-        constraint.upper_bound == Inf ?
-          vp[s][ids.(param)[ind]] = constraint.lower_bound + 1.0:
-          vp[s][ids.(param)[ind]] =
-            0.5 * (constraint.upper_bound - constraint.lower_bound) +
-            constraint.lower_bound
-      end
-    else
-      # Simplex parameters can ignore the bounds.
-      param_size = size(ids.(param))
-      if length(param_size) == 2
-        # matrix simplex
-        for col in 1:param_size[2]
-          vp[s][ids.(param)[:, col]] = 1 / param_size[1]
-        end
-      else
-        # vector simplex
-        vp[s][ids.(param)] = 1 / length(ids.(param))
-      end
-    end
-	end
-
-  vp
-end
-
-
-
 #########################
 # Define the exported variables.
 
@@ -796,74 +754,6 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
   DataTransform(bounds, active_sources=mp.active_sources, S=mp.S)
 end
 
-# An identity transform that does not enforce any bounds nor reduce
-# the dimension of the variational params.  This is mostly useful
-# for testing.
-function get_identity_transform(P::Int, S::Int)
-
-  active_S = S
-  active_sources = 1:S
-  bounds = ParamBounds[]
-
-  function from_vp!{NumType <: Number}(
-    vp::VariationalParams{NumType}, vp_free::VariationalParams{NumType})
-      @assert length(vp_free) == length(vp) == active_S
-      for s=1:S
-        @assert length(vp_free[s]) == length(vp[s]) == P
-        vp_free[s][:] = vp[s]
-      end
-  end
-
-  function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
-      vp_free = Array{NumType, 1}[ zeros(NumType, P) for si = 1:active_S ]
-      from_vp!(vp, vp_free)
-      vp_free
-  end
-
-  function to_vp!{NumType <: Number}(
-    vp_free::FreeVariationalParams{NumType}, vp::VariationalParams{NumType})
-    @assert length(vp_free) == length(vp) == active_S
-    for s=1:S
-      @assert length(vp_free[s]) == length(vp[s]) == P
-      vp[s][:] = vp_free[s]
-    end
-  end
-
-  function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
-      vp = Array{NumType, 1}[ zeros(P) for s = 1:S ]
-      to_vp!(vp_free, vp)
-      vp
-  end
-
-  function vp_to_array{NumType <: Number}(vp::VariationalParams{NumType},
-                                          omitted_ids::Vector{Int})
-      kept_ids = setdiff(1:P, omitted_ids)
-      xs = zeros(length(kept_ids), S)
-      for s=1:S
-        xs[:, s] = vp[s][kept_ids]
-      end
-      xs
-  end
-
-  function array_to_vp!{NumType <: Number}(xs::Matrix{NumType},
-                                           vp::VariationalParams{NumType},
-                                           omitted_ids::Vector{Int})
-      # This needs to update vp in place so that variables in omitted_ids
-      # stay at their original values.
-      kept_ids = setdiff(1:P, omitted_ids)
-      for s=1:S
-        vp[s][kept_ids] = xs[:, s]
-      end
-  end
-
-  function transform_sensitive_float{NumType <: Number}(
-      sf::SensitiveFloat, mp::ModelParams{NumType})
-    sf
-  end
-
-  DataTransform(to_vp, from_vp, to_vp!, from_vp!, vp_to_array, array_to_vp!,
-                transform_sensitive_float, bounds, active_sources, active_S, S)
-end
 
 """
 Put the variational parameters within the bounds of the transform.

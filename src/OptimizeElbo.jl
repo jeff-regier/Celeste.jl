@@ -260,24 +260,5 @@ function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
       verbose=verbose, max_iters=max_iters)
 end
 
-function maximize_elbo(tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;
-    xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
-    maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans,
-        ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
-end
-
-function maximize_elbo(tiled_blob::TiledBlob, mp::ModelParams; verbose = false)
-    trans = get_mp_transform(mp)
-    maximize_elbo(tiled_blob, mp, trans, verbose=verbose)
-end
-
-function maximize_likelihood(
-  tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;
-  xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
-    omitted_ids = [ids_free.k[:]; ids_free.c2[:]; ids_free.r2]
-    maximize_f(ElboDeriv.elbo_likelihood, tiled_blob, mp, trans,
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel,
-               ftol_abs=ftol_abs, verbose=verbose)
-end
 
 end

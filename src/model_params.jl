@@ -33,7 +33,7 @@ type ModelParams{T <: Number}
 
     S::Int
 
-    function ModelParams(vp::VariationalParams{T}, pp::PriorParams)
+    function ModelParams(vp::VariationalParams{T})
         # There must be one patch for each celestial object.
         S = length(vp)
         all_tile_sources = fill(fill(collect(1:S), 1, 1), 5)
@@ -41,42 +41,10 @@ type ModelParams{T <: Number}
         active_sources = collect(1:S)
         objids = ASCIIString[string(s) for s in 1:S]
 
-        new(vp, pp, patches, all_tile_sources, active_sources, objids, S)
+        new(vp, prior, patches, all_tile_sources, active_sources, objids, S)
     end
 end
 
 
-# Make a copy of a ModelParams keeping only some sources.
-function ModelParams{T <: Number}(mp_all::ModelParams{T}, keep_s::Vector{Int})
-    mp = ModelParams{T}(deepcopy(mp_all.vp[keep_s]), mp_all.pp);
-    mp.active_sources = Int[]
-    mp.objids = Array(ASCIIString, length(keep_s))
-    mp.patches = Array(SkyPatch, mp.S, size(mp_all.patches, 2))
+ModelParams{T <: Number}(vp::VariationalParams{T}) = ModelParams{T}(vp)
 
-    # Indices of sources in the new model params
-    for sa in 1:length(keep_s)
-        s = keep_s[sa]
-        mp.objids[sa] = mp_all.objids[s]
-        mp.patches[sa, :] = mp_all.patches[s, :]
-        if s in mp_all.active_sources
-            push!(mp.active_sources, sa)
-        end
-    end
-
-    @assert length(mp_all.tile_sources) == size(mp_all.patches, 2)
-    num_bands = length(mp_all.tile_sources)
-    mp.tile_sources = Array(Matrix{Vector{Int}}, num_bands)
-    for b=1:num_bands
-        mp.tile_sources[b] = Array(Vector{Int}, size(mp_all.tile_sources[b]))
-        for tile_ind in 1:length(mp_all.tile_sources[b])
-                tile_s = intersect(mp_all.tile_sources[b][tile_ind], keep_s)
-                mp.tile_sources[b][tile_ind] =
-                    Int[ findfirst(keep_s, s) for s in tile_s ]
-        end
-    end
-
-    mp
-end
-
-ModelParams{T <: Number}(vp::VariationalParams{T}, pp::PriorParams) =
-    ModelParams{T}(vp, pp)

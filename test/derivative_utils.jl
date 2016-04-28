@@ -12,7 +12,7 @@ function convert(FDType::Type{ForwardDiff.GradientNumber},
     convert(FDType, x[1])
 
     vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
-    mp_fd = ModelParams(vp_fd, mp.pp)
+    mp_fd = ModelParams(vp_fd)
 end
 
 function convert(FDType::Type{ForwardDiff.HessianNumber},
@@ -25,7 +25,7 @@ function convert(FDType::Type{ForwardDiff.HessianNumber},
     convert(FDType, x[1])
 
     vp_fd = convert(Array{Array{FDType, 1}, 1}, mp.vp[1])
-    mp_fd = ModelParams(vp_fd, mp.pp)
+    mp_fd = ModelParams(vp_fd)
 end
 
 
@@ -35,7 +35,7 @@ function forward_diff_model_params{T <: Number}(
             base_mp::ModelParams{Float64})
     S = length(base_mp.vp)
     P = length(base_mp.vp[1])
-    mp_fd = ModelParams{FDType}([ zeros(FDType, P) for s=1:S ], base_mp.pp);
+    mp_fd = ModelParams{FDType}([zeros(FDType, P) for s=1:S]);
     # Set the values (but not gradient numbers) for parameters other
     # than the galaxy parameters.
     for s=1:base_mp.S, i=1:length(ids)
