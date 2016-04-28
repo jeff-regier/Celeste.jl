@@ -5,6 +5,7 @@ import Logging
 using ..Model
 import ..WCSUtils
 import ..PSF
+import ..ElboDeriv
 
 
 """
@@ -19,15 +20,12 @@ Args:
 """
 function initialize_model_params(
             images::Vector{TiledImage},
-            cat::Vector{CatalogEntry};
+            catalog::Vector{CatalogEntry};
             fit_psf::Bool=true,
             patch_radius::Float64=NaN)
-    @assert length(cat) > 0
+    @assert length(catalog) > 0
 
-    Logging.info("Loading variational parameters from catalogs.")
-
-    vp = Array{Float64, 1}[Model.init_source(ce) for ce in cat]
-    mp = ModelParams(vp)
+    mp = ModelParams(catalog)
 
     N = length(images)
     mp.patches = Array(SkyPatch, mp.S, N)
@@ -37,13 +35,13 @@ function initialize_model_params(
         img = images[i]
 
         for s=1:mp.S
-            world_center = cat[s].pos
+            world_center = catalog[s].pos
 
             pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
             wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
             psf = fit_psf ? PSF.get_source_psf(world_center, img)[1] : img.psf
 
-            radius_pix = Model.choose_patch_radius(pixel_center, cat[s], psf, img)
+            radius_pix = Model.choose_patch_radius(pixel_center, catalog[s], psf, img)
 
             # for testing
             if !isnan(patch_radius)
@@ -113,9 +111,6 @@ function fit_object_psfs!{NumType <: Number}(
         end
     end
 end
-
-
-import ..ElboDeriv
 
 
 """
