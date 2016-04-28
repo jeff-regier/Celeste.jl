@@ -198,22 +198,6 @@ function test_sky_noise_estimates()
 end
 
 
-function test_get_relevant_sources()
-  blob, mp, body, tiled_blob = gen_n_body_dataset(100; seed=42);
-  mp = ModelInit.initialize_model_params(tiled_blob, body);
-
-  target_s = 1
-  relevant_sources = ModelInit.get_relevant_sources(mp, target_s);
-  @test length(relevant_sources) > 1 # Just to make sure the test is valid
-
-  @test target_s in relevant_sources
-  for b in 1:length(mp.tile_sources), tile_sources in mp.tile_sources[b]
-    if target_s in tile_sources
-      @test all(Bool[ s in relevant_sources for s in tile_sources ])
-    end
-  end
-end
-
 ####################################################
 
 test_tile_image()
@@ -221,4 +205,3 @@ test_sky_noise_estimates()
 test_local_sources()
 test_local_sources_2()
 test_local_sources_3()
-test_get_relevant_sources()
