@@ -67,7 +67,6 @@ function test_transform_sensitive_float()
 		vp_free_array = reshape(vp_free_vec, length(UnconstrainedParams), length(mp.active_sources))
 		vp_free = Vector{NumType}[ zeros(NumType, length(UnconstrainedParams)) for
 		                           sa in mp.active_sources ];
-		#vp_free = convert(FreeVariationalParams{NumType}, vp_free)
 		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
 		mp_local = forward_diff_model_params(NumType, mp);
 		transform.to_vp!(vp_free, mp_local.vp)

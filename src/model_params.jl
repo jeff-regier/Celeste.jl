@@ -3,7 +3,6 @@
 # parameters for that object (referenced using ParamIndex).
 
 typealias VariationalParams{NumType <: Number} Vector{Vector{NumType}}
-typealias RectVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 
 
