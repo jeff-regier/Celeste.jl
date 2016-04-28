@@ -16,13 +16,11 @@ Make a copy of a ModelParams keeping only some sources.
 function copy_mp_subset{T <: Number}(mp_all::ModelParams{T}, keep_s::Vector{Int})
     mp = ModelParams(deepcopy(mp_all.vp[keep_s]))
     mp.active_sources = Int[]
-    mp.objids = Array(ASCIIString, length(keep_s))
     mp.patches = Array(SkyPatch, mp.S, size(mp_all.patches, 2))
 
     # Indices of sources in the new model params
     for sa in 1:length(keep_s)
         s = keep_s[sa]
-        mp.objids[sa] = mp_all.objids[s]
         mp.patches[sa, :] = mp_all.patches[s, :]
         if s in mp_all.active_sources
             push!(mp.active_sources, sa)
@@ -328,13 +326,9 @@ function test_copy_model_params()
 
   # Pick a single object of interest.
   obj_s = 100
-  objid = mp_all.objids[obj_s]
   relevant_sources = ModelInit.get_relevant_sources(mp_all, obj_s);
   mp_all.active_sources = [ obj_s ];
   mp = copy_mp_subset(mp_all, relevant_sources);
-
-  s = findfirst(mp.objids, objid)
-  @test s > 0
 
   # Fit with both and make sure you get the same answer.
   ModelInit.fit_object_psfs!(mp_all, relevant_sources, tiled_images);
