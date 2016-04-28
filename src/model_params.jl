@@ -7,8 +7,6 @@ typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 
 
 """
-The parameters for a particular image.
-
 Attributes:
  - vp: The variational parameters
  - patches: An (objects X bands) matrix of SkyPatch objects

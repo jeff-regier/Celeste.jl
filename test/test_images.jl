@@ -326,7 +326,9 @@ function test_copy_model_params()
 
   # Pick a single object of interest.
   obj_s = 100
-  relevant_sources = ModelInit.get_relevant_sources(mp_all, obj_s);
+  neighbor_map = ModelInit.find_neighbors([obj_s], cat_entries, tiled_images)
+  relevant_sources = vcat(obj_s, neighbor_map[1])
+
   mp_all.active_sources = [ obj_s ];
   mp = copy_mp_subset(mp_all, relevant_sources);
 
@@ -349,9 +351,9 @@ function test_copy_model_params()
 end
 
 
+test_copy_model_params()
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
 test_local_source_candidate()
 test_set_patch_size()
-test_copy_model_params()

@@ -70,67 +70,8 @@ end
 
 
 """
-Return an array of source indices that have some overlap with target_s.
-
-Args:
-  - mp: The ModelParams
-  - target_s: The index of the source of interest
-
-Returns:
-  - An array of integers that index into mp.s representing all sources that
-    co-occur in at least one tile with target_s, including target_s itself.
-"""
-function get_relevant_sources{NumType <: Number}(mp::ModelParams{NumType},
-                                                 target_s::Int)
-    relevant_sources = Int[]
-    for b = 1:length(mp.tile_sources), tile_sources in mp.tile_sources[b]
-        if target_s in tile_sources
-            relevant_sources = union(relevant_sources, tile_sources);
-        end
-    end
-
-    relevant_sources
-end
-
-
-"""
-Return indicies of all sources relevant to any of a set of target sources
-in the given image.
-
-# Arguments
-  * `mp::ModelParams`: Model parameters.
-  * `targets::Vector{Int}`: Indicies of target sources.
-  * `b::Int`: Index of image.
-
-# Returns
-* `Vector{Int}`: Array of integers that index into mp.s. These represent
-  all sources that co-occur in at least one tile with *any* of the sources
-  in `targets`.
-"""
-function get_all_relevant_sources_in_image(
-                    sources_by_tile::Matrix{Vector{Int}},
-                    target_sources::Vector{Int})
-    out = Int[]
-
-    for tile_sources in sources_by_tile  # loop over image tiles
-        # check if *any* of this tile's sources are a target, and
-        # if so, add *all* the tile sources to the output.
-        if length(intersect(target_sources, tile_sources)) > 0
-            out = union(out, tile_sources)
-        end
-    end
-
-    out
-end
-
-
-"""
-Args:
-  - relevant_sources: A vector of source ids that index into mp.patches
-
-Returns:
-  - Updates mp.patches in place with fitted psfs for each source in
-    relevant_sources.
+Updates mp.patches in place with fitted psfs for each source in
+relevant_sources.
 """
 function fit_object_psfs!{NumType <: Number}(
                         mp::ModelParams{NumType}, 
@@ -153,8 +94,14 @@ function fit_object_psfs!{NumType <: Number}(
                                 psf_optimizer, initial_psf_params)
 
         # Get all relevant sources *in this image*
-        relevant_sources = get_all_relevant_sources_in_image(mp.tile_sources[i],
-                                                             target_sources)
+        relevant_sources = Int[]
+        for tile_sources in mp.tile_sources[i]
+            # check if *any* of this tile's sources are a target, and
+            # if so, add *all* the tile sources to the output.
+            if length(intersect(target_sources, tile_sources)) > 0
+                relevant_sources = union(relevant_sources, tile_sources)
+            end
+        end
 
         for s in relevant_sources
             patch = mp.patches[s, i]
@@ -278,8 +225,10 @@ function find_neighbors(target_sources::Vector{Int64},
     for s in 1:length(catalog)
         ce = catalog[s]
         for b in 1:B
-            radius_pix = Model.choose_patch_radius(ce, b, psf_width_ub[b],
-                                                             epsilon_lb[b])
+            radius_pix = Model.choose_patch_radius(ce, b,
+                                                   psf_width_ub[b],
+                                                   epsilon_lb[b],
+                                                   width_scale=1.2)
             radii_map[s] = max(radii_map[s], radius_pix)
         end
     end
