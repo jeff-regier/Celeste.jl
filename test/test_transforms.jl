@@ -208,7 +208,7 @@ function test_parameter_conversion()
 		x = transform.vp_to_array(vp, omitted_ids)
 		@test length(x) == length(vp_free[1]) * length(mp.active_sources)
 
-		vp2 = generate_valid_parameters(Float64, transform.bounds)
+		vp2 = Transform.generate_valid_parameters(Float64, transform.bounds)
 		transform.array_to_vp!(x, vp2, omitted_ids)
 		for id in fieldnames(ids), si in 1:transform.active_S
 			s = transform.active_sources[si]

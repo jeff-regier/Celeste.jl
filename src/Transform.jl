@@ -6,7 +6,7 @@ using ..Model
 using ..SensitiveFloats
 
 export DataTransform, ParamBounds, ParamBox, SimplexBox,
-       get_mp_transform, generate_valid_parameters, enforce_bounds!
+       get_mp_transform, enforce_bounds!
 
 import Logging
 
@@ -948,8 +948,6 @@ function enforce_bounds!{NumType <: Number}(
     end
   end
 end
-
-
 
 
 end
