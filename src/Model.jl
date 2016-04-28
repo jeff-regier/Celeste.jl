@@ -15,7 +15,8 @@ export CatalogEntry,
 export align
 
 # constants
-export band_letters, D, Ia, B, psf_K, galaxy_prototypes,
+export band_letters, D, Ia, B, psf_K,
+       galaxy_prototypes, prior,
        shape_standard_alignment,
        brightness_standard_alignment,
        gal_shape_alignment,

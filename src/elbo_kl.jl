@@ -104,12 +104,12 @@ end
 Subtract the KL divergence from the prior for c
 """
 function subtract_kl_c{NumType <: Number}(
-    d::Int, i::Int, vs::Vector{NumType}, pp::PriorParams)
+    d::Int, i::Int, vs::Vector{NumType})
 
   a = vs[ids.a[i]]
   k = vs[ids.k[d, i]]
 
-  pp_kl_cid = gen_diagmvn_mvn_kl(pp.c_mean[:, d, i], pp.c_cov[:, :, d, i])
+  pp_kl_cid = gen_diagmvn_mvn_kl(prior.c_mean[:, d, i], prior.c_cov[:, :, d, i])
   -pp_kl_cid(vs[ids.c1[:, i]], vs[ids.c2[:, i]]) * a * k
 end
 
@@ -117,10 +117,8 @@ end
 """
 Subtract the KL divergence from the prior for k
 """
-function subtract_kl_k{NumType <: Number}(
-  i::Int, vs::Vector{NumType}, pp::PriorParams)
-
-    pp_kl_ki = gen_categorical_kl(pp.k[:, i])
+function subtract_kl_k{NumType <: Number}(i::Int, vs::Vector{NumType})
+    pp_kl_ki = gen_categorical_kl(prior.k[:, i])
     -vs[ids.a[i]] * pp_kl_ki(vs[ids.k[:, i]])
 end
 
@@ -128,10 +126,9 @@ end
 """
 Subtract the KL divergence from the prior for r for object type i.
 """
-function subtract_kl_r{NumType <: Number}(
-  i::Int, vs::Vector{NumType}, pp::PriorParams)
+function subtract_kl_r{NumType <: Number}(i::Int, vs::Vector{NumType})
     a = vs[ids.a[i]]
-    pp_kl_r = gen_normal_kl(pp.r_mean[i], pp.r_var[i])
+    pp_kl_r = gen_normal_kl(prior.r_mean[i], prior.r_var[i])
     v = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
     -a * v
 end
@@ -140,8 +137,8 @@ end
 """
 Subtract the KL divergence from the prior for a
 """
-function subtract_kl_a{NumType <: Number}(vs::Vector{NumType}, pp::PriorParams)
-    pp_kl_a = gen_categorical_kl(pp.a)
+function subtract_kl_a{NumType <: Number}(vs::Vector{NumType})
+    pp_kl_a = gen_categorical_kl(prior.a)
     -pp_kl_a(vs[ids.a])
 end
 
@@ -156,13 +153,13 @@ function subtract_kl!{NumType <: Number}(
         vp_active = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
         for sa in 1:length(mp.active_sources)
             vs = vp_active[:, sa]
-            elbo_val += subtract_kl_a(vs, mp.pp)
+            elbo_val += subtract_kl_a(vs)
 
             for i in 1:Ia
-                    elbo_val += subtract_kl_r(i, vs, mp.pp)
-                    elbo_val += subtract_kl_k(i, vs, mp.pp)
+                    elbo_val += subtract_kl_r(i, vs)
+                    elbo_val += subtract_kl_k(i, vs)
                     for d in 1:D
-                        elbo_val += subtract_kl_c(d, i, vs, mp.pp)
+                        elbo_val += subtract_kl_c(d, i, vs)
                     end
             end
         end

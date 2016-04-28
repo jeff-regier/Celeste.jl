@@ -24,7 +24,6 @@ Attributes:
 """
 type ModelParams{T <: Number}
     vp::VariationalParams{T}
-    pp::PriorParams
     patches::Array{SkyPatch, 2}
     tile_sources::Vector{Array{Vector{Int}, 2}}
     active_sources::Vector{Int}
@@ -40,7 +39,7 @@ type ModelParams{T <: Number}
         active_sources = collect(1:S)
         objids = ASCIIString[string(s) for s in 1:S]
 
-        new(vp, prior, patches, all_tile_sources, active_sources, objids, S)
+        new(vp, patches, all_tile_sources, active_sources, objids, S)
     end
 end
 

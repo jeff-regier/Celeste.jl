@@ -1,13 +1,12 @@
 module PSF
 
 using Celeste
-using Celeste.Model
-using Celeste.BivariateNormals
-import Celeste.SensitiveFloats
-
-using Celeste.Transform
-using Celeste.SensitiveFloats.SensitiveFloat
-using Celeste.SensitiveFloats.clear!
+using ..Model
+using ..BivariateNormals
+using ..Transform
+using ..SensitiveFloats.SensitiveFloat
+import ..SensitiveFloats.clear!
+import ..SensitiveFloats
 
 import Optim
 import WCS
