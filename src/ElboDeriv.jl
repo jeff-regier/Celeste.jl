@@ -9,7 +9,6 @@ using ..Model
 using ..SensitiveFloats
 using ..BivariateNormals
 
-import ..KL
 import ..WCSUtils
 
 include("elbo_kl.jl")

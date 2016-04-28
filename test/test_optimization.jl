@@ -98,7 +98,8 @@ function test_star_optimization()
     # a high star probability.
     mp.vp[1][ids.a] = [0.8, 0.2]
     transform = get_mp_transform(mp, loc_width=1.0);
-    OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=false)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood,
+                            tiled_blob, mp, transform, verbose=false)
     verify_sample_star(mp.vp[1], [10.1, 12.2])
 end
 
@@ -120,7 +121,8 @@ function test_single_source_optimization()
 
   ElboDeriv.elbo_likelihood(tiled_blob, mp).v[1]
 
-  OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=true)
+  OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood,
+                          tiled_blob, mp, transform, verbose=true)
 
   # Test that it only optimized source s
   @test mp.vp[s] != mp_original.vp[s]
@@ -192,7 +194,8 @@ function test_galaxy_optimization()
     # NLOpt fails here so use newton.
     blob, mp, body, tiled_blob = gen_sample_galaxy_dataset();
     trans = get_mp_transform(mp, loc_width=3.0);
-    OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood,
+                            tiled_blob, mp, trans, verbose=false)
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6])
 end
 
@@ -312,7 +315,7 @@ end
 function test_full_elbo_optimization()
     blob, mp, body, tiled_blob = gen_sample_galaxy_dataset(perturb=true);
     trans = get_mp_transform(mp, loc_width=1.0);
-    OptimizeElbo.maximize_elbo(tiled_blob, mp, trans, xtol_rel=0.0);
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, xtol_rel=0.0);
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6]);
 end
 
@@ -328,7 +331,7 @@ function test_real_stamp_optimization()
 
     tiled_blob, mp = initialize_celeste(blob, cat_entries);
     trans = get_mp_transform(mp, loc_width=1.0);
-    OptimizeElbo.maximize_elbo(tiled_blob, mp, trans, xtol_rel=0.0);
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, xtol_rel=0.0);
 end
 
 

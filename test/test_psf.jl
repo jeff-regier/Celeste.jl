@@ -3,18 +3,45 @@ using Celeste.Model
 using Celeste.BivariateNormals
 using Celeste.SensitiveFloats
 
-import Celeste.PSF: evaluate_psf_fit,
+import Celeste.PSF: get_psf_at_point,
        get_psf_transform, initialize_psf_params, transform_psf_params!,
        unwrap_psf_params, wrap_psf_params,
        unconstrain_psf_params, constrain_psf_params,
        transform_psf_sensitive_float!,
-       PsfOptimizer, fit_raw_psf_for_celeste,
-       get_psf_at_point, get_source_psf
-
-
+       PsfOptimizer, fit_raw_psf_for_celeste
+       
 using ForwardDiff
 
-using Base.Test
+
+"""
+Evaluate the sum of squared difference between the raw_psf and the psf
+represented by psf_params, as well as the derivatives and hessians with
+respect to unconstrained parameters.
+
+Returns:
+  - A sensitive float for the sum of squared differences.
+"""
+function evaluate_psf_fit{NumType <: Number}( 
+    psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64},
+    calculate_derivs::Bool)
+
+  K = length(psf_params)
+  x_mat = PSF.get_x_matrix_from_psf(raw_psf);
+  
+  # TODO: allocate these outside?
+  bvn_derivs = BivariateNormalDerivatives{NumType}(NumType);
+  log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
+  pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
+  
+  pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
+  squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
+
+  PSF.evaluate_psf_fit!(
+      psf_params, raw_psf, x_mat, bvn_derivs,
+      log_pdf, pdf, pixel_value, squared_error, calculate_derivs)
+
+  squared_error
+end
 
 
 function load_raw_psf(; x::Float64=500., y::Float64=500.)

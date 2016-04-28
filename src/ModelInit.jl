@@ -27,7 +27,7 @@ function initialize_model_params(
     Logging.info("Loading variational parameters from catalogs.")
 
     vp = Array{Float64, 1}[Model.init_source(ce) for ce in cat]
-    mp = ModelParams(vp, Model.prior)
+    mp = ModelParams(vp)
     mp.objids = ASCIIString[cat_entry.objid for cat_entry in cat]
 
     N = length(images)
@@ -240,7 +240,7 @@ function trim_source_tiles(s::Int,
             else
                 # This tile does not contain the source. Replace the tile with a
                 # pseudo-tile that does not have any data in it.
-                # TThe problem is with mp.tile_sources, which can't be allowed to
+                # The problem is with mp.tile_sources, which can't be allowed to
                 # say that an empty tile has a source.
                 # TODO: Make a TiledBlob simply an array of an array of tiles
                 # rather than a 2d array to avoid this hack.
