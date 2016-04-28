@@ -15,6 +15,18 @@ include("elbo_kl.jl")
 include("source_brightness.jl")
 
 
+type ElboArgs
+    S::Int64
+    N::Int64
+    vp::VariationalParams
+    images::Vector{TiledImage}
+    tile_to_sources::Array{Int64, 3}
+    patches::Vector{SkyPatch}
+    calculate_derivs::Bool
+    calculate_hessian::Bool
+end
+
+
 # TODO: the identification of active pixels should go in pre-processing
 type ActivePixel
     # Band:
@@ -208,8 +220,6 @@ function accum_star_pos!{NumType <: Number}(
             end
         end
     end
-
-    true # Set return type
 end
 
 
@@ -555,8 +565,6 @@ function accumulate_source_brightness!{NumType <: Number}(
     end
 
     calculate_var_G_s!(elbo_vars, active_source)
-
-    true # Set default return type
 end
 
 

@@ -135,7 +135,7 @@ immutable BvnComponent{NumType <: Number}
         the_mean::Vector{T1}, the_cov::Matrix{T2}, weight::T3;
         calculate_siginv_deriv::Bool=true)
 
-      ThisNumType = promote_type(T1, T2, T3);
+      ThisNumType = promote_type(T1, T2, T3)
       the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
       c = 1 ./ (the_det^.5 * 2pi)
 
@@ -420,7 +420,7 @@ function GalaxyCacheComponent{NumType <: Number}(
 
   # Declare in advance to save memory allocation.
   const empty_sig_sf =
-    GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0));
+    GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0))
 
   XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]

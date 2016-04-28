@@ -162,7 +162,7 @@ function combine_sfs!{ParamType <: ParamSet,
 
   # You have to do this in the right order to not overwrite needed terms.
   if calculate_hessian
-    combine_sfs_hessian!(sf1, sf2, sf_result, g_d, g_h);
+    combine_sfs_hessian!(sf1, sf2, sf_result, g_d, g_h)
   end
 
   for ind in eachindex(sf_result.d)

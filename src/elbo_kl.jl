@@ -178,14 +178,14 @@ function subtract_kl!{NumType <: Number}(
                                     vp_vec,
                                     ForwardDiff.AllResults)
             accum.h += hess
-            accum.d += reshape(ForwardDiff.gradient(all_results), P, Sa);
+            accum.d += reshape(ForwardDiff.gradient(all_results), P, Sa)
             accum.v[1] += ForwardDiff.value(all_results)
         else
             grad, all_results =
                 ForwardDiff.gradient(subtract_kl_value_wrapper,
                                      vp_vec,
                                      ForwardDiff.AllResults)
-            accum.d += reshape(grad, P, Sa);
+            accum.d += reshape(grad, P, Sa)
             accum.v[1] += ForwardDiff.value(all_results)
         end
     else

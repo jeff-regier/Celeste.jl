@@ -212,13 +212,13 @@ function maximize_f(
     optim_obj_wrap =
       OptimizeElbo.ObjectiveWrapperFunctions(
         mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids,
-        fast_hessian=fast_hessian);
+        fast_hessian=fast_hessian)
 
     # For minimization, which is required by the linesearch algorithm.
     optim_obj_wrap.state.scale = -1.0
     optim_obj_wrap.state.verbose = verbose
 
-    x0 = transform.vp_to_array(mp.vp, omitted_ids);
+    x0 = transform.vp_to_array(mp.vp, omitted_ids)
     d = Optim.TwiceDifferentiableFunction(
       optim_obj_wrap.f_value, optim_obj_wrap.f_grad!,
       optim_obj_wrap.f_hessian!)
@@ -239,7 +239,7 @@ function maximize_f(
 
     iter_count = optim_obj_wrap.state.f_evals
     transform.array_to_vp!(reshape(nm_result.minimum, size(x0)),
-                           mp.vp, omitted_ids);
+                           mp.vp, omitted_ids)
     max_f = -1.0 * nm_result.f_minimum
     max_x = nm_result.minimum
 
@@ -254,7 +254,7 @@ function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
     max_iters = 100)
     # Use the default transform.
 
-    transform = get_mp_transform(mp);
+    transform = get_mp_transform(mp)
     maximize_f(f, tiled_blob, mp, transform,
       omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs,
       verbose=verbose, max_iters=max_iters)

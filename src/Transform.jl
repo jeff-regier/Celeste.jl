@@ -367,7 +367,7 @@ function get_transform_derivatives!{NumType <: Number}(
   			vp_ind = ids.(param)[ind]
   			vp_free_ind = ids_free.(param)[ind]
 
-  			jac, hess = box_derivatives(vp[s][vp_ind], constraint_vec[ind]);
+  			jac, hess = box_derivatives(vp[s][vp_ind], constraint_vec[ind])
 
   			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
   			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
@@ -424,7 +424,7 @@ function get_transform_derivatives{NumType <: Number}(
     mp::ModelParams{NumType}, bounds::Vector{ParamBounds})
 
   transform_derivatives =
-    TransformDerivatives{Float64}(length(mp.active_sources));
+    TransformDerivatives{Float64}(length(mp.active_sources))
   get_transform_derivatives!(mp.vp, mp.active_sources, bounds, transform_derivatives)
   transform_derivatives
 end
@@ -683,20 +683,20 @@ function DataTransform(bounds::Vector{ParamBounds};
   	@assert size(sf.d) == (length(CanonicalParams), length(mp.active_sources))
   	@assert length(mp.active_sources) == active_S
 
-    transform_derivatives = get_transform_derivatives(mp, bounds);
+    transform_derivatives = get_transform_derivatives(mp, bounds)
 
   	sf_free =
-  		zero_sensitive_float(UnconstrainedParams, NumType, active_S);
+  		zero_sensitive_float(UnconstrainedParams, NumType, active_S)
 
-  	sf_d_vec = sf.d[:];
+  	sf_d_vec = sf.d[:]
   	sf_free.v[1] = sf.v[1]
   	sf_free.d =
       reshape(transform_derivatives.dparam_dfree' * sf_d_vec,
-              length(UnconstrainedParams), active_S);
+              length(UnconstrainedParams), active_S)
 
   	sf_free.h =
   		transform_derivatives.dparam_dfree' *
-      sf.h * transform_derivatives.dparam_dfree;
+      sf.h * transform_derivatives.dparam_dfree
   	for ind in 1:length(sf_d_vec)
   		sf_free.h += transform_derivatives.d2param_dfree2[ind] * sf_d_vec[ind]
   	end
