@@ -8,14 +8,15 @@ export CatalogEntry,
        ModelParams, PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,
-       VariationalParams, FreeVariationalParams, RectVariationalParams,
+       VariationalParams, FreeVariationalParams,
        PsfParams, RawPSF, CatalogEntry
 
 # functions
 export align
 
 # constants
-export band_letters, D, Ia, B, psf_K, galaxy_prototypes,
+export band_letters, D, Ia, B, psf_K,
+       galaxy_prototypes, prior,
        shape_standard_alignment,
        brightness_standard_alignment,
        gal_shape_alignment,

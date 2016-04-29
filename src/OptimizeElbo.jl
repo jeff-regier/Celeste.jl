@@ -9,10 +9,6 @@ import DataFrames
 import Optim
 import Logging
 
-export ObjectiveWrapperFunctions, WrapperState
-
-#TODO: use Lumberjack.jl for logging
-const debug = false
 
 # Only include until this is merged with Optim.jl.
 include("newton_trust_region.jl")
@@ -200,10 +196,10 @@ Returns:
   - ret: The return code of optimize()
 """
 function maximize_f(
-  f::Function, tiled_blob::TiledBlob, mp::ModelParams,
-  transform::Transform.DataTransform;
-  omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  max_iters=100, rho_lower=0.25, fast_hessian=true)
+              f::Function, tiled_blob::TiledBlob, mp::ModelParams,
+              transform::Transform.DataTransform;
+              omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
+              max_iters=100, rho_lower=0.25, fast_hessian=true)
 
     # Make sure the model parameters are within the transform bounds
     enforce_bounds!(mp, transform)
@@ -212,13 +208,13 @@ function maximize_f(
     optim_obj_wrap =
       OptimizeElbo.ObjectiveWrapperFunctions(
         mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids,
-        fast_hessian=fast_hessian);
+        fast_hessian=fast_hessian)
 
     # For minimization, which is required by the linesearch algorithm.
     optim_obj_wrap.state.scale = -1.0
     optim_obj_wrap.state.verbose = verbose
 
-    x0 = transform.vp_to_array(mp.vp, omitted_ids);
+    x0 = transform.vp_to_array(mp.vp, omitted_ids)
     d = Optim.TwiceDifferentiableFunction(
       optim_obj_wrap.f_value, optim_obj_wrap.f_grad!,
       optim_obj_wrap.f_hessian!)
@@ -239,7 +235,7 @@ function maximize_f(
 
     iter_count = optim_obj_wrap.state.f_evals
     transform.array_to_vp!(reshape(nm_result.minimum, size(x0)),
-                           mp.vp, omitted_ids);
+                           mp.vp, omitted_ids)
     max_f = -1.0 * nm_result.f_minimum
     max_x = nm_result.minimum
 
@@ -250,34 +246,14 @@ end
 
 
 function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
-    omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
-    max_iters = 100)
+                omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
+                max_iters = 100)
     # Use the default transform.
-
-    transform = get_mp_transform(mp);
+    transform = get_mp_transform(mp)
     maximize_f(f, tiled_blob, mp, transform,
       omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs,
       verbose=verbose, max_iters=max_iters)
 end
 
-function maximize_elbo(tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;
-    xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
-    maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans,
-        ftol_abs=ftol_abs, xtol_rel=xtol_rel, verbose=verbose)
-end
-
-function maximize_elbo(tiled_blob::TiledBlob, mp::ModelParams; verbose = false)
-    trans = get_mp_transform(mp)
-    maximize_elbo(tiled_blob, mp, trans, verbose=verbose)
-end
-
-function maximize_likelihood(
-  tiled_blob::TiledBlob, mp::ModelParams, trans::DataTransform;
-  xtol_rel = 1e-7, ftol_abs=1e-6, verbose = false)
-    omitted_ids = [ids_free.k[:]; ids_free.c2[:]; ids_free.r2]
-    maximize_f(ElboDeriv.elbo_likelihood, tiled_blob, mp, trans,
-               omitted_ids=omitted_ids, xtol_rel=xtol_rel,
-               ftol_abs=ftol_abs, verbose=verbose)
-end
 
 end

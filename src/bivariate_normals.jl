@@ -1,20 +1,3 @@
-
-module BivariateNormals
-
-using ..Model
-using ..SensitiveFloats
-
-import ..WCSUtils
-
-# Model:
-export BivariateNormalDerivatives, BvnComponent, GalaxySigmaDerivs,
-       GalaxyCacheComponent
-
-# Functions:
-export eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_ux_derivs!,
-       transform_bvn_derivs!, load_bvn_mixtures, get_bvn_cov
-
-
 """
 Unpack a rotation-parameterized BVN covariance matrix.
 
@@ -135,7 +118,7 @@ immutable BvnComponent{NumType <: Number}
         the_mean::Vector{T1}, the_cov::Matrix{T2}, weight::T3;
         calculate_siginv_deriv::Bool=true)
 
-      ThisNumType = promote_type(T1, T2, T3);
+      ThisNumType = promote_type(T1, T2, T3)
       the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
       c = 1 ./ (the_det^.5 * 2pi)
 
@@ -194,8 +177,6 @@ function eval_bvn_pdf!{NumType <: Number}(
   bvn_derivs.f_pre[1] =
     bmc.z * exp(-0.5 * ((x[1] - bmc.the_mean[1]) * bvn_derivs.py1[1] +
                         (x[2] - bmc.the_mean[2]) * bvn_derivs.py2[1]))
-
-  true # return type
 end
 
 
@@ -420,7 +401,7 @@ function GalaxyCacheComponent{NumType <: Number}(
 
   # Declare in advance to save memory allocation.
   const empty_sig_sf =
-    GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0));
+    GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0))
 
   XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
@@ -490,8 +471,6 @@ function transform_bvn_ux_derivs!{NumType <: Number}(
     end
     @inbounds bvn_uu_h[2, 1] = bvn_uu_h[1, 2]
   end
-
-  true # Set return type
 end
 
 
@@ -570,84 +549,5 @@ function transform_bvn_derivs!{NumType <: Number}(
         (-wcs_jacobian[x_id, u_id])
     end
   end
-
-  true # Set return type
 end
 
-
-
-
-"""
-Convolve the current locations and galaxy shapes with the PSF.  If
-calculate_derivs is true, also calculate derivatives and hessians for
-active sources.
-
-Args:
- - psf: A vector of PSF components
- - mp: The current ModelParams
- - b: The current band
- - calculate_derivs: Whether to calculate derivatives for active sources.
-
-Returns:
- - star_mcs: An array of BvnComponents with indices
-    - PSF component
-    - Source (index within active_sources)
- - gal_mcs: An array of BvnComponents with indices
-    - PSF component
-    - Galaxy component
-    - Galaxy type
-    - Source (index within active_sources)
-  Hessians are only populated for s in mp.active_sources.
-
-The PSF contains three components, so you see lots of 3's below.
-"""
-function load_bvn_mixtures{NumType <: Number}(
-    mp::ModelParams{NumType}, b::Int;
-    calculate_derivs::Bool=true, calculate_hessian::Bool=true)
-
-  star_mcs = Array(BvnComponent{NumType}, psf_K, mp.S)
-  gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, mp.S)
-
-  # TODO: do not keep any derviative information if the sources are not in
-  # active_sources.
-  for s in 1:mp.S
-      psf = mp.patches[s, b].psf
-      vs = mp.vp[s]
-
-      world_loc = vs[[ids.u[1], ids.u[2]]]
-      m_pos = WCSUtils.world_to_pix(mp.patches[s, b].wcs_jacobian,
-                                    mp.patches[s, b].center,
-                                    mp.patches[s, b].pixel_center, world_loc)
-
-      # Convolve the star locations with the PSF.
-      for k in 1:psf_K
-          pc = psf[k]
-          mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
-          star_mcs[k, s] =
-            BvnComponent{NumType}(
-              mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
-      end
-
-      # Convolve the galaxy representations with the PSF.
-      for i = 1:2 # i indexes dev vs exp galaxy types.
-          e_dev_dir = (i == 1) ? 1. : -1.
-          e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
-
-          # Galaxies of type 1 have 8 components, and type 2 have 6 components.
-          for j in 1:[8,6][i]
-              for k = 1:psf_K
-                  gal_mcs[k, j, i, s] = GalaxyCacheComponent(
-                      e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
-                      m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],
-                      calculate_derivs && (s in mp.active_sources),
-                      calculate_hessian)
-              end
-          end
-      end
-  end
-
-  star_mcs, gal_mcs
-end
-
-
-end # End module
