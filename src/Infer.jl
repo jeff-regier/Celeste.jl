@@ -70,9 +70,9 @@ function infer_source(images::Vector{TiledImage},
     vp = Vector{Float64}[Model.init_source(ce) for ce in cat_local]
     patches, tile_source_map = get_tile_source_map(images, cat_local)
     ea = ElboArgs(images, vp, tile_source_map, patches, [1])
-    fit_object_psfs!(ea, ea.active_sources, images)
-    trimmed = trim_source_tiles(1, ea, images; noise_fraction=0.1)
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed, ea; max_iters=50)
+    fit_object_psfs!(ea, ea.active_sources)
+    trim_source_tiles!(ea)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, ea)
     vp[1]
 end
 
@@ -94,10 +94,10 @@ function get_tile_source_map(images::Vector{TiledImage},
             radius_pix = Model.choose_patch_radius(pixel_center, catalog[s],
                                                                 img.psf, img)
             patches[s, i] = SkyPatch(world_center,
-                                        radius_pix,
-                                        img.psf,
-                                        wcs_jacobian,
-                                        pixel_center)
+                                     radius_pix,
+                                     img.psf,
+                                     wcs_jacobian,
+                                     pixel_center)
         end
 
         # TODO: get rid of these puny methods
@@ -119,20 +119,17 @@ relevant_sources.
 """
 function fit_object_psfs!{NumType <: Number}(
                         ea::ElboArgs{NumType}, 
-                        target_sources::Vector{Int},
-                        images::Vector{TiledImage})
+                        target_sources::Vector{Int})
     # Initialize an optimizer
     initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false)
     psf_transform = PSF.get_psf_transform(initial_psf_params)
     psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K)
 
-    @assert size(ea.patches, 2) == length(images)
-
-    for i in 1:length(images)
+    for i in 1:length(ea.images)
         Logging.debug("Fitting PSFS for band $i")
         # Get a starting point in the middle of the image.
-        pixel_loc = Float64[ images[i].H / 2.0, images[i].W / 2.0 ]
-        raw_central_psf = images[i].raw_psf_comp(pixel_loc[1], pixel_loc[2])
+        pixel_loc = Float64[ ea.images[i].H / 2.0, ea.images[i].W / 2.0 ]
+        raw_central_psf = ea.images[i].raw_psf_comp(pixel_loc[1], pixel_loc[2])
         central_psf, central_psf_params =
             PSF.fit_raw_psf_for_celeste(raw_central_psf,
                                 psf_optimizer, initial_psf_params)
@@ -150,9 +147,8 @@ function fit_object_psfs!{NumType <: Number}(
         for s in relevant_sources
             patch = ea.patches[s, i]
             # Set the starting point at the center's PSF.
-            psf, psf_params =
-                PSF.get_source_psf(
-                    patch.center, images[i], psf_optimizer, central_psf_params)
+            psf, psf_params = PSF.get_source_psf(
+                    patch.center, ea.images[i], psf_optimizer, central_psf_params)
             ea.patches[s, i] = SkyPatch(patch, psf)
         end
     end
@@ -164,33 +160,18 @@ Set any pixels significantly below background noise for the
 specified source to NaN.
 
 Arguments:
-  s: The source index that we are trimming to
   ea: The ElboArgs object
-  tiled_blob: The original tiled blob
   noise_fraction: The proportion of the noise below which we will remove pixels.
   min_radius_pix: A minimum pixel radius to be included.
-
-Returns:
-  A new TiledBlob.  Tiles that do not contain the source will be pseudo-tiles
-  with empty pixel and noise arrays.  Tiles that contain the source will
-  be the same as the original tiles but with NaN where the expected source
-  electron counts are below <noise_fraction> of the noise at that pixel.
 """
-function trim_source_tiles(s::Int,
-                           ea::ElboArgs{Float64},
-                           tiled_blob::TiledBlob;
-                           noise_fraction::Float64=0.1,
-                           min_radius_pix::Float64=8.0)
-    N = length(tiled_blob)
-    trimmed = Array(TiledImage, N)
+function trim_source_tiles!(ea::ElboArgs{Float64},
+                            noise_fraction::Float64=0.1,
+                            min_radius_pix::Float64=8.0)
+    @assert length(ea.active_sources) == 1
+    s = ea.active_sources[1]
 
-    for i = 1:N
-        img = tiled_blob[i]
-        trimmed_tiles = Array(ImageTile, size(tiled_blob[i].tiles)...)
-        trimmed[i] = TiledImage(img.H, img.W, trimmed_tiles, img.tile_width,
-                                img.b, img.wcs,
-                                img.psf, img.run_num, img.camcol_num, 
-                                img.field_num, img.raw_psf_comp)
+    for i = 1:ea.N
+        tiles = ea.images[i].tiles
 
         patch = ea.patches[s, i]
         pix_loc = WCSUtils.world_to_pix(patch.wcs_jacobian, 
@@ -198,13 +179,12 @@ function trim_source_tiles(s::Int,
                                         patch.pixel_center,
                                         ea.vp[s][ids.u])
 
-        Ht, Wt = size(tiled_blob[i].tiles)
-        @assert size(ea.tile_source_map[i]) == size(tiled_blob[i].tiles)
-        for hh=1:Ht, ww=1:Wt
-            tile = tiled_blob[i].tiles[hh, ww]
+        #TODO: iterate over rows first, not columns
+        for hh=1:size(tiles, 1), ww=1:size(tiles, 2) 
+            tile = tiles[hh, ww]
+
             tile_source_map = ea.tile_source_map[i][hh, ww]
             if s in tile_source_map
-                trimmed_tiles[hh, ww] = deepcopy(tile)
                 pred_tile_pixels =
                     ElboDeriv.tile_predicted_image(tile, ea, [ s ],
                                                    include_epsilon=false)
@@ -213,36 +193,26 @@ function trim_source_tiles(s::Int,
                     h_im = h - minimum(tile.h_range) + 1
                     w_im = w - minimum(tile.w_range) + 1
 
-                    keep_pixel = false
                     bright_pixel = pred_tile_pixels[h_im, w_im] >
                        tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
                     close_pixel =
                         (h - pix_loc[1]) ^ 2 + (w - pix_loc[2])^2 < min_radius_pix^2
 
                     if !(bright_pixel || close_pixel)
-                        trimmed_tiles[hh, ww].pixels[h_im, w_im] = NaN
+                        tiles[hh, ww].pixels[h_im, w_im] = NaN
                     end
                 end
             else
-                # This tile does not contain the source. Replace the tile with a
-                # pseudo-tile that does not have any data in it.
-                # The problem is with ea.tile_source_map, which can't be allowed to
-                # say that an empty tile has a source.
                 # TODO: Make a TiledBlob simply an array of an array of tiles
                 # rather than a 2d array to avoid this hack.
-                trimmed_tiles[hh, ww] = ImageTile(i,
-                                              tile.h_range,
-                                              tile.w_range,
-                                              tile.h_width,
-                                              tile.w_width,
-                                              Array(Float64, 0, 0),
-                                              Array(Float64, 0, 0),
-                                              Array(Float64, 0))
+                tiles[hh, ww] = ImageTile(i, tile.h_range, tile.w_range,
+                                             tile.h_width, tile.w_width,
+                                             Array(Float64, 0, 0),
+                                             Array(Float64, 0, 0),
+                                             Array(Float64, 0))
             end
         end
     end
-
-    trimmed
 end
 
 
