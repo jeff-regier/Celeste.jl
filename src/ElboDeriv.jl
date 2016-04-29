@@ -7,24 +7,109 @@ import ForwardDiff
 
 using ..Model
 using ..SensitiveFloats
-using ..BivariateNormals
 
 import ..WCSUtils
 
 include("elbo_kl.jl")
 include("source_brightness.jl")
+include("bivariate_normals.jl")
 
 
 type ElboArgs
     S::Int64
     N::Int64
-    vp::VariationalParams
     images::Vector{TiledImage}
-    tile_to_sources::Array{Int64, 3}
+    vp::VariationalParams
+    active_sources::Vector{Bool}
+    tile_sources::Array{Int64, 3}
     patches::Vector{SkyPatch}
     calculate_derivs::Bool
     calculate_hessian::Bool
+
+    function ElboArgs(images, vp, sa, tile_sources, patches;
+                      calculate_derivs=true, calculate_hessian=true)
+        N = length(images)
+        S = length(vp)
+        @assert size(1, tile_sources) == N
+        @assert length(patches) == S
+        new(S, N, images, vp, active_sources, tile_sources, patches,
+                 calculate_derivs, calculate_hessian)
+    end
 end
+
+
+"""
+Convolve the current locations and galaxy shapes with the PSF.  If
+calculate_derivs is true, also calculate derivatives and hessians for
+active sources.
+
+Args:
+ - psf: A vector of PSF components
+ - mp: The current ModelParams
+ - b: The current band
+ - calculate_derivs: Whether to calculate derivatives for active sources.
+
+Returns:
+ - star_mcs: An array of BvnComponents with indices
+    - PSF component
+    - Source (index within active_sources)
+ - gal_mcs: An array of BvnComponents with indices
+    - PSF component
+    - Galaxy component
+    - Galaxy type
+    - Source (index within active_sources)
+  Hessians are only populated for s in mp.active_sources.
+
+The PSF contains three components, so you see lots of 3's below.
+"""
+function load_bvn_mixtures{NumType <: Number}(
+    mp::ModelParams{NumType}, b::Int;
+    calculate_derivs::Bool=true, calculate_hessian::Bool=true)
+
+  star_mcs = Array(BvnComponent{NumType}, psf_K, mp.S)
+  gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, mp.S)
+
+  # TODO: do not keep any derviative information if the sources are not in
+  # active_sources.
+  for s in 1:mp.S
+      psf = mp.patches[s, b].psf
+      vs = mp.vp[s]
+
+      world_loc = vs[[ids.u[1], ids.u[2]]]
+      m_pos = WCSUtils.world_to_pix(mp.patches[s, b].wcs_jacobian,
+                                    mp.patches[s, b].center,
+                                    mp.patches[s, b].pixel_center, world_loc)
+
+      # Convolve the star locations with the PSF.
+      for k in 1:psf_K
+          pc = psf[k]
+          mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
+          star_mcs[k, s] =
+            BvnComponent{NumType}(
+              mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
+      end
+
+      # Convolve the galaxy representations with the PSF.
+      for i = 1:2 # i indexes dev vs exp galaxy types.
+          e_dev_dir = (i == 1) ? 1. : -1.
+          e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
+
+          # Galaxies of type 1 have 8 components, and type 2 have 6 components.
+          for j in 1:[8,6][i]
+              for k = 1:psf_K
+                  gal_mcs[k, j, i, s] = GalaxyCacheComponent(
+                      e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
+                      m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],
+                      calculate_derivs && (s in mp.active_sources),
+                      calculate_hessian)
+              end
+          end
+      end
+  end
+
+  star_mcs, gal_mcs
+end
+
 
 
 # TODO: the identification of active pixels should go in pre-processing

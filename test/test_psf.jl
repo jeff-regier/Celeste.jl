@@ -1,6 +1,5 @@
 using Celeste
 using Celeste.Model
-using Celeste.BivariateNormals
 using Celeste.SensitiveFloats
 
 import Celeste.PSF: get_psf_at_point,
@@ -8,7 +7,8 @@ import Celeste.PSF: get_psf_at_point,
        unwrap_psf_params, wrap_psf_params,
        unconstrain_psf_params, constrain_psf_params,
        transform_psf_sensitive_float!,
-       PsfOptimizer, fit_raw_psf_for_celeste
+       PsfOptimizer, fit_raw_psf_for_celeste,
+       BivariateNormalDerivatives
        
 using ForwardDiff
 
@@ -106,7 +106,7 @@ function test_psf_fit()
     # sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K);
     #
     # for k = 1:K
-    #   sigma_vec[k] = BivariateNormals.get_bvn_cov(psf_params[k][psf_ids.e_axis],
+    #   sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.e_axis],
     #                                   psf_params[k][psf_ids.e_angle],
     #                                   psf_params[k][psf_ids.e_scale])
     #   sig_sf_vec[k] = GalaxySigmaDerivs(
@@ -132,7 +132,7 @@ function test_psf_fit()
 
   sigma_vec = Array(Matrix{Float64}, K);
   for k = 1:K
-    sigma_vec[k] = BivariateNormals.get_bvn_cov(psf_params[k][psf_ids.e_axis],
+    sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.e_axis],
                                     psf_params[k][psf_ids.e_angle],
                                     psf_params[k][psf_ids.e_scale])
   end

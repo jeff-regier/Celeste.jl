@@ -9,10 +9,6 @@ import DataFrames
 import Optim
 import Logging
 
-export ObjectiveWrapperFunctions, WrapperState
-
-#TODO: use Lumberjack.jl for logging
-const debug = false
 
 # Only include until this is merged with Optim.jl.
 include("newton_trust_region.jl")
@@ -200,10 +196,10 @@ Returns:
   - ret: The return code of optimize()
 """
 function maximize_f(
-  f::Function, tiled_blob::TiledBlob, mp::ModelParams,
-  transform::Transform.DataTransform;
-  omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-  max_iters=100, rho_lower=0.25, fast_hessian=true)
+              f::Function, tiled_blob::TiledBlob, mp::ModelParams,
+              transform::Transform.DataTransform;
+              omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
+              max_iters=100, rho_lower=0.25, fast_hessian=true)
 
     # Make sure the model parameters are within the transform bounds
     enforce_bounds!(mp, transform)
@@ -250,10 +246,9 @@ end
 
 
 function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
-    omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
-    max_iters = 100)
+                omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
+                max_iters = 100)
     # Use the default transform.
-
     transform = get_mp_transform(mp)
     maximize_f(f, tiled_blob, mp, transform,
       omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs,

@@ -4,7 +4,6 @@ using Celeste: Model
 
 import Celeste: WCSUtils, ModelInit, ElboDeriv, Model, ModelInit
 import Celeste: PSF, OptimizeElbo, SDSSIO, SensitiveFloats, Transform
-import Celeste: BivariateNormals
 
 include("Synthetic.jl")
 include("SampleData.jl")
