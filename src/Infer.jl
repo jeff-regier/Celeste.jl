@@ -78,7 +78,8 @@ end
 
 
 function get_tile_source_map(images::Vector{TiledImage},
-                             catalog::Vector{CatalogEntry})
+                             catalog::Vector{CatalogEntry};
+                             radius_override=NaN)
     N = length(images)
     S = length(catalog)
     patches = Array(SkyPatch, S, N)
@@ -93,6 +94,10 @@ function get_tile_source_map(images::Vector{TiledImage},
             wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
             radius_pix = Model.choose_patch_radius(pixel_center, catalog[s],
                                                                 img.psf, img)
+            if !isnan(radius_override)
+                radius_pix = radius_override
+            end
+
             patches[s, i] = SkyPatch(world_center,
                                      radius_pix,
                                      img.psf,
