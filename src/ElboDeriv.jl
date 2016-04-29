@@ -13,11 +13,7 @@ export ElboArgs
 
 
 """
-- calculate_derivs: Whether or not any gradient or hessian information will
-                    be calculated
-- calculate_hessian: Whether to calculate a Hessian. If calculate_derivs is
-                     false, a Hessian will not be calculated irrespective of
-                     the value of calculate_hessian.
+ElboArgs stores the arguments needed to call Elbo
 """
 type ElboArgs{NumType <: Number}
     S::Int64
@@ -27,21 +23,16 @@ type ElboArgs{NumType <: Number}
     tile_source_map::Vector{Matrix{Vector{Int}}}
     patches::Matrix{SkyPatch}
     active_sources::Vector{Int}
-    calculate_derivs::Bool
-    calculate_hessian::Bool
 end
 
 
-function ElboArgs(images, vp, tile_source_map, patches;
-                  active_sources=[1],
-                  calculate_derivs=true, calculate_hessian=true)
+function ElboArgs(images, vp, tile_source_map, patches, active_sources)
     S = length(vp)
     N = length(images)
     @assert length(tile_source_map) == N
     @assert size(patches, 1) == S
     @assert size(patches, 2) == N
-    ElboArgs(S, N, images, vp, tile_source_map, patches,
-             active_sources, calculate_derivs, calculate_hessian)
+    ElboArgs(S, N, images, vp, tile_source_map, patches, active_sources)
 end
 
 
@@ -378,12 +369,14 @@ function accum_galaxy_pos!{NumType <: Number}(
             # The Hessians:
 
             # Hessian terms involving only the shape parameters.
-            for shape_id1 in 1:length(gal_shape_ids), shape_id2 in 1:length(gal_shape_ids)
-                s1 = gal_shape_alignment[shape_id1]
-                s2 = gal_shape_alignment[shape_id2]
-                fs1m.h[s1, s2] +=
-                    f * (bvn_ss_h[shape_id1, shape_id2] +
-                             bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
+            for shape_id1 in 1:length(gal_shape_ids)
+                for shape_id2 in 1:length(gal_shape_ids)
+                    s1 = gal_shape_alignment[shape_id1]
+                    s2 = gal_shape_alignment[shape_id2]
+                    fs1m.h[s1, s2] +=
+                        f * (bvn_ss_h[shape_id1, shape_id2] +
+                                 bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
+                end
             end
 
             # Hessian terms involving only the location parameters.
@@ -862,7 +855,6 @@ modifying elbo in place.
 
 Args:
     - elbo_vars: Elbo intermediate values.
-    - tiled_blob: An Array of images
     - ea: Model parameters
     - active_pixels: An array of ActivePixels to be processed.
 
@@ -871,17 +863,16 @@ Returns:
 """
 function process_active_pixels!{NumType <: Number}(
                 elbo_vars::ElboIntermediateVariables{NumType},
-                tiled_blob::TiledBlob,
                 ea::ElboArgs{NumType},
                 active_pixels::Array{ActivePixel})
     sbs = load_source_brightnesses(ea,
         calculate_derivs=elbo_vars.calculate_derivs,
         calculate_hessian=elbo_vars.calculate_hessian)
 
-    star_mcs_vec = Array(Array{BvnComponent{NumType}, 2}, length(tiled_blob))
-    gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType}, 4}, length(tiled_blob))
+    star_mcs_vec = Array(Array{BvnComponent{NumType}, 2}, ea.N)
+    gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType}, 4}, ea.N)
 
-    for b=1:length(tiled_blob)
+    for b=1:ea.N
         # TODO: every elbo_vars should not get to decide its own calculate_*
         star_mcs_vec[b], gal_mcs_vec[b] =
             load_bvn_mixtures(ea, b,
@@ -891,7 +882,7 @@ function process_active_pixels!{NumType <: Number}(
 
     # iterate over the pixels
     for pixel in active_pixels
-        tile = tiled_blob[pixel.b].tiles[pixel.tile_ind]
+        tile = ea.images[pixel.b].tiles[pixel.tile_ind]
         tile_source_map = ea.tile_source_map[pixel.b][pixel.tile_ind]
         this_pixel = tile.pixels[pixel.h, pixel.w]
 
@@ -991,20 +982,17 @@ end
 
 
 """
-Get the active pixels (pixels for which the active sources are present)
-for a tiled blob.
-
+Get the active pixels (pixels for which the active sources are present).
 TODO: move this to pre-processing and use it instead of setting low-signal
 pixels to NaN.
 """
 function get_active_pixels{NumType <: Number}(
-                    tiled_blob::TiledBlob,
                     ea::ElboArgs{NumType})
     active_pixels = ActivePixel[]
-    for b in 1:length(tiled_blob), tile_ind in 1:length(tiled_blob[b].tiles)
+    for b in 1:ea.N, tile_ind in 1:length(ea.images[b].tiles)
         tile_source_map = ea.tile_source_map[b][tile_ind]
         if length(intersect(tile_source_map, ea.active_sources)) > 0
-            tile = tiled_blob[b].tiles[tile_ind]
+            tile = ea.images[b].tiles[tile_ind]
             for w in 1:tile.w_width, h in 1:tile.h_width
                 if !Base.isnan(tile.pixels[h, w])
                     push!(active_pixels, ActivePixel(b, tile_ind, h, w))
@@ -1020,15 +1008,18 @@ end
 """
 Return the expected log likelihood for all bands in a section
 of the sky.
-Returns: A sensitive float with the log likelihood.
+Returns: A sensitive float with the log,  likelihood.
 """
 function elbo_likelihood{NumType <: Number}(
-                    tiled_blob::TiledBlob,
-                    ea::ElboArgs{NumType})
-    active_pixels = get_active_pixels(tiled_blob, ea)
+                    ea::ElboArgs{NumType};
+                    calculate_derivs=true,
+                    calculate_hessian=true)
+    active_pixels = get_active_pixels(ea)
     elbo_vars = ElboIntermediateVariables(NumType, ea.S,
-                                length(ea.active_sources))
-    process_active_pixels!(elbo_vars, tiled_blob, ea, active_pixels)
+                                length(ea.active_sources),
+                                calculate_derivs=calculate_derivs,
+                                calculate_hessian=calculate_hessian)
+    process_active_pixels!(elbo_vars, ea, active_pixels)
     elbo_vars.elbo
 end
 
@@ -1039,11 +1030,14 @@ of an image.
 Returns: A sensitive float containing the ELBO for the image.
 """
 function elbo{NumType <: Number}(
-                    tiled_blob::TiledBlob,
-                    ea::ElboArgs{NumType})
-    elbo = elbo_likelihood(tiled_blob, ea)
+                    ea::ElboArgs{NumType};
+                    calculate_derivs=true,
+                    calculate_hessian=true)
+    elbo = elbo_likelihood(ea;
+        calculate_derivs=calculate_derivs, calculate_hessian=calculate_hessian)
     # TODO: subtract the kl with the hessian.
-    subtract_kl!(ea, elbo)
+    subtract_kl!(ea, elbo;
+        calculate_derivs=calculate_derivs, calculate_hessian=calculate_hessian)
     elbo
 end
 
