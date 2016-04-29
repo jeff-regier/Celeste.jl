@@ -93,7 +93,7 @@ function get_local_sources(tile::ImageTile,
                            patch_ctrs::Vector{Vector{Float64}},
                            patch_radii_px::Vector{Float64})
     @assert length(patch_ctrs) == length(patch_radii_px)
-    tile_sources = Int[]
+    tile_source_map = Int[]
     tile_ctr = (mean(tile.h_range), mean(tile.w_range))
 
     for i in eachindex(patch_ctrs)
@@ -103,11 +103,11 @@ function get_local_sources(tile::ImageTile,
         # This is a "ball" in the infinity norm.
         if ((abs(tile_ctr[1] - patch_ctr[1]) < patch_r + 0.5 * tile.h_width) &&
             (abs(tile_ctr[2] - patch_ctr[2]) < patch_r + 0.5 * tile.w_width))
-            push!(tile_sources, i)
+            push!(tile_source_map, i)
         end
     end
 
-    tile_sources
+    tile_source_map
 end
 
 

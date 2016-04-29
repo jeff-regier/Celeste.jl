@@ -6,7 +6,7 @@ import Celeste.Model: patch_ctrs_pix, patch_radii_pix
 println("Running misc tests.")
 
 function test_tile_image()
-  blob, mp, three_bodies = gen_three_body_dataset();
+  blob, ea, three_bodies = gen_three_body_dataset();
   img = blob[3];
   tile_width = 20;
   img.epsilon_mat = rand(size(img.pixels));
@@ -49,11 +49,11 @@ function test_local_sources()
 
     tile = ImageTile(1, 1, blob[3], 1000);
 
-    mp = ModelInit.initialize_model_params(
+    ea = ModelInit.initialize_model_params(
       tiled_blob, three_bodies; patch_radius=20.);
-    @test mp.S == 3
+    @test ea.S == 3
 
-    patches = vec(mp.patches[:, 3])
+    patches = vec(ea.patches[:, 3])
     subset1000 = Model.get_local_sources(tile, patch_ctrs_pix(patches),
                                              patch_radii_pix(patches))
     @test subset1000 == [1,2,3]
@@ -63,7 +63,7 @@ function test_local_sources()
     ModelInit.initialize_model_params(
       tiled_blob, three_bodies; patch_radius=20.);
 
-    patches = vec(mp.patches[:, 3])
+    patches = vec(ea.patches[:, 3])
     subset10 = Model.get_local_sources(tile, patch_ctrs_pix(patches),
                                            patch_radii_pix(patches))
     @test subset10 == [1]
@@ -72,7 +72,7 @@ function test_local_sources()
     ModelInit.initialize_model_params(
       tiled_blob, three_bodies; patch_radius=20.)
 
-    patches = vec(mp.patches[:, 3])
+    patches = vec(ea.patches[:, 3])
     last_subset = Model.get_local_sources(last_tile,
                                               patch_ctrs_pix(patches),
                                               patch_radii_pix(patches))
@@ -82,7 +82,7 @@ function test_local_sources()
     ModelInit.initialize_model_params(
       tiled_blob, three_bodies; patch_radius=20.);
 
-    patches = vec(mp.patches[:, 3])
+    patches = vec(ea.patches[:, 3])
     pop_subset = Model.get_local_sources(pop_tile, patch_ctrs_pix(patches),
                                              patch_radii_pix(patches))
 
@@ -106,15 +106,15 @@ function test_local_sources_2()
     for b in 1:5 blob0[b].H, blob0[b].W = 400, 400 end
     big_blob = Synthetic.gen_blob(blob0, one_body);
 
-    small_tiled_blob, mp_small = initialize_celeste(
+    small_tiled_blob, ea_small = initialize_celeste(
       small_blob, one_body, patch_radius=35.);
     small_source_tiles =
-      [ sum([ length(s) > 0 for s in source ]) for source in mp_small.tile_sources ]
+      [ sum([ length(s) > 0 for s in source ]) for source in ea_small.tile_sources ]
 
-    big_tiled_blob, mp_big = initialize_celeste(
+    big_tiled_blob, ea_big = initialize_celeste(
       big_blob, one_body, patch_radius=35.);
     big_source_tiles =
-      [ sum([ length(s) > 0 for s in source ]) for source in mp_big.tile_sources ]
+      [ sum([ length(s) > 0 for s in source ]) for source in ea_big.tile_sources ]
 
     @test all(big_source_tiles .== small_source_tiles)
 end
@@ -146,7 +146,7 @@ function test_local_sources_3()
     diags = [world_quad[:, i] - world_quad[:, i+2] for i=1:2]
     patch_radius = maximum([sqrt(dot(d, d)) for d in diags])
 
-    tiled_blob, mp = initialize_celeste(
+    tiled_blob, ea = initialize_celeste(
       blob, one_body, patch_radius=patch_radius);
 
     # Source should be present
@@ -156,7 +156,7 @@ function test_local_sources_3()
         blob[test_b],
         tile_width);
 
-    patches = vec(mp.patches[:,test_b])
+    patches = vec(ea.patches[:,test_b])
     @test Model.get_local_sources(tile, patch_ctrs_pix(patches),
                                       patch_radii_pix(patches)) == [1]
 
@@ -185,7 +185,7 @@ end
 
 function test_sky_noise_estimates()
     blobs = Array(Blob, 2)
-    blobs[1], mp, three_bodies = gen_three_body_dataset()  # synthetic
+    blobs[1], ea, three_bodies = gen_three_body_dataset()  # synthetic
     blobs[2] = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")  # real
 
     for blob in blobs

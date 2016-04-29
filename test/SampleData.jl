@@ -3,7 +3,7 @@ module SampleData
 using Distributions
 using Celeste, Celeste.Model
 
-import Celeste: WCSUtils, ModelInit
+import Celeste: WCSUtils, Infer
 import Synthetic
 import WCS, FITSIO, DataFrames
 
@@ -38,13 +38,15 @@ Turn a blob and vector of catalog entries into a tiled_blob and model
 parameters that can be used with Celeste.
 """
 function initialize_celeste(
-        blob::Blob, cat::Vector{CatalogEntry};
-        tile_width::Int=20, fit_psf::Bool=true,
-        patch_radius::Float64=NaN)
+                    blob::Blob,
+                    cat::Vector{CatalogEntry};
+                    tile_width::Int=20,
+                    fit_psf::Bool=true,
+                    patch_radius::Float64=NaN)
     tiled_blob = TiledImage[TiledImage(img, tile_width=tile_width) for img in blob]
-    mp = ModelInit.initialize_model_params(tiled_blob, cat,
+    ea = ModelInit.initialize_model_params(tiled_blob, cat,
                                fit_psf=fit_psf, patch_radius=patch_radius)
-    tiled_blob, mp
+    tiled_blob, ea
 end
 
 
@@ -186,7 +188,7 @@ end
 
 function empty_model_params(S::Int)
     vp = [Model.init_source([ 0., 0. ]) for s in 1:S]
-    ModelParams(vp)
+    ElboArgs(vp)
 end
 
 
@@ -196,8 +198,8 @@ function sample_ce(pos, is_star::Bool)
 end
 
 
-function perturb_params(mp) # for testing derivatives != 0
-    for vs in mp.vp
+function perturb_params(ea) # for testing derivatives != 0
+    for vs in ea.vp
         vs[ids.a] = [ 0.4, 0.6 ]
         vs[ids.u[1]] += .8
         vs[ids.u[2]] -= .7
@@ -222,11 +224,11 @@ function gen_sample_star_dataset(; perturb=true)
     end
     one_body = [sample_ce([10.1, 12.2], true),]
     blob = Synthetic.gen_blob(blob0, one_body)
-    tiled_blob, mp = initialize_celeste(blob, one_body)
+    tiled_blob, ea = initialize_celeste(blob, one_body)
     if perturb
-        perturb_params(mp)
+        perturb_params(ea)
     end
-    blob, mp, one_body, tiled_blob
+    blob, ea, one_body, tiled_blob
 end
 
 
@@ -239,11 +241,11 @@ function gen_sample_galaxy_dataset(; perturb=true)
     end
     one_body = [sample_ce([8.5, 9.6], false),]
     blob = Synthetic.gen_blob(blob0, one_body)
-    tiled_blob, mp = initialize_celeste(blob, one_body)
+    tiled_blob, ea = initialize_celeste(blob, one_body)
     if perturb
-        perturb_params(mp)
+        perturb_params(ea)
     end
-    blob, mp, one_body, tiled_blob
+    blob, ea, one_body, tiled_blob
 end
 
 function gen_two_body_dataset(; perturb=true)
@@ -261,11 +263,11 @@ function gen_two_body_dataset(; perturb=true)
         sample_ce([10.1, 12.1], true)
     ]
     blob = Synthetic.gen_blob(blob0, two_bodies)
-    tiled_blob, mp = initialize_celeste(blob, two_bodies)
+    tiled_blob, ea = initialize_celeste(blob, two_bodies)
     if perturb
-        perturb_params(mp)
+        perturb_params(ea)
     end
-    blob, mp, two_bodies, tiled_blob
+    blob, ea, two_bodies, tiled_blob
 end
 
 
@@ -283,11 +285,11 @@ function gen_three_body_dataset(; perturb=true)
         sample_ce([71.3, 100.4], false),
     ];
     blob = Synthetic.gen_blob(blob0, three_bodies);
-    tiled_blob, mp = initialize_celeste(blob, three_bodies);
+    tiled_blob, ea = initialize_celeste(blob, three_bodies);
     if perturb
-        perturb_params(mp)
+        perturb_params(ea)
     end
-    blob, mp, three_bodies, tiled_blob
+    blob, ea, three_bodies, tiled_blob
 end
 
 
@@ -328,10 +330,10 @@ function gen_n_body_dataset(
   world_radius_pts = WCSUtils.pix_to_world(
       blob[3].wcs, [patch_pixel_radius 0.; patch_pixel_radius 0.])
   world_radius = maxabs(world_radius_pts[:, 1] - world_radius_pts[:, 2])
-  tiled_blob, mp = initialize_celeste(
+  tiled_blob, ea = initialize_celeste(
     blob, S_bodies, tile_width=tile_width, patch_radius=world_radius)
 
-  blob, mp, S_bodies, tiled_blob
+  blob, ea, S_bodies, tiled_blob
 end
 
 end # End module
