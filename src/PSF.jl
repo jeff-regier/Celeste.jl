@@ -2,7 +2,6 @@ module PSF
 
 using Celeste
 using ..Model
-using ..BivariateNormals
 using ..Transform
 using ..SensitiveFloats.SensitiveFloat
 import ..SensitiveFloats.clear!
@@ -14,6 +13,7 @@ import WCS
 
  # Only include until this is merged with Optim.jl.
 include("newton_trust_region.jl")
+include("bivariate_normals.jl")
 
 
 const ID_MAT_2D = eye(Float64, 2)
@@ -499,7 +499,7 @@ function get_sigma_from_params{NumType <: Number}(
   sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K)
   bvn_vec = Array(BvnComponent{NumType}, K)
   for k = 1:K
-    sigma_vec[k] = BivariateNormals.get_bvn_cov(psf_params[k][psf_ids.e_axis],
+    sigma_vec[k] = get_bvn_cov(psf_params[k][psf_ids.e_axis],
                                     psf_params[k][psf_ids.e_angle],
                                     psf_params[k][psf_ids.e_scale])
     sig_sf_vec[k] = GalaxySigmaDerivs(

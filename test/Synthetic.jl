@@ -3,9 +3,12 @@ module Synthetic
 export gen_blob
 
 using Celeste, Celeste.Model
-import Celeste: ModelInit, BivariateNormals, WCSUtils
+import Celeste: ModelInit, WCSUtils, ElboDeriv
+
 
 import Distributions
+
+include("../src/bivariate_normals.jl")
 
 # Generate synthetic data.
 
@@ -69,7 +72,7 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                       expectation=false)
     iota = median(img0.iota_vec)
     e_devs = [ce.gal_frac_dev, 1 - ce.gal_frac_dev]
-    XiXi = BivariateNormals.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
+    XiXi = ElboDeriv.get_bvn_cov(ce.gal_ab, ce.gal_angle, ce.gal_scale)
 
     for i in 1:2
         for gproto in galaxy_prototypes[i]
