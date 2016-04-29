@@ -176,11 +176,9 @@ Optimizes f using Newton's method and exact Hessians.  For now, it is
 not clear whether this or BFGS is better, so it is kept as a separate function.
 
 Args:
-  - f: A function that takes a tiled_blob and constrained coordinates
+  - f: A function that takes elbo args and constrained coordinates
        (e.g. ElboDeriv.elbo)
-  - tiled_blob: Input for f
   - ea: Constrained initial ElboArgs
-  - transform: The data transform to be applied before optimizing.
   - lbs: An array of lower bounds (in the transformed space)
   - ubs: An array of upper bounds (in the transformed space)
   - omitted_ids: Omitted ids from the _unconstrained_ parameterization
@@ -195,20 +193,25 @@ Returns:
   - max_x: The optimal function input
   - ret: The return code of optimize()
 """
-function maximize_f(
-              f::Function, tiled_blob::TiledBlob, ea::ElboArgs,
-              transform::Transform.DataTransform;
-              omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-              max_iters=100, rho_lower=0.25, fast_hessian=true)
+function maximize_f(f::Function,
+                    ea::ElboArgs;
+                    omitted_ids=Int[],
+                    xtol_rel = 1e-7,
+                    ftol_abs = 1e-6,
+                    verbose=false,
+                    max_iters=50,
+                    rho_lower=0.25,
+                    fast_hessian=true)
+    transform = get_mp_transform(ea)
 
     # Make sure the model parameters are within the transform bounds
     enforce_bounds!(ea, transform)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
-      OptimizeElbo.ObjectiveWrapperFunctions(
-        ea -> f(ea), ea, transform, kept_ids, omitted_ids,
-        fast_hessian=fast_hessian)
+        OptimizeElbo.ObjectiveWrapperFunctions(
+                ea -> f(ea), ea, transform, kept_ids, omitted_ids,
+                fast_hessian=fast_hessian)
 
     # For minimization, which is required by the linesearch algorithm.
     optim_obj_wrap.state.scale = -1.0
@@ -216,8 +219,8 @@ function maximize_f(
 
     x0 = transform.vp_to_array(ea.vp, omitted_ids)
     d = Optim.TwiceDifferentiableFunction(
-      optim_obj_wrap.f_value, optim_obj_wrap.f_grad!,
-      optim_obj_wrap.f_hessian!)
+            optim_obj_wrap.f_value, optim_obj_wrap.f_grad!,
+            optim_obj_wrap.f_hessian!)
 
     # TODO: use the Optim version after newton_tr is merged.
     nm_result = newton_tr(d,
@@ -243,17 +246,5 @@ function maximize_f(
             "($(nm_result.iterations) Newton steps)\n")
     iter_count, max_f, max_x, nm_result
 end
-
-
-function maximize_f(f::Function, tiled_blob::TiledBlob, ea::ElboArgs;
-                omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
-                max_iters = 100)
-    # Use the default transform.
-    transform = get_mp_transform(ea)
-    maximize_f(f, tiled_blob, ea, transform,
-      omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs,
-      verbose=verbose, max_iters=max_iters)
-end
-
 
 end
