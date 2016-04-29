@@ -29,32 +29,32 @@ end
 
 
 """
-Wrap a vector of canonical parameters for active sources into a ModelParams
+Wrap a vector of canonical parameters for active sources into a ElboArgs
 object of the appropriate type. Used for testing with forward
 autodifferentiation.
 """
 function unwrap_vp_vector{NumType <: Number}(
-        vp_vec::Vector{NumType}, mp::ModelParams)
+        vp_vec::Vector{NumType}, ea::ElboArgs)
 
-    vp_array = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
-    mp_local = forward_diff_model_params(NumType, mp);
-    for sa = 1:length(mp.active_sources)
-        mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
+    vp_array = reshape(vp_vec, length(CanonicalParams), length(ea.active_sources))
+    ea_local = forward_diff_model_params(NumType, ea);
+    for sa = 1:length(ea.active_sources)
+        ea_local.vp[ea.active_sources[sa]] = vp_array[:, sa]
     end
-    mp_local
+    ea_local
 end
 
 
 """
 Convert the variational params into a vector for autodiff.
 """
-function wrap_vp_vector(mp::ModelParams, use_active_sources::Bool)
+function wrap_vp_vector(ea::ElboArgs, use_active_sources::Bool)
     P = length(CanonicalParams)
-    S = use_active_sources ? length(mp.active_sources) : mp.S
+    S = use_active_sources ? length(ea.active_sources) : ea.S
     x_mat = zeros(Float64, P, S);
     for s in 1:S
-        ind = use_active_sources ? mp.active_sources[s] : s
-        x_mat[:, s] = mp.vp[ind]
+        ind = use_active_sources ? ea.active_sources[s] : s
+        x_mat[:, s] = ea.vp[ind]
     end
     x_mat[:];
 end
@@ -116,35 +116,30 @@ function test_real_image()
     fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir run camcol field
     cat_entries = SDSSIO.read_photoobj_celeste(fname)
     singleton_cat = filter((ce)->ce.objid == "1237662226208063499", cat_entries)
-    tiled_blob, mp = initialize_celeste(images,
+    tiled_blob, ea = initialize_celeste(images,
                                         singleton_cat,
                                         fit_psf=false,
                                         tile_width=20);
 
     # Limit to very few pixels so that the autodiff is reasonably fast.
-    s = mp.active_sources[1]
-    very_trimmed_tiled_blob = ModelInit.trim_source_tiles(
-        s, mp, tiled_blob, noise_fraction=10., min_radius_pix=1.0);
-
-    # To see:
-    # using PyPlot
-    # matshow(ModelInit.stitch_object_tiles(s, 3, trimmed_mp, very_trimmed_tiled_blob))
-
-    elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, mp);
+    s = ea.active_sources[1]
+    very_trimmed_tiled_blob = Infer.trim_source_tiles(
+        s, ea, tiled_blob, noise_fraction=10., min_radius_pix=1.0);
+    elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, ea);
 
     function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
         vp_array =
-            reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
-        mp_local = forward_diff_model_params(NumType, mp);
-        for sa = 1:length(mp.active_sources)
-            mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
+            reshape(vp_vec, length(CanonicalParams), length(ea.active_sources))
+        ea_local = forward_diff_model_params(NumType, ea);
+        for sa = 1:length(ea.active_sources)
+            ea_local.vp[ea.active_sources[sa]] = vp_array[:, sa]
         end
         local_elbo = ElboDeriv.elbo(
-            very_trimmed_tiled_blob, mp_local, calculate_derivs=false)
+            very_trimmed_tiled_blob, ea_local, calculate_derivs=false)
         local_elbo.v[1]
     end
 
-    vp_vec = mp.vp[s];
+    vp_vec = ea.vp[s];
     ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
     ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
 
@@ -162,20 +157,20 @@ function test_dual_numbers()
     # Simply check that the likelihood can be used with dual numbers.
     # Due to the autodiff parts of the KL divergence and transform,
     # these parts of the ELBO will currently not work with dual numbers.
-    blob, mp, body, tiled_blob = gen_sample_star_dataset();
-    mp_dual = forward_diff_model_params(DualNumbers.Dual{Float64}, mp);
-    elbo_dual = ElboDeriv.elbo_likelihood(tiled_blob, mp_dual);
+    blob, ea, body, tiled_blob = gen_sample_star_dataset();
+    ea_dual = forward_diff_model_params(DualNumbers.Dual{Float64}, ea);
+    elbo_dual = ElboDeriv.elbo_likelihood(tiled_blob, ea_dual);
 
     true
 end
 
 
 function test_tile_predicted_image()
-    blob, mp, body, tiled_blob = gen_sample_star_dataset(perturb=false);
+    blob, ea, body, tiled_blob = gen_sample_star_dataset(perturb=false);
     tile = tiled_blob[1].tiles[1, 1];
-    tile_sources = mp.tile_sources[1][1, 1];
+    tile_sources = ea.tile_sources[1][1, 1];
     pred_image =
-        ElboDeriv.tile_predicted_image(tile, mp, tile_sources; include_epsilon=true);
+        ElboDeriv.tile_predicted_image(tile, ea, tile_sources; include_epsilon=true);
 
     # Regress the tile pixels onto the predicted image
     # TODO: Why isn't the regression closer to one?    Something in the sample data
@@ -189,18 +184,18 @@ end
 
 
 function test_derivative_flags()
-    blob, mp, body, tiled_blob = gen_two_body_dataset();
+    blob, ea, body, tiled_blob = gen_two_body_dataset();
     keep_pixels = 10:11
     trim_tiles!(tiled_blob, keep_pixels)
 
-    elbo = ElboDeriv.elbo(tiled_blob, mp);
+    elbo = ElboDeriv.elbo(tiled_blob, ea);
 
-    elbo_noderiv = ElboDeriv.elbo(tiled_blob, mp; calculate_derivs=false);
+    elbo_noderiv = ElboDeriv.elbo(tiled_blob, ea; calculate_derivs=false);
     @test_approx_eq elbo.v[1] elbo_noderiv.v
     @test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
     @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
 
-    elbo_nohess = ElboDeriv.elbo(tiled_blob, mp; calculate_hessian=false);
+    elbo_nohess = ElboDeriv.elbo(tiled_blob, ea; calculate_hessian=false);
     @test_approx_eq elbo.v[1] elbo_nohess.v
     @test_approx_eq elbo.d elbo_nohess.d
     @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
@@ -211,21 +206,21 @@ function test_active_sources()
     # Test that the derivatives of the expected brightnesses partition in
     # active_sources.
 
-    blob, mp, body, tiled_blob = gen_two_body_dataset();
+    blob, ea, body, tiled_blob = gen_two_body_dataset();
     keep_pixels = 10:11
     trim_tiles!(tiled_blob, keep_pixels)
     b = 1
     tile = tiled_blob[b].tiles[1,1];
     h, w = 10, 10
 
-    mp.active_sources = [1, 2]
-    elbo_lik_12 = ElboDeriv.elbo_likelihood(tiled_blob, mp);
+    ea.active_sources = [1, 2]
+    elbo_lik_12 = ElboDeriv.elbo_likelihood(tiled_blob, ea);
 
-    mp.active_sources = [1]
-    elbo_lik_1 = ElboDeriv.elbo_likelihood(tiled_blob, mp);
+    ea.active_sources = [1]
+    elbo_lik_1 = ElboDeriv.elbo_likelihood(tiled_blob, ea);
 
-    mp.active_sources = [2]
-    elbo_lik_2 = ElboDeriv.elbo_likelihood(tiled_blob, mp);
+    ea.active_sources = [2]
+    elbo_lik_2 = ElboDeriv.elbo_likelihood(tiled_blob, ea);
 
     @test_approx_eq elbo_lik_12.v[1] elbo_lik_1.v
     @test_approx_eq elbo_lik_12.v[1] elbo_lik_2.v
@@ -240,34 +235,34 @@ end
 
 
 function test_elbo()
-    blob, mp, body, tiled_blob = gen_two_body_dataset();
+    blob, ea, body, tiled_blob = gen_two_body_dataset();
     keep_pixels = 10:11
     trim_tiles!(tiled_blob, keep_pixels)
 
     # vp_vec is a vector of the parameters from all the active sources.
     function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
-        mp_local = unwrap_vp_vector(vp_vec, mp)
-        elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
+        ea_local = unwrap_vp_vector(vp_vec, ea)
+        elbo = ElboDeriv.elbo(tiled_blob, ea_local, calculate_derivs=false)
         elbo.v[1]
     end
 
-    mp.active_sources = [1];
-    vp_vec = wrap_vp_vector(mp, true);
-    elbo_1 = ElboDeriv.elbo(tiled_blob, mp);
+    ea.active_sources = [1];
+    vp_vec = wrap_vp_vector(ea, true);
+    elbo_1 = ElboDeriv.elbo(tiled_blob, ea);
     test_with_autodiff(wrap_elbo, vp_vec, elbo_1)
-    #test_elbo_mp(mp, elbo_1)
+    #test_elbo_mp(ea, elbo_1)
 
-    mp.active_sources = [2];
-    vp_vec = wrap_vp_vector(mp, true);
-    elbo_2 = ElboDeriv.elbo(tiled_blob, mp);
+    ea.active_sources = [2];
+    vp_vec = wrap_vp_vector(ea, true);
+    elbo_2 = ElboDeriv.elbo(tiled_blob, ea);
     test_with_autodiff(wrap_elbo, vp_vec, elbo_2)
-    #test_elbo_mp(mp, elbo_2)
+    #test_elbo_mp(ea, elbo_2)
 
-    mp.active_sources = [1, 2];
-    vp_vec = wrap_vp_vector(mp, true);
-    elbo_12 = ElboDeriv.elbo(tiled_blob, mp);
+    ea.active_sources = [1, 2];
+    vp_vec = wrap_vp_vector(ea, true);
+    elbo_12 = ElboDeriv.elbo(tiled_blob, ea);
     test_with_autodiff(wrap_elbo, vp_vec, elbo_12)
-    #test_elbo_mp(mp, elbo_12)
+    #test_elbo_mp(ea, elbo_12)
 
     P = length(CanonicalParams)
     @test size(elbo_1.d) == size(elbo_2.d) == (P, 1)
@@ -279,12 +274,12 @@ end
 
 
 function test_process_active_pixels()
-    blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+    blob, ea, bodies, tiled_blob = gen_two_body_dataset();
     # b = 1
     # keep_pixels = 10:11
     # trim_tiles!(tiled_blob, keep_pixels)
     # tile = tiled_blob[b][1, 1];
-    # tile_sources = mp.tile_sources[b][1, 1];
+    # tile_sources = ea.tile_sources[b][1, 1];
 
     # Choose four pixels only to keep the test fast.
     active_pixels = Array(ElboDeriv.ActivePixel, 4)
@@ -295,30 +290,30 @@ function test_process_active_pixels()
 
 
     function tile_lik_wrapper_fun{NumType <: Number}(
-            mp::ModelParams{NumType}, calculate_derivs::Bool)
+            ea::ElboArgs{NumType}, calculate_derivs::Bool)
 
-        elbo_vars = ElboIntermediateVariables(NumType, mp.S,
-                                            length(mp.active_sources),
+        elbo_vars = ElboIntermediateVariables(NumType, ea.S,
+                                            length(ea.active_sources),
                                             calculate_derivs=calculate_derivs,
                                             calculate_hessian=calculate_hessian)
-        ElboDeriv.process_active_pixels!(elbo_vars, tiled_blob, mp, active_pixels);
+        ElboDeriv.process_active_pixels!(elbo_vars, tiled_blob, ea, active_pixels);
         deepcopy(elbo_vars.elbo)
     end
 
     function tile_lik_value_wrapper{NumType <: Number}(x::Vector{NumType})
-        mp_local = unwrap_vp_vector(x, mp)
-        tile_lik_wrapper_fun(mp_local, false).v[1]
+        ea_local = unwrap_vp_vector(x, ea)
+        tile_lik_wrapper_fun(ea_local, false).v[1]
     end
 
-    elbo = tile_lik_wrapper_fun(mp, true);
+    elbo = tile_lik_wrapper_fun(ea, true);
 
-    x = wrap_vp_vector(mp, true);
+    x = wrap_vp_vector(ea, true);
     test_with_autodiff(tile_lik_value_wrapper, x, elbo);
 end
 
 
 function test_add_log_term()
-    blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+    blob, ea, bodies, tiled_blob = gen_two_body_dataset();
 
     # Test this pixel
     h, w = (10, 10)
@@ -327,25 +322,25 @@ function test_add_log_term()
         println("Testing log term for band $b.")
         x_nbm = 70.
         tile = tiled_blob[b].tiles[1,1];
-        tile_sources = mp.tile_sources[b][1,1];
+        tile_sources = ea.tile_sources[b][1,1];
 
         iota = median(blob[b].iota_vec)
 
         function add_log_term_wrapper_fun{NumType <: Number}(
-                mp::ModelParams{NumType}, calculate_derivs::Bool)
+                ea::ElboArgs{NumType}, calculate_derivs::Bool)
 
             star_mcs, gal_mcs =
-                ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
+                ElboDeriv.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs);
             sbs = ElboDeriv.SourceBrightness{NumType}[
-                ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
-                for s in 1:mp.S];
+                ElboDeriv.SourceBrightness(ea.vp[s], calculate_derivs=calculate_derivs)
+                for s in 1:ea.S];
 
-            elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
+            elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, ea.S, ea.S);
             elbo_vars_loc.calculate_derivs = calculate_derivs
             ElboDeriv.populate_fsm_vecs!(
-                elbo_vars_loc, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
+                elbo_vars_loc, ea, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
             ElboDeriv.combine_pixel_sources!(
-                elbo_vars_loc, mp, tile_sources, tile, sbs);
+                elbo_vars_loc, ea, tile_sources, tile, sbs);
 
             ElboDeriv.add_elbo_log_term!(elbo_vars_loc, x_nbm, iota)
 
@@ -353,21 +348,21 @@ function test_add_log_term()
         end
 
         function ad_wrapper_fun{NumType <: Number}(x::Vector{NumType})
-            mp_local = unwrap_vp_vector(x, mp)
-            add_log_term_wrapper_fun(mp_local, false).v[1]
+            ea_local = unwrap_vp_vector(x, ea)
+            add_log_term_wrapper_fun(ea_local, false).v[1]
         end
 
-        x = wrap_vp_vector(mp, true);
-        elbo = add_log_term_wrapper_fun(mp, true);
+        x = wrap_vp_vector(ea, true);
+        elbo = add_log_term_wrapper_fun(ea, true);
         test_with_autodiff(ad_wrapper_fun, x, elbo);
     end
 end
 
 
 function test_combine_pixel_sources()
-    blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+    blob, ea, bodies, tiled_blob = gen_two_body_dataset();
 
-    S = length(mp.active_sources)
+    S = length(ea.active_sources)
     P = length(CanonicalParams)
     h = 10
     w = 10
@@ -377,34 +372,34 @@ function test_combine_pixel_sources()
         println("Testing $(test_var_string), band $b")
 
         tile = tiled_blob[b].tiles[1,1]; # Note: only one tile in this simulated dataset.
-        tile_sources = mp.tile_sources[b][1,1];
+        tile_sources = ea.tile_sources[b][1,1];
 
         function e_g_wrapper_fun{NumType <: Number}(
-                mp::ModelParams{NumType}; calculate_derivs=true)
+                ea::ElboArgs{NumType}; calculate_derivs=true)
 
             star_mcs, gal_mcs =
-                ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
+                ElboDeriv.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs);
             sbs = ElboDeriv.SourceBrightness{NumType}[
-                ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
-                for s in 1:mp.S];
+                ElboDeriv.SourceBrightness(ea.vp[s], calculate_derivs=calculate_derivs)
+                for s in 1:ea.S];
 
-            elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, mp.S, mp.S);
+            elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, ea.S, ea.S);
             elbo_vars_loc.calculate_derivs = calculate_derivs;
             ElboDeriv.populate_fsm_vecs!(
-                elbo_vars_loc, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
+                elbo_vars_loc, ea, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
             ElboDeriv.combine_pixel_sources!(
-                elbo_vars_loc, mp, tile_sources, tile, sbs);
+                elbo_vars_loc, ea, tile_sources, tile, sbs);
             deepcopy(elbo_vars_loc)
         end
 
         function wrapper_fun{NumType <: Number}(x::Vector{NumType})
-            mp_local = unwrap_vp_vector(x, mp)
-            elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
+            ea_local = unwrap_vp_vector(x, ea)
+            elbo_vars_local = e_g_wrapper_fun(ea_local, calculate_derivs=false)
             test_var ? elbo_vars_local.var_G.v[1] : elbo_vars_local.E_G.v[1]
         end
 
-        x = wrap_vp_vector(mp, true)
-        elbo_vars = e_g_wrapper_fun(mp);
+        x = wrap_vp_vector(ea, true)
+        elbo_vars = e_g_wrapper_fun(ea);
         sf = test_var ? deepcopy(elbo_vars.var_G) : deepcopy(elbo_vars.E_G);
 
         test_with_autodiff(wrapper_fun, x, sf)
@@ -413,9 +408,9 @@ end
 
 
 function test_e_g_s_functions()
-    blob, mp, bodies, tiled_blob = gen_two_body_dataset();
+    blob, ea, bodies, tiled_blob = gen_two_body_dataset();
 
-    # S = length(mp.active_sources)
+    # S = length(ea.active_sources)
     P = length(CanonicalParams)
     h = 10
     w = 10
@@ -426,37 +421,37 @@ function test_e_g_s_functions()
         println("Testing $(test_var_string), band $b")
 
         tile = tiled_blob[b].tiles[1,1]; # Note: only one tile in this simulated dataset.
-        tile_sources = mp.tile_sources[b][1,1];
+        tile_sources = ea.tile_sources[b][1,1];
 
         function e_g_wrapper_fun{NumType <: Number}(
-                mp::ModelParams{NumType}; calculate_derivs=true)
+                ea::ElboArgs{NumType}; calculate_derivs=true)
 
             star_mcs, gal_mcs =
-                ElboDeriv.load_bvn_mixtures(mp, b, calculate_derivs=calculate_derivs);
+                ElboDeriv.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs);
             sbs = ElboDeriv.SourceBrightness{NumType}[
-                ElboDeriv.SourceBrightness(mp.vp[s], calculate_derivs=calculate_derivs)
-                for s in 1:mp.S];
+                ElboDeriv.SourceBrightness(ea.vp[s], calculate_derivs=calculate_derivs)
+                for s in 1:ea.S];
 
             elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(
-                NumType, mp.S, length(mp.active_sources));
+                NumType, ea.S, length(ea.active_sources));
             elbo_vars_loc.calculate_derivs = calculate_derivs;
             ElboDeriv.populate_fsm_vecs!(
-                elbo_vars_loc, mp, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
-            ElboDeriv.accumulate_source_brightness!(elbo_vars_loc, mp, sbs, s, b);
+                elbo_vars_loc, ea, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs);
+            ElboDeriv.accumulate_source_brightness!(elbo_vars_loc, ea, sbs, s, b);
             deepcopy(elbo_vars_loc)
         end
 
         function wrapper_fun{NumType <: Number}(x::Vector{NumType})
             @assert length(x) == P
-            mp_local = forward_diff_model_params(NumType, mp);
-            mp_local.vp[s] = x
-            elbo_vars_local = e_g_wrapper_fun(mp_local, calculate_derivs=false)
+            ea_local = forward_diff_model_params(NumType, ea);
+            ea_local.vp[s] = x
+            elbo_vars_local = e_g_wrapper_fun(ea_local, calculate_derivs=false)
             test_var ? elbo_vars_local.var_G_s.v[1] : elbo_vars_local.E_G_s.v[1]
         end
 
-        x = mp.vp[s];
+        x = ea.vp[s];
 
-        elbo_vars = e_g_wrapper_fun(mp);
+        elbo_vars = e_g_wrapper_fun(ea);
 
         # Sanity check the variance value.
         @test_approx_eq(elbo_vars.var_G_s.v,
@@ -471,15 +466,15 @@ end
 
 function test_fs1m_derivatives()
     # TODO: test with a real and asymmetric wcs jacobian.
-    blob, mp, three_bodies = gen_three_body_dataset();
+    blob, ea, three_bodies = gen_three_body_dataset();
     omitted_ids = Int[];
     kept_ids = setdiff(1:length(ids), omitted_ids);
 
     s = 1
     b = 1
 
-    patch = mp.patches[s, b];
-    u = mp.vp[s][ids.u]
+    patch = ea.patches[s, b];
+    u = ea.vp[s][ids.u]
     u_pix = WCSUtils.world_to_pix(
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
     x = ceil(u_pix + [1.0, 2.0])
@@ -494,18 +489,18 @@ function test_fs1m_derivatives()
     for psf_k=1:psf_K, type_i = 1:2, gal_j in 1:[8,6][type_i]
         gcc_ind = (psf_k, gal_j, type_i, s)
         function f_wrap_gal{T <: Number}(par::Vector{T})
-            # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-            mp_fd = forward_diff_model_params(T, mp);
+            # This uses ea, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
+            ea_fd = forward_diff_model_params(T, ea);
             elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
 
             # Make sure par is as long as the galaxy parameters.
             @assert length(par) == length(shape_standard_alignment[2])
             for p1 in 1:length(par)
                     p0 = shape_standard_alignment[2][p1]
-                    mp_fd.vp[s][p0] = par[p1]
+                    ea_fd.vp[s][p0] = par[p1]
             end
             star_mcs, gal_mcs =
-                ElboDeriv.load_bvn_mixtures(mp_fd, b, calculate_derivs=false);
+                ElboDeriv.load_bvn_mixtures(ea_fd, b, calculate_derivs=false);
 
             # Raw:
             gcc = gal_mcs[gcc_ind...];
@@ -513,18 +508,18 @@ function test_fs1m_derivatives()
             elbo_vars_fd.bvn_derivs.f_pre[1] * gcc.e_dev_i
         end
 
-        function mp_to_par_gal(mp::ModelParams{Float64})
+        function ea_to_par_gal(ea::ElboArgs{Float64})
             par = zeros(length(shape_standard_alignment[2]))
             for p1 in 1:length(par)
                     p0 = shape_standard_alignment[2][p1]
-                    par[p1] = mp.vp[s][p0]
+                    par[p1] = ea.vp[s][p0]
             end
             par
         end
 
-        par_gal = mp_to_par_gal(mp);
+        par_gal = ea_to_par_gal(ea);
 
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(ea, b);
         clear!(elbo_vars.fs1m_vec[s]);
         ElboDeriv.accum_galaxy_pos!(
             elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian, true);
@@ -535,7 +530,7 @@ function test_fs1m_derivatives()
         clear!(elbo_vars.fs1m_vec[s]);
         v = eval_bvn_log_density(elbo_vars, gcc.bmc, x);
         gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
-        pc = mp.patches[s, b].psf[gcc_ind[1]]
+        pc = ea.patches[s, b].psf[gcc_ind[1]]
 
         @test_approx_eq(
             pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(v) / (2 * pi),
@@ -548,15 +543,15 @@ end
 
 function test_fs0m_derivatives()
     # TODO: test with a real and asymmetric wcs jacobian.
-    blob, mp, three_bodies = gen_three_body_dataset();
+    blob, ea, three_bodies = gen_three_body_dataset();
     omitted_ids = Int[];
     kept_ids = setdiff(1:length(ids), omitted_ids);
 
     s = 1
     b = 1
 
-    patch = mp.patches[s, b];
-    u = mp.vp[s][ids.u]
+    patch = ea.patches[s, b];
+    u = ea.vp[s][ids.u]
     u_pix = WCSUtils.world_to_pix(
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
     x = ceil(u_pix + [1.0, 2.0])
@@ -571,34 +566,34 @@ function test_fs0m_derivatives()
     for psf_k=1:psf_K
         bmc_ind = (psf_k, s)
         function f_wrap_star{T <: Number}(par::Vector{T})
-            # This uses mp, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
-            mp_fd = forward_diff_model_params(T, mp);
+            # This uses ea, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
+            ea_fd = forward_diff_model_params(T, ea);
 
             # Make sure par is as long as the galaxy parameters.
             @assert length(par) == length(ids.u)
             for p1 in 1:2
                     p0 = ids.u[p1]
-                    mp_fd.vp[s][p0] = par[p1]
+                    ea_fd.vp[s][p0] = par[p1]
             end
-            star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp_fd, b);
+            star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(ea_fd, b);
             elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1);
             ElboDeriv.accum_star_pos!(
                 elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true);
             elbo_vars_fd.fs0m_vec[s].v[1]
         end
 
-        function mp_to_par_star(mp::ModelParams{Float64})
+        function ea_to_par_star(ea::ElboArgs{Float64})
             par = zeros(2)
             for p1 in 1:length(par)
-                    par[p1] = mp.vp[s][ids.u[p1]]
+                    par[p1] = ea.vp[s][ids.u[p1]]
             end
             par
         end
 
-        par_star = mp_to_par_star(mp)
+        par_star = ea_to_par_star(ea)
 
         clear!(elbo_vars.fs0m_vec[s])
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(mp, b);
+        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(ea, b);
         ElboDeriv.accum_star_pos!(
             elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true);
         fs0m = deepcopy(elbo_vars.fs0m_vec[s])
@@ -670,14 +665,14 @@ function test_galaxy_variable_transform()
 
     # TODO: test with a real and asymmetric wcs jacobian.
     # We only need this for a psf and jacobian.
-    blob, mp, three_bodies = gen_three_body_dataset();
+    blob, ea, three_bodies = gen_three_body_dataset();
 
     # Pick a single source and band for testing.
     s = 1
     b = 5
 
     # The pixel and world centers shouldn't matter for derivatives.
-    patch = mp.patches[s, b];
+    patch = ea.patches[s, b];
     psf = patch.psf[1];
 
     # Pick out a single galaxy component for testing.
@@ -763,14 +758,14 @@ function test_galaxy_cache_component()
 
     # TODO: test with a real and asymmetric wcs jacobian.
     # We only need this for a psf and jacobian.
-    blob, mp, three_bodies = gen_three_body_dataset();
+    blob, ea, three_bodies = gen_three_body_dataset();
 
     # Pick a single source and band for testing.
     s = 1
     b = 5
 
     # The pixel and world centers shouldn't matter for derivatives.
-    patch = mp.patches[s, b];
+    patch = ea.patches[s, b];
     psf = patch.psf[1];
 
     # Pick out a single galaxy component for testing.
@@ -901,7 +896,7 @@ end
 
 
 function test_brightness_hessian()
-    blob, mp, star_cat = gen_sample_star_dataset();
+    blob, ea, star_cat = gen_sample_star_dataset();
     kept_ids = [ ids.r1; ids.r2; ids.c1[:]; ids.c2[:] ];
     omitted_ids = setdiff(1:length(ids), kept_ids);
     i = 1
@@ -929,8 +924,8 @@ function test_brightness_hessian()
             wrap_source_brightness(vp, false).v[1]
         end
 
-        bright_vp = mp.vp[1][brightness_standard_alignment[i]];
-        bright = wrap_source_brightness(mp.vp[1], true);
+        bright_vp = ea.vp[1][brightness_standard_alignment[i]];
+        bright = wrap_source_brightness(ea.vp[1], true);
 
         @test_approx_eq bright.v[1] wrap_source_brightness_value(bright_vp);
 

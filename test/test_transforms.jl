@@ -51,7 +51,7 @@ end
 
 
 function test_transform_sensitive_float()
-	blob, mp, body, tiled_blob = gen_two_body_dataset();
+	blob, ea, body, tiled_blob = gen_two_body_dataset();
 
 	# Only keep a few pixels to make the autodiff results faster.
   keep_pixels = 10:11
@@ -64,21 +64,21 @@ function test_transform_sensitive_float()
 
 
 	function wrap_elbo{NumType <: Number}(vp_free_vec::Vector{NumType})
-		vp_free_array = reshape(vp_free_vec, length(UnconstrainedParams), length(mp.active_sources))
+		vp_free_array = reshape(vp_free_vec, length(UnconstrainedParams), length(ea.active_sources))
 		vp_free = Vector{NumType}[ zeros(NumType, length(UnconstrainedParams)) for
-		                           sa in mp.active_sources ];
+		                           sa in ea.active_sources ];
 		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
-		mp_local = forward_diff_model_params(NumType, mp);
-		transform.to_vp!(vp_free, mp_local.vp)
-		elbo = ElboDeriv.elbo(tiled_blob, mp_local, calculate_derivs=false)
+		ea_local = forward_diff_model_params(NumType, ea);
+		transform.to_vp!(vp_free, ea_local.vp)
+		elbo = ElboDeriv.elbo(tiled_blob, ea_local, calculate_derivs=false)
 		elbo.v[1]
 	end
 
-	transform = Transform.get_mp_transform(mp, loc_width=1.0);
-	elbo = ElboDeriv.elbo(tiled_blob, mp);
-	elbo_trans = transform.transform_sensitive_float(elbo, mp);
+	transform = Transform.get_mp_transform(ea, loc_width=1.0);
+	elbo = ElboDeriv.elbo(tiled_blob, ea);
+	elbo_trans = transform.transform_sensitive_float(elbo, ea);
 
-	free_vp_vec = reduce(vcat, transform.from_vp(mp.vp));
+	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
 	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
 	ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec);
 
@@ -86,12 +86,12 @@ function test_transform_sensitive_float()
 	@test_approx_eq ad_hess elbo_trans.h
 
   # Test with a subset of sources.
-	mp.active_sources = [2]
-	transform = Transform.get_mp_transform(mp, loc_width=1.0);
-	elbo = ElboDeriv.elbo(tiled_blob, mp);
-	elbo_trans = transform.transform_sensitive_float(elbo, mp);
+	ea.active_sources = [2]
+	transform = Transform.get_mp_transform(ea, loc_width=1.0);
+	elbo = ElboDeriv.elbo(tiled_blob, ea);
+	elbo_trans = transform.transform_sensitive_float(elbo, ea);
 
-	free_vp_vec = reduce(vcat, transform.from_vp(mp.vp));
+	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
 	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
 	ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec);
 
@@ -105,24 +105,24 @@ println("Running transform tests.")
 
 
 function test_box_derivatives()
-	blob, mp, body = gen_three_body_dataset();
-	transform = get_mp_transform(mp, loc_width=1.0);
+	blob, ea, body = gen_three_body_dataset();
+	transform = get_mp_transform(ea, loc_width=1.0);
 
 	box_params = setdiff(fieldnames(ids), [:a, :k])
-	vp_free = transform.from_vp(mp.vp)
-	for sa = 1:length(mp.active_sources), param in box_params, ind in length(ids.(param))
+	vp_free = transform.from_vp(ea.vp)
+	for sa = 1:length(ea.active_sources), param in box_params, ind in length(ids.(param))
 		# sa = 1
 		# param = box_params[1]
 		# ind = 1
 
-		s = mp.active_sources[sa]
+		s = ea.active_sources[sa]
 		vp_ind = ids.(param)[ind]
 		free_ind = [ids_free.(param)[ind]]
 
 		function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
 			local_vp_free =
 				Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
-			                  sa = 1:length(mp.active_sources) ]
+			                  sa = 1:length(ea.active_sources) ]
 			local_vp_free[s] = vp_free_s
 			vp = transform.to_vp(local_vp_free)
 			vp[s][ids.(param)[ind]]
@@ -132,7 +132,7 @@ function test_box_derivatives()
 		ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind][1,1]
 
 		d, h = Transform.box_derivatives(
-			mp.vp[s][vp_ind][1], transform.bounds[s][param][ind])
+			ea.vp[s][vp_ind][1], transform.bounds[s][param][ind])
 		@test_approx_eq ad_d d
 		@test_approx_eq ad_h h
 	end
@@ -140,24 +140,24 @@ end
 
 
 function test_box_simplex_derivatives()
-	blob, mp, body = gen_three_body_dataset();
-	for s = 1:mp.S
+	blob, ea, body = gen_three_body_dataset();
+	for s = 1:ea.S
 		delta = 0.01 * s # Make the parameters different for each one
-		mp.vp[s][ids.a] = Float64[ 0.2 - delta, 0.8 + delta ]
-		mp.vp[s][ids.k] = Float64[ 0.2- delta 0.2- delta; 0.8 + delta 0.8 + delta ]
+		ea.vp[s][ids.a] = Float64[ 0.2 - delta, 0.8 + delta ]
+		ea.vp[s][ids.k] = Float64[ 0.2- delta 0.2- delta; 0.8 + delta 0.8 + delta ]
 	end
-	transform = get_mp_transform(mp, loc_width=1.0);
+	transform = get_mp_transform(ea, loc_width=1.0);
 
 	simplex_params = [:a, :k]
-	vp_free = transform.from_vp(mp.vp)
+	vp_free = transform.from_vp(ea.vp)
 
-	for sa = 1:length(mp.active_sources), param in simplex_params
+	for sa = 1:length(ea.active_sources), param in simplex_params
 		# sa = 1
 		# param = :k
 		# col = 1 # For k only
 		# ind = 1 # Index within the simplex
 
-		s = mp.active_sources[sa]
+		s = ea.active_sources[sa]
 		num_cols = length(size(ids.(param)))
 		@assert num_cols == 1 || num_cols == 2
 
@@ -173,14 +173,14 @@ function test_box_simplex_derivatives()
 			end
 
 			d, h = Transform.box_simplex_derivatives(
-				mp.vp[s][vp_ind], transform.bounds[s][param][col])
+				ea.vp[s][vp_ind], transform.bounds[s][param][col])
 
 			for row = 1:2
 				# Write with a univariate output so we can take autodiff hessians.
 			  function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
 			  	local_vp_free =
 			  		Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
-			  	                     sa = 1:length(mp.active_sources) ]
+			  	                     sa = 1:length(ea.active_sources) ]
 			  	local_vp_free[s] = vp_free_s
 			  	vp = transform.to_vp(local_vp_free)
 			  	vp[s][ids.(param)[row, col]]
@@ -226,28 +226,28 @@ end
 
 
 function test_parameter_conversion()
-	blob, mp, body = gen_three_body_dataset();
+	blob, ea, body = gen_three_body_dataset();
 
-	transform = get_mp_transform(mp, loc_width=1.0);
+	transform = get_mp_transform(ea, loc_width=1.0);
 
-	function check_transform(transform::DataTransform, mp::ModelParams)
-		original_vp = deepcopy(mp.vp);
-		mp_check = deepcopy(mp);
+	function check_transform(transform::DataTransform, ea::ElboArgs)
+		original_vp = deepcopy(ea.vp);
+		ea_check = deepcopy(ea);
 
 		# Check that the constrain and unconstrain operations undo each other.
-		vp_free = transform.from_vp(mp.vp)
-		transform.to_vp!(vp_free, mp_check.vp)
+		vp_free = transform.from_vp(ea.vp)
+		transform.to_vp!(vp_free, ea_check.vp)
 
-		for id in fieldnames(ids), s in 1:mp.S
+		for id in fieldnames(ids), s in 1:ea.S
 			@test_approx_eq_eps(original_vp[s][ids.(id)],
-			                    mp_check.vp[s][ids.(id)], 1e-6)
+			                    ea_check.vp[s][ids.(id)], 1e-6)
 		end
 
 		# Check conversion to and from a vector.
 		omitted_ids = Array(Int, 0)
-		vp = deepcopy(mp.vp)
+		vp = deepcopy(ea.vp)
 		x = transform.vp_to_array(vp, omitted_ids)
-		@test length(x) == length(vp_free[1]) * length(mp.active_sources)
+		@test length(x) == length(vp_free[1]) * length(ea.active_sources)
 
 		vp2 = generate_valid_parameters(Float64, transform.bounds)
 		transform.array_to_vp!(x, vp2, omitted_ids)
@@ -258,17 +258,17 @@ function test_parameter_conversion()
 
 	end
 
-	transform = get_mp_transform(mp, loc_width=1.0);
-	check_transform(transform, mp)
+	transform = get_mp_transform(ea, loc_width=1.0);
+	check_transform(transform, ea)
 
 	# Test transforming only active sources.
-	mp1 = deepcopy(mp);
-	mp1.active_sources = [1]
-	transform1 = Transform.get_mp_transform(mp1)
+	ea1 = deepcopy(ea);
+	ea1.active_sources = [1]
+	transform1 = Transform.get_mp_transform(ea1)
 
-	@assert transform1.S == mp.S
+	@assert transform1.S == ea.S
 	@assert transform1.active_S == 1
-	check_transform(transform1, mp1)
+	check_transform(transform1, ea1)
 
 end
 
@@ -373,39 +373,39 @@ end
 
 
 function test_enforce_bounds()
-	blob, mp, three_bodies = gen_three_body_dataset();
-	transform = get_mp_transform(mp);
+	blob, ea, three_bodies = gen_three_body_dataset();
+	transform = get_mp_transform(ea);
 
-	mp.vp[1][ids.a[1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
-	mp.vp[2][ids.r1[1]] = transform.bounds[2][:r1][1].lower_bound - 1.0
-	mp.vp[2][ids.r1[2]] = transform.bounds[2][:r1][1].upper_bound + 1.0
-	mp.vp[3][ids.k[1, 1]] = transform.bounds[3][:k][1, 1].lower_bound - 0.00001
+	ea.vp[1][ids.a[1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
+	ea.vp[2][ids.r1[1]] = transform.bounds[2][:r1][1].lower_bound - 1.0
+	ea.vp[2][ids.r1[2]] = transform.bounds[2][:r1][1].upper_bound + 1.0
+	ea.vp[3][ids.k[1, 1]] = transform.bounds[3][:k][1, 1].lower_bound - 0.00001
 
-	@test_throws AssertionError transform.from_vp(mp.vp)
-	Transform.enforce_bounds!(mp, transform)
+	@test_throws AssertionError transform.from_vp(ea.vp)
+	Transform.enforce_bounds!(ea, transform)
 
 	# Check that it now works and all values are finite.
-	x_trans = transform.from_vp(mp.vp)
-	for s = 1:mp.S
+	x_trans = transform.from_vp(ea.vp)
+	for s = 1:ea.S
 		@test !any(Bool[ isinf(x) for x in x_trans[1] ])
 	end
 
 	# Test with only one active source.
 	sa = 2
-	mp.active_sources = [sa]
-	transform = get_mp_transform(mp);
+	ea.active_sources = [sa]
+	transform = get_mp_transform(ea);
 
-	mp.vp[sa][ids.a[1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
-	mp.vp[sa][ids.r1[1]] = transform.bounds[1][:r1][1].lower_bound - 1.0
-	mp.vp[sa][ids.r1[2]] = transform.bounds[1][:r1][1].upper_bound + 1.0
-	mp.vp[sa][ids.k[1, 1]] = transform.bounds[1][:k][1, 1].lower_bound - 0.00001
+	ea.vp[sa][ids.a[1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
+	ea.vp[sa][ids.r1[1]] = transform.bounds[1][:r1][1].lower_bound - 1.0
+	ea.vp[sa][ids.r1[2]] = transform.bounds[1][:r1][1].upper_bound + 1.0
+	ea.vp[sa][ids.k[1, 1]] = transform.bounds[1][:k][1, 1].lower_bound - 0.00001
 
-	@test_throws AssertionError transform.from_vp(mp.vp)
-	Transform.enforce_bounds!(mp, transform)
+	@test_throws AssertionError transform.from_vp(ea.vp)
+	Transform.enforce_bounds!(ea, transform)
 
 	# Check that it now works and all values are finite.
-	x_trans = transform.from_vp(mp.vp)
-	for s = 1:mp.S
+	x_trans = transform.from_vp(ea.vp)
+	for s = 1:ea.S
 		@test !any(Bool[ isinf(x) for x in x_trans[1] ])
 	end
 

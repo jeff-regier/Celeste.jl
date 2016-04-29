@@ -4,6 +4,7 @@ module Transform
 
 using ..Model
 using ..SensitiveFloats
+using ..ElboDeriv
 
 export DataTransform, ParamBounds, ParamBox, SimplexBox,
        get_mp_transform, enforce_bounds!
@@ -339,9 +340,9 @@ end
 Populate a TransformDerivatives object in place.
 
 Args:
-  - mp: ModelParams
+  - ea: ElboArgs
   - bounds: A vector containing one ParamBounds for each active source in the
-            same order as mp.active_sources.
+            same order as ea.active_sources.
   - transform_derivatives: TransformDerivatives to be populated.
 
 Returns:
@@ -421,11 +422,11 @@ end
 
 
 function get_transform_derivatives{NumType <: Number}(
-    mp::ModelParams{NumType}, bounds::Vector{ParamBounds})
+    ea::ElboArgs{NumType}, bounds::Vector{ParamBounds})
 
   transform_derivatives =
-    TransformDerivatives{Float64}(length(mp.active_sources))
-  get_transform_derivatives!(mp.vp, mp.active_sources, bounds, transform_derivatives)
+    TransformDerivatives{Float64}(length(ea.active_sources))
+  get_transform_derivatives!(ea.vp, ea.active_sources, bounds, transform_derivatives)
   transform_derivatives
 end
 
@@ -591,7 +592,7 @@ transform_sensitive_float: A function that takes (sensitive float, model
   parameters) where the sensitive float contains partial derivatives with
   respect to the variational parameters and returns a sensitive float with total
   derivatives with respect to the transformed parameters.
-bounds: The bounds for each parameter and each object in ModelParams.
+bounds: The bounds for each parameter and each object in ElboArgs.
 active_sources: The sources that are being optimized.  Only these sources'
   parameters are transformed into the parameter vector.
 """
@@ -609,8 +610,8 @@ type DataTransform
   S::Int
 end
 
-# TODO: Maybe this should be initialized with ModelParams with optional
-# custom bounds.  Or maybe it should be part of ModelParams with one transform
+# TODO: Maybe this should be initialized with ElboArgs with optional
+# custom bounds.  Or maybe it should be part of ElboArgs with one transform
 # per celestial object rather than a single object containing an array of
 # transforms.
 function DataTransform(bounds::Vector{ParamBounds};
@@ -678,12 +679,12 @@ function DataTransform(bounds::Vector{ParamBounds};
   # Note that all the other functions in ElboDeriv calculated derivatives with
   # respect to the constrained parameterization.
   function transform_sensitive_float{NumType <: Number}(
-  		sf::SensitiveFloat, mp::ModelParams{NumType})
+  		sf::SensitiveFloat, ea::ElboArgs{NumType})
 
-  	@assert size(sf.d) == (length(CanonicalParams), length(mp.active_sources))
-  	@assert length(mp.active_sources) == active_S
+  	@assert size(sf.d) == (length(CanonicalParams), length(ea.active_sources))
+  	@assert length(ea.active_sources) == active_S
 
-    transform_derivatives = get_transform_derivatives(mp, bounds)
+    transform_derivatives = get_transform_derivatives(ea, bounds)
 
   	sf_free =
   		zero_sensitive_float(UnconstrainedParams, NumType, active_S)
@@ -712,16 +713,16 @@ function DataTransform(bounds::Vector{ParamBounds};
 end
 
 
-function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
-  bounds = Array(ParamBounds, length(mp.active_sources))
+function get_mp_transform(ea::ElboArgs; loc_width::Float64=1.5e-3)
+  bounds = Array(ParamBounds, length(ea.active_sources))
 
   # Note that, for numerical reasons, the bounds must be on the scale
   # of reasonably meaningful changes.
-  for si in 1:length(mp.active_sources)
-    s = mp.active_sources[si]
+  for si in 1:length(ea.active_sources)
+    s = ea.active_sources[si]
     bounds[si] = ParamBounds()
     bounds[si][:u] = Array(ParamBox, 2)
-    u = mp.vp[s][ids.u]
+    u = ea.vp[s][ids.u]
     for axis in 1:2
       bounds[si][:u][axis] =
         ParamBox(u[axis] - loc_width, u[axis] + loc_width, 1.0)
@@ -751,7 +752,7 @@ function get_mp_transform(mp::ModelParams; loc_width::Float64=1.5e-3)
       bounds[si][:k][d] = SimplexBox(simplex_min, 1.0, 2)
     end
   end
-  DataTransform(bounds, active_sources=mp.active_sources, S=mp.S)
+  DataTransform(bounds, active_sources=ea.active_sources, S=ea.S)
 end
 
 
@@ -759,37 +760,37 @@ end
 Put the variational parameters within the bounds of the transform.
 
 Args:
-  - mp: A ModelParms whose vp parameters are updated to be within the bounds
+  - ea: A ModelParms whose vp parameters are updated to be within the bounds
         allowed by the transform.
   - transform: A DataTransform that will be used for optimization.
 
 Returns:
-  Updates mp.vp in place.
+  Updates ea.vp in place.
 """
 function enforce_bounds!{NumType <: Number}(
-  mp::ModelParams{NumType}, transform::DataTransform)
+  ea::ElboArgs{NumType}, transform::DataTransform)
 
-  @assert mp.S == transform.S
-  @assert length(mp.active_sources) == transform.active_S
+  @assert ea.S == transform.S
+  @assert length(ea.active_sources) == transform.active_S
 
   for sa=1:transform.active_S, (param, constraint_vec) in transform.bounds[sa]
-    s = mp.active_sources[sa]
+    s = ea.active_sources[sa]
     is_box = isa(constraint_vec, Array{ParamBox})
     if is_box
       # Box parameters.
       for ind in 1:length(ids.(param))
         constraint = constraint_vec[ind]
         if !(constraint.lower_bound <=
-             mp.vp[s][ids.(param)[ind]] <=
+             ea.vp[s][ids.(param)[ind]] <=
              constraint.upper_bound)
           Logging.debug("param[$s][$ind] was out of bounds.")
           # Don't set the value to exactly the lower bound to avoid Inf
           diff = constraint.upper_bound - constraint.lower_bound
           epsilon = diff == Inf ? 1e-12: diff * 1e-12
-          mp.vp[s][ids.(param)[ind]] =
-            min(mp.vp[s][ids.(param)[ind]], constraint.upper_bound - epsilon)
-          mp.vp[s][ids.(param)[ind]] =
-            max(mp.vp[s][ids.(param)[ind]], constraint.lower_bound + epsilon)
+          ea.vp[s][ids.(param)[ind]] =
+            min(ea.vp[s][ids.(param)[ind]], constraint.upper_bound - epsilon)
+          ea.vp[s][ids.(param)[ind]] =
+            max(ea.vp[s][ids.(param)[ind]], constraint.lower_bound + epsilon)
         end
       end
     else
@@ -799,40 +800,40 @@ function enforce_bounds!{NumType <: Number}(
         for col in 1:param_size[2]
           constraint = constraint_vec[col]
           for row in 1:param_size[1]
-            if !(constraint.lower_bound <= mp.vp[s][ids.(param)[row, col]] <= 1.0)
+            if !(constraint.lower_bound <= ea.vp[s][ids.(param)[row, col]] <= 1.0)
               Logging.debug("param[$s][$row, $col] was out of bounds.")
               # Don't set the value to exactly the lower bound to avoid Inf
               epsilon = (1.0 - constraint.lower_bound) * 1e-12
-              mp.vp[s][ids.(param)[row, col]] =
-                min(mp.vp[s][ids.(param)[row, col]], 1.0 - epsilon)
-              mp.vp[s][ids.(param)[row, col]] =
-                max(mp.vp[s][ids.(param)[row, col]],
+              ea.vp[s][ids.(param)[row, col]] =
+                min(ea.vp[s][ids.(param)[row, col]], 1.0 - epsilon)
+              ea.vp[s][ids.(param)[row, col]] =
+                max(ea.vp[s][ids.(param)[row, col]],
                     constraint.lower_bound + epsilon)
             end
           end
-          if sum(mp.vp[s][ids.(param)[:, col]]) != 1.0
+          if sum(ea.vp[s][ids.(param)[:, col]]) != 1.0
             Logging.debug("param[$s][:, $col] is not normalized.")
-            mp.vp[s][ids.(param)[:, col]] =
-              mp.vp[s][ids.(param)[:, col]] / sum(mp.vp[s][ids.(param)[:, col]])
+            ea.vp[s][ids.(param)[:, col]] =
+              ea.vp[s][ids.(param)[:, col]] / sum(ea.vp[s][ids.(param)[:, col]])
           end
         end
       else
         # vector simplex
         constraint = constraint_vec[1]
         for row in 1:param_size[1]
-          if !(constraint.lower_bound <= mp.vp[s][ids.(param)[row]] <= 1.0)
+          if !(constraint.lower_bound <= ea.vp[s][ids.(param)[row]] <= 1.0)
             Logging.debug("param[$s][$row] was out of bounds.")
             # Don't set the value to exactly the lower bound to avoid Inf
             epsilon = (1.0 - constraint.lower_bound) * 1e-12
-            mp.vp[s][ids.(param)[row]] =
-              min(mp.vp[s][ids.(param)[row]], 1.0 - epsilon)
-            mp.vp[s][ids.(param)[row]] =
-              max(mp.vp[s][ids.(param)[row]], constraint.lower_bound + epsilon)
+            ea.vp[s][ids.(param)[row]] =
+              min(ea.vp[s][ids.(param)[row]], 1.0 - epsilon)
+            ea.vp[s][ids.(param)[row]] =
+              max(ea.vp[s][ids.(param)[row]], constraint.lower_bound + epsilon)
           end
         end
-        if sum(mp.vp[s][ids.(param)]) != 1.0
+        if sum(ea.vp[s][ids.(param)]) != 1.0
           Logging.debug("param[$s] is not normalized.")
-          mp.vp[s][ids.(param)] = mp.vp[s][ids.(param)] / sum(mp.vp[s][ids.(param)])
+          ea.vp[s][ids.(param)] = ea.vp[s][ids.(param)] / sum(ea.vp[s][ids.(param)])
         end
       end
     end

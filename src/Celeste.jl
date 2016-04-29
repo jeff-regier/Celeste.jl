@@ -9,7 +9,7 @@ include("Transform.jl")
 include("PSF.jl")
 include("SDSSIO.jl")
 include("OptimizeElbo.jl")
-include("ModelInit.jl")
+include("Infer.jl")
 
 # public API
 export infer, score_field

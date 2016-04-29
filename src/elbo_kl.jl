@@ -144,14 +144,14 @@ end
 
 
 function subtract_kl!{NumType <: Number}(
-        mp::ModelParams{NumType}, accum::SensitiveFloat{CanonicalParams, NumType};
+        ea::ElboArgs{NumType}, accum::SensitiveFloat{CanonicalParams, NumType};
         calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
     # The KL divergence as a function of the active source variational parameters.
     function subtract_kl_value_wrapper{NumType2 <: Number}(vp_vec::Vector{NumType2})
         elbo_val = zero(NumType2)
-        vp_active = reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
-        for sa in 1:length(mp.active_sources)
+        vp_active = reshape(vp_vec, length(CanonicalParams), length(ea.active_sources))
+        for sa in 1:length(ea.active_sources)
             vs = vp_active[:, sa]
             elbo_val += subtract_kl_a(vs)
 
@@ -166,10 +166,10 @@ function subtract_kl!{NumType <: Number}(
         elbo_val
     end
 
-    vp_vec = reduce(vcat, Vector{NumType}[ mp.vp[sa] for sa in mp.active_sources ])
+    vp_vec = reduce(vcat, Vector{NumType}[ ea.vp[sa] for sa in ea.active_sources ])
 
     const P = length(CanonicalParams)
-    Sa = length(mp.active_sources)
+    Sa = length(ea.active_sources)
 
     if calculate_derivs
         if calculate_hessian

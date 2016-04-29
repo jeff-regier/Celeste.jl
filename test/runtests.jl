@@ -2,7 +2,7 @@
 
 using Celeste: Model
 
-import Celeste: WCSUtils, ModelInit, ElboDeriv, Model, ModelInit
+import Celeste: WCSUtils, ElboDeriv, Model, Infer
 import Celeste: PSF, OptimizeElbo, SDSSIO, SensitiveFloats, Transform
 
 include("Synthetic.jl")
@@ -37,9 +37,9 @@ function initialize_celeste(
         tile_width::Int=20, fit_psf::Bool=true,
         patch_radius::Float64=NaN)
     tiled_blob = TiledImage[TiledImage(img, tile_width=tile_width) for img in blob]
-    mp = ModelInit.initialize_model_params(tiled_blob, cat,
+    ea = ModelInit.initialize_model_params(tiled_blob, cat,
                                fit_psf=fit_psf, patch_radius=patch_radius)
-    tiled_blob, mp
+    tiled_blob, ea
 end
 
 
