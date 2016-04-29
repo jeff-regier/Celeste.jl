@@ -69,7 +69,7 @@ function infer_source(images::Vector{TiledImage},
     cat_local = vcat(entry, neighbors)
     vp = Vector{Float64}[Model.init_source(ce) for ce in cat_local]
     patches, tile_source_map = get_tile_source_map(images, cat_local)
-    ea = ElboArgs(images, vp, tile_source_map, patches)
+    ea = ElboArgs(images, vp, tile_source_map, patches, [1])
     fit_object_psfs!(ea, ea.active_sources, images)
     trimmed = trim_source_tiles(1, ea, images; noise_fraction=0.1)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed, ea; max_iters=50)

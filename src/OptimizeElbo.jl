@@ -207,7 +207,7 @@ function maximize_f(
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
       OptimizeElbo.ObjectiveWrapperFunctions(
-        ea -> f(tiled_blob, ea), ea, transform, kept_ids, omitted_ids,
+        ea -> f(ea), ea, transform, kept_ids, omitted_ids,
         fast_hessian=fast_hessian)
 
     # For minimization, which is required by the linesearch algorithm.
