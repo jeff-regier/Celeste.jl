@@ -11,6 +11,65 @@ const FIELD = 269
 
 
 """
+Make a copy of a ModelParams keeping only some sources.
+"""
+function copy_mp_subset{T <: Number}(mp_all::ModelParams{T}, keep_s::Vector{Int})
+    mp = ModelParams(deepcopy(mp_all.vp[keep_s]))
+    mp.active_sources = Int[]
+    mp.patches = Array(SkyPatch, mp.S, size(mp_all.patches, 2))
+
+    # Indices of sources in the new model params
+    for sa in 1:length(keep_s)
+        s = keep_s[sa]
+        mp.patches[sa, :] = mp_all.patches[s, :]
+        if s in mp_all.active_sources
+            push!(mp.active_sources, sa)
+        end
+    end
+
+    @assert length(mp_all.tile_sources) == size(mp_all.patches, 2)
+    num_bands = length(mp_all.tile_sources)
+    mp.tile_sources = Array(Matrix{Vector{Int}}, num_bands)
+    for b=1:num_bands
+        mp.tile_sources[b] = Array(Vector{Int}, size(mp_all.tile_sources[b]))
+        for tile_ind in 1:length(mp_all.tile_sources[b])
+                tile_s = intersect(mp_all.tile_sources[b][tile_ind], keep_s)
+                mp.tile_sources[b][tile_ind] =
+                    Int[ findfirst(keep_s, s) for s in tile_s ]
+        end
+    end
+
+    mp
+end
+
+
+"""
+Get the PSF located at a particular world location in an image.
+
+Args:
+ - world_loc: A location in world coordinates.
+ - img: An TiledImage
+
+Returns:
+ - An array of PsfComponent objects that represents the PSF as a mixture
+   of Gaussians.
+"""
+function get_source_psf(world_loc::Vector{Float64}, img::TiledImage)
+  # Some stamps or simulated data have no raw psf information.  In that case,
+  # just use the psf from the image.
+  if size(img.raw_psf_comp.rrows) == (0, 0)
+    # Also return a vector of empty psf params
+    return img.psf, fill(fill(NaN, length(PsfParams)), psf_K)
+  else
+    pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
+    psfstamp = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
+    return PSF.fit_raw_psf_for_celeste(psfstamp)
+  end
+end
+
+
+
+"""
 Crop an image in place to a (2 * width) x (2 * width) - pixel square centered
 at the world coordinates wcs_center.
 Args:
@@ -96,7 +155,7 @@ function test_blob()
   original_psf_celeste = PSF.fit_raw_psf_for_celeste(original_psf_val)[1];
   fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
-  obj_psf = PSF.get_source_psf(mp_obj.vp[1][ids.u], img)[1];
+  obj_psf = get_source_psf(mp_obj.vp[1][ids.u], img)[1];
   obj_psf_val = PSF.get_psf_at_point(obj_psf);
 
   # The fits should match exactly.
@@ -123,7 +182,7 @@ function test_stamp_get_object_psf()
   original_psf_val = PSF.get_psf_at_point(img.psf);
 
   obj_psf_val =
-    PSF.get_psf_at_point(PSF.get_source_psf(stamp_mp.vp[1][ids.u], img)[1])
+    PSF.get_psf_at_point(get_source_psf(stamp_mp.vp[1][ids.u], img)[1])
   @test_approx_eq_eps(obj_psf_val, original_psf_val, 1e-6)
 end
 
@@ -267,13 +326,11 @@ function test_copy_model_params()
 
   # Pick a single object of interest.
   obj_s = 100
-  objid = mp_all.objids[obj_s]
-  relevant_sources = ModelInit.get_relevant_sources(mp_all, obj_s);
-  mp_all.active_sources = [ obj_s ];
-  mp = ModelParams(mp_all, relevant_sources);
+  neighbor_map = ModelInit.find_neighbors([obj_s], cat_entries, tiled_images)
+  relevant_sources = vcat(obj_s, neighbor_map[1])
 
-  s = findfirst(mp.objids, objid)
-  @test s > 0
+  mp_all.active_sources = [ obj_s ];
+  mp = copy_mp_subset(mp_all, relevant_sources);
 
   # Fit with both and make sure you get the same answer.
   ModelInit.fit_object_psfs!(mp_all, relevant_sources, tiled_images);
@@ -294,9 +351,9 @@ function test_copy_model_params()
 end
 
 
+test_copy_model_params()
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
 test_local_source_candidate()
 test_set_patch_size()
-test_copy_model_params()

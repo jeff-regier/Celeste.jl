@@ -8,6 +8,48 @@ using Compat
 include("derivative_utils.jl")
 
 
+
+"""
+Generate parameters within the given bounds.
+"""
+function generate_valid_parameters(
+    NumType::DataType, bounds_vec::Vector{ParamBounds})
+
+    @assert NumType <: Number
+    S = length(bounds_vec)
+    vp = convert(VariationalParams{NumType},
+                                 [ zeros(NumType, length(ids)) for s = 1:S ])
+        for s=1:S, (param, constraint_vec) in bounds_vec[s]
+        is_box = isa(constraint_vec, Array{ParamBox})
+        if is_box
+            # Box parameters.
+            for ind in 1:length(ids.(param))
+                constraint = constraint_vec[ind]
+                constraint.upper_bound == Inf ?
+                    vp[s][ids.(param)[ind]] = constraint.lower_bound + 1.0:
+                    vp[s][ids.(param)[ind]] =
+                        0.5 * (constraint.upper_bound - constraint.lower_bound) +
+                        constraint.lower_bound
+            end
+        else
+            # Simplex parameters can ignore the bounds.
+            param_size = size(ids.(param))
+            if length(param_size) == 2
+                # matrix simplex
+                for col in 1:param_size[2]
+                    vp[s][ids.(param)[:, col]] = 1 / param_size[1]
+                end
+            else
+                # vector simplex
+                vp[s][ids.(param)] = 1 / length(ids.(param))
+            end
+        end
+        end
+
+    vp
+end
+
+
 function test_transform_sensitive_float()
 	blob, mp, body, tiled_blob = gen_two_body_dataset();
 
@@ -25,7 +67,6 @@ function test_transform_sensitive_float()
 		vp_free_array = reshape(vp_free_vec, length(UnconstrainedParams), length(mp.active_sources))
 		vp_free = Vector{NumType}[ zeros(NumType, length(UnconstrainedParams)) for
 		                           sa in mp.active_sources ];
-		#vp_free = convert(FreeVariationalParams{NumType}, vp_free)
 		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
 		mp_local = forward_diff_model_params(NumType, mp);
 		transform.to_vp!(vp_free, mp_local.vp)
@@ -232,29 +273,6 @@ function test_parameter_conversion()
 end
 
 
-function test_identity_transform()
-	blob, mp, three_bodies = gen_three_body_dataset();
-	omitted_ids = Int[];
-	kept_ids = setdiff(1:length(ids_free), omitted_ids);
-
-	transform = Transform.get_identity_transform(length(ids), mp.S);
-	@test_approx_eq reduce(hcat, mp.vp) reduce(hcat, transform.from_vp(mp.vp))
-	@test_approx_eq reduce(hcat, mp.vp) reduce(hcat, transform.to_vp(mp.vp))
-	xs = transform.vp_to_array(mp.vp, omitted_ids);
-	@test_approx_eq  xs reduce(hcat, mp.vp)
-	vp_new = deepcopy(mp.vp);
-	transform.array_to_vp!(xs, vp_new, omitted_ids);
-	@test_approx_eq reduce(hcat, vp_new) reduce(hcat, mp.vp)
-
-	sf = zero_sensitive_float(CanonicalParams, Float64, mp.S);
-	sf.d = rand(length(ids), mp.S)
-	sf_new = transform.transform_sensitive_float(sf, mp);
-	@test_approx_eq sf_new.v[1] sf.v
-	@test_approx_eq sf_new.d sf.d
-	[ @test_approx_eq sf_new.h[s] sf.h[s] for s=1:mp.S]
-end
-
-
 function test_transform_simplex_functions()
 	function simplex_and_unsimplex{NumType <: Number}(
 			param::Vector{NumType}, simplex_box::Transform.SimplexBox)
@@ -353,6 +371,7 @@ function test_basic_transforms()
 	@test_approx_eq Transform.constrain_to_simplex([Inf, 5]) [1.0, 0.0, 0.0]
 end
 
+
 function test_enforce_bounds()
 	blob, mp, three_bodies = gen_three_body_dataset();
 	transform = get_mp_transform(mp);
@@ -398,7 +417,6 @@ test_transform_sensitive_float()
 test_box_derivatives()
 test_box_simplex_derivatives()
 test_simplex_derivatives()
-test_identity_transform()
 test_parameter_conversion()
 test_transform_simplex_functions()
 test_basic_transforms()

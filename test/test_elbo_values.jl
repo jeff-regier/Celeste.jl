@@ -55,35 +55,39 @@ function test_kl_divergence_values()
 
     # a
     q_a = Bernoulli(vs[ids.a[2]])
-    p_a = Bernoulli(mp.pp.a[2])
-    test_kl(q_a, p_a, () -> ElboDeriv.subtract_kl_a(mp.vp[s], mp.pp))
+    p_a = Bernoulli(prior.a[2])
+    test_kl(q_a, p_a, () -> ElboDeriv.subtract_kl_a(mp.vp[s]))
 
     # k
     q_k = Categorical(vs[ids.k[:, i]])
-    p_k = Categorical(mp.pp.k[:, i])
+    p_k = Categorical(prior.k[:, i])
     function sklk()
         @assert i == 1
-        ElboDeriv.subtract_kl_k(i, mp.vp[s], mp.pp) / vs[ids.a[i]]
+        ElboDeriv.subtract_kl_k(i, mp.vp[s]) / vs[ids.a[i]]
     end
     test_kl(q_k, p_k, sklk)
 
     # c
-    mp.pp.c_mean[:,d,i] = vs[ids.c1[:, i]]
-    mp.pp.c_cov[:,:,d,i] = diagm(vs[ids.c2[:, i]])
+    old_c_mean = deepcopy(prior.c_mean)
+    old_c_cov = deepcopy(prior.c_cov)
+    prior.c_mean[:,d,i] = vs[ids.c1[:, i]]
+    prior.c_cov[:,:,d,i] = diagm(vs[ids.c2[:, i]])
     q_c = MvNormal(vs[ids.c1[:, i]], diagm(vs[ids.c2[:, i]]))
-    p_c = MvNormal(mp.pp.c_mean[:, d, i], mp.pp.c_cov[:, :, d, i])
+    p_c = MvNormal(prior.c_mean[:, d, i], prior.c_cov[:, :, d, i])
     function sklc()
-        ElboDeriv.subtract_kl_c(d, i, mp.vp[s], mp.pp) /
+        ElboDeriv.subtract_kl_c(d, i, mp.vp[s]) /
           vs[ids.a[i]] * vs[ids.k[d, i]]
     end
     test_kl(q_c, p_c, sklc)
+    prior.c_mean[:,:,:] = old_c_mean
+    prior.c_cov[:,:,:] = old_c_cov
 
     # r
     q_r = Normal(vs[ids.r1[i]], sqrt(vs[ids.r2[i]]))
-    p_r = Normal(mp.pp.r_mean[i], sqrt(mp.pp.r_var[i]))
+    p_r = Normal(prior.r_mean[i], sqrt(prior.r_var[i]))
     function sklr()
         @assert i == 1
-        ElboDeriv.subtract_kl_r(i, mp.vp[s], mp.pp) / vs[ids.a[i]]
+        ElboDeriv.subtract_kl_r(i, mp.vp[s]) / vs[ids.a[i]]
     end
     test_kl(q_r, p_r, sklr)
 

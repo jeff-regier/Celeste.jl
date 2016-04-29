@@ -4,12 +4,10 @@ module Celeste
 include("WCSUtils.jl")
 include("Model.jl")
 include("SensitiveFloats.jl")
-include("BivariateNormals.jl")
+include("ElboDeriv.jl")
 include("Transform.jl")
 include("PSF.jl")
 include("SDSSIO.jl")
-include("KL.jl")
-include("ElboDeriv.jl")
 include("OptimizeElbo.jl")
 include("ModelInit.jl")
 

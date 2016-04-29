@@ -98,7 +98,8 @@ function test_star_optimization()
     # a high star probability.
     mp.vp[1][ids.a] = [0.8, 0.2]
     transform = get_mp_transform(mp, loc_width=1.0);
-    OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=false)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood,
+                            tiled_blob, mp, transform, verbose=false)
     verify_sample_star(mp.vp[1], [10.1, 12.2])
 end
 
@@ -120,7 +121,8 @@ function test_single_source_optimization()
 
   ElboDeriv.elbo_likelihood(tiled_blob, mp).v[1]
 
-  OptimizeElbo.maximize_likelihood(tiled_blob, mp, transform, verbose=true)
+  OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood,
+                          tiled_blob, mp, transform, verbose=true)
 
   # Test that it only optimized source s
   @test mp.vp[s] != mp_original.vp[s]
@@ -192,127 +194,16 @@ function test_galaxy_optimization()
     # NLOpt fails here so use newton.
     blob, mp, body, tiled_blob = gen_sample_galaxy_dataset();
     trans = get_mp_transform(mp, loc_width=3.0);
-    OptimizeElbo.maximize_likelihood(tiled_blob, mp, trans, verbose=false)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood,
+                            tiled_blob, mp, trans, verbose=false)
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6])
-end
-
-
-function test_kappa_finding()
-    blob, mp, body, tiled_blob = gen_sample_galaxy_dataset();
-    trans = get_mp_transform(mp, loc_width=1.0);
-    omitted_ids = setdiff(1:length(UnconstrainedParams), ids_free.k[:])
-
-    function get_kl_gal_c()
-        accum = zero_sensitive_float(CanonicalParams)
-        for d in 1:D
-            ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
-        end
-        -accum.v[1]
-    end
-
-    mp.vp[1][ids.k[:, 2]] = [0.01, 0.99]
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 2, 2]
-    lower_klc = get_kl_gal_c()
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 1, 2]
-    higher_klc = get_kl_gal_c()
-    @test lower_klc < higher_klc
-
-    mp.vp[1][ids.k[:, 2]] = [0.99, 0.01]
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 1, 2]
-    lower_klc = get_kl_gal_c()
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 2, 2]
-    higher_klc = get_kl_gal_c()
-    @test lower_klc < higher_klc
-
-    mp.pp.c_cov[:, :, 1, 2] = mp.pp.c_cov[:, :, 2, 2] = eye(4)
-    function klc_wrapper{NumType <: Number}(
-        tiled_blob::TiledBlob, mp::ModelParams{NumType})
-      accum = zero_sensitive_float(CanonicalParams, NumType)
-      for d in 1:D
-          ElboDeriv.subtract_kl_c(d, 2, 1, mp, accum)
-      end
-      accum.v[1]
-    end
-
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 1, 2]
-    mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    lbs, ubs = OptimizeElbo.get_nlopt_unconstrained_bounds(
-      mp.vp, omitted_ids, trans);
-    OptimizeElbo.maximize_f_bfgs(
-      klc_wrapper, tiled_blob, mp, trans, lbs, ubs, omitted_ids=omitted_ids)
-    @test mp.vp[1][ids.k[1, 2]] > .9
-
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 2, 2]
-    mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f_bfgs(
-      klc_wrapper, tiled_blob, mp, trans, lbs, ubs, omitted_ids=omitted_ids)
-    @test mp.vp[1][ids.k[2, 2]] > .9
-
-    mp.pp.k[:, 2] = [.9, .1]
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 1, 2]
-    mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f_bfgs(
-      ElboDeriv.elbo, tiled_blob, mp, trans, lbs, ubs, omitted_ids=omitted_ids)
-    @test mp.vp[1][ids.k[1, 2]] > .9
-
-    mp.pp.k[:, 2] = [.1, .9]
-    mp.vp[1][ids.c1[:,2]] = mp.pp.c_mean[:, 2, 2]
-    mp.vp[1][ids.k[:, 2]] = [0.5, 0.5]
-    OptimizeElbo.maximize_f_bfgs(
-      ElboDeriv.elbo, tiled_blob, mp, trans, lbs, ubs, omitted_ids=omitted_ids)
-    @test mp.vp[1][ids.k[2, 2]] > .9
-end
-
-
-function test_bad_a_init()
-    gal_color_mode = [ 2.47122, 1.832, 4.0, 5.9192, 9.12822]
-    ce = CatalogEntry([7.2, 8.3], false, gal_color_mode, gal_color_mode,
-            0.5, .7, pi/4, .5, "test", 0)
-
-    blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
-    for b in 1:5
-        blob0[b].H, blob0[b].W = 20, 23
-        blob0[b].wcs = SampleData.wcs_id
-    end
-    blob = Synthetic.gen_blob(blob0, [ce,])
-
-    tiled_blob, mp = initialize_celeste(blob, [ce,])
-    trans = get_mp_transform(mp, loc_width=1.0);
-
-    mp.vp[1][ids.a] = [ 0.5, 0.5 ]
-
-    # Use BFGS because Newton doesn't work well with non-convex problems.
-    omitted_ids = [ids_free.a]
-    lbs, ubs = OptimizeElbo.get_nlopt_unconstrained_bounds(
-      mp.vp, omitted_ids, trans);
-    OptimizeElbo.maximize_f_bfgs(
-      ElboDeriv.elbo, tiled_blob, mp, trans, lbs, ubs, omitted_ids=omitted_ids)
-
-    mp.vp[1][ids.a] = [ 0.8, 0.2 ]
-    elbo_bad = ElboDeriv.elbo_likelihood(tiled_blob, mp)
-    @test elbo_bad.d[ids.a[2], 1] > 0
-
-    omitted_ids = setdiff(1:length(UnconstrainedParams), ids_free.a)
-    lbs, ubs = OptimizeElbo.get_nlopt_unconstrained_bounds(
-      mp.vp, omitted_ids, trans);
-    OptimizeElbo.maximize_f_bfgs(
-      ElboDeriv.elbo, tiled_blob, mp, trans, lbs, ubs, omitted_ids=omitted_ids)
-    @test mp.vp[1][ids.a[2]] >= 0.5
-
-    mp2 = deepcopy(mp)
-    mp2.vp[1][ids.a] = [ 0.01, 0.99 ]
-    elbo_true2 = ElboDeriv.elbo_likelihood(tiled_blob, mp2)
-    mp2.vp[1][ids.a] = [ 0.99, 0.01 ]
-    elbo_bad2 = ElboDeriv.elbo_likelihood(tiled_blob, mp2)
-    @test elbo_true2.v[1] > elbo_bad2.v[1]
-    @test elbo_bad2.d[ids.a[2], 1] > 0
 end
 
 
 function test_full_elbo_optimization()
     blob, mp, body, tiled_blob = gen_sample_galaxy_dataset(perturb=true);
     trans = get_mp_transform(mp, loc_width=1.0);
-    OptimizeElbo.maximize_elbo(tiled_blob, mp, trans, xtol_rel=0.0);
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, xtol_rel=0.0);
     verify_sample_galaxy(mp.vp[1], [8.5, 9.6]);
 end
 
@@ -328,34 +219,7 @@ function test_real_stamp_optimization()
 
     tiled_blob, mp = initialize_celeste(blob, cat_entries);
     trans = get_mp_transform(mp, loc_width=1.0);
-    OptimizeElbo.maximize_elbo(tiled_blob, mp, trans, xtol_rel=0.0);
-end
-
-
-function test_color()
-    # TODO: Why was this commented out?  Why is it not passing?
-
-    blob, mp, body, tiled_blob = gen_sample_galaxy_dataset(perturb=true);
-    trans = get_mp_transform(mp, loc_width=1.0);
-
-    # these are a bright star's colors
-    mp.vp[1][ids.c1[:, 1]] = [2.42824, 1.13996, 0.475603, 0.283062]
-    mp.vp[1][ids.c1[:, 2]] = [2.42824, 1.13996, 0.475603, 0.283062]
-
-    function klc_wrapper{NumType <: Number}(
-        tiled_blob::TiledBlob, mp::ModelParams{NumType})
-      accum = zero_sensitive_float(CanonicalParams, NumType, mp.S)
-      for s in 1:mp.S, i in 1:2, d in 1:D
-          ElboDeriv.subtract_kl_c(d, i, s, mp, accum)
-      end
-      accum
-    end
-    omitted_ids = [ids_free.c1[:]]
-    OptimizeElbo.maximize_f(klc_wrapper, tiled_blob, mp, trans,
-        omitted_ids=omitted_ids, ftol_abs=1e-9)
-
-    @test mp.vp[1][ids.a[2]] <= 0.01
-    @test_approx_eq_eps mp.vp[1][ids.k[2, 1]] 1 1e-2
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, mp, trans, xtol_rel=0.0);
 end
 
 
@@ -401,20 +265,11 @@ function test_quadratic_optimization()
     @test_approx_eq_eps quadratic_function(unused_blob, mp).v[1] 0.0 1e-15
 end
 
-####################################################
 
-test_quadratic_optimization()
 test_objective_wrapper()
-#test_objective_hessians()
 test_star_optimization()
 test_galaxy_optimization()
 test_single_source_optimization()
 test_full_elbo_optimization()
 test_real_stamp_optimization()
-
-# These tests are commented out because they mainly test NLopt,
-# which we are no longer using. It isn't straightforward to convert
-# them to testing trust region optimization because they are 1D
-# optimization problems.
-#test_kappa_finding()
-#test_bad_a_init()
+test_quadratic_optimization()
