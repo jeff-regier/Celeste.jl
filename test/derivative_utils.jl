@@ -32,17 +32,16 @@ end
 function forward_diff_model_params{T <: Number}(
             FDType::Type{T},
             base_ea::ElboArgs{Float64})
-    S = length(base_mp.vp)
-    P = length(base_mp.vp[1])
-    ea_fd = ElboArgs{FDType}([zeros(FDType, P) for s=1:S]);
+    P = length(base_ea.vp[1])
+    ea_fd = ElboArgs{FDType}([zeros(FDType, P) for s=1:base_ea.S]);
     # Set the values (but not gradient numbers) for parameters other
     # than the galaxy parameters.
-    for s=1:base_mp.S, i=1:length(ids)
-        ea_fd.vp[s][i] = base_mp.vp[s][i]
+    for s=1:base_ea.S, i=1:length(ids)
+        ea_fd.vp[s][i] = base_ea.vp[s][i]
     end
-    ea_fd.patches = base_mp.patches;
-    ea_fd.tile_sources = base_mp.tile_sources;
-    ea_fd.active_sources = base_mp.active_sources;
+    ea_fd.patches = base_ea.patches;
+    ea_fd.tile_source_map = base_ea.tile_source_map;
+    ea_fd.active_sources = base_ea.active_sources;
     ea_fd
 end
 

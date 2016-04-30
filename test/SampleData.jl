@@ -1,21 +1,20 @@
 module SampleData
 
-using Distributions
-using Celeste, Celeste.Model
-
+using Celeste: Model, ElboDeriv
 import Celeste: WCSUtils, Infer
-import Synthetic
-import WCS, FITSIO, DataFrames
 
-import WCS.WCSTransform
-import Celeste.Model: Image
+import Synthetic
+
+using Distributions
+import WCS, FITSIO, DataFrames
 
 
 export empty_model_params, dat_dir,
        sample_ce, perturb_params,
        sample_star_fluxes, sample_galaxy_fluxes,
        gen_sample_star_dataset, gen_sample_galaxy_dataset,
-       gen_two_body_dataset, gen_three_body_dataset, gen_n_body_dataset
+       gen_two_body_dataset, gen_three_body_dataset, gen_n_body_dataset,
+       make_elbo_args
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "test", "data")
 
@@ -34,19 +33,34 @@ const wcs_id = WCS.WCSTransform(2,
 
 
 """
-Turn a blob and vector of catalog entries into a tiled_blob and model
-parameters that can be used with Celeste.
+Turn a blob and vector of catalog entries into elbo arguments
+that can be used with Celeste.
 """
-function initialize_celeste(
-                    blob::Blob,
-                    cat::Vector{CatalogEntry};
-                    tile_width::Int=20,
-                    fit_psf::Bool=true,
-                    patch_radius::Float64=NaN)
-    tiled_blob = TiledImage[TiledImage(img, tile_width=tile_width) for img in blob]
-    ea = ModelInit.initialize_model_params(tiled_blob, cat,
-                               fit_psf=fit_psf, patch_radius=patch_radius)
-    tiled_blob, ea
+function make_elbo_args(images::Vector{TiledImage},
+                        catalog::Vector{CatalogEntry};
+                        fit_psf::Bool=false,
+                        patch_radius::Float64=NaN)
+    vp = Vector{Float64}[init_source(ce) for ce in catalog]
+    patches, tile_source_map = Infer.get_tile_source_map(images, catalog,
+                                radius_override=patch_radius)
+    active_sources = collect(1:length(catalog))
+    ea = ElboArgs(images, vp, tile_source_map, patches, active_sources)
+    if fit_psf
+        Infer.fit_object_psfs!(ea, ea.active_sources)
+    end
+    ea
+end
+
+
+function make_elbo_args(images::Vector{Image},
+                        catalog::Vector{CatalogEntry};
+                        tile_width::Int=20,
+                        fit_psf::Bool=false,
+                        patch_radius::Float64=NaN)
+    tiled_images = TiledImage[TiledImage(img, tile_width=tile_width)
+         for img in images]
+    make_elbo_args(tiled_images, catalog; fit_psf=fit_psf,
+                                patch_radius=patch_radius)
 end
 
 
@@ -224,11 +238,11 @@ function gen_sample_star_dataset(; perturb=true)
     end
     one_body = [sample_ce([10.1, 12.2], true),]
     blob = Synthetic.gen_blob(blob0, one_body)
-    tiled_blob, ea = initialize_celeste(blob, one_body)
+    ea = make_elbo_args(blob, one_body)
     if perturb
         perturb_params(ea)
     end
-    blob, ea, one_body, tiled_blob
+    blob, ea, one_body
 end
 
 
@@ -241,11 +255,11 @@ function gen_sample_galaxy_dataset(; perturb=true)
     end
     one_body = [sample_ce([8.5, 9.6], false),]
     blob = Synthetic.gen_blob(blob0, one_body)
-    tiled_blob, ea = initialize_celeste(blob, one_body)
+    ea = make_elbo_args(blob, one_body)
     if perturb
         perturb_params(ea)
     end
-    blob, ea, one_body, tiled_blob
+    blob, ea, one_body
 end
 
 function gen_two_body_dataset(; perturb=true)
@@ -263,11 +277,11 @@ function gen_two_body_dataset(; perturb=true)
         sample_ce([10.1, 12.1], true)
     ]
     blob = Synthetic.gen_blob(blob0, two_bodies)
-    tiled_blob, ea = initialize_celeste(blob, two_bodies)
+    ea = make_elbo_args(blob, two_bodies)
     if perturb
         perturb_params(ea)
     end
-    blob, ea, two_bodies, tiled_blob
+    blob, ea, two_bodies
 end
 
 
@@ -285,11 +299,11 @@ function gen_three_body_dataset(; perturb=true)
         sample_ce([71.3, 100.4], false),
     ];
     blob = Synthetic.gen_blob(blob0, three_bodies);
-    tiled_blob, ea = initialize_celeste(blob, three_bodies);
+    ea = make_elbo_args(blob, three_bodies);
     if perturb
         perturb_params(ea)
     end
-    blob, ea, three_bodies, tiled_blob
+    blob, ea, three_bodies
 end
 
 
@@ -330,10 +344,10 @@ function gen_n_body_dataset(
   world_radius_pts = WCSUtils.pix_to_world(
       blob[3].wcs, [patch_pixel_radius 0.; patch_pixel_radius 0.])
   world_radius = maxabs(world_radius_pts[:, 1] - world_radius_pts[:, 2])
-  tiled_blob, ea = initialize_celeste(
+  ea = make_elbo_args(
     blob, S_bodies, tile_width=tile_width, patch_radius=world_radius)
 
-  blob, ea, S_bodies, tiled_blob
+  blob, ea, S_bodies
 end
 
 end # End module

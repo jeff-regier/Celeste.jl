@@ -1,6 +1,7 @@
 ## test the main entry point in Celeste: the `infer` function
 import JLD
 
+
 """
 test infer with a single (run, camcol, field).
 This is basically just to make sure it runs at all.

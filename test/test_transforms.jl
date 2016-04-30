@@ -4,9 +4,7 @@
 using Celeste: Transform, SensitiveFloats
 using Compat
 
-
 include("derivative_utils.jl")
-
 
 
 """
@@ -98,10 +96,6 @@ function test_transform_sensitive_float()
 	@test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
 	@test_approx_eq ad_hess elbo_trans.h
 end
-
-
-
-println("Running transform tests.")
 
 
 function test_box_derivatives()
