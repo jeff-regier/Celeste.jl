@@ -3,8 +3,6 @@ using Base.Test
 using Celeste: Model, Transform, SensitiveFloats
 
 
-println("Running optimization tests.")
-
 function verify_sample_star(vs, pos)
     @test vs[ids.a[2]] <= 0.01
 
@@ -51,21 +49,21 @@ function test_objective_wrapper()
     omitted_ids = Int[];
     kept_ids = setdiff(1:length(ids_free), omitted_ids);
 
-    blob, ea, bodies, tiled_blob = SampleData.gen_three_body_dataset();
+    blob, ea, bodies = SampleData.gen_three_body_dataset();
     # Change the tile size.
-    tiled_blob, ea = initialize_celeste(
+    ea = make_elbo_args(
       blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
     ea.active_sources = Int[2, 3]
     trans = Transform.get_mp_transform(ea, loc_width=1.0);
 
     wrapper =
       OptimizeElbo.ObjectiveWrapperFunctions(
-        ea -> ElboDeriv.elbo(tiled_blob, ea),
+        ea -> ElboDeriv.elbo(ea),
         ea, trans, kept_ids, omitted_ids);
 
     x = trans.vp_to_array(ea.vp, omitted_ids);
     elbo_result =
-      trans.transform_sensitive_float(ElboDeriv.elbo(tiled_blob, ea), ea);
+      trans.transform_sensitive_float(ElboDeriv.elbo(ea), ea);
     elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, si] for
                                si in 1:length(ea.active_sources) ]);
 
@@ -92,43 +90,34 @@ end
 
 
 function test_star_optimization()
-    blob, ea, body, tiled_blob = gen_sample_star_dataset();
+    blob, ea, body = gen_sample_star_dataset();
 
     # Newton's method converges on a small galaxy unless we start with
     # a high star probability.
     ea.vp[1][ids.a] = [0.8, 0.2]
-    transform = get_mp_transform(ea, loc_width=1.0);
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood,
-                            tiled_blob, ea, transform, verbose=false)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, ea; loc_width=1.0)
     verify_sample_star(ea.vp[1], [10.1, 12.2])
 end
 
 
 function test_single_source_optimization()
-  blob, ea, three_bodies, tiled_blob = gen_three_body_dataset();
+    blob, ea, three_bodies = gen_three_body_dataset();
 
-  # Change the tile size.
-  tiled_blob, ea = initialize_celeste(
-  blob, three_bodies, tile_width=10, fit_psf=false);
-  ea_original = deepcopy(ea);
+    # Change the tile size.
+    ea = make_elbo_args(blob, three_bodies, tile_width=10, fit_psf=false);
+    ea_original = deepcopy(ea);
 
-  s = 2
-  ea.active_sources = Int[s]
-  transform = get_mp_transform(ea, loc_width=1.0);
+    s = 2
+    ea.active_sources = Int[s]
+    omitted_ids = Int[]
+    ElboDeriv.elbo_likelihood(ea).v[1]
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, ea; loc_width=false)
 
-  f = ElboDeriv.elbo;
-  omitted_ids = Int[]
-
-  ElboDeriv.elbo_likelihood(tiled_blob, ea).v[1]
-
-  OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood,
-                          tiled_blob, ea, transform, verbose=true)
-
-  # Test that it only optimized source s
-  @test ea.vp[s] != ea_original.vp[s]
-  for other_s in setdiff(1:ea.S, s)
-    @test_approx_eq ea.vp[other_s] ea_original.vp[other_s]
-  end
+    # Test that it only optimized source s
+    @test ea.vp[s] != ea_original.vp[s]
+    for other_s in setdiff(1:ea.S, s)
+        @test_approx_eq ea.vp[other_s] ea_original.vp[other_s]
+    end
 end
 
 
@@ -162,10 +151,10 @@ function test_two_body_optimization_newton()
 
     newton_image =
       ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], ea_newton,
-                                     ea_newton.tile_sources[3][1,1]);
+                                     ea_newton.tile_source_map[3][1,1]);
     bfgs_image =
       ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], ea_bfgs,
-                                     ea_bfgs.tile_sources[3][1,1]);
+                                     ea_bfgs.tile_source_map[3][1,1]);
     original_image = tiled_blob[3][1,1].pixels;
 
     PyPlot.figure()
@@ -217,9 +206,8 @@ function test_real_stamp_optimization()
         ce.pos[1] < 61 && ce.pos[2] < 61
     cat_entries = filter(inbounds, cat_entries);
 
-    tiled_blob, ea = initialize_celeste(blob, cat_entries);
-    trans = get_mp_transform(ea, loc_width=1.0);
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, ea, trans, xtol_rel=0.0);
+    ea = make_elbo_args(blob, cat_entries);
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, ea; loc_width=1.0, xtol_rel=0.0);
 end
 
 

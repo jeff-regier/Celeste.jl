@@ -195,6 +195,7 @@ Returns:
 """
 function maximize_f(f::Function,
                     ea::ElboArgs;
+                    loc_width=1.5e-3,
                     omitted_ids=Int[],
                     xtol_rel = 1e-7,
                     ftol_abs = 1e-6,
@@ -202,7 +203,7 @@ function maximize_f(f::Function,
                     max_iters=50,
                     rho_lower=0.25,
                     fast_hessian=true)
-    transform = get_mp_transform(ea)
+    transform = get_mp_transform(ea, loc_width=loc_width)
 
     # Make sure the model parameters are within the transform bounds
     enforce_bounds!(ea, transform)

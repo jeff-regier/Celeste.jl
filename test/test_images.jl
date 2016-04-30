@@ -2,45 +2,10 @@ using Base.Test
 using DataFrames
 import WCS
 
-println("Running SkyImages tests.")
 
 const RUN = 3900
 const CAMCOL = 6
 const FIELD = 269
-
-
-
-"""
-Make a copy of a ElboArgs keeping only some sources.
-"""
-function copy_mp_subset{T <: Number}(ea_all::ElboArgs{T}, keep_s::Vector{Int})
-    ea = ElboArgs(deepcopy(ea_all.vp[keep_s]))
-    ea.active_sources = Int[]
-    ea.patches = Array(SkyPatch, ea.S, size(ea_all.patches, 2))
-
-    # Indices of sources in the new model params
-    for sa in 1:length(keep_s)
-        s = keep_s[sa]
-        ea.patches[sa, :] = ea_all.patches[s, :]
-        if s in ea_all.active_sources
-            push!(ea.active_sources, sa)
-        end
-    end
-
-    @assert length(ea_all.tile_sources) == size(ea_all.patches, 2)
-    num_bands = length(ea_all.tile_sources)
-    ea.tile_sources = Array(Matrix{Vector{Int}}, num_bands)
-    for b=1:num_bands
-        ea.tile_sources[b] = Array(Vector{Int}, size(ea_all.tile_sources[b]))
-        for tile_ind in 1:length(ea_all.tile_sources[b])
-                tile_s = intersect(ea_all.tile_sources[b][tile_ind], keep_s)
-                ea.tile_sources[b][tile_ind] =
-                    Int[ findfirst(keep_s, s) for s in tile_s ]
-        end
-    end
-
-    ea
-end
 
 
 """
@@ -116,9 +81,8 @@ function test_blob()
     fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
     cat_entries = SDSSIO.read_photoobj_celeste(fname)
 
-    tiled_blob, ea = initialize_celeste(blob, cat_entries,
-                                                                                                patch_radius=1e-6,
-                                                                                                fit_psf=false, tile_width=20)
+    ea = make_elbo_args(blob, cat_entries,
+                       patch_radius=1e-6, fit_psf=false, tile_width=20)
 
     # Just check some basic facts about the catalog.
     @test length(cat_entries) == 805
@@ -138,17 +102,16 @@ function test_blob()
         # Check that it only has one tile of the right size containing the object.
         @assert length(cropped_blob[b].tiles) == 1
         patches = vec(ea.patches[:, b])
-        tile_sources = Model.get_local_sources(cropped_blob[b].tiles[1],
+        tile_source_map = Model.get_local_sources(cropped_blob[b].tiles[1],
                                                Model.patch_ctrs_pix(patches),
                                                Model.patch_radii_pix(patches))
-        @test obj_index in tile_sources
+        @test obj_index in tile_source_map
     end
 
     # Test get_source_psf at point while we have the blob loaded.
     test_b = 3
-    img = tiled_blob[test_b]
-    ea_obj = ModelInit.initialize_model_params(tiled_blob,
-                                               cat_entries[obj_index:obj_index])
+    img = ea.images[test_b]
+    ea_obj = make_elbo_args(cropped_blob, cat_entries[obj_index:obj_index])
     pixel_loc = WCS.world_to_pix(img.wcs, obj_loc);
     original_psf_val = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
 
@@ -164,9 +127,8 @@ function test_blob()
     # The raw psf will not be as good.
     @test_approx_eq_eps(obj_psf_val, original_psf_val, 1e-2)
 
-    ea_several =
-        ModelInit.initialize_model_params(
-            tiled_blob, [cat_entries[1]; cat_entries[obj_index]]);
+    cat_several = [cat_entries[1]; cat_entries[obj_index]]
+    ea_several = make_elbo_args(ea_obj.images, cat_several)
 
     # The second set of vp is the object of interest
     point_patch_psf = PSF.get_psf_at_point(ea_several.patches[2, test_b].psf);
@@ -189,10 +151,9 @@ end
 
 function test_get_tiled_image_source()
     # Test that an object only occurs the appropriate tile's local sources.
-    blob, ea, body, tiled_blob = gen_sample_star_dataset();
+    blob, ea, body = gen_sample_star_dataset();
 
-    ea = ModelInit.initialize_model_params(
-        tiled_blob, body; patch_radius=1e-6)
+    ea = make_elbo_args(blob, body; patch_radius=1e-6)
 
     tiled_img = TiledImage(blob[3], tile_width=10);
     for hh in 1:size(tiled_img.tiles, 1), ww in 1:size(tiled_img.tiles, 2)
@@ -228,27 +189,27 @@ function test_local_source_candidate()
 
     # This is run by gen_n_body_dataset but put it here for safe testing in
     # case that changes.
-    ea = ModelInit.initialize_model_params(tiled_blob, body);
+    ea = make_elbo_args(tiled_blob, body);
 
     for b=1:length(tiled_blob)
         # Get the sources by iterating over everything.
         patches = vec(ea.patches[:,b])
 
-        tile_sources = Model.get_sources_per_tile(tiled_blob[b].tiles,
-                                                                                            Model.patch_ctrs_pix(patches),
-                                                                                            Model.patch_radii_pix(patches))
+        tile_source_map = Model.get_sources_per_tile(tiled_blob[b].tiles,
+                        Model.patch_ctrs_pix(patches),
+                        Model.patch_radii_pix(patches))
 
         # Check that all the actual sources are candidates and that this is the
-        # same as what is returned by initialize_model_params.
-        HH, WW = size(tile_sources)
+        # same as what is returned by make_elbo_args
+        HH, WW = size(tile_source_map)
         for h=1:HH, w=1:WW
             # Get a set of candidates.
             candidates = Model.local_source_candidates(
                                                 tiled_blob[b].tiles[h, w],
                                                 Model.patch_ctrs_pix(patches),
                                                 Model.patch_radii_pix(patches))
-            @test setdiff(tile_sources[h, w], candidates) == []
-            @test tile_sources[h, w] == ea.tile_sources[b][h, w]
+            @test setdiff(tile_source_map[h, w], candidates) == []
+            @test tile_source_map[h, w] == ea.tile_source_map[b][h, w]
         end
     end
 end
@@ -279,13 +240,12 @@ function test_set_patch_size()
     for gal_scale in [1.0, 10.0], flux_scale in [0.1, 10.0]
         cat = gal_catalog_from_scale(gal_scale, flux_scale);
         blob = Synthetic.gen_blob(blob0, cat);
-        tiled_blob, ea =
-            initialize_celeste(blob, cat, tile_width=typemax(Int));
+        ea = make_elbo_args(blob, cat, tile_width=typemax(Int));
 
         for b=1:length(blob)
             @assert size(tiled_blob[b].tiles) == (1, 1)
             tile_image = ElboDeriv.tile_predicted_image(
-                tiled_blob[b].tiles[1,1], ea, ea.tile_sources[b][1,1]);
+                tiled_blob[b].tiles[1,1], ea, ea.tile_source_map[b][1,1]);
 
             pixel_center = WCS.world_to_pix(blob[b].wcs, cat[1].pos)
             radius = Model.choose_patch_radius(
@@ -311,47 +271,6 @@ function test_set_patch_size()
 end
 
 
-function test_copy_model_params()
-    # A lot of tests are in a single function to avoid having to reload
-    # the full image multiple times.
-    images = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir);
-
-    # Make sure that ElboArgs can handle more than five images (issue #203)
-    push!(images, deepcopy(images[1]));
-    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
-    cat_entries = SDSSIO.read_photoobj_celeste(fname);
-
-    tiled_images, ea_all =
-        initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
-
-    # Pick a single object of interest.
-    obj_s = 100
-    neighbor_map = Infer.find_neighbors([obj_s], cat_entries, tiled_images)
-    relevant_sources = vcat(obj_s, neighbor_map[1])
-
-    ea_all.active_sources = [ obj_s ];
-    ea = copy_mp_subset(ea_all, relevant_sources);
-
-    # Fit with both and make sure you get the same answer.
-    Infer.fit_object_psfs!(ea_all, relevant_sources, tiled_images);
-    Infer.fit_object_psfs!(ea, collect(1:ea.S), tiled_images);
-
-    @test ea.S == length(relevant_sources)
-    for sa in 1:length(relevant_sources)
-        s = relevant_sources[sa]
-        @test_approx_eq ea.vp[sa] ea_all.vp[s]
-    end
-
-    elbo_all = ElboDeriv.elbo(tiled_images, ea_all);
-    elbo = ElboDeriv.elbo(tiled_images, ea);
-
-    @test_approx_eq elbo_all.v elbo.v
-    @test_approx_eq elbo_all.d elbo.d
-    @test_approx_eq elbo_all.h elbo.h
-end
-
-
-test_copy_model_params()
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
