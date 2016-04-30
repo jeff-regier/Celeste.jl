@@ -117,10 +117,10 @@ function test_real_image()
 
     # Limit to very few pixels so that the autodiff is reasonably fast.
     s = ea.active_sources[1]
-    ea_very_trimmed = deepcopy(ea)
-    Infer.trim_source_tiles!(ea_very_trimmed; noise_fraction=10.,
-                                                min_radius_pix=1.0)
-    elbo = ElboDeriv.elbo(ea_very_trimmed)
+    ea2 = deepcopy(ea)
+    ea2.image = Infer.trim_source_tiles(ea; noise_fraction=10.,
+                                            min_radius_pix=1.0)
+    elbo = ElboDeriv.elbo(ea2)
 
     function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
         vp_array =

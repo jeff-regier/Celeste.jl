@@ -33,6 +33,7 @@ function forward_diff_model_params{T <: Number}(
             FDType::Type{T},
             base_ea::ElboArgs{Float64})
     P = length(base_ea.vp[1])
+    vp = FDTypes[zeros(FDType, P) for s=1:base_ea.S]
     ea_fd = ElboArgs{FDType}([zeros(FDType, P) for s=1:base_ea.S]);
     # Set the values (but not gradient numbers) for parameters other
     # than the galaxy parameters.
