@@ -71,7 +71,7 @@ function infer_source(images::Vector{TiledImage},
     patches, tile_source_map = get_tile_source_map(images, cat_local)
     ea = ElboArgs(images, vp, tile_source_map, patches, [1])
     fit_object_psfs!(ea, ea.active_sources)
-    trim_source_tiles!(ea)
+    ea.images = trim_source_tiles(ea)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, ea)
     vp[1]
 end
@@ -169,14 +169,23 @@ Arguments:
   noise_fraction: The proportion of the noise below which we will remove pixels.
   min_radius_pix: A minimum pixel radius to be included.
 """
-function trim_source_tiles!(ea::ElboArgs{Float64},
-                            noise_fraction::Float64=0.1,
-                            min_radius_pix::Float64=8.0)
+function trim_source_tiles(ea::ElboArgs{Float64};
+                            noise_fraction=0.1,
+                            min_radius_pix=8.0)
     @assert length(ea.active_sources) == 1
     s = ea.active_sources[1]
 
+    images_out = Array(TiledImage, ea.N)
+
     for i = 1:ea.N
-        tiles = ea.images[i].tiles
+        img = ea.images[i]
+        tiles = img.tiles
+
+        tiles_out = Array(ImageTile, size(tiles)...)
+        images_out[i] = TiledImage(img.H, img.W, tiles_out, img.tile_width,
+                                img.b, img.wcs,
+                                img.psf, img.run_num, img.camcol_num, 
+                                img.field_num, img.raw_psf_comp)
 
         patch = ea.patches[s, i]
         pix_loc = WCSUtils.world_to_pix(patch.wcs_jacobian, 
@@ -190,6 +199,7 @@ function trim_source_tiles!(ea::ElboArgs{Float64},
 
             tile_source_map = ea.tile_source_map[i][hh, ww]
             if s in tile_source_map
+                tiles_out[hh, ww] = deepcopy(tile)
                 pred_tile_pixels =
                     ElboDeriv.tile_predicted_image(tile, ea, [ s ],
                                                    include_epsilon=false)
@@ -204,13 +214,13 @@ function trim_source_tiles!(ea::ElboArgs{Float64},
                         (h - pix_loc[1]) ^ 2 + (w - pix_loc[2])^2 < min_radius_pix^2
 
                     if !(bright_pixel || close_pixel)
-                        tiles[hh, ww].pixels[h_im, w_im] = NaN
+                        tiles_out[hh, ww].pixels[h_im, w_im] = NaN
                     end
                 end
             else
                 # TODO: Make a TiledBlob simply an array of an array of tiles
                 # rather than a 2d array to avoid this hack.
-                tiles[hh, ww] = ImageTile(i, tile.h_range, tile.w_range,
+                tiles_out[hh, ww] = ImageTile(i, tile.h_range, tile.w_range,
                                              tile.h_width, tile.w_width,
                                              Array(Float64, 0, 0),
                                              Array(Float64, 0, 0),
@@ -218,6 +228,9 @@ function trim_source_tiles!(ea::ElboArgs{Float64},
             end
         end
     end
+
+    # TODO: modify ea in place, by mutating ea.images, not what ea.images points to
+    images_out
 end
 
 

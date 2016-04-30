@@ -307,7 +307,7 @@ function test_tiny_image_tiling()
   trivial_psf = [pc, pc, pc]
   pixels = ones(100, 1) * 12
   pixels[98:100, 1] = [1e3, 1e4, 1e5]
-  img = Image(3, 1, pixels, 3, blob0[3].wcs, trivial_psf, 1, 1, 1,
+  img = Image(3, 1, pixels, 1, blob0[3].wcs, trivial_psf, 1, 1, 1,
               fill(3., size(pixels)), fill(4., size(pixels, 1)),
               blob0[3].raw_psf_comp);
   catalog = [sample_ce([100., 1], true),];
@@ -316,11 +316,12 @@ function test_tiny_image_tiling()
   ea0 = make_elbo_args(
     [img], catalog, patch_radius=Inf)
 
+  println(size(ea0.patches))
   elbo_lik = ElboDeriv.elbo_likelihood(ea0;
         calculate_derivs=false, calculate_hessian=false);
 
   tile_width = 2
-  ea1 = initialize_celeste(
+  ea1 = make_elbo_args(
     [img], catalog, tile_width=tile_width, patch_radius=10.);
   elbo_lik_tiles =
     ElboDeriv.elbo_likelihood(
@@ -342,15 +343,15 @@ end
 function test_elbo_with_nan()
     blob, ea, body = gen_sample_star_dataset(perturb=false);
 
-    # Set tile width to 5 to test the code for tiles with no sources.
-    ea = initialize_celeste(blob, body, tile_width=5);
-    initial_elbo = ElboDeriv.elbo(ea; calculate_hessian=false);
-
     for b in 1:5
         blob[b].pixels[1,1] = NaN
     end
 
-    nan_elbo = ElboDeriv.elbo(tiled_blob, ea);
+    # Set tile width to 5 to test the code for tiles with no sources.
+    ea = make_elbo_args(blob, body, tile_width=5);
+    initial_elbo = ElboDeriv.elbo(ea; calculate_hessian=false);
+
+    nan_elbo = ElboDeriv.elbo(ea);
 
     # We deleted a pixel, so there's reason to expect them to be different,
     # but importantly they're reasonably close and not NaN.
@@ -365,9 +366,9 @@ function test_trim_source_tiles()
   blob, ea, bodies = gen_n_body_dataset(3, seed=42);
 
   # With the above seed, this is near the middle of the image.
-  s = 1
+  ea.active_sources = [1]
   trimmed_tiled_blob = 
-      Infer.trim_source_tiles(s, ea, tiled_blob, noise_fraction=0.1);
+      Infer.trim_source_tiles(ea; noise_fraction=0.1);
   loc_ids = ids.u
   non_loc_ids = setdiff(1:length(ids), ids.u)
   for b=1:length(blob)
@@ -375,11 +376,14 @@ function test_trim_source_tiles()
     # Make sure pixels got NaN-ed out
     @test(
       sum([ sum(!Base.isnan(tile.pixels)) for tile in trimmed_tiled_blob[b].tiles]) <
-      sum([ sum(!Base.isnan(tile.pixels)) for tile in tiled_blob[b].tiles]))
+      sum([ sum(!Base.isnan(tile.pixels)) for tile in ea.images[b].tiles]))
     s_tiles = find_source_tiles(s, b, ea)
     ea.active_sources = [s];
-    elbo_full = ElboDeriv.elbo(tiled_blob, ea; calculate_hessian=false);
-    elbo_trim = ElboDeriv.elbo(trimmed_tiled_blob, ea; calculate_hessian=false);
+    elbo_full = ElboDeriv.elbo(ea; calculate_hessian=false);
+
+    ea_trimmed = deepcopy(ea)
+    ea_trimmed.images = trimmmed_tiled_blob
+    elbo_trim = ElboDeriv.elbo(ea2; calculate_hessian=false);
     @test_approx_eq_eps(
       elbo_full.d[loc_ids, 1] ./ elbo_trim.d[loc_ids, 1],
       fill(1.0, length(loc_ids)), 0.06)
@@ -399,7 +403,7 @@ function test_trim_source_tiles()
   min_radius_pix = 6.0
   trimmed_tiled_blob = 
       Infer.trim_source_tiles(
-        s, ea, tiled_blob, noise_fraction=0.1, min_radius_pix = min_radius_pix);
+        ea, noise_fraction=0.1, min_radius_pix = min_radius_pix);
 
   total_nonempty_pixels = 0.0
   for tile_index in s_tiles
@@ -426,11 +430,11 @@ end
 
 ####################################################
 
+#test_trim_source_tiles()
+test_tiny_image_tiling()
 test_kl_divergence_values()
 test_that_variance_is_low()
 test_that_star_truth_is_most_likely()
 test_that_galaxy_truth_is_most_likely()
 test_coadd_cat_init_is_most_likely()
-test_tiny_image_tiling()
-#test_elbo_with_nan()
-test_trim_source_tiles()
+test_elbo_with_nan()

@@ -111,7 +111,7 @@ function test_single_source_optimization()
     ea.active_sources = Int[s]
     omitted_ids = Int[]
     ElboDeriv.elbo_likelihood(ea).v[1]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, ea; loc_width=false)
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, ea; loc_width=1.0)
 
     # Test that it only optimized source s
     @test ea.vp[s] != ea_original.vp[s]
@@ -181,18 +181,15 @@ end
 
 function test_galaxy_optimization()
     # NLOpt fails here so use newton.
-    blob, ea, body, tiled_blob = gen_sample_galaxy_dataset();
-    trans = get_mp_transform(ea, loc_width=3.0);
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood,
-                            tiled_blob, ea, trans, verbose=false)
+    blob, ea, body = gen_sample_galaxy_dataset();
+    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, ea; loc_width=3.0)
     verify_sample_galaxy(ea.vp[1], [8.5, 9.6])
 end
 
 
 function test_full_elbo_optimization()
-    blob, ea, body, tiled_blob = gen_sample_galaxy_dataset(perturb=true);
-    trans = get_mp_transform(ea, loc_width=1.0);
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, tiled_blob, ea, trans, xtol_rel=0.0);
+    blob, ea, body = gen_sample_galaxy_dataset(perturb=true);
+    OptimizeElbo.maximize_f(ElboDeriv.elbo, ea; loc_width=1.0, xtol_rel=0.0);
     verify_sample_galaxy(ea.vp[1], [8.5, 9.6]);
 end
 

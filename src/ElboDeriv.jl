@@ -443,6 +443,9 @@ function populate_fsm_vecs!{NumType <: Number}(
                     star_mcs::Array{BvnComponent{NumType}, 2})
     x = Float64[tile.h_range[h], tile.w_range[w]]
     for s in tile_source_map
+        # TODO: tile.b should refer to the tile's band, not the the index of
+        # the image that contains the tile!!! potentially this is a really
+        # bad bug
         wcs_jacobian = ea.patches[s, tile.b].wcs_jacobian
         active_source = s in ea.active_sources
 
