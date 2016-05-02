@@ -247,7 +247,7 @@ function test_quadratic_optimization()
 end
 
 
-#test_quadratic_optimization()
+test_quadratic_optimization()
 test_objective_wrapper()
 test_star_optimization()
 test_galaxy_optimization()
