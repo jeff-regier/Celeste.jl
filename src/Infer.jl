@@ -90,7 +90,7 @@ function infer_source(images::Vector{TiledImage},
     patches, tile_source_map = get_tile_source_map(images, cat_local)
     ea = ElboArgs(images, vp, tile_source_map, patches, [1])
     fit_object_psfs!(ea, ea.active_sources)
-    ea.images = trim_source_tiles(ea)
+    trim_source_tiles!(ea)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, ea)
     vp[1]
 end
@@ -191,7 +191,7 @@ Arguments:
   noise_fraction: The proportion of the noise below which we will remove pixels.
   min_radius_pix: A minimum pixel radius to be included.
 """
-function trim_source_tiles(ea::ElboArgs{Float64};
+function trim_source_tiles!(ea::ElboArgs{Float64};
                             noise_fraction=0.1,
                             min_radius_pix=8.0)
     @assert length(ea.active_sources) == 1
@@ -250,8 +250,9 @@ function trim_source_tiles(ea::ElboArgs{Float64};
         end
     end
 
-    # TODO: modify ea in place, by mutating ea.images, not what ea.images points to
-    images_out
+    # Note: We're changing the images ea points to---the original images aren't
+    # mutated
+    ea.images = images_out
 end
 
 
