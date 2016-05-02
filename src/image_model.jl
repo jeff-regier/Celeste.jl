@@ -185,9 +185,3 @@ function get_containing_tile(pixel_crds::Vector{Float64}, img::TiledImage)
     img.tiles[ht, wt]
 end
 
-
-# TODO: remove these types...they don't make anything more clear
-typealias Blob Vector{Image}
-typealias TiledBlob Vector{TiledImage}
-
-

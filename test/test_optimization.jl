@@ -129,12 +129,12 @@ function test_two_body_optimization_newton()
     blob, ea, two_bodies, tiled_blob = SampleData.gen_two_body_dataset();
 
     trans = get_mp_transform(ea, loc_width=1.0);
-    function lik_function(tiled_blob::TiledBlob, ea::ElboArgs)
+    function lik_function(tiled_blob::Vector{TiledImage}, ea::ElboArgs)
       ElboDeriv.elbo_likelihood(tiled_blob, ea)
     end
     omitted_ids = [ids_free.k[:]; ids_free.c2[:]; ids_free.r2]
 
-    function elbo_function(tiled_blob::TiledBlob, ea::ElboArgs)
+    function elbo_function(tiled_blob::Vector{TiledImage}, ea::ElboArgs)
       ElboDeriv.elbo(tiled_blob, ea)
     end
     omitted_ids = Int[]
