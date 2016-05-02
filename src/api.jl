@@ -4,12 +4,11 @@ import Logging
 
 using .Model
 import .SDSSIO
-import .ModelInit
+import .Infer
 import .OptimizeElbo
 
 
 const TILE_WIDTH = 20
-const DEFAULT_MAX_ITERS = 50
 const MIN_FLUX = 2.0
 
 # Use distributed parallelism (with Dtree)
@@ -296,7 +295,6 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                ra_range=(-1000., 1000.),
                dec_range=(-1000., 1000.),
                primary_initialization=true,
-               max_iters=DEFAULT_MAX_ITERS,
                reserve_thread=Ref(false),
                thread_fun=phalse,
                timing=InferTiming())
@@ -347,7 +345,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
     Logging.info("finding neighbors")
     tic()
-    neighbor_map = ModelInit.find_neighbors(target_sources, catalog, images)
+    neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
     Logging.info("neighbors found in ", toq(), " seconds")
 
     reserve_thread[] && thread_fun(reserve_thread)
@@ -367,46 +365,28 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
             s = target_sources[ts]
             entry = catalog[s]
 
-            try
+#            try
                 nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
                 gc()
 
                 t0 = time()
-                relevant_sources = vcat(s, neighbor_map[ts])
-                cat_local = catalog[relevant_sources]
-                mp = ModelInit.initialize_model_params(images, cat_local, fit_psf=false)
-                sa = findfirst(relevant_sources, s)
-                mp.active_sources = Int[ sa ]
-                init_time = time() - t0
-
-                t0 = time()
-                ModelInit.fit_object_psfs!(mp, mp.active_sources, images)
-                psf_time = time() - t0
-
-                t0 = time()
-                trimmed = ModelInit.trim_source_tiles(sa, mp, images;
-                                              noise_fraction=0.1)
-                trim_time = time() - t0
-
-                t0 = time()
-                iter_count, max_f, max_x, result =
-                    OptimizeElbo.maximize_f(ElboDeriv.elbo, trimmed, mp;
-                                            verbose=false, max_iters=max_iters)
-                opt_time = time() - t0
+                # TODO: subset images to images_local too.
+                vs_opt = Infer.infer_source(images,
+                                            catalog[neighbor_map[ts]],
+                                            entry)
+                runtime = time() - t0
 
                 lock!(results_lock)
-                results[entry.thing_id] = Dict("objid"=>entry.objid,
-                                               "ra"=>entry.pos[1],
-                                               "dec"=>entry.pos[2],
-                                               "vs"=>mp.vp[sa],
-                                               "init_time"=>init_time,
-                                               "psf_time"=>psf_time,
-                                               "trim_time"=>trim_time,
-                                               "opt_time"=>opt_time)
+                results[entry.thing_id] = Dict(
+                             "objid"=>entry.objid,
+                             "ra"=>entry.pos[1],
+                             "dec"=>entry.pos[2],
+                             "vs"=>vs_opt,
+                             "runtime"=>runtime)
                 unlock!(results_lock)
-            catch ex
-                Logging.err(ex)
-            end
+#            catch ex
+#                Logging.err(ex)
+#            end
         end
     end
     timing.opt_srcs = toq()

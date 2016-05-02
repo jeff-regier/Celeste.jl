@@ -227,13 +227,13 @@ A convenience function for getting only the brightness parameters
 from model parameters.
 
 Args:
-  mp: Model parameters
+  ea: Model parameters
 
 Returns:
   An array of E_l_a and E_ll_a for each source.
 """
-function get_brightness{NumType <: Number}(mp::ModelParams{NumType})
-    brightness = [SourceBrightness(mp.vp[s]) for s in mp.S]
+function get_brightness{NumType <: Number}(ea::ElboArgs{NumType})
+    brightness = [SourceBrightness(ea.vp[s]) for s in ea.S]
     brightness_vals = [ Float64[b.E_l_a[i, j].v[1] for
         i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
     brightness_squares = [ Float64[b.E_l_a[i, j].v[1] for
@@ -248,17 +248,17 @@ Load the source brightnesses for these model params.  Each SourceBrightness
 object has information for all bands and object types.
 
 Returns:
-  - An array of SourceBrightness objects for each object in 1:mp.S.  Only
-    sources in mp.active_sources will have derivative information.
+  - An array of SourceBrightness objects for each object in 1:ea.S.  Only
+    sources in ea.active_sources will have derivative information.
 """
 function load_source_brightnesses{NumType <: Number}(
-    mp::ModelParams{NumType};
+    ea::ElboArgs{NumType};
     calculate_derivs::Bool=true, calculate_hessian::Bool=true)
 
-  sbs = Array(SourceBrightness{NumType}, mp.S)
-  for s in 1:mp.S
-    calculate_this_deriv = (s in mp.active_sources) && calculate_derivs
-    sbs[s] = SourceBrightness(mp.vp[s],
+  sbs = Array(SourceBrightness{NumType}, ea.S)
+  for s in 1:ea.S
+    calculate_this_deriv = (s in ea.active_sources) && calculate_derivs
+    sbs[s] = SourceBrightness(ea.vp[s],
       calculate_derivs=calculate_this_deriv, calculate_hessian=calculate_hessian)
   end
   sbs

@@ -5,11 +5,12 @@ export CatalogEntry,
        Image, Blob, TiledImage, TiledBlob, ImageTile, 
        SkyPatch, PsfComponent,
        GalaxyComponent, GalaxyPrototype,
-       ModelParams, PriorParams, UnconstrainedParams,
+       PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,
        VariationalParams, FreeVariationalParams,
-       PsfParams, RawPSF, CatalogEntry
+       PsfParams, RawPSF, CatalogEntry,
+       init_source
 
 # functions
 export align
@@ -47,7 +48,13 @@ include("psf_model.jl")
 include("image_model.jl")
 include("param_set.jl")
 include("imaged_sources.jl")
-include("model_params.jl")
 
+
+# A vector of variational parameters.  The outer index is
+# of celestial objects, and the inner index is over individual
+# parameters for that object (referenced using ParamIndex).
+
+typealias VariationalParams{NumType <: Number} Vector{Vector{NumType}}
+typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 
 end  # module

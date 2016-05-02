@@ -3,8 +3,6 @@ using Distributions
 using SensitiveFloats
 include("../src/elbo_kl.jl")
 
-println("Running KL tests.")
-
 
 function verify_kl(q_dist, p_dist, claimed_kl::Float64)
     sample_size = 4_000_000

@@ -1,5 +1,3 @@
-println("Running WCSUtils tests.")
-
 import WCS: world_to_pix, pix_to_world
 
 import DataFrames
