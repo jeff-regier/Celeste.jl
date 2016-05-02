@@ -144,7 +144,7 @@ function test_real_image()
     patches, tile_source_map = Infer.get_tile_source_map(tiled_images, cat_local)
     ea = ElboArgs(tiled_images, vp, tile_source_map, patches, [1])
     Infer.fit_object_psfs!(ea, ea.active_sources)
-    ea.images = Infer.trim_source_tiles(ea)
+    Infer.trim_source_tiles!(ea)
 
     elbo = ElboDeriv.elbo(ea)
 
