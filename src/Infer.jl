@@ -240,7 +240,7 @@ function trim_source_tiles(ea::ElboArgs{Float64};
                     end
                 end
             else
-                # TODO: Make a TiledBlob simply an array of an array of tiles
+                # TODO: Make tiles simply a vector
                 # rather than a 2d array to avoid this hack.
                 tiles_out[hh, ww] = ImageTile(i, tile.h_range, tile.w_range,
                                              tile.h_width, tile.w_width,

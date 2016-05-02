@@ -72,7 +72,7 @@ end
 """
 Set all but a few pixels to NaN to speed up autodiff Hessian testing.
 """
-function trim_tiles!(tiled_blob::TiledBlob, keep_pixels)
+function trim_tiles!(tiled_blob::Vector{TiledImage}, keep_pixels)
     for b = 1:length(tiled_blob)
 	    tiled_blob[b].tiles[1,1].pixels[
 			setdiff(1:tiled_blob[b].tiles[1,1].h_width, keep_pixels), :] = NaN

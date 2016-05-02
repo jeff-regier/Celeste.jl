@@ -2,7 +2,7 @@ module Model
 
 # parameter types
 export CatalogEntry,
-       Image, Blob, TiledImage, TiledBlob, ImageTile, 
+       Image, TiledImage, ImageTile,
        SkyPatch, PsfComponent,
        GalaxyComponent, GalaxyPrototype,
        PriorParams, UnconstrainedParams,
