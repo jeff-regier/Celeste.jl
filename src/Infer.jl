@@ -243,7 +243,6 @@ function trim_source_tiles(ea::ElboArgs{Float64};
                 # TODO: Make tiles simply a vector
                 # rather than a 2d array to avoid this hack.
                 tiles_out[hh, ww] = ImageTile(i, tile.h_range, tile.w_range,
-                                             tile.h_width, tile.w_width,
                                              Array(Float64, 0, 0),
                                              Array(Float64, 0, 0),
                                              Array(Float64, 0))
