@@ -49,8 +49,6 @@ refuses to parallelize.
 Attributes:
 - h_range: The h pixel locations of the tile in the original image
 - w_range: The w pixel locations of the tile in the original image
-- h_width: The width of the tile in the h direction
-- w_width: The width of the tile in the w direction
 - pixels: The pixel values
 - remainder: the same as in the Image type.
 """
@@ -59,59 +57,10 @@ immutable ImageTile
 
     h_range::UnitRange{Int}
     w_range::UnitRange{Int}
-    h_width::Int
-    w_width::Int
     pixels::Matrix{Float32}
 
     epsilon_mat::Matrix{Float32}
     iota_vec::Vector{Float32}
-end
-
-
-"""
-Return the range of image pixels in an ImageTile.
-
-Args:
-  - hh: The tile row index (in 1:number of tile rows)
-  - ww: The tile column index (in 1:number of tile columns)
-  - H: The number of pixel rows in the image
-  - W: The number of pixel columns in the image
-  - tile_width: The width and height of a tile in pixels
-"""
-function tile_range(hh::Int, ww::Int, H::Int, W::Int, tile_width::Int)
-    h1 = 1 + (hh - 1) * tile_width
-    h2 = min(hh * tile_width, H)
-    w1 = 1 + (ww - 1) * tile_width
-    w2 = min(ww * tile_width, W)
-    h1:h2, w1:w2
-end
-
-
-"""
-Constructs an image tile from specific image pixels.
-
-Args:
-    - img: The Image to be broken into tiles
-    - h_range: A UnitRange for the h pixels
-    - w_range: A UnitRange for the w pixels
-    - hh: Optional h index in tile coordinates
-    - ww: Optional w index in tile coordinates
-"""
-function ImageTile(img::Image,
-                   h_range::UnitRange{Int},
-                   w_range::UnitRange{Int};
-                   hh::Int=1,
-                   ww::Int=1)
-    h_width = maximum(h_range) - minimum(h_range) + 1
-    w_width = maximum(w_range) - minimum(w_range) + 1
-
-    pixels = img.pixels[h_range, w_range]
-    epsilon_mat = img.epsilon_mat[h_range, w_range]
-    iota_vec = img.iota_vec[h_range]
-
-    ImageTile(img.b,
-              h_range, w_range, h_width, w_width,
-              pixels, epsilon_mat, iota_vec)
 end
 
 
@@ -125,8 +74,21 @@ Args:
     - tile_width: The width and height of a tile in pixels
 """
 function ImageTile(hh::Int, ww::Int, img::Image, tile_width::Int)
-    h_range, w_range = tile_range(hh, ww, img.H, img.W, tile_width)
-    ImageTile(img, h_range, w_range; hh=hh, ww=ww)
+    h1 = 1 + (hh - 1) * tile_width
+    h2 = min(hh * tile_width, img.H)
+    h_range = h1:h2
+
+    w1 = 1 + (ww - 1) * tile_width
+    w2 = min(ww * tile_width, img.W)
+    w_range = w1:w2
+
+    pixels = img.pixels[h_range, w_range]
+    epsilon_mat = img.epsilon_mat[h_range, w_range]
+    iota_vec = img.iota_vec[h_range]
+
+    ImageTile(img.b,
+              h_range, w_range,
+              pixels, epsilon_mat, iota_vec)
 end
 
 
@@ -139,7 +101,6 @@ type TiledImage
     W::Int
 
     # subimages
-    # TODO: use Float32 instead
     tiles::Matrix{ImageTile}
 
     # all tiles have the same height and width

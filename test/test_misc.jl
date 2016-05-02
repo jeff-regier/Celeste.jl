@@ -21,7 +21,8 @@ function test_tile_image()
     end
 
     tile = tiles[2, 2]
-    for h in 1:tile.h_width, w in 1:tile.w_width
+    h_width, w_width = size(tile.pixels)
+    for h in 1:h_width, w in 1:w_width
         @test tile.pixels[h, w] == img.pixels[tile.h_range[h], tile.w_range[w]]
     end
 end

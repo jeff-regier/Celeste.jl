@@ -65,7 +65,8 @@ function local_source_candidates(tile::ImageTile,
     # center of the tile.  These are candidates for having some
     # overlap with the tile.
     tile_center = (mean(tile.h_range), mean(tile.w_range))
-    tile_diag = (0.5 ^ 2) * (tile.h_width ^ 2 + tile.w_width ^ 2)
+    h_width, w_width = size(tile.pixels)
+    tile_diag = (0.5 ^ 2) * (h_width ^ 2 + w_width ^ 2)
 
     for s in 1:length(patch_ctrs)
         patch_dist = (tile_center[1] - patch_ctrs[s][1])^2
@@ -95,14 +96,15 @@ function get_local_sources(tile::ImageTile,
     @assert length(patch_ctrs) == length(patch_radii_px)
     tile_source_map = Int[]
     tile_ctr = (mean(tile.h_range), mean(tile.w_range))
+    h_width, w_width = size(tile.pixels)
 
     for i in eachindex(patch_ctrs)
         patch_ctr = patch_ctrs[i]
         patch_r = patch_radii_px[i]
 
         # This is a "ball" in the infinity norm.
-        if ((abs(tile_ctr[1] - patch_ctr[1]) < patch_r + 0.5 * tile.h_width) &&
-            (abs(tile_ctr[2] - patch_ctr[2]) < patch_r + 0.5 * tile.w_width))
+        if ((abs(tile_ctr[1] - patch_ctr[1]) < patch_r + 0.5 * h_width) &&
+            (abs(tile_ctr[2] - patch_ctr[2]) < patch_r + 0.5 * w_width))
             push!(tile_source_map, i)
         end
     end

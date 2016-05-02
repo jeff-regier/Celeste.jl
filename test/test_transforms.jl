@@ -54,10 +54,10 @@ function test_transform_sensitive_float()
 	# Only keep a few pixels to make the autodiff results faster.
   keep_pixels = 10:11
 	for b = 1:ea.N
-	  ea.images[b].tiles[1,1].pixels[
-			setdiff(1:ea.images[b].tiles[1,1].h_width, keep_pixels), :] = NaN;
-	  ea.images[b].tiles[1,1].pixels[
-			:, setdiff(1:ea.images[b].tiles[1,1].w_width, keep_pixels)] = NaN;
+	  pixels1 = ea.images[b].tiles[1,1].pixels
+      h_width, w_width = size(pixels1)
+	  pixels1[setdiff(1:h_width, keep_pixels), :] = NaN;
+	  pixels1[:, setdiff(1:w_width, keep_pixels)] = NaN;
 	end
 
 

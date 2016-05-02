@@ -31,8 +31,7 @@ object of the appropriate type. Used for testing with forward
 autodifferentiation.
 """
 function unwrap_vp_vector{NumType <: Number}(
-        vp_vec::Vector{NumType}, ea::ElboArgs)
-
+            vp_vec::Vector{NumType}, ea::ElboArgs)
     vp_array = reshape(vp_vec, length(CanonicalParams), length(ea.active_sources))
     ea_local = forward_diff_model_params(NumType, ea)
     for sa = 1:length(ea.active_sources)
@@ -74,10 +73,10 @@ Set all but a few pixels to NaN to speed up autodiff Hessian testing.
 """
 function trim_tiles!(tiled_blob::Vector{TiledImage}, keep_pixels)
     for b = 1:length(tiled_blob)
-	    tiled_blob[b].tiles[1,1].pixels[
-			setdiff(1:tiled_blob[b].tiles[1,1].h_width, keep_pixels), :] = NaN
-	    tiled_blob[b].tiles[1,1].pixels[
-			:, setdiff(1:tiled_blob[b].tiles[1,1].w_width, keep_pixels)] = NaN
+	    pixels1 = tiled_blob[b].tiles[1,1].pixels
+        h_width, w_width = size(pixels1)
+	    pixels1[setdiff(1:h_width, keep_pixels), :] = NaN
+        pixels1[:, setdiff(1:w_width, keep_pixels)] = NaN
 	end
 end
 

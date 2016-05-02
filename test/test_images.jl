@@ -33,46 +33,6 @@ function get_source_psf(world_loc::Vector{Float64}, img::TiledImage)
 end
 
 
-
-"""
-Crop an image in place to a (2 * width) x (2 * width) - pixel square centered
-at the world coordinates wcs_center.
-Args:
-    - blob: The field to crop
-    - width: The width in pixels of each quadrant
-    - wcs_center: A location in world coordinates (e.g. the location of a
-                                celestial body)
-
-Returns:
-    - A tiled blob with a single tile in each image centered at wcs_center.
-        This can be used to investigate a certain celestial object in a single
-        tiled blob, for example.
-"""
-function crop_blob_to_location(
-    blob::Array{Image, 1},
-    width::Int,
-    wcs_center::Vector{Float64})
-        @assert length(wcs_center) == 2
-        @assert width > 0
-
-        tiled_blob = Array(TiledImage, length(blob))
-        for b=1:length(blob)
-                # Get the pixels that are near enough to the wcs_center.
-                pix_center = WCS.world_to_pix(blob[b].wcs, wcs_center)
-                h_min = max(floor(Int, pix_center[1] - width), 1)
-                h_max = min(ceil(Int, pix_center[1] + width), blob[b].H)
-                sub_rows_h = h_min:h_max
-
-                w_min = max(floor(Int, (pix_center[2] - width)), 1)
-                w_max = min(ceil(Int, pix_center[2] + width), blob[b].W)
-                sub_rows_w = w_min:w_max
-                tiled_blob[b] = TiledImage(blob[b], tile_width=width)
-                tiled_blob[b].tiles = fill(ImageTile(blob[b], sub_rows_h, sub_rows_w), 1, 1)
-        end
-        tiled_blob
-end
-
-
 function test_blob()
     # A lot of tests are in a single function to avoid having to reload
     # the full image multiple times.
@@ -95,23 +55,10 @@ function test_blob()
     obj_index = findmin(dist)[2]    # index of closest object
     obj_loc = cat_entries[obj_index].pos    # location of closest object
 
-    # Test cropping.
-    width = 5
-    cropped_blob = crop_blob_to_location(blob, width, obj_loc);
-    for b=1:length(blob)
-        # Check that it only has one tile of the right size containing the object.
-        @assert length(cropped_blob[b].tiles) == 1
-        patches = vec(ea.patches[:, b])
-        tile_source_map = Model.get_local_sources(cropped_blob[b].tiles[1],
-                                               Model.patch_ctrs_pix(patches),
-                                               Model.patch_radii_pix(patches))
-        @test obj_index in tile_source_map
-    end
-
     # Test get_source_psf at point while we have the blob loaded.
     test_b = 3
     img = ea.images[test_b]
-    ea_obj = make_elbo_args(cropped_blob, cat_entries[obj_index:obj_index])
+    ea_obj = make_elbo_args(blob, cat_entries[obj_index:obj_index])
     pixel_loc = WCS.world_to_pix(img.wcs, obj_loc);
     original_psf_val = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
 
@@ -269,8 +216,8 @@ function test_set_patch_size()
 end
 
 
+test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
 test_local_source_candidate()
 test_set_patch_size()
-test_blob()
