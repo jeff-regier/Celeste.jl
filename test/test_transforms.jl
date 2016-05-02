@@ -49,15 +49,15 @@ end
 
 
 function test_transform_sensitive_float()
-	blob, ea, body, tiled_blob = gen_two_body_dataset();
+	blob, ea, body = gen_two_body_dataset();
 
 	# Only keep a few pixels to make the autodiff results faster.
   keep_pixels = 10:11
-	for b = 1:length(tiled_blob)
-	  tiled_blob[b].tiles[1,1].pixels[
-			setdiff(1:tiled_blob[b].tiles[1,1].h_width, keep_pixels), :] = NaN;
-	  tiled_blob[b].tiles[1,1].pixels[
-			:, setdiff(1:tiled_blob[b].tiles[1,1].w_width, keep_pixels)] = NaN;
+	for b = 1:ea.N
+	  ea.images[b].tiles[1,1].pixels[
+			setdiff(1:ea.images[b].tiles[1,1].h_width, keep_pixels), :] = NaN;
+	  ea.images[b].tiles[1,1].pixels[
+			:, setdiff(1:ea.images[b].tiles[1,1].w_width, keep_pixels)] = NaN;
 	end
 
 
@@ -68,12 +68,12 @@ function test_transform_sensitive_float()
 		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
 		ea_local = forward_diff_model_params(NumType, ea);
 		transform.to_vp!(vp_free, ea_local.vp)
-		elbo = ElboDeriv.elbo(tiled_blob, ea_local, calculate_derivs=false)
+		elbo = ElboDeriv.elbo(ea_local, calculate_derivs=false)
 		elbo.v[1]
 	end
 
 	transform = Transform.get_mp_transform(ea, loc_width=1.0);
-	elbo = ElboDeriv.elbo(tiled_blob, ea);
+	elbo = ElboDeriv.elbo(ea);
 	elbo_trans = transform.transform_sensitive_float(elbo, ea);
 
 	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
@@ -86,7 +86,7 @@ function test_transform_sensitive_float()
   # Test with a subset of sources.
 	ea.active_sources = [2]
 	transform = Transform.get_mp_transform(ea, loc_width=1.0);
-	elbo = ElboDeriv.elbo(tiled_blob, ea);
+	elbo = ElboDeriv.elbo(ea);
 	elbo_trans = transform.transform_sensitive_float(elbo, ea);
 
 	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
