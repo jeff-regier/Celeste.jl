@@ -13,7 +13,8 @@ export ElboArgs
 
 
 """
-ElboArgs stores the arguments needed to call Elbo
+ElboArgs stores the arguments needed to evaluate the variational objective
+function
 """
 type ElboArgs{NumType <: Number}
     S::Int64
@@ -67,8 +68,6 @@ Returns:
     - Galaxy type
     - Source (index within active_sources)
   Hessians are only populated for s in ea.active_sources.
-
-The PSF contains three components, so you see lots of 3's below.
 """
 function load_bvn_mixtures{NumType <: Number}(
     ea::ElboArgs{NumType}, b::Int;
@@ -961,15 +960,14 @@ end
 
 """
 Produce a predicted image for a given tile and model parameters.
+If include_epsilon is true, then the background is also rendered.
+Otherwise, only pixels from the object are rendered.
 
 Args:
     - tile: An ImageTile
     - ea: Model parameters
     - tile_source_map: A vector of integers of sources in 1:ea.S affecting the tile
     - include_epsilon: Whether the background noise should be included
-
-If include_epsilon is true, then the background is also rendered.
-Otherwise, only pixels from the object are rendered.
 """
 function tile_predicted_image{NumType <: Number}(
                     tile::ImageTile,

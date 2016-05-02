@@ -9,6 +9,16 @@ import ..PSF
 import ..OptimizeElbo
 
 
+
+"""
+Computes the nearby light sources in the catalog for each of the target
+sources.
+
+Arguments:
+    target_sources: indexes of astronomical objects in the catalog to infer
+    catalog: astronomical objects appearing the images
+    images: tiled astronomical images
+"""
 function find_neighbors(target_sources::Vector{Int64},
                         catalog::Vector{CatalogEntry},
                         images::Vector{TiledImage})
@@ -63,6 +73,15 @@ function find_neighbors(target_sources::Vector{Int64},
 end
 
 
+"""
+Infers one light source. This routine is intended to be called in parallel,
+once per target light source.
+
+Arguments:
+    images: a collection of (tiled) astronomical images
+    neighbors: the other light sources near `entry`
+    entry: the source to infer
+"""
 function infer_source(images::Vector{TiledImage},
                       neighbors::Vector{CatalogEntry},
                       entry::CatalogEntry)
@@ -77,6 +96,10 @@ function infer_source(images::Vector{TiledImage},
 end
 
 
+"""
+For tile of each image, compute a list of the indexes of the catalog entries
+that may be relevant to determining the likelihood of that tile.
+"""
 function get_tile_source_map(images::Vector{TiledImage},
                              catalog::Vector{CatalogEntry};
                              radius_override=NaN)
@@ -119,8 +142,7 @@ end
 
 
 """
-Updates patches in place with fitted psfs for each source in
-relevant_sources.
+Updates patches in place with fitted psfs for each active source.
 """
 function fit_object_psfs!{NumType <: Number}(
                         ea::ElboArgs{NumType}, 
@@ -161,8 +183,8 @@ end
 
 
 """
-Set any pixels significantly below background noise for the
-specified source to NaN.
+Set any pixels significantly below background noise for the specified source
+to NaN.
 
 Arguments:
   ea: The ElboArgs object
