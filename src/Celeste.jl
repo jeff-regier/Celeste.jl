@@ -14,6 +14,7 @@ include("Infer.jl")
 # public API
 export infer, score_field
 include("api.jl")
+include("nersc_io.jl")
 include("score.jl")
 
 end # module

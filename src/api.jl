@@ -395,7 +395,3 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     results
 end
 
-
-# NERSC-specific functions, for input and output to the routines above
-include("nersc_io.jl")
-
