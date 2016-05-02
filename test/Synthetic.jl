@@ -3,7 +3,7 @@ module Synthetic
 export gen_blob
 
 using Celeste, Celeste.Model
-import Celeste: ModelInit, WCSUtils, ElboDeriv
+import Celeste: Infer, WCSUtils, ElboDeriv
 
 
 import Distributions

@@ -1,8 +1,8 @@
 #!/usr/bin/env julia
 
-using Celeste: Model
+using Celeste: Model, ElboDeriv
 
-import Celeste: WCSUtils, ModelInit, ElboDeriv, Model, ModelInit
+import Celeste: WCSUtils, Infer, ElboDeriv
 import Celeste: PSF, OptimizeElbo, SDSSIO, SensitiveFloats, Transform
 
 include("Synthetic.jl")
@@ -28,21 +28,6 @@ run(`make RUN=4263 CAMCOL=5 FIELD=119`)
 cd(wd)
 
 
-"""
-Turn a blob and vector of catalog entries into a tiled_blob and model
-parameters that can be used with Celeste.
-"""
-function initialize_celeste(
-        blob::Blob, cat::Vector{CatalogEntry};
-        tile_width::Int=20, fit_psf::Bool=true,
-        patch_radius::Float64=NaN)
-    tiled_blob = TiledImage[TiledImage(img, tile_width=tile_width) for img in blob]
-    mp = ModelInit.initialize_model_params(tiled_blob, cat,
-                               fit_psf=fit_psf, patch_radius=patch_radius)
-    tiled_blob, mp
-end
-
-
 if length(ARGS) > 0
     testfiles = ["test_$(arg).jl" for arg in ARGS]
 else
@@ -62,6 +47,7 @@ end
 
 for testfile in testfiles
     try
+        println("Running ", testfile)
         include(testfile)
         println("\t\033[1m\033[32mPASSED\033[0m: $(testfile)")
     catch e

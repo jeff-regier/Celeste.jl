@@ -3,7 +3,7 @@ module OptimizeElbo
 using ..Model
 using ..SensitiveFloats
 using ..Transform
-import ..ElboDeriv
+using ..ElboDeriv
 
 import DataFrames
 import Optim
@@ -37,7 +37,7 @@ type ObjectiveWrapperFunctions
 
     state::WrapperState
     transform::DataTransform
-    mp::ModelParams{Float64}
+    ea::ElboArgs{Float64}
     kept_ids::Array{Int}
     omitted_ids::Array{Int}
 
@@ -46,24 +46,24 @@ type ObjectiveWrapperFunctions
     last_x::Vector{Float64}
 
     # Arguments:
-    #  f: A function that takes in ModelParams and returns a SensitiveFloat.
-    #  mp: Initial ModelParams
-    #  transform: A DataTransform that matches ModelParams
+    #  f: A function that takes in ElboArgs and returns a SensitiveFloat.
+    #  ea: Initial ElboArgs
+    #  transform: A DataTransform that matches ElboArgs
     #  kept_ids: The free parameter ids to keep
     #  omitted_ids: The free parameter ids to omit (TODO: this is redundant)
     #  fast_hessian: Evaluate the forward autodiff Hessian using only
-    #                mp.active_sources to speed up computation.
+    #                ea.active_sources to speed up computation.
     function ObjectiveWrapperFunctions(
-      f::Function, mp::ModelParams{Float64}, transform::DataTransform,
+      f::Function, ea::ElboArgs{Float64}, transform::DataTransform,
       kept_ids::Array{Int, 1}, omitted_ids::Array{Int, 1};
       fast_hessian::Bool=true)
 
         x_length = length(kept_ids) * transform.active_S
         x_size = (length(kept_ids), transform.active_S)
-        @assert transform.active_sources == mp.active_sources
+        @assert transform.active_sources == ea.active_sources
 
         last_sf =
-          zero_sensitive_float(UnconstrainedParams, length(mp.active_sources))
+          zero_sensitive_float(UnconstrainedParams, length(ea.active_sources))
         last_x = [ NaN ]
 
         state = WrapperState(0, false, 10, 1.0)
@@ -100,14 +100,14 @@ type ObjectiveWrapperFunctions
           else
             state.f_evals += 1
             # Evaluate in the constrained space and then unconstrain again.
-            transform.array_to_vp!(reshape(x, x_size), mp.vp, omitted_ids)
-            f_res = f(mp)
+            transform.array_to_vp!(reshape(x, x_size), ea.vp, omitted_ids)
+            f_res = f(ea)
 
             # TODO: Add an option to print either the transformed or
             # free parameterizations.
-            print_status(mp.vp[mp.active_sources],
+            print_status(ea.vp[ea.active_sources],
                          f_res.v[1], f_res.d)
-            f_res_trans = transform.transform_sensitive_float(f_res, mp)
+            f_res_trans = transform.transform_sensitive_float(f_res, ea)
 
             # Cache the result.
             last_x = deepcopy(x)
@@ -166,7 +166,7 @@ type ObjectiveWrapperFunctions
 
         new(f_objective, f_value_grad, f_value_grad!,
             f_value, f_grad, f_grad!, f_hessian, f_hessian!,
-            state, transform, mp, kept_ids, omitted_ids, last_sf)
+            state, transform, ea, kept_ids, omitted_ids, last_sf)
     end
 end
 
@@ -176,11 +176,9 @@ Optimizes f using Newton's method and exact Hessians.  For now, it is
 not clear whether this or BFGS is better, so it is kept as a separate function.
 
 Args:
-  - f: A function that takes a tiled_blob and constrained coordinates
+  - f: A function that takes elbo args and constrained coordinates
        (e.g. ElboDeriv.elbo)
-  - tiled_blob: Input for f
-  - mp: Constrained initial ModelParams
-  - transform: The data transform to be applied before optimizing.
+  - ea: Constrained initial ElboArgs
   - lbs: An array of lower bounds (in the transformed space)
   - ubs: An array of upper bounds (in the transformed space)
   - omitted_ids: Omitted ids from the _unconstrained_ parameterization
@@ -195,29 +193,33 @@ Returns:
   - max_x: The optimal function input
   - ret: The return code of optimize()
 """
-function maximize_f(
-              f::Function, tiled_blob::TiledBlob, mp::ModelParams,
-              transform::Transform.DataTransform;
-              omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose=false,
-              max_iters=100, rho_lower=0.25, fast_hessian=true)
-
+function maximize_f(f::Function,
+                    ea::ElboArgs,
+                    transform::DataTransform;
+                    omitted_ids=Int[],
+                    xtol_rel=1e-7,
+                    ftol_abs=1e-6,
+                    verbose=false,
+                    max_iters=50,
+                    rho_lower=0.25,
+                    fast_hessian=true)
     # Make sure the model parameters are within the transform bounds
-    enforce_bounds!(mp, transform)
+    enforce_bounds!(ea, transform)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
-      OptimizeElbo.ObjectiveWrapperFunctions(
-        mp -> f(tiled_blob, mp), mp, transform, kept_ids, omitted_ids,
-        fast_hessian=fast_hessian)
+        OptimizeElbo.ObjectiveWrapperFunctions(
+                ea -> f(ea), ea, transform, kept_ids, omitted_ids,
+                fast_hessian=fast_hessian)
 
     # For minimization, which is required by the linesearch algorithm.
     optim_obj_wrap.state.scale = -1.0
     optim_obj_wrap.state.verbose = verbose
 
-    x0 = transform.vp_to_array(mp.vp, omitted_ids)
+    x0 = transform.vp_to_array(ea.vp, omitted_ids)
     d = Optim.TwiceDifferentiableFunction(
-      optim_obj_wrap.f_value, optim_obj_wrap.f_grad!,
-      optim_obj_wrap.f_hessian!)
+            optim_obj_wrap.f_value, optim_obj_wrap.f_grad!,
+            optim_obj_wrap.f_hessian!)
 
     # TODO: use the Optim version after newton_tr is merged.
     nm_result = newton_tr(d,
@@ -235,7 +237,7 @@ function maximize_f(
 
     iter_count = optim_obj_wrap.state.f_evals
     transform.array_to_vp!(reshape(nm_result.minimum, size(x0)),
-                           mp.vp, omitted_ids)
+                           ea.vp, omitted_ids)
     max_f = -1.0 * nm_result.f_minimum
     max_x = nm_result.minimum
 
@@ -245,15 +247,28 @@ function maximize_f(
 end
 
 
-function maximize_f(f::Function, tiled_blob::TiledBlob, mp::ModelParams;
-                omitted_ids=Int[], xtol_rel = 1e-7, ftol_abs = 1e-6, verbose = false,
-                max_iters = 100)
-    # Use the default transform.
-    transform = get_mp_transform(mp)
-    maximize_f(f, tiled_blob, mp, transform,
-      omitted_ids=omitted_ids, xtol_rel=xtol_rel, ftol_abs=ftol_abs,
-      verbose=verbose, max_iters=max_iters)
+function maximize_f(f::Function,
+                    ea::ElboArgs;
+                    loc_width=1.5e-3,
+                    omitted_ids=Int[],
+                    xtol_rel=1e-7,
+                    ftol_abs=1e-6,
+                    verbose=false,
+                    max_iters=50,
+                    rho_lower=0.25,
+                    fast_hessian=true)
+    transform = get_mp_transform(ea, loc_width=loc_width)
+
+    maximize_f(f, ea, transform;
+                omitted_ids=omitted_ids,
+                xtol_rel=xtol_rel,
+                ftol_abs=ftol_abs,
+                verbose=verbose,
+                max_iters=max_iters,
+                rho_lower=rho_lower,
+                fast_hessian=fast_hessian)
 end
 
 
 end
+

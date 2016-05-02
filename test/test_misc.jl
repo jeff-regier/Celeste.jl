@@ -3,15 +3,13 @@ using Base.Test
 import Celeste.Model: patch_ctrs_pix, patch_radii_pix
 
 
-println("Running misc tests.")
-
 function test_tile_image()
-  blob, mp, three_bodies = gen_three_body_dataset();
-  img = blob[3];
-  tile_width = 20;
-  img.epsilon_mat = rand(size(img.pixels));
-  img.iota_vec = rand(size(img.pixels, 1));
-  tiles = Model.TiledImage(img; tile_width=tile_width).tiles;
+  blob, ea, three_bodies = gen_three_body_dataset()
+  img = blob[3]
+  tile_width = 20
+  img.epsilon_mat = rand(size(img.pixels))
+  img.iota_vec = rand(size(img.pixels, 1))
+  tiles = Model.TiledImage(img; tile_width=tile_width).tiles
   @test size(tiles) == (
     ceil(Int, img.H  / tile_width),
     ceil(Int, img.W / tile_width))
@@ -32,7 +30,7 @@ function test_local_sources()
     # Coarse test that local_sources gets the right objects.
 
     srand(1)
-    blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
+    blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")
     for b in 1:5
         blob0[b].H, blob0[b].W = 112, 238
         blob0[b].wcs = SampleData.wcs_id
@@ -44,45 +42,42 @@ function test_local_sources()
         sample_ce([71.3, 100.4], false),
     ]
 
-    blob = Synthetic.gen_blob(blob0, three_bodies);
+    blob = Synthetic.gen_blob(blob0, three_bodies)
     tiled_blob = TiledImage[TiledImage(img; tile_width=20) for img in blob]
 
-    tile = ImageTile(1, 1, blob[3], 1000);
+    tile = ImageTile(1, 1, blob[3], 1000)
 
-    mp = ModelInit.initialize_model_params(
-      tiled_blob, three_bodies; patch_radius=20.);
-    @test mp.S == 3
+    ea = make_elbo_args(
+      tiled_blob, three_bodies; patch_radius=20.)
+    @test ea.S == 3
 
-    patches = vec(mp.patches[:, 3])
+    patches = vec(ea.patches[:, 3])
     subset1000 = Model.get_local_sources(tile, patch_ctrs_pix(patches),
                                              patch_radii_pix(patches))
     @test subset1000 == [1,2,3]
 
     tile_width = 10
-    tile = ImageTile(1, 1, blob[3], tile_width);
-    ModelInit.initialize_model_params(
-      tiled_blob, three_bodies; patch_radius=20.);
+    tile = ImageTile(1, 1, blob[3], tile_width)
+    make_elbo_args(tiled_blob, three_bodies; patch_radius=20.)
 
-    patches = vec(mp.patches[:, 3])
+    patches = vec(ea.patches[:, 3])
     subset10 = Model.get_local_sources(tile, patch_ctrs_pix(patches),
                                            patch_radii_pix(patches))
     @test subset10 == [1]
 
     last_tile = ImageTile(11, 24, blob[3], tile_width)
-    ModelInit.initialize_model_params(
-      tiled_blob, three_bodies; patch_radius=20.)
+    make_elbo_args(tiled_blob, three_bodies; patch_radius=20.)
 
-    patches = vec(mp.patches[:, 3])
+    patches = vec(ea.patches[:, 3])
     last_subset = Model.get_local_sources(last_tile,
                                               patch_ctrs_pix(patches),
                                               patch_radii_pix(patches))
     @test length(last_subset) == 0
 
     pop_tile = ImageTile(7, 9, blob[3], tile_width)
-    ModelInit.initialize_model_params(
-      tiled_blob, three_bodies; patch_radius=20.);
+    make_elbo_args(tiled_blob, three_bodies; patch_radius=20.)
 
-    patches = vec(mp.patches[:, 3])
+    patches = vec(ea.patches[:, 3])
     pop_subset = Model.get_local_sources(pop_tile, patch_ctrs_pix(patches),
                                              patch_radii_pix(patches))
 
@@ -96,25 +91,23 @@ function test_local_sources_2()
     # the polygon logic.)
 
     srand(1)
-    blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
+    blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")
     one_body = [sample_ce([50., 50.], true),]
     for b in 1:5 blob0[b].wcs = SampleData.wcs_id end
 
     for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
-    small_blob = Synthetic.gen_blob(blob0, one_body);
+    small_blob = Synthetic.gen_blob(blob0, one_body)
 
     for b in 1:5 blob0[b].H, blob0[b].W = 400, 400 end
-    big_blob = Synthetic.gen_blob(blob0, one_body);
+    big_blob = Synthetic.gen_blob(blob0, one_body)
 
-    small_tiled_blob, mp_small = initialize_celeste(
-      small_blob, one_body, patch_radius=35.);
+    ea_small = make_elbo_args(small_blob, one_body, patch_radius=35.)
     small_source_tiles =
-      [ sum([ length(s) > 0 for s in source ]) for source in mp_small.tile_sources ]
+      [ sum([ length(s) > 0 for s in source ]) for source in ea_small.tile_source_map ]
 
-    big_tiled_blob, mp_big = initialize_celeste(
-      big_blob, one_body, patch_radius=35.);
+    ea_big = make_elbo_args(big_blob, one_body, patch_radius=35.)
     big_source_tiles =
-      [ sum([ length(s) > 0 for s in source ]) for source in mp_big.tile_sources ]
+      [ sum([ length(s) > 0 for s in source ]) for source in ea_big.tile_source_map ]
 
     @test all(big_source_tiles .== small_source_tiles)
 end
@@ -126,13 +119,13 @@ function test_local_sources_3()
     srand(1)
     test_b = 3 # Will test using this band only
     pix_loc = Float64[50., 50.]
-    blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
+    blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")
     body_loc = WCSUtils.pix_to_world(blob0[test_b].wcs, pix_loc)
     one_body = [sample_ce(body_loc, true),]
 
     # Get synthetic blobs but with the original world coordinates.
     for b in 1:5 blob0[b].H, blob0[b].W = 100, 100 end
-    blob = Synthetic.gen_blob(blob0, one_body);
+    blob = Synthetic.gen_blob(blob0, one_body)
     for b in 1:5 blob[b].wcs = blob0[b].wcs end
 
     tile_width = 1
@@ -146,17 +139,16 @@ function test_local_sources_3()
     diags = [world_quad[:, i] - world_quad[:, i+2] for i=1:2]
     patch_radius = maximum([sqrt(dot(d, d)) for d in diags])
 
-    tiled_blob, mp = initialize_celeste(
-      blob, one_body, patch_radius=patch_radius);
+    ea = make_elbo_args(blob, one_body, patch_radius=patch_radius)
 
     # Source should be present
     tile = ImageTile(
         round(Int, pix_loc[1] / tile_width),
         round(Int, pix_loc[2] / tile_width),
         blob[test_b],
-        tile_width);
+        tile_width)
 
-    patches = vec(mp.patches[:,test_b])
+    patches = vec(ea.patches[:,test_b])
     @test Model.get_local_sources(tile, patch_ctrs_pix(patches),
                                       patch_radii_pix(patches)) == [1]
 
@@ -185,7 +177,7 @@ end
 
 function test_sky_noise_estimates()
     blobs = Array(Blob, 2)
-    blobs[1], mp, three_bodies = gen_three_body_dataset()  # synthetic
+    blobs[1], ea, three_bodies = gen_three_body_dataset()  # synthetic
     blobs[2] = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")  # real
 
     for blob in blobs
