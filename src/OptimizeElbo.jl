@@ -194,17 +194,15 @@ Returns:
   - ret: The return code of optimize()
 """
 function maximize_f(f::Function,
-                    ea::ElboArgs;
-                    loc_width=1.5e-3,
+                    ea::ElboArgs,
+                    transform::DataTransform;
                     omitted_ids=Int[],
-                    xtol_rel = 1e-7,
-                    ftol_abs = 1e-6,
+                    xtol_rel=1e-7,
+                    ftol_abs=1e-6,
                     verbose=false,
                     max_iters=50,
                     rho_lower=0.25,
                     fast_hessian=true)
-    transform = get_mp_transform(ea, loc_width=loc_width)
-
     # Make sure the model parameters are within the transform bounds
     enforce_bounds!(ea, transform)
 
@@ -248,4 +246,29 @@ function maximize_f(f::Function,
     iter_count, max_f, max_x, nm_result
 end
 
+
+function maximize_f(f::Function,
+                    ea::ElboArgs;
+                    loc_width=1.5e-3,
+                    omitted_ids=Int[],
+                    xtol_rel=1e-7,
+                    ftol_abs=1e-6,
+                    verbose=false,
+                    max_iters=50,
+                    rho_lower=0.25,
+                    fast_hessian=true)
+    transform = get_mp_transform(ea, loc_width=loc_width)
+
+    maximize_f(f, ea, transform;
+                omitted_ids=omitted_ids,
+                xtol_rel=xtol_rel,
+                ftol_abs=ftol_abs,
+                verbose=verbose,
+                max_iters=max_iters,
+                rho_lower=rho_lower,
+                fast_hessian=fast_hessian)
 end
+
+
+end
+

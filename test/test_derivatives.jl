@@ -124,54 +124,56 @@ end
 
 
 function test_real_image()
-    # TODO: replace this with stamp tests having non-trivial WCS transforms.
-    # TODO: streamline the creation of small real images.
+  # TODO: replace this with stamp tests having non-trivial WCS transforms.
+  # TODO: streamline the creation of small real images.
 
-    run, camcol, field = (3900, 6, 269)
+  run, camcol, field = (3900, 6, 269)
 
-    images = SDSSIO.load_field_images(run, camcol, field, datadir)
-    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir run camcol field
-    cat_entries = SDSSIO.read_photoobj_celeste(fname)
-    singleton_cat = filter((ce)->ce.objid == "1237662226208063499", cat_entries)
-    tiled_blob, mp = initialize_celeste(images,
-                                        singleton_cat,
-                                        fit_psf=false,
-                                        tile_width=20);
+  images = SDSSIO.load_field_images(run, camcol, field, datadir)
+  fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir run camcol field
+  cat_entries = SDSSIO.read_photoobj_celeste(fname)
+  tiled_blob, mp =
+      initialize_celeste(images, cat_entries, fit_psf=false, tile_width=20);
 
-    # Limit to very few pixels so that the autodiff is reasonably fast.
-    s = mp.active_sources[1]
-    very_trimmed_tiled_blob = ModelInit.trim_source_tiles(
-        s, mp, tiled_blob, noise_fraction=10., min_radius_pix=1.0);
+  # Pick an object.
+  objid = "1237662226208063499"
+  trimmed_mp, trimmed_tiled_blob = limit_to_object_data(
+    objid, mp, tiled_blob, images, cat_entries);
 
-    # To see:
-    # using PyPlot
-    # matshow(ModelInit.stitch_object_tiles(s, 3, trimmed_mp, very_trimmed_tiled_blob))
+  # Limit to very few pixels so that the autodiff is reasonably fast.
+  s = trimmed_mp.active_sources[1]
+  very_trimmed_tiled_blob = ModelInit.trim_source_tiles(
+    s, trimmed_mp, trimmed_tiled_blob, noise_fraction=10., min_radius_pix=1.0);
 
-    elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, mp);
+  # To see:
+  # using PyPlot
+  # matshow(ModelInit.stitch_object_tiles(s, 3, trimmed_mp, very_trimmed_tiled_blob))
 
-    function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
-        vp_array =
-            reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
-        mp_local = forward_diff_model_params(NumType, mp);
-        for sa = 1:length(mp.active_sources)
-            mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
-        end
-        local_elbo = ElboDeriv.elbo(
-            very_trimmed_tiled_blob, mp_local, calculate_derivs=false)
-        local_elbo.v[1]
+  elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, trimmed_mp);
+
+  function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
+    vp_array =
+      reshape(vp_vec, length(CanonicalParams), length(trimmed_mp.active_sources))
+    mp_local = forward_diff_model_params(NumType, trimmed_mp);
+    for sa = 1:length(trimmed_mp.active_sources)
+      mp_local.vp[trimmed_mp.active_sources[sa]] = vp_array[:, sa]
     end
+    local_elbo = ElboDeriv.elbo(
+      very_trimmed_tiled_blob, mp_local, calculate_derivs=false)
+    local_elbo.v[1]
+  end
 
-    vp_vec = mp.vp[s];
-    ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
-    ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
+  vp_vec = trimmed_mp.vp[s];
+  ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
+  ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
 
-    # Sanity check
-    ad_v = wrap_elbo(vp_vec);
-    @test_approx_eq ad_v elbo.v
+  # Sanity check
+  ad_v = wrap_elbo(vp_vec);
+  @test_approx_eq ad_v elbo.v
 
-    hcat(ad_grad, elbo.d[:, 1])
-    @test_approx_eq ad_grad elbo.d[:, 1]
-    @test_approx_eq ad_hess elbo.h
+  hcat(ad_grad, elbo.d[:, 1])
+  @test_approx_eq ad_grad elbo.d[:, 1]
+  @test_approx_eq ad_hess elbo.h
 end
 
 

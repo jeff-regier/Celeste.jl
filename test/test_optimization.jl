@@ -218,9 +218,7 @@ function test_quadratic_optimization()
     centers[ids.a] = [ 0.4, 0.6 ]
     centers[ids.k] = [ 0.3 0.3; 0.7 0.7 ]
 
-    function quadratic_function{NumType <: Number}(
-          unused_blob::TiledBlob, ea::ElboArgs{NumType})
-
+    function quadratic_function{NumType <: Number}(ea::ElboArgs{NumType})
         val = zero_sensitive_float(CanonicalParams, NumType)
         val.v[1] = -sum((ea.vp[1] - centers) .^ 2)
         val.d[:] = -2.0 * (ea.vp[1] - centers)
@@ -240,21 +238,19 @@ function test_quadratic_optimization()
     ea = empty_model_params(1);
     n = length(CanonicalParams)
     ea.vp = convert(VariationalParams{Float64}, [fill(0.5, n) for s in 1:1]);
-    unused_blob = gen_sample_star_dataset()[4];
 
-    OptimizeElbo.maximize_f(
-        quadratic_function, unused_blob, ea, trans,
-        xtol_rel=1e-16, ftol_abs=1e-16)
+    OptimizeElbo.maximize_f(quadratic_function, ea, trans;
+                            xtol_rel=1e-16, ftol_abs=1e-16)
 
     @test_approx_eq_eps ea.vp[1] centers 1e-6
-    @test_approx_eq_eps quadratic_function(unused_blob, ea).v[1] 0.0 1e-15
+    @test_approx_eq_eps quadratic_function(ea).v[1] 0.0 1e-15
 end
 
 
+#test_quadratic_optimization()
 test_objective_wrapper()
 test_star_optimization()
 test_galaxy_optimization()
 test_single_source_optimization()
 test_full_elbo_optimization()
 test_real_stamp_optimization()
-test_quadratic_optimization()
