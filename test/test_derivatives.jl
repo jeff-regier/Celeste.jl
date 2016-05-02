@@ -103,6 +103,26 @@ function test_bvn_cov()
 end
 
 
+
+function test_bvn_cov()
+        e_axis = .7
+        e_angle = pi/5
+        e_scale = 2.
+
+        manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
+        util_11 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
+        @test_approx_eq util_11 manual_11
+
+        manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
+        util_12 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
+        @test_approx_eq util_12 manual_12
+
+        manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
+        util_22 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
+        @test_approx_eq util_22 manual_22
+end
+
+
 function test_real_image()
     # TODO: replace this with stamp tests having non-trivial WCS transforms.
     # TODO: streamline the creation of small real images.
@@ -113,33 +133,40 @@ function test_real_image()
     fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir run camcol field
     cat_entries = SDSSIO.read_photoobj_celeste(fname)
     singleton_cat = filter((ce)->ce.objid == "1237662226208063499", cat_entries)
-    ea = make_elbo_args(images, singleton_cat, fit_psf=false, tile_width=20)
+    tiled_blob, mp = initialize_celeste(images,
+                                        singleton_cat,
+                                        fit_psf=false,
+                                        tile_width=20);
 
     # Limit to very few pixels so that the autodiff is reasonably fast.
-    s = ea.active_sources[1]
-    ea2 = deepcopy(ea)
-    ea2.image = Infer.trim_source_tiles(ea; noise_fraction=10.,
-                                            min_radius_pix=1.0)
-    elbo = ElboDeriv.elbo(ea2)
+    s = mp.active_sources[1]
+    very_trimmed_tiled_blob = ModelInit.trim_source_tiles(
+        s, mp, tiled_blob, noise_fraction=10., min_radius_pix=1.0);
+
+    # To see:
+    # using PyPlot
+    # matshow(ModelInit.stitch_object_tiles(s, 3, trimmed_mp, very_trimmed_tiled_blob))
+
+    elbo = ElboDeriv.elbo(very_trimmed_tiled_blob, mp);
 
     function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
         vp_array =
-            reshape(vp_vec, length(CanonicalParams), length(ea.active_sources))
-        ea_local = forward_diff_model_params(NumType, ea)
-        for sa = 1:length(ea.active_sources)
-            ea_local.vp[ea.active_sources[sa]] = vp_array[:, sa]
+            reshape(vp_vec, length(CanonicalParams), length(mp.active_sources))
+        mp_local = forward_diff_model_params(NumType, mp);
+        for sa = 1:length(mp.active_sources)
+            mp_local.vp[mp.active_sources[sa]] = vp_array[:, sa]
         end
         local_elbo = ElboDeriv.elbo(
-            very_trimmed_tiled_blob, ea_local, calculate_derivs=false)
+            very_trimmed_tiled_blob, mp_local, calculate_derivs=false)
         local_elbo.v[1]
     end
 
-    vp_vec = ea.vp[s]
-    ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec)
-    ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec)
+    vp_vec = mp.vp[s];
+    ad_grad = ForwardDiff.gradient(wrap_elbo, vp_vec);
+    ad_hess = ForwardDiff.hessian(wrap_elbo, vp_vec);
 
     # Sanity check
-    ad_v = wrap_elbo(vp_vec)
+    ad_v = wrap_elbo(vp_vec);
     @test_approx_eq ad_v elbo.v
 
     hcat(ad_grad, elbo.d[:, 1])
@@ -152,17 +179,17 @@ function test_dual_numbers()
     # Simply check that the likelihood can be used with dual numbers.
     # Due to the autodiff parts of the KL divergence and transform,
     # these parts of the ELBO will currently not work with dual numbers.
-    blob, ea, body, tiled_blob = gen_sample_star_dataset()
+    blob, ea, body = gen_sample_star_dataset()
     ea_dual = forward_diff_model_params(DualNumbers.Dual{Float64}, ea)
-    elbo_dual = ElboDeriv.elbo_likelihood(tiled_blob, ea_dual)
+    elbo_dual = ElboDeriv.elbo_likelihood(ea_dual)
 
     true
 end
 
 
 function test_tile_predicted_image()
-    blob, ea, body, tiled_blob = gen_sample_star_dataset(perturb=false)
-    tile = tiled_blob[1].tiles[1, 1]
+    blob, ea, body = gen_sample_star_dataset(perturb=false)
+    tile = ea.images[1].tiles[1, 1]
     tile_source_map = ea.tile_source_map[1][1, 1]
     pred_image =
         ElboDeriv.tile_predicted_image(tile, ea, tile_source_map; include_epsilon=true)
@@ -179,18 +206,18 @@ end
 
 
 function test_derivative_flags()
-    blob, ea, body, tiled_blob = gen_two_body_dataset()
+    blob, ea, body = gen_two_body_dataset()
     keep_pixels = 10:11
-    trim_tiles!(tiled_blob, keep_pixels)
+    trim_tiles!(ea.images, keep_pixels)
 
-    elbo = ElboDeriv.elbo(tiled_blob, ea)
+    elbo = ElboDeriv.elbo(ea)
 
-    elbo_noderiv = ElboDeriv.elbo(tiled_blob, ea; calculate_derivs=false)
+    elbo_noderiv = ElboDeriv.elbo(ea; calculate_derivs=false)
     @test_approx_eq elbo.v[1] elbo_noderiv.v
     @test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
     @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
 
-    elbo_nohess = ElboDeriv.elbo(tiled_blob, ea; calculate_hessian=false)
+    elbo_nohess = ElboDeriv.elbo(ea; calculate_hessian=false)
     @test_approx_eq elbo.v[1] elbo_nohess.v
     @test_approx_eq elbo.d elbo_nohess.d
     @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
@@ -201,21 +228,21 @@ function test_active_sources()
     # Test that the derivatives of the expected brightnesses partition in
     # active_sources.
 
-    blob, ea, body, tiled_blob = gen_two_body_dataset()
+    blob, ea, body = gen_two_body_dataset()
     keep_pixels = 10:11
-    trim_tiles!(tiled_blob, keep_pixels)
+    trim_tiles!(ea.images, keep_pixels)
     b = 1
-    tile = tiled_blob[b].tiles[1,1]
+    tile = ea.images[b].tiles[1,1]
     h, w = 10, 10
 
     ea.active_sources = [1, 2]
-    elbo_lik_12 = ElboDeriv.elbo_likelihood(tiled_blob, ea)
+    elbo_lik_12 = ElboDeriv.elbo_likelihood(ea)
 
     ea.active_sources = [1]
-    elbo_lik_1 = ElboDeriv.elbo_likelihood(tiled_blob, ea)
+    elbo_lik_1 = ElboDeriv.elbo_likelihood(ea)
 
     ea.active_sources = [2]
-    elbo_lik_2 = ElboDeriv.elbo_likelihood(tiled_blob, ea)
+    elbo_lik_2 = ElboDeriv.elbo_likelihood(ea)
 
     @test_approx_eq elbo_lik_12.v[1] elbo_lik_1.v
     @test_approx_eq elbo_lik_12.v[1] elbo_lik_2.v
@@ -230,32 +257,32 @@ end
 
 
 function test_elbo()
-    blob, ea, body, tiled_blob = gen_two_body_dataset()
+    blob, ea, body = gen_two_body_dataset()
     keep_pixels = 10:11
-    trim_tiles!(tiled_blob, keep_pixels)
+    trim_tiles!(ea.images, keep_pixels)
 
     # vp_vec is a vector of the parameters from all the active sources.
     function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
         ea_local = unwrap_vp_vector(vp_vec, ea)
-        elbo = ElboDeriv.elbo(tiled_blob, ea_local, calculate_derivs=false)
+        elbo = ElboDeriv.elbo(ea_local, calculate_derivs=false)
         elbo.v[1]
     end
 
     ea.active_sources = [1]
     vp_vec = wrap_vp_vector(ea, true)
-    elbo_1 = ElboDeriv.elbo(tiled_blob, ea)
+    elbo_1 = ElboDeriv.elbo(ea)
     test_with_autodiff(wrap_elbo, vp_vec, elbo_1)
     #test_elbo_mp(ea, elbo_1)
 
     ea.active_sources = [2]
     vp_vec = wrap_vp_vector(ea, true)
-    elbo_2 = ElboDeriv.elbo(tiled_blob, ea)
+    elbo_2 = ElboDeriv.elbo(ea)
     test_with_autodiff(wrap_elbo, vp_vec, elbo_2)
     #test_elbo_mp(ea, elbo_2)
 
     ea.active_sources = [1, 2]
     vp_vec = wrap_vp_vector(ea, true)
-    elbo_12 = ElboDeriv.elbo(tiled_blob, ea)
+    elbo_12 = ElboDeriv.elbo(ea)
     test_with_autodiff(wrap_elbo, vp_vec, elbo_12)
     #test_elbo_mp(ea, elbo_12)
 
@@ -269,12 +296,7 @@ end
 
 
 function test_process_active_pixels()
-    blob, ea, bodies, tiled_blob = gen_two_body_dataset()
-    # b = 1
-    # keep_pixels = 10:11
-    # trim_tiles!(tiled_blob, keep_pixels)
-    # tile = tiled_blob[b][1, 1]
-    # tile_source_map = ea.tile_source_map[b][1, 1]
+    blob, ea, bodies = gen_two_body_dataset()
 
     # Choose four pixels only to keep the test fast.
     active_pixels = Array(ElboDeriv.ActivePixel, 4)
@@ -291,7 +313,7 @@ function test_process_active_pixels()
                                             length(ea.active_sources),
                                             calculate_derivs=calculate_derivs,
                                             calculate_hessian=calculate_hessian)
-        ElboDeriv.process_active_pixels!(elbo_vars, tiled_blob, ea, active_pixels)
+        ElboDeriv.process_active_pixels!(elbo_vars, ea.images, ea, active_pixels)
         deepcopy(elbo_vars.elbo)
     end
 
@@ -308,7 +330,7 @@ end
 
 
 function test_add_log_term()
-    blob, ea, bodies, tiled_blob = gen_two_body_dataset()
+    blob, ea, bodies = gen_two_body_dataset()
 
     # Test this pixel
     h, w = (10, 10)
@@ -316,7 +338,7 @@ function test_add_log_term()
     for b = 1:5
         println("Testing log term for band $b.")
         x_nbm = 70.
-        tile = tiled_blob[b].tiles[1,1]
+        tile = ea.images[b].tiles[1,1]
         tile_source_map = ea.tile_source_map[b][1,1]
 
         iota = median(blob[b].iota_vec)
@@ -355,7 +377,7 @@ end
 
 
 function test_combine_pixel_sources()
-    blob, ea, bodies, tiled_blob = gen_two_body_dataset()
+    blob, ea, bodies = gen_two_body_dataset()
 
     S = length(ea.active_sources)
     P = length(CanonicalParams)
@@ -366,7 +388,7 @@ function test_combine_pixel_sources()
         test_var_string = test_var ? "E_G" : "var_G"
         println("Testing $(test_var_string), band $b")
 
-        tile = tiled_blob[b].tiles[1,1]; # Note: only one tile in this simulated dataset.
+        tile = ea.images[b].tiles[1,1]; # Note: only one tile in this simulated dataset.
         tile_source_map = ea.tile_source_map[b][1,1]
 
         function e_g_wrapper_fun{NumType <: Number}(
@@ -403,7 +425,7 @@ end
 
 
 function test_e_g_s_functions()
-    blob, ea, bodies, tiled_blob = gen_two_body_dataset()
+    blob, ea, bodies = gen_two_body_dataset()
 
     # S = length(ea.active_sources)
     P = length(CanonicalParams)
@@ -415,7 +437,7 @@ function test_e_g_s_functions()
         test_var_string = test_var ? "E_G" : "var_G"
         println("Testing $(test_var_string), band $b")
 
-        tile = tiled_blob[b].tiles[1,1]; # Note: only one tile in this simulated dataset.
+        tile = ea.images[b].tiles[1,1]; # Note: only one tile in this simulated dataset.
         tile_source_map = ea.tile_source_map[b][1,1]
 
         function e_g_wrapper_fun{NumType <: Number}(

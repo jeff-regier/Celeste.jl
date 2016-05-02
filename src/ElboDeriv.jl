@@ -26,9 +26,14 @@ type ElboArgs{NumType <: Number}
 end
 
 
-function ElboArgs(images, vp, tile_source_map, patches, active_sources)
-    S = length(vp)
+function ElboArgs{NumType <: Number}(
+            images::Vector{TiledImage},
+            vp::VariationalParams{NumType},
+            tile_source_map::Vector{Matrix{Vector{Int}}},
+            patches::Matrix{SkyPatch},
+            active_sources::Vector{Int})
     N = length(images)
+    S = length(vp)
     @assert length(tile_source_map) == N
     @assert size(patches, 1) == S
     @assert size(patches, 2) == N

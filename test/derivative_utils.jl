@@ -28,21 +28,22 @@ function convert(FDType::Type{ForwardDiff.HessianNumber},
 end
 
 
-# TODO: Maybe write it as a convert()?
+# Maybe write it as a convert()?
 function forward_diff_model_params{T <: Number}(
             FDType::Type{T},
-            base_ea::ElboArgs{Float64})
-    P = length(base_ea.vp[1])
-    vp = FDTypes[zeros(FDType, P) for s=1:base_ea.S]
-    ea_fd = ElboArgs{FDType}([zeros(FDType, P) for s=1:base_ea.S]);
+            ea0::ElboArgs{Float64})
+    P = length(ea0.vp[1])
+    vp = Vector{FDType}[zeros(FDType, P) for s=1:ea0.S]
     # Set the values (but not gradient numbers) for parameters other
     # than the galaxy parameters.
-    for s=1:base_ea.S, i=1:length(ids)
-        ea_fd.vp[s][i] = base_ea.vp[s][i]
+    for s=1:ea0.S, i=1:length(ids)
+        vp[s][i] = ea0.vp[s][i]
     end
-    ea_fd.patches = base_ea.patches;
-    ea_fd.tile_source_map = base_ea.tile_source_map;
-    ea_fd.active_sources = base_ea.active_sources;
-    ea_fd
+
+    ElboArgs(ea0.images,
+             vp,
+             ea0.tile_source_map,
+             ea0.patches,
+             ea0.active_sources)
 end
 
