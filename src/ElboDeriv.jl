@@ -943,7 +943,8 @@ function tile_predicted_image{NumType <: Number}(
                 include_epsilon::Bool=true)
         predicted_pixels = copy(tile.pixels)
         # Iterate over pixels that are not NaN.
-        for w in 1:tile.w_width, h in 1:tile.h_width
+        h_width, w_width = size(tile.pixels)
+        for w in 1:w_width, h in 1:h_width
             this_pixel = tile.pixels[h, w]
             if !Base.isnan(this_pixel)
                 get_expected_pixel_brightness!(
@@ -999,7 +1000,8 @@ function get_active_pixels{NumType <: Number}(
         tile_source_map = ea.tile_source_map[b][tile_ind]
         if length(intersect(tile_source_map, ea.active_sources)) > 0
             tile = ea.images[b].tiles[tile_ind]
-            for w in 1:tile.w_width, h in 1:tile.h_width
+            h_width, w_width = size(tile.pixels)
+            for w in 1:w_width, h in 1:h_width
                 if !Base.isnan(tile.pixels[h, w])
                     push!(active_pixels, ActivePixel(b, tile_ind, h, w))
                 end

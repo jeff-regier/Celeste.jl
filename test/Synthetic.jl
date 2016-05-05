@@ -118,7 +118,7 @@ end
 Generate a simulated blob based on a vector of catalog entries using
 identity world coordinates.
 """
-function gen_blob(blob0::Blob, n_bodies::Vector{CatalogEntry}; expectation=false)
+function gen_blob(blob0::Vector{Image}, n_bodies::Vector{CatalogEntry}; expectation=false)
     [gen_image(blob0[b], n_bodies, expectation=expectation) for b in 1:5]
 end
 

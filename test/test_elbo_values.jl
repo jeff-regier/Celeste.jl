@@ -362,68 +362,70 @@ end
 
 
 function test_trim_source_tiles()
-  # Set a seed to avoid a flaky test.
-  blob, ea, bodies = gen_n_body_dataset(3, seed=42);
+    # Set a seed to avoid a flaky test.
+    blob, ea, bodies = gen_n_body_dataset(3, seed=42);
 
-  # With the above seed, this is near the middle of the image.
-  ea.active_sources = [1]
-  trimmed_tiled_blob = 
-      Infer.trim_source_tiles(ea; noise_fraction=0.1);
-  loc_ids = ids.u
-  non_loc_ids = setdiff(1:length(ids), ids.u)
-  for b=1:length(blob)
-    println("Testing b = $b")
-    # Make sure pixels got NaN-ed out
-    @test(
-      sum([ sum(!Base.isnan(tile.pixels)) for tile in trimmed_tiled_blob[b].tiles]) <
-      sum([ sum(!Base.isnan(tile.pixels)) for tile in ea.images[b].tiles]))
+    # With the above seed, this is near the middle of the image.
+    ea.active_sources = [1]
+    ea42 = deepcopy(ea)
+    Infer.trim_source_tiles!(ea42; noise_fraction=0.1);
+
+    loc_ids = ids.u
+    non_loc_ids = setdiff(1:length(ids), ids.u)
+    for b=1:length(blob)
+        println("Testing b = $b")
+        # Make sure pixels got NaN-ed out
+        @test(
+            sum([ sum(!Base.isnan(tile.pixels)) for tile in ea42.images[b].tiles]) <
+            sum([ sum(!Base.isnan(tile.pixels)) for tile in ea.images[b].tiles]))
+        s_tiles = find_source_tiles(s, b, ea)
+        ea.active_sources = [s];
+        elbo_full = ElboDeriv.elbo(ea; calculate_hessian=false);
+
+        ea_trimmed = deepcopy(ea)
+        ea_trimmed.images = trimmmed_tiled_blob
+        elbo_trim = ElboDeriv.elbo(ea2; calculate_hessian=false);
+        @test_approx_eq_eps(
+            elbo_full.d[loc_ids, 1] ./ elbo_trim.d[loc_ids, 1],
+            fill(1.0, length(loc_ids)), 0.06)
+        @test_approx_eq_eps(
+            elbo_full.d[non_loc_ids, 1] ./ elbo_trim.d[non_loc_ids, 1],
+            fill(1.0, length(non_loc_ids)), 4e-3)
+    end
+
+    # Test min_radius_pix on just one tile.
+    b = 3
     s_tiles = find_source_tiles(s, b, ea)
-    ea.active_sources = [s];
-    elbo_full = ElboDeriv.elbo(ea; calculate_hessian=false);
 
-    ea_trimmed = deepcopy(ea)
-    ea_trimmed.images = trimmmed_tiled_blob
-    elbo_trim = ElboDeriv.elbo(ea2; calculate_hessian=false);
-    @test_approx_eq_eps(
-      elbo_full.d[loc_ids, 1] ./ elbo_trim.d[loc_ids, 1],
-      fill(1.0, length(loc_ids)), 0.06)
-    @test_approx_eq_eps(
-      elbo_full.d[non_loc_ids, 1] ./ elbo_trim.d[non_loc_ids, 1],
-      fill(1.0, length(non_loc_ids)), 4e-3)
-  end
+    # Set the source to be very dim:
+    ea.vp[s][ids.r1] = 0.01
+    ea.vp[s][ids.r2] = 0.01
 
-  # Test min_radius_pix on just one tile.
-  b = 3
-  s_tiles = find_source_tiles(s, b, ea)
+    min_radius_pix = 6.0
+    ea43 = deepcopy(ea42)
+    Infer.trim_source_tiles!(ea43, noise_fraction=0.1, min_radius_pix = min_radius_pix);
+    trimmed_tiled_blob = ea43.images
 
-  # Set the source to be very dim:
-  ea.vp[s][ids.r1] = 0.01
-  ea.vp[s][ids.r2] = 0.01
+    total_nonempty_pixels = 0.0
+    for tile_index in s_tiles
+        tile = trimmed_tiled_blob[b].tiles[tile_index...]
+        total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
+    end
+    @test_approx_eq_eps total_nonempty_pixels pi * min_radius_pix ^ 2 2.0
 
-  min_radius_pix = 6.0
-  trimmed_tiled_blob = 
-      Infer.trim_source_tiles(
-        ea, noise_fraction=0.1, min_radius_pix = min_radius_pix);
+    min_radius_pix = 0.0
+    ea44 = deepcopy(ea)
+    Infer.trim_source_tiles!(
+                s, ea44, trimmed_tiled_blob, noise_fraction=0.1,
+                        min_radius_pix = min_radius_pix);
+    trimmed_tiled_blob = ea44.images
 
-  total_nonempty_pixels = 0.0
-  for tile_index in s_tiles
-    tile = trimmed_tiled_blob[b].tiles[tile_index...]
-    total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
-  end
-  @test_approx_eq_eps total_nonempty_pixels pi * min_radius_pix ^ 2 2.0
-
-  min_radius_pix = 0.0
-  trimmed_tiled_blob = 
-      Infer.trim_source_tiles(
-        s, ea, trimmed_tiled_blob, noise_fraction=0.1,
-            min_radius_pix = min_radius_pix);
-
-  total_nonempty_pixels = 0.0
-  for tile_index in s_tiles
-    tile = trimmed_tiled_blob[b].tiles[tile_index...]
-    total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
-  end
-  @test total_nonempty_pixels == 0.0
+    total_nonempty_pixels = 0.0
+    for tile_index in s_tiles
+        tile = trimmed_tiled_blob[b].tiles[tile_index...]
+        total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
+    end
+    @test total_nonempty_pixels == 0.0
 
 end
 

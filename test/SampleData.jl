@@ -206,7 +206,7 @@ function empty_model_params(S::Int)
              vp,
              Array(Matrix{Vector{Int}}, 0),
              Array(SkyPatch, S, 0),
-             Int64[])
+             collect(1:S))
 end
 
 
