@@ -4,26 +4,27 @@ import Celeste.Model: patch_ctrs_pix, patch_radii_pix
 
 
 function test_tile_image()
-  blob, ea, three_bodies = gen_three_body_dataset()
-  img = blob[3]
-  tile_width = 20
-  img.epsilon_mat = rand(size(img.pixels))
-  img.iota_vec = rand(size(img.pixels, 1))
-  tiles = Model.TiledImage(img; tile_width=tile_width).tiles
-  @test size(tiles) == (
-    ceil(Int, img.H  / tile_width),
-    ceil(Int, img.W / tile_width))
-  for tile in tiles
-    @test tile.b == img.b
-    @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
-    @test tile.epsilon_mat[2,3] == img.epsilon_mat[tile.h_range, tile.w_range][2,3]
-    @test tile.iota_vec[3] == img.iota_vec[tile.h_range][3]
-  end
+    blob, ea, three_bodies = gen_three_body_dataset()
+    img = blob[3]
+    tile_width = 20
+    img.epsilon_mat = rand(size(img.pixels))
+    img.iota_vec = rand(size(img.pixels, 1))
+    tiles = Model.TiledImage(img; tile_width=tile_width).tiles
+    @test size(tiles) == (
+        ceil(Int, img.H    / tile_width),
+        ceil(Int, img.W / tile_width))
+    for tile in tiles
+        @test tile.b == img.b
+        @test tile.pixels == img.pixels[tile.h_range, tile.w_range]
+        @test tile.epsilon_mat[2,3] == img.epsilon_mat[tile.h_range, tile.w_range][2,3]
+        @test tile.iota_vec[3] == img.iota_vec[tile.h_range][3]
+    end
 
-  tile = tiles[2, 2]
-  for h in 1:tile.h_width, w in 1:tile.w_width
-    @test tile.pixels[h, w] == img.pixels[tile.h_range[h], tile.w_range[w]]
-  end
+    tile = tiles[2, 2]
+    h_width, w_width = size(tile.pixels)
+    for h in 1:h_width, w in 1:w_width
+        @test tile.pixels[h, w] == img.pixels[tile.h_range[h], tile.w_range[w]]
+    end
 end
 
 function test_local_sources()
@@ -43,12 +44,11 @@ function test_local_sources()
     ]
 
     blob = Synthetic.gen_blob(blob0, three_bodies)
-    tiled_blob = TiledImage[TiledImage(img; tile_width=20) for img in blob]
+    tiled_images = TiledImage[TiledImage(img; tile_width=20) for img in blob]
 
     tile = ImageTile(1, 1, blob[3], 1000)
 
-    ea = make_elbo_args(
-      tiled_blob, three_bodies; patch_radius=20.)
+    ea = make_elbo_args(tiled_images, three_bodies; patch_radius=20.)
     @test ea.S == 3
 
     patches = vec(ea.patches[:, 3])
@@ -58,7 +58,7 @@ function test_local_sources()
 
     tile_width = 10
     tile = ImageTile(1, 1, blob[3], tile_width)
-    make_elbo_args(tiled_blob, three_bodies; patch_radius=20.)
+    make_elbo_args(tiled_images, three_bodies; patch_radius=20.)
 
     patches = vec(ea.patches[:, 3])
     subset10 = Model.get_local_sources(tile, patch_ctrs_pix(patches),
@@ -66,7 +66,7 @@ function test_local_sources()
     @test subset10 == [1]
 
     last_tile = ImageTile(11, 24, blob[3], tile_width)
-    make_elbo_args(tiled_blob, three_bodies; patch_radius=20.)
+    make_elbo_args(tiled_images, three_bodies; patch_radius=20.)
 
     patches = vec(ea.patches[:, 3])
     last_subset = Model.get_local_sources(last_tile,
@@ -75,7 +75,7 @@ function test_local_sources()
     @test length(last_subset) == 0
 
     pop_tile = ImageTile(7, 9, blob[3], tile_width)
-    make_elbo_args(tiled_blob, three_bodies; patch_radius=20.)
+    make_elbo_args(tiled_images, three_bodies; patch_radius=20.)
 
     patches = vec(ea.patches[:, 3])
     pop_subset = Model.get_local_sources(pop_tile, patch_ctrs_pix(patches),
@@ -176,7 +176,7 @@ end
 
 
 function test_sky_noise_estimates()
-    blobs = Array(Blob, 2)
+    blobs = Array(Vector{Image}, 2)
     blobs[1], ea, three_bodies = gen_three_body_dataset()  # synthetic
     blobs[2] = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")  # real
 
