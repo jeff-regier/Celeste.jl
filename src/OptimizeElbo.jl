@@ -224,6 +224,7 @@ function maximize_f(f::Function,
     # TODO: use the Optim version after newton_tr is merged.
     nm_result = newton_tr(d,
                           x0[:],
+                          NewtonTR();
                           xtol = xtol_rel,
                           ftol = ftol_abs,
                           grtol = 1e-8,
