@@ -5,13 +5,8 @@ Distributions
 DocOpt
 ForwardDiff 0.1.8 0.2
 JLD
-<<<<<<< HEAD
 Lumberjack
-Optim
-=======
-Logging
 Optim 0.5 0.5.1
->>>>>>> master
 FITSIO
 WCS
 Grid
