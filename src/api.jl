@@ -1,6 +1,6 @@
 import FITSIO
 import JLD
-import Logging
+import Lumberjack
 
 using .Model
 import .SDSSIO
@@ -249,7 +249,7 @@ function load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_di
     image_count = 0
 
     for i in 1:length(fieldids)
-        Logging.info("reading field ", fieldids[i])
+        Lumberjack.info("reading field $(fieldids[i])")
         run, camcol, field = fieldids[i]
         field_images = SDSSIO.load_field_images(run, camcol, field, frame_dirs[i],
                                              fpm_dir=fpm_dirs[i],
@@ -265,8 +265,8 @@ function load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_di
     end
     gc()
 
-    Logging.debug("Image names:")
-    Logging.debug(image_names)
+    Lumberjack.debug("Image names:")
+    Lumberjack.debug(string(image_names))
 
     images
 end
@@ -299,7 +299,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                thread_fun=phalse,
                timing=InferTiming())
 
-    Logging.info("Running with $(nthreads()) threads")
+    Lumberjack.info("Running with $(nthreads()) threads")
 
     # Read all primary objects in these fields.
     tic()
@@ -307,17 +307,17 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     catalog = SDSSIO.read_photoobj_files(fieldids, photoobj_dirs,
                         duplicate_policy=duplicate_policy)
     timing.read_photoobj = toq()
-    Logging.info("$(length(catalog)) primary sources")
+    Lumberjack.info("$(length(catalog)) primary sources")
 
     reserve_thread[] && thread_fun(reserve_thread)
 
     # Filter out low-flux objects in the catalog.
     catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
-    Logging.info("$(length(catalog)) primary sources after MIN_FLUX cut")
+    Lumberjack.info("$(length(catalog)) primary sources after MIN_FLUX cut")
 
     # Filter any object not specified, if an objid is specified
     if objid != ""
-        Logging.info(catalog[1].objid)
+        Lumberjack.info(catalog[1].objid)
         catalog = filter(entry->(entry.objid == objid), catalog)
     end
 
@@ -343,10 +343,10 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
 
     reserve_thread[] && thread_fun(reserve_thread)
 
-    Logging.info("finding neighbors")
+    Lumberjack.info("finding neighbors")
     tic()
     neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
-    Logging.info("neighbors found in ", toq(), " seconds")
+    Lumberjack.info("neighbors found in $(toq()) seconds")
 
     reserve_thread[] && thread_fun(reserve_thread)
 
@@ -385,7 +385,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                              "runtime"=>runtime)
                 unlock!(results_lock)
 #            catch ex
-#                Logging.err(ex)
+#                Lumberjack.err(ex)
 #            end
         end
     end

@@ -9,7 +9,7 @@ using ..ElboDeriv
 export DataTransform, ParamBounds, ParamBox, SimplexBox,
        get_mp_transform, enforce_bounds!
 
-import Logging
+import Lumberjack
 
 
 ################################
@@ -783,7 +783,7 @@ function enforce_bounds!{NumType <: Number}(
         if !(constraint.lower_bound <=
              ea.vp[s][ids.(param)[ind]] <=
              constraint.upper_bound)
-          Logging.debug("param[$s][$ind] was out of bounds.")
+          Lumberjack.debug("param[$s][$ind] was out of bounds.")
           # Don't set the value to exactly the lower bound to avoid Inf
           diff = constraint.upper_bound - constraint.lower_bound
           epsilon = diff == Inf ? 1e-12: diff * 1e-12
@@ -801,7 +801,7 @@ function enforce_bounds!{NumType <: Number}(
           constraint = constraint_vec[col]
           for row in 1:param_size[1]
             if !(constraint.lower_bound <= ea.vp[s][ids.(param)[row, col]] <= 1.0)
-              Logging.debug("param[$s][$row, $col] was out of bounds.")
+              Lumberjack.debug("param[$s][$row, $col] was out of bounds.")
               # Don't set the value to exactly the lower bound to avoid Inf
               epsilon = (1.0 - constraint.lower_bound) * 1e-12
               ea.vp[s][ids.(param)[row, col]] =
@@ -812,7 +812,7 @@ function enforce_bounds!{NumType <: Number}(
             end
           end
           if sum(ea.vp[s][ids.(param)[:, col]]) != 1.0
-            Logging.debug("param[$s][:, $col] is not normalized.")
+            Lumberjack.debug("param[$s][:, $col] is not normalized.")
             ea.vp[s][ids.(param)[:, col]] =
               ea.vp[s][ids.(param)[:, col]] / sum(ea.vp[s][ids.(param)[:, col]])
           end
@@ -822,7 +822,7 @@ function enforce_bounds!{NumType <: Number}(
         constraint = constraint_vec[1]
         for row in 1:param_size[1]
           if !(constraint.lower_bound <= ea.vp[s][ids.(param)[row]] <= 1.0)
-            Logging.debug("param[$s][$row] was out of bounds.")
+            Lumberjack.debug("param[$s][$row] was out of bounds.")
             # Don't set the value to exactly the lower bound to avoid Inf
             epsilon = (1.0 - constraint.lower_bound) * 1e-12
             ea.vp[s][ids.(param)[row]] =
@@ -832,7 +832,7 @@ function enforce_bounds!{NumType <: Number}(
           end
         end
         if sum(ea.vp[s][ids.(param)]) != 1.0
-          Logging.debug("param[$s] is not normalized.")
+          Lumberjack.debug("param[$s] is not normalized.")
           ea.vp[s][ids.(param)] = ea.vp[s][ids.(param)] / sum(ea.vp[s][ids.(param)])
         end
       end
