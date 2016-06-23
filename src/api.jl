@@ -249,7 +249,7 @@ function load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_di
     image_count = 0
 
     for i in 1:length(fieldids)
-        Lumberjack.info("reading field ", fieldids[i])
+        Lumberjack.info("reading field $(fieldids[i])")
         run, camcol, field = fieldids[i]
         field_images = SDSSIO.load_field_images(run, camcol, field, frame_dirs[i],
                                              fpm_dir=fpm_dirs[i],
@@ -266,7 +266,7 @@ function load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_di
     gc()
 
     Lumberjack.debug("Image names:")
-    Lumberjack.debug(image_names)
+    Lumberjack.debug(string(image_names))
 
     images
 end
@@ -346,7 +346,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     Lumberjack.info("finding neighbors")
     tic()
     neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
-    Lumberjack.info("neighbors found in ", toq(), " seconds")
+    Lumberjack.info("neighbors found in $(toq()) seconds")
 
     reserve_thread[] && thread_fun(reserve_thread)
 
