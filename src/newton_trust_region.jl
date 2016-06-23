@@ -6,7 +6,7 @@ using Optim.assess_convergence
 using Optim.MultivariateOptimizationResults
 using Optim.TwiceDifferentiableFunction
 
-import Logging
+import Lumberjack
 
 
 macro newton_tr_trace()
@@ -129,10 +129,10 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
       s[:] = -(H_eig[:vectors] ./ H_eig[:values]') * H_eig[:vectors]' * gr
       lambda = 0.0
       interior = true
-      # Logging.debug("Interior.  Eigenvalues: $(H_eig[:values])")
+      # Lumberjack.debug("Interior.  Eigenvalues: $(H_eig[:values])")
     else
       interior = false
-      # Logging.debug("Boundary")
+      # Lumberjack.debug("Boundary")
 
       # The hard case is when the gradient is orthogonal to all
       # eigenvectors associated with the lowest eigenvalue.
@@ -155,20 +155,20 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
 
         # Formula 4.45 in N&W
         p_lambda2 = p_mag2(lambda, lambda_1_multiplicity + 1)
-        # Logging.debug("lambda_1 = $(lambda_1), p_lambda2 = $(p_lambda2), ",
+        # Lumberjack.debug("lambda_1 = $(lambda_1), p_lambda2 = $(p_lambda2), ",
         #         "$delta2, $lambda_1_multiplicity")
         if p_lambda2 > delta2
           # Then we can simply solve using root finding.  Set a starting point
           # between the minimum and largest eigenvalues.
           # TODO: is there a better starting point?
-          # Logging.debug("Not hard case")
+          # Lumberjack.debug("Not hard case")
           hard_case = false
           lambda = min_lambda + 0.01 * (max_lambda - min_lambda)
         else
-          # Logging.debug("Hard case!")
+          # Lumberjack.debug("Hard case!")
           hard_case = true
           tau = sqrt(delta2 - p_lambda2)
-          # Logging.debug("Tau = $tau delta2 = $delta2 p_lambda2 = $(p_lambda2)")
+          # Lumberjack.debug("Tau = $tau delta2 = $delta2 p_lambda2 = $(p_lambda2)")
 
           # I don't think it matters which eigenvector we pick so take the first.
           for i=1:n
@@ -182,7 +182,7 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
       end
 
       if !hard_case
-        # Logging.debug("Easy case")
+        # Lumberjack.debug("Easy case")
         # The "easy case".
         # Algorithim 4.3 of N&W, with s insted of p_l to be consistent with
         # the rest of the library.
@@ -196,10 +196,10 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
           B[i, i] = H[i, i] + lambda
         end
         while (root_finding_diff > tolerance) && (iter <= max_iters)
-          # Logging.debug("---")
-          # Logging.debug("lambda=$lambda min_lambda=$(min_lambda)")
+          # Lumberjack.debug("---")
+          # Lumberjack.debug("lambda=$lambda min_lambda=$(min_lambda)")
           b_eigv = eigfact(B)[:values]
-          # Logging.debug("lambda_1=$(lambda_1) $(b_eigv)")
+          # Lumberjack.debug("lambda_1=$(lambda_1) $(b_eigv)")
           R = chol(B)
           s[:] = -R \ (R' \ gr)
           q_l = R' \ s
@@ -213,7 +213,7 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
           if lambda < min_lambda
             # TODO: add a unit test for this
             lambda = 0.5 * (lambda_previous - min_lambda) + min_lambda
-            # Logging.debug("Step too low.  Using $(lambda) from $(lambda_previous).")
+            # Lumberjack.debug("Step too low.  Using $(lambda) from $(lambda_previous).")
           end
           root_finding_diff = abs(lambda - lambda_previous)
           iter = iter + 1
@@ -235,14 +235,14 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
     else
       m = vecdot(gr, s) + 0.5 * vecdot(s, B * s)
     end
-    # Logging.debug("gr . s = $(vecdot(gr, s))")
+    # Lumberjack.debug("gr . s = $(vecdot(gr, s))")
 
     # if !interior && abs(delta2 - vecdot(s, s)) > 1e-6
     #   warn("The norm of s is not close to delta: s2=$(vecdot(s, s)) delta2=$delta2. ",
     #        "This may occur when the Hessian is badly conditioned.  ",
     #        "max_ev=$(max_lambda), min_ev=$(lambda_1)")
     # end
-    # Logging.debug("Root finding got m=$m, interior=$interior with ",
+    # Lumberjack.debug("Root finding got m=$m, interior=$interior with ",
     #         "delta^2=$delta2 and ||s||^2=$(vecdot(s, s))")
     return m, interior, lambda
 end
@@ -317,7 +317,7 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
     # Iterate until convergence
     converged = false
     while !converged && iteration <= iterations
-        # Logging.debug("\n-----------------Iter $iteration")
+        # Lumberjack.debug("\n-----------------Iter $iteration")
 
         # Find the next step direction.
         m, interior = solve_tr_subproblem!(gr, H, delta, s)
@@ -353,19 +353,19 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
           rho = f_x_diff / (0 - m)
         end
 
-        # Logging.debug("Got rho = $rho from $(f_x) - $(f_x_previous) ",
+        # Lumberjack.debug("Got rho = $rho from $(f_x) - $(f_x_previous) ",
         #         "(diff = $(f_x - f_x_previous)), and m = $m")
-        # Logging.debug("Interior = $interior, delta = $delta.")
+        # Lumberjack.debug("Interior = $interior, delta = $delta.")
 
         if rho < rho_lower
-            # Logging.debug("Shrinking trust region.")
+            # Lumberjack.debug("Shrinking trust region.")
             delta *= 0.25
         elseif (rho > rho_upper) && (!interior)
-            # Logging.debug("Growing trust region.")
+            # Lumberjack.debug("Growing trust region.")
             delta = min(2 * delta, delta_hat)
         else
           # else leave delta unchanged.
-          # Logging.debug("Keeping trust region the same.")
+          # Lumberjack.debug("Keeping trust region the same.")
         end
 
         if rho > eta
@@ -386,11 +386,11 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
               # Only compute the next Hessian if we haven't converged
               d.h!(x, H)
             else
-              Logging.debug("Converged.")
+              Lumberjack.debug("Converged.")
             end
         else
             # The improvement is too small and we won't take it.
-            # Logging.debug(
+            # Lumberjack.debug(
             #   "Rejecting improvement from f_prev = $(f_x_previous) to f=$f_x")
 
             # If you reject an interior solution, make sure that the next

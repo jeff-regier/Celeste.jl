@@ -7,7 +7,7 @@ using ..ElboDeriv
 
 import DataFrames
 import Optim
-import Logging
+import Lumberjack
 
 
 # Only include until this is merged with Optim.jl.
@@ -88,8 +88,8 @@ type ObjectiveWrapperFunctions
               for s=1:S
                 state_df[symbol(string("grad", s))] = grad[:, s]
               end
-              Logging.info(state_df)
-              Logging.info("\n=======================================\n")
+              Lumberjack.info(state_df)
+              Lumberjack.info("\n=======================================\n")
             end
         end
 
