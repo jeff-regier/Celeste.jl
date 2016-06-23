@@ -1,10 +1,11 @@
 # TODO: This is intended to be used in Optim.jl.  Until that is submitted
 # and merged, I'll include the working file in Celeste so the build passes.
-using Optim.update!
-using Optim.OptimizationTrace
-using Optim.assess_convergence
-using Optim.MultivariateOptimizationResults
-using Optim.TwiceDifferentiableFunction
+import Optim: Optimizer,
+              update!,
+              OptimizationTrace,
+              assess_convergence,
+              MultivariateOptimizationResults,
+              TwiceDifferentiableFunction
 
 import Logging
 
@@ -80,7 +81,7 @@ end
 #  gr: The gradient
 #  H:  The Hessian
 #  delta:  The trust region size, ||s|| <= delta
-#  s: Memory allocated for the step size
+#  s: Memory allocated for the step size, updated in place
 #  tolerance: The convergence tolerance for root finding
 #  max_iters: The maximum number of root finding iterations
 #
@@ -88,168 +89,133 @@ end
 #  m - The numeric value of the quadratic minimization.
 #  interior - A boolean indicating whether the solution was interior
 #  lambda - The chosen regularizing quantity
-#  s, the step to take from the current x, is updated in place.
 function solve_tr_subproblem!{T}(gr::Vector{T},
                                  H::Matrix{T},
                                  delta::T,
                                  s::Vector{T};
-                                 tolerance=1e-10, max_iters=5)
-    n = length(gr)
+                                 tolerance=1e-10,
+                                 max_iters=5)
+    const n = length(gr)
+    const delta_sq = delta^2
+
     @assert n == length(s)
     @assert (n, n) == size(H)
-    delta2 = delta ^ 2
+    @assert max_iters >= 1
 
     H_eig = eigfact(H)
-    lambda_1 = H_eig[:values][1]
-
-    # TODO: don't call this max_lambda to avoid confusion with min_lambda
-    max_lambda = H_eig[:values][n]
-    @assert(max_lambda > 0,
-            string("Last eigenvalue is <= 0 and Hessian is not positive ",
-                   "semidefinite.  (Check that the Hessian is symmetric.)  ",
-                   "Eigenvalues: $(H_eig[:values])"))
+    min_H_ev, max_H_ev = H_eig[:values][1], H_eig[:values][n]
+    H_ridged = copy(H)
 
     # Cache the inner products between the eigenvectors and the gradient.
     qg = Array(T, n)
     for i=1:n
-      qg[i] = vecdot(H_eig[:vectors][:, i], gr)
+        qg[i] = vecdot(H_eig[:vectors][:, i], gr)
     end
 
     # Function 4.39 in N&W
-    function p_mag2(lambda, min_i)
-      p_sum = 0.
-      for i = min_i:n
-        p_sum = p_sum + (qg[i] ^ 2) / ((lambda + H_eig[:values][i]) ^ 2)
-      end
-      p_sum
+    function p_sq_norm(lambda, min_i)
+        p_sum = 0.
+        for i = min_i:n
+            p_sum += qg[i]^2 / (lambda + H_eig[:values][i])^2
+        end
+        p_sum
     end
 
-    if p_mag2(0.0, 1) <= delta2
-      # No shrinkage is necessary, and -(H \ gr) is the solution.
-      s[:] = -(H_eig[:vectors] ./ H_eig[:values]') * H_eig[:vectors]' * gr
-      lambda = 0.0
-      interior = true
-      # Logging.debug("Interior.  Eigenvalues: $(H_eig[:values])")
+    if min_H_ev >= 1e-8 && p_sq_norm(0.0, 1) <= delta_sq
+        # No shrinkage is necessary: -(H \ gr) is the minimizer
+        interior = true
+        s[:] = -(H_eig[:vectors] ./ H_eig[:values]') * H_eig[:vectors]' * gr
+        lambda = 0.0
     else
-      interior = false
-      # Logging.debug("Boundary")
+        interior = false
 
-      # The hard case is when the gradient is orthogonal to all
-      # eigenvectors associated with the lowest eigenvalue.
-      hard_case_candidate, lambda_1_multiplicity =
-        check_hard_case_candidate(H_eig[:values], qg)
+        # The hard case is when the gradient is orthogonal to all
+        # eigenvectors associated with the lowest eigenvalue.
+        hard_case_candidate, min_H_ev_multiplicity =
+            check_hard_case_candidate(H_eig[:values], qg)
 
-      # Solutions smaller than this are not allowed.
-      # Rather than >= 0, constrain to be at least
-      # within 1e-12 of the largest eigenvalue to guarantee that the
-      # matrix can be inverted.
-      # TODO: What is the right way to do this?
-      min_lambda = max(-lambda_1, 0.0) + max_lambda * 1e-12
-      lambda = min_lambda
+        # Solutions smaller than this lower bound on lambda are not allowed:
+        # they don't ridge H enough to make H_ridge PSD.
+        lambda_lb = -min_H_ev + max(1e-4, abs(min_H_ev) * 1e-4)
+        lambda = lambda_lb
 
-      hard_case = false
-      if hard_case_candidate
-        # The "hard case".  lambda is taken to be -lambda_1 and we only need
-        # to find a multiple of an orthogonal eigenvector that lands the
-        # iterate on the boundary.
+        hard_case = false
+        if hard_case_candidate
+            # The "hard case". lambda is taken to be -min_H_ev and we only need
+            # to find a multiple of an orthogonal eigenvector that lands the
+            # iterate on the boundary.
 
-        # Formula 4.45 in N&W
-        p_lambda2 = p_mag2(lambda, lambda_1_multiplicity + 1)
-        # Logging.debug("lambda_1 = $(lambda_1), p_lambda2 = $(p_lambda2), ",
-        #         "$delta2, $lambda_1_multiplicity")
-        if p_lambda2 > delta2
-          # Then we can simply solve using root finding.  Set a starting point
-          # between the minimum and largest eigenvalues.
-          # TODO: is there a better starting point?
-          # Logging.debug("Not hard case")
-          hard_case = false
-          lambda = min_lambda + 0.01 * (max_lambda - min_lambda)
-        else
-          # Logging.debug("Hard case!")
-          hard_case = true
-          tau = sqrt(delta2 - p_lambda2)
-          # Logging.debug("Tau = $tau delta2 = $delta2 p_lambda2 = $(p_lambda2)")
+            # Formula 4.45 in N&W
+            p_lambda2 = p_sq_norm(lambda, min_H_ev_multiplicity + 1)
+            if p_lambda2 > delta_sq
+                # Then we can simply solve using root finding.
+                # Set a starting point between the minimum and largest eigenvalues.
+                # TODO: is there a better starting point?
+                lambda = lambda_lb + 0.01 * (max_H_ev - lambda_lb)
+            else
+                hard_case = true
+                tau = sqrt(delta_sq - p_lambda2)
 
-          # I don't think it matters which eigenvector we pick so take the first.
-          for i=1:n
-            s[i] = tau * H_eig[:vectors][i, 1]
-            for k=(lambda_1_multiplicity + 1):n
-              s[i] = s[i] +
-                     qg[k] * H_eig[:vectors][i, k] / (H_eig[:values][k] + lambda)
+                # I don't think it matters which eigenvector we pick so take
+                # the first.
+                for i=1:n
+                    s[i] = tau * H_eig[:vectors][i, 1]
+                    for k=(min_H_ev_multiplicity + 1):n
+                        s[i] = s[i] +
+                               qg[k] * H_eig[:vectors][i, k] / (H_eig[:values][k] + lambda)
+                    end
+                end
             end
-          end
         end
-      end
 
-      if !hard_case
-        # Logging.debug("Easy case")
-        # The "easy case".
-        # Algorithim 4.3 of N&W, with s insted of p_l to be consistent with
-        # the rest of the library.
+        if !hard_case
+            # Algorithim 4.3 of N&W, with s insted of p_l for consistency with
+            # Optim.jl
 
-        root_finding_diff = Inf
-        iter = 1
-        B = copy(H)
+            for i=1:n
+                H_ridged[i, i] = H[i, i] + lambda
+            end
 
-        lambda_previous = copy(lambda)
-        for i=1:n
-          B[i, i] = H[i, i] + lambda
+            for iter in 1:max_iters
+                lambda_previous = lambda
+
+                R = chol(H_ridged)
+                s[:] = -R \ (R' \ gr)
+                q_l = R' \ s
+                norm2_s = vecdot(s, s)
+                lambda_update = norm2_s * (sqrt(norm2_s) - delta) / (delta * vecdot(q_l, q_l))
+                lambda += lambda_update
+
+                # Check that lambda is not less than lambda_lb, and if so, go
+                # half the way to lambda_lb.
+                if lambda < (lambda_lb + 1e-8)
+                    lambda = 0.5 * (lambda_previous - lambda_lb) + lambda_lb
+                end
+
+                for i=1:n
+                    H_ridged[i, i] = H[i, i] + lambda
+                end
+
+                if abs(lambda - lambda_previous) < tolerance
+                    break
+                end
+            end
         end
-        while (root_finding_diff > tolerance) && (iter <= max_iters)
-          # Logging.debug("---")
-          # Logging.debug("lambda=$lambda min_lambda=$(min_lambda)")
-          b_eigv = eigfact(B)[:values]
-          # Logging.debug("lambda_1=$(lambda_1) $(b_eigv)")
-          R = chol(B)
-          s[:] = -R \ (R' \ gr)
-          q_l = R' \ s
-          norm2_s = vecdot(s, s)
-          lambda_previous = lambda
-          lambda = (lambda_previous +
-                    norm2_s * (sqrt(norm2_s) - delta) / (delta * vecdot(q_l, q_l)))
-
-          # Check that lambda is not less than min_lambda, and if so, go half the
-          # distance to min_lambda.
-          if lambda < min_lambda
-            # TODO: add a unit test for this
-            lambda = 0.5 * (lambda_previous - min_lambda) + min_lambda
-            # Logging.debug("Step too low.  Using $(lambda) from $(lambda_previous).")
-          end
-          root_finding_diff = abs(lambda - lambda_previous)
-          iter = iter + 1
-          for i=1:n
-            B[i, i] = H[i, i] + lambda
-          end
-        end
-        @assert(iter > 1, "Bad tolerance -- no iterations were computed")
-        if iter > (max_iters + 1)
-          warn(string("In the trust region subproblem max_iters ($max_iters) ",
-                      "was exceeded.  Diff vs tolerance: ",
-                      "$(root_finding_diff) > $(tolerance)"))
-        end # end easy case root finding
-      end # end easy case
-    end # Getting s
-    m = zero(T)
-    if interior || hard_case
-      m = vecdot(gr, s) + 0.5 * vecdot(s, H * s)
-    else
-      m = vecdot(gr, s) + 0.5 * vecdot(s, B * s)
     end
-    # Logging.debug("gr . s = $(vecdot(gr, s))")
 
-    # if !interior && abs(delta2 - vecdot(s, s)) > 1e-6
-    #   warn("The norm of s is not close to delta: s2=$(vecdot(s, s)) delta2=$delta2. ",
-    #        "This may occur when the Hessian is badly conditioned.  ",
-    #        "max_ev=$(max_lambda), min_ev=$(lambda_1)")
-    # end
-    # Logging.debug("Root finding got m=$m, interior=$interior with ",
-    #         "delta^2=$delta2 and ||s||^2=$(vecdot(s, s))")
+    m = vecdot(gr, s) + 0.5 * vecdot(s, H_ridged * s)
+
     return m, interior, lambda
 end
 
 
+immutable NewtonTR <: Optimizer
+end
+
+
 function newton_tr{T}(d::TwiceDifferentiableFunction,
-                       initial_x::Vector{T};
+                       initial_x::Vector{T},
+                       mo::NewtonTR;
                        initial_delta::T=1.0,
                        delta_hat::T = 100.0,
                        eta::T = 0.1,
@@ -307,7 +273,7 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
     interior = false
 
     # Trace the history of states visited
-    tr = OptimizationTrace()
+    tr = OptimizationTrace(mo)
     tracing = store_trace || show_trace || extended_trace
     @newton_tr_trace
 
@@ -370,7 +336,7 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
 
         if rho > eta
             # Accept the point and check convergence
-        
+
             x_converged,
             f_converged,
             gr_converged,

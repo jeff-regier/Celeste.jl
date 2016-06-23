@@ -31,7 +31,8 @@ cd(wd)
 if length(ARGS) > 0
     testfiles = ["test_$(arg).jl" for arg in ARGS]
 else
-    testfiles = ["test_derivatives.jl",
+    testfiles = ["test_newton_trust_region.jl",
+                 "test_derivatives.jl",
                  "test_elbo_values.jl",
                  "test_psf.jl",
                  "test_images.jl",
