@@ -112,6 +112,7 @@ type PsfOptimizer
       psf_params_free_vec = vec(wrap_psf_params(psf_params_free))
       nm_result = newton_tr(psf_2df,
                             psf_params_free_vec,
+                            NewtonTR();
                             xtol = 0.0, # Don't allow convergence in params
                             grtol = grtol,
                             ftol = ftol,
