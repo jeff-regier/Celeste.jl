@@ -14,8 +14,9 @@ using SampleData
 using Base.Test
 using Distributions
 
-import Logging
-Logging.configure(level=Logging.INFO)
+import Lumberjack
+truck = Lumberjack._lumber_mill.timber_trucks["console"]
+Lumberjack.configure(truck; mode="info")
 
 anyerrors = false
 

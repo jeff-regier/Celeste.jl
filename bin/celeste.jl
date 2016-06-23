@@ -19,7 +19,7 @@ Usage:
 Options:
   -h, --help         Show this screen.
   --version          Show the version.
-  --logging=<LEVEL>  Level for the Logging package (OFF, DEBUG, INFO, WARNING, ERROR, or CRITICAL). [default: INFO]
+  --logging=<level>  Level for the Lumberjack package (debug, info, warn, error). [default: info]
 
 The `stage-box` subcommand copies and/or uncompresses all files covering the
 given RA/Dec range from /project to user's SCRATCH directory.
@@ -35,21 +35,8 @@ The `score-field` subcommand is not yet implemented for the new API.
 """
 
 function set_logging_level(level)
-    if level == "OFF"
-      Logging.configure(level=Logging.OFF)
-    elseif level == "DEBUG"
-      Logging.configure(level=Logging.DEBUG)
-    elseif level == "INFO"
-      Logging.configure(level=Logging.INFO)
-    elseif level == "WARNING"
-      Logging.configure(level=Logging.WARNING)
-    elseif level == "ERROR"
-      Logging.configure(level=Logging.ERROR)
-    elseif level == "CRITICAL"
-      Logging.configure(level=Logging.CRITICAL)
-    else
-      Logging.err("Unknown logging level $(level)")
-    end
+    truck = Lumberjack._lumber_mill.timber_trucks["console"]
+    Lumberjack.configure(truck; mode=level)
 end
 
 
