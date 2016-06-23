@@ -121,7 +121,7 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
         p_sum
     end
 
-    if min_H_ev >= 1e-12 && p_sq_norm(0.0, 1) <= delta_sq
+    if min_H_ev >= 1e-8 && p_sq_norm(0.0, 1) <= delta_sq
         # No shrinkage is necessary: -(H \ gr) is the minimizer
         interior = true
         s[:] = -(H_eig[:vectors] ./ H_eig[:values]') * H_eig[:vectors]' * gr
@@ -134,8 +134,9 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
         hard_case_candidate, min_H_ev_multiplicity =
             check_hard_case_candidate(H_eig[:values], qg)
 
-        # Solutions smaller than this lower bound on lambda are not allowed.
-        lambda_lb = -min_H_ev + 1e-12
+        # Solutions smaller than this lower bound on lambda are not allowed:
+        # they don't ridge H enough to make H_ridge PSD.
+        lambda_lb = -min_H_ev + max(1e-4, abs(min_H_ev) * 1e-4)
         lambda = lambda_lb
 
         hard_case = false
@@ -147,11 +148,9 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
             # Formula 4.45 in N&W
             p_lambda2 = p_sq_norm(lambda, min_H_ev_multiplicity + 1)
             if p_lambda2 > delta_sq
-                # Then we can simply solve using root finding.    Set a
-                # starting point
-                # between the minimum and largest eigenvalues.
+                # Then we can simply solve using root finding.
+                # Set a starting point between the minimum and largest eigenvalues.
                 # TODO: is there a better starting point?
-                hard_case = false
                 lambda = lambda_lb + 0.01 * (max_H_ev - lambda_lb)
             else
                 hard_case = true
@@ -188,9 +187,8 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
                 lambda += lambda_update
 
                 # Check that lambda is not less than lambda_lb, and if so, go
-                # half the
-                # distance to lambda_lb.
-                if lambda < lambda_lb
+                # half the way to lambda_lb.
+                if lambda < (lambda_lb + 1e-8)
                     lambda = 0.5 * (lambda_previous - lambda_lb) + lambda_lb
                 end
 
