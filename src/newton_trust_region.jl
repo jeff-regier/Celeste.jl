@@ -102,6 +102,13 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
     @assert (n, n) == size(H)
     @assert max_iters >= 1
 
+    # symmetrizing H...this shouldn't be necessary, but currently the 
+    # eigenvalues are only sorted if H is perfectly symmetric.
+    # (Julia issue #17093)
+    H += H'
+    H /= 2.
+    H = Symmetric(H)
+
     H_eig = eigfact(H)
     min_H_ev, max_H_ev = H_eig[:values][1], H_eig[:values][n]
     H_ridged = copy(H)
