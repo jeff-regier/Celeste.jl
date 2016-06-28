@@ -107,9 +107,7 @@ function solve_tr_subproblem!{T}(gr::Vector{T},
     # (Julia issue #17093)
     H += H'
     H /= 2.
-    H = Symmetric(H)
-
-    H_eig = eigfact(H)
+    H_eig = eigfact(Symmetric(H))
     min_H_ev, max_H_ev = H_eig[:values][1], H_eig[:values][n]
     H_ridged = copy(H)
 
