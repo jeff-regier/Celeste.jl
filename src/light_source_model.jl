@@ -97,11 +97,12 @@ function load_prior()
     c_mean = Array(Float64, B - 1, D, Ia)
     c_cov = Array(Float64, B - 1, B - 1, D, Ia)
 
-    stars_file = open(joinpath(cfgdir, "stars$D.dat"))
+    v05 = VERSION >= v"0.5.0-dev" ? "-v05" : ""
+    stars_file = open(joinpath(cfgdir, "stars$D$v05.dat"))
     r_fit1, k[:, 1], c_mean[:,:,1], c_cov[:,:,:,1] = deserialize(stars_file)
     close(stars_file)
 
-    gals_file = open(joinpath(cfgdir, "gals$D.dat"))
+    gals_file = open(joinpath(cfgdir, "gals$D$v05.dat"))
     r_fit2, k[:, 2], c_mean[:,:,2], c_cov[:,:,:,2] = deserialize(gals_file)
     close(gals_file)
 
