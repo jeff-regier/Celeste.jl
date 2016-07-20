@@ -83,10 +83,10 @@ type ObjectiveWrapperFunctions
                   names=[ "x$i" for i=1:length(iter_vp[1, :])])
               end
               for s=1:S
-                state_df[symbol(string("val", s))] = iter_vp[s]
+                state_df[Symbol(string("val", s))] = iter_vp[s]
               end
               for s=1:S
-                state_df[symbol(string("grad", s))] = grad[:, s]
+                state_df[Symbol(string("grad", s))] = grad[:, s]
               end
               Lumberjack.info(string(state_df))
               Lumberjack.info("=======================================\n")

@@ -4,7 +4,7 @@
 using DataFrames
 
 immutable MatchException <: Exception
-    msg::ASCIIString
+    msg::String
 end
 
 
@@ -99,7 +99,7 @@ function load_s82(fname)
             :devphi_r, :expphi_r,
             :devrad_r, :exprad_r,
             :flags]
-    objs = [key=>read(f[2], string(key)) for key in keys]
+    objs = Dict(key=>read(f[2], string(key)) for key in keys)
     close(f)
 
     usedev = objs[:fracdev_r] .> 0.5  # true=> use dev, false=> use exp
@@ -239,10 +239,10 @@ function load_ce!(i::Int, ce::CatalogEntry, df::DataFrame)
     for j in 1:2
         s_type = ["star", "gal"][j]
         fluxes = j == 1 ? ce.star_fluxes : ce.gal_fluxes
-        df[i, symbol("$(s_type)_mag_r")] = flux_to_mag(fluxes[3])
+        df[i, Symbol("$(s_type)_mag_r")] = flux_to_mag(fluxes[3])
         for c in 1:4
-            cc = symbol("$(s_type)_color_$(color_names[c])")
-            cc_sd = symbol("$(s_type)_color_$(color_names[c])_sd")
+            cc = Symbol("$(s_type)_color_$(color_names[c])")
+            cc_sd = Symbol("$(s_type)_color_$(color_names[c])_sd")
             if fluxes[c] > 0 && fluxes[c + 1] > 0  # leave as NA otherwise
                 df[i, cc] = -2.5log10(fluxes[c] / fluxes[c + 1])
             else
@@ -275,12 +275,12 @@ function celeste_to_df(results::Dict{Int, Dict})
                      ["gal_$c" for c in color_col_names],
                      ["gal_$c" for c in color_sd_col_names],
                      ["gal_fracdev", "gal_ab", "gal_angle", "gal_scale"])
-    col_symbols = Symbol[symbol(cn) for cn in col_names]
+    col_Symbols = Symbol[Symbol(cn) for cn in col_names]
     col_types = Array(DataType, length(col_names))
     fill!(col_types, Float64)
-    col_types[1] = ASCIIString
+    col_types[1] = String
     df = DataFrame(col_types, N)
-    names!(df, col_symbols)
+    names!(df, col_Symbols)
 
     # Fill dataframe row-by-row.
     i = 0
@@ -316,10 +316,10 @@ function celeste_to_df(results::Dict{Int, Dict})
         #TODO: update UQ to mag units not flux. Also, log-normal now, not gamma.
 #        for j in 1:2
 #            s_type = ["star", "gal"][j]
-#            df[i, symbol("$(s_type)_flux_r_sd")] =
-#                sqrt(df[i, symbol("$(s_type)_flux_r")]) * vs[ids.r2[j]]
+#            df[i, Symbol("$(s_type)_flux_r_sd")] =
+#                sqrt(df[i, Symbol("$(s_type)_flux_r")]) * vs[ids.r2[j]]
 #            for c in 1:4
-#                cc_sd = symbol("$(s_type)_color_$(color_names[c])_sd")
+#                cc_sd = Symbol("$(s_type)_color_$(color_names[c])_sd")
 #                df[i, cc_sd] = 2.5 * log10(e) * vs[ids.c2[c, j]]
 #            end
 #        end
@@ -338,19 +338,19 @@ compute an a data frame containing each prediction's error.
 Let's call the return type of this function an \"error data frame\".
 """
 function get_err_df(truth::DataFrame, predicted::DataFrame)
-    color_cols = [symbol("color_$cn") for cn in color_names]
+    color_cols = [Symbol("color_$cn") for cn in color_names]
     abs_err_cols = [:gal_fracdev, :gal_ab, :gal_scale]
-    col_symbols = vcat([:objid, :position, :missed_stars,
+    col_Symbols = vcat([:objid, :position, :missed_stars,
                         :missed_gals, :mag_r],
                        color_cols,
                        abs_err_cols,
                        :gal_angle)
 
-    col_types = fill(Float64, length(col_symbols))
-    col_types[1] = ASCIIString
+    col_types = fill(Float64, length(col_Symbols))
+    col_types[1] = String
     col_types[3] = col_types[4] = Bool
     ret = DataFrame(col_types, size(truth, 1))
-    names!(ret, col_symbols)
+    names!(ret, col_Symbols)
     ret[:objid] = truth[:objid]
 
     predicted_gal = predicted[:is_star] .< .5
@@ -367,12 +367,12 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
         abs(truth[!true_gal, :star_mag_r] - predicted[!true_gal, :star_mag_r])
 
     for cn in color_names
-        ret[true_gal, symbol("color_$cn")] =
-            abs(truth[true_gal, symbol("gal_color_$cn")] -
-                predicted[true_gal, symbol("gal_color_$cn")])
-        ret[!true_gal, symbol("color_$cn")] =
-            abs(truth[!true_gal, symbol("star_color_$cn")] -
-                predicted[!true_gal, symbol("star_color_$cn")])
+        ret[true_gal, Symbol("color_$cn")] =
+            abs(truth[true_gal, Symbol("gal_color_$cn")] -
+                predicted[true_gal, Symbol("gal_color_$cn")])
+        ret[!true_gal, Symbol("color_$cn")] =
+            abs(truth[!true_gal, Symbol("star_color_$cn")] -
+                predicted[!true_gal, Symbol("star_color_$cn")])
     end
 
     for n in abs_err_cols
