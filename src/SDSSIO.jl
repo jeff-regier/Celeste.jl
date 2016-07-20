@@ -217,10 +217,10 @@ function load_field_images(
            run::Integer,
            camcol::Integer,
            field::Integer,
-           frame_dir::ByteString;
-           fpm_dir::ByteString=frame_dir,
-           psfield_dir::ByteString=frame_dir,
-           photofield_dir::ByteString=frame_dir)
+           frame_dir::String;
+           fpm_dir::String=frame_dir,
+           psfield_dir::String=frame_dir,
+           photofield_dir::String=frame_dir)
 
     # read gain for each band
     photofield_name = @sprintf("%s/photoField-%06d-%d.fits",
@@ -293,7 +293,7 @@ This function was originally based on the function sdss_psf_at_points
 in astrometry.net:
 https://github.com/dstndstn/astrometry.net/blob/master/util/sdss_psf.py
 """
-function call(psf::RawPSF, x::Real, y::Real)
+function (psf::RawPSF)(x::Real, y::Real)
     const RCS = 0.001  # A coordinate transform to keep polynomial
                        # coefficients to a reasonable size.
     nk = size(psf.rrows, 2)  # number of eigen images.

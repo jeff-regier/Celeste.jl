@@ -161,7 +161,7 @@ function get_id_names(
   ids::Union{CanonicalParams, UnconstrainedParams})
   ids_names = Array(String, length(ids))
   for name in fieldnames(ids)
-    inds = ids.(name)
+    inds = getfield(ids, name)
     if length(size(inds)) == 0
       ids_names[inds] = "$(name)"
     elseif length(size(inds)) == 1

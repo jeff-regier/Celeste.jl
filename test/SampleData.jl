@@ -132,7 +132,7 @@ function load_stamp_catalog_df(cat_dir, stamp_id, blob; match_blob=false)
     df = DataFrames.DataFrame()
     for i in 1:num_cols
         tmp_data = read(cat_fits[2], ttypes[i])
-        df[symbol(ttypes[i])] = tmp_data
+        df[Symbol(ttypes[i])] = tmp_data
     end
 
     close(cat_fits)
@@ -163,13 +163,13 @@ function load_stamp_catalog(cat_dir, stamp_id, blob; match_blob=false)
         fracs_dev = [row[1, :frac_dev], 1 - row[1, :frac_dev]]
         for b in 1:length(band_letters)
             bl = band_letters[b]
-            psf_col = symbol("psfflux_$bl")
+            psf_col = Symbol("psfflux_$bl")
 
             # TODO: How can there be negative fluxes?
             star_fluxes[b] = max(row[1, psf_col], 1e-6)
 
-            dev_col = symbol("devflux_$bl")
-            exp_col = symbol("expflux_$bl")
+            dev_col = Symbol("devflux_$bl")
+            exp_col = Symbol("expflux_$bl")
             gal_fluxes[b] += fracs_dev[1] * max(row[1, dev_col], 1e-6) +
                              fracs_dev[2] * max(row[1, exp_col], 1e-6)
         end
