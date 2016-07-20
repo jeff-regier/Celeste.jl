@@ -103,7 +103,7 @@ immutable SimplexBox
   end
 end
 
-# The vector of transform parameters for a symbol.
+# The vector of transform parameters for a Symbol.
 typealias ParamBounds Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
 
 
@@ -359,14 +359,14 @@ function get_transform_derivatives!{NumType <: Number}(
   	constraint_vec = bounds[sa][param]
 
   	if isa(constraint_vec[1], ParamBox) # It is a box constraint
-  		@assert(length(constraint_vec) == length(ids_free.(param)) ==
-        length(ids.(param)))
+  		@assert(length(constraint_vec) == length(getfield(ids_free, param)) ==
+        length(getfield(ids, param)))
 
   		# Get each components' derivatives one by one.
   		for ind = 1:length(constraint_vec)
   			@assert isa(constraint_vec[ind], ParamBox)
-  			vp_ind = ids.(param)[ind]
-  			vp_free_ind = ids_free.(param)[ind]
+  			vp_ind = getfield(ids, param)[ind]
+  			vp_free_ind = getfield(ids_free, param)[ind]
 
   			jac, hess = box_derivatives(vp[s][vp_ind], constraint_vec[ind])
 
@@ -382,12 +382,12 @@ function get_transform_derivatives!{NumType <: Number}(
   			# If a param is not a box constraint, it must have all simplex constraints.
   		@assert all([ isa(constraint, SimplexBox)  for constraint in constraint_vec])
 
-  		param_size = size(ids.(param))
+  		param_size = size(getfield(ids, param))
   		if length(param_size) == 2 # It's a simplex matrix
   			@assert length(constraint_vec) == param_size[2]
   			for col=1:(param_size[2])
-  				vp_free_ind = ids_free.(param)[:, col]
-  				vp_ind = ids.(param)[:, col]
+  				vp_free_ind = getfield(ids_free, param)[:, col]
+  				vp_ind = getfield(ids, param)[:, col]
   				vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
   				vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
@@ -402,8 +402,8 @@ function get_transform_derivatives!{NumType <: Number}(
   			end
   		else # It is simply a single simplex vector.
   			@assert length(constraint_vec) == 1
-  			vp_free_ind = ids_free.(param)
-  			vp_ind = ids.(param)
+  			vp_free_ind = getfield(ids_free, param)
+  			vp_ind = getfield(ids, param)
   			vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
   			vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
@@ -457,12 +457,12 @@ function perform_transform!{NumType <: Number}(
     is_box = isa(bounds[param], Array{ParamBox})
     if is_box
       # Apply a box constraint to each parameter.
-      @assert(length(ids.(param)) == length(ids_free.(param)) ==
+      @assert(length(getfield(ids, param)) == length(getfield(ids_free, param)) ==
         length(bounds[param]))
-      for ind in 1:length(ids.(param))
+      for ind in 1:length(getfield(ids, param))
         constraint = constraint_vec[ind]
-        free_ind = ids_free.(param)[ind]
-        vp_ind = ids.(param)[ind]
+        free_ind = getfield(ids_free, param)[ind]
+        vp_ind = getfield(ids, param)[ind]
         to_unconstrained ?
           vp_free[free_ind] = unbox_parameter(vp[vp_ind], constraint):
           vp[vp_ind] = box_parameter(vp_free[free_ind], constraint)
@@ -472,14 +472,14 @@ function perform_transform!{NumType <: Number}(
       @assert isa(bounds[param], Array{SimplexBox})
       # Some simplicial parameters are vectors, some are matrices.  Which is
       # which is determined by the size of the ids.
-      param_size = size(ids.(param))
+      param_size = size(getfield(ids, param))
       if length(param_size) == 2
         # If the ids are a matrix, then each column is a simplex.
         # Each column should have its own simplicial constrains.
         @assert length(bounds[param]) == param_size[2]
         for col in 1:(param_size[2])
-          free_ind = ids_free.(param)[:, col]
-          vp_ind = ids.(param)[:, col]
+          free_ind = getfield(ids_free, param)[:, col]
+          vp_ind = getfield(ids, param)[:, col]
           constraint = constraint_vec[col]
           to_unconstrained ?
             vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint):
@@ -488,8 +488,8 @@ function perform_transform!{NumType <: Number}(
       else
         # It is simply a simplex vector.
         @assert length(bounds[param]) == 1
-        free_ind = ids_free.(param)
-        vp_ind = ids.(param)
+        free_ind = getfield(ids_free, param)
+        vp_ind = getfield(ids, param)
         constraint = constraint_vec[1]
         to_unconstrained ?
           vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint):
@@ -778,62 +778,62 @@ function enforce_bounds!{NumType <: Number}(
     is_box = isa(constraint_vec, Array{ParamBox})
     if is_box
       # Box parameters.
-      for ind in 1:length(ids.(param))
+      for ind in 1:length(getfield(ids, param))
         constraint = constraint_vec[ind]
         if !(constraint.lower_bound <=
-             ea.vp[s][ids.(param)[ind]] <=
+             ea.vp[s][getfield(ids, param)[ind]] <=
              constraint.upper_bound)
           Lumberjack.debug("param[$s][$ind] was out of bounds.")
           # Don't set the value to exactly the lower bound to avoid Inf
           diff = constraint.upper_bound - constraint.lower_bound
           epsilon = diff == Inf ? 1e-12: diff * 1e-12
-          ea.vp[s][ids.(param)[ind]] =
-            min(ea.vp[s][ids.(param)[ind]], constraint.upper_bound - epsilon)
-          ea.vp[s][ids.(param)[ind]] =
-            max(ea.vp[s][ids.(param)[ind]], constraint.lower_bound + epsilon)
+          ea.vp[s][getfield(ids, param)[ind]] =
+            min(ea.vp[s][getfield(ids, param)[ind]], constraint.upper_bound - epsilon)
+          ea.vp[s][getfield(ids, param)[ind]] =
+            max(ea.vp[s][getfield(ids, param)[ind]], constraint.lower_bound + epsilon)
         end
       end
     else
-      param_size = size(ids.(param))
+      param_size = size(getfield(ids, param))
       if length(param_size) == 2
         # matrix simplex
         for col in 1:param_size[2]
           constraint = constraint_vec[col]
           for row in 1:param_size[1]
-            if !(constraint.lower_bound <= ea.vp[s][ids.(param)[row, col]] <= 1.0)
+            if !(constraint.lower_bound <= ea.vp[s][getfield(ids, param)[row, col]] <= 1.0)
               Lumberjack.debug("param[$s][$row, $col] was out of bounds.")
               # Don't set the value to exactly the lower bound to avoid Inf
               epsilon = (1.0 - constraint.lower_bound) * 1e-12
-              ea.vp[s][ids.(param)[row, col]] =
-                min(ea.vp[s][ids.(param)[row, col]], 1.0 - epsilon)
-              ea.vp[s][ids.(param)[row, col]] =
-                max(ea.vp[s][ids.(param)[row, col]],
+              ea.vp[s][getfield(ids, param)[row, col]] =
+                min(ea.vp[s][getfield(ids, param)[row, col]], 1.0 - epsilon)
+              ea.vp[s][getfield(ids, param)[row, col]] =
+                max(ea.vp[s][getfield(ids, param)[row, col]],
                     constraint.lower_bound + epsilon)
             end
           end
-          if sum(ea.vp[s][ids.(param)[:, col]]) != 1.0
+          if sum(ea.vp[s][getfield(ids, param)[:, col]]) != 1.0
             Lumberjack.debug("param[$s][:, $col] is not normalized.")
-            ea.vp[s][ids.(param)[:, col]] =
-              ea.vp[s][ids.(param)[:, col]] / sum(ea.vp[s][ids.(param)[:, col]])
+            ea.vp[s][getfield(ids, param)[:, col]] =
+              ea.vp[s][getfield(ids, param)[:, col]] / sum(ea.vp[s][getfield(ids, param)[:, col]])
           end
         end
       else
         # vector simplex
         constraint = constraint_vec[1]
         for row in 1:param_size[1]
-          if !(constraint.lower_bound <= ea.vp[s][ids.(param)[row]] <= 1.0)
+          if !(constraint.lower_bound <= ea.vp[s][getfield(ids, param)[row]] <= 1.0)
             Lumberjack.debug("param[$s][$row] was out of bounds.")
             # Don't set the value to exactly the lower bound to avoid Inf
             epsilon = (1.0 - constraint.lower_bound) * 1e-12
-            ea.vp[s][ids.(param)[row]] =
-              min(ea.vp[s][ids.(param)[row]], 1.0 - epsilon)
-            ea.vp[s][ids.(param)[row]] =
-              max(ea.vp[s][ids.(param)[row]], constraint.lower_bound + epsilon)
+            ea.vp[s][getfield(ids, param)[row]] =
+              min(ea.vp[s][getfield(ids, param)[row]], 1.0 - epsilon)
+            ea.vp[s][getfield(ids, param)[row]] =
+              max(ea.vp[s][getfield(ids, param)[row]], constraint.lower_bound + epsilon)
           end
         end
-        if sum(ea.vp[s][ids.(param)]) != 1.0
+        if sum(ea.vp[s][getfield(ids, param)]) != 1.0
           Lumberjack.debug("param[$s] is not normalized.")
-          ea.vp[s][ids.(param)] = ea.vp[s][ids.(param)] / sum(ea.vp[s][ids.(param)])
+          ea.vp[s][getfield(ids, param)] = ea.vp[s][getfield(ids, param)] / sum(ea.vp[s][getfield(ids, param)])
         end
       end
     end

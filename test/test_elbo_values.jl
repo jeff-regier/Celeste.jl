@@ -193,7 +193,7 @@ function test_that_galaxy_truth_is_most_likely()
     for n in [:e_axis, :e_angle, :e_scale]
         for bad_scale in [.8, 1.2]
             ea_bad = deepcopy(ea)
-            ea_bad.vp[1][ids.(n)] *= bad_scale
+            ea_bad.vp[1][getfield(ids, n)] *= bad_scale
             bad_elbo = ElboDeriv.elbo_likelihood(
               ea_bad; calculate_derivs=false)
             @test best.v[1] > bad_elbo.v[1]
@@ -257,7 +257,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     for n in [:e_axis, :e_angle, :e_scale]
         for bad_scale in [.6, 1.8]
             ea_bad = deepcopy(ea)
-            ea_bad.vp[s][ids.(n)] *= bad_scale
+            ea_bad.vp[s][getfield(ids, n)] *= bad_scale
             bad_elbo = ElboDeriv.elbo_likelihood(
               ea_bad; calculate_derivs=false)
             @test best.v[1] > bad_elbo.v[1]

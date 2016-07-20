@@ -21,25 +21,25 @@ function generate_valid_parameters(
         is_box = isa(constraint_vec, Array{ParamBox})
         if is_box
             # Box parameters.
-            for ind in 1:length(ids.(param))
+            for ind in 1:length(getfield(ids, param))
                 constraint = constraint_vec[ind]
                 constraint.upper_bound == Inf ?
-                    vp[s][ids.(param)[ind]] = constraint.lower_bound + 1.0:
-                    vp[s][ids.(param)[ind]] =
+                    vp[s][getfield(ids, param)[ind]] = constraint.lower_bound + 1.0:
+                    vp[s][getfield(ids, param)[ind]] =
                         0.5 * (constraint.upper_bound - constraint.lower_bound) +
                         constraint.lower_bound
             end
         else
             # Simplex parameters can ignore the bounds.
-            param_size = size(ids.(param))
+            param_size = size(getfield(ids, param))
             if length(param_size) == 2
                 # matrix simplex
                 for col in 1:param_size[2]
-                    vp[s][ids.(param)[:, col]] = 1 / param_size[1]
+                    vp[s][getfield(ids, param)[:, col]] = 1 / param_size[1]
                 end
             else
                 # vector simplex
-                vp[s][ids.(param)] = 1 / length(ids.(param))
+                vp[s][getfield(ids, param)] = 1 / length(getfield(ids, param))
             end
         end
         end
@@ -104,14 +104,14 @@ function test_box_derivatives()
 
 	box_params = setdiff(fieldnames(ids), [:a, :k])
 	vp_free = transform.from_vp(ea.vp)
-	for sa = 1:length(ea.active_sources), param in box_params, ind in length(ids.(param))
+	for sa = 1:length(ea.active_sources), param in box_params, ind in length(getfield(ids, param))
 		# sa = 1
 		# param = box_params[1]
 		# ind = 1
 
 		s = ea.active_sources[sa]
-		vp_ind = ids.(param)[ind]
-		free_ind = [ids_free.(param)[ind]]
+		vp_ind = getfield(ids, param)[ind]
+		free_ind = [getfield(ids_free, param)[ind]]
 
 		function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
 			local_vp_free =
@@ -119,7 +119,7 @@ function test_box_derivatives()
 			                  sa = 1:length(ea.active_sources) ]
 			local_vp_free[s] = vp_free_s
 			vp = transform.to_vp(local_vp_free)
-			vp[s][ids.(param)[ind]]
+			vp[s][getfield(ids, param)[ind]]
 		end
 
 		ad_d  = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind][1]
@@ -152,18 +152,18 @@ function test_box_simplex_derivatives()
 		# ind = 1 # Index within the simplex
 
 		s = ea.active_sources[sa]
-		num_cols = length(size(ids.(param)))
+		num_cols = length(size(getfield(ids, param)))
 		@assert num_cols == 1 || num_cols == 2
 
 		for col = 1:num_cols
-			vp_ind = ids.(param)[:, col]
+			vp_ind = getfield(ids, param)[:, col]
 
-			if length(size(ids_free.(param))) == 0
+			if length(size(getfield(ids_free, param))) == 0
 				# Hack to handle ids_free.a
 				@assert col == 1
-				free_ind = [ ids_free.(param) ]
+				free_ind = [ getfield(ids_free, param) ]
 			else
-				free_ind = ids_free.(param)[:, col]
+				free_ind = getfield(ids_free, param)[:, col]
 			end
 
 			d, h = Transform.box_simplex_derivatives(
@@ -177,7 +177,7 @@ function test_box_simplex_derivatives()
 			  	                     sa = 1:length(ea.active_sources) ]
 			  	local_vp_free[s] = vp_free_s
 			  	vp = transform.to_vp(local_vp_free)
-			  	vp[s][ids.(param)[row, col]]
+			  	vp[s][getfield(ids, param)[row, col]]
 			  end
 
 			  ad_d = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind]
@@ -233,8 +233,8 @@ function test_parameter_conversion()
 		transform.to_vp!(vp_free, ea_check.vp)
 
 		for id in fieldnames(ids), s in 1:ea.S
-			@test_approx_eq_eps(original_vp[s][ids.(id)],
-			                    ea_check.vp[s][ids.(id)], 1e-6)
+			@test_approx_eq_eps(original_vp[s][getfield(ids, id)],
+			                    ea_check.vp[s][getfield(ids, id)], 1e-6)
 		end
 
 		# Check conversion to and from a vector.
@@ -247,7 +247,7 @@ function test_parameter_conversion()
 		transform.array_to_vp!(x, vp2, omitted_ids)
 		for id in fieldnames(ids), si in 1:transform.active_S
 			s = transform.active_sources[si]
-			@test_approx_eq_eps(original_vp[s][ids.(id)], vp2[si][ids.(id)], 1e-6)
+			@test_approx_eq_eps(original_vp[s][getfield(ids, id)], vp2[si][getfield(ids, id)], 1e-6)
 		end
 
 	end

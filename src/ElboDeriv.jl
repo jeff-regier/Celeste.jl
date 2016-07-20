@@ -8,6 +8,7 @@ import ForwardDiff
 using ..Model
 using ..SensitiveFloats
 import ..WCSUtils
+import ..SensitiveFloats.clear!
 
 export ElboArgs
 

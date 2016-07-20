@@ -102,26 +102,6 @@ function test_bvn_cov()
 end
 
 
-
-function test_bvn_cov()
-        e_axis = .7
-        e_angle = pi/5
-        e_scale = 2.
-
-        manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
-        util_11 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
-        @test_approx_eq util_11 manual_11
-
-        manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
-        util_12 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
-        @test_approx_eq util_12 manual_12
-
-        manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
-        util_22 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
-        @test_approx_eq util_22 manual_22
-end
-
-
 function test_real_image()
     # TODO: replace this with stamp tests having non-trivial WCS transforms.
     # TODO: streamline the creation of small real images.
