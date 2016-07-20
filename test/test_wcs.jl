@@ -50,7 +50,7 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     sky_y = collect(read(img_fits[3], "YINTERP"))
 
     # Get the WCS coordinates.
-    header_str = FITSIO.read_header(img_fits[1], ASCIIString)
+    header_str = FITSIO.read_header(img_fits[1], String)
     wcs = WCS.from_header(header_str)[1]
 
     # These are the column types (not currently used).

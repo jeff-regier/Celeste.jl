@@ -245,7 +245,7 @@ end
 
 function load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_dirs)
     images = TiledImage[]
-    image_names = ASCIIString[]
+    image_names = String[]
     image_count = 0
 
     for i in 1:length(fieldids)

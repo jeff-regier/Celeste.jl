@@ -4,7 +4,7 @@
 using DataFrames
 
 immutable MatchException <: Exception
-    msg::ASCIIString
+    msg::String
 end
 
 
@@ -278,7 +278,7 @@ function celeste_to_df(results::Dict{Int, Dict})
     col_symbols = Symbol[symbol(cn) for cn in col_names]
     col_types = Array(DataType, length(col_names))
     fill!(col_types, Float64)
-    col_types[1] = ASCIIString
+    col_types[1] = String
     df = DataFrame(col_types, N)
     names!(df, col_symbols)
 
@@ -347,7 +347,7 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
                        :gal_angle)
 
     col_types = fill(Float64, length(col_symbols))
-    col_types[1] = ASCIIString
+    col_types[1] = String
     col_types[3] = col_types[4] = Bool
     ret = DataFrame(col_types, size(truth, 1))
     names!(ret, col_symbols)

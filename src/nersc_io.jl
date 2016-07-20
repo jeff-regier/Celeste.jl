@@ -179,7 +179,7 @@ function query_overlapping_fields(ramin, ramax, decmin, decmax)
     close(f)
 
     # initialize output "table"
-    out = Dict{ASCIIString, Vector}("run"=>Int[],
+    out = Dict{String, Vector}("run"=>Int[],
                                     "camcol"=>Int[],
                                     "field"=>Int[],
                                     "ramin"=>Float64[],
