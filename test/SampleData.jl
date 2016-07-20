@@ -79,7 +79,7 @@ function load_stamp_blob(stamp_dir, stamp_id)
         nelec_f32 = round(dn * hdr["GAIN"])
         nelec = convert(Array{Float64}, nelec_f32)
 
-        header_str = FITSIO.read_header(fits[1], ASCIIString)
+        header_str = FITSIO.read_header(fits[1], String)
         wcs = WCS.from_header(header_str)[1]
         close(fits)
 

@@ -101,7 +101,7 @@ Read an SDSS \"frame\" FITS file and return a 4-tuple:
 """
 function read_frame(fname)
     f = FITSIO.FITS(fname)
-    hdr = FITSIO.read_header(f[1], ASCIIString)::ASCIIString
+    hdr = FITSIO.read_header(f[1], String)::String
     image = read(f[1])::Array{Float32, 2}  # sky-subtracted & calibrated data
     calibration = read(f[2])::Vector{Float32}
     sky = read_sky(f[3])
@@ -170,8 +170,8 @@ function read_mask(fname, mask_planes=DEFAULT_MASK_PLANES)
     # other HDUs are. Use this to find the indicies of all the relevant
     # HDUs (those with attributeName matching a value in `mask_planes`).
     value = read(f[12], "Value")::Vector{Int32}
-    def = read(f[12], "defName")::Vector{ASCIIString}
-    attribute = read(f[12], "attributeName")::Vector{ASCIIString}
+    def = read(f[12], "defName")::Vector{String}
+    attribute = read(f[12], "attributeName")::Vector{String}
 
     # initialize return values
     xranges = UnitRange{Int}[]
@@ -380,7 +380,7 @@ function read_photoobj(fname, band::Char='r')
     # header, indicating no objects. We check explicitly for this case here
     # and return an empty table
     if (length(f) < 2) || (!isa(f[2], FITSIO.TableHDU))
-        catalog = Dict("objid"=>ASCIIString[],
+        catalog = Dict("objid"=>String[],
                        "ra"=>Float64[],
                        "dec"=>Float64[],
                        "thing_id"=>Int32[],
@@ -406,7 +406,7 @@ function read_photoobj(fname, band::Char='r')
 
     hdu = f[2]::FITSIO.TableHDU
 
-    objid = read(hdu, "objid")::Vector{ASCIIString}
+    objid = read(hdu, "objid")::Vector{String}
     ra = read(hdu, "ra")::Vector{Float64}
     dec = read(hdu, "dec")::Vector{Float64}
     mode = read(hdu, "mode")::Vector{UInt8}
@@ -498,7 +498,7 @@ end
 Convert from a catalog in dictionary-of-arrays, as returned by
 read_photoobj to Vector{CatalogEntry}.
 """
-function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{ASCIIString, Any})
+function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{String, Any})
     out = Array(CatalogEntry, length(catalog["objid"]))
 
     for i=1:length(catalog["objid"])
