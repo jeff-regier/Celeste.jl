@@ -50,7 +50,7 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     sky_y = collect(read(img_fits[3], "YINTERP"))
 
     # Get the WCS coordinates.
-    header_str = FITSIO.read_header(img_fits[1], ASCIIString)
+    header_str = FITSIO.read_header(img_fits[1], String)
     wcs = WCS.from_header(header_str)[1]
 
     # These are the column types (not currently used).
@@ -76,15 +76,22 @@ function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
     # ...keeping in mind that IDL uses zero indexing:
     # http://www.exelisvis.com/docs/Manipulating_Arrays.html
     sky_grid_vals = ((1:1.:size(sky_image_raw)[1]) - 1, (1:1.:size(sky_image_raw)[2]) - 1)
+    # This interpolation is really slow.
     sky_grid = Grid.CoordInterpGrid(sky_grid_vals, sky_image_raw[:,:,1],
                                     Grid.BCnearest, Grid.InterpLinear)
 
-    # This interpolation is really slow.
-    sky_image = [ sky_grid[x, y] for x in sky_x, y in sky_y ]
+    sky_image = Array(Float32, length(sky_x), length(sky_y))
+    for j in 1:length(sky_y)
+        for i in 1:length(sky_x)
+            sky_image[i, j] = sky_grid[sky_x[i], sky_y[j]]
+        end
+    end
 
     # Convert to raw electron counts.  Note that these may not be close to integers
     # due to the analog to digital conversion process in the telescope.
-    nelec = gain * convert(Array{Float64, 2}, (processed_image ./ calib_image .+ sky_image))
+    uncalib_img = processed_image ./ calib_image
+    with_sky = uncalib_img .+ sky_image
+    nelec = gain * with_sky
 
     nelec, calib_col, sky_grid, sky_x, sky_y, sky_image, wcs
 end

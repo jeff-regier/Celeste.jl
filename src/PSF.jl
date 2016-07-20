@@ -308,8 +308,8 @@ function transform_psf_params!{NumType <: Number}(
 
   for k=1:length(psf_params)
     for (param, constraint_vec) in psf_transform.bounds[k]
-      for ind in 1:length(psf_ids.(param))
-        param_ind = psf_ids.(param)[ind]
+      for ind in 1:length(getfield(psf_ids, param))
+        param_ind = getfield(psf_ids, param)[ind]
         constraint = constraint_vec[ind]
         to_unconstrained ?
           psf_params_free[k][param_ind] =
@@ -604,7 +604,7 @@ function transform_psf_sensitive_float!{NumType <: Number}(
 
       # The rest are one-dimensional.
       for field in setdiff(fieldnames(PsfParams), [ :mu ])
-        ind = psf_ids.(field)
+        ind = getfield(psf_ids, field)
         jac, hess = Transform.box_derivatives(
           psf_params[k][ind], psf_transform.bounds[k][field][1])
         jacobian_diag[offset + ind] = jac

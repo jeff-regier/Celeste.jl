@@ -15,7 +15,7 @@ type CatalogEntry
     gal_ab::Float64
     gal_angle::Float64
     gal_scale::Float64
-    objid::ASCIIString
+    objid::String
     thing_id::Int
 end
 

@@ -258,7 +258,7 @@ function test_psf_optimizer()
   for k=1:K
     @test_approx_eq psf_params_10_10_v1[k] psf_params_10_10_v2[k]
     for field in fieldnames(celeste_psf_10_10_v1[k])
-      @test_approx_eq celeste_psf_10_10_v1[k].(field) celeste_psf_10_10_v2[k].(field)
+      @test_approx_eq getfield(celeste_psf_10_10_v1[k], field) getfield(celeste_psf_10_10_v2[k], field)
     end
   end
 end
