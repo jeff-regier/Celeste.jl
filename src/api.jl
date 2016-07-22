@@ -142,6 +142,34 @@ function time_puts(elapsedtime, bytes, gctime, allocs)
     nputs(dt_nodeid, s)
 end
 
+"""
+Divide `N` into `np` parts as evenly as possible, returning `my` part as
+a (first, last) tuple.
+"""
+function divparts(N, np, my)
+    len, rem = divrem(N, np)
+    if len == 0
+        if my > rem
+            return 1, 0
+        end
+        len, rem = 1, 0
+    end
+    # compute my part
+    f = 1 + ((my-1) * len)
+    l = f + len - 1
+    # distribute remaining evenly
+    if rem > 0
+        if my <= rem
+            f = f + (my-1)
+            l = l + my
+        else
+            f = f + rem
+            l = l + rem
+        end
+    end
+    return f, l
+end
+ 
 
 """
 Divide the given ra, dec range into sky areas of `wira`x`widec` and
@@ -236,7 +264,6 @@ function divide_and_infer(ra_range::Tuple{Float64, Float64},
     tic()
     while rundt[]
         rundtree(rundt)
-        cpu_pause()
     end
     finalize(dt)
     timing.wait_done = toq()
@@ -299,7 +326,11 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                thread_fun=phalse,
                timing=InferTiming())
 
-    Lumberjack.info("Running with $(nthreads()) threads")
+    nprocthreads = nthreads()
+    if reserve_thread[]
+        nprocthreads = nprocthreads-1
+    end
+    Lumberjack.info("Running with $(nprocthreads) threads")
 
     # Read all primary objects in these fields.
     tic()
@@ -353,42 +384,49 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # iterate over sources
     results = Dict{Int, Dict}()
     results_lock = SpinLock()
-    tic()
-    @threads for ts in 1:length(target_sources)
+    function process_sources()
         tid = threadid()
+
         if reserve_thread[] && tid == 1
             while reserve_thread[]
                 thread_fun(reserve_thread)
                 cpu_pause()
             end
         else
-            s = target_sources[ts]
-            entry = catalog[s]
+            # divide loop iterations among threads
+            f, l = divparts(length(target_sources), nprocthreads, tid)
+            for ts = f:l
+                s = target_sources[ts]
+                entry = catalog[s]
 
-#            try
-                nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
-                gc()
+#                try
+                    nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
+                    gc()
 
-                t0 = time()
-                # TODO: subset images to images_local too.
-                vs_opt = Infer.infer_source(images,
-                                            catalog[neighbor_map[ts]],
-                                            entry)
-                runtime = time() - t0
+                    t0 = time()
+                    # TODO: subset images to images_local too.
+                    vs_opt = Infer.infer_source(images,
+                                                catalog[neighbor_map[ts]],
+                                                entry)
+                    runtime = time() - t0
 
-                lock!(results_lock)
-                results[entry.thing_id] = Dict(
-                             "objid"=>entry.objid,
-                             "ra"=>entry.pos[1],
-                             "dec"=>entry.pos[2],
-                             "vs"=>vs_opt,
-                             "runtime"=>runtime)
-                unlock!(results_lock)
-#            catch ex
-#                Lumberjack.err(ex)
-#            end
+                    lock!(results_lock)
+                    results[entry.thing_id] = Dict(
+                                 "objid"=>entry.objid,
+                                 "ra"=>entry.pos[1],
+                                 "dec"=>entry.pos[2],
+                                 "vs"=>vs_opt,
+                                 "runtime"=>runtime)
+                    unlock!(results_lock)
+#                catch ex
+#                    Lumberjack.err(ex)
+#                end
+            end
         end
     end
+
+    tic()
+    ccall(:jl_threading_run, Void, (Any,), Core.svec(process_sources))
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
 
