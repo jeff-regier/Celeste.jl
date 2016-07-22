@@ -27,7 +27,7 @@ else
 end
 
 # Use threads (on the loop over sources)
-const Threaded = false
+const Threaded = true
 if Threaded && VERSION > v"0.5.0-dev"
     using Base.Threads
 else
