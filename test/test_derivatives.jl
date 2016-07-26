@@ -823,12 +823,12 @@ function test_galaxy_cache_component()
         f_wrap(par))
 
     # Check the gradient.
-    ad_grad_fun = ForwardDiff.gradient(f_wrap)
+    ad_grad_fun = x -> ForwardDiff.gradient(f_wrap, x)
     ad_grad = ad_grad_fun(par)
     bvn_derivs = elbo_vars.bvn_derivs
     @test_approx_eq ad_grad [bvn_derivs.bvn_u_d; bvn_derivs.bvn_s_d]
 
-    ad_hess_fun = ForwardDiff.hessian(f_wrap)
+    ad_hess_fun = x -> ForwardDiff.hessian(f_wrap, x)
     ad_hess = ad_hess_fun(par)
 
     @test_approx_eq ad_hess[1:2, 1:2] bvn_derivs.bvn_uu_h
@@ -871,11 +871,11 @@ function test_galaxy_sigma_derivs()
 
         gal_derivs = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
 
-        ad_grad_fun = ForwardDiff.gradient(f_wrap)
+        ad_grad_fun = x -> ForwardDiff.gradient(f_wrap, x)
         ad_grad = ad_grad_fun(par)
         @test_approx_eq gal_derivs.j[si, :][:] ad_grad
 
-        ad_hess_fun = ForwardDiff.hessian(f_wrap)
+        ad_hess_fun = x -> ForwardDiff.hessian(f_wrap, x)
         ad_hess = ad_hess_fun(par)
         @test_approx_eq(
             ad_hess,
