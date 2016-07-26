@@ -384,6 +384,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # iterate over sources
     results = Dict{Int, Dict}()
     results_lock = SpinLock()
+    serialize_lock = SpinLock()
     function process_sources()
         tid = threadid()
 
@@ -407,7 +408,8 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                     # TODO: subset images to images_local too.
                     vs_opt = Infer.infer_source(images,
                                                 catalog[neighbor_map[ts]],
-                                                entry)
+                                                entry,
+                                                serialize_lock)
                     runtime = time() - t0
 
                     lock!(results_lock)

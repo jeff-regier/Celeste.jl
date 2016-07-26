@@ -8,6 +8,21 @@ import ..WCSUtils
 import ..PSF
 import ..OptimizeElbo
 
+# Use threads
+const Threaded = true
+if Threaded && VERSION > v"0.5.0-dev"
+    using Base.Threads
+else
+    # Pre-Julia 0.5 there are no threads
+    nthreads() = 1
+    threadid() = 1
+    macro threads(x)
+        x
+    end
+    SpinLock() = 1
+    lock!(l) = ()
+    unlock!(l) = ()
+end
 
 
 """
@@ -84,13 +99,14 @@ Arguments:
 """
 function infer_source(images::Vector{TiledImage},
                       neighbors::Vector{CatalogEntry},
-                      entry::CatalogEntry)
+                      entry::CatalogEntry,
+                      serialize_lock::SpinLock)
     cat_local = vcat(entry, neighbors)
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
-    patches, tile_source_map = get_tile_source_map(images, cat_local)
+    patches, tile_source_map = get_tile_source_map(images, cat_local, serialize_lock)
     ea = ElboArgs(images, vp, tile_source_map, patches, [1])
     fit_object_psfs!(ea, ea.active_sources)
-    trim_source_tiles!(ea)
+    trim_source_tiles!(ea, serialize_lock)
     OptimizeElbo.maximize_f(ElboDeriv.elbo, ea)
     vp[1]
 end
@@ -101,7 +117,8 @@ For tile of each image, compute a list of the indexes of the catalog entries
 that may be relevant to determining the likelihood of that tile.
 """
 function get_tile_source_map(images::Vector{TiledImage},
-                             catalog::Vector{CatalogEntry};
+                             catalog::Vector{CatalogEntry},
+                             serialize_lock::SpinLock;
                              radius_override=NaN)
     N = length(images)
     S = length(catalog)
@@ -113,7 +130,9 @@ function get_tile_source_map(images::Vector{TiledImage},
 
         for s=1:S
             world_center = catalog[s].pos
+            lock!(serialize_lock)
             pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
+            unlock!(serialize_lock)
             wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
             radius_pix = Model.choose_patch_radius(pixel_center, catalog[s],
                                                                 img.psf, img)
@@ -191,7 +210,8 @@ Arguments:
   noise_fraction: The proportion of the noise below which we will remove pixels.
   min_radius_pix: A minimum pixel radius to be included.
 """
-function trim_source_tiles!(ea::ElboArgs{Float64};
+function trim_source_tiles!(ea::ElboArgs{Float64},
+                            serialize_lock::SpinLock;
                             noise_fraction=0.1,
                             min_radius_pix=8.0)
     @assert length(ea.active_sources) == 1
@@ -210,10 +230,12 @@ function trim_source_tiles!(ea::ElboArgs{Float64};
                                 img.field_num, img.raw_psf_comp)
 
         patch = ea.patches[s, i]
+        lock!(serialize_lock)
         pix_loc = WCSUtils.world_to_pix(patch.wcs_jacobian, 
                                         patch.center,
                                         patch.pixel_center,
                                         ea.vp[s][ids.u])
+        unlock!(serialize_lock)
 
         #TODO: iterate over rows first, not columns
         for hh=1:size(tiles, 1), ww=1:size(tiles, 2) 
