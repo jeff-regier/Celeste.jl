@@ -7,24 +7,6 @@ import ElboDeriv: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 
 include("derivative_utils.jl")
 
-
-"""
-This is the function of which get_bvn_derivs!() returns the derivatives.
-It is only used for testing.
-"""
-function eval_bvn_log_density{NumType <: Number}(
-        elbo_vars::ElboDeriv.ElboIntermediateVariables{NumType},
-        bvn::BvnComponent{NumType}, x::Vector{Float64})
-
-    ElboDeriv.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
-
-    -0.5 * (
-        (x[1] - bvn.the_mean[1]) * elbo_vars.bvn_derivs.py1[1] +
-        (x[2] - bvn.the_mean[2]) * elbo_vars.bvn_derivs.py2[1] -
-        log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
-end
-
-
 """
 Wrap a vector of canonical parameters for active sources into a ElboArgs
 object of the appropriate type. Used for testing with forward
@@ -82,6 +64,18 @@ end
 
 
 #######################
+# Functions that will be tested each time.
+
+function test_set_hess()
+    sf = zero_sensitive_float(CanonicalParams)
+    set_hess!(sf, 2, 3, 5.0)
+    @test_approx_eq sf.h[2, 3] 5.0
+    @test_approx_eq sf.h[3, 2] 5.0
+
+    set_hess!(sf, 4, 4, 6.0)
+    @test_approx_eq sf.h[4, 4] 6.0
+end
+
 
 function test_bvn_cov()
         e_axis = .7
@@ -265,6 +259,27 @@ function test_elbo()
 
     @test size(elbo_1.h) == size(elbo_2.h) == (P, P)
     @test size(elbo_12.h) == size(elbo_12.h) == (2 * P, 2 * P)
+end
+
+
+############################################
+# The tests below are currently very slow to compile due to changes
+# in ForwardDiff in v0.2.2, so they will only be enabled optionally..
+
+"""
+This is the function of which get_bvn_derivs!() returns the derivatives.
+It is only used for testing.
+"""
+function eval_bvn_log_density{NumType <: Number}(
+        elbo_vars::ElboDeriv.ElboIntermediateVariables{NumType},
+        bvn::BvnComponent{NumType}, x::Vector{Float64})
+
+    ElboDeriv.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
+
+    -0.5 * (
+        (x[1] - bvn.the_mean[1]) * elbo_vars.bvn_derivs.py1[1] +
+        (x[2] - bvn.the_mean[2]) * elbo_vars.bvn_derivs.py2[1] -
+        log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
 end
 
 
@@ -823,12 +838,12 @@ function test_galaxy_cache_component()
         f_wrap(par))
 
     # Check the gradient.
-    ad_grad_fun = ForwardDiff.gradient(f_wrap)
+    ad_grad_fun = x -> ForwardDiff.gradient(f_wrap, x)
     ad_grad = ad_grad_fun(par)
     bvn_derivs = elbo_vars.bvn_derivs
     @test_approx_eq ad_grad [bvn_derivs.bvn_u_d; bvn_derivs.bvn_s_d]
 
-    ad_hess_fun = ForwardDiff.hessian(f_wrap)
+    ad_hess_fun = x -> ForwardDiff.hessian(f_wrap, x)
     ad_hess = ad_hess_fun(par)
 
     @test_approx_eq ad_hess[1:2, 1:2] bvn_derivs.bvn_uu_h
@@ -871,11 +886,11 @@ function test_galaxy_sigma_derivs()
 
         gal_derivs = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
 
-        ad_grad_fun = ForwardDiff.gradient(f_wrap)
+        ad_grad_fun = x -> ForwardDiff.gradient(f_wrap, x)
         ad_grad = ad_grad_fun(par)
         @test_approx_eq gal_derivs.j[si, :][:] ad_grad
 
-        ad_hess_fun = ForwardDiff.hessian(f_wrap)
+        ad_hess_fun = x -> ForwardDiff.hessian(f_wrap, x)
         ad_hess = ad_hess_fun(par)
         @test_approx_eq(
             ad_hess,
@@ -949,33 +964,30 @@ function test_dsiginv_dsig()
 end
 
 
-function test_set_hess()
-    sf = zero_sensitive_float(CanonicalParams)
-    set_hess!(sf, 2, 3, 5.0)
-    @test_approx_eq sf.h[2, 3] 5.0
-    @test_approx_eq sf.h[3, 2] 5.0
 
-    set_hess!(sf, 4, 4, 6.0)
-    @test_approx_eq sf.h[4, 4] 6.0
+@time test_set_hess()
+@time test_real_image()
+@time test_bvn_cov()
+@time test_dual_numbers()
+@time test_tile_predicted_image()
+@time test_derivative_flags()
+@time test_active_sources()
+@time test_elbo()
+
+# TODO: set in runtests
+test_detailed_derivatives = false
+
+if test_detailed_derivatives
+    test_process_active_pixels()
+    test_add_log_term()
+    test_combine_pixel_sources()
+    test_e_g_s_functions()
+    test_fs1m_derivatives()
+    test_fs0m_derivatives()
+    test_bvn_derivatives()
+    test_galaxy_variable_transform()
+    test_galaxy_cache_component()
+    test_galaxy_sigma_derivs()
+    test_brightness_hessian()
+    test_dsiginv_dsig()
 end
-
-
-test_real_image()
-test_bvn_cov()
-test_set_hess()
-test_dsiginv_dsig()
-test_brightness_hessian()
-test_bvn_derivatives()
-test_galaxy_sigma_derivs()
-test_galaxy_variable_transform()
-test_galaxy_cache_component()
-test_fs0m_derivatives()
-test_fs1m_derivatives()
-test_e_g_s_functions()
-test_combine_pixel_sources()
-test_add_log_term()
-test_elbo()
-test_active_sources()
-test_derivative_flags()
-test_tile_predicted_image()
-test_dual_numbers()

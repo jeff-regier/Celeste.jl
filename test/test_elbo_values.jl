@@ -299,7 +299,7 @@ end
 
 
 function test_tiny_image_tiling()
-  # Test that the tilling doesn't matter much for a body that is nearly a
+  # Test that the tiling doesn't matter much for a body that is nearly a
   # point with a narrow psf.
 
   blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
@@ -432,7 +432,7 @@ end
 
 ####################################################
 
-#test_trim_source_tiles()
+test_trim_source_tiles()
 test_tiny_image_tiling()
 test_kl_divergence_values()
 test_that_variance_is_low()
