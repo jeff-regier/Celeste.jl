@@ -173,16 +173,23 @@ function subtract_kl!{NumType <: Number}(
 
     if calculate_derivs
         if calculate_hessian
-            result = ForwardDiff.HessianResult(vp_vec)
-            ForwardDiff.hessian!(result, subtract_kl_value_wrapper, vp_vec)
-            accum.h += ForwardDiff.hessian(result)
+            hess, all_results =
+                ForwardDiff.hessian(subtract_kl_value_wrapper,
+                                    vp_vec,
+                                    ForwardDiff.AllResults)
+            accum.h += hess
+            accum.d += reshape(ForwardDiff.gradient(all_results), P, Sa)
+            accum.v[1] += ForwardDiff.value(all_results)
         else
-            result = ForwardDiff.GradientResult(vp_vec)
-            ForwardDiff.gradient!(result, subtract_kl_value_wrapper, vp_vec)
+            grad, all_results =
+                ForwardDiff.gradient(subtract_kl_value_wrapper,
+                                     vp_vec,
+                                     ForwardDiff.AllResults)
+            accum.d += reshape(grad, P, Sa)
+            accum.v[1] += ForwardDiff.value(all_results)
         end
-        accum.d += reshape(ForwardDiff.gradient(result), P, Sa)
-        accum.v[1] += ForwardDiff.value(result)
     else
         accum.v[1] += subtract_kl_value_wrapper(vp_vec)
     end
 end
+
