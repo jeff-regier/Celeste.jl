@@ -1,9 +1,9 @@
-julia 0.5+
+julia 0.4+
 Compat
 DataFrames
 Distributions
 DocOpt
-ForwardDiff 0.2
+ForwardDiff 0.1.8 0.2
 JLD
 Lumberjack
 Optim 0.5 0.5.1
