@@ -62,7 +62,7 @@ function get_galaxy_prototypes()
 
     # Adjustments to the effective radius hard-coded above.
     # (The effective radius is the distance from the center containing half
-  # the light.)
+    # the light.)
     effective_radii = [1.078031, 0.928896]
     dev_var /= effective_radii[1]^2
     exp_var /= effective_radii[2]^2
