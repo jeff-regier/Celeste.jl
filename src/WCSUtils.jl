@@ -40,7 +40,7 @@ Returns:
    coordinates across columns.
 """
 function pixel_world_jacobian(wcs::WCSTransform, pix_loc::Array{Float64, 1};
-	                      pixel_delt=0.5)
+                          pixel_delt=0.5)
 
     # Choose a step size.
     # Assume that about a half a pixel is a reasonable step size and the
