@@ -38,8 +38,8 @@ else
         x
     end
     SpinLock() = 1
-    lock!(l) = ()
-    unlock!(l) = ()
+    lock(l) = ()
+    unlock(l) = ()
 end
 
 # A workitem is of this ra / dec size
@@ -410,14 +410,14 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                                                 entry)
                     runtime = time() - t0
 
-                    lock!(results_lock)
+                    lock(results_lock)
                     results[entry.thing_id] = Dict(
                                  "objid"=>entry.objid,
                                  "ra"=>entry.pos[1],
                                  "dec"=>entry.pos[2],
                                  "vs"=>vs_opt,
                                  "runtime"=>runtime)
-                    unlock!(results_lock)
+                    unlock(results_lock)
 #                catch ex
 #                    Lumberjack.err(ex)
 #                end
