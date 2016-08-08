@@ -377,7 +377,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     max_camcol = maximum([f[2] for f in fieldids])
     max_field = maximum([f[3] for f in fieldids])
     image_map = Array(Int64, max_run, max_camcol, max_field)
-    fill!(image_map, max_run, max_camcol, max_field)
+    fill!(image_map, 0)
 
     # TODO: make `images` a 1D GlobalArray
     images = load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_dirs)
