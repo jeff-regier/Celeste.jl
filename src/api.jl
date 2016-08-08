@@ -365,10 +365,21 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
         return Dict{Int, Dict}()
     end
 
+    # TODO: make `target_sources` a 1D GlobalArray
+
     reserve_thread[] && thread_fun(reserve_thread)
 
     # Read in images for all (run, camcol, field).
     tic()
+
+    # TODO: make `image_map` a 3D GlobalArray
+    max_run = maximum([f[1] for f in fieldids])
+    max_camcol = maximum([f[2] for f in fieldids])
+    max_field = maximum([f[3] for f in fieldids])
+    image_map = Array(Int64, max_run, max_camcol, max_field)
+    fill!(image_map, 0)
+
+    # TODO: make `images` a 1D GlobalArray
     images = load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_dirs)
     timing.read_img = toq()
 
