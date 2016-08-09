@@ -369,6 +369,9 @@ of column names.
 This is currently pretty specific to Celeste because it returns only columns
 that we're interested in, and it does some transformations of some of the
 columns.
+
+The photoObj file format is documented here:
+https://data.sdss.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
 """
 function read_photoobj(fname, band::Char='r')
 

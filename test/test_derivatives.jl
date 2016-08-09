@@ -964,6 +964,124 @@ function test_dsiginv_dsig()
 end
 
 
+########################
+# Test derivatives of KL divergence functions
+
+function test_beta_kl_derivatives()
+    alpha2 = 3.5
+    beta2 = 4.3
+
+    alpha1 = 4.1
+    beta1 = 3.9
+
+    par = Float64[ alpha1, beta1 ]
+
+    beta_kl = gen_beta_kl(alpha2, beta)
+    function beta_kl_wrapper{NumType <: Number}(par::Vector{NumType})
+        alpha1 = par[1]
+        beta1 = par[2]
+        return beta_kl(alpha1, beta1, false)
+    end
+
+    kl, grad, hess = beta_kl(alpha1, beta1, true)
+
+    ad_grad = ForwardDiff.gradient(beta_kl_wrapper, par)
+    ad_hess = ForwardDiff.hessian(beta_kl_wrapper, par)
+
+    @test_approx_eq beta_kl_wrapper(par) kl
+    @test_approx_eq ad_grad grad
+    @test_approx_eq ad_hess hess
+end
+
+
+function test_categorical_kl_derivatives()
+    k = 4
+    p1 = rand(k)
+    p2 = rand(k)
+
+    p1 = p1 / sum(p1)
+    p2 = p2 / sum(p2)
+
+    categorical_kl = gen_categorical_kl(p2)
+
+    function categorical_kl_wrapper{NumType <: Number}(par::Vector{NumType})
+        return categorical_kl(par, false)
+    end
+
+    kl, grad, hess = categorical_kl(p1, true);
+
+    ad_grad = ForwardDiff.gradient(categorical_kl_wrapper, p1)
+    ad_hess = ForwardDiff.hessian(categorical_kl_wrapper, p1)
+
+    @test_approx_eq categorical_kl_wrapper(p1) kl
+    @test_approx_eq ad_grad grad
+    @test_approx_eq ad_hess hess
+end
+
+
+function test_diagmvn_mvn_kl_derivatives()
+    K = 4
+    mean1 = rand(K)
+    var1 = rand(K)
+    var1 = var1 .* var1
+
+    mean2 = rand(K)
+    cov2 = rand(K, K)
+    cov2 = 0.2 * cov2 * cov2' + eye(K)
+
+    diagmvn_mvn_kl = gen_diagmvn_mvn_kl(mu2, cov2)
+    kl, grad_mean, grad_var, hess_mean, hess_var =
+        diagmvn_mvn_kl(mean1, var1, true);
+
+    hess = zeros(Float64, 2 * K, 2 * K)
+    hess[1:K, 1:K] = hess_mean
+    hess[(K + 1):(2 * K), (K + 1):(2 * K)] = hess_var
+
+    function diagmvn_mvn_kl_wrapper{NumType <: Number}(par::Vector{NumType})
+        K = Int(length(par) / 2)
+        mean1 = par[1:K]
+        var1 = par[(K + 1):(2 * K)]
+        diagmvn_mvn_kl(mean1, var1, false)
+    end
+
+    par = vcat(mean1, var1)
+    ad_grad = ForwardDiff.gradient(diagmvn_mvn_kl_wrapper, par)
+    ad_hess = ForwardDiff.hessian(diagmvn_mvn_kl_wrapper, par)
+
+    @test_approx_eq diagmvn_mvn_kl_wrapper(par) kl
+    @test_approx_eq ad_grad vcat(grad_mean, grad_var)
+    @test_approx_eq ad_hess hess
+end
+
+
+function test_normal_kl_derivatives()
+    mean1 = 0.5
+    var1 = 2.0
+
+    mean2 = 0.8
+    var2 = 1.8
+
+    normal_kl = gen_normal_kl(mean2, var2)
+
+    function normal_kl_wrapper{NumType <: Number}(par::Vector{NumType})
+        normal_kl(par[1], par[2], false)
+    end
+
+    kl, grad, hess = normal_kl(mean1, var1, mean2, var2, true)
+
+    par = vcat(mean1, var1)
+    ad_grad = ForwardDiff.gradient(normal_kl_wrapper, par)
+    ad_hess = ForwardDiff.hessian(normal_kl_wrapper, par)
+
+    @test_approx_eq normal_kl_wrapper(par) kl
+    @test_approx_eq ad_grad grad
+    @test_approx_eq ad_hess hess
+end
+
+
+###################################
+# Run tests
+
 
 @time test_set_hess()
 @time test_real_image()
@@ -990,4 +1108,9 @@ if test_detailed_derivatives
     test_galaxy_sigma_derivs()
     test_brightness_hessian()
     test_dsiginv_dsig()
+
+    test_beta_kl_derivatives()
+    test_categorical_kl_derivatives()
+    test_diagmvn_mvn_kl_derivatives()
+    test_normal_kl_derivatives()
 end
