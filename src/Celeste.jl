@@ -1,6 +1,7 @@
 module Celeste
 
 # submodules
+include("Log.jl")
 include("WCSUtils.jl")
 include("Model.jl")
 include("SensitiveFloats.jl")

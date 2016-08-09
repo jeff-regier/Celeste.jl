@@ -34,15 +34,10 @@ field, using only that field.
 The `score-field` subcommand is not yet implemented for the new API.
 """
 
-function set_logging_level(level)
-    truck = Lumberjack._lumber_mill.timber_trucks["console"]
-    Lumberjack.configure(truck; mode=level)
-end
-
-
 function main()
     args = docopt(DOC, version=v"0.1.0", options_first=true)
-    set_logging_level(args["--logging"])
+#   TODO: re-enable selective logging by level
+#    set_logging_level(args["--logging"])
     if args["stage-box"] || args["infer-box"]
         ramin = parse(Float64, args["<ramin>"])
         ramax = parse(Float64, args["<ramax>"])
