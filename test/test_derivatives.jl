@@ -7,61 +7,6 @@ import ElboDeriv: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 
 include("derivative_utils.jl")
 
-"""
-Wrap a vector of canonical parameters for active sources into a ElboArgs
-object of the appropriate type. Used for testing with forward
-autodifferentiation.
-"""
-function unwrap_vp_vector{NumType <: Number}(
-            vp_vec::Vector{NumType}, ea::ElboArgs)
-    vp_array = reshape(vp_vec, length(CanonicalParams), length(ea.active_sources))
-    ea_local = forward_diff_model_params(NumType, ea)
-    for sa = 1:length(ea.active_sources)
-        ea_local.vp[ea.active_sources[sa]] = vp_array[:, sa]
-    end
-    ea_local
-end
-
-
-"""
-Convert the variational params into a vector for autodiff.
-"""
-function wrap_vp_vector(ea::ElboArgs, use_active_sources::Bool)
-    P = length(CanonicalParams)
-    S = use_active_sources ? length(ea.active_sources) : ea.S
-    x_mat = zeros(Float64, P, S)
-    for s in 1:S
-        ind = use_active_sources ? ea.active_sources[s] : s
-        x_mat[:, s] = ea.vp[ind]
-    end
-    x_mat[:]
-end
-
-
-"""
-Use ForwardDiff to test that fun(x) = sf (to abuse some notation)
-"""
-function test_with_autodiff(fun::Function, x::Vector{Float64}, sf::SensitiveFloat)
-    ad_grad = ForwardDiff.gradient(fun, x)
-    ad_hess = ForwardDiff.hessian(fun, x)
-    @test_approx_eq fun(x) sf.v
-    @test_approx_eq ad_grad sf.d[:]
-    @test_approx_eq ad_hess sf.h
-end
-
-
-"""
-Set all but a few pixels to NaN to speed up autodiff Hessian testing.
-"""
-function trim_tiles!(tiled_blob::Vector{TiledImage}, keep_pixels)
-    for b = 1:length(tiled_blob)
-	    pixels1 = tiled_blob[b].tiles[1,1].pixels
-        h_width, w_width = size(pixels1)
-	    pixels1[setdiff(1:h_width, keep_pixels), :] = NaN
-        pixels1[:, setdiff(1:w_width, keep_pixels)] = NaN
-	end
-end
-
 
 #######################
 # Functions that will be tested each time.
@@ -967,6 +912,26 @@ end
 ########################
 # Test derivatives of KL divergence functions
 
+"""
+Use Monte Carlo to check whether KL(q_dist || p_dist) matches exact_kl
+
+Args:
+    q_dist, p_dist: Distribution objects
+    exact_kl: The expected exact KL
+"""
+function test_kl_value(q_dist, p_dist, exact_kl::Float64)
+    sample_size = 2_000_000
+
+    q_samples = rand(q_dist, sample_size)
+    empirical_kl_samples =
+      logpdf(q_dist, q_samples) - logpdf(p_dist, q_samples)
+    empirical_kl = mean(empirical_kl_samples)
+    tol = 4 * std(empirical_kl_samples) / sqrt(sample_size)
+    min_diff = 1e-2 * std(empirical_kl_samples) / sqrt(sample_size)
+
+    @test_approx_eq_eps empirical_kl exact_kl tol
+end
+
 function test_beta_kl_derivatives()
     alpha2 = 3.5
     beta2 = 4.3
@@ -988,16 +953,21 @@ function test_beta_kl_derivatives()
     ad_grad = ForwardDiff.gradient(beta_kl_wrapper, par)
     ad_hess = ForwardDiff.hessian(beta_kl_wrapper, par)
 
+    # Check the derivatives
     @test_approx_eq beta_kl_wrapper(par) kl
     @test_approx_eq ad_grad grad
     @test_approx_eq ad_hess hess
+
+    # Check the value
+    p1_dist = Gamma(alpha1, beta1)
+    p2_dist = Gamma(alpha2, beta2)
+    test_kl_value(p1_dist, p2_dist, kl)
 end
 
 
 function test_categorical_kl_derivatives()
-    k = 4
-    p1 = rand(k)
-    p2 = rand(k)
+    p1 = Float64[ 1, 2, 3, 4]
+    p2 = Float64[ 5, 6, 2, 1]
 
     p1 = p1 / sum(p1)
     p2 = p2 / sum(p2)
@@ -1013,9 +983,15 @@ function test_categorical_kl_derivatives()
     ad_grad = ForwardDiff.gradient(categorical_kl_wrapper, p1)
     ad_hess = ForwardDiff.hessian(categorical_kl_wrapper, p1)
 
+    # Check the derivatives
     @test_approx_eq categorical_kl_wrapper(p1) kl
     @test_approx_eq ad_grad grad
     @test_approx_eq ad_hess hess
+
+    # Check the value
+    p1_dist = Categorical(p1)
+    p2_dist = Categorical(p2)
+    test_kl_value(p1_dist, p2_dist, kl)
 end
 
 
@@ -1048,9 +1024,15 @@ function test_diagmvn_mvn_kl_derivatives()
     ad_grad = ForwardDiff.gradient(diagmvn_mvn_kl_wrapper, par)
     ad_hess = ForwardDiff.hessian(diagmvn_mvn_kl_wrapper, par)
 
+    # Check the derivatives
     @test_approx_eq diagmvn_mvn_kl_wrapper(par) kl
     @test_approx_eq ad_grad vcat(grad_mean, grad_var)
     @test_approx_eq ad_hess hess
+
+    # Check the value
+    p1_dist = MvNormal(mean1, diagm(var1))
+    p2_dist = MvNormal(mean2, cov2)
+    test_kl_value(p1_dist, p2_dist, kl)
 end
 
 
@@ -1073,9 +1055,15 @@ function test_normal_kl_derivatives()
     ad_grad = ForwardDiff.gradient(normal_kl_wrapper, par)
     ad_hess = ForwardDiff.hessian(normal_kl_wrapper, par)
 
+    # Check the derivatives
     @test_approx_eq normal_kl_wrapper(par) kl
     @test_approx_eq ad_grad grad
     @test_approx_eq ad_hess hess
+
+    # Check the value
+    p1_dist = Normal(mean1, var1)
+    p2_dist = Normal(mean2, var2)
+    test_kl_value(p1_dist, p2_dist, kl)
 end
 
 
