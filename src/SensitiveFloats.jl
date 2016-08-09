@@ -197,20 +197,19 @@ end
 const multiply_sfs_hess = Float64[0 1; 1 0]
 
 """
-TODO: don't ignore the ids arguments.
+Updates sf1 in place with sf1 * sf2.
 """
 function multiply_sfs!{ParamType <: ParamSet, NumType <: Number}(
     sf1::SensitiveFloat{ParamType, NumType},
-    sf2::SensitiveFloat{ParamType, NumType};
-    ids1::Vector{Int}=collect(1:length(ParamType)),
-    ids2::Vector{Int}=collect(1:length(ParamType)),
+    sf2::SensitiveFloat{ParamType, NumType},
     calculate_hessian::Bool=true)
 
   v = sf1.v[1] * sf2.v[1]
   g_d = NumType[sf2.v[1], sf1.v[1]]
   #const g_h = NumType[0 1; 1 0]
 
-  combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess, calculate_hessian=calculate_hessian)
+  combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess,
+               calculate_hessian=calculate_hessian)
 
   true # Set definite return type
 end

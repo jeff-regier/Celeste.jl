@@ -11,7 +11,7 @@ facts("solve_tr_subproblem! finds the minimium") do
         n = rand(1:10)
         gr = randn(n)
         H = randn(n, n)
-        H += H'
+        H = H * H' + 5 * eye(n)
         s = zeros(n)
         m, interior = solve_tr_subproblem!(gr, H, 1., s, max_iters=100)
 
@@ -27,5 +27,3 @@ facts("solve_tr_subproblem! finds the minimium") do
         end
     end
 end
-
-

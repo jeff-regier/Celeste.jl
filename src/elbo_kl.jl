@@ -174,52 +174,97 @@ end
 # Functions to subtract single-source KL divergences from a SensitiveFloat
 
 """
+A sensitive float representing a single term a[i] which can be combined
+with other sensitive floats.
+"""
+function get_a_term_sensitive_float{NumType <: Number}(
+        a::NumType, i::Integer, calculate_derivs::Bool)
+    a_term = zero_sensitive_float(CanonicalParams, NumType)
+    a_term.v[1] = a
+    if calculate_derivs
+        a_term.d[ids.a[i], 1] = 1
+    end
+    return a_term
+end
+
+
+"""
+A sensitive float representing a single term k[d, i] which can be combined
+with other sensitive floats.
+"""
+function get_k_term_sensitive_float{NumType <: Number}(
+        k::NumType, i::Integer, d::Integer, calculate_derivs::Bool)
+
+    k_term = zero_sensitive_float(CanonicalParams, NumType)
+    k_term.v[1] = k
+    if calculate_derivs
+        k_term.d[ids.k[d, i], 1] = 1
+    end
+    return k_term
+end
+
+
+"""
 Subtract the KL divergence from the prior for c
 """
 function subtract_kl_c!{NumType <: Number}(
     vs::Vector{NumType}, kl_source::SensitiveFloat{CanonicalParams, NumType},
     calculate_derivs::Bool)
 
-    for i in 1:Ia
-        a = vs[ids.a[i]]
-        for d in 1:D
-            k = vs[ids.k[d, i]]
-            pp_kl_cid = gen_diagmvn_mvn_kl(
-                prior.c_mean[:, d, i], prior.c_cov[:, :, d, i])
-            mean_ids = ids.c1[:, i]
-            var_ids = ids.c2[:, i]
-            kl, grad_mean, grad_var, hess_mean, hess_var =
-                pp_kl_cid(vs[mean_ids], vs[var_ids], calculate_derivs)
-            kl_source.v -= a * k * kl
+    kl_term = zero_sensitive_float(CanonicalParams, NumType)
+    for i in 1:Ia, d in 1:D
+        clear!(kl_term)
+        pp_kl_cid = gen_diagmvn_mvn_kl(
+            prior.c_mean[:, d, i], prior.c_cov[:, :, d, i])
+        mean_ids = ids.c1[:, i]
+        var_ids = ids.c2[:, i]
+        kl, grad_mean, grad_var, hess_mean, hess_var =
+            pp_kl_cid(vs[mean_ids], vs[var_ids], calculate_derivs)
+        kl_term.v[1] = kl
 
-            if calculate_derivs
-                kl_source.d[mean_ids, 1] -= a * k * grad_mean
-                kl_source.d[var_ids, 1] -= a * k * grad_var
-                kl_source.h[mean_ids, mean_ids] -= a *k * hess_mean
-                kl_source.h[var_ids, var_ids] -= a *k * hess_var
-            end
+        if calculate_derivs
+            kl_term.d[mean_ids, 1] = grad_mean
+            kl_term.d[var_ids, 1] = grad_var
+            kl_term.h[mean_ids, mean_ids] = hess_mean
+            kl_term.h[var_ids, var_ids] = hess_var
         end
+
+        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i, calculate_derivs)
+        k_term = get_k_term_sensitive_float(vs[ids.k[d, i]], i, d, calculate_derivs)
+        multiply_sfs!(kl_term, a_term, calculate_derivs)
+        multiply_sfs!(kl_term, k_term, calculate_derivs)
+        add_scaled_sfs!(kl_source, kl_term, -1.0, calculate_derivs)
     end
 end
 
 
 """
-Subtract the KL divergence from the prior for k
+Subtract the KL divergence from the prior for k.
+
+Args:
+    vs: Variational parameters for a source
+    kl_k: Updated in place.  A SensitiveFloat containing the KL divergence
+          of the k parameters.
 """
 function subtract_kl_k!{NumType <: Number}(
-        vs::Vector{NumType}, kl_source::SensitiveFloat{CanonicalParams, NumType},
+        vs::Vector{NumType},
+        kl_source::SensitiveFloat{CanonicalParams, NumType},
         calculate_derivs::Bool)
 
+    kl_term = zero_sensitive_float(CanonicalParams, NumType)
     for i in 1:Ia
-        a = vs[ids.a[i]]
+        clear!(kl_term)
         k_ind = ids.k[:, i]
         pp_kl_ki = gen_categorical_kl(prior.k[:, i])
         kl, grad, hess = pp_kl_ki(vs[k_ind], calculate_derivs)
-        kl_source.v -= a * kl
+        kl_term.v[1] = kl
         if calculate_derivs
-            kl_source.d[k_ind, 1] -= a * grad
-            kl_source.h[k_ind, k_ind] -= a * hess
+            kl_term.d[k_ind, 1] = grad
+            kl_term.h[k_ind, k_ind] = hess
         end
+        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i, calculate_derivs)
+        multiply_sfs!(kl_term, a_term, calculate_derivs)
+        add_scaled_sfs!(kl_source, kl_term, -1.0, calculate_derivs)
     end
 end
 
@@ -231,16 +276,20 @@ function subtract_kl_r!{NumType <: Number}(
         vs::Vector{NumType}, kl_source::SensitiveFloat{CanonicalParams, NumType},
         calculate_derivs::Bool)
 
+    kl_term = zero_sensitive_float(CanonicalParams, NumType)
     for i in 1:Ia
+        clear!(kl_term)
         pp_kl_r = gen_normal_kl(prior.r_mean[i], prior.r_var[i])
-        a = vs[ids.a[i]]
         kl, grad, hess = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]], calculate_derivs)
         r_ind = Integer[ ids.r1[i], ids.r2[i] ]
-        kl_source.v -= a * kl
+        kl_term.v[1] = kl
         if calculate_derivs
-            kl_source.d[r_ind, 1] -= a * grad
-            kl_source.h[r_ind, r_ind] -= a * hess
+            kl_term.d[r_ind, 1] = grad
+            kl_term.h[r_ind, r_ind] = hess
         end
+        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i, calculate_derivs)
+        multiply_sfs!(kl_term, a_term, calculate_derivs)
+        add_scaled_sfs!(kl_source, kl_term, -1.0, calculate_derivs)
     end
 end
 
@@ -255,7 +304,7 @@ function subtract_kl_a!{NumType <: Number}(
     pp_kl_a = gen_categorical_kl(prior.a)
 
     kl, grad, hess = pp_kl_a(vs[ids.a], calculate_derivs)
-    kl_source.v -= kl
+    kl_source.v[1] -= kl
     if calculate_derivs
         kl_source.d[ids.a, 1] -= grad
         kl_source.h[ids.a, ids.a] -= hess
@@ -274,9 +323,10 @@ function subtract_kl!{NumType <: Number}(
         s = ea.active_sources[sa]
         kl_source = zero_sensitive_float(CanonicalParams, NumType)
         subtract_kl_a!(ea.vp[s], kl_source, calculate_derivs)
-        subtract_kl_r!(ea.vp[s], kl_source, calculate_derivs)
         subtract_kl_k!(ea.vp[s], kl_source, calculate_derivs)
+        subtract_kl_r!(ea.vp[s], kl_source, calculate_derivs)
         subtract_kl_c!(ea.vp[s], kl_source, calculate_derivs)
+
         add_sources_sf!(accum, kl_source, sa, calculate_derivs)
     end
 

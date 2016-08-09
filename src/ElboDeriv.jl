@@ -1045,7 +1045,7 @@ function elbo{NumType <: Number}(
     elbo = elbo_likelihood(ea;
         calculate_derivs=calculate_derivs, calculate_hessian=calculate_hessian)
     # TODO: subtract the kl with the hessian.
-    subtract_kl!(ea, elbo, calculate_derivs=calculate_derivs && calculate_hessian)
+    subtract_kl!(ea, elbo, calculate_derivs=calculate_derivs)
     elbo
 end
 
