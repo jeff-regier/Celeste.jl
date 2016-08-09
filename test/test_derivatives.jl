@@ -972,10 +972,11 @@ function test_categorical_kl_derivatives()
     p1 = p1 / sum(p1)
     p2 = p2 / sum(p2)
 
-    categorical_kl = gen_categorical_kl(p2)
+    categorical_kl = ElboDeriv.gen_categorical_kl(p2)
 
     function categorical_kl_wrapper{NumType <: Number}(par::Vector{NumType})
-        return categorical_kl(par, false)
+        kl, grad, hess = categorical_kl(par, false)
+        return kl
     end
 
     kl, grad, hess = categorical_kl(p1, true);

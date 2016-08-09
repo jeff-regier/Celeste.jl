@@ -37,10 +37,10 @@ function gen_beta_kl{NumType <: Number}(alpha2::NumType, beta2::NumType)
         together_term = both_inv_diff * di_both1
         kl = log_term + apart_term + together_term
 
-        if calculate_derivs
-            grad = zeros(NumType2, 2)
-            hess = zeros(NumType2, 2, 2)
+        grad = zeros(NumType2, 2)
+        hess = zeros(NumType2, 2, 2)
 
+        if calculate_derivs
             trigamma_alpha1 = trigamma(alpha1)
             trigamma_beta1 = trigamma(beta1)
             trigamma_both = trigamma(alpha1 + beta1)
@@ -56,11 +56,9 @@ function gen_beta_kl{NumType <: Number}(alpha2::NumType, beta2::NumType)
                          trigamma_beta1 - trigamma_both
             hess[1, 2] = hess[2, 1] =
                 -trigamma_both + both_inv_diff * quadgamma_both
-
-            return kl, grad, hess
-        else
-            return kl
         end
+
+        return kl, grad, hess
     end
 end
 
@@ -71,12 +69,10 @@ KL divergence between a pair of categorical distributions.
 function gen_categorical_kl{NumType <: Number}(p2::Vector{NumType})
     function this_categorical_kl{NumType2 <: Number}(
             p1::Vector{NumType2}, calculate_derivs::Bool)
-        kl = zero(NumType2)
 
-        if calculate_derivs
-            grad = zeros(NumType2, length(p1))
-            hess = zeros(NumType2, length(p1), length(p1))
-        end
+        kl = zero(NumType2)
+        grad = zeros(NumType2, length(p1))
+        hess = zeros(NumType2, length(p1), length(p1))
 
         for i in 1:length(p1)
             log_ratio = log(p1[i]) - log(p2[i])
@@ -87,11 +83,7 @@ function gen_categorical_kl{NumType <: Number}(p2::Vector{NumType})
             end
         end
 
-        if calculate_derivs
-            return kl, grad, hess
-        else
-            return kl
-        end
+        return kl, grad, hess
     end
 end
 
@@ -117,17 +109,15 @@ function gen_normal_kl{NumType <: Number}(mu2::NumType, sigma2Sq::NumType)
         kl = .5 * ((log_sigma2Sq - log(sigma1Sq)) +
              (sigma1Sq + (diff)^2) / sigma2Sq - 1)
 
+        grad = zeros(NumType2, 2)
+        hess = zeros(NumType2, 2, 2)
         if calculate_derivs
-            grad = zeros(NumType2, 2)
-            hess = zeros(NumType2, 2, 2)
             grad[1] = precision2 * diff                 # Gradient wrt the mean
             grad[2] = 0.5 * (precision2 - 1 / sigma1Sq) # Gradient wrt the var
             hess[1, 1] = precision2
             hess[2, 2] = 0.5 / (sigma1Sq ^ 2)
-            return kl, grad, hess
-        else
-            return kl
         end
+        return kl, grad, hess
     end
 end
 
@@ -160,24 +150,22 @@ function gen_diagmvn_mvn_kl{NumType <: Number}(
       kl += -sum(log(vars1)) + logdet_cov2
       kl = 0.5 * kl
 
-      if calculate_derivs
-          grad_mean = zeros(NumType2, K)
-          grad_var = zeros(NumType2, K)
-          hess_mean = zeros(NumType2, K, K)
-          hess_var = zeros(NumType2, K, K)
+      grad_mean = zeros(NumType2, K)
+      grad_var = zeros(NumType2, K)
+      hess_mean = zeros(NumType2, K, K)
+      hess_var = zeros(NumType2, K, K)
 
+      if calculate_derivs
           grad_mean = -1 * precision2 * diff
-          grad_var = 0.5 * (diag(precision2) - 1 ./ var1)
+          grad_var = 0.5 * (diag(precision2) - 1 ./ vars1)
 
           hess_mean = precision2
           for k in 1:K
-              hess_var[k, k] = 0.5 ./ (var1[k] ^ 2)
+              hess_var[k, k] = 0.5 ./ (vars1[k] ^ 2)
           end
-
-          return kl, grad_mean, grad_var, hess_mean, hess_var
-      else
-          return kl
       end
+
+      return kl, grad_mean, grad_var, hess_mean, hess_var
     end
 end
 
@@ -202,11 +190,14 @@ function subtract_kl_c!{NumType <: Number}(
             var_ids = ids.c2[:, i]
             kl, grad_mean, grad_var, hess_mean, hess_var =
                 pp_kl_cid(vs[mean_ids], vs[var_ids], calculate_derivs)
-            accum.v -= a * k * kl
-            accum.d[mean_ids] -= a * k * grad_mean
-            accum.d[var_ids] -= a * k * grad_var
-            accum.h[mean_ids, mean_ids] -= a *k * hess_mean
-            accum.h[var_ids, var_ids] -= a *k * hess_var
+            kl_source.v -= a * k * kl
+
+            if calculate_derivs
+                kl_source.d[mean_ids, 1] -= a * k * grad_mean
+                kl_source.d[var_ids, 1] -= a * k * grad_var
+                kl_source.h[mean_ids, mean_ids] -= a *k * hess_mean
+                kl_source.h[var_ids, var_ids] -= a *k * hess_var
+            end
         end
     end
 end
@@ -225,8 +216,10 @@ function subtract_kl_k!{NumType <: Number}(
         pp_kl_ki = gen_categorical_kl(prior.k[:, i])
         kl, grad, hess = pp_kl_ki(vs[k_ind], calculate_derivs)
         kl_source.v -= a * kl
-        kl_source.d[k_ind] -= a * grad
-        kl_source.h[k_ind, k_ind] -= a * hess
+        if calculate_derivs
+            kl_source.d[k_ind, 1] -= a * grad
+            kl_source.h[k_ind, k_ind] -= a * hess
+        end
     end
 end
 
@@ -244,8 +237,10 @@ function subtract_kl_r!{NumType <: Number}(
         kl, grad, hess = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]], calculate_derivs)
         r_ind = Integer[ ids.r1[i], ids.r2[i] ]
         kl_source.v -= a * kl
-        kl_source.d[r_ind] -= a * grad
-        kl_source.h[r_ind, r_ind] -= a * hess
+        if calculate_derivs
+            kl_source.d[r_ind, 1] -= a * grad
+            kl_source.h[r_ind, r_ind] -= a * hess
+        end
     end
 end
 
@@ -258,10 +253,13 @@ function subtract_kl_a!{NumType <: Number}(
         calculate_derivs::Bool)
 
     pp_kl_a = gen_categorical_kl(prior.a)
+
     kl, grad, hess = pp_kl_a(vs[ids.a], calculate_derivs)
     kl_source.v -= kl
-    kl_source.d[ids.a] -= grad
-    kl_source.h[ids.a, ids.a] -= hess
+    if calculate_derivs
+        kl_source.d[ids.a, 1] -= grad
+        kl_source.h[ids.a, ids.a] -= hess
+    end
 end
 
 
@@ -273,12 +271,13 @@ function subtract_kl!{NumType <: Number}(
         calculate_derivs::Bool=true)
 
     for sa in 1:length(ea.active_sources)
+        s = ea.active_sources[sa]
         kl_source = zero_sensitive_float(CanonicalParams, NumType)
-        subtract_kl_a!(ea.vp[sa], kl_source, calculate_derivs)
-        subtract_kl_r!(ea.vp[sa], kl_source, calculate_derivs)
-        subtract_kl_k!(ea.vp[sa], kl_source, calculate_derivs)
-        subtract_kl_c!(ea.vp[sa], kl_source, calculate_derivs)
-        add_sources_sf!(accum, kl_source, sa, calculate_hessian)
+        subtract_kl_a!(ea.vp[s], kl_source, calculate_derivs)
+        subtract_kl_r!(ea.vp[s], kl_source, calculate_derivs)
+        subtract_kl_k!(ea.vp[s], kl_source, calculate_derivs)
+        subtract_kl_c!(ea.vp[s], kl_source, calculate_derivs)
+        add_sources_sf!(accum, kl_source, sa, calculate_derivs)
     end
 
 end
