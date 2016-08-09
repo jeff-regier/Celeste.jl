@@ -59,7 +59,7 @@ function zero_sensitive_float{ParamType <: ParamSet}(
     v = zeros(NumType, 1)
     d = zeros(NumType, local_P, local_S)
     h = zeros(NumType, local_P * local_S, local_P * local_S)
-    SensitiveFloat{ParamType, NumType}(v, d, h, getids(ParamType))
+    SensitiveFloat{ParamType, NumType}(v, d, h)
 end
 
 
