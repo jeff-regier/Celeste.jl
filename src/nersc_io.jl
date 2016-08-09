@@ -30,7 +30,7 @@ function nersc_stage_field(run::Integer, camcol::Integer, field::Integer)
         dstfile = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
                            dstdir, band, run, camcol, field)
         if !isfile(dstfile)
-            Lumberjack.info("bzcat --keep $srcfile > $dstfile")
+            Log.info("bzcat --keep $srcfile > $dstfile")
             Base.run(pipeline(`bzcat --keep $srcfile`, stdout=dstfile))
         end
     end
@@ -49,7 +49,7 @@ function nersc_stage_field(run::Integer, camcol::Integer, field::Integer)
         dstfile = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
                            dstdir, run, band, camcol, field)
         if !isfile(dstfile)
-            Lumberjack.info("gunzip --stdout $srcfile > $dstfile")
+            Log.info("gunzip --stdout $srcfile > $dstfile")
             Base.run(pipeline(`gunzip --stdout $srcfile`, stdout=dstfile))
         end
     end
@@ -262,7 +262,7 @@ function infer_field_nersc(run::Int, camcol::Int, field::Int,
         @sprintf "%s/celeste-objid-%s.jld" outdir objid
     end
     JLD.save(fname, "results", results)
-    Lumberjack.debug("infer_field_nersc finished successfully")
+    Log.debug("infer_field_nersc finished successfully")
 end
 
 

@@ -31,7 +31,7 @@ import Distributions
 import FITSIO
 import WCS.WCSTransform
 import ForwardDiff
-import Lumberjack
+import ..Log
 
 import Base.length
 

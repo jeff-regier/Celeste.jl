@@ -7,7 +7,7 @@ import Optim: Optimizer,
               MultivariateOptimizationResults,
               TwiceDifferentiableFunction
 
-import Lumberjack
+import .Log
 
 
 macro newton_tr_trace()
@@ -288,7 +288,7 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
     # Iterate until convergence
     converged = false
     while !converged && iteration <= iterations
-        # Lumberjack.debug("\n-----------------Iter $iteration")
+        # Log.debug("\n-----------------Iter $iteration")
 
         # Find the next step direction.
         m, interior = solve_tr_subproblem!(gr, H, delta, s)
@@ -324,19 +324,19 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
           rho = f_x_diff / (0 - m)
         end
 
-        # Lumberjack.debug("Got rho = $rho from $(f_x) - $(f_x_previous) ",
+        # Log.debug("Got rho = $rho from $(f_x) - $(f_x_previous) ",
         #         "(diff = $(f_x - f_x_previous)), and m = $m")
-        # Lumberjack.debug("Interior = $interior, delta = $delta.")
+        # Log.debug("Interior = $interior, delta = $delta.")
 
         if rho < rho_lower
-            # Lumberjack.debug("Shrinking trust region.")
+            # Log.debug("Shrinking trust region.")
             delta *= 0.25
         elseif (rho > rho_upper) && (!interior)
-            # Lumberjack.debug("Growing trust region.")
+            # Log.debug("Growing trust region.")
             delta = min(2 * delta, delta_hat)
         else
           # else leave delta unchanged.
-          # Lumberjack.debug("Keeping trust region the same.")
+          # Log.debug("Keeping trust region the same.")
         end
 
         if rho > eta
@@ -357,11 +357,11 @@ function newton_tr{T}(d::TwiceDifferentiableFunction,
               # Only compute the next Hessian if we haven't converged
               d.h!(x, H)
             else
-              Lumberjack.debug("Converged.")
+              # Log.debug("Converged.")
             end
         else
             # The improvement is too small and we won't take it.
-            # Lumberjack.debug(
+            # Log.debug(
             #   "Rejecting improvement from f_prev = $(f_x_previous) to f=$f_x")
 
             # If you reject an interior solution, make sure that the next

@@ -1,13 +1,11 @@
 module Infer
 
-import Lumberjack
-
 using ..Model
 using ..ElboDeriv
 import ..WCSUtils
 import ..PSF
 import ..OptimizeElbo
-
+import ..Log
 
 
 """
@@ -153,7 +151,7 @@ function fit_object_psfs!{NumType <: Number}(
     psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K)
 
     for i in 1:length(ea.images)
-        Lumberjack.debug("Fitting PSFS for band $i")
+        Log.debug("Fitting PSFS for band $i")
         # Get a starting point in the middle of the image.
         pixel_loc = Float64[ ea.images[i].H / 2.0, ea.images[i].W / 2.0 ]
         raw_central_psf = ea.images[i].raw_psf_comp(pixel_loc[1], pixel_loc[2])

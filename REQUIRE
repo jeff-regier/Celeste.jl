@@ -5,7 +5,6 @@ Distributions
 DocOpt
 ForwardDiff 0.1.8 0.2
 JLD
-Lumberjack
 Optim 0.5 0.5.1
 FITSIO
 WCS

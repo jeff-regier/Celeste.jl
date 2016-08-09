@@ -3,8 +3,8 @@ module SDSSIO
 
 import FITSIO
 import WCS
-import Lumberjack
 
+import ..Log
 import ..Model: RawPSF, Image, CatalogEntry
 import ..PSF
 import Base.convert
@@ -567,7 +567,7 @@ function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
     @assert duplicate_policy == :primary || duplicate_policy == :first
     @assert duplicate_policy == :primary || length(dirs) == 1
 
-    Lumberjack.info("reading photoobj catalogs for $(length(fieldids)) fields")
+    Log.info("reading photoobj catalogs for $(length(fieldids)) fields")
 
     # the code below assumes there is at least one field.
     if length(fieldids) == 0
@@ -580,12 +580,12 @@ function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
         run, camcol, field = fieldids[i]
         dir = dirs[i]
         fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
-        Lumberjack.info("field $(fieldids[i]): reading $fname")
+        Log.info("field $(fieldids[i]): reading $fname")
         rawcatalogs[i] = read_photoobj(fname)
     end
 
     for i in eachindex(fieldids)
-        Lumberjack.info("field $(fieldids[i]): $(length(rawcatalogs[i]["objid"])) entries")
+        Log.info("field $(fieldids[i]): $(length(rawcatalogs[i]["objid"])) entries")
     end
 
     # Limit each catalog to primary objects and objects where thing_id != -1
@@ -601,8 +601,8 @@ function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
     end
 
     for i in eachindex(fieldids)
-        Lumberjack.info("field $(fieldids[i]): $(length(rawcatalogs[i]["objid"])) ",
-                "filtered entries")
+        Log.info(string("field $(fieldids[i]): $(length(rawcatalogs[i]["objid"])) ",
+                "filtered entries"))
     end
 
     # Merge all catalogs together (there should be no duplicate objects,
