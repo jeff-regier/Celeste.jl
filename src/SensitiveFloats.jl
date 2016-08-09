@@ -22,8 +22,6 @@ Attributes:
   h:  The second derivative with respect to each variational parameter,
       in the same format as d.  This is used for the full Hessian
       with respect to all the sources.
-  hs: An array of per-source Hessians.  This will generally be reserved
-      for the Hessian of brightness values that depend only on one source.
 """
 type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
     # Actually a single value, but an Array to avoid memory allocation
@@ -35,7 +33,7 @@ type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
     # h is ordered so that p changes fastest.  For example, the indices
     # of a column of h correspond to the indices of d's stacked columns.
     h::Matrix{NumType} # (local_P * local_S) x (local_P * local_S)
-    ids::ParamType
+    # ids::ParamType
 end
 
 

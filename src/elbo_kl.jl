@@ -6,6 +6,9 @@
 # e.g. if the prior is a float and the parameter is a dual number.
 
 
+######################################################
+# KL divergences
+
 """
 KL divergence between a pair of beta distributions
 
@@ -176,89 +179,149 @@ function gen_diagmvn_mvn_kl{NumType <: Number}(
 end
 
 
+#######################################################
+# Functions to subtract single-source KL divergences from a SensitiveFloat
+
 """
 Subtract the KL divergence from the prior for c
 """
-function subtract_kl_c{NumType <: Number}(
-    d::Int, i::Int, vs::Vector{NumType})
+function subtract_kl_c!{NumType <: Number}(
+    vs::Vector{NumType}, kl_source::SensitiveFloat{CanonicalParams, NumType},
+    calculate_derivs::Bool)
 
-  a = vs[ids.a[i]]
-  k = vs[ids.k[d, i]]
-
-  pp_kl_cid = gen_diagmvn_mvn_kl(prior.c_mean[:, d, i], prior.c_cov[:, :, d, i])
-  -pp_kl_cid(vs[ids.c1[:, i]], vs[ids.c2[:, i]]) * a * k
+    for i in 1:Ia
+        a = vs[ids.a[i]]
+        for d in 1:D
+            k = vs[ids.k[d, i]]
+            pp_kl_cid = gen_diagmvn_mvn_kl(
+                prior.c_mean[:, d, i], prior.c_cov[:, :, d, i])
+            mean_ids = ids.c1[:, i]
+            var_ids = ids.c2[:, i]
+            kl, grad_mean, grad_var, hess_mean, hess_var =
+                pp_kl_cid(vs[mean_ids], vs[var_ids], calculate_derivs)
+            accum.v -= a * k * kl
+            accum.d[mean_ids] -= a * k * grad_mean
+            accum.d[var_ids] -= a * k * grad_var
+            accum.h[mean_ids, mean_ids] -= a *k * hess_mean
+            accum.h[var_ids, var_ids] -= a *k * hess_var
+        end
+    end
 end
 
 
 """
 Subtract the KL divergence from the prior for k
 """
-function subtract_kl_k{NumType <: Number}(i::Int, vs::Vector{NumType})
-    pp_kl_ki = gen_categorical_kl(prior.k[:, i])
-    -vs[ids.a[i]] * pp_kl_ki(vs[ids.k[:, i]])
+function subtract_kl_k!{NumType <: Number}(
+        vs::Vector{NumType}, kl_source::SensitiveFloat{CanonicalParams, NumType},
+        calculate_derivs::Bool)
+
+    for i in 1:Ia
+        a = vs[ids.a[i]]
+        k_ind = Integer[ids.k[:, i]]
+        pp_kl_ki = gen_categorical_kl(prior.k[:, i])
+        kl, grad, hess = pp_kl_ki(vs[k_ind], calculate_derivs)
+        kl_source.v -= a * kl
+        kl_source.d[k_ind] -= a * grad
+        kl_source.h[k_ind, k_ind] -= a * hess
+    end
 end
 
 
 """
 Subtract the KL divergence from the prior for r for object type i.
 """
-function subtract_kl_r{NumType <: Number}(i::Int, vs::Vector{NumType})
-    a = vs[ids.a[i]]
-    pp_kl_r = gen_normal_kl(prior.r_mean[i], prior.r_var[i])
-    v = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
-    -a * v
+function subtract_kl_r!{NumType <: Number}(
+        vs::Vector{NumType}, kl_source::SensitiveFloat{CanonicalParams, NumType},
+        calculate_derivs::Bool)
+
+    for i in 1:Ia
+        pp_kl_r = gen_normal_kl(prior.r_mean[i], prior.r_var[i])
+        a = vs[ids.a[i]]
+        kl, grad, hess = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]], calculate_derivs)
+        r_ind = Integer[ ids.r1[i], ids.r2[i] ]
+        kl_source.v -= a * kl
+        kl_source.d[r_ind] -= a * grad
+        kl_source.h[r_ind, r_ind] -= a * hess
+    end
 end
 
 
 """
 Subtract the KL divergence from the prior for a
 """
-function subtract_kl_a{NumType <: Number}(vs::Vector{NumType})
+function subtract_kl_a!{NumType <: Number}(
+        vs::Vector{NumType}, kl_source::SensitiveFloat{CanonicalParams, NumType},
+        calculate_derivs::Bool)
+
     pp_kl_a = gen_categorical_kl(prior.a)
-    -pp_kl_a(vs[ids.a])
+    kl, grad, hess = pp_kl_a(vs[ids.a], calculate_derivs)
+    kl_source.v -= kl
+    kl_source.d[ids.a] -= grad
+    kl_source.h[ids.a, ids.a] -= hess
 end
 
 
+"""
+Subtract the KL divergences for all sources.
+"""
 function subtract_kl!{NumType <: Number}(
         ea::ElboArgs{NumType}, accum::SensitiveFloat{CanonicalParams, NumType};
-        calculate_derivs::Bool=true, calculate_hessian::Bool=true)
+        calculate_derivs::Bool)
 
-    # The KL divergence as a function of the active source variational parameters.
-    function subtract_kl_value_wrapper{NumType2 <: Number}(vp_vec::Vector{NumType2})
-        elbo_val = zero(NumType2)
-        vp_active = reshape(vp_vec, length(CanonicalParams), length(ea.active_sources))
-        for sa in 1:length(ea.active_sources)
-            vs = vp_active[:, sa]
-            elbo_val += subtract_kl_a(vs)
-
-            for i in 1:Ia
-                    elbo_val += subtract_kl_r(i, vs)
-                    elbo_val += subtract_kl_k(i, vs)
-                    for d in 1:D
-                        elbo_val += subtract_kl_c(d, i, vs)
-                    end
-            end
-        end
-        elbo_val
+    for sa in 1:length(ea.active_sources)
+        kl_source = zero_sensitive_float(CanonicalParams, NumType)
+        subtract_kl_a!(ea.vp[sa], kl_source, calculate_derivs)
+        subtract_kl_r!(ea.vp[sa], kl_source, calculate_derivs)
+        subtract_kl_k!(ea.vp[sa], kl_source, calculate_derivs)
+        subtract_kl_c!(ea.vp[sa], kl_source, calculate_derivs)
+        add_sources_sf!(accum, kl_source, sa, calculate_hessian)
     end
 
-    vp_vec = reduce(vcat, Vector{NumType}[ ea.vp[sa] for sa in ea.active_sources ])
-
-    const P = length(CanonicalParams)
-    Sa = length(ea.active_sources)
-
-    if calculate_derivs
-        if calculate_hessian
-            result = ForwardDiff.HessianResult(vp_vec)
-            ForwardDiff.hessian!(result, subtract_kl_value_wrapper, vp_vec)
-            accum.h += ForwardDiff.hessian(result)
-        else
-            result = ForwardDiff.GradientResult(vp_vec)
-            ForwardDiff.gradient!(result, subtract_kl_value_wrapper, vp_vec)
-        end
-        accum.d += reshape(ForwardDiff.gradient(result), P, Sa)
-        accum.v[1] += ForwardDiff.value(result)
-    else
-        accum.v[1] += subtract_kl_value_wrapper(vp_vec)
-    end
 end
+
+
+#
+# function subtract_kl!{NumType <: Number}(
+#         ea::ElboArgs{NumType}, accum::SensitiveFloat{CanonicalParams, NumType};
+#         calculate_derivs::Bool=true, calculate_hessian::Bool=true)
+#
+#     # The KL divergence as a function of the active source variational parameters.
+#     function subtract_kl_value_wrapper{NumType2 <: Number}(vp_vec::Vector{NumType2})
+#         elbo_val = zero(NumType2)
+#         vp_active = reshape(vp_vec, length(CanonicalParams), length(ea.active_sources))
+#         for sa in 1:length(ea.active_sources)
+#             vs = vp_active[:, sa]
+#             elbo_val += subtract_kl_a(vs)
+#
+#             for i in 1:Ia
+#                     elbo_val += subtract_kl_r(i, vs)
+#                     elbo_val += subtract_kl_k(i, vs)
+#                     for d in 1:D
+#                         elbo_val += subtract_kl_c(d, i, vs)
+#                     end
+#             end
+#         end
+#         elbo_val
+#     end
+#
+#     vp_vec = reduce(vcat, Vector{NumType}[ ea.vp[sa] for sa in ea.active_sources ])
+#
+#     const P = length(CanonicalParams)
+#     Sa = length(ea.active_sources)
+#
+#     if calculate_derivs
+#         if calculate_hessian
+#             result = ForwardDiff.HessianResult(vp_vec)
+#             ForwardDiff.hessian!(result, subtract_kl_value_wrapper, vp_vec)
+#             accum.h += ForwardDiff.hessian(result)
+#         else
+#             result = ForwardDiff.GradientResult(vp_vec)
+#             ForwardDiff.gradient!(result, subtract_kl_value_wrapper, vp_vec)
+#         end
+#         accum.d += reshape(ForwardDiff.gradient(result), P, Sa)
+#         accum.v[1] += ForwardDiff.value(result)
+#     else
+#         accum.v[1] += subtract_kl_value_wrapper(vp_vec)
+#     end
+# end

@@ -4,6 +4,9 @@ using Base.Test
 using Distributions
 
 
+######################################
+# Helper functions
+
 function true_star_init()
     blob, ea, body = gen_sample_star_dataset(perturb=false)
 
