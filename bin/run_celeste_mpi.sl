@@ -14,4 +14,4 @@ module load impi
 export I_MPI_PIN_DOMAIN=auto
 export USE_DTREE=1
 export I_MPI_PMI_LIBRARY=/usr/lib64/slurmpmi/libpmi.so
-srun -n 16 "$HOME/julia/bin/julia-debug" --depwarn=no "$HOME/.julia/v0.5/Celeste/bin/celeste.jl" infer-box 200 200.5 38.1 38.35 $SCRATCH
+srun -n 16 /global/cscratch1/sd/kpamnany/julia/usr/bin/julia-debug --depwarn=no "$HOME/.julia/v0.5/Celeste/bin/celeste.jl" infer-box 200 200.5 38.1 38.35 $SCRATCH

@@ -4,10 +4,10 @@ using ..Model
 using ..SensitiveFloats
 using ..Transform
 using ..ElboDeriv
+import ..Log
 
 import DataFrames
 import Optim
-import Lumberjack
 
 
 # Only include until this is merged with Optim.jl.
@@ -70,7 +70,7 @@ type ObjectiveWrapperFunctions
         function print_status{T <: Number}(
           iter_vp::VariationalParams{T}, value::T, grad::Array{T})
             if state.verbose || (state.f_evals % state.print_every_n == 0)
-                Lumberjack.info("f_evals: $(state.f_evals) value: $(value)")
+                Log.info("f_evals: $(state.f_evals) value: $(value)")
             end
             if state.verbose
               S = length(iter_vp)
@@ -88,8 +88,8 @@ type ObjectiveWrapperFunctions
               for s=1:S
                 state_df[Symbol(string("grad", s))] = grad[:, s]
               end
-              Lumberjack.info(string(state_df))
-              Lumberjack.info("=======================================\n")
+              Log.info(string(state_df))
+              Log.info("=======================================\n")
             end
         end
 
@@ -242,8 +242,8 @@ function maximize_f(f::Function,
     max_f = -1.0 * nm_result.f_minimum
     max_x = nm_result.minimum
 
-    Lumberjack.info("got $max_f at $max_x after $iter_count function evaluations ",
-            "($(nm_result.iterations) Newton steps)\n")
+    Log.info(string("got $max_f at $max_x after $iter_count function evaluations ",
+            "($(nm_result.iterations) Newton steps)\n"))
     iter_count, max_f, max_x, nm_result
 end
 
