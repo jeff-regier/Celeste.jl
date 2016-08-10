@@ -3,6 +3,7 @@ using Celeste: ElboDeriv, SensitiveFloats
 using Base.Test
 using Distributions
 
+include("derivative_utils.jl")
 
 ######################################
 # Helper functions
@@ -29,6 +30,105 @@ function find_source_tiles(s::Int, b::Int, ea::ElboArgs)
 end
 
 #################################
+
+function test_set_hess()
+    sf = zero_sensitive_float(CanonicalParams)
+    set_hess!(sf, 2, 3, 5.0)
+    @test_approx_eq sf.h[2, 3] 5.0
+    @test_approx_eq sf.h[3, 2] 5.0
+
+    set_hess!(sf, 4, 4, 6.0)
+    @test_approx_eq sf.h[4, 4] 6.0
+end
+
+
+function test_bvn_cov()
+        e_axis = .7
+        e_angle = pi/5
+        e_scale = 2.
+
+        manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
+        util_11 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
+        @test_approx_eq util_11 manual_11
+
+        manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
+        util_12 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
+        @test_approx_eq util_12 manual_12
+
+        manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
+        util_22 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
+        @test_approx_eq util_22 manual_22
+end
+
+
+function test_tile_predicted_image()
+    blob, ea, body = gen_sample_star_dataset(perturb=false)
+    tile = ea.images[1].tiles[1, 1]
+    tile_source_map = ea.tile_source_map[1][1, 1]
+    pred_image =
+        ElboDeriv.tile_predicted_image(tile, ea, tile_source_map; include_epsilon=true)
+
+    # Regress the tile pixels onto the predicted image
+    # TODO: Why isn't the regression closer to one?    Something in the sample data
+    # generation?
+    reg_coeff = dot(tile.pixels[:], pred_image[:]) / dot(pred_image[:], pred_image[:])
+    residuals = pred_image * reg_coeff - tile.pixels
+    residual_sd = sqrt(mean(residuals .^ 2))
+
+    @test residual_sd / mean(tile.pixels) < 0.1
+end
+
+
+function test_derivative_flags()
+    blob, ea, body = gen_two_body_dataset()
+    keep_pixels = 10:11
+    trim_tiles!(ea.images, keep_pixels)
+
+    elbo = ElboDeriv.elbo(ea)
+
+    elbo_noderiv = ElboDeriv.elbo(ea; calculate_derivs=false)
+    @test_approx_eq elbo.v[1] elbo_noderiv.v
+    @test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
+    @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
+
+    elbo_nohess = ElboDeriv.elbo(ea; calculate_hessian=false)
+    @test_approx_eq elbo.v[1] elbo_nohess.v
+    @test_approx_eq elbo.d elbo_nohess.d
+    @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
+end
+
+
+function test_active_sources()
+    # Test that the derivatives of the expected brightnesses partition in
+    # active_sources.
+
+    blob, ea, body = gen_two_body_dataset()
+    keep_pixels = 10:11
+    trim_tiles!(ea.images, keep_pixels)
+    b = 1
+    tile = ea.images[b].tiles[1,1]
+    h, w = 10, 10
+
+    ea.active_sources = [1, 2]
+    elbo_lik_12 = ElboDeriv.elbo_likelihood(ea)
+
+    ea.active_sources = [1]
+    elbo_lik_1 = ElboDeriv.elbo_likelihood(ea)
+
+    ea.active_sources = [2]
+    elbo_lik_2 = ElboDeriv.elbo_likelihood(ea)
+
+    @test_approx_eq elbo_lik_12.v[1] elbo_lik_1.v
+    @test_approx_eq elbo_lik_12.v[1] elbo_lik_2.v
+
+    @test_approx_eq elbo_lik_12.d[:, 1] elbo_lik_1.d[:, 1]
+    @test_approx_eq elbo_lik_12.d[:, 2] elbo_lik_2.d[:, 1]
+
+    P = length(CanonicalParams)
+    @test_approx_eq elbo_lik_12.h[1:P, 1:P] elbo_lik_1.h
+    @test_approx_eq elbo_lik_12.h[(1:P) + P, (1:P) + P] elbo_lik_2.h
+end
+
 
 function test_that_variance_is_low()
     # very peaked variational distribution---variance for F(m) should be low
@@ -373,7 +473,12 @@ end
 
 ####################################################
 
-#test_trim_source_tiles()
+#test_trim_source_tiles() # TODO: fix this
+test_set_hess()
+test_bvn_cov()
+test_tile_predicted_image()
+test_derivative_flags()
+test_active_sources()
 test_tiny_image_tiling()
 test_that_variance_is_low()
 test_that_star_truth_is_most_likely()
