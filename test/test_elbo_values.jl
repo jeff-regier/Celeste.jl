@@ -3,6 +3,10 @@ using Celeste: ElboDeriv, SensitiveFloats
 using Base.Test
 using Distributions
 
+include("derivative_utils.jl")
+
+######################################
+# Helper functions
 
 function true_star_init()
     blob, ea, body = gen_sample_star_dataset(perturb=false)
@@ -27,67 +31,102 @@ end
 
 #################################
 
-function test_kl_divergence_values()
-    blob, ea, three_bodies = gen_three_body_dataset();
+function test_set_hess()
+    sf = zero_sensitive_float(CanonicalParams)
+    set_hess!(sf, 2, 3, 5.0)
+    @test_approx_eq sf.h[2, 3] 5.0
+    @test_approx_eq sf.h[3, 2] 5.0
 
-    s = 1
-    i = 1
-    d = 1
-    sample_size = 2_000_000
+    set_hess!(sf, 4, 4, 6.0)
+    @test_approx_eq sf.h[4, 4] 6.0
+end
 
-    function test_kl(q_dist, p_dist, kl_fun)
-        q_samples = rand(q_dist, sample_size)
-        empirical_kl_samples =
-          logpdf(q_dist, q_samples) - logpdf(p_dist, q_samples)
-        empirical_kl = mean(empirical_kl_samples)
-        exact_kl = -kl_fun()
-        tol = 4 * std(empirical_kl_samples) / sqrt(sample_size)
-        min_diff = 1e-2 * std(empirical_kl_samples) / sqrt(sample_size)
 
-        # TODO: fix this test, which assumes an in-place update.
-        @test_approx_eq_eps empirical_kl exact_kl tol
-    end
+function test_bvn_cov()
+        e_axis = .7
+        e_angle = pi/5
+        e_scale = 2.
 
-    vs = ea.vp[s]
+        manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
+        util_11 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
+        @test_approx_eq util_11 manual_11
 
-    # a
-    q_a = Bernoulli(vs[ids.a[2]])
-    p_a = Bernoulli(prior.a[2])
-    test_kl(q_a, p_a, () -> ElboDeriv.subtract_kl_a(ea.vp[s]))
+        manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
+        util_12 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
+        @test_approx_eq util_12 manual_12
 
-    # k
-    q_k = Categorical(vs[ids.k[:, i]])
-    p_k = Categorical(prior.k[:, i])
-    function sklk()
-        @assert i == 1
-        ElboDeriv.subtract_kl_k(i, ea.vp[s]) / vs[ids.a[i]]
-    end
-    test_kl(q_k, p_k, sklk)
+        manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
+        util_22 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
+        @test_approx_eq util_22 manual_22
+end
 
-    # c
-    old_c_mean = deepcopy(prior.c_mean)
-    old_c_cov = deepcopy(prior.c_cov)
-    prior.c_mean[:,d,i] = vs[ids.c1[:, i]]
-    prior.c_cov[:,:,d,i] = diagm(vs[ids.c2[:, i]])
-    q_c = MvNormal(vs[ids.c1[:, i]], diagm(vs[ids.c2[:, i]]))
-    p_c = MvNormal(prior.c_mean[:, d, i], prior.c_cov[:, :, d, i])
-    function sklc()
-        ElboDeriv.subtract_kl_c(d, i, ea.vp[s]) /
-          vs[ids.a[i]] * vs[ids.k[d, i]]
-    end
-    test_kl(q_c, p_c, sklc)
-    prior.c_mean[:,:,:] = old_c_mean
-    prior.c_cov[:,:,:] = old_c_cov
 
-    # r
-    q_r = Normal(vs[ids.r1[i]], sqrt(vs[ids.r2[i]]))
-    p_r = Normal(prior.r_mean[i], sqrt(prior.r_var[i]))
-    function sklr()
-        @assert i == 1
-        ElboDeriv.subtract_kl_r(i, ea.vp[s]) / vs[ids.a[i]]
-    end
-    test_kl(q_r, p_r, sklr)
+function test_tile_predicted_image()
+    blob, ea, body = gen_sample_star_dataset(perturb=false)
+    tile = ea.images[1].tiles[1, 1]
+    tile_source_map = ea.tile_source_map[1][1, 1]
+    pred_image =
+        ElboDeriv.tile_predicted_image(tile, ea, tile_source_map; include_epsilon=true)
 
+    # Regress the tile pixels onto the predicted image
+    # TODO: Why isn't the regression closer to one?    Something in the sample data
+    # generation?
+    reg_coeff = dot(tile.pixels[:], pred_image[:]) / dot(pred_image[:], pred_image[:])
+    residuals = pred_image * reg_coeff - tile.pixels
+    residual_sd = sqrt(mean(residuals .^ 2))
+
+    @test residual_sd / mean(tile.pixels) < 0.1
+end
+
+
+function test_derivative_flags()
+    blob, ea, body = gen_two_body_dataset()
+    keep_pixels = 10:11
+    trim_tiles!(ea.images, keep_pixels)
+
+    elbo = ElboDeriv.elbo(ea)
+
+    elbo_noderiv = ElboDeriv.elbo(ea; calculate_derivs=false)
+    @test_approx_eq elbo.v[1] elbo_noderiv.v
+    @test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
+    @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
+
+    elbo_nohess = ElboDeriv.elbo(ea; calculate_hessian=false)
+    @test_approx_eq elbo.v[1] elbo_nohess.v
+    @test_approx_eq elbo.d elbo_nohess.d
+    @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
+end
+
+
+function test_active_sources()
+    # Test that the derivatives of the expected brightnesses partition in
+    # active_sources.
+
+    blob, ea, body = gen_two_body_dataset()
+    keep_pixels = 10:11
+    trim_tiles!(ea.images, keep_pixels)
+    b = 1
+    tile = ea.images[b].tiles[1,1]
+    h, w = 10, 10
+
+    ea.active_sources = [1, 2]
+    elbo_lik_12 = ElboDeriv.elbo_likelihood(ea)
+
+    ea.active_sources = [1]
+    elbo_lik_1 = ElboDeriv.elbo_likelihood(ea)
+
+    ea.active_sources = [2]
+    elbo_lik_2 = ElboDeriv.elbo_likelihood(ea)
+
+    @test_approx_eq elbo_lik_12.v[1] elbo_lik_1.v
+    @test_approx_eq elbo_lik_12.v[1] elbo_lik_2.v
+
+    @test_approx_eq elbo_lik_12.d[:, 1] elbo_lik_1.d[:, 1]
+    @test_approx_eq elbo_lik_12.d[:, 2] elbo_lik_2.d[:, 1]
+
+    P = length(CanonicalParams)
+    @test_approx_eq elbo_lik_12.h[1:P, 1:P] elbo_lik_1.h
+    @test_approx_eq elbo_lik_12.h[(1:P) + P, (1:P) + P] elbo_lik_2.h
 end
 
 
@@ -299,7 +338,7 @@ end
 
 
 function test_tiny_image_tiling()
-  # Test that the tilling doesn't matter much for a body that is nearly a
+  # Test that the tiling doesn't matter much for a body that is nearly a
   # point with a narrow psf.
 
   blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
@@ -361,12 +400,14 @@ function test_elbo_with_nan()
 end
 
 
+# TODO: fix this test.
 function test_trim_source_tiles()
     # Set a seed to avoid a flaky test.
     blob, ea, bodies = gen_n_body_dataset(3, seed=42);
 
     # With the above seed, this is near the middle of the image.
-    ea.active_sources = [1]
+    s = 1
+    ea.active_sources = [s]
     ea42 = deepcopy(ea)
     Infer.trim_source_tiles!(ea42; noise_fraction=0.1);
 
@@ -432,9 +473,13 @@ end
 
 ####################################################
 
-#test_trim_source_tiles()
+#test_trim_source_tiles() # TODO: fix this
+test_set_hess()
+test_bvn_cov()
+test_tile_predicted_image()
+test_derivative_flags()
+test_active_sources()
 test_tiny_image_tiling()
-test_kl_divergence_values()
 test_that_variance_is_low()
 test_that_star_truth_is_most_likely()
 test_that_galaxy_truth_is_most_likely()

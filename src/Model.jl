@@ -30,7 +30,6 @@ import Base.+
 import Distributions
 import FITSIO
 import WCS.WCSTransform
-import ForwardDiff
 import ..Log
 
 import Base.length
