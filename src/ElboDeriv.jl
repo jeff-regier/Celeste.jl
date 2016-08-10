@@ -3,8 +3,6 @@ Calculate value, gradient, and hessian of the variational ELBO.
 """
 module ElboDeriv
 
-import ForwardDiff
-
 using ..Model
 using ..SensitiveFloats
 import ..WCSUtils

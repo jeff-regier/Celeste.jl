@@ -103,11 +103,11 @@ Returns:
 function gen_normal_kl{NumType <: Number}(mu2::NumType, sigma2Sq::NumType)
     const log_sigma2Sq = log(sigma2Sq)
     const precision2 = 1 / sigma2Sq
-    function this_normal_lk{NumType2 <: Number}(
+    function this_normal_kl{NumType2 <: Number}(
             mu1::NumType2, sigma1Sq::NumType2, calculate_derivs::Bool)
         diff = mu1 - mu2
-        kl = .5 * ((log_sigma2Sq - log(sigma1Sq)) +
-             (sigma1Sq + (diff)^2) / sigma2Sq - 1)
+        kl = .5 * (log_sigma2Sq - log(sigma1Sq) +
+                   (sigma1Sq + (diff)^2) / sigma2Sq - 1)
 
         grad = zeros(NumType2, 2)
         hess = zeros(NumType2, 2, 2)
