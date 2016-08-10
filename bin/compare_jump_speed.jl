@@ -29,7 +29,7 @@ function compare_jump_speed()
     end
 
     jump_m, jump_elbo = ElboJuMP.build_jump_model(blob, mp);
-    @time MathProgBase.initialize(jump_elbo, [:Grad,:ExprGraph])
+#    @time MathProgBase.initialize(jump_elbo, [:Grad,:ExprGraph])
     obj_expr = MathProgBase.obj_expr(jump_elbo)
     fg = ReverseDiffSparse.genfgrad_simple(obj_expr)
     grad_out = zeros(length(jump_m.colVal))

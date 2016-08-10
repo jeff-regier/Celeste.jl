@@ -151,21 +151,21 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     @variable(m, vp_lambda[s=1:mp.S, b=1:(CelesteTypes.B - 1), a=1:CelesteTypes.I] >= 0)
 
     for s=1:mp.S
-        setValue(vp_chi[s], mp.vp[s][ids.chi])
-        setValue(vp_mu[s, 1], mp.vp[s][ids.mu][1])
-        setValue(vp_mu[s, 2], mp.vp[s][ids.mu][2])
+        setvalue(vp_chi[s], mp.vp[s][ids.chi])
+        setvalue(vp_mu[s, 1], mp.vp[s][ids.mu][1])
+        setvalue(vp_mu[s, 2], mp.vp[s][ids.mu][2])
 
-        setValue(vp_rho[s], mp.vp[s][ids.rho])
-        setValue(vp_sigma[s], mp.vp[s][ids.sigma])
-        setValue(vp_phi[s], mp.vp[s][ids.phi])
+        setvalue(vp_rho[s], mp.vp[s][ids.rho])
+        setvalue(vp_sigma[s], mp.vp[s][ids.sigma])
+        setvalue(vp_phi[s], mp.vp[s][ids.phi])
 
-        setValue(vp_theta[s], mp.vp[s][ids.theta])
+        setvalue(vp_theta[s], mp.vp[s][ids.theta])
         for a=1:CelesteTypes.I
-            setValue(vp_gamma[s, a], mp.vp[s][ids.gamma][a])
-            setValue(vp_zeta[s, a], mp.vp[s][ids.zeta][a])
+            setvalue(vp_gamma[s, a], mp.vp[s][ids.gamma][a])
+            setvalue(vp_zeta[s, a], mp.vp[s][ids.zeta][a])
             for b=1:(CelesteTypes.B - 1)
-                setValue(vp_beta[s, b, a], mp.vp[s][ids.beta][b, a])
-                setValue(vp_lambda[s, b, a], mp.vp[s][ids.lambda][b, a])
+                setvalue(vp_beta[s, b, a], mp.vp[s][ids.beta][b, a])
+                setvalue(vp_lambda[s, b, a], mp.vp[s][ids.lambda][b, a])
             end
         end
     end
@@ -386,14 +386,13 @@ function build_jump_model(blob::Blob, mp::ModelParams)
     @NLexpression(m, galaxy_type1_pdf_f[img=1:CelesteTypes.B, s=1:mp.S,
                                   k=1:n_pcf_comp, g_k=1:n_gal1_comp,
                                   pw=1:img_w, ph=1:img_h],
-            sum{
                 exp(-0.5 * sum{star_pdf_mean[img, s, k, pw, ph, pdf_f_row] * 
                                galaxy_type1_precision[img, s, k, g_k, pdf_f_row, pdf_f_col] *
                                star_pdf_mean[img, s, k, pw, ph, pdf_f_col],
                                pdf_f_row=1:2, pdf_f_col=1:2}/
                                galaxy_type1_det[img, s, k, g_k]) *
                 galaxy_type1_z[img, s, k, g_k]
-             });
+             );
 
 
     @NLexpression(m, galaxy_type2_pdf_f[img=1:CelesteTypes.B, s=1:mp.S,
