@@ -11,12 +11,11 @@ before_install:
   - sudo apt-get install libwcs4 -y
   - sudo apt-get install libcfitsio3 -y
   - sudo apt-get install mpich2 libmpich2-3 libmpich2-dev -y
-#  - sudo apt-get install openmpi-bin openmpi-common libopenmpi-dev -qq -y
+  - sudo apt-get install openmpi-bin openmpi-common libopenmpi-dev mpi-default-dev -qq -y
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
   - julia -e 'Pkg.clone(pwd()); Pkg.build("Celeste")'
-  - julia -e 'Pkg.clone("https://github.com/kpamnany/Dtree.jl"); Pkg.build("Dtree")'
   - julia -e 'Pkg.test("Celeste"; coverage=(VERSION < v"0.4"))'
 
 after_success:
