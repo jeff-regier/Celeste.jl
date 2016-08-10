@@ -3,6 +3,7 @@ Compat
 DataFrames
 Distributions
 DocOpt
+Dtree
 ForwardDiff 0.1.8 0.2
 JLD
 Optim 0.5 0.5.1
