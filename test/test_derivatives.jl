@@ -2,6 +2,7 @@ import DualNumbers
 import ForwardDiff
 
 using Celeste: Model, SensitiveFloats, ElboDeriv
+using Distributions
 import ElboDeriv: BvnComponent, GalaxyCacheComponent
 import ElboDeriv: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 
@@ -907,8 +908,9 @@ function test_diagmvn_mvn_kl_derivatives()
     mean2 = rand(K)
     cov2 = rand(K, K)
     cov2 = 0.2 * cov2 * cov2' + eye(K)
+    cov2 = 0.5 * (cov2 + cov2')
 
-    diagmvn_mvn_kl = ElboDeriv.gen_diagmvn_mvn_kl(mu2, cov2)
+    diagmvn_mvn_kl = ElboDeriv.gen_diagmvn_mvn_kl(mean2, cov2)
     kl, grad_mean, grad_var, hess_mean, hess_var =
         diagmvn_mvn_kl(mean1, var1, true);
 
@@ -949,7 +951,7 @@ function test_normal_kl_derivatives()
     mean2 = 0.8
     var2 = 1.8
 
-    normal_kl = gen_normal_kl(mean2, var2)
+    normal_kl = ElboDeriv.gen_normal_kl(mean2, var2)
 
     function normal_kl_wrapper{NumType <: Number}(par::Vector{NumType})
         local kl, grad, hess
@@ -957,7 +959,7 @@ function test_normal_kl_derivatives()
         return kl
     end
 
-    kl, grad, hess = normal_kl(mean1, var1, mean2, var2, true)
+    kl, grad, hess = normal_kl(mean1, var1, true)
 
     par = vcat(mean1, var1)
     ad_grad = ForwardDiff.gradient(normal_kl_wrapper, par)
@@ -969,8 +971,8 @@ function test_normal_kl_derivatives()
     @test_approx_eq ad_hess hess
 
     # Check the value
-    p1_dist = Normal(mean1, var1)
-    p2_dist = Normal(mean2, var2)
+    p1_dist = Normal(mean1, sqrt(var1))
+    p2_dist = Normal(mean2, sqrt(var2))
     test_kl_value(p1_dist, p2_dist, kl)
 end
 
