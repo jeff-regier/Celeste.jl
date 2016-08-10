@@ -370,12 +370,12 @@ function accum_pixel_source_stats!(sb::SourceBrightness,
 
     # Accumulate over PSF components.  Note that fs0m and fs1m
     # are cleared at this point.
-    clear!(fs0m)
+    CelesteTypes.clear!(fs0m)
     for star_mc in star_mcs[:, parent_s]
         accum_star_pos!(star_mc, m_pos, fs0m)
     end
 
-    clear!(fs1m)
+    CelesteTypes.clear!(fs1m)
     # TODO: Don't hard-code the index ranges.
     for i = 1:2 # Galaxy types
         for j in 1:[8,6][i] # Galaxy component
@@ -569,9 +569,9 @@ function elbo_likelihood!(tile::ImageTile, mp::ModelParams,
 
     # Iterate over pixels.
     for w in w_range, h in h_range
-        clear!(E_G)
+        CelesteTypes.clear!(E_G)
         E_G.v = tile.img.epsilon
-        clear!(var_G)
+        CelesteTypes.clear!(var_G)
 
         # Note that this is in a perhaps counterintuitive order
         # of h and w since h is "height" and w is "width".
