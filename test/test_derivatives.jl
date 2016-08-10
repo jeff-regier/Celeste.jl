@@ -1082,7 +1082,7 @@ end
 @time test_elbo()
 
 # TODO: set in runtests
-test_detailed_derivatives = false
+test_detailed_derivatives = true
 
 if test_detailed_derivatives
     test_process_active_pixels()

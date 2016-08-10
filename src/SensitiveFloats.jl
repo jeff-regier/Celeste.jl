@@ -208,7 +208,8 @@ function multiply_sfs!{ParamType <: ParamSet, NumType <: Number}(
   g_d = NumType[sf2.v[1], sf1.v[1]]
   #const g_h = NumType[0 1; 1 0]
 
-  combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess, calculate_hessian=calculate_hessian)
+  combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess,
+               calculate_hessian=calculate_hessian)
 
   true # Set definite return type
 end

@@ -177,11 +177,13 @@ end
 A sensitive float representing a single term a[i] which can be combined
 with other sensitive floats.
 """
-function get_a_term_sensitive_float{NumType <: Number}(a::NumType, i::Integer)
+function get_a_term_sensitive_float{NumType <: Number}(
+        a::NumType, i::Integer, calculate_derivs::Bool)
     a_term = zero_sensitive_float(CanonicalParams, NumType)
     a_term.v[1] = a
-    a_term.d[ids.a[i], 1] = 1
-
+    if calculate_derivs
+        a_term.d[ids.a[i], 1] = 1
+    end
     return a_term
 end
 
@@ -191,12 +193,13 @@ A sensitive float representing a single term k[d, i] which can be combined
 with other sensitive floats.
 """
 function get_k_term_sensitive_float{NumType <: Number}(
-        k::NumType, i::Integer, d::Integer)
+        k::NumType, i::Integer, d::Integer, calculate_derivs::Bool)
 
     k_term = zero_sensitive_float(CanonicalParams, NumType)
     k_term.v[1] = k
-    k_term.d[ids.k[d, i], 1] = 1
-
+    if calculate_derivs
+        k_term.d[ids.k[d, i], 1] = 1
+    end
     return k_term
 end
 
@@ -226,8 +229,8 @@ function subtract_kl_c!{NumType <: Number}(
             kl_term.h[var_ids, var_ids] = hess_var
         end
 
-        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i)
-        k_term = get_k_term_sensitive_float(vs[ids.k[d, i]], i, d)
+        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i, calculate_derivs)
+        k_term = get_k_term_sensitive_float(vs[ids.k[d, i]], i, d, calculate_derivs)
         multiply_sfs!(kl_term, a_term, calculate_derivs)
         multiply_sfs!(kl_term, k_term, calculate_derivs)
         add_scaled_sfs!(kl_source, kl_term, -1.0, calculate_derivs)
@@ -259,7 +262,7 @@ function subtract_kl_k!{NumType <: Number}(
             kl_term.d[k_ind, 1] = grad
             kl_term.h[k_ind, k_ind] = hess
         end
-        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i)
+        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i, calculate_derivs)
         multiply_sfs!(kl_term, a_term, calculate_derivs)
         add_scaled_sfs!(kl_source, kl_term, -1.0, calculate_derivs)
     end
@@ -284,7 +287,7 @@ function subtract_kl_r!{NumType <: Number}(
             kl_term.d[r_ind, 1] = grad
             kl_term.h[r_ind, r_ind] = hess
         end
-        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i)
+        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i, calculate_derivs)
         multiply_sfs!(kl_term, a_term, calculate_derivs)
         add_scaled_sfs!(kl_source, kl_term, -1.0, calculate_derivs)
     end
@@ -323,6 +326,7 @@ function subtract_kl!{NumType <: Number}(
         subtract_kl_k!(ea.vp[s], kl_source, calculate_derivs)
         subtract_kl_r!(ea.vp[s], kl_source, calculate_derivs)
         subtract_kl_c!(ea.vp[s], kl_source, calculate_derivs)
+
         add_sources_sf!(accum, kl_source, sa, calculate_derivs)
     end
 
