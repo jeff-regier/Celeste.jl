@@ -1,23 +1,12 @@
 module Celeste
 
-require(joinpath(Pkg.dir("Celeste"), "src", "Util.jl"))
-require(joinpath(Pkg.dir("Celeste"), "src", "CelesteTypes.jl"))
-require(joinpath(Pkg.dir("Celeste"), "src", "ModelInit.jl"))
-require(joinpath(Pkg.dir("Celeste"), "src", "SDSS.jl"))
-require(joinpath(Pkg.dir("Celeste"), "src", "ElboDeriv.jl"))
-require(joinpath(Pkg.dir("Celeste"), "src", "OptimizeElbo.jl"))
-require(joinpath(Pkg.dir("Celeste"), "src", "Synthetic.jl"))
-require(joinpath(Pkg.dir("Celeste"), "src", "SampleData.jl"))
-require(joinpath(Pkg.dir("Celeste"), "src", "ElboJuMP.jl"))
-
-import SDSS
-import ElboDeriv
-import OptimizeElbo
-import ModelInit
-
-using CelesteTypes
-
-
-# package code goes here
+include("Util.jl")
+include("CelesteTypes.jl")
+include("ModelInit.jl")
+include("SDSS.jl")
+include("ElboDeriv.jl")
+include("Synthetic.jl")
+include("SampleData.jl")
+include("ElboJuMP.jl")
 
 end # module

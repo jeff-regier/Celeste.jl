@@ -5,8 +5,8 @@
 
 module ElboDeriv
 
-using CelesteTypes
-import Util
+using ..CelesteTypes
+import ..Util
 
 
 immutable SourceBrightness

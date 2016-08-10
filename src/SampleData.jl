@@ -1,13 +1,12 @@
 # Generates sample datasets for testing.
 module SampleData
 
-using Celeste
-using CelesteTypes
+using ..CelesteTypes
 using Distributions
 
-import ModelInit
-import Synthetic
-import SDSS
+import ..ModelInit
+import ..Synthetic
+import ..SDSS
 
 export gen_sample_star_dataset, gen_sample_galaxy_dataset, gen_three_body_dataset
 export dat_dir

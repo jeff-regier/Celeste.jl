@@ -1,10 +1,11 @@
 module SDSS
 
-using CelesteTypes
+using ..CelesteTypes
 
 using FITSIO
-using WCSLIB
+using FITSIO.Libcfitsio
 using DataFrames
+import WCS
 
 # Just dealing with SDSS stuff.  Now tested.
 
@@ -22,24 +23,24 @@ function load_stamp_blob(stamp_dir, stamp_id)
 
         fits_file = fits_open_file(filename)
         header_str = fits_hdr2str(fits_file)
-        close(fits_file)
-        ((wcs,),nrejected) = wcspih(header_str)
+        fits_close_file(fits_file)
+        wcs = WCS.from_header(header_str)[1]
 
-        alphaBar = [hdr["PSF_P0"], hdr["PSF_P1"], hdr["PSF_P2"]]
+        alphaBar = [hdr["PSF_P0"]; hdr["PSF_P1"]; hdr["PSF_P2"]]
         xiBar = [
-            [hdr["PSF_P3"]  hdr["PSF_P4"]],
-            [hdr["PSF_P5"]  hdr["PSF_P6"]],
-            [hdr["PSF_P7"]  hdr["PSF_P8"]]
-        ]'
-        SigmaBar = Array(Float64, 2, 2, 3)
-        SigmaBar[:,:,1] = [[hdr["PSF_P9"] hdr["PSF_P11"]],
-                [hdr["PSF_P11"] hdr["PSF_P10"]]]
-        SigmaBar[:,:,2] = [[hdr["PSF_P12"] hdr["PSF_P14"]],
-                [hdr["PSF_P14"] hdr["PSF_P13"]]]
-        SigmaBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]],
-                [hdr["PSF_P17"] hdr["PSF_P16"]]]
+            [hdr["PSF_P3"]  hdr["PSF_P4"]];
+            [hdr["PSF_P5"]  hdr["PSF_P6"]];
+            [hdr["PSF_P7"]  hdr["PSF_P8"]]]'
 
-        psf = [PsfComponent(alphaBar[k], xiBar[:, k], SigmaBar[:, :, k]) for k in 1:3]
+        tauBar = Array(Float64, 2, 2, 3)
+        tauBar[:,:,1] = [[hdr["PSF_P9"] hdr["PSF_P11"]];
+                         [hdr["PSF_P11"] hdr["PSF_P10"]]]
+        tauBar[:,:,2] = [[hdr["PSF_P12"] hdr["PSF_P14"]];
+                         [hdr["PSF_P14"] hdr["PSF_P13"]]]
+        tauBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]];
+                         [hdr["PSF_P17"] hdr["PSF_P16"]]]
+
+        psf = [PsfComponent(alphaBar[k], xiBar[:, k], tauBar[:, :, k]) for k in 1:3]
 
         H, W = size(original_pixels)
         iota = hdr["GAIN"] / hdr["CALIB"]

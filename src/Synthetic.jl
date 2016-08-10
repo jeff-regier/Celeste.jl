@@ -2,9 +2,9 @@ module Synthetic
 
 export gen_blob
 
-using CelesteTypes
-import ModelInit
-import Util
+using ..CelesteTypes
+import ..ModelInit
+import ..Util
 
 import Distributions
 

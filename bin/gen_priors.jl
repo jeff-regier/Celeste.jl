@@ -1,6 +1,6 @@
 #!/usr/bin/env julia
 
-using FITSIO
+using FITSIO.Libcfitsio
 using GaussianMixtures
 using Distributions
 
@@ -13,8 +13,10 @@ end
 
 
 function read_r_colors(prior_file)
-	cat = fits_open_table(ENV["DAT"]"/priors/"prior_file)
-	num_rows = int(fits_read_keyword(cat, "NAXIS2")[1])
+	fn = "$(ENV["DAT"])/$prior_file"
+    println(fn)
+	cat = fits_open_table(fn)
+	num_rows = parse(Int, fits_read_keyword(cat, "NAXIS2")[1])
 	table = Array(Float64, num_rows, 12)
 	for i in 1:12
 		data = Array(Float64, num_rows)

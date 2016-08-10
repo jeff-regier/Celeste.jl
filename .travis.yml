@@ -2,13 +2,10 @@ language: julia
 os:
   - linux
 julia:
-  - release
+  - 0.5
 notifications:
   email: false
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("Celeste"); Pkg.test("Celeste"; coverage=true)'
-
-after_success:
-  - julia -e 'cd(Pkg.dir("Celeste")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
+  - julia --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("Celeste"); Pkg.test("Celeste"; coverage=false)'

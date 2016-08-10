@@ -1,11 +1,12 @@
 #!/usr/bin/env julia
 
 using Celeste
-using CelesteTypes
+using Celeste: CelesteTypes
 using Dates
 
-import SampleData
-import ElboJuMP
+import Celeste: SampleData, ElboJuMP
+
+using ReverseDiffSparse
 
 
 function compare_jump_speed()
@@ -28,7 +29,8 @@ function compare_jump_speed()
     end
 
     jump_m, jump_elbo = ElboJuMP.build_jump_model(blob, mp);
-    obj_expr = @ReverseDiffSparse.processNLExpr jump_elbo
+    @time MathProgBase.initialize(jump_elbo, [:Grad,:ExprGraph])
+    obj_expr = MathProgBase.obj_expr(jump_elbo)
     fg = ReverseDiffSparse.genfgrad_simple(obj_expr)
     grad_out = zeros(length(jump_m.colVal))
 

@@ -18,9 +18,8 @@ export zero_sensitive_float, const_sensitive_param, clear!
 
 export ParamIndex, ids, all_params, star_pos_params, galaxy_pos_params, D, B, I
 
-import FITSIO
 import Distributions
-import WCSLIB
+import WCS
 
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
@@ -135,7 +134,7 @@ type Image
     b::Int64
 
     # World coordinates
-    wcs::WCSLIB.wcsprm
+    wcs::WCS.WCSTransform
 
     # The background noise in nanomaggies.
     epsilon::Float64
