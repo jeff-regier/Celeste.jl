@@ -457,7 +457,9 @@ function build_jump_model(blob::Blob, mp::ModelParams)
                sum{img_log_likelihood[img] + log_base_measure[img],
                img=1:CelesteTypes.B});
 
-    m, elbo_log_likelihood
+    @NLobjective(m, Max, elbo_log_likelihood)
+
+    m
 end
 
 end

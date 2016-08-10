@@ -28,15 +28,14 @@ function compare_jump_speed()
         images[b].pixels = images[b].pixels[1:this_height, 1:this_width] 
     end
 
-    jump_m, jump_elbo = ElboJuMP.build_jump_model(images, mp);
-    d = JuMP.NLPEvaluator(jump_m)
+    @time jump_m = ElboJuMP.build_jump_model(images, mp);
+    @time d = JuMP.NLPEvaluator(jump_m)
     @time MathProgBase.initialize(d, [:Grad,:ExprGraph])
-    obj_expr = MathProgBase.obj_expr(d)
 
     grad_out = zeros(length(jump_m.colVal))
 
     # Run it more than once so we don't capture compilation time.
-    for iter = 1:5
+    for iter = 1:10
         println("trial $iter.")
 
         println("computing manually...")
@@ -46,7 +45,7 @@ function compare_jump_speed()
         println("computing with JuMP...")
         tic()
         objective_time = @elapsed jump_v = MathProgBase.eval_f(d, jump_m.colVal)
-        @show jump_time
+        @show objective_time
         grad_time = @elapsed MathProgBase.eval_g(d, grad_out, jump_m.colVal)
         @show grad_time
         jump_time = toc()
