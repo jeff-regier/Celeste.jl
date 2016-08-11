@@ -86,6 +86,7 @@ function ImageTile(hh::Int, ww::Int, img::Image, tile_width::Int)
     epsilon_mat = img.epsilon_mat[h_range, w_range]
     iota_vec = img.iota_vec[h_range]
 
+    @assert 1 <= img.b <= B
     ImageTile(img.b,
               h_range, w_range,
               pixels, epsilon_mat, iota_vec)
