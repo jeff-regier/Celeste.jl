@@ -22,8 +22,6 @@ Attributes:
   h:  The second derivative with respect to each variational parameter,
       in the same format as d.  This is used for the full Hessian
       with respect to all the sources.
-  hs: An array of per-source Hessians.  This will generally be reserved
-      for the Hessian of brightness values that depend only on one source.
 """
 type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
     # Actually a single value, but an Array to avoid memory allocation
@@ -35,7 +33,6 @@ type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
     # h is ordered so that p changes fastest.  For example, the indices
     # of a column of h correspond to the indices of d's stacked columns.
     h::Matrix{NumType} # (local_P * local_S) x (local_P * local_S)
-    ids::ParamType
 end
 
 
@@ -61,7 +58,7 @@ function zero_sensitive_float{ParamType <: ParamSet}(
     v = zeros(NumType, 1)
     d = zeros(NumType, local_P, local_S)
     h = zeros(NumType, local_P * local_S, local_P * local_S)
-    SensitiveFloat{ParamType, NumType}(v, d, h, getids(ParamType))
+    SensitiveFloat{ParamType, NumType}(v, d, h)
 end
 
 
@@ -199,20 +196,19 @@ end
 const multiply_sfs_hess = Float64[0 1; 1 0]
 
 """
-TODO: don't ignore the ids arguments.
+Updates sf1 in place with sf1 * sf2.
 """
 function multiply_sfs!{ParamType <: ParamSet, NumType <: Number}(
     sf1::SensitiveFloat{ParamType, NumType},
-    sf2::SensitiveFloat{ParamType, NumType};
-    ids1::Vector{Int}=collect(1:length(ParamType)),
-    ids2::Vector{Int}=collect(1:length(ParamType)),
+    sf2::SensitiveFloat{ParamType, NumType},
     calculate_hessian::Bool=true)
 
   v = sf1.v[1] * sf2.v[1]
   g_d = NumType[sf2.v[1], sf1.v[1]]
   #const g_h = NumType[0 1; 1 0]
 
-  combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess, calculate_hessian=calculate_hessian)
+  combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess,
+               calculate_hessian=calculate_hessian)
 
   true # Set definite return type
 end

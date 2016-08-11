@@ -3,8 +3,6 @@ Calculate value, gradient, and hessian of the variational ELBO.
 """
 module ElboDeriv
 
-import ForwardDiff
-
 using ..Model
 using ..SensitiveFloats
 import ..WCSUtils
@@ -1045,8 +1043,7 @@ function elbo{NumType <: Number}(
     elbo = elbo_likelihood(ea;
         calculate_derivs=calculate_derivs, calculate_hessian=calculate_hessian)
     # TODO: subtract the kl with the hessian.
-    subtract_kl!(ea, elbo;
-        calculate_derivs=calculate_derivs, calculate_hessian=calculate_hessian)
+    subtract_kl!(ea, elbo, calculate_derivs=calculate_derivs)
     elbo
 end
 

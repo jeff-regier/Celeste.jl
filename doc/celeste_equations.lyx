@@ -1630,6 +1630,170 @@ Also,
 
 \end_layout
 
+\begin_layout Section
+KL Divergence derivatives
+\end_layout
+
+\begin_layout Subsection
+Gamma distribution
+\end_layout
+
+\begin_layout Standard
+Let
+\begin_inset Formula 
+\begin{eqnarray*}
+p_{1} & = & \textrm{Beta}\left(\alpha_{1},\beta_{1}\right)\\
+p_{2} & = & \textrm{Beta}\left(\alpha_{2},\beta_{2}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Then
+\begin_inset Formula 
+\begin{eqnarray*}
+KL\left(p_{1}\vert\vert p_{2}\right) & = & \log\Gamma\left(\alpha_{1}+\beta_{1}\right)-\log\Gamma\left(\alpha_{1}\right)-\log\Gamma\left(\beta_{1}\right)-\\
+ &  & \log\Gamma\left(\alpha_{2}+\beta_{2}\right)+\log\Gamma\left(\alpha_{2}\right)+\log\Gamma\left(\beta_{2}\right)+\\
+ &  & \left(\alpha_{1}-\alpha_{2}\right)\psi\left(\alpha_{1}\right)+\left(\beta_{1}-\beta_{2}\right)\psi\left(\beta_{1}\right)-\\
+ &  & \left(\alpha_{1}-\alpha_{2}+\beta_{1}-\beta_{2}\right)\psi\left(\alpha_{1}+\beta_{1}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{\partial KL}{\partial\alpha_{1}} & = & \psi\left(\alpha_{1}+\beta_{1}\right)-\psi\left(\alpha_{1}\right)+\psi\left(\alpha_{1}\right)+\left(\alpha_{1}-\alpha_{2}\right)\psi'\left(\alpha_{1}\right)-\psi\left(\alpha_{1}+\beta_{1}\right)-\left(\alpha_{1}-\alpha_{2}+\beta_{1}-\beta_{2}\right)\psi'\left(\alpha_{1}+\beta_{1}\right)\\
+ & = & \left(\alpha_{1}-\alpha_{2}\right)\psi'\left(\alpha_{1}\right)-\left(\alpha_{1}-\alpha_{2}+\beta_{1}-\beta_{2}\right)\psi'\left(\alpha_{1}+\beta_{1}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Similarly,
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{\partial KL}{\partial\beta_{1}} & = & \left(\beta_{1}-\beta_{2}\right)\psi'\left(\beta_{1}\right)-\left(\alpha_{1}-\alpha_{2}+\beta_{1}-\beta_{2}\right)\psi'\left(\alpha_{1}+\beta_{1}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+And
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{\partial^{2}KL}{\partial\alpha_{1}^{2}} & = & \left(\alpha_{1}-\alpha_{2}\right)\psi''\left(\alpha_{1}\right)-\left(\alpha_{1}-\alpha_{2}+\beta_{1}-\beta_{2}\right)\psi''\left(\alpha_{1}+\beta_{1}\right)+\psi'\left(\alpha_{1}\right)-\psi'\left(\alpha_{1}+\beta_{1}\right)\\
+\frac{\partial^{2}KL}{\partial\beta_{1}^{2}} & = & \left(\beta_{1}-\beta_{2}\right)\psi''\left(\beta_{1}\right)-\left(\alpha_{1}-\alpha_{2}+\beta_{1}-\beta_{2}\right)\psi''\left(\alpha_{1}+\beta_{1}\right)+\psi'\left(\beta_{1}\right)-\psi'\left(\alpha_{1}+\beta_{1}\right)\\
+\frac{\partial^{2}KL}{\partial\beta_{1}\partial\alpha_{1}} & = & -\psi'\left(\alpha_{1}+\beta_{1}\right)-\left(\alpha_{1}-\alpha_{2}+\beta_{1}-\beta_{2}\right)\psi''\left(\alpha_{1}+\beta_{1}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Categorical distribution
+\end_layout
+
+\begin_layout Standard
+Here,
+\begin_inset Formula 
+\begin{eqnarray*}
+KL\left(\pi_{1}\vert\vert\pi_{2}\right) & = & \sum_{i}\pi_{1,i}\left(\log\pi_{1,i}-\log\pi_{2,i}\right)\\
+\frac{\partial KL}{\partial\pi_{1,i}} & = & 1+\log\pi_{1,i}-\log\pi_{2,i}\\
+\frac{\partial^{2}KL}{\partial^{2}\pi_{1,i}} & = & \frac{1}{\pi_{1,i}}\\
+\frac{\partial^{2}KL}{\partial\pi_{1,i}\partial\pi_{1,j}} & = & 0\textrm{ for }i\ne j
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Multivariate normal
+\end_layout
+
+\begin_layout Standard
+Here,
+\begin_inset Formula 
+\begin{eqnarray*}
+p_{1} & = & \prod_{i}\mathcal{N}\left(\mu_{1i},\sigma_{1i}^{2}\right)\\
+p_{2} & = & \mathcal{N}\left(\mu_{2},\Sigma\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+...so 
+\begin_inset Formula $p_{2}$
+\end_inset
+
+ is a 
+\begin_inset Formula $K$
+\end_inset
+
+-dimensional multivariate normal and 
+\begin_inset Formula $p_{1}$
+\end_inset
+
+ is a product of univariate normals.
+\begin_inset Formula 
+\begin{eqnarray*}
+KL\left(p_{1}\vert\vert p_{2}\right) & = & \frac{1}{2}\left(\sum\left(\sigma_{1i}^{2}\left(\Sigma^{-1}\right)_{ii}-\log\left(\sigma_{1i}^{2}\right)\right)-K+\left(\mu_{2}-\mu_{1}\right)^{T}\Sigma^{-1}\left(\mu_{2}-\mu_{1}\right)+\log\left|\Sigma\right|\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+So
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{\partial KL}{\partial\mu_{1}} & = & \Sigma^{-1}\left(\mu_{1}-\mu_{2}\right)\\
+\frac{\partial KL}{\partial\sigma_{1i}^{2}} & = & \frac{1}{2}\left(\left(\Sigma^{-1}\right)_{ii}-\frac{1}{\sigma_{1i}^{2}}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+And the hessians are
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{\partial^{2}KL}{\partial\mu_{1}\partial\mu_{1}^{T}} & = & \Sigma^{-1}\\
+\frac{\partial^{2}KL}{\partial\left(\sigma_{1i}^{2}\right)^{2}} & = & \frac{1}{2}\frac{1}{\left(\sigma_{1i}^{2}\right)^{2}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The off-diagonals are zero.
+\end_layout
+
 \begin_layout Subsection*
 Notes that you can delete later
 \end_layout
