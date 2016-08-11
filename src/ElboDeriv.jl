@@ -122,8 +122,8 @@ end
 
 # TODO: the identification of active pixels should go in pre-processing
 type ActivePixel
-    # Band:
-    b::Int
+    # image index
+    n::Int
 
     # Linear tile index:
     tile_ind::Int
@@ -426,7 +426,7 @@ Populate fs0m_vec and fs1m_vec for all sources for a given pixel.
 Args:
     - elbo_vars: Elbo intermediate values.
     - ea: Model parameters
-    - tile_source_map: A vector of integers of sources in 1:ea.S affecting the tile
+    - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
     - tile: An ImageTile
     - h, w: The integer locations of the pixel within the tile
     - sbs: Source brightnesses
@@ -440,17 +440,16 @@ Returns:
 function populate_fsm_vecs!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     ea::ElboArgs{NumType},
-                    tile_source_map::Vector{Int},
+                    tile_sources::Vector{Int},
                     tile::ImageTile,
                     h::Int, w::Int,
                     sbs::Vector{SourceBrightness{NumType}},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
     x = Float64[tile.h_range[h], tile.w_range[w]]
-    for s in tile_source_map
-        # TODO: tile.b should refer to the tile's band, not the the index of
-        # the image that contains the tile!!! potentially this is a really
-        # bad bug
+    for s in tile_sources
+        # ensure tile.b is a filter band, not an image's index
+        @assert 1 <= tile.b <= B
         wcs_jacobian = ea.patches[s, tile.b].wcs_jacobian
         active_source = s in ea.active_sources
 
@@ -715,7 +714,7 @@ Adds up E_G and var_G across all sources.
 Args:
     - elbo_vars: Elbo intermediate values, with updated fs1m_vec and fs0m_vec.
     - ea: Model parameters
-    - tile_source_map: A vector of integers of sources in 1:ea.S affecting the tile
+    - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
     - tile: An ImageTile
     - sbs: Source brightnesses
 
@@ -724,7 +723,7 @@ Updates elbo_vars.E_G and elbo_vars.var_G in place.
 function combine_pixel_sources!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     ea::ElboArgs{NumType},
-                    tile_source_map::Vector{Int},
+                    tile_sources::Vector{Int},
                     tile::ImageTile,
                     sbs::Vector{SourceBrightness{NumType}})
     clear!(elbo_vars.E_G,
@@ -732,7 +731,7 @@ function combine_pixel_sources!{NumType <: Number}(
     clear!(elbo_vars.var_G,
         elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
 
-    for s in tile_source_map
+    for s in tile_sources
         active_source = s in ea.active_sources
         calculate_hessian =
             elbo_vars.calculate_hessian && elbo_vars.calculate_derivs &&
@@ -762,7 +761,7 @@ Args:
     - gal_mcs: Galaxy components
     - tile: An ImageTile
     - ea: Model parameters
-    - tile_source_map: A vector of integers of sources in 1:ea.S affecting the tile
+    - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
     - include_epsilon: Whether the background noise should be included
 
 Returns:
@@ -776,15 +775,15 @@ function get_expected_pixel_brightness!{NumType <: Number}(
                 gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                 tile::ImageTile,
                 ea::ElboArgs{NumType},
-                tile_source_map::Vector{Int};
+                tile_sources::Vector{Int};
                 include_epsilon::Bool=true)
     # This combines the bvn components to get the brightness for each
     # source separately.
     populate_fsm_vecs!(
-        elbo_vars, ea, tile_source_map, tile, h, w, sbs, gal_mcs, star_mcs)
+        elbo_vars, ea, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
 
     # # This combines the sources into a single brightness value for the pixel.
-    combine_pixel_sources!(elbo_vars, ea, tile_source_map, tile, sbs)
+    combine_pixel_sources!(elbo_vars, ea, tile_sources, tile, sbs)
 
     if include_epsilon
         # There are no derivatives with respect to epsilon, so can safely add
@@ -890,15 +889,15 @@ function process_active_pixels!{NumType <: Number}(
 
     # iterate over the pixels
     for pixel in active_pixels
-        tile = ea.images[pixel.b].tiles[pixel.tile_ind]
-        tile_source_map = ea.tile_source_map[pixel.b][pixel.tile_ind]
+        tile = ea.images[pixel.n].tiles[pixel.tile_ind]
+        tile_sources = ea.tile_source_map[pixel.n][pixel.tile_ind]
         this_pixel = tile.pixels[pixel.h, pixel.w]
 
         # Get the brightness.
         get_expected_pixel_brightness!(
             elbo_vars, pixel.h, pixel.w, sbs,
-            star_mcs_vec[pixel.b], gal_mcs_vec[pixel.b], tile,
-            ea, tile_source_map, include_epsilon=true)
+            star_mcs_vec[pixel.n], gal_mcs_vec[pixel.n], tile,
+            ea, tile_sources, include_epsilon=true)
 
         # Add the terms to the elbo given the brightness.
         iota = tile.iota_vec[pixel.h]
@@ -924,7 +923,7 @@ Args:
     - elbo_vars: Elbo intermediate values.
     - tile: An ImageTile
     - ea: Model parameters
-    - tile_source_map: A vector of integers of sources in 1:ea.S affecting the tile
+    - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
     - sbs: Source brightnesses
     - star_mcs: Star components
     - gal_mcs: Galaxy components
@@ -937,26 +936,26 @@ function tile_predicted_image{NumType <: Number}(
                 elbo_vars::ElboIntermediateVariables{NumType},
                 tile::ImageTile,
                 ea::ElboArgs{NumType},
-                tile_source_map::Vector{Int},
+                tile_sources::Vector{Int},
                 sbs::Vector{SourceBrightness{NumType}},
                 star_mcs::Array{BvnComponent{NumType}, 2},
                 gal_mcs::Array{GalaxyCacheComponent{NumType}, 4};
                 include_epsilon::Bool=true)
-        predicted_pixels = copy(tile.pixels)
-        # Iterate over pixels that are not NaN.
-        h_width, w_width = size(tile.pixels)
-        for w in 1:w_width, h in 1:h_width
-            this_pixel = tile.pixels[h, w]
-            if !Base.isnan(this_pixel)
-                get_expected_pixel_brightness!(
-                    elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-                    ea, tile_source_map, include_epsilon=include_epsilon)
-                iota = tile.iota_vec[h]
-                predicted_pixels[h, w] = elbo_vars.E_G.v[1] * iota
-            end
+    predicted_pixels = copy(tile.pixels)
+    # Iterate over pixels that are not NaN.
+    h_width, w_width = size(tile.pixels)
+    for w in 1:w_width, h in 1:h_width
+        this_pixel = tile.pixels[h, w]
+        if !Base.isnan(this_pixel)
+            get_expected_pixel_brightness!(
+                elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
+                ea, tile_sources, include_epsilon=include_epsilon)
+            iota = tile.iota_vec[h]
+            predicted_pixels[h, w] = elbo_vars.E_G.v[1] * iota
         end
+    end
 
-        predicted_pixels
+    predicted_pixels
 end
 
 
@@ -968,13 +967,13 @@ Otherwise, only pixels from the object are rendered.
 Args:
     - tile: An ImageTile
     - ea: Model parameters
-    - tile_source_map: A vector of integers of sources in 1:ea.S affecting the tile
+    - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
     - include_epsilon: Whether the background noise should be included
 """
 function tile_predicted_image{NumType <: Number}(
                     tile::ImageTile,
                     ea::ElboArgs{NumType},
-                    tile_source_map::Vector{Int};
+                    tile_sources::Vector{Int};
                     include_epsilon::Bool=false)
     star_mcs, gal_mcs = load_bvn_mixtures(ea, tile.b, calculate_derivs=false)
     sbs = load_source_brightnesses(ea, calculate_derivs=false)
@@ -984,7 +983,7 @@ function tile_predicted_image{NumType <: Number}(
     elbo_vars.calculate_derivs = false
 
     tile_predicted_image(
-        elbo_vars, tile, ea, tile_source_map, sbs, star_mcs, gal_mcs,
+        elbo_vars, tile, ea, tile_sources, sbs, star_mcs, gal_mcs,
         include_epsilon=include_epsilon)
 end
 
@@ -997,14 +996,15 @@ pixels to NaN.
 function get_active_pixels{NumType <: Number}(
                     ea::ElboArgs{NumType})
     active_pixels = ActivePixel[]
-    for b in 1:ea.N, tile_ind in 1:length(ea.images[b].tiles)
-        tile_source_map = ea.tile_source_map[b][tile_ind]
-        if length(intersect(tile_source_map, ea.active_sources)) > 0
-            tile = ea.images[b].tiles[tile_ind]
+
+    for n in 1:ea.N, tile_ind in 1:length(ea.images[n].tiles)
+        tile_sources = ea.tile_source_map[n][tile_ind]
+        if length(intersect(tile_sources, ea.active_sources)) > 0
+            tile = ea.images[n].tiles[tile_ind]
             h_width, w_width = size(tile.pixels)
             for w in 1:w_width, h in 1:h_width
                 if !Base.isnan(tile.pixels[h, w])
-                    push!(active_pixels, ActivePixel(b, tile_ind, h, w))
+                    push!(active_pixels, ActivePixel(n, tile_ind, h, w))
                 end
             end
         end
