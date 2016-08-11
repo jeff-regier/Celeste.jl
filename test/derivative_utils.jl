@@ -1,16 +1,7 @@
-<<<<<<< HEAD
-import Base.convert
-
-"""
-Return an ElboArgs with the corresponding type. 
+""""
+Return an ElboArgs with the corresponding type.
 """
 function forward_diff_model_params{T<:Number}(::Type{T}, ea0::ElboArgs{Float64})
-=======
-# Maybe write it as a convert()?
-function forward_diff_model_params{T <: Number}(
-            FDType::Type{T},
-            ea0::ElboArgs{Float64})
->>>>>>> master
     P = length(ea0.vp[1])
     vp = Vector{T}[zeros(T, P) for s=1:ea0.S]
     # Set the values (but not gradient numbers) for parameters other
