@@ -41,7 +41,6 @@ else
                  "test_misc.jl",
                  "test_optimization.jl",
                  "test_sdssio.jl",
-                 "test_sensitive_float.jl",
                  "test_transforms.jl",
                  "test_wcs.jl",
                  "test_infer.jl"]
