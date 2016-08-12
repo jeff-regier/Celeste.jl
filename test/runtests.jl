@@ -33,9 +33,8 @@ test_files = setdiff(ARGS, [ test_derivatives_flag ])
 if length(test_files) > 0
     testfiles = ["test_$(arg).jl" for arg in test_files]
 else
-    testfiles = ["test_newton_trust_region.jl",
-                #  "test_derivatives.jl",
-                 "test_elbo_values.jl",
+    testfiles = ["test_elbo_values.jl",
+                 "test_derivatives.jl",
                  "test_psf.jl",
                  "test_images.jl",
                  "test_misc.jl",
@@ -48,8 +47,8 @@ end
 
 
 if test_detailed_derivatives
-    warn("Testing derivatives, which may be slow.")
-    push!(testfiles, "test_derivatives.jl")
+    warn("Testing ELBO derivatives, which may be slow.")
+    push!(testfiles, "test_slow_derivatives.jl")
 else
     warn("Skipping derivative tests.  ",
          "To test derivatives, run tests with the flag ", test_derivatives_flag)

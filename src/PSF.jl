@@ -11,8 +11,6 @@ import Optim
 import WCS
 
 
- # Only include until this is merged with Optim.jl.
-include("newton_trust_region.jl")
 include("bivariate_normals.jl")
 
 
@@ -110,19 +108,21 @@ type PsfOptimizer
       x_mat = get_x_matrix_from_psf(raw_psf)
       psf_params_free = unconstrain_psf_params(initial_params, psf_transform)
       psf_params_free_vec = vec(wrap_psf_params(psf_params_free))
-      nm_result = newton_tr(psf_2df,
-                            psf_params_free_vec,
-                            NewtonTR();
-                            xtol = 0.0, # Don't allow convergence in params
-                            grtol = grtol,
-                            ftol = ftol,
-                            iterations = num_iters,
-                            store_trace = verbose,
-                            show_trace = verbose,
-                            extended_trace = verbose,
-                            initial_delta=10.0,
-                            delta_hat=1e9,
-                            rho_lower = 0.2)
+
+      tr_method =
+          Optim.NewtonTrustRegion(initial_delta=10.0, delta_hat=1e9, eta=0.1,
+                                  rho_lower=0.2, rho_upper=0.75)
+
+      options = Optim.OptimizationOptions(;
+          x_tol = 0.0, # Don't allow convergence in params
+          f_tol = ftol, g_tol = grtol,
+          iterations = num_iters, store_trace = verbose,
+          show_trace = false, extended_trace = verbose)
+
+      nm_result = Optim.optimize(psf_fit_value,
+                                 psf_fit_grad!,
+                                 psf_fit_hess!,
+                                 psf_params_free_vec, tr_method, options)
       nm_result
     end
 
