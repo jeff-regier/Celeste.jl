@@ -25,24 +25,36 @@ run(`make`)
 run(`make RUN=4263 CAMCOL=5 FIELD=119`)
 cd(wd)
 
+# Check whether to run time-consuming derivatives tests.
+test_derivatives_flag = "--test_derivatives"
+test_detailed_derivatives = test_derivatives_flag in ARGS
+test_files = setdiff(ARGS, [ test_derivatives_flag ])
 
-if length(ARGS) > 0
-    testfiles = ["test_$(arg).jl" for arg in ARGS]
+if length(test_files) > 0
+    testfiles = ["test_$(arg).jl" for arg in test_files]
 else
     testfiles = ["test_newton_trust_region.jl",
-                 "test_derivatives.jl",
+                #  "test_derivatives.jl",
                  "test_elbo_values.jl",
                  "test_psf.jl",
                  "test_images.jl",
-                 "test_kl.jl",
                  "test_misc.jl",
                  "test_optimization.jl",
                  "test_sdssio.jl",
-                 "test_sensitive_float.jl",
                  "test_transforms.jl",
                  "test_wcs.jl",
                  "test_infer.jl"]
 end
+
+
+if test_detailed_derivatives
+    warn("Testing derivatives, which may be slow.")
+    push!(testfiles, "test_derivatives.jl")
+else
+    warn("Skipping derivative tests.  ",
+         "To test derivatives, run tests with the flag ", test_derivatives_flag)
+end
+
 
 for testfile in testfiles
     try

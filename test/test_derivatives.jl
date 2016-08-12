@@ -2,11 +2,12 @@ import DualNumbers
 import ForwardDiff
 
 using Celeste: Model, SensitiveFloats, ElboDeriv
+using Distributions
 import ElboDeriv: BvnComponent, GalaxyCacheComponent
 import ElboDeriv: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 
-include("derivative_utils.jl")
 
+include("derivative_utils.jl")
 
 """
 This is the function of which get_bvn_derivs!() returns the derivatives.
@@ -25,80 +26,19 @@ function eval_bvn_log_density{NumType <: Number}(
 end
 
 
-"""
-Wrap a vector of canonical parameters for active sources into a ElboArgs
-object of the appropriate type. Used for testing with forward
-autodifferentiation.
-"""
-function unwrap_vp_vector{NumType <: Number}(
-            vp_vec::Vector{NumType}, ea::ElboArgs)
-    vp_array = reshape(vp_vec, length(CanonicalParams), length(ea.active_sources))
-    ea_local = forward_diff_model_params(NumType, ea)
-    for sa = 1:length(ea.active_sources)
-        ea_local.vp[ea.active_sources[sa]] = vp_array[:, sa]
-    end
-    ea_local
-end
+############################################
+# The tests below are currently very slow to compile due to changes
+# in ForwardDiff in v0.2.2, so they will only be enabled optionally..
 
+function test_dual_numbers()
+    # Simply check that the likelihood can be used with dual numbers.
+    # Due to the autodiff parts of the KL divergence and transform,
+    # these parts of the ELBO will currently not work with dual numbers.
+    blob, ea, body = gen_sample_star_dataset()
+    ea_dual = forward_diff_model_params(DualNumbers.Dual{Float64}, ea)
+    elbo_dual = ElboDeriv.elbo_likelihood(ea_dual)
 
-"""
-Convert the variational params into a vector for autodiff.
-"""
-function wrap_vp_vector(ea::ElboArgs, use_active_sources::Bool)
-    P = length(CanonicalParams)
-    S = use_active_sources ? length(ea.active_sources) : ea.S
-    x_mat = zeros(Float64, P, S)
-    for s in 1:S
-        ind = use_active_sources ? ea.active_sources[s] : s
-        x_mat[:, s] = ea.vp[ind]
-    end
-    x_mat[:]
-end
-
-
-"""
-Use ForwardDiff to test that fun(x) = sf (to abuse some notation)
-"""
-function test_with_autodiff(fun::Function, x::Vector{Float64}, sf::SensitiveFloat)
-    ad_grad = ForwardDiff.gradient(fun, x)
-    ad_hess = ForwardDiff.hessian(fun, x)
-    @test_approx_eq fun(x) sf.v
-    @test_approx_eq ad_grad sf.d[:]
-    @test_approx_eq ad_hess sf.h
-end
-
-
-"""
-Set all but a few pixels to NaN to speed up autodiff Hessian testing.
-"""
-function trim_tiles!(tiled_blob::Vector{TiledImage}, keep_pixels)
-    for b = 1:length(tiled_blob)
-	    pixels1 = tiled_blob[b].tiles[1,1].pixels
-        h_width, w_width = size(pixels1)
-	    pixels1[setdiff(1:h_width, keep_pixels), :] = NaN
-        pixels1[:, setdiff(1:w_width, keep_pixels)] = NaN
-	end
-end
-
-
-#######################
-
-function test_bvn_cov()
-        e_axis = .7
-        e_angle = pi/5
-        e_scale = 2.
-
-        manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
-        util_11 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
-        @test_approx_eq util_11 manual_11
-
-        manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
-        util_12 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
-        @test_approx_eq util_12 manual_12
-
-        manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
-        util_22 = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
-        @test_approx_eq util_22 manual_22
+    true
 end
 
 
@@ -135,97 +75,7 @@ function test_real_image()
         local_elbo.v[1]
     end
 
-    ad_grad = ForwardDiff.gradient(wrap_elbo, ea.vp[1]);
-    ad_hess = ForwardDiff.hessian(wrap_elbo, ea.vp[1]);
-
-    # Sanity check
-    ad_v = wrap_elbo(ea.vp[1]);
-    @test_approx_eq ad_v elbo.v
-
-    hcat(ad_grad, elbo.d[:, 1])
-    @test_approx_eq ad_grad elbo.d[:, 1]
-    @test_approx_eq ad_hess elbo.h
-end
-
-
-function test_dual_numbers()
-    # Simply check that the likelihood can be used with dual numbers.
-    # Due to the autodiff parts of the KL divergence and transform,
-    # these parts of the ELBO will currently not work with dual numbers.
-    blob, ea, body = gen_sample_star_dataset()
-    ea_dual = forward_diff_model_params(DualNumbers.Dual{Float64}, ea)
-    elbo_dual = ElboDeriv.elbo_likelihood(ea_dual)
-
-    true
-end
-
-
-function test_tile_predicted_image()
-    blob, ea, body = gen_sample_star_dataset(perturb=false)
-    tile = ea.images[1].tiles[1, 1]
-    tile_source_map = ea.tile_source_map[1][1, 1]
-    pred_image =
-        ElboDeriv.tile_predicted_image(tile, ea, tile_source_map; include_epsilon=true)
-
-    # Regress the tile pixels onto the predicted image
-    # TODO: Why isn't the regression closer to one?    Something in the sample data
-    # generation?
-    reg_coeff = dot(tile.pixels[:], pred_image[:]) / dot(pred_image[:], pred_image[:])
-    residuals = pred_image * reg_coeff - tile.pixels
-    residual_sd = sqrt(mean(residuals .^ 2))
-
-    @test residual_sd / mean(tile.pixels) < 0.1
-end
-
-
-function test_derivative_flags()
-    blob, ea, body = gen_two_body_dataset()
-    keep_pixels = 10:11
-    trim_tiles!(ea.images, keep_pixels)
-
-    elbo = ElboDeriv.elbo(ea)
-
-    elbo_noderiv = ElboDeriv.elbo(ea; calculate_derivs=false)
-    @test_approx_eq elbo.v[1] elbo_noderiv.v
-    @test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
-    @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
-
-    elbo_nohess = ElboDeriv.elbo(ea; calculate_hessian=false)
-    @test_approx_eq elbo.v[1] elbo_nohess.v
-    @test_approx_eq elbo.d elbo_nohess.d
-    @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
-end
-
-
-function test_active_sources()
-    # Test that the derivatives of the expected brightnesses partition in
-    # active_sources.
-
-    blob, ea, body = gen_two_body_dataset()
-    keep_pixels = 10:11
-    trim_tiles!(ea.images, keep_pixels)
-    b = 1
-    tile = ea.images[b].tiles[1,1]
-    h, w = 10, 10
-
-    ea.active_sources = [1, 2]
-    elbo_lik_12 = ElboDeriv.elbo_likelihood(ea)
-
-    ea.active_sources = [1]
-    elbo_lik_1 = ElboDeriv.elbo_likelihood(ea)
-
-    ea.active_sources = [2]
-    elbo_lik_2 = ElboDeriv.elbo_likelihood(ea)
-
-    @test_approx_eq elbo_lik_12.v[1] elbo_lik_1.v
-    @test_approx_eq elbo_lik_12.v[1] elbo_lik_2.v
-
-    @test_approx_eq elbo_lik_12.d[:, 1] elbo_lik_1.d[:, 1]
-    @test_approx_eq elbo_lik_12.d[:, 2] elbo_lik_2.d[:, 1]
-
-    P = length(CanonicalParams)
-    @test_approx_eq elbo_lik_12.h[1:P, 1:P] elbo_lik_1.h
-    @test_approx_eq elbo_lik_12.h[(1:P) + P, (1:P) + P] elbo_lik_2.h
+    test_with_autodiff(wrap_elbo, ea.vp[1], elbo)
 end
 
 
@@ -257,7 +107,6 @@ function test_elbo()
     vp_vec = wrap_vp_vector(ea, true)
     elbo_12 = ElboDeriv.elbo(ea)
     test_with_autodiff(wrap_elbo, vp_vec, elbo_12)
-    #test_elbo_mp(ea, elbo_12)
 
     P = length(CanonicalParams)
     @test size(elbo_1.d) == size(elbo_2.d) == (P, 1)
@@ -268,24 +117,26 @@ function test_elbo()
 end
 
 
+# TODO: fix this test.
 function test_process_active_pixels()
     blob, ea, bodies = gen_two_body_dataset()
 
     # Choose four pixels only to keep the test fast.
     active_pixels = Array(ElboDeriv.ActivePixel, 4)
-    active_pixels[1] = ActivePixel(1, 1, 10, 11)
-    active_pixels[2] = ActivePixel(1, 1, 11, 10)
-    active_pixels[3] = ActivePixel(5, 1, 10, 11)
-    active_pixels[4] = ActivePixel(5, 1, 11, 10)
+    active_pixels[1] = ElboDeriv.ActivePixel(1, 1, 10, 11)
+    active_pixels[2] = ElboDeriv.ActivePixel(1, 1, 11, 10)
+    active_pixels[3] = ElboDeriv.ActivePixel(5, 1, 10, 11)
+    active_pixels[4] = ElboDeriv.ActivePixel(5, 1, 11, 10)
 
 
     function tile_lik_wrapper_fun{NumType <: Number}(
             ea::ElboArgs{NumType}, calculate_derivs::Bool)
 
-        elbo_vars = ElboIntermediateVariables(NumType, ea.S,
-                                            length(ea.active_sources),
-                                            calculate_derivs=calculate_derivs,
-                                            calculate_hessian=calculate_hessian)
+        elbo_vars = ElboDeriv.ElboIntermediateVariables(
+            NumType, ea.S,
+            length(ea.active_sources),
+            calculate_derivs=calculate_derivs,
+            calculate_hessian=calculate_derivs)
         ElboDeriv.process_active_pixels!(elbo_vars, ea.images, ea, active_pixels)
         deepcopy(elbo_vars.elbo)
     end
@@ -823,12 +674,12 @@ function test_galaxy_cache_component()
         f_wrap(par))
 
     # Check the gradient.
-    ad_grad_fun = ForwardDiff.gradient(f_wrap)
+    ad_grad_fun = x -> ForwardDiff.gradient(f_wrap, x)
     ad_grad = ad_grad_fun(par)
     bvn_derivs = elbo_vars.bvn_derivs
     @test_approx_eq ad_grad [bvn_derivs.bvn_u_d; bvn_derivs.bvn_s_d]
 
-    ad_hess_fun = ForwardDiff.hessian(f_wrap)
+    ad_hess_fun = x -> ForwardDiff.hessian(f_wrap, x)
     ad_hess = ad_hess_fun(par)
 
     @test_approx_eq ad_hess[1:2, 1:2] bvn_derivs.bvn_uu_h
@@ -871,11 +722,11 @@ function test_galaxy_sigma_derivs()
 
         gal_derivs = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
 
-        ad_grad_fun = ForwardDiff.gradient(f_wrap)
+        ad_grad_fun = x -> ForwardDiff.gradient(f_wrap, x)
         ad_grad = ad_grad_fun(par)
         @test_approx_eq gal_derivs.j[si, :][:] ad_grad
 
-        ad_hess_fun = ForwardDiff.hessian(f_wrap)
+        ad_hess_fun = x -> ForwardDiff.hessian(f_wrap, x)
         ad_hess = ad_hess_fun(par)
         @test_approx_eq(
             ad_hess,
@@ -949,33 +800,576 @@ function test_dsiginv_dsig()
 end
 
 
-function test_set_hess()
-    sf = zero_sensitive_float(CanonicalParams)
-    set_hess!(sf, 2, 3, 5.0)
-    @test_approx_eq sf.h[2, 3] 5.0
-    @test_approx_eq sf.h[3, 2] 5.0
+########################
+# Test derivatives of KL divergence functions
 
-    set_hess!(sf, 4, 4, 6.0)
-    @test_approx_eq sf.h[4, 4] 6.0
+"""
+Use Monte Carlo to check whether KL(q_dist || p_dist) matches exact_kl
+
+Args:
+    q_dist, p_dist: Distribution objects
+    exact_kl: The expected exact KL
+"""
+function test_kl_value(q_dist, p_dist, exact_kl::Float64)
+    sample_size = 2_000_000
+
+    q_samples = rand(q_dist, sample_size)
+    empirical_kl_samples =
+      logpdf(q_dist, q_samples) - logpdf(p_dist, q_samples)
+    empirical_kl = mean(empirical_kl_samples)
+    tol = 4 * std(empirical_kl_samples) / sqrt(sample_size)
+    min_diff = 1e-2 * std(empirical_kl_samples) / sqrt(sample_size)
+
+    @test_approx_eq_eps empirical_kl exact_kl tol
 end
 
 
-test_real_image()
-test_bvn_cov()
-test_set_hess()
-test_dsiginv_dsig()
-test_brightness_hessian()
-test_bvn_derivatives()
-test_galaxy_sigma_derivs()
-test_galaxy_variable_transform()
-test_galaxy_cache_component()
-test_fs0m_derivatives()
-test_fs1m_derivatives()
-test_e_g_s_functions()
-test_combine_pixel_sources()
-test_add_log_term()
-test_elbo()
-test_active_sources()
-test_derivative_flags()
-test_tile_predicted_image()
-test_dual_numbers()
+function test_beta_kl_derivatives()
+    alpha2 = 3.5
+    beta2 = 4.3
+
+    alpha1 = 4.1
+    beta1 = 3.9
+
+    par = Float64[ alpha1, beta1 ]
+
+    beta_kl = ElboDeriv.gen_beta_kl(alpha2, beta2)
+    function beta_kl_wrapper{NumType <: Number}(par::Vector{NumType})
+        alpha1 = par[1]
+        beta1 = par[2]
+        local kl, grad, hess
+        kl, grad, hess = beta_kl(alpha1, beta1, false)
+        return kl
+    end
+
+    kl, grad, hess = beta_kl(alpha1, beta1, true)
+
+    ad_grad = ForwardDiff.gradient(beta_kl_wrapper, par)
+    ad_hess = ForwardDiff.hessian(beta_kl_wrapper, par)
+
+    # Check the derivatives
+    @test_approx_eq beta_kl_wrapper(par) kl
+    @test_approx_eq ad_grad grad
+    @test_approx_eq ad_hess hess
+
+    # Check the value
+    p1_dist = Beta(alpha1, beta1)
+    p2_dist = Beta(alpha2, beta2)
+    test_kl_value(p1_dist, p2_dist, kl)
+end
+
+
+function test_categorical_kl_derivatives()
+    p1 = Float64[ 1, 2, 3, 4]
+    p2 = Float64[ 5, 6, 2, 1]
+
+    p1 = p1 / sum(p1)
+    p2 = p2 / sum(p2)
+
+    categorical_kl = ElboDeriv.gen_categorical_kl(p2)
+
+    function categorical_kl_wrapper{NumType <: Number}(par::Vector{NumType})
+        local kl, grad, hess
+        kl, grad, hess = categorical_kl(par, false)
+        return kl
+    end
+
+    kl, grad, hess = categorical_kl(p1, true);
+
+    ad_grad = ForwardDiff.gradient(categorical_kl_wrapper, p1)
+    ad_hess = ForwardDiff.hessian(categorical_kl_wrapper, p1)
+
+    # Check the derivatives
+    @test_approx_eq categorical_kl_wrapper(p1) kl
+    @test_approx_eq ad_grad grad
+    @test_approx_eq ad_hess hess
+
+    # Check the value
+    p1_dist = Categorical(p1)
+    p2_dist = Categorical(p2)
+    test_kl_value(p1_dist, p2_dist, kl)
+end
+
+
+function test_diagmvn_mvn_kl_derivatives()
+    K = 4
+    mean1 = rand(K)
+    var1 = rand(K)
+    var1 = var1 .* var1
+
+    mean2 = rand(K)
+    cov2 = rand(K, K)
+    cov2 = 0.2 * cov2 * cov2' + eye(K)
+    cov2 = 0.5 * (cov2 + cov2')
+
+    diagmvn_mvn_kl = ElboDeriv.gen_diagmvn_mvn_kl(mean2, cov2)
+    kl, grad_mean, grad_var, hess_mean, hess_var =
+        diagmvn_mvn_kl(mean1, var1, true);
+
+    hess = zeros(Float64, 2 * K, 2 * K)
+    hess[1:K, 1:K] = hess_mean
+    hess[(K + 1):(2 * K), (K + 1):(2 * K)] = hess_var
+
+    function diagmvn_mvn_kl_wrapper{NumType <: Number}(par::Vector{NumType})
+        K = Int(length(par) / 2)
+        mean1 = par[1:K]
+        var1 = par[(K + 1):(2 * K)]
+        local kl, grad_mean, grad_var, hess_mean, hess_var
+        kl, grad_mean, grad_var, hess_mean, hess_var =
+            diagmvn_mvn_kl(mean1, var1, false)
+        return kl
+    end
+
+    par = vcat(mean1, var1)
+    ad_grad = ForwardDiff.gradient(diagmvn_mvn_kl_wrapper, par)
+    ad_hess = ForwardDiff.hessian(diagmvn_mvn_kl_wrapper, par)
+
+    # Check the derivatives
+    @test_approx_eq diagmvn_mvn_kl_wrapper(par) kl
+    @test_approx_eq ad_grad vcat(grad_mean, grad_var)
+    @test_approx_eq ad_hess hess
+
+    # Check the value
+    p1_dist = MvNormal(mean1, diagm(var1))
+    p2_dist = MvNormal(mean2, cov2)
+    test_kl_value(p1_dist, p2_dist, kl)
+end
+
+
+function test_normal_kl_derivatives()
+    mean1 = 0.5
+    var1 = 2.0
+
+    mean2 = 0.8
+    var2 = 1.8
+
+    normal_kl = ElboDeriv.gen_normal_kl(mean2, var2)
+
+    function normal_kl_wrapper{NumType <: Number}(par::Vector{NumType})
+        local kl, grad, hess
+        kl, grad, hess = normal_kl(par[1], par[2], false)
+        return kl
+    end
+
+    kl, grad, hess = normal_kl(mean1, var1, true)
+
+    par = vcat(mean1, var1)
+    ad_grad = ForwardDiff.gradient(normal_kl_wrapper, par)
+    ad_hess = ForwardDiff.hessian(normal_kl_wrapper, par)
+
+    # Check the derivatives
+    @test_approx_eq normal_kl_wrapper(par) kl
+    @test_approx_eq ad_grad grad
+    @test_approx_eq ad_hess hess
+
+    # Check the value
+    p1_dist = Normal(mean1, sqrt(var1))
+    p2_dist = Normal(mean2, sqrt(var2))
+    test_kl_value(p1_dist, p2_dist, kl)
+end
+
+
+
+
+########################
+# Test derivatives of sensitive float manipulations
+
+function test_combine_sfs()
+  # TODO: this test was designed for multiply_sf.  Make it more general.
+
+  # Two sets of ids with some overlap and some disjointness.
+  p = length(ids)
+  S = 2
+
+  ids1 = find((1:p) .% 2 .== 0)
+  ids2 = setdiff(1:p, ids1)
+  ids1 = union(ids1, 1:5)
+  ids2 = union(ids2, 1:5)
+
+  l1 = zeros(Float64, S * p);
+  l2 = zeros(Float64, S * p);
+  l1[ids1] = rand(length(ids1))
+  l2[ids2] = rand(length(ids2))
+  l1[ids1 + p] = rand(length(ids1))
+  l2[ids2 + p] = rand(length(ids2))
+
+  sigma1 = zeros(Float64, S * p, S * p);
+  sigma2 = zeros(Float64, S * p, S * p);
+  sigma1[ids1, ids1] = rand(length(ids1), length(ids1));
+  sigma2[ids2, ids2] = rand(length(ids2), length(ids2));
+  sigma1[ids1 + p, ids1 + p] = rand(length(ids1), length(ids1));
+  sigma2[ids2 + p, ids2 + p] = rand(length(ids2), length(ids2));
+  sigma1 = 0.5 * (sigma1 + sigma1');
+  sigma2 = 0.5 * (sigma2 + sigma2');
+
+  x = 0.1 * rand(S * p);
+
+  function base_fun1{T <: Number}(x::Vector{T})
+    (l1' * x + 0.5 * x' * sigma1 * x)[1,1]
+  end
+
+  function base_fun2{T <: Number}(x::Vector{T})
+    (l2' * x + 0.5 * x' * sigma2 * x)[1,1]
+  end
+
+  function multiply_fun{T <: Number}(x::Vector{T})
+    base_fun1(x) * base_fun1(x)
+  end
+
+  function combine_fun{T <: Number}(x::Vector{T})
+    (base_fun1(x) ^ 2) * sqrt(base_fun2(x))
+  end
+
+  function combine_fun_derivatives{T <: Number}(x::Vector{T})
+    g_d = T[2 * base_fun1(x) * sqrt(base_fun2(x)),
+            0.5 * (base_fun1(x) ^ 2) / sqrt(base_fun2(x)) ]
+    g_h = zeros(T, 2, 2)
+    g_h[1, 1] = 2 * sqrt(base_fun2(x))
+    g_h[2, 2] = -0.25 * (base_fun1(x) ^ 2) * (base_fun2(x) ^(-3/2))
+    g_h[1, 2] = g_h[2, 1] = base_fun1(x) / sqrt(base_fun2(x))
+    g_d, g_h
+  end
+
+  s_ind = Array(UnitRange{Int}, 2);
+  s_ind[1] = 1:p
+  s_ind[2] = (1:p) + p
+
+  ret1 = zero_sensitive_float(CanonicalParams, Float64, S);
+  ret1.v[1] = base_fun1(x)
+  fill!(ret1.d, 0.0);
+  fill!(ret1.h, 0.0);
+  for s=1:S
+    ret1.d[:, s] = l1[s_ind[s]] + sigma1[s_ind[s], s_ind[s]] * x[s_ind[s]];
+    ret1.h[s_ind[s], s_ind[s]] = sigma1[s_ind[s], s_ind[s]];
+  end
+
+  ret2 = zero_sensitive_float(CanonicalParams, Float64, S);
+  ret2.v[1] = base_fun2(x)
+  fill!(ret2.d, 0.0);
+  fill!(ret2.h, 0.0);
+  for s=1:S
+    ret2.d[:, s] = l2[s_ind[s]] + sigma2[s_ind[s], s_ind[s]] * x[s_ind[s]];
+    ret2.h[s_ind[s], s_ind[s]] = sigma2[s_ind[s], s_ind[s]];
+  end
+
+  grad = ForwardDiff.gradient(base_fun1, x);
+  hess = ForwardDiff.hessian(base_fun1, x);
+  for s=1:S
+    @test_approx_eq(ret1.d[:, s], grad[s_ind[s]])
+  end
+  @test_approx_eq(ret1.h, hess)
+
+  grad = ForwardDiff.gradient(base_fun2, x);
+  hess = ForwardDiff.hessian(base_fun2, x);
+  for s=1:S
+    @test_approx_eq(ret2.d[:, s], grad[s_ind[s]])
+  end
+  @test_approx_eq(ret2.h, hess)
+
+  # Test the combinations.
+  v = combine_fun(x);
+  grad = ForwardDiff.gradient(combine_fun, x);
+  hess = ForwardDiff.hessian(combine_fun, x);
+
+  sf1 = deepcopy(ret1);
+  sf2 = deepcopy(ret2);
+  g_d, g_h = combine_fun_derivatives(x)
+  combine_sfs!(sf1, sf2, sf1.v[1] ^ 2 * sqrt(sf2.v[1]), g_d, g_h);
+
+  @test_approx_eq sf1.v[1] v
+  @test_approx_eq sf1.d[:] grad
+  @test_approx_eq sf1.h hess
+end
+
+
+function test_add_sources_sf()
+  P = length(CanonicalParams)
+  S = 2
+
+  sf_all = zero_sensitive_float(CanonicalParams, Float64, S);
+  sf_s = zero_sensitive_float(CanonicalParams, Float64, 1);
+
+  function scaled_exp!{NumType <: Number}(
+      sf::SensitiveFloat{CanonicalParams, NumType},
+      x::Vector{NumType}, a::Vector{Float64})
+
+    sf.v[1] = one(NumType)
+    for p in 1:P
+      sf.v[1] *= exp(sum(x[p] * a[p]))
+    end
+    if NumType == Float64
+      sf.d[:, 1] = sf.v[1] * a
+      sf.h[:, :] = sf.v[1] * (a * a')
+    end
+  end
+
+  a1 = rand(P);
+  function f1{NumType <: Number}(x::Vector{NumType})
+    sf_local = zero_sensitive_float(CanonicalParams, NumType, 1);
+    scaled_exp!(sf_local, x, a1)
+    sf_local.v[1]
+  end
+
+  a2 = rand(P);
+  function f2{NumType <: Number}(x::Vector{NumType})
+    sf_local = zero_sensitive_float(CanonicalParams, NumType, 1);
+    scaled_exp!(sf_local, x, a2)
+    sf_local.v[1]
+  end
+
+  x1 = rand(P);
+  clear!(sf_s);
+  scaled_exp!(sf_s, x1, a1);
+  v1 = sf_s.v[1]
+
+  fd_grad1 = ForwardDiff.gradient(f1, x1);
+  @test_approx_eq sf_s.d fd_grad1
+
+  fd_hess1 = ForwardDiff.hessian(f1, x1);
+  @test_approx_eq sf_s.h fd_hess1
+
+  add_sources_sf!(sf_all, sf_s, 1, true)
+
+  x2 = rand(P);
+  clear!(sf_s);
+  scaled_exp!(sf_s, x2, a2);
+  v2 = sf_s.v
+
+  fd_grad2 = ForwardDiff.gradient(f2, x2);
+  @test_approx_eq sf_s.d fd_grad2
+
+  fd_hess2 = ForwardDiff.hessian(f2, x2);
+  @test_approx_eq sf_s.h fd_hess2
+
+  add_sources_sf!(sf_all, sf_s, 2, true)
+
+  @test_approx_eq (v1 + v2) sf_all.v
+
+  @test_approx_eq (v1 + v2) sf_all.v
+  @test_approx_eq fd_grad1 sf_all.d[1:P, 1]
+  @test_approx_eq fd_grad2 sf_all.d[1:P, 2]
+  @test_approx_eq fd_hess1 sf_all.h[1:P, 1:P]
+  @test_approx_eq fd_hess2 sf_all.h[(1:P) + P, (1:P) + P]
+  @test_approx_eq zeros(P, P) sf_all.h[(1:P), (1:P) + P]
+  @test_approx_eq zeros(P, P) sf_all.h[(1:P) + P, (1:P)]
+end
+
+
+#####################################
+# Transforms
+
+function test_transform_sensitive_float()
+	blob, ea, body = gen_two_body_dataset();
+
+	# Only keep a few pixels to make the autodiff results faster.
+  keep_pixels = 10:11
+	for b = 1:ea.N
+	  pixels1 = ea.images[b].tiles[1,1].pixels
+      h_width, w_width = size(pixels1)
+	  pixels1[setdiff(1:h_width, keep_pixels), :] = NaN;
+	  pixels1[:, setdiff(1:w_width, keep_pixels)] = NaN;
+	end
+
+
+	function wrap_elbo{NumType <: Number}(vp_free_vec::Vector{NumType})
+		vp_free_array = reshape(vp_free_vec, length(UnconstrainedParams), length(ea.active_sources))
+		vp_free = Vector{NumType}[ zeros(NumType, length(UnconstrainedParams)) for
+		                           sa in ea.active_sources ];
+		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
+		ea_local = forward_diff_model_params(NumType, ea);
+		transform.to_vp!(vp_free, ea_local.vp)
+		elbo = ElboDeriv.elbo(ea_local, calculate_derivs=false)
+		elbo.v[1]
+	end
+
+	transform = Transform.get_mp_transform(ea, loc_width=1.0);
+	elbo = ElboDeriv.elbo(ea);
+	elbo_trans = transform.transform_sensitive_float(elbo, ea);
+
+	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
+	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
+	ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec);
+
+	@test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
+	@test_approx_eq ad_hess elbo_trans.h
+
+  # Test with a subset of sources.
+	ea.active_sources = [2]
+	transform = Transform.get_mp_transform(ea, loc_width=1.0);
+	elbo = ElboDeriv.elbo(ea);
+	elbo_trans = transform.transform_sensitive_float(elbo, ea);
+
+	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
+	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
+	ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec);
+
+	@test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
+	@test_approx_eq ad_hess elbo_trans.h
+end
+
+
+function test_box_derivatives()
+	blob, ea, body = gen_three_body_dataset();
+	transform = Transform.get_mp_transform(ea, loc_width=1.0);
+
+	box_params = setdiff(fieldnames(ids), [:a, :k])
+	vp_free = transform.from_vp(ea.vp)
+	for sa = 1:length(ea.active_sources), param in box_params, ind in length(getfield(ids, param))
+		# sa = 1
+		# param = box_params[1]
+		# ind = 1
+
+		s = ea.active_sources[sa]
+		vp_ind = getfield(ids, param)[ind]
+		free_ind = [getfield(ids_free, param)[ind]]
+
+		function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
+			local_vp_free =
+				Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
+			                  sa = 1:length(ea.active_sources) ]
+			local_vp_free[s] = vp_free_s
+			vp = transform.to_vp(local_vp_free)
+			vp[s][getfield(ids, param)[ind]]
+		end
+
+		ad_d  = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind][1]
+		ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind][1,1]
+
+		d, h = Transform.box_derivatives(
+			ea.vp[s][vp_ind][1], transform.bounds[s][param][ind])
+		@test_approx_eq ad_d d
+		@test_approx_eq ad_h h
+	end
+end
+
+
+function test_box_simplex_derivatives()
+	blob, ea, body = gen_three_body_dataset();
+	for s = 1:ea.S
+		delta = 0.01 * s # Make the parameters different for each one
+		ea.vp[s][ids.a] = Float64[ 0.2 - delta, 0.8 + delta ]
+		ea.vp[s][ids.k] = Float64[ 0.2- delta 0.2- delta; 0.8 + delta 0.8 + delta ]
+	end
+	transform = Transform.get_mp_transform(ea, loc_width=1.0);
+
+	simplex_params = [:a, :k]
+	vp_free = transform.from_vp(ea.vp)
+
+	for sa = 1:length(ea.active_sources), param in simplex_params
+		# sa = 1
+		# param = :k
+		# col = 1 # For k only
+		# ind = 1 # Index within the simplex
+
+		s = ea.active_sources[sa]
+		num_cols = length(size(getfield(ids, param)))
+		@assert num_cols == 1 || num_cols == 2
+
+		for col = 1:num_cols
+			vp_ind = getfield(ids, param)[:, col]
+
+			if length(size(getfield(ids_free, param))) == 0
+				# Hack to handle ids_free.a
+				@assert col == 1
+				free_ind = [ getfield(ids_free, param) ]
+			else
+				free_ind = getfield(ids_free, param)[:, col]
+			end
+
+			d, h = Transform.box_simplex_derivatives(
+				ea.vp[s][vp_ind], transform.bounds[s][param][col])
+
+			for row = 1:2
+				# Write with a univariate output so we can take autodiff hessians.
+			  function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
+			  	local_vp_free =
+			  		Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
+			  	                     sa = 1:length(ea.active_sources) ]
+			  	local_vp_free[s] = vp_free_s
+			  	vp = transform.to_vp(local_vp_free)
+			  	vp[s][getfield(ids, param)[row, col]]
+			  end
+
+			  ad_d = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind]
+			  ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind]
+				@test_approx_eq ad_d d[row, :][1]
+				@test_approx_eq ad_h h[row]
+			end
+		end
+	end
+end
+
+
+function test_simplex_derivatives()
+	n = 4
+	basic_simplex_box = Transform.SimplexBox(0, 1, n)
+	z = Float64[1, 2, 4, 3]
+	z /= sum(z)
+	r = Transform.unsimplexify_parameter(z, basic_simplex_box)
+	Transform.simplexify_parameter(r, basic_simplex_box)
+
+	ad_d = Array(Array{Float64}, n)
+	ad_h = Array(Array{Float64}, n)
+
+	for ind = 1:n
+	  function wrap_simplex{NumType <: Number}(r::Vector{NumType})
+	    local z = Transform.simplexify_parameter(r, basic_simplex_box)
+	    z[ind]
+	  end
+	  ad_d[ind] = ForwardDiff.gradient(wrap_simplex, r)
+	  ad_h[ind] = ForwardDiff.hessian(wrap_simplex, r)
+	end
+
+	jacobian, hessian_vec = Transform.simplex_derivatives(z)
+
+	@test_approx_eq jacobian' reduce(hcat, ad_d)
+	for ind = 1:n
+		@test_approx_eq(hessian_vec[ind], ad_h[ind])
+	end
+end
+
+
+###################################
+# Run tests
+
+# ForwardDiff 0.2's compilation time is very slow, so only run these tests
+# if explicitly requested.
+
+# ELBO tests:
+println("Running ELBO derivative tests.")
+@time test_dual_numbers()
+@time test_combine_pixel_sources()
+@time test_fs1m_derivatives()
+@time test_fs0m_derivatives()
+@time test_bvn_derivatives()
+@time test_galaxy_variable_transform()
+@time test_galaxy_cache_component()
+@time test_galaxy_sigma_derivs()
+@time test_brightness_hessian()
+@time test_dsiginv_dsig()
+#test_process_active_pixels()  # TODO: fix this
+
+# Especially slow tests:
+# @time test_elbo()
+# @time test_add_log_term()
+# @time test_e_g_s_functions()
+# @time test_real_image()
+
+# KL tests:
+println("Running KL derivative tests.")
+@time test_beta_kl_derivatives()
+@time test_categorical_kl_derivatives()
+@time test_diagmvn_mvn_kl_derivatives()
+@time test_normal_kl_derivatives()
+
+# SensitiveFloat tests:
+println("Running SensitiveFloat derivative tests.")
+@time test_combine_sfs()
+@time test_add_sources_sf()
+
+# Transform tests:
+println("Running Transform derivative tests.")
+@time test_transform_sensitive_float()
+@time test_box_derivatives()
+@time test_box_simplex_derivatives()
+@time test_simplex_derivatives()

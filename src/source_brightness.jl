@@ -78,9 +78,7 @@ function SourceBrightness{NumType <: Number}(
           set_hess!(E_l_a[4, i], bids.c1[3], bids.c2[3], E_l_a[4, i].v[1] * 0.5)
           set_hess!(E_l_a[4, i], bids.c2[3], bids.c2[3], E_l_a[4, i].v[1] * 0.25)
         end
-        multiply_sfs!(
-          E_l_a[4, i], E_l_a[3, i], ids1=ids_color_3, ids2=ids_band_3,
-          calculate_hessian=calculate_hessian)
+        multiply_sfs!(E_l_a[4, i], E_l_a[3, i], calculate_hessian)
 
         # Band 5 = band 4 * color 4.
         E_l_a[5, i].d[bids.c1[4]] = E_l_a[5, i].v[1]
@@ -90,9 +88,7 @@ function SourceBrightness{NumType <: Number}(
           set_hess!(E_l_a[5, i], bids.c1[4], bids.c2[4], E_l_a[5, i].v[1] * 0.5)
           set_hess!(E_l_a[5, i], bids.c2[4], bids.c2[4], E_l_a[5, i].v[1] * 0.25)
         end
-        multiply_sfs!(E_l_a[5, i], E_l_a[4, i],
-                      ids1=ids_color_4, ids2=union(ids_band_3, ids_color_3),
-                      calculate_hessian=calculate_hessian)
+        multiply_sfs!(E_l_a[5, i], E_l_a[4, i], calculate_hessian)
 
         # Band 2 = band 3 * color 2.
         E_l_a[2, i].d[bids.c1[2]] = E_l_a[2, i].v[1] * -1.
@@ -102,9 +98,7 @@ function SourceBrightness{NumType <: Number}(
           set_hess!(E_l_a[2, i], bids.c1[2], bids.c2[2], E_l_a[2, i].v[1] * -0.5)
           set_hess!(E_l_a[2, i], bids.c2[2], bids.c2[2], E_l_a[2, i].v[1] * 0.25)
         end
-        multiply_sfs!(
-          E_l_a[2, i], E_l_a[3, i], ids1=ids_color_2, ids2=ids_band_3,
-          calculate_hessian=calculate_hessian)
+        multiply_sfs!(E_l_a[2, i], E_l_a[3, i], calculate_hessian)
 
         # Band 1 = band 2 * color 1.
         E_l_a[1, i].d[bids.c1[1]] = E_l_a[1, i].v[1] * -1.
@@ -114,9 +108,7 @@ function SourceBrightness{NumType <: Number}(
           set_hess!(E_l_a[1, i], bids.c1[1], bids.c2[1], E_l_a[1, i].v[1] * -0.5)
           set_hess!(E_l_a[1, i], bids.c2[1], bids.c2[1], E_l_a[1, i].v[1] * 0.25)
         end
-        multiply_sfs!(E_l_a[1, i], E_l_a[2, i],
-                      ids1=ids_color_1, ids2=union(ids_band_3, ids_color_2),
-                      calculate_hessian=calculate_hessian)
+        multiply_sfs!(E_l_a[1, i], E_l_a[2, i], calculate_hessian)
       else
         # Simply update the values if not calculating derivatives.
         E_l_a[4, i].v[1] *= E_l_a[3, i].v[1]
@@ -160,9 +152,7 @@ function SourceBrightness{NumType <: Number}(
             set_hess!(E_ll_a[4, i], hess_ids..., E_ll_a[4, i].v[1] * 4.0)
           end
         end
-        multiply_sfs!(E_ll_a[4, i], E_ll_a[3, i],
-                      ids1=ids_color_3, ids2=ids_band_3,
-                      calculate_hessian=calculate_hessian)
+        multiply_sfs!(E_ll_a[4, i], E_ll_a[3, i], calculate_hessian)
 
         # Band 5 = band 4 * color 4.
         tmp4 = exp(2 * c1[4, i] + 2 * c2[4, i])
@@ -175,9 +165,7 @@ function SourceBrightness{NumType <: Number}(
             set_hess!(E_ll_a[5, i], hess_ids..., E_ll_a[5, i].v[1] * 4.0)
           end
         end
-        multiply_sfs!(E_ll_a[5, i], E_ll_a[4, i],
-                      ids1=ids_color_4, ids2=union(ids_band_3, ids_color_3),
-                      calculate_hessian=calculate_hessian)
+        multiply_sfs!(E_ll_a[5, i], E_ll_a[4, i], calculate_hessian)
 
         # Band 2 = band 3 * color 2
         tmp2 = exp(-2 * c1[2, i] + 2 * c2[2, i])
@@ -191,9 +179,7 @@ function SourceBrightness{NumType <: Number}(
           set_hess!(E_ll_a[2, i], bids.c1[2], bids.c2[2],
                     E_ll_a[2, i].v[1] * -4.0)
         end
-        multiply_sfs!(E_ll_a[2, i], E_ll_a[3, i],
-                      ids1=ids_color_2, ids2=ids_band_3,
-                      calculate_hessian=calculate_hessian)
+        multiply_sfs!(E_ll_a[2, i], E_ll_a[3, i], calculate_hessian)
 
         # Band 1 = band 2 * color 1
         E_ll_a[1, i].d[bids.c1[1]] = E_ll_a[1, i].v[1] * -2.
@@ -206,9 +192,7 @@ function SourceBrightness{NumType <: Number}(
           set_hess!(E_ll_a[1, i], bids.c1[1], bids.c2[1],
                     E_ll_a[1, i].v[1] * -4.0)
         end
-        multiply_sfs!(E_ll_a[1, i], E_ll_a[2, i],
-                      ids1=ids_color_1, ids2=union(ids_band_3, ids_color_2),
-                      calculate_hessian=calculate_hessian)
+        multiply_sfs!(E_ll_a[1, i], E_ll_a[2, i], calculate_hessian)
       else
         # Simply update the values if not calculating derivatives.
         E_ll_a[4, i].v[1] *= E_ll_a[3, i].v[1]
