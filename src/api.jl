@@ -5,7 +5,6 @@ import .Log
 using .Model
 import .SDSSIO
 import .Infer
-import .OptimizeElbo
 
 
 const TILE_WIDTH = 20
@@ -442,5 +441,177 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     timing.num_srcs = length(target_sources)
 
     results
+end
+
+
+"""
+Query the SDSS database for all fields that overlap the given RA, Dec range.
+"""
+function query_overlapping_fields(ramin, ramax, decmin, decmax)
+    f = FITSIO.FITS(extents_scratch())
+    hdu = f[2]::FITSIO.TableHDU
+
+    # read in the entire table.
+    all_run = read(hdu, "run")::Vector{Int16}
+    all_camcol = read(hdu, "camcol")::Vector{UInt8}
+    all_field = read(hdu, "field")::Vector{Int16}
+    all_ramin = read(hdu, "ramin")::Vector{Float64}
+    all_ramax = read(hdu, "ramax")::Vector{Float64}
+    all_decmin = read(hdu, "decmin")::Vector{Float64}
+    all_decmax = read(hdu, "decmax")::Vector{Float64}
+
+    close(f)
+
+    # initialize output "table"
+    out = Dict{String, Vector}("run"=>Int[],
+                                    "camcol"=>Int[],
+                                    "field"=>Int[],
+                                    "ramin"=>Float64[],
+                                    "ramax"=>Float64[],
+                                    "decmin"=>Float64[],
+                                    "decmax"=>Float64[])
+
+    # The ramin, ramax, etc is a bit unintuitive because we're looking
+    # for any overlap.
+    for i in eachindex(all_ramin)
+        if (all_ramax[i] > ramin && all_ramin[i] < ramax &&
+            all_decmax[i] > decmin && all_decmin[i] < decmax)
+            push!(out["run"], all_run[i])
+            push!(out["camcol"], all_camcol[i])
+            push!(out["field"], all_field[i])
+            push!(out["ramin"], all_ramin[i])
+            push!(out["ramax"], all_ramax[i])
+            push!(out["decmin"], all_decmin[i])
+            push!(out["decmax"], all_decmax[i])
+        end
+    end
+
+    return out
+end
+
+"""
+query_overlapping_fieldids(ramin, ramax, decmin, decmax) -> Vector{Tuple{Int, Int, Int}}
+
+Like `query_overlapping_fields`, but return a Vector of
+(run, camcol, field) triplets.
+"""
+function query_overlapping_fieldids(ramin, ramax, decmin, decmax)
+    fields = query_overlapping_fields(ramin, ramax, decmin, decmax)
+    return Tuple{Int, Int, Int}[(fields["run"][i],
+                                 fields["camcol"][i],
+                                 fields["field"][i])
+                                for i in eachindex(fields["run"])]
+end
+
+query_frame_dirs(fieldids) =
+    [field_scratchdir(x[1], x[2], x[3]) for x in fieldids]
+query_photofield_dirs(fieldids) =
+    [photofield_scratchdir(x[1], x[2]) for x in fieldids]
+
+"""
+called from main entry point for inference for one field
+(used for accuracy assessment, infer-box is the primary inference
+entry point)
+"""
+function infer_field(run::Int, camcol::Int, field::Int,
+                           outdir::AbstractString; objid="")
+    # ensure that files are staged and set up paths.
+    stage_field(run, camcol, field)
+    field_dirs = [field_scratchdir(run, camcol, field)]
+    photofield_dirs = [photofield_scratchdir(run, camcol)]
+
+    results = infer([(run, camcol, field)], field_dirs;
+                    objid=objid,
+                    fpm_dirs=field_dirs,
+                    psfield_dirs=field_dirs,
+                    photoobj_dirs=field_dirs,
+                    photofield_dirs=photofield_dirs,
+                    primary_initialization=false)
+
+    fname = if objid == ""
+        @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir run camcol field
+    else
+        @sprintf "%s/celeste-objid-%s.jld" outdir objid
+    end
+    JLD.save(fname, "results", results)
+    Log.debug("infer_field finished successfully")
+end
+
+
+"""
+Save provided results to a JLD file.
+"""
+function save_results(outdir, ramin, ramax, decmin, decmax, results)
+    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
+                     outdir, ramin, ramax, decmin, decmax)
+    JLD.save(fname, "results", results)
+end
+
+
+
+"""
+NERSC-specific infer function, called from main entry point.
+"""
+function infer_box(ramin, ramax, decmin, decmax, outdir)
+    # Base.@time hack for distributed environment
+    gc_stats = ()
+    gc_diff_stats = ()
+    elapsed_time = 0.0
+    gc_stats = Base.gc_num()
+    elapsed_time = time_ns()
+
+    times = InferTiming()
+    if dt_nnodes > 1
+        divide_and_infer((ramin, ramax),
+                         (decmin, decmax),
+                         timing=times,
+                         outdir=outdir)
+    else
+        # Get vector of (run, camcol, field) triplets overlapping this patch
+        tic()
+        fieldids = query_overlapping_fieldids(ramin, ramax,
+                                              decmin, decmax)
+        times.query_fids = toq()
+
+        # Get relevant directories corresponding to each field.
+        tic()
+        frame_dirs = query_frame_dirs(fieldids)
+        photofield_dirs = query_photofield_dirs(fieldids)
+        times.get_dirs = toq()
+
+        results = infer(fieldids,
+                        frame_dirs;
+                        ra_range=(ramin, ramax),
+                        dec_range=(decmin, decmax),
+                        fpm_dirs=frame_dirs,
+                        psfield_dirs=frame_dirs,
+                        photoobj_dirs=frame_dirs,
+                        photofield_dirs=photofield_dirs,
+                        timing=times)
+
+        tic()
+        save_results(outdir, ramin, ramax, decmin, decmax, results)
+        times.write_results = toq()
+    end
+
+    # Base.@time hack for distributed environment
+    elapsed_time = time_ns() - elapsed_time
+    gc_diff_stats = Base.GC_Diff(Base.gc_num(), gc_stats)
+    time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
+              Base.gc_alloc_count(gc_diff_stats))
+
+    times.num_srcs = max(1, times.num_srcs)
+    nputs(dt_nodeid, "timing: query_fids=$(times.query_fids)")
+    nputs(dt_nodeid, "timing: get_dirs=$(times.get_dirs)")
+    nputs(dt_nodeid, "timing: num_infers=$(times.num_infers)")
+    nputs(dt_nodeid, "timing: read_photoobj=$(times.read_photoobj)")
+    nputs(dt_nodeid, "timing: read_img=$(times.read_img)")
+    nputs(dt_nodeid, "timing: init_mp=$(times.init_mp)")
+    nputs(dt_nodeid, "timing: fit_psf=$(times.fit_psf)")
+    nputs(dt_nodeid, "timing: opt_srcs=$(times.opt_srcs)")
+    nputs(dt_nodeid, "timing: num_srcs=$(times.num_srcs)")
+    nputs(dt_nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
+    nputs(dt_nodeid, "timing: write_results=$(times.write_results)")
+    nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
 end
 
