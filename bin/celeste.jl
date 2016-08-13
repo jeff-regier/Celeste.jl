@@ -44,10 +44,10 @@ function main()
         decmin = parse(Float64, args["<decmin>"])
         decmax = parse(Float64, args["<decmax>"])
         if args["stage-box"]
-            Celeste.stage_box_nersc(ramin, ramax, decmin, decmax)
+            Celeste.stage_box(ramin, ramax, decmin, decmax)
         elseif args["infer-box"]
             outdir = args["<outdir>"]
-            Celeste.infer_box_nersc(ramin, ramax, decmin, decmax, outdir)
+            Celeste.infer_box(ramin, ramax, decmin, decmax, outdir)
         end
     else
         run = parse(Int, args["<run>"])
@@ -55,20 +55,20 @@ function main()
         field = parse(Int, args["<field>"])
         if args["infer-field"]
             outdir = args["<outdir>"]
-            Celeste.infer_field_nersc(run, camcol, field, outdir)
+            Celeste.infer_field(run, camcol, field, outdir)
         elseif args["infer-object"]
             outdir = args["<outdir>"]
             objid = args["<objid>"]
-            Celeste.infer_field_nersc(run, camcol, field, outdir; objid=objid)
+            Celeste.infer_field(run, camcol, field, outdir; objid=objid)
         elseif args["score-field"]
             resultdir = args["<resultdir>"]
             truthfile = args["<truthfile>"]
-            Celeste.score_field_nersc(run, camcol, field, resultdir, truthfile)
+            Celeste.score_field_disk(run, camcol, field, resultdir, truthfile)
         elseif args["score-object"]
             objid = args["<objid>"]
             resultdir = args["<resultdir>"]
             truthfile = args["<truthfile>"]
-            Celeste.score_object_nersc(run, camcol, field, objid, resultdir, truthfile)
+            Celeste.score_object_disk(run, camcol, field, objid, resultdir, truthfile)
         end
     end
 end
