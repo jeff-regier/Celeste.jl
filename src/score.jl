@@ -527,11 +527,11 @@ end
 """
 Score the celeste results for a particular field
 """
-function score_field_nersc(run, camcol, field, resultdir, truthfile)
+function score_field_disk(run, camcol, field, resultdir, truthfile)
     fieldid = (run, camcol, field)
     fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" resultdir run camcol field
     results = JLD.load(fname, "results")
-    primary_dir = nersc_photoobj_dir(run, camcol)
+    primary_dir = photoobj_dir(run, camcol)
 
     println( score_field(fieldid, results, truthfile, primary_dir) )
 end
@@ -540,11 +540,11 @@ end
 """
 Display results from Celeste, Primary, and Coadd for a particular object
 """
-function score_object_nersc(run, camcol, field, objid, resultdir, truthfile)
+function score_object_disk(run, camcol, field, objid, resultdir, truthfile)
     fieldid = (run, camcol, field)
     fname = @sprintf "%s/celeste-objid-%s.jld" resultdir objid
     results = JLD.load(fname, "results")
-    primary_dir = nersc_photoobj_dir(run, camcol)
+    primary_dir = photoobj_dir(run, camcol)
 
     (celeste_df, primary_df, coadd_df) = match_catalogs(fieldid,
                                 results, truthfile, primary_dir)
