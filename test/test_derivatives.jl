@@ -1,4 +1,3 @@
-import DualNumbers
 import ForwardDiff
 
 using Celeste: Model, SensitiveFloats, ElboDeriv
@@ -23,22 +22,6 @@ function eval_bvn_log_density{NumType <: Number}(
         (x[1] - bvn.the_mean[1]) * elbo_vars.bvn_derivs.py1[1] +
         (x[2] - bvn.the_mean[2]) * elbo_vars.bvn_derivs.py2[1] -
         log(bvn.precision[1, 1] * bvn.precision[2, 2] - bvn.precision[1, 2] ^ 2))
-end
-
-
-############################################
-# The tests below are currently very slow to compile due to changes
-# in ForwardDiff in v0.2.2, so they will only be enabled optionally..
-
-function test_dual_numbers()
-    # Simply check that the likelihood can be used with dual numbers.
-    # Due to the autodiff parts of the KL divergence and transform,
-    # these parts of the ELBO will currently not work with dual numbers.
-    blob, ea, body = gen_sample_star_dataset()
-    ea_dual = forward_diff_model_params(DualNumbers.Dual{Float64}, ea)
-    elbo_dual = ElboDeriv.elbo_likelihood(ea_dual)
-
-    true
 end
 
 
@@ -1209,7 +1192,6 @@ end
 
 # ELBO tests:
 println("Running ELBO derivative tests.")
-@time test_dual_numbers()
 @time test_combine_pixel_sources()
 @time test_fs1m_derivatives()
 @time test_fs0m_derivatives()

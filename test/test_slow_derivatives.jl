@@ -1,4 +1,3 @@
-import DualNumbers
 import ForwardDiff
 
 using Celeste: Model, SensitiveFloats, ElboDeriv
