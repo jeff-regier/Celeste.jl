@@ -447,7 +447,7 @@ end
 """
 Query the SDSS database for all fields that overlap the given RA, Dec range.
 """
-function query_overlapping_fields(ramin, ramax, decmin, decmax)
+function do_query_overlapping_fields(ramin, ramax, decmin, decmax)
     f = FITSIO.FITS(extents_scratch())
     hdu = f[2]::FITSIO.TableHDU
 
@@ -496,7 +496,7 @@ Like `query_overlapping_fields`, but return a Vector of
 (run, camcol, field) triplets.
 """
 function query_overlapping_fieldids(ramin, ramax, decmin, decmax)
-    fields = query_overlapping_fields(ramin, ramax, decmin, decmax)
+    fields = do_query_overlapping_fields(ramin, ramax, decmin, decmax)
     return Tuple{Int, Int, Int}[(fields["run"][i],
                                  fields["camcol"][i],
                                  fields["field"][i])

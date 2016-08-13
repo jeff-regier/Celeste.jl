@@ -91,7 +91,8 @@ end
 Stage all relevant files for the given sky patch to user's SCRATCH.
 """
 function stage_box(ramin, ramax, decmin, decmax)
-    `cp $(ENV[FIELD_EXTENTS]) $(extents_scratch())`
+    mkpath("$(ENV["SCRATCH"])/celeste")
+    cp(ENV["FIELD_EXTENTS"], extents_scratch())
     fieldids = query_overlapping_fieldids(ramin, ramax, decmin, decmax)
     for (run, camcol, field) in fieldids
         stage_field(run, camcol, field)
