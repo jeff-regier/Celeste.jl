@@ -2,6 +2,7 @@
 
 using DocOpt
 import Celeste
+import Celeste.SDSSIO.FieldTriplet
 
 const DOC =
 """Run Celeste.
@@ -56,24 +57,25 @@ function main()
         run = parse(Int, args["<run>"])
         camcol = parse(Int, args["<camcol>"])
         field = parse(Int, args["<field>"])
+        rcf = FieldTriplet(run, camcol, field)
         if args["infer-field"]
             sdssdir = ENV["SDSS_ROOT_DIR"]
-            Celeste.stage_field(run, camcol, field, sdssdir, stagedir)
+            Celeste.stage_field(rcf, sdssdir, stagedir)
             outdir = args["<outdir>"]
-            Celeste.infer_field(run, camcol, field, stagedir, outdir)
+            Celeste.infer_field(rcf, stagedir, outdir)
         elseif args["infer-object"]
             outdir = args["<outdir>"]
             objid = args["<objid>"]
-            Celeste.infer_field(run, camcol, field, stagedir, outdir; objid=objid)
+            Celeste.infer_field(rcf, stagedir, outdir; objid=objid)
         elseif args["score-field"]
             resultdir = args["<resultdir>"]
             truthfile = args["<truthfile>"]
-            Celeste.score_field_disk(run, camcol, field, resultdir, truthfile)
+            Celeste.score_field_disk(rcf, resultdir, truthfile)
         elseif args["score-object"]
             objid = args["<objid>"]
             resultdir = args["<resultdir>"]
             truthfile = args["<truthfile>"]
-            Celeste.score_object_disk(run, camcol, field, objid, resultdir, truthfile)
+            Celeste.score_object_disk(rcf, objid, resultdir, truthfile)
         end
     end
 end

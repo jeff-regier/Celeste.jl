@@ -10,10 +10,8 @@ function test_infer_single()
     # very small patch of sky that turns out to have 4 sources.
     # We checked that this patch is in the given field.
     box = Celeste.BoundingBox(164.39, 164.41, 39.11, 39.13)
-    fieldids = [(3900, 6, 269), ]
-    println(fieldids)
-    println(datadir)
-    result = Celeste.infer(fieldids, datadir; box=box)
+    field_triplets = [FieldTriplet(3900, 6, 269),]
+    result = Celeste.infer(field_triplets, datadir; box=box)
 end
 
 test_infer_single()

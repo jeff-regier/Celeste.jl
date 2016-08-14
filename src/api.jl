@@ -5,7 +5,7 @@ import .Log
 using .Model
 import .SDSSIO
 import .Infer
-
+import .SDSSIO: FieldTriplet
 
 const TILE_WIDTH = 20
 const MIN_FLUX = 2.0
@@ -83,14 +83,6 @@ immutable BoundingBox
     ramax::Float64
     decmin::Float64
     decmax::Float64
-end
-
-
-immutable FieldExtent
-    run::Int64
-    camcol::Int64
-    field::Int64
-    box::BoundingBox
 end
 
 
@@ -235,11 +227,11 @@ function divide_and_infer(box::BoundingBox,
         # Get vector of (run, camcol, field) triplets overlapping this patch
         tic()
         box = BoundingBox(iramin, iramax, idecmin, idecmax)
-        fieldids = get_overlapping_fieldids(box, stagedir)
+        rcfs = get_overlapping_fields(box, stagedir)
         itimes.query_fids = toq()
 
         # run inference for this subarea
-        results = infer(fieldids;
+        results = infer(rcfs;
                         box=BoundingBox(iramin, iramax, idecmin, idecmax),
                         reserve_thread=rundt,
                         thread_fun=rundtree,
@@ -262,19 +254,19 @@ function divide_and_infer(box::BoundingBox,
 end
 
 
-function load_images(fieldids, stagedir)
+function load_images(rcfs, stagedir)
     images = TiledImage[]
     image_names = String[]
     image_count = 0
 
-    for i in 1:length(fieldids)
-        Log.info("reading field $(fieldids[i])")
-        run, camcol, field = fieldids[i]
-        field_images = SDSSIO.load_field_images(run, camcol, field, stagedir)
+    for i in 1:length(rcfs)
+        Log.info("reading field $(rcfs[i])")
+        rcf = rcfs[i]
+        field_images = SDSSIO.load_field_images(rcf, stagedir)
         for b=1:length(field_images)
             image_count += 1
             push!(image_names,
-                "$image_count run=$run camcol=$camcol $field=field b=$b")
+                "$image_count run=$(rcf.run) camcol=$(rcf.camcol) field=$(rcf.field) b=$b")
             tiled_image = TiledImage(field_images[b])
             push!(images, tiled_image)
         end
@@ -292,14 +284,14 @@ end
 Fit the Celeste model to sources in a given ra, dec range,
 based on data from specified fields
 
-- fieldids: Array of run, camcol, field triplets that the source occurs in.
+- rcfs: Array of run, camcol, field triplets that the source occurs in.
 - box: a bounding box specifying a region of sky
 
 Returns:
 
 - Dictionary of results, keyed by SDSS thing_id.
 """
-function infer(fieldids::Vector{Tuple{Int, Int, Int}},
+function infer(rcfs::Vector{FieldTriplet},
                stagedir::String;
                objid="",
                box=BoundingBox(-1000., 1000., -1000., 1000.),
@@ -316,7 +308,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # Read all primary objects in these fields.
     tic()
     duplicate_policy = primary_initialization ? :primary : :first
-    catalog = SDSSIO.read_photoobj_files(fieldids, stagedir,
+    catalog = SDSSIO.read_photoobj_files(rcfs, stagedir,
                         duplicate_policy=duplicate_policy)
     timing.read_photoobj = toq()
     Log.info("$(length(catalog)) primary sources")
@@ -354,14 +346,14 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     tic()
 
     # TODO: make `image_map` a 3D GlobalArray
-    max_run = maximum([f[1] for f in fieldids])
-    max_camcol = maximum([f[2] for f in fieldids])
-    max_field = maximum([f[3] for f in fieldids])
+    max_run = maximum([rcf.run for rcf in rcfs])
+    max_camcol = maximum([rcf.camcol for rcf in rcfs])
+    max_field = maximum([rcf.field for rcf in rcfs])
     image_map = Array(Int64, max_run, max_camcol, max_field)
     fill!(image_map, 0)
 
     # TODO: make `images` a 1D GlobalArray
-    images = load_images(fieldids, stagedir)
+    images = load_images(rcfs, stagedir)
     timing.read_img = toq()
 
     reserve_thread[] && thread_fun(reserve_thread)
@@ -429,7 +421,7 @@ end
 """
 Query the SDSS database for all fields that overlap the given RA, Dec range.
 """
-function get_overlapping_fields(query::BoundingBox, stagedir::String)
+function get_overlapping_field_extents(query::BoundingBox, stagedir::String)
     f = FITSIO.FITS("$stagedir/field_extents.fits")
 
     hdu = f[2]::FITSIO.TableHDU
@@ -445,24 +437,17 @@ function get_overlapping_fields(query::BoundingBox, stagedir::String)
 
     close(f)
 
-    ret = FieldExtent[]
+    ret = Tuple{FieldTriplet, BoundingBox}[]
 
     # The ramin, ramax, etc is a bit unintuitive because we're looking
     # for any overlap.
     for i in eachindex(all_ramin)
         if (all_ramax[i] > query.ramin && all_ramin[i] < query.ramax &&
                 all_decmax[i] > query.decmin && all_decmin[i] < query.decmax)
-            cur_box = BoundingBox(
-                all_ramin[i],
-                all_ramax[i],
-                all_decmin[i],
-                all_decmax[i])
-            cur_fe = FieldExtent(
-                all_run[i],
-                all_camcol[i],
-                all_field[i],
-                cur_box)
-            push!(ret, cur_fe)
+            cur_box = BoundingBox(all_ramin[i], all_ramax[i],
+                                  all_decmin[i], all_decmax[i])
+            cur_fe = FieldTriplet(all_run[i], all_camcol[i], all_field[i])
+            push!(ret, (cur_fe, cur_box))
         end
     end
 
@@ -474,9 +459,9 @@ end
 Like `get_overlapping_fields`, but return a Vector of
 (run, camcol, field) triplets.
 """
-function get_overlapping_fieldids(query::BoundingBox, stagedir::String)
-    fes = get_overlapping_fields(query, stagedir)
-    Tuple{Int, Int, Int}[(fe.run, fe.camcol, fe.field) for fe in fes]
+function get_overlapping_fields(query::BoundingBox, stagedir::String)
+    fes = get_overlapping_field_extents(query, stagedir)
+    [fe[1] for fe in fes]
 end
 
 
@@ -485,16 +470,13 @@ called from main entry point for inference for one field
 (used for accuracy assessment, infer-box is the primary inference
 entry point)
 """
-function infer_field(run::Int, camcol::Int, field::Int,
+function infer_field(rcf::FieldTriplet,
                      stagedir::String,
                      outdir::String;
                      objid="")
-    results = infer([(run, camcol, field)], stagedir;
-                    objid=objid,
-                    primary_initialization=false)
-
+    results = infer([rcf,], stagedir; objid=objid, primary_initialization=false)
     fname = if objid == ""
-        @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir run camcol field
+        @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
     else
         @sprintf "%s/celeste-objid-%s.jld" outdir objid
     end
@@ -533,10 +515,10 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     else
         # Get vector of (run, camcol, field) triplets overlapping this patch
         tic()
-        fieldids = get_overlapping_fieldids(box, stagedir)
+        rcfs = get_overlapping_fields(box, stagedir)
         times.query_fids = toq()
 
-        results = infer(fieldids, stagedir; box=box, timing=times)
+        results = infer(rcfs, stagedir; box=box, timing=times)
 
         tic()
         save_results(outdir, box, results)

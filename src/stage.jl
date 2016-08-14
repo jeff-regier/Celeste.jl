@@ -5,8 +5,9 @@ Stage all relevant files for the given run, camcol, field to user's SCRATCH
 directory. The target locations are given by `field_scratchdir` and
 `photofield_scratchdir`.
 """
-function stage_field(run::Integer, camcol::Integer, field::Integer,
-                     sdssdir::String, stagedir::String)
+function stage_field(rcf::FieldTriplet, sdssdir::String, stagedir::String)
+    run, camcol, field = rcf.run, rcf.camcol, rcf.field
+
     # destination directory for all files except photofield.
     camcol_dstdir = joinpath(stagedir, "$run/$camcol")
     field_dstdir = joinpath(stagedir, "$run/$camcol/$field")
@@ -75,9 +76,9 @@ function stage_box(box::BoundingBox, sdssdir, stagedir)
     mkpath(stagedir)
     stage_extents = "$stagedir/field_extents.fits"
     cp(ENV["FIELD_EXTENTS"], stage_extents, remove_destination=true)
-    fieldids = get_overlapping_fieldids(box, stagedir)
-    for (run, camcol, field) in fieldids
-        stage_field(run, camcol, field, sdssdir, stagedir)
+    rcfs = get_overlapping_fields(box, stagedir)
+    for rcf in rcfs
+        stage_field(rcf, sdssdir, stagedir)
     end
 end
 

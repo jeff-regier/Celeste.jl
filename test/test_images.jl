@@ -2,10 +2,7 @@ using Base.Test
 using DataFrames
 import WCS
 
-
-const RUN = 3900
-const CAMCOL = 6
-const FIELD = 269
+const rcf = FieldTriplet(3900, 6, 269)
 
 
 """
@@ -36,10 +33,10 @@ end
 function test_blob()
     # A lot of tests are in a single function to avoid having to reload
     # the full image multiple times.
-    blob = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir)
+    blob = SDSSIO.load_field_images(rcf, datadir)
 
-    dir = "$datadir/$RUN/$CAMCOL/$FIELD"
-    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir RUN CAMCOL FIELD
+    dir = "$datadir/$(rcf.run)/$(rcf.camcol)/$(rcf.field)"
+    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir rcf.run rcf.camcol rcf.field
     cat_entries = SDSSIO.read_photoobj_celeste(fname)
 
     ea = make_elbo_args(blob, cat_entries,
