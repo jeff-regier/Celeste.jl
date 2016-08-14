@@ -41,9 +41,11 @@ else
     unlock(l) = ()
 end
 
+
 # A workitem is of this ra / dec size
 const wira = 0.025
 const widec = 0.025
+
 
 """
 Timing information.
@@ -64,6 +66,7 @@ type InferTiming
     InferTiming() = new(0.0, 0.0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
 end
 
+
 function add_timing!(i::InferTiming, j::InferTiming)
     i.query_fids = i.query_fids + j.query_fids
     i.get_dirs = i.get_dirs + j.get_dirs
@@ -78,34 +81,40 @@ function add_timing!(i::InferTiming, j::InferTiming)
     i.wait_done = i.wait_done + j.wait_done
 end
 
-"""
-An area of the sky subtended by `ramin`, `ramax`, `decmin`, and `decmax`.
-"""
-type SkyArea
+
+immutable BoundingBox
     ramin::Float64
     ramax::Float64
     decmin::Float64
     decmax::Float64
-    nra::Int64
-    ndec::Int64
 end
 
+
+immutable FieldExtent
+    run::Int64
+    camcol::Int64
+    field::Int64
+    box::BoundingBox
+end
+
+
 """
-Given a SkyArea that is to be divided into `skya.nra` x `skya.ndec` patches,
-return the `i`th patch. `i` is a linear index between 1 and
-`skya.nra * skya.ndec`.
+Given a BoundingBox that is to be divided into `nra` x `ndec` subareas,
+return the `i`th subarea. `i` is a linear index between 1 and
+`nra * ndec`.
 
 This function assumes a cartesian (rather than spherical) coordinate system!
 """
-function divide_skyarea(skya::SkyArea, i)
+function divide_skyarea(box, nra, ndec, i)
     global wira, widec
-    ix, iy = ind2sub((skya.nra, skya.ndec), i)
+    ix, iy = ind2sub((nra, ndec), i)
 
-    return (skya.ramin + (ix - 1) * wira,
-            min(skya.ramin + ix * wira, skya.ramax),
-            skya.decmin + (iy - 1) * widec,
-            min(skya.decmin + iy * widec, skya.decmax))
+    return (box.ramin + (ix - 1) * wira,
+            min(box.ramin + ix * wira, box.ramax),
+            box.decmin + (iy - 1) * widec,
+            min(box.decmin + iy * widec, box.decmax))
 end
+
 
 @inline nputs(nid, s) = ccall(:puts, Cint, (Ptr{Int8},), string("[$nid] ", s))
 @inline phalse(b) = b[] = false
@@ -141,6 +150,7 @@ function time_puts(elapsedtime, bytes, gctime, allocs)
     nputs(dt_nodeid, s)
 end
 
+
 """
 Divide `N` into `np` parts as evenly as possible, returning `my` part as
 a (first, last) tuple.
@@ -168,15 +178,14 @@ function divparts(N, np, my)
     end
     return f, l
 end
- 
+
 
 """
 Divide the given ra, dec range into sky areas of `wira`x`widec` and
 use Dtree to distribute these sky areas to nodes. Within each node
 use `infer()` to fit the Celeste model to sources in each sky area.
 """
-function divide_and_infer(ra_range::Tuple{Float64, Float64},
-                          dec_range::Tuple{Float64, Float64};
+function divide_and_infer(box::BoundingBox,
                           timing=InferTiming(),
                           outdir=".",
                           output_results=save_results)
@@ -186,9 +195,8 @@ function divide_and_infer(ra_range::Tuple{Float64, Float64},
 
     # how many `wira` X `widec` sky areas (work items)?
     global wira, widec
-    nra = ceil(Int64, (ra_range[2] - ra_range[1]) / wira)
-    ndec = ceil(Int64, (dec_range[2] - dec_range[1]) / widec)
-    skya = SkyArea(ra_range[1], ra_range[2], dec_range[1], dec_range[2], nra, ndec)
+    nra = ceil(Int64, (box.ramax - box.ramin) / wira)
+    ndec = ceil(Int64, (box.decmax - box.decmin) / widec)
 
     num_work_items = nra * ndec
     each = ceil(Int64, num_work_items / dt_nnodes)
@@ -229,7 +237,7 @@ function divide_and_infer(ra_range::Tuple{Float64, Float64},
 
         # Get vector of (run, camcol, field) triplets overlapping this patch
         tic()
-        fieldids = query_overlapping_fieldids(iramin, iramax,
+        fieldids = get_overlapping_fieldids(iramin, iramax,
                                               idecmin, idecmax)
         itimes.query_fids = toq()
 
@@ -242,8 +250,7 @@ function divide_and_infer(ra_range::Tuple{Float64, Float64},
         # run inference for this subarea
         results = infer(fieldids,
                         frame_dirs;
-                        ra_range=(iramin, iramax),
-                        dec_range=(idecmin, idecmax),
+                        box=BoundingBox(iramin, iramax, idecmin, idecmax),
                         fpm_dirs=frame_dirs,
                         psfield_dirs=frame_dirs,
                         photoobj_dirs=frame_dirs,
@@ -302,8 +309,7 @@ end
 Fit the Celeste model to sources in a given ra, dec range,
 based on data from specified fields
 
-- ra_range: minimum and maximum RA of sources to consider.
-- dec_range: minimum and maximum Dec of sources to consider.
+- box: a bounding box specifying a region of sky
 - fieldids: Array of run, camcol, field triplets that the source occurs in.
 - frame_dirs: Directories in which to find each field's frame FITS files.
 
@@ -318,8 +324,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
                psfield_dirs=frame_dirs,
                photofield_dirs=frame_dirs,
                photoobj_dirs=frame_dirs,
-               ra_range=(-1000., 1000.),
-               dec_range=(-1000., 1000.),
+               box=BoundingBox(-1000., 1000., -1000., 1000.),
                primary_initialization=true,
                reserve_thread=Ref(false),
                thread_fun=phalse,
@@ -352,12 +357,12 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     end
 
     # Get indicies of entries in the  RA/Dec range of interest.
-    entry_in_range = entry->((ra_range[1] < entry.pos[1] < ra_range[2]) &&
-                             (dec_range[1] < entry.pos[2] < dec_range[2]))
+    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
+                             (box.decmin < entry.pos[2] < box.decmax))
     target_sources = find(entry_in_range, catalog)
 
     nputs(dt_nodeid, string("processing $(length(target_sources)) sources in ",
-          "$(ra_range[1]), $(ra_range[2]), $(dec_range[1]), $(dec_range[2])"))
+          "$(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax)"))
 
     # If there are no objects of interest, return early.
     if length(target_sources) == 0
@@ -447,7 +452,7 @@ end
 """
 Query the SDSS database for all fields that overlap the given RA, Dec range.
 """
-function do_query_overlapping_fields(ramin, ramax, decmin, decmax)
+function get_overlapping_fields(query::BoundingBox)
     f = FITSIO.FITS(extents_scratch())
     hdu = f[2]::FITSIO.TableHDU
 
@@ -462,45 +467,38 @@ function do_query_overlapping_fields(ramin, ramax, decmin, decmax)
 
     close(f)
 
-    # initialize output "table"
-    out = Dict{String, Vector}("run"=>Int[],
-                                    "camcol"=>Int[],
-                                    "field"=>Int[],
-                                    "ramin"=>Float64[],
-                                    "ramax"=>Float64[],
-                                    "decmin"=>Float64[],
-                                    "decmax"=>Float64[])
+    ret = FieldExtent[]
 
     # The ramin, ramax, etc is a bit unintuitive because we're looking
     # for any overlap.
     for i in eachindex(all_ramin)
-        if (all_ramax[i] > ramin && all_ramin[i] < ramax &&
-            all_decmax[i] > decmin && all_decmin[i] < decmax)
-            push!(out["run"], all_run[i])
-            push!(out["camcol"], all_camcol[i])
-            push!(out["field"], all_field[i])
-            push!(out["ramin"], all_ramin[i])
-            push!(out["ramax"], all_ramax[i])
-            push!(out["decmin"], all_decmin[i])
-            push!(out["decmax"], all_decmax[i])
+        if (all_ramax[i] > query.ramin && all_ramin[i] < query.ramax &&
+                all_decmax[i] > query.decmin && all_decmin[i] < query.decmax)
+            cur_box = BoundingBox(
+                all_ramin[i],
+                all_ramax[i],
+                all_decmin[i],
+                all_decmax[i])
+            cur_fe = FieldExtent(
+                all_run[i],
+                all_camcol[i],
+                all_field[i],
+                cur_box)
+            push!(ret, cur_fe)
         end
     end
 
-    return out
+    return ret
 end
 
-"""
-query_overlapping_fieldids(ramin, ramax, decmin, decmax) -> Vector{Tuple{Int, Int, Int}}
 
-Like `query_overlapping_fields`, but return a Vector of
+"""
+Like `get_overlapping_fields`, but return a Vector of
 (run, camcol, field) triplets.
 """
-function query_overlapping_fieldids(ramin, ramax, decmin, decmax)
-    fields = do_query_overlapping_fields(ramin, ramax, decmin, decmax)
-    return Tuple{Int, Int, Int}[(fields["run"][i],
-                                 fields["camcol"][i],
-                                 fields["field"][i])
-                                for i in eachindex(fields["run"])]
+function get_overlapping_fieldids(query::BoundingBox)
+    fes = get_overlapping_fields(query)
+    Tuple{Int, Int, Int}[(fe.run, fe.camcol, fe.field) for fe in fes]
 end
 
 query_frame_dirs(fieldids) =
@@ -514,7 +512,7 @@ called from main entry point for inference for one field
 entry point)
 """
 function infer_field(run::Int, camcol::Int, field::Int,
-                           outdir::AbstractString; objid="")
+                           outdir::String; objid="")
     # ensure that files are staged and set up paths.
     stage_field(run, camcol, field)
     field_dirs = [field_scratchdir(run, camcol, field)]
@@ -552,7 +550,7 @@ end
 """
 NERSC-specific infer function, called from main entry point.
 """
-function infer_box(ramin, ramax, decmin, decmax, outdir)
+function infer_box(box::BoundingBox, outdir)
     # Base.@time hack for distributed environment
     gc_stats = ()
     gc_diff_stats = ()
@@ -562,15 +560,13 @@ function infer_box(ramin, ramax, decmin, decmax, outdir)
 
     times = InferTiming()
     if dt_nnodes > 1
-        divide_and_infer((ramin, ramax),
-                         (decmin, decmax),
+        divide_and_infer(box,
                          timing=times,
                          outdir=outdir)
     else
         # Get vector of (run, camcol, field) triplets overlapping this patch
         tic()
-        fieldids = query_overlapping_fieldids(ramin, ramax,
-                                              decmin, decmax)
+        fieldids = get_overlapping_fieldids(box)
         times.query_fids = toq()
 
         # Get relevant directories corresponding to each field.
@@ -581,8 +577,7 @@ function infer_box(ramin, ramax, decmin, decmax, outdir)
 
         results = infer(fieldids,
                         frame_dirs;
-                        ra_range=(ramin, ramax),
-                        dec_range=(decmin, decmax),
+                        box=box,
                         fpm_dirs=frame_dirs,
                         psfield_dirs=frame_dirs,
                         photoobj_dirs=frame_dirs,
@@ -590,7 +585,7 @@ function infer_box(ramin, ramax, decmin, decmax, outdir)
                         timing=times)
 
         tic()
-        save_results(outdir, ramin, ramax, decmin, decmax, results)
+        save_results(outdir, box, results)
         times.write_results = toq()
     end
 

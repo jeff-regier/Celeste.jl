@@ -43,11 +43,12 @@ function main()
         ramax = parse(Float64, args["<ramax>"])
         decmin = parse(Float64, args["<decmin>"])
         decmax = parse(Float64, args["<decmax>"])
+        box = Celeste.BoundingBox(ramin, ramax, decmin, decmax)
         if args["stage-box"]
-            Celeste.stage_box(ramin, ramax, decmin, decmax)
+            Celeste.stage_box(box)
         elseif args["infer-box"]
             outdir = args["<outdir>"]
-            Celeste.infer_box(ramin, ramax, decmin, decmax, outdir)
+            Celeste.infer_box(box, outdir)
         end
     else
         run = parse(Int, args["<run>"])
