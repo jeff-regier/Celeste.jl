@@ -217,19 +217,18 @@ function load_field_images(
            run::Integer,
            camcol::Integer,
            field::Integer,
-           frame_dir::String;
-           fpm_dir::String=frame_dir,
-           psfield_dir::String=frame_dir,
-           photofield_dir::String=frame_dir)
+           rootdir::String)
+    subdir2 = "$rootdir/$run/$camcol"
+    subdir3 = "$subdir2/$field"
 
     # read gain for each band
     photofield_name = @sprintf("%s/photoField-%06d-%d.fits",
-                               photofield_dir, run, camcol)
+                               subdir2, run, camcol)
     gains = read_field_gains(photofield_name, field)
 
     # open FITS file containing PSF for each band
     psf_name = @sprintf("%s/psField-%06d-%d-%04d.fit",
-                        psfield_dir, run, camcol, field)
+                        subdir3, run, camcol, field)
     psffile = FITSIO.FITS(psf_name)
 
     result = Array(Image, 5)
@@ -238,7 +237,7 @@ function load_field_images(
 
         # load image data
         frame_name = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
-                              frame_dir, band, run, camcol, field)
+                              subdir3, band, run, camcol, field)
         data, calibration, sky, wcs = read_frame(frame_name)
 
         # scale data to raw electron counts
@@ -246,7 +245,7 @@ function load_field_images(
 
         # read mask
         mask_name = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
-                             fpm_dir, run, band, camcol, field)
+                             subdir3, run, band, camcol, field)
         mask_xranges, mask_yranges = read_mask(mask_name)
 
         # apply mask
@@ -564,11 +563,11 @@ combined catalog.
 With `duplicate_policy = :first`, only the first detection is included in the
 combined catalog.
 """
-function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
-        duplicate_policy=:primary)
-    @assert length(fieldids) == length(dirs)
+function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}},
+                             rootdir::String;
+                             duplicate_policy=:primary)
     @assert duplicate_policy == :primary || duplicate_policy == :first
-    @assert duplicate_policy == :primary || length(dirs) == 1
+    @assert duplicate_policy == :primary || length(fieldids) == 1
 
     Log.info("reading photoobj catalogs for $(length(fieldids)) fields")
 
@@ -581,7 +580,7 @@ function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
     rawcatalogs = Array(Dict, length(fieldids))
     for i in eachindex(fieldids)
         run, camcol, field = fieldids[i]
-        dir = dirs[i]
+        dir = "$rootdir/$run/$camcol/$field"
         fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
         Log.info("field $(fieldids[i]): reading $fname")
         rawcatalogs[i] = read_photoobj(fname)

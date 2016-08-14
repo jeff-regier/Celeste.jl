@@ -51,7 +51,9 @@ function load_raw_psf(; x::Float64=500., y::Float64=500.)
   b = 3
 
   psf_filename =
-    @sprintf("%s/psField-%06d-%d-%04d.fit", datadir, run_num, camcol_num, field_num)
+    @sprintf("%s/%s/%s/%s/psField-%06d-%d-%04d.fit", 
+        datadir, run_num, camcol_num, field_num,
+                 run_num, camcol_num, field_num)
   psf_fits = FITSIO.FITS(psf_filename);
   raw_psf_comp = SDSSIO.read_psf(psf_fits, band_letters[b]);
   close(psf_fits)

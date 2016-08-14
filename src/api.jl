@@ -52,28 +52,24 @@ Timing information.
 """
 type InferTiming
     query_fids::Float64
-    get_dirs::Float64
     num_infers::Int64
     read_photoobj::Float64
     read_img::Float64
-    init_mp::Float64
     fit_psf::Float64
     opt_srcs::Float64
     num_srcs::Int64
     write_results::Float64
     wait_done::Float64
 
-    InferTiming() = new(0.0, 0.0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
+    InferTiming() = new(0.0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
 end
 
 
 function add_timing!(i::InferTiming, j::InferTiming)
     i.query_fids = i.query_fids + j.query_fids
-    i.get_dirs = i.get_dirs + j.get_dirs
     i.num_infers = i.num_infers + j.num_infers
     i.read_photoobj = i.read_photoobj + j.read_photoobj
     i.read_img = i.read_img + j.read_img
-    i.init_mp = i.init_mp + j.init_mp
     i.fit_psf = i.fit_psf + j.fit_psf
     i.opt_srcs = i.opt_srcs + j.opt_srcs
     i.num_srcs = i.num_srcs + j.num_srcs
@@ -186,6 +182,7 @@ use Dtree to distribute these sky areas to nodes. Within each node
 use `infer()` to fit the Celeste model to sources in each sky area.
 """
 function divide_and_infer(box::BoundingBox,
+                          stagedir::String,
                           timing=InferTiming(),
                           outdir=".",
                           output_results=save_results)
@@ -237,24 +234,13 @@ function divide_and_infer(box::BoundingBox,
 
         # Get vector of (run, camcol, field) triplets overlapping this patch
         tic()
-        fieldids = get_overlapping_fieldids(iramin, iramax,
-                                              idecmin, idecmax)
+        box = BoundingBox(iramin, iramax, idecmin, idecmax)
+        fieldids = get_overlapping_fieldids(box, stagedir)
         itimes.query_fids = toq()
 
-        # Get relevant directories corresponding to each field.
-        tic()
-        frame_dirs = query_frame_dirs(fieldids)
-        photofield_dirs = query_photofield_dirs(fieldids)
-        itimes.get_dirs = toq()
-
         # run inference for this subarea
-        results = infer(fieldids,
-                        frame_dirs;
+        results = infer(fieldids;
                         box=BoundingBox(iramin, iramax, idecmin, idecmax),
-                        fpm_dirs=frame_dirs,
-                        psfield_dirs=frame_dirs,
-                        photoobj_dirs=frame_dirs,
-                        photofield_dirs=photofield_dirs,
                         reserve_thread=rundt,
                         thread_fun=rundtree,
                         timing=itimes)
@@ -276,7 +262,7 @@ function divide_and_infer(box::BoundingBox,
 end
 
 
-function load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_dirs)
+function load_images(fieldids, stagedir)
     images = TiledImage[]
     image_names = String[]
     image_count = 0
@@ -284,10 +270,7 @@ function load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_di
     for i in 1:length(fieldids)
         Log.info("reading field $(fieldids[i])")
         run, camcol, field = fieldids[i]
-        field_images = SDSSIO.load_field_images(run, camcol, field, frame_dirs[i],
-                                             fpm_dir=fpm_dirs[i],
-                                             psfield_dir=psfield_dirs[i],
-                                             photofield_dir=photofield_dirs[i])
+        field_images = SDSSIO.load_field_images(run, camcol, field, stagedir)
         for b=1:length(field_images)
             image_count += 1
             push!(image_names,
@@ -309,27 +292,21 @@ end
 Fit the Celeste model to sources in a given ra, dec range,
 based on data from specified fields
 
-- box: a bounding box specifying a region of sky
 - fieldids: Array of run, camcol, field triplets that the source occurs in.
-- frame_dirs: Directories in which to find each field's frame FITS files.
+- box: a bounding box specifying a region of sky
 
 Returns:
 
 - Dictionary of results, keyed by SDSS thing_id.
 """
 function infer(fieldids::Vector{Tuple{Int, Int, Int}},
-               frame_dirs::Vector;
+               stagedir::String;
                objid="",
-               fpm_dirs=frame_dirs,
-               psfield_dirs=frame_dirs,
-               photofield_dirs=frame_dirs,
-               photoobj_dirs=frame_dirs,
                box=BoundingBox(-1000., 1000., -1000., 1000.),
                primary_initialization=true,
                reserve_thread=Ref(false),
                thread_fun=phalse,
                timing=InferTiming())
-
     nprocthreads = nthreads()
     if reserve_thread[]
         nprocthreads = nprocthreads-1
@@ -339,7 +316,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     # Read all primary objects in these fields.
     tic()
     duplicate_policy = primary_initialization ? :primary : :first
-    catalog = SDSSIO.read_photoobj_files(fieldids, photoobj_dirs,
+    catalog = SDSSIO.read_photoobj_files(fieldids, stagedir,
                         duplicate_policy=duplicate_policy)
     timing.read_photoobj = toq()
     Log.info("$(length(catalog)) primary sources")
@@ -384,7 +361,7 @@ function infer(fieldids::Vector{Tuple{Int, Int, Int}},
     fill!(image_map, 0)
 
     # TODO: make `images` a 1D GlobalArray
-    images = load_images(fieldids, frame_dirs, fpm_dirs, psfield_dirs, photofield_dirs)
+    images = load_images(fieldids, stagedir)
     timing.read_img = toq()
 
     reserve_thread[] && thread_fun(reserve_thread)
@@ -452,8 +429,9 @@ end
 """
 Query the SDSS database for all fields that overlap the given RA, Dec range.
 """
-function get_overlapping_fields(query::BoundingBox)
-    f = FITSIO.FITS(extents_scratch())
+function get_overlapping_fields(query::BoundingBox, stagedir::String)
+    f = FITSIO.FITS("$stagedir/field_extents.fits")
+
     hdu = f[2]::FITSIO.TableHDU
 
     # read in the entire table.
@@ -496,15 +474,11 @@ end
 Like `get_overlapping_fields`, but return a Vector of
 (run, camcol, field) triplets.
 """
-function get_overlapping_fieldids(query::BoundingBox)
-    fes = get_overlapping_fields(query)
+function get_overlapping_fieldids(query::BoundingBox, stagedir::String)
+    fes = get_overlapping_fields(query, stagedir)
     Tuple{Int, Int, Int}[(fe.run, fe.camcol, fe.field) for fe in fes]
 end
 
-query_frame_dirs(fieldids) =
-    [field_scratchdir(x[1], x[2], x[3]) for x in fieldids]
-query_photofield_dirs(fieldids) =
-    [photofield_scratchdir(x[1], x[2]) for x in fieldids]
 
 """
 called from main entry point for inference for one field
@@ -512,18 +486,11 @@ called from main entry point for inference for one field
 entry point)
 """
 function infer_field(run::Int, camcol::Int, field::Int,
-                           outdir::String; objid="")
-    # ensure that files are staged and set up paths.
-    stage_field(run, camcol, field)
-    field_dirs = [field_scratchdir(run, camcol, field)]
-    photofield_dirs = [photofield_scratchdir(run, camcol)]
-
-    results = infer([(run, camcol, field)], field_dirs;
+                     stagedir::String,
+                     outdir::String;
+                     objid="")
+    results = infer([(run, camcol, field)], stagedir;
                     objid=objid,
-                    fpm_dirs=field_dirs,
-                    psfield_dirs=field_dirs,
-                    photoobj_dirs=field_dirs,
-                    photofield_dirs=photofield_dirs,
                     primary_initialization=false)
 
     fname = if objid == ""
@@ -546,11 +513,10 @@ function save_results(outdir, ramin, ramax, decmin, decmax, results)
 end
 
 
-
 """
 NERSC-specific infer function, called from main entry point.
 """
-function infer_box(box::BoundingBox, outdir)
+function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     # Base.@time hack for distributed environment
     gc_stats = ()
     gc_diff_stats = ()
@@ -561,28 +527,16 @@ function infer_box(box::BoundingBox, outdir)
     times = InferTiming()
     if dt_nnodes > 1
         divide_and_infer(box,
+                         stagedir,
                          timing=times,
                          outdir=outdir)
     else
         # Get vector of (run, camcol, field) triplets overlapping this patch
         tic()
-        fieldids = get_overlapping_fieldids(box)
+        fieldids = get_overlapping_fieldids(box, stagedir)
         times.query_fids = toq()
 
-        # Get relevant directories corresponding to each field.
-        tic()
-        frame_dirs = query_frame_dirs(fieldids)
-        photofield_dirs = query_photofield_dirs(fieldids)
-        times.get_dirs = toq()
-
-        results = infer(fieldids,
-                        frame_dirs;
-                        box=box,
-                        fpm_dirs=frame_dirs,
-                        psfield_dirs=frame_dirs,
-                        photoobj_dirs=frame_dirs,
-                        photofield_dirs=photofield_dirs,
-                        timing=times)
+        results = infer(fieldids, stagedir; box=box, timing=times)
 
         tic()
         save_results(outdir, box, results)
@@ -597,11 +551,9 @@ function infer_box(box::BoundingBox, outdir)
 
     times.num_srcs = max(1, times.num_srcs)
     nputs(dt_nodeid, "timing: query_fids=$(times.query_fids)")
-    nputs(dt_nodeid, "timing: get_dirs=$(times.get_dirs)")
     nputs(dt_nodeid, "timing: num_infers=$(times.num_infers)")
     nputs(dt_nodeid, "timing: read_photoobj=$(times.read_photoobj)")
     nputs(dt_nodeid, "timing: read_img=$(times.read_img)")
-    nputs(dt_nodeid, "timing: init_mp=$(times.init_mp)")
     nputs(dt_nodeid, "timing: fit_psf=$(times.fit_psf)")
     nputs(dt_nodeid, "timing: opt_srcs=$(times.opt_srcs)")
     nputs(dt_nodeid, "timing: num_srcs=$(times.num_srcs)")

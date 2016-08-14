@@ -38,7 +38,8 @@ function test_blob()
     # the full image multiple times.
     blob = SDSSIO.load_field_images(RUN, CAMCOL, FIELD, datadir)
 
-    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" datadir RUN CAMCOL FIELD
+    dir = "$datadir/$RUN/$CAMCOL/$FIELD"
+    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir RUN CAMCOL FIELD
     cat_entries = SDSSIO.read_photoobj_celeste(fname)
 
     ea = make_elbo_args(blob, cat_entries,

@@ -38,6 +38,7 @@ function main()
     args = docopt(DOC, version=v"0.1.0", options_first=true)
 #   TODO: re-enable selective logging by level
 #    set_logging_level(args["--logging"])
+    stagedir = joinpath(ENV["SCRATCH"], "celeste")
     if args["stage-box"] || args["infer-box"]
         ramin = parse(Float64, args["<ramin>"])
         ramax = parse(Float64, args["<ramax>"])
@@ -45,22 +46,25 @@ function main()
         decmax = parse(Float64, args["<decmax>"])
         box = Celeste.BoundingBox(ramin, ramax, decmin, decmax)
         if args["stage-box"]
-            Celeste.stage_box(box)
+            sdssdir = ENV["SDSS_ROOT_DIR"]
+            Celeste.stage_box(box, sdssdir, stagedir)
         elseif args["infer-box"]
             outdir = args["<outdir>"]
-            Celeste.infer_box(box, outdir)
+            Celeste.infer_box(box, stagedir, outdir)
         end
     else
         run = parse(Int, args["<run>"])
         camcol = parse(Int, args["<camcol>"])
         field = parse(Int, args["<field>"])
         if args["infer-field"]
+            sdssdir = ENV["SDSS_ROOT_DIR"]
+            Celeste.stage_field(run, camcol, field, sdssdir, stagedir)
             outdir = args["<outdir>"]
-            Celeste.infer_field(run, camcol, field, outdir)
+            Celeste.infer_field(run, camcol, field, stagedir, outdir)
         elseif args["infer-object"]
             outdir = args["<outdir>"]
             objid = args["<objid>"]
-            Celeste.infer_field(run, camcol, field, outdir; objid=objid)
+            Celeste.infer_field(run, camcol, field, stagedir, outdir; objid=objid)
         elseif args["score-field"]
             resultdir = args["<resultdir>"]
             truthfile = args["<truthfile>"]
