@@ -19,7 +19,7 @@ const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
 const BAND_CHAR_TO_NUM = Dict('u'=>1, 'g'=>2, 'r'=>3, 'i'=>4, 'z'=>5)
 
 
-immutable FieldTriplet
+immutable RunCamcolField
     run::Int64
     camcol::Int64
     field::Int64
@@ -221,7 +221,7 @@ optional keyword arguments `fpm_dir`, `psfield_dir` and `photofield_dir`
 giving the directories of fpM, psField and photoField files. The defaults
 for these arguments is `frame_dir`.
 """
-function load_field_images(ft::FieldTriplet, datadir::String)
+function load_field_images(ft::RunCamcolField, datadir::String)
     subdir2 = "$datadir/$(ft.run)/$(ft.camcol)"
     subdir3 = "$subdir2/$(ft.field)"
 
@@ -567,7 +567,7 @@ combined catalog.
 With `duplicate_policy = :first`, only the first detection is included in the
 combined catalog.
 """
-function read_photoobj_files(fts::Vector{FieldTriplet},
+function read_photoobj_files(fts::Vector{RunCamcolField},
                              datadir::String;
                              duplicate_policy=:primary)
     @assert duplicate_policy == :primary || duplicate_policy == :first

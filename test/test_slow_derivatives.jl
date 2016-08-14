@@ -52,7 +52,7 @@ function test_real_image()
 
     run, camcol, field = (3900, 6, 269)
 
-    images = SDSSIO.load_field_images(FieldTriplet(run, camcol, field), datadir)
+    images = SDSSIO.load_field_images(RunCamcolField(run, camcol, field), datadir)
     tiled_images = TiledImage[TiledImage(img) for img in images]
     dir = joinpath(datadir, "$run/$camcol/$field")
     fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field

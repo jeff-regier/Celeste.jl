@@ -2,7 +2,7 @@ using Base.Test
 using DataFrames
 import WCS
 
-const rcf = FieldTriplet(3900, 6, 269)
+const rcf = RunCamcolField(3900, 6, 269)
 
 
 """

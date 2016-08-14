@@ -25,7 +25,12 @@ all : $(SUBDIR3)/fpM-$(RUN6)-u$(CAMCOL)-$(FIELD4).fit \
       $(SUBDIR3)/frame-z-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
       $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit \
       $(SUBDIR3)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits \
-      $(SUBDIR2)/photoField-$(RUN6)-$(CAMCOL).fits
+      $(SUBDIR2)/photoField-$(RUN6)-$(CAMCOL).fits \
+      field_extents.fits
+
+
+field_extents.fits :
+	wget --quiet https://www.dropbox.com/s/jmc1asvnsl962zy/field_extents.fits
 
 $(SUBDIR3)/fpM-$(RUN6)-%$(CAMCOL)-$(FIELD4).fit :
 	wget --quiet -P $(SUBDIR3) $(URLBASE)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz

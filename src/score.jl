@@ -173,7 +173,7 @@ load_primary(dir, run, camcol, field)
 Load the SDSS photoObj catalog used to initialize celeste, and reformat column
 names to match what the rest of the scoring code expects.
 """
-function load_primary(dir, rcf::FieldTriplet)
+function load_primary(dir, rcf::RunCamcolField)
     run, camcol, field = rcf.run, rcf.camcol, rcf.field
 
     fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
@@ -529,7 +529,7 @@ end
 """
 Score the celeste results for a particular field
 """
-function score_field_disk(rcf::FieldTriplet, resultdir, truthfile)
+function score_field_disk(rcf::RunCamcolField, resultdir, truthfile)
     fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" resultdir rcf.run rcf.camcol rcf.field
     results = JLD.load(fname, "results")
 
@@ -540,7 +540,7 @@ end
 """
 Display results from Celeste, Primary, and Coadd for a particular object
 """
-function score_object_disk(rcf::FieldTriplet, objid, resultdir, truthfile)
+function score_object_disk(rcf::RunCamcolField, objid, resultdir, truthfile)
     fname = @sprintf "%s/celeste-objid-%s.jld" resultdir objid
     results = JLD.load(fname, "results")
 

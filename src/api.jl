@@ -5,7 +5,10 @@ import .Log
 using .Model
 import .SDSSIO
 import .Infer
-import .SDSSIO: FieldTriplet
+import .SDSSIO: RunCamcolField
+
+#set this to false to use source-division parallelism
+const SKY_DIVISION_PARALLELISM=true
 
 const TILE_WIDTH = 20
 const MIN_FLUX = 2.0
@@ -171,13 +174,13 @@ end
 """
 Divide the given ra, dec range into sky areas of `wira`x`widec` and
 use Dtree to distribute these sky areas to nodes. Within each node
-use `infer()` to fit the Celeste model to sources in each sky area.
+use `one_node_infer()` to fit the Celeste model to sources in each sky area.
 """
-function divide_and_infer(box::BoundingBox,
-                          stagedir::String,
-                          timing=InferTiming(),
-                          outdir=".",
-                          output_results=save_results)
+function divide_sky_and_infer(
+                box::BoundingBox,
+                stagedir::String,
+                timing=InferTiming(),
+                outdir=".")
     if dt_nodeid == 1
         nputs(dt_nodeid, "running on $dt_nnodes nodes")
     end
@@ -231,13 +234,13 @@ function divide_and_infer(box::BoundingBox,
         itimes.query_fids = toq()
 
         # run inference for this subarea
-        results = infer(rcfs;
+        results = one_node_infer(rcfs;
                         box=BoundingBox(iramin, iramax, idecmin, idecmax),
                         reserve_thread=rundt,
                         thread_fun=rundtree,
                         timing=itimes)
         tic()
-        output_results(outdir, iramin, iramax, idecmin, idecmax, results)
+        save_results(outdir, iramin, iramax, idecmin, idecmax, results)
         itimes.write_results = toq()
 
         timing.num_infers = timing.num_infers+1
@@ -281,8 +284,8 @@ end
 
 
 """
-Fit the Celeste model to sources in a given ra, dec range,
-based on data from specified fields
+Use mulitple threads on one node to 
+fit the Celeste model to sources in a given bounding box.
 
 - rcfs: Array of run, camcol, field triplets that the source occurs in.
 - box: a bounding box specifying a region of sky
@@ -291,7 +294,8 @@ Returns:
 
 - Dictionary of results, keyed by SDSS thing_id.
 """
-function infer(rcfs::Vector{FieldTriplet},
+function one_node_infer(
+               rcfs::Vector{RunCamcolField},
                stagedir::String;
                objid="",
                box=BoundingBox(-1000., 1000., -1000., 1000.),
@@ -338,21 +342,11 @@ function infer(rcfs::Vector{FieldTriplet},
         return Dict{Int, Dict}()
     end
 
-    # TODO: make `target_sources` a 1D GlobalArray
-
     reserve_thread[] && thread_fun(reserve_thread)
 
     # Read in images for all (run, camcol, field).
     tic()
 
-    # TODO: make `image_map` a 3D GlobalArray
-    max_run = maximum([rcf.run for rcf in rcfs])
-    max_camcol = maximum([rcf.camcol for rcf in rcfs])
-    max_field = maximum([rcf.field for rcf in rcfs])
-    image_map = Array(Int64, max_run, max_camcol, max_field)
-    fill!(image_map, 0)
-
-    # TODO: make `images` a 1D GlobalArray
     images = load_images(rcfs, stagedir)
     timing.read_img = toq()
 
@@ -366,7 +360,7 @@ function infer(rcfs::Vector{FieldTriplet},
     reserve_thread[] && thread_fun(reserve_thread)
 
     # iterate over sources
-    results = Dict{Int, Dict}()
+    results = Dict[]
     results_lock = SpinLock()
     function process_sources()
         tid = threadid()
@@ -395,12 +389,13 @@ function infer(rcfs::Vector{FieldTriplet},
                     runtime = time() - t0
 
                     lock(results_lock)
-                    results[entry.thing_id] = Dict(
-                                 "objid"=>entry.objid,
-                                 "ra"=>entry.pos[1],
-                                 "dec"=>entry.pos[2],
-                                 "vs"=>vs_opt,
-                                 "runtime"=>runtime)
+                    push!(results, Dict(
+                        "thing_id"=>entry.thing_id,
+                        "objid"=>entry.objid,
+                        "ra"=>entry.pos[1],
+                        "dec"=>entry.pos[2],
+                        "vs"=>vs_opt,
+                        "runtime"=>runtime))
                     unlock(results_lock)
 #                catch ex
 #                    Log.err(ex)
@@ -437,7 +432,7 @@ function get_overlapping_field_extents(query::BoundingBox, stagedir::String)
 
     close(f)
 
-    ret = Tuple{FieldTriplet, BoundingBox}[]
+    ret = Tuple{RunCamcolField, BoundingBox}[]
 
     # The ramin, ramax, etc is a bit unintuitive because we're looking
     # for any overlap.
@@ -446,7 +441,7 @@ function get_overlapping_field_extents(query::BoundingBox, stagedir::String)
                 all_decmax[i] > query.decmin && all_decmin[i] < query.decmax)
             cur_box = BoundingBox(all_ramin[i], all_ramax[i],
                                   all_decmin[i], all_decmax[i])
-            cur_fe = FieldTriplet(all_run[i], all_camcol[i], all_field[i])
+            cur_fe = RunCamcolField(all_run[i], all_camcol[i], all_field[i])
             push!(ret, (cur_fe, cur_box))
         end
     end
@@ -470,11 +465,11 @@ called from main entry point for inference for one field
 (used for accuracy assessment, infer-box is the primary inference
 entry point)
 """
-function infer_field(rcf::FieldTriplet,
+function infer_field(rcf::RunCamcolField,
                      stagedir::String,
                      outdir::String;
                      objid="")
-    results = infer([rcf,], stagedir; objid=objid, primary_initialization=false)
+    results = one_node_infer([rcf,], stagedir; objid=objid, primary_initialization=false)
     fname = if objid == ""
         @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
     else
@@ -496,7 +491,7 @@ end
 
 
 """
-NERSC-specific infer function, called from main entry point.
+called from main entry point.
 """
 function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     # Base.@time hack for distributed environment
@@ -507,18 +502,17 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     elapsed_time = time_ns()
 
     times = InferTiming()
-    if dt_nnodes > 1
-        divide_and_infer(box,
-                         stagedir,
-                         timing=times,
-                         outdir=outdir)
+    if !SKY_DIVISION_PARALLELISM
+        divide_sources_and_infer(box, stagedir; timing=times, outdir=outdir)
+    elseif dt_nnodes > 1
+        divide_sky_and_infer(box, stagedir; timing=times, outdir=outdir)
     else
-        # Get vector of (run, camcol, field) triplets overlapping this patch
         tic()
+        # Get vector of (run, camcol, field) triplets overlapping this patch
         rcfs = get_overlapping_fields(box, stagedir)
         times.query_fids = toq()
 
-        results = infer(rcfs, stagedir; box=box, timing=times)
+        results = one_node_infer(rcfs, stagedir; box=box, timing=times)
 
         tic()
         save_results(outdir, box, results)

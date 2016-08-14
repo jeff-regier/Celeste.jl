@@ -5,7 +5,7 @@ Stage all relevant files for the given run, camcol, field to user's SCRATCH
 directory. The target locations are given by `field_scratchdir` and
 `photofield_scratchdir`.
 """
-function stage_field(rcf::FieldTriplet, sdssdir::String, stagedir::String)
+function stage_field(rcf::RunCamcolField, sdssdir::String, stagedir::String)
     run, camcol, field = rcf.run, rcf.camcol, rcf.field
 
     # destination directory for all files except photofield.

@@ -12,3 +12,5 @@
 
 # Require force to add any data
 test/data/*
+
+*.swp

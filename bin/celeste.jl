@@ -2,7 +2,7 @@
 
 using DocOpt
 import Celeste
-import Celeste.SDSSIO.FieldTriplet
+import Celeste.SDSSIO.RunCamcolField
 
 const DOC =
 """Run Celeste.
@@ -57,7 +57,7 @@ function main()
         run = parse(Int, args["<run>"])
         camcol = parse(Int, args["<camcol>"])
         field = parse(Int, args["<field>"])
-        rcf = FieldTriplet(run, camcol, field)
+        rcf = RunCamcolField(run, camcol, field)
         if args["infer-field"]
             sdssdir = ENV["SDSS_ROOT_DIR"]
             Celeste.stage_field(rcf, sdssdir, stagedir)
