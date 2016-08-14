@@ -76,9 +76,9 @@ function stage_box(box::BoundingBox, sdssdir, stagedir)
     mkpath(stagedir)
     stage_extents = "$stagedir/field_extents.fits"
     cp(ENV["FIELD_EXTENTS"], stage_extents, remove_destination=true)
-    fieldids = get_overlapping_fieldids(box, stagedir)
-    for (run, camcol, field) in fieldids
-        stage_field(run, camcol, field, sdssdir, stagedir)
+    rcfs = get_overlapping_fields(box, stagedir)
+    for rcf in rcfs
+        stage_field(rcf, sdssdir, stagedir)
     end
 end
 

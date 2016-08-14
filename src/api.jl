@@ -437,7 +437,7 @@ function get_overlapping_field_extents(query::BoundingBox, stagedir::String)
 
     close(f)
 
-    ret = Tuple{FieldTriplet, BoundingBox}
+    ret = Tuple{FieldTriplet, BoundingBox}[]
 
     # The ramin, ramax, etc is a bit unintuitive because we're looking
     # for any overlap.
