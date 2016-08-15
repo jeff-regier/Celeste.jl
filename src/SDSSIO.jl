@@ -18,6 +18,14 @@ const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
 
 const BAND_CHAR_TO_NUM = Dict('u'=>1, 'g'=>2, 'r'=>3, 'i'=>4, 'z'=>5)
 
+
+immutable RunCamcolField
+    run::Int64
+    camcol::Int64
+    field::Int64
+end
+
+
 """
 interp_sky(data, xcoords, ycoords)
 
@@ -213,23 +221,18 @@ optional keyword arguments `fpm_dir`, `psfield_dir` and `photofield_dir`
 giving the directories of fpM, psField and photoField files. The defaults
 for these arguments is `frame_dir`.
 """
-function load_field_images(
-           run::Integer,
-           camcol::Integer,
-           field::Integer,
-           frame_dir::String;
-           fpm_dir::String=frame_dir,
-           psfield_dir::String=frame_dir,
-           photofield_dir::String=frame_dir)
+function load_field_images(ft::RunCamcolField, datadir::String)
+    subdir2 = "$datadir/$(ft.run)/$(ft.camcol)"
+    subdir3 = "$subdir2/$(ft.field)"
 
     # read gain for each band
     photofield_name = @sprintf("%s/photoField-%06d-%d.fits",
-                               photofield_dir, run, camcol)
-    gains = read_field_gains(photofield_name, field)
+                               subdir2, ft.run, ft.camcol)
+    gains = read_field_gains(photofield_name, ft.field)
 
     # open FITS file containing PSF for each band
     psf_name = @sprintf("%s/psField-%06d-%d-%04d.fit",
-                        psfield_dir, run, camcol, field)
+                        subdir3, ft.run, ft.camcol, ft.field)
     psffile = FITSIO.FITS(psf_name)
 
     result = Array(Image, 5)
@@ -238,7 +241,7 @@ function load_field_images(
 
         # load image data
         frame_name = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
-                              frame_dir, band, run, camcol, field)
+                              subdir3, band, ft.run, ft.camcol, ft.field)
         data, calibration, sky, wcs = read_frame(frame_name)
 
         # scale data to raw electron counts
@@ -246,7 +249,7 @@ function load_field_images(
 
         # read mask
         mask_name = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
-                             fpm_dir, run, band, camcol, field)
+                     subdir3, ft.run, band, ft.camcol, ft.field)
         mask_xranges, mask_yranges = read_mask(mask_name)
 
         # apply mask
@@ -272,7 +275,7 @@ function load_field_images(
 
         # Set it to use a constant background but include the non-constant data.
         result[bandnum] = Image(H, W, data, bandnum, wcs, psf,
-                                run, camcol, field, epsilon_mat,
+                                ft.run, ft.camcol, ft.field, epsilon_mat,
                                 iota_vec, sdsspsf)
     end
 
@@ -564,31 +567,31 @@ combined catalog.
 With `duplicate_policy = :first`, only the first detection is included in the
 combined catalog.
 """
-function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
-        duplicate_policy=:primary)
-    @assert length(fieldids) == length(dirs)
+function read_photoobj_files(fts::Vector{RunCamcolField},
+                             datadir::String;
+                             duplicate_policy=:primary)
     @assert duplicate_policy == :primary || duplicate_policy == :first
-    @assert duplicate_policy == :primary || length(dirs) == 1
+    @assert duplicate_policy == :primary || length(fts) == 1
 
-    Log.info("reading photoobj catalogs for $(length(fieldids)) fields")
+    Log.info("reading photoobj catalogs for $(length(fts)) fields")
 
     # the code below assumes there is at least one field.
-    if length(fieldids) == 0
+    if length(fts) == 0
         return CatalogEntry[]
     end
 
     # Read in all photoobj catalogs.
-    rawcatalogs = Array(Dict, length(fieldids))
-    for i in eachindex(fieldids)
-        run, camcol, field = fieldids[i]
-        dir = dirs[i]
-        fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
-        Log.info("field $(fieldids[i]): reading $fname")
+    rawcatalogs = Array(Dict, length(fts))
+    for i in eachindex(fts)
+        ft = fts[i]
+        dir = "$datadir/$(ft.run)/$(ft.camcol)/$(ft.field)"
+        fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir ft.run ft.camcol ft.field
+        Log.info("field $(fts[i]): reading $fname")
         rawcatalogs[i] = read_photoobj(fname)
     end
 
-    for i in eachindex(fieldids)
-        Log.info("field $(fieldids[i]): $(length(rawcatalogs[i]["objid"])) entries")
+    for i in eachindex(fts)
+        Log.info("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) entries")
     end
 
     # Limit each catalog to primary objects and objects where thing_id != -1
@@ -603,8 +606,8 @@ function read_photoobj_files(fieldids::Vector{Tuple{Int, Int, Int}}, dirs;
         end
     end
 
-    for i in eachindex(fieldids)
-        Log.info(string("field $(fieldids[i]): $(length(rawcatalogs[i]["objid"])) ",
+    for i in eachindex(fts)
+        Log.info(string("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) ",
                 "filtered entries"))
     end
 

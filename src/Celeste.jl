@@ -14,8 +14,9 @@ include("Infer.jl")
 
 # public API
 export infer, score_field
-include("stage.jl")
 include("api.jl")
+include("source_division_inference.jl")
+include("stage.jl")
 include("score.jl")
 
 end # module

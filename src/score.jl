@@ -173,7 +173,9 @@ load_primary(dir, run, camcol, field)
 Load the SDSS photoObj catalog used to initialize celeste, and reformat column
 names to match what the rest of the scoring code expects.
 """
-function load_primary(dir, run, camcol, field)
+function load_primary(dir, rcf::RunCamcolField)
+    run, camcol, field = rcf.run, rcf.camcol, rcf.field
+
     fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
     objs = SDSSIO.read_photoobj(fname)
 
@@ -527,26 +529,22 @@ end
 """
 Score the celeste results for a particular field
 """
-function score_field_disk(run, camcol, field, resultdir, truthfile)
-    fieldid = (run, camcol, field)
-    fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" resultdir run camcol field
+function score_field_disk(rcf::RunCamcolField, resultdir, truthfile)
+    fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" resultdir rcf.run rcf.camcol rcf.field
     results = JLD.load(fname, "results")
-    primary_dir = photoobj_dir(run, camcol)
 
-    println( score_field(fieldid, results, truthfile, primary_dir) )
+    println( score_field(rcf, results, truthfile) )
 end
 
 
 """
 Display results from Celeste, Primary, and Coadd for a particular object
 """
-function score_object_disk(run, camcol, field, objid, resultdir, truthfile)
-    fieldid = (run, camcol, field)
+function score_object_disk(rcf::RunCamcolField, objid, resultdir, truthfile)
     fname = @sprintf "%s/celeste-objid-%s.jld" resultdir objid
     results = JLD.load(fname, "results")
-    primary_dir = photoobj_dir(run, camcol)
 
-    (celeste_df, primary_df, coadd_df) = match_catalogs(fieldid,
+    (celeste_df, primary_df, coadd_df) = match_catalogs(rcf,
                                 results, truthfile, primary_dir)
 
     println("\n\nceleste results:\n")

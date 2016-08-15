@@ -5,6 +5,7 @@ using Celeste: Model, ElboDeriv
 import Celeste: WCSUtils, Infer, ElboDeriv
 import Celeste: PSF, OptimizeElbo, SDSSIO, SensitiveFloats, Transform
 import SensitiveFloats.clear!
+import SDSSIO: RunCamcolField
 
 include("Synthetic.jl")
 include("SampleData.jl")
