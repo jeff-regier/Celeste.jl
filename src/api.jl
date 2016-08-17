@@ -360,6 +360,9 @@ function one_node_infer(
     reserve_thread[] && thread_fun(reserve_thread)
 
     # iterate over sources
+    curr_source = 1
+    last_source = length(target_sources)
+    sources_lock = SpinLock()
     results = Dict[]
     results_lock = SpinLock()
     function process_sources()
@@ -371,15 +374,18 @@ function one_node_infer(
                 cpu_pause()
             end
         else
-            # divide loop iterations among threads
-            f, l = divparts(length(target_sources), nprocthreads, tid)
-            for ts = f:l
-                s = target_sources[ts]
-                entry = catalog[s]
-
+            while true
+                lock(sources_lock)
+                ts = curr_source
+                curr_source = curr_source+1
+                unlock(sources_lock)
+                if ts >= last_source
+                    break
+                end
 #                try
+                    s = target_sources[ts]
+                    entry = catalog[s]
                     nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
-                    gc()
 
                     t0 = time()
                     # TODO: subset images to images_local too.
@@ -387,25 +393,26 @@ function one_node_infer(
                                                 catalog[neighbor_map[ts]],
                                                 entry)
                     runtime = time() - t0
-
-                    lock(results_lock)
-                    push!(results, Dict(
-                        "thing_id"=>entry.thing_id,
-                        "objid"=>entry.objid,
-                        "ra"=>entry.pos[1],
-                        "dec"=>entry.pos[2],
-                        "vs"=>vs_opt,
-                        "runtime"=>runtime))
-                    unlock(results_lock)
 #                catch ex
-#                    Log.err(ex)
+#                    error(ex)
 #                end
+
+                lock(results_lock)
+                push!(results, Dict(
+                    "thing_id"=>entry.thing_id,
+                    "objid"=>entry.objid,
+                    "ra"=>entry.pos[1],
+                    "dec"=>entry.pos[2],
+                    "vs"=>vs_opt,
+                    "runtime"=>runtime))
+                unlock(results_lock)
             end
         end
     end
 
     tic()
     ccall(:jl_threading_run, Void, (Any,), Core.svec(process_sources))
+    ccall(:jl_threading_profile, Void, ())
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
 
@@ -488,6 +495,9 @@ function save_results(outdir, ramin, ramax, decmin, decmax, results)
                      outdir, ramin, ramax, decmin, decmax)
     JLD.save(fname, "results", results)
 end
+
+save_results(outdir, box, results) =
+    save_results(outdir, box.ramin, box.ramax, box.decmin, box.decmax, results)
 
 
 """
