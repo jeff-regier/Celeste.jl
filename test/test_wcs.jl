@@ -33,11 +33,15 @@ Returns:
 The meaing of the frame data structures is thoroughly documented here:
 http://data.sdss3.org/datamodel/files/BOSS_PHOTOOBJ/frames/RERUN/RUN/CAMCOL/frame.html
 """
-function load_raw_field(field_dir, run_num, camcol_num, field_num, b, gain)
+function load_raw_field(run::Int64, camcol::Int64, field::Int64, b::Int64, gain)
     @assert 1 <= b <= 5
     b_letter = band_letters[b]
 
-    img_filename = "$field_dir/frame-$b_letter-$run_num-$camcol_num-$field_num.fits"
+    field_dir = joinpath(datadir, "$run/$camcol/$field")
+    img_filename = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
+                       field_dir, b_letter, run, camcol, field)
+    println(img_filename)
+
     img_fits = FITSIO.FITS(img_filename)
     @assert length(img_fits) == 4
 
@@ -105,12 +109,12 @@ end
 
 
 function test_pixel_deriv_to_world_deriv()
-    run_num = "003900"
-    camcol_num = "6"
-    field_num = "0269"
+    run_num = 3900
+    camcol_num = 6
+    field_num = 269
 
     # The gain is wrong but it doesn't matter.
-    wcs = load_raw_field(datadir, run_num, camcol_num, field_num, 1, 1.0)[7];
+    wcs = load_raw_field(run_num, camcol_num, field_num, 1, 1.0)[7];
 
     function test_fun(pix_loc::Array{Float64, 1})
         pix_loc[1]^2 + 0.5 * pix_loc[2]
@@ -149,13 +153,13 @@ end
 
 
 function test_world_to_pix()
-    run_num = "003900"
-    camcol_num = "6"
-    field_num = "0269"
+    run_num = 3900
+    camcol_num = 6
+    field_num = 269
 
     # The gain will not be used.
     nelec, calib_col, sky_grid, sky_x, sky_y, sky_image, wcs =
-        load_raw_field(datadir, run_num, camcol_num, field_num, 3, 1.0);
+        load_raw_field(run_num, camcol_num, field_num, 3, 1.0);
 
     pix_center = Float64[0.5 * size(nelec, 1), 0.5 * size(nelec, 1)]
     pix_loc = pix_center + [5., 3.]

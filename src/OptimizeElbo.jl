@@ -10,9 +10,6 @@ import DataFrames
 import Optim
 
 
-# Only include until this is merged with Optim.jl.
-include("newton_trust_region.jl")
-
 # The main reason we need this is to have a mutable type to keep
 # track of function evaluations, but we can keep other metadata
 # in it as well.
@@ -217,24 +214,19 @@ function maximize_f(f::Function,
     optim_obj_wrap.state.verbose = verbose
 
     x0 = transform.vp_to_array(ea.vp, omitted_ids)
-    d = Optim.TwiceDifferentiableFunction(
-            optim_obj_wrap.f_value, optim_obj_wrap.f_grad!,
-            optim_obj_wrap.f_hessian!)
+    tr_method =
+        Optim.NewtonTrustRegion(initial_delta=10.0, delta_hat=1e9, eta=0.1,
+                                rho_lower=rho_lower, rho_upper=0.75)
 
-    # TODO: use the Optim version after newton_tr is merged.
-    nm_result = newton_tr(d,
-                          x0[:],
-                          NewtonTR();
-                          xtol = xtol_rel,
-                          ftol = ftol_abs,
-                          grtol = 1e-8,
-                          iterations = max_iters,
-                          store_trace = verbose,
-                          show_trace = false,
-                          extended_trace = verbose,
-                          initial_delta=10.0,
-                          delta_hat=1e9,
-                          rho_lower = rho_lower)
+    options = Optim.OptimizationOptions(;
+        x_tol = xtol_rel, f_tol = ftol_abs, g_tol = 1e-8,
+        iterations = max_iters, store_trace = verbose,
+        show_trace = false, extended_trace = verbose)
+
+    nm_result = Optim.optimize(optim_obj_wrap.f_value,
+                               optim_obj_wrap.f_grad!,
+                               optim_obj_wrap.f_hessian!,
+                               x0[:], tr_method, options)
 
     iter_count = optim_obj_wrap.state.f_evals
     transform.array_to_vp!(reshape(nm_result.minimum, size(x0)),
@@ -272,4 +264,3 @@ end
 
 
 end
-
