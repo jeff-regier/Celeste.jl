@@ -4,7 +4,7 @@ using Celeste: Model, SensitiveFloats, ElboDeriv
 using Distributions
 import ElboDeriv: BvnComponent, GalaxyCacheComponent
 import ElboDeriv: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
-
+using DerivativeTestUtils
 
 """
 This is the function of which get_bvn_derivs!() returns the derivatives.

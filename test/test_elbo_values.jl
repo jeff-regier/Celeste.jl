@@ -2,6 +2,7 @@ using Celeste: ElboDeriv, SensitiveFloats
 
 using Base.Test
 using Distributions
+using DerivativeTestUtils
 
 ######################################
 # Helper functions

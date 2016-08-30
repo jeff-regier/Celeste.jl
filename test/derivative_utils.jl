@@ -1,3 +1,12 @@
+
+module DerivativeTestUtils
+
+using Celeste: Model, ElboDeriv
+import ForwardDiff
+
+export forward_diff_model_params, unwrap_vp_vector, wrap_vp_vector,
+       test_with_autodiff, trim_tiles!
+
 """"
 Return an ElboArgs with the corresponding type.
 """
@@ -83,3 +92,6 @@ function trim_tiles!(tiled_blob::Vector{TiledImage}, keep_pixels)
         pixels1[:, setdiff(1:w_width, keep_pixels)] = NaN
 	end
 end
+
+
+end # end module

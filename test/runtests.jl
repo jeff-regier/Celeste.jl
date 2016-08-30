@@ -9,13 +9,14 @@ import SDSSIO: RunCamcolField
 
 include("Synthetic.jl")
 include("SampleData.jl")
-include(joinpath(Pkg.dir("Celeste"), "test/derivative_utils.jl"))
 
 import Synthetic
 using SampleData
 
 using Base.Test
 using Distributions
+
+include(joinpath(Pkg.dir("Celeste"), "test/derivative_utils.jl"))
 
 anyerrors = false
 
