@@ -9,6 +9,7 @@ import SDSSIO: RunCamcolField
 
 include("Synthetic.jl")
 include("SampleData.jl")
+include(joinpath(Pkg.dir("Celeste"), "test/derivative_utils.jl"))
 
 import Synthetic
 using SampleData

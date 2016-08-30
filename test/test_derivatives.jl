@@ -6,8 +6,6 @@ import ElboDeriv: BvnComponent, GalaxyCacheComponent
 import ElboDeriv: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 
 
-include("derivative_utils.jl")
-
 """
 This is the function of which get_bvn_derivs!() returns the derivatives.
 It is only used for testing.
