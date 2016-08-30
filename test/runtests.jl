@@ -9,14 +9,13 @@ import SDSSIO: RunCamcolField
 
 include("Synthetic.jl")
 include("SampleData.jl")
+include("DerivativeTestUtils.jl")
 
 import Synthetic
 using SampleData
 
 using Base.Test
 using Distributions
-
-include(joinpath(Pkg.dir("Celeste"), "test/derivative_utils.jl"))
 
 anyerrors = false
 
@@ -53,8 +52,8 @@ if test_detailed_derivatives
     warn("Testing ELBO derivatives, which may be slow.")
     push!(testfiles, "test_slow_derivatives.jl")
 else
-    warn("Skipping derivative tests.  ",
-         "To test derivatives, run tests with the flag ", test_derivatives_flag)
+    warn("Skipping slow derivative tests.  ",
+         "To test slow derivatives, run tests with the flag ", test_derivatives_flag)
 end
 
 
