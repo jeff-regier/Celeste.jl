@@ -8,9 +8,9 @@
 # "Documented" here:
 # http://data.sdss3.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/psField.html
 
-# I think you need to replicate the code in 
+# I think you need to replicate the code in
 # https://github.com/rgiordan/astrometry.net/blob/master/sdss/common.py
-# ... called in 
+# ... called in
 # https://github.com/dstndstn/astrometry.net/blob/master/sdss/dr7.py
 # There is also this, which is a bit more explicit:
 # https://www.sdss3.org/dr8/algorithms/read_psf.php
@@ -27,6 +27,10 @@
 # 'http://data.sdss3.org/sas/dr10/boss/photo/redux/301/3900/objcs/6/psField-003900-6-0269.fit'
 
 
+##############
+# The photoObj file format is documented here:
+https://data.sdss.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
+
 
 ###############################
 # calibration
@@ -41,4 +45,3 @@
 # http://data.sdss3.org/sas/dr12/boss/sweeps/dr9/301/calibObj-003900-6-gal.fits.gz
 # http://data.sdss3.org/sas/dr12/boss/sweeps/dr9/301/calibObj-003900-6-star.fits.gz
 # ...but these files are huge.  Why?
-

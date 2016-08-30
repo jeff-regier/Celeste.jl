@@ -4,9 +4,7 @@ using Celeste: Model, SensitiveFloats, ElboDeriv
 using Distributions
 import ElboDeriv: BvnComponent, GalaxyCacheComponent
 import ElboDeriv: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
-
-
-include("derivative_utils.jl")
+using DerivativeTestUtils
 
 function test_elbo()
     blob, ea, body = gen_two_body_dataset()
