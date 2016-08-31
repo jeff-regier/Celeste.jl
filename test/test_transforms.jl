@@ -3,9 +3,7 @@
 
 using Celeste: Transform, SensitiveFloats
 using Compat
-
-include("derivative_utils.jl")
-
+using DerivativeTestUtils
 
 """
 Generate parameters within the given bounds.

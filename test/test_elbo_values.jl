@@ -2,8 +2,7 @@ using Celeste: ElboDeriv, SensitiveFloats
 
 using Base.Test
 using Distributions
-
-include("derivative_utils.jl")
+using DerivativeTestUtils
 
 ######################################
 # Helper functions
