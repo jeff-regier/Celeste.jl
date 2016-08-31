@@ -214,6 +214,19 @@ function test_set_patch_size()
 end
 
 
+function test_flat_image()
+    blob, ea, three_bodies = gen_three_body_dataset()
+    img0 = ea.images[1]
+
+    flat_img = FlatTiledImage(img0)
+    @assert img0.H == flat_img.H
+
+    img = TiledImage(flat_img)
+    @assert img0.H == img.H
+    # maybe should check that wcs is the same too....
+end
+
+test_flat_image()
 test_blob()
 test_stamp_get_object_psf()
 test_get_tiled_image_source()
