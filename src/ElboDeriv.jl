@@ -427,7 +427,6 @@ Args:
     - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
     - tile: An ImageTile
     - h, w: The integer locations of the pixel within the tile
-    - sbs: Source brightnesses
     - gal_mcs: Galaxy components
     - star_mcs: Star components
 
@@ -441,7 +440,6 @@ function populate_fsm_vecs!{NumType <: Number}(
                     tile_sources::Vector{Int},
                     tile::ImageTile,
                     h::Int, w::Int,
-                    sbs::Vector{SourceBrightness{NumType}},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
     x = Float64[tile.h_range[h], tile.w_range[w]]
@@ -778,7 +776,7 @@ function get_expected_pixel_brightness!{NumType <: Number}(
     # This combines the bvn components to get the brightness for each
     # source separately.
     populate_fsm_vecs!(
-        elbo_vars, ea, tile_sources, tile, h, w, sbs, gal_mcs, star_mcs)
+        elbo_vars, ea, tile_sources, tile, h, w, gal_mcs, star_mcs)
 
     # # This combines the sources into a single brightness value for the pixel.
     combine_pixel_sources!(elbo_vars, ea, tile_sources, tile, sbs)

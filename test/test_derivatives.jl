@@ -85,7 +85,7 @@ function test_add_log_term()
             elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, ea.S, ea.S)
             elbo_vars_loc.calculate_derivs = calculate_derivs
             ElboDeriv.populate_fsm_vecs!(
-                elbo_vars_loc, ea, tile_source_map, tile, h, w, sbs, gal_mcs, star_mcs)
+                elbo_vars_loc, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
             ElboDeriv.combine_pixel_sources!(
                 elbo_vars_loc, ea, tile_source_map, tile, sbs)
 
@@ -133,7 +133,7 @@ function test_combine_pixel_sources()
             elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, ea.S, ea.S)
             elbo_vars_loc.calculate_derivs = calculate_derivs
             ElboDeriv.populate_fsm_vecs!(
-                elbo_vars_loc, ea, tile_source_map, tile, h, w, sbs, gal_mcs, star_mcs)
+                elbo_vars_loc, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
             ElboDeriv.combine_pixel_sources!(
                 elbo_vars_loc, ea, tile_source_map, tile, sbs)
             deepcopy(elbo_vars_loc)
@@ -183,7 +183,7 @@ function test_e_g_s_functions()
                 NumType, ea.S, length(ea.active_sources))
             elbo_vars_loc.calculate_derivs = calculate_derivs
             ElboDeriv.populate_fsm_vecs!(
-                elbo_vars_loc, ea, tile_source_map, tile, h, w, sbs, gal_mcs, star_mcs)
+                elbo_vars_loc, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
             ElboDeriv.accumulate_source_brightness!(elbo_vars_loc, ea, sbs, s, b)
             deepcopy(elbo_vars_loc)
         end
