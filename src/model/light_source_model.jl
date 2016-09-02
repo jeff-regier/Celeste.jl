@@ -7,15 +7,15 @@ const Ia = 2
 
 
 type CatalogEntry
-    pos::Vector{Float64}
+    pos::Vec{2, Float64}
     is_star::Bool
-    star_fluxes::Vector{Float64}
-    gal_fluxes::Vector{Float64}
+    star_fluxes::Vec{5, Float64}
+    gal_fluxes::Vec{5, Float64}
     gal_frac_dev::Float64
     gal_ab::Float64
     gal_angle::Float64
     gal_scale::Float64
-    objid::String
+    objid::Vec{30, UInt8}
     thing_id::Int
 end
 

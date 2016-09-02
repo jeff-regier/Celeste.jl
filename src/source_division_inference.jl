@@ -43,7 +43,8 @@ function load_images(box, rcfs, stagedir)
         rcf = rcfs[n]
         raw_images = SDSSIO.load_field_images(rcf, stagedir)
         @assert(length(raw_images) == 5)
-        timgs = [FlatTiledImage(img) for img in raw_images]
+        timgs = [FlatTiledImage(TiledImage(img)) for img in raw_images]
+        sizeof(timgs[1])
         limages[i] = tuple(timgs...)
    
         # second, load the `catalog_offset` and `task_count` arrays with
