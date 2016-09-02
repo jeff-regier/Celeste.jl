@@ -94,14 +94,15 @@ function run_single_source_sampler(entry::CatalogEntry,
     active_pixels = ElboDeriv.get_active_pixels(ea)
 
     # generate the star logpdf
+    # TODO create a sample_from_star_prior function (over dispersion...)
     star_logpdf, star_logprior = make_star_logpdf(images, active_pixels, ea)
     star_state  = [.1 for i in 1:7]
     println("Star logpdf: ", star_logpdf(star_state))
-
     #star_state   = init_star_state()
     #star_samples, star_lls = run_slice_sampler(star_logpdf, star_state)
 
-    # generate the galaxy logpdf and sample
+    # generate the galaxy logpdf
+    # TODO create a sample_from_gal_prior function (with over dispersion)
     #gal_state   = init_gal_state()
     gal_logpdf, gal_logprior = make_galaxy_logpdf(images, active_pixels, ea)
     gal_state = [.1 for i in 1:11]
@@ -117,6 +118,17 @@ function run_single_source_sampler(entry::CatalogEntry,
 end
 
 
+"""
+Run a slice sampler for N steps
+"""
+function run_slice_sampler(lnpdf::Function, th0::Vector{Float64}, N::Int)
+    #TODO return samps and log likelihood
+end
+
+function run_star_gal_switcher(star_lls::Vector{Float64},
+                               gal_lls::Vector{Float64})
+    #TODO switch between states of the chain, alt to RJMCMC
+end
 
 
 """
