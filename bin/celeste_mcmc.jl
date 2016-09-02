@@ -58,8 +58,8 @@ end
 
 
 type SampleResult
-    star_samples::Vector{StarState}
-    galaxy_samples::Vector{GalaxyState}
+    star_samples::Array{Float64, 2}
+    galaxy_samples::Array{Float64, 2}
     type_samples::Vector{Int}
     star_lls::Vector{Float64}
     galaxy_lls::Vector{Float64}
@@ -94,8 +94,8 @@ function run_single_source_sampler(entry::CatalogEntry,
     active_pixels = ElboDeriv.get_active_pixels(ea)
 
     # generate the star logpdf
-    star_logpdf  = make_star_logpdf(images, active_pixels, ea)
-    star_state = [.1 for i in 1:7]
+    star_logpdf, star_logprior = make_star_logpdf(images, active_pixels, ea)
+    star_state  = [.1 for i in 1:7]
     println("Star logpdf: ", star_logpdf(star_state))
 
     #star_state   = init_star_state()
@@ -103,7 +103,9 @@ function run_single_source_sampler(entry::CatalogEntry,
 
     # generate the galaxy logpdf and sample
     #gal_state   = init_gal_state()
-    #gal_logpdf  = make_gal_logpdf(images, active_pixels, ea, prior)
+    gal_logpdf, gal_logprior = make_galaxy_logpdf(images, active_pixels, ea)
+    gal_state = [.1 for i in 1:11]
+    println("Gal logpdf: ", gal_logpdf(gal_state))
     #gal_samples, gal_lls  = run_slice_sampler(gal_logpdf, gal_state)
 
     # generate pointers to star/gal type (to infer p(star | data))
@@ -116,8 +118,14 @@ end
 
 
 
+
 """
 Creates a vectorized version of the star logpdf
+
+Args:
+  - images: Vector of TiledImage types (data for log_likelihood)
+  - active_pixels: Vector of ActivePixels on which the log_likelihood is based
+  - ea: ElboArgs book keeping argument - keeps the
 """
 function make_star_logpdf(images::Vector{TiledImage},
                           active_pixels::Vector{ActivePixel},
@@ -127,59 +135,76 @@ function make_star_logpdf(images::Vector{TiledImage},
     prior    = load_prior()
     subprior = prior.star
 
-    function star_log_prior(state::Vector{Float64})
+    function star_logprior(state::Vector{Float64})
         brightness, colors, u = state[1], state[2:5], state[6:end]
-        ll_brightness = logpdf(subprior.brightness, brightness)
-        ll_component  = [logpdf(subprior.colors[k], colors) for k in 1:2]
-        ll_color      = logsumexp(ll_component + log(subprior.color_component.p))
-        return ll_brightness + ll_color
+        return color_logprior(brightness, colors, prior, true)
     end
 
     # define star log joint probability density function
     function star_logpdf(state::Vector{Float64})
-        ll_prior = star_log_prior(state)
+        ll_prior = star_logprior(state)
 
         brightness, colors, position = state[1], state[2:5], state[6:end]
-        state = LatentState(true,  #is_star,
-                            brightness,
-                            1, # color_component (not needed)
-                            colors,
-                            position,
-                            .1, .1, .1, .1)
-        ll_like  = state_log_likelihood([state],
-                                        images, active_pixels, ea)
+        dummy_gal_shape = [.1, .1, .1, .1]
+        ll_like  = state_log_likelihood(true, brightness, colors, position,
+                                        dummy_gal_shape, images,
+                                        active_pixels, ea)
         return ll_like + ll_prior
     end
 
-    return star_logpdf
+    return star_logpdf, star_logprior
 end
 
 
-function state_log_prior(states::Vector{LatentState},
-                         prior::Prior)
-    # prior
-    log_prior = 0.0
-    for state in states
-        #state = states[s]
-        log_prior += logpdf(prior.is_star, state.is_star ? 1 : 0)
 
-        subprior = state.is_star ? prior.star : prior.galaxy
-        log_prior += logpdf(subprior.brightness, state.brightness)
-        log_prior += logpdf(subprior.color_component, state.color_component)
-        log_prior += logpdf(subprior.colors[state.color_component], state.colors)
+function make_galaxy_logpdf(images::Vector{TiledImage},
+                            active_pixels::Vector{ActivePixel},
+                            ea::ElboArgs)
 
-        # position and gal_angle have uniform priors--we ignore them
+    # define star prior log probability density function
+    prior    = load_prior()
+    subprior = prior.galaxy
 
-        if !state.is_star
-            log_prior += logpdf(subprior.gal_scale, state.gal_scale)
-            log_prior += logpdf(subprior.gal_ab, state.gal_ab)
-            log_prior += logpdf(subprior.gal_fracdev, state.gal_fracdev)
-        end
+    function galaxy_logprior(state::Vector{Float64})
+        brightness, colors, u, gal_shape = state[1], state[2:5], state[6:7], state[8:end]
+        # brightness prior
+        ll_b = color_logprior(brightness, colors, prior, true)
+        ll_s = shape_logprior(gal_shape, prior)
+        return ll_b + ll_s
     end
-    return log_prior
+
+    # define star log joint probability density function
+    function galaxy_logpdf(state::Vector{Float64})
+        ll_prior = galaxy_logprior(state)
+
+        brightness, colors, position, gal_shape = state[1], state[2:5], state[6:7], state[8:end]
+        ll_like  = state_log_likelihood(false, brightness, colors, position,
+                                        gal_shape, images,
+                                        active_pixels, ea)
+        return ll_like + ll_prior
+    end
+    return galaxy_logpdf, galaxy_logprior
 end
 
 
+"""
+Log likelihood of a single source given source params.
+
+Args:
+  - is_star: bool describing the type of source
+  - brightness: log r-band value
+  - colors: array of colors
+  - position: ra/dec of source
+  - gal_shape: vector of galaxy shape params (used if is_star=false)
+  - images: vector of TiledImage types (data for likelihood)
+  - active_pixels: vector of ActivePixels over which the ll is summed
+  - ea: ElboArgs object that maintains params for all sources
+
+Returns:
+  - result: a scalar describing the log likelihood of the
+            (brightness,colors,position,gal_shape) params conditioned on
+            the rest of the args
+"""
 function state_log_likelihood(is_star::Bool,
                               brightness::Float64,
                               colors::Vector{Float64},
@@ -189,12 +214,16 @@ function state_log_likelihood(is_star::Bool,
                               active_pixels::Vector{ActivePixel},
                               ea::ElboArgs)
 
-    # convert brightness/colors to fluxes for scaling
-    fluxes = brightness_to_fluxes(brightness, colors)
+    # TODO: cache the background rate image!! --- does not need to be recomputed at each ll eval
 
-    # make sure elbo-args reflects the position and galaxy shape passed in
-    ea.vp[1][ids.u[1]] = position[1]
-    ea.vp[1][ids.u[2]] = position[2]
+    # convert brightness/colors to fluxes for scaling
+    fluxes = colors_to_fluxes(brightness, colors)
+
+    # make sure elbo-args reflects the position and galaxy shape passed in for
+    # the first source in the elbo args (first is current source, the rest are
+    # conditioned on)
+    ea.vp[1][ids.u[1]]    = position[1]
+    ea.vp[1][ids.u[2]]    = position[2]
     ea.vp[1][ids.e_dev]   = gal_shape[1]
     ea.vp[1][ids.e_axis]  = gal_shape[2]
     ea.vp[1][ids.e_angle] = gal_shape[3]
@@ -207,7 +236,7 @@ function state_log_likelihood(is_star::Bool,
     elbo_vars.calculate_derivs = false
     elbo_vars.calculate_hessian= false
 
-    #TODO: load `star_mcs` and `gal_mcs`, as shown in `ElboDeriv.process_active_pixels!`
+    # load star/gal mixture components
     star_mcs_vec = Array(Array{BvnComponent{Float64}, 2}, ea.N)
     gal_mcs_vec  = Array(Array{GalaxyCacheComponent{Float64}, 4}, ea.N)
     for b=1:ea.N
@@ -217,49 +246,38 @@ function state_log_likelihood(is_star::Bool,
                 calculate_hessian=elbo_vars.calculate_hessian)
     end
 
-    # iterate over the pixels, summing pixel-wise poisson rates
+    # iterate over the pixels, summing pixel-specific poisson rates
+    ll = 0.
     for pixel in active_pixels
-        tile = ea.images[pixel.n].tiles[pixel.tile_ind]
-        band = ea.images[pixel.n].band
+        tile         = ea.images[pixel.n].tiles[pixel.tile_ind]
         tile_sources = ea.tile_source_map[pixel.n][pixel.tile_ind]
-        this_pixel = tile.pixels[pixel.h, pixel.w]
+        this_pixel   = tile.pixels[pixel.h, pixel.w]
+        pixel_band   = tile.b
 
-        # set the position and galaxy shape parameters
-        ea.vp[1][ids.u[1]] = state.position[1]
-        ea.vp[1][ids.u[2]] = state.position[2]
-
+        # compute the unit-flux pixel values
         ElboDeriv.populate_fsm_vecs!(elbo_vars, ea, tile_sources, tile,
                                      pixel.h, pixel.w,
                                      gal_mcs_vec[pixel.n], star_mcs_vec[pixel.n])
 
-        rate = tile.epsilon_mat[pixel.h, pixel.w]
-        for s in tile_sources
-            state = states[s]
-            rate += state.is_star ? elbo_vars.fs0m_vec[s].v : elbo_vars.fs1m_vec[s].v
-        end
-        rate *= tile.iota_vec[pixel.h]
+        # TODO incorporate background rate for pixel into this epsilon_mat
+        # compute the background rate for this pixel
+        background_rate = tile.epsilon_mat[pixel.h, pixel.w]
+        #for s in tile_sources
+        #    println("tile source s: ", s)
+        #    state = states[s]
+        #    rate += state.is_star ? elbo_vars.fs0m_vec[s].v : elbo_vars.fs1m_vec[s].v
+        #end
 
+        # this source's rate, add to background for total
+        this_rate  = is_star ? elbo_vars.fs0m_vec[1].v : elbo_vars.fs1m_vec[1].v
+        pixel_rate = fluxes[pixel_band]*this_rate + background_rate
+
+        # multiply by image's gain for this pixel
+        rate     = pixel_rate * tile.iota_vec[pixel.h]
         pixel_ll = logpdf(Poisson(rate[1]), round(Int, this_pixel))
         ll += pixel_ll
     end
     return ll
-end
-
-
-function joint_log_prob(images::Vector{TiledImage},
-                        active_pixels::Vector{ActivePixel},
-                        states::Vector{LatentState},
-                        ea::ElboArgs,
-                        prior::Prior)
-
-    # log prior for state variables
-    log_prior = state_log_prior(states, prior)
-
-    # log like
-    log_like = state_log_likelihood(states, images, active_pixels, ea)
-
-    println("log prob: ", log_prior, " ", log_like)
-    return log_prior + log_like
 end
 
 
@@ -312,9 +330,51 @@ function one_node_infer_mcmc(rcfs::Vector{RunCamcolField},
 end
 
 
-#
-# util
-#
+#####################
+# util funs         #
+#####################
+
+function color_logprior(brightness::Float64,
+                        colors::Vector{Float64},
+                        prior::Prior,
+                        is_star::Bool)
+    subprior = is_star ? prior.star : prior.galaxy
+    ll_brightness = logpdf(subprior.brightness, brightness)
+    ll_component  = [logpdf(subprior.colors[k], colors) for k in 1:2]
+    ll_color      = logsumexp(ll_component + log(subprior.color_component.p))
+    return ll_brightness + ll_color
+end
+
+
+function shape_logprior(gal_shape::Vector{Float64}, prior::Prior)
+    # position and gal_angle have uniform priors--we ignore them
+    gdev, gaxis, gangle, gscale = gal_shape
+    ll_shape = 0.
+    ll_shape += logpdf(prior.galaxy.gal_scale, gscale)
+    ll_shape += logpdf(prior.galaxy.gal_ab, gaxis)
+    ll_shape += logpdf(prior.galaxy.gal_fracdev, gdev)
+    return ll_shape
+end
+
+
+function logsumexp(a::Vector{Float64})
+    a_max = maximum(a)
+    out = log(sum(exp(a - a_max)))
+    out += a_max
+    return out
+end
+
+
+function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
+    ret    = Array(Float64, 5)
+    ret[3] = exp(brightness)
+    ret[4] = ret[3] * exp(colors[3]) #vs[ids.c1[3, i]])
+    ret[5] = ret[4] * exp(colors[4]) #vs[ids.c1[4, i]])
+    ret[2] = ret[3] / exp(colors[2]) #vs[ids.c1[2, i]])
+    ret[1] = ret[2] / exp(colors[1]) #vs[ids.c1[1, i]])
+    ret
+end
+
 
 function load_prior()
     pp = Model.load_prior()
@@ -335,22 +395,6 @@ function load_prior()
     return Prior(Bernoulli(.5), star_prior, gal_prior)
 end
 
-function logsumexp(a::Vector{Float64})
-    a_max = maximum(a)
-    out = log(sum(exp(a - a_max)))
-    out += a_max
-    return out
-end
-
-function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
-    ret    = Array(Float64, 5)
-    ret[3] = exp(brightness)
-    ret[4] = ret[3] * exp(colors[3]) #vs[ids.c1[3, i]])
-    ret[5] = ret[4] * exp(colors[4]) #vs[ids.c1[4, i]])
-    ret[2] = ret[3] / exp(colors[2]) #vs[ids.c1[2, i]])
-    ret[1] = ret[2] / exp(colors[1]) #vs[ids.c1[1, i]])
-    ret
-end
 
 # Main test entry point
 function run_gibbs_sampler_fixed()
