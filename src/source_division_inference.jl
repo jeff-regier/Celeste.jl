@@ -153,7 +153,7 @@ function load_images(box, rcfs, stagedir)
         rcf = rcfs[n]
         raw_images = SDSSIO.load_field_images(rcf, stagedir)
         @assert(length(raw_images) == 5)
-        timgs = [FlatTiledImage(TiledImage(img)) for img in raw_images]
+        timgs = [convert(FlatTiledImage, TiledImage(img)) for img in raw_images]
         sizeof(timgs[1])
         limages[i] = tuple(timgs...)
    
@@ -161,6 +161,8 @@ function load_images(box, rcfs, stagedir)
         # a number of sources for each field.
         # (We'll accumulate the entries later.)
         local_catalog = fetch_catalog(rcf, stagedir)
+        cef = convert(FlatCatalogEntry, local_catalog[1])
+        println(sizeof(cef))
 
         # we'll use sources outside of the box to render the background,
         # but we won't optimize them
@@ -214,7 +216,7 @@ function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     catalog_size = catalog_offset[end]
     num_tasks = task_offset[end]
 
-    catalog = Garray(Tuple{CatalogEntry, RunCamcolField}, catalog_size)
+    catalog = Garray(Tuple{FlatCatalogEntry, RunCamcolField}, catalog_size)
 
     # entries in `tasks` are indexes into `catalog`
     tasks = Garray(Int64, num_tasks)
