@@ -10,45 +10,16 @@ import ..Infer
 import ..SDSSIO: RunCamcolField
 
 
-#set this to false to use source-division parallelism
-const SKY_DIVISION_PARALLELISM=true
+using Base.Threads
+using Garbo
 
 const TILE_WIDTH = 20
 const MIN_FLUX = 2.0
 
-# Use distributed parallelism (with Dtree)
-if haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
-    const Distributed = true
-    using Dtree
-else
-    const Distributed = false
-    const dt_nodeid = 1
-    const dt_nnodes = 1
-    DtreeScheduler(n, f) = ()
-    initwork(dt) = 0, (1, 0)
-    getwork(dt) = 0, (1, 0)
-    runtree(dt) = 0
-    cpu_pause() = ()
-end
+# set this to false to use source-division parallelism
+const SKY_DIVISION_PARALLELISM=true
 
-# Use threads (on the loop over sources)
-const Threaded = true
-if Threaded && VERSION > v"0.5.0-dev"
-    using Base.Threads
-else
-    # Pre-Julia 0.5 there are no threads
-    nthreads() = 1
-    threadid() = 1
-    macro threads(x)
-        x
-    end
-    SpinLock() = 1
-    lock(l) = ()
-    unlock(l) = ()
-end
-
-
-# A workitem is of this ra / dec size
+# In sky-division parallelism, a workitem is of this ra / dec size
 const wira = 0.025
 const widec = 0.025
 
@@ -152,7 +123,7 @@ function time_puts(elapsedtime, bytes, gctime, allocs)
     elseif gctime > 0
         s = string(s, @sprintf(", %.2f%% gc time", 100*gctime/elapsedtime))
     end
-    nputs(dt_nodeid, s)
+    nputs(nodeid, s)
 end
 
 
@@ -195,8 +166,8 @@ function divide_sky_and_infer(
                 stagedir::String;
                 timing=InferTiming(),
                 outdir=".")
-    if dt_nodeid == 1
-        nputs(dt_nodeid, "running on $dt_nnodes nodes")
+    if nodeid == 1
+        nputs(nodeid, "running on $nnodes nodes")
     end
 
     # how many `wira` X `widec` sky areas (work items)?
@@ -205,11 +176,11 @@ function divide_sky_and_infer(
     ndec = ceil(Int64, (box.decmax - box.decmin) / widec)
 
     num_work_items = nra * ndec
-    each = ceil(Int64, num_work_items / dt_nnodes)
+    each = ceil(Int64, num_work_items / nnodes)
 
-    if dt_nodeid == 1
-        nputs(dt_nodeid, "work item dimensions: $wira X $widec")
-        nputs(dt_nodeid, "$num_work_items work items, ~$each per node")
+    if nodeid == 1
+        nputs(nodeid, "work item dimensions: $wira X $widec")
+        nputs(nodeid, "$num_work_items work items, ~$each per node")
     end
 
     # create Dtree and get the initial allocation
@@ -225,14 +196,14 @@ function divide_sky_and_infer(
     end
 
     # work item processing loop
-    nputs(dt_nodeid, "initially $ni work items ($ci to $li)")
+    nputs(nodeid, "initially $ni work items ($ci to $li)")
     itimes = InferTiming()
     while ni > 0
         li == 0 && break
         if ci > li
-            nputs(dt_nodeid, "consumed allocation (last was $li)")
+            nputs(nodeid, "consumed allocation (last was $li)")
             ni, (ci, li) = getwork(dt)
-            nputs(dt_nodeid, "got $ni work items ($ci to $li)")
+            nputs(nodeid, "got $ni work items ($ci to $li)")
             continue
         end
         item = ci
@@ -261,7 +232,7 @@ function divide_sky_and_infer(
         add_timing!(timing, itimes)
         rundtree(rundt)
     end
-    nputs(dt_nodeid, "out of work")
+    nputs(nodeid, "out of work")
     tic()
     while rundt[]
         rundtree(rundt)
@@ -348,7 +319,7 @@ function one_node_infer(
                              (box.decmin < entry.pos[2] < box.decmax))
     target_sources = find(entry_in_range, catalog)
 
-    nputs(dt_nodeid, string("processing $(length(target_sources)) sources in ",
+    nputs(nodeid, string("processing $(length(target_sources)) sources in ",
           "$(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax)"))
 
     # If there are no objects of interest, return early.
@@ -388,6 +359,7 @@ function one_node_infer(
                 cpu_pause()
             end
         else
+            gc_enable(false)
             while true
                 lock(sources_lock)
                 ts = curr_source
@@ -400,7 +372,7 @@ function one_node_infer(
 #                try
                     s = target_sources[ts]
                     entry = catalog[s]
-                    nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
+                    nputs(nodeid, "processing source $s: objid = $(entry.objid)")
 
                     t0 = time()
                     # TODO: subset images to images_local too.
@@ -423,6 +395,7 @@ function one_node_infer(
                 unlock(results_lock)
             end
         end
+        gc_enable(true)
     end
 
     tic()
@@ -530,8 +503,7 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     if !SKY_DIVISION_PARALLELISM
         Log.debug("source division parallelism")
         divide_sources_and_infer(box, stagedir; timing=times, outdir=outdir)
-    elseif dt_nnodes > 1
-        Log.debug("sky division parallelism")
+    elseif nnodes > 1
         divide_sky_and_infer(box, stagedir; timing=times, outdir=outdir)
     else
         Log.debug("multithreaded parallelism only")
@@ -554,16 +526,16 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
               Base.gc_alloc_count(gc_diff_stats))
 
     times.num_srcs = max(1, times.num_srcs)
-    nputs(dt_nodeid, "timing: query_fids=$(times.query_fids)")
-    nputs(dt_nodeid, "timing: num_infers=$(times.num_infers)")
-    nputs(dt_nodeid, "timing: read_photoobj=$(times.read_photoobj)")
-    nputs(dt_nodeid, "timing: read_img=$(times.read_img)")
-    nputs(dt_nodeid, "timing: fit_psf=$(times.fit_psf)")
-    nputs(dt_nodeid, "timing: opt_srcs=$(times.opt_srcs)")
-    nputs(dt_nodeid, "timing: num_srcs=$(times.num_srcs)")
-    nputs(dt_nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
-    nputs(dt_nodeid, "timing: write_results=$(times.write_results)")
-    nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
+    nputs(nodeid, "timing: query_fids=$(times.query_fids)")
+    nputs(nodeid, "timing: num_infers=$(times.num_infers)")
+    nputs(nodeid, "timing: read_photoobj=$(times.read_photoobj)")
+    nputs(nodeid, "timing: read_img=$(times.read_img)")
+    nputs(nodeid, "timing: fit_psf=$(times.fit_psf)")
+    nputs(nodeid, "timing: opt_srcs=$(times.opt_srcs)")
+    nputs(nodeid, "timing: num_srcs=$(times.num_srcs)")
+    nputs(nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
+    nputs(nodeid, "timing: write_results=$(times.write_results)")
+    nputs(nodeid, "timing: wait_done=$(times.wait_done)")
 end
 
 end

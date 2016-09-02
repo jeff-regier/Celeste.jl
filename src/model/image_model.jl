@@ -102,6 +102,7 @@ type TiledImage
     W::Int
 
     # subimages
+    # TODO: with FixedSizeArrays, can change this to Mat{N,M,ImageTile}
     tiles::Matrix{ImageTile}
 
     # all tiles have the same height and width
@@ -111,10 +112,12 @@ type TiledImage
     b::Int
 
     # World coordinates
+    # TODO: remove pointers from this
     wcs::WCSTransform
 
     # The components of the point spread function.
-    psf::Vector{PsfComponent}
+    # TODO: is 3 right?
+    psf::NTuple{3,PsfComponent}
 
     # SDSS-specific identifiers. A field is a particular region of the sky.
     # A Camcol is the output of one camera column as part of a Run.
@@ -124,6 +127,7 @@ type TiledImage
 
     # storing a RawPSF here isn't ideal, because it's an SDSS type
     # not a Celeste type
+    # TODO: any pointers in here?
     raw_psf_comp::RawPSF
 end
 

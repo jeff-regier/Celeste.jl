@@ -15,14 +15,153 @@ function in_box(entry::CatalogEntry, box::BoundingBox)
 end
 
 
+function load_images(box, rcfs, stagedir)
+    num_fields = length(rcfs)
+
+    # each cell of `images` contains B=5 tiled images
+    images = Garray(NTuple{5,FlatTiledImage}, num_fields)
+
+    # stores first index of each field's sources in the catalog array
+    catalog_offset = Garray(Int64, num_fields)
+
+    # stores first index of each field's tasks in the tasks array
+    task_offset = Garray(Int64, num_fields)
+
+    # get local distribution of the global array; this should be identical
+    # for all the arrays (since they're all the same size)
+    lo, hi = distribution(images, nodeid)
+    nlocal = hi[1]-lo[1]+1
+
+    # get access to the local parts of the global arrays
+    limages = access(images, lo, hi)
+    lcatalog_offset = access(catalog_offset, lo, hi)
+    ltask_offset = access(task_offset, lo, hi)
+
+    for i in 1:nlocal
+        n = lo[1] + i - 1
+
+        rcf = rcfs[n]
+        raw_images = SDSSIO.load_field_images(rcf, stagedir)
+        @assert(length(raw_images) == 5)
+        timgs = [FlatTiledImage(img) for img in raw_images]
+        limages[i] = tuple(timgs...)
+   
+        # second, load the `catalog_offset` and `task_count` arrays with
+        # a number of sources for each field.
+        # (We'll accumulate the entries later.)
+        local_catalog = fetch_catalog(rcf, stagedir)
+
+        # we'll use sources outside of the box to render the background,
+        # but we won't optimize them
+        local_tasks = filter(s->in_box(s, box), local_catalog)
+
+        lcatalog_offset[i] = length(local_catalog)
+        ltask_offset[i] = length(local_tasks)
+    end
+    flush(images)
+    flush(catalog_offset)
+    flush(task_offset)
+    sync()
+
+    # folds right, converting each field's count to offsets in # `catalog`
+    # and `tasks`. this is a prefix sum, which can be done in parallel
+    # (TODO: add this to Garbo) but is being done sequentially here
+    for nid = 1:nnodes
+        # one node at a time
+        if nid == nodeid
+            # the first node has no predecessor
+            if nid == 1
+                catalog_size = 0
+                num_tasks = 0
+            # all other nodes have to get the sum from their predecessor
+            else
+                prev = get(catalog_offset, lo-1, lo-1)
+                catalog_size = prev[1]
+                prev = get(task_offset, lo-1, lo-1)
+                num_tasks = prev[1]
+            end
+            # do the local summing
+            for i in 1:nlocal
+                catalog_size += lcatalog_offset[i]
+                lcatalog_offset[i] = catalog_size
+                num_tasks += ltask_offset[i]
+                ltask_offset[i] = num_tasks
+            end
+        end
+        # sync to ensure orderly progression
+        flush(catalog_offset)
+        flush(task_offset)
+        sync()
+    end
+
+    images, catalog_offset, task_offset
+end
+
+
+function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
+    num_fields = length(rcfs)
+    catalog_size = catalog_offset[end]
+    num_tasks = task_offset[end]
+
+    catalog = Garray(Tuple{CatalogEntry, RunCamcolField}, catalog_size)
+
+    # entries in `tasks` are indexes into `catalog`
+    tasks = Garray(Int64, num_tasks)
+
+    # get local distribution of the arrays
+    colo, cohi = distribution(catalog_offset, nodeid)
+    nlocal = cohi[1]-colo[1]+1
+    clo, chi = distribution(catalog, nodeid)
+    lcatalog_size = chi[1]-clo[1]+1
+    tlo, thi = distribution(tasks, nodeid)
+    ltasks_size = thi[1]-tlo[1]+1
+
+    # get access to the local parts of the global arrays
+    lcatalog = access(catalog, clo, chi)
+    ltasks = access(tasks, tlo, thi)
+
+    # iterate over the local catalog offsets to build the catalog and tasks list
+    for i in 1:nlocal
+        n = colo[1] + i - 1
+        rcf = rcfs[n]
+
+        local_catalog = fetch_catalog(rcf, stagedir)
+
+        local_t = 0
+        for local_s in 1:length(local_catalog)
+            entry = local_catalog[local_s]
+            # `s` is the global index of this source (in the catalog)
+            offset = n == 1 ? 0 : catalog_offset[n-1]
+            s = offset + local_s
+            # each field's primary detection is stored contiguously
+            #catalog[s] = (entry, rcf)
+            put!(catalog, [s], [s], [(entry, rcf)])
+
+            if in_box(entry, box)
+                local_t += 1
+                offset = n == 1 ? 0 : task_offset[n - 1]
+                t = offset + local_t
+                #tasks[t] = s
+                put!(tasks, [t], [t], [s])
+            end
+        end
+    end
+
+    catalog, tasks
+end
+
+
 function invert_rcf_array(rcfs)
-    max_run = maximum([rcf.run for rcf in rcfs])
-    max_camcol = maximum([rcf.camcol for rcf in rcfs])
-    max_field = maximum([rcf.field for rcf in rcfs])
+    max_run = 1
+    max_camcol = 1
+    max_field = 1
+    for rcf in rcfs
+        max_run = maximum(max_run, rcf.run)
+        max_camcol = maximum(max_run, rcf.camcol)
+        max_field = maximum(max_run, rcf.field)
+    end
 
-    rcf_to_index = Array(Int64, max_run, max_camcol, max_field)
-
-    fill!(rcf_to_index, -1)
+    rcf_to_index = zeros(Int64, max_run, max_camcol, max_field)
 
     # this should be really fast, each node could do it
     for n in 1:length(rcfs)
@@ -34,121 +173,46 @@ function invert_rcf_array(rcfs)
 end
 
 
-function load_images(box, rcfs, stagedir)
-    # TODO: set `total_threads`. We may not want to use all threads possible
-    # on all nodes, since this operation hits disk. Maybe just 1 thread per node?
-    total_threads = 5
-    num_fields = length(rcfs)
-    fields_per_thread = ceil(Int, num_fields / total_threads)
+function optimize_source(s, catalog, catalog_offset, rcf_to_index, images)
+    local_images = Vector{TiledImage}[]
+    local_catalog = CatalogEntry[];
 
-    #TODO: make `images` a global array
-    # (each cell of `images` contains B=5 tiled images)
-    images = Array(Vector{TiledImage}, num_fields)
+    entry, primary_rcf = catalog[s]
+    t_box = BoundingBox(entry.pos[1] - 1e-8, entry.pos[1] + 1e-8,
+                        entry.pos[2] - 1e-8, entry.pos[2] + 1e-8)
+    surrounding_rcfs = get_overlapping_fields(t_box, stagedir)
 
-    #TODO: make `catalog_offset` a global array too.
-    # It stores first index of each field's sources in the catalog array.
-    catalog_offset = Array(Int64, num_fields)
+    for rcf in surrounding_rcfs
+        n = rcf_to_index[rcf.run, rcf.camcol, rcf.field]
 
-    #TODO: make `task_offset` a global array too.
-    # It stores first index of each field's tasks in the tasks array.
-    task_offset = Array(Int64, num_fields)
+        push!(local_images, images[n])
 
-    #TODO: use dtree to have each thread on each node
-    #  load some fields.
-    #Note: this loop and the next one over threads hit disk, so we may not want
-    #  to use all available threads. (The third loop over threads is the 
-    #  only cpu intensive loop.)
-    for m in 0:(total_threads - 1)
-        n0 = 1 + m * fields_per_thread
-        nend = min(num_fields, (m + 1) * fields_per_thread)
-
-        for n in n0:nend
-            # first, load the field array
-            rcf = rcfs[n]
-            raw_images = SDSSIO.load_field_images(rcf, stagedir)
-            @assert(length(raw_images) == 5)
-            images[n] = [TiledImage(img) for img in raw_images]
-   
-            # second, load the `catalog_offset` and `task_count` arrays with
-            # a number of sources for each field.
-            # (We'll accumulate the entries later.)
-            local_catalog = fetch_catalog(rcf, stagedir)
-
-            # we'll use sources outside of the box to render the background,
-            # but we won't optimize them
-            local_tasks = filter(s->in_box(s, box), local_catalog)
-
-            catalog_offset[n] = length(local_catalog)
-            task_offset[n] = length(local_tasks)
+        s_a = n == 1 ? 1 : catalog_offset[n - 1] + 1
+        s_b = catalog_offset[n]
+        for neighbor in catalog[s_a:s_b]
+            push!(local_catalog, neighbor[1])
         end
     end
 
-   # folds right, converting each field's count to its offset in `catalog`
-   catalog_size = 0
-    for n in 1:num_fields
-        catalog_size += catalog_offset[n]
-        catalog_offset[n] = catalog_size
+    flat_images = TiledImage[]
+    for img5 in local_images, img in img5
+        push!(flat_images, img)
     end
 
-    # folds right, converting each field's count to its offset in `tasks`
-    num_tasks = 0
-    for n in 1:num_fields
-        num_tasks += task_offset[n]
-        task_offset[n] = num_tasks
-    end
+    i = findfirst(local_catalog, entry)
+    neighbor_indexes = Infer.find_neighbors([i,], local_catalog, flat_images)[1]
+    neighbors = local_catalog[neighbor_indexes]
 
-    images, catalog_offset, task_offset
-end
+    vs_opt = Infer.infer_source(flat_images, neighbors, entry)
+    # TODO: write vs_opt (the results) to disk, to a global array of size num_tasks,
+    # or to a local array, and then flush the array to disk later.
 
-
-function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
-    # TODO: set `total_threads`. We may not want to use all threads possible
-    # on all nodes, since this operation hits disk. Maybe just 1 thread per node?
-    total_threads = 3
-    num_fields = length(rcfs)
-    fields_per_thread = ceil(Int, num_fields / total_threads)
-
-    catalog_size = catalog_offset[end]
-    num_tasks = task_offset[end]
-
-    #TODO: make the `catalog` a GlobalArray
-    catalog = Array(Tuple{CatalogEntry, RunCamcolField}, catalog_size)
-
-    # entries in `tasks` are indexes into `catalog`
-    #TODO: make the `tasks` a GlobalArray
-    tasks = Array(Int64, num_tasks)
-
-    #let's read the catalog from disk again, rather than storing it in memory
-    for m in 0:(total_threads-1)
-        n0 = 1 + m * fields_per_thread
-        nend = min(num_fields, (m + 1) * fields_per_thread)
-
-        for n in n0:nend
-            rcf = rcfs[n]
-
-            local_catalog = fetch_catalog(rcf, stagedir)
-
-            local_t = 0
-            for local_s in 1:length(local_catalog)
-                # `s` is the global index of this source (in the source array)
-                offset = n == 1 ? 0 : catalog_offset[n - 1]
-                s = offset + local_s
-                # Note: each field's primary detections are stored contiguously
-                # in the source array
-                entry = local_catalog[local_s]
-                catalog[s] = (entry, rcf)
-
-                if in_box(entry, box)
-                    local_t += 1
-                    offset = n == 1 ? 0 : task_offset[n - 1]
-                    t = offset + local_t
-                    tasks[t] = s
-                end
-            end
-        end
-    end
-
-    catalog, tasks
+    push!(results, Dict(
+        "thing_id"=>entry.thing_id,
+        "objid"=>entry.objid,
+        "ra"=>entry.pos[1],
+        "dec"=>entry.pos[2],
+        "vs"=>vs_opt))
 end
 
 
@@ -231,15 +295,16 @@ function divide_sources_and_infer(
     # read the run-camcol-field triplets for this box
     rcfs = get_overlapping_fields(box, stagedir)
 
-    # mulithreaded operation 1 (of 3) -- loads 25TB from disk for SDSS
+    # loads 25TB from disk for SDSS
     images, catalog_offset, task_offset = load_images(box, rcfs, stagedir)
 
-    # mulithreaded operation 2 (of 3) -- loads 4TB from disk for SDSS
+    # loads 4TB from disk for SDSS
     catalog, tasks = load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
 
+    # create map from run, camcol, field to index into RCF array
     rcf_to_index = invert_rcf_array(rcfs)
 
-    # mulithreaded operation 3 (of 3) -- little disk access, cpu intensive
+    # optimization -- little disk access, cpu intensive
     results = optimize_sources(images, catalog, tasks,
                                catalog_offset, task_offset,
                                rcf_to_index, stagedir)
