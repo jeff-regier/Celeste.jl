@@ -233,7 +233,7 @@ end
 
 function sample_ce(pos, is_star::Bool)
     CatalogEntry(pos, is_star, sample_star_fluxes, sample_galaxy_fluxes,
-        0.1, .7, pi/4, 4., "sample", 0)
+        0.1, .7, pi/4, 4., "0000000000000000000", 0)
 end
 
 

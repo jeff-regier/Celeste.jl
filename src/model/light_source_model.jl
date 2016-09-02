@@ -5,17 +5,16 @@ const D = 2
 # The number of types of celestial objects (here, stars and galaxies).
 const Ia = 2
 
-
 type CatalogEntry
-    pos::Vec{2, Float64}
+    pos::Vector{Float64}
     is_star::Bool
-    star_fluxes::Vec{5, Float64}
-    gal_fluxes::Vec{5, Float64}
+    star_fluxes::Vector{Float64}
+    gal_fluxes::Vector{Float64}
     gal_frac_dev::Float64
     gal_ab::Float64
     gal_angle::Float64
     gal_scale::Float64
-    objid::Vec{30, UInt8}
+    objid::String
     thing_id::Int
 end
 

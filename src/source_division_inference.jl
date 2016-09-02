@@ -1,3 +1,113 @@
+using FixedSizeArrays
+
+
+###########  flatten catalog for use with Garbo #####
+
+type FlatCatalogEntry
+    pos::Vec{2, Float64}
+    is_star::Bool
+    star_fluxes::Vec{5, Float64}
+    gal_fluxes::Vec{5, Float64}
+    gal_frac_dev::Float64
+    gal_ab::Float64
+    gal_angle::Float64
+    gal_scale::Float64
+    objid::Vec{19, UInt8}
+    thing_id::Int
+end
+
+
+function convert(::Type{FlatCatalogEntry}, ce::CatalogEntry)
+    @assert length(ce.objid) == 19
+    FlatCatalogEntry(
+        ce.pos,
+        ce.is_star,
+        ce.star_fluxes,
+        ce.gal_fluxes,
+        ce.gal_frac_dev,
+        ce.gal_ab,
+        ce.gal_angle,
+        ce.gal_scale,
+        convert(Vector{UInt8}, ce.objid),
+        ce.thing_id)
+end
+
+
+function convert(::Type{CatalogEntry}, ce::FlatCatalogEntry)
+    CatalogEntry(
+        ce.pos,
+        ce.is_star,
+        ce.star_fluxes,
+        ce.gal_fluxes,
+        ce.gal_frac_dev,
+        ce.gal_ab,
+        ce.gal_angle,
+        ce.gal_scale,
+        convert(Vector{UInt8}, ce.objid),
+        ce.thing_id)
+end
+
+
+###########  flatten tiled image for use with Garbo #####
+
+immutable FlatTiledImage
+    # The image height.
+    H::Int
+
+    # The image width.
+    W::Int
+
+    # subimages
+    tiles::Mat{100,200,ImageTile}
+
+    # all tiles have the same height and width
+    tile_width::Int
+
+    # The band id (takes on values from 1 to 5).
+    b::Int
+
+    # World coordinates
+    wcs_header::Vec{10000,UInt8}
+
+    # The components of the point spread function.
+    psf::Vec{psf_K, PsfComponent}
+
+    # SDSS-specific identifiers. A field is a particular region of the sky.
+    # A Camcol is the output of one camera column as part of a Run.
+    run_num::Int
+    camcol_num::Int
+    field_num::Int
+
+    # storing a RawPSF here isn't ideal, because it's an SDSS type
+    # not a Celeste type
+    raw_psf_comp::RawPSF
+end
+
+
+function convert(::Type{FlatTiledImage}, img::TiledImage)
+    wcs_header = WCS.to_header(img.wcs)
+    # Kiran, I think the wcs_header will always be shorter than 
+    # 10000 characters
+    @assert(length(wcs_header) < 10_000)
+    FlatTiledImage(img.H, img.W, img.tiles, img.tile_width, img.b, wcs_header,
+                   img.psf, img.run_num, img.camcol_num, img.field_num,
+                   img.raw_psf_comp)
+end
+
+
+function convert(::Type{TiledImage}, img::FlatTiledImage)
+    wcs_array = WCS.from_header(img.wcs_header)
+    @assert(length(wcs_array) == 1)
+    wcs = wcs_array[1]
+    TiledImage(img.H, img.W, img.tiles, img.tile_width, img.b, wcs,
+               img.psf, img.run_num, img.camcol_num, img.field_num,
+               img.raw_psf_comp)
+end
+
+
+###########################################################
+
+
 function fetch_catalog(rcf, stagedir)
     # note: this call to read_photoobj_files considers only primary detections.
     catalog = SDSSIO.read_photoobj_files([rcf,], stagedir)
