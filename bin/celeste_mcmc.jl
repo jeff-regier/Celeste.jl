@@ -4,6 +4,10 @@
 
 using Distributions
 
+import Mamba
+#import Mamba: SliceMultivariate, Chains, setindex
+#using Mamba
+
 using Celeste
 import Celeste.Model: PsfComponent, psf_K, galaxy_prototypes, D, Ia, prior
 using Celeste: Model, ElboDeriv, Infer
@@ -100,6 +104,8 @@ function run_single_source_sampler(entry::CatalogEntry,
     println("Star logpdf: ", star_logpdf(star_state))
     #star_state   = init_star_state()
     #star_samples, star_lls = run_slice_sampler(star_logpdf, star_state)
+    star_param_names = ["lnr", "cug", "cgr", "cri", "ciz", "ra", "dec"]
+    sim = run_slice_sampler(star_logpdf, star_state, 400, star_param_names)
 
     # generate the galaxy logpdf
     # TODO create a sample_from_gal_prior function (with over dispersion)
@@ -107,6 +113,7 @@ function run_single_source_sampler(entry::CatalogEntry,
     gal_logpdf, gal_logprior = make_galaxy_logpdf(images, active_pixels, ea)
     gal_state = [.1 for i in 1:11]
     println("Gal logpdf: ", gal_logpdf(gal_state))
+    #gal_param_names = [star_param_names[1:7]; ["gdev", "gaxis", "gangle", "gscale"]]
     #gal_samples, gal_lls  = run_slice_sampler(gal_logpdf, gal_state)
 
     # generate pointers to star/gal type (to infer p(star | data))
@@ -121,8 +128,20 @@ end
 """
 Run a slice sampler for N steps
 """
-function run_slice_sampler(lnpdf::Function, th0::Vector{Float64}, N::Int)
-    #TODO return samps and log likelihood
+function run_slice_sampler(lnpdf::Function,
+                           th0::Vector{Float64},
+                           N::Int,
+                           param_names::Vector{String})
+    # slice sample as in example:
+    # http://mambajl.readthedocs.io/en/latest/examples/line_amwg_slice.html
+    sim = Mamba.Chains(N, 7, names = param_names)
+    th  = Mamba.SliceMultivariate(th0, 5., lnpdf)
+    for i in 1:N
+      sample!(th)
+      sim[i, :, 1] = th
+    end
+    Mamba.describe(sim)
+    return sim
 end
 
 function run_star_gal_switcher(star_lls::Vector{Float64},
