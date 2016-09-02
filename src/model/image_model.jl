@@ -1,3 +1,37 @@
+"""
+SDSS representation of a spatially variable PSF. The PSF is represented as
+a weighted combination of eigenimages (stored in `rrows`), where the weights
+vary smoothly across the image as a polynomial of the form
+```
+weight[k](x, y) = sum_{i,j} cmat[i, j, k] * (rcs * x)^i (rcs * y)^j
+```
+where `rcs` is a coordinate transformation and `x` and `y` are zero-indexed.
+"""
+immutable RawPSF
+    rrows::Mat{2601, 4, Float64}  # A matrix of flattened eigenimages.
+    rnrow::Int  # The number of rows in an eigenimage.
+    rncol::Int  # The number of columns in an eigenimage.
+    cmat::Vec{4, Mat{5, 5, Float64}}  # The coefficients of the weight polynomial
+    nrow_b::Int
+    ncol_b::Int
+
+    function RawPSF(rrows::Array{Float64, 2}, rnrow::Integer, rncol::Integer,
+                     cmat_raw::Array{Float64, 3}, nrow_b::Integer, ncol_b::Integer)
+        # rrows contains eigen images. Each eigen image is along the first
+        # dimension in a flattened form. Check that dimensions match up.
+        @assert size(rrows, 1) == rnrow * rncol
+
+        # The second dimension is the number of eigen images, which should
+        # match the number of coefficient arrays.
+        @assert size(rrows, 2) == size(cmat_raw, 3)
+
+        cmat2 = Matrix[cmat_raw[:,:,i] for i in 1:size(cmat_raw, 3)]
+
+        return new(rrows, Int(rnrow), Int(rncol), cmat2, Int(nrow_b), Int(ncol_b))
+    end
+end
+
+
 """An image, taken though a particular filter band"""
 type Image
     # The image height.
@@ -116,8 +150,7 @@ type TiledImage
     wcs::WCSTransform
 
     # The components of the point spread function.
-    # TODO: is 3 right?
-    psf::NTuple{3,PsfComponent}
+    psf::Vector{PsfComponent}
 
     # SDSS-specific identifiers. A field is a particular region of the sky.
     # A Camcol is the output of one camera column as part of a Run.
@@ -127,7 +160,6 @@ type TiledImage
 
     # storing a RawPSF here isn't ideal, because it's an SDSS type
     # not a Celeste type
-    # TODO: any pointers in here?
     raw_psf_comp::RawPSF
 end
 

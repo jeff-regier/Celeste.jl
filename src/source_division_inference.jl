@@ -58,9 +58,9 @@ function load_images(box, rcfs, stagedir)
         lcatalog_offset[i] = length(local_catalog)
         ltask_offset[i] = length(local_tasks)
     end
-    flush(images)
-    flush(catalog_offset)
-    flush(task_offset)
+    Garbo.flush(images)
+    Garbo.flush(catalog_offset)
+    Garbo.flush(task_offset)
     sync()
 
     # folds right, converting each field's count to offsets in # `catalog`
@@ -89,8 +89,8 @@ function load_images(box, rcfs, stagedir)
             end
         end
         # sync to ensure orderly progression
-        flush(catalog_offset)
-        flush(task_offset)
+        Garbo.flush(catalog_offset)
+        Garbo.flush(task_offset)
         sync()
     end
 
