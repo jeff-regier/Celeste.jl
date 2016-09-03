@@ -1,4 +1,5 @@
 using FixedSizeArrays
+import WCS
 
 
 ###########  flatten catalog for use with Garbo #####
@@ -86,10 +87,15 @@ end
 
 function convert(::Type{FlatTiledImage}, img::TiledImage)
     wcs_header = WCS.to_header(img.wcs)
-    # Kiran, I think the wcs_header will always be shorter than 
-    # 10000 characters
     @assert(length(wcs_header) < 10_000)
-    FlatTiledImage(img.H, img.W, img.tiles, img.tile_width, img.b, wcs_header,
+
+    n = length(wcs_header)
+    wcs_header_bytes = zeros(UInt8, 10_000)
+    for i in 1:n
+        wcs_header_bytes[i] = wcs_header[i]
+    end
+
+    FlatTiledImage(img.H, img.W, img.tiles, img.tile_width, img.b, wcs_header_bytes,
                    img.psf, img.run_num, img.camcol_num, img.field_num,
                    img.raw_psf_comp)
 end
