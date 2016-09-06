@@ -286,8 +286,6 @@ end
 # -----------------------------------------------------------------------------
 # PSF-related functions
 
-
-
 """
 read_psf(fitsfile, band)
 
@@ -310,13 +308,20 @@ function read_psf(fitsfile::FITSIO.FITS, band::Char)
     cmat_raw = read(hdu, "c")::Array{Float32, 3}
     rrows_raw = read(hdu, "rrows")::Array{Array{Float32,1},1}
 
+    # Only the first (nrow_b, ncol_b) submatrix of cmat is used for
+    # reasons obscure to the author.
+    cmat = Array(Float64, nrow_b, ncol_b, size(cmat_raw, 3))
+    for k=1:size(cmat_raw, 3), j=1:nrow_b, i=1:ncol_b
+        cmat[i, j, k] = cmat_raw[i, j, k]
+    end
+
     # convert rrows to Array{Float64, 2}, assuming each row is the same length.
     rrows = Array(Float64, length(rrows_raw[1]), length(rrows_raw))
     for i=1:length(rrows_raw)
         rrows[:, i] = rrows_raw[i]
     end
 
-    return RawPSF(rrows, rnrow, rncol, convert(Array{Float64}, cmat_raw), nrow_b, ncol_b)
+    return RawPSF(rrows, rnrow, rncol, cmat)
 end
 
 

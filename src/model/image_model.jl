@@ -2,32 +2,30 @@
 SDSS representation of a spatially variable PSF. The PSF is represented as
 a weighted combination of eigenimages (stored in `rrows`), where the weights
 vary smoothly across the image as a polynomial of the form
+
 ```
 weight[k](x, y) = sum_{i,j} cmat[i, j, k] * (rcs * x)^i (rcs * y)^j
 ```
+
 where `rcs` is a coordinate transformation and `x` and `y` are zero-indexed.
 """
 immutable RawPSF
-    rrows::Mat{2601, 4, Float64}  # A matrix of flattened eigenimages.
+    rrows::Array{Float64,2}  # A matrix of flattened eigenimages.
     rnrow::Int  # The number of rows in an eigenimage.
     rncol::Int  # The number of columns in an eigenimage.
-    cmat::Vec{4, Mat{5, 5, Float64}}  # The coefficients of the weight polynomial
-    nrow_b::Int
-    ncol_b::Int
+    cmat::Array{Float64,3}  # The coefficients of the weight polynomial
 
     function RawPSF(rrows::Array{Float64, 2}, rnrow::Integer, rncol::Integer,
-                     cmat_raw::Array{Float64, 3}, nrow_b::Integer, ncol_b::Integer)
+                     cmat::Array{Float64, 3})
         # rrows contains eigen images. Each eigen image is along the first
         # dimension in a flattened form. Check that dimensions match up.
         @assert size(rrows, 1) == rnrow * rncol
 
         # The second dimension is the number of eigen images, which should
         # match the number of coefficient arrays.
-        @assert size(rrows, 2) == size(cmat_raw, 3)
+        @assert size(rrows, 2) == size(cmat, 3)
 
-        cmat2 = Matrix[cmat_raw[:,:,i] for i in 1:size(cmat_raw, 3)]
-
-        return new(rrows, Int(rnrow), Int(rncol), cmat2, Int(nrow_b), Int(ncol_b))
+        return new(rrows, Int(rnrow), Int(rncol), cmat)
     end
 end
 
@@ -136,7 +134,6 @@ type TiledImage
     W::Int
 
     # subimages
-    # TODO: with FixedSizeArrays, can change this to Mat{N,M,ImageTile}
     tiles::Matrix{ImageTile}
 
     # all tiles have the same height and width
@@ -146,7 +143,6 @@ type TiledImage
     b::Int
 
     # World coordinates
-    # TODO: remove pointers from this
     wcs::WCSTransform
 
     # The components of the point spread function.

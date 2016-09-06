@@ -48,40 +48,61 @@ function convert(::Type{CatalogEntry}, ce::FlatCatalogEntry)
         ce.thing_id)
 end
 
+###########  flatten raw psf for use with Garbo #####
+
+immutable FlatRawPSF
+    rrows::Mat{2601, 4, Float64}  # A matrix of flattened eigenimages.
+    rnrow::Int  # The number of rows in an eigenimage.
+    rncol::Int  # The number of columns in an eigenimage.
+    cmat::Vec{4, Mat{5, 5, Float64}}  # The coefficients of the weight polynomial
+    nrow_b::Int
+    ncol_b::Int
+
+    function FlatRawPSF(rrows::Array{Float64, 2}, rnrow::Integer, rncol::Integer,
+                     cmat_raw::Array{Float64, 3}, nrow_b::Integer, ncol_b::Integer)
+        # rrows contains eigen images. Each eigen image is along the first
+        # dimension in a flattened form. Check that dimensions match up.
+        @assert size(rrows, 1) == rnrow * rncol
+
+        # The second dimension is the number of eigen images, which should
+        # match the number of coefficient arrays.
+        @assert size(rrows, 2) == size(cmat_raw, 3)
+
+        cmat2 = Matrix[cmat_raw[:,:,i] for i in 1:size(cmat_raw, 3)]
+
+        return new(rrows, Int(rnrow), Int(rncol), cmat2, Int(nrow_b), Int(ncol_b))
+    end
+end
+
+
+function convert(::Type{RawPSF}, psf::FlatRawPSF)
+    RawPSF(psf.rrows, psf.rnrow, psf.rncol, psf.cmat[1:psf.nrow_b, 1:psf.ncol_b])
+end
+
+
+function convert(::Type{FlatRawPSF}, psf::RawPSF)
+    cmat = zeros(5, 5, 4)
+    for k in 1:size(psf.cmat, 3)
+        cmat[size(psf.cmat, 1), size(psf.cmat, 2), k] = cmat[:, :, k]
+    end
+    FlatRawPSF(psf.rrows, psf.rnrow, psf.rncol, cmat, psf.nrow_b, psf.ncol_b)
+end
+
 
 ###########  flatten tiled image for use with Garbo #####
 
 immutable FlatTiledImage
-    # The image height.
     H::Int
-
-    # The image width.
     W::Int
-
-    # subimages
     tiles::Mat{100,200,ImageTile}
-
-    # all tiles have the same height and width
     tile_width::Int
-
-    # The band id (takes on values from 1 to 5).
     b::Int
-
-    # World coordinates
     wcs_header::Vec{10000,UInt8}
-
-    # The components of the point spread function.
     psf::Vec{psf_K, PsfComponent}
-
-    # SDSS-specific identifiers. A field is a particular region of the sky.
-    # A Camcol is the output of one camera column as part of a Run.
     run_num::Int
     camcol_num::Int
     field_num::Int
-
-    # storing a RawPSF here isn't ideal, because it's an SDSS type
-    # not a Celeste type
-    raw_psf_comp::RawPSF
+    raw_psf_comp::FlatRawPSF
 end
 
 
