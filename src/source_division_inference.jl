@@ -132,6 +132,17 @@ function convert(::Type{TiledImage}, img::FlatTiledImage)
 end
 
 
+###########  flat type to store inference results #########
+
+immutable InferResult
+    thing_id::Int
+    objid::SVector{30,UInt8}
+    ra::Float64
+    dec::Float64
+    vs::SVector{88,Float64}
+end
+
+
 ###########################################################
 
 
@@ -181,7 +192,6 @@ function load_images(box, rcfs, stagedir)
         raw_images = SDSSIO.load_field_images(rcf, stagedir)
         @assert(length(raw_images) == 5)
         timgs = [convert(FlatTiledImage, TiledImage(img)) for img in raw_images]
-        sizeof(timgs[1])
         limages[i] = tuple(timgs...)
    
         # second, load the `catalog_offset` and `task_count` arrays with
@@ -313,112 +323,113 @@ function invert_rcf_array(rcfs)
 end
 
 
-function optimize_source(s, catalog, catalog_offset, rcf_to_index, images)
+function optimize_source(s, images, catalog, catalog_offset, rcf_to_index, results)
     local_images = Vector{TiledImage}[]
     local_catalog = CatalogEntry[];
 
-    entry, primary_rcf = catalog[s]
+    ep = get(catalog, [s], [s])
+    entry, primary_rcf = ep[1]
     t_box = BoundingBox(entry.pos[1] - 1e-8, entry.pos[1] + 1e-8,
                         entry.pos[2] - 1e-8, entry.pos[2] + 1e-8)
     surrounding_rcfs = get_overlapping_fields(t_box, stagedir)
 
     for rcf in surrounding_rcfs
         n = rcf_to_index[rcf.run, rcf.camcol, rcf.field]
-
-        push!(local_images, images[n])
-
-        s_a = n == 1 ? 1 : catalog_offset[n - 1] + 1
-        s_b = catalog_offset[n]
-        for neighbor in catalog[s_a:s_b]
+        append!(local_images, get(images, [n], [n]))
+        if n == 1
+            s_a = 1
+            st = get(catalog_offset, [n], [n])
+            s_b = st[1]
+        else
+            st = get(catalog_offset, [n-1], [n])
+            s_a = st[1]
+            s_b = st[2]
+        end
+        neighbors = get(catalog, [s_a], [s_b])
+        for neighbor in neighbors
             push!(local_catalog, neighbor[1])
         end
     end
 
-    flat_images = TiledImage[]
-    for img5 in local_images, img in img5
-        push!(flat_images, img)
-    end
+    flat_images = [img for img5 in local_images for img in img5]
 
     i = findfirst(local_catalog, entry)
     neighbor_indexes = Infer.find_neighbors([i,], local_catalog, flat_images)[1]
     neighbors = local_catalog[neighbor_indexes]
 
     vs_opt = Infer.infer_source(flat_images, neighbors, entry)
-    # TODO: write vs_opt (the results) to disk, to a global array of size num_tasks,
-    # or to a local array, and then flush the array to disk later.
 
-    push!(results, Dict(
-        "thing_id"=>entry.thing_id,
-        "objid"=>entry.objid,
-        "ra"=>entry.pos[1],
-        "dec"=>entry.pos[2],
-        "vs"=>vs_opt))
+    put!(results, [s], [s], [InferResult(entry.thing_id, entry.objid,
+                                    entry.pos[1], entry.pos[2], vs_opt)])
 end
 
 
-function optimize_sources(images, catalog, tasks,
-                          catalog_offset, task_offset, 
-                          rcf_to_index, stagedir)
-    #TODO: set `nnodes` to the number of nodes, and
-    #`nthreads` to the number of threads per node.
-    num_nodes = 2
-    threads_per_node = 3
-    total_threads = num_nodes * threads_per_node
-
-    num_tasks = task_offset[end]
-
-    tasks_per_thread = ceil(Int, num_tasks / total_threads)
-
-    results = Dict[]
-
-    for m in 0:(total_threads-1)
-        t0 = 1 + m * tasks_per_thread
-        tend = min(num_tasks, (m + 1) * tasks_per_thread)
-
-        for t in t0:tend
-            s = tasks[t]
-            entry, primary_rcf = catalog[s]
-            t_box = BoundingBox(entry.pos[1] - 1e-8, entry.pos[1] + 1e-8,
-                                entry.pos[2] - 1e-8, entry.pos[2] + 1e-8)
-            surrounding_rcfs = get_overlapping_fields(t_box, stagedir)
-            local_images = Vector{TiledImage}[]
-            local_catalog = CatalogEntry[];
-
-            for rcf in surrounding_rcfs
-                n = rcf_to_index[rcf.run, rcf.camcol, rcf.field]
-
-                push!(local_images, images[n])
-
-                s_a = n == 1 ? 1 : catalog_offset[n - 1] + 1
-                s_b = catalog_offset[n]
-                for neighbor in catalog[s_a:s_b]
-                    push!(local_catalog, neighbor[1])
-                end
+function process_tasks(dt, rundt, wi, wilock, ci, li,
+                images, catalog, tasks, catalog_offset, task_offset,
+                rcf_to_index, stagedir, results)
+    tid == threadid()
+    if rundt && tid == 1
+        ntputs(nodeid, tid, "running tree")
+        while runtree(dt)
+            cpu_pause()
+        end
+    else
+        while true
+            lock(wilock)
+            if li[] == 0
+                ntputs(nodeid, tid, "out of work")
+                unlock(wilock)
+                break
             end
-
-            flat_images = TiledImage[]
-            for img5 in local_images, img in img5
-                push!(flat_images, img)
+            if ci[] == li[]
+                ntputs(nodeid, tid, "consumed last work item ($(li[])); requesting more")
+                ni, (ci, li) = getwork(dt)
+                wi = get(tasks, [ci], [li])
+                ci[] = 1
+                li[] = ni
+                ntputs(nodeid, tid, "got $ni work items")
+                unlock(wilock)
+                continue
             end
+            item = ci[]
+            ci[] = ci[] + 1
+            unlock(wilock)
 
-            i = findfirst(local_catalog, entry)
-            neighbor_indexes = Infer.find_neighbors([i,], local_catalog, flat_images)[1]
-            neighbors = local_catalog[neighbor_indexes]
-
-            vs_opt = Infer.infer_source(flat_images, neighbors, entry)
-            # TODO: write vs_opt (the results) to disk, to a global array of size num_tasks,
-            # or to a local array, and then flush the array to disk later.
-
-            push!(results, Dict(
-                "thing_id"=>entry.thing_id,
-                "objid"=>entry.objid,
-                "ra"=>entry.pos[1],
-                "dec"=>entry.pos[2],
-                "vs"=>vs_opt))
+            optimize_source(item, images, catalog, catalog_offset, rcf_to_index, results)
         end
     end
+end
 
-    results
+
+function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
+            rcf_to_index, stagedir, results, timing)
+    num_work_items = length(tasks)
+    if nodeid == 1
+        nputs(nodeid, "processing $num_work_items work items on $nnodes nodes")
+    end
+
+    # create Dtree and get the initial allocation
+    dt, isparent = DtreeScheduler(num_work_items, 0.4)
+    ni, (ci, li) = initwork(dt)
+    wi = get(tasks, [ci], [li])
+    ci = 1
+    li = ni
+    wilock = SpinLock()
+
+    tic()
+    ptargs = Core.svec(process_tasks, dt, runtree(dt), wi, wilock,
+                    Ref(ci), Ref(li),
+                    images, catalog, tasks, catalog_offset, task_offset,
+                    rcf_to_index, stagedir, results)
+    ccall(:jl_threading_run, Void, (Any,), ptargs)
+    timing.opt_srcs = toq()
+
+    if nodeid == 1
+        nputs(nodeid, "complete")
+    end
+    tic()
+    finalize(dt)
+    timing.wait_done = toq()
 end
 
 
@@ -433,21 +444,30 @@ function divide_sources_and_infer(
                 timing=InferTiming(),
                 outdir=".")
     # read the run-camcol-field triplets for this box
+    tic()
     rcfs = get_overlapping_fields(box, stagedir)
+    timing.query_fids = toq()
 
     # loads 25TB from disk for SDSS
+    tic()
     images, catalog_offset, task_offset = load_images(box, rcfs, stagedir)
+    timing.read_img = toq()
 
     # loads 4TB from disk for SDSS
+    tic()
     catalog, tasks = load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
+    timing.read_photoobj = toq()
 
     # create map from run, camcol, field to index into RCF array
     rcf_to_index = invert_rcf_array(rcfs)
 
+    # inference results are written here
+    results = Garray(InferResult, length(catalog))
+
     # optimization -- little disk access, cpu intensive
-    results = optimize_sources(images, catalog, tasks,
-                               catalog_offset, task_offset,
-                               rcf_to_index, stagedir)
+    timing.num_srcs = length(tasks)
+    optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
+            rcf_to_index, stagedir, results, timing)
 end
 
 
