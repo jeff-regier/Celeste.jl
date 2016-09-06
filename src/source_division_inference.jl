@@ -1,19 +1,19 @@
-using FixedSizeArrays
+using StaticArrays
 import WCS
 
 
 ###########  flatten catalog for use with Garbo #####
 
 type FlatCatalogEntry
-    pos::Vec{2, Float64}
+    pos::SVector{2,Float64}
     is_star::Bool
-    star_fluxes::Vec{5, Float64}
-    gal_fluxes::Vec{5, Float64}
+    star_fluxes::SVector{5,Float64}
+    gal_fluxes::SVector{5,Float64}
     gal_frac_dev::Float64
     gal_ab::Float64
     gal_angle::Float64
     gal_scale::Float64
-    objid::Vec{19, UInt8}
+    objid::SVector{19,UInt8}
     thing_id::Int
 end
 
@@ -51,10 +51,10 @@ end
 ###########  flatten raw psf for use with Garbo #####
 
 immutable FlatRawPSF
-    rrows::Mat{2601, 4, Float64}  # A matrix of flattened eigenimages.
+    rrows::SMatrix{2601,4,Float64}  # A matrix of flattened eigenimages.
     rnrow::Int  # The number of rows in an eigenimage.
     rncol::Int  # The number of columns in an eigenimage.
-    cmat::Vec{4, Mat{5, 5, Float64}}  # The coefficients of the weight polynomial
+    cmat::SVector{4,SMatrix{5,5,Float64}}  # The coefficients of the weight polynomial
     nrow_b::Int
     ncol_b::Int
 
@@ -94,11 +94,11 @@ end
 immutable FlatTiledImage
     H::Int
     W::Int
-    tiles::Mat{100,200,ImageTile}
+    tiles::SMatrix{100,200,ImageTile}
     tile_width::Int
     b::Int
-    wcs_header::Vec{10000,UInt8}
-    psf::Vec{psf_K, PsfComponent}
+    wcs_header::SVector{10000,UInt8}
+    psf::SVector{psf_K, PsfComponent}
     run_num::Int
     camcol_num::Int
     field_num::Int
