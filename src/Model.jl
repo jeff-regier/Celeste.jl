@@ -44,7 +44,7 @@ const B = length(band_letters)
 include("light_source_model.jl")
 include("psf_model.jl")
 include("image_model.jl")
-#include("param_set.jl")
+include("param_set.jl")
 include("imaged_sources.jl")
 
 

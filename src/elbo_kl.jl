@@ -5,6 +5,7 @@
 # Note that KL divergences may be between parameters of two different types,
 # e.g. if the prior is a float and the parameter is a dual number.
 
+import ..SensitiveFloats: SensitiveFloat
 
 ######################################################
 # KL divergences
