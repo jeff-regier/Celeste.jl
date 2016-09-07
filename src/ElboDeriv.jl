@@ -7,12 +7,12 @@ using ..Model
 import ..WCSUtils
 import ..SensitiveFloats.clear!
 
-# TODO make the functions dependent on these objects dependent on ..Model instead
 import ..Model: ElboArgs, ActivePixel, ElboIntermediateVariables,
                 populate_fsm_vecs!,
-                BvnComponent, GalaxyCacheComponent, load_bvn_mixtures
+                BvnComponent, GalaxyCacheComponent, load_bvn_mixtures,
+                get_active_pixels
 
-import ..SensitiveFloats: SensitiveFloat, zero_sensitive_float, add_sources_sf!
+using ..SensitiveFloats
 
 export ElboArgs, ActivePixel
 
