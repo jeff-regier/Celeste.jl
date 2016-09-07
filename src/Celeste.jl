@@ -3,8 +3,8 @@ module Celeste
 # submodules
 include("Log.jl")
 include("WCSUtils.jl")
-include("Model.jl")
 include("SensitiveFloats.jl")
+include("Model.jl")
 include("ElboDeriv.jl")
 include("Transform.jl")
 include("PSF.jl")
