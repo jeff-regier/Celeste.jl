@@ -9,6 +9,8 @@ include("bivariate_normals.jl")
 
 using Distributions
 
+import ..SensitiveFloats: SensitiveFloat
+
 #using ..Model
 #using Celeste
 #import ..Model: PsfComponent, psf_K, galaxy_prototypes, D, Ia,
