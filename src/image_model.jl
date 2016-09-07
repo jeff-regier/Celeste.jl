@@ -147,3 +147,60 @@ function get_containing_tile(pixel_crds::Vector{Float64}, img::TiledImage)
     img.tiles[ht, wt]
 end
 
+
+immutable FlatTiledImage
+    # The image height.
+    H::Int
+
+    # The image width.
+    W::Int
+
+    # subimages
+    # TODO: make this a fixed size 2D array
+    tiles::Matrix{ImageTile}
+
+    # all tiles have the same height and width
+    tile_width::Int
+
+    # The band id (takes on values from 1 to 5).
+    b::Int
+
+    # World coordinates
+    # TODO: make this a fixed length string/array
+    wcs_header::String
+
+    # The components of the point spread function.
+    # TODO: make this a fixed size 2D array
+    psf::Vector{PsfComponent}
+
+    # SDSS-specific identifiers. A field is a particular region of the sky.
+    # A Camcol is the output of one camera column as part of a Run.
+    run_num::Int
+    camcol_num::Int
+    field_num::Int
+
+    # storing a RawPSF here isn't ideal, because it's an SDSS type
+    # not a Celeste type
+    raw_psf_comp::RawPSF
+end
+
+
+function FlatTiledImage(img::TiledImage)
+    wcs_header = WCS.to_header(img.wcs)
+    # Kiran, I think the wcs_header will always be shorter than 
+    # 10000 characters
+    @assert(length(wcs_header) < 10_000)
+    FlatTiledImage(img.H, img.W, img.tiles, img.tile_width, img.b, wcs_header,
+                   img.psf, img.run_num, img.camcol_num, img.field_num,
+                   img.raw_psf_comp)
+end
+
+
+function TiledImage(img::FlatTiledImage)
+    wcs_array = WCS.from_header(img.wcs_header)
+    @assert(length(wcs_array) == 1)
+    wcs = wcs_array[1]
+    TiledImage(img.H, img.W, img.tiles, img.tile_width, img.b, wcs,
+               img.psf, img.run_num, img.camcol_num, img.field_num,
+               img.raw_psf_comp)
+end

@@ -1,7 +1,7 @@
 module Model
 
 # parameter types
-export Image, TiledImage, ImageTile,
+export Image, TiledImage, ImageTile, FlatTiledImage,
        SkyPatch, PsfComponent,
        GalaxyComponent, GalaxyPrototype,
        PriorParams, UnconstrainedParams,
@@ -27,7 +27,7 @@ export band_letters, D, Ia, B, psf_K,
 import Base.convert
 import Base.+
 import Distributions
-import FITSIO
+import FITSIO, WCS
 import WCS.WCSTransform
 import ForwardDiff
 import ..Log
