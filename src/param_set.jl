@@ -18,7 +18,7 @@
 # k       = {D|D-1}xIa matrix of color prior component indicators.
 #           (formerly kappa)
 
-abstract ParamSet
+import ..SensitiveFloats: ParamSet
 
 type StarPosParams <: ParamSet
     u::Vector{Int}
