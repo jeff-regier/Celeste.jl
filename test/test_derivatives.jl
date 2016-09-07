@@ -2,8 +2,8 @@ import ForwardDiff
 
 using Celeste: Model, SensitiveFloats, ElboDeriv
 using Distributions
-import ElboDeriv: BvnComponent, GalaxyCacheComponent
-import ElboDeriv: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
+import Celeste.Model: BvnComponent, GalaxyCacheComponent,
+                      eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 using DerivativeTestUtils
 
 """
@@ -11,10 +11,10 @@ This is the function of which get_bvn_derivs!() returns the derivatives.
 It is only used for testing.
 """
 function eval_bvn_log_density{NumType <: Number}(
-        elbo_vars::ElboDeriv.ElboIntermediateVariables{NumType},
+        elbo_vars::Model.ElboIntermediateVariables{NumType},
         bvn::BvnComponent{NumType}, x::Vector{Float64})
 
-    ElboDeriv.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
+    Model.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
 
     -0.5 * (
         (x[1] - bvn.the_mean[1]) * elbo_vars.bvn_derivs.py1[1] +
@@ -28,22 +28,22 @@ function test_process_active_pixels()
     blob, ea, bodies = gen_two_body_dataset()
 
     # Choose four pixels only to keep the test fast.
-    active_pixels = Array(ElboDeriv.ActivePixel, 4)
-    active_pixels[1] = ElboDeriv.ActivePixel(1, 1, 10, 11)
-    active_pixels[2] = ElboDeriv.ActivePixel(1, 1, 11, 10)
-    active_pixels[3] = ElboDeriv.ActivePixel(5, 1, 10, 11)
-    active_pixels[4] = ElboDeriv.ActivePixel(5, 1, 11, 10)
+    active_pixels = Array(Model.ActivePixel, 4)
+    active_pixels[1] = Model.ActivePixel(1, 1, 10, 11)
+    active_pixels[2] = Model.ActivePixel(1, 1, 11, 10)
+    active_pixels[3] = Model.ActivePixel(5, 1, 10, 11)
+    active_pixels[4] = Model.ActivePixel(5, 1, 11, 10)
 
 
     function tile_lik_wrapper_fun{NumType <: Number}(
             ea::ElboArgs{NumType}, calculate_derivs::Bool)
 
-        elbo_vars = ElboDeriv.ElboIntermediateVariables(
+        elbo_vars = Model.ElboIntermediateVariables(
             NumType, ea.S,
             length(ea.active_sources),
             calculate_derivs=calculate_derivs,
             calculate_hessian=calculate_derivs)
-        ElboDeriv.process_active_pixels!(elbo_vars, ea.images, ea, active_pixels)
+        Model.process_active_pixels!(elbo_vars, ea.images, ea, active_pixels)
         deepcopy(elbo_vars.elbo)
     end
 
@@ -77,14 +77,14 @@ function test_add_log_term()
                 ea::ElboArgs{NumType}, calculate_derivs::Bool)
 
             star_mcs, gal_mcs =
-                ElboDeriv.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs)
+                Model.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs)
             sbs = ElboDeriv.SourceBrightness{NumType}[
                 ElboDeriv.SourceBrightness(ea.vp[s], calculate_derivs=calculate_derivs)
                 for s in 1:ea.S]
 
-            elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, ea.S, ea.S)
+            elbo_vars_loc = Model.ElboIntermediateVariables(NumType, ea.S, ea.S)
             elbo_vars_loc.calculate_derivs = calculate_derivs
-            ElboDeriv.populate_fsm_vecs!(
+            Model.populate_fsm_vecs!(
                 elbo_vars_loc, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
             ElboDeriv.combine_pixel_sources!(
                 elbo_vars_loc, ea, tile_source_map, tile, sbs)
@@ -125,14 +125,14 @@ function test_combine_pixel_sources()
                 ea::ElboArgs{NumType}; calculate_derivs=true)
 
             star_mcs, gal_mcs =
-                ElboDeriv.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs)
+                Model.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs)
             sbs = ElboDeriv.SourceBrightness{NumType}[
                 ElboDeriv.SourceBrightness(ea.vp[s], calculate_derivs=calculate_derivs)
                 for s in 1:ea.S]
 
-            elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(NumType, ea.S, ea.S)
+            elbo_vars_loc = Model.ElboIntermediateVariables(NumType, ea.S, ea.S)
             elbo_vars_loc.calculate_derivs = calculate_derivs
-            ElboDeriv.populate_fsm_vecs!(
+            Model.populate_fsm_vecs!(
                 elbo_vars_loc, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
             ElboDeriv.combine_pixel_sources!(
                 elbo_vars_loc, ea, tile_source_map, tile, sbs)
@@ -174,15 +174,15 @@ function test_e_g_s_functions()
                 ea::ElboArgs{NumType}; calculate_derivs=true)
 
             star_mcs, gal_mcs =
-                ElboDeriv.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs)
+                Model.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs)
             sbs = ElboDeriv.SourceBrightness{NumType}[
                 ElboDeriv.SourceBrightness(ea.vp[s], calculate_derivs=calculate_derivs)
                 for s in 1:ea.S]
 
-            elbo_vars_loc = ElboDeriv.ElboIntermediateVariables(
+            elbo_vars_loc = Model.ElboIntermediateVariables(
                 NumType, ea.S, length(ea.active_sources))
             elbo_vars_loc.calculate_derivs = calculate_derivs
-            ElboDeriv.populate_fsm_vecs!(
+            Model.populate_fsm_vecs!(
                 elbo_vars_loc, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
             ElboDeriv.accumulate_source_brightness!(elbo_vars_loc, ea, sbs, s, b)
             deepcopy(elbo_vars_loc)
@@ -226,7 +226,7 @@ function test_fs1m_derivatives()
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
     x = ceil(u_pix + [1.0, 2.0])
 
-    elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1)
+    elbo_vars = Model.ElboIntermediateVariables(Float64, 1, 1)
 
     ###########################
     # Galaxies
@@ -238,7 +238,7 @@ function test_fs1m_derivatives()
         function f_wrap_gal{T <: Number}(par::Vector{T})
             # This uses ea, x, wcs_jacobian, and gcc_ind from the enclosing namespace.
             ea_fd = forward_diff_model_params(T, ea)
-            elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1)
+            elbo_vars_fd = Model.ElboIntermediateVariables(T, 1, 1)
 
             # Make sure par is as long as the galaxy parameters.
             @assert length(par) == length(shape_standard_alignment[2])
@@ -247,7 +247,7 @@ function test_fs1m_derivatives()
                     ea_fd.vp[s][p0] = par[p1]
             end
             star_mcs, gal_mcs =
-                ElboDeriv.load_bvn_mixtures(ea_fd, b, calculate_derivs=false)
+                Model.load_bvn_mixtures(ea_fd, b, calculate_derivs=false)
 
             # Raw:
             gcc = gal_mcs[gcc_ind...]
@@ -266,9 +266,9 @@ function test_fs1m_derivatives()
 
         par_gal = ea_to_par_gal(ea)
 
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(ea, b)
+        star_mcs, gal_mcs = Model.load_bvn_mixtures(ea, b)
         clear!(elbo_vars.fs1m_vec[s])
-        ElboDeriv.accum_galaxy_pos!(
+        Model.accum_galaxy_pos!(
             elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian, true)
         fs1m = deepcopy(elbo_vars.fs1m_vec[s])
 
@@ -303,7 +303,7 @@ function test_fs0m_derivatives()
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
     x = ceil(u_pix + [1.0, 2.0])
 
-    elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1)
+    elbo_vars = Model.ElboIntermediateVariables(Float64, 1, 1)
 
     ###########################
     # Stars
@@ -322,9 +322,9 @@ function test_fs0m_derivatives()
                     p0 = ids.u[p1]
                     ea_fd.vp[s][p0] = par[p1]
             end
-            star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(ea_fd, b)
-            elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1)
-            ElboDeriv.accum_star_pos!(
+            star_mcs, gal_mcs = Model.load_bvn_mixtures(ea_fd, b)
+            elbo_vars_fd = Model.ElboIntermediateVariables(T, 1, 1)
+            Model.accum_star_pos!(
                 elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true)
             elbo_vars_fd.fs0m_vec[s].v[1]
         end
@@ -340,8 +340,8 @@ function test_fs0m_derivatives()
         par_star = ea_to_par_star(ea)
 
         clear!(elbo_vars.fs0m_vec[s])
-        star_mcs, gal_mcs = ElboDeriv.load_bvn_mixtures(ea, b)
-        ElboDeriv.accum_star_pos!(
+        star_mcs, gal_mcs = Model.load_bvn_mixtures(ea, b)
+        Model.accum_star_pos!(
             elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true)
         fs0m = deepcopy(elbo_vars.fs0m_vec[s])
 
@@ -356,7 +356,7 @@ function test_bvn_derivatives()
     x = Float64[2.0, 3.0]
 
     e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
-    sigma = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)
+    sigma = Model.get_bvn_cov(e_axis, e_angle, e_scale)
 
     offset = Float64[0.5, 0.25]
 
@@ -365,9 +365,9 @@ function test_bvn_derivatives()
     weight = 0.724
 
     bvn = BvnComponent{Float64}(offset, sigma, weight)
-    elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1)
-    ElboDeriv.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
-    ElboDeriv.get_bvn_derivs!(elbo_vars.bvn_derivs, bvn, true, true)
+    elbo_vars = Model.ElboIntermediateVariables(Float64, 1, 1)
+    Model.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
+    Model.get_bvn_derivs!(elbo_vars.bvn_derivs, bvn, true, true)
 
     function bvn_function{T <: Number}(x::Vector{T}, sigma::Matrix{T})
         local_x = offset - x
@@ -459,7 +459,7 @@ function test_galaxy_variable_transform()
         u_pix = WCSUtils.world_to_pix(
             patch.wcs_jacobian, patch.center, patch.pixel_center, u)
 
-        sigma = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)
+        sigma = Model.get_bvn_cov(e_axis, e_angle, e_scale)
 
         function bvn_function{T <: Number}(u_pix::Vector{T}, sigma::Matrix{T})
             local_x = x - u_pix
@@ -473,14 +473,14 @@ function test_galaxy_variable_transform()
     par = wrap_par(u, e_angle, e_axis, e_scale)
     u_pix = WCSUtils.world_to_pix(
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-    sigma = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)
+    sigma = Model.get_bvn_cov(e_axis, e_angle, e_scale)
     bmc = BvnComponent{Float64}(u_pix, sigma, 1.0)
-    sig_sf = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma)
+    sig_sf = Model.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma)
     gcc = GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf)
-    elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1)
-    ElboDeriv.eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x)
-    ElboDeriv.get_bvn_derivs!(elbo_vars.bvn_derivs, bmc, true, true)
-    ElboDeriv.transform_bvn_derivs!(
+    elbo_vars = Model.ElboIntermediateVariables(Float64, 1, 1)
+    Model.eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x)
+    Model.get_bvn_derivs!(elbo_vars.bvn_derivs, bmc, true, true)
+    Model.transform_bvn_derivs!(
         elbo_vars.bvn_derivs, gcc.sig_sf, patch.wcs_jacobian, true)
 
     f_bvn_wrap(par)
@@ -540,7 +540,7 @@ function test_galaxy_cache_component()
         e_scale = par[par_ids_e_scale]
         u_pix = WCSUtils.world_to_pix(
             patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-        elbo_vars_fd = ElboDeriv.ElboIntermediateVariables(T, 1, 1)
+        elbo_vars_fd = Model.ElboIntermediateVariables(T, 1, 1)
         e_dev_i_fd = convert(T, e_dev_i)
         gcc = GalaxyCacheComponent(
                         e_dev_dir, e_dev_i_fd, gp, psf,
@@ -567,7 +567,7 @@ function test_galaxy_cache_component()
     gcc = GalaxyCacheComponent(
                     e_dev_dir, e_dev_i, gp, psf,
                     u_pix, e_axis, e_angle, e_scale, true, true)
-    elbo_vars = ElboDeriv.ElboIntermediateVariables(Float64, 1, 1)
+    elbo_vars = Model.ElboIntermediateVariables(Float64, 1, 1)
     eval_bvn_pdf!(elbo_vars.bvn_derivs, gcc.bmc, x)
     get_bvn_derivs!(elbo_vars.bvn_derivs, gcc.bmc, true, true)
     transform_bvn_derivs!(elbo_vars.bvn_derivs, gcc.sig_sf, patch.wcs_jacobian, true)
@@ -619,14 +619,14 @@ function test_galaxy_sigma_derivs()
             e_angle_fd = par[gal_shape_ids.e_angle]
             e_axis_fd = par[gal_shape_ids.e_axis]
             e_scale_fd = par[gal_shape_ids.e_scale]
-            this_cov = ElboDeriv.get_bvn_cov(e_axis_fd, e_angle_fd, e_scale_fd)
+            this_cov = Model.get_bvn_cov(e_axis_fd, e_angle_fd, e_scale_fd)
             this_cov[sig_i...]
         end
 
         par = wrap_par(e_angle, e_axis, e_scale)
-        XiXi = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)
+        XiXi = Model.get_bvn_cov(e_axis, e_angle, e_scale)
 
-        gal_derivs = ElboDeriv.GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
+        gal_derivs = Model.GalaxySigmaDerivs(e_angle, e_axis, e_scale, XiXi)
 
         ad_grad_fun = x -> ForwardDiff.gradient(f_wrap, x)
         ad_grad = ad_grad_fun(par)
@@ -687,7 +687,7 @@ end
 
 function test_dsiginv_dsig()
     e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # bvn_derivs.bvn_sigsig_h is large
-    the_cov = ElboDeriv.get_bvn_cov(e_axis, e_angle, e_scale)
+    the_cov = Model.get_bvn_cov(e_axis, e_angle, e_scale)
     the_mean = Float64[0., 0.]
     bvn = BvnComponent{Float64}(the_mean, the_cov, 1.0)
     sigma_vec = Float64[ the_cov[1, 1], the_cov[1, 2], the_cov[2, 2] ]
