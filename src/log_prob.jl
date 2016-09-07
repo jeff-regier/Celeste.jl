@@ -511,7 +511,7 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
                             ea::ElboArgs)
 
     # define star prior log probability density function
-    prior    = load_prior()
+    prior    = construct_prior()
     subprior = prior.galaxy
 
     function galaxy_logprior(state::Vector{Float64})
