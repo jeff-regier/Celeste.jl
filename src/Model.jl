@@ -41,11 +41,10 @@ const band_letters = ['u', 'g', 'r', 'i', 'z']
 # The number of bands (colors).
 const B = length(band_letters)
 
-
 include("light_source_model.jl")
 include("psf_model.jl")
 include("image_model.jl")
-include("param_set.jl")
+#include("param_set.jl")
 include("imaged_sources.jl")
 
 
@@ -55,5 +54,8 @@ include("imaged_sources.jl")
 
 typealias VariationalParams{NumType <: Number} Vector{Vector{NumType}}
 typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
+
+# log prob uses VariationalParams object --- included last
+include("log_prob.jl")
 
 end  # module
