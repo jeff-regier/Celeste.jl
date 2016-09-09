@@ -2,7 +2,7 @@ using StaticArrays
 import WCS
 
 
-###########  flatten catalog for use with Garbo #####
+###########  flattened data types for use with Garbo #####
 
 type FlatCatalogEntry
     pos::SVector{2,Float64}
@@ -16,7 +16,6 @@ type FlatCatalogEntry
     objid::SVector{19,UInt8}
     thing_id::Int
 end
-
 
 function convert(::Type{FlatCatalogEntry}, ce::CatalogEntry)
     @assert length(ce.objid) == 19
@@ -33,7 +32,6 @@ function convert(::Type{FlatCatalogEntry}, ce::CatalogEntry)
         ce.thing_id)
 end
 
-
 function convert(::Type{CatalogEntry}, ce::FlatCatalogEntry)
     CatalogEntry(
         ce.pos,
@@ -48,7 +46,7 @@ function convert(::Type{CatalogEntry}, ce::FlatCatalogEntry)
         ce.thing_id)
 end
 
-###########  flatten raw psf for use with Garbo #####
+####
 
 immutable FlatRawPSF
     rrows::SMatrix{2601,4,Float64}  # A matrix of flattened eigenimages.
@@ -74,11 +72,9 @@ immutable FlatRawPSF
     end
 end
 
-
 function convert(::Type{RawPSF}, psf::FlatRawPSF)
     RawPSF(psf.rrows, psf.rnrow, psf.rncol, psf.cmat[1:psf.nrow_b, 1:psf.ncol_b])
 end
-
 
 function convert(::Type{FlatRawPSF}, psf::RawPSF)
     cmat = zeros(5, 5, 4)
@@ -88,23 +84,58 @@ function convert(::Type{FlatRawPSF}, psf::RawPSF)
     FlatRawPSF(psf.rrows, psf.rnrow, psf.rncol, cmat, psf.nrow_b, psf.ncol_b)
 end
 
+####
 
-###########  flatten tiled image for use with Garbo #####
+immutable FlatPsfComponent
+    alphaBar::Float64
+    xiBar::SVector{2,Float64}
+    tauBar::SMatrix{2,2,Float64}
+    tauBarInv::SMatrix{2,2,Float64}
+    tauBarLd::Float64
+end
+
+function convert(::Type{FlatPsfComponent}, c::PsfComponent)
+    FlatPsfComponent(c.alphaBar. c.xiBar, c.tauBar, c.tauBarInv, c.tauBarLd)
+end
+
+function convert(::Type{PsfComponent}, c::FlatPsfComponent)
+    PsfComponent(c.alphaBar. c.xiBar, c.tauBar, c.tauBarInv, c.tauBarLd)
+end
+
+####
+
+immutable FlatImageTile
+    b::Int
+    h_range::UnitRange{Int}
+    w_range::UnitRange{Int}
+    pixels::SMatrix{20, 20, Float32}
+    epsilon_mat::SMatrix{20, 20, Float32}
+    iota_vec::SVector{20, Float32}
+end
+
+function convert(::Type{FlatImageTile}, it::ImageTile)
+    FlatImageTile(it.b, it.h_range, it.w_range, it.pixels, it.epsilon_mat, it.iota_vec)
+end
+
+function convert(::Type{ImageTile}, it::FlatImageTile)
+    ImageTile(it.b, it.h_range, it.w_range, it.pixels, it.epsilon_mat, it.iota_vec)
+end
+
+####
 
 immutable FlatTiledImage
     H::Int
     W::Int
-    tiles::SMatrix{100,200,ImageTile}
+    tiles::SMatrix{100,200,FlatImageTile}
     tile_width::Int
     b::Int
     wcs_header::SVector{10000,UInt8}
-    psf::SVector{psf_K, PsfComponent}
+    psf::SVector{psf_K,FlatPsfComponent}
     run_num::Int
     camcol_num::Int
     field_num::Int
     raw_psf_comp::FlatRawPSF
 end
-
 
 function convert(::Type{FlatTiledImage}, img::TiledImage)
     wcs_header = WCS.to_header(img.wcs)
@@ -120,7 +151,6 @@ function convert(::Type{FlatTiledImage}, img::TiledImage)
                    img.psf, img.run_num, img.camcol_num, img.field_num,
                    img.raw_psf_comp)
 end
-
 
 function convert(::Type{TiledImage}, img::FlatTiledImage)
     wcs_array = WCS.from_header(img.wcs_header)
