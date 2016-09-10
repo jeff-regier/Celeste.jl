@@ -1,8 +1,9 @@
 module Infer
 
+import WCS
+
 using ..Model
 using ..ElboDeriv
-import ..WCSUtils
 import ..PSF
 import ..OptimizeElbo
 import ..Log
@@ -111,8 +112,8 @@ function get_tile_source_map(images::Vector{TiledImage},
 
         for s=1:S
             world_center = catalog[s].pos
-            pixel_center = WCSUtils.world_to_pix(img.wcs, world_center)
-            wcs_jacobian = WCSUtils.pixel_world_jacobian(img.wcs, pixel_center)
+            pixel_center = WCS.world_to_pix(img.wcs, world_center)
+            wcs_jacobian = Model.pixel_world_jacobian(img.wcs, pixel_center)
             radius_pix = Model.choose_patch_radius(pixel_center, catalog[s],
                                                                 img.psf, img)
             if !isnan(radius_override)
@@ -207,10 +208,10 @@ function trim_source_tiles!(ea::ElboArgs{Float64};
                                 img.field_num, img.raw_psf_comp)
 
         patch = ea.patches[s, i]
-        pix_loc = WCSUtils.world_to_pix(patch.wcs_jacobian, 
-                                        patch.center,
-                                        patch.pixel_center,
-                                        ea.vp[s][ids.u])
+        pix_loc = Model.linear_world_to_pix(patch.wcs_jacobian, 
+                                            patch.center,
+                                            patch.pixel_center,
+                                            ea.vp[s][ids.u])
 
         #TODO: iterate over rows first, not columns
         for hh=1:size(tiles, 1), ww=1:size(tiles, 2) 
