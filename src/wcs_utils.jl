@@ -1,9 +1,3 @@
-module WCSUtils
-
-import WCS: WCSTransform, world_to_pix, pix_to_world
-
-export pixel_deriv_to_world_deriv
-
 """
 Convert a world location to a 1-indexed pixel location using a linear
 approximation to the true transform.
@@ -17,7 +11,7 @@ Args:
 Returns:
     - The 1-indexed pixel locations in the same shape as the input.
 """
-world_to_pix{T <: Number}(wcs_jacobian::Matrix{Float64},
+linear_world_to_pix{T <: Number}(wcs_jacobian::Matrix{Float64},
                           world_offset::Vector{Float64},
                           pix_offset::Vector{Float64},
                           worldcoords::VecOrMat{T}) =
@@ -45,38 +39,14 @@ function pixel_world_jacobian(wcs::WCSTransform, pix_loc::Array{Float64, 1};
     # Choose a step size.
     # Assume that about a half a pixel is a reasonable step size and the
     # directions are about the same.
-    world_loc = pix_to_world(wcs, pix_loc)
+    world_loc = WCS.pix_to_world(wcs, pix_loc)
     world_delt = maximum(abs(
-      pix_to_world(wcs, pix_loc + Float64[pixel_delt, pixel_delt]) - world_loc))
+      WCS.pix_to_world(wcs, pix_loc + Float64[pixel_delt, pixel_delt]) - world_loc))
 
     world_loc_1 = world_loc + world_delt * Float64[1, 0]
     world_loc_2 = world_loc + world_delt * Float64[0, 1]
 
-    hcat((world_to_pix(wcs, world_loc_1) - pix_loc) ./ world_delt,
-         (world_to_pix(wcs, world_loc_2) - pix_loc) ./ world_delt)
+    hcat((WCS.world_to_pix(wcs, world_loc_1) - pix_loc) ./ world_delt,
+         (WCS.world_to_pix(wcs, world_loc_2) - pix_loc) ./ world_delt)
 end
 
-
-"""
-Transform a derivative of a scalar function with respect to pixel
-coordinates into a derivatve with respect to world coordinates.
-
-Args:
- - wcs: The world coordinate system object
- - df_dpix: The derivative of a scalar function with respect to pixel coordinates
- - pix_loc: The pixel location at which the derivative was taken.
- - pixel_delt: The step size for the finite difference
-               approximation in pixel coordinates
-
-Returns:
- - The derivative with respect to world coordinates.
-"""
-function pixel_deriv_to_world_deriv(
-  wcs::WCSTransform, df_dpix::Array{Float64, 1},
-  pix_loc::Array{Float64, 1}; pixel_delt=1e-3)
-    @assert length(pix_loc) == length(df_dpix) == 2
-    trans = pixel_world_jacobian(wcs, pix_loc, pixel_delt=pixel_delt)
-    trans' * df_dpix
-end
-
-end

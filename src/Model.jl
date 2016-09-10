@@ -47,7 +47,7 @@ include("psf_model.jl")
 include("image_model.jl")
 include("param_set.jl")
 include("imaged_sources.jl")
-
+include("wcs_utils.jl")
 
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual
