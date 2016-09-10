@@ -108,8 +108,8 @@ function test_get_tiled_image_source()
         loc = Float64[mean(tile.h_range), mean(tile.w_range)]
         for b = 1:5
             ea.vp[1][ids.u] = loc
-            pixel_center = WCSUtils.world_to_pix(blob[b].wcs, loc)
-            wcs_jacobian = WCSUtils.pixel_world_jacobian(blob[b].wcs, pixel_center)
+            pixel_center = WCS.world_to_pix(blob[b].wcs, loc)
+            wcs_jacobian = Model.pixel_world_jacobian(blob[b].wcs, pixel_center)
             radius_pix = maxabs(eigvals(wcs_jacobian)) * 1e-6
             ea.patches[1, b] = SkyPatch(loc,
                                         radius_pix,

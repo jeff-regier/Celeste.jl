@@ -1,7 +1,7 @@
 module SampleData
 
 using Celeste: Model, ElboDeriv
-import Celeste: WCSUtils, Infer
+import Celeste: Infer
 
 import Synthetic
 
@@ -332,7 +332,7 @@ function gen_n_body_dataset(
   fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
 
   locations = rand(2, S) .* [img_size_h, img_size_w]
-  world_locations = WCSUtils.pix_to_world(blob0[3].wcs, locations)
+  world_locations = WCS.pix_to_world(blob0[3].wcs, locations)
 
   S_bodies = CatalogEntry[CatalogEntry(world_locations[:, s], true,
       fluxes, fluxes, 0.1, .7, pi/4, 4., string(s), s) for s in 1:S];
@@ -345,7 +345,7 @@ function gen_n_body_dataset(
     blob[b].epsilon_mat = fill(blob[b].epsilon_mat[1], blob[b].H, blob[b].W)
   end
 
-  world_radius_pts = WCSUtils.pix_to_world(
+  world_radius_pts = WCS.pix_to_world(
       blob[3].wcs, [patch_pixel_radius 0.; patch_pixel_radius 0.])
   world_radius = maxabs(world_radius_pts[:, 1] - world_radius_pts[:, 2])
   ea = make_elbo_args(
