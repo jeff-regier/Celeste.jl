@@ -7,19 +7,12 @@ import galsim
 
 _logger = logging.getLogger(__name__) 
 
-TRUTH_COLUMNS = ['left', 'bottom', 'angle_radians', 'ellipticity', 'offset_x', 'offset_y']
+TRUTH_COLUMNS = ['left', 'bottom', 'angle_radians', 'ellipticity', 'world_center_x', 'world_center_y']
 
 # Galaxy parameters
-BULGE_N = 3.5          #
-BULGE_RE = 2.3         # arcsec
-DISK_N = 1.5           #
-DISK_R0 = 0.85         # arcsec (corresponds to half_light_radius of ~3.7 arcsec)
-BULGE_FRAC = 0.3       #
-GAL_ELLIP_MAX = 0.6             # Maximum value of e, to avoid getting near e=1.
-GAL_ELLIP_RMS = 0.4             # using "distortion" definition of ellipticity:
-                                #   e = (a^2-b^2)/(a^2+b^2), where a and b are the 
-                                #   semi-major and semi-minor axes, respectively.
-GAL_SIGNAL_TO_NOISE = 200       # Great08 "LowNoise" run
+GALAXY_RADIUS=0.85 # arcsec
+GALAXY_FLUX = 1.e5 # total counts in image
+GAL_ELLIP_MIN = 0.2             # Minimum value of minor/major axis ratio
 
 # PSF parameters
 ATMOS_FWHM=2.1         # arcsec
@@ -36,21 +29,19 @@ TEL_DIAM = 4.          # meters
 
 # Other parameters
 PIXEL_SCALE = 0.75  # arcsec / pixel
-SKY_LEVEL = 1.e6                # ADU / arcsec^2
+SKY_LEVEL = 0. # TODO
 
 SHIFT_RADIUS = 5.0              # arcsec
 
-NX_TILES = 10
-NY_TILES = 10
+NX_TILES = 1
+NY_TILES = 1
 STAMP_XSIZE = 48
 STAMP_YSIZE = 48
 
-RANDOM_SEED = 6424512
+RANDOM_SEED = 6
 
 def make_galaxy():
-    bulge = galsim.Sersic(BULGE_N, half_light_radius=BULGE_RE)
-    disk = galsim.Sersic(DISK_N, scale_radius=DISK_R0)
-    return BULGE_FRAC * bulge + (1 - BULGE_FRAC) * disk
+    return galsim.Exponential(scale_radius=GALAXY_RADIUS, flux=GALAXY_FLUX)
 
 def make_atmospheric_psf():
     atmos = galsim.Kolmogorov(fwhm=ATMOS_FWHM)
@@ -88,15 +79,8 @@ def get_stamp_subimage(full_image, x_index, y_index):
 
 def apply_shear(galaxy, uniform_deviate):
     beta = uniform_deviate() * 2. * math.pi * galsim.radians
-
-    gaussian_deviate = galsim.GaussianDeviate(uniform_deviate, sigma=GAL_ELLIP_RMS)
-    ellip = 1
-    while (ellip > GAL_ELLIP_MAX):
-        # Don't do `ellip = math.fabs(gd())`
-        # Python basically implements this as a macro, so gd() is called twice!
-        val = gaussian_deviate()
-        ellip = math.fabs(val)
-    return galaxy.shear(e=ellip, beta=beta), beta, ellip
+    ellip = uniform_deviate() * (1 - GAL_ELLIP_MIN) + GAL_ELLIP_MIN
+    return galaxy.shear(q=ellip, beta=beta), beta, ellip
 
 def apply_shift(galaxy, uniform_deviate):
     rsq = 2 * SHIFT_RADIUS**2
@@ -107,9 +91,8 @@ def apply_shift(galaxy, uniform_deviate):
     return galaxy.shift(dx, dy), dx, dy
 
 def add_noise(image, uniform_deviate):
-    sky_level_pixel = SKY_LEVEL * PIXEL_SCALE**2
-    noise = galsim.PoissonNoise(uniform_deviate, sky_level=sky_level_pixel)
-    image.addNoiseSNR(noise, GAL_SIGNAL_TO_NOISE)
+    noise = galsim.PoissonNoise(uniform_deviate, sky_level=SKY_LEVEL)
+    image.addNoise(noise)
 
 def write_truth(file_name, rows):
     with open(file_name, 'w') as truth_stream:
@@ -142,7 +125,7 @@ def main():
             this_galaxy, shift_x, shift_y = apply_shift(this_galaxy, uniform_deviate)
 
             stamp_image = get_stamp_subimage(gal_image, ix, iy)
-            final_gal = galsim.Convolve([psf, this_galaxy])
+            final_gal = this_galaxy #galsim.Convolve([psf, this_galaxy])
             final_gal.drawImage(stamp_image)
             add_noise(stamp_image, uniform_deviate)
 
@@ -151,8 +134,8 @@ def main():
                 'bottom': iy * STAMP_YSIZE,
                 'angle_radians': beta.rad(),
                 'ellipticity': ellipticity,
-                'offset_x': shift_x,
-                'offset_y': shift_y,
+                'world_center_x': (STAMP_XSIZE / 2 + shift_x) * PIXEL_SCALE,
+                'world_center_y': (STAMP_YSIZE / 2 + shift_y) * PIXEL_SCALE,
             })
 
     if not os.path.exists('output'):
