@@ -17,7 +17,7 @@ const TILE_WIDTH = 20
 const MIN_FLUX = 2.0
 
 # set this to false to use source-division parallelism
-const SKY_DIVISION_PARALLELISM=true
+const SKY_DIVISION_PARALLELISM=false
 
 # In sky-division parallelism, a workitem is of this ra / dec size
 const wira = 0.025

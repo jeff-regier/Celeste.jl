@@ -108,13 +108,24 @@ immutable FlatImageTile
     b::Int
     h_range::UnitRange{Int}
     w_range::UnitRange{Int}
-    pixels::SMatrix{20, 20, Float32}
-    epsilon_mat::SMatrix{20, 20, Float32}
-    iota_vec::SVector{20, Float32}
+    pixels::SMatrix{20,20,Float32}
+    pixels_dims::Tuple{Int,Int}
+    epsilon_mat::SMatrix{20,20,Float32}
+    epsilon_mat_dims::Tuple{Int,Int}
+    iota_vec::SVector{20,Float32}
+    iota_vec_dims::Tuple{Int}
 end
 
 function convert(::Type{FlatImageTile}, it::ImageTile)
-    FlatImageTile(it.b, it.h_range, it.w_range, it.pixels, it.epsilon_mat, it.iota_vec)
+    pm = zeros(Float32, 20, 20)
+    copy!(pm, it.pixels)
+    emm = zeros(Float32, 20, 20)
+    copy!(emm, it.epsilon_mat)
+    ivv = zeros(Float32, 20)
+    copy!(ivv, iota_vec)
+    #FlatImageTile(it.b, it.h_range, it.w_range, it.pixels, it.epsilon_mat, it.iota_vec)
+    FlatImageTile(it.b, it.h_range, it.w_range, pm, size(it.pixels),
+            emm, size(it.epsilon_mat), ivv, size(it.iota_vec))
 end
 
 function convert(::Type{ImageTile}, it::FlatImageTile)
@@ -126,10 +137,14 @@ end
 immutable FlatTiledImage
     H::Int
     W::Int
-    tiles::SMatrix{100,200,FlatImageTile}
+    #tiles::SMatrix{100,200,FlatImageTile}
+    tiles::Matrix{FlatImageTile}
+    tiles_dims::Tuple{Int,Int}
     tile_width::Int
     b::Int
-    wcs_header::SVector{10000,UInt8}
+    #wcs_header::SVector{10000,UInt8}
+    wcs_header::String
+    wcs_header_length::Int
     psf::SVector{psf_K,FlatPsfComponent}
     run_num::Int
     camcol_num::Int
@@ -138,16 +153,16 @@ immutable FlatTiledImage
 end
 
 function convert(::Type{FlatTiledImage}, img::TiledImage)
+    #@assert(size(img.tiles) == (100, 200))
+    sz = size(img.tiles)
+    @assert(sz[1] <= 105)
+    @assert(sz[2] <= 200)
     wcs_header = WCS.to_header(img.wcs)
-    @assert(length(wcs_header) < 10_000)
+    wcs_header_length = length(wcs_header)
+    @assert(wcs_header_length < 10_000)
 
-    n = length(wcs_header)
-    wcs_header_bytes = zeros(UInt8, 10_000)
-    for i in 1:n
-        wcs_header_bytes[i] = wcs_header[i]
-    end
-
-    FlatTiledImage(img.H, img.W, img.tiles, img.tile_width, img.b, wcs_header_bytes,
+    FlatTiledImage(img.H, img.W, img.tiles, size(img.tiles), img.tile_width,
+                   img.b, wcs_header, wcs_header_length,
                    img.psf, img.run_num, img.camcol_num, img.field_num,
                    img.raw_psf_comp)
 end
@@ -161,15 +176,14 @@ function convert(::Type{TiledImage}, img::FlatTiledImage)
                img.raw_psf_comp)
 end
 
-
-###########  flat type to store inference results #########
+####
 
 immutable InferResult
     thing_id::Int
-    objid::SVector{30,UInt8}
+    objid::SVector{19,UInt8}
     ra::Float64
     dec::Float64
-    vs::SVector{88,Float64}
+    vs::SVector{32,Float64}
 end
 
 
@@ -196,8 +210,68 @@ end
 function load_images(box, rcfs, stagedir)
     num_fields = length(rcfs)
 
-    # each cell of `images` contains B=5 tiled images
-    images = Garray(NTuple{5,FlatTiledImage}, num_fields)
+    # `images` contains B=5 tiled images per field
+    # image tiles and WCS headers are stored in separate global arrays
+    # and linked into images on creation or after get()s
+    images = Garray(FlatTiledImage, 5*num_fields)
+    images_tiles = Garray(FlatImageTile, 5*num_fields*100*200)
+    it_length = 100*200
+    images_wcs_headers = Garray(UInt8, 5*num_fields*10000)
+    iwh_length = 10000
+
+    # get local distribution of the images global array and access to it
+    limages_lo, limages_hi = distribution(images, nodeid)
+    nlocal_images = limages_hi[1] - limages_lo[1] + 1
+    limages = access(images, limages_lo, limages_hi)
+
+    # we load images for the local distribution of the images global array only
+    li = 1
+    i_n = limages_lo[1]
+    it_n = ((i_n - 1) * 100 * 200) + 1
+    iwh_n = ((i_n - 1) * 10000) + 1
+    while i_n <= limages_hi[1]
+        # there are 5 images per RCF so an RCF's images  might be split across nodes
+        # (which is not good, but the fix is TODO); figure out which RCF corresponds
+        # to the images we want and load it
+        rcf_n, rcf_n_b = divrem(i_n, 5)
+        rcf_n = rcf_n + 1
+        rcf = rcfs[rcf_n]
+        raw_images = SDSSIO.load_field_images(rcf, stagedir)
+        @assert(length(raw_images) == 5)
+        for b = rcf_n_b:5
+            tiled_img = TiledImage(raw_images[b])
+            println(size(tiled_img.tiles))
+            limages[li] = convert(FlatTiledImage, tiled_img)
+
+            # put the image tiles (100x200 per image) into the tiles array; we can't
+            # use access() because the distribution might be different from the images
+            # global array; ditto for the WCS header
+            put!(images_tiles, [it_n], [it_n + it_length - 1], limages[li].tiles)
+            it_n = it_n + it_length
+
+            wh = zeros(UInt8, iwh_length)
+            copy!(wh, limages[i].wcs_header)
+            put!(images_wcs_headers, [iwh_n], [iwh_n + iwh_length - 1], wh)
+            iwh_n = iwh_n + iwh_length
+
+            li = li + 1
+            if li > nlocal_images
+                break
+            end
+        end
+        i_n = i_n + (5 - rcf_n_b + 1)
+    end
+    Garbo.flush(images)
+    Garbo.flush(images_tiles)
+    Garbo.flush(images_wcs_headers)
+    sync()
+
+    images, images_tiles, images_wcs_headers
+end
+
+
+function load_offsets(box, rcfs, stagedir)
+    num_fields = length(rcfs)
 
     # stores first index of each field's sources in the catalog array
     catalog_offset = Garray(Int64, num_fields)
@@ -205,31 +279,19 @@ function load_images(box, rcfs, stagedir)
     # stores first index of each field's tasks in the tasks array
     task_offset = Garray(Int64, num_fields)
 
-    # get local distribution of the global array; this should be identical
-    # for all the arrays (since they're all the same size)
-    lo, hi = distribution(images, nodeid)
-    nlocal = hi[1]-lo[1]+1
-
-    # get access to the local parts of the global arrays
-    limages = access(images, lo, hi)
+    # get local distribution and access the global arrays
+    lo, hi = distribution(catalog_offset, nodeid)
+    nlocal = hi[1] - lo[1] + 1
     lcatalog_offset = access(catalog_offset, lo, hi)
     ltask_offset = access(task_offset, lo, hi)
 
     for i in 1:nlocal
         n = lo[1] + i - 1
-
         rcf = rcfs[n]
-        raw_images = SDSSIO.load_field_images(rcf, stagedir)
-        @assert(length(raw_images) == 5)
-        timgs = [convert(FlatTiledImage, TiledImage(img)) for img in raw_images]
-        limages[i] = tuple(timgs...)
-   
-        # second, load the `catalog_offset` and `task_count` arrays with
-        # a number of sources for each field.
-        # (We'll accumulate the entries later.)
+
+        # load the `catalog_offset` and `task_count` arrays with a number of
+        # sources for each field (we'll accumulate the entries later)
         local_catalog = fetch_catalog(rcf, stagedir)
-        cef = convert(FlatCatalogEntry, local_catalog[1])
-        println(sizeof(cef))
 
         # we'll use sources outside of the box to render the background,
         # but we won't optimize them
@@ -238,7 +300,6 @@ function load_images(box, rcfs, stagedir)
         lcatalog_offset[i] = length(local_catalog)
         ltask_offset[i] = length(local_tasks)
     end
-    Garbo.flush(images)
     Garbo.flush(catalog_offset)
     Garbo.flush(task_offset)
     sync()
@@ -274,7 +335,7 @@ function load_images(box, rcfs, stagedir)
         sync()
     end
 
-    images, catalog_offset, task_offset
+    catalog_offset, task_offset
 end
 
 
@@ -480,8 +541,10 @@ function divide_sources_and_infer(
 
     # loads 25TB from disk for SDSS
     tic()
-    images, catalog_offset, task_offset = load_images(box, rcfs, stagedir)
+    images, images_tiles, images_wcs_headers = load_images(box, rcfs, stagedir)
     timing.read_img = toq()
+
+    catalog_offset, task_offset = load_offsets(box, rcfs, stagedir)
 
     # loads 4TB from disk for SDSS
     tic()
