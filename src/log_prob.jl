@@ -191,14 +191,14 @@ end
 type StarPrior
     brightness::LogNormal
     color_component::Categorical
-    colors::Vector{MvLogNormal}
+    colors::Vector{MvNormal}
 end
 
 
 type GalaxyPrior
     brightness::LogNormal
     color_component::Categorical
-    colors::Vector{MvLogNormal}
+    colors::Vector{MvNormal}
     gal_scale::LogNormal
     gal_ab::Beta
     gal_fracdev::Beta
@@ -220,12 +220,12 @@ function construct_prior()
     star_prior = StarPrior(
         LogNormal(pp.r_mean[1], pp.r_var[1]),
         Categorical(pp.k[:,1]),
-        [MvLogNormal(pp.c_mean[:,k,1], pp.c_cov[:,:,k,1]) for k in 1:2])
+        [MvNormal(pp.c_mean[:,k,1], pp.c_cov[:,:,k,1]) for k in 1:2])
 
     gal_prior = GalaxyPrior(
         LogNormal(pp.r_mean[2], pp.r_var[2]),
         Categorical(pp.k[:,2]),
-        [MvLogNormal(pp.c_mean[:,k,2], pp.c_cov[:,:,k,2]) for k in 1:2],
+        [MvNormal(pp.c_mean[:,k,2], pp.c_cov[:,:,k,2]) for k in 1:2],
         LogNormal(0, 10),
         Beta(1, 1),
         Beta(1, 1))
@@ -244,7 +244,7 @@ function color_logprior(brightness::Float64,
                         is_star::Bool)
     subprior      = is_star ? prior.star : prior.galaxy
     ll_brightness = logpdf(subprior.brightness, exp(brightness))
-    ll_component  = [logpdf(subprior.colors[k], exp(colors)) for k in 1:2]
+    ll_component  = [logpdf(subprior.colors[k], colors) for k in 1:2]
     ll_color      = logsumexp(ll_component + log(subprior.color_component.p))
     return ll_brightness + ll_color
 end
@@ -286,13 +286,15 @@ end
 Translate from the (brightness, color) parameterization to nmgy fluxes
 """
 function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
+    # build up log fluxes
     ret    = Array(Float64, 5)
-    ret[3] = exp(brightness)
-    ret[4] = ret[3] * exp(colors[3]) # colors3 = ln(r - z) vs[ids.c1[3, i]])
-    ret[5] = ret[4] * exp(colors[4]) #vs[ids.c1[4, i]])
-    ret[2] = ret[3] / exp(colors[2]) #vs[ids.c1[2, i]])
-    ret[1] = ret[2] / exp(colors[1]) #vs[ids.c1[1, i]])
-    ret
+    lnr    = brightness
+    ret[3] = lnr     # r flux
+    ret[4] = lnr - colors[3]         # ln(r/i) = c3 => lni = lnr - c3
+    ret[5] = ret[4] - colors[4]      # ln(i/z) = c4 => lnz = lni - c4
+    ret[2] = colors[2] + lnr         # ln(g/r) = c2 => lng = c2 + lnr
+    ret[1] = colors[1] + ret[2]      # ln(u/g) = c1 => lnu = c1 + lng
+    return exp(ret)
 end
 
 

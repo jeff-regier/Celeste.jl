@@ -15,7 +15,6 @@ function true_star_init()
     ea.vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * ea.vp[1][ids.r2]
     #ea.vp[1][ids.r1] = sample_star_fluxes[3] ./ ea.vp[1][ids.r2]
     ea.vp[1][ids.c2] = 1e-4
-    println("BLOB! ", typeof(blob))
     blob, ea, body
 end
 
@@ -77,7 +76,7 @@ function test_color_flux_transform()
     # transform back to colors
     fluxes_back = Model.colors_to_fluxes(lnr, colors)
     for i in 1:length(fluxes)
-        #@test fluxes[i] == fluxes_back[i]
+        @test isapprox(fluxes[i], fluxes_back[i])
     end
 end
 
