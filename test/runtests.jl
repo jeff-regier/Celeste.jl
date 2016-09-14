@@ -38,7 +38,6 @@ else
     testfiles = ["test_log_prob.jl",
                  "test_elbo_values.jl",
                  "test_derivatives.jl",
-                 "test_log_prob.jl",
                  "test_psf.jl",
                  "test_images.jl",
                  "test_misc.jl",
