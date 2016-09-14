@@ -81,7 +81,38 @@ function test_color_flux_transform()
 end
 
 
+function test_sigmoid_logit()
+    as = [-10., -1., -.001, .001, 1., 10.]
+    for a in as
+
+        # test that sigmoid is pushing between 0 and 1
+        sig_a = Model.sigmoid(a)
+        @test (sig_a >= 0) && (sig_a <= 1)
+
+        # test that logit is equal to inverse sigmoid
+        a_prime = Model.logit(sig_a)
+        @test isapprox(a, a_prime)
+
+    end
+end
+
+
+function test_gal_shape_constrain()
+    con_gal_shape = [.1, .1, .1, .1]
+    unc_gal_shape = Model.unconstrain_gal_shape(con_gal_shape)
+    back_gal_shape = Model.constrain_gal_shape(unc_gal_shape)
+
+    # test equality of inverse map
+    @test length(con_gal_shape) == length(back_gal_shape)
+    for i in 1:length(unc_gal_shape)
+        @test isapprox(con_gal_shape[i], back_gal_shape[i])
+    end
+end
+
+
 ####################################
+test_sigmoid_logit()
+test_gal_shape_constrain()
 test_color_flux_transform()
 test_that_star_truth_is_most_likely()
 test_that_gal_truth_is_most_likely()
