@@ -38,6 +38,7 @@ function make_star_logpdf(images::Vector{TiledImage},
     # define star log joint probability density function
     function star_logpdf(state::Vector{Float64})
         ll_prior = star_logprior(state)
+        println("star llpdf prior:", ll_prior)
 
         brightness, colors, position = state[1], state[2:5], state[6:end]
         dummy_gal_shape = [.1, .1, .1, .1]
@@ -152,14 +153,16 @@ function state_log_likelihood(is_star::Bool,
                            pixel.h, pixel.w,
                            gal_mcs_vec[pixel.n], star_mcs_vec[pixel.n])
 
-        # TODO incorporate background rate for pixel into this epsilon_mat
         # compute the background rate for this pixel
         background_rate = tile.epsilon_mat[pixel.h, pixel.w]
-        #for s in tile_sources
-        #    println("tile source s: ", s)
-        #    state = states[s]
-        #    rate += state.is_star ? elbo_vars.fs0m_vec[s].v : elbo_vars.fs1m_vec[s].v
-        #end
+        background_sources = tile_sources[tile_sources.!=1]
+        for s in background_sources
+            println("background s: ", s)
+            flux_s = variational_params_to_fluxes(s, ea.vp)
+            rate_s = is_star ? elbo_vars.fs0m_vec[s].v : elbo_vars.fs1m_vec[s].v
+            rate_s *= flux_s[pixel_band]
+            background_rate += rate_s
+        end
 
         # this source's rate, add to background for total
         this_rate  = is_star ? elbo_vars.fs0m_vec[1].v : elbo_vars.fs1m_vec[1].v
@@ -175,7 +178,7 @@ end
 
 
 ###########################################################################
-# prior data types - for computing prior log probs of star/gal parameters #
+# priors - for computing prior log probs of star/gal parameters           #
 ###########################################################################
 
 
@@ -203,18 +206,39 @@ type Prior
 end
 
 
-######################
-# other util funs    #
-######################
+"""
+Construct a `Prior` object, contains StarPrior and GalaxyPrior objects
+"""
+function construct_prior()
+    pp = load_prior()
+    star_prior = StarPrior(
+        LogNormal(pp.r_mean[1], pp.r_var[1]),
+        Categorical(pp.k[:,1]),
+        [MvLogNormal(pp.c_mean[:,k,1], pp.c_cov[:,:,k,1]) for k in 1:2])
+
+    gal_prior = GalaxyPrior(
+        LogNormal(pp.r_mean[2], pp.r_var[2]),
+        Categorical(pp.k[:,2]),
+        [MvLogNormal(pp.c_mean[:,k,2], pp.c_cov[:,:,k,2]) for k in 1:2],
+        LogNormal(0, 10),
+        Beta(1, 1),
+        Beta(1, 1))
+
+    return Prior(Bernoulli(.5), star_prior, gal_prior)
+end
 
 
+"""
+Return the log prior probability of a (brightness,color) pair based on
+prior probability objects constructed by `construct_prior()`
+"""
 function color_logprior(brightness::Float64,
                         colors::Vector{Float64},
                         prior::Prior,
                         is_star::Bool)
-    subprior = is_star ? prior.star : prior.galaxy
-    ll_brightness = logpdf(subprior.brightness, brightness)
-    ll_component  = [logpdf(subprior.colors[k], colors) for k in 1:2]
+    subprior      = is_star ? prior.star : prior.galaxy
+    ll_brightness = logpdf(subprior.brightness, exp(brightness))
+    ll_component  = [logpdf(subprior.colors[k], exp(colors)) for k in 1:2]
     ll_color      = logsumexp(ll_component + log(subprior.color_component.p))
     return ll_brightness + ll_color
 end
@@ -231,18 +255,34 @@ function shape_logprior(gal_shape::Vector{Float64}, prior::Prior)
 end
 
 
-function logsumexp(a::Vector{Float64})
-    a_max = maximum(a)
-    out = log(sum(exp(a - a_max)))
-    out += a_max
-    return out
+#################################################################
+# transformation of fluxes = (u, g, r, i, z) in nanomaggies to  #
+# (bright,color) pairs                                          #
+#################################################################
+
+
+"""
+Translate between fluxes (nmgy rates) and colors (on which
+LogNormal priors are placed)
+"""
+function fluxes_to_colors(fluxes::Vector{Float64})
+    lnr    = log(fluxes[3])
+    colors = Array(Float64, 4)
+    colors[1] = log(fluxes[1]) - log(fluxes[2])
+    colors[2] = log(fluxes[2]) - log(fluxes[3])
+    colors[3] = log(fluxes[3]) - log(fluxes[4])
+    colors[4] = log(fluxes[4]) - log(fluxes[5])
+    return lnr, colors
 end
 
 
+"""
+Translate from the (brightness, color) parameterization to nmgy fluxes
+"""
 function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
     ret    = Array(Float64, 5)
     ret[3] = exp(brightness)
-    ret[4] = ret[3] * exp(colors[3]) #vs[ids.c1[3, i]])
+    ret[4] = ret[3] * exp(colors[3]) # colors3 = ln(r - z) vs[ids.c1[3, i]])
     ret[5] = ret[4] * exp(colors[4]) #vs[ids.c1[4, i]])
     ret[2] = ret[3] / exp(colors[2]) #vs[ids.c1[2, i]])
     ret[1] = ret[2] / exp(colors[1]) #vs[ids.c1[1, i]])
@@ -250,21 +290,76 @@ function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
 end
 
 
-function construct_prior()
-    pp = load_prior()
+######################################################
+# initialize from catalog and variational parameters #
+######################################################
 
-    star_prior = StarPrior(
-        LogNormal(pp.r_mean[1], pp.r_var[1]),
-        Categorical(pp.k[:,1]),
-        [MvLogNormal(pp.c_mean[:,k,1], pp.c_cov[:,:,k,1]) for k in 1:2])
 
-    gal_prior = GalaxyPrior(
-        LogNormal(pp.r_mean[2], pp.r_var[2]),
-        Categorical(pp.k[:,2]),
-        [MvLogNormal(pp.c_mean[:,k,2], pp.c_cov[:,:,k,2]) for k in 1:2],
-        LogNormal(0, 10),
-        Beta(1, 1),
-        Beta(1, 1))
+function init_star_state(entry::CatalogEntry)
+    brightness, colors = fluxes_to_colors(entry.star_fluxes)
+    param_vec = [brightness; colors; entry.pos]
+end
 
-    return Prior(Bernoulli(.5), star_prior, gal_prior)
+
+function init_galaxy_state(entry::CatalogEntry)
+    brightness, colors = fluxes_to_colors(entry.gal_fluxes)
+    #gdev, gaxis, gangle, gscale = gal_shape
+    gal_shape = [entry.gal_frac_dev, entry.gal_ab,
+                 entry.gal_angle, entry.gal_scale]
+    param_vec = [brightness; colors; entry.pos; gal_shape]
+    return param_vec
+end
+
+
+function elbo_args_vp_to_star_state(vp::Array{Float64,1})
+    fluxes      = variational_params_to_fluxes(vp)
+    lnr, colors = fluxes_to_colors(fluxes)
+    ra, dec     = vp[ids.u[1]], vp[ids.u[2]]
+    return [[lnr]; colors; [ra, dec]]
+end
+
+
+function elbo_args_vp_to_galaxy_state(vp::Array{Float64, 1})
+    shared_params = elbo_args_vp_to_star_state(vp)
+    gal_shape = [vp[ids.e_dev]  ,
+                 vp[ids.e_axis] ,
+                 vp[ids.e_angle],
+                 vp[ids.e_scale]]
+    return [shared_params; gal_shape]
+end
+
+
+function variational_params_to_fluxes(i::Int, vs::Array{Array{Float64,1}})
+    ret = Array(Float64, 5)
+    ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
+    ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
+    ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
+    ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
+    ret[1] = ret[2] / exp(vs[ids.c1[1, i]])
+    ret
+end
+
+
+function variational_params_to_fluxes(vs::Array{Float64,1})
+    ret = Array(Float64, 5)
+    i = 1
+    ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
+    ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
+    ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
+    ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
+    ret[1] = ret[2] / exp(vs[ids.c1[1, i]])
+    ret
+end
+
+
+###################
+# other util funs #
+###################
+
+#TODO is there a better place for this generic function? --- acm
+function logsumexp(a::Vector{Float64})
+    a_max = maximum(a)
+    out = log(sum(exp(a - a_max)))
+    out += a_max
+    return out
 end
