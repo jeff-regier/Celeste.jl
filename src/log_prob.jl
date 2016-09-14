@@ -15,12 +15,21 @@ include("log_prob_util.jl")
 
 
 """
-Creates a vectorized version of the star logpdf
+Creates a vectorized version of the star logpdf as a function of
+unconstrained params.
+
+    star_params = [lnr, lnc1, ..., lnc4, ra, dec]
 
 Args:
   - images: Vector of TiledImage types (data for log_likelihood)
   - active_pixels: Vector of ActivePixels on which the log_likelihood is based
-  - ea: ElboArgs book keeping argument - keeps the
+  - ea: ElboArgs book keeping argument
+
+Returns:
+  - star_logpdf  : unnormalized logpdf function handle that takes in a flat,
+                   unconstrained array as parameter
+  - star_logprior: star param log prior function handle that takes in same
+                   flat, unconstrained array as parameter
 """
 function make_star_logpdf(images::Vector{TiledImage},
                           active_pixels::Vector{ActivePixel},
@@ -107,7 +116,6 @@ function state_log_likelihood(is_star::Bool,
                               images::Vector{TiledImage},
                               active_pixels::Vector{ActivePixel},
                               ea::ElboArgs)
-
     # TODO: cache the background rate image!! --- does not need to be recomputed at each ll eval
 
     # convert brightness/colors to fluxes for scaling
