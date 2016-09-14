@@ -1,5 +1,6 @@
 using StaticArrays
 import WCS
+import Base.convert
 
 
 ###########  flattened data types for use with Garbo #####
@@ -79,7 +80,7 @@ end
 function convert(::Type{FlatRawPSF}, psf::RawPSF)
     cmat = zeros(5, 5, 4)
     for k in 1:size(psf.cmat, 3)
-        cmat[size(psf.cmat, 1), size(psf.cmat, 2), k] = cmat[:, :, k]
+        cmat[size(psf.cmat, 1), size(psf.cmat, 2), k] = psf.cmat[:, :, k]
     end
     FlatRawPSF(psf.rrows, psf.rnrow, psf.rncol, cmat, psf.nrow_b, psf.ncol_b)
 end
@@ -95,11 +96,17 @@ immutable FlatPsfComponent
 end
 
 function convert(::Type{FlatPsfComponent}, c::PsfComponent)
-    FlatPsfComponent(c.alphaBar. c.xiBar, c.tauBar, c.tauBarInv, c.tauBarLd)
+    #xb = zeros(Float64, 2)
+    #copy!(xb, c.xiBar)
+    #tb = zeros(Float64, 2, 2)
+    #copy!(tb, c.tauBar)
+    #tbi = zeros(Float64, 2, 2)
+    #copy!(tbi, c.tauBarInv)
+    FlatPsfComponent(c.alphaBar, c.xiBar, c.tauBar, c.tauBarInv, c.tauBarLd)
 end
 
 function convert(::Type{PsfComponent}, c::FlatPsfComponent)
-    PsfComponent(c.alphaBar. c.xiBar, c.tauBar, c.tauBarInv, c.tauBarLd)
+    PsfComponent(c.alphaBar, c.xiBar, c.tauBar, c.tauBarInv, c.tauBarLd)
 end
 
 ####
@@ -122,10 +129,12 @@ function convert(::Type{FlatImageTile}, it::ImageTile)
     emm = zeros(Float32, 20, 20)
     copy!(emm, it.epsilon_mat)
     ivv = zeros(Float32, 20)
-    copy!(ivv, iota_vec)
+    copy!(ivv, it.iota_vec)
     #FlatImageTile(it.b, it.h_range, it.w_range, it.pixels, it.epsilon_mat, it.iota_vec)
-    FlatImageTile(it.b, it.h_range, it.w_range, pm, size(it.pixels),
-            emm, size(it.epsilon_mat), ivv, size(it.iota_vec))
+    FlatImageTile(it.b, it.h_range, it.w_range,
+            SMatrix{20,20,Float32}(pm), size(it.pixels),
+            SMatrix{20,20,Float32}(emm), size(it.epsilon_mat),
+            SVector{20,Float32}(ivv), size(it.iota_vec))
 end
 
 function convert(::Type{ImageTile}, it::FlatImageTile)
@@ -149,7 +158,8 @@ immutable FlatTiledImage
     run_num::Int
     camcol_num::Int
     field_num::Int
-    raw_psf_comp::FlatRawPSF
+    #raw_psf_comp::FlatRawPSF
+    raw_psf_comp::RawPSF
 end
 
 function convert(::Type{FlatTiledImage}, img::TiledImage)
@@ -212,7 +222,7 @@ function load_images(box, rcfs, stagedir)
 
     # `images` contains B=5 tiled images per field
     # image tiles and WCS headers are stored in separate global arrays
-    # and linked into images on creation or after get()s
+    # and linked into images after get()s
     images = Garray(FlatTiledImage, 5*num_fields)
     images_tiles = Garray(FlatImageTile, 5*num_fields*100*200)
     it_length = 100*200
@@ -239,9 +249,7 @@ function load_images(box, rcfs, stagedir)
         raw_images = SDSSIO.load_field_images(rcf, stagedir)
         @assert(length(raw_images) == 5)
         for b = rcf_n_b:5
-            tiled_img = TiledImage(raw_images[b])
-            println(size(tiled_img.tiles))
-            limages[li] = convert(FlatTiledImage, tiled_img)
+            limages[li] = convert(FlatTiledImage, TiledImage(raw_images[b]))
 
             # put the image tiles (100x200 per image) into the tiles array; we can't
             # use access() because the distribution might be different from the images
@@ -250,7 +258,7 @@ function load_images(box, rcfs, stagedir)
             it_n = it_n + it_length
 
             wh = zeros(UInt8, iwh_length)
-            copy!(wh, limages[i].wcs_header)
+            copy!(wh, limages[li].wcs_header)
             put!(images_wcs_headers, [iwh_n], [iwh_n + iwh_length - 1], wh)
             iwh_n = iwh_n + iwh_length
 
@@ -341,8 +349,10 @@ end
 
 function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     num_fields = length(rcfs)
-    catalog_size = catalog_offset[end]
-    num_tasks = task_offset[end]
+    coe = get(catalog_offset, [num_fields], [num_fields])
+    catalog_size = coe[1]
+    toe = get(task_offset, [num_fields], [num_fields])
+    num_tasks = toe[1]
 
     catalog = Garray(Tuple{FlatCatalogEntry, RunCamcolField}, catalog_size)
 
@@ -397,9 +407,9 @@ function invert_rcf_array(rcfs)
     max_camcol = 1
     max_field = 1
     for rcf in rcfs
-        max_run = maximum(max_run, rcf.run)
-        max_camcol = maximum(max_run, rcf.camcol)
-        max_field = maximum(max_run, rcf.field)
+        max_run = max(max_run, rcf.run)
+        max_camcol = max(max_run, rcf.camcol)
+        max_field = max(max_run, rcf.field)
     end
 
     rcf_to_index = zeros(Int64, max_run, max_camcol, max_field)
