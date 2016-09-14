@@ -299,10 +299,10 @@ LogNormal priors are placed)
 function fluxes_to_colors(fluxes::Vector{Float64})
     lnr    = log(fluxes[3])
     colors = Array(Float64, 4)
-    colors[1] = log(fluxes[1]) - log(fluxes[2])
-    colors[2] = log(fluxes[2]) - log(fluxes[3])
-    colors[3] = log(fluxes[3]) - log(fluxes[4])
-    colors[4] = log(fluxes[4]) - log(fluxes[5])
+    colors[1] = log(fluxes[2]) - log(fluxes[1])
+    colors[2] = log(fluxes[3]) - log(fluxes[2])
+    colors[3] = log(fluxes[4]) - log(fluxes[3])
+    colors[4] = log(fluxes[5]) - log(fluxes[4])
     return lnr, colors
 end
 
@@ -315,10 +315,10 @@ function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
     ret    = Array(Float64, 5)
     lnr    = brightness
     ret[3] = lnr     # r flux
-    ret[4] = lnr - colors[3]         # ln(r/i) = c3 => lni = lnr - c3
-    ret[5] = ret[4] - colors[4]      # ln(i/z) = c4 => lnz = lni - c4
-    ret[2] = colors[2] + lnr         # ln(g/r) = c2 => lng = c2 + lnr
-    ret[1] = colors[1] + ret[2]      # ln(u/g) = c1 => lnu = c1 + lng
+    ret[4] = lnr + colors[3]        # ln(r/i) = c3 => lni = lnr - c3
+    ret[5] = ret[4] + colors[4]     # ln(i/z) = c4 => lnz = lni - c4
+    ret[2] = -colors[2] + lnr       # ln(g/r) = c2 => lng = c2 + lnr
+    ret[1] = -colors[1] + ret[2]    # ln(u/g) = c1 => lnu = c1 + lng
     return exp(ret)
 end
 
