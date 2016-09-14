@@ -47,8 +47,6 @@ function make_star_logpdf(images::Vector{TiledImage},
     # define star log joint probability density function
     function star_logpdf(state::Vector{Float64})
         ll_prior = star_logprior(state)
-        println("star llpdf prior:", ll_prior)
-
         brightness, colors, position = state[1], state[2:5], state[6:end]
         dummy_gal_shape = [.1, .1, .1, .1]
         ll_like  = state_log_likelihood(true, brightness, colors, position,
