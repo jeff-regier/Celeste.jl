@@ -7,7 +7,7 @@ import ..WCSUtils
 
 include("bivariate_normals.jl")
 include("log_prob_util.jl")
-
+EPS = 1e-6
 
 ###################################
 # log likelihood function makers  #
@@ -100,7 +100,9 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
     function galaxy_logpdf(state::Vector{Float64})
         ll_prior = galaxy_logprior(state)
 
-        brightness, colors, position, gal_shape = state[1], state[2:5], state[6:7], state[8:end]
+        brightness, colors, position, gal_shape =
+            state[1], state[2:5], state[6:7], state[8:end]
+
         ll_like  = state_log_likelihood(false, brightness, colors, position,
                                         constrain_gal_shape(gal_shape), images,
                                         active_pixels, ea)
@@ -329,10 +331,10 @@ end
 function constrain_gal_shape(unc_gal_shape::Vector{Float64})
     gdev, gaxis, gangle, gscale = unc_gal_shape
     constr_shape    = Array(Float64, 4)
-    constr_shape[1] = sigmoid(gdev)
-    constr_shape[2] = sigmoid(gaxis)
+    constr_shape[1] = clamp(sigmoid(gdev), EPS, 1-EPS)
+    constr_shape[2] = clamp(sigmoid(gaxis), EPS, 1-EPS)
     constr_shape[3] = gangle       # TODO put this between [0, 2pi]
-    constr_shape[4] = exp(gscale)
+    constr_shape[4] = clamp(exp(gscale), EPS, Inf)
     return constr_shape
 end
 
@@ -362,8 +364,12 @@ end
 function init_galaxy_state(entry::CatalogEntry)
     brightness, colors = fluxes_to_colors(entry.gal_fluxes)
     #gdev, gaxis, gangle, gscale = gal_shape
-    gal_shape = unconstrain_gal_shape([entry.gal_frac_dev, entry.gal_ab,
-                                       entry.gal_angle, entry.gal_scale])
+    gal_shape = unconstrain_gal_shape([
+                    clamp(entry.gal_frac_dev, EPS, 1.-EPS),
+                    clamp(entry.gal_ab, EPS, 1.-EPS),
+                    entry.gal_angle,
+                    clamp(entry.gal_scale, EPS, Inf)
+                    ])
     param_vec = [brightness; colors; entry.pos; gal_shape]
     return param_vec
 end
