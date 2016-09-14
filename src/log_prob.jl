@@ -315,10 +315,10 @@ function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
     ret    = Array(Float64, 5)
     lnr    = brightness
     ret[3] = lnr     # r flux
-    ret[4] = lnr + colors[3]        # ln(r/i) = c3 => lni = lnr - c3
-    ret[5] = ret[4] + colors[4]     # ln(i/z) = c4 => lnz = lni - c4
-    ret[2] = -colors[2] + lnr       # ln(g/r) = c2 => lng = c2 + lnr
-    ret[1] = -colors[1] + ret[2]    # ln(u/g) = c1 => lnu = c1 + lng
+    ret[4] = lnr + colors[3]        # ln(i/r) = c3 => lni = lnr - c3
+    ret[5] = ret[4] + colors[4]     # ln(z/i) = c4 => lnz = lni - c4
+    ret[2] = -colors[2] + lnr       # ln(r/g) = c2 => lng = c2 + lnr
+    ret[1] = -colors[1] + ret[2]    # ln(g/u) = c1 => lnu = c1 + lng
     return exp(ret)
 end
 
