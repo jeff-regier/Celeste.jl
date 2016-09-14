@@ -47,24 +47,23 @@ function run_single_source_sampler(entry::CatalogEntry,
     Infer.trim_source_tiles!(ea)
     active_pixels = get_active_pixels(ea)
 
-    # generate the star logpdf
+    # generate the star logpdf and initial MCMC chain state
+    # states are packed together [lnr, cu, cg, cr, ci, ra, dec]
     # TODO create a sample_from_star_prior function (over dispersion...)
-    star_logpdf, star_logprior = Model.make_star_logpdf(images, active_pixels, ea)
-    star_state  = [.1 for i in 1:7]
-    println("Star logpdf: ", star_logpdf(star_state))
-    #star_state   = init_star_state()
-    #star_samples, star_lls = run_slice_sampler(star_logpdf, star_state)
+    star_logpdf, star_logprior =
+        Model.make_star_logpdf(images, active_pixels, ea)
+    star_state       = Model.init_star_state(entry)
     star_param_names = ["lnr", "cug", "cgr", "cri", "ciz", "ra", "dec"]
-    sim = run_slice_sampler(star_logpdf, star_state, 400, star_param_names)
+    star_sim = run_slice_sampler(star_logpdf, star_state, 200, star_param_names)
 
-    # generate the galaxy logpdf
+    # generate the galaxy logpdf and initial galaxy MCMC chain state
     # TODO create a sample_from_gal_prior function (with over dispersion)
-    #gal_state   = init_gal_state()
-    gal_logpdf, gal_logprior = Model.make_galaxy_logpdf(images, active_pixels, ea)
-    gal_state = [.1 for i in 1:11]
-    println("Gal logpdf: ", gal_logpdf(gal_state))
-    #gal_param_names = [star_param_names[1:7]; ["gdev", "gaxis", "gangle", "gscale"]]
-    #gal_samples, gal_lls  = run_slice_sampler(gal_logpdf, gal_state)
+    gal_logpdf, gal_logprior =
+        Model.make_galaxy_logpdf(images, active_pixels, ea)
+    gal_state   = Model.init_galaxy_state(entry)
+    gal_param_names = [star_param_names;
+                       ["gdev", "gaxis", "gangle", "gscale"]]
+    gal_sim = run_slice_sampler(gal_logpdf, gal_state, 200, gal_param_names)
 
     # generate pointers to star/gal type (to infer p(star | data))
     #type_samples, type_lls = run_star_gal_switcher(star_lls, gal_lls)
@@ -84,15 +83,19 @@ function run_slice_sampler(lnpdf::Function,
                            param_names::Vector{String})
     # slice sample as in example:
     # http://mambajl.readthedocs.io/en/latest/examples/line_amwg_slice.html
-    sim = Mamba.Chains(N, 7, names = param_names)
-    th  = Mamba.SliceMultivariate(th0, 5., lnpdf)
+    sim = Mamba.Chains(N, length(th0), names = param_names)
+    th  = Mamba.SliceUnivariate(th0, 1., lnpdf)
     for i in 1:N
+      if mod(i, 25) == 0
+          println("   sample ", i)
+      end
       sample!(th)
       sim[i, :, 1] = th
     end
     Mamba.describe(sim)
     return sim
 end
+
 
 function run_star_gal_switcher(star_lls::Vector{Float64},
                                gal_lls::Vector{Float64})
@@ -158,5 +161,6 @@ function run_gibbs_sampler_fixed()
     stagedir       = joinpath(ENV["SCRATCH"], "celeste")
     samples        = one_node_infer_mcmc(field_triplets, stagedir; box=box)
 end
+
 
 run_gibbs_sampler_fixed()
