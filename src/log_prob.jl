@@ -58,6 +58,26 @@ function make_star_logpdf(images::Vector{TiledImage},
 end
 
 
+"""
+Creates a vectorized version of a galaxy logpdf as a function of
+unconstrained params
+
+    gal_params = [lnr, lnc1, ..., lnc4, ra, dec, shp1, shp2, shp3, shp4]
+
+where the flux and position params are the same as the star case, and the
+shape params are unconstrained versions of (gdev, gaxis, gangle, gscale)
+
+Args:
+  - images: Vector of TiledImage types (data for log_likelihood)
+  - active_pixels: Vector of ActivePixels on which the log_likelihood is based
+  - ea: ElboArgs book keeping argument
+
+Returns:
+  - gal_logpdf  : unnormalized logpdf function handle that takes in a flat,
+                 unconstrained array as parameter
+  - gal_logprior: star param log prior function handle that takes in same
+                 flat, unconstrained array as parameter
+"""
 function make_galaxy_logpdf(images::Vector{TiledImage},
                             active_pixels::Vector{ActivePixel},
                             ea::ElboArgs)
@@ -67,10 +87,12 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
     subprior = prior.galaxy
 
     function galaxy_logprior(state::Vector{Float64})
-        brightness, colors, u, gal_shape = state[1], state[2:5], state[6:7], state[8:end]
+        brightness, colors, u, gal_shape =
+            state[1], state[2:5], state[6:7], state[8:end]
+
         # brightness prior
         ll_b = color_logprior(brightness, colors, prior, true)
-        ll_s = shape_logprior(gal_shape, prior)
+        ll_s = shape_logprior(constrain_gal_shape(gal_shape), prior)
         return ll_b + ll_s
     end
 
@@ -80,10 +102,11 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
 
         brightness, colors, position, gal_shape = state[1], state[2:5], state[6:7], state[8:end]
         ll_like  = state_log_likelihood(false, brightness, colors, position,
-                                        gal_shape, images,
+                                        constrain_gal_shape(gal_shape), images,
                                         active_pixels, ea)
         return ll_like + ll_prior
     end
+
     return galaxy_logpdf, galaxy_logprior
 end
 
@@ -298,6 +321,33 @@ function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
 end
 
 
+#######################################################################
+# galaxy shape transformation (unconstrained => constrained and back) #
+#######################################################################
+
+
+function constrain_gal_shape(unc_gal_shape::Vector{Float64})
+    gdev, gaxis, gangle, gscale = unc_gal_shape
+    constr_shape    = Array(Float64, 4)
+    constr_shape[1] = sigmoid(gdev)
+    constr_shape[2] = sigmoid(gaxis)
+    constr_shape[3] = gangle       # TODO put this between [0, 2pi]
+    constr_shape[4] = exp(gscale)
+    return constr_shape
+end
+
+
+function unconstrain_gal_shape(con_gal_shape::Vector{Float64})
+    gdev, gaxis, gangle, gscale = con_gal_shape
+    unc_shape    = Array(Float64, 4)
+    unc_shape[1] = logit(gdev)
+    unc_shape[2] = logit(gaxis)
+    unc_shape[3] = gangle
+    unc_shape[4] = log(gscale)
+    return unc_shape
+end
+
+
 ######################################################
 # initialize from catalog and variational parameters #
 ######################################################
@@ -312,8 +362,8 @@ end
 function init_galaxy_state(entry::CatalogEntry)
     brightness, colors = fluxes_to_colors(entry.gal_fluxes)
     #gdev, gaxis, gangle, gscale = gal_shape
-    gal_shape = [entry.gal_frac_dev, entry.gal_ab,
-                 entry.gal_angle, entry.gal_scale]
+    gal_shape = unconstrain_gal_shape([entry.gal_frac_dev, entry.gal_ab,
+                                       entry.gal_angle, entry.gal_scale])
     param_vec = [brightness; colors; entry.pos; gal_shape]
     return param_vec
 end
@@ -333,7 +383,7 @@ function elbo_args_vp_to_galaxy_state(vp::Array{Float64, 1})
                  vp[ids.e_axis] ,
                  vp[ids.e_angle],
                  vp[ids.e_scale]]
-    return [shared_params; gal_shape]
+    return [shared_params; unconstrain_gal_shape(gal_shape)]
 end
 
 
@@ -370,4 +420,14 @@ function logsumexp(a::Vector{Float64})
     out = log(sum(exp(a - a_max)))
     out += a_max
     return out
+end
+
+
+function logit(a::Float64)
+    return log(a) - log(1.0-a)
+end
+
+
+function sigmoid(a::Float64)
+    return 1. / (1. + exp(-a))
 end
