@@ -2,7 +2,7 @@
 
 using Celeste: Model, ElboDeriv
 
-import Celeste: WCSUtils, Infer, ElboDeriv
+import Celeste: Infer, ElboDeriv
 import Celeste: PSF, OptimizeElbo, SDSSIO, SensitiveFloats, Transform
 import SensitiveFloats.clear!
 import SDSSIO: RunCamcolField
@@ -37,6 +37,7 @@ if length(test_files) > 0
 else
     testfiles = ["test_elbo_values.jl",
                  "test_derivatives.jl",
+                 "test_log_prob.jl",
                  "test_psf.jl",
                  "test_images.jl",
                  "test_misc.jl",

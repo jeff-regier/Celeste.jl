@@ -452,9 +452,10 @@ function load_bvn_mixtures{NumType <: Number}(
       vs = ea.vp[s]
 
       world_loc = vs[[ids.u[1], ids.u[2]]]
-      m_pos = WCSUtils.world_to_pix(ea.patches[s, b].wcs_jacobian,
-                                    ea.patches[s, b].center,
-                                    ea.patches[s, b].pixel_center, world_loc)
+      m_pos = linear_world_to_pix(ea.patches[s, b].wcs_jacobian,
+                                  ea.patches[s, b].center,
+                                  ea.patches[s, b].pixel_center,
+                                  world_loc)
 
       # Convolve the star locations with the PSF.
       for k in 1:psf_K

@@ -4,15 +4,13 @@ Calculate value, gradient, and hessian of the variational ELBO.
 module ElboDeriv
 
 using ..Model
-import ..WCSUtils
+using ..SensitiveFloats
 import ..SensitiveFloats.clear!
 
 import ..Model: ElboArgs, ActivePixel, ElboIntermediateVariables,
                 populate_fsm_vecs!,
                 BvnComponent, GalaxyCacheComponent, load_bvn_mixtures,
                 get_active_pixels
-
-using ..SensitiveFloats
 
 export ElboArgs, ActivePixel
 

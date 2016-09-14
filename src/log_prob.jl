@@ -3,7 +3,6 @@
 
 using Distributions
 import ..SensitiveFloats: SensitiveFloat, zero_sensitive_float, clear!
-import ..WCSUtils
 
 include("bivariate_normals.jl")
 include("log_prob_util.jl")

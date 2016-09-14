@@ -263,11 +263,11 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     cat_entries = filter(bright, cat_entries)
 
     ce_pix_locs =
-      [ [ WCSUtils.world_to_pix(blob[b].wcs, ce.pos) for b=1:5 ]
+      [ [ WCS.world_to_pix(blob[b].wcs, ce.pos) for b=1:5 ]
         for ce in cat_entries ]
 
     function ce_inbounds(ce)
-        pix_locs = [ WCSUtils.world_to_pix(blob[b].wcs, ce.pos) for b=1:5 ]
+        pix_locs = [ WCS.world_to_pix(blob[b].wcs, ce.pos) for b=1:5 ]
         inbounds(pos) = pos[1] > -10. && pos[2] > -10 &&
                         pos[1] < 61 && pos[2] < 61
         reduce(&, [inbounds(pos) for pos in pix_locs])
