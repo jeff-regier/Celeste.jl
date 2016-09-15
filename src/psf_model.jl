@@ -86,5 +86,3 @@ function get_psf_width(psf::Array{PsfComponent}; width_scale=1.0)
     # mass in the PSF.
     width_scale * sqrt(eigvals(cov_est)[end]) * alpha_norm
 end
-
-
