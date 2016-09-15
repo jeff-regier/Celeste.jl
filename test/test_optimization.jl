@@ -52,7 +52,7 @@ function test_objective_wrapper()
     blob, ea, bodies = SampleData.gen_three_body_dataset();
     # Change the tile size.
     ea = make_elbo_args(
-      blob, bodies, tile_width=5, fit_psf=false, patch_radius=10.);
+      blob, bodies, tile_width=5, fit_psf=false, patch_radius_pix=10.);
     ea.active_sources = Int[2, 3]
     trans = Transform.get_mp_transform(ea, loc_width=1.0);
 
