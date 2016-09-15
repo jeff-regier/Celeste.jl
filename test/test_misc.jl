@@ -48,7 +48,7 @@ function test_local_sources()
 
     tile = ImageTile(1, 1, blob[3], 1000)
 
-    ea = make_elbo_args(tiled_images, three_bodies; patch_radius=20.)
+    ea = make_elbo_args(tiled_images, three_bodies; patch_radius_pix=20.)
     @test ea.S == 3
 
     patches = vec(ea.patches[:, 3])
@@ -58,7 +58,7 @@ function test_local_sources()
 
     tile_width = 10
     tile = ImageTile(1, 1, blob[3], tile_width)
-    make_elbo_args(tiled_images, three_bodies; patch_radius=20.)
+    make_elbo_args(tiled_images, three_bodies; patch_radius_pix=20.)
 
     patches = vec(ea.patches[:, 3])
     subset10 = Model.get_local_sources(tile, patch_ctrs_pix(patches),
@@ -66,7 +66,7 @@ function test_local_sources()
     @test subset10 == [1]
 
     last_tile = ImageTile(11, 24, blob[3], tile_width)
-    make_elbo_args(tiled_images, three_bodies; patch_radius=20.)
+    make_elbo_args(tiled_images, three_bodies; patch_radius_pix=20.)
 
     patches = vec(ea.patches[:, 3])
     last_subset = Model.get_local_sources(last_tile,
@@ -75,7 +75,7 @@ function test_local_sources()
     @test length(last_subset) == 0
 
     pop_tile = ImageTile(7, 9, blob[3], tile_width)
-    make_elbo_args(tiled_images, three_bodies; patch_radius=20.)
+    make_elbo_args(tiled_images, three_bodies; patch_radius_pix=20.)
 
     patches = vec(ea.patches[:, 3])
     pop_subset = Model.get_local_sources(pop_tile, patch_ctrs_pix(patches),
@@ -101,11 +101,11 @@ function test_local_sources_2()
     for b in 1:5 blob0[b].H, blob0[b].W = 400, 400 end
     big_blob = Synthetic.gen_blob(blob0, one_body)
 
-    ea_small = make_elbo_args(small_blob, one_body, patch_radius=35.)
+    ea_small = make_elbo_args(small_blob, one_body, patch_radius_pix=35.)
     small_source_tiles =
       [ sum([ length(s) > 0 for s in source ]) for source in ea_small.tile_source_map ]
 
-    ea_big = make_elbo_args(big_blob, one_body, patch_radius=35.)
+    ea_big = make_elbo_args(big_blob, one_body, patch_radius_pix=35.)
     big_source_tiles =
       [ sum([ length(s) > 0 for s in source ]) for source in ea_big.tile_source_map ]
 
@@ -131,15 +131,7 @@ function test_local_sources_3()
     tile_width = 1
     patch_radius_pix = 5.
 
-    # Get a patch radius in world coordinates by looking at the world diagonals of
-    # a pixel square of a certain size.
-    pix_quad = [0. 0.               patch_radius_pix patch_radius_pix;
-                0. patch_radius_pix 0.               patch_radius_pix]
-    world_quad = WCS.pix_to_world(blob[test_b].wcs, pix_quad)
-    diags = [world_quad[:, i] - world_quad[:, i+2] for i=1:2]
-    patch_radius = maximum([sqrt(dot(d, d)) for d in diags])
-
-    ea = make_elbo_args(blob, one_body, patch_radius=patch_radius)
+    ea = make_elbo_args(blob, one_body, patch_radius_pix=patch_radius_pix)
 
     # Source should be present
     tile = ImageTile(
@@ -150,7 +142,7 @@ function test_local_sources_3()
 
     patches = vec(ea.patches[:,test_b])
     @test Model.get_local_sources(tile, patch_ctrs_pix(patches),
-                                      patch_radii_pix(patches)) == [1]
+                                  patch_radii_pix(patches)) == [1]
 
     # Source should not match when you're 1 tile and a half away along the diagonal plus
     # the pixel radius from the center of the tile.
@@ -161,7 +153,7 @@ function test_local_sources_3()
         blob[test_b],
         tile_width)
     @test Model.get_local_sources(tile, patch_ctrs_pix(patches),
-                                      patch_radii_pix(patches)) == []
+                                  patch_radii_pix(patches)) == []
 
     tile = ImageTile(
         round(Int, (pix_loc[1]) / tile_width),

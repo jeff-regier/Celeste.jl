@@ -40,7 +40,7 @@ function test_blob()
     cat_entries = SDSSIO.read_photoobj_celeste(fname)
 
     ea = make_elbo_args(blob, cat_entries,
-                       patch_radius=1e-6, fit_psf=false, tile_width=20)
+                       patch_radius_pix=1e-6, fit_psf=false, tile_width=20)
 
     # Just check some basic facts about the catalog.
     @test length(cat_entries) == 805
@@ -100,7 +100,7 @@ function test_get_tiled_image_source()
     # Test that an object only occurs the appropriate tile's local sources.
     blob, ea, body = gen_sample_star_dataset();
 
-    ea = make_elbo_args(blob, body; patch_radius=1e-6)
+    ea = make_elbo_args(blob, body; patch_radius_pix=1e-6)
 
     tiled_img = TiledImage(blob[3], tile_width=10);
     for hh in 1:size(tiled_img.tiles, 1), ww in 1:size(tiled_img.tiles, 2)

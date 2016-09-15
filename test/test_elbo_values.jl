@@ -238,12 +238,8 @@ function test_that_galaxy_truth_is_most_likely()
         end
     end
 
-    # TODO: this test is failling because the stamps use three psf
-    # components.
     for b in 1:4
-        println("b: $b")
         for delta in [-.3, .3]
-            println("delta: $delta")
             ea_c1 = deepcopy(ea)
             ea_c1.vp[1][ids.c1[b, 2]] += delta
             bad_c1 = ElboDeriv.elbo_likelihood(
@@ -352,22 +348,21 @@ function test_tiny_image_tiling()
   catalog[1].star_fluxes = ones(5) * 1e5
 
   ea0 = make_elbo_args(
-    [img], catalog, patch_radius=Inf)
+    [img], catalog, patch_radius_pix=Inf)
 
-  println(size(ea0.patches))
   elbo_lik = ElboDeriv.elbo_likelihood(ea0;
         calculate_derivs=false, calculate_hessian=false);
 
   tile_width = 2
   ea1 = make_elbo_args(
-    [img], catalog, tile_width=tile_width, patch_radius=10.);
+    [img], catalog, tile_width=tile_width, patch_radius_pix=10.);
   elbo_lik_tiles =
     ElboDeriv.elbo_likelihood(
       ea1, calculate_derivs=false, calculate_hessian=false);
 
   tile_width = 5
   ea2 = make_elbo_args(
-      [img], catalog, tile_width=tile_width, patch_radius=10.);
+      [img], catalog, tile_width=tile_width, patch_radius_pix=10.);
   elbo_lik_tiles2 =
     ElboDeriv.elbo_likelihood(
       ea2, calculate_derivs=false, calculate_hessian=false);
@@ -399,80 +394,76 @@ function test_elbo_with_nan()
 end
 
 
-# TODO: fix this test.
 function test_trim_source_tiles()
-    # Set a seed to avoid a flaky test.
-    blob, ea, bodies = gen_n_body_dataset(3, seed=42);
+  # Set a seed to avoid a flaky test.
+  blob, ea, bodies = gen_n_body_dataset(3, seed=42);
 
-    # With the above seed, this is near the middle of the image.
-    s = 1
-    ea.active_sources = [s]
-    ea42 = deepcopy(ea)
-    Infer.trim_source_tiles!(ea42; noise_fraction=0.1);
+  # With the above seed, this is near the middle of the image.
+  s = 1
+  ea.active_sources = [s]
 
-    loc_ids = ids.u
-    non_loc_ids = setdiff(1:length(ids), ids.u)
-    for b=1:length(blob)
-        println("Testing b = $b")
-        # Make sure pixels got NaN-ed out
-        @test(
-            sum([ sum(!Base.isnan(tile.pixels)) for tile in ea42.images[b].tiles]) <
-            sum([ sum(!Base.isnan(tile.pixels)) for tile in ea.images[b].tiles]))
-        s_tiles = find_source_tiles(s, b, ea)
-        ea.active_sources = [s];
-        elbo_full = ElboDeriv.elbo(ea; calculate_hessian=false);
+  loc_ids = ids.u
+  non_loc_ids = setdiff(1:length(ids), ids.u)
+  for b=1:length(blob)
+      ea_trimmed = deepcopy(ea);
+      Infer.trim_source_tiles!(ea_trimmed; noise_fraction=0.0001);
 
-        ea_trimmed = deepcopy(ea)
-        ea_trimmed.images = trimmmed_tiled_blob
-        elbo_trim = ElboDeriv.elbo(ea2; calculate_hessian=false);
-        @test_approx_eq_eps(
-            elbo_full.d[loc_ids, 1] ./ elbo_trim.d[loc_ids, 1],
-            fill(1.0, length(loc_ids)), 0.06)
-        @test_approx_eq_eps(
-            elbo_full.d[non_loc_ids, 1] ./ elbo_trim.d[non_loc_ids, 1],
-            fill(1.0, length(non_loc_ids)), 4e-3)
-    end
+      # Make sure pixels got NaN-ed out
+      @test(
+          sum([ sum(!Base.isnan(tile.pixels)) for
+                tile in ea_trimmed.images[b].tiles]) <
+          sum([ sum(!Base.isnan(tile.pixels)) for
+                tile in ea.images[b].tiles]))
 
-    # Test min_radius_pix on just one tile.
-    b = 3
-    s_tiles = find_source_tiles(s, b, ea)
+      # Make sure the elbo derivatives are nearly identical.
+      elbo_trim = ElboDeriv.elbo(ea_trimmed; calculate_hessian=false);
+      elbo_full = ElboDeriv.elbo(ea; calculate_hessian=false);
+      @test_approx_eq_eps(
+          elbo_full.d[loc_ids, 1] ./ elbo_trim.d[loc_ids, 1],
+          fill(1.0, length(loc_ids)), 0.06)
+      @test_approx_eq_eps(
+          elbo_full.d[non_loc_ids, 1] ./ elbo_trim.d[non_loc_ids, 1],
+          fill(1.0, length(non_loc_ids)), 4e-3)
 
-    # Set the source to be very dim:
-    ea.vp[s][ids.r1] = 0.01
-    ea.vp[s][ids.r2] = 0.01
+      # Set the source to be very dim so that the number of non-NaN
+      # pixels is determined only by min_radius_pix
+      min_radius_pix = 6.0
+      ea_trimmed = deepcopy(ea);
+      ea_trimmed.vp[s][ids.r1] = log(0.1)
+      ea_trimmed.vp[s][ids.r2] = 0.001
+      Infer.trim_source_tiles!(ea_trimmed, noise_fraction=0.1,
+                               min_radius_pix = min_radius_pix);
 
-    min_radius_pix = 6.0
-    ea43 = deepcopy(ea42)
-    Infer.trim_source_tiles!(ea43, noise_fraction=0.1, min_radius_pix = min_radius_pix);
-    trimmed_tiled_blob = ea43.images
+      s_tiles = find_source_tiles(1, b, ea)
+      total_nonempty_pixels = 0.0
+      for tile_index in s_tiles
+          tile = ea_trimmed.images[b].tiles[tile_index...]
+          total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
+      end
+      @test_approx_eq_eps total_nonempty_pixels pi * min_radius_pix ^ 2 2.0
 
-    total_nonempty_pixels = 0.0
-    for tile_index in s_tiles
-        tile = trimmed_tiled_blob[b].tiles[tile_index...]
-        total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
-    end
-    @test_approx_eq_eps total_nonempty_pixels pi * min_radius_pix ^ 2 2.0
+      # Make sure a very dim image is completely NaN-ed out with a dim image
+      # and zero min radius.
+      min_radius_pix = 0.0
+      ea_trimmed = deepcopy(ea);
+      ea_trimmed.vp[s][ids.r1] = log(0.1)
+      ea_trimmed.vp[s][ids.r2] = 0.001
+      Infer.trim_source_tiles!(
+          ea_trimmed, noise_fraction=0.2, min_radius_pix = min_radius_pix);
 
-    min_radius_pix = 0.0
-    ea44 = deepcopy(ea)
-    Infer.trim_source_tiles!(
-                s, ea44, trimmed_tiled_blob, noise_fraction=0.1,
-                        min_radius_pix = min_radius_pix);
-    trimmed_tiled_blob = ea44.images
-
-    total_nonempty_pixels = 0.0
-    for tile_index in s_tiles
-        tile = trimmed_tiled_blob[b].tiles[tile_index...]
-        total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
-    end
-    @test total_nonempty_pixels == 0.0
-
+      total_nonempty_pixels = 0.0
+      for tile_index in s_tiles
+          tile = ea_trimmed.images[b].tiles[tile_index...]
+          total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
+      end
+      @test total_nonempty_pixels == 0.0
+  end
 end
 
 
 ####################################################
 
-#test_trim_source_tiles() # TODO: fix this
+test_trim_source_tiles()
 test_set_hess()
 test_bvn_cov()
 test_tile_predicted_image()

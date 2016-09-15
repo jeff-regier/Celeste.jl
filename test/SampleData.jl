@@ -39,10 +39,10 @@ that can be used with Celeste.
 function make_elbo_args(images::Vector{TiledImage},
                         catalog::Vector{CatalogEntry};
                         fit_psf::Bool=false,
-                        patch_radius::Float64=NaN)
+                        patch_radius_pix::Float64=NaN)
     vp = Vector{Float64}[init_source(ce) for ce in catalog]
     patches, tile_source_map = Infer.get_tile_source_map(images, catalog,
-                                radius_override=patch_radius)
+                                radius_override_pix=patch_radius_pix)
     active_sources = collect(1:length(catalog))
     ea = ElboArgs(images, vp, tile_source_map, patches, active_sources)
     if fit_psf
@@ -56,11 +56,11 @@ function make_elbo_args(images::Vector{Image},
                         catalog::Vector{CatalogEntry};
                         tile_width::Int=20,
                         fit_psf::Bool=false,
-                        patch_radius::Float64=NaN)
+                        patch_radius_pix::Float64=NaN)
     tiled_images = TiledImage[TiledImage(img, tile_width=tile_width)
          for img in images]
     make_elbo_args(tiled_images, catalog; fit_psf=fit_psf,
-                                patch_radius=patch_radius)
+                   patch_radius_pix=patch_radius_pix)
 end
 
 
@@ -110,8 +110,8 @@ function load_stamp_blob(stamp_dir, stamp_id)
 
         epsilon_mat = fill(epsilon, H, W)
         iota_vec = fill(iota, H)
-        empty_psf_comp = RawPSF(Array(Float64, 0, 0), 0, 0, 
-                                 Array(Float64, 0, 0, 0)) 
+        empty_psf_comp = RawPSF(Array(Float64, 0, 0), 0, 0,
+                                 Array(Float64, 0, 0, 0))
 
         Image(H, W, nelec, b, wcs, psf,
               run_num, camcol_num, field_num, epsilon_mat, iota_vec,
@@ -345,11 +345,8 @@ function gen_n_body_dataset(
     blob[b].epsilon_mat = fill(blob[b].epsilon_mat[1], blob[b].H, blob[b].W)
   end
 
-  world_radius_pts = WCS.pix_to_world(
-      blob[3].wcs, [patch_pixel_radius 0.; patch_pixel_radius 0.])
-  world_radius = maxabs(world_radius_pts[:, 1] - world_radius_pts[:, 2])
   ea = make_elbo_args(
-    blob, S_bodies, tile_width=tile_width, patch_radius=world_radius)
+    blob, S_bodies, tile_width=tile_width, patch_radius_pix=patch_pixel_radius)
 
   blob, ea, S_bodies
 end
