@@ -62,6 +62,7 @@ function load_images(box, rcfs, stagedir)
         n = lo[1] + i - 1
 
         rcf = rcfs[n]
+        nputs(nodeid, "loading images for $(rcf.run), $(rcf.camcol), $(rcf.field)")
         raw_images = SDSSIO.load_field_images(rcf, stagedir)
         @assert(length(raw_images) == 5)
         timgs = [TiledImage(img) for img in raw_images]
@@ -80,12 +81,7 @@ function load_images(box, rcfs, stagedir)
         ltask_offset[i] = length(local_tasks)
     end
     flush(images)
-    try
-        flush(catalog_offset)
-    catch e
-        nputs(nodeid, "catalog_offset! ", length(lcatalog_offset), " ", position(catalog_offset.access_iob), " ", catalog_offset.access_iob.size)
-        rethrow()
-    end
+    flush(catalog_offset)
     flush(task_offset)
     sync()
 
@@ -128,19 +124,22 @@ function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     num_fields = length(rcfs)
     coe = get(catalog_offset, [num_fields], [num_fields])
     catalog_size = coe[1]
+    nputs(nodeid, "catalog size is $catalog_size")
     toe = get(task_offset, [num_fields], [num_fields])
     num_tasks = toe[1]
+    nputs(nodeid, "$num_tasks tasks")
 
-    catalog = Garray(Tuple{CatalogEntry, RunCamcolField}, catalog_size)
+    catalog = Garray(Tuple{CatalogEntry, RunCamcolField}, 300, catalog_size)
 
     # entries in `tasks` are indexes into `catalog`
-    tasks = Garray(Int64, num_tasks)
+    tasks = Garray(Int64, 10, num_tasks)
 
     # get local distribution of the arrays
     colo, cohi = distribution(catalog_offset, nodeid)
     nlocal = cohi[1]-colo[1]+1
     clo, chi = distribution(catalog, nodeid)
     lcatalog_size = chi[1]-clo[1]+1
+    nputs(nodeid, "$lcatalog_size local catalog entries")
     tlo, thi = distribution(tasks, nodeid)
     ltasks_size = thi[1]-tlo[1]+1
 
@@ -201,7 +200,8 @@ function invert_rcf_array(rcfs)
 end
 
 
-function optimize_source(s, images, catalog, catalog_offset, rcf_to_index, results)
+function optimize_source(s, images, catalog, catalog_offset, rcf_to_index,
+                         stagedir, results)
     local_images = Vector{TiledImage}[]
     local_catalog = CatalogEntry[];
 
@@ -213,6 +213,8 @@ function optimize_source(s, images, catalog, catalog_offset, rcf_to_index, resul
 
     for rcf in surrounding_rcfs
         n = rcf_to_index[rcf.run, rcf.camcol, rcf.field]
+        #@assert n > 0
+        nputs(nodeid, "getting image $n for $(rcf.run), $(rcf.camcol), $(rcf.field)")
         append!(local_images, get(images, [n], [n]))
         if n == 1
             s_a = 1
@@ -242,43 +244,6 @@ function optimize_source(s, images, catalog, catalog_offset, rcf_to_index, resul
 end
 
 
-function process_tasks(dt, rundt, wi, wilock, ci, li,
-                images, catalog, tasks, catalog_offset, task_offset,
-                rcf_to_index, stagedir, results)
-    tid == threadid()
-    if rundt && tid == 1
-        ntputs(nodeid, tid, "running tree")
-        while runtree(dt)
-            cpu_pause()
-        end
-    else
-        while true
-            lock(wilock)
-            if li[] == 0
-                ntputs(nodeid, tid, "out of work")
-                unlock(wilock)
-                break
-            end
-            if ci[] == li[]
-                ntputs(nodeid, tid, "consumed last work item ($(li[])); requesting more")
-                ni, (ci, li) = getwork(dt)
-                wi = get(tasks, [ci], [li])
-                ci[] = 1
-                li[] = ni
-                ntputs(nodeid, tid, "got $ni work items")
-                unlock(wilock)
-                continue
-            end
-            item = ci[]
-            ci[] = ci[] + 1
-            unlock(wilock)
-
-            optimize_source(item, images, catalog, catalog_offset, rcf_to_index, results)
-        end
-    end
-end
-
-
 function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
             rcf_to_index, stagedir, results, timing)
     num_work_items = length(tasks)
@@ -289,17 +254,52 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
     # create Dtree and get the initial allocation
     dt, isparent = Dtree(num_work_items, 0.4)
     ni, (ci, li) = initwork(dt)
+    nputs(nodeid, "got $ni tasks ($ci-$li)")
+    rundt = runtree(dt)
     wi = get(tasks, [ci], [li])
     ci = 1
     li = ni
     wilock = SpinLock()
 
+    function process_tasks()
+        tid = threadid()
+        if rundt && tid == 1
+            ntputs(nodeid, tid, "running tree")
+            while runtree(dt)
+                cpu_pause()
+            end
+        else
+            while true
+                lock(wilock)
+                if li == 0
+                    ntputs(nodeid, tid, "out of work")
+                    unlock(wilock)
+                    break
+                end
+                if ci == li
+                    ntputs(nodeid, tid, "consumed last work item ($item); requesting more")
+                    ni, (ci, li) = getwork(dt)
+                    wi = get(tasks, [ci], [li])
+                    ci = 1
+                    li = ni
+                    ntputs(nodeid, tid, "got $ni work items")
+                    unlock(wilock)
+                    continue
+                end
+                item = ci
+                ci = ci + 1
+                unlock(wilock)
+                ntputs(nodeid, tid, "processing item $item")
+
+                optimize_source(item, images, catalog, catalog_offset, rcf_to_index,
+                                stagedir, results)
+            end
+        end
+    end
+
     tic()
-    ptargs = Core.svec(process_tasks, dt, runtree(dt), wi, wilock,
-                    Ref(ci), Ref(li),
-                    images, catalog, tasks, catalog_offset, task_offset,
-                    rcf_to_index, stagedir, results)
-    ccall(:jl_threading_run, Void, (Any,), ptargs)
+    #ccall(:jl_threading_run, Void, (Any,), Core.svec(process_tasks))
+    process_tasks()
     timing.opt_srcs = toq()
 
     if nodeid == 1
@@ -328,23 +328,23 @@ function divide_sources_and_infer(
 
     # loads 25TB from disk for SDSS
     tic()
-    @time images, catalog_offset, task_offset = load_images(box, rcfs, stagedir)
+    images, catalog_offset, task_offset = load_images(box, rcfs, stagedir)
     timing.read_img = toq()
 
     # loads 4TB from disk for SDSS
     tic()
-    @time catalog, tasks = load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
+    catalog, tasks = load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     timing.read_photoobj = toq()
 
     # create map from run, camcol, field to index into RCF array
-    @time rcf_to_index = invert_rcf_array(rcfs)
+    rcf_to_index = invert_rcf_array(rcfs)
 
     # inference results are written here
-    results = Garray(InferResult, length(catalog))
+    results = Garray(InferResult, 350, length(catalog))
 
     # optimization -- little disk access, cpu intensive
     timing.num_srcs = length(tasks)
-    @time optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
+    optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
             rcf_to_index, stagedir, results, timing)
 end
 
