@@ -15,7 +15,7 @@ before_install:
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia -e 'Pkg.clone("https://github.com/kpamnany/Garbo.jl"); Pkg.build("Garbo")'
+  - julia -e 'Pkg.clone("https://github.com/kpamnany/Garbo.jl"); Pkg.checkout("Garbo", "serialize"); Pkg.build("Garbo")'
   - julia -e 'Pkg.clone(pwd()); Pkg.build("Celeste")'
   - julia -e 'Pkg.checkout("StaticArrays")' # temporarily use master of StaticArrays. Delete when https://github.com/JuliaLang/METADATA.jl/pull/6752 has been merged
   - julia -e 'Pkg.test("Celeste"; coverage=(VERSION < v"0.4"))'
