@@ -352,7 +352,7 @@ function test_tiny_image_tiling()
   catalog[1].star_fluxes = ones(5) * 1e5
 
   ea0 = make_elbo_args(
-    [img], catalog, patch_radius=Inf)
+    [img], catalog, patch_radius_pix=Inf)
 
   println(size(ea0.patches))
   elbo_lik = ElboDeriv.elbo_likelihood(ea0;
@@ -360,14 +360,14 @@ function test_tiny_image_tiling()
 
   tile_width = 2
   ea1 = make_elbo_args(
-    [img], catalog, tile_width=tile_width, patch_radius=10.);
+    [img], catalog, tile_width=tile_width, patch_radius_pix=10.);
   elbo_lik_tiles =
     ElboDeriv.elbo_likelihood(
       ea1, calculate_derivs=false, calculate_hessian=false);
 
   tile_width = 5
   ea2 = make_elbo_args(
-      [img], catalog, tile_width=tile_width, patch_radius=10.);
+      [img], catalog, tile_width=tile_width, patch_radius_pix=10.);
   elbo_lik_tiles2 =
     ElboDeriv.elbo_likelihood(
       ea2, calculate_derivs=false, calculate_hessian=false);

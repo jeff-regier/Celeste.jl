@@ -26,7 +26,7 @@ function find_neighbors(target_sources::Vector{Int64},
         psf_width = Model.get_psf_width(img.psf)
         psf_width_ub[img.b] = max(psf_width_ub[img.b], psf_width)
     end
-        
+
     epsilon_lb = fill(Inf, B)
     for img in images
         Ht, Wt = size(img.tiles)
@@ -101,7 +101,7 @@ that may be relevant to determining the likelihood of that tile.
 """
 function get_tile_source_map(images::Vector{TiledImage},
                              catalog::Vector{CatalogEntry};
-                             radius_override=NaN)
+                             radius_override_pix=NaN)
     N = length(images)
     S = length(catalog)
     patches = Array(SkyPatch, S, N)
@@ -115,9 +115,9 @@ function get_tile_source_map(images::Vector{TiledImage},
             pixel_center = WCS.world_to_pix(img.wcs, world_center)
             wcs_jacobian = Model.pixel_world_jacobian(img.wcs, pixel_center)
             radius_pix = Model.choose_patch_radius(pixel_center, catalog[s],
-                                                                img.psf, img)
-            if !isnan(radius_override)
-                radius_pix = radius_override
+                                                   img.psf, img)
+            if !isnan(radius_override_pix)
+                radius_pix = radius_override_pix
             end
 
             patches[s, i] = SkyPatch(world_center,
@@ -144,7 +144,7 @@ end
 Updates patches in place with fitted psfs for each active source.
 """
 function fit_object_psfs!{NumType <: Number}(
-                        ea::ElboArgs{NumType}, 
+                        ea::ElboArgs{NumType},
                         target_sources::Vector{Int})
     # Initialize an optimizer
     initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false)
@@ -204,17 +204,17 @@ function trim_source_tiles!(ea::ElboArgs{Float64};
         tiles_out = Array(ImageTile, size(tiles)...)
         images_out[i] = TiledImage(img.H, img.W, tiles_out, img.tile_width,
                                 img.b, img.wcs,
-                                img.psf, img.run_num, img.camcol_num, 
+                                img.psf, img.run_num, img.camcol_num,
                                 img.field_num, img.raw_psf_comp)
 
         patch = ea.patches[s, i]
-        pix_loc = Model.linear_world_to_pix(patch.wcs_jacobian, 
+        pix_loc = Model.linear_world_to_pix(patch.wcs_jacobian,
                                             patch.center,
                                             patch.pixel_center,
                                             ea.vp[s][ids.u])
 
         #TODO: iterate over rows first, not columns
-        for hh=1:size(tiles, 1), ww=1:size(tiles, 2) 
+        for hh=1:size(tiles, 1), ww=1:size(tiles, 2)
             tile = tiles[hh, ww]
 
             tile_source_map = ea.tile_source_map[i][hh, ww]
