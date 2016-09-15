@@ -28,6 +28,7 @@ immutable PsfComponent
 
     function PsfComponent(alphaBar::Float64, xiBar::Vector{Float64},
                           tauBar::Matrix{Float64})
+        @assert(alphaBar > 0, "alphaBar must be positive.")
         new(alphaBar, xiBar, tauBar, tauBar^-1, logdet(tauBar))
     end
 end
@@ -86,5 +87,3 @@ function get_psf_width(psf::Array{PsfComponent}; width_scale=1.0)
     # mass in the PSF.
     width_scale * sqrt(eigvals(cov_est)[end]) * alpha_norm
 end
-
-
