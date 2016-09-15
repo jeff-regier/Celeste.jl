@@ -5,7 +5,7 @@ import Base.convert
 # RawPSF size is 84060 (rrows: 2601x4, cmat: 4x5x5)
 # PsfComponent size is 150 (xiBar: 2, tauBar:2x2, tauBarInv:2x2)
 # ImageTile size is 3296 (pixels: 20x20, epsilon_mat: 20x20, iota_vec: 20)
-# FlatTiledImage size is 69394456 (tiles: 105x200, wcs_header: 10000, psf: 2)
+# TiledImage size is 69394456 (tiles: 105x200, wcs_header: 10000, psf: 2)
 # InferResult size is 299 (objid: 19, vs: 32)
 
 immutable InferResult
@@ -36,90 +36,40 @@ end
 
 function load_images(box, rcfs, stagedir)
     num_fields = length(rcfs)
+    nputs(nodeid, "$num_fields fields")
 
-    # `images` contains B=5 tiled images per field
-    # image tiles and WCS headers are stored in separate global arrays
-    # and linked into images after get()s
-    images = Garray(FlatTiledImage, 5*num_fields)
-    images_tiles = Garray(FlatImageTile, 5*num_fields*100*200)
-    it_length = 100*200
-    images_wcs_headers = Garray(UInt8, 5*num_fields*10000)
-    iwh_length = 10000
-
-    # get local distribution of the images global array and access to it
-    limages_lo, limages_hi = distribution(images, nodeid)
-    nlocal_images = limages_hi[1] - limages_lo[1] + 1
-    limages = access(images, limages_lo, limages_hi)
-    nputs(nodeid, "$nlocal_images local images to load")
-
-    # we load images for the local distribution of the images global array only
-    li = 1
-    i_n = limages_lo[1]
-    it_n = ((i_n - 1) * 100 * 200) + 1
-    iwh_n = ((i_n - 1) * 10000) + 1
-    last_rcf_n = 0
-    while i_n <= limages_hi[1]
-        # there are 5 images per RCF so an RCF's images  might be split across nodes
-        # (which is not good, but the fix is TODO); figure out which RCF corresponds
-        # to the images we want and load it
-        rcf_n, rcf_n_b = divrem(i_n, 5)
-        rcf_n = rcf_n + 1
-        if rcf_n != last_rcf_n
-            rcf = rcfs[rcf_n]
-            raw_images = SDSSIO.load_field_images(rcf, stagedir)
-            @assert(length(raw_images) == 5)
-        end
-        for b = rcf_n_b:5
-            limages[li] = convert(FlatTiledImage, TiledImage(raw_images[b]))
-
-            # put the image tiles (100x200 per image) into the tiles array; we can't
-            # use access() because the distribution might be different from the images
-            # global array; ditto for the WCS header
-            put!(images_tiles, [it_n], [it_n + it_length - 1], limages[li].tiles)
-            it_n = it_n + it_length
-
-            wh = zeros(UInt8, iwh_length)
-            copy!(wh, limages[li].wcs_header)
-            put!(images_wcs_headers, [iwh_n], [iwh_n + iwh_length - 1], wh)
-            iwh_n = iwh_n + iwh_length
-
-            li = li + 1
-            if li > nlocal_images
-                break
-            end
-        end
-        i_n = i_n + (5 - rcf_n_b + 1)
-    end
-    flush(images)
-    flush(images_tiles)
-    flush(images_wcs_headers)
-    sync()
-
-    images, images_tiles, images_wcs_headers
-end
-
-
-function load_offsets(box, rcfs, stagedir)
-    num_fields = length(rcfs)
+    # each cell of `images` contains B=5 tiled images
+    images = Garray(NTuple{5,TiledImage}, 347500000, num_fields)
 
     # stores first index of each field's sources in the catalog array
-    catalog_offset = Garray(Int64, num_fields)
+    catalog_offset = Garray(Int64, 10, num_fields)
 
     # stores first index of each field's tasks in the tasks array
-    task_offset = Garray(Int64, num_fields)
+    task_offset = Garray(Int64, 10, num_fields)
 
-    # get local distribution and access the global arrays
-    lo, hi = distribution(catalog_offset, nodeid)
-    nlocal = hi[1] - lo[1] + 1
+    # get local distribution of the global array; this should be identical
+    # for all the arrays (since they're all the same size)
+    lo, hi = distribution(images, nodeid)
+    nlocal = hi[1]-lo[1]+1
+    nputs(nodeid, "$nlocal local images ($(lo[1])-$(hi[1]))")
+
+    # get access to the local parts of the global arrays
+    limages = access(images, lo, hi)
     lcatalog_offset = access(catalog_offset, lo, hi)
     ltask_offset = access(task_offset, lo, hi)
 
     for i in 1:nlocal
         n = lo[1] + i - 1
-        rcf = rcfs[n]
 
-        # load the `catalog_offset` and `task_count` arrays with a number of
-        # sources for each field (we'll accumulate the entries later)
+        rcf = rcfs[n]
+        raw_images = SDSSIO.load_field_images(rcf, stagedir)
+        @assert(length(raw_images) == 5)
+        timgs = [TiledImage(img) for img in raw_images]
+        limages[i] = tuple(timgs...)
+   
+        # second, load the `catalog_offset` and `task_count` arrays with
+        # a number of sources for each field.
+        # (We'll accumulate the entries later.)
         local_catalog = fetch_catalog(rcf, stagedir)
 
         # we'll use sources outside of the box to render the background,
@@ -129,7 +79,13 @@ function load_offsets(box, rcfs, stagedir)
         lcatalog_offset[i] = length(local_catalog)
         ltask_offset[i] = length(local_tasks)
     end
-    flush(catalog_offset)
+    flush(images)
+    try
+        flush(catalog_offset)
+    catch e
+        nputs(nodeid, "catalog_offset! ", length(lcatalog_offset), " ", position(catalog_offset.access_iob), " ", catalog_offset.access_iob.size)
+        rethrow()
+    end
     flush(task_offset)
     sync()
 
@@ -164,7 +120,7 @@ function load_offsets(box, rcfs, stagedir)
         sync()
     end
 
-    catalog_offset, task_offset
+    images, catalog_offset, task_offset
 end
 
 
@@ -175,7 +131,7 @@ function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     toe = get(task_offset, [num_fields], [num_fields])
     num_tasks = toe[1]
 
-    catalog = Garray(Tuple{FlatCatalogEntry, RunCamcolField}, catalog_size)
+    catalog = Garray(Tuple{CatalogEntry, RunCamcolField}, catalog_size)
 
     # entries in `tasks` are indexes into `catalog`
     tasks = Garray(Int64, num_tasks)
@@ -232,11 +188,10 @@ function invert_rcf_array(rcfs)
         max_camcol = max(max_camcol, rcf.camcol)
         max_field = max(max_field, rcf.field)
     end
-    nputs(nodeid, "max_run: $max_run, max_camcol: $max_camcol, max_field: $max_field")
 
     rcf_to_index = zeros(Int64, max_run, max_camcol, max_field)
 
-    # this should be really fast, each node could do it
+    # this should be really fast
     for n in 1:length(rcfs)
         rcf = rcfs[n]
         rcf_to_index[rcf.run, rcf.camcol, rcf.field] = n
@@ -373,10 +328,8 @@ function divide_sources_and_infer(
 
     # loads 25TB from disk for SDSS
     tic()
-    @time images, images_tiles, images_wcs_headers = load_images(box, rcfs, stagedir)
+    @time images, catalog_offset, task_offset = load_images(box, rcfs, stagedir)
     timing.read_img = toq()
-
-    @time catalog_offset, task_offset = load_offsets(box, rcfs, stagedir)
 
     # loads 4TB from disk for SDSS
     tic()
