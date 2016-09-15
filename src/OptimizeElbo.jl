@@ -85,7 +85,7 @@ type ObjectiveWrapperFunctions
               for s=1:S
                 state_df[Symbol(string("grad", s))] = grad[:, s]
               end
-              Log.info(string(state_df))
+              Log.info(repr(state_df))
               Log.info("=======================================\n")
             end
         end
