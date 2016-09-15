@@ -23,7 +23,6 @@ function eval_bvn_log_density{NumType <: Number}(
 end
 
 
-# TODO: fix this test.
 function test_process_active_pixels()
     blob, ea, bodies = gen_two_body_dataset()
 
@@ -43,7 +42,7 @@ function test_process_active_pixels()
             length(ea.active_sources),
             calculate_derivs=calculate_derivs,
             calculate_hessian=calculate_derivs)
-        ElboDeriv.process_active_pixels!(elbo_vars, ea.images, ea, active_pixels)
+        ElboDeriv.process_active_pixels!(elbo_vars, ea, active_pixels)
         deepcopy(elbo_vars.elbo)
     end
 
@@ -1201,7 +1200,7 @@ println("Running ELBO derivative tests.")
 @time test_dsiginv_dsig()
 @time test_add_log_term()
 @time test_e_g_s_functions()
-#test_process_active_pixels()  # TODO: fix this
+test_process_active_pixels()
 
 # KL tests:
 println("Running KL derivative tests.")
