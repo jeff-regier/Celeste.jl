@@ -11,7 +11,6 @@ export DataTransform, ParamBounds, ParamBox, SimplexBox,
        get_mp_transform, enforce_bounds!
 
 
-
 ################################
 # Elementary functions.
 
@@ -66,8 +65,8 @@ end
 
 
 """
-Convert an n-vector on the simplex to an (n - 1)-vector in R^{n -1}, where
-the last entry implicitly has the untransformed value 1.
+Convert an n-vector on the simplex to an (n - 1)-vector in R^{n -1}.  Entries
+are expressed relative to the last element.
 """
 function unconstrain_simplex{NumType <: Number}(z::Vector{NumType})
     n = length(z)
@@ -173,7 +172,8 @@ end
 
 
 """
-Invert the transformation simplexify_parameter()
+Invert the transformation simplexify_parameter() by converting an n-vector
+on a simplex to R^{n - 1}.
 """
 function unsimplexify_parameter{NumType <: Number}(
             param::Vector{NumType}, simplex_box::SimplexBox)
@@ -222,7 +222,7 @@ function simplex_derivatives{NumType <: Number}(z_sim::Vector{NumType})
                 if (j == i)
                     hessian_vec[i][j, k] = -z_sim[i] * z_sim[k] * (1 - 2 * z_sim[i])
                 elseif (k == i)
-                                        hessian_vec[i][j, k] = -z_sim[i] * z_sim[j] * (1 - 2 * z_sim[i])
+                    hessian_vec[i][j, k] = -z_sim[i] * z_sim[j] * (1 - 2 * z_sim[i])
                 else
                     hessian_vec[i][j, k] = 2 * z_sim[i] * z_sim[j] * z_sim[k]
                 end
@@ -376,41 +376,24 @@ function get_transform_derivatives!{NumType <: Number}(
           end
       else # It is a simplex constraint
 
-              # If a param is not a box constraint, it must have all simplex constraints.
+          # If a param is not a box constraint, it must have all simplex constraints.
           @assert all([ isa(constraint, SimplexBox)  for constraint in constraint_vec])
 
           param_size = size(getfield(ids, param))
-          if length(param_size) == 2 # It's a simplex matrix
-              @assert length(constraint_vec) == param_size[2]
-              for col=1:(param_size[2])
-                  vp_free_ind = getfield(ids_free, param)[:, col]
-                  vp_ind = getfield(ids, param)[:, col]
-                  vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
-                  vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
-
-                  jac, hess = Transform.box_simplex_derivatives(
-                      vp[s][vp_ind], constraint_vec[col])
-
-                  transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
-                  for row in 1:(param_size[1])
-                      transform_derivatives.d2param_dfree2[
-                          vp_sf_ind[row]][vp_free_sf_ind, vp_free_sf_ind] = hess[row]
-                  end
-              end
-          else # It is simply a single simplex vector.
-              @assert length(constraint_vec) == 1
-              vp_free_ind = getfield(ids_free, param)
-              vp_ind = getfield(ids, param)
+          @assert length(constraint_vec) == param_size[2]
+          for col=1:(param_size[2])
+              vp_free_ind = getfield(ids_free, param)[:, col]
+              vp_ind = getfield(ids, param)[:, col]
               vp_sf_ind = length(CanonicalParams) * (sa - 1) + vp_ind
               vp_free_sf_ind = length(UnconstrainedParams) * (sa - 1) + vp_free_ind
 
               jac, hess = Transform.box_simplex_derivatives(
-                  vp[s][vp_ind], constraint_vec[1])
+                  vp[s][vp_ind], constraint_vec[col])
 
               transform_derivatives.dparam_dfree[vp_sf_ind, vp_free_sf_ind] = jac
-              for ind in 1:length(vp_ind)
+              for row in 1:(param_size[1])
                   transform_derivatives.d2param_dfree2[
-                      vp_sf_ind[ind]][vp_free_sf_ind, vp_free_sf_ind] = hess[ind]
+                      vp_sf_ind[row]][vp_free_sf_ind, vp_free_sf_ind] = hess[row]
               end
           end
       end
@@ -465,27 +448,15 @@ function perform_transform!{NumType <: Number}(
         else
             # Apply a simplex constraint to each parameter.
             @assert isa(bounds[param], Array{SimplexBox})
-            # Some simplicial parameters are vectors, some are matrices.    Which is
-            # which is determined by the size of the ids.
             param_size = size(getfield(ids, param))
-            if length(param_size) == 2
-                # If the ids are a matrix, then each column is a simplex.
-                # Each column should have its own simplicial constrains.
-                @assert length(bounds[param]) == param_size[2]
-                for col in 1:(param_size[2])
-                    free_ind = getfield(ids_free, param)[:, col]
-                    vp_ind = getfield(ids, param)[:, col]
-                    constraint = constraint_vec[col]
-                    to_unconstrained ?
-                        vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint):
-                        vp[vp_ind] = simplexify_parameter(vp_free[free_ind], constraint)
-                end
-            else
-                # It is simply a simplex vector.
-                @assert length(bounds[param]) == 1
-                free_ind = getfield(ids_free, param)
-                vp_ind = getfield(ids, param)
-                constraint = constraint_vec[1]
+
+            # Each column is a simplex and should have its own
+            # simplicial constraints.
+            @assert length(bounds[param]) == param_size[2]
+            for col in 1:(param_size[2])
+                free_ind = getfield(ids_free, param)[:, col]
+                vp_ind = getfield(ids, param)[:, col]
+                constraint = constraint_vec[col]
                 to_unconstrained ?
                     vp_free[free_ind] = unsimplexify_parameter(vp[vp_ind], constraint):
                     vp[vp_ind] = simplexify_parameter(vp_free[free_ind], constraint)
@@ -642,8 +613,8 @@ function DataTransform(bounds::Vector{ParamBounds};
 
     function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
             @assert(active_S == S,
-                            string("to_vp is not supported when active_sources is a ",
-                                         "strict subset of all sources."))
+                    string("to_vp is not supported when active_sources is a ",
+                           "strict subset of all sources."))
             vp = Array{NumType, 1}[
                 zeros(NumType, length(CanonicalParams)) for s = 1:S]
             to_vp!(vp_free, vp)
@@ -651,19 +622,19 @@ function DataTransform(bounds::Vector{ParamBounds};
     end
 
     function vp_to_array{NumType <: Number}(vp::VariationalParams{NumType},
-                                                                                    omitted_ids::Vector{Int})
-            vp_trans = from_vp(vp)
-            free_vp_to_array(vp_trans, omitted_ids)
+                                            omitted_ids::Vector{Int})
+                                            vp_trans = from_vp(vp)
+        free_vp_to_array(vp_trans, omitted_ids)
     end
 
     function array_to_vp!{NumType <: Number}(xs::Matrix{NumType},
-                                                                                     vp::VariationalParams{NumType},
-                                                                                     omitted_ids::Vector{Int})
-            # This needs to update vp in place so that variables in omitted_ids
-            # stay at their original values.
-            vp_trans = from_vp(vp)
-            array_to_free_vp!(xs, vp_trans, omitted_ids)
-            to_vp!(vp_trans, vp)
+                                             vp::VariationalParams{NumType},
+                                             omitted_ids::Vector{Int})
+        # This needs to update vp in place so that variables in omitted_ids
+        # stay at their original values.
+        vp_trans = from_vp(vp)
+        array_to_free_vp!(xs, vp_trans, omitted_ids)
+        to_vp!(vp_trans, vp)
     end
 
     # Given a sensitive float with derivatives with respect to all the
@@ -735,7 +706,8 @@ function get_mp_transform(ea::ElboArgs; loc_width::Float64=1.5e-3)
         bounds[si][:e_scale] = ParamBox[ ParamBox(0.1, 70., 1.0) ]
 
         const simplex_min = 0.005
-        bounds[si][:a] = SimplexBox[ SimplexBox(simplex_min, 1.0, 2) ]
+        bounds[si][:a] = Array(SimplexBox, 1)
+        bounds[si][:a][1] = SimplexBox(simplex_min, 1.0, 2)
 
         bounds[si][:k] = Array(SimplexBox, D)
         for d in 1:D
@@ -784,46 +756,26 @@ function enforce_bounds!{NumType <: Number}(
                 end
             end
         else
+            # Simplex parameters.
             param_size = size(getfield(ids, param))
-            if length(param_size) == 2
-                # matrix simplex
-                for col in 1:param_size[2]
-                    constraint = constraint_vec[col]
-                    for row in 1:param_size[1]
-                        if !(constraint.lower_bound <= ea.vp[s][getfield(ids, param)[row, col]] <= 1.0)
-                            Log.debug("param[$s][$row, $col] was out of bounds.")
-                            # Don't set the value to exactly the lower bound to avoid Inf
-                            epsilon = (1.0 - constraint.lower_bound) * 1e-12
-                            ea.vp[s][getfield(ids, param)[row, col]] =
-                                min(ea.vp[s][getfield(ids, param)[row, col]], 1.0 - epsilon)
-                            ea.vp[s][getfield(ids, param)[row, col]] =
-                                max(ea.vp[s][getfield(ids, param)[row, col]],
-                                        constraint.lower_bound + epsilon)
-                        end
-                    end
-                    if sum(ea.vp[s][getfield(ids, param)[:, col]]) != 1.0
-                        Log.debug("param[$s][:, $col] is not normalized.")
-                        ea.vp[s][getfield(ids, param)[:, col]] =
-                            ea.vp[s][getfield(ids, param)[:, col]] / sum(ea.vp[s][getfield(ids, param)[:, col]])
-                    end
-                end
-            else
-                # vector simplex
-                constraint = constraint_vec[1]
+            for col in 1:param_size[2]
+                constraint = constraint_vec[col]
                 for row in 1:param_size[1]
-                    if !(constraint.lower_bound <= ea.vp[s][getfield(ids, param)[row]] <= 1.0)
-                        Log.debug("param[$s][$row] was out of bounds.")
+                    if !(constraint.lower_bound <= ea.vp[s][getfield(ids, param)[row, col]] <= 1.0)
+                        Log.debug("param[$s][$row, $col] was out of bounds.")
                         # Don't set the value to exactly the lower bound to avoid Inf
                         epsilon = (1.0 - constraint.lower_bound) * 1e-12
-                        ea.vp[s][getfield(ids, param)[row]] =
-                            min(ea.vp[s][getfield(ids, param)[row]], 1.0 - epsilon)
-                        ea.vp[s][getfield(ids, param)[row]] =
-                            max(ea.vp[s][getfield(ids, param)[row]], constraint.lower_bound + epsilon)
+                        ea.vp[s][getfield(ids, param)[row, col]] =
+                            min(ea.vp[s][getfield(ids, param)[row, col]], 1.0 - epsilon)
+                        ea.vp[s][getfield(ids, param)[row, col]] =
+                            max(ea.vp[s][getfield(ids, param)[row, col]],
+                                    constraint.lower_bound + epsilon)
                     end
                 end
-                if sum(ea.vp[s][getfield(ids, param)]) != 1.0
-                    Log.debug("param[$s] is not normalized.")
-                    ea.vp[s][getfield(ids, param)] = ea.vp[s][getfield(ids, param)] / sum(ea.vp[s][getfield(ids, param)])
+                if sum(ea.vp[s][getfield(ids, param)[:, col]]) != 1.0
+                    Log.debug("param[$s][:, $col] is not normalized.")
+                    ea.vp[s][getfield(ids, param)[:, col]] =
+                        ea.vp[s][getfield(ids, param)[:, col]] / sum(ea.vp[s][getfield(ids, param)[:, col]])
                 end
             end
         end

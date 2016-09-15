@@ -130,8 +130,8 @@ Return a default-initialized VariationalParams object.
 """
 function init_source(init_pos::Vector{Float64})
     ret = Array(Float64, length(CanonicalParams))
-    ret[ids.a[2]] = 0.5
-    ret[ids.a[1]] = 1.0 - ret[ids.a[2]]
+    ret[ids.a[2, 1]] = 0.5
+    ret[ids.a[1, 1]] = 1.0 - ret[ids.a[2, 1]]
     ret[ids.u[1]] = init_pos[1]
     ret[ids.u[2]] = init_pos[2]
     ret[ids.r1] = log(2.0)
@@ -154,8 +154,8 @@ function init_source(ce::CatalogEntry)
     # TODO: sync this up with the transform bounds
     ret = init_source(ce.pos)
 
-    ret[ids.a[1]] = ce.is_star ? 0.8: 0.2
-    ret[ids.a[2]] = ce.is_star ? 0.2: 0.8
+    ret[ids.a[1, 1]] = ce.is_star ? 0.8: 0.2
+    ret[ids.a[2, 1]] = ce.is_star ? 0.2: 0.8
 
     ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
     ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))
@@ -181,4 +181,3 @@ function init_source(ce::CatalogEntry)
 
     ret
 end
-

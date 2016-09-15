@@ -182,7 +182,7 @@ function get_a_term_sensitive_float{NumType <: Number}(
     a_term = zero_sensitive_float(CanonicalParams, NumType)
     a_term.v[1] = a
     if calculate_derivs
-        a_term.d[ids.a[i], 1] = 1
+        a_term.d[ids.a[i, 1], 1] = 1
     end
     return a_term
 end
@@ -229,7 +229,7 @@ function subtract_kl_c!{NumType <: Number}(
             kl_term.h[var_ids, var_ids] = hess_var
         end
 
-        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i, calculate_derivs)
+        a_term = get_a_term_sensitive_float(vs[ids.a[i, 1]], i, calculate_derivs)
         k_term = get_k_term_sensitive_float(vs[ids.k[d, i]], i, d, calculate_derivs)
         multiply_sfs!(kl_term, a_term, calculate_derivs)
         multiply_sfs!(kl_term, k_term, calculate_derivs)
@@ -262,7 +262,7 @@ function subtract_kl_k!{NumType <: Number}(
             kl_term.d[k_ind, 1] = grad
             kl_term.h[k_ind, k_ind] = hess
         end
-        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i, calculate_derivs)
+        a_term = get_a_term_sensitive_float(vs[ids.a[i, 1]], i, calculate_derivs)
         multiply_sfs!(kl_term, a_term, calculate_derivs)
         add_scaled_sfs!(kl_source, kl_term, -1.0, calculate_derivs)
     end
@@ -287,7 +287,7 @@ function subtract_kl_r!{NumType <: Number}(
             kl_term.d[r_ind, 1] = grad
             kl_term.h[r_ind, r_ind] = hess
         end
-        a_term = get_a_term_sensitive_float(vs[ids.a[i]], i, calculate_derivs)
+        a_term = get_a_term_sensitive_float(vs[ids.a[i, 1]], i, calculate_derivs)
         multiply_sfs!(kl_term, a_term, calculate_derivs)
         add_scaled_sfs!(kl_source, kl_term, -1.0, calculate_derivs)
     end
@@ -303,11 +303,11 @@ function subtract_kl_a!{NumType <: Number}(
 
     pp_kl_a = gen_categorical_kl(prior.a)
 
-    kl, grad, hess = pp_kl_a(vs[ids.a], calculate_derivs)
+    kl, grad, hess = pp_kl_a(vs[ids.a[:, 1]], calculate_derivs)
     kl_source.v[1] -= kl
     if calculate_derivs
-        kl_source.d[ids.a, 1] -= grad
-        kl_source.h[ids.a, ids.a] -= hess
+        kl_source.d[ids.a[:, 1], 1] -= grad
+        kl_source.h[ids.a[:, 1], ids.a[:, 1]] -= hess
     end
 end
 
