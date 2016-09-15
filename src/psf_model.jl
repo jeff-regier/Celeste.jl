@@ -28,7 +28,6 @@ immutable PsfComponent
 
     function PsfComponent(alphaBar::Float64, xiBar::Vector{Float64},
                           tauBar::Matrix{Float64})
-        # @assert(alphaBar > 0, "alphaBar must be positive.")
         new(alphaBar, xiBar, tauBar, tauBar^-1, logdet(tauBar))
     end
 end
