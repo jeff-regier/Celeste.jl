@@ -178,7 +178,7 @@ use `one_node_infer()` to fit the Celeste model to sources in each sky area.
 """
 function divide_sky_and_infer(
                 box::BoundingBox,
-                stagedir::String,
+                stagedir::String;
                 timing=InferTiming(),
                 outdir=".")
     if dt_nodeid == 1
