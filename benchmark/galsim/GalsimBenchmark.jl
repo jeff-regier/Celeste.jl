@@ -2,7 +2,7 @@
 
 module GalsimBenchmark
 
-import DataFrames # TODO remove after temporary code goes
+using DataFrames
 import FITSIO
 import WCS
 
@@ -77,11 +77,8 @@ function make_band_images(band_pixels, band_psfs, wcs)
 end
 
 # TODO: from test/SampleData.jl
-const sample_star_fluxes = [
-    4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
-const sample_galaxy_fluxes = [
-    1.377666E+01, 5.635334E+01, 1.258656E+02,
-    1.884264E+02, 2.351820E+02] * 100  # 1x wasn't bright enough
+const sample_star_fluxes = fill(1000., 5)
+const sample_galaxy_fluxes = fill(10., 5)
 
 function make_catalog_entry()
     Model.CatalogEntry(
@@ -98,30 +95,48 @@ function make_catalog_entry()
     )
 end
 
-function pretty_print_params(params)
+function canonical_angle(params)
+    angle_radians = params[Model.ids.e_angle]
+    while angle_radians < 0
+        angle_radians += 2 * pi
+    end
+    while angle_radians > 2 * pi
+        angle_radians -= 2 * pi
+    end
+    angle_radians
+end
+
+function pretty_print_params(params, truth_row)
     ids = Model.ids
     @printf "Location in world coords: (%.2f, %.2f)\n" params[ids.u[1]] params[ids.u[2]]
+    @printf "  Expected (%.2f, %.2f)" truth_row[1, :world_center_x] truth_row[1, :world_center_y]
     @printf "Weight on exponential (vs. Vaucouleurs): %.2f\n" params[ids.e_dev]
     @printf "Minor/major axis ratio: %.2f\n" params[ids.e_axis]
-    @printf "Angle: %.2f rad (%.1f deg)\n" params[ids.e_angle] params[ids.e_angle] * 180/pi
+    angle_radians = canonical_angle(params)
+    @printf "Angle: %.2f rad (%.1f deg)\n" angle_radians angle_radians * 180 / pi
     @printf "Scale: %.2f\n" params[ids.e_scale]
     @printf "Galaxy brightness lognormal mean %.2f, var %.2f\n" params[ids.r1[2]] params[ids.r2[2]]
     @printf "Probability of star: %.2f; of galaxy: %.2f\n" params[ids.a[1]] params[ids.a[2]]
 end
 
-function main()
-    pixels, psf, wcs = read_fits("output/galsim_test_image.fits")
-    band_images = make_band_images(fill(pixels, 5), fill(psf, 5), wcs)
-    catalog_entry = make_catalog_entry()
+function main(; verbose=false)
+    truth_df = readtable("galsim_truth.csv")
+    for index in 0:size(truth_df, 1)
+        filename = "output/galsim_test_image_$index.fits"
+        println("Reading $filename...")
+        pixels, psf, wcs = read_fits(filename)
+        band_images = make_band_images(fill(pixels, 5), fill(psf, 5), wcs)
+        catalog_entry = make_catalog_entry()
 
-    ea = make_elbo_args(band_images, [catalog_entry], fit_psf=false)
-    iter_count, max_f, max_x, nm_result = OptimizeElbo.maximize_f(
-        ElboDeriv.elbo_likelihood,
-        ea,
-        loc_width=1.0,
-    )
-    pretty_print_params(ea.vp[1])
-    ea.vp
+        ea = make_elbo_args(band_images, [catalog_entry], fit_psf=false)
+        iter_count, max_f, max_x, nm_result = OptimizeElbo.maximize_f(
+            ElboDeriv.elbo_likelihood,
+            ea,
+            loc_width=3.0,
+            verbose=verbose,
+        )
+        pretty_print_params(ea.vp[1], truth_df[index + 1, :])
+    end
 end
 
 end # module GalsimBenchmark
