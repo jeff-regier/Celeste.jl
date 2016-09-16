@@ -36,7 +36,7 @@ end
 
 function load_images(box, rcfs, stagedir)
     num_fields = length(rcfs)
-    nputs(nodeid, "$num_fields fields")
+    nputs(nodeid, "$num_fields RCFs")
 
     # each cell of `images` contains B=5 tiled images
     images = Garray(NTuple{5,TiledImage}, 347500000, num_fields)
@@ -202,7 +202,7 @@ end
 
 function optimize_source(s, images, catalog, catalog_offset, rcf_to_index,
                          stagedir, results)
-    local_images = Vector{TiledImage}[]
+    local_images = Vector{TiledImage}()
     local_catalog = CatalogEntry[];
 
     ep = get(catalog, [s], [s])
@@ -215,7 +215,8 @@ function optimize_source(s, images, catalog, catalog_offset, rcf_to_index,
         n = rcf_to_index[rcf.run, rcf.camcol, rcf.field]
         #@assert n > 0
         nputs(nodeid, "getting image $n for $(rcf.run), $(rcf.camcol), $(rcf.field)")
-        append!(local_images, get(images, [n], [n]))
+        imgs = get(images, [n], [n])
+        push!(local_images, imgs[1]...)
         if n == 1
             s_a = 1
             st = get(catalog_offset, [n], [n])
@@ -225,19 +226,21 @@ function optimize_source(s, images, catalog, catalog_offset, rcf_to_index,
             s_a = st[1]
             s_b = st[2]
         end
+        nputs(nodeid, "s_a=$s_a, s_b=$s_b")
         neighbors = get(catalog, [s_a], [s_b])
         for neighbor in neighbors
             push!(local_catalog, neighbor[1])
         end
     end
 
-    flat_images = [img for img5 in local_images for img in img5]
+    #flat_images = [img for img5 in local_images for img in img5]
 
     i = findfirst(local_catalog, entry)
-    neighbor_indexes = Infer.find_neighbors([i,], local_catalog, flat_images)[1]
+    nputs(nodeid, "i=$i")
+    neighbor_indexes = Infer.find_neighbors([i,], local_catalog, local_images)[1]
     neighbors = local_catalog[neighbor_indexes]
 
-    vs_opt = Infer.infer_source(flat_images, neighbors, entry)
+    vs_opt = Infer.infer_source(local_images, neighbors, entry)
 
     put!(results, [s], [s], [InferResult(entry.thing_id, entry.objid,
                                     entry.pos[1], entry.pos[2], vs_opt)])
@@ -286,7 +289,7 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
                     unlock(wilock)
                     continue
                 end
-                item = ci
+                item = wi[ci]
                 ci = ci + 1
                 unlock(wilock)
                 ntputs(nodeid, tid, "processing item $item")
