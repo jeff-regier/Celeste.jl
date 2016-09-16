@@ -408,6 +408,49 @@ z_{i} & = & \tilde{z}_{i}+\frac{1}{n}\left(1-\sum_{i}\tilde{z}_{i}\right)\\
 
 \end_layout
 
+\begin_layout Standard
+This makes sense.
+ But this is heavier than what we need.
+ We can simply make sure that everything is bigger than its min, and then
+ normalize it in a way that respects the min.
+ Suppose that 
+\begin_inset Formula $\tilde{z}$
+\end_inset
+
+ already has each element with 
+\begin_inset Formula $\tilde{z}_{i}\ge\mu_{i}$
+\end_inset
+
+ .
+ Then
+\begin_inset Formula 
+\begin{eqnarray*}
+z_{i} & = & \mu_{i}+\alpha\left(\tilde{z}_{i}-\mu_{i}\right)\\
+1 & = & \sum\mu_{i}+\alpha\sum\left(\tilde{z}_{i}-\mu_{i}\right)\\
+\alpha & = & \frac{1-\sum\mu_{i}}{\sum\tilde{z}_{i}-\sum\mu_{i}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+In our case, 
+\begin_inset Formula $\mu_{i}$
+\end_inset
+
+ is all the same, so
+\begin_inset Formula 
+\begin{eqnarray*}
+\alpha & = & \frac{1-n\mu}{\sum\tilde{z}_{i}-n\mu}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
 \begin_layout Section
 Derivative transform
 \end_layout

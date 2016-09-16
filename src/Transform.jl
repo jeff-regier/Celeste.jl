@@ -760,6 +760,7 @@ function enforce_bounds!{NumType <: Number}(
             param_size = size(getfield(ids, param))
             for col in 1:param_size[2]
                 constraint = constraint_vec[col]
+                param_sum = zero(NumType)
                 for row in 1:param_size[1]
                     if !(constraint.lower_bound <= ea.vp[s][getfield(ids, param)[row, col]] <= 1.0)
                         Log.debug("param[$s][$row, $col] was out of bounds.")
@@ -771,11 +772,18 @@ function enforce_bounds!{NumType <: Number}(
                             max(ea.vp[s][getfield(ids, param)[row, col]],
                                     constraint.lower_bound + epsilon)
                     end
+                    param_sum += ea.vp[s][getfield(ids, param)[row, col]]
                 end
-                if sum(ea.vp[s][getfield(ids, param)[:, col]]) != 1.0
+                if param_sum != 1.0
                     Log.debug("param[$s][:, $col] is not normalized.")
+                    # Normalize in a way that maintains the lower bounds
+                    rescale =
+                      (1 - constraint.n * constraint.lower_bound) /
+                      (param_sum - constraint.n * constraint.lower_bound)
                     ea.vp[s][getfield(ids, param)[:, col]] =
-                        ea.vp[s][getfield(ids, param)[:, col]] / sum(ea.vp[s][getfield(ids, param)[:, col]])
+                      constraint.lower_bound +
+                      rescale * (ea.vp[s][getfield(ids, param)[:, col]] -
+                                 constraint.lower_bound)
                 end
             end
         end
