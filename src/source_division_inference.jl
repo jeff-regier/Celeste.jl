@@ -5,8 +5,38 @@ import Base.convert
 # RawPSF size is 84060 (rrows: 2601x4, cmat: 4x5x5)
 # PsfComponent size is 150 (xiBar: 2, tauBar:2x2, tauBarInv:2x2)
 # ImageTile size is 3296 (pixels: 20x20, epsilon_mat: 20x20, iota_vec: 20)
-# TiledImage size is 69394456 (tiles: 105x200, wcs_header: 10000, psf: 2)
+# FlatTiledImage size is 69394456 (tiles: 105x200, wcs_header: 10000, psf: 2)
 # InferResult size is 299 (objid: 19, vs: 32)
+
+immutable FlatTiledImage
+    H::Int
+    W::Int
+    tiles::Matrix{ImageTile}
+    tile_width::Int
+    b::Int
+    wcs_header::String
+    psf::Vector{PsfComponent}
+    run_num::Int
+    camcol_num::Int
+    field_num::Int
+    raw_psf_comp::RawPSF
+end
+
+function convert(::Type{FlatTiledImage}, img::TiledImage)
+    wcs_header = WCS.to_header(img.wcs)
+    FlatTiledImage(img.H, img.W, img.tiles, img.tile_width, img.b,
+                   WCS.to_header(img.wcs), img.psf, img.run_num,
+                   img.camcol_num, img.field_num, img.raw_psf_comp)
+end
+
+function convert(::Type{TiledImage}, img::FlatTiledImage)
+    wcs_array = WCS.from_header(img.wcs_header)
+    @assert(length(wcs_array) == 1)
+    wcs = wcs_array[1]
+    TiledImage(img.H, img.W, img.tiles, img.tile_width, img.b, wcs,
+               img.psf, img.run_num, img.camcol_num, img.field_num,
+               img.raw_psf_comp)
+end
 
 immutable InferResult
     thing_id::Int
@@ -39,7 +69,7 @@ function load_images(box, rcfs, stagedir)
     nputs(nodeid, "$num_fields RCFs")
 
     # each cell of `images` contains B=5 tiled images
-    images = Garray(NTuple{5,TiledImage}, 347500000, num_fields)
+    images = Garray(NTuple{5,FlatTiledImage}, 347500000, num_fields)
 
     # stores first index of each field's sources in the catalog array
     catalog_offset = Garray(Int64, 10, num_fields)
@@ -65,7 +95,7 @@ function load_images(box, rcfs, stagedir)
         nputs(nodeid, "loading images for $(rcf.run), $(rcf.camcol), $(rcf.field)")
         raw_images = SDSSIO.load_field_images(rcf, stagedir)
         @assert(length(raw_images) == 5)
-        timgs = [TiledImage(img) for img in raw_images]
+        timgs = [FlatTiledImage(TiledImage(img)) for img in raw_images]
         limages[i] = tuple(timgs...)
    
         # second, load the `catalog_offset` and `task_count` arrays with
@@ -202,20 +232,21 @@ end
 
 function optimize_source(s, images, catalog, catalog_offset, rcf_to_index,
                          stagedir, results)
-    local_images = Vector{TiledImage}()
+    local_images = Vector{FlatTiledImage}()
     local_catalog = CatalogEntry[];
 
     ep = get(catalog, [s], [s])
     entry, primary_rcf = ep[1]
+
     t_box = BoundingBox(entry.pos[1] - 1e-8, entry.pos[1] + 1e-8,
                         entry.pos[2] - 1e-8, entry.pos[2] + 1e-8)
     surrounding_rcfs = get_overlapping_fields(t_box, stagedir)
 
     for rcf in surrounding_rcfs
         n = rcf_to_index[rcf.run, rcf.camcol, rcf.field]
-        #@assert n > 0
+        @assert n > 0
         nputs(nodeid, "getting image $n for $(rcf.run), $(rcf.camcol), $(rcf.field)")
-        imgs = get(images, [n], [n])
+        @time imgs = get(images, [n], [n])
         push!(local_images, imgs[1]...)
         if n == 1
             s_a = 1
@@ -226,21 +257,19 @@ function optimize_source(s, images, catalog, catalog_offset, rcf_to_index,
             s_a = st[1]
             s_b = st[2]
         end
-        nputs(nodeid, "s_a=$s_a, s_b=$s_b")
         neighbors = get(catalog, [s_a], [s_b])
         for neighbor in neighbors
             push!(local_catalog, neighbor[1])
         end
     end
 
-    #flat_images = [img for img5 in local_images for img in img5]
+    flat_images = [TiledImage(img) for img in local_images]
 
     i = findfirst(local_catalog, entry)
-    nputs(nodeid, "i=$i")
-    neighbor_indexes = Infer.find_neighbors([i,], local_catalog, local_images)[1]
+    neighbor_indexes = Infer.find_neighbors([i,], local_catalog, flat_images)[1]
     neighbors = local_catalog[neighbor_indexes]
 
-    vs_opt = Infer.infer_source(local_images, neighbors, entry)
+    vs_opt = Infer.infer_source(flat_images, neighbors, entry)
 
     put!(results, [s], [s], [InferResult(entry.thing_id, entry.objid,
                                     entry.pos[1], entry.pos[2], vs_opt)])

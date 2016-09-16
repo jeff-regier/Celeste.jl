@@ -1,3 +1,4 @@
+import Base.==
 
 # The number of components in the color prior.
 const D = 2
@@ -16,6 +17,19 @@ type CatalogEntry
     gal_scale::Float64
     objid::String
     thing_id::Int
+end
+
+function ==(ce1::CatalogEntry, ce2::CatalogEntry)
+    ce1.pos == ce2.pos &&
+    ce1.is_star == ce2.is_star &&
+    ce1.star_fluxes == ce2.star_fluxes &&
+    ce1.gal_fluxes == ce2.gal_fluxes &&
+    ce1.gal_frac_dev == ce2.gal_frac_dev &&
+    ce1.gal_ab == ce2.gal_ab &&
+    ce1.gal_angle == ce2.gal_angle &&
+    ce1.gal_scale == ce2.gal_scale &&
+    ce1.objid == ce2.objid &&
+    ce1.thing_id == ce2.thing_id
 end
 
 
