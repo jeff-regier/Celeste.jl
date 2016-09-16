@@ -11,14 +11,9 @@ import Celeste: ElboDeriv, Infer, Model, OptimizeElbo
 ## TODO pull this from test/SampleData.jl
 function make_elbo_args(images::Vector{Model.TiledImage},
                         catalog::Vector{Model.CatalogEntry};
-                        fit_psf::Bool=false,
-                        patch_radius::Float64=NaN)
+                        fit_psf::Bool=false)
     vp = Vector{Float64}[Model.init_source(ce) for ce in catalog]
-    patches, tile_source_map = Infer.get_tile_source_map(
-        images,
-        catalog,
-        radius_override=patch_radius,
-    )
+    patches, tile_source_map = Infer.get_tile_source_map(images, catalog)
     active_sources = collect(1:length(catalog))
     ea = ElboDeriv.ElboArgs(images, vp, tile_source_map, patches, active_sources)
     if fit_psf
@@ -78,7 +73,7 @@ end
 
 # TODO: from test/SampleData.jl
 const sample_star_fluxes = fill(1000., 5)
-const sample_galaxy_fluxes = fill(10., 5)
+const sample_galaxy_fluxes = fill(100., 5)
 
 function make_catalog_entry()
     Model.CatalogEntry(
@@ -109,7 +104,7 @@ end
 function pretty_print_params(params, truth_row)
     ids = Model.ids
     @printf "Location in world coords: (%.2f, %.2f)\n" params[ids.u[1]] params[ids.u[2]]
-    @printf "  Expected (%.2f, %.2f)" truth_row[1, :world_center_x] truth_row[1, :world_center_y]
+    @printf "  Expected (%.2f, %.2f)\n" truth_row[1, :world_center_x] truth_row[1, :world_center_y]
     @printf "Weight on exponential (vs. Vaucouleurs): %.2f\n" params[ids.e_dev]
     @printf "Minor/major axis ratio: %.2f\n" params[ids.e_axis]
     angle_radians = canonical_angle(params)
