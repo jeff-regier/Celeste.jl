@@ -218,7 +218,7 @@ end
 
 function perturb_params(ea) # for testing derivatives != 0
     for vs in ea.vp
-        vs[ids.a] = [ 0.4, 0.6 ]
+        vs[ids.a[:, 1]] = [ 0.4, 0.6 ]
         vs[ids.u[1]] += .8
         vs[ids.u[2]] -= .7
         vs[ids.r1] -= log(10)

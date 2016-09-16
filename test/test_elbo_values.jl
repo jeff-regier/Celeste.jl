@@ -10,7 +10,7 @@ using DerivativeTestUtils
 function true_star_init()
     blob, ea, body = gen_sample_star_dataset(perturb=false)
 
-    ea.vp[1][ids.a] = [ 1.0 - 1e-4, 1e-4 ]
+    ea.vp[1][ids.a[:, 1]] = [ 1.0 - 1e-4, 1e-4 ]
     ea.vp[1][ids.r2] = 1e-4
     ea.vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * ea.vp[1][ids.r2]
     #ea.vp[1][ids.r1] = sample_star_fluxes[3] ./ ea.vp[1][ids.r2]
@@ -160,7 +160,7 @@ function test_that_star_truth_is_most_likely()
 
     for bad_a in [.3, .5, .9]
         ea_a = deepcopy(ea)
-        ea_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ]
+        ea_a.vp[1][ids.a[:, 1]] = [ 1.0 - bad_a, bad_a ]
         bad_a_lik = ElboDeriv.elbo_likelihood(ea_a)
         @test best.v[1] > bad_a_lik.v[1]
     end
@@ -197,12 +197,12 @@ end
 
 function test_that_galaxy_truth_is_most_likely()
     blob, ea, body = gen_sample_galaxy_dataset(perturb=false);
-    ea.vp[1][ids.a] = [ 0.01, .99 ]
+    ea.vp[1][ids.a[:, 1]] = [ 0.01, .99 ]
     best = ElboDeriv.elbo_likelihood(ea);
 
     for bad_a in [.3, .5, .9]
         ea_a = deepcopy(ea);
-        ea_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ];
+        ea_a.vp[1][ids.a[:, 1]] = [ 1.0 - bad_a, bad_a ];
         bad_a =
           ElboDeriv.elbo_likelihood(ea_a; calculate_derivs=false);
         @test best.v[1] > bad_a.v[1];
@@ -272,8 +272,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
 
     ea = make_elbo_args(blob, cat_entries)
     for s in 1:length(cat_entries)
-        ea.vp[s][ids.a[2]] = cat_entries[s].is_star ? 0.01 : 0.99
-        ea.vp[s][ids.a[1]] = 1.0 - ea.vp[s][ids.a[2]]
+        ea.vp[s][ids.a[2, 1]] = cat_entries[s].is_star ? 0.01 : 0.99
+        ea.vp[s][ids.a[1, 1]] = 1.0 - ea.vp[s][ids.a[2, 1]]
     end
     best = ElboDeriv.elbo_likelihood(ea; calculate_derivs=false);
 
@@ -300,7 +300,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
 
     for bad_a in [.3, .7]
         ea_a = deepcopy(ea)
-        ea_a.vp[s][ids.a] = [ 1.0 - bad_a, bad_a ]
+        ea_a.vp[s][ids.a[:, 1]] = [ 1.0 - bad_a, bad_a ]
 
         bad_a = ElboDeriv.elbo_likelihood(
           ea_a; calculate_derivs=false)

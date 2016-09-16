@@ -312,6 +312,146 @@ The derivatives are
 \end_layout
 
 \begin_layout Section
+Enforcing simplex bounds
+\end_layout
+
+\begin_layout Standard
+It is convenient to be able to convert a generic positive vector to satisfy
+ the simplex bounds.
+ That is, given 
+\begin_inset Formula $\tilde{z}\in\left(\mathbb{R}^{+}\right)^{n}$
+\end_inset
+
+ we want to find 
+\begin_inset Formula $z$
+\end_inset
+
+ such that
+\begin_inset Formula 
+\begin{eqnarray*}
+z_{i} & \ge & \mu_{i},\forall i\\
+\sum z_{i} & = & 1
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Obviously we must have 
+\begin_inset Formula $\sum\mu_{i}\le1$
+\end_inset
+
+.
+ We also want 
+\begin_inset Formula $z$
+\end_inset
+
+ to be close to 
+\begin_inset Formula $\tilde{z}$
+\end_inset
+
+.
+ This is a quadratic program optimization problem with constraints:
+\begin_inset Formula 
+\begin{eqnarray*}
+z & = & \textrm{argmin}\left\{ \frac{1}{2}\sum\left(z_{i}-\tilde{z}_{i}\right)^{2}\right\} \\
+z_{i} & \ge & \mu_{i},\forall i\\
+\sum z_{i} & = & 1
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The Lagrangian is
+\begin_inset Formula 
+\begin{eqnarray*}
+L\left(z,\lambda\right) & = & \frac{1}{2}\sum\left(z_{i}-\tilde{z}_{i}\right)^{2}+\sum\lambda_{i}\left(z_{i}-\mu_{i}\right)+\lambda_{0}\left(\sum z_{i}-1\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{\partial L}{\partial z_{i}} & = & z_{i}-\tilde{z}_{i}+\lambda_{i}+\lambda_{0}=0\\
+\sum_{i}z_{i}-\sum_{i}\tilde{z}_{i} & = & -n\lambda_{0}-\sum_{i}\lambda_{i}\\
+-\frac{1}{n}\left(1-\sum_{i}\tilde{z}_{i}\right) & = & \lambda_{0}-\frac{1}{n}\sum_{i}\lambda_{i}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+If 
+\begin_inset Formula $\lambda_{i}=0$
+\end_inset
+
+ then
+\begin_inset Formula 
+\begin{eqnarray*}
+z_{i} & = & \tilde{z}_{i}+\frac{1}{n}\left(1-\sum_{i}\tilde{z}_{i}\right)\\
+ & = & \tilde{z}_{i}-\frac{1}{n}\sum_{i}\tilde{z}_{i}+\frac{1}{n}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+This makes sense.
+ But this is heavier than what we need.
+ We can simply make sure that everything is bigger than its min, and then
+ normalize it in a way that respects the min.
+ Suppose that 
+\begin_inset Formula $\tilde{z}$
+\end_inset
+
+ already has each element with 
+\begin_inset Formula $\tilde{z}_{i}\ge\mu_{i}$
+\end_inset
+
+ .
+ Then
+\begin_inset Formula 
+\begin{eqnarray*}
+z_{i} & = & \mu_{i}+\alpha\left(\tilde{z}_{i}-\mu_{i}\right)\\
+1 & = & \sum\mu_{i}+\alpha\sum\left(\tilde{z}_{i}-\mu_{i}\right)\\
+\alpha & = & \frac{1-\sum\mu_{i}}{\sum\tilde{z}_{i}-\sum\mu_{i}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+In our case, 
+\begin_inset Formula $\mu_{i}$
+\end_inset
+
+ is all the same, so
+\begin_inset Formula 
+\begin{eqnarray*}
+\alpha & = & \frac{1-n\mu}{\sum\tilde{z}_{i}-n\mu}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
 Derivative transform
 \end_layout
 
@@ -321,130 +461,6 @@ A reminder:
 \begin{eqnarray*}
 \frac{dE}{dxdx^{T}} & = & \frac{d}{dx}\left(\left(\frac{dy}{dx^{T}}\right)^{T}\frac{dE}{dy}\right)\\
  & = & \left(\frac{dy}{dx^{T}}\right)^{T}\frac{d^{2}E}{dydy^{T}}\frac{dy}{dx}+\sum_{i}\frac{dy_{i}}{dxdx^{T}}\frac{dE}{dy_{i}}
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Section
-Old notes
-\end_layout
-
-\begin_layout Standard
-Lower-bounded numbers can be parameterized with
-\begin_inset Formula 
-\begin{eqnarray*}
-\beta & = & \exp b+\beta_{0}\\
-\frac{df}{db} & = & \frac{df}{d\beta}\frac{d\beta}{db}=\frac{df}{d\beta}\left(\beta-\beta_{0}\right)
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-If you scale by a constant, then you divide by the constant for the derivative:
-\begin_inset Formula 
-\begin{eqnarray*}
-x & = & \alpha y\\
-\frac{df}{dx} & = & \frac{df}{dy}\frac{dy}{dx}=\frac{1}{\alpha}\frac{df}{dy}
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-In the case of 
-\begin_inset Formula $\rho$
-\end_inset
-
-, we are simply using the logit transform, which matches the case of 
-\begin_inset Formula $z_{1}$
-\end_inset
-
- above.
-\begin_inset Formula 
-\begin{eqnarray*}
-\rho & = & \frac{e^{r}}{1+e^{r}}\Rightarrow\\
-\frac{df}{dr} & = & \frac{df}{d\rho}\rho\left(1-\rho\right)
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-It may make sense to parameterize in terms of the product 
-\begin_inset Formula $\gamma\zeta$
-\end_inset
-
- instead of each separately.
- Let
-\begin_inset Formula 
-\begin{eqnarray*}
-b & = & \log\left(\gamma\zeta\right)=\log\gamma+\log\zeta\\
-v & = & \log\left(\gamma\zeta^{2}\right)=\log\gamma+2\log\zeta\\
-\zeta & = & \frac{\exp v}{\exp b}=\exp\left(v-b\right)\\
-\gamma & = & \frac{\exp\left(b\right)^{2}}{\exp\left(v\right)}=\exp\left(2b-v\right)\\
-\frac{df}{db} & = & \frac{df}{d\gamma}\frac{d\gamma}{db}+\frac{df}{d\zeta}\frac{d\zeta}{db}\\
- & = & 2\frac{df}{d\gamma}\gamma-\frac{df}{d\zeta}\zeta\\
-\frac{df}{dv} & = & \frac{df}{d\gamma}\frac{d\gamma}{dv}+\frac{df}{d\zeta}\frac{d\zeta}{dv}\\
- & = & -\frac{df}{d\gamma}\gamma+\frac{df}{d\zeta}\zeta
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-Certain variables might need to have box constraints.
- In that case,
-\end_layout
-
-\begin_layout Standard
-\begin_inset Formula 
-\begin{eqnarray*}
-y_{0} & = & \frac{1}{1+\exp\left(-x\right)}\\
-1-y_{0} & = & \frac{\exp\left(-x\right)}{1+\exp\left(-x\right)}\\
-y & = & y_{0}\left(y_{max}-y_{min}\right)+y_{min}\\
-y_{0} & = & \frac{y-y_{min}}{y_{max}-y_{min}}\\
-\frac{df}{dx} & = & \frac{df}{dy}\frac{dy}{dx}\\
-\frac{dy}{dx} & = & \frac{dy}{dy_{0}}\frac{dy_{0}}{dx}\\
- & = & \left(y_{max}-y_{min}\right)y_{0}\left(1-y_{0}\right)
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-Since, as above
-\begin_inset Formula 
-\begin{eqnarray*}
-\frac{dy_{0}}{dx} & = & \frac{\exp\left(-x\right)}{\left(1+\exp\left(-x\right)\right)^{2}}\\
- & = & y_{0}\left(1-y_{0}\right)
-\end{eqnarray*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-The second derivative is
-\begin_inset Formula 
-\begin{eqnarray*}
-\frac{d^{2}y}{dxdx} & = & \frac{d}{dx}\left(y_{max}-y_{min}\right)y_{0}\left(1-y_{0}\right)\\
- & = & \left(y_{max}-y_{min}\right)\left(1-2y_{0}\right)\frac{dy_{0}}{dx}\\
- & = & \left(y_{max}-y_{min}\right)\left(1-2y_{0}\right)y_{0}\left(1-y_{0}\right)
 \end{eqnarray*}
 
 \end_inset

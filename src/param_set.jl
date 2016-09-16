@@ -12,8 +12,8 @@
 # r2      = Iax1 lognormal variance parameter for r_s.
 # c1      = C_s means (formerly beta)
 # c2      = C_s variances (formerly lambda)
-# a       = probability of being a star or galaxy.  a[1] is the
-#           probability of being a star and a[2] of being a galaxy.
+# a       = probability of being a star or galaxy.  a[1, 1] is the
+#           probability of being a star and a[2, 1] of being a galaxy.
 #           (formerly chi)
 # k       = {D|D-1}xIa matrix of color prior component indicators.
 #           (formerly kappa)
@@ -77,7 +77,7 @@ type CanonicalParams <: ParamSet
     r2::Vector{Int}
     c1::Matrix{Int}
     c2::Matrix{Int}
-    a::Vector{Int}
+    a::Matrix{Int}
     k::Matrix{Int}
     CanonicalParams() =
         new([1, 2], 3, 4, 5, 6,
@@ -85,7 +85,7 @@ type CanonicalParams <: ParamSet
             collect((7+Ia):(7+2Ia-1)), # r2
             reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
             reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
-            collect((7+2Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia-1)),  # a
+            reshape((7+2Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia-1), (Ia, 1)),  # a
             reshape((7+3Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia+D*Ia-1), (D, Ia))) # k
 end
 const ids = CanonicalParams()
@@ -103,7 +103,7 @@ type UnconstrainedParams <: ParamSet
     r2::Vector{Int}
     c1::Matrix{Int}
     c2::Matrix{Int}
-    a::Vector{Int}
+    a::Matrix{Int}
     k::Matrix{Int}
     UnconstrainedParams() =
         new([1, 2], 3, 4, 5, 6,
@@ -111,7 +111,8 @@ type UnconstrainedParams <: ParamSet
             collect((7+Ia):(7+2Ia-1)), # r2
             reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
             reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
-            collect((7+2Ia+2*(B-1)*Ia):(7+2Ia+2*(B-1)*Ia+(Ia-1)-1)),  # a
+            reshape((7+2Ia+2*(B-1)*Ia):
+                    (7+2Ia+2*(B-1)*Ia+(Ia-1)-1), (Ia - 1, 1)),  # a
             reshape((7+2Ia+2*(B-1)*Ia+(Ia-1)):
                     (7+2Ia+2*(B-1)*Ia+(Ia-1)+(D-1)*Ia-1), (D-1, Ia))) # k
 end
@@ -181,6 +182,3 @@ end
 
 const ids_names = get_id_names(ids)
 const ids_free_names = get_id_names(ids_free)
-
-
-

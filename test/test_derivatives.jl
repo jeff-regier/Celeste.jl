@@ -1102,7 +1102,7 @@ function test_box_simplex_derivatives()
 	blob, ea, body = gen_three_body_dataset();
 	for s = 1:ea.S
 		delta = 0.01 * s # Make the parameters different for each one
-		ea.vp[s][ids.a] = Float64[ 0.2 - delta, 0.8 + delta ]
+		ea.vp[s][ids.a[:, 1]] = Float64[ 0.2 - delta, 0.8 + delta ]
 		ea.vp[s][ids.k] = Float64[ 0.2- delta 0.2- delta; 0.8 + delta 0.8 + delta ]
 	end
 	transform = Transform.get_mp_transform(ea, loc_width=1.0);
@@ -1110,48 +1110,48 @@ function test_box_simplex_derivatives()
 	simplex_params = [:a, :k]
 	vp_free = transform.from_vp(ea.vp)
 
-	for sa = 1:length(ea.active_sources), param in simplex_params
-		# sa = 1
-		# param = :k
-		# col = 1 # For k only
-		# ind = 1 # Index within the simplex
+  for sa = 1:length(ea.active_sources), param in simplex_params
+    # sa = 1
+    # param = :a
+    # col = 1 # For k only
+    # ind = 1 # Index within the simplex
 
-		s = ea.active_sources[sa]
-		num_cols = length(size(getfield(ids, param)))
-		@assert num_cols == 1 || num_cols == 2
+    s = ea.active_sources[sa]
+    num_rows = size(getfield(ids, param))[1]
+    num_cols = size(getfield(ids, param))[2]
 
-		for col = 1:num_cols
-			vp_ind = getfield(ids, param)[:, col]
+    for col = 1:num_cols
+    	vp_ind = getfield(ids, param)[:, col]
 
-			if length(size(getfield(ids_free, param))) == 0
-				# Hack to handle ids_free.a
-				@assert col == 1
-				free_ind = [ getfield(ids_free, param) ]
-			else
-				free_ind = getfield(ids_free, param)[:, col]
-			end
+    	if length(size(getfield(ids_free, param))) == 0
+    		# Hack to handle ids_free.a
+    		@assert col == 1
+    		free_ind = [ getfield(ids_free, param) ]
+    	else
+    		free_ind = getfield(ids_free, param)[:, col]
+    	end
 
-			d, h = Transform.box_simplex_derivatives(
-				ea.vp[s][vp_ind], transform.bounds[s][param][col])
+    	d, h = Transform.box_simplex_derivatives(
+    		ea.vp[s][vp_ind], transform.bounds[s][param][col])
 
-			for row = 1:2
-				# Write with a univariate output so we can take autodiff hessians.
-			  function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
-			  	local_vp_free =
-			  		Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
-			  	                     sa = 1:length(ea.active_sources) ]
-			  	local_vp_free[s] = vp_free_s
-			  	vp = transform.to_vp(local_vp_free)
-			  	vp[s][getfield(ids, param)[row, col]]
-			  end
+    	for row = 1:num_rows
+    		# Write with a univariate output so we can take autodiff hessians.
+    	  function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
+    	  	local_vp_free =
+    	  		Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
+    	  	                     sa = 1:length(ea.active_sources) ]
+    	  	local_vp_free[s] = vp_free_s
+    	  	vp = transform.to_vp(local_vp_free)
+    	  	vp[s][getfield(ids, param)[row, col]]
+    	  end
 
-			  ad_d = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind]
-			  ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind]
-				@test_approx_eq ad_d d[row, :][1]
-				@test_approx_eq ad_h h[row]
-			end
-		end
-	end
+    	  ad_d = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind]
+    	  ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind]
+    		@test_approx_eq ad_d d[row, :][1]
+    		@test_approx_eq ad_h h[row]
+    	end
+    end
+  end
 end
 
 

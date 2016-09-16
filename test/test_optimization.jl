@@ -4,7 +4,7 @@ using Celeste: Model, Transform, SensitiveFloats
 
 
 function verify_sample_star(vs, pos)
-    @test vs[ids.a[2]] <= 0.01
+    @test vs[ids.a[2, 1]] <= 0.01
 
     @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
     @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
@@ -19,7 +19,7 @@ function verify_sample_star(vs, pos)
 end
 
 function verify_sample_galaxy(vs, pos)
-    @test vs[ids.a[2]] >= 0.99
+    @test vs[ids.a[2, 1]] >= 0.99
 
     @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
     @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
@@ -94,7 +94,7 @@ function test_star_optimization()
 
     # Newton's method converges on a small galaxy unless we start with
     # a high star probability.
-    ea.vp[1][ids.a] = [0.8, 0.2]
+    ea.vp[1][ids.a[:, 1]] = [0.8, 0.2]
     OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, ea; loc_width=1.0)
     verify_sample_star(ea.vp[1], [10.1, 12.2])
 end
@@ -215,7 +215,7 @@ function test_quadratic_optimization()
     const centers = collect(linspace(0.1, 0.9, length(CanonicalParams)));
 
     # Set feasible centers for the indicators.
-    centers[ids.a] = [ 0.4, 0.6 ]
+    centers[ids.a[:, 1]] = [ 0.4, 0.6 ]
     centers[ids.k] = [ 0.3 0.3; 0.7 0.7 ]
 
     function quadratic_function{NumType <: Number}(ea::ElboArgs{NumType})
