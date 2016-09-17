@@ -168,15 +168,14 @@ end
 
 
 """
-load_primary(dir, run, camcol, field)
-
 Load the SDSS photoObj catalog used to initialize celeste, and reformat column
 names to match what the rest of the scoring code expects.
 """
-function load_primary(dir, rcf::RunCamcolField)
-    run, camcol, field = rcf.run, rcf.camcol, rcf.field
-
-    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
+function load_primary(rcf::RunCamcolField)
+    stagedir = joinpath(ENV["SCRATCH"], "celeste")
+    dir = @sprintf "%s/%d/%d/%d" stagedir rcf.run rcf.camcol rcf.field
+    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir rcf.run rcf.camcol rcf.field
+    println(fname)
     objs = SDSSIO.read_photoobj(fname)
 
     usedev = objs["frac_dev"] .> 0.5  # true=> use dev, false=> use exp
@@ -265,7 +264,7 @@ end
 """
 Convert Celeste results to a dataframe.
 """
-function celeste_to_df(results::Dict{Int, Dict})
+function celeste_to_df(results::Vector{Dict})
     # Initialize dataframe
     N = length(results)
     color_col_names = ["color_$cn" for cn in color_names]
@@ -286,7 +285,7 @@ function celeste_to_df(results::Dict{Int, Dict})
 
     # Fill dataframe row-by-row.
     i = 0
-    for (thingid, result) in results
+    for result in results
         i += 1
         vs = result["vs"]
 
@@ -310,7 +309,7 @@ function celeste_to_df(results::Dict{Int, Dict})
             vs[ids.e_angle],
             vs[ids.e_scale],
             result["objid"],
-            thingid)
+            result["thing_id"])
         load_ce!(i, ce, df)
 
         df[i, :is_star] = vs[ids.a[1, 1]]
@@ -392,8 +391,8 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
 end
 
 
-function match_catalogs(fieldid::Tuple{Int, Int, Int},
-               results, truthfile, primary_dir)
+function match_catalogs(rcf::RunCamcolField,
+               results, truthfile)
     # convert Celeste results to a DataFrame.
     celeste_full_df = celeste_to_df(results)
     println("celeste: $(size(celeste_full_df, 1)) objects")
@@ -423,7 +422,7 @@ function match_catalogs(fieldid::Tuple{Int, Int, Int},
 
     # load "primary" catalog (the SDSS photoObj catalog used to initialize
     # celeste).
-    primary_full_df = load_primary(primary_dir, fieldid...)
+    primary_full_df = load_primary(rcf)
     println("primary catalog: $(size(primary_full_df, 1)) objects")
 
     # match Primary to Celeste by object id
@@ -500,12 +499,11 @@ function get_scores_df(celeste_err, primary_err, coadd_df)
 end
 
 
-function score_field(fieldid::Tuple{Int, Int, Int},
-               results, truthfile, primary_dir)
-    (celeste_df, primary_df, coadd_df) = match_catalogs(fieldid,
-                                results, truthfile, primary_dir)
+function score_field(rcf::RunCamcolField, results, truthfile)
+    (celeste_df, primary_df, coadd_df) = match_catalogs(rcf,
+                                results, truthfile)
 
-    suffix = @sprintf "%06d-%d-%04d.csv" fieldid[1] fieldid[2] fieldid[3]
+    suffix = @sprintf "%06d-%d-%04d.csv" rcf.run rcf.camcol rcf.field
     writetable("celeste_results_"suffix, celeste_df)
     writetable("primary_results_"suffix, primary_df)
     writetable("coadd_results_"suffix, coadd_df)
@@ -545,7 +543,7 @@ function score_object_disk(rcf::RunCamcolField, objid, resultdir, truthfile)
     results = JLD.load(fname, "results")
 
     (celeste_df, primary_df, coadd_df) = match_catalogs(rcf,
-                                results, truthfile, primary_dir)
+                                results, truthfile)
 
     println("\n\nceleste results:\n")
     println(celeste_df)
