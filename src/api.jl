@@ -225,7 +225,7 @@ function divide_sky_and_infer(
         ci = ci + 1
 
         # map item to subarea
-        iramin, iramax, idecmin, idecmax = divide_skyarea(skya, item)
+        iramin, iramax, idecmin, idecmax = divide_skyarea(box, nra, ndec, item)
 
         # Get vector of (run, camcol, field) triplets overlapping this patch
         tic()
@@ -234,7 +234,7 @@ function divide_sky_and_infer(
         itimes.query_fids = toq()
 
         # run inference for this subarea
-        results = one_node_infer(rcfs;
+        results = one_node_infer(rcfs, stagedir;
                         box=BoundingBox(iramin, iramax, idecmin, idecmax),
                         reserve_thread=rundt,
                         thread_fun=rundtree,
@@ -513,10 +513,13 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
 
     times = InferTiming()
     if !SKY_DIVISION_PARALLELISM
+        Log.debug("source division parallelism")
         divide_sources_and_infer(box, stagedir; timing=times, outdir=outdir)
     elseif dt_nnodes > 1
+        Log.debug("sky division parallelism")
         divide_sky_and_infer(box, stagedir; timing=times, outdir=outdir)
     else
+        Log.debug("multithreaded parallelism only")
         tic()
         # Get vector of (run, camcol, field) triplets overlapping this patch
         rcfs = get_overlapping_fields(box, stagedir)
