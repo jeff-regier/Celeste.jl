@@ -507,6 +507,14 @@ function divide_sources_and_infer(
     tic()
     save_results(outdir, box, lresults)
     timing.write_results = toq()
+
+    sync()
+    finalize(results)
+    finalize(tasks)
+    finalize(catalog)
+    finalize(task_offset)
+    finalize(catalog_offset)
+    finalize(images)
 end
 
 
