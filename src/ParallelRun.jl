@@ -411,7 +411,8 @@ function one_node_infer(
 
     tic()
     ccall(:jl_threading_run, Void, (Any,), Core.svec(process_sources))
-    ccall(:jl_threading_profile, Void, ())
+    #process_sources()
+    #ccall(:jl_threading_profile, Void, ())
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
 
