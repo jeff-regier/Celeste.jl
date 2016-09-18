@@ -124,6 +124,27 @@ function ImageTile(hh::Int, ww::Int, img::Image, tile_width::Int)
               pixels, epsilon_mat, iota_vec)
 end
 
+#=
+function ImageTile(hh::Int, ww::Int, img::FlatImage, tile_width::Int)
+    h1 = 1 + (hh - 1) * tile_width
+    h2 = min(hh * tile_width, img.H)
+    h_range = h1:h2
+
+    w1 = 1 + (ww - 1) * tile_width
+    w2 = min(ww * tile_width, img.W)
+    w_range = w1:w2
+
+    pixels = img.pixels[h_range, w_range]
+    epsilon_mat = img.epsilon_mat[h_range, w_range]
+    iota_vec = img.iota_vec[h_range]
+
+    @assert 1 <= img.b <= B
+    ImageTile(img.b,
+              h_range, w_range,
+              pixels, epsilon_mat, iota_vec)
+end
+=#
+
 
 """An image, taken though a particular filter band"""
 type TiledImage
@@ -168,6 +189,20 @@ function TiledImage(img::Image; tile_width=20)
                img.run_num, img.camcol_num, img.field_num,
                img.raw_psf_comp)
 end
+
+#=
+function TiledImage(img::FlatImage; tile_width=20)
+    wcs_array = WCS.from_header(img.wcs_header)
+    @assert(length(wcs_array) == 1)
+    wcs = wcs_array[1]
+    WW = ceil(Int, img.W / tile_width)
+    HH = ceil(Int, img.H / tile_width)
+    tiles = ImageTile[ImageTile(hh, ww, img, tile_width) for hh=1:HH, ww=1:WW]
+    TiledImage(img.H, img.W, tiles, tile_width, img.b, wcs, img.psf,
+               img.run_num, img.camcol_num, img.field_num,
+               img.raw_psf_comp)
+end
+=#
 
 
 """ Returns the tile containing (or nearest to) the specified pixel"""
