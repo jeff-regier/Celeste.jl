@@ -59,8 +59,6 @@ function main()
         field = parse(Int, args["<field>"])
         rcf = RunCamcolField(run, camcol, field)
         if args["infer-field"]
-            sdssdir = ENV["SDSS_ROOT_DIR"]
-            Celeste.stage_field(rcf, sdssdir, stagedir)
             outdir = args["<outdir>"]
             Celeste.infer_field(rcf, stagedir, outdir)
         elseif args["infer-object"]

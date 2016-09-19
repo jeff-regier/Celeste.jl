@@ -78,7 +78,7 @@ function stage_box(box::BoundingBox, sdssdir, stagedir)
     cp(ENV["FIELD_EXTENTS"], stage_extents, remove_destination=true)
     rcfs = get_overlapping_fields(box, stagedir)
     for rcf in rcfs
-        stage_field(rcf, sdssdir, stagedir)
+        println("$(rcf.run) $(rcf.camcol) $(rcf.field)")
     end
 end
 
