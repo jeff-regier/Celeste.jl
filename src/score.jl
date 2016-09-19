@@ -172,7 +172,7 @@ Load the SDSS photoObj catalog used to initialize celeste, and reformat column
 names to match what the rest of the scoring code expects.
 """
 function load_primary(rcf::RunCamcolField)
-    stagedir = joinpath(ENV["SCRATCH"], "celeste")
+    stagedir = ENV["CELESTE_STAGE_DIR"]
     dir = @sprintf "%s/%d/%d/%d" stagedir rcf.run rcf.camcol rcf.field
     fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir rcf.run rcf.camcol rcf.field
     println(fname)
