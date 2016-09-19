@@ -181,8 +181,6 @@ function load_images(box, rcfs, stagedir)
     lo, hi = distribution(images, nodeid)
     nlocal = hi[1]-lo[1]+1
 
-    #nputs(nodeid, "$nlocal local images ($(lo[1])-$(hi[1]))")
-
     # get access to the local parts of the global arrays
     limages = access(images, lo, hi)
     lcatalog_offset = access(catalog_offset, lo, hi)
@@ -206,13 +204,12 @@ function load_images(box, rcfs, stagedir)
         # we'll use sources outside of the box to render the background,
         # but we won't optimize them
         local_tasks = filter(s->in_box(s, box), local_catalog)
+        nputs(nodeid, "$(length(local_tasks)) in this RCF")
 
         lcatalog_offset[i] = length(local_catalog)
         ltask_offset[i] = length(local_tasks)
     end
     flush(images)
-    flush(catalog_offset)
-    flush(task_offset)
     sync()
 
     # folds right, converting each field's count to offsets in # `catalog`
@@ -221,17 +218,13 @@ function load_images(box, rcfs, stagedir)
     for nid = 1:nnodes
         # one node at a time
         if nid == nodeid && nlocal > 0
-            # the first node has no predecessor
-            if nid == 1
-                catalog_size = 0
-                num_tasks = 0
-            # all other nodes have to get the sum from their predecessor
-            else
-                prev = get(catalog_offset, lo-1, lo-1)
-                catalog_size = prev[1]
-                prev = get(task_offset, lo-1, lo-1)
-                num_tasks = prev[1]
+            catalog_size = 0
+            num_tasks = 0
+            if nid > 1
+                catalog_size += getindex(get(catalog_offset, lo-1, lo-1), 1)
+                num_tasks += getindex(get(task_offset, lo-1, lo-1), 1)
             end
+
             # do the local summing
             for i in 1:nlocal
                 catalog_size += lcatalog_offset[i]
@@ -252,13 +245,12 @@ end
 
 function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     num_fields = length(rcfs)
-    coe = get(catalog_offset, [num_fields], [num_fields])
-    catalog_size = coe[1]
-    toe = get(task_offset, [num_fields], [num_fields])
-    num_tasks = toe[1]
+    catalog_size = getindex(get(catalog_offset, [num_fields], [num_fields]), 1)
+    num_tasks = getindex(get(task_offset, [num_fields], [num_fields]), 1)
 
     if nodeid == 1
         nputs(nodeid, "catalog size is $catalog_size")
+        nputs(nodeid, "$num_tasks tasks")
     end
 
     catalog = Garray(Tuple{CatalogEntry, RunCamcolField}, 300, catalog_size)
@@ -266,45 +258,30 @@ function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     # entries in `tasks` are indexes into `catalog`
     tasks = Garray(Int64, 10, num_tasks)
 
-    # get local distribution of the arrays
+    # we'll iterate over the local parts of the catalog_offset and
+    # task_offset arrays to build the catalog and task arrays. our starting
+    # indices into the catalog and task arrays are computed from the
+    # previous entries in the respective offset arrays.
     colo, cohi = distribution(catalog_offset, nodeid)
-    nlocal = cohi[1]-colo[1]+1
-    clo, chi = distribution(catalog, nodeid)
-    lcatalog_size = chi[1]-clo[1]+1
-    tlo, thi = distribution(tasks, nodeid)
-    ltasks_size = thi[1]-tlo[1]+1
-
-    #nputs(nodeid, "$lcatalog_size local catalog entries")
-    #nputs(nodeid, "$ltasks_size local task entries")
-
-    # get access to the local parts of the global arrays
-    lcatalog = access(catalog, clo, chi)
-    ltasks = access(tasks, tlo, thi)
-
-    # iterate over the local catalog offsets to build the catalog and tasks list
-    for i in 1:nlocal
-        n = colo[1] + i - 1
+    cat_idx = 1
+    task_idx = 1
+    if colo[1] > 1
+        cat_idx = cat_idx + getindex(get(catalog_offset, [colo[1]-1], [colo[1]-1]), 1)
+        task_idx = task_idx + getindex(get(task_offset, [colo[1]-1], [colo[1]-1]), 1)
+    end
+    for n in colo[1]:cohi[1]
         rcf = rcfs[n]
-
-        local_catalog = fetch_catalog(rcf, stagedir)
-
-        local_t = 0
-        for local_s in 1:length(local_catalog)
-            entry = local_catalog[local_s]
-            # `s` is the global index of this source (in the catalog)
-            offset = n == 1 ? 0 : catalog_offset[n-1]
-            s = offset + local_s
-            # each field's primary detection is stored contiguously
-            #catalog[s] = (entry, rcf)
-            put!(catalog, [s], [s], [(entry, rcf)])
-
+        rcf_catalog = fetch_catalog(rcf, stagedir)
+        for ci = 1:length(rcf_catalog)
+            entry = rcf_catalog[ci]
+            #nputs(nodeid, "adding entry $cat_idx to catalog")
+            put!(catalog, [cat_idx], [cat_idx], [(entry, rcf)])
             if in_box(entry, box)
-                local_t += 1
-                offset = n == 1 ? 0 : task_offset[n - 1]
-                t = offset + local_t
-                #tasks[t] = s
-                put!(tasks, [t], [t], [s])
+                #nputs(nodeid, "adding task $task_idx to task list")
+                put!(tasks, [task_idx], [task_idx], [cat_idx])
+                task_idx = task_idx + 1
             end
+            cat_idx = cat_idx + 1
         end
     end
 
@@ -352,7 +329,7 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
         cached_images, cached_catalog, mem_handle = get!(rcf_cache, rcf) do
             n = rcf_to_index[rcf.run, rcf.camcol, rcf.field]
             @assert n > 0
-            #nputs(nodeid, "getting image $n for $(rcf.run), $(rcf.camcol), $(rcf.field)")
+            nputs(nodeid, "getting image $n for $(rcf.run), $(rcf.camcol), $(rcf.field)")
             fimgs, mem_handle = getpersistent(images, [n], [n])
             imgs = Vector{TiledImage}()
             for fimg in fimgs[1]
@@ -381,9 +358,11 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
     neighbor_indexes = Infer.find_neighbors([i,], local_catalog, local_images)[1]
     neighbors = local_catalog[neighbor_indexes]
 
+    #nputs(nodeid, "starting inference for $s")
     t0 = time()
     vs_opt = Infer.infer_source(local_images, neighbors, entry)
     runtime = time() - t0
+    #nputs(nodeid, "inference for $s complete")
 
     InferResult(entry.thing_id, entry.objid, entry.pos[1], entry.pos[2],
                 vs_opt, runtime)
@@ -393,9 +372,6 @@ end
 function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
             rcf_to_index, stagedir, results, timing)
     num_work_items = length(tasks)
-    if nodeid == 1
-        nputs(nodeid, "processing $num_work_items work items on $nnodes nodes")
-    end
 
     # cache for RCF data
     rcf_cache = Dict{RunCamcolField,
@@ -405,7 +381,8 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
     rcf_cache_lock = SpinLock()
 
     # create Dtree and get the initial allocation
-    dt, isparent = Dtree(num_work_items, 0.4)
+    dt, isparent = Dtree(num_work_items, 0.4,
+                         ceil(Int64, Base.Threads.nthreads() / 2))
     numwi, (startwi, endwi) = initwork(dt)
     nputs(nodeid, "initially $numwi work items ($startwi-$endwi)")
     rundt = runtree(dt)
