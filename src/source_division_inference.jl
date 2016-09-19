@@ -189,8 +189,9 @@ function load_images(box, rcfs, stagedir)
     for i in 1:nlocal
         n = lo[1] + i - 1
 
+        nputs(nodeid, "loading images for RCF $n ($(rcf.run), $(rcf.camcol), $(rcf.field))")
+
         rcf = rcfs[n]
-        nputs(nodeid, "loading images for $(rcf.run), $(rcf.camcol), $(rcf.field)")
         raw_images = SDSSIO.load_field_images(rcf, stagedir)
         @assert(length(raw_images) == 5)
         fimgs = [FlatImage(img) for img in raw_images]
@@ -204,13 +205,18 @@ function load_images(box, rcfs, stagedir)
         # we'll use sources outside of the box to render the background,
         # but we won't optimize them
         local_tasks = filter(s->in_box(s, box), local_catalog)
-        nputs(nodeid, "$(length(local_tasks)) in this RCF")
+
+        nputs(nodeid, "$(length(local_catalog)) sources ($(length(local_tasks)) tasks) in this RCF")
 
         lcatalog_offset[i] = length(local_catalog)
         ltask_offset[i] = length(local_tasks)
     end
     flush(images)
+    flush(catalog_offset)
+    flush(task_offset)
     sync()
+    lcatalog_offset = access(catalog_offset, lo, hi)
+    ltask_offset = access(task_offset, lo, hi)
 
     # folds right, converting each field's count to offsets in # `catalog`
     # and `tasks`. this is a prefix sum, which can be done in parallel
@@ -221,15 +227,18 @@ function load_images(box, rcfs, stagedir)
             catalog_size = 0
             num_tasks = 0
             if nid > 1
-                catalog_size += getindex(get(catalog_offset, lo-1, lo-1), 1)
-                num_tasks += getindex(get(task_offset, lo-1, lo-1), 1)
+                coa, coa_handle = get(catalog_offset, lo-1, lo-1)
+                #nputs(nodeid, "got $(coa[1]) from $(lo[1]-1)")
+                catalog_size = catalog_size + coa[1]
+                toa, toa_handle = get(task_offset, lo-1, lo-1)
+                num_tasks = num_tasks + toa[1]
             end
 
             # do the local summing
             for i in 1:nlocal
-                catalog_size += lcatalog_offset[i]
+                catalog_size = catalog_size + lcatalog_offset[i]
                 lcatalog_offset[i] = catalog_size
-                num_tasks += ltask_offset[i]
+                num_tasks = num_tasks + ltask_offset[i]
                 ltask_offset[i] = num_tasks
             end
             flush(catalog_offset)
@@ -245,12 +254,13 @@ end
 
 function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     num_fields = length(rcfs)
-    catalog_size = getindex(get(catalog_offset, [num_fields], [num_fields]), 1)
-    num_tasks = getindex(get(task_offset, [num_fields], [num_fields]), 1)
+    coa, coa_handle = get(catalog_offset, [num_fields], [num_fields])
+    catalog_size = coa[1]
+    toa, toa_handle = get(task_offset, [num_fields], [num_fields])
+    num_tasks = toa[1]
 
     if nodeid == 1
-        nputs(nodeid, "catalog size is $catalog_size")
-        nputs(nodeid, "$num_tasks tasks")
+        nputs(nodeid, "catalog size is $catalog_size, $num_tasks tasks")
     end
 
     catalog = Garray(Tuple{CatalogEntry, RunCamcolField}, 300, catalog_size)
@@ -266,18 +276,18 @@ function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     cat_idx = 1
     task_idx = 1
     if colo[1] > 1
-        cat_idx = cat_idx + getindex(get(catalog_offset, [colo[1]-1], [colo[1]-1]), 1)
-        task_idx = task_idx + getindex(get(task_offset, [colo[1]-1], [colo[1]-1]), 1)
+        coa, coa_handle = get(catalog_offset, [colo[1]-1], [colo[1]-1])
+        cat_idx = cat_idx + coa[1]
+        toa, toa_handle = get(task_offset, [colo[1]-1], [colo[1]-1])
+        task_idx = task_idx + toa[1]
     end
     for n in colo[1]:cohi[1]
         rcf = rcfs[n]
         rcf_catalog = fetch_catalog(rcf, stagedir)
         for ci = 1:length(rcf_catalog)
             entry = rcf_catalog[ci]
-            #nputs(nodeid, "adding entry $cat_idx to catalog")
             put!(catalog, [cat_idx], [cat_idx], [(entry, rcf)])
             if in_box(entry, box)
-                #nputs(nodeid, "adding task $task_idx to task list")
                 put!(tasks, [task_idx], [task_idx], [cat_idx])
                 task_idx = task_idx + 1
             end
@@ -315,7 +325,7 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
                          catalog_offset::Garray, rcf_to_index::Array{Int64,3},
                          rcf_cache::Dict, rcf_cache_lock::SpinLock,
                          stagedir::String, results::Garray)
-    ep = get(catalog, [s], [s])
+    ep, ep_handle = get(catalog, [s], [s])
     entry, primary_rcf = ep[1]
 
     t_box = BoundingBox(entry.pos[1] - 1e-8, entry.pos[1] + 1e-8,
@@ -330,7 +340,7 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
             n = rcf_to_index[rcf.run, rcf.camcol, rcf.field]
             @assert n > 0
             nputs(nodeid, "getting image $n for $(rcf.run), $(rcf.camcol), $(rcf.field)")
-            fimgs, mem_handle = getpersistent(images, [n], [n])
+            fimgs, mem_handle = get(images, [n], [n])
             imgs = Vector{TiledImage}()
             for fimg in fimgs[1]
                 img = Image(fimg)
@@ -338,14 +348,14 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
             end
             if n == 1
                 s_a = 1
-                st = get(catalog_offset, [n], [n])
+                st, st_handle = get(catalog_offset, [n], [n])
                 s_b = st[1]
             else
-                st = get(catalog_offset, [n-1], [n])
+                st, st_handle = get(catalog_offset, [n-1], [n])
                 s_a = st[1]
                 s_b = st[2]
             end
-            catalog_entries = get(catalog, [s_a], [s_b])
+            catalog_entries, ce_handle = get(catalog, [s_a], [s_b])
             neighbors = [entry[1] for entry in catalog_entries]
             imgs, neighbors, mem_handle
         end
@@ -386,7 +396,7 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
     numwi, (startwi, endwi) = initwork(dt)
     nputs(nodeid, "initially $numwi work items ($startwi-$endwi)")
     rundt = runtree(dt)
-    workitems = get(tasks, [startwi], [endwi])
+    workitems, wi_handle = get(tasks, [startwi], [endwi])
     widx = 1
     wilock = SpinLock()
 
@@ -408,7 +418,7 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
                 if widx > numwi
                     ntputs(nodeid, tid, "consumed last work item; requesting more")
                     numwi, (startwi, endwi) = getwork(dt)
-                    workitems = get(tasks, [startwi], [endwi])
+                    workitems, wi_handle = get(tasks, [startwi], [endwi])
                     widx = 1
                     ntputs(nodeid, tid, "got $numwi work items ($startwi-$endwi)")
                     unlock(wilock)
