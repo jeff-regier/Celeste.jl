@@ -10,7 +10,7 @@ FIELD_STRIPPED := $(shell echo $(FIELD) | sed 's/^0*//')
 RUN6 := $(shell printf '%06d' $(RUN_STRIPPED))
 FIELD4 := $(shell printf '%04d' $(FIELD_STRIPPED))
 
-STAGEDIR := $(SCRATCH)/celeste
+STAGEDIR := $(CELESTE_STAGE_DIR)
 SUBDIR2 := $(STAGEDIR)/$(RUN_STRIPPED)/$(CAMCOL)
 SUBDIR3 := $(SUBDIR2)/$(FIELD_STRIPPED)
 
@@ -36,7 +36,10 @@ $(STAGEDIR)/field_extents.fits :
 
 $(SUBDIR3)/fpM-$(RUN6)-%$(CAMCOL)-$(FIELD4).fit :
 	mkdir -p $(SUBDIR3)
-	gunzip --stdout $(SDSS_ROOT_DIR)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz > $(SUBDIR3)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit
+	if [ -a $(SDSS_ROOT_DIR)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz ] ; \
+	then \
+		gunzip --stdout $(SDSS_ROOT_DIR)/photo/redux/301/$(RUN_STRIPPED)/objcs/$(CAMCOL)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit.gz > $(SUBDIR3)/fpM-$(RUN6)-$*$(CAMCOL)-$(FIELD4).fit ; \
+	fi;
 
 $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit :
 	mkdir -p $(SUBDIR3)
@@ -44,7 +47,10 @@ $(SUBDIR3)/psField-$(RUN6)-$(CAMCOL)-$(FIELD4).fit :
 
 $(SUBDIR3)/frame-%-$(RUN6)-$(CAMCOL)-$(FIELD4).fits :
 	mkdir -p $(SUBDIR3)
-	bzcat --keep $(SDSS_ROOT_DIR)/photoObj/frames/301/$(RUN_STRIPPED)/$(CAMCOL)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2 > $(SUBDIR3)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits
+	if [ -a $(SDSS_ROOT_DIR)/photoObj/frames/301/$(RUN_STRIPPED)/$(CAMCOL)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2 ] ; \
+	then \
+		bzcat --keep $(SDSS_ROOT_DIR)/photoObj/frames/301/$(RUN_STRIPPED)/$(CAMCOL)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits.bz2 > $(SUBDIR3)/frame-$*-$(RUN6)-$(CAMCOL)-$(FIELD4).fits ; \
+	fi;
 
 $(SUBDIR3)/photoObj-$(RUN6)-$(CAMCOL)-$(FIELD4).fits :
 	mkdir -p $(SUBDIR3)
