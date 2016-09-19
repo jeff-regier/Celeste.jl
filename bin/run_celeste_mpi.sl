@@ -2,7 +2,7 @@
 
 
 #SBATCH --partition=debug
-#SBATCH --nodes=8
+#SBATCH --nodes=2
 #SBATCH --job-name=celeste
 #SBATCH --time=00:30:00
 #SBATCH --license=SCRATCH
