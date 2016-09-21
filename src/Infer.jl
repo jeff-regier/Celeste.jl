@@ -1,11 +1,23 @@
+"""
+We'll delete this module soon, and move most of the these methods to the
+`Model` module: the log probability can't be determined without neighbors
+and without trimming.
+We can't make the move yet, because `PSF` depends on `Transform` still,
+and `Transform` depends on `Model` still.
+The `infer_source()` method probably belongs in `ParallelRun`, once this
+module is deleted.
+Currently `infer_source()` only does (deterministic) variational inference.
+In the future, `infer_source()` might take a call back function as an
+argument, to let it's user run either deterministic VI, stochastic VI,
+or MCMC.
+"""
 module Infer
 
 import WCS
 
 using ..Model
-using ..DeterministicVI
 import ..PSF
-import ..OptimizeElbo
+using ..DeterministicVI
 import ..Log
 
 
@@ -90,7 +102,7 @@ function infer_source(images::Vector{TiledImage},
     ea = ElboArgs(images, vp, tile_source_map, patches, [1])
     fit_object_psfs!(ea, ea.active_sources)
     trim_source_tiles!(ea)
-    OptimizeElbo.maximize_f(DeterministicVI.elbo, ea)
+    DeterministicVI.maximize_f(DeterministicVI.elbo, ea)
     vp[1]
 end
 

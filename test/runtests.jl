@@ -3,7 +3,7 @@
 using Celeste: Model, DeterministicVI
 
 import Celeste: Infer, DeterministicVI, ParallelRun
-import Celeste: PSF, OptimizeElbo, SDSSIO, SensitiveFloats, Transform
+import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
 import SensitiveFloats.clear!
 import SDSSIO: RunCamcolField
 

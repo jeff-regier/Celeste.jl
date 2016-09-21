@@ -14,7 +14,6 @@ include("DeterministicVI.jl")
 include("StochasticVI.jl")
 include("MCMC.jl")
 
-include("OptimizeElbo.jl")
 include("Infer.jl")
 include("ParallelRun.jl")
 

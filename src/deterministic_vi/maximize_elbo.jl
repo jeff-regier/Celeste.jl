@@ -1,18 +1,3 @@
-"""
-This module should be merged into DeterministicVI.
-"""
-module OptimizeElbo
-
-using ..Model
-using ..SensitiveFloats
-using ..Transform
-using ..DeterministicVI
-import ..Log
-
-import DataFrames
-import Optim
-
-
 # The main reason we need this is to have a mutable type to keep
 # track of function evaluations, but we can keep other metadata
 # in it as well.
@@ -208,7 +193,7 @@ function maximize_f(f::Function,
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
-        OptimizeElbo.ObjectiveWrapperFunctions(
+        ObjectiveWrapperFunctions(
                 ea -> f(ea), ea, transform, kept_ids, omitted_ids,
                 fast_hessian=fast_hessian)
 
@@ -266,4 +251,3 @@ function maximize_f(f::Function,
 end
 
 
-end
