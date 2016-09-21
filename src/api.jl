@@ -377,9 +377,10 @@ function one_node_infer(
             while true
                 lock(sources_lock)
                 ts = curr_source
-                curr_source = curr_source+1
+                curr_source += 1
                 unlock(sources_lock)
-                if ts >= last_source
+
+                if ts > last_source
                     break
                 end
 #                try
@@ -394,7 +395,7 @@ function one_node_infer(
                                                 entry)
                     runtime = time() - t0
 #                catch ex
-#                    error(ex)
+#                    Log.error(ex)
 #                end
 
                 lock(results_lock)

@@ -6,6 +6,10 @@ module Log
 @inline puts(s) = ccall(:puts, Cint, (Ptr{Int8},), string(s))
 
 
+function error(msg::String)
+    puts("ERROR: $msg")
+end
+
 function warn(msg::String)
     puts("WARN: $msg")
 end

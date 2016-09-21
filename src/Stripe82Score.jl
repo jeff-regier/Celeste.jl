@@ -1,7 +1,14 @@
-# Functions for interacting with Celeste from the command line.
+module Stripe82Score
 
 
+import JLD
+import FITSIO
 using DataFrames
+
+import ..SDSSIO
+import ..SDSSIO: RunCamcolField
+import ..Model: CatalogEntry, ids
+
 
 immutable MatchException <: Exception
     msg::String
@@ -171,8 +178,7 @@ end
 Load the SDSS photoObj catalog used to initialize celeste, and reformat column
 names to match what the rest of the scoring code expects.
 """
-function load_primary(rcf::RunCamcolField)
-    stagedir = ENV["CELESTE_STAGE_DIR"]
+function load_primary(rcf::RunCamcolField, stagedir::String)
     dir = @sprintf "%s/%d/%d/%d" stagedir rcf.run rcf.camcol rcf.field
     fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir rcf.run rcf.camcol rcf.field
     println(fname)
@@ -258,7 +264,6 @@ function load_ce!(i::Int, ce::CatalogEntry, df::DataFrame)
     df[i, :gal_scale] = ce.gal_scale
     df[i, :objid] = ce.objid
 end
-
 
 
 """
@@ -392,7 +397,7 @@ end
 
 
 function match_catalogs(rcf::RunCamcolField,
-               results, truthfile)
+               results, truthfile, stagedir)
     # convert Celeste results to a DataFrame.
     celeste_full_df = celeste_to_df(results)
     println("celeste: $(size(celeste_full_df, 1)) objects")
@@ -422,7 +427,7 @@ function match_catalogs(rcf::RunCamcolField,
 
     # load "primary" catalog (the SDSS photoObj catalog used to initialize
     # celeste).
-    primary_full_df = load_primary(rcf)
+    primary_full_df = load_primary(rcf, stagedir)
     println("primary catalog: $(size(primary_full_df, 1)) objects")
 
     # match Primary to Celeste by object id
@@ -499,25 +504,27 @@ function get_scores_df(celeste_err, primary_err, coadd_df)
 end
 
 
-function score_field(rcf::RunCamcolField, results, truthfile)
+function score_field(rcf::RunCamcolField, results, truthfile, stagedir)
     (celeste_df, primary_df, coadd_df) = match_catalogs(rcf,
-                                results, truthfile)
+                                results, truthfile, stagedir)
 
     suffix = @sprintf "%06d-%d-%04d.csv" rcf.run rcf.camcol rcf.field
-    writetable("celeste_results_"suffix, celeste_df)
-    writetable("primary_results_"suffix, primary_df)
-    writetable("coadd_results_"suffix, coadd_df)
+    #writetable("celeste_results_"suffix, celeste_df)
+    #writetable("primary_results_"suffix, primary_df)
+    #writetable("coadd_results_"suffix, coadd_df)
 
     # difference between celeste and coadd
     celeste_err = get_err_df(coadd_df, celeste_df)
     primary_err = get_err_df(coadd_df, primary_df)
 
+#=
     JLD.save("results_and_errors.jld",
              "celeste_df", celeste_df,
              "primary_df", primary_df,
              "coadd_df", coadd_df,
              "celeste_err", celeste_err,
              "primary_err", primary_err)
+=#
 
     # create scores
     get_scores_df(celeste_err, primary_err, coadd_df)
@@ -527,23 +534,23 @@ end
 """
 Score the celeste results for a particular field
 """
-function score_field_disk(rcf::RunCamcolField, resultdir, truthfile)
+function score_field_disk(rcf::RunCamcolField, resultdir, truthfile, stagedir)
     fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" resultdir rcf.run rcf.camcol rcf.field
     results = JLD.load(fname, "results")
 
-    println( score_field(rcf, results, truthfile) )
+    println( score_field(rcf, results, truthfile, stagedir) )
 end
 
 
 """
 Display results from Celeste, Primary, and Coadd for a particular object
 """
-function score_object_disk(rcf::RunCamcolField, objid, resultdir, truthfile)
+function score_object_disk(rcf::RunCamcolField, objid, resultdir, truthfile, stagedir)
     fname = @sprintf "%s/celeste-objid-%s.jld" resultdir objid
     results = JLD.load(fname, "results")
 
     (celeste_df, primary_df, coadd_df) = match_catalogs(rcf,
-                                results, truthfile)
+                                results, truthfile, stagedir)
 
     println("\n\nceleste results:\n")
     println(celeste_df)
@@ -551,4 +558,7 @@ function score_object_disk(rcf::RunCamcolField, objid, resultdir, truthfile)
     println(primary_df)
     println("\n\ncoadd results:\n")
     println(coadd_df)
+end
+
+
 end
