@@ -2,7 +2,9 @@ module Celeste
 
 # submodules
 include("Log.jl")
+
 include("SensitiveFloats.jl")
+
 include("Model.jl")
 include("ElboDeriv.jl")
 include("Transform.jl")
@@ -11,10 +13,11 @@ include("SDSSIO.jl")
 include("OptimizeElbo.jl")
 include("Infer.jl")
 
+include("Stripe82Score.jl")
+
 # public API
 export infer, score_field
 include("api.jl")
 include("source_division_inference.jl")
-include("score.jl")
 
 end # module

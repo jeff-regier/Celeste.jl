@@ -58,12 +58,12 @@ function main()
         elseif args["score-field"]
             resultdir = args["<resultdir>"]
             truthfile = args["<truthfile>"]
-            Celeste.score_field_disk(rcf, resultdir, truthfile)
+            Celeste.Stripe82Score.score_field_disk(rcf, resultdir, truthfile)
         elseif args["score-object"]
             objid = args["<objid>"]
             resultdir = args["<resultdir>"]
             truthfile = args["<truthfile>"]
-            Celeste.score_object_disk(rcf, objid, resultdir, truthfile)
+            Celeste.Stripe82Score.score_object_disk(rcf, objid, resultdir, truthfile)
         end
     end
 end

@@ -1,7 +1,14 @@
-# Functions for interacting with Celeste from the command line.
+module Stripe82Score
 
 
+import JLD
+import FITSIO
 using DataFrames
+
+import ..SDSSIO
+import ..SDSSIO: RunCamcolField
+import ..Model: CatalogEntry, ids
+
 
 immutable MatchException <: Exception
     msg::String
@@ -260,7 +267,6 @@ function load_ce!(i::Int, ce::CatalogEntry, df::DataFrame)
 end
 
 
-
 """
 Convert Celeste results to a dataframe.
 """
@@ -504,20 +510,22 @@ function score_field(rcf::RunCamcolField, results, truthfile)
                                 results, truthfile)
 
     suffix = @sprintf "%06d-%d-%04d.csv" rcf.run rcf.camcol rcf.field
-    writetable("celeste_results_"suffix, celeste_df)
-    writetable("primary_results_"suffix, primary_df)
-    writetable("coadd_results_"suffix, coadd_df)
+    #writetable("celeste_results_"suffix, celeste_df)
+    #writetable("primary_results_"suffix, primary_df)
+    #writetable("coadd_results_"suffix, coadd_df)
 
     # difference between celeste and coadd
     celeste_err = get_err_df(coadd_df, celeste_df)
     primary_err = get_err_df(coadd_df, primary_df)
 
+#=
     JLD.save("results_and_errors.jld",
              "celeste_df", celeste_df,
              "primary_df", primary_df,
              "coadd_df", coadd_df,
              "celeste_err", celeste_err,
              "primary_err", primary_err)
+=#
 
     # create scores
     get_scores_df(celeste_err, primary_err, coadd_df)
@@ -551,4 +559,7 @@ function score_object_disk(rcf::RunCamcolField, objid, resultdir, truthfile)
     println(primary_df)
     println("\n\ncoadd results:\n")
     println(coadd_df)
+end
+
+
 end
