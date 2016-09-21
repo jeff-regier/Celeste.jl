@@ -1,7 +1,7 @@
 """
 Calculate value, gradient, and hessian of the variational ELBO.
 """
-module ElboDeriv
+module DeterministicVI
 
 using ..Model
 using ..SensitiveFloats

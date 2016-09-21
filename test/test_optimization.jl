@@ -58,12 +58,12 @@ function test_objective_wrapper()
 
     wrapper =
       OptimizeElbo.ObjectiveWrapperFunctions(
-        ea -> ElboDeriv.elbo(ea),
+        ea -> DeterministicVI.elbo(ea),
         ea, trans, kept_ids, omitted_ids);
 
     x = trans.vp_to_array(ea.vp, omitted_ids);
     elbo_result =
-      trans.transform_sensitive_float(ElboDeriv.elbo(ea), ea);
+      trans.transform_sensitive_float(DeterministicVI.elbo(ea), ea);
     elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, si] for
                                si in 1:length(ea.active_sources) ]);
 
@@ -95,7 +95,7 @@ function test_star_optimization()
     # Newton's method converges on a small galaxy unless we start with
     # a high star probability.
     ea.vp[1][ids.a[:, 1]] = [0.8, 0.2]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, ea; loc_width=1.0)
+    OptimizeElbo.maximize_f(DeterministicVI.elbo_likelihood, ea; loc_width=1.0)
     verify_sample_star(ea.vp[1], [10.1, 12.2])
 end
 
@@ -110,8 +110,8 @@ function test_single_source_optimization()
     s = 2
     ea.active_sources = Int[s]
     omitted_ids = Int[]
-    ElboDeriv.elbo_likelihood(ea).v[1]
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, ea; loc_width=1.0)
+    DeterministicVI.elbo_likelihood(ea).v[1]
+    OptimizeElbo.maximize_f(DeterministicVI.elbo_likelihood, ea; loc_width=1.0)
 
     # Test that it only optimized source s
     @test ea.vp[s] != ea_original.vp[s]
@@ -130,12 +130,12 @@ function test_two_body_optimization_newton()
 
     trans = get_mp_transform(ea, loc_width=1.0);
     function lik_function(tiled_blob::Vector{TiledImage}, ea::ElboArgs)
-      ElboDeriv.elbo_likelihood(tiled_blob, ea)
+      DeterministicVI.elbo_likelihood(tiled_blob, ea)
     end
     omitted_ids = [ids_free.k[:]; ids_free.c2[:]; ids_free.r2]
 
     function elbo_function(tiled_blob::Vector{TiledImage}, ea::ElboArgs)
-      ElboDeriv.elbo(tiled_blob, ea)
+      DeterministicVI.elbo(tiled_blob, ea)
     end
     omitted_ids = Int[]
 
@@ -150,10 +150,10 @@ function test_two_body_optimization_newton()
       omitted_ids=omitted_ids, verbose=true);
 
     newton_image =
-      ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], ea_newton,
+      DeterministicVI.tile_predicted_image(tiled_blob[3][1,1], ea_newton,
                                      ea_newton.tile_source_map[3][1,1]);
     bfgs_image =
-      ElboDeriv.tile_predicted_image(tiled_blob[3][1,1], ea_bfgs,
+      DeterministicVI.tile_predicted_image(tiled_blob[3][1,1], ea_bfgs,
                                      ea_bfgs.tile_source_map[3][1,1]);
     original_image = tiled_blob[3][1,1].pixels;
 
@@ -182,14 +182,14 @@ end
 function test_galaxy_optimization()
     # NLOpt fails here so use newton.
     blob, ea, body = gen_sample_galaxy_dataset();
-    OptimizeElbo.maximize_f(ElboDeriv.elbo_likelihood, ea; loc_width=3.0)
+    OptimizeElbo.maximize_f(DeterministicVI.elbo_likelihood, ea; loc_width=3.0)
     verify_sample_galaxy(ea.vp[1], [8.5, 9.6])
 end
 
 
 function test_full_elbo_optimization()
     blob, ea, body = gen_sample_galaxy_dataset(perturb=true);
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, ea; loc_width=1.0, xtol_rel=0.0);
+    OptimizeElbo.maximize_f(DeterministicVI.elbo, ea; loc_width=1.0, xtol_rel=0.0);
     verify_sample_galaxy(ea.vp[1], [8.5, 9.6]);
 end
 
@@ -204,7 +204,7 @@ function test_real_stamp_optimization()
     cat_entries = filter(inbounds, cat_entries);
 
     ea = make_elbo_args(blob, cat_entries);
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, ea; loc_width=1.0, xtol_rel=0.0);
+    OptimizeElbo.maximize_f(DeterministicVI.elbo, ea; loc_width=1.0, xtol_rel=0.0);
 end
 
 

@@ -3,7 +3,7 @@ module Infer
 import WCS
 
 using ..Model
-using ..ElboDeriv
+using ..DeterministicVI
 import ..PSF
 import ..OptimizeElbo
 import ..Log
@@ -90,7 +90,7 @@ function infer_source(images::Vector{TiledImage},
     ea = ElboArgs(images, vp, tile_source_map, patches, [1])
     fit_object_psfs!(ea, ea.active_sources)
     trim_source_tiles!(ea)
-    OptimizeElbo.maximize_f(ElboDeriv.elbo, ea)
+    OptimizeElbo.maximize_f(DeterministicVI.elbo, ea)
     vp[1]
 end
 
@@ -221,7 +221,7 @@ function trim_source_tiles!(ea::ElboArgs{Float64};
             if s in tile_source_map
                 tiles_out[hh, ww] = deepcopy(tile)
                 pred_tile_pixels =
-                    ElboDeriv.tile_predicted_image(tile, ea, [ s ],
+                    DeterministicVI.tile_predicted_image(tile, ea, [ s ],
                                                    include_epsilon=false)
                 for h in tile.h_range, w in tile.w_range
                     # The pixel location in the rendered image.

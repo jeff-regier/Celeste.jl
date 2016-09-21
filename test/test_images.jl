@@ -187,7 +187,7 @@ function test_set_patch_size()
 
         for b=1:length(blob)
             @assert size(ea.images[b].tiles) == (1, 1)
-            tile_image = ElboDeriv.tile_predicted_image(
+            tile_image = DeterministicVI.tile_predicted_image(
                 ea.images[b].tiles[1,1], ea, ea.tile_source_map[b][1,1]);
 
             pixel_center = WCS.world_to_pix(blob[b].wcs, cat[1].pos)

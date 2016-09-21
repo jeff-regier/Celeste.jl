@@ -42,12 +42,12 @@ const band_letters = ['u', 'g', 'r', 'i', 'z']
 const B = length(band_letters)
 
 
-include("light_source_model.jl")
-include("psf_model.jl")
-include("image_model.jl")
-include("param_set.jl")
-include("imaged_sources.jl")
-include("wcs_utils.jl")
+include("model/light_source_model.jl")
+include("model/psf_model.jl")
+include("model/image_model.jl")
+include("model/param_set.jl")
+include("model/imaged_sources.jl")
+include("model/wcs_utils.jl")
 
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual

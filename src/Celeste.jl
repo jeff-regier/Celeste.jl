@@ -6,7 +6,7 @@ include("Log.jl")
 include("SensitiveFloats.jl")
 
 include("Model.jl")
-include("ElboDeriv.jl")
+include("DeterministicVI.jl")
 include("Transform.jl")
 include("PSF.jl")
 include("SDSSIO.jl")

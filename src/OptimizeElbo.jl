@@ -3,7 +3,7 @@ module OptimizeElbo
 using ..Model
 using ..SensitiveFloats
 using ..Transform
-using ..ElboDeriv
+using ..DeterministicVI
 import ..Log
 
 import DataFrames
@@ -174,7 +174,7 @@ not clear whether this or BFGS is better, so it is kept as a separate function.
 
 Args:
   - f: A function that takes elbo args and constrained coordinates
-       (e.g. ElboDeriv.elbo)
+       (e.g. DeterministicVI.elbo)
   - ea: Constrained initial ElboArgs
   - lbs: An array of lower bounds (in the transformed space)
   - ubs: An array of upper bounds (in the transformed space)

@@ -1,6 +1,6 @@
 module SampleData
 
-using Celeste: Model, ElboDeriv
+using Celeste: Model, DeterministicVI
 import Celeste: Infer
 
 import Synthetic

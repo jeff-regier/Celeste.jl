@@ -4,7 +4,7 @@ module Transform
 
 using ..Model
 using ..SensitiveFloats
-using ..ElboDeriv
+using ..DeterministicVI
 import ..Log
 
 export DataTransform, ParamBounds, ParamBox, SimplexBox,
@@ -641,7 +641,7 @@ function DataTransform(bounds::Vector{ParamBounds};
     # constrained parameters, calculate derivatives with respect to
     # the unconstrained parameters.
     #
-    # Note that all the other functions in ElboDeriv calculated derivatives with
+    # Note that all the other functions in DeterministicVI calculated derivatives with
     # respect to the constrained parameterization.
     function transform_sensitive_float{NumType <: Number}(
                     sf::SensitiveFloat, ea::ElboArgs{NumType})
