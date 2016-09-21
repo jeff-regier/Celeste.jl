@@ -36,6 +36,7 @@ if length(test_files) > 0
     testfiles = ["test_$(arg).jl" for arg in test_files]
 else
     testfiles = ["test_elbo_values.jl",
+                 "test_score.jl",
                  "test_derivatives.jl",
                  "test_psf.jl",
                  "test_images.jl",
@@ -44,7 +45,6 @@ else
                  "test_sdssio.jl",
                  "test_transforms.jl",
                  "test_wcs.jl",
-                 "test_score.jl",
                  "test_infer.jl"]
 end
 

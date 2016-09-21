@@ -6,7 +6,7 @@ function test_infer_field_and_score_object()
     objid = "1237663784734490644"
     Celeste.infer_field(rcf, datadir, datadir; objid=objid)
     truthfile = joinpath(datadir, "coadd_for_4263_5_119.fit")
-    Stripe82Score.score_object_disk(rcf, objid, datadir, truthfile)
+    Stripe82Score.score_object_disk(rcf, objid, datadir, truthfile, datadir)
 end
 
 
@@ -20,7 +20,7 @@ function test_score_field()
 
     rcf = RunCamcolField(4263, 5, 119)
     truthfile = joinpath(datadir, "coadd_for_4263_5_119.fit")
-    Stripe82Score.score_field_disk(rcf, datadir, truthfile)
+    Stripe82Score.score_field_disk(rcf, datadir, truthfile, datadir)
 end
 
 
