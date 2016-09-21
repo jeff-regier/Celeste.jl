@@ -1,8 +1,11 @@
 #!/usr/bin/env julia
 
 using DocOpt
-import Celeste
-import Celeste.SDSSIO.RunCamcolField
+
+import Celeste.ParallelRun: BoundingBox, infer_box, infer_field
+import Celeste.Stripe82Score: score_field_disk, score_object_disk
+import Celeste.SDSSIO: RunCamcolField
+
 
 const DOC =
 """Run Celeste.
@@ -40,9 +43,9 @@ function main()
         ramax = parse(Float64, args["<ramax>"])
         decmin = parse(Float64, args["<decmin>"])
         decmax = parse(Float64, args["<decmax>"])
-        box = Celeste.BoundingBox(ramin, ramax, decmin, decmax)
+        box = BoundingBox(ramin, ramax, decmin, decmax)
         outdir = args["<outdir>"]
-        Celeste.infer_box(box, stagedir, outdir)
+        infer_box(box, stagedir, outdir)
     else
         run = parse(Int, args["<run>"])
         camcol = parse(Int, args["<camcol>"])
@@ -50,20 +53,20 @@ function main()
         rcf = RunCamcolField(run, camcol, field)
         if args["infer-field"]
             outdir = args["<outdir>"]
-            Celeste.infer_field(rcf, stagedir, outdir)
+            infer_field(rcf, stagedir, outdir)
         elseif args["infer-object"]
             outdir = args["<outdir>"]
             objid = args["<objid>"]
-            Celeste.infer_field(rcf, stagedir, outdir; objid=objid)
+            infer_field(rcf, stagedir, outdir; objid=objid)
         elseif args["score-field"]
             resultdir = args["<resultdir>"]
             truthfile = args["<truthfile>"]
-            Celeste.Stripe82Score.score_field_disk(rcf, resultdir, truthfile, stagedir)
+            score_field_disk(rcf, resultdir, truthfile, stagedir)
         elseif args["score-object"]
             objid = args["<objid>"]
             resultdir = args["<resultdir>"]
             truthfile = args["<truthfile>"]
-            Celeste.Stripe82Score.score_object_disk(rcf, objid, resultdir, truthfile, stagedir)
+            score_object_disk(rcf, objid, resultdir, truthfile, stagedir)
         end
     end
 end

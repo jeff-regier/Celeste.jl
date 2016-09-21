@@ -1,11 +1,14 @@
+module ParallelRun
+
 import FITSIO
 import JLD
 
-import .Log
-using .Model
-import .SDSSIO
-import .Infer
-import .SDSSIO: RunCamcolField
+import ..Log
+using ..Model
+import ..SDSSIO
+import ..Infer
+import ..SDSSIO: RunCamcolField
+
 
 #set this to false to use source-division parallelism
 const SKY_DIVISION_PARALLELISM=true
@@ -89,6 +92,13 @@ immutable BoundingBox
 end
 
 
+@inline nputs(nid, s) = ccall(:puts, Cint, (Ptr{Int8},), string("[$nid] ", s))
+@inline phalse(b) = b[] = false
+
+
+include("source_division_inference.jl")
+
+
 """
 Given a BoundingBox that is to be divided into `nra` x `ndec` subareas,
 return the `i`th subarea. `i` is a linear index between 1 and
@@ -105,10 +115,6 @@ function divide_skyarea(box, nra, ndec, i)
             box.decmin + (iy - 1) * widec,
             min(box.decmin + iy * widec, box.decmax))
 end
-
-
-@inline nputs(nid, s) = ccall(:puts, Cint, (Ptr{Int8},), string("[$nid] ", s))
-@inline phalse(b) = b[] = false
 
 
 function time_puts(elapsedtime, bytes, gctime, allocs)
@@ -552,3 +558,4 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
 end
 
+end
