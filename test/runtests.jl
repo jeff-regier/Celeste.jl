@@ -1,9 +1,9 @@
 #!/usr/bin/env julia
 
-using Celeste: Model, ElboDeriv
+using Celeste: Model, DeterministicVI
 
-import Celeste: Infer, ElboDeriv
-import Celeste: PSF, OptimizeElbo, SDSSIO, SensitiveFloats, Transform
+import Celeste: Infer, DeterministicVI, ParallelRun
+import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
 import SensitiveFloats.clear!
 import SDSSIO: RunCamcolField
 

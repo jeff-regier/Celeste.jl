@@ -1,51 +1,4 @@
 """
-Calculate value, gradient, and hessian of the variational ELBO.
-"""
-module ElboDeriv
-
-using ..Model
-using ..SensitiveFloats
-import ..SensitiveFloats.clear!
-
-export ElboArgs
-
-
-"""
-ElboArgs stores the arguments needed to evaluate the variational objective
-function
-"""
-type ElboArgs{NumType <: Number}
-    S::Int64
-    N::Int64
-    images::Vector{TiledImage}
-    vp::VariationalParams{NumType}
-    tile_source_map::Vector{Matrix{Vector{Int}}}
-    patches::Matrix{SkyPatch}
-    active_sources::Vector{Int}
-end
-
-
-function ElboArgs{NumType <: Number}(
-            images::Vector{TiledImage},
-            vp::VariationalParams{NumType},
-            tile_source_map::Vector{Matrix{Vector{Int}}},
-            patches::Matrix{SkyPatch},
-            active_sources::Vector{Int})
-    N = length(images)
-    S = length(vp)
-    @assert length(tile_source_map) == N
-    @assert size(patches, 1) == S
-    @assert size(patches, 2) == N
-    ElboArgs(S, N, images, vp, tile_source_map, patches, active_sources)
-end
-
-
-include("elbo_kl.jl")
-include("source_brightness.jl")
-include("bivariate_normals.jl")
-
-
-"""
 Convolve the current locations and galaxy shapes with the PSF.  If
 calculate_derivs is true, also calculate derivatives and hessians for
 active sources.
@@ -68,51 +21,53 @@ Returns:
   Hessians are only populated for s in ea.active_sources.
 """
 function load_bvn_mixtures{NumType <: Number}(
-    ea::ElboArgs{NumType}, b::Int;
-    calculate_derivs::Bool=true, calculate_hessian::Bool=true)
+                    ea::ElboArgs{NumType},
+                    b::Int;
+                    calculate_derivs::Bool=true,
+                    calculate_hessian::Bool=true)
 
-  star_mcs = Array(BvnComponent{NumType}, psf_K, ea.S)
-  gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, ea.S)
+    star_mcs = Array(BvnComponent{NumType}, psf_K, ea.S)
+    gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, ea.S)
 
-  # TODO: do not keep any derviative information if the sources are not in
-  # active_sources.
-  for s in 1:ea.S
-      psf = ea.patches[s, b].psf
-      vs = ea.vp[s]
+    # TODO: do not keep any derviative information if the sources are not in
+    # active_sources.
+    for s in 1:ea.S
+        psf = ea.patches[s, b].psf
+        vs = ea.vp[s]
 
-      world_loc = vs[[ids.u[1], ids.u[2]]]
-      m_pos = Model.linear_world_to_pix(ea.patches[s, b].wcs_jacobian,
-                                           ea.patches[s, b].center,
-                                           ea.patches[s, b].pixel_center, world_loc)
+        world_loc = vs[[ids.u[1], ids.u[2]]]
+        m_pos = Model.linear_world_to_pix(ea.patches[s, b].wcs_jacobian,
+                                             ea.patches[s, b].center,
+                                             ea.patches[s, b].pixel_center, world_loc)
 
-      # Convolve the star locations with the PSF.
-      for k in 1:psf_K
-          pc = psf[k]
-          mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
-          star_mcs[k, s] =
-            BvnComponent{NumType}(
-              mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
-      end
+        # Convolve the star locations with the PSF.
+        for k in 1:psf_K
+            pc = psf[k]
+            mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
+            star_mcs[k, s] =
+              BvnComponent{NumType}(
+                mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
+        end
 
-      # Convolve the galaxy representations with the PSF.
-      for i = 1:2 # i indexes dev vs exp galaxy types.
-          e_dev_dir = (i == 1) ? 1. : -1.
-          e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
+        # Convolve the galaxy representations with the PSF.
+        for i = 1:2 # i indexes dev vs exp galaxy types.
+            e_dev_dir = (i == 1) ? 1. : -1.
+            e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
 
-          # Galaxies of type 1 have 8 components, and type 2 have 6 components.
-          for j in 1:[8,6][i]
-              for k = 1:psf_K
-                  gal_mcs[k, j, i, s] = GalaxyCacheComponent(
-                      e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
-                      m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],
-                      calculate_derivs && (s in ea.active_sources),
-                      calculate_hessian)
-              end
-          end
-      end
-  end
+            # Galaxies of type 1 have 8 components, and type 2 have 6 components.
+            for j in 1:[8,6][i]
+                for k = 1:psf_K
+                    gal_mcs[k, j, i, s] = GalaxyCacheComponent(
+                        e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
+                        m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],
+                        calculate_derivs && (s in ea.active_sources),
+                        calculate_hessian)
+                end
+            end
+        end
+    end
 
-  star_mcs, gal_mcs
+    star_mcs, gal_mcs
 end
 
 
@@ -1044,5 +999,3 @@ function elbo{NumType <: Number}(
     elbo
 end
 
-
-end

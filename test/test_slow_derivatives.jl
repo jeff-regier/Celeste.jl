@@ -1,10 +1,11 @@
 import ForwardDiff
 
-using Celeste: Model, SensitiveFloats, ElboDeriv
+using Celeste: Model, SensitiveFloats, DeterministicVI
 using Distributions
-import ElboDeriv: BvnComponent, GalaxyCacheComponent
-import ElboDeriv: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
+import DeterministicVI: BvnComponent, GalaxyCacheComponent
+import DeterministicVI: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 using DerivativeTestUtils
+
 
 function test_elbo()
     blob, ea, body = gen_two_body_dataset()
@@ -14,25 +15,25 @@ function test_elbo()
     # vp_vec is a vector of the parameters from all the active sources.
     function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
         ea_local = unwrap_vp_vector(vp_vec, ea)
-        elbo = ElboDeriv.elbo(ea_local, calculate_derivs=false)
+        elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false)
         elbo.v[1]
     end
 
     ea.active_sources = [1]
     vp_vec = wrap_vp_vector(ea, true)
-    elbo_1 = ElboDeriv.elbo(ea)
+    elbo_1 = DeterministicVI.elbo(ea)
     test_with_autodiff(wrap_elbo, vp_vec, elbo_1)
     #test_elbo_mp(ea, elbo_1)
 
     ea.active_sources = [2]
     vp_vec = wrap_vp_vector(ea, true)
-    elbo_2 = ElboDeriv.elbo(ea)
+    elbo_2 = DeterministicVI.elbo(ea)
     test_with_autodiff(wrap_elbo, vp_vec, elbo_2)
     #test_elbo_mp(ea, elbo_2)
 
     ea.active_sources = [1, 2]
     vp_vec = wrap_vp_vector(ea, true)
-    elbo_12 = ElboDeriv.elbo(ea)
+    elbo_12 = DeterministicVI.elbo(ea)
     test_with_autodiff(wrap_elbo, vp_vec, elbo_12)
 
     P = length(CanonicalParams)
@@ -69,12 +70,12 @@ function test_real_image()
     Infer.fit_object_psfs!(ea, ea.active_sources)
     Infer.trim_source_tiles!(ea)
 
-    elbo = ElboDeriv.elbo(ea)
+    elbo = DeterministicVI.elbo(ea)
 
     function wrap_elbo{NumType <: Number}(vs1::Vector{NumType})
         ea_local = forward_diff_model_params(NumType, ea)
         ea_local.vp[1][:] = vs1
-        local_elbo = ElboDeriv.elbo(ea_local, calculate_derivs=false)
+        local_elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false)
         local_elbo.v[1]
     end
 
@@ -102,13 +103,13 @@ function test_transform_sensitive_float()
 		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
 		ea_local = forward_diff_model_params(NumType, ea);
 		transform.to_vp!(vp_free, ea_local.vp)
-		elbo = ElboDeriv.elbo(ea_local, calculate_derivs=false)
+		elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false)
 		elbo.v[1]
 	end
 
-	transform = Transform.get_mp_transform(ea, loc_width=1.0);
-	elbo = ElboDeriv.elbo(ea);
-	elbo_trans = transform.transform_sensitive_float(elbo, ea);
+	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
+	elbo = DeterministicVI.elbo(ea);
+	elbo_trans = transform.transform_sensitive_float(elbo, ea.vp, ea.active_sources);
 
 	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
 	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
@@ -119,9 +120,9 @@ function test_transform_sensitive_float()
 
   # Test with a subset of sources.
 	ea.active_sources = [2]
-	transform = Transform.get_mp_transform(ea, loc_width=1.0);
-	elbo = ElboDeriv.elbo(ea);
-	elbo_trans = transform.transform_sensitive_float(elbo, ea);
+	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
+	elbo = DeterministicVI.elbo(ea);
+	elbo_trans = transform.transform_sensitive_float(elbo, ea.vp, ea.active_sources);
 
 	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
 	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);

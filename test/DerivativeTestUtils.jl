@@ -1,7 +1,7 @@
 
 module DerivativeTestUtils
 
-using Celeste: Model, ElboDeriv, SensitiveFloats
+using Celeste: Model, DeterministicVI, SensitiveFloats
 using Base.Test
 import ForwardDiff
 

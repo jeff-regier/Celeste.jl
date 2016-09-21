@@ -49,7 +49,7 @@ end
 function test_parameter_conversion()
 	blob, ea, body = gen_three_body_dataset();
 
-	transform = get_mp_transform(ea, loc_width=1.0);
+	transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 
 	function check_transform(transform::DataTransform, ea::ElboArgs)
 		original_vp = deepcopy(ea.vp);
@@ -79,13 +79,13 @@ function test_parameter_conversion()
 
 	end
 
-	transform = get_mp_transform(ea, loc_width=1.0);
+	transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 	check_transform(transform, ea)
 
 	# Test transforming only active sources.
 	ea1 = deepcopy(ea);
 	ea1.active_sources = [1]
-	transform1 = Transform.get_mp_transform(ea1)
+	transform1 = Transform.get_mp_transform(ea1.vp, ea1.active_sources)
 
 	@assert transform1.S == ea.S
 	@assert transform1.active_S == 1
@@ -195,7 +195,7 @@ end
 
 function test_enforce_bounds()
   blob, ea_original, three_bodies = gen_three_body_dataset();
-  transform = get_mp_transform(ea_original);
+  transform = get_mp_transform(ea_original.vp, ea_original.active_sources);
 
   ea = deepcopy(ea_original);
   ea.vp[1][ids.a[1, 1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
@@ -204,7 +204,7 @@ function test_enforce_bounds()
   ea.vp[3][ids.k[1, 1]] = transform.bounds[3][:k][1].lower_bound - 0.00001
 
   @test_throws AssertionError transform.from_vp(ea.vp)
-  Transform.enforce_bounds!(ea, transform)
+  Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)
 
   # Check that it now works and all values are finite.
   x_trans = transform.from_vp(ea.vp)
@@ -220,7 +220,7 @@ function test_enforce_bounds()
   ea.vp[1][ids.a[1, 1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
   ea.vp[1][ids.a[2, 1]] = 100
   @test_throws AssertionError transform.from_vp(ea.vp)
-  Transform.enforce_bounds!(ea, transform)
+  Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)
   # Check that it runs without an error now
   transform.from_vp(ea.vp)
 
@@ -229,7 +229,7 @@ function test_enforce_bounds()
   ea = deepcopy(ea_original);
   sa = 2
   ea.active_sources = [sa]
-  transform = get_mp_transform(ea);
+  transform = get_mp_transform(ea.vp, ea.active_sources);
 
   ea.vp[sa][ids.a[1, 1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
   ea.vp[sa][ids.r1[1]] = transform.bounds[1][:r1][1].lower_bound - 1.0
@@ -237,7 +237,7 @@ function test_enforce_bounds()
   ea.vp[sa][ids.k[1, 1]] = transform.bounds[1][:k][1].lower_bound - 0.00001
 
   @test_throws AssertionError transform.from_vp(ea.vp)
-  Transform.enforce_bounds!(ea, transform)
+  Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)
 
   # Check that it now works and all values are finite.
   x_trans = transform.from_vp(ea.vp)

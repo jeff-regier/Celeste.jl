@@ -6,18 +6,17 @@ include("Log.jl")
 include("SensitiveFloats.jl")
 
 include("Model.jl")
-include("ElboDeriv.jl")
 include("Transform.jl")
 include("PSF.jl")
 include("SDSSIO.jl")
-include("OptimizeElbo.jl")
+
+include("DeterministicVI.jl")
+include("StochasticVI.jl")
+include("MCMC.jl")
+
 include("Infer.jl")
+include("ParallelRun.jl")
 
 include("Stripe82Score.jl")
-
-# public API
-export infer, score_field
-include("api.jl")
-include("source_division_inference.jl")
 
 end # module
