@@ -2,9 +2,10 @@
 
 module Transform
 
+# TODO: don't import Model; transformations should operate on
+# generic ParamSets
 using ..Model
 using ..SensitiveFloats
-using ..DeterministicVI
 import ..Log
 
 export DataTransform, ParamBounds, ParamBox, SimplexBox,
@@ -337,17 +338,18 @@ end
 Populate a TransformDerivatives object in place.
 
 Args:
-  - ea: ElboArgs
   - bounds: A vector containing one ParamBounds for each active source in the
-            same order as ea.active_sources.
+            same order as active_sources.
   - transform_derivatives: TransformDerivatives to be populated.
 
 Returns:
   Update transform_derivatives in place.
 """
 function get_transform_derivatives!{NumType <: Number}(
-    vp::VariationalParams{NumType}, active_sources::Vector{Int},
-    bounds::Vector{ParamBounds}, transform_derivatives::TransformDerivatives)
+                            vp::VariationalParams{NumType},
+                            active_sources::Vector{Int},
+                            bounds::Vector{ParamBounds},
+                            transform_derivatives::TransformDerivatives)
 
   @assert transform_derivatives.Sa == length(active_sources)
 
@@ -402,11 +404,12 @@ end
 
 
 function get_transform_derivatives{NumType <: Number}(
-    ea::ElboArgs{NumType}, bounds::Vector{ParamBounds})
-
+                                vp::VariationalParams{NumType},
+                                active_sources::Vector{Int},
+                                bounds::Vector{ParamBounds})
   transform_derivatives =
-    TransformDerivatives{Float64}(length(ea.active_sources))
-  get_transform_derivatives!(ea.vp, ea.active_sources, bounds, transform_derivatives)
+    TransformDerivatives{Float64}(length(active_sources))
+  get_transform_derivatives!(vp, active_sources, bounds, transform_derivatives)
   transform_derivatives
 end
 
@@ -580,7 +583,8 @@ end
 # per celestial object rather than a single object containing an array of
 # transforms.
 function DataTransform(bounds::Vector{ParamBounds};
-                                             active_sources=collect(1:length(bounds)), S=length(bounds))
+                       active_sources=collect(1:length(bounds)),
+                       S=length(bounds))
     @assert length(bounds) == length(active_sources)
     @assert maximum(active_sources) <= S
     active_S = length(active_sources)
@@ -644,11 +648,13 @@ function DataTransform(bounds::Vector{ParamBounds};
     # Note that all the other functions in DeterministicVI calculated derivatives with
     # respect to the constrained parameterization.
     function transform_sensitive_float{NumType <: Number}(
-                    sf::SensitiveFloat, ea::ElboArgs{NumType})
-        @assert size(sf.d) == (length(CanonicalParams), length(ea.active_sources))
-        @assert length(ea.active_sources) == active_S
+                                    sf::SensitiveFloat, 
+                                    vp::VariationalParams{NumType},
+                                    active_sources::Vector{Int})
+        @assert size(sf.d) == (length(CanonicalParams), length(active_sources))
+        @assert length(active_sources) == active_S
 
-        transform_derivatives = get_transform_derivatives(ea, bounds)
+        transform_derivatives = get_transform_derivatives(vp, active_sources, bounds)
         sf_free = zero_sensitive_float(UnconstrainedParams, NumType, active_S)
 
         sf_d_vec = sf.d[:]
@@ -674,16 +680,19 @@ function DataTransform(bounds::Vector{ParamBounds};
 end
 
 
-function get_mp_transform(ea::ElboArgs; loc_width::Float64=1.5e-3)
-    bounds = Array(ParamBounds, length(ea.active_sources))
+function get_mp_transform{NumType <: Number}(
+                          vp::VariationalParams{NumType},
+                          active_sources::Vector{Int};
+                          loc_width::Float64=1.5e-3)
+    bounds = Array(ParamBounds, length(active_sources))
 
     # Note that, for numerical reasons, the bounds must be on the scale
     # of reasonably meaningful changes.
-    for si in 1:length(ea.active_sources)
-        s = ea.active_sources[si]
+    for si in 1:length(active_sources)
+        s = active_sources[si]
         bounds[si] = ParamBounds()
         bounds[si][:u] = Array(ParamBox, 2)
-        u = ea.vp[s][ids.u]
+        u = vp[s][ids.u]
         for axis in 1:2
             bounds[si][:u][axis] =
                 ParamBox(u[axis] - loc_width, u[axis] + loc_width, 1.0)
@@ -714,45 +723,37 @@ function get_mp_transform(ea::ElboArgs; loc_width::Float64=1.5e-3)
             bounds[si][:k][d] = SimplexBox(simplex_min, 1.0, 2)
         end
     end
-    DataTransform(bounds, active_sources=ea.active_sources, S=ea.S)
+
+    DataTransform(bounds, active_sources=active_sources, S=length(vp))
 end
 
 
 """
 Put the variational parameters within the bounds of the transform.
-
-Args:
-  - ea: A ModelParms whose vp parameters are updated to be within the bounds
-        allowed by the transform.
-  - transform: A DataTransform that will be used for optimization.
-
 Returns:
-  Updates ea.vp in place.
+  Updates vp in place.
 """
 function enforce_bounds!{NumType <: Number}(
-    ea::ElboArgs{NumType}, transform::DataTransform)
-
-    @assert ea.S == transform.S
-    @assert length(ea.active_sources) == transform.active_S
-
+                        vp::VariationalParams{NumType},
+                        active_sources::Vector{Int},
+                        transform::DataTransform)
     for sa=1:transform.active_S, (param, constraint_vec) in transform.bounds[sa]
-        s = ea.active_sources[sa]
+        s = active_sources[sa]
         is_box = isa(constraint_vec, Array{ParamBox})
         if is_box
             # Box parameters.
             for ind in 1:length(getfield(ids, param))
                 constraint = constraint_vec[ind]
                 if !(constraint.lower_bound <=
-                         ea.vp[s][getfield(ids, param)[ind]] <=
+                         vp[s][getfield(ids, param)[ind]] <=
                          constraint.upper_bound)
-                    Log.debug("param[$s][$ind] was out of bounds.")
                     # Don't set the value to exactly the lower bound to avoid Inf
                     diff = constraint.upper_bound - constraint.lower_bound
                     epsilon = diff == Inf ? 1e-12: diff * 1e-12
-                    ea.vp[s][getfield(ids, param)[ind]] =
-                        min(ea.vp[s][getfield(ids, param)[ind]], constraint.upper_bound - epsilon)
-                    ea.vp[s][getfield(ids, param)[ind]] =
-                        max(ea.vp[s][getfield(ids, param)[ind]], constraint.lower_bound + epsilon)
+                    vp[s][getfield(ids, param)[ind]] =
+                        min(vp[s][getfield(ids, param)[ind]], constraint.upper_bound - epsilon)
+                    vp[s][getfield(ids, param)[ind]] =
+                        max(vp[s][getfield(ids, param)[ind]], constraint.lower_bound + epsilon)
                 end
             end
         else
@@ -762,27 +763,25 @@ function enforce_bounds!{NumType <: Number}(
                 constraint = constraint_vec[col]
                 param_sum = zero(NumType)
                 for row in 1:param_size[1]
-                    if !(constraint.lower_bound <= ea.vp[s][getfield(ids, param)[row, col]] <= 1.0)
-                        Log.debug("param[$s][$row, $col] was out of bounds.")
+                    if !(constraint.lower_bound <= vp[s][getfield(ids, param)[row, col]] <= 1.0)
                         # Don't set the value to exactly the lower bound to avoid Inf
                         epsilon = (1.0 - constraint.lower_bound) * 1e-12
-                        ea.vp[s][getfield(ids, param)[row, col]] =
-                            min(ea.vp[s][getfield(ids, param)[row, col]], 1.0 - epsilon)
-                        ea.vp[s][getfield(ids, param)[row, col]] =
-                            max(ea.vp[s][getfield(ids, param)[row, col]],
+                        vp[s][getfield(ids, param)[row, col]] =
+                            min(vp[s][getfield(ids, param)[row, col]], 1.0 - epsilon)
+                        vp[s][getfield(ids, param)[row, col]] =
+                            max(vp[s][getfield(ids, param)[row, col]],
                                     constraint.lower_bound + epsilon)
                     end
-                    param_sum += ea.vp[s][getfield(ids, param)[row, col]]
+                    param_sum += vp[s][getfield(ids, param)[row, col]]
                 end
                 if param_sum != 1.0
-                    Log.debug("param[$s][:, $col] is not normalized.")
                     # Normalize in a way that maintains the lower bounds
                     rescale =
                       (1 - constraint.n * constraint.lower_bound) /
                       (param_sum - constraint.n * constraint.lower_bound)
-                    ea.vp[s][getfield(ids, param)[:, col]] =
+                    vp[s][getfield(ids, param)[:, col]] =
                       constraint.lower_bound +
-                      rescale * (ea.vp[s][getfield(ids, param)[:, col]] -
+                      rescale * (vp[s][getfield(ids, param)[:, col]] -
                                  constraint.lower_bound)
                 end
             end

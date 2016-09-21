@@ -1,3 +1,6 @@
+"""
+This module should be merged into DeterministicVI.
+"""
 module OptimizeElbo
 
 using ..Model
@@ -104,7 +107,7 @@ type ObjectiveWrapperFunctions
             # free parameterizations.
             print_status(ea.vp[ea.active_sources],
                          f_res.v[1], f_res.d)
-            f_res_trans = transform.transform_sensitive_float(f_res, ea)
+            f_res_trans = transform.transform_sensitive_float(f_res, ea.vp, ea.active_sources)
 
             # Cache the result.
             last_x = deepcopy(x)
@@ -201,7 +204,7 @@ function maximize_f(f::Function,
                     rho_lower=0.25,
                     fast_hessian=true)
     # Make sure the model parameters are within the transform bounds
-    enforce_bounds!(ea, transform)
+    enforce_bounds!(ea.vp, ea.active_sources, transform)
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     optim_obj_wrap =
@@ -250,7 +253,7 @@ function maximize_f(f::Function,
                     max_iters=50,
                     rho_lower=0.25,
                     fast_hessian=true)
-    transform = get_mp_transform(ea, loc_width=loc_width)
+    transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=loc_width)
 
     maximize_f(f, ea, transform;
                 omitted_ids=omitted_ids,

@@ -1065,7 +1065,7 @@ end
 
 function test_box_derivatives()
 	blob, ea, body = gen_three_body_dataset();
-	transform = Transform.get_mp_transform(ea, loc_width=1.0);
+	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 
 	box_params = setdiff(fieldnames(ids), [:a, :k])
 	vp_free = transform.from_vp(ea.vp)
@@ -1105,7 +1105,7 @@ function test_box_simplex_derivatives()
 		ea.vp[s][ids.a[:, 1]] = Float64[ 0.2 - delta, 0.8 + delta ]
 		ea.vp[s][ids.k] = Float64[ 0.2- delta 0.2- delta; 0.8 + delta 0.8 + delta ]
 	end
-	transform = Transform.get_mp_transform(ea, loc_width=1.0);
+	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 
 	simplex_params = [:a, :k]
 	vp_free = transform.from_vp(ea.vp)

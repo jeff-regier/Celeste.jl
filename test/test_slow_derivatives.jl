@@ -6,6 +6,7 @@ import DeterministicVI: BvnComponent, GalaxyCacheComponent
 import DeterministicVI: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 using DerivativeTestUtils
 
+
 function test_elbo()
     blob, ea, body = gen_two_body_dataset()
     keep_pixels = 10:11
@@ -106,9 +107,9 @@ function test_transform_sensitive_float()
 		elbo.v[1]
 	end
 
-	transform = Transform.get_mp_transform(ea, loc_width=1.0);
+	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 	elbo = DeterministicVI.elbo(ea);
-	elbo_trans = transform.transform_sensitive_float(elbo, ea);
+	elbo_trans = transform.transform_sensitive_float(elbo, ea.vp, ea.active_sources);
 
 	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
 	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
@@ -119,9 +120,9 @@ function test_transform_sensitive_float()
 
   # Test with a subset of sources.
 	ea.active_sources = [2]
-	transform = Transform.get_mp_transform(ea, loc_width=1.0);
+	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 	elbo = DeterministicVI.elbo(ea);
-	elbo_trans = transform.transform_sensitive_float(elbo, ea);
+	elbo_trans = transform.transform_sensitive_float(elbo, ea.vp, ea.active_sources);
 
 	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
 	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);

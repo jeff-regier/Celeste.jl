@@ -220,6 +220,9 @@ function trim_source_tiles!(ea::ElboArgs{Float64};
             tile_source_map = ea.tile_source_map[i][hh, ww]
             if s in tile_source_map
                 tiles_out[hh, ww] = deepcopy(tile)
+
+                # TODO; use log_prob.jl in the Model module to get the
+                # get the expected brightness, not variational inference
                 pred_tile_pixels =
                     DeterministicVI.tile_predicted_image(tile, ea, [ s ],
                                                    include_epsilon=false)

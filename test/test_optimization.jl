@@ -54,7 +54,7 @@ function test_objective_wrapper()
     ea = make_elbo_args(
       blob, bodies, tile_width=5, fit_psf=false, patch_radius_pix=10.);
     ea.active_sources = Int[2, 3]
-    trans = Transform.get_mp_transform(ea, loc_width=1.0);
+    trans = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 
     wrapper =
       OptimizeElbo.ObjectiveWrapperFunctions(
@@ -63,7 +63,7 @@ function test_objective_wrapper()
 
     x = trans.vp_to_array(ea.vp, omitted_ids);
     elbo_result =
-      trans.transform_sensitive_float(DeterministicVI.elbo(ea), ea);
+      trans.transform_sensitive_float(DeterministicVI.elbo(ea), ea.vp, ea.active_sources);
     elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, si] for
                                si in 1:length(ea.active_sources) ]);
 
@@ -128,7 +128,7 @@ function test_two_body_optimization_newton()
 
     blob, ea, two_bodies, tiled_blob = SampleData.gen_two_body_dataset();
 
-    trans = get_mp_transform(ea, loc_width=1.0);
+    trans = get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
     function lik_function(tiled_blob::Vector{TiledImage}, ea::ElboArgs)
       DeterministicVI.elbo_likelihood(tiled_blob, ea)
     end
