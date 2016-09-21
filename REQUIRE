@@ -3,8 +3,8 @@ DataFrames
 Distributions
 DocOpt
 Dtree
+FITSIO 0.8.4
 ForwardDiff 0.2
 JLD
 Optim 0.6
-FITSIO 0.8.4
 WCS 0.1.3
