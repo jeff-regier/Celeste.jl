@@ -188,10 +188,9 @@ function load_images(box, rcfs, stagedir)
 
     for i in 1:nlocal
         n = lo[1] + i - 1
+        rcf = rcfs[n]
 
         nputs(nodeid, "loading images for RCF $n ($(rcf.run), $(rcf.camcol), $(rcf.field))")
-
-        rcf = rcfs[n]
         raw_images = SDSSIO.load_field_images(rcf, stagedir)
         @assert(length(raw_images) == 5)
         fimgs = [FlatImage(img) for img in raw_images]
