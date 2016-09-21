@@ -477,25 +477,27 @@ function divide_sources_and_infer(
     catalog, tasks = load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     timing.read_photoobj = toq()
 
-    # create map from run, camcol, field to index into RCF array
-    rcf_to_index = invert_rcf_array(rcfs)
+    if length(tasks) > 0
+        # create map from run, camcol, field to index into RCF array
+        rcf_to_index = invert_rcf_array(rcfs)
 
-    # inference results are written here
-    results = Garray(InferResult, 350, length(tasks))
+        # inference results are written here
+        results = Garray(InferResult, 350, length(tasks))
 
-    # optimization -- little disk access, cpu intensive
-    timing.num_srcs = length(tasks)
-    optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
-            rcf_to_index, stagedir, results, timing)
+        # optimization -- little disk access, cpu intensive
+        timing.num_srcs = length(tasks)
+        optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
+                rcf_to_index, stagedir, results, timing)
 
-    rlo, rhi = distribution(results, nodeid)
-    lresults = access(results, rlo, rhi)
-    tic()
-    save_results(outdir, box, lresults)
-    timing.write_results = toq()
+        rlo, rhi = distribution(results, nodeid)
+        lresults = access(results, rlo, rhi)
+        tic()
+        save_results(outdir, box, lresults)
+        timing.write_results = toq()
 
-    sync()
-    finalize(results)
+        finalize(results)
+    end
+
     finalize(tasks)
     finalize(catalog)
     finalize(task_offset)
