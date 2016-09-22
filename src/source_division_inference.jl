@@ -324,7 +324,9 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
                          catalog_offset::Garray, rcf_to_index::Array{Int64,3},
                          rcf_cache::Dict, rcf_cache_lock::SpinLock,
                          stagedir::String, results::Garray)
+    lock(rcf_cache_lock)
     ep, ep_handle = get(catalog, [s], [s])
+    unlock(rcf_cache_lock)
     entry, primary_rcf = ep[1]
 
     t_box = BoundingBox(entry.pos[1] - 1e-8, entry.pos[1] + 1e-8,
@@ -432,7 +434,9 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
                 result = optimize_source(item, images, catalog, catalog_offset,
                                 rcf_to_index, rcf_cache, rcf_cache_lock,
                                 stagedir, results)
+                lock(rcf_cache_lock)
                 put!(results, [taskidx], [taskidx], [result])
+                unlock(rcf_cache_lock)
             end
         end
     end
