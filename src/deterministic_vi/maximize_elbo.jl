@@ -105,36 +105,22 @@ function maximize_f(f::Function,
         last_sf
     end
 
-    function f_value_grad{T <: Number}(x::Vector{T})
-        @assert length(x) == x_length
-        res = f_objective_cached(x)
-        grad = zeros(T, length(x))
-        if length(grad) > 0
-            svs = [res.d[kept_ids, si] for si in 1:transform.active_S]
-            grad[:] = reduce(vcat, svs)
-        end
-        state.scale * res.v[1], state.scale .* grad
-    end
-
-    # The remaining functions are scaled and take matrices.
-    function f_value_grad!{T <: Number}(x::Vector{T}, grad::Vector{T})
-        @assert length(x) == x_length
-        @assert length(x) == length(grad)
-        value, grad[:,:] = f_value_grad(x)
-        value
-    end
-
     function f_value{T <: Number}(x::Vector{T})
         @assert length(x) == x_length
-        f_value_grad(x)[1]
+        state.scale * f_objective_cached(x).v[1]
     end
 
     function f_grad!{T <: Number}(x::Vector{T}, grad::Vector{T})
         @assert length(x) == x_length
-        grad[:,:] = f_value_grad(x)[2]
+        res = f_objective_cached(x)
+        if length(grad) > 0
+            svs = [res.d[kept_ids, si] for si in 1:transform.active_S]
+            grad[:] = reduce(vcat, svs)
+        end
+        grad .*= state.scale
     end
 
-    function f_hessian{T <: Number}(x::Vector{T})
+    function f_hessian!{T <: Number}(x::Vector{T}, hess::Matrix{T})
         @assert length(x) == x_length
         res = f_objective_cached(x)
         all_kept_ids = Int[]
@@ -142,11 +128,7 @@ function maximize_f(f::Function,
             append!(all_kept_ids, kept_ids + (sa - 1) * length(kept_ids))
         end
         sub_hess = res.h[all_kept_ids, all_kept_ids]
-        state.scale .* 0.5 * (sub_hess + sub_hess')
-    end
-
-    function f_hessian!{T <: Number}(x::Vector{T}, hess::Matrix{T})
-        hess[:, :] = f_hessian(x)
+        hess[:, :] = state.scale .* 0.5 * (sub_hess + sub_hess')
     end
 
     # For minimization, which is required by the linesearch algorithm.
