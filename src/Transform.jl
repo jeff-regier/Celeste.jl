@@ -25,23 +25,11 @@ function inv_logit{NumType <: Number}(x::NumType)
 end
 
 
-function inv_logit{NumType <: Number}(x::Array{NumType})
-    @assert(all(x .>= 0))
-    @assert(all(x .<= 1))
-    -log(1.0 ./ x - 1)
-end
-
-
 """
 Convert x in R to lie in the unit interval.
 """
 function logit{NumType <: Number}(x::NumType)
     1.0 / (1.0 + exp(-x))
-end
-
-
-function logit{NumType <: Number}(x::Array{NumType})
-    1.0 ./ (1.0 + exp(-x))
 end
 
 
