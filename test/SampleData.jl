@@ -44,7 +44,8 @@ function make_elbo_args(images::Vector{TiledImage},
     patches, tile_source_map = Infer.get_tile_source_map(images, catalog,
                                 radius_override_pix=patch_radius_pix)
     active_sources = collect(1:length(catalog))
-    ea = ElboArgs(images, vp, tile_source_map, patches, active_sources)
+    ea = ElboArgs(images, vp, tile_source_map, patches, active_sources,
+                  default_psf_K, Inf)
     if fit_psf
         Infer.fit_object_psfs!(ea, ea.active_sources)
     end
@@ -206,7 +207,9 @@ function empty_model_params(S::Int)
              vp,
              Array(Matrix{Vector{Int}}, 0),
              Array(SkyPatch, S, 0),
-             collect(1:S))
+             collect(1:S),
+             default_psf_K,
+             Inf)
 end
 
 

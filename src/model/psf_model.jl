@@ -1,5 +1,5 @@
-# The number of Gaussian components in the PSF.
-const psf_K = 2
+# The default number of Gaussian components in the PSF.
+const default_psf_K = 2
 
 
 """
@@ -86,5 +86,3 @@ function get_psf_width(psf::Array{PsfComponent}; width_scale=1.0)
     # mass in the PSF.
     width_scale * sqrt(eigvals(cov_est)[end]) * alpha_norm
 end
-
-

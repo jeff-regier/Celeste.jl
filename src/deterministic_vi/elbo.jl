@@ -26,8 +26,8 @@ function load_bvn_mixtures{NumType <: Number}(
                     calculate_derivs::Bool=true,
                     calculate_hessian::Bool=true)
 
-    star_mcs = Array(BvnComponent{NumType}, psf_K, ea.S)
-    gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, ea.S)
+    star_mcs = Array(BvnComponent{NumType}, ea.psf_K, ea.S)
+    gal_mcs = Array(GalaxyCacheComponent{NumType}, ea.psf_K, 8, 2, ea.S)
 
     # TODO: do not keep any derviative information if the sources are not in
     # active_sources.
@@ -37,11 +37,11 @@ function load_bvn_mixtures{NumType <: Number}(
 
         world_loc = vs[[ids.u[1], ids.u[2]]]
         m_pos = Model.linear_world_to_pix(ea.patches[s, b].wcs_jacobian,
-                                             ea.patches[s, b].center,
-                                             ea.patches[s, b].pixel_center, world_loc)
+                                          ea.patches[s, b].center,
+                                          ea.patches[s, b].pixel_center, world_loc)
 
         # Convolve the star locations with the PSF.
-        for k in 1:psf_K
+        for k in 1:ea.psf_K
             pc = psf[k]
             mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
             star_mcs[k, s] =
@@ -56,7 +56,7 @@ function load_bvn_mixtures{NumType <: Number}(
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components.
             for j in 1:[8,6][i]
-                for k = 1:psf_K
+                for k = 1:ea.psf_K
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
                         m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],
@@ -235,11 +235,12 @@ function accum_star_pos!{NumType <: Number}(
                     x::Vector{Float64},
                     wcs_jacobian::Array{Float64, 2},
                     calculate_derivs::Bool)
+
     eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x)
 
-    # TODO: Also make a version that doesn't calculate any derivatives
-    # if the object isn't in active_sources.
-    get_bvn_derivs!(elbo_vars.bvn_derivs, bmc, true, false)
+    if elbo_vars.calculate_derivs && calculate_derivs
+        get_bvn_derivs!(elbo_vars.bvn_derivs, bmc, true, false)
+    end
 
     fs0m = elbo_vars.fs0m_vec[s]
     fs0m.v[1] += elbo_vars.bvn_derivs.f_pre[1]
@@ -396,6 +397,7 @@ function populate_fsm_vecs!{NumType <: Number}(
                     h::Int, w::Int,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
+
     x = Float64[tile.h_range[h], tile.w_range[w]]
     for s in tile_sources
         # ensure tile.b is a filter band, not an image's index
@@ -406,9 +408,12 @@ function populate_fsm_vecs!{NumType <: Number}(
         calculate_hessian =
             elbo_vars.calculate_hessian && elbo_vars.calculate_derivs && active_source
         clear!(elbo_vars.fs0m_vec[s], calculate_hessian)
-        for k = 1:psf_K # PSF component
-            accum_star_pos!(
-                elbo_vars, s, star_mcs[k, s], x, wcs_jacobian, active_source)
+        for k = 1:ea.psf_K # PSF component
+            if (ea.num_allowed_sd == Inf ||
+                check_point_close_to_bvn(star_mcs[k, s], x, ea.num_allowed_sd))
+                accum_star_pos!(
+                    elbo_vars, s, star_mcs[k, s], x, wcs_jacobian, active_source)
+            end
         end
 
         clear!(elbo_vars.fs1m_vec[s], calculate_hessian)
@@ -416,10 +421,14 @@ function populate_fsm_vecs!{NumType <: Number}(
             for j in 1:8 # Galaxy component
                 # If i == 2 then there are only six galaxy components.
                 if (i == 1) || (j <= 6)
-                    for k = 1:psf_K # PSF component
-                        accum_galaxy_pos!(
-                            elbo_vars, s, gal_mcs[k, j, i, s], x, wcs_jacobian,
-                            active_source)
+                    for k = 1:ea.psf_K # PSF component
+                        if (ea.num_allowed_sd == Inf ||
+                            check_point_close_to_bvn(
+                                gal_mcs[k, j, i, s].bmc, x, ea.num_allowed_sd))
+                            accum_galaxy_pos!(
+                                elbo_vars, s, gal_mcs[k, j, i, s], x, wcs_jacobian,
+                                active_source)
+                        end
                     end
                 end
             end
@@ -830,7 +839,6 @@ function process_active_pixels!{NumType <: Number}(
     gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType}, 4}, ea.N)
 
     for b=1:ea.N
-        # TODO: every elbo_vars should not get to decide its own calculate_*
         star_mcs_vec[b], gal_mcs_vec[b] =
             load_bvn_mixtures(ea, b,
                 calculate_derivs=elbo_vars.calculate_derivs,
@@ -998,4 +1006,3 @@ function elbo{NumType <: Number}(
     subtract_kl!(ea, elbo, calculate_derivs=calculate_derivs)
     elbo
 end
-

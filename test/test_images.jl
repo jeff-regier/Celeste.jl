@@ -16,7 +16,7 @@ Returns:
  - An array of PsfComponent objects that represents the PSF as a mixture
      of Gaussians.
 """
-function get_source_psf(world_loc::Vector{Float64}, img::TiledImage)
+function get_source_psf(world_loc::Vector{Float64}, img::TiledImage, psf_K::Int)
     # Some stamps or simulated data have no raw psf information.    In that case,
     # just use the psf from the image.
     if size(img.raw_psf_comp.rrows) == (0, 0)
@@ -63,7 +63,7 @@ function test_blob()
     original_psf_celeste = PSF.fit_raw_psf_for_celeste(original_psf_val)[1];
     fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
-    obj_psf = get_source_psf(ea_obj.vp[1][ids.u], img)[1];
+    obj_psf = get_source_psf(ea_obj.vp[1][ids.u], img, default_psf_K)[1];
     obj_psf_val = PSF.get_psf_at_point(obj_psf);
 
     # The fits should match exactly.
@@ -90,8 +90,8 @@ function test_stamp_get_object_psf()
     pixel_loc = WCS.world_to_pix(img.wcs, obj_index)
     original_psf_val = PSF.get_psf_at_point(img.psf);
 
-    obj_psf_val =
-        PSF.get_psf_at_point(get_source_psf(stamp_mp.vp[1][ids.u], img)[1])
+    obj_psf_val = PSF.get_psf_at_point(
+      get_source_psf(stamp_mp.vp[1][ids.u], img, default_psf_K)[1])
     @test_approx_eq_eps(obj_psf_val, original_psf_val, 1e-6)
 end
 

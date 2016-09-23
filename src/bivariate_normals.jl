@@ -107,12 +107,15 @@ Attributes:
    the_mean: The mean argument
    precision: The inverse of the_cov
    z: The weight times the normalizing constant.
+   dsiginv_dsig: The derivative of sigma inverse with respect to sigma.
+   major_sd: The standard deviation of the major axis.
 """
 immutable BvnComponent{NumType <: Number}
     the_mean::Vector{NumType}
     precision::Matrix{NumType}
     z::NumType
     dsiginv_dsig::Matrix{NumType}
+    major_sd::NumType
 
     function BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
         the_mean::Vector{T1}, the_cov::Matrix{T2}, weight::T3;
@@ -121,6 +124,7 @@ immutable BvnComponent{NumType <: Number}
       ThisNumType = promote_type(T1, T2, T3)
       the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
       c = 1 ./ (the_det^.5 * 2pi)
+      major_sd = sqrt(maximum([ the_cov[1, 1], the_cov[2, 2] ]))
 
       if calculate_siginv_deriv
         # Derivatives of Sigma^{-1} with respect to sigma.  These are the second
@@ -142,11 +146,25 @@ immutable BvnComponent{NumType <: Number}
         dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
         dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
         dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
-        new{ThisNumType}(the_mean, precision, c * weight, dsiginv_dsig)
+        new{ThisNumType}(the_mean, precision, c * weight,
+                         dsiginv_dsig, major_sd)
       else
-        new{ThisNumType}(the_mean, the_cov^-1, c * weight, zeros(ThisNumType, 0, 0))
+        new{ThisNumType}(the_mean, the_cov^-1, c * weight,
+                         zeros(ThisNumType, 0, 0), major_sd)
       end
     end
+end
+
+
+"""
+Check whether a point is close enough to a BvnComponent to bother making
+calculations with it.
+"""
+function check_point_close_to_bvn{NumType <: Number}(
+    bmc::BvnComponent{NumType}, x::Vector{Float64}, num_allowed_sd::Float64)
+
+    dist = sqrt(norm(x - bmc.the_mean))
+    return dist < (num_allowed_sd * bmc.major_sd)
 end
 
 
@@ -287,8 +305,8 @@ parameters are indexed by GalaxyShapeParams.
       derivatives d2 Sigma / d GalaxyShapeParams d GalaxyShapeParams.
 """
 type GalaxySigmaDerivs{NumType <: Number}
-  j::Matrix{NumType}
-  t::Array{NumType, 3}
+    j::Matrix{NumType}
+    t::Array{NumType, 3}
 end
 
 
@@ -550,4 +568,3 @@ function transform_bvn_derivs!{NumType <: Number}(
     end
   end
 end
-

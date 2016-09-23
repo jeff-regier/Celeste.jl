@@ -24,7 +24,9 @@ function forward_diff_model_params{T<:Number}(::Type{T}, ea0::ElboArgs{Float64})
              vp,
              ea0.tile_source_map,
              ea0.patches,
-             ea0.active_sources)
+             ea0.active_sources,
+             default_psf_K,
+             Inf)
 end
 
 

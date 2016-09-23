@@ -99,7 +99,7 @@ function infer_source(images::Vector{TiledImage},
     cat_local = vcat(entry, neighbors)
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
     patches, tile_source_map = get_tile_source_map(images, cat_local)
-    ea = ElboArgs(images, vp, tile_source_map, patches, [1])
+    ea = ElboArgs(images, vp, tile_source_map, patches, [1], default_psf_K, Inf)
     fit_object_psfs!(ea, ea.active_sources)
     trim_source_tiles!(ea)
     DeterministicVI.maximize_f(DeterministicVI.elbo, ea)
@@ -159,17 +159,16 @@ function fit_object_psfs!{NumType <: Number}(
                         ea::ElboArgs{NumType},
                         target_sources::Vector{Int})
     # Initialize an optimizer
-    initial_psf_params = PSF.initialize_psf_params(psf_K, for_test=false)
+    initial_psf_params = PSF.initialize_psf_params(ea.psf_K, for_test=false)
     psf_transform = PSF.get_psf_transform(initial_psf_params)
-    psf_optimizer = PSF.PsfOptimizer(psf_transform, psf_K)
+    psf_optimizer = PSF.PsfOptimizer(psf_transform, ea.psf_K)
 
     for i in 1:length(ea.images)
         # Get a starting point in the middle of the image.
         pixel_loc = Float64[ ea.images[i].H / 2.0, ea.images[i].W / 2.0 ]
         raw_central_psf = ea.images[i].raw_psf_comp(pixel_loc[1], pixel_loc[2])
-        central_psf, central_psf_params =
-            PSF.fit_raw_psf_for_celeste(raw_central_psf,
-                                psf_optimizer, initial_psf_params)
+        central_psf, central_psf_params = PSF.fit_raw_psf_for_celeste(
+            raw_central_psf, psf_optimizer, initial_psf_params)
 
         # Get all relevant sources *in this image*
         relevant_sources = Int[]
@@ -185,7 +184,7 @@ function fit_object_psfs!{NumType <: Number}(
             patch = ea.patches[s, i]
             # Set the starting point at the center's PSF.
             psf, psf_params = PSF.get_source_psf(
-                    patch.center, ea.images[i], psf_optimizer, central_psf_params)
+                patch.center, ea.images[i], psf_optimizer, central_psf_params)
             ea.patches[s, i] = SkyPatch(patch, psf)
         end
     end

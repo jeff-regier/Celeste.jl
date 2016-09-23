@@ -15,7 +15,7 @@ export Image, TiledImage, ImageTile,
 export align
 
 # constants
-export band_letters, D, Ia, B, psf_K,
+export band_letters, D, Ia, B, default_psf_K,
        galaxy_prototypes, prior,
        shape_standard_alignment,
        brightness_standard_alignment,

@@ -181,7 +181,7 @@ Returns:
  - An array of PsfComponent objects that represents the PSF as a mixture
      of Gaussians.
 """
-function get_source_psf(world_loc::Vector{Float64}, img::TiledImage)
+function get_source_psf(world_loc::Vector{Float64}, img::TiledImage, psf_K::Int)
     # Some stamps or simulated data have no raw psf information.    In that case,
     # just use the psf from the image.
     if size(img.raw_psf_comp.rrows) == (0, 0)
@@ -693,7 +693,8 @@ Args:
  Returns:
      - A vector of PsfComponents fit to the raw_psf.
 """
-function fit_raw_psf_for_celeste(raw_psf::Array{Float64, 2}; K=psf_K, ftol=1e-9)
+function fit_raw_psf_for_celeste(raw_psf::Array{Float64, 2};
+                                 K=default_psf_K, ftol=1e-9)
     psf_params = PSF.initialize_psf_params(K, for_test=false)
     psf_transform = PSF.get_psf_transform(psf_params)
     psf_optimizer = PsfOptimizer(psf_transform, K)

@@ -9,7 +9,7 @@ import Celeste.PSF: get_psf_at_point,
        transform_psf_sensitive_float!,
        PsfOptimizer, fit_raw_psf_for_celeste,
        BivariateNormalDerivatives
-       
+
 using ForwardDiff
 
 
@@ -21,18 +21,18 @@ respect to unconstrained parameters.
 Returns:
   - A sensitive float for the sum of squared differences.
 """
-function evaluate_psf_fit{NumType <: Number}( 
+function evaluate_psf_fit{NumType <: Number}(
     psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64},
     calculate_derivs::Bool)
 
   K = length(psf_params)
   x_mat = PSF.get_x_matrix_from_psf(raw_psf);
-  
+
   # TODO: allocate these outside?
   bvn_derivs = BivariateNormalDerivatives{NumType}(NumType);
   log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
   pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
-  
+
   pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
   squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
 
@@ -51,7 +51,7 @@ function load_raw_psf(; x::Float64=500., y::Float64=500.)
   b = 3
 
   psf_filename =
-    @sprintf("%s/%s/%s/%s/psField-%06d-%d-%04d.fit", 
+    @sprintf("%s/%s/%s/%s/psField-%06d-%d-%04d.fit",
         datadir, run_num, camcol_num, field_num,
                  run_num, camcol_num, field_num)
   psf_fits = FITSIO.FITS(psf_filename);
@@ -235,7 +235,7 @@ end
 function test_psf_optimizer()
   raw_psf = load_raw_psf();
 
-  K = psf_K
+  K = default_psf_K
   psf_params = initialize_psf_params(K, for_test=false);
   psf_transform = get_psf_transform(psf_params);
   psf_optimizer = PsfOptimizer(psf_transform, K);
