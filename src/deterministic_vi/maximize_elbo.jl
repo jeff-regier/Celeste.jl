@@ -9,6 +9,35 @@ type WrapperState
 end
 
 
+function print_status{T <: Number}(
+                    state::WrapperState,
+                    iter_vp::VariationalParams{T},
+                    value::T,
+                    grad::Array{T})
+    if state.verbose || (state.f_evals % state.print_every_n == 0)
+        Log.info("f_evals: $(state.f_evals) value: $(value)")
+    end
+    if state.verbose
+        S = length(iter_vp)
+        if length(iter_vp[1]) == length(ids_names)
+        state_df = DataFrames.DataFrame(names=ids_names)
+        elseif length(iter_vp[1]) == length(ids_free_names)
+        state_df = DataFrames.DataFrame(names=ids_free_names)
+        else
+        state_df = DataFrames.DataFrame(
+        names=[ "x$i" for i=1:length(iter_vp[1, :])])
+        end
+        for s=1:S
+        state_df[Symbol(string("val", s))] = iter_vp[s]
+        end
+        for s=1:S
+        state_df[Symbol(string("grad", s))] = grad[:, s]
+        end
+        Log.info(repr(state_df))
+        Log.info("=======================================\n")
+    end
+end
+
 """
 Optimizes f using Newton's method and exact Hessians.  For now, it is
 not clear whether this or BFGS is better, so it is kept as a separate function.
@@ -39,52 +68,20 @@ function maximize_f(f::Function,
                     ftol_abs=1e-6,
                     verbose=false,
                     max_iters=50,
-                    rho_lower=0.25,
                     fast_hessian=true)
     # Make sure the model parameters are within the transform bounds
     enforce_bounds!(ea.vp, ea.active_sources, transform)
+    @assert ea.active_sources == transform.active_sources
 
     kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
     x_length = length(kept_ids) * transform.active_S
     x_size = (length(kept_ids), transform.active_S)
-    @assert transform.active_sources == ea.active_sources
 
-    last_sf =
-      zero_sensitive_float(UnconstrainedParams, length(ea.active_sources))
-    last_x = [ NaN ]
+    Sa = length(ea.active_sources)
 
     state = WrapperState(0, false, 10, 1.0)
-    function print_status{T <: Number}(
-      iter_vp::VariationalParams{T}, value::T, grad::Array{T})
-        if state.verbose || (state.f_evals % state.print_every_n == 0)
-            Log.info("f_evals: $(state.f_evals) value: $(value)")
-        end
-        if state.verbose
-          S = length(iter_vp)
-          if length(iter_vp[1]) == length(ids_names)
-            state_df = DataFrames.DataFrame(names=ids_names)
-          elseif length(iter_vp[1]) == length(ids_free_names)
-            state_df = DataFrames.DataFrame(names=ids_free_names)
-          else
-            state_df = DataFrames.DataFrame(
-              names=[ "x$i" for i=1:length(iter_vp[1, :])])
-          end
-          for s=1:S
-            state_df[Symbol(string("val", s))] = iter_vp[s]
-          end
-          for s=1:S
-            state_df[Symbol(string("grad", s))] = grad[:, s]
-          end
-          Log.info(repr(state_df))
-          Log.info("=======================================\n")
-        end
-    end
 
-    function f_objective(x::Vector{Float64})
-      if x == last_x
-        # Return the cached result.
-        return(last_sf)
-      else
+    function f_objective_nocache(x::Vector{Float64})
         state.f_evals += 1
         # Evaluate in the constrained space and then unconstrain again.
         transform.array_to_vp!(reshape(x, x_size), ea.vp, omitted_ids)
@@ -92,20 +89,25 @@ function maximize_f(f::Function,
 
         # TODO: Add an option to print either the transformed or
         # free parameterizations.
-        print_status(ea.vp[ea.active_sources],
-                     f_res.v[1], f_res.d)
-        f_res_trans = transform.transform_sensitive_float(f_res, ea.vp, ea.active_sources)
+        print_status(state, ea.vp[ea.active_sources], f_res.v[1], f_res.d)
+        transform.transform_sensitive_float(f_res, ea.vp, ea.active_sources)
+    end
 
-        # Cache the result.
-        last_x = deepcopy(x)
-        last_sf = deepcopy(f_res_trans)
-        return(f_res_trans)
-      end
+    last_sf = zero_sensitive_float(UnconstrainedParams, Sa)
+    last_x = [ NaN ]
+
+    function f_objective_cached(x::Vector{Float64})
+        if x != last_x
+            last_x = deepcopy(x)
+            last_sf = deepcopy(f_objective_nocache(x))
+        end
+
+        last_sf
     end
 
     function f_value_grad{T <: Number}(x::Vector{T})
         @assert length(x) == x_length
-        res = f_objective(x)
+        res = f_objective_cached(x)
         grad = zeros(T, length(x))
         if length(grad) > 0
             svs = [res.d[kept_ids, si] for si in 1:transform.active_S]
@@ -125,30 +127,26 @@ function maximize_f(f::Function,
     function f_value{T <: Number}(x::Vector{T})
         @assert length(x) == x_length
         f_value_grad(x)[1]
-   end
-
-    function f_grad{T <: Number}(x::Vector{T})
-        @assert length(x) == x_length
-        f_value_grad(x)[2]
     end
 
     function f_grad!{T <: Number}(x::Vector{T}, grad::Vector{T})
-        grad[:,:] = f_grad(x)
+        @assert length(x) == x_length
+        grad[:,:] = f_value_grad(x)[2]
     end
 
     function f_hessian{T <: Number}(x::Vector{T})
-      @assert length(x) == x_length
-      res = f_objective(x)
-      all_kept_ids = Int[]
-      for sa=1:transform.active_S
-        append!(all_kept_ids, kept_ids + (sa - 1) * length(kept_ids))
-      end
-      sub_hess = res.h[all_kept_ids, all_kept_ids]
-      state.scale .* 0.5 * (sub_hess + sub_hess')
+        @assert length(x) == x_length
+        res = f_objective_cached(x)
+        all_kept_ids = Int[]
+        for sa=1:transform.active_S
+            append!(all_kept_ids, kept_ids + (sa - 1) * length(kept_ids))
+        end
+        sub_hess = res.h[all_kept_ids, all_kept_ids]
+        state.scale .* 0.5 * (sub_hess + sub_hess')
     end
 
     function f_hessian!{T <: Number}(x::Vector{T}, hess::Matrix{T})
-      hess[:, :] = f_hessian(x)
+        hess[:, :] = f_hessian(x)
     end
 
     # For minimization, which is required by the linesearch algorithm.
@@ -156,9 +154,12 @@ function maximize_f(f::Function,
     state.verbose = verbose
 
     x0 = transform.vp_to_array(ea.vp, omitted_ids)
-    tr_method =
-        Optim.NewtonTrustRegion(initial_delta=10.0, delta_hat=1e9, eta=0.1,
-                                rho_lower=rho_lower, rho_upper=0.75)
+    tr_method = Optim.NewtonTrustRegion(
+                    initial_delta=10.0,
+                    delta_hat=1e9,
+                    eta=0.1,
+                    rho_lower=0.25,
+                    rho_upper=0.75)
 
     options = Optim.OptimizationOptions(;
         x_tol = xtol_rel, f_tol = ftol_abs, g_tol = 1e-8,
@@ -190,7 +191,6 @@ function maximize_f(f::Function,
                     ftol_abs=1e-6,
                     verbose=false,
                     max_iters=50,
-                    rho_lower=0.25,
                     fast_hessian=true)
     transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=loc_width)
 
@@ -200,7 +200,6 @@ function maximize_f(f::Function,
                 ftol_abs=ftol_abs,
                 verbose=verbose,
                 max_iters=max_iters,
-                rho_lower=rho_lower,
                 fast_hessian=fast_hessian)
 end
 
