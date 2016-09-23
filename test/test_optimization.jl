@@ -45,50 +45,6 @@ end
 
 #########################################################
 
-function test_objective_wrapper()
-    omitted_ids = Int[];
-    kept_ids = setdiff(1:length(ids_free), omitted_ids);
-
-    blob, ea, bodies = SampleData.gen_three_body_dataset();
-    # Change the tile size.
-    ea = make_elbo_args(
-      blob, bodies, tile_width=5, fit_psf=false, patch_radius_pix=10.);
-    ea.active_sources = Int[2, 3]
-    trans = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
-
-    wrapper =
-      DeterministicVI.ObjectiveWrapperFunctions(
-        ea -> DeterministicVI.elbo(ea),
-        ea, trans, kept_ids, omitted_ids);
-
-    x = trans.vp_to_array(ea.vp, omitted_ids);
-    elbo_result =
-      trans.transform_sensitive_float(DeterministicVI.elbo(ea), ea.vp, ea.active_sources);
-    elbo_grad = reduce(vcat, [ elbo_result.d[kept_ids, si] for
-                               si in 1:length(ea.active_sources) ]);
-
-    # Tese the print function
-    wrapper.state.verbose = true
-    wrapper.f_objective(x[:]);
-    wrapper.state.verbose = false
-
-    w_v, w_grad = wrapper.f_value_grad(x[:]);
-    w_grad2 = zeros(Float64, length(x));
-    wrapper.f_value_grad!(x[:], w_grad2);
-
-    @test_approx_eq(w_v, elbo_result.v[1])
-    @test_approx_eq(w_grad, elbo_grad)
-    @test_approx_eq(w_grad, w_grad2)
-
-    @test_approx_eq(w_v, wrapper.f_value(x[:]))
-    @test_approx_eq(w_grad, wrapper.f_grad(x[:]))
-
-    this_iter = wrapper.state.f_evals;
-    wrapper.f_value(x[:] + 1.0);
-    @test wrapper.state.f_evals == this_iter + 1
-end
-
-
 function test_star_optimization()
     blob, ea, body = gen_sample_star_dataset();
 
@@ -248,9 +204,8 @@ end
 
 
 test_quadratic_optimization()
-test_objective_wrapper()
 test_star_optimization()
-test_galaxy_optimization()
 test_single_source_optimization()
 test_full_elbo_optimization()
 test_real_stamp_optimization()
+test_galaxy_optimization()
