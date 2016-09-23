@@ -1,43 +1,3 @@
-# The main reason we need this is to have a mutable type to keep
-# track of function evaluations, but we can keep other metadata
-# in it as well.
-type WrapperState
-    f_evals::Int
-    verbose::Bool
-    print_every_n::Int
-    scale::Float64
-end
-
-
-function print_status{T <: Number}(
-                    state::WrapperState,
-                    iter_vp::VariationalParams{T},
-                    value::T,
-                    grad::Array{T})
-    if state.verbose || (state.f_evals % state.print_every_n == 0)
-        Log.info("f_evals: $(state.f_evals) value: $(value)")
-    end
-    if state.verbose
-        S = length(iter_vp)
-        if length(iter_vp[1]) == length(ids_names)
-        state_df = DataFrames.DataFrame(names=ids_names)
-        elseif length(iter_vp[1]) == length(ids_free_names)
-        state_df = DataFrames.DataFrame(names=ids_free_names)
-        else
-        state_df = DataFrames.DataFrame(
-        names=[ "x$i" for i=1:length(iter_vp[1, :])])
-        end
-        for s=1:S
-        state_df[Symbol(string("val", s))] = iter_vp[s]
-        end
-        for s=1:S
-        state_df[Symbol(string("grad", s))] = grad[:, s]
-        end
-        Log.info(repr(state_df))
-        Log.info("=======================================\n")
-    end
-end
-
 """
 Optimizes f using Newton's method and exact Hessians.  For now, it is
 not clear whether this or BFGS is better, so it is kept as a separate function.
@@ -79,61 +39,87 @@ function maximize_f(f::Function,
 
     Sa = length(ea.active_sources)
 
-    state = WrapperState(0, false, 10, 1.0)
+    f_evals = 0
+    const print_every_n = 10
 
-    function f_objective_nocache(x::Vector{Float64})
-        state.f_evals += 1
+    function f_wrapped_nocache(x::Vector{Float64})
+        f_evals += 1
+
         # Evaluate in the constrained space and then unconstrain again.
         transform.array_to_vp!(reshape(x, x_size), ea.vp, omitted_ids)
         f_res = f(ea)
 
         # TODO: Add an option to print either the transformed or
         # free parameterizations.
-        print_status(state, ea.vp[ea.active_sources], f_res.v[1], f_res.d)
+
+        if verbose || (f_evals % print_every_n == 0)
+            Log.info("f_evals: $(f_evals) value: $(f_res.v[1])")
+        end
+
+        if verbose
+            S = length(iter_vp)
+
+            if length(iter_vp[1]) == length(ids_names)
+                state_df = DataFrames.DataFrame(names=ids_names)
+            elseif length(iter_vp[1]) == length(ids_free_names)
+                state_df = DataFrames.DataFrame(names=ids_free_names)
+            else
+                state_df = DataFrames.DataFrame(
+                    names=[ "x$i" for i=1:length(iter_vp[1, :])])
+            end
+
+            for s=1:S
+                state_df[Symbol(string("val", s))] = iter_vp[s]
+            end
+
+            for s=1:S
+                state_df[Symbol(string("grad", s))] = f_res.d[:, s]
+            end
+
+            Log.info(repr(state_df))
+            Log.info("=======================================\n")
+        end
+
         transform.transform_sensitive_float(f_res, ea.vp, ea.active_sources)
     end
 
     last_sf = zero_sensitive_float(UnconstrainedParams, Sa)
     last_x = [ NaN ]
 
-    function f_objective_cached(x::Vector{Float64})
+    function f_wrapped_cached(x::Vector{Float64})
         if x != last_x
             last_x = deepcopy(x)
-            last_sf = deepcopy(f_objective_nocache(x))
+            last_sf = deepcopy(f_wrapped_nocache(x))
         end
 
         last_sf
     end
 
-    function f_value{T <: Number}(x::Vector{T})
+    function neg_f_value{T <: Number}(x::Vector{T})
         @assert length(x) == x_length
-        state.scale * f_objective_cached(x).v[1]
+        -f_wrapped_cached(x).v[1]
     end
 
-    function f_grad!{T <: Number}(x::Vector{T}, grad::Vector{T})
+    function neg_f_grad!{T <: Number}(x::Vector{T}, grad::Vector{T})
         @assert length(x) == x_length
-        res = f_objective_cached(x)
+        res = f_wrapped_cached(x)
         if length(grad) > 0
             svs = [res.d[kept_ids, si] for si in 1:transform.active_S]
             grad[:] = reduce(vcat, svs)
         end
-        grad .*= state.scale
+        grad .*= -1
     end
 
-    function f_hessian!{T <: Number}(x::Vector{T}, hess::Matrix{T})
+    function neg_f_hessian!{T <: Number}(x::Vector{T}, hess::Matrix{T})
         @assert length(x) == x_length
-        res = f_objective_cached(x)
+        res = f_wrapped_cached(x)
         all_kept_ids = Int[]
         for sa=1:transform.active_S
             append!(all_kept_ids, kept_ids + (sa - 1) * length(kept_ids))
         end
         sub_hess = res.h[all_kept_ids, all_kept_ids]
-        hess[:, :] = state.scale .* 0.5 * (sub_hess + sub_hess')
+        hess[:, :] = -1 .* 0.5 * (sub_hess + sub_hess')
     end
-
-    # For minimization, which is required by the linesearch algorithm.
-    state.scale = -1.0
-    state.verbose = verbose
 
     x0 = transform.vp_to_array(ea.vp, omitted_ids)
     tr_method = Optim.NewtonTrustRegion(
@@ -148,20 +134,21 @@ function maximize_f(f::Function,
         iterations = max_iters, store_trace = verbose,
         show_trace = false, extended_trace = verbose)
 
-    nm_result = Optim.optimize(f_value,
-                               f_grad!,
-                               f_hessian!,
-                               x0[:], tr_method, options)
+    nm_result = Optim.optimize(neg_f_value,
+                               neg_f_grad!,
+                               neg_f_hessian!,
+                               x0[:],
+                               tr_method,
+                               options)
 
-    iter_count = state.f_evals
     transform.array_to_vp!(reshape(nm_result.minimum, size(x0)),
                            ea.vp, omitted_ids)
     max_f = -1.0 * nm_result.f_minimum
     max_x = nm_result.minimum
 
-    Log.info(string("got $max_f at $max_x after $iter_count function evaluations ",
+    Log.info(string("got $max_f at $max_x after $f_evals function evaluations ",
             "($(nm_result.iterations) Newton steps)\n"))
-    iter_count, max_f, max_x, nm_result
+    f_evals, max_f, max_x, nm_result
 end
 
 
