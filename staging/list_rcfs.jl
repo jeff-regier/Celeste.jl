@@ -1,20 +1,34 @@
-using Celeste
+#!/usr/bin/env julia
+
+using DocOpt
+
+import Celeste.ParallelRun: BoundingBox, get_overlapping_fields
+import Celeste.SDSSIO: RunCamcolField
+
+
+const DOC =
+"""List all Run-Camcol-Field triplets that overlap with a specified
+bounding box. Output is in a format that can be piped to make, with the
+makefile in this directory, e.g.
+
+    ./list_rcfs.jl -999 999 -999 999 | sort -R | xargs -P 32 -n 1 make
+
+Usage:
+  list_rcfs.jl <ramin> <ramax> <decmin> <decmax>
+  list_rcfs.jl -h | --help
+"""
 
 function main()
-    f = FITSIO.FITS(ENV["FIELD_EXTENTS"])
+    args = docopt(DOC, version=v"0.1.0", options_first=true)
 
-    hdu = f[2]::FITSIO.TableHDU
+    box = BoundingBox(args["<ramin>"], args["<ramax>"],
+                      args["<decmin>"], args["<decmax>"])
+    rcfs = get_overlapping_fields(box, dirname(ENV["FIELD_EXTENTS"]))
 
-    # read in the entire table.
-    all_run = read(hdu, "run")::Vector{Int16}
-    all_camcol = read(hdu, "camcol")::Vector{UInt8}
-    all_field = read(hdu, "field")::Vector{Int16}
-
-    close(f)
-
-    for i in eachindex(all_run)
-        println("RUN=$(all_run[i]) CAMCOL=$(all_camcol[i]) FIELD=$(all_field[i])")
+    for rcf in rcfs
+        println("RUN=$(rcf.run) CAMCOL=$(rcf.camcol) FIELD=$(rcf.field)")
     end
 end
+
 
 main()

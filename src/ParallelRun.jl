@@ -92,6 +92,14 @@ immutable BoundingBox
 end
 
 
+function BoundingBox(ramin::String, ramax::String, decmin::String, decmax::String)
+    BoundingBox(parse(Float64, ramin),
+                parse(Float64, ramax),
+                parse(Float64, decmin),
+                parse(Float64, decmax))
+end
+
+
 @inline nputs(nid, s) = ccall(:puts, Cint, (Ptr{Int8},), string("[$nid] ", s))
 @inline phalse(b) = b[] = false
 
