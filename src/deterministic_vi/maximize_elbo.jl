@@ -57,6 +57,7 @@ function maximize_f(f::Function,
         end
 
         if verbose
+            iter_vp = ea.vp[ea.active_sources]
             S = length(iter_vp)
 
             if length(iter_vp[1]) == length(ids_names)
