@@ -10,7 +10,6 @@ _logger = logging.getLogger(__name__)
 TRUTH_COLUMNS = ['left', 'bottom', 'angle_radians', 'ellipticity', 'world_center_x', 'world_center_y']
 
 PIXEL_SCALE = 0.75 # arcsec / pixel
-SKY_LEVEL = 0. # TODO
 SHIFT_RADIUS_ARCSEC = PIXEL_SCALE
 PSF_SIGMA_ARCSEC = PIXEL_SCALE # so that PSF sigma = 1 pixel
 STAMP_SIZE_PX = 48
