@@ -6,7 +6,7 @@ using DataFrames
 import FITSIO
 import WCS
 
-import Celeste: ElboDeriv, Infer, Model, OptimizeElbo
+import Celeste: Infer, Model, DeterministicVI
 
 ## TODO pull this from test/SampleData.jl
 function make_elbo_args(images::Vector{Model.TiledImage},
@@ -15,7 +15,7 @@ function make_elbo_args(images::Vector{Model.TiledImage},
     vp = Vector{Float64}[Model.init_source(ce) for ce in catalog]
     patches, tile_source_map = Infer.get_tile_source_map(images, catalog)
     active_sources = collect(1:length(catalog))
-    ea = ElboDeriv.ElboArgs(images, vp, tile_source_map, patches, active_sources)
+    ea = DeterministicVI.ElboArgs(images, vp, tile_source_map, patches, active_sources)
     if fit_psf
         Infer.fit_object_psfs!(ea, ea.active_sources)
     end
@@ -115,22 +115,19 @@ function pretty_print_params(params, truth_row)
 end
 
 function main(; verbose=false)
-    truth_df = readtable("galsim_truth.csv")
-    for index in 0:size(truth_df, 1)
+    truth_data = readtable("galsim_truth.csv")
+    for index in 0:size(truth_data, 1)
         filename = "output/galsim_test_image_$index.fits"
         println("Reading $filename...")
         pixels, psf, wcs = read_fits(filename)
-        band_images = make_band_images(fill(pixels, 5), fill(psf, 5), wcs)
-        catalog_entry = make_catalog_entry()
+        band_images::Vector{Model.TiledImage} = make_band_images(fill(pixels, 5), fill(psf, 5), wcs)
+        catalog_entry::Model.CatalogEntry = make_catalog_entry()
 
-        ea = make_elbo_args(band_images, [catalog_entry], fit_psf=false)
-        iter_count, max_f, max_x, nm_result = OptimizeElbo.maximize_f(
-            ElboDeriv.elbo_likelihood,
-            ea,
-            loc_width=3.0,
-            verbose=verbose,
-        )
-        pretty_print_params(ea.vp[1], truth_df[index + 1, :])
+        elbo_args::DeterministicVI.ElboArgs =
+            make_elbo_args(band_images, [catalog_entry], fit_psf=false)
+        DeterministicVI.maximize_f(DeterministicVI.elbo, elbo_args, verbose=verbose)
+        variational_parameters::Vector{Float64} = elbo_args.vp[1]
+        pretty_print_params(variational_parameters, truth_data[index + 1, :])
     end
 end
 
