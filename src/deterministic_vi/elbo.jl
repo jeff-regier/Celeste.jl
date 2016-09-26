@@ -693,6 +693,7 @@ function process_active_pixels!{NumType <: Number}(
         # the optimization convergence criterion, so I will leave it in for now.
         elbo_vars.elbo.v[1] -= lfact(this_pixel)
     end
+    assert_all_finite(elbo_vars.elbo)
 end
 
 
@@ -813,4 +814,12 @@ function elbo{NumType <: Number}(
     # TODO: subtract the kl with the hessian.
     subtract_kl!(ea, elbo, calculate_derivs=calculate_derivs)
     elbo
+end
+
+# If Infs/NaNs have crept into the ELBO evaluation (a symptom of poorly conditioned optimization),
+# this helps catch them immediately.
+function assert_all_finite{ParamType}(sf::SensitiveFloat{ParamType, Float64})
+    @assert all(isfinite(sf.v)) "Value is Inf/NaNs"
+    @assert all(isfinite(sf.d)) "Gradient contains Inf/NaNs"
+    @assert all(isfinite(sf.h)) "Hessian contains Inf/NaNs"
 end
