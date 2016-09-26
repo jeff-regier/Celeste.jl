@@ -3,6 +3,7 @@ Calculate value, gradient, and hessian of the variational ELBO.
 """
 module DeterministicVI
 
+import ..Exceptions
 using ..Model
 import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
                 GalaxySigmaDerivs,
@@ -16,7 +17,6 @@ import DataFrames
 import Optim
 
 export ElboArgs
-
 
 """
 ElboArgs stores the arguments needed to evaluate the variational objective
@@ -59,6 +59,13 @@ function ElboArgs{NumType <: Number}(
     @assert length(tile_source_map) == N
     @assert size(patches, 1) == S
     @assert size(patches, 2) == N
+    for tiled_image in images
+        for tile in tiled_image.tiles
+            if any(tile.epsilon_mat .<= 0)
+                throw(Exceptions.InvalidInputError("You must set all values of epsilon_mat > 0"))
+            end
+        end
+    end
     ElboArgs(S, N, psf_K, images, vp, tile_source_map, patches,
              active_sources, num_allowed_sd)
 end
