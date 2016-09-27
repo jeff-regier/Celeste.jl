@@ -39,11 +39,8 @@ function main()
 #    set_logging_level(args["--logging"])
     stagedir = ENV["CELESTE_STAGE_DIR"]
     if args["infer-box"]
-        ramin = parse(Float64, args["<ramin>"])
-        ramax = parse(Float64, args["<ramax>"])
-        decmin = parse(Float64, args["<decmin>"])
-        decmax = parse(Float64, args["<decmax>"])
-        box = BoundingBox(ramin, ramax, decmin, decmax)
+        box = BoundingBox(args["<ramin>"], args["<ramax>"],
+                          args["<decmin>"], args["<decmax>"])
         outdir = args["<outdir>"]
         infer_box(box, stagedir, outdir)
     else
