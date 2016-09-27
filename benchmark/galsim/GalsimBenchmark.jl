@@ -8,7 +8,7 @@ import WCS
 
 import Celeste: Infer, Model, DeterministicVI
 
-IOTA = 1000.
+const IOTA = 1000.
 
 ## TODO pull this from test/SampleData.jl
 function make_elbo_args(images::Vector{Model.TiledImage},
@@ -88,30 +88,36 @@ function make_catalog_entry()
     )
 end
 
+# Since we're considering elliptical galaxy shapes, angle is only meaningful up to rotations of 180
+# deg. This finds an equivalent angle in [0, 180) deg.
 function canonical_angle(params)
     angle_radians = params[Model.ids.e_angle]
     while angle_radians < 0
-        angle_radians += 2 * pi
+        angle_radians += pi
     end
-    while angle_radians > 2 * pi
-        angle_radians -= 2 * pi
+    while angle_radians > pi
+        angle_radians -= pi
     end
     angle_radians
 end
 
-function pretty_print_params(params, truth_row)
+const BENCHMARK_PARAMETER_LABELS = String[
+    "X center (world coords)",
+    "Y center (world coords)",
+    "Weight on exponential prototype (TODO)",
+    "Minor/major axis ratio",
+    "Angle (degrees)",
+    "Half-light radius (arcsec)",
+    "Galaxy brightness (nMgy)",
+    "Probability of galaxy",
+]
+
+function benchmark_comparison_data(params, truth_row)
     ids = Model.ids
-    benchmark_data = DataFrame(
-        field=String[
-            "X center (world coords)",
-            "Y center (world coords)",
-            "Weight on exponential (vs. Vaucouleurs)",
-            "Minor/major axis ratio",
-            "Angle (degrees)",
-            "Half-light radius (arcsec) (TODO)",
-            "Galaxy brightness (nMgy) (TODO)",
-            "Probability of galaxy (TODO)",
-        ],
+    @show params[ids.r1[2]], params[ids.r2[2]]
+    DataFrame(
+        label=fill(truth_row[1, :comment], length(BENCHMARK_PARAMETER_LABELS)),
+        field=BENCHMARK_PARAMETER_LABELS,
         expected=Float64[
             truth_row[1, :world_center_x],
             truth_row[1, :world_center_y],
@@ -133,12 +139,11 @@ function pretty_print_params(params, truth_row)
             params[ids.a[2]],
         ],
     )
-    println(truth_row[1, :comment])
-    println(repr(benchmark_data))
 end
 
 function main(; verbose=false)
     truth_data = readtable("galsim_truth.csv")
+    all_benchmark_data = []
     for index in 0:(size(truth_data, 1) - 1)
         filename = "output/galsim_test_image_$index.fits"
         println("Reading $filename...")
@@ -152,8 +157,13 @@ function main(; verbose=false)
             make_elbo_args(band_images, [catalog_entry], fit_psf=false)
         DeterministicVI.maximize_f(DeterministicVI.elbo, elbo_args, verbose=verbose)
         variational_parameters::Vector{Float64} = elbo_args.vp[1]
-        pretty_print_params(variational_parameters, truth_data[index + 1, :])
+
+        benchmark_data = benchmark_comparison_data(variational_parameters, truth_data[index + 1, :])
+        println(repr(benchmark_data))
+        push!(all_benchmark_data, benchmark_data)
     end
+
+    println(repr(vcat(all_benchmark_data...)))
 end
 
 end # module GalsimBenchmark
