@@ -53,7 +53,6 @@ type PsfOptimizer
 
     function PsfOptimizer(psf_transform::DataTransform, K::Int;
                           verbose::Bool=false, ftol::Float64=1e-9, grtol::Float64=1e-9)
-
         num_iters = 50
 
         bvn_derivs = BivariateNormalDerivatives{Float64}(Float64)
@@ -70,7 +69,6 @@ type PsfOptimizer
 
         function psf_fit_for_optim{NumType <: Number}(
                 psf_params_free_vec::Vector{NumType})
-
             if psf_params_free_vec == psf_params_free_vec_cache
                 return sf_free
             else
@@ -157,7 +155,6 @@ already implicit in the value of psf_array.
 """
 function get_psf_at_point(psf_array::Array{PsfComponent, 1};
                           rows=collect(-25:25), cols=collect(-25:25))
-
     function get_psf_value(psf::PsfComponent, row::Float64, col::Float64)
          x = Float64[row, col] - psf.xiBar
          exp_term = exp(-0.5 * x' * psf.tauBarInv * x - 0.5 * psf.tauBarLd)
@@ -190,7 +187,7 @@ function get_source_psf(world_loc::Vector{Float64}, img::TiledImage, psf_K::Int)
     else
         pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
         psfstamp = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
-        return PSF.fit_raw_psf_for_celeste(psfstamp)
+        return PSF.fit_raw_psf_for_celeste(psfstamp, psf_K)
     end
 end
 
@@ -272,7 +269,6 @@ Returns:
 function get_psf_transform(
         psf_params::Vector{Vector{Float64}};
         scale::Vector{Float64}=ones(length(PsfParams)))
-
     K = length(psf_params)
     bounds = Array(ParamBounds, length(psf_params))
     # Note that, for numerical reasons, the bounds must be on the scale
@@ -280,7 +276,7 @@ function get_psf_transform(
     for k in 1:K
         bounds[k] = ParamBounds()
         bounds[k][:mu] = ParamBox[ ParamBox(-5.0, 5.0, scale[psf_ids.mu[1]]),
-                                                             ParamBox(-5.0, 5.0, scale[psf_ids.mu[2]]) ]
+                                   ParamBox(-5.0, 5.0, scale[psf_ids.mu[2]]) ]
         bounds[k][:e_axis] = ParamBox[ ParamBox(0.1, 1.0, scale[psf_ids.e_axis] ) ]
         bounds[k][:e_angle] =
             ParamBox[ ParamBox(-4 * pi, 4 * pi, scale[psf_ids.e_angle] ) ]
@@ -311,7 +307,6 @@ Returns:
 function transform_psf_params!{NumType <: Number}(
         psf_params::Vector{Vector{NumType}}, psf_params_free::Vector{Vector{NumType}},
         psf_transform::DataTransform, to_unconstrained::Bool)
-
     for k=1:length(psf_params)
         for (param, constraint_vec) in psf_transform.bounds[k]
             for ind in 1:length(getfield(psf_ids, param))
@@ -335,7 +330,6 @@ Allocate memory for and return a constrained parameter set.
 """
 function constrain_psf_params{NumType <: Number}(
         psf_params_free::Vector{Vector{NumType}}, psf_transform::DataTransform)
-
     K = length(psf_params_free)
     psf_params = Array(Vector{NumType}, K)
     for k=1:K
@@ -353,7 +347,6 @@ Allocate memory for and return an unconstrained parameter set.
 """
 function unconstrain_psf_params{NumType <: Number}(
         psf_params::Vector{Vector{NumType}}, psf_transform::DataTransform)
-
     K = length(psf_params)
     psf_params_free = Array(Vector{NumType}, K)
     for k=1:K
@@ -417,7 +410,6 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
         pdf::SensitiveFloat{PsfParams, NumType},
         pixel_value::SensitiveFloat{PsfParams, NumType},
         calculate_derivs::Bool)
-
     clear!(pixel_value)
 
     K = length(psf_params)
@@ -498,9 +490,7 @@ end
 """
 Convert PSF parameters to covariance matrices and derivatives and BvnComponents.
 """
-function get_sigma_from_params{NumType <: Number}(
-        psf_params::Vector{Vector{NumType}})
-
+function get_sigma_from_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
     K = length(psf_params)
     sigma_vec = Array(Matrix{NumType}, K)
     sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K)
@@ -533,7 +523,6 @@ function evaluate_psf_fit!{NumType <: Number}(
         pixel_value::SensitiveFloat{PsfParams, NumType},
         squared_error::SensitiveFloat{PsfParams, NumType},
         calculate_derivs::Bool)
-
     K = length(psf_params)
     sigma_vec, sig_sf_vec, bvn_vec = get_sigma_from_params(psf_params)
     clear!(squared_error)
@@ -583,7 +572,6 @@ function transform_psf_sensitive_float!{NumType <: Number}(
         psf_params::Vector{Vector{NumType}}, psf_transform::Transform.DataTransform,
         sf::SensitiveFloat{PsfParams, NumType}, sf_free::SensitiveFloat{PsfParams, NumType},
         calculate_derivs::Bool)
-
     sf_free.v[1] = sf.v[1]
     if calculate_derivs
         K = length(psf_params)
@@ -663,7 +651,6 @@ Returns:
 function fit_raw_psf_for_celeste(
         raw_psf::Array{Float64, 2}, psf_optimizer::PsfOptimizer,
         initial_psf_params::Vector{Vector{Float64}})
-
     K = length(initial_psf_params)
     @assert K == psf_optimizer.K
     optim_result = psf_optimizer.fit_psf(raw_psf, initial_psf_params)
@@ -693,8 +680,7 @@ Args:
  Returns:
      - A vector of PsfComponents fit to the raw_psf.
 """
-function fit_raw_psf_for_celeste(raw_psf::Array{Float64, 2};
-                                 K=default_psf_K, ftol=1e-9)
+function fit_raw_psf_for_celeste(raw_psf::Array{Float64, 2}, K::Integer; ftol=1e-9)
     psf_params = PSF.initialize_psf_params(K, for_test=false)
     psf_transform = PSF.get_psf_transform(psf_params)
     psf_optimizer = PsfOptimizer(psf_transform, K)

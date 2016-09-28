@@ -66,7 +66,7 @@ function test_real_image()
     cat_local = vcat(catalog[sa], catalog[neighbors])
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
     patches, tile_source_map = Infer.get_tile_source_map(tiled_images, cat_local)
-    ea = ElboArgs(tiled_images, vp, tile_source_map, patches, [1], default_psf_K, Inf)
+    ea = ElboArgs(tiled_images, vp, tile_source_map, patches, [1])
     Infer.fit_object_psfs!(ea, ea.active_sources)
     Infer.trim_source_tiles!(ea)
 

@@ -235,7 +235,7 @@ end
 function test_psf_optimizer()
   raw_psf = load_raw_psf();
 
-  K = default_psf_K
+  K = 2
   psf_params = initialize_psf_params(K, for_test=false);
   psf_transform = get_psf_transform(psf_params);
   psf_optimizer = PsfOptimizer(psf_transform, K);

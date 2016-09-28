@@ -99,7 +99,7 @@ function infer_source(images::Vector{TiledImage},
     cat_local = vcat(entry, neighbors)
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
     patches, tile_source_map = get_tile_source_map(images, cat_local)
-    ea = ElboArgs(images, vp, tile_source_map, patches, [1], default_psf_K, Inf)
+    ea = ElboArgs(images, vp, tile_source_map, patches, [1])
     fit_object_psfs!(ea, ea.active_sources)
     trim_source_tiles!(ea)
     DeterministicVI.maximize_f(DeterministicVI.elbo, ea)

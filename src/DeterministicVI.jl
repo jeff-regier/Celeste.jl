@@ -30,8 +30,12 @@ type ElboArgs{NumType <: Number}
     patches::Matrix{SkyPatch}
     active_sources::Vector{Int}
 
-    # The number of standard deviations away below which a bivariate normal
-    # will be calculated.  Set to Inf to evaluate bivariate normals at all points.
+    # Bivarite normals will not be evaulated at points further than this many
+    # standard deviations away from their mean.  See its usage in the ELBO and
+    # bivariate normals for details.
+    #
+    # If this is set to Inf, the bivariate normals will be evaluated at all points
+    # irrespective of their distance from the mean.
     num_allowed_sd::Float64
 end
 
@@ -41,9 +45,9 @@ function ElboArgs{NumType <: Number}(
             vp::VariationalParams{NumType},
             tile_source_map::Vector{Matrix{Vector{Int}}},
             patches::Matrix{SkyPatch},
-            active_sources::Vector{Int},
-            psf_K::Int,
-            num_allowed_sd::Float64)
+            active_sources::Vector{Int};
+            psf_K::Int=2,
+            num_allowed_sd::Float64=Inf)
     N = length(images)
     S = length(vp)
 
@@ -51,7 +55,7 @@ function ElboArgs{NumType <: Number}(
     @assert length(tile_source_map) == N
     @assert size(patches, 1) == S
     @assert size(patches, 2) == N
-    ElboArgs(S, N, default_psf_K, images, vp, tile_source_map, patches,
+    ElboArgs(S, N, psf_K, images, vp, tile_source_map, patches,
              active_sources, num_allowed_sd)
 end
 

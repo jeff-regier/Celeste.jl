@@ -25,7 +25,6 @@ function load_bvn_mixtures{NumType <: Number}(
                     b::Int;
                     calculate_derivs::Bool=true,
                     calculate_hessian::Bool=true)
-
     star_mcs = Array(BvnComponent{NumType}, ea.psf_K, ea.S)
     gal_mcs = Array(GalaxyCacheComponent{NumType}, ea.psf_K, 8, 2, ea.S)
 
@@ -235,7 +234,6 @@ function accum_star_pos!{NumType <: Number}(
                     x::Vector{Float64},
                     wcs_jacobian::Array{Float64, 2},
                     calculate_derivs::Bool)
-
     eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x)
 
     if elbo_vars.calculate_derivs && calculate_derivs
@@ -397,7 +395,6 @@ function populate_fsm_vecs!{NumType <: Number}(
                     h::Int, w::Int,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
-
     x = Float64[tile.h_range[h], tile.w_range[w]]
     for s in tile_sources
         # ensure tile.b is a filter band, not an image's index

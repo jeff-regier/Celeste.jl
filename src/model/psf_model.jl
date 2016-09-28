@@ -1,7 +1,3 @@
-# The default number of Gaussian components in the PSF.
-const default_psf_K = 2
-
-
 """
 A single normal component of the point spread function.
 All quantities are in pixel coordinates.
