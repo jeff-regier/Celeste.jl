@@ -21,11 +21,11 @@ function generate_valid_parameters(
             # Box parameters.
             for ind in 1:length(getfield(ids, param))
                 constraint = constraint_vec[ind]
-                constraint.upper_bound == Inf ?
-                    vp[s][getfield(ids, param)[ind]] = constraint.lower_bound + 1.0:
+                constraint.ub == Inf ?
+                    vp[s][getfield(ids, param)[ind]] = constraint.lb + 1.0:
                     vp[s][getfield(ids, param)[ind]] =
-                        0.5 * (constraint.upper_bound - constraint.lower_bound) +
-                        constraint.lower_bound
+                        0.5 * (constraint.ub - constraint.lb) +
+                        constraint.lb
             end
         else
             # Simplex parameters can ignore the bounds.
@@ -167,9 +167,9 @@ function test_basic_transforms()
 	@test_approx_eq -6.0 Transform.inv_logit(Transform.logit(-6.0))
 
 	@test_approx_eq(
-		[ 0.99, 0.001 ], Transform.logit(Transform.inv_logit([ 0.99, 0.001 ])))
+		[ 0.99, 0.001 ], Transform.logit.(Transform.inv_logit.([ 0.99, 0.001 ])))
 	@test_approx_eq(
-		[ -6.0, 0.5 ], Transform.inv_logit(Transform.logit([ -6.0, 0.5 ])))
+		[ -6.0, 0.5 ], Transform.inv_logit.(Transform.logit.([ -6.0, 0.5 ])))
 
 	z = Float64[ 2.0, 4.0 ]
 	z ./= sum(z)
@@ -198,10 +198,10 @@ function test_enforce_bounds()
   transform = get_mp_transform(ea_original.vp, ea_original.active_sources);
 
   ea = deepcopy(ea_original);
-  ea.vp[1][ids.a[1, 1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
-  ea.vp[2][ids.r1[1]] = transform.bounds[2][:r1][1].lower_bound - 1.0
-  ea.vp[2][ids.r1[2]] = transform.bounds[2][:r1][1].upper_bound + 1.0
-  ea.vp[3][ids.k[1, 1]] = transform.bounds[3][:k][1].lower_bound - 0.00001
+  ea.vp[1][ids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
+  ea.vp[2][ids.r1[1]] = transform.bounds[2][:r1][1].lb - 1.0
+  ea.vp[2][ids.r1[2]] = transform.bounds[2][:r1][1].ub + 1.0
+  ea.vp[3][ids.k[1, 1]] = transform.bounds[3][:k][1].lb - 0.00001
 
   @test_throws AssertionError transform.from_vp(ea.vp)
   Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)
@@ -217,7 +217,7 @@ function test_enforce_bounds()
   # doesn't violate the minimization constraints
   ea = deepcopy(ea_original);
   constraint = transform.bounds[1][:a][1]
-  ea.vp[1][ids.a[1, 1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
+  ea.vp[1][ids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
   ea.vp[1][ids.a[2, 1]] = 100
   @test_throws AssertionError transform.from_vp(ea.vp)
   Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)
@@ -231,10 +231,10 @@ function test_enforce_bounds()
   ea.active_sources = [sa]
   transform = get_mp_transform(ea.vp, ea.active_sources);
 
-  ea.vp[sa][ids.a[1, 1]] = transform.bounds[1][:a][1].lower_bound - 0.00001
-  ea.vp[sa][ids.r1[1]] = transform.bounds[1][:r1][1].lower_bound - 1.0
-  ea.vp[sa][ids.r1[2]] = transform.bounds[1][:r1][1].upper_bound + 1.0
-  ea.vp[sa][ids.k[1, 1]] = transform.bounds[1][:k][1].lower_bound - 0.00001
+  ea.vp[sa][ids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
+  ea.vp[sa][ids.r1[1]] = transform.bounds[1][:r1][1].lb - 1.0
+  ea.vp[sa][ids.r1[2]] = transform.bounds[1][:r1][1].ub + 1.0
+  ea.vp[sa][ids.k[1, 1]] = transform.bounds[1][:k][1].lb - 0.00001
 
   @test_throws AssertionError transform.from_vp(ea.vp)
   Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)

@@ -39,6 +39,8 @@ the last entry implicitly has the untransformed value 1.
 """
 function constrain_to_simplex{NumType <: Number}(x::Vector{NumType})
     if any(x .== Inf)
+        # Is there a bug here? If more than 1 entry in x is Inf, that just means
+        # that the last entry in z is 0, not the both entries in z are the same.
         z = NumType[ x_entry .== Inf ? one(NumType) : zero(NumType) for x_entry in x]
         z ./ sum(z)
         push!(z, 0)
@@ -67,27 +69,27 @@ end
 # The transforms for Celeste.
 
 immutable ParamBox
-    lower_bound::Float64
-    upper_bound::Float64
+    lb::Float64  # lower bound
+    ub::Float64  # upper bound
     scale::Float64
 
-    function ParamBox(lower_bound, upper_bound, scale)
-        @assert lower_bound > -Inf # Not supported
+    function ParamBox(lb, ub, scale)
+        @assert lb > -Inf # Not supported
         @assert scale > 0.0
-        @assert lower_bound < upper_bound
-        new(lower_bound, upper_bound, scale)
+        @assert lb < ub
+        new(lb, ub, scale)
     end
 end
 
 immutable SimplexBox
-    lower_bound::Float64
+    lb::Float64  # lower bound
     scale::Float64
     n::Int
 
-    function SimplexBox(lower_bound, scale, n)
+    function SimplexBox(lb, scale, n)
         @assert n >= 2
-        @assert 0.0 <= lower_bound < 1 / n
-        new(lower_bound, scale, n)
+        @assert 0.0 <= lb < 1 / n
+        new(lb, scale, n)
     end
 end
 
@@ -95,44 +97,34 @@ end
 typealias ParamBounds Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
 
 
-
 ###############################################
 # Functions for a "free transform".
 
-function unbox_parameter{NumType <: Number}(param::NumType, param_box::ParamBox)
-    lower_bound = param_box.lower_bound
-    upper_bound = param_box.upper_bound
-    scale = param_box.scale
-
-    positive_constraint = (upper_bound == Inf)
+function unbox_parameter{NumType <: Number}(param::NumType, pb::ParamBox)
+    positive_constraint = (pb.ub == Inf)
 
     # exp and the logit functions handle infinities correctly, so
     # parameters can equal the bounds.
-    @assert(lower_bound .<= param .<= upper_bound,
+    @assert(pb.lb .<= param .<= pb.ub,
                     string("unbox_parameter: param outside bounds: ",
-                                 "$param ($lower_bound, $upper_bound)"))
+                                 "$param ($(pb.lb), $(pb.ub))"))
 
     if positive_constraint
-        return log(param - lower_bound) * scale
+        return log(param - pb.lb) * pb.scale
     else
-        param_bounded = (param - lower_bound) / (upper_bound - lower_bound)
-        return inv_logit(param_bounded) * scale
+        param_bounded = (param - pb.lb) / (pb.ub - pb.lb)
+        return inv_logit(param_bounded) * pb.scale
     end
 end
 
 
 function box_parameter{NumType <: Number}(
-            free_param::NumType, param_box::ParamBox)
-    lower_bound = param_box.lower_bound
-    upper_bound = param_box.upper_bound
-    scale = param_box.scale
-
-    positive_constraint = (upper_bound == Inf)
+            free_param::NumType, pb::ParamBox)
+    positive_constraint = (pb.ub == Inf)
     if positive_constraint
-        return (exp(free_param / scale) + lower_bound)
+        return exp(free_param / pb.scale) + pb.lb
     else
-        return(
-            logit(free_param / scale) * (upper_bound - lower_bound) + lower_bound)
+        return logit(free_param / pb.scale) * (pb.ub - pb.lb) + pb.lb
     end
 end
 
@@ -140,21 +132,17 @@ end
 """
 Convert an unconstrained (n-1)-vector to a simplicial n-vector, z, such that
   - sum(z) = 1
-  - z >= simplex_box.lower_bound
+  - z >= sb.lb
 See notes for a derivation and reasoning.
 """
 function simplexify_parameter{NumType <: Number}(
-            free_param::Vector{NumType}, simplex_box::SimplexBox)
-    n = simplex_box.n
-    lower_bound = simplex_box.lower_bound
-    scale = simplex_box.scale
-
-    @assert length(free_param) == (n - 1)
+            free_param::Vector{NumType}, sb::SimplexBox)
+    @assert length(free_param) == (sb.n - 1)
 
     # Broadcasting doesn't work with DualNumbers and Floats. :(
     # z_sim is on an unconstrained simplex.
-    z_sim = constrain_to_simplex(NumType[ p / scale for p in free_param ])
-    param = NumType[ (1 - n * lower_bound) * p + lower_bound for p in z_sim ]
+    z_sim = constrain_to_simplex(NumType[ p / sb.scale for p in free_param ])
+    param = NumType[ (1 - sb.n * sb.lb) * p + sb.lb for p in z_sim ]
 
     param
 end
@@ -165,19 +153,15 @@ Invert the transformation simplexify_parameter() by converting an n-vector
 on a simplex to R^{n - 1}.
 """
 function unsimplexify_parameter{NumType <: Number}(
-            param::Vector{NumType}, simplex_box::SimplexBox)
-    n = simplex_box.n
-    lower_bound = simplex_box.lower_bound
-    scale = simplex_box.scale
-
-    @assert length(param) == n
-    @assert all(param .>= lower_bound)
+            param::Vector{NumType}, sb::SimplexBox)
+    @assert length(param) == sb.n
+    @assert all(param .>= sb.lb)
     @assert(abs(sum(param) - 1) < 1e-14, abs(sum(param) - 1))
 
     # z_sim is on an unconstrained simplex.
     # Broadcasting doesn't work with DualNumbers and Floats. :(
-    z_sim = NumType[ (p - lower_bound) / (1 - n * lower_bound) for p in param ]
-    free_param = NumType[ p * scale for p in unconstrain_simplex(z_sim) ]
+    z_sim = NumType[ (p - sb.lb) / (1 - sb.n * sb.lb) for p in param ]
+    free_param = NumType[ p * sb.scale for p in unconstrain_simplex(z_sim) ]
 
     free_param
 end
@@ -240,27 +224,24 @@ Args:
   - param: The constrained parameter (NB: the derivatives are expressed
                as a function of the constrained parameterd despite being
                      the derivative of the function unconstrained -> constrained)
-    - simplex_box: A box simplex constraint
+    - sb: A box simplex constraint
 """
 function box_simplex_derivatives{NumType <: Number}(
-    param::Vector{NumType}, simplex_box::SimplexBox)
-    lower_bound = simplex_box.lower_bound
-  scale = simplex_box.scale
-  n = simplex_box.n
+    param::Vector{NumType}, sb::SimplexBox)
 
-  @assert length(param) == n
+    @assert length(param) == sb.n
 
-  # z_sim is on an unconstrained simplex.
-  # Broadcasting doesn't work with DualNumbers and Floats. :(
-  z_sim = NumType[ (p - lower_bound) / (1 - n * lower_bound) for p in param ]
+    # z_sim is on an unconstrained simplex.
+    # Broadcasting doesn't work with DualNumbers and Floats. :(
+    z_sim = NumType[ (p - sb.lb) / (1 - sb.n * sb.lb) for p in param ]
 
     jacobian, hessian_vec = simplex_derivatives(z_sim)
-
-    for i in 1:n
-        hessian_vec[i] *= (scale ^ 2) * (1 - n * lower_bound)
+    for i in 1:sb.n
+        hessian_vec[i] *= (sb.scale ^ 2) * (1 - sb.n * sb.lb)
     end
-    jacobian *= scale * (1 - n * lower_bound)
-  jacobian, hessian_vec
+    jacobian *= sb.scale * (1 - sb.n * sb.lb)
+
+    jacobian, hessian_vec
 end
 
 
@@ -272,21 +253,17 @@ Args:
   - param: The constrained parameter (NB: the derivatives are expressed
                as a function of the constrained parameterd despite being
                      the derivative of the function unconstrained -> constrained)
-    - param_box: A box constraint
+    - pb: A box constraint
 """
-function box_derivatives{NumType <: Number}(param::NumType, param_box::ParamBox)
-    lower_bound = param_box.lower_bound
-  upper_bound = param_box.upper_bound
-  scale = param_box.scale
-
-    if upper_bound == Inf
-        centered_param = param - lower_bound
-        return scale * centered_param, scale ^ 2 * centered_param
+function box_derivatives{NumType <: Number}(param::NumType, pb::ParamBox)
+    if pb.ub == Inf
+        centered_param = param - pb.lb
+        return pb.scale * centered_param, pb.scale ^ 2 * centered_param
     else
-        param_range = upper_bound - lower_bound
-        centered_param = (param - lower_bound) / param_range
-        derivative = param_range * centered_param * (1 - centered_param) / scale
-        return derivative, derivative * (1 - 2 * centered_param) / scale
+        param_range = pb.ub - pb.lb
+        centered_param = (param - pb.lb) / param_range
+        derivative = param_range * centered_param * (1 - centered_param) / pb.scale
+        return derivative, derivative * (1 - 2 * centered_param) / pb.scale
     end
 end
 
@@ -732,16 +709,16 @@ function enforce_bounds!{NumType <: Number}(
             # Box parameters.
             for ind in 1:length(getfield(ids, param))
                 constraint = constraint_vec[ind]
-                if !(constraint.lower_bound <=
+                if !(constraint.lb <=
                          vp[s][getfield(ids, param)[ind]] <=
-                         constraint.upper_bound)
+                         constraint.ub)
                     # Don't set the value to exactly the lower bound to avoid Inf
-                    diff = constraint.upper_bound - constraint.lower_bound
+                    diff = constraint.ub - constraint.lb
                     epsilon = diff == Inf ? 1e-12: diff * 1e-12
                     vp[s][getfield(ids, param)[ind]] =
-                        min(vp[s][getfield(ids, param)[ind]], constraint.upper_bound - epsilon)
+                        min(vp[s][getfield(ids, param)[ind]], constraint.ub - epsilon)
                     vp[s][getfield(ids, param)[ind]] =
-                        max(vp[s][getfield(ids, param)[ind]], constraint.lower_bound + epsilon)
+                        max(vp[s][getfield(ids, param)[ind]], constraint.lb + epsilon)
                 end
             end
         else
@@ -751,26 +728,26 @@ function enforce_bounds!{NumType <: Number}(
                 constraint = constraint_vec[col]
                 param_sum = zero(NumType)
                 for row in 1:param_size[1]
-                    if !(constraint.lower_bound <= vp[s][getfield(ids, param)[row, col]] <= 1.0)
+                    if !(constraint.lb <= vp[s][getfield(ids, param)[row, col]] <= 1.0)
                         # Don't set the value to exactly the lower bound to avoid Inf
-                        epsilon = (1.0 - constraint.lower_bound) * 1e-12
+                        epsilon = (1.0 - constraint.lb) * 1e-12
                         vp[s][getfield(ids, param)[row, col]] =
                             min(vp[s][getfield(ids, param)[row, col]], 1.0 - epsilon)
                         vp[s][getfield(ids, param)[row, col]] =
                             max(vp[s][getfield(ids, param)[row, col]],
-                                    constraint.lower_bound + epsilon)
+                                    constraint.lb + epsilon)
                     end
                     param_sum += vp[s][getfield(ids, param)[row, col]]
                 end
                 if param_sum != 1.0
                     # Normalize in a way that maintains the lower bounds
                     rescale =
-                      (1 - constraint.n * constraint.lower_bound) /
-                      (param_sum - constraint.n * constraint.lower_bound)
+                      (1 - constraint.n * constraint.lb) /
+                      (param_sum - constraint.n * constraint.lb)
                     vp[s][getfield(ids, param)[:, col]] =
-                      constraint.lower_bound +
+                      constraint.lb +
                       rescale * (vp[s][getfield(ids, param)[:, col]] -
-                                 constraint.lower_bound)
+                                 constraint.lb)
                 end
             end
         end
