@@ -323,7 +323,7 @@ end
 function optimize_source(s::Int64, images::Garray, catalog::Garray,
                          catalog_offset::Garray, rcf_to_index::Array{Int64,3},
                          rcf_cache::Dict, rcf_cache_lock::SpinLock,
-                         stagedir::String, results::Garray)
+                         stagedir::String)
     lock(rcf_cache_lock)
     ep, ep_handle = get(catalog, [s], [s])
     unlock(rcf_cache_lock)
@@ -381,8 +381,12 @@ end
 
 
 function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
-            rcf_to_index, stagedir, results, timing)
+            rcf_to_index, stagedir, timing)
     num_work_items = length(tasks)
+
+    # inference results
+    results = Vector{InferResult}()
+    results_lock = SpinLock()
 
     # cache for RCF data
     rcf_cache = Dict{RunCamcolField,
@@ -432,11 +436,11 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
                 ntputs(nodeid, tid, "processing source $item")
 
                 result = optimize_source(item, images, catalog, catalog_offset,
-                                rcf_to_index, rcf_cache, rcf_cache_lock,
-                                stagedir, results)
-                lock(rcf_cache_lock)
-                put!(results, [taskidx], [taskidx], [result])
-                unlock(rcf_cache_lock)
+                                 rcf_to_index, rcf_cache, rcf_cache_lock,
+                                 stagedir)
+                lock(results_lock)
+                push!(results, result)
+                unlock(results_lock)
             end
         end
     end
@@ -453,6 +457,8 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
     tic()
     finalize(dt)
     timing.wait_done = toq()
+
+    return results
 end
 
 
@@ -485,21 +491,15 @@ function divide_sources_and_infer(
         # create map from run, camcol, field to index into RCF array
         rcf_to_index = invert_rcf_array(rcfs)
 
-        # inference results are written here
-        results = Garray(InferResult, 350, length(tasks))
-
         # optimization -- little disk access, cpu intensive
         timing.num_srcs = length(tasks)
-        optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
-                rcf_to_index, stagedir, results, timing)
+        results = optimize_sources(images, catalog, tasks,
+                                   catalog_offset, task_offset,
+                                   rcf_to_index, stagedir, timing)
 
-        rlo, rhi = distribution(results, nodeid)
-        lresults = access(results, rlo, rhi)
         tic()
-        save_results(outdir, box, lresults)
+        save_results(outdir, box, results)
         timing.write_results = toq()
-
-        finalize(results)
     end
 
     finalize(tasks)
