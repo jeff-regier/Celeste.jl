@@ -262,9 +262,10 @@ function load_field_images(ft::RunCamcolField, datadir::String)
         # read the psf
         sdsspsf = read_psf(psffile, band)
 
-        # evalute the psf in the center of the image and then fit it.
+        # evalute the psf in the center of the image and then fit it with
+        # two components.
         psfstamp = sdsspsf(H / 2., W / 2.)
-        psf = PSF.fit_raw_psf_for_celeste(psfstamp)[1]
+        psf = PSF.fit_raw_psf_for_celeste(psfstamp, 2)[1]
 
         # For now, use the median noise and sky.  Here,
         # epsilon * iota needs to be in units comparable to nelec

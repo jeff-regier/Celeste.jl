@@ -25,7 +25,7 @@ function get_source_psf(world_loc::Vector{Float64}, img::TiledImage, psf_K::Int)
     else
         pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
         psfstamp = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
-        return PSF.fit_raw_psf_for_celeste(psfstamp)
+        return PSF.fit_raw_psf_for_celeste(psfstamp, psf_K)
     end
 end
 
@@ -60,7 +60,8 @@ function test_blob()
     pixel_loc = WCS.world_to_pix(img.wcs, obj_loc);
     original_psf_val = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
 
-    original_psf_celeste = PSF.fit_raw_psf_for_celeste(original_psf_val)[1];
+    original_psf_celeste =
+        PSF.fit_raw_psf_for_celeste(original_psf_val, ea.psf_K)[1];
     fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste);
 
     obj_psf = get_source_psf(ea_obj.vp[1][ids.u], img, ea.psf_K)[1];

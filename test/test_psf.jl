@@ -247,14 +247,15 @@ function test_psf_optimizer()
   # Could this test be tighter?
   @test 0.0 < nm_result.f_minimum < 1e-3
 
-  celeste_psf = fit_raw_psf_for_celeste(raw_psf)[1]
+  celeste_psf = fit_raw_psf_for_celeste(raw_psf, K)[1]
   rendered_psf = get_psf_at_point(celeste_psf);
 
   @test_approx_eq nm_result.f_minimum sum((raw_psf - rendered_psf) .^ 2)
 
   # Make sure that re-using the optimizer gets the same results.
   raw_psf_10_10 = load_raw_psf(x=10., y=10.);
-  celeste_psf_10_10_v1, psf_params_10_10_v1 = fit_raw_psf_for_celeste(raw_psf_10_10)
+  celeste_psf_10_10_v1, psf_params_10_10_v1 =
+    fit_raw_psf_for_celeste(raw_psf_10_10, K)
   celeste_psf_10_10_v2, psf_params_10_10_v2 =
     fit_raw_psf_for_celeste(raw_psf_10_10, psf_optimizer, psf_params)
   for k=1:K
