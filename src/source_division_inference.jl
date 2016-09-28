@@ -186,7 +186,7 @@ function load_images(box, rcfs, stagedir)
     lcatalog_offset = access(catalog_offset, lo, hi)
     ltask_offset = access(task_offset, lo, hi)
 
-    for i in 1:nlocal
+    @time for i in 1:nlocal
         n = lo[1] + i - 1
         rcf = rcfs[n]
 
@@ -213,7 +213,9 @@ function load_images(box, rcfs, stagedir)
     flush(images)
     flush(catalog_offset)
     flush(task_offset)
+    gc()
     sync()
+
     lcatalog_offset = access(catalog_offset, lo, hi)
     ltask_offset = access(task_offset, lo, hi)
 
@@ -293,7 +295,12 @@ function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
             cat_idx = cat_idx + 1
         end
     end
+    sync()
 
+nputs(nodeid, cat_idx)
+nputs(nodeid, task_idx)
+w, wh = get(tasks, [265], [352])
+nputs(nodeid, w)
     catalog, tasks
 end
 
@@ -423,9 +430,9 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
                 if widx > numwi
                     ntputs(nodeid, tid, "consumed last work item; requesting more")
                     numwi, (startwi, endwi) = getwork(dt)
+                    ntputs(nodeid, tid, "got $numwi work items ($startwi-$endwi)")
                     workitems, wi_handle = get(tasks, [startwi], [endwi])
                     widx = 1
-                    ntputs(nodeid, tid, "got $numwi work items ($startwi-$endwi)")
                     unlock(wilock)
                     continue
                 end
@@ -462,6 +469,30 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
 end
 
 
+function set_thread_affinity(nid::Int, ppn::Int, tid::Int, nthreads::Int)
+    cpu = (((nid - 1) % ppn) * nthreads) + 1
+    mask = zeros(UInt8, 4096)
+    mask[cpu] = 1
+    uvtid = ccall(:uv_thread_self, UInt64, ())
+    ccall(:uv_thread_setaffinity, Int, (Ptr{Void}, Ptr{Void}, Ptr{Void}, Int64),
+          pointer_from_objref(uvtid), mask, C_NULL, 4096)
+end
+
+
+function affinitize()
+    ppn = try
+        parse(Int, ENV["JULIA_EXCLUSIVE"])
+    catch exc
+        return
+    end
+    function threadfun()
+        set_thread_affinity(nodeid, ppn,
+                            Base.Threads.threadid(), Base.Threads.nthreads())
+    end
+    ccall(:jl_threading_run, Void, (Any,), Core.svec(threadfun))
+end
+
+
 """
 Fit the Celeste model to sources in a given ra, dec range,
 based on data from specified fields
@@ -472,6 +503,8 @@ function divide_sources_and_infer(
                 stagedir::String;
                 timing=InferTiming(),
                 outdir=".")
+    affinitize()
+
     # read the run-camcol-field triplets for this box
     tic()
     rcfs = get_overlapping_fields(box, stagedir)
@@ -482,10 +515,22 @@ function divide_sources_and_infer(
     images, catalog_offset, task_offset = load_images(box, rcfs, stagedir)
     timing.read_img = toq()
 
+    try
+        t = ENV["CELESTE_EXIT_AFTER_LOAD_IMAGES"]
+        exit()
+    catch exc
+    end
+
     # loads 4TB from disk for SDSS
     tic()
     catalog, tasks = load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     timing.read_photoobj = toq()
+
+    try
+        t = ENV["CELESTE_EXIT_AFTER_LOAD_CATALOG"]
+        exit()
+    catch exc
+    end
 
     if length(tasks) > 0
         # create map from run, camcol, field to index into RCF array
@@ -508,5 +553,4 @@ function divide_sources_and_infer(
     finalize(catalog_offset)
     finalize(images)
 end
-
 
