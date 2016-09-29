@@ -224,7 +224,7 @@ function populate_fsm_vecs!{NumType <: Number}(
         active_source = s in active_sources
 
         calculate_hessian =
-            mv_calculate_hessian && calculate_derivs && active_source
+            mv_calculate_hessian && mv_calculate_derivs && active_source
         clear!(fs0m_vec[s], calculate_hessian)
         for k = 1:psf_K # PSF component
             if (num_allowed_sd == Inf ||

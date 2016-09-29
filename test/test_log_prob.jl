@@ -33,7 +33,7 @@ function test_that_star_truth_is_most_likely()
     star_logpdf, star_logprior =
         Model.make_star_logpdf(ea.images, active_pixels, ea.S, ea.N,
                                ea.vp, ea.tile_source_map,
-                               ea.patches, ea.active_sources)
+                               ea.patches, ea.active_sources, ea.psf_K, ea.num_allowed_sd)
 
     ## convert ea.vp[1] to star state, and cache elbo args
     star_state = Model.elbo_args_vp_to_star_state(ea.vp[1])

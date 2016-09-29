@@ -253,7 +253,8 @@ function populate_fsm_vecs!{NumType <: Number}(
                              elbo_vars.fs1m_vec,
                              elbo_vars.calculate_derivs,
                              elbo_vars.calculate_hessian,
-                             ea.patches, ea.active_sources, ea.psf_K,
+                             ea.patches, ea.active_sources,
+                             ea.psf_K, ea.num_allowed_sd,
                              tile_sources, tile, h, w, gal_mcs, star_mcs)
 end
 
