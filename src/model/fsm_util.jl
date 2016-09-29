@@ -90,30 +90,10 @@ type ModelIntermediateVariables{NumType <: Number}
     fs0m_vec::Vector{SensitiveFloat{StarPosParams, NumType}}
     fs1m_vec::Vector{SensitiveFloat{GalaxyPosParams, NumType}}
 
-    # Brightness values for a single source
-    E_G_s::SensitiveFloat{CanonicalParams, NumType}
-    E_G2_s::SensitiveFloat{CanonicalParams, NumType}
-    var_G_s::SensitiveFloat{CanonicalParams, NumType}
-
-    # Subsets of the Hessian of E_G_s and E_G2_s that allow us to use BLAS
-    # functions to accumulate Hessian terms. There is one submatrix for
-    # each celestial object type in 1:Ia
-    #E_G_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
-    #E_G2_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
-
-    # Expected pixel intensity and variance for a pixel from all sources.
-    E_G::SensitiveFloat{CanonicalParams, NumType}
-    var_G::SensitiveFloat{CanonicalParams, NumType}
 
     # Pre-allocated memory for the gradient and Hessian of combine functions.
     combine_grad::Vector{NumType}
     combine_hess::Matrix{NumType}
-
-    # A placeholder for the log term in the ELBO.
-    elbo_log_term::SensitiveFloat{CanonicalParams, NumType}
-
-    # The ELBO itself.
-    elbo::SensitiveFloat{CanonicalParams, NumType}
 
     # If false, do not calculate hessians or derivatives.
     calculate_derivs::Bool
@@ -149,32 +129,13 @@ function ModelIntermediateVariables(NumType::DataType,
         fs1m_vec[s] = zero_sensitive_float(GalaxyPosParams, NumType)
     end
 
-    E_G_s = zero_sensitive_float(CanonicalParams, NumType, 1)
-    E_G2_s = zero_sensitive_float(CanonicalParams, NumType, 1)
-    var_G_s = zero_sensitive_float(CanonicalParams, NumType, 1)
-
-    #E_G_s_hsub_vec =
-    #    HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
-    #E_G2_s_hsub_vec =
-    #    HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
-
-    E_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-    var_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-
     combine_grad = zeros(NumType, 2)
     combine_hess = zeros(NumType, 2, 2)
 
-    elbo_log_term =
-        zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-    elbo = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-
     ModelIntermediateVariables{NumType}(
         bvn_derivs, fs0m_vec, fs1m_vec,
-        E_G_s, E_G2_s,
-        var_G_s,
-        #E_G_s_hsub_vec, E_G2_s_hsub_vec,
-        E_G, var_G, combine_grad, combine_hess,
-        elbo_log_term, elbo, calculate_derivs, calculate_hessian)
+        combine_grad, combine_hess,
+        calculate_derivs, calculate_hessian)
 end
 
 
