@@ -222,7 +222,8 @@ Args:
     - bmc: The component to be added
     - x: An offset for the component in pixel coordinates (e.g. a pixel location)
     - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-    - calculate_derivs: Whether to calculate derivatives.
+    - is_active_source: Whether it is an active source, (i.e. whether to
+                        calculate derivatives if requested.)
 
 Returns:
     Updates elbo_vars.fs0m_vec[s] in place.
@@ -233,17 +234,17 @@ function accum_star_pos!{NumType <: Number}(
                     bmc::BvnComponent{NumType},
                     x::Vector{Float64},
                     wcs_jacobian::Array{Float64, 2},
-                    calculate_derivs::Bool)
+                    is_active_source::Bool)
     eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x)
 
-    if elbo_vars.calculate_derivs && calculate_derivs
+    if elbo_vars.calculate_derivs && is_active_source
         get_bvn_derivs!(elbo_vars.bvn_derivs, bmc, true, false)
     end
 
     fs0m = elbo_vars.fs0m_vec[s]
     fs0m.v[1] += elbo_vars.bvn_derivs.f_pre[1]
 
-    if elbo_vars.calculate_derivs && calculate_derivs
+    if elbo_vars.calculate_derivs && is_active_source
         transform_bvn_ux_derivs!(
             elbo_vars.bvn_derivs, wcs_jacobian, elbo_vars.calculate_hessian)
         bvn_u_d = elbo_vars.bvn_derivs.bvn_u_d
@@ -277,7 +278,8 @@ Args:
     - gcc: The galaxy component to be added
     - x: An offset for the component in pixel coordinates (e.g. a pixel location)
     - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-    - calculate_derivs: Whether to calculate derivatives.
+    - is_active_source: Whether it is an active source, (i.e. whether to
+                        calculate derivatives if requested.)
 
 Returns:
     Updates elbo_vars.fs1m_vec[s] in place.
@@ -288,13 +290,13 @@ function accum_galaxy_pos!{NumType <: Number}(
                     gcc::GalaxyCacheComponent{NumType},
                     x::Vector{Float64},
                     wcs_jacobian::Array{Float64, 2},
-                    calculate_derivs::Bool)
+                    is_active_source::Bool)
     eval_bvn_pdf!(elbo_vars.bvn_derivs, gcc.bmc, x)
     f = elbo_vars.bvn_derivs.f_pre[1] * gcc.e_dev_i
     fs1m = elbo_vars.fs1m_vec[s]
     fs1m.v[1] += f
 
-    if elbo_vars.calculate_derivs && calculate_derivs
+    if elbo_vars.calculate_derivs && is_active_source
 
         get_bvn_derivs!(elbo_vars.bvn_derivs, gcc.bmc,
             elbo_vars.calculate_hessian, elbo_vars.calculate_hessian)
@@ -367,7 +369,7 @@ function accum_galaxy_pos!{NumType <: Number}(
                 fs1m.h[devi, si] = fs1m.h[si, devi]
             end
         end # if calculate hessian
-    end # if calculate_derivs
+    end # if is_active_source
 end
 
 
