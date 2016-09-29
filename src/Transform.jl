@@ -39,8 +39,9 @@ the last entry implicitly has the untransformed value 1.
 """
 function constrain_to_simplex{NumType <: Number}(x::Vector{NumType})
     if any(x .== Inf)
-        # Is there a bug here? If more than 1 entry in x is Inf, that just means
-        # that the last entry in z is 0, not the both entries in z are the same.
+        # If more than 1 entry in x is Inf, it may be because the
+        # the last entry in z is 0. Here we set all those entries to the
+        # same value, though that may not be strictly correct.
         z = NumType[ x_entry .== Inf ? one(NumType) : zero(NumType) for x_entry in x]
         z ./ sum(z)
         push!(z, 0)
