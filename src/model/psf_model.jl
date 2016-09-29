@@ -1,7 +1,3 @@
-# The number of Gaussian components in the PSF.
-const psf_K = 2
-
-
 """
 A single normal component of the point spread function.
 All quantities are in pixel coordinates.
@@ -86,5 +82,3 @@ function get_psf_width(psf::Array{PsfComponent}; width_scale=1.0)
     # mass in the PSF.
     width_scale * sqrt(eigvals(cov_est)[end]) * alpha_norm
 end
-
-

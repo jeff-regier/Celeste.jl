@@ -29,9 +29,53 @@ function load_bvn_mixtures{NumType <: Number}(
                     patches::Matrix{SkyPatch},
                     vp::VariationalParams{NumType},
                     active_sources::Vector{Int},
+                    psf_K::Int64,
                     b::Int;
                     calculate_derivs::Bool=true,
                     calculate_hessian::Bool=true)
+    star_mcs = Array(BvnComponent{NumType}, psf_K, S)
+    gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, S)
+
+    # TODO: do not keep any derviative information if the sources are not in
+    # active_sources.
+    for s in 1:S
+        psf = patches[s, b].psf
+        vs = vp[s]
+
+        world_loc = vs[[ids.u[1], ids.u[2]]]
+        m_pos = Model.linear_world_to_pix(patches[s, b].wcs_jacobian,
+                                          patches[s, b].center,
+                                          patches[s, b].pixel_center, world_loc)
+
+        # Convolve the star locations with the PSF.
+        for k in 1:psf_K
+            pc = psf[k]
+            mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
+            star_mcs[k, s] =
+              BvnComponent{NumType}(
+                mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
+        end
+
+        # Convolve the galaxy representations with the PSF.
+        for i = 1:2 # i indexes dev vs exp galaxy types.
+            e_dev_dir = (i == 1) ? 1. : -1.
+            e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
+
+            # Galaxies of type 1 have 8 components, and type 2 have 6 components.
+            for j in 1:[8,6][i]
+                for k = 1:psf_K
+                    gal_mcs[k, j, i, s] = GalaxyCacheComponent(
+                        e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
+                        m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],
+                        calculate_derivs && (s in active_sources),
+                        calculate_hessian)
+                end
+            end
+        end
+    end
+
+    star_mcs, gal_mcs
+
 
     star_mcs = Array(BvnComponent{NumType}, psf_K, S)
     gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, S)
@@ -164,11 +208,14 @@ function populate_fsm_vecs!{NumType <: Number}(
                     mv_calculate_hessian::Bool,
                     patches::Matrix{SkyPatch},
                     active_sources::Vector{Int},
+                    psf_K::Int64,
+                    num_allowed_sd::Float64,
                     tile_sources::Vector{Int},
                     tile::ImageTile,
                     h::Int, w::Int,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
+
     x = Float64[tile.h_range[h], tile.w_range[w]]
     for s in tile_sources
         # ensure tile.b is a filter band, not an image's index
@@ -177,14 +224,17 @@ function populate_fsm_vecs!{NumType <: Number}(
         active_source = s in active_sources
 
         calculate_hessian =
-            mv_calculate_hessian && mv_calculate_derivs && active_source
+            mv_calculate_hessian && calculate_derivs && active_source
         clear!(fs0m_vec[s], calculate_hessian)
         for k = 1:psf_K # PSF component
-            accum_star_pos!(bvn_derivs,
-                            fs0m_vec,
-                            mv_calculate_derivs && active_source,
-                            mv_calculate_hessian,
-                            s, star_mcs[k, s], x, wcs_jacobian)
+            if (num_allowed_sd == Inf ||
+                check_point_close_to_bvn(star_mcs[k, s], x, num_allowed_sd))
+                accum_star_pos!(
+                    bvn_derivs, fs0m_vec,
+                    mv_calculate_derivs,
+                    mv_calculate_hessian,
+                    s, star_mcs[k, s], x, wcs_jacobian, active_source)
+            end
         end
 
         clear!(fs1m_vec[s], calculate_hessian)
@@ -193,12 +243,16 @@ function populate_fsm_vecs!{NumType <: Number}(
                 # If i == 2 then there are only six galaxy components.
                 if (i == 1) || (j <= 6)
                     for k = 1:psf_K # PSF component
-                        accum_galaxy_pos!(
-                            bvn_derivs,
-                            fs1m_vec,
-                            mv_calculate_derivs && active_source,
-                            mv_calculate_hessian,
-                            s, gal_mcs[k, j, i, s], x, wcs_jacobian)
+                        if (num_allowed_sd == Inf ||
+                            check_point_close_to_bvn(
+                                gal_mcs[k, j, i, s].bmc, x, num_allowed_sd))
+                            accum_galaxy_pos!(
+                                bvn_derivs, fs1m_vec,
+                                mv_calculate_derivs,
+                                mv_calculate_hessian,
+                                s, gal_mcs[k, j, i, s], x, wcs_jacobian,
+                                active_source)
+                        end
                     end
                 end
             end
@@ -211,6 +265,8 @@ function populate_fsm_vecs!{NumType <: Number}(
                     model_vars::ModelIntermediateVariables{NumType},
                     patches::Matrix{SkyPatch},
                     active_sources::Vector{Int},
+                    psf_K::Int64,
+                    num_allowed_sd::Float64,
                     tile_sources::Vector{Int},
                     tile::ImageTile,
                     h::Int, w::Int,
@@ -221,7 +277,8 @@ function populate_fsm_vecs!{NumType <: Number}(
                              model_vars.fs1m_vec,
                              model_vars.calculate_derivs,
                              model_vars.calculate_hessian,
-                             patches, active_sources, tile_sources,
+                             patches, active_sources, psf_K, num_allowed_sd,
+                             tile_sources,
                              tile, h, w, gal_mcs, star_mcs)
 end
 
@@ -251,19 +308,19 @@ function accum_star_pos!{NumType <: Number}(
                     s::Int,
                     bmc::BvnComponent{NumType},
                     x::Vector{Float64},
-                    wcs_jacobian::Array{Float64, 2})
+                    wcs_jacobian::Array{Float64, 2},
+                    is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, bmc, x)
 
-    # TODO: Also make a version that doesn't calculate any derivatives
-    # if the object isn't in active_sources.
-    get_bvn_derivs!(bvn_derivs, bmc, true, false)
+    if calculate_derivs && is_active_source
+        get_bvn_derivs!(bvn_derivs, bmc, true, false)
+    end
 
     fs0m = fs0m_vec[s]
     fs0m.v[1] += bvn_derivs.f_pre[1]
 
-    if calculate_derivs
-        transform_bvn_ux_derivs!(
-            bvn_derivs, wcs_jacobian, calculate_hessian)
+    if calculate_derivs && is_active_source
+        transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, calculate_hessian)
         bvn_u_d = bvn_derivs.bvn_u_d
         bvn_uu_h = bvn_derivs.bvn_uu_h
 
@@ -290,7 +347,6 @@ Add the contributions of a galaxy component term to the ELBO by
 updating fs1m in place.
 
 Args:
-    - elbo_vars: Elbo intermediate variables
     - s: The index of the current source in 1:S
     - gcc: The galaxy component to be added
     - x: An offset for the component in pixel coordinates (e.g. a pixel location)
@@ -308,13 +364,14 @@ function accum_galaxy_pos!{NumType <: Number}(
                     s::Int,
                     gcc::GalaxyCacheComponent{NumType},
                     x::Vector{Float64},
-                    wcs_jacobian::Array{Float64, 2})
+                    wcs_jacobian::Array{Float64, 2},
+                    is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, gcc.bmc, x)
     f = bvn_derivs.f_pre[1] * gcc.e_dev_i
     fs1m = fs1m_vec[s]
     fs1m.v[1] += f
 
-    if calculate_derivs
+    if calculate_derivs && is_active_source
 
         get_bvn_derivs!(bvn_derivs, gcc.bmc,
             calculate_hessian, calculate_hessian)
@@ -387,7 +444,6 @@ function accum_galaxy_pos!{NumType <: Number}(
                 fs1m.h[devi, si] = fs1m.h[si, devi]
             end
         end # if calculate hessian
-    end # if calculate_derivs
+    end # if is_active_source
+
 end
-
-

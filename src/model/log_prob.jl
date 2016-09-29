@@ -33,7 +33,9 @@ function make_star_logpdf(images::Vector{TiledImage},
                           vp::VariationalParams{Float64},
                           tile_source_map::Vector{Matrix{Vector{Int}}},
                           patches::Matrix{SkyPatch},
-                          active_sources::Vector{Int})
+                          active_sources::Vector{Int},
+                          psf_K::Int64,
+                          num_allowed_sd::Float64)
 
     # define star prior log probability density function
     prior    = construct_prior()
@@ -53,7 +55,9 @@ function make_star_logpdf(images::Vector{TiledImage},
                                         dummy_gal_shape, images,
                                         active_pixels, 
                                         patches,
-                                        active_sources, vp,
+                                        active_sources,
+                                        psf_K, num_allowed_sd,
+                                        vp,
                                         tile_source_map, S, N)
         return ll_like + ll_prior
     end
@@ -61,55 +65,66 @@ function make_star_logpdf(images::Vector{TiledImage},
 end
 
 
-#"""
-#Creates a vectorized version of a galaxy logpdf as a function of
-#unconstrained params
-#    gal_params = [lnr, lnc1, ..., lnc4, ra, dec, shp1, shp2, shp3, shp4]
-#where the flux and position params are the same as the star case, and the
-#shape params are unconstrained versions of (gdev, gaxis, gangle, gscale)
-#Args:
-#  - images: Vector of TiledImage types (data for log_likelihood)
-#  - active_pixels: Vector of ActivePixels on which the log_likelihood is based
-#  - ea: ElboArgs book keeping argument
-#Returns:
-#  - gal_logpdf  : unnormalized logpdf function handle that takes in a flat,
-#                 unconstrained array as parameter
-#  - gal_logprior: star param log prior function handle that takes in same
-#                 flat, unconstrained array as parameter
-#"""
-#function make_galaxy_logpdf(images::Vector{TiledImage},
-#                            active_pixels::Vector{ActivePixel},
-#                            ea::ElboArgs)
-#
-#    # define star prior log probability density function
-#    prior    = construct_prior()
-#    subprior = prior.galaxy
-#
-#    function galaxy_logprior(state::Vector{Float64})
-#        brightness, colors, u, gal_shape =
-#            state[1], state[2:5], state[6:7], state[8:end]
-#
-#        # brightness prior
-#        ll_b = color_logprior(brightness, colors, prior, true)
-#        ll_s = shape_logprior(constrain_gal_shape(gal_shape), prior)
-#        return ll_b + ll_s
-#    end
-#
-#    # define star log joint probability density function
-#    function galaxy_logpdf(state::Vector{Float64})
-#        ll_prior = galaxy_logprior(state)
-#
-#        brightness, colors, position, gal_shape =
-#            state[1], state[2:5], state[6:7], state[8:end]
-#
-#        ll_like  = state_log_likelihood(false, brightness, colors, position,
-#                                        constrain_gal_shape(gal_shape), images,
-#                                        active_pixels, ea)
-#        return ll_like + ll_prior
-#    end
-#
-#    return galaxy_logpdf, galaxy_logprior
-#end
+"""
+Creates a vectorized version of a galaxy logpdf as a function of
+unconstrained params
+    gal_params = [lnr, lnc1, ..., lnc4, ra, dec, shp1, shp2, shp3, shp4]
+where the flux and position params are the same as the star case, and the
+shape params are unconstrained versions of (gdev, gaxis, gangle, gscale)
+Args:
+  - images: Vector of TiledImage types (data for log_likelihood)
+  - active_pixels: Vector of ActivePixels on which the log_likelihood is based
+  - ea: ElboArgs book keeping argument
+Returns:
+  - gal_logpdf  : unnormalized logpdf function handle that takes in a flat,
+                 unconstrained array as parameter
+  - gal_logprior: star param log prior function handle that takes in same
+                 flat, unconstrained array as parameter
+"""
+function make_galaxy_logpdf(images::Vector{TiledImage},
+                            active_pixels::Vector{ActivePixel},
+                            S::Int64,
+                            N::Int64,
+                            vp::VariationalParams{Float64},
+                            tile_source_map::Vector{Matrix{Vector{Int}}},
+                            patches::Matrix{SkyPatch},
+                            active_sources::Vector{Int},
+                            psf_K::Int64,
+                            num_allowed_sd::Float64)
+
+    # define star prior log probability density function
+    prior    = construct_prior()
+    subprior = prior.galaxy
+
+    function galaxy_logprior(state::Vector{Float64})
+        brightness, colors, u, gal_shape =
+            state[1], state[2:5], state[6:7], state[8:end]
+
+        # brightness prior
+        ll_b = color_logprior(brightness, colors, prior, true)
+        ll_s = shape_logprior(constrain_gal_shape(gal_shape), prior)
+        return ll_b + ll_s
+    end
+
+    # define star log joint probability density function
+    function galaxy_logpdf(state::Vector{Float64})
+        ll_prior = galaxy_logprior(state)
+
+        brightness, colors, position, gal_shape =
+            state[1], state[2:5], state[6:7], state[8:end]
+
+        ll_like  = state_log_likelihood(false, brightness, colors, position,
+                                        constrain_gal_shape(gal_shape), images,
+                                        active_pixels,
+                                        patches,
+                                        active_sources, psf_K, num_allowed_sd,
+                                        vp,
+                                        tile_source_map, S, N)
+        return ll_like + ll_prior
+    end
+
+    return galaxy_logpdf, galaxy_logprior
+end
 
 
 """
@@ -137,6 +152,8 @@ function state_log_likelihood(is_star::Bool,
                               active_pixels::Vector{ActivePixel},
                               patches::Matrix{SkyPatch},  # formerly of ElboArgs
                               active_sources::Vector{Int},
+                              psf_K::Int64,
+                              num_allowed_sd::Float64,
                               vp::VariationalParams{Float64},
                               tile_source_map::Vector{Matrix{Vector{Int}}},
                               S::Int64,
@@ -168,8 +185,7 @@ function state_log_likelihood(is_star::Bool,
     gal_mcs_vec  = Array(Array{GalaxyCacheComponent{Float64}, 4}, N)
     for b=1:N
         star_mcs_vec[b], gal_mcs_vec[b] =
-            load_bvn_mixtures(S, patches, vp, active_sources,
-                              b,
+            load_bvn_mixtures(S, patches, vp, active_sources, psf_K, b,
                               calculate_derivs=model_vars.calculate_derivs,
                               calculate_hessian=model_vars.calculate_hessian)
     end
@@ -184,6 +200,7 @@ function state_log_likelihood(is_star::Bool,
 
         # compute the unit-flux pixel values
         populate_fsm_vecs!(model_vars, patches, active_sources,
+                           psf_K, num_allowed_sd,
                            tile_sources, tile,
                            pixel.h, pixel.w,
                            gal_mcs_vec[pixel.n], star_mcs_vec[pixel.n])

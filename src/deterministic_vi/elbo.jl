@@ -26,9 +26,10 @@ function load_bvn_mixtures{NumType <: Number}(
                     calculate_derivs::Bool=true,
                     calculate_hessian::Bool=true)
     # call bvn loader from the Model Module
-    Model.load_bvn_mixtures(ea.S, ea.patches, ea.vp, ea.active_sources, b,
-                      calculate_derivs=calculate_derivs,
-                      calculate_hessian=calculate_hessian)
+    Model.load_bvn_mixtures(ea.S, ea.patches, ea.vp, ea.active_sources,
+                            ea.psf_K, b,
+                            calculate_derivs=calculate_derivs,
+                            calculate_hessian=calculate_hessian)
 end
 
 
@@ -169,7 +170,8 @@ Args:
     - bmc: The component to be added
     - x: An offset for the component in pixel coordinates (e.g. a pixel location)
     - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-    - calculate_derivs: Whether to calculate derivatives.
+    - is_active_source: Whether it is an active source, (i.e. whether to
+                        calculate derivatives if requested.)
 
 Returns:
     Updates elbo_vars.fs0m_vec[s] in place.
@@ -180,13 +182,13 @@ function accum_star_pos!{NumType <: Number}(
                     bmc::BvnComponent{NumType},
                     x::Vector{Float64},
                     wcs_jacobian::Array{Float64, 2},
-                    calculate_derivs::Bool)
+                    is_active_source::Bool)
     # call accum star pos in model
     Model.accum_star_pos!(elbo_vars.bvn_derivs,
                     elbo_vars.fs0m_vec,
-                    elbo_vars.calculate_derivs && calculate_derivs,
+                    elbo_vars.calculate_derivs,
                     elbo_vars.calculate_hessian,
-                    s, bmc, x, wcs_jacobian)
+                    s, bmc, x, wcs_jacobian, is_active_source)
 end
 
 
@@ -200,7 +202,8 @@ Args:
     - gcc: The galaxy component to be added
     - x: An offset for the component in pixel coordinates (e.g. a pixel location)
     - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-    - calculate_derivs: Whether to calculate derivatives.
+    - is_active_source: Whether it is an active source, (i.e. whether to
+                        calculate derivatives if requested.)
 
 Returns:
     Updates elbo_vars.fs1m_vec[s] in place.
@@ -211,13 +214,13 @@ function accum_galaxy_pos!{NumType <: Number}(
                     gcc::GalaxyCacheComponent{NumType},
                     x::Vector{Float64},
                     wcs_jacobian::Array{Float64, 2},
-                    calculate_derivs::Bool)
+                    is_active_source::Bool)
     # call accum star pos in model
     Model.accum_galaxy_pos!(elbo_vars.bvn_derivs,
                             elbo_vars.fs1m_vec,
-                            elbo_vars.calculate_derivs && calculate_derivs,
+                            elbo_vars.calculate_derivs,
                             elbo_vars.calculate_hessian,
-                            s, gcc, x, wcs_jacobian)
+                            s, gcc, x, wcs_jacobian, is_active_source)
 end
 
 
@@ -250,7 +253,7 @@ function populate_fsm_vecs!{NumType <: Number}(
                              elbo_vars.fs1m_vec,
                              elbo_vars.calculate_derivs,
                              elbo_vars.calculate_hessian,
-                             ea.patches, ea.active_sources,
+                             ea.patches, ea.active_sources, ea.psf_K,
                              tile_sources, tile, h, w, gal_mcs, star_mcs)
 end
 
@@ -657,7 +660,6 @@ function process_active_pixels!{NumType <: Number}(
     gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType}, 4}, ea.N)
 
     for b=1:ea.N
-        # TODO: every elbo_vars should not get to decide its own calculate_*
         star_mcs_vec[b], gal_mcs_vec[b] =
             load_bvn_mixtures(ea, b,
                 calculate_derivs=elbo_vars.calculate_derivs,
@@ -811,4 +813,3 @@ function elbo{NumType <: Number}(
     subtract_kl!(ea, elbo, calculate_derivs=calculate_derivs)
     elbo
 end
-

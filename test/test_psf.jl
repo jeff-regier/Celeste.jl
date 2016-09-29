@@ -9,7 +9,7 @@ import Celeste.PSF: get_psf_at_point,
        transform_psf_sensitive_float!,
        PsfOptimizer, fit_raw_psf_for_celeste,
        BivariateNormalDerivatives
-       
+
 using ForwardDiff
 
 
@@ -21,18 +21,18 @@ respect to unconstrained parameters.
 Returns:
   - A sensitive float for the sum of squared differences.
 """
-function evaluate_psf_fit{NumType <: Number}( 
+function evaluate_psf_fit{NumType <: Number}(
     psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64},
     calculate_derivs::Bool)
 
   K = length(psf_params)
   x_mat = PSF.get_x_matrix_from_psf(raw_psf);
-  
+
   # TODO: allocate these outside?
   bvn_derivs = BivariateNormalDerivatives{NumType}(NumType);
   log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
   pdf = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, 1);
-  
+
   pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
   squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, NumType, K);
 
@@ -51,7 +51,7 @@ function load_raw_psf(; x::Float64=500., y::Float64=500.)
   b = 3
 
   psf_filename =
-    @sprintf("%s/%s/%s/%s/psField-%06d-%d-%04d.fit", 
+    @sprintf("%s/%s/%s/%s/psField-%06d-%d-%04d.fit",
         datadir, run_num, camcol_num, field_num,
                  run_num, camcol_num, field_num)
   psf_fits = FITSIO.FITS(psf_filename);
@@ -235,7 +235,7 @@ end
 function test_psf_optimizer()
   raw_psf = load_raw_psf();
 
-  K = psf_K
+  K = 2
   psf_params = initialize_psf_params(K, for_test=false);
   psf_transform = get_psf_transform(psf_params);
   psf_optimizer = PsfOptimizer(psf_transform, K);
@@ -247,14 +247,15 @@ function test_psf_optimizer()
   # Could this test be tighter?
   @test 0.0 < nm_result.f_minimum < 1e-3
 
-  celeste_psf = fit_raw_psf_for_celeste(raw_psf)[1]
+  celeste_psf = fit_raw_psf_for_celeste(raw_psf, K)[1]
   rendered_psf = get_psf_at_point(celeste_psf);
 
   @test_approx_eq nm_result.f_minimum sum((raw_psf - rendered_psf) .^ 2)
 
   # Make sure that re-using the optimizer gets the same results.
   raw_psf_10_10 = load_raw_psf(x=10., y=10.);
-  celeste_psf_10_10_v1, psf_params_10_10_v1 = fit_raw_psf_for_celeste(raw_psf_10_10)
+  celeste_psf_10_10_v1, psf_params_10_10_v1 =
+    fit_raw_psf_for_celeste(raw_psf_10_10, K)
   celeste_psf_10_10_v2, psf_params_10_10_v2 =
     fit_raw_psf_for_celeste(raw_psf_10_10, psf_optimizer, psf_params)
   for k=1:K
