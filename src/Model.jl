@@ -57,4 +57,10 @@ include("model/pixels.jl")
 typealias VariationalParams{NumType <: Number} Vector{Vector{NumType}}
 typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 
+
+import ..SensitiveFloats: SensitiveFloat
+include("bivariate_normals.jl")
+include("model/fsm_util.jl")
+include("model/log_prob.jl")
+
 end  # module
