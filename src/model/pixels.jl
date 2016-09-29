@@ -20,7 +20,7 @@ Get the active pixels (pixels for which the active sources are present).
 TODO: move this to pre-processing and use it instead of setting low-signal
 pixels to NaN.
 """
-function get_active_pixels{NumType <: Number}(
+function get_active_pixels(
                       N::Int64,
                       images::Vector{TiledImage},
                       tile_source_map::Vector{Matrix{Vector{Int}}},
