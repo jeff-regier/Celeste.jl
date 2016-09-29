@@ -86,7 +86,7 @@ function test_derivative_flags()
     elbo = DeterministicVI.elbo(ea)
 
     elbo_noderiv = DeterministicVI.elbo(ea; calculate_derivs=false)
-    @test_approx_eq elbo.v[1] elbo_noderiv.v
+    @test_approx_eq elbo.v[1] elbo_noderiv.v[1]
     @test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
     @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
 
@@ -458,6 +458,21 @@ function test_trim_source_tiles()
       end
       @test total_nonempty_pixels == 0.0
   end
+end
+
+
+function test_num_allowed_sd()
+    blob, ea, body = gen_two_body_dataset()
+
+    ea.num_allowed_sd = Inf
+    elbo_inf = DeterministicVI.elbo(ea)
+
+    ea.num_allowed_sd = 3
+    elbo_4sd = DeterministicVI.elbo(ea)
+
+    @test_approx_eq elbo_inf.v[1] elbo_4sd.v[1]
+    @test_approx_eq elbo_inf.d elbo_4sd.d
+    @test_approx_eq elbo_inf.h elbo_4sd.h
 end
 
 
