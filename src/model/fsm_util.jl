@@ -1,14 +1,17 @@
-#TODO RE Document this function
 """
 Convolve the current locations and galaxy shapes with the PSF.  If
 calculate_derivs is true, also calculate derivatives and hessians for
 active sources.
 
 Args:
+ - S (formerly from ElboArgs)
+ - patches (formerly from ElboArgs)
+ - vp: (formerly from ElboArgs)
+ - active_sources (formerly from ElboArgs)
  - psf: A vector of PSF components
- - ea: The current ElboArgs
  - b: The current band
  - calculate_derivs: Whether to calculate derivatives for active sources.
+ - calculate_hessian
 
 Returns:
  - star_mcs: An array of BvnComponents with indices
@@ -182,8 +185,9 @@ end
 Populate fs0m_vec and fs1m_vec for all sources for a given pixel.
 
 Args:
-    - elbo_vars: Elbo intermediate values.
-    - ea: Model parameters
+    - model_vars: Model intermediate values.
+    - patches: (formerly from the ElboArgs object)
+    - active_sources: (formerly from the ElboArgs object)
     - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
     - tile: An ImageTile
     - h, w: The integer locations of the pixel within the tile
@@ -246,12 +250,14 @@ Add the contributions of a star's bivariate normal term to the ELBO,
 by updating elbo_vars.fs0m_vec[s] in place.
 
 Args:
-    - elbo_vars: Elbo intermediate values.
+    - bvn_derivs: (formerly from elbo_vars)
+    - fs0m_vec: vector of sensitive floats, populated by this method
+    - calculate_derivs: the and of active_source and formerly elbo_vars.calculate_derivs
+    - calculate_hessian: elbo_vars: Elbo intermediate values.
     - s: The index of the current source in 1:S
     - bmc: The component to be added
     - x: An offset for the component in pixel coordinates (e.g. a pixel location)
     - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-    - calculate_derivs: Whether to calculate derivatives.
 
 Returns:
     Updates elbo_vars.fs0m_vec[s] in place.
