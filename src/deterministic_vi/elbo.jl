@@ -245,35 +245,13 @@ function populate_fsm_vecs!{NumType <: Number}(
                     h::Int, w::Int,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
-    x = Float64[tile.h_range[h], tile.w_range[w]]
-    for s in tile_sources
-        # ensure tile.b is a filter band, not an image's index
-        @assert 1 <= tile.b <= B
-        wcs_jacobian = ea.patches[s, tile.b].wcs_jacobian
-        active_source = s in ea.active_sources
-
-        calculate_hessian =
-            elbo_vars.calculate_hessian && elbo_vars.calculate_derivs && active_source
-        clear!(elbo_vars.fs0m_vec[s], calculate_hessian)
-        for k = 1:psf_K # PSF component
-            accum_star_pos!(
-                elbo_vars, s, star_mcs[k, s], x, wcs_jacobian, active_source)
-        end
-
-        clear!(elbo_vars.fs1m_vec[s], calculate_hessian)
-        for i = 1:2 # Galaxy types
-            for j in 1:8 # Galaxy component
-                # If i == 2 then there are only six galaxy components.
-                if (i == 1) || (j <= 6)
-                    for k = 1:psf_K # PSF component
-                        accum_galaxy_pos!(
-                            elbo_vars, s, gal_mcs[k, j, i, s], x, wcs_jacobian,
-                            active_source)
-                    end
-                end
-            end
-        end
-    end
+    Model.populate_fsm_vecs!(elbo_vars.bvn_derivs,
+                             elbo_vars.fs0m_vec,
+                             elbo_vars.fs1m_vec,
+                             elbo_vars.calculate_derivs,
+                             elbo_vars.calculate_hessian,
+                             ea.patches, ea.active_sources,
+                             tile_sources, tile, h, w, gal_mcs, star_mcs)
 end
 
 

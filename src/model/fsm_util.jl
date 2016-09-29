@@ -78,8 +78,6 @@ function load_bvn_mixtures{NumType <: Number}(
 end
 
 
-
-
 type ModelIntermediateVariables{NumType <: Number}
 
     bvn_derivs::BivariateNormalDerivatives{NumType}
@@ -180,7 +178,6 @@ function ModelIntermediateVariables(NumType::DataType,
 end
 
 
-
 """
 Populate fs0m_vec and fs1m_vec for all sources for a given pixel.
 
@@ -195,11 +192,15 @@ Args:
     - star_mcs: Star components
 
 Returns:
-    Updates elbo_vars.fs0m_vec and elbo_vars.fs1m_vec in place with the total
+    Updates model_vars.fs0m_vec and model_vars.fs1m_vec in place with the total
     shape contributions to this pixel's brightness.
 """
 function populate_fsm_vecs!{NumType <: Number}(
-                    model_vars::ModelIntermediateVariables{NumType},
+                    bvn_derivs::BivariateNormalDerivatives{NumType},
+                    fs0m_vec::Vector{SensitiveFloat{StarPosParams, NumType}},
+                    fs1m_vec::Vector{SensitiveFloat{GalaxyPosParams, NumType}},
+                    mv_calculate_derivs::Bool,
+                    mv_calculate_hessian::Bool,
                     patches::Matrix{SkyPatch},
                     active_sources::Vector{Int},
                     tile_sources::Vector{Int},
@@ -215,33 +216,52 @@ function populate_fsm_vecs!{NumType <: Number}(
         active_source = s in active_sources
 
         calculate_hessian =
-            model_vars.calculate_hessian && model_vars.calculate_derivs && active_source
-        clear!(model_vars.fs0m_vec[s], calculate_hessian)
+            mv_calculate_hessian && mv_calculate_derivs && active_source
+        clear!(fs0m_vec[s], calculate_hessian)
         for k = 1:psf_K # PSF component
-            accum_star_pos!(model_vars.bvn_derivs,
-                            model_vars.fs0m_vec,
-                            model_vars.calculate_derivs && active_source,
-                            model_vars.calculate_hessian,
+            accum_star_pos!(bvn_derivs,
+                            fs0m_vec,
+                            mv_calculate_derivs && active_source,
+                            mv_calculate_hessian,
                             s, star_mcs[k, s], x, wcs_jacobian)
         end
 
-        clear!(model_vars.fs1m_vec[s], calculate_hessian)
+        clear!(fs1m_vec[s], calculate_hessian)
         for i = 1:2 # Galaxy types
             for j in 1:8 # Galaxy component
                 # If i == 2 then there are only six galaxy components.
                 if (i == 1) || (j <= 6)
                     for k = 1:psf_K # PSF component
                         accum_galaxy_pos!(
-                            model_vars.bvn_derivs,
-                            model_vars.fs1m_vec,
-                            model_vars.calculate_derivs && active_source,
-                            model_vars.calculate_hessian,
+                            bvn_derivs,
+                            fs1m_vec,
+                            mv_calculate_derivs && active_source,
+                            mv_calculate_hessian,
                             s, gal_mcs[k, j, i, s], x, wcs_jacobian)
                     end
                 end
             end
         end
     end
+end
+
+
+function populate_fsm_vecs!{NumType <: Number}(
+                    model_vars::ModelIntermediateVariables{NumType},
+                    patches::Matrix{SkyPatch},
+                    active_sources::Vector{Int},
+                    tile_sources::Vector{Int},
+                    tile::ImageTile,
+                    h::Int, w::Int,
+                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+                    star_mcs::Array{BvnComponent{NumType}, 2})
+    Model.populate_fsm_vecs!(model_vars.bvn_derivs,
+                             model_vars.fs0m_vec,
+                             model_vars.fs1m_vec,
+                             model_vars.calculate_derivs,
+                             model_vars.calculate_hessian,
+                             patches, active_sources, tile_sources,
+                             tile, h, w, gal_mcs, star_mcs)
 end
 
 
