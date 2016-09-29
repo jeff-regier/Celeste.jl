@@ -48,6 +48,7 @@ include("model/image_model.jl")
 include("model/param_set.jl")
 include("model/imaged_sources.jl")
 include("model/wcs_utils.jl")
+include("model/pixels.jl")
 
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual
@@ -55,5 +56,11 @@ include("model/wcs_utils.jl")
 
 typealias VariationalParams{NumType <: Number} Vector{Vector{NumType}}
 typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
+
+
+import ..SensitiveFloats: SensitiveFloat
+include("bivariate_normals.jl")
+include("model/fsm_util.jl")
+include("model/log_prob.jl")
 
 end  # module

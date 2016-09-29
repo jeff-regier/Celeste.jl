@@ -25,63 +25,11 @@ function load_bvn_mixtures{NumType <: Number}(
                     b::Int;
                     calculate_derivs::Bool=true,
                     calculate_hessian::Bool=true)
-    star_mcs = Array(BvnComponent{NumType}, ea.psf_K, ea.S)
-    gal_mcs = Array(GalaxyCacheComponent{NumType}, ea.psf_K, 8, 2, ea.S)
-
-    # TODO: do not keep any derviative information if the sources are not in
-    # active_sources.
-    for s in 1:ea.S
-        psf = ea.patches[s, b].psf
-        vs = ea.vp[s]
-
-        world_loc = vs[[ids.u[1], ids.u[2]]]
-        m_pos = Model.linear_world_to_pix(ea.patches[s, b].wcs_jacobian,
-                                          ea.patches[s, b].center,
-                                          ea.patches[s, b].pixel_center, world_loc)
-
-        # Convolve the star locations with the PSF.
-        for k in 1:ea.psf_K
-            pc = psf[k]
-            mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
-            star_mcs[k, s] =
-              BvnComponent{NumType}(
-                mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
-        end
-
-        # Convolve the galaxy representations with the PSF.
-        for i = 1:2 # i indexes dev vs exp galaxy types.
-            e_dev_dir = (i == 1) ? 1. : -1.
-            e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
-
-            # Galaxies of type 1 have 8 components, and type 2 have 6 components.
-            for j in 1:[8,6][i]
-                for k = 1:ea.psf_K
-                    gal_mcs[k, j, i, s] = GalaxyCacheComponent(
-                        e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
-                        m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],
-                        calculate_derivs && (s in ea.active_sources),
-                        calculate_hessian)
-                end
-            end
-        end
-    end
-
-    star_mcs, gal_mcs
-end
-
-
-
-# TODO: the identification of active pixels should go in pre-processing
-type ActivePixel
-    # image index
-    n::Int
-
-    # Linear tile index:
-    tile_ind::Int
-
-    # Location in tile:
-    h::Int
-    w::Int
+    # call bvn loader from the Model Module
+    Model.load_bvn_mixtures(ea.S, ea.patches, ea.vp, ea.active_sources,
+                            ea.psf_K, b,
+                            calculate_derivs=calculate_derivs,
+                            calculate_hessian=calculate_hessian)
 end
 
 
@@ -235,36 +183,12 @@ function accum_star_pos!{NumType <: Number}(
                     x::Vector{Float64},
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
-    eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x)
-
-    if elbo_vars.calculate_derivs && is_active_source
-        get_bvn_derivs!(elbo_vars.bvn_derivs, bmc, true, false)
-    end
-
-    fs0m = elbo_vars.fs0m_vec[s]
-    fs0m.v[1] += elbo_vars.bvn_derivs.f_pre[1]
-
-    if elbo_vars.calculate_derivs && is_active_source
-        transform_bvn_ux_derivs!(
-            elbo_vars.bvn_derivs, wcs_jacobian, elbo_vars.calculate_hessian)
-        bvn_u_d = elbo_vars.bvn_derivs.bvn_u_d
-        bvn_uu_h = elbo_vars.bvn_derivs.bvn_uu_h
-
-        # Accumulate the derivatives.
-        for u_id in 1:2
-            fs0m.d[star_ids.u[u_id]] += elbo_vars.bvn_derivs.f_pre[1] * bvn_u_d[u_id]
-        end
-
-        if elbo_vars.calculate_hessian
-            # Hessian terms involving only the location parameters.
-            # TODO: redundant term
-            for u_id1 in 1:2, u_id2 in 1:2
-                fs0m.h[star_ids.u[u_id1], star_ids.u[u_id2]] +=
-                    elbo_vars.bvn_derivs.f_pre[1] * (bvn_uu_h[u_id1, u_id2] +
-                    bvn_u_d[u_id1] * bvn_u_d[u_id2])
-            end
-        end
-    end
+    # call accum star pos in model
+    Model.accum_star_pos!(elbo_vars.bvn_derivs,
+                    elbo_vars.fs0m_vec,
+                    elbo_vars.calculate_derivs,
+                    elbo_vars.calculate_hessian,
+                    s, bmc, x, wcs_jacobian, is_active_source)
 end
 
 
@@ -291,85 +215,12 @@ function accum_galaxy_pos!{NumType <: Number}(
                     x::Vector{Float64},
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
-    eval_bvn_pdf!(elbo_vars.bvn_derivs, gcc.bmc, x)
-    f = elbo_vars.bvn_derivs.f_pre[1] * gcc.e_dev_i
-    fs1m = elbo_vars.fs1m_vec[s]
-    fs1m.v[1] += f
-
-    if elbo_vars.calculate_derivs && is_active_source
-
-        get_bvn_derivs!(elbo_vars.bvn_derivs, gcc.bmc,
-            elbo_vars.calculate_hessian, elbo_vars.calculate_hessian)
-        transform_bvn_derivs!(
-            elbo_vars.bvn_derivs, gcc.sig_sf, wcs_jacobian, elbo_vars.calculate_hessian)
-
-        bvn_u_d = elbo_vars.bvn_derivs.bvn_u_d
-        bvn_uu_h = elbo_vars.bvn_derivs.bvn_uu_h
-        bvn_s_d = elbo_vars.bvn_derivs.bvn_s_d
-        bvn_ss_h = elbo_vars.bvn_derivs.bvn_ss_h
-        bvn_us_h = elbo_vars.bvn_derivs.bvn_us_h
-
-        # Accumulate the derivatives.
-        for u_id in 1:2
-            fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]
-        end
-
-        for gal_id in 1:length(gal_shape_ids)
-            fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
-        end
-
-        # The e_dev derivative. e_dev just scales the entire component.
-        # The direction is positive or negative depending on whether this
-        # is an exp or dev component.
-        fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * elbo_vars.bvn_derivs.f_pre[1]
-
-        if elbo_vars.calculate_hessian
-            # The Hessians:
-
-            # Hessian terms involving only the shape parameters.
-            for shape_id1 in 1:length(gal_shape_ids)
-                for shape_id2 in 1:length(gal_shape_ids)
-                    s1 = gal_shape_alignment[shape_id1]
-                    s2 = gal_shape_alignment[shape_id2]
-                    fs1m.h[s1, s2] +=
-                        f * (bvn_ss_h[shape_id1, shape_id2] +
-                                 bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
-                end
-            end
-
-            # Hessian terms involving only the location parameters.
-            for u_id1 in 1:2, u_id2 in 1:2
-                u1 = gal_ids.u[u_id1]
-                u2 = gal_ids.u[u_id2]
-                fs1m.h[u1, u2] +=
-                    f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
-            end
-
-            # Hessian terms involving both the shape and location parameters.
-            for u_id in 1:2, shape_id in 1:length(gal_shape_ids)
-                ui = gal_ids.u[u_id]
-                si = gal_shape_alignment[shape_id]
-                fs1m.h[ui, si] +=
-                    f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
-                fs1m.h[si, ui] = fs1m.h[ui, si]
-            end
-
-            # Do the e_dev hessian terms.
-            devi = gal_ids.e_dev
-            for u_id in 1:2
-                ui = gal_ids.u[u_id]
-                fs1m.h[ui, devi] +=
-                    elbo_vars.bvn_derivs.f_pre[1] * gcc.e_dev_dir * bvn_u_d[u_id]
-                fs1m.h[devi, ui] = fs1m.h[ui, devi]
-            end
-            for shape_id in 1:length(gal_shape_ids)
-                si = gal_shape_alignment[shape_id]
-                fs1m.h[si, devi] +=
-                    elbo_vars.bvn_derivs.f_pre[1] * gcc.e_dev_dir * bvn_s_d[shape_id]
-                fs1m.h[devi, si] = fs1m.h[si, devi]
-            end
-        end # if calculate hessian
-    end # if is_active_source
+    # call accum star pos in model
+    Model.accum_galaxy_pos!(elbo_vars.bvn_derivs,
+                            elbo_vars.fs1m_vec,
+                            elbo_vars.calculate_derivs,
+                            elbo_vars.calculate_hessian,
+                            s, gcc, x, wcs_jacobian, is_active_source)
 end
 
 
@@ -397,42 +248,14 @@ function populate_fsm_vecs!{NumType <: Number}(
                     h::Int, w::Int,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
-    x = Float64[tile.h_range[h], tile.w_range[w]]
-    for s in tile_sources
-        # ensure tile.b is a filter band, not an image's index
-        @assert 1 <= tile.b <= B
-        wcs_jacobian = ea.patches[s, tile.b].wcs_jacobian
-        active_source = s in ea.active_sources
-
-        calculate_hessian =
-            elbo_vars.calculate_hessian && elbo_vars.calculate_derivs && active_source
-        clear!(elbo_vars.fs0m_vec[s], calculate_hessian)
-        for k = 1:ea.psf_K # PSF component
-            if (ea.num_allowed_sd == Inf ||
-                check_point_close_to_bvn(star_mcs[k, s], x, ea.num_allowed_sd))
-                accum_star_pos!(
-                    elbo_vars, s, star_mcs[k, s], x, wcs_jacobian, active_source)
-            end
-        end
-
-        clear!(elbo_vars.fs1m_vec[s], calculate_hessian)
-        for i = 1:2 # Galaxy types
-            for j in 1:8 # Galaxy component
-                # If i == 2 then there are only six galaxy components.
-                if (i == 1) || (j <= 6)
-                    for k = 1:ea.psf_K # PSF component
-                        if (ea.num_allowed_sd == Inf ||
-                            check_point_close_to_bvn(
-                                gal_mcs[k, j, i, s].bmc, x, ea.num_allowed_sd))
-                            accum_galaxy_pos!(
-                                elbo_vars, s, gal_mcs[k, j, i, s], x, wcs_jacobian,
-                                active_source)
-                        end
-                    end
-                end
-            end
-        end
-    end
+    Model.populate_fsm_vecs!(elbo_vars.bvn_derivs,
+                             elbo_vars.fs0m_vec,
+                             elbo_vars.fs1m_vec,
+                             elbo_vars.calculate_derivs,
+                             elbo_vars.calculate_hessian,
+                             ea.patches, ea.active_sources,
+                             ea.psf_K, ea.num_allowed_sd,
+                             tile_sources, tile, h, w, gal_mcs, star_mcs)
 end
 
 
@@ -952,22 +775,8 @@ pixels to NaN.
 """
 function get_active_pixels{NumType <: Number}(
                     ea::ElboArgs{NumType})
-    active_pixels = ActivePixel[]
-
-    for n in 1:ea.N, tile_ind in 1:length(ea.images[n].tiles)
-        tile_sources = ea.tile_source_map[n][tile_ind]
-        if length(intersect(tile_sources, ea.active_sources)) > 0
-            tile = ea.images[n].tiles[tile_ind]
-            h_width, w_width = size(tile.pixels)
-            for w in 1:w_width, h in 1:h_width
-                if !Base.isnan(tile.pixels[h, w])
-                    push!(active_pixels, ActivePixel(n, tile_ind, h, w))
-                end
-            end
-        end
-    end
-
-    active_pixels
+    return Model.get_active_pixels(ea.N, ea.images,
+                                   ea.tile_source_map, ea.active_sources)
 end
 
 
