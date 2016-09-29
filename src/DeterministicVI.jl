@@ -4,8 +4,10 @@ Calculate value, gradient, and hessian of the variational ELBO.
 module DeterministicVI
 
 using ..Model
-import ..Model: BivariateNormalDerivatives, BvnComponent,
-                GalaxyCacheComponent, get_bvn_cov
+import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
+                GalaxySigmaDerivs,
+                get_bvn_cov, eval_bvn_pdf!, get_bvn_derivs!,
+                transform_bvn_derivs!
 using ..SensitiveFloats
 import ..SensitiveFloats.clear!
 import ..Log
