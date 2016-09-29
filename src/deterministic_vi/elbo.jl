@@ -71,21 +71,6 @@ function load_bvn_mixtures{NumType <: Number}(
 end
 
 
-
-# TODO: the identification of active pixels should go in pre-processing
-type ActivePixel
-    # image index
-    n::Int
-
-    # Linear tile index:
-    tile_ind::Int
-
-    # Location in tile:
-    h::Int
-    w::Int
-end
-
-
 """
 Store pre-allocated memory in this data structures, which contains
 intermediate values used in the ELBO calculation.
@@ -945,22 +930,8 @@ pixels to NaN.
 """
 function get_active_pixels{NumType <: Number}(
                     ea::ElboArgs{NumType})
-    active_pixels = ActivePixel[]
-
-    for n in 1:ea.N, tile_ind in 1:length(ea.images[n].tiles)
-        tile_sources = ea.tile_source_map[n][tile_ind]
-        if length(intersect(tile_sources, ea.active_sources)) > 0
-            tile = ea.images[n].tiles[tile_ind]
-            h_width, w_width = size(tile.pixels)
-            for w in 1:w_width, h in 1:h_width
-                if !Base.isnan(tile.pixels[h, w])
-                    push!(active_pixels, ActivePixel(n, tile_ind, h, w))
-                end
-            end
-        end
-    end
-
-    active_pixels
+    return Model.get_active_pixels(ea.N, ea.images,
+                                   ea.tile_source_map, ea.active_sources)
 end
 
 
