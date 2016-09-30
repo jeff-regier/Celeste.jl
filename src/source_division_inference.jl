@@ -392,7 +392,7 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
         append!(local_images, cached_imgs)
         append!(local_catalog, cached_cat)
     end
-    #ntputs(nodeid, tid, "prepared to infer $s in $(toq()) secs")
+    #ntputs(nodeid, tid, "fetched data to infer $s in $(toq()) secs")
 
     tic()
     i = findfirst(local_catalog, entry)
@@ -433,17 +433,13 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
     ttimes = Array(InferTiming, Base.Threads.nthreads())
 
     # create Dtree and get the initial allocation
-    tic()
     dt, isparent = Dtree(num_work_items, 0.4,
-                         ceil(Int64, Base.Threads.nthreads() / 2))
+                         ceil(Int64, Base.Threads.nthreads() / 4))
     numwi, (startwi, endwi) = initwork(dt)
     rundt = runtree(dt)
-    timing.sched_ovh = toq()
 
     nputs(nodeid, "initially $numwi work items ($startwi-$endwi)")
-    tic()
     workitems, wi_handle = get(tasks, [startwi], [endwi])
-    timing.ga_get = toq()
 
     widx = 1
     wilock = SpinLock()
@@ -472,13 +468,17 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
                     ntputs(nodeid, tid, "consumed last work item; requesting more")
                     lock(g_lock)
                     numwi, (startwi, endwi) = getwork(dt)
-                    times.sched_ovh = times.sched_ovh + toq()
-                    tic()
-                    workitems, wi_handle = get(tasks, [startwi], [endwi])
                     unlock(g_lock)
-                    times.ga_get = times.ga_get + toq()
+                    times.sched_ovh = times.sched_ovh + toq()
                     ntputs(nodeid, tid, "got $numwi work items ($startwi-$endwi)")
-                    widx = 1
+                    if endwi > 0
+                        tic()
+                        lock(g_lock)
+                        workitems, wi_handle = get(tasks, [startwi], [endwi])
+                        unlock(g_lock)
+                        times.ga_get = times.ga_get + toq()
+                        widx = 1
+                    end
                     unlock(wilock)
                     continue
                 end
