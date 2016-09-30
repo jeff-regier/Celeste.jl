@@ -41,25 +41,23 @@ end
 Timing information.
 """
 type InferTiming
-    query_fids::Float64
-    num_infers::Int64
-    read_photoobj::Float64
-    read_img::Float64
-    fit_psf::Float64
+    load_img::Float64
+    load_cat::Float64
+    sched_ovh::Float64
+    ga_get::Float64
     opt_srcs::Float64
     num_srcs::Int64
     write_results::Float64
     wait_done::Float64
 
-    InferTiming() = new(0.0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
+    InferTiming() = new(0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
 end
 
 function add_timing!(i::InferTiming, j::InferTiming)
-    i.query_fids = i.query_fids + j.query_fids
-    i.num_infers = i.num_infers + j.num_infers
-    i.read_photoobj = i.read_photoobj + j.read_photoobj
-    i.read_img = i.read_img + j.read_img
-    i.fit_psf = i.fit_psf + j.fit_psf
+    i.load_img = i.load_img + j.load_img
+    i.load_cat = i.load_cat + j.load_cat
+    i.sched_ovh = i.sched_ovh + j.sched_ovh
+    i.ga_get = i.ga_get + j.ga_get
     i.opt_srcs = i.opt_srcs + j.opt_srcs
     i.num_srcs = i.num_srcs + j.num_srcs
     i.write_results = i.write_results + j.write_results
@@ -229,10 +227,8 @@ function divide_sky_and_infer(
         iramin, iramax, idecmin, idecmax = divide_skyarea(box, nra, ndec, item)
 
         # Get vector of (run, camcol, field) triplets overlapping this patch
-        tic()
         box = BoundingBox(iramin, iramax, idecmin, idecmax)
         rcfs = get_overlapping_fields(box, stagedir)
-        itimes.query_fids = toq()
 
         # run inference for this subarea
         results = one_node_infer(rcfs;
@@ -244,7 +240,6 @@ function divide_sky_and_infer(
         save_results(outdir, box, results)
         itimes.write_results = toq()
 
-        timing.num_infers = timing.num_infers+1
         add_timing!(timing, itimes)
         rundtree(rundt)
     end
@@ -311,11 +306,9 @@ function one_node_infer(
     Log.info("Running with $(nprocthreads) threads")
 
     # Read all primary objects in these fields.
-    tic()
     duplicate_policy = primary_initialization ? :primary : :first
     catalog = SDSSIO.read_photoobj_files(rcfs, stagedir,
                         duplicate_policy=duplicate_policy)
-    timing.read_photoobj = toq()
     Log.info("$(length(catalog)) primary sources")
 
     reserve_thread[] && thread_fun(reserve_thread)
@@ -349,7 +342,7 @@ function one_node_infer(
     tic()
 
     images = load_images(rcfs, stagedir)
-    timing.read_img = toq()
+    timing.load_img = toq()
 
     reserve_thread[] && thread_fun(reserve_thread)
 
@@ -517,10 +510,8 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
         divide_sky_and_infer(box, stagedir; timing=times, outdir=outdir)
     else
         Log.debug("multithreaded parallelism only")
-        tic()
         # Get vector of (run, camcol, field) triplets overlapping this patch
         rcfs = get_overlapping_fields(box, stagedir)
-        times.query_fids = toq()
 
         results = one_node_infer(rcfs, stagedir; box=box, timing=times)
 
@@ -536,11 +527,10 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
               Base.gc_alloc_count(gc_diff_stats))
 
     times.num_srcs = max(1, times.num_srcs)
-    nputs(nodeid, "timing: query_fids=$(times.query_fids)")
-    nputs(nodeid, "timing: num_infers=$(times.num_infers)")
-    nputs(nodeid, "timing: read_photoobj=$(times.read_photoobj)")
-    nputs(nodeid, "timing: read_img=$(times.read_img)")
-    nputs(nodeid, "timing: fit_psf=$(times.fit_psf)")
+    nputs(nodeid, "timing: load_img=$(times.load_img)")
+    nputs(nodeid, "timing: load_cat=$(times.load_cat)")
+    nputs(nodeid, "timing: sched_ovh=$(times.sched_ovh)")
+    nputs(nodeid, "timing: ga_get=$(times.ga_get)")
     nputs(nodeid, "timing: opt_srcs=$(times.opt_srcs)")
     nputs(nodeid, "timing: num_srcs=$(times.num_srcs)")
     nputs(nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
