@@ -118,11 +118,12 @@ end
 Factor out the hessian part of combine_sfs!.
 """
 function combine_sfs_hessian!{ParamType <: ParamSet,
-                              T1 <: Number, T2 <: Number, T3 <: Number}(
-        sf1::SensitiveFloat{ParamType, T1},
-        sf2::SensitiveFloat{ParamType, T1},
-        sf_result::SensitiveFloat{ParamType, T1},
-        g_d::Vector{T2}, g_h::Matrix{T3})
+                 T1 <: Number, T2 <: Number, T3 <: Number}(
+            sf1::SensitiveFloat{ParamType, T1},
+            sf2::SensitiveFloat{ParamType, T1},
+            sf_result::SensitiveFloat{ParamType, T1},
+            g_d::Vector{T2}, g_h::Matrix{T3})
+    @assert g_h[1, 2] == g_h[2, 1]
 
     p1, p2 = size(sf_result.h)
     @assert size(sf_result.h) == size(sf1.h) == size(sf2.h)
@@ -161,22 +162,15 @@ function combine_sfs!{ParamType <: ParamSet,
         sf_result::SensitiveFloat{ParamType, T1},
         v::T1, g_d::Vector{T2}, g_h::Matrix{T3};
         calculate_hessian::Bool=true)
-
-    # TODO: time consuming **************
-
-    # TODO: this line is allocating a lot of memory and I don't know why.
-    # Commenting this line out attributes the same allocation to the next line.
-    # Is memory being allocated lazily or misattributed?
-    @assert g_h[1, 2] == g_h[2, 1]
-
     # You have to do this in the right order to not overwrite needed terms.
     if calculate_hessian
         combine_sfs_hessian!(sf1, sf2, sf_result, g_d, g_h)
     end
 
-    for ind in eachindex(sf_result.d)
-        sf_result.d[ind] = g_d[1] * sf1.d[ind] + g_d[2] * sf2.d[ind]
-    end
+    sf_result.d[:] = sf1.d
+    n = length(sf_result.d)
+    LinAlg.BLAS.scal!(n, g_d[1], sf_result.d, 1)
+    LinAlg.BLAS.axpy!(g_d[2], sf2.d, sf_result.d)
 
     sf_result.v[1] = v
 
@@ -193,7 +187,7 @@ each evaluated at (sf1, sf2).
 The result is stored in sf1.
 """
 function combine_sfs!{ParamType <: ParamSet,
-                                            T1 <: Number, T2 <: Number, T3 <: Number}(
+                      T1 <: Number, T2 <: Number, T3 <: Number}(
         sf1::SensitiveFloat{ParamType, T1},
         sf2::SensitiveFloat{ParamType, T1},
         v::T1, g_d::Vector{T2}, g_h::Matrix{T3};
@@ -234,11 +228,9 @@ function add_scaled_sfs!{ParamType <: ParamSet, NumType <: Number}(
         sf2::SensitiveFloat{ParamType, NumType},
         scale::AbstractFloat, calculate_hessian::Bool)
 
-    sf1.v[1] = sf1.v[1] + scale * sf2.v[1]
+    sf1.v[1] += scale * sf2.v[1]
 
-    @inbounds for i in eachindex(sf1.d)
-        sf1.d[i] = sf1.d[i] + scale * sf2.d[i]
-    end
+    LinAlg.BLAS.axpy!(scale, sf2.d, sf1.d)
 
     if calculate_hessian
         p1, p2 = size(sf1.h)
