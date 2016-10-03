@@ -118,11 +118,12 @@ end
 Factor out the hessian part of combine_sfs!.
 """
 function combine_sfs_hessian!{ParamType <: ParamSet,
-                              T1 <: Number, T2 <: Number, T3 <: Number}(
-        sf1::SensitiveFloat{ParamType, T1},
-        sf2::SensitiveFloat{ParamType, T1},
-        sf_result::SensitiveFloat{ParamType, T1},
-        g_d::Vector{T2}, g_h::Matrix{T3})
+                 T1 <: Number, T2 <: Number, T3 <: Number}(
+            sf1::SensitiveFloat{ParamType, T1},
+            sf2::SensitiveFloat{ParamType, T1},
+            sf_result::SensitiveFloat{ParamType, T1},
+            g_d::Vector{T2}, g_h::Matrix{T3})
+    @assert g_h[1, 2] == g_h[2, 1]
 
     p1, p2 = size(sf_result.h)
     @assert size(sf_result.h) == size(sf1.h) == size(sf2.h)
