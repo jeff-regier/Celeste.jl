@@ -155,6 +155,7 @@ function main(; verbose=false)
 
         elbo_args::DeterministicVI.ElboArgs =
             make_elbo_args(band_images, [catalog_entry], fit_psf=false)
+        Infer.trim_source_tiles!(elbo_args)
         DeterministicVI.maximize_f(DeterministicVI.elbo, elbo_args, verbose=verbose)
         variational_parameters::Vector{Float64} = elbo_args.vp[1]
 
