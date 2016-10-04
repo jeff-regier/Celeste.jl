@@ -3,7 +3,6 @@ Calculate value, gradient, and hessian of the variational ELBO.
 """
 module DeterministicVI
 
-import ..Exceptions
 using ..Model
 import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
                 GalaxySigmaDerivs,
@@ -17,6 +16,14 @@ import DataFrames
 import Optim
 
 export ElboArgs
+
+"""
+Some parameter to a function has invalid values. The message should explain what parameter is
+invalid and why.
+"""
+type InvalidInputError <: Exception
+    message::String
+end
 
 """
 ElboArgs stores the arguments needed to evaluate the variational objective
@@ -62,7 +69,9 @@ function ElboArgs{NumType <: Number}(
     for tiled_image in images
         for tile in tiled_image.tiles
             if any(tile.epsilon_mat .<= 0)
-                throw(Exceptions.InvalidInputError("You must set all values of epsilon_mat > 0"))
+                throw(InvalidInputError(
+                    "You must set all values of epsilon_mat > 0 for all images included in ElboArgs"
+                ))
             end
         end
     end
