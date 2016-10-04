@@ -1,7 +1,6 @@
 module Celeste
 
 # submodules
-include("Exceptions.jl")
 include("Log.jl")
 
 include("SensitiveFloats.jl")
