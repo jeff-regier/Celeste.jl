@@ -93,6 +93,30 @@ getids(::Type{CanonicalParams}) = ids
 length(::Type{CanonicalParams}) = 6 + 3*Ia + 2*(B-1)*Ia + D*Ia
 
 
+type LatentStateIndexes <: ParamSet
+    u::Vector{Int}        # world coordinate ra/dec location
+    e_dev::Int            # gal dev/exp proportion
+    e_axis::Int           # gal minor/major axis ratio
+    e_angle::Int          # gal angle (east of north?)
+    e_scale::Int          # gal scale (in world or pixels?)
+    r::Vector{Int}        # [star_log_r_flux, gal_log_r_flux]
+    c::Matrix{Int}        # c[1] = star colors, c[2] = gal colors
+    a::Matrix{Int}        # a[1,1] = prob star
+    k::Matrix{Int}        # color prior component indicators (not needed, i think)
+
+    LatentStateIndexes() =
+        new([1, 2], 3, 4, 5, 6,
+            collect(7:(7+Ia-1)),  # r
+            reshape((7+Ia):(7+Ia+(B-1)*Ia-1), (B-1, Ia)),  # c
+            reshape((7+Ia+(B-1)*Ia):(7+2Ia+(B-1)*Ia-1), (Ia, 1)),  # a
+            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+(B-1)*Ia+D*Ia-1), (D, Ia))) # k
+end
+
+const lidx = LatentStateIndexes()
+getlidx(::Type{LatentStateIndexes}) = lidx
+length(::Type{LatentStateIndexes}) = 22 #6 + 3*Ia + 2*(B-1)*Ia + D*Ia
+
+
 type UnconstrainedParams <: ParamSet
     u::Vector{Int}
     e_dev::Int

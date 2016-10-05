@@ -30,10 +30,16 @@ function test_that_star_truth_is_most_likely()
     active_pixels = Model.get_active_pixels(ea.N, ea.images,
                                             ea.tile_source_map, ea.active_sources)
 
+    # turn variational params into a list of LatentStateParams
+    source_states = [Model.variational_params_to_latent_state_params(ea.vp[s])
+                     for s in 1:length(ea.vp)]
+    println("SOURCE STATES:\n", source_states)
+
     star_logpdf, star_logprior =
         Model.make_star_logpdf(ea.images, active_pixels, ea.S, ea.N,
-                               ea.vp, ea.tile_source_map,
-                               ea.patches, ea.active_sources, ea.psf_K, ea.num_allowed_sd)
+                               source_states, ea.tile_source_map,
+                               ea.patches, ea.active_sources,
+                               ea.psf_K, ea.num_allowed_sd)
 
     ## convert ea.vp[1] to star state, and cache elbo args
     star_state = Model.elbo_args_vp_to_star_state(ea.vp[1])

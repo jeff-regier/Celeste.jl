@@ -19,7 +19,8 @@ unconstrained params.
 Args:
   - images: Vector of TiledImage types (data for log_likelihood)
   - active_pixels: Vector of ActivePixels on which the log_likelihood is based
-  - ea: ElboArgs book keeping argument
+  - S: --- from ElboArgs
+  - N:
 Returns:
   - star_logpdf  : unnormalized logpdf function handle that takes in a flat,
                    unconstrained array as parameter
@@ -30,7 +31,7 @@ function make_star_logpdf(images::Vector{TiledImage},
                           active_pixels::Vector{ActivePixel},
                           S::Int64,
                           N::Int64,
-                          vp::VariationalParams{Float64},
+                          source_params::Vector{Vector{Float64}},
                           tile_source_map::Vector{Matrix{Vector{Int}}},
                           patches::Matrix{SkyPatch},
                           active_sources::Vector{Int},
@@ -57,7 +58,7 @@ function make_star_logpdf(images::Vector{TiledImage},
                                         patches,
                                         active_sources,
                                         psf_K, num_allowed_sd,
-                                        vp,
+                                        source_params,
                                         tile_source_map, S, N)
         return ll_like + ll_prior
     end
@@ -85,7 +86,7 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
                             active_pixels::Vector{ActivePixel},
                             S::Int64,
                             N::Int64,
-                            vp::VariationalParams{Float64},
+                            source_params::Vector{GalaxyPosParams}, #vp::VariationalParams{Float64},
                             tile_source_map::Vector{Matrix{Vector{Int}}},
                             patches::Matrix{SkyPatch},
                             active_sources::Vector{Int},
@@ -118,7 +119,7 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
                                         active_pixels,
                                         patches,
                                         active_sources, psf_K, num_allowed_sd,
-                                        vp,
+                                        source_params,
                                         tile_source_map, S, N)
         return ll_like + ll_prior
     end
@@ -143,35 +144,24 @@ Returns:
             (brightness,colors,position,gal_shape) params conditioned on
             the rest of the args
 """
-function state_log_likelihood(is_star::Bool,
-                              brightness::Float64,
-                              colors::Vector{Float64},
-                              position::Vector{Float64},
-                              gal_shape::Vector{Float64},
-                              images::Vector{TiledImage},
-                              active_pixels::Vector{ActivePixel},
-                              patches::Matrix{SkyPatch},  # formerly of ElboArgs
-                              active_sources::Vector{Int},
-                              psf_K::Int64,
-                              num_allowed_sd::Float64,
-                              vp::VariationalParams{Float64},
+function state_log_likelihood(is_star::Bool,                # source is star
+                              brightness::Float64,          # source log r brightness
+                              colors::Vector{Float64},      # source vector of colors
+                              position::Vector{Float64},    # source position
+                              gal_shape::Vector{Float64},   # source gal shape
+                              images::Vector{TiledImage},   # list of images with source pixel data
+                              active_pixels::Vector{ActivePixel}, # which pixels enter into the likelihood
+                              patches::Matrix{SkyPatch},    # formerly of ElboArgs
+                              active_sources::Vector{Int},  # formerly of ElboArgs
+                              psf_K::Int64,                 # number of PSF Comps
+                              num_allowed_sd::Float64,      # ...
+                              source_params::Vector{Vector{Float64}}, # list of background sources
                               tile_source_map::Vector{Matrix{Vector{Int}}},
                               S::Int64,
                               N::Int64)
     # TODO: cache the background rate image!! --- does not need to be recomputed at each ll eval
-
     # convert brightness/colors to fluxes for scaling
     fluxes = colors_to_fluxes(brightness, colors)
-
-    # make sure elbo-args reflects the position and galaxy shape passed in for
-    # the first source in the elbo args (first is current source, the rest are
-    # conditioned on)
-    vp[1][ids.u[1]]    = position[1]
-    vp[1][ids.u[2]]    = position[2]
-    vp[1][ids.e_dev]   = gal_shape[1]
-    vp[1][ids.e_axis]  = gal_shape[2]
-    vp[1][ids.e_angle] = gal_shape[3]
-    vp[1][ids.e_scale] = gal_shape[4]
 
     # create objects needed to compute the mean poisson value per pixel
     # (similar to ElboDeriv.process_active_pixels!)
@@ -180,12 +170,18 @@ function state_log_likelihood(is_star::Bool,
     model_vars.calculate_derivs = false
     model_vars.calculate_hessian= false
 
-    # load star/gal mixture components
+    # load star/gal mixture components (make sure these reflect
+    gdev, gaxis, gangle, gscale = gal_shape
+    source_params[1][lidx.u]       = position
+    source_params[1][lidx.e_dev]   = gdev
+    source_params[1][lidx.e_axis]  = gaxis
+    source_params[1][lidx.e_angle] = gangle
+    source_params[1][lidx.e_scale] = gscale
     star_mcs_vec = Array(Array{BvnComponent{Float64}, 2}, N)
     gal_mcs_vec  = Array(Array{GalaxyCacheComponent{Float64}, 4}, N)
     for b=1:N
         star_mcs_vec[b], gal_mcs_vec[b] =
-            load_bvn_mixtures(S, patches, vp, active_sources, psf_K, b,
+            load_bvn_mixtures(S, patches, source_params, active_sources, psf_K, b,
                               calculate_derivs=model_vars.calculate_derivs,
                               calculate_hessian=model_vars.calculate_hessian)
     end
@@ -206,14 +202,16 @@ function state_log_likelihood(is_star::Bool,
                            gal_mcs_vec[pixel.n], star_mcs_vec[pixel.n])
 
         # compute the background rate for this pixel
-        background_rate = tile.epsilon_mat[pixel.h, pixel.w]
+        background_rate    = tile.epsilon_mat[pixel.h, pixel.w]
         background_sources = tile_sources[tile_sources.!=1]
         for s in background_sources
             println("background s: ", s)
-            flux_s = variational_params_to_fluxes(s, vp)
-            rate_s = is_star ? model_vars.fs0m_vec[s].v : model_vars.fs1m_vec[s].v
-            rate_s *= flux_s[pixel_band]
-            background_rate += rate_s
+            #TODO: compute background rate conditional on source_params
+            #s_lnr, s_color = source_params[s][lidx.
+            #flux_s = variational_params_to_fluxes(s, vp)
+            #rate_s = is_star ? model_vars.fs0m_vec[s].v : model_vars.fs1m_vec[s].v
+            #rate_s *= flux_s[pixel_band]
+            #background_rate += rate_s
         end
 
         # this source's rate, add to background for total
@@ -397,7 +395,7 @@ end
 
 
 function elbo_args_vp_to_star_state(vp::Array{Float64,1})
-    fluxes      = variational_params_to_fluxes(vp)
+    fluxes      = variational_params_to_fluxes(vp, 1)
     lnr, colors = fluxes_to_colors(fluxes)
     ra, dec     = vp[ids.u[1]], vp[ids.u[2]]
     return [[lnr]; colors; [ra, dec]]
@@ -405,7 +403,7 @@ end
 
 
 function elbo_args_vp_to_galaxy_state(vp::Array{Float64, 1})
-    shared_params = elbo_args_vp_to_star_state(vp)
+    shared_params = elbo_args_vp_to_star_state(vp, 2)
     gal_shape = [vp[ids.e_dev]  ,
                  vp[ids.e_axis] ,
                  vp[ids.e_angle],
@@ -414,20 +412,43 @@ function elbo_args_vp_to_galaxy_state(vp::Array{Float64, 1})
 end
 
 
-function variational_params_to_fluxes(i::Int, vs::Array{Array{Float64,1}})
-    ret = Array(Float64, 5)
-    ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
-    ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
-    ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
-    ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
-    ret[1] = ret[2] / exp(vs[ids.c1[1, i]])
+function variational_params_to_latent_state_params(vp::Array{Float64, 1})
+    # create a float array of the appropriate length
+    ret = Array(Float64, length(lidx))
+
+    # galaxy shape params
+    ret[lidx.u]       = vp[ids.u]
+    ret[lidx.e_dev]   = vp[ids.e_dev]
+    ret[lidx.e_axis]  = vp[ids.e_axis]
+    ret[lidx.e_scale] = vp[ids.e_scale]
+
+    # star, gal r flux
+    star_lnr, star_cols =
+        fluxes_to_colors(variational_params_to_fluxes(vp, 1))
+    gal_lnr, gal_cols =
+        fluxes_to_colors(variational_params_to_fluxes(vp, 2))
+    ret[lidx.r] = [star_lnr, gal_lnr]
+    ret[lidx.c] = hcat([star_cols, gal_cols]...)
+
+    # set the prob star/prob gal
+    ret[lidx.a] = vp[ids.a]
+
     ret
 end
 
 
-function variational_params_to_fluxes(vs::Array{Float64,1})
+#function variational_params_to_fluxes(i::Int, vs::Array{Array{Float64,1}})
+#    ret = Array(Float64, 5)
+#    ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
+#    ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
+#    ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
+#    ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
+#    ret[1] = ret[2] / exp(vs[ids.c1[1, i]])
+#    ret
+#end
+
+function variational_params_to_fluxes(vs::Array{Float64,1}, i::Int)
     ret = Array(Float64, 5)
-    i = 1
     ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
     ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
     ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
