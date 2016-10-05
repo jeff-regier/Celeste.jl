@@ -9,19 +9,14 @@ import WCS
 import Celeste: Infer, Model, DeterministicVI
 
 const IOTA = 1000.
+const FILENAME = "output/galsim_test_images.fits"
 
 ## TODO pull this from test/SampleData.jl
-function make_elbo_args(images::Vector{Model.TiledImage},
-                        catalog::Vector{Model.CatalogEntry};
-                        fit_psf::Bool=false)
+function make_elbo_args(images::Vector{Model.TiledImage}, catalog::Vector{Model.CatalogEntry})
     vp = Vector{Float64}[Model.init_source(ce) for ce in catalog]
     patches, tile_source_map = Infer.get_tile_source_map(images, catalog)
     active_sources = collect(1:length(catalog))
-    ea = DeterministicVI.ElboArgs(images, vp, tile_source_map, patches, active_sources)
-    if fit_psf
-        Infer.fit_object_psfs!(ea, ea.active_sources)
-    end
-    ea
+    DeterministicVI.ElboArgs(images, vp, tile_source_map, patches, active_sources)
 end
 
 ## end code from SampleData
@@ -35,36 +30,40 @@ end
 
 function read_fits(filename; read_sdss_psf=false)
     @assert isfile(filename)
+    println("Reading $filename...")
     fits = FITSIO.FITS(filename)
-    pixels = read(fits[1])
+    println("Found $(length(fits)) extensions.")
+
+    multi_extension_pixels = []
+    for extension in fits
+        push!(multi_extension_pixels, read(extension))
+    end
+
+    # assume WCS same for each extension
     header_str = FITSIO.read_header(fits[1], String)
     wcs = WCS.from_header(header_str)[1]
-    if read_sdss_psf
-        header = FITSIO.read_header(fits[1])
-        psf = read_psf_from_sdss_header(header)
-    else
-        psf = make_psf()
-    end
+
     close(fits)
-    pixels, psf, wcs
+    multi_extension_pixels, wcs
 end
 
-function make_band_images(band_pixels, band_psfs, wcs, epsilon)
-    H, W = size(band_pixels[1])
+function make_tiled_images(band_pixels, psf, wcs, epsilon)
+    # assume dimensions equal for all images
+    height, width = size(band_pixels[1])
     [
         Model.TiledImage(
             Model.Image(
-                H,
-                W,
+                height,
+                width,
                 band_pixels[band],
                 band,
                 wcs,
-                band_psfs[band],
+                psf,
                 0, # SDSS run
                 0, # SDSS camcol
                 0, # SDSS field
-                fill(epsilon, H, W), #epsilon_mat,
-                fill(IOTA, H), #iota_vec,
+                fill(epsilon, height, width), #epsilon_mat,
+                fill(IOTA, height), #iota_vec,
                 Model.RawPSF(Array(Float64, 0, 0), 0, 0, Array(Float64, 0, 0, 0)),
             ),
             tile_width=48,
@@ -73,12 +72,40 @@ function make_band_images(band_pixels, band_psfs, wcs, epsilon)
     ]
 end
 
+function typical_band_relative_intensities(is_star::Bool)
+    source_type_index = is_star ? 1 : 2
+    prior_parameters::Model.PriorParams = Model.load_prior()
+    # Band relative intensities are a mixture of lognormals. Which mixture component has the most
+    # weight?
+    dominant_component = indmax(prior_parameters.k[:, source_type_index])
+    # What are the most typical log relative intensities for that component?
+    inter_band_ratios = exp(prior_parameters.c_mean[:, dominant_component, source_type_index])
+    Float64[
+        1 / inter_band_ratios[2] / inter_band_ratios[1],
+        1 / inter_band_ratios[2],
+        1,
+        inter_band_ratios[3],
+        inter_band_ratios[3] * inter_band_ratios[4],
+    ]
+end
+
+function typical_reference_brightness(is_star::Bool)
+    source_type_index = is_star ? 1 : 2
+    prior_parameters::Model.PriorParams = Model.load_prior()
+    exp(
+        prior_parameters.r_mean[source_type_index]
+        + 0.5 * prior_parameters.r_var[source_type_index]
+    )
+end
+
 function make_catalog_entry()
     Model.CatalogEntry(
         [18., 18.], # pos
         false, # is_star
-        fill(100., 5), #sample_star_fluxes
-        fill(1000., 5), #sample_galaxy_fluxes
+        # sample_star_fluxes
+        typical_band_relative_intensities(true) .* typical_reference_brightness(true),
+        # sample_galaxy_fluxes
+        typical_band_relative_intensities(false) .* typical_reference_brightness(false),
         0.1, # gal_frac_dev
         0.7, # gal_ab
         pi / 4, # gal_angle
@@ -144,22 +171,22 @@ end
 function main(; verbose=false)
     truth_data = readtable("galsim_truth.csv")
     all_benchmark_data = []
-    for index in 0:(size(truth_data, 1) - 1)
-        filename = "output/galsim_test_image_$index.fits"
-        println("Reading $filename...")
-        pixels, psf, wcs = read_fits(filename)
-        epsilon = truth_data[index + 1, :sky_level] / IOTA
-        band_images::Vector{Model.TiledImage} =
-            make_band_images(fill(pixels, 5), fill(psf, 5), wcs, epsilon)
+    psf = make_psf()
+    multi_extension_pixels, wcs = read_fits(FILENAME)
+    for index in 1:size(truth_data, 1)
+        epsilon = truth_data[index, :sky_level] / IOTA
+
+        first_band_index = (index - 1) * 5 + 1
+        band_pixels = multi_extension_pixels[first_band_index:(first_band_index + 4)]
+        band_images::Vector{Model.TiledImage} = make_tiled_images(band_pixels, psf, wcs, epsilon)
         catalog_entry::Model.CatalogEntry = make_catalog_entry()
 
-        elbo_args::DeterministicVI.ElboArgs =
-            make_elbo_args(band_images, [catalog_entry], fit_psf=false)
+        elbo_args::DeterministicVI.ElboArgs = make_elbo_args(band_images, [catalog_entry])
         Infer.trim_source_tiles!(elbo_args)
         DeterministicVI.maximize_f(DeterministicVI.elbo, elbo_args, verbose=verbose)
         variational_parameters::Vector{Float64} = elbo_args.vp[1]
 
-        benchmark_data = benchmark_comparison_data(variational_parameters, truth_data[index + 1, :])
+        benchmark_data = benchmark_comparison_data(variational_parameters, truth_data[index, :])
         println(repr(benchmark_data))
         push!(all_benchmark_data, benchmark_data)
     end
