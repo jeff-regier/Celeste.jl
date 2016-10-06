@@ -15,7 +15,7 @@ function test_score_field()
 
     if !isfile(joinpath(datadir, results_filename))
         results_url = "https://www.dropbox.com/s/8jcdmluahsf38tm/celeste-004263-5-0119.jld"
-        run(`wget --quiet -P $datadir $results_url`)
+        run(`wget --quiet -O $datadir/$results_filename $results_url`)
     end
 
     rcf = RunCamcolField(4263, 5, 119)
