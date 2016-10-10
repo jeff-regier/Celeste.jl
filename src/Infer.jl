@@ -56,6 +56,7 @@ function find_neighbors(target_sources::Vector{Int64},
                                                    width_scale=1.2)
             radii_map[s] = max(radii_map[s], radius_pix)
         end
+        radii_map[s] = min(radii_map[s], 25) # hack: upper bound radius at 25 arc seconds
     end
 
     # compute distance in pixels using small-distance approximation
@@ -148,7 +149,6 @@ function get_tile_source_map(images::Vector{TiledImage},
                                                patch_centers, patch_radii)
     end
 
-    # TODO: don't create patches
     patches, tile_source_map
 end
 
@@ -217,6 +217,7 @@ function load_active_pixels!(ea::ElboArgs{Float64};
                                             patch.pixel_center,
                                             ea.vp[s][ids.u])
 
+        # TODO: just loop over the tiles/pixels near the active source
         for t in 1:length(tiles)
             tile = tiles[t]
 
