@@ -48,6 +48,18 @@ function make_elbo_args(images::Vector{TiledImage},
     if fit_psf
         Infer.fit_object_psfs!(ea, ea.active_sources)
     end
+
+    # make all the pixels active by default, for the tests
+    for n in 1:ea.N
+        tiles = images[n].tiles
+        for t in 1:length(tiles)
+            H, W = size(tiles[t].pixels)
+            for w in 1:W, h in 1:H
+                push!(ea.active_pixels, ActivePixel(n, t, h, w))
+            end
+        end
+    end
+
     ea
 end
 

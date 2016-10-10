@@ -77,17 +77,6 @@ function ElboArgs{NumType <: Number}(
         end
     end
 
-    active_pixels = ActivePixel[]
-    for i in 1:N
-        tiles = images[i].tiles
-        for j in 1:length(tiles)
-            W, H = size(tiles[j].pixels)
-            for w in 1:W, h in 1:H
-                push!(active_pixels, ActivePixel(i, j, h, w))
-            end
-        end
-    end
-
     ElboArgs(S, N, psf_K, images, vp, tile_source_map, patches,
              active_sources, num_allowed_sd, ActivePixel[])
 end

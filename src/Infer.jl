@@ -102,6 +102,7 @@ function infer_source(images::Vector{TiledImage},
     ea = ElboArgs(images, vp, tile_source_map, patches, [1])
     fit_object_psfs!(ea, ea.active_sources)
     load_active_pixels!(ea)
+    @assert length(ea.active_pixels) > 0
     DeterministicVI.maximize_f(DeterministicVI.elbo, ea)
     vp[1]
 end
@@ -205,19 +206,21 @@ function load_active_pixels!(ea::ElboArgs{Float64};
     @assert length(ea.active_sources) == 1
     s = ea.active_sources[1]
 
-    for i = 1:ea.N
-        tiles = ea.images[i].tiles
+    @assert(length(ea.active_pixels) == 0)
 
-        patch = ea.patches[s, i]
+    for n = 1:ea.N
+        tiles = ea.images[n].tiles
+
+        patch = ea.patches[s, n]
         pix_loc = Model.linear_world_to_pix(patch.wcs_jacobian,
                                             patch.center,
                                             patch.pixel_center,
                                             ea.vp[s][ids.u])
 
-        for j in 1:length(tiles)
-            tile = tiles[j]
+        for t in 1:length(tiles)
+            tile = tiles[t]
 
-            tile_source_map = ea.tile_source_map[i][j]
+            tile_source_map = ea.tile_source_map[n][t]
             if s in tile_source_map
                 # TODO; use log_prob.jl in the Model module to get the
                 # get the expected brightness, not variational inference
@@ -235,7 +238,7 @@ function load_active_pixels!(ea::ElboArgs{Float64};
                         (h - pix_loc[1]) ^ 2 + (w - pix_loc[2])^2 < min_radius_pix^2
 
                     if bright_pixel || close_pixel
-                        push!(ea.active_pixels, ActivePixel(i, j, h_im, w_im))
+                        push!(ea.active_pixels, ActivePixel(n, t, h_im, w_im))
                     end
                 end
             end
