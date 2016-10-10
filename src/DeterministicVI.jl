@@ -48,6 +48,8 @@ type ElboArgs{NumType <: Number}
     # If this is set to Inf, the bivariate normals will be evaluated at all points
     # irrespective of their distance from the mean.
     num_allowed_sd::Float64
+
+    active_pixels::Vector{ActivePixel}
 end
 
 
@@ -66,19 +68,17 @@ function ElboArgs{NumType <: Number}(
     @assert length(tile_source_map) == N
     @assert size(patches, 1) == S
     @assert size(patches, 2) == N
-    for tiled_image in images
-        for tile in tiled_image.tiles
-            for ep in tile.epsilon_mat
-                if ep <= 0.0
-                    throw(InvalidInputError(
-                        "You must set all values of epsilon_mat > 0 for all images included in ElboArgs"
-                    ))
-                end
-            end
+
+    for img in images, tile in img.tiles, ep in tile.epsilon_mat
+        if ep <= 0.0
+            throw(InvalidInputError(
+                "You must set all values of epsilon_mat > 0 for all images included in ElboArgs"
+            ))
         end
     end
+
     ElboArgs(S, N, psf_K, images, vp, tile_source_map, patches,
-             active_sources, num_allowed_sd)
+             active_sources, num_allowed_sd, ActivePixel[])
 end
 
 

@@ -1,12 +1,13 @@
-
 module DerivativeTestUtils
 
 using Celeste: Model, DeterministicVI, SensitiveFloats
 using Base.Test
 import ForwardDiff
 
-export forward_diff_model_params, unwrap_vp_vector, wrap_vp_vector,
-       test_with_autodiff, trim_tiles!
+export forward_diff_model_params,
+       unwrap_vp_vector,
+       wrap_vp_vector,
+       test_with_autodiff
 
 """"
 Return an ElboArgs with the corresponding type.
@@ -20,11 +21,13 @@ function forward_diff_model_params{T<:Number}(::Type{T}, ea0::ElboArgs{Float64})
         vp[s][i] = ea0.vp[s][i]
     end
 
-    ElboArgs(ea0.images,
+    ea1 = ElboArgs(ea0.images,
              vp,
              ea0.tile_source_map,
              ea0.patches,
              ea0.active_sources)
+    ea1.active_pixels = ea0.active_pixels
+    ea1
 end
 
 
@@ -79,19 +82,6 @@ function test_with_autodiff(fun::Function, x::Vector{Float64}, sf::SensitiveFloa
         ad_hess = ForwardDiff.hessian(fun, x)
         @test_approx_eq ad_hess sf.h
     end
-end
-
-
-"""
-Set all but a few pixels to NaN to speed up autodiff Hessian testing.
-"""
-function trim_tiles!(tiled_blob::Vector{TiledImage}, keep_pixels)
-    for b = 1:length(tiled_blob)
-	    pixels1 = tiled_blob[b].tiles[1,1].pixels
-        h_width, w_width = size(pixels1)
-	    pixels1[setdiff(1:h_width, keep_pixels), :] = NaN
-        pixels1[:, setdiff(1:w_width, keep_pixels)] = NaN
-	end
 end
 
 

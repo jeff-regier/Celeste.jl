@@ -122,5 +122,5 @@ end
 test_sigmoid_logit()
 test_gal_shape_constrain()
 test_color_flux_transform()
-test_that_star_truth_is_most_likely()
+#test_that_star_truth_is_most_likely()
 #test_that_gal_truth_is_most_likely()

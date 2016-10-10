@@ -80,8 +80,6 @@ end
 
 function test_derivative_flags()
     blob, ea, body = gen_two_body_dataset()
-    keep_pixels = 10:11
-    trim_tiles!(ea.images, keep_pixels)
 
     elbo = DeterministicVI.elbo(ea)
 
@@ -102,8 +100,6 @@ function test_active_sources()
     # active_sources.
 
     blob, ea, body = gen_two_body_dataset()
-    keep_pixels = 10:11
-    trim_tiles!(ea.images, keep_pixels)
     b = 1
     tile = ea.images[b].tiles[1,1]
     h, w = 10, 10
@@ -373,94 +369,6 @@ function test_tiny_image_tiling()
 end
 
 
-function test_elbo_with_nan()
-    blob, ea, body = gen_sample_star_dataset(perturb=false);
-
-    for b in 1:5
-        blob[b].pixels[1,1] = NaN
-    end
-
-    # Set tile width to 5 to test the code for tiles with no sources.
-    ea = make_elbo_args(blob, body, tile_width=5);
-    initial_elbo = DeterministicVI.elbo(ea; calculate_hessian=false);
-
-    nan_elbo = DeterministicVI.elbo(ea);
-
-    # We deleted a pixel, so there's reason to expect them to be different,
-    # but importantly they're reasonably close and not NaN.
-    @test_approx_eq_eps (nan_elbo.v[1] - initial_elbo.v[1]) / initial_elbo.v[1] 0. 1e-4
-    deriv_rel_err = (nan_elbo.d - initial_elbo.d) ./ initial_elbo.d
-    @test_approx_eq_eps deriv_rel_err fill(0., length(ea.vp[1])) 0.05
-end
-
-
-function test_trim_source_tiles()
-  # Set a seed to avoid a flaky test.
-  blob, ea, bodies = gen_n_body_dataset(3, seed=42);
-
-  # With the above seed, this is near the middle of the image.
-  s = 1
-  ea.active_sources = [s]
-
-  loc_ids = ids.u
-  non_loc_ids = setdiff(1:length(ids), ids.u)
-  for b=1:length(blob)
-      ea_trimmed = deepcopy(ea);
-      Infer.trim_source_tiles!(ea_trimmed; noise_fraction=0.0001);
-
-      # Make sure pixels got NaN-ed out
-      @test(
-          sum([ sum(!Base.isnan(tile.pixels)) for
-                tile in ea_trimmed.images[b].tiles]) <
-          sum([ sum(!Base.isnan(tile.pixels)) for
-                tile in ea.images[b].tiles]))
-
-      # Make sure the elbo derivatives are nearly identical.
-      elbo_trim = DeterministicVI.elbo(ea_trimmed; calculate_hessian=false);
-      elbo_full = DeterministicVI.elbo(ea; calculate_hessian=false);
-      @test_approx_eq_eps(
-          elbo_full.d[loc_ids, 1] ./ elbo_trim.d[loc_ids, 1],
-          fill(1.0, length(loc_ids)), 0.06)
-      @test_approx_eq_eps(
-          elbo_full.d[non_loc_ids, 1] ./ elbo_trim.d[non_loc_ids, 1],
-          fill(1.0, length(non_loc_ids)), 4e-3)
-
-      # Set the source to be very dim so that the number of non-NaN
-      # pixels is determined only by min_radius_pix
-      min_radius_pix = 6.0
-      ea_trimmed = deepcopy(ea);
-      ea_trimmed.vp[s][ids.r1] = log(0.1)
-      ea_trimmed.vp[s][ids.r2] = 0.001
-      Infer.trim_source_tiles!(ea_trimmed, noise_fraction=0.1,
-                               min_radius_pix = min_radius_pix);
-
-      s_tiles = find_source_tiles(1, b, ea)
-      total_nonempty_pixels = 0.0
-      for tile_index in s_tiles
-          tile = ea_trimmed.images[b].tiles[tile_index...]
-          total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
-      end
-      @test_approx_eq_eps total_nonempty_pixels pi * min_radius_pix ^ 2 2.0
-
-      # Make sure a very dim image is completely NaN-ed out with a dim image
-      # and zero min radius.
-      min_radius_pix = 0.0
-      ea_trimmed = deepcopy(ea);
-      ea_trimmed.vp[s][ids.r1] = log(0.1)
-      ea_trimmed.vp[s][ids.r2] = 0.001
-      Infer.trim_source_tiles!(
-          ea_trimmed, noise_fraction=0.2, min_radius_pix = min_radius_pix);
-
-      total_nonempty_pixels = 0.0
-      for tile_index in s_tiles
-          tile = ea_trimmed.images[b].tiles[tile_index...]
-          total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
-      end
-      @test total_nonempty_pixels == 0.0
-  end
-end
-
-
 function test_num_allowed_sd()
     blob, ea, body = gen_two_body_dataset()
 
@@ -478,7 +386,6 @@ end
 
 ####################################################
 
-test_trim_source_tiles()
 test_set_hess()
 test_bvn_cov()
 test_tile_predicted_image()
@@ -489,4 +396,3 @@ test_that_variance_is_low()
 test_that_star_truth_is_most_likely()
 test_that_galaxy_truth_is_most_likely()
 test_coadd_cat_init_is_most_likely()
-test_elbo_with_nan()

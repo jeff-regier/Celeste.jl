@@ -101,7 +101,8 @@ function infer_source(images::Vector{TiledImage},
     patches, tile_source_map = get_tile_source_map(images, cat_local)
     ea = ElboArgs(images, vp, tile_source_map, patches, [1])
     fit_object_psfs!(ea, ea.active_sources)
-    trim_source_tiles!(ea)
+    load_active_pixels!(ea)
+    @assert length(ea.active_pixels) > 0
     DeterministicVI.maximize_f(DeterministicVI.elbo, ea)
     vp[1]
 end
@@ -192,46 +193,35 @@ end
 
 
 """
-Set any pixels significantly below background noise for the specified source
-to NaN.
+Get pixels significantly above background noise.
 
 Arguments:
   ea: The ElboArgs object
   noise_fraction: The proportion of the noise below which we will remove pixels.
   min_radius_pix: A minimum pixel radius to be included.
 """
-function trim_source_tiles!(ea::ElboArgs{Float64};
+function load_active_pixels!(ea::ElboArgs{Float64};
                             noise_fraction=0.1,
                             min_radius_pix=8.0)
     @assert length(ea.active_sources) == 1
     s = ea.active_sources[1]
 
-    images_out = Array(TiledImage, ea.N)
+    @assert(length(ea.active_pixels) == 0)
 
-    for i = 1:ea.N
-        img = ea.images[i]
-        tiles = img.tiles
+    for n = 1:ea.N
+        tiles = ea.images[n].tiles
 
-        tiles_out = Array(ImageTile, size(tiles)...)
-        images_out[i] = TiledImage(img.H, img.W, tiles_out, img.tile_width,
-                                img.b, img.wcs,
-                                img.psf, img.run_num, img.camcol_num,
-                                img.field_num, img.raw_psf_comp)
-
-        patch = ea.patches[s, i]
+        patch = ea.patches[s, n]
         pix_loc = Model.linear_world_to_pix(patch.wcs_jacobian,
                                             patch.center,
                                             patch.pixel_center,
                                             ea.vp[s][ids.u])
 
-        #TODO: iterate over rows first, not columns
-        for hh=1:size(tiles, 1), ww=1:size(tiles, 2)
-            tile = tiles[hh, ww]
+        for t in 1:length(tiles)
+            tile = tiles[t]
 
-            tile_source_map = ea.tile_source_map[i][hh, ww]
+            tile_source_map = ea.tile_source_map[n][t]
             if s in tile_source_map
-                tiles_out[hh, ww] = deepcopy(tile)
-
                 # TODO; use log_prob.jl in the Model module to get the
                 # get the expected brightness, not variational inference
                 pred_tile_pixels =
@@ -247,24 +237,13 @@ function trim_source_tiles!(ea::ElboArgs{Float64};
                     close_pixel =
                         (h - pix_loc[1]) ^ 2 + (w - pix_loc[2])^2 < min_radius_pix^2
 
-                    if !(bright_pixel || close_pixel)
-                        tiles_out[hh, ww].pixels[h_im, w_im] = NaN
+                    if (bright_pixel || close_pixel) && !isnan(tile.pixels[h_im, w_im])
+                        push!(ea.active_pixels, ActivePixel(n, t, h_im, w_im))
                     end
                 end
-            else
-                # TODO: Make tiles simply a vector
-                # rather than a 2d array to avoid this hack.
-                tiles_out[hh, ww] = ImageTile(i, tile.h_range, tile.w_range,
-                                             Array(Float64, 0, 0),
-                                             Array(Float64, 0, 0),
-                                             Array(Float64, 0))
             end
         end
     end
-
-    # Note: We're changing the images ea points to---the original images aren't
-    # mutated
-    ea.images = images_out
 end
 
 

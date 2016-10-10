@@ -28,15 +28,15 @@ run(`make RUN=4263 CAMCOL=5 FIELD=119`)
 cd(wd)
 
 # Check whether to run time-consuming derivatives tests.
-test_derivatives_flag = "--test_derivatives"
-test_detailed_derivatives = test_derivatives_flag in ARGS
-test_files = setdiff(ARGS, [ test_derivatives_flag ])
+long_running_flag = "--long-running"
+test_long_running = long_running_flag in ARGS
+test_files = setdiff(ARGS, [ long_running_flag ])
 
 if length(test_files) > 0
     testfiles = ["test_$(arg).jl" for arg in test_files]
 else
     testfiles = ["test_log_prob.jl",
-                 "test_elbo_values.jl",
+                 "test_elbo.jl",
                  "test_score.jl",
                  "test_derivatives.jl",
                  "test_psf.jl",
@@ -50,12 +50,12 @@ else
 end
 
 
-if test_detailed_derivatives
+if test_long_running
     warn("Testing ELBO derivatives, which may be slow.")
     push!(testfiles, "test_slow_derivatives.jl")
 else
-    warn("Skipping slow derivative tests.  ",
-         "To test slow derivatives, run tests with the flag ", test_derivatives_flag)
+    warn("Skipping long running tests.  ",
+         "To test everything, run tests with the flag ", long_running_flag)
 end
 
 

@@ -644,15 +644,13 @@ modifying elbo in place.
 Args:
     - elbo_vars: Elbo intermediate values.
     - ea: Model parameters
-    - active_pixels: An array of ActivePixels to be processed.
 
 Returns:
     Adds to elbo_vars.elbo in place.
 """
 function process_active_pixels!{NumType <: Number}(
                 elbo_vars::ElboIntermediateVariables{NumType},
-                ea::ElboArgs{NumType},
-                active_pixels::Array{ActivePixel})
+                ea::ElboArgs{NumType})
     sbs = load_source_brightnesses(ea,
         calculate_derivs=elbo_vars.calculate_derivs,
         calculate_hessian=elbo_vars.calculate_hessian)
@@ -668,7 +666,7 @@ function process_active_pixels!{NumType <: Number}(
     end
 
     # iterate over the pixels
-    for pixel in active_pixels
+    for pixel in ea.active_pixels
         tile = ea.images[pixel.n].tiles[pixel.tile_ind]
         tile_sources = ea.tile_source_map[pixel.n][pixel.tile_ind]
         this_pixel = tile.pixels[pixel.h, pixel.w]
@@ -683,9 +681,9 @@ function process_active_pixels!{NumType <: Number}(
         iota = tile.iota_vec[pixel.h]
         add_elbo_log_term!(elbo_vars, this_pixel, iota)
         add_scaled_sfs!(elbo_vars.elbo,
-                        elbo_vars.E_G, -iota,
-                        elbo_vars.calculate_hessian &&
-                        elbo_vars.calculate_derivs)
+                        elbo_vars.E_G,
+                        -iota,
+                        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
 
         # Subtract the log factorial term. This is not a function of the
         # parameters so the derivatives don't need to be updated. Note that
@@ -770,18 +768,6 @@ end
 
 
 """
-Get the active pixels (pixels for which the active sources are present).
-TODO: move this to pre-processing and use it instead of setting low-signal
-pixels to NaN.
-"""
-function get_active_pixels{NumType <: Number}(
-                    ea::ElboArgs{NumType})
-    return Model.get_active_pixels(ea.N, ea.images,
-                                   ea.tile_source_map, ea.active_sources)
-end
-
-
-"""
 Return the expected log likelihood for all bands in a section
 of the sky.
 Returns: A sensitive float with the log,  likelihood.
@@ -790,12 +776,11 @@ function elbo_likelihood{NumType <: Number}(
                     ea::ElboArgs{NumType};
                     calculate_derivs=true,
                     calculate_hessian=true)
-    active_pixels = get_active_pixels(ea)
     elbo_vars = ElboIntermediateVariables(NumType, ea.S,
                                 length(ea.active_sources),
                                 calculate_derivs=calculate_derivs,
                                 calculate_hessian=calculate_hessian)
-    process_active_pixels!(elbo_vars, ea, active_pixels)
+    process_active_pixels!(elbo_vars, ea)
     elbo_vars.elbo
 end
 
@@ -818,7 +803,8 @@ end
 
 # If Infs/NaNs have crept into the ELBO evaluation (a symptom of poorly conditioned optimization),
 # this helps catch them immediately.
-function assert_all_finite{ParamType}(sf::SensitiveFloat{ParamType, Float64})
+function assert_all_finite{ParamType <: ParamSet, NumType <: Number}(
+        sf::SensitiveFloat{ParamType, NumType})
     @assert all(isfinite(sf.v)) "Value is Inf/NaNs"
     @assert all(isfinite(sf.d)) "Gradient contains Inf/NaNs"
     @assert all(isfinite(sf.h)) "Hessian contains Inf/NaNs"
