@@ -23,16 +23,15 @@ function eval_bvn_log_density{NumType <: Number}(
 end
 
 
-function test_process_active_pixels()
+function test_active_pixels()
     blob, ea, bodies = gen_two_body_dataset()
 
     # Choose four pixels only to keep the test fast.
-    active_pixels = Array(DeterministicVI.ActivePixel, 4)
-    active_pixels[1] = DeterministicVI.ActivePixel(1, 1, 10, 11)
-    active_pixels[2] = DeterministicVI.ActivePixel(1, 1, 11, 10)
-    active_pixels[3] = DeterministicVI.ActivePixel(5, 1, 10, 11)
-    active_pixels[4] = DeterministicVI.ActivePixel(5, 1, 11, 10)
-
+    ea.active_pixels = Array(DeterministicVI.ActivePixel, 4)
+    ea.active_pixels[1] = DeterministicVI.ActivePixel(1, 1, 10, 11)
+    ea.active_pixels[2] = DeterministicVI.ActivePixel(1, 1, 11, 10)
+    ea.active_pixels[3] = DeterministicVI.ActivePixel(5, 1, 10, 11)
+    ea.active_pixels[4] = DeterministicVI.ActivePixel(5, 1, 11, 10)
 
     function tile_lik_wrapper_fun{NumType <: Number}(
             ea::ElboArgs{NumType}, calculate_derivs::Bool)
@@ -42,7 +41,6 @@ function test_process_active_pixels()
             length(ea.active_sources),
             calculate_derivs=calculate_derivs,
             calculate_hessian=calculate_derivs)
-        DeterministicVI.process_active_pixels!(elbo_vars, ea, active_pixels)
         deepcopy(elbo_vars.elbo)
     end
 
@@ -1189,33 +1187,33 @@ end
 
 # ELBO tests:
 println("Running ELBO derivative tests.")
-@time test_combine_pixel_sources()
-@time test_fs1m_derivatives()
-@time test_fs0m_derivatives()
-@time test_bvn_derivatives()
-@time test_galaxy_variable_transform()
-@time test_galaxy_cache_component()
-@time test_galaxy_sigma_derivs()
-@time test_brightness_hessian()
-@time test_dsiginv_dsig()
-@time test_add_log_term()
-@time test_e_g_s_functions()
-test_process_active_pixels()
+test_active_pixels()
+test_combine_pixel_sources()
+test_fs1m_derivatives()
+test_fs0m_derivatives()
+test_bvn_derivatives()
+test_galaxy_variable_transform()
+test_galaxy_cache_component()
+test_galaxy_sigma_derivs()
+test_brightness_hessian()
+test_dsiginv_dsig()
+test_add_log_term()
+test_e_g_s_functions()
 
 # KL tests:
 println("Running KL derivative tests.")
-@time test_beta_kl_derivatives()
-@time test_categorical_kl_derivatives()
-@time test_diagmvn_mvn_kl_derivatives()
-@time test_normal_kl_derivatives()
+test_beta_kl_derivatives()
+test_categorical_kl_derivatives()
+test_diagmvn_mvn_kl_derivatives()
+test_normal_kl_derivatives()
 
 # SensitiveFloat tests:
 println("Running SensitiveFloat derivative tests.")
-@time test_combine_sfs()
-@time test_add_sources_sf()
+test_combine_sfs()
+test_add_sources_sf()
 
 # Transform tests:
 println("Running Transform derivative tests.")
-@time test_box_derivatives()
-@time test_box_simplex_derivatives()
-@time test_simplex_derivatives()
+test_box_derivatives()
+test_box_simplex_derivatives()
+test_simplex_derivatives()
