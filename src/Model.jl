@@ -9,7 +9,7 @@ export Image, TiledImage, ImageTile,
        GalaxyPosParams, GalaxyShapeParams,
        VariationalParams, FreeVariationalParams,
        PsfParams, RawPSF, CatalogEntry,
-       init_source
+       init_source, ParamSet
 
 # functions
 export align

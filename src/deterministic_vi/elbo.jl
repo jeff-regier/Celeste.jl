@@ -681,9 +681,9 @@ function process_active_pixels!{NumType <: Number}(
         iota = tile.iota_vec[pixel.h]
         add_elbo_log_term!(elbo_vars, this_pixel, iota)
         add_scaled_sfs!(elbo_vars.elbo,
-                        elbo_vars.E_G, -iota,
-                        elbo_vars.calculate_hessian &&
-                        elbo_vars.calculate_derivs)
+                        elbo_vars.E_G,
+                        -iota,
+                        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
 
         # Subtract the log factorial term. This is not a function of the
         # parameters so the derivatives don't need to be updated. Note that
@@ -803,7 +803,8 @@ end
 
 # If Infs/NaNs have crept into the ELBO evaluation (a symptom of poorly conditioned optimization),
 # this helps catch them immediately.
-function assert_all_finite{ParamType}(sf::SensitiveFloat{ParamType, Float64})
+function assert_all_finite{ParamType <: ParamSet, NumType <: Number}(
+        sf::SensitiveFloat{ParamType, NumType})
     @assert all(isfinite(sf.v)) "Value is Inf/NaNs"
     @assert all(isfinite(sf.d)) "Gradient contains Inf/NaNs"
     @assert all(isfinite(sf.h)) "Hessian contains Inf/NaNs"

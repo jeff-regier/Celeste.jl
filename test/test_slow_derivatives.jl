@@ -9,8 +9,15 @@ using DerivativeTestUtils
 
 function test_elbo()
     blob, ea, body = gen_two_body_dataset()
-    keep_pixels = 10:11
-    trim_tiles!(ea.images, keep_pixels)
+
+	# Only keep a few pixels to make the autodiff results faster.
+    ea.active_pixels = []
+    for n in 1:ea.N
+        push!(ea.active_pixels, ActivePixel(n, 1, 10, 10))
+        push!(ea.active_pixels, ActivePixel(n, 1, 10, 11))
+        push!(ea.active_pixels, ActivePixel(n, 1, 11, 10))
+        push!(ea.active_pixels, ActivePixel(n, 1, 11, 11))
+    end
 
     # vp_vec is a vector of the parameters from all the active sources.
     function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
@@ -68,7 +75,10 @@ function test_real_image()
     patches, tile_source_map = Infer.get_tile_source_map(tiled_images, cat_local)
     ea = ElboArgs(tiled_images, vp, tile_source_map, patches, [1])
     Infer.fit_object_psfs!(ea, ea.active_sources)
-    Infer.trim_source_tiles!(ea)
+
+    @test length(ea.active_pixels) == 0
+    Infer.load_active_pixels!(ea)
+    @test length(ea.active_pixels) > 0
 
     elbo = DeterministicVI.elbo(ea)
 
@@ -87,14 +97,13 @@ function test_transform_sensitive_float()
 	blob, ea, body = gen_two_body_dataset();
 
 	# Only keep a few pixels to make the autodiff results faster.
-  keep_pixels = 10:11
-	for b = 1:ea.N
-	  pixels1 = ea.images[b].tiles[1,1].pixels
-      h_width, w_width = size(pixels1)
-	  pixels1[setdiff(1:h_width, keep_pixels), :] = NaN;
-	  pixels1[:, setdiff(1:w_width, keep_pixels)] = NaN;
-	end
-
+    ea.active_pixels = []
+    for n in 1:ea.N
+        push!(ea.active_pixels, ActivePixel(n, 1, 10, 10))
+        push!(ea.active_pixels, ActivePixel(n, 1, 10, 11))
+        push!(ea.active_pixels, ActivePixel(n, 1, 11, 10))
+        push!(ea.active_pixels, ActivePixel(n, 1, 11, 11))
+    end
 
 	function wrap_elbo{NumType <: Number}(vp_free_vec::Vector{NumType})
 		vp_free_array = reshape(vp_free_vec, length(UnconstrainedParams), length(ea.active_sources))
@@ -103,7 +112,7 @@ function test_transform_sensitive_float()
 		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
 		ea_local = forward_diff_model_params(NumType, ea);
 		transform.to_vp!(vp_free, ea_local.vp)
-		elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false)
+		elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false, calculate_hessian=false)
 		elbo.v[1]
 	end
 
@@ -136,6 +145,6 @@ end
 # ForwardDiff 0.2's compilation time is very slow, so only run these tests
 # if explicitly requested.
 
-@time test_elbo()
-@time test_real_image()
 @time test_transform_sensitive_float()
+@time test_real_image()
+@time test_elbo()

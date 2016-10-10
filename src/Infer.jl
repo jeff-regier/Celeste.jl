@@ -237,7 +237,7 @@ function load_active_pixels!(ea::ElboArgs{Float64};
                     close_pixel =
                         (h - pix_loc[1]) ^ 2 + (w - pix_loc[2])^2 < min_radius_pix^2
 
-                    if bright_pixel || close_pixel
+                    if (bright_pixel || close_pixel) && !isnan(tile.pixels[h_im, w_im])
                         push!(ea.active_pixels, ActivePixel(n, t, h_im, w_im))
                     end
                 end
