@@ -271,8 +271,8 @@ function load_field_images(ft::RunCamcolField, datadir::String)
         # epsilon * iota needs to be in units comparable to nelec
         # electron counts.
         # Note that each are actuall pretty variable.
-        iota_vec = convert(Vector{Float64}, gains[band] ./ calibration)
-        epsilon_mat = convert(Array{Float64, 2}, sky .* calibration)
+        iota_vec = convert(Vector{Float32}, gains[band] ./ calibration)
+        epsilon_mat = convert(Array{Float32, 2}, sky .* calibration)
 
         # Set it to use a constant background but include the non-constant data.
         result[bandnum] = Image(H, W, data, bandnum, wcs, psf,
