@@ -126,13 +126,17 @@ immutable BvnComponent{NumType <: Number}
       c = 1 ./ (the_det^.5 * 2pi)
       major_sd = sqrt(maximum([ the_cov[1, 1], the_cov[2, 2] ]))
 
+      precision = Array(NumType, 2, 2)
+      precision[2, 2] = the_cov[1,1] / the_det
+      precision[1, 1] = the_cov[2,2] / the_det
+      precision[1, 2] = -the_cov[1, 2] / the_det
+      precision[2, 1] = -the_cov[2, 1] / the_det
+
       if calculate_siginv_deriv
         # Derivatives of Sigma^{-1} with respect to sigma.  These are the second
         # derivatives of log|Sigma| with respect to sigma.
         # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
         dsiginv_dsig = Array(ThisNumType, 3, 3)
-
-        precision = the_cov^-1
 
         dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
         dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
@@ -149,7 +153,7 @@ immutable BvnComponent{NumType <: Number}
         new{ThisNumType}(the_mean, precision, c * weight,
                          dsiginv_dsig, major_sd)
       else
-        new{ThisNumType}(the_mean, the_cov^-1, c * weight,
+        new{ThisNumType}(the_mean, precision, c * weight,
                          zeros(ThisNumType, 0, 0), major_sd)
       end
     end
