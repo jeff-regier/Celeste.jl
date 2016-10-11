@@ -39,8 +39,11 @@ function test_blob()
     fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir rcf.run rcf.camcol rcf.field
     cat_entries = SDSSIO.read_photoobj_celeste(fname)
 
+    println("though0")
+    println(length(cat_entries))
     ea = make_elbo_args(blob, cat_entries,
                        patch_radius_pix=1e-6, fit_psf=false, tile_width=20)
+    println("though1")
 
     # Just check some basic facts about the catalog.
     @test length(cat_entries) == 805
@@ -57,6 +60,7 @@ function test_blob()
     test_b = 3
     img = ea.images[test_b]
     ea_obj = make_elbo_args(blob, cat_entries[obj_index:obj_index])
+    println("though2")
     pixel_loc = WCS.world_to_pix(img.wcs, obj_loc);
     original_psf_val = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
 
@@ -75,6 +79,7 @@ function test_blob()
 
     cat_several = [cat_entries[1]; cat_entries[obj_index]]
     ea_several = make_elbo_args(ea_obj.images, cat_several)
+    println("though3")
 
     # The second set of vp is the object of interest
     point_patch_psf = PSF.get_psf_at_point(ea_several.patches[2, test_b].psf);
@@ -216,7 +221,7 @@ end
 
 
 test_blob()
-test_stamp_get_object_psf()
-test_get_tiled_image_source()
-test_local_source_candidate()
-test_set_patch_size()
+#test_stamp_get_object_psf()
+#test_get_tiled_image_source()
+#test_local_source_candidate()
+#test_set_patch_size()

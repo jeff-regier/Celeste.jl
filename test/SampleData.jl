@@ -43,7 +43,8 @@ function make_elbo_args(images::Vector{TiledImage},
     vp = Vector{Float64}[init_source(ce) for ce in catalog]
     patches, tile_source_map = Infer.get_tile_source_map(images, catalog,
                                 radius_override_pix=patch_radius_pix)
-    active_sources = collect(1:length(catalog))
+    S = length(catalog)
+    active_sources = S <= 3 ? collect(1:S) : [1,2,3]
     ea = ElboArgs(images, vp, tile_source_map, patches, active_sources)
     if fit_psf
         Infer.fit_object_psfs!(ea, ea.active_sources)

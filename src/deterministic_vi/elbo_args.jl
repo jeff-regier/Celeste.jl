@@ -231,6 +231,8 @@ function ElboArgs{NumType <: Number}(
         end
     end
 
+    @assert(length(active_sources) <= 5, "too many active_sources")
+
     elbo_vars = ElboIntermediateVariables(NumType, S,
                                 length(active_sources),
                                 calculate_derivs=true,
