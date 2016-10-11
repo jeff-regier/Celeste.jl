@@ -209,7 +209,6 @@ function state_log_likelihood(is_star::Bool,
         background_rate = tile.epsilon_mat[pixel.h, pixel.w]
         background_sources = tile_sources[tile_sources.!=1]
         for s in background_sources
-            println("background s: ", s)
             flux_s = variational_params_to_fluxes(s, vp)
             rate_s = is_star ? model_vars.fs0m_vec[s].v : model_vars.fs1m_vec[s].v
             rate_s *= flux_s[pixel_band]

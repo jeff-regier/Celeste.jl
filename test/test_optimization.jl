@@ -60,11 +60,10 @@ function test_single_source_optimization()
     blob, ea, three_bodies = gen_three_body_dataset();
 
     # Change the tile size.
-    ea = make_elbo_args(blob, three_bodies, tile_width=10, fit_psf=false);
+    s = 2
+    ea = make_elbo_args(blob, three_bodies, tile_width=10, fit_psf=false, active_source=s);
     ea_original = deepcopy(ea);
 
-    s = 2
-    ea.active_sources = Int[s]
     omitted_ids = Int[]
     DeterministicVI.elbo_likelihood(ea).v[1]
     DeterministicVI.maximize_f(DeterministicVI.elbo_likelihood, ea; loc_width=1.0)

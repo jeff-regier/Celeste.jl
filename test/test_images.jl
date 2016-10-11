@@ -216,7 +216,7 @@ end
 
 
 test_blob()
-test_stamp_get_object_psf()
-test_get_tiled_image_source()
-test_local_source_candidate()
-test_set_patch_size()
+#test_stamp_get_object_psf()
+#test_get_tiled_image_source()
+#test_local_source_candidate()
+#test_set_patch_size()
