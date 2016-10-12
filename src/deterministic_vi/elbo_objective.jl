@@ -53,7 +53,7 @@ function accum_star_pos!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     s::Int,
                     bmc::BvnComponent{NumType},
-                    x::Vector{Float64},
+                    x::SVector{2,Float64},
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
     # call accum star pos in model
@@ -85,7 +85,7 @@ function accum_galaxy_pos!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     s::Int,
                     gcc::GalaxyCacheComponent{NumType},
-                    x::Vector{Float64},
+                    x::SVector{2,Float64},
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
     # call accum star pos in model

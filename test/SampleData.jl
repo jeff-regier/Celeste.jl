@@ -6,8 +6,8 @@ import Celeste: Infer
 import Synthetic
 
 using Distributions
+using StaticArrays
 import WCS, FITSIO, DataFrames
-
 
 export empty_model_params, dat_dir,
        sample_ce, perturb_params,
@@ -115,8 +115,8 @@ function load_stamp_blob(stamp_dir, stamp_id)
         tauBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]];
                          [hdr["PSF_P17"] hdr["PSF_P16"]]]
 
-        psf = [PsfComponent(alphaBar[k], xiBar[:, k],
-                            tauBar[:, :, k]) for k in 1:3]
+        psf = [PsfComponent(alphaBar[k], SVector{2,Float64}(xiBar[:, k]),
+                            SMatrix{2,2,Float64,4}(tauBar[:, :, k])) for k in 1:3]
 
         H, W = size(original_pixels)
         iota = hdr["GAIN"] / hdr["CALIB"]
