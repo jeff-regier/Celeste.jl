@@ -1,3 +1,5 @@
+using Base.Threads
+
 import WCS
 import Base.convert, Base.serialize, Base.deserialize
 
@@ -190,36 +192,35 @@ function load_images(box, rcfs, stagedir)
         n = lo[1] + i - 1
         rcf = rcfs[n]
 
-        nputs(nodeid, "loading images for RCF $n ($(rcf.run), $(rcf.camcol), $(rcf.field))")
         raw_images = SDSSIO.load_field_images(rcf, stagedir)
         @assert(length(raw_images) == 5)
         fimgs = [FlatImage(img) for img in raw_images]
         limages[i] = tuple(fimgs...)
    
-        # second, load the `catalog_offset` and `task_count` arrays with
-        # a number of sources for each field.
-        # (We'll accumulate the entries later.)
+        # load the catalog entries for this RCF
         local_catalog = fetch_catalog(rcf, stagedir)
 
         # we'll use sources outside of the box to render the background,
         # but we won't optimize them
         local_tasks = filter(s->in_box(s, box), local_catalog)
 
-        nputs(nodeid, "$(length(local_catalog)) sources ($(length(local_tasks)) tasks) in this RCF")
+        nputs(nodeid,
+              "$(length(local_catalog)) sources ($(length(local_tasks)) tasks)",
+              "in $(rcf.run), $(rcf.camcol), $(rcf.field)")
 
+        # only store the number of catalog entries and tasks
         lcatalog_offset[i] = length(local_catalog)
         ltask_offset[i] = length(local_tasks)
     end
     flush(images)
     flush(catalog_offset)
     flush(task_offset)
-    gc()
     sync()
 
     lcatalog_offset = access(catalog_offset, lo, hi)
     ltask_offset = access(task_offset, lo, hi)
 
-    # folds right, converting each field's count to offsets in # `catalog`
+    # folds right, converting each field's count to offsets in `catalog`
     # and `tasks`. this is a prefix sum, which can be done in parallel
     # (TODO: add this to Garbo) but is being done sequentially here
     for nid = 1:nnodes
@@ -228,10 +229,10 @@ function load_images(box, rcfs, stagedir)
             catalog_size = 0
             num_tasks = 0
             if nid > 1
-                coa, coa_handle = get(catalog_offset, lo-1, lo-1)
+                coa, ch = get(catalog_offset, lo-1, lo-1)
                 #nputs(nodeid, "got $(coa[1]) from $(lo[1]-1)")
                 catalog_size = catalog_size + coa[1]
-                toa, toa_handle = get(task_offset, lo-1, lo-1)
+                toa, th = get(task_offset, lo-1, lo-1)
                 num_tasks = num_tasks + toa[1]
             end
 
@@ -245,6 +246,7 @@ function load_images(box, rcfs, stagedir)
             flush(catalog_offset)
             flush(task_offset)
         end
+
         # sync to ensure orderly progression
         sync()
     end
@@ -255,9 +257,9 @@ end
 
 function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     num_fields = length(rcfs)
-    coa, coa_handle = get(catalog_offset, [num_fields], [num_fields])
+    coa, ch = get(catalog_offset, [num_fields], [num_fields])
     catalog_size = coa[1]
-    toa, toa_handle = get(task_offset, [num_fields], [num_fields])
+    toa, th = get(task_offset, [num_fields], [num_fields])
     num_tasks = toa[1]
 
     if nodeid == 1
@@ -273,13 +275,13 @@ function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     # task_offset arrays to build the catalog and task arrays. our starting
     # indices into the catalog and task arrays are computed from the
     # previous entries in the respective offset arrays.
-    colo, cohi = distribution(catalog_offset, nodeid)
     cat_idx = 1
     task_idx = 1
+    colo, cohi = distribution(catalog_offset, nodeid)
     if colo[1] > 1
-        coa, coa_handle = get(catalog_offset, [colo[1]-1], [colo[1]-1])
+        coa, ch = get(catalog_offset, [colo[1]-1], [colo[1]-1])
         cat_idx = cat_idx + coa[1]
-        toa, toa_handle = get(task_offset, [colo[1]-1], [colo[1]-1])
+        toa, th = get(task_offset, [colo[1]-1], [colo[1]-1])
         task_idx = task_idx + toa[1]
     end
     for n in colo[1]:cohi[1]
@@ -301,7 +303,11 @@ function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
 end
 
 
-function invert_rcf_array(rcfs)
+"""
+Build an index to quickly map an RCF to its index in the set of RCFs
+provided.
+"""
+function invert_rcf_array(rcfs::Vector{RunCamcolField})
     max_run = 1
     max_camcol = 1
     max_field = 1
@@ -323,15 +329,37 @@ function invert_rcf_array(rcfs)
 end
 
 
+"""
+Evicts the LRU entry in the RCF cache.
+"""
+function clean_cache(cache::Dict)
+    lru_rcf = RunCamcolField(0, 0, 0)
+    lru_interval = 0.0 
+    curr_time = time()
+    for (rcf, (imgs, ih, cat, ch, lru)) in cache
+        use_interval = curr_time - lru 
+        if use_interval > lru_interval
+            lru_rcf = rcf 
+            lru_interval = use_interval
+        end 
+    end 
+    ntputs(nodeid, threadid(), "discarding $(lru_rcf.run), $(lru_rcf.camcol), $(lru_rcf.field)")
+    delete!(cache, lru_rcf)
+end
+
+
+"""
+Sets up for, and runs inference on the specified source. Thread-safe.
+"""
 function optimize_source(s::Int64, images::Garray, catalog::Garray,
                          catalog_offset::Garray, rcf_to_index::Array{Int64,3},
-                         rcf_cache::Dict, rcf_cache_lock::SpinLock,
-                         g_lock::SpinLock, stagedir::String, times::InferTiming)
-    tid = Base.Threads.threadid()
+                         cache::Dict, cache_lock::SpinLock, g_lock::SpinLock,
+                         stagedir::String, times::InferTiming)
+    tid = threadid()
 
     tic()
     lock(g_lock)
-    ep, ep_handle = get(catalog, [s], [s])
+    ep, eph = get(catalog, [s], [s])
     unlock(g_lock)
     times.ga_get = times.ga_get + toq()
     entry, primary_rcf = ep[1]
@@ -340,12 +368,12 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
                         entry.pos[2] - 1e-8, entry.pos[2] + 1e-8)
     surrounding_rcfs = get_overlapping_fields(t_box, stagedir)
 
-    local_images = Vector{TiledImage}()
-    local_catalog = Vector{CatalogEntry}()
+    rimages = Vector{TiledImage}()
+    rcatalog = Vector{CatalogEntry}()
     tic()
     for rcf in surrounding_rcfs
-        lock(rcf_cache_lock)
-        cached_imgs, ihandle, cached_cat, chandle, lru = get!(rcf_cache, rcf) do
+        lock(cache_lock)
+        cached_imgs, ih, cached_cat, ch, _ = get(cache, rcf) do
             ntputs(nodeid, tid, "fetching $(rcf.run), $(rcf.camcol), $(rcf.field)")
 
             n = rcf_to_index[rcf.run, rcf.camcol, rcf.field]
@@ -353,14 +381,10 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
 
             tic()
             lock(g_lock)
-            fimgs, ihandle = get(images, [n], [n])
+            fimgs, ih = get(images, [n], [n])
             unlock(g_lock)
             times.ga_get = times.ga_get + toq()
-            imgs = Vector{TiledImage}()
-            for fimg in fimgs[1]
-                img = Image(fimg)
-                push!(imgs, TiledImage(img))
-            end
+            imgs = [TiledImage(Image(fimg)) for fimg in fimgs[1]]
 
             if n == 1
                 s_a = 1
@@ -381,37 +405,43 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
             end
             tic()
             lock(g_lock)
-            cat_entries, chandle = get(catalog, [s_a], [s_b])
+            cat_entries, ch = get(catalog, [s_a], [s_b])
             unlock(g_lock)
             times.ga_get = times.ga_get + toq()
-            neighbors = [entry[1] for entry in cat_entries]
+            neighbors = [ce[1] for ce in cat_entries]
 
-            imgs, ihandle, neighbors, chandle, time()
+            imgs, ih, neighbors, ch, time()
         end
-        unlock(rcf_cache_lock)
-        append!(local_images, cached_imgs)
-        append!(local_catalog, cached_cat)
+        push!(cache, rcf => (cached_imgs, ih, cached_cat, ch, time()))
+        if length(cache) > 20
+            clean_cache(cache)
+        end
+        unlock(cache_lock)
+        append!(rimages, cached_imgs)
+        append!(rcatalog, cached_cat)
     end
     #ntputs(nodeid, tid, "fetched data to infer $s in $(toq()) secs")
 
     tic()
-    i = findfirst(local_catalog, entry)
-    neighbor_indexes = Infer.find_neighbors([i,], local_catalog, local_images)[1]
-    neighbors = local_catalog[neighbor_indexes]
+    i = findfirst(rcatalog, entry)
+    neighbor_indexes = Infer.find_neighbors([i,], rcatalog, rimages)[1]
+    neighbors = rcatalog[neighbor_indexes]
     #ntputs(nodeid, tid, "loaded neighbors of $s in $(toq()) secs")
 
     t0 = time()
-    vs_opt = Infer.infer_source(local_images, neighbors, entry)
+    vs_opt = Infer.infer_source(rimages, neighbors, entry)
     runtime = time() - t0
-    #ntputs(nodeid, tid, "ran inference for $s in $runtime secs")
+    ntputs(nodeid, tid, "$(entry.objid): $runtime secs")
 
     InferResult(entry.thing_id, entry.objid, entry.pos[1], entry.pos[2],
                 vs_opt, runtime)
 end
 
 
-function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
-            rcf_to_index, stagedir, timing)
+function optimize_sources(images::Garray, catalog::Garray, tasks::Garray,
+                          catalog_offset::Garray, task_offset::Garray,
+                          rcf_to_index::Array{Int64,3}, stagedir::String,
+                          timing::InferTiming)
     num_work_items = length(tasks)
 
     # inference results
@@ -419,62 +449,63 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
     results_lock = SpinLock()
 
     # cache for RCF data; key is RCF, 
-    rcf_cache = Dict{RunCamcolField,
-                     Tuple{Vector{TiledImage},
-                           GarrayMemoryHandle,
-                           Vector{CatalogEntry},
-                           GarrayMemoryHandle,
-                           Float64}}()
-    rcf_cache_lock = SpinLock()
+    cache = Dict{RunCamcolField,
+                 Tuple{Vector{TiledImage},
+                       GarrayMemoryHandle,
+                       Vector{CatalogEntry},
+                       GarrayMemoryHandle,
+                       Float64}}()
+    cache_lock = SpinLock()
 
+    # to serialize get() calls
     g_lock = SpinLock()
 
     # per-thread timing
-    ttimes = Array(InferTiming, Base.Threads.nthreads())
+    ttimes = Array(InferTiming, nthreads())
 
     # create Dtree and get the initial allocation
     dt, isparent = Dtree(num_work_items, 0.4,
-                         ceil(Int64, Base.Threads.nthreads() / 4))
+                         ceil(Int64, nthreads() / 4))
     numwi, (startwi, endwi) = initwork(dt)
     rundt = runtree(dt)
 
-    nputs(nodeid, "initially $numwi work items ($startwi-$endwi)")
-    workitems, wi_handle = get(tasks, [startwi], [endwi])
+    nputs(nodeid, "dtree: initial work: $numwi ($startwi-$endwi)")
 
+    workitems, wih = get(tasks, [startwi], [endwi])
     widx = 1
     wilock = SpinLock()
 
     function process_tasks()
-        tid = Base.Threads.threadid()
+        tid = threadid()
         ttimes[tid] = InferTiming()
         times = ttimes[tid]
 
         if rundt && tid == 1
-            ntputs(nodeid, tid, "running tree")
+            ntputs(nodeid, tid, "dtree: running tree")
             while runtree(dt)
-                Garbo.cpu_pause()
+                cpu_pause()
             end
         else
             while true
-                lock(wilock)
                 tic()
+                lock(wilock)
                 if endwi == 0
-                    ntputs(nodeid, tid, "out of work")
+                    ntputs(nodeid, tid, "dtree: out of work")
                     unlock(wilock)
                     times.sched_ovh = times.sched_ovh + toq()
                     break
                 end
                 if widx > numwi
-                    ntputs(nodeid, tid, "consumed last work item; requesting more")
+                    ntputs(nodeid, tid, "dtree: getting work")
                     lock(g_lock)
                     numwi, (startwi, endwi) = getwork(dt)
                     unlock(g_lock)
                     times.sched_ovh = times.sched_ovh + toq()
-                    ntputs(nodeid, tid, "got $numwi work items ($startwi-$endwi)")
+                    ntputs(nodeid, tid, "dtree: $numwi work items ($startwi-$endwi)")
                     if endwi > 0
                         tic()
                         lock(g_lock)
-                        workitems, wi_handle = get(tasks, [startwi], [endwi])
+                        workitems, wih = get(tasks, [startwi], [endwi])
                         unlock(g_lock)
                         times.ga_get = times.ga_get + toq()
                         widx = 1
@@ -482,16 +513,30 @@ function optimize_sources(images, catalog, tasks, catalog_offset, task_offset,
                     unlock(wilock)
                     continue
                 end
-                taskidx = startwi+widx-1
                 item = workitems[widx]
                 widx = widx + 1
-                times.sched_ovh = times.sched_ovh + toq()
                 unlock(wilock)
-                ntputs(nodeid, tid, "processing source $item")
+                times.sched_ovh = times.sched_ovh + toq()
+                #ntputs(nodeid, tid, "processing source $item")
 
-                result = optimize_source(item, images, catalog, catalog_offset,
-                                 rcf_to_index, rcf_cache, rcf_cache_lock,
-                                 g_lock, stagedir, times)
+                result = InferResult(0, "", 0.0, 0.0, [0.0], 1.0)
+                tries = 1 
+                while tries <= 3
+                    result = try 
+                        optimize_source(item, images, catalog, catalog_offset,
+                                        rcf_to_index, cache, cache_lock, g_lock,
+                                        stagedir, times)
+                    catch exc 
+                        ntputs(nodeid, tid, "$exc running task $item on try $tries")
+                        tries = tries + 1 
+                        continue
+                    end 
+                    break
+                end 
+                if tries > 3
+                    ntputs(nodeid, tid, "exception running task $item on 3 tries, giving up")
+                    continue
+                end
 
                 lock(results_lock)
                 push!(results, result)
@@ -544,8 +589,7 @@ function affinitize()
         false
     end
     function threadfun()
-        set_thread_affinity(nodeid, ppn,
-                            Base.Threads.threadid(), Base.Threads.nthreads(), show_cpu)
+        set_thread_affinity(nodeid, ppn, threadid(), nthreads(), show_cpu)
     end
     ccall(:jl_threading_run, Void, (Any,), Core.svec(threadfun))
 end
@@ -566,7 +610,7 @@ function divide_sources_and_infer(
     # read the run-camcol-field triplets for this box
     rcfs = get_overlapping_fields(box, stagedir)
 
-    # loads 25TB from disk for SDSS
+    # loads up to 25TB from disk for SDSS
     tic()
     images, catalog_offset, task_offset = load_images(box, rcfs, stagedir)
     timing.load_img = toq()
@@ -577,7 +621,7 @@ function divide_sources_and_infer(
     catch exc
     end
 
-    # loads 4TB from disk for SDSS
+    # loads up to 4TB from disk for SDSS
     tic()
     catalog, tasks = load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     timing.load_cat = toq()
@@ -596,7 +640,6 @@ function divide_sources_and_infer(
         results = optimize_sources(images, catalog, tasks,
                                    catalog_offset, task_offset,
                                    rcf_to_index, stagedir, timing)
-
         timing.num_srcs = length(results)
 
         tic()
