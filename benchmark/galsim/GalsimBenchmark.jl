@@ -11,16 +11,6 @@ import Celeste: Infer, Model, DeterministicVI
 const IOTA = 1000.
 const FILENAME = "output/galsim_test_images.fits"
 
-## TODO pull this from test/SampleData.jl
-function make_elbo_args(images::Vector{Model.TiledImage}, catalog::Vector{Model.CatalogEntry})
-    vp = Vector{Float64}[Model.init_source(ce) for ce in catalog]
-    patches, tile_source_map = Infer.get_tile_source_map(images, catalog)
-    active_sources = collect(1:length(catalog))
-    DeterministicVI.ElboArgs(images, vp, tile_source_map, patches, active_sources)
-end
-
-## end code from SampleData
-
 function make_psf()
     alphaBar = [1.; 1.; 1.] ./ 3
     xiBar = [0.; 0.]
@@ -131,38 +121,35 @@ end
 const BENCHMARK_PARAMETER_LABELS = String[
     "X center (world coords)",
     "Y center (world coords)",
-    "Weight on exponential prototype (TODO)",
     "Minor/major axis ratio",
     "Angle (degrees)",
     "Half-light radius (arcsec)",
-    "Galaxy brightness (nMgy)",
+    "Brightness (nMgy)",
     "Probability of galaxy",
 ]
 
 function benchmark_comparison_data(params, truth_row)
     ids = Model.ids
-    @show params[ids.r1[2]], params[ids.r2[2]]
+    star_galaxy_index = truth_row[1, :star_or_galaxy] == "star" ? 1 : 2
     DataFrame(
         label=fill(truth_row[1, :comment], length(BENCHMARK_PARAMETER_LABELS)),
         field=BENCHMARK_PARAMETER_LABELS,
-        expected=Float64[
+        expected=Any[
             truth_row[1, :world_center_x],
             truth_row[1, :world_center_y],
-            1,
             truth_row[1, :minor_major_axis_ratio],
             truth_row[1, :angle_degrees],
             truth_row[1, :half_light_radius_arcsec],
             truth_row[1, :flux_counts] / IOTA,
-            1,
+            truth_row[1, :star_or_galaxy] == "star" ? 0 : 1,
         ],
         actual=Float64[
             params[ids.u[1]],
             params[ids.u[2]],
-            params[ids.e_dev],
             params[ids.e_axis],
             canonical_angle(params) * 180 / pi,
             params[ids.e_scale],
-            exp(params[ids.r1[2]]),
+            exp(params[ids.r1[star_galaxy_index]]),
             params[ids.a[2]],
         ],
     )
@@ -181,10 +168,13 @@ function main(; verbose=false)
         band_images::Vector{Model.TiledImage} = make_tiled_images(band_pixels, psf, wcs, epsilon)
         catalog_entry::Model.CatalogEntry = make_catalog_entry()
 
-        elbo_args::DeterministicVI.ElboArgs = make_elbo_args(band_images, [catalog_entry])
-        Infer.trim_source_tiles!(elbo_args)
-        DeterministicVI.maximize_f(DeterministicVI.elbo, elbo_args, verbose=verbose)
-        variational_parameters::Vector{Float64} = elbo_args.vp[1]
+
+        vp = Vector{Float64}[Model.init_source(catalog_entry)]
+        patches, tile_source_map = Infer.get_tile_source_map(band_images, [catalog_entry])
+        elbo_args = DeterministicVI.ElboArgs(band_images, vp, tile_source_map, patches, [1])
+        Infer.load_active_pixels!(elbo_args)
+        DeterministicVI.maximize_f(DeterministicVI.elbo, elbo_args, verbose=verbose, loc_width=3.0)
+        variational_parameters::Vector{Float64} = vp[1]
 
         benchmark_data = benchmark_comparison_data(variational_parameters, truth_data[index, :])
         println(repr(benchmark_data))
