@@ -53,7 +53,7 @@ function make_star_logpdf(images::Vector{TiledImage},
         dummy_gal_shape = [.1, .1, .1, .1]
         ll_like  = state_log_likelihood(true, brightness, colors, position,
                                         dummy_gal_shape, images,
-                                        active_pixels, 
+                                        active_pixels,
                                         patches,
                                         active_sources,
                                         psf_K, num_allowed_sd,
@@ -200,7 +200,7 @@ function state_log_likelihood(is_star::Bool,
 
         # compute the unit-flux pixel values
         populate_fsm_vecs!(model_vars, patches, active_sources,
-                           psf_K, num_allowed_sd,
+                           num_allowed_sd,
                            tile_sources, tile,
                            pixel.h, pixel.w,
                            gal_mcs_vec[pixel.n], star_mcs_vec[pixel.n])

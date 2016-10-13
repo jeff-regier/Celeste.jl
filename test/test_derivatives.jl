@@ -265,8 +265,12 @@ function test_fs1m_derivatives()
 
         star_mcs, gal_mcs = DeterministicVI.load_bvn_mixtures(ea, b)
         clear!(elbo_vars.fs1m_vec[s])
-        DeterministicVI.accum_galaxy_pos!(
-            elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian, true)
+        Model.accum_galaxy_pos!(elbo_vars.bvn_derivs,
+                                elbo_vars.fs1m_vec[s],
+                                elbo_vars.calculate_derivs,
+                                elbo_vars.calculate_hessian,
+                                gal_mcs[gcc_ind...], x,
+                                patch.wcs_jacobian, true)
         fs1m = deepcopy(elbo_vars.fs1m_vec[s])
 
         # Two sanity checks.
@@ -321,8 +325,13 @@ function test_fs0m_derivatives()
             end
             star_mcs, gal_mcs = DeterministicVI.load_bvn_mixtures(ea_fd, b)
             elbo_vars_fd = DeterministicVI.ElboIntermediateVariables(T, 1, 1)
-            DeterministicVI.accum_star_pos!(
-                elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true)
+            Model.accum_star_pos!(elbo_vars_fd.bvn_derivs,
+                                  elbo_vars_fd.fs0m_vec[s],
+                                  elbo_vars_fd.calculate_derivs,
+                                  elbo_vars_fd.calculate_hessian,
+                                  star_mcs[bmc_ind...], x,
+                                  patch.wcs_jacobian, true)
+
             elbo_vars_fd.fs0m_vec[s].v[1]
         end
 
@@ -338,8 +347,13 @@ function test_fs0m_derivatives()
 
         clear!(elbo_vars.fs0m_vec[s])
         star_mcs, gal_mcs = DeterministicVI.load_bvn_mixtures(ea, b)
-        DeterministicVI.accum_star_pos!(
-            elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true)
+        Model.accum_star_pos!(elbo_vars.bvn_derivs,
+                              elbo_vars.fs0m_vec[s],
+                              elbo_vars.calculate_derivs,
+                              elbo_vars.calculate_hessian,
+                              star_mcs[bmc_ind...], x,
+                              patch.wcs_jacobian, true)
+
         fs0m = deepcopy(elbo_vars.fs0m_vec[s])
 
         test_with_autodiff(f_wrap_star, par_star, fs0m)
