@@ -483,7 +483,7 @@ function optimize_sources(images::Garray, catalog::Garray, tasks::Garray,
         if rundt && tid == 1
             ntputs(nodeid, tid, "dtree: running tree")
             while runtree(dt)
-                cpu_pause()
+                Garbo.cpu_pause()
             end
         else
             while true

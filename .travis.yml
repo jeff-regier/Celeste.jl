@@ -1,17 +1,18 @@
+sudo: required
+dist: trusty
 language: julia
-os:
-  - linux
+os: linux
 julia:
   - 0.5
 notifications:
   email: false
-
+env:
+  - MPICH_CC=gcc
 before_install:
   - sudo apt-get update -qq -y
-  - sudo apt-get install -y gcc-4.8
+  - sudo apt-get install -y mpich libmpich-dev
   - sudo apt-get install libwcs4 -y
   - sudo apt-get install libcfitsio3 -y
-  - sudo apt-get install mpich2 libmpich2-3 libmpich2-dev -y
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
