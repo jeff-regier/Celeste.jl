@@ -44,30 +44,30 @@ end
 Set a SensitiveFloat's hessian term, maintaining symmetry.
 """
 function set_hess!{ParamType <: ParamSet, NumType <: Number}(
-    sf::SensitiveFloat{ParamType, NumType},
-    i::Int, j::Int, v::NumType)
-  i != j ?
-    sf.h[i, j] = sf.h[j, i] = v:
-    sf.h[i, j] = v
-
-    true # Set definite return type
+                    sf::SensitiveFloat{ParamType, NumType},
+                    i::Int,
+                    j::Int,
+                    v::NumType)
+    # even if i == j, it's probably faster not to branch
+    sf.h[i, j] = sf.h[j, i] = v
 end
 
 function zero_sensitive_float{ParamType <: ParamSet}(
-  ::Type{ParamType}, NumType::DataType, local_S::Int)
+              ::Type{ParamType}, NumType::DataType, local_S::Int)
     local_P = length(ParamType)
 
     v = zeros(NumType, 1)
     d = zeros(NumType, local_P, local_S)
     h = zeros(NumType, local_P * local_S, local_P * local_S)
+
     SensitiveFloat{ParamType, NumType}(v, d, h)
 end
 
 
 function zero_sensitive_float{ParamType <: ParamSet}(
-    ::Type{ParamType}, NumType::DataType)
-        # Default to a single source.
-        zero_sensitive_float(ParamType, NumType, 1)
+                    ::Type{ParamType}, NumType::DataType)
+    # Default to a single source.
+    zero_sensitive_float(ParamType, NumType, 1)
 end
 
 
@@ -81,18 +81,6 @@ end
 function zero_sensitive_float{ParamType <: ParamSet}(
             param_arg::Type{ParamType})
     zero_sensitive_float(param_arg, Float64, 1)
-end
-
-
-function zero_sensitive_float_array{ParamType <: ParamSet}(
-    ::Type{ParamType}, NumType::DataType, local_S::Int, d::Integer...)
-
-    sf_array = Array(SensitiveFloat{ParamType, NumType}, d)
-    for ind in 1:length(sf_array)
-        sf_array[ind] = zero_sensitive_float(ParamType, NumType, local_S)
-    end
-
-    sf_array
 end
 
 
@@ -173,8 +161,6 @@ function combine_sfs!{ParamType <: ParamSet,
     LinAlg.BLAS.axpy!(g_d[2], sf2.d, sf_result.d)
 
     sf_result.v[1] = v
-
-    true # Set definite return type
 end
 
 
@@ -194,8 +180,6 @@ function combine_sfs!{ParamType <: ParamSet,
         calculate_hessian::Bool=true)
 
     combine_sfs!(sf1, sf2, sf1, v, g_d, g_h, calculate_hessian=calculate_hessian)
-
-    true # Set definite return type
 end
 
 # Decalare outside to avoid allocating memory.
@@ -211,12 +195,9 @@ function multiply_sfs!{ParamType <: ParamSet, NumType <: Number}(
 
     v = sf1.v[1] * sf2.v[1]
     g_d = NumType[sf2.v[1], sf1.v[1]]
-    #const g_h = NumType[0 1; 1 0]
 
     combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess,
                              calculate_hessian=calculate_hessian)
-
-    true # Set definite return type
 end
 
 
