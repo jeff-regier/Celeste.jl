@@ -7,9 +7,9 @@ import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
 import SensitiveFloats.clear!
 import SDSSIO: RunCamcolField
 
-include("Synthetic.jl")
-include("SampleData.jl")
-include("DerivativeTestUtils.jl")
+include(joinpath(Pkg.dir("Celeste"), "test", "Synthetic.jl"))
+include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
+include(joinpath(Pkg.dir("Celeste"), "test", "DerivativeTestUtils.jl"))
 
 import Synthetic
 using SampleData

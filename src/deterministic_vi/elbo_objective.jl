@@ -34,70 +34,6 @@ end
 
 
 """
-Add the contributions of a star's bivariate normal term to the ELBO,
-by updating elbo_vars.fs0m_vec[s] in place.
-
-Args:
-    - elbo_vars: Elbo intermediate values.
-    - s: The index of the current source in 1:S
-    - bmc: The component to be added
-    - x: An offset for the component in pixel coordinates (e.g. a pixel location)
-    - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-    - is_active_source: Whether it is an active source, (i.e. whether to
-                        calculate derivatives if requested.)
-
-Returns:
-    Updates elbo_vars.fs0m_vec[s] in place.
-"""
-function accum_star_pos!{NumType <: Number}(
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    s::Int,
-                    bmc::BvnComponent{NumType},
-                    x::Vector{Float64},
-                    wcs_jacobian::Array{Float64, 2},
-                    is_active_source::Bool)
-    # call accum star pos in model
-    Model.accum_star_pos!(elbo_vars.bvn_derivs,
-                    elbo_vars.fs0m_vec,
-                    elbo_vars.calculate_derivs,
-                    elbo_vars.calculate_hessian,
-                    s, bmc, x, wcs_jacobian, is_active_source)
-end
-
-
-"""
-Add the contributions of a galaxy component term to the ELBO by
-updating fs1m in place.
-
-Args:
-    - elbo_vars: Elbo intermediate variables
-    - s: The index of the current source in 1:S
-    - gcc: The galaxy component to be added
-    - x: An offset for the component in pixel coordinates (e.g. a pixel location)
-    - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-    - is_active_source: Whether it is an active source, (i.e. whether to
-                        calculate derivatives if requested.)
-
-Returns:
-    Updates elbo_vars.fs1m_vec[s] in place.
-"""
-function accum_galaxy_pos!{NumType <: Number}(
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    s::Int,
-                    gcc::GalaxyCacheComponent{NumType},
-                    x::Vector{Float64},
-                    wcs_jacobian::Array{Float64, 2},
-                    is_active_source::Bool)
-    # call accum star pos in model
-    Model.accum_galaxy_pos!(elbo_vars.bvn_derivs,
-                            elbo_vars.fs1m_vec,
-                            elbo_vars.calculate_derivs,
-                            elbo_vars.calculate_hessian,
-                            s, gcc, x, wcs_jacobian, is_active_source)
-end
-
-
-"""
 Populate fs0m_vec and fs1m_vec for all sources for a given pixel.
 
 Args:
@@ -127,8 +63,50 @@ function populate_fsm_vecs!{NumType <: Number}(
                              elbo_vars.calculate_derivs,
                              elbo_vars.calculate_hessian,
                              ea.patches, ea.active_sources,
-                             ea.psf_K, ea.num_allowed_sd,
+                             ea.num_allowed_sd,
                              tile_sources, tile, h, w, gal_mcs, star_mcs)
+end
+
+
+"""
+Populate fs0m and fs1m for all sources for a given source and pixel.
+
+Args:
+    - elbo_vars: Elbo intermediate values.
+    - ea: Model parameters
+    - fs0m, fs1m: Star and galaxy parameters updated in place.
+    - s: The source to use
+    - b: The band
+    - x: The pixel location in the full image
+    - active_source: Whether or not the source is being optimized
+    - gal_mcs: Galaxy components
+    - star_mcs: Star components
+
+Returns:
+    Updates fs0m and fs1m in place with the total
+    shape contributions to this pixel's brightness.
+"""
+function populate_fsm!{NumType <: Number}(
+                    elbo_vars::ElboIntermediateVariables{NumType},
+                    ea::ElboArgs{NumType},
+                    fs0m::SensitiveFloat{StarPosParams, NumType},
+                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
+                    s::Int,
+                    b::Int,
+                    x::Vector{Float64},
+                    active_source::Bool,
+                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+                    star_mcs::Array{BvnComponent{NumType}, 2})
+    # ensure tile.b is a filter band, not an image's index
+    @assert 1 <= b <= B
+    Model.populate_fsm!(elbo_vars.bvn_derivs,
+                        fs0m, fs1m,
+                        elbo_vars.calculate_derivs,
+                        elbo_vars.calculate_hessian,
+                        s, x, active_source,
+                        ea.num_allowed_sd,
+                        ea.patches[s, b].wcs_jacobian,
+                        gal_mcs, star_mcs)
 end
 
 
@@ -673,4 +651,3 @@ function elbo{NumType <: Number}(
     subtract_kl!(ea, elbo, calculate_derivs=calculate_derivs)
     elbo
 end
-

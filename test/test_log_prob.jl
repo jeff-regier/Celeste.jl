@@ -10,18 +10,6 @@ test log_prob.jl and log_prob_util.jl
 #####################
 
 
-function true_star_init()
-    blob, ea, body = gen_sample_star_dataset(perturb=false)
-
-    ea.vp[1][ids.a] = [ 1.0 - 1e-4, 1e-4 ]
-    ea.vp[1][ids.r2] = 1e-4
-    ea.vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * ea.vp[1][ids.r2]
-    #ea.vp[1][ids.r1] = sample_star_fluxes[3] ./ ea.vp[1][ids.r2]
-    ea.vp[1][ids.c2] = 1e-4
-    blob, ea, body
-end
-
-
 function test_that_star_truth_is_most_likely()
     blob, ea, body = true_star_init();
 
