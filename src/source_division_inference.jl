@@ -7,7 +7,6 @@ import Base.convert, Base.serialize, Base.deserialize
 # RawPSF size is 84060 (rrows: 2601x4, cmat: 4x5x5)
 # PsfComponent size is 150 (xiBar: 2, tauBar:2x2, tauBarInv:2x2)
 # FlatImage size is 24903682 (pixels: 2048x1489, epsilon_mat: 1489, iota_vec: 2048)
-# ImageTile size is 3296 (pixels: 20x20, epsilon_mat: 20x20, iota_vec: 20)
 # InferResult size is 344 (objid: 19, vs: 32)
 
 immutable FlatImage
@@ -27,6 +26,7 @@ end
 
 function convert(::Type{FlatImage}, img::Image)
     wcs_header = WCS.to_header(img.wcs)
+    @assert(length(wcs_header) <= 10000)
     FlatImage(img.H, img.W, img.pixels, img.b,
               wcs_header, img.psf, img.run_num,
               img.camcol_num, img.field_num,
@@ -46,6 +46,10 @@ function convert(::Type{Image}, img::FlatImage)
 end
 
 function ser_array(s::Base.AbstractSerializer, a::Array, flen::Int)
+    if length(a) > flen
+        nputs(nodeid, "error: ser_array dims are $(size(a)), > $flen")
+    end
+    @assert(length(a) <= flen)
     serialize(s, size(a))
     for p in a
         write(s.io, p)
@@ -62,25 +66,47 @@ function deser_array(s::Base.AbstractSerializer, T::DataType, flen::Int)
     return a
 end
 
-#=
 function serialize(s::Base.AbstractSerializer, psf::PsfComponent)
     Base.serialize_type(s, typeof(psf))
     write(s.io, psf.alphaBar)
-    ser_array(s, psf.xiBar, 2)
-    ser_array(s, psf.tauBar, 4)
-    ser_array(s, psf.tauBarInv, 4)
+    for p in psf.xiBar
+        write(s.io, p)
+    end
+    for p in psf.tauBar
+        write(s.io, p)
+    end
+    for p in psf.tauBarInv
+        write(s.io, p)
+    end
+    #ser_array(s, psf.xiBar, 2)
+    #ser_array(s, psf.tauBar, 4)
+    #ser_array(s, psf.tauBarInv, 4)
     write(s.io, psf.tauBarLd)
 end
 
 function deserialize(s::Base.AbstractSerializer, t::Type{PsfComponent})
     alphaBar = read(s.io, Float64)::Float64
-    xiBar = deser_array(s, Float64, 2)
-    tauBar = deser_array(s, Float64, 4)
-    tauBarInv = deser_array(s, Float64, 4)
+    x = zeros(Float64, 2)
+    for i = 1:length(x)
+        x[i] = read(s.io, Float64)::Float64
+    end
+    xiBar = SVector{2}(x)
+    x = zeros(Float64, 2, 2)
+    for i = 1:length(x)
+        x[i] = read(s.io, Float64)::Float64
+    end
+    tauBar = SMatrix{2,2}(x)
+    x = zeros(Float64, 2, 2)
+    for i = 1:length(x)
+        x[i] = read(s.io, Float64)::Float64
+    end
+    tauBarInv = SMatrix{2,2}(x)
+    #xiBar = deser_array(s, Float64, 2)
+    #tauBar = deser_array(s, Float64, 4)
+    #tauBarInv = deser_array(s, Float64, 4)
     tauBarLd = read(s.io, Float64)::Float64
     PsfComponent(alphaBar, xiBar, tauBar, tauBarInv, tauBarLd)
 end
-=#
 
 function serialize(s::Base.AbstractSerializer, rp::RawPSF)
     Base.serialize_type(s, typeof(rp))
@@ -105,6 +131,7 @@ function serialize(s::Base.AbstractSerializer, img::FlatImage)
     ser_array(s, img.pixels, 3100000)
     write(s.io, img.b)
     whlen = length(img.wcs_header.data)
+    @assert(whlen <= 10000)
     write(s.io, whlen)
     for i in 1:whlen
         write(s.io, img.wcs_header.data[i])

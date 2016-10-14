@@ -500,6 +500,11 @@ end
 called from main entry point.
 """
 function infer_box(box::BoundingBox, stagedir::String, outdir::String)
+    if nodeid == 1
+        nputs(nodeid, "running inference for $(box.ramin)-$(box.ramax), ",
+              "$(box.decmin)-$(box.decmax) with $nnodes process(es)")
+    end
+
     # Base.@time hack for distributed environment
     gc_stats = Base.gc_num()
     elapsed_time = time_ns()
