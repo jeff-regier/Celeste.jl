@@ -62,6 +62,7 @@ function deser_array(s::Base.AbstractSerializer, T::DataType, flen::Int)
     return a
 end
 
+#=
 function serialize(s::Base.AbstractSerializer, psf::PsfComponent)
     Base.serialize_type(s, typeof(psf))
     write(s.io, psf.alphaBar)
@@ -79,6 +80,7 @@ function deserialize(s::Base.AbstractSerializer, t::Type{PsfComponent})
     tauBarLd = read(s.io, Float64)::Float64
     PsfComponent(alphaBar, xiBar, tauBar, tauBarInv, tauBarLd)
 end
+=#
 
 function serialize(s::Base.AbstractSerializer, rp::RawPSF)
     Base.serialize_type(s, typeof(rp))
@@ -370,7 +372,7 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
 
     rimages = Vector{TiledImage}()
     rcatalog = Vector{CatalogEntry}()
-    tic()
+    #tic()
     for rcf in surrounding_rcfs
         lock(cache_lock)
         cached_imgs, ih, cached_cat, ch, _ = get(cache, rcf) do
@@ -423,7 +425,7 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
     end
     #ntputs(nodeid, tid, "fetched data to infer $s in $(toq()) secs")
 
-    tic()
+    #tic()
     i = findfirst(rcatalog, entry)
     neighbor_indexes = Infer.find_neighbors([i,], rcatalog, rimages)[1]
     neighbors = rcatalog[neighbor_indexes]
