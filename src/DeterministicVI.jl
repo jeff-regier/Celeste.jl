@@ -14,6 +14,7 @@ import ..Log
 using ..Transform
 import DataFrames
 import Optim
+using StaticArrays
 
 export ElboArgs
 
