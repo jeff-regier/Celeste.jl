@@ -7,8 +7,7 @@ import ForwardDiff
 export forward_diff_model_params,
        unwrap_vp_vector,
        wrap_vp_vector,
-       test_with_autodiff,
-       true_star_init
+       test_with_autodiff
 
 """"
 Return an ElboArgs with the corresponding type.
@@ -83,19 +82,6 @@ function test_with_autodiff(fun::Function, x::Vector{Float64}, sf::SensitiveFloa
         ad_hess = ForwardDiff.hessian(fun, x)
         @test_approx_eq ad_hess sf.h
     end
-end
-
-
-function true_star_init()
-    blob, ea, body = gen_sample_star_dataset(perturb=false)
-
-    ea.vp[1][ids.a[:, 1]] = [ 1.0 - 1e-4, 1e-4 ]
-    ea.vp[1][ids.r2] = 1e-4
-    ea.vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * ea.vp[1][ids.r2]
-    #ea.vp[1][ids.r1] = sample_star_fluxes[3] ./ ea.vp[1][ids.r2]
-    ea.vp[1][ids.c2] = 1e-4
-
-    blob, ea, body
 end
 
 

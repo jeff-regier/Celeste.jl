@@ -14,7 +14,7 @@ export empty_model_params, dat_dir,
        sample_star_fluxes, sample_galaxy_fluxes,
        gen_sample_star_dataset, gen_sample_galaxy_dataset,
        gen_two_body_dataset, gen_three_body_dataset, gen_n_body_dataset,
-       make_elbo_args
+       make_elbo_args, true_star_init
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "test", "data")
 
@@ -368,5 +368,19 @@ function gen_n_body_dataset(
 
   blob, ea, S_bodies
 end
+
+
+function true_star_init()
+    blob, ea, body = gen_sample_star_dataset(perturb=false)
+
+    ea.vp[1][ids.a[:, 1]] = [ 1.0 - 1e-4, 1e-4 ]
+    ea.vp[1][ids.r2] = 1e-4
+    ea.vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * ea.vp[1][ids.r2]
+    #ea.vp[1][ids.r1] = sample_star_fluxes[3] ./ ea.vp[1][ids.r2]
+    ea.vp[1][ids.c2] = 1e-4
+
+    blob, ea, body
+end
+
 
 end # End module
