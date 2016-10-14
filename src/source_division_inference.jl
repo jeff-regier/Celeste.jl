@@ -206,7 +206,7 @@ function load_images(box, rcfs, stagedir)
 
         nputs(nodeid,
               "$(length(local_catalog)) sources ($(length(local_tasks)) tasks)",
-              "in $(rcf.run), $(rcf.camcol), $(rcf.field)")
+              " in RCF $n ($(rcf.run), $(rcf.camcol), $(rcf.field))")
 
         # only store the number of catalog entries and tasks
         lcatalog_offset[i] = length(local_catalog)
@@ -374,10 +374,11 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
     for rcf in surrounding_rcfs
         lock(cache_lock)
         cached_imgs, ih, cached_cat, ch, _ = get(cache, rcf) do
-            ntputs(nodeid, tid, "fetching $(rcf.run), $(rcf.camcol), $(rcf.field)")
-
             n = rcf_to_index[rcf.run, rcf.camcol, rcf.field]
             @assert n > 0
+
+            ntputs(nodeid, tid, "fetching RCF $n",
+                   " ($(rcf.run), $(rcf.camcol), $(rcf.field))")
 
             tic()
             lock(g_lock)
@@ -393,15 +394,15 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
                 st, st_handle = get(catalog_offset, [n], [n])
                 unlock(g_lock)
                 times.ga_get = times.ga_get + toq()
-                s_b = st[1]
+                s_b = max(1, st[1])
             else
                 tic()
                 lock(g_lock)
                 st, st_handle = get(catalog_offset, [n-1], [n])
                 unlock(g_lock)
                 times.ga_get = times.ga_get + toq()
-                s_a = st[1]
-                s_b = st[2]
+                s_a = max(1, st[1])
+                s_b = max(1, st[2])
             end
             tic()
             lock(g_lock)
