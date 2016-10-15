@@ -404,7 +404,8 @@ end
 
 
 """
-Adds up E_G and var_G across all sources.
+Adds up E_G and var_G across all sources.  This requires elbo_vars.fs0m_vec and
+elbo_vars.fs1m_vec to have been set already for all sources.
 
 Args:
     - elbo_vars: Elbo intermediate values, with updated fs1m_vec and fs0m_vec.
@@ -431,7 +432,7 @@ function combine_pixel_sources!{NumType <: Number}(
         accumulate_source_pixel_brightness!(
             elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
             elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s],
-            sbs[s], b, s, active_source)
+            sbs[s], tile.b, s, active_source)
     end
 end
 
@@ -493,13 +494,12 @@ Args:
 """
 function add_elbo_log_term!{NumType <: Number}(
                 elbo_vars::ElboIntermediateVariables{NumType},
+                E_G::SensitiveFloat{CanonicalParams, NumType},
+                var_G::SensitiveFloat{CanonicalParams, NumType},
+                elbo::SensitiveFloat{CanonicalParams, NumType},
                 x_nbm::AbstractFloat, iota::AbstractFloat)
     # See notes for a derivation. The log term is
     # log E[G] - Var(G) / (2 * E[G] ^2 )
-
-    E_G = elbo_vars.E_G
-    var_G = elbo_vars.var_G
-    elbo = elbo_vars.elbo
 
     # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
     log_term_value = log(E_G.v[1]) - 0.5 * var_G.v[1]    / (E_G.v[1] ^ 2)
@@ -521,7 +521,7 @@ function add_elbo_log_term!{NumType <: Number}(
 
         # Calculate the log term.
         combine_sfs!(
-            elbo_vars.var_G, elbo_vars.E_G, elbo_vars.elbo_log_term,
+            var_G, E_G, elbo_vars.elbo_log_term,
             log_term_value, elbo_vars.combine_grad, elbo_vars.combine_hess,
             calculate_hessian=elbo_vars.calculate_hessian)
 
@@ -538,6 +538,17 @@ function add_elbo_log_term!{NumType <: Number}(
     end
 end
 
+
+function add_elbo_log_term!{NumType <: Number}(
+                elbo_vars::ElboIntermediateVariables{NumType},
+                x_nbm::AbstractFloat, iota::AbstractFloat)
+    add_elbo_log_term!(elbo_vars,
+                       elbo_vars.E_G,
+                       elbo_vars.var_G,
+                       elbo_vars.elbo,
+                       x_nbm,
+                       iota)
+end
 
 ############################################
 # The remaining functions loop over tiles, sources, and pixels.
