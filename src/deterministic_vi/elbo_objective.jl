@@ -78,7 +78,7 @@ Args:
     - s: The source to use
     - b: The band
     - x: The pixel location in the full image
-    - active_source: Whether or not the source is being optimized
+    - is_active_source: Whether or not the source is being optimized
     - gal_mcs: Galaxy components
     - star_mcs: Star components
 
@@ -94,7 +94,7 @@ function populate_fsm!{NumType <: Number}(
                     s::Int,
                     b::Int,
                     x::Vector{Float64},
-                    active_source::Bool,
+                    is_active_source::Bool,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
     # ensure tile.b is a filter band, not an image's index
@@ -103,7 +103,7 @@ function populate_fsm!{NumType <: Number}(
                         fs0m, fs1m,
                         elbo_vars.calculate_derivs,
                         elbo_vars.calculate_hessian,
-                        s, x, active_source,
+                        s, x, is_active_source,
                         ea.num_allowed_sd,
                         ea.patches[s, b].wcs_jacobian,
                         gal_mcs, star_mcs)
@@ -138,7 +138,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
                     fs1m::SensitiveFloat{GalaxyPosParams, NumType},
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
-                    active_source::Bool)
+                    is_active_source::Bool)
 
     E_G2_s = elbo_vars.E_G2_s
 
@@ -157,7 +157,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
         E_G2_s.v[1] += a_i * llff
 
         # Only calculate derivatives for active sources.
-        if active_source && elbo_vars.calculate_derivs
+        if is_active_source && elbo_vars.calculate_derivs
             ######################
             # Gradients.
 
@@ -297,7 +297,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
         end
     end
 
-    calculate_var_G_s!(elbo_vars, E_G_s, E_G2_s, var_G_s, active_source)
+    calculate_var_G_s!(elbo_vars, E_G_s, E_G2_s, var_G_s, is_active_source)
 end
 
 
@@ -328,7 +328,7 @@ Args:
     - E_G_s: The expected brightness for a source
     - E_G2_s: The expected squared brightness for a source
     - var_G_s: Updated in place.  The variance of the brightness of a source.
-    - active_source: Whether this is an active source that requires derivatives
+    - is_active_source: Whether this is an active source that requires derivatives
 
 Returns:
     Updates var_G_s in place.
@@ -338,14 +338,14 @@ function calculate_var_G_s!{NumType <: Number}(
                     E_G_s::SensitiveFloat{CanonicalParams, NumType},
                     E_G2_s::SensitiveFloat{CanonicalParams, NumType},
                     var_G_s::SensitiveFloat{CanonicalParams, NumType},
-                    active_source::Bool)
+                    is_active_source::Bool)
     clear!(var_G_s,
            elbo_vars.calculate_hessian &&
-           elbo_vars.calculate_derivs && active_source)
+           elbo_vars.calculate_derivs && is_active_source)
 
     var_G_s.v[1] = E_G2_s.v[1] - (E_G_s.v[1] ^ 2)
 
-    if active_source && elbo_vars.calculate_derivs
+    if is_active_source && elbo_vars.calculate_derivs
         @assert length(var_G_s.d) == length(E_G2_s.d) == length(E_G_s.d)
         @inbounds for ind1 = 1:length(var_G_s.d)
             var_G_s.d[ind1] = E_G2_s.d[ind1] - 2 * E_G_s.v[1] * E_G_s.d[ind1]
@@ -378,20 +378,20 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
                     fs1m::SensitiveFloat{GalaxyPosParams, NumType},
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
-                    active_source::Bool)
+                    is_active_source::Bool)
 
     calculate_hessian =
         elbo_vars.calculate_hessian && elbo_vars.calculate_derivs &&
-        active_source
+        is_active_source
 
     # This updates elbo_vars.E_G_s and elbo_vars.var_G_s
     calculate_source_pixel_brightness!(
         elbo_vars, ea,
         elbo_vars.E_G_s, elbo_vars.var_G_s,
         fs0m, fs1m,
-        sb, b, s, active_source)
+        sb, b, s, is_active_source)
 
-    if active_source
+    if is_active_source
         sa = findfirst(ea.active_sources, s)
         add_sources_sf!(E_G, elbo_vars.E_G_s, sa, calculate_hessian)
         add_sources_sf!(var_G, elbo_vars.var_G_s, sa, calculate_hessian)
@@ -428,11 +428,11 @@ function combine_pixel_sources!{NumType <: Number}(
         elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
 
     for s in tile_sources
-        active_source = s in ea.active_sources
+        is_active_source = s in ea.active_sources
         accumulate_source_pixel_brightness!(
             elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
             elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s],
-            sbs[s], tile.b, s, active_source)
+            sbs[s], tile.b, s, is_active_source)
     end
 end
 
