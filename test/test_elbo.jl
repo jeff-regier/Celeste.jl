@@ -392,7 +392,7 @@ function test_populate_fsm!()
     fs0m = zero_sensitive_float(StarPosParams, Float64)
     fs1m = zero_sensitive_float(GalaxyPosParams, Float64)
 
-    x = Float64[tile.h_range[h], tile.w_range[w]]
+    x = @SVector Float64[tile.h_range[h], tile.w_range[w]]
     DeterministicVI.populate_fsm!(
         elbo_vars, ea, fs0m, fs1m,
         s, b, x, true, gal_mcs, star_mcs)

@@ -199,7 +199,7 @@ function populate_fsm!{NumType <: Number}(
                     mv_calculate_derivs::Bool,
                     mv_calculate_hessian::Bool,
                     s::Int,
-                    x::Vector{Float64},
+                    x::SVector{2,Float64},
                     active_source::Bool,
                     num_allowed_sd::Float64,
                     wcs_jacobian::Matrix{Float64},

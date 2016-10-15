@@ -157,7 +157,7 @@ function populate_fsm!{NumType <: Number}(
                     fs1m::SensitiveFloat{GalaxyPosParams, NumType},
                     s::Int,
                     b::Int,
-                    x::Vector{Float64},
+                    x::SVector{2,Float64},
                     is_active_source::Bool,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
