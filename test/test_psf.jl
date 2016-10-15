@@ -11,7 +11,7 @@ import Celeste.PSF: get_psf_at_point,
        BivariateNormalDerivatives
 
 using ForwardDiff
-
+using StaticArrays
 
 """
 Evaluate the sum of squared difference between the raw_psf and the psf
@@ -130,7 +130,7 @@ function test_psf_fit()
     pixel_value_wrapper_sf(psf_param_vec, false).v[1]
   end
 
-  x = Float64[1.0, 2.0]
+  x = @SVector [1.0, 2.0]
 
   sigma_vec = Array(Matrix{Float64}, K);
   for k = 1:K
@@ -141,7 +141,7 @@ function test_psf_fit()
 
   println("Testing single pixel value")
   psf_components = PsfComponent[
-    PsfComponent(psf_params[k][psf_ids.weight], psf_params[k][psf_ids.mu], sigma_vec[k])
+    PsfComponent(psf_params[k][psf_ids.weight], SVector{2,Float64}(psf_params[k][psf_ids.mu]), SMatrix{2,2,Float64,4}(sigma_vec[k]))
                   for k = 1:K ];
 
   psf_rendered = get_psf_at_point(psf_components, rows=[ x[1] ], cols=[ x[2] ])[1];
@@ -265,7 +265,6 @@ function test_psf_optimizer()
     end
   end
 end
-
 
 test_transform_psf_sensitive_float()
 test_transform_psf_params()

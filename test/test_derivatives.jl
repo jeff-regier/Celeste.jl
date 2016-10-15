@@ -5,6 +5,7 @@ using Distributions
 import DeterministicVI: BvnComponent, GalaxyCacheComponent
 import DeterministicVI: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 using DerivativeTestUtils
+using StaticArrays
 
 """
 This is the function of which get_bvn_derivs!() returns the derivatives.
@@ -12,7 +13,7 @@ It is only used for testing.
 """
 function eval_bvn_log_density{NumType <: Number}(
         elbo_vars::DeterministicVI.ElboIntermediateVariables{NumType},
-        bvn::BvnComponent{NumType}, x::Vector{Float64})
+        bvn::BvnComponent{NumType}, x::SVector{2,Float64})
 
     DeterministicVI.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
 
@@ -221,7 +222,8 @@ function test_fs1m_derivatives()
     u = ea.vp[s][ids.u]
     u_pix = Model.linear_world_to_pix(
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-    x = ceil(u_pix + [1.0, 2.0])
+    # Maybe u_pix should be created as a Vec
+    x = ceil.(SVector{2,Float64}(u_pix) + @SVector Float64[1, 2])
 
     elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1)
 
@@ -302,7 +304,7 @@ function test_fs0m_derivatives()
     u = ea.vp[s][ids.u]
     u_pix = Model.linear_world_to_pix(
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-    x = ceil(u_pix + [1.0, 2.0])
+    x = ceil.(SVector{2,Float64}(u_pix) + @SVector Float64[1, 2])
 
     elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1)
 
@@ -364,12 +366,12 @@ end
 function test_bvn_derivatives()
     # Test log(bvn prob) / d(mean, sigma)
 
-    x = Float64[2.0, 3.0]
+    x = @SVector Float64[2, 3]
 
     e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
     sigma = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)
 
-    offset = Float64[0.5, 0.25]
+    offset = @SVector Float64[0.5, 0.25]
 
     # Note that get_bvn_derivs doesn't use the weight, so set it to something
     # strange to check that it doesn't matter.
@@ -380,16 +382,16 @@ function test_bvn_derivatives()
     DeterministicVI.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
     DeterministicVI.get_bvn_derivs!(elbo_vars.bvn_derivs, bvn, true, true)
 
-    function bvn_function{T <: Number}(x::Vector{T}, sigma::Matrix{T})
+    function bvn_function{T <: Number}(x::SVector{2,T}, sigma::SMatrix{2,2,T,4})
         local_x = offset - x
-        -0.5 * ((local_x' * (sigma \ local_x))[1,1] + log(det(sigma)))
+        -0.5 * (dot(local_x, sigma \ local_x) + log(det(sigma)))
     end
 
     x_ids = 1:2
     sig_ids = 3:5
-    function wrap(x::Vector{Float64}, sigma::Matrix{Float64})
+    function wrap(x::SVector{2,Float64}, sigma::SMatrix{2,2,Float64,4})
         par = zeros(Float64, length(x_ids) + length(sig_ids))
-        par[x_ids] = x
+        par[x_ids] = Vector(x)
         par[sig_ids] = [ sigma[1, 1], sigma[1, 2], sigma[2, 2]]
         par
     end
@@ -398,7 +400,7 @@ function test_bvn_derivatives()
         x_loc = par[x_ids]
         s_vec = par[sig_ids]
         sig_loc = T[s_vec[1] s_vec[2]; s_vec[2] s_vec[3]]
-        bvn_function(x_loc, sig_loc)
+        bvn_function(SVector{2,T}(x_loc), SMatrix{2,2,T,4}(sig_loc))
     end
 
     par = wrap(x, sigma)
@@ -441,8 +443,8 @@ function test_galaxy_variable_transform()
     # Test the variable transformation.
     e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
 
-    u = Float64[5.3, 2.9]
-    x = Float64[7.0, 5.0]
+    u =          Float64[5.3, 2.9]
+    x = @SVector Float64[7.0, 5.0]
 
     # The indices in par of each variable.
     par_ids_u = [1, 2]
@@ -472,12 +474,12 @@ function test_galaxy_variable_transform()
 
         sigma = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)
 
-        function bvn_function{T <: Number}(u_pix::Vector{T}, sigma::Matrix{T})
+        function bvn_function{T <: Number}(u_pix::SVector{2,T}, sigma::SMatrix{2,2,T,4})
             local_x = x - u_pix
-            -0.5 * ((local_x' * (sigma \ local_x))[1,1] + log(det(sigma)))
+            -0.5 * (dot(local_x, sigma \ local_x) + log(det(sigma)))
         end
 
-        bvn_function(u_pix, sigma)
+        bvn_function(SVector{2,T}(u_pix), sigma)
     end
 
     # First just test the bvn function itself
@@ -485,7 +487,7 @@ function test_galaxy_variable_transform()
     u_pix = Model.linear_world_to_pix(
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
     sigma = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)
-    bmc = BvnComponent{Float64}(u_pix, sigma, 1.0)
+    bmc = BvnComponent{Float64}(SVector{2,Float64}(u_pix), sigma, 1.0)
     sig_sf = DeterministicVI.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma)
     gcc = GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf)
     elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1)
@@ -534,8 +536,8 @@ function test_galaxy_cache_component()
     # Test the variable transformation.
     e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
 
-    u = Float64[5.3, 2.9]
-    x = Float64[7.0, 5.0]
+    u =          Float64[5.3, 2.9]
+    x = @SVector Float64[7.0, 5.0]
 
     # The indices in par of each variable.
     par_ids_u = [1, 2]
@@ -699,7 +701,7 @@ end
 function test_dsiginv_dsig()
     e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # bvn_derivs.bvn_sigsig_h is large
     the_cov = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)
-    the_mean = Float64[0., 0.]
+    the_mean = @SVector Float64[0., 0.]
     bvn = BvnComponent{Float64}(the_mean, the_cov, 1.0)
     sigma_vec = Float64[ the_cov[1, 1], the_cov[1, 2], the_cov[2, 2] ]
 
