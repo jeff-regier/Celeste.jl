@@ -181,7 +181,7 @@ function test_e_g_s_functions()
             elbo_vars_loc.calculate_derivs = calculate_derivs
             DeterministicVI.populate_fsm_vecs!(
                 elbo_vars_loc, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
-            DeterministicVI.accumulate_source_brightness!(elbo_vars_loc, ea, sbs, s, b)
+            DeterministicVI.calculate_source_pixel_brightness!(elbo_vars_loc, ea, sbs, s, b)
             deepcopy(elbo_vars_loc)
         end
 

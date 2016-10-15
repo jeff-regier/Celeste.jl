@@ -111,14 +111,14 @@ end
 
 
 """
-Add the contributions of a single source to E_G_s and var_G_s, which are cleared
-and then updated in place.
+Calculate the contributions of a single source for a single pixel to
+the sensitive floats E_G_s and var_G_s, which are cleared and updated in place.
 
 Args:
     - elbo_vars: Elbo intermediate values, with updated fs1m_vec and fs0m_vec.
     - ea: Model parameters
-    - E_G_s: The expectation  and variance of the brightnesses of this source
-          at this pixel, updated in place.
+    - E_G_s, var_G_s: The expectation  and variance of the brightnesses of this
+          source at this pixel, updated in place.
     - fs0m, fs1m: The star and galaxy shape parameters for this source at
           this pixel.
     - sbs: Source brightnesses
@@ -129,7 +129,7 @@ Returns:
     Updates E_G_s and var_G_s in place with the brightness
     for this source at this pixel.
 """
-function accumulate_source_brightness!{NumType <: Number}(
+function calculate_source_pixel_brightness!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     ea::ElboArgs{NumType},
                     E_G_s::SensitiveFloat{CanonicalParams, NumType},
@@ -301,13 +301,13 @@ function accumulate_source_brightness!{NumType <: Number}(
 end
 
 
-function accumulate_source_brightness!{NumType <: Number}(
+function calculate_source_pixel_brightness!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     ea::ElboArgs{NumType},
                     sbs::Vector{SourceBrightness{NumType}},
                     s::Int, b::Int)
 
-    accumulate_source_brightness!(
+    calculate_source_pixel_brightness!(
         elbo_vars,
         ea,
         elbo_vars.E_G_s,
@@ -366,6 +366,44 @@ end
 
 
 """
+Add the contributions from a single source at a single pixel to the
+sensitive floast E_G and var_G, which are updated in place.
+"""
+function accumulate_source_pixel_brightness!{NumType <: Number}(
+                    elbo_vars::ElboIntermediateVariables{NumType},
+                    ea::ElboArgs{NumType},
+                    E_G::SensitiveFloat{CanonicalParams, NumType},
+                    var_G::SensitiveFloat{CanonicalParams, NumType},
+                    fs0m::SensitiveFloat{StarPosParams, NumType},
+                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
+                    sb::SourceBrightness{NumType},
+                    b::Int, s::Int,
+                    active_source::Bool)
+
+    calculate_hessian =
+        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs &&
+        active_source
+
+    # This updates elbo_vars.E_G_s and elbo_vars.var_G_s
+    calculate_source_pixel_brightness!(
+        elbo_vars, ea,
+        elbo_vars.E_G_s, elbo_vars.var_G_s,
+        fs0m, fs1m,
+        sb, b, s, active_source)
+
+    if active_source
+        sa = findfirst(ea.active_sources, s)
+        add_sources_sf!(E_G, elbo_vars.E_G_s, sa, calculate_hessian)
+        add_sources_sf!(var_G, elbo_vars.var_G_s, sa, calculate_hessian)
+    else
+        # If the sources is inactive, simply accumulate the values.
+        E_G.v[1] += elbo_vars.E_G_s.v[1]
+        var_G.v[1] += elbo_vars.var_G_s.v[1]
+    end
+end
+
+
+"""
 Adds up E_G and var_G across all sources.
 
 Args:
@@ -390,19 +428,10 @@ function combine_pixel_sources!{NumType <: Number}(
 
     for s in tile_sources
         active_source = s in ea.active_sources
-        calculate_hessian =
-            elbo_vars.calculate_hessian && elbo_vars.calculate_derivs &&
-            active_source
-        accumulate_source_brightness!(elbo_vars, ea, sbs, s, tile.b)
-        if active_source
-            sa = findfirst(ea.active_sources, s)
-            add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa, calculate_hessian)
-            add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa, calculate_hessian)
-        else
-            # If the sources is inactive, simply accumulate the values.
-            elbo_vars.E_G.v[1] += elbo_vars.E_G_s.v[1]
-            elbo_vars.var_G.v[1] += elbo_vars.var_G_s.v[1]
-        end
+        accumulate_source_pixel_brightness!(
+            elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
+            elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s],
+            sbs[s], b, s, active_source)
     end
 end
 
