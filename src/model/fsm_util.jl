@@ -50,7 +50,7 @@ function load_bvn_mixtures{NumType <: Number}(
         # Convolve the star locations with the PSF.
         for k in 1:psf_K
             pc = psf[k]
-            mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
+            mean_s = @SVector NumType[pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
             star_mcs[k, s] =
               BvnComponent{NumType}(
                 mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
@@ -94,7 +94,7 @@ function load_bvn_mixtures{NumType <: Number}(
         # Convolve the star locations with the PSF.
         for k in 1:psf_K
             pc = psf[k]
-            mean_s = [pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
+            mean_s = @SVector NumType[pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
             star_mcs[k, s] =
               BvnComponent{NumType}(
                 mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
@@ -199,7 +199,7 @@ function populate_fsm!{NumType <: Number}(
                     mv_calculate_derivs::Bool,
                     mv_calculate_hessian::Bool,
                     s::Int,
-                    x::Vector{Float64},
+                    x::SVector{2,Float64},
                     active_source::Bool,
                     num_allowed_sd::Float64,
                     wcs_jacobian::Matrix{Float64},
@@ -258,7 +258,7 @@ function populate_fsm_vecs!{NumType <: Number}(
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
 
-    x = Float64[tile.h_range[h], tile.w_range[w]]
+    x = @SVector Float64[tile.h_range[h], tile.w_range[w]]
     for s in tile_sources
         # ensure tile.b is a filter band, not an image's index
         @assert 1 <= tile.b <= B
@@ -316,7 +316,7 @@ function accum_star_pos!{NumType <: Number}(
                     calculate_derivs::Bool,
                     calculate_hessian::Bool,
                     bmc::BvnComponent{NumType},
-                    x::Vector{Float64},
+                    x::SVector{2,Float64},
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, bmc, x)
@@ -363,7 +363,7 @@ function accum_galaxy_pos!{NumType <: Number}(
                     calculate_derivs::Bool,
                     calculate_hessian::Bool,
                     gcc::GalaxyCacheComponent{NumType},
-                    x::Vector{Float64},
+                    x::SVector{2,Float64},
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, gcc.bmc, x)
