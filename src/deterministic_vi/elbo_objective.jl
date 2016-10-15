@@ -117,33 +117,37 @@ and then updated in place.
 Args:
     - elbo_vars: Elbo intermediate values, with updated fs1m_vec and fs0m_vec.
     - ea: Model parameters
+    - E_G_s: The expectation  and variance of the brightnesses of this source
+          at this pixel, updated in place.
+    - fs0m, fs1m: The star and galaxy shape parameters for this source at
+          this pixel.
     - sbs: Source brightnesses
     - s: The source, in 1:ea.S
     - b: The band
 
 Returns:
-    Updates elbo_vars.E_G_s and elbo_vars.var_G_s in place with the brightness
-    for this sourve at this pixel.
+    Updates E_G_s and var_G_s in place with the brightness
+    for this source at this pixel.
 """
 function accumulate_source_brightness!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     ea::ElboArgs{NumType},
-                    sbs::Vector{SourceBrightness{NumType}},
-                    s::Int, b::Int)
-    # E[G] and E{G ^ 2} for a single source
-    E_G_s = elbo_vars.E_G_s
+                    E_G_s::SensitiveFloat{CanonicalParams, NumType},
+                    var_G_s::SensitiveFloat{CanonicalParams, NumType},
+                    fs0m::SensitiveFloat{StarPosParams, NumType},
+                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
+                    sb::SourceBrightness{NumType},
+                    b::Int, s::Int,
+                    active_source::Bool)
+
     E_G2_s = elbo_vars.E_G2_s
 
     clear_hessian = elbo_vars.calculate_hessian && elbo_vars.calculate_derivs
     clear!(E_G_s, clear_hessian)
     clear!(E_G2_s, clear_hessian)
 
-    sb = sbs[s]
-
-    active_source = (s in ea.active_sources)
-
     for i in 1:Ia # Stars and galaxies
-        fsm_i = (i == 1) ? elbo_vars.fs0m_vec[s] : elbo_vars.fs1m_vec[s]
+        fsm_i = (i == 1) ? fs0m : fs1m
         a_i = ea.vp[s][ids.a[i, 1]]
 
         lf = sb.E_l_a[b, i].v[1] * fsm_i.v[1]
@@ -293,7 +297,26 @@ function accumulate_source_brightness!{NumType <: Number}(
         end
     end
 
-    calculate_var_G_s!(elbo_vars, active_source)
+    calculate_var_G_s!(elbo_vars, E_G_s, E_G2_s, var_G_s, active_source)
+end
+
+
+function accumulate_source_brightness!{NumType <: Number}(
+                    elbo_vars::ElboIntermediateVariables{NumType},
+                    ea::ElboArgs{NumType},
+                    sbs::Vector{SourceBrightness{NumType}},
+                    s::Int, b::Int)
+
+    accumulate_source_brightness!(
+        elbo_vars,
+        ea,
+        elbo_vars.E_G_s,
+        elbo_vars.var_G_s,
+        elbo_vars.fs0m_vec[s],
+        elbo_vars.fs1m_vec[s],
+        sbs[s],
+        b, s,
+        s in ea.active_sources)
 end
 
 
@@ -302,23 +325,25 @@ Calculate the variance var_G_s as a function of (E_G_s, E_G2_s).
 
 Args:
     - elbo_vars: Elbo intermediate values.
+    - E_G_s: The expected brightness for a source
+    - E_G2_s: The expected squared brightness for a source
+    - var_G_s: Updated in place.  The variance of the brightness of a source.
     - active_source: Whether this is an active source that requires derivatives
 
 Returns:
-    Updates elbo_vars.var_G_s in place.
+    Updates var_G_s in place.
 """
 function calculate_var_G_s!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
+                    E_G_s::SensitiveFloat{CanonicalParams, NumType},
+                    E_G2_s::SensitiveFloat{CanonicalParams, NumType},
+                    var_G_s::SensitiveFloat{CanonicalParams, NumType},
                     active_source::Bool)
-    var_G_s = elbo_vars.var_G_s
-    E_G_s = elbo_vars.E_G_s
-    E_G2_s = elbo_vars.E_G2_s
-
     clear!(var_G_s,
-        elbo_vars.calculate_hessian &&
-            elbo_vars.calculate_derivs && active_source)
+           elbo_vars.calculate_hessian &&
+           elbo_vars.calculate_derivs && active_source)
 
-    elbo_vars.var_G_s.v[1] = E_G2_s.v[1] - (E_G_s.v[1] ^ 2)
+    var_G_s.v[1] = E_G2_s.v[1] - (E_G_s.v[1] ^ 2)
 
     if active_source && elbo_vars.calculate_derivs
         @assert length(var_G_s.d) == length(E_G2_s.d) == length(E_G_s.d)
@@ -374,7 +399,7 @@ function combine_pixel_sources!{NumType <: Number}(
             add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa, calculate_hessian)
             add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa, calculate_hessian)
         else
-            # If the sources is inactives, simply accumulate the values.
+            # If the sources is inactive, simply accumulate the values.
             elbo_vars.E_G.v[1] += elbo_vars.E_G_s.v[1]
             elbo_vars.var_G.v[1] += elbo_vars.var_G_s.v[1]
         end
