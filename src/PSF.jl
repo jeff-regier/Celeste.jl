@@ -214,7 +214,7 @@ function get_source_psf(world_loc::Vector{Float64},
         return img.psf
     else
         pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
-        psfstamp = img.raw_psf_comp(pixel_loc[1], pixel_loc[2])
+        psfstamp = Model.eval_psf(img.raw_psf_comp, pixel_loc[1], pixel_loc[2])
         return PSF.fit_raw_psf_for_celeste(psfstamp, psf_optimizer, initial_psf_params)
     end
 end

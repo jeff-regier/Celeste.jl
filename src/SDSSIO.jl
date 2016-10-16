@@ -5,7 +5,7 @@ import FITSIO
 import WCS
 
 import ..Log
-import ..Model: RawPSF, Image, CatalogEntry
+import ..Model: RawPSF, Image, CatalogEntry, eval_psf
 import ..PSF
 import Base.convert
 
@@ -264,7 +264,7 @@ function load_field_images(ft::RunCamcolField, datadir::String)
 
         # evalute the psf in the center of the image and then fit it with
         # two components.
-        psfstamp = sdsspsf(H / 2., W / 2.)
+        psfstamp = eval_psf(sdsspsf, H / 2., W / 2.)
         psf = PSF.fit_raw_psf_for_celeste(psfstamp, 2)[1]
 
         # For now, use the median noise and sky.  Here,
@@ -285,46 +285,6 @@ end
 
 # -----------------------------------------------------------------------------
 # PSF-related functions
-
-"""
-psf(x, y)
-
-Evaluate the PSF at the given image coordinates. The size of the result is
-will be `(psf.rnrow, psf.rncol)`, with the PSF (presumably) centered in the
-stamp.
-
-This function was originally based on the function sdss_psf_at_points
-in astrometry.net:
-https://github.com/dstndstn/astrometry.net/blob/master/util/sdss_psf.py
-"""
-function (psf::RawPSF)(x::Real, y::Real)
-    const RCS = 0.001  # A coordinate transform to keep polynomial
-                       # coefficients to a reasonable size.
-    nk = size(psf.rrows, 2)  # number of eigen images.
-
-    # initialize output stamp
-    stamp = zeros(psf.rnrow, psf.rncol)
-
-    # Loop over eigen images
-    for k=1:nk
-        # calculate the weight for the k-th eigen image from psf.cmat.
-        # Note that the image coordinates and coefficients are intended
-        # to be zero-indexed.
-        w = 0.0
-        for j=1:size(psf.cmat, 2), i=1:size(psf.cmat, 1)
-            w += (psf.cmat[i, j, k] *
-                  (RCS * (x - 1.0))^(i-1) * (RCS * (y - 1.0))^(j-1))
-        end
-
-        # add the weighted k-th eigen image to the output stamp
-        for i=1:length(stamp)
-            stamp[i] += w * psf.rrows[i, k]
-        end
-    end
-
-    return stamp
-end
-
 
 """
 read_psf(fitsfile, band)
