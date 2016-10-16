@@ -167,7 +167,7 @@ function fit_object_psfs!{NumType <: Number}(
     for i in 1:length(ea.images)
         # Get a starting point in the middle of the image.
         pixel_loc = Float64[ ea.images[i].H / 2.0, ea.images[i].W / 2.0 ]
-        raw_central_psf = ea.images[i].raw_psf_comp(pixel_loc[1], pixel_loc[2])
+        raw_central_psf = Model.eval_psf(ea.images[i].raw_psf_comp, pixel_loc[1], pixel_loc[2])
         central_psf, central_psf_params = PSF.fit_raw_psf_for_celeste(
             raw_central_psf, psf_optimizer, initial_psf_params)
 

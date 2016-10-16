@@ -9,6 +9,7 @@ import Celeste.PSF: get_psf_at_point,
        transform_psf_sensitive_float!,
        PsfOptimizer, fit_raw_psf_for_celeste,
        BivariateNormalDerivatives
+import Celeste.Model: eval_psf
 
 using ForwardDiff
 using StaticArrays
@@ -58,7 +59,7 @@ function load_raw_psf(; x::Float64=500., y::Float64=500.)
   raw_psf_comp = SDSSIO.read_psf(psf_fits, band_letters[b]);
   close(psf_fits)
 
-  raw_psf_comp(x, y);
+  eval_psf(raw_psf_comp, x, y);
 end
 
 
