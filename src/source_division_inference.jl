@@ -1,12 +1,15 @@
 using Base.Threads
+using StaticArrays
 
 import WCS
 import Base.convert, Base.serialize, Base.deserialize
 
-# CatalogEntry size is 201 (pos:2, star_fluxes:5, gal_fluxes:5, objid:19)
-# RawPSF size is 84060 (rrows: 2601x4, cmat: 4x5x5)
-# PsfComponent size is 150 (xiBar: 2, tauBar:2x2, tauBarInv:2x2)
-# FlatImage size is 24903682 (pixels: 2048x1489, epsilon_mat: 1489, iota_vec: 2048)
+# Serialized type sizes:
+# - CatalogEntry size is 202 (pos:2, star_fluxes:5, gal_fluxes:5, objid:19)
+# - RawPSF size is 84861 (rrows: 2601x4, cmat: 4x5x5)
+# - PsfComponent size is 130 (xiBar: 2, tauBar:2x2, tauBarInv:2x2)
+# - FlatImage size is 24499147 (pixels: 2048x1489, epsilon_mat: 1489, iota_vec: 2048)
+# - NTuple{5,FlatImage} is 122495737
 # InferResult size is 344 (objid: 19, vs: 32)
 
 immutable FlatImage
@@ -461,7 +464,8 @@ function optimize_source(s::Int64, images::Garray, catalog::Garray,
     t0 = time()
     vs_opt = Infer.infer_source(rimages, neighbors, entry)
     runtime = time() - t0
-    ntputs(nodeid, tid, "$(entry.objid): $runtime secs")
+    rds = @sprintf "%s: %5.3f secs" entry.objid runtime
+    ntputs(nodeid, tid, rds)
 
     InferResult(entry.thing_id, entry.objid, entry.pos[1], entry.pos[2],
                 vs_opt, runtime)

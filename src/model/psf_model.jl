@@ -21,11 +21,11 @@ immutable PsfComponent
 
     tauBarInv::SMatrix{2,2,Float64,4}
     tauBarLd::Float64
+end
 
-    function PsfComponent(alphaBar::Float64, xiBar::SVector{2,Float64},
-                          tauBar::SMatrix{2,2,Float64,4})
-        new(alphaBar, xiBar, tauBar, inv(tauBar), log(det(tauBar)))
-    end
+function PsfComponent(alphaBar::Float64, xiBar::SVector{2,Float64},
+                      tauBar::SMatrix{2,2,Float64,4})
+    PsfComponent(alphaBar, xiBar, tauBar, inv(tauBar), log(det(tauBar)))
 end
 
 function PsfComponent(alphaBar::Float64, xiBar::Vector{Float64},
