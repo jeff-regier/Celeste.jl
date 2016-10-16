@@ -393,9 +393,14 @@ function test_populate_fsm!()
     fs1m = zero_sensitive_float(GalaxyPosParams, Float64)
 
     x = @SVector Float64[tile.h_range[h], tile.w_range[w]]
-    DeterministicVI.populate_fsm!(
-        elbo_vars, ea, fs0m, fs1m,
-        s, b, x, true, gal_mcs, star_mcs)
+    Model.populate_fsm!(elbo_vars.bvn_derivs,
+                        fs0m, fs1m,
+                        elbo_vars.calculate_derivs,
+                        elbo_vars.calculate_hessian,
+                        s, x, true,
+                        ea.num_allowed_sd,
+                        ea.patches[s, b].wcs_jacobian,
+                        gal_mcs, star_mcs)
 
     @test_approx_eq fs0m.v[1] elbo_vars.fs0m_vec[s].v[1]
     @test_approx_eq fs0m.d elbo_vars.fs0m_vec[s].d

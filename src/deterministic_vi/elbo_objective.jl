@@ -133,48 +133,6 @@ end
 
 
 """
-Populate fs0m and fs1m for all sources for a given source and pixel.
-
-Args:
-    - elbo_vars: Elbo intermediate values.
-    - ea: Model parameters
-    - fs0m, fs1m: Star and galaxy parameters updated in place.
-    - s: The source to use
-    - b: The band
-    - x: The pixel location in the full image
-    - is_active_source: Whether or not the source is being optimized
-    - gal_mcs: Galaxy components
-    - star_mcs: Star components
-
-Returns:
-    Updates fs0m and fs1m in place with the total
-    shape contributions to this pixel's brightness.
-"""
-function populate_fsm!{NumType <: Number}(
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    ea::ElboArgs{NumType},
-                    fs0m::SensitiveFloat{StarPosParams, NumType},
-                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
-                    s::Int,
-                    b::Int,
-                    x::SVector{2,Float64},
-                    is_active_source::Bool,
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    star_mcs::Array{BvnComponent{NumType}, 2})
-    # ensure tile.b is a filter band, not an image's index
-    @assert 1 <= b <= B
-    Model.populate_fsm!(elbo_vars.bvn_derivs,
-                        fs0m, fs1m,
-                        elbo_vars.calculate_derivs,
-                        elbo_vars.calculate_hessian,
-                        s, x, is_active_source,
-                        ea.num_allowed_sd,
-                        ea.patches[s, b].wcs_jacobian,
-                        gal_mcs, star_mcs)
-end
-
-
-"""
 Calculate the contributions of a single source for a single pixel to
 the sensitive floats E_G_s and var_G_s, which are cleared and updated in place.
 
