@@ -8,19 +8,6 @@ using StaticArrays
 ######################################
 # Helper functions
 
-function true_star_init()
-    blob, ea, body = gen_sample_star_dataset(perturb=false)
-
-    ea.vp[1][ids.a[:, 1]] = [ 1.0 - 1e-4, 1e-4 ]
-    ea.vp[1][ids.r2] = 1e-4
-    ea.vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * ea.vp[1][ids.r2]
-    #ea.vp[1][ids.r1] = sample_star_fluxes[3] ./ ea.vp[1][ids.r2]
-    ea.vp[1][ids.c2] = 1e-4
-
-    blob, ea, body
-end
-
-
 """
 Return a vector of (h, w) indices of tiles that contain this source.
 """
@@ -385,6 +372,46 @@ function test_num_allowed_sd()
 end
 
 
+function test_populate_fsm!()
+    blob, ea, body = gen_two_body_dataset()
+
+    b = 3
+    s = 2
+    h = w = 5
+    ea.active_sources = [s]
+
+    tile = ea.images[b].tiles[1, 1]
+    tile_source_map = ea.tile_source_map[b][1, 1]
+
+    star_mcs, gal_mcs =
+        DeterministicVI.load_bvn_mixtures(ea, b, calculate_derivs=true)
+    elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, ea.S, ea.S)
+    DeterministicVI.populate_fsm_vecs!(
+        elbo_vars, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
+
+    fs0m = zero_sensitive_float(StarPosParams, Float64)
+    fs1m = zero_sensitive_float(GalaxyPosParams, Float64)
+
+    x = @SVector Float64[tile.h_range[h], tile.w_range[w]]
+    Model.populate_fsm!(elbo_vars.bvn_derivs,
+                        fs0m, fs1m,
+                        elbo_vars.calculate_derivs,
+                        elbo_vars.calculate_hessian,
+                        s, x, true,
+                        ea.num_allowed_sd,
+                        ea.patches[s, b].wcs_jacobian,
+                        gal_mcs, star_mcs)
+
+    @test_approx_eq fs0m.v[1] elbo_vars.fs0m_vec[s].v[1]
+    @test_approx_eq fs0m.d elbo_vars.fs0m_vec[s].d
+    @test_approx_eq fs0m.h elbo_vars.fs0m_vec[s].h
+
+    @test_approx_eq fs1m.v[1] elbo_vars.fs1m_vec[s].v[1]
+    @test_approx_eq fs1m.d elbo_vars.fs1m_vec[s].d
+    @test_approx_eq fs1m.h elbo_vars.fs1m_vec[s].h
+end
+
+
 ####################################################
 
 test_set_hess()
@@ -392,8 +419,10 @@ test_bvn_cov()
 test_tile_predicted_image()
 test_derivative_flags()
 #test_active_sources()
+test_num_allowed_sd()
 test_tiny_image_tiling()
 test_that_variance_is_low()
 test_that_star_truth_is_most_likely()
 test_that_galaxy_truth_is_most_likely()
 test_coadd_cat_init_is_most_likely()
+test_populate_fsm!()

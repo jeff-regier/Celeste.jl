@@ -84,6 +84,18 @@ function zero_sensitive_float{ParamType <: ParamSet}(
 end
 
 
+function zero_sensitive_float_array{ParamType <: ParamSet}(
+    ::Type{ParamType}, NumType::DataType, local_S::Int, d::Integer...)
+
+    sf_array = Array(SensitiveFloat{ParamType, NumType}, d)
+    for ind in 1:length(sf_array)
+        sf_array[ind] = zero_sensitive_float(ParamType, NumType, local_S)
+    end
+
+    sf_array
+end
+
+
 function clear!{ParamType <: ParamSet, NumType <: Number}(
             sp::SensitiveFloat{ParamType, NumType})
     clear!(sp, true)
