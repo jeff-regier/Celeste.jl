@@ -150,7 +150,8 @@ function choose_patch_radius(ce::CatalogEntry,
                              b::Int64,
                              psf_width::AbstractFloat,
                              epsilon::AbstractFloat;
-                             width_scale=1.0)
+                             width_scale=1.0,
+                             max_radius=25)
     # The galaxy scale is the point with half the light -- if the light
     # were entirely in a univariate normal, this would be at 0.67 standard
     # deviations.  We are being a bit conservative here.
@@ -166,7 +167,8 @@ function choose_patch_radius(ce::CatalogEntry,
     pdf_90 = exp(-0.5 * (1.64)^2) / (sqrt(2pi) * obj_width)
     pdf_target = min(pdf_90, epsilon / (20 * flux))
     rhs = log(pdf_target) + 0.5 * log(2pi) + log(obj_width)
-    sqrt(-2 * (obj_width ^ 2) * rhs)
+    radius = sqrt(-2 * (obj_width ^ 2) * rhs)
+    min(radius, max_radius)
 end
 
 
