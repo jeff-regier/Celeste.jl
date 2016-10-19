@@ -436,15 +436,27 @@ function variational_params_to_latent_state_params(vp::Array{Float64, 1})
 end
 
 
-#function variational_params_to_fluxes(i::Int, vs::Array{Array{Float64,1}})
-#    ret = Array(Float64, 5)
-#    ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
-#    ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
-#    ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
-#    ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
-#    ret[1] = ret[2] / exp(vs[ids.c1[1, i]])
-#    ret
-#end
+function catalog_entry_to_latent_state_params(ce::CatalogEntry)
+    # create a float array of the appropriate length
+    ret = Array(Float64, length(lidx))
+
+    # galaxy shape params
+    ret[lidx.u]       = ce.pos
+    ret[lidx.e_dev]   = ce.gal_frac_dev
+    ret[lidx.e_axis]  = ce.gal_ab
+    ret[lidx.e_scale] = ce.gal_scale
+
+    # star, gal r flux
+    star_lnr, star_cols = fluxes_to_colors(ce.star_fluxes)
+    gal_lnr, gal_cols   = fluxes_to_colors(ce.gal_fluxes)
+    ret[lidx.r]         = [star_lnr, gal_lnr]
+    ret[lidx.c]         = hcat([star_cols, gal_cols]...)
+
+    # set the prob star/prob gal
+    ret[lidx.a] = clamp(ce.is_star, EPS, 1-EPS)
+    ret
+end
+
 
 function variational_params_to_fluxes(vs::Array{Float64,1}, i::Int)
     ret = Array(Float64, 5)
