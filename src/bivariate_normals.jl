@@ -1,3 +1,5 @@
+using StaticArrays
+
 """
 Unpack a rotation-parameterized BVN covariance matrix.
 
@@ -12,18 +14,18 @@ Returns:
 function get_bvn_cov{NumType <: Number}(
     ab::NumType, angle::NumType, scale::NumType)
 
-   if NumType <: AbstractFloat
-       @assert 0 < scale
-       @assert 0 < ab <= 1.
-   end
+    if NumType <: AbstractFloat
+        @assert 0 < scale
+        @assert 0 < ab <= 1.
+    end
 
-   cp = cos(angle)
-   sp = sin(angle)
-   ab_term = (ab ^ 2 - 1)
-   scale_squared = scale ^ 2
-   off_diag_term = -scale_squared * cp * sp * ab_term
-   NumType[ scale_squared * (1 + ab_term * (sp ^ 2))    off_diag_term;
-            off_diag_term    scale_squared * (1 + ab_term * (cp ^ 2))]
+    cp = cos(angle)
+    sp = sin(angle)
+    ab_term = (ab ^ 2 - 1)
+    scale_squared = scale ^ 2
+    off_diag_term = -scale_squared * cp * sp * ab_term
+    @SMatrix NumType[scale_squared * (1 + ab_term * (sp ^ 2))  off_diag_term;
+                     off_diag_term                             scale_squared * (1 + ab_term * (cp ^ 2))]
 end
 
 
@@ -111,46 +113,49 @@ Attributes:
    major_sd: The standard deviation of the major axis.
 """
 immutable BvnComponent{NumType <: Number}
-    the_mean::Vector{NumType}
-    precision::Matrix{NumType}
+    the_mean::SVector{2,NumType}
+    precision::SMatrix{2,2,NumType,4}
     z::NumType
-    dsiginv_dsig::Matrix{NumType}
+    dsiginv_dsig::SMatrix{3,3,NumType,9}
     major_sd::NumType
 
     function BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
-        the_mean::Vector{T1}, the_cov::Matrix{T2}, weight::T3;
+        the_mean::SVector{2,T1}, the_cov::SMatrix{2,2,T2,4}, weight::T3;
         calculate_siginv_deriv::Bool=true)
 
       ThisNumType = promote_type(T1, T2, T3)
-      the_det = the_cov[1,1] * the_cov[2,2] - the_cov[1,2] * the_cov[2,1]
-      c = 1 ./ (the_det^.5 * 2pi)
-      major_sd = sqrt(maximum([ the_cov[1, 1], the_cov[2, 2] ]))
+      c = 1 / (sqrt(det(the_cov)) * 2pi)
+      major_sd = sqrt(max( the_cov[1, 1], the_cov[2, 2] ))
+
+      precision = inv(the_cov)
 
       if calculate_siginv_deriv
         # Derivatives of Sigma^{-1} with respect to sigma.  These are the second
         # derivatives of log|Sigma| with respect to sigma.
         # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
-        dsiginv_dsig = Array(ThisNumType, 3, 3)
 
-        precision = the_cov^-1
+        dsiginv_dsig11 = -precision[1, 1] ^ 2
+        dsiginv_dsig12 = -2 * precision[1, 1] * precision[1, 2]
+        dsiginv_dsig13 = -precision[1, 2] ^ 2
 
-        dsiginv_dsig[1, 1] = -precision[1, 1] ^ 2
-        dsiginv_dsig[1, 2] = -2 * precision[1, 1] * precision[1, 2]
-        dsiginv_dsig[1, 3] = -precision[1, 2] ^ 2
-
-        dsiginv_dsig[2, 1] = -precision[1, 1] * precision[2, 1]
-        dsiginv_dsig[2, 2] =
+        dsiginv_dsig21 = -precision[1, 1] * precision[2, 1]
+        dsiginv_dsig22 =
           -(precision[1, 1] * precision[2, 2] + precision[1, 2] ^ 2)
-        dsiginv_dsig[2, 3] = -precision[2, 2] * precision[1, 2]
+        dsiginv_dsig23 = -precision[2, 2] * precision[1, 2]
 
-        dsiginv_dsig[3, 1] = -precision[1, 2] ^ 2
-        dsiginv_dsig[3, 2] = - 2 * precision[2, 2] * precision[2, 1]
-        dsiginv_dsig[3, 3] = -precision[2, 2] ^ 2
+        dsiginv_dsig31 = -precision[1, 2] ^ 2
+        dsiginv_dsig32 = - 2 * precision[2, 2] * precision[2, 1]
+        dsiginv_dsig33 = -precision[2, 2] ^ 2
+
+        dsiginv_dsig = @SMatrix ThisNumType[ dsiginv_dsig11 dsiginv_dsig12 dsiginv_dsig13;
+                                             dsiginv_dsig21 dsiginv_dsig22 dsiginv_dsig23;
+                                             dsiginv_dsig13 dsiginv_dsig32 dsiginv_dsig33 ]
+
         new{ThisNumType}(the_mean, precision, c * weight,
                          dsiginv_dsig, major_sd)
       else
-        new{ThisNumType}(the_mean, the_cov^-1, c * weight,
-                         zeros(ThisNumType, 0, 0), major_sd)
+        new{ThisNumType}(the_mean, precision, c * weight,
+                         zeros(SMatrix{3,3,ThisNumType,9}), major_sd)
       end
     end
 end
@@ -161,7 +166,7 @@ Check whether a point is close enough to a BvnComponent to bother making
 calculations with it.
 """
 function check_point_close_to_bvn{NumType <: Number}(
-    bmc::BvnComponent{NumType}, x::Vector{Float64}, num_allowed_sd::Float64)
+    bmc::BvnComponent{NumType}, x::SVector{2,NumType}, num_allowed_sd::NumType)
 
     dist = sqrt(norm(x - bmc.the_mean))
     return dist < (num_allowed_sd * bmc.major_sd)
@@ -184,7 +189,7 @@ Returns:
 """
 function eval_bvn_pdf!{NumType <: Number}(
     bvn_derivs::BivariateNormalDerivatives{NumType},
-    bmc::BvnComponent{NumType}, x::Vector{Float64})
+    bmc::BvnComponent{NumType}, x::SVector{2,Float64})
 
   bvn_derivs.py1[1] =
     bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
@@ -196,7 +201,6 @@ function eval_bvn_pdf!{NumType <: Number}(
     bmc.z * exp(-0.5 * ((x[1] - bmc.the_mean[1]) * bvn_derivs.py1[1] +
                         (x[2] - bmc.the_mean[2]) * bvn_derivs.py2[1]))
 end
-
 
 ##################
 # Derivatives
@@ -321,7 +325,7 @@ Note that nubar is not included.
 """
 function GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
-    XiXi::Matrix{NumType}; calculate_tensor::Bool=true)
+    XiXi::SMatrix{2,2,NumType,4}; calculate_tensor::Bool=true)
 
   cos_sin = cos(e_angle)sin(e_angle)
   sin_sq = sin(e_angle)^2
@@ -422,7 +426,7 @@ function GalaxyCacheComponent{NumType <: Number}(
     GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0))
 
   XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
-  mean_s = NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
+  mean_s = @SVector NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
   var_s = pc.tauBar + gc.nuBar * XiXi
   weight = pc.alphaBar * gc.etaBar  # excludes e_dev
 

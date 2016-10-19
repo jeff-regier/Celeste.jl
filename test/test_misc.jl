@@ -182,7 +182,7 @@ function test_sky_noise_estimates()
 end
 
 
-function zero_sensitive_float_array()
+function test_zero_sensitive_float_array()
     S = 3
     sf_vec = zero_sensitive_float_array(CanonicalParams, Float64, S, 3, 5)
     @test size(sf_vec) == (3, 5)
@@ -195,8 +195,8 @@ function zero_sensitive_float_array()
     # Test that the sensitive floats are distinct and not pointers to the
     # same sensitive float.
     sf_vec[1].v[1] = rand()
-    sf_vec[1].d[1] = rand(length(CanonicalParams))
-    sf_vec[1].h = 2 * diagm(size(sf_vec[1].h, 1))
+    sf_vec[1].d[:, 1] = rand(length(CanonicalParams))
+    sf_vec[1].h = 2 * diagm(ones(size(sf_vec[1].h, 1)))
 
     for ind in 2:length(sf_vec)
         sf = sf_vec[ind]
@@ -206,6 +206,7 @@ function zero_sensitive_float_array()
     end
 end
 
+
 ####################################################
 
 test_tile_image()
@@ -213,3 +214,4 @@ test_sky_noise_estimates()
 test_local_sources()
 test_local_sources_2()
 test_local_sources_3()
+test_zero_sensitive_float_array()

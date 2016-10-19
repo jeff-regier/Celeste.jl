@@ -5,6 +5,7 @@ using Distributions
 import DeterministicVI: BvnComponent, GalaxyCacheComponent
 import DeterministicVI: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 using DerivativeTestUtils
+using StaticArrays
 
 """
 This is the function of which get_bvn_derivs!() returns the derivatives.
@@ -12,7 +13,7 @@ It is only used for testing.
 """
 function eval_bvn_log_density{NumType <: Number}(
         elbo_vars::DeterministicVI.ElboIntermediateVariables{NumType},
-        bvn::BvnComponent{NumType}, x::Vector{Float64})
+        bvn::BvnComponent{NumType}, x::SVector{2,Float64})
 
     DeterministicVI.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
 
@@ -23,16 +24,15 @@ function eval_bvn_log_density{NumType <: Number}(
 end
 
 
-function test_process_active_pixels()
+function test_active_pixels()
     blob, ea, bodies = gen_two_body_dataset()
 
     # Choose four pixels only to keep the test fast.
-    active_pixels = Array(DeterministicVI.ActivePixel, 4)
-    active_pixels[1] = DeterministicVI.ActivePixel(1, 1, 10, 11)
-    active_pixels[2] = DeterministicVI.ActivePixel(1, 1, 11, 10)
-    active_pixels[3] = DeterministicVI.ActivePixel(5, 1, 10, 11)
-    active_pixels[4] = DeterministicVI.ActivePixel(5, 1, 11, 10)
-
+    ea.active_pixels = Array(DeterministicVI.ActivePixel, 4)
+    ea.active_pixels[1] = DeterministicVI.ActivePixel(1, 1, 10, 11)
+    ea.active_pixels[2] = DeterministicVI.ActivePixel(1, 1, 11, 10)
+    ea.active_pixels[3] = DeterministicVI.ActivePixel(5, 1, 10, 11)
+    ea.active_pixels[4] = DeterministicVI.ActivePixel(5, 1, 11, 10)
 
     function tile_lik_wrapper_fun{NumType <: Number}(
             ea::ElboArgs{NumType}, calculate_derivs::Bool)
@@ -42,7 +42,6 @@ function test_process_active_pixels()
             length(ea.active_sources),
             calculate_derivs=calculate_derivs,
             calculate_hessian=calculate_derivs)
-        DeterministicVI.process_active_pixels!(elbo_vars, ea, active_pixels)
         deepcopy(elbo_vars.elbo)
     end
 
@@ -183,7 +182,7 @@ function test_e_g_s_functions()
             elbo_vars_loc.calculate_derivs = calculate_derivs
             DeterministicVI.populate_fsm_vecs!(
                 elbo_vars_loc, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
-            DeterministicVI.accumulate_source_brightness!(elbo_vars_loc, ea, sbs, s, b)
+            DeterministicVI.calculate_source_pixel_brightness!(elbo_vars_loc, ea, sbs, s, b)
             deepcopy(elbo_vars_loc)
         end
 
@@ -223,7 +222,8 @@ function test_fs1m_derivatives()
     u = ea.vp[s][ids.u]
     u_pix = Model.linear_world_to_pix(
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-    x = ceil(u_pix + [1.0, 2.0])
+    # Maybe u_pix should be created as a Vec
+    x = ceil.(SVector{2,Float64}(u_pix) + @SVector Float64[1, 2])
 
     elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1)
 
@@ -267,8 +267,12 @@ function test_fs1m_derivatives()
 
         star_mcs, gal_mcs = DeterministicVI.load_bvn_mixtures(ea, b)
         clear!(elbo_vars.fs1m_vec[s])
-        DeterministicVI.accum_galaxy_pos!(
-            elbo_vars, s, gal_mcs[gcc_ind...], x, patch.wcs_jacobian, true)
+        Model.accum_galaxy_pos!(elbo_vars.bvn_derivs,
+                                elbo_vars.fs1m_vec[s],
+                                elbo_vars.calculate_derivs,
+                                elbo_vars.calculate_hessian,
+                                gal_mcs[gcc_ind...], x,
+                                patch.wcs_jacobian, true)
         fs1m = deepcopy(elbo_vars.fs1m_vec[s])
 
         # Two sanity checks.
@@ -300,7 +304,7 @@ function test_fs0m_derivatives()
     u = ea.vp[s][ids.u]
     u_pix = Model.linear_world_to_pix(
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-    x = ceil(u_pix + [1.0, 2.0])
+    x = ceil.(SVector{2,Float64}(u_pix) + @SVector Float64[1, 2])
 
     elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1)
 
@@ -323,8 +327,13 @@ function test_fs0m_derivatives()
             end
             star_mcs, gal_mcs = DeterministicVI.load_bvn_mixtures(ea_fd, b)
             elbo_vars_fd = DeterministicVI.ElboIntermediateVariables(T, 1, 1)
-            DeterministicVI.accum_star_pos!(
-                elbo_vars_fd, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true)
+            Model.accum_star_pos!(elbo_vars_fd.bvn_derivs,
+                                  elbo_vars_fd.fs0m_vec[s],
+                                  elbo_vars_fd.calculate_derivs,
+                                  elbo_vars_fd.calculate_hessian,
+                                  star_mcs[bmc_ind...], x,
+                                  patch.wcs_jacobian, true)
+
             elbo_vars_fd.fs0m_vec[s].v[1]
         end
 
@@ -340,8 +349,13 @@ function test_fs0m_derivatives()
 
         clear!(elbo_vars.fs0m_vec[s])
         star_mcs, gal_mcs = DeterministicVI.load_bvn_mixtures(ea, b)
-        DeterministicVI.accum_star_pos!(
-            elbo_vars, s, star_mcs[bmc_ind...], x, patch.wcs_jacobian, true)
+        Model.accum_star_pos!(elbo_vars.bvn_derivs,
+                              elbo_vars.fs0m_vec[s],
+                              elbo_vars.calculate_derivs,
+                              elbo_vars.calculate_hessian,
+                              star_mcs[bmc_ind...], x,
+                              patch.wcs_jacobian, true)
+
         fs0m = deepcopy(elbo_vars.fs0m_vec[s])
 
         test_with_autodiff(f_wrap_star, par_star, fs0m)
@@ -352,12 +366,12 @@ end
 function test_bvn_derivatives()
     # Test log(bvn prob) / d(mean, sigma)
 
-    x = Float64[2.0, 3.0]
+    x = @SVector Float64[2, 3]
 
     e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
     sigma = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)
 
-    offset = Float64[0.5, 0.25]
+    offset = @SVector Float64[0.5, 0.25]
 
     # Note that get_bvn_derivs doesn't use the weight, so set it to something
     # strange to check that it doesn't matter.
@@ -368,16 +382,16 @@ function test_bvn_derivatives()
     DeterministicVI.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
     DeterministicVI.get_bvn_derivs!(elbo_vars.bvn_derivs, bvn, true, true)
 
-    function bvn_function{T <: Number}(x::Vector{T}, sigma::Matrix{T})
+    function bvn_function{T <: Number}(x::SVector{2,T}, sigma::SMatrix{2,2,T,4})
         local_x = offset - x
-        -0.5 * ((local_x' * (sigma \ local_x))[1,1] + log(det(sigma)))
+        -0.5 * (dot(local_x, sigma \ local_x) + log(det(sigma)))
     end
 
     x_ids = 1:2
     sig_ids = 3:5
-    function wrap(x::Vector{Float64}, sigma::Matrix{Float64})
+    function wrap(x::SVector{2,Float64}, sigma::SMatrix{2,2,Float64,4})
         par = zeros(Float64, length(x_ids) + length(sig_ids))
-        par[x_ids] = x
+        par[x_ids] = Vector(x)
         par[sig_ids] = [ sigma[1, 1], sigma[1, 2], sigma[2, 2]]
         par
     end
@@ -386,7 +400,7 @@ function test_bvn_derivatives()
         x_loc = par[x_ids]
         s_vec = par[sig_ids]
         sig_loc = T[s_vec[1] s_vec[2]; s_vec[2] s_vec[3]]
-        bvn_function(x_loc, sig_loc)
+        bvn_function(SVector{2,T}(x_loc), SMatrix{2,2,T,4}(sig_loc))
     end
 
     par = wrap(x, sigma)
@@ -429,8 +443,8 @@ function test_galaxy_variable_transform()
     # Test the variable transformation.
     e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
 
-    u = Float64[5.3, 2.9]
-    x = Float64[7.0, 5.0]
+    u =          Float64[5.3, 2.9]
+    x = @SVector Float64[7.0, 5.0]
 
     # The indices in par of each variable.
     par_ids_u = [1, 2]
@@ -460,12 +474,12 @@ function test_galaxy_variable_transform()
 
         sigma = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)
 
-        function bvn_function{T <: Number}(u_pix::Vector{T}, sigma::Matrix{T})
+        function bvn_function{T <: Number}(u_pix::SVector{2,T}, sigma::SMatrix{2,2,T,4})
             local_x = x - u_pix
-            -0.5 * ((local_x' * (sigma \ local_x))[1,1] + log(det(sigma)))
+            -0.5 * (dot(local_x, sigma \ local_x) + log(det(sigma)))
         end
 
-        bvn_function(u_pix, sigma)
+        bvn_function(SVector{2,T}(u_pix), sigma)
     end
 
     # First just test the bvn function itself
@@ -473,7 +487,7 @@ function test_galaxy_variable_transform()
     u_pix = Model.linear_world_to_pix(
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
     sigma = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)
-    bmc = BvnComponent{Float64}(u_pix, sigma, 1.0)
+    bmc = BvnComponent{Float64}(SVector{2,Float64}(u_pix), sigma, 1.0)
     sig_sf = DeterministicVI.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma)
     gcc = GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf)
     elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1)
@@ -522,8 +536,8 @@ function test_galaxy_cache_component()
     # Test the variable transformation.
     e_angle, e_axis, e_scale = (1.1, 0.02, 4.8)
 
-    u = Float64[5.3, 2.9]
-    x = Float64[7.0, 5.0]
+    u =          Float64[5.3, 2.9]
+    x = @SVector Float64[7.0, 5.0]
 
     # The indices in par of each variable.
     par_ids_u = [1, 2]
@@ -687,7 +701,7 @@ end
 function test_dsiginv_dsig()
     e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # bvn_derivs.bvn_sigsig_h is large
     the_cov = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)
-    the_mean = Float64[0., 0.]
+    the_mean = @SVector Float64[0., 0.]
     bvn = BvnComponent{Float64}(the_mean, the_cov, 1.0)
     sigma_vec = Float64[ the_cov[1, 1], the_cov[1, 2], the_cov[2, 2] ]
 
@@ -1189,33 +1203,33 @@ end
 
 # ELBO tests:
 println("Running ELBO derivative tests.")
-@time test_combine_pixel_sources()
-@time test_fs1m_derivatives()
-@time test_fs0m_derivatives()
-@time test_bvn_derivatives()
-@time test_galaxy_variable_transform()
-@time test_galaxy_cache_component()
-@time test_galaxy_sigma_derivs()
-@time test_brightness_hessian()
-@time test_dsiginv_dsig()
-@time test_add_log_term()
-@time test_e_g_s_functions()
-test_process_active_pixels()
+test_active_pixels()
+test_combine_pixel_sources()
+test_fs1m_derivatives()
+test_fs0m_derivatives()
+test_bvn_derivatives()
+test_galaxy_variable_transform()
+test_galaxy_cache_component()
+test_galaxy_sigma_derivs()
+test_brightness_hessian()
+test_dsiginv_dsig()
+test_add_log_term()
+test_e_g_s_functions()
 
 # KL tests:
 println("Running KL derivative tests.")
-@time test_beta_kl_derivatives()
-@time test_categorical_kl_derivatives()
-@time test_diagmvn_mvn_kl_derivatives()
-@time test_normal_kl_derivatives()
+test_beta_kl_derivatives()
+test_categorical_kl_derivatives()
+test_diagmvn_mvn_kl_derivatives()
+test_normal_kl_derivatives()
 
 # SensitiveFloat tests:
 println("Running SensitiveFloat derivative tests.")
-@time test_combine_sfs()
-@time test_add_sources_sf()
+test_combine_sfs()
+test_add_sources_sf()
 
 # Transform tests:
 println("Running Transform derivative tests.")
-@time test_box_derivatives()
-@time test_box_simplex_derivatives()
-@time test_simplex_derivatives()
+test_box_derivatives()
+test_box_simplex_derivatives()
+test_simplex_derivatives()

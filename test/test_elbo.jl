@@ -3,22 +3,10 @@ using Celeste: DeterministicVI, SensitiveFloats
 using Base.Test
 using Distributions
 using DerivativeTestUtils
+using StaticArrays
 
 ######################################
 # Helper functions
-
-function true_star_init()
-    blob, ea, body = gen_sample_star_dataset(perturb=false)
-
-    ea.vp[1][ids.a[:, 1]] = [ 1.0 - 1e-4, 1e-4 ]
-    ea.vp[1][ids.r2] = 1e-4
-    ea.vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * ea.vp[1][ids.r2]
-    #ea.vp[1][ids.r1] = sample_star_fluxes[3] ./ ea.vp[1][ids.r2]
-    ea.vp[1][ids.c2] = 1e-4
-
-    blob, ea, body
-end
-
 
 """
 Return a vector of (h, w) indices of tiles that contain this source.
@@ -80,8 +68,6 @@ end
 
 function test_derivative_flags()
     blob, ea, body = gen_two_body_dataset()
-    keep_pixels = 10:11
-    trim_tiles!(ea.images, keep_pixels)
 
     elbo = DeterministicVI.elbo(ea)
 
@@ -102,8 +88,6 @@ function test_active_sources()
     # active_sources.
 
     blob, ea, body = gen_two_body_dataset()
-    keep_pixels = 10:11
-    trim_tiles!(ea.images, keep_pixels)
     b = 1
     tile = ea.images[b].tiles[1,1]
     h, w = 10, 10
@@ -337,7 +321,7 @@ function test_tiny_image_tiling()
   # point with a narrow psf.
 
   blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
-  pc = PsfComponent(1./3, zeros(2), 1e-4 * eye(2));
+  pc = PsfComponent(1/3, zeros(SVector{2,Float64}), 1e-4 * eye(SMatrix{2,2,Float64,4}));
   trivial_psf = [pc, pc, pc]
   pixels = ones(100, 1) * 12
   pixels[98:100, 1] = [1e3, 1e4, 1e5]
@@ -373,94 +357,6 @@ function test_tiny_image_tiling()
 end
 
 
-function test_elbo_with_nan()
-    blob, ea, body = gen_sample_star_dataset(perturb=false);
-
-    for b in 1:5
-        blob[b].pixels[1,1] = NaN
-    end
-
-    # Set tile width to 5 to test the code for tiles with no sources.
-    ea = make_elbo_args(blob, body, tile_width=5);
-    initial_elbo = DeterministicVI.elbo(ea; calculate_hessian=false);
-
-    nan_elbo = DeterministicVI.elbo(ea);
-
-    # We deleted a pixel, so there's reason to expect them to be different,
-    # but importantly they're reasonably close and not NaN.
-    @test_approx_eq_eps (nan_elbo.v[1] - initial_elbo.v[1]) / initial_elbo.v[1] 0. 1e-4
-    deriv_rel_err = (nan_elbo.d - initial_elbo.d) ./ initial_elbo.d
-    @test_approx_eq_eps deriv_rel_err fill(0., length(ea.vp[1])) 0.05
-end
-
-
-function test_trim_source_tiles()
-  # Set a seed to avoid a flaky test.
-  blob, ea, bodies = gen_n_body_dataset(3, seed=42);
-
-  # With the above seed, this is near the middle of the image.
-  s = 1
-  ea.active_sources = [s]
-
-  loc_ids = ids.u
-  non_loc_ids = setdiff(1:length(ids), ids.u)
-  for b=1:length(blob)
-      ea_trimmed = deepcopy(ea);
-      Infer.trim_source_tiles!(ea_trimmed; noise_fraction=0.0001);
-
-      # Make sure pixels got NaN-ed out
-      @test(
-          sum([ sum(!Base.isnan(tile.pixels)) for
-                tile in ea_trimmed.images[b].tiles]) <
-          sum([ sum(!Base.isnan(tile.pixels)) for
-                tile in ea.images[b].tiles]))
-
-      # Make sure the elbo derivatives are nearly identical.
-      elbo_trim = DeterministicVI.elbo(ea_trimmed; calculate_hessian=false);
-      elbo_full = DeterministicVI.elbo(ea; calculate_hessian=false);
-      @test_approx_eq_eps(
-          elbo_full.d[loc_ids, 1] ./ elbo_trim.d[loc_ids, 1],
-          fill(1.0, length(loc_ids)), 0.06)
-      @test_approx_eq_eps(
-          elbo_full.d[non_loc_ids, 1] ./ elbo_trim.d[non_loc_ids, 1],
-          fill(1.0, length(non_loc_ids)), 4e-3)
-
-      # Set the source to be very dim so that the number of non-NaN
-      # pixels is determined only by min_radius_pix
-      min_radius_pix = 6.0
-      ea_trimmed = deepcopy(ea);
-      ea_trimmed.vp[s][ids.r1] = log(0.1)
-      ea_trimmed.vp[s][ids.r2] = 0.001
-      Infer.trim_source_tiles!(ea_trimmed, noise_fraction=0.1,
-                               min_radius_pix = min_radius_pix);
-
-      s_tiles = find_source_tiles(1, b, ea)
-      total_nonempty_pixels = 0.0
-      for tile_index in s_tiles
-          tile = ea_trimmed.images[b].tiles[tile_index...]
-          total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
-      end
-      @test_approx_eq_eps total_nonempty_pixels pi * min_radius_pix ^ 2 2.0
-
-      # Make sure a very dim image is completely NaN-ed out with a dim image
-      # and zero min radius.
-      min_radius_pix = 0.0
-      ea_trimmed = deepcopy(ea);
-      ea_trimmed.vp[s][ids.r1] = log(0.1)
-      ea_trimmed.vp[s][ids.r2] = 0.001
-      Infer.trim_source_tiles!(
-          ea_trimmed, noise_fraction=0.2, min_radius_pix = min_radius_pix);
-
-      total_nonempty_pixels = 0.0
-      for tile_index in s_tiles
-          tile = ea_trimmed.images[b].tiles[tile_index...]
-          total_nonempty_pixels += sum(!Base.isnan(tile.pixels))
-      end
-      @test total_nonempty_pixels == 0.0
-  end
-end
-
-
 function test_num_allowed_sd()
     blob, ea, body = gen_two_body_dataset()
 
@@ -476,17 +372,57 @@ function test_num_allowed_sd()
 end
 
 
+function test_populate_fsm!()
+    blob, ea, body = gen_two_body_dataset()
+
+    b = 3
+    s = 2
+    h = w = 5
+    ea.active_sources = [s]
+
+    tile = ea.images[b].tiles[1, 1]
+    tile_source_map = ea.tile_source_map[b][1, 1]
+
+    star_mcs, gal_mcs =
+        DeterministicVI.load_bvn_mixtures(ea, b, calculate_derivs=true)
+    elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, ea.S, ea.S)
+    DeterministicVI.populate_fsm_vecs!(
+        elbo_vars, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
+
+    fs0m = zero_sensitive_float(StarPosParams, Float64)
+    fs1m = zero_sensitive_float(GalaxyPosParams, Float64)
+
+    x = @SVector Float64[tile.h_range[h], tile.w_range[w]]
+    Model.populate_fsm!(elbo_vars.bvn_derivs,
+                        fs0m, fs1m,
+                        elbo_vars.calculate_derivs,
+                        elbo_vars.calculate_hessian,
+                        s, x, true,
+                        ea.num_allowed_sd,
+                        ea.patches[s, b].wcs_jacobian,
+                        gal_mcs, star_mcs)
+
+    @test_approx_eq fs0m.v[1] elbo_vars.fs0m_vec[s].v[1]
+    @test_approx_eq fs0m.d elbo_vars.fs0m_vec[s].d
+    @test_approx_eq fs0m.h elbo_vars.fs0m_vec[s].h
+
+    @test_approx_eq fs1m.v[1] elbo_vars.fs1m_vec[s].v[1]
+    @test_approx_eq fs1m.d elbo_vars.fs1m_vec[s].d
+    @test_approx_eq fs1m.h elbo_vars.fs1m_vec[s].h
+end
+
+
 ####################################################
 
-test_trim_source_tiles()
 test_set_hess()
 test_bvn_cov()
 test_tile_predicted_image()
 test_derivative_flags()
-test_active_sources()
+#test_active_sources()
+test_num_allowed_sd()
 test_tiny_image_tiling()
 test_that_variance_is_low()
 test_that_star_truth_is_most_likely()
 test_that_galaxy_truth_is_most_likely()
 test_coadd_cat_init_is_most_likely()
-test_elbo_with_nan()
+test_populate_fsm!()

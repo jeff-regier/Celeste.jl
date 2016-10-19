@@ -16,15 +16,15 @@ Attributes:
 """
 immutable PsfComponent
     alphaBar::Float64  # TODO: use underscore
-    xiBar::Vector{Float64}
-    tauBar::Matrix{Float64}
+    xiBar::SVector{2,Float64}
+    tauBar::SMatrix{2,2,Float64,4}
 
-    tauBarInv::Matrix{Float64}
+    tauBarInv::SMatrix{2,2,Float64,4}
     tauBarLd::Float64
 
-    function PsfComponent(alphaBar::Float64, xiBar::Vector{Float64},
-                          tauBar::Matrix{Float64})
-        new(alphaBar, xiBar, tauBar, tauBar^-1, logdet(tauBar))
+    function PsfComponent(alphaBar::Float64, xiBar::SVector{2,Float64},
+                          tauBar::SMatrix{2,2,Float64,4})
+        new(alphaBar, xiBar, tauBar, inv(tauBar), log(det(tauBar)))
     end
 end
 
@@ -82,3 +82,45 @@ function get_psf_width(psf::Array{PsfComponent}; width_scale=1.0)
     # mass in the PSF.
     width_scale * sqrt(eigvals(cov_est)[end]) * alpha_norm
 end
+
+
+"""
+psf(x, y)
+
+Evaluate the PSF at the given image coordinates. The size of the result is
+will be `(psf.rnrow, psf.rncol)`, with the PSF (presumably) centered in the
+stamp.
+
+This function was originally based on the function sdss_psf_at_points
+in astrometry.net:
+https://github.com/dstndstn/astrometry.net/blob/master/util/sdss_psf.py
+"""
+function eval_psf(psf::RawPSF, x::Real, y::Real)
+    const RCS = 0.001  # A coordinate transform to keep polynomial
+                       # coefficients to a reasonable size.
+    nk = size(psf.rrows, 2)  # number of eigen images.
+
+    # initialize output stamp
+    stamp = zeros(psf.rnrow, psf.rncol)
+
+    # Loop over eigen images
+    for k=1:nk
+        # calculate the weight for the k-th eigen image from psf.cmat.
+        # Note that the image coordinates and coefficients are intended
+        # to be zero-indexed.
+        w = 0.0
+        for j=1:size(psf.cmat, 2), i=1:size(psf.cmat, 1)
+            w += (psf.cmat[i, j, k] *
+                  (RCS * (x - 1.0))^(i-1) * (RCS * (y - 1.0))^(j-1))
+        end
+
+        # add the weighted k-th eigen image to the output stamp
+        for i=1:length(stamp)
+            stamp[i] += w * psf.rrows[i, k]
+        end
+    end
+
+    return stamp
+end
+
+

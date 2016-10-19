@@ -54,7 +54,7 @@ function make_star_logpdf(images::Vector{TiledImage},
         dummy_gal_shape = [.1, .1, .1, .1]
         ll_like  = state_log_likelihood(true, brightness, colors, position,
                                         dummy_gal_shape, images,
-                                        active_pixels, 
+                                        active_pixels,
                                         patches,
                                         active_sources,
                                         psf_K, num_allowed_sd,
@@ -196,7 +196,7 @@ function state_log_likelihood(is_star::Bool,                # source is star
 
         # compute the unit-flux pixel values
         populate_fsm_vecs!(model_vars, patches, active_sources,
-                           psf_K, num_allowed_sd,
+                           num_allowed_sd,
                            tile_sources, tile,
                            pixel.h, pixel.w,
                            gal_mcs_vec[pixel.n], star_mcs_vec[pixel.n])
@@ -207,7 +207,6 @@ function state_log_likelihood(is_star::Bool,                # source is star
         for s in background_sources
             println("background s: ", s)
             #TODO: compute background rate conditional on source_params
-            #s_lnr, s_color = source_params[s][lidx.
             #flux_s = variational_params_to_fluxes(s, vp)
             #rate_s = is_star ? model_vars.fs0m_vec[s].v : model_vars.fs1m_vec[s].v
             #rate_s *= flux_s[pixel_band]

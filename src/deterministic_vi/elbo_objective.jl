@@ -34,133 +34,6 @@ end
 
 
 """
-Store pre-allocated memory in this data structures, which contains
-intermediate values used in the ELBO calculation.
-"""
-type HessianSubmatrices{NumType <: Number}
-    u_u::Matrix{NumType}
-    shape_shape::Matrix{NumType}
-end
-
-
-"""
-Pre-allocated memory for efficiently accumulating certain sub-matrices
-of the E_G_s and E_G2_s Hessian.
-
-Args:
-    NumType: The numeric type of the hessian.
-    i: The type of celestial source, from 1:Ia
-"""
-function HessianSubmatrices(NumType::DataType, i::Int)
-    @assert 1 <= i <= Ia
-    shape_p = length(shape_standard_alignment[i])
-
-    u_u = zeros(NumType, 2, 2)
-    shape_shape = zeros(NumType, shape_p, shape_p)
-    HessianSubmatrices{NumType}(u_u, shape_shape)
-end
-
-
-type ElboIntermediateVariables{NumType <: Number}
-
-    bvn_derivs::BivariateNormalDerivatives{NumType}
-
-    # Vectors of star and galaxy bvn quantities from all sources for a pixel.
-    # The vector has one element for each active source, in the same order
-    # as ea.active_sources.
-
-    # TODO: you can treat this the same way as E_G_s and not keep a vector around.
-    fs0m_vec::Vector{SensitiveFloat{StarPosParams, NumType}}
-    fs1m_vec::Vector{SensitiveFloat{GalaxyPosParams, NumType}}
-
-    # Brightness values for a single source
-    E_G_s::SensitiveFloat{CanonicalParams, NumType}
-    E_G2_s::SensitiveFloat{CanonicalParams, NumType}
-    var_G_s::SensitiveFloat{CanonicalParams, NumType}
-
-    # Subsets of the Hessian of E_G_s and E_G2_s that allow us to use BLAS
-    # functions to accumulate Hessian terms. There is one submatrix for
-    # each celestial object type in 1:Ia
-    E_G_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
-    E_G2_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
-
-    # Expected pixel intensity and variance for a pixel from all sources.
-    E_G::SensitiveFloat{CanonicalParams, NumType}
-    var_G::SensitiveFloat{CanonicalParams, NumType}
-
-    # Pre-allocated memory for the gradient and Hessian of combine functions.
-    combine_grad::Vector{NumType}
-    combine_hess::Matrix{NumType}
-
-    # A placeholder for the log term in the ELBO.
-    elbo_log_term::SensitiveFloat{CanonicalParams, NumType}
-
-    # The ELBO itself.
-    elbo::SensitiveFloat{CanonicalParams, NumType}
-
-    # If false, do not calculate hessians or derivatives.
-    calculate_derivs::Bool
-
-    # If false, do not calculate hessians.
-    calculate_hessian::Bool
-end
-
-
-"""
-Args:
-    - S: The total number of sources
-    - num_active_sources: The number of actives sources (with deriviatives)
-    - calculate_derivs: If false, only calculate values
-    - calculate_hessian: If false, only calculate gradients. Note that if
-                calculate_derivs = false, then hessians will not be
-                calculated irrespective of the value of calculate_hessian.
-"""
-function ElboIntermediateVariables(NumType::DataType,
-                                   S::Int,
-                                   num_active_sources::Int;
-                                   calculate_derivs::Bool=true,
-                                   calculate_hessian::Bool=true)
-    @assert NumType <: Number
-
-    bvn_derivs = BivariateNormalDerivatives{NumType}(NumType)
-
-    # fs0m and fs1m accumulate contributions from all bvn components
-    # for a given source.
-    fs0m_vec = Array(SensitiveFloat{StarPosParams, NumType}, S)
-    fs1m_vec = Array(SensitiveFloat{GalaxyPosParams, NumType}, S)
-    for s = 1:S
-        fs0m_vec[s] = zero_sensitive_float(StarPosParams, NumType)
-        fs1m_vec[s] = zero_sensitive_float(GalaxyPosParams, NumType)
-    end
-
-    E_G_s = zero_sensitive_float(CanonicalParams, NumType, 1)
-    E_G2_s = zero_sensitive_float(CanonicalParams, NumType, 1)
-    var_G_s = zero_sensitive_float(CanonicalParams, NumType, 1)
-
-    E_G_s_hsub_vec =
-        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
-    E_G2_s_hsub_vec =
-        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
-
-    E_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-    var_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-
-    combine_grad = zeros(NumType, 2)
-    combine_hess = zeros(NumType, 2, 2)
-
-    elbo_log_term =
-        zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-    elbo = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-
-    ElboIntermediateVariables{NumType}(
-        bvn_derivs, fs0m_vec, fs1m_vec,
-        E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
-        E_G, var_G, combine_grad, combine_hess,
-        elbo_log_term, elbo, calculate_derivs, calculate_hessian)
-end
-
-
-"""
 Add the contributions of a star's bivariate normal term to the ELBO,
 by updating elbo_vars.fs0m_vec[s] in place.
 
@@ -180,7 +53,7 @@ function accum_star_pos!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     s::Int,
                     bmc::BvnComponent{NumType},
-                    x::Vector{Float64},
+                    x::SVector{2, Float64},
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
     # call accum star pos in model
@@ -212,7 +85,7 @@ function accum_galaxy_pos!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     s::Int,
                     gcc::GalaxyCacheComponent{NumType},
-                    x::Vector{Float64},
+                    x::SVector{2, Float64},
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
     # call accum star pos in model
@@ -254,45 +127,49 @@ function populate_fsm_vecs!{NumType <: Number}(
                              elbo_vars.calculate_derivs,
                              elbo_vars.calculate_hessian,
                              ea.patches, ea.active_sources,
-                             ea.psf_K, ea.num_allowed_sd,
+                             ea.num_allowed_sd,
                              tile_sources, tile, h, w, gal_mcs, star_mcs)
 end
 
 
 """
-Add the contributions of a single source to E_G_s and var_G_s, which are cleared
-and then updated in place.
+Calculate the contributions of a single source for a single pixel to
+the sensitive floats E_G_s and var_G_s, which are cleared and updated in place.
 
 Args:
     - elbo_vars: Elbo intermediate values, with updated fs1m_vec and fs0m_vec.
     - ea: Model parameters
-    - sbs: Source brightnesses
+    - E_G_s, var_G_s: The expectation  and variance of the brightnesses of this
+          source at this pixel, updated in place.
+    - fs0m, fs1m: The star and galaxy shape parameters for this source at
+          this pixel.
+    - sb: Source brightnesse
     - s: The source, in 1:ea.S
     - b: The band
 
 Returns:
-    Updates elbo_vars.E_G_s and elbo_vars.var_G_s in place with the brightness
-    for this sourve at this pixel.
+    Updates E_G_s and var_G_s in place with the brightness
+    for this source at this pixel.
 """
-function accumulate_source_brightness!{NumType <: Number}(
+function calculate_source_pixel_brightness!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     ea::ElboArgs{NumType},
-                    sbs::Vector{SourceBrightness{NumType}},
-                    s::Int, b::Int)
-    # E[G] and E{G ^ 2} for a single source
-    E_G_s = elbo_vars.E_G_s
+                    E_G_s::SensitiveFloat{CanonicalParams, NumType},
+                    var_G_s::SensitiveFloat{CanonicalParams, NumType},
+                    fs0m::SensitiveFloat{StarPosParams, NumType},
+                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
+                    sb::SourceBrightness{NumType},
+                    b::Int, s::Int,
+                    is_active_source::Bool)
+
     E_G2_s = elbo_vars.E_G2_s
 
     clear_hessian = elbo_vars.calculate_hessian && elbo_vars.calculate_derivs
     clear!(E_G_s, clear_hessian)
     clear!(E_G2_s, clear_hessian)
 
-    sb = sbs[s]
-
-    active_source = (s in ea.active_sources)
-
     for i in 1:Ia # Stars and galaxies
-        fsm_i = (i == 1) ? elbo_vars.fs0m_vec[s] : elbo_vars.fs1m_vec[s]
+        fsm_i = (i == 1) ? fs0m : fs1m
         a_i = ea.vp[s][ids.a[i, 1]]
 
         lf = sb.E_l_a[b, i].v[1] * fsm_i.v[1]
@@ -302,7 +179,7 @@ function accumulate_source_brightness!{NumType <: Number}(
         E_G2_s.v[1] += a_i * llff
 
         # Only calculate derivatives for active sources.
-        if active_source && elbo_vars.calculate_derivs
+        if is_active_source && elbo_vars.calculate_derivs
             ######################
             # Gradients.
 
@@ -442,7 +319,26 @@ function accumulate_source_brightness!{NumType <: Number}(
         end
     end
 
-    calculate_var_G_s!(elbo_vars, active_source)
+    calculate_var_G_s!(elbo_vars, E_G_s, E_G2_s, var_G_s, is_active_source)
+end
+
+
+function calculate_source_pixel_brightness!{NumType <: Number}(
+                    elbo_vars::ElboIntermediateVariables{NumType},
+                    ea::ElboArgs{NumType},
+                    sbs::Vector{SourceBrightness{NumType}},
+                    s::Int, b::Int)
+
+    calculate_source_pixel_brightness!(
+        elbo_vars,
+        ea,
+        elbo_vars.E_G_s,
+        elbo_vars.var_G_s,
+        elbo_vars.fs0m_vec[s],
+        elbo_vars.fs1m_vec[s],
+        sbs[s],
+        b, s,
+        s in ea.active_sources)
 end
 
 
@@ -451,25 +347,27 @@ Calculate the variance var_G_s as a function of (E_G_s, E_G2_s).
 
 Args:
     - elbo_vars: Elbo intermediate values.
-    - active_source: Whether this is an active source that requires derivatives
+    - E_G_s: The expected brightness for a source
+    - E_G2_s: The expected squared brightness for a source
+    - var_G_s: Updated in place.  The variance of the brightness of a source.
+    - is_active_source: Whether this is an active source that requires derivatives
 
 Returns:
-    Updates elbo_vars.var_G_s in place.
+    Updates var_G_s in place.
 """
 function calculate_var_G_s!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
-                    active_source::Bool)
-    var_G_s = elbo_vars.var_G_s
-    E_G_s = elbo_vars.E_G_s
-    E_G2_s = elbo_vars.E_G2_s
-
+                    E_G_s::SensitiveFloat{CanonicalParams, NumType},
+                    E_G2_s::SensitiveFloat{CanonicalParams, NumType},
+                    var_G_s::SensitiveFloat{CanonicalParams, NumType},
+                    is_active_source::Bool)
     clear!(var_G_s,
-        elbo_vars.calculate_hessian &&
-            elbo_vars.calculate_derivs && active_source)
+           elbo_vars.calculate_hessian &&
+           elbo_vars.calculate_derivs && is_active_source)
 
-    elbo_vars.var_G_s.v[1] = E_G2_s.v[1] - (E_G_s.v[1] ^ 2)
+    var_G_s.v[1] = E_G2_s.v[1] - (E_G_s.v[1] ^ 2)
 
-    if active_source && elbo_vars.calculate_derivs
+    if is_active_source && elbo_vars.calculate_derivs
         @assert length(var_G_s.d) == length(E_G2_s.d) == length(E_G_s.d)
         @inbounds for ind1 = 1:length(var_G_s.d)
             var_G_s.d[ind1] = E_G2_s.d[ind1] - 2 * E_G_s.v[1] * E_G_s.d[ind1]
@@ -490,7 +388,46 @@ end
 
 
 """
-Adds up E_G and var_G across all sources.
+Add the contributions from a single source at a single pixel to the
+sensitive floast E_G and var_G, which are updated in place.
+"""
+function accumulate_source_pixel_brightness!{NumType <: Number}(
+                    elbo_vars::ElboIntermediateVariables{NumType},
+                    ea::ElboArgs{NumType},
+                    E_G::SensitiveFloat{CanonicalParams, NumType},
+                    var_G::SensitiveFloat{CanonicalParams, NumType},
+                    fs0m::SensitiveFloat{StarPosParams, NumType},
+                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
+                    sb::SourceBrightness{NumType},
+                    b::Int, s::Int,
+                    is_active_source::Bool)
+
+    calculate_hessian =
+        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs &&
+        is_active_source
+
+    # This updates elbo_vars.E_G_s and elbo_vars.var_G_s
+    calculate_source_pixel_brightness!(
+        elbo_vars, ea,
+        elbo_vars.E_G_s, elbo_vars.var_G_s,
+        fs0m, fs1m,
+        sb, b, s, is_active_source)
+
+    if is_active_source
+        sa = findfirst(ea.active_sources, s)
+        add_sources_sf!(E_G, elbo_vars.E_G_s, sa, calculate_hessian)
+        add_sources_sf!(var_G, elbo_vars.var_G_s, sa, calculate_hessian)
+    else
+        # If the sources is inactive, simply accumulate the values.
+        E_G.v[1] += elbo_vars.E_G_s.v[1]
+        var_G.v[1] += elbo_vars.var_G_s.v[1]
+    end
+end
+
+
+"""
+Adds up E_G and var_G across all sources.  This requires elbo_vars.fs0m_vec and
+elbo_vars.fs1m_vec to have been set already for all sources.
 
 Args:
     - elbo_vars: Elbo intermediate values, with updated fs1m_vec and fs0m_vec.
@@ -513,20 +450,11 @@ function combine_pixel_sources!{NumType <: Number}(
         elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
 
     for s in tile_sources
-        active_source = s in ea.active_sources
-        calculate_hessian =
-            elbo_vars.calculate_hessian && elbo_vars.calculate_derivs &&
-            active_source
-        accumulate_source_brightness!(elbo_vars, ea, sbs, s, tile.b)
-        if active_source
-            sa = findfirst(ea.active_sources, s)
-            add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa, calculate_hessian)
-            add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa, calculate_hessian)
-        else
-            # If the sources is inactives, simply accumulate the values.
-            elbo_vars.E_G.v[1] += elbo_vars.E_G_s.v[1]
-            elbo_vars.var_G.v[1] += elbo_vars.var_G_s.v[1]
-        end
+        is_active_source = s in ea.active_sources
+        accumulate_source_pixel_brightness!(
+            elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
+            elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s],
+            sbs[s], tile.b, s, is_active_source)
     end
 end
 
@@ -588,13 +516,12 @@ Args:
 """
 function add_elbo_log_term!{NumType <: Number}(
                 elbo_vars::ElboIntermediateVariables{NumType},
+                E_G::SensitiveFloat{CanonicalParams, NumType},
+                var_G::SensitiveFloat{CanonicalParams, NumType},
+                elbo::SensitiveFloat{CanonicalParams, NumType},
                 x_nbm::AbstractFloat, iota::AbstractFloat)
     # See notes for a derivation. The log term is
     # log E[G] - Var(G) / (2 * E[G] ^2 )
-
-    E_G = elbo_vars.E_G
-    var_G = elbo_vars.var_G
-    elbo = elbo_vars.elbo
 
     # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
     log_term_value = log(E_G.v[1]) - 0.5 * var_G.v[1]    / (E_G.v[1] ^ 2)
@@ -616,7 +543,7 @@ function add_elbo_log_term!{NumType <: Number}(
 
         # Calculate the log term.
         combine_sfs!(
-            elbo_vars.var_G, elbo_vars.E_G, elbo_vars.elbo_log_term,
+            var_G, E_G, elbo_vars.elbo_log_term,
             log_term_value, elbo_vars.combine_grad, elbo_vars.combine_hess,
             calculate_hessian=elbo_vars.calculate_hessian)
 
@@ -634,6 +561,17 @@ function add_elbo_log_term!{NumType <: Number}(
 end
 
 
+function add_elbo_log_term!{NumType <: Number}(
+                elbo_vars::ElboIntermediateVariables{NumType},
+                x_nbm::AbstractFloat, iota::AbstractFloat)
+    add_elbo_log_term!(elbo_vars,
+                       elbo_vars.E_G,
+                       elbo_vars.var_G,
+                       elbo_vars.elbo,
+                       x_nbm,
+                       iota)
+end
+
 ############################################
 # The remaining functions loop over tiles, sources, and pixels.
 
@@ -644,15 +582,13 @@ modifying elbo in place.
 Args:
     - elbo_vars: Elbo intermediate values.
     - ea: Model parameters
-    - active_pixels: An array of ActivePixels to be processed.
 
 Returns:
     Adds to elbo_vars.elbo in place.
 """
 function process_active_pixels!{NumType <: Number}(
                 elbo_vars::ElboIntermediateVariables{NumType},
-                ea::ElboArgs{NumType},
-                active_pixels::Array{ActivePixel})
+                ea::ElboArgs{NumType})
     sbs = load_source_brightnesses(ea,
         calculate_derivs=elbo_vars.calculate_derivs,
         calculate_hessian=elbo_vars.calculate_hessian)
@@ -668,7 +604,7 @@ function process_active_pixels!{NumType <: Number}(
     end
 
     # iterate over the pixels
-    for pixel in active_pixels
+    for pixel in ea.active_pixels
         tile = ea.images[pixel.n].tiles[pixel.tile_ind]
         tile_sources = ea.tile_source_map[pixel.n][pixel.tile_ind]
         this_pixel = tile.pixels[pixel.h, pixel.w]
@@ -683,9 +619,9 @@ function process_active_pixels!{NumType <: Number}(
         iota = tile.iota_vec[pixel.h]
         add_elbo_log_term!(elbo_vars, this_pixel, iota)
         add_scaled_sfs!(elbo_vars.elbo,
-                        elbo_vars.E_G, -iota,
-                        elbo_vars.calculate_hessian &&
-                        elbo_vars.calculate_derivs)
+                        elbo_vars.E_G,
+                        -iota,
+                        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
 
         # Subtract the log factorial term. This is not a function of the
         # parameters so the derivatives don't need to be updated. Note that
@@ -759,25 +695,13 @@ function tile_predicted_image{NumType <: Number}(
     star_mcs, gal_mcs = load_bvn_mixtures(ea, tile.b, calculate_derivs=false)
     sbs = load_source_brightnesses(ea, calculate_derivs=false)
 
-    elbo_vars =
-        ElboIntermediateVariables(NumType, ea.S, length(ea.active_sources))
-    elbo_vars.calculate_derivs = false
+    clear!(ea.elbo_vars)
+    ea.elbo_vars.calculate_derivs = false
+    ea.elbo_vars.calculate_hessian = false
 
     tile_predicted_image(
-        elbo_vars, tile, ea, tile_sources, sbs, star_mcs, gal_mcs,
+        ea.elbo_vars, tile, ea, tile_sources, sbs, star_mcs, gal_mcs,
         include_epsilon=include_epsilon)
-end
-
-
-"""
-Get the active pixels (pixels for which the active sources are present).
-TODO: move this to pre-processing and use it instead of setting low-signal
-pixels to NaN.
-"""
-function get_active_pixels{NumType <: Number}(
-                    ea::ElboArgs{NumType})
-    return Model.get_active_pixels(ea.N, ea.images,
-                                   ea.tile_source_map, ea.active_sources)
 end
 
 
@@ -790,13 +714,12 @@ function elbo_likelihood{NumType <: Number}(
                     ea::ElboArgs{NumType};
                     calculate_derivs=true,
                     calculate_hessian=true)
-    active_pixels = get_active_pixels(ea)
-    elbo_vars = ElboIntermediateVariables(NumType, ea.S,
-                                length(ea.active_sources),
-                                calculate_derivs=calculate_derivs,
-                                calculate_hessian=calculate_hessian)
-    process_active_pixels!(elbo_vars, ea, active_pixels)
-    elbo_vars.elbo
+    clear!(ea.elbo_vars)
+    ea.elbo_vars.calculate_derivs = calculate_derivs
+    ea.elbo_vars.calculate_hessian = calculate_derivs && calculate_hessian
+
+    process_active_pixels!(ea.elbo_vars, ea)
+    deepcopy(ea.elbo_vars.elbo)
 end
 
 
@@ -809,17 +732,9 @@ function elbo{NumType <: Number}(
                     ea::ElboArgs{NumType};
                     calculate_derivs=true,
                     calculate_hessian=true)
-    elbo = elbo_likelihood(ea;
-        calculate_derivs=calculate_derivs, calculate_hessian=calculate_hessian)
+    elbo = elbo_likelihood(ea; calculate_derivs=calculate_derivs,
+                               calculate_hessian=calculate_hessian)
     # TODO: subtract the kl with the hessian.
     subtract_kl!(ea, elbo, calculate_derivs=calculate_derivs)
     elbo
-end
-
-# If Infs/NaNs have crept into the ELBO evaluation (a symptom of poorly conditioned optimization),
-# this helps catch them immediately.
-function assert_all_finite{ParamType}(sf::SensitiveFloat{ParamType, Float64})
-    @assert all(isfinite(sf.v)) "Value is Inf/NaNs"
-    @assert all(isfinite(sf.d)) "Gradient contains Inf/NaNs"
-    @assert all(isfinite(sf.h)) "Hessian contains Inf/NaNs"
 end

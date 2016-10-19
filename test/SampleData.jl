@@ -6,15 +6,15 @@ import Celeste: Infer
 import Synthetic
 
 using Distributions
+using StaticArrays
 import WCS, FITSIO, DataFrames
-
 
 export empty_model_params, dat_dir,
        sample_ce, perturb_params,
        sample_star_fluxes, sample_galaxy_fluxes,
        gen_sample_star_dataset, gen_sample_galaxy_dataset,
        gen_two_body_dataset, gen_three_body_dataset, gen_n_body_dataset,
-       make_elbo_args
+       make_elbo_args, true_star_init
 
 const dat_dir = joinpath(Pkg.dir("Celeste"), "test", "data")
 
@@ -39,15 +39,29 @@ that can be used with Celeste.
 function make_elbo_args(images::Vector{TiledImage},
                         catalog::Vector{CatalogEntry};
                         fit_psf::Bool=false,
+                        active_source=-1,
                         patch_radius_pix::Float64=NaN)
     vp = Vector{Float64}[init_source(ce) for ce in catalog]
     patches, tile_source_map = Infer.get_tile_source_map(images, catalog,
                                 radius_override_pix=patch_radius_pix)
-    active_sources = collect(1:length(catalog))
+    S = length(catalog)
+    active_sources = active_source > 0 ? [active_source] : S <= 3 ? collect(1:S) : [1,2,3]
     ea = ElboArgs(images, vp, tile_source_map, patches, active_sources)
     if fit_psf
         Infer.fit_object_psfs!(ea, ea.active_sources)
     end
+
+    # make all the pixels active by default, for the tests
+    for n in 1:ea.N
+        tiles = images[n].tiles
+        for t in 1:length(tiles)
+            H, W = size(tiles[t].pixels)
+            for w in 1:W, h in 1:H
+                push!(ea.active_pixels, ActivePixel(n, t, h, w))
+            end
+        end
+    end
+
     ea
 end
 
@@ -56,10 +70,14 @@ function make_elbo_args(images::Vector{Image},
                         catalog::Vector{CatalogEntry};
                         tile_width::Int=20,
                         fit_psf::Bool=false,
+                        active_source=-1,
                         patch_radius_pix::Float64=NaN)
     tiled_images = TiledImage[TiledImage(img, tile_width=tile_width)
          for img in images]
-    make_elbo_args(tiled_images, catalog; fit_psf=fit_psf,
+    make_elbo_args(tiled_images,
+                   catalog;
+                   fit_psf=fit_psf,
+                   active_source=active_source,
                    patch_radius_pix=patch_radius_pix)
 end
 
@@ -97,8 +115,8 @@ function load_stamp_blob(stamp_dir, stamp_id)
         tauBar[:,:,3] = [[hdr["PSF_P15"] hdr["PSF_P17"]];
                          [hdr["PSF_P17"] hdr["PSF_P16"]]]
 
-        psf = [PsfComponent(alphaBar[k], xiBar[:, k],
-                            tauBar[:, :, k]) for k in 1:3]
+        psf = [PsfComponent(alphaBar[k], SVector{2,Float64}(xiBar[:, k]),
+                            SMatrix{2,2,Float64,4}(tauBar[:, :, k])) for k in 1:3]
 
         H, W = size(original_pixels)
         iota = hdr["GAIN"] / hdr["CALIB"]
@@ -350,5 +368,19 @@ function gen_n_body_dataset(
 
   blob, ea, S_bodies
 end
+
+
+function true_star_init()
+    blob, ea, body = gen_sample_star_dataset(perturb=false)
+
+    ea.vp[1][ids.a[:, 1]] = [ 1.0 - 1e-4, 1e-4 ]
+    ea.vp[1][ids.r2] = 1e-4
+    ea.vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * ea.vp[1][ids.r2]
+    #ea.vp[1][ids.r1] = sample_star_fluxes[3] ./ ea.vp[1][ids.r2]
+    ea.vp[1][ids.c2] = 1e-4
+
+    blob, ea, body
+end
+
 
 end # End module
