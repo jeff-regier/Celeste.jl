@@ -3,9 +3,7 @@
 using Distributions
 import ..SensitiveFloats: SensitiveFloat, zero_sensitive_float, clear!
 
-#include("../bivariate_normals.jl")
-#include("log_prob_util.jl")
-EPS = 1e-6
+const eps_prob_a = 1e-6
 
 ###################################
 # log likelihood function makers  #
@@ -19,7 +17,8 @@ unconstrained params.
 Args:
   - images: Vector of TiledImage types (data for log_likelihood)
   - active_pixels: Vector of ActivePixels on which the log_likelihood is based
-  - ea: ElboArgs book keeping argument
+  - S: --- from ElboArgs
+  - N:
 Returns:
   - star_logpdf  : unnormalized logpdf function handle that takes in a flat,
                    unconstrained array as parameter
@@ -30,7 +29,7 @@ function make_star_logpdf(images::Vector{TiledImage},
                           active_pixels::Vector{ActivePixel},
                           S::Int64,
                           N::Int64,
-                          vp::VariationalParams{Float64},
+                          source_params::Vector{Vector{Float64}},
                           tile_source_map::Vector{Matrix{Vector{Int}}},
                           patches::Matrix{SkyPatch},
                           active_sources::Vector{Int},
@@ -57,7 +56,7 @@ function make_star_logpdf(images::Vector{TiledImage},
                                         patches,
                                         active_sources,
                                         psf_K, num_allowed_sd,
-                                        vp,
+                                        source_params,
                                         tile_source_map, S, N)
         return ll_like + ll_prior
     end
@@ -85,14 +84,13 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
                             active_pixels::Vector{ActivePixel},
                             S::Int64,
                             N::Int64,
-                            vp::VariationalParams{Float64},
+                            source_params::Vector{Vector{Float64}},
                             tile_source_map::Vector{Matrix{Vector{Int}}},
                             patches::Matrix{SkyPatch},
                             active_sources::Vector{Int},
                             psf_K::Int64,
                             num_allowed_sd::Float64)
-
-    # define star prior log probability density function
+    # define galaxy prior function
     prior    = construct_prior()
     subprior = prior.galaxy
 
@@ -106,19 +104,17 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
         return ll_b + ll_s
     end
 
-    # define star log joint probability density function
+    # define galaxy log joint probability density function
     function galaxy_logpdf(state::Vector{Float64})
         ll_prior = galaxy_logprior(state)
-
         brightness, colors, position, gal_shape =
             state[1], state[2:5], state[6:7], state[8:end]
-
         ll_like  = state_log_likelihood(false, brightness, colors, position,
                                         constrain_gal_shape(gal_shape), images,
                                         active_pixels,
                                         patches,
                                         active_sources, psf_K, num_allowed_sd,
-                                        vp,
+                                        source_params,
                                         tile_source_map, S, N)
         return ll_like + ll_prior
     end
@@ -143,35 +139,24 @@ Returns:
             (brightness,colors,position,gal_shape) params conditioned on
             the rest of the args
 """
-function state_log_likelihood(is_star::Bool,
-                              brightness::Float64,
-                              colors::Vector{Float64},
-                              position::Vector{Float64},
-                              gal_shape::Vector{Float64},
-                              images::Vector{TiledImage},
-                              active_pixels::Vector{ActivePixel},
-                              patches::Matrix{SkyPatch},  # formerly of ElboArgs
-                              active_sources::Vector{Int},
-                              psf_K::Int64,
-                              num_allowed_sd::Float64,
-                              vp::VariationalParams{Float64},
+function state_log_likelihood(is_star::Bool,                # source is star
+                              brightness::Float64,          # source log r brightness
+                              colors::Vector{Float64},      # source vector of colors
+                              position::Vector{Float64},    # source position
+                              gal_shape::Vector{Float64},   # source gal shape
+                              images::Vector{TiledImage},   # list of images with source pixel data
+                              active_pixels::Vector{ActivePixel}, # which pixels enter into the likelihood
+                              patches::Matrix{SkyPatch},    # formerly of ElboArgs
+                              active_sources::Vector{Int},  # formerly of ElboArgs
+                              psf_K::Int64,                 # number of PSF Comps
+                              num_allowed_sd::Float64,      # ...
+                              source_params::Vector{Vector{Float64}}, # list of background sources
                               tile_source_map::Vector{Matrix{Vector{Int}}},
                               S::Int64,
                               N::Int64)
     # TODO: cache the background rate image!! --- does not need to be recomputed at each ll eval
-
     # convert brightness/colors to fluxes for scaling
     fluxes = colors_to_fluxes(brightness, colors)
-
-    # make sure elbo-args reflects the position and galaxy shape passed in for
-    # the first source in the elbo args (first is current source, the rest are
-    # conditioned on)
-    vp[1][ids.u[1]]    = position[1]
-    vp[1][ids.u[2]]    = position[2]
-    vp[1][ids.e_dev]   = gal_shape[1]
-    vp[1][ids.e_axis]  = gal_shape[2]
-    vp[1][ids.e_angle] = gal_shape[3]
-    vp[1][ids.e_scale] = gal_shape[4]
 
     # create objects needed to compute the mean poisson value per pixel
     # (similar to ElboDeriv.process_active_pixels!)
@@ -180,12 +165,18 @@ function state_log_likelihood(is_star::Bool,
     model_vars.calculate_derivs = false
     model_vars.calculate_hessian= false
 
-    # load star/gal mixture components
+    # load star/gal mixture components (make sure these reflect
+    gdev, gaxis, gangle, gscale = gal_shape
+    source_params[1][lidx.u]       = position
+    source_params[1][lidx.e_dev]   = gdev
+    source_params[1][lidx.e_axis]  = gaxis
+    source_params[1][lidx.e_angle] = gangle
+    source_params[1][lidx.e_scale] = gscale
     star_mcs_vec = Array(Array{BvnComponent{Float64}, 2}, N)
     gal_mcs_vec  = Array(Array{GalaxyCacheComponent{Float64}, 4}, N)
     for b=1:N
         star_mcs_vec[b], gal_mcs_vec[b] =
-            load_bvn_mixtures(S, patches, vp, active_sources, psf_K, b,
+            load_bvn_mixtures(S, patches, source_params, active_sources, psf_K, b,
                               calculate_derivs=model_vars.calculate_derivs,
                               calculate_hessian=model_vars.calculate_hessian)
     end
@@ -206,11 +197,16 @@ function state_log_likelihood(is_star::Bool,
                            gal_mcs_vec[pixel.n], star_mcs_vec[pixel.n])
 
         # compute the background rate for this pixel
-        background_rate = tile.epsilon_mat[pixel.h, pixel.w]
+        background_rate    = tile.epsilon_mat[pixel.h, pixel.w]
         background_sources = tile_sources[tile_sources.!=1]
         for s in background_sources
-            flux_s = variational_params_to_fluxes(s, vp)
-            rate_s = is_star ? model_vars.fs0m_vec[s].v : model_vars.fs1m_vec[s].v
+            # determine if background source is star/gal; get fluxes
+            params_s  = source_params[s]
+            s_is_star = params_s[lidx.a[1,1]] > .5
+            type_idx  = s_is_star ? 1 : 2
+            flux_s    = colors_to_fluxes(params_s[lidx.r[type_idx]],
+                                         params_s[lidx.c[:,type_idx]])
+            rate_s = s_is_star ? model_vars.fs0m_vec[s].v : model_vars.fs1m_vec[s].v
             rate_s *= flux_s[pixel_band]
             background_rate += rate_s
         end
@@ -351,10 +347,10 @@ end
 function constrain_gal_shape(unc_gal_shape::Vector{Float64})
     gdev, gaxis, gangle, gscale = unc_gal_shape
     constr_shape    = Array(Float64, 4)
-    constr_shape[1] = clamp(sigmoid(gdev), EPS, 1-EPS)
-    constr_shape[2] = clamp(sigmoid(gaxis), EPS, 1-EPS)
+    constr_shape[1] = clamp(sigmoid(gdev), eps_prob_a, 1-eps_prob_a)
+    constr_shape[2] = clamp(sigmoid(gaxis), eps_prob_a, 1-eps_prob_a)
     constr_shape[3] = gangle       # TODO put this between [0, 2pi]
-    constr_shape[4] = clamp(exp(gscale), EPS, Inf)
+    constr_shape[4] = clamp(exp(gscale), eps_prob_a, Inf)
     return constr_shape
 end
 
@@ -385,54 +381,51 @@ function init_galaxy_state(entry::CatalogEntry)
     brightness, colors = fluxes_to_colors(entry.gal_fluxes)
     #gdev, gaxis, gangle, gscale = gal_shape
     gal_shape = unconstrain_gal_shape([
-                    clamp(entry.gal_frac_dev, EPS, 1.-EPS),
-                    clamp(entry.gal_ab, EPS, 1.-EPS),
+                    clamp(entry.gal_frac_dev, eps_prob_a, 1.-eps_prob_a),
+                    clamp(entry.gal_ab, eps_prob_a, 1.-eps_prob_a),
                     entry.gal_angle,
-                    clamp(entry.gal_scale, EPS, Inf)
+                    clamp(entry.gal_scale, eps_prob_a, Inf)
                     ])
     param_vec = [brightness; colors; entry.pos; gal_shape]
     return param_vec
 end
 
 
-function elbo_args_vp_to_star_state(vp::Array{Float64,1})
-    fluxes      = variational_params_to_fluxes(vp)
-    lnr, colors = fluxes_to_colors(fluxes)
-    ra, dec     = vp[ids.u[1]], vp[ids.u[2]]
-    return [[lnr]; colors; [ra, dec]]
-end
+function catalog_entry_to_latent_state_params(ce::CatalogEntry)
+    # create a float array of the appropriate length
+    ret = Array(Float64, length(lidx))
 
+    # galaxy shape params
+    ret[lidx.u]       = ce.pos
+    ret[lidx.e_dev]   = ce.gal_frac_dev
+    ret[lidx.e_axis]  = ce.gal_ab
+    ret[lidx.e_scale] = ce.gal_scale
+    ret[lidx.e_angle] = ce.gal_angle
 
-function elbo_args_vp_to_galaxy_state(vp::Array{Float64, 1})
-    shared_params = elbo_args_vp_to_star_state(vp)
-    gal_shape = [vp[ids.e_dev]  ,
-                 vp[ids.e_axis] ,
-                 vp[ids.e_angle],
-                 vp[ids.e_scale]]
-    return [shared_params; unconstrain_gal_shape(gal_shape)]
-end
+    # star, gal r flux
+    star_lnr, star_cols = fluxes_to_colors(ce.star_fluxes)
+    gal_lnr, gal_cols   = fluxes_to_colors(ce.gal_fluxes)
+    ret[lidx.r]         = [star_lnr, gal_lnr]
+    ret[lidx.c]         = hcat([star_cols, gal_cols]...)
 
-
-function variational_params_to_fluxes(i::Int, vs::Array{Array{Float64,1}})
-    ret = Array(Float64, 5)
-    ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
-    ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
-    ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
-    ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
-    ret[1] = ret[2] / exp(vs[ids.c1[1, i]])
+    # set the prob star/prob gal
+    ret[lidx.a] = clamp(ce.is_star, eps_prob_a, 1-eps_prob_a)
     ret
 end
 
 
-function variational_params_to_fluxes(vs::Array{Float64,1})
-    ret = Array(Float64, 5)
-    i = 1
-    ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
-    ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
-    ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
-    ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
-    ret[1] = ret[2] / exp(vs[ids.c1[1, i]])
-    ret
+function extract_star_state(ls::Array{Float64, 1})
+    return [[ls[lidx.r[1]]]; ls[lidx.c[:, 1]]; ls[lidx.u]]
+end
+
+
+function extract_galaxy_state(ls::Array{Float64, 1})
+    gal_shape = [ls[lidx.e_dev]  ,
+                 ls[lidx.e_axis] ,
+                 ls[lidx.e_angle],
+                 ls[lidx.e_scale]]
+    return [[ls[lidx.r[2]]]; ls[lidx.c[:, 2]]; ls[lidx.u];
+            unconstrain_gal_shape(gal_shape)]
 end
 
 

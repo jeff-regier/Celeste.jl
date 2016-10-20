@@ -13,4 +13,3 @@ type ActivePixel
     h::Int
     w::Int
 end
-

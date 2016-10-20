@@ -8,7 +8,7 @@ Args:
  - patches (formerly from ElboArgs)
  - vp: (formerly from ElboArgs)
  - active_sources (formerly from ElboArgs)
- - psf: A vector of PSF components
+ - psf_K: Number of psf components (psf from patches object)
  - b: The current band
  - calculate_derivs: Whether to calculate derivatives for active sources.
  - calculate_hessian
@@ -27,7 +27,7 @@ Returns:
 function load_bvn_mixtures{NumType <: Number}(
                     S::Int64,
                     patches::Matrix{SkyPatch},
-                    vp::VariationalParams{NumType},
+                    source_params::Vector{Vector{NumType}},
                     active_sources::Vector{Int},
                     psf_K::Int64,
                     b::Int;
@@ -40,9 +40,9 @@ function load_bvn_mixtures{NumType <: Number}(
     # active_sources.
     for s in 1:S
         psf = patches[s, b].psf
-        vs = vp[s]
+        sp  = source_params[s]
 
-        world_loc = vs[[ids.u[1], ids.u[2]]]
+        world_loc = sp[lidx.u]
         m_pos = Model.linear_world_to_pix(patches[s, b].wcs_jacobian,
                                           patches[s, b].center,
                                           patches[s, b].pixel_center, world_loc)
@@ -59,58 +59,15 @@ function load_bvn_mixtures{NumType <: Number}(
         # Convolve the galaxy representations with the PSF.
         for i = 1:2 # i indexes dev vs exp galaxy types.
             e_dev_dir = (i == 1) ? 1. : -1.
-            e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
+            e_dev_i = (i == 1) ? sp[lidx.e_dev] : 1. - sp[lidx.e_dev]
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components.
             for j in 1:[8,6][i]
                 for k = 1:psf_K
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
-                        m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],
-                        calculate_derivs && (s in active_sources),
-                        calculate_hessian)
-                end
-            end
-        end
-    end
-
-    star_mcs, gal_mcs
-
-
-    star_mcs = Array(BvnComponent{NumType}, psf_K, S)
-    gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, S)
-
-    # TODO: do not keep any derviative information if the sources are not in
-    # active_sources.
-    for s in 1:S
-        psf = patches[s, b].psf
-        vs = vp[s]
-
-        world_loc = vs[[ids.u[1], ids.u[2]]]
-        m_pos = Model.linear_world_to_pix(patches[s, b].wcs_jacobian,
-                                          patches[s, b].center,
-                                          patches[s, b].pixel_center, world_loc)
-
-        # Convolve the star locations with the PSF.
-        for k in 1:psf_K
-            pc = psf[k]
-            mean_s = @SVector NumType[pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
-            star_mcs[k, s] =
-              BvnComponent{NumType}(
-                mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
-        end
-
-        # Convolve the galaxy representations with the PSF.
-        for i = 1:2 # i indexes dev vs exp galaxy types.
-            e_dev_dir = (i == 1) ? 1. : -1.
-            e_dev_i = (i == 1) ? vs[ids.e_dev] : 1. - vs[ids.e_dev]
-
-            # Galaxies of type 1 have 8 components, and type 2 have 6 components.
-            for j in 1:[8,6][i]
-                for k = 1:psf_K
-                    gal_mcs[k, j, i, s] = GalaxyCacheComponent(
-                        e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
-                        m_pos, vs[ids.e_axis], vs[ids.e_angle], vs[ids.e_scale],
+                        m_pos,
+                        sp[lidx.e_axis], sp[lidx.e_angle], sp[lidx.e_scale],
                         calculate_derivs && (s in active_sources),
                         calculate_hessian)
                 end
