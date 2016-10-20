@@ -8,7 +8,7 @@ Args:
  - patches (formerly from ElboArgs)
  - vp: (formerly from ElboArgs)
  - active_sources (formerly from ElboArgs)
- - psf: A vector of PSF components
+ - psf_K: Number of psf components (psf from patches object)
  - b: The current band
  - calculate_derivs: Whether to calculate derivatives for active sources.
  - calculate_hessian
