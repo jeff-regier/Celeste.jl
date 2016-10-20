@@ -9,7 +9,6 @@ export Image, TiledImage, ImageTile,
        PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,
-       VariationalParams, FreeVariationalParams,
        PsfParams, RawPSF, CatalogEntry,
        init_source, ParamSet
 
@@ -51,14 +50,6 @@ include("model/param_set.jl")
 include("model/imaged_sources.jl")
 include("model/wcs_utils.jl")
 include("model/pixels.jl")
-
-# A vector of variational parameters.  The outer index is
-# of celestial objects, and the inner index is over individual
-# parameters for that object (referenced using ParamIndex).
-
-typealias VariationalParams{NumType <: Number} Vector{Vector{NumType}}
-typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
-
 
 import ..SensitiveFloats: SensitiveFloat
 include("bivariate_normals.jl")

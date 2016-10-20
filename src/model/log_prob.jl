@@ -3,8 +3,6 @@
 using Distributions
 import ..SensitiveFloats: SensitiveFloat, zero_sensitive_float, clear!
 
-#include("../bivariate_normals.jl")
-#include("log_prob_util.jl")
 EPS = 1e-6
 
 ###################################
@@ -393,49 +391,6 @@ function init_galaxy_state(entry::CatalogEntry)
 end
 
 
-function elbo_args_vp_to_star_state(vp::Array{Float64,1})
-    fluxes      = variational_params_to_fluxes(vp, 1)
-    lnr, colors = fluxes_to_colors(fluxes)
-    ra, dec     = vp[ids.u[1]], vp[ids.u[2]]
-    return [[lnr]; colors; [ra, dec]]
-end
-
-
-function elbo_args_vp_to_galaxy_state(vp::Array{Float64, 1})
-    shared_params = elbo_args_vp_to_star_state(vp, 2)
-    gal_shape = [vp[ids.e_dev]  ,
-                 vp[ids.e_axis] ,
-                 vp[ids.e_angle],
-                 vp[ids.e_scale]]
-    return [shared_params; unconstrain_gal_shape(gal_shape)]
-end
-
-
-function variational_params_to_latent_state_params(vp::Array{Float64, 1})
-    # create a float array of the appropriate length
-    ret = Array(Float64, length(lidx))
-
-    # galaxy shape params
-    ret[lidx.u]       = vp[ids.u]
-    ret[lidx.e_dev]   = vp[ids.e_dev]
-    ret[lidx.e_axis]  = vp[ids.e_axis]
-    ret[lidx.e_scale] = vp[ids.e_scale]
-
-    # star, gal r flux
-    star_lnr, star_cols =
-        fluxes_to_colors(variational_params_to_fluxes(vp, 1))
-    gal_lnr, gal_cols =
-        fluxes_to_colors(variational_params_to_fluxes(vp, 2))
-    ret[lidx.r] = [star_lnr, gal_lnr]
-    ret[lidx.c] = hcat([star_cols, gal_cols]...)
-
-    # set the prob star/prob gal
-    ret[lidx.a] = vp[ids.a]
-
-    ret
-end
-
-
 function catalog_entry_to_latent_state_params(ce::CatalogEntry)
     # create a float array of the appropriate length
     ret = Array(Float64, length(lidx))
@@ -458,14 +413,18 @@ function catalog_entry_to_latent_state_params(ce::CatalogEntry)
 end
 
 
-function variational_params_to_fluxes(vs::Array{Float64,1}, i::Int)
-    ret = Array(Float64, 5)
-    ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
-    ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
-    ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
-    ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
-    ret[1] = ret[2] / exp(vs[ids.c1[1, i]])
-    ret
+function extract_star_state(ls::Array{Float64, 1})
+    return [[ls[lidx.r[1]]]; ls[lidx.c[:, 1]]; ls[lidx.u]]
+end
+
+
+function extract_galaxy_state(ls::Array{Float64, 1})
+    gal_shape = [ls[lidx.e_dev]  ,
+                 ls[lidx.e_axis] ,
+                 ls[lidx.e_angle],
+                 ls[lidx.e_scale]]
+    return [[ls[lidx.r[2]]]; ls[lidx.c[:, 2]]; ls[lidx.u];
+            unconstrain_gal_shape(gal_shape)]
 end
 
 
