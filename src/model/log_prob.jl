@@ -3,7 +3,7 @@
 using Distributions
 import ..SensitiveFloats: SensitiveFloat, zero_sensitive_float, clear!
 
-EPS = 1e-6
+const eps_prob_a = 1e-6
 
 ###################################
 # log likelihood function makers  #
@@ -347,10 +347,10 @@ end
 function constrain_gal_shape(unc_gal_shape::Vector{Float64})
     gdev, gaxis, gangle, gscale = unc_gal_shape
     constr_shape    = Array(Float64, 4)
-    constr_shape[1] = clamp(sigmoid(gdev), EPS, 1-EPS)
-    constr_shape[2] = clamp(sigmoid(gaxis), EPS, 1-EPS)
+    constr_shape[1] = clamp(sigmoid(gdev), eps_prob_a, 1-eps_prob_a)
+    constr_shape[2] = clamp(sigmoid(gaxis), eps_prob_a, 1-eps_prob_a)
     constr_shape[3] = gangle       # TODO put this between [0, 2pi]
-    constr_shape[4] = clamp(exp(gscale), EPS, Inf)
+    constr_shape[4] = clamp(exp(gscale), eps_prob_a, Inf)
     return constr_shape
 end
 
@@ -381,10 +381,10 @@ function init_galaxy_state(entry::CatalogEntry)
     brightness, colors = fluxes_to_colors(entry.gal_fluxes)
     #gdev, gaxis, gangle, gscale = gal_shape
     gal_shape = unconstrain_gal_shape([
-                    clamp(entry.gal_frac_dev, EPS, 1.-EPS),
-                    clamp(entry.gal_ab, EPS, 1.-EPS),
+                    clamp(entry.gal_frac_dev, eps_prob_a, 1.-eps_prob_a),
+                    clamp(entry.gal_ab, eps_prob_a, 1.-eps_prob_a),
                     entry.gal_angle,
-                    clamp(entry.gal_scale, EPS, Inf)
+                    clamp(entry.gal_scale, eps_prob_a, Inf)
                     ])
     param_vec = [brightness; colors; entry.pos; gal_shape]
     return param_vec
@@ -408,7 +408,7 @@ function catalog_entry_to_latent_state_params(ce::CatalogEntry)
     ret[lidx.c]         = hcat([star_cols, gal_cols]...)
 
     # set the prob star/prob gal
-    ret[lidx.a] = clamp(ce.is_star, EPS, 1-EPS)
+    ret[lidx.a] = clamp(ce.is_star, eps_prob_a, 1-eps_prob_a)
     ret
 end
 
