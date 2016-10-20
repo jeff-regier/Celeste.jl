@@ -2,7 +2,6 @@
 # parameterizations.
 
 using Celeste: Transform, SensitiveFloats
-using Compat
 using DerivativeTestUtils
 
 """
