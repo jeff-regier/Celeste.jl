@@ -9,7 +9,15 @@ using ..SensitiveFloats
 import ..Log
 
 export DataTransform, ParamBounds, ParamBox, SimplexBox,
-       get_mp_transform, enforce_bounds!
+       get_mp_transform, enforce_bounds!,
+       VariationalParams, FreeVariationalParams
+
+
+# A vector of variational parameters.  The outer index is
+# of celestial objects, and the inner index is over individual
+# parameters for that object (referenced using ParamIndex).
+typealias VariationalParams{NumType <: Number} Vector{Vector{NumType}}
+typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
 
 
 ################################

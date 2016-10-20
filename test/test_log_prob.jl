@@ -1,4 +1,4 @@
-using Celeste: Model #, SensitiveFloats, Infer
+using Celeste: Model
 using Base.Test
 
 """
@@ -11,26 +11,26 @@ test log_prob.jl and log_prob_util.jl
 
 
 function test_that_star_truth_is_most_likely_log_prob()
+
+    # init ground truth star
     blob, ea, body = true_star_init();
+    blob_tiles     = [Model.TiledImage(b; tile_width=b.W) for b in blob]
+    active_pixels  = ea.active_pixels
 
-    # set up the log pdf function
-    blob_tiles    = [Model.TiledImage(b; tile_width=b.W) for b in blob]
-    active_pixels = Model.get_active_pixels(ea.N, ea.images,
-                                            ea.tile_source_map, ea.active_sources)
+    # turn list of catalog entries a list of LatentStateParams
+    source_states = [Model.catalog_entry_to_latent_state_params(body[s])
+                     for s in 1:length(body)]
 
-    # turn variational params into a list of LatentStateParams
-    source_states = [Model.variational_params_to_latent_state_params(ea.vp[s])
-                     for s in 1:length(ea.vp)]
-    println("SOURCE STATES:\n", source_states)
-
+    # create logpdf function handle
     star_logpdf, star_logprior =
         Model.make_star_logpdf(ea.images, active_pixels, ea.S, ea.N,
                                source_states, ea.tile_source_map,
                                ea.patches, ea.active_sources,
                                ea.psf_K, ea.num_allowed_sd)
 
-    ## convert ea.vp[1] to star state, and cache elbo args
-    star_state = Model.elbo_args_vp_to_star_state(ea.vp[1])
+    # extract the star-specific parameters from source_states[1] for the
+    # logpdf function
+    star_state = Model.extract_star_state(source_states[1])
     println(star_state)
     best_ll = star_logpdf(star_state)
     println("Best ll ", best_ll)
@@ -116,5 +116,5 @@ end
 test_sigmoid_logit()
 test_gal_shape_constrain()
 test_color_flux_transform()
-#test_that_star_truth_is_most_likely_log_prob()
+test_that_star_truth_is_most_likely_log_prob()
 #test_that_gal_truth_is_most_likely()
