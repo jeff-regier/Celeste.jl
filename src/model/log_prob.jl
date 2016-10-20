@@ -84,14 +84,13 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
                             active_pixels::Vector{ActivePixel},
                             S::Int64,
                             N::Int64,
-                            source_params::Vector{GalaxyPosParams}, #vp::VariationalParams{Float64},
+                            source_params::Vector{Vector{Float64}},
                             tile_source_map::Vector{Matrix{Vector{Int}}},
                             patches::Matrix{SkyPatch},
                             active_sources::Vector{Int},
                             psf_K::Int64,
                             num_allowed_sd::Float64)
-
-    # define star prior log probability density function
+    # define galaxy prior function
     prior    = construct_prior()
     subprior = prior.galaxy
 
@@ -105,13 +104,11 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
         return ll_b + ll_s
     end
 
-    # define star log joint probability density function
+    # define galaxy log joint probability density function
     function galaxy_logpdf(state::Vector{Float64})
         ll_prior = galaxy_logprior(state)
-
         brightness, colors, position, gal_shape =
             state[1], state[2:5], state[6:7], state[8:end]
-
         ll_like  = state_log_likelihood(false, brightness, colors, position,
                                         constrain_gal_shape(gal_shape), images,
                                         active_pixels,
@@ -403,6 +400,7 @@ function catalog_entry_to_latent_state_params(ce::CatalogEntry)
     ret[lidx.e_dev]   = ce.gal_frac_dev
     ret[lidx.e_axis]  = ce.gal_ab
     ret[lidx.e_scale] = ce.gal_scale
+    ret[lidx.e_angle] = ce.gal_angle
 
     # star, gal r flux
     star_lnr, star_cols = fluxes_to_colors(ce.star_fluxes)
