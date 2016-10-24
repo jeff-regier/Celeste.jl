@@ -23,5 +23,20 @@ function test_source_division_parallelism()
 end
 
 
+function test_load_active_pixels()
+    images, ea, one_body = gen_sample_star_dataset()
+
+    ea.active_pixels = ActivePixel[]
+    Infer.load_active_pixels!(ea; min_radius_pix=0.0)
+
+   # these images have 20 * 23 * 5 = 2300 pixels in total.
+   # the star is bright but it doesn't cover the whole image.
+   # it's hard to say exactly how many pixels should be active,
+   # but not all of them, and not none of them.
+   @test 100 < length(ea.active_pixels) < 2000
+end
+
+
+test_load_active_pixels()
 test_source_division_parallelism()
 test_infer_single()

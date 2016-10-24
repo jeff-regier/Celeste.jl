@@ -4,7 +4,7 @@ using StaticArrays
 
 # parameter types
 export Image, TiledImage, ImageTile,
-       SkyPatch, PsfComponent,
+       SkyPatch, PsfComponent, ActivePixel,
        GalaxyComponent, GalaxyPrototype,
        PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,
