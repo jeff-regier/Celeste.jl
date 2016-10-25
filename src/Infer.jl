@@ -17,8 +17,10 @@ import WCS
 
 using ..Model
 import ..PSF
-using ..DeterministicVI
 import ..Log
+
+using ..DeterministicVI
+import ..DeterministicVI.tile_predicted_image
 
 
 """
@@ -203,43 +205,66 @@ Arguments:
 function load_active_pixels!(ea::ElboArgs{Float64};
                             noise_fraction=0.1,
                             min_radius_pix=8.0)
-    @assert length(ea.active_sources) == 1
-    s = ea.active_sources[1]
-
-    @assert(length(ea.active_pixels) == 0)
+    ea.active_pixels = ActivePixel[]
 
     for n = 1:ea.N
         tiles = ea.images[n].tiles
 
-        patch = ea.patches[s, n]
-        pix_loc = Model.linear_world_to_pix(patch.wcs_jacobian,
-                                            patch.center,
-                                            patch.pixel_center,
-                                            ea.vp[s][ids.u])
-
-        # TODO: just loop over the tiles/pixels near the active source
+        # TODO: just loop over the tiles/pixels near the active source(s)
         for t in 1:length(tiles)
             tile = tiles[t]
 
-            tile_source_map = ea.tile_source_map[n][t]
-            if s in tile_source_map
-                # TODO; use log_prob.jl in the Model module to get the
-                # get the expected brightness, not variational inference
-                pred_tile_pixels =
-                    DeterministicVI.tile_predicted_image(tile, ea, [ s ],
-                                                   include_epsilon=false)
-                for h in tile.h_range, w in tile.w_range
-                    # The pixel location in the rendered image.
-                    h_im = h - minimum(tile.h_range) + 1
-                    w_im = w - minimum(tile.w_range) + 1
+            local_active_sources = Int64[]
+            local_centers = Vector{Float64}[]
+            for s in ea.active_sources
+                # `intersect(ea.active_sources, tile_source_map)` allocates
+                # huge amounts of memory, so now we don't do that here
+                if s in ea.tile_source_map[n][t]
+                    push!(local_active_sources, s)
 
-                    bright_pixel = pred_tile_pixels[h_im, w_im] >
-                       tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
-                    sq_dist = (h - pix_loc[1])^2 + (w - pix_loc[2])^2 
-                    close_pixel = sq_dist < min_radius_pix^2
+                    patch = ea.patches[s, n]
+                    pix_loc = Model.linear_world_to_pix(patch.wcs_jacobian,
+                                                        patch.center,
+                                                        patch.pixel_center,
+                                                        ea.vp[s][ids.u])
+                    push!(local_centers, pix_loc)
+                end
+            end
 
-                    if (bright_pixel || close_pixel) && !isnan(tile.pixels[h_im, w_im])
+            if isempty(local_active_sources)
+                continue
+            end
+
+            # TODO; use log_prob.jl in the Model module to get the
+            # get the expected brightness, not variational inference
+            pred_tile_pixels = tile_predicted_image(tile,
+                                                    ea,
+                                                    local_active_sources,
+                                                    include_epsilon=false)
+
+            for h in tile.h_range, w in tile.w_range
+                # The pixel location in the rendered image.
+                h_im = h - minimum(tile.h_range) + 1
+                w_im = w - minimum(tile.w_range) + 1
+
+                # skip masked pixels
+                if isnan(tile.pixels[h_im, w_im])
+                    continue
+                end
+
+                # if this pixel is bright, let's include it
+                expected_sky = tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im]
+                if pred_tile_pixels[h_im, w_im] > expected_sky * noise_fraction
+                    push!(ea.active_pixels, ActivePixel(n, t, h_im, w_im))
+                    continue
+                end
+
+                # include pixels that are close, even if they aren't bright
+                for pix_loc in local_centers
+                    sq_dist = (h - pix_loc[1])^2 + (w - pix_loc[2])^2
+                    if sq_dist < min_radius_pix^2
                         push!(ea.active_pixels, ActivePixel(n, t, h_im, w_im))
+                        break
                     end
                 end
             end
@@ -248,4 +273,4 @@ function load_active_pixels!(ea::ElboArgs{Float64};
 end
 
 
-end
+end  # module
