@@ -235,8 +235,8 @@ function load_active_pixels!(ea::ElboArgs{Float64};
 
                     bright_pixel = pred_tile_pixels[h_im, w_im] >
                        tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
-                    close_pixel =
-                        (h - pix_loc[1]) ^ 2 + (w - pix_loc[2])^2 < min_radius_pix^2
+                    sq_dist = (h - pix_loc[1])^2 + (w - pix_loc[2])^2 
+                    close_pixel = sq_dist < min_radius_pix^2
 
                     if (bright_pixel || close_pixel) && !isnan(tile.pixels[h_im, w_im])
                         push!(ea.active_pixels, ActivePixel(n, t, h_im, w_im))

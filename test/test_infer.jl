@@ -26,14 +26,42 @@ end
 function test_load_active_pixels()
     images, ea, one_body = gen_sample_star_dataset()
 
+    # these images have 20 * 23 * 5 = 2300 pixels in total.
+    # the star is bright but it doesn't cover the whole image.
+    # it's hard to say exactly how many pixels should be active,
+    # but not all of them, and not none of them.
     ea.active_pixels = ActivePixel[]
     Infer.load_active_pixels!(ea; min_radius_pix=0.0)
+    @test 100 < length(ea.active_pixels) < 2000
 
-   # these images have 20 * 23 * 5 = 2300 pixels in total.
-   # the star is bright but it doesn't cover the whole image.
-   # it's hard to say exactly how many pixels should be active,
-   # but not all of them, and not none of them.
-   @test 100 < length(ea.active_pixels) < 2000
+    # most star light (>90%) should be recorded by the active pixels
+    active_photons = 0.0
+    for ap in ea.active_pixels
+        tile = ea.images[ap.n].tiles[ap.tile_ind]
+        active_photons += tile.pixels[ap.h, ap.w] - tile.epsilon_mat[ap.h, ap.w]
+    end
+
+    total_photons = 0.0
+    for img in ea.images
+        for t in img.tiles
+            total_photons += sum(t.pixels) - sum(t.epsilon_mat)
+        end
+    end
+
+    @test active_photons <= total_photons  # sanity check
+    @test active_photons > 0.9 * total_photons
+
+    # a really dim star never exceeds the background intensity by much
+    ea.vp[1][ids.r1] = -999.  # very dim
+    ea.active_pixels = ActivePixel[]
+    Infer.load_active_pixels!(ea; min_radius_pix=0.0)
+    @test length(ea.active_pixels) == 0
+
+    # only 2 pixels per image are within 0.6 pixels of the
+    # source's center (10.9, 11.5)
+    ea.active_pixels = ActivePixel[]
+    Infer.load_active_pixels!(ea; min_radius_pix=0.6)
+    @test length(ea.active_pixels) == 2 * 5
 end
 
 
