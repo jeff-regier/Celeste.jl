@@ -78,6 +78,8 @@ def create_galaxy_from_truth_parameters(truth_dict, relative_intensity):
     galaxy = apply_shift(galaxy, truth_dict)
     return galaxy
 
+def add_sky_background(image, sky_level_nmgy):
+    image.array[:] = image.array + sky_level_nmgy * COUNTS_PER_NMGY
 
 def add_noise(image, uniform_deviate):
     noise = galsim.PoissonNoise(uniform_deviate)
@@ -89,14 +91,24 @@ def read_truth(file_name):
         for row in reader:
             yield row
 
+def add_header_to_hdu(hdu, case_index, band_index, truth_dict):
+    header = galsim.fits.FitsHeader(hdu.header)
+    header['CL_CASEI'] = (case_index + 1, FITS_COMMENT_PREPEND + 'test case index')
+    header['CL_BAND'] = (band_index + 1, FITS_COMMENT_PREPEND + 'color band')
+    header['CL_IOTA'] = (COUNTS_PER_NMGY, FITS_COMMENT_PREPEND + 'counts per nMgy')
+    for csv_field, type_fn, fits_field, comment in TRUTH_HEADER_FIELDS:
+        if truth_dict[csv_field]:
+            value = type_fn(truth_dict[csv_field])
+            header[fits_field] = (value, FITS_COMMENT_PREPEND + comment)
+
 def main():
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
     truth_file_name = 'galsim_truth.csv'
     _logger.info('Reading %s', truth_file_name)
     fits_hdus = astropy.io.fits.HDUList()
-    for index, truth_dict in enumerate(read_truth(truth_file_name)):
-        uniform_deviate = galsim.UniformDeviate(RANDOM_SEED + index)
+    for case_index, truth_dict in enumerate(read_truth(truth_file_name)):
+        uniform_deviate = galsim.UniformDeviate(RANDOM_SEED + case_index)
         for band_index in xrange(5):
             if truth_dict['star_or_galaxy'] == 'galaxy':
                 galaxy = create_galaxy_from_truth_parameters(
@@ -113,19 +125,12 @@ def main():
 
             image = galsim.ImageF(STAMP_SIZE_PX, STAMP_SIZE_PX, scale=ARCSEC_PER_PIXEL)
             final_light_source.drawImage(image)
-            image.array[:] = image.array[:] + float(truth_dict['sky_level_nmgy']) * COUNTS_PER_NMGY
+            add_sky_background(image, float(truth_dict['sky_level_nmgy']))
             if truth_dict['add_noise'] == '1':
                 add_noise(image, uniform_deviate)
+
             galsim.fits.write(image, hdu_list=fits_hdus)
-            hdu = fits_hdus[-1]
-            image.header = galsim.fits.FitsHeader(hdu.header)
-            image.header['CL_CASEI'] = (index + 1, FITS_COMMENT_PREPEND + 'test case index')
-            image.header['CL_BAND'] = (band_index + 1, FITS_COMMENT_PREPEND + 'color band')
-            image.header['CL_IOTA'] = (COUNTS_PER_NMGY, FITS_COMMENT_PREPEND + 'counts per nMgy')
-            for csv_field, type_fn, fits_field, comment in TRUTH_HEADER_FIELDS:
-                if truth_dict[csv_field]:
-                    value = type_fn(truth_dict[csv_field])
-                    image.header[fits_field] = (value, FITS_COMMENT_PREPEND + comment)
+            add_header_to_hdu(fits_hdus[-1], case_index, band_index, truth_dict)
 
     if not os.path.exists('output'):
         os.mkdir('output')
