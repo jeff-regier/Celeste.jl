@@ -176,6 +176,9 @@ function main(; verbose=false)
         band_images::Vector{Model.TiledImage} = make_tiled_images(band_pixels, psf, wcs, epsilon)
         catalog_entry::Model.CatalogEntry = make_catalog_entry()
 
+        if truth_data[index, :add_noise] == 0
+            @assert abs(sum(band_pixels[3]) - truth_data[index, :flux_counts]) < 1
+        end
 
         vp = Vector{Float64}[Model.init_source(catalog_entry)]
         patches, tile_source_map = Infer.get_tile_source_map(band_images, [catalog_entry])
