@@ -7,10 +7,11 @@ import galsim
 
 _logger = logging.getLogger(__name__) 
 
-PIXEL_SCALE = 0.75 # arcsec / pixel
-SHIFT_RADIUS_ARCSEC = PIXEL_SCALE
-PSF_SIGMA_ARCSEC = 1
+ARCSEC_PER_PIXEL = 0.75 # arcsec / pixel
+SHIFT_RADIUS_ARCSEC = ARCSEC_PER_PIXEL
+PSF_SIGMA_PIXELS = 1
 STAMP_SIZE_PX = 48
+COUNTS_PER_NMGY = 1000 # a.k.a. "iota" in Celeste
 
 # intensity (flux) relative to third band (= "a" band = reference)
 # see GalsimBenchmark.typical_band_relative_intensities()
@@ -37,13 +38,13 @@ def make_basic_galaxy(half_light_radius_arcsec, flux_counts):
     return galsim.Exponential(half_light_radius=half_light_radius_arcsec, flux=flux_counts)
 
 def make_psf(flux):
-    return galsim.Gaussian(flux=flux, sigma=PSF_SIGMA_ARCSEC)
+    return galsim.Gaussian(flux=flux, sigma=PSF_SIGMA_PIXELS * ARCSEC_PER_PIXEL)
 
 def apply_shear(galaxy, angle_degrees, minor_major_axis_ratio):
     return galaxy.shear(q=minor_major_axis_ratio, beta=angle_degrees * galsim.degrees)
 
 def apply_shift(light_source, truth_dict):
-    image_center_in_world_coordinates = (STAMP_SIZE_PX + 1) / 2.0 * PIXEL_SCALE
+    image_center_in_world_coordinates = (STAMP_SIZE_PX + 1) / 2.0 * ARCSEC_PER_PIXEL
     return light_source.shift(
         float(truth_dict['world_center_x']) - image_center_in_world_coordinates,
         float(truth_dict['world_center_y']) - image_center_in_world_coordinates,
@@ -52,7 +53,7 @@ def apply_shift(light_source, truth_dict):
 def create_galaxy_from_truth_parameters(truth_dict, relative_intensity):
     galaxy = make_basic_galaxy(
         float(truth_dict['half_light_radius_arcsec']),
-        float(truth_dict['flux_counts']) * relative_intensity,
+        float(truth_dict['reference_band_flux_nmgy']) * relative_intensity * COUNTS_PER_NMGY,
     )
     galaxy = apply_shear(
         galaxy,
@@ -63,8 +64,8 @@ def create_galaxy_from_truth_parameters(truth_dict, relative_intensity):
     return galaxy
 
 
-def add_noise(image, sky_level, uniform_deviate):
-    noise = galsim.PoissonNoise(uniform_deviate, sky_level=sky_level)
+def add_noise(image, uniform_deviate):
+    noise = galsim.PoissonNoise(uniform_deviate)
     image.addNoise(noise)
 
 def read_truth(file_name):
@@ -90,19 +91,20 @@ def main():
                 final_light_source = galsim.Convolve([galaxy, make_psf(1)])
             else:
                 point_source_plus_psf = make_psf(
-                    float(truth_dict['flux_counts']) * STAR_RELATIVE_INTENSITIES[band_index]
+                    float(truth_dict['reference_band_flux_nmgy'])
+                        * STAR_RELATIVE_INTENSITIES[band_index] * COUNTS_PER_NMGY
                 )
                 final_light_source = apply_shift(point_source_plus_psf, truth_dict)
 
-            image = galsim.ImageF(STAMP_SIZE_PX, STAMP_SIZE_PX, scale=PIXEL_SCALE)
+            image = galsim.ImageF(STAMP_SIZE_PX, STAMP_SIZE_PX, scale=ARCSEC_PER_PIXEL)
             final_light_source.drawImage(image)
+            image.array[:] = image.array[:] + float(truth_dict['sky_level_nmgy']) * COUNTS_PER_NMGY
             if truth_dict['add_noise'] == '1':
-                add_noise(image, float(truth_dict['sky_level']), uniform_deviate)
+                add_noise(image, uniform_deviate)
             images.append(image)
 
-        if not os.path.exists('output'):
-            os.mkdir('output')
-
+    if not os.path.exists('output'):
+        os.mkdir('output')
     image_file_name = os.path.join('output', 'galsim_test_images.fits')
     galsim.fits.writeMulti(images, image_file_name)
     _logger.info('Wrote multi-extension FITS images to %r', image_file_name)

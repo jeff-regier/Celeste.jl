@@ -1,18 +1,17 @@
-world_center_x,world_center_y,star_or_galaxy,angle_degrees,minor_major_axis_ratio,half_light_radius_arcsec,flux_counts,sky_level,add_noise,comment
-18,18,star,,,,40000,10,0,simple star
-16,18,star,,,,40000,10,0,star position 1
-18,20,star,,,,40000,10,0,star position 2
-18,18,star,,,,20000,10,0,dim star
-18,18,star,,,,80000,10,0,bright star
-17,19,star,,,,40000,100,1,star with noise
-18.3,17.3,galaxy,0,1,0.01,10000,10,0,location (with bright point source)
-18,18,galaxy,15,0.2,1,10000,10,0,angle and axis ratio 1
-18,18,galaxy,160,0.4,1,10000,10,0,angle and axis ratio 2
-18,18,galaxy,0,1,0.5,10000,10,0,radius 1
-18,18,galaxy,0,1,1.5,10000,10,0,radius 2
-18,18,galaxy,0,1,1,5000,10,0,flux 1
-18,18,galaxy,0,1,1,20000,10,0,flux 2
-18.3,17.3,galaxy,15,0.4,1.5,15000,10,0,everything
-18.3,17.3,galaxy,15,0.4,1.5,15000,10,1,everything with noise
-18.3,17.3,galaxy,15,0.4,1.5,15000,100,1,everything with noise and low background
-18.3,17.3,galaxy,15,0.4,1.5,15000,300,1,everything with noise and high background
+world_center_x,world_center_y,star_or_galaxy,angle_degrees,minor_major_axis_ratio,half_light_radius_arcsec,reference_band_flux_nmgy,sky_level_nmgy,add_noise,comment
+18,18,star,,,,40,0.01,0,simple star
+16,18,star,,,,40,0.01,0,star position 1
+18,20,star,,,,40,0.01,0,star position 2
+18,18,star,,,,20,0.01,0,dim star
+18,18,star,,,,80,0.01,0,bright star
+17,19,star,,,,40,0.1,1,star with noise
+18,18,galaxy,15,0.2,1,10,0.01,0,angle and axis ratio 1
+18,18,galaxy,160,0.4,1,10,0.01,0,angle and axis ratio 2
+18,18,galaxy,0,1,0.5,10,0.01,0,radius 1
+18,18,galaxy,0,1,1.5,10,0.01,0,radius 2
+18,18,galaxy,0,1,1,5,0.01,0,flux 1
+18,18,galaxy,0,1,1,20,0.01,0,flux 2
+18.3,17.3,galaxy,15,0.4,1.5,15,0.01,0,everything
+18.3,17.3,galaxy,15,0.4,1.5,15,0.01,1,everything with noise
+18.3,17.3,galaxy,15,0.4,1.5,15,0.1,1,everything with noise and low background
+18.3,17.3,galaxy,15,0.4,1.5,15,0.3,1,everything with noise and high background

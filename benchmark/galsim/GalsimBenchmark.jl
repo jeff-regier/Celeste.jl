@@ -7,8 +7,6 @@ import FITSIO
 import StaticArrays
 import WCS
 
-import PyPlot
-
 import Celeste: Infer, Model, DeterministicVI
 
 const IOTA = 1000.
@@ -79,7 +77,10 @@ function typical_band_relative_intensities(is_star::Bool)
     # weight?
     dominant_component = indmax(prior_parameters.k[:, source_type_index])
     # What are the most typical log relative intensities for that component?
-    inter_band_ratios = exp(prior_parameters.c_mean[:, dominant_component, source_type_index])
+    inter_band_ratios = exp(
+        prior_parameters.c_mean[:, dominant_component, source_type_index]
+        - diag(prior_parameters.c_cov[:, :, dominant_component, source_type_index])
+    )
     Float64[
         1 / inter_band_ratios[2] / inter_band_ratios[1],
         1 / inter_band_ratios[2],
@@ -94,7 +95,7 @@ function typical_reference_brightness(is_star::Bool)
     prior_parameters::Model.PriorParams = Model.load_prior()
     exp(
         prior_parameters.r_mean[source_type_index]
-        + 0.5 * prior_parameters.r_var[source_type_index]
+        - prior_parameters.r_var[source_type_index]
     )
 end
 
@@ -154,7 +155,7 @@ function benchmark_comparison_data(params, truth_row)
             truth_row[1, :minor_major_axis_ratio],
             truth_row[1, :angle_degrees],
             truth_row[1, :half_light_radius_arcsec],
-            truth_row[1, :flux_counts] / IOTA,
+            truth_row[1, :reference_band_flux_nmgy],
             NA,
             NA,
             NA,
@@ -183,7 +184,7 @@ function main(; verbose=false)
     psf = make_psf()
     multi_extension_pixels::Vector{Matrix{Float32}}, wcs = read_fits(FILENAME)
     for index in 1:size(truth_data, 1)
-        epsilon = truth_data[index, :sky_level] / IOTA
+        epsilon = truth_data[index, :sky_level_nmgy]
 
         first_band_index = (index - 1) * 5 + 1
         band_pixels = multi_extension_pixels[first_band_index:(first_band_index + 4)]
@@ -191,7 +192,11 @@ function main(; verbose=false)
         catalog_entry::Model.CatalogEntry = make_catalog_entry()
 
         if truth_data[index, :add_noise] == 0
-            @assert abs(sum(band_pixels[3]) - truth_data[index, :flux_counts]) < 1
+            expected_flux = (
+                (truth_data[index, :reference_band_flux_nmgy]
+                 + prod(size(band_pixels[3])) * truth_data[index, :sky_level_nmgy]) * IOTA
+            )
+            @assert abs(sum(band_pixels[3]) - expected_flux) / expected_flux < 1e-3
         end
 
         vp = Vector{Float64}[Model.init_source(catalog_entry)]
