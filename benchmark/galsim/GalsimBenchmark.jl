@@ -4,6 +4,7 @@ module GalsimBenchmark
 
 using DataFrames
 import FITSIO
+import StaticArrays
 import WCS
 
 import Celeste: Infer, Model, DeterministicVI
@@ -15,7 +16,14 @@ function make_psf()
     alphaBar = [1.; 1.; 1.] ./ 3
     xiBar = [0.; 0.]
     tauBar = [1. 0.; 0. 1.]
-    [Model.PsfComponent(alphaBar[k], xiBar, tauBar) for k in 1:3]
+    [
+        Model.PsfComponent(
+            alphaBar[k],
+            StaticArrays.SVector{2, Float64}(xiBar),
+            StaticArrays.SMatrix{2, 2, Float64, 4}(tauBar)
+        )
+        for k in 1:3
+    ]
 end
 
 function read_fits(filename; read_sdss_psf=false)
