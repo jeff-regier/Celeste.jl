@@ -26,23 +26,27 @@ function make_psf()
     ]
 end
 
+immutable FitsExtension
+    pixels::Matrix{Float32}
+    header::FITSIO.FITSHeader
+end
+
 function read_fits(filename; read_sdss_psf=false)
     @assert isfile(filename)
     println("Reading $filename...")
     fits = FITSIO.FITS(filename)
     println("Found $(length(fits)) extensions.")
 
-    multi_extension_pixels = []
+    extensions::Vector{FitsExtension} = []
     for extension in fits
-        push!(multi_extension_pixels, read(extension))
+        push!(extensions, FitsExtension(read(extension), FITSIO.read_header(extension)))
     end
 
     # assume WCS same for each extension
-    header_str = FITSIO.read_header(fits[1], String)
-    wcs = WCS.from_header(header_str)[1]
+    wcs = WCS.from_header(FITSIO.read_header(fits[1], String))[1]
 
     close(fits)
-    multi_extension_pixels, wcs
+    extensions, wcs
 end
 
 function make_tiled_images(band_pixels, psf, wcs, epsilon)
@@ -143,24 +147,32 @@ const BENCHMARK_PARAMETER_LABELS = String[
     "Probability of galaxy",
 ]
 
-function benchmark_comparison_data(params, truth_row)
+function get_field(header::FITSIO.FITSHeader, key::String)
+    if haskey(header, key)
+        header[key]
+    else
+        NA
+    end
+end
+
+function benchmark_comparison_data(params, header)
     ids = Model.ids
-    star_galaxy_index = truth_row[1, :star_or_galaxy] == "star" ? 1 : 2
+    star_galaxy_index = header["CL_STGAL"] == "star" ? 1 : 2
     DataFrame(
-        label=fill(truth_row[1, :comment], length(BENCHMARK_PARAMETER_LABELS)),
+        label=fill(header["CL_DESCR"], length(BENCHMARK_PARAMETER_LABELS)),
         field=BENCHMARK_PARAMETER_LABELS,
         expected=Any[
-            truth_row[1, :world_center_x],
-            truth_row[1, :world_center_y],
-            truth_row[1, :minor_major_axis_ratio],
-            truth_row[1, :angle_degrees],
-            truth_row[1, :half_light_radius_arcsec],
-            truth_row[1, :reference_band_flux_nmgy],
-            NA,
-            NA,
-            NA,
-            NA,
-            truth_row[1, :star_or_galaxy] == "star" ? 0 : 1,
+            get_field(header, "CL_CENTX"),
+            get_field(header, "CL_CENTY"),
+            get_field(header, "CL_RATIO"),
+            get_field(header, "CL_ANGLE"),
+            get_field(header, "CL_HLRAD"),
+            get_field(header, "CL_FLUX"),
+            get_field(header, "CL_COL12"),
+            get_field(header, "CL_COL23"),
+            get_field(header, "CL_COL34"),
+            get_field(header, "CL_COL45"),
+            header["CL_STGAL"] == "star" ? 0 : 1,
         ],
         actual=Float64[
             params[ids.u[1]],
@@ -178,27 +190,37 @@ function benchmark_comparison_data(params, truth_row)
     )
 end
 
+function assert_counts_match_expected_flux(band_pixels::Vector{Matrix{Float32}},
+                                           header::FITSIO.FITSHeader)
+    if !header["CL_NOISE"]
+        expected_flux = (
+            (header["CL_FLUX"] + prod(size(band_pixels[3])) * header["CL_SKY"]) * iota
+        )
+        @assert abs(sum(band_pixels[3]) - expected_flux) / expected_flux < 1e-3
+    end
+end
+
 function main(; verbose=false)
-    truth_data = readtable("galsim_truth.csv")
     all_benchmark_data = []
     psf = make_psf()
-    multi_extension_pixels::Vector{Matrix{Float32}}, wcs = read_fits(FILENAME)
-    for index in 1:size(truth_data, 1)
-        epsilon = truth_data[index, :sky_level_nmgy]
+    extensions, wcs = read_fits(FILENAME)
+    @assert length(extensions) % 5 == 0 # one extension per band for each test case
 
-        first_band_index = (index - 1) * 5 + 1
-        band_pixels = multi_extension_pixels[first_band_index:(first_band_index + 4)]
+    for test_case_index in 1:div(length(extensions), 5)
+        first_band_index = (test_case_index - 1) * 5 + 1
+        @show first_band_index
+        header = extensions[first_band_index].header
+        epsilon = header["CL_SKY"]
+        iota = header["CL_IOTA"]
+
+        band_pixels = [
+            extensions[index].pixels for index in first_band_index:(first_band_index + 4)
+        ]
+        assert_counts_match_expected_flux(band_pixels, header)
         band_images::Vector{Model.TiledImage} = make_tiled_images(band_pixels, psf, wcs, epsilon)
         catalog_entry::Model.CatalogEntry = make_catalog_entry()
 
-        if truth_data[index, :add_noise] == 0
-            expected_flux = (
-                (truth_data[index, :reference_band_flux_nmgy]
-                 + prod(size(band_pixels[3])) * truth_data[index, :sky_level_nmgy]) * IOTA
-            )
-            @assert abs(sum(band_pixels[3]) - expected_flux) / expected_flux < 1e-3
-        end
-
+        # this code is very close to Infer.infer_source()
         vp = Vector{Float64}[Model.init_source(catalog_entry)]
         patches, tile_source_map = Infer.get_tile_source_map(band_images, [catalog_entry])
         elbo_args = DeterministicVI.ElboArgs(band_images, vp, tile_source_map, patches, [1])
@@ -206,7 +228,7 @@ function main(; verbose=false)
         DeterministicVI.maximize_f(DeterministicVI.elbo, elbo_args, verbose=verbose, loc_width=3.0)
         variational_parameters::Vector{Float64} = vp[1]
 
-        benchmark_data = benchmark_comparison_data(variational_parameters, truth_data[index, :])
+        benchmark_data = benchmark_comparison_data(variational_parameters, header)
         println(repr(benchmark_data))
         push!(all_benchmark_data, benchmark_data)
     end

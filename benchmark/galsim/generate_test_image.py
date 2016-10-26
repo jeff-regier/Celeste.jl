@@ -4,6 +4,7 @@ import math
 import os
 
 import galsim
+import astropy.io.fits
 
 _logger = logging.getLogger(__name__) 
 
@@ -33,6 +34,20 @@ GALAXY_RELATIVE_INTENSITIES = [
 ]
 
 RANDOM_SEED = 1234
+
+FITS_COMMENT_PREPEND = 'Celeste: '
+TRUTH_HEADER_FIELDS = [
+    ('world_center_x', float, 'CL_CENTX', 'X center in world coordinates'),
+    ('world_center_y', float, 'CL_CENTY', 'Y center in world coordinates'),
+    ('star_or_galaxy', str, 'CL_STGAL', '"star" or "galaxy"?'),
+    ('angle_degrees', float, 'CL_ANGLE', 'major axis angle (degrees from x-axis)'),
+    ('minor_major_axis_ratio', float, 'CL_RATIO', 'minor/major axis ratio'),
+    ('half_light_radius_arcsec', float, 'CL_HLRAD', 'half-light radius (arcsec)'),
+    ('reference_band_flux_nmgy', float, 'CL_FLUX', 'reference (=3) band brightness (nMgy)'),
+    ('sky_level_nmgy', float, 'CL_SKY', '"epsilon" sky level (nMgy each px)'),
+    ('add_noise', bool, 'CL_NOISE', 'was Poisson noise added?'),
+    ('comment', str, 'CL_DESCR', 'comment'),
+]
 
 def make_basic_galaxy(half_light_radius_arcsec, flux_counts):
     return galsim.Exponential(half_light_radius=half_light_radius_arcsec, flux=flux_counts)
@@ -79,7 +94,7 @@ def main():
 
     truth_file_name = 'galsim_truth.csv'
     _logger.info('Reading %s', truth_file_name)
-    images = []
+    fits_hdus = astropy.io.fits.HDUList()
     for index, truth_dict in enumerate(read_truth(truth_file_name)):
         uniform_deviate = galsim.UniformDeviate(RANDOM_SEED + index)
         for band_index in xrange(5):
@@ -101,12 +116,23 @@ def main():
             image.array[:] = image.array[:] + float(truth_dict['sky_level_nmgy']) * COUNTS_PER_NMGY
             if truth_dict['add_noise'] == '1':
                 add_noise(image, uniform_deviate)
-            images.append(image)
+            galsim.fits.write(image, hdu_list=fits_hdus)
+            hdu = fits_hdus[-1]
+            image.header = galsim.fits.FitsHeader(hdu.header)
+            image.header['CL_CASEI'] = (index + 1, FITS_COMMENT_PREPEND + 'test case index')
+            image.header['CL_BAND'] = (band_index + 1, FITS_COMMENT_PREPEND + 'color band')
+            image.header['CL_IOTA'] = (COUNTS_PER_NMGY, FITS_COMMENT_PREPEND + 'counts per nMgy')
+            for csv_field, type_fn, fits_field, comment in TRUTH_HEADER_FIELDS:
+                if truth_dict[csv_field]:
+                    value = type_fn(truth_dict[csv_field])
+                    image.header[fits_field] = (value, FITS_COMMENT_PREPEND + comment)
 
     if not os.path.exists('output'):
         os.mkdir('output')
     image_file_name = os.path.join('output', 'galsim_test_images.fits')
-    galsim.fits.writeMulti(images, image_file_name)
+    if os.path.exists(image_file_name):
+        os.remove(image_file_name)
+    fits_hdus.writeto(image_file_name)
     _logger.info('Wrote multi-extension FITS images to %r', image_file_name)
 
 if __name__ == "__main__":
