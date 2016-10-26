@@ -3,12 +3,12 @@ import logging
 import math
 import os
 
-import galsim
 import astropy.io.fits
+import galsim
 
 _logger = logging.getLogger(__name__) 
 
-ARCSEC_PER_PIXEL = 0.75 # arcsec / pixel
+ARCSEC_PER_PIXEL = 0.75
 SHIFT_RADIUS_ARCSEC = ARCSEC_PER_PIXEL
 PSF_SIGMA_PIXELS = 1
 STAMP_SIZE_PX = 48
@@ -101,6 +101,36 @@ def add_header_to_hdu(hdu, case_index, band_index, truth_dict):
             value = type_fn(truth_dict[csv_field])
             header[fits_field] = (value, FITS_COMMENT_PREPEND + comment)
 
+def construct_image_from_truth(truth_dict, band_index, uniform_deviate):
+    if truth_dict['star_or_galaxy'] == 'galaxy':
+        galaxy = create_galaxy_from_truth_parameters(
+            truth_dict,
+            GALAXY_RELATIVE_INTENSITIES[band_index],
+        )
+        final_light_source = galsim.Convolve([galaxy, make_psf(1)])
+    else:
+        assert truth_dict['star_or_galaxy'] == 'star'
+        point_source_plus_psf = make_psf(
+            float(truth_dict['reference_band_flux_nmgy'])
+                * STAR_RELATIVE_INTENSITIES[band_index] * COUNTS_PER_NMGY
+        )
+        final_light_source = apply_shift(point_source_plus_psf, truth_dict)
+
+    image = galsim.ImageF(STAMP_SIZE_PX, STAMP_SIZE_PX, scale=ARCSEC_PER_PIXEL)
+    final_light_source.drawImage(image)
+    add_sky_background(image, float(truth_dict['sky_level_nmgy']))
+    if truth_dict['add_noise'] == '1':
+        add_noise(image, uniform_deviate)
+    return image
+
+def save_multi_extension_fits(hdu_list, filename):
+    if not os.path.exists(os.path.dirname(filename)):
+        os.mkdir(os.path.dirname(filename))
+    if os.path.exists(filename):
+        os.remove(filename)
+    hdu_list.writeto(filename)
+    _logger.info('Wrote multi-extension FITS images to %r', filename)
+
 def main():
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
@@ -110,35 +140,12 @@ def main():
     for case_index, truth_dict in enumerate(read_truth(truth_file_name)):
         uniform_deviate = galsim.UniformDeviate(RANDOM_SEED + case_index)
         for band_index in xrange(5):
-            if truth_dict['star_or_galaxy'] == 'galaxy':
-                galaxy = create_galaxy_from_truth_parameters(
-                    truth_dict,
-                    GALAXY_RELATIVE_INTENSITIES[band_index],
-                )
-                final_light_source = galsim.Convolve([galaxy, make_psf(1)])
-            else:
-                point_source_plus_psf = make_psf(
-                    float(truth_dict['reference_band_flux_nmgy'])
-                        * STAR_RELATIVE_INTENSITIES[band_index] * COUNTS_PER_NMGY
-                )
-                final_light_source = apply_shift(point_source_plus_psf, truth_dict)
-
-            image = galsim.ImageF(STAMP_SIZE_PX, STAMP_SIZE_PX, scale=ARCSEC_PER_PIXEL)
-            final_light_source.drawImage(image)
-            add_sky_background(image, float(truth_dict['sky_level_nmgy']))
-            if truth_dict['add_noise'] == '1':
-                add_noise(image, uniform_deviate)
-
+            image = construct_image_from_truth(truth_dict, band_index, uniform_deviate)
             galsim.fits.write(image, hdu_list=fits_hdus)
             add_header_to_hdu(fits_hdus[-1], case_index, band_index, truth_dict)
 
-    if not os.path.exists('output'):
-        os.mkdir('output')
     image_file_name = os.path.join('output', 'galsim_test_images.fits')
-    if os.path.exists(image_file_name):
-        os.remove(image_file_name)
-    fits_hdus.writeto(image_file_name)
-    _logger.info('Wrote multi-extension FITS images to %r', image_file_name)
+    save_multi_extension_fits(fits_hdus, image_file_name)
 
 if __name__ == "__main__":
     main()
