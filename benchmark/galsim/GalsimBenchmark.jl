@@ -7,6 +7,8 @@ import FITSIO
 import StaticArrays
 import WCS
 
+import PyPlot
+
 import Celeste: Infer, Model, DeterministicVI
 
 const IOTA = 1000.
@@ -133,6 +135,10 @@ const BENCHMARK_PARAMETER_LABELS = String[
     "Angle (degrees)",
     "Half-light radius (arcsec)",
     "Brightness (nMgy)",
+    "Color band 1-2 ratio",
+    "Color band 2-3 ratio",
+    "Color band 3-4 ratio",
+    "Color band 4-5 ratio",
     "Probability of galaxy",
 ]
 
@@ -149,6 +155,10 @@ function benchmark_comparison_data(params, truth_row)
             truth_row[1, :angle_degrees],
             truth_row[1, :half_light_radius_arcsec],
             truth_row[1, :flux_counts] / IOTA,
+            NA,
+            NA,
+            NA,
+            NA,
             truth_row[1, :star_or_galaxy] == "star" ? 0 : 1,
         ],
         actual=Float64[
@@ -158,6 +168,10 @@ function benchmark_comparison_data(params, truth_row)
             canonical_angle(params) * 180 / pi,
             params[ids.e_scale],
             exp(params[ids.r1[star_galaxy_index]]),
+            exp(params[ids.c1[1, star_galaxy_index]]),
+            exp(params[ids.c1[2, star_galaxy_index]]),
+            exp(params[ids.c1[3, star_galaxy_index]]),
+            exp(params[ids.c1[4, star_galaxy_index]]),
             params[ids.a[2]],
         ],
     )
@@ -167,7 +181,7 @@ function main(; verbose=false)
     truth_data = readtable("galsim_truth.csv")
     all_benchmark_data = []
     psf = make_psf()
-    multi_extension_pixels, wcs = read_fits(FILENAME)
+    multi_extension_pixels::Vector{Matrix{Float32}}, wcs = read_fits(FILENAME)
     for index in 1:size(truth_data, 1)
         epsilon = truth_data[index, :sky_level] / IOTA
 

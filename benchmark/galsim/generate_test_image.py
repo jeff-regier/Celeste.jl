@@ -16,19 +16,19 @@ STAMP_SIZE_PX = 48
 # see GalsimBenchmark.typical_band_relative_intensities()
 # these are taken from the current dominant component of the lognormal prior on c_s for stars
 STAR_RELATIVE_INTENSITIES = [
-    0.098,
-    0.488,
+    1 / (4.986 * 2.049),
+    1 / 2.049,
     1,
     1.350,
-    1.599,
+    1.350 * 1.184,
 ]
 # these are taken from the current dominant component of the lognormal prior on c_s for galaxies
 GALAXY_RELATIVE_INTENSITIES = [
-    0.219,
-    0.465,
+    1 / (2.117 * 2.152),
+    1 / 2.152,
     1,
     1.421,
-    1.846,
+    1.421 * 1.299,
 ]
 
 RANDOM_SEED = 1234
