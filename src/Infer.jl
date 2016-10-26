@@ -214,11 +214,26 @@ function load_active_pixels!(ea::ElboArgs{Float64};
         for t in 1:length(tiles)
             tile = tiles[t]
 
-            local_active_sources = Int64[]
-            local_centers = Vector{Float64}[]
+            # we're checking up front whether this tile matters,
+            # *before* we allocate memory for local_active_sources
+            # and local_active_centers
+            ignore_tile = true
             for s in ea.active_sources
                 # `intersect(ea.active_sources, tile_source_map)` allocates
                 # huge amounts of memory, so now we don't do that here
+                if s in ea.tile_source_map[n][t]
+                    ignore_tile = false
+                    break
+                end
+            end
+
+            if ignore_tile
+                continue
+            end
+
+            local_active_sources = Int64[]
+            local_centers = Vector{Float64}[]
+            for s in ea.active_sources
                 if s in ea.tile_source_map[n][t]
                     push!(local_active_sources, s)
 
@@ -229,10 +244,6 @@ function load_active_pixels!(ea::ElboArgs{Float64};
                                                         ea.vp[s][ids.u])
                     push!(local_centers, pix_loc)
                 end
-            end
-
-            if isempty(local_active_sources)
-                continue
             end
 
             # TODO; use log_prob.jl in the Model module to get the
