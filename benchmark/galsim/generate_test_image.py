@@ -11,7 +11,7 @@ ARCSEC_PER_PIXEL = 0.75 # arcsec / pixel
 SHIFT_RADIUS_ARCSEC = ARCSEC_PER_PIXEL
 PSF_SIGMA_PIXELS = 1
 STAMP_SIZE_PX = 48
-COUNTS_PER_NMGY = 1000 # a.k.a. "iota" in Celeste
+COUNTS_PER_NMGY = 1000.0 # a.k.a. "iota" in Celeste
 
 # intensity (flux) relative to third band (= "a" band = reference)
 # see GalsimBenchmark.typical_band_relative_intensities()

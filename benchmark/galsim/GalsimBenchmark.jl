@@ -13,7 +13,7 @@ const IOTA = 1000.
 const FILENAME = "output/galsim_test_images.fits"
 
 function make_psf()
-    alphaBar = [1.; 1.; 1.] ./ 3
+    alphaBar = [1.; 0.; 0.]
     xiBar = [0.; 0.]
     tauBar = [1. 0.; 0. 1.]
     [
@@ -211,7 +211,8 @@ function main(; verbose=false)
         push!(all_benchmark_data, benchmark_data)
     end
 
-    println(repr(vcat(all_benchmark_data...)))
+    full_data = vcat(all_benchmark_data...)
+    println(repr(full_data[!isna(full_data[:expected]), :]))
 end
 
 end # module GalsimBenchmark
