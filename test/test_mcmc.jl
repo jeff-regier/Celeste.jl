@@ -76,8 +76,7 @@ function test_star_mcmc()
     for i in 1:length(true_star_state)
         ths = star_chain.value[:,i,1]
         lo, hi = percentile(ths, 1), percentile(ths, 99)
-        @printf "   %s   = %2.4f  [%2.4f,  %2.4f] \n" MCMC.star_param_names[i] mean(ths) lo hi
-        println(sin)
+        @printf "   %s (true_val %2.4f)  = %2.4f  [%2.4f,  %2.4f] \n" MCMC.star_param_names[i] true_star_state[i] mean(ths) lo hi
         @test (true_star_state[i] < hi) & (true_star_state[i] > lo)
     end
 end
@@ -108,7 +107,7 @@ function test_galaxy_mcmc()
     for i in 1:length(true_gal_state)
         ths = gal_chain.value[:,i,1]
         lo, hi = percentile(ths, 1), percentile(ths, 99)
-        @printf "   %s   = %2.4f  [%2.4f,  %2.4f] \n" gal_param_names[i] mean(ths) lo hi
+        @printf "   %s (true_val %2.4f) = %2.4f  [%2.4f,  %2.4f] \n" gal_param_names[i] true_gal_state[i] mean(ths) lo hi
         @test (true_gal_state[i] < hi) & (true_gal_state[i] > lo)
     end
 end
