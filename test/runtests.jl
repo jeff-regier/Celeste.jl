@@ -46,7 +46,8 @@ else
                  "test_sdssio.jl",
                  "test_transforms.jl",
                  "test_wcs.jl",
-                 "test_infer.jl"]
+                 "test_infer.jl",
+                 "test_mcmc.jl"]
 end
 
 
