@@ -3,6 +3,11 @@ module MCMC
 using ..Model
 import Mamba
 
+# TODO move these to model/log_prob.jl
+star_param_names = ["lnr", "cug", "cgr", "cri", "ciz", "ra", "dec"]
+galaxy_param_names = [star_param_names; ["gdev", "gaxis", "gangle", "gscale"]]
+
+
 function run_single_star_mcmc(num_samples::Int64,
                               sources::Vector{CatalogEntry},
                               images::Vector{TiledImage},
@@ -31,19 +36,42 @@ function run_single_star_mcmc(num_samples::Int64,
     best_ll = star_logpdf(star_state)
 
     # run star slic esampler for 
-    star_param_names = ["lnr", "cug", "cgr", "cri", "ciz", "ra", "dec"]
     star_sim = run_slice_sampler(star_logpdf, star_state,
                                  num_samples, star_param_names)
     star_sim
 end
 
 
-function run_single_gal_mcmc()
-    #gal_logpdf, gal_logprior =
-    #    Model.make_galaxy_logpdf(ea.images, active_pixels, ea.S, ea.N,
-    #                             source_states, ea.tile_source_map,
-    #                             ea.patches, ea.active_sources,
-    #                             ea.psf_K, ea.num_allowed_sd)
+function run_single_galaxy_mcmc(num_samples::Int64,
+                                sources::Vector{CatalogEntry},
+                                images::Vector{TiledImage},
+                                active_pixels::Vector{ActivePixel},
+                                S::Int64,
+                                N::Int64,
+                                tile_source_map::Vector{Matrix{Vector{Int}}},
+                                patches::Matrix{SkyPatch},
+                                active_sources::Vector{Int},
+                                psf_K::Int64,
+                                num_allowed_sd::Float64)
+
+    source_states = [Model.catalog_entry_to_latent_state_params(s)
+                     for s in sources]
+    gal_logpdf, gal_logprior =
+        Model.make_galaxy_logpdf(images, active_pixels, S, N,
+                                 source_states, tile_source_map,
+                                 patches, active_sources,
+                                 psf_K, num_allowed_sd)
+
+    # initialize star params
+    gal_state = Model.extract_galaxy_state(source_states[1])
+    println(gal_state)
+    best_ll = gal_logpdf(gal_state)
+
+    # run star slic esampler for 
+    gal_sim = run_slice_sampler(gal_logpdf, gal_state,
+                                 num_samples, galaxy_param_names)
+    gal_sim
+
 end
 
 
