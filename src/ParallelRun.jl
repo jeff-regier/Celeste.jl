@@ -299,7 +299,7 @@ function load_images(rcfs, stagedir)
     images
 end
 
-function UnionFind(i, components_tree)
+function union_find(i, components_tree)
     root = i
     while components_tree[i] != i
         i = components_tree[i]
@@ -330,8 +330,8 @@ TODO max - refactor into different file.
 Returns:
 - Nothing
 """
-function ComputeConnectedComponents(source_start, source_end, sources, neighbor_map,
-                                    components_tree, components, src_to_target_index)
+function compute_connected_components(source_start, source_end, sources, neighbor_map,
+                                      components_tree, components, src_to_target_index)
     # Construct reverse map from source_id -> index in source. Only do this for
     # the specified portion we are computing connected components.
     source_to_index = Dict{Int64, Int64}()
@@ -347,11 +347,11 @@ function ComputeConnectedComponents(source_start, source_end, sources, neighbor_
 
     # Run union find algorithm to find connected components.
     for i = source_start:source_end
-        target = UnionFind(i-source_start+1, components_tree)
+        target = union_find(i-source_start+1, components_tree)
         for neighbor in neighbor_map[index_to_source[i-source_start+1]]
             if haskey(source_to_index, neighbor)
                 neighbor_idx = source_to_index[neighbor]                
-                component_source = UnionFind(neighbor_idx, components_tree)
+                component_source = union_find(neighbor_idx, components_tree)
                 components_tree[component_source] = target
             end
             
@@ -360,7 +360,7 @@ function ComputeConnectedComponents(source_start, source_end, sources, neighbor_
 
     # Write to components dictionary.
     for i = source_start:source_end
-        index = UnionFind(i-source_start+1, components_tree)
+        index = union_find(i-source_start+1, components_tree)
         if !haskey(components, index)
             components[index] = Vector{Int64}()
         end
@@ -379,7 +379,7 @@ TODO max - refactor into different source file (E.G: Cyclades.jl)
 Returns:
 - An array of vectors representing the workload of each thread ([thread][batch][sources(indices)])
 """
-function PartitionCyclades(nprocthreads, target_sources, neighbor_map; batch_size=60)
+function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_size=60)
     Log.info("Starting Cyclades partitioning...")
     tic()
 
@@ -422,10 +422,10 @@ function PartitionCyclades(nprocthreads, target_sources, neighbor_map; batch_siz
         @assert source_end - source_start + 1 <= batch_size
         
         # TODO max - parallelize this
-        ComputeConnectedComponents(source_start, source_end, sources, neighbor_map,
-                                   components_tree[1],
-                                   components[cur_batch],
-                                   src_to_indx)
+        compute_connected_components(source_start, source_end, sources, neighbor_map,
+                                     components_tree[1],
+                                     components[cur_batch],
+                                     src_to_indx)
     end
 
     assigned_sources = 0
@@ -466,7 +466,7 @@ Returns:
   Note for partition equally, there is only 1 batch.
 
 """
-function PartitionEqually(nprocthreads, n_sources)
+function partition_equally(nprocthreads, n_sources)
     Log.info("Starting basic source partitioning...")
     tic()
     n_sources_per_thread = convert(Int64, floor(n_sources / nprocthreads))
@@ -579,9 +579,9 @@ function one_node_infer_multi_iter(rcfs::Vector{RunCamcolField},
             source_id = target_sources[index]
             cyclades_neighbor_map[source_id] = neighbors
         end
-        thread_sources_assignment = PartitionCyclades(nprocthreads, target_sources, cyclades_neighbor_map)
+        thread_sources_assignment = partition_cyclades(nprocthreads, target_sources, cyclades_neighbor_map)
     else
-        thread_sources_assignment = PartitionEqually(nprocthreads, n_sources)
+        thread_sources_assignment = partition_equally(nprocthreads, n_sources)
     end
 
     Log.info("Done assigning sources to threads for processing")
@@ -621,7 +621,7 @@ function one_node_infer_multi_iter(rcfs::Vector{RunCamcolField},
 
     # Initialize elboargs in parallel
     tic()
-    thread_initialize_sources_assignment = PartitionEqually(nprocthreads, n_sources)
+    thread_initialize_sources_assignment = partition_equally(nprocthreads, n_sources)
     
     Threads.@threads for i=1:nprocthreads
         for batch = 1:length(thread_initialize_sources_assignment[i])

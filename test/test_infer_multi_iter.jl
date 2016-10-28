@@ -89,7 +89,7 @@ function test_cyclades_partitioning()
     target_sources = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
 
     # 3 threads, 16 sources, batch_size = 4
-    source_assignment = ParallelRun.PartitionCyclades(3, target_sources, neighbor_map, batch_size=4)
+    source_assignment = ParallelRun.partition_cyclades(3, target_sources, neighbor_map, batch_size=4)
 
     # Gather the entities across all batches.
     # 1. They should sum up to 16 exactly.
