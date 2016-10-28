@@ -323,7 +323,9 @@ TODO max - refactor into different file.
 - sources - the actual source ids to find connected components for (indexed by source_start and source_end)
 - neighbor_map - conflict graph of sources
 - components_tree - the components array to do union find on.
-- components - Dict{Int64, Vector{Int64}} dictionary from cc_id to sources in that component
+- components - Dict{Int64, Vector{Int64}} dictionary from cc_id to target_source index in that component
+- src_to_target_index - a mapping from light source id -> index within the target_sources array. This is required
+                        since we need to write the index within target sources to the output, rather than the source id itself.
 
 Returns:
 - Nothing

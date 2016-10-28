@@ -129,6 +129,8 @@ function test_cyclades_partitioning()
     println("Cyclades partitioning test succeeded")
 end
 
+# Run this multiple times, since the cyclades algorithm shuffles the elements
+# before batching them up.
 for i=1:20
     test_cyclades_partitioning()
 end
