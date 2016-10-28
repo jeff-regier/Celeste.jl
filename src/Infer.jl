@@ -106,8 +106,8 @@ function infer_source(images::Vector{TiledImage},
     fit_object_psfs!(ea, ea.active_sources)
     load_active_pixels!(ea)
     @assert length(ea.active_pixels) > 0
-    DeterministicVI.maximize_f(DeterministicVI.elbo, ea)
-    vp[1]
+    f_evals, max_f, max_x, nm_result = DeterministicVI.maximize_f(DeterministicVI.elbo, ea, max_iters=20)
+    vp[1], max_f
 end
 
 
