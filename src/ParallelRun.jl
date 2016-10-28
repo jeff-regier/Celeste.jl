@@ -567,12 +567,6 @@ function one_node_infer_multi_iter(rcfs::Vector{RunCamcolField},
 
     reserve_thread[] && thread_fun(reserve_thread)
 
-    # Create a source_id -> target_sources index map
-    source_id_to_target_sources_index = Dict{Int64, Int64}()
-    for (index, source_id) in enumerate(target_sources)
-        source_id_to_target_sources_index[source_id] = index
-    end
-    
     # Partition the sources
     n_sources = length(target_sources)
     Log.info("Optimizing $(n_sources) sources")
