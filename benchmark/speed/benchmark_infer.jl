@@ -16,11 +16,15 @@ test infer with a single (run, camcol, field).
 This is basically just to make sure it runs at all.
 """
 function benchmark_infer()
+    # Warm up---this compiles the code
+    box_compile = ParallelRun.BoundingBox(164.39, 164.40, 39.11, 39.13)
+    field_triplets_compile = [RunCamcolField(3900, 6, 269),]
+    ParallelRun.one_node_infer(field_triplets_compile, datadir; box=box_compile)
+
     # very small patch of sky that turns out to have 4 sources.
     # We checked that this patch is in the given field.
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
-    @time ParallelRun.one_node_infer(field_triplets, datadir; box=box)
 
     # take 22 seconds on jeff's old desktop (intel core2 q6600 processor),
     # as of 10/7/2016
