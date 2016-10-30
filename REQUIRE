@@ -1,7 +1,6 @@
 julia 0.5-
 DataFrames
 Distributions
-DocOpt
 Dtree
 FITSIO 0.8.4
 ForwardDiff 0.2
