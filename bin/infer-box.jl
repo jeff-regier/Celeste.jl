@@ -1,13 +1,12 @@
 #!/usr/bin/env julia
 
 import Celeste.ParallelRun: BoundingBox, infer_box
-import Celeste.SDSSIO: RunCamcolField
 
 
 const usage_info =
 """
 Usage:
-  celeste.jl [options] infer-box <ramin> <ramax> <decmin> <decmax>
+  infer-box <ramin> <ramax> <decmin> <decmax>
 """
 
 const stagedir = ENV["CELESTE_STAGE_DIR"]
