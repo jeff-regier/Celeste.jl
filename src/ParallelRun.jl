@@ -313,6 +313,7 @@ function one_node_infer(
                stagedir::String;
                objid="",
                box=BoundingBox(-1000., 1000., -1000., 1000.),
+               target_rcfs=RunCamcolField[],
                primary_initialization=true,
                reserve_thread=Ref(false),
                thread_fun=phalse,
@@ -337,19 +338,30 @@ function one_node_infer(
     catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
     Log.info("$(length(catalog)) primary sources after MIN_FLUX cut")
 
-    # Filter any object not specified, if an objid is specified
-    if objid != ""
-        Log.info(catalog[1].objid)
-        catalog = filter(entry->(entry.objid == objid), catalog)
-    end
-
-    # Get indicies of entries in the  RA/Dec range of interest.
+    # Get indicies of entries in the RA/Dec range of interest.
     entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
                              (box.decmin < entry.pos[2] < box.decmax))
     target_sources = find(entry_in_range, catalog)
 
-    nputs(dt_nodeid, string("processing $(length(target_sources)) sources in ",
+    Log.info(string("Found $(length(target_sources)) target sources in ",
           "$(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax)"))
+
+    # For infer-box.jl, target sources are everything in the box.
+    # For infer-rcf.jl, target sources are primary detections in the target rcf.
+    if !isempty(target_rcfs)
+        target_entries = SDSSIO.read_photoobj_files(target_rcfs,
+                                                    stagedir,
+                                                    duplicate_policy=:primary)
+        target_ids = Set([entry.objid for entry in target_entries])
+        target_sources = filter(ts->(catalog[ts].objid in target_ids), target_sources)
+        Log.info("$(length(target_sources)) target light sources after target_rcf cut")
+    end
+
+    # Filter any object not specified, if an objid is specified
+    if objid != ""
+        target_sources = filter(ts->(catalog[ts].objid == objid), target_sources)
+        Log.info("$(length(target_sources)) target light sources after objid cut")
+    end
 
     # If there are no objects of interest, return early.
     if length(target_sources) == 0
@@ -491,6 +503,10 @@ function infer_field(rcf::RunCamcolField,
                      stagedir::String,
                      outdir::String;
                      objid="")
+    # Here `one_node_infer` is called just with a single rcf, even though
+    # other rcfs may overlap with this one. That's because this function is
+    # just for testing on stripe 82: in practice we always use all relevent
+    # data to make inferences.
     results = one_node_infer([rcf,], stagedir; objid=objid, primary_initialization=false)
     fname = if objid == ""
         @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
@@ -499,6 +515,53 @@ function infer_field(rcf::RunCamcolField,
     end
     JLD.save(fname, "results", results)
     Log.debug("infer_field finished successfully")
+end
+
+
+immutable UnknownRCF <: Exception
+    rcf::RunCamcolField
+end
+
+
+"""
+This function is called directly from the `bin` directory.
+It optimizes all the primary detections in the specified run-camcol-field,
+using essentially all relevant images. Typically relevant image data includes
+run-camcol-field's in addition to the specified one, that overlap
+with the specified run-camcol-field. I say "essentially" because
+some large light sources may contribute photons to images that do
+not overlap with the rcf containig the center of the light source's
+primary detection, and these images are excluded. This is more of a
+feature than a bug because we need to limit the amount of computation
+per light souce.
+"""
+function infer_rcf(rcf::RunCamcolField,
+                   stagedir::String,
+                   outdir::String;
+                   objid="")
+    whole_sky = BoundingBox(-999, 999, -999, 999)
+    all_fes = get_overlapping_field_extents(whole_sky, stagedir)
+    this_fe = filter(fe->(fe[1] == rcf), all_fes)
+
+    @assert(length(this_fe) <= 1)
+    if isempty(this_fe)
+        throw(UnknownRCF(rcf))
+    end
+
+    rcf_bounds = this_fe[1][2]
+    overlapping_rcfs = get_overlapping_fields(rcf_bounds, stagedir)
+    @assert rcf in overlapping_rcfs
+
+    tic()
+    results = one_node_infer(overlapping_rcfs,
+                             stagedir;
+                             objid=objid,  # just for making unit tests run fast
+                             box=rcf_bounds,  # could exclude this argument
+                             target_rcfs=[rcf,])
+    Log.info("Inferred $rcf in $(toq()) seconds")
+
+    fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
+    JLD.save(fname, "results", results)
 end
 
 

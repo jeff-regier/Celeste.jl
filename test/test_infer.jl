@@ -15,6 +15,21 @@ function test_infer_single()
 end
 
 
+function test_infer_rcf()
+    resfile = joinpath(datadir, "celeste-003900-6-0269.jld")
+    rm(resfile, force=true)
+
+    rcf = RunCamcolField(3900, 6, 269)
+    objid = "1237662226208063492"
+    ParallelRun.infer_rcf(rcf, datadir, datadir; objid=objid)
+
+    @test isfile(resfile)
+    println(filesize(resfile))
+    @test filesize(resfile) > 1000  # should be about 15 KB
+    rm(resfile)
+end
+
+
 function test_source_division_parallelism()
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
@@ -65,6 +80,7 @@ function test_load_active_pixels()
 end
 
 
+test_infer_rcf()
 test_load_active_pixels()
 test_source_division_parallelism()
 test_infer_single()
