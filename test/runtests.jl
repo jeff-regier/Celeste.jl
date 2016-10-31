@@ -47,7 +47,7 @@ else
                  "test_transforms.jl",
                  "test_wcs.jl",
                  "test_infer.jl",
-                 "test_infer_multi_iter.jl"]
+                 "test_joint_infer.jl"]
 end
 
 

@@ -4,7 +4,7 @@ import JLD
 test infer multi iter with a single (run, camcol, field).
 This is basically just to make sure it runs at all.
 """
-function test_infer_multi_iter()
+function test_one_node_joint_infer()
     # very small patch of sky that turns out to have 4 sources.
     # We checked that this patch is in the given field.
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
@@ -14,9 +14,9 @@ end
 
 """
 test infer multi iter obj overlapping.
-This makes sure test_infer_multi_iter achieves sum objective value lest than single iter on non overlapping sources. 
+This makes sure one_node_joint_infer achieves sum objective value lest than single iter on non overlapping sources. 
 """
-function test_infer_multi_iter_obj_overlapping()
+function test_one_node_joint_infer_obj_overlapping()
 
     # This bounding box has overlapping stars. (neighbor map is not empty)
     box = ParallelRun.BoundingBox(124.39, 164.41, 19.11, 39.13)
@@ -34,11 +34,11 @@ function test_infer_multi_iter_obj_overlapping()
     sum_multi = sum(obj_values_multi)
     sum_single = sum(obj_values_single)
     sum_two = sum(obj_values_two)
-    println("Multi iter objective value: $(sum_multi)")
-    println("Multi iter 1 iter objective value: $(sum_two)")
+    println("One node joint infer objective value: $(sum_multi)")
+    println("One node joint infer 1 iter objective value: $(sum_two)")
     println("Single iter objective value: $(sum_single)")
-    println("Multi iter time: $(multi_iter_time)")
-    println("Multi iter 1 iter time: $(multi_iter_one_iter_time)")
+    println("One node joint infer time: $(multi_iter_time)")
+    println("One node joint infer 1 iter time: $(multi_iter_one_iter_time)")
     println("Single iter time: $(single_iter_time)")
     @test sum_multi > sum_single
     @test sum_multi > sum_two
@@ -141,5 +141,6 @@ end
 for i=1:20
     test_cyclades_partitioning()
 end
-test_infer_multi_iter()
-test_infer_multi_iter_obj_overlapping()
+
+test_one_node_joint_infer()
+test_one_node_joint_infer_obj_overlapping()
