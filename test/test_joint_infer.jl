@@ -19,7 +19,7 @@ This makes sure one_node_joint_infer achieves sum objective value lest than sing
 function test_one_node_joint_infer_obj_overlapping()
 
     # This bounding box has overlapping stars. (neighbor map is not empty)
-    box = ParallelRun.BoundingBox(124.39, 164.41, 19.11, 39.13)
+    box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
     tic()
     result_multi, obj_values_multi = ParallelRun.one_node_joint_infer(field_triplets, datadir; box=box, n_iters=100)
