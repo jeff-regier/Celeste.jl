@@ -9,7 +9,7 @@ function test_infer_multi_iter()
     # We checked that this patch is in the given field.
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
-    result = ParallelRun.one_node_infer_multi_iter(field_triplets, datadir; box=box, n_iters=10)
+    result = ParallelRun.one_node_joint_infer(field_triplets, datadir; box=box, n_iters=10)
 end
 
 """
@@ -19,34 +19,41 @@ This makes sure test_infer_multi_iter achieves sum objective value lest than sin
 function test_infer_multi_iter_obj_overlapping()
 
     # This bounding box has overlapping stars. (neighbor map is not empty)
-    box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
+    box = ParallelRun.BoundingBox(124.39, 164.41, 19.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
-    result_multi, obj_values_multi = ParallelRun.one_node_infer_multi_iter(field_triplets, datadir; box=box, n_iters=100)
-    result_multi, obj_values_two = ParallelRun.one_node_infer_multi_iter(field_triplets, datadir; box=box, n_iters=1)
+    tic()
+    result_multi, obj_values_multi = ParallelRun.one_node_joint_infer(field_triplets, datadir; box=box, n_iters=100)
+    multi_iter_time = toq()
+    tic()
+    result_multi, obj_values_two = ParallelRun.one_node_joint_infer(field_triplets, datadir; box=box, n_iters=2)
+    multi_iter_one_iter_time = toq()
+    tic()
     result_single, obj_values_single = ParallelRun.one_node_infer(field_triplets, datadir; box=box)
+    single_iter_time = toq()
 
     sum_multi = sum(obj_values_multi)
     sum_single = sum(obj_values_single)
     sum_two = sum(obj_values_two)
     println("Multi iter objective value: $(sum_multi)")
-    println("2 iter objective value: $(sum_two)")
+    println("Multi iter 1 iter objective value: $(sum_two)")
     println("Single iter objective value: $(sum_single)")
-    @assert sum_multi > sum_single
-    @assert sum_multi > sum_two
+    println("Multi iter time: $(multi_iter_time)")
+    println("Multi iter 1 iter time: $(multi_iter_one_iter_time)")
+    println("Single iter time: $(single_iter_time)")
+    @test sum_multi > sum_single
+    @test sum_multi > sum_two
 end
 
 """
 helper edges_between_sources
 Helper function to determine if there are edges between 2 sets of sources
 """
-function edges_between_sources(a, b, map)
-    for v_a in a
-        for v_b in b
-            # We assume undirected graph (symmetric map)
-            if v_b in map[v_a] 
-                println("Found edge between elements $(v_a) and $(v_b)")
-                return true
-            end
+function edges_between_sources(a, b, neighbor_map)
+    for v_a in a, v_b in b
+        # We assume undirected graph (symmetric map)
+        if v_b in neighbor_map[v_a] 
+            println("Found edge between elements $(v_a) and $(v_b)")
+            return true
         end
     end        
     return false
@@ -95,21 +102,21 @@ function test_cyclades_partitioning()
     # 1. They should sum up to 16 exactly.
     # 2. They should be numbered from 1 - 16.
     all_sources =  Vector{Int64}()
-    n_threads = length(source_assignment)
+    n_simulated_threads = length(source_assignment)
     n_batches = length(source_assignment[1])
-    @assert n_threads == 3
+    @test n_simulated_threads == 3
     for thread_id=1:3
         # Every thread must have the same # of batches.
-        @assert n_batches == length(source_assignment[thread_id])
+        @test n_batches == length(source_assignment[thread_id])
         for batch=1:n_batches
             for source_id in source_assignment[thread_id][batch]
                 push!(all_sources, source_id)
             end
         end
     end
-    @assert length(all_sources) == 16
+    @test length(all_sources) == 16
     for source_id=1:16
-        @assert source_id in all_sources
+        @test source_id in all_sources
     end
 
     # Now make sure elements of the same batches between threads do not conflict (have an edge).
@@ -121,9 +128,9 @@ function test_cyclades_partitioning()
         println(t1_sources)
         println(t2_sources)
         println(t3_sources)
-        @assert !edges_between_sources(t1_sources, t2_sources, neighbor_map)
-        @assert !edges_between_sources(t1_sources, t3_sources, neighbor_map)
-        @assert !edges_between_sources(t2_sources, t3_sources, neighbor_map)
+        @test !edges_between_sources(t1_sources, t2_sources, neighbor_map)
+        @test !edges_between_sources(t1_sources, t3_sources, neighbor_map)
+        @test !edges_between_sources(t2_sources, t3_sources, neighbor_map)
     end
 
     println("Cyclades partitioning test succeeded")
