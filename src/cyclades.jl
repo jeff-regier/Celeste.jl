@@ -115,7 +115,7 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
     # First shuffle the sources. Note Cyclades is serially equivalent
     # to this permutation of sources.
     sources = [x for x in keys(neighbor_map)]
-    shuffle!(sources)
+    #shuffle!(sources)
 
     # Process batch_size number of sources at a time.
     # TODO max - parallelize everything below (particularly CC computation)
