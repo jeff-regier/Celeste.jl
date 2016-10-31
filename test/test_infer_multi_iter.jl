@@ -105,11 +105,11 @@ function test_cyclades_partitioning()
     n_simulated_threads = length(source_assignment)
     n_batches = length(source_assignment[1])
     @test n_simulated_threads == 3
-    for thread_id=1:3
+    for simulated_thread_id=1:3
         # Every thread must have the same # of batches.
-        @test n_batches == length(source_assignment[thread_id])
+        @test n_batches == length(source_assignment[simulated_thread_id])
         for batch=1:n_batches
-            for source_id in source_assignment[thread_id][batch]
+            for source_id in source_assignment[simulated_thread_id][batch]
                 push!(all_sources, source_id)
             end
         end
