@@ -8,7 +8,10 @@ using ..Model
 import ..SDSSIO
 import ..Infer
 import ..SDSSIO: RunCamcolField
+import ..PSF
 
+using ..DeterministicVI
+include("cyclades.jl")
 
 #set this to false to use source-division parallelism
 const SKY_DIVISION_PARALLELISM=true
@@ -248,11 +251,11 @@ function divide_sky_and_infer(
         itimes.query_fids = toq()
 
         # run inference for this subarea
-        results = one_node_infer(rcfs, stagedir;
-                        box=BoundingBox(iramin, iramax, idecmin, idecmax),
-                        reserve_thread=rundt,
-                        thread_fun=rundtree,
-                        timing=itimes)
+        results, obj_value = one_node_infer(rcfs, stagedir;
+                                            box=BoundingBox(iramin, iramax, idecmin, idecmax),
+                                            reserve_thread=rundt,
+                                            thread_fun=rundtree,
+                                            timing=itimes)
         tic()
         save_results(outdir, iramin, iramax, idecmin, idecmax, results)
         itimes.write_results = toq()
@@ -293,8 +296,7 @@ function load_images(rcfs, stagedir)
     images
 end
 
-
-"""
+""" 
 Use mulitple threads on one node to 
 fit the Celeste model to sources in a given bounding box.
 
@@ -383,6 +385,7 @@ function one_node_infer(
     reserve_thread[] && thread_fun(reserve_thread)
 
     # iterate over sources
+    obj_values = Array{Float64}(length(target_sources))
     curr_source = 1
     last_source = length(target_sources)
     sources_lock = SpinLock()
@@ -402,7 +405,6 @@ function one_node_infer(
                 ts = curr_source
                 curr_source += 1
                 unlock(sources_lock)
-
                 if ts > last_source
                     break
                 end
@@ -413,15 +415,17 @@ function one_node_infer(
 
                     t0 = time()
                     # TODO: subset images to images_local too.
-                    vs_opt = Infer.infer_source(images,
-                                                catalog[neighbor_map[ts]],
-                                                entry)
+                    vs_opt, obj_value = Infer.infer_source(images,
+                                                           catalog[neighbor_map[ts]],
+                                                           entry)
                     runtime = time() - t0
+                    obj_values[ts] = obj_value
 #                catch ex
 #                    Log.error(ex)
 #                end
 
                 lock(results_lock)
+                println(vs_opt)
                 push!(results, Dict(
                     "thing_id"=>entry.thing_id,
                     "objid"=>entry.objid,
@@ -448,8 +452,8 @@ function one_node_infer(
     ccall(:jl_threading_profile, Void, ())
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
-
-    results
+    
+    results, obj_values
 end
 
 
@@ -513,7 +517,7 @@ function infer_field(rcf::RunCamcolField,
     # other rcfs may overlap with this one. That's because this function is
     # just for testing on stripe 82: in practice we always use all relevent
     # data to make inferences.
-    results = one_node_infer([rcf,], stagedir; objid=objid, primary_initialization=false)
+    results, obj_value = one_node_infer([rcf,], stagedir; objid=objid, primary_initialization=false)
     fname = if objid == ""
         @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
     else
@@ -609,7 +613,7 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
         rcfs = get_overlapping_fields(box, stagedir)
         times.query_fids = toq()
 
-        results = one_node_infer(rcfs, stagedir; box=box, timing=times)
+        results, obj_value = one_node_infer(rcfs, stagedir; box=box, timing=times)
 
         tic()
         save_results(outdir, box, results)
