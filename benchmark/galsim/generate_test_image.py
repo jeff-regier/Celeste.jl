@@ -10,7 +10,7 @@ _logger = logging.getLogger(__name__)
 
 ARCSEC_PER_PIXEL = 0.75
 SHIFT_RADIUS_ARCSEC = ARCSEC_PER_PIXEL
-PSF_SIGMA_PIXELS = 1
+PSF_SIGMA_PIXELS = 4
 STAMP_SIZE_PX = 48
 COUNTS_PER_NMGY = 1000.0 # a.k.a. "iota" in Celeste
 
@@ -18,19 +18,19 @@ COUNTS_PER_NMGY = 1000.0 # a.k.a. "iota" in Celeste
 # see GalsimBenchmark.typical_band_relative_intensities()
 # these are taken from the current dominant component of the lognormal prior on c_s for stars
 STAR_RELATIVE_INTENSITIES = [
-    1 / (4.986 * 2.049),
-    1 / 2.049,
+    0.1330,
+    0.5308,
     1,
-    1.350,
-    1.350 * 1.184,
+    1.3179,
+    1.5417,
 ]
 # these are taken from the current dominant component of the lognormal prior on c_s for galaxies
 GALAXY_RELATIVE_INTENSITIES = [
-    1 / (2.117 * 2.152),
-    1 / 2.152,
+    0.4013,
+    0.4990,
     1,
-    1.421,
-    1.421 * 1.299,
+    1.4031,
+    1.7750,
 ]
 
 RANDOM_SEED = 1234

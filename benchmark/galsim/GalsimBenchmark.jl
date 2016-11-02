@@ -15,7 +15,7 @@ const FILENAME = "output/galsim_test_images.fits"
 function make_psf()
     alphaBar = [1.; 0.]
     xiBar = [0.; 0.]
-    tauBar = [1. 0.; 0. 1.]
+    tauBar = [16. 0.; 0. 16.]
     [
         Model.PsfComponent(
             alphaBar[k],
