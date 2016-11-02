@@ -290,9 +290,6 @@ function load_images(rcfs, stagedir)
     end
     gc()
 
-    Log.debug("Image names:")
-    Log.debug(string(image_names))
-
     images
 end
 
@@ -412,7 +409,7 @@ function one_node_infer(
 #                try
                     s = target_sources[ts]
                     entry = catalog[s]
-                    nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
+                    Log.info("processing source $s: objid = $(entry.objid)")
 
                     t0 = time()
                     # TODO: subset images to images_local too.
@@ -433,6 +430,15 @@ function one_node_infer(
                     "vs"=>vs_opt,
                     "runtime"=>runtime))
                 unlock(results_lock)
+
+                rcf_name = ""
+                if length(target_rcfs) == 1
+                    rcf = target_rcfs[1]
+                    rcf_name = string(" in ", (rcf.run, rcf.camcol, rcf.field))
+                end
+                rt1 = round(runtime, 1)
+                Log.info("objid $(entry.objid)$rcf_name took $rt1 seconds")
+                Log.info("========================")
             end
         end
     end

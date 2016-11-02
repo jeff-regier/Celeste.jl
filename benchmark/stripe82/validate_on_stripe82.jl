@@ -7,7 +7,7 @@ import Celeste.Stripe82Score: score_field_disk, score_object_disk
 import Celeste.SDSSIO: RunCamcolField
 
 
-# I'd rather let the use specify a rcf on the command line, but picking
+# I'd rather let the user specify a rcf on the command line, but picking
 # an arbitrary rcf isn't too useful without having ground truth for it,
 # from a co-add run. Getting ground truth isn't easy to automate because
 # the web ui is the best way to interact with the CasJobs server.

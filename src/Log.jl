@@ -3,23 +3,26 @@ Thread-safe logging
 """
 module Log
 
+import Base.Threads.threadid
+
+
 @inline puts(s) = ccall(:puts, Cint, (Ptr{Int8},), string(s))
 
 
 function error(msg::String)
-    puts("ERROR: $msg")
+    puts("[$(threadid())] ERROR: $msg")
 end
 
 function warn(msg::String)
-    puts("WARN: $msg")
+    puts("[$(threadid())] WARN: $msg")
 end
 
 function info(msg::String)
-    puts("INFO: $msg")
+    puts("[$(threadid())] INFO: $msg")
 end
 
 function debug(msg::String)
-    puts("DEBUG: $msg")
+    puts("[$(threadid())] DEBUG: $msg")
 end
 
 end
