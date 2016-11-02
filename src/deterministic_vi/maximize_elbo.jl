@@ -147,8 +147,7 @@ function maximize_f(f::Function,
     max_f = -1.0 * nm_result.f_minimum
     max_x = nm_result.minimum
 
-    Log.info(string("got $max_f at $max_x after $f_evals function evaluations ",
-            "($(nm_result.iterations) Newton steps)\n"))
+    Log.info(string("elbo is $max_f after $(nm_result.iterations) Newton steps"))
     f_evals, max_f, max_x, nm_result
 end
 
