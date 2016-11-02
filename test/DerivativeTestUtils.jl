@@ -60,7 +60,7 @@ end
 """
 Use ForwardDiff to test that fun(x) = sf (to abuse some notation)
 """
-function test_with_autodiff(fun::Function, x::Vector{Float64}, sf::SensitiveFloat)
+function test_with_autodiff{F}(fun::F, x::Vector{Float64}, sf::SensitiveFloat)
 
     const test_grad = false
     const test_hess = false

@@ -180,7 +180,7 @@ with other sensitive floats.
 function get_a_term_sensitive_float{NumType <: Number}(
         a::NumType, i::Integer, calculate_derivs::Bool)
     a_term = zero_sensitive_float(CanonicalParams, NumType)
-    a_term.v[1] = a
+    a_term.v[] = a
     if calculate_derivs
         a_term.d[ids.a[i, 1], 1] = 1
     end
@@ -196,7 +196,7 @@ function get_k_term_sensitive_float{NumType <: Number}(
         k::NumType, i::Integer, d::Integer, calculate_derivs::Bool)
 
     k_term = zero_sensitive_float(CanonicalParams, NumType)
-    k_term.v[1] = k
+    k_term.v[] = k
     if calculate_derivs
         k_term.d[ids.k[d, i], 1] = 1
     end
@@ -220,7 +220,7 @@ function subtract_kl_c!{NumType <: Number}(
         var_ids = ids.c2[:, i]
         kl, grad_mean, grad_var, hess_mean, hess_var =
             pp_kl_cid(vs[mean_ids], vs[var_ids], calculate_derivs)
-        kl_term.v[1] = kl
+        kl_term.v[] = kl
 
         if calculate_derivs
             kl_term.d[mean_ids, 1] = grad_mean
@@ -257,7 +257,7 @@ function subtract_kl_k!{NumType <: Number}(
         k_ind = ids.k[:, i]
         pp_kl_ki = gen_categorical_kl(prior.k[:, i])
         kl, grad, hess = pp_kl_ki(vs[k_ind], calculate_derivs)
-        kl_term.v[1] = kl
+        kl_term.v[] = kl
         if calculate_derivs
             kl_term.d[k_ind, 1] = grad
             kl_term.h[k_ind, k_ind] = hess
@@ -282,7 +282,7 @@ function subtract_kl_r!{NumType <: Number}(
         pp_kl_r = gen_normal_kl(prior.r_mean[i], prior.r_var[i])
         kl, grad, hess = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]], calculate_derivs)
         r_ind = Integer[ ids.r1[i], ids.r2[i] ]
-        kl_term.v[1] = kl
+        kl_term.v[] = kl
         if calculate_derivs
             kl_term.d[r_ind, 1] = grad
             kl_term.h[r_ind, r_ind] = hess
@@ -304,7 +304,7 @@ function subtract_kl_a!{NumType <: Number}(
     pp_kl_a = gen_categorical_kl(prior.a)
 
     kl, grad, hess = pp_kl_a(vs[ids.a[:, 1]], calculate_derivs)
-    kl_source.v[1] -= kl
+    kl_source.v[] -= kl
     if calculate_derivs
         kl_source.d[ids.a[:, 1], 1] -= grad
         kl_source.h[ids.a[:, 1], ids.a[:, 1]] -= hess

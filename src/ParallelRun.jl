@@ -294,8 +294,8 @@ function load_images(rcfs, stagedir)
     images
 end
 
-""" 
-Use mulitple threads on one node to 
+"""
+Use mulitple threads on one node to
 fit the Celeste model to sources in a given bounding box.
 
 - rcfs: Array of run, camcol, field triplets that the source occurs in.
@@ -466,7 +466,7 @@ function one_node_infer(
     end
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
-    
+
     results, obj_values
 end
 

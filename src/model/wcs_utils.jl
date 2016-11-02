@@ -49,4 +49,3 @@ function pixel_world_jacobian(wcs::WCSTransform, pix_loc::Array{Float64, 1};
     hcat((WCS.world_to_pix(wcs, world_loc_1) - pix_loc) ./ world_delt,
          (WCS.world_to_pix(wcs, world_loc_2) - pix_loc) ./ world_delt)
 end
-

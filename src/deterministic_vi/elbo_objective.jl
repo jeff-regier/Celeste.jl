@@ -37,11 +37,11 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
         fsm_i = (i == 1) ? fs0m : fs1m
         a_i = ea.vp[s][ids.a[i, 1]]
 
-        lf = sb.E_l_a[b, i].v[1] * fsm_i.v[1]
-        llff = sb.E_ll_a[b, i].v[1] * fsm_i.v[1]^2
+        lf = sb.E_l_a[b, i].v[] * fsm_i.v[]
+        llff = sb.E_ll_a[b, i].v[] * fsm_i.v[]^2
 
-        E_G_s.v[1] += a_i * lf
-        E_G2_s.v[1] += a_i * llff
+        E_G_s.v[] += a_i * lf
+        E_G2_s.v[] += a_i * llff
 
         # Only calculate derivatives for active sources.
         if is_active_source && elbo_vars.calculate_derivs
@@ -58,17 +58,17 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
             # Derivatives with respect to the spatial parameters
             for p0_shape_ind in 1:length(p0_shape)
                 E_G_s.d[p0_shape[p0_shape_ind], 1] +=
-                    sb.E_l_a[b, i].v[1] * a_i * fsm_i.d[p0_shape_ind, 1]
+                    sb.E_l_a[b, i].v[] * a_i * fsm_i.d[p0_shape_ind, 1]
                 E_G2_s.d[p0_shape[p0_shape_ind], 1] +=
-                    sb.E_ll_a[b, i].v[1] * 2 * fsm_i.v[1] * a_i * fsm_i.d[p0_shape_ind, 1]
+                    sb.E_ll_a[b, i].v[] * 2 * fsm_i.v[] * a_i * fsm_i.d[p0_shape_ind, 1]
             end
 
             # Derivatives with respect to the brightness parameters.
             for p0_bright_ind in 1:length(p0_bright)
                 E_G_s.d[p0_bright[p0_bright_ind], 1] +=
-                    a_i * fsm_i.v[1] * sb.E_l_a[b, i].d[p0_bright_ind, 1]
+                    a_i * fsm_i.v[] * sb.E_l_a[b, i].d[p0_bright_ind, 1]
                 E_G2_s.d[p0_bright[p0_bright_ind], 1] +=
-                    a_i * (fsm_i.v[1]^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
+                    a_i * (fsm_i.v[]^2) * sb.E_ll_a[b, i].d[p0_bright_ind, 1]
             end
 
             if elbo_vars.calculate_hessian
@@ -85,19 +85,19 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
                 for p0_ind1 in 1:length(p0_bright), p0_ind2 in 1:length(p0_bright)
                     # TODO: time consuming **************
                     E_G_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-                        a_i * sb.E_l_a[b, i].h[p0_ind1, p0_ind2] * fsm_i.v[1]
+                        a_i * sb.E_l_a[b, i].h[p0_ind1, p0_ind2] * fsm_i.v[]
                     E_G2_s.h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-                        (fsm_i.v[1]^2) * a_i * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
+                        (fsm_i.v[]^2) * a_i * sb.E_ll_a[b, i].h[p0_ind1, p0_ind2]
                 end
 
                 # The (shape, shape) block:
                 p1, p2 = size(E_G_s_hsub.shape_shape)
                 for ind1 = 1:p1, ind2 = 1:p2
                     E_G_s_hsub.shape_shape[ind1, ind2] =
-                        a_i * sb.E_l_a[b, i].v[1] * fsm_i.h[ind1, ind2]
+                        a_i * sb.E_l_a[b, i].v[] * fsm_i.h[ind1, ind2]
                     E_G2_s_hsub.shape_shape[ind1, ind2] =
-                        2 * a_i * sb.E_ll_a[b, i].v[1] * (
-                            fsm_i.v[1] * fsm_i.h[ind1, ind2] +
+                        2 * a_i * sb.E_ll_a[b, i].v[] * (
+                            fsm_i.v[] * fsm_i.h[ind1, ind2] +
                             fsm_i.d[ind1, 1] * fsm_i.d[ind2, 1])
                 end
 
@@ -105,7 +105,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
                 # the loop.
                 for p0_ind1 in 1:length(p0_shape), p0_ind2 in 1:length(p0_shape)
                     E_G_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
-                        a_i * sb.E_l_a[b, i].v[1] * fsm_i.h[p0_ind1, p0_ind2]
+                        a_i * sb.E_l_a[b, i].v[] * fsm_i.h[p0_ind1, p0_ind2]
                     E_G2_s.h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
                         E_G2_s_hsub.shape_shape[p0_ind1, p0_ind2]
                 end
@@ -126,9 +126,9 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
                 # The (a, bright) blocks:
                 for p0_ind in 1:length(p0_bright)
                     E_G_s.h[p0_bright[p0_ind], ids.a[i, 1]] =
-                        fsm_i.v[1] * sb.E_l_a[b, i].d[p0_ind, 1]
+                        fsm_i.v[] * sb.E_l_a[b, i].d[p0_ind, 1]
                     E_G2_s.h[p0_bright[p0_ind], ids.a[i, 1]] =
-                        (fsm_i.v[1] ^ 2) * sb.E_ll_a[b, i].d[p0_ind, 1]
+                        (fsm_i.v[] ^ 2) * sb.E_ll_a[b, i].d[p0_ind, 1]
                     E_G_s.h[ids.a[i, 1], p0_bright[p0_ind]] =
                         E_G_s.h[p0_bright[p0_ind], ids.a[i, 1]]
                     E_G2_s.h[ids.a[i, 1], p0_bright[p0_ind]] =
@@ -138,9 +138,9 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
                 # The (a, shape) blocks.
                 for p0_ind in 1:length(p0_shape)
                     E_G_s.h[p0_shape[p0_ind], ids.a[i, 1]] =
-                        sb.E_l_a[b, i].v[1] * fsm_i.d[p0_ind, 1]
+                        sb.E_l_a[b, i].v[] * fsm_i.d[p0_ind, 1]
                     E_G2_s.h[p0_shape[p0_ind], ids.a[i, 1]] =
-                        sb.E_ll_a[b, i].v[1] * 2 * fsm_i.v[1] * fsm_i.d[p0_ind, 1]
+                        sb.E_ll_a[b, i].v[] * 2 * fsm_i.v[] * fsm_i.d[p0_ind, 1]
                     E_G_s.h[ids.a[i, 1], p0_shape[p0_ind]] =
                         E_G_s.h[p0_shape[p0_ind], ids.a[i, 1]]
                     E_G2_s.h[ids.a[i, 1], p0_shape[p0_ind]] =
@@ -151,7 +151,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
                     E_G_s.h[p0_bright[ind_b], p0_shape[ind_s]] =
                         a_i * sb.E_l_a[b, i].d[ind_b, 1] * fsm_i.d[ind_s, 1]
                     E_G2_s.h[p0_bright[ind_b], p0_shape[ind_s]] =
-                        2 * a_i * sb.E_ll_a[b, i].d[ind_b, 1] * fsm_i.v[1] * fsm_i.d[ind_s]
+                        2 * a_i * sb.E_ll_a[b, i].d[ind_b, 1] * fsm_i.v[] * fsm_i.d[ind_s]
 
                     E_G_s.h[p0_shape[ind_s], p0_bright[ind_b]] =
                         E_G_s.h[p0_bright[ind_b], p0_shape[ind_s]]
@@ -211,12 +211,12 @@ function calculate_var_G_s!{NumType <: Number}(
            elbo_vars.calculate_hessian &&
            elbo_vars.calculate_derivs && is_active_source)
 
-    var_G_s.v[1] = E_G2_s.v[1] - (E_G_s.v[1] ^ 2)
+    var_G_s.v[] = E_G2_s.v[] - (E_G_s.v[] ^ 2)
 
     if is_active_source && elbo_vars.calculate_derivs
         @assert length(var_G_s.d) == length(E_G2_s.d) == length(E_G_s.d)
         @inbounds for ind1 = 1:length(var_G_s.d)
-            var_G_s.d[ind1] = E_G2_s.d[ind1] - 2 * E_G_s.v[1] * E_G_s.d[ind1]
+            var_G_s.d[ind1] = E_G2_s.d[ind1] - 2 * E_G_s.v[] * E_G_s.d[ind1]
         end
 
         if elbo_vars.calculate_hessian
@@ -224,7 +224,7 @@ function calculate_var_G_s!{NumType <: Number}(
             @inbounds for ind2 = 1:p2, ind1 = 1:ind2
                 var_G_s.h[ind1, ind2] =
                     E_G2_s.h[ind1, ind2] - 2 * (
-                        E_G_s.v[1] * E_G_s.h[ind1, ind2] +
+                        E_G_s.v[] * E_G_s.h[ind1, ind2] +
                         E_G_s.d[ind1, 1] * E_G_s.d[ind2, 1])
                 var_G_s.h[ind2, ind1] = var_G_s.h[ind1, ind2]
             end
@@ -270,8 +270,8 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
         add_sources_sf!(var_G, elbo_vars.var_G_s, sa, calculate_hessian)
     else
         # If the sources is inactive, simply accumulate the values.
-        E_G.v[1] += elbo_vars.E_G_s.v[1]
-        var_G.v[1] += elbo_vars.var_G_s.v[1]
+        E_G.v[] += elbo_vars.E_G_s.v[]
+        var_G.v[] += elbo_vars.var_G_s.v[]
     end
 end
 
@@ -299,21 +299,21 @@ function add_elbo_log_term!{NumType <: Number}(
 
     @inbounds begin
         # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
-        log_term_value = log(E_G.v[1]) - 0.5 * var_G.v[1]    / (E_G.v[1] ^ 2)
+        log_term_value = log(E_G.v[]) - 0.5 * var_G.v[]    / (E_G.v[] ^ 2)
 
         # Add x_nbm * (log term * log(iota)) to the elbo.
         # If not calculating derivatives, add the values directly.
-        elbo.v[1] += x_nbm * (log(iota) + log_term_value)
+        elbo.v[] += x_nbm * (log(iota) + log_term_value)
 
         if elbo_vars.calculate_derivs
-            elbo_vars.combine_grad[1] = -0.5 / (E_G.v[1] ^ 2)
-            elbo_vars.combine_grad[2] = 1 / E_G.v[1] + var_G.v[1] / (E_G.v[1] ^ 3)
+            elbo_vars.combine_grad[1] = -0.5 / (E_G.v[] ^ 2)
+            elbo_vars.combine_grad[2] = 1 / E_G.v[] + var_G.v[] / (E_G.v[] ^ 3)
 
             if elbo_vars.calculate_hessian
                 elbo_vars.combine_hess[1, 1] = 0.0
-                elbo_vars.combine_hess[1, 2] = elbo_vars.combine_hess[2, 1] = 1 / E_G.v[1]^3
+                elbo_vars.combine_hess[1, 2] = elbo_vars.combine_hess[2, 1] = 1 / E_G.v[]^3
                 elbo_vars.combine_hess[2, 2] =
-                    -(1 / E_G.v[1] ^ 2 + 3    * var_G.v[1] / (E_G.v[1] ^ 4))
+                    -(1 / E_G.v[] ^ 2 + 3    * var_G.v[] / (E_G.v[] ^ 4))
             end
 
             # Calculate the log term.
@@ -384,7 +384,7 @@ function add_pixel_term!{NumType <: Number}(
 
     # There are no derivatives with respect to epsilon, so can safely add
     # to the value.
-    elbo_vars.E_G.v[1] += img.epsilon_mat[h, w]
+    elbo_vars.E_G.v[] += img.epsilon_mat[h, w]
 
     # Add the terms to the elbo given the brightness.
     add_elbo_log_term!(elbo_vars,
@@ -402,7 +402,7 @@ function add_pixel_term!{NumType <: Number}(
     # parameters so the derivatives don't need to be updated. Note that
     # even though this does not affect the ELBO's maximum, it affects
     # the optimization convergence criterion, so I will leave it in for now.
-    elbo_vars.elbo.v[1] -= lfact(img.pixels[h,w])
+    elbo_vars.elbo.v[] -= lfact(img.pixels[h,w])
 end
 
 

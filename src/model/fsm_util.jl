@@ -271,7 +271,7 @@ function accum_star_pos!{NumType <: Number}(
         get_bvn_derivs!(bvn_derivs, bmc, true, false)
     end
 
-    fs0m.v[1] += bvn_derivs.f_pre[1]
+    fs0m.v[] += bvn_derivs.f_pre[1]
 
     if calculate_derivs && is_active_source
         transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, calculate_hessian)
@@ -314,7 +314,7 @@ function accum_galaxy_pos!{NumType <: Number}(
                     is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, gcc.bmc, x)
     f = bvn_derivs.f_pre[1] * gcc.e_dev_i
-    fs1m.v[1] += f
+    fs1m.v[] += f
 
     if calculate_derivs && is_active_source
 
