@@ -12,7 +12,7 @@ function verify_sample_star(vs, pos)
     brightness_hat = exp(vs[ids.r1[1]] + 0.5 * vs[ids.r2[1]])
     @test_approx_eq_eps brightness_hat / sample_star_fluxes[3] 1. 0.01
 
-    true_colors = log(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
+    true_colors = log.(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
     for b in 1:4
         @test_approx_eq_eps vs[ids.c1[b, 1]] true_colors[b] 0.2
     end
@@ -36,7 +36,7 @@ function verify_sample_galaxy(vs, pos)
     brightness_hat = exp(vs[ids.r1[2]] + 0.5 * vs[ids.r2[2]])
     @test_approx_eq_eps brightness_hat / sample_galaxy_fluxes[3] 1. 0.01
 
-    true_colors = log(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])
+    true_colors = log.(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])
     for b in 1:4
         @test_approx_eq_eps vs[ids.c1[b, 2]] true_colors[b] 0.2
     end

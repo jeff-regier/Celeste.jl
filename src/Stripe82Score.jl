@@ -155,7 +155,7 @@ function load_s82(fname)
 
     # gal angle (degrees)
     raw_phi = where(usedev, objs[:devphi_r], objs[:expphi_r])
-    result[:gal_angle] = raw_phi - floor(raw_phi / 180) * 180
+    result[:gal_angle] = raw_phi - floor.(raw_phi / 180) * 180
 
     return result
 end
@@ -194,20 +194,20 @@ function load_primary(rcf::RunCamcolField, stagedir::String)
     result[:ra] = objs["ra"]
     result[:dec] = objs["dec"]
     result[:is_star] = objs["is_star"]
-    result[:star_mag_r] = flux_to_mag(objs["psfflux_r"])
-    result[:gal_mag_r] = flux_to_mag(gal_flux_r)
+    result[:star_mag_r] = flux_to_mag.(objs["psfflux_r"])
+    result[:gal_mag_r] = flux_to_mag.(gal_flux_r)
 
     # star colors
-    result[:star_color_ug] = fluxes_to_color(objs["psfflux_u"], objs["psfflux_g"])
-    result[:star_color_gr] = fluxes_to_color(objs["psfflux_g"], objs["psfflux_r"])
-    result[:star_color_ri] = fluxes_to_color(objs["psfflux_r"], objs["psfflux_i"])
-    result[:star_color_iz] = fluxes_to_color(objs["psfflux_i"], objs["psfflux_z"])
+    result[:star_color_ug] = fluxes_to_color.(objs["psfflux_u"], objs["psfflux_g"])
+    result[:star_color_gr] = fluxes_to_color.(objs["psfflux_g"], objs["psfflux_r"])
+    result[:star_color_ri] = fluxes_to_color.(objs["psfflux_r"], objs["psfflux_i"])
+    result[:star_color_iz] = fluxes_to_color.(objs["psfflux_i"], objs["psfflux_z"])
 
     # gal colors
-    result[:gal_color_ug] = fluxes_to_color(gal_flux_u, gal_flux_g)
-    result[:gal_color_gr] = fluxes_to_color(gal_flux_g, gal_flux_r)
-    result[:gal_color_ri] = fluxes_to_color(gal_flux_r, gal_flux_i)
-    result[:gal_color_iz] = fluxes_to_color(gal_flux_i, gal_flux_z)
+    result[:gal_color_ug] = fluxes_to_color.(gal_flux_u, gal_flux_g)
+    result[:gal_color_gr] = fluxes_to_color.(gal_flux_g, gal_flux_r)
+    result[:gal_color_ri] = fluxes_to_color.(gal_flux_r, gal_flux_i)
+    result[:gal_color_iz] = fluxes_to_color.(gal_flux_i, gal_flux_z)
 
     # gal shape -- fracdev
     result[:gal_fracdev] = objs["frac_dev"]
@@ -222,7 +222,7 @@ function load_primary(rcf::RunCamcolField, stagedir::String)
 
     # gal angle (degrees)
     raw_phi = where(usedev, objs["phi_dev"], objs["phi_exp"])
-    result[:gal_angle] = raw_phi - floor(raw_phi / 180) * 180
+    result[:gal_angle] = raw_phi - floor.(raw_phi / 180) * 180
 
     return result#[!objs["is_saturated"], :]
 end
@@ -361,7 +361,7 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
     ret[:missed_stars] =  predicted_gal & !(true_gal)
     ret[:missed_gals] =  !predicted_gal & true_gal
 
-    ret[:position] = dist(truth[:ra], truth[:dec],
+    ret[:position] = dist.(truth[:ra], truth[:dec],
                           predicted[:ra], predicted[:dec])
 
     ret[true_gal, :mag_r] =
@@ -384,7 +384,7 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
 
     function degrees_to_diff(a, b)
         angle_between = abs(a - b) % 180
-        min(angle_between, 180 - angle_between)
+        min.(angle_between, 180 - angle_between)
     end
 
     ret[:gal_angle] = degrees_to_diff(truth[:gal_angle], predicted[:gal_angle])

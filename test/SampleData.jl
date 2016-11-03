@@ -94,7 +94,7 @@ function load_stamp_blob(stamp_dir, stamp_id)
         hdr = FITSIO.read_header(fits[1])
         original_pixels = read(fits[1])
         dn = original_pixels / hdr["CALIB"] + hdr["SKY"]
-        nelec_f32 = round(dn * hdr["GAIN"])
+        nelec_f32 = round.(dn * hdr["GAIN"])
         nelec = convert(Array{Float64}, nelec_f32)
 
         header_str = FITSIO.read_header(fits[1], String)
