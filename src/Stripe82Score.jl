@@ -21,10 +21,8 @@ mag_to_flux(m)
 convert SDSS mags to SDSS flux
 """
 mag_to_flux(m::AbstractFloat) = 10.^(0.4 * (22.5 - m))
-@vectorize_1arg AbstractFloat mag_to_flux
 
 flux_to_mag(nm::AbstractFloat) = nm > 0 ? 22.5 - 2.5 * log10(nm) : NaN
-@vectorize_1arg AbstractFloat flux_to_mag
 
 """
 where(condition, x, y)
@@ -171,7 +169,6 @@ function fluxes_to_color(f1::Real, f2::Real)
     (f1 <= 0. || f2 <= 0.) && return NaN
     return -2.5 * log10(f1 / f2)
 end
-@vectorize_2arg Real fluxes_to_color
 
 
 """

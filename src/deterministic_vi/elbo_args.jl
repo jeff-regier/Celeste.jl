@@ -162,9 +162,9 @@ this helps catch them immediately.
 """
 function assert_all_finite{ParamType <: ParamSet, NumType <: Number}(
         sf::SensitiveFloat{ParamType, NumType})
-    @assert all(isfinite(sf.v)) "Value is Inf/NaNs"
-    @assert all(isfinite(sf.d)) "Gradient contains Inf/NaNs"
-    @assert all(isfinite(sf.h)) "Hessian contains Inf/NaNs"
+    @assert all(isfinite, sf.v) "Value is Inf/NaNs"
+    @assert all(isfinite, sf.d) "Gradient contains Inf/NaNs"
+    @assert all(isfinite, sf.h) "Hessian contains Inf/NaNs"
 end
 
 
