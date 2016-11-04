@@ -408,41 +408,42 @@ function one_node_infer(
                 if ts > last_source
                     break
                 end
-#                try
+
+                try
                     s = target_sources[ts]
                     entry = catalog[s]
                     Log.info("processing source $s: objid = $(entry.objid)")
 
-                    t0 = time()
                     # TODO: subset images to images_local too.
+                    t0 = time()
                     vs_opt, obj_value = Infer.infer_source(images,
-                                                           catalog[neighbor_map[ts]],
-                                                           entry)
+                                           catalog[neighbor_map[ts]],
+                                           entry)
                     runtime = time() - t0
                     obj_values[ts] = obj_value
-#                catch ex
-#                    Log.error(ex)
-#                end
 
-                lock(results_lock)
-                println(vs_opt)
-                push!(results, Dict(
-                    "thing_id"=>entry.thing_id,
-                    "objid"=>entry.objid,
-                    "ra"=>entry.pos[1],
-                    "dec"=>entry.pos[2],
-                    "vs"=>vs_opt,
-                    "runtime"=>runtime))
-                unlock(results_lock)
+                    result = Dict(
+                        "thing_id"=>entry.thing_id,
+                        "objid"=>entry.objid,
+                        "ra"=>entry.pos[1],
+                        "dec"=>entry.pos[2],
+                        "vs"=>vs_opt,
+                        "runtime"=>runtime)
+                    lock(results_lock)
+                    push!(results, result)
+                    unlock(results_lock)
 
-                rcf_name = ""
-                if length(target_rcfs) == 1
-                    rcf = target_rcfs[1]
-                    rcf_name = string(" in ", (rcf.run, rcf.camcol, rcf.field))
+                    rcf_name = ""
+                    if length(target_rcfs) == 1
+                        rcf = target_rcfs[1]
+                        rcf_name = string(" in ", (rcf.run, rcf.camcol, rcf.field))
+                    end
+                    rt1 = round(runtime, 1)
+                    Log.info("objid $(entry.objid)$rcf_name took $rt1 seconds")
+                    Log.info("========================")
+                catch ex
+                    Log.error(string(ex))
                 end
-                rt1 = round(runtime, 1)
-                Log.info("objid $(entry.objid)$rcf_name took $rt1 seconds")
-                Log.info("========================")
             end
         end
     end
