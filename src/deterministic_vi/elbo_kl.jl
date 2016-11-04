@@ -147,7 +147,7 @@ function gen_diagmvn_mvn_kl{NumType <: Number}(
 
       kl = sum(diag(precision2) .* vars1) - K
       kl += (diff' * precision2 * diff)[]
-      kl += -sum(log(vars1)) + logdet_cov2
+      kl += -sum(log, vars1) + logdet_cov2
       kl = 0.5 * kl
 
       grad_mean = zeros(NumType2, K)

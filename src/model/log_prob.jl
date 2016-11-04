@@ -286,7 +286,7 @@ function color_logprior(brightness::Float64,
     subprior      = is_star ? prior.star : prior.galaxy
     ll_brightness = logpdf(subprior.brightness, exp(brightness))
     ll_component  = [logpdf(subprior.colors[k], colors) for k in 1:2]
-    ll_color      = logsumexp(ll_component + log(subprior.color_component.p))
+    ll_color      = logsumexp(ll_component + log.(subprior.color_component.p))
     return ll_brightness + ll_color
 end
 
@@ -335,7 +335,7 @@ function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
     ret[5] = ret[4] + colors[4]     # ln(z/i) = c4 => lnz = lni - c4
     ret[2] = -colors[2] + lnr       # ln(r/g) = c2 => lng = c2 + lnr
     ret[1] = -colors[1] + ret[2]    # ln(g/u) = c1 => lnu = c1 + lng
-    return exp(ret)
+    return exp.(ret)
 end
 
 
@@ -436,9 +436,8 @@ end
 #TODO is there a better place for this generic function? --- acm
 function logsumexp(a::Vector{Float64})
     a_max = maximum(a)
-    out = log(sum(exp(a - a_max)))
-    out += a_max
-    return out
+    out = log(sum(exp, a - a_max))
+    return out + a_max
 end
 
 
