@@ -657,7 +657,7 @@ function fit_raw_psf_for_celeste(
     optim_result = psf_optimizer.fit_psf(raw_psf, initial_psf_params)
     psf_params_fit =
         constrain_psf_params(
-            unwrap_psf_params(optim_result.minimum), psf_optimizer.psf_transform)
+            unwrap_psf_params(Optim.minimizer(optim_result)), psf_optimizer.psf_transform)
 
     sigma_vec = get_sigma_from_params(psf_params_fit)[1]
     celeste_psf = Array(PsfComponent, K)
