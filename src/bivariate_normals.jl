@@ -335,13 +335,12 @@ function GalaxySigmaDerivs{NumType <: Number}(
   cos_sq = cos(e_angle)^2
 
   j = Array(NumType, 3, length(gal_shape_ids))
-  for i = 1:3
-    j[i, gal_shape_ids.e_axis] =
-      2 * e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq][i]
-    j[i, gal_shape_ids.e_angle] =
-      e_scale^2 * (e_axis^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin][i]
-    j[i, gal_shape_ids.e_scale] = (2XiXi ./ e_scale)[[1, 2, 4][i]]
-  end
+  j[:, gal_shape_ids.e_axis] =
+    2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
+  j[:, gal_shape_ids.e_angle] =
+    e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
+  j[:, gal_shape_ids.e_scale] =
+    2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale
 
   t = Array(NumType, 3, length(gal_shape_ids), length(gal_shape_ids))
   if calculate_tensor
@@ -349,31 +348,27 @@ function GalaxySigmaDerivs{NumType <: Number}(
 
     for i = 1:3
       # Second derivatives involving e_scale
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_scale] =
-        (2 * XiXi ./ (e_scale ^ 2))[[1, 2, 4][i]]
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis] =
-        (2 * j[i, gal_shape_ids.e_axis] ./ e_scale)
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle] =
-        (2 * j[i, gal_shape_ids.e_angle] ./ e_scale)
+      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_scale] = 2 * XiXi[1 << (i - 1)] / e_scale^2
+      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]  = 2 * j[i, gal_shape_ids.e_axis]  / e_scale
+      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle] = 2 * j[i, gal_shape_ids.e_angle] / e_scale
 
       t[i, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
         t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]
       t[i, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
         t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle]
 
+    end
       # Remaining second derivatives involving e_angle
-      t[i, gal_shape_ids.e_angle, gal_shape_ids.e_angle] =
-        2 * e_scale^2 * (e_axis^2 - 1) *
-        [cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq][i]
-      t[i, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
-        2 * e_scale^2 * e_axis * [2cos_sin, sin_sq - cos_sq, -2cos_sin][i]
-      t[i, gal_shape_ids.e_axis, gal_shape_ids.e_angle] =
-        t[i, gal_shape_ids.e_angle, gal_shape_ids.e_axis]
+    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_angle]  =
+      2 * e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq)
+    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle]   =
+      t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
+        2 * e_scale^2 * e_axis       * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
 
       # The second derivative involving only e_axis.
-      t[i, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
-        2 * e_scale^2 * [sin_sq, -cos_sin, cos_sq][i]
-    end
+    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
+        2 * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
+
   else
     fill!(t, 0.0)
   end
