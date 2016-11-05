@@ -160,7 +160,7 @@ function combine_sfs!{ParamType <: ParamSet,
         sf1::SensitiveFloat{ParamType, T1},
         sf2::SensitiveFloat{ParamType, T1},
         sf_result::SensitiveFloat{ParamType, T1},
-        v::T1, g_d::Vector{T2}, g_h::Matrix{T3};
+        v::T1, g_d::Vector{T2}, g_h::Matrix{T3},
         calculate_hessian::Bool=true)
     # You have to do this in the right order to not overwrite needed terms.
     if calculate_hessian
@@ -191,7 +191,7 @@ function combine_sfs!{ParamType <: ParamSet,
         v::T1, g_d::Vector{T2}, g_h::Matrix{T3};
         calculate_hessian::Bool=true)
 
-    combine_sfs!(sf1, sf2, sf1, v, g_d, g_h, calculate_hessian=calculate_hessian)
+    combine_sfs!(sf1, sf2, sf1, v, g_d, g_h, calculate_hessian)
 end
 
 # Decalare outside to avoid allocating memory.
