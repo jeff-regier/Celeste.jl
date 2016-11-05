@@ -120,7 +120,7 @@ immutable BvnComponent{NumType <: Number}
     major_sd::NumType
 
     function BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
-        the_mean::SVector{2,T1}, the_cov::SMatrix{2,2,T2,4}, weight::T3;
+        the_mean::SVector{2,T1}, the_cov::SMatrix{2,2,T2,4}, weight::T3,
         calculate_siginv_deriv::Bool=true)
 
       ThisNumType = promote_type(T1, T2, T3)
@@ -430,8 +430,7 @@ function GalaxyCacheComponent{NumType <: Number}(
 
   # d siginv / dsigma is only necessary for the Hessian.
   bmc = BvnComponent{NumType}(
-    mean_s, var_s, weight,
-    calculate_siginv_deriv=calculate_derivs && calculate_hessian)
+    mean_s, var_s, weight, calculate_derivs && calculate_hessian)
 
   if calculate_derivs
     sig_sf = GalaxySigmaDerivs(
