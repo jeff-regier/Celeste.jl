@@ -115,7 +115,7 @@ function test_psf_fit()
     #   sig_sf_vec[k] = GalaxySigmaDerivs(
     #     psf_params[k][psf_ids.e_angle],
     #     psf_params[k][psf_ids.e_axis],
-    #     psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_tensor=calculate_derivs);
+    #     psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_derivs);
     #
     # end
 

@@ -328,7 +328,7 @@ Note that nubar is not included.
 """
 function GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
-    XiXi::SMatrix{2,2,NumType,4}; calculate_tensor::Bool=true)
+    XiXi::SMatrix{2,2,NumType,4}, calculate_tensor::Bool=true)
 
   cos_sin = cos(e_angle)sin(e_angle)
   sin_sq = sin(e_angle)^2
@@ -434,7 +434,7 @@ function GalaxyCacheComponent{NumType <: Number}(
 
   if calculate_derivs
     sig_sf = GalaxySigmaDerivs(
-      e_angle, e_axis, e_scale, XiXi, calculate_tensor=calculate_hessian)
+      e_angle, e_axis, e_scale, XiXi, calculate_hessian)
     sig_sf.j .*= gc.nuBar
     if calculate_hessian
       # The tensor is only needed for the Hessian.
