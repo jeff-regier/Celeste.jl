@@ -617,7 +617,6 @@ function transform_psf_sensitive_float!{NumType <: Number}(
                     (jacobian_diag[ind1] * jacobian_diag[ind2]) * sf.h[ind1, ind2]
                 if ind1 == ind2
                     sf_free.h[ind1, ind2] +=    hessian_values[ind1] * sf.d[ind1]
-                    diagm(hessian_values .* sf.d[:])
                 end
             end
         end
