@@ -435,10 +435,10 @@ function GalaxyCacheComponent{NumType <: Number}(
   if calculate_derivs
     sig_sf = GalaxySigmaDerivs(
       e_angle, e_axis, e_scale, XiXi, calculate_hessian)
-    sig_sf.j .*= gc.nuBar
+    scale!(sig_sf.j, gc.nuBar)
     if calculate_hessian
       # The tensor is only needed for the Hessian.
-      sig_sf.t .*= gc.nuBar
+      scale!(sig_sf.t, gc.nuBar)
     end
   else
     sig_sf = empty_sig_sf
