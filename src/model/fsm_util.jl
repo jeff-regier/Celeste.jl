@@ -215,7 +215,7 @@ function populate_fsm_vecs!{NumType <: Number}(
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
 
-    x = @SVector Float64[tile.h_range[h], tile.w_range[w]]
+    x = SVector{2,Float64}(tile.h_range[h], tile.w_range[w])
     for s in tile_sources
         # ensure tile.b is a filter band, not an image's index
         @assert 1 <= tile.b <= B
