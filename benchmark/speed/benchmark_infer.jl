@@ -21,20 +21,23 @@ function benchmark_infer()
     field_triplets_compile = [RunCamcolField(3900, 6, 269),]
     ParallelRun.one_node_infer(field_triplets_compile, datadir; box=box_compile)
 
+    # clear allocations in case julia is running with --track-allocations=user
+    Profile.clear_malloc_data()
+
     # very small patch of sky that turns out to have 4 sources.
     # We checked that this patch is in the given field.
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
 
-    # take 22 seconds on jeff's old desktop (intel core2 q6600 processor),
-    # as of 10/7/2016
+    # takes 6.4 seconds as of 11/5/2016 on an Intel Core i5-6600 processor
     @time ParallelRun.one_node_infer(field_triplets, datadir; box=box)
 
-    Profile.init(10^8, 0.001)
-    Profile.clear_malloc_data()
-    # about half the run time is psf fitting, the other half is elbo evaluation
-    @profile ParallelRun.one_node_infer(field_triplets, datadir; box=box)
-    Profile.print(format=:flat, sortedby=:count)
+    if !isempty(ARGS) && ARGS[1] == "--profile"
+        Profile.clear_malloc_data()
+        # about half the run time is psf fitting, the other half is elbo evaluation
+        @profile ParallelRun.one_node_infer(field_triplets, datadir; box=box)
+        Profile.print(format=:flat, sortedby=:count)
+    end
 end
 
 
