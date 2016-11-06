@@ -51,7 +51,7 @@ function compute_connected_components(source_start, source_end, sources, neighbo
         source_to_index[sources[i]] = i-source_start+1
         index_to_source[i-source_start+1] = sources[i]
     end
-    
+
     for i = source_start:source_end
         components_tree[i-source_start+1] = i-source_start+1
     end
@@ -61,11 +61,11 @@ function compute_connected_components(source_start, source_end, sources, neighbo
         target = union_find!(i-source_start+1, components_tree)
         for neighbor in neighbor_map[index_to_source[i-source_start+1]]
             if haskey(source_to_index, neighbor)
-                neighbor_idx = source_to_index[neighbor]                
+                neighbor_idx = source_to_index[neighbor]
                 component_source = union_find!(neighbor_idx, components_tree)
                 components_tree[component_source] = target
             end
-            
+
         end
     end
 
@@ -80,7 +80,7 @@ function compute_connected_components(source_start, source_end, sources, neighbo
 end
 
 """
-Partitions sources via the cyclades algorithm. 
+Partitions sources via the cyclades algorithm.
 TODO max - refactor into different source file (E.G: Cyclades.jl)
 
 - nprocthreads - number of threads to which to distribute sources
@@ -110,7 +110,7 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
         for batch = 1:n_total_batches
             thread_sources_assignment[thread][batch] = Vector{Int64}()
         end
-    end    
+    end
 
     # First shuffle the sources. Note Cyclades is serially equivalent
     # to this permutation of sources.
@@ -131,7 +131,7 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
         source_start = source_index
         source_end = min(source_index+batch_size-1, n_sources)
         @assert source_end - source_start + 1 <= batch_size
-        
+
         # TODO max - parallelize this
         compute_connected_components(source_start, source_end, sources, neighbor_map,
                                      components_tree[1],
@@ -146,7 +146,7 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
         pqueue = Base.Collections.PriorityQueue([i for i=1:nprocthreads],
                                                 [0 for i=1:nprocthreads],
                                                 Base.Order.Forward)
-        
+
         # Assign non-conflicting group of sources to different threads
         for (component_group_id, sources_of_component) in cur_batch_component
             least_loaded_thread = Base.Collections.peek(pqueue)[1]
@@ -157,7 +157,7 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
             pqueue[least_loaded_thread] += length(sources_of_component)
         end
     end
-    
+
     Log.info("Cyclades - Assigned sources: $(assigned_sources) vs correct number of sources: $(n_sources)")
     @assert assigned_sources == n_sources
     Log.info("Cyclades - Number of batches: $(n_total_batches)")
@@ -173,7 +173,7 @@ TODO max - refactor into different source file (E.G: Cyclades.jl)
 - n_sources - the number of total sources to process.
 
 Returns:
-- An array of vectors representing the workload of each thread ([thread][batch][sources]). 
+- An array of vectors representing the workload of each thread ([thread][batch][sources]).
   Note for partition equally, there is only 1 batch.
 
 """
@@ -203,8 +203,8 @@ function partition_equally(nprocthreads, n_sources)
 end
 
 """
-Like one_node_infer, uses multiple threads on one node to fit the Celeste 
-model over numerous iterations. 
+Like one_node_infer, uses multiple threads on one node to fit the Celeste
+model over numerous iterations.
 TODO max - refactor into different source file (E.G: Cyclades.jl)? Maybe also rename?
 
 catalog - the catalog of light sources
@@ -220,7 +220,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               n_iters=10,
                               objid="")
     nprocthreads = nthreads()
-    
+
     # Partition the sources
     n_sources = length(target_sources)
     Log.info("Optimizing $(n_sources) sources")
@@ -244,7 +244,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
         cat = catalog[target_source]
         target_source_variational_params[target_source] = init_source(cat)
     end
-    
+
     # Pre-allocate dictionary of elboargs, call it model.
     model = Array{ElboArgs}(n_sources)
     function initialize_elboargs_sources(sources)
@@ -259,12 +259,11 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for source $(target_sources[cur_source_index]): objid=$(entry.objid)")
             cat_local = vcat(entry, neighbors)
             ids_local = vcat(entry_id, neighbor_ids)
-            
+
             #vp = Vector{Float64}[init_source(ce) for ce in cat_local]
             vp = Vector{Float64}[haskey(target_source_variational_params, x) ? target_source_variational_params[x] : init_source(catalog[x]) for x in ids_local]
             patches, tile_source_map = Infer.get_tile_source_map(images, cat_local)
             ea = ElboArgs(images, vp, tile_source_map, patches, [1])
-            Infer.fit_object_psfs!(ea, ea.active_sources)
             Infer.load_active_pixels!(ea)
             @assert length(ea.active_pixels) > 0
             model[cur_source_index] = ea
@@ -274,7 +273,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     # Initialize elboargs in parallel
     tic()
     thread_initialize_sources_assignment = partition_equally(nprocthreads, n_sources)
-    
+
     Threads.@threads for i=1:nprocthreads
         for batch = 1:length(thread_initialize_sources_assignment[i])
             initialize_elboargs_sources(thread_initialize_sources_assignment[i][batch])
@@ -290,10 +289,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     function process_sources(source_assignment::Vector{Int64})
         for cur_source_indx in source_assignment
             cur_entry = catalog[target_sources[cur_source_indx]]
-            nputs(dt_nodeid, "Thread $(Threads.threadid()) processing source $(target_sources[cur_source_indx]): objid = $(cur_entry.objid)")
-            nputs(dt_nodeid, "Before: $(model[cur_source_indx].vp[1])")
             iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(DeterministicVI.elbo, model[cur_source_indx], max_iters=10)
-            nputs(dt_nodeid, "After: $(model[cur_source_indx].vp[1])")
             obj_values[cur_source_indx] = obj_value
         end
     end
@@ -313,8 +309,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             end
         end
     end
-    Log.info("Done fitting elboargs. Elapsed time: $(toq())")    
-    
+    Log.info("Done fitting elboargs. Elapsed time: $(toq())")
+
     # Return add results to dictionary
     results = Dict[]
 
