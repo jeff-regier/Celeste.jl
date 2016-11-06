@@ -207,79 +207,20 @@ Like one_node_infer, uses multiple threads on one node to fit the Celeste
 model over numerous iterations. 
 TODO max - refactor into different source file (E.G: Cyclades.jl)? Maybe also rename?
 
-- rcfs: Array of run, camcol, field triplets that the source occurs in.
-- box: a bounding box specifying a region of sky
+catalog - the catalog of light sources
+target_sources - light sources to optimize
+neighbor_map - ligh_source index -> neighbor light_source id
 
 Returns:
 
 - Dictionary of results, keyed by SDSS thing_id.
 """
-function one_node_joint_infer(rcfs::Vector{RunCamcolField},
-                              stagedir::String;
+function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
                               n_iters=10,
-                              objid="",
-                              box=BoundingBox(-1000., 1000., -1000., 1000.),
-                              primary_initialization=true,
-                              reserve_thread=Ref(false),
-                              thread_fun=phalse,
-                              timing=InferTiming())
+                              objid="")
     nprocthreads = nthreads()
-    if reserve_thread[]
-        nprocthreads = nprocthreads-1
-    end
-    Log.info("Running with $(nprocthreads) threads")
     
-    # Read all primary objects in these fields.
-    tic()
-    duplicate_policy = primary_initialization ? :primary : :first
-    catalog = SDSSIO.read_photoobj_files(rcfs, stagedir,
-                        duplicate_policy=duplicate_policy)
-    timing.read_photoobj = toq()
-    Log.info("$(length(catalog)) primary sources")
-
-    reserve_thread[] && thread_fun(reserve_thread)
-
-    # Filter out low-flux objects in the catalog.
-    catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
-    Log.info("$(length(catalog)) primary sources after MIN_FLUX cut")
-
-    # Filter any object not specified, if an objid is specified
-    if objid != ""
-        Log.info(catalog[1].objid)
-        catalog = filter(entry->(entry.objid == objid), catalog)
-    end
-
-    # Get indicies of entries in the  RA/Dec range of interest.
-    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
-                             (box.decmin < entry.pos[2] < box.decmax))
-    target_sources = find(entry_in_range, catalog)
-
-    nputs(dt_nodeid, string("processing $(length(target_sources)) sources in ",
-          "$(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax)"))
-
-    # If there are no objects of interest, return early.
-    if length(target_sources) == 0
-        return Dict{Int, Dict}()
-    end
-
-    reserve_thread[] && thread_fun(reserve_thread)
-
-    # Read in images for all (run, camcol, field).
-    tic()
-
-    images = load_images(rcfs, stagedir)
-    timing.read_img = toq()
-
-    reserve_thread[] && thread_fun(reserve_thread)
-
-    Log.info("Finding neighbors")
-    tic()
-    neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
-    Log.info("Neighbors found in $(toq()) seconds")
-
-    reserve_thread[] && thread_fun(reserve_thread)
-
     # Partition the sources
     n_sources = length(target_sources)
     Log.info("Optimizing $(n_sources) sources")

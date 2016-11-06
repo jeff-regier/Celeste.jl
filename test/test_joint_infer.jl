@@ -9,7 +9,7 @@ function test_one_node_joint_infer()
     # We checked that this patch is in the given field.
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
-    result = ParallelRun.one_node_joint_infer(field_triplets, datadir; box=box, n_iters=10)
+    result = ParallelRun.one_node_infer(field_triplets, datadir; box=box, joint_infer=true)
 end
 
 """
@@ -22,10 +22,10 @@ function test_one_node_joint_infer_obj_overlapping()
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
     tic()
-    result_multi, obj_values_multi = ParallelRun.one_node_joint_infer(field_triplets, datadir; box=box, n_iters=100)
+    result_multi, obj_values_multi = ParallelRun.one_node_infer(field_triplets, datadir; box=box, joint_infer_n_iters=100, joint_infer=true)
     multi_iter_time = toq()
     tic()
-    result_multi, obj_values_two = ParallelRun.one_node_joint_infer(field_triplets, datadir; box=box, n_iters=2)
+    result_multi, obj_values_two = ParallelRun.one_node_infer(field_triplets, datadir; box=box, joint_infer_n_iters=2, joint_infer=true)
     multi_iter_one_iter_time = toq()
     tic()
     result_single, obj_values_single = ParallelRun.one_node_infer(field_triplets, datadir; box=box)
