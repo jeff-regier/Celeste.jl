@@ -1,7 +1,5 @@
 #!/usr/bin/env julia
 
-using DocOpt
-
 import Celeste.ParallelRun: BoundingBox, infer_field
 import Celeste.Stripe82Score: score_field_disk, score_object_disk
 import Celeste.SDSSIO: RunCamcolField

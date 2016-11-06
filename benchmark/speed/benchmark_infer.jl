@@ -29,10 +29,10 @@ function benchmark_infer()
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
 
-    # takes 6.4 seconds as of 11/5/2016 on an Intel Core i5-6600 processor
-    @time ParallelRun.one_node_infer(field_triplets, datadir; box=box)
-
-    if !isempty(ARGS) && ARGS[1] == "--profile"
+    if isempty(ARGS)
+        # takes 6.4 seconds as of 11/5/2016 on an Intel Core i5-6600 processor
+        @time ParallelRun.one_node_infer(field_triplets, datadir; box=box)
+    elseif ARGS[1] == "--profile"
         Profile.clear_malloc_data()
         # about half the run time is psf fitting, the other half is elbo evaluation
         @profile ParallelRun.one_node_infer(field_triplets, datadir; box=box)
