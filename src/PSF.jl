@@ -415,7 +415,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
 
     K = length(psf_params)
     sigma_ids = (psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale)
-    for k = 1:K
+    @inbounds for k = 1:K
         # I will put in the weights later so that the log pdf sensitive float
         # is accurate.
         bvn = bvn_vec[k]
@@ -528,7 +528,7 @@ function evaluate_psf_fit!{NumType <: Number}(
     sigma_vec, sig_sf_vec, bvn_vec = get_sigma_from_params(psf_params)
     clear!(squared_error)
 
-    for x_ind in 1:length(x_mat)
+    @inbounds for x_ind in 1:length(x_mat)
         clear!(pixel_value)
         evaluate_psf_pixel_fit!(
                 x_mat[x_ind], psf_params, sigma_vec, sig_sf_vec, bvn_vec,

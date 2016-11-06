@@ -168,7 +168,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
     clear!(E_G_s, clear_hessian)
     clear!(E_G2_s, clear_hessian)
 
-    for i in 1:Ia # Stars and galaxies
+    @inbounds for i in 1:Ia # Stars and galaxies
         fsm_i = (i == 1) ? fs0m : fs1m
         a_i = ea.vp[s][ids.a[i, 1]]
 
@@ -297,7 +297,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
         end # if calculate derivatives
     end # i loop
 
-    if elbo_vars.calculate_hessian
+    @inbounds if elbo_vars.calculate_hessian
         # Accumulate the u Hessian. u is the only parameter that is shared between
         # different values of i.
 
@@ -523,38 +523,41 @@ function add_elbo_log_term!{NumType <: Number}(
     # See notes for a derivation. The log term is
     # log E[G] - Var(G) / (2 * E[G] ^2 )
 
-    # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
-    log_term_value = log(E_G.v[1]) - 0.5 * var_G.v[1]    / (E_G.v[1] ^ 2)
+    @inbounds begin
 
-    # Add x_nbm * (log term * log(iota)) to the elbo.
-    # If not calculating derivatives, add the values directly.
-    elbo.v[1] += x_nbm * (log(iota) + log_term_value)
+        # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
+        log_term_value = log(E_G.v[1]) - 0.5 * var_G.v[1]    / (E_G.v[1] ^ 2)
 
-    if elbo_vars.calculate_derivs
-        elbo_vars.combine_grad[1] = -0.5 / (E_G.v[1] ^ 2)
-        elbo_vars.combine_grad[2] = 1 / E_G.v[1] + var_G.v[1] / (E_G.v[1] ^ 3)
+        # Add x_nbm * (log term * log(iota)) to the elbo.
+        # If not calculating derivatives, add the values directly.
+        elbo.v[1] += x_nbm * (log(iota) + log_term_value)
 
-        if elbo_vars.calculate_hessian
-            elbo_vars.combine_hess[1, 1] = 0.0
-            elbo_vars.combine_hess[1, 2] = elbo_vars.combine_hess[2, 1] = 1 / E_G.v[1]^3
-            elbo_vars.combine_hess[2, 2] =
-                -(1 / E_G.v[1] ^ 2 + 3    * var_G.v[1] / (E_G.v[1] ^ 4))
-        end
+        if elbo_vars.calculate_derivs
+            elbo_vars.combine_grad[1] = -0.5 / (E_G.v[1] ^ 2)
+            elbo_vars.combine_grad[2] = 1 / E_G.v[1] + var_G.v[1] / (E_G.v[1] ^ 3)
 
-        # Calculate the log term.
-        combine_sfs!(
-            var_G, E_G, elbo_vars.elbo_log_term,
-            log_term_value, elbo_vars.combine_grad, elbo_vars.combine_hess,
-            calculate_hessian=elbo_vars.calculate_hessian)
+            if elbo_vars.calculate_hessian
+                elbo_vars.combine_hess[1, 1] = 0.0
+                elbo_vars.combine_hess[1, 2] = elbo_vars.combine_hess[2, 1] = 1 / E_G.v[1]^3
+                elbo_vars.combine_hess[2, 2] =
+                    -(1 / E_G.v[1] ^ 2 + 3    * var_G.v[1] / (E_G.v[1] ^ 4))
+            end
 
-        # Add to the ELBO.
-        for ind in 1:length(elbo.d)
-            elbo.d[ind] += x_nbm * elbo_vars.elbo_log_term.d[ind]
-        end
+            # Calculate the log term.
+            combine_sfs!(
+                var_G, E_G, elbo_vars.elbo_log_term,
+                log_term_value, elbo_vars.combine_grad, elbo_vars.combine_hess,
+                calculate_hessian=elbo_vars.calculate_hessian)
 
-        if elbo_vars.calculate_hessian
-            for ind in 1:length(elbo.h)
-                elbo.h[ind] += x_nbm * elbo_vars.elbo_log_term.h[ind]
+            # Add to the ELBO.
+            for ind in 1:length(elbo.d)
+                elbo.d[ind] += x_nbm * elbo_vars.elbo_log_term.d[ind]
+            end
+
+            if elbo_vars.calculate_hessian
+                for ind in 1:length(elbo.h)
+                    elbo.h[ind] += x_nbm * elbo_vars.elbo_log_term.h[ind]
+                end
             end
         end
     end
