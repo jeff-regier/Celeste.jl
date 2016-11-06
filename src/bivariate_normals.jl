@@ -223,73 +223,76 @@ function get_bvn_derivs!{NumType <: Number}(
     bvn::BvnComponent{NumType}, calculate_x_hess::Bool,
     calculate_sigma_hessian::Bool)
 
-  # Gradient with respect to x.
-  bvn_x_d = bvn_derivs.bvn_x_d
-  bvn_x_d[1] = -bvn_derivs.py1[1]
-  bvn_x_d[2] = -bvn_derivs.py2[1]
+  @inbounds begin
 
-  if calculate_x_hess
-    bvn_xx_h = bvn_derivs.bvn_xx_h
+    # Gradient with respect to x.
+    bvn_x_d = bvn_derivs.bvn_x_d
+    bvn_x_d[1] = -bvn_derivs.py1[1]
+    bvn_x_d[2] = -bvn_derivs.py2[1]
 
-    # Hessian terms involving only x
-    bvn_xx_h[1, 1] = -bvn.precision[1, 1]
-    bvn_xx_h[2, 2] = -bvn.precision[2, 2]
-    bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1 ,2]
-  end
+    if calculate_x_hess
+      bvn_xx_h = bvn_derivs.bvn_xx_h
 
-  # The first term is the derivative of -0.5 * x' Sigma^{-1} x
-  # The second term is the derivative of -0.5 * log|Sigma|
-  bvn_sig_d = bvn_derivs.bvn_sig_d
-  bvn_sig_d[1] =
-    0.5 * bvn_derivs.py1[1] * bvn_derivs.py1[1] - 0.5 * bvn.precision[1, 1]
-  bvn_sig_d[2] =
-    bvn_derivs.py1[1] * bvn_derivs.py2[1]             - bvn.precision[1, 2]
-  bvn_sig_d[3] =
-    0.5 * bvn_derivs.py2[1] * bvn_derivs.py2[1] - 0.5 * bvn.precision[2, 2]
-
-  if calculate_sigma_hessian
-
-    # Hessian calculation for terms containing sigma.
-
-    # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
-    # These are used for the hessian calculations.
-    dpy1_dsig = bvn_derivs.dpy1_dsig
-    dpy1_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,1]
-    dpy1_dsig[2] = -bvn_derivs.py2[1] * bvn.precision[1,1] -
-                    bvn_derivs.py1[1] * bvn.precision[1,2]
-    dpy1_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[1,2]
-
-    dpy2_dsig = bvn_derivs.dpy2_dsig
-    dpy2_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,2]
-    dpy2_dsig[2] = -bvn_derivs.py1[1] * bvn.precision[2,2] -
-                    bvn_derivs.py2[1] * bvn.precision[1,2]
-    dpy2_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[2,2]
-
-    # Hessian terms involving only sigma
-    bvn_sigsig_h = bvn_derivs.bvn_sigsig_h
-    for s_ind=1:3
-      # Differentiate with respect to s_ind second.
-      bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
-        bvn_derivs.py1[1] * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
-
-      # d log|sigma| / dsigma12 is twice lambda12.
-      bvn_sigsig_h[2, s_ind] =
-        bvn_derivs.py1[1] * dpy2_dsig[s_ind] + bvn_derivs.py2[1] * dpy1_dsig[s_ind] -
-        bvn.dsiginv_dsig[2, s_ind]
-
-      bvn_sigsig_h[3, s_ind] = #bvn_sigsig_h[s_ind, 3] =
-        bvn_derivs.py2[1] * dpy2_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[3, s_ind]
+      # Hessian terms involving only x
+      bvn_xx_h[1, 1] = -bvn.precision[1, 1]
+      bvn_xx_h[2, 2] = -bvn.precision[2, 2]
+      bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1 ,2]
     end
 
-    # Hessian terms involving both x and sigma.
-    # Note that dpyA / dxB = bvn.precision[A, B]
-    bvn_xsig_h = bvn_derivs.bvn_xsig_h
-    for x_ind=1:2
-      bvn_xsig_h[x_ind, 1] = bvn_derivs.py1[1] * bvn.precision[1, x_ind]
-      bvn_xsig_h[x_ind, 2] =
-        bvn_derivs.py1[1] * bvn.precision[2, x_ind] +
-        bvn_derivs.py2[1] * bvn.precision[1, x_ind]
-      bvn_xsig_h[x_ind, 3] = bvn_derivs.py2[1] * bvn.precision[2, x_ind]
+    # The first term is the derivative of -0.5 * x' Sigma^{-1} x
+    # The second term is the derivative of -0.5 * log|Sigma|
+    bvn_sig_d = bvn_derivs.bvn_sig_d
+    bvn_sig_d[1] =
+      0.5 * bvn_derivs.py1[1] * bvn_derivs.py1[1] - 0.5 * bvn.precision[1, 1]
+    bvn_sig_d[2] =
+      bvn_derivs.py1[1] * bvn_derivs.py2[1]             - bvn.precision[1, 2]
+    bvn_sig_d[3] =
+      0.5 * bvn_derivs.py2[1] * bvn_derivs.py2[1] - 0.5 * bvn.precision[2, 2]
+
+    if calculate_sigma_hessian
+
+      # Hessian calculation for terms containing sigma.
+
+      # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
+      # These are used for the hessian calculations.
+      dpy1_dsig = bvn_derivs.dpy1_dsig
+      dpy1_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,1]
+      dpy1_dsig[2] = -bvn_derivs.py2[1] * bvn.precision[1,1] -
+                      bvn_derivs.py1[1] * bvn.precision[1,2]
+      dpy1_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[1,2]
+
+      dpy2_dsig = bvn_derivs.dpy2_dsig
+      dpy2_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,2]
+      dpy2_dsig[2] = -bvn_derivs.py1[1] * bvn.precision[2,2] -
+                      bvn_derivs.py2[1] * bvn.precision[1,2]
+      dpy2_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[2,2]
+
+      # Hessian terms involving only sigma
+      bvn_sigsig_h = bvn_derivs.bvn_sigsig_h
+      for s_ind=1:3
+        # Differentiate with respect to s_ind second.
+        bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
+          bvn_derivs.py1[1] * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
+
+        # d log|sigma| / dsigma12 is twice lambda12.
+        bvn_sigsig_h[2, s_ind] =
+          bvn_derivs.py1[1] * dpy2_dsig[s_ind] + bvn_derivs.py2[1] * dpy1_dsig[s_ind] -
+          bvn.dsiginv_dsig[2, s_ind]
+
+        bvn_sigsig_h[3, s_ind] = #bvn_sigsig_h[s_ind, 3] =
+          bvn_derivs.py2[1] * dpy2_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[3, s_ind]
+      end
+
+      # Hessian terms involving both x and sigma.
+      # Note that dpyA / dxB = bvn.precision[A, B]
+      bvn_xsig_h = bvn_derivs.bvn_xsig_h
+      for x_ind=1:2
+        bvn_xsig_h[x_ind, 1] = bvn_derivs.py1[1] * bvn.precision[1, x_ind]
+        bvn_xsig_h[x_ind, 2] =
+          bvn_derivs.py1[1] * bvn.precision[2, x_ind] +
+          bvn_derivs.py2[1] * bvn.precision[1, x_ind]
+        bvn_xsig_h[x_ind, 3] = bvn_derivs.py2[1] * bvn.precision[2, x_ind]
+      end
     end
   end
 end
