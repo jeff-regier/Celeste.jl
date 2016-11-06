@@ -154,6 +154,39 @@ function get_tile_source_map(images::Vector{TiledImage},
     patches, tile_source_map
 end
 
+"""
+Test if the there are any intersections between two vectors.
+"""
+function isintersection_sorted(x::AbstractVector, y::AbstractVector)
+    nx, ny = length(x), length(y)
+    if nx == 0 || ny == 0
+        return false
+    end
+    @inbounds begin
+        i = j = 1
+        xi, yj = x[1], y[1]
+        while true
+            if xi < yj
+                if i == nx
+                    return false
+                else
+                    i += 1
+                    xi = x[i]
+                end
+            elseif xi > yj
+                if j == ny
+                    return false
+                else
+                    j += 1
+                    yj = y[j]
+                end
+            else
+                return true
+            end
+        end
+    end
+end
+
 
 """
 Updates patches in place with fitted psfs for each active source.
@@ -178,7 +211,7 @@ function fit_object_psfs!{NumType <: Number}(
         for tile_source_map in ea.tile_source_map[i]
             # check if *any* of this tile's sources are a target, and
             # if so, add *all* the tile sources to the output.
-            if length(intersect(target_sources, tile_source_map)) > 0
+            if isintersection_sorted(target_sources, tile_source_map)
                 relevant_sources = union(relevant_sources, tile_source_map)
             end
         end

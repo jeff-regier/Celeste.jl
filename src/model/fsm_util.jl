@@ -53,7 +53,7 @@ function load_bvn_mixtures{NumType <: Number}(
             mean_s = @SVector NumType[pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
             star_mcs[k, s] =
               BvnComponent{NumType}(
-                mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
+                mean_s, pc.tauBar, pc.alphaBar, false)
         end
 
         # Convolve the galaxy representations with the PSF.
@@ -215,7 +215,7 @@ function populate_fsm_vecs!{NumType <: Number}(
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
 
-    x = @SVector Float64[tile.h_range[h], tile.w_range[w]]
+    x = SVector{2,Float64}(tile.h_range[h], tile.w_range[w])
     for s in tile_sources
         # ensure tile.b is a filter band, not an image's index
         @assert 1 <= tile.b <= B

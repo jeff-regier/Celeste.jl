@@ -120,7 +120,7 @@ immutable BvnComponent{NumType <: Number}
     major_sd::NumType
 
     function BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
-        the_mean::SVector{2,T1}, the_cov::SMatrix{2,2,T2,4}, weight::T3;
+        the_mean::SVector{2,T1}, the_cov::SMatrix{2,2,T2,4}, weight::T3,
         calculate_siginv_deriv::Bool=true)
 
       ThisNumType = promote_type(T1, T2, T3)
@@ -328,20 +328,19 @@ Note that nubar is not included.
 """
 function GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
-    XiXi::SMatrix{2,2,NumType,4}; calculate_tensor::Bool=true)
+    XiXi::SMatrix{2,2,NumType,4}, calculate_tensor::Bool=true)
 
   cos_sin = cos(e_angle)sin(e_angle)
   sin_sq = sin(e_angle)^2
   cos_sq = cos(e_angle)^2
 
   j = Array(NumType, 3, length(gal_shape_ids))
-  for i = 1:3
-    j[i, gal_shape_ids.e_axis] =
-      2 * e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq][i]
-    j[i, gal_shape_ids.e_angle] =
-      e_scale^2 * (e_axis^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin][i]
-    j[i, gal_shape_ids.e_scale] = (2XiXi ./ e_scale)[[1, 2, 4][i]]
-  end
+  j[:, gal_shape_ids.e_axis] =
+    2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
+  j[:, gal_shape_ids.e_angle] =
+    e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
+  j[:, gal_shape_ids.e_scale] =
+    2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale
 
   t = Array(NumType, 3, length(gal_shape_ids), length(gal_shape_ids))
   if calculate_tensor
@@ -349,31 +348,27 @@ function GalaxySigmaDerivs{NumType <: Number}(
 
     for i = 1:3
       # Second derivatives involving e_scale
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_scale] =
-        (2 * XiXi ./ (e_scale ^ 2))[[1, 2, 4][i]]
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis] =
-        (2 * j[i, gal_shape_ids.e_axis] ./ e_scale)
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle] =
-        (2 * j[i, gal_shape_ids.e_angle] ./ e_scale)
+      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_scale] = 2 * XiXi[1 << (i - 1)] / e_scale^2
+      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]  = 2 * j[i, gal_shape_ids.e_axis]  / e_scale
+      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle] = 2 * j[i, gal_shape_ids.e_angle] / e_scale
 
       t[i, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
         t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]
       t[i, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
         t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle]
 
+    end
       # Remaining second derivatives involving e_angle
-      t[i, gal_shape_ids.e_angle, gal_shape_ids.e_angle] =
-        2 * e_scale^2 * (e_axis^2 - 1) *
-        [cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq][i]
-      t[i, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
-        2 * e_scale^2 * e_axis * [2cos_sin, sin_sq - cos_sq, -2cos_sin][i]
-      t[i, gal_shape_ids.e_axis, gal_shape_ids.e_angle] =
-        t[i, gal_shape_ids.e_angle, gal_shape_ids.e_axis]
+    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_angle]  =
+      2 * e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq)
+    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle]   =
+      t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
+        2 * e_scale^2 * e_axis       * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
 
       # The second derivative involving only e_axis.
-      t[i, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
-        2 * e_scale^2 * [sin_sq, -cos_sin, cos_sq][i]
-    end
+    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
+        2 * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
+
   else
     fill!(t, 0.0)
   end
@@ -435,16 +430,15 @@ function GalaxyCacheComponent{NumType <: Number}(
 
   # d siginv / dsigma is only necessary for the Hessian.
   bmc = BvnComponent{NumType}(
-    mean_s, var_s, weight,
-    calculate_siginv_deriv=calculate_derivs && calculate_hessian)
+    mean_s, var_s, weight, calculate_derivs && calculate_hessian)
 
   if calculate_derivs
     sig_sf = GalaxySigmaDerivs(
-      e_angle, e_axis, e_scale, XiXi, calculate_tensor=calculate_hessian)
-    sig_sf.j .*= gc.nuBar
+      e_angle, e_axis, e_scale, XiXi, calculate_hessian)
+    scale!(sig_sf.j, gc.nuBar)
     if calculate_hessian
       # The tensor is only needed for the Hessian.
-      sig_sf.t .*= gc.nuBar
+      scale!(sig_sf.t, gc.nuBar)
     end
   else
     sig_sf = empty_sig_sf

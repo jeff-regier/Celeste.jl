@@ -547,7 +547,7 @@ function add_elbo_log_term!{NumType <: Number}(
             combine_sfs!(
                 var_G, E_G, elbo_vars.elbo_log_term,
                 log_term_value, elbo_vars.combine_grad, elbo_vars.combine_hess,
-                calculate_hessian=elbo_vars.calculate_hessian)
+                elbo_vars.calculate_hessian)
 
             # Add to the ELBO.
             for ind in 1:length(elbo.d)
