@@ -310,6 +310,8 @@ Returns:
 function one_node_infer(
                rcfs::Vector{RunCamcolField},
                stagedir::String;
+               joint_infer=false,
+               joint_infer_n_iters=10,
                objid="",
                box=BoundingBox(-1000., 1000., -1000., 1000.),
                target_rcfs=RunCamcolField[],
@@ -384,6 +386,10 @@ function one_node_infer(
 
     reserve_thread[] && thread_fun(reserve_thread)
 
+    if joint_infer
+        return one_node_joint_infer(catalog, target_sources, neighbor_map, images, n_iters=joint_infer_n_iters, objid=objid)
+    end
+    
     # iterate over sources
     obj_values = Array{Float64}(length(target_sources))
     curr_source = 1
