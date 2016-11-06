@@ -157,13 +157,13 @@ function populate_fsm!{NumType <: Number}(
                     mv_calculate_hessian::Bool,
                     s::Int,
                     x::SVector{2,Float64},
-                    active_source::Bool,
+                    is_active_source::Bool,
                     num_allowed_sd::Float64,
                     wcs_jacobian::Matrix{Float64},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
     calculate_hessian =
-        mv_calculate_hessian && mv_calculate_derivs && active_source
+        mv_calculate_hessian && mv_calculate_derivs && is_active_source
 
     clear!(fs0m, calculate_hessian)
     for k = 1:size(star_mcs, 1) # PSF component
@@ -173,7 +173,7 @@ function populate_fsm!{NumType <: Number}(
                 bvn_derivs, fs0m,
                 mv_calculate_derivs,
                 mv_calculate_hessian,
-                star_mcs[k, s], x, wcs_jacobian, active_source)
+                star_mcs[k, s], x, wcs_jacobian, is_active_source)
         end
     end
 
@@ -191,7 +191,7 @@ function populate_fsm!{NumType <: Number}(
                             mv_calculate_derivs,
                             mv_calculate_hessian,
                             gal_mcs[k, j, i, s], x, wcs_jacobian,
-                            active_source)
+                            is_active_source)
                     end
                 end
             end
@@ -214,16 +214,15 @@ function populate_fsm_vecs!{NumType <: Number}(
                     h::Int, w::Int,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
-
     x = SVector{2,Float64}(tile.h_range[h], tile.w_range[w])
     for s in tile_sources
         # ensure tile.b is a filter band, not an image's index
         @assert 1 <= tile.b <= B
-        active_source = s in active_sources
+        is_active_source = s in active_sources
         wcs_jacobian = patches[s, tile.b].wcs_jacobian
         populate_fsm!(bvn_derivs, fs0m_vec[s], fs1m_vec[s],
                       mv_calculate_derivs, mv_calculate_hessian,
-                      s, x, active_source, num_allowed_sd,
+                      s, x, is_active_source, num_allowed_sd,
                       wcs_jacobian, gal_mcs, star_mcs)
     end
 end
@@ -257,7 +256,7 @@ by updating elbo_vars.fs0m_vec[s] in place.
 Args:
     - bvn_derivs: (formerly from elbo_vars)
     - fs0m_vec: vector of sensitive floats, populated by this method
-    - calculate_derivs: the and of active_source and formerly elbo_vars.calculate_derivs
+    - calculate_derivs: the and of is_active_source and formerly elbo_vars.calculate_derivs
     - calculate_hessian: elbo_vars: Elbo intermediate values.
     - s: The index of the current source in 1:S
     - bmc: The component to be added

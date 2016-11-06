@@ -42,11 +42,13 @@ function make_elbo_args(images::Vector{TiledImage},
                         active_source=-1,
                         patch_radius_pix::Float64=NaN)
     vp = Vector{Float64}[init_source(ce) for ce in catalog]
-    patches, tile_source_map = Infer.get_tile_source_map(images, catalog,
-                                radius_override_pix=patch_radius_pix)
+    patches = Infer.get_sky_patches(images,
+                                    catalog,
+                                    radius_override_pix=patch_radius_pix)
     S = length(catalog)
-    active_sources = active_source > 0 ? [active_source] : S <= 3 ? collect(1:S) : [1,2,3]
-    ea = ElboArgs(images, vp, tile_source_map, patches, active_sources)
+    active_sources = active_source > 0 ? [active_source] :
+                                          S <= 3 ? collect(1:S) : [1,2,3]
+    ea = ElboArgs(images, vp, patches, active_sources)
     if fit_psf
         Infer.fit_object_psfs!(ea, ea.active_sources)
     end
@@ -222,7 +224,6 @@ function empty_model_params(S::Int)
     vp = [Model.init_source([ 0., 0. ]) for s in 1:S]
     ElboArgs(TiledImage[],
              vp,
-             Array(Matrix{Vector{Int}}, 0),
              Array(SkyPatch, S, 0),
              collect(1:S))
 end

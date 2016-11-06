@@ -20,7 +20,13 @@ import ..PSF
 import ..Log
 
 using ..DeterministicVI
-import ..DeterministicVI.tile_predicted_image
+import ..DeterministicVI: load_bvn_mixtures,
+                          load_source_brightnesses,
+                          get_expected_pixel_brightness!,
+                          elbo,
+                          maximize_f,
+                          clear!
+
 
 
 """
@@ -99,13 +105,17 @@ Arguments:
 function infer_source(images::Vector{TiledImage},
                       neighbors::Vector{CatalogEntry},
                       entry::CatalogEntry)
+
+    if length(neighbors) > 100
+        Log.warn("Excessive number ($(length(neighbors))) of neighbors")
+    end
     cat_local = vcat(entry, neighbors)
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
-    patches, tile_source_map = get_tile_source_map(images, cat_local)
-    ea = ElboArgs(images, vp, tile_source_map, patches, [1])
+    patches = get_sky_patches(images, cat_local)
+    ea = ElboArgs(images, vp, patches, [1])
     load_active_pixels!(ea)
     @assert length(ea.active_pixels) > 0
-    f_evals, max_f, max_x, nm_result = DeterministicVI.maximize_f(DeterministicVI.elbo, ea)
+    f_evals, max_f, max_x, nm_result = maximize_f(elbo, ea)
     vp[1], max_f
 end
 
@@ -114,13 +124,12 @@ end
 For tile of each image, compute a list of the indexes of the catalog entries
 that may be relevant to determining the likelihood of that tile.
 """
-function get_tile_source_map(images::Vector{TiledImage},
-                             catalog::Vector{CatalogEntry};
-                             radius_override_pix=NaN)
+function get_sky_patches(images::Vector{TiledImage},
+                         catalog::Vector{CatalogEntry};
+                         radius_override_pix=NaN)
     N = length(images)
     S = length(catalog)
     patches = Array(SkyPatch, S, N)
-    tile_source_map = Array(Matrix{Vector{Int}}, N)
 
     for i = 1:N
         img = images[i]
@@ -141,17 +150,11 @@ function get_tile_source_map(images::Vector{TiledImage},
                                      wcs_jacobian,
                                      pixel_center)
         end
-
-        # TODO: get rid of these puny methods
-        patch_centers = Model.patch_ctrs_pix(patches[:, i])
-        patch_radii = Model.patch_radii_pix(patches[:, i])
-
-        tile_source_map[i] = Model.get_sources_per_tile(images[i].tiles,
-                                               patch_centers, patch_radii)
     end
 
-    patches, tile_source_map
+    patches
 end
+
 
 """
 Test if the there are any intersections between two vectors.
@@ -207,27 +210,28 @@ function load_active_pixels!(ea::ElboArgs{Float64};
         for t in 1:length(tiles)
             tile = tiles[t]
 
-            # we're checking up front whether this tile matters,
-            # *before* we allocate memory for local_active_sources
-            # and local_active_centers
-            ignore_tile = true
-            for s in ea.active_sources
-                # `intersect(ea.active_sources, tile_source_map)` allocates
-                # huge amounts of memory, so now we don't do that here
-                if s in ea.tile_source_map[n][t]
-                    ignore_tile = false
-                    break
-                end
+            tile_ctr = (mean(tile.h_range), mean(tile.w_range))
+            h_width, w_width = size(tile.pixels)
+            tile_diag = (0.5 ^ 2) * (h_width ^ 2 + w_width ^ 2)
+
+            is_close(s) = begin
+                patch_ctr = ea.patches[s, n].pixel_center
+                patch_dist = (tile_ctr[1] - patch_ctr[1])^2
+                              + (tile_ctr[2] - patch_ctr[2])^2
+                patch_r = ea.patches[s, n].radius_pix
+                patch_dist <= (tile_diag + patch_r)^2 &&
+                   (abs(tile_ctr[1] - patch_ctr[1]) < patch_r + 0.5 * h_width) &&
+                   (abs(tile_ctr[2] - patch_ctr[2]) < patch_r + 0.5 * w_width)
             end
 
-            if ignore_tile
+            if !any(is_close, ea.active_sources)
                 continue
             end
 
             local_active_sources = Int64[]
             local_centers = Vector{Float64}[]
             for s in ea.active_sources
-                if s in ea.tile_source_map[n][t]
+                if is_close(s)
                     push!(local_active_sources, s)
 
                     patch = ea.patches[s, n]
@@ -241,10 +245,12 @@ function load_active_pixels!(ea::ElboArgs{Float64};
 
             # TODO; use log_prob.jl in the Model module to get the
             # get the expected brightness, not variational inference
-            pred_tile_pixels = tile_predicted_image(tile,
-                                                    ea,
-                                                    local_active_sources,
-                                                    include_epsilon=false)
+
+            star_mcs, gal_mcs = load_bvn_mixtures(ea, tile.b, calculate_derivs=false)
+            sbs = load_source_brightnesses(ea, calculate_derivs=false)
+            clear!(ea.elbo_vars)
+            ea.elbo_vars.calculate_derivs = false
+            ea.elbo_vars.calculate_hessian = false
 
             for h in tile.h_range, w in tile.w_range
                 # The pixel location in the rendered image.
@@ -257,8 +263,12 @@ function load_active_pixels!(ea::ElboArgs{Float64};
                 end
 
                 # if this pixel is bright, let's include it
-                expected_sky = tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im]
-                if pred_tile_pixels[h_im, w_im] > expected_sky * noise_fraction
+                get_expected_pixel_brightness!(
+                    ea.elbo_vars, h_im, w_im, sbs, star_mcs, gal_mcs, tile,
+                    ea, local_active_sources, include_epsilon=false)
+
+                expected_sky = tile.epsilon_mat[h_im, w_im]
+                if ea.elbo_vars.E_G.v[1] > expected_sky * noise_fraction
                     push!(ea.active_pixels, ActivePixel(n, t, h_im, w_im))
                     continue
                 end

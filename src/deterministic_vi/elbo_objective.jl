@@ -609,7 +609,7 @@ function process_active_pixels!{NumType <: Number}(
     # iterate over the pixels
     for pixel in ea.active_pixels
         tile = ea.images[pixel.n].tiles[pixel.tile_ind]
-        tile_sources = ea.tile_source_map[pixel.n][pixel.tile_ind]
+        tile_sources = collect(1:ea.S)
         this_pixel = tile.pixels[pixel.h, pixel.w]
 
         # Get the brightness.

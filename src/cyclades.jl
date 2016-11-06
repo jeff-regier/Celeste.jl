@@ -262,8 +262,9 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
 
             #vp = Vector{Float64}[init_source(ce) for ce in cat_local]
             vp = Vector{Float64}[haskey(target_source_variational_params, x) ? target_source_variational_params[x] : init_source(catalog[x]) for x in ids_local]
-            patches, tile_source_map = Infer.get_tile_source_map(images, cat_local)
-            ea = ElboArgs(images, vp, tile_source_map, patches, [1])
+            patches = Infer.get_sky_patches(images, cat_local)
+            ea = ElboArgs(images, vp, patches, [1])
+            Infer.fit_object_psfs!(ea, ea.active_sources)
             Infer.load_active_pixels!(ea)
             @assert length(ea.active_pixels) > 0
             model[cur_source_index] = ea

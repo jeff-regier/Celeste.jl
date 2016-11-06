@@ -30,7 +30,6 @@ function make_star_logpdf(images::Vector{TiledImage},
                           S::Int64,
                           N::Int64,
                           source_params::Vector{Vector{Float64}},
-                          tile_source_map::Vector{Matrix{Vector{Int}}},
                           patches::Matrix{SkyPatch},
                           active_sources::Vector{Int},
                           psf_K::Int64,
@@ -57,7 +56,7 @@ function make_star_logpdf(images::Vector{TiledImage},
                                         active_sources,
                                         psf_K, num_allowed_sd,
                                         source_params,
-                                        tile_source_map, S, N)
+                                        S, N)
         return ll_like + ll_prior
     end
     return star_logpdf, star_logprior
@@ -85,7 +84,6 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
                             S::Int64,
                             N::Int64,
                             source_params::Vector{Vector{Float64}},
-                            tile_source_map::Vector{Matrix{Vector{Int}}},
                             patches::Matrix{SkyPatch},
                             active_sources::Vector{Int},
                             psf_K::Int64,
@@ -115,7 +113,7 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
                                         patches,
                                         active_sources, psf_K, num_allowed_sd,
                                         source_params,
-                                        tile_source_map, S, N)
+                                        S, N)
         return ll_like + ll_prior
     end
 
@@ -151,7 +149,6 @@ function state_log_likelihood(is_star::Bool,                # source is star
                               psf_K::Int64,                 # number of PSF Comps
                               num_allowed_sd::Float64,      # ...
                               source_params::Vector{Vector{Float64}}, # list of background sources
-                              tile_source_map::Vector{Matrix{Vector{Int}}},
                               S::Int64,
                               N::Int64)
     # TODO: cache the background rate image!! --- does not need to be recomputed at each ll eval
@@ -185,21 +182,19 @@ function state_log_likelihood(is_star::Bool,                # source is star
     ll = 0.
     for pixel in active_pixels
         tile         = images[pixel.n].tiles[pixel.tile_ind]
-        tile_sources = tile_source_map[pixel.n][pixel.tile_ind]
         this_pixel   = tile.pixels[pixel.h, pixel.w]
         pixel_band   = tile.b
 
         # compute the unit-flux pixel values
         populate_fsm_vecs!(model_vars, patches, active_sources,
                            num_allowed_sd,
-                           tile_sources, tile,
+                           tile,
                            pixel.h, pixel.w,
                            gal_mcs_vec[pixel.n], star_mcs_vec[pixel.n])
 
         # compute the background rate for this pixel
         background_rate    = tile.epsilon_mat[pixel.h, pixel.w]
-        background_sources = tile_sources[tile_sources.!=1]
-        for s in background_sources
+        for s in 2:S  # excludes source #1
             # determine if background source is star/gal; get fluxes
             params_s  = source_params[s]
             s_is_star = params_s[lidx.a[1,1]] > .5

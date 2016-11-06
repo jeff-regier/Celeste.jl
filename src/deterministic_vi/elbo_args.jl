@@ -189,7 +189,6 @@ type ElboArgs{NumType <: Number}
     psf_K::Int64
     images::Vector{TiledImage}
     vp::VariationalParams{NumType}
-    tile_source_map::Vector{Matrix{Vector{Int}}}
     patches::Matrix{SkyPatch}
     active_sources::Vector{Int}
 
@@ -210,7 +209,6 @@ end
 function ElboArgs{NumType <: Number}(
             images::Vector{TiledImage},
             vp::VariationalParams{NumType},
-            tile_source_map::Vector{Matrix{Vector{Int}}},
             patches::Matrix{SkyPatch},
             active_sources::Vector{Int};
             psf_K::Int=2,
@@ -219,7 +217,6 @@ function ElboArgs{NumType <: Number}(
     S = length(vp)
 
     @assert psf_K > 0
-    @assert length(tile_source_map) == N
     @assert size(patches, 1) == S
     @assert size(patches, 2) == N
 
@@ -238,7 +235,7 @@ function ElboArgs{NumType <: Number}(
                                 calculate_derivs=true,
                                 calculate_hessian=true)
 
-    ElboArgs(S, N, psf_K, images, vp, tile_source_map, patches,
+    ElboArgs(S, N, psf_K, images, vp, patches,
              active_sources, num_allowed_sd, ActivePixel[], elbo_vars)
 end
 
