@@ -1,138 +1,4 @@
 """
-Convolve the current locations and galaxy shapes with the PSF.  If
-calculate_derivs is true, also calculate derivatives and hessians for
-active sources.
-
-Args:
- - psf: A vector of PSF components
- - ea: The current ElboArgs
- - b: The current band
- - calculate_derivs: Whether to calculate derivatives for active sources.
-
-Returns:
- - star_mcs: An array of BvnComponents with indices
-    - PSF component
-    - Source (index within active_sources)
- - gal_mcs: An array of BvnComponents with indices
-    - PSF component
-    - Galaxy component
-    - Galaxy type
-    - Source (index within active_sources)
-  Hessians are only populated for s in ea.active_sources.
-"""
-function load_bvn_mixtures{NumType <: Number}(
-                    ea::ElboArgs{NumType},
-                    b::Int;
-                    calculate_derivs::Bool=true,
-                    calculate_hessian::Bool=true)
-    # call bvn loader from the Model Module
-    Model.load_bvn_mixtures(ea.S, ea.patches, ea.vp, ea.active_sources,
-                            ea.psf_K, b,
-                            calculate_derivs=calculate_derivs,
-                            calculate_hessian=calculate_hessian)
-end
-
-
-"""
-Add the contributions of a star's bivariate normal term to the ELBO,
-by updating elbo_vars.fs0m_vec[s] in place.
-
-Args:
-    - elbo_vars: Elbo intermediate values.
-    - s: The index of the current source in 1:S
-    - bmc: The component to be added
-    - x: An offset for the component in pixel coordinates (e.g. a pixel location)
-    - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-    - is_active_source: Whether it is an active source, (i.e. whether to
-                        calculate derivatives if requested.)
-
-Returns:
-    Updates elbo_vars.fs0m_vec[s] in place.
-"""
-function accum_star_pos!{NumType <: Number}(
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    s::Int,
-                    bmc::BvnComponent{NumType},
-                    x::SVector{2, Float64},
-                    wcs_jacobian::Array{Float64, 2},
-                    is_active_source::Bool)
-    # call accum star pos in model
-    Model.accum_star_pos!(elbo_vars.bvn_derivs,
-                    elbo_vars.fs0m_vec,
-                    elbo_vars.calculate_derivs,
-                    elbo_vars.calculate_hessian,
-                    s, bmc, x, wcs_jacobian, is_active_source)
-end
-
-
-"""
-Add the contributions of a galaxy component term to the ELBO by
-updating fs1m in place.
-
-Args:
-    - elbo_vars: Elbo intermediate variables
-    - s: The index of the current source in 1:S
-    - gcc: The galaxy component to be added
-    - x: An offset for the component in pixel coordinates (e.g. a pixel location)
-    - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-    - is_active_source: Whether it is an active source, (i.e. whether to
-                        calculate derivatives if requested.)
-
-Returns:
-    Updates elbo_vars.fs1m_vec[s] in place.
-"""
-function accum_galaxy_pos!{NumType <: Number}(
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    s::Int,
-                    gcc::GalaxyCacheComponent{NumType},
-                    x::SVector{2, Float64},
-                    wcs_jacobian::Array{Float64, 2},
-                    is_active_source::Bool)
-    # call accum star pos in model
-    Model.accum_galaxy_pos!(elbo_vars.bvn_derivs,
-                            elbo_vars.fs1m_vec,
-                            elbo_vars.calculate_derivs,
-                            elbo_vars.calculate_hessian,
-                            s, gcc, x, wcs_jacobian, is_active_source)
-end
-
-
-"""
-Populate fs0m_vec and fs1m_vec for all sources for a given pixel.
-
-Args:
-    - elbo_vars: Elbo intermediate values.
-    - ea: Model parameters
-    - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
-    - tile: An ImageTile
-    - h, w: The integer locations of the pixel within the tile
-    - gal_mcs: Galaxy components
-    - star_mcs: Star components
-
-Returns:
-    Updates elbo_vars.fs0m_vec and elbo_vars.fs1m_vec in place with the total
-    shape contributions to this pixel's brightness.
-"""
-function populate_fsm_vecs!{NumType <: Number}(
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    ea::ElboArgs{NumType},
-                    tile_sources::Vector{Int},
-                    tile::ImageTile,
-                    h::Int, w::Int,
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    star_mcs::Array{BvnComponent{NumType}, 2})
-    Model.populate_fsm_vecs!(elbo_vars.bvn_derivs,
-                             elbo_vars.fs0m_vec,
-                             elbo_vars.fs1m_vec,
-                             elbo_vars.calculate_derivs,
-                             elbo_vars.calculate_hessian,
-                             ea.patches, ea.active_sources,
-                             ea.num_allowed_sd,
-                             tile_sources, tile, h, w, gal_mcs, star_mcs)
-end
-
-
-"""
 Calculate the contributions of a single source for a single pixel to
 the sensitive floats E_G_s and var_G_s, which are cleared and updated in place.
 
@@ -161,7 +27,6 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
                     is_active_source::Bool)
-
     E_G2_s = elbo_vars.E_G2_s
 
     clear_hessian = elbo_vars.calculate_hessian && elbo_vars.calculate_derivs
@@ -323,25 +188,6 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
 end
 
 
-function calculate_source_pixel_brightness!{NumType <: Number}(
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    ea::ElboArgs{NumType},
-                    sbs::Vector{SourceBrightness{NumType}},
-                    s::Int, b::Int)
-
-    calculate_source_pixel_brightness!(
-        elbo_vars,
-        ea,
-        elbo_vars.E_G_s,
-        elbo_vars.var_G_s,
-        elbo_vars.fs0m_vec[s],
-        elbo_vars.fs1m_vec[s],
-        sbs[s],
-        b, s,
-        s in ea.active_sources)
-end
-
-
 """
 Calculate the variance var_G_s as a function of (E_G_s, E_G2_s).
 
@@ -401,17 +247,22 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
                     is_active_source::Bool)
-
-    calculate_hessian =
-        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs &&
-        is_active_source
+    calculate_hessian = elbo_vars.calculate_hessian &&
+                        elbo_vars.calculate_derivs &&
+                        is_active_source
 
     # This updates elbo_vars.E_G_s and elbo_vars.var_G_s
     calculate_source_pixel_brightness!(
-        elbo_vars, ea,
-        elbo_vars.E_G_s, elbo_vars.var_G_s,
-        fs0m, fs1m,
-        sb, b, s, is_active_source)
+        elbo_vars,
+        ea,
+        elbo_vars.E_G_s,
+        elbo_vars.var_G_s,
+        elbo_vars.fs0m_vec[s],
+        elbo_vars.fs1m_vec[s],
+        sbs[s],
+        b,
+        s,
+        s in ea.active_sources)
 
     if is_active_source
         sa = findfirst(ea.active_sources, s)
@@ -421,83 +272,6 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
         # If the sources is inactive, simply accumulate the values.
         E_G.v[1] += elbo_vars.E_G_s.v[1]
         var_G.v[1] += elbo_vars.var_G_s.v[1]
-    end
-end
-
-
-"""
-Adds up E_G and var_G across all sources.  This requires elbo_vars.fs0m_vec and
-elbo_vars.fs1m_vec to have been set already for all sources.
-
-Args:
-    - elbo_vars: Elbo intermediate values, with updated fs1m_vec and fs0m_vec.
-    - ea: Model parameters
-    - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
-    - tile: An ImageTile
-    - sbs: Source brightnesses
-
-Updates elbo_vars.E_G and elbo_vars.var_G in place.
-"""
-function combine_pixel_sources!{NumType <: Number}(
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    ea::ElboArgs{NumType},
-                    tile_sources::Vector{Int},
-                    tile::ImageTile,
-                    sbs::Vector{SourceBrightness{NumType}})
-    clear!(elbo_vars.E_G,
-        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
-    clear!(elbo_vars.var_G,
-        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
-
-    for s in tile_sources
-        is_active_source = s in ea.active_sources
-        accumulate_source_pixel_brightness!(
-            elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
-            elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s],
-            sbs[s], tile.b, s, is_active_source)
-    end
-end
-
-
-"""
-Expected brightness for a single pixel.
-
-Args:
-    - elbo_vars: Elbo intermediate values.
-    - h, w: The integer locations of the pixel within the tile
-    - sbs: Source brightnesses
-    - star_mcs: Star components
-    - gal_mcs: Galaxy components
-    - tile: An ImageTile
-    - ea: Model parameters
-    - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
-    - include_epsilon: Whether the background noise should be included
-
-Returns:
-    - Updates elbo_vars.E_G and elbo_vars.var_G in place.
-"""
-function get_expected_pixel_brightness!{NumType <: Number}(
-                elbo_vars::ElboIntermediateVariables{NumType},
-                h::Int, w::Int,
-                sbs::Vector{SourceBrightness{NumType}},
-                star_mcs::Array{BvnComponent{NumType}, 2},
-                gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                tile::ImageTile,
-                ea::ElboArgs{NumType},
-                tile_sources::Vector{Int};
-                include_epsilon::Bool=true)
-    # This combines the bvn components to get the brightness for each
-    # source separately.
-    populate_fsm_vecs!(
-        elbo_vars, ea, tile_sources, tile, h, w, gal_mcs, star_mcs)
-
-    # # This combines the sources into a single brightness value for the pixel.
-    combine_pixel_sources!(elbo_vars, ea, tile_sources, tile, sbs)
-
-    if include_epsilon
-        # There are no derivatives with respect to epsilon, so can safely add
-        # to the value.
-        elbo_vars.E_G.v[1] += tile.epsilon_mat[h, w]
     end
 end
 
@@ -524,7 +298,6 @@ function add_elbo_log_term!{NumType <: Number}(
     # log E[G] - Var(G) / (2 * E[G] ^2 )
 
     @inbounds begin
-
         # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
         log_term_value = log(E_G.v[1]) - 0.5 * var_G.v[1]    / (E_G.v[1] ^ 2)
 
@@ -564,154 +337,68 @@ function add_elbo_log_term!{NumType <: Number}(
 end
 
 
-function add_elbo_log_term!{NumType <: Number}(
-                elbo_vars::ElboIntermediateVariables{NumType},
-                x_nbm::AbstractFloat, iota::AbstractFloat)
+function add_pixel_term!{NumType <: Number}(
+                    ea::ElboArgs{NumType},
+                    n::Int, h::Int, w::Int,
+                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+                    star_mcs::Array{BvnComponent{NumType}, 2};
+                    calculate_derivs=true,
+                    calculate_hessian=true)
+    # This combines the bvn components to get the light density for each
+    # source separately.
+    Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
+                             ea.elbo_vars.fs0m_vec,
+                             ea.elbo_vars.fs1m_vec,
+                             ea.elbo_vars.calculate_derivs,
+                             ea.elbo_vars.calculate_hessian,
+                             ea.patches,
+                             ea.active_sources,  #NO! Need local sources.
+                             ea.num_allowed_sd,
+                             pixel_sources,
+                             n, h, w,
+                             gal_mcs, star_mcs)
+
+    # This combines the sources into a single brightness value for the pixel.
+    clear!(elbo_vars.E_G,
+        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
+    clear!(elbo_vars.var_G,
+        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
+    for s in pixel_sources
+        is_active_source = s in ea.active_sources
+        accumulate_source_pixel_brightness!(
+            elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
+            elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s],
+            sbs[s], ea.images[n].b, s, is_active_source)
+    end
+
+    # There are no derivatives with respect to epsilon, so can safely add
+    # to the value.
+    elbo_vars.E_G.v[1] += img.epsilon_mat[h, w]
+
+    # Add the terms to the elbo given the brightness.
     add_elbo_log_term!(elbo_vars,
                        elbo_vars.E_G,
                        elbo_vars.var_G,
                        elbo_vars.elbo,
-                       x_nbm,
-                       iota)
-end
+                       img.pixels[h,w],
+                       img.iota_vec[h])
+    add_scaled_sfs!(elbo_vars.elbo,
+                    elbo_vars.E_G,
+                    -img.iota_vec[h],
+                    elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
 
-############################################
-# The remaining functions loop over tiles, sources, and pixels.
-
-"""
-Add an array of pixels' contribution to the ELBO likelihood term by
-modifying elbo in place.
-
-Args:
-    - elbo_vars: Elbo intermediate values.
-    - ea: Model parameters
-
-Returns:
-    Adds to elbo_vars.elbo in place.
-"""
-function process_active_pixels!{NumType <: Number}(
-                elbo_vars::ElboIntermediateVariables{NumType},
-                ea::ElboArgs{NumType})
-    sbs = load_source_brightnesses(ea,
-        calculate_derivs=elbo_vars.calculate_derivs,
-        calculate_hessian=elbo_vars.calculate_hessian)
-
-    star_mcs_vec = Array(Array{BvnComponent{NumType}, 2}, ea.N)
-    gal_mcs_vec = Array(Array{GalaxyCacheComponent{NumType}, 4}, ea.N)
-
-    for b=1:ea.N
-        star_mcs_vec[b], gal_mcs_vec[b] =
-            load_bvn_mixtures(ea, b,
-                calculate_derivs=elbo_vars.calculate_derivs,
-                calculate_hessian=elbo_vars.calculate_hessian)
-    end
-
-    # iterate over the pixels
-    for pixel in ea.active_pixels
-        tile = ea.images[pixel.n].tiles[pixel.tile_ind]
-        tile_sources = collect(1:ea.S)
-        this_pixel = tile.pixels[pixel.h, pixel.w]
-
-        # Get the brightness.
-        get_expected_pixel_brightness!(
-            elbo_vars, pixel.h, pixel.w, sbs,
-            star_mcs_vec[pixel.n], gal_mcs_vec[pixel.n], tile,
-            ea, tile_sources, include_epsilon=true)
-
-        # Add the terms to the elbo given the brightness.
-        iota = tile.iota_vec[pixel.h]
-        add_elbo_log_term!(elbo_vars, this_pixel, iota)
-        add_scaled_sfs!(elbo_vars.elbo,
-                        elbo_vars.E_G,
-                        -iota,
-                        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
-
-        # Subtract the log factorial term. This is not a function of the
-        # parameters so the derivatives don't need to be updated. Note that
-        # even though this does not affect the ELBO's maximum, it affects
-        # the optimization convergence criterion, so I will leave it in for now.
-        elbo_vars.elbo.v[1] -= lfact(this_pixel)
-    end
-    assert_all_finite(elbo_vars.elbo)
-end
-
-
-"""
-Return the image predicted for the tile given the current parameters.
-
-Args:
-    - elbo_vars: Elbo intermediate values.
-    - tile: An ImageTile
-    - ea: Model parameters
-    - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
-    - sbs: Source brightnesses
-    - star_mcs: Star components
-    - gal_mcs: Galaxy components
-    - include_epsilon: Whether the background noise should be included
-
-Returns:
-    A matrix of the same size as the tile with the predicted brightnesses.
-"""
-function tile_predicted_image{NumType <: Number}(
-                elbo_vars::ElboIntermediateVariables{NumType},
-                tile::ImageTile,
-                ea::ElboArgs{NumType},
-                tile_sources::Vector{Int},
-                sbs::Vector{SourceBrightness{NumType}},
-                star_mcs::Array{BvnComponent{NumType}, 2},
-                gal_mcs::Array{GalaxyCacheComponent{NumType}, 4};
-                include_epsilon::Bool=true)
-    predicted_pixels = copy(tile.pixels)
-    # Iterate over pixels that are not NaN.
-    h_width, w_width = size(tile.pixels)
-    for w in 1:w_width, h in 1:h_width
-        this_pixel = tile.pixels[h, w]
-        if !Base.isnan(this_pixel)
-            get_expected_pixel_brightness!(
-                elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-                ea, tile_sources, include_epsilon=include_epsilon)
-            iota = tile.iota_vec[h]
-            predicted_pixels[h, w] = elbo_vars.E_G.v[1] * iota
-        end
-    end
-
-    predicted_pixels
-end
-
-
-"""
-Produce a predicted image for a given tile and model parameters.
-If include_epsilon is true, then the background is also rendered.
-Otherwise, only pixels from the object are rendered.
-
-Args:
-    - tile: An ImageTile
-    - ea: Model parameters
-    - tile_sources: A vector of integers of sources in 1:ea.S affecting the tile
-    - include_epsilon: Whether the background noise should be included
-"""
-function tile_predicted_image{NumType <: Number}(
-                    tile::ImageTile,
-                    ea::ElboArgs{NumType},
-                    tile_sources::Vector{Int};
-                    include_epsilon::Bool=false)
-    star_mcs, gal_mcs = load_bvn_mixtures(ea, tile.b, calculate_derivs=false)
-    sbs = load_source_brightnesses(ea, calculate_derivs=false)
-
-    clear!(ea.elbo_vars)
-    ea.elbo_vars.calculate_derivs = false
-    ea.elbo_vars.calculate_hessian = false
-
-    tile_predicted_image(
-        ea.elbo_vars, tile, ea, tile_sources, sbs, star_mcs, gal_mcs,
-        include_epsilon=include_epsilon)
+    # Subtract the log factorial term. This is not a function of the
+    # parameters so the derivatives don't need to be updated. Note that
+    # even though this does not affect the ELBO's maximum, it affects
+    # the optimization convergence criterion, so I will leave it in for now.
+    elbo_vars.elbo.v[1] -= lfact(img.pixels[h,w])
 end
 
 
 """
 Return the expected log likelihood for all bands in a section
 of the sky.
-Returns: A sensitive float with the log,  likelihood.
+Returns: A sensitive float with the log likelihood.
 """
 function elbo_likelihood{NumType <: Number}(
                     ea::ElboArgs{NumType};
@@ -721,7 +408,45 @@ function elbo_likelihood{NumType <: Number}(
     ea.elbo_vars.calculate_derivs = calculate_derivs
     ea.elbo_vars.calculate_hessian = calculate_derivs && calculate_hessian
 
-    process_active_pixels!(ea.elbo_vars, ea)
+    # this call loops over light sources (but not images)
+    sbs = load_source_brightnesses(ea,
+                calculate_derivs=elbo_vars.calculate_derivs,
+                calculate_hessian=elbo_vars.calculate_hessian)
+
+    for n in 1:ea.N
+        img = ea.images[n]
+
+        # could preallocate these---outside of elbo_likehood even to use for
+        # all ~50 evalulations of the likelihood
+        # This convolves the PSF with the star/galaxy model, returning a
+        # mixture of bivariate normals.
+        star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+                                    ea.vp, ea.active_sources,
+                                    ea.psf_K, n,
+                                    calculate_derivs=calculate_derivs,
+                                    calculate_hessian=calculate_hessian)
+
+        # Otherwise we'd need to allocate memory to avoiding visiting the
+        # same pixel twice.
+        @assert length(ea.active_sources) == 1
+
+        # iterate over the pixels
+        radius_int = ea.patches[s,n].radius_int
+        for w2 in 1:2radius_int, h2 in 1:radius_int
+            # (h2, w2) index the local patch, while (h, w) index the image
+            h = patches[s,n].center_int[1] - radius_int + h2
+            w = patches[s,n].center_int[2] - radius_int + w2
+
+            if !patches[s,n].active_pixel_bitmap[h,w]
+                continue
+            end
+
+            # if we're here it's a unique active pixel
+            add_pixel_term!(ea, n, h, w, star_mcs, gal_mcs)
+        end
+    end
+
+    assert_all_finite(elbo_vars.elbo)
     deepcopy(ea.elbo_vars.elbo)
 end
 

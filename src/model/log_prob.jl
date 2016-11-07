@@ -15,7 +15,7 @@ Creates a vectorized version of the star logpdf as a function of
 unconstrained params.
     star_params = [lnr, lnc1, ..., lnc4, ra, dec]
 Args:
-  - images: Vector of TiledImage types (data for log_likelihood)
+  - images: Vector of Image types (data for log_likelihood)
   - active_pixels: Vector of ActivePixels on which the log_likelihood is based
   - S: --- from ElboArgs
   - N:
@@ -25,7 +25,7 @@ Returns:
   - star_logprior: star param log prior function handle that takes in same
                    flat, unconstrained array as parameter
 """
-function make_star_logpdf(images::Vector{TiledImage},
+function make_star_logpdf(images::Vector{Image},
                           active_pixels::Vector{ActivePixel},
                           S::Int64,
                           N::Int64,
@@ -34,9 +34,8 @@ function make_star_logpdf(images::Vector{TiledImage},
                           active_sources::Vector{Int},
                           psf_K::Int64,
                           num_allowed_sd::Float64)
-
     # define star prior log probability density function
-    prior    = construct_prior()
+    prior = construct_prior()
     subprior = prior.star
 
     function star_logprior(state::Vector{Float64})
@@ -59,6 +58,7 @@ function make_star_logpdf(images::Vector{TiledImage},
                                         S, N)
         return ll_like + ll_prior
     end
+
     return star_logpdf, star_logprior
 end
 
@@ -70,7 +70,7 @@ unconstrained params
 where the flux and position params are the same as the star case, and the
 shape params are unconstrained versions of (gdev, gaxis, gangle, gscale)
 Args:
-  - images: Vector of TiledImage types (data for log_likelihood)
+  - images: Vector of Image types (data for log_likelihood)
   - active_pixels: Vector of ActivePixels on which the log_likelihood is based
   - ea: ElboArgs book keeping argument
 Returns:
@@ -79,7 +79,7 @@ Returns:
   - gal_logprior: star param log prior function handle that takes in same
                  flat, unconstrained array as parameter
 """
-function make_galaxy_logpdf(images::Vector{TiledImage},
+function make_galaxy_logpdf(images::Vector{Image},
                             active_pixels::Vector{ActivePixel},
                             S::Int64,
                             N::Int64,
@@ -129,7 +129,7 @@ Args:
   - colors: array of colors
   - position: ra/dec of source
   - gal_shape: vector of galaxy shape params (used if is_star=false)
-  - images: vector of TiledImage types (data for likelihood)
+  - images: vector of Image types (data for likelihood)
   - active_pixels: vector of ActivePixels over which the ll is summed
   - ea: ElboArgs object that maintains params for all sources
 Returns:
@@ -142,7 +142,7 @@ function state_log_likelihood(is_star::Bool,                # source is star
                               colors::Vector{Float64},      # source vector of colors
                               position::Vector{Float64},    # source position
                               gal_shape::Vector{Float64},   # source gal shape
-                              images::Vector{TiledImage},   # list of images with source pixel data
+                              images::Vector{Image},   # list of images with source pixel data
                               active_pixels::Vector{ActivePixel}, # which pixels enter into the likelihood
                               patches::Matrix{SkyPatch},    # formerly of ElboArgs
                               active_sources::Vector{Int},  # formerly of ElboArgs
@@ -171,29 +171,39 @@ function state_log_likelihood(is_star::Bool,                # source is star
     source_params[1][lidx.e_scale] = gscale
     star_mcs_vec = Array(Array{BvnComponent{Float64}, 2}, N)
     gal_mcs_vec  = Array(Array{GalaxyCacheComponent{Float64}, 4}, N)
-    for b=1:N
-        star_mcs_vec[b], gal_mcs_vec[b] =
-            load_bvn_mixtures(S, patches, source_params, active_sources, psf_K, b,
+
+    for n=1:N
+        star_mcs_vec[n], gal_mcs_vec[n] = load_bvn_mixtures(S, patches, 
+                              source_params, active_sources, psf_K, n,
                               calculate_derivs=model_vars.calculate_derivs,
                               calculate_hessian=model_vars.calculate_hessian)
     end
 
     # iterate over the pixels, summing pixel-specific poisson rates
     ll = 0.
-    for pixel in active_pixels
-        tile         = images[pixel.n].tiles[pixel.tile_ind]
-        this_pixel   = tile.pixels[pixel.h, pixel.w]
-        pixel_band   = tile.b
+
+    radius_int = patches[s,n].radius_int
+    for w2 in 1:2radius_int, h2 in 1:radius_int
+        # (h2, w2) index the local patch, while (h, w) index the image
+        h = patches[s,n].center_int[1] - radius_int + h2
+        w = patches[s,n].center_int[2] - radius_int + w2
+
+        if !patches[s,n].active_pixel_bitmap[h,w]
+            continue
+        end
 
         # compute the unit-flux pixel values
-        populate_fsm_vecs!(model_vars, patches, active_sources,
-                           num_allowed_sd,
-                           tile,
-                           pixel.h, pixel.w,
-                           gal_mcs_vec[pixel.n], star_mcs_vec[pixel.n])
+        populate_fsm_vecs!(model_vars.bvn_derivs,
+                           model_vars.fs0m_vec,
+                           model_vars.fs1m_vec,
+                           model_vars.calculate_derivs,
+                           model_vars.calculate_hessian,
+                           patches, active_sources, num_allowed_sd,
+                           tile_sources,
+                           n, h, w, gal_mcs, star_mcs)
 
         # compute the background rate for this pixel
-        background_rate    = tile.epsilon_mat[pixel.h, pixel.w]
+        background_rate = img.epsilon_mat[h, w]
         for s in 2:S  # excludes source #1
             # determine if background source is star/gal; get fluxes
             params_s  = source_params[s]
@@ -202,19 +212,20 @@ function state_log_likelihood(is_star::Bool,                # source is star
             flux_s    = colors_to_fluxes(params_s[lidx.r[type_idx]],
                                          params_s[lidx.c[:,type_idx]])
             rate_s = s_is_star ? model_vars.fs0m_vec[s].v : model_vars.fs1m_vec[s].v
-            rate_s *= flux_s[pixel_band]
+            rate_s *= flux_s[img.b]
             background_rate += rate_s
         end
 
         # this source's rate, add to background for total
         this_rate  = is_star ? model_vars.fs0m_vec[1].v : model_vars.fs1m_vec[1].v
-        pixel_rate = fluxes[pixel_band]*this_rate + background_rate
+        pixel_rate = fluxes[img.b] * this_rate + background_rate
 
         # multiply by image's gain for this pixel
-        rate     = pixel_rate * tile.iota_vec[pixel.h]
-        pixel_ll = logpdf(Poisson(rate[1]), round(Int, this_pixel))
+        rate     = pixel_rate * img.iota_vec[h]
+        pixel_ll = logpdf(Poisson(rate[1]), round(Int, img.pixels[h, w]))
         ll += pixel_ll
     end
+
     return ll
 end
 

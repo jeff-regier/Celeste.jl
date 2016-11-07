@@ -3,8 +3,7 @@ module Model
 using StaticArrays
 
 # parameter types
-export Image, TiledImage, ImageTile,
-       SkyPatch, PsfComponent, ActivePixel,
+export Image, SkyPatch, PsfComponent,
        GalaxyComponent, GalaxyPrototype,
        PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,

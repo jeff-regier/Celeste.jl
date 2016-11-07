@@ -16,7 +16,6 @@ include("cyclades.jl")
 #set this to false to use source-division parallelism
 const SKY_DIVISION_PARALLELISM=true
 
-const TILE_WIDTH = 20
 const MIN_FLUX = 2.0
 
 # Use distributed parallelism (with Dtree)
@@ -275,7 +274,7 @@ end
 
 
 function load_images(rcfs, stagedir)
-    images = TiledImage[]
+    images = Image[]
     image_names = String[]
     image_count = 0
 
@@ -287,8 +286,7 @@ function load_images(rcfs, stagedir)
             image_count += 1
             push!(image_names,
                 "$image_count run=$(rcf.run) camcol=$(rcf.camcol) field=$(rcf.field) b=$b")
-            tiled_image = TiledImage(field_images[b])
-            push!(images, tiled_image)
+            push!(images, field_images[b])
         end
     end
     gc()

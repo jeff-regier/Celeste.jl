@@ -9,7 +9,7 @@ Args:
  - vp: (formerly from ElboArgs)
  - active_sources (formerly from ElboArgs)
  - psf_K: Number of psf components (psf from patches object)
- - b: The current band
+ - n: the image id (not the band)
  - calculate_derivs: Whether to calculate derivatives for active sources.
  - calculate_hessian
 
@@ -30,7 +30,7 @@ function load_bvn_mixtures{NumType <: Number}(
                     source_params::Vector{Vector{NumType}},
                     active_sources::Vector{Int},
                     psf_K::Int64,
-                    b::Int;
+                    n::Int;
                     calculate_derivs::Bool=true,
                     calculate_hessian::Bool=true)
     star_mcs = Array(BvnComponent{NumType}, psf_K, S)
@@ -39,13 +39,13 @@ function load_bvn_mixtures{NumType <: Number}(
     # TODO: do not keep any derviative information if the sources are not in
     # active_sources.
     for s in 1:S
-        psf = patches[s, b].psf
+        psf = patches[s, n].psf
         sp  = source_params[s]
 
         world_loc = sp[lidx.u]
-        m_pos = Model.linear_world_to_pix(patches[s, b].wcs_jacobian,
-                                          patches[s, b].center,
-                                          patches[s, b].pixel_center, world_loc)
+        m_pos = Model.linear_world_to_pix(patches[s, n].wcs_jacobian,
+                                          patches[s, n].center,
+                                          patches[s, n].pixel_center, world_loc)
 
         # Convolve the star locations with the PSF.
         for k in 1:psf_K
@@ -209,43 +209,25 @@ function populate_fsm_vecs!{NumType <: Number}(
                     patches::Matrix{SkyPatch},
                     active_sources::Vector{Int},
                     num_allowed_sd::Float64,
-                    tile_sources::Vector{Int},
-                    tile::ImageTile,
-                    h::Int, w::Int,
+                    n::Int, h::Int, w::Int,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
-    x = SVector{2,Float64}(tile.h_range[h], tile.w_range[w])
-    for s in tile_sources
-        # ensure tile.b is a filter band, not an image's index
-        @assert 1 <= tile.b <= B
-        is_active_source = s in active_sources
-        wcs_jacobian = patches[s, tile.b].wcs_jacobian
-        populate_fsm!(bvn_derivs, fs0m_vec[s], fs1m_vec[s],
-                      mv_calculate_derivs, mv_calculate_hessian,
-                      s, x, is_active_source, num_allowed_sd,
-                      wcs_jacobian, gal_mcs, star_mcs)
+    for s in 1:size(patches, 1)
+        p = patches[s,n]
+        h2 = h - p.center_int[1] - p.pixel_radius
+        w2 = w - p.center_int[2] - p.pixel_radius
+        if 1 >= h2 >= 2p.pixel_radius &&
+                1 >= w2 >= 2p.pixel_radius &&
+                p.active_pixel_bitmap[h2, w2]
+            populate_fsm!(bvn_derivs, fs0m_vec[s], fs1m_vec[s],
+                          mv_calculate_derivs, mv_calculate_hessian,
+                          s, SVector{2,Float64}(h, w),
+                          s in active_sources,
+                          num_allowed_sd,
+                          p.wcs_jacobian,
+                          gal_mcs, star_mcs)
+        end
     end
-end
-
-
-function populate_fsm_vecs!{NumType <: Number}(
-                    model_vars::ModelIntermediateVariables{NumType},
-                    patches::Matrix{SkyPatch},
-                    active_sources::Vector{Int},
-                    num_allowed_sd::Float64,
-                    tile_sources::Vector{Int},
-                    tile::ImageTile,
-                    h::Int, w::Int,
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    star_mcs::Array{BvnComponent{NumType}, 2})
-    Model.populate_fsm_vecs!(model_vars.bvn_derivs,
-                             model_vars.fs0m_vec,
-                             model_vars.fs1m_vec,
-                             model_vars.calculate_derivs,
-                             model_vars.calculate_hessian,
-                             patches, active_sources, num_allowed_sd,
-                             tile_sources,
-                             tile, h, w, gal_mcs, star_mcs)
 end
 
 

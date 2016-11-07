@@ -22,6 +22,10 @@ immutable SkyPatch
     psf::Vector{PsfComponent}
     wcs_jacobian::Matrix{Float64}
     pixel_center::Vector{Float64}
+
+    center_int::Vector{Int64}
+    radius_int::Int64
+    active_pixel_bitmap::Matrix{Bool}
 end
 
 
@@ -77,15 +81,12 @@ function choose_patch_radius(
             pixel_center::Vector{Float64},
             ce::CatalogEntry,
             psf::Array{PsfComponent},
-            img::TiledImage;
+            img::Image;
             width_scale=1.0,
             max_radius=100)
     psf_width = Model.get_psf_width(psf, width_scale=width_scale)
-
-    # Get the average sky noise around a source
-    close_tile = get_containing_tile(pixel_center, img)
-    epsilon = mean(close_tile.epsilon_mat)
-
+    epsilon = img.epsilon_mat[round(Int, pixel_center[1]),
+                              round(Int, pixel_center[2])]
     radius_req = choose_patch_radius(ce, img.b, psf_width, epsilon;
                                         width_scale=width_scale)
     min(radius_req, max_radius)
