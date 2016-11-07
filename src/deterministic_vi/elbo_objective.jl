@@ -259,7 +259,7 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
         elbo_vars.var_G_s,
         elbo_vars.fs0m_vec[s],
         elbo_vars.fs1m_vec[s],
-        sbs[s],
+        sb,
         b,
         s,
         s in ea.active_sources)
@@ -340,8 +340,9 @@ end
 function add_pixel_term!{NumType <: Number}(
                     ea::ElboArgs{NumType},
                     n::Int, h::Int, w::Int,
+                    star_mcs::Array{BvnComponent{NumType}, 2},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    star_mcs::Array{BvnComponent{NumType}, 2};
+                    sbs::Vector{SourceBrightness{NumType}};
                     calculate_derivs=true,
                     calculate_hessian=true)
     # This combines the bvn components to get the light density for each
@@ -354,21 +355,30 @@ function add_pixel_term!{NumType <: Number}(
                              ea.patches,
                              ea.active_sources,  #NO! Need local sources.
                              ea.num_allowed_sd,
-                             pixel_sources,
                              n, h, w,
                              gal_mcs, star_mcs)
+    elbo_vars = ea.elbo_vars
+    img = ea.images[n]
 
     # This combines the sources into a single brightness value for the pixel.
     clear!(elbo_vars.E_G,
         elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
     clear!(elbo_vars.var_G,
         elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
-    for s in pixel_sources
-        is_active_source = s in ea.active_sources
-        accumulate_source_pixel_brightness!(
-            elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
-            elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s],
-            sbs[s], ea.images[n].b, s, is_active_source)
+    for s in 1:size(ea.patches, 1)
+        p = ea.patches[s,n]
+        h2 = h - p.bitmap_corner[1]
+        w2 = w - p.bitmap_corner[2]
+        H2, W2 = size(p.active_pixel_bitmap)
+        if 1 <= h2 <= size(p.active_pixel_bitmap, 1) &&
+                   1 <= w2 < size(p.active_pixel_bitmap, 2) &&
+                   p.active_pixel_bitmap[h2, w2]
+            is_active_source = s in ea.active_sources
+            accumulate_source_pixel_brightness!(
+                elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
+                elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s],
+                sbs[s], ea.images[n].b, s, is_active_source)
+        end
     end
 
     # There are no derivatives with respect to epsilon, so can safely add
@@ -410,8 +420,8 @@ function elbo_likelihood{NumType <: Number}(
 
     # this call loops over light sources (but not images)
     sbs = load_source_brightnesses(ea,
-                calculate_derivs=elbo_vars.calculate_derivs,
-                calculate_hessian=elbo_vars.calculate_hessian)
+                calculate_derivs=ea.elbo_vars.calculate_derivs,
+                calculate_hessian=ea.elbo_vars.calculate_hessian)
 
     for n in 1:ea.N
         img = ea.images[n]
@@ -427,26 +437,29 @@ function elbo_likelihood{NumType <: Number}(
                                     calculate_hessian=calculate_hessian)
 
         # Otherwise we'd need to allocate memory to avoiding visiting the
-        # same pixel twice.
+        # same pixel twice. (I'll change this later.)
         @assert length(ea.active_sources) == 1
 
         # iterate over the pixels
-        radius_int = ea.patches[s,n].radius_int
-        for w2 in 1:2radius_int, h2 in 1:radius_int
+        p = ea.patches[ea.active_sources[1], n]
+        H2, W2 = size(p.active_pixel_bitmap)
+        for w2 in 1:W2, h2 in 1:H2
             # (h2, w2) index the local patch, while (h, w) index the image
-            h = patches[s,n].center_int[1] - radius_int + h2
-            w = patches[s,n].center_int[2] - radius_int + w2
+            h = p.bitmap_corner[1] + h2
+            w = p.bitmap_corner[2] + w2
 
-            if !patches[s,n].active_pixel_bitmap[h,w]
+            if !p.active_pixel_bitmap[h2, w2]
                 continue
             end
 
             # if we're here it's a unique active pixel
-            add_pixel_term!(ea, n, h, w, star_mcs, gal_mcs)
+            add_pixel_term!(ea, n, h, w, star_mcs, gal_mcs, sbs;
+                            calculate_derivs=ea.elbo_vars.calculate_derivs,
+                            calculate_hessian=ea.elbo_vars.calculate_hessian)
         end
     end
 
-    assert_all_finite(elbo_vars.elbo)
+    assert_all_finite(ea.elbo_vars.elbo)
     deepcopy(ea.elbo_vars.elbo)
 end
 

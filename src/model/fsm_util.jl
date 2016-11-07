@@ -214,11 +214,12 @@ function populate_fsm_vecs!{NumType <: Number}(
                     star_mcs::Array{BvnComponent{NumType}, 2})
     for s in 1:size(patches, 1)
         p = patches[s,n]
-        h2 = h - p.center_int[1] - p.pixel_radius
-        w2 = w - p.center_int[2] - p.pixel_radius
-        if 1 >= h2 >= 2p.pixel_radius &&
-                1 >= w2 >= 2p.pixel_radius &&
-                p.active_pixel_bitmap[h2, w2]
+        h2 = h - p.bitmap_corner[1]
+        w2 = w - p.bitmap_corner[2]
+        H2, W2 = size(p.active_pixel_bitmap)
+        if 1 <= h2 <= size(p.active_pixel_bitmap, 1) &&
+                   1 <= w2 < size(p.active_pixel_bitmap, 2) &&
+                   p.active_pixel_bitmap[h2, w2]
             populate_fsm!(bvn_derivs, fs0m_vec[s], fs1m_vec[s],
                           mv_calculate_derivs, mv_calculate_hessian,
                           s, SVector{2,Float64}(h, w),

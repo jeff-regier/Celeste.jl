@@ -65,8 +65,8 @@ function load_images(box, rcfs, stagedir)
         for n in n0:nend
             # first, load the field array
             rcf = rcfs[n]
-            images = SDSSIO.load_field_images(rcf, stagedir)
-            @assert(length(images) == 5)
+            images[n] = SDSSIO.load_field_images(rcf, stagedir)
+            @assert(length(images[n]) == 5)
    
             # second, load the `catalog_offset` and `task_count` arrays with
             # a number of sources for each field.

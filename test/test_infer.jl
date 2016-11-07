@@ -80,7 +80,7 @@ function test_load_active_pixels()
 end
 
 
-test_load_active_pixels()
-#test_infer_rcf()
 test_source_division_parallelism()
 test_infer_single()
+test_infer_rcf()
+test_load_active_pixels()

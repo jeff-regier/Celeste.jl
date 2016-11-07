@@ -200,8 +200,6 @@ type ElboArgs{NumType <: Number}
     # irrespective of their distance from the mean.
     num_allowed_sd::Float64
 
-    active_pixels::Vector{ActivePixel}
-
     elbo_vars::ElboIntermediateVariables
 end
 
@@ -236,6 +234,6 @@ function ElboArgs{NumType <: Number}(
                                 calculate_hessian=true)
 
     ElboArgs(S, N, psf_K, images, vp, patches,
-             active_sources, num_allowed_sd, ActivePixel[], elbo_vars)
+             active_sources, num_allowed_sd, elbo_vars)
 end
 

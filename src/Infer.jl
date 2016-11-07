@@ -1,18 +1,14 @@
 module Infer
 
 import WCS
+using StaticArrays
 
 using ..Model
 import ..PSF
 import ..Log
 
 using ..DeterministicVI
-import ..DeterministicVI: load_bvn_mixtures,
-                          load_source_brightnesses,
-                          get_expected_pixel_brightness!,
-                          elbo,
-                          maximize_f,
-                          clear!
+import ..DeterministicVI: elbo, maximize_f
 
 
 """
@@ -96,7 +92,6 @@ Arguments:
 function infer_source(images::Vector{Image},
                       neighbors::Vector{CatalogEntry},
                       entry::CatalogEntry)
-
     if length(neighbors) > 100
         Log.warn("Excessive number ($(length(neighbors))) of neighbors")
     end
@@ -105,7 +100,6 @@ function infer_source(images::Vector{Image},
     patches = get_sky_patches(images, cat_local)
     ea = ElboArgs(images, vp, patches, [1])
     load_active_pixels!(ea)
-    @assert length(ea.active_pixels) > 0
     f_evals, max_f, max_x, nm_result = maximize_f(elbo, ea)
     vp[1], max_f
 end
@@ -138,16 +132,20 @@ function get_sky_patches(images::Vector{Image},
 
             center_int = round(Int, pixel_center)
             radius_int = ceil(Int, radius_pix)
+            hmin = max(1, center_int[1] - radius_int)
+            hmax = min(img.H, center_int[1] + radius_int)
+            wmin = max(1, center_int[2] - radius_int)
+            wmax = min(img.W, center_int[2] + radius_int)
+
             # all pixels are active by default
-            active_pixel_bitmap = trues(radius_int, radius_int)
+            active_pixel_bitmap = trues(hmax - hmin, wmax - wmin)
 
             patches[s, n] = SkyPatch(world_center,
                                      radius_pix,
                                      img.psf,
                                      wcs_jacobian,
                                      pixel_center,
-                                     center_int,
-                                     radius_int,
+                                     SVector(hmin, wmin),
                                      active_pixel_bitmap)
         end
     end
@@ -168,27 +166,25 @@ function load_active_pixels!(ea::ElboArgs{Float64};
                             noise_fraction=0.2,
                             min_radius_pix=8.0)
     for n = 1:ea.N, s=1:ea.S
-        img = images[n]
-
-        radius_int = ea.patches[s,n].radius_int
-        center_int = ea.patches[s,n].center_int
-        active_bitmap = ea.patches[s,n].active_pixel_bitmap
+        img = ea.images[n]
+        p = ea.patches[s,n]
 
         # (h2, w2) index the local patch, while (h, w) index the image
-        for w2 in 1:2radius_int, h2 in 1:2radius_int
-            h = center_int[1] - radius_int + h2
-            w = center_int[2] - radius_int + w2
+        H2, W2 = size(p.active_pixel_bitmap)
+        for w2 in 1:W2, h2 in 1:H2
+            h = p.bitmap_corner[1] + h2
+            w = p.bitmap_corner[2] + w2
 
             # skip masked pixels
             if isnan(img.pixels[h, w])
-                active_bitmap[h, w] = false
+                p.active_pixel_bitmap[h2, w2] = false
                 continue
             end
 
             # include pixels that are close, even if they aren't bright
-            sq_dist = (h - pixel_center[1])^2 + (w - pixel_center[2])^2
+            sq_dist = (h - p.pixel_center[1])^2 + (w - p.pixel_center[2])^2
             if sq_dist < min_radius_pix^2
-                active_bitmap[h2, w2] = true
+                p.active_pixel_bitmap[h2, w2] = true
                 continue
             end
 
@@ -197,7 +193,7 @@ function load_active_pixels!(ea::ElboArgs{Float64};
             # fitting an elipse, so we don't include nearby sources' pixels,
             # or adjusting active pixels during the optimization)
             threshold = img.epsilon_mat[h, w] * (1. + noise_fraction)
-            active_bitmap[h2, w2] = img.pixel[h, w] > threshold
+            p.active_pixel_bitmap[h2, w2] = img.pixels[h, w] > threshold
         end
     end
 end

@@ -23,8 +23,7 @@ immutable SkyPatch
     wcs_jacobian::Matrix{Float64}
     pixel_center::Vector{Float64}
 
-    center_int::Vector{Int64}
-    radius_int::Int64
+    bitmap_corner::SVector{2, Int64}  # lower left corner index
     active_pixel_bitmap::Matrix{Bool}
 end
 

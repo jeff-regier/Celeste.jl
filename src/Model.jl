@@ -48,7 +48,6 @@ include("model/image_model.jl")
 include("model/param_set.jl")
 include("model/imaged_sources.jl")
 include("model/wcs_utils.jl")
-include("model/pixels.jl")
 
 import ..SensitiveFloats: SensitiveFloat
 include("bivariate_normals.jl")
