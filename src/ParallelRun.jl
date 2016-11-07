@@ -387,7 +387,12 @@ function one_node_infer(
     reserve_thread[] && thread_fun(reserve_thread)
 
     if joint_infer
-        return one_node_joint_infer(catalog, target_sources, neighbor_map, images, n_iters=joint_infer_n_iters, objid=objid)
+        return one_node_joint_infer(catalog,
+                                    target_sources,
+                                    neighbor_map,
+                                    images,
+                                    n_iters=joint_infer_n_iters,
+                                    objid=objid)
     end
     
     # iterate over sources
