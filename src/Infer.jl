@@ -38,15 +38,11 @@ function find_neighbors(target_sources::Vector{Int64},
     radii_map = zeros(length(catalog))
     for s in 1:length(catalog)
         ce = catalog[s]
-        for b in 1:B
-            radius_pix = Model.choose_patch_radius(ce,
-                                                   b,
-                                                   psf_width_ub[b],
-                                                   epsilon_lb[b],
-                                                   width_scale=1.2)
+        for img in images
+            radius_pix = Model.choose_patch_radius(ce, img, width_scale=1.2)
             radii_map[s] = max(radii_map[s], radius_pix)
         end
-        radii_map[s] = min(radii_map[s], 25) # hack: upper bound radius at 25 arc seconds
+        @assert radii_map[s] <= 25
     end
 
     # compute distance in pixels using small-distance approximation
@@ -124,8 +120,7 @@ function get_sky_patches(images::Vector{Image},
             world_center = catalog[s].pos
             pixel_center = WCS.world_to_pix(img.wcs, world_center)
             wcs_jacobian = Model.pixel_world_jacobian(img.wcs, pixel_center)
-            radius_pix = Model.choose_patch_radius(pixel_center, catalog[s],
-                                                   img.psf, img)
+            radius_pix = Model.choose_patch_radius(catalog[s], img, width_scale=1.2)
             if !isnan(radius_override_pix)
                 radius_pix = radius_override_pix
             end
@@ -137,8 +132,13 @@ function get_sky_patches(images::Vector{Image},
             wmin = max(1, center_int[2] - radius_int)
             wmax = min(img.W, center_int[2] + radius_int)
 
+            # some light sources are so far from some images that they don't
+            # overlap at all
+            H2 = max(0, hmax - hmin)
+            W2 = max(0, wmax - wmin)
+
             # all pixels are active by default
-            active_pixel_bitmap = trues(hmax - hmin, wmax - wmin)
+            active_pixel_bitmap = trues(H2, W2)
 
             patches[s, n] = SkyPatch(world_center,
                                      radius_pix,

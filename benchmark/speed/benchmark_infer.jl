@@ -36,7 +36,7 @@ function benchmark_infer()
         Profile.clear_malloc_data()
         # about half the run time is psf fitting, the other half is elbo evaluation
         @profile ParallelRun.one_node_infer(field_triplets, datadir; box=box)
-        Profile.print()#format=:flat, sortedby=:count)
+        Profile.print(format=:flat, sortedby=:count)
     end
 end
 

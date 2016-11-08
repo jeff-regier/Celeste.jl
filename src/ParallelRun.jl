@@ -418,7 +418,7 @@ function one_node_infer(
                     break
                 end
 
-                try
+#                try
                     s = target_sources[ts]
                     entry = catalog[s]
                     Log.info("processing source $s: objid = $(entry.objid)")
@@ -450,16 +450,20 @@ function one_node_infer(
                     rt1 = round(runtime, 1)
                     Log.info("objid $(entry.objid)$rcf_name took $rt1 seconds")
                     Log.info("========================")
-                catch ex
-                    Log.error(string(ex))
-                end
+#                catch ex
+#                    Log.error(string(ex))
+#                end
             end
         end
     end
 
     tic()
-    ccall(:jl_threading_run, Void, (Any,), Core.svec(process_sources))
-    ccall(:jl_threading_profile, Void, ())
+    if nthreads() == 1
+        process_sources()
+    else
+        ccall(:jl_threading_run, Void, (Any,), Core.svec(process_sources))
+        ccall(:jl_threading_profile, Void, ())
+    end
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
     

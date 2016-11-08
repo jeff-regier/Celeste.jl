@@ -212,18 +212,21 @@ function populate_fsm_vecs!{NumType <: Number}(
                     n::Int, h::Int, w::Int,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
-    for s in 1:size(patches, 1)
+    @inbounds for s in 1:size(patches, 1)
         p = patches[s,n]
+
         h2 = h - p.bitmap_corner[1]
         w2 = w - p.bitmap_corner[2]
+
         H2, W2 = size(p.active_pixel_bitmap)
-        if 1 <= h2 <= size(p.active_pixel_bitmap, 1) &&
-                   1 <= w2 < size(p.active_pixel_bitmap, 2) &&
-                   p.active_pixel_bitmap[h2, w2]
+
+        if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
+            hw = SVector{2,Float64}(h, w)
+            is_active_source = s in active_sources  # fast?
+
             populate_fsm!(bvn_derivs, fs0m_vec[s], fs1m_vec[s],
                           mv_calculate_derivs, mv_calculate_hessian,
-                          s, SVector{2,Float64}(h, w),
-                          s in active_sources,
+                          s, hw, is_active_source,
                           num_allowed_sd,
                           p.wcs_jacobian,
                           gal_mcs, star_mcs)

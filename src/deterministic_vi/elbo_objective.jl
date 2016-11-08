@@ -353,7 +353,7 @@ function add_pixel_term!{NumType <: Number}(
                              ea.elbo_vars.calculate_derivs,
                              ea.elbo_vars.calculate_hessian,
                              ea.patches,
-                             ea.active_sources,  #NO! Need local sources.
+                             ea.active_sources,
                              ea.num_allowed_sd,
                              n, h, w,
                              gal_mcs, star_mcs)
@@ -365,14 +365,15 @@ function add_pixel_term!{NumType <: Number}(
         elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
     clear!(elbo_vars.var_G,
         elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
+
     for s in 1:size(ea.patches, 1)
         p = ea.patches[s,n]
+
         h2 = h - p.bitmap_corner[1]
         w2 = w - p.bitmap_corner[2]
+
         H2, W2 = size(p.active_pixel_bitmap)
-        if 1 <= h2 <= size(p.active_pixel_bitmap, 1) &&
-                   1 <= w2 < size(p.active_pixel_bitmap, 2) &&
-                   p.active_pixel_bitmap[h2, w2]
+        if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
             is_active_source = s in ea.active_sources
             accumulate_source_pixel_brightness!(
                 elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
