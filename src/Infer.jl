@@ -91,11 +91,16 @@ function infer_source(images::Vector{Image},
     if length(neighbors) > 100
         Log.warn("Excessive number ($(length(neighbors))) of neighbors")
     end
+
+    # It's a bit inefficient to call the next 5 lines every time we optimize_f.
+    # But, as long as runtime is dominated by the call to maximize_f, that 
+    # isn't a big deal.
     cat_local = vcat(entry, neighbors)
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
     patches = get_sky_patches(images, cat_local)
     ea = ElboArgs(images, vp, patches, [1])
     load_active_pixels!(ea)
+
     f_evals, max_f, max_x, nm_result = maximize_f(elbo, ea)
     vp[1], max_f
 end
@@ -121,6 +126,7 @@ function get_sky_patches(images::Vector{Image},
             pixel_center = WCS.world_to_pix(img.wcs, world_center)
             wcs_jacobian = Model.pixel_world_jacobian(img.wcs, pixel_center)
             radius_pix = Model.choose_patch_radius(catalog[s], img, width_scale=1.2)
+            @assert radius_pix <= 25
             if !isnan(radius_override_pix)
                 radius_pix = radius_override_pix
             end
@@ -163,7 +169,7 @@ Arguments:
   min_radius_pix: A minimum pixel radius to be included.
 """
 function load_active_pixels!(ea::ElboArgs{Float64};
-                            noise_fraction=0.2,
+                            noise_fraction=0.5,
                             min_radius_pix=8.0)
     for n = 1:ea.N, s=1:ea.S
         img = ea.images[n]
@@ -192,7 +198,7 @@ function load_active_pixels!(ea::ElboArgs{Float64};
             # (in the future we may want to do something fancier, like
             # fitting an elipse, so we don't include nearby sources' pixels,
             # or adjusting active pixels during the optimization)
-            threshold = img.epsilon_mat[h, w] * (1. + noise_fraction)
+            threshold = img.iota_vec[h] * img.epsilon_mat[h, w] * (1. + noise_fraction)
             p.active_pixel_bitmap[h2, w2] = img.pixels[h, w] > threshold
         end
     end
