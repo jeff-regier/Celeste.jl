@@ -1,5 +1,3 @@
-#!/usr/bin/env julia
-
 module GalsimBenchmark
 
 using DataFrames
@@ -213,7 +211,7 @@ function infer_source(band_images::Vector{Model.TiledImage},
     variational_parameters
 end
 
-function main(; verbose=false)
+function main(; test_case_name=Nullable{String}(), verbose=false)
     all_benchmark_data = []
     psf = make_psf()
     extensions, wcs = read_fits(FILENAME)
@@ -222,6 +220,11 @@ function main(; verbose=false)
     for test_case_index in 1:div(length(extensions), 5)
         first_band_index = (test_case_index - 1) * 5 + 1
         header = extensions[first_band_index].header
+        this_test_case_name = header["CL_DESCR"]
+        if get(test_case_name, this_test_case_name) != this_test_case_name
+            continue
+        end
+        println("Running test case '$this_test_case_name'")
 
         band_pixels = [
             extensions[index].pixels for index in first_band_index:(first_band_index + 4)
