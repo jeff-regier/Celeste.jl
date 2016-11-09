@@ -5,7 +5,7 @@ synthetic star and galaxy imagery and uses these images to benchmark Celeste's a
 
 ## Fetching test images
 
-TODO: write a Makefile to fetch an uploaded FITS file from NERSC.
+Run `make`.
 
 ## Generating test images
 
@@ -32,3 +32,8 @@ on each extension includes all ground truth data.
 
 Once you have `output/galsim_test_images.fits`, use `julia run_galsim_benchmark.jl` to run Celeste
 on each test case and report inferred and ground truth values.
+
+## Defining new test images
+
+Take a look at the bottom of `test_case_definitions.py`. There are many simple examples and you can
+add a new (decorated) function to define a new test case.
