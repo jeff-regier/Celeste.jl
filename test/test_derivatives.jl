@@ -25,7 +25,7 @@ end
 
 
 function test_active_pixels()
-    blob, ea, bodies = gen_two_body_dataset()
+    images, ea, bodies = gen_two_body_dataset()
 
     # Choose four pixels only to keep the test fast.
     ea.active_pixels = Array(DeterministicVI.ActivePixel, 4)
@@ -58,7 +58,7 @@ end
 
 
 function test_add_log_term()
-    blob, ea, bodies = gen_two_body_dataset()
+    images, ea, bodies = gen_two_body_dataset()
 
     # Test this pixel
     h, w = (10, 10)
@@ -69,7 +69,7 @@ function test_add_log_term()
         tile = ea.images[b].tiles[1,1]
         tile_source_map = ea.tile_source_map[b][1,1]
 
-        iota = median(blob[b].iota_vec)
+        iota = median(images[b].iota_vec)
 
         function add_log_term_wrapper_fun{NumType <: Number}(
                 ea::ElboArgs{NumType}, calculate_derivs::Bool)
@@ -105,7 +105,7 @@ end
 
 
 function test_combine_pixel_sources()
-    blob, ea, bodies = gen_two_body_dataset()
+    images, ea, bodies = gen_two_body_dataset()
 
     S = length(ea.active_sources)
     P = length(CanonicalParams)
@@ -153,7 +153,7 @@ end
 
 
 function test_e_g_s_functions()
-    blob, ea, bodies = gen_two_body_dataset()
+    images, ea, bodies = gen_two_body_dataset()
 
     # S = length(ea.active_sources)
     P = length(CanonicalParams)
@@ -211,7 +211,7 @@ end
 
 function test_fs1m_derivatives()
     # TODO: test with a real and asymmetric wcs jacobian.
-    blob, ea, three_bodies = gen_three_body_dataset()
+    images, ea, three_bodies = gen_three_body_dataset()
     omitted_ids = Int[]
     kept_ids = setdiff(1:length(ids), omitted_ids)
 
@@ -293,7 +293,7 @@ end
 
 function test_fs0m_derivatives()
     # TODO: test with a real and asymmetric wcs jacobian.
-    blob, ea, three_bodies = gen_three_body_dataset()
+    images, ea, three_bodies = gen_three_body_dataset()
     omitted_ids = Int[]
     kept_ids = setdiff(1:length(ids), omitted_ids)
 
@@ -425,7 +425,7 @@ function test_galaxy_variable_transform()
 
     # TODO: test with a real and asymmetric wcs jacobian.
     # We only need this for a psf and jacobian.
-    blob, ea, three_bodies = gen_three_body_dataset()
+    images, ea, three_bodies = gen_three_body_dataset()
 
     # Pick a single source and band for testing.
     s = 1
@@ -518,7 +518,7 @@ function test_galaxy_cache_component()
 
     # TODO: test with a real and asymmetric wcs jacobian.
     # We only need this for a psf and jacobian.
-    blob, ea, three_bodies = gen_three_body_dataset()
+    images, ea, three_bodies = gen_three_body_dataset()
 
     # Pick a single source and band for testing.
     s = 1
@@ -656,7 +656,7 @@ end
 
 
 function test_brightness_hessian()
-    blob, ea, star_cat = gen_sample_star_dataset()
+    images, ea, star_cat = gen_sample_star_dataset()
     kept_ids = [ ids.r1; ids.r2; ids.c1[:]; ids.c2[:] ]
     omitted_ids = setdiff(1:length(ids), kept_ids)
     i = 1
@@ -1078,7 +1078,7 @@ end
 # Transforms
 
 function test_box_derivatives()
-	blob, ea, body = gen_three_body_dataset();
+	images, ea, body = gen_three_body_dataset();
 	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 
 	box_params = setdiff(fieldnames(ids), [:a, :k])
@@ -1113,7 +1113,7 @@ end
 
 
 function test_box_simplex_derivatives()
-	blob, ea, body = gen_three_body_dataset();
+	images, ea, body = gen_three_body_dataset();
 	for s = 1:ea.S
 		delta = 0.01 * s # Make the parameters different for each one
 		ea.vp[s][ids.a[:, 1]] = Float64[ 0.2 - delta, 0.8 + delta ]

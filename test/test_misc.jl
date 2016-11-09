@@ -5,14 +5,14 @@ import Celeste.SensitiveFloats.zero_sensitive_float_array
 
 
 function test_sky_noise_estimates()
-    blobs = Array(Vector{Image}, 2)
-    blobs[1], ea, three_bodies = gen_three_body_dataset()  # synthetic
-    blobs[2] = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")  # real
+    images_vec = Array(Vector{Image}, 2)
+    images_vec[1], ea, three_bodies = gen_three_body_dataset()  # synthetic
+    images_vec[2] = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")  # real
 
-    for blob in blobs
+    for images in images_vec
         for b in 1:5
-            sdss_sky_estimate = median(blob[b].epsilon_mat) * median(blob[b].iota_vec)
-            crude_estimate = median(blob[b].pixels)
+            sdss_sky_estimate = median(images[b].epsilon_mat) * median(images[b].iota_vec)
+            crude_estimate = median(images[b].pixels)
             @test_approx_eq_eps sdss_sky_estimate / crude_estimate 1. .3
         end
     end

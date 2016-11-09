@@ -42,6 +42,10 @@ function load_bvn_mixtures{NumType <: Number}(
         psf = patches[s, n].psf
         sp  = source_params[s]
 
+        # TODO: it's a lucky coincidence that lidx.u = ids.u.
+        # That's why this works when called from both log_prob.jl with `sp`
+        # and elbo_objective.jl with `vp`.
+        # We need a safer way to let both methods call this method.
         world_loc = sp[lidx.u]
         m_pos = Model.linear_world_to_pix(patches[s, n].wcs_jacobian,
                                           patches[s, n].center,

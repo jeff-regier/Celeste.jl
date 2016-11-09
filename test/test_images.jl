@@ -30,32 +30,32 @@ function get_source_psf(world_loc::Vector{Float64}, img::Image, psf_K::Int)
 end
 
 
-function test_blob()
+function test_images()
     # A lot of tests are in a single function to avoid having to reload
     # the full image multiple times.
-    blob = SDSSIO.load_field_images(rcf, datadir)
+    images = SDSSIO.load_field_images(rcf, datadir)
 
     dir = "$datadir/$(rcf.run)/$(rcf.camcol)/$(rcf.field)"
     fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir rcf.run rcf.camcol rcf.field
     cat_entries = SDSSIO.read_photoobj_celeste(fname)
 
-    ea = make_elbo_args(blob, cat_entries, patch_radius_pix=1e-6)
+    ea = make_elbo_args(images, cat_entries, patch_radius_pix=1e-6)
 
     # Just check some basic facts about the catalog.
     @test length(cat_entries) == 805
     @test 0 < sum([ce.is_star for ce in cat_entries]) < 805
 
     # Find an object near the middle of the image.
-    ctr = WCS.pix_to_world(blob[3].wcs, [blob[3].H / 2, blob[3].W / 2])
+    ctr = WCS.pix_to_world(images[3].wcs, [images[3].H / 2, images[3].W / 2])
     dist = [sqrt((ce.pos[1] - ctr[1])^2 + (ce.pos[2] - ctr[2])^2)
                     for ce in cat_entries]
     obj_index = findmin(dist)[2]    # index of closest object
     obj_loc = cat_entries[obj_index].pos    # location of closest object
 
-    # Test get_source_psf at point while we have the blob loaded.
+    # Test get_source_psf at point while we have the images loaded.
     test_b = 3
     img = ea.images[test_b]
-    ea_obj = make_elbo_args(blob, cat_entries[obj_index:obj_index])
+    ea_obj = make_elbo_args(images, cat_entries[obj_index:obj_index])
     pixel_loc = WCS.world_to_pix(img.wcs, obj_loc)
     original_psf_val = Model.eval_psf(img.raw_psf_comp, pixel_loc[1], pixel_loc[2])
 
@@ -108,31 +108,31 @@ function test_set_patch_size()
     end
 
     srand(1)
-    blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")
+    images0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")
     img_size = 150
     for b in 1:5
-            blob0[b].H, blob0[b].W = img_size, img_size
+            images0[b].H, images0[b].W = img_size, img_size
     end
     fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
 
-    world_location = WCS.pix_to_world(blob0[3].wcs,
+    world_location = WCS.pix_to_world(images0[3].wcs,
                                       Float64[img_size / 2, img_size / 2])
 
     for gal_scale in [1.0, 10.0], flux_scale in [0.1, 10.0]
         cat = gal_catalog_from_scale(gal_scale, flux_scale)
-        blob = Synthetic.gen_blob(blob0, cat)
-        ea = make_elbo_args(blob, cat)
+        images = Synthetic.gen_blob(images0, cat)
+        ea = make_elbo_args(images, cat)
 
-        for b=1:length(blob)
+        for b=1:length(images)
             @assert size(ea.images[b].tiles) == (1, 1)
             tile_image = DeterministicVI.tile_predicted_image(
                 ea.images[b].tiles[1,1], ea, ea.tile_source_map[b][1,1])
 
-            pixel_center = WCS.world_to_pix(blob[b].wcs, cat[1].pos)
+            pixel_center = WCS.world_to_pix(images[b].wcs, cat[1].pos)
             radius = Model.choose_patch_radius(
-                pixel_center, cat[1], blob[b].psf, ea.images[b])
+                pixel_center, cat[1], images[b].psf, ea.images[b])
 
-            circle_pts = fill(false, blob[b].H, blob[b].W)
+            circle_pts = fill(false, images[b].H, images[b].W)
             in_circle = 0.0
             for x=1:size(tile_image)[1], y=1:size(tile_image)[2]
                 if ((x - pixel_center[1]) ^ 2 + (y - pixel_center[2]) ^ 2) < radius ^ 2
@@ -141,17 +141,11 @@ function test_set_patch_size()
                 end
             end
             @test in_circle / sum(tile_image) > 0.95
-
-            # Convenient for visualizing:
-            # using PyPlot
-            # in_circle / sum(tile_image)
-            # imshow(tile_image); colorbar()
-            # imshow(circle_pts, alpha=0.4)
         end
     end
 end
 
 
-test_blob()
+test_images()
 #test_stamp_get_object_psf()
 #test_set_patch_size()
