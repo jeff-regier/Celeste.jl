@@ -7,7 +7,6 @@ import WCS
 
 import Celeste: Infer, Model, DeterministicVI
 
-const IOTA = 1000.
 const FILENAME = "output/galsim_test_images.fits"
 
 function make_psf()
@@ -101,23 +100,6 @@ function typical_reference_brightness(is_star::Bool)
     )
 end
 
-function make_catalog_entry()
-    Model.CatalogEntry(
-        [18., 18.], # pos
-        false, # is_star
-        # sample_star_fluxes
-        typical_band_relative_intensities(true) .* typical_reference_brightness(true),
-        # sample_galaxy_fluxes
-        typical_band_relative_intensities(false) .* typical_reference_brightness(false),
-        0.1, # gal_frac_dev
-        0.7, # gal_ab
-        pi / 4, # gal_angle
-        4., # gal_scale
-        "sample", # objid
-        0, # thing_id
-    )
-end
-
 # Since we're considering elliptical galaxy shapes, angle is only meaningful up to rotations of 180
 # deg. This finds an equivalent angle in [0, 180) deg.
 function canonical_angle(params)
@@ -155,22 +137,22 @@ end
 
 function benchmark_comparison_data(params, header)
     ids = Model.ids
-    star_galaxy_index = header["CL_STGAL"] == "star" ? 1 : 2
+    star_galaxy_index = header["CL_TYPE1"] == "star" ? 1 : 2
     DataFrame(
         label=fill(header["CL_DESCR"], length(BENCHMARK_PARAMETER_LABELS)),
         field=BENCHMARK_PARAMETER_LABELS,
         expected=Any[
-            get_field(header, "CL_CENTX"),
-            get_field(header, "CL_CENTY"),
-            get_field(header, "CL_RATIO"),
-            get_field(header, "CL_ANGLE"),
-            get_field(header, "CL_HLRAD"),
-            get_field(header, "CL_FLUX"),
-            get_field(header, "CL_COL12"),
-            get_field(header, "CL_COL23"),
-            get_field(header, "CL_COL34"),
-            get_field(header, "CL_COL45"),
-            header["CL_STGAL"] == "star" ? 0 : 1,
+            get_field(header, "CL_X1"),
+            get_field(header, "CL_Y1"),
+            get_field(header, "CL_RTIO1"),
+            get_field(header, "CL_ANGL1"),
+            get_field(header, "CL_RAD1"),
+            get_field(header, "CL_FLUX1"),
+            get_field(header, "CL_C12_1"),
+            get_field(header, "CL_C23_1"),
+            get_field(header, "CL_C34_1"),
+            get_field(header, "CL_C45_1"),
+            header["CL_TYPE1"] == "star" ? 0 : 1,
         ],
         actual=Float64[
             params[ids.u[1]],
@@ -189,24 +171,60 @@ function benchmark_comparison_data(params, header)
 end
 
 function assert_counts_match_expected_flux(band_pixels::Vector{Matrix{Float32}},
-                                           header::FITSIO.FITSHeader)
+                                           header::FITSIO.FITSHeader,
+                                           iota::Float64)
     if !header["CL_NOISE"]
-        expected_flux = (
-            (header["CL_FLUX"] + prod(size(band_pixels[3])) * header["CL_SKY"]) * iota
-        )
-        @assert abs(sum(band_pixels[3]) - expected_flux) / expected_flux < 1e-3
+        expected_flux_nmgy = prod(size(band_pixels[3])) * header["CL_SKY"]
+        for source_index in 1:header["CL_NSRC"]
+            expected_flux_nmgy += header[string("CL_FLUX", source_index)]
+        end
+        expected_flux_counts = expected_flux_nmgy * iota
+        @assert abs(sum(band_pixels[3]) - expected_flux_counts) / expected_flux_counts < 1e-3
     end
+end
+
+function make_catalog_entry(x_position_world_coords, y_position_world_coords)
+    Model.CatalogEntry(
+        [x_position_world_coords, y_position_world_coords],
+        false, # is_star
+        # sample_star_fluxes
+        typical_band_relative_intensities(true) .* typical_reference_brightness(true),
+        # sample_galaxy_fluxes
+        typical_band_relative_intensities(false) .* typical_reference_brightness(false),
+        0.1, # gal_frac_dev
+        0.7, # gal_ab
+        pi / 4, # gal_angle
+        4., # gal_scale
+        "sample", # objid
+        0, # thing_id
+    )
+end
+
+function make_catalog_entries(header::FITSIO.FITSHeader)
+    catalog_entries = Model.CatalogEntry[]
+    for index in 1:header["CL_NSRC"]
+        if num_sources == 1
+            initial_position = [18, 18]
+        else
+            initial_position = [
+                header[string("CL_X", source_index)],
+                header[string("CL_Y", source_index)],
+            ]
+        end
+        push!(catalog_entries, make_catalog_entry(initial_position[1], initial_position[2]))
+    end
+    catalog_entries
 end
 
 # this code is very close to Infer.infer_source() but avoids PSF fitting
 function infer_source(band_images::Vector{Model.TiledImage},
-                      catalog_entry::Model.CatalogEntry,
+                      catalog_entries::Vector{Model.CatalogEntry},
                       verbose::Bool)
-    vp = Vector{Float64}[Model.init_source(catalog_entry)]
-    patches, tile_source_map = Infer.get_tile_source_map(band_images, [catalog_entry])
+    vp = Vector{Float64}[Model.init_source(entry) for entry in catalog_entries]
+    patches, tile_source_map = Infer.get_tile_source_map(band_images, catalog_entries)
     elbo_args = DeterministicVI.ElboArgs(band_images, vp, tile_source_map, patches, [1])
     Infer.load_active_pixels!(elbo_args)
-    DeterministicVI.maximize_f(DeterministicVI.elbo, elbo_args, verbose=verbose, loc_width=3.0)
+    DeterministicVI.maximize_f(DeterministicVI.elbo, elbo_args, verbose=verbose, loc_width=9.0)
     variational_parameters::Vector{Float64} = vp[1]
     variational_parameters
 end
@@ -225,16 +243,16 @@ function main(; test_case_name=Nullable{String}(), verbose=false)
             continue
         end
         println("Running test case '$this_test_case_name'")
+        iota = header["CL_IOTA"]
 
         band_pixels = [
             extensions[index].pixels for index in first_band_index:(first_band_index + 4)
         ]
-        assert_counts_match_expected_flux(band_pixels, header)
-        band_images::Vector{Model.TiledImage} =
-            make_tiled_images(band_pixels, psf, wcs, header["CL_SKY"], header["CL_IOTA"])
-        catalog_entry::Model.CatalogEntry = make_catalog_entry()
+        assert_counts_match_expected_flux(band_pixels, header, iota)
+        band_images = make_tiled_images(band_pixels, psf, wcs, header["CL_SKY"], iota)
+        catalog_entries::Vector{Model.CatalogEntry} = make_catalog_entries(header)
 
-        variational_parameters = infer_source(band_images, catalog_entry, verbose)
+        variational_parameters = infer_source(band_images, catalog_entries, verbose)
 
         benchmark_data = benchmark_comparison_data(variational_parameters, header)
         println(repr(benchmark_data))

@@ -43,15 +43,15 @@ class CommonFields(object):
             image_center_in_world_coordinates + self.offset_from_center_world_coords[1],
         )
 
-    def add_header_fields(self, header, star_or_galaxy):
+    def add_header_fields(self, header, index_str, star_or_galaxy):
         position = self.position_world_coords()
-        header['CL_CENTX'] = (position[0], 'X center in world coordinates')
-        header['CL_CENTY'] = (position[1], 'Y center in world coordinates')
-        header['CL_FLUX'] = (
+        header['CL_X' + index_str] = (position[0], 'X center in world coordinates')
+        header['CL_Y' + index_str] = (position[1], 'Y center in world coordinates')
+        header['CL_FLUX' + index_str] = (
             self.reference_band_flux_nmgy,
             'reference (=3) band brightness (nMgy)',
         )
-        header['CL_STGAL'] = (star_or_galaxy, '"star" or "galaxy"?')
+        header['CL_TYPE' + index_str] = (star_or_galaxy, '"star" or "galaxy"?')
 
 # this essentially just serves a documentation purpose
 class LightSource(object):
@@ -84,12 +84,13 @@ class Star(LightSource):
                 .shift(offset[0], offset[1])
         )
 
-    def add_header_fields(self, header):
-        self._common_fields.add_header_fields(header, 'star')
+    def add_header_fields(self, header, index_str):
+        self._common_fields.add_header_fields(header, index_str, 'star')
 
 class Galaxy(LightSource):
     def __init__(self):
         self._common_fields = CommonFields()
+        self._common_fields.reference_band_flux_nmgy = 10
         self._angle_deg = 0
         self._minor_major_axis_ratio = 0.4
         self._half_light_radius_arcsec = 6
@@ -127,11 +128,11 @@ class Galaxy(LightSource):
         psf = galsim.Gaussian(flux=1, sigma=psf_sigma_arcsec())
         return galsim.Convolve([galaxy, psf])
 
-    def add_header_fields(self, header):
-        self._common_fields.add_header_fields(header, 'galaxy')
-        header['CL_ANGLE'] = (self._angle_deg, 'major axis angle (degrees from x-axis)')
-        header['CL_RATIO'] = (self._minor_major_axis_ratio, 'minor/major axis ratio')
-        header['CL_HLRAD'] = (self._half_light_radius_arcsec, 'half-light radius (arcsec)')
+    def add_header_fields(self, header, index_str):
+        self._common_fields.add_header_fields(header, index_str, 'galaxy')
+        header['CL_ANGL' + index_str] = (self._angle_deg, 'major axis angle (degrees from x-axis)')
+        header['CL_RTIO' + index_str] = (self._minor_major_axis_ratio, 'minor/major axis ratio')
+        header['CL_RAD' + index_str] = (self._half_light_radius_arcsec, 'half-light radius (arcsec)')
 
 # A complete description of a GalSim test image, along with logic to generate the image and the
 # "ground truth" header fields
@@ -163,12 +164,14 @@ class GalSimTestCase(object):
     def construct_image(self, band_index, uniform_deviate):
         image = galsim.ImageF(STAMP_SIZE_PX, STAMP_SIZE_PX, scale=ARCSEC_PER_PIXEL)
         for light_source in self._light_sources:
-            light_source.get_galsim_light_source(band_index).drawImage(image)
+            light_source.get_galsim_light_source(band_index).drawImage(image, add_to_image=True)
         self._add_sky_background(image)
         self._add_noise(image, uniform_deviate)
         return image
 
     def get_fits_header(self, case_index, band_index):
+        # FITS header fields will be too long if there's a two-digit index
+        assert len(self._light_sources) < 10
         header = {
             'CL_SKY': (self.sky_level_nmgy, '"epsilon" sky level (nMgy each px)'),
             'CL_NOISE': (self.include_noise, 'was Poisson noise added?'),
@@ -176,9 +179,10 @@ class GalSimTestCase(object):
             'CL_CASEI': (case_index + 1, 'test case index'),
             'CL_BAND': (band_index + 1, 'color band'),
             'CL_IOTA': (COUNTS_PER_NMGY, 'counts per nMgy'),
+            'CL_NSRC': (len(self._light_sources), 'number of sources'),
         }
-        for light_source in self._light_sources:
-            light_source.add_header_fields(header)
+        for source_index, light_source in enumerate(self._light_sources):
+            light_source.add_header_fields(header, str(source_index + 1))
         return header
 
 # just a trick to set the test case function name as the `GalSimTestCase.comment` field (for
@@ -266,6 +270,37 @@ def galaxy_with_low_background(test_case):
     test_case.sky_level_nmgy = 0.1
 
 @galsim_test_case
-def galaxy_with_low_background(test_case):
+def galaxy_with_high_background(test_case):
     galaxy_with_noise(test_case)
     test_case.sky_level_nmgy = 0.3
+
+@galsim_test_case
+def overlapping_stars(test_case):
+    test_case.add(Star().offset_world_coords(-3, 0))
+    test_case.add(Star().offset_world_coords(3, 0))
+
+@galsim_test_case
+def overlapping_galaxies(test_case):
+    test_case.add(Galaxy().offset_world_coords(-2, -2).angle_deg(135).minor_major_axis_ratio(0.2))
+    test_case.add(Galaxy().offset_world_coords(3, 3).angle_deg(35).minor_major_axis_ratio(0.5))
+
+@galsim_test_case
+def overlapping_star_and_galaxy(test_case):
+    test_case.add(Star().offset_world_coords(-5, 0))
+    test_case.add(Galaxy().offset_world_coords(2, 2).angle_deg(35).minor_major_axis_ratio(0.5))
+
+@galsim_test_case
+def three_sources_two_overlap(test_case):
+    test_case.add(Star().offset_world_coords(-5, 5))
+    test_case.add(
+        Galaxy().offset_world_coords(2, 5)
+            .angle_deg(35)
+            .minor_major_axis_ratio(0.2)
+            .half_light_radius_arcsec(3)
+    )
+    test_case.add(Star().offset_world_coords(10, -10))
+
+@galsim_test_case
+def three_sources_all_overlap(test_case):
+    overlapping_star_and_galaxy(test_case)
+    test_case.add(Star().offset_world_coords(8, -1))
