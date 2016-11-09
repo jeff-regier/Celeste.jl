@@ -48,7 +48,6 @@ function make_star_logpdf(images::Vector{Image},
         dummy_gal_shape = [.1, .1, .1, .1]
         ll_like  = state_log_likelihood(true, brightness, colors, position,
                                         dummy_gal_shape, images,
-                                        active_pixels,
                                         patches,
                                         active_sources,
                                         psf_K, num_allowed_sd,
@@ -105,7 +104,6 @@ function make_galaxy_logpdf(images::Vector{Image},
             state[1], state[2:5], state[6:7], state[8:end]
         ll_like  = state_log_likelihood(false, brightness, colors, position,
                                         constrain_gal_shape(gal_shape), images,
-                                        active_pixels,
                                         patches,
                                         active_sources, psf_K, num_allowed_sd,
                                         source_params,
@@ -163,15 +161,6 @@ function state_log_likelihood(is_star::Bool,                # source is star
     source_params[1][lidx.e_axis]  = gaxis
     source_params[1][lidx.e_angle] = gangle
     source_params[1][lidx.e_scale] = gscale
-    star_mcs_vec = Array(Array{BvnComponent{Float64}, 2}, N)
-    gal_mcs_vec  = Array(Array{GalaxyCacheComponent{Float64}, 4}, N)
-
-    for n=1:N
-        star_mcs_vec[n], gal_mcs_vec[n] = load_bvn_mixtures(S, patches, 
-                              source_params, active_sources, psf_K, n,
-                              calculate_derivs=model_vars.calculate_derivs,
-                              calculate_hessian=model_vars.calculate_hessian)
-    end
 
     # iterate over the pixels, summing pixel-specific poisson rates
     ll = 0.
@@ -179,10 +168,15 @@ function state_log_likelihood(is_star::Bool,                # source is star
     @assert length(active_sources) == 1
 
     for n in 1:N
-        p = patches[active_sources[1], n]
-        H2, W2 = size(p.active_pixel_bitmap)
         img = images[n]
 
+        star_mcs, gal_mcs = load_bvn_mixtures(S, patches, 
+                              source_params, active_sources, psf_K, n,
+                              calculate_derivs=model_vars.calculate_derivs,
+                              calculate_hessian=model_vars.calculate_hessian)
+
+        p = patches[active_sources[1], n]
+        H2, W2 = size(p.active_pixel_bitmap)
         for w2 in 1:W2, h2 in 1:H2
             # (h2, w2) index the local patch, while (h, w) index the image
             h = p.bitmap_corner[1] + h2
@@ -199,7 +193,6 @@ function state_log_likelihood(is_star::Bool,                # source is star
                                model_vars.calculate_derivs,
                                model_vars.calculate_hessian,
                                patches, active_sources, num_allowed_sd,
-                               tile_sources,
                                n, h, w, gal_mcs, star_mcs)
 
             # compute the background rate for this pixel

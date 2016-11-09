@@ -46,7 +46,7 @@ end
 #########################################################
 
 function test_star_optimization()
-    blob, ea, body = gen_sample_star_dataset();
+    images, ea, body = gen_sample_star_dataset();
 
     # Newton's method converges on a small galaxy unless we start with
     # a high star probability.
@@ -57,11 +57,10 @@ end
 
 
 function test_single_source_optimization()
-    blob, ea, three_bodies = gen_three_body_dataset();
+    images, ea, three_bodies = gen_three_body_dataset();
 
-    # Change the tile size.
     s = 2
-    ea = make_elbo_args(blob, three_bodies, tile_width=10, fit_psf=false, active_source=s);
+    ea = make_elbo_args(images, three_bodies, active_source=s);
     ea_original = deepcopy(ea);
 
     omitted_ids = Int[]
@@ -76,89 +75,30 @@ function test_single_source_optimization()
 end
 
 
-function test_two_body_optimization_newton()
-    # This test is currently too slow to be part of the ordinary
-    # test suite, and the block diagonal hessian does not work very well.
-    # For now, leave it in for future reference.
-
-    blob, ea, two_bodies, tiled_blob = SampleData.gen_two_body_dataset();
-
-    trans = get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
-    function lik_function(tiled_blob::Vector{TiledImage}, ea::ElboArgs)
-      DeterministicVI.elbo_likelihood(tiled_blob, ea)
-    end
-    omitted_ids = [ids_free.k[:]; ids_free.c2[:]; ids_free.r2]
-
-    function elbo_function(tiled_blob::Vector{TiledImage}, ea::ElboArgs)
-      DeterministicVI.elbo(tiled_blob, ea)
-    end
-    omitted_ids = Int[]
-
-    ea_newton = deepcopy(ea);
-    newton_iter_count = DeterministicVI.maximize_f_newton(
-      elbo_function, tiled_blob, ea_newton, trans,
-      omitted_ids=omitted_ids, verbose=true);
-
-    ea_bfgs = deepcopy(ea);
-    bfgs_iter_count = DeterministicVI.maximize_f(
-      elbo_function, tiled_blob, ea_bfgs, trans,
-      omitted_ids=omitted_ids, verbose=true);
-
-    newton_image =
-      DeterministicVI.tile_predicted_image(tiled_blob[3][1,1], ea_newton,
-                                     ea_newton.tile_source_map[3][1,1]);
-    bfgs_image =
-      DeterministicVI.tile_predicted_image(tiled_blob[3][1,1], ea_bfgs,
-                                     ea_bfgs.tile_source_map[3][1,1]);
-    original_image = tiled_blob[3][1,1].pixels;
-
-    PyPlot.figure()
-    PyPlot.subplot(1, 3, 1)
-    PyPlot.imshow(newton_image)
-    PyPlot.title("Newton")
-
-    PyPlot.subplot(1, 3, 2)
-    PyPlot.imshow(bfgs_image)
-    PyPlot.title("BFGS")
-
-    PyPlot.subplot(1, 3, 3)
-    PyPlot.imshow(original_image)
-    PyPlot.title("Original")
-
-    sum((newton_image .- original_image) .^ 2)
-    sum((bfgs_image .- original_image) .^ 2)
-
-    # newton beats bfgs on the elbo, though not on the likelihood.
-    elbo_function(tiled_blob, ea_bfgs).v[1]
-    elbo_function(tiled_blob, ea_newton).v[1]
-end
-
-
 function test_galaxy_optimization()
-    # NLOpt fails here so use newton.
-    blob, ea, body = gen_sample_galaxy_dataset();
+    images, ea, body = gen_sample_galaxy_dataset();
     DeterministicVI.maximize_f(DeterministicVI.elbo_likelihood, ea; loc_width=3.0)
     verify_sample_galaxy(ea.vp[1], [8.5, 9.6])
 end
 
 
 function test_full_elbo_optimization()
-    blob, ea, body = gen_sample_galaxy_dataset(perturb=true);
+    images, ea, body = gen_sample_galaxy_dataset(perturb=true);
     DeterministicVI.maximize_f(DeterministicVI.elbo, ea; loc_width=1.0, xtol_rel=0.0);
     verify_sample_galaxy(ea.vp[1], [8.5, 9.6]);
 end
 
 
 function test_real_stamp_optimization()
-    blob = SampleData.load_stamp_blob(datadir, "5.0073-0.0739_2kpsf");
-    cat_entries = SampleData.load_stamp_catalog(datadir, "s82-5.0073-0.0739_2kpsf", blob);
+    images = SampleData.load_stamp_blob(datadir, "5.0073-0.0739_2kpsf");
+    cat_entries = SampleData.load_stamp_catalog(datadir, "s82-5.0073-0.0739_2kpsf", images);
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries);
     inbounds(ce) = ce.pos[1] > -10. && ce.pos[2] > -10 &&
         ce.pos[1] < 61 && ce.pos[2] < 61
     cat_entries = filter(inbounds, cat_entries);
 
-    ea = make_elbo_args(blob, cat_entries);
+    ea = make_elbo_args(images, cat_entries);
     DeterministicVI.maximize_f(DeterministicVI.elbo, ea; loc_width=1.0, xtol_rel=0.0);
 end
 
@@ -206,5 +146,5 @@ test_quadratic_optimization()
 test_star_optimization()
 test_single_source_optimization()
 test_full_elbo_optimization()
-test_real_stamp_optimization()
+#test_real_stamp_optimization()
 test_galaxy_optimization()

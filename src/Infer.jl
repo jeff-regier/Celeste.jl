@@ -198,6 +198,9 @@ function load_active_pixels!(ea::ElboArgs{Float64};
             # (in the future we may want to do something fancier, like
             # fitting an elipse, so we don't include nearby sources' pixels,
             # or adjusting active pixels during the optimization)
+            # Note: This is risky because bright pixels are disproportionately likely
+            # to get included, even if it's because of noise. Therefore it's important
+            # to keep the noise fraction pretty low.
             threshold = img.iota_vec[h] * img.epsilon_mat[h, w] * (1. + noise_fraction)
             p.active_pixel_bitmap[h2, w2] = img.pixels[h, w] > threshold
         end
