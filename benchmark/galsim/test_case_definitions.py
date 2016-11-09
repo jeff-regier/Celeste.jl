@@ -6,7 +6,7 @@ TEST_CASE_FNS = []
 ARCSEC_PER_PIXEL = 0.75
 SHIFT_RADIUS_ARCSEC = ARCSEC_PER_PIXEL
 PSF_SIGMA_PIXELS = 4
-STAMP_SIZE_PX = 48
+STAMP_SIZE_PX = 96
 COUNTS_PER_NMGY = 1000.0 # a.k.a. "iota" in Celeste
 
 # intensity (flux) relative to third band (= "a" band = reference)
@@ -93,7 +93,7 @@ class Galaxy(LightSource):
         self._common_fields.reference_band_flux_nmgy = 10
         self._angle_deg = 0
         self._minor_major_axis_ratio = 0.4
-        self._half_light_radius_arcsec = 6
+        self._half_light_radius_arcsec = 3
 
     def offset_world_coords(self, x, y):
         self._common_fields.offset_from_center_world_coords = (x, y)
@@ -235,11 +235,11 @@ def angle_and_axis_ratio_2(test_case):
 
 @galsim_test_case
 def small_galaxy(test_case):
-    test_case.add(Galaxy().half_light_radius_arcsec(3))
+    test_case.add(Galaxy().half_light_radius_arcsec(1.5))
 
 @galsim_test_case
 def large_galaxy(test_case):
-    test_case.add(Galaxy().half_light_radius_arcsec(10))
+    test_case.add(Galaxy().half_light_radius_arcsec(5))
 
 @galsim_test_case
 def dim_galaxy(test_case):
@@ -255,7 +255,7 @@ def galaxy_with_all(test_case):
         Galaxy().offset_world_coords(0.3, -0.7)
             .angle_deg(15)
             .minor_major_axis_ratio(0.4)
-            .half_light_radius_arcsec(9)
+            .half_light_radius_arcsec(5)
             .reference_band_flux_nmgy(15)
     )
 

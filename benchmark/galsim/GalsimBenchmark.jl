@@ -204,7 +204,7 @@ function make_catalog_entries(header::FITSIO.FITSHeader)
     catalog_entries = Model.CatalogEntry[]
     for index in 1:header["CL_NSRC"]
         if num_sources == 1
-            initial_position = [18, 18]
+            initial_position = [36, 36]
         else
             initial_position = [
                 header[string("CL_X", source_index)],
