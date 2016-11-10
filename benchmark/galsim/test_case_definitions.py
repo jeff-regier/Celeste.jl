@@ -1,3 +1,5 @@
+import collections
+
 import galsim
 
 # populated by the `galsim_test_case` decorator
@@ -172,15 +174,15 @@ class GalSimTestCase(object):
     def get_fits_header(self, case_index, band_index):
         # FITS header fields will be too long if there's a two-digit index
         assert len(self._light_sources) < 10
-        header = {
-            'CL_SKY': (self.sky_level_nmgy, '"epsilon" sky level (nMgy each px)'),
-            'CL_NOISE': (self.include_noise, 'was Poisson noise added?'),
-            'CL_DESCR': (self.comment, 'comment'),
-            'CL_CASEI': (case_index + 1, 'test case index'),
-            'CL_BAND': (band_index + 1, 'color band'),
-            'CL_IOTA': (COUNTS_PER_NMGY, 'counts per nMgy'),
-            'CL_NSRC': (len(self._light_sources), 'number of sources'),
-        }
+        header = collections.OrderedDict([
+            ('CL_CASEI', (case_index + 1, 'test case index')),
+            ('CL_DESCR', (self.comment, 'comment')),
+            ('CL_IOTA', (COUNTS_PER_NMGY, 'counts per nMgy')),
+            ('CL_SKY', (self.sky_level_nmgy, '"epsilon" sky level (nMgy each px)')),
+            ('CL_NOISE', (self.include_noise, 'was Poisson noise added?')),
+            ('CL_BAND', (band_index + 1, 'color band')),
+            ('CL_NSRC', (len(self._light_sources), 'number of sources')),
+        ])
         for source_index, light_source in enumerate(self._light_sources):
             light_source.add_header_fields(header, str(source_index + 1))
         return header
