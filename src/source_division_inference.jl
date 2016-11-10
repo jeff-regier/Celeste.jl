@@ -42,8 +42,8 @@ function load_images(box, rcfs, stagedir)
     fields_per_thread = ceil(Int, num_fields / total_threads)
 
     #TODO: make `images` a global array
-    # (each cell of `images` contains B=5 tiled images)
-    images = Array(Vector{TiledImage}, num_fields)
+    # (each cell of `images` contains B=5 images)
+    images = Array(Vector{Image}, num_fields)
 
     #TODO: make `catalog_offset` a global array too.
     # It stores first index of each field's sources in the catalog array.
@@ -65,9 +65,8 @@ function load_images(box, rcfs, stagedir)
         for n in n0:nend
             # first, load the field array
             rcf = rcfs[n]
-            raw_images = SDSSIO.load_field_images(rcf, stagedir)
-            @assert(length(raw_images) == 5)
-            images[n] = [TiledImage(img) for img in raw_images]
+            images[n] = SDSSIO.load_field_images(rcf, stagedir)
+            @assert(length(images[n]) == 5)
    
             # second, load the `catalog_offset` and `task_count` arrays with
             # a number of sources for each field.
@@ -177,7 +176,7 @@ function optimize_sources(images, catalog, tasks,
             t_box = BoundingBox(entry.pos[1] - 1e-8, entry.pos[1] + 1e-8,
                                 entry.pos[2] - 1e-8, entry.pos[2] + 1e-8)
             surrounding_rcfs = get_overlapping_fields(t_box, stagedir)
-            local_images = Vector{TiledImage}[]
+            local_images = Vector{Image}[]
             local_catalog = CatalogEntry[];
 
             for rcf in surrounding_rcfs
@@ -192,7 +191,7 @@ function optimize_sources(images, catalog, tasks,
                 end
             end
 
-            flat_images = TiledImage[]
+            flat_images = Image[]
             for img5 in local_images, img in img5
                 push!(flat_images, img)
             end

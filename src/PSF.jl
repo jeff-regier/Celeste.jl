@@ -173,13 +173,13 @@ Get the PSF located at a particular world location in an image.
 
 Args:
  - world_loc: A location in world coordinates.
- - img: An TiledImage
+ - img: An Image
 
 Returns:
  - An array of PsfComponent objects that represents the PSF as a mixture
      of Gaussians.
 """
-function get_source_psf(world_loc::Vector{Float64}, img::TiledImage, psf_K::Int)
+function get_source_psf(world_loc::Vector{Float64}, img::Image, psf_K::Int)
     # Some stamps or simulated data have no raw psf information.    In that case,
     # just use the psf from the image.
     if size(img.raw_psf_comp.rrows) == (0, 0)
@@ -198,14 +198,14 @@ Get the PSF located at a particular world location in an image.
 
 Args:
  - world_loc: A location in world coordinates.
- - img: An TiledImage
+ - img: An Image
 
 Returns:
  - An array of PsfComponent objects that represents the PSF as a mixture
      of Gaussians.
 """
 function get_source_psf(world_loc::Vector{Float64},
-                        img::TiledImage,
+                        img::Image,
                         psf_optimizer::PSF.PsfOptimizer,
                         initial_psf_params::Vector{Vector{Float64}})
     # Some stamps or simulated data have no raw psf information. In that case,

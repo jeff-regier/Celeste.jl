@@ -1,26 +1,14 @@
-"""
-We'll delete this module soon, and move most of the these methods to the
-`Model` module: the log probability can't be determined without neighbors
-and without trimming.
-We can't make the move yet, because `PSF` depends on `Transform` still,
-and `Transform` depends on `Model` still.
-The `infer_source()` method probably belongs in `ParallelRun`, once this
-module is deleted.
-Currently `infer_source()` only does (deterministic) variational inference.
-In the future, `infer_source()` might take a call back function as an
-argument, to let it's user run either deterministic VI, stochastic VI,
-or MCMC.
-"""
 module Infer
 
 import WCS
+using StaticArrays
 
 using ..Model
 import ..PSF
 import ..Log
 
 using ..DeterministicVI
-import ..DeterministicVI.tile_predicted_image
+import ..DeterministicVI: elbo, maximize_f
 
 
 """
@@ -30,11 +18,11 @@ sources.
 Arguments:
     target_sources: indexes of astronomical objects in the catalog to infer
     catalog: astronomical objects appearing the images
-    images: tiled astronomical images
+    images: astronomical images
 """
 function find_neighbors(target_sources::Vector{Int64},
                         catalog::Vector{CatalogEntry},
-                        images::Vector{TiledImage})
+                        images::Vector{Image})
     psf_width_ub = zeros(B)
     for img in images
         psf_width = Model.get_psf_width(img.psf)
@@ -43,22 +31,18 @@ function find_neighbors(target_sources::Vector{Int64},
 
     epsilon_lb = fill(Inf, B)
     for img in images
-        Ht, Wt = size(img.tiles)
-        epsilon = mean(img.tiles[ceil(Int, Ht/2), ceil(Int, Wt/2)].epsilon_mat)
+        epsilon = mean(img.epsilon_mat)  # use just the center if this is slow
         epsilon_lb[img.b] = min(epsilon_lb[img.b], epsilon)
     end
 
     radii_map = zeros(length(catalog))
     for s in 1:length(catalog)
         ce = catalog[s]
-        for b in 1:B
-            radius_pix = Model.choose_patch_radius(ce, b,
-                                                   psf_width_ub[b],
-                                                   epsilon_lb[b],
-                                                   width_scale=1.2)
+        for img in images
+            radius_pix = Model.choose_patch_radius(ce, img, width_scale=1.2)
             radii_map[s] = max(radii_map[s], radius_pix)
         end
-        radii_map[s] = min(radii_map[s], 25) # hack: upper bound radius at 25 arc seconds
+        @assert radii_map[s] <= 25
     end
 
     # compute distance in pixels using small-distance approximation
@@ -91,99 +75,88 @@ end
 Infers one light source. This routine is intended to be called in parallel,
 once per target light source.
 
+Currently `infer_source()` only does (deterministic) variational inference.
+In the future, `infer_source()` might take a call back function as an
+argument, to let it's user run either deterministic VI, stochastic VI,
+or MCMC.
+
 Arguments:
-    images: a collection of (tiled) astronomical images
+    images: a collection of astronomical images
     neighbors: the other light sources near `entry`
     entry: the source to infer
 """
-function infer_source(images::Vector{TiledImage},
+function infer_source(images::Vector{Image},
                       neighbors::Vector{CatalogEntry},
                       entry::CatalogEntry)
+    if length(neighbors) > 100
+        Log.warn("Excessive number ($(length(neighbors))) of neighbors")
+    end
+
+    # It's a bit inefficient to call the next 5 lines every time we optimize_f.
+    # But, as long as runtime is dominated by the call to maximize_f, that 
+    # isn't a big deal.
     cat_local = vcat(entry, neighbors)
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
-    patches, tile_source_map = get_tile_source_map(images, cat_local)
-    ea = ElboArgs(images, vp, tile_source_map, patches, [1])
+    patches = get_sky_patches(images, cat_local)
+    ea = ElboArgs(images, vp, patches, [1])
     load_active_pixels!(ea)
-    @assert length(ea.active_pixels) > 0
-    f_evals, max_f, max_x, nm_result = DeterministicVI.maximize_f(DeterministicVI.elbo, ea)
+
+    f_evals, max_f, max_x, nm_result = maximize_f(elbo, ea)
     vp[1], max_f
 end
 
-
 """
-For tile of each image, compute a list of the indexes of the catalog entries
-that may be relevant to determining the likelihood of that tile.
+  noise_fraction: The proportion of the noise below which we will remove pixels.
+  min_radius_pix: A minimum pixel radius to be included.
 """
-function get_tile_source_map(images::Vector{TiledImage},
-                             catalog::Vector{CatalogEntry};
-                             radius_override_pix=NaN)
+function get_sky_patches(images::Vector{Image},
+                         catalog::Vector{CatalogEntry};
+                         radius_override_pix=NaN,
+                         noise_fraction=0.1,
+                         min_radius_pix=8.0)
     N = length(images)
     S = length(catalog)
     patches = Array(SkyPatch, S, N)
-    tile_source_map = Array(Matrix{Vector{Int}}, N)
 
-    for i = 1:N
-        img = images[i]
+    for n = 1:N
+        img = images[n]
 
         for s=1:S
             world_center = catalog[s].pos
             pixel_center = WCS.world_to_pix(img.wcs, world_center)
             wcs_jacobian = Model.pixel_world_jacobian(img.wcs, pixel_center)
-            radius_pix = Model.choose_patch_radius(pixel_center, catalog[s],
-                                                   img.psf, img)
+            radius_pix = Model.choose_patch_radius(catalog[s], img, width_scale=1.2)
+            @assert radius_pix <= 25
             if !isnan(radius_override_pix)
                 radius_pix = radius_override_pix
             end
 
-            patches[s, i] = SkyPatch(world_center,
+            center_int = round(Int, pixel_center)
+            radius_int = ceil(Int, radius_pix)
+            hmin = max(1, center_int[1] - radius_int)
+            hmax = min(img.H, center_int[1] + radius_int)
+            wmin = max(1, center_int[2] - radius_int)
+            wmax = min(img.W, center_int[2] + radius_int)
+
+            # some light sources are so far from some images that they don't
+            # overlap at all
+            H2 = max(0, hmax - hmin)
+            W2 = max(0, wmax - wmin)
+
+            # all pixels are active by default
+            active_pixel_bitmap = trues(H2, W2)
+
+            patches[s, n] = SkyPatch(world_center,
                                      radius_pix,
                                      img.psf,
                                      wcs_jacobian,
-                                     pixel_center)
-        end
-
-        # TODO: get rid of these puny methods
-        patch_centers = Model.patch_ctrs_pix(patches[:, i])
-        patch_radii = Model.patch_radii_pix(patches[:, i])
-
-        tile_source_map[i] = Model.get_sources_per_tile(images[i].tiles,
-                                               patch_centers, patch_radii)
-    end
-
-    patches, tile_source_map
-end
-
-"""
-Test if the there are any intersections between two vectors.
-"""
-function isintersection_sorted(x::AbstractVector, y::AbstractVector)
-    nx, ny = length(x), length(y)
-    if nx == 0 || ny == 0
-        return false
-    end
-    @inbounds begin
-        i = j = 1
-        xi, yj = x[1], y[1]
-        while true
-            if xi < yj
-                if i == nx
-                    return false
-                else
-                    i += 1
-                    xi = x[i]
-                end
-            elseif xi > yj
-                if j == ny
-                    return false
-                else
-                    j += 1
-                    yj = y[j]
-                end
-            else
-                return true
-            end
+                                     pixel_center,
+                                     SVector(hmin, wmin),
+                                     active_pixel_bitmap)
         end
     end
+
+    patches
 end
 
 
@@ -196,82 +169,40 @@ Arguments:
   min_radius_pix: A minimum pixel radius to be included.
 """
 function load_active_pixels!(ea::ElboArgs{Float64};
-                            noise_fraction=0.1,
+                            noise_fraction=0.5,
                             min_radius_pix=8.0)
-    ea.active_pixels = ActivePixel[]
+    for n = 1:ea.N, s=1:ea.S
+        img = ea.images[n]
+        p = ea.patches[s,n]
 
-    for n = 1:ea.N
-        tiles = ea.images[n].tiles
+        # (h2, w2) index the local patch, while (h, w) index the image
+        H2, W2 = size(p.active_pixel_bitmap)
+        for w2 in 1:W2, h2 in 1:H2
+            h = p.bitmap_corner[1] + h2
+            w = p.bitmap_corner[2] + w2
 
-        # TODO: just loop over the tiles/pixels near the active source(s)
-        for t in 1:length(tiles)
-            tile = tiles[t]
-
-            # we're checking up front whether this tile matters,
-            # *before* we allocate memory for local_active_sources
-            # and local_active_centers
-            ignore_tile = true
-            for s in ea.active_sources
-                # `intersect(ea.active_sources, tile_source_map)` allocates
-                # huge amounts of memory, so now we don't do that here
-                if s in ea.tile_source_map[n][t]
-                    ignore_tile = false
-                    break
-                end
-            end
-
-            if ignore_tile
+            # skip masked pixels
+            if isnan(img.pixels[h, w])
+                p.active_pixel_bitmap[h2, w2] = false
                 continue
             end
 
-            local_active_sources = Int64[]
-            local_centers = Vector{Float64}[]
-            for s in ea.active_sources
-                if s in ea.tile_source_map[n][t]
-                    push!(local_active_sources, s)
-
-                    patch = ea.patches[s, n]
-                    pix_loc = Model.linear_world_to_pix(patch.wcs_jacobian,
-                                                        patch.center,
-                                                        patch.pixel_center,
-                                                        ea.vp[s][ids.u])
-                    push!(local_centers, pix_loc)
-                end
+            # include pixels that are close, even if they aren't bright
+            sq_dist = (h - p.pixel_center[1])^2 + (w - p.pixel_center[2])^2
+            if sq_dist < min_radius_pix^2
+                p.active_pixel_bitmap[h2, w2] = true
+                continue
             end
 
-            # TODO; use log_prob.jl in the Model module to get the
-            # get the expected brightness, not variational inference
-            pred_tile_pixels = tile_predicted_image(tile,
-                                                    ea,
-                                                    local_active_sources,
-                                                    include_epsilon=false)
-
-            for h in tile.h_range, w in tile.w_range
-                # The pixel location in the rendered image.
-                h_im = h - minimum(tile.h_range) + 1
-                w_im = w - minimum(tile.w_range) + 1
-
-                # skip masked pixels
-                if isnan(tile.pixels[h_im, w_im])
-                    continue
-                end
-
-                # if this pixel is bright, let's include it
-                expected_sky = tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im]
-                if pred_tile_pixels[h_im, w_im] > expected_sky * noise_fraction
-                    push!(ea.active_pixels, ActivePixel(n, t, h_im, w_im))
-                    continue
-                end
-
-                # include pixels that are close, even if they aren't bright
-                for pix_loc in local_centers
-                    sq_dist = (h - pix_loc[1])^2 + (w - pix_loc[2])^2
-                    if sq_dist < min_radius_pix^2
-                        push!(ea.active_pixels, ActivePixel(n, t, h_im, w_im))
-                        break
-                    end
-                end
-            end
+            # if this pixel is bright, let's include it
+            # (in the future we may want to do something fancier, like
+            # fitting an elipse, so we don't include nearby sources' pixels,
+            # or adjusting active pixels during the optimization)
+            # Note: This is risky because bright pixels are disproportionately likely
+            # to get included, even if it's because of noise. Therefore it's important
+            # to keep the noise fraction pretty low.
+            threshold = img.iota_vec[h] * img.epsilon_mat[h, w] * (1. + noise_fraction)
+            p.active_pixel_bitmap[h2, w2] = img.pixels[h, w] > threshold
         end
     end
 end

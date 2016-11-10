@@ -7,6 +7,7 @@ import DeterministicVI: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 using DerivativeTestUtils
 using StaticArrays
 
+
 """
 This is the function of which get_bvn_derivs!() returns the derivatives.
 It is only used for testing.
@@ -25,14 +26,13 @@ end
 
 
 function test_active_pixels()
-    blob, ea, bodies = gen_two_body_dataset()
+    images, ea, bodies = gen_two_body_dataset()
 
     # Choose four pixels only to keep the test fast.
-    ea.active_pixels = Array(DeterministicVI.ActivePixel, 4)
-    ea.active_pixels[1] = DeterministicVI.ActivePixel(1, 1, 10, 11)
-    ea.active_pixels[2] = DeterministicVI.ActivePixel(1, 1, 11, 10)
-    ea.active_pixels[3] = DeterministicVI.ActivePixel(5, 1, 10, 11)
-    ea.active_pixels[4] = DeterministicVI.ActivePixel(5, 1, 11, 10)
+    ea.patches[1,1].active_pixel_bitmap[10, 11] = true
+    ea.patches[1,5].active_pixel_bitmap[11, 10] = true
+    ea.patches[2,1].active_pixel_bitmap[10, 11] = true
+    ea.patches[2,5].active_pixel_bitmap[11, 10] = true
 
     function tile_lik_wrapper_fun{NumType <: Number}(
             ea::ElboArgs{NumType}, calculate_derivs::Bool)
@@ -58,7 +58,7 @@ end
 
 
 function test_add_log_term()
-    blob, ea, bodies = gen_two_body_dataset()
+    images, ea, bodies = gen_two_body_dataset()
 
     # Test this pixel
     h, w = (10, 10)
@@ -66,26 +66,34 @@ function test_add_log_term()
     for b = 1:5
         println("Testing log term for band $b.")
         x_nbm = 70.
-        tile = ea.images[b].tiles[1,1]
-        tile_source_map = ea.tile_source_map[b][1,1]
 
-        iota = median(blob[b].iota_vec)
+        iota = median(images[b].iota_vec)
 
         function add_log_term_wrapper_fun{NumType <: Number}(
                 ea::ElboArgs{NumType}, calculate_derivs::Bool)
 
-            star_mcs, gal_mcs =
-                DeterministicVI.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs)
+            star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+                                        ea.vp, ea.active_sources,
+                                        ea.psf_K, n)
+
             sbs = DeterministicVI.SourceBrightness{NumType}[
                 DeterministicVI.SourceBrightness(ea.vp[s], calculate_derivs=calculate_derivs)
                 for s in 1:ea.S]
 
             elbo_vars_loc = DeterministicVI.ElboIntermediateVariables(NumType, ea.S, ea.S)
             elbo_vars_loc.calculate_derivs = calculate_derivs
-            DeterministicVI.populate_fsm_vecs!(
-                elbo_vars_loc, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
+            Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
+                                     ea.elbo_vars.fs0m_vec,
+                                     ea.elbo_vars.fs1m_vec,
+                                     ea.elbo_vars.calculate_derivs,
+                                     ea.elbo_vars.calculate_hessian,
+                                     ea.patches,
+                                     ea.active_sources,
+                                     ea.num_allowed_sd,
+                                     n, h, w,
+                                     gal_mcs, star_mcs)
             DeterministicVI.combine_pixel_sources!(
-                elbo_vars_loc, ea, tile_source_map, tile, sbs)
+                elbo_vars_loc, ea, sbs)
 
             DeterministicVI.add_elbo_log_term!(elbo_vars_loc, x_nbm, iota)
 
@@ -105,10 +113,11 @@ end
 
 
 function test_combine_pixel_sources()
-    blob, ea, bodies = gen_two_body_dataset()
+    images, ea, bodies = gen_two_body_dataset()
 
     S = length(ea.active_sources)
     P = length(CanonicalParams)
+    n = 1
     h = 10
     w = 10
 
@@ -116,24 +125,29 @@ function test_combine_pixel_sources()
         test_var_string = test_var ? "E_G" : "var_G"
         println("Testing $(test_var_string), band $b")
 
-        tile = ea.images[b].tiles[1,1]; # Note: only one tile in this simulated dataset.
-        tile_source_map = ea.tile_source_map[b][1,1]
-
         function e_g_wrapper_fun{NumType <: Number}(
-                ea::ElboArgs{NumType}; calculate_derivs=true)
-
-            star_mcs, gal_mcs =
-                DeterministicVI.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs)
+                    ea::ElboArgs{NumType}; calculate_derivs=true)
+            star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+                                        ea.vp, ea.active_sources,
+                                        ea.psf_K, n)
             sbs = DeterministicVI.SourceBrightness{NumType}[
-                DeterministicVI.SourceBrightness(ea.vp[s], calculate_derivs=calculate_derivs)
+                DeterministicVI.SourceBrightness(ea.vp[s])
                 for s in 1:ea.S]
 
             elbo_vars_loc = DeterministicVI.ElboIntermediateVariables(NumType, ea.S, ea.S)
             elbo_vars_loc.calculate_derivs = calculate_derivs
-            DeterministicVI.populate_fsm_vecs!(
-                elbo_vars_loc, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
+            Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
+                                     ea.elbo_vars.fs0m_vec,
+                                     ea.elbo_vars.fs1m_vec,
+                                     ea.elbo_vars.calculate_derivs,
+                                     ea.elbo_vars.calculate_hessian,
+                                     ea.patches,
+                                     ea.active_sources,
+                                     ea.num_allowed_sd,
+                                     n, h, w,
+                                     gal_mcs, star_mcs)
             DeterministicVI.combine_pixel_sources!(
-                elbo_vars_loc, ea, tile_source_map, tile, sbs)
+                elbo_vars_loc, ea, sbs)
             deepcopy(elbo_vars_loc)
         end
 
@@ -153,10 +167,11 @@ end
 
 
 function test_e_g_s_functions()
-    blob, ea, bodies = gen_two_body_dataset()
+    images, ea, bodies = gen_two_body_dataset()
 
     # S = length(ea.active_sources)
     P = length(CanonicalParams)
+    n = 1
     h = 10
     w = 10
     s = 1
@@ -165,14 +180,11 @@ function test_e_g_s_functions()
         test_var_string = test_var ? "E_G" : "var_G"
         println("Testing $(test_var_string), band $b")
 
-        tile = ea.images[b].tiles[1,1]; # Note: only one tile in this simulated dataset.
-        tile_source_map = ea.tile_source_map[b][1,1]
-
         function e_g_wrapper_fun{NumType <: Number}(
-                ea::ElboArgs{NumType}; calculate_derivs=true)
-
-            star_mcs, gal_mcs =
-                DeterministicVI.load_bvn_mixtures(ea, b, calculate_derivs=calculate_derivs)
+                    ea::ElboArgs{NumType}; calculate_derivs=true)
+            star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+                                        ea.vp, ea.active_sources,
+                                        ea.psf_K, n)
             sbs = DeterministicVI.SourceBrightness{NumType}[
                 DeterministicVI.SourceBrightness(ea.vp[s], calculate_derivs=calculate_derivs)
                 for s in 1:ea.S]
@@ -180,8 +192,16 @@ function test_e_g_s_functions()
             elbo_vars_loc = DeterministicVI.ElboIntermediateVariables(
                 NumType, ea.S, length(ea.active_sources))
             elbo_vars_loc.calculate_derivs = calculate_derivs
-            DeterministicVI.populate_fsm_vecs!(
-                elbo_vars_loc, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
+            Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
+                                     ea.elbo_vars.fs0m_vec,
+                                     ea.elbo_vars.fs1m_vec,
+                                     ea.elbo_vars.calculate_derivs,
+                                     ea.elbo_vars.calculate_hessian,
+                                     ea.patches,
+                                     ea.active_sources,
+                                     ea.num_allowed_sd,
+                                     n, h, w,
+                                     gal_mcs, star_mcs)
             DeterministicVI.calculate_source_pixel_brightness!(elbo_vars_loc, ea, sbs, s, b)
             deepcopy(elbo_vars_loc)
         end
@@ -211,7 +231,7 @@ end
 
 function test_fs1m_derivatives()
     # TODO: test with a real and asymmetric wcs jacobian.
-    blob, ea, three_bodies = gen_three_body_dataset()
+    images, ea, three_bodies = gen_three_body_dataset()
     omitted_ids = Int[]
     kept_ids = setdiff(1:length(ids), omitted_ids)
 
@@ -245,8 +265,9 @@ function test_fs1m_derivatives()
                     p0 = shape_standard_alignment[2][p1]
                     ea_fd.vp[s][p0] = par[p1]
             end
-            star_mcs, gal_mcs =
-                DeterministicVI.load_bvn_mixtures(ea_fd, b, calculate_derivs=false)
+            star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+                                        ea.vp, ea.active_sources,
+                                        ea.psf_K, n)
 
             # Raw:
             gcc = gal_mcs[gcc_ind...]
@@ -265,7 +286,11 @@ function test_fs1m_derivatives()
 
         par_gal = ea_to_par_gal(ea)
 
-        star_mcs, gal_mcs = DeterministicVI.load_bvn_mixtures(ea, b)
+        n = 1
+        star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+                                    ea.vp, ea.active_sources,
+                                    ea.psf_K, n)
+        elbo_vars = ea.elbo_vars
         clear!(elbo_vars.fs1m_vec[s])
         Model.accum_galaxy_pos!(elbo_vars.bvn_derivs,
                                 elbo_vars.fs1m_vec[s],
@@ -293,12 +318,13 @@ end
 
 function test_fs0m_derivatives()
     # TODO: test with a real and asymmetric wcs jacobian.
-    blob, ea, three_bodies = gen_three_body_dataset()
+    images, ea, three_bodies = gen_three_body_dataset()
     omitted_ids = Int[]
     kept_ids = setdiff(1:length(ids), omitted_ids)
 
     s = 1
     b = 1
+    n = 1
 
     patch = ea.patches[s, b]
     u = ea.vp[s][ids.u]
@@ -325,7 +351,9 @@ function test_fs0m_derivatives()
                     p0 = ids.u[p1]
                     ea_fd.vp[s][p0] = par[p1]
             end
-            star_mcs, gal_mcs = DeterministicVI.load_bvn_mixtures(ea_fd, b)
+            star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+                                        ea_fd.vp, ea.active_sources,
+                                        ea.psf_K, n)
             elbo_vars_fd = DeterministicVI.ElboIntermediateVariables(T, 1, 1)
             Model.accum_star_pos!(elbo_vars_fd.bvn_derivs,
                                   elbo_vars_fd.fs0m_vec[s],
@@ -348,7 +376,10 @@ function test_fs0m_derivatives()
         par_star = ea_to_par_star(ea)
 
         clear!(elbo_vars.fs0m_vec[s])
-        star_mcs, gal_mcs = DeterministicVI.load_bvn_mixtures(ea, b)
+        n = 1
+        star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+                                    ea.vp, ea.active_sources,
+                                    ea.psf_K, n)
         Model.accum_star_pos!(elbo_vars.bvn_derivs,
                               elbo_vars.fs0m_vec[s],
                               elbo_vars.calculate_derivs,
@@ -425,7 +456,7 @@ function test_galaxy_variable_transform()
 
     # TODO: test with a real and asymmetric wcs jacobian.
     # We only need this for a psf and jacobian.
-    blob, ea, three_bodies = gen_three_body_dataset()
+    images, ea, three_bodies = gen_three_body_dataset()
 
     # Pick a single source and band for testing.
     s = 1
@@ -518,7 +549,7 @@ function test_galaxy_cache_component()
 
     # TODO: test with a real and asymmetric wcs jacobian.
     # We only need this for a psf and jacobian.
-    blob, ea, three_bodies = gen_three_body_dataset()
+    images, ea, three_bodies = gen_three_body_dataset()
 
     # Pick a single source and band for testing.
     s = 1
@@ -656,7 +687,7 @@ end
 
 
 function test_brightness_hessian()
-    blob, ea, star_cat = gen_sample_star_dataset()
+    images, ea, star_cat = gen_sample_star_dataset()
     kept_ids = [ ids.r1; ids.r2; ids.c1[:]; ids.c2[:] ]
     omitted_ids = setdiff(1:length(ids), kept_ids)
     i = 1
@@ -1078,7 +1109,7 @@ end
 # Transforms
 
 function test_box_derivatives()
-	blob, ea, body = gen_three_body_dataset();
+	images, ea, body = gen_three_body_dataset();
 	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 
 	box_params = setdiff(fieldnames(ids), [:a, :k])
@@ -1113,7 +1144,7 @@ end
 
 
 function test_box_simplex_derivatives()
-	blob, ea, body = gen_three_body_dataset();
+	images, ea, body = gen_three_body_dataset();
 	for s = 1:ea.S
 		delta = 0.01 * s # Make the parameters different for each one
 		ea.vp[s][ids.a[:, 1]] = Float64[ 0.2 - delta, 0.8 + delta ]
@@ -1198,23 +1229,156 @@ function test_simplex_derivatives()
 end
 
 
+function test_elbo()
+    images, ea, body = gen_two_body_dataset()
+
+    # Choose four pixels only to keep the test fast.
+    ea.patches[1,1].active_pixel_bitmap[10, 11] = true
+    ea.patches[1,5].active_pixel_bitmap[11, 10] = true
+    ea.patches[2,1].active_pixel_bitmap[10, 11] = true
+    ea.patches[2,5].active_pixel_bitmap[11, 10] = true
+
+    # vp_vec is a vector of the parameters from all the active sources.
+    function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
+        ea_local = unwrap_vp_vector(vp_vec, ea)
+        elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false)
+        elbo.v[1]
+    end
+
+    ea.active_sources = [1]
+    vp_vec = wrap_vp_vector(ea, true)
+    elbo_1 = DeterministicVI.elbo(ea)
+    test_with_autodiff(wrap_elbo, vp_vec, elbo_1)
+    #test_elbo_mp(ea, elbo_1)
+
+    ea.active_sources = [2]
+    vp_vec = wrap_vp_vector(ea, true)
+    elbo_2 = DeterministicVI.elbo(ea)
+    test_with_autodiff(wrap_elbo, vp_vec, elbo_2)
+    #test_elbo_mp(ea, elbo_2)
+
+    ea.active_sources = [1, 2]
+    vp_vec = wrap_vp_vector(ea, true)
+    elbo_12 = DeterministicVI.elbo(ea)
+    test_with_autodiff(wrap_elbo, vp_vec, elbo_12)
+
+    P = length(CanonicalParams)
+    @test size(elbo_1.d) == size(elbo_2.d) == (P, 1)
+    @test size(elbo_12.d) == (length(CanonicalParams), 2)
+
+    @test size(elbo_1.h) == size(elbo_2.h) == (P, P)
+    @test size(elbo_12.h) == size(elbo_12.h) == (2 * P, 2 * P)
+end
+
+
+function test_real_image()
+    # TODO: replace this with stamp tests having non-trivial WCS transforms.
+    # TODO: streamline the creation of small real images.
+
+    run, camcol, field = (3900, 6, 269)
+
+    images = SDSSIO.load_field_images(RunCamcolField(run, camcol, field), datadir)
+    dir = joinpath(datadir, "$run/$camcol/$field")
+    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir run camcol field
+    catalog = SDSSIO.read_photoobj_celeste(fname)
+
+    # Pick an object.
+    objid = "1237662226208063499"
+    objids = [ce.objid for ce in catalog]
+    sa = findfirst(objids, objid)
+    neighbors = Infer.find_neighbors([sa], catalog, images)[1]
+
+    cat_local = vcat(catalog[sa], catalog[neighbors])
+    vp = Vector{Float64}[init_source(ce) for ce in cat_local]
+    patches = Infer.get_sky_patches(images, cat_local)
+    ea = ElboArgs(images, vp, patches, [1])
+
+    Infer.load_active_pixels!(ea)
+    @test sum(ea.patches[1,1].active_pixel_bitmap) > 0
+
+    elbo = DeterministicVI.elbo(ea)
+
+    function wrap_elbo{NumType <: Number}(vs1::Vector{NumType})
+        ea_local = forward_diff_model_params(NumType, ea)
+        ea_local.vp[1][:] = vs1
+        local_elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false)
+        local_elbo.v[1]
+    end
+
+    test_with_autodiff(wrap_elbo, ea.vp[1], elbo)
+end
+
+
+function test_transform_sensitive_float()
+	images, ea, body = gen_two_body_dataset();
+
+    # Choose four pixels only to keep the test fast.
+    ea.patches[1,1].active_pixel_bitmap[10, 11] = true
+    ea.patches[1,5].active_pixel_bitmap[11, 10] = true
+    ea.patches[2,1].active_pixel_bitmap[10, 11] = true
+    ea.patches[2,5].active_pixel_bitmap[11, 10] = true
+
+	function wrap_elbo{NumType <: Number}(vp_free_vec::Vector{NumType})
+		vp_free_array = reshape(vp_free_vec, length(UnconstrainedParams), length(ea.active_sources))
+		vp_free = Vector{NumType}[ zeros(NumType, length(UnconstrainedParams)) for
+		                           sa in ea.active_sources ];
+		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
+		ea_local = forward_diff_model_params(NumType, ea);
+		transform.to_vp!(vp_free, ea_local.vp)
+		elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false, calculate_hessian=false)
+		elbo.v[1]
+	end
+
+	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
+	elbo = DeterministicVI.elbo(ea);
+	elbo_trans = transform.transform_sensitive_float(elbo, ea.vp, ea.active_sources);
+
+	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
+	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
+	ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec);
+
+	@test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
+	@test_approx_eq ad_hess elbo_trans.h
+
+  # Test with a subset of sources.
+	ea.active_sources = [2]
+	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
+	elbo = DeterministicVI.elbo(ea);
+	elbo_trans = transform.transform_sensitive_float(elbo, ea.vp, ea.active_sources);
+
+	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
+	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
+	ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec);
+
+	@test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
+	@test_approx_eq ad_hess elbo_trans.h
+end
+
+
 ###################################
 # Run tests
+
+# ForwardDiff 0.2's compilation time is very slow, so only run these tests
+# if explicitly requested.
+if test_long_running
+    @time test_brightness_hessian()
+    @time test_transform_sensitive_float()
+    @time test_elbo()
+end
 
 # ELBO tests:
 println("Running ELBO derivative tests.")
 test_active_pixels()
-test_combine_pixel_sources()
+#test_combine_pixel_sources()
 test_fs1m_derivatives()
 test_fs0m_derivatives()
 test_bvn_derivatives()
 test_galaxy_variable_transform()
 test_galaxy_cache_component()
 test_galaxy_sigma_derivs()
-test_brightness_hessian()
 test_dsiginv_dsig()
-test_add_log_term()
-test_e_g_s_functions()
+#test_add_log_term()
+#test_e_g_s_functions()
 
 # KL tests:
 println("Running KL derivative tests.")
@@ -1233,3 +1397,7 @@ println("Running Transform derivative tests.")
 test_box_derivatives()
 test_box_simplex_derivatives()
 test_simplex_derivatives()
+
+# this test was slow before, but no longer
+test_real_image()
+

@@ -3,8 +3,7 @@ module Model
 using StaticArrays
 
 # parameter types
-export Image, TiledImage, ImageTile,
-       SkyPatch, PsfComponent, ActivePixel,
+export Image, SkyPatch, PsfComponent,
        GalaxyComponent, GalaxyPrototype,
        PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,
@@ -49,7 +48,6 @@ include("model/image_model.jl")
 include("model/param_set.jl")
 include("model/imaged_sources.jl")
 include("model/wcs_utils.jl")
-include("model/pixels.jl")
 
 import ..SensitiveFloats: SensitiveFloat
 include("bivariate_normals.jl")

@@ -16,7 +16,6 @@ include("cyclades.jl")
 #set this to false to use source-division parallelism
 const SKY_DIVISION_PARALLELISM=true
 
-const TILE_WIDTH = 20
 const MIN_FLUX = 2.0
 
 # Use distributed parallelism (with Dtree)
@@ -275,7 +274,7 @@ end
 
 
 function load_images(rcfs, stagedir)
-    images = TiledImage[]
+    images = Image[]
     image_names = String[]
     image_count = 0
 
@@ -287,8 +286,7 @@ function load_images(rcfs, stagedir)
             image_count += 1
             push!(image_names,
                 "$image_count run=$(rcf.run) camcol=$(rcf.camcol) field=$(rcf.field) b=$b")
-            tiled_image = TiledImage(field_images[b])
-            push!(images, tiled_image)
+            push!(images, field_images[b])
         end
     end
     gc()
@@ -420,7 +418,7 @@ function one_node_infer(
                     break
                 end
 
-                try
+#                try
                     s = target_sources[ts]
                     entry = catalog[s]
                     Log.info("processing source $s: objid = $(entry.objid)")
@@ -452,16 +450,20 @@ function one_node_infer(
                     rt1 = round(runtime, 1)
                     Log.info("objid $(entry.objid)$rcf_name took $rt1 seconds")
                     Log.info("========================")
-                catch ex
-                    Log.error(string(ex))
-                end
+#                catch ex
+#                    Log.error(string(ex))
+#                end
             end
         end
     end
 
     tic()
-    ccall(:jl_threading_run, Void, (Any,), Core.svec(process_sources))
-    ccall(:jl_threading_profile, Void, ())
+    if nthreads() == 1
+        process_sources()
+    else
+        ccall(:jl_threading_run, Void, (Any,), Core.svec(process_sources))
+        ccall(:jl_threading_profile, Void, ())
+    end
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
     

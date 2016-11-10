@@ -64,7 +64,6 @@ end
 
 if test_long_running
     warn("Testing ELBO derivatives, which may be slow.")
-    push!(testfiles, "test_slow_derivatives.jl")
 else
     warn("Skipping long running tests.  ",
          "To test everything, run tests with the flag ", long_running_flag)

@@ -27,7 +27,6 @@ end
 """
 Computes connected components given a conflict graph, and the range of sources
 to process. Writes to the components argument.
-TODO max - refactor into different file.
 
 - source_start - start source
 - end_source - end source (inclusively processed)
@@ -81,7 +80,6 @@ end
 
 """
 Partitions sources via the cyclades algorithm.
-TODO max - refactor into different source file (E.G: Cyclades.jl)
 
 - nprocthreads - number of threads to which to distribute sources
 - target_sources - array of target sources. Elements should match keys of neighbor_map.
@@ -167,7 +165,6 @@ end
 
 """
 Partitions sources across threads equally.
-TODO max - refactor into different source file (E.G: Cyclades.jl)
 
 - nprocthreads - number of threads to which to distribute processing the sources.
 - n_sources - the number of total sources to process.
@@ -205,7 +202,6 @@ end
 """
 Like one_node_infer, uses multiple threads on one node to fit the Celeste
 model over numerous iterations.
-TODO max - refactor into different source file (E.G: Cyclades.jl)? Maybe also rename?
 
 catalog - the catalog of light sources
 target_sources - light sources to optimize
@@ -261,11 +257,12 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             ids_local = vcat(entry_id, neighbor_ids)
 
             #vp = Vector{Float64}[init_source(ce) for ce in cat_local]
-            vp = Vector{Float64}[haskey(target_source_variational_params, x) ? target_source_variational_params[x] : init_source(catalog[x]) for x in ids_local]
-            patches, tile_source_map = Infer.get_tile_source_map(images, cat_local)
-            ea = ElboArgs(images, vp, tile_source_map, patches, [1])
+            vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
+                        target_source_variational_params[x] :
+                        init_source(catalog[x]) for x in ids_local]
+            patches = Infer.get_sky_patches(images, cat_local)
+            ea = ElboArgs(images, vp, patches, [1])
             Infer.load_active_pixels!(ea)
-            @assert length(ea.active_pixels) > 0
             model[cur_source_index] = ea
         end
     end
@@ -289,11 +286,13 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     function process_sources(source_assignment::Vector{Int64})
         for cur_source_indx in source_assignment
             cur_entry = catalog[target_sources[cur_source_indx]]
-            iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(DeterministicVI.elbo, model[cur_source_indx], max_iters=10)
+            iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
+                                                    DeterministicVI.elbo,
+                                                    model[cur_source_indx],
+                                                    max_iters=10)
             obj_values[cur_source_indx] = obj_value
         end
     end
-
 
     # Process sources in parallel using nprocthreads.
     tic()
