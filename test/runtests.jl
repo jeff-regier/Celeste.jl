@@ -25,17 +25,6 @@ wd = pwd()
 cd(datadir)
 run(`make`)
 run(`make RUN=4263 CAMCOL=5 FIELD=119`)
-
-# these rcfs are all the rcfs that overlap with (3900,6,269)
-run(`make RUN=3900 CAMCOL=6 FIELD=268`)
-run(`make RUN=3900 CAMCOL=6 FIELD=269`)
-run(`make RUN=3900 CAMCOL=6 FIELD=270`)
-run(`make RUN=4469 CAMCOL=5 FIELD=342`)
-run(`make RUN=4469 CAMCOL=5 FIELD=343`)
-run(`make RUN=4469 CAMCOL=6 FIELD=342`)
-run(`make RUN=4469 CAMCOL=6 FIELD=343`)
-run(`make RUN=4469 CAMCOL=6 FIELD=344`)
-
 cd(wd)
 
 # Check whether to run time-consuming derivatives tests.
