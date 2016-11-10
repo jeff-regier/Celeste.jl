@@ -437,26 +437,42 @@ function elbo_likelihood{NumType <: Number}(
                                     calculate_derivs=calculate_derivs,
                                     calculate_hessian=calculate_hessian)
 
-        # Otherwise we'd need to allocate memory to avoiding visiting the
-        # same pixel twice. (I'll change this later.)
-        @assert length(ea.active_sources) == 1
+        # if there's only one active source, we know each pixel we visit
+        # hasn't been visited before, so no need to allocate memory.
+        # currently length(ea.active_sources) > 1 only in unit tests, never
+        # when invoked from `bin`.
+        already_visited = length(ea.active_sources) == 1 ?
+                              falses(0, 0) :
+                              falses(size(img.pixels))
 
-        # iterate over the pixels
-        p = ea.patches[ea.active_sources[1], n]
-        H2, W2 = size(p.active_pixel_bitmap)
-        for w2 in 1:W2, h2 in 1:H2
-            # (h2, w2) index the local patch, while (h, w) index the image
-            h = p.bitmap_corner[1] + h2
-            w = p.bitmap_corner[2] + w2
+        # iterate over the pixels by iterating over the patches, and visiting
+        # all the pixels in the patch that are active and haven't already been
+        # visited
+        for s in ea.active_sources
+            p = ea.patches[s, n]
+            H2, W2 = size(p.active_pixel_bitmap)
+            for w2 in 1:W2, h2 in 1:H2
+                # (h2, w2) index the local patch, while (h, w) index the image
+                h = p.bitmap_corner[1] + h2
+                w = p.bitmap_corner[2] + w2
 
-            if !p.active_pixel_bitmap[h2, w2]
-                continue
+                if !p.active_pixel_bitmap[h2, w2]
+                    continue
+                end
+
+                # if there's only one active source, we know this pixel is new
+                if length(ea.active_sources) != 1
+                    if already_visited[h,w]
+                        continue
+                    end
+                    already_visited[h,w] = true
+                end
+
+                # if we're here it's a unique active pixel
+                add_pixel_term!(ea, n, h, w, star_mcs, gal_mcs, sbs;
+                                calculate_derivs=ea.elbo_vars.calculate_derivs,
+                                calculate_hessian=ea.elbo_vars.calculate_hessian)
             end
-
-            # if we're here it's a unique active pixel
-            add_pixel_term!(ea, n, h, w, star_mcs, gal_mcs, sbs;
-                            calculate_derivs=ea.elbo_vars.calculate_derivs,
-                            calculate_hessian=ea.elbo_vars.calculate_hessian)
         end
     end
 

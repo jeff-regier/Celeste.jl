@@ -57,16 +57,16 @@ function test_active_sources()
     # Test that the derivatives of the expected brightnesses partition in
     # active_sources.
 
-    images, ea, body = gen_two_body_dataset()
+    images, ea, bodies = gen_two_body_dataset()
 
-    ea.active_sources = [1, 2]
-    elbo_lik_12 = DeterministicVI.elbo_likelihood(ea)
+    ea12 = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2])
+    elbo_lik_12 = DeterministicVI.elbo_likelihood(ea12)
 
-    ea.active_sources = [1]
-    elbo_lik_1 = DeterministicVI.elbo_likelihood(ea)
+    ea1 = ElboArgs(ea.images, ea.vp, ea.patches, [1,])
+    elbo_lik_1 = DeterministicVI.elbo_likelihood(ea1)
 
-    ea.active_sources = [2]
-    elbo_lik_2 = DeterministicVI.elbo_likelihood(ea)
+    ea2 = ElboArgs(ea.images, ea.vp, ea.patches, [2,])
+    elbo_lik_2 = DeterministicVI.elbo_likelihood(ea2)
 
     @test_approx_eq elbo_lik_12.v[1] elbo_lik_1.v
     @test_approx_eq elbo_lik_12.v[1] elbo_lik_2.v
@@ -83,6 +83,7 @@ end
 function test_that_variance_is_low()
     # very peaked variational distribution---variance for F(m) should be low
     images, ea, body = true_star_init()
+    n = 1
 
     star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
                                 ea.vp, ea.active_sources,
@@ -343,13 +344,13 @@ function test_populate_fsm!()
 end
 
 
+test_active_sources()
 test_set_hess()
 test_bvn_cov()
-#test_derivative_flags()
-#test_active_sources()
-#test_num_allowed_sd()
+test_derivative_flags()
+test_num_allowed_sd()
 #test_that_variance_is_low()
 test_that_star_truth_is_most_likely()
 test_that_galaxy_truth_is_most_likely()
-#test_coadd_cat_init_is_most_likely()
+test_coadd_cat_init_is_most_likely()
 test_populate_fsm!()
