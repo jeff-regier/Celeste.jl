@@ -86,7 +86,7 @@ function test_galaxy_mcmc()
     blob, ea, body = SampleData.gen_sample_galaxy_dataset();
 
     # run single source slice sampler on synthetic dataset
-    gal_chain = MCMC.run_single_galaxy_mcmc(200,  # num_samples,
+    gal_chain = MCMC.run_single_galaxy_mcmc(500,  # num_samples,
                                             body, # sources
                                             ea.images,
                                             ea.active_pixels, ea.S, ea.N,
@@ -104,12 +104,18 @@ function test_galaxy_mcmc()
 
     # check to make sure posterior percentiles cover truth
     gal_param_names = MCMC.galaxy_param_names
+    los = Array(Float64, length(true_gal_state))
+    his = Array(Float64, length(true_gal_state))
     for i in 1:length(true_gal_state)
         ths = gal_chain.value[:,i,1]
-        lo, hi = percentile(ths, 1), percentile(ths, 99)
+        los[i], his[i] = percentile(ths, .01), percentile(ths, 99.9)
         @printf "   %s (true_val %2.4f) = %2.4f  [%2.4f,  %2.4f] \n" gal_param_names[i] true_gal_state[i] mean(ths) lo hi
-        @test (true_gal_state[i] < hi) & (true_gal_state[i] > lo)
     end
+
+    for i in 1:length(true_gal_state)
+        @test (true_gal_state[i] < his[i]) & (true_gal_state[i] > los[i])
+    end
+
 end
 
 
