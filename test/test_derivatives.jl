@@ -1362,8 +1362,8 @@ end
 # if explicitly requested.
 if test_long_running
     @time test_brightness_hessian()
-    @time test_transform_sensitive_float()
-    @time test_elbo()
+#    @time test_transform_sensitive_float()
+#    @time test_elbo()
 end
 
 # ELBO tests:

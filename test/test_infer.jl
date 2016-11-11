@@ -16,6 +16,21 @@ end
 
 
 function test_infer_rcf()
+    wd = pwd()
+    cd(datadir)
+ 
+    # these rcfs are all the rcfs that overlap with (3900,6,269)
+    run(`make RUN=3900 CAMCOL=6 FIELD=268`)
+    run(`make RUN=3900 CAMCOL=6 FIELD=269`)
+    run(`make RUN=3900 CAMCOL=6 FIELD=270`)
+    run(`make RUN=4469 CAMCOL=5 FIELD=342`)
+    run(`make RUN=4469 CAMCOL=5 FIELD=343`)
+    run(`make RUN=4469 CAMCOL=6 FIELD=342`)
+    run(`make RUN=4469 CAMCOL=6 FIELD=343`)
+    run(`make RUN=4469 CAMCOL=6 FIELD=344`)
+
+    cd(wd)
+
     resfile = joinpath(datadir, "celeste-003900-6-0269.jld")
     rm(resfile, force=true)
 
@@ -92,4 +107,7 @@ end
 test_load_active_pixels()
 test_source_division_parallelism()
 test_infer_single()
-test_infer_rcf()
+
+if test_long_running
+    test_infer_rcf()
+end
