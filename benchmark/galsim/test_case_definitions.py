@@ -311,7 +311,7 @@ def three_sources_all_overlap(test_case):
     test_case.add(Star().offset_world_coords(8, -1))
 
 @galsim_test_case
-def smaller_pdf(test_case):
+def smaller_psf(test_case):
     test_case.psf_sigma_pixels = 2
     test_case.add(Star())
 
