@@ -199,13 +199,15 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
             E_G2_s_h = E_G2_s.h
 
             E_G_s_h[ids_u_1, ids_u_1] = E_G_s_hsub_vec_1_u_u[1, 1] + E_G_s_hsub_vec_2_u_u[1, 1]
-            E_G_s_h[ids_u_1, ids_u_2] = E_G_s_hsub_vec_1_u_u[1, 2] + E_G_s_hsub_vec_2_u_u[1, 2]
-            E_G_s_h[ids_u_2, ids_u_1] = E_G_s_hsub_vec_1_u_u[2, 1] + E_G_s_hsub_vec_2_u_u[2, 1]
-            E_G_s_h[ids_u_2, ids_u_2] = E_G_s_hsub_vec_1_u_u[2, 2] + E_G_s_hsub_vec_2_u_u[2, 2]
-
             E_G2_s_h[ids_u_1, ids_u_1] = E_G2_s_hsub_vec_1_u_u[1, 1] + E_G2_s_hsub_vec_2_u_u[1, 1]
+
+            E_G_s_h[ids_u_1, ids_u_2] = E_G_s_hsub_vec_1_u_u[1, 2] + E_G_s_hsub_vec_2_u_u[1, 2]
             E_G2_s_h[ids_u_1, ids_u_2] = E_G2_s_hsub_vec_1_u_u[1, 2] + E_G2_s_hsub_vec_2_u_u[1, 2]
+
+            E_G_s_h[ids_u_2, ids_u_1] = E_G_s_hsub_vec_1_u_u[2, 1] + E_G_s_hsub_vec_2_u_u[2, 1]
             E_G2_s_h[ids_u_2, ids_u_1] = E_G2_s_hsub_vec_1_u_u[2, 1] + E_G2_s_hsub_vec_2_u_u[2, 1]
+
+            E_G_s_h[ids_u_2, ids_u_2] = E_G_s_hsub_vec_1_u_u[2, 2] + E_G_s_hsub_vec_2_u_u[2, 2]
             E_G2_s_h[ids_u_2, ids_u_2] = E_G2_s_hsub_vec_1_u_u[2, 2] + E_G2_s_hsub_vec_2_u_u[2, 2]
         end
     end
@@ -337,8 +339,9 @@ function add_elbo_log_term!{NumType <: Number}(
     @inbounds begin
         E_G_v = E_G.v[]
         var_G_v = var_G.v[]
+
         # The gradients and Hessians are written as a f(x, y) = f(E_G2, E_G)
-        log_term_value = log(E_G_v) - 0.5 * var_G_v    / (E_G_v ^ 2)
+        log_term_value = log(E_G_v) - var_G_v / (2.0 * E_G_v ^ 2)
 
         # Add x_nbm * (log term * log(iota)) to the elbo.
         # If not calculating derivatives, add the values directly.

@@ -1083,7 +1083,7 @@ function test_add_sources_sf()
   x2 = rand(P);
   clear!(sf_s);
   scaled_exp!(sf_s, x2, a2);
-  v2 = sf_s.v
+  v2 = sf_s.v[]
 
   fd_grad2 = ForwardDiff.gradient(f2, x2);
   @test_approx_eq sf_s.d fd_grad2
@@ -1093,9 +1093,9 @@ function test_add_sources_sf()
 
   add_sources_sf!(sf_all, sf_s, 2, true)
 
-  @test_approx_eq (v1 + v2) sf_all.v
+  @test_approx_eq (v1 + v2) sf_all.v[]
 
-  @test_approx_eq (v1 + v2) sf_all.v
+  @test_approx_eq (v1 + v2) sf_all.v[]
   @test_approx_eq fd_grad1 sf_all.d[1:P, 1]
   @test_approx_eq fd_grad2 sf_all.d[1:P, 2]
   @test_approx_eq fd_hess1 sf_all.h[1:P, 1:P]
@@ -1400,4 +1400,3 @@ test_simplex_derivatives()
 
 # this test was slow before, but no longer
 test_real_image()
-

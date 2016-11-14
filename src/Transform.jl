@@ -490,15 +490,15 @@ Transform a parameter vector to variational parameters in place.
 
 Args:
  - xs: A (param x sources) matrix created from free variational parameters.
- - vp_free: Free variational parameters.  Only the ids not in omitted_ids
+ - vp_free: Free variational parameters.  Only the ids in kept_ids
             will be updated.
- - omitted_ids: Ids to omit (from ids_free)
+ - kept_ids: Ids to update (from ids_free)
 
 Returns:
  - Update vp_free in place.
 """
 function array_to_free_vp!{T}(xs::Array{T}, vp_free::FreeVariationalParams{T},
-                              kept_ids::Vector{Int}, omitted_ids::Vector{Int})
+                              kept_ids::Vector{Int})
     for s in 1:length(vp_free), p1 in 1:length(kept_ids)
         vp_free[s][kept_ids[p1]] = xs[p1, s]
     end
@@ -565,7 +565,7 @@ function to_vp!{T<:Number}(dt::DataTransform, vp_free::FreeVariationalParams{T},
 end
 
 function from_vp{T}(dt::DataTransform, vp::VariationalParams{T})
-    vp_free = fill(zeros(T, length(ids_free)), length(dt.active_sources))
+    vp_free = [zeros(T, length(ids_free)) for _ in 1:length(dt.active_sources)]
     from_vp!(dt, vp, vp_free)
     vp_free
 end
@@ -575,7 +575,7 @@ function to_vp{T}(dt::DataTransform, vp_free::FreeVariationalParams{T})
     @assert(n_active_sources == dt.S,
             string("to_vp is not supported when active_sources is a ",
                    "strict subset of all sources."))
-    vp = fill(zeros(T, length(ids_free)), n_active_sources)
+    vp = [zeros(T, length(CanonicalParams)) for _ in 1:n_active_sources]
     to_vp!(dt, vp_free, vp)
     vp
 end
@@ -586,11 +586,11 @@ function vp_to_array{T}(dt::DataTransform, vp::VariationalParams{T}, omitted_ids
 end
 
 function array_to_vp!{T}(dt::DataTransform, xs::Array{T}, vp::VariationalParams{T},
-                         kept_ids::Vector{Int}, omitted_ids::Vector{Int})
+                         kept_ids::Vector{Int})
     # This needs to update vp in place so that variables in omitted_ids
     # stay at their original values.
     vp_trans = from_vp(dt, vp)
-    array_to_free_vp!(xs, vp_trans, kept_ids, omitted_ids)
+    array_to_free_vp!(xs, vp_trans, kept_ids)
     to_vp!(dt, vp_trans, vp)
 end
 

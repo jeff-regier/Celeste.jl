@@ -65,12 +65,14 @@ function test_parameter_conversion()
 
 		# Check conversion to and from a vector.
 		omitted_ids = Array(Int, 0)
+		kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
 		vp = deepcopy(ea.vp)
 		x = Transform.vp_to_array(transform, vp, omitted_ids)
 		@test length(x) == length(vp_free[1]) * length(ea.active_sources)
 
 		vp2 = generate_valid_parameters(Float64, transform.bounds)
-		Transform.array_to_vp!(transform, x, vp2, omitted_ids)
+		Transform.array_to_vp!(transform, x, vp2, kept_ids)
+
 		for id in fieldnames(ids), si in eachindex(transform.active_sources)
 			s = transform.active_sources[si]
 			@test_approx_eq_eps(original_vp[s][getfield(ids, id)], vp2[si][getfield(ids, id)], 1e-6)
@@ -87,7 +89,7 @@ function test_parameter_conversion()
 	transform1 = Transform.get_mp_transform(ea1.vp, ea1.active_sources)
 
 	@assert transform1.S == ea.S
-	@assert length(transform.active_sources) == 1
+	@assert length(transform1.active_sources) == 1
 	check_transform(transform1, ea1)
 
 end

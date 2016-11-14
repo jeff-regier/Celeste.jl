@@ -51,7 +51,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
     f_wrapped_nocache! = (x::Vector) -> begin
         # Evaluate in the constrained space and then unconstrain again.
         reshaped_x = reshape(x, length(kept_ids), n_active_sources)
-        Transform.array_to_vp!(transform, reshaped_x, ea.vp, kept_ids, omitted_ids)
+        Transform.array_to_vp!(transform, reshaped_x, ea.vp, kept_ids)
         f_res = f(ea)
         f_evals += 1
         log_f_eval(verbose, f_evals, print_every_n, ea, f_res)
@@ -108,7 +108,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
                                options)
 
     reshaped_min = reshape(Optim.minimizer(nm_result), size(x0))
-    Transform.array_to_vp!(transform, reshaped_min, ea.vp, kept_ids, omitted_ids)
+    Transform.array_to_vp!(transform, reshaped_min, ea.vp, kept_ids)
     max_f = -1.0 * Optim.minimum(nm_result)
     max_x = Optim.minimizer(nm_result)
 

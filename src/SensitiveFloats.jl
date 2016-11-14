@@ -187,7 +187,7 @@ function combine_sfs!{ParamType <: ParamSet,
                       T1 <: Number, T2 <: Number, T3 <: Number}(
         sf1::SensitiveFloat{ParamType, T1},
         sf2::SensitiveFloat{ParamType, T1},
-        v::T1, g_d::Vector{T2}, g_h::Matrix{T3};
+        v::T1, g_d::Vector{T2}, g_h::Matrix{T3},
         calculate_hessian::Bool=true)
 
     combine_sfs!(sf1, sf2, sf1, v, g_d, g_h, calculate_hessian)
@@ -207,8 +207,7 @@ function multiply_sfs!{ParamType <: ParamSet, NumType <: Number}(
     v = sf1.v[] * sf2.v[]
     g_d = NumType[sf2.v[], sf1.v[]]
 
-    combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess,
-                             calculate_hessian=calculate_hessian)
+    combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess, calculate_hessian)
 end
 
 
