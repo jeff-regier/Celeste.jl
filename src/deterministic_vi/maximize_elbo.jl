@@ -1,18 +1,5 @@
 """
-Optimizes f using Newton's method and exact Hessians.  For now, it is
-not clear whether this or BFGS is better, so it is kept as a separate function.
-
-Args:
-  - f: A function that takes elbo args and constrained coordinates
-       (e.g. DeterministicVI.elbo)
-  - ea: Constrained initial ElboArgs
-  - lbs: An array of lower bounds (in the transformed space)
-  - ubs: An array of upper bounds (in the transformed space)
-  - omitted_ids: Omitted ids from the _unconstrained_ parameterization
-      (i.e. elements of free_ids).
-  - xtol_rel: X convergence
-  - ftol_abs: F convergence
-  - verbose: Print detailed output
+Optimizes f using Newton's method and exact Hessians.
 
 Returns:
   - iter_count: The number of iterations taken
@@ -172,5 +159,3 @@ function maximize_f(f::Function,
                 max_iters=max_iters,
                 fast_hessian=fast_hessian)
 end
-
-

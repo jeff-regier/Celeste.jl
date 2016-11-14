@@ -77,7 +77,7 @@ function test_real_image()
     Infer.fit_object_psfs!(ea, ea.active_sources)
 
     @test length(ea.active_pixels) == 0
-    Infer.load_active_pixels!(ea)
+    Infer.load_active_pixels!(ea, true)
     @test length(ea.active_pixels) > 0
 
     elbo = DeterministicVI.elbo(ea)

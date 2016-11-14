@@ -608,26 +608,27 @@ function process_active_pixels!{NumType <: Number}(
         tile = ea.images[pixel.n].tiles[pixel.tile_ind]
         tile_sources = ea.tile_source_map[pixel.n][pixel.tile_ind]
         this_pixel = tile.pixels[pixel.h, pixel.w]
+        if !Base.isnan(this_pixel)
+            # Get the brightness.
+            get_expected_pixel_brightness!(
+                elbo_vars, pixel.h, pixel.w, sbs,
+                star_mcs_vec[pixel.n], gal_mcs_vec[pixel.n], tile,
+                ea, tile_sources, include_epsilon=true)
 
-        # Get the brightness.
-        get_expected_pixel_brightness!(
-            elbo_vars, pixel.h, pixel.w, sbs,
-            star_mcs_vec[pixel.n], gal_mcs_vec[pixel.n], tile,
-            ea, tile_sources, include_epsilon=true)
+            # Add the terms to the elbo given the brightness.
+            iota = tile.iota_vec[pixel.h]
+            add_elbo_log_term!(elbo_vars, this_pixel, iota)
+            add_scaled_sfs!(elbo_vars.elbo,
+                            elbo_vars.E_G,
+                            -iota,
+                            elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
 
-        # Add the terms to the elbo given the brightness.
-        iota = tile.iota_vec[pixel.h]
-        add_elbo_log_term!(elbo_vars, this_pixel, iota)
-        add_scaled_sfs!(elbo_vars.elbo,
-                        elbo_vars.E_G,
-                        -iota,
-                        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
-
-        # Subtract the log factorial term. This is not a function of the
-        # parameters so the derivatives don't need to be updated. Note that
-        # even though this does not affect the ELBO's maximum, it affects
-        # the optimization convergence criterion, so I will leave it in for now.
-        elbo_vars.elbo.v[1] -= lfact(this_pixel)
+            # Subtract the log factorial term. This is not a function of the
+            # parameters so the derivatives don't need to be updated. Note that
+            # even though this does not affect the ELBO's maximum, it affects
+            # the optimization convergence criterion, so I will leave it in for now.
+            elbo_vars.elbo.v[1] -= lfact(this_pixel)
+        end
     end
     assert_all_finite(elbo_vars.elbo)
 end
@@ -663,13 +664,11 @@ function tile_predicted_image{NumType <: Number}(
     h_width, w_width = size(tile.pixels)
     for w in 1:w_width, h in 1:h_width
         this_pixel = tile.pixels[h, w]
-        if !Base.isnan(this_pixel)
-            get_expected_pixel_brightness!(
-                elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
-                ea, tile_sources, include_epsilon=include_epsilon)
-            iota = tile.iota_vec[h]
-            predicted_pixels[h, w] = elbo_vars.E_G.v[1] * iota
-        end
+        get_expected_pixel_brightness!(
+            elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile,
+            ea, tile_sources, include_epsilon=include_epsilon)
+        iota = tile.iota_vec[h]
+        predicted_pixels[h, w] = elbo_vars.E_G.v[1] * iota
     end
 
     predicted_pixels

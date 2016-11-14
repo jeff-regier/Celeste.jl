@@ -102,7 +102,7 @@ function infer_source(images::Vector{TiledImage},
     patches, tile_source_map = get_tile_source_map(images, cat_local)
     ea = ElboArgs(images, vp, tile_source_map, patches, [1])
     fit_object_psfs!(ea, ea.active_sources)
-    load_active_pixels!(ea)
+    load_active_pixels!(ea, true)
     @assert length(ea.active_pixels) > 0
     DeterministicVI.maximize_f(DeterministicVI.elbo, ea)
     vp[1]
@@ -197,12 +197,14 @@ Get pixels significantly above background noise.
 
 Arguments:
   ea: The ElboArgs object
+  discard_nan: If true, NaN pixels are not included.
   noise_fraction: The proportion of the noise below which we will remove pixels.
   min_radius_pix: A minimum pixel radius to be included.
 """
-function load_active_pixels!(ea::ElboArgs{Float64};
-                            noise_fraction=0.1,
-                            min_radius_pix=8.0)
+function load_active_pixels!(ea::ElboArgs{Float64},
+                             discard_nan::Bool;
+                             noise_fraction=0.1,
+                             min_radius_pix=8.0)
     @assert length(ea.active_sources) == 1
     s = ea.active_sources[1]
 
@@ -229,17 +231,19 @@ function load_active_pixels!(ea::ElboArgs{Float64};
                     DeterministicVI.tile_predicted_image(tile, ea, [ s ],
                                                    include_epsilon=false)
                 for h in tile.h_range, w in tile.w_range
-                    # The pixel location in the rendered image.
-                    h_im = h - minimum(tile.h_range) + 1
-                    w_im = w - minimum(tile.w_range) + 1
+                    pixel_nan = discard_nan && isnan(tile.pixels[h_im, w_im])
+                    if !pixel_nan
+                        # The pixel location in the rendered image.
+                        h_im = h - minimum(tile.h_range) + 1
+                        w_im = w - minimum(tile.w_range) + 1
 
-                    bright_pixel = pred_tile_pixels[h_im, w_im] >
-                       tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
-                    close_pixel =
-                        (h - pix_loc[1]) ^ 2 + (w - pix_loc[2])^2 < min_radius_pix^2
-
-                    if (bright_pixel || close_pixel) && !isnan(tile.pixels[h_im, w_im])
-                        push!(ea.active_pixels, ActivePixel(n, t, h_im, w_im))
+                        bright_pixel = pred_tile_pixels[h_im, w_im] >
+                           tile.iota_vec[h_im] * tile.epsilon_mat[h_im, w_im] * noise_fraction
+                        close_pixel =
+                            (h - pix_loc[1]) ^ 2 + (w - pix_loc[2])^2 < min_radius_pix^2
+                        if bright_pixel || close_pixel
+                            push!(ea.active_pixels, ActivePixel(n, t, h_im, w_im))
+                        end
                     end
                 end
             end
