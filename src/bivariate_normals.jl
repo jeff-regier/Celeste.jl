@@ -120,7 +120,7 @@ immutable BvnComponent{NumType <: Number}
     major_sd::NumType
 
     function BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
-        the_mean::SVector{2,T1}, the_cov::SMatrix{2,2,T2,4}, weight::T3;
+        the_mean::SVector{2,T1}, the_cov::SMatrix{2,2,T2,4}, weight::T3,
         calculate_siginv_deriv::Bool=true)
 
       ThisNumType = promote_type(T1, T2, T3)
@@ -223,73 +223,76 @@ function get_bvn_derivs!{NumType <: Number}(
     bvn::BvnComponent{NumType}, calculate_x_hess::Bool,
     calculate_sigma_hessian::Bool)
 
-  # Gradient with respect to x.
-  bvn_x_d = bvn_derivs.bvn_x_d
-  bvn_x_d[1] = -bvn_derivs.py1[1]
-  bvn_x_d[2] = -bvn_derivs.py2[1]
+  @inbounds begin
 
-  if calculate_x_hess
-    bvn_xx_h = bvn_derivs.bvn_xx_h
+    # Gradient with respect to x.
+    bvn_x_d = bvn_derivs.bvn_x_d
+    bvn_x_d[1] = -bvn_derivs.py1[1]
+    bvn_x_d[2] = -bvn_derivs.py2[1]
 
-    # Hessian terms involving only x
-    bvn_xx_h[1, 1] = -bvn.precision[1, 1]
-    bvn_xx_h[2, 2] = -bvn.precision[2, 2]
-    bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1 ,2]
-  end
+    if calculate_x_hess
+      bvn_xx_h = bvn_derivs.bvn_xx_h
 
-  # The first term is the derivative of -0.5 * x' Sigma^{-1} x
-  # The second term is the derivative of -0.5 * log|Sigma|
-  bvn_sig_d = bvn_derivs.bvn_sig_d
-  bvn_sig_d[1] =
-    0.5 * bvn_derivs.py1[1] * bvn_derivs.py1[1] - 0.5 * bvn.precision[1, 1]
-  bvn_sig_d[2] =
-    bvn_derivs.py1[1] * bvn_derivs.py2[1]             - bvn.precision[1, 2]
-  bvn_sig_d[3] =
-    0.5 * bvn_derivs.py2[1] * bvn_derivs.py2[1] - 0.5 * bvn.precision[2, 2]
-
-  if calculate_sigma_hessian
-
-    # Hessian calculation for terms containing sigma.
-
-    # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
-    # These are used for the hessian calculations.
-    dpy1_dsig = bvn_derivs.dpy1_dsig
-    dpy1_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,1]
-    dpy1_dsig[2] = -bvn_derivs.py2[1] * bvn.precision[1,1] -
-                    bvn_derivs.py1[1] * bvn.precision[1,2]
-    dpy1_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[1,2]
-
-    dpy2_dsig = bvn_derivs.dpy2_dsig
-    dpy2_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,2]
-    dpy2_dsig[2] = -bvn_derivs.py1[1] * bvn.precision[2,2] -
-                    bvn_derivs.py2[1] * bvn.precision[1,2]
-    dpy2_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[2,2]
-
-    # Hessian terms involving only sigma
-    bvn_sigsig_h = bvn_derivs.bvn_sigsig_h
-    for s_ind=1:3
-      # Differentiate with respect to s_ind second.
-      bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
-        bvn_derivs.py1[1] * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
-
-      # d log|sigma| / dsigma12 is twice lambda12.
-      bvn_sigsig_h[2, s_ind] =
-        bvn_derivs.py1[1] * dpy2_dsig[s_ind] + bvn_derivs.py2[1] * dpy1_dsig[s_ind] -
-        bvn.dsiginv_dsig[2, s_ind]
-
-      bvn_sigsig_h[3, s_ind] = #bvn_sigsig_h[s_ind, 3] =
-        bvn_derivs.py2[1] * dpy2_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[3, s_ind]
+      # Hessian terms involving only x
+      bvn_xx_h[1, 1] = -bvn.precision[1, 1]
+      bvn_xx_h[2, 2] = -bvn.precision[2, 2]
+      bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1 ,2]
     end
 
-    # Hessian terms involving both x and sigma.
-    # Note that dpyA / dxB = bvn.precision[A, B]
-    bvn_xsig_h = bvn_derivs.bvn_xsig_h
-    for x_ind=1:2
-      bvn_xsig_h[x_ind, 1] = bvn_derivs.py1[1] * bvn.precision[1, x_ind]
-      bvn_xsig_h[x_ind, 2] =
-        bvn_derivs.py1[1] * bvn.precision[2, x_ind] +
-        bvn_derivs.py2[1] * bvn.precision[1, x_ind]
-      bvn_xsig_h[x_ind, 3] = bvn_derivs.py2[1] * bvn.precision[2, x_ind]
+    # The first term is the derivative of -0.5 * x' Sigma^{-1} x
+    # The second term is the derivative of -0.5 * log|Sigma|
+    bvn_sig_d = bvn_derivs.bvn_sig_d
+    bvn_sig_d[1] =
+      0.5 * bvn_derivs.py1[1] * bvn_derivs.py1[1] - 0.5 * bvn.precision[1, 1]
+    bvn_sig_d[2] =
+      bvn_derivs.py1[1] * bvn_derivs.py2[1]             - bvn.precision[1, 2]
+    bvn_sig_d[3] =
+      0.5 * bvn_derivs.py2[1] * bvn_derivs.py2[1] - 0.5 * bvn.precision[2, 2]
+
+    if calculate_sigma_hessian
+
+      # Hessian calculation for terms containing sigma.
+
+      # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
+      # These are used for the hessian calculations.
+      dpy1_dsig = bvn_derivs.dpy1_dsig
+      dpy1_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,1]
+      dpy1_dsig[2] = -bvn_derivs.py2[1] * bvn.precision[1,1] -
+                      bvn_derivs.py1[1] * bvn.precision[1,2]
+      dpy1_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[1,2]
+
+      dpy2_dsig = bvn_derivs.dpy2_dsig
+      dpy2_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,2]
+      dpy2_dsig[2] = -bvn_derivs.py1[1] * bvn.precision[2,2] -
+                      bvn_derivs.py2[1] * bvn.precision[1,2]
+      dpy2_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[2,2]
+
+      # Hessian terms involving only sigma
+      bvn_sigsig_h = bvn_derivs.bvn_sigsig_h
+      for s_ind=1:3
+        # Differentiate with respect to s_ind second.
+        bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
+          bvn_derivs.py1[1] * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
+
+        # d log|sigma| / dsigma12 is twice lambda12.
+        bvn_sigsig_h[2, s_ind] =
+          bvn_derivs.py1[1] * dpy2_dsig[s_ind] + bvn_derivs.py2[1] * dpy1_dsig[s_ind] -
+          bvn.dsiginv_dsig[2, s_ind]
+
+        bvn_sigsig_h[3, s_ind] = #bvn_sigsig_h[s_ind, 3] =
+          bvn_derivs.py2[1] * dpy2_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[3, s_ind]
+      end
+
+      # Hessian terms involving both x and sigma.
+      # Note that dpyA / dxB = bvn.precision[A, B]
+      bvn_xsig_h = bvn_derivs.bvn_xsig_h
+      for x_ind=1:2
+        bvn_xsig_h[x_ind, 1] = bvn_derivs.py1[1] * bvn.precision[1, x_ind]
+        bvn_xsig_h[x_ind, 2] =
+          bvn_derivs.py1[1] * bvn.precision[2, x_ind] +
+          bvn_derivs.py2[1] * bvn.precision[1, x_ind]
+        bvn_xsig_h[x_ind, 3] = bvn_derivs.py2[1] * bvn.precision[2, x_ind]
+      end
     end
   end
 end
@@ -325,20 +328,19 @@ Note that nubar is not included.
 """
 function GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
-    XiXi::SMatrix{2,2,NumType,4}; calculate_tensor::Bool=true)
+    XiXi::SMatrix{2,2,NumType,4}, calculate_tensor::Bool=true)
 
   cos_sin = cos(e_angle)sin(e_angle)
   sin_sq = sin(e_angle)^2
   cos_sq = cos(e_angle)^2
 
   j = Array(NumType, 3, length(gal_shape_ids))
-  for i = 1:3
-    j[i, gal_shape_ids.e_axis] =
-      2 * e_axis * e_scale^2 * [sin_sq, -cos_sin, cos_sq][i]
-    j[i, gal_shape_ids.e_angle] =
-      e_scale^2 * (e_axis^2 - 1) * [2cos_sin, sin_sq - cos_sq, -2cos_sin][i]
-    j[i, gal_shape_ids.e_scale] = (2XiXi ./ e_scale)[[1, 2, 4][i]]
-  end
+  j[:, gal_shape_ids.e_axis] =
+    2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
+  j[:, gal_shape_ids.e_angle] =
+    e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
+  j[:, gal_shape_ids.e_scale] =
+    2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale
 
   t = Array(NumType, 3, length(gal_shape_ids), length(gal_shape_ids))
   if calculate_tensor
@@ -346,31 +348,27 @@ function GalaxySigmaDerivs{NumType <: Number}(
 
     for i = 1:3
       # Second derivatives involving e_scale
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_scale] =
-        (2 * XiXi ./ (e_scale ^ 2))[[1, 2, 4][i]]
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis] =
-        (2 * j[i, gal_shape_ids.e_axis] ./ e_scale)
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle] =
-        (2 * j[i, gal_shape_ids.e_angle] ./ e_scale)
+      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_scale] = 2 * XiXi[1 << (i - 1)] / e_scale^2
+      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]  = 2 * j[i, gal_shape_ids.e_axis]  / e_scale
+      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle] = 2 * j[i, gal_shape_ids.e_angle] / e_scale
 
       t[i, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
         t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]
       t[i, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
         t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle]
 
+    end
       # Remaining second derivatives involving e_angle
-      t[i, gal_shape_ids.e_angle, gal_shape_ids.e_angle] =
-        2 * e_scale^2 * (e_axis^2 - 1) *
-        [cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq][i]
-      t[i, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
-        2 * e_scale^2 * e_axis * [2cos_sin, sin_sq - cos_sq, -2cos_sin][i]
-      t[i, gal_shape_ids.e_axis, gal_shape_ids.e_angle] =
-        t[i, gal_shape_ids.e_angle, gal_shape_ids.e_axis]
+    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_angle]  =
+      2 * e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq)
+    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle]   =
+      t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
+        2 * e_scale^2 * e_axis       * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
 
       # The second derivative involving only e_axis.
-      t[i, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
-        2 * e_scale^2 * [sin_sq, -cos_sin, cos_sq][i]
-    end
+    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
+        2 * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
+
   else
     fill!(t, 0.0)
   end
@@ -432,16 +430,15 @@ function GalaxyCacheComponent{NumType <: Number}(
 
   # d siginv / dsigma is only necessary for the Hessian.
   bmc = BvnComponent{NumType}(
-    mean_s, var_s, weight,
-    calculate_siginv_deriv=calculate_derivs && calculate_hessian)
+    mean_s, var_s, weight, calculate_derivs && calculate_hessian)
 
   if calculate_derivs
     sig_sf = GalaxySigmaDerivs(
-      e_angle, e_axis, e_scale, XiXi, calculate_tensor=calculate_hessian)
-    sig_sf.j .*= gc.nuBar
+      e_angle, e_axis, e_scale, XiXi, calculate_hessian)
+    scale!(sig_sf.j, gc.nuBar)
     if calculate_hessian
       # The tensor is only needed for the Hessian.
-      sig_sf.t .*= gc.nuBar
+      scale!(sig_sf.t, gc.nuBar)
     end
   else
     sig_sf = empty_sig_sf

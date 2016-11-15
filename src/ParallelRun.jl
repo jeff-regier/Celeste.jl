@@ -8,12 +8,14 @@ using ..Model
 import ..SDSSIO
 import ..Infer
 import ..SDSSIO: RunCamcolField
+import ..PSF
 
+using ..DeterministicVI
+include("cyclades.jl")
 
 #set this to false to use source-division parallelism
 const SKY_DIVISION_PARALLELISM=true
 
-const TILE_WIDTH = 20
 const MIN_FLUX = 2.0
 
 # Use distributed parallelism (with Dtree)
@@ -248,11 +250,11 @@ function divide_sky_and_infer(
         itimes.query_fids = toq()
 
         # run inference for this subarea
-        results = one_node_infer(rcfs, stagedir;
-                        box=BoundingBox(iramin, iramax, idecmin, idecmax),
-                        reserve_thread=rundt,
-                        thread_fun=rundtree,
-                        timing=itimes)
+        results, obj_value = one_node_infer(rcfs, stagedir;
+                                            box=BoundingBox(iramin, iramax, idecmin, idecmax),
+                                            reserve_thread=rundt,
+                                            thread_fun=rundtree,
+                                            timing=itimes)
         tic()
         save_results(outdir, iramin, iramax, idecmin, idecmax, results)
         itimes.write_results = toq()
@@ -272,7 +274,7 @@ end
 
 
 function load_images(rcfs, stagedir)
-    images = TiledImage[]
+    images = Image[]
     image_names = String[]
     image_count = 0
 
@@ -284,20 +286,15 @@ function load_images(rcfs, stagedir)
             image_count += 1
             push!(image_names,
                 "$image_count run=$(rcf.run) camcol=$(rcf.camcol) field=$(rcf.field) b=$b")
-            tiled_image = TiledImage(field_images[b])
-            push!(images, tiled_image)
+            push!(images, field_images[b])
         end
     end
     gc()
 
-    Log.debug("Image names:")
-    Log.debug(string(image_names))
-
     images
 end
 
-
-"""
+""" 
 Use mulitple threads on one node to 
 fit the Celeste model to sources in a given bounding box.
 
@@ -311,8 +308,11 @@ Returns:
 function one_node_infer(
                rcfs::Vector{RunCamcolField},
                stagedir::String;
+               joint_infer=false,
+               joint_infer_n_iters=10,
                objid="",
                box=BoundingBox(-1000., 1000., -1000., 1000.),
+               target_rcfs=RunCamcolField[],
                primary_initialization=true,
                reserve_thread=Ref(false),
                thread_fun=phalse,
@@ -337,19 +337,30 @@ function one_node_infer(
     catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
     Log.info("$(length(catalog)) primary sources after MIN_FLUX cut")
 
-    # Filter any object not specified, if an objid is specified
-    if objid != ""
-        Log.info(catalog[1].objid)
-        catalog = filter(entry->(entry.objid == objid), catalog)
-    end
-
-    # Get indicies of entries in the  RA/Dec range of interest.
+    # Get indicies of entries in the RA/Dec range of interest.
     entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
                              (box.decmin < entry.pos[2] < box.decmax))
     target_sources = find(entry_in_range, catalog)
 
-    nputs(dt_nodeid, string("processing $(length(target_sources)) sources in ",
+    Log.info(string("Found $(length(target_sources)) target sources in ",
           "$(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax)"))
+
+    # For infer-box.jl, target sources are everything in the box.
+    # For infer-rcf.jl, target sources are primary detections in the target rcf.
+    if !isempty(target_rcfs)
+        target_entries = SDSSIO.read_photoobj_files(target_rcfs,
+                                                    stagedir,
+                                                    duplicate_policy=:primary)
+        target_ids = Set([entry.objid for entry in target_entries])
+        target_sources = filter(ts->(catalog[ts].objid in target_ids), target_sources)
+        Log.info("$(length(target_sources)) target light sources after target_rcf cut")
+    end
+
+    # Filter any object not specified, if an objid is specified
+    if objid != ""
+        target_sources = filter(ts->(catalog[ts].objid == objid), target_sources)
+        Log.info("$(length(target_sources)) target light sources after objid cut")
+    end
 
     # If there are no objects of interest, return early.
     if length(target_sources) == 0
@@ -373,7 +384,17 @@ function one_node_infer(
 
     reserve_thread[] && thread_fun(reserve_thread)
 
+    if joint_infer
+        return one_node_joint_infer(catalog,
+                                    target_sources,
+                                    neighbor_map,
+                                    images,
+                                    n_iters=joint_infer_n_iters,
+                                    objid=objid)
+    end
+    
     # iterate over sources
+    obj_values = Array{Float64}(length(target_sources))
     curr_source = 1
     last_source = length(target_sources)
     sources_lock = SpinLock()
@@ -393,45 +414,60 @@ function one_node_infer(
                 ts = curr_source
                 curr_source += 1
                 unlock(sources_lock)
-
                 if ts > last_source
                     break
                 end
-#                try
+
+                try
                     s = target_sources[ts]
                     entry = catalog[s]
-                    nputs(dt_nodeid, "processing source $s: objid = $(entry.objid)")
+                    Log.info("processing source $s: objid = $(entry.objid)")
 
-                    t0 = time()
                     # TODO: subset images to images_local too.
-                    vs_opt = Infer.infer_source(images,
-                                                catalog[neighbor_map[ts]],
-                                                entry)
+                    t0 = time()
+                    vs_opt, obj_value = Infer.infer_source(images,
+                                           catalog[neighbor_map[ts]],
+                                           entry)
                     runtime = time() - t0
-#                catch ex
-#                    Log.error(ex)
-#                end
+                    obj_values[ts] = obj_value
 
-                lock(results_lock)
-                push!(results, Dict(
-                    "thing_id"=>entry.thing_id,
-                    "objid"=>entry.objid,
-                    "ra"=>entry.pos[1],
-                    "dec"=>entry.pos[2],
-                    "vs"=>vs_opt,
-                    "runtime"=>runtime))
-                unlock(results_lock)
+                    result = Dict(
+                        "thing_id"=>entry.thing_id,
+                        "objid"=>entry.objid,
+                        "ra"=>entry.pos[1],
+                        "dec"=>entry.pos[2],
+                        "vs"=>vs_opt,
+                        "runtime"=>runtime)
+                    lock(results_lock)
+                    push!(results, result)
+                    unlock(results_lock)
+
+                    rcf_name = ""
+                    if length(target_rcfs) == 1
+                        rcf = target_rcfs[1]
+                        rcf_name = string(" in ", (rcf.run, rcf.camcol, rcf.field))
+                    end
+                    rt1 = round(runtime, 1)
+                    Log.info("objid $(entry.objid)$rcf_name took $rt1 seconds")
+                    Log.info("========================")
+                catch ex
+                    Log.error(string(ex))
+                end
             end
         end
     end
 
     tic()
-    ccall(:jl_threading_run, Void, (Any,), Core.svec(process_sources))
-    ccall(:jl_threading_profile, Void, ())
+    if nthreads() == 1
+        process_sources()
+    else
+        ccall(:jl_threading_run, Void, (Any,), Core.svec(process_sources))
+        ccall(:jl_threading_profile, Void, ())
+    end
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
-
-    results
+    
+    results, obj_values
 end
 
 
@@ -491,7 +527,11 @@ function infer_field(rcf::RunCamcolField,
                      stagedir::String,
                      outdir::String;
                      objid="")
-    results = one_node_infer([rcf,], stagedir; objid=objid, primary_initialization=false)
+    # Here `one_node_infer` is called just with a single rcf, even though
+    # other rcfs may overlap with this one. That's because this function is
+    # just for testing on stripe 82: in practice we always use all relevent
+    # data to make inferences.
+    results, obj_value = one_node_infer([rcf,], stagedir; objid=objid, primary_initialization=false)
     fname = if objid == ""
         @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
     else
@@ -499,6 +539,53 @@ function infer_field(rcf::RunCamcolField,
     end
     JLD.save(fname, "results", results)
     Log.debug("infer_field finished successfully")
+end
+
+
+immutable UnknownRCF <: Exception
+    rcf::RunCamcolField
+end
+
+
+"""
+This function is called directly from the `bin` directory.
+It optimizes all the primary detections in the specified run-camcol-field,
+using essentially all relevant images. Typically relevant image data includes
+run-camcol-field's in addition to the specified one, that overlap
+with the specified run-camcol-field. I say "essentially" because
+some large light sources may contribute photons to images that do
+not overlap with the rcf containig the center of the light source's
+primary detection, and these images are excluded. This is more of a
+feature than a bug because we need to limit the amount of computation
+per light souce.
+"""
+function infer_rcf(rcf::RunCamcolField,
+                   stagedir::String,
+                   outdir::String;
+                   objid="")
+    whole_sky = BoundingBox(-999, 999, -999, 999)
+    all_fes = get_overlapping_field_extents(whole_sky, stagedir)
+    this_fe = filter(fe->(fe[1] == rcf), all_fes)
+
+    @assert(length(this_fe) <= 1)
+    if isempty(this_fe)
+        throw(UnknownRCF(rcf))
+    end
+
+    rcf_bounds = this_fe[1][2]
+    overlapping_rcfs = get_overlapping_fields(rcf_bounds, stagedir)
+    @assert rcf in overlapping_rcfs
+
+    tic()
+    results = one_node_infer(overlapping_rcfs,
+                             stagedir;
+                             objid=objid,  # just for making unit tests run fast
+                             box=rcf_bounds,  # could exclude this argument
+                             target_rcfs=[rcf,])
+    Log.info("Inferred $rcf in $(toq()) seconds")
+
+    fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
+    JLD.save(fname, "results", results)
 end
 
 
@@ -540,7 +627,7 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
         rcfs = get_overlapping_fields(box, stagedir)
         times.query_fids = toq()
 
-        results = one_node_infer(rcfs, stagedir; box=box, timing=times)
+        results, obj_value = one_node_infer(rcfs, stagedir; box=box, timing=times)
 
         tic()
         save_results(outdir, box, results)

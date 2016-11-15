@@ -115,7 +115,7 @@ function test_psf_fit()
     #   sig_sf_vec[k] = GalaxySigmaDerivs(
     #     psf_params[k][psf_ids.e_angle],
     #     psf_params[k][psf_ids.e_axis],
-    #     psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_tensor=calculate_derivs);
+    #     psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_derivs);
     #
     # end
 
@@ -243,15 +243,15 @@ function test_psf_optimizer()
 
   nm_result = psf_optimizer.fit_psf(raw_psf, psf_params)
   psf_params_fit =
-    constrain_psf_params(unwrap_psf_params(nm_result.minimum), psf_transform)
+    constrain_psf_params(unwrap_psf_params(Optim.minimizer(nm_result)), psf_transform)
 
   # Could this test be tighter?
-  @test 0.0 < nm_result.f_minimum < 1e-3
+  @test 0.0 < Optim.minimum(nm_result) < 1e-3
 
   celeste_psf = fit_raw_psf_for_celeste(raw_psf, K)[1]
   rendered_psf = get_psf_at_point(celeste_psf);
 
-  @test_approx_eq nm_result.f_minimum sum((raw_psf - rendered_psf) .^ 2)
+  @test_approx_eq Optim.minimum(nm_result) sum((raw_psf - rendered_psf) .^ 2)
 
   # Make sure that re-using the optimizer gets the same results.
   raw_psf_10_10 = load_raw_psf(x=10., y=10.);

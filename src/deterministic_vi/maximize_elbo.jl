@@ -129,13 +129,12 @@ function maximize_f(f::Function,
                                tr_method,
                                options)
 
-    transform.array_to_vp!(reshape(nm_result.minimum, size(x0)),
+    transform.array_to_vp!(reshape(Optim.minimizer(nm_result), size(x0)),
                            ea.vp, omitted_ids)
-    max_f = -1.0 * nm_result.f_minimum
-    max_x = nm_result.minimum
+    max_f = -1.0 * Optim.minimum(nm_result)
+    max_x = Optim.minimizer(nm_result)
 
-    Log.info(string("got $max_f at $max_x after $f_evals function evaluations ",
-            "($(nm_result.iterations) Newton steps)\n"))
+    Log.info(string("elbo is $max_f after $(nm_result.iterations) Newton steps"))
     f_evals, max_f, max_x, nm_result
 end
 

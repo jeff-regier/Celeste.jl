@@ -236,14 +236,16 @@ Returns:
     sources in ea.active_sources will have derivative information.
 """
 function load_source_brightnesses{NumType <: Number}(
-    ea::ElboArgs{NumType};
-    calculate_derivs::Bool=true, calculate_hessian::Bool=true)
+                    ea::ElboArgs{NumType};
+                    calculate_derivs::Bool=true,
+                    calculate_hessian::Bool=true)
+    sbs = Array(SourceBrightness{NumType}, ea.S)
 
-  sbs = Array(SourceBrightness{NumType}, ea.S)
-  for s in 1:ea.S
-    calculate_this_deriv = (s in ea.active_sources) && calculate_derivs
-    sbs[s] = SourceBrightness(ea.vp[s],
-      calculate_derivs=calculate_this_deriv, calculate_hessian=calculate_hessian)
-  end
-  sbs
+    for s in 1:ea.S
+        calculate_this_deriv = (s in ea.active_sources) && calculate_derivs
+        sbs[s] = SourceBrightness(ea.vp[s],
+        calculate_derivs=calculate_this_deriv, calculate_hessian=calculate_hessian)
+    end
+
+    sbs
 end

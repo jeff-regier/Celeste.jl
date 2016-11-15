@@ -162,9 +162,9 @@ this helps catch them immediately.
 """
 function assert_all_finite{ParamType <: ParamSet, NumType <: Number}(
         sf::SensitiveFloat{ParamType, NumType})
-    @assert all(isfinite(sf.v)) "Value is Inf/NaNs"
-    @assert all(isfinite(sf.d)) "Gradient contains Inf/NaNs"
-    @assert all(isfinite(sf.h)) "Hessian contains Inf/NaNs"
+    @assert all(isfinite, sf.v) "Value is Inf/NaNs"
+    @assert all(isfinite, sf.d) "Gradient contains Inf/NaNs"
+    @assert all(isfinite, sf.h) "Hessian contains Inf/NaNs"
 end
 
 
@@ -187,9 +187,8 @@ type ElboArgs{NumType <: Number}
 
     # The number of components in the point spread function.
     psf_K::Int64
-    images::Vector{TiledImage}
+    images::Vector{Image}
     vp::VariationalParams{NumType}
-    tile_source_map::Vector{Matrix{Vector{Int}}}
     patches::Matrix{SkyPatch}
     active_sources::Vector{Int}
 
@@ -201,16 +200,13 @@ type ElboArgs{NumType <: Number}
     # irrespective of their distance from the mean.
     num_allowed_sd::Float64
 
-    active_pixels::Vector{ActivePixel}
-
     elbo_vars::ElboIntermediateVariables
 end
 
 
 function ElboArgs{NumType <: Number}(
-            images::Vector{TiledImage},
+            images::Vector{Image},
             vp::VariationalParams{NumType},
-            tile_source_map::Vector{Matrix{Vector{Int}}},
             patches::Matrix{SkyPatch},
             active_sources::Vector{Int};
             psf_K::Int=2,
@@ -219,11 +215,10 @@ function ElboArgs{NumType <: Number}(
     S = length(vp)
 
     @assert psf_K > 0
-    @assert length(tile_source_map) == N
     @assert size(patches, 1) == S
     @assert size(patches, 2) == N
 
-    for img in images, tile in img.tiles, ep in tile.epsilon_mat
+    for img in images, ep in img.epsilon_mat
         if ep <= 0.0
             throw(InvalidInputError(
                 "You must set all values of epsilon_mat > 0 for all images included in ElboArgs"
@@ -238,7 +233,7 @@ function ElboArgs{NumType <: Number}(
                                 calculate_derivs=true,
                                 calculate_hessian=true)
 
-    ElboArgs(S, N, psf_K, images, vp, tile_source_map, patches,
-             active_sources, num_allowed_sd, ActivePixel[], elbo_vars)
+    ElboArgs(S, N, psf_K, images, vp, patches,
+             active_sources, num_allowed_sd, elbo_vars)
 end
 

@@ -173,13 +173,13 @@ Get the PSF located at a particular world location in an image.
 
 Args:
  - world_loc: A location in world coordinates.
- - img: An TiledImage
+ - img: An Image
 
 Returns:
  - An array of PsfComponent objects that represents the PSF as a mixture
      of Gaussians.
 """
-function get_source_psf(world_loc::Vector{Float64}, img::TiledImage, psf_K::Int)
+function get_source_psf(world_loc::Vector{Float64}, img::Image, psf_K::Int)
     # Some stamps or simulated data have no raw psf information.    In that case,
     # just use the psf from the image.
     if size(img.raw_psf_comp.rrows) == (0, 0)
@@ -198,14 +198,14 @@ Get the PSF located at a particular world location in an image.
 
 Args:
  - world_loc: A location in world coordinates.
- - img: An TiledImage
+ - img: An Image
 
 Returns:
  - An array of PsfComponent objects that represents the PSF as a mixture
      of Gaussians.
 """
 function get_source_psf(world_loc::Vector{Float64},
-                        img::TiledImage,
+                        img::Image,
                         psf_optimizer::PSF.PsfOptimizer,
                         initial_psf_params::Vector{Vector{Float64}})
     # Some stamps or simulated data have no raw psf information. In that case,
@@ -415,7 +415,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
 
     K = length(psf_params)
     sigma_ids = (psf_ids.e_axis, psf_ids.e_angle, psf_ids.e_scale)
-    for k = 1:K
+    @inbounds for k = 1:K
         # I will put in the weights later so that the log pdf sensitive float
         # is accurate.
         bvn = bvn_vec[k]
@@ -503,7 +503,7 @@ function get_sigma_from_params{NumType <: Number}(psf_params::Vector{Vector{NumT
         sig_sf_vec[k] = GalaxySigmaDerivs(
             psf_params[k][psf_ids.e_angle],
             psf_params[k][psf_ids.e_axis],
-            psf_params[k][psf_ids.e_scale], sigma_vec[k], calculate_tensor=true)
+            psf_params[k][psf_ids.e_scale], sigma_vec[k], true)
 
         bvn_vec[k] =
             BvnComponent{NumType}(SVector{2,NumType}(psf_params[k][psf_ids.mu]), sigma_vec[k], 1.0)
@@ -528,7 +528,7 @@ function evaluate_psf_fit!{NumType <: Number}(
     sigma_vec, sig_sf_vec, bvn_vec = get_sigma_from_params(psf_params)
     clear!(squared_error)
 
-    for x_ind in 1:length(x_mat)
+    @inbounds for x_ind in 1:length(x_mat)
         clear!(pixel_value)
         evaluate_psf_pixel_fit!(
                 x_mat[x_ind], psf_params, sigma_vec, sig_sf_vec, bvn_vec,
@@ -617,7 +617,6 @@ function transform_psf_sensitive_float!{NumType <: Number}(
                     (jacobian_diag[ind1] * jacobian_diag[ind2]) * sf.h[ind1, ind2]
                 if ind1 == ind2
                     sf_free.h[ind1, ind2] +=    hessian_values[ind1] * sf.d[ind1]
-                    diagm(hessian_values .* sf.d[:])
                 end
             end
         end
@@ -657,7 +656,7 @@ function fit_raw_psf_for_celeste(
     optim_result = psf_optimizer.fit_psf(raw_psf, initial_psf_params)
     psf_params_fit =
         constrain_psf_params(
-            unwrap_psf_params(optim_result.minimum), psf_optimizer.psf_transform)
+            unwrap_psf_params(Optim.minimizer(optim_result)), psf_optimizer.psf_transform)
 
     sigma_vec = get_sigma_from_params(psf_params_fit)[1]
     celeste_psf = Array(PsfComponent, K)

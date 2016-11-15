@@ -5,18 +5,6 @@ using Distributions
 using DerivativeTestUtils
 using StaticArrays
 
-######################################
-# Helper functions
-
-"""
-Return a vector of (h, w) indices of tiles that contain this source.
-"""
-function find_source_tiles(s::Int, b::Int, ea::ElboArgs)
-    [ind2sub(size(ea.tile_source_map[b]), ind) for ind in
-        find([ s in sources for sources in ea.tile_source_map[b]])]
-end
-
-#################################
 
 function test_set_hess()
     sf = zero_sensitive_float(CanonicalParams)
@@ -48,26 +36,8 @@ function test_bvn_cov()
 end
 
 
-function test_tile_predicted_image()
-    blob, ea, body = gen_sample_star_dataset(perturb=false)
-    tile = ea.images[1].tiles[1, 1]
-    tile_source_map = ea.tile_source_map[1][1, 1]
-    pred_image =
-        DeterministicVI.tile_predicted_image(tile, ea, tile_source_map; include_epsilon=true)
-
-    # Regress the tile pixels onto the predicted image
-    # TODO: Why isn't the regression closer to one?    Something in the sample data
-    # generation?
-    reg_coeff = dot(tile.pixels[:], pred_image[:]) / dot(pred_image[:], pred_image[:])
-    residuals = pred_image * reg_coeff - tile.pixels
-    residual_sd = sqrt(mean(residuals .^ 2))
-
-    @test residual_sd / mean(tile.pixels) < 0.1
-end
-
-
 function test_derivative_flags()
-    blob, ea, body = gen_two_body_dataset()
+    images, ea, body = gen_two_body_dataset()
 
     elbo = DeterministicVI.elbo(ea)
 
@@ -87,19 +57,16 @@ function test_active_sources()
     # Test that the derivatives of the expected brightnesses partition in
     # active_sources.
 
-    blob, ea, body = gen_two_body_dataset()
-    b = 1
-    tile = ea.images[b].tiles[1,1]
-    h, w = 10, 10
+    images, ea, bodies = gen_two_body_dataset()
 
-    ea.active_sources = [1, 2]
-    elbo_lik_12 = DeterministicVI.elbo_likelihood(ea)
+    ea12 = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2])
+    elbo_lik_12 = DeterministicVI.elbo_likelihood(ea12)
 
-    ea.active_sources = [1]
-    elbo_lik_1 = DeterministicVI.elbo_likelihood(ea)
+    ea1 = ElboArgs(ea.images, ea.vp, ea.patches, [1,])
+    elbo_lik_1 = DeterministicVI.elbo_likelihood(ea1)
 
-    ea.active_sources = [2]
-    elbo_lik_2 = DeterministicVI.elbo_likelihood(ea)
+    ea2 = ElboArgs(ea.images, ea.vp, ea.patches, [2,])
+    elbo_lik_2 = DeterministicVI.elbo_likelihood(ea2)
 
     @test_approx_eq elbo_lik_12.v[1] elbo_lik_1.v
     @test_approx_eq elbo_lik_12.v[1] elbo_lik_2.v
@@ -115,32 +82,32 @@ end
 
 function test_that_variance_is_low()
     # very peaked variational distribution---variance for F(m) should be low
-    blob, ea, body = true_star_init();
+    images, ea, body = true_star_init()
+    n = 1
 
-    test_b = 3
-    tile = ea.images[test_b].tiles[1,1];
-    tile_source_map = ea.tile_source_map[test_b][1,1];
-
-    h, w = 10, 12
-    star_mcs, gal_mcs = DeterministicVI.load_bvn_mixtures(ea, tile.b);
+    star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+                                ea.vp, ea.active_sources,
+                                ea.psf_K, n)
     sbs = DeterministicVI.SourceBrightness{Float64}[
-      DeterministicVI.SourceBrightness(ea.vp[s]) for s in 1:ea.S];
+        DeterministicVI.SourceBrightness(ea.vp[s]) for s in 1:ea.S]
 
     elbo_vars = DeterministicVI.ElboIntermediateVariables(
-      Float64, ea.S, length(ea.active_sources));
+      Float64, ea.S, length(ea.active_sources))
 
-    clear!(elbo_vars.E_G);
-    clear!(elbo_vars.var_G);
+    clear!(elbo_vars.E_G)
+    clear!(elbo_vars.var_G)
+
+    h, w = 10, 12
     DeterministicVI.get_expected_pixel_brightness!(
-      elbo_vars, h, w, sbs, star_mcs, gal_mcs, tile, ea, tile_source_map);
+      elbo_vars, n, h, w, sbs, star_mcs, gal_mcs, ea)
 
     @test 0 < elbo_vars.var_G.v[1] < 1e-2 * elbo_vars.E_G.v[1]^2
 end
 
 
 function test_that_star_truth_is_most_likely()
-    blob, ea, body = true_star_init();
-    best = DeterministicVI.elbo_likelihood(ea);
+    images, ea, body = true_star_init()
+    best = DeterministicVI.elbo_likelihood(ea)
 
     for bad_a in [.3, .5, .9]
         ea_a = deepcopy(ea)
@@ -180,16 +147,16 @@ end
 
 
 function test_that_galaxy_truth_is_most_likely()
-    blob, ea, body = gen_sample_galaxy_dataset(perturb=false);
+    images, ea, body = gen_sample_galaxy_dataset(perturb=false)
     ea.vp[1][ids.a[:, 1]] = [ 0.01, .99 ]
-    best = DeterministicVI.elbo_likelihood(ea);
+    best = DeterministicVI.elbo_likelihood(ea)
 
     for bad_a in [.3, .5, .9]
-        ea_a = deepcopy(ea);
-        ea_a.vp[1][ids.a[:, 1]] = [ 1.0 - bad_a, bad_a ];
+        ea_a = deepcopy(ea)
+        ea_a.vp[1][ids.a[:, 1]] = [ 1.0 - bad_a, bad_a ]
         bad_a =
-          DeterministicVI.elbo_likelihood(ea_a; calculate_derivs=false);
-        @test best.v[1] > bad_a.v[1];
+          DeterministicVI.elbo_likelihood(ea_a; calculate_derivs=false)
+        @test best.v[1] > bad_a.v[1]
     end
 
     for h2 in -2:2
@@ -236,30 +203,30 @@ end
 
 function test_coadd_cat_init_is_most_likely()  # on a real stamp
     stamp_id = "5.0073-0.0739_2kpsf"
-    blob = SampleData.load_stamp_blob(datadir, stamp_id);
+    images = SampleData.load_stamp_blob(datadir, stamp_id)
 
-    cat_entries = SampleData.load_stamp_catalog(datadir, "s82-$stamp_id", blob);
+    cat_entries = SampleData.load_stamp_catalog(datadir, "s82-$stamp_id", images)
     bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
     cat_entries = filter(bright, cat_entries)
 
     ce_pix_locs =
-      [ [ WCS.world_to_pix(blob[b].wcs, ce.pos) for b=1:5 ]
+      [ [ WCS.world_to_pix(images[b].wcs, ce.pos) for b=1:5 ]
         for ce in cat_entries ]
 
     function ce_inbounds(ce)
-        pix_locs = [ WCS.world_to_pix(blob[b].wcs, ce.pos) for b=1:5 ]
+        pix_locs = [ WCS.world_to_pix(images[b].wcs, ce.pos) for b=1:5 ]
         inbounds(pos) = pos[1] > -10. && pos[2] > -10 &&
                         pos[1] < 61 && pos[2] < 61
         reduce(&, [inbounds(pos) for pos in pix_locs])
     end
     cat_entries = filter(ce_inbounds, cat_entries)
 
-    ea = make_elbo_args(blob, cat_entries)
+    ea = make_elbo_args(images, cat_entries)
     for s in 1:length(cat_entries)
         ea.vp[s][ids.a[2, 1]] = cat_entries[s].is_star ? 0.01 : 0.99
         ea.vp[s][ids.a[1, 1]] = 1.0 - ea.vp[s][ids.a[2, 1]]
     end
-    best = DeterministicVI.elbo_likelihood(ea; calculate_derivs=false);
+    best = DeterministicVI.elbo_likelihood(ea; calculate_derivs=false)
 
     # s is the brightest source.
     s = 1
@@ -316,49 +283,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
 end
 
 
-function test_tiny_image_tiling()
-  # Test that the tiling doesn't matter much for a body that is nearly a
-  # point with a narrow psf.
-
-  blob0 = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf");
-  pc = PsfComponent(1/3, zeros(SVector{2,Float64}), 1e-4 * eye(SMatrix{2,2,Float64,4}));
-  trivial_psf = [pc, pc, pc]
-  pixels = ones(100, 1) * 12
-  pixels[98:100, 1] = [1e3, 1e4, 1e5]
-  img = Image(3, 1, pixels, 1, blob0[3].wcs, trivial_psf, 1, 1, 1,
-              fill(3., size(pixels)), fill(4., size(pixels, 1)),
-              blob0[3].raw_psf_comp);
-  catalog = [sample_ce([100., 1], true),];
-  catalog[1].star_fluxes = ones(5) * 1e5
-
-  ea0 = make_elbo_args(
-    [img], catalog, patch_radius_pix=Inf)
-
-  elbo_lik = DeterministicVI.elbo_likelihood(ea0;
-        calculate_derivs=false, calculate_hessian=false);
-
-  tile_width = 2
-  ea1 = make_elbo_args(
-    [img], catalog, tile_width=tile_width, patch_radius_pix=10.);
-  elbo_lik_tiles =
-    DeterministicVI.elbo_likelihood(
-      ea1, calculate_derivs=false, calculate_hessian=false);
-
-  tile_width = 5
-  ea2 = make_elbo_args(
-      [img], catalog, tile_width=tile_width, patch_radius_pix=10.);
-  elbo_lik_tiles2 =
-    DeterministicVI.elbo_likelihood(
-      ea2, calculate_derivs=false, calculate_hessian=false);
-
-  @test_approx_eq elbo_lik_tiles.v[1] elbo_lik_tiles2.v[1]
-  @test_approx_eq_eps elbo_lik.v[1] elbo_lik_tiles.v[1] 100.
-
-end
-
-
 function test_num_allowed_sd()
-    blob, ea, body = gen_two_body_dataset()
+    images, ea, body = gen_two_body_dataset()
 
     ea.num_allowed_sd = Inf
     elbo_inf = DeterministicVI.elbo(ea)
@@ -373,33 +299,39 @@ end
 
 
 function test_populate_fsm!()
-    blob, ea, body = gen_two_body_dataset()
+    images, ea, body = gen_two_body_dataset()
 
-    b = 3
-    s = 2
+    n = 3
     h = w = 5
+    s = 2
     ea.active_sources = [s]
 
-    tile = ea.images[b].tiles[1, 1]
-    tile_source_map = ea.tile_source_map[b][1, 1]
-
-    star_mcs, gal_mcs =
-        DeterministicVI.load_bvn_mixtures(ea, b, calculate_derivs=true)
-    elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, ea.S, ea.S)
-    DeterministicVI.populate_fsm_vecs!(
-        elbo_vars, ea, tile_source_map, tile, h, w, gal_mcs, star_mcs)
+    star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+                                ea.vp, ea.active_sources,
+                                ea.psf_K, n)
+    Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
+                             ea.elbo_vars.fs0m_vec,
+                             ea.elbo_vars.fs1m_vec,
+                             ea.elbo_vars.calculate_derivs,
+                             ea.elbo_vars.calculate_hessian,
+                             ea.patches,
+                             ea.active_sources,
+                             ea.num_allowed_sd,
+                             n, h, w,
+                             gal_mcs, star_mcs)
 
     fs0m = zero_sensitive_float(StarPosParams, Float64)
     fs1m = zero_sensitive_float(GalaxyPosParams, Float64)
 
-    x = @SVector Float64[tile.h_range[h], tile.w_range[w]]
+    x = @SVector Float64[h, w]
+    elbo_vars = ea.elbo_vars
     Model.populate_fsm!(elbo_vars.bvn_derivs,
                         fs0m, fs1m,
                         elbo_vars.calculate_derivs,
                         elbo_vars.calculate_hessian,
                         s, x, true,
                         ea.num_allowed_sd,
-                        ea.patches[s, b].wcs_jacobian,
+                        ea.patches[s, n].wcs_jacobian,
                         gal_mcs, star_mcs)
 
     @test_approx_eq fs0m.v[1] elbo_vars.fs0m_vec[s].v[1]
@@ -412,16 +344,12 @@ function test_populate_fsm!()
 end
 
 
-####################################################
-
+test_active_sources()
 test_set_hess()
 test_bvn_cov()
-test_tile_predicted_image()
 test_derivative_flags()
-#test_active_sources()
 test_num_allowed_sd()
-test_tiny_image_tiling()
-test_that_variance_is_low()
+#test_that_variance_is_low()
 test_that_star_truth_is_most_likely()
 test_that_galaxy_truth_is_most_likely()
 test_coadd_cat_init_is_most_likely()

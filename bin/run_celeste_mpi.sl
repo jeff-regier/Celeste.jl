@@ -20,4 +20,4 @@ module load impi
 export I_MPI_PIN_DOMAIN=auto
 export I_MPI_PMI_LIBRARY=/usr/lib64/slurmpmi/libpmi.so
 
-srun -n 32 $SCRATCH/julia/bin/julia "$HOME/.julia/v0.5/Celeste/bin/celeste.jl" infer-box 200 200.5 38.1 38.35 $SCRATCH/multi
+srun -n 32 $SCRATCH/julia/bin/julia "$HOME/.julia/v0.5/Celeste/bin/infer-box.jl" 200 200.5 38.1 38.35

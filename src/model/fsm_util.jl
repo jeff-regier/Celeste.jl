@@ -9,7 +9,7 @@ Args:
  - vp: (formerly from ElboArgs)
  - active_sources (formerly from ElboArgs)
  - psf_K: Number of psf components (psf from patches object)
- - b: The current band
+ - n: the image id (not the band)
  - calculate_derivs: Whether to calculate derivatives for active sources.
  - calculate_hessian
 
@@ -30,7 +30,7 @@ function load_bvn_mixtures{NumType <: Number}(
                     source_params::Vector{Vector{NumType}},
                     active_sources::Vector{Int},
                     psf_K::Int64,
-                    b::Int;
+                    n::Int;
                     calculate_derivs::Bool=true,
                     calculate_hessian::Bool=true)
     star_mcs = Array(BvnComponent{NumType}, psf_K, S)
@@ -39,13 +39,17 @@ function load_bvn_mixtures{NumType <: Number}(
     # TODO: do not keep any derviative information if the sources are not in
     # active_sources.
     for s in 1:S
-        psf = patches[s, b].psf
+        psf = patches[s, n].psf
         sp  = source_params[s]
 
+        # TODO: it's a lucky coincidence that lidx.u = ids.u.
+        # That's why this works when called from both log_prob.jl with `sp`
+        # and elbo_objective.jl with `vp`.
+        # We need a safer way to let both methods call this method.
         world_loc = sp[lidx.u]
-        m_pos = Model.linear_world_to_pix(patches[s, b].wcs_jacobian,
-                                          patches[s, b].center,
-                                          patches[s, b].pixel_center, world_loc)
+        m_pos = Model.linear_world_to_pix(patches[s, n].wcs_jacobian,
+                                          patches[s, n].center,
+                                          patches[s, n].pixel_center, world_loc)
 
         # Convolve the star locations with the PSF.
         for k in 1:psf_K
@@ -53,7 +57,7 @@ function load_bvn_mixtures{NumType <: Number}(
             mean_s = @SVector NumType[pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
             star_mcs[k, s] =
               BvnComponent{NumType}(
-                mean_s, pc.tauBar, pc.alphaBar, calculate_siginv_deriv=false)
+                mean_s, pc.tauBar, pc.alphaBar, false)
         end
 
         # Convolve the galaxy representations with the PSF.
@@ -202,13 +206,13 @@ function populate_fsm!{NumType <: Number}(
                     mv_calculate_hessian::Bool,
                     s::Int,
                     x::SVector{2,Float64},
-                    active_source::Bool,
+                    is_active_source::Bool,
                     num_allowed_sd::Float64,
                     wcs_jacobian::Matrix{Float64},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
     calculate_hessian =
-        mv_calculate_hessian && mv_calculate_derivs && active_source
+        mv_calculate_hessian && mv_calculate_derivs && is_active_source
 
     clear!(fs0m, calculate_hessian)
     for k = 1:size(star_mcs, 1) # PSF component
@@ -218,7 +222,7 @@ function populate_fsm!{NumType <: Number}(
                 bvn_derivs, fs0m,
                 mv_calculate_derivs,
                 mv_calculate_hessian,
-                star_mcs[k, s], x, wcs_jacobian, active_source)
+                star_mcs[k, s], x, wcs_jacobian, is_active_source)
         end
     end
 
@@ -236,44 +240,29 @@ function populate_fsm_vecs!{NumType <: Number}(
                     patches::Matrix{SkyPatch},
                     active_sources::Vector{Int},
                     num_allowed_sd::Float64,
-                    tile_sources::Vector{Int},
-                    tile::ImageTile,
-                    h::Int, w::Int,
+                    n::Int, h::Int, w::Int,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
+    @inbounds for s in 1:size(patches, 1)
+        p = patches[s,n]
 
-    x = @SVector Float64[tile.h_range[h], tile.w_range[w]]
-    for s in tile_sources
-        # ensure tile.b is a filter band, not an image's index
-        @assert 1 <= tile.b <= B
-        active_source = s in active_sources
-        wcs_jacobian = patches[s, tile.b].wcs_jacobian
-        populate_fsm!(bvn_derivs, fs0m_vec[s], fs1m_vec[s],
-                      mv_calculate_derivs, mv_calculate_hessian,
-                      s, x, active_source, num_allowed_sd,
-                      wcs_jacobian, gal_mcs, star_mcs)
+        h2 = h - p.bitmap_corner[1]
+        w2 = w - p.bitmap_corner[2]
+
+        H2, W2 = size(p.active_pixel_bitmap)
+
+        if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
+            hw = SVector{2,Float64}(h, w)
+            is_active_source = s in active_sources  # fast?
+
+            populate_fsm!(bvn_derivs, fs0m_vec[s], fs1m_vec[s],
+                          mv_calculate_derivs, mv_calculate_hessian,
+                          s, hw, is_active_source,
+                          num_allowed_sd,
+                          p.wcs_jacobian,
+                          gal_mcs, star_mcs)
+        end
     end
-end
-
-
-function populate_fsm_vecs!{NumType <: Number}(
-                    model_vars::ModelIntermediateVariables{NumType},
-                    patches::Matrix{SkyPatch},
-                    active_sources::Vector{Int},
-                    num_allowed_sd::Float64,
-                    tile_sources::Vector{Int},
-                    tile::ImageTile,
-                    h::Int, w::Int,
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    star_mcs::Array{BvnComponent{NumType}, 2})
-    Model.populate_fsm_vecs!(model_vars.bvn_derivs,
-                             model_vars.fs0m_vec,
-                             model_vars.fs1m_vec,
-                             model_vars.calculate_derivs,
-                             model_vars.calculate_hessian,
-                             patches, active_sources, num_allowed_sd,
-                             tile_sources,
-                             tile, h, w, gal_mcs, star_mcs)
 end
 
 
@@ -284,7 +273,7 @@ by updating elbo_vars.fs0m_vec[s] in place.
 Args:
     - bvn_derivs: (formerly from elbo_vars)
     - fs0m_vec: vector of sensitive floats, populated by this method
-    - calculate_derivs: the and of active_source and formerly elbo_vars.calculate_derivs
+    - calculate_derivs: the and of is_active_source and formerly elbo_vars.calculate_derivs
     - calculate_hessian: elbo_vars: Elbo intermediate values.
     - s: The index of the current source in 1:S
     - bmc: The component to be added

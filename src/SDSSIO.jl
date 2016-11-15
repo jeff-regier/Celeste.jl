@@ -26,6 +26,14 @@ immutable RunCamcolField
 end
 
 
+function RunCamcolField(run::String, camcol::String, field::String)
+    RunCamcolField(
+        parse(Int64, run),
+        parse(Int64, camcol),
+        parse(Int64, field))
+end
+
+
 """
 interp_sky(data, xcoords, ycoords)
 

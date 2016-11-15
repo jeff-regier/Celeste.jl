@@ -53,13 +53,13 @@ function constrain_to_simplex{NumType <: Number}(x::Vector{NumType})
         z = NumType[ x_entry .== Inf ? one(NumType) : zero(NumType) for x_entry in x]
         z ./ sum(z)
         push!(z, 0)
-        return(z)
+        return z
     else
-        z = exp(x)
+        z = exp.(x)
         z_sum = sum(z) + 1
         z ./= z_sum
         push!(z, 1 / z_sum)
-        return(z)
+        return z
     end
 end
 

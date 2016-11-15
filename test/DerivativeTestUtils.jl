@@ -21,13 +21,7 @@ function forward_diff_model_params{T<:Number}(::Type{T}, ea0::ElboArgs{Float64})
         vp[s][i] = ea0.vp[s][i]
     end
 
-    ea1 = ElboArgs(ea0.images,
-             vp,
-             ea0.tile_source_map,
-             ea0.patches,
-             ea0.active_sources)
-    ea1.active_pixels = ea0.active_pixels
-    ea1
+    ElboArgs(ea0.images, vp, ea0.patches, ea0.active_sources)
 end
 
 

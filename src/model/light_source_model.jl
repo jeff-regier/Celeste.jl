@@ -116,8 +116,8 @@ function load_prior()
 
     # The prior contains parameters of a lognormal distribution with
     # the desired means.
-    r_var = log(var_brightness ./ (mean_brightness .^ 2) + 1)
-    r_mean = log(mean_brightness) - 0.5 * r_var
+    r_var = log.(var_brightness ./ (mean_brightness .^ 2) + 1)
+    r_mean = log.(mean_brightness) - 0.5 * r_var
     PriorParams(a, r_mean, r_var, k, c_mean, c_cov)
 end
 
