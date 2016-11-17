@@ -227,7 +227,7 @@ function populate_fsm!{NumType <: Number}(
     end
 
     populate_gal_fsm!(bvn_derivs, fs1m, mv_calculate_derivs, mv_calculate_hessian,
-                      s, x, active_source, num_allowed_sd, wcs_jacobian, gal_mcs)
+                      s, x, is_active_source, num_allowed_sd, wcs_jacobian, gal_mcs)
 end
 
 

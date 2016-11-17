@@ -56,7 +56,6 @@ function accum_star_pos!{NumType <: Number}(
                     x::SVector{2, Float64},
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
-    # call accum star pos in model
     Model.accum_star_pos!(elbo_vars.bvn_derivs,
                     elbo_vars.fs0m_vec,
                     elbo_vars.calculate_derivs,
@@ -88,7 +87,6 @@ function accum_galaxy_pos!{NumType <: Number}(
                     x::SVector{2, Float64},
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
-    # call accum star pos in model
     Model.accum_galaxy_pos!(elbo_vars.bvn_derivs,
                             elbo_vars.fs1m_vec,
                             elbo_vars.calculate_derivs,
@@ -375,8 +373,8 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
         ea,
         elbo_vars.E_G_s,
         elbo_vars.var_G_s,
-        elbo_vars.fs0m_vec[s],
-        elbo_vars.fs1m_vec[s],
+        fs0m,
+        fs1m,
         sb,
         b,
         s,
@@ -584,6 +582,12 @@ function elbo_likelihood{NumType <: Number}(
                         continue
                     end
                     already_visited[h,w] = true
+                end
+
+                # Some pixels that are NaN in the original image may be active
+                # for the convolution code.
+                if isnan(img.pixels[h, w])
+                    continue
                 end
 
                 # if we're here it's a unique active pixel

@@ -93,7 +93,7 @@ function infer_source(images::Vector{Image},
     end
 
     # It's a bit inefficient to call the next 5 lines every time we optimize_f.
-    # But, as long as runtime is dominated by the call to maximize_f, that 
+    # But, as long as runtime is dominated by the call to maximize_f, that
     # isn't a big deal.
     cat_local = vcat(entry, neighbors)
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
@@ -163,16 +163,16 @@ end
 """
 Get pixels significantly above background noise.
 
-# TODO: implement discard_nan
 Arguments:
   ea: The ElboArgs object
-  discard_nan: If true, NaN pixels are not included.
+  exclude_nan: If true, NaN pixels are not included.
   noise_fraction: The proportion of the noise below which we will remove pixels.
   min_radius_pix: A minimum pixel radius to be included.
 """
 function load_active_pixels!(ea::ElboArgs{Float64};
-                            noise_fraction=0.5,
-                            min_radius_pix=8.0)
+                             exclude_nan=true,
+                             noise_fraction=0.5,
+                             min_radius_pix=8.0)
     for n = 1:ea.N, s=1:ea.S
         img = ea.images[n]
         p = ea.patches[s,n]
@@ -184,7 +184,7 @@ function load_active_pixels!(ea::ElboArgs{Float64};
             w = p.bitmap_corner[2] + w2
 
             # skip masked pixels
-            if isnan(img.pixels[h, w])
+            if isnan(img.pixels[h, w]) && exclude_nan
                 p.active_pixel_bitmap[h2, w2] = false
                 continue
             end
