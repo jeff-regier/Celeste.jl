@@ -182,22 +182,35 @@ ElboArgs stores the arguments needed to evaluate the variational objective
 function.
 """
 type ElboArgs{NumType <: Number}
+    # the overall number of sources: we don't necessarily visit them
+    # all or optimize them all, but if we do visit a pixel where any
+    # of these are active, we use it in the elbo calculation
     S::Int64
+
+    # the number of images
     N::Int64
 
     # The number of components in the point spread function.
     psf_K::Int64
     images::Vector{Image}
     vp::VariationalParams{NumType}
+
+    # subimages is a better name for patches: regions of an image
+    # around a particular light source
     patches::Matrix{SkyPatch}
+
+    # the sources to optimize
     active_sources::Vector{Int}
+
+    # the sources whose patches we visit we computing the elbo
+    sources_to_visit::Vector{Int}
 
     # Bivarite normals will not be evaulated at points further than this many
     # standard deviations away from their mean.  See its usage in the ELBO and
     # bivariate normals for details.
     #
-    # If this is set to Inf, the bivariate normals will be evaluated at all points
-    # irrespective of their distance from the mean.
+    # If this is set to Inf, the bivariate normals will be evaluated at all
+    # points irrespective of their distance from the mean.
     num_allowed_sd::Float64
 
     elbo_vars::ElboIntermediateVariables
@@ -208,7 +221,8 @@ function ElboArgs{NumType <: Number}(
             images::Vector{Image},
             vp::VariationalParams{NumType},
             patches::Matrix{SkyPatch},
-            active_sources::Vector{Int};
+            active_sources::Vector{Int},
+            sources_to_visit::Vector{Int};
             psf_K::Int=2,
             num_allowed_sd::Float64=Inf)
     N = length(images)
@@ -220,9 +234,9 @@ function ElboArgs{NumType <: Number}(
 
     for img in images, ep in img.epsilon_mat
         if ep <= 0.0
-            throw(InvalidInputError(
-                "You must set all values of epsilon_mat > 0 for all images included in ElboArgs"
-            ))
+            msg = string("You must set all values of epsilon_mat > 0 ",
+                         "for all images included in ElboArgs")
+            throw(InvalidInputError(msg))
         end
     end
 
@@ -234,6 +248,6 @@ function ElboArgs{NumType <: Number}(
                                 calculate_hessian=true)
 
     ElboArgs(S, N, psf_K, images, vp, patches,
-             active_sources, num_allowed_sd, elbo_vars)
+             active_sources, sources_to_visit, num_allowed_sd, elbo_vars)
 end
 

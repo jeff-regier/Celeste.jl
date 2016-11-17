@@ -179,8 +179,8 @@ function state_log_likelihood(is_star::Bool,                # source is star
         H2, W2 = size(p.active_pixel_bitmap)
         for w2 in 1:W2, h2 in 1:H2
             # (h2, w2) index the local patch, while (h, w) index the image
-            h = p.bitmap_corner[1] + h2
-            w = p.bitmap_corner[2] + w2
+            h = p.bitmap_corner[1] + h2 - 1
+            w = p.bitmap_corner[2] + w2 - 1
 
             if !p.active_pixel_bitmap[h2, w2]
                 continue

@@ -9,6 +9,7 @@ export forward_diff_model_params,
        wrap_vp_vector,
        test_with_autodiff
 
+
 """"
 Return an ElboArgs with the corresponding type.
 """
@@ -21,9 +22,9 @@ function forward_diff_model_params{T<:Number}(::Type{T}, ea0::ElboArgs{Float64})
         vp[s][i] = ea0.vp[s][i]
     end
 
-    ElboArgs(ea0.images, vp, ea0.patches, ea0.active_sources)
+    ElboArgs(ea0.images, vp, ea0.patches, ea0.active_sources,
+             ea0.sources_to_visit)
 end
-
 
 
 """

@@ -65,20 +65,22 @@ function test_load_active_pixels()
     # most star light (>90%) should be recorded by the active pixels
     num_active_photons = 0.0
     num_active_pixels = 0
+    total_pixels = 0
     for n in 1:ea.N
         img = ea.images[n]
         p = ea.patches[1, n]
         H2, W2 = size(p.active_pixel_bitmap)
+        total_pixels += length(img.pixels)
         for w2 in 1:W2, h2 in 1:H2
             # (h2, w2) index the local patch, while (h, w) index the image
-            h = p.bitmap_corner[1] + h2
-            w = p.bitmap_corner[2] + w2
+            h = p.bitmap_corner[1] + h2 - 1
+            w = p.bitmap_corner[2] + w2 - 1
             num_active_photons += img.pixels[h, w] - img.epsilon_mat[h, w]
             num_active_pixels += 1
         end
     end
 
-    @test 100 < num_active_pixels < 2200
+    @test 100 < num_active_pixels < total_pixels
 
     total_photons = 0.0
     for img in ea.images

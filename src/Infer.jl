@@ -98,7 +98,7 @@ function infer_source(images::Vector{Image},
     cat_local = vcat(entry, neighbors)
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
     patches = get_sky_patches(images, cat_local)
-    ea = ElboArgs(images, vp, patches, [1])
+    ea = ElboArgs(images, vp, patches, [1], [1])
     load_active_pixels!(ea)
 
     f_evals, max_f, max_x, nm_result = maximize_f(elbo, ea)
@@ -131,17 +131,15 @@ function get_sky_patches(images::Vector{Image},
                 radius_pix = radius_override_pix
             end
 
-            center_int = round(Int, pixel_center)
-            radius_int = ceil(Int, radius_pix)
-            hmin = max(1, center_int[1] - radius_int)
-            hmax = min(img.H, center_int[1] + radius_int)
-            wmin = max(1, center_int[2] - radius_int)
-            wmax = min(img.W, center_int[2] + radius_int)
+            hmin = max(1, floor(Int, pixel_center[1] - radius_pix))
+            hmax = min(img.H, ceil(Int, pixel_center[1] + radius_pix))
+            wmin = max(1, floor(Int, pixel_center[2] - radius_pix))
+            wmax = min(img.W, ceil(Int, pixel_center[2] + radius_pix))
 
             # some light sources are so far from some images that they don't
             # overlap at all
-            H2 = max(0, hmax - hmin)
-            W2 = max(0, wmax - wmin)
+            H2 = max(0, hmax - hmin + 1)
+            W2 = max(0, wmax - wmin + 1)
 
             # all pixels are active by default
             active_pixel_bitmap = trues(H2, W2)
@@ -178,8 +176,8 @@ function load_active_pixels!(ea::ElboArgs{Float64};
         # (h2, w2) index the local patch, while (h, w) index the image
         H2, W2 = size(p.active_pixel_bitmap)
         for w2 in 1:W2, h2 in 1:H2
-            h = p.bitmap_corner[1] + h2
-            w = p.bitmap_corner[2] + w2
+            h = p.bitmap_corner[1] + h2 - 1
+            w = p.bitmap_corner[2] + w2 - 1
 
             # skip masked pixels
             if isnan(img.pixels[h, w])
