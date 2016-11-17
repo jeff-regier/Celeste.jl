@@ -219,7 +219,7 @@ function test_e_g_s_functions()
         elbo_vars = e_g_wrapper_fun(ea)
 
         # Sanity check the variance value.
-        @test_approx_eq(elbo_vars.var_G_s.v,
+        @test_approx_eq(elbo_vars.var_G_s.v[],
                                         elbo_vars.E_G2_s.v[] - (elbo_vars.E_G_s.v[] ^ 2))
 
         sf = test_var ? deepcopy(elbo_vars.var_G_s) : deepcopy(elbo_vars.E_G_s)
@@ -309,7 +309,7 @@ function test_fs1m_derivatives()
 
         @test_approx_eq(
             pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(v) / (2 * pi),
-            fs1m.v)
+            fs1m.v[])
 
         test_with_autodiff(f_wrap_gal, par_gal, fs1m)
     end
@@ -1242,7 +1242,7 @@ function test_elbo()
     function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
         ea_local = unwrap_vp_vector(vp_vec, ea)
         elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false)
-        elbo.v[1]
+        elbo.v[]
     end
 
     ea.active_sources = [1]
@@ -1300,12 +1300,12 @@ function test_real_image()
 
     function wrap_elbo{NumType <: Number}(vs1::Vector{NumType})
         ea_local = forward_diff_model_params(NumType, ea)
-        ea_local.vp[1][:] = vs1
+        ea_local.vp[][:] = vs1
         local_elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false)
-        local_elbo.v[1]
+        local_elbo.v[]
     end
 
-    test_with_autodiff(wrap_elbo, ea.vp[1], elbo)
+    test_with_autodiff(wrap_elbo, ea.vp[], elbo)
 end
 
 
@@ -1326,7 +1326,7 @@ function test_transform_sensitive_float()
 		ea_local = forward_diff_model_params(NumType, ea);
 		transform.to_vp!(vp_free, ea_local.vp)
 		elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false, calculate_hessian=false)
-		elbo.v[1]
+		elbo.v[]
 	end
 
 	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);

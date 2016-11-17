@@ -65,7 +65,7 @@ function test_with_autodiff{F}(fun::F, x::Vector{Float64}, sf::SensitiveFloat)
     const test_grad = false
     const test_hess = false
 
-    @test_approx_eq fun(x) sf.v
+    @test_approx_eq fun(x) sf.v[]
 
     if test_grad
         ad_grad = ForwardDiff.gradient(fun, x)
