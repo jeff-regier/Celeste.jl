@@ -187,28 +187,27 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
         #     E_G2_u_u_hess += elbo_vars.E_G2_s_hsub_vec[i].u_u
         # end
         # For each value in 1:Ia, written this way for speed.
+
         @assert Ia == 2
-        @inbounds begin
-            ids_u_1 = ids.u[1]
-            ids_u_2 = ids.u[2]
-            E_G_s_hsub_vec_1_u_u = elbo_vars.E_G_s_hsub_vec[1].u_u
-            E_G_s_hsub_vec_2_u_u = elbo_vars.E_G_s_hsub_vec[2].u_u
-            E_G2_s_hsub_vec_1_u_u = elbo_vars.E_G2_s_hsub_vec[1].u_u
-            E_G2_s_hsub_vec_2_u_u = elbo_vars.E_G2_s_hsub_vec[2].u_u
-            E_G_s_h = E_G_s.h
-            E_G2_s_h = E_G2_s.h
 
-            E_G_s_h[ids_u_1, ids_u_1] = E_G_s_hsub_vec_1_u_u[1, 1] + E_G_s_hsub_vec_2_u_u[1, 1]
-            E_G2_s_h[ids_u_1, ids_u_1] = E_G2_s_hsub_vec_1_u_u[1, 1] + E_G2_s_hsub_vec_2_u_u[1, 1]
+        E_G_s_h = E_G_s.h
+        E_G2_s_h = E_G2_s.h
+        E_G_s_hsub_vec = elbo_vars.E_G_s_hsub_vec
+        E_G2_s_hsub_vec = elbo_vars.E_G2_s_hsub_vec
 
-            E_G_s_h[ids_u_1, ids_u_2] = E_G_s_hsub_vec_1_u_u[1, 2] + E_G_s_hsub_vec_2_u_u[1, 2]
-            E_G2_s_h[ids_u_1, ids_u_2] = E_G2_s_hsub_vec_1_u_u[1, 2] + E_G2_s_hsub_vec_2_u_u[1, 2]
-
-            E_G_s_h[ids_u_2, ids_u_1] = E_G_s_hsub_vec_1_u_u[2, 1] + E_G_s_hsub_vec_2_u_u[2, 1]
-            E_G2_s_h[ids_u_2, ids_u_1] = E_G2_s_hsub_vec_1_u_u[2, 1] + E_G2_s_hsub_vec_2_u_u[2, 1]
-
-            E_G_s_h[ids_u_2, ids_u_2] = E_G_s_hsub_vec_1_u_u[2, 2] + E_G_s_hsub_vec_2_u_u[2, 2]
-            E_G2_s_h[ids_u_2, ids_u_2] = E_G2_s_hsub_vec_1_u_u[2, 2] + E_G2_s_hsub_vec_2_u_u[2, 2]
+        @inbounds for i in 1:Ia
+            u_i = ids.u[i]
+            @inbounds for j in 1:Ia
+                u_j = ids.u[j]
+                E_G_s_term = E_G_s_hsub_vec[1].u_u[i, j]
+                E_G2_s_term = E_G2_s_hsub_vec[1].u_u[i, j]
+                @inbounds for k in 2:Ia
+                    E_G_s_term += E_G_s_hsub_vec[k].u_u[i, j]
+                    E_G2_s_term += E_G2_s_hsub_vec[k].u_u[i, j]
+                end
+                E_G_s_h[u_i, u_j] = E_G_s_term
+                E_G2_s_h[u_i, u_j] = E_G2_s_term
+            end
         end
     end
 
