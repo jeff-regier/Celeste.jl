@@ -4,7 +4,6 @@ Tools for exploratory data analysis and debugging.
 module CelesteEDA
 
 using DataFrames
-using PyPlot
 
 import ..DeterministicVI:
     load_source_brightnesses, accumulate_source_pixel_brightness!, ElboArgs

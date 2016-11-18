@@ -2,6 +2,7 @@ using Celeste:
     Model, DeterministicVI, CelesteEDA, DeterministicVIImagePSF, SDSSIO,
     Infer, PSF
 
+# NB: PyPlot is not in REQUIRE.
 using PyPlot
 
 ##########
