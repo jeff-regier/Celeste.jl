@@ -37,16 +37,17 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
 
     f_evals = 0
     print_every_n = 10
-    n_active_sources = length(transform.active_sources)
-    kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    all_kept_ids = Int[]
+    n_active_sources::Int = length(transform.active_sources)
+    kept_ids::Vector{Int} = setdiff(1:length(UnconstrainedParams), omitted_ids)
+
+    all_kept_ids::Vector{Int} = Int[]
     for i in eachindex(transform.active_sources)
         append!(all_kept_ids, kept_ids + (i - 1) * length(kept_ids))
     end
 
     x0 = vec(Transform.vp_to_array(transform, ea.vp, omitted_ids))
-    last_sf = zero_sensitive_float(UnconstrainedParams, n_active_sources)
-    last_x = fill(NaN, size(x0))
+    last_sf::SensitiveFloat{UnconstrainedParams,Float64} = zero_sensitive_float(UnconstrainedParams, n_active_sources)
+    last_x::Vector{Float64} = fill(NaN, size(x0))
 
     f_wrapped_nocache! = (x::Vector) -> begin
         # Evaluate in the constrained space and then unconstrain again.
@@ -63,26 +64,30 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
             copy!(last_x, x)
             f_wrapped_nocache!(x)
         end
-        return last_sf
+        return nothing
     end
 
     neg_f_value = (x::Vector) -> begin
-        sf = f_wrapped_cached!(x)
-        return -(sf.v[])
+        f_wrapped_cached!(x)
+        return -(last_sf.v[])
     end
 
     neg_f_grad! = (x::Vector, grad::Vector) -> begin
-        sf = f_wrapped_cached!(x)
-        for i in kept_ids, j in 1:n_active_sources
-            grad[i, j] = -sf.d[i, j]
+        f_wrapped_cached!(x)
+        for i in kept_ids
+            for j in 1:n_active_sources
+                grad[i, j] = -last_sf.d[i, j]
+            end
         end
         return grad
     end
 
     neg_f_hessian! = (x::Vector, hess::Matrix) -> begin
-        sf = f_wrapped_cached!(x)
-        for i in all_kept_ids, j in all_kept_ids
-            hess[i, j] = sf.h[i, j]
+        f_wrapped_cached!(x)
+        for i in all_kept_ids
+            for j in all_kept_ids
+                hess[i, j] = last_sf.h[i, j]
+            end
         end
         Transform.symmetrize!(hess, -0.5)
         return hess
