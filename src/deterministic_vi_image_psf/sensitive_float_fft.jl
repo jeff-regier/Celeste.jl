@@ -21,13 +21,13 @@ function convolve_sensitive_float_matrix!{ParamType <: ParamSet}(
     w_range = 1:size(sf_matrix, 2)
 
     for h in h_range, w in w_range
-      fft_matrix[h, w] = sf_matrix[h, w].v[1]
+      fft_matrix[h, w] = sf_matrix[h, w].v[]
     end
     fft!(fft_matrix)
     fft_matrix .*= conv_fft
     ifft!(fft_matrix)
     for h in h_range, w in w_range
-        sf_matrix_out[h, w].v[1] = real(fft_matrix[h, w]);
+        sf_matrix_out[h, w].v[] = real(fft_matrix[h, w]);
     end
 
     for sa_d in 1:n_active_sources, ind in 1:length(ParamType)

@@ -44,7 +44,7 @@ function test_convolve_sensitive_float_matrix()
         fsms, 1, 1, 1, 1, 3, 3, psf_image_mat)
 
     sf = zero_sensitive_float(GalaxyPosParams, Float64)
-    sf.v[1] = 3;
+    sf.v[] = 3;
     sf.d[:, 1] = rand(size(sf.d, 1))
     h = rand(size(sf.h))
     sf.h = h * h';
@@ -54,8 +54,8 @@ function test_convolve_sensitive_float_matrix()
     h_indices = (1:3) + fsms.pad_pix_h
     w_indices = (1:3) + fsms.pad_pix_w
     conv_image =
-        Float64[ sf.v[1] for sf in fsms.fs1m_conv_padded ][h_indices, w_indices];
-    @test_approx_eq(sf.v[1] * psf_image, conv_image)
+        Float64[ sf.v[] for sf in fsms.fs1m_conv_padded ][h_indices, w_indices];
+    @test_approx_eq(sf.v[] * psf_image, conv_image)
 
     for ind in 1:size(sf.d, 1)
         conv_image =
@@ -145,14 +145,14 @@ function test_lanczos_interpolate()
     for test_pix in prod(image_size)
         function lanczos_interpolate_loc_fd{T <: Number}(world_loc::Vector{T})
             local image = lanczos_interpolate_loc(world_loc, false)
-            return image[test_pix].v[1]
+            return image[test_pix].v[]
         end
 
         fd_v = lanczos_interpolate_loc_fd(world_loc)
         fd_d = ForwardDiff.gradient(lanczos_interpolate_loc_fd, world_loc)
         fd_h = ForwardDiff.hessian(lanczos_interpolate_loc_fd, world_loc)
 
-        @test_approx_eq image[test_pix].v[1] fd_v
+        @test_approx_eq image[test_pix].v[] fd_v
         @test_approx_eq image[test_pix].d fd_d
         @test_approx_eq image[test_pix].h fd_h
     end

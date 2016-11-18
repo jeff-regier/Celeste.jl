@@ -24,20 +24,20 @@ function test_zero_sensitive_float_array()
     sf_vec = zero_sensitive_float_array(CanonicalParams, Float64, S, 3, 5)
     @test size(sf_vec) == (3, 5)
     for sf in sf_vec
-        @test sf.v[1] == 0
+        @test sf.v[] == 0
         @test all([ all(sf_d .== 0) for sf_d in sf.d ])
         @test all(sf.h .== 0)
     end
 
     # Test that the sensitive floats are distinct and not pointers to the
     # same sensitive float.
-    sf_vec[1].v[1] = rand()
+    sf_vec[1].v[] = rand()
     sf_vec[1].d[:, 1] = rand(length(CanonicalParams))
     sf_vec[1].h = 2 * diagm(ones(size(sf_vec[1].h, 1)))
 
     for ind in 2:length(sf_vec)
         sf = sf_vec[ind]
-        @test sf.v[1] == 0
+        @test sf.v[] == 0
         @test all([ all(sf_d .== 0) for sf_d in sf.d ])
         @test all(sf.h .== 0)
     end

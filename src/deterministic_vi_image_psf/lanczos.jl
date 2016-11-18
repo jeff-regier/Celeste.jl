@@ -82,7 +82,7 @@ function lanczos_interpolate!{NumType <: Number, ParamType <: ParamSet}(
             lh_v, lh_d, lh_h = lanczos_kernel_with_derivatives(h_psf - h_ind, a)
             if lh_v != 0
                 clear!(kernel_h)
-                kernel_h.v[1] = lh_v
+                kernel_h.v[] = lh_v
 
                 if calculate_derivs
                     # This is -1 * wcs_jacobian' * [lh_d, 0]
@@ -99,7 +99,7 @@ function lanczos_interpolate!{NumType <: Number, ParamType <: ParamSet}(
                         lanczos_kernel_with_derivatives(w_psf - w_ind, a)
                     if lw_v != 0
                         clear!(kernel)
-                        kernel.v[1] = lw_v
+                        kernel.v[] = lw_v
                         # This is -1 * wcs_jacobian' * [0, lw_d]
                         # and -1 * wcs_jacobian' * [0 0; 0 lw_h] * wcs_jacobian
                         if calculate_derivs
@@ -112,8 +112,8 @@ function lanczos_interpolate!{NumType <: Number, ParamType <: ParamSet}(
                                 image[h, w], kernel, psf_image[h_ind, w_ind],
                                 calculate_hessian)
                         else
-                            image[h, w].v[1] +=
-                                kernel.v[1] * kernel_h.v[1] * psf_image[h_ind, w_ind]
+                            image[h, w].v[] +=
+                                kernel.v[] * kernel_h.v[] * psf_image[h_ind, w_ind]
                         end
                     end
                 end

@@ -40,7 +40,7 @@ function maximize_f(f::Function,
         # free parameterizations.
 
         if verbose || (f_evals % print_every_n == 0)
-            Log.info("f_evals: $(f_evals) value: $(f_res.v[1])")
+            Log.info("f_evals: $(f_evals) value: $(f_res.v[])")
         end
 
         if verbose
@@ -85,7 +85,7 @@ function maximize_f(f::Function,
 
     function neg_f_value{T <: Number}(x::Vector{T})
         @assert length(x) == x_length
-        -f_wrapped_cached(x).v[1]
+        -f_wrapped_cached(x).v[]
     end
 
     function neg_f_grad!{T <: Number}(x::Vector{T}, grad::Vector{T})

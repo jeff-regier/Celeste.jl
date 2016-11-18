@@ -203,7 +203,7 @@ function accumulate_source_image_brightness!(
         ea.elbo_vars.calculate_hessian && ea.elbo_vars.calculate_derivs &&
         is_active_source
 
-    image_fft = [ sf.v[1] for sf in fsms.fs1m_conv ]
+    image_fft = [ sf.v[] for sf in fsms.fs1m_conv ]
     p = ea.patches[s, n]
     H_patch, W_patch = size(p.active_pixel_bitmap)
     for w_patch in 1:W_patch, h_patch in 1:H_patch
@@ -265,11 +265,11 @@ function accumulate_band_in_elbo!(
 
             # There are no derivatives with respect to epsilon, so can
             # afely add to the value.
-            E_G.v[1] += image.epsilon_mat[h_image, w_image]
+            E_G.v[] += image.epsilon_mat[h_image, w_image]
 
-            if E_G.v[1] < 0
+            if E_G.v[] < 0
                 warn("Image ", n, " sources ", s, " pixel ", (h_image, w_image),
-                     " has negative brightness ", E_G.v[1])
+                     " has negative brightness ", E_G.v[])
                 continue
             end
 
@@ -290,7 +290,7 @@ function accumulate_band_in_elbo!(
             # that even though this does not affect the ELBO's maximum,
             # it affects the optimization convergence criterion, so I will
             # leave it in for now.
-            ea.elbo_vars.elbo.v[1] -= lfact(this_pixel)
+            ea.elbo_vars.elbo.v[] -= lfact(this_pixel)
         end
     end
 end

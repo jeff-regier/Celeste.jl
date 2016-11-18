@@ -90,11 +90,11 @@ function render_source(ea::ElboArgs, s::Int, n::Int;
             sbs[s], ea.images[n].b, s, false)
 
         if field == :E_G
-            image[h2, w2] = ea.elbo_vars.E_G.v[1]
+            image[h2, w2] = ea.elbo_vars.E_G.v[]
         elseif field == :fs0m
-            image[h2, w2] = ea.elbo_vars.fs0m_vec[s].v[1]
+            image[h2, w2] = ea.elbo_vars.fs0m_vec[s].v[]
         elseif field == :fs1m
-            image[h2, w2] = ea.elbo_vars.fs1m_vec[s].v[1]
+            image[h2, w2] = ea.elbo_vars.fs1m_vec[s].v[]
         else
             error("Unknown field ", field)
         end
@@ -149,7 +149,7 @@ function render_source_fft(
         w_fsm = w - fsms.w_lower + 1
 
         # if we're here it's a unique active pixel
-        image[h2, w2] = getfield(fsms, field)[h_fsm, w_fsm].v[1]
+        image[h2, w2] = getfield(fsms, field)[h_fsm, w_fsm].v[]
         if include_iota
             image[h2, w2] *= ea.images[n].iota_vec[h]
         end

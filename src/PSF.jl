@@ -91,7 +91,7 @@ type PsfOptimizer
         end
 
         function psf_fit_value{NumType <: Number}(psf_params_free_vec::Vector{NumType})
-            psf_fit_for_optim(psf_params_free_vec).v[1]
+            psf_fit_for_optim(psf_params_free_vec).v[]
         end
 
         function psf_fit_grad!(
@@ -427,7 +427,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
         clear!(pdf)
 
         # This is redundant, but it's what eval_bvn_pdf returns.
-        log_pdf.v[1] = log(bvn_derivs.f_pre[1])
+        log_pdf.v[] = log(bvn_derivs.f_pre[1])
 
         if calculate_derivs
             for ind=1:2
@@ -453,8 +453,8 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
             end
         end
 
-        pdf_val = exp(log_pdf.v[1])
-        pdf.v[1] = pdf_val
+        pdf_val = exp(log_pdf.v[])
+        pdf.v[] = pdf_val
 
         if calculate_derivs
             for ind1 = 1:length(PsfParams)
@@ -479,7 +479,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
 
         end
 
-        pdf.v[1] *= psf_params[k][psf_ids.weight]
+        pdf.v[] *= psf_params[k][psf_ids.weight]
 
         SensitiveFloats.add_sources_sf!(pixel_value, pdf, k, calculate_derivs)
     end
@@ -534,8 +534,8 @@ function evaluate_psf_fit!{NumType <: Number}(
                 x_mat[x_ind], psf_params, sigma_vec, sig_sf_vec, bvn_vec,
                 bvn_derivs, log_pdf, pdf, pixel_value, calculate_derivs)
 
-        diff = (pixel_value.v[1] - raw_psf[x_ind])
-        squared_error.v[1] +=    diff ^ 2
+        diff = (pixel_value.v[] - raw_psf[x_ind])
+        squared_error.v[] +=    diff ^ 2
         if calculate_derivs
             for ind1 = 1:length(squared_error.d)
                 squared_error.d[ind1] += 2 * diff * pixel_value.d[ind1]
@@ -573,7 +573,7 @@ function transform_psf_sensitive_float!{NumType <: Number}(
         psf_params::Vector{Vector{NumType}}, psf_transform::Transform.DataTransform,
         sf::SensitiveFloat{PsfParams, NumType}, sf_free::SensitiveFloat{PsfParams, NumType},
         calculate_derivs::Bool)
-    sf_free.v[1] = sf.v[1]
+    sf_free.v[] = sf.v[]
     if calculate_derivs
         K = length(psf_params)
 
