@@ -1,3 +1,6 @@
+![](http://portal.nersc.gov/project/dasrepo/celeste/sample_sky.jpg)
+
+
 Celeste.jl
 ========
 
