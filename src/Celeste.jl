@@ -13,6 +13,7 @@ include("PSF.jl")
 include("SDSSIO.jl")
 
 include("DeterministicVI.jl")
+include("DeterministicVIImagePSF.jl")
 include("StochasticVI.jl")
 include("MCMC.jl")
 

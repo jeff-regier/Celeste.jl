@@ -33,11 +33,11 @@ function load_bvn_mixtures{NumType <: Number}(
                     n::Int;
                     calculate_derivs::Bool=true,
                     calculate_hessian::Bool=true)
+    # TODO: do not keep any derviative information if the sources are not in
+    # active_sources.
     star_mcs = Array(BvnComponent{NumType}, psf_K, S)
     gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, S)
 
-    # TODO: do not keep any derviative information if the sources are not in
-    # active_sources.
     for s in 1:S
         psf = patches[s, n].psf
         sp  = source_params[s]
@@ -61,22 +61,22 @@ function load_bvn_mixtures{NumType <: Number}(
         end
 
         # Convolve the galaxy representations with the PSF.
-        for i = 1:2 # i indexes dev vs exp galaxy types.
-            e_dev_dir = (i == 1) ? 1. : -1.
-            e_dev_i = (i == 1) ? sp[lidx.e_dev] : 1. - sp[lidx.e_dev]
+         for i = 1:2 # i indexes dev vs exp galaxy types.
+             e_dev_dir = (i == 1) ? 1. : -1.
+             e_dev_i = (i == 1) ? sp[lidx.e_dev] : 1. - sp[lidx.e_dev]
 
-            # Galaxies of type 1 have 8 components, and type 2 have 6 components.
-            for j in 1:[8,6][i]
-                for k = 1:psf_K
-                    gal_mcs[k, j, i, s] = GalaxyCacheComponent(
-                        e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
-                        m_pos,
-                        sp[lidx.e_axis], sp[lidx.e_angle], sp[lidx.e_scale],
-                        calculate_derivs && (s in active_sources),
-                        calculate_hessian)
-                end
-            end
-        end
+             # Galaxies of type 1 have 8 components, and type 2 have 6 components.
+             for j in 1:[8,6][i]
+                 for k = 1:psf_K
+                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
+                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
+                         m_pos,
+                         sp[lidx.e_axis], sp[lidx.e_angle], sp[lidx.e_scale],
+                         calculate_derivs && (s in active_sources),
+                         calculate_hessian)
+                 end
+             end
+         end
     end
 
     star_mcs, gal_mcs
