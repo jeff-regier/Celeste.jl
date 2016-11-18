@@ -22,4 +22,6 @@ include("ParallelRun.jl")
 
 include("Stripe82Score.jl")
 
+include("CelesteEDA.jl")
+
 end # module
