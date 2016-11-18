@@ -1,37 +1,12 @@
-using Celeste: Model, DeterministicVI
-using StaticArrays
+using Celeste.DeterministicVIImagePSF
 
-import Celeste: Infer, DeterministicVI, ParallelRun
-import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
-import SensitiveFloats.clear!
-import SDSSIO: RunCamcolField
-
-include(joinpath(Pkg.dir("Celeste"), "test", "Synthetic.jl"))
-include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
-include(joinpath(Pkg.dir("Celeste"), "test", "DerivativeTestUtils.jl"))
-
-include("celeste_tools/celeste_tools.jl")
-const dir = "/home/rgiordan/Documents/git_repos/CelesteDev.jl/"
-
-# include(joinpath(dir, "rasterized_psf/lanczos.jl"))
-include(joinpath(dir, "rasterized_psf/elbo_pixelated_psf.jl"))
-
-using DeterministicVIImagePSF
-import Synthetic
-using SampleData
-
-using Base.Test
-using Distributions
-
-using DeterministicVI.CanonicalParams
-using SensitiveFloats.zero_sensitive_float
-using SensitiveFloats.zero_sensitive_float_array
-using SensitiveFloats.SensitiveFloat
-using SensitiveFloats.clear!
-
+using Celeste.DeterministicVI.CanonicalParams
+using Celeste.SensitiveFloats.zero_sensitive_float
+using Celeste.SensitiveFloats.zero_sensitive_float_array
+using Celeste.SensitiveFloats.SensitiveFloat
+using Celeste.SensitiveFloats.clear!
 
 using ForwardDiff
-using DeterministicVIImagePSF
 
 # Overload some base functions for testing with ForwardDiff
 import Base.floor
@@ -94,7 +69,7 @@ function test_convolve_sensitive_float_matrix()
         @test_approx_eq(sf.h[ind1, ind2] * psf_image, conv_image)
     end
 
-    
+
 end
 
 
@@ -184,8 +159,6 @@ function test_lanczos_interpolate()
 end
 
 
-
-######################
 test_sinc()
 test_lanczos_kernel()
 test_convolve_sensitive_float_matrix()
