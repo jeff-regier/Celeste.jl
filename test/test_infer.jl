@@ -60,7 +60,7 @@ function test_load_active_pixels()
     # the star is bright but it doesn't cover the whole image.
     # it's hard to say exactly how many pixels should be active,
     # but not all of them, and not none of them.
-    Infer.load_active_pixels!(ea; min_radius_pix=0.0)
+    Infer.load_active_pixels!(ea.images, ea.patches; min_radius_pix=0.0)
 
     # most star light (>90%) should be recorded by the active pixels
     num_active_photons = 0.0
@@ -97,7 +97,7 @@ function test_load_active_pixels()
 
     # only 2 pixels per image are within 0.6 pixels of the
     # source's center (10.9, 11.5)
-    Infer.load_active_pixels!(ea; min_radius_pix=0.6)
+    Infer.load_active_pixels!(ea.images, ea.patches; min_radius_pix=0.6)
 
     for n in 1:ea.N
 #  FIXME: is load active pixels off by (0.5, 0.5)?

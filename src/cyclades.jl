@@ -262,7 +262,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                         init_source(catalog[x]) for x in ids_local]
             patches = Infer.get_sky_patches(images, cat_local)
             ea = ElboArgs(images, vp, patches, [1], [1])
-            Infer.load_active_pixels!(ea)
+            Infer.load_active_pixels!(ea.images, ea.patches)
             model[cur_source_index] = ea
         end
     end

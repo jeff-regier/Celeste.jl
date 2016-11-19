@@ -6,7 +6,7 @@ import Celeste.ParallelRun: BoundingBox, infer_box
 const usage_info =
 """
 Usage:
-  infer-box <ramin> <ramax> <decmin> <decmax>
+  infer-box.jl <ramin> <ramax> <decmin> <decmax>
 """
 
 const stagedir = ENV["CELESTE_STAGE_DIR"]

@@ -10,7 +10,9 @@ import ..Infer
 import ..SDSSIO: RunCamcolField
 import ..PSF
 
-using ..DeterministicVI
+import ..DeterministicVI: infer_source
+
+
 include("cyclades.jl")
 
 #set this to false to use source-division parallelism
@@ -423,12 +425,13 @@ function one_node_infer(
                     entry = catalog[s]
                     Log.info("processing source $s: objid = $(entry.objid)")
 
-                    # TODO: subset images to images_local too.
+                    # could subset images to images_local here too.
+                    neighbors = catalog[neighbor_map[ts]]
+
                     t0 = time()
-                    vs_opt, obj_value = Infer.infer_source(images,
-                                           catalog[neighbor_map[ts]],
-                                           entry)
+                    vs_opt, obj_value = infer_source(images, neighbors, entry)
                     runtime = time() - t0
+
                     obj_values[ts] = obj_value
 
                     result = Dict(
@@ -651,6 +654,15 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     nputs(dt_nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
     nputs(dt_nodeid, "timing: write_results=$(times.write_results)")
     nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
+end
+
+
+"""
+Estimates the amount of computation required to call `infer_box` on a
+particular region of the sky.
+"""
+function estimate_box_runtime(box::BoundingBox, stagedir::String, outdir::String)
+    rcfs = get_overlapping_fields(box, stagedir)
 end
 
 end
