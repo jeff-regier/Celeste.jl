@@ -119,9 +119,11 @@ function test_estimate_box_runtime()
 
     num_active = ParallelRun.estimate_box_runtime(box, datadir)   
 
-    # This box contains about 13 sources, and each source should have at
-    # least 50 active pixels, and at most about 2000 active pixels
-    @test 13 * 50 < num_active < 13 * 2000
+    # This box contains about 1000 sources to optimize, and each source
+    # should have at least 50 active pixels per image it appears in, and at most about
+    # 2000 active pixels per image it appears in. Most sources only appear
+    # in 1 or 2 frames. Each frame has 5 bands.
+    @test 1000 * 50 * 1 * 5 < num_active < 1000 * 2000 * 3 * 5
 end
 
 
