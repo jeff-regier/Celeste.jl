@@ -47,7 +47,7 @@ function make_elbo_args(images::Vector{Image},
     S = length(catalog)
     active_sources = active_source > 0 ? [active_source] :
                                           S <= 3 ? collect(1:S) : [1,2,3]
-    ElboArgs(images, vp, patches, active_sources)
+    ElboArgs(images, vp, patches, active_sources, collect(1:S))
 end
 
 
@@ -192,6 +192,7 @@ function empty_model_params(S::Int)
     ElboArgs(Image[],
              vp,
              Array(SkyPatch, S, 0),
+             collect(1:S),
              collect(1:S))
 end
 
