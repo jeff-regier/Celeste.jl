@@ -21,8 +21,8 @@ const SKY_DIVISION_PARALLELISM=true
 const MIN_FLUX = 2.0
 
 # In production mode, rather the development mode, always catch exceptions
-const is_prod = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != ""
-
+const is_production_run = haskey(ENV, "CELESTE_PROD") &&
+                          ENV["CELESTE_PROD"] != ""
 
 # Use distributed parallelism (with Dtree)
 if haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
@@ -466,8 +466,9 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                     Log.info("objid $(entry.objid) took $rt1 seconds")
                     Log.info("========================")
                 catch ex
-                    Log.error(string(ex))
-                    if !is_prod
+                    if is_production_run || nthreads() > 1
+                        Log.error(string(ex))
+                    else
                         rethrow(ex)
                     end
                 end
@@ -595,7 +596,7 @@ function infer_rcf(rcf::RunCamcolField,
 
     rcf_bounds = this_fe[1][2]
     overlapping_rcfs = get_overlapping_fields(rcf_bounds, stagedir)
-    @assert rcf in overlapping_rcfs
+    @assert(rcf in overlapping_rcfs, "$rcf doesn't overlap with itself?")
 
     tic()
     println(rcf_bounds)
