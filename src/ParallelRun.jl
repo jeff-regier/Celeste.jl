@@ -580,6 +580,7 @@ function infer_rcf(rcf::RunCamcolField,
     @assert rcf in overlapping_rcfs
 
     tic()
+    println(rcf_bounds)
     results = one_node_infer(overlapping_rcfs,
                              stagedir;
                              objid=objid,  # just for making unit tests run fast
@@ -661,8 +662,10 @@ end
 Estimates the amount of computation required to call `infer_box` on a
 particular region of the sky.
 """
-function estimate_box_runtime(box::BoundingBox, stagedir::String, outdir::String)
+function estimate_box_runtime(box::BoundingBox, stagedir::String)
     rcfs = get_overlapping_fields(box, stagedir)
+
+    42
 end
 
 end

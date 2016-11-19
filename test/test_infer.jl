@@ -15,7 +15,7 @@ function test_infer_single()
 end
 
 
-function test_infer_rcf()
+function load_surrounding_rcfs()
     wd = pwd()
     cd(datadir)
  
@@ -30,6 +30,11 @@ function test_infer_rcf()
     run(`make RUN=4469 CAMCOL=6 FIELD=344`)
 
     cd(wd)
+end
+
+
+function test_infer_rcf()
+    load_surrounding_rcfs()
 
     resfile = joinpath(datadir, "celeste-003900-6-0269.jld")
     rm(resfile, force=true)
@@ -106,10 +111,26 @@ function test_load_active_pixels()
 end
 
 
+function test_estimate_box_runtime()
+    load_surrounding_rcfs()
+
+    # This box is contained in (3900, 6, 269)
+    box = ParallelRun.BoundingBox(164.29, 164.55, 39.00, 39.25)
+
+    num_active = ParallelRun.estimate_box_runtime(box, datadir)   
+
+    # This box contains about 13 sources, and each source should have at
+    # least 50 active pixels, and at most about 2000 active pixels
+    @test 13 * 50 < num_active < 13 * 2000
+end
+
+
+if test_long_running
+    test_estimate_box_runtime()
+    test_infer_rcf()
+end
+
 test_load_active_pixels()
 test_source_division_parallelism()
 test_infer_single()
 
-if test_long_running
-    test_infer_rcf()
-end
