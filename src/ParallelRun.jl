@@ -279,28 +279,6 @@ function divide_sky_and_infer(
 end
 
 
-function load_images(rcfs, stagedir)
-    images = Image[]
-    image_names = String[]
-    image_count = 0
-
-    for i in 1:length(rcfs)
-        Log.info("reading field $(rcfs[i])")
-        rcf = rcfs[i]
-        field_images = SDSSIO.load_field_images(rcf, stagedir)
-        for b=1:length(field_images)
-            image_count += 1
-            push!(image_names,
-                "$image_count run=$(rcf.run) camcol=$(rcf.camcol) field=$(rcf.field) b=$b")
-            push!(images, field_images[b])
-        end
-    end
-    gc()
-
-    images
-end
-
-
 function infer_init(rcfs::Vector{RunCamcolField},
                     stagedir::String;
                     objid="",
@@ -348,7 +326,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
         neighbor_map = Vector{Int}[]
     else
         # Read in images for all (run, camcol, field).
-        images = load_images(rcfs, stagedir)
+        images = SDSSIO.load_field_images(rcfs, stagedir)
 
         tic()
         neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
