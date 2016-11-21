@@ -19,9 +19,9 @@ using ..DeterministicVIImagePSF:
 
 import Base.print
 function print(ce::CatalogEntry)
-  for field in fieldnames(ce)
-    println(field, ": ", getfield(ce, field))
-  end
+    for field in fieldnames(ce)
+      println(field, ": ", getfield(ce, field))
+    end
 end
 
 
@@ -72,17 +72,16 @@ function render_source(ea::ElboArgs, s::Int, n::Int;
         clear!(ea.elbo_vars.E_G, false)
         clear!(ea.elbo_vars.var_G, false)
 
-        populate_fsm_vecs!(
-                                 ea.elbo_vars.bvn_derivs,
-                                 ea.elbo_vars.fs0m_vec,
-                                 ea.elbo_vars.fs1m_vec,
-                                 false,
-                                 false,
-                                 ea.patches,
-                                 ea.active_sources,
-                                 ea.num_allowed_sd,
-                                 n, h, w,
-                                 gal_mcs, star_mcs)
+        populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
+                           ea.elbo_vars.fs0m_vec,
+                           ea.elbo_vars.fs1m_vec,
+                           false,
+                           false,
+                           ea.patches,
+                           ea.active_sources,
+                           ea.num_allowed_sd,
+                           n, h, w,
+                           gal_mcs, star_mcs)
 
         accumulate_source_pixel_brightness!(
             ea.elbo_vars, ea, ea.elbo_vars.E_G, ea.elbo_vars.var_G,

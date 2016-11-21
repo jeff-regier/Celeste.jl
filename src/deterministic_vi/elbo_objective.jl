@@ -1,101 +1,4 @@
 """
-Convolve the current locations and galaxy shapes with the PSF.  If
-calculate_derivs is true, also calculate derivatives and hessians for
-active sources.
-
-Args:
- - psf: A vector of PSF components
- - ea: The current ElboArgs
- - b: The current band
- - calculate_derivs: Whether to calculate derivatives for active sources.
-
-Returns:
- - star_mcs: An array of BvnComponents with indices
-    - PSF component
-    - Source (index within active_sources)
- - gal_mcs: An array of BvnComponents with indices
-    - PSF component
-    - Galaxy component
-    - Galaxy type
-    - Source (index within active_sources)
-  Hessians are only populated for s in ea.active_sources.
-"""
-function load_bvn_mixtures{NumType <: Number}(
-                    ea::ElboArgs{NumType},
-                    b::Int;
-                    calculate_derivs::Bool=true,
-                    calculate_hessian::Bool=true)
-    # call bvn loader from the Model Module
-    Model.load_bvn_mixtures(ea.S, ea.patches, ea.vp, ea.active_sources,
-                            ea.psf_K, b,
-                            calculate_derivs=calculate_derivs,
-                            calculate_hessian=calculate_hessian)
-end
-
-
-"""
-Add the contributions of a star's bivariate normal term to the ELBO,
-by updating elbo_vars.fs0m_vec[s] in place.
-
-Args:
-    - elbo_vars: Elbo intermediate values.
-    - s: The index of the current source in 1:S
-    - bmc: The component to be added
-    - x: An offset for the component in pixel coordinates (e.g. a pixel location)
-    - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-    - is_active_source: Whether it is an active source, (i.e. whether to
-                        calculate derivatives if requested.)
-
-Returns:
-    Updates elbo_vars.fs0m_vec[s] in place.
-"""
-function accum_star_pos!{NumType <: Number}(
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    s::Int,
-                    bmc::BvnComponent{NumType},
-                    x::SVector{2, Float64},
-                    wcs_jacobian::Array{Float64, 2},
-                    is_active_source::Bool)
-    Model.accum_star_pos!(elbo_vars.bvn_derivs,
-                    elbo_vars.fs0m_vec,
-                    elbo_vars.calculate_derivs,
-                    elbo_vars.calculate_hessian,
-                    s, bmc, x, wcs_jacobian, is_active_source)
-end
-
-
-"""
-Add the contributions of a galaxy component term to the ELBO by
-updating fs1m in place.
-
-Args:
-    - elbo_vars: Elbo intermediate variables
-    - s: The index of the current source in 1:S
-    - gcc: The galaxy component to be added
-    - x: An offset for the component in pixel coordinates (e.g. a pixel location)
-    - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-    - is_active_source: Whether it is an active source, (i.e. whether to
-                        calculate derivatives if requested.)
-
-Returns:
-    Updates elbo_vars.fs1m_vec[s] in place.
-"""
-function accum_galaxy_pos!{NumType <: Number}(
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    s::Int,
-                    gcc::GalaxyCacheComponent{NumType},
-                    x::SVector{2, Float64},
-                    wcs_jacobian::Array{Float64, 2},
-                    is_active_source::Bool)
-    Model.accum_galaxy_pos!(elbo_vars.bvn_derivs,
-                            elbo_vars.fs1m_vec,
-                            elbo_vars.calculate_derivs,
-                            elbo_vars.calculate_hessian,
-                            s, gcc, x, wcs_jacobian, is_active_source)
-end
-
-
-"""
 Calculate the contributions of a single source for a single pixel to
 the sensitive floats E_G_s and var_G_s, which are cleared and updated in place.
 
@@ -285,23 +188,22 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
 end
 
 
-function calculate_source_pixel_brightness!{NumType <: Number}(
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    ea::ElboArgs{NumType},
-                    sbs::Vector{SourceBrightness{NumType}},
-                    s::Int, b::Int)
-
-    calculate_source_pixel_brightness!(
-        elbo_vars,
-        ea,
-        elbo_vars.E_G_s,
-        elbo_vars.var_G_s,
-        elbo_vars.fs0m_vec[s],
-        elbo_vars.fs1m_vec[s],
-        sbs[s],
-        b, s,
-        s in ea.active_sources)
-end
+# function calculate_source_pixel_brightness!{NumType <: Number}(
+#                     elbo_vars::ElboIntermediateVariables{NumType},
+#                     ea::ElboArgs{NumType},
+#                     sbs::Vector{SourceBrightness{NumType}},
+#                     s::Int, b::Int)
+#     calculate_source_pixel_brightness!(
+#         elbo_vars,
+#         ea,
+#         elbo_vars.E_G_s,
+#         elbo_vars.var_G_s,
+#         elbo_vars.fs0m_vec[s],
+#         elbo_vars.fs1m_vec[s],
+#         sbs[s],
+#         b, s,
+#         s in ea.active_sources)
+# end
 
 
 """

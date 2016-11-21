@@ -143,8 +143,9 @@ function initialize_fsm_sf_matrices!(
 end
 
 
-# This is useful for debugging and exploration.  Do not delete.
-function populate_fsm_vec!(
+# This is useful for debugging and exploration.
+# Do not delete until May 2017.
+function debug_populate_fsm_vec!(
     ea::ElboArgs,
     fsm_vec::Array{FSMSensitiveFloatMatrices},
     lanczos_width::Int)

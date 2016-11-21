@@ -202,7 +202,16 @@ function test_e_g_s_functions()
                                      ea.num_allowed_sd,
                                      n, h, w,
                                      gal_mcs, star_mcs)
-            DeterministicVI.calculate_source_pixel_brightness!(elbo_vars_loc, ea, sbs, s, b)
+            calculate_source_pixel_brightness!(
+            elbo_vars,
+            ea,
+            elbo_vars.E_G_s,
+            elbo_vars.var_G_s,
+            elbo_vars.fs0m_vec[s],
+            elbo_vars.fs1m_vec[s],
+            sbs[s],
+            b, s,
+            s in ea.active_sources)
             deepcopy(elbo_vars_loc)
         end
 
@@ -1400,4 +1409,3 @@ test_simplex_derivatives()
 
 # this test was slow before, but no longer
 test_real_image()
-

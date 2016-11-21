@@ -61,22 +61,22 @@ function load_bvn_mixtures{NumType <: Number}(
         end
 
         # Convolve the galaxy representations with the PSF.
-         for i = 1:2 # i indexes dev vs exp galaxy types.
-             e_dev_dir = (i == 1) ? 1. : -1.
-             e_dev_i = (i == 1) ? sp[lidx.e_dev] : 1. - sp[lidx.e_dev]
+        for i = 1:2 # i indexes dev vs exp galaxy types.
+            e_dev_dir = (i == 1) ? 1. : -1.
+            e_dev_i = (i == 1) ? sp[lidx.e_dev] : 1. - sp[lidx.e_dev]
 
-             # Galaxies of type 1 have 8 components, and type 2 have 6 components.
-             for j in 1:[8,6][i]
-                 for k = 1:psf_K
-                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
-                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
-                         m_pos,
-                         sp[lidx.e_axis], sp[lidx.e_angle], sp[lidx.e_scale],
-                         calculate_derivs && (s in active_sources),
-                         calculate_hessian)
-                 end
-             end
-         end
+            # Galaxies of type 1 have 8 components, and type 2 have 6 components.
+            for j in 1:[8,6][i]
+                for k = 1:psf_K
+                    gal_mcs[k, j, i, s] = GalaxyCacheComponent(
+                        e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
+                        m_pos,
+                        sp[lidx.e_axis], sp[lidx.e_angle], sp[lidx.e_scale],
+                        calculate_derivs && (s in active_sources),
+                        calculate_hessian)
+                end
+            end
+        end
     end
 
     star_mcs, gal_mcs
@@ -160,12 +160,12 @@ function populate_gal_fsm!{NumType <: Number}(
                     mv_calculate_hessian::Bool,
                     s::Int,
                     x::SVector{2,Float64},
-                    active_source::Bool,
+                    is_active_source::Bool,
                     num_allowed_sd::Float64,
                     wcs_jacobian::Matrix{Float64},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
     calculate_hessian =
-        mv_calculate_hessian && mv_calculate_derivs && active_source
+        mv_calculate_hessian && mv_calculate_derivs && is_active_source
     clear!(fs1m, calculate_hessian)
     for i = 1:2 # Galaxy types
         for j in 1:8 # Galaxy component
@@ -180,7 +180,7 @@ function populate_gal_fsm!{NumType <: Number}(
                             mv_calculate_derivs,
                             mv_calculate_hessian,
                             gal_mcs[k, j, i, s], x, wcs_jacobian,
-                            active_source)
+                            is_active_source)
                     end
                 end
             end
