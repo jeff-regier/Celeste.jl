@@ -1,6 +1,5 @@
 using Base.Test
 
-import Celeste.Model: patch_ctrs_pix, patch_radii_pix
 import Celeste.SensitiveFloats.zero_sensitive_float_array
 
 

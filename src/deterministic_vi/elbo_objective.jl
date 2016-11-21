@@ -378,7 +378,7 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
         sb,
         b,
         s,
-        s in ea.active_sources)
+        is_active_source)
 
     if is_active_source
         sa = findfirst(ea.active_sources, s)
@@ -485,8 +485,8 @@ function add_pixel_term!{NumType <: Number}(
     for s in 1:size(ea.patches, 1)
         p = ea.patches[s,n]
 
-        h2 = h - p.bitmap_corner[1]
-        w2 = w - p.bitmap_corner[2]
+        h2 = h - p.bitmap_corner[1] - 1
+        w2 = w - p.bitmap_corner[2] - 1
 
         H2, W2 = size(p.active_pixel_bitmap)
         if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
@@ -557,27 +557,27 @@ function elbo_likelihood{NumType <: Number}(
         # hasn't been visited before, so no need to allocate memory.
         # currently length(ea.active_sources) > 1 only in unit tests, never
         # when invoked from `bin`.
-        already_visited = length(ea.active_sources) == 1 ?
+        already_visited = length(ea.sources_to_visit) == 1 ?
                               falses(0, 0) :
                               falses(size(img.pixels))
 
         # iterate over the pixels by iterating over the patches, and visiting
         # all the pixels in the patch that are active and haven't already been
         # visited
-        for s in ea.active_sources
+        for s in ea.sources_to_visit
             p = ea.patches[s, n]
             H2, W2 = size(p.active_pixel_bitmap)
             for w2 in 1:W2, h2 in 1:H2
                 # (h2, w2) index the local patch, while (h, w) index the image
-                h = p.bitmap_corner[1] + h2
-                w = p.bitmap_corner[2] + w2
+                h = p.bitmap_corner[1] + h2 - 1
+                w = p.bitmap_corner[2] + w2 - 1
 
                 if !p.active_pixel_bitmap[h2, w2]
                     continue
                 end
 
-                # if there's only one active source, we know this pixel is new
-                if length(ea.active_sources) != 1
+                # if there's only one source to visit, we know this pixel is new
+                if length(ea.sources_to_visit) != 1
                     if already_visited[h,w]
                         continue
                     end

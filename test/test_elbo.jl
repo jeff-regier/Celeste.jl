@@ -18,21 +18,21 @@ end
 
 
 function test_bvn_cov()
-        e_axis = .7
-        e_angle = pi/5
-        e_scale = 2.
+    e_axis = .7
+    e_angle = pi/5
+    e_scale = 2.
 
-        manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
-        util_11 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
-        @test_approx_eq util_11 manual_11
+    manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
+    util_11 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
+    @test_approx_eq util_11 manual_11
 
-        manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
-        util_12 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
-        @test_approx_eq util_12 manual_12
+    manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
+    util_12 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
+    @test_approx_eq util_12 manual_12
 
-        manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
-        util_22 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
-        @test_approx_eq util_22 manual_22
+    manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
+    util_22 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
+    @test_approx_eq util_22 manual_22
 end
 
 
@@ -59,13 +59,40 @@ function test_active_sources()
 
     images, ea, bodies = gen_two_body_dataset()
 
-    ea12 = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2])
+    s = 1
+    n = 5
+    p = ea.patches[s, n]
+
+    # for subsequent tests, ensure that the second light source
+    # has a radius at least as large as both the height and the
+    # width of image 3, and that its center is within the image
+    @test p.radius_pix >= 23
+    @test 0.5 <= p.center[1] <= 20.5
+    @test 0.5 <= p.center[2] <= 23.5
+
+    # this patch is huge, the bottom left corner should be the
+    # bottom left of the image
+    @test p.bitmap_corner == [1, 1]
+
+    # this patch is huge, all the pixels should be active pixels
+    @test size(p.active_pixel_bitmap) == size(images[n].pixels)
+    @test all(p.active_pixel_bitmap)
+
+    # lets make the second source have only a few active pixels
+    # in one band, so it and source 1 don't overlap completely
+    s2 = 2
+    p2 = ea.patches[s2, n]
+    fill!(p2.active_pixel_bitmap, false)
+    p2.active_pixel_bitmap[10:11,10:11] = true
+
+    # now on to the main test
+    ea12 = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2], [1, 2])
     elbo_lik_12 = DeterministicVI.elbo_likelihood(ea12)
 
-    ea1 = ElboArgs(ea.images, ea.vp, ea.patches, [1,])
+    ea1 = ElboArgs(ea.images, ea.vp, ea.patches, [1,], [1, 2])
     elbo_lik_1 = DeterministicVI.elbo_likelihood(ea1)
 
-    ea2 = ElboArgs(ea.images, ea.vp, ea.patches, [2,])
+    ea2 = ElboArgs(ea.images, ea.vp, ea.patches, [2,], [1, 2])
     elbo_lik_2 = DeterministicVI.elbo_likelihood(ea2)
 
     @test_approx_eq elbo_lik_12.v[] elbo_lik_1.v
