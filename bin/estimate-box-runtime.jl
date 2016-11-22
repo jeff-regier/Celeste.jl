@@ -16,6 +16,7 @@ if length(ARGS) != 4
 else
     box = BoundingBox(ARGS...)
     num_active = estimate_box_runtime(box, stagedir)
-    println("The specified region contains $num_active active pixels.")
+    box_str = "[$(box.ramin), $(box.ramax)] x [$(box.decmin), $(box.decmax)]"
+    println("The region $box_str contains $num_active active pixels.")
 end
 
