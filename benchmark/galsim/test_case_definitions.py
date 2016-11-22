@@ -5,8 +5,7 @@ import galsim
 # populated by the `galsim_test_case` decorator
 TEST_CASE_FNS = []
 
-ARCSEC_PER_PIXEL = 0.75
-SHIFT_RADIUS_ARCSEC = ARCSEC_PER_PIXEL
+ARCSEC_PER_PIXEL = 0.396 # the value used in SDSS (https://github.com/jeff-regier/Celeste.jl/pull/411)
 PSF_SIGMA_PIXELS = 4
 STAMP_SIZE_PX = 96
 COUNTS_PER_NMGY = 1000.0 # a.k.a. "iota" in Celeste

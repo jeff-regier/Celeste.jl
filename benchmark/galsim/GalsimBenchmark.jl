@@ -202,7 +202,7 @@ function make_catalog_entries(header::FITSIO.FITSHeader)
     num_sources = header["CL_NSRC"]
     for source_index in 1:num_sources
         if num_sources == 1
-            initial_position = [36, 36]
+            initial_position = [19, 19]
         else
             initial_position = [
                 header[string("CL_X", source_index)],
