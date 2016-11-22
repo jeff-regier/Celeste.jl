@@ -13,37 +13,9 @@ function compute_obj_value(results,
                                                                            box=box, objid="",
                                                                            target_rcfs=RunCamcolField[])
 
-    # Create a map from entry.thing_id -> variational params of the source.
-    param_map = Dict{Int64, Any}()
-    for result in results
-        param_map[result["thing_id"]] = result["vs"]
-    end
-
-    # Extract all the variational parameters from results        
-    vp = Array{Array{Float64,1},1}()
-    cat = Array{Celeste.Model.CatalogEntry,1}()
-    optimized_source_indices = Array{Int64,1}()
-    optimized_source_cur_index = 1
-    for (source_index, source) in enumerate(target_sources)
-        entry = catalog[source]
-        push!(vp, param_map[entry.thing_id])
-        push!(optimized_source_indices, optimized_source_cur_index)
-
-        # Push the neighbors
-        for neighbor in catalog[neighbor_map[source_index]]
-            if haskey(param_map, neighbor.thing_id)
-                push!(vp, param_map[neighbor.thing_id])
-            else
-                push!(vp, init_source(neighbor))
-            end
-        end
-        cat = vcat(cat, vcat(entry, catalog[neighbor_map[source_index]]))
-        optimized_source_cur_index += 1 + length(neighbor_map[source_index])
-    end
-
-    #patches = Infer.get_sky_patches(images, cat)
-    #ea = ElboArgs(images, vp, patches, optimized_source_indices, [1])
-    ea = ElboArgs(images, [x["vs"] for x in results], Infer.get_sky_patches(images, catalog[target_sources]), collect(1:length(target_sources)), [1])
+    ea = ElboArgs(images, [x["vs"] for x in results],
+                  Infer.get_sky_patches(images, catalog[target_sources]),
+                  collect(1:length(target_sources)), [1])
     iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
         DeterministicVI.elbo,
         ea,
