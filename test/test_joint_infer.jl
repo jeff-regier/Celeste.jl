@@ -15,13 +15,8 @@ function compute_obj_value(results,
 
     ea = ElboArgs(images, [x["vs"] for x in results],
                   Infer.get_sky_patches(images, catalog[target_sources]),
-                  collect(1:length(target_sources)), [1])
-    iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
-        DeterministicVI.elbo,
-        ea,
-        max_iters=1)
-
-    obj_value
+                  collect(1:length(target_sources)), Int64[])
+    DeterministicVI.elbo(ea, calculate_derivs=false, calculate_hessian=false).v[]
 end
 
 """
