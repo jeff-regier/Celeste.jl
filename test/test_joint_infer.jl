@@ -1,5 +1,56 @@
 import JLD
+import ..Infer
 
+"""
+compute_obj_value
+computes obj value given set of results from one_node_infer and one_node_joint_infer
+"""
+function compute_obj_value(results,
+                           rcfs::Vector{RunCamcolField},
+                           stagedir::String;
+                           box=BoundingBox(-1000.,1000.,-1000.,1000.))
+    catalog, target_sources, neighbor_map, images = ParallelRun.infer_init(rcfs, stagedir;
+                                                                           box=box, objid="",
+                                                                           target_rcfs=RunCamcolField[])
+
+    # Create a map from entry.thing_id -> variational params of the source.
+    param_map = Dict{Int64, Any}()
+    for result in results
+        param_map[result["thing_id"]] = result["vs"]
+    end
+
+    # Extract all the variational parameters from results        
+    vp = Array{Array{Float64,1},1}()
+    cat = Array{Celeste.Model.CatalogEntry,1}()
+    optimized_source_indices = Array{Int64,1}()
+    optimized_source_cur_index = 1
+    for (source_index, source) in enumerate(target_sources)
+        entry = catalog[source]
+        push!(vp, param_map[entry.thing_id])
+        push!(optimized_source_indices, optimized_source_cur_index)
+
+        # Push the neighbors
+        for neighbor in catalog[neighbor_map[source_index]]
+            if haskey(param_map, neighbor.thing_id)
+                push!(vp, param_map[neighbor.thing_id])
+            else
+                push!(vp, init_source(neighbor))
+            end
+        end
+        cat = vcat(cat, vcat(entry, catalog[neighbor_map[source_index]]))
+        optimized_source_cur_index += 1 + length(neighbor_map[source_index])
+    end
+
+    #patches = Infer.get_sky_patches(images, cat)
+    #ea = ElboArgs(images, vp, patches, optimized_source_indices, [1])
+    ea = ElboArgs(images, [x["vs"] for x in results], Infer.get_sky_patches(images, catalog[target_sources]), collect(1:length(target_sources)), [1])
+    iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
+        DeterministicVI.elbo,
+        ea,
+        max_iters=1)
+
+    obj_value
+end
 
 """
 test infer multi iter with a single (run, camcol, field).
@@ -24,30 +75,37 @@ function test_one_node_joint_infer_obj_overlapping()
     # This bounding box has overlapping stars. (neighbor map is not empty)
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
-    tic()
-    result_multi, obj_values_multi = ParallelRun.one_node_infer(field_triplets,
-        datadir; box=box, joint_infer_n_iters=100, joint_infer=true)
-    multi_iter_time = toq()
-    tic()
-    result_multi, obj_values_two = ParallelRun.one_node_infer(field_triplets,
-        datadir; box=box, joint_infer_n_iters=2, joint_infer=true)
-    multi_iter_one_iter_time = toq()
-    tic()
-    result_single, obj_values_single = ParallelRun.one_node_infer(
-                                    field_triplets, datadir; box=box)
-    single_iter_time = toq()
 
-    sum_multi = sum(obj_values_multi)
-    sum_single = sum(obj_values_single)
-    sum_two = sum(obj_values_two)
-    println("One node joint infer objective value: $(sum_multi)")
-    println("One node joint infer 1 iter objective value: $(sum_two)")
-    println("Single iter objective value: $(sum_single)")
+    # 100 iterations
+    tic()
+    result_multi = ParallelRun.one_node_infer(field_triplets, datadir;
+                                              box=box, joint_infer_n_iters=100,
+                                              joint_infer=true)
+    multi_iter_time = toq()
+    score_multi = compute_obj_value(result_multi, field_triplets, datadir; box=box)
+
+    # 2 iterations
+    tic()
+    result_two = ParallelRun.one_node_infer(field_triplets, datadir;
+                                            box=box, joint_infer_n_iters=2,
+                                            joint_infer=true)    
+    multi_iter_one_iter_time = toq()    
+    score_two = compute_obj_value(result_two, field_triplets, datadir; box=box)
+
+    # One node infer (1 iteration, butm ore newton steps)
+    tic()
+    result_single = ParallelRun.one_node_infer(field_triplets, datadir; box=box)
+    single_iter_time = toq()
+    score_single = compute_obj_value(result_single, field_triplets, datadir; box=box)
+
+    println("One node joint infer objective value: $(score_multi)")
+    println("One node joint infer 1 iter objective value: $(score_two)")
+    println("Single iter objective value: $(score_single)")
     println("One node joint infer time: $(multi_iter_time)")
     println("One node joint infer 1 iter time: $(multi_iter_one_iter_time)")
     println("Single iter time: $(single_iter_time)")
-    @test sum_multi > sum_single
-    @test sum_multi > sum_two
+    @test score_multi > score_single
+    @test score_multi > score_two
 end
 
 
@@ -145,6 +203,7 @@ function test_cyclades_partitioning()
     println("Cyclades partitioning test succeeded")
 end
 
+test_one_node_joint_infer_obj_overlapping()
 
 # Run this multiple times, since the cyclades algorithm shuffles the elements
 # before batching them up.
@@ -153,4 +212,3 @@ for i=1:20
 end
 
 test_one_node_joint_infer()
-test_one_node_joint_infer_obj_overlapping()
