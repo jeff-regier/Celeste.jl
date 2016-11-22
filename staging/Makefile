@@ -1,4 +1,3 @@
-URLBASE := http://data.sdss3.org/sas/dr12/boss
 RUN := 3900
 CAMCOL := 6
 FIELD := 269
@@ -32,7 +31,7 @@ all : $(SUBDIR3)/fpM-$(RUN6)-u$(CAMCOL)-$(FIELD4).fit \
 
 $(STAGEDIR)/field_extents.fits :
 	mkdir -p $(STAGEDIR)
-	cp /project/projectdirs/dasrepo/celeste-sc16/field_extents.fits $(STAGEDIR)/field_extents.fits
+	cp $(FIELD_EXTENTS) $(STAGEDIR)/field_extents.fits
 
 $(SUBDIR3)/fpM-$(RUN6)-%$(CAMCOL)-$(FIELD4).fit :
 	mkdir -p $(SUBDIR3)
