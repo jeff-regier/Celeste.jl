@@ -1,10 +1,10 @@
 #!/bin/bash -l
 
-#SBATCH --partition=debug
+#SBATCH --partition=regular
 #SBATCH --qos=premium
 #SBATCH -N 64 -c 64
 #SBATCH --job-name=celestebb_stage
-#SBATCH --time=00:30:00
+#SBATCH --time=03:00:00
 #SBATCH --license=SCRATCH
 #SBATCH -C haswell
 
@@ -20,7 +20,7 @@ export JULIA_PKGDIR=$SCRATCH/julia_pkgdir
 export MAKEFILE_DIR=$JULIA_PKGDIR/v0.5/Celeste/staging
 cd $JULIA_PKGDIR/v0.5/Celeste/staging
 
-export THREADS=64
+export THREADS=32
 
 runcommands.sh stage_tasks
 
