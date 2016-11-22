@@ -128,7 +128,7 @@ function test_psf_fit()
   end
 
   function pixel_value_wrapper_value{NumType <: Number}(psf_param_vec::Vector{NumType})
-    pixel_value_wrapper_sf(psf_param_vec, false).v[1]
+    pixel_value_wrapper_sf(psf_param_vec, false).v[]
   end
 
   x = @SVector [1.0, 2.0]
@@ -173,7 +173,7 @@ function test_psf_fit()
 
   function evaluate_psf_fit_wrapper_value{NumType <: Number}(psf_param_vec::Vector{NumType})
     local squared_error = evaluate_psf_fit_wrapper_sf(psf_param_vec, false);
-    squared_error.v[1]
+    squared_error.v[]
   end
 
   squared_error = deepcopy(evaluate_psf_fit_wrapper_sf(psf_param_vec, true));
@@ -217,17 +217,17 @@ function test_transform_psf_sensitive_float()
   function psf_fit_for_optim_val{NumType <: Number}(
       psf_params_free_vec::Vector{NumType})
 
-    psf_fit_for_optim(psf_params_free_vec, false).v[1]
+    psf_fit_for_optim(psf_params_free_vec, false).v[]
   end
 
   sf_free = deepcopy(psf_fit_for_optim(psf_params_free_vec, true));
 
   expected_value =
-    evaluate_psf_fit(psf_params, raw_psf[keep_pixels, keep_pixels], false).v[1];
+    evaluate_psf_fit(psf_params, raw_psf[keep_pixels, keep_pixels], false).v[];
   ad_grad = ForwardDiff.gradient(psf_fit_for_optim_val, psf_params_free_vec);
   ad_hess = ForwardDiff.hessian(psf_fit_for_optim_val, psf_params_free_vec);
 
-  @test_approx_eq expected_value sf_free.v[1]
+  @test_approx_eq expected_value sf_free.v[]
   @test_approx_eq sf_free.d[:] ad_grad
   @test_approx_eq sf_free.h ad_hess
 end

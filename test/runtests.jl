@@ -39,6 +39,7 @@ else
                  "test_elbo.jl",
                  "test_score.jl",
                  "test_derivatives.jl",
+                 "test_fft.jl",
                  "test_psf.jl",
                  "test_images.jl",
                  "test_misc.jl",

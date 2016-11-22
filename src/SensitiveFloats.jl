@@ -172,7 +172,7 @@ function combine_sfs!{ParamType <: ParamSet,
     LinAlg.BLAS.scal!(n, g_d[1], sf_result.d, 1)
     LinAlg.BLAS.axpy!(g_d[2], sf2.d, sf_result.d)
 
-    sf_result.v[1] = v
+    sf_result.v[] = v
 end
 
 
@@ -205,8 +205,8 @@ function multiply_sfs!{ParamType <: ParamSet, NumType <: Number}(
         sf2::SensitiveFloat{ParamType, NumType},
         calculate_hessian::Bool=true)
 
-    v = sf1.v[1] * sf2.v[1]
-    g_d = NumType[sf2.v[1], sf1.v[1]]
+    v = sf1.v[] * sf2.v[]
+    g_d = NumType[sf2.v[], sf1.v[]]
 
     combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess,
                              calculate_hessian=calculate_hessian)
@@ -221,7 +221,7 @@ function add_scaled_sfs!{ParamType <: ParamSet, NumType <: Number}(
         sf2::SensitiveFloat{ParamType, NumType},
         scale::AbstractFloat, calculate_hessian::Bool)
 
-    sf1.v[1] += scale * sf2.v[1]
+    sf1.v[] += scale * sf2.v[]
 
     LinAlg.BLAS.axpy!(scale, sf2.d, sf1.d)
 
@@ -248,7 +248,7 @@ function add_sources_sf!{ParamType <: ParamSet, NumType <: Number}(
         s::Int, calculate_hessian::Bool)
 
     # TODO: This line, too, allocates a lot of memory.    Why?
-    sf_all.v[1] = sf_all.v[1] + sf_s.v[1]
+    sf_all.v[] = sf_all.v[] + sf_s.v[]
 
     # TODO: time consuming **************
     P = length(ParamType)
