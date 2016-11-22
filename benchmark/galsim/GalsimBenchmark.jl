@@ -216,6 +216,8 @@ function make_catalog_entries(header::FITSIO.FITSHeader)
     catalog_entries
 end
 
+
+# TODO: this code seems to be obsolete?
 # this code is very close to Infer.infer_source() but avoids PSF fitting
 function infer_source(band_images::Vector{Model.TiledImage},
                       catalog_entries::Vector{Model.CatalogEntry},

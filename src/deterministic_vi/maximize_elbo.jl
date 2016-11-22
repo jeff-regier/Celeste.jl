@@ -1,18 +1,5 @@
 """
-Optimizes f using Newton's method and exact Hessians.  For now, it is
-not clear whether this or BFGS is better, so it is kept as a separate function.
-
-Args:
-  - f: A function that takes elbo args and constrained coordinates
-       (e.g. DeterministicVI.elbo)
-  - ea: Constrained initial ElboArgs
-  - lbs: An array of lower bounds (in the transformed space)
-  - ubs: An array of upper bounds (in the transformed space)
-  - omitted_ids: Omitted ids from the _unconstrained_ parameterization
-      (i.e. elements of free_ids).
-  - xtol_rel: X convergence
-  - ftol_abs: F convergence
-  - verbose: Print detailed output
+Optimizes f using Newton's method and exact Hessians.
 
 Returns:
   - iter_count: The number of iterations taken
@@ -53,7 +40,7 @@ function maximize_f(f::Function,
         # free parameterizations.
 
         if verbose || (f_evals % print_every_n == 0)
-            Log.info("f_evals: $(f_evals) value: $(f_res.v[1])")
+            Log.info("f_evals: $(f_evals) value: $(f_res.v[])")
         end
 
         if verbose
@@ -98,7 +85,7 @@ function maximize_f(f::Function,
 
     function neg_f_value{T <: Number}(x::Vector{T})
         @assert length(x) == x_length
-        -f_wrapped_cached(x).v[1]
+        -f_wrapped_cached(x).v[]
     end
 
     function neg_f_grad!{T <: Number}(x::Vector{T}, grad::Vector{T})
@@ -171,5 +158,3 @@ function maximize_f(f::Function,
                 max_iters=max_iters,
                 fast_hessian=fast_hessian)
 end
-
-

@@ -33,11 +33,11 @@ function load_bvn_mixtures{NumType <: Number}(
                     n::Int;
                     calculate_derivs::Bool=true,
                     calculate_hessian::Bool=true)
+    # TODO: do not keep any derviative information if the sources are not in
+    # active_sources.
     star_mcs = Array(BvnComponent{NumType}, psf_K, S)
     gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, S)
 
-    # TODO: do not keep any derviative information if the sources are not in
-    # active_sources.
     for s in 1:S
         psf = patches[s, n].psf
         sp  = source_params[s]
@@ -153,6 +153,51 @@ Non-obvious args:
     - x: The pixel location in the image
     ...
 """
+function populate_gal_fsm!{NumType <: Number}(
+                    bvn_derivs::BivariateNormalDerivatives{NumType},
+                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
+                    mv_calculate_derivs::Bool,
+                    mv_calculate_hessian::Bool,
+                    s::Int,
+                    x::SVector{2,Float64},
+                    is_active_source::Bool,
+                    num_allowed_sd::Float64,
+                    wcs_jacobian::Matrix{Float64},
+                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
+    calculate_hessian =
+        mv_calculate_hessian && mv_calculate_derivs && is_active_source
+    clear!(fs1m, calculate_hessian)
+    for i = 1:2 # Galaxy types
+        for j in 1:8 # Galaxy component
+            # If i == 2 then there are only six galaxy components.
+            if (i == 1) || (j <= 6)
+                for k = 1:size(gal_mcs, 1) # PSF component
+                    if (num_allowed_sd == Inf ||
+                        check_point_close_to_bvn(
+                            gal_mcs[k, j, i, s].bmc, x, num_allowed_sd))
+                        accum_galaxy_pos!(
+                            bvn_derivs, fs1m,
+                            mv_calculate_derivs,
+                            mv_calculate_hessian,
+                            gal_mcs[k, j, i, s], x, wcs_jacobian,
+                            is_active_source)
+                    end
+                end
+            end
+        end
+    end
+end
+
+
+"""
+Populate fs0m and fs1m for source s in the a given pixel.
+
+Non-obvious args:
+    ...
+    - s: The source index in star_mcs and gal_mcs
+    - x: The pixel location in the image
+    ...
+"""
 function populate_fsm!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
                     fs0m::SensitiveFloat{StarPosParams, NumType},
@@ -181,26 +226,8 @@ function populate_fsm!{NumType <: Number}(
         end
     end
 
-    clear!(fs1m, calculate_hessian)
-    for i = 1:2 # Galaxy types
-        for j in 1:8 # Galaxy component
-            # If i == 2 then there are only six galaxy components.
-            if (i == 1) || (j <= 6)
-                for k = 1:size(gal_mcs, 1) # PSF component
-                    if (num_allowed_sd == Inf ||
-                        check_point_close_to_bvn(
-                            gal_mcs[k, j, i, s].bmc, x, num_allowed_sd))
-                        accum_galaxy_pos!(
-                            bvn_derivs, fs1m,
-                            mv_calculate_derivs,
-                            mv_calculate_hessian,
-                            gal_mcs[k, j, i, s], x, wcs_jacobian,
-                            is_active_source)
-                    end
-                end
-            end
-        end
-    end
+    populate_gal_fsm!(bvn_derivs, fs1m, mv_calculate_derivs, mv_calculate_hessian,
+                      s, x, is_active_source, num_allowed_sd, wcs_jacobian, gal_mcs)
 end
 
 
@@ -271,7 +298,7 @@ function accum_star_pos!{NumType <: Number}(
         get_bvn_derivs!(bvn_derivs, bmc, true, false)
     end
 
-    fs0m.v[1] += bvn_derivs.f_pre[1]
+    fs0m.v[] += bvn_derivs.f_pre[1]
 
     if calculate_derivs && is_active_source
         transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, calculate_hessian)
@@ -314,7 +341,7 @@ function accum_galaxy_pos!{NumType <: Number}(
                     is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, gcc.bmc, x)
     f = bvn_derivs.f_pre[1] * gcc.e_dev_i
-    fs1m.v[1] += f
+    fs1m.v[] += f
 
     if calculate_derivs && is_active_source
 

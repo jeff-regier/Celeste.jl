@@ -139,6 +139,7 @@ Non-standard arguments:
 """
 function load_active_pixels!(images::Vector{Image},
                              patches::Matrix{SkyPatch};
+                             exclude_nan=true,
                              noise_fraction=0.5,
                              min_radius_pix=8.0)
     S, N = size(patches)
@@ -154,7 +155,7 @@ function load_active_pixels!(images::Vector{Image},
             w = p.bitmap_corner[2] + w2 - 1
 
             # skip masked pixels
-            if isnan(img.pixels[h, w])
+            if isnan(img.pixels[h, w]) && exclude_nan
                 p.active_pixel_bitmap[h2, w2] = false
                 continue
             end

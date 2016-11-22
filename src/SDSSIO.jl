@@ -654,6 +654,7 @@ function read_photoobj_files(fts::Vector{RunCamcolField},
 end
 
 
+# TODO: this is obsolete, remove it.
 """
 read_photoobj_celeste(fname)
 
