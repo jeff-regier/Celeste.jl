@@ -53,7 +53,7 @@ function infer_source(images::Vector{Image},
     Infer.load_active_pixels!(images, patches)
 
     f_evals, max_f, max_x, nm_result = maximize_f(elbo, ea)
-    vp[1], max_f
+    vp[1]
 end
 
 

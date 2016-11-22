@@ -200,7 +200,7 @@ function optimize_sources(images, catalog, tasks,
             neighbor_indexes = Infer.find_neighbors([i,], local_catalog, flat_images)[1]
             neighbors = local_catalog[neighbor_indexes]
 
-            vs_opt, obj_value = infer_source(flat_images, neighbors, entry)
+            vs_opt = infer_source(flat_images, neighbors, entry)
             # TODO: write vs_opt (the results) to disk, to a global array of size num_tasks,
             # or to a local array, and then flush the array to disk later.
 
