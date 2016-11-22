@@ -15,7 +15,7 @@ function test_infer_single()
 end
 
 
-function test_infer_rcf()
+function load_surrounding_rcfs()
     wd = pwd()
     cd(datadir)
  
@@ -30,6 +30,11 @@ function test_infer_rcf()
     run(`make RUN=4469 CAMCOL=6 FIELD=344`)
 
     cd(wd)
+end
+
+
+function test_infer_rcf()
+    load_surrounding_rcfs()
 
     resfile = joinpath(datadir, "celeste-003900-6-0269.jld")
     rm(resfile, force=true)
@@ -60,7 +65,7 @@ function test_load_active_pixels()
     # the star is bright but it doesn't cover the whole image.
     # it's hard to say exactly how many pixels should be active,
     # but not all of them, and not none of them.
-    Infer.load_active_pixels!(ea; min_radius_pix=0.0)
+    Infer.load_active_pixels!(ea.images, ea.patches; min_radius_pix=0.0)
 
     # most star light (>90%) should be recorded by the active pixels
     num_active_photons = 0.0
@@ -97,7 +102,7 @@ function test_load_active_pixels()
 
     # only 2 pixels per image are within 0.6 pixels of the
     # source's center (10.9, 11.5)
-    Infer.load_active_pixels!(ea; min_radius_pix=0.6)
+    Infer.load_active_pixels!(ea.images, ea.patches; min_radius_pix=0.6)
 
     for n in 1:ea.N
 #  FIXME: is load active pixels off by (0.5, 0.5)?
@@ -106,10 +111,28 @@ function test_load_active_pixels()
 end
 
 
+function test_estimate_box_runtime()
+    load_surrounding_rcfs()
+
+    # This box is contained in (3900, 6, 269)
+    box = ParallelRun.BoundingBox(164.29, 164.55, 39.00, 39.25)
+
+    num_active = ParallelRun.estimate_box_runtime(box, datadir)   
+
+    # This box contains about 1000 sources to optimize, and each source
+    # should have at least 50 active pixels per image it appears in, and at most about
+    # 2000 active pixels per image it appears in. Most sources only appear
+    # in 1 or 2 frames. Each frame has 5 bands.
+    @test 1000 * 50 * 1 * 5 < num_active < 1000 * 2000 * 3 * 5
+end
+
+
+if test_long_running
+    test_estimate_box_runtime()
+    test_infer_rcf()
+end
+
 test_load_active_pixels()
 test_source_division_parallelism()
 test_infer_single()
 
-if test_long_running
-    test_infer_rcf()
-end

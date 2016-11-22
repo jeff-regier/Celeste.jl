@@ -33,10 +33,10 @@ patches = Infer.get_sky_patches(images, cat_local);
 # Visualize a source at initial parameters using both classic and FFT Celeste.
 
 ea = ElboArgs(images, deepcopy(vp), patches, [1]);
-Celeste.Infer.load_active_pixels!(ea);
+Celeste.Infer.load_active_pixels!(ea.images, ea.patches);
 
 ea_fft = ElboArgs(images, deepcopy(vp), patches, [1], psf_K=1);
-Celeste.Infer.load_active_pixels!(ea_fft, exclude_nan=false);
+Celeste.Infer.load_active_pixels!(ea_fft.images, ea.patches; exclude_nan=false);
 
 psf_image_mat = Matrix{Float64}[
     PSF.get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea_fft.S, b in 1:ea_fft.N];

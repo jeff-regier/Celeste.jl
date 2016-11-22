@@ -1302,7 +1302,7 @@ function test_real_image()
     patches = Infer.get_sky_patches(images, cat_local)
     ea = ElboArgs(images, vp, patches, [1], [1])
 
-    Infer.load_active_pixels!(ea)
+    Infer.load_active_pixels!(ea.images, ea.patches)
     @test sum(ea.patches[1,1].active_pixel_bitmap) > 0
 
     elbo = DeterministicVI.elbo(ea)

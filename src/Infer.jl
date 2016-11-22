@@ -1,14 +1,19 @@
+"""
+Routines for single-node inference that aren't specific
+to any particular method of inference (e.g MCMC, DeterministicVI),
+yet are also not about the statistical model (i.e., the Model
+module).
+Currently what's in here are routines that effectively
+truncate the Gaussians in the model.
+TODO: rename this module to something more meaningful
+"""
 module Infer
 
 import WCS
 using StaticArrays
 
 using ..Model
-import ..PSF
 import ..Log
-
-using ..DeterministicVI
-import ..DeterministicVI: elbo, maximize_f
 
 
 """
@@ -72,40 +77,6 @@ end
 
 
 """
-Infers one light source. This routine is intended to be called in parallel,
-once per target light source.
-
-Currently `infer_source()` only does (deterministic) variational inference.
-In the future, `infer_source()` might take a call back function as an
-argument, to let it's user run either deterministic VI, stochastic VI,
-or MCMC.
-
-Arguments:
-    images: a collection of astronomical images
-    neighbors: the other light sources near `entry`
-    entry: the source to infer
-"""
-function infer_source(images::Vector{Image},
-                      neighbors::Vector{CatalogEntry},
-                      entry::CatalogEntry)
-    if length(neighbors) > 100
-        Log.warn("Excessive number ($(length(neighbors))) of neighbors")
-    end
-
-    # It's a bit inefficient to call the next 5 lines every time we optimize_f.
-    # But, as long as runtime is dominated by the call to maximize_f, that
-    # isn't a big deal.
-    cat_local = vcat(entry, neighbors)
-    vp = Vector{Float64}[init_source(ce) for ce in cat_local]
-    patches = get_sky_patches(images, cat_local)
-    ea = ElboArgs(images, vp, patches, [1], [1])
-    load_active_pixels!(ea)
-
-    f_evals, max_f, max_x, nm_result = maximize_f(elbo, ea)
-    vp[1], max_f
-end
-
-"""
   noise_fraction: The proportion of the noise below which we will remove pixels.
   min_radius_pix: A minimum pixel radius to be included.
 """
@@ -159,21 +130,23 @@ end
 
 
 """
-Get pixels significantly above background noise.
+Record which pixels in each patch will be considered when computing the
+objective function.
 
-Arguments:
-  ea: The ElboArgs object
-  exclude_nan: If true, NaN pixels are not included.
+Non-standard arguments:
   noise_fraction: The proportion of the noise below which we will remove pixels.
   min_radius_pix: A minimum pixel radius to be included.
 """
-function load_active_pixels!(ea::ElboArgs{Float64};
+function load_active_pixels!(images::Vector{Image},
+                             patches::Matrix{SkyPatch};
                              exclude_nan=true,
                              noise_fraction=0.5,
                              min_radius_pix=8.0)
-    for n = 1:ea.N, s=1:ea.S
-        img = ea.images[n]
-        p = ea.patches[s,n]
+    S, N = size(patches)
+
+    for n = 1:N, s=1:S
+        img = images[n]
+        p = patches[s,n]
 
         # (h2, w2) index the local patch, while (h, w) index the image
         H2, W2 = size(p.active_pixel_bitmap)

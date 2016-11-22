@@ -222,58 +222,64 @@ function read_mask(fname, mask_planes=DEFAULT_MASK_PLANES)
 end
 
 
+type RawImage
+    H::Int
+    W::Int
+    pixels::Matrix{Float32}
+    b::Int
+    wcs::WCS.WCSTransform
+    run_num::Int
+    camcol_num::Int
+    field_num::Int
+    epsilon_mat::Matrix{Float32}
+    iota_vec::Vector{Float32}
+    raw_psf_comp::RawPSF
+end
+
+
 """
-Read a SDSS run/camcol/field into an array of Images. `frame_dir` is the
-directory in which to find SDSS \"frame\" files. This function accepts
-optional keyword arguments `fpm_dir`, `psfield_dir` and `photofield_dir`
-giving the directories of fpM, psField and photoField files. The defaults
-for these arguments is `frame_dir`.
+Read a SDSS run/camcol/field into a vector of RawImages
 """
-function load_field_images(ft::RunCamcolField, datadir::String)
-    subdir2 = "$datadir/$(ft.run)/$(ft.camcol)"
-    subdir3 = "$subdir2/$(ft.field)"
+function load_raw_images(rcf::RunCamcolField, datadir::String)
+    subdir2 = "$datadir/$(rcf.run)/$(rcf.camcol)"
+    subdir3 = "$subdir2/$(rcf.field)"
 
     # read gain for each band
     photofield_name = @sprintf("%s/photoField-%06d-%d.fits",
-                               subdir2, ft.run, ft.camcol)
-    gains = read_field_gains(photofield_name, ft.field)
+                               subdir2, rcf.run, rcf.camcol)
+    gains = read_field_gains(photofield_name, rcf.field)
 
     # open FITS file containing PSF for each band
     psf_name = @sprintf("%s/psField-%06d-%d-%04d.fit",
-                        subdir3, ft.run, ft.camcol, ft.field)
+                        subdir3, rcf.run, rcf.camcol, rcf.field)
     psffile = FITSIO.FITS(psf_name)
 
-    result = Array(Image, 5)
+    result = Array(RawImage, 5)
 
-    for (bandnum, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
+    for (b, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
 
         # load image data
         frame_name = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
-                              subdir3, band, ft.run, ft.camcol, ft.field)
-        data, calibration, sky, wcs = read_frame(frame_name)
+                              subdir3, band, rcf.run, rcf.camcol, rcf.field)
+        pixels, calibration, sky, wcs = read_frame(frame_name)
 
-        # scale data to raw electron counts
-        decalibrate!(data, sky, calibration, gains[band])
+        # scale pixels to raw electron counts
+        decalibrate!(pixels, sky, calibration, gains[band])
 
         # read mask
         mask_name = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
-                     subdir3, ft.run, band, ft.camcol, ft.field)
+                     subdir3, rcf.run, band, rcf.camcol, rcf.field)
         mask_xranges, mask_yranges = read_mask(mask_name)
 
         # apply mask
         for i=1:length(mask_xranges)
-            data[mask_xranges[i], mask_yranges[i]] = NaN
+            pixels[mask_xranges[i], mask_yranges[i]] = NaN
         end
 
-        H, W = size(data)
+        H, W = size(pixels)
 
         # read the psf
         sdsspsf = read_psf(psffile, band)
-
-        # evalute the psf in the center of the image and then fit it with
-        # two components.
-        psfstamp = eval_psf(sdsspsf, H / 2., W / 2.)
-        psf = PSF.fit_raw_psf_for_celeste(psfstamp, 2)[1]
 
         # For now, use the median noise and sky.  Here,
         # epsilon * iota needs to be in units comparable to nelec
@@ -283,13 +289,59 @@ function load_field_images(ft::RunCamcolField, datadir::String)
         epsilon_mat = convert(Array{Float32, 2}, sky .* calibration)
 
         # Set it to use a constant background but include the non-constant data.
-        result[bandnum] = Image(H, W, data, bandnum, wcs, psf,
-                                ft.run, ft.camcol, ft.field, epsilon_mat,
-                                iota_vec, sdsspsf)
+        result[b] = RawImage(H, W, pixels, b, wcs,
+                             rcf.run, rcf.camcol, rcf.field,
+                             epsilon_mat, iota_vec, sdsspsf)
     end
 
     return result
 end
+
+
+"""
+Load all the images for multiple rcfs
+"""
+function load_raw_images(rcfs::Vector{RunCamcolField}, datadir::String)
+    raw_images = RawImage[]
+
+    for rcf in rcfs
+        Log.info("loading images for $rcf")
+        rcf_raw_images = SDSSIO.load_raw_images(rcf, datadir)
+        append!(raw_images, rcf_raw_images)
+    end
+
+    raw_images
+end
+
+
+"""
+Converts a raw image to an image by fitting the PSF, a mixture of Gaussians.
+"""
+function convert(::Type{Image}, r::RawImage)
+    psfstamp = eval_psf(r.raw_psf_comp, r.H / 2., r.W / 2.)
+    celeste_psf = PSF.fit_raw_psf_for_celeste(psfstamp, 2)[1]
+    Image(r.H, r.W, r.pixels, r.b, r.wcs, celeste_psf,
+          r.run_num, r.camcol_num, r.field_num,
+          r.epsilon_mat, r.iota_vec, r.raw_psf_comp)
+end
+
+
+"""
+Read a SDSS run/camcol/field into an array of Images.
+"""
+function load_field_images(rcfs, stagedir)
+    raw_images = SDSSIO.load_raw_images(rcfs, stagedir)
+
+    N = length(raw_images)
+    images = Array(Image, N)
+
+    Threads.@threads for n in 1:N
+        images[n] = convert(Image, raw_images[n])
+    end
+
+    return images
+end
+
 
 # -----------------------------------------------------------------------------
 # PSF-related functions
@@ -347,7 +399,7 @@ https://data.sdss.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.ht
 """
 function read_photoobj(fname, band::Char='r')
 
-    bandnum = BAND_CHAR_TO_NUM[band]
+    b = BAND_CHAR_TO_NUM[band]
 
     f = FITSIO.FITS(fname)
 
@@ -401,7 +453,7 @@ function read_photoobj(fname, band::Char='r')
     is_gal = objc_type .== 3
     is_bad_obj = !(is_star | is_gal)
 
-    fracdev = vec((read(hdu, "fracdev")::Matrix{Float32})[bandnum, :])
+    fracdev = vec((read(hdu, "fracdev")::Matrix{Float32})[b, :])
 
     # determine mask for rows
     has_dev = fracdev .> 0.
@@ -446,13 +498,13 @@ function read_photoobj(fname, band::Char='r')
                    "is_star"=>is_star[mask],
                    "is_gal"=>is_gal[mask],
                    "frac_dev"=>fracdev[mask],
-                   "ab_exp"=>vec(ab_exp[bandnum, mask]),
-                   "theta_exp"=>vec(theta_exp[bandnum, mask]),
-                   "phi_exp"=>vec(phi_exp_deg[bandnum, mask]),
-                   "ab_dev"=>vec(ab_dev[bandnum, mask]),
-                   "theta_dev"=>vec(theta_dev[bandnum, mask]),
-                   "phi_dev"=>vec(phi_dev_deg[bandnum, mask]),
-                   "phi_offset"=>vec(phi_offset[bandnum, mask]),
+                   "ab_exp"=>vec(ab_exp[b, mask]),
+                   "theta_exp"=>vec(theta_exp[b, mask]),
+                   "phi_exp"=>vec(phi_exp_deg[b, mask]),
+                   "ab_dev"=>vec(ab_dev[b, mask]),
+                   "theta_dev"=>vec(theta_dev[b, mask]),
+                   "phi_dev"=>vec(phi_dev_deg[b, mask]),
+                   "phi_offset"=>vec(phi_offset[b, mask]),
                    "is_large"=>vec(is_large[mask]),
                    "is_saturated"=>vec(is_saturated[mask]))
     for (b, n) in BAND_CHAR_TO_NUM

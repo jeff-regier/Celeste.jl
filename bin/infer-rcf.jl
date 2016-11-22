@@ -7,7 +7,7 @@ import Celeste.SDSSIO: RunCamcolField
 const usage_info =
 """
 Usage:
-  infer-rcf <run> <camcol> <field>
+  infer-rcf.jl <run> <camcol> <field>
 """
 
 const stagedir = ENV["CELESTE_STAGE_DIR"]
