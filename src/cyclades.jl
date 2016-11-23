@@ -280,13 +280,22 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     Log.info("Done preallocating array of elboargs. Elapsed time: $(toq())")
 
     # Process partition of sources. Multiple threads call this function in parallel.
-    function process_sources(source_assignment::Vector{Int64})
-        for cur_source_indx in source_assignment
-            cur_entry = catalog[target_sources[cur_source_indx]]
-            iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
-                                                    DeterministicVI.elbo,
-                                                    model[cur_source_indx],
-                                                    max_iters=10)
+    function process_sources(source_assignment::Vector{Int64}, iter)
+        try
+            n_newton_steps = iter == 1 ? 20 : 1
+            for cur_source_indx in source_assignment
+                cur_entry = catalog[target_sources[cur_source_indx]]
+                iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
+                    DeterministicVI.elbo,
+                    model[cur_source_indx],
+                    max_iters=n_newton_steps)
+            end
+        catch ex
+            if is_production_run || nthreads() > 1
+                Log.error(string(ex))
+            else
+                rethrow(ex)
+            end
         end
     end
 
@@ -300,7 +309,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
         for batch = 1:n_batches
             # Process every batch of every iteration with nprocthreads
             Threads.@threads for i = 1:nprocthreads
-                process_sources(thread_sources_assignment[i][batch])
+                process_sources(thread_sources_assignment[i][batch], iter)
             end
         end
     end
