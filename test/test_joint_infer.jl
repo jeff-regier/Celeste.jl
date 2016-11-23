@@ -9,11 +9,10 @@ function compute_obj_value(results,
                            rcfs::Vector{RunCamcolField},
                            stagedir::String;
                            box=BoundingBox(-1000.,1000.,-1000.,1000.))
-    catalog, target_sources, neighbor_map, images = ParallelRun.infer_init(rcfs, stagedir;
-                                                                           box=box, objid="",
-                                                                           target_rcfs=RunCamcolField[])
+    catalog, target_sources = ParallelRun.infer_init(rcfs, stagedir; box=box)
+    images = SDSSIO.load_field_images(rcfs, stagedir)
 
-    ea = ElboArgs(images, [x["vs"] for x in results],
+    ea = ElboArgs(images, [r.vs for r in results],
                   Infer.get_sky_patches(images, catalog[target_sources]),
                   collect(1:length(target_sources)), Int64[])
     DeterministicVI.elbo(ea, calculate_derivs=false, calculate_hessian=false).v[]

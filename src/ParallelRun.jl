@@ -324,15 +324,8 @@ function infer_init(rcfs::Vector{RunCamcolField},
 end
 
 """
-Use mulitple threads on one node to
-fit the Celeste model to sources in a given bounding box.
-
-- rcfs: Array of run, camcol, field triplets that the source occurs in.
-- box: a bounding box specifying a region of sky
-
-Returns:
-
-- Dictionary of results, keyed by SDSS thing_id.
+Use mulitple threads on one node to fit the Celeste model to sources in a given
+bounding box.
 """
 function one_node_infer(rcfs::Vector{RunCamcolField},
                         stagedir::String;
@@ -387,6 +380,15 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
 end
 
 
+immutable OptimizedSource
+    thingid::Int64
+    objid::String
+    init_ra::Float64
+    init_dec::Float64
+    vs::Vector{Float64}
+end
+
+
 function one_node_single_infer(catalog::Vector{CatalogEntry},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
@@ -397,7 +399,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
     curr_source = 1
     last_source = length(target_sources)
     sources_lock = SpinLock()
-    results = Dict[]
+    results = OptimizedSource[]
     results_lock = SpinLock()
 
     # iterate over sources
@@ -431,13 +433,11 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                     vs_opt = infer_source(images, neighbors, entry)
                     runtime = time() - t0
 
-                    result = Dict(
-                        "thing_id"=>entry.thing_id,
-                        "objid"=>entry.objid,
-                        "ra"=>entry.pos[1],
-                        "dec"=>entry.pos[2],
-                        "vs"=>vs_opt,
-                        "runtime"=>runtime)
+                    result = OptimizedSource(entry.thing_id,
+                                             entry.objid,
+                                             entry.pos[1],
+                                             entry.pos[2],
+                                             vs_opt)
                     lock(results_lock)
                     push!(results, result)
                     unlock(results_lock)
@@ -654,17 +654,6 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     nputs(dt_nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
     nputs(dt_nodeid, "timing: write_results=$(times.write_results)")
     nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
-end
-
-
-"""
-Estimates the amount of computation required to call `infer_box` on a
-particular region of the sky.
-"""
-function estimate_box_runtime(box::BoundingBox, stagedir::String)
-    rcfs = get_overlapping_fields(box, stagedir)
-    catalog, target_sources = infer_init(rcfs, stagedir; box=box)
-    return length(rcfs), length(target_sources)
 end
 
 end

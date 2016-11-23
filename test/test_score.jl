@@ -14,7 +14,7 @@ function test_score_field()
     results_filename = "celeste-004263-5-0119.jld"
 
     if !isfile(joinpath(datadir, results_filename))
-        results_url = "https://www.dropbox.com/s/8jcdmluahsf38tm/celeste-004263-5-0119.jld"
+        results_url = "http://portal.nersc.gov/project/dasrepo/celeste/$results_filename"
         run(`wget --quiet -O $datadir/$results_filename $results_url`)
     end
 

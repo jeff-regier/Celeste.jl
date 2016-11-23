@@ -17,6 +17,6 @@ else
     box = BoundingBox(ARGS...)
     # Output gets written to the top level of the staging directory.
     # We may want to modify that in the future by changing the third argument.
-    infer_box(box, stagedir, stagedir)
+    @time infer_box(box, stagedir, stagedir)
 end
 

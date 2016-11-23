@@ -8,6 +8,7 @@ using DataFrames
 import ..SDSSIO
 import ..SDSSIO: RunCamcolField
 import ..Model: CatalogEntry, ids
+import ..ParallelRun: OptimizedSource
 
 
 immutable MatchException <: Exception
@@ -266,7 +267,7 @@ end
 """
 Convert Celeste results to a dataframe.
 """
-function celeste_to_df(results::Vector{Dict})
+function celeste_to_df(results::Vector{OptimizedSource})
     # Initialize dataframe
     N = length(results)
     color_col_names = ["color_$cn" for cn in color_names]
@@ -289,7 +290,7 @@ function celeste_to_df(results::Vector{Dict})
     i = 0
     for result in results
         i += 1
-        vs = result["vs"]
+        vs = result.vs
 
         function get_fluxes(i::Int)
             ret = Array(Float64, 5)
@@ -310,8 +311,8 @@ function celeste_to_df(results::Vector{Dict})
             vs[ids.e_axis],
             vs[ids.e_angle],
             vs[ids.e_scale],
-            result["objid"],
-            result["thing_id"])
+            result.objid,
+            result.thingid)
         load_ce!(i, ce, df)
 
         df[i, :is_star] = vs[ids.a[1, 1]]
