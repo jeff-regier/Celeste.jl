@@ -320,20 +320,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
         Log.info("$(length(target_sources)) target light sources after objid cut")
     end
 
-    # If there are no objects of interest, return early.
-    if length(target_sources) == 0
-        images = Image[]
-        neighbor_map = Vector{Int}[]
-    else
-        # Read in images for all (run, camcol, field).
-        images = SDSSIO.load_field_images(rcfs, stagedir)
-
-        tic()
-        neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
-        Log.info("neighbors found in $(toq()) seconds")
-    end
-
-    return catalog, target_sources, neighbor_map, images
+    return catalog, target_sources
 end
 
 """
@@ -358,23 +345,41 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
                         reserve_thread=Ref(false),
                         thread_fun=phalse,
                         timing=InferTiming())
-    # ctni = (catalog, target_sources, neighbor_map, images)
-    ctni = infer_init(rcfs, stagedir;
-                      objid=objid,
-                      box=box,
-                      target_rcfs=target_rcfs,
-                      primary_initialization=primary_initialization)
+    catalog, target_sources = infer_init(rcfs,
+                                         stagedir;
+                                         objid=objid,
+                                         box=box,
+                                         target_rcfs=target_rcfs,
+                                         primary_initialization=primary_initialization)
+
+    # If there are no objects of interest, return early.
+    if length(target_sources) == 0
+        images = Image[]
+        neighbor_map = Vector{Int}[]
+    else
+        # Read in images for all (run, camcol, field).
+        images = SDSSIO.load_field_images(rcfs, stagedir)
+
+        tic()
+        neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
+        Log.info("neighbors found in $(toq()) seconds")
+    end
 
     Log.info("Running with $(nthreads()) threads")
 
-    # NB: All I/O happens above in `infer_init()`. The methods below don't
-    # touch disk.
+    # NB: All I/O happens above. The methods below don't touch disk.
     if joint_infer
-        return one_node_joint_infer(ctni...;
+        return one_node_joint_infer(catalog,
+                                    target_sources,
+                                    neighbor_map,
+                                    images;
                                     n_iters=joint_infer_n_iters,
                                     objid=objid)
     else
-        return one_node_single_infer(ctni...;
+        return one_node_single_infer(catalog,
+                                     target_sources,
+                                     neighbor_map,
+                                     images;
                                      reserve_thread=reserve_thread,
                                      thread_fun=thread_fun,
                                      timing=timing)
@@ -658,22 +663,8 @@ particular region of the sky.
 """
 function estimate_box_runtime(box::BoundingBox, stagedir::String)
     rcfs = get_overlapping_fields(box, stagedir)
-    catalog, targets, n_map, images = infer_init(rcfs, stagedir; box=box)
-
-    # Typically we call `get_sky_patches()` with just a subset of the
-    # catalog---just the light sources around one we're optimizing.
-    # Here we call it for the whole catalog to get a count of the active
-    # pixels all at once.
-    patches = Infer.get_sky_patches(images, catalog)
-    Infer.load_active_pixels!(images, patches)
-
-    num_active = 0
-
-    for n in 1:length(images), s in targets
-        num_active += sum(patches[s, n].active_pixel_bitmap)
-    end
-
-    num_active
+    catalog, target_sources = infer_init(rcfs, stagedir; box=box)
+    return length(rcfs), length(target_sources)
 end
 
 end

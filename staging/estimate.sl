@@ -1,10 +1,10 @@
 #!/bin/bash -l
 
-#SBATCH --partition=regular
+#SBATCH --partition=debug
 #SBATCH --qos=premium
 #SBATCH -N 64 -c 64
 #SBATCH --job-name=celestebb_stage
-#SBATCH --time=05:00:00
+#SBATCH --time=00:30:00
 #SBATCH --license=SCRATCH
 #SBATCH -C haswell
 
@@ -13,14 +13,19 @@
 export SDSS_ROOT_DIR="/global/projecta/projectdirs/sdss/data/sdss/dr12/boss"
 export FIELD_EXTENTS="/project/projectdirs/dasrepo/celeste-sc16/field_extents.fits"
 export CELESTE_STAGE_DIR=$DW_PERSISTENT_STRIPED_celestebb/celeste
-
-export PATH=$PATH:/usr/common/tig/taskfarmer/1.5/bin:$(pwd)
+export OMP_NUM_THREADS=1
+export JULIA_NUM_THREADS=1
 
 export JULIA_PKGDIR=$SCRATCH/julia_pkgdir
 export MAKEFILE_DIR=$JULIA_PKGDIR/v0.5/Celeste/staging
+
+export PATH=$PATH:/usr/common/tig/taskfarmer/1.5/bin:$(pwd)
+export PATH=$SCRATCH/julia/bin:$PATH
+export PATH=$JULIA_PKGDIR/v0.5/Celeste/bin:$PATH
+
+export THREADS=16
+
 cd $JULIA_PKGDIR/v0.5/Celeste/staging
 
-export THREADS=32
-
-runcommands.sh stage_tasks
+runcommands.sh estimate_tasks
 
