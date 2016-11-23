@@ -4,7 +4,7 @@
 #SBATCH --qos=premium
 #SBATCH -N 64 -c 64
 #SBATCH --job-name=celestebb_stage
-#SBATCH --time=03:00:00
+#SBATCH --time=05:00:00
 #SBATCH --license=SCRATCH
 #SBATCH -C haswell
 

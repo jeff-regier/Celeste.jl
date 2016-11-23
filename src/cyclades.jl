@@ -209,7 +209,7 @@ neighbor_map - ligh_source index -> neighbor light_source id
 
 Returns:
 
-- Dictionary of results, keyed by SDSS thing_id.
+- Vector of OptimizedSource results
 """
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
@@ -315,17 +315,17 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     end
     Log.info("Done fitting elboargs. Elapsed time: $(toq())")
 
-    # Return add results to dictionary
-    results = Dict[]
+    # Return add results to vector
+    results = OptimizedSource[]
 
     for i = 1:n_sources
         entry = catalog[target_sources[i]]
-        push!(results, Dict("thing_id"=>entry.thing_id,
-                            "objid"=>entry.objid,
-                            "ra"=>entry.pos[1],
-                            "dec"=>entry.pos[2],
-                            "vs"=>model[i].vp[1],
-                            "runtime"=>-1))
+        result = OptimizedSource(entry.thing_id,
+                                 entry.objid,
+                                 entry.pos[1],
+                                 entry.pos[2],
+                                 model[i].vp[1])
+        push!(results, result)
     end
 
     results

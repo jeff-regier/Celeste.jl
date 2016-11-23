@@ -320,6 +320,31 @@ function infer_init(rcfs::Vector{RunCamcolField},
         Log.info("$(length(target_sources)) target light sources after objid cut")
     end
 
+    return catalog, target_sources
+end
+
+"""
+Use mulitple threads on one node to fit the Celeste model to sources in a given
+bounding box.
+"""
+function one_node_infer(rcfs::Vector{RunCamcolField},
+                        stagedir::String;
+                        joint_infer=false,
+                        joint_infer_n_iters=10,
+                        objid="",
+                        box=BoundingBox(-1000., 1000., -1000., 1000.),
+                        target_rcfs=RunCamcolField[],
+                        primary_initialization=true,
+                        reserve_thread=Ref(false),
+                        thread_fun=phalse,
+                        timing=InferTiming())
+    catalog, target_sources = infer_init(rcfs,
+                                         stagedir;
+                                         objid=objid,
+                                         box=box,
+                                         target_rcfs=target_rcfs,
+                                         primary_initialization=primary_initialization)
+
     # If there are no objects of interest, return early.
     if length(target_sources) == 0
         images = Image[]
@@ -333,52 +358,34 @@ function infer_init(rcfs::Vector{RunCamcolField},
         Log.info("neighbors found in $(toq()) seconds")
     end
 
-    return catalog, target_sources, neighbor_map, images
-end
-
-"""
-Use mulitple threads on one node to
-fit the Celeste model to sources in a given bounding box.
-
-- rcfs: Array of run, camcol, field triplets that the source occurs in.
-- box: a bounding box specifying a region of sky
-
-Returns:
-
-- Dictionary of results, keyed by SDSS thing_id.
-"""
-function one_node_infer(rcfs::Vector{RunCamcolField},
-                        stagedir::String;
-                        joint_infer=false,
-                        joint_infer_n_iters=10,
-                        objid="",
-                        box=BoundingBox(-1000., 1000., -1000., 1000.),
-                        target_rcfs=RunCamcolField[],
-                        primary_initialization=true,
-                        reserve_thread=Ref(false),
-                        thread_fun=phalse,
-                        timing=InferTiming())
-    # ctni = (catalog, target_sources, neighbor_map, images)
-    ctni = infer_init(rcfs, stagedir;
-                      objid=objid,
-                      box=box,
-                      target_rcfs=target_rcfs,
-                      primary_initialization=primary_initialization)
-
     Log.info("Running with $(nthreads()) threads")
 
-    # NB: All I/O happens above in `infer_init()`. The methods below don't
-    # touch disk.
+    # NB: All I/O happens above. The methods below don't touch disk.
     if joint_infer
-        return one_node_joint_infer(ctni...;
+        return one_node_joint_infer(catalog,
+                                    target_sources,
+                                    neighbor_map,
+                                    images;
                                     n_iters=joint_infer_n_iters,
                                     objid=objid)
     else
-        return one_node_single_infer(ctni...;
+        return one_node_single_infer(catalog,
+                                     target_sources,
+                                     neighbor_map,
+                                     images;
                                      reserve_thread=reserve_thread,
                                      thread_fun=thread_fun,
                                      timing=timing)
     end
+end
+
+
+immutable OptimizedSource
+    thingid::Int64
+    objid::String
+    init_ra::Float64
+    init_dec::Float64
+    vs::Vector{Float64}
 end
 
 
@@ -392,7 +399,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
     curr_source = 1
     last_source = length(target_sources)
     sources_lock = SpinLock()
-    results = Dict[]
+    results = OptimizedSource[]
     results_lock = SpinLock()
 
     # iterate over sources
@@ -426,13 +433,11 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                     vs_opt = infer_source(images, neighbors, entry)
                     runtime = time() - t0
 
-                    result = Dict(
-                        "thing_id"=>entry.thing_id,
-                        "objid"=>entry.objid,
-                        "ra"=>entry.pos[1],
-                        "dec"=>entry.pos[2],
-                        "vs"=>vs_opt,
-                        "runtime"=>runtime)
+                    result = OptimizedSource(entry.thing_id,
+                                             entry.objid,
+                                             entry.pos[1],
+                                             entry.pos[2],
+                                             vs_opt)
                     lock(results_lock)
                     push!(results, result)
                     unlock(results_lock)
@@ -649,31 +654,6 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     nputs(dt_nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
     nputs(dt_nodeid, "timing: write_results=$(times.write_results)")
     nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
-end
-
-
-"""
-Estimates the amount of computation required to call `infer_box` on a
-particular region of the sky.
-"""
-function estimate_box_runtime(box::BoundingBox, stagedir::String)
-    rcfs = get_overlapping_fields(box, stagedir)
-    catalog, targets, n_map, images = infer_init(rcfs, stagedir; box=box)
-
-    # Typically we call `get_sky_patches()` with just a subset of the
-    # catalog---just the light sources around one we're optimizing.
-    # Here we call it for the whole catalog to get a count of the active
-    # pixels all at once.
-    patches = Infer.get_sky_patches(images, catalog)
-    Infer.load_active_pixels!(images, patches)
-
-    num_active = 0
-
-    for n in 1:length(images), s in targets
-        num_active += sum(patches[s, n].active_pixel_bitmap)
-    end
-
-    num_active
 end
 
 end

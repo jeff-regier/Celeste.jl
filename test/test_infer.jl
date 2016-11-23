@@ -111,24 +111,7 @@ function test_load_active_pixels()
 end
 
 
-function test_estimate_box_runtime()
-    load_surrounding_rcfs()
-
-    # This box is contained in (3900, 6, 269)
-    box = ParallelRun.BoundingBox(164.29, 164.55, 39.00, 39.25)
-
-    num_active = ParallelRun.estimate_box_runtime(box, datadir)   
-
-    # This box contains about 1000 sources to optimize, and each source
-    # should have at least 50 active pixels per image it appears in, and at most about
-    # 2000 active pixels per image it appears in. Most sources only appear
-    # in 1 or 2 frames. Each frame has 5 bands.
-    @test 1000 * 50 * 1 * 5 < num_active < 1000 * 2000 * 3 * 5
-end
-
-
 if test_long_running
-    test_estimate_box_runtime()
     test_infer_rcf()
 end
 
