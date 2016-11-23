@@ -291,7 +291,11 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                     max_iters=n_newton_steps)
             end
         catch ex
-            Log.error(string(ex))
+            if is_production_run || nthreads() > 1
+                Log.error(string(ex))
+            else
+                rethrow(ex)
+            end
         end
     end
 
