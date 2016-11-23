@@ -459,7 +459,7 @@ bvn_x_d and bvn_xx_h should already have been set using get_bvn_derivs!()
 """
 function transform_bvn_ux_derivs!{NumType <: Number}(
     bvn_derivs::BivariateNormalDerivatives{NumType},
-    wcs_jacobian::Array{Float64, 2}, calculate_hessian::Bool)
+    wcs_jacobian, calculate_hessian::Bool)
 
   # Gradient calculations.
 
@@ -507,7 +507,7 @@ bvn_xsig_h
 function transform_bvn_derivs!{NumType <: Number}(
     bvn_derivs::BivariateNormalDerivatives{NumType},
     sig_sf::GalaxySigmaDerivs{NumType},
-    wcs_jacobian::Array{Float64, 2}, calculate_hessian::Bool)
+    wcs_jacobian, calculate_hessian::Bool)
 
   # Transform the u derivates first.
   # bvn_x_d and bvn_xx_h should already have been set using get_bvn_derivs!()

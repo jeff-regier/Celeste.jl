@@ -24,9 +24,8 @@ Attributes:
       in the same format as d.  This is used for the full Hessian
       with respect to all the sources.
 """
-type SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
-    # Actually a single value, but an Array to avoid memory allocation
-    v::Vector{NumType}
+immutable SensitiveFloat{ParamType <: ParamSet, NumType <: Number}
+    v::Base.RefValue{NumType}
 
     # local_P x local_S matrix of gradients
     d::Matrix{NumType}
@@ -56,7 +55,7 @@ function zero_sensitive_float{ParamType <: ParamSet}(
               ::Type{ParamType}, NumType::DataType, local_S::Int)
     local_P = length(ParamType)
 
-    v = zeros(NumType, 1)
+    v = Ref(zero(NumType))
     d = zeros(NumType, local_P, local_S)
     h = zeros(NumType, local_P * local_S, local_P * local_S)
 
@@ -104,7 +103,7 @@ end
 
 function clear!{ParamType <: ParamSet, NumType <: Number}(
                 sp::SensitiveFloat{ParamType, NumType}, clear_hessian::Bool)
-    fill!(sp.v, zero(NumType))
+    sp.v[] = zero(NumType)
     fill!(sp.d, zero(NumType))
     if clear_hessian
       fill!(sp.h, zero(NumType))
@@ -188,7 +187,7 @@ function combine_sfs!{ParamType <: ParamSet,
                       T1 <: Number, T2 <: Number, T3 <: Number}(
         sf1::SensitiveFloat{ParamType, T1},
         sf2::SensitiveFloat{ParamType, T1},
-        v::T1, g_d::Vector{T2}, g_h::Matrix{T3};
+        v::T1, g_d::Vector{T2}, g_h::Matrix{T3},
         calculate_hessian::Bool=true)
 
     combine_sfs!(sf1, sf2, sf1, v, g_d, g_h, calculate_hessian)
@@ -208,8 +207,7 @@ function multiply_sfs!{ParamType <: ParamSet, NumType <: Number}(
     v = sf1.v[] * sf2.v[]
     g_d = NumType[sf2.v[], sf1.v[]]
 
-    combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess,
-                             calculate_hessian=calculate_hessian)
+    combine_sfs!(sf1, sf2, v, g_d, multiply_sfs_hess, calculate_hessian)
 end
 
 

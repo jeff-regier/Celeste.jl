@@ -32,7 +32,7 @@ function test_zero_sensitive_float_array()
     # same sensitive float.
     sf_vec[1].v[] = rand()
     sf_vec[1].d[:, 1] = rand(length(CanonicalParams))
-    sf_vec[1].h = 2 * diagm(ones(size(sf_vec[1].h, 1)))
+    sf_vec[1].h[:, :] = 2 * diagm(ones(size(sf_vec[1].h, 1)))
 
     for ind in 2:length(sf_vec)
         sf = sf_vec[ind]

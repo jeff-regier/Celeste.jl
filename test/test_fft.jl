@@ -47,7 +47,7 @@ function test_convolve_sensitive_float_matrix()
     sf.v[] = 3;
     sf.d[:, 1] = rand(size(sf.d, 1))
     h = rand(size(sf.h))
-    sf.h = h * h';
+    sf.h[:] = h * h';
     fsms.fs1m_image_padded[2, 2] = deepcopy(sf);
     DeterministicVIImagePSF.convolve_sensitive_float_matrix!(
         fsms.fs1m_image_padded, fsms.psf_fft_vec[1], fsms.fs1m_conv_padded);

@@ -33,11 +33,10 @@ type PsfOptimizer
     ftol::Float64
     grtol::Float64
     num_iters::Int
-    raw_psf::Matrix{Float64}
+    verbose::Bool
     K::Int
 
     # Variable that will be allocated in optimization:
-    x_mat::Matrix{Float64}
     bvn_derivs::BivariateNormalDerivatives{Float64}
 
     log_pdf::SensitiveFloat{PsfParams, Float64}
@@ -48,12 +47,10 @@ type PsfOptimizer
 
     psf_params_free_vec_cache::Vector{Float64}
 
-    # functions
-    psf_2df::Optim.TwiceDifferentiableFunction
-    fit_psf::Function
-
     function PsfOptimizer(psf_transform::DataTransform, K::Int;
-                          verbose::Bool=false, ftol::Float64=1e-9, grtol::Float64=1e-9)
+                          verbose::Bool=false,
+                          ftol::Float64=1e-9,
+                          grtol::Float64=1e-9)
         num_iters = 50
 
         bvn_derivs = BivariateNormalDerivatives{Float64}(Float64)
@@ -64,79 +61,74 @@ type PsfOptimizer
         squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K)
         sf_free = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K)
 
-        x_mat = Array(Float64, 0, 0)
-        raw_psf = Array(Float64, 0, 0)
         psf_params_free_vec_cache = fill(NaN, K * length(PsfParams))
 
-        function psf_fit_for_optim{NumType <: Number}(
-                psf_params_free_vec::Vector{NumType})
-            if psf_params_free_vec == psf_params_free_vec_cache
-                return sf_free
-            else
-                psf_params_free_vec_cache = deepcopy(psf_params_free_vec)
-            end
-            psf_params_free = unwrap_psf_params(psf_params_free_vec)
-            psf_params = constrain_psf_params(psf_params_free, psf_transform)
-
-            # Update squared_error in place.
-            evaluate_psf_fit!(
-                    psf_params, raw_psf, x_mat, bvn_derivs,
-                    log_pdf, pdf, pixel_value, squared_error, true)
-
-            # Update sf_free in place.
-            transform_psf_sensitive_float!(
-                psf_params, psf_transform, squared_error, sf_free, true)
-
-            sf_free
-        end
-
-        function psf_fit_value{NumType <: Number}(psf_params_free_vec::Vector{NumType})
-            psf_fit_for_optim(psf_params_free_vec).v[]
-        end
-
-        function psf_fit_grad!(
-                psf_params_free_vec::Vector{Float64}, grad::Vector{Float64})
-            grad[:] = psf_fit_for_optim(psf_params_free_vec).d[:]
-        end
-
-        function psf_fit_hess!(
-                psf_params_free_vec::Vector{Float64}, hess::Matrix{Float64})
-            hess[:] = psf_fit_for_optim(psf_params_free_vec).h
-            hess[:] = 0.5 * (hess + hess')
-        end
-
-        psf_2df = Optim.TwiceDifferentiableFunction(
-            psf_fit_value, psf_fit_grad!, psf_fit_hess!)
-
-        function fit_psf(psf::Matrix{Float64}, initial_params::Vector{Vector{Float64}})
-            raw_psf = psf
-            x_mat = get_x_matrix_from_psf(raw_psf)
-            psf_params_free = unconstrain_psf_params(initial_params, psf_transform)
-            psf_params_free_vec = vec(wrap_psf_params(psf_params_free))
-
-            tr_method =
-                    Optim.NewtonTrustRegion(initial_delta=10.0, delta_hat=1e9, eta=0.1,
-                                            rho_lower=0.2, rho_upper=0.75)
-
-            options = Optim.OptimizationOptions(;
-                    x_tol = 0.0, # Don't allow convergence in params
-                    f_tol = ftol, g_tol = grtol,
-                    iterations = num_iters, store_trace = verbose,
-                    show_trace = false, extended_trace = verbose)
-
-            nm_result = Optim.optimize(psf_fit_value,
-                                       psf_fit_grad!,
-                                       psf_fit_hess!,
-                                       psf_params_free_vec, tr_method, options)
-            nm_result
-        end
-
-        new(psf_transform, ftol, grtol, num_iters, raw_psf, K,
-            x_mat, bvn_derivs, log_pdf, pdf, pixel_value, squared_error, sf_free,
-            psf_params_free_vec_cache, psf_2df, fit_psf)
+        new(psf_transform, ftol, grtol, num_iters, verbose, K,
+            bvn_derivs, log_pdf, pdf, pixel_value, squared_error,
+            sf_free, psf_params_free_vec_cache)
     end
 end
 
+############################################################################################
+
+function psf_fit_for_optim(psf_optimizer::PsfOptimizer, raw_psf, x_mat, psf_params_free_vec::Vector)
+    if psf_params_free_vec == psf_optimizer.psf_params_free_vec_cache
+        return psf_optimizer.sf_free
+    else
+        copy!(psf_optimizer.psf_params_free_vec_cache, psf_params_free_vec)
+    end
+
+    psf_params_free = unwrap_psf_params(psf_params_free_vec)
+    psf_params = constrain_psf_params(psf_params_free, psf_optimizer.psf_transform)
+
+    # Update squared_error in place.
+    evaluate_psf_fit!(psf_params, raw_psf, x_mat, psf_optimizer.bvn_derivs,
+                      psf_optimizer.log_pdf, psf_optimizer.pdf,
+                      psf_optimizer.pixel_value, psf_optimizer.squared_error, true)
+
+    # Update sf_free in place.
+    transform_psf_sensitive_float!(psf_params, psf_optimizer.psf_transform,
+                                   psf_optimizer.squared_error,
+                                   psf_optimizer.sf_free, true)
+
+    psf_optimizer.sf_free
+end
+
+function fit_psf(psf_optimizer::PsfOptimizer, raw_psf::Matrix{Float64}, initial_params::Vector{Vector{Float64}})
+    x_mat = get_x_matrix_from_psf(raw_psf)
+    psf_params_free = unconstrain_psf_params(initial_params, psf_optimizer.psf_transform)
+    psf_params_free_vec = vec(wrap_psf_params(psf_params_free))
+
+    function psf_fit_value(psf_params_free_vec::Vector)
+        psf_fit_for_optim(psf_optimizer, raw_psf, x_mat, psf_params_free_vec).v[]
+    end
+
+    function psf_fit_grad!(psf_params_free_vec::Vector{Float64}, grad::Vector{Float64})
+        grad[:] = psf_fit_for_optim(psf_optimizer, raw_psf, x_mat, psf_params_free_vec).d[:]
+    end
+
+    function psf_fit_hess!(psf_params_free_vec::Vector{Float64}, hess::Matrix{Float64})
+        hess[:] = psf_fit_for_optim(psf_optimizer, raw_psf, x_mat, psf_params_free_vec).h
+        hess[:] = 0.5 * (hess + hess')
+    end
+
+    tr_method = Optim.NewtonTrustRegion(initial_delta=10.0, delta_hat=1e9, eta=0.1,
+                                        rho_lower=0.2, rho_upper=0.75)
+
+    options = Optim.OptimizationOptions(;
+                                        x_tol = 0.0, # Don't allow convergence in params
+                                        f_tol = psf_optimizer.ftol,
+                                        g_tol = psf_optimizer.grtol,
+                                        iterations = psf_optimizer.num_iters,
+                                        store_trace = psf_optimizer.verbose,
+                                        show_trace = false,
+                                        extended_trace = psf_optimizer.verbose)
+
+    return Optim.optimize(psf_fit_value, psf_fit_grad!, psf_fit_hess!,
+                          psf_params_free_vec, tr_method, options)
+end
+
+############################################################################################
 
 """
 Return an image of a Celeste GMM PSF evaluated at rows, cols.
@@ -206,7 +198,7 @@ Returns:
 """
 function get_source_psf(world_loc::Vector{Float64},
                         img::Image,
-                        psf_optimizer::PSF.PsfOptimizer,
+                        psf_optimizer::PsfOptimizer,
                         initial_psf_params::Vector{Vector{Float64}})
     # Some stamps or simulated data have no raw psf information. In that case,
     # just use the psf from the image.
@@ -287,7 +279,7 @@ function get_psf_transform(
         # Note that the weights do not need to sum to one.
         bounds[k][:weight] = ParamBox[ ParamBox(0.05, 2.0, scale[psf_ids.weight] ) ]
     end
-    DataTransform(bounds, active_sources=collect(1:K), S=K)
+    DataTransform(bounds, collect(1:K), K)
 end
 
 
@@ -305,7 +297,7 @@ Args:
 Returns:
     - Updates psf_params or psf_params_free in place.
 """
-function transform_psf_params!{NumType <: Number}(
+function transform_psf_params!{NumType<:Number}(
         psf_params::Vector{Vector{NumType}}, psf_params_free::Vector{Vector{NumType}},
         psf_transform::DataTransform, to_unconstrained::Bool)
     for k=1:length(psf_params)
@@ -329,7 +321,7 @@ end
 """
 Allocate memory for and return a constrained parameter set.
 """
-function constrain_psf_params{NumType <: Number}(
+function constrain_psf_params{NumType<:Number}(
         psf_params_free::Vector{Vector{NumType}}, psf_transform::DataTransform)
     K = length(psf_params_free)
     psf_params = Array(Vector{NumType}, K)
@@ -346,7 +338,7 @@ end
 """
 Allocate memory for and return an unconstrained parameter set.
 """
-function unconstrain_psf_params{NumType <: Number}(
+function unconstrain_psf_params{NumType<:Number}(
         psf_params::Vector{Vector{NumType}}, psf_transform::DataTransform)
     K = length(psf_params)
     psf_params_free = Array(Vector{NumType}, K)
@@ -421,7 +413,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
         bvn = bvn_vec[k]
         eval_bvn_pdf!(bvn_derivs, bvn, x)
         get_bvn_derivs!(bvn_derivs, bvn, true, true)
-        transform_bvn_derivs!(bvn_derivs, sig_sf_vec[k], ID_MAT_2D, true)
+        transform_bvn_derivs!(bvn_derivs, sig_sf_vec[k], I, true)
 
         clear!(log_pdf)
         clear!(pdf)
@@ -569,8 +561,8 @@ Args:
 Returns:
     - Updates sf_free in place.
 """
-function transform_psf_sensitive_float!{NumType <: Number}(
-        psf_params::Vector{Vector{NumType}}, psf_transform::Transform.DataTransform,
+function transform_psf_sensitive_float!{NumType<:Number}(
+        psf_params::Vector{Vector{NumType}}, psf_transform::DataTransform,
         sf::SensitiveFloat{PsfParams, NumType}, sf_free::SensitiveFloat{PsfParams, NumType},
         calculate_derivs::Bool)
     sf_free.v[] = sf.v[]
@@ -648,12 +640,12 @@ Args:
 Returns:
     - A vector of PsfComponents fit to the raw_psf.
 """
-function fit_raw_psf_for_celeste(
-        raw_psf::Array{Float64, 2}, psf_optimizer::PsfOptimizer,
+function fit_raw_psf_for_celeste{P<:PsfOptimizer}(
+        raw_psf::Array{Float64, 2}, psf_optimizer::P,
         initial_psf_params::Vector{Vector{Float64}})
     K = length(initial_psf_params)
     @assert K == psf_optimizer.K
-    optim_result = psf_optimizer.fit_psf(raw_psf, initial_psf_params)
+    optim_result = fit_psf(psf_optimizer, raw_psf, initial_psf_params)
     psf_params_fit =
         constrain_psf_params(
             unwrap_psf_params(Optim.minimizer(optim_result)), psf_optimizer.psf_transform)
