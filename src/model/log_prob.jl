@@ -170,7 +170,7 @@ function state_log_likelihood(is_star::Bool,                # source is star
     for n in 1:N
         img = images[n]
 
-        star_mcs, gal_mcs = load_bvn_mixtures(S, patches, 
+        star_mcs, gal_mcs = load_bvn_mixtures(S, patches,
                               source_params, active_sources, psf_K, n,
                               calculate_derivs=model_vars.calculate_derivs,
                               calculate_hessian=model_vars.calculate_hessian)
@@ -205,13 +205,13 @@ function state_log_likelihood(is_star::Bool,                # source is star
                 flux_s    = colors_to_fluxes(params_s[lidx.r[type_idx]],
                                              params_s[lidx.c[:,type_idx]])
                 rate_s = s_is_star ? model_vars.fs0m_vec[s].v : model_vars.fs1m_vec[s].v
-                rate_s *= flux_s[img.b]
-                background_rate += rate_s
+                rate_s[] *= flux_s[img.b]
+                background_rate += rate_s[]
             end
 
             # this source's rate, add to background for total
             this_rate  = is_star ? model_vars.fs0m_vec[1].v : model_vars.fs1m_vec[1].v
-            pixel_rate = fluxes[img.b] * this_rate + background_rate
+            pixel_rate = fluxes[img.b] * this_rate[] + background_rate
 
             # multiply by image's gain for this pixel
             rate     = pixel_rate * img.iota_vec[h]

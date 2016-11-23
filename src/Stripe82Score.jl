@@ -1,6 +1,5 @@
 module Stripe82Score
 
-
 import JLD
 import FITSIO
 using DataFrames
@@ -8,6 +7,7 @@ using DataFrames
 import ..SDSSIO
 import ..SDSSIO: RunCamcolField
 import ..Model: CatalogEntry, ids
+import ..ParallelRun: OptimizedSource
 
 
 immutable MatchException <: Exception

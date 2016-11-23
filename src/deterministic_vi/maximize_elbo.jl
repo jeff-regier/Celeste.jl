@@ -1,3 +1,7 @@
+##############
+# maximize_f #
+##############
+
 """
 Optimizes f using Newton's method and exact Hessians.
 
@@ -7,109 +11,75 @@ Returns:
   - max_x: The optimal function input
   - ret: The return code of optimize()
 """
-function maximize_f(f::Function,
-                    ea::ElboArgs,
-                    transform::DataTransform;
-                    omitted_ids=Int[],
-                    xtol_rel=1e-7,
-                    ftol_abs=1e-6,
-                    verbose=false,
-                    max_iters=50,
-                    fast_hessian=true)
+function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
+                       omitted_ids=Int[],
+                       xtol_rel=1e-7,
+                       ftol_abs=1e-6,
+                       verbose=false,
+                       max_iters=50,
+                       fast_hessian=true)
     # Make sure the model parameters are within the transform bounds
     enforce_bounds!(ea.vp, ea.active_sources, transform)
     @assert ea.active_sources == transform.active_sources
 
-    kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    x_length = length(kept_ids) * transform.active_S
-    x_size = (length(kept_ids), transform.active_S)
-
-    Sa = length(ea.active_sources)
-
     f_evals = 0
-    const print_every_n = 10
+    print_every_n = 10
+    n_active_sources::Int = length(transform.active_sources)
+    kept_ids::Vector{Int} = setdiff(1:length(UnconstrainedParams), omitted_ids)
 
-    function f_wrapped_nocache(x::Vector{Float64})
-        f_evals += 1
+    all_kept_ids::Vector{Int} = Int[]
+    for i in eachindex(transform.active_sources)
+        append!(all_kept_ids, kept_ids + (i - 1) * length(kept_ids))
+    end
 
+    x0 = vec(Transform.vp_to_array(transform, ea.vp, omitted_ids))
+    last_sf::SensitiveFloat{UnconstrainedParams,Float64} = zero_sensitive_float(UnconstrainedParams, n_active_sources)
+    last_x::Vector{Float64} = fill(NaN, size(x0))
+
+    f_wrapped_nocache! = (x::Vector) -> begin
         # Evaluate in the constrained space and then unconstrain again.
-        transform.array_to_vp!(reshape(x, x_size), ea.vp, omitted_ids)
+        reshaped_x = reshape(x, length(kept_ids), n_active_sources)
+        Transform.array_to_vp!(transform, reshaped_x, ea.vp, kept_ids)
         f_res = f(ea)
-
-        # TODO: Add an option to print either the transformed or
-        # free parameterizations.
-
-        if verbose || (f_evals % print_every_n == 0)
-            Log.info("f_evals: $(f_evals) value: $(f_res.v[])")
-        end
-
-        if verbose
-            iter_vp = ea.vp[ea.active_sources]
-            S = length(iter_vp)
-
-            if length(iter_vp[1]) == length(ids_names)
-                state_df = DataFrames.DataFrame(names=ids_names)
-            elseif length(iter_vp[1]) == length(ids_free_names)
-                state_df = DataFrames.DataFrame(names=ids_free_names)
-            else
-                state_df = DataFrames.DataFrame(
-                    names=[ "x$i" for i=1:length(iter_vp[1, :])])
-            end
-
-            for s=1:S
-                state_df[Symbol(string("val", s))] = iter_vp[s]
-            end
-
-            for s=1:S
-                state_df[Symbol(string("grad", s))] = f_res.d[:, s]
-            end
-
-            Log.info(repr(state_df))
-            Log.info("=======================================\n")
-        end
-
-        transform.transform_sensitive_float(f_res, ea.vp, ea.active_sources)
+        f_evals += 1
+        log_f_eval(verbose, f_evals, print_every_n, ea, f_res)
+        Transform.transform_sensitive_float!(transform, last_sf, f_res, ea.vp, ea.active_sources)
     end
 
-    last_sf = zero_sensitive_float(UnconstrainedParams, Sa)
-    last_x = [ NaN ]
-
-    function f_wrapped_cached(x::Vector{Float64})
+    f_wrapped_cached! = (x::Vector) -> begin
         if x != last_x
-            last_x = deepcopy(x)
-            last_sf = deepcopy(f_wrapped_nocache(x))
+            copy!(last_x, x)
+            f_wrapped_nocache!(x)
         end
-
-        last_sf
+        return nothing
     end
 
-    function neg_f_value{T <: Number}(x::Vector{T})
-        @assert length(x) == x_length
-        -f_wrapped_cached(x).v[]
+    neg_f_value = (x::Vector) -> begin
+        f_wrapped_cached!(x)
+        return -(last_sf.v[])
     end
 
-    function neg_f_grad!{T <: Number}(x::Vector{T}, grad::Vector{T})
-        @assert length(x) == x_length
-        res = f_wrapped_cached(x)
-        if length(grad) > 0
-            svs = [res.d[kept_ids, si] for si in 1:transform.active_S]
-            grad[:] = reduce(vcat, svs)
+    neg_f_grad! = (x::Vector, grad::Vector) -> begin
+        f_wrapped_cached!(x)
+        for i in kept_ids
+            for j in 1:n_active_sources
+                grad[i, j] = -last_sf.d[i, j]
+            end
         end
-        grad .*= -1
+        return grad
     end
 
-    function neg_f_hessian!{T <: Number}(x::Vector{T}, hess::Matrix{T})
-        @assert length(x) == x_length
-        res = f_wrapped_cached(x)
-        all_kept_ids = Int[]
-        for sa=1:transform.active_S
-            append!(all_kept_ids, kept_ids + (sa - 1) * length(kept_ids))
+    neg_f_hessian! = (x::Vector, hess::Matrix) -> begin
+        f_wrapped_cached!(x)
+        for i in all_kept_ids
+            for j in all_kept_ids
+                hess[i, j] = last_sf.h[i, j]
+            end
         end
-        sub_hess = res.h[all_kept_ids, all_kept_ids]
-        hess[:, :] = -1 .* 0.5 * (sub_hess + sub_hess')
+        Transform.symmetrize!(hess, -0.5)
+        return hess
     end
 
-    x0 = transform.vp_to_array(ea.vp, omitted_ids)
     tr_method = Optim.NewtonTrustRegion(
                     initial_delta=10.0,
                     delta_hat=1e9,
@@ -125,29 +95,27 @@ function maximize_f(f::Function,
     nm_result = Optim.optimize(neg_f_value,
                                neg_f_grad!,
                                neg_f_hessian!,
-                               x0[:],
+                               x0,
                                tr_method,
                                options)
 
-    transform.array_to_vp!(reshape(Optim.minimizer(nm_result), size(x0)),
-                           ea.vp, omitted_ids)
+    reshaped_min = reshape(Optim.minimizer(nm_result), size(x0))
+    Transform.array_to_vp!(transform, reshaped_min, ea.vp, kept_ids)
     max_f = -1.0 * Optim.minimum(nm_result)
     max_x = Optim.minimizer(nm_result)
 
-    Log.info(string("elbo is $max_f after $(nm_result.iterations) Newton steps"))
-    f_evals, max_f, max_x, nm_result
+    Log.info("elbo is $max_f after $(nm_result.iterations) Newton steps")
+    return f_evals, max_f, max_x, nm_result
 end
 
-
-function maximize_f(f::Function,
-                    ea::ElboArgs;
-                    loc_width=1.5e-3,
-                    omitted_ids=Int[],
-                    xtol_rel=1e-7,
-                    ftol_abs=1e-6,
-                    verbose=false,
-                    max_iters=50,
-                    fast_hessian=true)
+function maximize_f{F}(f::F, ea::ElboArgs;
+                       loc_width=1.5e-3,
+                       omitted_ids=Int[],
+                       xtol_rel=1e-7,
+                       ftol_abs=1e-6,
+                       verbose=false,
+                       max_iters=50,
+                       fast_hessian=true)
     transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=loc_width)
 
     maximize_f(f, ea, transform;
@@ -157,4 +125,35 @@ function maximize_f(f::Function,
                 verbose=verbose,
                 max_iters=max_iters,
                 fast_hessian=fast_hessian)
+end
+
+
+function log_f_eval(verbose, f_evals, print_every_n, ea::ElboArgs, f_res)
+    # TODO: Add an option to print either the transformed or
+    # free parameterizations.
+    if verbose || (f_evals % print_every_n == 0)
+        Log.info("f_evals=$(f_evals) | value=$(f_res.v[])")
+    end
+    if verbose
+        iter_vp = ea.vp[ea.active_sources]
+
+        if length(iter_vp[1]) == length(ids_names)
+            state_df = DataFrames.DataFrame(names=ids_names)
+        elseif length(iter_vp[1]) == length(ids_free_names)
+            state_df = DataFrames.DataFrame(names=ids_free_names)
+        else
+            state_df = DataFrames.DataFrame(names=[ "x$i" for i=1:length(iter_vp[1, :])])
+        end
+
+        for s in eachindex(iter_vp)
+            state_df[Symbol(string("val", s))] = iter_vp[s]
+        end
+
+        for s in eachindex(iter_vp)
+            state_df[Symbol(string("grad", s))] = f_res.d[:, s]
+        end
+
+        Log.info(repr(state_df))
+        Log.info("=======================================\n")
+    end
 end

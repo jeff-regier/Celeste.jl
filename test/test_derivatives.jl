@@ -228,8 +228,8 @@ function test_e_g_s_functions()
         elbo_vars = e_g_wrapper_fun(ea)
 
         # Sanity check the variance value.
-        @test_approx_eq(elbo_vars.var_G_s.v,
-                                        elbo_vars.E_G2_s.v[] - (elbo_vars.E_G_s.v[] ^ 2))
+        @test_approx_eq(elbo_vars.var_G_s.v[],
+                        elbo_vars.E_G2_s.v[] - (elbo_vars.E_G_s.v[] ^ 2))
 
         sf = test_var ? deepcopy(elbo_vars.var_G_s) : deepcopy(elbo_vars.E_G_s)
 
@@ -318,7 +318,7 @@ function test_fs1m_derivatives()
 
         @test_approx_eq(
             pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(v) / (2 * pi),
-            fs1m.v)
+            fs1m.v[])
 
         test_with_autodiff(f_wrap_gal, par_gal, fs1m)
     end
@@ -1092,7 +1092,7 @@ function test_add_sources_sf()
   x2 = rand(P);
   clear!(sf_s);
   scaled_exp!(sf_s, x2, a2);
-  v2 = sf_s.v
+  v2 = sf_s.v[]
 
   fd_grad2 = ForwardDiff.gradient(f2, x2);
   @test_approx_eq sf_s.d fd_grad2
@@ -1102,9 +1102,9 @@ function test_add_sources_sf()
 
   add_sources_sf!(sf_all, sf_s, 2, true)
 
-  @test_approx_eq (v1 + v2) sf_all.v
+  @test_approx_eq (v1 + v2) sf_all.v[]
 
-  @test_approx_eq (v1 + v2) sf_all.v
+  @test_approx_eq (v1 + v2) sf_all.v[]
   @test_approx_eq fd_grad1 sf_all.d[1:P, 1]
   @test_approx_eq fd_grad2 sf_all.d[1:P, 2]
   @test_approx_eq fd_hess1 sf_all.h[1:P, 1:P]
@@ -1122,7 +1122,7 @@ function test_box_derivatives()
 	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 
 	box_params = setdiff(fieldnames(ids), [:a, :k])
-	vp_free = transform.from_vp(ea.vp)
+	vp_free = Transform.from_vp(transform, ea.vp)
 	for sa = 1:length(ea.active_sources), param in box_params, ind in length(getfield(ids, param))
 		# sa = 1
 		# param = box_params[1]
@@ -1137,7 +1137,7 @@ function test_box_derivatives()
 				Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
 			                  sa = 1:length(ea.active_sources) ]
 			local_vp_free[s] = vp_free_s
-			vp = transform.to_vp(local_vp_free)
+			vp = Transform.to_vp(transform, local_vp_free)
 			vp[s][getfield(ids, param)[ind]]
 		end
 
@@ -1162,7 +1162,7 @@ function test_box_simplex_derivatives()
 	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 
 	simplex_params = [:a, :k]
-	vp_free = transform.from_vp(ea.vp)
+	vp_free = Transform.from_vp(transform, ea.vp)
 
   for sa = 1:length(ea.active_sources), param in simplex_params
     # sa = 1
@@ -1195,7 +1195,7 @@ function test_box_simplex_derivatives()
     	  		Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
     	  	                     sa = 1:length(ea.active_sources) ]
     	  	local_vp_free[s] = vp_free_s
-    	  	vp = transform.to_vp(local_vp_free)
+    	  	vp = Transform.to_vp(transform, local_vp_free)
     	  	vp[s][getfield(ids, param)[row, col]]
     	  end
 
@@ -1309,12 +1309,12 @@ function test_real_image()
 
     function wrap_elbo{NumType <: Number}(vs1::Vector{NumType})
         ea_local = forward_diff_model_params(NumType, ea)
-        ea_local.vp[1][:] = vs1
+        ea_local.vp[][:] = vs1
         local_elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false)
         local_elbo.v[]
     end
 
-    test_with_autodiff(wrap_elbo, ea.vp[1], elbo)
+    test_with_autodiff(wrap_elbo, ea.vp[], elbo)
 end
 
 

@@ -289,7 +289,7 @@ Members:
 """
 type TransformDerivatives{NumType <: Number}
     dparam_dfree::Matrix{NumType}
-    d2param_dfree2::Array{Matrix{NumType}}
+    d2param_dfree2::Vector{Matrix{NumType}}
     Sa::Int
 
     # TODO: use sparse matrices?
@@ -490,25 +490,17 @@ Transform a parameter vector to variational parameters in place.
 
 Args:
  - xs: A (param x sources) matrix created from free variational parameters.
- - vp_free: Free variational parameters.  Only the ids not in omitted_ids
+ - vp_free: Free variational parameters.  Only the ids in kept_ids
             will be updated.
- - omitted_ids: Ids to omit (from ids_free)
+ - kept_ids: Ids to update (from ids_free)
 
 Returns:
  - Update vp_free in place.
 """
-function array_to_free_vp!{NumType <: Number}(
-    xs::Matrix{NumType}, vp_free::FreeVariationalParams{NumType},
-    omitted_ids::Vector{Int})
-
-    left_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-    P = length(left_ids)
-    S = length(vp_free)
-    @assert size(xs) == (P, S)
-
-    for s in 1:S, p1 in 1:P
-        p0 = left_ids[p1]
-        vp_free[s][p0] = xs[p1, s]
+function array_to_free_vp!{T}(xs::Array{T}, vp_free::FreeVariationalParams{T},
+                              kept_ids::Vector{Int})
+    for s in 1:length(vp_free), p1 in 1:length(kept_ids)
+        vp_free[s][kept_ids[p1]] = xs[p1, s]
     end
 end
 
@@ -538,121 +530,118 @@ active_sources: The sources that are being optimized.    Only these sources'
     parameters are transformed into the parameter vector.
 """
 type DataTransform
-    to_vp::Function
-    from_vp::Function
-    to_vp!::Function
-    from_vp!::Function
-    vp_to_array::Function
-    array_to_vp!::Function
-    transform_sensitive_float::Function
     bounds::Vector{ParamBounds}
     active_sources::Vector{Int}
-    active_S::Int
     S::Int
+    # TODO: Maybe this should be initialized with ElboArgs with optional
+    # custom bounds. Or maybe it should be part of ElboArgs with one transform
+    # per celestial object rather than a single object containing an array of
+    # transforms.
+    function DataTransform(bounds::Vector{ParamBounds},
+                           active_sources=collect(1:length(bounds)),
+                           S=length(bounds))
+        @assert length(bounds) == length(active_sources)
+        @assert maximum(active_sources) <= S
+        new(bounds, active_sources, S)
+    end
+end
+
+function from_vp!{T}(dt::DataTransform, vp::VariationalParams{T}, vp_free::VariationalParams{T})
+    active_sources = dt.active_sources
+    bounds = dt.bounds
+    for i in eachindex(active_sources)
+        vp_to_free!(vp[active_sources[i]], vp_free[i], bounds[i])
+    end
+    return nothing
+end
+
+function to_vp!{T<:Number}(dt::DataTransform, vp_free::FreeVariationalParams{T}, vp::VariationalParams{T})
+    active_sources = dt.active_sources
+    bounds = dt.bounds
+    for i in eachindex(active_sources)
+        free_to_vp!(vp_free[i], vp[active_sources[i]], bounds[i])
+    end
+    return nothing
+end
+
+function from_vp{T}(dt::DataTransform, vp::VariationalParams{T})
+    vp_free = [zeros(T, length(ids_free)) for _ in 1:length(dt.active_sources)]
+    from_vp!(dt, vp, vp_free)
+    vp_free
+end
+
+function to_vp{T}(dt::DataTransform, vp_free::FreeVariationalParams{T})
+    n_active_sources = length(dt.active_sources)
+    @assert(n_active_sources == dt.S,
+            string("to_vp is not supported when active_sources is a ",
+                   "strict subset of all sources."))
+    vp = [zeros(T, length(CanonicalParams)) for _ in 1:n_active_sources]
+    to_vp!(dt, vp_free, vp)
+    vp
+end
+
+function vp_to_array{T}(dt::DataTransform, vp::VariationalParams{T}, omitted_ids::Vector{Int})
+    vp_trans = from_vp(dt, vp)
+    free_vp_to_array(vp_trans, omitted_ids)
+end
+
+function array_to_vp!{T}(dt::DataTransform, xs::Array{T}, vp::VariationalParams{T},
+                         kept_ids::Vector{Int})
+    # This needs to update vp in place so that variables in omitted_ids
+    # stay at their original values.
+    vp_trans = from_vp(dt, vp)
+    array_to_free_vp!(xs, vp_trans, kept_ids)
+    to_vp!(dt, vp_trans, vp)
 end
 
 
-# TODO: Maybe this should be initialized with ElboArgs with optional
-# custom bounds.    Or maybe it should be part of ElboArgs with one transform
-# per celestial object rather than a single object containing an array of
-# transforms.
-function DataTransform(bounds::Vector{ParamBounds};
-                       active_sources=collect(1:length(bounds)),
-                       S=length(bounds))
-    @assert length(bounds) == length(active_sources)
-    @assert maximum(active_sources) <= S
-    active_S = length(active_sources)
+# Given a sensitive float with derivatives with respect to all the
+# constrained parameters, calculate derivatives with respect to
+# the unconstrained parameters.
+#
+# Note that all the other functions in DeterministicVI calculated derivatives with
+# respect to the constrained parameterization.
+function transform_sensitive_float!{T}(dt::DataTransform,
+                                       sf_free::SensitiveFloat,
+                                       sf::SensitiveFloat,
+                                       vp::VariationalParams{T},
+                                       active_sources::Vector{Int})
+    n_active_sources = length(active_sources)
+    @assert size(sf.d) == (length(CanonicalParams), n_active_sources)
 
-    function from_vp!{NumType <: Number}(
-            vp::VariationalParams{NumType}, vp_free::VariationalParams{NumType})
-        S = length(vp)
-        @assert length(vp_free) == active_S
-        for si=1:active_S
-            s = active_sources[si]
-            vp_to_free!(vp[s], vp_free[si], bounds[si])
+    transform_derivatives = get_transform_derivatives(vp, active_sources, dt.bounds)
+
+    d, h = sf.d, sf.h
+    free_d, free_h = sf_free.d, sf_free.h
+    dparam_dfree = transform_derivatives.dparam_dfree
+    d2param_dfree2 = transform_derivatives.d2param_dfree2
+
+    sf_free.v[] = sf.v[]
+
+    copy!(free_d, reshape(dparam_dfree' * d, length(UnconstrainedParams), n_active_sources))
+
+    At_mul_B!(free_h, dparam_dfree, h * dparam_dfree)
+
+    for i in eachindex(d)
+        X, n = d2param_dfree2[i], d[i]
+        for j in eachindex(X)
+            free_h[j] += X[j] * n
         end
     end
 
-    function from_vp{NumType <: Number}(vp::VariationalParams{NumType})
-            vp_free = Array{NumType, 1}[
-                zeros(NumType, length(ids_free)) for si = 1:active_S]
-            from_vp!(vp, vp_free)
-            vp_free
-    end
+    symmetrize!(free_h)
 
-    function to_vp!{NumType <: Number}(
-            vp_free::FreeVariationalParams{NumType}, vp::VariationalParams{NumType})
-        @assert length(vp_free) == active_S
-        for si=1:active_S
-            s = active_sources[si]
-            free_to_vp!(vp_free[si], vp[s], bounds[si])
-        end
-    end
-
-    function to_vp{NumType <: Number}(vp_free::FreeVariationalParams{NumType})
-            @assert(active_S == S,
-                    string("to_vp is not supported when active_sources is a ",
-                           "strict subset of all sources."))
-            vp = Array{NumType, 1}[
-                zeros(NumType, length(CanonicalParams)) for s = 1:S]
-            to_vp!(vp_free, vp)
-            vp
-    end
-
-    function vp_to_array{NumType <: Number}(vp::VariationalParams{NumType},
-                                            omitted_ids::Vector{Int})
-                                            vp_trans = from_vp(vp)
-        free_vp_to_array(vp_trans, omitted_ids)
-    end
-
-    function array_to_vp!{NumType <: Number}(xs::Matrix{NumType},
-                                             vp::VariationalParams{NumType},
-                                             omitted_ids::Vector{Int})
-        # This needs to update vp in place so that variables in omitted_ids
-        # stay at their original values.
-        vp_trans = from_vp(vp)
-        array_to_free_vp!(xs, vp_trans, omitted_ids)
-        to_vp!(vp_trans, vp)
-    end
-
-    # Given a sensitive float with derivatives with respect to all the
-    # constrained parameters, calculate derivatives with respect to
-    # the unconstrained parameters.
-    #
-    # Note that all the other functions in DeterministicVI calculated derivatives with
-    # respect to the constrained parameterization.
-    function transform_sensitive_float{NumType <: Number}(
-                                    sf::SensitiveFloat, 
-                                    vp::VariationalParams{NumType},
-                                    active_sources::Vector{Int})
-        @assert size(sf.d) == (length(CanonicalParams), length(active_sources))
-        @assert length(active_sources) == active_S
-
-        transform_derivatives = get_transform_derivatives(vp, active_sources, bounds)
-        sf_free = zero_sensitive_float(UnconstrainedParams, NumType, active_S)
-
-        sf_d_vec = sf.d[:]
-        sf_free.v[] = sf.v[]
-        sf_free.d =
-        reshape(transform_derivatives.dparam_dfree' * sf_d_vec,
-                        length(UnconstrainedParams), active_S)
-
-        sf_free.h =
-                transform_derivatives.dparam_dfree' *
-        sf.h * transform_derivatives.dparam_dfree
-        for ind in 1:length(sf_d_vec)
-                sf_free.h += transform_derivatives.d2param_dfree2[ind] * sf_d_vec[ind]
-        end
-        # Ensure exact symmetry, which is necessary for some numerical linear
-        # algebra routines.
-        sf_free.h = 0.5 * (sf_free.h' + sf_free.h)
-        sf_free
-    end
-
-    DataTransform(to_vp, from_vp, to_vp!, from_vp!, vp_to_array, array_to_vp!,
-                  transform_sensitive_float, bounds, active_sources, active_S, S)
+    return sf_free
 end
 
+# Ensure exact symmetry, which is necessary for
+# some numerical linear algebra routines.
+function symmetrize!(A, c = 0.5)
+    for i in 1:size(A, 1), j in 1:i
+        A[i, j] = A[j, i] = c * (A[i, j] + A[j, i])
+    end
+    return A
+end
 
 function get_mp_transform{NumType <: Number}(
                           vp::VariationalParams{NumType},
@@ -698,7 +687,7 @@ function get_mp_transform{NumType <: Number}(
         end
     end
 
-    DataTransform(bounds, active_sources=active_sources, S=length(vp))
+    DataTransform(bounds, active_sources, length(vp))
 end
 
 
@@ -711,7 +700,7 @@ function enforce_bounds!{NumType <: Number}(
                         vp::VariationalParams{NumType},
                         active_sources::Vector{Int},
                         transform::DataTransform)
-    for sa=1:transform.active_S, (param, constraint_vec) in transform.bounds[sa]
+    for sa in eachindex(transform.active_sources), (param, constraint_vec) in transform.bounds[sa]
         s = active_sources[sa]
         is_box = isa(constraint_vec, Array{ParamBox})
         if is_box

@@ -47,7 +47,7 @@ function test_derivative_flags()
     @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
 
     elbo_nohess = DeterministicVI.elbo(ea; calculate_hessian=false)
-    @test_approx_eq elbo.v[] elbo_nohess.v
+    @test_approx_eq elbo.v[] elbo_nohess.v[]
     @test_approx_eq elbo.d elbo_nohess.d
     @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
 end
@@ -95,8 +95,8 @@ function test_active_sources()
     ea2 = ElboArgs(ea.images, ea.vp, ea.patches, [2,], [1, 2])
     elbo_lik_2 = DeterministicVI.elbo_likelihood(ea2)
 
-    @test_approx_eq elbo_lik_12.v[] elbo_lik_1.v
-    @test_approx_eq elbo_lik_12.v[] elbo_lik_2.v
+    @test_approx_eq elbo_lik_12.v[] elbo_lik_1.v[]
+    @test_approx_eq elbo_lik_12.v[] elbo_lik_2.v[]
 
     @test_approx_eq elbo_lik_12.d[:, 1] elbo_lik_1.d[:, 1]
     @test_approx_eq elbo_lik_12.d[:, 2] elbo_lik_2.d[:, 1]
@@ -181,9 +181,8 @@ function test_that_galaxy_truth_is_most_likely()
     for bad_a in [.3, .5, .9]
         ea_a = deepcopy(ea)
         ea_a.vp[1][ids.a[:, 1]] = [ 1.0 - bad_a, bad_a ]
-        bad_a =
-          DeterministicVI.elbo_likelihood(ea_a; calculate_derivs=false)
-        @test best.v[] > bad_a.v[]
+        bad_a = DeterministicVI.elbo_likelihood(ea_a; calculate_derivs=false);
+        @test best.v[] > bad_a.v[];
     end
 
     for h2 in -2:2

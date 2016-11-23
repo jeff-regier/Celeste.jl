@@ -162,7 +162,7 @@ this helps catch them immediately.
 """
 function assert_all_finite{ParamType <: ParamSet, NumType <: Number}(
         sf::SensitiveFloat{ParamType, NumType})
-    @assert all(isfinite, sf.v) "Value is Inf/NaNs"
+    @assert isfinite(sf.v[]) "Value is Inf/NaNs"
     @assert all(isfinite, sf.d) "Gradient contains Inf/NaNs"
     @assert all(isfinite, sf.h) "Hessian contains Inf/NaNs"
 end
@@ -250,4 +250,3 @@ function ElboArgs{NumType <: Number}(
     ElboArgs(S, N, psf_K, images, vp, patches,
              active_sources, sources_to_visit, num_allowed_sd, elbo_vars)
 end
-

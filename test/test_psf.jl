@@ -2,7 +2,7 @@ using Celeste
 using Celeste.Model
 using Celeste.SensitiveFloats
 
-import Celeste.PSF: get_psf_at_point,
+import Celeste.PSF: get_psf_at_point, fit_psf,
        get_psf_transform, initialize_psf_params, transform_psf_params!,
        unwrap_psf_params, wrap_psf_params,
        unconstrain_psf_params, constrain_psf_params,
@@ -241,7 +241,7 @@ function test_psf_optimizer()
   psf_transform = get_psf_transform(psf_params);
   psf_optimizer = PsfOptimizer(psf_transform, K);
 
-  nm_result = psf_optimizer.fit_psf(raw_psf, psf_params)
+  nm_result = fit_psf(psf_optimizer, raw_psf, psf_params)
   psf_params_fit =
     constrain_psf_params(unwrap_psf_params(Optim.minimizer(nm_result)), psf_transform)
 
