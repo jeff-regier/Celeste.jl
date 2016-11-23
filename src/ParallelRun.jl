@@ -256,11 +256,11 @@ function divide_sky_and_infer(
         itimes.query_fids = toq()
 
         # run inference for this subarea
-        results, obj_value = one_node_infer(rcfs, stagedir;
-                                            box=BoundingBox(iramin, iramax, idecmin, idecmax),
-                                            reserve_thread=rundt,
-                                            thread_fun=rundtree,
-                                            timing=itimes)
+        results = one_node_infer(rcfs, stagedir;
+                                 box=BoundingBox(iramin, iramax, idecmin, idecmax),
+                                 reserve_thread=rundt,
+                                 thread_fun=rundtree,
+                                 timing=itimes)
         tic()
         save_results(outdir, iramin, iramax, idecmin, idecmax, results)
         itimes.write_results = toq()
@@ -389,7 +389,6 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                                reserve_thread=Ref(false),
                                thread_fun=phalse,
                                timing=InferTiming())
-    obj_values = Array{Float64}(length(target_sources))
     curr_source = 1
     last_source = length(target_sources)
     sources_lock = SpinLock()
@@ -424,10 +423,8 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                     neighbors = catalog[neighbor_map[ts]]
 
                     t0 = time()
-                    vs_opt, obj_value = infer_source(images, neighbors, entry)
+                    vs_opt = infer_source(images, neighbors, entry)
                     runtime = time() - t0
-
-                    obj_values[ts] = obj_value
 
                     result = Dict(
                         "thing_id"=>entry.thing_id,
@@ -464,7 +461,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
 
-    results, obj_values
+    results
 end
 
 
@@ -528,10 +525,10 @@ function infer_field(rcf::RunCamcolField,
     # other rcfs may overlap with this one. That's because this function is
     # just for testing on stripe 82: in practice we always use all relevent
     # data to make inferences.
-    results, obj_value = one_node_infer([rcf,],
-                                        stagedir;
-                                        objid=objid,
-                                        primary_initialization=false)
+    results = one_node_infer([rcf,],
+                             stagedir;
+                             objid=objid,
+                             primary_initialization=false)
     fname = if objid == ""
         @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
     else
@@ -628,7 +625,7 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
         rcfs = get_overlapping_fields(box, stagedir)
         times.query_fids = toq()
 
-        results, obj_value = one_node_infer(rcfs, stagedir; box=box, timing=times)
+        results = one_node_infer(rcfs, stagedir; box=box, timing=times)
 
         tic()
         save_results(outdir, box, results)

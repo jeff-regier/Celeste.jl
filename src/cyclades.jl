@@ -279,9 +279,6 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
 
     Log.info("Done preallocating array of elboargs. Elapsed time: $(toq())")
 
-    # Keep track of object values achieved per light source
-    obj_values = Array{Float64}(length(target_sources))
-
     # Process partition of sources. Multiple threads call this function in parallel.
     function process_sources(source_assignment::Vector{Int64})
         for cur_source_indx in source_assignment
@@ -290,7 +287,6 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                                                     DeterministicVI.elbo,
                                                     model[cur_source_indx],
                                                     max_iters=10)
-            obj_values[cur_source_indx] = obj_value
         end
     end
 
@@ -323,5 +319,5 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                             "runtime"=>-1))
     end
 
-    results, obj_values
+    results
 end
