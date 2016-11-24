@@ -58,7 +58,7 @@ function find_neighbors(target_sources::Vector{Int64},
 
     # If this loop isn't super fast in pratice, we can tile (the sky, not the
     # images) or build a spatial index with a library before distributing
-    for ts in 1:length(target_sources)
+    Threads.@threads for ts in 1:length(target_sources)
         s = target_sources[ts]
         ce = catalog[s]
 

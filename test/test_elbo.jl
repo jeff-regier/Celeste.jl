@@ -78,34 +78,44 @@ function test_active_sources()
     @test size(p.active_pixel_bitmap) == size(images[n].pixels)
     @test all(p.active_pixel_bitmap)
 
+    # lets make the second source have no active pixels
+    s2 = 2
+    for i in 1:ea.N
+        fill!(ea.patches[s2, i].active_pixel_bitmap, false)
+    end
+
+    P = length(CanonicalParams)
+    ea_no2 = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2])
+    elbo_no2 = DeterministicVI.elbo_likelihood(ea_no2)
+    @test_approx_eq elbo_no2.d[:, 2] zeros(P, 1)
+
     # lets make the second source have only a few active pixels
     # in one band, so it and source 1 don't overlap completely
-    s2 = 2
     p2 = ea.patches[s2, n]
-    fill!(p2.active_pixel_bitmap, false)
     p2.active_pixel_bitmap[10:11,10:11] = true
 
-    # now on to the main test
-    ea12 = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2], [1, 2])
+    # now on to a main test--active source order shouldn't matter
+    ea12 = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2])
     elbo_lik_12 = DeterministicVI.elbo_likelihood(ea12)
 
-    ea21 = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2], [2, 1])
+    ea21 = ElboArgs(ea.images, ea.vp, ea.patches, [2, 1])
     elbo_lik_21 = DeterministicVI.elbo_likelihood(ea21)
     @test_approx_eq elbo_lik_12.v[] elbo_lik_21.v[]
+    @test_approx_eq elbo_lik_12.d[:,1] elbo_lik_21.d[:,2]
+    @test_approx_eq elbo_lik_12.d[:,2] elbo_lik_21.d[:,1]
 
-    ea1 = ElboArgs(ea.images, ea.vp, ea.patches, [1,], [1, 2])
+    # next main test--deriviatives for active sources don't
+    ea1 = ElboArgs(ea.images, ea.vp, ea.patches, [1,])
     elbo_lik_1 = DeterministicVI.elbo_likelihood(ea1)
+    # source 1 includes all of source 2's active pixels
+    @test_approx_eq elbo_lik_1.v[] elbo_lik_12.v[]
 
-    ea2 = ElboArgs(ea.images, ea.vp, ea.patches, [2,], [1, 2])
+    ea2 = ElboArgs(ea.images, ea.vp, ea.patches, [2,])
     elbo_lik_2 = DeterministicVI.elbo_likelihood(ea2)
-
-    @test_approx_eq elbo_lik_12.v[] elbo_lik_1.v[]
-    @test_approx_eq elbo_lik_12.v[] elbo_lik_2.v[]
 
     @test_approx_eq elbo_lik_12.d[:, 1] elbo_lik_1.d[:, 1]
     @test_approx_eq elbo_lik_12.d[:, 2] elbo_lik_2.d[:, 1]
 
-    P = length(CanonicalParams)
     @test_approx_eq elbo_lik_12.h[1:P, 1:P] elbo_lik_1.h
     @test_approx_eq elbo_lik_12.h[(1:P) + P, (1:P) + P] elbo_lik_2.h
 end

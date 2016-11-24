@@ -202,9 +202,6 @@ type ElboArgs{NumType <: Number}
     # the sources to optimize
     active_sources::Vector{Int}
 
-    # the sources whose patches we visit we computing the elbo
-    sources_to_visit::Vector{Int}
-
     # Bivarite normals will not be evaulated at points further than this many
     # standard deviations away from their mean.  See its usage in the ELBO and
     # bivariate normals for details.
@@ -221,8 +218,7 @@ function ElboArgs{NumType <: Number}(
             images::Vector{Image},
             vp::VariationalParams{NumType},
             patches::Matrix{SkyPatch},
-            active_sources::Vector{Int},
-            sources_to_visit::Vector{Int};
+            active_sources::Vector{Int};
             psf_K::Int=2,
             num_allowed_sd::Float64=Inf)
     N = length(images)
@@ -248,5 +244,5 @@ function ElboArgs{NumType <: Number}(
                                 calculate_hessian=true)
 
     ElboArgs(S, N, psf_K, images, vp, patches,
-             active_sources, sources_to_visit, num_allowed_sd, elbo_vars)
+             active_sources, num_allowed_sd, elbo_vars)
 end
