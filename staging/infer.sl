@@ -1,12 +1,13 @@
 #!/bin/bash -l
 
 #SBATCH --partition=regular
-#SBATCH --qos=premium
-#SBATCH -N 16 -c 64
+#SBATCH --qos=normal
+#SBATCH -N 512 -c 64
 #SBATCH --job-name=celeste_infer
 #SBATCH --time=08:00:00
 #SBATCH --license=SCRATCH
 #SBATCH -C haswell
+#SBATCH -A desi
 
 #DW persistentdw name=celestebb
 
