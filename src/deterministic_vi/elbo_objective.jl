@@ -424,8 +424,8 @@ function add_pixel_term!{NumType <: Number}(
     for s in 1:size(ea.patches, 1)
         p = ea.patches[s,n]
 
-        h2 = h - p.bitmap_corner[1] - 1
-        w2 = w - p.bitmap_corner[2] - 1
+        h2 = h - p.bitmap_offset[1]
+        w2 = w - p.bitmap_offset[2]
 
         H2, W2 = size(p.active_pixel_bitmap)
         if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
@@ -508,8 +508,8 @@ function elbo_likelihood{NumType <: Number}(
             H2, W2 = size(p.active_pixel_bitmap)
             for w2 in 1:W2, h2 in 1:H2
                 # (h2, w2) index the local patch, while (h, w) index the image
-                h = p.bitmap_corner[1] + h2 - 1
-                w = p.bitmap_corner[2] + w2 - 1
+                h = p.bitmap_offset[1] + h2
+                w = p.bitmap_offset[2] + w2
 
                 if !p.active_pixel_bitmap[h2, w2]
                     continue

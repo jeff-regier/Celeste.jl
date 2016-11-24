@@ -72,7 +72,7 @@ function test_active_sources()
 
     # this patch is huge, the bottom left corner should be the
     # bottom left of the image
-    @test p.bitmap_corner == [1, 1]
+    @test p.bitmap_offset == [0, 0]
 
     # this patch is huge, all the pixels should be active pixels
     @test size(p.active_pixel_bitmap) == size(images[n].pixels)
@@ -88,6 +88,10 @@ function test_active_sources()
     # now on to the main test
     ea12 = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2], [1, 2])
     elbo_lik_12 = DeterministicVI.elbo_likelihood(ea12)
+
+    ea21 = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2], [2, 1])
+    elbo_lik_21 = DeterministicVI.elbo_likelihood(ea21)
+    @test_approx_eq elbo_lik_12.v[] elbo_lik_21.v[]
 
     ea1 = ElboArgs(ea.images, ea.vp, ea.patches, [1,], [1, 2])
     elbo_lik_1 = DeterministicVI.elbo_likelihood(ea1)

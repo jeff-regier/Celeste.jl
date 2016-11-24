@@ -40,7 +40,7 @@ function source_pixel_location(ea::ElboArgs, s::Int, n::Int)
         p.center,
         p.pixel_center,
         ea.vp[s][lidx.u])
-    return pix_loc - p.bitmap_corner
+    return pix_loc - p.bitmap_offset
 end
 
 
@@ -62,8 +62,8 @@ function render_source(ea::ElboArgs, s::Int, n::Int;
     H2, W2 = size(p.active_pixel_bitmap)
     for w2 in 1:W2, h2 in 1:H2
         # (h2, w2) index the local patch, while (h, w) index the image
-        h = p.bitmap_corner[1] + h2
-        w = p.bitmap_corner[2] + w2
+        h = p.bitmap_offset[1] + h2
+        w = p.bitmap_offset[2] + w2
 
         if !p.active_pixel_bitmap[h2, w2]
             continue
@@ -137,8 +137,8 @@ function render_source_fft(
     H2, W2 = size(p.active_pixel_bitmap)
     for w2 in 1:W2, h2 in 1:H2
         # (h2, w2) index the local patch, while (h, w) index the image
-        h = p.bitmap_corner[1] + h2
-        w = p.bitmap_corner[2] + w2
+        h = p.bitmap_offset[1] + h2
+        w = p.bitmap_offset[2] + w2
 
         if !p.active_pixel_bitmap[h2, w2]
             continue
@@ -168,8 +168,8 @@ function show_source_image(ea::ElboArgs, s::Int, n::Int)
     image = fill(NaN, H2, W2);
     for w2 in 1:W2, h2 in 1:H2
         # (h2, w2) index the local patch, while (h, w) index the image
-        h = p.bitmap_corner[1] + h2
-        w = p.bitmap_corner[2] + w2
+        h = p.bitmap_offset[1] + h2
+        w = p.bitmap_offset[2] + w2
 
         if !p.active_pixel_bitmap[h2, w2]
             continue
