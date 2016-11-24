@@ -1300,7 +1300,7 @@ function test_real_image()
     cat_local = vcat(catalog[sa], catalog[neighbors])
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
     patches = Infer.get_sky_patches(images, cat_local)
-    ea = ElboArgs(images, vp, patches, [1], [1])
+    ea = ElboArgs(images, vp, patches, [1])
 
     Infer.load_active_pixels!(ea.images, ea.patches)
     @test sum(ea.patches[1,1].active_pixel_bitmap) > 0

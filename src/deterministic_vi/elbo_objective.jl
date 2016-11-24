@@ -206,24 +206,6 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
 end
 
 
-# function calculate_source_pixel_brightness!{NumType <: Number}(
-#                     elbo_vars::ElboIntermediateVariables{NumType},
-#                     ea::ElboArgs{NumType},
-#                     sbs::Vector{SourceBrightness{NumType}},
-#                     s::Int, b::Int)
-#     calculate_source_pixel_brightness!(
-#         elbo_vars,
-#         ea,
-#         elbo_vars.E_G_s,
-#         elbo_vars.var_G_s,
-#         elbo_vars.fs0m_vec[s],
-#         elbo_vars.fs1m_vec[s],
-#         sbs[s],
-#         b, s,
-#         s in ea.active_sources)
-# end
-
-
 """
 Calculate the variance var_G_s as a function of (E_G_s, E_G2_s).
 
@@ -424,8 +406,8 @@ function add_pixel_term!{NumType <: Number}(
     for s in 1:size(ea.patches, 1)
         p = ea.patches[s,n]
 
-        h2 = h - p.bitmap_corner[1] - 1
-        w2 = w - p.bitmap_corner[2] - 1
+        h2 = h - p.bitmap_offset[1]
+        w2 = w - p.bitmap_offset[2]
 
         H2, W2 = size(p.active_pixel_bitmap)
         if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
@@ -496,27 +478,27 @@ function elbo_likelihood{NumType <: Number}(
         # hasn't been visited before, so no need to allocate memory.
         # currently length(ea.active_sources) > 1 only in unit tests, never
         # when invoked from `bin`.
-        already_visited = length(ea.sources_to_visit) == 1 ?
+        already_visited = length(ea.active_sources) == 1 ?
                               falses(0, 0) :
                               falses(size(img.pixels))
 
         # iterate over the pixels by iterating over the patches, and visiting
         # all the pixels in the patch that are active and haven't already been
         # visited
-        for s in ea.sources_to_visit
+        for s in ea.active_sources
             p = ea.patches[s, n]
             H2, W2 = size(p.active_pixel_bitmap)
             for w2 in 1:W2, h2 in 1:H2
                 # (h2, w2) index the local patch, while (h, w) index the image
-                h = p.bitmap_corner[1] + h2 - 1
-                w = p.bitmap_corner[2] + w2 - 1
+                h = p.bitmap_offset[1] + h2
+                w = p.bitmap_offset[2] + w2
 
                 if !p.active_pixel_bitmap[h2, w2]
                     continue
                 end
 
                 # if there's only one source to visit, we know this pixel is new
-                if length(ea.sources_to_visit) != 1
+                if length(ea.active_sources) != 1
                     if already_visited[h,w]
                         continue
                     end

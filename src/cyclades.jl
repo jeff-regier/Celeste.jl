@@ -241,8 +241,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
         target_source_variational_params[target_source] = init_source(cat)
     end
 
-    # Pre-allocate dictionary of elboargs, call it model.
-    model = Array{ElboArgs}(n_sources)
+    # Pre-allocate dictionary of elboargs, call it ea_vec.
+    ea_vec = Array{ElboArgs}(n_sources)
     function initialize_elboargs_sources(sources)
         nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for $(length(sources)) sources")
         for cur_source_index in sources
@@ -261,9 +261,9 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                         target_source_variational_params[x] :
                         init_source(catalog[x]) for x in ids_local]
             patches = Infer.get_sky_patches(images, cat_local)
-            ea = ElboArgs(images, vp, patches, [1], [1])
+            ea = ElboArgs(images, vp, patches, [1])
             Infer.load_active_pixels!(ea.images, ea.patches)
-            model[cur_source_index] = ea
+            ea_vec[cur_source_index] = ea
         end
     end
 
@@ -287,7 +287,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 cur_entry = catalog[target_sources[cur_source_indx]]
                 iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
                     DeterministicVI.elbo,
-                    model[cur_source_indx],
+                    ea_vec[cur_source_indx],
                     max_iters=n_newton_steps)
             end
         catch ex
@@ -324,7 +324,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                                  entry.objid,
                                  entry.pos[1],
                                  entry.pos[2],
-                                 model[i].vp[1])
+                                 ea_vec[i].vp[1])
         push!(results, result)
     end
 

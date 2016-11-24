@@ -49,9 +49,9 @@ function infer_source(images::Vector{Image},
     cat_local = vcat(entry, neighbors)
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
     patches = Infer.get_sky_patches(images, cat_local)
-    ea = ElboArgs(images, vp, patches, [1], [1])
     Infer.load_active_pixels!(images, patches)
 
+    ea = ElboArgs(images, vp, patches, [1])
     f_evals, max_f, max_x, nm_result = maximize_f(elbo, ea)
     vp[1]
 end

@@ -12,8 +12,8 @@ import ..PSF
 
 import ..DeterministicVI: infer_source
 
-
 include("cyclades.jl")
+
 
 #set this to false to use source-division parallelism
 const SKY_DIVISION_PARALLELISM=true
@@ -322,6 +322,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
 
     return catalog, target_sources
 end
+
 
 """
 Use mulitple threads on one node to fit the Celeste model to sources in a given

@@ -246,8 +246,8 @@ function populate_fsm_vecs!{NumType <: Number}(
     @inbounds for s in 1:size(patches, 1)
         p = patches[s,n]
 
-        h2 = h - p.bitmap_corner[1] - 1
-        w2 = w - p.bitmap_corner[2] - 1
+        h2 = h - p.bitmap_offset[1]
+        w2 = w - p.bitmap_offset[2]
 
         H2, W2 = size(p.active_pixel_bitmap)
 

@@ -12,9 +12,22 @@ function compute_obj_value(results,
     catalog, target_sources = ParallelRun.infer_init(rcfs, stagedir; box=box)
     images = SDSSIO.load_field_images(rcfs, stagedir)
 
-    ea = ElboArgs(images, [r.vs for r in results],
-                  Infer.get_sky_patches(images, catalog[target_sources]),
-                  collect(1:length(target_sources)), Int64[])
+    vp = [r.vs for r in results]
+
+    # it may be better to pass `patches` as an argument to `compute_obj_value`.
+    patches = Infer.get_sky_patches(images, catalog[target_sources])
+
+    # if we don't call `load_active_pixels!`, these patches will be different
+    # than the patches we used for optimizing---and then the objective
+    # function could also be slightly different
+    Infer.load_active_pixels!(images, patches)
+
+    # this works since we're just generating patches for active_sources.
+    # if instead you pass patches for all sources, then instead we'd used
+    # active_sources = target_sources
+    active_sources = collect(1:length(target_sources))
+
+    ea = ElboArgs(images, vp, patches, active_sources)
     DeterministicVI.elbo(ea, calculate_derivs=false, calculate_hessian=false).v[]
 end
 
@@ -54,8 +67,8 @@ function test_one_node_joint_infer_obj_overlapping()
     tic()
     result_two = ParallelRun.one_node_infer(field_triplets, datadir;
                                             box=box, joint_infer_n_iters=2,
-                                            joint_infer=true)    
-    multi_iter_one_iter_time = toq()    
+                                            joint_infer=true)
+    multi_iter_one_iter_time = toq()
     score_two = compute_obj_value(result_two, field_triplets, datadir; box=box)
 
     # One node infer (1 iteration, butm ore newton steps)

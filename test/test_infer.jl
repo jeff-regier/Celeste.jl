@@ -78,8 +78,8 @@ function test_load_active_pixels()
         total_pixels += length(img.pixels)
         for w2 in 1:W2, h2 in 1:H2
             # (h2, w2) index the local patch, while (h, w) index the image
-            h = p.bitmap_corner[1] + h2 - 1
-            w = p.bitmap_corner[2] + w2 - 1
+            h = p.bitmap_offset[1] + h2
+            w = p.bitmap_offset[2] + w2
             num_active_photons += img.pixels[h, w] - img.epsilon_mat[h, w]
             num_active_pixels += 1
         end

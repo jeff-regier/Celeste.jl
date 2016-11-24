@@ -136,8 +136,8 @@ function populate_gal_fsm_image!(
     p = ea.patches[s, n]
     H_patch, W_patch = size(p.active_pixel_bitmap)
     for w_patch in 1:W_patch, h_patch in 1:H_patch
-        h_image = h_patch + p.bitmap_corner[1]
-        w_image = w_patch + p.bitmap_corner[2]
+        h_image = h_patch + p.bitmap_offset[1]
+        w_image = w_patch + p.bitmap_offset[2]
 
         h_fsm = h_image - fsms.h_lower + 1
         w_fsm = w_image - fsms.w_lower + 1
@@ -207,8 +207,8 @@ function accumulate_source_image_brightness!(
     p = ea.patches[s, n]
     H_patch, W_patch = size(p.active_pixel_bitmap)
     for w_patch in 1:W_patch, h_patch in 1:H_patch
-        h_fsm = h_patch + p.bitmap_corner[1] - fsms.h_lower + 1
-        w_fsm = w_patch + p.bitmap_corner[2] - fsms.w_lower + 1
+        h_fsm = h_patch + p.bitmap_offset[1] - fsms.h_lower + 1
+        w_fsm = w_patch + p.bitmap_offset[2] - fsms.w_lower + 1
         accumulate_source_pixel_brightness!(
                             ea.elbo_vars,
                             ea,
@@ -246,8 +246,8 @@ function accumulate_band_in_elbo!(
         p = ea.patches[s, n]
         H_patch, W_patch = size(p.active_pixel_bitmap)
         for w_patch in 1:W_patch, h_patch in 1:H_patch
-            h_image = h_patch + p.bitmap_corner[1]
-            w_image = w_patch + p.bitmap_corner[2]
+            h_image = h_patch + p.bitmap_offset[1]
+            w_image = w_patch + p.bitmap_offset[2]
 
             image = ea.images[n]
             this_pixel = image.pixels[h_image, w_image]

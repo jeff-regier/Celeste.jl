@@ -102,10 +102,10 @@ function get_sky_patches(images::Vector{Image},
                 radius_pix = radius_override_pix
             end
 
-            hmin = max(1, floor(Int, pixel_center[1] - radius_pix))
-            hmax = min(img.H, ceil(Int, pixel_center[1] + radius_pix))
-            wmin = max(1, floor(Int, pixel_center[2] - radius_pix))
-            wmax = min(img.W, ceil(Int, pixel_center[2] + radius_pix))
+            hmin = max(0, floor(Int, pixel_center[1] - radius_pix - 1))
+            hmax = min(img.H - 1, ceil(Int, pixel_center[1] + radius_pix - 1))
+            wmin = max(0, floor(Int, pixel_center[2] - radius_pix - 1))
+            wmax = min(img.W - 1, ceil(Int, pixel_center[2] + radius_pix - 1))
 
             # some light sources are so far from some images that they don't
             # overlap at all
@@ -151,8 +151,8 @@ function load_active_pixels!(images::Vector{Image},
         # (h2, w2) index the local patch, while (h, w) index the image
         H2, W2 = size(p.active_pixel_bitmap)
         for w2 in 1:W2, h2 in 1:H2
-            h = p.bitmap_corner[1] + h2 - 1
-            w = p.bitmap_corner[2] + w2 - 1
+            h = p.bitmap_offset[1] + h2
+            w = p.bitmap_offset[2] + w2
 
             # skip masked pixels
             if isnan(img.pixels[h, w]) && exclude_nan

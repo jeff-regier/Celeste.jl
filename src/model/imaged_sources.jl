@@ -23,7 +23,7 @@ immutable SkyPatch
     wcs_jacobian::Matrix{Float64}
     pixel_center::Vector{Float64}
 
-    bitmap_corner::SVector{2, Int64}  # lower left corner index
+    bitmap_offset::SVector{2, Int64}  # lower left corner index offset
     active_pixel_bitmap::Matrix{Bool}
 end
 
@@ -66,4 +66,3 @@ function choose_patch_radius(ce::CatalogEntry,
 
     min(radius_req, max_radius)
 end
-
