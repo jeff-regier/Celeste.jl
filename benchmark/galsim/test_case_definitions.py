@@ -5,8 +5,7 @@ import galsim
 # populated by the `galsim_test_case` decorator
 TEST_CASE_FNS = []
 
-ARCSEC_PER_PIXEL = 0.75
-SHIFT_RADIUS_ARCSEC = ARCSEC_PER_PIXEL
+ARCSEC_PER_PIXEL = 0.396 # the value used in SDSS (https://github.com/jeff-regier/Celeste.jl/pull/411)
 PSF_SIGMA_PIXELS = 4
 STAMP_SIZE_PX = 96
 COUNTS_PER_NMGY = 1000.0 # a.k.a. "iota" in Celeste
@@ -29,8 +28,6 @@ GALAXY_RELATIVE_INTENSITIES = [
     1.4031,
     1.7750,
 ]
-
-def psf_sigma_arcsec(): return PSF_SIGMA_PIXELS * ARCSEC_PER_PIXEL
 
 # fields and logic shared between stars and galaxies
 class CommonFields(object):
@@ -75,14 +72,14 @@ class Star(LightSource):
         self._common_fields.reference_band_flux_nmgy = flux
         return self
 
-    def get_galsim_light_source(self, band_index):
+    def get_galsim_light_source(self, band_index, psf_sigma_arcsec):
         flux_counts = (
             self._common_fields.reference_band_flux_nmgy * STAR_RELATIVE_INTENSITIES[band_index]
                 * COUNTS_PER_NMGY
         )
         offset = self._common_fields.offset_from_center_world_coords
         return (
-            galsim.Gaussian(flux=flux_counts, sigma=psf_sigma_arcsec())
+            galsim.Gaussian(flux=flux_counts, sigma=psf_sigma_arcsec)
                 .shift(offset[0], offset[1])
         )
 
@@ -117,7 +114,7 @@ class Galaxy(LightSource):
         self._half_light_radius_arcsec = radius
         return self
 
-    def get_galsim_light_source(self, band_index):
+    def get_galsim_light_source(self, band_index, psf_sigma_arcsec):
         flux_counts = (
             self._common_fields.reference_band_flux_nmgy * GALAXY_RELATIVE_INTENSITIES[band_index]
                 * COUNTS_PER_NMGY
@@ -127,7 +124,7 @@ class Galaxy(LightSource):
                 .shear(q=self._minor_major_axis_ratio, beta=self._angle_deg * galsim.degrees)
                 .shift(self._common_fields.offset_from_center_world_coords)
         )
-        psf = galsim.Gaussian(flux=1, sigma=psf_sigma_arcsec())
+        psf = galsim.Gaussian(flux=1, sigma=psf_sigma_arcsec)
         return galsim.Convolve([galaxy, psf])
 
     def add_header_fields(self, header, index_str):
@@ -141,6 +138,7 @@ class Galaxy(LightSource):
 class GalSimTestCase(object):
     def __init__(self):
         self._light_sources = []
+        self.psf_sigma_pixels = 4
         self.sky_level_nmgy = 0.01
         self.include_noise = False
         self.comment = None
@@ -166,7 +164,11 @@ class GalSimTestCase(object):
     def construct_image(self, band_index, uniform_deviate):
         image = galsim.ImageF(STAMP_SIZE_PX, STAMP_SIZE_PX, scale=ARCSEC_PER_PIXEL)
         for light_source in self._light_sources:
-            light_source.get_galsim_light_source(band_index).drawImage(image, add_to_image=True)
+            galsim_light_source = light_source.get_galsim_light_source(
+                band_index,
+                self.psf_sigma_pixels * ARCSEC_PER_PIXEL,
+            )
+            galsim_light_source.drawImage(image, add_to_image=True)
         self._add_sky_background(image)
         self._add_noise(image, uniform_deviate)
         return image
@@ -180,6 +182,7 @@ class GalSimTestCase(object):
             ('CL_IOTA', (COUNTS_PER_NMGY, 'counts per nMgy')),
             ('CL_SKY', (self.sky_level_nmgy, '"epsilon" sky level (nMgy each px)')),
             ('CL_NOISE', (self.include_noise, 'was Poisson noise added?')),
+            ('CL_SIGMA', (self.psf_sigma_pixels, 'Gaussian PSF sigma (px)')),
             ('CL_BAND', (band_index + 1, 'color band')),
             ('CL_NSRC', (len(self._light_sources), 'number of sources')),
         ])
@@ -306,3 +309,13 @@ def three_sources_two_overlap(test_case):
 def three_sources_all_overlap(test_case):
     overlapping_star_and_galaxy(test_case)
     test_case.add(Star().offset_world_coords(8, -1))
+
+@galsim_test_case
+def smaller_psf(test_case):
+    test_case.psf_sigma_pixels = 2
+    test_case.add(Star())
+
+@galsim_test_case
+def larger_psf(test_case):
+    test_case.psf_sigma_pixels = 6
+    test_case.add(Star())

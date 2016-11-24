@@ -5,7 +5,7 @@ import FITSIO
 import StaticArrays
 import WCS
 
-import Celeste: Infer, Model, DeterministicVI
+import Celeste: Model, DeterministicVI
 
 const FILENAME = "output/galsim_test_images.fits"
 
@@ -46,26 +46,23 @@ function read_fits(filename; read_sdss_psf=false)
     extensions, wcs
 end
 
-function make_tiled_images(band_pixels, psf, wcs, epsilon, iota)
+function make_images(band_pixels, psf, wcs, epsilon, iota)
     # assume dimensions equal for all images
     height, width = size(band_pixels[1])
     [
-        Model.TiledImage(
-            Model.Image(
-                height,
-                width,
-                band_pixels[band],
-                band,
-                wcs,
-                psf,
-                0, # SDSS run
-                0, # SDSS camcol
-                0, # SDSS field
-                fill(epsilon, height, width),
-                fill(iota, height),
-                Model.RawPSF(Array(Float64, 0, 0), 0, 0, Array(Float64, 0, 0, 0)),
-            ),
-            tile_width=48,
+        Model.Image(
+            height,
+            width,
+            band_pixels[band],
+            band,
+            wcs,
+            psf,
+            0, # SDSS run
+            0, # SDSS camcol
+            0, # SDSS field
+            fill(epsilon, height, width),
+            fill(iota, height),
+            Model.RawPSF(Array(Float64, 0, 0), 0, 0, Array(Float64, 0, 0, 0)),
         )
         for band in 1:5
     ]
@@ -202,9 +199,10 @@ end
 
 function make_catalog_entries(header::FITSIO.FITSHeader)
     catalog_entries = Model.CatalogEntry[]
-    for index in 1:header["CL_NSRC"]
+    num_sources = header["CL_NSRC"]
+    for source_index in 1:num_sources
         if num_sources == 1
-            initial_position = [36, 36]
+            initial_position = [19, 19]
         else
             initial_position = [
                 header[string("CL_X", source_index)],
@@ -216,22 +214,7 @@ function make_catalog_entries(header::FITSIO.FITSHeader)
     catalog_entries
 end
 
-
-# TODO: this code seems to be obsolete?
-# this code is very close to Infer.infer_source() but avoids PSF fitting
-function infer_source(band_images::Vector{Model.TiledImage},
-                      catalog_entries::Vector{Model.CatalogEntry},
-                      verbose::Bool)
-    vp = Vector{Float64}[Model.init_source(entry) for entry in catalog_entries]
-    patches, tile_source_map = Infer.get_tile_source_map(band_images, catalog_entries)
-    elbo_args = DeterministicVI.ElboArgs(band_images, vp, tile_source_map, patches, [1])
-    Infer.load_active_pixels!(elbo_args)
-    DeterministicVI.maximize_f(DeterministicVI.elbo, elbo_args, verbose=verbose, loc_width=9.0)
-    variational_parameters::Vector{Float64} = vp[1]
-    variational_parameters
-end
-
-function main(; test_case_name=Nullable{String}(), verbose=false)
+function main(; test_case_name=Nullable{String}())
     all_benchmark_data = []
     psf = make_psf()
     extensions, wcs = read_fits(FILENAME)
@@ -251,10 +234,14 @@ function main(; test_case_name=Nullable{String}(), verbose=false)
             extensions[index].pixels for index in first_band_index:(first_band_index + 4)
         ]
         assert_counts_match_expected_flux(band_pixels, header, iota)
-        band_images = make_tiled_images(band_pixels, psf, wcs, header["CL_SKY"], iota)
+        band_images = make_images(band_pixels, psf, wcs, header["CL_SKY"], iota)
         catalog_entries::Vector{Model.CatalogEntry} = make_catalog_entries(header)
 
-        variational_parameters = infer_source(band_images, catalog_entries, verbose)
+        variational_parameters, max_f = DeterministicVI.infer_source(
+            band_images,
+            catalog_entries[2:length(catalog_entries)],
+            catalog_entries[1]
+        )
 
         benchmark_data = benchmark_comparison_data(variational_parameters, header)
         println(repr(benchmark_data))
