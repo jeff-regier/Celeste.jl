@@ -31,6 +31,7 @@ def main():
     _logger.info('Generating %d test cases', len(test_case_definitions.TEST_CASE_FNS))
     fits_hdus = astropy.io.fits.HDUList()
     for case_index, test_case_fn in enumerate(test_case_definitions.TEST_CASE_FNS):
+        _logger.info('  Generating case %s', test_case_fn.__name__)
         uniform_deviate = galsim.UniformDeviate(RANDOM_SEED + case_index)
         test_case = test_case_definitions.GalSimTestCase()
         test_case_fn(test_case)
