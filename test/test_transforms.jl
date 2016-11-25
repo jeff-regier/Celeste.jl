@@ -46,151 +46,151 @@ end
 
 
 function test_parameter_conversion()
-	blob, ea, body = gen_three_body_dataset();
+    blob, ea, body = gen_three_body_dataset();
 
-	transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
+    transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
 
-	function check_transform(transform::DataTransform, ea::ElboArgs)
-		original_vp = deepcopy(ea.vp);
-		ea_check = deepcopy(ea);
+    function check_transform(transform::DataTransform, ea::ElboArgs)
+        original_vp = deepcopy(ea.vp);
+        ea_check = deepcopy(ea);
 
-		# Check that the constrain and unconstrain operations undo each other.
-		vp_free = Transform.from_vp(transform, ea.vp)
-		Transform.to_vp!(transform, vp_free, ea_check.vp)
+        # Check that the constrain and unconstrain operations undo each other.
+        vp_free = Transform.from_vp(transform, ea.vp)
+        Transform.to_vp!(transform, vp_free, ea_check.vp)
 
-		for id in fieldnames(ids), s in 1:ea.S
-			@test_approx_eq_eps(original_vp[s][getfield(ids, id)],
-			                    ea_check.vp[s][getfield(ids, id)], 1e-6)
-		end
+        for id in fieldnames(ids), s in 1:ea.S
+            @test_approx_eq_eps(original_vp[s][getfield(ids, id)],
+                                ea_check.vp[s][getfield(ids, id)], 1e-6)
+        end
 
-		# Check conversion to and from a vector.
-		omitted_ids = Array(Int, 0)
-		kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
-		vp = deepcopy(ea.vp)
-		x = Transform.vp_to_array(transform, vp, omitted_ids)
-		@test length(x) == length(vp_free[1]) * length(ea.active_sources)
+        # Check conversion to and from a vector.
+        omitted_ids = Array(Int, 0)
+        kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
+        vp = deepcopy(ea.vp)
+        x = Transform.vp_to_array(transform, vp, omitted_ids)
+        @test length(x) == length(vp_free[1]) * length(ea.active_sources)
 
-		vp2 = generate_valid_parameters(Float64, transform.bounds)
-		Transform.array_to_vp!(transform, x, vp2, kept_ids)
+        vp2 = generate_valid_parameters(Float64, transform.bounds)
+        Transform.array_to_vp!(transform, x, vp2, kept_ids)
 
-		for id in fieldnames(ids), si in eachindex(transform.active_sources)
-			s = transform.active_sources[si]
-			@test_approx_eq_eps(original_vp[s][getfield(ids, id)], vp2[si][getfield(ids, id)], 1e-6)
-		end
+        for id in fieldnames(ids), si in eachindex(transform.active_sources)
+            s = transform.active_sources[si]
+            @test_approx_eq_eps(original_vp[s][getfield(ids, id)], vp2[si][getfield(ids, id)], 1e-6)
+        end
 
-	end
+    end
 
-	transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
-	check_transform(transform, ea)
+    transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
+    check_transform(transform, ea)
 
-	# Test transforming only active sources.
-	ea1 = deepcopy(ea);
-	ea1.active_sources = [1]
-	transform1 = Transform.get_mp_transform(ea1.vp, ea1.active_sources)
+    # Test transforming only active sources.
+    ea1 = deepcopy(ea);
+    ea1.active_sources = [1]
+    transform1 = Transform.get_mp_transform(ea1.vp, ea1.active_sources)
 
-	@assert transform1.S == ea.S
-	@assert length(transform1.active_sources) == 1
-	check_transform(transform1, ea1)
+    @assert transform1.S == ea.S
+    @assert length(transform1.active_sources) == 1
+    check_transform(transform1, ea1)
 
 end
 
 
 function test_transform_simplex_functions()
-	function simplex_and_unsimplex{NumType <: Number}(
-			param::Vector{NumType}, simplex_box::Transform.SimplexBox)
+    function simplex_and_unsimplex{NumType <: Number}(
+            param::Vector{NumType}, simplex_box::Transform.SimplexBox)
 
-		param_free = Transform.unsimplexify_parameter(param, simplex_box)
-		new_param = Transform.simplexify_parameter(param_free, simplex_box)
-		@test_approx_eq param new_param
-	end
+        param_free = Transform.unsimplexify_parameter(param, simplex_box)
+        new_param = Transform.simplexify_parameter(param_free, simplex_box)
+        @test_approx_eq param new_param
+    end
 
-	for this_scale = [ 1.0, 2.0 ], lb = [0.1, 0.0 ]
-		param = Float64[ 0.2, 0.8 ]
+    for this_scale = [ 1.0, 2.0 ], lb = [0.1, 0.0 ]
+        param = Float64[ 0.2, 0.8 ]
 
-		simplex_box = Transform.SimplexBox(lb, this_scale, length(param))
-		simplex_and_unsimplex(param, simplex_box)
+        simplex_box = Transform.SimplexBox(lb, this_scale, length(param))
+        simplex_and_unsimplex(param, simplex_box)
 
-		# Test that the edges work.
-		simplex_and_unsimplex(Float64[ lb, 1 - lb ], simplex_box)
-		simplex_and_unsimplex(Float64[ 1 - lb, lb ], simplex_box)
+        # Test that the edges work.
+        simplex_and_unsimplex(Float64[ lb, 1 - lb ], simplex_box)
+        simplex_and_unsimplex(Float64[ 1 - lb, lb ], simplex_box)
 
-		# Test the scaling
-		unscaled_simplex_box = Transform.SimplexBox(lb, 1.0, length(param))
-		@test_approx_eq(
-			Transform.unsimplexify_parameter(param, simplex_box),
-			this_scale * Transform.unsimplexify_parameter(param, unscaled_simplex_box))
+        # Test the scaling
+        unscaled_simplex_box = Transform.SimplexBox(lb, 1.0, length(param))
+        @test_approx_eq(
+            Transform.unsimplexify_parameter(param, simplex_box),
+            this_scale * Transform.unsimplexify_parameter(param, unscaled_simplex_box))
 
-		# Test the bound checking
-		@test_throws(AssertionError,
-			Transform.unsimplexify_parameter([ lb - 1e-6, 1 - lb + 1e-6 ], simplex_box))
-		@test_throws(AssertionError,
-			Transform.unsimplexify_parameter([ 0.3, 0.8 ], simplex_box))
-		@test_throws(AssertionError,
-			Transform.unsimplexify_parameter([ 0.2, 0.3, 0.5 ], simplex_box))
-		@test_throws(AssertionError, Transform.simplexify_parameter([ 1., 2. ], simplex_box))
-	end
+        # Test the bound checking
+        @test_throws(AssertionError,
+            Transform.unsimplexify_parameter([ lb - 1e-6, 1 - lb + 1e-6 ], simplex_box))
+        @test_throws(AssertionError,
+            Transform.unsimplexify_parameter([ 0.3, 0.8 ], simplex_box))
+        @test_throws(AssertionError,
+            Transform.unsimplexify_parameter([ 0.2, 0.3, 0.5 ], simplex_box))
+        @test_throws(AssertionError, Transform.simplexify_parameter([ 1., 2. ], simplex_box))
+    end
 end
 
 
 function test_transform_box_functions()
-	function box_and_unbox{NumType <: Number}(param::NumType, param_box::ParamBox)
-		param_free = Transform.unbox_parameter(param, param_box)
-		new_param = Transform.box_parameter(param_free, param_box)
-		@test_approx_eq param new_param
-	end
+    function box_and_unbox{NumType <: Number}(param::NumType, param_box::ParamBox)
+        param_free = Transform.unbox_parameter(param, param_box)
+        new_param = Transform.box_parameter(param_free, param_box)
+        @test_approx_eq param new_param
+    end
 
-	for this_scale = [ 1.0, 2.0 ], lb = [-10.0, 0.1], ub = [0.5, Inf]
-		#println(this_scale, " ", lb, " ", ub)
-		param = 0.2
-		param_box = Transform.ParamBox(lb, ub, this_scale)
-		box_and_unbox(param, param_box)
+    for this_scale = [ 1.0, 2.0 ], lb = [-10.0, 0.1], ub = [0.5, Inf]
+        #println(this_scale, " ", lb, " ", ub)
+        param = 0.2
+        param_box = Transform.ParamBox(lb, ub, this_scale)
+        box_and_unbox(param, param_box)
 
-		# Test that the edges work.
-		box_and_unbox(lb, param_box)
-		ub < Inf && box_and_unbox(ub, param_box)
+        # Test that the edges work.
+        box_and_unbox(lb, param_box)
+        ub < Inf && box_and_unbox(ub, param_box)
 
-		# Test the scaling
-		unscaled_param_box = Transform.ParamBox(lb, ub, 1.0)
-		@test_approx_eq(
-			Transform.unbox_parameter(param, param_box),
-			this_scale * Transform.unbox_parameter(param, unscaled_param_box))
+        # Test the scaling
+        unscaled_param_box = Transform.ParamBox(lb, ub, 1.0)
+        @test_approx_eq(
+            Transform.unbox_parameter(param, param_box),
+            this_scale * Transform.unbox_parameter(param, unscaled_param_box))
 
-		# Test the bound checking
-		@test_throws AssertionError Transform.unbox_parameter(lb - 1.0, param_box)
-		ub < Inf &&
-			@test_throws AssertionError Transform.unbox_parameter(ub + 1.0, param_box)
-	end
+        # Test the bound checking
+        @test_throws AssertionError Transform.unbox_parameter(lb - 1.0, param_box)
+        ub < Inf &&
+            @test_throws AssertionError Transform.unbox_parameter(ub + 1.0, param_box)
+    end
 end
 
 
 function test_basic_transforms()
-	@test_approx_eq 0.99 Transform.logit(Transform.inv_logit(0.99))
-	@test_approx_eq -6.0 Transform.inv_logit(Transform.logit(-6.0))
+    @test_approx_eq 0.99 Transform.logit(Transform.inv_logit(0.99))
+    @test_approx_eq -6.0 Transform.inv_logit(Transform.logit(-6.0))
 
-	@test_approx_eq(
-		[ 0.99, 0.001 ], Transform.logit.(Transform.inv_logit.([ 0.99, 0.001 ])))
-	@test_approx_eq(
-		[ -6.0, 0.5 ], Transform.inv_logit.(Transform.logit.([ -6.0, 0.5 ])))
+    @test_approx_eq(
+        [ 0.99, 0.001 ], Transform.logit.(Transform.inv_logit.([ 0.99, 0.001 ])))
+    @test_approx_eq(
+        [ -6.0, 0.5 ], Transform.inv_logit.(Transform.logit.([ -6.0, 0.5 ])))
 
-	z = Float64[ 2.0, 4.0 ]
-	z ./= sum(z)
-	x = Transform.unconstrain_simplex(z)
+    z = Float64[ 2.0, 4.0 ]
+    z ./= sum(z)
+    x = Transform.unconstrain_simplex(z)
 
-	@test_approx_eq Transform.constrain_to_simplex(x) z
+    @test_approx_eq Transform.constrain_to_simplex(x) z
 
-	@test Transform.inv_logit(1.0) == Inf
-	@test Transform.inv_logit(0.0) == -Inf
+    @test Transform.inv_logit(1.0) == Inf
+    @test Transform.inv_logit(0.0) == -Inf
 
-	@test Transform.logit(Inf) == 1.0
-	@test Transform.logit(-Inf) == 0.0
+    @test Transform.logit(Inf) == 1.0
+    @test Transform.logit(-Inf) == 0.0
 
-	@test_approx_eq Transform.constrain_to_simplex([-Inf]) [0.0, 1.0]
-	@test_approx_eq Transform.unconstrain_simplex([0.0, 1.0]) [-Inf]
+    @test_approx_eq Transform.constrain_to_simplex([-Inf]) [0.0, 1.0]
+    @test_approx_eq Transform.unconstrain_simplex([0.0, 1.0]) [-Inf]
 
-	@test_approx_eq Transform.constrain_to_simplex([Inf]) [1.0, 0.0]
-	@test_approx_eq Transform.unconstrain_simplex([1.0, 0.0]) [Inf]
+    @test_approx_eq Transform.constrain_to_simplex([Inf]) [1.0, 0.0]
+    @test_approx_eq Transform.unconstrain_simplex([1.0, 0.0]) [Inf]
 
-	@test_approx_eq Transform.constrain_to_simplex([Inf, 5]) [1.0, 0.0, 0.0]
+    @test_approx_eq Transform.constrain_to_simplex([Inf, 5]) [1.0, 0.0, 0.0]
 end
 
 
@@ -210,7 +210,7 @@ function test_enforce_bounds()
   # Check that it now works and all values are finite.
   x_trans = Transform.from_vp(transform, ea.vp)
   for s = 1:ea.S
-  	@test !any(Bool[ isinf(x) for x in x_trans[1] ])
+      @test !any(Bool[ isinf(x) for x in x_trans[1] ])
   end
 
 
@@ -243,7 +243,7 @@ function test_enforce_bounds()
   # Check that it now works and all values are finite.
   x_trans = Transform.from_vp(transform, ea.vp)
   for s = 1:ea.S
-  	@test !any(Bool[ isinf(x) for x in x_trans[1] ])
+      @test !any(Bool[ isinf(x) for x in x_trans[1] ])
   end
 end
 

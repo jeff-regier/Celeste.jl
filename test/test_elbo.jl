@@ -5,9 +5,11 @@ using Distributions
 using DerivativeTestUtils
 using StaticArrays
 
+import SampleData: gen_two_body_dataset, true_star_init
+
 
 function test_set_hess()
-    sf = zero_sensitive_float(CanonicalParams)
+    sf = SensitiveFloat{Float64}(length(ids), 1, true, true)
     set_hess!(sf, 2, 3, 5.0)
     @test_approx_eq sf.h[2, 3] 5.0
     @test_approx_eq sf.h[3, 2] 5.0
@@ -33,23 +35,6 @@ function test_bvn_cov()
     manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
     util_22 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
     @test_approx_eq util_22 manual_22
-end
-
-
-function test_derivative_flags()
-    images, ea, body = gen_two_body_dataset()
-
-    elbo = DeterministicVI.elbo(ea)
-
-    elbo_noderiv = DeterministicVI.elbo(ea; calculate_derivs=false)
-    @test_approx_eq elbo.v[] elbo_noderiv.v[]
-    @test_approx_eq elbo_noderiv.d zeros(size(elbo_noderiv.d))
-    @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
-
-    elbo_nohess = DeterministicVI.elbo(ea; calculate_hessian=false)
-    @test_approx_eq elbo.v[] elbo_nohess.v[]
-    @test_approx_eq elbo.d elbo_nohess.d
-    @test_approx_eq elbo_noderiv.h zeros(size(elbo_noderiv.h))
 end
 
 
@@ -195,7 +180,7 @@ function test_that_galaxy_truth_is_most_likely()
     for bad_a in [.3, .5, .9]
         ea_a = deepcopy(ea)
         ea_a.vp[1][ids.a[:, 1]] = [ 1.0 - bad_a, bad_a ]
-        bad_a = DeterministicVI.elbo_likelihood(ea_a; calculate_derivs=false);
+        bad_a = DeterministicVI.elbo_likelihood(ea_a)
         @test best.v[] > bad_a.v[];
     end
 
@@ -204,8 +189,7 @@ function test_that_galaxy_truth_is_most_likely()
             if !(h2 == 0 && w2 == 0)
                 ea_mu = deepcopy(ea)
                 ea_mu.vp[1][ids.u] += [h2 * .5, w2 * .5]
-                bad_mu = DeterministicVI.elbo_likelihood(
-                  ea_mu; calculate_derivs=false)
+                bad_mu = DeterministicVI.elbo_likelihood(ea_mu)
                 @test best.v[] > bad_mu.v[]
             end
         end
@@ -214,8 +198,7 @@ function test_that_galaxy_truth_is_most_likely()
     for bad_scale in [.8, 1.2]
         ea_r1 = deepcopy(ea)
         ea_r1.vp[1][ids.r1] += 2 * log(bad_scale)
-        bad_r1 = DeterministicVI.elbo_likelihood(
-          ea_r1; calculate_derivs=false)
+        bad_r1 = DeterministicVI.elbo_likelihood(ea_r1)
         @test best.v[] > bad_r1.v[]
     end
 
@@ -223,8 +206,7 @@ function test_that_galaxy_truth_is_most_likely()
         for bad_scale in [.8, 1.2]
             ea_bad = deepcopy(ea)
             ea_bad.vp[1][getfield(ids, n)] *= bad_scale
-            bad_elbo = DeterministicVI.elbo_likelihood(
-              ea_bad; calculate_derivs=false)
+            bad_elbo = DeterministicVI.elbo_likelihood(ea_bad)
             @test best.v[] > bad_elbo.v[]
         end
     end
@@ -233,8 +215,7 @@ function test_that_galaxy_truth_is_most_likely()
         for delta in [-.3, .3]
             ea_c1 = deepcopy(ea)
             ea_c1.vp[1][ids.c1[b, 2]] += delta
-            bad_c1 = DeterministicVI.elbo_likelihood(
-              ea_c1; calculate_derivs=false)
+            bad_c1 = DeterministicVI.elbo_likelihood(ea_c1)
             @test best.v[] > bad_c1.v[]
         end
     end
@@ -261,12 +242,12 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     end
     cat_entries = filter(ce_inbounds, cat_entries)
 
-    ea = make_elbo_args(images, cat_entries)
+    ea = SampleData.make_elbo_args(images, cat_entries)
     for s in 1:length(cat_entries)
         ea.vp[s][ids.a[2, 1]] = cat_entries[s].is_star ? 0.01 : 0.99
         ea.vp[s][ids.a[1, 1]] = 1.0 - ea.vp[s][ids.a[2, 1]]
     end
-    best = DeterministicVI.elbo_likelihood(ea; calculate_derivs=false)
+    best = DeterministicVI.elbo_likelihood(ea)
 
     # s is the brightest source.
     s = 1
@@ -274,8 +255,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
     for bad_scale in [.7, 1.3]
         ea_r1 = deepcopy(ea)
         ea_r1.vp[s][ids.r1] += 2 * log(bad_scale)
-        bad_r1 = DeterministicVI.elbo_likelihood(
-          ea_r1; calculate_derivs=false)
+        bad_r1 = DeterministicVI.elbo_likelihood(ea_r1)
         @test best.v[] > bad_r1.v[]
     end
 
@@ -283,8 +263,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         for bad_scale in [.6, 1.8]
             ea_bad = deepcopy(ea)
             ea_bad.vp[s][getfield(ids, n)] *= bad_scale
-            bad_elbo = DeterministicVI.elbo_likelihood(
-              ea_bad; calculate_derivs=false)
+            bad_elbo = DeterministicVI.elbo_likelihood(ea_bad)
             @test best.v[] > bad_elbo.v[]
         end
     end
@@ -293,8 +272,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         ea_a = deepcopy(ea)
         ea_a.vp[s][ids.a[:, 1]] = [ 1.0 - bad_a, bad_a ]
 
-        bad_a = DeterministicVI.elbo_likelihood(
-          ea_a; calculate_derivs=false)
+        bad_a = DeterministicVI.elbo_likelihood(ea_a)
         @test best.v[] > bad_a.v[]
     end
 
@@ -303,8 +281,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
             if !(h2 == 0 && w2 == 0)
                 ea_mu = deepcopy(ea)
                 ea_mu.vp[s][ids.u] += [0.5h2, 0.5w2]
-                bad_mu = DeterministicVI.elbo_likelihood(
-                  ea_mu; calculate_derivs=false)
+                bad_mu = DeterministicVI.elbo_likelihood(ea_mu)
                 @test best.v[] > bad_mu.v[]
             end
         end
@@ -314,8 +291,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
         for delta in [-2., 2.]
             ea_c1 = deepcopy(ea)
             ea_c1.vp[s][ids.c1[b, :]] += delta
-            bad_c1 = DeterministicVI.elbo_likelihood(
-              ea_c1; calculate_derivs=false)
+            bad_c1 = DeterministicVI.elbo_likelihood(ea_c1)
             info("$(best.v[])  >  $(bad_c1.v[])")
             @test best.v[] > bad_c1.v[]
         end
@@ -352,23 +328,19 @@ function test_populate_fsm!()
     Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
                              ea.elbo_vars.fs0m_vec,
                              ea.elbo_vars.fs1m_vec,
-                             ea.elbo_vars.calculate_derivs,
-                             ea.elbo_vars.calculate_hessian,
                              ea.patches,
                              ea.active_sources,
                              ea.num_allowed_sd,
                              n, h, w,
                              gal_mcs, star_mcs)
 
-    fs0m = zero_sensitive_float(StarPosParams, Float64)
-    fs1m = zero_sensitive_float(GalaxyPosParams, Float64)
+    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, true, true)
+    fs1m = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, true, true)
 
     x = @SVector Float64[h, w]
     elbo_vars = ea.elbo_vars
     Model.populate_fsm!(elbo_vars.bvn_derivs,
                         fs0m, fs1m,
-                        elbo_vars.calculate_derivs,
-                        elbo_vars.calculate_hessian,
                         s, x, true,
                         ea.num_allowed_sd,
                         ea.patches[s, n].wcs_jacobian,
@@ -387,7 +359,6 @@ end
 test_active_sources()
 test_set_hess()
 test_bvn_cov()
-test_derivative_flags()
 test_num_allowed_sd()
 #test_that_variance_is_low()
 test_that_star_truth_is_most_likely()

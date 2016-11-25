@@ -23,7 +23,6 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
     @assert ea.active_sources == transform.active_sources
 
     f_evals = 0
-    print_every_n = 10
     n_active_sources::Int = length(transform.active_sources)
     kept_ids::Vector{Int} = setdiff(1:length(UnconstrainedParams), omitted_ids)
 
@@ -33,7 +32,8 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
     end
 
     x0 = vec(Transform.vp_to_array(transform, ea.vp, omitted_ids))
-    last_sf::SensitiveFloat{UnconstrainedParams,Float64} = zero_sensitive_float(UnconstrainedParams, n_active_sources)
+    last_sf::SensitiveFloat{Float64} = SensitiveFloat{Float64}(
+                    length(UnconstrainedParams), n_active_sources, true, true)
     last_x::Vector{Float64} = fill(NaN, size(x0))
 
     f_wrapped_nocache! = (x::Vector) -> begin
@@ -42,7 +42,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
         Transform.array_to_vp!(transform, reshaped_x, ea.vp, kept_ids)
         f_res = f(ea)
         f_evals += 1
-        log_f_eval(verbose, f_evals, print_every_n, ea, f_res)
+        log_f_eval(verbose, f_evals, ea, f_res)
         Transform.transform_sensitive_float!(transform, last_sf, f_res, ea.vp, ea.active_sources)
     end
 
@@ -128,13 +128,12 @@ function maximize_f{F}(f::F, ea::ElboArgs;
 end
 
 
-function log_f_eval(verbose, f_evals, print_every_n, ea::ElboArgs, f_res)
+function log_f_eval(verbose, f_evals, ea::ElboArgs, f_res)
     # TODO: Add an option to print either the transformed or
     # free parameterizations.
-    if verbose || (f_evals % print_every_n == 0)
-        Log.info("f_evals=$(f_evals) | value=$(f_res.v[])")
-    end
     if verbose
+        Log.info("f_evals=$(f_evals) | value=$(f_res.v[])")
+
         iter_vp = ea.vp[ea.active_sources]
 
         if length(iter_vp[1]) == length(ids_names)

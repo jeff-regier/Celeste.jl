@@ -7,7 +7,7 @@ function load_gal_bvn_mixtures{NumType <: Number}(
                     source_params::Vector{Vector{NumType}},
                     active_sources::Vector{Int},
                     n::Int;
-                    calculate_derivs::Bool=true,
+                    calculate_gradient::Bool=true,
                     calculate_hessian::Bool=true)
     # To maintain consistency with the rest of the code, use a 4d
     # array.  The first dimension was previously the PSF component.
@@ -29,7 +29,7 @@ function load_gal_bvn_mixtures{NumType <: Number}(
                 gal_mcs[1, j, i, s] = GalaxyCacheComponent(
                     e_dev_dir, e_dev_i, galaxy_prototypes[i][j], m_pos,
                     sp[lidx.e_axis], sp[lidx.e_angle], sp[lidx.e_scale],
-                    calculate_derivs && (s in active_sources),
+                    calculate_gradient && (s in active_sources),
                     calculate_hessian)
             end
         end
@@ -45,7 +45,7 @@ function GalaxyCacheComponent{NumType <: Number}(
     e_dev_dir::Float64, e_dev_i::NumType,
     gc::GalaxyComponent, u::Vector{NumType},
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
-    calculate_derivs::Bool, calculate_hessian::Bool)
+    calculate_gradient::Bool, calculate_hessian::Bool)
 
     # Declare in advance to save memory allocation.
     const empty_sig_sf =
@@ -57,9 +57,9 @@ function GalaxyCacheComponent{NumType <: Number}(
     # d siginv / dsigma is only necessary for the Hessian.
     bmc = BvnComponent{NumType}(
         SVector{2, NumType}(u), var_s, gc.etaBar,
-        calculate_derivs && calculate_hessian)
+        calculate_gradient && calculate_hessian)
 
-    if calculate_derivs
+    if calculate_gradient
         sig_sf = GalaxySigmaDerivs(
             e_angle, e_axis, e_scale, XiXi, calculate_hessian)
         sig_sf.j .*= gc.nuBar
@@ -145,7 +145,7 @@ function populate_gal_fsm_image!(
         x = SVector{2, Float64}([h_image, w_image])
         populate_gal_fsm!(ea.elbo_vars.bvn_derivs,
                           fsms.fs1m_image[h_fsm, w_fsm],
-                          ea.elbo_vars.calculate_derivs,
+                          ea.elbo_vars.calculate_gradient,
                           ea.elbo_vars.calculate_hessian,
                           s, x, is_active_source, Inf,
                           p.wcs_jacobian,
@@ -179,9 +179,10 @@ function populate_star_fsm_image!(
                             ea.patches[s, n].pixel_center,
                             ea.vp[s][lidx.u]) -
         Float64[ h_lower - 1, w_lower - 1]
-    lanczos_interpolate!(fs0m_conv, psf_image, star_loc_pix, lanczos_width,
+    lanczos_interpolate!(Float64, fs0m_conv, psf_image,
+                         star_loc_pix, lanczos_width,
                          ea.patches[s, n].wcs_jacobian,
-                         ea.elbo_vars.calculate_derivs,
+                         ea.elbo_vars.calculate_gradient,
                          ea.elbo_vars.calculate_hessian);
 end
 
@@ -200,7 +201,7 @@ function accumulate_source_image_brightness!(
 
     is_active_source = s in ea.active_sources
     calculate_hessian =
-        ea.elbo_vars.calculate_hessian && ea.elbo_vars.calculate_derivs &&
+        ea.elbo_vars.calculate_hessian && ea.elbo_vars.calculate_gradient &&
         is_active_source
 
     image_fft = [ sf.v[] for sf in fsms.fs1m_conv ]
@@ -281,9 +282,7 @@ function accumulate_band_in_elbo!(
             iota = image.iota_vec[h_image]
             add_elbo_log_term!(
                 ea.elbo_vars, E_G, var_G, ea.elbo_vars.elbo, this_pixel, iota)
-            add_scaled_sfs!(ea.elbo_vars.elbo, E_G, -iota,
-                            ea.elbo_vars.calculate_hessian &&
-                            ea.elbo_vars.calculate_derivs)
+            add_scaled_sfs!(ea.elbo_vars.elbo, E_G, -iota)
 
             # Subtract the log factorial term. This is not a function of the
             # parameters so the derivatives don't need to be updated. Note
@@ -302,15 +301,15 @@ function elbo_likelihood_with_fft!(
     fsm_vec::Array{FSMSensitiveFloatMatrices})
 
     sbs = load_source_brightnesses(ea,
-        calculate_derivs=ea.elbo_vars.calculate_derivs,
-        calculate_hessian=ea.elbo_vars.calculate_hessian);
+        calculate_gradient=ea.elbo_vars.elbo.has_gradient,
+        calculate_hessian=ea.elbo_vars.elbo.has_hessian);
 
     clear!(ea.elbo_vars.elbo)
     for n in 1:ea.N
         gal_mcs = load_gal_bvn_mixtures(
                 ea.S, ea.patches, ea.vp, ea.active_sources, n,
-                calculate_derivs=ea.elbo_vars.calculate_derivs,
-                calculate_hessian=ea.elbo_vars.calculate_hessian);
+                calculate_gradient=ea.elbo_vars.elbo.has_gradient,
+                calculate_hessian=ea.elbo_vars.elbo.has_hessian);
         accumulate_band_in_elbo!(ea, fsm_vec[n], sbs, gal_mcs, n, lanczos_width)
     end
 end

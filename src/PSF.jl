@@ -39,11 +39,11 @@ type PsfOptimizer
     # Variable that will be allocated in optimization:
     bvn_derivs::BivariateNormalDerivatives{Float64}
 
-    log_pdf::SensitiveFloat{PsfParams, Float64}
-    pdf::SensitiveFloat{PsfParams, Float64}
-    pixel_value::SensitiveFloat{PsfParams, Float64}
-    squared_error::SensitiveFloat{PsfParams, Float64}
-    sf_free::SensitiveFloat{PsfParams, Float64}
+    log_pdf::SensitiveFloat{Float64}
+    pdf::SensitiveFloat{Float64}
+    pixel_value::SensitiveFloat{Float64}
+    squared_error::SensitiveFloat{Float64}
+    sf_free::SensitiveFloat{Float64}
 
     psf_params_free_vec_cache::Vector{Float64}
 
@@ -55,11 +55,11 @@ type PsfOptimizer
 
         bvn_derivs = BivariateNormalDerivatives{Float64}(Float64)
 
-        log_pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1)
-        pdf = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, 1)
-        pixel_value = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K)
-        squared_error = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K)
-        sf_free = SensitiveFloats.zero_sensitive_float(PsfParams, Float64, K)
+        log_pdf = SensitiveFloat{Float64}(length(PsfParams), 1, true, true)
+        pdf = SensitiveFloat{Float64}(length(PsfParams), 1, true, true)
+        pixel_value = SensitiveFloat{Float64}(length(PsfParams), K, true, true)
+        squared_error = SensitiveFloat{Float64}(length(PsfParams), K, true, true)
+        sf_free = SensitiveFloat{Float64}(length(PsfParams), K, true, true)
 
         psf_params_free_vec_cache = fill(NaN, K * length(PsfParams))
 
@@ -387,7 +387,7 @@ TODO: fix the name.
 
 Args:
     - x: The 2d location at which to evaluate the pdf
-    - calculate_derivs: If false, only update the value of pixel_value
+    - calculate_gradient: If false, only update the value of pixel_value
     - other values: Pre-allocated memory for intermediate calculations
 
 Returns:
@@ -399,10 +399,10 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
         sig_sf_vec::Vector{GalaxySigmaDerivs{NumType}},
         bvn_vec::Vector{BvnComponent{NumType}},
         bvn_derivs::BivariateNormalDerivatives{NumType},
-        log_pdf::SensitiveFloat{PsfParams, NumType},
-        pdf::SensitiveFloat{PsfParams, NumType},
-        pixel_value::SensitiveFloat{PsfParams, NumType},
-        calculate_derivs::Bool)
+        log_pdf::SensitiveFloat{NumType},
+        pdf::SensitiveFloat{NumType},
+        pixel_value::SensitiveFloat{NumType},
+        calculate_gradient::Bool)
     clear!(pixel_value)
 
     K = length(psf_params)
@@ -421,7 +421,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
         # This is redundant, but it's what eval_bvn_pdf returns.
         log_pdf.v[] = log(bvn_derivs.f_pre[1])
 
-        if calculate_derivs
+        if calculate_gradient
             for ind=1:2
                 log_pdf.d[psf_ids.mu[ind]] = bvn_derivs.bvn_u_d[ind]
             end
@@ -448,7 +448,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
         pdf_val = exp(log_pdf.v[])
         pdf.v[] = pdf_val
 
-        if calculate_derivs
+        if calculate_gradient
             for ind1 = 1:length(PsfParams)
                 if ind1 == psf_ids.weight
                     pdf.d[ind1] = pdf_val
@@ -473,7 +473,7 @@ function evaluate_psf_pixel_fit!{NumType <: Number}(
 
         pdf.v[] *= psf_params[k][psf_ids.weight]
 
-        SensitiveFloats.add_sources_sf!(pixel_value, pdf, k, calculate_derivs)
+        SensitiveFloats.add_sources_sf!(pixel_value, pdf, k)
     end
 
     true # Set return type
@@ -511,11 +511,11 @@ function evaluate_psf_fit!{NumType <: Number}(
         psf_params::Vector{Vector{NumType}}, raw_psf::Matrix{Float64},
         x_mat::Matrix{SVector{2,Float64}},
         bvn_derivs::BivariateNormalDerivatives{NumType},
-        log_pdf::SensitiveFloat{PsfParams, NumType},
-        pdf::SensitiveFloat{PsfParams, NumType},
-        pixel_value::SensitiveFloat{PsfParams, NumType},
-        squared_error::SensitiveFloat{PsfParams, NumType},
-        calculate_derivs::Bool)
+        log_pdf::SensitiveFloat{NumType},
+        pdf::SensitiveFloat{NumType},
+        pixel_value::SensitiveFloat{NumType},
+        squared_error::SensitiveFloat{NumType},
+        calculate_gradient::Bool)
     K = length(psf_params)
     sigma_vec, sig_sf_vec, bvn_vec = get_sigma_from_params(psf_params)
     clear!(squared_error)
@@ -524,11 +524,11 @@ function evaluate_psf_fit!{NumType <: Number}(
         clear!(pixel_value)
         evaluate_psf_pixel_fit!(
                 x_mat[x_ind], psf_params, sigma_vec, sig_sf_vec, bvn_vec,
-                bvn_derivs, log_pdf, pdf, pixel_value, calculate_derivs)
+                bvn_derivs, log_pdf, pdf, pixel_value, calculate_gradient)
 
         diff = (pixel_value.v[] - raw_psf[x_ind])
         squared_error.v[] +=    diff ^ 2
-        if calculate_derivs
+        if calculate_gradient
             for ind1 = 1:length(squared_error.d)
                 squared_error.d[ind1] += 2 * diff * pixel_value.d[ind1]
                 for ind2 = 1:ind1
@@ -538,7 +538,7 @@ function evaluate_psf_fit!{NumType <: Number}(
                     squared_error.h[ind2, ind1] = squared_error.h[ind1, ind2]
                 end
             end
-        end # if calculate_derivs
+        end # if calculate_gradient
     end
 
     squared_error
@@ -556,17 +556,17 @@ Args:
     - sf: The SensitiveFloat with derivatives with respect to the constrained params
     - sf_free: Updated in place.    The SensitiveFloat with derivatives with respect
                          to the unconstrained parameters.
-    - calculate_derivs: If false, only calculate the value.
+    - calculate_gradient: If false, only calculate the value.
 
 Returns:
     - Updates sf_free in place.
 """
 function transform_psf_sensitive_float!{NumType<:Number}(
         psf_params::Vector{Vector{NumType}}, psf_transform::DataTransform,
-        sf::SensitiveFloat{PsfParams, NumType}, sf_free::SensitiveFloat{PsfParams, NumType},
-        calculate_derivs::Bool)
+        sf::SensitiveFloat{NumType}, sf_free::SensitiveFloat{NumType},
+        calculate_gradient::Bool)
     sf_free.v[] = sf.v[]
-    if calculate_derivs
+    if calculate_gradient
         K = length(psf_params)
 
         # These are the hessians of each individual parameter's transform.    We

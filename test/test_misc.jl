@@ -1,7 +1,5 @@
 using Base.Test
-
-import Celeste.SensitiveFloats.zero_sensitive_float_array
-
+import SensitiveFloats: zero_sensitive_float_array
 
 function test_sky_noise_estimates()
     images_vec = Array(Vector{Image}, 2)
@@ -20,7 +18,7 @@ end
 
 function test_zero_sensitive_float_array()
     S = 3
-    sf_vec = zero_sensitive_float_array(CanonicalParams, Float64, S, 3, 5)
+    sf_vec = zero_sensitive_float_array(Float64, length(ids), S, 3, 5)
     @test size(sf_vec) == (3, 5)
     for sf in sf_vec
         @test sf.v[] == 0

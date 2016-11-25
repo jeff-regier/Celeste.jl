@@ -27,8 +27,9 @@ function compute_obj_value(results,
     # active_sources = target_sources
     active_sources = collect(1:length(target_sources))
 
-    ea = ElboArgs(images, vp, patches, active_sources)
-    DeterministicVI.elbo(ea, calculate_derivs=false, calculate_hessian=false).v[]
+    ea = ElboArgs(images, vp, patches, active_sources,
+                  calculate_gradient=false, calculate_hessian=false)
+    DeterministicVI.elbo(ea).v[]
 end
 
 """

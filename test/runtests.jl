@@ -35,7 +35,8 @@ test_files = setdiff(ARGS, [ long_running_flag ])
 if length(test_files) > 0
     testfiles = ["test_$(arg).jl" for arg in test_files]
 else
-    testfiles = ["test_log_prob.jl",
+    testfiles = [
+                 "test_log_prob.jl",
                  "test_elbo.jl",
                  "test_score.jl",
                  "test_derivatives.jl",
@@ -52,9 +53,7 @@ else
 end
 
 
-if test_long_running
-    warn("Testing ELBO derivatives, which may be slow.")
-else
+if !test_long_running
     warn("Skipping long running tests.  ",
          "To test everything, run tests with the flag ", long_running_flag)
 end

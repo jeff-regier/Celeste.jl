@@ -2,8 +2,8 @@ import ForwardDiff
 
 using Celeste: Model, SensitiveFloats, DeterministicVI
 using Distributions
-import DeterministicVI: BvnComponent, GalaxyCacheComponent
-import DeterministicVI: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
+import Celeste.DeterministicVI: BvnComponent, GalaxyCacheComponent
+import Celeste.DeterministicVI: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 using DerivativeTestUtils
 using StaticArrays
 
@@ -35,13 +35,13 @@ function test_active_pixels()
     ea.patches[2,5].active_pixel_bitmap[11, 10] = true
 
     function tile_lik_wrapper_fun{NumType <: Number}(
-            ea::ElboArgs{NumType}, calculate_derivs::Bool)
+            ea::ElboArgs{NumType}, calculate_gradient::Bool)
 
         elbo_vars = DeterministicVI.ElboIntermediateVariables(
             NumType, ea.S,
             length(ea.active_sources),
-            calculate_derivs=calculate_derivs,
-            calculate_hessian=calculate_derivs)
+            calculate_gradient=calculate_gradient,
+            calculate_hessian=calculate_gradient)
         deepcopy(elbo_vars.elbo)
     end
 
@@ -70,23 +70,21 @@ function test_add_log_term()
         iota = median(images[b].iota_vec)
 
         function add_log_term_wrapper_fun{NumType <: Number}(
-                ea::ElboArgs{NumType}, calculate_derivs::Bool)
+                ea::ElboArgs{NumType}, calculate_gradient::Bool)
 
             star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
                                         ea.vp, ea.active_sources,
                                         ea.psf_K, n)
 
             sbs = DeterministicVI.SourceBrightness{NumType}[
-                DeterministicVI.SourceBrightness(ea.vp[s], calculate_derivs=calculate_derivs)
+                DeterministicVI.SourceBrightness(ea.vp[s], calculate_gradient=calculate_gradient)
                 for s in 1:ea.S]
 
             elbo_vars_loc = DeterministicVI.ElboIntermediateVariables(NumType, ea.S, ea.S)
-            elbo_vars_loc.calculate_derivs = calculate_derivs
+            elbo_vars_loc.calculate_gradient = calculate_gradient
             Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
                                      ea.elbo_vars.fs0m_vec,
                                      ea.elbo_vars.fs1m_vec,
-                                     ea.elbo_vars.calculate_derivs,
-                                     ea.elbo_vars.calculate_hessian,
                                      ea.patches,
                                      ea.active_sources,
                                      ea.num_allowed_sd,
@@ -126,7 +124,7 @@ function test_combine_pixel_sources()
         println("Testing $(test_var_string), band $b")
 
         function e_g_wrapper_fun{NumType <: Number}(
-                    ea::ElboArgs{NumType}; calculate_derivs=true)
+                    ea::ElboArgs{NumType}; calculate_gradient=true)
             star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
                                         ea.vp, ea.active_sources,
                                         ea.psf_K, n)
@@ -135,12 +133,10 @@ function test_combine_pixel_sources()
                 for s in 1:ea.S]
 
             elbo_vars_loc = DeterministicVI.ElboIntermediateVariables(NumType, ea.S, ea.S)
-            elbo_vars_loc.calculate_derivs = calculate_derivs
+            elbo_vars_loc.calculate_gradient = calculate_gradient
             Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
                                      ea.elbo_vars.fs0m_vec,
                                      ea.elbo_vars.fs1m_vec,
-                                     ea.elbo_vars.calculate_derivs,
-                                     ea.elbo_vars.calculate_hessian,
                                      ea.patches,
                                      ea.active_sources,
                                      ea.num_allowed_sd,
@@ -153,7 +149,7 @@ function test_combine_pixel_sources()
 
         function wrapper_fun{NumType <: Number}(x::Vector{NumType})
             ea_local = unwrap_vp_vector(x, ea)
-            elbo_vars_local = e_g_wrapper_fun(ea_local, calculate_derivs=false)
+            elbo_vars_local = e_g_wrapper_fun(ea_local, calculate_gradient=false)
             test_var ? elbo_vars_local.var_G.v[] : elbo_vars_local.E_G.v[]
         end
 
@@ -181,22 +177,20 @@ function test_e_g_s_functions()
         println("Testing $(test_var_string), band $b")
 
         function e_g_wrapper_fun{NumType <: Number}(
-                    ea::ElboArgs{NumType}; calculate_derivs=true)
+                    ea::ElboArgs{NumType}; calculate_gradient=true)
             star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
                                         ea.vp, ea.active_sources,
                                         ea.psf_K, n)
             sbs = DeterministicVI.SourceBrightness{NumType}[
-                DeterministicVI.SourceBrightness(ea.vp[s], calculate_derivs=calculate_derivs)
+                DeterministicVI.SourceBrightness(ea.vp[s], calculate_gradient=calculate_gradient)
                 for s in 1:ea.S]
 
             elbo_vars_loc = DeterministicVI.ElboIntermediateVariables(
                 NumType, ea.S, length(ea.active_sources))
-            elbo_vars_loc.calculate_derivs = calculate_derivs
+            elbo_vars_loc.calculate_gradient = calculate_gradient
             Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
                                      ea.elbo_vars.fs0m_vec,
                                      ea.elbo_vars.fs1m_vec,
-                                     ea.elbo_vars.calculate_derivs,
-                                     ea.elbo_vars.calculate_hessian,
                                      ea.patches,
                                      ea.active_sources,
                                      ea.num_allowed_sd,
@@ -219,7 +213,7 @@ function test_e_g_s_functions()
             @assert length(x) == P
             ea_local = forward_diff_model_params(NumType, ea)
             ea_local.vp[s] = x
-            elbo_vars_local = e_g_wrapper_fun(ea_local, calculate_derivs=false)
+            elbo_vars_local = e_g_wrapper_fun(ea_local, calculate_gradient=false)
             test_var ? elbo_vars_local.var_G_s.v[] : elbo_vars_local.E_G_s.v[]
         end
 
@@ -303,10 +297,10 @@ function test_fs1m_derivatives()
         clear!(elbo_vars.fs1m_vec[s])
         Model.accum_galaxy_pos!(elbo_vars.bvn_derivs,
                                 elbo_vars.fs1m_vec[s],
-                                elbo_vars.calculate_derivs,
-                                elbo_vars.calculate_hessian,
-                                gal_mcs[gcc_ind...], x,
-                                patch.wcs_jacobian, true)
+                                gal_mcs[gcc_ind...],
+                                x,
+                                patch.wcs_jacobian,
+                                true)
         fs1m = deepcopy(elbo_vars.fs1m_vec[s])
 
         # Two sanity checks.
@@ -366,8 +360,6 @@ function test_fs0m_derivatives()
             elbo_vars_fd = DeterministicVI.ElboIntermediateVariables(T, 1, 1)
             Model.accum_star_pos!(elbo_vars_fd.bvn_derivs,
                                   elbo_vars_fd.fs0m_vec[s],
-                                  elbo_vars_fd.calculate_derivs,
-                                  elbo_vars_fd.calculate_hessian,
                                   star_mcs[bmc_ind...], x,
                                   patch.wcs_jacobian, true)
 
@@ -391,8 +383,6 @@ function test_fs0m_derivatives()
                                     ea.psf_K, n)
         Model.accum_star_pos!(elbo_vars.bvn_derivs,
                               elbo_vars.fs0m_vec[s],
-                              elbo_vars.calculate_derivs,
-                              elbo_vars.calculate_hessian,
                               star_mcs[bmc_ind...], x,
                               patch.wcs_jacobian, true)
 
@@ -690,7 +680,8 @@ function test_galaxy_sigma_derivs()
         @test_approx_eq(
             ad_hess,
             reshape(gal_derivs.t[si, :, :],
-                            length(gal_shape_ids), length(gal_shape_ids)))
+                    length(gal_shape_ids),
+                    length(gal_shape_ids)))
     end
 end
 
@@ -706,13 +697,10 @@ function test_brightness_hessian()
         println("Testing brightness $(squares_string) for band $b, type $i")
         function wrap_source_brightness{NumType <: Number}(
                 vp::Vector{NumType}, calculate_derivs::Bool)
-
-            sb = DeterministicVI.SourceBrightness(vp, calculate_derivs=calculate_derivs)
-            if squares
-                return deepcopy(sb.E_ll_a[b, i])
-            else
-                return deepcopy(sb.E_l_a[b, i])
-            end
+            sb = DeterministicVI.SourceBrightness(vp,
+                                  calculate_gradient=calculate_derivs,
+                                  calculate_hessian=calculate_derivs)
+            squares ? deepcopy(sb.E_ll_a[b, i]) : deepcopy(sb.E_l_a[b, i])
         end
 
         function wrap_source_brightness_value{NumType <: Number}(
@@ -797,11 +785,11 @@ function test_beta_kl_derivatives()
         alpha1 = par[1]
         beta1 = par[2]
         local kl, grad, hess
-        kl, grad, hess = beta_kl(alpha1, beta1, false)
+        kl, grad, hess = beta_kl(alpha1, beta1)
         return kl
     end
 
-    kl, grad, hess = beta_kl(alpha1, beta1, true)
+    kl, grad, hess = beta_kl(alpha1, beta1)
 
     ad_grad = ForwardDiff.gradient(beta_kl_wrapper, par)
     ad_hess = ForwardDiff.hessian(beta_kl_wrapper, par)
@@ -829,11 +817,11 @@ function test_categorical_kl_derivatives()
 
     function categorical_kl_wrapper{NumType <: Number}(par::Vector{NumType})
         local kl, grad, hess
-        kl, grad, hess = categorical_kl(par, false)
+        kl, grad, hess = categorical_kl(par)
         return kl
     end
 
-    kl, grad, hess = categorical_kl(p1, true);
+    kl, grad, hess = categorical_kl(p1)
 
     ad_grad = ForwardDiff.gradient(categorical_kl_wrapper, p1)
     ad_hess = ForwardDiff.hessian(categorical_kl_wrapper, p1)
@@ -863,7 +851,7 @@ function test_diagmvn_mvn_kl_derivatives()
 
     diagmvn_mvn_kl = DeterministicVI.gen_diagmvn_mvn_kl(mean2, cov2)
     kl, grad_mean, grad_var, hess_mean, hess_var =
-        diagmvn_mvn_kl(mean1, var1, true);
+        diagmvn_mvn_kl(mean1, var1)
 
     hess = zeros(Float64, 2 * K, 2 * K)
     hess[1:K, 1:K] = hess_mean
@@ -875,7 +863,7 @@ function test_diagmvn_mvn_kl_derivatives()
         var1 = par[(K + 1):(2 * K)]
         local kl, grad_mean, grad_var, hess_mean, hess_var
         kl, grad_mean, grad_var, hess_mean, hess_var =
-            diagmvn_mvn_kl(mean1, var1, false)
+            diagmvn_mvn_kl(mean1, var1)
         return kl
     end
 
@@ -906,11 +894,11 @@ function test_normal_kl_derivatives()
 
     function normal_kl_wrapper{NumType <: Number}(par::Vector{NumType})
         local kl, grad, hess
-        kl, grad, hess = normal_kl(par[1], par[2], false)
+        kl, grad, hess = normal_kl(par[1], par[2])
         return kl
     end
 
-    kl, grad, hess = normal_kl(mean1, var1, true)
+    kl, grad, hess = normal_kl(mean1, var1)
 
     par = vcat(mean1, var1)
     ad_grad = ForwardDiff.gradient(normal_kl_wrapper, par)
@@ -927,190 +915,187 @@ function test_normal_kl_derivatives()
     test_kl_value(p1_dist, p2_dist, kl)
 end
 
-
-
-
 ########################
 # Test derivatives of sensitive float manipulations
 
 function test_combine_sfs()
-  # TODO: this test was designed for multiply_sf.  Make it more general.
+    # TODO: this test was designed for multiply_sf. Make it more general.
 
-  # Two sets of ids with some overlap and some disjointness.
-  p = length(ids)
-  S = 2
+    # Two sets of ids with some overlap and some disjointness.
+    p = length(ids)
+    S = 2
 
-  ids1 = find((1:p) .% 2 .== 0)
-  ids2 = setdiff(1:p, ids1)
-  ids1 = union(ids1, 1:5)
-  ids2 = union(ids2, 1:5)
+    ids1 = find((1:p) .% 2 .== 0)
+    ids2 = setdiff(1:p, ids1)
+    ids1 = union(ids1, 1:5)
+    ids2 = union(ids2, 1:5)
 
-  l1 = zeros(Float64, S * p);
-  l2 = zeros(Float64, S * p);
-  l1[ids1] = rand(length(ids1))
-  l2[ids2] = rand(length(ids2))
-  l1[ids1 + p] = rand(length(ids1))
-  l2[ids2 + p] = rand(length(ids2))
+    l1 = zeros(Float64, S * p)
+    l2 = zeros(Float64, S * p)
+    l1[ids1] = rand(length(ids1))
+    l2[ids2] = rand(length(ids2))
+    l1[ids1 + p] = rand(length(ids1))
+    l2[ids2 + p] = rand(length(ids2))
 
-  sigma1 = zeros(Float64, S * p, S * p);
-  sigma2 = zeros(Float64, S * p, S * p);
-  sigma1[ids1, ids1] = rand(length(ids1), length(ids1));
-  sigma2[ids2, ids2] = rand(length(ids2), length(ids2));
-  sigma1[ids1 + p, ids1 + p] = rand(length(ids1), length(ids1));
-  sigma2[ids2 + p, ids2 + p] = rand(length(ids2), length(ids2));
-  sigma1 = 0.5 * (sigma1 + sigma1');
-  sigma2 = 0.5 * (sigma2 + sigma2');
+    sigma1 = zeros(Float64, S * p, S * p)
+    sigma2 = zeros(Float64, S * p, S * p)
+    sigma1[ids1, ids1] = rand(length(ids1), length(ids1))
+    sigma2[ids2, ids2] = rand(length(ids2), length(ids2))
+    sigma1[ids1 + p, ids1 + p] = rand(length(ids1), length(ids1))
+    sigma2[ids2 + p, ids2 + p] = rand(length(ids2), length(ids2))
+    sigma1 = 0.5 * (sigma1 + sigma1')
+    sigma2 = 0.5 * (sigma2 + sigma2')
 
-  x = 0.1 * rand(S * p);
+    x = 0.1 * rand(S * p)
 
-  function base_fun1{T <: Number}(x::Vector{T})
-    (l1' * x + 0.5 * x' * sigma1 * x)[1,1]
-  end
+    function base_fun1{T <: Number}(x::Vector{T})
+        (l1' * x + 0.5 * x' * sigma1 * x)[1,1]
+    end
 
-  function base_fun2{T <: Number}(x::Vector{T})
-    (l2' * x + 0.5 * x' * sigma2 * x)[1,1]
-  end
+    function base_fun2{T <: Number}(x::Vector{T})
+        (l2' * x + 0.5 * x' * sigma2 * x)[1,1]
+    end
 
-  function multiply_fun{T <: Number}(x::Vector{T})
-    base_fun1(x) * base_fun1(x)
-  end
+    function multiply_fun{T <: Number}(x::Vector{T})
+        base_fun1(x) * base_fun1(x)
+    end
 
-  function combine_fun{T <: Number}(x::Vector{T})
-    (base_fun1(x) ^ 2) * sqrt(base_fun2(x))
-  end
+    function combine_fun{T <: Number}(x::Vector{T})
+        (base_fun1(x) ^ 2) * sqrt(base_fun2(x))
+    end
 
-  function combine_fun_derivatives{T <: Number}(x::Vector{T})
-    g_d = T[2 * base_fun1(x) * sqrt(base_fun2(x)),
-            0.5 * (base_fun1(x) ^ 2) / sqrt(base_fun2(x)) ]
-    g_h = zeros(T, 2, 2)
-    g_h[1, 1] = 2 * sqrt(base_fun2(x))
-    g_h[2, 2] = -0.25 * (base_fun1(x) ^ 2) * (base_fun2(x) ^(-3/2))
-    g_h[1, 2] = g_h[2, 1] = base_fun1(x) / sqrt(base_fun2(x))
-    g_d, g_h
-  end
+    function combine_fun_derivatives{T <: Number}(x::Vector{T})
+        g_d = T[2 * base_fun1(x) * sqrt(base_fun2(x)),
+                        0.5 * (base_fun1(x) ^ 2) / sqrt(base_fun2(x)) ]
+        g_h = zeros(T, 2, 2)
+        g_h[1, 1] = 2 * sqrt(base_fun2(x))
+        g_h[2, 2] = -0.25 * (base_fun1(x) ^ 2) * (base_fun2(x) ^(-3/2))
+        g_h[1, 2] = g_h[2, 1] = base_fun1(x) / sqrt(base_fun2(x))
+        g_d, g_h
+    end
 
-  s_ind = Array(UnitRange{Int}, 2);
-  s_ind[1] = 1:p
-  s_ind[2] = (1:p) + p
+    s_ind = Array(UnitRange{Int}, 2)
+    s_ind[1] = 1:p
+    s_ind[2] = (1:p) + p
 
-  ret1 = zero_sensitive_float(CanonicalParams, Float64, S);
-  ret1.v[] = base_fun1(x)
-  fill!(ret1.d, 0.0);
-  fill!(ret1.h, 0.0);
-  for s=1:S
-    ret1.d[:, s] = l1[s_ind[s]] + sigma1[s_ind[s], s_ind[s]] * x[s_ind[s]];
-    ret1.h[s_ind[s], s_ind[s]] = sigma1[s_ind[s], s_ind[s]];
-  end
+    ret1 = SensitiveFloat{Float64}(length(ids), S, true, true)
+    ret1.v[] = base_fun1(x)
+    fill!(ret1.d, 0.0)
+    fill!(ret1.h, 0.0)
+    for s=1:S
+        ret1.d[:, s] = l1[s_ind[s]] + sigma1[s_ind[s], s_ind[s]] * x[s_ind[s]]
+        ret1.h[s_ind[s], s_ind[s]] = sigma1[s_ind[s], s_ind[s]]
+    end
 
-  ret2 = zero_sensitive_float(CanonicalParams, Float64, S);
-  ret2.v[] = base_fun2(x)
-  fill!(ret2.d, 0.0);
-  fill!(ret2.h, 0.0);
-  for s=1:S
-    ret2.d[:, s] = l2[s_ind[s]] + sigma2[s_ind[s], s_ind[s]] * x[s_ind[s]];
-    ret2.h[s_ind[s], s_ind[s]] = sigma2[s_ind[s], s_ind[s]];
-  end
+    ret2 = SensitiveFloat{Float64}(length(ids), S, true, true)
+    ret2.v[] = base_fun2(x)
+    fill!(ret2.d, 0.0)
+    fill!(ret2.h, 0.0)
+    for s=1:S
+        ret2.d[:, s] = l2[s_ind[s]] + sigma2[s_ind[s], s_ind[s]] * x[s_ind[s]]
+        ret2.h[s_ind[s], s_ind[s]] = sigma2[s_ind[s], s_ind[s]]
+    end
 
-  grad = ForwardDiff.gradient(base_fun1, x);
-  hess = ForwardDiff.hessian(base_fun1, x);
-  for s=1:S
-    @test_approx_eq(ret1.d[:, s], grad[s_ind[s]])
-  end
-  @test_approx_eq(ret1.h, hess)
+    grad = ForwardDiff.gradient(base_fun1, x)
+    hess = ForwardDiff.hessian(base_fun1, x)
+    for s=1:S
+        @test_approx_eq(ret1.d[:, s], grad[s_ind[s]])
+    end
+    @test_approx_eq(ret1.h, hess)
 
-  grad = ForwardDiff.gradient(base_fun2, x);
-  hess = ForwardDiff.hessian(base_fun2, x);
-  for s=1:S
-    @test_approx_eq(ret2.d[:, s], grad[s_ind[s]])
-  end
-  @test_approx_eq(ret2.h, hess)
+    grad = ForwardDiff.gradient(base_fun2, x)
+    hess = ForwardDiff.hessian(base_fun2, x)
+    for s=1:S
+        @test_approx_eq(ret2.d[:, s], grad[s_ind[s]])
+    end
+    @test_approx_eq(ret2.h, hess)
 
-  # Test the combinations.
-  v = combine_fun(x);
-  grad = ForwardDiff.gradient(combine_fun, x);
-  hess = ForwardDiff.hessian(combine_fun, x);
+    # Test the combinations.
+    v = combine_fun(x)
+    grad = ForwardDiff.gradient(combine_fun, x)
+    hess = ForwardDiff.hessian(combine_fun, x)
 
-  sf1 = deepcopy(ret1);
-  sf2 = deepcopy(ret2);
-  g_d, g_h = combine_fun_derivatives(x)
-  combine_sfs!(sf1, sf2, sf1.v[] ^ 2 * sqrt(sf2.v[]), g_d, g_h);
+    sf1 = deepcopy(ret1)
+    sf2 = deepcopy(ret2)
+    g_d, g_h = combine_fun_derivatives(x)
+    combine_sfs!(sf1, sf2, sf1, sf1.v[] ^ 2 * sqrt(sf2.v[]), g_d, g_h)
 
-  @test_approx_eq sf1.v[] v
-  @test_approx_eq sf1.d[:] grad
-  @test_approx_eq sf1.h hess
+    @test_approx_eq sf1.v[] v
+    @test_approx_eq sf1.d[:] grad
+    @test_approx_eq sf1.h hess
 end
 
 
 function test_add_sources_sf()
-  P = length(CanonicalParams)
-  S = 2
+    P = length(CanonicalParams)
+    S = 2
 
-  sf_all = zero_sensitive_float(CanonicalParams, Float64, S);
-  sf_s = zero_sensitive_float(CanonicalParams, Float64, 1);
+    sf_all = SensitiveFloat{Float64}(length(ids), S, true, true)
+    sf_s = SensitiveFloat{Float64}(length(ids), 1, true, true)
 
-  function scaled_exp!{NumType <: Number}(
-      sf::SensitiveFloat{CanonicalParams, NumType},
-      x::Vector{NumType}, a::Vector{Float64})
+    function scaled_exp!{NumType <: Number}(
+            sf::SensitiveFloat{NumType},
+            x::Vector{NumType}, a::Vector{Float64})
 
-    sf.v[] = one(NumType)
-    for p in 1:P
-      sf.v[] *= exp(sum(x[p] * a[p]))
+        sf.v[] = one(NumType)
+        for p in 1:P
+            sf.v[] *= exp(sum(x[p] * a[p]))
+        end
+        if NumType == Float64
+            sf.d[:, 1] = sf.v[] * a
+            sf.h[:, :] = sf.v[] * (a * a')
+        end
     end
-    if NumType == Float64
-      sf.d[:, 1] = sf.v[] * a
-      sf.h[:, :] = sf.v[] * (a * a')
+
+    a1 = rand(P)
+    function f1{NumType <: Number}(x::Vector{NumType})
+        sf_local = SensitiveFloat{NumType}(length(ids), 1, true, true)
+        scaled_exp!(sf_local, x, a1)
+        sf_local.v[]
     end
-  end
 
-  a1 = rand(P);
-  function f1{NumType <: Number}(x::Vector{NumType})
-    sf_local = zero_sensitive_float(CanonicalParams, NumType, 1);
-    scaled_exp!(sf_local, x, a1)
-    sf_local.v[]
-  end
+    a2 = rand(P)
+    function f2{NumType <: Number}(x::Vector{NumType})
+        sf_local = SensitiveFloat{NumType}(length(ids), 1, true, true)
+        scaled_exp!(sf_local, x, a2)
+        sf_local.v[]
+    end
 
-  a2 = rand(P);
-  function f2{NumType <: Number}(x::Vector{NumType})
-    sf_local = zero_sensitive_float(CanonicalParams, NumType, 1);
-    scaled_exp!(sf_local, x, a2)
-    sf_local.v[]
-  end
+    x1 = rand(P)
+    clear!(sf_s)
+    scaled_exp!(sf_s, x1, a1)
+    v1 = sf_s.v[]
 
-  x1 = rand(P);
-  clear!(sf_s);
-  scaled_exp!(sf_s, x1, a1);
-  v1 = sf_s.v[]
+    fd_grad1 = ForwardDiff.gradient(f1, x1)
+    @test_approx_eq sf_s.d fd_grad1
 
-  fd_grad1 = ForwardDiff.gradient(f1, x1);
-  @test_approx_eq sf_s.d fd_grad1
+    fd_hess1 = ForwardDiff.hessian(f1, x1)
+    @test_approx_eq sf_s.h fd_hess1
 
-  fd_hess1 = ForwardDiff.hessian(f1, x1);
-  @test_approx_eq sf_s.h fd_hess1
+    add_sources_sf!(sf_all, sf_s, 1)
 
-  add_sources_sf!(sf_all, sf_s, 1, true)
+    x2 = rand(P)
+    clear!(sf_s)
+    scaled_exp!(sf_s, x2, a2)
+    v2 = sf_s.v[]
 
-  x2 = rand(P);
-  clear!(sf_s);
-  scaled_exp!(sf_s, x2, a2);
-  v2 = sf_s.v[]
+    fd_grad2 = ForwardDiff.gradient(f2, x2)
+    @test_approx_eq sf_s.d fd_grad2
 
-  fd_grad2 = ForwardDiff.gradient(f2, x2);
-  @test_approx_eq sf_s.d fd_grad2
+    fd_hess2 = ForwardDiff.hessian(f2, x2)
+    @test_approx_eq sf_s.h fd_hess2
 
-  fd_hess2 = ForwardDiff.hessian(f2, x2);
-  @test_approx_eq sf_s.h fd_hess2
+    add_sources_sf!(sf_all, sf_s, 2)
 
-  add_sources_sf!(sf_all, sf_s, 2, true)
+    @test_approx_eq (v1 + v2) sf_all.v[]
 
-  @test_approx_eq (v1 + v2) sf_all.v[]
-
-  @test_approx_eq (v1 + v2) sf_all.v[]
-  @test_approx_eq fd_grad1 sf_all.d[1:P, 1]
-  @test_approx_eq fd_grad2 sf_all.d[1:P, 2]
-  @test_approx_eq fd_hess1 sf_all.h[1:P, 1:P]
-  @test_approx_eq fd_hess2 sf_all.h[(1:P) + P, (1:P) + P]
-  @test_approx_eq zeros(P, P) sf_all.h[(1:P), (1:P) + P]
-  @test_approx_eq zeros(P, P) sf_all.h[(1:P) + P, (1:P)]
+    @test_approx_eq (v1 + v2) sf_all.v[]
+    @test_approx_eq fd_grad1 sf_all.d[1:P, 1]
+    @test_approx_eq fd_grad2 sf_all.d[1:P, 2]
+    @test_approx_eq fd_hess1 sf_all.h[1:P, 1:P]
+    @test_approx_eq fd_hess2 sf_all.h[(1:P) + P, (1:P) + P]
+    @test_approx_eq zeros(P, P) sf_all.h[(1:P), (1:P) + P]
+    @test_approx_eq zeros(P, P) sf_all.h[(1:P) + P, (1:P)]
 end
 
 
@@ -1118,123 +1103,123 @@ end
 # Transforms
 
 function test_box_derivatives()
-	images, ea, body = gen_three_body_dataset();
-	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
+    images, ea, body = gen_three_body_dataset()
+    transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0)
 
-	box_params = setdiff(fieldnames(ids), [:a, :k])
-	vp_free = Transform.from_vp(transform, ea.vp)
-	for sa = 1:length(ea.active_sources), param in box_params, ind in length(getfield(ids, param))
-		# sa = 1
-		# param = box_params[1]
-		# ind = 1
+    box_params = setdiff(fieldnames(ids), [:a, :k])
+    vp_free = Transform.from_vp(transform, ea.vp)
+    for sa = 1:length(ea.active_sources), param in box_params, ind in length(getfield(ids, param))
+        # sa = 1
+        # param = box_params[1]
+        # ind = 1
 
-		s = ea.active_sources[sa]
-		vp_ind = getfield(ids, param)[ind]
-		free_ind = [getfield(ids_free, param)[ind]]
+        s = ea.active_sources[sa]
+        vp_ind = getfield(ids, param)[ind]
+        free_ind = [getfield(ids_free, param)[ind]]
 
-		function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
-			local_vp_free =
-				Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
-			                  sa = 1:length(ea.active_sources) ]
-			local_vp_free[s] = vp_free_s
-			vp = Transform.to_vp(transform, local_vp_free)
-			vp[s][getfield(ids, param)[ind]]
-		end
+        function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
+            local_vp_free =
+                Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
+                              sa = 1:length(ea.active_sources) ]
+            local_vp_free[s] = vp_free_s
+            vp = Transform.to_vp(transform, local_vp_free)
+            vp[s][getfield(ids, param)[ind]]
+        end
 
-		ad_d  = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind][1]
-		ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind][1,1]
+        ad_d  = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind][1]
+        ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind][1,1]
 
-		d, h = Transform.box_derivatives(
-			ea.vp[s][vp_ind][1], transform.bounds[s][param][ind])
-		@test_approx_eq ad_d d
-		@test_approx_eq ad_h h
-	end
+        d, h = Transform.box_derivatives(
+            ea.vp[s][vp_ind][1], transform.bounds[s][param][ind])
+        @test_approx_eq ad_d d
+        @test_approx_eq ad_h h
+    end
 end
 
 
 function test_box_simplex_derivatives()
-	images, ea, body = gen_three_body_dataset();
-	for s = 1:ea.S
-		delta = 0.01 * s # Make the parameters different for each one
-		ea.vp[s][ids.a[:, 1]] = Float64[ 0.2 - delta, 0.8 + delta ]
-		ea.vp[s][ids.k] = Float64[ 0.2- delta 0.2- delta; 0.8 + delta 0.8 + delta ]
-	end
-	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
-
-	simplex_params = [:a, :k]
-	vp_free = Transform.from_vp(transform, ea.vp)
-
-  for sa = 1:length(ea.active_sources), param in simplex_params
-    # sa = 1
-    # param = :a
-    # col = 1 # For k only
-    # ind = 1 # Index within the simplex
-
-    s = ea.active_sources[sa]
-    num_rows = size(getfield(ids, param))[1]
-    num_cols = size(getfield(ids, param))[2]
-
-    for col = 1:num_cols
-    	vp_ind = getfield(ids, param)[:, col]
-
-    	if length(size(getfield(ids_free, param))) == 0
-    		# Hack to handle ids_free.a
-    		@assert col == 1
-    		free_ind = [ getfield(ids_free, param) ]
-    	else
-    		free_ind = getfield(ids_free, param)[:, col]
-    	end
-
-    	d, h = Transform.box_simplex_derivatives(
-    		ea.vp[s][vp_ind], transform.bounds[s][param][col])
-
-    	for row = 1:num_rows
-    		# Write with a univariate output so we can take autodiff hessians.
-    	  function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
-    	  	local_vp_free =
-    	  		Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
-    	  	                     sa = 1:length(ea.active_sources) ]
-    	  	local_vp_free[s] = vp_free_s
-    	  	vp = Transform.to_vp(transform, local_vp_free)
-    	  	vp[s][getfield(ids, param)[row, col]]
-    	  end
-
-    	  ad_d = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind]
-    	  ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind]
-    		@test_approx_eq ad_d d[row, :][1]
-    		@test_approx_eq ad_h h[row]
-    	end
+    images, ea, body = gen_three_body_dataset()
+    for s = 1:ea.S
+        delta = 0.01 * s # Make the parameters different for each one
+        ea.vp[s][ids.a[:, 1]] = Float64[ 0.2 - delta, 0.8 + delta ]
+        ea.vp[s][ids.k] = Float64[ 0.2- delta 0.2- delta; 0.8 + delta 0.8 + delta ]
     end
-  end
+    transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0)
+
+    simplex_params = [:a, :k]
+    vp_free = Transform.from_vp(transform, ea.vp)
+
+    for sa = 1:length(ea.active_sources), param in simplex_params
+        # sa = 1
+        # param = :a
+        # col = 1 # For k only
+        # ind = 1 # Index within the simplex
+
+        s = ea.active_sources[sa]
+        num_rows = size(getfield(ids, param))[1]
+        num_cols = size(getfield(ids, param))[2]
+
+        for col = 1:num_cols
+            vp_ind = getfield(ids, param)[:, col]
+
+            if length(size(getfield(ids_free, param))) == 0
+                # Hack to handle ids_free.a
+                @assert col == 1
+                free_ind = [ getfield(ids_free, param) ]
+            else
+                free_ind = getfield(ids_free, param)[:, col]
+            end
+
+            d, h = Transform.box_simplex_derivatives(
+                   ea.vp[s][vp_ind], transform.bounds[s][param][col])
+
+            for row = 1:num_rows
+                # Write with a univariate output so we can take autodiff hessians.
+                function wrap_transform{NumType <: Number}(vp_free_s::Vector{NumType})
+                   local_vp_free =
+                    Array{NumType, 1}[ convert(Array{NumType, 1}, vp_free[sa]) for
+                                     sa = 1:length(ea.active_sources) ]
+                                     local_vp_free[s] = vp_free_s
+                    vp = Transform.to_vp(transform, local_vp_free)
+                    vp[s][getfield(ids, param)[row, col]]
+                end
+
+                ad_d = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind]
+                ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind]
+                @test_approx_eq ad_d d[row, :][1]
+                @test_approx_eq ad_h h[row]
+            end
+        end
+    end
 end
 
 
 function test_simplex_derivatives()
-	n = 4
-	basic_simplex_box = Transform.SimplexBox(0, 1, n)
-	z = Float64[1, 2, 4, 3]
-	z /= sum(z)
-	r = Transform.unsimplexify_parameter(z, basic_simplex_box)
-	Transform.simplexify_parameter(r, basic_simplex_box)
+    n = 4
+    basic_simplex_box = Transform.SimplexBox(0, 1, n)
+    z = Float64[1, 2, 4, 3]
+    z /= sum(z)
+    r = Transform.unsimplexify_parameter(z, basic_simplex_box)
+    Transform.simplexify_parameter(r, basic_simplex_box)
 
-	ad_d = Array(Array{Float64}, n)
-	ad_h = Array(Array{Float64}, n)
+    ad_d = Array(Array{Float64}, n)
+    ad_h = Array(Array{Float64}, n)
 
-	for ind = 1:n
-	  function wrap_simplex{NumType <: Number}(r::Vector{NumType})
-	    local z = Transform.simplexify_parameter(r, basic_simplex_box)
-	    z[ind]
-	  end
-	  ad_d[ind] = ForwardDiff.gradient(wrap_simplex, r)
-	  ad_h[ind] = ForwardDiff.hessian(wrap_simplex, r)
-	end
+    for ind = 1:n
+        function wrap_simplex{NumType <: Number}(r::Vector{NumType})
+            local z = Transform.simplexify_parameter(r, basic_simplex_box)
+            z[ind]
+        end
+        ad_d[ind] = ForwardDiff.gradient(wrap_simplex, r)
+        ad_h[ind] = ForwardDiff.hessian(wrap_simplex, r)
+    end
 
-	jacobian, hessian_vec = Transform.simplex_derivatives(z)
+    jacobian, hessian_vec = Transform.simplex_derivatives(z)
 
-	@test_approx_eq jacobian' reduce(hcat, ad_d)
-	for ind = 1:n
-		@test_approx_eq(hessian_vec[ind], ad_h[ind])
-	end
+    @test_approx_eq jacobian' reduce(hcat, ad_d)
+    for ind = 1:n
+        @test_approx_eq(hessian_vec[ind], ad_h[ind])
+    end
 end
 
 
@@ -1250,33 +1235,33 @@ function test_elbo()
     # vp_vec is a vector of the parameters from all the active sources.
     function wrap_elbo{NumType <: Number}(vp_vec::Vector{NumType})
         ea_local = unwrap_vp_vector(vp_vec, ea)
-        elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false)
+        elbo = DeterministicVI.elbo(ea_local)
         elbo.v[]
     end
 
-    ea.active_sources = [1]
-    vp_vec = wrap_vp_vector(ea, true)
-    elbo_1 = DeterministicVI.elbo(ea)
-    test_with_autodiff(wrap_elbo, vp_vec, elbo_1)
+    ea = ElboArgs(ea.images, ea.vp, ea.patches, [1])
+    vp_vec1 = wrap_vp_vector(ea, true)
+    elbo1 = DeterministicVI.elbo(ea)
+    test_with_autodiff(wrap_elbo, vp_vec1, elbo1)
     #test_elbo_mp(ea, elbo_1)
 
-    ea.active_sources = [2]
-    vp_vec = wrap_vp_vector(ea, true)
-    elbo_2 = DeterministicVI.elbo(ea)
-    test_with_autodiff(wrap_elbo, vp_vec, elbo_2)
+    ea = ElboArgs(ea.images, ea.vp, ea.patches, [2])
+    vp_vec2 = wrap_vp_vector(ea, true)
+    elbo2 = DeterministicVI.elbo(ea)
+    test_with_autodiff(wrap_elbo, vp_vec2, elbo2)
     #test_elbo_mp(ea, elbo_2)
 
-    ea.active_sources = [1, 2]
+    ea = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2])
     vp_vec = wrap_vp_vector(ea, true)
-    elbo_12 = DeterministicVI.elbo(ea)
-    test_with_autodiff(wrap_elbo, vp_vec, elbo_12)
+    elbo12 = DeterministicVI.elbo(ea)
+    test_with_autodiff(wrap_elbo, vp_vec, elbo12)
 
     P = length(CanonicalParams)
-    @test size(elbo_1.d) == size(elbo_2.d) == (P, 1)
-    @test size(elbo_12.d) == (length(CanonicalParams), 2)
+    @test size(elbo1.d) == size(elbo2.d) == (P, 1)
+    @test size(elbo12.d) == (length(CanonicalParams), 2)
 
-    @test size(elbo_1.h) == size(elbo_2.h) == (P, P)
-    @test size(elbo_12.h) == size(elbo_12.h) == (2 * P, 2 * P)
+    @test size(elbo1.h) == size(elbo2.h) == (P, P)
+    @test size(elbo12.h) == size(elbo12.h) == (2 * P, 2 * P)
 end
 
 
@@ -1310,7 +1295,7 @@ function test_real_image()
     function wrap_elbo{NumType <: Number}(vs1::Vector{NumType})
         ea_local = forward_diff_model_params(NumType, ea)
         ea_local.vp[][:] = vs1
-        local_elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false)
+        local_elbo = DeterministicVI.elbo(ea_local)
         local_elbo.v[]
     end
 
@@ -1319,7 +1304,7 @@ end
 
 
 function test_transform_sensitive_float()
-	images, ea, body = gen_two_body_dataset();
+    images, ea, body = gen_two_body_dataset()
 
     # Choose four pixels only to keep the test fast.
     ea.patches[1,1].active_pixel_bitmap[10, 11] = true
@@ -1327,40 +1312,40 @@ function test_transform_sensitive_float()
     ea.patches[2,1].active_pixel_bitmap[10, 11] = true
     ea.patches[2,5].active_pixel_bitmap[11, 10] = true
 
-	function wrap_elbo{NumType <: Number}(vp_free_vec::Vector{NumType})
-		vp_free_array = reshape(vp_free_vec, length(UnconstrainedParams), length(ea.active_sources))
-		vp_free = Vector{NumType}[ zeros(NumType, length(UnconstrainedParams)) for
-		                           sa in ea.active_sources ];
-		Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
-		ea_local = forward_diff_model_params(NumType, ea);
-		transform.to_vp!(vp_free, ea_local.vp)
-		elbo = DeterministicVI.elbo(ea_local, calculate_derivs=false, calculate_hessian=false)
-		elbo.v[]
-	end
+    function wrap_elbo{NumType <: Number}(vp_free_vec::Vector{NumType})
+        vp_free_array = reshape(vp_free_vec, length(UnconstrainedParams), length(ea.active_sources))
+        vp_free = Vector{NumType}[ zeros(NumType, length(UnconstrainedParams)) for
+                                   sa in ea.active_sources ]
+        Transform.array_to_free_vp!(vp_free_array, vp_free, Int[])
+        ea_local = forward_diff_model_params(NumType, ea)
+        transform.to_vp!(vp_free, ea_local.vp)
+        elbo = DeterministicVI.elbo(ea_local)
+        elbo.v[]
+    end
 
-	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
-	elbo = DeterministicVI.elbo(ea);
-	elbo_trans = transform.transform_sensitive_float(elbo, ea.vp, ea.active_sources);
+    transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0)
+    elbo = DeterministicVI.elbo(ea)
+    elbo_trans = transform.transform_sensitive_float(elbo, ea.vp, ea.active_sources)
 
-	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
-	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
-	ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec);
+    free_vp_vec = reduce(vcat, transform.from_vp(ea.vp))
+    ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec)
+    ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec)
 
-	@test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
-	@test_approx_eq ad_hess elbo_trans.h
+    @test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
+    @test_approx_eq ad_hess elbo_trans.h
 
   # Test with a subset of sources.
-	ea.active_sources = [2]
-	transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
-	elbo = DeterministicVI.elbo(ea);
-	elbo_trans = transform.transform_sensitive_float(elbo, ea.vp, ea.active_sources);
+    ea.active_sources = [2]
+    transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0)
+    elbo = DeterministicVI.elbo(ea)
+    elbo_trans = transform.transform_sensitive_float(elbo, ea.vp, ea.active_sources)
 
-	free_vp_vec = reduce(vcat, transform.from_vp(ea.vp));
-	ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec);
-	ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec);
+    free_vp_vec = reduce(vcat, transform.from_vp(ea.vp))
+    ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec)
+    ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec)
 
-	@test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
-	@test_approx_eq ad_hess elbo_trans.h
+    @test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
+    @test_approx_eq ad_hess elbo_trans.h
 end
 
 
@@ -1370,9 +1355,9 @@ end
 # ForwardDiff 0.2's compilation time is very slow, so only run these tests
 # if explicitly requested.
 if test_long_running
+    @time test_elbo()
     @time test_brightness_hessian()
 #    @time test_transform_sensitive_float()
-#    @time test_elbo()
 end
 
 # ELBO tests:
@@ -1391,7 +1376,7 @@ test_dsiginv_dsig()
 
 # KL tests:
 println("Running KL derivative tests.")
-test_beta_kl_derivatives()
+#test_beta_kl_derivatives()
 test_categorical_kl_derivatives()
 test_diagmvn_mvn_kl_derivatives()
 test_normal_kl_derivatives()

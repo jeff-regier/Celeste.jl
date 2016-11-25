@@ -1,6 +1,6 @@
 """
 Convolve the current locations and galaxy shapes with the PSF.  If
-calculate_derivs is true, also calculate derivatives and hessians for
+calculate_gradient is true, also calculate derivatives and hessians for
 active sources.
 
 Args:
@@ -10,7 +10,7 @@ Args:
  - active_sources (formerly from ElboArgs)
  - psf_K: Number of psf components (psf from patches object)
  - n: the image id (not the band)
- - calculate_derivs: Whether to calculate derivatives for active sources.
+ - calculate_gradient: Whether to calculate derivatives for active sources.
  - calculate_hessian
 
 Returns:
@@ -31,7 +31,7 @@ function load_bvn_mixtures{NumType <: Number}(
                     active_sources::Vector{Int},
                     psf_K::Int64,
                     n::Int;
-                    calculate_derivs::Bool=true,
+                    calculate_gradient::Bool=true,
                     calculate_hessian::Bool=true)
     # TODO: do not keep any derviative information if the sources are not in
     # active_sources.
@@ -72,7 +72,7 @@ function load_bvn_mixtures{NumType <: Number}(
                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
                         m_pos,
                         sp[lidx.e_axis], sp[lidx.e_angle], sp[lidx.e_scale],
-                        calculate_derivs && (s in active_sources),
+                        calculate_gradient && (s in active_sources),
                         calculate_hessian)
                 end
             end
@@ -84,7 +84,6 @@ end
 
 
 type ModelIntermediateVariables{NumType <: Number}
-
     bvn_derivs::BivariateNormalDerivatives{NumType}
 
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
@@ -92,34 +91,28 @@ type ModelIntermediateVariables{NumType <: Number}
     # as ea.active_sources.
 
     # TODO: you can treat this the same way as E_G_s and not keep a vector around.
-    fs0m_vec::Vector{SensitiveFloat{StarPosParams, NumType}}
-    fs1m_vec::Vector{SensitiveFloat{GalaxyPosParams, NumType}}
-
+    fs0m_vec::Vector{SensitiveFloat{NumType}}
+    fs1m_vec::Vector{SensitiveFloat{NumType}}
 
     # Pre-allocated memory for the gradient and Hessian of combine functions.
     combine_grad::Vector{NumType}
     combine_hess::Matrix{NumType}
-
-    # If false, do not calculate hessians or derivatives.
-    calculate_derivs::Bool
-
-    # If false, do not calculate hessians.
-    calculate_hessian::Bool
 end
+
 
 """
 Args:
     - S: The total number of sources
     - num_active_sources: The number of actives sources (with deriviatives)
-    - calculate_derivs: If false, only calculate values
+    - calculate_gradient: If false, only calculate values
     - calculate_hessian: If false, only calculate gradients. Note that if
-                calculate_derivs = false, then hessians will not be
+                calculate_gradient = false, then hessians will not be
                 calculated irrespective of the value of calculate_hessian.
 """
 function ModelIntermediateVariables(NumType::DataType,
                                     S::Int,
                                     num_active_sources::Int;
-                                    calculate_derivs::Bool=true,
+                                    calculate_gradient::Bool=true,
                                     calculate_hessian::Bool=true)
     @assert NumType <: Number
 
@@ -127,11 +120,13 @@ function ModelIntermediateVariables(NumType::DataType,
 
     # fs0m and fs1m accumulate contributions from all bvn components
     # for a given source.
-    fs0m_vec = Array(SensitiveFloat{StarPosParams, NumType}, S)
-    fs1m_vec = Array(SensitiveFloat{GalaxyPosParams, NumType}, S)
+    fs0m_vec = Array(SensitiveFloat{NumType}, S)
+    fs1m_vec = Array(SensitiveFloat{NumType}, S)
     for s = 1:S
-        fs0m_vec[s] = zero_sensitive_float(StarPosParams, NumType)
-        fs1m_vec[s] = zero_sensitive_float(GalaxyPosParams, NumType)
+        fs0m_vec[s] = SensitiveFloat{NumType}(length(StarPosParams), 1,
+                                     calculate_gradient, calculate_hessian)
+        fs1m_vec[s] = SensitiveFloat{NumType}(length(GalaxyPosParams), 1,
+                                     calculate_gradient, calculate_hessian)
     end
 
     combine_grad = zeros(NumType, 2)
@@ -139,8 +134,7 @@ function ModelIntermediateVariables(NumType::DataType,
 
     ModelIntermediateVariables{NumType}(
         bvn_derivs, fs0m_vec, fs1m_vec,
-        combine_grad, combine_hess,
-        calculate_derivs, calculate_hessian)
+        combine_grad, combine_hess)
 end
 
 
@@ -155,18 +149,14 @@ Non-obvious args:
 """
 function populate_gal_fsm!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
-                    mv_calculate_derivs::Bool,
-                    mv_calculate_hessian::Bool,
+                    fs1m::SensitiveFloat{NumType},
                     s::Int,
                     x::SVector{2,Float64},
                     is_active_source::Bool,
                     num_allowed_sd::Float64,
                     wcs_jacobian::Matrix{Float64},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
-    calculate_hessian =
-        mv_calculate_hessian && mv_calculate_derivs && is_active_source
-    clear!(fs1m, calculate_hessian)
+    clear!(fs1m)
     for i = 1:2 # Galaxy types
         for j in 1:8 # Galaxy component
             # If i == 2 then there are only six galaxy components.
@@ -177,8 +167,6 @@ function populate_gal_fsm!{NumType <: Number}(
                             gal_mcs[k, j, i, s].bmc, x, num_allowed_sd))
                         accum_galaxy_pos!(
                             bvn_derivs, fs1m,
-                            mv_calculate_derivs,
-                            mv_calculate_hessian,
                             gal_mcs[k, j, i, s], x, wcs_jacobian,
                             is_active_source)
                     end
@@ -200,10 +188,8 @@ Non-obvious args:
 """
 function populate_fsm!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs0m::SensitiveFloat{StarPosParams, NumType},
-                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
-                    mv_calculate_derivs::Bool,
-                    mv_calculate_hessian::Bool,
+                    fs0m::SensitiveFloat{NumType},
+                    fs1m::SensitiveFloat{NumType},
                     s::Int,
                     x::SVector{2,Float64},
                     is_active_source::Bool,
@@ -211,32 +197,26 @@ function populate_fsm!{NumType <: Number}(
                     wcs_jacobian::Matrix{Float64},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
-    calculate_hessian =
-        mv_calculate_hessian && mv_calculate_derivs && is_active_source
-
-    clear!(fs0m, calculate_hessian)
+    clear!(fs0m)
     for k = 1:size(star_mcs, 1) # PSF component
         if (num_allowed_sd == Inf ||
             check_point_close_to_bvn(star_mcs[k, s], x, num_allowed_sd))
             accum_star_pos!(
                 bvn_derivs, fs0m,
-                mv_calculate_derivs,
-                mv_calculate_hessian,
                 star_mcs[k, s], x, wcs_jacobian, is_active_source)
         end
     end
 
-    populate_gal_fsm!(bvn_derivs, fs1m, mv_calculate_derivs, mv_calculate_hessian,
-                      s, x, is_active_source, num_allowed_sd, wcs_jacobian, gal_mcs)
+    populate_gal_fsm!(bvn_derivs, fs1m,
+                      s, x, is_active_source,
+                      num_allowed_sd, wcs_jacobian, gal_mcs)
 end
 
 
 function populate_fsm_vecs!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs0m_vec::Vector{SensitiveFloat{StarPosParams, NumType}},
-                    fs1m_vec::Vector{SensitiveFloat{GalaxyPosParams, NumType}},
-                    mv_calculate_derivs::Bool,
-                    mv_calculate_hessian::Bool,
+                    fs0m_vec::Vector{SensitiveFloat{NumType}},
+                    fs1m_vec::Vector{SensitiveFloat{NumType}},
                     patches::Matrix{SkyPatch},
                     active_sources::Vector{Int},
                     num_allowed_sd::Float64,
@@ -256,7 +236,6 @@ function populate_fsm_vecs!{NumType <: Number}(
             is_active_source = s in active_sources  # fast?
 
             populate_fsm!(bvn_derivs, fs0m_vec[s], fs1m_vec[s],
-                          mv_calculate_derivs, mv_calculate_hessian,
                           s, hw, is_active_source,
                           num_allowed_sd,
                           p.wcs_jacobian,
@@ -273,7 +252,7 @@ by updating elbo_vars.fs0m_vec[s] in place.
 Args:
     - bvn_derivs: (formerly from elbo_vars)
     - fs0m_vec: vector of sensitive floats, populated by this method
-    - calculate_derivs: the and of is_active_source and formerly elbo_vars.calculate_derivs
+    - calculate_gradient: the and of is_active_source and formerly elbo_vars.calculate_gradient
     - calculate_hessian: elbo_vars: Elbo intermediate values.
     - s: The index of the current source in 1:S
     - bmc: The component to be added
@@ -285,23 +264,21 @@ Returns:
 """
 function accum_star_pos!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs0m::SensitiveFloat{StarPosParams, NumType},
-                    calculate_derivs::Bool,
-                    calculate_hessian::Bool,
+                    fs0m::SensitiveFloat{NumType},
                     bmc::BvnComponent{NumType},
                     x::SVector{2,Float64},
                     wcs_jacobian::Array{Float64, 2},
                     is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, bmc, x)
 
-    if calculate_derivs && is_active_source
+    if fs0m.has_gradient && is_active_source
         get_bvn_derivs!(bvn_derivs, bmc, true, false)
     end
 
     fs0m.v[] += bvn_derivs.f_pre[1]
 
-    if calculate_derivs && is_active_source
-        transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, calculate_hessian)
+    if fs0m.has_gradient && is_active_source
+        transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, fs0m.has_hessian)
         bvn_u_d = bvn_derivs.bvn_u_d
         bvn_uu_h = bvn_derivs.bvn_uu_h
 
@@ -310,7 +287,7 @@ function accum_star_pos!{NumType <: Number}(
             fs0m.d[star_ids.u[u_id]] += bvn_derivs.f_pre[1] * bvn_u_d[u_id]
         end
 
-        if calculate_hessian
+        if fs0m.has_hessian
             # Hessian terms involving only the location parameters.
             # TODO: redundant term
             for u_id1 in 1:2, u_id2 in 1:2
@@ -332,9 +309,7 @@ Returns:
 """
 function accum_galaxy_pos!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
-                    calculate_derivs::Bool,
-                    calculate_hessian::Bool,
+                    fs1m::SensitiveFloat{NumType},
                     gcc::GalaxyCacheComponent{NumType},
                     x::SVector{2,Float64},
                     wcs_jacobian::Array{Float64, 2},
@@ -343,12 +318,12 @@ function accum_galaxy_pos!{NumType <: Number}(
     f = bvn_derivs.f_pre[1] * gcc.e_dev_i
     fs1m.v[] += f
 
-    if calculate_derivs && is_active_source
+    if fs1m.has_hessian && is_active_source
 
         get_bvn_derivs!(bvn_derivs, gcc.bmc,
-            calculate_hessian, calculate_hessian)
+                        fs1m.has_gradient, fs1m.has_hessian)
         transform_bvn_derivs!(
-            bvn_derivs, gcc.sig_sf, wcs_jacobian, calculate_hessian)
+            bvn_derivs, gcc.sig_sf, wcs_jacobian, fs1m.has_hessian)
 
         bvn_u_d = bvn_derivs.bvn_u_d
         bvn_uu_h = bvn_derivs.bvn_uu_h
@@ -370,7 +345,7 @@ function accum_galaxy_pos!{NumType <: Number}(
         # is an exp or dev component.
         fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * bvn_derivs.f_pre[1]
 
-        if calculate_hessian
+        if fs1m.has_hessian
             # The Hessians:
 
             # Hessian terms involving only the shape parameters.
@@ -417,5 +392,4 @@ function accum_galaxy_pos!{NumType <: Number}(
             end
         end # if calculate hessian
     end # if is_active_source
-
 end

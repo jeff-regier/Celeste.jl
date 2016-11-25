@@ -35,13 +35,13 @@ type ElboIntermediateVariables{NumType <: Number}
     # as ea.active_sources.
 
     # TODO: you can treat this the same way as E_G_s and not keep a vector around.
-    fs0m_vec::Vector{SensitiveFloat{StarPosParams, NumType}}
-    fs1m_vec::Vector{SensitiveFloat{GalaxyPosParams, NumType}}
+    fs0m_vec::Vector{SensitiveFloat{NumType}}
+    fs1m_vec::Vector{SensitiveFloat{NumType}}
 
     # Brightness values for a single source
-    E_G_s::SensitiveFloat{CanonicalParams, NumType}
-    E_G2_s::SensitiveFloat{CanonicalParams, NumType}
-    var_G_s::SensitiveFloat{CanonicalParams, NumType}
+    E_G_s::SensitiveFloat{NumType}
+    E_G2_s::SensitiveFloat{NumType}
+    var_G_s::SensitiveFloat{NumType}
 
     # Subsets of the Hessian of E_G_s and E_G2_s that allow us to use BLAS
     # functions to accumulate Hessian terms. There is one submatrix for
@@ -50,24 +50,18 @@ type ElboIntermediateVariables{NumType <: Number}
     E_G2_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
 
     # Expected pixel intensity and variance for a pixel from all sources.
-    E_G::SensitiveFloat{CanonicalParams, NumType}
-    var_G::SensitiveFloat{CanonicalParams, NumType}
+    E_G::SensitiveFloat{NumType}
+    var_G::SensitiveFloat{NumType}
 
     # Pre-allocated memory for the gradient and Hessian of combine functions.
     combine_grad::Vector{NumType}
     combine_hess::Matrix{NumType}
 
     # A placeholder for the log term in the ELBO.
-    elbo_log_term::SensitiveFloat{CanonicalParams, NumType}
+    elbo_log_term::SensitiveFloat{NumType}
 
     # The ELBO itself.
-    elbo::SensitiveFloat{CanonicalParams, NumType}
-
-    # If false, do not calculate hessians or derivatives.
-    calculate_derivs::Bool
-
-    # If false, do not calculate hessians.
-    calculate_hessian::Bool
+    elbo::SensitiveFloat{NumType}
 end
 
 
@@ -75,15 +69,15 @@ end
 Args:
     - S: The total number of sources
     - num_active_sources: The number of actives sources (with deriviatives)
-    - calculate_derivs: If false, only calculate values
+    - calculate_gradient: If false, only calculate values
     - calculate_hessian: If false, only calculate gradients. Note that if
-                calculate_derivs = false, then hessians will not be
+                calculate_gradient = false, then hessians will not be
                 calculated irrespective of the value of calculate_hessian.
 """
 function ElboIntermediateVariables(NumType::DataType,
                                    S::Int,
                                    num_active_sources::Int;
-                                   calculate_derivs::Bool=true,
+                                   calculate_gradient::Bool=true,
                                    calculate_hessian::Bool=true)
     @assert NumType <: Number
 
@@ -91,37 +85,40 @@ function ElboIntermediateVariables(NumType::DataType,
 
     # fs0m and fs1m accumulate contributions from all bvn components
     # for a given source.
-    fs0m_vec = Array(SensitiveFloat{StarPosParams, NumType}, S)
-    fs1m_vec = Array(SensitiveFloat{GalaxyPosParams, NumType}, S)
+    fs0m_vec = Array(SensitiveFloat{NumType}, S)
+    fs1m_vec = Array(SensitiveFloat{NumType}, S)
     for s = 1:S
-        fs0m_vec[s] = zero_sensitive_float(StarPosParams, NumType)
-        fs1m_vec[s] = zero_sensitive_float(GalaxyPosParams, NumType)
+        fs0m_vec[s] = SensitiveFloat{NumType}(length(StarPosParams), 1,
+                                    calculate_gradient, calculate_hessian)
+        fs1m_vec[s] = SensitiveFloat{NumType}(length(GalaxyPosParams), 1,
+                                    calculate_gradient, calculate_hessian)
     end
 
-    E_G_s = zero_sensitive_float(CanonicalParams, NumType, 1)
-    E_G2_s = zero_sensitive_float(CanonicalParams, NumType, 1)
-    var_G_s = zero_sensitive_float(CanonicalParams, NumType, 1)
+    E_G_s = SensitiveFloat{NumType}(length(CanonicalParams), 1,
+                                    calculate_gradient, calculate_hessian)
+    E_G2_s = SensitiveFloat(E_G_s)
+    var_G_s = SensitiveFloat(E_G_s)
 
     E_G_s_hsub_vec =
         HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
     E_G2_s_hsub_vec =
         HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
 
-    E_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-    var_G = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
+    E_G = SensitiveFloat{NumType}(length(CanonicalParams), num_active_sources,
+                                  calculate_gradient, calculate_hessian)
+    var_G = SensitiveFloat(E_G)
 
     combine_grad = zeros(NumType, 2)
     combine_hess = zeros(NumType, 2, 2)
 
-    elbo_log_term =
-        zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
-    elbo = zero_sensitive_float(CanonicalParams, NumType, num_active_sources)
+    elbo_log_term = SensitiveFloat(E_G)
+    elbo = SensitiveFloat(E_G)
 
     ElboIntermediateVariables{NumType}(
         bvn_derivs, fs0m_vec, fs1m_vec,
         E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
         E_G, var_G, combine_grad, combine_hess,
-        elbo_log_term, elbo, calculate_derivs, calculate_hessian)
+        elbo_log_term, elbo)
 end
 
 
@@ -160,8 +157,7 @@ end
 If Infs/NaNs have crept into the ELBO evaluation (a symptom of poorly conditioned optimization),
 this helps catch them immediately.
 """
-function assert_all_finite{ParamType <: ParamSet, NumType <: Number}(
-        sf::SensitiveFloat{ParamType, NumType})
+function assert_all_finite{NumType <: Number}(sf::SensitiveFloat{NumType})
     @assert isfinite(sf.v[]) "Value is Inf/NaNs"
     @assert all(isfinite, sf.d) "Gradient contains Inf/NaNs"
     @assert all(isfinite, sf.h) "Hessian contains Inf/NaNs"
@@ -220,7 +216,9 @@ function ElboArgs{NumType <: Number}(
             patches::Matrix{SkyPatch},
             active_sources::Vector{Int};
             psf_K::Int=2,
-            num_allowed_sd::Float64=Inf)
+            num_allowed_sd::Float64=Inf,
+            calculate_gradient=true,
+            calculate_hessian=true)
     N = length(images)
     S = length(vp)
 
@@ -238,11 +236,11 @@ function ElboArgs{NumType <: Number}(
 
     @assert(length(active_sources) <= 5, "too many active_sources")
 
-    elbo_vars = ElboIntermediateVariables(NumType, S,
-                                length(active_sources),
-                                calculate_derivs=true,
-                                calculate_hessian=true)
-
+    elbo_vars = ElboIntermediateVariables(NumType,
+                                          S,
+                                          length(active_sources);
+                                          calculate_gradient=calculate_gradient,
+                                          calculate_hessian=calculate_hessian)
     ElboArgs(S, N, psf_K, images, vp, patches,
              active_sources, num_allowed_sd, elbo_vars)
 end

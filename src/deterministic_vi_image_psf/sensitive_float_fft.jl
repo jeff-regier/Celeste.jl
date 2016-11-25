@@ -6,10 +6,10 @@ Args:
   - conv_fft: Pre-allocated memory the same size as sf_matrix
   - sf_matrix_out: The FFT of the signal you want to convolve, same size as sf_matrix
 """
-function convolve_sensitive_float_matrix!{ParamType <: ParamSet}(
-    sf_matrix::Matrix{SensitiveFloat{ParamType, Float64}},
-    conv_fft::Matrix{Complex{Float64}},
-    sf_matrix_out::Matrix{SensitiveFloat{ParamType, Float64}})
+function convolve_sensitive_float_matrix!(
+            sf_matrix::Matrix{SensitiveFloat{Float64}},
+            conv_fft::Matrix{Complex{Float64}},
+            sf_matrix_out::Matrix{SensitiveFloat{Float64}})
 
     @assert size(sf_matrix) == size(conv_fft)
 
@@ -30,7 +30,7 @@ function convolve_sensitive_float_matrix!{ParamType <: ParamSet}(
         sf_matrix_out[h, w].v[] = real(fft_matrix[h, w]);
     end
 
-    for sa_d in 1:n_active_sources, ind in 1:length(ParamType)
+    for sa_d in 1:n_active_sources, ind in 1:sf_matrix[1,1].local_P
         for h in h_range, w in w_range
           fft_matrix[h, w] = sf_matrix[h, w].d[ind, sa_d]
         end

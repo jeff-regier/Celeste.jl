@@ -50,11 +50,11 @@ function render_source(ea::ElboArgs, s::Int, n::Int;
     local p = ea.patches[s, n]
     local image = fill(NaN, size(p.active_pixel_bitmap))
     local sbs = load_source_brightnesses(
-        ea, calculate_derivs=false, calculate_hessian=false)
+        ea, calculate_gradient=false, calculate_hessian=false)
     star_mcs, gal_mcs = load_bvn_mixtures(ea.S, ea.patches,
                                 ea.vp, ea.active_sources,
                                 ea.psf_K, n,
-                                calculate_derivs=false,
+                                calculate_gradient=false,
                                 calculate_hessian=false)
 
     p = ea.patches[s,n]
@@ -69,14 +69,12 @@ function render_source(ea::ElboArgs, s::Int, n::Int;
             continue
         end
 
-        clear!(ea.elbo_vars.E_G, false)
-        clear!(ea.elbo_vars.var_G, false)
+        clear!(ea.elbo_vars.E_G)
+        clear!(ea.elbo_vars.var_G)
 
         populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
                            ea.elbo_vars.fs0m_vec,
                            ea.elbo_vars.fs1m_vec,
-                           false,
-                           false,
                            ea.patches,
                            ea.active_sources,
                            ea.num_allowed_sd,
@@ -119,12 +117,12 @@ function render_source_fft(
     local p = ea.patches[s, n]
     local image = fill(NaN, size(p.active_pixel_bitmap))
     local sbs = load_source_brightnesses(
-        ea, calculate_derivs=false, calculate_hessian=false)
+        ea, calculate_gradient=false, calculate_hessian=false)
     local fsms = fsm_vec[n]
 
     local gal_mcs = load_gal_bvn_mixtures(
             ea.S, ea.patches, ea.vp, ea.active_sources, n,
-            calculate_derivs=false,
+            calculate_gradient=false,
             calculate_hessian=false);
 
     clear_brightness!(fsms)
