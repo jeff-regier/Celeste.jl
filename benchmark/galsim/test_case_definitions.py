@@ -5,7 +5,9 @@ import galsim
 # populated by the `galsim_test_case` decorator
 TEST_CASE_FNS = []
 
+ARCSEC_PER_DEGREE = 3600.
 ARCSEC_PER_PIXEL = 0.396 # the value used in SDSS (https://github.com/jeff-regier/Celeste.jl/pull/411)
+DEGREES_PER_PIXEL = ARCSEC_PER_PIXEL / ARCSEC_PER_DEGREE
 PSF_SIGMA_PIXELS = 4
 STAMP_SIZE_PX = 96
 COUNTS_PER_NMGY = 1000.0 # a.k.a. "iota" in Celeste
@@ -32,20 +34,28 @@ GALAXY_RELATIVE_INTENSITIES = [
 # fields and logic shared between stars and galaxies
 class CommonFields(object):
     def __init__(self):
-        self.offset_from_center_world_coords = (0, 0)
+        self.offset_from_center_arcsec = (0, 0)
         self.reference_band_flux_nmgy = 40
 
-    def position_world_coords(self):
-        image_center_in_world_coordinates = (STAMP_SIZE_PX + 1) / 2.0 * ARCSEC_PER_PIXEL
+    def offset_from_center_degrees(self):
         return (
-            image_center_in_world_coordinates + self.offset_from_center_world_coords[0],
-            image_center_in_world_coordinates + self.offset_from_center_world_coords[1],
+            self.offset_from_center_arcsec[0] / ARCSEC_PER_DEGREE,
+            self.offset_from_center_arcsec[1] / ARCSEC_PER_DEGREE,
+        )
+
+    def position_deg(self):
+        image_center_deg = (
+            (STAMP_SIZE_PX + 1) / 2.0 * DEGREES_PER_PIXEL
+        )
+        return (
+            image_center_deg + self.offset_from_center_arcsec[0] / ARCSEC_PER_DEGREE,
+            image_center_deg + self.offset_from_center_arcsec[1] / ARCSEC_PER_DEGREE,
         )
 
     def add_header_fields(self, header, index_str, star_or_galaxy):
-        position = self.position_world_coords()
-        header['CL_X' + index_str] = (position[0], 'X center in world coordinates')
-        header['CL_Y' + index_str] = (position[1], 'Y center in world coordinates')
+        position_deg = self.position_deg()
+        header['CL_X' + index_str] = (position_deg[0], 'X center in world coordinates (deg)')
+        header['CL_Y' + index_str] = (position_deg[1], 'Y center in world coordinates (deg)')
         header['CL_FLUX' + index_str] = (
             self.reference_band_flux_nmgy,
             'reference (=3) band brightness (nMgy)',
@@ -64,23 +74,22 @@ class Star(LightSource):
     def __init__(self):
         self._common_fields = CommonFields()
 
-    def offset_world_coords(self, x, y):
-        self._common_fields.offset_from_center_world_coords = (x, y)
+    def offset_arcsec(self, x, y):
+        self._common_fields.offset_from_center_arcsec = (x, y)
         return self
 
     def reference_band_flux_nmgy(self, flux):
         self._common_fields.reference_band_flux_nmgy = flux
         return self
 
-    def get_galsim_light_source(self, band_index, psf_sigma_arcsec):
+    def get_galsim_light_source(self, band_index, psf_sigma_degrees):
         flux_counts = (
             self._common_fields.reference_band_flux_nmgy * STAR_RELATIVE_INTENSITIES[band_index]
                 * COUNTS_PER_NMGY
         )
-        offset = self._common_fields.offset_from_center_world_coords
         return (
-            galsim.Gaussian(flux=flux_counts, sigma=psf_sigma_arcsec)
-                .shift(offset[0], offset[1])
+            galsim.Gaussian(flux=flux_counts, sigma=psf_sigma_degrees)
+                .shift(self._common_fields.offset_from_center_degrees())
         )
 
     def add_header_fields(self, header, index_str):
@@ -92,10 +101,10 @@ class Galaxy(LightSource):
         self._common_fields.reference_band_flux_nmgy = 10
         self._angle_deg = 0
         self._minor_major_axis_ratio = 0.4
-        self._half_light_radius_arcsec = 3
+        self._half_light_radius_arcsec = 1.5
 
-    def offset_world_coords(self, x, y):
-        self._common_fields.offset_from_center_world_coords = (x, y)
+    def offset_arcsec(self, x, y):
+        self._common_fields.offset_from_center_arcsec = (x, y)
         return self
 
     def reference_band_flux_nmgy(self, flux):
@@ -114,24 +123,32 @@ class Galaxy(LightSource):
         self._half_light_radius_arcsec = radius
         return self
 
-    def get_galsim_light_source(self, band_index, psf_sigma_arcsec):
+    def get_galsim_light_source(self, band_index, psf_sigma_degrees):
         flux_counts = (
             self._common_fields.reference_band_flux_nmgy * GALAXY_RELATIVE_INTENSITIES[band_index]
                 * COUNTS_PER_NMGY
         )
+        half_light_radius_deg = self._half_light_radius_arcsec / ARCSEC_PER_DEGREE
         galaxy = (
-            galsim.Exponential(half_light_radius=self._half_light_radius_arcsec, flux=flux_counts)
+            galsim.Exponential(half_light_radius=half_light_radius_deg, flux=flux_counts)
                 .shear(q=self._minor_major_axis_ratio, beta=self._angle_deg * galsim.degrees)
-                .shift(self._common_fields.offset_from_center_world_coords)
+                .shift(self._common_fields.offset_from_center_degrees())
         )
-        psf = galsim.Gaussian(flux=1, sigma=psf_sigma_arcsec)
+        psf = galsim.Gaussian(flux=1, sigma=psf_sigma_degrees)
         return galsim.Convolve([galaxy, psf])
 
     def add_header_fields(self, header, index_str):
         self._common_fields.add_header_fields(header, index_str, 'galaxy')
         header['CL_ANGL' + index_str] = (self._angle_deg, 'major axis angle (degrees from x-axis)')
         header['CL_RTIO' + index_str] = (self._minor_major_axis_ratio, 'minor/major axis ratio')
-        header['CL_RAD' + index_str] = (self._half_light_radius_arcsec, 'half-light radius (arcsec)')
+        header['CL_RADA' + index_str] = (
+            self._half_light_radius_arcsec,
+            'half-light radius (arcsec)',
+        )
+        header['CL_RADP' + index_str] = (
+            self._half_light_radius_arcsec / ARCSEC_PER_PIXEL,
+            'half-light radius (pixels)',
+        )
 
 # A complete description of a GalSim test image, along with logic to generate the image and the
 # "ground truth" header fields
@@ -162,11 +179,11 @@ class GalSimTestCase(object):
             image.addNoise(noise)
 
     def construct_image(self, band_index, uniform_deviate):
-        image = galsim.ImageF(STAMP_SIZE_PX, STAMP_SIZE_PX, scale=ARCSEC_PER_PIXEL)
+        image = galsim.ImageF(STAMP_SIZE_PX, STAMP_SIZE_PX, scale=DEGREES_PER_PIXEL)
         for light_source in self._light_sources:
             galsim_light_source = light_source.get_galsim_light_source(
                 band_index,
-                self.psf_sigma_pixels * ARCSEC_PER_PIXEL,
+                self.psf_sigma_pixels * DEGREES_PER_PIXEL,
             )
             galsim_light_source.drawImage(image, add_to_image=True)
         self._add_sky_background(image)
@@ -210,11 +227,11 @@ def simple_star(test_case):
 
 @galsim_test_case
 def star_position_1(test_case):
-    test_case.add(Star().offset_world_coords(-2, 0))
+    test_case.add(Star().offset_arcsec(-2, 0))
 
 @galsim_test_case
 def star_position_2(test_case):
-    test_case.add(Star().offset_world_coords(0, 2))
+    test_case.add(Star().offset_arcsec(0, 2))
 
 @galsim_test_case
 def dim_star(test_case):
@@ -226,7 +243,7 @@ def bright_star(test_case):
 
 @galsim_test_case
 def star_with_noise(test_case):
-    test_case.add(Star().offset_world_coords(-1, 1).reference_band_flux_nmgy(20))
+    test_case.add(Star().offset_arcsec(-1, 1).reference_band_flux_nmgy(20))
     test_case.sky_level_nmgy = 0.1
     test_case.include_noise = True
 
@@ -240,11 +257,11 @@ def angle_and_axis_ratio_2(test_case):
 
 @galsim_test_case
 def small_galaxy(test_case):
-    test_case.add(Galaxy().half_light_radius_arcsec(1.5))
+    test_case.add(Galaxy().half_light_radius_arcsec(0.75))
 
 @galsim_test_case
 def large_galaxy(test_case):
-    test_case.add(Galaxy().half_light_radius_arcsec(5))
+    test_case.add(Galaxy().half_light_radius_arcsec(2.5))
 
 @galsim_test_case
 def dim_galaxy(test_case):
@@ -257,10 +274,10 @@ def bright_galaxy(test_case):
 @galsim_test_case
 def galaxy_with_all(test_case):
     test_case.add(
-        Galaxy().offset_world_coords(0.3, -0.7)
+        Galaxy().offset_arcsec(0.3, -0.7)
             .angle_deg(15)
             .minor_major_axis_ratio(0.4)
-            .half_light_radius_arcsec(5)
+            .half_light_radius_arcsec(2.5)
             .reference_band_flux_nmgy(15)
     )
 
@@ -281,34 +298,33 @@ def galaxy_with_high_background(test_case):
 
 @galsim_test_case
 def overlapping_stars(test_case):
-    test_case.add(Star().offset_world_coords(-3, 0))
-    test_case.add(Star().offset_world_coords(3, 0))
+    test_case.add(Star().offset_arcsec(-3, 0))
+    test_case.add(Star().offset_arcsec(3, 0))
 
 @galsim_test_case
 def overlapping_galaxies(test_case):
-    test_case.add(Galaxy().offset_world_coords(-2, -2).angle_deg(135).minor_major_axis_ratio(0.2))
-    test_case.add(Galaxy().offset_world_coords(3, 3).angle_deg(35).minor_major_axis_ratio(0.5))
+    test_case.add(Galaxy().offset_arcsec(-2, -2).angle_deg(135).minor_major_axis_ratio(0.2))
+    test_case.add(Galaxy().offset_arcsec(3, 3).angle_deg(35).minor_major_axis_ratio(0.5))
 
 @galsim_test_case
 def overlapping_star_and_galaxy(test_case):
-    test_case.add(Star().offset_world_coords(-5, 0))
-    test_case.add(Galaxy().offset_world_coords(2, 2).angle_deg(35).minor_major_axis_ratio(0.5))
+    test_case.add(Star().offset_arcsec(-5, 0))
+    test_case.add(Galaxy().offset_arcsec(2, 2).angle_deg(35).minor_major_axis_ratio(0.5))
 
 @galsim_test_case
 def three_sources_two_overlap(test_case):
-    test_case.add(Star().offset_world_coords(-5, 5))
+    test_case.add(Star().offset_arcsec(-5, 5))
     test_case.add(
-        Galaxy().offset_world_coords(2, 5)
+        Galaxy().offset_arcsec(2, 5)
             .angle_deg(35)
             .minor_major_axis_ratio(0.2)
-            .half_light_radius_arcsec(3)
     )
-    test_case.add(Star().offset_world_coords(10, -10))
+    test_case.add(Star().offset_arcsec(10, -10))
 
 @galsim_test_case
 def three_sources_all_overlap(test_case):
     overlapping_star_and_galaxy(test_case)
-    test_case.add(Star().offset_world_coords(8, -1))
+    test_case.add(Star().offset_arcsec(8, -1))
 
 @galsim_test_case
 def smaller_psf(test_case):

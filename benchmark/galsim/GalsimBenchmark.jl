@@ -115,7 +115,7 @@ const BENCHMARK_PARAMETER_LABELS = String[
     "Y center (world coords)",
     "Minor/major axis ratio",
     "Angle (degrees)",
-    "Half-light radius (arcsec)",
+    "Half-light radius (pixels)",
     "Brightness (nMgy)",
     "Color band 1-2 ratio",
     "Color band 2-3 ratio",
@@ -143,7 +143,7 @@ function benchmark_comparison_data(params, header)
             get_field(header, "CL_Y1"),
             get_field(header, "CL_RTIO1"),
             get_field(header, "CL_ANGL1"),
-            get_field(header, "CL_RAD1"),
+            get_field(header, "CL_RADP1"),
             get_field(header, "CL_FLUX1"),
             get_field(header, "CL_C12_1"),
             get_field(header, "CL_C23_1"),
@@ -202,7 +202,7 @@ function make_catalog_entries(header::FITSIO.FITSHeader)
     num_sources = header["CL_NSRC"]
     for source_index in 1:num_sources
         if num_sources == 1
-            initial_position = [19, 19]
+            initial_position = [0.005335 for i in 1:2] # center of image
         else
             initial_position = [
                 header[string("CL_X", source_index)],
@@ -237,7 +237,7 @@ function main(; test_case_name=Nullable{String}())
         band_images = make_images(band_pixels, psf, wcs, header["CL_SKY"], iota)
         catalog_entries::Vector{Model.CatalogEntry} = make_catalog_entries(header)
 
-        variational_parameters, max_f = DeterministicVI.infer_source(
+        variational_parameters = DeterministicVI.infer_source(
             band_images,
             catalog_entries[2:length(catalog_entries)],
             catalog_entries[1]
