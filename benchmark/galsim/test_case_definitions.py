@@ -141,9 +141,13 @@ class Galaxy(LightSource):
         self._common_fields.add_header_fields(header, index_str, 'galaxy')
         header['CL_ANGL' + index_str] = (self._angle_deg, 'major axis angle (degrees from x-axis)')
         header['CL_RTIO' + index_str] = (self._minor_major_axis_ratio, 'minor/major axis ratio')
-        header['CL_RAD' + index_str] = (
-            self._half_light_radius_arcsec / ARCSEC_PER_DEGREE,
-            'half-light radius (deg)'
+        header['CL_RADA' + index_str] = (
+            self._half_light_radius_arcsec,
+            'half-light radius (arcsec)',
+        )
+        header['CL_RADP' + index_str] = (
+            self._half_light_radius_arcsec / ARCSEC_PER_PIXEL,
+            'half-light radius (pixels)',
         )
 
 # A complete description of a GalSim test image, along with logic to generate the image and the
