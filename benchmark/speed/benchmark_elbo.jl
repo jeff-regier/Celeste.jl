@@ -13,7 +13,7 @@ function main()
     println("Loading data.")
 
     S = 100
-    blob, ea, body = SampleData.gen_n_body_dataset(S, tile_width=10)
+    blob, ea, body = SampleData.gen_n_body_dataset(S)
 
     println("Calculating ELBO.")
 
