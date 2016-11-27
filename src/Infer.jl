@@ -15,6 +15,11 @@ using StaticArrays
 using ..Model
 import ..Log
 
+function dist(r1, d1, r2, d2)
+    term1 = sind(d1) * sind(d2)
+    term2 = cosd(d1) * cosd(d2) * cosd(r1-r2)
+    acosd(term1 + term2)
+end
 
 """
 Computes the nearby light sources in the catalog for each of the target
@@ -50,10 +55,6 @@ function find_neighbors(target_sources::Vector{Int64},
         @assert radii_map[s] <= 25
     end
 
-    # compute distance in pixels using small-distance approximation
-    dist(ra1, dec1, ra2, dec2) = (3600 / 0.396) * (sqrt((dec2 - dec1)^2 +
-                                  (cos(dec1) * (ra2 - ra1))^2))
-
     neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
 
     # If this loop isn't super fast in pratice, we can tile (the sky, not the
@@ -62,11 +63,11 @@ function find_neighbors(target_sources::Vector{Int64},
         s = target_sources[ts]
         ce = catalog[s]
 
-        for s2 in 1:length(catalog)
+        for s2 in 1:length(target_sources)
             ce2 = catalog[s2]
             ctrs_dist = dist(ce.pos[1], ce.pos[2], ce2.pos[1], ce2.pos[2])
 
-            if s2 != s && ctrs_dist < radii_map[s] + radii_map[s2]
+            if s2 != ts && ctrs_dist < radii_map[s2] + radii_map[ts]
                 push!(neighbor_map[ts], s2)
             end
         end

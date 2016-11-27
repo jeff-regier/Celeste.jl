@@ -4,7 +4,7 @@ import FITSIO
 import StaticArrays
 import WCS
 
-import Celeste: Model, DeterministicVI, ParallelRun
+import Celeste: Model, DeterministicVI, ParallelRun, Infer
 
 const FILENAME = "output/galsim_test_images.fits"
 
@@ -231,15 +231,16 @@ function parallel_inference(band_images, catalog_entries; joint_infer=false)
     target_sources = collect(1:length(catalog_entries))
 
     # Create the neighbor map (everyone is a neighbor of each other)
-    #neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, band_images)
-    neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
-    for target_source in target_sources
-        for other_target_source in target_sources
-            if target_source != other_target_source
-                push!(neighbor_map[target_source], other_target_source)
-            end
-        end
-    end
+    neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, band_images)
+    #neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
+    #for target_source in target_sources
+    #    for other_target_source in target_sources
+    #        if target_source != other_target_source
+    #            push!(neighbor_map[target_source], other_target_source)
+    #        end
+    #    end
+    #end
+    println("$(neighbor_map)")
 
     # Optimize
     results = ParallelRun.parallel_infer(catalog_entries, target_sources, neighbor_map, band_images;
