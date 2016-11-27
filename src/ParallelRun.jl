@@ -14,7 +14,6 @@ import ..DeterministicVI: infer_source
 
 include("cyclades.jl")
 
-
 #set this to false to use source-division parallelism
 const SKY_DIVISION_PARALLELISM=true
 
@@ -327,7 +326,7 @@ end
 A simplified helper method to choose between one_node_single_infer and one_node_joint_infer
 """
 function parallel_infer(catalog, target_sources, neighbor_map, images;
-                        joint_infer=false
+                        joint_infer=false,
                         joint_infer_n_iters=50,
                         reserve_thread=Ref(false),
                         thread_fun=phalse,
