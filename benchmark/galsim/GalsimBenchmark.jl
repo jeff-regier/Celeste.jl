@@ -131,7 +131,7 @@ function get_field(header::FITSIO.FITSHeader, key::String)
     end
 end
 
-function benchmark_comparison_data(params, header)
+function benchmark_comparison_data(params, joint_infer_params, header)
     ids = Model.ids
     star_galaxy_index = header["CL_TYPE1"] == "star" ? 1 : 2
     DataFrame(
@@ -150,7 +150,7 @@ function benchmark_comparison_data(params, header)
             get_field(header, "CL_C45_1"),
             header["CL_TYPE1"] == "star" ? 0 : 1,
         ],
-        actual=Float64[
+        single_infer_actual=Float64[
             params[ids.u[1]],
             params[ids.u[2]],
             params[ids.e_axis],
@@ -162,6 +162,19 @@ function benchmark_comparison_data(params, header)
             exp(params[ids.c1[3, star_galaxy_index]]),
             exp(params[ids.c1[4, star_galaxy_index]]),
             params[ids.a[2]],
+        ],
+        joint_infer_actual=Float64[
+            joint_infer_params[ids.u[1]],
+            joint_infer_params[ids.u[2]],
+            joint_infer_params[ids.e_axis],
+            canonical_angle(joint_infer_params) * 180 / pi,
+            joint_infer_params[ids.e_scale],
+            exp(joint_infer_params[ids.r1[star_galaxy_index]]),
+            exp(joint_infer_params[ids.c1[1, star_galaxy_index]]),
+            exp(joint_infer_params[ids.c1[2, star_galaxy_index]]),
+            exp(joint_infer_params[ids.c1[3, star_galaxy_index]]),
+            exp(joint_infer_params[ids.c1[4, star_galaxy_index]]),
+            joint_infer_params[ids.a[2]],            
         ],
     )
 end
@@ -230,7 +243,7 @@ function parallel_inference(band_images, catalog_entries; joint_infer=false)
 
     # Optimize
     results = ParallelRun.parallel_infer(catalog_entries, target_sources, neighbor_map, band_images;
-                                         joint_infer=joint_infer, joint_infer_n_iters=100)
+                                         joint_infer=joint_infer, joint_infer_n_iters=20)
     results[1].vs
 end
 
@@ -257,13 +270,14 @@ function main(; test_case_name=Nullable{String}())
         band_images = make_images(band_pixels, psf, wcs, header["CL_SKY"], iota)
         catalog_entries::Vector{Model.CatalogEntry} = make_catalog_entries(header)
 
-        variational_parameters = DeterministicVI.infer_source(
-            band_images,
-            catalog_entries[2:length(catalog_entries)],
-            catalog_entries[1]
-        )
-
-        benchmark_data = benchmark_comparison_data(variational_parameters, header)
+        variational_parameters = parallel_inference(band_images, catalog_entries,
+                                                    joint_infer=false)
+        joint_infer_variational_parameters = parallel_inference(band_images, catalog_entries,
+                                                                joint_infer=true)
+        
+        benchmark_data = benchmark_comparison_data(variational_parameters,
+                                                   joint_infer_variational_parameters,
+                                                   header)
         println(repr(benchmark_data))
         push!(all_benchmark_data, benchmark_data)
     end

@@ -1,5 +1,6 @@
 #!/usr/bin/env julia
 
+include("GalsimBenchmark.jl")
 import GalsimBenchmark
 
 if length(ARGS) == 1
