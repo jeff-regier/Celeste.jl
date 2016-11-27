@@ -15,12 +15,6 @@ using StaticArrays
 using ..Model
 import ..Log
 
-function dist(r1, d1, r2, d2)
-    term1 = sind(d1) * sind(d2)
-    term2 = cosd(d1) * cosd(d2) * cosd(r1-r2)
-    acosd(term1 + term2)
-end
-
 """
 Computes the nearby light sources in the catalog for each of the target
 sources.
@@ -57,17 +51,23 @@ function find_neighbors(target_sources::Vector{Int64},
 
     neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
 
+    dist(ra1, dec1, ra2, dec2) = (3600 / 0.396) * (sqrt((dec2 - dec1)^2 +
+                                                        (cosd(dec1) * (ra2 - ra1))^2))
+
     # If this loop isn't super fast in pratice, we can tile (the sky, not the
     # images) or build a spatial index with a library before distributing
     for ts in 1:length(target_sources)
         s = target_sources[ts]
         ce = catalog[s]
 
-        for s2 in 1:length(target_sources)
+        for s2 in 1:length(catalog)
             ce2 = catalog[s2]
             ctrs_dist = dist(ce.pos[1], ce.pos[2], ce2.pos[1], ce2.pos[2])
 
-            if s2 != ts && ctrs_dist < radii_map[s2] + radii_map[ts]
+            println("YO $(ce.pos[2]) $(ce2.pos[2])")
+            println("YO $(radii_map[s]+radii_map[s2]) $(ctrs_dist)")
+
+            if s2 != s && ctrs_dist < radii_map[s] + radii_map[s2]                
                 push!(neighbor_map[ts], s2)
             end
         end
