@@ -1,11 +1,10 @@
 module GalsimBenchmark
-
 using DataFrames
 import FITSIO
 import StaticArrays
 import WCS
 
-import Celeste: Model, DeterministicVI
+import Celeste: Model, DeterministicVI, ParallelRun
 
 const FILENAME = "output/galsim_test_images.fits"
 
@@ -212,6 +211,27 @@ function make_catalog_entries(header::FITSIO.FITSHeader)
         push!(catalog_entries, make_catalog_entry(initial_position[1], initial_position[2]))
     end
     catalog_entries
+end
+
+function parallel_inference(band_images, catalog_entries; joint_infer=false)
+    # Target sources is all sources
+    target_sources = collect(1:length(catalog_entries))
+
+    # Create the neighbor map (everyone is a neighbor of each other)
+    #neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, band_images)
+    neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
+    for target_source in target_sources
+        for other_target_source in target_sources
+            if target_source != other_target_source
+                push!(neighbor_map[target_source], other_target_source)
+            end
+        end
+    end
+
+    # Optimize
+    results = ParallelRun.parallel_infer(catalog_entries, target_sources, neighbor_map, band_images;
+                                         joint_infer=joint_infer, joint_infer_n_iters=100)
+    results[1].vs
 end
 
 function main(; test_case_name=Nullable{String}())

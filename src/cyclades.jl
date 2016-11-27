@@ -213,8 +213,7 @@ Returns:
 """
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
-                              n_iters=10,
-                              objid="")
+                              n_iters=10)
     nprocthreads = nthreads()
 
     # Partition the sources

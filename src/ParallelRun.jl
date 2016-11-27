@@ -323,6 +323,32 @@ function infer_init(rcfs::Vector{RunCamcolField},
     return catalog, target_sources
 end
 
+"""
+A simplified helper method to choose between one_node_single_infer and one_node_joint_infer
+"""
+function parallel_infer(catalog, target_sources, neighbor_map, images;
+                        joint_infer=false
+                        joint_infer_n_iters=50,
+                        reserve_thread=Ref(false),
+                        thread_fun=phalse,
+                        timing=InferTiming())
+    if joint_infer
+        return one_node_joint_infer(catalog,
+                                    target_sources,
+                                    neighbor_map,
+                                    images;
+                                    n_iters=joint_infer_n_iters)
+    else
+        return one_node_single_infer(catalog,
+                                     target_sources,
+                                     neighbor_map,
+                                     images;
+                                     reserve_thread=reserve_thread,
+                                     thread_fun=thread_fun,
+                                     timing=timing)
+    end
+end
+
 
 """
 Use mulitple threads on one node to fit the Celeste model to sources in a given
@@ -362,22 +388,9 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
     Log.info("Running with $(nthreads()) threads")
 
     # NB: All I/O happens above. The methods below don't touch disk.
-    if joint_infer
-        return one_node_joint_infer(catalog,
-                                    target_sources,
-                                    neighbor_map,
-                                    images;
-                                    n_iters=joint_infer_n_iters,
-                                    objid=objid)
-    else
-        return one_node_single_infer(catalog,
-                                     target_sources,
-                                     neighbor_map,
-                                     images;
-                                     reserve_thread=reserve_thread,
-                                     thread_fun=thread_fun,
-                                     timing=timing)
-    end
+    parallel_infer(catalog, target_sources, neighbor_map, images,
+                   joint_infer=joint_infer, joint_infer_n_iters=joint_infer_n_iters,
+                   reserve_thread=reserve_thread, thread_fun=thread_fun, timing=timing)
 end
 
 
