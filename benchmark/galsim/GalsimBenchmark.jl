@@ -270,8 +270,10 @@ function main(; test_case_name=Nullable{String}())
         band_images = make_images(band_pixels, psf, wcs, header["CL_SKY"], iota)
         catalog_entries::Vector{Model.CatalogEntry} = make_catalog_entries(header)
 
-        variational_parameters = parallel_inference(band_images, catalog_entries,
-                                                    joint_infer=false)
+        variational_parameters = DeterministicVI.infer_source(
+            band_images,
+            catalog_entries[2:length(catalog_entries)],
+            catalog_entries[1])
         joint_infer_variational_parameters = parallel_inference(band_images, catalog_entries,
                                                                 joint_infer=true)
         
