@@ -1,6 +1,5 @@
 import JLD
 import ..Infer
-import ..SDSSIO: RunCamcolField
 
 """
 compute_obj_value
