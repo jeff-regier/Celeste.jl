@@ -44,7 +44,6 @@ function lanczos_interpolate!{NumType <: Number}(
         wcs_jacobian::Matrix{Float64},
         calculate_gradient::Bool,
         calculate_hessian::Bool)
-    @show image[1].local_P
     @assert image[1].local_P == length(StarPosParams)
 
     a = Float64(lanczos_width)
