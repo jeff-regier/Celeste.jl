@@ -147,7 +147,7 @@ function actual_values(params)
     ]
 end
 
-function benchmark_comparison_data(single_params, joint_infer_params, header)
+function benchmark_comparison_data(single_infer_params, joint_infer_params, header)
     ids = Model.ids
     star_galaxy_index = header["CL_TYPE1"] == "star" ? 1 : 2
     DataFrame(
