@@ -27,6 +27,11 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
                     is_active_source::Bool)
+    @assert E_G_s.local_P == var_G_s.local_P == length(CanonicalParams)
+    @assert E_G_s.local_S == var_G_s.local_S == 1
+    @assert fs0m.local_P == length(StarPosParams)
+    @assert fs1m.local_P == length(GalaxyPosParams)
+
     E_G2_s = elbo_vars.E_G2_s
 
     clear!(E_G_s)
