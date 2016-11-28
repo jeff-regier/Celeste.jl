@@ -131,7 +131,7 @@ function get_field(header::FITSIO.FITSHeader, key::String)
     end
 end
 
-function actual_values(params)
+function actual_values(ids, star_galaxy_index, params)
     Float64[
         params[ids.u[1]],
         params[ids.u[2]],
@@ -166,8 +166,8 @@ function benchmark_comparison_data(single_infer_params, joint_infer_params, head
             get_field(header, "CL_C45_1"),
             header["CL_TYPE1"] == "star" ? 0 : 1,
         ],
-        single_infer_actual=actual_values(single_infer_params),
-        joint_infer_actual=actual_values(joint_infer_params)
+        single_infer_actual=actual_values(ids, star_galaxy_index, single_infer_params),
+        joint_infer_actual=actual_values(ids, star_galaxy_index, joint_infer_params)
     )
 end
 
