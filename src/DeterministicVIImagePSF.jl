@@ -20,7 +20,7 @@ import ..Model:
     get_bvn_cov, galaxy_prototypes, linear_world_to_pix
 
 import ..SensitiveFloats:
-    SensitiveFloat, zero_sensitive_float, zero_sensitive_float_array,
+    SensitiveFloat, zero_sensitive_float_array,
     multiply_sfs!, add_scaled_sfs!, clear!
 
 include("deterministic_vi_image_psf/sensitive_float_fft.jl")

@@ -1,12 +1,13 @@
 using Celeste.DeterministicVIImagePSF
 
 using Celeste.DeterministicVI.CanonicalParams
-using Celeste.SensitiveFloats.zero_sensitive_float
 using Celeste.SensitiveFloats.zero_sensitive_float_array
 using Celeste.SensitiveFloats.SensitiveFloat
 using Celeste.SensitiveFloats.clear!
 
 using ForwardDiff
+using Base.Test
+
 
 # Overload some base functions for testing with ForwardDiff
 import Base.floor
@@ -43,7 +44,7 @@ function test_convolve_sensitive_float_matrix()
     DeterministicVIImagePSF.initialize_fsm_sf_matrices_band!(
         fsms, 1, 1, 1, 1, 3, 3, psf_image_mat)
 
-    sf = zero_sensitive_float(GalaxyPosParams, Float64)
+    sf = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, true, true)
     sf.v[] = 3;
     sf.d[:, 1] = rand(size(sf.d, 1))
     h = rand(size(sf.h))
@@ -131,13 +132,14 @@ function test_lanczos_interpolate()
 
     image_size = (11, 11)
     function lanczos_interpolate_loc{T <: Number}(
-        world_loc::Vector{T}, calculate_derivs::Bool)
-        local image = zero_sensitive_float_array(StarPosParams, T, 1, image_size...);
+        world_loc::Vector{T}, calculate_gradient::Bool)
+        local image = zero_sensitive_float_array(T, length(StarPosParams), 1,
+                                                            image_size...)
         local pixel_loc = Celeste.Model.linear_world_to_pix(
             wcs_jacobian, Float64[0., 0.], Float64[1.0, 0.5], world_loc)
         DeterministicVIImagePSF.lanczos_interpolate!(
             image, psf_image, pixel_loc, lanczos_width, wcs_jacobian,
-            calculate_derivs, calculate_derivs)
+            calculate_gradient, calculate_gradient)
         return image
     end
 

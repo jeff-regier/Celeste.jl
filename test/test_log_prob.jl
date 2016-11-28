@@ -13,7 +13,7 @@ test log_prob.jl and log_prob_util.jl
 function test_that_star_truth_is_most_likely_log_prob()
 
     # init ground truth star
-    images, ea, body = true_star_init();
+    images, ea, body = SampleData.true_star_init()
 
     # turn list of catalog entries a list of LatentStateParams
     source_states = [Model.catalog_entry_to_latent_state_params(body[s])

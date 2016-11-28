@@ -114,7 +114,7 @@ function test_quadratic_optimization()
     centers[ids.k] = [ 0.3 0.3; 0.7 0.7 ]
 
     function quadratic_function{NumType <: Number}(ea::ElboArgs{NumType})
-        val = zero_sensitive_float(CanonicalParams, NumType)
+        val = SensitiveFloat{NumType}(length(ids), 1, true, true)
         val.v[] = -sum((ea.vp[1] - centers) .^ 2)
         val.d[:] = -2.0 * (ea.vp[1] - centers)
         val.h[:, :] = diagm(fill(-2.0, length(CanonicalParams)))

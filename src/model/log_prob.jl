@@ -1,7 +1,7 @@
 # Functions to compute the log probability of star parameters and galaxy
 # parameters given pixel data
 using Distributions
-import ..SensitiveFloats: SensitiveFloat, zero_sensitive_float, clear!
+import ..SensitiveFloats: SensitiveFloat, clear!
 
 const eps_prob_a = 1e-6
 
@@ -149,10 +149,11 @@ function state_log_likelihood(is_star::Bool,                # source is star
 
     # create objects needed to compute the mean poisson value per pixel
     # (similar to ElboDeriv.process_active_pixels!)
-    model_vars =
-      ModelIntermediateVariables(Float64, S, length(active_sources))
-    model_vars.calculate_derivs = false
-    model_vars.calculate_hessian= false
+    model_vars = ModelIntermediateVariables(Float64,
+                                            S,
+                                            length(active_sources);
+                                            calculate_gradient=false,
+                                            calculate_hessian=false)
 
     # load star/gal mixture components (make sure these reflect
     gdev, gaxis, gangle, gscale = gal_shape
@@ -172,8 +173,8 @@ function state_log_likelihood(is_star::Bool,                # source is star
 
         star_mcs, gal_mcs = load_bvn_mixtures(S, patches,
                               source_params, active_sources, psf_K, n,
-                              calculate_derivs=model_vars.calculate_derivs,
-                              calculate_hessian=model_vars.calculate_hessian)
+                              calculate_gradient=false,
+                              calculate_hessian=false)
 
         p = patches[active_sources[1], n]
         H2, W2 = size(p.active_pixel_bitmap)
@@ -190,8 +191,6 @@ function state_log_likelihood(is_star::Bool,                # source is star
             populate_fsm_vecs!(model_vars.bvn_derivs,
                                model_vars.fs0m_vec,
                                model_vars.fs1m_vec,
-                               model_vars.calculate_derivs,
-                               model_vars.calculate_hessian,
                                patches, active_sources, num_allowed_sd,
                                n, h, w, gal_mcs, star_mcs)
 

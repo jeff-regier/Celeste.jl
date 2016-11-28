@@ -36,27 +36,30 @@ end
 
 
 # Interpolate the PSF to the pixel values.
-function lanczos_interpolate!{NumType <: Number, ParamType <: ParamSet}(
-        image::Matrix{SensitiveFloat{ParamType, NumType}},
+function lanczos_interpolate!{NumType <: Number}(
+        image::Matrix{SensitiveFloat{NumType}},
         psf_image::Matrix{Float64},
         object_loc::Vector{NumType},
         lanczos_width::Int,
         wcs_jacobian::Matrix{Float64},
-        calculate_derivs::Bool,
+        calculate_gradient::Bool,
         calculate_hessian::Bool)
+    @assert image[1].local_P == length(StarPosParams)
 
     a = Float64(lanczos_width)
     h_psf_width = (size(psf_image, 1) + 1) / 2.0
     w_psf_width = (size(psf_image, 2) + 1) / 2.0
 
-    param_ids = getids(ParamType)
+    param_ids = getids(StarPosParams)
 
     # These are sensitive floats representing derviatives of the Lanczos kernel.
-    kernel = zero_sensitive_float(ParamType, NumType, 1)
-    kernel_h = zero_sensitive_float(ParamType, NumType, 1)
+    kernel = SensitiveFloat{NumType}(length(StarPosParams), 1,
+                                     calculate_gradient, calculate_hessian)
+    kernel_h = SensitiveFloat{NumType}(length(StarPosParams), 1,
+                                       calculate_gradient, calculate_hessian)
 
     # Pre-compute terms for transforming derivatives to world coordinates.
-    if calculate_derivs
+    if calculate_gradient
         k_h_grad = wcs_jacobian' * Float64[1, 0]
         k_w_grad = wcs_jacobian' * Float64[0, 1]
 
@@ -84,7 +87,7 @@ function lanczos_interpolate!{NumType <: Number, ParamType <: ParamSet}(
                 clear!(kernel_h)
                 kernel_h.v[] = lh_v
 
-                if calculate_derivs
+                if calculate_gradient
                     # This is -1 * wcs_jacobian' * [lh_d, 0]
                     # and -1 * wcs_jacobian' * [lh_h 0; 0 0] * wcs_jacobian
                     kernel_h.d[param_ids.u] = -1 * k_h_grad * lh_d
@@ -102,15 +105,14 @@ function lanczos_interpolate!{NumType <: Number, ParamType <: ParamSet}(
                         kernel.v[] = lw_v
                         # This is -1 * wcs_jacobian' * [0, lw_d]
                         # and -1 * wcs_jacobian' * [0 0; 0 lw_h] * wcs_jacobian
-                        if calculate_derivs
+                        if calculate_gradient
                             kernel.d[param_ids.u] = -1 * k_w_grad * lw_d;
                             if calculate_hessian
                                 kernel.h[param_ids.u, param_ids.u] = k_w_hess * lw_h;
                             end
-                            multiply_sfs!(kernel, kernel_h, calculate_hessian)
+                            multiply_sfs!(kernel, kernel_h)
                             add_scaled_sfs!(
-                                image[h, w], kernel, psf_image[h_ind, w_ind],
-                                calculate_hessian)
+                                image[h, w], kernel, psf_image[h_ind, w_ind])
                         else
                             image[h, w].v[] +=
                                 kernel.v[] * kernel_h.v[] * psf_image[h_ind, w_ind]

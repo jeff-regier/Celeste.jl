@@ -1,7 +1,7 @@
 
-typealias GMatrix Matrix{SensitiveFloat{CanonicalParams, Float64}}
-typealias fs0mMatrix Matrix{SensitiveFloat{StarPosParams, Float64}}
-typealias fs1mMatrix Matrix{SensitiveFloat{GalaxyPosParams, Float64}}
+typealias GMatrix Matrix{SensitiveFloat{Float64}}
+typealias fs0mMatrix Matrix{SensitiveFloat{Float64}}
+typealias fs1mMatrix Matrix{SensitiveFloat{Float64}}
 
 
 type FSMSensitiveFloatMatrices
@@ -62,12 +62,12 @@ function initialize_fsm_sf_matrices_band!(
 
     # An fsm value is only sensitive to one source's parameters.
     fsms.fs1m_image = zero_sensitive_float_array(
-        GalaxyPosParams, Float64, 1, h_width, w_width);
+        Float64, length(GalaxyPosParams), 1, h_width, w_width);
     fsms.fs1m_conv = zero_sensitive_float_array(
-        GalaxyPosParams, Float64, 1, h_width, w_width);
+        Float64, length(GalaxyPosParams), 1, h_width, w_width);
 
     fsms.fs0m_conv = zero_sensitive_float_array(
-        StarPosParams, Float64, 1, h_width, w_width);
+        Float64, length(StarPosParams), 1, h_width, w_width);
 
     # The amount of padding introduced by the convolution
     (fft_size1, fft_size2) =
@@ -79,15 +79,15 @@ function initialize_fsm_sf_matrices_band!(
     fsms.pad_pix_w = Integer((psf_size[2] - 1) / 2)
 
     fsms.fs1m_image_padded = zero_sensitive_float_array(
-        GalaxyPosParams, Float64, 1, fft_size1, fft_size2);
+        Float64, length(GalaxyPosParams), 1, fft_size1, fft_size2);
     fsms.fs1m_conv_padded = zero_sensitive_float_array(
-        GalaxyPosParams, Float64, 1, fft_size1, fft_size2);
+        Float64, length(GalaxyPosParams), 1, fft_size1, fft_size2);
 
     # Brightness images
     fsms.E_G = zero_sensitive_float_array(
-        CanonicalParams, Float64, num_active_sources, h_width, w_width);
+        Float64, length(CanonicalParams), num_active_sources, h_width, w_width);
     fsms.var_G = zero_sensitive_float_array(
-        CanonicalParams, Float64, num_active_sources, h_width, w_width);
+        Float64, length(CanonicalParams), num_active_sources, h_width, w_width);
 
     # Store the psf image and its FFT.
     S = size(psf_image_mat, 1)
@@ -151,14 +151,14 @@ function debug_populate_fsm_vec!(
     lanczos_width::Int)
 
     sbs = load_source_brightnesses(ea,
-        calculate_derivs=ea.elbo_vars.calculate_derivs,
+        calculate_gradient=ea.elbo_vars.calculate_gradient,
         calculate_hessian=ea.elbo_vars.calculate_hessian);
 
     gal_mcs_vec = Array(Array{GalaxyCacheComponent{Float64}, 4}, ea.N);
     for b=1:ea.N
         gal_mcs_vec[b] = load_gal_bvn_mixtures(
                 ea.S, ea.patches, ea.vp, ea.active_sources, b,
-                calculate_derivs=ea.elbo_vars.calculate_derivs,
+                calculate_gradient=ea.elbo_vars.calculate_gradient,
                 calculate_hessian=ea.elbo_vars.calculate_hessian);
     end
 

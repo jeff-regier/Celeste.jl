@@ -1,11 +1,9 @@
 #!/usr/bin/env julia
 
-import Celeste.DeterministicVI: elbo
+import Celeste.DeterministicVI: elbo, ElboArgs
 
 include(string(Pkg.dir("Celeste"), "/test/Synthetic.jl"))
 include(string(Pkg.dir("Celeste"), "/test/SampleData.jl"))
-
-const CALC_HESS = false  # with hessian?
 
 
 function main()
@@ -14,22 +12,26 @@ function main()
 
     S = 100
     blob, ea, body = SampleData.gen_n_body_dataset(S)
+    ea = ElboArgs(ea.images, ea.vp, ea.patches, ea.active_sources;
+                  psf_K=ea.psf_K,
+                  calculate_gradient=true,
+                  calculate_hessian=false)
 
-    println("Calculating ELBO.")
 
+    println("Warm-up / compiling.")
     # do a trial run first, so we don't profile/time compling the code
-    @time elbo(ea; calculate_hessian=CALC_HESS)
-
-    # let's time it without any overhead from profiling
-    @time elbo(ea; calculate_hessian=CALC_HESS)
-
-    # on an intel core2 Q6600 processor,
-    # median runtime is consistently 24 seconds with Julia 0.4
-    Profile.init(10^8, 0.001)
+    elbo(ea)
     Profile.clear_malloc_data()
-    #@profile elbo(tiled_blob, ea, calculate_hessian=CALC_HESS)
-    @profile elbo(ea; calculate_hessian=CALC_HESS)
-    Profile.print(format=:flat, sortedby=:count)
+
+    println("Calculating ELBO and gradient.")
+    if isempty(ARGS)
+        # let's time it without any overhead from profiling
+        @time elbo(ea)
+    elseif ARGS[1] == "--profile"
+        Profile.init(delay=0.001)
+        @profile elbo(ea)
+        Profile.print(format=:flat, sortedby=:count)
+    end
 end
 
 

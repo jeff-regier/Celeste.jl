@@ -417,7 +417,7 @@ function GalaxyCacheComponent{NumType <: Number}(
     e_dev_dir::Float64, e_dev_i::NumType,
     gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
-    calculate_derivs::Bool, calculate_hessian::Bool)
+    calculate_gradient::Bool, calculate_hessian::Bool)
 
   # Declare in advance to save memory allocation.
   const empty_sig_sf =
@@ -430,9 +430,9 @@ function GalaxyCacheComponent{NumType <: Number}(
 
   # d siginv / dsigma is only necessary for the Hessian.
   bmc = BvnComponent{NumType}(
-    mean_s, var_s, weight, calculate_derivs && calculate_hessian)
+    mean_s, var_s, weight, calculate_gradient && calculate_hessian)
 
-  if calculate_derivs
+  if calculate_gradient
     sig_sf = GalaxySigmaDerivs(
       e_angle, e_axis, e_scale, XiXi, calculate_hessian)
     scale!(sig_sf.j, gc.nuBar)

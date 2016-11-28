@@ -24,7 +24,7 @@ function gen_beta_kl{NumType <: Number}(alpha2::NumType, beta2::NumType)
     const lgamma_alpha2 = lgamma(alpha2)
     const lgamma_beta2 = lgamma(beta2)
     function this_beta_kl{NumType2 <: Number}(
-            alpha1::NumType2, beta1::NumType2, calculate_derivs::Bool)
+            alpha1::NumType2, beta1::NumType2)
 
         alpha_diff = alpha1 - alpha2
         beta_diff = beta1 - beta2
@@ -40,23 +40,21 @@ function gen_beta_kl{NumType <: Number}(alpha2::NumType, beta2::NumType)
         grad = zeros(NumType2, 2)
         hess = zeros(NumType2, 2, 2)
 
-        if calculate_derivs
-            trigamma_alpha1 = trigamma(alpha1)
-            trigamma_beta1 = trigamma(beta1)
-            trigamma_both = trigamma(alpha1 + beta1)
-            grad[1] = alpha_diff * trigamma_alpha1 + both_inv_diff * trigamma_both
-            grad[2] = beta_diff * trigamma_beta1 + both_inv_diff * trigamma_both
+        trigamma_alpha1 = trigamma(alpha1)
+        trigamma_beta1 = trigamma(beta1)
+        trigamma_both = trigamma(alpha1 + beta1)
+        grad[1] = alpha_diff * trigamma_alpha1 + both_inv_diff * trigamma_both
+        grad[2] = beta_diff * trigamma_beta1 + both_inv_diff * trigamma_both
 
-            quadgamma_both = polygamma(2, alpha1 + beta1)
-            hess[1, 1] = alpha_diff * polygamma(2, alpha1) +
-                         both_inv_diff * quadgamma_both +
-                         trigamma_alpha1 - trigamma_both
-            hess[2, 2] = beta_diff * polygamma(2, beta1) +
-                         both_inv_diff * quadgamma_both +
-                         trigamma_beta1 - trigamma_both
-            hess[1, 2] = hess[2, 1] =
-                -trigamma_both + both_inv_diff * quadgamma_both
-        end
+        quadgamma_both = polygamma(2, alpha1 + beta1)
+        hess[1, 1] = alpha_diff * polygamma(2, alpha1) +
+                     both_inv_diff * quadgamma_both +
+                     trigamma_alpha1 - trigamma_both
+        hess[2, 2] = beta_diff * polygamma(2, beta1) +
+                     both_inv_diff * quadgamma_both +
+                     trigamma_beta1 - trigamma_both
+        hess[1, 2] = hess[2, 1] =
+            -trigamma_both + both_inv_diff * quadgamma_both
 
         return kl, grad, hess
     end
@@ -68,7 +66,7 @@ KL divergence between a pair of categorical distributions.
 """
 function gen_categorical_kl{NumType <: Number}(p2::Vector{NumType})
     function this_categorical_kl{NumType2 <: Number}(
-            p1::Vector{NumType2}, calculate_derivs::Bool)
+            p1::Vector{NumType2})
 
         kl = zero(NumType2)
         grad = zeros(NumType2, length(p1))
@@ -77,10 +75,8 @@ function gen_categorical_kl{NumType <: Number}(p2::Vector{NumType})
         for i in 1:length(p1)
             log_ratio = log(p1[i]) - log(p2[i])
             kl += p1[i] * log_ratio
-            if calculate_derivs
-                grad[i] = 1 + log_ratio
-                hess[i, i] = 1 / p1[i]
-            end
+            grad[i] = 1 + log_ratio
+            hess[i, i] = 1 / p1[i]
         end
 
         return kl, grad, hess
@@ -104,19 +100,18 @@ function gen_normal_kl{NumType <: Number}(mu2::NumType, sigma2Sq::NumType)
     const log_sigma2Sq = log(sigma2Sq)
     const precision2 = 1 / sigma2Sq
     function this_normal_kl{NumType2 <: Number}(
-            mu1::NumType2, sigma1Sq::NumType2, calculate_derivs::Bool)
+            mu1::NumType2, sigma1Sq::NumType2)
         diff = mu1 - mu2
         kl = .5 * (log_sigma2Sq - log(sigma1Sq) +
                    (sigma1Sq + (diff)^2) / sigma2Sq - 1)
 
         grad = zeros(NumType2, 2)
         hess = zeros(NumType2, 2, 2)
-        if calculate_derivs
-            grad[1] = precision2 * diff                 # Gradient wrt the mean
-            grad[2] = 0.5 * (precision2 - 1 / sigma1Sq) # Gradient wrt the var
-            hess[1, 1] = precision2
-            hess[2, 2] = 0.5 / (sigma1Sq ^ 2)
-        end
+        grad[1] = precision2 * diff                 # Gradient wrt the mean
+        grad[2] = 0.5 * (precision2 - 1 / sigma1Sq) # Gradient wrt the var
+        hess[1, 1] = precision2
+        hess[2, 2] = 0.5 / (sigma1Sq ^ 2)
+
         return kl, grad, hess
     end
 end
@@ -141,13 +136,13 @@ function gen_diagmvn_mvn_kl{NumType <: Number}(
     const K = length(mean2)
 
     function this_diagmvn_mvn_kl{NumType2 <: Number}(
-        mean1::Vector{NumType2}, vars1::Vector{NumType2}, calculate_derivs::Bool)
+        mean1::Vector{NumType2}, vars1::Vector{NumType2})
 
       diff = mean2 - mean1
 
       kl = sum(diag(precision2) .* vars1) - K
       kl += (diff' * precision2 * diff)[]
-      kl += -sum(log, vars1) + logdet_cov2
+      kl += -sum(log(vars1)) + logdet_cov2
       kl = 0.5 * kl
 
       grad_mean = zeros(NumType2, K)
@@ -155,14 +150,12 @@ function gen_diagmvn_mvn_kl{NumType <: Number}(
       hess_mean = zeros(NumType2, K, K)
       hess_var = zeros(NumType2, K, K)
 
-      if calculate_derivs
-          grad_mean = -1 * precision2 * diff
-          grad_var = 0.5 * (diag(precision2) - 1 ./ vars1)
+      grad_mean = -1 * precision2 * diff
+      grad_var = 0.5 * (diag(precision2) - 1 ./ vars1)
 
-          hess_mean = precision2
-          for k in 1:K
-              hess_var[k, k] = 0.5 ./ (vars1[k] ^ 2)
-          end
+      hess_mean = precision2
+      for k in 1:K
+          hess_var[k, k] = 0.5 ./ (vars1[k] ^ 2)
       end
 
       return kl, grad_mean, grad_var, hess_mean, hess_var
@@ -177,11 +170,12 @@ end
 A sensitive float representing a single term a[i] which can be combined
 with other sensitive floats.
 """
-function get_a_term_sensitive_float{NumType <: Number}(
-        a::NumType, i::Integer, calculate_derivs::Bool)
-    a_term = zero_sensitive_float(CanonicalParams, NumType)
+function get_a_term_sensitive_float{NumType <: Number}(tgt::SensitiveFloat,
+                                                       a::NumType,
+                                                       i::Integer)
+    a_term = SensitiveFloat(tgt)
     a_term.v[] = a
-    if calculate_derivs
+    if tgt.has_gradient
         a_term.d[ids.a[i, 1], 1] = 1
     end
     return a_term
@@ -189,29 +183,13 @@ end
 
 
 """
-A sensitive float representing a single term k[d, i] which can be combined
-with other sensitive floats.
-"""
-function get_k_term_sensitive_float{NumType <: Number}(
-        k::NumType, i::Integer, d::Integer, calculate_derivs::Bool)
-
-    k_term = zero_sensitive_float(CanonicalParams, NumType)
-    k_term.v[] = k
-    if calculate_derivs
-        k_term.d[ids.k[d, i], 1] = 1
-    end
-    return k_term
-end
-
-
-"""
 Subtract the KL divergence from the prior for c
 """
 function subtract_kl_c!{NumType <: Number}(
-    vs::Vector{NumType}, kl_source::SensitiveFloat{CanonicalParams, NumType},
-    calculate_derivs::Bool)
+                vs::Vector{NumType},
+                kl_source::SensitiveFloat{NumType})
+    kl_term = SensitiveFloat(kl_source)
 
-    kl_term = zero_sensitive_float(CanonicalParams, NumType)
     for i in 1:Ia, d in 1:D
         clear!(kl_term)
         pp_kl_cid = gen_diagmvn_mvn_kl(
@@ -219,21 +197,30 @@ function subtract_kl_c!{NumType <: Number}(
         mean_ids = ids.c1[:, i]
         var_ids = ids.c2[:, i]
         kl, grad_mean, grad_var, hess_mean, hess_var =
-            pp_kl_cid(vs[mean_ids], vs[var_ids], calculate_derivs)
+            pp_kl_cid(vs[mean_ids], vs[var_ids])
         kl_term.v[] = kl
 
-        if calculate_derivs
+        if kl_source.has_gradient
             kl_term.d[mean_ids, 1] = grad_mean
             kl_term.d[var_ids, 1] = grad_var
+        end
+
+        if kl_source.has_hessian
             kl_term.h[mean_ids, mean_ids] = hess_mean
             kl_term.h[var_ids, var_ids] = hess_var
         end
 
-        a_term = get_a_term_sensitive_float(vs[ids.a[i, 1]], i, calculate_derivs)
-        k_term = get_k_term_sensitive_float(vs[ids.k[d, i]], i, d, calculate_derivs)
-        multiply_sfs!(kl_term, a_term, calculate_derivs)
-        multiply_sfs!(kl_term, k_term, calculate_derivs)
-        add_scaled_sfs!(kl_source, kl_term, -1.0, calculate_derivs)
+        a_term = get_a_term_sensitive_float(kl_source, vs[ids.a[i, 1]], i)
+
+        k_term = SensitiveFloat(kl_source)
+        k_term.v[] = vs[ids.k[d, i]]
+        if k_term.has_gradient
+            k_term.d[ids.k[d, i], 1] = 1
+        end
+
+        multiply_sfs!(kl_term, a_term)
+        multiply_sfs!(kl_term, k_term)
+        add_scaled_sfs!(kl_source, kl_term, -1.0)
     end
 end
 
@@ -247,24 +234,25 @@ Args:
           of the k parameters.
 """
 function subtract_kl_k!{NumType <: Number}(
-        vs::Vector{NumType},
-        kl_source::SensitiveFloat{CanonicalParams, NumType},
-        calculate_derivs::Bool)
+                    vs::Vector{NumType},
+                    kl_source::SensitiveFloat{NumType})
+    kl_term = SensitiveFloat(kl_source)
 
-    kl_term = zero_sensitive_float(CanonicalParams, NumType)
     for i in 1:Ia
         clear!(kl_term)
         k_ind = ids.k[:, i]
         pp_kl_ki = gen_categorical_kl(prior.k[:, i])
-        kl, grad, hess = pp_kl_ki(vs[k_ind], calculate_derivs)
+        kl, grad, hess = pp_kl_ki(vs[k_ind])
         kl_term.v[] = kl
-        if calculate_derivs
+        if kl_source.has_gradient
             kl_term.d[k_ind, 1] = grad
+        end
+        if kl_source.has_hessian
             kl_term.h[k_ind, k_ind] = hess
         end
-        a_term = get_a_term_sensitive_float(vs[ids.a[i, 1]], i, calculate_derivs)
-        multiply_sfs!(kl_term, a_term, calculate_derivs)
-        add_scaled_sfs!(kl_source, kl_term, -1.0, calculate_derivs)
+        a_term = get_a_term_sensitive_float(kl_source, vs[ids.a[i, 1]], i)
+        multiply_sfs!(kl_term, a_term)
+        add_scaled_sfs!(kl_source, kl_term, -1.0)
     end
 end
 
@@ -273,23 +261,25 @@ end
 Subtract the KL divergence from the prior for r for object type i.
 """
 function subtract_kl_r!{NumType <: Number}(
-        vs::Vector{NumType}, kl_source::SensitiveFloat{CanonicalParams, NumType},
-        calculate_derivs::Bool)
+                    vs::Vector{NumType},
+                    kl_source::SensitiveFloat{NumType})
+    kl_term = SensitiveFloat(kl_source)
 
-    kl_term = zero_sensitive_float(CanonicalParams, NumType)
     for i in 1:Ia
         clear!(kl_term)
         pp_kl_r = gen_normal_kl(prior.r_mean[i], prior.r_var[i])
-        kl, grad, hess = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]], calculate_derivs)
+        kl, grad, hess = pp_kl_r(vs[ids.r1[i]], vs[ids.r2[i]])
         r_ind = Integer[ ids.r1[i], ids.r2[i] ]
         kl_term.v[] = kl
-        if calculate_derivs
+        if kl_term.has_gradient
             kl_term.d[r_ind, 1] = grad
+        end
+        if kl_term.has_hessian
             kl_term.h[r_ind, r_ind] = hess
         end
-        a_term = get_a_term_sensitive_float(vs[ids.a[i, 1]], i, calculate_derivs)
-        multiply_sfs!(kl_term, a_term, calculate_derivs)
-        add_scaled_sfs!(kl_source, kl_term, -1.0, calculate_derivs)
+        a_term = get_a_term_sensitive_float(kl_source, vs[ids.a[i, 1]], i)
+        multiply_sfs!(kl_term, a_term)
+        add_scaled_sfs!(kl_source, kl_term, -1.0)
     end
 end
 
@@ -298,15 +288,18 @@ end
 Subtract the KL divergence from the prior for a
 """
 function subtract_kl_a!{NumType <: Number}(
-        vs::Vector{NumType}, kl_source::SensitiveFloat{CanonicalParams, NumType},
-        calculate_derivs::Bool)
-
+                    vs::Vector{NumType},
+                    kl_source::SensitiveFloat{NumType})
     pp_kl_a = gen_categorical_kl(prior.a)
 
-    kl, grad, hess = pp_kl_a(vs[ids.a[:, 1]], calculate_derivs)
-    kl_source.v[] -= kl
-    if calculate_derivs
+    kl, grad, hess = pp_kl_a(vs[ids.a[:, 1]])
+    kl_source.v[]  -= kl
+
+    if kl_source.has_gradient
         kl_source.d[ids.a[:, 1], 1] -= grad
+    end
+
+    if kl_source.has_hessian
         kl_source.h[ids.a[:, 1], ids.a[:, 1]] -= hess
     end
 end
@@ -316,18 +309,17 @@ end
 Subtract the KL divergences for all sources.
 """
 function subtract_kl!{NumType <: Number}(
-        ea::ElboArgs{NumType}, accum::SensitiveFloat{CanonicalParams, NumType};
-        calculate_derivs::Bool=true)
-
+                    ea::ElboArgs{NumType},
+                    accum::SensitiveFloat{NumType})
     for sa in 1:length(ea.active_sources)
         s = ea.active_sources[sa]
-        kl_source = zero_sensitive_float(CanonicalParams, NumType)
-        subtract_kl_a!(ea.vp[s], kl_source, calculate_derivs)
-        subtract_kl_k!(ea.vp[s], kl_source, calculate_derivs)
-        subtract_kl_r!(ea.vp[s], kl_source, calculate_derivs)
-        subtract_kl_c!(ea.vp[s], kl_source, calculate_derivs)
+        kl_source = SensitiveFloat{NumType}(length(CanonicalParams), 1,
+                                            accum.has_gradient, accum.has_hessian)
+        subtract_kl_a!(ea.vp[s], kl_source)
+        subtract_kl_k!(ea.vp[s], kl_source)
+        subtract_kl_r!(ea.vp[s], kl_source)
+        subtract_kl_c!(ea.vp[s], kl_source)
 
-        add_sources_sf!(accum, kl_source, sa, calculate_derivs)
+        add_sources_sf!(accum, kl_source, sa)
     end
-
 end

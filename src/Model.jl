@@ -49,7 +49,7 @@ include("model/param_set.jl")
 include("model/imaged_sources.jl")
 include("model/wcs_utils.jl")
 
-import ..SensitiveFloats: SensitiveFloat
+import ..SensitiveFloats: SensitiveFloat, clear!
 include("bivariate_normals.jl")
 include("model/fsm_util.jl")
 include("model/log_prob.jl")

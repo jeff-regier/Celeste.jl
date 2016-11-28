@@ -20,18 +20,22 @@ Returns:
 function calculate_source_pixel_brightness!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     ea::ElboArgs{NumType},
-                    E_G_s::SensitiveFloat{CanonicalParams, NumType},
-                    var_G_s::SensitiveFloat{CanonicalParams, NumType},
-                    fs0m::SensitiveFloat{StarPosParams, NumType},
-                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
+                    E_G_s::SensitiveFloat{NumType},
+                    var_G_s::SensitiveFloat{NumType},
+                    fs0m::SensitiveFloat{NumType},
+                    fs1m::SensitiveFloat{NumType},
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
                     is_active_source::Bool)
+    @assert E_G_s.local_P == var_G_s.local_P == length(CanonicalParams)
+    @assert E_G_s.local_S == var_G_s.local_S == 1
+    @assert fs0m.local_P == length(StarPosParams)
+    @assert fs1m.local_P == length(GalaxyPosParams)
+
     E_G2_s = elbo_vars.E_G2_s
 
-    clear_hessian = elbo_vars.calculate_hessian && elbo_vars.calculate_derivs
-    clear!(E_G_s, clear_hessian)
-    clear!(E_G2_s, clear_hessian)
+    clear!(E_G_s)
+    clear!(E_G2_s)
 
     @inbounds for i in 1:Ia # Stars and galaxies
         fsm_i = (i == 1) ? fs0m : fs1m
@@ -59,7 +63,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
         E_G2_s.v[] += a_i * llff
 
         # Only calculate derivatives for active sources.
-        if is_active_source && elbo_vars.calculate_derivs
+        if is_active_source && elbo_vars.elbo.has_gradient
             ######################
             # Gradients.
 
@@ -86,7 +90,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
                     a_i * (fsm_i_v^2) * sb_E_ll_a_b_i_d[p0_bright_ind, 1]
             end
 
-            if elbo_vars.calculate_hessian
+            if elbo_vars.elbo.has_hessian
                 ######################
                 # Hessians.
 
@@ -178,7 +182,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
         end # if calculate derivatives
     end # i loop
 
-    if elbo_vars.calculate_hessian
+    if elbo_vars.elbo.has_hessian
         # Accumulate the u Hessian. u is the only parameter that is shared between
         # different values of i.
 
@@ -221,20 +225,18 @@ Returns:
 """
 function calculate_var_G_s!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
-                    E_G_s::SensitiveFloat{CanonicalParams, NumType},
-                    E_G2_s::SensitiveFloat{CanonicalParams, NumType},
-                    var_G_s::SensitiveFloat{CanonicalParams, NumType},
+                    E_G_s::SensitiveFloat{NumType},
+                    E_G2_s::SensitiveFloat{NumType},
+                    var_G_s::SensitiveFloat{NumType},
                     is_active_source::Bool)
-    clear!(var_G_s,
-           elbo_vars.calculate_hessian &&
-           elbo_vars.calculate_derivs && is_active_source)
+    clear!(var_G_s)
 
     E_G_s_v = E_G_s.v[]
     E_G2_s_v = E_G2_s.v[]
 
     var_G_s.v[] = E_G2_s_v - (E_G_s_v ^ 2)
 
-    if is_active_source && elbo_vars.calculate_derivs
+    if is_active_source && elbo_vars.elbo.has_gradient
         var_G_s_d = var_G_s.d
         E_G2_s_d = E_G2_s.d
         E_G_s_d = E_G_s.d
@@ -245,7 +247,7 @@ function calculate_var_G_s!{NumType <: Number}(
             var_G_s_d[ind1] = E_G2_s_d[ind1] - 2 * E_G_s_v * E_G_s_d[ind1]
         end
 
-        if elbo_vars.calculate_hessian
+        if elbo_vars.elbo.has_hessian
             var_G_s_h = var_G_s.h
             E_G2_s_h = E_G2_s.h
             E_G_s_h = E_G_s.h
@@ -269,17 +271,13 @@ sensitive floast E_G and var_G, which are updated in place.
 function accumulate_source_pixel_brightness!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     ea::ElboArgs{NumType},
-                    E_G::SensitiveFloat{CanonicalParams, NumType},
-                    var_G::SensitiveFloat{CanonicalParams, NumType},
-                    fs0m::SensitiveFloat{StarPosParams, NumType},
-                    fs1m::SensitiveFloat{GalaxyPosParams, NumType},
+                    E_G::SensitiveFloat{NumType},
+                    var_G::SensitiveFloat{NumType},
+                    fs0m::SensitiveFloat{NumType},
+                    fs1m::SensitiveFloat{NumType},
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
                     is_active_source::Bool)
-    calculate_hessian = elbo_vars.calculate_hessian &&
-                        elbo_vars.calculate_derivs &&
-                        is_active_source
-
     # This updates elbo_vars.E_G_s and elbo_vars.var_G_s
     calculate_source_pixel_brightness!(
         elbo_vars,
@@ -295,8 +293,8 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
 
     if is_active_source
         sa = findfirst(ea.active_sources, s)
-        add_sources_sf!(E_G, elbo_vars.E_G_s, sa, calculate_hessian)
-        add_sources_sf!(var_G, elbo_vars.var_G_s, sa, calculate_hessian)
+        add_sources_sf!(E_G, elbo_vars.E_G_s, sa)
+        add_sources_sf!(var_G, elbo_vars.var_G_s, sa)
     else
         # If the sources is inactive, simply accumulate the values.
         E_G.v[] += elbo_vars.E_G_s.v[]
@@ -319,10 +317,11 @@ Args:
 """
 function add_elbo_log_term!{NumType <: Number}(
                 elbo_vars::ElboIntermediateVariables{NumType},
-                E_G::SensitiveFloat{CanonicalParams, NumType},
-                var_G::SensitiveFloat{CanonicalParams, NumType},
-                elbo::SensitiveFloat{CanonicalParams, NumType},
-                x_nbm::AbstractFloat, iota::AbstractFloat)
+                E_G::SensitiveFloat{NumType},
+                var_G::SensitiveFloat{NumType},
+                elbo::SensitiveFloat{NumType},
+                x_nbm::AbstractFloat,
+                iota::AbstractFloat)
     # See notes for a derivation. The log term is
     # log E[G] - Var(G) / (2 * E[G] ^2 )
 
@@ -337,11 +336,11 @@ function add_elbo_log_term!{NumType <: Number}(
         # If not calculating derivatives, add the values directly.
         elbo.v[] += x_nbm * (log(iota) + log_term_value)
 
-        if elbo_vars.calculate_derivs
+        if elbo_vars.elbo.has_gradient
             elbo_vars.combine_grad[1] = -0.5 / (E_G_v ^ 2)
             elbo_vars.combine_grad[2] = 1 / E_G_v + var_G_v / (E_G_v ^ 3)
 
-            if elbo_vars.calculate_hessian
+            if elbo_vars.elbo.has_hessian
                 elbo_vars.combine_hess[1, 1] = 0.0
                 elbo_vars.combine_hess[1, 2] = elbo_vars.combine_hess[2, 1] = 1 / E_G_v^3
                 elbo_vars.combine_hess[2, 2] =
@@ -351,8 +350,7 @@ function add_elbo_log_term!{NumType <: Number}(
             # Calculate the log term.
             combine_sfs!(
                 var_G, E_G, elbo_vars.elbo_log_term,
-                log_term_value, elbo_vars.combine_grad, elbo_vars.combine_hess,
-                elbo_vars.calculate_hessian)
+                log_term_value, elbo_vars.combine_grad, elbo_vars.combine_hess)
 
             # Add to the ELBO.
             elbo_d = elbo.d
@@ -362,7 +360,7 @@ function add_elbo_log_term!{NumType <: Number}(
                 elbo_d[ind] += x_nbm * elbo_vars_elbo_log_term_d[ind]
             end
 
-            if elbo_vars.calculate_hessian
+            if elbo_vars.elbo.has_hessian
                 elbo_h = elbo.h
                 elbo_vars_elbo_log_term_h = elbo_vars.elbo_log_term.h
                 for ind in 1:length(elbo_h)
@@ -379,16 +377,12 @@ function add_pixel_term!{NumType <: Number}(
                     n::Int, h::Int, w::Int,
                     star_mcs::Array{BvnComponent{NumType}, 2},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    sbs::Vector{SourceBrightness{NumType}};
-                    calculate_derivs=true,
-                    calculate_hessian=true)
+                    sbs::Vector{SourceBrightness{NumType}})
     # This combines the bvn components to get the light density for each
     # source separately.
     Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
                              ea.elbo_vars.fs0m_vec,
                              ea.elbo_vars.fs1m_vec,
-                             ea.elbo_vars.calculate_derivs,
-                             ea.elbo_vars.calculate_hessian,
                              ea.patches,
                              ea.active_sources,
                              ea.num_allowed_sd,
@@ -398,10 +392,8 @@ function add_pixel_term!{NumType <: Number}(
     img = ea.images[n]
 
     # This combines the sources into a single brightness value for the pixel.
-    clear!(elbo_vars.E_G,
-        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
-    clear!(elbo_vars.var_G,
-        elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
+    clear!(elbo_vars.E_G)
+    clear!(elbo_vars.var_G)
 
     for s in 1:size(ea.patches, 1)
         p = ea.patches[s,n]
@@ -432,8 +424,7 @@ function add_pixel_term!{NumType <: Number}(
                        img.iota_vec[h])
     add_scaled_sfs!(elbo_vars.elbo,
                     elbo_vars.E_G,
-                    -img.iota_vec[h],
-                    elbo_vars.calculate_hessian && elbo_vars.calculate_derivs)
+                    -img.iota_vec[h])
 
     # Subtract the log factorial term. This is not a function of the
     # parameters so the derivatives don't need to be updated. Note that
@@ -448,18 +439,11 @@ Return the expected log likelihood for all bands in a section
 of the sky.
 Returns: A sensitive float with the log likelihood.
 """
-function elbo_likelihood{NumType <: Number}(
-                    ea::ElboArgs{NumType};
-                    calculate_derivs=true,
-                    calculate_hessian=true)
+function elbo_likelihood{NumType <: Number}(ea::ElboArgs{NumType})
     clear!(ea.elbo_vars)
-    ea.elbo_vars.calculate_derivs = calculate_derivs
-    ea.elbo_vars.calculate_hessian = calculate_derivs && calculate_hessian
 
     # this call loops over light sources (but not images)
-    sbs = load_source_brightnesses(ea,
-                calculate_derivs=ea.elbo_vars.calculate_derivs,
-                calculate_hessian=ea.elbo_vars.calculate_hessian)
+    sbs = load_source_brightnesses(ea)
 
     for n in 1:ea.N
         img = ea.images[n]
@@ -471,8 +455,8 @@ function elbo_likelihood{NumType <: Number}(
         star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
                                     ea.vp, ea.active_sources,
                                     ea.psf_K, n,
-                                    calculate_derivs=calculate_derivs,
-                                    calculate_hessian=calculate_hessian)
+                                    calculate_gradient=ea.elbo_vars.elbo.has_gradient,
+                                    calculate_hessian=ea.elbo_vars.elbo.has_hessian)
 
         # if there's only one active source, we know each pixel we visit
         # hasn't been visited before, so no need to allocate memory.
@@ -512,9 +496,7 @@ function elbo_likelihood{NumType <: Number}(
                 end
 
                 # if we're here it's a unique active pixel
-                add_pixel_term!(ea, n, h, w, star_mcs, gal_mcs, sbs;
-                                calculate_derivs=ea.elbo_vars.calculate_derivs,
-                                calculate_hessian=ea.elbo_vars.calculate_hessian)
+                add_pixel_term!(ea, n, h, w, star_mcs, gal_mcs, sbs)
             end
         end
     end
@@ -529,13 +511,8 @@ Calculates and returns the ELBO and its derivatives for all the bands
 of an image.
 Returns: A sensitive float containing the ELBO for the image.
 """
-function elbo{NumType <: Number}(
-                    ea::ElboArgs{NumType};
-                    calculate_derivs=true,
-                    calculate_hessian=true)
-    elbo = elbo_likelihood(ea; calculate_derivs=calculate_derivs,
-                               calculate_hessian=calculate_hessian)
-    # TODO: subtract the kl with the hessian.
-    subtract_kl!(ea, elbo, calculate_derivs=calculate_derivs)
+function elbo{NumType <: Number}(ea::ElboArgs{NumType})
+    elbo = elbo_likelihood(ea)
+    subtract_kl!(ea, elbo)
     elbo
 end
