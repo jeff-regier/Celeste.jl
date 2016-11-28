@@ -1,11 +1,10 @@
 module GalsimBenchmark
-
 using DataFrames
 import FITSIO
 import StaticArrays
 import WCS
 
-import Celeste: Model, DeterministicVI
+import Celeste: Model, DeterministicVI, ParallelRun, Infer
 
 const FILENAME = "output/galsim_test_images.fits"
 
@@ -132,7 +131,23 @@ function get_field(header::FITSIO.FITSHeader, key::String)
     end
 end
 
-function benchmark_comparison_data(params, header)
+function actual_values(ids, star_galaxy_index, params)
+    Float64[
+        params[ids.u[1]],
+        params[ids.u[2]],
+        params[ids.e_axis],
+        canonical_angle(params) * 180 / pi,
+        params[ids.e_scale],
+        exp(params[ids.r1[star_galaxy_index]]),
+        exp(params[ids.c1[1, star_galaxy_index]]),
+        exp(params[ids.c1[2, star_galaxy_index]]),
+        exp(params[ids.c1[3, star_galaxy_index]]),
+        exp(params[ids.c1[4, star_galaxy_index]]),
+        params[ids.a[2]],
+    ]
+end
+
+function benchmark_comparison_data(single_infer_params, joint_infer_params, header)
     ids = Model.ids
     star_galaxy_index = header["CL_TYPE1"] == "star" ? 1 : 2
     DataFrame(
@@ -151,19 +166,8 @@ function benchmark_comparison_data(params, header)
             get_field(header, "CL_C45_1"),
             header["CL_TYPE1"] == "star" ? 0 : 1,
         ],
-        actual=Float64[
-            params[ids.u[1]],
-            params[ids.u[2]],
-            params[ids.e_axis],
-            canonical_angle(params) * 180 / pi,
-            params[ids.e_scale],
-            exp(params[ids.r1[star_galaxy_index]]),
-            exp(params[ids.c1[1, star_galaxy_index]]),
-            exp(params[ids.c1[2, star_galaxy_index]]),
-            exp(params[ids.c1[3, star_galaxy_index]]),
-            exp(params[ids.c1[4, star_galaxy_index]]),
-            params[ids.a[2]],
-        ],
+        single_infer_actual=actual_values(ids, star_galaxy_index, single_infer_params),
+        joint_infer_actual=actual_values(ids, star_galaxy_index, joint_infer_params)
     )
 end
 
@@ -214,6 +218,19 @@ function make_catalog_entries(header::FITSIO.FITSHeader)
     catalog_entries
 end
 
+function parallel_inference(band_images, catalog_entries; joint_infer=false)
+    # Target sources is all sources
+    target_sources = collect(1:length(catalog_entries))
+
+    # Create the neighbor map (everyone is a neighbor of each other)
+    neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, band_images)
+
+    # Optimize
+    results = ParallelRun.parallel_infer(catalog_entries, target_sources, neighbor_map, band_images;
+                                         joint_infer=joint_infer, joint_infer_n_iters=20)
+    results[1].vs
+end
+
 function main(; test_case_name=Nullable{String}())
     all_benchmark_data = []
     psf = make_psf()
@@ -237,13 +254,14 @@ function main(; test_case_name=Nullable{String}())
         band_images = make_images(band_pixels, psf, wcs, header["CL_SKY"], iota)
         catalog_entries::Vector{Model.CatalogEntry} = make_catalog_entries(header)
 
-        variational_parameters = DeterministicVI.infer_source(
-            band_images,
-            catalog_entries[2:length(catalog_entries)],
-            catalog_entries[1]
-        )
-
-        benchmark_data = benchmark_comparison_data(variational_parameters, header)
+        single_infer_variational_parameters = parallel_inference(band_images, catalog_entries,
+                                                                 joint_infer=false)
+        joint_infer_variational_parameters = parallel_inference(band_images, catalog_entries,
+                                                                joint_infer=true)
+        
+        benchmark_data = benchmark_comparison_data(single_infer_variational_parameters,
+                                                   joint_infer_variational_parameters,
+                                                   header)
         println(repr(benchmark_data))
         push!(all_benchmark_data, benchmark_data)
     end

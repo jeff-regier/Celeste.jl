@@ -213,8 +213,7 @@ Returns:
 """
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
-                              n_iters=10,
-                              objid="")
+                              n_iters=10)
     nprocthreads = nthreads()
 
     # Partition the sources
@@ -282,7 +281,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     # Process partition of sources. Multiple threads call this function in parallel.
     function process_sources(source_assignment::Vector{Int64}, iter)
         try
-            n_newton_steps = iter == 1 ? 20 : 1
+            n_newton_steps = iter == 1 ? 20 : 5
             for cur_source_indx in source_assignment
                 cur_entry = catalog[target_sources[cur_source_indx]]
                 iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
