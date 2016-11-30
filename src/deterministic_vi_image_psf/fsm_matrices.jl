@@ -120,8 +120,8 @@ function initialize_fsm_sf_matrices!(
     #.the fsm matrices as big as the total number of active pixels.
     for s in 1:ea.S, n in 1:ea.N
         p = ea.patches[s, n]
-        h1 = p.bitmap_offset[1]
-        w1 = p.bitmap_offset[2]
+        h1 = p.bitmap_offset[1] + 1
+        w1 = p.bitmap_offset[2] + 1
         h2 = h1 + size(p.active_pixel_bitmap, 1) - 1
         w2 = w1 + size(p.active_pixel_bitmap, 2) - 1
         h_lower_vec[n] = min(h_lower_vec[n], h1)
