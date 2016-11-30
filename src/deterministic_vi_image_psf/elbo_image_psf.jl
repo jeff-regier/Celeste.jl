@@ -145,8 +145,6 @@ function populate_gal_fsm_image!(
         x = SVector{2, Float64}([h_image, w_image])
         populate_gal_fsm!(ea.elbo_vars.bvn_derivs,
                           fsms.fs1m_image[h_fsm, w_fsm],
-                          ea.elbo_vars.calculate_gradient,
-                          ea.elbo_vars.calculate_hessian,
                           s, x, is_active_source, Inf,
                           p.wcs_jacobian,
                           gal_mcs)
@@ -179,11 +177,11 @@ function populate_star_fsm_image!(
                             ea.patches[s, n].pixel_center,
                             ea.vp[s][lidx.u]) -
         Float64[ h_lower - 1, w_lower - 1]
-    lanczos_interpolate!(Float64, fs0m_conv, psf_image,
+    lanczos_interpolate!(fs0m_conv, psf_image,
                          star_loc_pix, lanczos_width,
                          ea.patches[s, n].wcs_jacobian,
-                         ea.elbo_vars.calculate_gradient,
-                         ea.elbo_vars.calculate_hessian);
+                         ea.elbo_vars.elbo.has_gradient,
+                         ea.elbo_vars.elbo.has_hessian);
 end
 
 
@@ -201,7 +199,7 @@ function accumulate_source_image_brightness!(
 
     is_active_source = s in ea.active_sources
     calculate_hessian =
-        ea.elbo_vars.calculate_hessian && ea.elbo_vars.calculate_gradient &&
+        ea.elbo_vars.elbo.has_hessian && ea.elbo_vars.elbo.has_gradient &&
         is_active_source
 
     image_fft = [ sf.v[] for sf in fsms.fs1m_conv ]

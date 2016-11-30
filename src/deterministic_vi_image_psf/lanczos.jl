@@ -35,6 +35,8 @@ function lanczos_kernel_with_derivatives{NumType <: Number}(x::NumType, a::Float
 end
 
 
+# TODO: replace the gradient and hessian flags with whether or not the
+# sensitive floats in the image have gradients and hessians.
 # Interpolate the PSF to the pixel values.
 function lanczos_interpolate!{NumType <: Number}(
         image::Matrix{SensitiveFloat{NumType}},
