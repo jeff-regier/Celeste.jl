@@ -258,7 +258,7 @@ function load_ce!(i::Int, ce::CatalogEntry, df::DataFrame)
     df[i, :gal_fracdev] = ce.gal_frac_dev
     df[i, :gal_ab] = ce.gal_ab
     df[i, :gal_angle] = (180/pi)ce.gal_angle
-    df[i, :gal_scale] = ce.gal_scale
+    df[i, :gal_scale] = ce.gal_scale * sqrt(ce.gal_ab)
     df[i, :objid] = ce.objid
 end
 
