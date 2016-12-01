@@ -97,11 +97,11 @@ function render_source(ea::ElboArgs, s::Int, n::Int;
         else
             error("Unknown field ", field)
         end
-        if include_iota
-            image[h2, w2] *= ea.images[n].iota_vec[h]
-        end
         if include_epsilon
             image[h2, w2] += ea.images[n].epsilon_mat[h, w]
+        end
+        if include_iota
+            image[h2, w2] *= ea.images[n].iota_vec[h]
         end
     end
 
