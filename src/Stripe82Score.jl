@@ -347,7 +347,7 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
                         :missed_gals, :mag_r],
                        color_cols,
                        abs_err_cols,
-                       :gal_angle)
+                       [:gal_angle])
 
     col_types = fill(Float64, length(col_Symbols))
     col_types[1] = String
