@@ -175,7 +175,7 @@ function show_source_image(ea::ElboArgs, s::Int, n::Int)
             continue
         end
 
-        image[h2, w2] = images[n].pixels[h, w]
+        image[h2, w2] = ea.images[n].pixels[h, w]
     end
     return image
 end
