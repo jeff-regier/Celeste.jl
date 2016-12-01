@@ -1282,7 +1282,7 @@ function test_real_image()
     sa = findfirst(objids, objid)
     neighbors = Infer.find_neighbors([sa], catalog, images)[1]
 
-    cat_local = vcat(catalog[sa], catalog[neighbors])
+    cat_local = vcat(catalog[sa:sa], catalog[neighbors])
     vp = Vector{Float64}[init_source(ce) for ce in cat_local]
     patches = Infer.get_sky_patches(images, cat_local)
     ea = ElboArgs(images, vp, patches, [1])
