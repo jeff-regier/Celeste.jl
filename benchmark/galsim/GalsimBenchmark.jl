@@ -8,10 +8,10 @@ import Celeste: Model, DeterministicVI, ParallelRun, Infer
 
 const FILENAME = "output/galsim_test_images.fits"
 
-function make_psf()
+function make_psf(psf_sigma_px)
     alphaBar = [1.; 0.]
     xiBar = [0.; 0.]
-    tauBar = [16. 0.; 0. 16.]
+    tauBar = [psf_sigma_px^2 0.; 0. psf_sigma_px^2]
     [
         Model.PsfComponent(
             alphaBar[k],
@@ -233,7 +233,6 @@ end
 
 function main(; test_case_name=Nullable{String}())
     all_benchmark_data = []
-    psf = make_psf()
     extensions, wcs = read_fits(FILENAME)
     @assert length(extensions) % 5 == 0 # one extension per band for each test case
 
@@ -246,6 +245,7 @@ function main(; test_case_name=Nullable{String}())
         end
         println("Running test case '$this_test_case_name'")
         iota = header["CL_IOTA"]
+        psf = make_psf(header["CL_SIGMA"])
 
         band_pixels = [
             extensions[index].pixels for index in first_band_index:(first_band_index + 4)
