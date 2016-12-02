@@ -437,7 +437,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                 try
                     s = target_sources[ts]
                     entry = catalog[s]
-                    Log.info("processing source $s: objid = $(entry.objid)")
+                    Log.debug("processing source $s: objid = $(entry.objid)")
 
                     # could subset images to images_local here too.
                     neighbors = catalog[neighbor_map[ts]]
@@ -456,8 +456,8 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                     unlock(results_lock)
 
                     rt1 = round(runtime, 1)
-                    Log.info("objid $(entry.objid) took $rt1 seconds")
-                    Log.info("========================")
+                    Log.debug("objid $(entry.objid) took $rt1 seconds")
+                    Log.debug("========================")
                 catch ex
                     if is_production_run || nthreads() > 1
                         Log.error(string(ex))
