@@ -538,6 +538,7 @@ entry point)
 function infer_field(rcf::RunCamcolField,
                      stagedir::String,
                      outdir::String;
+                     joint_infer=false,
                      objid="")
     # Here `one_node_infer` is called just with a single rcf, even though
     # other rcfs may overlap with this one. That's because this function is
@@ -546,7 +547,8 @@ function infer_field(rcf::RunCamcolField,
     results = one_node_infer([rcf,],
                              stagedir;
                              objid=objid,
-                             primary_initialization=false)
+                             primary_initialization=false,
+                             joint_infer=joint_infer)
     fname = if objid == ""
         @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
     else
