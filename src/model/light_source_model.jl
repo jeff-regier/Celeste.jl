@@ -122,7 +122,7 @@ function load_prior()
 end
 
 
-prior = load_prior()
+const prior = load_prior()
 
 
 """

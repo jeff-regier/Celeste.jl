@@ -304,6 +304,13 @@ function subtract_kl_a!{NumType <: Number}(
     end
 end
 
+function subtract_kl_source_old!(kl_source, vs)
+    subtract_kl_a!(vs, kl_source)
+    subtract_kl_k!(vs, kl_source)
+    subtract_kl_r!(vs, kl_source)
+    subtract_kl_c!(vs, kl_source)
+    return kl_source
+end
 
 """
 Subtract the KL divergences for all sources.
@@ -312,14 +319,9 @@ function subtract_kl!{NumType <: Number}(
                     ea::ElboArgs{NumType},
                     accum::SensitiveFloat{NumType})
     for sa in 1:length(ea.active_sources)
-        s = ea.active_sources[sa]
         kl_source = SensitiveFloat{NumType}(length(CanonicalParams), 1,
                                             accum.has_gradient, accum.has_hessian)
-        subtract_kl_a!(ea.vp[s], kl_source)
-        subtract_kl_k!(ea.vp[s], kl_source)
-        subtract_kl_r!(ea.vp[s], kl_source)
-        subtract_kl_c!(ea.vp[s], kl_source)
-
+        subtract_kl_source_old!(kl_source, ea.vp[ea.active_sources[sa]])
         add_sources_sf!(accum, kl_source, sa)
     end
 end

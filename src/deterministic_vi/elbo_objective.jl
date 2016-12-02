@@ -513,6 +513,6 @@ Returns: A sensitive float containing the ELBO for the image.
 """
 function elbo{NumType <: Number}(ea::ElboArgs{NumType})
     elbo = elbo_likelihood(ea)
-    subtract_kl!(ea, elbo)
+    subtract_kl_all_sources!(ea, elbo)
     elbo
 end
