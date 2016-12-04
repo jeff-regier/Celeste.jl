@@ -13,6 +13,7 @@ Returns:
 """
 function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
                        omitted_ids=Int[],
+                       use_default_optim_params=false,
                        xtol_rel=1e-7,
                        ftol_abs=1e-6,
                        verbose=false,
@@ -80,7 +81,16 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
         return hess
     end
 
-    tr_method = Optim.NewtonTrustRegion()
+    if use_default_optim_params
+        tr_method = Optim.NewtonTrustRegion()
+    else
+        tr_method = Optim.NewtonTrustRegion(
+            initial_delta=10.0,
+            delta_hat=1e9,
+            eta=0.1,
+            rho_lower=0.25,
+            rho_upper=0.75)
+    end
 
     options = Optim.OptimizationOptions(;
         x_tol = xtol_rel, f_tol = ftol_abs, g_tol = 1e-8,
@@ -110,7 +120,8 @@ function maximize_f{F}(f::F, ea::ElboArgs;
                        ftol_abs=1e-6,
                        verbose=false,
                        max_iters=50,
-                       fast_hessian=true)
+                       fast_hessian=true,
+                       use_default_optim_params=false)
     transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=loc_width)
 
     maximize_f(f, ea, transform;
@@ -119,7 +130,8 @@ function maximize_f{F}(f::F, ea::ElboArgs;
                 ftol_abs=ftol_abs,
                 verbose=verbose,
                 max_iters=max_iters,
-                fast_hessian=fast_hessian)
+                fast_hessian=fast_hessian,
+                use_default_optim_params=use_default_optim_params)
 end
 
 
