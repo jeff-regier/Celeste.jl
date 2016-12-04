@@ -257,8 +257,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
 
             # TODO max: refactor this portion? It's reused in infer_source.
             nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for source $(target_sources[cur_source_index]): objid=$(entry.objid)")
-            cat_local = vcat(entry, neighbors)
-            ids_local = vcat(entry_id, neighbor_ids)
+            cat_local = vcat([entry], neighbors)
+            ids_local = vcat([entry_id], neighbor_ids)
 
             #vp = Vector{Float64}[init_source(ce) for ce in cat_local]
             vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
