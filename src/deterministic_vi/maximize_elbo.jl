@@ -43,7 +43,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
         Transform.array_to_vp!(transform, reshaped_x, ea.vp, kept_ids)
         f_res = f(ea)
         f_evals += 1
-        log_f_eval(verbose, f_evals, ea, f_res)
+        verbose && log_f_eval(f_evals, ea, f_res)
         Transform.transform_sensitive_float!(transform, last_sf, f_res, ea.vp, ea.active_sources)
     end
 
@@ -109,7 +109,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
     max_f = -1.0 * Optim.minimum(nm_result)
     max_x = Optim.minimizer(nm_result)
 
-    Log.info("elbo is $max_f after $(nm_result.iterations) Newton steps")
+    Log.debug("elbo is $max_f after $(nm_result.iterations) Newton steps")
     return f_evals, max_f, max_x, nm_result
 end
 
@@ -135,31 +135,29 @@ function maximize_f{F}(f::F, ea::ElboArgs;
 end
 
 
-function log_f_eval(verbose, f_evals, ea::ElboArgs, f_res)
+function log_f_eval(f_evals, ea::ElboArgs, f_res)
     # TODO: Add an option to print either the transformed or
     # free parameterizations.
-    if verbose
-        Log.info("f_evals=$(f_evals) | value=$(f_res.v[])")
+    Log.debug("f_evals=$(f_evals) | value=$(f_res.v[])")
 
-        iter_vp = ea.vp[ea.active_sources]
+    iter_vp = ea.vp[ea.active_sources]
 
-        if length(iter_vp[1]) == length(ids_names)
-            state_df = DataFrames.DataFrame(names=ids_names)
-        elseif length(iter_vp[1]) == length(ids_free_names)
-            state_df = DataFrames.DataFrame(names=ids_free_names)
-        else
-            state_df = DataFrames.DataFrame(names=[ "x$i" for i=1:length(iter_vp[1, :])])
-        end
-
-        for s in eachindex(iter_vp)
-            state_df[Symbol(string("val", s))] = iter_vp[s]
-        end
-
-        for s in eachindex(iter_vp)
-            state_df[Symbol(string("grad", s))] = f_res.d[:, s]
-        end
-
-        Log.info(repr(state_df))
-        Log.info("=======================================\n")
+    if length(iter_vp[1]) == length(ids_names)
+        state_df = DataFrames.DataFrame(names=ids_names)
+    elseif length(iter_vp[1]) == length(ids_free_names)
+        state_df = DataFrames.DataFrame(names=ids_free_names)
+    else
+        state_df = DataFrames.DataFrame(names=[ "x$i" for i=1:length(iter_vp[1, :])])
     end
+
+    for s in eachindex(iter_vp)
+        state_df[Symbol(string("val", s))] = iter_vp[s]
+    end
+
+    for s in eachindex(iter_vp)
+        state_df[Symbol(string("grad", s))] = f_res.d[:, s]
+    end
+
+    Log.debug(repr(state_df))
+    Log.debug("=======================================\n")
 end
