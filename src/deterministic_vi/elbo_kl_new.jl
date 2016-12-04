@@ -143,28 +143,28 @@ subtract_kl_hessian!(out, x) = ForwardDiff.jacobian!(out, nested_subtract_kl_gra
 # Entry Point #
 ###############
 
-function subtract_kl_source!(kl_source::SensitiveFloat, vs::Vector{Float64},
-                             grad_result::DiffBase.DiffResult, hess_result)
+function subtract_kl_source!(kl_source::SensitiveFloat, vs, kl_grad, kl_hess)
     if kl_source.has_gradient
-        subtract_kl_gradient!(grad_result, vs)
-        kl_source.v[] = DiffBase.value(grad_result)
-        copy!(kl_source.d, DiffBase.gradient(grad_result))
+        subtract_kl_gradient!(kl_grad, vs)
+        kl_source.v[] = DiffBase.value(kl_grad)
+        copy!(kl_source.d, DiffBase.gradient(kl_grad))
     else
         kl_source.v[] = subtract_kl(vs)
     end
     if kl_source.has_hessian
-        subtract_kl_hessian!(hess_result, vs)
-        copy!(kl_source.h, hess_result)
+        subtract_kl_hessian!(kl_hess, vs)
+        copy!(kl_source.h, kl_hess)
     end
     return kl_source
 end
 
-function subtract_kl_all_sources!{T}(ea::ElboArgs, accum::SensitiveFloat{T})
-    kl_source = SensitiveFloat{T}(PARAM_LENGTH, 1, accum.has_gradient, accum.has_hessian)
-    grad_result = DiffBase.GradientResult(zeros(PARAM_LENGTH))
-    hess_result = zeros(PARAM_LENGTH, PARAM_LENGTH)
+function subtract_kl_all_sources!(ea::ElboArgs,
+                                  accum::SensitiveFloat,
+                                  kl_source::SensitiveFloat,
+                                  kl_grad, kl_hess)
     for sa in 1:length(ea.active_sources)
-        subtract_kl_source!(kl_source, ea.vp[ea.active_sources[sa]], grad_result, hess_result)
+        subtract_kl_source!(kl_source, ea.vp[ea.active_sources[sa]], kl_grad, kl_hess)
         add_sources_sf!(accum, kl_source, sa)
     end
+    return accum
 end

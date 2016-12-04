@@ -511,8 +511,13 @@ Calculates and returns the ELBO and its derivatives for all the bands
 of an image.
 Returns: A sensitive float containing the ELBO for the image.
 """
-function elbo{NumType <: Number}(ea::ElboArgs{NumType})
+function elbo{T}(ea::ElboArgs{T},
+                 kl_source = SensitiveFloat{T}(length(CanonicalParams), 1,
+                                               ea.elbo_vars.elbo.has_gradient,
+                                               ea.elbo_vars.elbo.has_hessian),
+                 kl_grad = DiffBase.GradientResult(zeros(T, length(CanonicalParams))),
+                 kl_hess = zeros(T, length(CanonicalParams), length(CanonicalParams)))
     elbo = elbo_likelihood(ea)
-    subtract_kl_all_sources!(ea, elbo)
-    elbo
+    subtract_kl_all_sources!(ea, elbo, kl_source, kl_grad, kl_hess)
+    return elbo
 end
