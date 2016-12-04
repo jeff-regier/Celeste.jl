@@ -329,6 +329,7 @@ function parallel_infer(catalog, target_sources, neighbor_map, images;
                         joint_infer=false,
                         joint_infer_n_iters=50,
                         joint_infer_batch_size=60,
+                        joint_infer_shuffle=true,
                         reserve_thread=Ref(false),
                         thread_fun=phalse,
                         timing=InferTiming())
@@ -338,7 +339,8 @@ function parallel_infer(catalog, target_sources, neighbor_map, images;
                                     neighbor_map,
                                     images;
                                     n_iters=joint_infer_n_iters,
-                                    joint_infer_batch_size=joint_infer_batch_size)
+                                    joint_infer_batch_size=joint_infer_batch_size,
+                                    within_batch_shuffling=joint_infer_shuffle)
     else
         return one_node_single_infer(catalog,
                                      target_sources,
@@ -360,6 +362,7 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
                         joint_infer=false,
                         joint_infer_n_iters=50,
                         joint_infer_batch_size=60,
+                        joint_infer_shuffle=true,
                         objid="",
                         box=BoundingBox(-1000., 1000., -1000., 1000.),
                         target_rcfs=RunCamcolField[],
@@ -393,7 +396,8 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
     parallel_infer(catalog, target_sources, neighbor_map, images,
                    joint_infer=joint_infer, joint_infer_n_iters=joint_infer_n_iters,
                    reserve_thread=reserve_thread, thread_fun=thread_fun, timing=timing,
-                   joint_infer_batch_size=joint_infer_batch_size)
+                   joint_infer_batch_size=joint_infer_batch_size,
+                   joint_infer_shuffle=joint_infer_shuffle)
 end
 
 

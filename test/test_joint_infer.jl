@@ -71,11 +71,13 @@ function test_different_result_with_different_iter()
 
     result_iter_1 = ParallelRun.one_node_infer(field_triplets, datadir;
                                                box=box, joint_infer_n_iters=1,
-                                               joint_infer=true)
+                                               joint_infer=true,
+                                               joint_infer_shuffle=false)
     
     result_iter_5 = ParallelRun.one_node_infer(field_triplets, datadir;
                                                box=box, joint_infer_n_iters=5,
-                                               joint_infer=true)
+                                               joint_infer=true,
+                                               joint_infer_shuffle=false)
 
     # Make sure that parameters are not the same
     @test !compare_vp_params(result_iter_1, result_iter_5) 
@@ -94,12 +96,14 @@ function test_same_result_with_diff_batch_sizes()
     result_bs_7 = ParallelRun.one_node_infer(field_triplets, datadir;
                                               box=box, joint_infer_n_iters=3,
                                               joint_infer=true,
-                                              joint_infer_batch_size=7)
+                                              joint_infer_batch_size=7,
+                                              joint_infer_shuffle=false)
     # With batch size = 39
     result_bs_39 = ParallelRun.one_node_infer(field_triplets, datadir;
                                               box=box, joint_infer_n_iters=3,
                                               joint_infer=true,
-                                              joint_infer_batch_size=39)
+                                              joint_infer_batch_size=39,
+                                              joint_infer_shuffle=false)
 
     # Make sure that parameters are exactly the same
     @test compare_vp_params(result_bs_7, result_bs_39)
@@ -133,7 +137,8 @@ function test_one_node_joint_infer_obj_overlapping()
     tic()
     result_multi = ParallelRun.one_node_infer(field_triplets, datadir;
                                               box=box, joint_infer_n_iters=100,
-                                              joint_infer=true)
+                                              joint_infer=true,
+                                              joint_infer_shuffle=false)
     multi_iter_time = toq()
     score_multi = compute_obj_value(result_multi, field_triplets, datadir; box=box)
 
@@ -141,7 +146,8 @@ function test_one_node_joint_infer_obj_overlapping()
     tic()
     result_two = ParallelRun.one_node_infer(field_triplets, datadir;
                                             box=box, joint_infer_n_iters=2,
-                                            joint_infer=true)
+                                            joint_infer=true,
+                                            joint_infer_shuffle=false)
     multi_iter_one_iter_time = toq()
     score_two = compute_obj_value(result_two, field_triplets, datadir; box=box)
 

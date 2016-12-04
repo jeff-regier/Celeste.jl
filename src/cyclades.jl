@@ -214,7 +214,7 @@ Returns:
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
                               joint_infer_batch_size=60,
-                              within_batch_shuffling=false,
+                              within_batch_shuffling=true,
                               n_iters=10)
     # Seed random number generator to ensure the same results per run.
     srand(42)
