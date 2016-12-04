@@ -80,12 +80,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
         return hess
     end
 
-    tr_method = Optim.NewtonTrustRegion(
-                    initial_delta=10.0,
-                    delta_hat=1e9,
-                    eta=0.1,
-                    rho_lower=0.25,
-                    rho_upper=0.75)
+    tr_method = Optim.NewtonTrustRegion()
 
     options = Optim.OptimizationOptions(;
         x_tol = xtol_rel, f_tol = ftol_abs, g_tol = 1e-8,

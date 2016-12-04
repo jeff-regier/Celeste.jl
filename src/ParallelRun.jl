@@ -328,6 +328,7 @@ A simplified helper method to choose between one_node_single_infer and one_node_
 function parallel_infer(catalog, target_sources, neighbor_map, images;
                         joint_infer=false,
                         joint_infer_n_iters=50,
+                        joint_infer_batch_size=60,
                         reserve_thread=Ref(false),
                         thread_fun=phalse,
                         timing=InferTiming())
@@ -336,7 +337,8 @@ function parallel_infer(catalog, target_sources, neighbor_map, images;
                                     target_sources,
                                     neighbor_map,
                                     images;
-                                    n_iters=joint_infer_n_iters)
+                                    n_iters=joint_infer_n_iters,
+                                    joint_infer_batch_size=joint_infer_batch_size)
     else
         return one_node_single_infer(catalog,
                                      target_sources,
@@ -356,7 +358,8 @@ bounding box.
 function one_node_infer(rcfs::Vector{RunCamcolField},
                         stagedir::String;
                         joint_infer=false,
-                        joint_infer_n_iters=10,
+                        joint_infer_n_iters=50,
+                        joint_infer_batch_size=60,
                         objid="",
                         box=BoundingBox(-1000., 1000., -1000., 1000.),
                         target_rcfs=RunCamcolField[],
@@ -389,7 +392,8 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
     # NB: All I/O happens above. The methods below don't touch disk.
     parallel_infer(catalog, target_sources, neighbor_map, images,
                    joint_infer=joint_infer, joint_infer_n_iters=joint_infer_n_iters,
-                   reserve_thread=reserve_thread, thread_fun=thread_fun, timing=timing)
+                   reserve_thread=reserve_thread, thread_fun=thread_fun, timing=timing,
+                   joint_infer_batch_size=joint_infer_batch_size)
 end
 
 
