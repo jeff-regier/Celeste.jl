@@ -77,7 +77,7 @@ function test_different_result_with_different_iter()
                                                box=box, joint_infer_n_iters=5,
                                                joint_infer=true)
 
-    # Make sure that parameters are exactly the same
+    # Make sure that parameters are not the same
     @test !compare_vp_params(result_iter_1, result_iter_5) 
 end
 
@@ -102,7 +102,7 @@ function test_same_result_with_diff_batch_sizes()
                                               joint_infer_batch_size=39)
 
     # Make sure that parameters are exactly the same
-    #@test compare_vp_params(result_bs_7, result_bs_39)
+    @test compare_vp_params(result_bs_7, result_bs_39)
 end
 
 """

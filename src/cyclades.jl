@@ -214,6 +214,7 @@ Returns:
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
                               joint_infer_batch_size=60,
+                              within_batch_shuffling=false,
                               n_iters=10)
     # Seed random number generator to ensure the same results per run.
     srand(42)
@@ -289,8 +290,12 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             # Use a constant number of newton steps
             n_newton_steps = 5
 
-            # Shuffle the source assignments within each batch of each process
-            shuffle!(source_assignment)
+            # Shuffle the source assignments within each batch of each process.
+            # This is disabled by default because it ruins the deterministic outcome
+            # required by the test cases.
+            if within_batch_shuffling
+                shuffle!(source_assignment)
+            end
             for cur_source_indx in source_assignment
                 cur_entry = catalog[target_sources[cur_source_indx]]
                 iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
