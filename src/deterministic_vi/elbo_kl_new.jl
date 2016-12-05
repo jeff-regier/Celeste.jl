@@ -128,16 +128,14 @@ end
 const PARAM_LENGTH = length(CanonicalParams)
 const CHUNK_SIZE = ForwardDiff.pickchunksize(PARAM_LENGTH)
 const DUAL_TYPE = ForwardDiff.Dual{CHUNK_SIZE,Float64}
-const SUBTRACT_KL_TAPE = ReverseDiff.compile(ReverseDiff.GradientTape(subtract_kl, rand(PARAM_LENGTH)))
-const NESTED_SUBTRACT_KL_TAPE = ReverseDiff.compile(ReverseDiff.GradientTape(subtract_kl, rand(DUAL_TYPE,PARAM_LENGTH)))
-const NESTED_SUBTRACT_KL_GRADIENT_BUFFER = zeros(DUAL_TYPE,PARAM_LENGTH)
-const NESTED_SUBTRACT_KL_JACOBIAN_CONFIG = ForwardDiff.JacobianConfig{CHUNK_SIZE}(rand(PARAM_LENGTH))
+const NESTED_KL_GRADIENT_BUFFER = zeros(DUAL_TYPE,PARAM_LENGTH)
+const NESTED_KL_JACOBIAN_CONFIG = ForwardDiff.JacobianConfig{CHUNK_SIZE}(rand(PARAM_LENGTH))
 
-subtract_kl_gradient!(out, x) = ReverseDiff.gradient!(out, SUBTRACT_KL_TAPE, x)
+const kl_gradient! = ReverseDiff.compile_gradient(subtract_kl, rand(PARAM_LENGTH))
+const nested_kl_gradient! = ReverseDiff.compile_gradient(subtract_kl, rand(DUAL_TYPE,PARAM_LENGTH))
 
-nested_subtract_kl_gradient(x) = ReverseDiff.gradient!(NESTED_SUBTRACT_KL_GRADIENT_BUFFER, NESTED_SUBTRACT_KL_TAPE, x)
-
-subtract_kl_hessian!(out, x) = ForwardDiff.jacobian!(out, nested_subtract_kl_gradient, x, NESTED_SUBTRACT_KL_JACOBIAN_CONFIG)
+nested_kl_gradient(x) = nested_kl_gradient!(NESTED_KL_GRADIENT_BUFFER, x)
+kl_hessian!(out, x) = ForwardDiff.jacobian!(out, nested_kl_gradient, x, NESTED_KL_JACOBIAN_CONFIG)
 
 ###############
 # Entry Point #
@@ -145,14 +143,14 @@ subtract_kl_hessian!(out, x) = ForwardDiff.jacobian!(out, nested_subtract_kl_gra
 
 function subtract_kl_source!(kl_source::SensitiveFloat, vs, kl_grad, kl_hess)
     if kl_source.has_gradient
-        subtract_kl_gradient!(kl_grad, vs)
+        kl_gradient!(kl_grad, vs)
         kl_source.v[] = DiffBase.value(kl_grad)
         copy!(kl_source.d, DiffBase.gradient(kl_grad))
     else
         kl_source.v[] = subtract_kl(vs)
     end
     if kl_source.has_hessian
-        subtract_kl_hessian!(kl_hess, vs)
+        kl_hessian!(kl_hess, vs)
         copy!(kl_source.h, kl_hess)
     end
     return kl_source
