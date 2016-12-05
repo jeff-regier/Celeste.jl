@@ -302,11 +302,9 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                     DeterministicVI.elbo,
                     ea_vec[cur_source_indx],
                     max_iters=n_newton_steps,
-                    use_default_optim_params=false)
+                    use_default_optim_params=true)
             end
         catch ex
-            Log.error(string(ex))
-            exit(-1)
             if is_production_run || nthreads() > 1
                 Log.error(string(ex))
             else
