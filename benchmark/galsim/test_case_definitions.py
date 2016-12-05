@@ -256,6 +256,10 @@ def angle_and_axis_ratio_2(test_case):
     test_case.add(Galaxy().angle_deg(160).minor_major_axis_ratio(0.4))
 
 @galsim_test_case
+def round_galaxy(test_case):
+    test_case.add(Galaxy().minor_major_axis_ratio(1))
+
+@galsim_test_case
 def small_galaxy(test_case):
     test_case.add(Galaxy().half_light_radius_arcsec(0.75))
 

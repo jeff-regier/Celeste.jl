@@ -22,7 +22,10 @@ function info(msg::String)
 end
 
 function debug(msg::String)
-    puts("[$(threadid())] DEBUG: $msg")
+    # In production mode, rather the development mode, don't log debug statements
+    const is_production_run = haskey(ENV, "CELESTE_PROD") &&
+                                     ENV["CELESTE_PROD"] != ""
+    is_production_run || puts("[$(threadid())] DEBUG: $msg")
 end
 
 end

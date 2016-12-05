@@ -258,7 +258,7 @@ function load_ce!(i::Int, ce::CatalogEntry, df::DataFrame)
     df[i, :gal_fracdev] = ce.gal_frac_dev
     df[i, :gal_ab] = ce.gal_ab
     df[i, :gal_angle] = (180/pi)ce.gal_angle
-    df[i, :gal_scale] = ce.gal_scale
+    df[i, :gal_scale] = ce.gal_scale * sqrt(ce.gal_ab)
     df[i, :objid] = ce.objid
 end
 
@@ -347,7 +347,7 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
                         :missed_gals, :mag_r],
                        color_cols,
                        abs_err_cols,
-                       :gal_angle)
+                       [:gal_angle])
 
     col_types = fill(Float64, length(col_Symbols))
     col_types[1] = String
