@@ -137,7 +137,7 @@ function actual_values(ids, star_galaxy_index, params)
         params[ids.u[2]],
         params[ids.e_axis],
         canonical_angle(params) * 180 / pi,
-        params[ids.e_scale],
+        params[ids.e_scale] * sqrt(params[ids.e_axis]),
         exp(params[ids.r1[star_galaxy_index]]),
         exp(params[ids.c1[1, star_galaxy_index]]),
         exp(params[ids.c1[2, star_galaxy_index]]),
