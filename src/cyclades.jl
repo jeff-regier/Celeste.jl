@@ -113,7 +113,7 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
     # First shuffle the sources. Note Cyclades is serially equivalent
     # to this permutation of sources.
     sources = [x for x in keys(neighbor_map)]
-    #shuffle!(sources)
+    shuffle!(sources)
 
     # Process batch_size number of sources at a time.
     # TODO max - parallelize everything below (particularly CC computation)
@@ -213,7 +213,12 @@ Returns:
 """
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
+                              joint_infer_batch_size=60,
+                              within_batch_shuffling=true,
                               n_iters=10)
+    # Seed random number generator to ensure the same results per run.
+    srand(42)
+    
     nprocthreads = nthreads()
 
     # Partition the sources
@@ -226,7 +231,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             source_id = target_sources[index]
             cyclades_neighbor_map[source_id] = neighbors
         end
-        thread_sources_assignment = partition_cyclades(nprocthreads, target_sources, cyclades_neighbor_map)
+        thread_sources_assignment = partition_cyclades(nprocthreads, target_sources, cyclades_neighbor_map, batch_size=joint_infer_batch_size)
     else
         thread_sources_assignment = partition_equally(nprocthreads, n_sources)
     end
@@ -281,13 +286,23 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     # Process partition of sources. Multiple threads call this function in parallel.
     function process_sources(source_assignment::Vector{Int64}, iter)
         try
-            n_newton_steps = iter == 1 ? 20 : 5
+
+            # Use a constant number of newton steps
+            n_newton_steps = 5
+
+            # Shuffle the source assignments within each batch of each process.
+            # This is disabled by default because it ruins the deterministic outcome
+            # required by the test cases.
+            if within_batch_shuffling
+                shuffle!(source_assignment)
+            end
             for cur_source_indx in source_assignment
                 cur_entry = catalog[target_sources[cur_source_indx]]
                 iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
                     DeterministicVI.elbo,
                     ea_vec[cur_source_indx],
-                    max_iters=n_newton_steps)
+                    max_iters=n_newton_steps,
+                    use_default_optim_params=true)
             end
         catch ex
             if is_production_run || nthreads() > 1

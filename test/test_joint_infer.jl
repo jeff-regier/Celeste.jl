@@ -2,6 +2,34 @@ import JLD
 import ..Infer
 
 """
+compare_vp_params
+Helper to check whether two sets of variational parameters from the 
+result of joint inference are the same.
+
+Return true if vp params are the same, false otherwise
+"""
+function compare_vp_params(r1, r2)
+
+    # Create a map from thingid -> vp for r1
+    r1_vp = Dict{Int64, Vector{Float64}}()
+    for r1_result in r1
+        r1_vp[r1_result.thingid] = r1_result.vs
+    end
+
+    # Check the existence and equivalence of each source's vp in r2
+    for r2_result in r2
+        if !haskey(r1_vp, r2_result.thingid) || r1_vp[r2_result.thingid] != r2_result.vs
+            if r1_vp[r2_result.thingid] != r2_result.vs
+                println("compare_vp_params: Mismatch - $(r1_vp[r2_result.thingid]) vs $(r2_result.vs)")
+            end
+            return false
+        end
+    end
+
+    return length(r1) == length(r2)
+end
+
+"""
 compute_obj_value
 computes obj value given set of results from one_node_infer and one_node_joint_infer
 """
@@ -33,6 +61,55 @@ function compute_obj_value(results,
 end
 
 """
+test_different_result_with_different_iter()
+Using 3 iters instead of 1 iters should result in a different set of parameters.
+"""
+function test_different_result_with_different_iter()
+    # This bounding box has overlapping stars. (neighbor map is not empty)
+    box = ParallelRun.BoundingBox(4.39, 164.41, 9.11, 39.13)
+    field_triplets = [RunCamcolField(3900, 6, 269),]
+
+    result_iter_1 = ParallelRun.one_node_infer(field_triplets, datadir;
+                                               box=box, joint_infer_n_iters=1,
+                                               joint_infer=true,
+                                               joint_infer_shuffle=false)
+    
+    result_iter_5 = ParallelRun.one_node_infer(field_triplets, datadir;
+                                               box=box, joint_infer_n_iters=5,
+                                               joint_infer=true,
+                                               joint_infer_shuffle=false)
+
+    # Make sure that parameters are not the same
+    @test !compare_vp_params(result_iter_1, result_iter_5) 
+end
+
+"""
+test_same_result_with_diff_batch_sizes
+Varying batch sizes using the cyclades algorithm should not change final objective value.
+"""
+function test_same_result_with_diff_batch_sizes()
+    # This bounding box has overlapping stars. (neighbor map is not empty)
+    box = ParallelRun.BoundingBox(4.39, 164.41, 9.11, 39.13)
+    field_triplets = [RunCamcolField(3900, 6, 269),]
+
+    # With batch size = 7
+    result_bs_7 = ParallelRun.one_node_infer(field_triplets, datadir;
+                                              box=box, joint_infer_n_iters=3,
+                                              joint_infer=true,
+                                              joint_infer_batch_size=7,
+                                              joint_infer_shuffle=false)
+    # With batch size = 39
+    result_bs_39 = ParallelRun.one_node_infer(field_triplets, datadir;
+                                              box=box, joint_infer_n_iters=3,
+                                              joint_infer=true,
+                                              joint_infer_batch_size=39,
+                                              joint_infer_shuffle=false)
+
+    # Make sure that parameters are exactly the same
+    @test compare_vp_params(result_bs_7, result_bs_39)
+end
+
+"""
 test infer multi iter with a single (run, camcol, field).
 This is basically just to make sure it runs at all.
 """
@@ -60,7 +137,8 @@ function test_one_node_joint_infer_obj_overlapping()
     tic()
     result_multi = ParallelRun.one_node_infer(field_triplets, datadir;
                                               box=box, joint_infer_n_iters=100,
-                                              joint_infer=true)
+                                              joint_infer=true,
+                                              joint_infer_shuffle=false)
     multi_iter_time = toq()
     score_multi = compute_obj_value(result_multi, field_triplets, datadir; box=box)
 
@@ -68,7 +146,8 @@ function test_one_node_joint_infer_obj_overlapping()
     tic()
     result_two = ParallelRun.one_node_infer(field_triplets, datadir;
                                             box=box, joint_infer_n_iters=2,
-                                            joint_infer=true)
+                                            joint_infer=true,
+                                            joint_infer_shuffle=false)
     multi_iter_one_iter_time = toq()
     score_two = compute_obj_value(result_two, field_triplets, datadir; box=box)
 
@@ -183,6 +262,8 @@ function test_cyclades_partitioning()
     println("Cyclades partitioning test succeeded")
 end
 
+test_different_result_with_different_iter()
+test_same_result_with_diff_batch_sizes()
 test_one_node_joint_infer_obj_overlapping()
 
 # Run this multiple times, since the cyclades algorithm shuffles the elements
