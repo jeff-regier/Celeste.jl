@@ -319,21 +319,21 @@ function initialize_fft_elbo_parameters(
     patches::Matrix{SkyPatch},
     active_sources::Vector{Int};
     use_raw_psf=true)
-    
+
     ea = ElboArgs(images, vp, patches, active_sources, psf_K=1);
     load_active_pixels!(images, ea.patches; exclude_nan=false);
     if use_raw_psf
-        psf_image_mat = Array{Matrix{Float64}}(ea.S, ea.N) 
+        psf_image_mat = Array{Matrix{Float64}}(ea.S, ea.N)
         for n in 1:ea.N, s in 1:ea.S
             img = images[n]
             world_loc = ea.vp[s][lidx.u]
             pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
-            psf_image_mat[s, n] = 
+            psf_image_mat[s, n] =
                 eval_psf(img.raw_psf_comp, pixel_loc[1], pixel_loc[2]);
         end
     else
         psf_image_mat = Matrix{Float64}[
-            get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea.S, b in 1:ea.N];        
+            get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea.S, b in 1:ea.N];
     end
     fsm_vec = FSMSensitiveFloatMatrices[
         FSMSensitiveFloatMatrices() for n in 1:ea.N];
@@ -345,15 +345,15 @@ end
 @doc """
 Return a function callback for an FFT elbo.
 """
-function get_fft_elbo_function(
-    ea::ElboArgs, fsm_vec::Vector{}, lanczos_width::Int64)
-    function elbo_fft_opt{NumType <: Number}(
-                        ea::ElboArgs{NumType};
-                        calculate_derivs=true,
-                        calculate_hessian=true)
+function get_fft_elbo_function{T}(ea::ElboArgs{T}, fsm_vec::Vector, lanczos_width::Int64,
+                                  kl_grad = DiffBase.GradientResult(zeros(T, length(CanonicalParams))),
+                                  kl_hess = zeros(T, length(CanonicalParams), length(CanonicalParams)))
+    function elbo_fft_opt(ea::ElboArgs)
         @assert ea.psf_K == 1
-        elbo_likelihood_with_fft!(ea, lanczos_width, fsm_vec);
-        subtract_kl!(ea, ea.elbo_vars.elbo)
-        return deepcopy(ea.elbo_vars.elbo)
+        elbo = ea.elbo_vars.elbo
+        kl_source = SensitiveFloat{T}(length(CanonicalParams), 1, elbo.has_gradient, elbo.has_hessian)
+        elbo_likelihood_with_fft!(ea, lanczos_width, fsm_vec)
+        subtract_kl_all_sources!(ea, elbo, kl_source, kl_grad, kl_hess)
+        return deepcopy(elbo)
     end
 end

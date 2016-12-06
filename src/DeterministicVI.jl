@@ -23,8 +23,7 @@ export ElboArgs
 
 
 include("deterministic_vi/elbo_args.jl")
-include("deterministic_vi/elbo_kl_old.jl")
-include("deterministic_vi/elbo_kl_new.jl")
+include("deterministic_vi/elbo_kl.jl")
 include("deterministic_vi/source_brightness.jl")
 include("deterministic_vi/elbo_objective.jl")
 include("deterministic_vi/maximize_elbo.jl")
