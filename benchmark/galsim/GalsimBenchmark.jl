@@ -147,9 +147,7 @@ function actual_values(ids, star_galaxy_index, params)
     ]
 end
 
-function benchmark_comparison_data(single_infer_params, joint_infer_params, header)
-    ids = Model.ids
-    star_galaxy_index = header["CL_TYPE1"] == "star" ? 1 : 2
+function get_expected_dataframe(header)
     DataFrame(
         label=fill(header["CL_DESCR"], length(BENCHMARK_PARAMETER_LABELS)),
         field=BENCHMARK_PARAMETER_LABELS,
@@ -165,10 +163,18 @@ function benchmark_comparison_data(single_infer_params, joint_infer_params, head
             get_field(header, "CL_C34_1"),
             get_field(header, "CL_C45_1"),
             header["CL_TYPE1"] == "star" ? 0 : 1,
-        ],
-        single_infer_actual=actual_values(ids, star_galaxy_index, single_infer_params),
-        joint_infer_actual=actual_values(ids, star_galaxy_index, joint_infer_params)
-    )
+        ])    
+end
+
+function benchmark_comparison_data(single_infer_params, joint_infer_params, header)
+    ids = Model.ids
+    star_galaxy_index = header["CL_TYPE1"] == "star" ? 1 : 2
+    comparison_dataframe = get_expected_dataframe(header)
+    comparison_dataframe[:single_infer_actual] = 
+        actual_values(ids, star_galaxy_index, single_infer_params)
+    comparison_dataframe[:joint_infer_actual] =
+        actual_values(ids, star_galaxy_index, joint_infer_params)
+    comparison_dataframe
 end
 
 function assert_counts_match_expected_flux(band_pixels::Vector{Matrix{Float32}},

@@ -145,8 +145,6 @@ function populate_gal_fsm_image!(
         x = SVector{2, Float64}([h_image, w_image])
         populate_gal_fsm!(ea.elbo_vars.bvn_derivs,
                           fsms.fs1m_image[h_fsm, w_fsm],
-                          ea.elbo_vars.calculate_gradient,
-                          ea.elbo_vars.calculate_hessian,
                           s, x, is_active_source, Inf,
                           p.wcs_jacobian,
                           gal_mcs)
@@ -179,11 +177,11 @@ function populate_star_fsm_image!(
                             ea.patches[s, n].pixel_center,
                             ea.vp[s][lidx.u]) -
         Float64[ h_lower - 1, w_lower - 1]
-    lanczos_interpolate!(Float64, fs0m_conv, psf_image,
+    lanczos_interpolate!(fs0m_conv, psf_image,
                          star_loc_pix, lanczos_width,
                          ea.patches[s, n].wcs_jacobian,
-                         ea.elbo_vars.calculate_gradient,
-                         ea.elbo_vars.calculate_hessian);
+                         ea.elbo_vars.elbo.has_gradient,
+                         ea.elbo_vars.elbo.has_hessian);
 end
 
 
@@ -201,7 +199,7 @@ function accumulate_source_image_brightness!(
 
     is_active_source = s in ea.active_sources
     calculate_hessian =
-        ea.elbo_vars.calculate_hessian && ea.elbo_vars.calculate_gradient &&
+        ea.elbo_vars.elbo.has_hessian && ea.elbo_vars.elbo.has_gradient &&
         is_active_source
 
     image_fft = [ sf.v[] for sf in fsms.fs1m_conv ]
@@ -311,5 +309,51 @@ function elbo_likelihood_with_fft!(
                 calculate_gradient=ea.elbo_vars.elbo.has_gradient,
                 calculate_hessian=ea.elbo_vars.elbo.has_hessian);
         accumulate_band_in_elbo!(ea, fsm_vec[n], sbs, gal_mcs, n, lanczos_width)
+    end
+end
+
+
+function initialize_fft_elbo_parameters(
+    images::Vector{Image},
+    vp::VariationalParams{Float64},
+    patches::Matrix{SkyPatch},
+    active_sources::Vector{Int};
+    use_raw_psf=true)
+    
+    ea = ElboArgs(images, vp, patches, active_sources, psf_K=1);
+    load_active_pixels!(images, ea.patches; exclude_nan=false);
+    if use_raw_psf
+        psf_image_mat = Array{Matrix{Float64}}(ea.S, ea.N) 
+        for n in 1:ea.N, s in 1:ea.S
+            img = images[n]
+            world_loc = ea.vp[s][lidx.u]
+            pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
+            psf_image_mat[s, n] = 
+                eval_psf(img.raw_psf_comp, pixel_loc[1], pixel_loc[2]);
+        end
+    else
+        psf_image_mat = Matrix{Float64}[
+            get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea.S, b in 1:ea.N];        
+    end
+    fsm_vec = FSMSensitiveFloatMatrices[
+        FSMSensitiveFloatMatrices() for n in 1:ea.N];
+    initialize_fsm_sf_matrices!(fsm_vec, ea, psf_image_mat);
+    ea, fsm_vec
+end
+
+
+@doc """
+Return a function callback for an FFT elbo.
+"""
+function get_fft_elbo_function(
+    ea::ElboArgs, fsm_vec::Vector{}, lanczos_width::Int64)
+    function elbo_fft_opt{NumType <: Number}(
+                        ea::ElboArgs{NumType};
+                        calculate_derivs=true,
+                        calculate_hessian=true)
+        @assert ea.psf_K == 1
+        elbo_likelihood_with_fft!(ea, lanczos_width, fsm_vec);
+        subtract_kl!(ea, ea.elbo_vars.elbo)
+        return deepcopy(ea.elbo_vars.elbo)
     end
 end

@@ -1,6 +1,6 @@
 #!/usr/bin/env julia
 
-include("GalsimBenchmark.jl")
+include(joinpath(Pkg.dir("Celeste"), "benchmark/galsim/GalsimBenchmark.jl"))
 import GalsimBenchmark
 
 if length(ARGS) == 1

@@ -4,6 +4,18 @@ typealias fs0mMatrix Matrix{SensitiveFloat{Float64}}
 typealias fs1mMatrix Matrix{SensitiveFloat{Float64}}
 
 
+# Some ideas for optimizing FSMSensitiveFloatMatrices:
+# - The default size of the PSF matrix is probably bigger than it
+#   needs to be right now.  For most PSFs, most pixels are dark.
+# - The fs*m_image matrices are big enough to contain all pixels in the
+#   pixel masks.  They could instead be big enough to contain only the active
+#   pixels.
+# - As-is, a single image only has one set of fs*m_* matrices.  This means
+#   each must be large enough to contain all the sources.  If you arranged
+#   it so that each source had its own fs*m_* matrices, then they could be
+#   much smaller.
+# - Currently, active_pixels are set by the size of the image post convolution.
+#   However, fs1m_image only needs to be as big as the image pre convolution.
 type FSMSensitiveFloatMatrices
     # The lower corner of the image (in terms of index values)
     h_lower::Int
@@ -118,6 +130,7 @@ function initialize_fsm_sf_matrices!(
     # Since we are using the same size fsm matrix for each source,
     # and even non-active sources need to be rendered, we need to make
     #.the fsm matrices as big as the total number of active pixels.
+    # Right now I just set it as big as the entire active pixel bitmap.
     for s in 1:ea.S, n in 1:ea.N
         p = ea.patches[s, n]
         h1 = p.bitmap_offset[1] + 1
