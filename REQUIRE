@@ -2,8 +2,8 @@ julia 0.5-
 DataFrames
 Distributions
 FITSIO 0.8.4
-ForwardDiff
-ReverseDiff
+ForwardDiff 0.3.2 0.4
+ReverseDiff 0.0.1 0.1
 JLD
 Optim 0.6
 WCS 0.1.3
