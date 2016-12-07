@@ -19,12 +19,16 @@ using Distributions
 
 anyerrors = false
 
+wd = pwd()
 # Ensure that test images are available.
 const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
-wd = pwd()
 cd(datadir)
 run(`make`)
 run(`make RUN=4263 CAMCOL=5 FIELD=119`)
+# Ensure GalSim test images are available.
+const galsim_benchmark_dir = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
+cd(galsim_benchmark_dir)
+run(`make fetch`)
 cd(wd)
 
 # Check whether to run time-consuming derivatives tests.
@@ -36,20 +40,22 @@ if length(test_files) > 0
     testfiles = ["test_$(arg).jl" for arg in test_files]
 else
     testfiles = [
-                 "test_log_prob.jl",
-                 "test_elbo.jl",
-                 "test_score.jl",
                  "test_derivatives.jl",
+                 "test_elbo.jl",
                  "test_fft.jl",
-                 "test_psf.jl",
+                 "test_galsim_benchmarks.jl",
                  "test_images.jl",
+                 "test_infer.jl",
+                 "test_joint_infer.jl",
+                 "test_log_prob.jl",
                  "test_misc.jl",
                  "test_optimization.jl",
+                 "test_psf.jl",
+                 "test_score.jl",
                  "test_sdssio.jl",
                  "test_transforms.jl",
                  "test_wcs.jl",
-                 "test_infer.jl",
-                 "test_joint_infer.jl"]
+                 ]
 end
 
 
