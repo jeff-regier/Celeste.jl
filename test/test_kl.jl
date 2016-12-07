@@ -1,5 +1,5 @@
 using Celeste: Model, SensitiveFloats, DeterministicVI
-using Distributions
+using Distributions, DiffBase, JLD
 using Base.Test
 
 """
@@ -63,8 +63,24 @@ function test_gaussian_kl_value()
     test_kl_value(p1_dist, p2_dist, kl)
 end
 
+function test_subtract_kl()
+    sf = SensitiveFloat{Float64}(32, 1, true, true)
+    vs = rand(MersenneTwister(1), 32)
+    kl_grad = DiffBase.GradientResult(vs)
+    kl_hess = zeros(32, 32)
+    Celeste.DeterministicVI.subtract_kl_source!(sf, vs, kl_grad, kl_hess)
+    test_sf = JLD.load(joinpath(dirname(@__FILE__), "kl_values.jld"), "sf")
+    @test_approx_eq sf.v[] DiffBase.value(kl_grad)
+    @test_approx_eq sf.d DiffBase.gradient(kl_grad)
+    @test_approx_eq sf.h kl_hess
+    @test_approx_eq sf.v[] test_sf.v[]
+    @test_approx_eq sf.d test_sf.d
+    @test_approx_eq sf.h test_sf.h
+end
+
 println("Running KL divergence tests.")
 test_beta_kl_value()
 test_categorical_kl_value()
 test_diagmvn_mvn_kl_value()
 test_gaussian_kl_value()
+test_subtract_kl()
