@@ -6,6 +6,7 @@ import WCS
 
 import Celeste: Model, DeterministicVI, ParallelRun, Infer
 
+const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const FILENAME = "output/galsim_test_images.fits"
 
 function make_psf(psf_sigma_px)
@@ -28,8 +29,8 @@ immutable FitsExtension
 end
 
 function read_fits(filename; read_sdss_psf=false)
-    @assert isfile(filename)
     println("Reading $filename...")
+    @assert isfile(filename)
     fits = FITSIO.FITS(filename)
     println("Found $(length(fits)) extensions.")
 
@@ -239,7 +240,7 @@ end
 
 function main(; test_case_name=Nullable{String}())
     all_benchmark_data = []
-    extensions, wcs = read_fits(FILENAME)
+    extensions, wcs = read_fits(joinpath(GALSIM_BENCHMARK_DIR, FILENAME))
     @assert length(extensions) % 5 == 0 # one extension per band for each test case
 
     for test_case_index in 1:div(length(extensions), 5)

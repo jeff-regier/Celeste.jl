@@ -1,7 +1,6 @@
 #!/usr/bin/env julia
 
-include(joinpath(Pkg.dir("Celeste"), "benchmark/galsim/GalsimBenchmark.jl"))
-import GalsimBenchmark
+import Celeste.GalsimBenchmark
 
 if length(ARGS) == 1
     # test case name: function name in test_case_definitions.py, or CL_DESCR field from FITS header
