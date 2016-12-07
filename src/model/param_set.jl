@@ -1,22 +1,33 @@
 
 # ParamSet types
 #
+# For more detailed explanations, see
+# https://github.com/jeff-regier/Celeste.jl/wiki/Glossary-and-guide-to-Celeste-parameters
+#
 # The variable names are:
-# u       = Location in world coordinates (formerly mu)
+# u       = Location in world coordinates (formerly mu). In Celeste, world coordinates are generally
+#           in degrees, but this depends on the WCS embedded in the image.
 # e_dev   = Weight given to a galaxy of type 1 (formerly theta)
 # e_axis  = Galaxy minor/major ratio (formerly rho)
-# e_angle = Galaxy angle (formerly phi)
-# e_scale = Galaxy scale (sigma)
-# For r1 and r2, the first row is stars, and the second is galaxies.
-# r1      = Iax1 lognormal mean parameter for r_s.
+# e_angle = Galaxy angle (formerly phi), in radians north of east
+# e_scale = Galaxy scale (sigma). e_scale times sqrt(e_axis) gives the half-light radius in pixel
+#           coords.
+# For r1, r2, c1 and c2, the first row is stars, and the second is galaxies.
+# r1      = Iax1 lognormal mean parameter for r_s, the brightness/total flux of the object, in nMgy.
+#           For example, r1[1] gives the lognormal mean brightness for a star.
 # r2      = Iax1 lognormal variance parameter for r_s.
-# c1      = C_s means (formerly beta)
+# c1      = C_s means (formerly beta), the log ratios of brightness from each color band to the
+#           previous one. For example c1[1,2] gives the mean log brightness ratio of band 3 over
+#           band 2.
 # c2      = C_s variances (formerly lambda)
 # a       = probability of being a star or galaxy.  a[1, 1] is the
 #           probability of being a star and a[2, 1] of being a galaxy.
 #           (formerly chi)
 # k       = {D|D-1}xIa matrix of color prior component indicators.
 #           (formerly kappa)
+#
+# Note Ia denotes the number of types of astronomical objects (e.g., 2 for stars and galaxies).
+
 abstract ParamSet
 
 type StarPosParams <: ParamSet
@@ -93,15 +104,15 @@ length(::Type{CanonicalParams}) = 6 + 3*Ia + 2*(B-1)*Ia + D*Ia
 
 
 type LatentStateIndexes <: ParamSet
-    u::Vector{Int}        # world coordinate ra/dec location
-    e_dev::Int            # gal dev/exp proportion
-    e_axis::Int           # gal minor/major axis ratio
-    e_angle::Int          # gal angle (east of north?)
-    e_scale::Int          # gal scale (in world or pixels?)
-    r::Vector{Int}        # [star_log_r_flux, gal_log_r_flux]
-    c::Matrix{Int}        # c[1] = star colors, c[2] = gal colors
-    a::Matrix{Int}        # a[1,1] = prob star
-    k::Matrix{Int}        # color prior component indicators (not needed, i think)
+    u::Vector{Int}
+    e_dev::Int
+    e_axis::Int
+    e_angle::Int
+    e_scale::Int
+    r::Vector{Int}
+    c::Matrix{Int}
+    a::Matrix{Int}
+    k::Matrix{Int}        # (not needed, i think)
 
     LatentStateIndexes() =
         new([1, 2], 3, 4, 5, 6,
