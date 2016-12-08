@@ -350,9 +350,8 @@ function get_fft_elbo_function{T}(ea::ElboArgs{T}, fsm_vec::Vector, lanczos_widt
         @assert ea.psf_K == 1
         elbo = ea.elbo_vars.elbo
         kl_source = SensitiveFloat{T}(length(CanonicalParams), 1, elbo.has_gradient, elbo.has_hessian)
-        kl_helper = Celeste.DeterministicVI.KL_HELPER_POOL[threadid()]
         elbo_likelihood_with_fft!(ea, lanczos_width, fsm_vec)
-        subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
+        subtract_kl_all_sources!(ea, elbo, kl_source, KL_HELPER_POOL[Base.Threads.threadid()])
         return deepcopy(elbo)
     end
 end
