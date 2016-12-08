@@ -345,15 +345,14 @@ end
 @doc """
 Return a function callback for an FFT elbo.
 """
-function get_fft_elbo_function{T}(ea::ElboArgs{T}, fsm_vec::Vector, lanczos_width::Int64,
-                                  kl_grad = DiffBase.GradientResult(zeros(T, length(CanonicalParams))),
-                                  kl_hess = zeros(T, length(CanonicalParams), length(CanonicalParams)))
+function get_fft_elbo_function{T}(ea::ElboArgs{T}, fsm_vec::Vector, lanczos_width::Int64)
     function elbo_fft_opt(ea::ElboArgs)
         @assert ea.psf_K == 1
         elbo = ea.elbo_vars.elbo
         kl_source = SensitiveFloat{T}(length(CanonicalParams), 1, elbo.has_gradient, elbo.has_hessian)
+        kl_helper = Celeste.DeterministicVI.KL_HELPER_POOL[threadid()]
         elbo_likelihood_with_fft!(ea, lanczos_width, fsm_vec)
-        subtract_kl_all_sources!(ea, elbo, kl_source, kl_grad, kl_hess)
+        subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
         return deepcopy(elbo)
     end
 end

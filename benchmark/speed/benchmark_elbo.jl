@@ -20,20 +20,19 @@ function main()
 
     param_length = length(Celeste.Model.CanonicalParams)
     kl_source = Celeste.SensitiveFloats.SensitiveFloat{Float64}(param_length, 1, true, false)
-    kl_grad = DiffBase.GradientResult(zeros(param_length))
 
     println("Warm-up / compiling.")
     # do a trial run first, so we don't profile/time compling the code
-    elbo(ea, kl_source, kl_grad, nothing)
+    elbo(ea, kl_source)
     Profile.clear_malloc_data()
 
     println("Calculating ELBO and gradient.")
     if isempty(ARGS)
         # let's time it without any overhead from profiling
-        @time elbo(ea, kl_source, kl_grad, nothing)
+        @time elbo(ea, kl_source)
     elseif ARGS[1] == "--profile"
         Profile.init(delay=0.001)
-        @profile elbo(ea, kl_source, kl_grad, nothing)
+        @profile elbo(ea, kl_source)
         Profile.print(format=:flat, sortedby=:count)
     end
 end

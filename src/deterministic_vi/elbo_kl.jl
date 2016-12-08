@@ -125,43 +125,54 @@ end
 # Differentiation #
 ###################
 
+using ForwardDiff: Dual, JacobianConfig, pickchunksize
+using ReverseDiff: compile_gradient
+
+immutable KLHelper{G,H}
+    gradient!::G
+    hessian!::H
+end
+
 const PARAM_LENGTH = length(CanonicalParams)
-const CHUNK_SIZE = ForwardDiff.pickchunksize(PARAM_LENGTH)
-const DUAL_TYPE = ForwardDiff.Dual{CHUNK_SIZE,Float64}
-const NESTED_KL_GRADIENT_BUFFER = zeros(DUAL_TYPE,PARAM_LENGTH)
-const NESTED_KL_JACOBIAN_CONFIG = ForwardDiff.JacobianConfig{CHUNK_SIZE}(rand(PARAM_LENGTH))
+const DEFAULT_DUAL_TYPE = Dual{pickchunksize(PARAM_LENGTH),Float64}
 
-const kl_gradient! = ReverseDiff.compile_gradient(subtract_kl, rand(PARAM_LENGTH))
-const nested_kl_gradient! = ReverseDiff.compile_gradient(subtract_kl, rand(DUAL_TYPE,PARAM_LENGTH))
+function KLHelper{N,T}(::Type{Dual{N,T}} = DEFAULT_DUAL_TYPE)
+    dual_buffer = zeros(Dual{N,T}, PARAM_LENGTH)
+    jacobian_config = JacobianConfig{N}(rand(PARAM_LENGTH))
+    gradient! = compile_gradient(subtract_kl, rand(PARAM_LENGTH))
+    nested_gradient! = compile_gradient(subtract_kl, rand(Dual{N,T}, PARAM_LENGTH))
+    nested_gradient = x -> nested_gradient!(dual_buffer, x)
+    hessian! = (out, x) -> ForwardDiff.jacobian!(out, nested_gradient, x, jacobian_config)
+    return KLHelper(gradient!, hessian!)
+end
 
-nested_kl_gradient(x) = nested_kl_gradient!(NESTED_KL_GRADIENT_BUFFER, x)
-kl_hessian!(out, x) = ForwardDiff.jacobian!(out, nested_kl_gradient, x, NESTED_KL_JACOBIAN_CONFIG)
+const KL_HELPER_POOL = ntuple(n -> KLHelper(), nthreads())
 
 ###############
 # Entry Point #
 ###############
 
-function subtract_kl_source!(kl_source::SensitiveFloat, vs, kl_grad, kl_hess)
+function subtract_kl_source!(kl_source::SensitiveFloat, result::DiffBase.DiffResult,
+                             vs, helper::KLHelper)
     if kl_source.has_gradient
-        kl_gradient!(kl_grad, vs)
-        kl_source.v[] = DiffBase.value(kl_grad)
-        copy!(kl_source.d, DiffBase.gradient(kl_grad))
+        helper.gradient!(result, vs)
+        kl_source.v[] = DiffBase.value(result)
     else
         kl_source.v[] = subtract_kl(vs)
     end
     if kl_source.has_hessian
-        kl_hessian!(kl_hess, vs)
-        copy!(kl_source.h, kl_hess)
+        helper.hessian!(kl_source.h, vs)
     end
     return kl_source
 end
 
-function subtract_kl_all_sources!(ea::ElboArgs,
-                                  accum::SensitiveFloat,
-                                  kl_source::SensitiveFloat,
-                                  kl_grad, kl_hess)
+function subtract_kl_all_sources!{T}(ea::ElboArgs,
+                                     accum::SensitiveFloat,
+                                     kl_source::SensitiveFloat{T},
+                                     helper::KLHelper)
+    result = DiffBase.DiffResult(zero(T), kl_source.d)
     for sa in 1:length(ea.active_sources)
-        subtract_kl_source!(kl_source, ea.vp[ea.active_sources[sa]], kl_grad, kl_hess)
+        subtract_kl_source!(kl_source, result, ea.vp[ea.active_sources[sa]], helper)
         add_sources_sf!(accum, kl_source, sa)
     end
     return accum

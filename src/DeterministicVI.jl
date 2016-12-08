@@ -3,6 +3,7 @@ Calculate value, gradient, and hessian of the variational ELBO.
 """
 module DeterministicVI
 
+using Base.Threads: threadid, nthreads
 using ..Model
 import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
                 GalaxySigmaDerivs, SkyPatch,
