@@ -6,6 +6,7 @@ import WCS
 
 import Celeste: Model, DeterministicVI, ParallelRun, Infer
 
+const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const FILENAME = "output/galsim_test_images.fits"
 
 function make_psf(psf_sigma_px)
@@ -28,8 +29,8 @@ immutable FitsExtension
 end
 
 function read_fits(filename; read_sdss_psf=false)
-    @assert isfile(filename)
     println("Reading $filename...")
+    @assert isfile(filename)
     fits = FITSIO.FITS(filename)
     println("Found $(length(fits)) extensions.")
 
@@ -237,16 +238,22 @@ function parallel_inference(band_images, catalog_entries; joint_infer=false)
     results[1].vs
 end
 
-function main(; test_case_name=Nullable{String}())
+# Returns a data frame with one row for each test case and  parameter name, with columns
+# * label: test case name
+# * field: human-readable parameter name
+# * expected: "ground truth" expected value
+# * single_infer_actual: inferred MAP value or posterior median from single-source inference
+# * joint_infer_actual: ditto, for multi-source joint inference
+function main(; test_case_names=String[], print_fn=println)
     all_benchmark_data = []
-    extensions, wcs = read_fits(FILENAME)
+    extensions, wcs = read_fits(joinpath(GALSIM_BENCHMARK_DIR, FILENAME))
     @assert length(extensions) % 5 == 0 # one extension per band for each test case
 
     for test_case_index in 1:div(length(extensions), 5)
         first_band_index = (test_case_index - 1) * 5 + 1
         header = extensions[first_band_index].header
         this_test_case_name = header["CL_DESCR"]
-        if get(test_case_name, this_test_case_name) != this_test_case_name
+        if !isempty(test_case_names) && !in(this_test_case_name, test_case_names)
             continue
         end
         println("Running test case '$this_test_case_name'")
@@ -268,12 +275,13 @@ function main(; test_case_name=Nullable{String}())
         benchmark_data = benchmark_comparison_data(single_infer_variational_parameters,
                                                    joint_infer_variational_parameters,
                                                    header)
-        println(repr(benchmark_data))
+        print_fn(repr(benchmark_data))
         push!(all_benchmark_data, benchmark_data)
     end
 
     full_data = vcat(all_benchmark_data...)
-    println(repr(full_data[!isna(full_data[:expected]), :]))
+    print_fn(repr(full_data[!isna(full_data[:expected]), :]))
+    full_data
 end
 
 end # module GalsimBenchmark

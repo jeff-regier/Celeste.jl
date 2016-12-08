@@ -20,6 +20,7 @@ include("DeterministicVIImagePSF.jl")
 
 include("ParallelRun.jl")
 
+include("GalsimBenchmark.jl")
 include("Stripe82Score.jl")
 
 include("CelesteEDA.jl")
