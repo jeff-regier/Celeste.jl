@@ -208,11 +208,12 @@ function add_sources_sf!{NumType <: Number}(
     @assert size(sf_all.d, 1) == size(sf_s.d, 1)
 
     P = sf_all.local_P
+    P_shifted = P * (s - 1)
 
     if sf_all.has_gradient
         @assert size(sf_s.d) == (P, 1)
-        @inbounds for s_ind1 in 1:sf_all.local_P
-            s_all_ind1 = P * (s - 1) + s_ind1
+        @inbounds for s_ind1 in 1:P
+            s_all_ind1 = P_shifted + s_ind1
             sf_all.d[s_all_ind1] = sf_all.d[s_all_ind1] + sf_s.d[s_ind1]
         end
     end
@@ -224,12 +225,11 @@ function add_sources_sf!{NumType <: Number}(
         @assert Ph >= P * s
 
         @inbounds for s_ind1 in 1:P
-            s_all_ind1 = P * (s - 1) + s_ind1
+            s_all_ind1 = P_shifted + s_ind1
 
             @inbounds for s_ind2 in 1:s_ind1
-                s_all_ind2 = P * (s - 1) + s_ind2
-                sf_all.h[s_all_ind2, s_all_ind1] =
-                    sf_all.h[s_all_ind2, s_all_ind1] + sf_s.h[s_ind2, s_ind1]
+                s_all_ind2 = P_shifted + s_ind2
+                sf_all.h[s_all_ind2, s_all_ind1] += sf_s.h[s_ind2, s_ind1]
                 # TODO: move outside the loop?
                 sf_all.h[s_all_ind1, s_all_ind2] = sf_all.h[s_all_ind2, s_all_ind1]
             end

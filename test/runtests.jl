@@ -41,6 +41,7 @@ if length(test_files) > 0
 else
     testfiles = [
                  "test_derivatives.jl",
+                 "test_kl.jl",
                  "test_elbo.jl",
                  "test_fft.jl",
                  "test_galsim_benchmarks.jl",

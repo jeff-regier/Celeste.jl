@@ -5,14 +5,14 @@ image rather than a mixture of Gaussians.
 
 module DeterministicVIImagePSF
 
-using StaticArrays
+using StaticArrays, DiffBase
 
 import ..DeterministicVI:
     ElboArgs, ElboIntermediateVariables,
     StarPosParams, GalaxyPosParams, CanonicalParams, VariationalParams,
     SourceBrightness, GalaxyComponent, SkyPatch,
     load_source_brightnesses, add_elbo_log_term!,
-    accumulate_source_pixel_brightness!, subtract_kl!
+    accumulate_source_pixel_brightness!, subtract_kl_all_sources!, KL_HELPER_POOL
 
 import ..Model:
     populate_gal_fsm!, getids, ParamSet, linear_world_to_pix, lidx,
@@ -23,7 +23,7 @@ import ..Model:
 import ..SensitiveFloats:
     SensitiveFloat, zero_sensitive_float_array,
     multiply_sfs!, add_scaled_sfs!, clear!
-    
+
 import ..Infer: load_active_pixels!
 
 import ..PSF: get_psf_at_point
