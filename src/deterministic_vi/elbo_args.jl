@@ -234,7 +234,10 @@ function ElboArgs{NumType <: Number}(
         end
     end
 
-    @assert(length(active_sources) <= 5, "too many active_sources")
+    @assert(length(active_sources) <= 5 || !calculate_hessian,
+            "too many active_sources to store a hessian")
+    @assert(all([all(isfinite, vs) for vs in vp]),
+            "VariationalParameters contains NaNs or Infs")
 
     elbo_vars = ElboIntermediateVariables(NumType,
                                           S,
