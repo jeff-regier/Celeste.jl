@@ -31,7 +31,7 @@ import ..PSF: get_psf_at_point
 import WCS
 
 include("deterministic_vi_image_psf/sensitive_float_fft.jl")
-include("deterministic_vi_image_psf/lanczos.jl")
+include("deterministic_vi_image_psf/kernels.jl")
 include("deterministic_vi_image_psf/fsm_matrices.jl")
 include("deterministic_vi_image_psf/elbo_image_psf.jl")
 
