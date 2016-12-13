@@ -54,7 +54,7 @@ type FSMSensitiveFloatMatrices
             Vector{Matrix{Complex{Float64}}}(),
             Vector{Matrix{Float64}}(),
             0, 0,
-            2, bspline_kernel_with_derivatives)
+            2, x -> cubic_kernel_with_derivatives(x, -0.75))
     end
 end
 

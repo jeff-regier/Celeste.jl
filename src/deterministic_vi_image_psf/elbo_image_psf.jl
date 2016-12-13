@@ -346,14 +346,15 @@ end
 @doc """
 Return a function callback for an FFT elbo.
 """
-function get_fft_elbo_function(ea::ElboArgs, fsm_vec::Vector{})
-    function elbo_fft_opt{NumType <: Number}(
-                        ea::ElboArgs{NumType};
-                        calculate_derivs=true,
-                        calculate_hessian=true)
+function get_fft_elbo_function{T}(ea::ElboArgs{T}, fsm_vec::Vector{})
+    function elbo_fft_opt(ea::ElboArgs)
         @assert ea.psf_K == 1
+        elbo = ea.elbo_vars.elbo
+        kl_source = SensitiveFloat{T}(length(CanonicalParams), 1,
+                                      elbo.has_gradient, elbo.has_hessian)
         elbo_likelihood_with_fft!(ea, fsm_vec)
-        subtract_kl!(ea, ea.elbo_vars.elbo)
-        return deepcopy(ea.elbo_vars.elbo)
+        subtract_kl_all_sources!(ea, elbo, kl_source,
+                                 KL_HELPER_POOL[Base.Threads.threadid()])
+        return deepcopy(elbo)
     end
 end

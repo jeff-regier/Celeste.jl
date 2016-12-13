@@ -150,8 +150,7 @@ function test_star_optimization_fft()
     elbo_fft_opt =
         DeterministicVIImagePSF.get_fft_elbo_function(ea_fft, fsm_vec)
     DeterministicVI.maximize_f(elbo_fft_opt, ea_fft; loc_width=1.0)
-    # TODO: Currently failing, so don't trust the FFT ELBO.
-    # verify_sample_star(ea_fft.vp[1], [10.1, 12.2])
+    verify_sample_star(ea_fft.vp[1], [10.1, 12.2])
 end
 
 
@@ -162,7 +161,9 @@ function test_galaxy_optimization_fft()
     elbo_fft_opt =
         DeterministicVIImagePSF.get_fft_elbo_function(ea_fft, fsm_vec)
     DeterministicVI.maximize_f(elbo_fft_opt, ea_fft; loc_width=1.0)
-    # TODO: Currently failing, so don't trust the FFT ELBO.
+    # TODO: Currently failing since it misses the brighness by 3%, which is
+    # greater than the 1% permitted by the test.  However, the ELBO of the
+    # FFT optimum is lower than that of the MOG optimum.
     # verify_sample_galaxy(ea_fft.vp[1], [8.5, 9.6])
 end
 
