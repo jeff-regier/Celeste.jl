@@ -110,11 +110,12 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
     max_x = Optim.minimizer(nm_result)
 
     Log.debug("elbo is $max_f after $(nm_result.iterations) Newton steps")
-    return f_evals, max_f, max_x, nm_result
+    return f_evals, max_f, max_x, nm_result, transform
 end
 
 function maximize_f{F}(f::F, ea::ElboArgs;
                        loc_width=1.5e-3,
+                       loc_scale=1.0,
                        omitted_ids=Int[],
                        xtol_rel=1e-7,
                        ftol_abs=1e-6,
@@ -122,7 +123,8 @@ function maximize_f{F}(f::F, ea::ElboArgs;
                        max_iters=50,
                        fast_hessian=true,
                        use_default_optim_params=false)
-    transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=loc_width)
+    transform = get_mp_transform(ea.vp, ea.active_sources,
+                                 loc_width=loc_width, loc_scale=loc_scale)
 
     maximize_f(f, ea, transform;
                 omitted_ids=omitted_ids,
