@@ -222,8 +222,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
                               joint_infer_batch_size=60,
                               within_batch_shuffling=true,
-                              joint_inference_terminate=true,
-                              joint_inference_terminate_percentage=.95,
+                              joint_inference_terminate_percentage=1,
                               n_iters=10)
     # Seed random number generator to ensure the same results per run.
     srand(42)
@@ -369,11 +368,11 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             end
         end
 
-        if n_sources_converged >= joint_inference_terminate_percentage * n_sources &&
-            joint_inference_terminate
+        if n_sources_converged >= joint_inference_terminate_percentage * n_sources
             break
         end
     end
+    Log.info("$(n_sources_converged) / $(n_sources) converged")
     Log.info("Done fitting elboargs. Elapsed time: $(toq())")
 
     # Return add results to vector
