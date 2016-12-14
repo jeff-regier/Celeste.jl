@@ -183,6 +183,7 @@ function debug_populate_fsm_vec!(
     end
 
     for b=1:ea.N
+        clear_brightness!(fsm_vec[b])
         for s in 1:ea.S
             populate_star_fsm_image!(
                 ea, s, b, fsm_vec[b].psf_vec[s], fsm_vec[b].fs0m_conv,
