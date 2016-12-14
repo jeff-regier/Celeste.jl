@@ -1,0 +1,359 @@
+#LyX 2.2 created this file. For more info see http://www.lyx.org/
+\lyxformat 508
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+\begin_inset FormulaMacro
+\newcommand{\sinc}{\textrm{sinc}}
+{\textrm{sinc}}
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The Lanczos interpolation of the PSF involves three coordinate systems.
+ One is the pixel space of the original image, which I will denote without
+ subscripts: 
+\begin_inset Formula $\left(h,w\right)$
+\end_inset
+
+.
+ The second is the pixels of the PSF image itself, which I will denote with
+ a subscript 
+\begin_inset Formula $\left(h,w\right)_{psf}$
+\end_inset
+
+.
+ Finally, there is the coordinate system centered at the star, 
+\begin_inset Formula $\left(h,w\right)_{star}$
+\end_inset
+
+.
+ The three coordinate systems have the same scale, but are related by offsets.
+ Let the star be located at 
+\begin_inset Formula $\left(\mu_{h},\mu_{w}\right)$
+\end_inset
+
+ (no subscript indicates in the original image).
+ Let the center of the PSF in its image be at 
+\begin_inset Formula $\left(h_{0},w_{0}\right)_{psf}$
+\end_inset
+
+ (that is an index into the PSF image).
+ Then
+\begin_inset Formula 
+\begin{align*}
+\left(h,w\right) & =\left(h-\mu_{h},w-\mu_{w}\right)_{star}\\
+\left(h,w\right)_{star} & =\left(h+h_{0},w+w_{0}\right)_{psf}\\
+\left(h,w\right) & =\left(h-\mu_{h}+h_{0},w-\mu_{w}+w_{0}\right)_{psf}
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Let 
+\begin_inset Formula $L$
+\end_inset
+
+ denote a Lanczos kernel with width 
+\begin_inset Formula $a$
+\end_inset
+
+.
+ We have samples of the PSF at integer locations in the coordinates 
+\begin_inset Formula $\left(\cdot\right)_{psf}$
+\end_inset
+
+.
+ The integer pixel locations in 
+\begin_inset Formula $\left(\cdot\right)$
+\end_inset
+
+ are non-integer locations in 
+\begin_inset Formula $\left(\cdot\right)_{psf}$
+\end_inset
+
+.
+ Then the pixel value at 
+\begin_inset Formula $\left(h,w\right)$
+\end_inset
+
+ is given by
+\begin_inset Formula 
+\begin{align*}
+\bar{h} & =\left\lfloor h-\mu_{h}+h_{0}\right\rfloor \\
+\bar{w} & =\left\lfloor w-\mu_{w}+w_{0}\right\rfloor \\
+p\left(h,w\right) & =\sum_{h_{psf}=\bar{h}-a+1}^{\bar{h}+a}\sum_{w_{psf}=\bar{w}-a+1}^{\bar{w}+a}PSF\left(h_{psf},w_{psf}\right)L\left(h-\mu_{h}+h_{0}-h_{psf}\right)L\left(w-\mu_{w}+w_{0}-w_{psf}\right)
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The derivatives pass through the Lanczos kernel.
+ Since
+\begin_inset Formula 
+\begin{align*}
+L\left(x;a\right) & =\sinc\left(x\right)\sinc\left(\frac{x}{a}\right)\mathbb{I}\left(\left|x\right|<a\right)\\
+ & =\frac{\sin\pi x}{\pi x}\frac{\sin\left(\frac{\pi x}{a}\right)}{\frac{\pi x}{a}}\mathbb{I}\left(\left|x\right|<a\right)\\
+\sinc'\left(x\right)=\frac{d\sinc\left(x\right)}{dx} & =\pi\left(\frac{\cos\pi x}{\pi x}-\frac{\sin\pi x}{\pi^{2}x^{2}}\right)=\frac{\pi x\cos x-\sin x}{x^{2}}=\pi\frac{\cos\pi x-\sinc x}{\pi x}\\
+\sinc''\left(x\right)=\frac{d^{2}\sinc\left(x\right)}{dx^{2}} & =\pi\left(\frac{-\pi\sin\pi x-\sinc'x}{\pi x}-\frac{\cos\pi x-\sinc x}{\left(\pi x\right)^{2}}\right)\\
+ & =\pi\left(\frac{-\pi\sin\pi x-\sinc'x}{\pi x}-\frac{\sinc'\left(x\right)}{\pi x}\right)\\
+ & =-\pi\left(\pi\sinc x+2\frac{\sinc'\left(x\right)}{\pi x}\right)\\
+\frac{dL\left(x;a\right)}{dx} & =\left(\sinc'\left(x\right)\sinc\left(\frac{x}{a}\right)+\frac{1}{a}\sinc\left(x\right)\sinc'\left(\frac{x}{a}\right)\right)\mathbb{I}\left(\left|x\right|<a\right)\\
+\frac{d^{2}L\left(x;a\right)}{dx^{2}} & =\left(\sinc''\left(x\right)\sinc\left(\frac{x}{a}\right)+\frac{1}{a}\sinc'\left(x\right)\sinc'\left(\frac{x}{a}\right)+\frac{1}{a}\sinc'\left(x\right)\sinc'\left(\frac{x}{a}\right)+\frac{1}{a^{2}}\sinc\left(x\right)\sinc''\left(\frac{x}{a}\right)\right)\mathbb{I}\left(\left|x\right|<a\right)\\
+ & =\left(\sinc''\left(x\right)\sinc\left(\frac{x}{a}\right)+\frac{2}{a}\sinc'\left(x\right)\sinc'\left(\frac{x}{a}\right)+\frac{1}{a^{2}}\sinc\left(x\right)\sinc''\left(\frac{x}{a}\right)\right)\mathbb{I}\left(\left|x\right|<a\right)
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Here is the behavior at 
+\begin_inset Formula $x=0$
+\end_inset
+
+:
+\begin_inset Formula 
+\begin{align*}
+\lim_{x\rightarrow0}\sinc x & =\lim_{x\rightarrow0}\frac{\sin\pi x}{\pi x}=\lim_{x\rightarrow0}\frac{\pi\cos x}{\pi}=1
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Note that since 
+\begin_inset Formula $\sinc$
+\end_inset
+
+ is not formally defined at 
+\begin_inset Formula $0$
+\end_inset
+
+ you need to use L'Hopital's rule carefully to calculate the derivatives
+ at 
+\begin_inset Formula $0$
+\end_inset
+
+.
+\begin_inset Formula 
+\begin{align*}
+\sinc'\left(0\right) & =\lim_{x\rightarrow0}\frac{\sinc\left(x\right)-\sinc\left(-x\right)}{2x}\\
+ & =\lim_{x\rightarrow0}\frac{\sin\left(\pi x\right)-\sin\left(-\pi x\right)}{2\pi x^{2}}\\
+ & =\lim_{x\rightarrow0}\frac{\pi\cos\left(\pi x\right)-\pi\cos\left(-\pi x\right)}{4\pi x}\\
+ & =\lim_{x\rightarrow0}\pi\frac{-\sin\left(\pi x\right)+\sin\left(-\pi x\right)}{4}\\
+ & =0\\
+\sinc''\left(0\right) & =\lim_{x\rightarrow0}\frac{\pi\frac{\cos\pi x-\sinc x}{\pi x}}{2x}\\
+ & =\lim_{x\rightarrow0}\frac{\cos\pi x-\sinc x}{2x^{2}}\\
+ & =\lim_{x\rightarrow0}\frac{-\pi\sin x-\frac{\sinc\left(x\right)-\sinc\left(-x\right)}{2x}}{4x}\\
+ & =\lim_{x\rightarrow0}\frac{-\pi2x\sin x-\sinc\left(x\right)+\sinc\left(-x\right)}{8x^{2}}\\
+ & =\lim_{x\rightarrow0}\frac{-\pi2x\sin x-\sinc\left(x\right)+\sinc\left(x\right)}{8x^{2}}\textrm{ (symmetry of }\sinc\textrm{)}\\
+ & =\lim_{x\rightarrow0}\frac{-\pi\sin x}{4x}\\
+ & =-\frac{\pi}{4}\textrm{ (not checked carefully -- importantly, it's fininte)}
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+This is surprising since
+\begin_inset Formula 
+\begin{align*}
+\sinc x & =\frac{\sin\pi x}{\pi x}\\
+ & =\frac{1}{\pi x}\left(\pi x-\frac{1}{3!}\left(\pi x\right)^{3}+\frac{1}{5!}\left(\pi x\right)^{5}-\frac{1}{7!}\left(\pi x\right)^{7}\right)\\
+ & =1-\frac{1}{3!}\left(\pi x\right)^{2}+\frac{1}{5!}\left(\pi x\right)^{4}-\frac{1}{7!}\left(\pi x\right)^{6}...\\
+\sinc'x & =-\frac{2\pi}{3!}\pi x+\frac{4\pi}{5!}\left(\pi x\right)^{3}-\frac{6\pi}{7!}\left(\pi x\right)^{5}+...\\
+\sinc''x & =-\frac{2\pi^{2}}{3!}+\frac{4\cdot3\pi^{2}}{5!}\pi x-\frac{6\cdot5}{7!}\left(\pi x\right)^{4}+...
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+...which is symmetric.
+ With these in hand you can easily calculate 
+\begin_inset Formula 
+\begin{align*}
+\frac{dp}{d\mu} & \textrm{ and }\frac{d^{2}p}{d\mu d\mu^{T}}
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Note that the pixel location 
+\begin_inset Formula $\mu$
+\end_inset
+
+ and actual world location 
+\begin_inset Formula $\mu_{RD}$
+\end_inset
+
+ (RD is for RA-DEC) are related by the Jacobian of the WCS transform:
+\begin_inset Formula 
+\begin{align*}
+\frac{d\mu}{d\mu_{RD}^{T}} & =J_{WCS}
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+so
+\begin_inset Formula 
+\begin{align*}
+\frac{dp}{d\mu_{RD}} & =J_{WCS}^{T}\frac{dp}{d\mu}\\
+\frac{d^{2}p}{d\mu_{RD}d\mu_{RD}^{T}} & J_{WCS}^{T}\frac{d^{2}p}{d\mu d\mu}J_{WCS}
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Note that
+\begin_inset Formula 
+\begin{align*}
+J_{WCS}^{T}\left[\begin{array}{c}
+z\\
+0
+\end{array}\right] & =\left[\begin{array}{cc}
+J_{11} & J_{21}\\
+J_{12} & J_{22}
+\end{array}\right]\left[\begin{array}{c}
+z\\
+0
+\end{array}\right]=z\left[\begin{array}{c}
+J_{11}\\
+J_{12}
+\end{array}\right]\\
+J_{WCS}^{T}\left[\begin{array}{c}
+0\\
+z
+\end{array}\right] & =z\left[\begin{array}{c}
+J_{21}\\
+J_{22}
+\end{array}\right]\\
+J_{WCS}^{T}\left[\begin{array}{cc}
+z & 0\\
+0 & 0
+\end{array}\right]J_{WCS} & =\left[\begin{array}{cc}
+J_{11} & J_{21}\\
+J_{12} & J_{22}
+\end{array}\right]\left[\begin{array}{cc}
+zJ_{11} & zJ_{12}\\
+0 & 0
+\end{array}\right]=z\left[\begin{array}{cc}
+J_{11}^{2} & J_{11}J_{12}\\
+J_{11}J_{12} & J_{12}^{2}
+\end{array}\right]\\
+J_{WCS}^{T}\left[\begin{array}{cc}
+0 & 0\\
+0 & z
+\end{array}\right]J_{WCS} & =\left[\begin{array}{cc}
+J_{11} & J_{21}\\
+J_{12} & J_{22}
+\end{array}\right]\left[\begin{array}{cc}
+0 & 0\\
+zJ_{21} & zJ_{22}
+\end{array}\right]=z\left[\begin{array}{cc}
+J_{21}^{2} & J_{22}J_{21}\\
+J_{22}J_{21} & J_{22}^{2}
+\end{array}\right]
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document
