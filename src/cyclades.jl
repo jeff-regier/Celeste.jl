@@ -297,6 +297,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
         sources_converged[source] = false
     end
     n_sources_converged = 0
+    n_sources_converged_lock = SpinLock()
 
     function should_optimize_source(src_indx)
         src_has_converged = sources_converged[target_sources[src_indx]]
@@ -337,7 +338,9 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
 
                 # Maintain count of sources that have converged
                 if sources_converged[target_sources[cur_source_indx]]
+                    lock(n_sources_converged_lock)
                     n_sources_converged += 1
+                    unlock(n_sources_converged_lock)
                 end
             end
         catch ex
