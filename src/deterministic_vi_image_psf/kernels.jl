@@ -35,26 +35,62 @@ function lanczos_kernel_with_derivatives{NumType <: Number}(x::NumType, a::Float
 end
 
 
+function bspline_kernel_with_derivatives{NumType <: Number}(x::NumType)
+    abs_x = abs(x)
+    sign_x = sign(x)
+    if abs_x > 2
+        return 0, 0, 0
+    elseif abs_x > 1
+        return (-1 * abs_x^3 + 6 * abs_x^2 - 12 * abs_x + 8) / 6,
+               (-3 * abs_x^2 + 12 * abs_x  - 12) * sign_x / 6,
+               (-6 * abs_x + 12) / 6
+    else
+        return (3 * abs_x^3 - 6 * abs_x^2 + 4) / 6,
+               (9 * abs_x^2 - 12 * abs_x) * sign_x / 6,
+               (18 * abs_x  - 12) / 6
+    end
+end
+
+
+function cubic_kernel_with_derivatives{NumType <: Number}(x::NumType, a::Float64)
+    abs_x = abs(x)
+    sign_x = sign(x)
+    if abs_x > 2
+        return 0, 0, 0
+    elseif abs_x > 1
+        return a * abs_x^3      -5 * a * abs_x^2 +  8 * a * abs_x - 4 * a,
+               (3 * a * abs_x^2  -10 * a * abs_x +   8 * a) * sign_x,
+               6 * a * abs_x    -10 * a
+    else
+        return (a + 2) * abs_x^3 -    (a + 3) * abs_x^2 + 1,
+               (3 * (a + 2) * abs_x^2  -2 * (a + 3) * abs_x) * sign_x,
+               6 * (a + 2) * abs_x    -2 * (a + 3)
+    end
+    return x
+end
+
+
+
 # TODO: replace the gradient and hessian flags with whether or not the
 # sensitive floats in the image have gradients and hessians.
 # Interpolate the PSF to the pixel values.
-function lanczos_interpolate!{NumType <: Number}(
+function interpolate!{NumType <: Number}(
+        kernel_with_derivs, # A 1-d kernel function
+        kernel_width::Int,
         image::Matrix{SensitiveFloat{NumType}},
         psf_image::Matrix{Float64},
         object_loc::Vector{NumType},
-        lanczos_width::Int,
         wcs_jacobian::Matrix{Float64},
         calculate_gradient::Bool,
         calculate_hessian::Bool)
     @assert image[1].local_P == length(StarPosParams)
 
-    a = Float64(lanczos_width)
     h_psf_width = (size(psf_image, 1) + 1) / 2.0
     w_psf_width = (size(psf_image, 2) + 1) / 2.0
 
     param_ids = getids(StarPosParams)
 
-    # These are sensitive floats representing derviatives of the Lanczos kernel.
+    # These are sensitive floats representing derviatives of the kernel.
     kernel = SensitiveFloat{NumType}(length(StarPosParams), 1,
                                      calculate_gradient, calculate_hessian)
     kernel_h = SensitiveFloat{NumType}(length(StarPosParams), 1,
@@ -81,10 +117,10 @@ function lanczos_interpolate!{NumType <: Number}(
 
         # Centers of indices of the psf matrix, i.e., integer psf coordinates.
         h_ind0, w_ind0 = Int(floor(h_psf)), Int(floor(w_psf))
-        h_lower = max(h_ind0 - lanczos_width + 1, 1)
-        h_upper = min(h_ind0 + lanczos_width, size(psf_image, 1))
+        h_lower = max(h_ind0 - kernel_width + 1, 1)
+        h_upper = min(h_ind0 + kernel_width, size(psf_image, 1))
         for h_ind = (h_lower:h_upper)
-            lh_v, lh_d, lh_h = lanczos_kernel_with_derivatives(h_psf - h_ind, a)
+            lh_v, lh_d, lh_h = kernel_with_derivs(h_psf - h_ind)
             if lh_v != 0
                 clear!(kernel_h)
                 kernel_h.v[] = lh_v
@@ -97,11 +133,10 @@ function lanczos_interpolate!{NumType <: Number}(
                         kernel_h.h[param_ids.u, param_ids.u] = k_h_hess * lh_h;
                     end
                 end
-                w_lower = max(w_ind0 - lanczos_width + 1, 1)
-                w_upper = min(w_ind0 + lanczos_width, size(psf_image, 2))
+                w_lower = max(w_ind0 - kernel_width + 1, 1)
+                w_upper = min(w_ind0 + kernel_width, size(psf_image, 2))
                 for w_ind = (w_lower:w_upper)
-                    lw_v, lw_d, lw_h =
-                        lanczos_kernel_with_derivatives(w_psf - w_ind, a)
+                    lw_v, lw_d, lw_h = kernel_with_derivs(w_psf - w_ind)
                     if lw_v != 0
                         clear!(kernel)
                         kernel.v[] = lw_v
