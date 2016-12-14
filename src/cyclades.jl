@@ -222,7 +222,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
                               joint_infer_batch_size=60,
                               within_batch_shuffling=true,
-                              joint_inference_terminate_percentage=1,
+                              joint_inference_terminate_percentage=.95,
                               n_iters=10)
     # Seed random number generator to ensure the same results per run.
     srand(42)
@@ -344,8 +344,6 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 end
             end
         catch ex
-            Log.error(string(ex))
-            exit(-1)
             if is_production_run || nthreads() > 1
                 Log.error(string(ex))
             else
