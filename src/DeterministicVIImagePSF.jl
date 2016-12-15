@@ -8,7 +8,7 @@ module DeterministicVIImagePSF
 using StaticArrays, DiffBase
 
 import ..DeterministicVI:
-    ElboArgs, ElboIntermediateVariables,
+    ElboArgs, ElboIntermediateVariables, maximize_f,
     StarPosParams, GalaxyPosParams, CanonicalParams, VariationalParams,
     SourceBrightness, GalaxyComponent, SkyPatch,
     load_source_brightnesses, add_elbo_log_term!,
@@ -18,13 +18,13 @@ import ..Model:
     populate_gal_fsm!, getids, ParamSet, linear_world_to_pix, lidx,
     BvnComponent, GalaxyCacheComponent, GalaxySigmaDerivs,
     get_bvn_cov, galaxy_prototypes, linear_world_to_pix,
-    Image, eval_psf
+    Image, eval_psf, CatalogEntry, init_source
 
 import ..SensitiveFloats:
     SensitiveFloat, zero_sensitive_float_array,
     multiply_sfs!, add_scaled_sfs!, clear!
 
-import ..Infer: load_active_pixels!
+import ..Infer: load_active_pixels!, get_sky_patches
 
 import ..PSF: get_psf_at_point
 
@@ -37,5 +37,22 @@ include("deterministic_vi_image_psf/elbo_image_psf.jl")
 
 export elbo_likelihood_with_fft!, FSMSensitiveFloatMatrices,
        initialize_fsm_sf_matrices!, initialize_fft_elbo_parameters
+
+
+function infer_source_fft(images::Vector{Image},
+                          neighbors::Vector{CatalogEntry},
+                          entry::CatalogEntry)
+   cat_local = vcat([entry], neighbors)
+   vp = Vector{Float64}[init_source(ce) for ce in cat_local]
+   patches = get_sky_patches(images, cat_local)
+   load_active_pixels!(images, patches)
+
+   ea_fft, fsm_vec = initialize_fft_elbo_parameters(
+       images, vp, patches, [1], use_raw_psf=false)
+   elbo_fft_opt = get_fft_elbo_function(ea_fft, fsm_vec)
+   maximize_f(elbo_fft_opt, ea_fft)
+
+   vp[1]
+end
 
 end

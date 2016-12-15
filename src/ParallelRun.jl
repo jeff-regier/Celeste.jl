@@ -12,7 +12,7 @@ import ..PSF
 
 import ..DeterministicVI: infer_source
 
-include("cyclades.jl")
+include("joint_infer.jl")
 
 #set this to false to use source-division parallelism
 const SKY_DIVISION_PARALLELISM=true
@@ -322,36 +322,6 @@ function infer_init(rcfs::Vector{RunCamcolField},
     return catalog, target_sources
 end
 
-"""
-A simplified helper method to choose between one_node_single_infer and one_node_joint_infer
-"""
-function parallel_infer(catalog, target_sources, neighbor_map, images;
-                        joint_infer=false,
-                        joint_infer_n_iters=50,
-                        joint_infer_batch_size=60,
-                        joint_infer_shuffle=true,
-                        reserve_thread=Ref(false),
-                        thread_fun=phalse,
-                        timing=InferTiming())
-    if joint_infer
-        return one_node_joint_infer(catalog,
-                                    target_sources,
-                                    neighbor_map,
-                                    images;
-                                    n_iters=joint_infer_n_iters,
-                                    joint_infer_batch_size=joint_infer_batch_size,
-                                    within_batch_shuffling=joint_infer_shuffle)
-    else
-        return one_node_single_infer(catalog,
-                                     target_sources,
-                                     neighbor_map,
-                                     images;
-                                     reserve_thread=reserve_thread,
-                                     thread_fun=thread_fun,
-                                     timing=timing)
-    end
-end
-
 
 """
 Use mulitple threads on one node to fit the Celeste model to sources in a given
@@ -359,23 +329,17 @@ bounding box.
 """
 function one_node_infer(rcfs::Vector{RunCamcolField},
                         stagedir::String;
-                        joint_infer=false,
-                        joint_infer_n_iters=1000,
-                        joint_infer_batch_size=60,
-                        joint_infer_shuffle=true,
+                        infer_callback=one_node_single_infer,
                         objid="",
                         box=BoundingBox(-1000., 1000., -1000., 1000.),
                         target_rcfs=RunCamcolField[],
-                        primary_initialization=true,
-                        reserve_thread=Ref(false),
-                        thread_fun=phalse,
-                        timing=InferTiming())
+                        primary_initialization=true)
     catalog, target_sources = infer_init(rcfs,
-                                         stagedir;
-                                         objid=objid,
-                                         box=box,
-                                         target_rcfs=target_rcfs,
-                                         primary_initialization=primary_initialization)
+                                 stagedir;
+                                 objid=objid,
+                                 box=box,
+                                 target_rcfs=target_rcfs,
+                                 primary_initialization=primary_initialization)
 
     # If there are no objects of interest, return early.
     if length(target_sources) == 0
@@ -393,11 +357,7 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
     Log.info("Running with $(nthreads()) threads")
 
     # NB: All I/O happens above. The methods below don't touch disk.
-    parallel_infer(catalog, target_sources, neighbor_map, images,
-                   joint_infer=joint_infer, joint_infer_n_iters=joint_infer_n_iters,
-                   reserve_thread=reserve_thread, thread_fun=thread_fun, timing=timing,
-                   joint_infer_batch_size=joint_infer_batch_size,
-                   joint_infer_shuffle=joint_infer_shuffle)
+    infer_callback(catalog, target_sources, neighbor_map, images)
 end
 
 
@@ -414,6 +374,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
                                images::Vector{Image};
+                               infer_source_callback=infer_source,
                                reserve_thread=Ref(false),
                                thread_fun=phalse,
                                timing=InferTiming())
@@ -451,7 +412,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
                     neighbors = catalog[neighbor_map[ts]]
 
                     t0 = time()
-                    vs_opt = infer_source(images, neighbors, entry)
+                    vs_opt = infer_source_callback(images, neighbors, entry)
                     runtime = time() - t0
 
                     result = OptimizedSource(entry.thing_id,
@@ -535,35 +496,6 @@ Like `get_overlapping_fields`, but return a Vector of
 function get_overlapping_fields(query::BoundingBox, stagedir::String)
     fes = get_overlapping_field_extents(query, stagedir)
     [fe[1] for fe in fes]
-end
-
-
-"""
-called from main entry point for inference for one field
-(used for accuracy assessment, infer-box is the primary inference
-entry point)
-"""
-function infer_field(rcf::RunCamcolField,
-                     stagedir::String,
-                     outdir::String;
-                     joint_infer=false,
-                     objid="")
-    # Here `one_node_infer` is called just with a single rcf, even though
-    # other rcfs may overlap with this one. That's because this function is
-    # just for testing on stripe 82: in practice we always use all relevent
-    # data to make inferences.
-    results = one_node_infer([rcf,],
-                             stagedir;
-                             objid=objid,
-                             primary_initialization=false,
-                             joint_infer=joint_infer)
-    fname = if objid == ""
-        @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
-    else
-        @sprintf "%s/celeste-objid-%s.jld" outdir objid
-    end
-    JLD.save(fname, "results", results)
-    Log.debug("infer_field finished successfully")
 end
 
 
