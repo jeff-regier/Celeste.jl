@@ -360,7 +360,7 @@ bounding box.
 function one_node_infer(rcfs::Vector{RunCamcolField},
                         stagedir::String;
                         joint_infer=false,
-                        joint_infer_n_iters=50,
+                        joint_infer_n_iters=1000,
                         joint_infer_batch_size=60,
                         joint_infer_shuffle=true,
                         objid="",

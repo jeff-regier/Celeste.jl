@@ -1,5 +1,6 @@
 import FITSIO
 import JLD
+import Optim
 
 import ..Log
 using ..Model
@@ -207,6 +208,12 @@ catalog - the catalog of light sources
 target_sources - light sources to optimize
 neighbor_map - ligh_source index -> neighbor light_source id
 
+cyclades_partition - use the cyclades algorithm to partition into non conflicting batches for updates.
+joint_infer_batch_size - size of a single batch of sources for updates
+within_batch_shuffling - whether or not to process sources within a batch randomly
+joint_inference_terminate - whether to terminate once sources seem to be stable
+joint_inference_terminate_percentage - stop optimization once a certain percentage of sources have been optimized.
+
 Returns:
 
 - Vector of OptimizedSource results
@@ -215,6 +222,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
                               joint_infer_batch_size=60,
                               within_batch_shuffling=true,
+                              joint_inference_terminate_percentage=.95,
                               n_iters=10)
     # Seed random number generator to ensure the same results per run.
     srand(42)
@@ -283,6 +291,25 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
 
     Log.info("Done preallocating array of elboargs. Elapsed time: $(toq())")
 
+    # Keep track of which sources have converged.
+    sources_converged = Dict{Int64, Bool}()
+    for source in target_sources
+        sources_converged[source] = false
+    end
+    n_sources_converged = 0
+    n_sources_converged_lock = SpinLock()
+
+    function should_optimize_source(src_indx)
+        src_has_converged = sources_converged[target_sources[src_indx]]
+        neighbors_have_converged = true
+        for neighbor in neighbor_map[src_indx]
+            if haskey(sources_converged, neighbor)
+                neighbors_have_converged = neighbors_have_converged && sources_converged[neighbor]
+            end
+        end 
+        return !src_has_converged || !neighbors_have_converged
+    end
+
     # Process partition of sources. Multiple threads call this function in parallel.
     function process_sources(source_assignment::Vector{Int64}, iter)
         try
@@ -297,12 +324,24 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 shuffle!(source_assignment)
             end
             for cur_source_indx in source_assignment
-                cur_entry = catalog[target_sources[cur_source_indx]]
-                iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
-                    DeterministicVI.elbo,
-                    ea_vec[cur_source_indx],
-                    max_iters=n_newton_steps,
-                    use_default_optim_params=true)
+                # Optimize only if source has not converged or at least
+                # one of its neighbors has not converged
+                if should_optimize_source(cur_source_indx)
+                    cur_entry = catalog[target_sources[cur_source_indx]]
+                    iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
+                        DeterministicVI.elbo,
+                        ea_vec[cur_source_indx],
+                        max_iters=n_newton_steps,
+                        use_default_optim_params=true)
+                    sources_converged[target_sources[cur_source_indx]] = Optim.converged(r)
+                end
+
+                # Maintain count of sources that have converged
+                if sources_converged[target_sources[cur_source_indx]]
+                    lock(n_sources_converged_lock)
+                    n_sources_converged += 1
+                    unlock(n_sources_converged_lock)
+                end
             end
         catch ex
             if is_production_run || nthreads() > 1
@@ -317,6 +356,9 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     tic()
     n_batches = length(thread_sources_assignment[1])
     for iter = 1:n_iters
+        # Reset number of sources converged
+        n_sources_converged = 0
+        
         # Process every batch of every iteration. We do the batches on the outside
         # Since there is an implicit barrier after the inner threaded for loop below.
         # We want this barrier because there may be conflict _between_ Cyclades batches.
@@ -326,7 +368,12 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 process_sources(thread_sources_assignment[i][batch], iter)
             end
         end
+
+        if n_sources_converged >= joint_inference_terminate_percentage * n_sources
+            break
+        end
     end
+    Log.info("$(n_sources_converged) / $(n_sources) converged")
     Log.info("Done fitting elboargs. Elapsed time: $(toq())")
 
     # Return add results to vector

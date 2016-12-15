@@ -76,7 +76,7 @@ else
     if length(ARGS) == 0 || ARGS[1] != "--score-only"
         # adding `; objid=...` to the call limits infer_field to that source.
         # Potentially useful for debugging.
-        @time infer_field(rcf, datadir, outdir)
+        @time infer_field(rcf, datadir, outdir, joint_infer=true)
     end
 
     # Calling `score_object_disk(rcf, objid, datadir, truthfile, datadir)`
