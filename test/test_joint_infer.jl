@@ -1,9 +1,12 @@
 import JLD
 import ..Infer
+import ..ParallelRun: infer_init, one_node_infer, BoundingBox,
+                      one_node_joint_infer, one_node_single_infer
+
 
 """
 compare_vp_params
-Helper to check whether two sets of variational parameters from the 
+Helper to check whether two sets of variational parameters from the
 result of joint inference are the same.
 
 Return true if vp params are the same, false otherwise
@@ -37,7 +40,7 @@ function compute_obj_value(results,
                            rcfs::Vector{RunCamcolField},
                            stagedir::String;
                            box=BoundingBox(-1000.,1000.,-1000.,1000.))
-    catalog, target_sources = ParallelRun.infer_init(rcfs, stagedir; box=box)
+    catalog, target_sources = infer_init(rcfs, stagedir; box=box)
     images = SDSSIO.load_field_images(rcfs, stagedir)
 
     vp = [r.vs for r in results]
@@ -66,21 +69,23 @@ Using 3 iters instead of 1 iters should result in a different set of parameters.
 """
 function test_different_result_with_different_iter()
     # This bounding box has overlapping stars. (neighbor map is not empty)
-    box = ParallelRun.BoundingBox(4.39, 164.41, 9.11, 39.13)
+    box = BoundingBox(4.39, 164.41, 9.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
 
-    result_iter_1 = ParallelRun.one_node_infer(field_triplets, datadir;
-                                               box=box, joint_infer_n_iters=1,
-                                               joint_infer=true,
-                                               joint_infer_shuffle=false)
-    
-    result_iter_5 = ParallelRun.one_node_infer(field_triplets, datadir;
-                                               box=box, joint_infer_n_iters=5,
-                                               joint_infer=true,
-                                               joint_infer_shuffle=false)
+    infer_few(ctni...) = one_node_joint_infer(ctni...;
+                                              n_iters=1,
+                                              within_batch_shuffling=false)
+    result_iter_1 = one_node_infer(field_triplets, datadir;
+                                   infer_callback=infer_few, box=box)
+
+    infer_many(ctni...) = one_node_joint_infer(ctni...;
+                                             n_iters=5,
+                                             within_batch_shuffling=false)
+    result_iter_5 = one_node_infer(field_triplets, datadir;
+                                   infer_callback=infer_many, box=box)
 
     # Make sure that parameters are not the same
-    @test !compare_vp_params(result_iter_1, result_iter_5) 
+    @test !compare_vp_params(result_iter_1, result_iter_5)
 end
 
 """
@@ -89,21 +94,26 @@ Varying batch sizes using the cyclades algorithm should not change final objecti
 """
 function test_same_result_with_diff_batch_sizes()
     # This bounding box has overlapping stars. (neighbor map is not empty)
-    box = ParallelRun.BoundingBox(4.39, 164.41, 9.11, 39.13)
+    box = BoundingBox(4.39, 164.41, 9.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
 
     # With batch size = 7
-    result_bs_7 = ParallelRun.one_node_infer(field_triplets, datadir;
-                                              box=box, joint_infer_n_iters=3,
-                                              joint_infer=true,
-                                              joint_infer_batch_size=7,
-                                              joint_infer_shuffle=false)
+    infer_few(ctni...) = one_node_joint_infer(ctni...;
+                                n_iters=3,
+                                batch_size=7,
+                                within_batch_shuffling=false)
+    result_bs_7 = one_node_infer(field_triplets, datadir;
+                                 infer_callback=infer_few,
+                                 box=box)
+
     # With batch size = 39
-    result_bs_39 = ParallelRun.one_node_infer(field_triplets, datadir;
-                                              box=box, joint_infer_n_iters=3,
-                                              joint_infer=true,
-                                              joint_infer_batch_size=39,
-                                              joint_infer_shuffle=false)
+    infer_many(ctni...) = one_node_joint_infer(ctni...;
+                                n_iters=3,
+                                batch_size=39,
+                                within_batch_shuffling=false)
+    result_bs_39 = one_node_infer(field_triplets, datadir;
+                                  infer_callback=infer_many,
+                                  box=box)
 
     # Make sure that parameters are exactly the same
     @test compare_vp_params(result_bs_7, result_bs_39)
@@ -116,9 +126,11 @@ This is basically just to make sure it runs at all.
 function test_one_node_joint_infer()
     # very small patch of sky that turns out to have 4 sources.
     # We checked that this patch is in the given field.
-    box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
+    box = BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
-    result = ParallelRun.one_node_infer(field_triplets, datadir; box=box, joint_infer=true)
+    result = one_node_infer(field_triplets, datadir;
+                            infer_callback=one_node_joint_infer,
+                            box=box)
 end
 
 
@@ -130,38 +142,42 @@ than single iter on non overlapping sources.
 function test_one_node_joint_infer_obj_overlapping()
 
     # This bounding box has overlapping stars. (neighbor map is not empty)
-    box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
+    box = BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
 
     # 100 iterations
     tic()
-    result_multi = ParallelRun.one_node_infer(field_triplets, datadir;
-                                              box=box, joint_infer_n_iters=100,
-                                              joint_infer=true,
-                                              joint_infer_shuffle=false)
+    infer_multi(ctni...) = one_node_joint_infer(ctni...;
+                                     n_iters=100,
+                                     within_batch_shuffling=false)
+    result_multi = one_node_infer(field_triplets, datadir;
+                                  infer_callback=infer_multi,
+                                  box=box)
     multi_iter_time = toq()
     score_multi = compute_obj_value(result_multi, field_triplets, datadir; box=box)
 
     # 2 iterations
     tic()
-    result_two = ParallelRun.one_node_infer(field_triplets, datadir;
-                                            box=box, joint_infer_n_iters=2,
-                                            joint_infer=true,
-                                            joint_infer_shuffle=false)
-    multi_iter_one_iter_time = toq()
+    infer_two(ctni...) = one_node_joint_infer(ctni...;
+                                     n_iters=2,
+                                     within_batch_shuffling=false)
+    result_two = one_node_infer(field_triplets, datadir;
+                                  infer_callback=infer_two,
+                                  box=box)
+    two_iter_time = toq()
     score_two = compute_obj_value(result_two, field_triplets, datadir; box=box)
 
     # One node infer (1 iteration, butm ore newton steps)
     tic()
-    result_single = ParallelRun.one_node_infer(field_triplets, datadir; box=box)
+    result_single = one_node_infer(field_triplets, datadir; box=box)
     single_iter_time = toq()
     score_single = compute_obj_value(result_single, field_triplets, datadir; box=box)
 
     println("One node joint infer objective value: $(score_multi)")
-    println("One node joint infer 1 iter objective value: $(score_two)")
+    println("One node joint infer 2 iter objective value: $(score_two)")
     println("Single iter objective value: $(score_single)")
     println("One node joint infer time: $(multi_iter_time)")
-    println("One node joint infer 1 iter time: $(multi_iter_one_iter_time)")
+    println("One node joint infer 2 iter time: $(two_iter_time)")
     println("Single iter time: $(single_iter_time)")
     @test score_multi > score_single
     @test score_multi > score_two

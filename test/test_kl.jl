@@ -71,7 +71,7 @@ function test_subtract_kl()
     Celeste.DeterministicVI.subtract_kl_source!(sf, kl_result, vs, kl_helper)
     @test sf.v[] == DiffBase.value(kl_result)
     @test sf.d === DiffBase.gradient(kl_result)
-    test_sf = JLD.load(joinpath(dirname(@__FILE__), "kl_values.jld"), "sf")
+    test_sf = JLD.load(joinpath(datadir, "kl_values.jld"), "sf")
     @test_approx_eq sf.v[] test_sf.v[]
     @test_approx_eq sf.d test_sf.d
     @test_approx_eq sf.h test_sf.h

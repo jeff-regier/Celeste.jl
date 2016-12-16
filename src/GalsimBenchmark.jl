@@ -5,6 +5,9 @@ import StaticArrays
 import WCS
 
 import Celeste: Model, DeterministicVI, ParallelRun, Infer
+import Celeste.Model: CatalogEntry
+import Celeste.ParallelRun: one_node_single_infer, one_node_joint_infer
+
 
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const FILENAME = "output/galsim_test_images.fits"
@@ -164,14 +167,14 @@ function get_expected_dataframe(header)
             get_field(header, "CL_C34_1"),
             get_field(header, "CL_C45_1"),
             header["CL_TYPE1"] == "star" ? 0 : 1,
-        ])    
+        ])
 end
 
 function benchmark_comparison_data(single_infer_params, joint_infer_params, header)
     ids = Model.ids
     star_galaxy_index = header["CL_TYPE1"] == "star" ? 1 : 2
     comparison_dataframe = get_expected_dataframe(header)
-    comparison_dataframe[:single_infer_actual] = 
+    comparison_dataframe[:single_infer_actual] =
         actual_values(ids, star_galaxy_index, single_infer_params)
     comparison_dataframe[:joint_infer_actual] =
         actual_values(ids, star_galaxy_index, joint_infer_params)
@@ -192,7 +195,7 @@ function assert_counts_match_expected_flux(band_pixels::Vector{Matrix{Float32}},
 end
 
 function make_catalog_entry(x_position_world_coords, y_position_world_coords)
-    Model.CatalogEntry(
+    CatalogEntry(
         [x_position_world_coords, y_position_world_coords],
         false, # is_star
         # sample_star_fluxes
@@ -208,8 +211,8 @@ function make_catalog_entry(x_position_world_coords, y_position_world_coords)
     )
 end
 
-function make_catalog_entries(header::FITSIO.FITSHeader)
-    catalog_entries = Model.CatalogEntry[]
+function make_catalog(header::FITSIO.FITSHeader)
+    catalog = CatalogEntry[]
     num_sources = header["CL_NSRC"]
     for source_index in 1:num_sources
         if num_sources == 1
@@ -220,22 +223,9 @@ function make_catalog_entries(header::FITSIO.FITSHeader)
                 header[string("CL_Y", source_index)],
             ]
         end
-        push!(catalog_entries, make_catalog_entry(initial_position[1], initial_position[2]))
+        push!(catalog, make_catalog_entry(initial_position[1], initial_position[2]))
     end
-    catalog_entries
-end
-
-function parallel_inference(band_images, catalog_entries; joint_infer=false)
-    # Target sources is all sources
-    target_sources = collect(1:length(catalog_entries))
-
-    # Create the neighbor map (everyone is a neighbor of each other)
-    neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, band_images)
-
-    # Optimize
-    results = ParallelRun.parallel_infer(catalog_entries, target_sources, neighbor_map, band_images;
-                                         joint_infer=joint_infer, joint_infer_n_iters=20)
-    results[1].vs
+    catalog
 end
 
 # Returns a data frame with one row for each test case and  parameter name, with columns
@@ -264,16 +254,22 @@ function main(; test_case_names=String[], print_fn=println)
             extensions[index].pixels for index in first_band_index:(first_band_index + 4)
         ]
         assert_counts_match_expected_flux(band_pixels, header, iota)
-        band_images = make_images(band_pixels, psf, wcs, header["CL_SKY"], iota)
-        catalog_entries::Vector{Model.CatalogEntry} = make_catalog_entries(header)
 
-        single_infer_variational_parameters = parallel_inference(band_images, catalog_entries,
-                                                                 joint_infer=false)
-        joint_infer_variational_parameters = parallel_inference(band_images, catalog_entries,
-                                                                joint_infer=true)
-        
-        benchmark_data = benchmark_comparison_data(single_infer_variational_parameters,
-                                                   joint_infer_variational_parameters,
+        images = make_images(band_pixels, psf, wcs, header["CL_SKY"], iota)
+        catalog = make_catalog(header)
+
+        # we're only scoring one object per image
+        target_sources = [1,]
+
+        # everyone is a neighbor of the target source
+        neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
+
+        ctni = (catalog, target_sources, neighbor_map, images)
+        single_results = one_node_single_infer(ctni...)
+        joint_results = one_node_joint_infer(ctni...)
+
+        benchmark_data = benchmark_comparison_data(single_results[1].vs,
+                                                   joint_results[1].vs,
                                                    header)
         print_fn(repr(benchmark_data))
         push!(all_benchmark_data, benchmark_data)

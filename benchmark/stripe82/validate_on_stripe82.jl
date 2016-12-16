@@ -1,9 +1,13 @@
 #!/usr/bin/env julia
 
-import Celeste.ParallelRun: BoundingBox, infer_field
+import Celeste.ParallelRun: BoundingBox,
+                            one_node_infer,
+                            one_node_single_infer,
+                            one_node_joint_infer
 import Celeste.Stripe82Score: score_field_disk, score_object_disk
 import Celeste.SDSSIO: RunCamcolField
-
+import Celeste.DeterministicVI: infer_source
+import Celeste.DeterministicVIImagePSF: infer_source_fft
 
 # I'd rather let the user specify a rcf on the command line, but picking
 # an arbitrary rcf isn't too useful without having ground truth for it,
@@ -65,25 +69,38 @@ where
 """
 const truthfile = joinpath(datadir, "coadd_for_4263_5_119.fit")
 
+const valid_args = Set(["--score-only", "--joint-infer", "--fft"])
 
-if length(ARGS) > 1 || (length(ARGS) == 1 && ARGS[1] != "--score-only")
-    println("usage: validate_on_stripe82.jl [--score-only]")
+if !(ARGS ⊆ valid_args)
+    args_str = join(["[$va]" for va in valid_args],  " ")
+    println("usage: validate_on_stripe82.jl $args_str")
 else
     # By default this script both infers all the parameters and scores them,
     # but because inference is computationally intensive, whereas scoring isn't,
     # the user gets the option to just run the scoring mode. Running a scoring
     # alone would primarily be useful for debugging.
-    if length(ARGS) == 0 || ARGS[1] != "--score-only"
-        # adding `; objid=...` to the call limits infer_field to that source.
-        # Potentially useful for debugging.
-        @time infer_field(rcf, datadir, outdir, joint_infer=true)
+    if !("--score-only" in ARGS)
+        wrap_joint(cnti...) = one_node_joint_infer(cnti...;
+                                                   termination_percent=0.9)
+        source_callback = "--fft" in ARGS ? infer_source_fft : infer_source
+        wrap_single(cnti...) = one_node_single_infer(cnti...;
+                                      infer_source_callback=source_callback)
+        infer_callback = "--joint-infer" in ARGS ? wrap_joint : wrap_single
+        # Here `one_node_infer` is called just with a single rcf, even though
+        # other rcfs may overlap with this one. That's because this function is
+        # just for testing on stripe 82: in practice we always use all relevent
+        # data to make inferences.
+        @time results = one_node_infer([rcf,], datadir;
+                                       infer_callback=infer_callback,
+                                       primary_initialization=false)
+        fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
+        JLD.save(fname, "results", results)
     end
 
     # Calling `score_object_disk(rcf, objid, datadir, truthfile, datadir)`
     # instead limits scoring to the specific light source (objid).
     # That could be somewhat useful for debugging. The output is in a somewhat
     # different format though, because with just one object it doesn't make
-    # sense to compute a full table comparing Celeste to Primary. 
+    # sense to compute a full table comparing Celeste to Primary.
     score_field_disk(rcf, outdir, truthfile, datadir)
 end
-
