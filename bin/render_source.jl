@@ -40,14 +40,15 @@ Celeste.Infer.load_active_pixels!(ea_fft.images, ea.patches; exclude_nan=false);
 
 psf_image_mat = Matrix{Float64}[
     PSF.get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea_fft.S, b in 1:ea_fft.N];
-fsm_vec = DeterministicVIImagePSF.FSMSensitiveFloatMatrices[
-    DeterministicVIImagePSF.FSMSensitiveFloatMatrices() for b in 1:ea_fft.N];
-DeterministicVIImagePSF.initialize_fsm_sf_matrices!(fsm_vec, ea_fft, psf_image_mat);
+fsm_mat = DeterministicVIImagePSF.FSMSensitiveFloatMatrices[
+    DeterministicVIImagePSF.FSMSensitiveFloatMatrices() for
+    s in 1:ea_fft.S, b in 1:ea_fft.N];
+DeterministicVIImagePSF.initialize_fsm_sf_matrices!(fsm_mat, ea_fft, psf_image_mat);
 
 s = 1
 n = 3
 
-image_fft = CelesteEDA.render_source_fft(ea, fsm_vec, s, n, include_iota=false, field=:E_G);
+image_fft = CelesteEDA.render_source_fft(ea, fsm_mat, s, n, include_iota=false, field=:E_G);
 image_orig = CelesteEDA.render_source(ea, s, n, include_iota=false, field=:E_G);
 
 PyPlot.close("all")

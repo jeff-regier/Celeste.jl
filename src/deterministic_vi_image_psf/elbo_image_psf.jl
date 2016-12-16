@@ -91,7 +91,7 @@ function convolve_fs1m_image!(fsms::FSMSensitiveFloatMatrices, s::Int)
     end
 
     convolve_sensitive_float_matrix!(
-        fsms.fs1m_image_padded, fsms.psf_fft_vec[s], fsms.fs1m_conv_padded)
+        fsms.fs1m_image_padded, fsms.psf_fft, fsms.fs1m_conv_padded)
 
     for h in 1:size(fsms.fs1m_image, 1), w in 1:size(fsms.fs1m_image, 2)
         fsms.fs1m_conv[h, w] =
@@ -136,6 +136,9 @@ function populate_gal_fsm_image!(
     p = ea.patches[s, n]
     H_patch, W_patch = size(p.active_pixel_bitmap)
     for w_patch in 1:W_patch, h_patch in 1:H_patch
+        if !p.active_pixel_bitmap[h_patch, w_patch]
+            continue
+        end
         h_image = h_patch + p.bitmap_offset[1]
         w_image = w_patch + p.bitmap_offset[2]
 
@@ -209,6 +212,9 @@ function accumulate_source_image_brightness!(
     for w_patch in 1:W_patch, h_patch in 1:H_patch
         h_fsm = h_patch + p.bitmap_offset[1] - fsms.h_lower + 1
         w_fsm = w_patch + p.bitmap_offset[2] - fsms.w_lower + 1
+        if !p.active_pixel_bitmap[h_patch, w_patch]
+            continue
+        end
         accumulate_source_pixel_brightness!(
                             ea.elbo_vars,
                             ea,
@@ -226,15 +232,16 @@ Uses the values in fsms to add the contribution from this band to the ELBO.
 """
 function accumulate_band_in_elbo!(
     ea::ElboArgs{Float64},
-    fsms::FSMSensitiveFloatMatrices,
+    fsm_mat::Matrix{FSMSensitiveFloatMatrices},
     sbs::Vector{SourceBrightness{Float64}},
     gal_mcs::Array{GalaxyCacheComponent{Float64}, 4},
     n::Int)
 
-    clear_brightness!(fsms)
     for s in 1:ea.S
+        fsms = fsm_mat[s, n]
+        clear_brightness!(fsms)
         populate_star_fsm_image!(
-            ea, s, n, fsms.psf_vec[s], fsms.fs0m_conv,
+            ea, s, n, fsms.psf, fsms.fs0m_conv,
             fsms.h_lower, fsms.w_lower,
             fsms.kernel_fun, fsms.kernel_width)
         populate_gal_fsm_image!(ea, s, n, gal_mcs, fsms)
@@ -245,8 +252,12 @@ function accumulate_band_in_elbo!(
     # contributions from non-active sources to E_G and var_G.
     for s in ea.active_sources
         p = ea.patches[s, n]
+        fsms = fsm_mat[s, n]
         H_patch, W_patch = size(p.active_pixel_bitmap)
         for w_patch in 1:W_patch, h_patch in 1:H_patch
+            if !p.active_pixel_bitmap[h_patch, w_patch]
+                continue
+            end
             h_image = h_patch + p.bitmap_offset[1]
             w_image = w_patch + p.bitmap_offset[2]
 
@@ -297,7 +308,7 @@ end
 
 function elbo_likelihood_with_fft!(
     ea::ElboArgs,
-    fsm_vec::Array{FSMSensitiveFloatMatrices})
+    fsm_mat::Matrix{FSMSensitiveFloatMatrices})
 
     sbs = load_source_brightnesses(ea,
         calculate_gradient=ea.elbo_vars.elbo.has_gradient,
@@ -309,7 +320,7 @@ function elbo_likelihood_with_fft!(
                 ea.S, ea.patches, ea.vp, ea.active_sources, n,
                 calculate_gradient=ea.elbo_vars.elbo.has_gradient,
                 calculate_hessian=ea.elbo_vars.elbo.has_hessian)
-        accumulate_band_in_elbo!(ea, fsm_vec[n], sbs, gal_mcs, n)
+        accumulate_band_in_elbo!(ea, fsm_mat, sbs, gal_mcs, n)
     end
 end
 
@@ -336,23 +347,24 @@ function initialize_fft_elbo_parameters(
         psf_image_mat = Matrix{Float64}[
             get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea.S, b in 1:ea.N]        
     end
-    fsm_vec = FSMSensitiveFloatMatrices[
-        FSMSensitiveFloatMatrices() for n in 1:ea.N]
-    initialize_fsm_sf_matrices!(fsm_vec, ea, psf_image_mat)
-    ea, fsm_vec
+    fsm_mat = FSMSensitiveFloatMatrices[
+        FSMSensitiveFloatMatrices() for s in 1:ea.S, n in 1:ea.N]
+    initialize_fsm_sf_matrices!(fsm_mat, ea, psf_image_mat)
+    ea, fsm_mat
 end
 
 
 @doc """
 Return a function callback for an FFT elbo.
 """
-function get_fft_elbo_function{T}(ea::ElboArgs{T}, fsm_vec::Vector{})
+function get_fft_elbo_function{T}(
+    ea::ElboArgs{T}, fsm_mat::Matrix{FSMSensitiveFloatMatrices})
     function elbo_fft_opt(ea::ElboArgs)
         @assert ea.psf_K == 1
         elbo = ea.elbo_vars.elbo
         kl_source = SensitiveFloat{T}(length(CanonicalParams), 1,
                                       elbo.has_gradient, elbo.has_hessian)
-        elbo_likelihood_with_fft!(ea, fsm_vec)
+        elbo_likelihood_with_fft!(ea, fsm_mat)
         subtract_kl_all_sources!(ea, elbo, kl_source,
                                  KL_HELPER_POOL[Base.Threads.threadid()])
         return deepcopy(elbo)
