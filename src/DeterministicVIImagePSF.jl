@@ -26,7 +26,7 @@ import ..SensitiveFloats:
 
 import ..Infer: load_active_pixels!, get_sky_patches
 
-import ..PSF: get_psf_at_point
+import ..PSF: get_psf_at_point, trim_psf
 
 import WCS
 

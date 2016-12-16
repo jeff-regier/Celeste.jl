@@ -330,7 +330,8 @@ function initialize_fft_elbo_parameters(
     vp::VariationalParams{Float64},
     patches::Matrix{SkyPatch},
     active_sources::Vector{Int};
-    use_raw_psf=true)
+    use_raw_psf=true,
+    use_trimmed_psf=true)
     
     ea = ElboArgs(images, vp, patches, active_sources, psf_K=1)
     load_active_pixels!(images, ea.patches; exclude_nan=false)
@@ -347,6 +348,13 @@ function initialize_fft_elbo_parameters(
         psf_image_mat = Matrix{Float64}[
             get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea.S, b in 1:ea.N]        
     end
+
+    if use_trimmed_psf
+        for n in 1:ea.N, s in 1:ea.S
+            psf_image_mat[s, n] = trim_psf(psf_image_mat[s, n])
+        end
+    end
+
     fsm_mat = FSMSensitiveFloatMatrices[
         FSMSensitiveFloatMatrices() for s in 1:ea.S, n in 1:ea.N]
     initialize_fsm_sf_matrices!(fsm_mat, ea, psf_image_mat)
