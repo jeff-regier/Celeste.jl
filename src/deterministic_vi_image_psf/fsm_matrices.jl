@@ -4,11 +4,6 @@ typealias fs0mMatrix Matrix{SensitiveFloat{Float64}}
 typealias fs1mMatrix Matrix{SensitiveFloat{Float64}}
 
 
-# Some ideas for optimizing FSMSensitiveFloatMatrices:
-# - The default size of the PSF matrix is probably bigger than it
-#   needs to be right now.  For most PSFs, most pixels are dark.
-# - Currently, active_pixels are set by the size of the image post convolution.
-#   However, fs1m_image only needs to be as big as the image pre convolution.
 type FSMSensitiveFloatMatrices
     # The lower corner of the image (in terms of index values)
     h_lower::Int
