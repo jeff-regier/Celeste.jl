@@ -42,7 +42,7 @@ type FSMSensitiveFloatMatrices
             Matrix{Complex{Float64}}(),
             Matrix{Float64}(),
             0, 0,
-            2, x -> cubic_kernel_with_derivatives(x, -0.75))
+            2, x -> cubic_kernel_with_derivatives(x, 0.0))
     end
 end
 
@@ -117,7 +117,7 @@ function initialize_fsm_sf_matrices!(
         w2 = w1 + maximum(active_cols) - 1
 
         initialize_fsm_sf_matrices_band!(
-            fsm_mat[n], s, n, num_active_sources,
+            fsm_mat[s, n], s, n, num_active_sources,
             h1, w1, h2, w2, psf_image_mat[s, n])
     end
 end
@@ -150,7 +150,7 @@ function debug_populate_fsm_mat!(
                 fsms.h_lower, fsms.w_lower,
                 fsms.kernel_fun, fsms.kernel_width)
             populate_gal_fsm_image!(
-                ea, s, b, gal_mcs_vec[b], fsm_mat[b])
+                ea, s, b, gal_mcs_vec[b], fsm_mat[s, n])
             accumulate_source_image_brightness!(
                 ea, s, b, fsms, sbs[s])
         end
