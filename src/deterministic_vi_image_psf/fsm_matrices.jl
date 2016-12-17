@@ -4,18 +4,6 @@ typealias fs0mMatrix Matrix{SensitiveFloat{Float64}}
 typealias fs1mMatrix Matrix{SensitiveFloat{Float64}}
 
 
-# Some ideas for optimizing FSMSensitiveFloatMatrices:
-# - The default size of the PSF matrix is probably bigger than it
-#   needs to be right now.  For most PSFs, most pixels are dark.
-# - The fs*m_image matrices are big enough to contain all pixels in the
-#   pixel masks.  They could instead be big enough to contain only the active
-#   pixels.
-# - As-is, a single image only has one set of fs*m_* matrices.  This means
-#   each must be large enough to contain all the sources.  If you arranged
-#   it so that each source had its own fs*m_* matrices, then they could be
-#   much smaller.
-# - Currently, active_pixels are set by the size of the image post convolution.
-#   However, fs1m_image only needs to be as big as the image pre convolution.
 type FSMSensitiveFloatMatrices
     # The lower corner of the image (in terms of index values)
     h_lower::Int
@@ -32,9 +20,9 @@ type FSMSensitiveFloatMatrices
     E_G::GMatrix
     var_G::GMatrix
 
-    # A vector of psfs, one for each source.
-    psf_fft_vec::Vector{Matrix{Complex{Float64}}}
-    psf_vec::Vector{Matrix{Float64}}
+    # The PSF and its FFT.
+    psf_fft::Matrix{Complex{Float64}}
+    psf::Matrix{Float64}
 
     # The amount of padding introduced by the convolution on one side of the
     # image (the total pixels added in each dimension are twice this)
@@ -51,8 +39,8 @@ type FSMSensitiveFloatMatrices
         new(1, 1,
             fs1mMatrix(), fs1mMatrix(), fs1mMatrix(), fs1mMatrix(), fs0mMatrix(),
             GMatrix(), GMatrix(),
-            Vector{Matrix{Complex{Float64}}}(),
-            Vector{Matrix{Float64}}(),
+            Matrix{Complex{Float64}}(),
+            Matrix{Float64}(),
             0, 0,
             2, x -> cubic_kernel_with_derivatives(x, -0.75))
     end
@@ -61,17 +49,12 @@ end
 
 function initialize_fsm_sf_matrices_band!(
     fsms::FSMSensitiveFloatMatrices,
-    b::Int,
-    num_active_sources::Int,
+    s::Int, b::Int, num_active_sources::Int,
     h_lower::Int, w_lower::Int,
     h_upper::Int, w_upper::Int,
-    psf_image_mat::Matrix{Matrix{Float64}})
+    psf_image::Matrix{Float64})
 
-    # Require that every PSF is the same size, since we are only
-    # keeping one padded matrix for the whole band.
-    psf_sizes = Set([ size(im) for im in psf_image_mat[:, b] ])
-    @assert length(psf_sizes) == 1
-    psf_size = pop!(psf_sizes)
+    psf_size = size(psf_image)
 
     fsms.h_lower = h_lower
     fsms.w_lower = w_lower
@@ -109,66 +92,42 @@ function initialize_fsm_sf_matrices_band!(
         Float64, length(CanonicalParams), num_active_sources, h_width, w_width);
 
     # Store the psf image and its FFT.
-    S = size(psf_image_mat, 1)
-    fsms.psf_fft_vec = Array(Matrix{Complex{Float64}}, S)
-    fsms.psf_vec = Array(Matrix{Float64}, S)
-    for s in 1:size(psf_image_mat, 1)
-        fsms.psf_fft_vec[s] =
-            zeros(Complex{Float64}, fft_size1, fft_size2);
-        fsms.psf_fft_vec[s][1:psf_size[1], 1:psf_size[2]] =
-            psf_image_mat[s, b];
-        fft!(fsms.psf_fft_vec[s]);
-        fsms.psf_vec[s] = psf_image_mat[s, b]
-    end
+    fsms.psf = deepcopy(psf_image)
+    fsms.psf_fft = zeros(Complex{Float64}, fft_size1, fft_size2);
+    fsms.psf_fft[1:psf_size[1], 1:psf_size[2]] = fsms.psf;
+    fft!(fsms.psf_fft);
 end
 
 
 function initialize_fsm_sf_matrices!(
-    fsm_vec::Vector{FSMSensitiveFloatMatrices},
+    fsm_mat::Matrix{FSMSensitiveFloatMatrices},
     ea::ElboArgs{Float64},
     psf_image_mat::Matrix{Matrix{Float64}})
 
-    # Get the extreme active pixels in each band.
-    h_lower_vec = Int[typemax(Int) for b in ea.images ]
-    w_lower_vec = Int[typemax(Int) for b in ea.images ]
-    h_upper_vec = Int[0 for b in ea.images ]
-    w_upper_vec = Int[0 for b in ea.images ]
-
-    # Since we are using the same size fsm matrix for each source,
-    # and even non-active sources need to be rendered, we need to make
-    #.the fsm matrices as big as the total number of active pixels.
-    # Right now I just set it as big as the entire active pixel bitmap.
-    for s in 1:ea.S, n in 1:ea.N
-        p = ea.patches[s, n]
-        h1 = p.bitmap_offset[1] + 1
-        w1 = p.bitmap_offset[2] + 1
-        h2 = h1 + size(p.active_pixel_bitmap, 1) - 1
-        w2 = w1 + size(p.active_pixel_bitmap, 2) - 1
-        h_lower_vec[n] = min(h_lower_vec[n], h1)
-        h_upper_vec[n] = max(h_upper_vec[n], h2)
-        w_lower_vec[n] = min(w_lower_vec[n], w1)
-        w_upper_vec[n] = max(w_upper_vec[n], w2)
-    end
-
     num_active_sources = length(ea.active_sources)
 
-    # Pre-allocate arrays.
-    for b in 1:ea.N
+    for n in 1:ea.N, s in 1:ea.S
+        p = ea.patches[s, n]
+        apb = p.active_pixel_bitmap
+        active_cols = find([ any(apb[:, col]) for col in 1:size(apb, 2) ])
+        active_rows = find([ any(apb[row, :]) for row in 1:size(apb, 1) ])
+        h1 = p.bitmap_offset[1] + minimum(active_rows)
+        w1 = p.bitmap_offset[2] + minimum(active_cols)
+        h2 = h1 + maximum(active_rows) - 1
+        w2 = w1 + maximum(active_cols) - 1
+
         initialize_fsm_sf_matrices_band!(
-            fsm_vec[b], b, num_active_sources,
-            h_lower_vec[b], w_lower_vec[b],
-            h_upper_vec[b], w_upper_vec[b],
-            psf_image_mat)
+            fsm_mat[n], s, n, num_active_sources,
+            h1, w1, h2, w2, psf_image_mat[s, n])
     end
 end
 
 
 # This is useful for debugging and exploration.
 # Do not delete until May 2017.
-function debug_populate_fsm_vec!(
+function debug_populate_fsm_mat!(
     ea::ElboArgs,
-    fsm_vec::Array{FSMSensitiveFloatMatrices},
-    kernel_width::Int)
+    fsm_mat::Matrix{FSMSensitiveFloatMatrices})
 
     sbs = load_source_brightnesses(ea,
         calculate_gradient=ea.elbo_vars.elbo.has_gradient,
@@ -183,16 +142,17 @@ function debug_populate_fsm_vec!(
     end
 
     for b=1:ea.N
-        clear_brightness!(fsm_vec[b])
         for s in 1:ea.S
+            fsms = fsm_mat[s, b]
+            clear_brightness!(fsms)
             populate_star_fsm_image!(
-                ea, s, b, fsm_vec[b].psf_vec[s], fsm_vec[b].fs0m_conv,
-                fsm_vec[b].h_lower, fsm_vec[b].w_lower,
-                fsm_vec[b].kernel_fun, fsm_vec[b].kernel_width)
+                ea, s, b, fsms.psf, fsms.fs0m_conv,
+                fsms.h_lower, fsms.w_lower,
+                fsms.kernel_fun, fsms.kernel_width)
             populate_gal_fsm_image!(
-                ea, s, b, gal_mcs_vec[b], fsm_vec[b])
+                ea, s, b, gal_mcs_vec[b], fsm_mat[b])
             accumulate_source_image_brightness!(
-                ea, s, b, fsm_vec[b], sbs[s])
+                ea, s, b, fsms, sbs[s])
         end
     end
 end

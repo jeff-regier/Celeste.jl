@@ -36,13 +36,12 @@ function test_convolve_sensitive_float_matrix()
     # Use the FSMSensitiveFloatMatrices because it initializes all the
     # sizes for us automatically.
     fsms = DeterministicVIImagePSF.FSMSensitiveFloatMatrices();
-    psf_image_mat = Matrix{Matrix{Float64}}(1, 1);
     psf_image = zeros(3, 3);
     psf_image[2, 2] = 0.5;
     psf_image[2, 1] = psf_image[1, 2] = 0.25;
-    psf_image_mat[1, 1] = psf_image;
     DeterministicVIImagePSF.initialize_fsm_sf_matrices_band!(
-        fsms, 1, 1, 1, 1, 3, 3, psf_image_mat)
+        fsms, 1, 1, 1,
+        1, 1, 3, 3, psf_image)
 
     sf = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, true, true)
     sf.v[] = 3;
@@ -51,7 +50,7 @@ function test_convolve_sensitive_float_matrix()
     sf.h[:] = h * h';
     fsms.fs1m_image_padded[2, 2] = deepcopy(sf);
     DeterministicVIImagePSF.convolve_sensitive_float_matrix!(
-        fsms.fs1m_image_padded, fsms.psf_fft_vec[1], fsms.fs1m_conv_padded);
+        fsms.fs1m_image_padded, fsms.psf_fft, fsms.fs1m_conv_padded);
     h_indices = (1:3) + fsms.pad_pix_h
     w_indices = (1:3) + fsms.pad_pix_w
     conv_image =

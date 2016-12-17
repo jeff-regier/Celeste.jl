@@ -680,4 +680,23 @@ function fit_raw_psf_for_celeste(raw_psf::Array{Float64, 2}, K::Integer; ftol=1e
     fit_raw_psf_for_celeste(raw_psf, psf_optimizer, psf_params)
 end
 
+
+function trim_psf(raw_psf::Array{Float64, 2}; trim_percent=0.999)
+    h_mid = cld(size(raw_psf, 1), 2)
+    w_mid = cld(size(raw_psf, 2), 2)
+
+    width = 1
+    function get_trimmed_psf_image()
+        raw_psf[(h_mid - width):(h_mid + width),
+                (w_mid - width):(w_mid + width)]
+    end
+
+    psf_tot = sum(abs(raw_psf))
+    while sum(abs(get_trimmed_psf_image())) < trim_percent * psf_tot
+        width += 1
+    end
+    
+    deepcopy(get_trimmed_psf_image())
+end
+
 end # module

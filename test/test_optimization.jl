@@ -145,10 +145,10 @@ end
 function test_star_optimization_fft()
     images, ea, body = gen_sample_star_dataset()
     ea.vp[1][ids.a[:, 1]] = [0.8, 0.2]
-    ea_fft, fsm_vec = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
+    ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
         images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
     elbo_fft_opt =
-        DeterministicVIImagePSF.get_fft_elbo_function(ea_fft, fsm_vec)
+        DeterministicVIImagePSF.get_fft_elbo_function(ea_fft, fsm_mat)
     DeterministicVI.maximize_f(elbo_fft_opt, ea_fft; loc_width=1.0)
     verify_sample_star(ea_fft.vp[1], [10.1, 12.2])
 end
@@ -156,10 +156,10 @@ end
 
 function test_galaxy_optimization_fft()
     images, ea, body = gen_sample_galaxy_dataset()
-    ea_fft, fsm_vec = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
+    ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
         images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
     elbo_fft_opt =
-        DeterministicVIImagePSF.get_fft_elbo_function(ea_fft, fsm_vec)
+        DeterministicVIImagePSF.get_fft_elbo_function(ea_fft, fsm_mat)
     DeterministicVI.maximize_f(elbo_fft_opt, ea_fft; loc_width=1.0)
     # TODO: Currently failing since it misses the brighness by 3%, which is
     # greater than the 1% permitted by the test.  However, the ELBO of the

@@ -7,7 +7,7 @@ import Celeste.PSF: get_psf_at_point, fit_psf,
        unwrap_psf_params, wrap_psf_params,
        unconstrain_psf_params, constrain_psf_params,
        transform_psf_sensitive_float!,
-       PsfOptimizer, fit_raw_psf_for_celeste,
+       PsfOptimizer, fit_raw_psf_for_celeste, trim_psf,
        BivariateNormalDerivatives
 import Celeste.Model: eval_psf
 
@@ -267,7 +267,19 @@ function test_psf_optimizer()
   end
 end
 
+
+function test_trim_psf()
+    raw_psf = load_raw_psf()
+    trim_percent = 0.95
+    trimmed_psf = trim_psf(raw_psf; trim_percent=trim_percent)
+    @test sum(abs(trimmed_psf)) >= trim_percent * sum(abs(raw_psf)) 
+    @test size(trimmed_psf, 1) < size(raw_psf, 1)
+    @test size(trimmed_psf, 2) < size(raw_psf, 2)
+end
+
+
 test_transform_psf_sensitive_float()
 test_transform_psf_params()
 test_psf_fit()
 test_psf_optimizer()
+test_trim_psf()

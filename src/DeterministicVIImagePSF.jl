@@ -26,7 +26,7 @@ import ..SensitiveFloats:
 
 import ..Infer: load_active_pixels!, get_sky_patches
 
-import ..PSF: get_psf_at_point
+import ..PSF: get_psf_at_point, trim_psf
 
 import WCS
 
@@ -47,9 +47,9 @@ function infer_source_fft(images::Vector{Image},
    patches = get_sky_patches(images, cat_local)
    load_active_pixels!(images, patches)
 
-   ea_fft, fsm_vec = initialize_fft_elbo_parameters(
+   ea_fft, fsm_mat = initialize_fft_elbo_parameters(
        images, vp, patches, [1], use_raw_psf=false)
-   elbo_fft_opt = get_fft_elbo_function(ea_fft, fsm_vec)
+   elbo_fft_opt = get_fft_elbo_function(ea_fft, fsm_mat)
    maximize_f(elbo_fft_opt, ea_fft)
 
    vp[1]
