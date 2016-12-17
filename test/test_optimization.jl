@@ -143,6 +143,8 @@ end
 
 
 function test_star_optimization_fft()
+    println("Testing star fft optimization.")
+
     images, ea, body = gen_sample_star_dataset()
     ea.vp[1][ids.a[:, 1]] = [0.8, 0.2]
     ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
@@ -155,6 +157,8 @@ end
 
 
 function test_galaxy_optimization_fft()
+    println("Testing galaxy fft optimization.")
+
     images, ea, body = gen_sample_galaxy_dataset()
     ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
         images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
@@ -167,6 +171,21 @@ function test_galaxy_optimization_fft()
     # verify_sample_galaxy(ea_fft.vp[1], [8.5, 9.6])
 end
 
+
+function test_three_body_optimization_fft()
+    println("Testing three body fft optimization.")
+
+    images, ea, three_bodies = gen_three_body_dataset();
+    Infer.load_active_pixels!(images, ea.patches; exclude_nan=false);
+    s = 2
+    ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
+        images, deepcopy(ea.vp), ea.patches, [s], use_raw_psf=false)
+    elbo_fft_opt = DeterministicVIImagePSF.get_fft_elbo_function(ea_fft, fsm_mat)
+    DeterministicVI.maximize_f(elbo_fft_opt, ea_fft; loc_width=1.0)
+end
+
+
+test_three_body_optimization_fft()
 test_star_optimization_fft()
 test_galaxy_optimization_fft()
 
