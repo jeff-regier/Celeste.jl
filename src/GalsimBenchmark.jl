@@ -249,6 +249,7 @@ function main(; test_case_names=String[], print_fn=println)
         println("Running test case '$this_test_case_name'")
         iota = header["CL_IOTA"]
         psf = make_psf(header["CL_SIGMA"])
+        n_sources = header["CL_NSRC"]
 
         band_pixels = [
             extensions[index].pixels for index in first_band_index:(first_band_index + 4)
@@ -260,13 +261,16 @@ function main(; test_case_names=String[], print_fn=println)
 
         # we're only scoring one object per image
         target_sources = [1,]
-
-        # everyone is a neighbor of the target source
         neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
 
+        target_sources_joint = collect(1:n_sources)
+        neighbor_map_joint = Infer.find_neighbors(target_sources_joint, catalog, images)
+
         ctni = (catalog, target_sources, neighbor_map, images)
+        ctni_joint = (catalog, target_sources_joint, neighbor_map_joint, images)
+        
         single_results = one_node_single_infer(ctni...)
-        joint_results = one_node_joint_infer(ctni...)
+        joint_results = one_node_joint_infer(ctni_joint...)
 
         benchmark_data = benchmark_comparison_data(single_results[1].vs,
                                                    joint_results[1].vs,
