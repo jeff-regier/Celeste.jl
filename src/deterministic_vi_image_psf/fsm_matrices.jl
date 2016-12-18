@@ -4,6 +4,9 @@ typealias fs0mMatrix Matrix{SensitiveFloat{Float64}}
 typealias fs1mMatrix Matrix{SensitiveFloat{Float64}}
 
 
+const plan_fft_lock = Base.Threads.SpinLock()
+
+
 type FSMSensitiveFloatMatrices
     # The lower corner of the image (in terms of index values)
     h_lower::Int
@@ -28,7 +31,7 @@ type FSMSensitiveFloatMatrices
     # image (the total pixels added in each dimension are twice this)
     pad_pix_h::Int
     pad_pix_w::Int
-    
+
     # Functions for star convolution.
     # kernel_fun is a kernel function that returns the value, derivative, and second
     # derivative of a univariate kernel, e.g. bspline_kernel_with_derivatives()
@@ -93,9 +96,19 @@ function initialize_fsm_sf_matrices_band!(
 
     # Store the psf image and its FFT.
     fsms.psf = deepcopy(psf_image)
-    fsms.psf_fft = zeros(Complex{Float64}, fft_size1, fft_size2);
-    fsms.psf_fft[1:psf_size[1], 1:psf_size[2]] = fsms.psf;
-    fft!(fsms.psf_fft);
+    fsms.psf_fft = zeros(Complex{Float64}, fft_size1, fft_size2)
+    fsms.psf_fft[1:psf_size[1], 1:psf_size[2]] = fsms.psf
+
+    psf_fft1 = Base.DFT.to1(fsms.psf_fft)
+
+    Base.Threads.lock(plan_fft_lock)
+    # doesn't mutate its argument, despite the bang in the name
+    plan = Base.DFT.plan_fft!(psf_fft1)
+    Base.Threads.unlock(plan_fft_lock)
+
+    # mutates psf_fft1, even though it doesn't look like an in-place multiply
+    plan * psf_fft1
+    psf_fft1
 end
 
 
