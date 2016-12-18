@@ -135,7 +135,8 @@ function get_field(header::FITSIO.FITSHeader, key::String)
     end
 end
 
-function actual_values(ids, star_galaxy_index, params)
+function inferred_values(star_galaxy_index, params)
+    ids = Model.ids
     Float64[
         params[ids.u[1]],
         params[ids.u[2]],
@@ -151,11 +152,11 @@ function actual_values(ids, star_galaxy_index, params)
     ]
 end
 
-function get_expected_dataframe(header)
+function get_ground_truth_dataframe(header)
     DataFrame(
         label=fill(header["CL_DESCR"], length(BENCHMARK_PARAMETER_LABELS)),
         field=BENCHMARK_PARAMETER_LABELS,
-        expected=Any[
+        ground_truth=Any[
             get_field(header, "CL_X1"),
             get_field(header, "CL_Y1"),
             get_field(header, "CL_RTIO1"),
@@ -167,17 +168,16 @@ function get_expected_dataframe(header)
             get_field(header, "CL_C34_1"),
             get_field(header, "CL_C45_1"),
             header["CL_TYPE1"] == "star" ? 0 : 1,
-        ])
+        ]
+    )
 end
 
 function benchmark_comparison_data(single_infer_params, joint_infer_params, header)
     ids = Model.ids
     star_galaxy_index = header["CL_TYPE1"] == "star" ? 1 : 2
-    comparison_dataframe = get_expected_dataframe(header)
-    comparison_dataframe[:single_infer_actual] =
-        actual_values(ids, star_galaxy_index, single_infer_params)
-    comparison_dataframe[:joint_infer_actual] =
-        actual_values(ids, star_galaxy_index, joint_infer_params)
+    comparison_dataframe = get_ground_truth_dataframe(header)
+    comparison_dataframe[:single_inferred] = inferred_values(star_galaxy_index, single_infer_params)
+    comparison_dataframe[:joint_inferred] = inferred_values(star_galaxy_index, joint_infer_params)
     comparison_dataframe
 end
 
@@ -281,7 +281,7 @@ function main(; test_case_names=String[], print_fn=println,
     end
 
     full_data = vcat(all_benchmark_data...)
-    print_fn(repr(full_data[!isna(full_data[:expected]), :]))
+    print_fn(repr(full_data[!isna(full_data[:ground_truth]), :]))
     full_data
 end
 
