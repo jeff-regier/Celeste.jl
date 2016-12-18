@@ -403,53 +403,44 @@ function match_catalogs(rcf::RunCamcolField,
     coadd_full_df = load_s82(truthfile)
     println("coadd catalog: $(size(coadd_full_df, 1)) objects")
 
-    # find matches in coadd catalog by position
-    disttol = 1.0 / 0.396  # 1 arcsec
-    good_coadd_indexes = Int[]
-    good_celeste_indexes = Int[]
-    for i in 1:size(celeste_full_df, 1)
-        try
-            j = match_position(coadd_full_df[:ra], coadd_full_df[:dec],
-                         celeste_full_df[i, :ra], celeste_full_df[i, :dec],
-                         disttol)
-            push!(good_celeste_indexes, i)
-            push!(good_coadd_indexes, j)
-        catch y
-            isa(y, MatchException) || throw(y)
-        end
-    end
-
-    celeste_df = celeste_full_df[good_celeste_indexes, :]
-    coadd_df = coadd_full_df[good_coadd_indexes, :]
-
     # load "primary" catalog (the SDSS photoObj catalog used to initialize
     # celeste).
     primary_full_df = load_primary(rcf, stagedir)
     println("primary catalog: $(size(primary_full_df, 1)) objects")
 
-    # match Primary to Celeste by object id
-    pc_matches = Int[findfirst(primary_full_df[:objid], objid)
-                   for objid in celeste_df[:objid]]
-    pc_matches = filter(x->x!=0, pc_matches)
-    primary_df = primary_full_df[pc_matches, :]
+    # find matches in coadd catalog by position
+    disttol = 1.0 / 0.396  # 1 arcsec
 
-    # match Celeste to Primary by object id
-    cp_matches = Int[findfirst(celeste_df[:objid], objid)
-                   for objid in primary_df[:objid]]
-    cp_matches = filter(x->x!=0, cp_matches)
-    celeste_df = celeste_df[cp_matches, :]
-    coadd_df = coadd_df[cp_matches, :]
+    good_celeste_indexes = Int[]
+    good_coadd_indexes = Int[]
+    good_primary_indexes = Int[]
+
+    for i in 1:size(primary_full_df, 1)
+        try
+            j = match_position(coadd_full_df[:ra], coadd_full_df[:dec],
+                         primary_full_df[i, :ra], primary_full_df[i, :dec],
+                         disttol)
+            k = findfirst(celeste_full_df[:objid], primary_full_df[i, :objid])
+            # Celeste doesn't process some light sources due to various filters
+            if k != 0
+                push!(good_primary_indexes, i)
+                push!(good_coadd_indexes, j)
+                push!(good_celeste_indexes, k)
+            end
+        catch y
+            isa(y, MatchException) || throw(y)
+        end
+    end
+
+    primary_df = primary_full_df[good_primary_indexes, :]
+    celeste_df = celeste_full_df[good_celeste_indexes, :]
+    coadd_df = coadd_full_df[good_coadd_indexes, :]
 
     # show that all catalogs have same size, and (hopefully)
     # that not too many sources were filtered
     println("matched celeste catalog: $(size(celeste_df, 1)) objects")
     println("matched coadd catalog: $(size(coadd_df, 1)) objects")
     println("matched primary catalog: $(size(primary_df, 1)) objects")
-
-    # ensure that all objects are matched
-    if size(primary_df, 1) != size(celeste_df, 1)
-        error("catalog mismatch between celeste and primary")
-    end
 
     (celeste_df, primary_df, coadd_df)
 end
