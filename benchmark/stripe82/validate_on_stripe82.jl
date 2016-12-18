@@ -9,6 +9,7 @@ import Celeste.SDSSIO: RunCamcolField
 import Celeste.DeterministicVI: infer_source
 import Celeste.DeterministicVIImagePSF: infer_source_fft
 
+
 # I'd rather let the user specify a rcf on the command line, but picking
 # an arbitrary rcf isn't too useful without having ground truth for it,
 # from a co-add run. Getting ground truth isn't easy to automate because
@@ -16,7 +17,6 @@ import Celeste.DeterministicVIImagePSF: infer_source_fft
 # At least having these hard coded ensures that we don't compare scores
 # from different regions.
 const rcf = RunCamcolField(4263, 5, 119)
-
 
 # This data might already be there from the unit tests.
 # `make` won't fetch it again if it's already there.
