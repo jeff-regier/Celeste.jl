@@ -23,9 +23,9 @@ function convolve_sensitive_float_matrix!(
     for h in h_range, w in w_range
       fft_matrix[h, w] = sf_matrix[h, w].v[]
     end
-    fft!(fft_matrix)
+    safe_fft!(fft_matrix)
     fft_matrix .*= conv_fft
-    ifft!(fft_matrix)
+    safe_ifft!(fft_matrix)
     for h in h_range, w in w_range
         sf_matrix_out[h, w].v[] = real(fft_matrix[h, w]);
     end
@@ -34,9 +34,9 @@ function convolve_sensitive_float_matrix!(
         for h in h_range, w in w_range
           fft_matrix[h, w] = sf_matrix[h, w].d[ind, sa_d]
         end
-        fft!(fft_matrix)
+        safe_fft!(fft_matrix)
         fft_matrix .*= conv_fft
-        ifft!(fft_matrix)
+        safe_ifft!(fft_matrix)
         for h in h_range, w in w_range
             sf_matrix_out[h, w].d[ind, sa_d] = real(fft_matrix[h, w]);
         end
@@ -47,9 +47,9 @@ function convolve_sensitive_float_matrix!(
           # TOOD: avoid this copy?
           fft_matrix[h, w] = sf_matrix[h, w].h[ind1, ind2]
         end
-        fft!(fft_matrix)
+        safe_fft!(fft_matrix)
         fft_matrix .*= conv_fft
-        ifft!(fft_matrix)
+        safe_ifft!(fft_matrix)
         for h in h_range, w in w_range
             sf_matrix_out[h, w].h[ind1, ind2] = sf_matrix_out[h, w].h[ind2, ind1] =
                 real(fft_matrix[h, w]);

@@ -1,3 +1,4 @@
+import Base.DFT: plan_fft!, plan_ifft!, to1
 
 typealias GMatrix Matrix{SensitiveFloat{Float64}}
 typealias fs0mMatrix Matrix{SensitiveFloat{Float64}}
@@ -5,6 +6,25 @@ typealias fs1mMatrix Matrix{SensitiveFloat{Float64}}
 
 
 const plan_fft_lock = Base.Threads.SpinLock()
+
+const fft_plans = [plan_fft!(zeros(Complex{Float64}, i, i)) for i in 1:100]
+const ifft_plans = [plan_ifft!(zeros(Complex{Float64}, i, i)) for i in 1:100]
+
+
+function safe_fft!(A)
+    A1 = to1(A)
+
+#    plan = Base.DFT.plan_fft!(A1)
+    plan = fft_plans[size(A1, 1)]
+
+    plan * A1  # mutates A1
+    A1
+end
+
+
+function safe_ifft!(A)
+    ifft!(A)
+end
 
 
 type FSMSensitiveFloatMatrices
@@ -99,16 +119,7 @@ function initialize_fsm_sf_matrices_band!(
     fsms.psf_fft = zeros(Complex{Float64}, fft_size1, fft_size2)
     fsms.psf_fft[1:psf_size[1], 1:psf_size[2]] = fsms.psf
 
-    psf_fft1 = Base.DFT.to1(fsms.psf_fft)
-
-    Base.Threads.lock(plan_fft_lock)
-    # doesn't mutate its argument, despite the bang in the name
-    plan = Base.DFT.plan_fft!(psf_fft1)
-    Base.Threads.unlock(plan_fft_lock)
-
-    # mutates psf_fft1, even though it doesn't look like an in-place multiply
-    plan * psf_fft1
-    psf_fft1
+    safe_fft!(fsms.psf_fft)
 end
 
 
