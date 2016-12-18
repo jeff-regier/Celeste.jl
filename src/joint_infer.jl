@@ -255,8 +255,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
 
     # Pre-allocate dictionary of elboargs, call it ea_vec.
     ea_vec = Array{ElboArgs}(n_sources)
-    ea_first_pass_vec = Array{ElboArgs}(n_sources)
     function initialize_elboargs_sources(sources)
+#        nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for $(length(sources)) sources")
         for cur_source_index in sources
             entry_id = target_sources[cur_source_index]
             entry = catalog[target_sources[cur_source_index]]
@@ -264,23 +264,18 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             neighbors = catalog[neighbor_map[cur_source_index]]
 
             # TODO max: refactor this portion? It's reused in infer_source.
+#            nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for source $(target_sources[cur_source_index]): objid=$(entry.objid)")
             cat_local = vcat([entry], neighbors)
             ids_local = vcat([entry_id], neighbor_ids)
 
+            #vp = Vector{Float64}[init_source(ce) for ce in cat_local]
             vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
                         target_source_variational_params[x] :
                         init_source(catalog[x]) for x in ids_local]
             patches = Infer.get_sky_patches(images, cat_local)
             ea = ElboArgs(images, vp, patches, [1])
             Infer.load_active_pixels!(ea.images, ea.patches)
-
-            # The ea_vec array contains elbo args for all target sources
             ea_vec[cur_source_index] = ea
-
-            vp_non_shared = vcat([target_source_variational_params[entry_id]],
-                                 [init_source(catalog[x]) for x in neighbor_ids])
-            ea_non_shared = ElboArgs(images, vp_non_shared, patches, [1])
-            ea_first_pass_vec[cur_source_index] = ea_non_shared
         end
     end
 
@@ -319,6 +314,9 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     function process_sources(source_assignment::Vector{Int64}, iter)
         try
 
+            # Use a constant number of newton steps
+            n_newton_steps = 5
+
             # Shuffle the source assignments within each batch of each process.
             # This is disabled by default because it ruins the deterministic outcome
             # required by the test cases.
@@ -330,20 +328,12 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 # one of its neighbors has not converged
                 if should_optimize_source(cur_source_indx)
                     cur_entry = catalog[target_sources[cur_source_indx]]
-                    if iter == 1
-                        iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
-                            DeterministicVI.elbo,
-                            ea_first_pass_vec[cur_source_indx],
-                            max_iters=5,
-                            use_default_optim_params=true)                        
-                    else
-                        iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
-                            DeterministicVI.elbo,
-                            ea_vec[cur_source_indx],
-                            max_iters=2,
-                            use_default_optim_params=true)
-                        sources_converged[target_sources[cur_source_indx]] = Optim.converged(r)
-                    end
+                    iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
+                        DeterministicVI.elbo,
+                        ea_vec[cur_source_indx],
+                        max_iters=n_newton_steps,
+                        use_default_optim_params=true)
+                    sources_converged[target_sources[cur_source_indx]] = Optim.converged(r)
                 end
 
                 # Maintain count of sources that have converged
