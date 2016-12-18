@@ -1,4 +1,6 @@
 import Base.DFT: plan_fft!, plan_ifft!, to1
+import Base.DFT.FFTW.cFFTWPlan
+import ..Log
 
 typealias GMatrix Matrix{SensitiveFloat{Float64}}
 typealias fs0mMatrix Matrix{SensitiveFloat{Float64}}
@@ -7,23 +9,41 @@ typealias fs1mMatrix Matrix{SensitiveFloat{Float64}}
 
 const plan_fft_lock = Base.Threads.SpinLock()
 
-const fft_plans = [plan_fft!(zeros(Complex{Float64}, i, i)) for i in 1:100]
-const ifft_plans = [plan_ifft!(zeros(Complex{Float64}, i, i)) for i in 1:100]
+function __init__()
+    global fft_plans, ifft_plans
+    fft_plans = Dict{Tuple{Int64, Int64}, cFFTWPlan{Complex{Float64},-1,true,2}}()
+    ifft_type = Base.DFT.ScaledPlan{Complex{Float64},Base.DFT.FFTW.cFFTWPlan{Complex{Float64},1,true,2},Float64}
+    ifft_plans = Dict{Tuple{Int64, Int64}, ifft_type}()
+end
 
 
 function safe_fft!(A)
     A1 = to1(A)
+    global fft_plans
 
-#    plan = Base.DFT.plan_fft!(A1)
-    plan = fft_plans[size(A1, 1)]
+    if !haskey(fft_plans, size(A))
+        lock(plan_fft_lock)
+        fft_plans[size(A)] = Base.DFT.plan_fft!(A1)
+        unlock(plan_fft_lock)
+    end
 
-    plan * A1  # mutates A1
+    fft_plans[size(A)] * A1  # mutates A1
     A1
 end
 
 
 function safe_ifft!(A)
-    ifft!(A)
+    A1 = to1(A)
+    global ifft_plans
+
+    if !haskey(ifft_plans, size(A))
+        lock(plan_fft_lock)
+        ifft_plans[size(A)] = Base.DFT.plan_ifft!(A1)
+        unlock(plan_fft_lock)
+    end
+
+    ifft_plans[size(A)] * A1  # mutates A1
+    A1
 end
 
 
