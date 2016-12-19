@@ -24,7 +24,7 @@ function test_that_star_truth_is_most_likely_log_prob()
         Model.make_star_logpdf(ea.images, ea.S, ea.N,
                                source_states,
                                ea.patches, ea.active_sources,
-                               ea.psf_K, ea.num_allowed_sd)
+                               ea.psf_K)
 
     # extract the star-specific parameters from source_states[1] for the
     # logpdf function
@@ -77,7 +77,7 @@ function test_that_gal_truth_is_most_likely_log_prob()
         Model.make_galaxy_logpdf(ea.images, ea.S, ea.N,
                                  source_states,
                                  ea.patches, ea.active_sources,
-                                 ea.psf_K, ea.num_allowed_sd)
+                                 ea.psf_K)
 
     # extract the star-specific parameters from source_states[1] for the
     # logpdf function

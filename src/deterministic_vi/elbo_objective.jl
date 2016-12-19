@@ -3,7 +3,7 @@ Calculate the contributions of a single source for a single pixel to
 the sensitive floats E_G_s and var_G_s, which are cleared and updated in place.
 
 Args:
-    - elbo_vars: Elbo intermediate values, with updated fs1m_vec and fs0m_vec.
+    - elbo_vars: Elbo intermediate values, with updated fs1m and fs0m.
     - ea: Model parameters
     - E_G_s, var_G_s: The expectation  and variance of the brightnesses of this
           source at this pixel, updated in place.
@@ -378,16 +378,6 @@ function add_pixel_term!{NumType <: Number}(
                     star_mcs::Array{BvnComponent{NumType}, 2},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     sbs::Vector{SourceBrightness{NumType}})
-    # This combines the bvn components to get the light density for each
-    # source separately.
-    Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
-                             ea.elbo_vars.fs0m_vec,
-                             ea.elbo_vars.fs1m_vec,
-                             ea.patches,
-                             ea.active_sources,
-                             ea.num_allowed_sd,
-                             n, h, w,
-                             gal_mcs, star_mcs)
     elbo_vars = ea.elbo_vars
     img = ea.images[n]
 
@@ -401,12 +391,21 @@ function add_pixel_term!{NumType <: Number}(
         h2 = h - p.bitmap_offset[1]
         w2 = w - p.bitmap_offset[2]
 
+        hw = SVector{2,Float64}(h, w)
+        is_active_source = s in ea.active_sources  # fast?
+
+        populate_fsm!(ea.elbo_vars.bvn_derivs,
+                      ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
+                      s, hw, is_active_source,
+                      p.wcs_jacobian,
+                      gal_mcs, star_mcs)
+
         H2, W2 = size(p.active_pixel_bitmap)
         if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
             is_active_source = s in ea.active_sources
             accumulate_source_pixel_brightness!(
                 elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
-                elbo_vars.fs0m_vec[s], elbo_vars.fs1m_vec[s],
+                elbo_vars.fs0m, elbo_vars.fs1m,
                 sbs[s], ea.images[n].b, s, is_active_source)
         end
     end

@@ -148,7 +148,7 @@ function populate_gal_fsm_image!(
         x = SVector{2, Float64}([h_image, w_image])
         populate_gal_fsm!(ea.elbo_vars.bvn_derivs,
                           fsms.fs1m_image[h_fsm, w_fsm],
-                          s, x, is_active_source, Inf,
+                          s, x, is_active_source,
                           p.wcs_jacobian,
                           gal_mcs)
     end

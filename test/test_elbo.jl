@@ -314,48 +314,6 @@ function test_num_allowed_sd()
 end
 
 
-function test_populate_fsm!()
-    images, ea, body = gen_two_body_dataset()
-
-    n = 3
-    h = w = 5
-    s = 2
-    ea.active_sources = [s]
-
-    star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
-                                ea.vp, ea.active_sources,
-                                ea.psf_K, n)
-    Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
-                             ea.elbo_vars.fs0m_vec,
-                             ea.elbo_vars.fs1m_vec,
-                             ea.patches,
-                             ea.active_sources,
-                             ea.num_allowed_sd,
-                             n, h, w,
-                             gal_mcs, star_mcs)
-
-    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, true, true)
-    fs1m = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, true, true)
-
-    x = @SVector Float64[h, w]
-    elbo_vars = ea.elbo_vars
-    Model.populate_fsm!(elbo_vars.bvn_derivs,
-                        fs0m, fs1m,
-                        s, x, true,
-                        ea.num_allowed_sd,
-                        ea.patches[s, n].wcs_jacobian,
-                        gal_mcs, star_mcs)
-
-    @test_approx_eq fs0m.v[] elbo_vars.fs0m_vec[s].v[]
-    @test_approx_eq fs0m.d elbo_vars.fs0m_vec[s].d
-    @test_approx_eq fs0m.h elbo_vars.fs0m_vec[s].h
-
-    @test_approx_eq fs1m.v[] elbo_vars.fs1m_vec[s].v[]
-    @test_approx_eq fs1m.d elbo_vars.fs1m_vec[s].d
-    @test_approx_eq fs1m.h elbo_vars.fs1m_vec[s].h
-end
-
-
 test_active_sources()
 test_set_hess()
 test_bvn_cov()
@@ -364,4 +322,3 @@ test_num_allowed_sd()
 test_that_star_truth_is_most_likely()
 test_that_galaxy_truth_is_most_likely()
 test_coadd_cat_init_is_most_likely()
-test_populate_fsm!()

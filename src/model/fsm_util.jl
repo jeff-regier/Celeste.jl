@@ -83,69 +83,11 @@ function load_bvn_mixtures{NumType <: Number}(
 end
 
 
-type ModelIntermediateVariables{NumType <: Number}
-    bvn_derivs::BivariateNormalDerivatives{NumType}
-
-    # Vectors of star and galaxy bvn quantities from all sources for a pixel.
-    # The vector has one element for each active source, in the same order
-    # as ea.active_sources.
-
-    # TODO: you can treat this the same way as E_G_s and not keep a vector around.
-    fs0m_vec::Vector{SensitiveFloat{NumType}}
-    fs1m_vec::Vector{SensitiveFloat{NumType}}
-
-    # Pre-allocated memory for the gradient and Hessian of combine functions.
-    combine_grad::Vector{NumType}
-    combine_hess::Matrix{NumType}
-end
-
-
-"""
-Args:
-    - S: The total number of sources
-    - num_active_sources: The number of actives sources (with deriviatives)
-    - calculate_gradient: If false, only calculate values
-    - calculate_hessian: If false, only calculate gradients. Note that if
-                calculate_gradient = false, then hessians will not be
-                calculated irrespective of the value of calculate_hessian.
-"""
-function ModelIntermediateVariables(NumType::DataType,
-                                    S::Int,
-                                    num_active_sources::Int;
-                                    calculate_gradient::Bool=true,
-                                    calculate_hessian::Bool=true)
-    @assert NumType <: Number
-
-    bvn_derivs = BivariateNormalDerivatives{NumType}()
-
-    # fs0m and fs1m accumulate contributions from all bvn components
-    # for a given source.
-    fs0m_vec = Array(SensitiveFloat{NumType}, S)
-    fs1m_vec = Array(SensitiveFloat{NumType}, S)
-    for s = 1:S
-        fs0m_vec[s] = SensitiveFloat{NumType}(length(StarPosParams), 1,
-                                     calculate_gradient, calculate_hessian)
-        fs1m_vec[s] = SensitiveFloat{NumType}(length(GalaxyPosParams), 1,
-                                     calculate_gradient, calculate_hessian)
-    end
-
-    combine_grad = zeros(NumType, 2)
-    combine_hess = zeros(NumType, 2, 2)
-
-    ModelIntermediateVariables{NumType}(
-        bvn_derivs, fs0m_vec, fs1m_vec,
-        combine_grad, combine_hess)
-end
-
-
 """
 Populate fs0m and fs1m for source s in the a given pixel.
 
-Non-obvious args:
-    ...
-    - s: The source index in star_mcs and gal_mcs
+Non-standard args:
     - x: The pixel location in the image
-    ...
 """
 function populate_gal_fsm!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
@@ -153,9 +95,9 @@ function populate_gal_fsm!{NumType <: Number}(
                     s::Int,
                     x::SVector{2,Float64},
                     is_active_source::Bool,
-                    num_allowed_sd::Float64,
                     wcs_jacobian::Matrix{Float64},
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
+                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4};
+                    num_allowed_sd=Inf)
     clear!(fs1m)
     for i = 1:2 # Galaxy types
         for j in 1:8 # Galaxy component
@@ -180,11 +122,8 @@ end
 """
 Populate fs0m and fs1m for source s in the a given pixel.
 
-Non-obvious args:
-    ...
-    - s: The source index in star_mcs and gal_mcs
+Non-standard args:
     - x: The pixel location in the image
-    ...
 """
 function populate_fsm!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
@@ -193,10 +132,10 @@ function populate_fsm!{NumType <: Number}(
                     s::Int,
                     x::SVector{2,Float64},
                     is_active_source::Bool,
-                    num_allowed_sd::Float64,
                     wcs_jacobian::Matrix{Float64},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    star_mcs::Array{BvnComponent{NumType}, 2})
+                    star_mcs::Array{BvnComponent{NumType}, 2};
+                    num_allowed_sd=Inf)
     clear!(fs0m)
     for k = 1:size(star_mcs, 1) # PSF component
         if (num_allowed_sd == Inf ||
@@ -209,58 +148,24 @@ function populate_fsm!{NumType <: Number}(
 
     populate_gal_fsm!(bvn_derivs, fs1m,
                       s, x, is_active_source,
-                      num_allowed_sd, wcs_jacobian, gal_mcs)
-end
-
-
-function populate_fsm_vecs!{NumType <: Number}(
-                    bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs0m_vec::Vector{SensitiveFloat{NumType}},
-                    fs1m_vec::Vector{SensitiveFloat{NumType}},
-                    patches::Matrix{SkyPatch},
-                    active_sources::Vector{Int},
-                    num_allowed_sd::Float64,
-                    n::Int, h::Int, w::Int,
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    star_mcs::Array{BvnComponent{NumType}, 2})
-    @inbounds for s in 1:size(patches, 1)
-        p = patches[s,n]
-
-        h2 = h - p.bitmap_offset[1]
-        w2 = w - p.bitmap_offset[2]
-
-        H2, W2 = size(p.active_pixel_bitmap)
-
-        if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
-            hw = SVector{2,Float64}(h, w)
-            is_active_source = s in active_sources  # fast?
-
-            populate_fsm!(bvn_derivs, fs0m_vec[s], fs1m_vec[s],
-                          s, hw, is_active_source,
-                          num_allowed_sd,
-                          p.wcs_jacobian,
-                          gal_mcs, star_mcs)
-        end
-    end
+                      wcs_jacobian, gal_mcs;
+                      num_allowed_sd=num_allowed_sd)
 end
 
 
 """
 Add the contributions of a star's bivariate normal term to the ELBO,
-by updating elbo_vars.fs0m_vec[s] in place.
+by updating elbo_vars.fs0m in place.
 
 Args:
     - bvn_derivs: (formerly from elbo_vars)
-    - fs0m_vec: vector of sensitive floats, populated by this method
+    - fs0m: sensitive floats populated by this method
     - calculate_gradient: the and of is_active_source and formerly elbo_vars.calculate_gradient
     - calculate_hessian: elbo_vars: Elbo intermediate values.
     - s: The index of the current source in 1:S
     - bmc: The component to be added
     - x: An offset for the component in pixel coordinates (e.g. a pixel location)
     - wcs_jacobian: The jacobian of the function pixel = F(world) at this location.
-
-Returns:
-    Updates elbo_vars.fs0m_vec[s] in place.
 """
 function accum_star_pos!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
@@ -303,9 +208,6 @@ end
 """
 Add the contributions of a galaxy component term to the ELBO by
 updating fs1m in place.
-
-Returns:
-    Updates fs1m in place.
 """
 function accum_galaxy_pos!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
