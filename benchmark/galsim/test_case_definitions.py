@@ -14,7 +14,7 @@ COUNTS_PER_NMGY = 1000.0 # a.k.a. "iota" in Celeste
 # intensity (flux) relative to third band (= "a" band = reference)
 # see GalsimBenchmark.typical_band_relative_intensities()
 # these are taken from the current dominant component of the lognormal prior on c_s for stars
-STAR_RELATIVE_INTENSITIES = [
+DEFAULT_STAR_RELATIVE_INTENSITIES = [
     0.1330,
     0.5308,
     1,
@@ -22,7 +22,7 @@ STAR_RELATIVE_INTENSITIES = [
     1.5417,
 ]
 # these are taken from the current dominant component of the lognormal prior on c_s for galaxies
-GALAXY_RELATIVE_INTENSITIES = [
+DEFAULT_GALAXY_RELATIVE_INTENSITIES = [
     0.4013,
     0.4990,
     1,
@@ -35,6 +35,13 @@ class CommonFields(object):
     def __init__(self):
         self.offset_from_center_arcsec = (0, 0)
         self.reference_band_flux_nmgy = 40
+        # relative flux in each band defines "color" of light sources
+        self.flux_relative_to_reference_band = DEFAULT_GALAXY_RELATIVE_INTENSITIES
+
+    def set_flux_relative_to_reference_band(self, relative_flux):
+        assert len(relative_flux) == 5
+        assert relative_flux[2] == 1
+        self.flux_relative_to_reference_band = relative_flux
 
     def offset_from_center_degrees(self):
         return (
@@ -51,6 +58,12 @@ class CommonFields(object):
             image_center_deg + self.offset_from_center_arcsec[1] / ARCSEC_PER_DEGREE,
         )
 
+    def flux_counts(self, band_index):
+        return (
+            self.reference_band_flux_nmgy * self.flux_relative_to_reference_band[band_index]
+            * COUNTS_PER_NMGY
+        )
+
     def add_header_fields(self, header, index_str, star_or_galaxy):
         position_deg = self.position_deg()
         header['CL_X' + index_str] = (position_deg[0], 'X center in world coordinates (deg)')
@@ -58,6 +71,22 @@ class CommonFields(object):
         header['CL_FLUX' + index_str] = (
             self.reference_band_flux_nmgy,
             'reference (=3) band brightness (nMgy)',
+        )
+        header['CL_C12_' + index_str] = (
+            self.flux_relative_to_reference_band[1] / self.flux_relative_to_reference_band[0],
+            'ratio of flux in band 2 to band 1',
+        )
+        header['CL_C23_' + index_str] = (
+            1 / self.flux_relative_to_reference_band[1],
+            'ratio of flux in band 3 to band 2',
+        )
+        header['CL_C34_' + index_str] = (
+            self.flux_relative_to_reference_band[3],
+            'ratio of flux in band 4 to band 3',
+        )
+        header['CL_C45_' + index_str] = (
+            self.flux_relative_to_reference_band[4] / self.flux_relative_to_reference_band[3],
+            'ratio of flux in band 5 to band 4',
         )
         header['CL_TYPE' + index_str] = (star_or_galaxy, '"star" or "galaxy"?')
 
@@ -72,6 +101,7 @@ class LightSource(object):
 class Star(LightSource):
     def __init__(self):
         self._common_fields = CommonFields()
+        self._common_fields.flux_relative_to_reference_band = DEFAULT_STAR_RELATIVE_INTENSITIES
 
     def offset_arcsec(self, x, y):
         self._common_fields.offset_from_center_arcsec = (x, y)
@@ -81,11 +111,12 @@ class Star(LightSource):
         self._common_fields.reference_band_flux_nmgy = flux
         return self
 
+    def flux_relative_to_reference_band(self, relative_flux):
+        self._common_fields.set_flux_relative_to_reference_band(relative_flux)
+        return self
+
     def get_galsim_light_source(self, band_index, psf_sigma_degrees):
-        flux_counts = (
-            self._common_fields.reference_band_flux_nmgy * STAR_RELATIVE_INTENSITIES[band_index]
-                * COUNTS_PER_NMGY
-        )
+        flux_counts = self._common_fields.flux_counts(band_index)
         return (
             galsim.Gaussian(flux=flux_counts, sigma=psf_sigma_degrees)
                 .shift(self._common_fields.offset_from_center_degrees())
@@ -110,6 +141,10 @@ class Galaxy(LightSource):
         self._common_fields.reference_band_flux_nmgy = flux
         return self
 
+    def flux_relative_to_reference_band(self, relative_flux):
+        self._common_fields.set_flux_relative_to_reference_band(relative_flux)
+        return self
+
     def angle_deg(self, angle):
         self._angle_deg = angle
         return self
@@ -123,10 +158,7 @@ class Galaxy(LightSource):
         return self
 
     def get_galsim_light_source(self, band_index, psf_sigma_degrees):
-        flux_counts = (
-            self._common_fields.reference_band_flux_nmgy * GALAXY_RELATIVE_INTENSITIES[band_index]
-                * COUNTS_PER_NMGY
-        )
+        flux_counts = self._common_fields.flux_counts(band_index)
         half_light_radius_deg = self._half_light_radius_arcsec / ARCSEC_PER_DEGREE
         galaxy = (
             galsim.Exponential(half_light_radius=half_light_radius_deg, flux=flux_counts)
@@ -241,6 +273,10 @@ def bright_star(test_case):
     test_case.add(Star().reference_band_flux_nmgy(80))
 
 @galsim_test_case
+def different_color_star(test_case):
+    test_case.add(Star().flux_relative_to_reference_band([0.2, 0.8, 1, 1.6, 1.3]))
+
+@galsim_test_case
 def star_with_noise(test_case):
     test_case.add(Star().offset_arcsec(-1, 1).reference_band_flux_nmgy(20))
     test_case.sky_level_nmgy = 0.1
@@ -273,6 +309,10 @@ def dim_galaxy(test_case):
 @galsim_test_case
 def bright_galaxy(test_case):
     test_case.add(Galaxy().reference_band_flux_nmgy(20))
+
+@galsim_test_case
+def different_color_galaxy(test_case):
+    test_case.add(Galaxy().flux_relative_to_reference_band([0.6, 0.2, 1, 1.1, 2]))
 
 @galsim_test_case
 def galaxy_with_all(test_case):

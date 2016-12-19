@@ -11,14 +11,14 @@ import Celeste: GalsimBenchmark
     )
     for row_index in 1:size(results, 1)
         row = results[row_index, :]
-        if isna(row[1, :expected])
+        if isna(row[1, :ground_truth])
             continue
         end
-        for result_column in [:single_infer_actual, :joint_infer_actual]
+        for result_column in [:single_inferred, :joint_inferred]
             @test_approx_eq_eps(
-                results[1, :expected],
+                results[1, :ground_truth],
                 results[1, result_column],
-                0.05 * results[1, :expected], # maximum permissible error
+                0.05 * results[1, :ground_truth], # maximum permissible error
             )
         end
     end
