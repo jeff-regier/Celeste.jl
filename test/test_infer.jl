@@ -50,14 +50,6 @@ function test_infer_rcf()
 end
 
 
-function test_source_division_parallelism()
-    box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
-    field_triplets = [RunCamcolField(3900, 6, 269),]
-    results = ParallelRun.divide_sources_and_infer(box, datadir)
-    @test length(results) == 4
-end
-
-
 function test_load_active_pixels()
     images, ea, one_body = gen_sample_star_dataset()
 
@@ -116,6 +108,5 @@ if test_long_running
 end
 
 test_load_active_pixels()
-test_source_division_parallelism()
 test_infer_single()
 
