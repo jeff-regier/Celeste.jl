@@ -172,12 +172,38 @@ function get_ground_truth_dataframe(header)
     )
 end
 
-function benchmark_comparison_data(single_infer_params, joint_infer_params, header)
+function error_in_posterior_std_devs(star_galaxy_index, params, header)
     ids = Model.ids
+    lognormal_mean_id = vcat(
+        [ids.r1[star_galaxy_index]],
+        [ids.c1[band, star_galaxy_index] for band in 1:4],
+    )
+    lognormal_var_id = vcat(
+        [ids.r2[star_galaxy_index]],
+        [ids.c2[band, star_galaxy_index] for band in 1:4],
+    )
+    ground_truth_key = ["CL_FLUX1", "CL_C12_1", "CL_C23_1", "CL_C34_1", "CL_C45_1"]
+
+    posterior_z_scores = Any[]
+    for index in 1:length(lognormal_mean_id)
+        error = abs(params[lognormal_mean_id[index]] - log(get_field(header, ground_truth_key[index])))
+        posterior_sd = sqrt(params[lognormal_var_id[index]])
+        push!(posterior_z_scores, error / posterior_sd)
+    end
+
+    vcat(fill(NA, 5), posterior_z_scores, [NA])
+end
+
+function benchmark_comparison_data(single_infer_params, joint_infer_params, header)
     star_galaxy_index = header["CL_TYPE1"] == "star" ? 1 : 2
     comparison_dataframe = get_ground_truth_dataframe(header)
     comparison_dataframe[:single_inferred] = inferred_values(star_galaxy_index, single_infer_params)
     comparison_dataframe[:joint_inferred] = inferred_values(star_galaxy_index, joint_infer_params)
+    comparison_dataframe[:error_sds] = error_in_posterior_std_devs(
+        star_galaxy_index,
+        joint_infer_params,
+        header,
+    )
     comparison_dataframe
 end
 
