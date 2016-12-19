@@ -146,7 +146,7 @@ function state_log_likelihood(is_star::Bool,                # source is star
 
     # create objects needed to compute the mean poisson value per pixel
     # (similar to ElboDeriv.process_active_pixels!)
-    bvn_derivs = BivariateNormalDerivatives{Float64}(Float64)
+    bvn_derivs = BivariateNormalDerivatives{Float64}()
     fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
     fs1m = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, false, false)
 
