@@ -272,7 +272,7 @@ function test_trim_psf()
     raw_psf = load_raw_psf()
     trim_percent = 0.95
     trimmed_psf = trim_psf(raw_psf; trim_percent=trim_percent)
-    @test sum(abs(trimmed_psf)) >= trim_percent * sum(abs(raw_psf)) 
+    @test sum(abs, trimmed_psf) >= trim_percent * sum(abs, raw_psf)
     @test size(trimmed_psf, 1) < size(raw_psf, 1)
     @test size(trimmed_psf, 2) < size(raw_psf, 2)
 end
