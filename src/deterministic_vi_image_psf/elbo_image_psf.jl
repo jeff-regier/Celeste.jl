@@ -332,21 +332,21 @@ function initialize_fft_elbo_parameters(
     active_sources::Vector{Int};
     use_raw_psf=true,
     use_trimmed_psf=true)
-    
+
     ea = ElboArgs(images, vp, patches, active_sources, psf_K=1)
     load_active_pixels!(images, ea.patches; exclude_nan=false)
     if use_raw_psf
-        psf_image_mat = Array{Matrix{Float64}}(ea.S, ea.N) 
+        psf_image_mat = Array{Matrix{Float64}}(ea.S, ea.N)
         for n in 1:ea.N, s in 1:ea.S
             img = images[n]
             world_loc = ea.vp[s][lidx.u]
             pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
-            psf_image_mat[s, n] = 
+            psf_image_mat[s, n] =
                 eval_psf(img.raw_psf_comp, pixel_loc[1], pixel_loc[2])
         end
     else
         psf_image_mat = Matrix{Float64}[
-            get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea.S, b in 1:ea.N]        
+            get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea.S, b in 1:ea.N]
     end
 
     if use_trimmed_psf
@@ -373,8 +373,8 @@ function get_fft_elbo_function{T}(
         kl_source = SensitiveFloat{T}(length(CanonicalParams), 1,
                                       elbo.has_gradient, elbo.has_hessian)
         elbo_likelihood_with_fft!(ea, fsm_mat)
-        subtract_kl_all_sources!(ea, elbo, kl_source,
-                                 KL_HELPER_POOL[Base.Threads.threadid()])
+        kl_helper = KLDivergence.KL_HELPER_POOL[Base.Threads.threadid()]
+        KLDivergence.subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
         return deepcopy(elbo)
     end
 end

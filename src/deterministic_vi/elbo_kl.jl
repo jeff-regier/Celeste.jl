@@ -1,3 +1,10 @@
+module KLDivergence
+
+using ..DeterministicVI: ElboArgs
+using ...Model: CanonicalParams, ids, prior, Ia, D
+using ...SensitiveFloats: SensitiveFloat, add_sources_sf!
+using ForwardDiff, ReverseDiff, DiffBase
+
 # Calculate the Kullback-Leibler divergences between pairs of well-known parameteric
 # distributions, and derivatives with respect to the parameters of the first distributions.
 
@@ -146,8 +153,6 @@ function KLHelper{N,T}(::Type{Dual{N,T}} = DEFAULT_DUAL_TYPE)
     return KLHelper(gradient!, hessian!)
 end
 
-const KL_HELPER_POOL = ntuple(n -> KLHelper(), nthreads())
-
 ###############
 # Entry Point #
 ###############
@@ -177,3 +182,13 @@ function subtract_kl_all_sources!{T}(ea::ElboArgs,
     end
     return accum
 end
+
+############
+# __init__ #
+############
+
+function __init__()
+    eval(KLDivergence, :(const KL_HELPER_POOL = $(ntuple(n -> KLHelper(), Base.Threads.nthreads()))))
+end
+
+end # module

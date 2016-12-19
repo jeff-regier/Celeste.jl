@@ -17,8 +17,6 @@ using ..Transform
 import DataFrames
 import Optim
 using StaticArrays
-using ForwardDiff
-using ReverseDiff
 
 export ElboArgs
 

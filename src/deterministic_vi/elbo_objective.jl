@@ -515,8 +515,8 @@ function elbo{T}(ea::ElboArgs{T},
                  kl_source = SensitiveFloat{T}(length(CanonicalParams), 1,
                                                ea.elbo_vars.elbo.has_gradient,
                                                ea.elbo_vars.elbo.has_hessian),
-                 kl_helper = KL_HELPER_POOL[threadid()])
+                 kl_helper = KLDivergence.KL_HELPER_POOL[threadid()])
     elbo = elbo_likelihood(ea)
-    subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
+    KLDivergence.subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
     return elbo
 end
