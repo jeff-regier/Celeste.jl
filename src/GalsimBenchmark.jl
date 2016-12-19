@@ -234,7 +234,8 @@ end
 # * expected: "ground truth" expected value
 # * single_infer_actual: inferred MAP value or posterior median from single-source inference
 # * joint_infer_actual: ditto, for multi-source joint inference
-function main(; test_case_names=String[], print_fn=println)
+function main(; test_case_names=String[], print_fn=println,
+              infer_source_callback=DeterministicVI.infer_source)
     all_benchmark_data = []
     extensions, wcs = read_fits(joinpath(GALSIM_BENCHMARK_DIR, FILENAME))
     @assert length(extensions) % 5 == 0 # one extension per band for each test case
@@ -266,11 +267,11 @@ function main(; test_case_names=String[], print_fn=println)
         target_sources_joint = collect(1:n_sources)
         neighbor_map_joint = Infer.find_neighbors(target_sources_joint, catalog, images)
 
-        ctni = (catalog, target_sources, neighbor_map, images)
-        ctni_joint = (catalog, target_sources_joint, neighbor_map_joint, images)
-        
-        single_results = one_node_single_infer(ctni...)
-        joint_results = one_node_joint_infer(ctni_joint...)
+        single_results = one_node_single_infer(
+            catalog, target_sources, neighbor_map, images;
+            infer_source_callback=infer_source_callback)
+        joint_results = one_node_joint_infer(catalog, target_sources_joint,
+                                             neighbor_map_joint, images)
 
         benchmark_data = benchmark_comparison_data(single_results[1].vs,
                                                    joint_results[1].vs,
