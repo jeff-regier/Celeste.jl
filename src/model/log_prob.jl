@@ -30,8 +30,7 @@ function make_star_logpdf(images::Vector{Image},
                           source_params::Vector{Vector{Float64}},
                           patches::Matrix{SkyPatch},
                           active_sources::Vector{Int},
-                          psf_K::Int64,
-                          num_allowed_sd::Float64)
+                          psf_K::Int64)
     # define star prior log probability density function
     prior = construct_prior()
     subprior = prior.star
@@ -50,7 +49,7 @@ function make_star_logpdf(images::Vector{Image},
                                         dummy_gal_shape, images,
                                         patches,
                                         active_sources,
-                                        psf_K, num_allowed_sd,
+                                        psf_K,
                                         source_params,
                                         S, N)
         return ll_like + ll_prior
@@ -81,8 +80,7 @@ function make_galaxy_logpdf(images::Vector{Image},
                             source_params::Vector{Vector{Float64}},
                             patches::Matrix{SkyPatch},
                             active_sources::Vector{Int},
-                            psf_K::Int64,
-                            num_allowed_sd::Float64)
+                            psf_K::Int64)
     # define galaxy prior function
     prior    = construct_prior()
     subprior = prior.galaxy
@@ -105,7 +103,7 @@ function make_galaxy_logpdf(images::Vector{Image},
         ll_like  = state_log_likelihood(false, brightness, colors, position,
                                         constrain_gal_shape(gal_shape), images,
                                         patches,
-                                        active_sources, psf_K, num_allowed_sd,
+                                        active_sources, psf_K,
                                         source_params,
                                         S, N)
         return ll_like + ll_prior
@@ -139,7 +137,6 @@ function state_log_likelihood(is_star::Bool,                # source is star
                               patches::Matrix{SkyPatch},    # formerly of ElboArgs
                               active_sources::Vector{Int},  # formerly of ElboArgs
                               psf_K::Int64,                 # number of PSF Comps
-                              num_allowed_sd::Float64,      # ...
                               source_params::Vector{Vector{Float64}}, # list of background sources
                               S::Int64,
                               N::Int64)
@@ -149,11 +146,9 @@ function state_log_likelihood(is_star::Bool,                # source is star
 
     # create objects needed to compute the mean poisson value per pixel
     # (similar to ElboDeriv.process_active_pixels!)
-    model_vars = ModelIntermediateVariables(Float64,
-                                            S,
-                                            length(active_sources);
-                                            calculate_gradient=false,
-                                            calculate_hessian=false)
+    bvn_derivs = BivariateNormalDerivatives{Float64}(Float64)
+    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
+    fs1m = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, false, false)
 
     # load star/gal mixture components (make sure these reflect
     gdev, gaxis, gangle, gscale = gal_shape
@@ -188,11 +183,7 @@ function state_log_likelihood(is_star::Bool,                # source is star
             end
 
             # compute the unit-flux pixel values
-            populate_fsm_vecs!(model_vars.bvn_derivs,
-                               model_vars.fs0m_vec,
-                               model_vars.fs1m_vec,
-                               patches, active_sources, num_allowed_sd,
-                               n, h, w, gal_mcs, star_mcs)
+            hw = SVector{2,Float64}(h, w)
 
             # compute the background rate for this pixel
             background_rate = img.epsilon_mat[h, w]
@@ -203,14 +194,26 @@ function state_log_likelihood(is_star::Bool,                # source is star
                 type_idx  = s_is_star ? 1 : 2
                 flux_s    = colors_to_fluxes(params_s[lidx.r[type_idx]],
                                              params_s[lidx.c[:,type_idx]])
-                rate_s = s_is_star ? model_vars.fs0m_vec[s].v : model_vars.fs1m_vec[s].v
-                rate_s[] *= flux_s[img.b]
-                background_rate += rate_s[]
+                populate_fsm!(bvn_derivs,
+                              fs0m, fs1m,
+                              s, hw,
+                              false,
+                              p.wcs_jacobian,
+                              gal_mcs, star_mcs)
+                rate_s = s_is_star ? fs0m.v[] : fs1m.v[]
+                rate_s *= flux_s[img.b]
+                background_rate += rate_s
             end
 
             # this source's rate, add to background for total
-            this_rate  = is_star ? model_vars.fs0m_vec[1].v : model_vars.fs1m_vec[1].v
-            pixel_rate = fluxes[img.b] * this_rate[] + background_rate
+            populate_fsm!(bvn_derivs,
+                          fs0m, fs1m,
+                          1, hw,
+                          false,
+                          p.wcs_jacobian,
+                          gal_mcs, star_mcs)
+            this_rate  = is_star ? fs0m.v[] : fs1m.v[]
+            pixel_rate = fluxes[img.b] * this_rate + background_rate
 
             # multiply by image's gain for this pixel
             rate     = pixel_rate * img.iota_vec[h]

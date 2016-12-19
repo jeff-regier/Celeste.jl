@@ -8,7 +8,7 @@ using ..Model
 import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
                 GalaxySigmaDerivs, SkyPatch,
                 get_bvn_cov, eval_bvn_pdf!, get_bvn_derivs!,
-                transform_bvn_derivs!, init_source
+                transform_bvn_derivs!, init_source, populate_fsm!
 import ..Infer
 using ..SensitiveFloats
 import ..SensitiveFloats.clear!

@@ -34,9 +34,8 @@ type ElboIntermediateVariables{NumType <: Number}
     # The vector has one element for each active source, in the same order
     # as ea.active_sources.
 
-    # TODO: you can treat this the same way as E_G_s and not keep a vector around.
-    fs0m_vec::Vector{SensitiveFloat{NumType}}
-    fs1m_vec::Vector{SensitiveFloat{NumType}}
+    fs0m::SensitiveFloat{NumType}
+    fs1m::SensitiveFloat{NumType}
 
     # Brightness values for a single source
     E_G_s::SensitiveFloat{NumType}
@@ -85,14 +84,10 @@ function ElboIntermediateVariables(NumType::DataType,
 
     # fs0m and fs1m accumulate contributions from all bvn components
     # for a given source.
-    fs0m_vec = Array(SensitiveFloat{NumType}, S)
-    fs1m_vec = Array(SensitiveFloat{NumType}, S)
-    for s = 1:S
-        fs0m_vec[s] = SensitiveFloat{NumType}(length(StarPosParams), 1,
-                                    calculate_gradient, calculate_hessian)
-        fs1m_vec[s] = SensitiveFloat{NumType}(length(GalaxyPosParams), 1,
-                                    calculate_gradient, calculate_hessian)
-    end
+    fs0m = SensitiveFloat{NumType}(length(StarPosParams), 1,
+                                calculate_gradient, calculate_hessian)
+    fs1m = SensitiveFloat{NumType}(length(GalaxyPosParams), 1,
+                                calculate_gradient, calculate_hessian)
 
     E_G_s = SensitiveFloat{NumType}(length(CanonicalParams), 1,
                                     calculate_gradient, calculate_hessian)
@@ -115,7 +110,7 @@ function ElboIntermediateVariables(NumType::DataType,
     elbo = SensitiveFloat(E_G)
 
     ElboIntermediateVariables{NumType}(
-        bvn_derivs, fs0m_vec, fs1m_vec,
+        bvn_derivs, fs0m, fs1m,
         E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
         E_G, var_G, combine_grad, combine_hess,
         elbo_log_term, elbo)
@@ -126,11 +121,8 @@ function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType}
     #TODO: don't allocate memory here?
     elbo_vars.bvn_derivs = BivariateNormalDerivatives{NumType}()
 
-    for s = 1:length(elbo_vars.fs0m_vec)
-        clear!(elbo_vars.fs0m_vec[s])
-        clear!(elbo_vars.fs1m_vec[s])
-    end
-
+    clear!(elbo_vars.fs0m)
+    clear!(elbo_vars.fs1m)
     clear!(elbo_vars.E_G_s)
     clear!(elbo_vars.E_G2_s)
     clear!(elbo_vars.var_G_s)

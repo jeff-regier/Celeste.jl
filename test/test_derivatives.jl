@@ -82,14 +82,12 @@ function test_add_log_term()
 
             elbo_vars_loc = DeterministicVI.ElboIntermediateVariables(NumType, ea.S, ea.S)
             elbo_vars_loc.calculate_gradient = calculate_gradient
-            Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
-                                     ea.elbo_vars.fs0m_vec,
-                                     ea.elbo_vars.fs1m_vec,
-                                     ea.patches,
-                                     ea.active_sources,
-                                     ea.num_allowed_sd,
-                                     n, h, w,
-                                     gal_mcs, star_mcs)
+            Model.populate_fsm!(ea.elbo_vars.bvn_derivs,
+                          ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
+                          s, hw, is_active_source,
+                          num_allowed_sd,
+                          ea.patches[s,n].wcs_jacobian,
+                          gal_mcs, star_mcs)
             DeterministicVI.combine_pixel_sources!(
                 elbo_vars_loc, ea, sbs)
 
@@ -139,7 +137,6 @@ function test_combine_pixel_sources()
                                      ea.elbo_vars.fs1m_vec,
                                      ea.patches,
                                      ea.active_sources,
-                                     ea.num_allowed_sd,
                                      n, h, w,
                                      gal_mcs, star_mcs)
             DeterministicVI.combine_pixel_sources!(
@@ -1196,8 +1193,8 @@ end
 println("Running ELBO derivative tests.")
 test_active_pixels()
 #test_combine_pixel_sources()
-test_fs1m_derivatives()
-test_fs0m_derivatives()
+#test_fs1m_derivatives()
+#test_fs0m_derivatives()
 test_bvn_derivatives()
 test_galaxy_variable_transform()
 test_galaxy_cache_component()
