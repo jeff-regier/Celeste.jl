@@ -691,11 +691,11 @@ function trim_psf(raw_psf::Array{Float64, 2}; trim_percent=0.999)
                 (w_mid - width):(w_mid + width)]
     end
 
-    psf_tot = sum(abs(raw_psf))
-    while sum(abs(get_trimmed_psf_image())) < trim_percent * psf_tot
+    psf_tot = sum(abs, raw_psf)
+    while sum(abs, get_trimmed_psf_image()) < trim_percent * psf_tot
         width += 1
     end
-    
+
     deepcopy(get_trimmed_psf_image())
 end
 

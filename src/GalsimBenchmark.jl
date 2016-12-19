@@ -78,7 +78,7 @@ function typical_band_relative_intensities(is_star::Bool)
     # weight?
     dominant_component = indmax(prior_parameters.k[:, source_type_index])
     # What are the most typical log relative intensities for that component?
-    inter_band_ratios = exp(
+    inter_band_ratios = exp.(
         prior_parameters.c_mean[:, dominant_component, source_type_index]
         - diag(prior_parameters.c_cov[:, :, dominant_component, source_type_index])
     )
