@@ -30,7 +30,7 @@ function evaluate_psf_fit{NumType <: Number}(
   x_mat = PSF.get_x_matrix_from_psf(raw_psf)
 
   # TODO: allocate these outside?
-  bvn_derivs = BivariateNormalDerivatives{NumType}(NumType)
+  bvn_derivs = BivariateNormalDerivatives{NumType}()
   log_pdf = SensitiveFloat{NumType}(length(PsfParams), 1, true, true)
   pdf = SensitiveFloat{NumType}(length(PsfParams), 1, true, true)
 
@@ -96,7 +96,7 @@ function test_psf_fit()
       psf_param_vec::Vector{NumType}, calculate_gradient::Bool)
 
     local psf_params = unwrap_psf_params(psf_param_vec)
-    bvn_derivs = BivariateNormalDerivatives{NumType}(NumType)
+    bvn_derivs = BivariateNormalDerivatives{NumType}()
     log_pdf = SensitiveFloat{NumType}(length(PsfParams), 1, true, true)
     pdf = SensitiveFloat{NumType}(length(PsfParams), 1, true, true)
 

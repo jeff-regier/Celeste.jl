@@ -53,7 +53,7 @@ type PsfOptimizer
                           grtol::Float64=1e-9)
         num_iters = 50
 
-        bvn_derivs = BivariateNormalDerivatives{Float64}(Float64)
+        bvn_derivs = BivariateNormalDerivatives{Float64}()
 
         log_pdf = SensitiveFloat{Float64}(length(PsfParams), 1, true, true)
         pdf = SensitiveFloat{Float64}(length(PsfParams), 1, true, true)
