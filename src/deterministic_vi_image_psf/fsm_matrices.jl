@@ -153,6 +153,10 @@ function initialize_fsm_sf_matrices!(
     for n in 1:ea.N, s in 1:ea.S
         p = ea.patches[s, n]
         apb = p.active_pixel_bitmap
+
+        # some sources don't appear in some images
+        sum(apb) > 0 || continue
+
         active_cols = find([ any(apb[:, col]) for col in 1:size(apb, 2) ])
         active_rows = find([ any(apb[row, :]) for row in 1:size(apb, 1) ])
         h1 = p.bitmap_offset[1] + minimum(active_rows)

@@ -1,8 +1,10 @@
 #!/usr/bin/env julia
 
-import Celeste.ParallelRun: BoundingBox, infer_box
+import Celeste.ParallelRun: BoundingBox, get_overlapping_fields,
+                            one_node_infer, one_node_single_infer
 import Celeste.SDSSIO: RunCamcolField
-
+import Celeste.DeterministicVIImagePSF: infer_source_fft
+import Celeste.DeterministicVI: infer_source
 
 const rcfs = [
     RunCamcolField(4264,6,160),
@@ -35,16 +37,25 @@ one-quarter-square-degree region of sky.
 function benchmark_quarter_degree()
     box = BoundingBox(124.0, 124.5, 58.5, 59.0)
 
+    wrap_single(cnti...) = one_node_single_infer(cnti...;
+                                  infer_source_callback=infer_source_fft)
+
     warmup_box = BoundingBox(124.2, 124.21, 58.7, 58.71)
-    infer_box(warmup_box, datadir, datadir)
+    warmup_rcfs = get_overlapping_fields(warmup_box, datadir)
+    one_node_infer(warmup_rcfs,
+                   datadir;
+                   infer_callback=wrap_single,
+                   box=warmup_box)
+
+    rcfs = get_overlapping_fields(box, datadir)
 
     # resets runtime profiler *and* count for --track-allocation
     Profile.clear_malloc_data()
 
     if isempty(ARGS)
-        @time infer_box(box, datadir, datadir)
+        @time one_node_infer(rcfs, datadir; infer_callback=wrap_single, box=box)
     elseif ARGS[1] == "--profile"
-        @profile infer_box(box, datadir, datadir)
+        @profile one_node_infer(rcfs, datadir; infer_callback=wrap_single, box=box)
         Profile.print(format=:flat, sortedby=:count)
     end
 end
