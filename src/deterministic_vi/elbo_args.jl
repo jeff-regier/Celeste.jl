@@ -81,7 +81,7 @@ function ElboIntermediateVariables(NumType::DataType,
                                    calculate_hessian::Bool=true)
     @assert NumType <: Number
 
-    bvn_derivs = BivariateNormalDerivatives{NumType}(NumType)
+    bvn_derivs = BivariateNormalDerivatives{NumType}()
 
     # fs0m and fs1m accumulate contributions from all bvn components
     # for a given source.
@@ -124,7 +124,7 @@ end
 
 function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType})
     #TODO: don't allocate memory here?
-    elbo_vars.bvn_derivs = BivariateNormalDerivatives{NumType}(NumType)
+    elbo_vars.bvn_derivs = BivariateNormalDerivatives{NumType}()
 
     for s = 1:length(elbo_vars.fs0m_vec)
         clear!(elbo_vars.fs0m_vec[s])

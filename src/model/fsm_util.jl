@@ -116,7 +116,7 @@ function ModelIntermediateVariables(NumType::DataType,
                                     calculate_hessian::Bool=true)
     @assert NumType <: Number
 
-    bvn_derivs = BivariateNormalDerivatives{NumType}(NumType)
+    bvn_derivs = BivariateNormalDerivatives{NumType}()
 
     # fs0m and fs1m accumulate contributions from all bvn components
     # for a given source.

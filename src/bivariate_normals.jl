@@ -62,31 +62,31 @@ type BivariateNormalDerivatives{NumType <: Number}
   bvn_ss_h::Array{NumType, 2}
   bvn_us_h::Array{NumType, 2}
 
-  function BivariateNormalDerivatives(ThisNumType::DataType)
-    py1 = zeros(ThisNumType, 1)
-    py2 = zeros(ThisNumType, 1)
-    f_pre = zeros(ThisNumType, 1)
+  function BivariateNormalDerivatives()
+    py1 = zeros(NumType, 1)
+    py2 = zeros(NumType, 1)
+    f_pre = zeros(NumType, 1)
 
-    bvn_x_d = zeros(ThisNumType, 2)
-    bvn_sig_d = zeros(ThisNumType, 3)
-    bvn_xx_h = zeros(ThisNumType, 2, 2)
-    bvn_xsig_h = zeros(ThisNumType, 2, 3)
-    bvn_sigsig_h = zeros(ThisNumType, 3, 3)
+    bvn_x_d = zeros(NumType, 2)
+    bvn_sig_d = zeros(NumType, 3)
+    bvn_xx_h = zeros(NumType, 2, 2)
+    bvn_xsig_h = zeros(NumType, 2, 3)
+    bvn_sigsig_h = zeros(NumType, 3, 3)
 
-    dpy1_dsig = zeros(ThisNumType, 3)
-    dpy2_dsig = zeros(ThisNumType, 3)
-    dsiginv_dsig = zeros(ThisNumType, 3, 3)
+    dpy1_dsig = zeros(NumType, 3)
+    dpy2_dsig = zeros(NumType, 3)
+    dsiginv_dsig = zeros(NumType, 3, 3)
 
     # Derivatives wrt u.
-    bvn_u_d = zeros(ThisNumType, 2)
-    bvn_uu_h = zeros(ThisNumType, 2, 2)
+    bvn_u_d = zeros(NumType, 2)
+    bvn_uu_h = zeros(NumType, 2, 2)
 
     # Shape deriviatives.  Here, s stands for "shape".
-    bvn_s_d = zeros(ThisNumType, length(gal_shape_ids))
+    bvn_s_d = zeros(NumType, length(gal_shape_ids))
 
     # The hessians.
-    bvn_ss_h = zeros(ThisNumType, length(gal_shape_ids), length(gal_shape_ids))
-    bvn_us_h = zeros(ThisNumType, 2, length(gal_shape_ids))
+    bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
+    bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
 
     new(py1, py2, f_pre,
         bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
