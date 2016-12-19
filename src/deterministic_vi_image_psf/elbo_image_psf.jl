@@ -238,6 +238,9 @@ function accumulate_band_in_elbo!(
     n::Int)
 
     for s in 1:ea.S
+        # some sources don't appear in some images
+        sum(ea.patches[s, n].active_pixel_bitmap) > 0 || continue
+
         fsms = fsm_mat[s, n]
         clear_brightness!(fsms)
         populate_star_fsm_image!(
@@ -332,21 +335,21 @@ function initialize_fft_elbo_parameters(
     active_sources::Vector{Int};
     use_raw_psf=true,
     use_trimmed_psf=true)
-    
+
     ea = ElboArgs(images, vp, patches, active_sources, psf_K=1)
     load_active_pixels!(images, ea.patches; exclude_nan=false)
     if use_raw_psf
-        psf_image_mat = Array{Matrix{Float64}}(ea.S, ea.N) 
+        psf_image_mat = Array{Matrix{Float64}}(ea.S, ea.N)
         for n in 1:ea.N, s in 1:ea.S
             img = images[n]
             world_loc = ea.vp[s][lidx.u]
             pixel_loc = WCS.world_to_pix(img.wcs, world_loc)
-            psf_image_mat[s, n] = 
+            psf_image_mat[s, n] =
                 eval_psf(img.raw_psf_comp, pixel_loc[1], pixel_loc[2])
         end
     else
         psf_image_mat = Matrix{Float64}[
-            get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea.S, b in 1:ea.N]        
+            get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea.S, b in 1:ea.N]
     end
 
     if use_trimmed_psf
