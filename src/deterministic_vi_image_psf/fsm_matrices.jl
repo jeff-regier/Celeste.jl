@@ -1,7 +1,50 @@
+import Base.DFT: plan_fft!, plan_ifft!, to1
+import Base.DFT.FFTW.cFFTWPlan
+import ..Log
 
 typealias GMatrix Matrix{SensitiveFloat{Float64}}
 typealias fs0mMatrix Matrix{SensitiveFloat{Float64}}
 typealias fs1mMatrix Matrix{SensitiveFloat{Float64}}
+
+
+const plan_fft_lock = Base.Threads.SpinLock()
+
+function __init__()
+    global fft_plans, ifft_plans
+    fft_plans = Dict{Tuple{Int64, Int64}, cFFTWPlan{Complex{Float64},-1,true,2}}()
+    ifft_type = Base.DFT.ScaledPlan{Complex{Float64},Base.DFT.FFTW.cFFTWPlan{Complex{Float64},1,true,2},Float64}
+    ifft_plans = Dict{Tuple{Int64, Int64}, ifft_type}()
+end
+
+
+function safe_fft!(A)
+    A1 = to1(A)
+    global fft_plans
+
+    if !haskey(fft_plans, size(A))
+        lock(plan_fft_lock)
+        fft_plans[size(A)] = Base.DFT.plan_fft!(A1)
+        unlock(plan_fft_lock)
+    end
+
+    fft_plans[size(A)] * A1  # mutates A1
+    A1
+end
+
+
+function safe_ifft!(A)
+    A1 = to1(A)
+    global ifft_plans
+
+    if !haskey(ifft_plans, size(A))
+        lock(plan_fft_lock)
+        ifft_plans[size(A)] = Base.DFT.plan_ifft!(A1)
+        unlock(plan_fft_lock)
+    end
+
+    ifft_plans[size(A)] * A1  # mutates A1
+    A1
+end
 
 
 type FSMSensitiveFloatMatrices
@@ -28,7 +71,7 @@ type FSMSensitiveFloatMatrices
     # image (the total pixels added in each dimension are twice this)
     pad_pix_h::Int
     pad_pix_w::Int
-    
+
     # Functions for star convolution.
     # kernel_fun is a kernel function that returns the value, derivative, and second
     # derivative of a univariate kernel, e.g. bspline_kernel_with_derivatives()
@@ -93,9 +136,10 @@ function initialize_fsm_sf_matrices_band!(
 
     # Store the psf image and its FFT.
     fsms.psf = deepcopy(psf_image)
-    fsms.psf_fft = zeros(Complex{Float64}, fft_size1, fft_size2);
-    fsms.psf_fft[1:psf_size[1], 1:psf_size[2]] = fsms.psf;
-    fft!(fsms.psf_fft);
+    fsms.psf_fft = zeros(Complex{Float64}, fft_size1, fft_size2)
+    fsms.psf_fft[1:psf_size[1], 1:psf_size[2]] = fsms.psf
+
+    safe_fft!(fsms.psf_fft)
 end
 
 

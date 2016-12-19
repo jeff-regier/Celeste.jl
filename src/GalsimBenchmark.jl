@@ -250,6 +250,7 @@ function main(; test_case_names=String[], print_fn=println,
         println("Running test case '$this_test_case_name'")
         iota = header["CL_IOTA"]
         psf = make_psf(header["CL_SIGMA"])
+        n_sources = header["CL_NSRC"]
 
         band_pixels = [
             extensions[index].pixels for index in first_band_index:(first_band_index + 4)
@@ -261,16 +262,16 @@ function main(; test_case_names=String[], print_fn=println,
 
         # we're only scoring one object per image
         target_sources = [1,]
-
-        # everyone is a neighbor of the target source
         neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
 
-        ctni = (catalog, target_sources, neighbor_map, images)
+        target_sources_joint = collect(1:n_sources)
+        neighbor_map_joint = Infer.find_neighbors(target_sources_joint, catalog, images)
+
         single_results = one_node_single_infer(
-            ctni...; infer_source_callback=infer_source_callback)
-        # one_node_joint_infer doesn't support source callbacks.  See
-        # https://github.com/jeff-regier/Celeste.jl/issues/456
-        joint_results = one_node_joint_infer(ctni...)
+            catalog, target_sources, neighbor_map, images;
+            infer_source_callback=infer_source_callback)
+        joint_results = one_node_joint_infer(catalog, target_sources_joint,
+                                             neighbor_map_joint, images)
 
         benchmark_data = benchmark_comparison_data(single_results[1].vs,
                                                    joint_results[1].vs,
