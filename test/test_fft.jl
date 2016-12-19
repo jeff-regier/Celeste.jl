@@ -102,7 +102,6 @@ function test_lanczos_kernel()
     end
 
     for x in Float64[-2.2, -1.2, -0.2, 0, 0.2, 1.2, 2.2]
-        println("Testing x = ", x)
         fd_v = lanczos_kernel_fd([ x ])
         fd_d = ForwardDiff.gradient(lanczos_kernel_fd, Float64[ x ])[1]
         fd_h = ForwardDiff.hessian(lanczos_kernel_fd, Float64[ x ])[1, 1]
@@ -123,7 +122,6 @@ function test_bspline_kernel()
     end
 
     for x in Float64[-2.2, -1.2, -0.2, 0, 0.2, 1.2, 2.2]
-        println("Testing x = ", x)
         fd_v = bspline_kernel_fd([ x ])
         fd_d = ForwardDiff.gradient(bspline_kernel_fd, Float64[ x ])[1]
         fd_h = ForwardDiff.hessian(bspline_kernel_fd, Float64[ x ])[1, 1]
@@ -147,7 +145,6 @@ function test_cubic_kernel()
     end
 
     for x in Float64[-2.2, -1.2, -0.2, 0, 0.2, 1.2, 2.2]
-        println("Testing x = ", x)
         fd_v = cubic_kernel_fd([ x ])
         fd_d = ForwardDiff.gradient(cubic_kernel_fd, Float64[ x ])[1]
         fd_h = ForwardDiff.hessian(cubic_kernel_fd, Float64[ x ])[1, 1]
