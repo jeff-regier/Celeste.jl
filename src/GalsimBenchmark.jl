@@ -234,7 +234,8 @@ end
 # * expected: "ground truth" expected value
 # * single_infer_actual: inferred MAP value or posterior median from single-source inference
 # * joint_infer_actual: ditto, for multi-source joint inference
-function main(; test_case_names=String[], print_fn=println)
+function main(; test_case_names=String[], print_fn=println,
+              infer_source_callback=Celeste.DeterministicVI.infer_source)
     all_benchmark_data = []
     extensions, wcs = read_fits(joinpath(GALSIM_BENCHMARK_DIR, FILENAME))
     @assert length(extensions) % 5 == 0 # one extension per band for each test case
@@ -265,7 +266,10 @@ function main(; test_case_names=String[], print_fn=println)
         neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
 
         ctni = (catalog, target_sources, neighbor_map, images)
-        single_results = one_node_single_infer(ctni...)
+        single_results = one_node_single_infer(
+            ctni...; infer_source_callback=infer_source_callback)
+        # one_node_joint_infer doesn't support source callbacks.  See
+        # https://github.com/jeff-regier/Celeste.jl/issues/456
         joint_results = one_node_joint_infer(ctni...)
 
         benchmark_data = benchmark_comparison_data(single_results[1].vs,
