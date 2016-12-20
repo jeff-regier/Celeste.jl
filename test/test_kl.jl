@@ -1,4 +1,5 @@
 using Celeste: Model, SensitiveFloats, DeterministicVI
+using DeterministicVI: KLDivergence
 using Distributions, DiffBase, JLD
 using Base.Test
 
@@ -24,7 +25,7 @@ function test_beta_kl_value()
     alpha2, beta2 = 3.5, 4.3
     p1_dist = Beta(alpha1, beta1)
     p2_dist = Beta(alpha2, beta2)
-    kl = DeterministicVI.beta_kl(alpha1, beta1, alpha2, beta2)
+    kl = KLDivergence.beta_kl(alpha1, beta1, alpha2, beta2)
     test_kl_value(p1_dist, p2_dist, kl)
 end
 
@@ -35,7 +36,7 @@ function test_categorical_kl_value()
     p2 = p2 ./ sum(p2)
     p1_dist = Categorical(p1)
     p2_dist = Categorical(p2)
-    kl = DeterministicVI.categorical_kl(p1, p2)
+    kl = KLDivergence.categorical_kl(p1, p2)
     test_kl_value(p1_dist, p2_dist, kl)
 end
 
@@ -50,7 +51,7 @@ function test_diagmvn_mvn_kl_value()
     cov2 = 0.5 * (cov2 + cov2')
     p1_dist = MvNormal(mean1, diagm(var1))
     p2_dist = MvNormal(mean2, cov2)
-    kl = DeterministicVI.diagmvn_mvn_kl(mean1, var1, mean2, cov2)
+    kl = KLDivergence.diagmvn_mvn_kl(mean1, var1, mean2, cov2)
     test_kl_value(p1_dist, p2_dist, kl)
 end
 
@@ -59,7 +60,7 @@ function test_gaussian_kl_value()
     mean2, var2 = 0.8, 1.8
     p1_dist = Normal(mean1, sqrt(var1))
     p2_dist = Normal(mean2, sqrt(var2))
-    kl = DeterministicVI.gaussian_kl(mean1, var1, mean2, var2)
+    kl = KLDivergence.gaussian_kl(mean1, var1, mean2, var2)
     test_kl_value(p1_dist, p2_dist, kl)
 end
 
@@ -67,8 +68,8 @@ function test_subtract_kl()
     sf = SensitiveFloat{Float64}(32, 1, true, true)
     vs = rand(MersenneTwister(1), 32)
     kl_result = DiffBase.DiffResult(0.0, sf.d)
-    kl_helper = Celeste.DeterministicVI.KL_HELPER_POOL[Base.Threads.threadid()]
-    Celeste.DeterministicVI.subtract_kl_source!(sf, kl_result, vs, kl_helper)
+    kl_helper = KLDivergence.KL_HELPER_POOL[Base.Threads.threadid()]
+    KLDivergence.subtract_kl_source!(sf, kl_result, vs, kl_helper)
     @test sf.v[] == DiffBase.value(kl_result)
     @test sf.d === DiffBase.gradient(kl_result)
     test_sf = JLD.load(joinpath(datadir, "kl_values.jld"), "sf")

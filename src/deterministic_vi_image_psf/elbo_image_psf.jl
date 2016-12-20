@@ -376,8 +376,8 @@ function get_fft_elbo_function{T}(
         kl_source = SensitiveFloat{T}(length(CanonicalParams), 1,
                                       elbo.has_gradient, elbo.has_hessian)
         elbo_likelihood_with_fft!(ea, fsm_mat)
-        subtract_kl_all_sources!(ea, elbo, kl_source,
-                                 KL_HELPER_POOL[Base.Threads.threadid()])
+        kl_helper = KLDivergence.KL_HELPER_POOL[Base.Threads.threadid()]
+        KLDivergence.subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
         return deepcopy(elbo)
     end
 end
