@@ -8,8 +8,7 @@ using DataFrames
 import ..DeterministicVI:
     load_source_brightnesses, accumulate_source_pixel_brightness!, ElboArgs
 import ..Model:
-    linear_world_to_pix, load_bvn_mixtures, ids_names, ids, CatalogEntry,
-    populate_fsm_vecs!
+    linear_world_to_pix, load_bvn_mixtures, ids_names, ids, CatalogEntry
 import ..SensitiveFloats.clear!
 import ..DeterministicVIImagePSF:
     FSMSensitiveFloatMatrices
@@ -72,26 +71,25 @@ function render_source(ea::ElboArgs, s::Int, n::Int;
         clear!(ea.elbo_vars.E_G)
         clear!(ea.elbo_vars.var_G)
 
-        populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
-                           ea.elbo_vars.fs0m_vec,
-                           ea.elbo_vars.fs1m_vec,
-                           ea.patches,
-                           ea.active_sources,
-                           ea.num_allowed_sd,
-                           n, h, w,
-                           gal_mcs, star_mcs)
+        hw = SVector{2,Float64}(h, w)
+        is_active_source = s in ea.active_sources
+        populate_fsm!(ea.elbo_vars.bvn_derivs,
+                      ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
+                      s, hw, is_active_source,
+                      p.wcs_jacobian,
+                      gal_mcs, star_mcs)
 
         accumulate_source_pixel_brightness!(
             ea.elbo_vars, ea, ea.elbo_vars.E_G, ea.elbo_vars.var_G,
-            ea.elbo_vars.fs0m_vec[s], ea.elbo_vars.fs1m_vec[s],
+            ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
             sbs[s], ea.images[n].b, s, false)
 
         if field == :E_G
             image[h2, w2] = ea.elbo_vars.E_G.v[]
         elseif field == :fs0m
-            image[h2, w2] = ea.elbo_vars.fs0m_vec[s].v[]
+            image[h2, w2] = ea.elbo_vars.fs0m.v[]
         elseif field == :fs1m
-            image[h2, w2] = ea.elbo_vars.fs1m_vec[s].v[]
+            image[h2, w2] = ea.elbo_vars.fs1m.v[]
         else
             error("Unknown field ", field)
         end

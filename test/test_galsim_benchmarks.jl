@@ -6,7 +6,7 @@ import Celeste: GalsimBenchmark
 
 GALSIM_CASES_EXERCISED = [
     #"simple_star", "probability of galaxy" is wrong (#482)
-    "star_with_noise",
+    #"star_with_noise",
     "angle_and_axis_ratio_1",
     "galaxy_with_all",
     #"galaxy_with_noise", half-light radius and brightness are wrong (#482)
