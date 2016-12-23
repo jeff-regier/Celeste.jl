@@ -92,7 +92,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
             rho_upper=0.75)
     end
 
-    options = Optim.OptimizationOptions(;
+    options = Optim.Options(;
         x_tol = xtol_rel, f_tol = ftol_abs, g_tol = 1e-8,
         iterations = max_iters, store_trace = verbose,
         show_trace = false, extended_trace = verbose)
