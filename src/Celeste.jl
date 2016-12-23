@@ -25,4 +25,8 @@ include("Stripe82Score.jl")
 
 include("CelesteEDA.jl")
 
+import .ParallelRun: BoundingBox, OptimizedSource
+import .SDSSIO: RunCamcolField, CatalogEntry
+export BoundingBox, OptimizedSource, RunCamcolField, CatalogEntry
+
 end # module
