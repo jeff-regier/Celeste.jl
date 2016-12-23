@@ -115,14 +115,14 @@ function fit_psf(psf_optimizer::PsfOptimizer, raw_psf::Matrix{Float64}, initial_
     tr_method = Optim.NewtonTrustRegion(initial_delta=10.0, delta_hat=1e9, eta=0.1,
                                         rho_lower=0.2, rho_upper=0.75)
 
-    options = Optim.OptimizationOptions(;
-                                        x_tol = 0.0, # Don't allow convergence in params
-                                        f_tol = psf_optimizer.ftol,
-                                        g_tol = psf_optimizer.grtol,
-                                        iterations = psf_optimizer.num_iters,
-                                        store_trace = psf_optimizer.verbose,
-                                        show_trace = false,
-                                        extended_trace = psf_optimizer.verbose)
+    options = Optim.Options(;
+                            x_tol = 0.0, # Don't allow convergence in params
+                            f_tol = psf_optimizer.ftol,
+                            g_tol = psf_optimizer.grtol,
+                            iterations = psf_optimizer.num_iters,
+                            store_trace = psf_optimizer.verbose,
+                            show_trace = false,
+                            extended_trace = psf_optimizer.verbose)
 
     return Optim.optimize(psf_fit_value, psf_fit_grad!, psf_fit_hess!,
                           psf_params_free_vec, tr_method, options)
