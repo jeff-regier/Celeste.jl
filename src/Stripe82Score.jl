@@ -291,7 +291,7 @@ function celeste_to_df(results::Vector{OptimizedSource})
         i += 1
         vs = result.vs
 
-        function get_fluxes(i::Int)
+        function get_median_fluxes(i::Int)
             ret = Array(Float64, 5)
             ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
             ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
@@ -304,8 +304,8 @@ function celeste_to_df(results::Vector{OptimizedSource})
         ce = CatalogEntry(
             vs[ids.u],
             vs[ids.a[1, 1]] > 0.5,
-            get_fluxes(1),
-            get_fluxes(2),
+            get_median_fluxes(1),
+            get_median_fluxes(2),
             vs[ids.e_dev],
             vs[ids.e_axis],
             vs[ids.e_angle],
