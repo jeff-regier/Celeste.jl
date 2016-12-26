@@ -91,7 +91,6 @@ where
 ```
 """
 function load_s82(fname)
-
     # First, simply read the FITS table into a dictionary of arrays.
     f = FITSIO.FITS(fname)
     keys = [:objid, :rerun, :run, :camcol, :field, :flags,
@@ -293,7 +292,7 @@ function celeste_to_df(results::Vector{OptimizedSource})
 
         function get_median_fluxes(i::Int)
             ret = Array(Float64, 5)
-            ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
+            ret[3] = exp(vs[ids.r1[i]])
             ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
             ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
             ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
@@ -330,7 +329,6 @@ function celeste_to_df(results::Vector{OptimizedSource})
 
     return df
 end
-
 
 
 """
@@ -420,6 +418,19 @@ function match_catalogs(rcf::RunCamcolField,
             j = match_position(coadd_full_df[:ra], coadd_full_df[:dec],
                          primary_full_df[i, :ra], primary_full_df[i, :dec],
                          disttol)
+            # very large galaxies make average L1 error an unsuitable metric
+            # for comparing scale, but other metrics are less interpretable,
+            # so let's omit any galaxy that is more than an order of
+            # magnitude larger than an average-size galaxy.
+            if coadd_full_df[j, :gal_scale] > 20
+                continue
+            end
+
+            # primary is better at flagging oversaturated sources that coadd
+            if primary_full_df[i, :star_mag_r] < 16
+                continue
+            end
+
             k = findfirst(celeste_full_df[:objid], primary_full_df[i, :objid])
             # Celeste doesn't process some light sources due to various filters
             if k != 0
@@ -496,23 +507,16 @@ function score_field(rcf::RunCamcolField, results, truthfile, stagedir)
     (celeste_df, primary_df, coadd_df) = match_catalogs(rcf,
                                 results, truthfile, stagedir)
 
-    suffix = @sprintf "%06d-%d-%04d.csv" rcf.run rcf.camcol rcf.field
-    #writetable("celeste_results_"suffix, celeste_df)
-    #writetable("primary_results_"suffix, primary_df)
-    #writetable("coadd_results_"suffix, coadd_df)
-
     # difference between celeste and coadd
     celeste_err = get_err_df(coadd_df, celeste_df)
     primary_err = get_err_df(coadd_df, primary_df)
 
-#=
     JLD.save("results_and_errors.jld",
              "celeste_df", celeste_df,
              "primary_df", primary_df,
              "coadd_df", coadd_df,
              "celeste_err", celeste_err,
              "primary_err", primary_err)
-=#
 
     # create scores
     get_scores_df(celeste_err, primary_err, coadd_df)

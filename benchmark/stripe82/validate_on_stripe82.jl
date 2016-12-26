@@ -77,8 +77,8 @@ if !(ARGS ⊆ valid_args)
 else
     # By default this script both infers all the parameters and scores them,
     # but because inference is computationally intensive, whereas scoring isn't,
-    # the user gets the option to just run the scoring mode. Running a scoring
-    # alone would primarily be useful for debugging.
+    # the user gets the option to just run the scoring mode. Running scoring
+    # alone is primarily useful for debugging.
     if !("--score-only" in ARGS)
         wrap_joint(cnti...) = one_node_joint_infer(cnti...;
                                                    termination_percent=0.95)

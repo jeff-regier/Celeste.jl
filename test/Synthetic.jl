@@ -121,7 +121,6 @@ const pp = Model.load_prior()
 
 
 function sample_fluxes(i::Int, r_s)
-#    r_s = rand(Distributions.Normal(pp.r_mean[i], pp.r_var[i]))
     k_s = rand(Distributions.Categorical(pp.k[i]))
     c_s = rand(Distributions.MvNormal(pp.c[i][:, k_s], pp.c[i][:, :, k_s]))
 
