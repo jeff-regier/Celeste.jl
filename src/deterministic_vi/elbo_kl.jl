@@ -119,8 +119,8 @@ end
 function source_e_log_prob(vs)
     x = vs[ids.e_scale]
     μ = prior.e_scale_μ
-    σ = prior.e_scale_σ
-    -0.5 * log(2pi) - log(σ) - 0.5 * ((x - μ) / σ)^2
+    σ² = prior.e_scale_σ²
+    -0.5 * (log(2pi) + log(σ²) + (x - μ)^2 / σ²)
 end
 
 

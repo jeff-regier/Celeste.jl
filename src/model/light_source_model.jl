@@ -84,7 +84,7 @@ immutable PriorParams
     c_mean::Array{Float64, 3} # formerly Omega
     c_cov::Array{Float64, 4} # formerly Lambda
     e_scale_μ::Float64
-    e_scale_σ::Float64
+    e_scale_σ²::Float64
 end
 
 
@@ -115,7 +115,7 @@ function load_prior()
     # If I remove this next statement, compile time for
     # benchmark_infer.jl jumps from 13 seconds to 300 seconds!
     # Really. It's crazy!
-    #log(42.)
+    log(42.)
 
     # Compile time is still over 20x as long if `log(42.)`
     # is replaced with `exp(2.)`. Insane! Julia 0.5.0 mac os x.
@@ -126,9 +126,9 @@ function load_prior()
     # determined by fitting a univariate log normal to primary's
     # output the region of stripe 82 we use for validation
     e_scale_μ = 0.5015693
-    e_scale_σ = 0.8590007
+    e_scale_σ² = 0.8590007^2
 
-    PriorParams(a, r_μ, r_σ², k, c_mean, c_cov, e_scale_μ, e_scale_σ)
+    PriorParams(a, r_μ, r_σ², k, c_mean, c_cov, e_scale_μ, e_scale_σ²)
 end
 
 
@@ -160,7 +160,7 @@ end
 """
 Return a VariationalParams object initialized form a catalog entry.
 """
-function init_source(ce::CatalogEntry)
+function init_source(ce::CatalogEntry; max_gal_scale=Inf)
     # TODO: sync this up with the transform bounds
     ret = init_source(ce.pos)
 
@@ -189,7 +189,7 @@ function init_source(ce::CatalogEntry)
 
     ret[ids.e_axis] = ce.is_star ? .8 : min(max(ce.gal_ab, 0.015), 0.985)
     ret[ids.e_angle] = ce.gal_angle
-    ret[ids.e_scale] = ce.is_star ? 0.2 : max(ce.gal_scale, 0.2)
+    ret[ids.e_scale] = ce.is_star ? 0.2 : min(max_gal_scale, max(ce.gal_scale, 0.2))
 
     ret
 end
