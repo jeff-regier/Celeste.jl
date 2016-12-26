@@ -261,12 +261,12 @@ Construct a `Prior` object, contains StarPrior and GalaxyPrior objects
 function construct_prior()
     pp = load_prior()
     star_prior = StarPrior(
-        LogNormal(pp.r_mean[1], pp.r_var[1]),
+        LogNormal(pp.r_μ[1], sqrt(pp.r_σ²[1])),
         Categorical(pp.k[:,1]),
         [MvNormal(pp.c_mean[:,k,1], pp.c_cov[:,:,k,1]) for k in 1:2])
 
     gal_prior = GalaxyPrior(
-        LogNormal(pp.r_mean[2], pp.r_var[2]),
+        LogNormal(pp.r_μ[2], sqrt(pp.r_σ²[2])),
         Categorical(pp.k[:,2]),
         [MvNormal(pp.c_mean[:,k,2], pp.c_cov[:,:,k,2]) for k in 1:2],
         LogNormal(0, 10),

@@ -94,10 +94,10 @@ end
 function typical_reference_brightness(is_star::Bool)
     source_type_index = is_star ? 1 : 2
     prior_parameters::Model.PriorParams = Model.load_prior()
-    exp(
-        prior_parameters.r_mean[source_type_index]
-        - prior_parameters.r_var[source_type_index]
-    )
+
+    # this is the mode. brightness is log normal.
+    exp(prior_parameters.r_μ[source_type_index]
+            - prior_parameters.r_σ²[source_type_index])
 end
 
 # Since we're considering elliptical galaxy shapes, angle is only meaningful up to rotations of 180
