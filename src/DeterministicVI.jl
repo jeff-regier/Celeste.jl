@@ -48,7 +48,7 @@ function infer_source(images::Vector{Image},
     # But, as long as runtime is dominated by the call to maximize_f, that
     # isn't a big deal.
     cat_local = vcat([entry], neighbors)
-    vp = Vector{Float64}[init_source(ce) for ce in cat_local]
+    vp = Vector{Float64}[init_source(ce; max_gal_scale=2.) for ce in cat_local]
     patches = Infer.get_sky_patches(images, cat_local)
     Infer.load_active_pixels!(images, patches)
 
