@@ -43,7 +43,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
         Transform.array_to_vp!(transform, reshaped_x, ea.vp, kept_ids)
         f_res = f(ea)
         f_evals += 1
-        verbose && log_f_eval(f_evals, ea, f_res)
+        verbose && record_f_eval(f_evals, ea, f_res)
         Transform.transform_sensitive_float!(transform, last_sf, f_res, ea.vp, ea.active_sources)
     end
 
@@ -114,7 +114,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
 end
 
 function maximize_f{F}(f::F, ea::ElboArgs;
-                       loc_width=1.5e-3,
+                       loc_width=1e-4, # about a pixel either direction
                        loc_scale=1.0,
                        omitted_ids=Int[],
                        xtol_rel=1e-7,
@@ -137,7 +137,7 @@ function maximize_f{F}(f::F, ea::ElboArgs;
 end
 
 
-function log_f_eval(f_evals, ea::ElboArgs, f_res)
+function record_f_eval(f_evals, ea::ElboArgs, f_res)
     # TODO: Add an option to print either the transformed or
     # free parameterizations.
     Log.debug("f_evals=$(f_evals) | value=$(f_res.v[])")
