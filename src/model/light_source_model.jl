@@ -99,25 +99,28 @@ function load_prior()
 
     v05 = VERSION >= v"0.5.0-dev" ? "-v05" : ""
     stars_file = open(joinpath(cfgdir, "stars$D$v05.dat"))
-    r_fit1, k[:, 1], c_mean[:,:,1], c_cov[:,:,:,1] = deserialize(stars_file)
+    _, k[:, 1], c_mean[:,:,1], c_cov[:,:,:,1] = deserialize(stars_file)
     close(stars_file)
 
     gals_file = open(joinpath(cfgdir, "gals$D$v05.dat"))
-    r_fit2, k[:, 2], c_mean[:,:,2], c_cov[:,:,:,2] = deserialize(gals_file)
+    _, k[:, 2], c_mean[:,:,2], c_cov[:,:,:,2] = deserialize(gals_file)
     close(gals_file)
 
-    # These "magic numbers" have been in use for a while.
-    # They were initially gamma parameters, and now they are log normal
-    # parameters.  TODO: Get rid of these and use an empirical prior.
-    # r = [0.47 1.28; 1/0.012 1/0.11] # These were gamma (shape, scale)
+    # log normal parameters for the r-band brightness prior.
+    # these were fit by maximum likelihood to the output of primary
+    # on one field.
+    r_μ = Float64[1.685292911417265, 1.352219729535452]
+    r_σ² = Float64[1.909666346677381^2, 1.160302342323597^2]
 
-    mean_brightness = [0.47 / 0.012, 1.28 / 0.11 ]
-    var_brightness = [0.47 / (0.012 ^ 2), 1.28 / (0.11 ^ 2) ]
+    # If I remove this next statement, compile time for
+    # benchmark_infer.jl jumps from 13 seconds to 300 seconds!
+    # Really. It's crazy!
+    #log(42.)
 
-    # The prior contains parameters of a lognormal distribution with
-    # the desired means.
-    r_σ² = log.(var_brightness ./ (mean_brightness .^ 2) + 1)
-    r_μ = log.(mean_brightness) - 0.5 * r_σ²
+    # Compile time is still over 20x as long if `log(42.)`
+    # is replaced with `exp(2.)`. Insane! Julia 0.5.0 mac os x.
+    # Update: happens on Linux with 0.5.0 binaries too.
+    # exp(2.)
 
     # log normal prior parameters (location, scale) on galaxy scale.
     # determined by fitting a univariate log normal to primary's
@@ -161,6 +164,8 @@ function init_source(ce::CatalogEntry)
     # TODO: sync this up with the transform bounds
     ret = init_source(ce.pos)
 
+    # TODO: don't do this thresholding for background sources,
+    # just for sources that are being optimized
     ret[ids.a[1, 1]] = ce.is_star ? 0.8: 0.2
     ret[ids.a[2, 1]] = ce.is_star ? 0.2: 0.8
 
