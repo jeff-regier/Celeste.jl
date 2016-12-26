@@ -78,11 +78,13 @@ const galaxy_prototypes = get_galaxy_prototypes()
 
 immutable PriorParams
     a::Vector{Float64}  # formerly Phi
-    r_mean::Vector{Float64}
-    r_var::Vector{Float64}
+    r_μ::Vector{Float64}
+    r_σ²::Vector{Float64}
     k::Matrix{Float64}  # formerly Xi
     c_mean::Array{Float64, 3} # formerly Omega
     c_cov::Array{Float64, 4} # formerly Lambda
+    e_scale_μ::Float64
+    e_scale_σ::Float64
 end
 
 
@@ -91,8 +93,6 @@ function load_prior()
     # due to the greater flexibility of the galaxy model
     #a = [0.28, 0.72]
     a = [0.99, 0.01]
-    r_mean = Array(Float64, Ia)
-    r_var = Array(Float64, Ia)
     k = Array(Float64, D, Ia)
     c_mean = Array(Float64, B - 1, D, Ia)
     c_cov = Array(Float64, B - 1, B - 1, D, Ia)
@@ -116,9 +116,16 @@ function load_prior()
 
     # The prior contains parameters of a lognormal distribution with
     # the desired means.
-    r_var = log.(var_brightness ./ (mean_brightness .^ 2) + 1)
-    r_mean = log.(mean_brightness) - 0.5 * r_var
-    PriorParams(a, r_mean, r_var, k, c_mean, c_cov)
+    r_σ² = log.(var_brightness ./ (mean_brightness .^ 2) + 1)
+    r_μ = log.(mean_brightness) - 0.5 * r_σ²
+
+    # log normal prior parameters (location, scale) on galaxy scale.
+    # determined by fitting a univariate log normal to primary's
+    # output the region of stripe 82 we use for validation
+    e_scale_μ = 0.5015693
+    e_scale_σ = 0.8590007
+
+    PriorParams(a, r_μ, r_σ², k, c_mean, c_cov, e_scale_μ, e_scale_σ)
 end
 
 
