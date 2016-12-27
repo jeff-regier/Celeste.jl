@@ -67,20 +67,22 @@ end
 test_different_result_with_different_iter()
 Using 3 iters instead of 1 iters should result in a different set of parameters.
 """
-function test_different_result_with_different_iter()
+function test_different_result_with_different_iter(;use_fft=false)
     # This bounding box has overlapping stars. (neighbor map is not empty)
     box = BoundingBox(4.39, 164.41, 9.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
 
     infer_few(ctni...) = one_node_joint_infer(ctni...;
                                               n_iters=1,
-                                              within_batch_shuffling=false)
+                                              within_batch_shuffling=false,
+                                              use_fft=use_fft)
     result_iter_1 = one_node_infer(field_triplets, datadir;
                                    infer_callback=infer_few, box=box)
 
     infer_many(ctni...) = one_node_joint_infer(ctni...;
-                                             n_iters=5,
-                                             within_batch_shuffling=false)
+                                               n_iters=5,
+                                               within_batch_shuffling=false,
+                                               use_fft=use_fft)
     result_iter_5 = one_node_infer(field_triplets, datadir;
                                    infer_callback=infer_many, box=box)
 
@@ -92,7 +94,7 @@ end
 test_same_result_with_diff_batch_sizes
 Varying batch sizes using the cyclades algorithm should not change final objective value.
 """
-function test_same_result_with_diff_batch_sizes()
+function test_same_result_with_diff_batch_sizes(;use_fft=false)
     # This bounding box has overlapping stars. (neighbor map is not empty)
     box = BoundingBox(4.39, 164.41, 9.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
@@ -101,7 +103,8 @@ function test_same_result_with_diff_batch_sizes()
     infer_few(ctni...) = one_node_joint_infer(ctni...;
                                 n_iters=3,
                                 batch_size=7,
-                                within_batch_shuffling=false)
+                                within_batch_shuffling=false,
+                                use_fft=use_fft)
     result_bs_7 = one_node_infer(field_triplets, datadir;
                                  infer_callback=infer_few,
                                  box=box)
@@ -110,7 +113,8 @@ function test_same_result_with_diff_batch_sizes()
     infer_many(ctni...) = one_node_joint_infer(ctni...;
                                 n_iters=3,
                                 batch_size=39,
-                                within_batch_shuffling=false)
+                                within_batch_shuffling=false,
+                                use_fft=use_fft)
     result_bs_39 = one_node_infer(field_triplets, datadir;
                                   infer_callback=infer_many,
                                   box=box)
@@ -139,7 +143,7 @@ test infer multi iter obj overlapping.
 This makes sure one_node_joint_infer achieves sum objective value less
 than single iter on non overlapping sources.
 """
-function test_one_node_joint_infer_obj_overlapping()
+function test_one_node_joint_infer_obj_overlapping(;use_fft=false)
 
     # This bounding box has overlapping stars. (neighbor map is not empty)
     box = BoundingBox(164.39, 164.41, 39.11, 39.13)
@@ -148,8 +152,9 @@ function test_one_node_joint_infer_obj_overlapping()
     # 100 iterations
     tic()
     infer_multi(ctni...) = one_node_joint_infer(ctni...;
-                                     n_iters=100,
-                                     within_batch_shuffling=false)
+                                                n_iters=100,
+                                                within_batch_shuffling=false,
+                                                use_fft=use_fft)
     result_multi = one_node_infer(field_triplets, datadir;
                                   infer_callback=infer_multi,
                                   box=box)
@@ -159,11 +164,12 @@ function test_one_node_joint_infer_obj_overlapping()
     # 2 iterations
     tic()
     infer_two(ctni...) = one_node_joint_infer(ctni...;
-                                     n_iters=2,
-                                     within_batch_shuffling=false)
+                                              n_iters=2,
+                                              within_batch_shuffling=false,
+                                              use_fft=use_fft)
     result_two = one_node_infer(field_triplets, datadir;
-                                  infer_callback=infer_two,
-                                  box=box)
+                                infer_callback=infer_two,
+                                box=box)
     two_iter_time = toq()
     score_two = compute_obj_value(result_two, field_triplets, datadir; box=box)
 
@@ -278,9 +284,15 @@ function test_cyclades_partitioning()
     println("Cyclades partitioning test succeeded")
 end
 
+# Test non fft
 test_different_result_with_different_iter()
 test_same_result_with_diff_batch_sizes()
 test_one_node_joint_infer_obj_overlapping()
+
+# Test with using fft
+test_different_result_with_different_iter(use_fft=true)
+test_same_result_with_diff_batch_sizes(use_fft=true)
+test_one_node_joint_infer_obj_overlapping(use_fft=true)
 
 # Run this multiple times, since the cyclades algorithm shuffles the elements
 # before batching them up.

@@ -10,6 +10,7 @@ import ..SDSSIO: RunCamcolField
 import ..PSF
 
 using ..DeterministicVI
+using ..DeterministicVIImagePSF
 
 function union_find!(i, components_tree)
     root = i
@@ -220,6 +221,7 @@ Returns:
 """
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
+                              use_fft=false,
                               batch_size=60,
                               within_batch_shuffling=true,
                               termination_percent=.95,
@@ -255,6 +257,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
 
     # Pre-allocate dictionary of elboargs, call it ea_vec.
     ea_vec = Array{ElboArgs}(n_sources)
+    fsm_vec = Array{Matrix}(n_sources)
     function initialize_elboargs_sources(sources)
 #        nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for $(length(sources)) sources")
         for cur_source_index in sources
@@ -268,13 +271,20 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             cat_local = vcat([entry], neighbors)
             ids_local = vcat([entry_id], neighbor_ids)
 
-            #vp = Vector{Float64}[init_source(ce) for ce in cat_local]
             vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
                         target_source_variational_params[x] :
                         init_source(catalog[x]) for x in ids_local]
             patches = Infer.get_sky_patches(images, cat_local)
-            ea = ElboArgs(images, vp, patches, [1])
             Infer.load_active_pixels!(ea.images, ea.patches)
+
+            # Switch parameters based on whether or not we're using the fft method
+            if use_fft
+                ea, fsm_mat = initialize_fft_elbo_parameters(images, vp, patches, [1], use_raw_psf=false)
+                fsm_vec[cur_source_index] = fsm_mat
+            else    
+                ea = ElboArgs(images, vp, patches, [1])
+            end
+            
             ea_vec[cur_source_index] = ea
         end
     end
@@ -327,6 +337,15 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 # Optimize only if source has not converged or at least
                 # one of its neighbors has not converged
                 if should_optimize_source(cur_source_indx)
+
+                    # Select optimization method if depending on
+                    # whether to use fft or not
+                    if use_fft
+                        elbo = get_fft_elbo_function(ea[cur_source_indx], fsm_vec[cur_source_indx])
+                    else
+                        elbo = DeterministicVI.elbo
+                    end
+                    
                     cur_entry = catalog[target_sources[cur_source_indx]]
                     iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
                         DeterministicVI.elbo,
