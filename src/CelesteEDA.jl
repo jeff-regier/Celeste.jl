@@ -93,11 +93,11 @@ function render_source(ea::ElboArgs, s::Int, n::Int;
         else
             error("Unknown field ", field)
         end
-        if include_iota
-            image[h2, w2] *= ea.images[n].iota_vec[h]
-        end
         if include_epsilon
             image[h2, w2] += ea.images[n].epsilon_mat[h, w]
+        end
+        if include_iota
+            image[h2, w2] *= ea.images[n].iota_vec[h]
         end
     end
 
@@ -144,13 +144,12 @@ function render_source_fft(
         w_fsm = w - fsms.w_lower + 1
 
         image[h2, w2] = getfield(fsms, field)[h_fsm, w_fsm].v[]
-        if include_iota
-            image[h2, w2] *= ea.images[n].iota_vec[h]
-        end
         if include_epsilon
             image[h2, w2] += ea.images[n].epsilon_mat[h, w]
         end
-
+        if include_iota
+            image[h2, w2] *= ea.images[n].iota_vec[h]
+        end
     end
 
     return deepcopy(image)
