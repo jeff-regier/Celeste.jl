@@ -9,7 +9,9 @@ import Celeste.Model: CatalogEntry
 import Celeste.ParallelRun: one_node_single_infer, one_node_joint_infer
 
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
-const LATEST_FITS_FILENAME_HOLDER = joinpath(GALSIM_BENCHMARK_DIR, "latest_fits_filename.txt")
+const LATEST_FITS_FILENAME_HOLDER = joinpath(
+    GALSIM_BENCHMARK_DIR, "latest_filename", "latest_galsim_benchmarks.txt"
+)
 
 type GalsimFitsFileNotFound <: Exception end
 
