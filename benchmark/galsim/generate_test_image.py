@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 
@@ -9,7 +10,7 @@ import test_case_definitions
 _logger = logging.getLogger(__name__) 
 
 RANDOM_SEED = 1234
-
+LATEST_FITS_FILENAME_HOLDER = 'latest_fits_filename.txt'
 FITS_COMMENT_PREPEND = 'Celeste: '
 
 def add_header_to_hdu(hdu, header_dict):
@@ -23,7 +24,16 @@ def save_multi_extension_fits(hdu_list, filename):
     if os.path.exists(filename):
         os.remove(filename)
     hdu_list.writeto(filename)
-    _logger.info('Wrote multi-extension FITS image to %r', filename)
+
+def append_md5sum_to_filename(filename):
+    md5 = hashlib.md5()
+    with open(filename, 'rb') as stream:
+        md5.update(stream.read())
+    md5sum = md5.hexdigest()
+    root, extension = os.path.splitext(filename)
+    new_filename = '{}_{}{}'.format(root, md5.hexdigest()[:10], extension)
+    os.rename(filename, new_filename)
+    return new_filename
 
 def main():
     logging.basicConfig(format="%(message)s", level=logging.INFO)
@@ -42,6 +52,13 @@ def main():
 
     image_file_name = os.path.join('output', 'galsim_test_images.fits')
     save_multi_extension_fits(fits_hdus, image_file_name)
+    final_filename = append_md5sum_to_filename(image_file_name)
+    _logger.info('Wrote multi-extension FITS file to %r', final_filename)
+
+    with open(LATEST_FITS_FILENAME_HOLDER, 'w') as stream:
+        stream.write(os.path.basename(final_filename))
+        stream.write('\n')
+    _logger.info('Updated %r', LATEST_FITS_FILENAME_HOLDER)
 
 if __name__ == "__main__":
     main()

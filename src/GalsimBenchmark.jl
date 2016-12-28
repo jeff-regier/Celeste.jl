@@ -8,9 +8,10 @@ import Celeste: Model, DeterministicVI, ParallelRun, Infer
 import Celeste.Model: CatalogEntry
 import Celeste.ParallelRun: one_node_single_infer, one_node_joint_infer
 
-
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
-const FILENAME = "output/galsim_test_images.fits"
+const LATEST_FITS_FILENAME_HOLDER = joinpath(GALSIM_BENCHMARK_DIR, "latest_fits_filename.txt")
+
+type GalsimFitsFileNotFound <: Exception end
 
 function make_psf(psf_sigma_px)
     alphaBar = [1.; 0.]
@@ -26,14 +27,27 @@ function make_psf(psf_sigma_px)
     ]
 end
 
+function get_latest_fits_filename()
+    println("Looking for latest FITS filename in '$LATEST_FITS_FILENAME_HOLDER'")
+    open(LATEST_FITS_FILENAME_HOLDER) do stream
+        return strip(readstring(stream))
+    end
+end
+
 immutable FitsExtension
     pixels::Matrix{Float32}
     header::FITSIO.FITSHeader
 end
 
 function read_fits(filename; read_sdss_psf=false)
-    println("Reading $filename...")
-    @assert isfile(filename)
+    println("Reading '$filename'...")
+    if !isfile(filename)
+        println(string(
+            "FITS file '$filename' not found. Try running 'make fetch' in the 'benchmark/galsim' ",
+            "directory."
+        ))
+        throw(GalsimFitsFileNotFound())
+    end
     fits = FITSIO.FITS(filename)
     println("Found $(length(fits)) extensions.")
 
@@ -262,10 +276,11 @@ end
 # * joint_infer_actual: ditto, for multi-source joint inference
 function main(; test_case_names=String[], print_fn=println,
               infer_source_callback=DeterministicVI.infer_source)
-    all_benchmark_data = []
-    extensions, wcs = read_fits(joinpath(GALSIM_BENCHMARK_DIR, FILENAME))
+    latest_fits_filename = get_latest_fits_filename()
+    extensions, wcs = read_fits(joinpath(GALSIM_BENCHMARK_DIR, "output", latest_fits_filename))
     @assert length(extensions) % 5 == 0 # one extension per band for each test case
 
+    all_benchmark_data = []
     for test_case_index in 1:div(length(extensions), 5)
         first_band_index = (test_case_index - 1) * 5 + 1
         header = extensions[first_band_index].header
