@@ -475,8 +475,9 @@ end
 test_gradient_is_near_zero_on_four_sources(; use_fft=false)
 
 # Test with using fft
-test_different_result_with_different_iter(use_fft=true)
-test_same_result_with_diff_batch_sizes(use_fft=true)
+#test_different_result_with_different_iter(use_fft=true)
+#test_same_result_with_diff_batch_sizes(use_fft=true)
+#test_one_node_joint_infer_obj_overlapping(use_fft=true)
 
 # Test non fft
 test_different_result_with_different_iter()
