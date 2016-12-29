@@ -271,20 +271,27 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             cat_local = vcat([entry], neighbors)
             ids_local = vcat([entry_id], neighbor_ids)
 
-            vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
-                        target_source_variational_params[x] :
-                        init_source(catalog[x]) for x in ids_local]
             patches = Infer.get_sky_patches(images, cat_local)
-            Infer.load_active_pixels!(ea.images, ea.patches)
+            Infer.load_active_pixels!(images, patches)
 
+            # Load vp with shared target source params, and also vp
+            # that doesn't share target source params
+            vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
+                                 target_source_variational_params[x] :
+                                 init_source(catalog[x]) for x in ids_local]
+            
             # Switch parameters based on whether or not we're using the fft method
             if use_fft
-                ea, fsm_mat = initialize_fft_elbo_parameters(images, vp, patches, [1], use_raw_psf=false)
+                ea, fsm_mat = initialize_fft_elbo_parameters(images,
+                                                             vp,
+                                                             patches,
+                                                             [1],
+                                                             use_raw_psf=false)
                 fsm_vec[cur_source_index] = fsm_mat
             else    
                 ea = ElboArgs(images, vp, patches, [1])
             end
-            
+
             ea_vec[cur_source_index] = ea
         end
     end
@@ -324,9 +331,6 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     function process_sources(source_assignment::Vector{Int64}, iter)
         try
 
-            # Use a constant number of newton steps
-            n_newton_steps = 5
-
             # Shuffle the source assignments within each batch of each process.
             # This is disabled by default because it ruins the deterministic outcome
             # required by the test cases.
@@ -334,21 +338,23 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 shuffle!(source_assignment)
             end
             for cur_source_indx in source_assignment
+
+                n_newton_steps = 5
+                
                 # Optimize only if source has not converged or at least
-                # one of its neighbors has not converged
-                if should_optimize_source(cur_source_indx)
+                # one of its neighbors has not converge
+                if should_optimize_source(cur_source_indx) 
 
                     # Select optimization method if depending on
                     # whether to use fft or not
                     if use_fft
-                        elbo = get_fft_elbo_function(ea[cur_source_indx], fsm_vec[cur_source_indx])
+                        elbo = get_fft_elbo_function(ea_vec[cur_source_indx], fsm_vec[cur_source_indx])
                     else
                         elbo = DeterministicVI.elbo
                     end
-                    
-                    cur_entry = catalog[target_sources[cur_source_indx]]
+
                     iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
-                        DeterministicVI.elbo,
+                        elbo,
                         ea_vec[cur_source_indx],
                         max_iters=n_newton_steps,
                         use_default_optim_params=true)
@@ -374,6 +380,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     # Process sources in parallel using nprocthreads.
     tic()
     n_batches = length(thread_sources_assignment[1])
+
     for iter = 1:n_iters
         # Reset number of sources converged
         n_sources_converged = 0
