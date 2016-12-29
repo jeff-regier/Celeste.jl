@@ -37,8 +37,7 @@ include("deterministic_vi_image_psf/fsm_matrices.jl")
 include("deterministic_vi_image_psf/elbo_image_psf.jl")
 
 export elbo_likelihood_with_fft!, FSMSensitiveFloatMatrices,
-       initialize_fsm_sf_matrices!, initialize_fft_elbo_parameters,
-       get_fft_elbo_function
+       initialize_fsm_sf_matrices!, initialize_fft_elbo_parameters
 
 
 function infer_source_fft(images::Vector{Image},

@@ -155,7 +155,6 @@ test_improve_stripe_82_obj_value
 function test_improve_stripe_82_obj_value(; use_fft=false)
     println("Testing that joint_infer improves score on stripe 82...")
     (rcfs, datadir, target_sources, catalog, images) = load_stripe_82_data()
-    println("YOOOO $(length(target_sources))")
 
     # Single inference obj value
     infer_source_callback = use_fft ?
