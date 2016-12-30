@@ -2,7 +2,7 @@
 
 using Celeste: Model, DeterministicVI
 
-import Celeste: Infer, DeterministicVI, ParallelRun
+import Celeste: Infer, DeterministicVI, ParallelRun, DeterministicVIImagePSF
 import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
 import SensitiveFloats.clear!
 import SDSSIO: RunCamcolField
