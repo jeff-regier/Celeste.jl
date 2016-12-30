@@ -1,1 +1,1 @@
-galsim_benchmarks_7b461cae2a.fits
+galsim_benchmarks_0b7bd50da4.fits

@@ -10,7 +10,7 @@ import Celeste.ParallelRun: one_node_single_infer, one_node_joint_infer
 
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const LATEST_FITS_FILENAME_HOLDER = joinpath(
-    GALSIM_BENCHMARK_DIR, "latest_filename", "latest_galsim_benchmarks.txt"
+    GALSIM_BENCHMARK_DIR, "latest_filenames", "latest_galsim_benchmarks.txt"
 )
 
 type GalsimFitsFileNotFound <: Exception end
@@ -170,20 +170,20 @@ end
 
 function get_ground_truth_dataframe(header)
     DataFrame(
-        label=fill(header["CL_DESCR"], length(BENCHMARK_PARAMETER_LABELS)),
+        label=fill(header["CLDESCR"], length(BENCHMARK_PARAMETER_LABELS)),
         field=BENCHMARK_PARAMETER_LABELS,
         ground_truth=Any[
-            get_field(header, "CL_X1"),
-            get_field(header, "CL_Y1"),
-            get_field(header, "CL_RTIO1"),
-            get_field(header, "CL_ANGL1"),
-            get_field(header, "CL_RADP1"),
-            get_field(header, "CL_FLUX1"),
-            get_field(header, "CL_C12_1"),
-            get_field(header, "CL_C23_1"),
-            get_field(header, "CL_C34_1"),
-            get_field(header, "CL_C45_1"),
-            header["CL_TYPE1"] == "star" ? 0 : 1,
+            get_field(header, "CLX001"),
+            get_field(header, "CLY001"),
+            get_field(header, "CLRTO001"),
+            get_field(header, "CLANG001"),
+            get_field(header, "CLRDP001"),
+            get_field(header, "CLFLX001"),
+            get_field(header, "CLC12001"),
+            get_field(header, "CLC23001"),
+            get_field(header, "CLC34001"),
+            get_field(header, "CLC45001"),
+            header["CLTYP001"] == "star" ? 0 : 1,
         ]
     )
 end
@@ -198,7 +198,7 @@ function error_in_posterior_std_devs(star_galaxy_index, params, header)
         [ids.r2[star_galaxy_index]],
         [ids.c2[band, star_galaxy_index] for band in 1:4],
     )
-    ground_truth_key = ["CL_FLUX1", "CL_C12_1", "CL_C23_1", "CL_C34_1", "CL_C45_1"]
+    ground_truth_key = ["CLFLX001", "CLC12001", "CLC23001", "CLC34001", "CLC45001"]
 
     posterior_z_scores = Any[]
     for index in 1:length(lognormal_mean_id)
@@ -211,7 +211,7 @@ function error_in_posterior_std_devs(star_galaxy_index, params, header)
 end
 
 function benchmark_comparison_data(single_infer_params, joint_infer_params, header)
-    star_galaxy_index = header["CL_TYPE1"] == "star" ? 1 : 2
+    star_galaxy_index = header["CLTYP001"] == "star" ? 1 : 2
     comparison_dataframe = get_ground_truth_dataframe(header)
     comparison_dataframe[:single_inferred] = inferred_values(star_galaxy_index, single_infer_params)
     comparison_dataframe[:joint_inferred] = inferred_values(star_galaxy_index, joint_infer_params)
@@ -226,10 +226,10 @@ end
 function assert_counts_match_expected_flux(band_pixels::Vector{Matrix{Float32}},
                                            header::FITSIO.FITSHeader,
                                            iota::Float64)
-    if !header["CL_NOISE"]
-        expected_flux_nmgy = prod(size(band_pixels[3])) * header["CL_SKY"]
-        for source_index in 1:header["CL_NSRC"]
-            expected_flux_nmgy += header[string("CL_FLUX", source_index)]
+    if !header["CLNOISE"]
+        expected_flux_nmgy = prod(size(band_pixels[3])) * header["CLSKY"]
+        for source_index in 1:header["CLNSRC"]
+            expected_flux_nmgy += header[@sprintf("CLFLX%03d", source_index)]
         end
         expected_flux_counts = expected_flux_nmgy * iota
         @assert abs(sum(band_pixels[3]) - expected_flux_counts) / expected_flux_counts < 1e-3
@@ -255,14 +255,14 @@ end
 
 function make_catalog(header::FITSIO.FITSHeader)
     catalog = CatalogEntry[]
-    num_sources = header["CL_NSRC"]
+    num_sources = header["CLNSRC"]
     for source_index in 1:num_sources
         if num_sources == 1
             initial_position = [0.005335 for i in 1:2] # center of image
         else
             initial_position = [
-                header[string("CL_X", source_index)],
-                header[string("CL_Y", source_index)],
+                header[@sprintf("CLX%03d", source_index)],
+                header[@sprintf("CLY%03d", source_index)],
             ]
         end
         push!(catalog, make_catalog_entry(initial_position[1], initial_position[2]))
@@ -286,21 +286,21 @@ function main(; test_case_names=String[], print_fn=println,
     for test_case_index in 1:div(length(extensions), 5)
         first_band_index = (test_case_index - 1) * 5 + 1
         header = extensions[first_band_index].header
-        this_test_case_name = header["CL_DESCR"]
+        this_test_case_name = header["CLDESCR"]
         if !isempty(test_case_names) && !in(this_test_case_name, test_case_names)
             continue
         end
         println("Running test case '$this_test_case_name'")
-        iota = header["CL_IOTA"]
-        psf = make_psf(header["CL_SIGMA"])
-        n_sources = header["CL_NSRC"]
+        iota = header["CLIOTA"]
+        psf = make_psf(header["CLSIGMA"])
+        n_sources = header["CLNSRC"]
 
         band_pixels = [
             extensions[index].pixels for index in first_band_index:(first_band_index + 4)
         ]
         assert_counts_match_expected_flux(band_pixels, header, iota)
 
-        images = make_images(band_pixels, psf, wcs, header["CL_SKY"], iota)
+        images = make_images(band_pixels, psf, wcs, header["CLSKY"], iota)
         catalog = make_catalog(header)
 
         # we're only scoring one object per image
