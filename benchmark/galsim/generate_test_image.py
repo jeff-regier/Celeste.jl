@@ -15,9 +15,6 @@ FITS_COMMENT_PREPEND = 'Celeste: '
 TEST_CASE_FNS = []
 
 ARCSEC_PER_DEGREE = 3600.
-ARCSEC_PER_PIXEL = 0.396 # the value used in SDSS (https://github.com/jeff-regier/Celeste.jl/pull/411)
-DEGREES_PER_PIXEL = ARCSEC_PER_PIXEL / ARCSEC_PER_DEGREE
-STAMP_SIZE_PX = 96
 COUNTS_PER_NMGY = 1000.0 # a.k.a. "iota" in Celeste
 
 # intensity (flux) relative to third band (= "a" band = reference)
@@ -39,6 +36,16 @@ DEFAULT_GALAXY_RELATIVE_INTENSITIES = [
     1.7750,
 ]
 
+class ImageParameters(object):
+    def __init__(self):
+        self.width_px = 96
+        self.height_px = 96
+        # 0.396 = resolution of SDSS images (https://github.com/jeff-regier/Celeste.jl/pull/411)
+        self.arcsec_per_pixel = 0.396
+
+    def degrees_per_pixel(self):
+        return self.arcsec_per_pixel / ARCSEC_PER_DEGREE
+
 # fields and logic shared between stars and galaxies
 class CommonFields(object):
     def __init__(self):
@@ -58,13 +65,12 @@ class CommonFields(object):
             self.offset_from_center_arcsec[1] / ARCSEC_PER_DEGREE,
         )
 
-    def position_deg(self):
-        image_center_deg = (
-            (STAMP_SIZE_PX + 1) / 2.0 * DEGREES_PER_PIXEL
-        )
+    def position_deg(self, image_parameters):
         return (
-            image_center_deg + self.offset_from_center_arcsec[0] / ARCSEC_PER_DEGREE,
-            image_center_deg + self.offset_from_center_arcsec[1] / ARCSEC_PER_DEGREE,
+            (image_parameters.width_px + 1) / 2.0 * image_parameters.degrees_per_pixel()
+                + self.offset_from_center_arcsec[0] / ARCSEC_PER_DEGREE,
+            (image_parameters.height_px + 1) / 2.0 * image_parameters.degrees_per_pixel()
+                + self.offset_from_center_arcsec[1] / ARCSEC_PER_DEGREE,
         )
 
     def flux_counts(self, band_index):
@@ -73,8 +79,8 @@ class CommonFields(object):
             * COUNTS_PER_NMGY
         )
 
-    def add_header_fields(self, header, index_str, star_or_galaxy):
-        position_deg = self.position_deg()
+    def add_header_fields(self, header, index_str, image_parameters, star_or_galaxy):
+        position_deg = self.position_deg(image_parameters)
         header['CL_X' + index_str] = (position_deg[0], 'X center in world coordinates (deg)')
         header['CL_Y' + index_str] = (position_deg[1], 'Y center in world coordinates (deg)')
         header['CL_FLUX' + index_str] = (
@@ -104,7 +110,7 @@ class LightSource(object):
     def get_galsim_light_source(self, band_index):
         raise NotImplementedError
 
-    def add_header_fields(self, header):
+    def add_header_fields(self, header, index_str, image_parameters):
         raise NotImplementedError
 
 class Star(LightSource):
@@ -131,8 +137,8 @@ class Star(LightSource):
                 .shift(self._common_fields.offset_from_center_degrees())
         )
 
-    def add_header_fields(self, header, index_str):
-        self._common_fields.add_header_fields(header, index_str, 'star')
+    def add_header_fields(self, header, index_str, image_parameters):
+        self._common_fields.add_header_fields(header, index_str, image_parameters, 'star')
 
 class Galaxy(LightSource):
     def __init__(self):
@@ -177,8 +183,8 @@ class Galaxy(LightSource):
         psf = galsim.Gaussian(flux=1, sigma=psf_sigma_degrees)
         return galsim.Convolve([galaxy, psf])
 
-    def add_header_fields(self, header, index_str):
-        self._common_fields.add_header_fields(header, index_str, 'galaxy')
+    def add_header_fields(self, header, index_str, image_parameters):
+        self._common_fields.add_header_fields(header, index_str, image_parameters, 'galaxy')
         header['CL_ANGL' + index_str] = (self._angle_deg, 'major axis angle (degrees from x-axis)')
         header['CL_RTIO' + index_str] = (self._minor_major_axis_ratio, 'minor/major axis ratio')
         header['CL_RADA' + index_str] = (
@@ -186,7 +192,7 @@ class Galaxy(LightSource):
             'half-light radius (arcsec)',
         )
         header['CL_RADP' + index_str] = (
-            self._half_light_radius_arcsec / ARCSEC_PER_PIXEL,
+            self._half_light_radius_arcsec / image_parameters.arcsec_per_pixel,
             'half-light radius (pixels)',
         )
 
@@ -195,10 +201,18 @@ class Galaxy(LightSource):
 class GalSimTestCase(object):
     def __init__(self):
         self._light_sources = []
+        self.image_parameters = ImageParameters()
         self.psf_sigma_pixels = 4
         self.sky_level_nmgy = 0.01
         self.include_noise = False
         self.comment = None
+
+    def set_dimensions(self, width_px, height_px):
+        self.image_parameters.width_px = width_px
+        self.image_parameters.height_px = height_px
+
+    def set_resolution(self, arcsec_per_pixel):
+        self.image_parameters.arcsec_per_pixel = arcsec_per_pixel
 
     def add_star(self):
         star = Star()
@@ -225,11 +239,15 @@ class GalSimTestCase(object):
             image.addNoise(noise)
 
     def construct_image(self, band_index, uniform_deviate):
-        image = galsim.ImageF(STAMP_SIZE_PX, STAMP_SIZE_PX, scale=DEGREES_PER_PIXEL)
+        image = galsim.ImageF(
+            self.image_parameters.width_px,
+            self.image_parameters.height_px,
+            scale=self.image_parameters.degrees_per_pixel(),
+        )
         for light_source in self._light_sources:
             galsim_light_source = light_source.get_galsim_light_source(
                 band_index,
-                self.psf_sigma_pixels * DEGREES_PER_PIXEL,
+                self.psf_sigma_pixels * self.image_parameters.degrees_per_pixel(),
             )
             galsim_light_source.drawImage(image, add_to_image=True)
         self._add_sky_background(image)
@@ -250,7 +268,7 @@ class GalSimTestCase(object):
             ('CL_NSRC', (len(self._light_sources), 'number of sources')),
         ])
         for source_index, light_source in enumerate(self._light_sources):
-            light_source.add_header_fields(header, str(source_index + 1))
+            light_source.add_header_fields(header, str(source_index + 1), self.image_parameters)
         return header
 
 # just a trick to set the test case function name as the `GalSimTestCase.comment` field (for
