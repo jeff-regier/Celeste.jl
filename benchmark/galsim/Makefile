@@ -1,6 +1,6 @@
 OUTPUT_DIR := output
-TEST_IMAGES_BASE_URL := http://portal.nersc.gov/project/dasrepo/celeste
-LATEST_FITS_FILENAME := $(shell cat latest_fits_filename.txt)
+TEST_IMAGES_BASE_URL := http://portal.nersc.gov/project/dasrepo/celeste/galsim_fits
+LATEST_FITS_FILENAME := $(shell cat latest_filenames/latest_galsim_benchmarks.txt)
 LATEST_FITS_PATH := $(OUTPUT_DIR)/$(LATEST_FITS_FILENAME)
 
 default: benchmark
