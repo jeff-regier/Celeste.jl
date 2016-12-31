@@ -69,7 +69,7 @@ where
 """
 const truthfile = joinpath(datadir, "coadd_for_4263_5_119.fit")
 
-const valid_args = Set(["--score-only", "--joint-infer", "--fft"])
+const valid_args = Set(["--score-only", "--joint", "--fft"])
 
 if !(ARGS ⊆ valid_args)
     args_str = join(["[$va]" for va in valid_args],  " ")
@@ -81,11 +81,12 @@ else
     # alone is primarily useful for debugging.
     if !("--score-only" in ARGS)
         wrap_joint(cnti...) = one_node_joint_infer(cnti...;
-                                                   termination_percent=0.95)
+						   use_fft=("--fft" in ARGS),
+                                                   termination_percent=1.00)
         source_callback = "--fft" in ARGS ? infer_source_fft : infer_source
         wrap_single(cnti...) = one_node_single_infer(cnti...;
                                       infer_source_callback=source_callback)
-        infer_callback = "--joint-infer" in ARGS ? wrap_joint : wrap_single
+        infer_callback = "--joint" in ARGS ? wrap_joint : wrap_single
         # Here `one_node_infer` is called just with a single rcf, even though
         # other rcfs may overlap with this one. That's because this function is
         # just for testing on stripe 82: in practice we always use all relevent
