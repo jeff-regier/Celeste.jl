@@ -25,7 +25,7 @@ objids = [ce.objid for ce in catalog];
 sa = findfirst(objids, objid);
 neighbors = Infer.find_neighbors([sa], catalog, images)[1];
 cat_local = vcat(catalog[sa], catalog[neighbors]);
-vp = Vector{Float64}[Infer.init_source(ce) for ce in cat_local];
+vp = DeterministicVI.init_sources([1], cat_local)
 patches = Infer.get_sky_patches(images, cat_local);
 
 

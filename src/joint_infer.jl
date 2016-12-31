@@ -252,7 +252,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     target_source_variational_params = Dict{Int64, Array{Float64}}()
     for target_source in target_sources
         cat = catalog[target_source]
-        target_source_variational_params[target_source] = init_source(cat)
+        target_source_variational_params[target_source] = generic_init_source(cat.pos)
     end
 
     # Pre-allocate dictionary of elboargs, call it ea_vec.
@@ -278,8 +278,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             # that doesn't share target source params
             vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
                                  target_source_variational_params[x] :
-                                 init_source(catalog[x]) for x in ids_local]
-            
+                                 catalog_init_source(catalog[x]) for x in ids_local]
+
             # Switch parameters based on whether or not we're using the fft method
             if use_fft
                 ea, fsm_mat = initialize_fft_elbo_parameters(images,
@@ -288,7 +288,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                                                              [1],
                                                              use_raw_psf=false)
                 fsm_vec[cur_source_index] = fsm_mat
-            else    
+            else
                 ea = ElboArgs(images, vp, patches, [1])
             end
 
@@ -340,10 +340,10 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             for cur_source_indx in source_assignment
 
                 n_newton_steps = 5
-                
+
                 # Optimize only if source has not converged or at least
                 # one of its neighbors has not converge
-                if should_optimize_source(cur_source_indx) 
+                if should_optimize_source(cur_source_indx)
 
                     # Select optimization method if depending on
                     # whether to use fft or not

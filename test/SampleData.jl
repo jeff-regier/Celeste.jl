@@ -40,7 +40,7 @@ function make_elbo_args(images::Vector{Image},
                         catalog::Vector{CatalogEntry};
                         active_source=-1,
                         patch_radius_pix::Float64=NaN)
-    vp = Vector{Float64}[init_source(ce) for ce in catalog]
+    vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
     patches = Infer.get_sky_patches(images,
                                     catalog,
                                     radius_override_pix=patch_radius_pix)
@@ -188,7 +188,7 @@ end
 
 
 function empty_model_params(S::Int)
-    vp = [Model.init_source([ 0., 0. ]) for s in 1:S]
+    vp = [DeterministicVI.generic_init_source([ 0., 0. ]) for s in 1:S]
     ElboArgs(Image[],
              vp,
              Array(SkyPatch, S, 0),
