@@ -13,13 +13,13 @@ import ..DeterministicVI:
     SourceBrightness, GalaxyComponent, SkyPatch,
     load_source_brightnesses, add_elbo_log_term!,
     accumulate_source_pixel_brightness!,
-    KLDivergence
+    KLDivergence, init_sources
 
 import ..Model:
     populate_gal_fsm!, getids, ParamSet, linear_world_to_pix, lidx,
     BvnComponent, GalaxyCacheComponent, GalaxySigmaDerivs,
     get_bvn_cov, galaxy_prototypes, linear_world_to_pix,
-    Image, eval_psf, CatalogEntry, init_source
+    Image, eval_psf, CatalogEntry
 
 import ..SensitiveFloats:
     SensitiveFloat, zero_sensitive_float_array,
@@ -37,14 +37,15 @@ include("deterministic_vi_image_psf/fsm_matrices.jl")
 include("deterministic_vi_image_psf/elbo_image_psf.jl")
 
 export elbo_likelihood_with_fft!, FSMSensitiveFloatMatrices,
-       initialize_fsm_sf_matrices!, initialize_fft_elbo_parameters
+       initialize_fsm_sf_matrices!, initialize_fft_elbo_parameters,
+       get_fft_elbo_function
 
 
 function infer_source_fft(images::Vector{Image},
                           neighbors::Vector{CatalogEntry},
                           entry::CatalogEntry)
    cat_local = vcat([entry], neighbors)
-   vp = Vector{Float64}[init_source(ce) for ce in cat_local]
+   vp = init_sources([1], cat_local)
    patches = get_sky_patches(images, cat_local)
    load_active_pixels!(images, patches)
 

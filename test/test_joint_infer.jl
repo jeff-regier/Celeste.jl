@@ -17,7 +17,7 @@ function load_ea_from_source(target_source, target_sources, catalog, images, all
     for (indx, cur_source) in enumerate(target_sources)
         target_source_variational_params[cur_source] = all_vps[indx]
     end
-    
+
     # Load neighbors, patches and variational parameters
     neighbors = catalog[neighbor_map[1]]
     entry = catalog[target_source]
@@ -27,8 +27,8 @@ function load_ea_from_source(target_source, target_sources, catalog, images, all
     ids_local = vcat([target_source], neighbor_map[1])
     vp = [haskey(target_source_variational_params, x) ?
           target_source_variational_params[x] :
-          init_source(catalog[x]) for x in ids_local]
-    
+          DeterministicVI.catalog_init_source(catalog[x]) for x in ids_local]
+
     # Create elbo args
     fsm_mat = 0
     if use_fft
@@ -50,25 +50,24 @@ function compute_unconstrained_gradient(target_source, target_sources, catalog, 
     # Load ea
     (ea, fsm) = load_ea_from_source(target_source, target_sources, catalog, images,
                                     all_vps, use_fft=use_fft)
-    
+
     # Evaluate in constrained space and then unconstrain. (Taken from maximize_f)
     last_sf::SensitiveFloat{Float64} = SensitiveFloats.SensitiveFloat{Float64}(length(UnconstrainedParams), 1, true, true)
     transform = DeterministicVI.get_mp_transform(ea.vp, ea.active_sources)
     elbo = use_fft ? get_fft_elbo_function(ea, fsm) : DeterministicVI.elbo
-    f_res = elbo(ea)        
+    f_res = elbo(ea)
     Transform.transform_sensitive_float!(transform, last_sf, f_res, ea.vp, ea.active_sources)
     last_sf.d
 end
 
-""" 
+"""
 unconstrained_gradient_near_zero
 """
-function unconstrained_gradient_near_zero(target_sources, catalog, images, all_vps; use_fft=false)    
+function unconstrained_gradient_near_zero(target_sources, catalog, images, all_vps; use_fft=false)
 
     # Compute gradient per source
     for (cur_source_indx, source) in enumerate(target_sources)
         gradient = compute_unconstrained_gradient(source, target_sources, catalog, images,all_vps; use_fft=use_fft)
-        display(gradient)
         if !isapprox(gradient, zeros(length(gradient)), atol=1)
             return false
         end
@@ -158,8 +157,8 @@ function test_improve_stripe_82_obj_value(; use_fft=false)
 
     # Single inference obj value
     infer_source_callback = use_fft ?
-        DeterministicVIImagePSF.infer_source_fft : 
-        DeterministicVI.infer_source    
+        DeterministicVIImagePSF.infer_source_fft :
+        DeterministicVI.infer_source
     infer_single(ctni...) = one_node_single_infer(ctni...;
                                                   infer_source_callback=infer_source_callback)
     result_single = one_node_infer(rcfs, datadir;
@@ -195,13 +194,13 @@ function test_gradient_is_near_zero_on_stripe_82(; use_fft=false)
     # Make sure joint infer with few iterations does not pass the gradient near zero check
     joint_few(cnti...) = one_node_joint_infer(cnti...; termination_percent=.01, use_fft=use_fft)
     results_few = one_node_infer(rcfs, datadir; infer_callback=joint_few, primary_initialization=false)
-    @test !unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_few])   
+    @test !unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_few])
 
     # Make sure joint infer with many iterations passes the gradient near zero check
     joint_many(cnti...) = one_node_joint_infer(cnti...; termination_percent=1, use_fft=use_fft, n_iters=500)
-    results_many = one_node_infer(rcfs, datadir; infer_callback=joint_many, primary_initialization=false)    
+    results_many = one_node_infer(rcfs, datadir; infer_callback=joint_many, primary_initialization=false)
     @test unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_many])
-end 
+end
 
 """
 test_gradient_is_near_zero_on_four_sources
@@ -209,7 +208,7 @@ Tests that the gradient is zero on four sources after joint optimization.
 Makes sure that with fewer iterations the gradient is not zero.
 """
 function test_gradient_is_near_zero_on_four_sources(; use_fft=false)
-    box = BoundingBox(154.39, 164.41, 39.11, 39.13)    
+    box = BoundingBox(154.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
 
     catalog, target_sources = infer_init(field_triplets, datadir; box=box)
@@ -221,8 +220,7 @@ function test_gradient_is_near_zero_on_four_sources(; use_fft=false)
                                               use_fft=use_fft)
     result_few = one_node_infer(field_triplets, datadir;
                                 infer_callback=infer_few,
-                                box=box)   
-
+                                box=box)
     @test !unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in result_few])
 
     infer_many(ctni...) = one_node_joint_infer(ctni...;
@@ -234,7 +232,7 @@ function test_gradient_is_near_zero_on_four_sources(; use_fft=false)
                                  infer_callback=infer_many,
                                  box=box)
     @test unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in result_many])
-     
+
 end
 
 """
@@ -351,7 +349,7 @@ function test_one_node_joint_infer_obj_overlapping(;use_fft=false)
     # One node infer (1 iteration, butm ore newton steps)
     tic()
     infer_source_callback = use_fft ?
-        DeterministicVIImagePSF.infer_source_fft : 
+        DeterministicVIImagePSF.infer_source_fft :
         DeterministicVI.infer_source
     infer_single(ctni...) = one_node_single_infer(ctni...;
                                                   infer_source_callback=infer_source_callback)
