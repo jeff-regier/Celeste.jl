@@ -321,7 +321,7 @@ todo(max) - this fails with use_fft=true. Fix.
 function test_one_node_joint_infer_obj_overlapping(;use_fft=false)
 
     # This bounding box has overlapping stars. (neighbor map is not empty)
-    box = BoundingBox(154.39, 164.41, 39.11, 39.13)   
+    box = BoundingBox(154.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
 
     # 100 iterations
