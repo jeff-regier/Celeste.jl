@@ -1,6 +1,8 @@
+import JLD
+
 
 # The number of components in the color prior.
-const D = 2
+const D = 8
 
 # The number of types of celestial objects (here, stars and galaxies).
 const Ia = 2
@@ -92,19 +94,18 @@ function load_prior()
     # set a = [.99, .01] if stars are underrepresented
     # due to the greater flexibility of the galaxy model
     #a = [0.28, 0.72]
-    a = [0.99, 0.01]
+    a = [0.099, 0.001]
     k = Array(Float64, D, Ia)
     c_mean = Array(Float64, B - 1, D, Ia)
     c_cov = Array(Float64, B - 1, B - 1, D, Ia)
 
-    v05 = VERSION >= v"0.5.0-dev" ? "-v05" : ""
-    stars_file = open(joinpath(cfgdir, "stars$D$v05.dat"))
-    _, k[:, 1], c_mean[:,:,1], c_cov[:,:,:,1] = deserialize(stars_file)
-    close(stars_file)
-
-    gals_file = open(joinpath(cfgdir, "gals$D$v05.dat"))
-    _, k[:, 2], c_mean[:,:,2], c_cov[:,:,:,2] = deserialize(gals_file)
-    close(gals_file)
+    prior_params = [JLD.load(joinpath(cfgdir, "star_prior.jld")),
+                    JLD.load(joinpath(cfgdir, "gal_prior.jld"))]
+    for i in 1:2
+        k[:, i] = prior_params[i]["c_weights"]
+        c_mean[:, :, i] = prior_params[i]["c_means"]
+        c_cov[:, :, :, i] = prior_params[i]["c_covs"]
+    end
 
     # log normal parameters for the r-band brightness prior.
     # these were fit by maximum likelihood to the output of primary

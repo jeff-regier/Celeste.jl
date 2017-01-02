@@ -1209,10 +1209,12 @@ test_combine_sfs()
 test_add_sources_sf()
 
 # Transform tests:
+#=
 println("Running Transform derivative tests.")
 test_box_derivatives()
 test_box_simplex_derivatives()
 test_simplex_derivatives()
+=#
 
 # this test was slow before, but no longer
 test_real_image()
