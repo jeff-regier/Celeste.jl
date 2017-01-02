@@ -9,9 +9,7 @@ import Celeste.Model: CatalogEntry
 import Celeste.ParallelRun: one_node_single_infer, one_node_joint_infer
 
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
-const LATEST_FITS_FILENAME_HOLDER = joinpath(
-    GALSIM_BENCHMARK_DIR, "latest_filenames", "latest_galsim_benchmarks.txt"
-)
+const LATEST_FITS_FILENAME_DIR = joinpath(GALSIM_BENCHMARK_DIR, "latest_filenames")
 
 type GalsimFitsFileNotFound <: Exception end
 
@@ -29,9 +27,13 @@ function make_psf(psf_sigma_px)
     ]
 end
 
-function get_latest_fits_filename()
-    println("Looking for latest FITS filename in '$LATEST_FITS_FILENAME_HOLDER'")
-    open(LATEST_FITS_FILENAME_HOLDER) do stream
+function get_latest_fits_filename(label)
+    latest_fits_filename_holder = joinpath(
+        LATEST_FITS_FILENAME_DIR,
+        @sprintf("latest_%s.txt", label),
+    )
+    println("Looking for latest FITS filename in '$latest_fits_filename_holder'")
+    open(latest_fits_filename_holder) do stream
         return strip(readstring(stream))
     end
 end
@@ -62,6 +64,13 @@ function read_fits(filename; read_sdss_psf=false)
     wcs = WCS.from_header(FITSIO.read_header(fits[1], String))[1]
 
     close(fits)
+    extensions, wcs
+end
+
+function load_galsim_fits(label)
+    latest_fits_filename = get_latest_fits_filename(label)
+    extensions, wcs = read_fits(joinpath(GALSIM_BENCHMARK_DIR, "output", latest_fits_filename))
+    @assert length(extensions) % 5 == 0 # one extension per band for each test case
     extensions, wcs
 end
 
@@ -143,7 +152,8 @@ const BENCHMARK_PARAMETER_LABELS = String[
     "Probability of galaxy",
 ]
 
-function get_field(header::FITSIO.FITSHeader, key::String)
+function get_field(header::FITSIO.FITSHeader, label::String, index::Int64)
+    key = @sprintf("%s%03d", label, index)
     if haskey(header, key)
         header[key]
     else
@@ -168,27 +178,29 @@ function inferred_values(star_galaxy_index, params)
     ]
 end
 
-function get_ground_truth_dataframe(header)
+function get_ground_truth_dataframe(header, source_index)
+    source_field(label) = get_field(header, label, source_index)
     DataFrame(
         label=fill(header["CLDESCR"], length(BENCHMARK_PARAMETER_LABELS)),
+        source=fill(source_index, length(BENCHMARK_PARAMETER_LABELS)),
         field=BENCHMARK_PARAMETER_LABELS,
         ground_truth=Any[
-            get_field(header, "CLX001"),
-            get_field(header, "CLY001"),
-            get_field(header, "CLRTO001"),
-            get_field(header, "CLANG001"),
-            get_field(header, "CLRDP001"),
-            get_field(header, "CLFLX001"),
-            get_field(header, "CLC12001"),
-            get_field(header, "CLC23001"),
-            get_field(header, "CLC34001"),
-            get_field(header, "CLC45001"),
-            header["CLTYP001"] == "star" ? 0 : 1,
+            source_field("CLX"),
+            source_field("CLY"),
+            source_field("CLRTO"),
+            source_field("CLANG"),
+            source_field("CLRDP"),
+            source_field("CLFLX"),
+            source_field("CLC12"),
+            source_field("CLC23"),
+            source_field("CLC34"),
+            source_field("CLC45"),
+            source_field("CLTYP") == "star" ? 0 : 1,
         ]
     )
 end
 
-function error_in_posterior_std_devs(star_galaxy_index, params, header)
+function error_in_posterior_std_devs(star_galaxy_index, params, header, source_index)
     ids = Model.ids
     lognormal_mean_id = vcat(
         [ids.r1[star_galaxy_index]],
@@ -198,11 +210,12 @@ function error_in_posterior_std_devs(star_galaxy_index, params, header)
         [ids.r2[star_galaxy_index]],
         [ids.c2[band, star_galaxy_index] for band in 1:4],
     )
-    ground_truth_key = ["CLFLX001", "CLC12001", "CLC23001", "CLC34001", "CLC45001"]
+    ground_truth_label = ["CLFLX", "CLC12", "CLC23", "CLC34", "CLC45"]
 
     posterior_z_scores = Any[]
     for index in 1:length(lognormal_mean_id)
-        error = abs(params[lognormal_mean_id[index]] - log(get_field(header, ground_truth_key[index])))
+        ground_truth = get_field(header, ground_truth_label[index], source_index)
+        error = abs(params[lognormal_mean_id[index]] - log(ground_truth))
         posterior_sd = sqrt(params[lognormal_var_id[index]])
         push!(posterior_z_scores, error / posterior_sd)
     end
@@ -210,17 +223,17 @@ function error_in_posterior_std_devs(star_galaxy_index, params, header)
     vcat(fill(NA, 5), posterior_z_scores, [NA])
 end
 
-function benchmark_comparison_data(single_infer_params, joint_infer_params, header)
-    star_galaxy_index = header["CLTYP001"] == "star" ? 1 : 2
-    comparison_dataframe = get_ground_truth_dataframe(header)
-    comparison_dataframe[:single_inferred] = inferred_values(star_galaxy_index, single_infer_params)
-    comparison_dataframe[:joint_inferred] = inferred_values(star_galaxy_index, joint_infer_params)
+function benchmark_comparison_data(inferred_params, header, source_index)
+    star_galaxy_index = get_field(header, "CLTYP", source_index) == "star" ? 1 : 2
+    comparison_dataframe = get_ground_truth_dataframe(header, source_index)
+    comparison_dataframe[:estimate] = inferred_values(star_galaxy_index, inferred_params)
     comparison_dataframe[:error_sds] = error_in_posterior_std_devs(
         star_galaxy_index,
-        joint_infer_params,
+        inferred_params,
         header,
+        source_index,
     )
-    comparison_dataframe
+    comparison_dataframe[!isna(comparison_dataframe[:ground_truth]), :]
 end
 
 function assert_counts_match_expected_flux(band_pixels::Vector{Matrix{Float32}},
@@ -229,7 +242,7 @@ function assert_counts_match_expected_flux(band_pixels::Vector{Matrix{Float32}},
     if !header["CLNOISE"]
         expected_flux_nmgy = prod(size(band_pixels[3])) * header["CLSKY"]
         for source_index in 1:header["CLNSRC"]
-            expected_flux_nmgy += header[@sprintf("CLFLX%03d", source_index)]
+            expected_flux_nmgy += get_field(header, "CLFLX", source_index)
         end
         expected_flux_counts = expected_flux_nmgy * iota
         @assert abs(sum(band_pixels[3]) - expected_flux_counts) / expected_flux_counts < 1e-3
@@ -261,8 +274,8 @@ function make_catalog(header::FITSIO.FITSHeader)
             initial_position = [0.005335 for i in 1:2] # center of image
         else
             initial_position = [
-                header[@sprintf("CLX%03d", source_index)],
-                header[@sprintf("CLY%03d", source_index)],
+                get_field(header, "CLX", source_index),
+                get_field(header, "CLY", source_index),
             ]
         end
         push!(catalog, make_catalog_entry(initial_position[1], initial_position[2]))
@@ -270,18 +283,15 @@ function make_catalog(header::FITSIO.FITSHeader)
     catalog
 end
 
-# Returns a data frame with one row for each test case and  parameter name, with columns
+# Returns a data frame with one row for each test case and parameter name, with columns
 # * label: test case name
 # * field: human-readable parameter name
-# * expected: "ground truth" expected value
-# * single_infer_actual: inferred MAP value or posterior median from single-source inference
-# * joint_infer_actual: ditto, for multi-source joint inference
-function main(; test_case_names=String[], print_fn=println,
-              infer_source_callback=DeterministicVI.infer_source)
-    latest_fits_filename = get_latest_fits_filename()
-    extensions, wcs = read_fits(joinpath(GALSIM_BENCHMARK_DIR, "output", latest_fits_filename))
-    @assert length(extensions) % 5 == 0 # one extension per band for each test case
-
+# * ground_truth: value used in GalSim image generation
+# * estimate: inferred MAP value or posterior median from single-source inference
+# * error_sds: absolute error of estimate, divided by posterior standard deviation
+function run_benchmarks(; test_case_names=String[], print_fn=println, joint_inference=false,
+                        infer_source_callback=DeterministicVI.infer_source)
+    extensions, wcs = load_galsim_fits("galsim_benchmarks")
     all_benchmark_data = []
     for test_case_index in 1:div(length(extensions), 5)
         first_band_index = (test_case_index - 1) * 5 + 1
@@ -303,29 +313,33 @@ function main(; test_case_names=String[], print_fn=println,
         images = make_images(band_pixels, psf, wcs, header["CLSKY"], iota)
         catalog = make_catalog(header)
 
-        # we're only scoring one object per image
-        target_sources = [1,]
+        if joint_inference
+            target_sources = collect(1:n_sources)
+        else
+            target_sources = [1,]
+        end
         neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
 
-        target_sources_joint = collect(1:n_sources)
-        neighbor_map_joint = Infer.find_neighbors(target_sources_joint, catalog, images)
+        if joint_inference
+            results = one_node_joint_infer(catalog, target_sources, neighbor_map, images)
+        else
+            results = one_node_single_infer(
+                catalog,
+                target_sources,
+                neighbor_map,
+                images,
+                infer_source_callback=infer_source_callback,
+            )
+        end
 
-        single_results = one_node_single_infer(
-            catalog, target_sources, neighbor_map, images;
-            infer_source_callback=infer_source_callback)
-        joint_results = one_node_joint_infer(catalog, target_sources_joint,
-                                             neighbor_map_joint, images)
-
-        benchmark_data = benchmark_comparison_data(single_results[1].vs,
-                                                   joint_results[1].vs,
-                                                   header)
-        print_fn(repr(benchmark_data))
-        push!(all_benchmark_data, benchmark_data)
+        for source_index in 1:n_sources
+            benchmark_data = benchmark_comparison_data(results[1].vs, header, source_index)
+            print_fn(repr(benchmark_data))
+            push!(all_benchmark_data, benchmark_data)
+        end
     end
 
-    full_data = vcat(all_benchmark_data...)
-    print_fn(repr(full_data[!isna(full_data[:ground_truth]), :]))
-    full_data
+    vcat(all_benchmark_data...)
 end
 
 end # module GalsimBenchmark

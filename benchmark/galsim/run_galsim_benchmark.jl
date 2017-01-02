@@ -21,6 +21,16 @@ for arg in ARGS
     end
 end
 
-GalsimBenchmark.main(
+results = GalsimBenchmark.run_benchmarks(
     test_case_names=test_case_names,
-    infer_source_callback=infer_source_callback)
+    joint_inference=false,
+    infer_source_callback=infer_source_callback,
+)
+joint_results = GalsimBenchmark.run_benchmarks(
+    test_case_names=test_case_names,
+    joint_inference=true,
+)
+
+results[:joint_estimate] = joint_results[:estimate]
+results[:joint_error_sds] = joint_results[:error_sds]
+println(repr(results))
