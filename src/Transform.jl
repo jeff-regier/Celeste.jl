@@ -678,13 +678,12 @@ function get_mp_transform{NumType <: Number}(
         bounds[si][:e_angle] = ParamBox[ ParamBox(-10.0, 10.0, 1.0) ]
         bounds[si][:e_scale] = ParamBox[ ParamBox(0.1, 70., 1.0) ]
 
-        const simplex_min = 0.005
         bounds[si][:a] = Array(SimplexBox, 1)
-        bounds[si][:a][1] = SimplexBox(simplex_min, 1.0, 2)
+        bounds[si][:a][1] = SimplexBox(0.005, 1.0, 2)
 
-        bounds[si][:k] = Array(SimplexBox, D)
-        for d in 1:D
-            bounds[si][:k][d] = SimplexBox(simplex_min, 1.0, 2)
+        bounds[si][:k] = Array(SimplexBox, Ia)
+        for i in 1:Ia
+            bounds[si][:k][i] = SimplexBox(0.01 / D, 1.0, D)
         end
     end
 

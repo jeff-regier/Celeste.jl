@@ -5,6 +5,7 @@
 using FITSIO
 using GaussianMixtures
 using Distributions
+using JLD
 
 
 function mag_to_nanomaggies(mag::Float64)
@@ -24,10 +25,6 @@ function read_r_colors(prior_file)
 	close(fits)
 
 	t2 = table[:,:]
-	for err_col in 8:12
-		t2 = t2[t2[:,err_col] .< median(table[:,err_col]) / 2, :]
-	end
-
 	for b in 2:7
 		t2 = t2[t2[:, b] .> -50, :]
 	end
@@ -64,27 +61,25 @@ end
 if length(ARGS) != 2
     println("usage: gen_priors.jl [catalog.fits] [out_file.dat]")
 else
-    if contains(ARGS[1], "xdcore")
-        c0, r0 = read_quasar_catalog(ARGS[1])
-    else
-        c0, r0 = read_r_colors(ARGS[1])
+    c0, r0 = read_r_colors(ARGS[1])
+    if false && contains(ARGS[1], "stars")
+        c0_quasar, r0_quasar = read_quasar_catalog("xdcore_005972.fits")
+        c0 = vcat(c0, c0_quasar)
+        r0 = vcat(r0, r0_quasar)
     end
 
     fit_r = fit_mle(LogNormal, r0)
     println(fit_r)
 
-    D = 2
+    D = 8
     c0_train = c0
     #c0_test = c0[120001:end, :]
     fit_gmm = GMM(D, c0_train, kind=:full, method=:split)
     println("train avll:", GaussianMixtures.avll(fit_gmm, c0_train))
     #println("test avll:", GaussianMixtures.avll(fit_gmm, c0_test))
 
-    out_file = open(ARGS[2], "w+")
-    serialize(out_file, (
-        params(fit_r),
-        weights(fit_gmm),
-        means(fit_gmm)',
-        vecmat_to_tensor(covars(fit_gmm))))
-    close(out_file)
+    save(ARGS[2], "r_params", params(fit_r),
+        "c_weights", weights(fit_gmm),
+        "c_means", means(fit_gmm)',
+        "c_covs", vecmat_to_tensor(covars(fit_gmm)))
 end

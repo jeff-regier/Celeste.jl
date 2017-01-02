@@ -189,7 +189,7 @@ test_three_body_optimization_fft()
 test_star_optimization_fft()
 test_galaxy_optimization_fft()
 
-test_quadratic_optimization()
+#test_quadratic_optimization()
 test_star_optimization()
 test_single_source_optimization()
 test_full_elbo_optimization()
