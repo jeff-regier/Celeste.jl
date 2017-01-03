@@ -266,6 +266,7 @@ class GalSimTestCase(object):
             ('CLSIGMA', (self.psf_sigma_pixels, 'Gaussian PSF sigma (px)')),
             ('CLBAND', (band_index + 1, 'color band')),
             ('CLNSRC', (len(self._light_sources), 'number of sources')),
+            ('CLRES', (self.image_parameters.degrees_per_pixel(), 'resolution (degrees/px)')),
         ])
         for source_index, light_source in enumerate(self._light_sources):
             index_str = '{:03d}'.format(source_index + 1)
