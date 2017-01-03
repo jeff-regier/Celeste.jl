@@ -1,5 +1,9 @@
+__precompile__()
+
 module GalsimBenchmark
+
 using DataFrames
+using Distributions
 import FITSIO
 import StaticArrays
 import WCS
@@ -180,23 +184,24 @@ end
 
 function get_ground_truth_dataframe(header, source_index)
     source_field(label) = get_field(header, label, source_index)
+    ground_truth = @data(Any[
+        source_field("CLX"),
+        source_field("CLY"),
+        source_field("CLRTO"),
+        source_field("CLANG"),
+        source_field("CLRDP"),
+        source_field("CLFLX"),
+        source_field("CLC12"),
+        source_field("CLC23"),
+        source_field("CLC34"),
+        source_field("CLC45"),
+        source_field("CLTYP") == "star" ? 0 : 1,
+    ])
     DataFrame(
         label=fill(header["CLDESCR"], length(BENCHMARK_PARAMETER_LABELS)),
         source=fill(source_index, length(BENCHMARK_PARAMETER_LABELS)),
         field=BENCHMARK_PARAMETER_LABELS,
-        ground_truth=Any[
-            source_field("CLX"),
-            source_field("CLY"),
-            source_field("CLRTO"),
-            source_field("CLANG"),
-            source_field("CLRDP"),
-            source_field("CLFLX"),
-            source_field("CLC12"),
-            source_field("CLC23"),
-            source_field("CLC34"),
-            source_field("CLC45"),
-            source_field("CLTYP") == "star" ? 0 : 1,
-        ]
+        ground_truth=convert(DataVector{Float64}, ground_truth),
     )
 end
 
@@ -212,7 +217,7 @@ function error_in_posterior_std_devs(star_galaxy_index, params, header, source_i
     )
     ground_truth_label = ["CLFLX", "CLC12", "CLC23", "CLC34", "CLC45"]
 
-    posterior_z_scores = Any[]
+    posterior_z_scores = Float64[]
     for index in 1:length(lognormal_mean_id)
         ground_truth = get_field(header, ground_truth_label[index], source_index)
         error = abs(params[lognormal_mean_id[index]] - log(ground_truth))
@@ -220,7 +225,7 @@ function error_in_posterior_std_devs(star_galaxy_index, params, header, source_i
         push!(posterior_z_scores, error / posterior_sd)
     end
 
-    vcat(fill(NA, 5), posterior_z_scores, [NA])
+    vcat(repeat(@data(Float64[NA]), outer=5), posterior_z_scores, @data(Float64[NA]))
 end
 
 function benchmark_comparison_data(inferred_params, header, source_index)
@@ -269,18 +274,28 @@ end
 function make_catalog(header::FITSIO.FITSHeader)
     catalog = CatalogEntry[]
     num_sources = header["CLNSRC"]
+    degrees_per_pixel = header["CLRES"]
     for source_index in 1:num_sources
-        if num_sources == 1
-            initial_position = [0.005335 for i in 1:2] # center of image
-        else
-            initial_position = [
-                get_field(header, "CLX", source_index),
-                get_field(header, "CLY", source_index),
-            ]
-        end
-        push!(catalog, make_catalog_entry(initial_position[1], initial_position[2]))
+        position_offset = rand(Uniform(-degrees_per_pixel, degrees_per_pixel), 2)
+        catalog_entry = make_catalog_entry(
+            get_field(header, "CLX", source_index) + position_offset[1],
+            get_field(header, "CLY", source_index) + position_offset[2],
+        )
+        push!(catalog, catalog_entry)
     end
     catalog
+end
+
+function make_images_and_catalog(start_index, fits_extensions, wcs, header)
+    psf = make_psf(header["CLSIGMA"])
+    iota = header["CLIOTA"]
+    band_pixels = [
+        fits_extensions[index].pixels for index in start_index:(start_index + 4)
+    ]
+    assert_counts_match_expected_flux(band_pixels, header, iota)
+    images = make_images(band_pixels, psf, wcs, header["CLSKY"], iota)
+    catalog = make_catalog(header)
+    images, catalog
 end
 
 # Returns a data frame with one row for each test case and parameter name, with columns
@@ -301,44 +316,65 @@ function run_benchmarks(; test_case_names=String[], print_fn=println, joint_infe
             continue
         end
         println("Running test case '$this_test_case_name'")
-        iota = header["CLIOTA"]
-        psf = make_psf(header["CLSIGMA"])
-        n_sources = header["CLNSRC"]
+        num_sources = header["CLNSRC"]
 
-        band_pixels = [
-            extensions[index].pixels for index in first_band_index:(first_band_index + 4)
-        ]
-        assert_counts_match_expected_flux(band_pixels, header, iota)
+        images, catalog = make_images_and_catalog(first_band_index, extensions, wcs, header)
 
-        images = make_images(band_pixels, psf, wcs, header["CLSKY"], iota)
-        catalog = make_catalog(header)
-
+        inferred_params = []
         if joint_inference
-            target_sources = collect(1:n_sources)
-        else
-            target_sources = [1,]
-        end
-        neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
-
-        if joint_inference
+            target_sources = collect(1:num_sources)
+            neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
             results = one_node_joint_infer(catalog, target_sources, neighbor_map, images)
+            inferred_params = [results[source_index].vs for source_index in 1:num_sources]
         else
-            results = one_node_single_infer(
-                catalog,
-                target_sources,
-                neighbor_map,
-                images,
-                infer_source_callback=infer_source_callback,
-            )
+            for source_index in 1:num_sources
+                target_sources = [source_index,]
+                neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
+                results = one_node_single_infer(
+                    catalog,
+                    target_sources,
+                    neighbor_map,
+                    images,
+                    infer_source_callback=infer_source_callback,
+                )
+                @assert length(results) == 1
+                push!(inferred_params, results[1].vs)
+            end
         end
 
-        for source_index in 1:n_sources
-            benchmark_data = benchmark_comparison_data(results[1].vs, header, source_index)
+        for source_index in 1:num_sources
+            benchmark_data = benchmark_comparison_data(
+                inferred_params[source_index],
+                header,
+                source_index,
+            )
             print_fn(repr(benchmark_data))
             push!(all_benchmark_data, benchmark_data)
         end
     end
 
+    vcat(all_benchmark_data...)
+end
+
+function run_field()
+    extensions, wcs = load_galsim_fits("galsim_field")
+    header = extensions[1].header
+    num_sources = header["CLNSRC"]
+
+    images, catalog = make_images_and_catalog(1, extensions, wcs, header)
+    target_sources = collect(1:num_sources)
+    neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
+    infer_results = one_node_joint_infer(catalog, target_sources, neighbor_map, images)
+
+    all_benchmark_data = DataFrame[]
+    for source_index in 1:num_sources
+        benchmark_data = benchmark_comparison_data(
+            infer_results[source_index].vs,
+            header,
+            source_index,
+        )
+        push!(all_benchmark_data, benchmark_data)
+    end
     vcat(all_benchmark_data...)
 end
 

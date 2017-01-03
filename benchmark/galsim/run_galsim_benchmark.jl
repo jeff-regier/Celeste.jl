@@ -21,6 +21,8 @@ for arg in ARGS
     end
 end
 
+srand(12345)
+
 results = GalsimBenchmark.run_benchmarks(
     test_case_names=test_case_names,
     joint_inference=false,
