@@ -216,8 +216,8 @@ joint_inference_terminate - whether to terminate once sources seem to be stable
 termination_percent - stop optimization once a certain percentage of sources have been optimized.
 n_iters - number of iterations to optimize. 1 iteration optimizes a full pass over target 
           sources if optimize_fixed_iters=true.
-optimize_fixed_iters - true if should do n_iters full optimization passes over target sources, w
-                       here on each iteration each target source is optimized
+optimize_fixed_iters - true if should do n_iters full optimization passes over target sources,
+                       with each iteration optimizing all sources in target_sources
 
 Returns:
 
