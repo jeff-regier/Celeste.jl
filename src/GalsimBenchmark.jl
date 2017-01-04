@@ -184,7 +184,9 @@ end
 
 function get_ground_truth_dataframe(header, source_index)
     source_field(label) = get_field(header, label, source_index)
-    ground_truth = @data(Any[
+    # this circuitous code seems necessary to construct a DataVector{Float64} with NAs
+    # using @data causes weird bugs -srh
+    ground_truth = DataVector{Any}(Any[
         source_field("CLX"),
         source_field("CLY"),
         source_field("CLRTO"),
@@ -201,7 +203,7 @@ function get_ground_truth_dataframe(header, source_index)
         label=fill(header["CLDESCR"], length(BENCHMARK_PARAMETER_LABELS)),
         source=fill(source_index, length(BENCHMARK_PARAMETER_LABELS)),
         field=BENCHMARK_PARAMETER_LABELS,
-        ground_truth=convert(DataVector{Float64}, ground_truth),
+        ground_truth=DataVector{Float64}(ground_truth)
     )
 end
 
