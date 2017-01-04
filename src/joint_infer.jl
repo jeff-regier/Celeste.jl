@@ -214,6 +214,10 @@ batch_size - size of a single batch of sources for updates
 within_batch_shuffling - whether or not to process sources within a batch randomly
 joint_inference_terminate - whether to terminate once sources seem to be stable
 termination_percent - stop optimization once a certain percentage of sources have been optimized.
+n_iters - number of iterations to optimize. 1 iteration optimizes a full pass over target 
+          sources if optimize_fixed_iters=true.
+optimize_fixed_iters - true if should do n_iters full optimization passes over target sources, w
+                       here on each iteration each target source is optimized
 
 Returns:
 
@@ -225,7 +229,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               batch_size=60,
                               within_batch_shuffling=true,
                               termination_percent=.95,
-                              n_iters=10)
+                              n_iters=10,
+                              optimize_fixed_iters=false)
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
@@ -324,7 +329,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 neighbors_have_converged = neighbors_have_converged && sources_converged[neighbor]
             end
         end
-        return !src_has_converged || !neighbors_have_converged
+        return !src_has_converged || !neighbors_have_converged || optimize_fixed_iters
     end
 
     # Process partition of sources. Multiple threads call this function in parallel.
@@ -395,7 +400,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             end
         end
 
-        if n_sources_converged >= termination_percent * n_sources
+        if n_sources_converged >= termination_percent * n_sources && !optimize_fixed_iters
             break
         end
     end
