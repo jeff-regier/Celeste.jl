@@ -195,7 +195,7 @@ function test_improve_stripe_82_obj_value(; use_fft=false)
 
     # Joint inference obj value
     infer_multi(ctni...) = one_node_joint_infer(ctni...;
-                                                n_iters=3,
+                                                n_iters=30,
                                                 within_batch_shuffling=true,
                                                 use_fft=use_fft)
     result_multi = one_node_infer(rcfs, datadir;
@@ -223,7 +223,7 @@ function test_gradient_is_near_zero_on_stripe_82(; use_fft=false)
     @test !unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_few])
 
     # Make sure joint infer with many iterations passes the gradient near zero check
-    joint_many(cnti...) = one_node_joint_infer(cnti...; use_fft=use_fft, n_iters=3)
+    joint_many(cnti...) = one_node_joint_infer(cnti...; use_fft=use_fft, n_iters=10)
     results_many = one_node_infer(rcfs, datadir; infer_callback=joint_many, primary_initialization=false)
     @test unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_many])
 end

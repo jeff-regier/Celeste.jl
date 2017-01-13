@@ -340,10 +340,6 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                     use_default_optim_params=use_default_optim_params)
             end
         catch ex
-            Log.error(string(ex))
-            println("ERROR: ", ex.msg)
-            catch_stacktrace()
-            exit(-1)
             if is_production_run || nthreads() > 1
                 Log.error(string(ex))
             else
