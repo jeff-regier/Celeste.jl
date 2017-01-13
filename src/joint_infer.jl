@@ -225,7 +225,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               use_fft=false,
                               batch_size=60,
                               within_batch_shuffling=true,
-                              n_iters=10)
+                              n_iters=10,
+                              use_default_optim_params=true)
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
@@ -321,12 +322,10 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             for cur_source_indx in source_assignment
 
                 n_newton_steps = 50
-                use_default_optim_params = true
 
                 # Select optimization method if depending on
                 # whether to use fft or not
                 if use_fft
-                    #use_default_optim_params = false
                     ea = ea_vec[cur_source_indx]
                     fsm_mat = load_fsm_mat(ea, images; use_raw_psf=false)
                     elbo = get_fft_elbo_function(ea, fsm_mat)

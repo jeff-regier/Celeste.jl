@@ -140,15 +140,16 @@ function test_fft_on_one_source_matches_single()
     box = BoundingBox(164.37, 164.38, 39.10, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
 
-    # With batch size = 7
+    # Joint infer. Don't use default optim params since single infer does not.
     infer_joint(ctni...) = one_node_joint_infer(ctni...;
-                                n_iters=1,
-                                use_fft=true)
+                                                n_iters=1,
+                                                use_fft=true,
+                                                use_default_optim_params=false)
     result_infer_joint = one_node_infer(field_triplets, datadir;
                                         infer_callback=infer_joint,
                                         box=box)
 
-    # With batch size = 39
+    # Single infer fft.
     infer_source_callback = DeterministicVIImagePSF.infer_source_fft
     infer_single(ctni...) = one_node_single_infer(ctni...;
                                                   infer_source_callback=infer_source_callback)
