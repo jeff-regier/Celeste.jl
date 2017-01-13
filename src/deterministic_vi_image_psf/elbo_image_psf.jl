@@ -328,16 +328,10 @@ function elbo_likelihood_with_fft!(
 end
 
 
-function initialize_fft_elbo_parameters(
-    images::Vector{Image},
-    vp::VariationalParams{Float64},
-    patches::Matrix{SkyPatch},
-    active_sources::Vector{Int};
-    use_raw_psf=true,
-    use_trimmed_psf=true)
-
-    ea = ElboArgs(images, vp, patches, active_sources, psf_K=1)
-    load_active_pixels!(images, ea.patches; exclude_nan=false)
+function load_fsm_mat(ea::ElboArgs,
+                      images;
+                      use_raw_psf=true,
+                      use_trimmed_psf=true)
     if use_raw_psf
         psf_image_mat = Array{Matrix{Float64}}(ea.S, ea.N)
         for n in 1:ea.N, s in 1:ea.S
@@ -351,16 +345,36 @@ function initialize_fft_elbo_parameters(
         psf_image_mat = Matrix{Float64}[
             get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea.S, b in 1:ea.N]
     end
-
+    
     if use_trimmed_psf
         for n in 1:ea.N, s in 1:ea.S
             psf_image_mat[s, n] = trim_psf(psf_image_mat[s, n])
         end
     end
-
+    
     fsm_mat = FSMSensitiveFloatMatrices[
         FSMSensitiveFloatMatrices() for s in 1:ea.S, n in 1:ea.N]
     initialize_fsm_sf_matrices!(fsm_mat, ea, psf_image_mat)
+    fsm_mat
+end
+
+function initialize_fft_elbo_parameters(
+    images::Vector{Image},
+    vp::VariationalParams{Float64},
+    patches::Matrix{SkyPatch},
+    active_sources::Vector{Int};
+    use_raw_psf=true,
+    use_trimmed_psf=true,
+    allocate_fsm_mat=true)
+
+    ea = ElboArgs(images, vp, patches, active_sources, psf_K=1)
+    load_active_pixels!(images, ea.patches; exclude_nan=false)
+
+    fsm_mat = nothing
+    if allocate_fsm_mat
+        fsm_mat = load_fsm_mat(ea, images; use_raw_psf=use_raw_psf, use_trimmed_psf=use_trimmed_psf)
+    end
+
     ea, fsm_mat
 end
 
