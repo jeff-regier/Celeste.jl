@@ -326,7 +326,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 # Select optimization method if depending on
                 # whether to use fft or not
                 if use_fft
-                    use_default_optim_params = false
+                    #use_default_optim_params = false
                     ea = ea_vec[cur_source_indx]
                     fsm_mat = load_fsm_mat(ea, images; use_raw_psf=false)
                     elbo = get_fft_elbo_function(ea, fsm_mat)
