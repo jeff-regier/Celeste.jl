@@ -192,12 +192,12 @@ function test_gradient_is_near_zero_on_stripe_82(; use_fft=false)
     (rcfs, datadir, target_sources, catalog, images) = load_stripe_82_data()
 
     # Make sure joint infer with few iterations does not pass the gradient near zero check
-    joint_few(cnti...) = one_node_joint_infer(cnti...; termination_percent=.01, use_fft=use_fft)
+    joint_few(cnti...) = one_node_joint_infer(cnti...; use_fft=use_fft)
     results_few = one_node_infer(rcfs, datadir; infer_callback=joint_few, primary_initialization=false)
     @test !unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_few])
 
     # Make sure joint infer with many iterations passes the gradient near zero check
-    joint_many(cnti...) = one_node_joint_infer(cnti...; termination_percent=1, use_fft=use_fft, n_iters=500)
+    joint_many(cnti...) = one_node_joint_infer(cnti...; use_fft=use_fft, n_iters=100)
     results_many = one_node_infer(rcfs, datadir; infer_callback=joint_many, primary_initialization=false)
     @test unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_many])
 end
@@ -224,10 +224,9 @@ function test_gradient_is_near_zero_on_four_sources(; use_fft=false)
     @test !unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in result_few])
 
     infer_many(ctni...) = one_node_joint_infer(ctni...;
-                                               n_iters=500,
+                                               n_iters=100,
                                                within_batch_shuffling=true,
-                                               use_fft=use_fft,
-                                               termination_percent=1)
+                                               use_fft=use_fft)
     result_many = one_node_infer(field_triplets, datadir;
                                  infer_callback=infer_many,
                                  box=box)
