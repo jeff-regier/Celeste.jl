@@ -257,7 +257,6 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
 
     # Pre-allocate dictionary of elboargs, call it ea_vec.
     ea_vec = Array{ElboArgs}(n_sources)
-    fsm_vec = Array{Matrix}(n_sources)    
     
     function initialize_elboargs_sources(sources)
 #        nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for $(length(sources)) sources")
@@ -291,10 +290,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                                                        allocate_fsm_mat=true)
             else
                 ea = ElboArgs(images, vp, patches, [1])
-                _ = 0
             end
 
-            fsm_vec[cur_source_index] = _
             ea_vec[cur_source_index] = ea
         end
     end
@@ -331,8 +328,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 if use_fft
                     use_default_optim_params = false
                     ea = ea_vec[cur_source_indx]
-                    #fsm_mat = load_fsm_mat(ea, images)
-                    fsm_mat = fsm_vec[cur_source_indx]
+                    fsm_mat = load_fsm_mat(ea, images; use_raw_psf=false)
                     elbo = get_fft_elbo_function(ea, fsm_mat)
                 else
                     elbo = DeterministicVI.elbo
