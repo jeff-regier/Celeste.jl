@@ -81,8 +81,7 @@ else
     # alone is primarily useful for debugging.
     if !("--score-only" in ARGS)
         wrap_joint(cnti...) = one_node_joint_infer(cnti...;
-						   use_fft=("--fft" in ARGS),
-                                                   termination_percent=1.00)
+						   use_fft=("--fft" in ARGS))
         source_callback = "--fft" in ARGS ? infer_source_fft : infer_source
         wrap_single(cnti...) = one_node_single_infer(cnti...;
                                       infer_source_callback=source_callback)
