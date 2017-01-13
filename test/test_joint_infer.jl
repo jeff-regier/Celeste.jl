@@ -135,6 +135,32 @@ function compute_obj_value(results,
     DeterministicVI.elbo(ea).v[]
 end
 
+function test_fft_on_one_source_matches_single()
+    # This bounding box has 1 source.
+    box = BoundingBox(164.37, 164.38, 39.10, 39.13)
+    field_triplets = [RunCamcolField(3900, 6, 269),]
+
+    # Joint infer. Don't use default optim params since single infer does not.
+    infer_joint(ctni...) = one_node_joint_infer(ctni...;
+                                                n_iters=1,
+                                                use_fft=true,
+                                                use_default_optim_params=false)
+    result_infer_joint = one_node_infer(field_triplets, datadir;
+                                        infer_callback=infer_joint,
+                                        box=box)
+
+    # Single infer fft.
+    infer_source_callback = DeterministicVIImagePSF.infer_source_fft
+    infer_single(ctni...) = one_node_single_infer(ctni...;
+                                                  infer_source_callback=infer_source_callback)
+    result_infer_single = one_node_infer(field_triplets, datadir;
+                                         infer_callback=infer_single,
+                                         box=box)
+
+    # Make sure that parameters are exactly the same
+    @test compare_vp_params(result_infer_joint, result_infer_single)
+end
+
 """
 load_stripe_82_data
 """
@@ -169,7 +195,7 @@ function test_improve_stripe_82_obj_value(; use_fft=false)
 
     # Joint inference obj value
     infer_multi(ctni...) = one_node_joint_infer(ctni...;
-                                                n_iters=100,
+                                                n_iters=30,
                                                 within_batch_shuffling=true,
                                                 use_fft=use_fft)
     result_multi = one_node_infer(rcfs, datadir;
@@ -197,7 +223,7 @@ function test_gradient_is_near_zero_on_stripe_82(; use_fft=false)
     @test !unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_few])
 
     # Make sure joint infer with many iterations passes the gradient near zero check
-    joint_many(cnti...) = one_node_joint_infer(cnti...; use_fft=use_fft, n_iters=100)
+    joint_many(cnti...) = one_node_joint_infer(cnti...; use_fft=use_fft, n_iters=10)
     results_many = one_node_infer(rcfs, datadir; infer_callback=joint_many, primary_initialization=false)
     @test unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_many])
 end
@@ -324,7 +350,7 @@ function test_one_node_joint_infer_obj_overlapping(;use_fft=false)
     # 100 iterations
     tic()
     infer_multi(ctni...) = one_node_joint_infer(ctni...;
-                                                n_iters=100,
+                                                n_iters=30,
                                                 within_batch_shuffling=true,
                                                 use_fft=use_fft)
     result_multi = one_node_infer(field_triplets, datadir;
@@ -467,6 +493,9 @@ end
 if test_long_running
     test_improve_stripe_82_obj_value()
 end
+
+# Test fft is working
+test_fft_on_one_source_matches_single()
 
 # Test gradients near zero
 test_gradient_is_near_zero_on_four_sources(; use_fft=false)

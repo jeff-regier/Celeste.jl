@@ -225,7 +225,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               use_fft=false,
                               batch_size=60,
                               within_batch_shuffling=true,
-                              n_iters=10)
+                              n_iters=10,
+                              use_default_optim_params=true)
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
@@ -257,7 +258,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
 
     # Pre-allocate dictionary of elboargs, call it ea_vec.
     ea_vec = Array{ElboArgs}(n_sources)
-    fsm_vec = Array{Matrix}(n_sources)
+    
     function initialize_elboargs_sources(sources)
 #        nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for $(length(sources)) sources")
         for cur_source_index in sources
@@ -282,12 +283,12 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
 
             # Switch parameters based on whether or not we're using the fft method
             if use_fft
-                ea, fsm_mat = initialize_fft_elbo_parameters(images,
-                                                             vp,
-                                                             patches,
-                                                             [1],
-                                                             use_raw_psf=false)
-                fsm_vec[cur_source_index] = fsm_mat
+                ea, _ = initialize_fft_elbo_parameters(images,
+                                                       vp,
+                                                       patches,
+                                                       [1],
+                                                       use_raw_psf=false,
+                                                       allocate_fsm_mat=true)
             else
                 ea = ElboArgs(images, vp, patches, [1])
             end
@@ -325,7 +326,9 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 # Select optimization method if depending on
                 # whether to use fft or not
                 if use_fft
-                    elbo = get_fft_elbo_function(ea_vec[cur_source_indx], fsm_vec[cur_source_indx])
+                    ea = ea_vec[cur_source_indx]
+                    fsm_mat = load_fsm_mat(ea, images; use_raw_psf=false)
+                    elbo = get_fft_elbo_function(ea, fsm_mat)
                 else
                     elbo = DeterministicVI.elbo
                 end
@@ -334,7 +337,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                     elbo,
                     ea_vec[cur_source_indx],
                     max_iters=n_newton_steps,
-                    use_default_optim_params=true)
+                    use_default_optim_params=use_default_optim_params)
             end
         catch ex
             if is_production_run || nthreads() > 1
