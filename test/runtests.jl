@@ -69,7 +69,7 @@ end
 for testfile in testfiles
     try
         println("Running ", testfile)
-        include(testfile)
+        @time include(testfile)
         println("\t\033[1m\033[32mPASSED\033[0m: $(testfile)")
     catch e
         anyerrors = true
