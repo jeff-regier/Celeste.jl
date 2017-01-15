@@ -492,13 +492,16 @@ end
 # Stripe 82 tests are long running
 if test_long_running
     test_improve_stripe_82_obj_value()
+
+    # Test gradients near zero (this takes 100 iterations and is a bit slow)
+    test_gradient_is_near_zero_on_four_sources(; use_fft=false)
+
+    # Test that we reach a higher objective with more iterations. This is a bit slow.
+    test_one_node_joint_infer_obj_overlapping()
 end
 
 # Test fft is working
 test_fft_on_one_source_matches_single()
-
-# Test gradients near zero
-test_gradient_is_near_zero_on_four_sources(; use_fft=false)
 
 # Test with using fft
 #test_different_result_with_different_iter(use_fft=true)
@@ -508,7 +511,6 @@ test_gradient_is_near_zero_on_four_sources(; use_fft=false)
 # Test non fft
 test_different_result_with_different_iter()
 test_same_result_with_diff_batch_sizes()
-test_one_node_joint_infer_obj_overlapping()
 
 # Run this multiple times, since the cyclades algorithm shuffles the elements
 # before batching them up.
