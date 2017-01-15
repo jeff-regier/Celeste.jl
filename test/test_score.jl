@@ -6,7 +6,7 @@ function test_score_field()
 
     if !isfile(joinpath(datadir, results_filename))
         results_url = "http://portal.nersc.gov/project/dasrepo/celeste/$results_filename"
-        run(`wget --quiet -O $datadir/$results_filename $results_url`)
+        run(`curl --create-dirs -o $datadir/$results_filename $results_url`)
     end
 
     rcf = RunCamcolField(4263, 5, 119)

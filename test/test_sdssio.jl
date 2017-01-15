@@ -34,13 +34,13 @@ function test_read_photoobj_missing()
     fname = joinpath(Pkg.dir("Celeste"), "test", "data",
                      "photoObj-006597-4-0025.fits")
     if !isfile(fname)
-        run(`wget --quiet -O $(fname) http://data.sdss3.org/sas/dr12/boss/photoObj/301/6597/4/photoObj-006597-4-0025.fits`)
+        run(`curl --create-dirs -o $fname http://data.sdss3.org/sas/dr12/boss/photoObj/301/6597/4/photoObj-006597-4-0025.fits`)
     end
 
     catalog = SDSSIO.read_photoobj(fname)
-
 end
 
+
+test_read_photoobj_missing()
 test_interp_sky()
 test_interp_sky_oob()
-test_read_photoobj_missing()
