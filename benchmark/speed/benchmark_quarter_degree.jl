@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 import Celeste.ParallelRun: BoundingBox, get_overlapping_fields,
-                            one_node_infer, one_node_single_infer
+                            one_node_infer, one_node_joint_infer
 import Celeste.SDSSIO: RunCamcolField
 import Celeste.DeterministicVIImagePSF: infer_source_fft
 import Celeste.DeterministicVI: infer_source
@@ -37,14 +37,13 @@ one-quarter-square-degree region of sky.
 function benchmark_quarter_degree()
     box = BoundingBox(124.0, 124.5, 58.5, 59.0)
 
-    wrap_single(cnti...) = one_node_single_infer(cnti...;
-                                  infer_source_callback=infer_source_fft)
+    wrap_joint(cnti...) = one_node_joint_infer(cnti...; use_fft=true)
 
     warmup_box = BoundingBox(124.2, 124.21, 58.7, 58.71)
     warmup_rcfs = get_overlapping_fields(warmup_box, datadir)
     one_node_infer(warmup_rcfs,
                    datadir;
-                   infer_callback=wrap_single,
+                   infer_callback=wrap_joint,
                    box=warmup_box)
 
     rcfs = get_overlapping_fields(box, datadir)
@@ -53,9 +52,9 @@ function benchmark_quarter_degree()
     Profile.clear_malloc_data()
 
     if isempty(ARGS)
-        @time one_node_infer(rcfs, datadir; infer_callback=wrap_single, box=box)
+        @time one_node_infer(rcfs, datadir; infer_callback=wrap_joint, box=box)
     elseif ARGS[1] == "--profile"
-        @profile one_node_infer(rcfs, datadir; infer_callback=wrap_single, box=box)
+        @profile one_node_infer(rcfs, datadir; infer_callback=wrap_joint, box=box)
         Profile.print(format=:flat, sortedby=:count)
     end
 end

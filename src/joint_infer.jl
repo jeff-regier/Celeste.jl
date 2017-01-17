@@ -225,7 +225,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               use_fft=false,
                               batch_size=60,
                               within_batch_shuffling=true,
-                              n_iters=10,
+                              n_iters=3,
                               use_default_optim_params=true)
     # Seed random number generator to ensure the same results per run.
     srand(42)
