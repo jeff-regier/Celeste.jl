@@ -84,7 +84,7 @@ end
 
 function test_full_elbo_optimization()
     images, ea, body = gen_sample_galaxy_dataset(perturb=true);
-    DeterministicVI.maximize_f(DeterministicVI.elbo, ea; loc_width=1.0, xtol_rel=0.0);
+    DeterministicVI.maximize_f(DeterministicVI.elbo, ea; loc_width=1.0, xtol_abs=0.0);
     verify_sample_galaxy(ea.vp[1], [8.5, 9.6]);
 end
 
@@ -99,7 +99,7 @@ function test_real_stamp_optimization()
     cat_entries = filter(inbounds, cat_entries);
 
     ea = make_elbo_args(images, cat_entries);
-    DeterministicVI.maximize_f(DeterministicVI.elbo, ea; loc_width=1.0, xtol_rel=0.0);
+    DeterministicVI.maximize_f(DeterministicVI.elbo, ea; loc_width=1.0, xtol_abs=0.0);
 end
 
 
@@ -135,7 +135,7 @@ function test_quadratic_optimization()
     ea.vp = convert(VariationalParams{Float64}, [fill(0.5, n) for s in 1:1]);
 
     DeterministicVI.maximize_f(quadratic_function, ea, trans;
-                            xtol_rel=1e-16, ftol_abs=1e-16)
+                            xtol_abs=1e-16, ftol_rel=1e-16)
 
     @test isapprox(ea.vp[1]                  , centers, 1e-6)
     @test isapprox(quadratic_function(ea).v[], 0.0    , 1e-15)

@@ -1,7 +1,5 @@
 module ParallelRun
 
-using Base.Threads
-
 import FITSIO
 import JLD
 
@@ -17,26 +15,90 @@ import ..DeterministicVIImagePSF
 
 include("joint_infer.jl")
 
+#set this to false to use source-division parallelism
+const SKY_DIVISION_PARALLELISM=true
+
+const MIN_FLUX = 2.0
+
 # In production mode, rather the development mode, always catch exceptions
-const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != ""
+const is_production_run = haskey(ENV, "CELESTE_PROD") &&
+                          ENV["CELESTE_PROD"] != ""
 
 # Use distributed parallelism (with Dtree)
-const distributed = haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
-
-if distributed
-import Gasp.nodeid
+if haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
+    const Distributed = true
+    using Dtree
 else
-nodeid = 1
+    const Distributed = false
+    const dt_nodeid = 1
+    const dt_nnodes = 1
+    DtreeScheduler(n, f) = ()
+    initwork(dt) = 0, (1, 0)
+    getwork(dt) = 0, (1, 0)
+    runtree(dt) = 0
+    cpu_pause() = ()
 end
 
-#
-# ------ bounding box ------
+# Use threads (on the loop over sources)
+const Threaded = true
+if Threaded && VERSION > v"0.5.0-dev"
+    using Base.Threads
+else
+    # Pre-Julia 0.5 there are no threads
+    nthreads() = 1
+    threadid() = 1
+    macro threads(x)
+        x
+    end
+    SpinLock() = 1
+    lock(l) = ()
+    unlock(l) = ()
+end
+
+
+# A workitem is of this ra / dec size
+const wira = 0.025
+const widec = 0.025
+
+
+"""
+Timing information.
+"""
+type InferTiming
+    query_fids::Float64
+    num_infers::Int64
+    read_photoobj::Float64
+    read_img::Float64
+    fit_psf::Float64
+    opt_srcs::Float64
+    num_srcs::Int64
+    write_results::Float64
+    wait_done::Float64
+
+    InferTiming() = new(0.0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
+end
+
+
+function add_timing!(i::InferTiming, j::InferTiming)
+    i.query_fids = i.query_fids + j.query_fids
+    i.num_infers = i.num_infers + j.num_infers
+    i.read_photoobj = i.read_photoobj + j.read_photoobj
+    i.read_img = i.read_img + j.read_img
+    i.fit_psf = i.fit_psf + j.fit_psf
+    i.opt_srcs = i.opt_srcs + j.opt_srcs
+    i.num_srcs = i.num_srcs + j.num_srcs
+    i.write_results = i.write_results + j.write_results
+    i.wait_done = i.wait_done + j.wait_done
+end
+
+
 immutable BoundingBox
     ramin::Float64
     ramax::Float64
     decmin::Float64
     decmax::Float64
 end
+
 
 function BoundingBox(ramin::String, ramax::String, decmin::String, decmax::String)
     BoundingBox(parse(Float64, ramin),
@@ -46,52 +108,30 @@ function BoundingBox(ramin::String, ramax::String, decmin::String, decmax::Strin
 end
 
 
-# ------
-# thread-safe print functions
-@inline nputs(nid, s...) = ccall(:puts, Cint, (Cstring,), string("[$nid] ", s...))
-@inline ntputs(nid, tid, s...) = ccall(:puts, Cint, (Cstring,), string("[$nid]<$tid> ", s...))
-
+@inline nputs(nid, s) = ccall(:puts, Cint, (Ptr{Int8},), string("[$nid] ", s))
 @inline phalse(b) = b[] = false
 
 
-# ------
-# timed parts of Celeste
-type InferTiming
-    query_fids::Float64
-    num_infers::Int64
-    read_photoobj::Float64
-    read_img::Float64
-    opt_srcs::Float64
-    num_srcs::Int64
-    write_results::Float64
-    wait_done::Float64
+include("source_division_inference.jl")
 
-    InferTiming() = new(0.0, 0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
+
+"""
+Given a BoundingBox that is to be divided into `nra` x `ndec` subareas,
+return the `i`th subarea. `i` is a linear index between 1 and
+`nra * ndec`.
+
+This function assumes a cartesian (rather than spherical) coordinate system!
+"""
+function divide_skyarea(box, nra, ndec, i)
+    global wira, widec
+    ix, iy = ind2sub((nra, ndec), i)
+
+    return (box.ramin + (ix - 1) * wira,
+            min(box.ramin + ix * wira, box.ramax),
+            box.decmin + (iy - 1) * widec,
+            min(box.decmin + iy * widec, box.decmax))
 end
 
-function add_timing!(i::InferTiming, j::InferTiming)
-    i.query_fids = i.query_fids + j.query_fids
-    i.num_infers = i.num_infers + j.num_infers
-    i.read_photoobj = i.read_photoobj + j.read_photoobj
-    i.read_img = i.read_img + j.read_img
-    i.opt_srcs = i.opt_srcs + j.opt_srcs
-    i.num_srcs = i.num_srcs + j.num_srcs
-    i.write_results = i.write_results + j.write_results
-    i.wait_done = i.wait_done + j.wait_done
-end
-
-function puts_timing(i::InferTiming)
-    i.num_srcs = max(1, i.num_srcs)
-    nputs(nodeid, "timing: query_fids=$(i.query_fids)")
-    nputs(nodeid, "timing: num_infers=$(i.num_infers)")
-    nputs(nodeid, "timing: read_photoobj=$(i.read_photoobj)")
-    nputs(nodeid, "timing: read_img=$(i.read_img)")
-    nputs(nodeid, "timing: opt_srcs=$(i.opt_srcs)")
-    nputs(nodeid, "timing: num_srcs=$(i.num_srcs)")
-    nputs(nodeid, "timing: average opt_srcs=$(i.opt_srcs/i.num_srcs)")
-    nputs(nodeid, "timing: write_results=$(i.write_results)")
-    nputs(nodeid, "timing: wait_done=$(i.wait_done)")
-end
 
 function time_puts(elapsedtime, bytes, gctime, allocs)
     s = @sprintf("%10.6f seconds", elapsedtime/1e9)
@@ -120,7 +160,122 @@ function time_puts(elapsedtime, bytes, gctime, allocs)
     elseif gctime > 0
         s = string(s, @sprintf(", %.2f%% gc time", 100*gctime/elapsedtime))
     end
-    nputs(nodeid, s)
+    nputs(dt_nodeid, s)
+end
+
+
+"""
+Divide `N` into `np` parts as evenly as possible, returning `my` part as
+a (first, last) tuple.
+"""
+function divparts(N, np, my)
+    len, rem = divrem(N, np)
+    if len == 0
+        if my > rem
+            return 1, 0
+        end
+        len, rem = 1, 0
+    end
+    # compute my part
+    f = 1 + ((my-1) * len)
+    l = f + len - 1
+    # distribute remaining evenly
+    if rem > 0
+        if my <= rem
+            f = f + (my-1)
+            l = l + my
+        else
+            f = f + rem
+            l = l + rem
+        end
+    end
+    return f, l
+end
+
+
+"""
+Divide the given ra, dec range into sky areas of `wira`x`widec` and
+use Dtree to distribute these sky areas to nodes. Within each node
+use `one_node_infer()` to fit the Celeste model to sources in each sky area.
+"""
+function divide_sky_and_infer(
+                box::BoundingBox,
+                stagedir::String;
+                timing=InferTiming(),
+                outdir=".")
+    if dt_nodeid == 1
+        nputs(dt_nodeid, "running on $dt_nnodes nodes")
+    end
+
+    # how many `wira` X `widec` sky areas (work items)?
+    global wira, widec
+    nra = ceil(Int64, (box.ramax - box.ramin) / wira)
+    ndec = ceil(Int64, (box.decmax - box.decmin) / widec)
+
+    num_work_items = nra * ndec
+    each = ceil(Int64, num_work_items / dt_nnodes)
+
+    if dt_nodeid == 1
+        nputs(dt_nodeid, "work item dimensions: $wira X $widec")
+        nputs(dt_nodeid, "$num_work_items work items, ~$each per node")
+    end
+
+    # create Dtree and get the initial allocation
+    dt, is_parent = DtreeScheduler(num_work_items, 0.4)
+    ni, (ci, li) = initwork(dt)
+    rundt = Ref(runtree(dt))
+    @inline function rundtree(again)
+        if again[]
+            again[] = runtree(dt)
+            cpu_pause()
+        end
+        again[]
+    end
+
+    # work item processing loop
+    nputs(dt_nodeid, "initially $ni work items ($ci to $li)")
+    itimes = InferTiming()
+    while ni > 0
+        li == 0 && break
+        if ci > li
+            nputs(dt_nodeid, "consumed allocation (last was $li)")
+            ni, (ci, li) = getwork(dt)
+            nputs(dt_nodeid, "got $ni work items ($ci to $li)")
+            continue
+        end
+        item = ci
+        ci = ci + 1
+
+        # map item to subarea
+        iramin, iramax, idecmin, idecmax = divide_skyarea(box, nra, ndec, item)
+
+        # Get vector of (run, camcol, field) triplets overlapping this patch
+        tic()
+        box = BoundingBox(iramin, iramax, idecmin, idecmax)
+        rcfs = get_overlapping_fields(box, stagedir)
+        itimes.query_fids = toq()
+
+        # run inference for this subarea
+        results = one_node_infer(rcfs, stagedir;
+                                 box=BoundingBox(iramin, iramax, idecmin, idecmax),
+                                 reserve_thread=rundt,
+                                 thread_fun=rundtree,
+                                 timing=itimes)
+        tic()
+        save_results(outdir, iramin, iramax, idecmin, idecmax, results)
+        itimes.write_results = toq()
+
+        timing.num_infers = timing.num_infers+1
+        add_timing!(timing, itimes)
+        rundtree(rundt)
+    end
+    nputs(dt_nodeid, "out of work")
+    tic()
+    while rundt[]
+        rundtree(rundt)
+    end
+    finalize(dt)
+    timing.wait_done = toq()
 end
 
 
@@ -128,17 +283,19 @@ function infer_init(rcfs::Vector{RunCamcolField},
                     stagedir::String;
                     objid="",
                     box=BoundingBox(-1000., 1000., -1000., 1000.),
-                    primary_initialization=true,
-                    timing=InferTiming())
+                    target_rcfs=RunCamcolField[],
+                    primary_initialization=true)
     # Read all primary objects in these fields.
     duplicate_policy = primary_initialization ? :primary : :first
-    tic()
     catalog = SDSSIO.read_photoobj_files(rcfs, stagedir,
                         duplicate_policy=duplicate_policy)
-    timing.read_photoobj = toq()
     Log.info("$(length(catalog)) primary sources")
 
-    # Get indices of entries in the RA/Dec range of interest.
+    # Filter out low-flux objects in the catalog.
+    catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
+    Log.info("$(length(catalog)) primary sources after MIN_FLUX cut")
+
+    # Get indicies of entries in the RA/Dec range of interest.
     entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
                              (box.decmin < entry.pos[2] < box.decmax))
     target_sources = find(entry_in_range, catalog)
@@ -146,31 +303,62 @@ function infer_init(rcfs::Vector{RunCamcolField},
     Log.info(string("Found $(length(target_sources)) target sources in ",
           "$(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax)"))
 
+    # For infer-box.jl, target sources are everything in the box.
+    # For infer-rcf.jl, target sources are primary detections in the target rcf.
+    if !isempty(target_rcfs)
+        target_entries = SDSSIO.read_photoobj_files(target_rcfs,
+                                                    stagedir,
+                                                    duplicate_policy=:primary)
+        target_ids = Set([entry.objid for entry in target_entries])
+        target_sources = filter(ts->(catalog[ts].objid in target_ids), target_sources)
+        Log.info("$(length(target_sources)) target light sources after target_rcf cut")
+    end
+
     # Filter any object not specified, if an objid is specified
     if objid != ""
         target_sources = filter(ts->(catalog[ts].objid == objid), target_sources)
         Log.info("$(length(target_sources)) target light sources after objid cut")
     end
 
-    # Load images and neighbor map for target sources
-    images = Image[]
-    neighbor_map = Vector{Int}[]
-    if length(target_sources) > 0
+    return catalog, target_sources
+end
+
+
+"""
+Use mulitple threads on one node to fit the Celeste model to sources in a given
+bounding box.
+"""
+function one_node_infer(rcfs::Vector{RunCamcolField},
+                        stagedir::String;
+                        infer_callback=one_node_single_infer,
+                        objid="",
+                        box=BoundingBox(-1000., 1000., -1000., 1000.),
+                        target_rcfs=RunCamcolField[],
+                        primary_initialization=true)
+    catalog, target_sources = infer_init(rcfs,
+                                 stagedir;
+                                 objid=objid,
+                                 box=box,
+                                 target_rcfs=target_rcfs,
+                                 primary_initialization=primary_initialization)
+
+    # If there are no objects of interest, return early.
+    if length(target_sources) == 0
+        images = Image[]
+        neighbor_map = Vector{Int}[]
+    else
         # Read in images for all (run, camcol, field).
-        try
-            tic()
-            images = SDSSIO.load_field_images(rcfs, stagedir)
-            timing.read_img = toq()
-        catch ex
-            Log.error(string(ex))
-        end
+        images = SDSSIO.load_field_images(rcfs, stagedir)
 
         tic()
         neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
         Log.info("neighbors found in $(toq()) seconds")
     end
 
-    return catalog, target_sources, images, neighbor_map
+    Log.info("Running with $(nthreads()) threads")
+
+    # NB: All I/O happens above. The methods below don't touch disk.
+    infer_callback(catalog, target_sources, neighbor_map, images)
 end
 
 
@@ -183,41 +371,13 @@ immutable OptimizedSource
 end
 
 
-"""
-Optimize the `ts`th element of `sources`.
-"""
-function process_source(ts::Int,
-                        target_sources::Vector{Int},
-                        catalog::Vector{CatalogEntry},
-                        neighbor_map::Vector{Vector{Int}},
-                        images::Vector{Image};
-                        infer_source_callback=infer_source)
-    s = target_sources[ts]
-    entry = catalog[s]
-
-    neighbors = catalog[neighbor_map[ts]]
-
-    ntputs(nodeid, threadid(), "processing objid $(entry.objid)")
-    tic()
-    vs_opt = infer_source_callback(images, neighbors, entry)
-    ntputs(nodeid, threadid(), "processed objid $(entry.objid) in $(toq()) secs")
-    return OptimizedSource(entry.thing_id,
-                           entry.objid,
-                           entry.pos[1],
-                           entry.pos[2],
-                           vs_opt)
-end
-
-
-"""
-Use multiple threads to process each target source with the specified
-callback and write the results to a file.
-"""
 function one_node_single_infer(catalog::Vector{CatalogEntry},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
                                images::Vector{Image};
                                infer_source_callback=infer_source,
+                               reserve_thread=Ref(false),
+                               thread_fun=phalse,
                                timing=InferTiming())
     curr_source = 1
     last_source = length(target_sources)
@@ -229,28 +389,50 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
     function process_sources()
         tid = threadid()
 
-        while true
-            lock(sources_lock)
-            ts = curr_source
-            curr_source += 1
-            unlock(sources_lock)
-            if ts > last_source
-                break
+        if reserve_thread[] && tid == 1
+            while reserve_thread[]
+                thread_fun(reserve_thread)
+                cpu_pause()
             end
+        else
+            while true
+                lock(sources_lock)
+                ts = curr_source
+                curr_source += 1
+                unlock(sources_lock)
+                if ts > last_source
+                    break
+                end
 
-            try
-                result = process_source(ts, target_sources, catalog, neighbor_map,
-                                        images;
-                                        infer_source_callback=infer_source_callback)
+                try
+                    s = target_sources[ts]
+                    entry = catalog[s]
+                    Log.debug("Optimizing source $s [objid $(entry.objid)]")
 
-                lock(results_lock)
-                push!(results, result)
-                unlock(results_lock)
-            catch ex
-                if is_production_run || nthreads() > 1
-                    Log.error(string(ex))
-                else
-                    rethrow(ex)
+                    # could subset images to images_local here too.
+                    neighbors = catalog[neighbor_map[ts]]
+
+                    t0 = time()
+                    vs_opt = infer_source_callback(images, neighbors, entry)
+                    runtime = time() - t0
+
+                    result = OptimizedSource(entry.thing_id,
+                                             entry.objid,
+                                             entry.pos[1],
+                                             entry.pos[2],
+                                             vs_opt)
+                    lock(results_lock)
+                    push!(results, result)
+                    unlock(results_lock)
+
+                    rt1 = round(runtime, 1)
+                    Log.debug("source $s [objid $(entry.objid)] took $rt1 seconds")
+                catch ex
+                    if is_production_run || nthreads() > 1
+                        Log.error(string(ex))
+                    else
+                        rethrow(ex)
+                    end
                 end
             end
         end
@@ -266,31 +448,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
 
-    return results
-end
-
-
-"""
-Use mulitple threads on one node to fit the Celeste model to sources in a given
-bounding box.
-"""
-function one_node_infer(rcfs::Vector{RunCamcolField},
-                        stagedir::String;
-                        infer_callback=one_node_single_infer,
-                        objid="",
-                        box=BoundingBox(-1000., 1000., -1000., 1000.),
-                        primary_initialization=true)
-    catalog, target_sources, images, neighbor_map =
-        infer_init(rcfs,
-                   stagedir;
-                   objid=objid,
-                   box=box,
-                   primary_initialization=primary_initialization)
-
-    Log.info("Running with $(nthreads()) threads")
-
-    # NB: All I/O happens above. The methods below don't touch disk.
-    infer_callback(catalog, target_sources, neighbor_map, images)
+    results
 end
 
 
@@ -341,12 +499,60 @@ function get_overlapping_fields(query::BoundingBox, stagedir::String)
 end
 
 
+immutable UnknownRCF <: Exception
+    rcf::RunCamcolField
+end
+
+
+"""
+This function is called directly from the `bin` directory.
+It optimizes all the primary detections in the specified run-camcol-field,
+using essentially all relevant images. Typically relevant image data includes
+run-camcol-field's in addition to the specified one, that overlap
+with the specified run-camcol-field. I say "essentially" because
+some large light sources may contribute photons to images that do
+not overlap with the rcf containig the center of the light source's
+primary detection, and these images are excluded. This is more of a
+feature than a bug because we need to limit the amount of computation
+per light souce.
+"""
+function infer_rcf(rcf::RunCamcolField,
+                   stagedir::String,
+                   outdir::String;
+                   objid="")
+    whole_sky = BoundingBox(-999, 999, -999, 999)
+    all_fes = get_overlapping_field_extents(whole_sky, stagedir)
+    this_fe = filter(fe->(fe[1] == rcf), all_fes)
+
+    @assert(length(this_fe) <= 1)
+    if isempty(this_fe)
+        throw(UnknownRCF(rcf))
+    end
+
+    rcf_bounds = this_fe[1][2]
+    overlapping_rcfs = get_overlapping_fields(rcf_bounds, stagedir)
+    @assert(rcf in overlapping_rcfs, "$rcf doesn't overlap with itself?")
+
+    tic()
+    println(rcf_bounds)
+    results = one_node_infer(overlapping_rcfs,
+                             stagedir;
+                             objid=objid,  # just for making unit tests run fast
+                             box=rcf_bounds,  # could exclude this argument
+                             target_rcfs=[rcf,])
+    Log.info("Inferred $rcf in $(toq()) seconds")
+
+    fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
+    JLD.save(fname, "results", results)
+end
+
+
 """
 Save provided results to a JLD file.
 """
 function save_results(outdir, ramin, ramax, decmin, decmax, results)
-    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f-node%d.jld",
-                     outdir, ramin, ramax, decmin, decmax, nodeid)
+    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f.jld",
+                     outdir, ramin, ramax, decmin, decmax)
     JLD.save(fname, "results", results)
 end
 
@@ -358,45 +564,6 @@ save_results(outdir, box, results) =
 called from main entry point.
 """
 function infer_box(box::BoundingBox, stagedir::String, outdir::String)
-    times = InferTiming()
-
-    Log.debug("multithreaded parallelism only")
-
-    tic()
-    # Get vector of (run, camcol, field) triplets overlapping this patch
-    rcfs = get_overlapping_fields(box, stagedir)
-    times.query_fids = toq()
-
-    @time results = one_node_infer(rcfs, stagedir; box=box, timing=times)
-
-    tic()
-    save_results(outdir, box, results)
-    times.write_results = toq()
-
-    puts_timing(times)
-end
-
-
-if distributed
-include("multinode_run.jl")
-else
-function multi_node_infer(boxes::Vector{BoundingBox},
-                          stagedir::String;
-                          outdir=".",
-                          primary_initialization=true,
-                          timing=InferTiming())
-    Log.error("distributed functionality is disabled (set USE_DTREE=1 to enable)")
-    exit(-1)
-end
-end
-
-
-"""
-called from main entry point.
-"""
-function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::String)
-    times = InferTiming()
-
     # Base.@time hack for distributed environment
     gc_stats = ()
     gc_diff_stats = ()
@@ -404,7 +571,26 @@ function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::Strin
     gc_stats = Base.gc_num()
     elapsed_time = time_ns()
 
-    multi_node_infer(boxes, stagedir; outdir=outdir, timing=times)
+    times = InferTiming()
+    if !SKY_DIVISION_PARALLELISM
+        Log.debug("source division parallelism")
+        divide_sources_and_infer(box, stagedir; timing=times, outdir=outdir)
+    elseif dt_nnodes > 1
+        Log.debug("sky division parallelism")
+        divide_sky_and_infer(box, stagedir; timing=times, outdir=outdir)
+    else
+        Log.debug("multithreaded parallelism only")
+        tic()
+        # Get vector of (run, camcol, field) triplets overlapping this patch
+        rcfs = get_overlapping_fields(box, stagedir)
+        times.query_fids = toq()
+
+        results = one_node_infer(rcfs, stagedir; box=box, timing=times)
+
+        tic()
+        save_results(outdir, box, results)
+        times.write_results = toq()
+    end
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time
@@ -412,8 +598,17 @@ function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::Strin
     time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
               Base.gc_alloc_count(gc_diff_stats))
 
-    puts_timing(times)
+    times.num_srcs = max(1, times.num_srcs)
+    nputs(dt_nodeid, "timing: query_fids=$(times.query_fids)")
+    nputs(dt_nodeid, "timing: num_infers=$(times.num_infers)")
+    nputs(dt_nodeid, "timing: read_photoobj=$(times.read_photoobj)")
+    nputs(dt_nodeid, "timing: read_img=$(times.read_img)")
+    nputs(dt_nodeid, "timing: fit_psf=$(times.fit_psf)")
+    nputs(dt_nodeid, "timing: opt_srcs=$(times.opt_srcs)")
+    nputs(dt_nodeid, "timing: num_srcs=$(times.num_srcs)")
+    nputs(dt_nodeid, "timing: average opt_srcs=$(times.opt_srcs/times.num_srcs)")
+    nputs(dt_nodeid, "timing: write_results=$(times.write_results)")
+    nputs(dt_nodeid, "timing: wait_done=$(times.wait_done)")
 end
 
 end
-

@@ -10,13 +10,14 @@ import ..DeterministicVI:
     load_source_brightnesses, accumulate_source_pixel_brightness!, ElboArgs,
     populate_fsm!
 import ..Model:
-    linear_world_to_pix, load_bvn_mixtures, ids_names, ids, CatalogEntry
+    linear_world_to_pix, load_bvn_mixtures, ids_names, ids, CatalogEntry, populate_fsm!
 import ..SensitiveFloats.clear!
 import ..DeterministicVIImagePSF:
     FSMSensitiveFloatMatrices
 using ..DeterministicVIImagePSF:
     clear_brightness!, populate_star_fsm_image!, populate_gal_fsm_image!,
     accumulate_source_image_brightness!, load_gal_bvn_mixtures
+using StaticArrays: SVector
 
 import Base.print
 function print(ce::CatalogEntry)
@@ -31,6 +32,7 @@ function print_vp(vp::Vector{Float64})
     s = 1
     df[Symbol(string("v", s))] = vp
     println(df)
+    df
 end
 
 

@@ -1,0 +1,955 @@
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 16.9 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 4.1956e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 3.885e-5 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.536642116
+[1] INFO: Done fitting elboargs. Elapsed time: 41.225997013
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 4.3 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 3.1863e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 2.141e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.00073735
+[1] INFO: Done fitting elboargs. Elapsed time: 45.64319834
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 4.5 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.6429e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.669e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000661357
+[1] INFO: Done fitting elboargs. Elapsed time: 44.797463237
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 3.6 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.5568e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.669e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.00066948
+[1] INFO: Done fitting elboargs. Elapsed time: 41.347471195
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 5.1 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.7601e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 2.058e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000679705
+[1] INFO: Done fitting elboargs. Elapsed time: 48.750901226
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 4.0 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.6963e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.771e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000658478
+[1] INFO: Done fitting elboargs. Elapsed time: 25.203422621
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 2.2 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.8476e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.768e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000648049
+[1] INFO: Done fitting elboargs. Elapsed time: 21.587051613
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 4.6 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.6331e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.72e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000659933
+[1] INFO: Done fitting elboargs. Elapsed time: 44.348618402
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 3.9 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.6375e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.624e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000647292
+[1] INFO: Done fitting elboargs. Elapsed time: 41.388025557
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 4.5 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.9627e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 2.231e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000714716
+[1] INFO: Done fitting elboargs. Elapsed time: 13.005717191
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 3.4 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.6999e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 2.113e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000649162
+[1] INFO: Done fitting elboargs. Elapsed time: 36.086229807
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 4.9 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.9101e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.687e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000688853
+[1] INFO: Done fitting elboargs. Elapsed time: 48.466520575
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 3.6 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 1.7663e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.252e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000442063
+[1] INFO: Done fitting elboargs. Elapsed time: 29.425800919
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 6.1 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.81e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.898e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000653554
+[1] INFO: Done fitting elboargs. Elapsed time: 54.828870729
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 4.4 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.8608e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.765e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000668572
+[1] INFO: Done fitting elboargs. Elapsed time: 39.478789221
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 6.3 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.8159e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.814e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000669386
+[1] INFO: Done fitting elboargs. Elapsed time: 60.324812049
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 7.0 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.9235e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.959e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000722251
+[1] INFO: Done fitting elboargs. Elapsed time: 65.064917065
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 2.2 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 1.7245e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.182e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000419393
+[1] INFO: Done fitting elboargs. Elapsed time: 20.455705715
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 2.0 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.6864e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.496e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000573584
+[1] INFO: Done fitting elboargs. Elapsed time: 20.699484011
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 6.9 seconds
+[1] INFO: Optimizing 2 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 2 vs correct number of sources: 2
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 1.859e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.263e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.001148989
+[1] INFO: Done fitting elboargs. Elapsed time: 129.612150022
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 8.3 seconds
+[1] INFO: Optimizing 2 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 2 vs correct number of sources: 2
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.944e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.53e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.001812117
+[1] INFO: Done fitting elboargs. Elapsed time: 146.637020607
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 6.9 seconds
+[1] INFO: Optimizing 2 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 2 vs correct number of sources: 2
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 1.7842e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.154e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.001108287
+[1] INFO: Done fitting elboargs. Elapsed time: 130.99175438
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 6.7 seconds
+[1] INFO: Optimizing 3 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 3 vs correct number of sources: 3
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 1.9861e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.462e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.0018153
+[1] INFO: Done fitting elboargs. Elapsed time: 181.494527654
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 7.5 seconds
+[1] INFO: Optimizing 3 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 3 vs correct number of sources: 3
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.8405e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.746e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.003253237
+[1] INFO: Done fitting elboargs. Elapsed time: 256.965680491
+[1] DEBUG: Optimizing source 1 [objid sample]
+Looking for latest FITS filename in '/home/rgiordan/.julia/v0.5/Celeste/benchmark/galsim/latest_filenames/latest_galsim_benchmarks.txt'
+Reading '/home/rgiordan/.julia/v0.5/Celeste/benchmark/galsim/output/galsim_benchmarks_0b7bd50da4.fits'...
+Found 130 extensions.
+Running test case 'simple_star'
+11×6 DataFrames.DataFrame
+│ Row │ label         │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼───────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "simple_star" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 2   │ "simple_star" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 3   │ "simple_star" │ "Minor/major axis ratio"     │ NA           │ 0.949057        │ 0.0739317      │ NA         │
+│ 4   │ "simple_star" │ "Angle (degrees)"            │ NA           │ 180.0           │ 5.59778e-12    │ NA         │
+│ 5   │ "simple_star" │ "Half-light radius (pixels)" │ NA           │ 0.381019        │ 0.11385        │ NA         │
+│ 6   │ "simple_star" │ "Brightness (nMgy)"          │ 40           │ 39.972          │ 39.972         │ 0.0699695  │
+│ 7   │ "simple_star" │ "Color band 1-2 ratio"       │ 3.99098      │ 3.99779         │ 3.99779        │ 0.099409   │
+│ 8   │ "simple_star" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88464         │ 1.88464        │ 0.0367739  │
+│ 9   │ "simple_star" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31783         │ 1.31783        │ 0.00505262 │
+│ 10  │ "simple_star" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.16976         │ 1.16976        │ 0.00462879 │
+│ 11  │ "simple_star" │ "Probability of galaxy"      │ 0            │ 0.0054509       │ 0.005019       │ NA         │
+Running test case 'star_position_1'
+11×6 DataFrames.DataFrame
+│ Row │ label             │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼───────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "star_position_1" │ "X center (world coords)"    │ 0.00477944   │ 0.005235        │ 0.00477944     │ NA         │
+│ 2   │ "star_position_1" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 3   │ "star_position_1" │ "Minor/major axis ratio"     │ NA           │ 0.194872        │ 0.686969       │ NA         │
+│ 4   │ "star_position_1" │ "Angle (degrees)"            │ NA           │ 0.0             │ 180.0          │ NA         │
+│ 5   │ "star_position_1" │ "Half-light radius (pixels)" │ NA           │ 3.02261         │ 0.264023       │ NA         │
+│ 6   │ "star_position_1" │ "Brightness (nMgy)"          │ 40           │ 32.9586         │ 39.9715        │ 0.0711858  │
+│ 7   │ "star_position_1" │ "Color band 1-2 ratio"       │ 3.99098      │ 4.08718         │ 3.99747        │ 0.094597   │
+│ 8   │ "star_position_1" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.89191         │ 1.8846         │ 0.0345357  │
+│ 9   │ "star_position_1" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31747         │ 1.31783        │ 0.00507925 │
+│ 10  │ "star_position_1" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.16921         │ 1.16976        │ 0.00480085 │
+│ 11  │ "star_position_1" │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.995          │ NA         │
+Running test case 'star_position_2'
+11×6 DataFrames.DataFrame
+│ Row │ label             │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼───────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "star_position_2" │ "X center (world coords)"    │ 0.005335     │ 0.00533452      │ 0.005335       │ NA         │
+│ 2   │ "star_position_2" │ "Y center (world coords)"    │ 0.00589056   │ 0.00543201      │ 0.00589056     │ NA         │
+│ 3   │ "star_position_2" │ "Minor/major axis ratio"     │ NA           │ 0.196849        │ 0.644556       │ NA         │
+│ 4   │ "star_position_2" │ "Angle (degrees)"            │ NA           │ 89.9357         │ 90.0           │ NA         │
+│ 5   │ "star_position_2" │ "Half-light radius (pixels)" │ NA           │ 3.03202         │ 0.263843       │ NA         │
+│ 6   │ "star_position_2" │ "Brightness (nMgy)"          │ 40           │ 32.7639         │ 39.9715        │ 0.0713174  │
+│ 7   │ "star_position_2" │ "Color band 1-2 ratio"       │ 3.99098      │ 4.12165         │ 3.99747        │ 0.0945613  │
+│ 8   │ "star_position_2" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.90549         │ 1.8846         │ 0.0345241  │
+│ 9   │ "star_position_2" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.29814         │ 1.31783        │ 0.00507016 │
+│ 10  │ "star_position_2" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.15299         │ 1.16976        │ 0.00478278 │
+│ 11  │ "star_position_2" │ "Probability of galaxy"      │ 0            │ 0.982204        │ 0.995          │ NA         │
+Running test case 'dim_star'
+11×6 DataFrames.DataFrame
+│ Row │ label      │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "dim_star" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 2   │ "dim_star" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 3   │ "dim_star" │ "Minor/major axis ratio"     │ NA           │ 0.818936        │ 0.629042       │ NA         │
+│ 4   │ "dim_star" │ "Angle (degrees)"            │ NA           │ 180.0           │ 180.0          │ NA         │
+│ 5   │ "dim_star" │ "Half-light radius (pixels)" │ NA           │ 0.232478        │ 0.361092       │ NA         │
+│ 6   │ "dim_star" │ "Brightness (nMgy)"          │ 20           │ 19.9682         │ 19.9821        │ 0.0895167  │
+│ 7   │ "dim_star" │ "Color band 1-2 ratio"       │ 3.99098      │ 4.03175         │ 4.00325        │ 0.112076   │
+│ 8   │ "dim_star" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88998         │ 1.88487        │ 0.0479003  │
+│ 9   │ "dim_star" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.3167          │ 1.31771        │ 0.0145092  │
+│ 10  │ "dim_star" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.16827         │ 1.16972        │ 0.00834928 │
+│ 11  │ "dim_star" │ "Probability of galaxy"      │ 0            │ 0.994427        │ 0.00504296     │ NA         │
+Running test case 'bright_star'
+11×6 DataFrames.DataFrame
+│ Row │ label         │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼───────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "bright_star" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 2   │ "bright_star" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 3   │ "bright_star" │ "Minor/major axis ratio"     │ NA           │ 0.527222        │ 0.819847       │ NA         │
+│ 4   │ "bright_star" │ "Angle (degrees)"            │ NA           │ 180.0           │ 180.0          │ NA         │
+│ 5   │ "bright_star" │ "Half-light radius (pixels)" │ NA           │ 0.248108        │ 0.336394       │ NA         │
+│ 6   │ "bright_star" │ "Brightness (nMgy)"          │ 80           │ 79.9588         │ 79.9589        │ 0.0514166  │
+│ 7   │ "bright_star" │ "Color band 1-2 ratio"       │ 3.99098      │ 3.99521         │ 3.99512        │ 0.093288   │
+│ 8   │ "bright_star" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88448         │ 1.88448        │ 0.0279969  │
+│ 9   │ "bright_star" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31787         │ 1.31787        │ 0.00243375 │
+│ 10  │ "bright_star" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.16977         │ 1.16977        │ 0.00358872 │
+│ 11  │ "bright_star" │ "Probability of galaxy"      │ 0            │ 0.00678495      │ 0.00514296     │ NA         │
+Running test case 'different_color_star'
+11×6 DataFrames.DataFrame
+│ Row │ label                  │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds   │
+├─────┼────────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼─────────────┤
+│ 1   │ "different_color_star" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 2   │ "different_color_star" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 3   │ "different_color_star" │ "Minor/major axis ratio"     │ NA           │ 0.863273        │ 0.863245       │ NA          │
+│ 4   │ "different_color_star" │ "Angle (degrees)"            │ NA           │ 180.0           │ 180.0          │ NA          │
+│ 5   │ "different_color_star" │ "Half-light radius (pixels)" │ NA           │ 0.296529        │ 0.296535       │ NA          │
+│ 6   │ "different_color_star" │ "Brightness (nMgy)"          │ 40           │ 39.97           │ 39.97          │ 0.0749542   │
+│ 7   │ "different_color_star" │ "Color band 1-2 ratio"       │ 4.0          │ 4.00309         │ 4.00309        │ 0.0581976   │
+│ 8   │ "different_color_star" │ "Color band 2-3 ratio"       │ 1.25         │ 1.25033         │ 1.25033        │ 0.0265162   │
+│ 9   │ "different_color_star" │ "Color band 3-4 ratio"       │ 1.6          │ 1.60002         │ 1.60002        │ 0.00108414  │
+│ 10  │ "different_color_star" │ "Color band 4-5 ratio"       │ 0.8125       │ 0.812505        │ 0.812505       │ 0.000619091 │
+│ 11  │ "different_color_star" │ "Probability of galaxy"      │ 0            │ 0.0509859       │ 0.0509658      │ NA          │
+Running test case 'star_with_noise'
+11×6 DataFrames.DataFrame
+│ Row │ label             │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼───────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "star_with_noise" │ "X center (world coords)"    │ 0.00505722   │ 0.005235        │ 0.00505668     │ NA        │
+│ 2   │ "star_with_noise" │ "Y center (world coords)"    │ 0.00561278   │ 0.005435        │ 0.00561395     │ NA        │
+│ 3   │ "star_with_noise" │ "Minor/major axis ratio"     │ NA           │ 0.0100003       │ 0.0100373      │ NA        │
+│ 4   │ "star_with_noise" │ "Angle (degrees)"            │ NA           │ 134.015         │ 118.246        │ NA        │
+│ 5   │ "star_with_noise" │ "Half-light radius (pixels)" │ NA           │ 0.251497        │ 0.0542038      │ NA        │
+│ 6   │ "star_with_noise" │ "Brightness (nMgy)"          │ 20           │ 18.5582         │ 20.0798        │ 0.398007  │
+│ 7   │ "star_with_noise" │ "Color band 1-2 ratio"       │ 3.99098      │ 4.1781          │ 4.10901        │ 0.491044  │
+│ 8   │ "star_with_noise" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.9208          │ 1.88792        │ 0.125246  │
+│ 9   │ "star_with_noise" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.32412         │ 1.31447        │ 0.260601  │
+│ 10  │ "star_with_noise" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.17229         │ 1.16631        │ 0.299434  │
+│ 11  │ "star_with_noise" │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.995          │ NA        │
+Running test case 'angle_and_axis_ratio_1'
+11×6 DataFrames.DataFrame
+│ Row │ label                    │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼──────────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "angle_and_axis_ratio_1" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 2   │ "angle_and_axis_ratio_1" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 3   │ "angle_and_axis_ratio_1" │ "Minor/major axis ratio"     │ 0.2          │ 0.205574        │ 0.205574       │ NA         │
+│ 4   │ "angle_and_axis_ratio_1" │ "Angle (degrees)"            │ 15           │ 15.0012         │ 15.0012        │ NA         │
+│ 5   │ "angle_and_axis_ratio_1" │ "Half-light radius (pixels)" │ 3.78788      │ 3.56592         │ 3.56592        │ NA         │
+│ 6   │ "angle_and_axis_ratio_1" │ "Brightness (nMgy)"          │ 10           │ 9.89974         │ 9.89974        │ 1.00764    │
+│ 7   │ "angle_and_axis_ratio_1" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24566         │ 1.24566        │ 0.0662323  │
+│ 8   │ "angle_and_axis_ratio_1" │ "Color band 2-3 ratio"       │ 2.00401      │ 2.0079          │ 2.0079         │ 0.113803   │
+│ 9   │ "angle_and_axis_ratio_1" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40296         │ 1.40296        │ 0.00987492 │
+│ 10  │ "angle_and_axis_ratio_1" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26593         │ 1.26593        │ 0.0692369  │
+│ 11  │ "angle_and_axis_ratio_1" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA         │
+Running test case 'angle_and_axis_ratio_2'
+11×6 DataFrames.DataFrame
+│ Row │ label                    │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼──────────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "angle_and_axis_ratio_2" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 2   │ "angle_and_axis_ratio_2" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 3   │ "angle_and_axis_ratio_2" │ "Minor/major axis ratio"     │ 0.4          │ 0.407493        │ 0.407493       │ NA        │
+│ 4   │ "angle_and_axis_ratio_2" │ "Angle (degrees)"            │ 160          │ 160.0           │ 160.0          │ NA        │
+│ 5   │ "angle_and_axis_ratio_2" │ "Half-light radius (pixels)" │ 3.78788      │ 3.57244         │ 3.57244        │ NA        │
+│ 6   │ "angle_and_axis_ratio_2" │ "Brightness (nMgy)"          │ 10           │ 9.91674         │ 9.91674        │ 0.836103  │
+│ 7   │ "angle_and_axis_ratio_2" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.2451          │ 1.2451         │ 0.0525494 │
+│ 8   │ "angle_and_axis_ratio_2" │ "Color band 2-3 ratio"       │ 2.00401      │ 2.00641         │ 2.00641        │ 0.0742112 │
+│ 9   │ "angle_and_axis_ratio_2" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40274         │ 1.40274        │ 0.0254402 │
+│ 10  │ "angle_and_axis_ratio_2" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26569         │ 1.26569        │ 0.0497187 │
+│ 11  │ "angle_and_axis_ratio_2" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA        │
+Running test case 'round_galaxy'
+11×6 DataFrames.DataFrame
+│ Row │ label          │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "round_galaxy" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 2   │ "round_galaxy" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 3   │ "round_galaxy" │ "Minor/major axis ratio"     │ 1            │ 0.979207        │ 0.99           │ NA        │
+│ 4   │ "round_galaxy" │ "Angle (degrees)"            │ 0            │ 1.2193e-10      │ 135.0          │ NA        │
+│ 5   │ "round_galaxy" │ "Half-light radius (pixels)" │ 3.78788      │ 3.61831         │ 3.5724         │ NA        │
+│ 6   │ "round_galaxy" │ "Brightness (nMgy)"          │ 10           │ 10.0351         │ 9.92634        │ 0.739314  │
+│ 7   │ "round_galaxy" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24554         │ 1.24488        │ 0.0466782 │
+│ 8   │ "round_galaxy" │ "Color band 2-3 ratio"       │ 2.00401      │ 2.00607         │ 2.00579        │ 0.0565701 │
+│ 9   │ "round_galaxy" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40246         │ 1.40259        │ 0.0360593 │
+│ 10  │ "round_galaxy" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.2652          │ 1.26559        │ 0.0422856 │
+│ 11  │ "round_galaxy" │ "Probability of galaxy"      │ 1            │ 0.994574        │ 0.995          │ NA        │
+Running test case 'small_galaxy'
+11×6 DataFrames.DataFrame
+│ Row │ label          │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "small_galaxy" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 2   │ "small_galaxy" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 3   │ "small_galaxy" │ "Minor/major axis ratio"     │ 0.4          │ 0.409094        │ 0.409094       │ NA        │
+│ 4   │ "small_galaxy" │ "Angle (degrees)"            │ 0            │ 0.0             │ 0.0            │ NA        │
+│ 5   │ "small_galaxy" │ "Half-light radius (pixels)" │ 1.89394      │ 1.82554         │ 1.82554        │ NA        │
+│ 6   │ "small_galaxy" │ "Brightness (nMgy)"          │ 10           │ 10.0096         │ 10.0096        │ 0.0955071 │
+│ 7   │ "small_galaxy" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24464         │ 1.24464        │ 0.0427007 │
+│ 8   │ "small_galaxy" │ "Color band 2-3 ratio"       │ 2.00401      │ 2.00529         │ 2.00529        │ 0.0446383 │
+│ 9   │ "small_galaxy" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.4024          │ 1.4024         │ 0.0495802 │
+│ 10  │ "small_galaxy" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26534         │ 1.26534        │ 0.0228005 │
+│ 11  │ "small_galaxy" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA        │
+Running test case 'large_galaxy'
+11×6 DataFrames.DataFrame
+│ Row │ label          │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "large_galaxy" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 2   │ "large_galaxy" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 3   │ "large_galaxy" │ "Minor/major axis ratio"     │ 0.4          │ 0.405836        │ 0.405836       │ NA        │
+│ 4   │ "large_galaxy" │ "Angle (degrees)"            │ 0            │ 0.0             │ 0.0            │ NA        │
+│ 5   │ "large_galaxy" │ "Half-light radius (pixels)" │ 6.31313      │ 5.82775         │ 5.82775        │ NA        │
+│ 6   │ "large_galaxy" │ "Brightness (nMgy)"          │ 10           │ 9.81655         │ 9.81655        │ 1.85148   │
+│ 7   │ "large_galaxy" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24707         │ 1.24707        │ 0.092809  │
+│ 8   │ "large_galaxy" │ "Color band 2-3 ratio"       │ 2.00401      │ 2.01122         │ 2.01122        │ 0.182085  │
+│ 9   │ "large_galaxy" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.4035          │ 1.4035         │ 0.0287291 │
+│ 10  │ "large_galaxy" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26634         │ 1.26634        │ 0.101545  │
+│ 11  │ "large_galaxy" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA        │
+Running test case 'dim_galaxy'
+11×6 DataFrames.DataFrame
+│ Row │ label        │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼──────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "dim_galaxy" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 2   │ "dim_galaxy" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 3   │ "dim_galaxy" │ "Minor/major axis ratio"     │ 0.4          │ 0.410528        │ 0.410528       │ NA        │
+│ 4   │ "dim_galaxy" │ "Angle (degrees)"            │ 0            │ 0.0             │ 0.0            │ NA        │
+│ 5   │ "dim_galaxy" │ "Half-light radius (pixels)" │ 3.78788      │ 3.50899         │ 3.50899        │ NA        │
+│ 6   │ "dim_galaxy" │ "Brightness (nMgy)"          │ 5            │ 4.91889         │ 4.91889        │ 1.63546   │
+│ 7   │ "dim_galaxy" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24884         │ 1.24884        │ 0.0970555 │
+│ 8   │ "dim_galaxy" │ "Color band 2-3 ratio"       │ 2.00401      │ 2.01284         │ 2.01284        │ 0.155003  │
+│ 9   │ "dim_galaxy" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40221         │ 1.40221        │ 0.0598193 │
+│ 10  │ "dim_galaxy" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26685         │ 1.26685        │ 0.101995  │
+│ 11  │ "dim_galaxy" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA        │
+Running test case 'bright_galaxy'
+11×6 DataFrames.DataFrame
+│ Row │ label           │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼─────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "bright_galaxy" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 2   │ "bright_galaxy" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 3   │ "bright_galaxy" │ "Minor/major axis ratio"     │ 0.4          │ 0.405852        │ 0.405852       │ NA         │
+│ 4   │ "bright_galaxy" │ "Angle (degrees)"            │ 0            │ 0.0             │ 0.0            │ NA         │
+│ 5   │ "bright_galaxy" │ "Half-light radius (pixels)" │ 3.78788      │ 3.59967         │ 3.59967        │ NA         │
+│ 6   │ "bright_galaxy" │ "Brightness (nMgy)"          │ 20           │ 19.9115         │ 19.9115        │ 0.443419   │
+│ 7   │ "bright_galaxy" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24397         │ 1.24397        │ 0.0275411  │
+│ 8   │ "bright_galaxy" │ "Color band 2-3 ratio"       │ 2.00401      │ 2.0049          │ 2.0049         │ 0.0444499  │
+│ 9   │ "bright_galaxy" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40302         │ 1.40302        │ 0.00605013 │
+│ 10  │ "bright_galaxy" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26534         │ 1.26534        │ 0.0227547  │
+│ 11  │ "bright_galaxy" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA         │
+Running test case 'different_color_galaxy'
+11×6 DataFrames.DataFrame
+│ Row │ label                    │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼──────────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "different_color_galaxy" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 2   │ "different_color_galaxy" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA        │
+│ 3   │ "different_color_galaxy" │ "Minor/major axis ratio"     │ 0.4          │ 0.407431        │ 0.407431       │ NA        │
+│ 4   │ "different_color_galaxy" │ "Angle (degrees)"            │ 0            │ 0.0             │ 0.0            │ NA        │
+│ 5   │ "different_color_galaxy" │ "Half-light radius (pixels)" │ 3.78788      │ 3.57387         │ 3.57387        │ NA        │
+│ 6   │ "different_color_galaxy" │ "Brightness (nMgy)"          │ 10           │ 9.90602         │ 9.90602        │ 0.944238  │
+│ 7   │ "different_color_galaxy" │ "Color band 1-2 ratio"       │ 0.333333     │ 0.335266        │ 0.335266       │ 0.314352  │
+│ 8   │ "different_color_galaxy" │ "Color band 2-3 ratio"       │ 5.0          │ 4.9715          │ 4.9715         │ 0.336624  │
+│ 9   │ "different_color_galaxy" │ "Color band 3-4 ratio"       │ 1.1          │ 1.10138         │ 1.10138        │ 0.125723  │
+│ 10  │ "different_color_galaxy" │ "Color band 4-5 ratio"       │ 1.81818      │ 1.81866         │ 1.81866        │ 0.0262995 │
+│ 11  │ "different_color_galaxy" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA        │
+Running test case 'galaxy_with_all'
+11×6 DataFrames.DataFrame
+│ Row │ label             │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼───────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "galaxy_with_all" │ "X center (world coords)"    │ 0.00541833   │ 0.005435        │ 0.00541833     │ NA        │
+│ 2   │ "galaxy_with_all" │ "Y center (world coords)"    │ 0.00514056   │ 0.005235        │ 0.00514056     │ NA        │
+│ 3   │ "galaxy_with_all" │ "Minor/major axis ratio"     │ 0.4          │ 0.424124        │ 0.403993       │ NA        │
+│ 4   │ "galaxy_with_all" │ "Angle (degrees)"            │ 15           │ 15.5486         │ 14.9995        │ NA        │
+│ 5   │ "galaxy_with_all" │ "Half-light radius (pixels)" │ 6.31313      │ 6.09006         │ 5.8805         │ NA        │
+│ 6   │ "galaxy_with_all" │ "Brightness (nMgy)"          │ 15           │ 15.0057         │ 14.8103        │ 1.27284   │
+│ 7   │ "galaxy_with_all" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24412         │ 1.24509        │ 0.0603572 │
+│ 8   │ "galaxy_with_all" │ "Color band 2-3 ratio"       │ 2.00401      │ 2.00051         │ 2.00708        │ 0.110528  │
+│ 9   │ "galaxy_with_all" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40083         │ 1.40322        │ 0.0085186 │
+│ 10  │ "galaxy_with_all" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26423         │ 1.2657         │ 0.0511821 │
+│ 11  │ "galaxy_with_all" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA        │
+Running test case 'galaxy_with_noise'
+11×6 DataFrames.DataFrame
+│ Row │ label               │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼─────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "galaxy_with_noise" │ "X center (world coords)"    │ 0.00541833   │ 0.005435        │ 0.00541524     │ NA        │
+│ 2   │ "galaxy_with_noise" │ "Y center (world coords)"    │ 0.00514056   │ 0.005235        │ 0.00513466     │ NA        │
+│ 3   │ "galaxy_with_noise" │ "Minor/major axis ratio"     │ 0.4          │ 0.478599        │ 0.455648       │ NA        │
+│ 4   │ "galaxy_with_noise" │ "Angle (degrees)"            │ 15           │ 18.0965         │ 17.0867        │ NA        │
+│ 5   │ "galaxy_with_noise" │ "Half-light radius (pixels)" │ 6.31313      │ 11.2775         │ 10.8066        │ NA        │
+│ 6   │ "galaxy_with_noise" │ "Brightness (nMgy)"          │ 15           │ 23.5542         │ 22.8577        │ 42.1237   │
+│ 7   │ "galaxy_with_noise" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24493         │ 1.24444        │ 0.0377751 │
+│ 8   │ "galaxy_with_noise" │ "Color band 2-3 ratio"       │ 2.00401      │ 1.88811         │ 1.89015        │ 4.40168   │
+│ 9   │ "galaxy_with_noise" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.33188         │ 1.33476        │ 4.99342   │
+│ 10  │ "galaxy_with_noise" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.23774         │ 1.23974        │ 2.02158   │
+│ 11  │ "galaxy_with_noise" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA        │
+Running test case 'galaxy_with_low_background'
+11×6 DataFrames.DataFrame
+│ Row │ label                        │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼──────────────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "galaxy_with_low_background" │ "X center (world coords)"    │ 0.00541833   │ 0.005435        │ 0.00542721     │ NA        │
+│ 2   │ "galaxy_with_low_background" │ "Y center (world coords)"    │ 0.00514056   │ 0.005235        │ 0.00512794     │ NA        │
+│ 3   │ "galaxy_with_low_background" │ "Minor/major axis ratio"     │ 0.4          │ 0.396703        │ 0.446214       │ NA        │
+│ 4   │ "galaxy_with_low_background" │ "Angle (degrees)"            │ 15           │ 18.7487         │ 16.2808        │ NA        │
+│ 5   │ "galaxy_with_low_background" │ "Half-light radius (pixels)" │ 6.31313      │ 5.0657          │ 5.43741        │ NA        │
+│ 6   │ "galaxy_with_low_background" │ "Brightness (nMgy)"          │ 15           │ 12.9442         │ 13.6623        │ 9.3409    │
+│ 7   │ "galaxy_with_low_background" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.25844         │ 1.26205        │ 0.276163  │
+│ 8   │ "galaxy_with_low_background" │ "Color band 2-3 ratio"       │ 2.00401      │ 1.92683         │ 1.92951        │ 1.13296   │
+│ 9   │ "galaxy_with_low_background" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.49833         │ 1.49408        │ 5.71079   │
+│ 10  │ "galaxy_with_low_background" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.20441         │ 1.20722        │ 3.23441   │
+│ 11  │ "galaxy_with_low_background" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA        │
+Running test case 'galaxy_with_high_background'
+11×6 DataFrames.DataFrame
+│ Row │ label                         │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼───────────────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "galaxy_with_high_background" │ "X center (world coords)"    │ 0.00541833   │ 0.00539836      │ 0.00537487     │ NA        │
+│ 2   │ "galaxy_with_high_background" │ "Y center (world coords)"    │ 0.00514056   │ 0.005235        │ 0.00511495     │ NA        │
+│ 3   │ "galaxy_with_high_background" │ "Minor/major axis ratio"     │ 0.4          │ 0.571161        │ 0.642892       │ NA        │
+│ 4   │ "galaxy_with_high_background" │ "Angle (degrees)"            │ 15           │ 13.7033         │ 12.959         │ NA        │
+│ 5   │ "galaxy_with_high_background" │ "Half-light radius (pixels)" │ 6.31313      │ 4.49556         │ 4.82714        │ NA        │
+│ 6   │ "galaxy_with_high_background" │ "Brightness (nMgy)"          │ 15           │ 11.0425         │ 11.7178        │ 15.9008   │
+│ 7   │ "galaxy_with_high_background" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.22435         │ 1.23811        │ 0.0413799 │
+│ 8   │ "galaxy_with_high_background" │ "Color band 2-3 ratio"       │ 2.00401      │ 2.28976         │ 2.29697        │ 2.16404   │
+│ 9   │ "galaxy_with_high_background" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.44425         │ 1.44623        │ 1.76056   │
+│ 10  │ "galaxy_with_high_background" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.23409         │ 1.23073        │ 1.22423   │
+│ 11  │ "galaxy_with_high_background" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA        │
+Running test case 'overlapping_stars'
+11×6 DataFrames.DataFrame
+│ Row │ label               │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼─────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "overlapping_stars" │ "X center (world coords)"    │ 0.00450167   │ 0.00460167      │ 0.00450112     │ NA         │
+│ 2   │ "overlapping_stars" │ "Y center (world coords)"    │ 0.005335     │ 0.00533532      │ 0.005335       │ NA         │
+│ 3   │ "overlapping_stars" │ "Minor/major axis ratio"     │ NA           │ 0.0346784       │ 0.0100083      │ NA         │
+│ 4   │ "overlapping_stars" │ "Angle (degrees)"            │ NA           │ 179.98          │ 90.0           │ NA         │
+│ 5   │ "overlapping_stars" │ "Half-light radius (pixels)" │ NA           │ 5.37855         │ 0.0420833      │ NA         │
+│ 6   │ "overlapping_stars" │ "Brightness (nMgy)"          │ 40           │ 37.8855         │ 39.9484        │ 0.129094   │
+│ 7   │ "overlapping_stars" │ "Color band 1-2 ratio"       │ 3.99098      │ 3.92753         │ 3.99713        │ 0.0893153  │
+│ 8   │ "overlapping_stars" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.87167         │ 1.8845         │ 0.0292581  │
+│ 9   │ "overlapping_stars" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31304         │ 1.31778        │ 0.00887276 │
+│ 10  │ "overlapping_stars" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.16741         │ 1.16974        │ 0.00625254 │
+│ 11  │ "overlapping_stars" │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.00500002     │ NA         │
+Running test case 'overlapping_galaxies'
+11×6 DataFrames.DataFrame
+│ Row │ label                  │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼────────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "overlapping_galaxies" │ "X center (world coords)"    │ 0.00477944   │ 0.00487944      │ 0.00477724     │ NA        │
+│ 2   │ "overlapping_galaxies" │ "Y center (world coords)"    │ 0.00477944   │ 0.00487944      │ 0.00476701     │ NA        │
+│ 3   │ "overlapping_galaxies" │ "Minor/major axis ratio"     │ 0.2          │ 0.258773        │ 0.0100001      │ NA        │
+│ 4   │ "overlapping_galaxies" │ "Angle (degrees)"            │ 135          │ 45.0241         │ 135.108        │ NA        │
+│ 5   │ "overlapping_galaxies" │ "Half-light radius (pixels)" │ 3.78788      │ 15.1457         │ 0.775886       │ NA        │
+│ 6   │ "overlapping_galaxies" │ "Brightness (nMgy)"          │ 10           │ 40.4228         │ 9.23234        │ 7.98719   │
+│ 7   │ "overlapping_galaxies" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.22697         │ 1.24683        │ 0.0974418 │
+│ 8   │ "overlapping_galaxies" │ "Color band 2-3 ratio"       │ 2.00401      │ 1.89305         │ 2.01774        │ 0.383367  │
+│ 9   │ "overlapping_galaxies" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.36057         │ 1.40634        │ 0.230752  │
+│ 10  │ "overlapping_galaxies" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.24063         │ 1.26802        │ 0.234258  │
+│ 11  │ "overlapping_galaxies" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA        │
+Running test case 'overlapping_star_and_galaxy'
+11×6 DataFrames.DataFrame
+│ Row │ label                         │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds │
+├─────┼───────────────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼───────────┤
+│ 1   │ "overlapping_star_and_galaxy" │ "X center (world coords)"    │ 0.00394611   │ 0.0039901       │ 0.00394611     │ NA        │
+│ 2   │ "overlapping_star_and_galaxy" │ "Y center (world coords)"    │ 0.005335     │ 0.00534323      │ 0.00532763     │ NA        │
+│ 3   │ "overlapping_star_and_galaxy" │ "Minor/major axis ratio"     │ NA           │ 0.146699        │ 0.0121095      │ NA        │
+│ 4   │ "overlapping_star_and_galaxy" │ "Angle (degrees)"            │ NA           │ 16.226          │ 123.501        │ NA        │
+│ 5   │ "overlapping_star_and_galaxy" │ "Half-light radius (pixels)" │ NA           │ 2.34375         │ 0.0280632      │ NA        │
+│ 6   │ "overlapping_star_and_galaxy" │ "Brightness (nMgy)"          │ 40           │ 38.8226         │ 34.8839        │ 13.6852   │
+│ 7   │ "overlapping_star_and_galaxy" │ "Color band 1-2 ratio"       │ 3.99098      │ 3.83084         │ 5.37777        │ 11.4956   │
+│ 8   │ "overlapping_star_and_galaxy" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.87935         │ 1.89029        │ 0.336105  │
+│ 9   │ "overlapping_star_and_galaxy" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31837         │ 1.31111        │ 0.516354  │
+│ 10  │ "overlapping_star_and_galaxy" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.17189         │ 1.16073        │ 0.779927  │
+│ 11  │ "overlapping_star_and_galaxy" │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.00500285     │ NA        │
+Running test case 'three_sources_two_overlap'
+11×6 DataFrames.DataFrame
+│ Row │ label                       │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼─────────────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "three_sources_two_overlap" │ "X center (world coords)"    │ 0.00394611   │ 0.00399102      │ 0.00394592     │ NA         │
+│ 2   │ "three_sources_two_overlap" │ "Y center (world coords)"    │ 0.00672389   │ 0.00670927      │ 0.0067238      │ NA         │
+│ 3   │ "three_sources_two_overlap" │ "Minor/major axis ratio"     │ NA           │ 0.245284        │ 0.0100417      │ NA         │
+│ 4   │ "three_sources_two_overlap" │ "Angle (degrees)"            │ NA           │ 179.066         │ 86.1035        │ NA         │
+│ 5   │ "three_sources_two_overlap" │ "Half-light radius (pixels)" │ NA           │ 2.53659         │ 0.0425454      │ NA         │
+│ 6   │ "three_sources_two_overlap" │ "Brightness (nMgy)"          │ 40           │ 39.2907         │ 39.9709        │ 0.0727765  │
+│ 7   │ "three_sources_two_overlap" │ "Color band 1-2 ratio"       │ 3.99098      │ 3.8185          │ 3.99699        │ 0.0872078  │
+│ 8   │ "three_sources_two_overlap" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88219         │ 1.88454        │ 0.0312749  │
+│ 9   │ "three_sources_two_overlap" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31898         │ 1.31786        │ 0.00339693 │
+│ 10  │ "three_sources_two_overlap" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.17282         │ 1.16974        │ 0.00645703 │
+│ 11  │ "three_sources_two_overlap" │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.00500003     │ NA         │
+Running test case 'three_sources_all_overlap'
+11×6 DataFrames.DataFrame
+│ Row │ label                       │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼─────────────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "three_sources_all_overlap" │ "X center (world coords)"    │ 0.00394611   │ 0.0039906       │ 0.00394588     │ NA         │
+│ 2   │ "three_sources_all_overlap" │ "Y center (world coords)"    │ 0.005335     │ 0.0053441       │ 0.00533481     │ NA         │
+│ 3   │ "three_sources_all_overlap" │ "Minor/major axis ratio"     │ NA           │ 0.187407        │ 0.0100095      │ NA         │
+│ 4   │ "three_sources_all_overlap" │ "Angle (degrees)"            │ NA           │ 12.9929         │ 107.491        │ NA         │
+│ 5   │ "three_sources_all_overlap" │ "Half-light radius (pixels)" │ NA           │ 3.14016         │ 0.0424233      │ NA         │
+│ 6   │ "three_sources_all_overlap" │ "Brightness (nMgy)"          │ 40           │ 38.5403         │ 39.9745        │ 0.0637652  │
+│ 7   │ "three_sources_all_overlap" │ "Color band 1-2 ratio"       │ 3.99098      │ 3.81827         │ 3.99654        │ 0.0807784  │
+│ 8   │ "three_sources_all_overlap" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.87759         │ 1.8846         │ 0.0342936  │
+│ 9   │ "three_sources_all_overlap" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31795         │ 1.31785        │ 0.00354411 │
+│ 10  │ "three_sources_all_overlap" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.17179         │ 1.16976        │ 0.00444471 │
+│ 11  │ "three_sources_all_overlap" │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.00500047     │ NA         │
+Running test case 'smaller_psf'
+11×6 DataFrames.DataFrame
+│ Row │ label         │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼───────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "smaller_psf" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 2   │ "smaller_psf" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 3   │ "smaller_psf" │ "Minor/major axis ratio"     │ NA           │ 0.968653        │ 0.985251       │ NA         │
+│ 4   │ "smaller_psf" │ "Angle (degrees)"            │ NA           │ 1.23965e-10     │ 4.8436e-10     │ NA         │
+│ 5   │ "smaller_psf" │ "Half-light radius (pixels)" │ NA           │ 0.249059        │ 0.269228       │ NA         │
+│ 6   │ "smaller_psf" │ "Brightness (nMgy)"          │ 40           │ 39.9337         │ 39.9334        │ 0.157577   │
+│ 7   │ "smaller_psf" │ "Color band 1-2 ratio"       │ 3.99098      │ 4.00998         │ 4.00081        │ 0.100209   │
+│ 8   │ "smaller_psf" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88638         │ 1.8853         │ 0.0511733  │
+│ 9   │ "smaller_psf" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31776         │ 1.31805        │ 0.0106009  │
+│ 10  │ "smaller_psf" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.1695          │ 1.16984        │ 0.00148892 │
+│ 11  │ "smaller_psf" │ "Probability of galaxy"      │ 0            │ 0.993469        │ 0.994855       │ NA         │
+Running test case 'larger_psf'
+11×6 DataFrames.DataFrame
+│ Row │ label        │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds  │
+├─────┼──────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼────────────┤
+│ 1   │ "larger_psf" │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 2   │ "larger_psf" │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA         │
+│ 3   │ "larger_psf" │ "Minor/major axis ratio"     │ NA           │ 0.695235        │ 0.657666       │ NA         │
+│ 4   │ "larger_psf" │ "Angle (degrees)"            │ NA           │ 1.31395e-10     │ 180.0          │ NA         │
+│ 5   │ "larger_psf" │ "Half-light radius (pixels)" │ NA           │ 0.2209          │ 0.387383       │ NA         │
+│ 6   │ "larger_psf" │ "Brightness (nMgy)"          │ 40           │ 39.9604         │ 39.9818        │ 0.0453887  │
+│ 7   │ "larger_psf" │ "Color band 1-2 ratio"       │ 3.99098      │ 4.02502         │ 3.99807        │ 0.086774   │
+│ 8   │ "larger_psf" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88888         │ 1.88445        │ 0.0264954  │
+│ 9   │ "larger_psf" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31681         │ 1.31777        │ 0.00980585 │
+│ 10  │ "larger_psf" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.1684          │ 1.16973        │ 0.00733815 │
+│ 11  │ "larger_psf" │ "Probability of galaxy"      │ 0            │ 0.994375        │ 0.00509062     │ NA         │
+247×6 DataFrames.DataFrame
+│ Row │ label                         │ field                        │ ground_truth │ single_inferred │ joint_inferred │ error_sds   │
+├─────┼───────────────────────────────┼──────────────────────────────┼──────────────┼─────────────────┼────────────────┼─────────────┤
+│ 1   │ "simple_star"                 │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 2   │ "simple_star"                 │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 3   │ "simple_star"                 │ "Brightness (nMgy)"          │ 40           │ 39.972          │ 39.972         │ 0.0699695   │
+│ 4   │ "simple_star"                 │ "Color band 1-2 ratio"       │ 3.99098      │ 3.99779         │ 3.99779        │ 0.099409    │
+│ 5   │ "simple_star"                 │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88464         │ 1.88464        │ 0.0367739   │
+│ 6   │ "simple_star"                 │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31783         │ 1.31783        │ 0.00505262  │
+│ 7   │ "simple_star"                 │ "Color band 4-5 ratio"       │ 1.16982      │ 1.16976         │ 1.16976        │ 0.00462879  │
+│ 8   │ "simple_star"                 │ "Probability of galaxy"      │ 0            │ 0.0054509       │ 0.005019       │ NA          │
+│ 9   │ "star_position_1"             │ "X center (world coords)"    │ 0.00477944   │ 0.005235        │ 0.00477944     │ NA          │
+│ 10  │ "star_position_1"             │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 11  │ "star_position_1"             │ "Brightness (nMgy)"          │ 40           │ 32.9586         │ 39.9715        │ 0.0711858   │
+│ 12  │ "star_position_1"             │ "Color band 1-2 ratio"       │ 3.99098      │ 4.08718         │ 3.99747        │ 0.094597    │
+│ 13  │ "star_position_1"             │ "Color band 2-3 ratio"       │ 1.88395      │ 1.89191         │ 1.8846         │ 0.0345357   │
+│ 14  │ "star_position_1"             │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31747         │ 1.31783        │ 0.00507925  │
+│ 15  │ "star_position_1"             │ "Color band 4-5 ratio"       │ 1.16982      │ 1.16921         │ 1.16976        │ 0.00480085  │
+│ 16  │ "star_position_1"             │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.995          │ NA          │
+│ 17  │ "star_position_2"             │ "X center (world coords)"    │ 0.005335     │ 0.00533452      │ 0.005335       │ NA          │
+│ 18  │ "star_position_2"             │ "Y center (world coords)"    │ 0.00589056   │ 0.00543201      │ 0.00589056     │ NA          │
+│ 19  │ "star_position_2"             │ "Brightness (nMgy)"          │ 40           │ 32.7639         │ 39.9715        │ 0.0713174   │
+│ 20  │ "star_position_2"             │ "Color band 1-2 ratio"       │ 3.99098      │ 4.12165         │ 3.99747        │ 0.0945613   │
+│ 21  │ "star_position_2"             │ "Color band 2-3 ratio"       │ 1.88395      │ 1.90549         │ 1.8846         │ 0.0345241   │
+│ 22  │ "star_position_2"             │ "Color band 3-4 ratio"       │ 1.3179       │ 1.29814         │ 1.31783        │ 0.00507016  │
+│ 23  │ "star_position_2"             │ "Color band 4-5 ratio"       │ 1.16982      │ 1.15299         │ 1.16976        │ 0.00478278  │
+│ 24  │ "star_position_2"             │ "Probability of galaxy"      │ 0            │ 0.982204        │ 0.995          │ NA          │
+│ 25  │ "dim_star"                    │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 26  │ "dim_star"                    │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 27  │ "dim_star"                    │ "Brightness (nMgy)"          │ 20           │ 19.9682         │ 19.9821        │ 0.0895167   │
+│ 28  │ "dim_star"                    │ "Color band 1-2 ratio"       │ 3.99098      │ 4.03175         │ 4.00325        │ 0.112076    │
+│ 29  │ "dim_star"                    │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88998         │ 1.88487        │ 0.0479003   │
+│ 30  │ "dim_star"                    │ "Color band 3-4 ratio"       │ 1.3179       │ 1.3167          │ 1.31771        │ 0.0145092   │
+│ 31  │ "dim_star"                    │ "Color band 4-5 ratio"       │ 1.16982      │ 1.16827         │ 1.16972        │ 0.00834928  │
+│ 32  │ "dim_star"                    │ "Probability of galaxy"      │ 0            │ 0.994427        │ 0.00504296     │ NA          │
+│ 33  │ "bright_star"                 │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 34  │ "bright_star"                 │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 35  │ "bright_star"                 │ "Brightness (nMgy)"          │ 80           │ 79.9588         │ 79.9589        │ 0.0514166   │
+│ 36  │ "bright_star"                 │ "Color band 1-2 ratio"       │ 3.99098      │ 3.99521         │ 3.99512        │ 0.093288    │
+│ 37  │ "bright_star"                 │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88448         │ 1.88448        │ 0.0279969   │
+│ 38  │ "bright_star"                 │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31787         │ 1.31787        │ 0.00243375  │
+│ 39  │ "bright_star"                 │ "Color band 4-5 ratio"       │ 1.16982      │ 1.16977         │ 1.16977        │ 0.00358872  │
+│ 40  │ "bright_star"                 │ "Probability of galaxy"      │ 0            │ 0.00678495      │ 0.00514296     │ NA          │
+│ 41  │ "different_color_star"        │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 42  │ "different_color_star"        │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 43  │ "different_color_star"        │ "Brightness (nMgy)"          │ 40           │ 39.97           │ 39.97          │ 0.0749542   │
+│ 44  │ "different_color_star"        │ "Color band 1-2 ratio"       │ 4.0          │ 4.00309         │ 4.00309        │ 0.0581976   │
+│ 45  │ "different_color_star"        │ "Color band 2-3 ratio"       │ 1.25         │ 1.25033         │ 1.25033        │ 0.0265162   │
+│ 46  │ "different_color_star"        │ "Color band 3-4 ratio"       │ 1.6          │ 1.60002         │ 1.60002        │ 0.00108414  │
+│ 47  │ "different_color_star"        │ "Color band 4-5 ratio"       │ 0.8125       │ 0.812505        │ 0.812505       │ 0.000619091 │
+│ 48  │ "different_color_star"        │ "Probability of galaxy"      │ 0            │ 0.0509859       │ 0.0509658      │ NA          │
+│ 49  │ "star_with_noise"             │ "X center (world coords)"    │ 0.00505722   │ 0.005235        │ 0.00505668     │ NA          │
+│ 50  │ "star_with_noise"             │ "Y center (world coords)"    │ 0.00561278   │ 0.005435        │ 0.00561395     │ NA          │
+│ 51  │ "star_with_noise"             │ "Brightness (nMgy)"          │ 20           │ 18.5582         │ 20.0798        │ 0.398007    │
+│ 52  │ "star_with_noise"             │ "Color band 1-2 ratio"       │ 3.99098      │ 4.1781          │ 4.10901        │ 0.491044    │
+│ 53  │ "star_with_noise"             │ "Color band 2-3 ratio"       │ 1.88395      │ 1.9208          │ 1.88792        │ 0.125246    │
+│ 54  │ "star_with_noise"             │ "Color band 3-4 ratio"       │ 1.3179       │ 1.32412         │ 1.31447        │ 0.260601    │
+│ 55  │ "star_with_noise"             │ "Color band 4-5 ratio"       │ 1.16982      │ 1.17229         │ 1.16631        │ 0.299434    │
+│ 56  │ "star_with_noise"             │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.995          │ NA          │
+│ 57  │ "angle_and_axis_ratio_1"      │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 58  │ "angle_and_axis_ratio_1"      │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 59  │ "angle_and_axis_ratio_1"      │ "Minor/major axis ratio"     │ 0.2          │ 0.205574        │ 0.205574       │ NA          │
+│ 60  │ "angle_and_axis_ratio_1"      │ "Angle (degrees)"            │ 15           │ 15.0012         │ 15.0012        │ NA          │
+│ 61  │ "angle_and_axis_ratio_1"      │ "Half-light radius (pixels)" │ 3.78788      │ 3.56592         │ 3.56592        │ NA          │
+│ 62  │ "angle_and_axis_ratio_1"      │ "Brightness (nMgy)"          │ 10           │ 9.89974         │ 9.89974        │ 1.00764     │
+│ 63  │ "angle_and_axis_ratio_1"      │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24566         │ 1.24566        │ 0.0662323   │
+│ 64  │ "angle_and_axis_ratio_1"      │ "Color band 2-3 ratio"       │ 2.00401      │ 2.0079          │ 2.0079         │ 0.113803    │
+│ 65  │ "angle_and_axis_ratio_1"      │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40296         │ 1.40296        │ 0.00987492  │
+│ 66  │ "angle_and_axis_ratio_1"      │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26593         │ 1.26593        │ 0.0692369   │
+│ 67  │ "angle_and_axis_ratio_1"      │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 68  │ "angle_and_axis_ratio_2"      │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 69  │ "angle_and_axis_ratio_2"      │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 70  │ "angle_and_axis_ratio_2"      │ "Minor/major axis ratio"     │ 0.4          │ 0.407493        │ 0.407493       │ NA          │
+│ 71  │ "angle_and_axis_ratio_2"      │ "Angle (degrees)"            │ 160          │ 160.0           │ 160.0          │ NA          │
+│ 72  │ "angle_and_axis_ratio_2"      │ "Half-light radius (pixels)" │ 3.78788      │ 3.57244         │ 3.57244        │ NA          │
+│ 73  │ "angle_and_axis_ratio_2"      │ "Brightness (nMgy)"          │ 10           │ 9.91674         │ 9.91674        │ 0.836103    │
+│ 74  │ "angle_and_axis_ratio_2"      │ "Color band 1-2 ratio"       │ 1.24346      │ 1.2451          │ 1.2451         │ 0.0525494   │
+│ 75  │ "angle_and_axis_ratio_2"      │ "Color band 2-3 ratio"       │ 2.00401      │ 2.00641         │ 2.00641        │ 0.0742112   │
+│ 76  │ "angle_and_axis_ratio_2"      │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40274         │ 1.40274        │ 0.0254402   │
+│ 77  │ "angle_and_axis_ratio_2"      │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26569         │ 1.26569        │ 0.0497187   │
+│ 78  │ "angle_and_axis_ratio_2"      │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 79  │ "round_galaxy"                │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 80  │ "round_galaxy"                │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 81  │ "round_galaxy"                │ "Minor/major axis ratio"     │ 1            │ 0.979207        │ 0.99           │ NA          │
+│ 82  │ "round_galaxy"                │ "Angle (degrees)"            │ 0            │ 1.2193e-10      │ 135.0          │ NA          │
+│ 83  │ "round_galaxy"                │ "Half-light radius (pixels)" │ 3.78788      │ 3.61831         │ 3.5724         │ NA          │
+│ 84  │ "round_galaxy"                │ "Brightness (nMgy)"          │ 10           │ 10.0351         │ 9.92634        │ 0.739314    │
+│ 85  │ "round_galaxy"                │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24554         │ 1.24488        │ 0.0466782   │
+│ 86  │ "round_galaxy"                │ "Color band 2-3 ratio"       │ 2.00401      │ 2.00607         │ 2.00579        │ 0.0565701   │
+│ 87  │ "round_galaxy"                │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40246         │ 1.40259        │ 0.0360593   │
+│ 88  │ "round_galaxy"                │ "Color band 4-5 ratio"       │ 1.26506      │ 1.2652          │ 1.26559        │ 0.0422856   │
+│ 89  │ "round_galaxy"                │ "Probability of galaxy"      │ 1            │ 0.994574        │ 0.995          │ NA          │
+│ 90  │ "small_galaxy"                │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 91  │ "small_galaxy"                │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 92  │ "small_galaxy"                │ "Minor/major axis ratio"     │ 0.4          │ 0.409094        │ 0.409094       │ NA          │
+│ 93  │ "small_galaxy"                │ "Angle (degrees)"            │ 0            │ 0.0             │ 0.0            │ NA          │
+│ 94  │ "small_galaxy"                │ "Half-light radius (pixels)" │ 1.89394      │ 1.82554         │ 1.82554        │ NA          │
+│ 95  │ "small_galaxy"                │ "Brightness (nMgy)"          │ 10           │ 10.0096         │ 10.0096        │ 0.0955071   │
+│ 96  │ "small_galaxy"                │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24464         │ 1.24464        │ 0.0427007   │
+│ 97  │ "small_galaxy"                │ "Color band 2-3 ratio"       │ 2.00401      │ 2.00529         │ 2.00529        │ 0.0446383   │
+│ 98  │ "small_galaxy"                │ "Color band 3-4 ratio"       │ 1.4031       │ 1.4024          │ 1.4024         │ 0.0495802   │
+│ 99  │ "small_galaxy"                │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26534         │ 1.26534        │ 0.0228005   │
+│ 100 │ "small_galaxy"                │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 101 │ "large_galaxy"                │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 102 │ "large_galaxy"                │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 103 │ "large_galaxy"                │ "Minor/major axis ratio"     │ 0.4          │ 0.405836        │ 0.405836       │ NA          │
+│ 104 │ "large_galaxy"                │ "Angle (degrees)"            │ 0            │ 0.0             │ 0.0            │ NA          │
+│ 105 │ "large_galaxy"                │ "Half-light radius (pixels)" │ 6.31313      │ 5.82775         │ 5.82775        │ NA          │
+│ 106 │ "large_galaxy"                │ "Brightness (nMgy)"          │ 10           │ 9.81655         │ 9.81655        │ 1.85148     │
+│ 107 │ "large_galaxy"                │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24707         │ 1.24707        │ 0.092809    │
+│ 108 │ "large_galaxy"                │ "Color band 2-3 ratio"       │ 2.00401      │ 2.01122         │ 2.01122        │ 0.182085    │
+│ 109 │ "large_galaxy"                │ "Color band 3-4 ratio"       │ 1.4031       │ 1.4035          │ 1.4035         │ 0.0287291   │
+│ 110 │ "large_galaxy"                │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26634         │ 1.26634        │ 0.101545    │
+│ 111 │ "large_galaxy"                │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 112 │ "dim_galaxy"                  │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 113 │ "dim_galaxy"                  │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 114 │ "dim_galaxy"                  │ "Minor/major axis ratio"     │ 0.4          │ 0.410528        │ 0.410528       │ NA          │
+│ 115 │ "dim_galaxy"                  │ "Angle (degrees)"            │ 0            │ 0.0             │ 0.0            │ NA          │
+│ 116 │ "dim_galaxy"                  │ "Half-light radius (pixels)" │ 3.78788      │ 3.50899         │ 3.50899        │ NA          │
+│ 117 │ "dim_galaxy"                  │ "Brightness (nMgy)"          │ 5            │ 4.91889         │ 4.91889        │ 1.63546     │
+│ 118 │ "dim_galaxy"                  │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24884         │ 1.24884        │ 0.0970555   │
+│ 119 │ "dim_galaxy"                  │ "Color band 2-3 ratio"       │ 2.00401      │ 2.01284         │ 2.01284        │ 0.155003    │
+│ 120 │ "dim_galaxy"                  │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40221         │ 1.40221        │ 0.0598193   │
+│ 121 │ "dim_galaxy"                  │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26685         │ 1.26685        │ 0.101995    │
+│ 122 │ "dim_galaxy"                  │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 123 │ "bright_galaxy"               │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 124 │ "bright_galaxy"               │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 125 │ "bright_galaxy"               │ "Minor/major axis ratio"     │ 0.4          │ 0.405852        │ 0.405852       │ NA          │
+│ 126 │ "bright_galaxy"               │ "Angle (degrees)"            │ 0            │ 0.0             │ 0.0            │ NA          │
+│ 127 │ "bright_galaxy"               │ "Half-light radius (pixels)" │ 3.78788      │ 3.59967         │ 3.59967        │ NA          │
+│ 128 │ "bright_galaxy"               │ "Brightness (nMgy)"          │ 20           │ 19.9115         │ 19.9115        │ 0.443419    │
+│ 129 │ "bright_galaxy"               │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24397         │ 1.24397        │ 0.0275411   │
+│ 130 │ "bright_galaxy"               │ "Color band 2-3 ratio"       │ 2.00401      │ 2.0049          │ 2.0049         │ 0.0444499   │
+│ 131 │ "bright_galaxy"               │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40302         │ 1.40302        │ 0.00605013  │
+│ 132 │ "bright_galaxy"               │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26534         │ 1.26534        │ 0.0227547   │
+│ 133 │ "bright_galaxy"               │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 134 │ "different_color_galaxy"      │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 135 │ "different_color_galaxy"      │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 136 │ "different_color_galaxy"      │ "Minor/major axis ratio"     │ 0.4          │ 0.407431        │ 0.407431       │ NA          │
+│ 137 │ "different_color_galaxy"      │ "Angle (degrees)"            │ 0            │ 0.0             │ 0.0            │ NA          │
+│ 138 │ "different_color_galaxy"      │ "Half-light radius (pixels)" │ 3.78788      │ 3.57387         │ 3.57387        │ NA          │
+│ 139 │ "different_color_galaxy"      │ "Brightness (nMgy)"          │ 10           │ 9.90602         │ 9.90602        │ 0.944238    │
+│ 140 │ "different_color_galaxy"      │ "Color band 1-2 ratio"       │ 0.333333     │ 0.335266        │ 0.335266       │ 0.314352    │
+│ 141 │ "different_color_galaxy"      │ "Color band 2-3 ratio"       │ 5.0          │ 4.9715          │ 4.9715         │ 0.336624    │
+│ 142 │ "different_color_galaxy"      │ "Color band 3-4 ratio"       │ 1.1          │ 1.10138         │ 1.10138        │ 0.125723    │
+│ 143 │ "different_color_galaxy"      │ "Color band 4-5 ratio"       │ 1.81818      │ 1.81866         │ 1.81866        │ 0.0262995   │
+│ 144 │ "different_color_galaxy"      │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 145 │ "galaxy_with_all"             │ "X center (world coords)"    │ 0.00541833   │ 0.005435        │ 0.00541833     │ NA          │
+│ 146 │ "galaxy_with_all"             │ "Y center (world coords)"    │ 0.00514056   │ 0.005235        │ 0.00514056     │ NA          │
+│ 147 │ "galaxy_with_all"             │ "Minor/major axis ratio"     │ 0.4          │ 0.424124        │ 0.403993       │ NA          │
+│ 148 │ "galaxy_with_all"             │ "Angle (degrees)"            │ 15           │ 15.5486         │ 14.9995        │ NA          │
+│ 149 │ "galaxy_with_all"             │ "Half-light radius (pixels)" │ 6.31313      │ 6.09006         │ 5.8805         │ NA          │
+│ 150 │ "galaxy_with_all"             │ "Brightness (nMgy)"          │ 15           │ 15.0057         │ 14.8103        │ 1.27284     │
+│ 151 │ "galaxy_with_all"             │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24412         │ 1.24509        │ 0.0603572   │
+│ 152 │ "galaxy_with_all"             │ "Color band 2-3 ratio"       │ 2.00401      │ 2.00051         │ 2.00708        │ 0.110528    │
+│ 153 │ "galaxy_with_all"             │ "Color band 3-4 ratio"       │ 1.4031       │ 1.40083         │ 1.40322        │ 0.0085186   │
+│ 154 │ "galaxy_with_all"             │ "Color band 4-5 ratio"       │ 1.26506      │ 1.26423         │ 1.2657         │ 0.0511821   │
+│ 155 │ "galaxy_with_all"             │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 156 │ "galaxy_with_noise"           │ "X center (world coords)"    │ 0.00541833   │ 0.005435        │ 0.00541524     │ NA          │
+│ 157 │ "galaxy_with_noise"           │ "Y center (world coords)"    │ 0.00514056   │ 0.005235        │ 0.00513466     │ NA          │
+│ 158 │ "galaxy_with_noise"           │ "Minor/major axis ratio"     │ 0.4          │ 0.478599        │ 0.455648       │ NA          │
+│ 159 │ "galaxy_with_noise"           │ "Angle (degrees)"            │ 15           │ 18.0965         │ 17.0867        │ NA          │
+│ 160 │ "galaxy_with_noise"           │ "Half-light radius (pixels)" │ 6.31313      │ 11.2775         │ 10.8066        │ NA          │
+│ 161 │ "galaxy_with_noise"           │ "Brightness (nMgy)"          │ 15           │ 23.5542         │ 22.8577        │ 42.1237     │
+│ 162 │ "galaxy_with_noise"           │ "Color band 1-2 ratio"       │ 1.24346      │ 1.24493         │ 1.24444        │ 0.0377751   │
+│ 163 │ "galaxy_with_noise"           │ "Color band 2-3 ratio"       │ 2.00401      │ 1.88811         │ 1.89015        │ 4.40168     │
+│ 164 │ "galaxy_with_noise"           │ "Color band 3-4 ratio"       │ 1.4031       │ 1.33188         │ 1.33476        │ 4.99342     │
+│ 165 │ "galaxy_with_noise"           │ "Color band 4-5 ratio"       │ 1.26506      │ 1.23774         │ 1.23974        │ 2.02158     │
+│ 166 │ "galaxy_with_noise"           │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 167 │ "galaxy_with_low_background"  │ "X center (world coords)"    │ 0.00541833   │ 0.005435        │ 0.00542721     │ NA          │
+│ 168 │ "galaxy_with_low_background"  │ "Y center (world coords)"    │ 0.00514056   │ 0.005235        │ 0.00512794     │ NA          │
+│ 169 │ "galaxy_with_low_background"  │ "Minor/major axis ratio"     │ 0.4          │ 0.396703        │ 0.446214       │ NA          │
+│ 170 │ "galaxy_with_low_background"  │ "Angle (degrees)"            │ 15           │ 18.7487         │ 16.2808        │ NA          │
+│ 171 │ "galaxy_with_low_background"  │ "Half-light radius (pixels)" │ 6.31313      │ 5.0657          │ 5.43741        │ NA          │
+│ 172 │ "galaxy_with_low_background"  │ "Brightness (nMgy)"          │ 15           │ 12.9442         │ 13.6623        │ 9.3409      │
+│ 173 │ "galaxy_with_low_background"  │ "Color band 1-2 ratio"       │ 1.24346      │ 1.25844         │ 1.26205        │ 0.276163    │
+│ 174 │ "galaxy_with_low_background"  │ "Color band 2-3 ratio"       │ 2.00401      │ 1.92683         │ 1.92951        │ 1.13296     │
+│ 175 │ "galaxy_with_low_background"  │ "Color band 3-4 ratio"       │ 1.4031       │ 1.49833         │ 1.49408        │ 5.71079     │
+│ 176 │ "galaxy_with_low_background"  │ "Color band 4-5 ratio"       │ 1.26506      │ 1.20441         │ 1.20722        │ 3.23441     │
+│ 177 │ "galaxy_with_low_background"  │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 178 │ "galaxy_with_high_background" │ "X center (world coords)"    │ 0.00541833   │ 0.00539836      │ 0.00537487     │ NA          │
+│ 179 │ "galaxy_with_high_background" │ "Y center (world coords)"    │ 0.00514056   │ 0.005235        │ 0.00511495     │ NA          │
+│ 180 │ "galaxy_with_high_background" │ "Minor/major axis ratio"     │ 0.4          │ 0.571161        │ 0.642892       │ NA          │
+│ 181 │ "galaxy_with_high_background" │ "Angle (degrees)"            │ 15           │ 13.7033         │ 12.959         │ NA          │
+│ 182 │ "galaxy_with_high_background" │ "Half-light radius (pixels)" │ 6.31313      │ 4.49556         │ 4.82714        │ NA          │
+│ 183 │ "galaxy_with_high_background" │ "Brightness (nMgy)"          │ 15           │ 11.0425         │ 11.7178        │ 15.9008     │
+│ 184 │ "galaxy_with_high_background" │ "Color band 1-2 ratio"       │ 1.24346      │ 1.22435         │ 1.23811        │ 0.0413799   │
+│ 185 │ "galaxy_with_high_background" │ "Color band 2-3 ratio"       │ 2.00401      │ 2.28976         │ 2.29697        │ 2.16404     │
+│ 186 │ "galaxy_with_high_background" │ "Color band 3-4 ratio"       │ 1.4031       │ 1.44425         │ 1.44623        │ 1.76056     │
+│ 187 │ "galaxy_with_high_background" │ "Color band 4-5 ratio"       │ 1.26506      │ 1.23409         │ 1.23073        │ 1.22423     │
+│ 188 │ "galaxy_with_high_background" │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 189 │ "overlapping_stars"           │ "X center (world coords)"    │ 0.00450167   │ 0.00460167      │ 0.00450112     │ NA          │
+│ 190 │ "overlapping_stars"           │ "Y center (world coords)"    │ 0.005335     │ 0.00533532      │ 0.005335       │ NA          │
+│ 191 │ "overlapping_stars"           │ "Brightness (nMgy)"          │ 40           │ 37.8855         │ 39.9484        │ 0.129094    │
+│ 192 │ "overlapping_stars"           │ "Color band 1-2 ratio"       │ 3.99098      │ 3.92753         │ 3.99713        │ 0.0893153   │
+│ 193 │ "overlapping_stars"           │ "Color band 2-3 ratio"       │ 1.88395      │ 1.87167         │ 1.8845         │ 0.0292581   │
+│ 194 │ "overlapping_stars"           │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31304         │ 1.31778        │ 0.00887276  │
+│ 195 │ "overlapping_stars"           │ "Color band 4-5 ratio"       │ 1.16982      │ 1.16741         │ 1.16974        │ 0.00625254  │
+│ 196 │ "overlapping_stars"           │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.00500002     │ NA          │
+│ 197 │ "overlapping_galaxies"        │ "X center (world coords)"    │ 0.00477944   │ 0.00487944      │ 0.00477724     │ NA          │
+│ 198 │ "overlapping_galaxies"        │ "Y center (world coords)"    │ 0.00477944   │ 0.00487944      │ 0.00476701     │ NA          │
+│ 199 │ "overlapping_galaxies"        │ "Minor/major axis ratio"     │ 0.2          │ 0.258773        │ 0.0100001      │ NA          │
+│ 200 │ "overlapping_galaxies"        │ "Angle (degrees)"            │ 135          │ 45.0241         │ 135.108        │ NA          │
+│ 201 │ "overlapping_galaxies"        │ "Half-light radius (pixels)" │ 3.78788      │ 15.1457         │ 0.775886       │ NA          │
+│ 202 │ "overlapping_galaxies"        │ "Brightness (nMgy)"          │ 10           │ 40.4228         │ 9.23234        │ 7.98719     │
+│ 203 │ "overlapping_galaxies"        │ "Color band 1-2 ratio"       │ 1.24346      │ 1.22697         │ 1.24683        │ 0.0974418   │
+│ 204 │ "overlapping_galaxies"        │ "Color band 2-3 ratio"       │ 2.00401      │ 1.89305         │ 2.01774        │ 0.383367    │
+│ 205 │ "overlapping_galaxies"        │ "Color band 3-4 ratio"       │ 1.4031       │ 1.36057         │ 1.40634        │ 0.230752    │
+│ 206 │ "overlapping_galaxies"        │ "Color band 4-5 ratio"       │ 1.26506      │ 1.24063         │ 1.26802        │ 0.234258    │
+│ 207 │ "overlapping_galaxies"        │ "Probability of galaxy"      │ 1            │ 0.995           │ 0.995          │ NA          │
+│ 208 │ "overlapping_star_and_galaxy" │ "X center (world coords)"    │ 0.00394611   │ 0.0039901       │ 0.00394611     │ NA          │
+│ 209 │ "overlapping_star_and_galaxy" │ "Y center (world coords)"    │ 0.005335     │ 0.00534323      │ 0.00532763     │ NA          │
+│ 210 │ "overlapping_star_and_galaxy" │ "Brightness (nMgy)"          │ 40           │ 38.8226         │ 34.8839        │ 13.6852     │
+│ 211 │ "overlapping_star_and_galaxy" │ "Color band 1-2 ratio"       │ 3.99098      │ 3.83084         │ 5.37777        │ 11.4956     │
+│ 212 │ "overlapping_star_and_galaxy" │ "Color band 2-3 ratio"       │ 1.88395      │ 1.87935         │ 1.89029        │ 0.336105    │
+│ 213 │ "overlapping_star_and_galaxy" │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31837         │ 1.31111        │ 0.516354    │
+│ 214 │ "overlapping_star_and_galaxy" │ "Color band 4-5 ratio"       │ 1.16982      │ 1.17189         │ 1.16073        │ 0.779927    │
+│ 215 │ "overlapping_star_and_galaxy" │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.00500285     │ NA          │
+│ 216 │ "three_sources_two_overlap"   │ "X center (world coords)"    │ 0.00394611   │ 0.00399102      │ 0.00394592     │ NA          │
+│ 217 │ "three_sources_two_overlap"   │ "Y center (world coords)"    │ 0.00672389   │ 0.00670927      │ 0.0067238      │ NA          │
+│ 218 │ "three_sources_two_overlap"   │ "Brightness (nMgy)"          │ 40           │ 39.2907         │ 39.9709        │ 0.0727765   │
+│ 219 │ "three_sources_two_overlap"   │ "Color band 1-2 ratio"       │ 3.99098      │ 3.8185          │ 3.99699        │ 0.0872078   │
+│ 220 │ "three_sources_two_overlap"   │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88219         │ 1.88454        │ 0.0312749   │
+│ 221 │ "three_sources_two_overlap"   │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31898         │ 1.31786        │ 0.00339693  │
+│ 222 │ "three_sources_two_overlap"   │ "Color band 4-5 ratio"       │ 1.16982      │ 1.17282         │ 1.16974        │ 0.00645703  │
+│ 223 │ "three_sources_two_overlap"   │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.00500003     │ NA          │
+│ 224 │ "three_sources_all_overlap"   │ "X center (world coords)"    │ 0.00394611   │ 0.0039906       │ 0.00394588     │ NA          │
+│ 225 │ "three_sources_all_overlap"   │ "Y center (world coords)"    │ 0.005335     │ 0.0053441       │ 0.00533481     │ NA          │
+│ 226 │ "three_sources_all_overlap"   │ "Brightness (nMgy)"          │ 40           │ 38.5403         │ 39.9745        │ 0.0637652   │
+│ 227 │ "three_sources_all_overlap"   │ "Color band 1-2 ratio"       │ 3.99098      │ 3.81827         │ 3.99654        │ 0.0807784   │
+│ 228 │ "three_sources_all_overlap"   │ "Color band 2-3 ratio"       │ 1.88395      │ 1.87759         │ 1.8846         │ 0.0342936   │
+│ 229 │ "three_sources_all_overlap"   │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31795         │ 1.31785        │ 0.00354411  │
+│ 230 │ "three_sources_all_overlap"   │ "Color band 4-5 ratio"       │ 1.16982      │ 1.17179         │ 1.16976        │ 0.00444471  │
+│ 231 │ "three_sources_all_overlap"   │ "Probability of galaxy"      │ 0            │ 0.995           │ 0.00500047     │ NA          │
+│ 232 │ "smaller_psf"                 │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 233 │ "smaller_psf"                 │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 234 │ "smaller_psf"                 │ "Brightness (nMgy)"          │ 40           │ 39.9337         │ 39.9334        │ 0.157577    │
+│ 235 │ "smaller_psf"                 │ "Color band 1-2 ratio"       │ 3.99098      │ 4.00998         │ 4.00081        │ 0.100209    │
+│ 236 │ "smaller_psf"                 │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88638         │ 1.8853         │ 0.0511733   │
+│ 237 │ "smaller_psf"                 │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31776         │ 1.31805        │ 0.0106009   │
+│ 238 │ "smaller_psf"                 │ "Color band 4-5 ratio"       │ 1.16982      │ 1.1695          │ 1.16984        │ 0.00148892  │
+│ 239 │ "smaller_psf"                 │ "Probability of galaxy"      │ 0            │ 0.993469        │ 0.994855       │ NA          │
+│ 240 │ "larger_psf"                  │ "X center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 241 │ "larger_psf"                  │ "Y center (world coords)"    │ 0.005335     │ 0.005335        │ 0.005335       │ NA          │
+│ 242 │ "larger_psf"                  │ "Brightness (nMgy)"          │ 40           │ 39.9604         │ 39.9818        │ 0.0453887   │
+│ 243 │ "larger_psf"                  │ "Color band 1-2 ratio"       │ 3.99098      │ 4.02502         │ 3.99807        │ 0.086774    │
+│ 244 │ "larger_psf"                  │ "Color band 2-3 ratio"       │ 1.88395      │ 1.88888         │ 1.88445        │ 0.0264954   │
+│ 245 │ "larger_psf"                  │ "Color band 3-4 ratio"       │ 1.3179       │ 1.31681         │ 1.31777        │ 0.00980585  │
+│ 246 │ "larger_psf"                  │ "Color band 4-5 ratio"       │ 1.16982      │ 1.1684          │ 1.16973        │ 0.00733815  │
+│ 247 │ "larger_psf"                  │ "Probability of galaxy"      │ 0            │ 0.994375        │ 0.00509062     │ NA          │
+[1] DEBUG: source 1 [objid sample] took 2.3 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.9046e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 2.183e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.000694456
+[1] INFO: Done fitting elboargs. Elapsed time: 24.68413248
+[1] DEBUG: Optimizing source 1 [objid sample]
+[1] DEBUG: source 1 [objid sample] took 7.3 seconds
+[1] INFO: Optimizing 1 sources
+[1] INFO: Starting Cyclades partitioning...
+[1] INFO: Cyclades - Assigned sources: 1 vs correct number of sources: 1
+[1] INFO: Cyclades - Number of batches: 1
+[1] INFO: Finished Cyclades partitioning.  Elapsed time: 2.5753e-5 seconds
+[1] INFO: Done assigning sources to threads for processing
+[1] INFO: Starting basic source partitioning...
+[1] INFO: Finished basic source partitioning. Elapsed time: 1.597e-6 seconds
+[1] INFO: Done preallocating array of elboargs. Elapsed time: 0.00062163
+[1] INFO: Done fitting elboargs. Elapsed time: 71.381532707

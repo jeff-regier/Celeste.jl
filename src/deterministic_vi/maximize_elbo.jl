@@ -14,11 +14,10 @@ Returns:
 function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
                        omitted_ids=Int[],
                        use_default_optim_params=false,
-                       xtol_rel=1e-7,
-                       ftol_abs=1e-6,
+                       xtol_abs=1e-7,
+                       ftol_rel=1e-6,
                        verbose=false,
-                       max_iters=50,
-                       fast_hessian=true)
+                       max_iters=50)
     # Make sure the model parameters are within the transform bounds
     enforce_bounds!(ea.vp, ea.active_sources, transform)
     @assert ea.active_sources == transform.active_sources
@@ -96,7 +95,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
     end
 
     options = Optim.Options(;
-        x_tol = xtol_rel, f_tol = ftol_abs, g_tol = 1e-8,
+        x_tol = xtol_abs, f_tol = ftol_rel, g_tol = 1e-8,
         iterations = max_iters, store_trace = verbose,
         show_trace = false, extended_trace = verbose)
 
@@ -120,22 +119,20 @@ function maximize_f{F}(f::F, ea::ElboArgs;
                        loc_width=1e-4, # about a pixel either direction
                        loc_scale=1.0,
                        omitted_ids=Int[],
-                       xtol_rel=1e-7,
-                       ftol_abs=1e-6,
+                       xtol_abs=1e-7,
+                       ftol_rel=1e-6,
                        verbose=false,
                        max_iters=50,
-                       fast_hessian=true,
                        use_default_optim_params=false)
     transform = get_mp_transform(ea.vp, ea.active_sources,
                                  loc_width=loc_width, loc_scale=loc_scale)
 
     maximize_f(f, ea, transform;
                 omitted_ids=omitted_ids,
-                xtol_rel=xtol_rel,
-                ftol_abs=ftol_abs,
+                xtol_abs=xtol_abs,
+                ftol_rel=ftol_rel,
                 verbose=verbose,
                 max_iters=max_iters,
-                fast_hessian=fast_hessian,
                 use_default_optim_params=use_default_optim_params)
 end
 
