@@ -306,8 +306,11 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                                                                    ea.active_sources)
             end
         catch ex
-            Log.error(string(ex))
-            exit(-1)
+            if is_production_run || nthreads() > 1
+                Log.error(string(ex))
+            else
+                rethrow(ex)
+            end
         end
     end
 
@@ -355,8 +358,6 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                     use_default_optim_params=use_default_optim_params)
             end
         catch ex
-            Log.error(stringe(ex))
-            exit(-1)
             if is_production_run || nthreads() > 1
                 Log.error(string(ex))
             else
