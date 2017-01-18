@@ -62,9 +62,10 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
 
     neg_f_grad! = (x::Vector, grad::Vector) -> begin
         f_wrapped_cached!(x)
-        for i in kept_ids
+        for i_free in 1:length(kept_ids)
+            i_bnd = kept_ids[i_free]
             for j in 1:n_active_sources
-                grad[i, j] = -last_sf.d[i, j]
+                grad[i_free, j] = -last_sf.d[i_bnd, j]
             end
         end
         return grad
@@ -72,9 +73,11 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
 
     neg_f_hessian! = (x::Vector, hess::Matrix) -> begin
         f_wrapped_cached!(x)
-        for i in all_kept_ids
-            for j in all_kept_ids
-                hess[i, j] = last_sf.h[i, j]
+        for i_free in 1:length(kept_ids)
+            i_bnd = kept_ids[i_free]
+            for j_free in 1:length(all_kept_ids)
+                j_bnd = kept_ids[j_free]
+                hess[i_free, j_free] = last_sf.h[i_bnd, j_bnd]
             end
         end
         Transform.symmetrize!(hess, -0.5)
