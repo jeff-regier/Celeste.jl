@@ -2,7 +2,7 @@ OUTPUT_DIR := output
 TEST_IMAGES_BASE_URL := http://portal.nersc.gov/project/dasrepo/celeste/galsim_fits
 BENCHMARK_FITS_FILENAME := $(shell cat latest_filenames/latest_galsim_benchmarks.txt)
 BENCHMARK_FITS_PATH := $(OUTPUT_DIR)/$(BENCHMARK_FITS_FILENAME)
-FIELD_FITS_FILENAME := $(shell cat latest_filenames/latest_galsim_benchmarks.txt)
+FIELD_FITS_FILENAME := $(shell cat latest_filenames/latest_galsim_field.txt)
 FIELD_FITS_PATH := $(OUTPUT_DIR)/$(FIELD_FITS_FILENAME)
 
 default: benchmark
@@ -19,12 +19,12 @@ field: GalsimBenchmark.jl run_galsim_field.jl $(FIELD_FITS_PATH)
 $(BENCHMARK_FITS_PATH):
 	echo "Fetching GalSim test images from $(TEST_IMAGES_BASE_URL)/$(BENCHMARK_FITS_FILENAME)"
 	mkdir -p $(OUTPUT_DIR)
-	curl --fail -o $(LATEST_FITS_PATH) $(TEST_IMAGES_BASE_URL)/$(BENCHMARK_FITS_FILENAME)
+	curl --fail -o $(BENCHMARK_FITS_PATH) $(TEST_IMAGES_BASE_URL)/$(BENCHMARK_FITS_FILENAME)
 
 $(FIELD_FITS_PATH):
 	echo "Fetching GalSim test images from $(TEST_IMAGES_BASE_URL)/$(FIELD_FITS_FILENAME)"
 	mkdir -p $(OUTPUT_DIR)
-	curl --fail -o $(LATEST_FITS_PATH) $(TEST_IMAGES_BASE_URL)/$(FIELD_FITS_FILENAME)
+	curl --fail -o $(FIELD_FITS_PATH) $(TEST_IMAGES_BASE_URL)/$(FIELD_FITS_FILENAME)
 
 generate_benchmark_fits: Vagrantfile bootstrap.sh generate_test_image.py galsim_benchmarks.py
 	vagrant up
