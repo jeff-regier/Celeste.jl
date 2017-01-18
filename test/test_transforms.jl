@@ -248,6 +248,13 @@ function test_enforce_bounds()
 end
 
 
+function test_omitted_ids()
+    images, ea, body = true_star_init()
+    DeterministicVI.maximize_f(DeterministicVI.elbo, ea, omitted_ids=[1,2])
+end
+
+
+test_omitted_ids()
 test_transform_box_functions()
 test_parameter_conversion()
 test_transform_simplex_functions()
