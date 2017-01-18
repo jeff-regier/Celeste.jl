@@ -99,7 +99,7 @@ function compare_vp_params(r1, r2)
             return false
         end
     end
-
+    
     return length(r1) == length(r2)
 end
 

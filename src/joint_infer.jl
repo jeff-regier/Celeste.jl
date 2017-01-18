@@ -4,6 +4,7 @@ import Optim
 
 import ..Log
 using ..Model
+using ..Transform
 import ..SDSSIO
 import ..Infer
 import ..SDSSIO: RunCamcolField
@@ -258,42 +259,55 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
 
     # Pre-allocate dictionary of elboargs, call it ea_vec.
     ea_vec = Array{ElboArgs}(n_sources)
+
+    # The mp transform vec needs to be persisted across calls to maximize_f to
+    # constrain the source to its initial position.
+    transform_vec = Array{DataTransform}(n_sources)
     
     function initialize_elboargs_sources(sources)
-#        nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for $(length(sources)) sources")
-        for cur_source_index in sources
-            entry_id = target_sources[cur_source_index]
-            entry = catalog[target_sources[cur_source_index]]
-            neighbor_ids = neighbor_map[cur_source_index]
-            neighbors = catalog[neighbor_map[cur_source_index]]
+        try
+            #        nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for $(length(sources)) sources")
+            for cur_source_index in sources
+                entry_id = target_sources[cur_source_index]
+                entry = catalog[target_sources[cur_source_index]]
+                neighbor_ids = neighbor_map[cur_source_index]
+                neighbors = catalog[neighbor_map[cur_source_index]]
 
-            # TODO max: refactor this portion? It's reused in infer_source.
-#            nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for source $(target_sources[cur_source_index]): objid=$(entry.objid)")
-            cat_local = vcat([entry], neighbors)
-            ids_local = vcat([entry_id], neighbor_ids)
+                # TODO max: refactor this portion? It's reused in infer_source.
+                #            nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for source $(target_sources[cur_source_index]): objid=$(entry.objid)")
+                cat_local = vcat([entry], neighbors)
+                ids_local = vcat([entry_id], neighbor_ids)
 
-            patches = Infer.get_sky_patches(images, cat_local)
-            Infer.load_active_pixels!(images, patches)
+                patches = Infer.get_sky_patches(images, cat_local)
+                Infer.load_active_pixels!(images, patches)
 
-            # Load vp with shared target source params, and also vp
-            # that doesn't share target source params
-            vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
-                                 target_source_variational_params[x] :
-                                 catalog_init_source(catalog[x]) for x in ids_local]
+                # Load vp with shared target source params, and also vp
+                # that doesn't share target source params
+                vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
+                                     target_source_variational_params[x] :
+                                     catalog_init_source(catalog[x]) for x in ids_local]
 
-            # Switch parameters based on whether or not we're using the fft method
-            if use_fft
-                ea, _ = initialize_fft_elbo_parameters(images,
-                                                       vp,
-                                                       patches,
-                                                       [1],
-                                                       use_raw_psf=false,
-                                                       allocate_fsm_mat=true)
-            else
-                ea = ElboArgs(images, vp, patches, [1])
+                # Switch parameters based on whether or not we're using the fft method
+                if use_fft
+                    ea, _ = initialize_fft_elbo_parameters(images,
+                                                           vp,
+                                                           patches,
+                                                           [1],
+                                                           use_raw_psf=false,
+                                                           allocate_fsm_mat=true)
+                else
+                    ea = ElboArgs(images, vp, patches, [1])
+                end           
+
+                ea_vec[cur_source_index] = ea
+
+                # Also preallocate data for the transform vec
+                transform_vec[cur_source_index] = get_mp_transform(ea.vp,
+                                                                   ea.active_sources)
             end
-
-            ea_vec[cur_source_index] = ea
+        catch ex
+            Log.error(string(ex))
+            exit(-1)
         end
     end
 
@@ -336,10 +350,13 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
                     elbo,
                     ea_vec[cur_source_indx],
+                    transform_vec[cur_source_indx],
                     max_iters=n_newton_steps,
                     use_default_optim_params=use_default_optim_params)
             end
         catch ex
+            Log.error(stringe(ex))
+            exit(-1)
             if is_production_run || nthreads() > 1
                 Log.error(string(ex))
             else
