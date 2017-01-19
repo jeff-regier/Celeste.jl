@@ -164,7 +164,7 @@ function test_galaxy_optimization_fft()
         images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
     elbo_fft_opt =
         DeterministicVIImagePSF.get_fft_elbo_function(ea_fft, fsm_mat)
-    DeterministicVI.maximize_f(elbo_fft_opt, ea_fft; loc_width=1.0)
+    DeterministicVI.maximize_f_two_steps(elbo_fft_opt, ea_fft; loc_width=1.0)
     # TODO: Currently failing since it misses the brighness by 3%, which is
     # greater than the 1% permitted by the test.  However, the ELBO of the
     # FFT optimum is lower than that of the MOG optimum.
@@ -181,13 +181,13 @@ function test_three_body_optimization_fft()
     ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
         images, deepcopy(ea.vp), ea.patches, [s], use_raw_psf=false)
     elbo_fft_opt = DeterministicVIImagePSF.get_fft_elbo_function(ea_fft, fsm_mat)
-    DeterministicVI.maximize_f(elbo_fft_opt, ea_fft; loc_width=1.0)
+    DeterministicVI.maximize_f_two_steps(elbo_fft_opt, ea_fft; loc_width=1.0)
 end
 
 
+test_galaxy_optimization_fft()
 test_three_body_optimization_fft()
 test_star_optimization_fft()
-test_galaxy_optimization_fft()
 
 #test_quadratic_optimization()
 test_star_optimization()

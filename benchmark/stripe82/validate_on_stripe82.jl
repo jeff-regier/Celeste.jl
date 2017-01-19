@@ -7,7 +7,7 @@ import Celeste.ParallelRun: BoundingBox,
 import Celeste.Stripe82Score: score_field_disk, score_object_disk
 import Celeste.SDSSIO: RunCamcolField
 import Celeste.DeterministicVI: infer_source
-import Celeste.DeterministicVIImagePSF: infer_source_fft
+import Celeste.DeterministicVIImagePSF: infer_source_fft, infer_source_fft_two_step
 
 
 # I'd rather let the user specify a rcf on the command line, but picking
@@ -69,7 +69,7 @@ where
 """
 const truthfile = joinpath(datadir, "coadd_for_4263_5_119.fit")
 
-const valid_args = Set(["--score-only", "--joint", "--fft"])
+const valid_args = Set(["--score-only", "--joint", "--fft", "--fft_two_step"])
 
 if !(ARGS ⊆ valid_args)
     args_str = join(["[$va]" for va in valid_args],  " ")
@@ -82,7 +82,14 @@ else
     if !("--score-only" in ARGS)
         wrap_joint(cnti...) = one_node_joint_infer(cnti...;
 						   use_fft=("--fft" in ARGS))
-        source_callback = "--fft" in ARGS ? infer_source_fft : infer_source
+        source_callback = nothing
+        if "--fft" in ARGS
+            source_callback = infer_source_fft
+        elseif "--fft_two_step" in ARGS
+            source_callback = infer_source_fft_two_step
+        else
+            source_callback = infer_source
+        end
         wrap_single(cnti...) = one_node_single_infer(cnti...;
                                       infer_source_callback=source_callback)
         infer_callback = "--joint" in ARGS ? wrap_joint : wrap_single
