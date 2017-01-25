@@ -181,7 +181,7 @@ function debug_populate_fsm_mat!(
         calculate_gradient=ea.elbo_vars.elbo.has_gradient,
         calculate_hessian=ea.elbo_vars.elbo.has_hessian);
 
-    gal_mcs_vec = Array(Array{GalaxyCacheComponent{Float64}, 4}, ea.N);
+    gal_mcs_vec = Vector{Array{GalaxyCacheComponent{Float64}, 4}}(ea.N)
     for b=1:ea.N
         gal_mcs_vec[b] = load_gal_bvn_mixtures(
                 ea.S, ea.patches, ea.vp, ea.active_sources, b,

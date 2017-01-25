@@ -17,7 +17,7 @@ function read_r_colors(prior_file)
 	fits = FITS(prior_file)
     cat = fits[2]
 	num_rows, = read_key(cat, "NAXIS2")
-	table = Array(Float64, num_rows, 12)
+	table = Matrix{Float64}(num_rows, 12)
 	for i in 1:12
     col_name, = read_key(cat, "TTYPE$i")
 		table[:, i] = read(cat, col_name)
@@ -30,7 +30,7 @@ function read_r_colors(prior_file)
 	end
 
 	t3 = mag_to_nanomaggies.(t2[:, 3:7])
-	colors = Array(Float64, size(t2)[1], 4)
+	colors = Matrix{Float64}(size(t2, 1), 4)
 	for i in 1:4
 		colors[:, i] = log(t3[:, i + 1] ./ t3[:, i])
 	end
@@ -50,7 +50,7 @@ function read_quasar_catalog(prior_file)
 end
 
 function vecmat_to_tensor(vecmat::Vector{Matrix{Float64}})
-    ret = Array(Float64, size(vecmat[1], 1), size(vecmat[1], 2), length(vecmat))
+    ret = Array{Float64,3}(size(vecmat[1], 1), size(vecmat[1], 2), length(vecmat))
     for i in 1:length(vecmat)
         ret[:, :, i] = vecmat[i]
     end

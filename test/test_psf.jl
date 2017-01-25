@@ -77,9 +77,9 @@ function test_transform_psf_params()
   psf_params_2 = constrain_psf_params(psf_params_free, psf_transform)
 
   for k=1:K
-    @test_approx_eq psf_params[k] psf_params_original[k]
-    @test_approx_eq psf_params_free[k] psf_params_free_2[k]
-    @test_approx_eq psf_params[k] psf_params_2[k]
+    @test psf_params[k]      ≈ psf_params_original[k]
+    @test psf_params_free[k] ≈ psf_params_free_2[k]
+    @test psf_params[k]      ≈ psf_params_2[k]
   end
 end
 
@@ -105,8 +105,8 @@ function test_psf_fit()
     local sigma_vec, sig_sf_vec, bvn_vec
     sigma_vec, sig_sf_vec, bvn_vec = PSF.get_sigma_from_params(psf_params)
 
-    # sigma_vec = Array(Matrix{NumType}, K)
-    # sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K)
+    # sigma_vec = Vector{Matrix{NumType}}(K)
+    # sig_sf_vec = Vector{GalaxySigmaDerivs{NumType}}(K)
     #
     # for k = 1:K
     #   sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.e_axis],
@@ -133,7 +133,7 @@ function test_psf_fit()
 
   x = @SVector [1.0, 2.0]
 
-  sigma_vec = Array(Matrix{Float64}, K)
+  sigma_vec = Vector{Matrix{Float64}}(K)
   for k = 1:K
     sigma_vec[k] = PSF.get_bvn_cov(psf_params[k][psf_ids.e_axis],
                                     psf_params[k][psf_ids.e_angle],
@@ -146,15 +146,15 @@ function test_psf_fit()
                   for k = 1:K ]
 
   psf_rendered = get_psf_at_point(psf_components, rows=[ x[1] ], cols=[ x[2] ])[1]
-  @test_approx_eq psf_rendered pixel_value_wrapper_value(psf_param_vec)
+  @test psf_rendered ≈ pixel_value_wrapper_value(psf_param_vec)
 
   pixel_value = deepcopy(pixel_value_wrapper_sf(psf_param_vec, true))
 
   ad_grad = ForwardDiff.gradient(pixel_value_wrapper_value, psf_param_vec)
   ad_hess = ForwardDiff.hessian(pixel_value_wrapper_value, psf_param_vec)
 
-  @test_approx_eq ad_grad pixel_value.d[:]
-  @test_approx_eq ad_hess[:] pixel_value.h[:]
+  @test ad_grad    ≈ pixel_value.d[:]
+  @test ad_hess[:] ≈ pixel_value.h[:]
 
   # Test the whole least squares function.
   println("Testing psf least squares")
@@ -181,8 +181,8 @@ function test_psf_fit()
   ad_grad = ForwardDiff.gradient(evaluate_psf_fit_wrapper_value, psf_param_vec)
   ad_hess = ForwardDiff.hessian(evaluate_psf_fit_wrapper_value, psf_param_vec)
 
-  @test_approx_eq ad_grad squared_error.d[:]
-  @test_approx_eq ad_hess[:] squared_error.h[:]
+  @test ad_grad    ≈ squared_error.d[:]
+  @test ad_hess[:] ≈ squared_error.h[:]
 end
 
 
@@ -227,9 +227,9 @@ function test_transform_psf_sensitive_float()
   ad_grad = ForwardDiff.gradient(psf_fit_for_optim_val, psf_params_free_vec)
   ad_hess = ForwardDiff.hessian(psf_fit_for_optim_val, psf_params_free_vec)
 
-  @test_approx_eq expected_value sf_free.v[]
-  @test_approx_eq sf_free.d[:] ad_grad
-  @test_approx_eq sf_free.h ad_hess
+  @test expected_value ≈ sf_free.v[]
+  @test sf_free.d[:]   ≈ ad_grad
+  @test sf_free.h      ≈ ad_hess
 end
 
 
@@ -251,7 +251,7 @@ function test_psf_optimizer()
   celeste_psf = fit_raw_psf_for_celeste(raw_psf, K)[1]
   rendered_psf = get_psf_at_point(celeste_psf)
 
-  @test_approx_eq Optim.minimum(nm_result) sum((raw_psf - rendered_psf) .^ 2)
+  @test Optim.minimum(nm_result) ≈ sum((raw_psf - rendered_psf) .^ 2)
 
   # Make sure that re-using the optimizer gets the same results.
   raw_psf_10_10 = load_raw_psf(x=10., y=10.)
@@ -260,9 +260,9 @@ function test_psf_optimizer()
   celeste_psf_10_10_v2, psf_params_10_10_v2 =
     fit_raw_psf_for_celeste(raw_psf_10_10, psf_optimizer, psf_params)
   for k=1:K
-    @test_approx_eq psf_params_10_10_v1[k] psf_params_10_10_v2[k]
+    @test psf_params_10_10_v1[k] ≈ psf_params_10_10_v2[k]
     for field in fieldnames(celeste_psf_10_10_v1[k])
-      @test_approx_eq getfield(celeste_psf_10_10_v1[k], field) getfield(celeste_psf_10_10_v2[k], field)
+      @test getfield(celeste_psf_10_10_v1[k], field) ≈ getfield(celeste_psf_10_10_v2[k], field)
     end
   end
 end

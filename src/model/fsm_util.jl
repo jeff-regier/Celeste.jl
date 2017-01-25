@@ -35,8 +35,8 @@ function load_bvn_mixtures{NumType <: Number}(
                     calculate_hessian::Bool=true)
     # TODO: do not keep any derviative information if the sources are not in
     # active_sources.
-    star_mcs = Array(BvnComponent{NumType}, psf_K, S)
-    gal_mcs = Array(GalaxyCacheComponent{NumType}, psf_K, 8, 2, S)
+    star_mcs = Matrix{BvnComponent{NumType}}(psf_K, S)
+    gal_mcs  = Array{GalaxyCacheComponent{NumType}}(psf_K, 8, 2, S)
 
     for s in 1:S
         psf = patches[s, n].psf

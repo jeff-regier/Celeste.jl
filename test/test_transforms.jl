@@ -59,12 +59,12 @@ function test_parameter_conversion()
         Transform.to_vp!(transform, vp_free, ea_check.vp)
 
         for id in fieldnames(ids), s in 1:ea.S
-            @test_approx_eq_eps(original_vp[s][getfield(ids, id)],
-                                ea_check.vp[s][getfield(ids, id)], 1e-6)
+            @test isapprox(original_vp[s][getfield(ids, id)],
+                           ea_check.vp[s][getfield(ids, id)], atol=1e-6)
         end
 
         # Check conversion to and from a vector.
-        omitted_ids = Array(Int, 0)
+        omitted_ids = Vector{Int}(0)
         kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
         vp = deepcopy(ea.vp)
         x = Transform.vp_to_array(transform, vp, omitted_ids)
@@ -75,7 +75,7 @@ function test_parameter_conversion()
 
         for id in fieldnames(ids), si in eachindex(transform.active_sources)
             s = transform.active_sources[si]
-            @test_approx_eq_eps(original_vp[s][getfield(ids, id)], vp2[si][getfield(ids, id)], 1e-6)
+            @test isapprox(original_vp[s][getfield(ids, id)], vp2[si][getfield(ids, id)], atol=1e-6)
         end
 
     end
@@ -101,7 +101,7 @@ function test_transform_simplex_functions()
 
         param_free = Transform.unsimplexify_parameter(param, simplex_box)
         new_param = Transform.simplexify_parameter(param_free, simplex_box)
-        @test_approx_eq param new_param
+        @test param ≈ new_param
     end
 
     for this_scale = [ 1.0, 2.0 ], lb = [0.1, 0.0 ]
@@ -116,7 +116,7 @@ function test_transform_simplex_functions()
 
         # Test the scaling
         unscaled_simplex_box = Transform.SimplexBox(lb, 1.0, length(param))
-        @test_approx_eq(
+        @test isapprox(
             Transform.unsimplexify_parameter(param, simplex_box),
             this_scale * Transform.unsimplexify_parameter(param, unscaled_simplex_box))
 
@@ -136,7 +136,7 @@ function test_transform_box_functions()
     function box_and_unbox{NumType <: Number}(param::NumType, param_box::ParamBox)
         param_free = Transform.unbox_parameter(param, param_box)
         new_param = Transform.box_parameter(param_free, param_box)
-        @test_approx_eq param new_param
+        @test param ≈ new_param
     end
 
     for this_scale = [ 1.0, 2.0 ], lb = [-10.0, 0.1], ub = [0.5, Inf]
@@ -151,7 +151,7 @@ function test_transform_box_functions()
 
         # Test the scaling
         unscaled_param_box = Transform.ParamBox(lb, ub, 1.0)
-        @test_approx_eq(
+        @test isapprox(
             Transform.unbox_parameter(param, param_box),
             this_scale * Transform.unbox_parameter(param, unscaled_param_box))
 
@@ -164,19 +164,19 @@ end
 
 
 function test_basic_transforms()
-    @test_approx_eq 0.99 Transform.logit(Transform.inv_logit(0.99))
-    @test_approx_eq -6.0 Transform.inv_logit(Transform.logit(-6.0))
+    @test 0.99 ≈ Transform.logit(Transform.inv_logit(0.99))
+    @test -6.0 ≈ Transform.inv_logit(Transform.logit(-6.0))
 
-    @test_approx_eq(
+    @test isapprox(
         [ 0.99, 0.001 ], Transform.logit.(Transform.inv_logit.([ 0.99, 0.001 ])))
-    @test_approx_eq(
+    @test isapprox(
         [ -6.0, 0.5 ], Transform.inv_logit.(Transform.logit.([ -6.0, 0.5 ])))
 
     z = Float64[ 2.0, 4.0 ]
     z ./= sum(z)
     x = Transform.unconstrain_simplex(z)
 
-    @test_approx_eq Transform.constrain_to_simplex(x) z
+    @test Transform.constrain_to_simplex(x) ≈ z
 
     @test Transform.inv_logit(1.0) == Inf
     @test Transform.inv_logit(0.0) == -Inf
@@ -184,13 +184,13 @@ function test_basic_transforms()
     @test Transform.logit(Inf) == 1.0
     @test Transform.logit(-Inf) == 0.0
 
-    @test_approx_eq Transform.constrain_to_simplex([-Inf]) [0.0, 1.0]
-    @test_approx_eq Transform.unconstrain_simplex([0.0, 1.0]) [-Inf]
+    @test Transform.constrain_to_simplex([-Inf])    ≈ [0.0, 1.0]
+    @test Transform.unconstrain_simplex([0.0, 1.0]) ≈ [-Inf]
 
-    @test_approx_eq Transform.constrain_to_simplex([Inf]) [1.0, 0.0]
-    @test_approx_eq Transform.unconstrain_simplex([1.0, 0.0]) [Inf]
+    @test Transform.constrain_to_simplex([Inf])     ≈ [1.0, 0.0]
+    @test Transform.unconstrain_simplex([1.0, 0.0]) ≈ [Inf]
 
-    @test_approx_eq Transform.constrain_to_simplex([Inf, 5]) [1.0, 0.0, 0.0]
+    @test Transform.constrain_to_simplex([Inf, 5])  ≈ [1.0, 0.0, 0.0]
 end
 
 

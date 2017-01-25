@@ -1,6 +1,7 @@
 import FITSIO
 import JLD
 import Optim
+using DataStructures
 
 import ..Log
 using ..Model
@@ -105,7 +106,7 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
     end
 
     # The final workload distribution.
-    thread_sources_assignment = Array(Vector{Vector{Int64}}, nprocthreads)
+    thread_sources_assignment = Vector{Vector{Vector{Int64}}}(nprocthreads)
     for thread = 1:nprocthreads
         thread_sources_assignment[thread] = Vector{Vector{Int64}}(n_total_batches)
         for batch = 1:n_total_batches
@@ -122,7 +123,7 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
     # TODO max - parallelize everything below (particularly CC computation)
 
     # The components tree is for union-find.
-    components_tree = [Array(Int64, batch_size) for i=1:nprocthreads]
+    components_tree = [Vector{Int64}(batch_size) for i=1:nprocthreads]
 
     # We have n_total_batches components, where each component is a dictionary
     # from the component id, to a list of sources in that component
@@ -144,13 +145,13 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
     # Load balance the connected components within each batch into thread_sources_assignment.
     for (cur_batch, cur_batch_component) in enumerate(components)
         # Priority queue for load balancing.
-        pqueue = Base.Collections.PriorityQueue([i for i=1:nprocthreads],
-                                                [0 for i=1:nprocthreads],
-                                                Base.Order.Forward)
+        pqueue = PriorityQueue([i for i=1:nprocthreads],
+                               [0 for i=1:nprocthreads],
+                               Base.Order.Forward)
 
         # Assign non-conflicting group of sources to different threads
         for (component_group_id, sources_of_component) in cur_batch_component
-            least_loaded_thread = Base.Collections.peek(pqueue)[1]
+            least_loaded_thread = peek(pqueue)[1]
             for source_to_assign in sources_of_component
                 push!(thread_sources_assignment[least_loaded_thread][cur_batch], source_to_assign)
                 assigned_sources += 1
@@ -181,7 +182,7 @@ function partition_equally(nprocthreads, n_sources)
     Log.info("Starting basic source partitioning...")
     tic()
     n_sources_per_thread = floor(Int64, n_sources / nprocthreads)
-    thread_sources_assignment = Array(Vector{Vector{Int64}}, nprocthreads)
+    thread_sources_assignment = Vector{Vector{Vector{Int64}}}(nprocthreads)
     n_sources_assigned = 0
     for thread = 1:nprocthreads
         start_source = (thread-1) * n_sources_per_thread
@@ -258,11 +259,11 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     end
 
     # Pre-allocate dictionary of elboargs, call it ea_vec.
-    ea_vec = Array{ElboArgs}(n_sources)
+    ea_vec = Vector{ElboArgs}(n_sources)
 
     # The mp transform vec needs to be persisted across calls to maximize_f to
     # constrain the source to its initial position.
-    transform_vec = Array{DataTransform}(n_sources)
+    transform_vec = Vector{DataTransform}(n_sources)
     
     function initialize_elboargs_sources(sources)
         try

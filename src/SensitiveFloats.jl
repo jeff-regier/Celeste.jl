@@ -41,9 +41,9 @@ immutable SensitiveFloat{NumType}
                    has_gradient::Bool, has_hessian::Bool) = begin
         @assert has_gradient || !has_hessian
         v = Ref(zero(NumType))
-        d = has_gradient ? zeros(NumType, local_P, local_S) : Array(NumType, 0, 0)
+        d = has_gradient ? zeros(NumType, local_P, local_S) : Matrix{NumType}(0, 0)
         h = has_hessian ? zeros(NumType, local_P * local_S, local_P * local_S) :
-                       Array(NumType, 0, 0)
+                       Matrix{NumType}(0, 0)
         new(v, d, h, local_P, local_S, has_gradient, has_hessian)
     end
 end
@@ -242,7 +242,7 @@ function zero_sensitive_float_array(NumType::DataType,
                                     local_P::Int,
                                     local_S::Int,
                                     d::Integer...)
-    sf_array = Array(SensitiveFloat{NumType}, d)
+    sf_array = Array{SensitiveFloat{NumType}}(d)
     for ind in 1:length(sf_array)
         # Do we always want these arrays to have gradients and hessians?
         sf_array[ind] = SensitiveFloat{NumType}(local_P, local_S, true, true)

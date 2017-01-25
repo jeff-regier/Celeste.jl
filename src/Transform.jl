@@ -195,10 +195,10 @@ Returns:
 """
 function simplex_derivatives{NumType <: Number}(z_sim::Vector{NumType})
     n = length(z_sim)
-    hessian_vec = Array(Array{NumType}, n)
+    hessian_vec = Vector{Array{NumType}}(n)
 
     for i = 1:n
-        hessian_vec[i] = Array(NumType, n - 1, n - 1)
+        hessian_vec[i] = Matrix{NumType}(n - 1, n - 1)
         for j=1:(n - 1), k=1:(n - 1)
             if j != k
                 if (j == i)
@@ -297,7 +297,7 @@ type TransformDerivatives{NumType <: Number}
         dparam_dfree =
             zeros(NumType,
                         Sa * length(CanonicalParams), Sa * length(UnconstrainedParams))
-        d2param_dfree2 = Array(Matrix{NumType}, Sa * length(CanonicalParams))
+        d2param_dfree2 = Vector{Matrix{NumType}}(Sa * length(CanonicalParams))
         for i in 1:(Sa * length(CanonicalParams))
             d2param_dfree2[i] =
                 zeros(NumType,
@@ -648,27 +648,27 @@ function get_mp_transform{NumType <: Number}(
                           active_sources::Vector{Int};
                           loc_scale=1.0,
                           loc_width=1e-4)
-    bounds = Array(ParamBounds, length(active_sources))
+    bounds = Vector{ParamBounds}(length(active_sources))
 
     # Note that, for numerical reasons, the bounds must be on the scale
     # of reasonably meaningful changes.
     for si in 1:length(active_sources)
         s = active_sources[si]
         bounds[si] = ParamBounds()
-        bounds[si][:u] = Array(ParamBox, 2)
+        bounds[si][:u] = Vector{ParamBox}(2)
         u = vp[s][ids.u]
         for axis in 1:2
             bounds[si][:u][axis] =
                 ParamBox(u[axis] - loc_width, u[axis] + loc_width, loc_scale)
         end
-        bounds[si][:r1] = Array(ParamBox, Ia)
-        bounds[si][:r2] = Array(ParamBox, Ia)
+        bounds[si][:r1] = Vector{ParamBox}(Ia)
+        bounds[si][:r2] = Vector{ParamBox}(Ia)
         for i in 1:Ia
             bounds[si][:r1][i] = ParamBox(-1.0, 10., 1.0)
             bounds[si][:r2][i] = ParamBox(1e-4, 0.1, 1.0)
         end
-        bounds[si][:c1] = Array(ParamBox, 4 * Ia)
-        bounds[si][:c2] = Array(ParamBox, 4 * Ia)
+        bounds[si][:c1] = Vector{ParamBox}(4 * Ia)
+        bounds[si][:c2] = Vector{ParamBox}(4 * Ia)
         for ind in 1:length(ids.c1)
             bounds[si][:c1][ind] = ParamBox(-10., 10., 1.0)
             bounds[si][:c2][ind] = ParamBox(1e-4, 1., 1.0)
@@ -678,10 +678,10 @@ function get_mp_transform{NumType <: Number}(
         bounds[si][:e_angle] = ParamBox[ ParamBox(-10.0, 10.0, 1.0) ]
         bounds[si][:e_scale] = ParamBox[ ParamBox(0.1, 70., 1.0) ]
 
-        bounds[si][:a] = Array(SimplexBox, 1)
+        bounds[si][:a] = Vector{SimplexBox}(1)
         bounds[si][:a][1] = SimplexBox(0.005, 1.0, 2)
 
-        bounds[si][:k] = Array(SimplexBox, Ia)
+        bounds[si][:k] = Vector{SimplexBox}(Ia)
         for i in 1:Ia
             bounds[si][:k][i] = SimplexBox(0.01 / D, 1.0, D)
         end

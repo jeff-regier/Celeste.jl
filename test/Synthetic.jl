@@ -124,7 +124,7 @@ function sample_fluxes(i::Int, r_s)
     k_s = rand(Distributions.Categorical(pp.k[i]))
     c_s = rand(Distributions.MvNormal(pp.c[i][:, k_s], pp.c[i][:, :, k_s]))
 
-    l_s = Array(Float64, 5)
+    l_s = Vector{Float64}(5)
     l_s[3] = r_s
     l_s[4] = l_s[3] * exp(c_s[3])
     l_s[5] = l_s[4] * exp(c_s[4])

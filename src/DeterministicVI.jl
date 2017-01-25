@@ -25,7 +25,7 @@ export ElboArgs, generic_init_source, catalog_init_source, init_sources
 Return a default-initialized VariationalParams instance.
 """
 function generic_init_source(init_pos::Vector{Float64})
-    ret = Array(Float64, length(CanonicalParams))
+    ret = Vector{Float64}(length(CanonicalParams))
     ret[ids.a[2, 1]] = 0.5
     ret[ids.a[1, 1]] = 1.0 - ret[ids.a[2, 1]]
     ret[ids.u[1]] = init_pos[1]
@@ -82,7 +82,7 @@ end
 
 
 function init_sources(target_sources::Vector{Int}, catalog::Vector{CatalogEntry})
-    ret = Array(Vector{Float64}, length(catalog))
+    ret = Vector{Vector{Float64}}(length(catalog))
     for s in 1:length(catalog)
         ret[s] = catalog_init_source(catalog[s])
     end

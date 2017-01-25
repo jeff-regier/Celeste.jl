@@ -11,11 +11,11 @@ import SampleData: gen_two_body_dataset, true_star_init
 function test_set_hess()
     sf = SensitiveFloat{Float64}(length(ids), 1, true, true)
     set_hess!(sf, 2, 3, 5.0)
-    @test_approx_eq sf.h[2, 3] 5.0
-    @test_approx_eq sf.h[3, 2] 5.0
+    @test sf.h[2, 3] ≈ 5.0
+    @test sf.h[3, 2] ≈ 5.0
 
     set_hess!(sf, 4, 4, 6.0)
-    @test_approx_eq sf.h[4, 4] 6.0
+    @test sf.h[4, 4] ≈ 6.0
 end
 
 
@@ -26,15 +26,15 @@ function test_bvn_cov()
 
     manual_11 = e_scale^2 * (1 + (e_axis^2 - 1) * (sin(e_angle))^2)
     util_11 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[1,1]
-    @test_approx_eq util_11 manual_11
+    @test util_11 ≈ manual_11
 
     manual_12 = e_scale^2 * (1 - e_axis^2) * (cos(e_angle)sin(e_angle))
     util_12 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[1,2]
-    @test_approx_eq util_12 manual_12
+    @test util_12 ≈ manual_12
 
     manual_22 = e_scale^2 * (1 + (e_axis^2 - 1) * (cos(e_angle))^2)
     util_22 = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)[2,2]
-    @test_approx_eq util_22 manual_22
+    @test util_22 ≈ manual_22
 end
 
 
@@ -72,7 +72,7 @@ function test_active_sources()
     P = length(CanonicalParams)
     ea_no2 = ElboArgs(ea.images, ea.vp, ea.patches, [1, 2])
     elbo_no2 = DeterministicVI.elbo_likelihood(ea_no2)
-    @test_approx_eq elbo_no2.d[:, 2] zeros(P, 1)
+    @test elbo_no2.d[:, 2] ≈ zeros(P, 1)
 
     # lets make the second source have only a few active pixels
     # in one band, so it and source 1 don't overlap completely
@@ -85,24 +85,24 @@ function test_active_sources()
 
     ea21 = ElboArgs(ea.images, ea.vp, ea.patches, [2, 1])
     elbo_lik_21 = DeterministicVI.elbo_likelihood(ea21)
-    @test_approx_eq elbo_lik_12.v[] elbo_lik_21.v[]
-    @test_approx_eq elbo_lik_12.d[:,1] elbo_lik_21.d[:,2]
-    @test_approx_eq elbo_lik_12.d[:,2] elbo_lik_21.d[:,1]
+    @test elbo_lik_12.v[]    ≈ elbo_lik_21.v[]
+    @test elbo_lik_12.d[:,1] ≈ elbo_lik_21.d[:,2]
+    @test elbo_lik_12.d[:,2] ≈ elbo_lik_21.d[:,1]
 
     # next main test--deriviatives for active sources don't
     ea1 = ElboArgs(ea.images, ea.vp, ea.patches, [1,])
     elbo_lik_1 = DeterministicVI.elbo_likelihood(ea1)
     # source 1 includes all of source 2's active pixels
-    @test_approx_eq elbo_lik_1.v[] elbo_lik_12.v[]
+    @test elbo_lik_1.v[] ≈ elbo_lik_12.v[]
 
     ea2 = ElboArgs(ea.images, ea.vp, ea.patches, [2,])
     elbo_lik_2 = DeterministicVI.elbo_likelihood(ea2)
 
-    @test_approx_eq elbo_lik_12.d[:, 1] elbo_lik_1.d[:, 1]
-    @test_approx_eq elbo_lik_12.d[:, 2] elbo_lik_2.d[:, 1]
+    @test elbo_lik_12.d[:, 1] ≈ elbo_lik_1.d[:, 1]
+    @test elbo_lik_12.d[:, 2] ≈ elbo_lik_2.d[:, 1]
 
-    @test_approx_eq elbo_lik_12.h[1:P, 1:P] elbo_lik_1.h
-    @test_approx_eq elbo_lik_12.h[(1:P) + P, (1:P) + P] elbo_lik_2.h
+    @test elbo_lik_12.h[1:P, 1:P]             ≈ elbo_lik_1.h
+    @test elbo_lik_12.h[(1:P) + P, (1:P) + P] ≈ elbo_lik_2.h
 end
 
 
@@ -308,9 +308,9 @@ function test_num_allowed_sd()
     ea.num_allowed_sd = 3
     elbo_4sd = DeterministicVI.elbo(ea)
 
-    @test_approx_eq elbo_inf.v[] elbo_4sd.v[]
-    @test_approx_eq elbo_inf.d elbo_4sd.d
-    @test_approx_eq elbo_inf.h elbo_4sd.h
+    @test elbo_inf.v[] ≈ elbo_4sd.v[]
+    @test elbo_inf.d   ≈ elbo_4sd.d
+    @test elbo_inf.h   ≈ elbo_4sd.h
 end
 
 

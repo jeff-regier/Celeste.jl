@@ -95,9 +95,9 @@ function load_prior()
     # due to the greater flexibility of the galaxy model
     #a = [0.28, 0.72]
     a = [0.099, 0.001]
-    k = Array(Float64, D, Ia)
-    c_mean = Array(Float64, B - 1, D, Ia)
-    c_cov = Array(Float64, B - 1, B - 1, D, Ia)
+    k = Matrix{Float64}(D, Ia)
+    c_mean = Array{Float64}(B - 1, D, Ia)
+    c_cov = Array{Float64}(B - 1, B - 1, D, Ia)
 
     prior_params = [JLD.load(joinpath(cfgdir, "star_prior.jld")),
                     JLD.load(joinpath(cfgdir, "gal_prior.jld"))]

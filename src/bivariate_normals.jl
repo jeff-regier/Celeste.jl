@@ -334,7 +334,7 @@ function GalaxySigmaDerivs{NumType <: Number}(
   sin_sq = sin(e_angle)^2
   cos_sq = cos(e_angle)^2
 
-  j = Array(NumType, 3, length(gal_shape_ids))
+  j = Matrix{NumType}(3, length(gal_shape_ids))
   j[:, gal_shape_ids.e_axis] =
     2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
   j[:, gal_shape_ids.e_angle] =
@@ -342,7 +342,7 @@ function GalaxySigmaDerivs{NumType <: Number}(
   j[:, gal_shape_ids.e_scale] =
     2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale
 
-  t = Array(NumType, 3, length(gal_shape_ids), length(gal_shape_ids))
+  t = Array{NumType,3}(3, length(gal_shape_ids), length(gal_shape_ids))
   if calculate_tensor
     # Second derivatives.
 
@@ -421,7 +421,7 @@ function GalaxyCacheComponent{NumType <: Number}(
 
   # Declare in advance to save memory allocation.
   const empty_sig_sf =
-    GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0))
+    GalaxySigmaDerivs(Matrix{NumType}(0, 0), Array{NumType,3}(0, 0, 0))
 
   XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = @SVector NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]

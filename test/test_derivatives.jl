@@ -219,8 +219,8 @@ function test_e_g_s_functions()
         elbo_vars = e_g_wrapper_fun(ea)
 
         # Sanity check the variance value.
-        @test_approx_eq(elbo_vars.var_G_s.v[],
-                        elbo_vars.E_G2_s.v[] - (elbo_vars.E_G_s.v[] ^ 2))
+        @test elbo_vars.var_G_s.v[] ≈
+                        elbo_vars.E_G2_s.v[] - (elbo_vars.E_G_s.v[] ^ 2)
 
         sf = test_var ? deepcopy(elbo_vars.var_G_s) : deepcopy(elbo_vars.E_G_s)
 
@@ -307,9 +307,7 @@ function test_fs1m_derivatives()
         gc = galaxy_prototypes[gcc_ind[3]][gcc_ind[2]]
         pc = ea.patches[s, b].psf[gcc_ind[1]]
 
-        @test_approx_eq(
-            pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(v) / (2 * pi),
-            fs1m.v[])
+        @test pc.alphaBar * gc.etaBar * gcc.e_dev_i * exp(v) / (2 * pi) ≈ fs1m.v[]
 
         test_with_autodiff(f_wrap_gal, par_gal, fs1m)
     end
@@ -433,17 +431,17 @@ function test_bvn_derivatives()
     par = wrap(x, sigma)
 
     # Sanity check
-    @test_approx_eq eval_bvn_log_density(elbo_vars, bvn, x) f_wrap(par)
+    @test eval_bvn_log_density(elbo_vars, bvn, x) ≈ f_wrap(par)
 
     bvn_derivs = elbo_vars.bvn_derivs
     ad_grad = ForwardDiff.gradient(f_wrap, par)
-    @test_approx_eq bvn_derivs.bvn_x_d ad_grad[x_ids]
-    @test_approx_eq bvn_derivs.bvn_sig_d ad_grad[sig_ids]
+    @test bvn_derivs.bvn_x_d   ≈ ad_grad[x_ids]
+    @test bvn_derivs.bvn_sig_d ≈ ad_grad[sig_ids]
 
     ad_hess = ForwardDiff.hessian(f_wrap, par)
-    @test_approx_eq bvn_derivs.bvn_xx_h ad_hess[x_ids, x_ids]
-    @test_approx_eq bvn_derivs.bvn_xsig_h ad_hess[x_ids, sig_ids]
-    @test_approx_eq bvn_derivs.bvn_sigsig_h ad_hess[sig_ids, sig_ids]
+    @test bvn_derivs.bvn_xx_h     ≈ ad_hess[x_ids, x_ids]
+    @test bvn_derivs.bvn_xsig_h   ≈ ad_hess[x_ids, sig_ids]
+    @test bvn_derivs.bvn_sigsig_h ≈ ad_hess[sig_ids, sig_ids]
 end
 
 
@@ -528,15 +526,15 @@ function test_galaxy_variable_transform()
     # Check the gradient.
     ad_grad = ForwardDiff.gradient(f_bvn_wrap, par)
     bvn_derivs = elbo_vars.bvn_derivs
-    @test_approx_eq ad_grad [bvn_derivs.bvn_u_d; bvn_derivs.bvn_s_d]
+    @test ad_grad ≈ [bvn_derivs.bvn_u_d; bvn_derivs.bvn_s_d]
 
     ad_hess = ForwardDiff.hessian(f_bvn_wrap, par)
-    @test_approx_eq ad_hess[1:2, 1:2] bvn_derivs.bvn_uu_h
-    @test_approx_eq ad_hess[1:2, 3:5] bvn_derivs.bvn_us_h
+    @test ad_hess[1:2, 1:2] ≈ bvn_derivs.bvn_uu_h
+    @test ad_hess[1:2, 3:5] ≈ bvn_derivs.bvn_us_h
 
     celeste_bvn_ss_h = deepcopy(bvn_derivs.bvn_ss_h)
     ad_bvn_ss_h = deepcopy(ad_hess[3:5, 3:5])
-    @test_approx_eq ad_hess[3:5, 3:5] bvn_derivs.bvn_ss_h
+    @test ad_hess[3:5, 3:5] ≈ bvn_derivs.bvn_ss_h
 end
 
 
@@ -613,7 +611,7 @@ function test_galaxy_cache_component()
     transform_bvn_derivs!(elbo_vars.bvn_derivs, gcc.sig_sf, patch.wcs_jacobian, true)
 
     # Sanity check the wrapper.
-    @test_approx_eq(
+    @test isapprox(
         -0.5 *((x - gcc.bmc.the_mean)' * gcc.bmc.precision * (x - gcc.bmc.the_mean) -
                      log(det(gcc.bmc.precision)))[1,1] - log(2pi) +
                      log(psf.alphaBar * gp.etaBar),
@@ -623,18 +621,18 @@ function test_galaxy_cache_component()
     ad_grad_fun = x -> ForwardDiff.gradient(f_wrap, x)
     ad_grad = ad_grad_fun(par)
     bvn_derivs = elbo_vars.bvn_derivs
-    @test_approx_eq ad_grad [bvn_derivs.bvn_u_d; bvn_derivs.bvn_s_d]
+    @test ad_grad ≈ [bvn_derivs.bvn_u_d; bvn_derivs.bvn_s_d]
 
     ad_hess_fun = x -> ForwardDiff.hessian(f_wrap, x)
     ad_hess = ad_hess_fun(par)
 
-    @test_approx_eq ad_hess[1:2, 1:2] bvn_derivs.bvn_uu_h
-    @test_approx_eq ad_hess[1:2, 3:5] bvn_derivs.bvn_us_h
+    @test ad_hess[1:2, 1:2] ≈ bvn_derivs.bvn_uu_h
+    @test ad_hess[1:2, 3:5] ≈ bvn_derivs.bvn_us_h
 
     # I'm not sure why this requires less precision for this test.
     celeste_bvn_ss_h = deepcopy(bvn_derivs.bvn_ss_h)
     ad_bvn_ss_h = deepcopy(ad_hess[3:5, 3:5])
-    @test_approx_eq ad_hess[3:5, 3:5] bvn_derivs.bvn_ss_h
+    @test ad_hess[3:5, 3:5] ≈ bvn_derivs.bvn_ss_h
 
 end
 
@@ -670,11 +668,11 @@ function test_galaxy_sigma_derivs()
 
         ad_grad_fun = x -> ForwardDiff.gradient(f_wrap, x)
         ad_grad = ad_grad_fun(par)
-        @test_approx_eq gal_derivs.j[si, :][:] ad_grad
+        @test gal_derivs.j[si, :][:] ≈ ad_grad
 
         ad_hess_fun = x -> ForwardDiff.hessian(f_wrap, x)
         ad_hess = ad_hess_fun(par)
-        @test_approx_eq(
+        @test isapprox(
             ad_hess,
             reshape(gal_derivs.t[si, :, :],
                     length(gal_shape_ids),
@@ -712,13 +710,13 @@ function test_brightness_hessian()
         bright_vp = ea.vp[1][brightness_standard_alignment[i]]
         bright = wrap_source_brightness(ea.vp[1], true)
 
-        @test_approx_eq bright.v[] wrap_source_brightness_value(bright_vp)
+        @test bright.v[] ≈ wrap_source_brightness_value(bright_vp)
 
         ad_grad = ForwardDiff.gradient(wrap_source_brightness_value, bright_vp)
-        @test_approx_eq ad_grad bright.d[:, 1]
+        @test ad_grad ≈ bright.d[:, 1]
 
         ad_hess = ForwardDiff.hessian(wrap_source_brightness_value, bright_vp)
-        @test_approx_eq ad_hess bright.h
+        @test ad_hess ≈ bright.h
     end
 end
 
@@ -739,7 +737,7 @@ function test_dsiginv_dsig()
         end
 
         ad_grad = ForwardDiff.gradient(invert_sigma, sigma_vec)
-        @test_approx_eq ad_grad bvn.dsiginv_dsig[component_index, :][:]
+        @test ad_grad ≈ bvn.dsiginv_dsig[component_index, :][:]
     end
 end
 
@@ -803,7 +801,7 @@ function test_combine_sfs()
         g_d, g_h
     end
 
-    s_ind = Array(UnitRange{Int}, 2)
+    s_ind = Vector{UnitRange{Int}}(2)
     s_ind[1] = 1:p
     s_ind[2] = (1:p) + p
 
@@ -828,16 +826,16 @@ function test_combine_sfs()
     grad = ForwardDiff.gradient(base_fun1, x)
     hess = ForwardDiff.hessian(base_fun1, x)
     for s=1:S
-        @test_approx_eq(ret1.d[:, s], grad[s_ind[s]])
+        @test ret1.d[:, s] ≈ grad[s_ind[s]]
     end
-    @test_approx_eq(ret1.h, hess)
+    @test ret1.h ≈ hess
 
     grad = ForwardDiff.gradient(base_fun2, x)
     hess = ForwardDiff.hessian(base_fun2, x)
     for s=1:S
-        @test_approx_eq(ret2.d[:, s], grad[s_ind[s]])
+        @test ret2.d[:, s] ≈ grad[s_ind[s]]
     end
-    @test_approx_eq(ret2.h, hess)
+    @test ret2.h ≈ hess
 
     # Test the combinations.
     v = combine_fun(x)
@@ -849,9 +847,9 @@ function test_combine_sfs()
     g_d, g_h = combine_fun_derivatives(x)
     combine_sfs!(sf1, sf2, sf1, sf1.v[] ^ 2 * sqrt(sf2.v[]), g_d, g_h)
 
-    @test_approx_eq sf1.v[] v
-    @test_approx_eq sf1.d[:] grad
-    @test_approx_eq sf1.h hess
+    @test sf1.v[]  ≈ v
+    @test sf1.d[:] ≈ grad
+    @test sf1.h    ≈ hess
 end
 
 
@@ -896,10 +894,10 @@ function test_add_sources_sf()
     v1 = sf_s.v[]
 
     fd_grad1 = ForwardDiff.gradient(f1, x1)
-    @test_approx_eq sf_s.d fd_grad1
+    @test sf_s.d ≈ fd_grad1
 
     fd_hess1 = ForwardDiff.hessian(f1, x1)
-    @test_approx_eq sf_s.h fd_hess1
+    @test sf_s.h ≈ fd_hess1
 
     add_sources_sf!(sf_all, sf_s, 1)
 
@@ -909,22 +907,20 @@ function test_add_sources_sf()
     v2 = sf_s.v[]
 
     fd_grad2 = ForwardDiff.gradient(f2, x2)
-    @test_approx_eq sf_s.d fd_grad2
+    @test sf_s.d ≈ fd_grad2
 
     fd_hess2 = ForwardDiff.hessian(f2, x2)
-    @test_approx_eq sf_s.h fd_hess2
+    @test sf_s.h ≈ fd_hess2
 
     add_sources_sf!(sf_all, sf_s, 2)
 
-    @test_approx_eq (v1 + v2) sf_all.v[]
-
-    @test_approx_eq (v1 + v2) sf_all.v[]
-    @test_approx_eq fd_grad1 sf_all.d[1:P, 1]
-    @test_approx_eq fd_grad2 sf_all.d[1:P, 2]
-    @test_approx_eq fd_hess1 sf_all.h[1:P, 1:P]
-    @test_approx_eq fd_hess2 sf_all.h[(1:P) + P, (1:P) + P]
-    @test_approx_eq zeros(P, P) sf_all.h[(1:P), (1:P) + P]
-    @test_approx_eq zeros(P, P) sf_all.h[(1:P) + P, (1:P)]
+    @test (v1 + v2)   ≈ sf_all.v[]
+    @test fd_grad1    ≈ sf_all.d[1:P, 1]
+    @test fd_grad2    ≈ sf_all.d[1:P, 2]
+    @test fd_hess1    ≈ sf_all.h[1:P, 1:P]
+    @test fd_hess2    ≈ sf_all.h[(1:P) + P, (1:P) + P]
+    @test zeros(P, P) ≈ sf_all.h[(1:P), (1:P) + P]
+    @test zeros(P, P) ≈ sf_all.h[(1:P) + P, (1:P)]
 end
 
 
@@ -960,8 +956,8 @@ function test_box_derivatives()
 
         d, h = Transform.box_derivatives(
             ea.vp[s][vp_ind][1], transform.bounds[s][param][ind])
-        @test_approx_eq ad_d d
-        @test_approx_eq ad_h h
+        @test ad_d ≈ d
+        @test ad_h ≈ h
     end
 end
 
@@ -1015,8 +1011,8 @@ function test_box_simplex_derivatives()
 
                 ad_d = ForwardDiff.gradient(wrap_transform, vp_free[s])[free_ind]
                 ad_h = ForwardDiff.hessian(wrap_transform, vp_free[s])[free_ind, free_ind]
-                @test_approx_eq ad_d d[row, :][1]
-                @test_approx_eq ad_h h[row]
+                @test ad_d ≈ d[row, :][1]
+                @test ad_h ≈ h[row]
             end
         end
     end
@@ -1031,8 +1027,8 @@ function test_simplex_derivatives()
     r = Transform.unsimplexify_parameter(z, basic_simplex_box)
     Transform.simplexify_parameter(r, basic_simplex_box)
 
-    ad_d = Array(Array{Float64}, n)
-    ad_h = Array(Array{Float64}, n)
+    ad_d = Vector{Array{Float64}}(n)
+    ad_h = Vector{Array{Float64}}(n)
 
     for ind = 1:n
         function wrap_simplex{NumType <: Number}(r::Vector{NumType})
@@ -1045,9 +1041,9 @@ function test_simplex_derivatives()
 
     jacobian, hessian_vec = Transform.simplex_derivatives(z)
 
-    @test_approx_eq jacobian' reduce(hcat, ad_d)
+    @test jacobian' ≈ reduce(hcat, ad_d)
     for ind = 1:n
-        @test_approx_eq(hessian_vec[ind], ad_h[ind])
+        @test hessian_vec[ind] ≈ ad_h[ind]
     end
 end
 
@@ -1160,8 +1156,8 @@ function test_transform_sensitive_float()
     ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec)
     ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec)
 
-    @test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
-    @test_approx_eq ad_hess elbo_trans.h
+    @test ad_grad ≈ reduce(vcat, elbo_trans.d)
+    @test ad_hess ≈ elbo_trans.h
 
   # Test with a subset of sources.
     ea.active_sources = [2]
@@ -1173,8 +1169,8 @@ function test_transform_sensitive_float()
     ad_grad = ForwardDiff.gradient(wrap_elbo, free_vp_vec)
     ad_hess = ForwardDiff.hessian(wrap_elbo, free_vp_vec)
 
-    @test_approx_eq ad_grad reduce(vcat, elbo_trans.d)
-    @test_approx_eq ad_hess elbo_trans.h
+    @test ad_grad ≈ reduce(vcat, elbo_trans.d)
+    @test ad_hess ≈ elbo_trans.h
 end
 
 

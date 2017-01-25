@@ -20,7 +20,7 @@ function invert_rcf_array(rcfs)
     max_camcol = maximum([rcf.camcol for rcf in rcfs])
     max_field = maximum([rcf.field for rcf in rcfs])
 
-    rcf_to_index = Array(Int64, max_run, max_camcol, max_field)
+    rcf_to_index = Array{Int64,3}(max_run, max_camcol, max_field)
 
     fill!(rcf_to_index, -1)
 
@@ -43,15 +43,15 @@ function load_images(box, rcfs, stagedir)
 
     #TODO: make `images` a global array
     # (each cell of `images` contains B=5 images)
-    images = Array(Vector{Image}, num_fields)
+    images = Vector{Vector{Image}}(num_fields)
 
     #TODO: make `catalog_offset` a global array too.
     # It stores first index of each field's sources in the catalog array.
-    catalog_offset = Array(Int64, num_fields)
+    catalog_offset = Vector{Int64}(num_fields)
 
     #TODO: make `task_offset` a global array too.
     # It stores first index of each field's tasks in the tasks array.
-    task_offset = Array(Int64, num_fields)
+    task_offset = Vector{Int64}(num_fields)
 
     #TODO: use dtree to have each thread on each node
     #  load some fields.
@@ -111,11 +111,11 @@ function load_catalog(box, rcfs, catalog_offset, task_offset, stagedir)
     num_tasks = task_offset[end]
 
     #TODO: make the `catalog` a GlobalArray
-    catalog = Array(Tuple{CatalogEntry, RunCamcolField}, catalog_size)
+    catalog = Vector{Tuple{CatalogEntry, RunCamcolField}}(catalog_size)
 
     # entries in `tasks` are indexes into `catalog`
     #TODO: make the `tasks` a GlobalArray
-    tasks = Array(Int64, num_tasks)
+    tasks = Vector{Int64}(num_tasks)
 
     #let's read the catalog from disk again, rather than storing it in memory
     for m in 0:(total_threads-1)

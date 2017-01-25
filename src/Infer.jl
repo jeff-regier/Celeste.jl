@@ -87,7 +87,7 @@ function get_sky_patches(images::Vector{Image},
                          min_radius_pix=8.0)
     N = length(images)
     S = length(catalog)
-    patches = Array(SkyPatch, S, N)
+    patches = Matrix{SkyPatch}(S, N)
 
     for n = 1:N
         img = images[n]

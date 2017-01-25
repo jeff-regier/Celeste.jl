@@ -1,6 +1,8 @@
 # Functions for loading FITS files from the SloanDigitalSkySurvey.
 module SDSSIO
 
+using Compat
+
 import FITSIO
 import WCS
 
@@ -52,7 +54,7 @@ constant extrapolation.)
 function interp_sky{T, S}(data::Array{T, 2}, xcoords::Vector{S},
                           ycoords::Vector{S})
     nx, ny = size(data)
-    out = Array(T, length(xcoords), length(ycoords))
+    out = Matrix{T}(length(xcoords), length(ycoords))
     for j=1:length(ycoords)
         y0 = floor(Int, ycoords[j])
         y1 = y0 + 1
@@ -254,7 +256,7 @@ function load_raw_images(rcf::RunCamcolField, datadir::String)
                         subdir3, rcf.run, rcf.camcol, rcf.field)
     psffile = FITSIO.FITS(psf_name)
 
-    result = Array(RawImage, 5)
+    result = Vector{RawImage}(5)
 
     for (b, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
 
@@ -333,7 +335,7 @@ function load_field_images(rcfs, stagedir)
     raw_images = SDSSIO.load_raw_images(rcfs, stagedir)
 
     N = length(raw_images)
-    images = Array(Image, N)
+    images = Vector{Image}(N)
 
     Threads.@threads for n in 1:N
         images[n] = convert(Image, raw_images[n])
@@ -361,8 +363,8 @@ function read_psf(fitsfile::FITSIO.FITS, band::Char)
     hdu = fitsfile[extnum]::FITSIO.TableHDU
 
     nrows = FITSIO.read_key(hdu, "NAXIS2")[1]::Int
-    nrow_b = (read(hdu, "nrow_b")::Vector{Int32})[1]
-    ncol_b = (read(hdu, "ncol_b")::Vector{Int32})[1]
+    nrow_b = Int((read(hdu, "nrow_b")::Vector{Int32})[1])
+    ncol_b = Int((read(hdu, "ncol_b")::Vector{Int32})[1])
     rnrow = (read(hdu, "rnrow")::Vector{Int32})[1]
     rncol = (read(hdu, "rncol")::Vector{Int32})[1]
     cmat_raw = read(hdu, "c")::Array{Float32, 3}
@@ -370,13 +372,13 @@ function read_psf(fitsfile::FITSIO.FITS, band::Char)
 
     # Only the first (nrow_b, ncol_b) submatrix of cmat is used for
     # reasons obscure to the author.
-    cmat = Array(Float64, nrow_b, ncol_b, size(cmat_raw, 3))
+    cmat = Array{Float64,3}(nrow_b, ncol_b, size(cmat_raw, 3))
     for k=1:size(cmat_raw, 3), j=1:nrow_b, i=1:ncol_b
         cmat[i, j, k] = cmat_raw[i, j, k]
     end
 
     # convert rrows to Array{Float64, 2}, assuming each row is the same length.
-    rrows = Array(Float64, length(rrows_raw[1]), length(rrows_raw))
+    rrows = Matrix{Float64}(length(rrows_raw[1]), length(rrows_raw))
     for i=1:length(rrows_raw)
         rrows[:, i] = rrows_raw[i]
     end
@@ -441,9 +443,9 @@ function read_photoobj(fname, band::Char='r')
 
     # Get "bright" objects.
     # (In objc_flags, the bit pattern Int32(2) corresponds to bright objects.)
-    is_bright = read(hdu, "objc_flags")::Vector{Int32} & Int32(2) .!= 0
-    is_saturated = read(hdu, "objc_flags")::Vector{Int32} & Int32(18) .!= 0
-    is_large = read(hdu, "objc_flags")::Vector{Int32} & Int32(24) .!= 0
+    is_bright    = @compat(read(hdu, "objc_flags")::Vector{Int32} .& Int32(2)) .!= 0
+    is_saturated = @compat(read(hdu, "objc_flags")::Vector{Int32} .& Int32(18)) .!= 0
+    is_large     = @compat(read(hdu, "objc_flags")::Vector{Int32} .& Int32(24)) .!= 0
 
     has_child = read(hdu, "nchild")::Vector{Int16} .> 0
 
@@ -451,20 +453,20 @@ function read_photoobj(fname, band::Char='r')
     objc_type = read(hdu, "objc_type")::Vector{Int32}
     is_star = objc_type .== 6
     is_gal = objc_type .== 3
-    is_bad_obj = !(is_star | is_gal)
+    is_bad_obj = @compat(!(is_star .| is_gal))
 
     fracdev = vec((read(hdu, "fracdev")::Matrix{Float32})[b, :])
 
     # determine mask for rows
     has_dev = fracdev .> 0.
     has_exp = fracdev .< 1.
-    is_comp = has_dev & has_exp
-    is_bad_fracdev = (fracdev .< 0.) | (fracdev .> 1)
+    is_comp = @compat(has_dev .& has_exp)
+    is_bad_fracdev = @compat((fracdev .< 0.) .| (fracdev .> 1))
 
     # TODO: We don't really want to exclude objects entirely just for being
     # bright: we just don't want to use for scoring (since
     # they're very saturated, presumably).
-    mask = !(is_bad_fracdev | is_bad_obj | is_bright | has_child)
+    mask = @compat(!(is_bad_fracdev .| is_bad_obj .| is_bright .| has_child))
 
     # Read the fluxes.
     # Record the cmodelflux if the galaxy is composite, otherwise use
@@ -526,7 +528,7 @@ Convert from a catalog in dictionary-of-arrays, as returned by
 read_photoobj to Vector{CatalogEntry}.
 """
 function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{String, Any})
-    out = Array(CatalogEntry, length(catalog["objid"]))
+    out = Vector{CatalogEntry}(length(catalog["objid"]))
 
     for i=1:length(catalog["objid"])
         worldcoords = [catalog["ra"][i], catalog["dec"][i]]
@@ -602,7 +604,7 @@ function read_photoobj_files(fts::Vector{RunCamcolField},
     end
 
     # Read in all photoobj catalogs.
-    rawcatalogs = Array(Dict, length(fts))
+    rawcatalogs = Vector{Dict}(length(fts))
     for i in eachindex(fts)
         ft = fts[i]
         dir = "$datadir/$(ft.run)/$(ft.camcol)/$(ft.field)"
@@ -620,7 +622,7 @@ function read_photoobj_files(fts::Vector{RunCamcolField},
     for cat in rawcatalogs
         mask = (cat["thing_id"] .!= -1)
         if duplicate_policy == :primary
-            mask &= (cat["mode"] .== 0x01)
+            mask = @compat(mask .& (cat["mode"] .== 0x01))
         end
         for key in keys(cat)
             cat[key] = cat[key][mask]

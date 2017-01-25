@@ -67,10 +67,10 @@ function test_images()
     obj_psf_val = PSF.get_psf_at_point(obj_psf)
 
     # The fits should match exactly.
-    @test_approx_eq_eps(obj_psf_val, fit_original_psf_val, 1e-6)
+    @test isapprox(obj_psf_val, fit_original_psf_val, atol=1e-6)
 
     # The raw psf will not be as good.
-    @test_approx_eq_eps(obj_psf_val, original_psf_val, 1e-2)
+    @test isapprox(obj_psf_val, original_psf_val, atol=1e-2)
 
     cat_several = [cat_entries[1]; cat_entries[obj_index]]
     ea_several = make_elbo_args(ea_obj.images, cat_several)
@@ -79,20 +79,20 @@ function test_images()
     point_patch_psf = PSF.get_psf_at_point(ea_several.patches[2, test_b].psf)
     # The threshold for the test below was formerly 1e-6.
     # Is it a problem I needed to increase it?
-    @test_approx_eq_eps(obj_psf_val, point_patch_psf, 1e-4)
+    @test isapprox(obj_psf_val, point_patch_psf, atol=5e-4)
 end
 
 
 function test_stamp_get_object_psf()
     stamp_blob, stamp_mp, body = gen_sample_star_dataset()
     img = stamp_blob[3]
-    obj_index =    stamp_mp.vp[1][ids.u]
+    obj_index = stamp_mp.vp[1][ids.u]
     pixel_loc = WCS.world_to_pix(img.wcs, obj_index)
     original_psf_val = PSF.get_psf_at_point(img.psf)
 
     obj_psf_val = PSF.get_psf_at_point(
       get_source_psf(stamp_mp.vp[1][ids.u], img, 2)[1])
-    @test_approx_eq_eps(obj_psf_val, original_psf_val, 1e-6)
+    @test isapprox(obj_psf_val, original_psf_val, atol=1e-6)
 end
 
 

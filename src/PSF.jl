@@ -224,7 +224,7 @@ Returns:
     - A vector of PSF parameters, one for each component.
 """
 function initialize_psf_params(K::Int; for_test::Bool=false)
-    psf_params = Array(Vector{Float64}, K)
+    psf_params = Vector{Vector{Float64}}(K)
     for k=1:K
         if for_test
             # Choose asymmetric values for testing.
@@ -263,7 +263,7 @@ function get_psf_transform(
         psf_params::Vector{Vector{Float64}};
         scale::Vector{Float64}=ones(length(PsfParams)))
     K = length(psf_params)
-    bounds = Array(ParamBounds, length(psf_params))
+    bounds = Vector{ParamBounds}(length(psf_params))
     # Note that, for numerical reasons, the bounds must be on the scale
     # of reasonably meaningful changes.
     for k in 1:K
@@ -324,7 +324,7 @@ Allocate memory for and return a constrained parameter set.
 function constrain_psf_params{NumType<:Number}(
         psf_params_free::Vector{Vector{NumType}}, psf_transform::DataTransform)
     K = length(psf_params_free)
-    psf_params = Array(Vector{NumType}, K)
+    psf_params = Vector{Vector{NumType}}(K)
     for k=1:K
         psf_params[k] = zeros(NumType, length(PsfParams))
     end
@@ -341,7 +341,7 @@ Allocate memory for and return an unconstrained parameter set.
 function unconstrain_psf_params{NumType<:Number}(
         psf_params::Vector{Vector{NumType}}, psf_transform::DataTransform)
     K = length(psf_params)
-    psf_params_free = Array(Vector{NumType}, K)
+    psf_params_free = Vector{Vector{NumType}}(K)
     for k=1:K
         psf_params_free[k] = zeros(NumType, length(PsfParams))
     end
@@ -359,7 +359,7 @@ function unwrap_psf_params{NumType <: Number}(psf_param_vec::Vector{NumType})
     @assert length(psf_param_vec) % length(PsfParams) == 0
     K = round(Int, length(psf_param_vec) / length(PsfParams))
     psf_param_mat = reshape(psf_param_vec, length(PsfParams), K)
-    psf_params = Array(Vector{NumType}, K)
+    psf_params = Vector{Vector{NumType}}(K)
     for k = 1:K
         psf_params[k] = psf_param_mat[:, k]
     end
@@ -485,9 +485,9 @@ Convert PSF parameters to covariance matrices and derivatives and BvnComponents.
 """
 function get_sigma_from_params{NumType <: Number}(psf_params::Vector{Vector{NumType}})
     K = length(psf_params)
-    sigma_vec = Array(SMatrix{2,2,NumType,4}, K)
-    sig_sf_vec = Array(GalaxySigmaDerivs{NumType}, K)
-    bvn_vec = Array(BvnComponent{NumType}, K)
+    sigma_vec = Vector{SMatrix{2,2,NumType,4}}(K)
+    sig_sf_vec = Vector{GalaxySigmaDerivs{NumType}}(K)
+    bvn_vec = Vector{BvnComponent{NumType}}(K)
     for k = 1:K
         sigma_vec[k] = get_bvn_cov(psf_params[k][psf_ids.e_axis],
             psf_params[k][psf_ids.e_angle],
@@ -651,7 +651,7 @@ function fit_raw_psf_for_celeste{P<:PsfOptimizer}(
             unwrap_psf_params(Optim.minimizer(optim_result)), psf_optimizer.psf_transform)
 
     sigma_vec = get_sigma_from_params(psf_params_fit)[1]
-    celeste_psf = Array(PsfComponent, K)
+    celeste_psf = Vector{PsfComponent}(K)
     for k=1:K
         mu = psf_params_fit[k][psf_ids.mu]
         weight = psf_params_fit[k][psf_ids.weight]

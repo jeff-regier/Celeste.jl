@@ -17,7 +17,7 @@ function test_kl_value(q_dist, p_dist, exact_kl::Float64)
     empirical_kl = mean(empirical_kl_samples)
     tol = 4 * std(empirical_kl_samples) / sqrt(sample_size)
     min_diff = 1e-2 * std(empirical_kl_samples) / sqrt(sample_size)
-    @test_approx_eq_eps empirical_kl exact_kl tol
+    @test isapprox(empirical_kl, exact_kl, atol=tol)
 end
 
 function test_beta_kl_value()
@@ -73,9 +73,9 @@ function test_subtract_kl()
     @test sf.v[] == DiffBase.value(kl_result)
     @test sf.d === DiffBase.gradient(kl_result)
     test_sf = JLD.load(joinpath(datadir, "kl_values.jld"), "sf")
-    @test_approx_eq sf.v[] test_sf.v[]
-    @test_approx_eq sf.d test_sf.d
-    @test_approx_eq sf.h test_sf.h
+    @test sf.v[] ≈ test_sf.v[]
+    @test sf.d   ≈ test_sf.d
+    @test sf.h   ≈ test_sf.h
 end
 
 println("Running KL divergence tests.")
