@@ -25,6 +25,7 @@ immutable SourceParams
     half_light_radius_arcsec::Float64
     angle_deg::Float64
     minor_major_axis_ratio::Float64
+    de_vaucouleurs_mixture_weight::Float64
 end
 
 function draw_source_params(prior)
@@ -48,10 +49,12 @@ function draw_source_params(prior)
         ))
         angle_deg = rand(Uniform(0, 180))
         minor_major_axis_ratio = rand(Beta(2, 2))
+        de_vaucouleurs_mixture_weight = rand(Beta(0.5, 0.5))
     else
         half_light_radius_px = -1
         angle_deg = -1
         minor_major_axis_ratio = -1
+        de_vaucouleurs_mixture_weight = -1
     end
 
     position_x = rand(Uniform(0, 1))
@@ -69,6 +72,7 @@ function draw_source_params(prior)
         half_light_radius_px * SDSS_ARCSEC_PER_PIXEL,
         angle_deg,
         minor_major_axis_ratio,
+        de_vaucouleurs_mixture_weight,
     )
 end
 
