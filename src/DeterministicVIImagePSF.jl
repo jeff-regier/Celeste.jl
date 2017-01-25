@@ -52,7 +52,7 @@ function infer_source_fft(images::Vector{Image},
    ea_fft, fsm_mat = initialize_fft_elbo_parameters(
        images, vp, patches, [1], use_raw_psf=false)
    elbo_fft_opt = get_fft_elbo_function(ea_fft, fsm_mat)
-   maximize_f(elbo_fft_opt, ea_fft)
+   maximize_f(elbo_fft_opt, ea_fft, max_iters=150)
 
    vp[1]
 end

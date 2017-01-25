@@ -9,7 +9,7 @@ using PyPlot
 # Load data.
 
 const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
-rcf = SDSSIO.RunCamcolField(4263, 5,119)
+rcf = SDSSIO.RunCamcolField(4263, 5, 119)
 images = SDSSIO.load_field_images(rcf, datadir);
 catalog = SDSSIO.read_photoobj_files([rcf], datadir, duplicate_policy=:first);
 
@@ -20,7 +20,7 @@ for cat in catalog
         print("\n")
     end
 end
-objid = "1237663784734490677"
+objid = "1237663784734491145"
 objids = [ce.objid for ce in catalog];
 sa = findfirst(objids, objid);
 neighbors = Infer.find_neighbors([sa], catalog, images)[1];
