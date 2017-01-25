@@ -2,6 +2,7 @@ import collections
 import hashlib
 import logging
 import os
+import sys
 
 import astropy.io.fits
 import galsim
@@ -267,7 +268,9 @@ class GalSimTestCase(object):
             self.image_parameters.height_px,
             scale=self.image_parameters.degrees_per_pixel(),
         )
-        for light_source in self._light_sources:
+        for index, light_source in enumerate(self._light_sources):
+            sys.stdout.write('Band {} source {}\r'.format(band_index + 1, index + 1))
+            sys.stdout.flush()
             galsim_light_source = light_source.get_galsim_light_source(
                 band_index,
                 self.psf_sigma_pixels * self.image_parameters.degrees_per_pixel(),
