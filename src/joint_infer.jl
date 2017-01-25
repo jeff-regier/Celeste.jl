@@ -227,7 +227,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               batch_size=60,
                               within_batch_shuffling=true,
                               n_iters=3,
-                              use_default_optim_params=true)
+                              use_default_optim_params=true,
+                              min_radius_pix=Nullable{Float64}())
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
@@ -279,7 +280,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 ids_local = vcat([entry_id], neighbor_ids)
 
                 patches = Infer.get_sky_patches(images, cat_local)
-                Infer.load_active_pixels!(images, patches)
+                Infer.load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
 
                 # Load vp with shared target source params, and also vp
                 # that doesn't share target source params

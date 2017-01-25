@@ -111,7 +111,8 @@ Arguments:
 """
 function infer_source(images::Vector{Image},
                       neighbors::Vector{CatalogEntry},
-                      entry::CatalogEntry)
+                      entry::CatalogEntry;
+                      min_radius_pix=Nullable{Float64}())
     if length(neighbors) > 100
         Log.warn("Excessive number ($(length(neighbors))) of neighbors")
     end
@@ -122,7 +123,7 @@ function infer_source(images::Vector{Image},
     cat_local = vcat([entry], neighbors)
     vp = init_sources([1], cat_local)
     patches = Infer.get_sky_patches(images, cat_local)
-    Infer.load_active_pixels!(images, patches)
+    Infer.load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
 
     ea = ElboArgs(images, vp, patches, [1])
     f_evals, max_f, max_x, nm_result = maximize_f(elbo, ea)

@@ -43,11 +43,12 @@ export elbo_likelihood_with_fft!, FSMSensitiveFloatMatrices,
 
 function infer_source_fft(images::Vector{Image},
                           neighbors::Vector{CatalogEntry},
-                          entry::CatalogEntry)
+                          entry::CatalogEntry;
+                          min_radius_pix=Nullable{Float64}())
    cat_local = vcat([entry], neighbors)
    vp = init_sources([1], cat_local)
    patches = get_sky_patches(images, cat_local)
-   load_active_pixels!(images, patches)
+   load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
 
    ea_fft, fsm_mat = initialize_fft_elbo_parameters(
        images, vp, patches, [1], use_raw_psf=false)

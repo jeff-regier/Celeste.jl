@@ -14,6 +14,7 @@ import Celeste.ParallelRun: one_node_single_infer, one_node_joint_infer
 
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const LATEST_FITS_FILENAME_DIR = joinpath(GALSIM_BENCHMARK_DIR, "latest_filenames")
+const ACTIVE_PIXELS_MIN_RADIUS_PX = Nullable(40.0)
 
 type GalsimFitsFileNotFound <: Exception end
 
@@ -308,6 +309,10 @@ end
 # * error_sds: absolute error of estimate, divided by posterior standard deviation
 function run_benchmarks(; test_case_names=String[], print_fn=println, joint_inference=false,
                         infer_source_callback=DeterministicVI.infer_source)
+    function infer_source_min_radius(args...; kwargs...)
+        infer_source_callback(args...; min_radius_pix=ACTIVE_PIXELS_MIN_RADIUS_PX, kwargs...)
+    end
+
     extensions, wcs = load_galsim_fits("galsim_benchmarks")
     all_benchmark_data = []
     for test_case_index in 1:div(length(extensions), 5)
@@ -326,7 +331,13 @@ function run_benchmarks(; test_case_names=String[], print_fn=println, joint_infe
         if joint_inference
             target_sources = collect(1:num_sources)
             neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
-            results = one_node_joint_infer(catalog, target_sources, neighbor_map, images)
+            results = one_node_joint_infer(
+                catalog,
+                target_sources,
+                neighbor_map,
+                images,
+                min_radius_pix=ACTIVE_PIXELS_MIN_RADIUS_PX,
+            )
             inferred_params = [results[source_index].vs for source_index in 1:num_sources]
         else
             for source_index in 1:num_sources
@@ -337,7 +348,7 @@ function run_benchmarks(; test_case_names=String[], print_fn=println, joint_infe
                     target_sources,
                     neighbor_map,
                     images,
-                    infer_source_callback=infer_source_callback,
+                    infer_source_callback=infer_source_min_radius,
                 )
                 @assert length(results) == 1
                 push!(inferred_params, results[1].vs)

@@ -76,15 +76,9 @@ function find_neighbors(target_sources::Vector{Int64},
 end
 
 
-"""
-  noise_fraction: The proportion of the noise below which we will remove pixels.
-  min_radius_pix: A minimum pixel radius to be included.
-"""
 function get_sky_patches(images::Vector{Image},
                          catalog::Vector{CatalogEntry};
-                         radius_override_pix=NaN,
-                         noise_fraction=0.1,
-                         min_radius_pix=8.0)
+                         radius_override_pix=NaN)
     N = length(images)
     S = length(catalog)
     patches = Array(SkyPatch, S, N)
@@ -141,7 +135,8 @@ function load_active_pixels!(images::Vector{Image},
                              patches::Matrix{SkyPatch};
                              exclude_nan=true,
                              noise_fraction=0.5,
-                             min_radius_pix=8.0)
+                             min_radius_pix=Nullable{Float64}())
+    min_radius_pix = get(min_radius_pix, 8.0)
     S, N = size(patches)
 
     for n = 1:N, s=1:S
