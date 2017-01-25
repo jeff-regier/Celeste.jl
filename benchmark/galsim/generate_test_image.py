@@ -254,13 +254,13 @@ class GalSimTestCase(object):
         self._light_sources.append(galaxy)
         return galaxy
 
-    def _add_sky_background(self, image):
-        image.array[:] = image.array + self.sky_level_nmgy * COUNTS_PER_NMGY
-
-    def _add_noise(self, image, uniform_deviate):
+    def _add_sky_background(self, image, uniform_deviate):
+        sky_level_counts = self.sky_level_nmgy * COUNTS_PER_NMGY
         if self.include_noise:
-            noise = galsim.PoissonNoise(uniform_deviate)
-            image.addNoise(noise)
+            poisson_deviate = galsim.PoissonDeviate(uniform_deviate, mean=sky_level_counts)
+            image.addNoise(galsim.DeviateNoise(poisson_deviate))
+        else:
+            image.array[:] = image.array + sky_level_counts
 
     def construct_image(self, band_index, uniform_deviate):
         image = galsim.ImageF(
@@ -275,9 +275,14 @@ class GalSimTestCase(object):
                 band_index,
                 self.psf_sigma_pixels * self.image_parameters.degrees_per_pixel(),
             )
-            galsim_light_source.drawImage(image, add_to_image=True)
-        self._add_sky_background(image)
-        self._add_noise(image, uniform_deviate)
+            galsim_light_source.drawImage(
+                image,
+                add_to_image=True,
+                method='phot',
+                max_extra_noise=self.sky_level_nmgy * COUNTS_PER_NMGY / 1000.0,
+                rng=uniform_deviate,
+            )
+        self._add_sky_background(image, uniform_deviate)
         return image
 
     def get_fits_header(self, case_index, band_index):
