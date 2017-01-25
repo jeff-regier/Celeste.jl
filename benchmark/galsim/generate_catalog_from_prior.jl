@@ -92,6 +92,7 @@ function write_fits_table(filename::String, all_sources::Vector{SourceParams})
 end
 
 function main()
+    srand(12345)
     prior = Model.load_prior()
     source_params = [draw_source_params(prior) for index in 1:500]
     write_fits_table(FITS_CATALOG_FILENAME, source_params)
