@@ -94,7 +94,7 @@ function make_images(band_pixels, psf, wcs, epsilon, iota)
             0, # SDSS field
             fill(epsilon, height, width),
             fill(iota, height),
-            Model.RawPSF(Array(Float64, 0, 0), 0, 0, Array(Float64, 0, 0, 0)),
+            Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
         )
         for band in 1:5
     ]

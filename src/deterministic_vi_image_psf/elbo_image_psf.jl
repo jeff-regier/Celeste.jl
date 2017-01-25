@@ -11,7 +11,7 @@ function load_gal_bvn_mixtures{NumType <: Number}(
                     calculate_hessian::Bool=true)
     # To maintain consistency with the rest of the code, use a 4d
     # array.  The first dimension was previously the PSF component.
-    gal_mcs = Array(GalaxyCacheComponent{NumType}, 1, 8, 2, S)
+    gal_mcs = Array{GalaxyCacheComponent{NumType}}(1, 8, 2, S)
 
     for s in 1:S
         sp  = source_params[s]
@@ -49,7 +49,7 @@ function GalaxyCacheComponent{NumType <: Number}(
 
     # Declare in advance to save memory allocation.
     const empty_sig_sf =
-        GalaxySigmaDerivs(Array(NumType, 0, 0), Array(NumType, 0, 0, 0))
+        GalaxySigmaDerivs(Matrix{NumType}(0, 0), Array{NumType}(0, 0, 0))
 
     XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
     var_s = gc.nuBar * XiXi
@@ -333,7 +333,7 @@ function load_fsm_mat(ea::ElboArgs,
                       use_raw_psf=true,
                       use_trimmed_psf=true)
     if use_raw_psf
-        psf_image_mat = Array{Matrix{Float64}}(ea.S, ea.N)
+        psf_image_mat = Matrix{Matrix{Float64}}(ea.S, ea.N)
         for n in 1:ea.N, s in 1:ea.S
             img = images[n]
             world_loc = ea.vp[s][lidx.u]
@@ -345,13 +345,13 @@ function load_fsm_mat(ea::ElboArgs,
         psf_image_mat = Matrix{Float64}[
             get_psf_at_point(ea.patches[s, b].psf) for s in 1:ea.S, b in 1:ea.N]
     end
-    
+
     if use_trimmed_psf
         for n in 1:ea.N, s in 1:ea.S
             psf_image_mat[s, n] = trim_psf(psf_image_mat[s, n])
         end
     end
-    
+
     fsm_mat = FSMSensitiveFloatMatrices[
         FSMSensitiveFloatMatrices() for s in 1:ea.S, n in 1:ea.N]
     initialize_fsm_sf_matrices!(fsm_mat, ea, psf_image_mat)

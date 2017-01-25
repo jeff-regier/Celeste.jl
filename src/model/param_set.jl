@@ -193,7 +193,7 @@ const gal_shape_alignment = align(gal_shape_ids, gal_ids)
 
 function get_id_names(
   ids::Union{CanonicalParams, UnconstrainedParams})
-  ids_names = Array(String, length(ids))
+  ids_names = Vector{String}(length(ids))
   for name in fieldnames(ids)
     inds = getfield(ids, name)
     if length(size(inds)) == 0

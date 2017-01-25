@@ -76,7 +76,7 @@ function load_stamp_blob(stamp_dir, stamp_id)
             [hdr["PSF_P5"]  hdr["PSF_P6"]];
             [hdr["PSF_P7"]  hdr["PSF_P8"]]]'
 
-        tauBar = Array(Float64, 2, 2, 3)
+        tauBar = Array{Float64,3}(2, 2, 3)
         tauBar[:,:,1] = [[hdr["PSF_P9"] hdr["PSF_P11"]];
                          [hdr["PSF_P11"] hdr["PSF_P10"]]]
         tauBar[:,:,2] = [[hdr["PSF_P12"] hdr["PSF_P14"]];
@@ -97,8 +97,8 @@ function load_stamp_blob(stamp_dir, stamp_id)
 
         epsilon_mat = fill(epsilon, H, W)
         iota_vec = fill(iota, H)
-        empty_psf_comp = RawPSF(Array(Float64, 0, 0), 0, 0,
-                                 Array(Float64, 0, 0, 0))
+        empty_psf_comp = RawPSF(Matrix{Float64}(0, 0), 0, 0,
+                                 Array{Float64,3}(0, 0, 0))
 
         Image(H, W, nelec, b, wcs, psf,
               run_num, camcol_num, field_num, epsilon_mat, iota_vec,
@@ -191,7 +191,7 @@ function empty_model_params(S::Int)
     vp = [DeterministicVI.generic_init_source([ 0., 0. ]) for s in 1:S]
     ElboArgs(Image[],
              vp,
-             Array(SkyPatch, S, 0),
+             Matrix{SkyPatch}(S, 0),
              collect(1:S))
 end
 

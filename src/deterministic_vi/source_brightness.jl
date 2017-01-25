@@ -34,8 +34,8 @@ function SourceBrightness{NumType <: Number}(vs::Vector{NumType};
 
     # E_l_a has a row for each of the five colors and columns
     # for star / galaxy.
-    E_l_a = Array(SensitiveFloat{NumType}, B, Ia)
-    E_ll_a = Array(SensitiveFloat{NumType}, B, Ia)
+    E_l_a  = Matrix{SensitiveFloat{NumType}}(B, Ia)
+    E_ll_a = Matrix{SensitiveFloat{NumType}}(B, Ia)
 
     for i = 1:Ia
         ids_band_3 = Int[bids.r1, bids.r2]
@@ -241,7 +241,7 @@ function load_source_brightnesses{NumType <: Number}(
                     ea::ElboArgs{NumType};
                     calculate_gradient::Bool=true,
                     calculate_hessian::Bool=true)
-    sbs = Array(SourceBrightness{NumType}, ea.S)
+    sbs = Vector{SourceBrightness{NumType}}(ea.S)
 
     for s in 1:ea.S
         this_deriv = (s in ea.active_sources) && calculate_gradient

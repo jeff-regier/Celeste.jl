@@ -18,7 +18,7 @@ end
 function load_surrounding_rcfs()
     wd = pwd()
     cd(datadir)
- 
+
     # these rcfs are all the rcfs that overlap with (3900,6,269)
     run(`make RUN=3900 CAMCOL=6 FIELD=268`)
     run(`make RUN=3900 CAMCOL=6 FIELD=269`)

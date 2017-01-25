@@ -316,7 +316,7 @@ LogNormal priors are placed)
 """
 function fluxes_to_colors(fluxes::Vector{Float64})
     lnr    = log(fluxes[3])
-    colors = Array(Float64, 4)
+    colors = Vector{Float64}(4)
     colors[1] = log(fluxes[2]) - log(fluxes[1])
     colors[2] = log(fluxes[3]) - log(fluxes[2])
     colors[3] = log(fluxes[4]) - log(fluxes[3])
@@ -330,7 +330,7 @@ Translate from the (brightness, color) parameterization to nmgy fluxes
 """
 function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
     # build up log fluxes
-    ret    = Array(Float64, 5)
+    ret    = Vector{Float64}(5)
     lnr    = brightness
     ret[3] = lnr     # r flux
     ret[4] = lnr + colors[3]        # ln(i/r) = c3 => lni = lnr - c3
@@ -348,7 +348,7 @@ end
 
 function constrain_gal_shape(unc_gal_shape::Vector{Float64})
     gdev, gaxis, gangle, gscale = unc_gal_shape
-    constr_shape    = Array(Float64, 4)
+    constr_shape    = Vector{Float64}(4)
     constr_shape[1] = clamp(sigmoid(gdev), eps_prob_a, 1-eps_prob_a)
     constr_shape[2] = clamp(sigmoid(gaxis), eps_prob_a, 1-eps_prob_a)
     constr_shape[3] = gangle       # TODO put this between [0, 2pi]
@@ -359,7 +359,7 @@ end
 
 function unconstrain_gal_shape(con_gal_shape::Vector{Float64})
     gdev, gaxis, gangle, gscale = con_gal_shape
-    unc_shape    = Array(Float64, 4)
+    unc_shape    = Vector{Float64}(4)
     unc_shape[1] = logit(gdev)
     unc_shape[2] = logit(gaxis)
     unc_shape[3] = gangle
@@ -395,7 +395,7 @@ end
 
 function catalog_entry_to_latent_state_params(ce::CatalogEntry)
     # create a float array of the appropriate length
-    ret = Array(Float64, length(lidx))
+    ret = Vector{Float64}(length(lidx))
 
     # galaxy shape params
     ret[lidx.u]       = ce.pos

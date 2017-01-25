@@ -32,8 +32,8 @@ function test_linear_world_to_pix()
                                        world_loc)
 
         # Note that the accuracy of the linear approximation isn't great.
-        @test_approx_eq(pix_loc_test1, pix_loc)
-        @test_approx_eq_eps(pix_loc_test2, pix_loc, 1e-2)
+        @test pix_loc_test1 ≈ pix_loc
+        @test isapprox(pix_loc_test2, pix_loc, atol=1e-2)
     end
 
     @test Model.pixel_world_jacobian(SampleData.wcs_id, pix_center) == [1.0 0.0; 0.0 1.0];

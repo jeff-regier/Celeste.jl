@@ -6,39 +6,39 @@ using Celeste: Model, Transform, SensitiveFloats, DeterministicVIImagePSF
 function verify_sample_star(vs, pos)
     @test vs[ids.a[2, 1]] <= 0.01
 
-    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
-    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
+    @test isapprox(vs[ids.u[1]], pos[1], atol=0.1)
+    @test isapprox(vs[ids.u[2]], pos[2], atol=0.1)
 
     brightness_hat = exp(vs[ids.r1[1]] + 0.5 * vs[ids.r2[1]])
-    @test_approx_eq_eps brightness_hat / sample_star_fluxes[3] 1. 0.01
+    @test isapprox(brightness_hat / sample_star_fluxes[3], 1.0, atol=0.01)
 
     true_colors = log.(sample_star_fluxes[2:5] ./ sample_star_fluxes[1:4])
     for b in 1:4
-        @test_approx_eq_eps vs[ids.c1[b, 1]] true_colors[b] 0.2
+        @test isapprox(vs[ids.c1[b, 1]], true_colors[b], atol=0.2)
     end
 end
 
 function verify_sample_galaxy(vs, pos)
     @test vs[ids.a[2, 1]] >= 0.99
 
-    @test_approx_eq_eps vs[ids.u[1]] pos[1] 0.1
-    @test_approx_eq_eps vs[ids.u[2]] pos[2] 0.1
+    @test isapprox(vs[ids.u[1]], pos[1], atol=0.1)
+    @test isapprox(vs[ids.u[2]], pos[2], atol=0.1)
 
-    @test_approx_eq_eps vs[ids.e_axis] .7 0.05
-    @test_approx_eq_eps vs[ids.e_dev] 0.1 0.08
-    @test_approx_eq_eps vs[ids.e_scale] 4. 0.2
+    @test isapprox(vs[ids.e_axis] , 0.7, atol=0.05)
+    @test isapprox(vs[ids.e_dev]  , 0.1, atol=0.08)
+    @test isapprox(vs[ids.e_scale], 4.0, atol=0.2)
 
     phi_hat = vs[ids.e_angle]
     phi_hat -= floor(phi_hat / pi) * pi
     five_deg = 5 * pi/180
-    @test_approx_eq_eps phi_hat pi/4 five_deg
+    @test isapprox(phi_hat, pi/4, atol=five_deg)
 
     brightness_hat = exp(vs[ids.r1[2]] + 0.5 * vs[ids.r2[2]])
-    @test_approx_eq_eps brightness_hat / sample_galaxy_fluxes[3] 1. 0.01
+    @test isapprox(brightness_hat / sample_galaxy_fluxes[3], 1.0, atol=0.01)
 
     true_colors = log.(sample_galaxy_fluxes[2:5] ./ sample_galaxy_fluxes[1:4])
     for b in 1:4
-        @test_approx_eq_eps vs[ids.c1[b, 2]] true_colors[b] 0.2
+        @test isapprox(vs[ids.c1[b, 2]], true_colors[b], atol=0.2)
     end
 end
 
@@ -70,7 +70,7 @@ function test_single_source_optimization()
     # Test that it only optimized source s
     @test ea.vp[s] != ea_original.vp[s]
     for other_s in setdiff(1:ea.S, s)
-        @test_approx_eq ea.vp[other_s] ea_original.vp[other_s]
+        @test ea.vp[other_s] ≈ ea_original.vp[other_s]
     end
 end
 
@@ -121,7 +121,7 @@ function test_quadratic_optimization()
         val
     end
 
-    bounds = Array(ParamBounds, 1)
+    bounds = Vector{ParamBounds}(1)
     bounds[1] = ParamBounds()
     for param in setdiff(fieldnames(ids), [:a, :k])
       bounds[1][Symbol(param)] = fill(ParamBox(0., 1.0, 1.0), length(getfield(ids, param)))
@@ -137,8 +137,8 @@ function test_quadratic_optimization()
     DeterministicVI.maximize_f(quadratic_function, ea, trans;
                             xtol_rel=1e-16, ftol_abs=1e-16)
 
-    @test_approx_eq_eps ea.vp[1] centers 1e-6
-    @test_approx_eq_eps quadratic_function(ea).v[] 0.0 1e-15
+    @test isapprox(ea.vp[1]                  , centers, 1e-6)
+    @test isapprox(quadratic_function(ea).v[], 0.0    , 1e-15)
 end
 
 

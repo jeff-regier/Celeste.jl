@@ -65,16 +65,16 @@ function test_with_autodiff{F}(fun::F, x::Vector{Float64}, sf::SensitiveFloat)
     const test_grad = false
     const test_hess = false
 
-    @test_approx_eq fun(x) sf.v[]
+    @test fun(x) ≈ sf.v[]
 
     if test_grad
         ad_grad = ForwardDiff.gradient(fun, x)
-        @test_approx_eq ad_grad sf.d[:]
+        @test ad_grad ≈ sf.d[:]
     end
 
     if test_hess
         ad_hess = ForwardDiff.hessian(fun, x)
-        @test_approx_eq ad_hess sf.h
+        @test ad_hess ≈ sf.h
     end
 end
 

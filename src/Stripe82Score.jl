@@ -278,7 +278,7 @@ function celeste_to_df(results::Vector{OptimizedSource})
                      ["gal_$c" for c in color_sd_col_names],
                      ["gal_fracdev", "gal_ab", "gal_angle", "gal_scale"])
     col_Symbols = Symbol[Symbol(cn) for cn in col_names]
-    col_types = Array(DataType, length(col_names))
+    col_types = Vector{DataType}(length(col_names))
     fill!(col_types, Float64)
     col_types[1] = String
     df = DataFrame(col_types, N)
@@ -291,7 +291,7 @@ function celeste_to_df(results::Vector{OptimizedSource})
         vs = result.vs
 
         function get_median_fluxes(i::Int)
-            ret = Array(Float64, 5)
+            ret = Vector{Float64}(5)
             ret[3] = exp(vs[ids.r1[i]])
             ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
             ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
