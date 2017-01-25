@@ -65,6 +65,14 @@ def bright_galaxy(test_case):
     test_case.add_galaxy().reference_band_flux_nmgy(20)
 
 @generate_test_image.galsim_test_case
+def de_vaucouleurs_galaxy(test_case):
+    test_case.add_galaxy().de_vaucouleurs_mixture_weight(1)
+
+@generate_test_image.galsim_test_case
+def exp_dev_mixture_galaxy(test_case):
+    test_case.add_galaxy().de_vaucouleurs_mixture_weight(0.4)
+
+@generate_test_image.galsim_test_case
 def different_color_galaxy(test_case):
     test_case.add_galaxy().flux_relative_to_reference_band([0.6, 0.2, 1, 1.1, 2])
 
@@ -76,6 +84,8 @@ def galaxy_with_all(test_case):
          .minor_major_axis_ratio(0.4)
          .half_light_radius_arcsec(2.5)
          .reference_band_flux_nmgy(15)
+         .de_vaucouleurs_mixture_weight(0.4)
+         .flux_relative_to_reference_band([0.6, 0.2, 1, 1.1, 2])
     )
 
 @generate_test_image.galsim_test_case

@@ -150,6 +150,7 @@ class Galaxy(LightSource):
         self._angle_deg = 0
         self._minor_major_axis_ratio = 0.4
         self._half_light_radius_arcsec = 1.5
+        self._de_vaucouleurs_mixture_weight = 0.0
 
     def offset_arcsec(self, x, y):
         self._common_fields.offset_from_center_arcsec = (x, y)
@@ -175,14 +176,32 @@ class Galaxy(LightSource):
         self._half_light_radius_arcsec = radius
         return self
 
+    def de_vaucouleurs_mixture_weight(self, weight):
+        self._de_vaucouleurs_mixture_weight = weight
+        return self
+
     def get_galsim_light_source(self, band_index, psf_sigma_degrees):
+        def apply_shear_and_shift(galaxy):
+            return (
+                galaxy.shear(q=self._minor_major_axis_ratio, beta=self._angle_deg * galsim.degrees)
+                    .shift(self._common_fields.get_offset_from_center_degrees())
+            )
+
         flux_counts = self._common_fields.get_flux_counts(band_index)
         half_light_radius_deg = self._half_light_radius_arcsec / ARCSEC_PER_DEGREE
-        galaxy = (
-            galsim.Exponential(half_light_radius=half_light_radius_deg, flux=flux_counts)
-                .shear(q=self._minor_major_axis_ratio, beta=self._angle_deg * galsim.degrees)
-                .shift(self._common_fields.get_offset_from_center_degrees())
+        exponential_profile = apply_shear_and_shift(
+            galsim.Exponential(
+                half_light_radius=half_light_radius_deg,
+                flux=flux_counts * (1 - self._de_vaucouleurs_mixture_weight),
+            )
         )
+        de_vaucouleurs_profile = apply_shear_and_shift(
+            galsim.DeVaucouleurs(
+                half_light_radius=half_light_radius_deg,
+                flux=flux_counts * self._de_vaucouleurs_mixture_weight,
+            )
+        )
+        galaxy = exponential_profile + de_vaucouleurs_profile
         psf = galsim.Gaussian(flux=1, sigma=psf_sigma_degrees)
         return galsim.Convolve([galaxy, psf])
 
@@ -197,6 +216,10 @@ class Galaxy(LightSource):
         header['CLRDP' + index_str] = (
             self._half_light_radius_arcsec / image_parameters.arcsec_per_pixel,
             'half-light radius (pixels)',
+        )
+        header['CLDEV' + index_str] = (
+            self._de_vaucouleurs_mixture_weight,
+            'de Vaucouleurs mixture weight',
         )
 
 # A complete description of a GalSim test image, along with logic to generate the image and the
@@ -329,6 +352,7 @@ def generate_fits_file(output_label):
         for band_index in xrange(5):
             image = test_case.construct_image(band_index, uniform_deviate)
             galsim.fits.write(image, hdu_list=fits_hdus)
+            fits_hdus[-1].name = '{}_{}'.format(test_case_fn.__name__, band_index + 1)
             add_header_to_hdu(fits_hdus[-1], test_case.get_fits_header(case_index, band_index))
 
     image_file_name = os.path.join('output', output_label + '.fits')
