@@ -8,18 +8,8 @@ import Celeste.DeterministicVI: infer_source
 
 const rcfs = [
     RunCamcolField(4264,6,160),
-    RunCamcolField(4264,6,161),
-    RunCamcolField(4264,5,158),
-    RunCamcolField(4264,5,159),
     RunCamcolField(4264,5,160),
-    RunCamcolField(4264,5,161),
-    RunCamcolField(4264,5,162),
-    RunCamcolField(4294,6,133),
-    RunCamcolField(4294,6,134),
     RunCamcolField(4294,6,135),
-    RunCamcolField(4294,6,136),
-    RunCamcolField(4294,6,137),
-    RunCamcolField(4294,6,138),
     RunCamcolField(4294,5,135)]
 
 const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
@@ -32,14 +22,14 @@ cd(wd)
 
 """
 This benchmark optimizes all the light sources in a
-one-quarter-square-degree region of sky.
+one-sixteenth-square-degree region of sky.
 """
-function benchmark_quarter_degree()
-    box = BoundingBox(124.0, 124.5, 58.5, 59.0)
+function benchmark_sixteenth_degree()
+    box = BoundingBox(124.25, 124.50, 58.5, 58.75)
 
     wrap_joint(cnti...) = one_node_joint_infer(cnti...; use_fft=true)
 
-    warmup_box = BoundingBox(124.2, 124.21, 58.7, 58.71)
+    warmup_box = BoundingBox(124.25, 124.26, 58.7, 58.71)
     warmup_rcfs = get_overlapping_fields(warmup_box, datadir)
     one_node_infer(warmup_rcfs,
                    datadir;
@@ -54,10 +44,11 @@ function benchmark_quarter_degree()
     if isempty(ARGS)
         @time one_node_infer(rcfs, datadir; infer_callback=wrap_joint, box=box)
     elseif ARGS[1] == "--profile"
+        Profile.init(delay=1.0)
         @profile one_node_infer(rcfs, datadir; infer_callback=wrap_joint, box=box)
         Profile.print(format=:flat, sortedby=:count)
     end
 end
 
 
-benchmark_quarter_degree()
+benchmark_sixteenth_degree()

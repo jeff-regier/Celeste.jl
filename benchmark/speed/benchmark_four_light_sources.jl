@@ -1,6 +1,6 @@
 #!/usr/bin/env julia
 
-import Celeste.ParallelRun: one_node_single_infer, infer_init, BoundingBox
+import Celeste.ParallelRun: one_node_joint_infer, infer_init, BoundingBox
 import Celeste.SDSSIO: RunCamcolField, load_field_images
 import Celeste.Infer: find_neighbors
 import Celeste.DeterministicVIImagePSF: infer_source_fft
@@ -12,11 +12,7 @@ run(`make`)
 cd(wd)
 
 
-"""
-test infer with a single (run, camcol, field).
-This is basically just to make sure it runs at all.
-"""
-function benchmark_infer()
+function benchmark_four_light_sources()
     # very small patch of sky that turns out to have 4 sources.
     # We checked that this patch is in the given field.
     box = BoundingBox(164.39, 164.41, 39.11, 39.13)
@@ -28,21 +24,19 @@ function benchmark_infer()
     ctni = (catalog, target_sources, neighbor_map, images)
 
     # Warm up---this compiles the code
-    one_node_single_infer(ctni...; infer_source_callback=infer_source_fft)
+    one_node_joint_infer(ctni...; use_fft=true)
 
     # clear allocations in case julia is running with --track-allocations=user
     Profile.clear_malloc_data()
 
     if isempty(ARGS)
-        @time one_node_single_infer(ctni...; infer_source_callback=infer_source_fft)
+        @time one_node_joint_infer(ctni...; use_fft=true)
     elseif ARGS[1] == "--profile"
-        Profile.clear_malloc_data()
-	Profile.init(delay=0.01)
-        # about half the run time is psf fitting, the other half is elbo evaluation
-        @profile one_node_single_infer(ctni...; infer_source_callback=infer_source_fft)
+        Profile.init(delay=0.01)
+        @profile one_node_joint_infer(ctni...; use_fft=true)
         Profile.print(format=:flat, sortedby=:count)
     end
 end
 
 
-benchmark_infer()
+benchmark_four_light_sources()
