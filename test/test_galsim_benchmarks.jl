@@ -15,6 +15,8 @@ function assert_estimates_are_close(benchmark_results)
         row = benchmark_results[row_index, :]
         if row[1, :field] == "Probability of galaxy"
             maximum_error = 0.1
+        elseif row[1, :field] == "de Vaucouleurs weight"
+            maximum_error = 0.2
         elseif row[1, :field] == "Angle (degrees)"
             maximum_error = 5
         else

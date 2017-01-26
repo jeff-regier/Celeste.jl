@@ -26,6 +26,7 @@ def field_500(test_case):
                     .half_light_radius_arcsec(source_row.field('half_light_radius_arcsec'))
                     .angle_deg(source_row.field('angle_deg'))
                     .minor_major_axis_ratio(source_row.field('minor_major_axis_ratio'))
+                    .de_vaucouleurs_mixture_weight(source_row.field('de_vaucouleurs_mixture_weight'))
                 )
             source.offset_arcsec(
                 (source_row.field('relative_position_x') - 0.5) * image_dimensions_arcsec[0],

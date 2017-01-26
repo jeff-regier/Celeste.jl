@@ -149,6 +149,7 @@ const BENCHMARK_PARAMETER_LABELS = String[
     "Minor/major axis ratio",
     "Angle (degrees)",
     "Half-light radius (pixels)",
+    "de Vaucouleurs weight",
     "Brightness (nMgy)",
     "Color band 1-2 ratio",
     "Color band 2-3 ratio",
@@ -174,6 +175,7 @@ function inferred_values(star_galaxy_index, params)
         params[ids.e_axis],
         canonical_angle(params) * 180 / pi,
         params[ids.e_scale] * sqrt(params[ids.e_axis]),
+        params[ids.e_dev],
         exp(params[ids.r1[star_galaxy_index]]),
         exp(params[ids.c1[1, star_galaxy_index]]),
         exp(params[ids.c1[2, star_galaxy_index]]),
@@ -193,6 +195,7 @@ function get_ground_truth_dataframe(header, source_index)
         source_field("CLRTO"),
         source_field("CLANG"),
         source_field("CLRDP"),
+        source_field("CLDEV"),
         source_field("CLFLX"),
         source_field("CLC12"),
         source_field("CLC23"),
@@ -228,7 +231,7 @@ function error_in_posterior_std_devs(star_galaxy_index, params, header, source_i
         push!(posterior_z_scores, error / posterior_sd)
     end
 
-    vcat(repeat(@data(Float64[NA]), outer=5), posterior_z_scores, @data(Float64[NA]))
+    vcat(repeat(@data(Float64[NA]), outer=6), posterior_z_scores, @data(Float64[NA]))
 end
 
 function benchmark_comparison_data(inferred_params, header, source_index)
@@ -253,7 +256,7 @@ function assert_counts_match_expected_flux(band_pixels::Vector{Matrix{Float32}},
             expected_flux_nmgy += get_field(header, "CLFLX", source_index)
         end
         expected_flux_counts = expected_flux_nmgy * iota
-        @assert abs(sum(band_pixels[3]) - expected_flux_counts) / expected_flux_counts < 1e-3
+        @assert abs(sum(band_pixels[3]) - expected_flux_counts) / expected_flux_counts < 1e-2
     end
 end
 
