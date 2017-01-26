@@ -365,10 +365,11 @@ function initialize_fft_elbo_parameters(
     active_sources::Vector{Int};
     use_raw_psf=true,
     use_trimmed_psf=true,
-    allocate_fsm_mat=true)
+    allocate_fsm_mat=true,
+    min_radius_pix=Nullable{Float64}())
 
     ea = ElboArgs(images, vp, patches, active_sources, psf_K=1)
-    load_active_pixels!(images, ea.patches; exclude_nan=false)
+    load_active_pixels!(images, ea.patches; exclude_nan=false, min_radius_pix=min_radius_pix)
 
     fsm_mat = nothing
     if allocate_fsm_mat
