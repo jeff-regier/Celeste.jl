@@ -83,12 +83,17 @@ else
         wrap_joint(cnti...) = one_node_joint_infer(cnti...;
 						   use_fft=("--fft" in ARGS))
         source_callback = nothing
+        
+        result_description = ""
         if "--fft" in ARGS
             source_callback = infer_source_fft
+            result_description = "fft"
         elseif "--fft_two_step" in ARGS
             source_callback = infer_source_fft_two_step
+            result_description = "fft_two_step"
         else
             source_callback = infer_source
+            result_description = "mog"
         end
         wrap_single(cnti...) = one_node_single_infer(cnti...;
                                       infer_source_callback=source_callback)
@@ -100,7 +105,7 @@ else
         @time results = one_node_infer([rcf,], datadir;
                                        infer_callback=infer_callback,
                                        primary_initialization=false)
-        fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
+        fname = @sprintf "%s/celeste-%s-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field result_description
         JLD.save(fname, "results", results)
     end
 
