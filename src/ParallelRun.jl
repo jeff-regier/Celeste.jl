@@ -584,7 +584,7 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
         rcfs = get_overlapping_fields(box, stagedir)
         times.query_fids = toq()
 
-        results = one_node_infer(rcfs, stagedir; box=box, timing=times)
+        results = one_node_infer(rcfs, stagedir; box=box)
 
         tic()
         save_results(outdir, box, results)
