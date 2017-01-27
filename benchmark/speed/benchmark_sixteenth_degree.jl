@@ -6,6 +6,7 @@ import Celeste.SDSSIO: RunCamcolField
 import Celeste.DeterministicVIImagePSF: infer_source_fft
 import Celeste.DeterministicVI: infer_source
 
+
 const rcfs = [
     RunCamcolField(4294,6,136),
     RunCamcolField(4264,5,158),
@@ -27,20 +28,20 @@ cd(wd)
 """
 This benchmark optimizes all the light sources in a
 one-sixteenth-square-degree region of sky.
+It has 34,278,282 pixel-visits.
 """
 function benchmark_sixteenth_degree()
     box = BoundingBox(124.25, 124.50, 58.5, 58.75)
 
     wrap_joint(cnti...) = one_node_joint_infer(cnti...; use_fft=true)
 
-#=
     warmup_box = BoundingBox(124.25, 124.26, 58.7, 58.71)
     warmup_rcfs = get_overlapping_fields(warmup_box, datadir)
     one_node_infer(warmup_rcfs,
                    datadir;
                    infer_callback=wrap_joint,
                    box=warmup_box)
-=#
+
     rcfs = get_overlapping_fields(box, datadir)
 
     # resets runtime profiler *and* count for --track-allocation
