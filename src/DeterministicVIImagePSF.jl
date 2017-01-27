@@ -12,7 +12,7 @@ import ..DeterministicVI:
     StarPosParams, GalaxyPosParams, CanonicalParams, VariationalParams,
     SourceBrightness, GalaxyComponent, SkyPatch,
     load_source_brightnesses, add_elbo_log_term!,
-    accumulate_source_pixel_brightness!,
+    calculate_source_pixel_brightness!,
     KLDivergence, init_sources
 
 import ..Model:

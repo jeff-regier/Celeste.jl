@@ -214,14 +214,13 @@ function accumulate_source_image_brightness!(
         if !p.active_pixel_bitmap[h_patch, w_patch]
             continue
         end
-        accumulate_source_pixel_brightness!(
-                            ea.elbo_vars,
-                            ea,
-                            fsms.E_G[h_fsm, w_fsm],
-                            fsms.var_G[h_fsm, w_fsm],
-                            fsms.fs0m_conv[h_fsm, w_fsm],
-                            fsms.fs1m_conv[h_fsm, w_fsm],
-                            sb, ea.images[n].b, s, is_active_source)
+        calculate_source_pixel_brightness!(
+            ea.elbo_vars, ea,
+            fsms.E_G[h_fsm, w_fsm],
+            fsms.var_G[h_fsm, w_fsm],
+            fsms.fs0m_conv[h_fsm, w_fsm],
+            fsms.fs1m_conv[h_fsm, w_fsm],
+            sb, ea.images[n].b, s, is_active_source)
     end
 end
 
@@ -414,8 +413,8 @@ function get_fft_elbo_function{T}(
     function elbo_fft_opt(ea::ElboArgs)
         @assert ea.psf_K == 1
         elbo = ea.elbo_vars.elbo
-        kl_source = SensitiveFloat{T}(length(CanonicalParams), 1,
-                                      elbo.has_gradient, elbo.has_hessian)
+        kl_source = SensitiveFloat{T}(length(CanonicalParams),
+                                      1, elbo.has_gradient, elbo.has_hessian)
         elbo_likelihood_with_fft!(ea, fsm_mat)
         kl_helper = KLDivergence.KL_HELPER_POOL[Base.Threads.threadid()]
         KLDivergence.subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)

@@ -448,7 +448,36 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
     timing.opt_srcs = toq()
     timing.num_srcs = length(target_sources)
 
+<<<<<<< 306c6558988a69f2f3dd345174325e40b71c7477
     results
+=======
+    return results
+end
+
+
+"""
+Use mulitple threads on one node to fit the Celeste model to sources in a given
+bounding box.
+"""
+function one_node_infer(rcfs::Vector{RunCamcolField},
+                        stagedir::String;
+                        infer_callback=one_node_single_infer,
+                        objid="",
+                        box=BoundingBox(-1000., 1000., -1000., 1000.),
+                        primary_initialization=true,
+                        timing=InferTiming())
+    catalog, target_sources, images, neighbor_map =
+        infer_init(rcfs,
+                   stagedir;
+                   objid=objid,
+                   box=box,
+                   primary_initialization=primary_initialization)
+
+    Log.info("Running with $(nthreads()) threads")
+
+    # NB: All I/O happens above. The methods below don't touch disk.
+    infer_callback(catalog, target_sources, neighbor_map, images)
+>>>>>>> Fix multiple sources
 end
 
 
