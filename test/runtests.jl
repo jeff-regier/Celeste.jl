@@ -48,6 +48,7 @@ else
                  "test_images.jl",
                  "test_infer.jl",
                  "test_joint_infer.jl",
+                 "test_kernels.jl",
                  "test_log_prob.jl",
                  "test_misc.jl",
                  "test_optimization.jl",
