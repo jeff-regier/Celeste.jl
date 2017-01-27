@@ -227,6 +227,8 @@ function accumulate_source_image_brightness!(
 end
 
 
+pixel_counter = 0
+
 """
 Uses the values in fsms to add the contribution from this band to the ELBO.
 """
@@ -261,6 +263,7 @@ function accumulate_band_in_elbo!(
             if !p.active_pixel_bitmap[h_patch, w_patch]
                 continue
             end
+            global pixel_counter += 1
             h_image = h_patch + p.bitmap_offset[1]
             w_image = w_patch + p.bitmap_offset[2]
 

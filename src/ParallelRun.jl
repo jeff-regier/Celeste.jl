@@ -291,10 +291,6 @@ function infer_init(rcfs::Vector{RunCamcolField},
                         duplicate_policy=duplicate_policy)
     Log.info("$(length(catalog)) primary sources")
 
-    # Filter out low-flux objects in the catalog.
-    catalog = filter(entry->(maximum(entry.star_fluxes) >= MIN_FLUX), catalog)
-    Log.info("$(length(catalog)) primary sources after MIN_FLUX cut")
-
     # Get indicies of entries in the RA/Dec range of interest.
     entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
                              (box.decmin < entry.pos[2] < box.decmax))

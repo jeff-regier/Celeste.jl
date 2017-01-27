@@ -11,7 +11,10 @@ cd(datadir)
 run(`make`)
 cd(wd)
 
-
+"""
+This benchmark operates on a box of the sky that contains
+four light sources. 170,474 pixel-visits in total.
+"""
 function benchmark_four_light_sources()
     # very small patch of sky that turns out to have 4 sources.
     # We checked that this patch is in the given field.
@@ -24,7 +27,7 @@ function benchmark_four_light_sources()
     ctni = (catalog, target_sources, neighbor_map, images)
 
     # Warm up---this compiles the code
-    one_node_joint_infer(ctni...; use_fft=true)
+    #one_node_joint_infer(ctni...; use_fft=true)
 
     # clear allocations in case julia is running with --track-allocations=user
     Profile.clear_malloc_data()
