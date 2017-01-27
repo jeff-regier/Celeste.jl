@@ -229,7 +229,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               within_batch_shuffling=true,
                               n_iters=3,
                               use_default_optim_params=true,
-                              min_radius_pix=Nullable{Float64}())
+                              min_radius_pix=Nullable{Float64}(),
+                              timing=InferTiming())
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
