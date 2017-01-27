@@ -301,10 +301,15 @@ function accumulate_band_in_elbo!(
         
     # Loop over pixels in the image and accumulate the ELBO.
     for h in H_min:H_max, w in W_min: W_max
+        # Some pixels that are NaN in the original image may be active
+        # for the convolution code.
+        image = ea.images[n]
+        pixel_value = image.pixels[h, w]
+        if isnan(pixel_value)
+            continue
+        end
 
         accumulate_image_pixel_brightness!(ea, fsm_mat, E_G, var_G, h, w, n)
-        
-        image = ea.images[n]
         elbo = ea.elbo_vars.elbo;
         
         # There are no derivatives with respect to epsilon, so can
@@ -321,7 +326,6 @@ function accumulate_band_in_elbo!(
 
         # Add the terms to the elbo given the brightness.
         iota = image.iota_vec[h]
-        pixel_value = image.pixels[h, w]
         add_elbo_log_term!(ea.elbo_vars, E_G, var_G, elbo, pixel_value, iota)
         add_scaled_sfs!(elbo, E_G, -iota)
 
