@@ -10,6 +10,7 @@ import Celeste.DeterministicVI: infer_source
 import Celeste.DeterministicVIImagePSF: infer_source_fft, infer_source_fft_two_step
 
 
+
 # I'd rather let the user specify a rcf on the command line, but picking
 # an arbitrary rcf isn't too useful without having ground truth for it,
 # from a co-add run. Getting ground truth isn't easy to automate because
@@ -102,10 +103,14 @@ else
         # other rcfs may overlap with this one. That's because this function is
         # just for testing on stripe 82: in practice we always use all relevent
         # data to make inferences.
+        # bounding_box = BoundingBox(-1000., 1000., -1000., 1000.)
+        bounding_box = BoundingBox(0.442738, 0.48364875, 0.410397, 0.46667400)
         @time results = one_node_infer([rcf,], datadir;
+                                       box=bounding_box,
                                        infer_callback=infer_callback,
                                        primary_initialization=false)
-        fname = @sprintf "%s/celeste-%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field 
+        # fname = @sprintf "%s/celeste-%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field 
+        fname = @sprintf "%s/celeste-smallbox-%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field 
         JLD.save(fname, "results", results)
     end
 
