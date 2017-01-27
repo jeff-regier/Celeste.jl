@@ -49,6 +49,23 @@ function source_pixel_location(ea::ElboArgs, s::Int, n::Int)
 end
 
 
+function render_valid_pixels(ea::ElboArgs, sources::Vector{Int}, n::Int)
+    H_min, W_min, H_max, W_max = get_active_pixel_range(ea.patches, sources, n)
+    image = falses(H_max - H_min + 1, W_max - W_min + 1)
+
+    for h in H_min:H_max, w in W_min:W_max
+        # The pixel in the image
+        h_img = h - H_min + 1
+        w_img = w - W_min + 1
+
+        if any([ is_pixel_in_patch(h, w, p) for p in ea.patches[sources, n] ])
+            image[h_img, w_img] = true
+        end
+    end
+    image
+end
+
+
 function render_sources(ea::ElboArgs, sources::Vector{Int}, n::Int;
                         include_epsilon=true, field=:E_G,
                         include_iota=true)
@@ -61,7 +78,18 @@ function render_sources(ea::ElboArgs, sources::Vector{Int}, n::Int;
                                 calculate_hessian=false)
 
     H_min, W_min, H_max, W_max = get_active_pixel_range(ea.patches, sources, n)
-    image = zeros(H_max - H_min + 1, W_max - W_min + 1)
+    image = fill(NaN, H_max - H_min + 1, W_max - W_min + 1)
+
+    for h in H_min:H_max, w in W_min:W_max
+        # The pixel in the image
+        h_img = h - H_min + 1
+        w_img = w - W_min + 1
+
+        if any([ is_pixel_in_patch(h, w, p) for p in ea.patches[sources, n] ])
+            image[h_img, w_img] = 0.0
+        end
+    end
+
     for s in sources, h in H_min:H_max, w in W_min:W_max
         p = ea.patches[s, n]
         if is_pixel_in_patch(h, w, p)
@@ -98,6 +126,10 @@ function render_sources(ea::ElboArgs, sources::Vector{Int}, n::Int;
     end
 
     for h in H_min:H_max, w in W_min:W_max
+        if !any([ is_pixel_in_patch(h, w, p) for p in ea.patches[sources, n] ])
+            continue
+        end
+        
         # The pixel in the image
         h_img = h - H_min + 1
         w_img = w - W_min + 1
@@ -140,7 +172,18 @@ function render_sources_fft(
     end
 
     H_min, W_min, H_max, W_max = get_active_pixel_range(ea.patches, sources, n)
-    image = zeros(H_max - H_min + 1, W_max - W_min + 1)
+    image = fill(NaN, H_max - H_min + 1, W_max - W_min + 1)
+
+    for h in H_min:H_max, w in W_min:W_max
+        # The pixel in the image
+        h_img = h - H_min + 1
+        w_img = w - W_min + 1
+
+        if any([ is_pixel_in_patch(h, w, p) for p in ea.patches[sources, n] ])
+            image[h_img, w_img] = 0.0
+        end
+    end
+
     for s in sources, h in H_min:H_max, w in W_min:W_max
         fsms = fsm_mat[s, n]
         p = ea.patches[s, n]
@@ -158,6 +201,10 @@ function render_sources_fft(
     end
 
     for h in H_min:H_max, w in W_min:W_max
+        if !any([ is_pixel_in_patch(h, w, p) for p in ea.patches[sources, n] ])
+            continue
+        end
+
         # The pixel in the image
         h_img = h - H_min + 1
         w_img = w - W_min + 1
@@ -175,7 +222,7 @@ end
 
 function show_sources_image(ea::ElboArgs, sources::Vector{Int}, n::Int)
     H_min, W_min, H_max, W_max = get_active_pixel_range(ea.patches, sources, n)
-    image = zeros(H_max - H_min + 1, W_max - W_min + 1)
+    image = fill(NaN, H_max - H_min + 1, W_max - W_min + 1)
     for h in H_min:H_max, w in W_min:W_max, p in ea.patches[sources, n]
         if is_pixel_in_patch(h, w, p)
             # The pixel in the image
