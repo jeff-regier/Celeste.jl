@@ -526,10 +526,8 @@ end
 """
 Score the celeste results for a particular field
 """
-function score_field_disk(rcf::RunCamcolField, resultdir, truthfile, stagedir)
-    fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" resultdir rcf.run rcf.camcol rcf.field
+function score_field_disk(rcf::RunCamcolField, fname, resultdir, truthfile, stagedir)
     results = JLD.load(fname, "results")
-
     println( score_field(rcf, results, truthfile, stagedir) )
 end
 

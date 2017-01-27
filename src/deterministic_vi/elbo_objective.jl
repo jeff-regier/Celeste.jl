@@ -494,7 +494,10 @@ function elbo_likelihood{NumType <: Number}(ea::ElboArgs{NumType})
                     continue
                 end
 
-                # if we're here it's a unique active pixel
+                # if we're here it's a unique active pixel.
+                # Note that although we are iterating over pixels within a
+                # single patch, add_pixel_term /also/ iterates over patches to
+                # find all patches that overlap with this pixel.
                 add_pixel_term!(ea, n, h, w, star_mcs, gal_mcs, sbs)
             end
         end

@@ -105,7 +105,7 @@ else
         @time results = one_node_infer([rcf,], datadir;
                                        infer_callback=infer_callback,
                                        primary_initialization=false)
-        fname = @sprintf "%s/celeste-%s-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field result_description
+        fname = @sprintf "%s/celeste-%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field 
         JLD.save(fname, "results", results)
     end
 
@@ -114,5 +114,5 @@ else
     # That could be somewhat useful for debugging. The output is in a somewhat
     # different format though, because with just one object it doesn't make
     # sense to compute a full table comparing Celeste to Primary.
-    score_field_disk(rcf, outdir, truthfile, datadir)
+    score_field_disk(rcf, fname, outdir, truthfile, datadir)
 end

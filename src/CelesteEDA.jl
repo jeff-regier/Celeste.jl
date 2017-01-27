@@ -109,6 +109,8 @@ function render_source(ea::ElboArgs, s::Int, n::Int;
 end
 
 
+# Render a single source from a single image
+# in an matrix that is the size of the active_pixel_bitmap.
 function render_source_fft(
     ea::ElboArgs,
     fsm_mat::Matrix{FSMSensitiveFloatMatrices},

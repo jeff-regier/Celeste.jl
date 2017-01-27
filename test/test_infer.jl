@@ -103,10 +103,51 @@ function test_load_active_pixels()
 end
 
 
+function test_patch_pixel_selection()
+    images, ea, two_body = gen_two_body_dataset();
+    patches = Infer.get_sky_patches(images, two_body; radius_override_pix=5);
+    Infer.load_active_pixels!(
+        images, patches, noise_fraction=Inf, min_radius_pix=Nullable(5));
+
+    for n in 1:ea.N
+        # Make sure, for testing purposes, that the whole bitmap isn't full.
+        for s in 1:ea.S
+            @test sum(patches[s, n].active_pixel_bitmap) <
+                  prod(size(patches[s, n].active_pixel_bitmap))
+        end
+
+        function patch_in_whole_image(p::SkyPatch)
+            patch_image = zeros(size(images[n].pixels))
+            for h in 1:images[n].H, w in 1:images[n].W
+                if Infer.is_pixel_in_patch(h, w, p)
+                    patch_image[h, w] += 1
+                end
+            end
+            return patch_image
+        end
+        patch_images = [ patch_in_whole_image(patches[s, 3]) for s in 1:ea.S ];
+        for s in 1:ea.S
+            @test sum(patch_images[s]) == sum(patches[s, n].active_pixel_bitmap)
+        end
+
+        H_min, W_min, H_max, W_max =
+            Infer.get_active_pixel_range(patches, collect(1:ea.S), n);
+        patch_image = zeros(H_max - H_min + 1, W_max - W_min + 1);
+
+        for h in H_min:H_max, w in W_min:W_max, s in 1:ea.S
+            p = patches[s, n]
+            if Infer.is_pixel_in_patch(h, w, p)
+                patch_image[h - H_min + 1, w - W_min + 1] += 1
+            end
+        end
+        @test all(patch_image .== sum(patch_images)[H_min:H_max, W_min:W_max])
+    end
+end
+
 if test_long_running
     test_infer_rcf()
 end
 
+test_patch_pixel_selection()
 test_load_active_pixels()
 test_infer_single()
-

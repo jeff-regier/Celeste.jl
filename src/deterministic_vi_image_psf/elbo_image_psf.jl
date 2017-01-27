@@ -251,8 +251,17 @@ function accumulate_band_in_elbo!(
         accumulate_source_image_brightness!(ea, s, n, fsms, sbs[s])
     end
 
-    # Iterate only over active sources, since we have already added the
-    # contributions from non-active sources to E_G and var_G.
+    # if there's only one active source, we know each pixel we visit
+    # hasn't been visited before, so no need to allocate memory.
+    # currently length(ea.active_sources) > 1 only in unit tests, never
+    # when invoked from `bin`.
+    already_visited = length(ea.active_sources) == 1 ?
+                          falses(0, 0) :
+                          falses(size(img.pixels))
+
+    # iterate over the pixels by iterating over the patches, and visiting
+    # all the pixels in the patch that are active and haven't already been
+    # visited
     for s in ea.active_sources
         p = ea.patches[s, n]
         fsms = fsm_mat[s, n]
