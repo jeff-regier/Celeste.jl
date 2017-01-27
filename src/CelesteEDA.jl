@@ -11,12 +11,14 @@ import ..DeterministicVI:
     populate_fsm!
 import ..Model:
     linear_world_to_pix, load_bvn_mixtures, ids_names, ids, CatalogEntry, populate_fsm!
-import ..SensitiveFloats.clear!
+using ..SensitiveFloats: clear!
 import ..DeterministicVIImagePSF:
     FSMSensitiveFloatMatrices
 using ..DeterministicVIImagePSF:
     clear_brightness!, populate_star_fsm_image!, populate_gal_fsm_image!,
     accumulate_source_image_brightness!, load_gal_bvn_mixtures
+using ..Infer: get_active_pixel_range, is_pixel_in_patch
+
 using StaticArrays: SVector
 
 import Base.print
@@ -47,11 +49,9 @@ function source_pixel_location(ea::ElboArgs, s::Int, n::Int)
 end
 
 
-function render_source(ea::ElboArgs, s::Int, n::Int;
-                       include_epsilon=true, field=:E_G,
-                       include_iota=true)
-    local p = ea.patches[s, n]
-    local image = fill(NaN, size(p.active_pixel_bitmap))
+function render_sources(ea::ElboArgs, sources::Vector{Int}, n::Int;
+                        include_epsilon=true, field=:E_G,
+                        include_iota=true)
     local sbs = load_source_brightnesses(
         ea, calculate_gradient=false, calculate_hessian=false)
     star_mcs, gal_mcs = load_bvn_mixtures(ea.S, ea.patches,
@@ -60,49 +60,53 @@ function render_source(ea::ElboArgs, s::Int, n::Int;
                                 calculate_gradient=false,
                                 calculate_hessian=false)
 
-    p = ea.patches[s,n]
+    H_min, W_min, H_max, W_max = get_active_pixel_range(ea.patches, sources, n)
+    image = zeros(H_max - H_min + 1, W_max - W_min + 1)
+    for s in sources, h in H_min:H_max, w in W_min:W_max
+        p = ea.patches[s, n]
+        if is_pixel_in_patch(h, w, p)
+            # The pixel in the image
+            h_img = h - H_min + 1
+            w_img = w - W_min + 1
 
-    H2, W2 = size(p.active_pixel_bitmap)
-    for w2 in 1:W2, h2 in 1:H2
-        # (h2, w2) index the local patch, while (h, w) index the image
-        h = p.bitmap_offset[1] + h2
-        w = p.bitmap_offset[2] + w2
+            clear!(ea.elbo_vars.E_G)
+            clear!(ea.elbo_vars.var_G)
 
-        if !p.active_pixel_bitmap[h2, w2]
-            continue
+            hw = SVector{2,Float64}(h, w)
+            is_active_source = s in ea.active_sources
+            populate_fsm!(ea.elbo_vars.bvn_derivs,
+                          ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
+                          s, hw, is_active_source,
+                          p.wcs_jacobian,
+                          gal_mcs, star_mcs)
+
+            accumulate_source_pixel_brightness!(
+                ea.elbo_vars, ea, ea.elbo_vars.E_G, ea.elbo_vars.var_G,
+                ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
+                sbs[s], ea.images[n].b, s, false)
+
+            if field == :E_G
+                image[h_img, w_img] += ea.elbo_vars.E_G.v[]
+            elseif field == :fs0m
+                image[h_img, w_img] += ea.elbo_vars.fs0m.v[]
+            elseif field == :fs1m
+                image[h_img, w_img] += ea.elbo_vars.fs1m.v[]
+            else
+                error("Unknown field ", field)
+            end
         end
+    end
 
-        clear!(ea.elbo_vars.E_G)
-        clear!(ea.elbo_vars.var_G)
-
-        hw = SVector{2,Float64}(h, w)
-        is_active_source = s in ea.active_sources
-        populate_fsm!(ea.elbo_vars.bvn_derivs,
-                      ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
-                      s, hw, is_active_source,
-                      p.wcs_jacobian,
-                      gal_mcs, star_mcs)
-
-        accumulate_source_pixel_brightness!(
-            ea.elbo_vars, ea, ea.elbo_vars.E_G, ea.elbo_vars.var_G,
-            ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
-            sbs[s], ea.images[n].b, s, false)
-
-        if field == :E_G
-            image[h2, w2] = ea.elbo_vars.E_G.v[]
-        elseif field == :fs0m
-            image[h2, w2] = ea.elbo_vars.fs0m.v[]
-        elseif field == :fs1m
-            image[h2, w2] = ea.elbo_vars.fs1m.v[]
-        else
-            error("Unknown field ", field)
-        end
+    for h in H_min:H_max, w in W_min:W_max
+        # The pixel in the image
+        h_img = h - H_min + 1
+        w_img = w - W_min + 1
         if include_epsilon
-            image[h2, w2] += ea.images[n].epsilon_mat[h, w]
+            image[h_img, w_img] += ea.images[n].epsilon_mat[h, w]
         end
         if include_iota
-            image[h2, w2] *= ea.images[n].iota_vec[h]
-        end
+            image[h_img, w_img] *= ea.images[n].iota_vec[h]
+        end        
     end
 
     return image
@@ -111,71 +115,75 @@ end
 
 # Render a single source from a single image
 # in an matrix that is the size of the active_pixel_bitmap.
-function render_source_fft(
+function render_sources_fft(
     ea::ElboArgs,
     fsm_mat::Matrix{FSMSensitiveFloatMatrices},
-    s::Int, n::Int;
+    sources::Vector{Int}, n::Int;
     include_epsilon=true,
     field=:E_G, include_iota=true)
 
-    local p = ea.patches[s, n]
-    local image = fill(NaN, size(p.active_pixel_bitmap))
-    local sbs = load_source_brightnesses(
+    sbs = load_source_brightnesses(
         ea, calculate_gradient=false, calculate_hessian=false)
-    local fsms = fsm_mat[s, n]
-
-    local gal_mcs = load_gal_bvn_mixtures(
+        
+    gal_mcs = load_gal_bvn_mixtures(
             ea.S, ea.patches, ea.vp, ea.active_sources, n,
-            calculate_gradient=false,
-            calculate_hessian=false);
+            calculate_gradient=false, calculate_hessian=false);
 
-    clear_brightness!(fsms)
-    populate_star_fsm_image!(
-        ea, s, n, fsms.psf, fsms.fs0m_conv,
-        fsms.h_lower, fsms.w_lower, fsms.kernel_fun, fsms.kernel_width)
-    populate_gal_fsm_image!(ea, s, n, gal_mcs, fsms)
-    accumulate_source_image_brightness!(ea, s, n, fsms, sbs[s])
+    for s in sources
+        fsms = fsm_mat[s, n]
+        clear_brightness!(fsms)
+        populate_star_fsm_image!(
+            ea, s, n, fsms.psf, fsms.fs0m_conv,
+            fsms.h_lower, fsms.w_lower, fsms.kernel_fun, fsms.kernel_width)
+        populate_gal_fsm_image!(ea, s, n, gal_mcs, fsms)
+        accumulate_source_image_brightness!(ea, s, n, fsms, sbs[s])
+    end
 
-    H2, W2 = size(p.active_pixel_bitmap)
-    for w2 in 1:W2, h2 in 1:H2
-        # (h2, w2) index the local patch, while (h, w) index the image
-        h = p.bitmap_offset[1] + h2
-        w = p.bitmap_offset[2] + w2
+    H_min, W_min, H_max, W_max = get_active_pixel_range(ea.patches, sources, n)
+    image = zeros(H_max - H_min + 1, W_max - W_min + 1)
+    for s in sources, h in H_min:H_max, w in W_min:W_max
+        fsms = fsm_mat[s, n]
+        p = ea.patches[s, n]
+        if is_pixel_in_patch(h, w, p)
+            # The pixel in the fsm matrix
+            h_fsm = h - fsms.h_lower + 1
+            w_fsm = w - fsms.w_lower + 1
 
-        if !p.active_pixel_bitmap[h2, w2]
-            continue
-        end
-
-        h_fsm = h - fsms.h_lower + 1
-        w_fsm = w - fsms.w_lower + 1
-
-        image[h2, w2] = getfield(fsms, field)[h_fsm, w_fsm].v[]
-        if include_epsilon
-            image[h2, w2] += ea.images[n].epsilon_mat[h, w]
-        end
-        if include_iota
-            image[h2, w2] *= ea.images[n].iota_vec[h]
+            # The pixel in the image
+            h_img = h - H_min + 1
+            w_img = w - W_min + 1
+            
+            image[h_img, w_img] += getfield(fsms, field)[h_fsm, w_fsm].v[]
         end
     end
 
-    return deepcopy(image)
+    for h in H_min:H_max, w in W_min:W_max
+        # The pixel in the image
+        h_img = h - H_min + 1
+        w_img = w - W_min + 1
+        if include_epsilon
+            image[h_img, w_img] += ea.images[n].epsilon_mat[h, w]
+        end
+        if include_iota
+            image[h_img, w_img] *= ea.images[n].iota_vec[h]
+        end        
+    end
+
+    return image
 end
 
 
-function show_source_image(ea::ElboArgs, s::Int, n::Int)
-    p = ea.patches[s, n]
-    H2, W2 = size(p.active_pixel_bitmap)
-    image = fill(NaN, H2, W2);
-    for w2 in 1:W2, h2 in 1:H2
-        # (h2, w2) index the local patch, while (h, w) index the image
-        h = p.bitmap_offset[1] + h2
-        w = p.bitmap_offset[2] + w2
-
-        if !p.active_pixel_bitmap[h2, w2]
-            continue
+function show_sources_image(ea::ElboArgs, sources::Vector{Int}, n::Int)
+    H_min, W_min, H_max, W_max = get_active_pixel_range(ea.patches, sources, n)
+    image = zeros(H_max - H_min + 1, W_max - W_min + 1)
+    for h in H_min:H_max, w in W_min:W_max, p in ea.patches[sources, n]
+        if is_pixel_in_patch(h, w, p)
+            # The pixel in the image
+            h_img = h - H_min + 1
+            w_img = w - W_min + 1
+            
+            image[h_img, w_img] = ea.images[n].pixels[h, w]
         end
-
-        image[h2, w2] = ea.images[n].pixels[h, w]
     end
     return image
 end
