@@ -1,5 +1,7 @@
 using Base.Test
 
+using DataFrames
+
 import Celeste: GalsimBenchmark
 
 GALSIM_CASES_EXERCISED = [
@@ -19,6 +21,8 @@ function assert_estimates_are_close(benchmark_results)
             maximum_error = 0.2
         elseif row[1, :field] == "Angle (degrees)"
             maximum_error = 5
+        elseif !isna(row[1, :error_sds])
+            maximum_error = 2.5 * row[1, :error_sds]
         else
             maximum_error = 0.1 * max(row[1, :ground_truth])
         end
