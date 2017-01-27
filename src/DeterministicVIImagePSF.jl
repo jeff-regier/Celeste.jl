@@ -23,9 +23,11 @@ import ..Model:
 
 import ..SensitiveFloats:
     SensitiveFloat, zero_sensitive_float_array,
-    multiply_sfs!, add_scaled_sfs!, clear!
+    multiply_sfs!, add_scaled_sfs!, clear!, add_sources_sf!
 
-import ..Infer: load_active_pixels!, get_sky_patches
+import ..Infer:
+    load_active_pixels!, get_sky_patches, get_active_pixel_range,
+    is_pixel_in_patch
 
 import ..PSF: get_psf_at_point, trim_psf
 

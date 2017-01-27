@@ -189,10 +189,9 @@ function populate_star_fsm_image!(
 end
 
 
-# TODO: rename this to source image brighntess or something.
 """
-Updates fsms.E_G and fsms.var_G in place with the contributions from this
-source in this band.
+Updates single-source sensitive floats fsms.E_G and fsms.var_G in place with
+the brightness of this source in this band.
 """
 function accumulate_source_image_brightness!(
     ea::ElboArgs{Float64},
@@ -228,6 +227,47 @@ end
 
 
 """
+    Clear E_G and var_G and accumulate the contributions from all the sources
+    for a pixel in image n.
+
+    h, w are image pixel indices.
+"""
+function accumulate_image_pixel_brightness!{NumType <: Number}(
+    ea::ElboArgs{NumType},
+    fsm_mat::Matrix{FSMSensitiveFloatMatrices},
+    E_G::SensitiveFloat{NumType},
+    var_G::SensitiveFloat{NumType},
+    h::Int, w::Int, n::Int)
+    
+    clear!(E_G)
+    clear!(var_G)
+
+    for s in 1:ea.S
+        is_pixel_in_patch(h, w, ea.patches[s, n]) || continue
+
+        # Accumulate the brightnesses and variances.
+
+        # Pixel location in the FSM matrix.
+        fsms = fsm_mat[s, n]
+        h_fsm = h - fsms.h_lower + 1
+        w_fsm = w - fsms.w_lower + 1
+
+        is_active_source = s in ea.active_sources
+        if is_active_source
+            sa = findfirst(ea.active_sources, s)
+            add_sources_sf!(E_G, fsms.E_G[h_fsm, w_fsm], sa)
+            add_sources_sf!(var_G, fsms.var_G[h_fsm, w_fsm], sa)
+        else
+            # If the sources is inactive, simply accumulate the values.
+            E_G.v[] += fsms.E_G[h_fsm, w_fsm].v[]
+            var_G.v[] += fsms.var_G[h_fsm, w_fsm].v[]
+        end
+    end
+
+end
+
+
+"""
 Uses the values in fsms to add the contribution from this band to the ELBO.
 """
 function accumulate_band_in_elbo!(
@@ -238,6 +278,8 @@ function accumulate_band_in_elbo!(
     n::Int)
 
     for s in 1:ea.S
+        # Populate the fsm matrices.
+        
         # some sources don't appear in some images
         sum(ea.patches[s, n].active_pixel_bitmap) > 0 || continue
 
@@ -251,69 +293,39 @@ function accumulate_band_in_elbo!(
         accumulate_source_image_brightness!(ea, s, n, fsms, sbs[s])
     end
 
-    # if there's only one active source, we know each pixel we visit
-    # hasn't been visited before, so no need to allocate memory.
-    # currently length(ea.active_sources) > 1 only in unit tests, never
-    # when invoked from `bin`.
-    already_visited = length(ea.active_sources) == 1 ?
-                          falses(0, 0) :
-                          falses(size(img.pixels))
+    E_G = ea.elbo_vars.E_G
+    var_G = ea.elbo_vars.var_G
 
-    # iterate over the pixels by iterating over the patches, and visiting
-    # all the pixels in the patch that are active and haven't already been
-    # visited
-    for s in ea.active_sources
-        p = ea.patches[s, n]
-        fsms = fsm_mat[s, n]
-        H_patch, W_patch = size(p.active_pixel_bitmap)
-        for w_patch in 1:W_patch, h_patch in 1:H_patch
-            if !p.active_pixel_bitmap[h_patch, w_patch]
-                continue
-            end
-            h_image = h_patch + p.bitmap_offset[1]
-            w_image = w_patch + p.bitmap_offset[2]
+    H_min, W_min, H_max, W_max =
+        get_active_pixel_range(ea.patches, ea.active_sources, n)
+        
+    # Loop over pixels in the image and accumulate the ELBO.
+    for h in H_min:H_max, w in W_min: W_max
 
-            image = ea.images[n]
-            this_pixel = image.pixels[h_image, w_image]
+        accumulate_image_pixel_brightness!(ea, fsm_mat, E_G, var_G, h, w, n)
+        
+        image = ea.images[n]
+        elbo = ea.elbo_vars.elbo;
+        
+        # There are no derivatives with respect to epsilon, so can
+        # afely add to the value.
+        E_G.v[] += image.epsilon_mat[h, w]
 
-            if Base.isnan(this_pixel)
-                continue
-            end
-
-            # These are indices within the fs?m image.
-            h_fsm = h_image - fsms.h_lower + 1
-            w_fsm = w_image - fsms.w_lower + 1
-
-            E_G = fsms.E_G[h_fsm, w_fsm]
-            var_G = fsms.var_G[h_fsm, w_fsm]
-
-            # There are no derivatives with respect to epsilon, so can
-            # afely add to the value.
-            E_G.v[] += image.epsilon_mat[h_image, w_image]
-
-            if E_G.v[] < 0
-                # warn("Image ", n, " sources ", s, " pixel ", (h_image, w_image),
-                #      " has negative brightness ", E_G.v[])
-                continue
-            end
-
-            # Note that with a kernel_width > 1 negative values are
-            # possible, and this will result in an error in
-            # add_elbo_log_term.
-
-            # Add the terms to the elbo given the brightness.
-            iota = image.iota_vec[h_image]
-            add_elbo_log_term!(
-                ea.elbo_vars, E_G, var_G, ea.elbo_vars.elbo, this_pixel, iota)
-            add_scaled_sfs!(ea.elbo_vars.elbo, E_G, -iota)
-
-            # Subtract the log factorial term. This is not a function of the
-            # parameters so the derivatives don't need to be updated. Note
-            # that even though this does not affect the ELBO's maximum,
-            # it affects the optimization convergence criterion, so I will
-            # leave it in for now.
-            ea.elbo_vars.elbo.v[] -= lfact(this_pixel)
+        if E_G.v[] < 0
+            # This can happen because of the interpolation, but it has not
+            # proven to be a real problem.
+            # warn("Image ", n, " sources ", s, " pixel ", (h_image, w_image),
+            #      " has negative brightness ", E_G.v[])
+            continue
         end
+
+        # Add the terms to the elbo given the brightness.
+        iota = image.iota_vec[h]
+        pixel_value = image.pixels[h, w]
+        add_elbo_log_term!(ea.elbo_vars, E_G, var_G, elbo, pixel_value, iota)
+        add_scaled_sfs!(elbo, E_G, -iota)
+
+        elbo.v[] -= lfact(pixel_value)
     end
 end
 
@@ -366,6 +378,7 @@ function load_fsm_mat(ea::ElboArgs,
     initialize_fsm_sf_matrices!(fsm_mat, ea, psf_image_mat)
     fsm_mat
 end
+
 
 function initialize_fft_elbo_parameters(
     images::Vector{Image},
