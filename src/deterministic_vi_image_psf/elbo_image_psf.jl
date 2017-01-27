@@ -337,6 +337,9 @@ function elbo_likelihood_with_fft!(
     ea::ElboArgs,
     fsm_mat::Matrix{FSMSensitiveFloatMatrices})
 
+    if length(ea.active_sources) > 1
+        warn("Multiple active sources have not been well-tested with elbo_likelihood_with_fft!")
+    end
     sbs = load_source_brightnesses(ea,
         calculate_gradient=ea.elbo_vars.elbo.has_gradient,
         calculate_hessian=ea.elbo_vars.elbo.has_hessian)

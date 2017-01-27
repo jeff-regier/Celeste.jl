@@ -85,16 +85,16 @@ else
 						   use_fft=("--fft" in ARGS))
         source_callback = nothing
         
-        result_description = ""
+        result_description = "small_box"
         if "--fft" in ARGS
             source_callback = infer_source_fft
-            result_description = "fft"
+            result_description *= "_fft"
         elseif "--fft_two_step" in ARGS
             source_callback = infer_source_fft_two_step
-            result_description = "fft_two_step"
+            result_description *= "_fft_two_step"
         else
             source_callback = infer_source
-            result_description = "mog"
+            result_description *= "_mog"
         end
         wrap_single(cnti...) = one_node_single_infer(cnti...;
                                       infer_source_callback=source_callback)
@@ -110,7 +110,8 @@ else
                                        infer_callback=infer_callback,
                                        primary_initialization=false)
         # fname = @sprintf "%s/celeste-%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field 
-        fname = @sprintf "%s/celeste-smallbox-%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field 
+        fname = @sprintf "%s/celeste-%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field 
+        println("Saving inference results to ", fname)
         JLD.save(fname, "results", results)
     end
 
@@ -119,5 +120,7 @@ else
     # That could be somewhat useful for debugging. The output is in a somewhat
     # different format though, because with just one object it doesn't make
     # sense to compute a full table comparing Celeste to Primary.
-    score_field_disk(rcf, fname, outdir, truthfile, datadir)
+    outfname = @sprintf  "%s/results_and_errors_%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field
+    println("Saving scoring results to ", outfname)
+    score_field_disk(rcf, fname, outdir, truthfile, datadir, outfname)
 end
