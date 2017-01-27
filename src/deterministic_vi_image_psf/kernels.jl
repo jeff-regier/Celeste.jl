@@ -1,7 +1,7 @@
 
 
 function lanczos_kernel{NumType <: Number}(x::NumType, a::Float64)
-    abs(x) < a ? sinc(x) * sinc(x / a): zero(NumType)
+    abs(x) < a ? sinc(x) * sinc(x / a) : zero(promote_type(NumType, Float64))
 end
 
 
@@ -28,8 +28,9 @@ end
 
 
 function lanczos_kernel_with_derivatives{NumType <: Number}(x::NumType, a::Float64)
+    T = promote_type(NumType, Float64)
     if abs(x) > a
-        return 0, 0, 0
+        return T(0), T(0), T(0)
     end
     return lanczos_kernel_with_derivatives_nocheck(x, a)
 end
@@ -39,7 +40,7 @@ function bspline_kernel_with_derivatives{NumType <: Number}(x::NumType)
     abs_x = abs(x)
     sign_x = sign(x)
     if abs_x > 2
-        return 0, 0, 0
+        return zero(x)/1, zero(x)/1, zero(x)/1
     elseif abs_x > 1
         return (-1 * abs_x^3 + 6 * abs_x^2 - 12 * abs_x + 8) / 6,
                (-3 * abs_x^2 + 12 * abs_x  - 12) * sign_x / 6,
@@ -53,10 +54,11 @@ end
 
 
 function cubic_kernel_with_derivatives{NumType <: Number}(x::NumType, a::Float64)
+    T = promote_type(NumType, Float64)
     abs_x = abs(x)
     sign_x = sign(x)
     if abs_x > 2
-        return 0, 0, 0
+        return T(0), T(0), T(0)
     elseif abs_x > 1
         return a * abs_x^3      -5 * a * abs_x^2 +  8 * a * abs_x - 4 * a,
                (3 * a * abs_x^2  -10 * a * abs_x +   8 * a) * sign_x,
@@ -66,7 +68,6 @@ function cubic_kernel_with_derivatives{NumType <: Number}(x::NumType, a::Float64
                (3 * (a + 2) * abs_x^2  -2 * (a + 3) * abs_x) * sign_x,
                6 * (a + 2) * abs_x    -2 * (a + 3)
     end
-    return x
 end
 
 
