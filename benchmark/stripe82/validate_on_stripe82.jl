@@ -104,7 +104,7 @@ else
         # just for testing on stripe 82: in practice we always use all relevent
         # data to make inferences.
         # bounding_box = BoundingBox(-1000., 1000., -1000., 1000.)
-        bounding_box = BoundingBox(0.442738, 0.48364875, 0.410397, 0.46667400)
+        bounding_box = BoundingBox(0.442738, 0.5, 0.410397, 0.51)
         @time results = one_node_infer([rcf,], datadir;
                                        box=bounding_box,
                                        infer_callback=infer_callback,

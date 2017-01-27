@@ -37,7 +37,12 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
     clear!(E_G_s)
     clear!(E_G2_s)
 
-    @inbounds for i in 1:Ia # Stars and galaxies
+    # Only add contributions for stars if
+    Ia_range = (is_active_source && ea.active_source_star_only) ? 1: (1:Ia)
+    if Ia_range != (1:Ia)
+        warn("Using just star!  This is not fully tested.")
+    end
+    @inbounds for i in Ia_range # Celestial object types (e.g. stars and galaxies)
         fsm_i = (i == 1) ? fs0m : fs1m
         a_i = ea.vp[s][ids.a[i, 1]]
         sb_E_l_a_b_i = sb.E_l_a[b, i]
@@ -193,16 +198,28 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
         # end
         # For each value in 1:Ia, written this way for speed.
 
-        @assert Ia == 2
+        if Ia_range == (1:2)
+            @assert Ia == 2
 
-        for u_ind1 = 1:2, u_ind2 = 1:2
-            E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
-            elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
-            elbo_vars.E_G_s_hsub_vec[2].u_u[u_ind1, u_ind2]
+            for u_ind1 = 1:2, u_ind2 = 1:2
+                E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
+                elbo_vars.E_G_s_hsub_vec[2].u_u[u_ind1, u_ind2]
 
-            E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
-                elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
-                elbo_vars.E_G2_s_hsub_vec[2].u_u[u_ind1, u_ind2]
+                E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                    elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
+                    elbo_vars.E_G2_s_hsub_vec[2].u_u[u_ind1, u_ind2]
+            end
+        elseif Ia_range == 1
+            for u_ind1 = 1:2, u_ind2 = 1:2
+                E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2]
+
+                E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                    elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2]
+            end            
+        else
+            error("Invalide value for Ia_range in hard-coded Hessian. ", Ia_range)
         end
     end
 

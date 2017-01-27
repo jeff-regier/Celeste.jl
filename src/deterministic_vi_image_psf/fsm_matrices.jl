@@ -77,7 +77,7 @@ type FSMSensitiveFloatMatrices
     # derivative of a univariate kernel, e.g. bspline_kernel_with_derivatives()
     kernel_width::Int64
     kernel_fun
-
+    
     FSMSensitiveFloatMatrices() = begin
         new(1, 1,
             fs1mMatrix(), fs1mMatrix(), fs1mMatrix(), fs1mMatrix(), fs0mMatrix(),

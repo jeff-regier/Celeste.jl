@@ -528,6 +528,7 @@ Score the celeste results for a particular field
 """
 function score_field_disk(rcf::RunCamcolField, fname, resultdir, truthfile, stagedir, outfname)
     results = JLD.load(fname, "results")
+    println("Errors results (lower is better).  diff = Primary error - Celeste error.")
     println( score_field(rcf, results, truthfile, stagedir, outfname) )
 end
 

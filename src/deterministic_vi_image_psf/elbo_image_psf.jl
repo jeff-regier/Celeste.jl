@@ -288,7 +288,12 @@ function accumulate_band_in_elbo!(
             ea, s, n, fsms.psf, fsms.fs0m_conv,
             fsms.h_lower, fsms.w_lower,
             fsms.kernel_fun, fsms.kernel_width)
-        populate_gal_fsm_image!(ea, s, n, gal_mcs, fsms)
+        
+        is_active_source = s in ea.active_sources
+        if !(is_active_source && ea.active_source_star_only)
+            # Skip galaxies for active sources if ea.active_source_star_only
+            populate_gal_fsm_image!(ea, s, n, gal_mcs, fsms)
+        end
         accumulate_source_image_brightness!(ea, s, n, fsms, sbs[s])
     end
 

@@ -53,7 +53,7 @@ function infer_source_fft(images::Vector{Image},
    load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
 
    ea_fft, fsm_mat = initialize_fft_elbo_parameters(
-       images, vp, patches, [1], use_raw_psf=false)
+       images, vp, patches, [1], use_raw_psf=true)
    elbo_fft_opt = get_fft_elbo_function(ea_fft, fsm_mat)
    maximize_f(elbo_fft_opt, ea_fft, max_iters=150)
 
@@ -70,7 +70,7 @@ function infer_source_fft_two_step(images::Vector{Image},
    load_active_pixels!(images, patches)
 
    ea_fft, fsm_mat = initialize_fft_elbo_parameters(
-       images, vp, patches, [1], use_raw_psf=false)
+       images, vp, patches, [1], use_raw_psf=true)
    elbo_fft_opt = get_fft_elbo_function(ea_fft, fsm_mat)
    maximize_f_two_steps(elbo_fft_opt, ea_fft)
 

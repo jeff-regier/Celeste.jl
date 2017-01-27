@@ -70,12 +70,12 @@ function render_sources(ea::ElboArgs, sources::Vector{Int}, n::Int;
                         include_epsilon=true, field=:E_G,
                         include_iota=true)
     local sbs = load_source_brightnesses(
-        ea, calculate_gradient=false, calculate_hessian=false)
+        ea, calculate_gradient=true, calculate_hessian=true)
     star_mcs, gal_mcs = load_bvn_mixtures(ea.S, ea.patches,
                                 ea.vp, ea.active_sources,
                                 ea.psf_K, n,
-                                calculate_gradient=false,
-                                calculate_hessian=false)
+                                calculate_gradient=true,
+                                calculate_hessian=true)
 
     H_min, W_min, H_max, W_max = get_active_pixel_range(ea.patches, sources, n)
     image = fill(NaN, H_max - H_min + 1, W_max - W_min + 1)
@@ -154,12 +154,13 @@ function render_sources_fft(
     include_epsilon=true,
     field=:E_G, include_iota=true)
 
+    
     sbs = load_source_brightnesses(
-        ea, calculate_gradient=false, calculate_hessian=false)
+        ea, calculate_gradient=true, calculate_hessian=true)
         
     gal_mcs = load_gal_bvn_mixtures(
             ea.S, ea.patches, ea.vp, ea.active_sources, n,
-            calculate_gradient=false, calculate_hessian=false);
+            calculate_gradient=true, calculate_hessian=true);
 
     for s in sources
         fsms = fsm_mat[s, n]
