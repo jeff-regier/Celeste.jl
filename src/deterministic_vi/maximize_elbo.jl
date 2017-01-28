@@ -159,6 +159,7 @@ function maximize_f_two_steps{F}(f::F, ea::ElboArgs;
                              omitted_ids)
 
      ea.vp[1][ids.a] = [1, 0]
+     ea.active_source_star_only = true
      f_evals_star, max_f_star, max_x_star, nm_result_star =
          maximize_f(f, ea, transform;
                     omitted_ids=star_omitted_ids,
@@ -169,6 +170,7 @@ function maximize_f_two_steps{F}(f::F, ea::ElboArgs;
                     use_default_optim_params=use_default_optim_params)
 
     ea.vp[1][ids.a] = [0.8, 0.2]
+    ea.active_source_star_only = false
     f_evals_both, max_f_both, max_x_both, nm_result_both =
         maximize_f(f, ea, transform;
                    omitted_ids=omitted_ids,

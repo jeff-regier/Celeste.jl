@@ -85,7 +85,7 @@ else
 						   use_fft=("--fft" in ARGS))
         source_callback = nothing
         
-        result_description = "small_box"
+        result_description = "full_box"
         if "--fft" in ARGS
             source_callback = infer_source_fft
             result_description *= "_fft"
@@ -103,8 +103,8 @@ else
         # other rcfs may overlap with this one. That's because this function is
         # just for testing on stripe 82: in practice we always use all relevent
         # data to make inferences.
-        # bounding_box = BoundingBox(-1000., 1000., -1000., 1000.)
-        bounding_box = BoundingBox(0.442738, 0.5, 0.410397, 0.51)
+        bounding_box = BoundingBox(-1000., 1000., -1000., 1000.)
+        # bounding_box = BoundingBox(0.442738, 0.5, 0.410397, 0.51)
         @time results = one_node_infer([rcf,], datadir;
                                        box=bounding_box,
                                        infer_callback=infer_callback,

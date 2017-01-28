@@ -31,6 +31,8 @@ import ..Infer:
 
 import ..PSF: get_psf_at_point, trim_psf
 
+import ..Transform: get_mp_transform
+
 import WCS
 
 include("deterministic_vi_image_psf/sensitive_float_fft.jl")
@@ -72,6 +74,7 @@ function infer_source_fft_two_step(images::Vector{Image},
    ea_fft, fsm_mat = initialize_fft_elbo_parameters(
        images, vp, patches, [1], use_raw_psf=true)
    elbo_fft_opt = get_fft_elbo_function(ea_fft, fsm_mat)
+
    maximize_f_two_steps(elbo_fft_opt, ea_fft)
 
    vp[1]

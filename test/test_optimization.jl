@@ -178,7 +178,7 @@ function test_three_body_optimization_fft()
     images, ea, three_bodies = gen_three_body_dataset();
     Infer.load_active_pixels!(images, ea.patches; exclude_nan=false);
     ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
-        images, deepcopy(ea.vp), ea.patches, collect(1:ea.S), use_raw_psf=false)
+        images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
     elbo_fft_opt = DeterministicVIImagePSF.get_fft_elbo_function(ea_fft, fsm_mat)
     DeterministicVI.maximize_f_two_steps(elbo_fft_opt, ea_fft; loc_width=1.0)
 end

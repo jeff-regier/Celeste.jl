@@ -40,7 +40,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
     # Only add contributions for stars if
     Ia_range = (is_active_source && ea.active_source_star_only) ? 1: (1:Ia)
     if Ia_range != (1:Ia)
-        warn("Using just star!  This is not fully tested.")
+        # warn("Using just star!  This is not fully tested.")
     end
     @inbounds for i in Ia_range # Celestial object types (e.g. stars and galaxies)
         fsm_i = (i == 1) ? fs0m : fs1m
