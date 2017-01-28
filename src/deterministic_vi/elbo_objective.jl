@@ -537,5 +537,6 @@ function elbo{T}(ea::ElboArgs{T},
                  kl_helper = KLDivergence.KL_HELPER_POOL[threadid()])
     elbo = elbo_likelihood(ea)
     KLDivergence.subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
+    assert_all_finite(ea.elbo_vars.elbo)
     return elbo
 end

@@ -40,6 +40,9 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
         # Evaluate in the constrained space and then unconstrain again.
         reshaped_x = reshape(x, length(kept_ids), n_active_sources)
         Transform.array_to_vp!(transform, reshaped_x, ea.vp, kept_ids)
+        for s in 1:size(ea.vp, 2)
+            assert(all(!isnan(ea.vp[s]))) 
+        end 
         f_res = f(ea)
         f_evals += 1
         verbose && record_f_eval(f_evals, ea, f_res)

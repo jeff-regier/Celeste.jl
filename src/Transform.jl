@@ -606,6 +606,19 @@ function transform_sensitive_float!{T}(dt::DataTransform,
                                        sf::SensitiveFloat,
                                        vp::VariationalParams{T},
                                        active_sources::Vector{Int})
+
+    if isnan(sf.v[])
+       error("sf has NaN value:", sf_free.v[])
+    end
+
+    if any(isnan(sf.d))
+       error("sf has NaN derivatives:", sf_free.d[])
+    end
+
+    if any(isnan(sf.h))
+       error("sf has NaN hessian:", sf_free.h)
+    end
+
     n_active_sources = length(active_sources)
     @assert size(sf.d) == (length(CanonicalParams), n_active_sources)
 
@@ -630,6 +643,18 @@ function transform_sensitive_float!{T}(dt::DataTransform,
     end
 
     symmetrize!(free_h)
+    
+    if isnan(sf_free.v[])
+        error("sf_free has NaN value:", sf_free.v[])
+    end
+
+    if any(isnan(sf_free.d))
+        error("sf_free has NaN derivatives:", sf_free.d[])
+    end
+
+    if any(isnan(sf_free.h))
+        error("sf_free has NaN hessian:", sf_free.h)
+    end
 
     return sf_free
 end
