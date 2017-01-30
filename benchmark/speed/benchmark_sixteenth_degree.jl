@@ -28,7 +28,8 @@ cd(wd)
 """
 This benchmark optimizes all the light sources in a
 one-sixteenth-square-degree region of sky.
-It has 34,278,282 pixel-visits.
+During the optimization, a pixel is visited
+35,937,971 times (``pixel visits'').
 """
 function benchmark_sixteenth_degree()
     box = BoundingBox(124.25, 124.50, 58.5, 58.75)

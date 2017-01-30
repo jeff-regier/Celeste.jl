@@ -279,8 +279,7 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
                         infer_callback=one_node_single_infer,
                         objid="",
                         box=BoundingBox(-1000., 1000., -1000., 1000.),
-                        primary_initialization=true,
-                        timing=InferTiming())
+                        primary_initialization=true)
     catalog, target_sources, images, neighbor_map =
         infer_init(rcfs,
                    stagedir;
@@ -291,7 +290,7 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
     Log.info("Running with $(nthreads()) threads")
 
     # NB: All I/O happens above. The methods below don't touch disk.
-    infer_callback(catalog, target_sources, neighbor_map, images; timing=timing)
+    infer_callback(catalog, target_sources, neighbor_map, images)
 end
 
 
