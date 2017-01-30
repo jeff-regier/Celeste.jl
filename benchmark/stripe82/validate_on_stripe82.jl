@@ -109,7 +109,6 @@ else
                                        box=bounding_box,
                                        infer_callback=infer_callback,
                                        primary_initialization=false)
-        # fname = @sprintf "%s/celeste-%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field 
         fname = @sprintf "%s/celeste-%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field 
         println("Saving inference results to ", fname)
         JLD.save(fname, "results", results)
