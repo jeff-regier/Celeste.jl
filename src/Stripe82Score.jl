@@ -1,6 +1,5 @@
 module Stripe82Score
 
-
 import JLD
 import FITSIO
 using DataFrames
@@ -8,6 +7,7 @@ using DataFrames
 import ..SDSSIO
 import ..SDSSIO: RunCamcolField
 import ..Model: CatalogEntry, ids
+import ..ParallelRun: OptimizedSource
 
 
 immutable MatchException <: Exception
@@ -21,10 +21,8 @@ mag_to_flux(m)
 convert SDSS mags to SDSS flux
 """
 mag_to_flux(m::AbstractFloat) = 10.^(0.4 * (22.5 - m))
-@vectorize_1arg AbstractFloat mag_to_flux
 
 flux_to_mag(nm::AbstractFloat) = nm > 0 ? 22.5 - 2.5 * log10(nm) : NaN
-@vectorize_1arg AbstractFloat flux_to_mag
 
 """
 where(condition, x, y)
@@ -93,7 +91,6 @@ where
 ```
 """
 function load_s82(fname)
-
     # First, simply read the FITS table into a dictionary of arrays.
     f = FITSIO.FITS(fname)
     keys = [:objid, :rerun, :run, :camcol, :field, :flags,
@@ -157,7 +154,7 @@ function load_s82(fname)
 
     # gal angle (degrees)
     raw_phi = where(usedev, objs[:devphi_r], objs[:expphi_r])
-    result[:gal_angle] = raw_phi - floor(raw_phi / 180) * 180
+    result[:gal_angle] = raw_phi - floor.(raw_phi / 180) * 180
 
     return result
 end
@@ -171,7 +168,6 @@ function fluxes_to_color(f1::Real, f2::Real)
     (f1 <= 0. || f2 <= 0.) && return NaN
     return -2.5 * log10(f1 / f2)
 end
-@vectorize_2arg Real fluxes_to_color
 
 
 """
@@ -197,20 +193,20 @@ function load_primary(rcf::RunCamcolField, stagedir::String)
     result[:ra] = objs["ra"]
     result[:dec] = objs["dec"]
     result[:is_star] = objs["is_star"]
-    result[:star_mag_r] = flux_to_mag(objs["psfflux_r"])
-    result[:gal_mag_r] = flux_to_mag(gal_flux_r)
+    result[:star_mag_r] = flux_to_mag.(objs["psfflux_r"])
+    result[:gal_mag_r] = flux_to_mag.(gal_flux_r)
 
     # star colors
-    result[:star_color_ug] = fluxes_to_color(objs["psfflux_u"], objs["psfflux_g"])
-    result[:star_color_gr] = fluxes_to_color(objs["psfflux_g"], objs["psfflux_r"])
-    result[:star_color_ri] = fluxes_to_color(objs["psfflux_r"], objs["psfflux_i"])
-    result[:star_color_iz] = fluxes_to_color(objs["psfflux_i"], objs["psfflux_z"])
+    result[:star_color_ug] = fluxes_to_color.(objs["psfflux_u"], objs["psfflux_g"])
+    result[:star_color_gr] = fluxes_to_color.(objs["psfflux_g"], objs["psfflux_r"])
+    result[:star_color_ri] = fluxes_to_color.(objs["psfflux_r"], objs["psfflux_i"])
+    result[:star_color_iz] = fluxes_to_color.(objs["psfflux_i"], objs["psfflux_z"])
 
     # gal colors
-    result[:gal_color_ug] = fluxes_to_color(gal_flux_u, gal_flux_g)
-    result[:gal_color_gr] = fluxes_to_color(gal_flux_g, gal_flux_r)
-    result[:gal_color_ri] = fluxes_to_color(gal_flux_r, gal_flux_i)
-    result[:gal_color_iz] = fluxes_to_color(gal_flux_i, gal_flux_z)
+    result[:gal_color_ug] = fluxes_to_color.(gal_flux_u, gal_flux_g)
+    result[:gal_color_gr] = fluxes_to_color.(gal_flux_g, gal_flux_r)
+    result[:gal_color_ri] = fluxes_to_color.(gal_flux_r, gal_flux_i)
+    result[:gal_color_iz] = fluxes_to_color.(gal_flux_i, gal_flux_z)
 
     # gal shape -- fracdev
     result[:gal_fracdev] = objs["frac_dev"]
@@ -225,7 +221,7 @@ function load_primary(rcf::RunCamcolField, stagedir::String)
 
     # gal angle (degrees)
     raw_phi = where(usedev, objs["phi_dev"], objs["phi_exp"])
-    result[:gal_angle] = raw_phi - floor(raw_phi / 180) * 180
+    result[:gal_angle] = raw_phi - floor.(raw_phi / 180) * 180
 
     return result#[!objs["is_saturated"], :]
 end
@@ -261,7 +257,7 @@ function load_ce!(i::Int, ce::CatalogEntry, df::DataFrame)
     df[i, :gal_fracdev] = ce.gal_frac_dev
     df[i, :gal_ab] = ce.gal_ab
     df[i, :gal_angle] = (180/pi)ce.gal_angle
-    df[i, :gal_scale] = ce.gal_scale
+    df[i, :gal_scale] = ce.gal_scale * sqrt(ce.gal_ab)
     df[i, :objid] = ce.objid
 end
 
@@ -269,7 +265,7 @@ end
 """
 Convert Celeste results to a dataframe.
 """
-function celeste_to_df(results::Vector{Dict})
+function celeste_to_df(results::Vector{OptimizedSource})
     # Initialize dataframe
     N = length(results)
     color_col_names = ["color_$cn" for cn in color_names]
@@ -282,7 +278,7 @@ function celeste_to_df(results::Vector{Dict})
                      ["gal_$c" for c in color_sd_col_names],
                      ["gal_fracdev", "gal_ab", "gal_angle", "gal_scale"])
     col_Symbols = Symbol[Symbol(cn) for cn in col_names]
-    col_types = Array(DataType, length(col_names))
+    col_types = Vector{DataType}(length(col_names))
     fill!(col_types, Float64)
     col_types[1] = String
     df = DataFrame(col_types, N)
@@ -292,11 +288,11 @@ function celeste_to_df(results::Vector{Dict})
     i = 0
     for result in results
         i += 1
-        vs = result["vs"]
+        vs = result.vs
 
-        function get_fluxes(i::Int)
-            ret = Array(Float64, 5)
-            ret[3] = exp(vs[ids.r1[i]] + 0.5 * vs[ids.r2[i]])
+        function get_median_fluxes(i::Int)
+            ret = Vector{Float64}(5)
+            ret[3] = exp(vs[ids.r1[i]])
             ret[4] = ret[3] * exp(vs[ids.c1[3, i]])
             ret[5] = ret[4] * exp(vs[ids.c1[4, i]])
             ret[2] = ret[3] / exp(vs[ids.c1[2, i]])
@@ -307,14 +303,14 @@ function celeste_to_df(results::Vector{Dict})
         ce = CatalogEntry(
             vs[ids.u],
             vs[ids.a[1, 1]] > 0.5,
-            get_fluxes(1),
-            get_fluxes(2),
+            get_median_fluxes(1),
+            get_median_fluxes(2),
             vs[ids.e_dev],
             vs[ids.e_axis],
             vs[ids.e_angle],
             vs[ids.e_scale],
-            result["objid"],
-            result["thing_id"])
+            result.objid,
+            result.thingid)
         load_ce!(i, ce, df)
 
         df[i, :is_star] = vs[ids.a[1, 1]]
@@ -335,7 +331,6 @@ function celeste_to_df(results::Vector{Dict})
 end
 
 
-
 """
 Given two results data frame, one containing ground truth (i.e Coadd)
 and one containing predictions (i.e., either Primary of Celeste),
@@ -350,7 +345,7 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
                         :missed_gals, :mag_r],
                        color_cols,
                        abs_err_cols,
-                       :gal_angle)
+                       [:gal_angle])
 
     col_types = fill(Float64, length(col_Symbols))
     col_types[1] = String
@@ -364,7 +359,7 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
     ret[:missed_stars] =  predicted_gal & !(true_gal)
     ret[:missed_gals] =  !predicted_gal & true_gal
 
-    ret[:position] = dist(truth[:ra], truth[:dec],
+    ret[:position] = dist.(truth[:ra], truth[:dec],
                           predicted[:ra], predicted[:dec])
 
     ret[true_gal, :mag_r] =
@@ -387,7 +382,7 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
 
     function degrees_to_diff(a, b)
         angle_between = abs(a - b) % 180
-        min(angle_between, 180 - angle_between)
+        min.(angle_between, 180 - angle_between)
     end
 
     ret[:gal_angle] = degrees_to_diff(truth[:gal_angle], predicted[:gal_angle])
@@ -406,53 +401,57 @@ function match_catalogs(rcf::RunCamcolField,
     coadd_full_df = load_s82(truthfile)
     println("coadd catalog: $(size(coadd_full_df, 1)) objects")
 
-    # find matches in coadd catalog by position
-    disttol = 1.0 / 0.396  # 1 arcsec
-    good_coadd_indexes = Int[]
-    good_celeste_indexes = Int[]
-    for i in 1:size(celeste_full_df, 1)
-        try
-            j = match_position(coadd_full_df[:ra], coadd_full_df[:dec],
-                         celeste_full_df[i, :ra], celeste_full_df[i, :dec],
-                         disttol)
-            push!(good_celeste_indexes, i)
-            push!(good_coadd_indexes, j)
-        catch y
-            isa(y, MatchException) || throw(y)
-        end
-    end
-
-    celeste_df = celeste_full_df[good_celeste_indexes, :]
-    coadd_df = coadd_full_df[good_coadd_indexes, :]
-
     # load "primary" catalog (the SDSS photoObj catalog used to initialize
     # celeste).
     primary_full_df = load_primary(rcf, stagedir)
     println("primary catalog: $(size(primary_full_df, 1)) objects")
 
-    # match Primary to Celeste by object id
-    pc_matches = Int[findfirst(primary_full_df[:objid], objid)
-                   for objid in celeste_df[:objid]]
-    pc_matches = filter(x->x!=0, pc_matches)
-    primary_df = primary_full_df[pc_matches, :]
+    # find matches in coadd catalog by position
+    disttol = 1.0 / 0.396  # 1 arcsec
 
-    # match Celeste to Primary by object id
-    cp_matches = Int[findfirst(celeste_df[:objid], objid)
-                   for objid in primary_df[:objid]]
-    cp_matches = filter(x->x!=0, cp_matches)
-    celeste_df = celeste_df[cp_matches, :]
-    coadd_df = coadd_df[cp_matches, :]
+    good_celeste_indexes = Int[]
+    good_coadd_indexes = Int[]
+    good_primary_indexes = Int[]
+
+    for i in 1:size(primary_full_df, 1)
+        try
+            j = match_position(coadd_full_df[:ra], coadd_full_df[:dec],
+                         primary_full_df[i, :ra], primary_full_df[i, :dec],
+                         disttol)
+            # very large galaxies make average L1 error an unsuitable metric
+            # for comparing scale, but other metrics are less interpretable,
+            # so let's omit any galaxy that is more than an order of
+            # magnitude larger than an average-size galaxy.
+            if coadd_full_df[j, :gal_scale] > 20
+                continue
+            end
+
+            # primary is better at flagging oversaturated sources that coadd
+            if primary_full_df[i, :star_mag_r] < 16
+                continue
+            end
+
+            k = findfirst(celeste_full_df[:objid], primary_full_df[i, :objid])
+            # Celeste doesn't process some light sources due to various filters
+            if k != 0
+                push!(good_primary_indexes, i)
+                push!(good_coadd_indexes, j)
+                push!(good_celeste_indexes, k)
+            end
+        catch y
+            isa(y, MatchException) || throw(y)
+        end
+    end
+
+    primary_df = primary_full_df[good_primary_indexes, :]
+    celeste_df = celeste_full_df[good_celeste_indexes, :]
+    coadd_df = coadd_full_df[good_coadd_indexes, :]
 
     # show that all catalogs have same size, and (hopefully)
     # that not too many sources were filtered
     println("matched celeste catalog: $(size(celeste_df, 1)) objects")
     println("matched coadd catalog: $(size(coadd_df, 1)) objects")
     println("matched primary catalog: $(size(primary_df, 1)) objects")
-
-    # ensure that all objects are matched
-    if size(primary_df, 1) != size(celeste_df, 1)
-        error("catalog mismatch between celeste and primary")
-    end
 
     (celeste_df, primary_df, coadd_df)
 end
@@ -508,23 +507,16 @@ function score_field(rcf::RunCamcolField, results, truthfile, stagedir)
     (celeste_df, primary_df, coadd_df) = match_catalogs(rcf,
                                 results, truthfile, stagedir)
 
-    suffix = @sprintf "%06d-%d-%04d.csv" rcf.run rcf.camcol rcf.field
-    #writetable("celeste_results_"suffix, celeste_df)
-    #writetable("primary_results_"suffix, primary_df)
-    #writetable("coadd_results_"suffix, coadd_df)
-
     # difference between celeste and coadd
     celeste_err = get_err_df(coadd_df, celeste_df)
     primary_err = get_err_df(coadd_df, primary_df)
 
-#=
     JLD.save("results_and_errors.jld",
              "celeste_df", celeste_df,
              "primary_df", primary_df,
              "coadd_df", coadd_df,
              "celeste_err", celeste_err,
              "primary_err", primary_err)
-=#
 
     # create scores
     get_scores_df(celeste_err, primary_err, coadd_df)

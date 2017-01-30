@@ -40,8 +40,8 @@ function pixel_world_jacobian(wcs::WCSTransform, pix_loc::Array{Float64, 1};
     # Assume that about a half a pixel is a reasonable step size and the
     # directions are about the same.
     world_loc = WCS.pix_to_world(wcs, pix_loc)
-    world_delt = maximum(abs(
-      WCS.pix_to_world(wcs, pix_loc + Float64[pixel_delt, pixel_delt]) - world_loc))
+    world_delt = maximum(abs,
+      WCS.pix_to_world(wcs, pix_loc + Float64[pixel_delt, pixel_delt]) - world_loc)
 
     world_loc_1 = world_loc + world_delt * Float64[1, 0]
     world_loc_2 = world_loc + world_delt * Float64[0, 1]
@@ -49,4 +49,3 @@ function pixel_world_jacobian(wcs::WCSTransform, pix_loc::Array{Float64, 1};
     hcat((WCS.world_to_pix(wcs, world_loc_1) - pix_loc) ./ world_delt,
          (WCS.world_to_pix(wcs, world_loc_2) - pix_loc) ./ world_delt)
 end
-

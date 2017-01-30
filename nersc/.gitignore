@@ -1,0 +1,3 @@
+*.tfin
+.sockfile*
+slurm-*.out

@@ -13,9 +13,7 @@ test log_prob.jl and log_prob_util.jl
 function test_that_star_truth_is_most_likely_log_prob()
 
     # init ground truth star
-    blob, ea, body = true_star_init();
-    blob_tiles     = [Model.TiledImage(b; tile_width=b.W) for b in blob]
-    active_pixels  = ea.active_pixels
+    images, ea, body = SampleData.true_star_init()
 
     # turn list of catalog entries a list of LatentStateParams
     source_states = [Model.catalog_entry_to_latent_state_params(body[s])
@@ -23,10 +21,10 @@ function test_that_star_truth_is_most_likely_log_prob()
 
     # create logpdf function handle
     star_logpdf, star_logprior =
-        Model.make_star_logpdf(ea.images, active_pixels, ea.S, ea.N,
-                               source_states, ea.tile_source_map,
+        Model.make_star_logpdf(ea.images, ea.S, ea.N,
+                               source_states,
                                ea.patches, ea.active_sources,
-                               ea.psf_K, ea.num_allowed_sd)
+                               ea.psf_K)
 
     # extract the star-specific parameters from source_states[1] for the
     # logpdf function
@@ -66,9 +64,7 @@ end
 
 function test_that_gal_truth_is_most_likely_log_prob()
     # init ground truth star
-    blob, ea, body = gen_sample_galaxy_dataset()
-    blob_tiles     = [Model.TiledImage(b; tile_width=b.W) for b in blob]
-    active_pixels  = ea.active_pixels
+    images, ea, body = gen_sample_galaxy_dataset()
 
     # turn list of catalog entries a list of LatentStateParams
     source_states = [Model.catalog_entry_to_latent_state_params(body[s])
@@ -78,10 +74,10 @@ function test_that_gal_truth_is_most_likely_log_prob()
 
     # create logpdf function handle
     gal_logpdf, gal_logprior =
-        Model.make_galaxy_logpdf(ea.images, active_pixels, ea.S, ea.N,
-                                 source_states, ea.tile_source_map,
+        Model.make_galaxy_logpdf(ea.images, ea.S, ea.N,
+                                 source_states,
                                  ea.patches, ea.active_sources,
-                                 ea.psf_K, ea.num_allowed_sd)
+                                 ea.psf_K)
 
     # extract the star-specific parameters from source_states[1] for the
     # logpdf function

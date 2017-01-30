@@ -9,6 +9,7 @@ export forward_diff_model_params,
        wrap_vp_vector,
        test_with_autodiff
 
+
 """"
 Return an ElboArgs with the corresponding type.
 """
@@ -21,15 +22,8 @@ function forward_diff_model_params{T<:Number}(::Type{T}, ea0::ElboArgs{Float64})
         vp[s][i] = ea0.vp[s][i]
     end
 
-    ea1 = ElboArgs(ea0.images,
-             vp,
-             ea0.tile_source_map,
-             ea0.patches,
-             ea0.active_sources)
-    ea1.active_pixels = ea0.active_pixels
-    ea1
+    ElboArgs(ea0.images, vp, ea0.patches, ea0.active_sources)
 end
-
 
 
 """
@@ -66,21 +60,21 @@ end
 """
 Use ForwardDiff to test that fun(x) = sf (to abuse some notation)
 """
-function test_with_autodiff(fun::Function, x::Vector{Float64}, sf::SensitiveFloat)
+function test_with_autodiff{F}(fun::F, x::Vector{Float64}, sf::SensitiveFloat)
 
     const test_grad = false
     const test_hess = false
 
-    @test_approx_eq fun(x) sf.v
+    @test fun(x) ≈ sf.v[]
 
     if test_grad
         ad_grad = ForwardDiff.gradient(fun, x)
-        @test_approx_eq ad_grad sf.d[:]
+        @test ad_grad ≈ sf.d[:]
     end
 
     if test_hess
         ad_hess = ForwardDiff.hessian(fun, x)
-        @test_approx_eq ad_hess sf.h
+        @test ad_hess ≈ sf.h
     end
 end
 

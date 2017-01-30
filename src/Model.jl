@@ -3,14 +3,13 @@ module Model
 using StaticArrays
 
 # parameter types
-export Image, TiledImage, ImageTile,
-       SkyPatch, PsfComponent,
+export Image, SkyPatch, PsfComponent,
        GalaxyComponent, GalaxyPrototype,
        PriorParams, UnconstrainedParams,
        CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,
        PsfParams, RawPSF, CatalogEntry,
-       init_source, ParamSet
+       ParamSet
 
 # functions
 export align
@@ -49,9 +48,8 @@ include("model/image_model.jl")
 include("model/param_set.jl")
 include("model/imaged_sources.jl")
 include("model/wcs_utils.jl")
-include("model/pixels.jl")
 
-import ..SensitiveFloats: SensitiveFloat
+import ..SensitiveFloats: SensitiveFloat, clear!
 include("bivariate_normals.jl")
 include("model/fsm_util.jl")
 include("model/log_prob.jl")

@@ -1,7 +1,7 @@
 # Functions to compute the log probability of star parameters and galaxy
 # parameters given pixel data
 using Distributions
-import ..SensitiveFloats: SensitiveFloat, zero_sensitive_float, clear!
+import ..SensitiveFloats: SensitiveFloat, clear!
 
 const eps_prob_a = 1e-6
 
@@ -15,8 +15,7 @@ Creates a vectorized version of the star logpdf as a function of
 unconstrained params.
     star_params = [lnr, lnc1, ..., lnc4, ra, dec]
 Args:
-  - images: Vector of TiledImage types (data for log_likelihood)
-  - active_pixels: Vector of ActivePixels on which the log_likelihood is based
+  - images: Vector of Image types (data for log_likelihood)
   - S: --- from ElboArgs
   - N:
 Returns:
@@ -25,19 +24,15 @@ Returns:
   - star_logprior: star param log prior function handle that takes in same
                    flat, unconstrained array as parameter
 """
-function make_star_logpdf(images::Vector{TiledImage},
-                          active_pixels::Vector{ActivePixel},
+function make_star_logpdf(images::Vector{Image},
                           S::Int64,
                           N::Int64,
                           source_params::Vector{Vector{Float64}},
-                          tile_source_map::Vector{Matrix{Vector{Int}}},
                           patches::Matrix{SkyPatch},
                           active_sources::Vector{Int},
-                          psf_K::Int64,
-                          num_allowed_sd::Float64)
-
+                          psf_K::Int64)
     # define star prior log probability density function
-    prior    = construct_prior()
+    prior = construct_prior()
     subprior = prior.star
 
     function star_logprior(state::Vector{Float64})
@@ -52,14 +47,14 @@ function make_star_logpdf(images::Vector{TiledImage},
         dummy_gal_shape = [.1, .1, .1, .1]
         ll_like  = state_log_likelihood(true, brightness, colors, position,
                                         dummy_gal_shape, images,
-                                        active_pixels,
                                         patches,
                                         active_sources,
-                                        psf_K, num_allowed_sd,
+                                        psf_K,
                                         source_params,
-                                        tile_source_map, S, N)
+                                        S, N)
         return ll_like + ll_prior
     end
+
     return star_logpdf, star_logprior
 end
 
@@ -71,8 +66,7 @@ unconstrained params
 where the flux and position params are the same as the star case, and the
 shape params are unconstrained versions of (gdev, gaxis, gangle, gscale)
 Args:
-  - images: Vector of TiledImage types (data for log_likelihood)
-  - active_pixels: Vector of ActivePixels on which the log_likelihood is based
+  - images: Vector of Image types (data for log_likelihood)
   - ea: ElboArgs book keeping argument
 Returns:
   - gal_logpdf  : unnormalized logpdf function handle that takes in a flat,
@@ -80,16 +74,13 @@ Returns:
   - gal_logprior: star param log prior function handle that takes in same
                  flat, unconstrained array as parameter
 """
-function make_galaxy_logpdf(images::Vector{TiledImage},
-                            active_pixels::Vector{ActivePixel},
+function make_galaxy_logpdf(images::Vector{Image},
                             S::Int64,
                             N::Int64,
                             source_params::Vector{Vector{Float64}},
-                            tile_source_map::Vector{Matrix{Vector{Int}}},
                             patches::Matrix{SkyPatch},
                             active_sources::Vector{Int},
-                            psf_K::Int64,
-                            num_allowed_sd::Float64)
+                            psf_K::Int64)
     # define galaxy prior function
     prior    = construct_prior()
     subprior = prior.galaxy
@@ -111,11 +102,10 @@ function make_galaxy_logpdf(images::Vector{TiledImage},
             state[1], state[2:5], state[6:7], state[8:end]
         ll_like  = state_log_likelihood(false, brightness, colors, position,
                                         constrain_gal_shape(gal_shape), images,
-                                        active_pixels,
                                         patches,
-                                        active_sources, psf_K, num_allowed_sd,
+                                        active_sources, psf_K,
                                         source_params,
-                                        tile_source_map, S, N)
+                                        S, N)
         return ll_like + ll_prior
     end
 
@@ -131,8 +121,7 @@ Args:
   - colors: array of colors
   - position: ra/dec of source
   - gal_shape: vector of galaxy shape params (used if is_star=false)
-  - images: vector of TiledImage types (data for likelihood)
-  - active_pixels: vector of ActivePixels over which the ll is summed
+  - images: vector of Image types (data for likelihood)
   - ea: ElboArgs object that maintains params for all sources
 Returns:
   - result: a scalar describing the log likelihood of the
@@ -144,14 +133,11 @@ function state_log_likelihood(is_star::Bool,                # source is star
                               colors::Vector{Float64},      # source vector of colors
                               position::Vector{Float64},    # source position
                               gal_shape::Vector{Float64},   # source gal shape
-                              images::Vector{TiledImage},   # list of images with source pixel data
-                              active_pixels::Vector{ActivePixel}, # which pixels enter into the likelihood
+                              images::Vector{Image},   # list of images with source pixel data
                               patches::Matrix{SkyPatch},    # formerly of ElboArgs
                               active_sources::Vector{Int},  # formerly of ElboArgs
                               psf_K::Int64,                 # number of PSF Comps
-                              num_allowed_sd::Float64,      # ...
                               source_params::Vector{Vector{Float64}}, # list of background sources
-                              tile_source_map::Vector{Matrix{Vector{Int}}},
                               S::Int64,
                               N::Int64)
     # TODO: cache the background rate image!! --- does not need to be recomputed at each ll eval
@@ -160,10 +146,9 @@ function state_log_likelihood(is_star::Bool,                # source is star
 
     # create objects needed to compute the mean poisson value per pixel
     # (similar to ElboDeriv.process_active_pixels!)
-    model_vars =
-      ModelIntermediateVariables(Float64, S, length(active_sources))
-    model_vars.calculate_derivs = false
-    model_vars.calculate_hessian= false
+    bvn_derivs = BivariateNormalDerivatives{Float64}()
+    fs0m = SensitiveFloat{Float64}(length(StarPosParams), 1, false, false)
+    fs1m = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, false, false)
 
     # load star/gal mixture components (make sure these reflect
     gdev, gaxis, gangle, gscale = gal_shape
@@ -172,54 +157,71 @@ function state_log_likelihood(is_star::Bool,                # source is star
     source_params[1][lidx.e_axis]  = gaxis
     source_params[1][lidx.e_angle] = gangle
     source_params[1][lidx.e_scale] = gscale
-    star_mcs_vec = Array(Array{BvnComponent{Float64}, 2}, N)
-    gal_mcs_vec  = Array(Array{GalaxyCacheComponent{Float64}, 4}, N)
-    for b=1:N
-        star_mcs_vec[b], gal_mcs_vec[b] =
-            load_bvn_mixtures(S, patches, source_params, active_sources, psf_K, b,
-                              calculate_derivs=model_vars.calculate_derivs,
-                              calculate_hessian=model_vars.calculate_hessian)
-    end
 
     # iterate over the pixels, summing pixel-specific poisson rates
     ll = 0.
-    for pixel in active_pixels
-        tile         = images[pixel.n].tiles[pixel.tile_ind]
-        tile_sources = tile_source_map[pixel.n][pixel.tile_ind]
-        this_pixel   = tile.pixels[pixel.h, pixel.w]
-        pixel_band   = tile.b
 
-        # compute the unit-flux pixel values
-        populate_fsm_vecs!(model_vars, patches, active_sources,
-                           num_allowed_sd,
-                           tile_sources, tile,
-                           pixel.h, pixel.w,
-                           gal_mcs_vec[pixel.n], star_mcs_vec[pixel.n])
+    @assert length(active_sources) == 1
 
-        # compute the background rate for this pixel
-        background_rate    = tile.epsilon_mat[pixel.h, pixel.w]
-        background_sources = tile_sources[tile_sources.!=1]
-        for s in background_sources
-            # determine if background source is star/gal; get fluxes
-            params_s  = source_params[s]
-            s_is_star = params_s[lidx.a[1,1]] > .5
-            type_idx  = s_is_star ? 1 : 2
-            flux_s    = colors_to_fluxes(params_s[lidx.r[type_idx]],
-                                         params_s[lidx.c[:,type_idx]])
-            rate_s = s_is_star ? model_vars.fs0m_vec[s].v : model_vars.fs1m_vec[s].v
-            rate_s *= flux_s[pixel_band]
-            background_rate += rate_s
+    for n in 1:N
+        img = images[n]
+
+        star_mcs, gal_mcs = load_bvn_mixtures(S, patches,
+                              source_params, active_sources, psf_K, n,
+                              calculate_gradient=false,
+                              calculate_hessian=false)
+
+        p = patches[active_sources[1], n]
+        H2, W2 = size(p.active_pixel_bitmap)
+        for w2 in 1:W2, h2 in 1:H2
+            # (h2, w2) index the local patch, while (h, w) index the image
+            h = p.bitmap_offset[1] + h2
+            w = p.bitmap_offset[2] + w2
+
+            if !p.active_pixel_bitmap[h2, w2]
+                continue
+            end
+
+            # compute the unit-flux pixel values
+            hw = SVector{2,Float64}(h, w)
+
+            # compute the background rate for this pixel
+            background_rate = img.epsilon_mat[h, w]
+            for s in 2:S  # excludes source #1
+                # determine if background source is star/gal; get fluxes
+                params_s  = source_params[s]
+                s_is_star = params_s[lidx.a[1,1]] > .5
+                type_idx  = s_is_star ? 1 : 2
+                flux_s    = colors_to_fluxes(params_s[lidx.r[type_idx]],
+                                             params_s[lidx.c[:,type_idx]])
+                populate_fsm!(bvn_derivs,
+                              fs0m, fs1m,
+                              s, hw,
+                              false,
+                              p.wcs_jacobian,
+                              gal_mcs, star_mcs)
+                rate_s = s_is_star ? fs0m.v[] : fs1m.v[]
+                rate_s *= flux_s[img.b]
+                background_rate += rate_s
+            end
+
+            # this source's rate, add to background for total
+            populate_fsm!(bvn_derivs,
+                          fs0m, fs1m,
+                          1, hw,
+                          false,
+                          p.wcs_jacobian,
+                          gal_mcs, star_mcs)
+            this_rate  = is_star ? fs0m.v[] : fs1m.v[]
+            pixel_rate = fluxes[img.b] * this_rate + background_rate
+
+            # multiply by image's gain for this pixel
+            rate     = pixel_rate * img.iota_vec[h]
+            pixel_ll = logpdf(Poisson(rate[1]), round(Int, img.pixels[h, w]))
+            ll += pixel_ll
         end
-
-        # this source's rate, add to background for total
-        this_rate  = is_star ? model_vars.fs0m_vec[1].v : model_vars.fs1m_vec[1].v
-        pixel_rate = fluxes[pixel_band]*this_rate + background_rate
-
-        # multiply by image's gain for this pixel
-        rate     = pixel_rate * tile.iota_vec[pixel.h]
-        pixel_ll = logpdf(Poisson(rate[1]), round(Int, this_pixel))
-        ll += pixel_ll
     end
+
     return ll
 end
 
@@ -259,14 +261,14 @@ Construct a `Prior` object, contains StarPrior and GalaxyPrior objects
 function construct_prior()
     pp = load_prior()
     star_prior = StarPrior(
-        LogNormal(pp.r_mean[1], pp.r_var[1]),
+        LogNormal(pp.r_μ[1], sqrt(pp.r_σ²[1])),
         Categorical(pp.k[:,1]),
-        [MvNormal(pp.c_mean[:,k,1], pp.c_cov[:,:,k,1]) for k in 1:2])
+        [MvNormal(pp.c_mean[:,k,1], pp.c_cov[:,:,k,1]) for k in 1:D])
 
     gal_prior = GalaxyPrior(
-        LogNormal(pp.r_mean[2], pp.r_var[2]),
+        LogNormal(pp.r_μ[2], sqrt(pp.r_σ²[2])),
         Categorical(pp.k[:,2]),
-        [MvNormal(pp.c_mean[:,k,2], pp.c_cov[:,:,k,2]) for k in 1:2],
+        [MvNormal(pp.c_mean[:,k,2], pp.c_cov[:,:,k,2]) for k in 1:D],
         LogNormal(0, 10),
         Beta(1, 1),
         Beta(1, 1))
@@ -285,8 +287,8 @@ function color_logprior(brightness::Float64,
                         is_star::Bool)
     subprior      = is_star ? prior.star : prior.galaxy
     ll_brightness = logpdf(subprior.brightness, exp(brightness))
-    ll_component  = [logpdf(subprior.colors[k], colors) for k in 1:2]
-    ll_color      = logsumexp(ll_component + log(subprior.color_component.p))
+    ll_component  = [logpdf(subprior.colors[k], colors) for k in 1:D]
+    ll_color      = logsumexp(ll_component + log.(subprior.color_component.p))
     return ll_brightness + ll_color
 end
 
@@ -314,7 +316,7 @@ LogNormal priors are placed)
 """
 function fluxes_to_colors(fluxes::Vector{Float64})
     lnr    = log(fluxes[3])
-    colors = Array(Float64, 4)
+    colors = Vector{Float64}(4)
     colors[1] = log(fluxes[2]) - log(fluxes[1])
     colors[2] = log(fluxes[3]) - log(fluxes[2])
     colors[3] = log(fluxes[4]) - log(fluxes[3])
@@ -328,14 +330,14 @@ Translate from the (brightness, color) parameterization to nmgy fluxes
 """
 function colors_to_fluxes(brightness::Float64, colors::Vector{Float64})
     # build up log fluxes
-    ret    = Array(Float64, 5)
+    ret    = Vector{Float64}(5)
     lnr    = brightness
     ret[3] = lnr     # r flux
     ret[4] = lnr + colors[3]        # ln(i/r) = c3 => lni = lnr - c3
     ret[5] = ret[4] + colors[4]     # ln(z/i) = c4 => lnz = lni - c4
     ret[2] = -colors[2] + lnr       # ln(r/g) = c2 => lng = c2 + lnr
     ret[1] = -colors[1] + ret[2]    # ln(g/u) = c1 => lnu = c1 + lng
-    return exp(ret)
+    return exp.(ret)
 end
 
 
@@ -346,7 +348,7 @@ end
 
 function constrain_gal_shape(unc_gal_shape::Vector{Float64})
     gdev, gaxis, gangle, gscale = unc_gal_shape
-    constr_shape    = Array(Float64, 4)
+    constr_shape    = Vector{Float64}(4)
     constr_shape[1] = clamp(sigmoid(gdev), eps_prob_a, 1-eps_prob_a)
     constr_shape[2] = clamp(sigmoid(gaxis), eps_prob_a, 1-eps_prob_a)
     constr_shape[3] = gangle       # TODO put this between [0, 2pi]
@@ -357,7 +359,7 @@ end
 
 function unconstrain_gal_shape(con_gal_shape::Vector{Float64})
     gdev, gaxis, gangle, gscale = con_gal_shape
-    unc_shape    = Array(Float64, 4)
+    unc_shape    = Vector{Float64}(4)
     unc_shape[1] = logit(gdev)
     unc_shape[2] = logit(gaxis)
     unc_shape[3] = gangle
@@ -393,7 +395,7 @@ end
 
 function catalog_entry_to_latent_state_params(ce::CatalogEntry)
     # create a float array of the appropriate length
-    ret = Array(Float64, length(lidx))
+    ret = Vector{Float64}(length(lidx))
 
     # galaxy shape params
     ret[lidx.u]       = ce.pos
@@ -436,9 +438,8 @@ end
 #TODO is there a better place for this generic function? --- acm
 function logsumexp(a::Vector{Float64})
     a_max = maximum(a)
-    out = log(sum(exp(a - a_max)))
-    out += a_max
-    return out
+    out = log(sum(exp, a - a_max))
+    return out + a_max
 end
 
 
