@@ -191,6 +191,13 @@ function test_basic_transforms()
     @test Transform.unconstrain_simplex([1.0, 0.0]) ≈ [Inf]
 
     @test Transform.constrain_to_simplex([Inf, 5])  ≈ [1.0, 0.0, 0.0]
+
+    @test sum(Transform.constrain_to_simplex([Inf, Inf])) ≈ 1.0 # Make sure that it's a simplex when there is more than one Inf
+
+    @test sum(Transform.constrain_to_simplex([709.0, 709.0, 709.0])) ≈ 1.0 # sum overflows
+    @test sum(Transform.constrain_to_simplex([710.0, 710.0, 710.0])) ≈ 1.0 # each element overflows
+    @test sum(Transform.constrain_to_simplex([88.0f0, 88.0f0, 88.0f0])) ≈ 1.0f0 # sum overflows
+    @test sum(Transform.constrain_to_simplex([89.0f0, 89.0f0, 89.0f0])) ≈ 1.0f0 # each element overflows
 end
 
 

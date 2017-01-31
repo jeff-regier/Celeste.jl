@@ -46,19 +46,20 @@ Convert an (n - 1)-vector of real numbers to an n-vector on the simplex, where
 the last entry implicitly has the untransformed value 1.
 """
 function constrain_to_simplex{NumType <: Number}(x::Vector{NumType})
-    if any(x .== Inf)
+    m = maximum(x)
+    if m == Inf
         # If more than 1 entry in x is Inf, it may be because the
         # the last entry in z is 0. Here we set all those entries to the
         # same value, though that may not be strictly correct.
-        z = NumType[ x_entry .== Inf ? one(NumType) : zero(NumType) for x_entry in x]
-        z ./ sum(z)
+        z   = NumType[ x_entry .== Inf ? one(NumType) : zero(NumType) for x_entry in x]
+        z ./= sum(z)
         push!(z, 0)
         return z
     else
-        z = exp.(x)
-        z_sum = sum(z) + 1
+        z = exp.(x .- m)
+        z_sum = sum(z) + exp(-m)
         z ./= z_sum
-        push!(z, 1 / z_sum)
+        push!(z, inv(z_sum)*exp(-m))
         return z
     end
 end
