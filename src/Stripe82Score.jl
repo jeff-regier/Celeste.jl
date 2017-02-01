@@ -4,6 +4,7 @@ import JLD
 import FITSIO
 using DataFrames
 
+import ..AccuracyBenchmark
 import ..SDSSIO
 import ..SDSSIO: RunCamcolField
 import ..Model: CatalogEntry, ids
@@ -60,103 +61,6 @@ function match_position(ras, decs, ra, dec, maxdist)
         dist(ra, dec, ras[i], decs[i]) < maxdist && return i
     end
     throw(MatchException(@sprintf("No source found at %f  %f", ra, dec)))
-end
-
-
-"""
-load_s82(fname)
-
-Load Stripe 82 objects into a DataFrame. `fname` should be a FITS file
-created by running a CasJobs (skyserver.sdss.org/casjobs/) query
-on the Stripe82 database. Run the following query in the \"Stripe82\"
-context, then download the table as a FITS file.
-
-```
-select
-  objid, rerun, run, camcol, field, flags,
-  ra, dec, probpsf,
-  psfmag_u, psfmag_g, psfmag_r, psfmag_i, psfmag_z,
-  devmag_u, devmag_g, devmag_r, devmag_i, devmag_z,
-  expmag_u, expmag_g, expmag_r, expmag_i, expmag_z,
-  fracdev_r,
-  devab_r, expab_r,
-  devphi_r, expphi_r,
-  devrad_r, exprad_r
-into mydb.s82_0_1_0_1
-from stripe82.photoobj
-where
-  run in (106, 206) and
-  ra between 0. and 1. and
-  dec between 0. and 1.
-```
-"""
-function load_s82(fname)
-    # First, simply read the FITS table into a dictionary of arrays.
-    f = FITSIO.FITS(fname)
-    keys = [:objid, :rerun, :run, :camcol, :field, :flags,
-            :ra, :dec, :probpsf,
-            :psfmag_u, :psfmag_g, :psfmag_r, :psfmag_i, :psfmag_z,
-            :devmag_u, :devmag_g, :devmag_r, :devmag_i, :devmag_z,
-            :expmag_u, :expmag_g, :expmag_r, :expmag_i, :expmag_z,
-            :fracdev_r,
-            :devab_r, :expab_r,
-            :devphi_r, :expphi_r,
-            :devrad_r, :exprad_r,
-            :flags]
-    objs = Dict(key=>read(f[2], string(key)) for key in keys)
-    close(f)
-
-    usedev = objs[:fracdev_r] .> 0.5  # true=> use dev, false=> use exp
-
-    # Convert to "celeste" style results.
-    gal_mag_u = where(usedev, objs[:devmag_u], objs[:expmag_u])
-    gal_mag_g = where(usedev, objs[:devmag_g], objs[:expmag_g])
-    gal_mag_r = where(usedev, objs[:devmag_r], objs[:expmag_r])
-    gal_mag_i = where(usedev, objs[:devmag_i], objs[:expmag_i])
-    gal_mag_z = where(usedev, objs[:devmag_z], objs[:expmag_z])
-
-    result = DataFrame()
-    result[:objid] = objs[:objid]
-    result[:ra] = objs[:ra]
-    result[:dec] = objs[:dec]
-    result[:is_star] = [x != 0 for x in objs[:probpsf]]
-    result[:star_mag_r] = objs[:psfmag_r]
-    result[:gal_mag_r] = gal_mag_r
-
-    # star colors
-    result[:star_color_ug] = objs[:psfmag_u] .- objs[:psfmag_g]
-    result[:star_color_gr] = objs[:psfmag_g] .- objs[:psfmag_r]
-    result[:star_color_ri] = objs[:psfmag_r] .- objs[:psfmag_i]
-    result[:star_color_iz] = objs[:psfmag_i] .- objs[:psfmag_z]
-
-    # gal colors
-    result[:gal_color_ug] = gal_mag_u .- gal_mag_g
-    result[:gal_color_gr] = gal_mag_g .- gal_mag_r
-    result[:gal_color_ri] = gal_mag_r .- gal_mag_i
-    result[:gal_color_iz] = gal_mag_i .- gal_mag_z
-
-    # gal shape -- fracdev
-    result[:gal_fracdev] = objs[:fracdev_r]
-
-    # Note that the SDSS photo pipeline doesn't constrain the de Vaucouleur
-    # profile parameters and exponential disk parameters (A/B, angle, scale)
-    # to be the same, whereas Celeste does. Here, we pick one or the other
-    # from SDSS, based on fracdev - we'll get the parameters corresponding
-    # to the dominant component. Later, we limit comparison to objects with
-    # fracdev close to 0 or 1 to ensure that we're comparing apples to apples.
-
-    result[:gal_ab] = where(usedev, objs[:devab_r], objs[:expab_r])
-
-    # gal effective radius (re)
-    re_arcsec = where(usedev, objs[:devrad_r], objs[:exprad_r])
-    re_pixel = re_arcsec / 0.396
-    result[:gal_scale] = re_pixel
-
-    # gal angle (degrees)
-    raw_phi = where(usedev, objs[:devphi_r], objs[:expphi_r])
-    result[:gal_angle] = raw_phi - floor.(raw_phi / 180) * 180
-
-    return result
 end
 
 
@@ -398,7 +302,7 @@ function match_catalogs(rcf::RunCamcolField,
     println("celeste: $(size(celeste_full_df, 1)) objects")
 
     # load coadd catalog
-    coadd_full_df = load_s82(truthfile)
+    coadd_full_df = AccuracyBenchmark.load_coadd_catalog(truthfile)
     println("coadd catalog: $(size(coadd_full_df, 1)) objects")
 
     # load "primary" catalog (the SDSS photoObj catalog used to initialize

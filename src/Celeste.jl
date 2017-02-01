@@ -20,10 +20,12 @@ include("DeterministicVIImagePSF.jl")
 
 include("ParallelRun.jl")
 
+include("AccuracyBenchmark.jl")
 include("GalsimBenchmark.jl")
 include("Stripe82Score.jl")
 
 include("CelesteEDA.jl")
+
 
 import .ParallelRun: BoundingBox, OptimizedSource
 import .SDSSIO: RunCamcolField, CatalogEntry
