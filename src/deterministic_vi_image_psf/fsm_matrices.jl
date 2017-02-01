@@ -92,7 +92,7 @@ end
 
 function initialize_fsm_sf_matrices_band!(
     fsms::FSMSensitiveFloatMatrices,
-    s::Int, b::Int, num_active_sources::Int,
+    s::Int, b::Int,
     h_lower::Int, w_lower::Int,
     h_upper::Int, w_upper::Int,
     psf_image::Matrix{Float64})
@@ -128,11 +128,11 @@ function initialize_fsm_sf_matrices_band!(
     fsms.fs1m_conv_padded = zero_sensitive_float_array(
         Float64, length(GalaxyPosParams), 1, fft_size1, fft_size2);
 
-    # Brightness images
+    # Brightness images for single sources.
     fsms.E_G = zero_sensitive_float_array(
-        Float64, length(CanonicalParams), num_active_sources, h_width, w_width);
+        Float64, length(CanonicalParams), 1, h_width, w_width);
     fsms.var_G = zero_sensitive_float_array(
-        Float64, length(CanonicalParams), num_active_sources, h_width, w_width);
+        Float64, length(CanonicalParams), 1, h_width, w_width);
 
     # Store the psf image and its FFT.
     fsms.psf = deepcopy(psf_image)
@@ -147,8 +147,6 @@ function initialize_fsm_sf_matrices!(
     fsm_mat::Matrix{FSMSensitiveFloatMatrices},
     ea::ElboArgs{Float64},
     psf_image_mat::Matrix{Matrix{Float64}})
-
-    num_active_sources = length(ea.active_sources)
 
     for n in 1:ea.N, s in 1:ea.S
         p = ea.patches[s, n]
@@ -165,8 +163,7 @@ function initialize_fsm_sf_matrices!(
         w2 = w1 + maximum(active_cols) - 1
 
         initialize_fsm_sf_matrices_band!(
-            fsm_mat[s, n], s, n, num_active_sources,
-            h1, w1, h2, w2, psf_image_mat[s, n])
+            fsm_mat[s, n], s, n, h1, w1, h2, w2, psf_image_mat[s, n])
     end
 end
 

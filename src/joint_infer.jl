@@ -347,7 +347,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                 # whether to use fft or not
                 if use_fft
                     ea = ea_vec[cur_source_indx]
-                    fsm_mat = load_fsm_mat(ea, images; use_raw_psf=false)
+                    fsm_mat = load_fsm_mat(ea, images; use_raw_psf=true)
                     elbo = get_fft_elbo_function(ea, fsm_mat)
                 else
                     elbo = DeterministicVI.elbo

@@ -503,7 +503,7 @@ function get_scores_df(celeste_err, primary_err, coadd_df)
 end
 
 
-function score_field(rcf::RunCamcolField, results, truthfile, stagedir)
+function score_field(rcf::RunCamcolField, results, truthfile, stagedir, outfname)
     (celeste_df, primary_df, coadd_df) = match_catalogs(rcf,
                                 results, truthfile, stagedir)
 
@@ -511,7 +511,7 @@ function score_field(rcf::RunCamcolField, results, truthfile, stagedir)
     celeste_err = get_err_df(coadd_df, celeste_df)
     primary_err = get_err_df(coadd_df, primary_df)
 
-    JLD.save("results_and_errors.jld",
+    JLD.save(outfname,
              "celeste_df", celeste_df,
              "primary_df", primary_df,
              "coadd_df", coadd_df,
@@ -526,11 +526,10 @@ end
 """
 Score the celeste results for a particular field
 """
-function score_field_disk(rcf::RunCamcolField, resultdir, truthfile, stagedir)
-    fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" resultdir rcf.run rcf.camcol rcf.field
+function score_field_disk(rcf::RunCamcolField, fname, resultdir, truthfile, stagedir, outfname)
     results = JLD.load(fname, "results")
-
-    println( score_field(rcf, results, truthfile, stagedir) )
+    println("Errors results (lower is better).  diff = Primary error - Celeste error.")
+    println( score_field(rcf, results, truthfile, stagedir, outfname) )
 end
 
 

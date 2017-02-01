@@ -176,4 +176,35 @@ function load_active_pixels!(images::Vector{Image},
 end
 
 
+# The range of image pixels in a vector of patches
+function get_active_pixel_range(
+    patches::Matrix{SkyPatch}, sources::Vector{Int}, n::Int)
+    H_min = minimum([ p.bitmap_offset[1] + 1 for p in patches[sources, n] ])
+    W_min = minimum([ p.bitmap_offset[2] + 1 for p in patches[sources, n] ])
+    H_max = maximum([ p.bitmap_offset[1] + size(p.active_pixel_bitmap, 1)
+                      for p in patches[sources, n] ])
+    W_max = maximum([ p.bitmap_offset[2] + size(p.active_pixel_bitmap, 2)
+                      for p in patches[sources, n] ])
+    H_min, W_min, H_max, W_max
+end
+
+
+# Is a pixel (h, w) in whole-image coordinates an active pixel in the patch p?
+function is_pixel_in_patch(h::Int, w::Int, p::SkyPatch)
+    hp = h - p.bitmap_offset[1]
+    wp = w - p.bitmap_offset[2]
+    in_patch =
+        (hp > 0) &
+        (wp > 0) &
+        (hp <= size(p.active_pixel_bitmap, 1)) &
+        (wp <= size(p.active_pixel_bitmap, 2))
+    if !in_patch
+        return false
+    else
+        return p.active_pixel_bitmap[hp, wp]
+    end
+end
+
+
+
 end  # module

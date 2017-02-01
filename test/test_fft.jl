@@ -40,7 +40,7 @@ function test_convolve_sensitive_float_matrix()
     psf_image[2, 2] = 0.5;
     psf_image[2, 1] = psf_image[1, 2] = 0.25;
     DeterministicVIImagePSF.initialize_fsm_sf_matrices_band!(
-        fsms, 1, 1, 1,
+        fsms, 1, 1,
         1, 1, 3, 3, psf_image)
 
     sf = SensitiveFloat{Float64}(length(GalaxyPosParams), 1, true, true)
