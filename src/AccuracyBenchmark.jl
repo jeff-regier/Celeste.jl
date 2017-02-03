@@ -1,7 +1,10 @@
 module AccuracyBenchmark
 
 using DataFrames
+using Distributions
 import FITSIO
+
+import Celeste.Model
 
 const SDSS_ARCSEC_PER_PIXEL = 0.396
 
@@ -194,7 +197,13 @@ end
 """
 Load/store a catalog DF from/to a CSV.
 """
-load_catalog(csv_file::String) = readtable(csv_file)
-store_catalog(csv_file::String, catalog_df::DataFrame)= writetable(csv_file, catalog_df)
+function read_catalog(csv_file::String)
+    @printf("Reading '%s'...\n", csv_file)
+    readtable(csv_file)
+end
+function write_catalog(csv_file::String, catalog_df::DataFrame)
+    @printf("Writing '%s'...\n", csv_file)
+    writetable(csv_file, catalog_df)
+end
 
 end # module AccuracyBenchmark
