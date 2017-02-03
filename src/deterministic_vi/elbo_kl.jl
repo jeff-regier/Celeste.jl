@@ -165,9 +165,8 @@ immutable KLHelper{G,H}
 end
 
 const PARAM_LENGTH = length(CanonicalParams)
-const DEFAULT_DUAL_TYPE = Dual{pickchunksize(PARAM_LENGTH),Float64}
 
-function KLHelper{N,T}(::Type{Dual{N,T}} = DEFAULT_DUAL_TYPE)
+function KLHelper{N,T}(::Type{Dual{N,T}})
     dual_buffer = zeros(Dual{N,T}, PARAM_LENGTH)
     jacobian_config = JacobianConfig{N}(rand(PARAM_LENGTH))
     gradient! = compile_gradient(subtract_kl, rand(PARAM_LENGTH))
@@ -212,7 +211,16 @@ end
 ############
 
 function __init__()
-    eval(KLDivergence, :(const KL_HELPER_POOL = $(ntuple(n -> KLHelper(), Base.Threads.nthreads()))))
+    N = pickchunksize(PARAM_LENGTH)
+    D1 = Dual{N,Float64}
+    D2 = Dual{N,Dual{1,Float64}}
+    code = quote
+        const KL_HELPER_POOL = ($(ntuple(n -> KLHelper(D1), Base.Threads.nthreads())),
+                                $(ntuple(n -> KLHelper(D2), Base.Threads.nthreads())))
+        get_kl_helper(::Type{Float64}) = KL_HELPER_POOL[1][Base.Threads.threadid()]
+        get_kl_helper(::Type{Dual{1,Float64}}) = KL_HELPER_POOL[2][Base.Threads.threadid()]
+    end
+    eval(KLDivergence, code)
 end
 
 end # module
