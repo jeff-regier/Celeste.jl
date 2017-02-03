@@ -326,7 +326,9 @@ function test_elbo_supports_dual_numbers()
     # the hessian (it doesn't matter that the "perturbation" are all zero, it's just
     # for testing the speed and verifying that it works)
     P = length(ea0.vp[1])
-    T = ForwardDiff.Dual{P * ea0.S, Float64}
+    # `1` "perterbation" per dual number is enough for a hessian-vector mulitiply,
+    # I think
+    T = ForwardDiff.Dual{1, Float64}
     vp = Vector{T}[zeros(T, P) for s=1:ea0.S]
     for s=1:ea0.S
         vp[s][:] = ea0.vp[s][:]
