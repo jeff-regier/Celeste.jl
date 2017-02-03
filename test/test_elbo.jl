@@ -4,8 +4,10 @@ using Base.Test
 using Distributions
 using DerivativeTestUtils
 using StaticArrays
-using ForwardDiff
 
+using ForwardDiff
+import ForwardDiff.Dual
+import DeterministicVI.KLDivergence.KLHelper
 
 import SampleData: gen_two_body_dataset, true_star_init
 
@@ -326,8 +328,8 @@ function test_elbo_supports_dual_numbers()
     # the hessian (it doesn't matter that the "perturbation" are all zero, it's just
     # for testing the speed and verifying that it works)
     P = length(ea0.vp[1])
+
     # `1` "perterbation" per dual number is enough for a hessian-vector mulitiply,
-    # I think
     T = ForwardDiff.Dual{1, Float64}
     vp = Vector{T}[zeros(T, P) for s=1:ea0.S]
     for s=1:ea0.S
@@ -336,8 +338,11 @@ function test_elbo_supports_dual_numbers()
     ea1 = ElboArgs(ea0.images, vp, ea0.patches, ea0.active_sources, calculate_hessian=false)
 
     # evaluate the elbo for both argument types
-    @time DeterministicVI.elbo(ea0)
-    @time DeterministicVI.elbo(ea1)
+    DeterministicVI.elbo(ea0)
+
+    chunksize = ForwardDiff.pickchunksize(length(Model.ids))
+    kl_helper = KLHelper(Dual{chunksize, Dual{1, Float64}})
+    DeterministicVI.elbo(ea1; kl_helper=kl_helper)
 end
 
 
