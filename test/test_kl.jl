@@ -68,7 +68,7 @@ function test_subtract_kl()
     sf = SensitiveFloat{Float64}(32, 1, true, true)
     vs = rand(MersenneTwister(1), 32)
     kl_result = DiffBase.DiffResult(0.0, sf.d)
-    kl_helper = KLDivergence.KL_HELPER_POOL[Base.Threads.threadid()]
+    kl_helper = KLDivergence.get_kl_helper(Float64)
     KLDivergence.subtract_kl_source!(sf, kl_result, vs, kl_helper)
     @test sf.v[] == DiffBase.value(kl_result)
     @test sf.d === DiffBase.gradient(kl_result)

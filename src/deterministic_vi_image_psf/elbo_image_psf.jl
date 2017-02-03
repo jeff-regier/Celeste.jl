@@ -237,7 +237,7 @@ function accumulate_image_pixel_brightness!{NumType <: Number}(
     E_G::SensitiveFloat{NumType},
     var_G::SensitiveFloat{NumType},
     h::Int, w::Int, n::Int)
-    
+
     clear!(E_G)
     clear!(var_G)
 
@@ -278,7 +278,7 @@ function accumulate_band_in_elbo!(
 
     for s in 1:ea.S
         # Populate the fsm matrices.
-        
+
         # some sources don't appear in some images
         sum(ea.patches[s, n].active_pixel_bitmap) > 0 || continue
 
@@ -288,7 +288,7 @@ function accumulate_band_in_elbo!(
             ea, s, n, fsms.psf, fsms.fs0m_conv,
             fsms.h_lower, fsms.w_lower,
             fsms.kernel_fun, fsms.kernel_width)
-        
+
         is_active_source = s in ea.active_sources
         if !(is_active_source && ea.active_source_star_only)
             # Skip galaxies for active sources if ea.active_source_star_only
@@ -302,7 +302,7 @@ function accumulate_band_in_elbo!(
 
     H_min, W_min, H_max, W_max =
         get_active_pixel_range(ea.patches, ea.active_sources, n)
-        
+
     # Loop over pixels in the image and accumulate the ELBO.
     for h in H_min:H_max, w in W_min: W_max
         # Some pixels that are NaN in the original image may be active
@@ -315,7 +315,7 @@ function accumulate_band_in_elbo!(
 
         accumulate_image_pixel_brightness!(ea, fsm_mat, E_G, var_G, h, w, n)
         elbo = ea.elbo_vars.elbo;
-        
+
         # There are no derivatives with respect to epsilon, so can
         # afely add to the value.
         E_G.v[] += image.epsilon_mat[h, w]
@@ -424,7 +424,7 @@ function get_fft_elbo_function{T}(
         kl_source = SensitiveFloat{T}(length(CanonicalParams),
                                       1, elbo.has_gradient, elbo.has_hessian)
         elbo_likelihood_with_fft!(ea, fsm_mat)
-        kl_helper = KLDivergence.KL_HELPER_POOL[Base.Threads.threadid()]
+        kl_helper = KLDivergence.get_kl_helper(T)
         KLDivergence.subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
         return deepcopy(elbo)
     end

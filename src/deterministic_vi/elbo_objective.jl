@@ -207,7 +207,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
             for u_ind1 = 1:2, u_ind2 = 1:2
                 E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
                     elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2]
-        
+
                 E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
                     elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2]
             end
@@ -533,11 +533,11 @@ Calculates and returns the ELBO and its derivatives for all the bands
 of an image.
 Returns: A sensitive float containing the ELBO for the image.
 """
-function elbo{T}(ea::ElboArgs{T};
+function elbo{T}(ea::ElboArgs{T},
                  kl_source = SensitiveFloat{T}(length(CanonicalParams), 1,
                                                ea.elbo_vars.elbo.has_gradient,
                                                ea.elbo_vars.elbo.has_hessian),
-                 kl_helper = KLDivergence.KL_HELPER_POOL[threadid()])
+                 kl_helper = KLDivergence.get_kl_helper(T))
     elbo = elbo_likelihood(ea)
     KLDivergence.subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
     assert_all_finite(ea.elbo_vars.elbo)
