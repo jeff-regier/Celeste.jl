@@ -197,7 +197,6 @@ function process_source(ts::Int,
 
     neighbors = catalog[neighbor_map[ts]]
 
-    ntputs(nodeid, threadid(), "processing objid $(entry.objid)")
     tic()
     vs_opt = infer_source_callback(images, neighbors, entry)
     ntputs(nodeid, threadid(), "processed objid $(entry.objid) in $(toq()) secs")

@@ -120,8 +120,8 @@ function load_s82(fname)
     result[:ra] = objs[:ra]
     result[:dec] = objs[:dec]
     result[:is_star] = [x != 0 for x in objs[:probpsf]]
-    result[:star_mag_r] = objs[:psfmag_r]
-    result[:gal_mag_r] = gal_mag_r
+    result[:star_flux_r] = mag_to_flux.(objs[:psfmag_r])
+    result[:gal_flux_r] = mag_to_flux.(gal_mag_r)
 
     # star colors
     result[:star_color_ug] = objs[:psfmag_u] .- objs[:psfmag_g]
@@ -193,8 +193,8 @@ function load_primary(rcf::RunCamcolField, stagedir::String)
     result[:ra] = objs["ra"]
     result[:dec] = objs["dec"]
     result[:is_star] = objs["is_star"]
-    result[:star_mag_r] = flux_to_mag.(objs["psfflux_r"])
-    result[:gal_mag_r] = flux_to_mag.(gal_flux_r)
+    result[:star_flux_r] = objs["psfflux_r"]
+    result[:gal_flux_r] = gal_flux_r
 
     # star colors
     result[:star_color_ug] = fluxes_to_color.(objs["psfflux_u"], objs["psfflux_g"])
@@ -242,7 +242,7 @@ function load_ce!(i::Int, ce::CatalogEntry, df::DataFrame)
     for j in 1:2
         s_type = ["star", "gal"][j]
         fluxes = j == 1 ? ce.star_fluxes : ce.gal_fluxes
-        df[i, Symbol("$(s_type)_mag_r")] = flux_to_mag(fluxes[3])
+        df[i, Symbol("$(s_type)_flux_r")] = fluxes[3]
         for c in 1:4
             cc = Symbol("$(s_type)_color_$(color_names[c])")
             cc_sd = Symbol("$(s_type)_color_$(color_names[c])_sd")
@@ -270,8 +270,8 @@ function celeste_to_df(results::Vector{OptimizedSource})
     N = length(results)
     color_col_names = ["color_$cn" for cn in color_names]
     color_sd_col_names = ["color_$(cn)_sd" for cn in color_names]
-    col_names = vcat(["objid", "ra", "dec", "is_star", "star_mag_r",
-                      "star_mag_r_sd", "gal_mag_r", "gal_mag_r_sd"],
+    col_names = vcat(["objid", "ra", "dec", "is_star", "star_flux_r",
+                      "star_flux_r_sd", "gal_flux_r", "gal_flux_r_sd"],
                      ["star_$c" for c in color_col_names],
                      ["star_$c" for c in color_sd_col_names],
                      ["gal_$c" for c in color_col_names],
@@ -342,7 +342,7 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
     color_cols = [Symbol("color_$cn") for cn in color_names]
     abs_err_cols = [:gal_fracdev, :gal_ab, :gal_scale]
     col_Symbols = vcat([:objid, :position, :missed_stars,
-                        :missed_gals, :mag_r],
+                        :missed_gals, :flux_r],
                        color_cols,
                        abs_err_cols,
                        [:gal_angle])
@@ -362,10 +362,10 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
     ret[:position] = dist.(truth[:ra], truth[:dec],
                           predicted[:ra], predicted[:dec])
 
-    ret[true_gal, :mag_r] =
-        abs(truth[true_gal, :gal_mag_r] - predicted[true_gal, :gal_mag_r])
-    ret[!true_gal, :mag_r] =
-        abs(truth[!true_gal, :star_mag_r] - predicted[!true_gal, :star_mag_r])
+    ret[true_gal, :flux_r] =
+        abs(truth[true_gal, :gal_flux_r] - predicted[true_gal, :gal_flux_r])
+    ret[!true_gal, :flux_r] =
+        abs(truth[!true_gal, :star_flux_r] - predicted[!true_gal, :star_flux_r])
 
     for cn in color_names
         ret[true_gal, Symbol("color_$cn")] =
@@ -427,7 +427,7 @@ function match_catalogs(rcf::RunCamcolField,
             end
 
             # primary is better at flagging oversaturated sources that coadd
-            if primary_full_df[i, :star_mag_r] < 16
+            if flux_to_mag(primary_full_df[i, :star_flux_r]) < 16
                 continue
             end
 
