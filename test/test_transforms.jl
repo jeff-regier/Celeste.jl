@@ -110,10 +110,6 @@ function test_transform_simplex_functions()
         simplex_box = Transform.SimplexBox(lb, this_scale, length(param))
         simplex_and_unsimplex(param, simplex_box)
 
-        # Test that the edges work.
-        simplex_and_unsimplex(Float64[ lb, 1 - lb ], simplex_box)
-        simplex_and_unsimplex(Float64[ 1 - lb, lb ], simplex_box)
-
         # Test the scaling
         unscaled_simplex_box = Transform.SimplexBox(lb, 1.0, length(param))
         @test isapprox(
@@ -184,13 +180,14 @@ function test_basic_transforms()
     @test Transform.logit(Inf) == 1.0
     @test Transform.logit(-Inf) == 0.0
 
-    @test Transform.constrain_to_simplex([-Inf])    ≈ [0.0, 1.0]
-    @test Transform.unconstrain_simplex([0.0, 1.0]) ≈ [-Inf]
-
-    @test Transform.constrain_to_simplex([Inf])     ≈ [1.0, 0.0]
-    @test Transform.unconstrain_simplex([1.0, 0.0]) ≈ [Inf]
-
     @test Transform.constrain_to_simplex([Inf, 5])  ≈ [1.0, 0.0, 0.0]
+
+    @test sum(Transform.constrain_to_simplex([Inf, Inf])) ≈ 1.0 # Make sure that it's a simplex when there is more than one Inf
+
+    @test sum(Transform.constrain_to_simplex([709.0, 709.0, 709.0])) ≈ 1.0 # sum overflows
+    @test sum(Transform.constrain_to_simplex([710.0, 710.0, 710.0])) ≈ 1.0 # each element overflows
+    @test sum(Transform.constrain_to_simplex([88.0f0, 88.0f0, 88.0f0])) ≈ 1.0f0 # sum overflows
+    @test sum(Transform.constrain_to_simplex([89.0f0, 89.0f0, 89.0f0])) ≈ 1.0f0 # each element overflows
 end
 
 

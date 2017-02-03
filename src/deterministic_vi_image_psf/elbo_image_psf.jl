@@ -189,10 +189,9 @@ function populate_star_fsm_image!(
 end
 
 
-# TODO: rename this to source image brighntess or something.
 """
-Updates fsms.E_G and fsms.var_G in place with the contributions from this
-source in this band.
+Updates single-source sensitive floats fsms.E_G and fsms.var_G in place with
+the brightness of this source in this band.
 """
 function accumulate_source_image_brightness!(
     ea::ElboArgs{Float64},
@@ -215,15 +214,55 @@ function accumulate_source_image_brightness!(
         if !p.active_pixel_bitmap[h_patch, w_patch]
             continue
         end
-        accumulate_source_pixel_brightness!(
-                            ea.elbo_vars,
-                            ea,
-                            fsms.E_G[h_fsm, w_fsm],
-                            fsms.var_G[h_fsm, w_fsm],
-                            fsms.fs0m_conv[h_fsm, w_fsm],
-                            fsms.fs1m_conv[h_fsm, w_fsm],
-                            sb, ea.images[n].b, s, is_active_source)
+        calculate_source_pixel_brightness!(
+            ea.elbo_vars, ea,
+            fsms.E_G[h_fsm, w_fsm],
+            fsms.var_G[h_fsm, w_fsm],
+            fsms.fs0m_conv[h_fsm, w_fsm],
+            fsms.fs1m_conv[h_fsm, w_fsm],
+            sb, ea.images[n].b, s, is_active_source)
     end
+end
+
+
+"""
+    Clear E_G and var_G and accumulate the contributions from all the sources
+    for a pixel in image n.
+
+    h, w are image pixel indices.
+"""
+function accumulate_image_pixel_brightness!{NumType <: Number}(
+    ea::ElboArgs{NumType},
+    fsm_mat::Matrix{FSMSensitiveFloatMatrices},
+    E_G::SensitiveFloat{NumType},
+    var_G::SensitiveFloat{NumType},
+    h::Int, w::Int, n::Int)
+    
+    clear!(E_G)
+    clear!(var_G)
+
+    for s in 1:ea.S
+        is_pixel_in_patch(h, w, ea.patches[s, n]) || continue
+
+        # Accumulate the brightnesses and variances.
+
+        # Pixel location in the FSM matrix.
+        fsms = fsm_mat[s, n]
+        h_fsm = h - fsms.h_lower + 1
+        w_fsm = w - fsms.w_lower + 1
+
+        is_active_source = s in ea.active_sources
+        if is_active_source
+            sa = findfirst(ea.active_sources, s)
+            add_sources_sf!(E_G, fsms.E_G[h_fsm, w_fsm], sa)
+            add_sources_sf!(var_G, fsms.var_G[h_fsm, w_fsm], sa)
+        else
+            # If the sources is inactive, simply accumulate the values.
+            E_G.v[] += fsms.E_G[h_fsm, w_fsm].v[]
+            var_G.v[] += fsms.var_G[h_fsm, w_fsm].v[]
+        end
+    end
+
 end
 
 
@@ -238,6 +277,8 @@ function accumulate_band_in_elbo!(
     n::Int)
 
     for s in 1:ea.S
+        # Populate the fsm matrices.
+        
         # some sources don't appear in some images
         sum(ea.patches[s, n].active_pixel_bitmap) > 0 || continue
 
@@ -247,64 +288,52 @@ function accumulate_band_in_elbo!(
             ea, s, n, fsms.psf, fsms.fs0m_conv,
             fsms.h_lower, fsms.w_lower,
             fsms.kernel_fun, fsms.kernel_width)
-        populate_gal_fsm_image!(ea, s, n, gal_mcs, fsms)
+        
+        is_active_source = s in ea.active_sources
+        if !(is_active_source && ea.active_source_star_only)
+            # Skip galaxies for active sources if ea.active_source_star_only
+            populate_gal_fsm_image!(ea, s, n, gal_mcs, fsms)
+        end
         accumulate_source_image_brightness!(ea, s, n, fsms, sbs[s])
     end
 
-    # Iterate only over active sources, since we have already added the
-    # contributions from non-active sources to E_G and var_G.
-    for s in ea.active_sources
-        p = ea.patches[s, n]
-        fsms = fsm_mat[s, n]
-        H_patch, W_patch = size(p.active_pixel_bitmap)
-        for w_patch in 1:W_patch, h_patch in 1:H_patch
-            if !p.active_pixel_bitmap[h_patch, w_patch]
-                continue
-            end
-            h_image = h_patch + p.bitmap_offset[1]
-            w_image = w_patch + p.bitmap_offset[2]
+    E_G = ea.elbo_vars.E_G
+    var_G = ea.elbo_vars.var_G
 
-            image = ea.images[n]
-            this_pixel = image.pixels[h_image, w_image]
-
-            if Base.isnan(this_pixel)
-                continue
-            end
-
-            # These are indices within the fs?m image.
-            h_fsm = h_image - fsms.h_lower + 1
-            w_fsm = w_image - fsms.w_lower + 1
-
-            E_G = fsms.E_G[h_fsm, w_fsm]
-            var_G = fsms.var_G[h_fsm, w_fsm]
-
-            # There are no derivatives with respect to epsilon, so can
-            # afely add to the value.
-            E_G.v[] += image.epsilon_mat[h_image, w_image]
-
-            if E_G.v[] < 0
-                # warn("Image ", n, " sources ", s, " pixel ", (h_image, w_image),
-                #      " has negative brightness ", E_G.v[])
-                continue
-            end
-
-            # Note that with a kernel_width > 1 negative values are
-            # possible, and this will result in an error in
-            # add_elbo_log_term.
-
-            # Add the terms to the elbo given the brightness.
-            iota = image.iota_vec[h_image]
-            add_elbo_log_term!(
-                ea.elbo_vars, E_G, var_G, ea.elbo_vars.elbo, this_pixel, iota)
-            add_scaled_sfs!(ea.elbo_vars.elbo, E_G, -iota)
-
-            # Subtract the log factorial term. This is not a function of the
-            # parameters so the derivatives don't need to be updated. Note
-            # that even though this does not affect the ELBO's maximum,
-            # it affects the optimization convergence criterion, so I will
-            # leave it in for now.
-            ea.elbo_vars.elbo.v[] -= lfact(this_pixel)
+    H_min, W_min, H_max, W_max =
+        get_active_pixel_range(ea.patches, ea.active_sources, n)
+        
+    # Loop over pixels in the image and accumulate the ELBO.
+    for h in H_min:H_max, w in W_min: W_max
+        # Some pixels that are NaN in the original image may be active
+        # for the convolution code.
+        image = ea.images[n]
+        pixel_value = image.pixels[h, w]
+        if isnan(pixel_value)
+            continue
         end
+
+        accumulate_image_pixel_brightness!(ea, fsm_mat, E_G, var_G, h, w, n)
+        elbo = ea.elbo_vars.elbo;
+        
+        # There are no derivatives with respect to epsilon, so can
+        # afely add to the value.
+        E_G.v[] += image.epsilon_mat[h, w]
+
+        if E_G.v[] < 0
+            # This can happen because of the interpolation, but it has not
+            # proven to be a real problem.
+            # warn("Image ", n, " sources ", s, " pixel ", (h_image, w_image),
+            #      " has negative brightness ", E_G.v[])
+            continue
+        end
+
+        # Add the terms to the elbo given the brightness.
+        iota = image.iota_vec[h]
+        add_elbo_log_term!(ea.elbo_vars, E_G, var_G, elbo, pixel_value, iota)
+        add_scaled_sfs!(elbo, E_G, -iota)
+
+        elbo.v[] -= lfact(pixel_value)
     end
 end
 
@@ -313,6 +342,9 @@ function elbo_likelihood_with_fft!(
     ea::ElboArgs,
     fsm_mat::Matrix{FSMSensitiveFloatMatrices})
 
+    if length(ea.active_sources) > 1
+        warn("Multiple active sources have not been well-tested with elbo_likelihood_with_fft!")
+    end
     sbs = load_source_brightnesses(ea,
         calculate_gradient=ea.elbo_vars.elbo.has_gradient,
         calculate_hessian=ea.elbo_vars.elbo.has_hessian)
@@ -358,6 +390,7 @@ function load_fsm_mat(ea::ElboArgs,
     fsm_mat
 end
 
+
 function initialize_fft_elbo_parameters(
     images::Vector{Image},
     vp::VariationalParams{Float64},
@@ -388,8 +421,8 @@ function get_fft_elbo_function{T}(
     function elbo_fft_opt(ea::ElboArgs)
         @assert ea.psf_K == 1
         elbo = ea.elbo_vars.elbo
-        kl_source = SensitiveFloat{T}(length(CanonicalParams), 1,
-                                      elbo.has_gradient, elbo.has_hessian)
+        kl_source = SensitiveFloat{T}(length(CanonicalParams),
+                                      1, elbo.has_gradient, elbo.has_hessian)
         elbo_likelihood_with_fft!(ea, fsm_mat)
         kl_helper = KLDivergence.KL_HELPER_POOL[Base.Threads.threadid()]
         KLDivergence.subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)

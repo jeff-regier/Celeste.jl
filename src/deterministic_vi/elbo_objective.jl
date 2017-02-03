@@ -37,7 +37,17 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
     clear!(E_G_s)
     clear!(E_G2_s)
 
-    @inbounds for i in 1:Ia # Stars and galaxies
+    # # Only add contributions for stars if
+    star_only = is_active_source && ea.active_source_star_only
+    # Ia_range = (is_active_source && ea.active_source_star_only) ? 1: (1:Ia)
+    # if Ia_range != (1:Ia)
+    #     # warn("Using just star!  This is not fully tested.")
+    # end
+    # @inbounds for i in Ia_range # Celestial object types (e.g. stars and galaxies)
+    @inbounds for i in 1:Ia # Celestial object types (e.g. stars and galaxies)
+        if star_only && i != 1
+            continue
+        end
         fsm_i = (i == 1) ? fs0m : fs1m
         a_i = ea.vp[s][ids.a[i, 1]]
         sb_E_l_a_b_i = sb.E_l_a[b, i]
@@ -193,16 +203,26 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
         # end
         # For each value in 1:Ia, written this way for speed.
 
-        @assert Ia == 2
+        if star_only
+            for u_ind1 = 1:2, u_ind2 = 1:2
+                E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                    elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2]
+        
+                E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                    elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2]
+            end
+        else
+            @assert Ia == 2
 
-        for u_ind1 = 1:2, u_ind2 = 1:2
-            E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
-            elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
-            elbo_vars.E_G_s_hsub_vec[2].u_u[u_ind1, u_ind2]
+            for u_ind1 = 1:2, u_ind2 = 1:2
+                E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                    elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
+                    elbo_vars.E_G_s_hsub_vec[2].u_u[u_ind1, u_ind2]
 
-            E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
-                elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
-                elbo_vars.E_G2_s_hsub_vec[2].u_u[u_ind1, u_ind2]
+                E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                    elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
+                    elbo_vars.E_G2_s_hsub_vec[2].u_u[u_ind1, u_ind2]
+            end
         end
     end
 
@@ -494,7 +514,10 @@ function elbo_likelihood{NumType <: Number}(ea::ElboArgs{NumType})
                     continue
                 end
 
-                # if we're here it's a unique active pixel
+                # if we're here it's a unique active pixel.
+                # Note that although we are iterating over pixels within a
+                # single patch, add_pixel_term /also/ iterates over patches to
+                # find all patches that overlap with this pixel.
                 add_pixel_term!(ea, n, h, w, star_mcs, gal_mcs, sbs)
             end
         end
@@ -517,5 +540,6 @@ function elbo{T}(ea::ElboArgs{T},
                  kl_helper = KLDivergence.KL_HELPER_POOL[threadid()])
     elbo = elbo_likelihood(ea)
     KLDivergence.subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
+    assert_all_finite(ea.elbo_vars.elbo)
     return elbo
 end

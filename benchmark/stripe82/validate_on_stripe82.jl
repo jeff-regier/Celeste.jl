@@ -7,7 +7,8 @@ import Celeste.ParallelRun: BoundingBox,
 import Celeste.Stripe82Score: score_field_disk, score_object_disk
 import Celeste.SDSSIO: RunCamcolField
 import Celeste.DeterministicVI: infer_source
-import Celeste.DeterministicVIImagePSF: infer_source_fft
+import Celeste.DeterministicVIImagePSF: infer_source_fft, infer_source_fft_two_step
+
 
 
 # I'd rather let the user specify a rcf on the command line, but picking
@@ -69,7 +70,7 @@ where
 """
 const truthfile = joinpath(datadir, "coadd_for_4263_5_119.fit")
 
-const valid_args = Set(["--score-only", "--joint", "--fft"])
+const valid_args = Set(["--score-only", "--joint", "--fft", "--fft_two_step"])
 
 if !(ARGS ⊆ valid_args)
     args_str = join(["[$va]" for va in valid_args],  " ")
@@ -82,7 +83,19 @@ else
     if !("--score-only" in ARGS)
         wrap_joint(cnti...) = one_node_joint_infer(cnti...;
 						   use_fft=("--fft" in ARGS))
-        source_callback = "--fft" in ARGS ? infer_source_fft : infer_source
+        source_callback = nothing
+        
+        result_description = "full_box"
+        if "--fft" in ARGS
+            source_callback = infer_source_fft
+            result_description *= "_fft"
+        elseif "--fft_two_step" in ARGS
+            source_callback = infer_source_fft_two_step
+            result_description *= "_fft_two_step"
+        else
+            source_callback = infer_source
+            result_description *= "_mog"
+        end
         wrap_single(cnti...) = one_node_single_infer(cnti...;
                                       infer_source_callback=source_callback)
         infer_callback = "--joint" in ARGS ? wrap_joint : wrap_single
@@ -90,10 +103,14 @@ else
         # other rcfs may overlap with this one. That's because this function is
         # just for testing on stripe 82: in practice we always use all relevent
         # data to make inferences.
+        bounding_box = BoundingBox(-1000., 1000., -1000., 1000.)
+        # bounding_box = BoundingBox(0.442738, 0.5, 0.410397, 0.51)
         @time results = one_node_infer([rcf,], datadir;
+                                       box=bounding_box,
                                        infer_callback=infer_callback,
                                        primary_initialization=false)
-        fname = @sprintf "%s/celeste-%06d-%d-%04d.jld" outdir rcf.run rcf.camcol rcf.field
+        fname = @sprintf "%s/celeste-%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field 
+        println("Saving inference results to ", fname)
         JLD.save(fname, "results", results)
     end
 
@@ -102,5 +119,7 @@ else
     # That could be somewhat useful for debugging. The output is in a somewhat
     # different format though, because with just one object it doesn't make
     # sense to compute a full table comparing Celeste to Primary.
-    score_field_disk(rcf, outdir, truthfile, datadir)
+    outfname = @sprintf  "%s/results_and_errors_%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field
+    println("Saving scoring results to ", outfname)
+    score_field_disk(rcf, fname, outdir, truthfile, datadir, outfname)
 end

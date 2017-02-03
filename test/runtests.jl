@@ -3,7 +3,7 @@
 using Celeste: Model, DeterministicVI
 
 import Celeste: Infer, DeterministicVI, ParallelRun, DeterministicVIImagePSF
-import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
+import Celeste: PSF, SDSSIO, SensitiveFloats, Transform, CelesteEDA
 import SensitiveFloats.clear!
 import SDSSIO: RunCamcolField
 
@@ -42,6 +42,7 @@ else
     testfiles = [
                  "test_derivatives.jl",
                  "test_kl.jl",
+                 "test_eda.jl",
                  "test_elbo.jl",
                  "test_fft.jl",
                  "test_galsim_benchmarks.jl",

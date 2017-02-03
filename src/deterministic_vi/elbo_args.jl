@@ -197,6 +197,9 @@ type ElboArgs{NumType <: Number}
     # If this is set to Inf, the bivariate normals will be evaluated at all
     # points irrespective of their distance from the mean.
     num_allowed_sd::Float64
+    
+    # If true, only render star parameters for active sources.
+    active_source_star_only::Bool
 
     elbo_vars::ElboIntermediateVariables
 end
@@ -237,5 +240,5 @@ function ElboArgs{NumType <: Number}(
                                           calculate_gradient=calculate_gradient,
                                           calculate_hessian=calculate_hessian)
     ElboArgs(S, N, psf_K, images, vp, patches,
-             active_sources, num_allowed_sd, elbo_vars)
+             active_sources, num_allowed_sd, false, elbo_vars)
 end

@@ -30,7 +30,9 @@ function beta_kl(α₁, β₁, α₂, β₂)
     log_term -= lgamma(α₂_plus_β₂) - lgamma(α₂) - lgamma(β₂)
     apart_term = α₁_minus_α₂ * digamma(α₁) + β₁_minus_β₂ * digamma(β₁)
     together_term = -(α₁_minus_α₂ + β₁_minus_β₂) * digamma(α₁_plus_β₁)
-    return log_term + apart_term + together_term
+    kl = log_term + apart_term + together_term
+    assert(!isnan(kl))
+    return kl
 end
 
 #############################
@@ -40,7 +42,11 @@ end
 """
 Returns the KL divergence between a pair of categorical distributions
 """
-categorical_kl(p₁, p₂) = sum(a * (log(a) - log(b)) for (a, b) in zip(p₁, p₂))
+function categorical_kl(p₁, p₂)
+    kl = sum(a * (log(a) - log(b)) for (a, b) in zip(p₁, p₂))
+    assert(!isnan(kl))
+    return kl
+end
 
 ##########################
 # Gaussian Distributions #
@@ -76,6 +82,7 @@ function diagmvn_mvn_kl(μ₁, var₁, μ₂, Σ₂, inv_Σ₂ = inv(Σ₂), log
     kl = sum(diag(inv_Σ₂) .* var₁) - length(μ₂)
     kl += dot(μ₂_minus_μ₁, inv_Σ₂ * μ₂_minus_μ₁)
     kl += logdet_Σ₂ - sum(log.(var₁))
+    assert(!isnan(kl))
     return 0.5 * kl
 end
 
@@ -91,6 +98,7 @@ function kl_source_r(vs)
         kl += vs[ids.a[i, 1]] * gaussian_kl(vs[ids.r1[i]], vs[ids.r2[i]],
                                             prior.r_μ[i], prior.r_σ²[i])
     end
+    assert(!isnan(kl))
     return kl
 end
 
@@ -99,6 +107,7 @@ function kl_source_k(vs)
     for i in 1:Ia
         kl += vs[ids.a[i, 1]] * categorical_kl(vs[ids.k[:, i]], prior.k[:, i])
     end
+    assert(!isnan(kl))
     return kl
 end
 
@@ -112,6 +121,7 @@ function kl_source_c(vs)
             kl += a * vs[ids.k[d, i]] * diagmvn_mvn_kl(μ₁, var₁, μ₂, Σ₂)
         end
     end
+    assert(!isnan(kl))
     return kl
 end
 
@@ -120,7 +130,9 @@ function source_e_log_prob(vs)
     x = vs[ids.e_scale]
     μ = prior.e_scale_μ
     σ² = prior.e_scale_σ²
-    -0.5 * (log(2pi) + log(σ²) + (x - μ)^2 / σ²)
+    kl = -0.5 * (log(2pi) + log(σ²) + (x - μ)^2 / σ²)
+    assert(!isnan(kl))
+    return kl
 end
 
 
@@ -137,7 +149,6 @@ function subtract_kl(vs)
     # negative log probability is the kl divergence between a
     # variational distribution that is a point mass and the prior
     kl += source_e_log_prob(vs)
-
     return kl
 end
 
