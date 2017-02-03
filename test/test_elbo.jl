@@ -12,6 +12,10 @@ import DeterministicVI.KLDivergence.KLHelper
 import SampleData: gen_two_body_dataset, true_star_init
 
 
+chunksize = ForwardDiff.pickchunksize(length(Model.ids))
+kl_helper = KLHelper(Dual{chunksize, Dual{1, Float64}})
+
+
 function test_set_hess()
     sf = SensitiveFloat{Float64}(length(ids), 1, true, true)
     set_hess!(sf, 2, 3, 5.0)
@@ -339,9 +343,6 @@ function test_elbo_supports_dual_numbers()
 
     # evaluate the elbo for both argument types
     DeterministicVI.elbo(ea0)
-
-    chunksize = ForwardDiff.pickchunksize(length(Model.ids))
-    kl_helper = KLHelper(Dual{chunksize, Dual{1, Float64}})
     DeterministicVI.elbo(ea1; kl_helper=kl_helper)
 end
 
