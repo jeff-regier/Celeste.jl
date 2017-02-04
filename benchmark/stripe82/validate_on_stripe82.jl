@@ -76,26 +76,31 @@ if !(ARGS ⊆ valid_args)
     args_str = join(["[$va]" for va in valid_args],  " ")
     println("usage: validate_on_stripe82.jl $args_str")
 else
+    source_callback = nothing
+
+    result_description = "full_box"
+    if "--fft" in ARGS
+        source_callback = infer_source_fft
+        result_description *= "_fft"
+    elseif "--fft_two_step" in ARGS
+        source_callback = infer_source_fft_two_step
+        result_description *= "_fft_two_step"
+    else
+        source_callback = infer_source
+        result_description *= "_mog"
+    end
+    fname = @sprintf("%s/celeste-%s-%06d-%d-%04d.jld",
+                     outdir,
+                     result_description,
+                     rcf.run, rcf.camcol, rcf.field)
+
     # By default this script both infers all the parameters and scores them,
     # but because inference is computationally intensive, whereas scoring isn't,
     # the user gets the option to just run the scoring mode. Running scoring
     # alone is primarily useful for debugging.
     if !("--score-only" in ARGS)
         wrap_joint(cnti...) = one_node_joint_infer(cnti...;
-						   use_fft=("--fft" in ARGS))
-        source_callback = nothing
-        
-        result_description = "full_box"
-        if "--fft" in ARGS
-            source_callback = infer_source_fft
-            result_description *= "_fft"
-        elseif "--fft_two_step" in ARGS
-            source_callback = infer_source_fft_two_step
-            result_description *= "_fft_two_step"
-        else
-            source_callback = infer_source
-            result_description *= "_mog"
-        end
+                              use_fft=("--fft" in ARGS))
         wrap_single(cnti...) = one_node_single_infer(cnti...;
                                       infer_source_callback=source_callback)
         infer_callback = "--joint" in ARGS ? wrap_joint : wrap_single
@@ -109,7 +114,6 @@ else
                                        box=bounding_box,
                                        infer_callback=infer_callback,
                                        primary_initialization=false)
-        fname = @sprintf "%s/celeste-%s-%06d-%d-%04d.jld" outdir result_description rcf.run rcf.camcol rcf.field 
         println("Saving inference results to ", fname)
         JLD.save(fname, "results", results)
     end
