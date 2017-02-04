@@ -141,10 +141,16 @@ function combine_sfs!{T1 <: Number, T2 <: Number, T3 <: Number}(
     end
 
     if sf_result.has_gradient
+        for ind in eachindex(sf_result.d)
+            sf_result.d[ind] = g_d[1] * sf1.d[ind] + g_d[2] * sf2.d[ind]
+        end
+#=
         sf_result.d[:] = sf1.d
         n = length(sf_result.d)
+        @show (n, g_d[1], sf_result.d, 1)
         LinAlg.BLAS.scal!(n, g_d[1], sf_result.d, 1)
         LinAlg.BLAS.axpy!(g_d[2], sf2.d, sf_result.d)
+=#
     end
 
     sf_result.v[] = v

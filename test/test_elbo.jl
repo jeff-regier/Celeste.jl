@@ -5,6 +5,9 @@ using Distributions
 using DerivativeTestUtils
 using StaticArrays
 
+using ForwardDiff
+import ForwardDiff.Dual
+
 import SampleData: gen_two_body_dataset, true_star_init
 
 
@@ -314,6 +317,32 @@ function test_num_allowed_sd()
 end
 
 
+function test_elbo_supports_dual_numbers()
+    _, ea, _ = gen_two_body_dataset()
+
+    # create elbo arguments of type Float64 that compute the gradient but not the hessian
+    ea0 = ElboArgs(ea.images, ea.vp, ea.patches, ea.active_sources, calculate_hessian=false)
+
+    # create elbo arguments of the Dual number type, that compute the gradient but not
+    # the hessian (it doesn't matter that the "perturbation" are all zero, it's just
+    # for testing the speed and verifying that it works)
+    P = length(ea0.vp[1])
+
+    # `1` "perterbation" per dual number is enough for a hessian-vector mulitiply,
+    T = ForwardDiff.Dual{1, Float64}
+    vp = Vector{T}[zeros(T, P) for s=1:ea0.S]
+    for s=1:ea0.S
+        vp[s][:] = ea0.vp[s][:]
+    end
+    ea1 = ElboArgs(ea0.images, vp, ea0.patches, ea0.active_sources, calculate_hessian=false)
+
+    # evaluate the elbo for both argument types
+    DeterministicVI.elbo(ea0)
+    DeterministicVI.elbo(ea1)
+end
+
+
+test_elbo_supports_dual_numbers()
 test_active_sources()
 test_set_hess()
 test_bvn_cov()
