@@ -317,32 +317,40 @@ function test_num_allowed_sd()
 end
 
 
-function test_elbo_supports_dual_numbers()
+@testset "Tests elbo gradient, and that elbo supports dual numbers" begin
     _, ea, _ = gen_two_body_dataset()
 
     # create elbo arguments of type Float64 that compute the gradient but not the hessian
-    ea0 = ElboArgs(ea.images, ea.vp, ea.patches, ea.active_sources, calculate_hessian=false)
+    ea_float = ElboArgs(ea.images, ea.vp, ea.patches, ea.active_sources,
+                        calculate_hessian=false)
+    @time DeterministicVI.elbo(ea_float)
+    println("done loading ea_float")
 
     # create elbo arguments of the Dual number type, that compute the gradient but not
     # the hessian (it doesn't matter that the "perturbation" are all zero, it's just
     # for testing the speed and verifying that it works)
-    P = length(ea0.vp[1])
+    P = length(ea.vp[1])
 
-    # `1` "perterbation" per dual number is enough for a hessian-vector mulitiply,
     T = ForwardDiff.Dual{1, Float64}
-    vp = Vector{T}[zeros(T, P) for s=1:ea0.S]
-    for s=1:ea0.S
-        vp[s][:] = ea0.vp[s][:]
-    end
-    ea1 = ElboArgs(ea0.images, vp, ea0.patches, ea0.active_sources, calculate_hessian=false)
+    vp = Vector{T}[zeros(T, P) for s=1:ea.S]
+    vp[1][:] = ea.vp[1]
+    vp[2][:] = ea.vp[2]
+    ea_dual = ElboArgs(ea.images, vp, ea.patches, ea.active_sources,
+                       calculate_gradient=false,
+                       calculate_hessian=false)
 
-    # evaluate the elbo for both argument types
-    DeterministicVI.elbo(ea0)
-    DeterministicVI.elbo(ea1)
+    for s in 1:2, i in 1:length(ids)
+        ea_dual.vp[s][i] += ForwardDiff.Dual(0, 1)
+        DeterministicVI.elbo(ea_dual)
+        ea_dual.vp[s][i] -= ForwardDiff.Dual(0, 1)
+
+        fwd_diff = ea_dual.elbo_vars.elbo.v[].partials[]
+        manual_diff = ea_float.elbo_vars.elbo.d[i, s]
+        @test manual_diff ≈ fwd_diff
+    end
 end
 
 
-test_elbo_supports_dual_numbers()
 test_active_sources()
 test_set_hess()
 test_bvn_cov()
