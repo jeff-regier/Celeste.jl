@@ -36,7 +36,6 @@ function test_active_pixels()
 
     function tile_lik_wrapper_fun{NumType <: Number}(
             ea::ElboArgs{NumType}, calculate_gradient::Bool)
-
         elbo_vars = DeterministicVI.ElboIntermediateVariables(
             NumType, ea.S,
             length(ea.active_sources),
@@ -59,52 +58,40 @@ end
 
 function test_add_log_term()
     images, ea, bodies = gen_two_body_dataset()
-
-    # Test this pixel
+    n = 3
     h, w = (10, 10)
+    x_nbm = 70.
+    iota = median(images[n].iota_vec)
 
-    for b = 1:5
-        println("Testing log term for band $b.")
-        x_nbm = 70.
-
-        iota = median(images[b].iota_vec)
-
-        function add_log_term_wrapper_fun{NumType <: Number}(
-                ea::ElboArgs{NumType}, calculate_gradient::Bool)
-
-            star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
-                                        ea.vp, ea.active_sources,
-                                        ea.psf_K, n)
-
-            sbs = DeterministicVI.SourceBrightness{NumType}[
-                DeterministicVI.SourceBrightness(ea.vp[s], calculate_gradient=calculate_gradient)
-                for s in 1:ea.S]
-
-            elbo_vars_loc = DeterministicVI.ElboIntermediateVariables(NumType, ea.S, ea.S)
-            elbo_vars_loc.calculate_gradient = calculate_gradient
-            Model.populate_fsm!(ea.elbo_vars.bvn_derivs,
-                          ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
-                          s, hw, is_active_source,
-                          num_allowed_sd,
-                          ea.patches[s,n].wcs_jacobian,
-                          gal_mcs, star_mcs)
-            DeterministicVI.combine_pixel_sources!(
-                elbo_vars_loc, ea, sbs)
-
-            DeterministicVI.add_elbo_log_term!(elbo_vars_loc, x_nbm, iota)
-
-            deepcopy(elbo_vars_loc.elbo)
-        end
-
-        function ad_wrapper_fun{NumType <: Number}(x::Vector{NumType})
-            ea_local = unwrap_vp_vector(x, ea)
-            add_log_term_wrapper_fun(ea_local, false).v[]
-        end
-
-        x = wrap_vp_vector(ea, true)
-        elbo = add_log_term_wrapper_fun(ea, true)
-        test_with_autodiff(ad_wrapper_fun, x, elbo)
+    function add_log_term_wrapper_fun(ea::ElboArgs)
+        star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+                                    ea.vp, ea.active_sources,
+                                    ea.psf_K, n)
+        sbs = [DeterministicVI.SourceBrightness(ea.vp[s]) for s in 1:ea.S]
+        hw = SVector{2,Float64}(h, w)
+        is_active_source = s in ea.active_sources
+        Model.populate_fsm!(ea.elbo_vars.bvn_derivs,
+                      ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
+                      s, hw, is_active_source,
+                      ea.patches[s,n].wcs_jacobian,
+                      gal_mcs, star_mcs)
+        DeterministicVI.add_elbo_log_term!(ea.elbo_vars,
+                                           ea.elbo_vars.E_G,
+                                           ea.elbo_vars.var_G,
+                                           ea.elbo_vars.elbo,
+                                           x_nbm,
+                                           iota)
+        deepcopy(ea.elbo_vars.elbo)
     end
+
+    function ad_wrapper_fun(x::Vector)
+        ea_local = unwrap_vp_vector(x, ea)
+        add_log_term_wrapper_fun(ea_local).v[]
+    end
+
+    x = wrap_vp_vector(ea, true)
+    elbo = add_log_term_wrapper_fun(ea)
+    test_with_autodiff(ad_wrapper_fun, x, elbo)
 end
 
 
@@ -173,56 +160,49 @@ function test_e_g_s_functions()
         test_var_string = test_var ? "E_G" : "var_G"
         println("Testing $(test_var_string), band $b")
 
-        function e_g_wrapper_fun{NumType <: Number}(
-                    ea::ElboArgs{NumType}; calculate_gradient=true)
-            star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+        function e_g_wrapper_fun(ea::ElboArgs)
+            star_mcs, gal_mcs = Model.load_bvn_mixtures(
+                                        ea.S, ea.patches,
                                         ea.vp, ea.active_sources,
                                         ea.psf_K, n)
-            sbs = DeterministicVI.SourceBrightness{NumType}[
-                DeterministicVI.SourceBrightness(ea.vp[s], calculate_gradient=calculate_gradient)
-                for s in 1:ea.S]
+            sb = DeterministicVI.SourceBrightness(ea.vp[s])
 
-            elbo_vars_loc = DeterministicVI.ElboIntermediateVariables(
-                NumType, ea.S, length(ea.active_sources))
-            elbo_vars_loc.calculate_gradient = calculate_gradient
-            Model.populate_fsm_vecs!(ea.elbo_vars.bvn_derivs,
-                                     ea.elbo_vars.fs0m_vec,
-                                     ea.elbo_vars.fs1m_vec,
-                                     ea.patches,
-                                     ea.active_sources,
-                                     ea.num_allowed_sd,
-                                     n, h, w,
-                                     gal_mcs, star_mcs)
-            calculate_source_pixel_brightness!(
-            elbo_vars,
-            ea,
-            elbo_vars.E_G_s,
-            elbo_vars.var_G_s,
-            elbo_vars.fs0m_vec[s],
-            elbo_vars.fs1m_vec[s],
-            sbs[s],
-            b, s,
-            s in ea.active_sources)
-            deepcopy(elbo_vars_loc)
+            hw = SVector{2,Float64}(h, w)
+            is_active_source = s in ea.active_sources
+            Model.populate_fsm!(ea.elbo_vars.bvn_derivs,
+                                ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
+                                s, hw, is_active_source,
+                                ea.patches[s,n].wcs_jacobian,
+                                gal_mcs, star_mcs)
+            DeterministicVI.calculate_source_pixel_brightness!(
+                ea.elbo_vars,
+                ea,
+                ea.elbo_vars.E_G_s,
+                ea.elbo_vars.var_G_s,
+                ea.elbo_vars.fs0m,
+                ea.elbo_vars.fs1m,
+                sb,
+                b, s,
+                is_active_source)
         end
 
         function wrapper_fun{NumType <: Number}(x::Vector{NumType})
             @assert length(x) == P
             ea_local = forward_diff_model_params(NumType, ea)
             ea_local.vp[s] = x
-            elbo_vars_local = e_g_wrapper_fun(ea_local, calculate_gradient=false)
-            test_var ? elbo_vars_local.var_G_s.v[] : elbo_vars_local.E_G_s.v[]
+            e_g_wrapper_fun(ea_local)
+            test_var ? ea_local.elbo_vars.var_G_s.v[] : ea_local.elbo_vars.E_G_s.v[]
         end
 
         x = ea.vp[s]
 
-        elbo_vars = e_g_wrapper_fun(ea)
+        e_g_wrapper_fun(ea)
 
         # Sanity check the variance value.
-        @test elbo_vars.var_G_s.v[] ≈
-                        elbo_vars.E_G2_s.v[] - (elbo_vars.E_G_s.v[] ^ 2)
+        @test ea.elbo_vars.var_G_s.v[] ≈
+                        ea.elbo_vars.E_G2_s.v[] - (ea.elbo_vars.E_G_s.v[] ^ 2)
 
-        sf = test_var ? deepcopy(elbo_vars.var_G_s) : deepcopy(elbo_vars.E_G_s)
+        sf = test_var ? deepcopy(ea.elbo_vars.var_G_s) : deepcopy(ea.elbo_vars.E_G_s)
 
         test_with_autodiff(wrapper_fun, x, sf)
     end
@@ -1187,8 +1167,10 @@ end
 
 # ELBO tests:
 println("Running ELBO derivative tests.")
+test_e_g_s_functions()
 test_active_pixels()
 #test_combine_pixel_sources()
+#test_add_log_term()
 #test_fs1m_derivatives()
 #test_fs0m_derivatives()
 test_bvn_derivatives()
@@ -1196,8 +1178,6 @@ test_galaxy_variable_transform()
 test_galaxy_cache_component()
 test_galaxy_sigma_derivs()
 test_dsiginv_dsig()
-#test_add_log_term()
-#test_e_g_s_functions()
 
 # SensitiveFloat tests:
 println("Running SensitiveFloat derivative tests.")
