@@ -21,8 +21,8 @@ def set_image_dimensions(test_case, catalog_rows):
     width_arcsec = (max_ra_deg - min_ra_deg) * ARCSEC_PER_DEGREE + 2 * FIELD_EXPAND_ARCSEC
     height_arcsec = (max_dec_deg - min_dec_deg) * ARCSEC_PER_DEGREE + 2 * FIELD_EXPAND_ARCSEC
     arcsec_per_pixel = test_case.get_resolution()
-    width_px = width_arcsec / arcsec_per_pixel
-    height_px = height_arcsec / arcsec_per_pixel
+    width_px = int(width_arcsec / arcsec_per_pixel)
+    height_px = int(height_arcsec / arcsec_per_pixel)
 
     print('  Image dimensions {} x {} px'.format(width_px, height_px))
     test_case.set_dimensions(width_px, height_px)
@@ -70,7 +70,8 @@ def main():
     def celeste_field_test(test_case):
         generate_field(test_case, args.catalog_csv)
 
-    generate_test_image.generate_fits_file('galsim_field', [celeste_field_test])
+    output_label = os.path.splitext(os.path.basename(args.catalog_csv))[0] + '_images'
+    generate_test_image.generate_fits_file(output_label, [celeste_field_test])
 
 if __name__ == "__main__":
     main()
