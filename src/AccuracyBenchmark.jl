@@ -14,6 +14,11 @@ convert between SDSS mags and SDSS flux (nMgy)
 mag_to_flux(m::AbstractFloat) = 10.^(0.4 * (22.5 - m))
 flux_to_mag(nm::AbstractFloat) = nm > 0 ? 22.5 - 2.5 * log10(nm) : NaN
 
+color_from_fluxes(flux1::AbstractFloat, flux2::AbstractFloat) = log(flux2 / flux1)
+function color_from_mags(mags1::AbstractFloat, mags2::AbstractFloat)
+    color_from_fluxes(mag_to_flux(mags1), mag_to_flux(mags1))
+end
+
 STRIPE_82_CATALOG_KEYS = [
     :objid, :rerun, :run, :camcol, :field, :flags,
     :ra, :dec, :probpsf,
@@ -70,36 +75,33 @@ function load_coadd_catalog(fits_filename)
 
     usedev = raw_df[:fracdev_r] .> 0.5  # true=> use dev, false=> use exp
     dev_or_exp(dev_column, exp_column) = ifelse(usedev, raw_df[dev_column], raw_df[exp_column])
+    is_star = [x != 0 for x in raw_df[:probpsf]]
+    function star_or_galaxy(star_column, galaxy_dev_column, galaxy_exp_column)
+        ifelse(is_star, raw_df[star_column], dev_or_exp(galaxy_dev_column, galaxy_exp_column))
+    end
 
-    # Convert to "celeste" style results.
-    gal_mag_u = dev_or_exp(:devmag_u, :expmag_u)
-    gal_mag_g = dev_or_exp(:devmag_g, :expmag_g)
-    gal_mag_r = dev_or_exp(:devmag_r, :expmag_r)
-    gal_mag_i = dev_or_exp(:devmag_i, :expmag_i)
-    gal_mag_z = dev_or_exp(:devmag_z, :expmag_z)
+    mag_u = star_or_galaxy(:psfmag_u, :devmag_u, :expmag_u)
+    mag_g = star_or_galaxy(:psfmag_g, :devmag_g, :expmag_g)
+    mag_r = star_or_galaxy(:psfmag_r, :devmag_r, :expmag_r)
+    mag_i = star_or_galaxy(:psfmag_i, :devmag_i, :expmag_i)
+    mag_z = star_or_galaxy(:psfmag_z, :devmag_z, :expmag_z)
 
     result = DataFrame()
     result[:objid] = raw_df[:objid]
-    result[:ra] = raw_df[:ra]
-    result[:dec] = raw_df[:dec]
-    result[:is_star] = [x != 0 for x in raw_df[:probpsf]]
-    result[:star_mag_r] = raw_df[:psfmag_r]
-    result[:gal_mag_r] = gal_mag_r
+    result[:right_ascension_deg] = raw_df[:ra]
+    result[:declination_deg] = raw_df[:dec]
+    result[:is_star] = is_star
+
+    result[:reference_band_flux_nmgy] = mag_to_flux.(mag_r)
 
     # star colors
-    result[:star_color_ug] = raw_df[:psfmag_u] .- raw_df[:psfmag_g]
-    result[:star_color_gr] = raw_df[:psfmag_g] .- raw_df[:psfmag_r]
-    result[:star_color_ri] = raw_df[:psfmag_r] .- raw_df[:psfmag_i]
-    result[:star_color_iz] = raw_df[:psfmag_i] .- raw_df[:psfmag_z]
-
-    # gal colors
-    result[:gal_color_ug] = gal_mag_u .- gal_mag_g
-    result[:gal_color_gr] = gal_mag_g .- gal_mag_r
-    result[:gal_color_ri] = gal_mag_r .- gal_mag_i
-    result[:gal_color_iz] = gal_mag_i .- gal_mag_z
+    result[:color_log_ratio_ug] = color_from_mags.(mag_u, mag_g)
+    result[:color_log_ratio_gr] = color_from_mags.(mag_g, mag_r)
+    result[:color_log_ratio_ri] = color_from_mags.(mag_r, mag_i)
+    result[:color_log_ratio_iz] = color_from_mags.(mag_i, mag_z)
 
     # gal shape -- fracdev
-    result[:gal_fracdev] = raw_df[:fracdev_r]
+    result[:de_vaucouleurs_mixture_weight] = raw_df[:fracdev_r]
 
     # Note that the SDSS photo pipeline doesn't constrain the de Vaucouleur
     # profile parameters and exponential disk parameters (A/B, angle, scale)
@@ -108,16 +110,16 @@ function load_coadd_catalog(fits_filename)
     # to the dominant component. Later, we limit comparison to objects with
     # fracdev close to 0 or 1 to ensure that we're comparing apples to apples.
 
-    result[:gal_ab] = dev_or_exp(:devab_r, :expab_r)
+    result[:minor_major_axis_ratio] = dev_or_exp(:devab_r, :expab_r)
 
     # gal effective radius (re)
     re_arcsec = dev_or_exp(:devrad_r, :exprad_r)
-    re_pixel = re_arcsec / SDSS_ARCSEC_PER_PIXEL
-    result[:gal_scale] = re_pixel
+    re_pixel = re_arcsec ./ SDSS_ARCSEC_PER_PIXEL
+    result[:half_light_radius_px] = convert(Vector{Float64}, re_pixel)
 
     # gal angle (degrees)
     raw_phi = dev_or_exp(:devphi_r, :expphi_r)
-    result[:gal_angle] = raw_phi - floor.(raw_phi / 180) * 180
+    result[:angle_deg] = raw_phi - floor.(raw_phi / 180) * 180
 
     return result
 end
@@ -142,7 +144,7 @@ function draw_source_params(prior, object_id)
         MvNormal(prior.c_mean[:, k, source_type_index], prior.c_cov[:, :, k, source_type_index])
         for k in 1:num_color_components
     ]
-    color_ratios = exp(rand(MixtureModel(color_components, color_mixture_weights)))
+    color_log_ratios = rand(MixtureModel(color_components, color_mixture_weights))
 
     if !is_star
         half_light_radius_px = exp(rand(
@@ -158,28 +160,24 @@ function draw_source_params(prior, object_id)
         de_vaucouleurs_mixture_weight = -1
     end
 
-    position_x = rand(Uniform(0, 1))
-    position_y = rand(Uniform(0, 1))
+    # Use approximate size of SDSS field in degrees
+    right_ascension_deg = rand(Uniform(0, 0.14))
+    declination_deg = rand(Uniform(0, 0.22))
 
     DataFrame(
         objid=object_id,
-        ra=position_x,
-        dec=position_y,
+        right_ascension_deg=right_ascension_deg,
+        declination_deg=declination_deg,
         is_star=is_star,
-        star_mag_r=flux_to_mag(reference_band_flux_nmgy),
-        gal_mag_r=flux_to_mag(reference_band_flux_nmgy),
-        star_color_ug=color_ratios[1],
-        star_color_gr=color_ratios[2],
-        star_color_ri=color_ratios[3],
-        star_color_iz=color_ratios[4],
-        gal_color_ug=color_ratios[1],
-        gal_color_gr=color_ratios[2],
-        gal_color_ri=color_ratios[3],
-        gal_color_iz=color_ratios[4],
-        gal_fracdev=de_vaucouleurs_mixture_weight,
-        gal_ab=minor_major_axis_ratio,
-        gal_scale=half_light_radius_px,
-        gal_angle=angle_deg,
+        reference_band_flux_nmgy=reference_band_flux_nmgy,
+        color_log_ratio_ug=color_log_ratios[1],
+        color_log_ratio_gr=color_log_ratios[2],
+        color_log_ratio_ri=color_log_ratios[3],
+        color_log_ratio_iz=color_log_ratios[4],
+        de_vaucouleurs_mixture_weight=de_vaucouleurs_mixture_weight,
+        minor_major_axis_ratio=minor_major_axis_ratio,
+        half_light_radius_px=half_light_radius_px,
+        angle_deg=angle_deg,
     )
 end
 

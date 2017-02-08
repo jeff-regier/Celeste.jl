@@ -1,1 +1,1 @@
-galsim_field_1d2e5fdb14.fits
+galsim_field_bc90ad421f.fits
