@@ -16,22 +16,6 @@ const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const LATEST_FITS_FILENAME_DIR = joinpath(GALSIM_BENCHMARK_DIR, "latest_filenames")
 const ACTIVE_PIXELS_MIN_RADIUS_PX = Nullable(40.0)
 
-type GalsimFitsFileNotFound <: Exception end
-
-function make_psf(psf_sigma_px)
-    alphaBar = [1.; 0.]
-    xiBar = [0.; 0.]
-    tauBar = [psf_sigma_px^2 0.; 0. psf_sigma_px^2]
-    [
-        Model.PsfComponent(
-            alphaBar[k],
-            StaticArrays.SVector{2, Float64}(xiBar),
-            StaticArrays.SMatrix{2, 2, Float64, 4}(tauBar)
-        )
-        for k in 1:2
-    ]
-end
-
 function get_latest_fits_filename(label)
     latest_fits_filename_holder = joinpath(
         LATEST_FITS_FILENAME_DIR,
@@ -43,91 +27,11 @@ function get_latest_fits_filename(label)
     end
 end
 
-immutable FitsExtension
-    pixels::Matrix{Float32}
-    header::FITSIO.FITSHeader
-end
-
-function read_fits(filename; read_sdss_psf=false)
-    println("Reading '$filename'...")
-    if !isfile(filename)
-        println(string(
-            "FITS file '$filename' not found. Try running 'make fetch' in the 'benchmark/galsim' ",
-            "directory."
-        ))
-        throw(GalsimFitsFileNotFound())
-    end
-    fits = FITSIO.FITS(filename)
-    println("Found $(length(fits)) extensions.")
-
-    extensions::Vector{FitsExtension} = []
-    for extension in fits
-        push!(extensions, FitsExtension(read(extension), FITSIO.read_header(extension)))
-    end
-
-    # assume WCS same for each extension
-    wcs = WCS.from_header(FITSIO.read_header(fits[1], String))[1]
-
-    close(fits)
-    extensions, wcs
-end
-
 function load_galsim_fits(label)
     latest_fits_filename = get_latest_fits_filename(label)
     extensions, wcs = read_fits(joinpath(GALSIM_BENCHMARK_DIR, "output", latest_fits_filename))
     @assert length(extensions) % 5 == 0 # one extension per band for each test case
     extensions, wcs
-end
-
-function make_images(band_pixels, psf, wcs, epsilon, iota)
-    # assume dimensions equal for all images
-    height, width = size(band_pixels[1])
-    [
-        Model.Image(
-            height,
-            width,
-            band_pixels[band],
-            band,
-            wcs,
-            psf,
-            0, # SDSS run
-            0, # SDSS camcol
-            0, # SDSS field
-            fill(epsilon, height, width),
-            fill(iota, height),
-            Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
-        )
-        for band in 1:5
-    ]
-end
-
-function typical_band_relative_intensities(is_star::Bool)
-    source_type_index = is_star ? 1 : 2
-    prior_parameters::Model.PriorParams = Model.load_prior()
-    # Band relative intensities are a mixture of lognormals. Which mixture component has the most
-    # weight?
-    dominant_component = indmax(prior_parameters.k[:, source_type_index])
-    # What are the most typical log relative intensities for that component?
-    inter_band_ratios = exp.(
-        prior_parameters.c_mean[:, dominant_component, source_type_index]
-        - diag(prior_parameters.c_cov[:, :, dominant_component, source_type_index])
-    )
-    Float64[
-        1 / inter_band_ratios[2] / inter_band_ratios[1],
-        1 / inter_band_ratios[2],
-        1,
-        inter_band_ratios[3],
-        inter_band_ratios[3] * inter_band_ratios[4],
-    ]
-end
-
-function typical_reference_brightness(is_star::Bool)
-    source_type_index = is_star ? 1 : 2
-    prior_parameters::Model.PriorParams = Model.load_prior()
-
-    # this is the mode. brightness is log normal.
-    exp(prior_parameters.r_μ[source_type_index]
-            - prior_parameters.r_σ²[source_type_index])
 end
 
 # Since we're considering elliptical galaxy shapes, angle is only meaningful up to rotations of 180
@@ -258,38 +162,6 @@ function assert_counts_match_expected_flux(band_pixels::Vector{Matrix{Float32}},
         expected_flux_counts = expected_flux_nmgy * iota
         @assert abs(sum(band_pixels[3]) - expected_flux_counts) / expected_flux_counts < 1e-2
     end
-end
-
-function make_catalog_entry(x_position_world_coords, y_position_world_coords)
-    CatalogEntry(
-        [x_position_world_coords, y_position_world_coords],
-        false, # is_star
-        # sample_star_fluxes
-        typical_band_relative_intensities(true) .* typical_reference_brightness(true),
-        # sample_galaxy_fluxes
-        typical_band_relative_intensities(false) .* typical_reference_brightness(false),
-        0.1, # gal_frac_dev
-        0.7, # gal_ab
-        pi / 4, # gal_angle
-        4., # gal_scale
-        "sample", # objid
-        0, # thing_id
-    )
-end
-
-function make_catalog(header::FITSIO.FITSHeader)
-    catalog = CatalogEntry[]
-    num_sources = header["CLNSRC"]
-    degrees_per_pixel = header["CLRES"]
-    for source_index in 1:num_sources
-        position_offset = rand(Uniform(-degrees_per_pixel, degrees_per_pixel), 2)
-        catalog_entry = make_catalog_entry(
-            get_field(header, "CLX", source_index) + position_offset[1],
-            get_field(header, "CLY", source_index) + position_offset[2],
-        )
-        push!(catalog, catalog_entry)
-    end
-    catalog
 end
 
 function make_images_and_catalog(start_index, fits_extensions, wcs, header)

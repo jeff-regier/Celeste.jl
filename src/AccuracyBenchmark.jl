@@ -3,10 +3,17 @@ module AccuracyBenchmark
 using DataFrames
 using Distributions
 import FITSIO
+import StaticArrays
+import WCS
 
 import Celeste.Model
 
 const SDSS_ARCSEC_PER_PIXEL = 0.396
+const ARCSEC_PER_DEGREE = 3600
+
+type BenchmarkFitsFileNotFound <: Exception
+    filename::String
+end
 
 """
 convert between SDSS mags and SDSS flux (nMgy)
@@ -202,6 +209,143 @@ end
 function write_catalog(csv_file::String, catalog_df::DataFrame)
     @printf("Writing '%s'...\n", csv_file)
     writetable(csv_file, catalog_df)
+end
+
+## Load a multi-extension FITS imagery file
+
+immutable FitsImage
+    pixels::Matrix{Float32}
+    header::FITSIO.FITSHeader
+    wcs::WCS.WCSTransform
+end
+
+function read_fits(filename::String)
+    println("Reading '$filename'...")
+    if !isfile(filename)
+        throw(BenchmarkFitsFileNotFound(filename))
+    end
+
+    fits = FITSIO.FITS(filename)
+    try
+        println("Found $(length(fits)) extensions.")
+        map(fits) do extension
+            pixels = read(extension)
+            header = FITSIO.read_header(extension)
+            wcs = WCS.from_header(FITSIO.read_header(fits[1], String))[1]
+            FitsImage(pixels, header, wcs)
+        end
+    finally
+        close(fits)
+    end
+end
+
+## Create Celeste images from FITS imagery
+
+function make_psf(psf_sigma_px)
+    alphaBar = [1.; 0.]
+    xiBar = [0.; 0.]
+    tauBar = [psf_sigma_px^2 0.; 0. psf_sigma_px^2]
+    [
+        Model.PsfComponent(
+            alphaBar[k],
+            StaticArrays.SVector{2, Float64}(xiBar),
+            StaticArrays.SMatrix{2, 2, Float64, 4}(tauBar)
+        )
+        for k in 1:2
+    ]
+end
+
+function make_images(band_extensions::Vector{FitsImage})
+    map(enumerate(band_extensions)) do pair
+        band_index, extension = pair
+        height, width = size(extension.pixels)
+        Model.Image(
+            height,
+            width,
+            extension.pixels,
+            band_index,
+            extension.wcs,
+            make_psf(extension.header["CLSIGMA"]),
+            0, # SDSS run
+            0, # SDSS camcol
+            0, # SDSS field
+            fill(extension.header["CLSKY"], height, width),
+            fill(extension.header["CLIOTA"], height),
+            Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
+        )
+    end
+end
+
+## Create an initialization catalog for Celeste
+
+function typical_band_relative_intensities(is_star::Bool)
+    source_type_index = is_star ? 1 : 2
+    prior_parameters::Model.PriorParams = Model.load_prior()
+    # Band relative intensities are a mixture of lognormals. Which mixture component has the most
+    # weight?
+    dominant_component = indmax(prior_parameters.k[:, source_type_index])
+    # What are the most typical log relative intensities for that component?
+    inter_band_ratios = exp.(
+        prior_parameters.c_mean[:, dominant_component, source_type_index]
+        - diag(prior_parameters.c_cov[:, :, dominant_component, source_type_index])
+    )
+    Float64[
+        1 / inter_band_ratios[2] / inter_band_ratios[1],
+        1 / inter_band_ratios[2],
+        1,
+        inter_band_ratios[3],
+        inter_band_ratios[3] * inter_band_ratios[4],
+    ]
+end
+
+function typical_reference_brightness(is_star::Bool)
+    source_type_index = is_star ? 1 : 2
+    prior_parameters::Model.PriorParams = Model.load_prior()
+    # this is the mode. brightness is log normal.
+    exp(prior_parameters.r_μ[source_type_index] - prior_parameters.r_σ²[source_type_index])
+end
+
+function make_catalog_entry(
+    x_position_world_coords, y_position_world_coords, star_fluxes, galaxy_fluxes
+)
+    Model.CatalogEntry(
+        [x_position_world_coords, y_position_world_coords],
+        false, # is_star
+        # sample_star_fluxes
+        star_fluxes,
+        # sample_galaxy_fluxes
+        galaxy_fluxes,
+        0.1, # gal_frac_dev
+        0.7, # gal_ab
+        pi / 4, # gal_angle
+        4., # gal_scale
+        "sample", # objid
+        0, # thing_id
+    )
+end
+
+function get_field(header::FITSIO.FITSHeader, label::String, index::Int64)
+    key = @sprintf("%s%03d", label, index)
+    if haskey(header, key)
+        header[key]
+    else
+        NA
+    end
+end
+
+function make_initialization_catalog(catalog::DataFrame)
+    position_offset_width = SDSS_ARCSEC_PER_PIXEL / ARCSEC_PER_DEGREE # 1 pixel, in degrees
+    star_fluxes = typical_band_relative_intensities(true) .* typical_reference_brightness(true)
+    galaxy_fluxes = typical_band_relative_intensities(false) .* typical_reference_brightness(false)
+    map(eachrow(catalog)) do row
+        position_offset = rand(Uniform(-position_offset_width, position_offset_width), 2)
+        make_catalog_entry(
+            row[:right_ascension_deg],
+            row[:declination_deg],
+            star_fluxes,
+            galaxy_fluxes,
+        )
+    end
 end
 
 end # module AccuracyBenchmark
