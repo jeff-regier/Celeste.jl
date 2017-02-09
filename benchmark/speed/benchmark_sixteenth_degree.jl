@@ -34,7 +34,7 @@ During the optimization, a pixel is visited
 function benchmark_sixteenth_degree()
     box = BoundingBox(124.25, 124.50, 58.5, 58.75)
 
-    wrap_joint(cnti...) = one_node_joint_infer(cnti...; use_fft=true)
+    wrap_joint(cnti...) = one_node_joint_infer(cnti...; use_fft=false)
 
     warmup_box = BoundingBox(124.25, 124.26, 58.7, 58.71)
     warmup_rcfs = get_overlapping_fields(warmup_box, datadir)
