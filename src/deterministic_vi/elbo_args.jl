@@ -197,7 +197,7 @@ type ElboArgs{NumType <: Number}
     # If this is set to Inf, the bivariate normals will be evaluated at all
     # points irrespective of their distance from the mean.
     num_allowed_sd::Float64
-    
+
     # If true, only render star parameters for active sources.
     active_source_star_only::Bool
 
@@ -241,4 +241,30 @@ function ElboArgs{NumType <: Number}(
                                           calculate_hessian=calculate_hessian)
     ElboArgs(S, N, psf_K, images, vp, patches,
              active_sources, num_allowed_sd, false, elbo_vars)
+end
+
+
+function convert(::Type{ElboArgs{Dual{1, Float64}}}, ea::ElboArgs{Float64})
+    T = Dual{1, Float64}
+    P = length(CanonicalParams)
+    vp = Vector{T}[zeros(T, P) for s=1:ea.S]
+    for s in 1:ea.S
+        vp[s][:] = ea.vp[s]
+    end
+    ElboArgs(ea.images, vp, ea.patches, ea.active_sources,
+             psf_K=ea.psf_K,
+             num_allowed_sd=ea.num_allowed_sd,
+             calculate_gradient=ea.elbo_vars.elbo.has_gradient,
+             calculate_hessian=ea.elbo_vars.elbo.has_hessian)
+end
+
+
+function ElboArgs{NumType <: Number}(ea::ElboArgs{NumType};
+                                     calculate_gradient=true,
+                                     calculate_hessian=true)
+    ElboArgs(ea.images, ea.vp, ea.patches, ea.active_sources,
+             psf_K=ea.psf_K,
+             num_allowed_sd=ea.num_allowed_sd,
+             calculate_gradient=calculate_gradient,
+             calculate_hessian=calculate_hessian)
 end
