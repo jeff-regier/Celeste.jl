@@ -5,7 +5,6 @@ using Distributions
 using DerivativeTestUtils
 using StaticArrays
 
-using ForwardDiff
 import ForwardDiff.Dual
 
 import SampleData: gen_two_body_dataset, true_star_init
@@ -321,23 +320,16 @@ end
     _, ea, _ = gen_two_body_dataset()
 
     # create elbo arguments of type Float64 that compute the gradient but not the hessian
-    ea_float = ElboArgs(ea.images, ea.vp, ea.patches, ea.active_sources,
-                        calculate_hessian=false)
-    @time DeterministicVI.elbo(ea_float)
-    println("done loading ea_float")
+    ea_float = ElboArgs(ea, calculate_hessian=false)
+    # compiling the next line takes 56 seconds on mac, but only 4 seconds on linux
+    DeterministicVI.elbo(ea_float)
 
     # create elbo arguments of the Dual number type, that compute the gradient but not
     # the hessian (it doesn't matter that the "perturbation" are all zero, it's just
     # for testing the speed and verifying that it works)
-    P = length(ea.vp[1])
-
-    T = ForwardDiff.Dual{1, Float64}
-    vp = Vector{T}[zeros(T, P) for s=1:ea.S]
-    vp[1][:] = ea.vp[1]
-    vp[2][:] = ea.vp[2]
-    ea_dual = ElboArgs(ea.images, vp, ea.patches, ea.active_sources,
-                       calculate_gradient=false,
-                       calculate_hessian=false)
+    ea_dual_g = convert(ElboArgs{Dual{1, Float64}}, ea_float)
+    ea_dual = ElboArgs(ea_dual_g, calculate_gradient=false,
+                                  calculate_hessian=false)
 
     for s in 1:2, i in 1:length(ids)
         ea_dual.vp[s][i] += ForwardDiff.Dual(0, 1)
