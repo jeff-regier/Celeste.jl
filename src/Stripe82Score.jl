@@ -73,64 +73,6 @@ function fluxes_to_color(f1::Real, f2::Real)
     return -2.5 * log10(f1 / f2)
 end
 
-
-"""
-Load the SDSS photoObj catalog used to initialize celeste, and reformat column
-names to match what the rest of the scoring code expects.
-"""
-function load_primary(rcf::RunCamcolField, stagedir::String)
-    dir = @sprintf "%s/%d/%d/%d" stagedir rcf.run rcf.camcol rcf.field
-    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir rcf.run rcf.camcol rcf.field
-    println(fname)
-    objs = SDSSIO.read_photoobj(fname)
-
-    usedev = objs["frac_dev"] .> 0.5  # true=> use dev, false=> use exp
-
-    gal_flux_u = where(usedev, objs["devflux_u"], objs["expflux_u"])
-    gal_flux_g = where(usedev, objs["devflux_g"], objs["expflux_g"])
-    gal_flux_r = where(usedev, objs["devflux_r"], objs["expflux_r"])
-    gal_flux_i = where(usedev, objs["devflux_i"], objs["expflux_i"])
-    gal_flux_z = where(usedev, objs["devflux_z"], objs["expflux_z"])
-
-    result = DataFrame()
-    result[:objid] = objs["objid"]
-    result[:ra] = objs["ra"]
-    result[:dec] = objs["dec"]
-    result[:is_star] = objs["is_star"]
-    result[:star_mag_r] = flux_to_mag.(objs["psfflux_r"])
-    result[:gal_mag_r] = flux_to_mag.(gal_flux_r)
-
-    # star colors
-    result[:star_color_ug] = fluxes_to_color.(objs["psfflux_u"], objs["psfflux_g"])
-    result[:star_color_gr] = fluxes_to_color.(objs["psfflux_g"], objs["psfflux_r"])
-    result[:star_color_ri] = fluxes_to_color.(objs["psfflux_r"], objs["psfflux_i"])
-    result[:star_color_iz] = fluxes_to_color.(objs["psfflux_i"], objs["psfflux_z"])
-
-    # gal colors
-    result[:gal_color_ug] = fluxes_to_color.(gal_flux_u, gal_flux_g)
-    result[:gal_color_gr] = fluxes_to_color.(gal_flux_g, gal_flux_r)
-    result[:gal_color_ri] = fluxes_to_color.(gal_flux_r, gal_flux_i)
-    result[:gal_color_iz] = fluxes_to_color.(gal_flux_i, gal_flux_z)
-
-    # gal shape -- fracdev
-    result[:gal_fracdev] = objs["frac_dev"]
-
-    # gal shape -- axis ratio
-    #TODO: filter when 0.5 < frac_dev < .95
-    result[:gal_ab] = where(usedev, objs["ab_dev"], objs["ab_exp"])
-
-    # gal effective radius (re)
-    re_arcsec = where(usedev, objs["theta_dev"], objs["theta_exp"])
-    result[:gal_scale] = re_arcsec / 0.396 #pixel scale
-
-    # gal angle (degrees)
-    raw_phi = where(usedev, objs["phi_dev"], objs["phi_exp"])
-    result[:gal_angle] = raw_phi - floor.(raw_phi / 180) * 180
-
-    return result#[!objs["is_saturated"], :]
-end
-
-
 const color_names = ["ug", "gr", "ri", "iz"]
 
 """

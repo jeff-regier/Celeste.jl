@@ -7,6 +7,7 @@ import StaticArrays
 import WCS
 
 import Celeste.Model
+import Celeste.SDSSIO
 
 const SDSS_ARCSEC_PER_PIXEL = 0.396
 const ARCSEC_PER_DEGREE = 3600
@@ -21,7 +22,13 @@ convert between SDSS mags and SDSS flux (nMgy)
 mag_to_flux(m::AbstractFloat) = 10.^(0.4 * (22.5 - m))
 flux_to_mag(nm::AbstractFloat) = nm > 0 ? 22.5 - 2.5 * log10(nm) : NaN
 
-color_from_fluxes(flux1::AbstractFloat, flux2::AbstractFloat) = log(flux2 / flux1)
+function color_from_fluxes(flux1::AbstractFloat, flux2::AbstractFloat)
+    if flux1 <= 0 || flux2 <= 0
+        NA
+    else
+        log(flux2 / flux1)
+    end
+end
 function color_from_mags(mags1::AbstractFloat, mags2::AbstractFloat)
     color_from_fluxes(mag_to_flux(mags1), mag_to_flux(mags1))
 end
@@ -101,7 +108,6 @@ function load_coadd_catalog(fits_filename)
 
     result[:reference_band_flux_nmgy] = mag_to_flux.(mag_r)
 
-    # star colors
     result[:color_log_ratio_ug] = color_from_mags.(mag_u, mag_g)
     result[:color_log_ratio_gr] = color_from_mags.(mag_g, mag_r)
     result[:color_log_ratio_ri] = color_from_mags.(mag_r, mag_i)
@@ -126,6 +132,64 @@ function load_coadd_catalog(fits_filename)
 
     # gal angle (degrees)
     raw_phi = dev_or_exp(:devphi_r, :expphi_r)
+    result[:angle_deg] = raw_phi - floor.(raw_phi / 180) * 180
+
+    return result
+end
+
+function object_dict_to_data_frame(objects::Dict)
+    result_df = DataFrame()
+    for (key, values) in objects
+        result_df[Symbol(key)] = values
+    end
+    result_df
+end
+
+"""
+Load the SDSS photoObj catalog used to initialize celeste, and reformat column
+names to match what the rest of the scoring code expects.
+"""
+function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
+    dir = @sprintf "%s/%d/%d/%d" stagedir rcf.run rcf.camcol rcf.field
+    filename = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir rcf.run rcf.camcol rcf.field
+    @printf("Loading primary catalog from %s\n", filename)
+    raw_df = object_dict_to_data_frame(SDSSIO.read_photoobj(filename))
+
+    usedev = raw_df[:frac_dev] .> 0.5  # true=> use dev, false=> use exp
+    dev_or_exp(dev_column, exp_column) = ifelse(usedev, raw_df[dev_column], raw_df[exp_column])
+    function star_or_galaxy(star_column, galaxy_dev_column, galaxy_exp_column)
+        ifelse(raw_df[:is_star], raw_df[star_column], dev_or_exp(galaxy_dev_column, galaxy_exp_column))
+    end
+
+    flux_u = star_or_galaxy(:psfflux_u, :devflux_u, :expflux_u)
+    flux_g = star_or_galaxy(:psfflux_g, :devflux_g, :expflux_g)
+    flux_r = star_or_galaxy(:psfflux_r, :devflux_r, :expflux_r)
+    flux_i = star_or_galaxy(:psfflux_i, :devflux_i, :expflux_i)
+    flux_z = star_or_galaxy(:psfflux_z, :devflux_z, :expflux_z)
+
+    result = DataFrame()
+    result[:objid] = raw_df[:objid]
+    result[:right_ascension_deg] = raw_df[:ra]
+    result[:declination_deg] = raw_df[:dec]
+    result[:is_star] = raw_df[:is_star]
+
+    result[:reference_band_flux_nmgy] = flux_r
+
+    result[:color_log_ratio_ug] = color_from_fluxes.(flux_u, flux_g)
+    result[:color_log_ratio_gr] = color_from_fluxes.(flux_g, flux_r)
+    result[:color_log_ratio_ri] = color_from_fluxes.(flux_r, flux_i)
+    result[:color_log_ratio_iz] = color_from_fluxes.(flux_i, flux_z)
+
+    result[:de_vaucouleurs_mixture_weight] = raw_df[:frac_dev]
+    result[:minor_major_axis_ratio] = dev_or_exp(:ab_dev, :ab_exp)
+
+    # gal effective radius (re)
+    re_arcsec = dev_or_exp(:theta_dev, :theta_exp)
+    re_pixel = re_arcsec ./ SDSS_ARCSEC_PER_PIXEL
+    result[:half_light_radius_px] = convert(Vector{Float64}, re_pixel)
+
+    # gal angle (degrees)
+    raw_phi = dev_or_exp(:phi_dev, :phi_exp)
     result[:angle_deg] = raw_phi - floor.(raw_phi / 180) * 180
 
     return result
