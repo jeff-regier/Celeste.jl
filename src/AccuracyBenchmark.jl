@@ -7,6 +7,7 @@ import StaticArrays
 import WCS
 
 import Celeste.Model
+import Celeste.ParallelRun
 import Celeste.SDSSIO
 
 const SDSS_ARCSEC_PER_PIXEL = 0.396
@@ -193,6 +194,46 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
     result[:angle_deg] = raw_phi - floor.(raw_phi / 180) * 180
 
     return result
+end
+
+function get_median_fluxes(variational_params::Vector{Float64}, source_type::Int64)
+    ids = Model.ids
+    fluxes = Vector{Float64}(5)
+    fluxes[3] = exp(variational_params[ids.r1[source_type]])
+    fluxes[4] = fluxes[3] * exp(variational_params[ids.c1[3, source_type]])
+    fluxes[5] = fluxes[4] * exp(variational_params[ids.c1[4, source_type]])
+    fluxes[2] = fluxes[3] / exp(variational_params[ids.c1[2, source_type]])
+    fluxes[1] = fluxes[2] / exp(variational_params[ids.c1[1, source_type]])
+    fluxes
+end
+
+function variational_parameters_to_data_frame_row(variational_params::Vector{Float64})
+    ids = Model.ids
+    result = DataFrame()
+    result[:ra] = variational_params[ids.u[1]]
+    result[:dec] = variational_params[ids.u[2]]
+    result[:is_star] = variational_params[ids.a[1, 1]]
+    result[:de_vaucouleurs_mixture_weight] = variational_params[ids.e_dev]
+    result[:minor_major_axis_ratio] = variational_params[ids.e_axis]
+    result[:half_light_radius_px] = variational_params[ids.e_scale]
+    result[:angle_deg] = variational_params[ids.e_angle]
+
+    fluxes = get_median_fluxes(variational_params, result[1, :is_star] > 0.5 ? 1 : 2)
+    result[:reference_band_flux_nmgy] = fluxes[3]
+    result[:color_log_ratio_ug] = color_from_fluxes.(fluxes[1], fluxes[2])
+    result[:color_log_ratio_gr] = color_from_fluxes.(fluxes[2], fluxes[3])
+    result[:color_log_ratio_ri] = color_from_fluxes.(fluxes[3], fluxes[4])
+    result[:color_log_ratio_iz] = color_from_fluxes.(fluxes[4], fluxes[5])
+    result
+end
+
+
+"""
+Convert Celeste results to a dataframe.
+"""
+function celeste_to_df(results::Vector{ParallelRun.OptimizedSource})
+    rows = [variational_parameters_to_data_frame_row(result.vs) for result in results]
+    vcat(rows...)
 end
 
 # This is the ratio of stars derived from the catalog used the generate the prior; the value 0.99 is
