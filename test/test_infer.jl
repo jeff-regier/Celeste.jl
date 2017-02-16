@@ -144,6 +144,28 @@ function test_patch_pixel_selection()
     end
 end
 
+
+@testset "test that we don't select a patch that is way too big" begin
+    wd = pwd()
+    cd(datadir)
+    run(`make RUN=4114 CAMCOL=3 FIELD=127`)
+    run(`make RUN=4114 CAMCOL=4 FIELD=127`)
+    cd(wd)
+
+    rcfs= [RunCamcolField(4114, 3, 127), RunCamcolField(4114, 4, 127)]
+    images = SDSSIO.load_field_images(rcfs, datadir)
+    catalog = SDSSIO.read_photoobj_files(rcfs, datadir)
+    entry_id = findfirst((ce)->ce.objid == "1237663143711147274", catalog)
+    entry = catalog[entry_id]
+
+    neighbors = Infer.find_neighbors([entry_id,], catalog, images)[1]
+    @show neighbors
+
+    # there's a lot near this star, but not a lot that overlaps with it, see
+    # http://skyserver.sdss.org/dr10/en/tools/explore/summary.aspx?id=0x112d1012607f050a
+    @test length(neighbors) < 5
+end
+
 if test_long_running
     test_infer_rcf()
 end

@@ -50,9 +50,7 @@ function find_neighbors(target_sources::Vector{Int64},
         @assert radii_map[s] <= 25
     end
 
-    # compute distance in pixels using small-distance approximation
-    dist(ra1, dec1, ra2, dec2) = (3600 / 0.396) * (sqrt((dec2 - dec1)^2 +
-                                  (cos(dec1) * (ra2 - ra1))^2))
+    dist(ra1, dec1, ra2, dec2) = (3600 / 0.396) * max(abs(dec2 - dec1), abs(ra2 - ra1))
 
     neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
 
