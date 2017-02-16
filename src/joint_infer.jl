@@ -164,6 +164,12 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
     @assert assigned_sources == n_sources
     Log.info("Cyclades - Number of batches: $(n_total_batches)")
     Log.info("Finished Cyclades partitioning.  Elapsed time: $(toq()) seconds")
+
+    for cur_batch = 1:length(collect(1:batch_size:n_sources))
+        load_balance_for_batch = [length(thread_sources_assignment[t][cur_batch]) for t=1:nprocthreads]
+        Log.info("Load balance for batch $(cur_batch) - $(load_balance_for_batch)")
+    end
+    
     thread_sources_assignment
 end
 
@@ -225,7 +231,7 @@ Returns:
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition=true,
                               use_fft=false,
-                              batch_size=60,
+                              batch_size=400,
                               within_batch_shuffling=true,
                               n_iters=3,
                               use_default_optim_params=true,
@@ -373,15 +379,24 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     tic()
     n_batches = length(thread_sources_assignment[1])
 
-    for iter = 1:n_iters
+    
+
+    for iter = 1:n_iters        
         # Process every batch of every iteration. We do the batches on the outside
         # Since there is an implicit barrier after the inner threaded for loop below.
-        # We want this barrier because there may be conflict _between_ Cyclades batches.
+        # We want this barrier because there may be conflict _between_ Cyclades batches.                
         for batch = 1:n_batches
+            
+            process_sources_elapsed_times = Vector{Float64}(nprocthreads)
+            
             # Process every batch of every iteration with nprocthreads
             Threads.@threads for i = 1:nprocthreads
+                tic()
                 process_sources(thread_sources_assignment[i][batch], iter)
+                process_sources_elapsed_times[i] = toq()
             end
+
+            Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
         end
     end
     Log.info("Done fitting elboargs. Elapsed time: $(toq())")
