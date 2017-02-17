@@ -170,7 +170,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
         Log.info("neighbors found in $(toq()) seconds")
     end
 
-    return catalog, target_sources, images, neighbor_map
+    return catalog, target_sources, neighbor_map, images
 end
 
 
@@ -280,7 +280,7 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
                         box=BoundingBox(-1000., 1000., -1000., 1000.),
                         primary_initialization=true,
                         timing=InferTiming())
-    catalog, target_sources, images, neighbor_map =
+    catalog, target_sources, neighbor_map, images =
         infer_init(rcfs,
                    stagedir;
                    objid=objid,

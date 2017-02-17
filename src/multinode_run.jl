@@ -95,7 +95,7 @@ function multi_node_infer(all_boxes::Vector{BoundingBox},
         timing.query_fids = timing.query_fids + toq()
 
         cbox.catalog, cbox.sources,
-        cbox.images, cbox.neighbor_map = infer_init(rcfs, stagedir;
+        cbox.neighbor_map, cbox.images = infer_init(rcfs, stagedir;
                                                     primary_initialization=primary_initialization,
                                                     timing=timing)
         cbox.curr_source = 1

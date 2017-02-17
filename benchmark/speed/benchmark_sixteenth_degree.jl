@@ -1,10 +1,9 @@
 #!/usr/bin/env julia
 
 import Celeste.ParallelRun: BoundingBox, get_overlapping_fields,
-                            one_node_infer, one_node_joint_infer
-import Celeste.SDSSIO: RunCamcolField
-import Celeste.DeterministicVIImagePSF: infer_source_fft
-import Celeste.DeterministicVI: infer_source
+                            one_node_joint_infer, infer_init
+import Celeste.SDSSIO: RunCamcolField, load_field_images
+import Celeste.Infer: find_neighbors
 
 
 const rcfs = [
@@ -33,26 +32,24 @@ During the optimization, a pixel is visited
 """
 function benchmark_sixteenth_degree()
     box = BoundingBox(124.25, 124.50, 58.5, 58.75)
-
-    wrap_joint(cnti...) = one_node_joint_infer(cnti...; use_fft=false)
-
-    warmup_box = BoundingBox(124.25, 124.26, 58.7, 58.71)
-    warmup_rcfs = get_overlapping_fields(warmup_box, datadir)
-    one_node_infer(warmup_rcfs,
-                   datadir;
-                   infer_callback=wrap_joint,
-                   box=warmup_box)
-
     rcfs = get_overlapping_fields(box, datadir)
+
+    # ctni = (catalogs, target, neighbor_map, images)
+    ctni = infer_init(rcfs, datadir; box=box)
+
+    # Warm up---this compiles the code
+    ctni2 = (ctni[1], ctni[2][1:1], ctni[3][1:1], ctni[4][1:1])
+    @time one_node_joint_infer(ctni2...)
+    println("Done with warm up")
 
     # resets runtime profiler *and* count for --track-allocation
     Profile.clear_malloc_data()
 
     if isempty(ARGS)
-        @time one_node_infer(rcfs, datadir; infer_callback=wrap_joint, box=box)
+        @time  one_node_joint_infer(ctni...)
     elseif ARGS[1] == "--profile"
         Profile.init(delay=1.0)
-        @profile one_node_infer(rcfs, datadir; infer_callback=wrap_joint, box=box)
+        @profile one_node_joint_infer(ctni...)
         Profile.print(format=:flat, sortedby=:count)
     end
 end
