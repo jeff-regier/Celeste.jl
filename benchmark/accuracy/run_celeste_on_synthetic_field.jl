@@ -2,7 +2,6 @@
 
 import ArgParse
 using DataFrames
-import JLD
 
 import Celeste.AccuracyBenchmark
 import Celeste.Infer
@@ -50,7 +49,9 @@ results = ParallelRun.one_node_joint_infer(
     use_fft=parsed_args["fft"],
 )
 
+results_df = AccuracyBenchmark.celeste_to_df(results)
+
 catalog_label = splitext(basename(parsed_args["image_fits"]))[1]
-output_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_estimates.jld", catalog_label))
+output_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.csv", catalog_label))
 @printf("Writing results to %s\n", output_filename)
-JLD.save(output_filename, "results", results)
+AccuracyBenchmark.write_catalog(output_filename, results_df)
