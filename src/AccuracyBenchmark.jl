@@ -13,7 +13,7 @@ import Celeste.SDSSIO
 const SDSS_ARCSEC_PER_PIXEL = 0.396
 const ARCSEC_PER_DEGREE = 3600
 
-type BenchmarkFitsFileNotFound <: Exception
+immutable BenchmarkFitsFileNotFound <: Exception
     filename::String
 end
 
@@ -21,14 +21,51 @@ immutable MatchException <: Exception
     msg::String
 end
 
-"""
-Load/store a catalog DF from/to a CSV.
-"""
+immutable ObjectsMissingFromGroundTruth <: Exception
+    missing_objids::Vector{String}
+end
+
+immutable MissingColumnsError <: Exception
+    missing_columns::Vector{Symbol}
+end
+
+################################################################################
+# Load/store a catalog DF from/to a CSV.
+################################################################################
+
+CATALOG_COLUMNS = Set([
+    :objid,
+    :right_ascension_deg,
+    :declination_deg,
+    :is_star,
+    :reference_band_flux_nmgy,
+    :color_log_ratio_ug,
+    :color_log_ratio_gr,
+    :color_log_ratio_ri,
+    :color_log_ratio_iz,
+    :de_vaucouleurs_mixture_weight,
+    :minor_major_axis_ratio,
+    :half_light_radius_px,
+    :angle_deg,
+])
+
+function assert_columns_are_valid(catalog_df::DataFrame)
+    missing_columns = setdiff(CATALOG_COLUMNS, Set(names(catalog_df)))
+    if !isempty(missing_columns)
+        throw(MissingColumnsError([missing_columns...]))
+    end
+end
+
 function read_catalog(csv_file::String)
     @printf("Reading '%s'...\n", csv_file)
-    readtable(csv_file)
+    catalog_df = readtable(csv_file)
+    assert_columns_are_valid(catalog_df)
+    catalog_df[:objid] = String[string(objid) for objid in catalog_df[:objid]]
+    catalog_df
 end
+
 function write_catalog(csv_file::String, catalog_df::DataFrame)
+    assert_columns_are_valid(catalog_df)
     @printf("Writing '%s'...\n", csv_file)
     writetable(csv_file, catalog_df)
 end
@@ -227,11 +264,12 @@ function get_median_fluxes(variational_params::Vector{Float64}, source_type::Int
     fluxes
 end
 
-function variational_parameters_to_data_frame_row(variational_params::Vector{Float64})
+function variational_parameters_to_data_frame_row(objid::String, variational_params::Vector{Float64})
     ids = Model.ids
     result = DataFrame()
-    result[:ra] = variational_params[ids.u[1]]
-    result[:dec] = variational_params[ids.u[2]]
+    result[:objid] = objid
+    result[:right_ascension_deg] = variational_params[ids.u[1]]
+    result[:declination_deg] = variational_params[ids.u[2]]
     result[:is_star] = variational_params[ids.a[1, 1]]
     result[:de_vaucouleurs_mixture_weight] = variational_params[ids.e_dev]
     result[:minor_major_axis_ratio] = variational_params[ids.e_axis]
@@ -252,7 +290,7 @@ end
 Convert Celeste results to a dataframe.
 """
 function celeste_to_df(results::Vector{ParallelRun.OptimizedSource})
-    rows = [variational_parameters_to_data_frame_row(result.vs) for result in results]
+    rows = [variational_parameters_to_data_frame_row(result.objid, result.vs) for result in results]
     vcat(rows...)
 end
 
@@ -428,7 +466,7 @@ function typical_reference_brightness(is_star::Bool)
 end
 
 function make_catalog_entry(
-    x_position_world_coords, y_position_world_coords, star_fluxes, galaxy_fluxes
+    x_position_world_coords, y_position_world_coords, star_fluxes, galaxy_fluxes, objid
 )
     Model.CatalogEntry(
         [x_position_world_coords, y_position_world_coords],
@@ -441,7 +479,7 @@ function make_catalog_entry(
         0.7, # gal_ab
         pi / 4, # gal_angle
         4., # gal_scale
-        "sample", # objid
+        objid, # objid
         0, # thing_id
     )
 end
@@ -466,6 +504,7 @@ function make_initialization_catalog(catalog::DataFrame)
             row[:declination_deg],
             star_fluxes,
             galaxy_fluxes,
+            row[:objid]
         )
     end
 end
@@ -478,7 +517,6 @@ ABSOLUTE_ERROR_COLUMNS = [
     :de_vaucouleurs_mixture_weight,
     :minor_major_axis_ratio,
     :half_light_radius_px,
-    :reference_band_flux_nmgy,
     :color_log_ratio_ug,
     :color_log_ratio_gr,
     :color_log_ratio_ri,
@@ -497,18 +535,19 @@ compute an a data frame containing each prediction's error.
 (It's not an average of the errors, it's each error.)
 Let's call the return type of this function an \"error data frame\".
 """
-function get_err_df(truth::DataFrame, predicted::DataFrame)
-    color_cols = [Symbol("color_$cn") for cn in color_names]
-    abs_err_cols = [:gal_fracdev, :gal_ab, :gal_scale]
-
+function get_error_df(truth::DataFrame, predicted::DataFrame)
     errors = DataFrame(objid=truth[:objid])
 
     predicted_galaxy = predicted[:is_star] .< .5
     true_galaxy = truth[:is_star] .< .5
-    errors[:missed_stars] =  predicted_galaxy & !(true_galaxy)
-    errors[:missed_gals] =  !predicted_galaxy & true_galaxy
+    errors[:misclassified] =  (predicted_galaxy .!= true_galaxy)
 
-    errors[:position] = dist.(truth[:ra], truth[:dec], predicted[:ra], predicted[:dec])
+    errors[:position] = sky_distance_px.(
+        truth[:right_ascension_deg],
+        truth[:declination_deg],
+        predicted[:right_ascension_deg],
+        predicted[:declination_deg],
+    )
     errors[:reference_band_flux_mag] = abs(
         flux_to_mag.(truth[:reference_band_flux_nmgy])
         .- flux_to_mag.(predicted[:reference_band_flux_nmgy])
@@ -542,25 +581,20 @@ function filter_rows(
     good_row
 end
 
-function score_column(first_errors::Vector, second_errors::Vector, labels::Vector{String})
+function score_column(first_errors::DataArray, second_errors::DataArray)
     @assert length(first_errors) == length(second_errors)
     scores = DataFrame(N=length(first_errors))
-    scores[labels[1]] = mean(first_errors)
-    scores[labels[2]] = mean(second_errors)
-    diffs = primary_err[good_row, nm] .- celeste_err[good_row, nm]
+    scores[:first] = mean(first_errors)
+    scores[:second] = mean(second_errors)
+    diffs = first_errors .- second_errors
     scores[:diff] = mean(diffs)
     scores[:diff_sd] = std(abs(diffs)) / sqrt(length(diffs))
     scores
 end
 
-function get_scores_df(truth::DataFrame; error_dataframe_args...)
-    @assert length(error_dataframe_args) == 2
-    labels = Symbol[keys(error_dataframe_args)]
-    first_errors = error_dataframe_args[labels[1]]
-    second_errors = error_dataframe_args[labels[2]]
-
+function get_scores_df(truth::DataFrame, first_errors::DataFrame, second_errors::DataFrame)
     score_rows = DataFrame[]
-    for column_name in names(truth)
+    for column_name in names(first_errors)
         if column_name == :objid
             continue
         end
@@ -571,10 +605,10 @@ function get_scores_df(truth::DataFrame; error_dataframe_args...)
             else
                 row = score_column(
                     first_errors[good_row, column_name],
-                    second_errors[good_row, column_name],
-                    labels,
+                    second_errors[good_row, column_name]
                 )
                 row[:field] = column_name
+                row[:source_type] = source_type
                 push!(score_rows, row)
             end
         end
@@ -582,50 +616,38 @@ function get_scores_df(truth::DataFrame; error_dataframe_args...)
     vcat(score_rows...)
 end
 
-function match_catalogs(truth::DataFrame, predictions::Vector{DataFrame})
-    # find matches in coadd catalog by position
+function extract_rows_by_objid(catalog_df::DataFrame, objids::Vector{String})
+    row_indices = map(objids) do objid
+        findfirst(catalog_df[:objid] .== objid)
+    end
+    @assert all(row_indices .!= 0)
+    catalog_df[row_indices, :]
+end
 
-    good_celeste_indexes = Int[]
-    good_coadd_indexes = Int[]
-    good_primary_indexes = Int[]
-    for i in 1:size(truth, 1)
-        try
-            # very large galaxies make average L1 error an unsuitable metric
-            # for comparing scale, but other metrics are less interpretable,
-            # so let's omit any galaxy that is more than an order of
-            # magnitude larger than an average-size galaxy.
-            if coadd_full_df[j, :gal_scale] > 20
-                continue
-            end
+function match_catalogs(truth::DataFrame, prediction_dfs::Vector{DataFrame})
+    objid_sets = [Set(predictions[:objid]) for predictions in prediction_dfs]
+    common_objids = intersect(objid_sets...)
+    @printf("%d objids in common\n", length(common_objids))
 
-            # primary is better at flagging oversaturated sources that coadd
-            if primary_full_df[i, :star_mag_r] < 16
-                continue
-            end
-
-            k = findfirst(celeste_full_df[:objid], primary_full_df[i, :objid])
-            # Celeste doesn't process some light sources due to various filters
-            if k != 0
-                push!(good_primary_indexes, i)
-                push!(good_coadd_indexes, j)
-                push!(good_celeste_indexes, k)
-            end
-        catch y
-            isa(y, MatchException) || throw(y)
-        end
+    objids_not_in_ground_truth = setdiff(common_objids, truth[:objid])
+    if !isempty(objids_not_in_ground_truth)
+        @printf("%d objids not found in ground truth catalog:\n", length(objids_not_in_ground_truth))
+        println(join(objids_not_in_ground_truth, ", "))
+        throw(ObjectsMissingFromGroundTruth([objids_not_in_ground_truth]))
     end
 
-    primary_df = primary_full_df[good_primary_indexes, :]
-    celeste_df = celeste_full_df[good_celeste_indexes, :]
-    coadd_df = coadd_full_df[good_coadd_indexes, :]
+    ordered_objids = [common_objids...]
+    (
+        extract_rows_by_objid(truth, ordered_objids),
+        [extract_rows_by_objid(predictions, ordered_objids) for predictions in prediction_dfs]
+    )
+end
 
-    # show that all catalogs have same size, and (hopefully)
-    # that not too many sources were filtered
-    println("matched celeste catalog: $(size(celeste_df, 1)) objects")
-    println("matched coadd catalog: $(size(coadd_df, 1)) objects")
-    println("matched primary catalog: $(size(primary_df, 1)) objects")
-
-    (celeste_df, primary_df, coadd_df)
+function score_predictions(truth::DataFrame, prediction_dfs::Vector{DataFrame})
+    matched_truth, matched_prediction_dfs = match_catalogs(truth, prediction_dfs)
+    error_dfs = [get_error_df(matched_truth, predictions) for predictions in matched_prediction_dfs]
+    @assert length(prediction_dfs) == 2
+    get_scores_df(matched_truth, error_dfs[1], error_dfs[2])
 end
 
 ################################################################################

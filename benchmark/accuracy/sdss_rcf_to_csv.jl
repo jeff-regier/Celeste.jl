@@ -54,8 +54,9 @@ for source_index in 1:size(catalog_df, 1)
     catch exc
         if !isa(exc, AccuracyBenchmark.MatchException)
             rethrow()
+        else
+            continue
         end
-        continue
     end
 
     if in(matching_truth_index, used_truth_indices)
