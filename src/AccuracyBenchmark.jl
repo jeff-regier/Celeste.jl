@@ -17,6 +17,26 @@ type BenchmarkFitsFileNotFound <: Exception
     filename::String
 end
 
+immutable MatchException <: Exception
+    msg::String
+end
+
+"""
+Load/store a catalog DF from/to a CSV.
+"""
+function read_catalog(csv_file::String)
+    @printf("Reading '%s'...\n", csv_file)
+    readtable(csv_file)
+end
+function write_catalog(csv_file::String, catalog_df::DataFrame)
+    @printf("Writing '%s'...\n", csv_file)
+    writetable(csv_file, catalog_df)
+end
+
+################################################################################
+# Read various catalogs to a common catalog DF format
+################################################################################
+
 """
 convert between SDSS mags and SDSS flux (nMgy)
 """
@@ -102,7 +122,7 @@ function load_coadd_catalog(fits_filename)
     mag_z = star_or_galaxy(:psfmag_z, :devmag_z, :expmag_z)
 
     result = DataFrame()
-    result[:objid] = raw_df[:objid]
+    result[:objid] = [string(objid) for objid in raw_df[:objid]]
     result[:right_ascension_deg] = raw_df[:ra]
     result[:declination_deg] = raw_df[:dec]
     result[:is_star] = is_star
@@ -236,6 +256,10 @@ function celeste_to_df(results::Vector{ParallelRun.OptimizedSource})
     vcat(rows...)
 end
 
+################################################################################
+# Generate a catalog from the Celeste prior
+################################################################################
+
 # This is the ratio of stars derived from the catalog used the generate the prior; the value 0.99 is
 # currently used in inference to account for the extra flexibility of the galaxy model
 const PRIOR_PROBABILITY_OF_STAR = 0.28
@@ -304,17 +328,10 @@ function generate_catalog_from_celeste_prior(num_sources::Int64, seed::Int64)
     )
 end
 
-"""
-Load/store a catalog DF from/to a CSV.
-"""
-function read_catalog(csv_file::String)
-    @printf("Reading '%s'...\n", csv_file)
-    readtable(csv_file)
-end
-function write_catalog(csv_file::String, catalog_df::DataFrame)
-    @printf("Writing '%s'...\n", csv_file)
-    writetable(csv_file, catalog_df)
-end
+
+################################################################################
+# Support for running Celeste on test imagery
+################################################################################
 
 ## Load a multi-extension FITS imagery file
 
@@ -452,5 +469,192 @@ function make_initialization_catalog(catalog::DataFrame)
         )
     end
 end
+
+################################################################################
+# Score a set of predictions against a ground truth catalog
+################################################################################
+
+ABSOLUTE_ERROR_COLUMNS = [
+    :de_vaucouleurs_mixture_weight,
+    :minor_major_axis_ratio,
+    :half_light_radius_px,
+    :reference_band_flux_nmgy,
+    :color_log_ratio_ug,
+    :color_log_ratio_gr,
+    :color_log_ratio_ri,
+    :color_log_ratio_iz,
+]
+
+function degrees_to_diff(a, b)
+    angle_between = abs(a - b) % 180
+    min.(angle_between, 180 - angle_between)
+end
+
+"""
+Given two results data frame, one containing ground truth (i.e Coadd)
+and one containing predictions (i.e., either Primary of Celeste),
+compute an a data frame containing each prediction's error.
+(It's not an average of the errors, it's each error.)
+Let's call the return type of this function an \"error data frame\".
+"""
+function get_err_df(truth::DataFrame, predicted::DataFrame)
+    color_cols = [Symbol("color_$cn") for cn in color_names]
+    abs_err_cols = [:gal_fracdev, :gal_ab, :gal_scale]
+
+    errors = DataFrame(objid=truth[:objid])
+
+    predicted_galaxy = predicted[:is_star] .< .5
+    true_galaxy = truth[:is_star] .< .5
+    errors[:missed_stars] =  predicted_galaxy & !(true_galaxy)
+    errors[:missed_gals] =  !predicted_galaxy & true_galaxy
+
+    errors[:position] = dist.(truth[:ra], truth[:dec], predicted[:ra], predicted[:dec])
+    errors[:reference_band_flux_mag] = abs(
+        flux_to_mag.(truth[:reference_band_flux_nmgy])
+        .- flux_to_mag.(predicted[:reference_band_flux_nmgy])
+    )
+    errors[:angle_deg] = degrees_to_diff(truth[:angle_deg], predicted[:angle_deg])
+
+    for column_symbol in ABSOLUTE_ERROR_COLUMNS
+        errors[column_symbol] = abs(truth[column_symbol] - predicted[column_symbol])
+    end
+
+    errors
+end
+
+function filter_rows(
+    truth::DataFrame, first_errors::DataFrame, second_errors::DataFrame, column_name::Symbol,
+    source_type::Symbol
+)
+    good_row = !isnan(first_errors[column_name]) & !isnan(second_errors[column_name])
+    if source_type == :star
+        good_row &= (truth[:is_star] .> 0.5)
+    else
+        good_row &= (truth[:is_star] .< 0.5)
+        if column_name in [:minor_major_axis_ratio, :half_light_radius_px, :angle_deg,
+                          :de_vaucouleurs_mixture_weight]
+            good_row &= !(0.05 .< truth[:de_vaucouleurs_mixture_weight] .< 0.95)
+        end
+        if column_name == :angle_deg
+            good_row &= truth[:minor_major_axis_ratio] .< .6
+        end
+    end
+    good_row
+end
+
+function score_column(first_errors::Vector, second_errors::Vector, labels::Vector{String})
+    @assert length(first_errors) == length(second_errors)
+    scores = DataFrame(N=length(first_errors))
+    scores[labels[1]] = mean(first_errors)
+    scores[labels[2]] = mean(second_errors)
+    diffs = primary_err[good_row, nm] .- celeste_err[good_row, nm]
+    scores[:diff] = mean(diffs)
+    scores[:diff_sd] = std(abs(diffs)) / sqrt(length(diffs))
+    scores
+end
+
+function get_scores_df(truth::DataFrame; error_dataframe_args...)
+    @assert length(error_dataframe_args) == 2
+    labels = Symbol[keys(error_dataframe_args)]
+    first_errors = error_dataframe_args[labels[1]]
+    second_errors = error_dataframe_args[labels[2]]
+
+    score_rows = DataFrame[]
+    for column_name in names(truth)
+        if column_name == :objid
+            continue
+        end
+        for source_type in [:star, :galaxy]
+            good_row = filter_rows(truth, first_errors, second_errors, column_name, source_type)
+            if sum(good_row) <= 1
+                continue
+            else
+                row = score_column(
+                    first_errors[good_row, column_name],
+                    second_errors[good_row, column_name],
+                    labels,
+                )
+                row[:field] = column_name
+                push!(score_rows, row)
+            end
+        end
+    end
+    vcat(score_rows...)
+end
+
+function match_catalogs(truth::DataFrame, predictions::Vector{DataFrame})
+    # find matches in coadd catalog by position
+
+    good_celeste_indexes = Int[]
+    good_coadd_indexes = Int[]
+    good_primary_indexes = Int[]
+    for i in 1:size(truth, 1)
+        try
+            # very large galaxies make average L1 error an unsuitable metric
+            # for comparing scale, but other metrics are less interpretable,
+            # so let's omit any galaxy that is more than an order of
+            # magnitude larger than an average-size galaxy.
+            if coadd_full_df[j, :gal_scale] > 20
+                continue
+            end
+
+            # primary is better at flagging oversaturated sources that coadd
+            if primary_full_df[i, :star_mag_r] < 16
+                continue
+            end
+
+            k = findfirst(celeste_full_df[:objid], primary_full_df[i, :objid])
+            # Celeste doesn't process some light sources due to various filters
+            if k != 0
+                push!(good_primary_indexes, i)
+                push!(good_coadd_indexes, j)
+                push!(good_celeste_indexes, k)
+            end
+        catch y
+            isa(y, MatchException) || throw(y)
+        end
+    end
+
+    primary_df = primary_full_df[good_primary_indexes, :]
+    celeste_df = celeste_full_df[good_celeste_indexes, :]
+    coadd_df = coadd_full_df[good_coadd_indexes, :]
+
+    # show that all catalogs have same size, and (hopefully)
+    # that not too many sources were filtered
+    println("matched celeste catalog: $(size(celeste_df, 1)) objects")
+    println("matched coadd catalog: $(size(coadd_df, 1)) objects")
+    println("matched primary catalog: $(size(primary_df, 1)) objects")
+
+    (celeste_df, primary_df, coadd_df)
+end
+
+################################################################################
+# Utilities
+################################################################################
+
+"""
+Return distance in pixels using small-distance approximation. Falls apart at poles and RA boundary.
+"""
+function sky_distance_px(ra1, dec1, ra2, dec2)
+    (ARCSEC_PER_DEGREE / SDSS_ARCSEC_PER_PIXEL) * max(abs(dec2 - dec1), abs(ra2 - ra1))
+end
+
+"""
+match_position(ras, decs, ra, dec, dist)
+
+Return index of first position in `ras`, `decs` that is within a distance `maxdist_px` of the target
+position `ra`, `dec`. If none found, an exception is raised.
+"""
+function match_position(ras, decs, ra, dec, maxdist_px)
+    @assert length(ras) == length(decs)
+    for i in 1:length(ras)
+        if sky_distance_px(ra, dec, ras[i], decs[i]) < maxdist_px
+            return i
+        end
+    end
+    throw(MatchException(@sprintf("No source found at %f  %f", ra, dec)))
+end
+
+
 
 end # module AccuracyBenchmark
