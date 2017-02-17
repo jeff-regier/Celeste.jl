@@ -3,7 +3,7 @@
 import Celeste.ParallelRun: one_node_joint_infer, infer_init, BoundingBox
 import Celeste.SDSSIO: RunCamcolField, load_field_images
 import Celeste.Infer: find_neighbors
-import Celeste.DeterministicVIImagePSF: infer_source_fft
+
 
 const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
 wd = pwd()
@@ -22,9 +22,8 @@ function benchmark_seven_light_sources()
     box = BoundingBox(164.39, 164.41, 39.11, 39.13)
     rcfs = [RunCamcolField(3900, 6, 269),]
 
-    catalog, target_sources = infer_init(rcfs, datadir; box=box)
-    images = load_field_images(rcfs, datadir)
-    neighbor_map = find_neighbors(target_sources, catalog, images)
+    catalog, target_sources, neighbor_map, images =
+                        infer_init(rcfs, datadir; box=box)
     ctni = (catalog, target_sources, neighbor_map, images)
 
     # Warm up---this compiles the code
