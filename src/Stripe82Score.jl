@@ -45,7 +45,7 @@ Return distance in pixels using small-distance approximation. Falls
 apart at poles and RA boundary.
 """
 dist(ra1, dec1, ra2, dec2) = (3600 / 0.396) * (sqrt((dec2 - dec1).^2 +
-                                  (cos(dec1) .* (ra2 - ra1)).^2))
+                                  (cosd(dec1) .* (ra2 - ra1)).^2))
 
 """
 match_position(ras, decs, ra, dec, dist)
