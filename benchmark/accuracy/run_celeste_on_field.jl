@@ -15,6 +15,9 @@ ArgParse.@add_arg_table arg_parse_settings begin
     "--fft"
         help = "Use FFT inference"
         action = :store_true
+    "--joint"
+        help = "Use joint inference"
+        action = :store_true
     "--limit-num-sources"
         help = "Target only the given number of sources, for quicker testing"
         arg_type = Int
@@ -49,14 +52,15 @@ else
     target_sources = collect(1:length(catalog_entries))
 end
 neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
-results = ParallelRun.one_node_joint_infer(
+
+results = AccuracyBenchmark.run_celeste(
     catalog_entries,
     target_sources,
     neighbor_map,
     images,
+    use_joint_inference=parsed_args["joint"],
     use_fft=parsed_args["fft"],
 )
-
 results_df = AccuracyBenchmark.celeste_to_df(results)
 
 if parsed_args["image-fits"] != nothing
