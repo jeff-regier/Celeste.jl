@@ -5,6 +5,8 @@ using Distributions
 using DerivativeTestUtils
 using StaticArrays
 
+import ForwardDiff.Dual
+
 import SampleData: gen_two_body_dataset, true_star_init
 
 
@@ -311,6 +313,33 @@ function test_num_allowed_sd()
     @test elbo_inf.v[] ≈ elbo_4sd.v[]
     @test elbo_inf.d   ≈ elbo_4sd.d
     @test elbo_inf.h   ≈ elbo_4sd.h
+end
+
+
+@testset "Tests elbo gradient, and that elbo supports dual numbers" begin
+    _, ea, _ = gen_two_body_dataset()
+
+    # create elbo arguments of type Float64 that compute the gradient but not the hessian
+    ea_float = ElboArgs(ea, calculate_hessian=false)
+    # compiling the next line takes 56 seconds on mac, but only 4 seconds on linux
+    DeterministicVI.elbo(ea_float)
+
+    # create elbo arguments of the Dual number type, that compute the gradient but not
+    # the hessian (it doesn't matter that the "perturbation" are all zero, it's just
+    # for testing the speed and verifying that it works)
+    ea_dual_g = convert(ElboArgs{Dual{1, Float64}}, ea_float)
+    ea_dual = ElboArgs(ea_dual_g, calculate_gradient=false,
+                                  calculate_hessian=false)
+
+    for s in 1:2, i in 1:length(ids)
+        ea_dual.vp[s][i] += ForwardDiff.Dual(0, 1)
+        DeterministicVI.elbo(ea_dual)
+        ea_dual.vp[s][i] -= ForwardDiff.Dual(0, 1)
+
+        fwd_diff = ea_dual.elbo_vars.elbo.v[].partials[]
+        manual_diff = ea_float.elbo_vars.elbo.d[i, s]
+        @test manual_diff ≈ fwd_diff
+    end
 end
 
 

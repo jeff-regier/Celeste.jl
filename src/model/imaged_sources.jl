@@ -56,7 +56,7 @@ function choose_patch_radius(ce::CatalogEntry,
     if (!(flux > 0.)) @show ce end
     @assert flux > 0.
 
-    # Choose enough pixels that the light is either 90% of the light
+    # Choose enough pixels that the light is either 80% of the light
     # would be captured from a 1d gaussian or 5% of the sky noise,
     # whichever is a larger radius.
     epsilon = img.epsilon_mat[div(img.H, 2), div(img.W, 2)]

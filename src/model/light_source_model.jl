@@ -110,8 +110,8 @@ function load_prior()
     # log normal parameters for the r-band brightness prior.
     # these were fit by maximum likelihood to the output of primary
     # on one field.
-    r_μ = Float64[1.685292911417265, 1.352219729535452]
-    r_σ² = Float64[1.909666346677381^2, 1.160302342323597^2]
+    r_μ = Float64[1.5035546, 1.07431]
+    r_σ² = Float64[1.9039063^2, 1.1177502^2]
 
     # If I remove this next statement, compile time for
     # benchmark_infer.jl jumps from 13 seconds to 300 seconds!

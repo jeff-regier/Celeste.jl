@@ -3,7 +3,7 @@
 import Celeste.ParallelRun: one_node_joint_infer, infer_init, BoundingBox
 import Celeste.SDSSIO: RunCamcolField, load_field_images
 import Celeste.Infer: find_neighbors
-import Celeste.DeterministicVIImagePSF: infer_source_fft
+
 
 const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
 wd = pwd()
@@ -22,23 +22,22 @@ function benchmark_seven_light_sources()
     box = BoundingBox(164.39, 164.41, 39.11, 39.13)
     rcfs = [RunCamcolField(3900, 6, 269),]
 
-    catalog, target_sources = infer_init(rcfs, datadir; box=box)
-    images = load_field_images(rcfs, datadir)
-    neighbor_map = find_neighbors(target_sources, catalog, images)
+    catalog, target_sources, neighbor_map, images =
+                        infer_init(rcfs, datadir; box=box)
     ctni = (catalog, target_sources, neighbor_map, images)
 
     # Warm up---this compiles the code
     ctni2 = (catalog, target_sources[1:1], neighbor_map[1:1], images[1:1])
-    one_node_joint_infer(ctni2...; use_fft=true)
+    one_node_joint_infer(ctni2...; use_fft=false)
 
     # clear allocations in case julia is running with --track-allocations=user
     Profile.clear_malloc_data()
 
     if isempty(ARGS)
-        @time one_node_joint_infer(ctni...; use_fft=true)
+        @time one_node_joint_infer(ctni...; use_fft=false)
     elseif ARGS[1] == "--profile"
         Profile.init(delay=0.01)
-        @profile one_node_joint_infer(ctni...; use_fft=true)
+        @profile one_node_joint_infer(ctni...; use_fft=false)
         Profile.print(format=:flat, sortedby=:count)
     end
 end

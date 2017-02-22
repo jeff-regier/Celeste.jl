@@ -170,7 +170,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
         Log.info("neighbors found in $(toq()) seconds")
     end
 
-    return catalog, target_sources, images, neighbor_map
+    return catalog, target_sources, neighbor_map, images
 end
 
 
@@ -197,7 +197,6 @@ function process_source(ts::Int,
 
     neighbors = catalog[neighbor_map[ts]]
 
-    ntputs(nodeid, threadid(), "processing objid $(entry.objid)")
     tic()
     vs_opt = infer_source_callback(images, neighbors, entry)
     ntputs(nodeid, threadid(), "processed objid $(entry.objid) in $(toq()) secs")
@@ -279,8 +278,9 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
                         infer_callback=one_node_single_infer,
                         objid="",
                         box=BoundingBox(-1000., 1000., -1000., 1000.),
-                        primary_initialization=true)
-    catalog, target_sources, images, neighbor_map =
+                        primary_initialization=true,
+                        timing=InferTiming())
+    catalog, target_sources, neighbor_map, images =
         infer_init(rcfs,
                    stagedir;
                    objid=objid,
@@ -357,23 +357,22 @@ save_results(outdir, box, results) =
 """
 called from main entry point.
 """
-function infer_box(box::BoundingBox, stagedir::String, outdir::String)
-    times = InferTiming()
-
+function infer_box(box::BoundingBox, stagedir::String, outdir::String;
+                   timing=InferTiming())
     Log.debug("multithreaded parallelism only")
 
     tic()
     # Get vector of (run, camcol, field) triplets overlapping this patch
     rcfs = get_overlapping_fields(box, stagedir)
-    times.query_fids = toq()
+    timing.query_fids = toq()
 
-    @time results = one_node_infer(rcfs, stagedir; box=box, timing=times)
+    results = one_node_infer(rcfs, stagedir; box=box, timing=timing)
 
     tic()
     save_results(outdir, box, results)
-    times.write_results = toq()
+    timing.write_results = toq()
 
-    puts_timing(times)
+    puts_timing(timing)
 end
 
 
@@ -394,9 +393,8 @@ end
 """
 called from main entry point.
 """
-function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::String)
-    times = InferTiming()
-
+function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::String;
+                     timing = InferTiming())
     # Base.@time hack for distributed environment
     gc_stats = ()
     gc_diff_stats = ()
@@ -404,7 +402,7 @@ function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::Strin
     gc_stats = Base.gc_num()
     elapsed_time = time_ns()
 
-    multi_node_infer(boxes, stagedir; outdir=outdir, timing=times)
+    multi_node_infer(boxes, stagedir; outdir=outdir, timing=timing)
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time
@@ -412,7 +410,7 @@ function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::Strin
     time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
               Base.gc_alloc_count(gc_diff_stats))
 
-    puts_timing(times)
+    puts_timing(timing)
 end
 
 end

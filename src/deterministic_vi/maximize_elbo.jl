@@ -14,11 +14,10 @@ Returns:
 function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
                        omitted_ids=Int[],
                        use_default_optim_params=false,
-                       xtol_rel=1e-7,
-                       ftol_abs=1e-6,
+                       xtol_abs=1e-7,
+                       ftol_rel=1e-6,
                        verbose=false,
-                       max_iters=50,
-                       fast_hessian=true)
+                       max_iters=50)
     # Make sure the model parameters are within the transform bounds
     enforce_bounds!(ea.vp, ea.active_sources, transform)
     @assert ea.active_sources == transform.active_sources
@@ -40,7 +39,11 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
     f_wrapped_nocache! = (x::Vector) -> begin
         # Evaluate in the constrained space and then unconstrain again.
         reshaped_x = reshape(x, length(kept_ids), n_active_sources)
+        assert(all(!isnan(reshaped_x)))
         Transform.array_to_vp!(transform, reshaped_x, ea.vp, kept_ids)
+        for s in 1:size(ea.vp, 2)
+            assert(!any(isnan(ea.vp[s])))
+        end 
         f_res = f(ea)
         f_evals += 1
         verbose && record_f_eval(f_evals, ea, f_res)
@@ -96,7 +99,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
     end
 
     options = Optim.Options(;
-        x_tol = xtol_rel, f_tol = ftol_abs, g_tol = 1e-8,
+        x_tol = xtol_abs, f_tol = ftol_rel, g_tol = 1e-8,
         iterations = max_iters, store_trace = verbose,
         show_trace = false, extended_trace = verbose)
 
@@ -120,23 +123,69 @@ function maximize_f{F}(f::F, ea::ElboArgs;
                        loc_width=1e-4, # about a pixel either direction
                        loc_scale=1.0,
                        omitted_ids=Int[],
-                       xtol_rel=1e-7,
-                       ftol_abs=1e-6,
+                       xtol_abs=1e-7,
+                       ftol_rel=1e-6,
                        verbose=false,
                        max_iters=50,
-                       fast_hessian=true,
                        use_default_optim_params=false)
     transform = get_mp_transform(ea.vp, ea.active_sources,
                                  loc_width=loc_width, loc_scale=loc_scale)
 
     maximize_f(f, ea, transform;
                 omitted_ids=omitted_ids,
-                xtol_rel=xtol_rel,
-                ftol_abs=ftol_abs,
+                xtol_abs=xtol_abs,
+                ftol_rel=ftol_rel,
                 verbose=verbose,
                 max_iters=max_iters,
-                fast_hessian=fast_hessian,
                 use_default_optim_params=use_default_optim_params)
+end
+
+
+function maximize_f_two_steps{F}(f::F, ea::ElboArgs;
+                                 loc_width=1e-4, # about a pixel either direction
+                                 loc_scale=1.0,
+                                 omitted_ids=Int[],
+                                 xtol_abs=1e-7,
+                                 ftol_rel=1e-6,
+                                 verbose=false,
+                                 max_iters=50,
+                                 use_default_optim_params=false)
+
+    transform = get_mp_transform(ea.vp, ea.active_sources,
+                                 loc_width=loc_width, loc_scale=loc_scale)
+
+    star_ids_free = vcat(ids_free.u,
+                         ids_free.r1[1], ids_free.r2[1],
+                         ids_free.c1[:, 1][:], ids_free.c2[:, 1][:],
+                         ids_free.k[:, 1][:])
+
+    star_omitted_ids = union(setdiff(1:length(ids_free), star_ids_free),
+                             omitted_ids)
+
+     ea.vp[1][ids.a] = [1, 0]
+     ea.active_source_star_only = true
+     f_evals_star, max_f_star, max_x_star, nm_result_star =
+         maximize_f(f, ea, transform;
+                    omitted_ids=star_omitted_ids,
+                    xtol_abs=xtol_abs,
+                    ftol_rel=ftol_rel,
+                    verbose=verbose,
+                    max_iters=max_iters,
+                    use_default_optim_params=use_default_optim_params)
+
+    ea.vp[1][ids.a] = [0.8, 0.2]
+    ea.active_source_star_only = false
+    f_evals_both, max_f_both, max_x_both, nm_result_both =
+        maximize_f(f, ea, transform;
+                   omitted_ids=omitted_ids,
+                   xtol_abs=xtol_abs,
+                   ftol_rel=ftol_rel,
+                   verbose=verbose,
+                   max_iters=max_iters,
+                   use_default_optim_params=use_default_optim_params)
+
+    # It would be nice to somehow return both opimization results.
+    f_evals_star + f_evals_both, max_f_both, max_x_both, nm_result_both, transform
 end
 
 

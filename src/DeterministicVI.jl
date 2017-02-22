@@ -17,6 +17,8 @@ using ..Transform
 import DataFrames
 import Optim
 using StaticArrays
+import ForwardDiff.Dual
+import Base.convert
 
 export ElboArgs, generic_init_source, catalog_init_source, init_sources
 
@@ -114,7 +116,9 @@ function infer_source(images::Vector{Image},
                       entry::CatalogEntry;
                       min_radius_pix=Nullable{Float64}())
     if length(neighbors) > 100
-        Log.warn("Excessive number ($(length(neighbors))) of neighbors")
+        msg = string("objid $(entry.objid) [ra: $(entry.pos)] has an excessive",
+                     "number ($(length(neighbors))) of neighbors")
+        Log.warn(msg)
     end
 
     # It's a bit inefficient to call the next 5 lines every time we optimize_f.

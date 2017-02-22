@@ -220,18 +220,14 @@ function accum_galaxy_pos!{NumType <: Number}(
     f = bvn_derivs.f_pre[1] * gcc.e_dev_i
     fs1m.v[] += f
 
-    if fs1m.has_hessian && is_active_source
-
+    if fs1m.has_gradient && is_active_source
         get_bvn_derivs!(bvn_derivs, gcc.bmc,
                         fs1m.has_gradient, fs1m.has_hessian)
         transform_bvn_derivs!(
             bvn_derivs, gcc.sig_sf, wcs_jacobian, fs1m.has_hessian)
 
         bvn_u_d = bvn_derivs.bvn_u_d
-        bvn_uu_h = bvn_derivs.bvn_uu_h
         bvn_s_d = bvn_derivs.bvn_s_d
-        bvn_ss_h = bvn_derivs.bvn_ss_h
-        bvn_us_h = bvn_derivs.bvn_us_h
 
         # Accumulate the derivatives.
         for u_id in 1:2
@@ -249,6 +245,9 @@ function accum_galaxy_pos!{NumType <: Number}(
 
         if fs1m.has_hessian
             # The Hessians:
+            bvn_uu_h = bvn_derivs.bvn_uu_h
+            bvn_ss_h = bvn_derivs.bvn_ss_h
+            bvn_us_h = bvn_derivs.bvn_us_h
 
             # Hessian terms involving only the shape parameters.
             for shape_id1 in 1:length(gal_shape_ids)

@@ -8,11 +8,11 @@ module DeterministicVIImagePSF
 using StaticArrays, DiffBase
 
 import ..DeterministicVI:
-    ElboArgs, ElboIntermediateVariables, maximize_f,
+    ElboArgs, ElboIntermediateVariables, maximize_f, maximize_f_two_steps,
     StarPosParams, GalaxyPosParams, CanonicalParams, VariationalParams,
     SourceBrightness, GalaxyComponent, SkyPatch,
     load_source_brightnesses, add_elbo_log_term!,
-    accumulate_source_pixel_brightness!,
+    calculate_source_pixel_brightness!,
     KLDivergence, init_sources
 
 import ..Model:
@@ -23,11 +23,15 @@ import ..Model:
 
 import ..SensitiveFloats:
     SensitiveFloat, zero_sensitive_float_array,
-    multiply_sfs!, add_scaled_sfs!, clear!
+    multiply_sfs!, add_scaled_sfs!, clear!, add_sources_sf!
 
-import ..Infer: load_active_pixels!, get_sky_patches
+import ..Infer:
+    load_active_pixels!, get_sky_patches, get_active_pixel_range,
+    is_pixel_in_patch
 
 import ..PSF: get_psf_at_point, trim_psf
+
+import ..Transform: get_mp_transform
 
 import WCS
 
@@ -51,9 +55,27 @@ function infer_source_fft(images::Vector{Image},
    load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
 
    ea_fft, fsm_mat = initialize_fft_elbo_parameters(
-       images, vp, patches, [1], use_raw_psf=false)
+       images, vp, patches, [1], use_raw_psf=true)
    elbo_fft_opt = get_fft_elbo_function(ea_fft, fsm_mat)
    maximize_f(elbo_fft_opt, ea_fft, max_iters=150)
+
+   vp[1]
+end
+
+
+function infer_source_fft_two_step(images::Vector{Image},
+                                   neighbors::Vector{CatalogEntry},
+                                   entry::CatalogEntry)
+   cat_local = vcat([entry], neighbors)
+   vp = init_sources([1], cat_local)
+   patches = get_sky_patches(images, cat_local)
+   load_active_pixels!(images, patches)
+
+   ea_fft, fsm_mat = initialize_fft_elbo_parameters(
+       images, vp, patches, [1], use_raw_psf=true)
+   elbo_fft_opt = get_fft_elbo_function(ea_fft, fsm_mat)
+
+   maximize_f_two_steps(elbo_fft_opt, ea_fft)
 
    vp[1]
 end
