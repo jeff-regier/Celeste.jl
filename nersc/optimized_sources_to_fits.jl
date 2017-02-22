@@ -8,7 +8,7 @@ using DataFrames
 
 function optimized_sources_to_fits(inpath, outdir)
     optimized_sources = load(inpath)["results"]
-    sources_df = Celeste.Stripe82Score.celeste_to_df(optimized_sources)
+    sources_df = Celeste.AccuracyBenchmark.celeste_to_df(optimized_sources)
 
     # stores the optimized sources in an "attribute-major" format
     # suitable for writing to a fits table
