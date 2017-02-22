@@ -74,6 +74,17 @@ function write_catalog(csv_file::String, catalog_df::DataFrame)
     writetable(csv_file, catalog_df)
 end
 
+function append_hash_to_file(filename::String)
+    contents_hash = open(filename) do stream
+        hash(read(stream))
+    end
+    hash_string = hex(contents_hash)[1:10]
+    base, extension = splitext(filename)
+    new_filename = @sprintf("%s_%s%s", base, hash_string, extension)
+    @printf("Renaming %s -> %s\n", filename, new_filename)
+    mv(filename, new_filename, remove_destination=true)
+end
+
 ################################################################################
 # Read various catalogs to a common catalog DF format
 ################################################################################

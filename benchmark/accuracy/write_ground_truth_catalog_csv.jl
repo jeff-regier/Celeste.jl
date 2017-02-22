@@ -5,8 +5,8 @@ using DataFrames
 import Celeste.AccuracyBenchmark
 
 const OUTPUT_DIRECTORY = joinpath(splitdir(Base.source_path())[1], "output")
-const COADD_CATALOG_CSV_BASE = joinpath(OUTPUT_DIRECTORY, "stripe82_coadd_catalog")
-const CELESTE_PRIOR_CATALOG_BASE = joinpath(OUTPUT_DIRECTORY, "celeste_prior_catalog")
+const COADD_CATALOG_CSV = joinpath(OUTPUT_DIRECTORY, "stripe82_coadd_catalog.csv")
+const CELESTE_PRIOR_CATALOG_CSV = joinpath(OUTPUT_DIRECTORY, "celeste_prior_catalog.csv")
 
 GALAXY_ONLY_COLUMNS = [
     :de_vaucouleurs_mixture_weight,
@@ -69,10 +69,10 @@ function main()
     action = ARGS[1]
     if action == "coadd"
         catalog = AccuracyBenchmark.load_coadd_catalog(COADD_CATALOG_FITS)
-        base_filename = COADD_CATALOG_CSV_BASE
+        output_filename = COADD_CATALOG_CSV
     elseif action == "prior"
         catalog = AccuracyBenchmark.generate_catalog_from_celeste_prior(500, 12345)
-        base_filename = CELESTE_PRIOR_CATALOG_BASE
+        output_filename = CELESTE_PRIOR_CATALOG_CSV
     else
         @printf("Invalid action: '%s'\n\n", action)
         print_usage()
@@ -87,8 +87,8 @@ function main()
     if !isdir(OUTPUT_DIRECTORY)
         mkdir(OUTPUT_DIRECTORY)
     end
-    filename_with_hash = @sprintf("%s_%s.csv", base_filename, hex(hash(catalog))[1:10])
-    AccuracyBenchmark.write_catalog(filename_with_hash, catalog)
+    AccuracyBenchmark.write_catalog(output_filename, catalog)
+    AccuracyBenchmark.append_hash_to_file(output_filename)
 end
 
 main()

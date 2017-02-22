@@ -77,5 +77,5 @@ output_filename = @sprintf(
     run_camcol_field.field,
 )
 output_path = joinpath(OUTPUT_DIRECTORY, output_filename)
-@printf("Writing results to %s\n", output_path)
 AccuracyBenchmark.write_catalog(output_path, catalog_df)
+AccuracyBenchmark.append_hash_to_file(output_path)
