@@ -18,6 +18,9 @@ ArgParse.@add_arg_table arg_parse_settings begin
     "--joint"
         help = "Use joint inference"
         action = :store_true
+    "--use-full-initialization"
+        help = "Use all information from initialization catalog (otherwise will just use noisy position"
+        action = :store_true
     "--limit-num-sources"
         help = "Target only the given number of sources, for quicker testing"
         arg_type = Int
@@ -43,7 +46,10 @@ end
 @assert length(images) == 5
 
 catalog_data = AccuracyBenchmark.read_catalog(parsed_args["catalog_csv"])
-catalog_entries = AccuracyBenchmark.make_initialization_catalog(catalog_data)
+catalog_entries = AccuracyBenchmark.make_initialization_catalog(
+    catalog_data,
+    parsed_args["use-full-initialization"],
+)
 @printf("Loaded %d sources...\n", length(catalog_entries))
 
 if parsed_args["limit-num-sources"] != nothing

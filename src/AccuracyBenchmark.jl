@@ -470,20 +470,44 @@ function typical_reference_brightness(is_star::Bool)
 end
 
 function make_catalog_entry(
-    x_position_world_coords, y_position_world_coords, star_fluxes, galaxy_fluxes, objid
+    x_position_world_coords::Float64, y_position_world_coords::Float64,
+    star_fluxes::Vector{Float64}, galaxy_fluxes::Vector{Float64},
+    objid::String
 )
     Model.CatalogEntry(
         [x_position_world_coords, y_position_world_coords],
         false, # is_star
-        # sample_star_fluxes
         star_fluxes,
-        # sample_galaxy_fluxes
         galaxy_fluxes,
         0.1, # gal_frac_dev
         0.7, # gal_ab
         pi / 4, # gal_angle
         4., # gal_scale
         objid, # objid
+        0, # thing_id
+    )
+end
+
+ensure_small_flux(value) = (isna(value) || value <= 0) ? 1e-6 : value
+
+function make_catalog_entry(row::DataFrameRow)
+    fluxes = ensure_small_flux.(Any[
+        row[:reference_band_flux_nmgy] * exp(row[:color_log_ratio_gr] + row[:color_log_ratio_ug]),
+        row[:reference_band_flux_nmgy] * exp(row[:color_log_ratio_gr]),
+        row[:reference_band_flux_nmgy],
+        row[:reference_band_flux_nmgy] / exp(row[:color_log_ratio_ri]),
+        row[:reference_band_flux_nmgy] / exp(row[:color_log_ratio_ri] + row[:color_log_ratio_iz]),
+    ])
+    Model.CatalogEntry(
+        [row[:right_ascension_deg], row[:declination_deg]],
+        row[:is_star],
+        fluxes,
+        fluxes,
+        row[:de_vaucouleurs_mixture_weight],
+        row[:minor_major_axis_ratio],
+        row[:angle_deg],
+        row[:half_light_radius_px],
+        row[:objid],
         0, # thing_id
     )
 end
@@ -497,19 +521,23 @@ function get_field(header::FITSIO.FITSHeader, label::String, index::Int64)
     end
 end
 
-function make_initialization_catalog(catalog::DataFrame)
+function make_initialization_catalog(catalog::DataFrame, use_full_initialzation::Bool)
     position_offset_width = SDSS_ARCSEC_PER_PIXEL / ARCSEC_PER_DEGREE # 1 pixel, in degrees
     star_fluxes = typical_band_relative_intensities(true) .* typical_reference_brightness(true)
     galaxy_fluxes = typical_band_relative_intensities(false) .* typical_reference_brightness(false)
     map(eachrow(catalog)) do row
-        position_offset = rand(Uniform(-position_offset_width, position_offset_width), 2)
-        make_catalog_entry(
-            row[:right_ascension_deg],
-            row[:declination_deg],
-            star_fluxes,
-            galaxy_fluxes,
-            row[:objid]
-        )
+        if use_full_initialzation
+            make_catalog_entry(row)
+        else
+            position_offset = rand(Uniform(-position_offset_width, position_offset_width), 2)
+            make_catalog_entry(
+                row[:right_ascension_deg],
+                row[:declination_deg],
+                star_fluxes,
+                galaxy_fluxes,
+                row[:objid]
+            )
+        end
     end
 end
 
