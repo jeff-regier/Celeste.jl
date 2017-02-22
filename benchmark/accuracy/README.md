@@ -1,7 +1,7 @@
 # Accuracy benchmarks
 
-This directory, as well as the module `src/AccuracyBenchmark.jl`, contains code for a variety of
-possible benchmarks of Celeste's accuracy.
+The code in this directory and the module `src/AccuracyBenchmark.jl` support a variety of possible
+benchmarks of Celeste's accuracy.
 
 ## Overview
 
@@ -25,7 +25,7 @@ At each step we have some choices:
 The command
 
 ```
-$ julia write_ground_truth_catalog.jl [coadd|prior]
+$ julia write_ground_truth_catalog_csv.jl [coadd|prior]
 ```
 
 writes a ground truth catalog to the `output` subdirectory.
@@ -53,11 +53,12 @@ For any ground truth catalog, one can generate synthetic imagery in two ways:
 The command
 
 ```
-$ julia sdss_rcf_to_csv.jl
+$ julia sdss_rcf_to_csv.jl <coadd_catalog>
 ```
 
 will read the Stripe82 "primary" catalog (from pre-downloaded FITS files) and write it in CSV form
-to the `output` subdirectory. This is useful for two things:
+to the `output` subdirectory. (The coadd catalog is used only for `objid` matching.) This is useful
+for two things:
 
 1. Initializing Celeste for a run on Stripe82 imagery.
 2. Comparing Celeste's accuracy to the "primary" catalog.
@@ -96,13 +97,14 @@ Here are some examples of use:
   runs, and compare Celeste to Stripe82 primary accuracy:
     
     ```
-    $ julia benchmark/accuracy/write_ground_truth_catalog.jl coadd
-    $ julia benchmark/accuracy/sdss_rcf_to_csv.jl
+    $ julia benchmark/accuracy/write_ground_truth_catalog_csv.jl coadd
+    $ julia benchmark/accuracy/sdss_rcf_to_csv.jl \
+        benchmark/accuracy/output/stripe82_coadd_catalog_<hash>.csv
     $ julia benchmark/accuracy/run_celeste_on_field.jl --use-full-initialization \
-        benchmark/accuracy/output/sdss_4263_5_119_primary.csv
+        benchmark/accuracy/output/sdss_4263_5_119_primary_<hash>.csv
     $ julia benchmark/accuracy/score_predictions \
         benchmark/accuracy/output/stripe82_coadd_catalog_<hash>.csv \
-        benchmark/accuracy/output/sdss_4263_5_119_primary.csv \
+        benchmark/accuracy/output/sdss_4263_5_119_primary_<hash>.csv \
         benchmark/accuracy/output/sdss_4263_5_119_predictions_<hash>.csv
     ```
     
@@ -110,7 +112,7 @@ Here are some examples of use:
   from the ground truth catalog for initialization, and compare single to joint inference:
     
     ```
-    $ julia benchmark/accuracy/write_ground_truth_catalog.jl prior
+    $ julia benchmark/accuracy/write_ground_truth_catalog_csv.jl prior
     # go to benchmark/galsim/ and generate synthetic imagery from the above-generated catalog
     $ julia benchmark/accuracy/run_celeste_on_field.jl \
         benchmark/accuracy/output/celeste_prior_catalog_<hash>.csv

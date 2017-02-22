@@ -22,7 +22,7 @@ else
 end
 
 scores = AccuracyBenchmark.score_predictions(truth, [first_predictions, second_predictions])
-if !have_second_predicitons
+if !have_second_predictions
     scores = scores[:, [:N, :first, :field, :source_type]]
 end
 println(repr(scores))

@@ -35,7 +35,7 @@ parsed_args = ArgParse.parse_args(ARGS, arg_parse_settings)
 srand(12345)
 
 if parsed_args["image-fits"] != nothing
-    extensions = AccuracyBenchmark.read_fits(parsed_args["image_fits"])
+    extensions = AccuracyBenchmark.read_fits(parsed_args["image-fits"])
     images = AccuracyBenchmark.make_images(extensions)
 else
     images = SDSSIO.load_field_images(
@@ -70,7 +70,7 @@ results = AccuracyBenchmark.run_celeste(
 results_df = AccuracyBenchmark.celeste_to_df(results)
 
 if parsed_args["image-fits"] != nothing
-    catalog_label = splitext(basename(parsed_args["image_fits"]))[1]
+    catalog_label = splitext(basename(parsed_args["image-fits"]))[1]
 else
     rcf = AccuracyBenchmark.STRIPE82_RCF
     catalog_label = @sprintf("sdss_%s_%s_%s", rcf.run, rcf.camcol, rcf.field)
