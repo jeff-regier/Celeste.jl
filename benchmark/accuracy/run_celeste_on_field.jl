@@ -76,5 +76,4 @@ else
     catalog_label = @sprintf("sdss_%s_%s_%s", rcf.run, rcf.camcol, rcf.field)
 end
 output_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.csv", catalog_label))
-@printf("Writing results to %s\n", output_filename)
 AccuracyBenchmark.write_catalog(output_filename, results_df)
