@@ -2,11 +2,11 @@
 
 import ArgParse
 using DataFrames
+import FITSIO
 
 import Celeste.AccuracyBenchmark
 import Celeste.SDSSIO
 
-const SDSS_DATA_DIR = joinpath(Pkg.dir("Celeste"), "test", "data")
 const OUTPUT_DIRECTORY = joinpath(splitdir(Base.source_path())[1], "output")
 
 arg_parse_settings = ArgParse.ArgParseSettings()
@@ -14,15 +14,15 @@ ArgParse.@add_arg_table arg_parse_settings begin
     "--run"
         help = "SDSS run #"
         arg_type = Int
-        default = 4263
+        default = AccuracyBenchmark.STRIPE82_RCF.run
     "--camcol"
         help = "SDSS camcol #"
         arg_type = Int
-        default = 5
+        default = AccuracyBenchmark.STRIPE82_RCF.camcol
     "--field"
         help = "SDSS field #"
         arg_type = Int
-        default = 119
+        default = AccuracyBenchmark.STRIPE82_RCF.field
     "truth_catalog_csv"
         help = "CSV file containing coadd 'ground truth' catalog"
         required = true
@@ -35,7 +35,7 @@ run_camcol_field = SDSSIO.RunCamcolField(
     parsed_args["field"],
 )
 @printf("Reading %s...\n", run_camcol_field)
-catalog_df = AccuracyBenchmark.load_primary(run_camcol_field, SDSS_DATA_DIR)
+catalog_df = AccuracyBenchmark.load_primary(run_camcol_field, AccuracyBenchmark.SDSS_DATA_DIR)
 @printf("Loaded %d objects from catalog\n", size(catalog_df, 1))
 
 # Match sources to ground truth catalog, and pull object IDs from truth catalog
@@ -67,11 +67,11 @@ for source_index in 1:size(catalog_df, 1)
     end
 end
 
-catalog_df = catalog_df[catalog_df[:objid] .== "", :]
+catalog_df = catalog_df[catalog_df[:objid] .!= "", :]
 @printf("Matched %d objects to ground truth catalog\n", size(catalog_df, 1))
 
 output_filename = @sprintf(
-    "sdss_%s_%s_%s.csv",
+    "sdss_%s_%s_%s_primary.csv",
     run_camcol_field.run,
     run_camcol_field.camcol,
     run_camcol_field.field,

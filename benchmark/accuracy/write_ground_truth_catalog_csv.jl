@@ -1,10 +1,19 @@
 #!/usr/bin/env julia
 
+using DataFrames
+
 import Celeste.AccuracyBenchmark
 
 const OUTPUT_DIRECTORY = joinpath(splitdir(Base.source_path())[1], "output")
 const COADD_CATALOG_CSV_BASE = joinpath(OUTPUT_DIRECTORY, "stripe82_coadd_catalog")
 const CELESTE_PRIOR_CATALOG_BASE = joinpath(OUTPUT_DIRECTORY, "celeste_prior_catalog")
+
+GALAXY_ONLY_COLUMNS = [
+    :de_vaucouleurs_mixture_weight,
+    :minor_major_axis_ratio,
+    :half_light_radius_px,
+    :angle_deg,
+]
 
 # The truth file comes from CasJobs. The query that generates it appears
 # below. I selected the RA/Dec range in this query to include all of the
@@ -68,6 +77,11 @@ function main()
         @printf("Invalid action: '%s'\n\n", action)
         print_usage()
         return
+    end
+
+    # for stars, ensure galaxy-only fields are NA
+    for column_symbol in GALAXY_ONLY_COLUMNS
+        catalog[catalog[:is_star], column_symbol] = NA
     end
 
     if !isdir(OUTPUT_DIRECTORY)

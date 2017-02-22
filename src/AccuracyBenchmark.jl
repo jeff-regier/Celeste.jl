@@ -10,8 +10,10 @@ import Celeste.Model
 import Celeste.ParallelRun
 import Celeste.SDSSIO
 
-const SDSS_ARCSEC_PER_PIXEL = 0.396
 const ARCSEC_PER_DEGREE = 3600
+const SDSS_ARCSEC_PER_PIXEL = 0.396
+const SDSS_DATA_DIR = joinpath(Pkg.dir("Celeste"), "test", "data")
+const STRIPE82_RCF = SDSSIO.RunCamcolField(4263, 5, 119)
 
 immutable BenchmarkFitsFileNotFound <: Exception
     filename::String
@@ -565,7 +567,7 @@ function filter_rows(
     truth::DataFrame, first_errors::DataFrame, second_errors::DataFrame, column_name::Symbol,
     source_type::Symbol
 )
-    good_row = !isnan(first_errors[column_name]) & !isnan(second_errors[column_name])
+    good_row = !isna(first_errors[column_name]) & !isna(second_errors[column_name])
     if source_type == :star
         good_row &= (truth[:is_star] .> 0.5)
     else
