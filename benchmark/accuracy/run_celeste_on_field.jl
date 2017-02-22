@@ -77,3 +77,4 @@ else
 end
 output_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.csv", catalog_label))
 AccuracyBenchmark.write_catalog(output_filename, results_df)
+AccuracyBenchmark.append_hash_to_file(output_filename)
