@@ -29,6 +29,7 @@ $ julia write_ground_truth_catalog.jl [coadd|prior]
 ```
 
 writes a ground truth catalog to the `output` subdirectory.
+
 * `coadd` uses the SDSS Stripe82 "coadd" catalog, already (manually) pulled from the SDSS CasJobs
 server (and checked into the Celeste repository under `test/data`).
 * `prior` draws 500 random sources from the Celeste prior (with a few added prior distributions for
@@ -77,22 +78,44 @@ catalog, writing predictions to a new catalog under the `output` subdirectory.
 
 ## Scoring accuracy
 
-The 
+The command
+
+```
+$ julia benchmark/accuracy/score_predictions.jl <ground truth CSV> <predictions CSV> [predictions CSV]
+```
+
+compares one or two prediction catalogs to a ground truth catalog, summarizing their performance
+(and comparing to each other, if two are given).
+
 
 ## Examples
 
 Here are some examples of use:
 
-* To run Celeste on Stripe82 real imagery using "primary" predictions for initialization (using
-  Stripe82 imagery is the default):
+* To run Celeste on Stripe82 real imagery using "primary" predictions for initialization, as in real
+  runs, and compare Celeste to Stripe82 primary accuracy:
+    
     ```
+    $ julia benchmark/accuracy/write_ground_truth_catalog.jl coadd
+    $ julia benchmark/accuracy/sdss_rcf_to_csv.jl
     $ julia benchmark/accuracy/run_celeste_on_field.jl --use-full-initialization \
         benchmark/accuracy/output/sdss_4263_5_119_primary.csv
+    $ julia benchmark/accuracy/score_predictions \
+        benchmark/accuracy/output/stripe82_coadd_catalog_<hash>.csv \
+        benchmark/accuracy/output/sdss_4263_5_119_primary.csv \
+        benchmark/accuracy/output/sdss_4263_5_119_predictions_<hash>.csv
     ```
+    
 * To run Celeste on GalSim imagery from a "prior" ground truth catalog, using partial information
-  from the ground truth catalog for initialization:
+  from the ground truth catalog for initialization, and compare single to joint inference:
+    
     ```
+    $ julia benchmark/accuracy/write_ground_truth_catalog.jl prior
+    # go to benchmark/galsim/ and generate synthetic imagery from the above-generated catalog
     $ julia benchmark/accuracy/run_celeste_on_field.jl \
-        benchmark/accuracy/output/
+        benchmark/accuracy/output/celeste_prior_catalog_<hash>.csv
         --image-fits benchmark/galsim/output/celeste_prior_catalog_<hash>_images_<hash>.fits
+    $ julia benchmark/accuracy/score_predictions \
+        benchmark/accuracy/output/celeste_prior_catalog_<hash>.csv \
+        benchmark/accuracy/output/celeste_prior_catalog_<hash>_images_<hash>_predictions_<hash>.csv
     ```
