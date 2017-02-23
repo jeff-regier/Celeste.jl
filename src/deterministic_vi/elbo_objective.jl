@@ -49,7 +49,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
             continue
         end
         fsm_i = (i == 1) ? fs0m : fs1m
-        a_i = ea.vp[s][ids.a[i, 1]]
+        a_i = ea.vp[s][ids.a[i]]
         sb_E_l_a_b_i = sb.E_l_a[b, i]
         sb_E_ll_a_b_i = sb.E_ll_a[b, i]
 
@@ -77,8 +77,8 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
             ######################
             # Gradients.
 
-            E_G_s_d[ids.a[i, 1], 1] += lf
-            E_G2_s_d[ids.a[i, 1], 1] += llff
+            E_G_s_d[ids.a[i], 1] += lf
+            E_G2_s_d[ids.a[i], 1] += llff
 
             p0_shape = shape_standard_alignment[i]
             p0_bright = brightness_standard_alignment[i]
@@ -155,26 +155,26 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
                 # The (a, bright) blocks:
                 for p0_ind in 1:length(p0_bright)
 
-                    E_G_s_h[p0_bright[p0_ind], ids.a[i, 1]] =
+                    E_G_s_h[p0_bright[p0_ind], ids.a[i]] =
                         fsm_i_v * sb_E_l_a_b_i_d[p0_ind, 1]
-                    E_G2_s_h[p0_bright[p0_ind], ids.a[i, 1]] =
+                    E_G2_s_h[p0_bright[p0_ind], ids.a[i]] =
                         (fsm_i_v ^ 2) * sb_E_ll_a_b_i_d[p0_ind, 1]
-                    E_G_s_h[ids.a[i, 1], p0_bright[p0_ind]] =
-                        E_G_s_h[p0_bright[p0_ind], ids.a[i, 1]]
-                    E_G2_s_h[ids.a[i, 1], p0_bright[p0_ind]] =
-                        E_G2_s_h[p0_bright[p0_ind], ids.a[i, 1]]
+                    E_G_s_h[ids.a[i], p0_bright[p0_ind]] =
+                        E_G_s_h[p0_bright[p0_ind], ids.a[i]]
+                    E_G2_s_h[ids.a[i], p0_bright[p0_ind]] =
+                        E_G2_s_h[p0_bright[p0_ind], ids.a[i]]
                 end
 
                 # The (a, shape) blocks.
                 for p0_ind in 1:length(p0_shape)
-                    E_G_s_h[p0_shape[p0_ind], ids.a[i, 1]] =
+                    E_G_s_h[p0_shape[p0_ind], ids.a[i]] =
                         sb_E_l_a_b_i_v * fsm_i_d[p0_ind, 1]
-                    E_G2_s_h[p0_shape[p0_ind], ids.a[i, 1]] =
+                    E_G2_s_h[p0_shape[p0_ind], ids.a[i]] =
                         sb_E_ll_a_b_i_v * 2 * fsm_i_v * fsm_i_d[p0_ind, 1]
-                    E_G_s_h[ids.a[i, 1], p0_shape[p0_ind]] =
-                        E_G_s_h[p0_shape[p0_ind], ids.a[i, 1]]
-                    E_G2_s_h[ids.a[i, 1], p0_shape[p0_ind]] =
-                        E_G2_s_h[p0_shape[p0_ind], ids.a[i, 1]]
+                    E_G_s_h[ids.a[i], p0_shape[p0_ind]] =
+                        E_G_s_h[p0_shape[p0_ind], ids.a[i]]
+                    E_G2_s_h[ids.a[i], p0_shape[p0_ind]] =
+                        E_G2_s_h[p0_shape[p0_ind], ids.a[i]]
                 end
 
                 for ind_b in 1:length(p0_bright), ind_s in 1:length(p0_shape)

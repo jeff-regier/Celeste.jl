@@ -4,6 +4,8 @@
 using Celeste: Transform, SensitiveFloats
 using DerivativeTestUtils
 
+const tids = Transform.ids
+
 """
 Generate parameters within the given bounds.
 """
@@ -13,30 +15,30 @@ function generate_valid_parameters(
     @assert NumType <: Number
     S = length(bounds_vec)
     vp = convert(VariationalParams{NumType},
-                                 [ zeros(NumType, length(ids)) for s = 1:S ])
+                                 [ zeros(NumType, length(tids)) for s = 1:S ])
         for s=1:S, (param, constraint_vec) in bounds_vec[s]
         is_box = isa(constraint_vec, Array{ParamBox})
         if is_box
             # Box parameters.
-            for ind in 1:length(getfield(ids, param))
+            for ind in 1:length(getfield(tids, param))
                 constraint = constraint_vec[ind]
                 constraint.ub == Inf ?
-                    vp[s][getfield(ids, param)[ind]] = constraint.lb + 1.0:
-                    vp[s][getfield(ids, param)[ind]] =
+                    vp[s][getfield(tids, param)[ind]] = constraint.lb + 1.0:
+                    vp[s][getfield(tids, param)[ind]] =
                         0.5 * (constraint.ub - constraint.lb) +
                         constraint.lb
             end
         else
             # Simplex parameters can ignore the bounds.
-            param_size = size(getfield(ids, param))
+            param_size = size(getfield(tids, param))
             if length(param_size) == 2
                 # matrix simplex
                 for col in 1:param_size[2]
-                    vp[s][getfield(ids, param)[:, col]] = 1 / param_size[1]
+                    vp[s][getfield(tids, param)[:, col]] = 1 / param_size[1]
                 end
             else
                 # vector simplex
-                vp[s][getfield(ids, param)] = 1 / length(getfield(ids, param))
+                vp[s][getfield(tids, param)] = 1 / length(getfield(tids, param))
             end
         end
         end
@@ -58,14 +60,14 @@ function test_parameter_conversion()
         vp_free = Transform.from_vp(transform, ea.vp)
         Transform.to_vp!(transform, vp_free, ea_check.vp)
 
-        for id in fieldnames(ids), s in 1:ea.S
-            @test isapprox(original_vp[s][getfield(ids, id)],
-                           ea_check.vp[s][getfield(ids, id)], atol=1e-6)
+        for id in fieldnames(tids), s in 1:ea.S
+            @test isapprox(original_vp[s][getfield(tids, id)],
+                           ea_check.vp[s][getfield(tids, id)], atol=1e-6)
         end
 
         # Check conversion to and from a vector.
         omitted_ids = Vector{Int}(0)
-        kept_ids = setdiff(1:length(UnconstrainedParams), omitted_ids)
+        kept_ids = setdiff(1:length(Transform.UnconstrainedParams), omitted_ids)
         vp = deepcopy(ea.vp)
         x = Transform.vp_to_array(transform, vp, omitted_ids)
         @test length(x) == length(vp_free[1]) * length(ea.active_sources)
@@ -73,9 +75,9 @@ function test_parameter_conversion()
         vp2 = generate_valid_parameters(Float64, transform.bounds)
         Transform.array_to_vp!(transform, x, vp2, kept_ids)
 
-        for id in fieldnames(ids), si in eachindex(transform.active_sources)
+        for id in fieldnames(tids), si in eachindex(transform.active_sources)
             s = transform.active_sources[si]
-            @test isapprox(original_vp[s][getfield(ids, id)], vp2[si][getfield(ids, id)], atol=1e-6)
+            @test isapprox(original_vp[s][getfield(tids, id)], vp2[si][getfield(tids, id)], atol=1e-6)
         end
 
     end
@@ -196,10 +198,10 @@ function test_enforce_bounds()
   transform = get_mp_transform(ea_original.vp, ea_original.active_sources);
 
   ea = deepcopy(ea_original);
-  ea.vp[1][ids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
-  ea.vp[2][ids.r1[1]] = transform.bounds[2][:r1][1].lb - 1.0
-  ea.vp[2][ids.r1[2]] = transform.bounds[2][:r1][1].ub + 1.0
-  ea.vp[3][ids.k[1, 1]] = transform.bounds[3][:k][1].lb - 0.00001
+  ea.vp[1][tids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
+  ea.vp[2][tids.r1[1]] = transform.bounds[2][:r1][1].lb - 1.0
+  ea.vp[2][tids.r1[2]] = transform.bounds[2][:r1][1].ub + 1.0
+  ea.vp[3][tids.k[1, 1]] = transform.bounds[3][:k][1].lb - 0.00001
 
   @test_throws AssertionError Transform.from_vp(transform, ea.vp)
   Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)
@@ -215,8 +217,8 @@ function test_enforce_bounds()
   # doesn't violate the minimization constraints
   ea = deepcopy(ea_original);
   constraint = transform.bounds[1][:a][1]
-  ea.vp[1][ids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
-  ea.vp[1][ids.a[2, 1]] = 100
+  ea.vp[1][tids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
+  ea.vp[1][tids.a[2, 1]] = 100
   @test_throws AssertionError Transform.from_vp(transform, ea.vp)
   Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)
   # Check that it runs without an error now
@@ -229,10 +231,10 @@ function test_enforce_bounds()
   ea.active_sources = [sa]
   transform = get_mp_transform(ea.vp, ea.active_sources);
 
-  ea.vp[sa][ids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
-  ea.vp[sa][ids.r1[1]] = transform.bounds[1][:r1][1].lb - 1.0
-  ea.vp[sa][ids.r1[2]] = transform.bounds[1][:r1][1].ub + 1.0
-  ea.vp[sa][ids.k[1, 1]] = transform.bounds[1][:k][1].lb - 0.00001
+  ea.vp[sa][tids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
+  ea.vp[sa][tids.r1[1]] = transform.bounds[1][:r1][1].lb - 1.0
+  ea.vp[sa][tids.r1[2]] = transform.bounds[1][:r1][1].ub + 1.0
+  ea.vp[sa][tids.k[1, 1]] = transform.bounds[1][:k][1].lb - 0.00001
 
   @test_throws AssertionError Transform.from_vp(transform, ea.vp)
   Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)

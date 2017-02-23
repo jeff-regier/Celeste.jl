@@ -37,17 +37,21 @@ immutable SensitiveFloat{NumType}
     has_gradient::Bool
     has_hessian::Bool
 
-    SensitiveFloat(local_P::Int64, local_S::Int64,
-                   has_gradient::Bool, has_hessian::Bool) = begin
+    function SensitiveFloat(local_P, local_S, has_gradient, has_hessian)
         @assert has_gradient || !has_hessian
         v = Ref(zero(NumType))
-        d = has_gradient ? zeros(NumType, local_P, local_S) : Matrix{NumType}(0, 0)
-        h = has_hessian ? zeros(NumType, local_P * local_S, local_P * local_S) :
-                       Matrix{NumType}(0, 0)
+        d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
+        h_dim = local_P * local_S * has_hessian
+        h = zeros(NumType, h_dim, h_dim)
         new(v, d, h, local_P, local_S, has_gradient, has_hessian)
     end
 end
 
+function SensitiveFloat(local_P::Int64, local_S::Int64,
+                        has_gradient::Bool = true,
+                        has_hessian::Bool = true)
+    return SensitiveFloat{Float64}(local_P, local_S, has_gradient, has_hessian)
+end
 
 function SensitiveFloat{NumType <: Number}(prototype_sf::SensitiveFloat{NumType})
     SensitiveFloat{NumType}(prototype_sf.local_P,

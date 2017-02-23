@@ -139,7 +139,7 @@ function test_that_star_truth_is_most_likely()
 
     for bad_a in [.3, .5, .9]
         ea_a = deepcopy(ea)
-        ea_a.vp[1][ids.a[:, 1]] = [ 1.0 - bad_a, bad_a ]
+        ea_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ]
         bad_a_lik = DeterministicVI.elbo_likelihood(ea_a)
         @test best.v[] > bad_a_lik.v[]
     end
@@ -176,12 +176,12 @@ end
 
 function test_that_galaxy_truth_is_most_likely()
     images, ea, body = gen_sample_galaxy_dataset(perturb=false)
-    ea.vp[1][ids.a[:, 1]] = [ 0.01, .99 ]
+    ea.vp[1][ids.a] = [ 0.01, .99 ]
     best = DeterministicVI.elbo_likelihood(ea)
 
     for bad_a in [.3, .5, .9]
         ea_a = deepcopy(ea)
-        ea_a.vp[1][ids.a[:, 1]] = [ 1.0 - bad_a, bad_a ]
+        ea_a.vp[1][ids.a] = [ 1.0 - bad_a, bad_a ]
         bad_a = DeterministicVI.elbo_likelihood(ea_a)
         @test best.v[] > bad_a.v[];
     end
@@ -246,8 +246,8 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
 
     ea = SampleData.make_elbo_args(images, cat_entries)
     for s in 1:length(cat_entries)
-        ea.vp[s][ids.a[2, 1]] = cat_entries[s].is_star ? 0.01 : 0.99
-        ea.vp[s][ids.a[1, 1]] = 1.0 - ea.vp[s][ids.a[2, 1]]
+        ea.vp[s][ids.a[2]] = cat_entries[s].is_star ? 0.01 : 0.99
+        ea.vp[s][ids.a[1]] = 1.0 - ea.vp[s][ids.a[2]]
     end
     best = DeterministicVI.elbo_likelihood(ea)
 
@@ -272,7 +272,7 @@ function test_coadd_cat_init_is_most_likely()  # on a real stamp
 
     for bad_a in [.3, .7]
         ea_a = deepcopy(ea)
-        ea_a.vp[s][ids.a[:, 1]] = [ 1.0 - bad_a, bad_a ]
+        ea_a.vp[s][ids.a] = [ 1.0 - bad_a, bad_a ]
 
         bad_a = DeterministicVI.elbo_likelihood(ea_a)
         @test best.v[] > bad_a.v[]
