@@ -28,18 +28,16 @@ Return a default-initialized VariationalParams instance.
 """
 function generic_init_source(init_pos::Vector{Float64})
     ret = Vector{Float64}(length(CanonicalParams))
-    ret[ids.a[2, 1]] = 0.5
-    ret[ids.a[1, 1]] = 1.0 - ret[ids.a[2, 1]]
-    ret[ids.u[1]] = init_pos[1]
-    ret[ids.u[2]] = init_pos[2]
+    ret[ids.a] = 0.5
+    ret[ids.u] = init_pos
     ret[ids.r1] = log(2.0)
     ret[ids.r2] = 1e-3
     ret[ids.e_dev] = 0.5
     ret[ids.e_axis] = 0.5
-    ret[ids.e_angle] = 0.
-    ret[ids.e_scale] = 1.
-    ret[ids.k] = 1. / size(ids.k, 1)
-    ret[ids.c1] = 0.
+    ret[ids.e_angle] = 0.0
+    ret[ids.e_scale] = 1.0
+    ret[ids.k] = 1.0 / size(ids.k, 1)
+    ret[ids.c1] = 0.0
     ret[ids.c2] =  1e-2
     ret
 end
@@ -54,8 +52,8 @@ function catalog_init_source(ce::CatalogEntry; max_gal_scale=Inf)
 
     # TODO: don't do this thresholding for background sources,
     # just for sources that are being optimized
-    ret[ids.a[1, 1]] = ce.is_star ? 0.8: 0.2
-    ret[ids.a[2, 1]] = ce.is_star ? 0.2: 0.8
+    ret[ids.a[1]] = ce.is_star ? 0.8: 0.2
+    ret[ids.a[2]] = ce.is_star ? 0.2: 0.8
 
     ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
     ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))

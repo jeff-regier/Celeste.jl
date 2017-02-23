@@ -90,12 +90,12 @@ end
 # Subtracting KL divergences from sources #
 ###########################################
 
-kl_source_a(vs) = categorical_kl(vs[ids.a[:, 1]], prior.a)
+kl_source_a(vs) = categorical_kl(vs[ids.a], prior.a)
 
 function kl_source_r(vs)
     kl = zero(eltype(vs))
     for i in 1:Ia
-        kl += vs[ids.a[i, 1]] * gaussian_kl(vs[ids.r1[i]], vs[ids.r2[i]],
+        kl += vs[ids.a[i]] * gaussian_kl(vs[ids.r1[i]], vs[ids.r2[i]],
                                             prior.r_μ[i], prior.r_σ²[i])
     end
     assert(!isnan(kl))
@@ -105,7 +105,7 @@ end
 function kl_source_k(vs)
     kl = zero(eltype(vs))
     for i in 1:Ia
-        kl += vs[ids.a[i, 1]] * categorical_kl(vs[ids.k[:, i]], prior.k[:, i])
+        kl += vs[ids.a[i]] * categorical_kl(vs[ids.k[:, i]], prior.k[:, i])
     end
     assert(!isnan(kl))
     return kl
@@ -115,7 +115,7 @@ function kl_source_c(vs)
     kl = zero(eltype(vs))
     for i in 1:Ia
         μ₁, var₁ = vs[ids.c1[:, i]], vs[ids.c2[:, i]]
-        a = vs[ids.a[i, 1]]
+        a = vs[ids.a[i]]
         for d in 1:D
             μ₂, Σ₂ = prior.c_mean[:, d, i], prior.c_cov[:, :, d, i]
             kl += a * vs[ids.k[d, i]] * diagmvn_mvn_kl(μ₁, var₁, μ₂, Σ₂)

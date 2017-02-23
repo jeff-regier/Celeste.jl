@@ -3,7 +3,7 @@ module SampleData
 using Celeste: Model, DeterministicVI
 import Celeste: Infer
 
-import Synthetic
+import ..Synthetic
 
 using Distributions
 using StaticArrays
@@ -204,7 +204,7 @@ end
 
 function perturb_params(ea) # for testing derivatives != 0
     for vs in ea.vp
-        vs[ids.a[:, 1]] = [ 0.4, 0.6 ]
+        vs[ids.a] = [ 0.4, 0.6 ]
         vs[ids.u[1]] += .8
         vs[ids.u[2]] -= .7
         vs[ids.r1] -= log(10)
@@ -341,12 +341,11 @@ end
 function true_star_init()
     images, ea, body = gen_sample_star_dataset(perturb=false)
 
-    ea.vp[1][ids.a[:, 1]] = [ 1.0 - 1e-4, 1e-4 ]
+    ea.vp[1][ids.a] = [ 1.0 - 1e-4, 1e-4 ]
     ea.vp[1][ids.r2] = 1e-4
     ea.vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * ea.vp[1][ids.r2]
     #ea.vp[1][ids.r1] = sample_star_fluxes[3] ./ ea.vp[1][ids.r2]
     ea.vp[1][ids.c2] = 1e-4
-
     images, ea, body
 end
 

@@ -4,7 +4,7 @@ using Celeste: Model, Transform, SensitiveFloats, DeterministicVIImagePSF
 
 
 function verify_sample_star(vs, pos)
-    @test vs[ids.a[2, 1]] <= 0.01
+    @test vs[ids.a[2]] <= 0.01
 
     @test isapprox(vs[ids.u[1]], pos[1], atol=0.1)
     @test isapprox(vs[ids.u[2]], pos[2], atol=0.1)
@@ -19,7 +19,7 @@ function verify_sample_star(vs, pos)
 end
 
 function verify_sample_galaxy(vs, pos)
-    @test vs[ids.a[2, 1]] >= 0.99
+    @test vs[ids.a[2]] >= 0.99
 
     @test isapprox(vs[ids.u[1]], pos[1], atol=0.1)
     @test isapprox(vs[ids.u[2]], pos[2], atol=0.1)
@@ -146,7 +146,7 @@ function test_star_optimization_fft()
     println("Testing star fft optimization.")
 
     images, ea, body = gen_sample_star_dataset()
-    ea.vp[1][ids.a[:, 1]] = [0.8, 0.2]
+    ea.vp[1][ids.a] = [0.8, 0.2]
     ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
         images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
     elbo_fft_opt =
