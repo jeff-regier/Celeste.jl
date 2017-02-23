@@ -62,7 +62,6 @@ neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
 results = AccuracyBenchmark.run_celeste(
     catalog_entries,
     target_sources,
-    neighbor_map,
     images,
     use_joint_inference=parsed_args["joint"],
     use_fft=parsed_args["fft"],

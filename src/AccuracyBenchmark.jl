@@ -8,6 +8,7 @@ import WCS
 
 import Celeste.DeterministicVI
 import Celeste.DeterministicVIImagePSF
+import Celeste.Infer
 import Celeste.Model
 import Celeste.ParallelRun
 import Celeste.SDSSIO
@@ -604,11 +605,8 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
     errors
 end
 
-function filter_rows(
-    truth::DataFrame, first_errors::DataFrame, second_errors::DataFrame, column_name::Symbol,
-    source_type::Symbol
-)
-    good_row = !isna(first_errors[column_name]) & !isna(second_errors[column_name])
+function filter_rows(truth::DataFrame, errors::DataFrame, column_name::Symbol, source_type::Symbol)
+    good_row = !isna(first_errors[column_name])
     if source_type == :star
         good_row &= (truth[:is_star] .> 0.5)
     else
@@ -624,31 +622,39 @@ function filter_rows(
     good_row
 end
 
-function score_column(first_errors::DataArray, second_errors::DataArray)
+function score_column(first_errors::DataArray, second_errors::Nullable{DataArray})
     @assert length(first_errors) == length(second_errors)
     scores = DataFrame(N=length(first_errors))
     scores[:first] = mean(first_errors)
-    scores[:second] = mean(second_errors)
-    diffs = first_errors .- second_errors
-    scores[:diff] = mean(diffs)
-    scores[:diff_sd] = std(abs(diffs)) / sqrt(length(diffs))
+    if !isnull(second_errors)
+        scores[:second] = mean(get(second_errors))
+        diffs = first_errors .- get(second_errors)
+        scores[:diff] = mean(diffs)
+        scores[:diff_sd] = std(abs(diffs)) / sqrt(length(diffs))
+    end
     scores
 end
 
-function get_scores_df(truth::DataFrame, first_errors::DataFrame, second_errors::DataFrame)
+function get_scores_df(
+    truth::DataFrame, first_errors::DataFrame, second_errors::Nullable{DataFrame}
+)
+    null_array = Nullable{DataArray}()
     score_rows = DataFrame[]
     for column_name in names(first_errors)
         if column_name == :objid
             continue
         end
         for source_type in [:star, :galaxy]
-            good_row = filter_rows(truth, first_errors, second_errors, column_name, source_type)
+            good_row = filter_rows(truth, first_errors, column_name, source_type)
+            if !isnull(second_errors)
+                good_row .&= filter_rows(truth, second_errors, column_name, source_type)
+            end
             if sum(good_row) <= 1
                 continue
             else
                 row = score_column(
                     first_errors[good_row, column_name],
-                    second_errors[good_row, column_name]
+                    isnull(second_errors) ? null_array : get(second_errors)[good_row, column_name],
                 )
                 row[:field] = column_name
                 row[:source_type] = source_type
@@ -689,8 +695,12 @@ end
 function score_predictions(truth::DataFrame, prediction_dfs::Vector{DataFrame})
     matched_truth, matched_prediction_dfs = match_catalogs(truth, prediction_dfs)
     error_dfs = [get_error_df(matched_truth, predictions) for predictions in matched_prediction_dfs]
-    @assert length(prediction_dfs) == 2
-    get_scores_df(matched_truth, error_dfs[1], error_dfs[2])
+    @assert length(prediction_dfs) <= 2
+    get_scores_df(
+        matched_truth,
+        error_dfs[1],
+        length(error_dfs) > 1 ? error_dfs[2] : Nullable{DataFrame}(),
+    )
 end
 
 ################################################################################
@@ -722,8 +732,9 @@ end
 
 # Run Celeste with any combination of single/joint inference and MOG/FFT model
 function run_celeste(
-    catalog_entries, target_sources, neighbor_map, images; use_joint_inference=false, use_fft=false
+    catalog_entries, target_sources, images; use_joint_inference=false, use_fft=false
 )
+    neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
     if use_joint_inference
         ParallelRun.one_node_joint_infer(
             catalog_entries,
