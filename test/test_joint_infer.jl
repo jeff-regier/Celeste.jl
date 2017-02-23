@@ -52,7 +52,7 @@ function compute_unconstrained_gradient(target_source, target_sources, catalog, 
     (ea, fsm) = load_ea_from_source(target_source, target_sources, catalog, images,
                                     all_vps, use_fft=use_fft)
 
-    # Evaluate in constrained space and then unconstrain. (Taken from maximize_f)
+    # Evaluate in constrained space and then unconstrain (taken from the old maximize_elbo.jl code)
     last_sf::SensitiveFloat{Float64} = SensitiveFloats.SensitiveFloat{Float64}(length(UnconstrainedParams), 1, true, true)
     transform = DeterministicVI.get_mp_transform(ea.vp, ea.active_sources)
     elbo = use_fft ? FFTElboFunction(ea, fsm) : DeterministicVI.elbo

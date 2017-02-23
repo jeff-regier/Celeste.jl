@@ -97,7 +97,6 @@ include("deterministic_vi/elbo_args.jl")
 include("deterministic_vi/elbo_kl.jl")
 include("deterministic_vi/source_brightness.jl")
 include("deterministic_vi/elbo_objective.jl")
-include("deterministic_vi/maximize_elbo.jl")
 include("deterministic_vi/NewtonMaximize.jl")
 
 

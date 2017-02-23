@@ -367,7 +367,7 @@ end
 loc_width, loc_scale = rand(), rand()
 n_sources = 4
 bound = collect(rand(length(CanonicalParams)) for _ in 1:n_sources)
-constraints = ConstraintBatch(bound; loc_width=loc_width, loc_scale=loc_scale)
+constraints = ConstraintBatch(bound, loc_width, loc_scale)
 
 for src in 1:n_sources
     u1_box = constraints.boxes[src][1].constraint

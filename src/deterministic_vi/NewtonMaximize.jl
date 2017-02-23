@@ -8,6 +8,10 @@ using ..DeterministicVI: ElboArgs
 using ...ConstraintTransforms: TransformDerivatives,
                                ParameterBatch,
                                ConstraintBatch,
+                               ParameterConstraint,
+                               BoxConstraint,
+                               SimplexConstraint,
+                               u_ParameterConstraints,
                                allocate_free_params,
                                to_free!,
                                to_bound!,
@@ -29,11 +33,14 @@ immutable Config{N,T}
 end
 
 function Config{T}(bound_params::ParameterBatch{T};
-                   constraints::ConstraintBatch = ConstraintBatch(bound_params),
+                   loc_width::Float64 = 1e-4,
+                   loc_scale::Float64 = 1.0,
+                   verbose::Bool = false,
+                   max_iters::Int = 50,
+                   constraints::ConstraintBatch = ConstraintBatch(bound_params, loc_width, loc_scale),
                    free_params::ParameterBatch{T} = allocate_free_params(bound_params, constraints),
                    derivs::TransformDerivatives = TransformDerivatives(bound_params, free_params),
-                   verbose::Bool = false,
-                   optim_options::Options = custom_optim_options(verbose=verbose),
+                   optim_options::Options = custom_optim_options(verbose=verbose, max_iters=max_iters),
                    trust_region::NewtonTrustRegion = custom_trust_region())
     return Config(bound_params, free_params, constraints, derivs,
                   optim_options, trust_region, verbose)
@@ -167,6 +174,44 @@ function from_vector!(sources, x)
         end
     end
     return sources
+end
+
+#######################
+# maximize_two_steps! #
+#######################
+
+function star_only_config(ea::ElboArgs; loc_width = 1.0e-4, loc_scale = 1.0, kwargs...)
+    bound = ea.vp[ea.active_sources]
+    n_sources = length(bound)
+    boxes = Vector{Vector{ParameterConstraint{BoxConstraint}}}(n_sources)
+    simplexes = Vector{Vector{ParameterConstraint{SimplexConstraint}}}(n_sources)
+    for src in 1:n_sources
+        u1, u2 = u_ParameterConstraints(bound[src], loc_width, loc_scale)
+        boxes[src] = [
+            u1,
+            u2,
+            ParameterConstraint(BoxConstraint(-1.0, 10.0, 1.0), ids.r1[1]),
+            ParameterConstraint(BoxConstraint(1e-4, 0.10, 1.0), ids.r2[1]),
+            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.c1[:, 1]),
+            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 1])
+        ]
+        simplexes[src] = [
+            ParameterConstraint(SimplexConstraint(0.01/D, 1.0, D), ids.k[:, 1])
+        ]
+    end
+    return Config(ea; constraints = ConstraintBatch(boxes, simplexes), kwargs...)
+end
+
+function maximize_two_steps!{F,T}(f::F, ea::ElboArgs{T},
+                                  cfg_star::Config = star_only_config(ea),
+                                  cfg_both::Config = Config(ea))
+    ea.vp[1][ids.a] = [1, 0]
+    ea.active_source_star_only = true
+    f_evals_star = first(maximize!(f, ea, cfg_star))
+    ea.vp[1][ids.a] = [0.8, 0.2]
+    ea.active_source_star_only = false
+    f_evals_both, max_f_both, max_x_both, nm_result_both = maximize!(f, ea, cfg_both)
+    return f_evals_star + f_evals_both, max_f_both, max_x_both, nm_result_both
 end
 
 end # module

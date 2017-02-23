@@ -55,9 +55,9 @@ immutable ConstraintBatch
 end
 
 # default ConstraintBatch for Celeste's model
-function ConstraintBatch{T}(bound::ParameterBatch{T};
-                            loc_width = 1.0e-4,
-                            loc_scale = 1.0)
+function ConstraintBatch{T}(bound::ParameterBatch{T},
+                            loc_width::Real = 1.0e-4,
+                            loc_scale::Real = 1.0)
     n_sources = length(bound)
     boxes = Vector{Vector{ParameterConstraint{BoxConstraint}}}(n_sources)
     simplexes = Vector{Vector{ParameterConstraint{SimplexConstraint}}}(n_sources)
