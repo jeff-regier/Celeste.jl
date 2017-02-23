@@ -9,27 +9,31 @@ GALSIM_CASES_EXERCISED = [
     "star_with_noise",
     "angle_and_axis_ratio_1",
     "galaxy_with_all",
-    "galaxy_with_noise",
+    #"galaxy_with_noise",
 ]
 
 function assert_estimates_are_close(benchmark_results)
-    for row_index in 1:size(benchmark_results, 1)
-        row = benchmark_results[row_index, :]
-        if row[1, :variable] == :is_star
+    for row in eachrow(benchmark_results)
+        if isna(row[:truth])
+            continue
+        end
+        if row[:variable] == :is_star
             maximum_error = 0.1
-        elseif row[1, :variable] == :de_vaucouleurs_mixture_weight
+        elseif row[:variable] == :de_vaucouleurs_mixture_weight
             maximum_error = 0.2
-        elseif row[1, :variable] == :angle_deg
+        elseif row[:variable] == :angle_deg
             maximum_error = 5
         #elseif !isna(row[1, :error_sds])
         #    maximum_error = 2.5 * row[1, :error_sds]
         else
-            maximum_error = 0.2 * abs(row[1, :truth])
+            maximum_error = 0.2 * abs(row[:truth])
         end
-        if !isapprox(row[1, :truth], row[1, :estimate], atol=maximum_error)
+        if !isapprox(row[:truth], row[:estimate], atol=maximum_error)
             @show row
             @show maximum_error
             @test false
+        else
+            @test true # just so test framework will count test cases
         end
     end
 end

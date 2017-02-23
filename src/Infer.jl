@@ -134,7 +134,7 @@ function load_active_pixels!(images::Vector{Image},
                              exclude_nan=true,
                              noise_fraction=0.5,
                              min_radius_pix=Nullable{Float64}())
-    min_radius_pix = get(min_radius_pix, 50.0)
+    min_radius_pix = get(min_radius_pix, 8.0)
     S, N = size(patches)
 
     for n = 1:N, s=1:S
