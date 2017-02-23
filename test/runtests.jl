@@ -43,6 +43,7 @@ else
                  "test_derivatives.jl",
                  "test_kl.jl",
                  "test_eda.jl",
+                 "test_constraints.jl",
                  "test_elbo.jl",
                  "test_fft.jl",
                  "test_galsim_benchmarks.jl",
@@ -58,7 +59,7 @@ else
                  "test_sdssio.jl",
                  "test_transforms.jl",
                  "test_wcs.jl",
-                 ]
+                ]
 end
 
 
