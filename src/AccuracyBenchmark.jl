@@ -299,7 +299,9 @@ function variational_parameters_to_data_frame_row(objid::String, variational_par
     result[:is_star] = variational_params[ids.a[1, 1]]
     result[:de_vaucouleurs_mixture_weight] = variational_params[ids.e_dev]
     result[:minor_major_axis_ratio] = variational_params[ids.e_axis]
-    result[:half_light_radius_px] = variational_params[ids.e_scale]
+    result[:half_light_radius_px] = (
+        variational_params[ids.e_scale] * sqrt(variational_params[ids.e_axis])
+    )
     result[:angle_deg] = canonical_angle(180 / pi * variational_params[ids.e_angle])
 
     fluxes = get_median_fluxes(variational_params, result[1, :is_star] > 0.5 ? 1 : 2)
