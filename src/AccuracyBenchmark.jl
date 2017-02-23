@@ -107,6 +107,8 @@ function color_from_mags(mags1::AbstractFloat, mags2::AbstractFloat)
     color_from_fluxes(mag_to_flux(mags1), mag_to_flux(mags1))
 end
 
+radians_to_canonical_degrees(angle_rad) = angle_rad - floor(angle_rad / 180) * 180
+
 STRIPE_82_CATALOG_KEYS = [
     :objid, :rerun, :run, :camcol, :field, :flags,
     :ra, :dec, :probpsf,
@@ -206,7 +208,7 @@ function load_coadd_catalog(fits_filename)
 
     # gal angle (degrees)
     raw_phi = dev_or_exp(:devphi_r, :expphi_r)
-    result[:angle_deg] = raw_phi - floor.(raw_phi / 180) * 180
+    result[:angle_deg] = radians_to_canonical_degrees.(raw_phi)
 
     return result
 end
@@ -264,7 +266,7 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
 
     # gal angle (degrees)
     raw_phi = dev_or_exp(:phi_dev, :phi_exp)
-    result[:angle_deg] = raw_phi - floor.(raw_phi / 180) * 180
+    result[:angle_deg] = radians_to_canonical_degrees.(raw_phi)
 
     return result
 end
@@ -290,14 +292,14 @@ function variational_parameters_to_data_frame_row(objid::String, variational_par
     result[:de_vaucouleurs_mixture_weight] = variational_params[ids.e_dev]
     result[:minor_major_axis_ratio] = variational_params[ids.e_axis]
     result[:half_light_radius_px] = variational_params[ids.e_scale]
-    result[:angle_deg] = variational_params[ids.e_angle]
+    result[:angle_deg] = radians_to_canonical_degrees(variational_params[ids.e_angle])
 
     fluxes = get_median_fluxes(variational_params, result[1, :is_star] > 0.5 ? 1 : 2)
     result[:reference_band_flux_nmgy] = fluxes[3]
-    result[:color_log_ratio_ug] = color_from_fluxes.(fluxes[1], fluxes[2])
-    result[:color_log_ratio_gr] = color_from_fluxes.(fluxes[2], fluxes[3])
-    result[:color_log_ratio_ri] = color_from_fluxes.(fluxes[3], fluxes[4])
-    result[:color_log_ratio_iz] = color_from_fluxes.(fluxes[4], fluxes[5])
+    result[:color_log_ratio_ug] = color_from_fluxes(fluxes[1], fluxes[2])
+    result[:color_log_ratio_gr] = color_from_fluxes(fluxes[2], fluxes[3])
+    result[:color_log_ratio_ri] = color_from_fluxes(fluxes[3], fluxes[4])
+    result[:color_log_ratio_iz] = color_from_fluxes(fluxes[4], fluxes[5])
     result
 end
 
@@ -606,7 +608,7 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
 end
 
 function filter_rows(truth::DataFrame, errors::DataFrame, column_name::Symbol, source_type::Symbol)
-    good_row = !isna(first_errors[column_name])
+    good_row = !isna(errors[column_name])
     if source_type == :star
         good_row &= (truth[:is_star] .> 0.5)
     else
@@ -622,23 +624,26 @@ function filter_rows(truth::DataFrame, errors::DataFrame, column_name::Symbol, s
     good_row
 end
 
-function score_column(first_errors::DataArray, second_errors::Nullable{DataArray})
+function score_column(errors::DataArray)
+    DataFrame(
+        N=length(errors),
+        first=mean(errors),
+    )
+end
+
+function score_column(first_errors::DataArray, second_errors::DataArray)
     @assert length(first_errors) == length(second_errors)
-    scores = DataFrame(N=length(first_errors))
-    scores[:first] = mean(first_errors)
-    if !isnull(second_errors)
-        scores[:second] = mean(get(second_errors))
-        diffs = first_errors .- get(second_errors)
-        scores[:diff] = mean(diffs)
-        scores[:diff_sd] = std(abs(diffs)) / sqrt(length(diffs))
-    end
+    scores = score_column(first_errors)
+    scores[:second] = mean(second_errors)
+    diffs = first_errors .- second_errors
+    scores[:diff] = mean(diffs)
+    scores[:diff_sd] = std(abs(diffs)) / sqrt(length(diffs))
     scores
 end
 
 function get_scores_df(
     truth::DataFrame, first_errors::DataFrame, second_errors::Nullable{DataFrame}
 )
-    null_array = Nullable{DataArray}()
     score_rows = DataFrame[]
     for column_name in names(first_errors)
         if column_name == :objid
@@ -647,15 +652,19 @@ function get_scores_df(
         for source_type in [:star, :galaxy]
             good_row = filter_rows(truth, first_errors, column_name, source_type)
             if !isnull(second_errors)
-                good_row .&= filter_rows(truth, second_errors, column_name, source_type)
+                good_row &= filter_rows(truth, get(second_errors), column_name, source_type)
             end
             if sum(good_row) <= 1
                 continue
             else
-                row = score_column(
-                    first_errors[good_row, column_name],
-                    isnull(second_errors) ? null_array : get(second_errors)[good_row, column_name],
-                )
+                if isnull(second_errors)
+                    row = score_column(first_errors[good_row, column_name])
+                else
+                    row = score_column(
+                        first_errors[good_row, column_name],
+                        get(second_errors)[good_row, column_name],
+                    )
+                end
                 row[:field] = column_name
                 row[:source_type] = source_type
                 push!(score_rows, row)
@@ -699,7 +708,7 @@ function score_predictions(truth::DataFrame, prediction_dfs::Vector{DataFrame})
     get_scores_df(
         matched_truth,
         error_dfs[1],
-        length(error_dfs) > 1 ? error_dfs[2] : Nullable{DataFrame}(),
+        length(error_dfs) > 1 ? Nullable(error_dfs[2]) : Nullable{DataFrame}(),
     )
 end
 

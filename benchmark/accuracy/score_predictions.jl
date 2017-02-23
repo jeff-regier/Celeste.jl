@@ -12,6 +12,6 @@ if !(2 <= length(ARGS) <= 3)
 end
 
 truth = AccuracyBenchmark.read_catalog(ARGS[1])
-prediction_dfs = [AccuracyBenchmark.read_catalog(path) for path in ARGS[2:3]]
+prediction_dfs = [AccuracyBenchmark.read_catalog(path) for path in ARGS[2:length(ARGS)]]
 scores = AccuracyBenchmark.score_predictions(truth, prediction_dfs)
 println(repr(scores))

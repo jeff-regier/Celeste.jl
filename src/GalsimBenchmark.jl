@@ -3,10 +3,7 @@ __precompile__()
 module GalsimBenchmark
 
 using DataFrames
-using Distributions
 import FITSIO
-import StaticArrays
-import WCS
 
 import Celeste: AccuracyBenchmark, Infer
 
@@ -36,7 +33,7 @@ function extract_catalog_from_header(header::FITSIO.FITSHeader)
             end
         end
         DataFrame(
-            objid=string(source_index),
+            objid=@sprintf("%s_%03d", header["CLDESCR"], source_index),
             right_ascension_deg=source_field("CLX"),
             declination_deg=source_field("CLY"),
             is_star=(source_field("CLTYP") == "star" ? 1 : 0),
