@@ -107,7 +107,7 @@ function color_from_mags(mags1::AbstractFloat, mags2::AbstractFloat)
     color_from_fluxes(mag_to_flux(mags1), mag_to_flux(mags1))
 end
 
-radians_to_canonical_degrees(angle_rad) = angle_rad - floor(angle_rad / 180) * 180
+canonical_angle(angle_deg) = angle_deg - floor(angle_deg / 180) * 180
 
 STRIPE_82_CATALOG_KEYS = [
     :objid, :rerun, :run, :camcol, :field, :flags,
@@ -208,7 +208,7 @@ function load_coadd_catalog(fits_filename)
 
     # gal angle (degrees)
     raw_phi = dev_or_exp(:devphi_r, :expphi_r)
-    result[:angle_deg] = radians_to_canonical_degrees.(raw_phi)
+    result[:angle_deg] = canonical_angle.(raw_phi)
 
     return result
 end
@@ -266,7 +266,7 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
 
     # gal angle (degrees)
     raw_phi = dev_or_exp(:phi_dev, :phi_exp)
-    result[:angle_deg] = radians_to_canonical_degrees.(raw_phi)
+    result[:angle_deg] = canonical_angle.(raw_phi)
 
     return result
 end
@@ -292,7 +292,7 @@ function variational_parameters_to_data_frame_row(objid::String, variational_par
     result[:de_vaucouleurs_mixture_weight] = variational_params[ids.e_dev]
     result[:minor_major_axis_ratio] = variational_params[ids.e_axis]
     result[:half_light_radius_px] = variational_params[ids.e_scale]
-    result[:angle_deg] = radians_to_canonical_degrees(variational_params[ids.e_angle])
+    result[:angle_deg] = canonical_angle(180 / pi * variational_params[ids.e_angle])
 
     fluxes = get_median_fluxes(variational_params, result[1, :is_star] > 0.5 ? 1 : 2)
     result[:reference_band_flux_nmgy] = fluxes[3]
