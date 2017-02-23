@@ -8,7 +8,7 @@ module DeterministicVIImagePSF
 using StaticArrays, DiffBase, Compat
 
 import ..DeterministicVI:
-    ElboArgs, ElboIntermediateVariables, maximize_f, maximize_f_two_steps,
+    ElboArgs, ElboIntermediateVariables,
     StarPosParams, GalaxyPosParams, CanonicalParams, VariationalParams,
     SourceBrightness, GalaxyComponent, SkyPatch,
     load_source_brightnesses, add_elbo_log_term!,
@@ -57,7 +57,7 @@ function infer_source_fft(images::Vector{Image},
 
     ea_fft, fsm_mat = initialize_fft_elbo_parameters(images, vp, patches, [1], use_raw_psf=true)
     elbo_fft_opt = FFTElboFunction(fsm_mat)
-    cfg = Config(ea_fft; optim_options=custom_optim_options(max_iters=150))
+    cfg = Config(ea_fft; max_iters=150)
     maximize!(elbo_fft_opt, ea_fft, cfg)
 
     return vp[1]
@@ -76,7 +76,7 @@ function infer_source_fft_two_step(images::Vector{Image},
        images, vp, patches, [1], use_raw_psf=true)
    elbo_fft_opt = FFTElboFunction(fsm_mat)
 
-   maximize_f_two_steps(elbo_fft_opt, ea_fft)
+   NewtonMaximize.maximize_two_steps!(elbo_fft_opt, ea_fft)
 
    vp[1]
 end

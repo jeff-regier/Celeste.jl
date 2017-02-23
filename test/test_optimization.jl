@@ -4,7 +4,8 @@ using Celeste: Model, SensitiveFloats, DeterministicVIImagePSF
 using Celeste.ConstraintTransforms: ParameterConstraint, ConstraintBatch,
                                     BoxConstraint, SimplexConstraint
 using Celeste.DeterministicVI: ElboArgs
-using Celeste.DeterministicVI.NewtonMaximize: Config, maximize!, custom_optim_options
+using Celeste.DeterministicVI.NewtonMaximize: Config, maximize!, custom_optim_options,
+                                              star_only_config, maximize_two_steps!
 
 function verify_sample_star(vs, pos)
     @test vs[ids.a[2]] <= 0.01
@@ -55,7 +56,7 @@ function test_star_optimization()
     # a high star probability.
     ea.vp[1][ids.a] = [0.8, 0.2]
 
-    cfg = Config(ea; constraints=ConstraintBatch(ea.vp[ea.active_sources], loc_width=1.0))
+    cfg = Config(ea; loc_width=1.0)
     maximize!(DeterministicVI.elbo, ea, cfg)
 
     verify_sample_star(ea.vp[1], [10.1, 12.2])
@@ -71,7 +72,7 @@ function test_single_source_optimization()
 
     DeterministicVI.elbo_likelihood(ea).v[]
 
-    cfg = Config(ea; constraints=ConstraintBatch(ea.vp[ea.active_sources], loc_width=1.0))
+    cfg = Config(ea; loc_width=1.0)
     maximize!(DeterministicVI.elbo_likelihood, ea, cfg)
 
     # Test that it only optimized source s
@@ -84,7 +85,7 @@ end
 
 function test_galaxy_optimization()
     images, ea, body = gen_sample_galaxy_dataset();
-    cfg = Config(ea; constraints=ConstraintBatch(ea.vp[ea.active_sources], loc_width=3.0))
+    cfg = Config(ea; loc_width=3.0)
     maximize!(DeterministicVI.elbo_likelihood, ea, cfg)
     verify_sample_galaxy(ea.vp[1], [8.5, 9.6])
 end
@@ -92,7 +93,7 @@ end
 
 function test_full_elbo_optimization()
     images, ea, body = gen_sample_galaxy_dataset(perturb=true);
-    cfg = Config(ea; constraints=ConstraintBatch(ea.vp[ea.active_sources], loc_width=1.0),
+    cfg = Config(ea; loc_width=1.0,
                  optim_options=custom_optim_options(xtol_abs=0.0))
     maximize!(DeterministicVI.elbo, ea, cfg)
     verify_sample_galaxy(ea.vp[1], [8.5, 9.6]);
@@ -109,7 +110,7 @@ function test_real_stamp_optimization()
     cat_entries = filter(inbounds, cat_entries);
 
     ea = make_elbo_args(images, cat_entries);
-    cfg = Config(ea; constraints=ConstraintBatch(ea.vp[ea.active_sources], loc_width=1.0),
+    cfg = Config(ea; loc_width=1.0,
                  optim_options=custom_optim_options(xtol_abs=0.0))
     maximize!(DeterministicVI.elbo, ea, cfg)
 end
@@ -177,7 +178,7 @@ function test_star_optimization_fft()
         images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
     elbo_fft_objective = DeterministicVIImagePSF.FFTElboFunction(fsm_mat)
 
-    cfg = Config(ea_fft; constraints=ConstraintBatch(ea_fft.vp[ea_fft.active_sources], loc_width=1.0))
+    cfg = Config(ea_fft; loc_width=1.0)
     maximize!(elbo_fft_objective, ea_fft, cfg)
 
     verify_sample_star(ea_fft.vp[1], [10.1, 12.2])
@@ -191,12 +192,9 @@ function test_galaxy_optimization_fft()
     ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
         images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
     elbo_fft_opt = DeterministicVIImagePSF.FFTElboFunction(fsm_mat)
-    DeterministicVI.maximize_f_two_steps(elbo_fft_opt, ea_fft; loc_width=1.0)
-
-    # elbo_fft_objective = DeterministicVIImagePSF.FFTElboFunction(fsm_mat)
-    # cfg = Config(ea_fft; constraints=ConstraintBatch(ea_fft.vp[ea_fft.active_sources], loc_width=1.0))
-    # maximize!(elbo_fft_objective, ea_fft, cfg)
-
+    cfg_star = star_only_config(ea_fft; loc_width=1.0)
+    cfg_both = Config(ea_fft; loc_width=1.0)
+    maximize_two_steps!(elbo_fft_opt, ea_fft, cfg_star, cfg_both)
     # TODO: Currently failing since it misses the brighness by 3%, which is
     # greater than the 1% permitted by the test.  However, the ELBO of the
     # FFT optimum is lower than that of the MOG optimum.
@@ -212,11 +210,9 @@ function test_three_body_optimization_fft()
     ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
         images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
     elbo_fft_opt = DeterministicVIImagePSF.FFTElboFunction(fsm_mat)
-    DeterministicVI.maximize_f_two_steps(elbo_fft_opt, ea_fft; loc_width=1.0)
-
-    # elbo_fft_objective = DeterministicVIImagePSF.get_fft_elbo_funct
-    # cfg = Config(ea_fft; constraints=ConstraintBatch(ea_fft.vp[ea_fft.active_sources], loc_width=1.0))
-    # maximize!(elbo_fft_objective, ea_fft, cfg)
+    cfg_star = star_only_config(ea_fft; loc_width=1.0)
+    cfg_both = Config(ea_fft; loc_width=1.0)
+    maximize_two_steps!(elbo_fft_opt, ea_fft, cfg_star, cfg_both)
 end
 
 
