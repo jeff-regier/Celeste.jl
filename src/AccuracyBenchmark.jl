@@ -466,9 +466,13 @@ end
 
 ## Create an initialization catalog for Celeste
 
-function typical_band_relative_intensities(is_star::Bool)
+function typical_band_fluxes(is_star::Bool)
     source_type_index = is_star ? 1 : 2
     prior_parameters::Model.PriorParams = Model.load_prior()
+    # this is the mode. brightness is log normal.
+    reference_band_flux = exp(
+        prior_parameters.r_μ[source_type_index] - prior_parameters.r_σ²[source_type_index]
+    )
     # Band relative intensities are a mixture of lognormals. Which mixture component has the most
     # weight?
     dominant_component = indmax(prior_parameters.k[:, source_type_index])
@@ -477,26 +481,17 @@ function typical_band_relative_intensities(is_star::Bool)
         prior_parameters.c_mean[:, dominant_component, source_type_index]
         - diag(prior_parameters.c_cov[:, :, dominant_component, source_type_index])
     )
-    fluxes_from_colors(1, color_log_ratios)
-end
-
-function typical_reference_brightness(is_star::Bool)
-    source_type_index = is_star ? 1 : 2
-    prior_parameters::Model.PriorParams = Model.load_prior()
-    # this is the mode. brightness is log normal.
-    exp(prior_parameters.r_μ[source_type_index] - prior_parameters.r_σ²[source_type_index])
+    fluxes_from_colors(reference_band_flux, color_log_ratios)
 end
 
 function make_catalog_entry(
-    x_position_world_coords::Float64, y_position_world_coords::Float64,
-    star_fluxes::Vector{Float64}, galaxy_fluxes::Vector{Float64},
-    objid::String
+    x_position_world_coords::Float64, y_position_world_coords::Float64, objid::String
 )
     Model.CatalogEntry(
         [x_position_world_coords, y_position_world_coords],
         false, # is_star
-        star_fluxes,
-        galaxy_fluxes,
+        typical_band_fluxes(true),
+        typical_band_fluxes(false),
         0.1, # gal_frac_dev
         0.7, # gal_ab
         pi / 4, # gal_angle
@@ -541,8 +536,6 @@ end
 
 function make_initialization_catalog(catalog::DataFrame, use_full_initialzation::Bool)
     position_offset_width = SDSS_ARCSEC_PER_PIXEL / ARCSEC_PER_DEGREE # 1 pixel, in degrees
-    star_fluxes = typical_band_relative_intensities(true) .* typical_reference_brightness(true)
-    galaxy_fluxes = typical_band_relative_intensities(false) .* typical_reference_brightness(false)
     map(eachrow(catalog)) do row
         if use_full_initialzation
             make_catalog_entry(row)
@@ -551,9 +544,7 @@ function make_initialization_catalog(catalog::DataFrame, use_full_initialzation:
             make_catalog_entry(
                 row[:right_ascension_deg],
                 row[:declination_deg],
-                star_fluxes,
-                galaxy_fluxes,
-                row[:objid]
+                row[:objid],
             )
         end
     end
