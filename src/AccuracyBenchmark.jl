@@ -271,15 +271,23 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
     return result
 end
 
-function get_median_fluxes(variational_params::Vector{Float64}, source_type::Int64)
-    ids = Model.ids
+function fluxes_from_colors(reference_band_flux_nmgy::Float64, color_log_ratios::Vector{Float64})
+    @assert length(color_log_ratios) == 4
+    color_ratios = exp.(color_log_ratios)
     fluxes = Vector{Float64}(5)
-    fluxes[3] = exp(variational_params[ids.r1[source_type]])
-    fluxes[4] = fluxes[3] * exp(variational_params[ids.c1[3, source_type]])
-    fluxes[5] = fluxes[4] * exp(variational_params[ids.c1[4, source_type]])
-    fluxes[2] = fluxes[3] / exp(variational_params[ids.c1[2, source_type]])
-    fluxes[1] = fluxes[2] / exp(variational_params[ids.c1[1, source_type]])
+    fluxes[3] = reference_band_flux_nmgy
+    fluxes[4] = fluxes[3] * color_ratios[3]
+    fluxes[5] = fluxes[4] * color_ratios[4]
+    fluxes[2] = fluxes[3] / color_ratios[2]
+    fluxes[1] = fluxes[2] / color_ratios[1]
     fluxes
+end
+
+function get_median_fluxes(variational_params::Vector{Float64}, source_type::Int64)
+    fluxes_from_colors(
+        exp(variational_params[Model.ids.r1[source_type]]),
+        variational_params[Model.ids.c1[:, source_type]],
+    )
 end
 
 function variational_parameters_to_data_frame_row(objid::String, variational_params::Vector{Float64})
@@ -463,17 +471,11 @@ function typical_band_relative_intensities(is_star::Bool)
     # weight?
     dominant_component = indmax(prior_parameters.k[:, source_type_index])
     # What are the most typical log relative intensities for that component?
-    inter_band_ratios = exp.(
+    color_log_ratios = (
         prior_parameters.c_mean[:, dominant_component, source_type_index]
         - diag(prior_parameters.c_cov[:, :, dominant_component, source_type_index])
     )
-    Float64[
-        1 / inter_band_ratios[2] / inter_band_ratios[1],
-        1 / inter_band_ratios[2],
-        1,
-        inter_band_ratios[3],
-        inter_band_ratios[3] * inter_band_ratios[4],
-    ]
+    fluxes_from_colors(1, color_log_ratios)
 end
 
 function typical_reference_brightness(is_star::Bool)
@@ -505,13 +507,13 @@ end
 ensure_small_flux(value) = (isna(value) || value <= 0) ? 1e-6 : value
 
 function make_catalog_entry(row::DataFrameRow)
-    fluxes = ensure_small_flux.(Any[
-        row[:reference_band_flux_nmgy] * exp(row[:color_log_ratio_gr] + row[:color_log_ratio_ug]),
-        row[:reference_band_flux_nmgy] * exp(row[:color_log_ratio_gr]),
-        row[:reference_band_flux_nmgy],
-        row[:reference_band_flux_nmgy] / exp(row[:color_log_ratio_ri]),
-        row[:reference_band_flux_nmgy] / exp(row[:color_log_ratio_ri] + row[:color_log_ratio_iz]),
-    ])
+    color_log_ratios = [
+        row[:color_log_ratio_ug],
+        row[:color_log_ratio_gr],
+        row[:color_log_ratio_ri],
+        row[:color_log_ratio_iz],
+    ]
+    fluxes = ensure_small_flux.(fluxes_from_colors(row[:reference_band_flux_nmgy], color_log_ratios))
     Model.CatalogEntry(
         [row[:right_ascension_deg], row[:declination_deg]],
         row[:is_star],
