@@ -683,7 +683,7 @@ end
 
 function test_brightness_hessian()
     images, ea, star_cat = gen_sample_star_dataset()
-    kept_ids = [ ids.r1; ids.r2; ids.c1[:]; ids.c2[:] ]
+    kept_ids = [ ids.r1; ids.r2; ids.c1; ids.c2 ]
     omitted_ids = setdiff(1:length(ids), kept_ids)
     i = 1
 
@@ -966,8 +966,9 @@ function test_box_simplex_derivatives()
     images, ea, body = gen_three_body_dataset()
     for s = 1:ea.S
         delta = 0.01 * s # Make the parameters different for each one
-        ea.vp[s][ids.a[:, 1]] = Float64[ 0.2 - delta, 0.8 + delta ]
-        ea.vp[s][ids.k] = Float64[ 0.2- delta 0.2- delta; 0.8 + delta 0.8 + delta ]
+        ea.vp[s][ids.a] = [0.2 - delta, 0.8 + delta]
+        ea.vp[s][ids.k[:, 1]] = [0.2 - delta, 0.8 + delta]
+        ea.vp[s][ids.k[:, 2]] = ea.vp[s][ids.k[:, 1]]
     end
     transform = Transform.get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0)
 

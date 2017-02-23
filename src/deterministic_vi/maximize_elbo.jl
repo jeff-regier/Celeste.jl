@@ -24,7 +24,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
 
     f_evals = 0
     n_active_sources::Int = length(transform.active_sources)
-    kept_ids::Vector{Int} = setdiff(1:length(UnconstrainedParams), omitted_ids)
+    kept_ids::Vector{Int} = setdiff(1:length(Transform.UnconstrainedParams), omitted_ids)
 
     all_kept_ids::Vector{Int} = Int[]
     for i in eachindex(transform.active_sources)
@@ -33,7 +33,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
 
     x0 = vec(Transform.vp_to_array(transform, ea.vp, omitted_ids))
     last_sf::SensitiveFloat{Float64} = SensitiveFloat{Float64}(
-                    length(UnconstrainedParams), n_active_sources, true, true)
+                    length(Transform.UnconstrainedParams), n_active_sources, true, true)
     last_x::Vector{Float64} = fill(NaN, size(x0))
 
     f_wrapped_nocache! = (x::Vector) -> begin
@@ -43,7 +43,7 @@ function maximize_f{F}(f::F, ea::ElboArgs, transform::DataTransform;
         Transform.array_to_vp!(transform, reshaped_x, ea.vp, kept_ids)
         for s in 1:size(ea.vp, 2)
             assert(!any(isnan(ea.vp[s])))
-        end 
+        end
         f_res = f(ea)
         f_evals += 1
         verbose && record_f_eval(f_evals, ea, f_res)
@@ -154,12 +154,14 @@ function maximize_f_two_steps{F}(f::F, ea::ElboArgs;
     transform = get_mp_transform(ea.vp, ea.active_sources,
                                  loc_width=loc_width, loc_scale=loc_scale)
 
-    star_ids_free = vcat(ids_free.u,
-                         ids_free.r1[1], ids_free.r2[1],
-                         ids_free.c1[:, 1][:], ids_free.c2[:, 1][:],
-                         ids_free.k[:, 1][:])
+    star_ids_free = vcat(Transform.ids_free.u,
+                         Transform.ids_free.r1[1],
+                         Transform.ids_free.r2[1],
+                         Transform.ids_free.c1[:, 1][:],
+                         Transform.ids_free.c2[:, 1][:],
+                         Transform.ids_free.k[:, 1][:])
 
-    star_omitted_ids = union(setdiff(1:length(ids_free), star_ids_free),
+    star_omitted_ids = union(setdiff(1:length(Transform.ids_free), star_ids_free),
                              omitted_ids)
 
      ea.vp[1][ids.a] = [1, 0]

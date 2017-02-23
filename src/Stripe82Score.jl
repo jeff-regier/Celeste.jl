@@ -302,7 +302,7 @@ function celeste_to_df(results::Vector{OptimizedSource})
 
         ce = CatalogEntry(
             vs[ids.u],
-            vs[ids.a[1, 1]] > 0.5,
+            vs[ids.a[1]] > 0.5,
             get_median_fluxes(1),
             get_median_fluxes(2),
             vs[ids.e_dev],
@@ -313,7 +313,7 @@ function celeste_to_df(results::Vector{OptimizedSource})
             result.thingid)
         load_ce!(i, ce, df)
 
-        df[i, :is_star] = vs[ids.a[1, 1]]
+        df[i, :is_star] = vs[ids.a[1]]
 
         #TODO: update UQ to mag units not flux. Also, log-normal now, not gamma.
 #        for j in 1:2
