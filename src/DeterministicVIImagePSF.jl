@@ -13,7 +13,9 @@ import ..DeterministicVI:
     SourceBrightness, GalaxyComponent, SkyPatch,
     load_source_brightnesses, add_elbo_log_term!,
     calculate_source_pixel_brightness!,
-    KLDivergence, init_sources
+    KLDivergence, NewtonMaximize, init_sources
+
+using ..DeterministicVI.NewtonMaximize: maximize!, Config, custom_optim_options
 
 import ..Model:
     populate_gal_fsm!, getids, ParamSet, linear_world_to_pix, lidx,
@@ -31,7 +33,6 @@ import ..Infer:
 
 import ..PSF: get_psf_at_point, trim_psf
 
-import ..Transform: get_mp_transform
 
 import WCS
 
@@ -42,24 +43,24 @@ include("deterministic_vi_image_psf/elbo_image_psf.jl")
 
 export elbo_likelihood_with_fft!, FSMSensitiveFloatMatrices,
        initialize_fsm_sf_matrices!, initialize_fft_elbo_parameters,
-       get_fft_elbo_function, load_fsm_mat
+       FFTElboFunction, load_fsm_mat
 
 
 function infer_source_fft(images::Vector{Image},
                           neighbors::Vector{CatalogEntry},
                           entry::CatalogEntry;
                           min_radius_pix=Nullable{Float64}())
-   cat_local = vcat([entry], neighbors)
-   vp = init_sources([1], cat_local)
-   patches = get_sky_patches(images, cat_local)
-   load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
+    cat_local = vcat([entry], neighbors)
+    vp = init_sources([1], cat_local)
+    patches = get_sky_patches(images, cat_local)
+    load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
 
-   ea_fft, fsm_mat = initialize_fft_elbo_parameters(
-       images, vp, patches, [1], use_raw_psf=true)
-   elbo_fft_opt = get_fft_elbo_function(ea_fft, fsm_mat)
-   maximize_f(elbo_fft_opt, ea_fft, max_iters=150)
+    ea_fft, fsm_mat = initialize_fft_elbo_parameters(images, vp, patches, [1], use_raw_psf=true)
+    elbo_fft_opt = FFTElboFunction(fsm_mat)
+    cfg = Config(ea_fft; optim_options=custom_optim_options(max_iters=150))
+    maximize!(elbo_fft_opt, ea_fft, cfg)
 
-   vp[1]
+    return vp[1]
 end
 
 
@@ -73,7 +74,7 @@ function infer_source_fft_two_step(images::Vector{Image},
 
    ea_fft, fsm_mat = initialize_fft_elbo_parameters(
        images, vp, patches, [1], use_raw_psf=true)
-   elbo_fft_opt = get_fft_elbo_function(ea_fft, fsm_mat)
+   elbo_fft_opt = FFTElboFunction(fsm_mat)
 
    maximize_f_two_steps(elbo_fft_opt, ea_fft)
 

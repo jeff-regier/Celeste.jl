@@ -3,6 +3,7 @@ import ..Infer
 import ..ParallelRun: infer_init, one_node_infer, BoundingBox,
     one_node_joint_infer, one_node_single_infer
 import ..SensitiveFloats: SensitiveFloat
+import Celeste.DeterministicVI.NewtonMaximize
 
 """
 load_ea_from_source
@@ -54,7 +55,7 @@ function compute_unconstrained_gradient(target_source, target_sources, catalog, 
     # Evaluate in constrained space and then unconstrain. (Taken from maximize_f)
     last_sf::SensitiveFloat{Float64} = SensitiveFloats.SensitiveFloat{Float64}(length(UnconstrainedParams), 1, true, true)
     transform = DeterministicVI.get_mp_transform(ea.vp, ea.active_sources)
-    elbo = use_fft ? get_fft_elbo_function(ea, fsm) : DeterministicVI.elbo
+    elbo = use_fft ? FFTElboFunction(ea, fsm) : DeterministicVI.elbo
     f_res = elbo(ea)
     Transform.transform_sensitive_float!(transform, last_sf, f_res, ea.vp, ea.active_sources)
     last_sf.d
@@ -92,14 +93,18 @@ function compare_vp_params(r1, r2)
 
     # Check the existence and equivalence of each source's vp in r2
     for r2_result in r2
-        if !haskey(r1_vp, r2_result.thingid) || r1_vp[r2_result.thingid] != r2_result.vs
-            if r1_vp[r2_result.thingid] != r2_result.vs
-                println("compare_vp_params: Mismatch - $(r1_vp[r2_result.thingid]) vs $(r2_result.vs)")
+        if haskey(r1_vp, r2_result.thingid)
+            a, b = r1_vp[r2_result.thingid], r2_result.vs
+            if !(isapprox(a, b))
+                println("compare_vp_params: Mismatch - $(a) vs $(b)")
+                print("norm(a - b): ", norm(a - b))
+                return false
             end
+        else
             return false
         end
     end
-    
+
     return length(r1) == length(r2)
 end
 
@@ -144,7 +149,7 @@ function test_fft_on_one_source_matches_single()
     infer_joint(ctni...) = one_node_joint_infer(ctni...;
                                                 n_iters=1,
                                                 use_fft=true,
-                                                use_default_optim_params=false)
+                                                trust_region=NewtonMaximize.custom_trust_region())
     result_infer_joint = one_node_infer(field_triplets, datadir;
                                         infer_callback=infer_joint,
                                         box=box)
@@ -306,6 +311,7 @@ function test_same_result_with_diff_batch_sizes(;use_fft=false)
                                  infer_callback=infer_few,
                                  box=box)
 
+
     # With batch size = 39
     infer_many(ctni...) = one_node_joint_infer(ctni...;
                                 n_iters=3,
@@ -318,6 +324,28 @@ function test_same_result_with_diff_batch_sizes(;use_fft=false)
 
     # Make sure that parameters are exactly the same
     @test compare_vp_params(result_bs_7, result_bs_39)
+end
+
+function test_same_one_node_infer_twice(;use_fft=false)
+    # This bounding box has overlapping stars. (neighbor map is not empty)
+    box = BoundingBox(154.39, 164.41, 39.11, 39.13)
+    field_triplets = [RunCamcolField(3900, 6, 269),]
+
+    infer_few(ctni...) = one_node_joint_infer(ctni...;
+                                              n_iters=3,
+                                              batch_size=7,
+                                              within_batch_shuffling=false,
+                                              use_fft=use_fft)
+    result_bs_7_1 = one_node_infer(field_triplets, datadir;
+                                   infer_callback=infer_few,
+                                   box=box)
+
+    result_bs_7_2 = one_node_infer(field_triplets, datadir;
+                                   infer_callback=infer_few,
+                                   box=box)
+
+    # Make sure that parameters are exactly the same
+    @test compare_vp_params(result_bs_7_1, result_bs_7_2)
 end
 
 """
@@ -508,7 +536,9 @@ test_fft_on_one_source_matches_single()
 #test_same_result_with_diff_batch_sizes(use_fft=true)
 #test_one_node_joint_infer_obj_overlapping(use_fft=true)
 
+
 # Test non fft
+test_same_one_node_infer_twice()
 test_different_result_with_different_iter()
 test_same_result_with_diff_batch_sizes()
 

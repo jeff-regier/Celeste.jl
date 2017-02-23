@@ -59,7 +59,7 @@ matshow(image_orig); colorbar(); title("original Celeste")
 ##############################################
 # Optimize the same source with both methods.
 
-elbo_fft_opt = DeterministicVIImagePSF.get_fft_elbo_function(ea_fft, fsm_mat);
+elbo_fft_opt = DeterministicVIImagePSF.FFTElboFunction(fsm_mat);
 f_evals_fft, max_f_fft, max_x_fft, nm_result_fft, transform_fft =
     DeterministicVI.maximize_f(elbo_fft_opt, ea_fft, verbose=true, max_iters=100);
 vp_opt_fft = deepcopy(ea_fft.vp[1]);

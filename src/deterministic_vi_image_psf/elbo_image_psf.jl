@@ -416,16 +416,16 @@ end
 @doc """
 Return a function callback for an FFT elbo.
 """
-function get_fft_elbo_function{T}(
-    ea::ElboArgs{T}, fsm_mat::Matrix{FSMSensitiveFloatMatrices})
-    function elbo_fft_opt(ea::ElboArgs)
-        @assert ea.psf_K == 1
-        elbo = ea.elbo_vars.elbo
-        kl_source = SensitiveFloat{T}(length(CanonicalParams),
-                                      1, elbo.has_gradient, elbo.has_hessian)
-        elbo_likelihood_with_fft!(ea, fsm_mat)
-        kl_helper = KLDivergence.get_kl_helper(T)
-        KLDivergence.subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
-        return deepcopy(elbo)
-    end
+immutable FFTElboFunction{T} <: Function
+    fsm_mat::Matrix{T}
+end
+
+function (f::FFTElboFunction){T}(ea::ElboArgs{T})
+    @assert ea.psf_K == 1
+    elbo_sf = ea.elbo_vars.elbo
+    elbo_likelihood_with_fft!(ea, f.fsm_mat)
+    kl_source = SensitiveFloat{T}(length(CanonicalParams), 1, elbo_sf.has_gradient, elbo_sf.has_hessian)
+    kl_helper = KLDivergence.get_kl_helper(T)
+    KLDivergence.subtract_kl_all_sources!(ea, elbo_sf, kl_source, kl_helper)
+    return deepcopy(elbo_sf)
 end
