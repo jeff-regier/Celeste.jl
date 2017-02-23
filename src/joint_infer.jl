@@ -1,17 +1,19 @@
 import FITSIO
 import JLD
 import Optim
+import Optim: NewtonTrustRegion
 using DataStructures
 
 import ..Log
 using ..Model
-using ..Transform
 import ..SDSSIO
 import ..Infer
 import ..SDSSIO: RunCamcolField
 import ..PSF
-
+using ..ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
 using ..DeterministicVI
+using ..DeterministicVI.NewtonMaximize
+using ..DeterministicVI.NewtonMaximize: Config
 using ..DeterministicVIImagePSF
 
 function union_find!(i, components_tree)
@@ -85,14 +87,14 @@ end
 """
 Partitions sources via the cyclades algorithm.
 
-- nprocthreads - number of threads to which to distribute sources
+- n_threads - number of threads to which to distribute sources
 - target_sources - array of target sources. Elements should match keys of neighbor_map.
 - neighbor_map - graph of connections of sources
 
 Returns:
 - An array of vectors representing the workload of each thread ([thread][batch][sources(indices)])
 """
-function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_size=60)
+function partition_cyclades(n_threads, target_sources, neighbor_map; batch_size=60)
     Log.info("Starting Cyclades partitioning...")
     tic()
 
@@ -106,8 +108,8 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
     end
 
     # The final workload distribution.
-    thread_sources_assignment = Vector{Vector{Vector{Int64}}}(nprocthreads)
-    for thread = 1:nprocthreads
+    thread_sources_assignment = Vector{Vector{Vector{Int64}}}(n_threads)
+    for thread = 1:n_threads
         thread_sources_assignment[thread] = Vector{Vector{Int64}}(n_total_batches)
         for batch = 1:n_total_batches
             thread_sources_assignment[thread][batch] = Vector{Int64}()
@@ -123,7 +125,7 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
     # TODO max - parallelize everything below (particularly CC computation)
 
     # The components tree is for union-find.
-    components_tree = [Vector{Int64}(batch_size) for i=1:nprocthreads]
+    components_tree = [Vector{Int64}(batch_size) for i=1:n_threads]
 
     # We have n_total_batches components, where each component is a dictionary
     # from the component id, to a list of sources in that component
@@ -145,8 +147,8 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
     # Load balance the connected components within each batch into thread_sources_assignment.
     for (cur_batch, cur_batch_component) in enumerate(components)
         # Priority queue for load balancing.
-        pqueue = PriorityQueue([i for i=1:nprocthreads],
-                               [0 for i=1:nprocthreads],
+        pqueue = PriorityQueue([i for i=1:n_threads],
+                               [0 for i=1:n_threads],
                                Base.Order.Forward)
 
         # Assign non-conflicting group of sources to different threads
@@ -166,17 +168,17 @@ function partition_cyclades(nprocthreads, target_sources, neighbor_map; batch_si
     Log.info("Finished Cyclades partitioning.  Elapsed time: $(toq()) seconds")
 
     for cur_batch = 1:length(collect(1:batch_size:n_sources))
-        load_balance_for_batch = [length(thread_sources_assignment[t][cur_batch]) for t=1:nprocthreads]
+        load_balance_for_batch = [length(thread_sources_assignment[t][cur_batch]) for t=1:n_threads]
         Log.info("Load balance for batch $(cur_batch) - $(load_balance_for_batch)")
     end
-    
+
     thread_sources_assignment
 end
 
 """
 Partitions sources across threads equally.
 
-- nprocthreads - number of threads to which to distribute processing the sources.
+- n_threads - number of threads to which to distribute processing the sources.
 - n_sources - the number of total sources to process.
 
 Returns:
@@ -184,16 +186,16 @@ Returns:
   Note for partition equally, there is only 1 batch.
 
 """
-function partition_equally(nprocthreads, n_sources)
+function partition_equally(n_threads, n_sources)
     Log.info("Starting basic source partitioning...")
     tic()
-    n_sources_per_thread = floor(Int64, n_sources / nprocthreads)
-    thread_sources_assignment = Vector{Vector{Vector{Int64}}}(nprocthreads)
+    n_sources_per_thread = floor(Int64, n_sources / n_threads)
+    thread_sources_assignment = Vector{Vector{Vector{Int64}}}(n_threads)
     n_sources_assigned = 0
-    for thread = 1:nprocthreads
+    for thread = 1:n_threads
         start_source = (thread-1) * n_sources_per_thread
         end_source = thread * n_sources_per_thread
-        if thread == nprocthreads
+        if thread == n_threads
             end_source = n_sources
         end
         # Only 1 batch for partitioning equally
@@ -221,7 +223,7 @@ cyclades_partition - use the cyclades algorithm to partition into non conflictin
 batch_size - size of a single batch of sources for updates
 within_batch_shuffling - whether or not to process sources within a batch randomly
 joint_inference_terminate - whether to terminate once sources seem to be stable
-n_iters - number of iterations to optimize. 1 iteration optimizes a full pass over target 
+n_iters - number of iterations to optimize. 1 iteration optimizes a full pass over target
           sources if optimize_fixed_iters=true.
 
 Returns:
@@ -229,22 +231,25 @@ Returns:
 - Vector of OptimizedSource results
 """
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
-                              cyclades_partition=true,
-                              use_fft=false,
-                              batch_size=400,
-                              within_batch_shuffling=true,
-                              n_iters=3,
-                              use_default_optim_params=true,
-                              min_radius_pix=Nullable{Float64}(),
-                              timing=InferTiming())
+                              cyclades_partition::Bool=true,
+                              use_fft::Bool=false,
+                              batch_size::Int=400,
+                              within_batch_shuffling::Bool=true,
+                              n_iters::Int=3,
+                              trust_region::NewtonTrustRegion{Float64}=NewtonTrustRegion(),
+                              min_radius_pix::Nullable{Float64}=Nullable{Float64}())
+
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
-    nprocthreads = nthreads()
+    n_threads = nthreads()
 
     # Partition the sources
     n_sources = length(target_sources)
     Log.info("Optimizing $(n_sources) sources")
+
+    local thread_sources_assignment::Vector{Vector{Vector{Int64}}}
+
     if cyclades_partition
         # Convert neighbormap to cyclades map (map from source_id -> [neighbor source_ids])
         cyclades_neighbor_map = Dict{Int64, Vector{Int64}}()
@@ -252,153 +257,43 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
             source_id = target_sources[index]
             cyclades_neighbor_map[source_id] = neighbors
         end
-        thread_sources_assignment = partition_cyclades(nprocthreads, target_sources, cyclades_neighbor_map, batch_size=batch_size)
+        thread_sources_assignment = partition_cyclades(n_threads, target_sources, cyclades_neighbor_map, batch_size=batch_size)
     else
-        thread_sources_assignment = partition_equally(nprocthreads, n_sources)
+        thread_sources_assignment = partition_equally(n_threads, n_sources)
     end
 
     Log.info("Done assigning sources to threads for processing")
 
     # Pre allocate elbo args variational params
-    target_source_variational_params = Dict{Int64, Array{Float64}}()
+    target_source_variational_params::Dict{Int64, Array{Float64}} = Dict{Int64, Array{Float64}}()
     for target_source in target_sources
         cat = catalog[target_source]
         target_source_variational_params[target_source] = generic_init_source(cat.pos)
     end
 
-    # Pre-allocate dictionary of elboargs, call it ea_vec.
-    ea_vec = Vector{ElboArgs}(n_sources)
-
-    # The mp transform vec needs to be persisted across calls to maximize_f to
-    # constrain the source to its initial position.
-    transform_vec = Vector{DataTransform}(n_sources)
-    
-    function initialize_elboargs_sources(sources)
-        try
-            #        nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for $(length(sources)) sources")
-            for cur_source_index in sources
-                entry_id = target_sources[cur_source_index]
-                entry = catalog[target_sources[cur_source_index]]
-                neighbor_ids = neighbor_map[cur_source_index]
-                neighbors = catalog[neighbor_map[cur_source_index]]
-
-                # TODO max: refactor this portion? It's reused in infer_source.
-                #            nputs(dt_nodeid, "Thread $(Threads.threadid()) allocating mem for source $(target_sources[cur_source_index]): objid=$(entry.objid)")
-                cat_local = vcat([entry], neighbors)
-                ids_local = vcat([entry_id], neighbor_ids)
-
-                patches = Infer.get_sky_patches(images, cat_local)
-                Infer.load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
-
-                # Load vp with shared target source params, and also vp
-                # that doesn't share target source params
-                vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
-                                     target_source_variational_params[x] :
-                                     catalog_init_source(catalog[x]) for x in ids_local]
-
-                # Switch parameters based on whether or not we're using the fft method
-                if use_fft
-                    ea, _ = initialize_fft_elbo_parameters(images,
-                                                           vp,
-                                                           patches,
-                                                           [1],
-                                                           use_raw_psf=false,
-                                                           allocate_fsm_mat=true)
-                else
-                    ea = ElboArgs(images, vp, patches, [1])
-                end           
-
-                ea_vec[cur_source_index] = ea
-
-                # Also preallocate data for the transform vec
-                transform_vec[cur_source_index] = get_mp_transform(ea.vp,
-                                                                   ea.active_sources)
-            end
-        catch ex
-            if is_production_run || nthreads() > 1
-                Log.error(string(ex))
-            else
-                rethrow(ex)
-            end
-        end
-    end
+    # configurations need to be persisted across calls to maximize! so
+    # that location constraints don't shift from their initial position
+    ea_vec::Vector{ElboArgs{Float64}} = Vector{ElboArgs{Float64}}(n_sources)
+    cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}} = Vector{Config{DEFAULT_CHUNK,Float64}}(n_sources)
 
     # Initialize elboargs in parallel
     tic()
-    thread_initialize_sources_assignment = partition_equally(nprocthreads, n_sources)
+    thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} = partition_equally(n_threads, n_sources)
 
-    Threads.@threads for i=1:nprocthreads
-        for batch = 1:length(thread_initialize_sources_assignment[i])
-            initialize_elboargs_sources(thread_initialize_sources_assignment[i][batch])
-        end
-    end
+    initialize_elboargs_sources!(ea_vec, cfg_vec, thread_initialize_sources_assignment,
+                                 catalog, target_sources, neighbor_map, images,
+                                 trust_region, use_fft, min_radius_pix,
+                                 target_source_variational_params)
 
     Log.info("Done preallocating array of elboargs. Elapsed time: $(toq())")
 
-    # Process partition of sources. Multiple threads call this function in parallel.
-    function process_sources(source_assignment::Vector{Int64}, iter)
-        try
-
-            # Shuffle the source assignments within each batch of each process.
-            # This is disabled by default because it ruins the deterministic outcome
-            # required by the test cases.
-            if within_batch_shuffling
-                shuffle!(source_assignment)
-            end
-            for cur_source_indx in source_assignment
-
-                n_newton_steps = 50
-
-                # Select optimization method if depending on
-                # whether to use fft or not
-                if use_fft
-                    ea = ea_vec[cur_source_indx]
-                    fsm_mat = load_fsm_mat(ea, images; use_raw_psf=true)
-                    elbo = get_fft_elbo_function(ea, fsm_mat)
-                else
-                    elbo = DeterministicVI.elbo
-                end
-
-                iter_count, obj_value, max_x, r = DeterministicVI.maximize_f(
-                    elbo,
-                    ea_vec[cur_source_indx],
-                    transform_vec[cur_source_indx],
-                    max_iters=n_newton_steps,
-                    use_default_optim_params=use_default_optim_params)
-            end
-        catch ex
-            if is_production_run || nthreads() > 1
-                Log.error(string(ex))
-            else
-                rethrow(ex)
-            end
-        end
-    end
-
-    # Process sources in parallel using nprocthreads.
+    # Process sources in parallel
     tic()
-    n_batches = length(thread_sources_assignment[1])
 
-    
+    process_sources!(images, ea_vec, cfg_vec,
+                     thread_sources_assignment,
+                     n_iters, use_fft, within_batch_shuffling)
 
-    for iter = 1:n_iters        
-        # Process every batch of every iteration. We do the batches on the outside
-        # Since there is an implicit barrier after the inner threaded for loop below.
-        # We want this barrier because there may be conflict _between_ Cyclades batches.                
-        for batch = 1:n_batches
-            
-            process_sources_elapsed_times = Vector{Float64}(nprocthreads)
-            
-            # Process every batch of every iteration with nprocthreads
-            Threads.@threads for i = 1:nprocthreads
-                tic()
-                process_sources(thread_sources_assignment[i][batch], iter)
-                process_sources_elapsed_times[i] = toq()
-            end
-
-            Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
-        end
-    end
     Log.info("Done fitting elboargs. Elapsed time: $(toq())")
 
     # Return add results to vector
@@ -415,4 +310,129 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     end
 
     results
+end
+
+function initialize_elboargs_sources!(ea_vec, cfg_vec, thread_initialize_sources_assignment,
+                                      catalog, target_sources, neighbor_map, images,
+                                      trust_region, use_fft, min_radius_pix,
+                                      target_source_variational_params)
+    Threads.@threads for i in 1:nthreads()
+        for batch in 1:length(thread_initialize_sources_assignment[i])
+            initialize_elboargs_sources_kernel!(ea_vec, cfg_vec,
+                                                thread_initialize_sources_assignment[i][batch],
+                                                catalog, target_sources, neighbor_map, images,
+                                                trust_region, use_fft, min_radius_pix,
+                                                target_source_variational_params)
+        end
+    end
+end
+
+function initialize_elboargs_sources_kernel!(ea_vec, cfg_vec, sources, catalog,
+                                             target_sources, neighbor_map, images,
+                                             trust_region, use_fft, min_radius_pix,
+                                             target_source_variational_params)
+    try
+        for cur_source_index in sources
+            entry_id = target_sources[cur_source_index]
+            entry = catalog[target_sources[cur_source_index]]
+            neighbor_ids = neighbor_map[cur_source_index]
+            neighbors = catalog[neighbor_map[cur_source_index]]
+
+            # TODO max: refactor this portion? It's reused in infer_source.
+            cat_local = vcat([entry], neighbors)
+            ids_local = vcat([entry_id], neighbor_ids)
+
+            patches = Infer.get_sky_patches(images, cat_local)
+            Infer.load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
+
+            # Load vp with shared target source params, and also vp
+            # that doesn't share target source params
+            vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
+                                 target_source_variational_params[x] :
+                                 catalog_init_source(catalog[x]) for x in ids_local]
+
+            # Switch parameters based on whether or not we're using the fft method
+            if use_fft
+                ea, _ = initialize_fft_elbo_parameters(images,
+                                                       vp,
+                                                       patches,
+                                                       [1],
+                                                       use_raw_psf=false,
+                                                       allocate_fsm_mat=true)
+            else
+                ea = ElboArgs(images, vp, patches, [1])
+            end
+
+            ea_vec[cur_source_index] = ea
+            cfg_vec[cur_source_index] = Config(ea, trust_region = trust_region)
+        end
+        return nothing
+    catch ex
+        if is_production_run || nthreads() > 1
+            Log.error(string(ex))
+        else
+            rethrow(ex)
+        end
+    end
+end
+
+function process_sources!(images::Vector{Model.Image},
+                          ea_vec::Vector{ElboArgs{Float64}},
+                          cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
+                          thread_sources_assignment::Vector{Vector{Vector{Int64}}},
+                          n_iters::Int,
+                          use_fft::Bool,
+                          within_batch_shuffling::Bool)
+    n_threads::Int = nthreads()
+    n_batches::Int = length(thread_sources_assignment[1])
+    for iter in 1:n_iters
+        # Process every batch of every iteration. We do the batches on the outside
+        # Since there is an implicit barrier after the inner threaded for loop below.
+        # We want this barrier because there may be conflict _between_ Cyclades batches.
+        for batch in 1:n_batches
+            process_sources_elapsed_times::Vector{Float64} = Vector{Float64}(n_threads)
+            # Process every batch of every iteration with n_threads
+            Threads.@threads for i in 1:n_threads
+                tic()
+                process_sources_kernel!(images, ea_vec, cfg_vec,
+                                        thread_sources_assignment[i::Int][batch::Int],
+                                        iter, use_fft, within_batch_shuffling)
+                process_sources_elapsed_times[i::Int] = toq()
+            end
+            Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
+        end
+    end
+end
+
+# Process partition of sources. Multiple threads call this function in parallel.
+function process_sources_kernel!(images::Vector{Model.Image},
+                                 ea_vec::Vector{ElboArgs{Float64}},
+                                 cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
+                                 source_assignment::Vector{Int64},
+                                 iter::Int,
+                                 use_fft::Bool,
+                                 within_batch_shuffling::Bool)
+    try
+        # Shuffle the source assignments within each batch of each process.
+        # This is disabled by default because it ruins the deterministic outcome
+        # required by the test cases.
+        if within_batch_shuffling
+            shuffle!(source_assignment)
+        end
+        for i in source_assignment
+            ea, cfg = ea_vec[i], cfg_vec[i]
+            if use_fft
+                f = FFTElboFunction(load_fsm_mat(ea, images; use_raw_psf=true))
+            else
+                f = DeterministicVI.elbo
+            end
+            NewtonMaximize.maximize!(f, ea, cfg)
+        end
+    catch ex
+        if is_production_run || nthreads() > 1
+            Log.error(string(ex))
+        else
+            rethrow(ex)
+        end
+    end
 end

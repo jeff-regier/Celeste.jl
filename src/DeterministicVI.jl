@@ -96,6 +96,7 @@ include("deterministic_vi/elbo_kl.jl")
 include("deterministic_vi/source_brightness.jl")
 include("deterministic_vi/elbo_objective.jl")
 include("deterministic_vi/maximize_elbo.jl")
+include("deterministic_vi/NewtonMaximize.jl")
 
 
 """
@@ -118,7 +119,7 @@ function infer_source(images::Vector{Image},
     end
 
     # It's a bit inefficient to call the next 5 lines every time we optimize_f.
-    # But, as long as runtime is dominated by the call to maximize_f, that
+    # But, as long as runtime is dominated by the call to maximize!, that
     # isn't a big deal.
     cat_local = vcat([entry], neighbors)
     vp = init_sources([1], cat_local)
@@ -126,9 +127,8 @@ function infer_source(images::Vector{Image},
     Infer.load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
 
     ea = ElboArgs(images, vp, patches, [1])
-    f_evals, max_f, max_x, nm_result = maximize_f(elbo, ea)
-    vp[1]
+    f_evals, max_f, max_x, nm_result = NewtonMaximize.maximize!(elbo, ea)
+    return vp[1]
 end
-
 
 end
