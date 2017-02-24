@@ -23,6 +23,7 @@ include("ParallelRun.jl")
 
 include("AccuracyBenchmark.jl")
 include("GalsimBenchmark.jl")
+include("Stripe82Score.jl")
 
 include("CelesteEDA.jl")
 
