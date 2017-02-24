@@ -35,7 +35,7 @@ immutable GalaxyComponent
 end
 
 
-typealias GalaxyPrototype Vector{GalaxyComponent}
+@compat const GalaxyPrototype = Vector{GalaxyComponent}
 
 
 """

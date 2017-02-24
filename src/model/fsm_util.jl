@@ -56,8 +56,7 @@ function load_bvn_mixtures{NumType <: Number}(
             pc = psf[k]
             mean_s = @SVector NumType[pc.xiBar[1] + m_pos[1], pc.xiBar[2] + m_pos[2]]
             star_mcs[k, s] =
-              BvnComponent{NumType}(
-                mean_s, pc.tauBar, pc.alphaBar, false)
+              BvnComponent(mean_s, pc.tauBar, pc.alphaBar, false)
         end
 
         # Convolve the galaxy representations with the PSF.

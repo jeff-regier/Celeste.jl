@@ -453,7 +453,7 @@ function read_photoobj(fname, band::Char='r')
     objc_type = read(hdu, "objc_type")::Vector{Int32}
     is_star = objc_type .== 6
     is_gal = objc_type .== 3
-    is_bad_obj = @compat(!(is_star .| is_gal))
+    is_bad_obj = @compat((!).(is_star .| is_gal))
 
     fracdev = vec((read(hdu, "fracdev")::Matrix{Float32})[b, :])
 
@@ -466,7 +466,7 @@ function read_photoobj(fname, band::Char='r')
     # TODO: We don't really want to exclude objects entirely just for being
     # bright: we just don't want to use for scoring (since
     # they're very saturated, presumably).
-    mask = @compat(!(is_bad_fracdev .| is_bad_obj .| is_bright .| has_child))
+    mask = @compat((!).(is_bad_fracdev .| is_bad_obj .| is_bright .| has_child))
 
     # Read the fluxes.
     # Record the cmodelflux if the galaxy is composite, otherwise use

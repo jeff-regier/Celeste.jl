@@ -62,7 +62,7 @@ type BivariateNormalDerivatives{NumType <: Number}
   bvn_ss_h::Array{NumType, 2}
   bvn_us_h::Array{NumType, 2}
 
-  function BivariateNormalDerivatives()
+  function (::Type{BivariateNormalDerivatives{NumType}}){NumType}()
     py1 = zeros(NumType, 1)
     py2 = zeros(NumType, 1)
     f_pre = zeros(NumType, 1)
@@ -88,7 +88,7 @@ type BivariateNormalDerivatives{NumType <: Number}
     bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
     bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
 
-    new(py1, py2, f_pre,
+    new{NumType}(py1, py2, f_pre,
         bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
         dpy1_dsig, dpy2_dsig,
         dsiginv_dsig,
@@ -118,18 +118,19 @@ immutable BvnComponent{NumType <: Number}
     z::NumType
     dsiginv_dsig::SMatrix{3,3,NumType,9}
     major_sd::NumType
+end
 
-    function BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
-        the_mean::SVector{2,T1}, the_cov::SMatrix{2,2,T2,4}, weight::T3,
-        calculate_siginv_deriv::Bool=true)
+function BvnComponent{T1<:Number,T2<:Number,T3<:Number}(
+    the_mean::SVector{2,T1}, the_cov::SMatrix{2,2,T2,4}, weight::T3,
+    calculate_siginv_deriv::Bool=true)
 
-      ThisNumType = promote_type(T1, T2, T3)
-      c = 1 / (sqrt(det(the_cov)) * 2pi)
-      major_sd = sqrt(max( the_cov[1, 1], the_cov[2, 2] ))
+    NumType = promote_type(T1,T2,T3)
+    c = 1 / (sqrt(det(the_cov)) * 2pi)
+    major_sd = sqrt(max( the_cov[1, 1], the_cov[2, 2] ))
 
-      precision = inv(the_cov)
+    precision = inv(the_cov)
 
-      if calculate_siginv_deriv
+    if calculate_siginv_deriv
         # Derivatives of Sigma^{-1} with respect to sigma.  These are the second
         # derivatives of log|Sigma| with respect to sigma.
         # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
@@ -147,16 +148,15 @@ immutable BvnComponent{NumType <: Number}
         dsiginv_dsig32 = - 2 * precision[2, 2] * precision[2, 1]
         dsiginv_dsig33 = -precision[2, 2] ^ 2
 
-        dsiginv_dsig = @SMatrix ThisNumType[ dsiginv_dsig11 dsiginv_dsig12 dsiginv_dsig13;
-                                             dsiginv_dsig21 dsiginv_dsig22 dsiginv_dsig23;
-                                             dsiginv_dsig13 dsiginv_dsig32 dsiginv_dsig33 ]
+        dsiginv_dsig = @SMatrix NumType[ dsiginv_dsig11 dsiginv_dsig12 dsiginv_dsig13;
+                                           dsiginv_dsig21 dsiginv_dsig22 dsiginv_dsig23;
+                                           dsiginv_dsig13 dsiginv_dsig32 dsiginv_dsig33 ]
 
-        new{ThisNumType}(the_mean, precision, c * weight,
-                         dsiginv_dsig, major_sd)
-      else
-        new{ThisNumType}(the_mean, precision, c * weight,
-                         zeros(SMatrix{3,3,ThisNumType,9}), major_sd)
-      end
+        BvnComponent{NumType}(the_mean, precision, c * weight,
+                              dsiginv_dsig, major_sd)
+    else
+        BvnComponent{NumType}(the_mean, precision, c * weight,
+                              zeros(SMatrix{3,3,NumType,9}), major_sd)
     end
 end
 
@@ -429,8 +429,7 @@ function GalaxyCacheComponent{NumType <: Number}(
   weight = pc.alphaBar * gc.etaBar  # excludes e_dev
 
   # d siginv / dsigma is only necessary for the Hessian.
-  bmc = BvnComponent{NumType}(
-    mean_s, var_s, weight, calculate_gradient && calculate_hessian)
+  bmc = BvnComponent(mean_s, var_s, weight, calculate_gradient && calculate_hessian)
 
   if calculate_gradient
     sig_sf = GalaxySigmaDerivs(

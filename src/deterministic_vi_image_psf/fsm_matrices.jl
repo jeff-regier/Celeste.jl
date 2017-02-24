@@ -2,9 +2,9 @@ import Base.DFT: plan_fft!, plan_ifft!, to1
 import Base.DFT.FFTW.cFFTWPlan
 import ..Log
 
-typealias GMatrix Matrix{SensitiveFloat{Float64}}
-typealias fs0mMatrix Matrix{SensitiveFloat{Float64}}
-typealias fs1mMatrix Matrix{SensitiveFloat{Float64}}
+@compat const GMatrix    = Matrix{SensitiveFloat{Float64}}
+@compat const fs0mMatrix = Matrix{SensitiveFloat{Float64}}
+@compat const fs1mMatrix = Matrix{SensitiveFloat{Float64}}
 
 
 const plan_fft_lock = Base.Threads.SpinLock()
