@@ -271,16 +271,21 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
     return result
 end
 
-function fluxes_from_colors(reference_band_flux_nmgy::Float64, color_log_ratios::Vector{Float64})
+function fluxes_from_colors(reference_band_flux_nmgy::Float64, color_log_ratios::DataVector{Float64})
     @assert length(color_log_ratios) == 4
     color_ratios = exp.(color_log_ratios)
-    fluxes = Vector{Float64}(5)
+    fluxes = DataArray(Float64, 5)
     fluxes[3] = reference_band_flux_nmgy
     fluxes[4] = fluxes[3] * color_ratios[3]
     fluxes[5] = fluxes[4] * color_ratios[4]
     fluxes[2] = fluxes[3] / color_ratios[2]
     fluxes[1] = fluxes[2] / color_ratios[1]
     fluxes
+end
+
+function fluxes_from_colors(reference_band_flux_nmgy::Float64, color_log_ratios::Vector{Float64})
+    fluxes = fluxes_from_colors(reference_band_flux_nmgy, DataArray{Float64}(color_log_ratios))
+    convert(Vector{Float64}, fluxes)
 end
 
 function get_median_fluxes(variational_params::Vector{Float64}, source_type::Int64)
@@ -504,13 +509,14 @@ end
 ensure_small_flux(value) = (isna(value) || value <= 0) ? 1e-6 : value
 
 function make_catalog_entry(row::DataFrameRow)
-    color_log_ratios = [
+    color_log_ratios = DataArray{Float64}(DataArray(Any[
         row[:color_log_ratio_ug],
         row[:color_log_ratio_gr],
         row[:color_log_ratio_ri],
         row[:color_log_ratio_iz],
-    ]
-    fluxes = ensure_small_flux.(fluxes_from_colors(row[:reference_band_flux_nmgy], color_log_ratios))
+    ]))
+    fluxes = fluxes_from_colors(row[:reference_band_flux_nmgy], color_log_ratios)
+    fluxes = convert(Vector{Float64}, ensure_small_flux.(fluxes))
     Model.CatalogEntry(
         [row[:right_ascension_deg], row[:declination_deg]],
         row[:is_star],
