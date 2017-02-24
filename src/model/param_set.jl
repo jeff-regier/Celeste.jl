@@ -28,7 +28,7 @@
 #
 # Note Ia denotes the number of types of astronomical objects (e.g., 2 for stars and galaxies).
 
-abstract ParamSet
+@compat abstract type ParamSet end
 
 type StarPosParams <: ParamSet
     u::Vector{Int}

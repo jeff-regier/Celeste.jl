@@ -382,7 +382,7 @@ function test_bvn_derivatives()
     # strange to check that it doesn't matter.
     weight = 0.724
 
-    bvn = BvnComponent{Float64}(offset, sigma, weight)
+    bvn = BvnComponent(offset, sigma, weight)
     elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1)
     DeterministicVI.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
     DeterministicVI.get_bvn_derivs!(elbo_vars.bvn_derivs, bvn, true, true)
@@ -492,7 +492,7 @@ function test_galaxy_variable_transform()
     u_pix = Model.linear_world_to_pix(
         patch.wcs_jacobian, patch.center, patch.pixel_center, u)
     sigma = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)
-    bmc = BvnComponent{Float64}(SVector{2,Float64}(u_pix), sigma, 1.0)
+    bmc = BvnComponent(SVector{2,Float64}(u_pix), sigma, 1.0)
     sig_sf = DeterministicVI.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma)
     gcc = GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf)
     elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1)
@@ -705,7 +705,7 @@ function test_dsiginv_dsig()
     e_angle, e_axis, e_scale = (1.1, 0.02, 4.8) # bvn_derivs.bvn_sigsig_h is large
     the_cov = DeterministicVI.get_bvn_cov(e_axis, e_angle, e_scale)
     the_mean = @SVector Float64[0., 0.]
-    bvn = BvnComponent{Float64}(the_mean, the_cov, 1.0)
+    bvn = BvnComponent(the_mean, the_cov, 1.0)
     sigma_vec = Float64[ the_cov[1, 1], the_cov[1, 2], the_cov[2, 2] ]
 
     for component_index = 1:3

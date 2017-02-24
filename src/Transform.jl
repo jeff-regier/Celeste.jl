@@ -2,6 +2,8 @@
 
 module Transform
 
+using Compat
+
 # TODO: don't import Model; transformations should operate on
 # generic ParamSets
 using ..SensitiveFloats
@@ -17,8 +19,8 @@ export DataTransform, ParamBounds, ParamBox, SimplexBox,
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual
 # parameters for that object (referenced using ParamIndex).
-typealias VariationalParams{NumType <: Number} Vector{Vector{NumType}}
-typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
+@compat const VariationalParams{NumType <: Number}     = Vector{Vector{NumType}}
+@compat const FreeVariationalParams{NumType <: Number} = Vector{Vector{NumType}}
 
 #####################################################################################
 # this is essentially a compatibility layer since Model has gotten rid of this code
@@ -159,7 +161,7 @@ immutable SimplexBox
 end
 
 # The vector of transform parameters for a Symbol.
-typealias ParamBounds Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
+@compat const ParamBounds = Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
 
 
 ###############################################
@@ -349,7 +351,7 @@ type TransformDerivatives{NumType <: Number}
     Sa::Int
 
     # TODO: use sparse matrices?
-    function TransformDerivatives(Sa::Int)
+    function (::Type{TransformDerivatives{NumType}}){NumType}(Sa::Int)
         dparam_dfree =
             zeros(NumType,
                         Sa * length(CanonicalParams), Sa * length(UnconstrainedParams))
@@ -359,7 +361,7 @@ type TransformDerivatives{NumType <: Number}
                 zeros(NumType,
                             Sa * length(UnconstrainedParams), Sa * length(UnconstrainedParams))
         end
-        new(dparam_dfree, d2param_dfree2, Sa)
+        new{NumType}(dparam_dfree, d2param_dfree2, Sa)
     end
 end
 

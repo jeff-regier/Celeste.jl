@@ -4,13 +4,13 @@ using ..Model
 using ..SensitiveFloats
 using Compat
 
-typealias ParameterBatch{T<:Number} Vector{Vector{T}}
+@compat const ParameterBatch{T<:Number} = Vector{Vector{T}}
 
 ####################
 # Constraint Types #
 ####################
 
-abstract Constraint
+@compat abstract type Constraint end
 
 immutable BoxConstraint <: Constraint
     lower::Float64

@@ -1,5 +1,6 @@
 module Model
 
+using Compat
 using StaticArrays
 
 # parameter types

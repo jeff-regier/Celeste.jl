@@ -55,9 +55,8 @@ function GalaxyCacheComponent{NumType <: Number}(
     var_s = gc.nuBar * XiXi
 
     # d siginv / dsigma is only necessary for the Hessian.
-    bmc = BvnComponent{NumType}(
-        SVector{2, NumType}(u), var_s, gc.etaBar,
-        calculate_gradient && calculate_hessian)
+    bmc = BvnComponent(SVector{2, NumType}(u), var_s, gc.etaBar,
+                       calculate_gradient && calculate_hessian)
 
     if calculate_gradient
         sig_sf = GalaxySigmaDerivs(

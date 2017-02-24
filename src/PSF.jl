@@ -498,7 +498,7 @@ function get_sigma_from_params{NumType <: Number}(psf_params::Vector{Vector{NumT
             psf_params[k][psf_ids.e_scale], sigma_vec[k], true)
 
         bvn_vec[k] =
-            BvnComponent{NumType}(SVector{2,NumType}(psf_params[k][psf_ids.mu]), sigma_vec[k], 1.0)
+            BvnComponent(SVector{2,NumType}(psf_params[k][psf_ids.mu]), sigma_vec[k], 1.0)
     end
     sigma_vec, sig_sf_vec, bvn_vec
 end

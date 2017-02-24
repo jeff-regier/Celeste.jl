@@ -5,7 +5,7 @@ image rather than a mixture of Gaussians.
 
 module DeterministicVIImagePSF
 
-using StaticArrays, DiffBase
+using StaticArrays, DiffBase, Compat
 
 import ..DeterministicVI:
     ElboArgs, ElboIntermediateVariables, maximize_f, maximize_f_two_steps,
