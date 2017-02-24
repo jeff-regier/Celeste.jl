@@ -196,6 +196,7 @@ function star_only_config(ea::ElboArgs; loc_width = 1.0e-4, loc_scale = 1.0, kwa
             ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 1])
         ]
         simplexes[src] = [
+            ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.a),
             ParameterConstraint(SimplexConstraint(0.01/D, 1.0, D), ids.k[:, 1])
         ]
     end
