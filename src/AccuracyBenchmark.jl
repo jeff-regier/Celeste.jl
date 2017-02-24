@@ -715,7 +715,8 @@ end
 Return distance in pixels using small-distance approximation. Falls apart at poles and RA boundary.
 """
 function sky_distance_px(ra1, dec1, ra2, dec2)
-    (ARCSEC_PER_DEGREE / SDSS_ARCSEC_PER_PIXEL) * max(abs(dec2 - dec1), abs(ra2 - ra1))
+    distance_deg = sqrt((dec2 - dec1)^2 + (cosd(dec1) * (ra2 - ra1))^2)
+    distance_deg * ARCSEC_PER_DEGREE / SDSS_ARCSEC_PER_PIXEL
 end
 
 """
