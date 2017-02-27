@@ -53,6 +53,7 @@ function choose_patch_radius(ce::CatalogEntry,
     obj_width += psf_width
 
     flux = ce.is_star ? ce.star_fluxes[img.b] : ce.gal_fluxes[img.b]
+    if (!(flux > 0.)) @show ce end
     @assert flux > 0.
 
     # Choose enough pixels that the light is either 80% of the light
