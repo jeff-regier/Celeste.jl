@@ -1,5 +1,7 @@
 #!/usr/bin/env julia
 
+Pkg.checkout("DataFrames", "anj/06")
+
 using Celeste: Model, DeterministicVI
 
 import Celeste: Infer, DeterministicVI, ParallelRun, DeterministicVIImagePSF
