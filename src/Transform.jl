@@ -669,11 +669,11 @@ function transform_sensitive_float!{T}(dt::DataTransform,
        error("sf has NaN value:", sf_free.v[])
     end
 
-    if any(isnan(sf.d))
+    if any(isnan.(sf.d))
        error("sf has NaN derivatives:", sf_free.d[])
     end
 
-    if any(isnan(sf.h))
+    if any(isnan.(sf.h))
        error("sf has NaN hessian:", sf_free.h)
     end
 
@@ -706,11 +706,11 @@ function transform_sensitive_float!{T}(dt::DataTransform,
         error("sf_free has NaN value:", sf_free.v[])
     end
 
-    if any(isnan(sf_free.d))
+    if any(isnan.(sf_free.d))
         error("sf_free has NaN derivatives:", sf_free.d[])
     end
 
-    if any(isnan(sf_free.h))
+    if any(isnan.(sf_free.h))
         error("sf_free has NaN hessian:", sf_free.h)
     end
 
