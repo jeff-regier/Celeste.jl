@@ -1,6 +1,11 @@
 #!/usr/bin/env julia
 
+
+Pkg.checkout("DataArrays")
+Pkg.build("DataArrays")
 Pkg.checkout("DataFrames", "anj/06")
+Pkg.build("DataFrames")
+
 
 using Celeste: Model, DeterministicVI
 
