@@ -1,4 +1,4 @@
-URLBASE := http://data.sdss3.org/sas/dr12/boss
+URLBASE := https://data.sdss.org/sas/dr12/boss
 RUN := 3900
 CAMCOL := 6
 FIELD := 269
