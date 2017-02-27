@@ -80,10 +80,10 @@ type FSMSensitiveFloatMatrices
 
     FSMSensitiveFloatMatrices() = begin
         new(1, 1,
-            fs1mMatrix(), fs1mMatrix(), fs1mMatrix(), fs1mMatrix(), fs0mMatrix(),
-            GMatrix(), GMatrix(),
-            Matrix{Complex{Float64}}(),
-            Matrix{Float64}(),
+            fs1mMatrix(0,0), fs1mMatrix(0,0), fs1mMatrix(0,0), fs1mMatrix(0,0), fs0mMatrix(0,0),
+            GMatrix(0,0), GMatrix(0,0),
+            Matrix{Complex{Float64}}(0,0),
+            Matrix{Float64}(0,0),
             0, 0,
             2, x -> cubic_kernel_with_derivatives(x, 0.0))
     end

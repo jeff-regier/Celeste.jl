@@ -244,7 +244,7 @@ function benchmark_comparison_data(inferred_params, header, source_index)
         header,
         source_index,
     )
-    comparison_dataframe[!isna(comparison_dataframe[:ground_truth]), :]
+    comparison_dataframe[.!isna(comparison_dataframe[:ground_truth]), :]
 end
 
 function assert_counts_match_expected_flux(band_pixels::Vector{Matrix{Float32}},
