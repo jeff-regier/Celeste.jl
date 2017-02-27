@@ -356,8 +356,8 @@ function get_err_df(truth::DataFrame, predicted::DataFrame)
 
     predicted_gal = predicted[:is_star] .< .5
     true_gal = truth[:is_star] .< .5
-    ret[:missed_stars] =  predicted_gal & !(true_gal)
-    ret[:missed_gals] =  !predicted_gal & true_gal
+    ret[:missed_stars] =  predicted_gal .& !(true_gal)
+    ret[:missed_gals] =  !predicted_gal .& true_gal
 
     ret[:position] = dist.(truth[:ra], truth[:dec],
                           predicted[:ra], predicted[:dec])
@@ -468,16 +468,16 @@ function get_scores_df(celeste_err, primary_err, coadd_df)
 
         pe_good = Bool[!isnan(x) for x in primary_err[:, nm]]
         ce_good = Bool[!isnan(x) for x in celeste_err[:, nm]]
-        good_row = pe_good & ce_good
+        good_row = pe_good .& ce_good
         if string(nm)[1:5] == "star_"
-            good_row &= (coadd_df[:is_star] .> 0.5)
+            good_row .&= (coadd_df[:is_star] .> 0.5)
         elseif string(nm)[1:4] == "gal_"
-            good_row &= (coadd_df[:is_star] .< 0.5)
+            good_row .&= (coadd_df[:is_star] .< 0.5)
             if nm in [:gal_ab, :gal_scale, :gal_angle, :gal_fracdev]
-                good_row &= !(0.05 .< coadd_df[:gal_fracdev] .< 0.95)
+                good_row .&= !(0.05 .< coadd_df[:gal_fracdev] .< 0.95)
             end
             if nm == :gal_angle
-                good_row &= coadd_df[:gal_ab] .< .6
+                good_row .&= coadd_df[:gal_ab] .< .6
             end
         end
 
