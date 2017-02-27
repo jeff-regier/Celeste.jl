@@ -34,7 +34,7 @@ function test_read_photoobj_missing()
     fname = joinpath(Pkg.dir("Celeste"), "test", "data",
                      "photoObj-006597-4-0025.fits")
     if !isfile(fname)
-        run(`curl --create-dirs -o $fname http://data.sdss3.org/sas/dr12/boss/photoObj/301/6597/4/photoObj-006597-4-0025.fits`)
+        run(`curl --create-dirs -o $fname https://data.sdss.org/sas/dr12/boss/photoObj/301/6597/4/photoObj-006597-4-0025.fits`)
     end
 
     catalog = SDSSIO.read_photoobj(fname)
