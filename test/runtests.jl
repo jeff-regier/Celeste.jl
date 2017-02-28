@@ -6,6 +6,8 @@ Pkg.build("DataArrays")
 Pkg.checkout("DataFrames", "anj/06")
 Pkg.build("DataFrames")
 
+using ForwardDiff
+using StaticArrays
 
 using Celeste: Model, DeterministicVI
 

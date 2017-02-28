@@ -5,7 +5,6 @@ using Celeste.SensitiveFloats.zero_sensitive_float_array
 using Celeste.SensitiveFloats.SensitiveFloat
 using Celeste.SensitiveFloats.clear!
 
-using ForwardDiff
 using Base.Test
 
 
