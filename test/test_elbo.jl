@@ -3,7 +3,6 @@ using Celeste: DeterministicVI, SensitiveFloats
 using Base.Test
 using Distributions
 using DerivativeTestUtils
-using StaticArrays
 
 import ForwardDiff.Dual
 

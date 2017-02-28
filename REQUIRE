@@ -1,4 +1,4 @@
-julia 0.5
+julia 0.6-
 Compat 0.18.0
 DataFrames
 DataStructures 0.5.2

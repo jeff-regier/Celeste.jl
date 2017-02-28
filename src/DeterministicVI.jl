@@ -16,8 +16,8 @@ import ..Log
 using ..Transform
 import DataFrames
 import Optim
-using StaticArrays
 import ForwardDiff.Dual
+using StaticArrays
 import Base.convert
 
 export ElboArgs, generic_init_source, catalog_init_source, init_sources

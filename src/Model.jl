@@ -1,6 +1,7 @@
 module Model
 
 using Compat
+import ForwardDiff
 using StaticArrays
 
 # parameter types
@@ -29,7 +30,6 @@ import Base.+
 import Distributions
 import FITSIO, WCS
 import WCS.WCSTransform
-import ForwardDiff
 import ..Log
 
 import Base.length

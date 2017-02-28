@@ -1,11 +1,8 @@
-import ForwardDiff
-
 using Celeste: Model, SensitiveFloats, DeterministicVI
 using Distributions
 import Celeste.DeterministicVI: BvnComponent, GalaxyCacheComponent
 import Celeste.DeterministicVI: eval_bvn_pdf!, get_bvn_derivs!, transform_bvn_derivs!
 using DerivativeTestUtils
-using StaticArrays
 
 
 """
