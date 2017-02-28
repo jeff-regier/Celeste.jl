@@ -1,10 +1,14 @@
 #!/usr/bin/env julia
 
+if Pkg.installed("DataArrays") <= v"0.3.12"
+    Pkg.checkout("DataArrays")
+    Pkg.build("DataArrays")
+end
 
-Pkg.checkout("DataArrays")
-Pkg.build("DataArrays")
-Pkg.checkout("DataFrames", "anj/06")
-Pkg.build("DataFrames")
+if Pkg.installed("DataFrames") <= v"0.8.5"
+    Pkg.checkout("DataFrames", "anj/06")
+    Pkg.build("DataFrames")
+end
 
 using ForwardDiff
 using StaticArrays

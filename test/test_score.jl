@@ -25,7 +25,7 @@ import WCS
     # both distances are about 0.315 pixels -- an arc second shift to the right
     # is less, in pixels, at higher elevations than at the equator, where it's
     # 1/0.396 ≈ 2.525 pixels per arc second.
-    @test_approx_eq_eps exact_dist our_dist 1e-4
+    @test exact_dist ≈ our_dist atol=1e-4
 end
 
 @testset "test scoring a whole field" begin
