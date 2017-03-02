@@ -149,8 +149,7 @@ function test_fft_on_one_source_matches_single()
     # Joint infer. Don't use default optim params since single infer does not.
     infer_joint(ctni...) = one_node_joint_infer(ctni...;
                                                 n_iters=1,
-                                                use_fft=true,
-                                                trust_region=NewtonMaximize.custom_trust_region())
+                                                use_fft=true)
     result_infer_joint = one_node_infer(field_triplets, datadir;
                                         infer_callback=infer_joint,
                                         box=box)

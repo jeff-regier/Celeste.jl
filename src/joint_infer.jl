@@ -1,7 +1,5 @@
 import FITSIO
 import JLD
-import Optim
-import Optim: NewtonTrustRegion
 using DataStructures
 
 import ..Log
@@ -36,13 +34,16 @@ to process. Writes to the components argument.
 
 - source_start - start source
 - end_source - end source (inclusively processed)
-- sources - the actual source ids to find connected components for (indexed by source_start and source_end)
+- sources - the actual source ids to find connected components for
+    (indexed by source_start and source_end)
 - neighbor_map - conflict graph of sources
 - components_tree - the components array to do union find on.
-- components - Dict{Int64, Vector{Int64}} dictionary from cc_id to target_source index in that component
-- src_to_target_index - a mapping from light source id -> index within the target_sources array. This is required
-                        since we need to write the index within target sources to the output, rather than the source id itself.
-
+- components - Dict{Int64, Vector{Int64}} dictionary from cc_id to
+              target_source index in that component
+- src_to_target_index - a mapping from light source id -> index
+            within the target_sources array. This is required
+            since we need to write the index within target sources
+            to the output, rather than the source id itself.
 Returns:
 - Nothing
 """
@@ -235,9 +236,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
                               use_fft::Bool=false,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
-                              n_iters::Int=3,
-                              trust_region::NewtonTrustRegion{Float64}=NewtonTrustRegion())
-
+                              n_iters::Int=3)
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
@@ -281,7 +280,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
 
     initialize_elboargs_sources!(config, ea_vec, cfg_vec, thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
-                                 trust_region, use_fft, target_source_variational_params)
+                                 use_fft, target_source_variational_params)
 
     Log.info("Done preallocating array of elboargs. Elapsed time: $(toq())")
 
@@ -316,8 +315,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               use_fft::Bool=false,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
-                              n_iters::Int=3,
-                              trust_region::NewtonTrustRegion{Float64}=NewtonTrustRegion())
+                              n_iters::Int=3)
     one_node_joint_infer(
         Configs.Config(),
         catalog,
@@ -328,23 +326,21 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
         use_fft=use_fft,
         batch_size=batch_size,
         within_batch_shuffling=within_batch_shuffling,
-        n_iters=n_iters,
-        trust_region=trust_region,
+        n_iters=n_iters
     )
 end
 
 function initialize_elboargs_sources!(config::Configs.Config, ea_vec, cfg_vec,
                                       thread_initialize_sources_assignment,
                                       catalog, target_sources, neighbor_map, images,
-                                      trust_region, use_fft, target_source_variational_params)
+                                      use_fft, target_source_variational_params)
     Threads.@threads for i in 1:nthreads()
         try
             for batch in 1:length(thread_initialize_sources_assignment[i])
                 initialize_elboargs_sources_kernel!(config, ea_vec, cfg_vec,
                                                     thread_initialize_sources_assignment[i][batch],
                                                     catalog, target_sources, neighbor_map, images,
-                                                    trust_region, use_fft,
-                                                    target_source_variational_params)
+                                                    use_fft, target_source_variational_params)
             end
         catch ex
             Log.exception(ex)
@@ -353,10 +349,10 @@ function initialize_elboargs_sources!(config::Configs.Config, ea_vec, cfg_vec,
     end
 end
 
+
 function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg_vec, sources,
                                              catalog, target_sources, neighbor_map, images,
-                                             trust_region, use_fft,
-                                             target_source_variational_params)
+                                             use_fft, target_source_variational_params)
     try
         for cur_source_index in sources
             entry_id = target_sources[cur_source_index]
@@ -390,7 +386,7 @@ function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg
             end
 
             ea_vec[cur_source_index] = ea
-            cfg_vec[cur_source_index] = Config(ea, trust_region = trust_region)
+            cfg_vec[cur_source_index] = Config(ea)
         end
         return nothing
     catch ex

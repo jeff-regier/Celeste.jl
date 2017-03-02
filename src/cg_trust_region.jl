@@ -2,6 +2,7 @@ import Optim: update!, solve_tr_subproblem!, Optimizer, @add_generic_fields,
               Options, initial_state, update_state!, trace!, assess_convergence,
               update_g!
 
+
 immutable CGTrustRegion{T <: Real} <: Optimizer
     initial_radius::T
     max_radius::T
@@ -78,8 +79,6 @@ end
 function trace!(tr, state, iteration, method::CGTrustRegion, options)
     dt = Dict()
     if options.extended_trace
-        dt["x"] = copy(state.x)
-        dt["g(x)"] = copy(state.g)
         dt["radius"] = copy(state.radius)
         dt["interior"] = state.interior
         dt["accept_step"] = state.accept_step
@@ -117,7 +116,7 @@ function cg_steihaug!{T}(objective::TwiceDifferentiableHV,
     fill!(z, 0.0)  # the search direction is initialized to the 0 vector,
     r[:] = g  # so at first the whole gradient is the residual.
     d[:] = -r # the first direction is the direction of steepest descent.
-    rho0 = 1e22  # just a big number
+    rho0 = 1e100  # just a big number
 
     for i in 1:n
         objective.hv!(x, d, Hd)
@@ -182,6 +181,7 @@ function update_state!{T}(objective::TwiceDifferentiableHV,
     return false
 end
 
+
 function update_g!(objective, state::CGTrustRegionState, method)
     if state.accept_step
         # Update the function value and gradient
@@ -189,6 +189,7 @@ function update_g!(objective, state::CGTrustRegionState, method)
         state.f_calls, state.g_calls = state.f_calls + 1, state.g_calls + 1
     end
 end
+
 
 function assess_convergence(state::CGTrustRegionState, options)
     if !state.accept_step
