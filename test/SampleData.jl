@@ -201,7 +201,8 @@ function sample_ce(pos, is_star::Bool)
 end
 
 
-function perturb_params(vp) # for testing derivatives != 0
+# for testing away from the truth, where derivatives != 0
+function perturb_params(vp)
     for vs in vp
         vs[ids.a] = [ 0.4, 0.6 ]
         vs[ids.u[1]] += .8
@@ -248,9 +249,6 @@ function gen_sample_galaxy_dataset(; perturb=true)
     catalog = [sample_ce([8.5, 9.6], false),]
     images = Synthetic.gen_blob(images0, catalog)
     ea = make_elbo_args(images, catalog)
-    if perturb
-        perturb_params(ea)
-    end
 
     vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
     if perturb
@@ -294,20 +292,20 @@ function gen_three_body_dataset(; perturb=true)
         images0[b].H, images0[b].W = 112, 238
         images0[b].wcs = wcs_id
     end
-    three_bodies = [
+    catalog = [
         sample_ce([4.5, 3.6], false),
         sample_ce([60.1, 82.2], true),
         sample_ce([71.3, 100.4], false),
     ];
-    images = Synthetic.gen_blob(images0, three_bodies);
-    ea = make_elbo_args(images, three_bodies);
+    images = Synthetic.gen_blob(images0, catalog);
+    ea = make_elbo_args(images, catalog);
 
-    vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in ea.catalog]
+    vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
     if perturb
         perturb_params(vp)
     end
 
-    ea, vp
+    ea, vp, catalog
 end
 
 
@@ -316,7 +314,7 @@ Generate a large dataset with S randomly placed bodies and non-constant
 background.
 """
 function gen_n_body_dataset(
-        S::Int; patch_pixel_radius=20., seed=NaN)
+        S::Int; patch_pixel_radius=20., seed=NaN, perturb=true)
     if !isnan(seed)
         srand(seed)
     end
@@ -347,7 +345,7 @@ function gen_n_body_dataset(
     ea = make_elbo_args(
         images, catalog, patch_radius_pix=patch_pixel_radius)
 
-    vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in ea.catalog]
+    vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
     if perturb
         perturb_params(vp)
     end

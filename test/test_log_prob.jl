@@ -1,23 +1,22 @@
 using Celeste: Model
 using Base.Test
 
-"""
-test log_prob.jl and log_prob_util.jl
-"""
+
+# test log_prob.jl and log_prob_util.jl
+
 
 #####################
 ## Helper functions #
 #####################
 
 
-function test_that_star_truth_is_most_likely_log_prob()
-
+@testset "star truth has the highest log probability" begin
     # init ground truth star
-    images, ea, body = SampleData.true_star_init()
+    ea, vp, catalog = SampleData.true_star_init()
 
     # turn list of catalog entries a list of LatentStateParams
-    source_states = [Model.catalog_entry_to_latent_state_params(body[s])
-                     for s in 1:length(body)]
+    source_states = [Model.catalog_entry_to_latent_state_params(catalog[s])
+                     for s in 1:length(catalog)]
 
     # create logpdf function handle
     star_logpdf, star_logprior =
@@ -29,9 +28,7 @@ function test_that_star_truth_is_most_likely_log_prob()
     # extract the star-specific parameters from source_states[1] for the
     # logpdf function
     star_state = Model.extract_star_state(source_states[1])
-    println(star_state)
     best_ll = star_logpdf(star_state)
-    println("Best ll ", best_ll)
 
     # perterb lnr
     lnr = star_state[1]
@@ -62,15 +59,13 @@ function test_that_star_truth_is_most_likely_log_prob()
 end
 
 
-function test_that_gal_truth_is_most_likely_log_prob()
+@testset "galaxy truth has the highest log probability" begin
     # init ground truth star
-    images, ea, body = gen_sample_galaxy_dataset()
+    ea, vp, catalog = gen_sample_galaxy_dataset()
 
     # turn list of catalog entries a list of LatentStateParams
-    source_states = [Model.catalog_entry_to_latent_state_params(body[s])
-                     for s in 1:length(body)]
-    println("  active source params: ", body[1])
-    println("  corresponding ls    : ", source_states[1])
+    source_states = [Model.catalog_entry_to_latent_state_params(catalog[s])
+                     for s in 1:length(catalog)]
 
     # create logpdf function handle
     gal_logpdf, gal_logprior =
@@ -82,9 +77,7 @@ function test_that_gal_truth_is_most_likely_log_prob()
     # extract the star-specific parameters from source_states[1] for the
     # logpdf function
     gal_state = Model.extract_galaxy_state(source_states[1])
-    println(gal_state)
     best_ll = gal_logpdf(gal_state)
-    println("Best ll ", best_ll)
 
     # unpack true gal parameters
     lnr, col, u, shape = gal_state[1], gal_state[2:5],
@@ -130,7 +123,7 @@ function test_that_gal_truth_is_most_likely_log_prob()
 end
 
 
-function test_color_flux_transform()
+@testset "test color flux transform" begin
     # fluxes --- positive poisson rates
     fluxes = [1., 200., 300., 20., 5.]
     lnr, colors = Model.fluxes_to_colors(fluxes)
@@ -143,7 +136,7 @@ function test_color_flux_transform()
 end
 
 
-function test_sigmoid_logit()
+@testset "test sigmoid logit" begin
     as = [-10., -1., -.001, .001, 1., 10.]
     for a in as
 
@@ -159,7 +152,7 @@ function test_sigmoid_logit()
 end
 
 
-function test_gal_shape_constrain()
+@testset "test gal shape constrain" begin
     con_gal_shape = [.1, .1, .1, .1]
     unc_gal_shape = Model.unconstrain_gal_shape(con_gal_shape)
     back_gal_shape = Model.constrain_gal_shape(unc_gal_shape)
@@ -171,10 +164,3 @@ function test_gal_shape_constrain()
     end
 end
 
-
-####################################
-test_sigmoid_logit()
-test_gal_shape_constrain()
-test_color_flux_transform()
-test_that_star_truth_is_most_likely_log_prob()
-test_that_gal_truth_is_most_likely_log_prob()
