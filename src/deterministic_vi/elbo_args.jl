@@ -241,7 +241,8 @@ end
 
 function convert!(vp_tgt::VariationalParams{Dual{1, Float64}},
                   vp_src::VariationalParams{Float64})
-    for s in 1:length(vp)
+    @assert length(vp_tgt) == length(vp_src)
+    for s in 1:length(vp_src)
         vp_tgt[s][:] = vp_src[s]
     end
     vp_tgt

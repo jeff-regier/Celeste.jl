@@ -94,7 +94,7 @@ end
 end
 
 
-@testset "test that star truth is most likely" begin
+@testset "star truth is most likely" begin
     ea, vp, catalog = true_star_init()
     best = DeterministicVI.elbo_likelihood(ea, vp)
 
@@ -134,7 +134,7 @@ end
 end
 
 
-@testset "test that galaxy truth is most likely" begin
+@testset "galaxy truth is most likely" begin
     ea, vp, catalog = gen_sample_galaxy_dataset(perturb=false)
     vp[1][ids.a] = [ 0.01, .99 ]
     best = DeterministicVI.elbo_likelihood(ea, vp)
@@ -184,7 +184,7 @@ end
 end
 
 
-@testset "Tests elbo gradient, and that elbo supports dual numbers" begin
+@testset "manual elbo gradient matches auto diff gradient" begin
     ea, vp, catalog = gen_two_body_dataset()
 
     # compute the gradient (and the value) of the elbo manually
