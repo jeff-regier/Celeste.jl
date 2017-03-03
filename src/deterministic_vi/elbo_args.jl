@@ -238,14 +238,20 @@ function ElboArgs(
 end
 
 
+
+function convert!(vp_tgt::VariationalParams{Dual{1, Float64}},
+                  vp_src::VariationalParams{Float64})
+    for s in 1:length(vp)
+        vp_tgt[s][:] = vp_src[s]
+    end
+    vp_tgt
+end
+
 function convert(::Type{VariationalParams{Dual{1, Float64}}},
                  vp::VariationalParams{Float64})
     T = Dual{1, Float64}
     P = length(CanonicalParams)
-    vp2 = Vector{T}[zeros(T, P) for s=1:length(vp)]
-    for s in 1:length(vp)
-        vp2[s][:] = vp[s]
-    end
-    vp2
+    vp_tgt = Vector{T}[zeros(T, P) for s=1:length(vp)]
+    convert!(vp_tgt, vp)
 end
 

@@ -6,7 +6,7 @@ using Optim
 using Optim: Options
 using ..Model
 using ..SensitiveFloats
-using ..DeterministicVI: ElboArgs, elbo, ElboIntermediateVariables, VariationalParams
+using ..DeterministicVI: ElboArgs, elbo, ElboIntermediateVariables, VariationalParams, convert!
 using ...ConstraintTransforms: TransformDerivatives,
                                ParameterBatch,
                                ConstraintBatch,
@@ -63,80 +63,85 @@ end
 # Objective #
 #############
 
-
-immutable Objective{N} <: Function
+immutable Objective <: Function
     ea::ElboArgs
-    elbo_vars::ElboIntermediateVariables{Float64}
-    sf_free::SensitiveFloat{Float64}
-    cfg::Config{N,Float64}
+    vp::VariationalParams{T}
+    elbo_vars::ElboIntermediateVariables{T}
+    sf_free::SensitiveFloat{T}
+    cfg::Config{1, T}
 end
 
-immutable Gradient{N} <: Function
+immutable Gradient <: Function
     ea::ElboArgs
+    vp::VariationalParams{Float64}
     elbo_vars::ElboIntermediateVariables{Float64}
     sf_free::SensitiveFloat{Float64}
-    cfg::Config{N,Float64}
+    cfg::Config{1, Float64}
 end
 
-immutable Hessian{N} <: Function
+immutable Hessian <: Function
     ea::ElboArgs
+    vp_float::VariationalParams{Float64}
+    vp::VariationalParams{Dual{1, Float64}}
     elbo_vars::ElboIntermediateVariables{Dual{1, Float64}}
     sf_free::SensitiveFloat{Dual{1, Float64}}
-    cfg::Config{N,Dual{1, Float64}}
+    cfg::Config{1, Dual{1, Float64}}
 end
 
 """
 An unconstrained version of the ELBO
 """
-function Objective(ea::ElboArgs, cfg::Config, x::Vector)
+function Objective(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config, x::Vector)
     elbo_vars = ElboIntermediateVariables(Float64, ea.S, length(ea.active_sources); 
                                           calculate_gradient=calculate_gradient, 
                                           calculate_hessian=false)
     sf_free = SensitiveFloat{Float64}(length(cfg.free_params[1]),
                                       length(cfg.bound_params), false, false)
-    return Objective(ea, elbo_vars, sf_free, cfg)
+    return Objective(ea, vp, elbo_vars, sf_free, cfg)
 end
 
 """
 Computes both the gradient the objective function's value
 """
-function Gradient(ea::ElboArgs, cfg::Config, x::Vector)
+function Gradient(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config, x::Vector)
     elbo_vars = ElboIntermediateVariables(Float64, ea.S, length(ea.active_sources); 
                                           calculate_gradient=calculate_gradient, 
                                           calculate_hessian=false)
     sf_free = SensitiveFloat{Float64}(length(cfg.free_params[1]),
                                       length(cfg.bound_params), true, false)
-    return Gradient(ea, elbo_vars, sf_free, cfg)
+    return Gradient(ea, vp, elbo_vars, sf_free, cfg)
 end
 
 """
 Computes hessian-vector products
 """
-function Hessian(ea::ElboArgs, cfg::Config, x::Vector)
+function Hessian(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config, x::Vector)
     elbo_vars = ElboIntermediateVariables(Dual{1, Float64}, ea.S, length(ea.active_sources); 
                                           calculate_gradient=true, 
                                           calculate_hessian=false)
     sf_free = SensitiveFloat{Dual{1, Float64}}(length(cfg.free_params[1]), 
                                     length(cfg.bound_params), true, false)
-    return Hessian(ea, elbo_vars, sf_free, cfg)
+    vp_dual = convert(VariationalParams{Dual{1, Float64}}, vp)
+    return Hessian(ea, vp, vp_dual, elbo_vars, sf_free, cfg)
 end
 
-function evaluate!(f::Objective, x::Vector)
+function (f::Objective)(x::Vector)
     from_vector!(f.cfg.free_params, x)
     to_bound!(f.cfg.bound_params, f.cfg.free_params, f.cfg.constraints)
     sf_bound = f.f(f.ea)
     propagate_derivatives!(to_bound!, sf_bound, f.sf_free, f.cfg.free_params,
                            f.cfg.constraints, f.cfg.derivs)
-    return nothing
-end
 
-function (f::Objective)(x::Vector)
-    evaluate!(f, x)
     return -(f.sf_free.v[])
 end
 
 function (f::Gradient)(x::Vector, result::Vector)
-    evaluate!(f, x)
+    from_vector!(f.cfg.free_params, x)
+    to_bound!(f.cfg.bound_params, f.cfg.free_params, f.cfg.constraints)
+    sf_bound = f.f(f.ea)
+    propagate_derivatives!(to_bound!, sf_bound, f.sf_free, f.cfg.free_params,
+                           f.cfg.constraints, f.cfg.derivs)
+
     free_gradient = f.sf_free.d
     for i in eachindex(result)
         result[i] = -(free_gradient[i])
@@ -145,14 +150,17 @@ function (f::Gradient)(x::Vector, result::Vector)
 end
 
 function (f::Hessian)(x::Vector, v::Vector, result::Vector)
-    evaluate!(f, x)
-    H = Matrix{Float64}(length(x), length(x))
-    free_hessian = f.sf_free.h
-    for i in eachindex(H)
-        H[i] = -(free_hessian[i])
+    convert!(f.vp, f.vp_float)
+    from_vector!(f.cfg.free_params, x)
+    to_bound!(f.cfg.bound_params, f.cfg.free_params, f.cfg.constraints)
+    sf_bound = f.f(f.ea)
+    propagate_derivatives!(to_bound!, sf_bound, f.sf_free, f.cfg.free_params,
+                           f.cfg.constraints, f.cfg.derivs)
+
+    free_gradient = f.sf_free.d
+    for i in eachindex(result)
+        result[i] = -(free_gradient[i].partials[])
     end
-    result[:] = H * v
-    return result
 end
 
 #############
@@ -160,8 +168,6 @@ end
 #############
 
 function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}; cfg_kwargs...)
-    vp_dual = convert(VariationalParams{Dual{1, Float64}}, vp)
-
     cfg = Config(vp[ea.active_sources]; cfg_kwargs...)
     enforce!(cfg.bound_params, cfg.constraints)
     to_free!(cfg.free_params, cfg.bound_params, cfg.constraints)
