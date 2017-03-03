@@ -546,10 +546,9 @@ function make_initialization_catalog(catalog::DataFrame, use_full_initialzation:
         if use_full_initialzation
             make_catalog_entry(row)
         else
-            position_offset = rand(Uniform(-position_offset_width, position_offset_width), 2)
             make_catalog_entry(
-                row[:right_ascension_deg] + position_offset[1],
-                row[:declination_deg] + position_offset[2],
+                row[:right_ascension_deg] + position_offset_width,
+                row[:declination_deg] - 0.5 * position_offset_width,
                 row[:objid],
             )
         end
