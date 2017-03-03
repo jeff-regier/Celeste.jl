@@ -4,6 +4,7 @@ import ArgParse
 using DataFrames
 
 import Celeste.AccuracyBenchmark
+import Celeste.Configs
 import Celeste.Infer
 import Celeste.ParallelRun
 import Celeste.SDSSIO
@@ -60,6 +61,7 @@ end
 neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
 
 results = AccuracyBenchmark.run_celeste(
+    Configs.Config(),
     catalog_entries,
     target_sources,
     images,

@@ -3,6 +3,7 @@ __precompile__()
 module Celeste
 
 # submodules
+include("Configs.jl")
 include("Log.jl")
 
 include("SensitiveFloats.jl")

@@ -8,8 +8,9 @@ import ..PSF: get_psf_at_point
 function test_render()
     images, ea, two_body = SampleData.gen_two_body_dataset();
     patches = Infer.get_sky_patches(images, two_body; radius_override_pix=50);
-    Infer.load_active_pixels!(
-        images, patches, noise_fraction=Inf, min_radius_pix=Nullable(10));
+    config = Configs.Config()
+    config.min_radius_pix = 10.0
+    Infer.load_active_pixels!(config, images, patches, noise_fraction=Inf)
     ea_fft = DeterministicVIImagePSF.ElboArgs(
         images, deepcopy(ea.vp), patches, collect(1:ea.S), psf_K=1);
     n = 3

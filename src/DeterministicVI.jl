@@ -4,6 +4,8 @@ Calculate value, gradient, and hessian of the variational ELBO.
 module DeterministicVI
 
 using Base.Threads: threadid, nthreads
+
+import ..Configs
 using ..Model
 import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
                 GalaxySigmaDerivs, SkyPatch,
@@ -109,10 +111,10 @@ Arguments:
     neighbors: the other light sources near `entry`
     entry: the source to infer
 """
-function infer_source(images::Vector{Image},
+function infer_source(config::Configs.Config,
+                      images::Vector{Image},
                       neighbors::Vector{CatalogEntry},
-                      entry::CatalogEntry;
-                      min_radius_pix=Nullable{Float64}())
+                      entry::CatalogEntry)
     if length(neighbors) > 100
         msg = string("objid $(entry.objid) [ra: $(entry.pos)] has an excessive",
                      "number ($(length(neighbors))) of neighbors")
@@ -125,11 +127,18 @@ function infer_source(images::Vector{Image},
     cat_local = vcat([entry], neighbors)
     vp = init_sources([1], cat_local)
     patches = Infer.get_sky_patches(images, cat_local)
-    Infer.load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
+    Infer.load_active_pixels!(config, images, patches)
 
     ea = ElboArgs(images, vp, patches, [1])
     f_evals, max_f, max_x, nm_result = NewtonMaximize.maximize!(elbo, ea)
     return vp[1]
+end
+
+# legacy wrapper
+function infer_source(images::Vector{Image},
+                      neighbors::Vector{CatalogEntry},
+                      entry::CatalogEntry)
+    infer_source(Configs.Config(), images, neighbors, entry)
 end
 
 end

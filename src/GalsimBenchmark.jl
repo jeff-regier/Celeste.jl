@@ -5,11 +5,13 @@ module GalsimBenchmark
 using DataFrames
 import FITSIO
 
-import Celeste: AccuracyBenchmark, Infer
+import Celeste.AccuracyBenchmark
+import Celeste.Configs
+import Celeste.Infer
 
 const GALSIM_BENCHMARK_DIR = joinpath(Pkg.dir("Celeste"), "benchmark", "galsim")
 const LATEST_FITS_FILENAME_DIR = joinpath(GALSIM_BENCHMARK_DIR, "latest_filenames")
-const ACTIVE_PIXELS_MIN_RADIUS_PX = Nullable(40.0)
+const ACTIVE_PIXELS_MIN_RADIUS_PX = 40.0
 
 function get_latest_fits_filename(label)
     latest_fits_filename_holder = joinpath(
@@ -66,10 +68,6 @@ end
 
 function run_benchmarks(; test_case_names=String[], print_fn=println, joint_inference=false,
                         use_fft=false)
-    function infer_source_min_radius(args...; kwargs...)
-        infer_source_callback(args...; min_radius_pix=ACTIVE_PIXELS_MIN_RADIUS_PX, kwargs...)
-    end
-
     latest_fits_filename = get_latest_fits_filename("galsim_benchmarks")
     full_fits_path = joinpath(GALSIM_BENCHMARK_DIR, "output", latest_fits_filename)
     extensions = AccuracyBenchmark.read_fits(full_fits_path)
@@ -89,7 +87,10 @@ function run_benchmarks(; test_case_names=String[], print_fn=println, joint_infe
         truth_catalog_df = extract_catalog_from_header(header)
         catalog_entries = AccuracyBenchmark.make_initialization_catalog(truth_catalog_df, false)
         target_sources = collect(1:num_sources)
+        config = Configs.Config()
+        config.min_radius_pix = ACTIVE_PIXELS_MIN_RADIUS_PX
         results = AccuracyBenchmark.run_celeste(
+            config,
             catalog_entries,
             target_sources,
             images,

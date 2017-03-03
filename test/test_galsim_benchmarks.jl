@@ -5,11 +5,11 @@ using DataFrames
 import Celeste: GalsimBenchmark
 
 GALSIM_CASES_EXERCISED = [
-    #"simple_star",
+    "simple_star",
     "star_with_noise",
     "angle_and_axis_ratio_1",
     "galaxy_with_all",
-    #"galaxy_with_noise",
+    "galaxy_with_noise",
 ]
 
 function assert_estimates_are_close(benchmark_results)

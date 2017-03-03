@@ -6,6 +6,7 @@ import FITSIO
 import StaticArrays
 import WCS
 
+import Celeste.Configs
 import Celeste.DeterministicVI
 import Celeste.DeterministicVIImagePSF
 import Celeste.Infer
@@ -742,11 +743,13 @@ end
 
 # Run Celeste with any combination of single/joint inference and MOG/FFT model
 function run_celeste(
-    catalog_entries, target_sources, images; use_joint_inference=false, use_fft=false
+    config::Configs.Config, catalog_entries, target_sources, images;
+    use_joint_inference=false, use_fft=false
 )
     neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
     if use_joint_inference
         ParallelRun.one_node_joint_infer(
+            config,
             catalog_entries,
             target_sources,
             neighbor_map,
@@ -760,6 +763,7 @@ function run_celeste(
             infer_source_callback = DeterministicVI.infer_source
         end
         ParallelRun.one_node_single_infer(
+            config,
             catalog_entries,
             target_sources,
             neighbor_map,

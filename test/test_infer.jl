@@ -1,6 +1,7 @@
 ## test the main entry point in Celeste: the `infer` function
 import JLD
 
+import Celeste.Configs
 
 """
 test infer with a single (run, camcol, field).
@@ -57,7 +58,9 @@ function test_load_active_pixels()
     # the star is bright but it doesn't cover the whole image.
     # it's hard to say exactly how many pixels should be active,
     # but not all of them, and not none of them.
-    Infer.load_active_pixels!(ea.images, ea.patches; min_radius_pix=Nullable(0.0))
+    config = Configs.Config()
+    config.min_radius_pix = 0
+    Infer.load_active_pixels!(config, ea.images, ea.patches)
 
     # most star light (>90%) should be recorded by the active pixels
     num_active_photons = 0.0
@@ -94,7 +97,9 @@ function test_load_active_pixels()
 
     # only 2 pixels per image are within 0.6 pixels of the
     # source's center (10.9, 11.5)
-    Infer.load_active_pixels!(ea.images, ea.patches; min_radius_pix=Nullable(0.6))
+    config = Configs.Config()
+    config.min_radius_pix = 0.6
+    Infer.load_active_pixels!(config, ea.images, ea.patches)
 
     for n in 1:ea.N
 #  FIXME: is load active pixels off by (0.5, 0.5)?
@@ -106,8 +111,9 @@ end
 function test_patch_pixel_selection()
     images, ea, two_body = gen_two_body_dataset();
     patches = Infer.get_sky_patches(images, two_body; radius_override_pix=5);
-    Infer.load_active_pixels!(
-        images, patches, noise_fraction=Inf, min_radius_pix=Nullable(5));
+    config = Configs.Config()
+    config.min_radius_pix = 5
+    Infer.load_active_pixels!(config, images, patches, noise_fraction=Inf)
 
     for n in 1:ea.N
         # Make sure, for testing purposes, that the whole bitmap isn't full.

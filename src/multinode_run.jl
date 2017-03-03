@@ -1,7 +1,6 @@
 using Base.Threads
 using Gasp
 
-
 type BoxInfo
     sources::Vector{Int}
     catalog::Vector{CatalogEntry}
@@ -145,7 +144,14 @@ ntputs(nodeid, tid, "source $ts of $(length(cbox.sources))")
 
                 # process the source and record the result
                 try
-                    result = process_source(ts, cbox.sources, cbox.catalog, cbox.neighbor_map, cbox.images)
+                    result = process_source(
+                        Configs.Config(),
+                        ts,
+                        cbox.sources,
+                        cbox.catalog,
+                        cbox.neighbor_map,
+                        cbox.images,
+                    )
 
                     lock(results_lock)
                     push!(results, result)
