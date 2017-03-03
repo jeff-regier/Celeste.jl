@@ -18,21 +18,23 @@ Returns:
     for this source at this pixel.
 """
 function calculate_source_pixel_brightness!{NumType <: Number}(
+                    ea::ElboArgs,
+                    vp::VariationalParams{NumType},
                     elbo_vars::ElboIntermediateVariables{NumType},
-                    ea::ElboArgs{NumType},
-                    E_G_s::SensitiveFloat{NumType},
-                    var_G_s::SensitiveFloat{NumType},
-                    fs0m::SensitiveFloat{NumType},
-                    fs1m::SensitiveFloat{NumType},
                     sb::SourceBrightness{NumType},
-                    b::Int, s::Int,
+                    b::Int,
+                    s::Int,
                     is_active_source::Bool)
+    E_G_s = elbo_vars.E_G_s
+    E_G2_s = elbo_vars.E_G2_s
+    var_G_s = elbo_vars.var_G_s
+    fs0m = elbo_vars.fs0m
+    fs1m = elbo_vars.fs1m
+
     @assert E_G_s.local_P == var_G_s.local_P == length(CanonicalParams)
     @assert E_G_s.local_S == var_G_s.local_S == 1
     @assert fs0m.local_P == length(StarPosParams)
     @assert fs1m.local_P == length(GalaxyPosParams)
-
-    E_G2_s = elbo_vars.E_G2_s
 
     clear!(E_G_s)
     clear!(E_G2_s)
@@ -49,7 +51,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
             continue
         end
         fsm_i = (i == 1) ? fs0m : fs1m
-        a_i = ea.vp[s][ids.a[i]]
+        a_i = vp[s][ids.a[i]]
         sb_E_l_a_b_i = sb.E_l_a[b, i]
         sb_E_ll_a_b_i = sb.E_ll_a[b, i]
 
@@ -205,28 +207,28 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
 
         if star_only
             for u_ind1 = 1:2, u_ind2 = 1:2
-                E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                elbo_vars.E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
                     elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2]
 
-                E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                elbo_vars.E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
                     elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2]
             end
         else
             @assert Ia == 2
 
             for u_ind1 = 1:2, u_ind2 = 1:2
-                E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                elbo_vars.E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
                     elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
                     elbo_vars.E_G_s_hsub_vec[2].u_u[u_ind1, u_ind2]
 
-                E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
+                elbo_vars.E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
                     elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
                     elbo_vars.E_G2_s_hsub_vec[2].u_u[u_ind1, u_ind2]
             end
         end
     end
 
-    calculate_var_G_s!(elbo_vars, E_G_s, E_G2_s, var_G_s, is_active_source)
+    calculate_var_G_s!(ea, vp, elbo_vars, is_active_source)
 end
 
 
@@ -244,22 +246,21 @@ Returns:
     Updates var_G_s in place.
 """
 function calculate_var_G_s!{NumType <: Number}(
+                    ea::ElboArgs,
+                    vp::VariationalParams{NumType},
                     elbo_vars::ElboIntermediateVariables{NumType},
-                    E_G_s::SensitiveFloat{NumType},
-                    E_G2_s::SensitiveFloat{NumType},
-                    var_G_s::SensitiveFloat{NumType},
                     is_active_source::Bool)
-    clear!(var_G_s)
+    clear!(elbo_vars.var_G_s)
 
-    E_G_s_v = E_G_s.v[]
-    E_G2_s_v = E_G2_s.v[]
+    E_G_s_v = elbo_vars.E_G_s.v[]
+    E_G2_s_v = elbo_vars.E_G2_s.v[]
 
-    var_G_s.v[] = E_G2_s_v - (E_G_s_v ^ 2)
+    elbo_vars.var_G_s.v[] = E_G2_s_v - (E_G_s_v ^ 2)
 
     if is_active_source && elbo_vars.elbo.has_gradient
-        var_G_s_d = var_G_s.d
-        E_G2_s_d = E_G2_s.d
-        E_G_s_d = E_G_s.d
+        var_G_s_d = elbo_vars.var_G_s.d
+        E_G2_s_d = elbo_vars.E_G2_s.d
+        E_G_s_d = elbo_vars.E_G_s.d
 
         @assert length(var_G_s_d) == length(E_G2_s_d) == length(E_G_s_d)
 
@@ -268,9 +269,9 @@ function calculate_var_G_s!{NumType <: Number}(
         end
 
         if elbo_vars.elbo.has_hessian
-            var_G_s_h = var_G_s.h
-            E_G2_s_h = E_G2_s.h
-            E_G_s_h = E_G_s.h
+            var_G_s_h = elbo_vars.var_G_s.h
+            E_G2_s_h = elbo_vars.E_G2_s.h
+            E_G_s_h = elbo_vars.E_G_s.h
             p1, p2 = size(var_G_s_h)
             @inbounds for ind2 = 1:p2, ind1 = 1:ind2
                 var_G_s_h[ind1, ind2] =
@@ -289,36 +290,25 @@ Add the contributions from a single source at a single pixel to the
 sensitive floast E_G and var_G, which are updated in place.
 """
 function accumulate_source_pixel_brightness!{NumType <: Number}(
+                    ea::ElboArgs,
+                    vp::VariationalParams{NumType},
                     elbo_vars::ElboIntermediateVariables{NumType},
-                    ea::ElboArgs{NumType},
-                    E_G::SensitiveFloat{NumType},
-                    var_G::SensitiveFloat{NumType},
-                    fs0m::SensitiveFloat{NumType},
-                    fs1m::SensitiveFloat{NumType},
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
                     is_active_source::Bool)
     # This updates elbo_vars.E_G_s and elbo_vars.var_G_s
     calculate_source_pixel_brightness!(
-        elbo_vars,
-        ea,
-        elbo_vars.E_G_s,
-        elbo_vars.var_G_s,
-        fs0m,
-        fs1m,
-        sb,
-        b,
-        s,
-        is_active_source)
+        ea, vp, elbo_vars,
+        sb, b, s, is_active_source)
 
     if is_active_source
         sa = findfirst(ea.active_sources, s)
-        add_sources_sf!(E_G, elbo_vars.E_G_s, sa)
-        add_sources_sf!(var_G, elbo_vars.var_G_s, sa)
+        add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa)
+        add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa)
     else
         # If the sources is inactive, simply accumulate the values.
-        E_G.v[] += elbo_vars.E_G_s.v[]
-        var_G.v[] += elbo_vars.var_G_s.v[]
+        elbo_vars.E_G.v[] += elbo_vars.E_G_s.v[]
+        elbo_vars.var_G.v[] += elbo_vars.var_G_s.v[]
     end
 end
 
@@ -393,12 +383,13 @@ end
 
 
 function add_pixel_term!{NumType <: Number}(
-                    ea::ElboArgs{NumType},
+                    ea::ElboArgs,
+                    vp::VariationalParams{NumType},
                     n::Int, h::Int, w::Int,
                     star_mcs::Array{BvnComponent{NumType}, 2},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    sbs::Vector{SourceBrightness{NumType}})
-    elbo_vars = ea.elbo_vars
+                    sbs::Vector{SourceBrightness{NumType}};
+                    elbo_vars = ElboIntermediateVariables(NumType, ea.S, ea.Sa, true, false))
     img = ea.images[n]
 
     # This combines the sources into a single brightness value for the pixel.
@@ -414,8 +405,9 @@ function add_pixel_term!{NumType <: Number}(
         hw = SVector{2,Float64}(h, w)
         is_active_source = s in ea.active_sources  # fast?
 
-        populate_fsm!(ea.elbo_vars.bvn_derivs,
-                      ea.elbo_vars.fs0m, ea.elbo_vars.fs1m,
+        populate_fsm!(elbo_vars.bvn_derivs,
+                      elbo_vars.fs0m,
+                      elbo_vars.fs1m,
                       s, hw, is_active_source,
                       p.wcs_jacobian,
                       gal_mcs, star_mcs)
@@ -423,9 +415,7 @@ function add_pixel_term!{NumType <: Number}(
         H2, W2 = size(p.active_pixel_bitmap)
         if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
             is_active_source = s in ea.active_sources
-            accumulate_source_pixel_brightness!(
-                elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
-                elbo_vars.fs0m, elbo_vars.fs1m,
+            accumulate_source_pixel_brightness!(ea, vp, elbo_vars,
                 sbs[s], ea.images[n].b, s, is_active_source)
         end
     end
@@ -458,11 +448,14 @@ Return the expected log likelihood for all bands in a section
 of the sky.
 Returns: A sensitive float with the log likelihood.
 """
-function elbo_likelihood{NumType <: Number}(ea::ElboArgs{NumType})
-    clear!(ea.elbo_vars)
+function elbo_likelihood{NumType <: Number}(
+             ea::ElboArgs,
+             vp::VariationalParams{NumType};
+             elbo_vars = ElboIntermediateVariables(NumType, ea.S, ea.Sa))
+    clear!(elbo_vars)
 
     # this call loops over light sources (but not images)
-    sbs = load_source_brightnesses(ea)
+    sbs = load_source_brightnesses(ea, vp)
 
     for n in 1:ea.N
         img = ea.images[n]
@@ -472,10 +465,10 @@ function elbo_likelihood{NumType <: Number}(ea::ElboArgs{NumType})
         # This convolves the PSF with the star/galaxy model, returning a
         # mixture of bivariate normals.
         star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
-                                    ea.vp, ea.active_sources,
+                                    vp, ea.active_sources,
                                     ea.psf_K, n,
-                                    calculate_gradient=ea.elbo_vars.elbo.has_gradient,
-                                    calculate_hessian=ea.elbo_vars.elbo.has_hessian)
+                                    calculate_gradient=elbo_vars.elbo.has_gradient,
+                                    calculate_hessian=elbo_vars.elbo.has_hessian)
 
         # if there's only one active source, we know each pixel we visit
         # hasn't been visited before, so no need to allocate memory.
@@ -518,13 +511,14 @@ function elbo_likelihood{NumType <: Number}(ea::ElboArgs{NumType})
                 # Note that although we are iterating over pixels within a
                 # single patch, add_pixel_term /also/ iterates over patches to
                 # find all patches that overlap with this pixel.
-                add_pixel_term!(ea, n, h, w, star_mcs, gal_mcs, sbs)
+                add_pixel_term!(ea, vp, n, h, w, star_mcs, gal_mcs, sbs;
+                                elbo_vars=elbo_vars)
             end
         end
     end
 
-    assert_all_finite(ea.elbo_vars.elbo)
-    deepcopy(ea.elbo_vars.elbo)
+    assert_all_finite(elbo_vars.elbo)
+    deepcopy(elbo_vars.elbo)
 end
 
 
@@ -533,13 +527,18 @@ Calculates and returns the ELBO and its derivatives for all the bands
 of an image.
 Returns: A sensitive float containing the ELBO for the image.
 """
-function elbo{T}(ea::ElboArgs{T},
-                 kl_source = SensitiveFloat{T}(length(CanonicalParams), 1,
-                                               ea.elbo_vars.elbo.has_gradient,
-                                               ea.elbo_vars.elbo.has_hessian),
-                 kl_helper = KLDivergence.get_kl_helper(T))
-    elbo = elbo_likelihood(ea)
-    KLDivergence.subtract_kl_all_sources!(ea, elbo, kl_source, kl_helper)
-    assert_all_finite(ea.elbo_vars.elbo)
-    return elbo
+function elbo{NumType <: Number}(
+                 ea::ElboArgs,
+                 vp::VariationalParams{NumType};
+                 elbo_vars = ElboIntermediateVariables(NumType, ea.S, ea.Sa, true, false),
+                 kl_source = SensitiveFloat{NumType}(length(CanonicalParams), 1,
+                                               elbo_vars.elbo.has_gradient, false),
+                 kl_helper = KLDivergence.get_kl_helper(NumType))
+    @assert(all([all(isfinite, vs) for vs in vp]), "vp contains NaNs or Infs")
+    ret = elbo_likelihood(ea, vp; elbo_vars=elbo_vars)
+    if ea.include_kl
+        KLDivergence.subtract_kl_all_sources!(ea, vp, ret, kl_source, kl_helper)
+    end
+    assert_all_finite(elbo_vars.elbo)
+    return ret
 end

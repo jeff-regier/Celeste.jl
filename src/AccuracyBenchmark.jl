@@ -8,7 +8,6 @@ import WCS
 
 import Celeste.Configs
 import Celeste.DeterministicVI
-import Celeste.DeterministicVIImagePSF
 import Celeste.Infer
 import Celeste.Model
 import Celeste.ParallelRun

@@ -129,7 +129,7 @@ function infer_source(config::Configs.Config,
     patches = Infer.get_sky_patches(images, cat_local)
     Infer.load_active_pixels!(config, images, patches)
 
-    ea = ElboArgs(images, vp, patches, [1])
+    ea = ElboArgs(images, patches, [1])
     f_evals, max_f, max_x, nm_result = NewtonMaximize.maximize!(elbo, ea)
     return vp[1]
 end

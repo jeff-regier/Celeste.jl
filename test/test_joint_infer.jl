@@ -33,15 +33,7 @@ function load_ea_from_source(target_source, target_sources, catalog, images, all
 
     # Create elbo args
     fsm_mat = 0
-    if use_fft
-        ea, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(images,
-                                                                             vp,
-                                                                             patches,
-                                                                             [1],
-                                                                             use_raw_psf=false)
-    else
-        ea = ElboArgs(images, vp, patches, [1])
-    end
+    ea = ElboArgs(images, vp, patches, [1])
     ea, fsm_mat
 end
 
@@ -139,31 +131,6 @@ function compute_obj_value(results,
     ea = ElboArgs(images, vp, patches, active_sources,
                   calculate_gradient=false, calculate_hessian=false)
     DeterministicVI.elbo(ea).v[]
-end
-
-function test_fft_on_one_source_matches_single()
-    # This bounding box has 1 source.
-    box = BoundingBox(164.37, 164.38, 39.10, 39.13)
-    field_triplets = [RunCamcolField(3900, 6, 269),]
-
-    # Joint infer. Don't use default optim params since single infer does not.
-    infer_joint(ctni...) = one_node_joint_infer(ctni...;
-                                                n_iters=1,
-                                                use_fft=true)
-    result_infer_joint = one_node_infer(field_triplets, datadir;
-                                        infer_callback=infer_joint,
-                                        box=box)
-
-    # Single infer fft.
-    infer_source_callback = DeterministicVIImagePSF.infer_source_fft
-    infer_single(ctni...) = one_node_single_infer(ctni...;
-                                                  infer_source_callback=infer_source_callback)
-    result_infer_single = one_node_infer(field_triplets, datadir;
-                                         infer_callback=infer_single,
-                                         box=box)
-
-    # Make sure that parameters are exactly the same
-    @test compare_vp_params(result_infer_joint, result_infer_single)
 end
 
 """
@@ -528,16 +495,6 @@ if test_long_running
     test_one_node_joint_infer_obj_overlapping()
 end
 
-# Test fft is working
-test_fft_on_one_source_matches_single()
-
-# Test with using fft
-#test_different_result_with_different_iter(use_fft=true)
-#test_same_result_with_diff_batch_sizes(use_fft=true)
-#test_one_node_joint_infer_obj_overlapping(use_fft=true)
-
-
-# Test non fft
 test_same_one_node_infer_twice()
 test_different_result_with_different_iter()
 test_same_result_with_diff_batch_sizes()

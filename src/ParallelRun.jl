@@ -14,7 +14,6 @@ import ..SDSSIO: RunCamcolField
 import ..PSF
 
 import ..DeterministicVI: infer_source
-import ..DeterministicVIImagePSF
 
 include("joint_infer.jl")
 

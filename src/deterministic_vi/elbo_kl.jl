@@ -1,6 +1,6 @@
 module KLDivergence
 
-using ..DeterministicVI: ElboArgs
+using ..DeterministicVI: ElboArgs, VariationalParams
 using ...Model: CanonicalParams, ids, prior, Ia, D
 using ...SensitiveFloats: SensitiveFloat, add_sources_sf!
 using Compat
@@ -212,12 +212,13 @@ function subtract_kl_source!(kl_source::SensitiveFloat, result::DiffBase.DiffRes
 end
 
 function subtract_kl_all_sources!{T}(ea::ElboArgs,
+                                     vp::VariationalParams{T},
                                      accum::SensitiveFloat,
                                      kl_source::SensitiveFloat{T},
                                      helper::KLHelper)
     result = DiffBase.DiffResult(zero(T), kl_source.d)
     for sa in 1:length(ea.active_sources)
-        subtract_kl_source!(kl_source, result, ea.vp[ea.active_sources[sa]], helper)
+        subtract_kl_source!(kl_source, result, vp[ea.active_sources[sa]], helper)
         add_sources_sf!(accum, kl_source, sa)
     end
     return accum

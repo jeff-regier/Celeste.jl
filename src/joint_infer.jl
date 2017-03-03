@@ -10,9 +10,8 @@ import ..SDSSIO: RunCamcolField
 import ..PSF
 using ..ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
 using ..DeterministicVI
-using ..DeterministicVI.NewtonMaximize
-using ..DeterministicVI.NewtonMaximize: Config
-using ..DeterministicVIImagePSF
+using ..DeterministicVI.NewtonMaximize: Config, maximize!
+
 
 function union_find!(i, components_tree)
     root = i
@@ -271,7 +270,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
 
     # configurations need to be persisted across calls to maximize! so
     # that location constraints don't shift from their initial position
-    ea_vec::Vector{ElboArgs{Float64}} = Vector{ElboArgs{Float64}}(n_sources)
+    ea_vec::Vector{ElboArgs} = Vector{ElboArgs}(n_sources)
     cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}} = Vector{Config{DEFAULT_CHUNK,Float64}}(n_sources)
 
     # Initialize elboargs in parallel
@@ -399,7 +398,7 @@ function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg
 end
 
 function process_sources!(images::Vector{Model.Image},
-                          ea_vec::Vector{ElboArgs{Float64}},
+                          ea_vec::Vector{ElboArgs},
                           cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
                           thread_sources_assignment::Vector{Vector{Vector{Int64}}},
                           n_iters::Int,
@@ -433,7 +432,7 @@ end
 
 # Process partition of sources. Multiple threads call this function in parallel.
 function process_sources_kernel!(images::Vector{Model.Image},
-                                 ea_vec::Vector{ElboArgs{Float64}},
+                                 ea_vec::Vector{ElboArgs},
                                  cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
                                  source_assignment::Vector{Int64},
                                  iter::Int,
@@ -453,7 +452,7 @@ function process_sources_kernel!(images::Vector{Model.Image},
             else
                 f = DeterministicVI.elbo
             end
-            NewtonMaximize.maximize!(f, ea, cfg)
+            maximize!(f, ea, cfg)
         end
     catch ex
         if is_production_run || nthreads() > 1
