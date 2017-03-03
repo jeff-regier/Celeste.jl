@@ -56,7 +56,9 @@ end
     # Test get_source_psf at point while we have the images loaded.
     test_b = 3
     img = ea.images[test_b]
-    ea_obj = make_elbo_args(images, catalog[obj_index:obj_index])
+    catalog_obj = catalog[obj_index:obj_index]
+    ea_obj = make_elbo_args(images, catalog_obj)
+    vp_obj = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog_obj]
     pixel_loc = WCS.world_to_pix(img.wcs, obj_loc)
     original_psf_val = Model.eval_psf(img.raw_psf_comp, pixel_loc[1], pixel_loc[2])
 
@@ -64,7 +66,7 @@ end
         PSF.fit_raw_psf_for_celeste(original_psf_val, ea.psf_K)[1]
     fit_original_psf_val = PSF.get_psf_at_point(original_psf_celeste)
 
-    obj_psf = get_source_psf(vp[1][ids.u], img, ea.psf_K)[1]
+    obj_psf = get_source_psf(vp_obj[1][ids.u], img, ea.psf_K)[1]
     obj_psf_val = PSF.get_psf_at_point(obj_psf)
 
     # The fits should match exactly.

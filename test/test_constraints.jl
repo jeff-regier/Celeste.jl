@@ -17,6 +17,7 @@ include(joinpath(dirname(@__FILE__), "SampleData.jl"))
 
 using Base.Test
 
+
 srand(1)
 
 ####################
