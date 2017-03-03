@@ -65,10 +65,10 @@ end
 
 immutable Objective <: Function
     ea::ElboArgs
-    vp::VariationalParams{T}
-    elbo_vars::ElboIntermediateVariables{T}
-    sf_free::SensitiveFloat{T}
-    cfg::Config{1, T}
+    vp::VariationalParams{Float64}
+    elbo_vars::ElboIntermediateVariables{Float64}
+    sf_free::SensitiveFloat{Float64}
+    cfg::Config{1, Float64}
 end
 
 immutable Gradient <: Function
