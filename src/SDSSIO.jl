@@ -338,7 +338,12 @@ function load_field_images(rcfs, stagedir)
     images = Vector{Image}(N)
 
     Threads.@threads for n in 1:N
-        images[n] = convert(Image, raw_images[n])
+        try
+            images[n] = convert(Image, raw_images[n])
+        catch exc
+            Log.exception(exc)
+            rethrow()
+        end
     end
 
     return images
