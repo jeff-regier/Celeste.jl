@@ -210,17 +210,23 @@ end
 # __init__ #
 ############
 
+const KL_HELPER_POOL_1 = Vector{KLHelper}()
+const KL_HELPER_POOL_2 = Vector{KLHelper}()
+get_kl_helper(::Type{Float64}) = KL_HELPER_POOL_1[Base.Threads.threadid()]
+get_kl_helper(::Type{Dual{1,Float64}}) = KL_HELPER_POOL_2[Base.Threads.threadid()]
 function __init__()
     N = pickchunksize(PARAM_LENGTH)
     D1 = Dual{N,Float64}
     D2 = Dual{N,Dual{1,Float64}}
-    code = quote
-        const KL_HELPER_POOL = ($(ntuple(n -> KLHelper(D1), Base.Threads.nthreads())),
-                                $(ntuple(n -> KLHelper(D2), Base.Threads.nthreads())))
-        get_kl_helper(::Type{Float64}) = KL_HELPER_POOL[1][Base.Threads.threadid()]
-        get_kl_helper(::Type{Dual{1,Float64}}) = KL_HELPER_POOL[2][Base.Threads.threadid()]
+    if length(KL_HELPER_POOL_1) != Base.Threads.nthreads()
+        empty!(KL_HELPER_POOL_1)
+        empty!(KL_HELPER_POOL_2)
+        for i = 1:Base.Threads.nthreads()
+            push!(KL_HELPER_POOL_1, KLHelper(D1))
+            push!(KL_HELPER_POOL_2, KLHelper(D2))
+        end
     end
-    eval(KLDivergence, code)
 end
+__init__()
 
 end # module
