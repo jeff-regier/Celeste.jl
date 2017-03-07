@@ -1,9 +1,8 @@
-import SampleData
-
-import ..DeterministicVIImagePSF:
+import Celeste.Configs
+import Celeste.DeterministicVIImagePSF:
     FSMSensitiveFloatMatrices, initialize_fsm_sf_matrices!, ElboArgs
-import ..Infer: get_sky_patches, load_active_pixels!
-import ..PSF: get_psf_at_point
+import Celeste.Infer: get_sky_patches, load_active_pixels!
+import Celeste.PSF: get_psf_at_point
 
 function test_render()
     images, ea, two_body = SampleData.gen_two_body_dataset();

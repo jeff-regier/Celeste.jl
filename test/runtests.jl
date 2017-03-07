@@ -10,6 +10,8 @@ if Pkg.installed("DataFrames") <= v"0.8.5"
     Pkg.build("DataFrames")
 end
 
+using Base.Test
+using Distributions
 using ForwardDiff
 using StaticArrays
 
@@ -17,18 +19,14 @@ using Celeste: Model, DeterministicVI
 
 import Celeste: Infer, DeterministicVI, ParallelRun, DeterministicVIImagePSF
 import Celeste: PSF, SDSSIO, SensitiveFloats, Transform, CelesteEDA
-import SensitiveFloats.clear!
-import SDSSIO: RunCamcolField
+import Celeste.SensitiveFloats.clear!
+import Celeste.SDSSIO: RunCamcolField
 
 include(joinpath(Pkg.dir("Celeste"), "test", "Synthetic.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "DerivativeTestUtils.jl"))
 
-import Synthetic
 using SampleData
-
-using Base.Test
-using Distributions
 
 anyerrors = false
 
