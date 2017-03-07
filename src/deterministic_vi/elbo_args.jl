@@ -236,23 +236,3 @@ function ElboArgs(
     ElboArgs(S, Sa, N, psf_K, images, patches,
              active_sources, num_allowed_sd, false, include_kl)
 end
-
-
-
-function convert!(vp_tgt::VariationalParams{Dual{1, Float64}},
-                  vp_src::VariationalParams{Float64})
-    @assert length(vp_tgt) == length(vp_src)
-    for s in 1:length(vp_src)
-        vp_tgt[s][:] = vp_src[s]
-    end
-    vp_tgt
-end
-
-function convert(::Type{VariationalParams{Dual{1, Float64}}},
-                 vp::VariationalParams{Float64})
-    T = Dual{1, Float64}
-    P = length(CanonicalParams)
-    vp_tgt = Vector{T}[zeros(T, P) for s=1:length(vp)]
-    convert!(vp_tgt, vp)
-end
-

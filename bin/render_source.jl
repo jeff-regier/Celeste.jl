@@ -2,7 +2,7 @@ using Celeste:
     Model, DeterministicVI, CelesteEDA, DeterministicVIImagePSF, SDSSIO,
     Infer, PSF
 
-import DeterministicVI.NewtonMaximize
+import DeterministicVI.ElboMaximize
 
 # NB: PyPlot is not in REQUIRE.
 using PyPlot
@@ -62,12 +62,12 @@ matshow(image_orig); colorbar(); title("original Celeste")
 # Optimize the same source with both methods.
 
 elbo_fft_opt = DeterministicVIImagePSF.FFTElboFunction(fsm_mat);
-cfg = NewtonMaximize.Config(ea_fft; verbose=true, max_iters=100)
-f_evals_fft, max_f_fft, max_x_fft, nm_result_fft = NewtonMaximize.maximize!(elbo_fft_opt, ea_fft, cfg);
+cfg = ElboMaximize.Config(ea_fft; verbose=true, max_iters=100)
+f_evals_fft, max_f_fft, max_x_fft, nm_result_fft = ElboMaximize.maximize!(elbo_fft_opt, ea_fft, cfg);
 vp_opt_fft = deepcopy(ea_fft.vp[1]);
 
-cfg = NewtonMaximize.Config(ea_fft; verbose=true)
-f_evals, max_f, max_x, nm_result = NewtonMaximize.maximize!(DeterministicVI.elbo, ea, cfg);
+cfg = ElboMaximize.Config(ea_fft; verbose=true)
+f_evals, max_f, max_x, nm_result = ElboMaximize.maximize!(DeterministicVI.elbo, ea, cfg);
 vp_opt = deepcopy(ea.vp[1]);
 
 max_f_fft

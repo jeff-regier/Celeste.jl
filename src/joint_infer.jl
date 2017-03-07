@@ -8,9 +8,10 @@ import ..SDSSIO
 import ..Infer
 import ..SDSSIO: RunCamcolField
 import ..PSF
-using ..ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
+
 using ..DeterministicVI
-using ..DeterministicVI.NewtonMaximize: Config, maximize!
+using ..DeterministicVI.ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
+using ..DeterministicVI.ElboMaximize: Config, maximize!
 
 
 function union_find!(i, components_tree)

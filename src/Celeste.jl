@@ -10,7 +10,6 @@ include("SensitiveFloats.jl")
 
 include("Model.jl")
 include("Infer.jl")
-include("ConstraintTransforms.jl")
 include("Transform.jl")
 include("PSF.jl")
 include("SDSSIO.jl")

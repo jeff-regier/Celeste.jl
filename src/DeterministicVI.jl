@@ -3,6 +3,7 @@ Calculate value, gradient, and hessian of the variational ELBO.
 """
 module DeterministicVI
 
+using Compat
 using Base.Threads: threadid, nthreads
 
 import ..Configs
@@ -24,6 +25,7 @@ import Base.convert
 
 export ElboArgs, generic_init_source, catalog_init_source, init_sources
 
+@compat const VariationalParams{T<:Number} = Vector{Vector{T}}
 
 """
 Return a default-initialized VariationalParams instance.
@@ -94,12 +96,12 @@ function init_sources(target_sources::Vector{Int}, catalog::Vector{CatalogEntry}
     ret
 end
 
-
+include("deterministic_vi/ConstraintTransforms.jl")
 include("deterministic_vi/elbo_args.jl")
 include("deterministic_vi/elbo_kl.jl")
 include("deterministic_vi/source_brightness.jl")
 include("deterministic_vi/elbo_objective.jl")
-include("deterministic_vi/NewtonMaximize.jl")
+include("deterministic_vi/ElboMaximize.jl")
 
 
 """
@@ -130,7 +132,7 @@ function infer_source(config::Configs.Config,
     Infer.load_active_pixels!(config, images, patches)
 
     ea = ElboArgs(images, patches, [1])
-    f_evals, max_f, max_x, nm_result = NewtonMaximize.maximize!(elbo, ea)
+    f_evals, max_f, max_x, nm_result = ElboMaximize.maximize!(ea, vp)
     return vp[1]
 end
 

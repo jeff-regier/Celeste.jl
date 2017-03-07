@@ -4,7 +4,7 @@ import Celeste.Infer
 import Celeste.ParallelRun: infer_init, one_node_infer, BoundingBox,
     one_node_joint_infer, one_node_single_infer
 import Celeste.SensitiveFloats: SensitiveFloat
-import Celeste.DeterministicVI.NewtonMaximize
+import Celeste.DeterministicVI.ElboMaximize
 
 """
 load_ea_from_source
