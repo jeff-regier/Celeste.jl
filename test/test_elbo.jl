@@ -207,4 +207,34 @@ end
 end
 
 
+@testset "automative hessian vector product matches finite diff" begin
+    ea, vp, catalog = gen_two_body_dataset()
 
+    # compute the gradient (and the value) of the elbo manually
+    d0 = DeterministicVI.elbo(ea, vp).d[:]
+
+    vp1 = deepcopy(vp)
+    perturbation = 1e-5
+    vp1[1] += perturbation
+    vp1[2] += perturbation
+    d1 = DeterministicVI.elbo(ea, vp1).d[:]
+
+    hv_manual = (d1 - d0) / perturbation
+    @show hv_manual
+
+    vp_dual = convert(VariationalParams{Dual{1, Float64}}, vp)
+
+    for s in 1:2, i in 1:length(ids)
+        vp_dual[s][i] += ForwardDiff.Dual(0, 1)
+    end
+
+    elbo_dual = DeterministicVI.elbo(ea, vp_dual)
+
+    P = length(ids)
+    hv_auto = [elbo_dual.d[i].partials[] for i in 1:(2P)]
+    @show hv_auto
+
+    for i in 1:20
+        @test hv_manual[i] ≈ hv_auto[i] atol=abs(0.01 * hv_auto[i])
+    end
+end
