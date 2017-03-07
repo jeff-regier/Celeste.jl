@@ -61,6 +61,9 @@ type ElboIntermediateVariables{NumType <: Number}
 
     # The ELBO itself.
     elbo::SensitiveFloat{NumType}
+
+    star_mcs::Matrix{BvnComponent{NumType}}
+    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4}
 end
 
 
@@ -74,6 +77,7 @@ Args:
                 calculated irrespective of the value of calculate_hessian.
 """
 function ElboIntermediateVariables(NumType::DataType,
+                                   psf_K::Int,
                                    S::Int,
                                    num_active_sources::Int;
                                    calculate_gradient::Bool=true,
@@ -109,11 +113,14 @@ function ElboIntermediateVariables(NumType::DataType,
     elbo_log_term = SensitiveFloat(E_G)
     elbo = SensitiveFloat(E_G)
 
+    star_mcs = Matrix{BvnComponent{NumType}}(psf_K, S)
+    gal_mcs  = Array{GalaxyCacheComponent{NumType}}(psf_K, 8, 2, S)
+
     ElboIntermediateVariables{NumType}(
         bvn_derivs, fs0m, fs1m,
         E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
         E_G, var_G, combine_grad, combine_hess,
-        elbo_log_term, elbo)
+        elbo_log_term, elbo, star_mcs, gal_mcs)
 end
 
 
@@ -201,7 +208,7 @@ type ElboArgs{NumType <: Number}
     # If true, only render star parameters for active sources.
     active_source_star_only::Bool
 
-    elbo_vars::ElboIntermediateVariables
+    elbo_vars::ElboIntermediateVariables{NumType}
 end
 
 
@@ -235,6 +242,7 @@ function ElboArgs{NumType <: Number}(
             "VariationalParameters contains NaNs or Infs")
 
     elbo_vars = ElboIntermediateVariables(NumType,
+                                          psf_K,
                                           S,
                                           length(active_sources);
                                           calculate_gradient=calculate_gradient,

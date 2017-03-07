@@ -24,19 +24,23 @@ Returns:
     - Source (index within active_sources)
   Hessians are only populated for s in ea.active_sources.
 """
-function load_bvn_mixtures{NumType <: Number}(
+function load_bvn_mixtures!{NumType <: Number}(
+                    #outputs
+                    star_mcs::Matrix{BvnComponent{NumType}},
+                    gal_mcs::Array{GalaxyCacheComponent{NumType},4},
+                    #inputs
                     S::Int64,
                     patches::Matrix{SkyPatch},
                     source_params::Vector{Vector{NumType}},
                     active_sources::Vector{Int},
                     psf_K::Int64,
-                    n::Int;
+                    n::Int,
                     calculate_gradient::Bool=true,
                     calculate_hessian::Bool=true)
+    @assert size(star_mcs, 1) == psf_K
+    @assert size(star_mcs, 2) == S
     # TODO: do not keep any derviative information if the sources are not in
     # active_sources.
-    star_mcs = Matrix{BvnComponent{NumType}}(psf_K, S)
-    gal_mcs  = Array{GalaxyCacheComponent{NumType}}(psf_K, 8, 2, S)
 
     for s in 1:S
         psf = patches[s, n].psf
@@ -81,6 +85,20 @@ function load_bvn_mixtures{NumType <: Number}(
     star_mcs, gal_mcs
 end
 
+function load_bvn_mixtures{NumType <: Number}(S::Int64,
+              patches::Matrix{SkyPatch},
+              source_params::Vector{Vector{NumType}},
+              active_sources::Vector{Int},
+              psf_K::Int64,
+              n::Int;
+              calculate_gradient::Bool=true,
+              calculate_hessian::Bool=true)
+    star_mcs = Matrix{BvnComponent{NumType}}(psf_K, S)
+    gal_mcs  = Array{GalaxyCacheComponent{NumType}}(psf_K, 8, 2, S)
+    load_bvn_mixtures!(star_mcs, gal_mcs, patches, source_params, active_sources,
+      psf_K, n, calculate_gradient, calculate_hessian)
+end
+
 
 """
 Populate fs0m and fs1m for source s in the a given pixel.
@@ -95,7 +113,7 @@ function populate_gal_fsm!{NumType <: Number}(
                     x::SVector{2,Float64},
                     is_active_source::Bool,
                     wcs_jacobian::Matrix{Float64},
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4};
+                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     num_allowed_sd=Inf)
     clear!(fs1m)
     for i = 1:2 # Galaxy types
@@ -133,7 +151,7 @@ function populate_fsm!{NumType <: Number}(
                     is_active_source::Bool,
                     wcs_jacobian::Matrix{Float64},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    star_mcs::Array{BvnComponent{NumType}, 2};
+                    star_mcs::Array{BvnComponent{NumType}, 2},
                     num_allowed_sd=Inf)
     clear!(fs0m)
     for k = 1:size(star_mcs, 1) # PSF component
@@ -147,8 +165,8 @@ function populate_fsm!{NumType <: Number}(
 
     populate_gal_fsm!(bvn_derivs, fs1m,
                       s, x, is_active_source,
-                      wcs_jacobian, gal_mcs;
-                      num_allowed_sd=num_allowed_sd)
+                      wcs_jacobian, gal_mcs,
+                      num_allowed_sd)
 end
 
 
