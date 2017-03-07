@@ -230,14 +230,13 @@ Returns:
 
 - Vector of OptimizedSource results
 """
-function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
+function one_node_joint_infer(config::Configs.Config, catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
                               use_fft::Bool=false,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3,
-                              trust_region::NewtonTrustRegion{Float64}=NewtonTrustRegion(),
-                              min_radius_pix::Nullable{Float64}=Nullable{Float64}())
+                              trust_region::NewtonTrustRegion{Float64}=NewtonTrustRegion())
 
     # Seed random number generator to ensure the same results per run.
     srand(42)
@@ -280,10 +279,9 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     tic()
     thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} = partition_equally(n_threads, n_sources)
 
-    initialize_elboargs_sources!(ea_vec, cfg_vec, thread_initialize_sources_assignment,
+    initialize_elboargs_sources!(config, ea_vec, cfg_vec, thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
-                                 trust_region, use_fft, min_radius_pix,
-                                 target_source_variational_params)
+                                 trust_region, use_fft, target_source_variational_params)
 
     Log.info("Done preallocating array of elboargs. Elapsed time: $(toq())")
 
@@ -312,17 +310,40 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
     results
 end
 
-function initialize_elboargs_sources!(ea_vec, cfg_vec, thread_initialize_sources_assignment,
+# legacy wrapper
+function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
+                              cyclades_partition::Bool=true,
+                              use_fft::Bool=false,
+                              batch_size::Int=400,
+                              within_batch_shuffling::Bool=true,
+                              n_iters::Int=3,
+                              trust_region::NewtonTrustRegion{Float64}=NewtonTrustRegion())
+    one_node_joint_infer(
+        Configs.Config(),
+        catalog,
+        target_sources,
+        neighbor_map,
+        images,
+        cyclades_partition=cyclades_partition,
+        use_fft=use_fft,
+        batch_size=batch_size,
+        within_batch_shuffling=within_batch_shuffling,
+        n_iters=n_iters,
+        trust_region=trust_region,
+    )
+end
+
+function initialize_elboargs_sources!(config::Configs.Config, ea_vec, cfg_vec,
+                                      thread_initialize_sources_assignment,
                                       catalog, target_sources, neighbor_map, images,
-                                      trust_region, use_fft, min_radius_pix,
-                                      target_source_variational_params)
+                                      trust_region, use_fft, target_source_variational_params)
     Threads.@threads for i in 1:nthreads()
         try
             for batch in 1:length(thread_initialize_sources_assignment[i])
-                initialize_elboargs_sources_kernel!(ea_vec, cfg_vec,
+                initialize_elboargs_sources_kernel!(config, ea_vec, cfg_vec,
                                                     thread_initialize_sources_assignment[i][batch],
                                                     catalog, target_sources, neighbor_map, images,
-                                                    trust_region, use_fft, min_radius_pix,
+                                                    trust_region, use_fft,
                                                     target_source_variational_params)
             end
         catch ex
@@ -332,9 +353,9 @@ function initialize_elboargs_sources!(ea_vec, cfg_vec, thread_initialize_sources
     end
 end
 
-function initialize_elboargs_sources_kernel!(ea_vec, cfg_vec, sources, catalog,
-                                             target_sources, neighbor_map, images,
-                                             trust_region, use_fft, min_radius_pix,
+function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg_vec, sources,
+                                             catalog, target_sources, neighbor_map, images,
+                                             trust_region, use_fft,
                                              target_source_variational_params)
     try
         for cur_source_index in sources
@@ -348,7 +369,7 @@ function initialize_elboargs_sources_kernel!(ea_vec, cfg_vec, sources, catalog,
             ids_local = vcat([entry_id], neighbor_ids)
 
             patches = Infer.get_sky_patches(images, cat_local)
-            Infer.load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
+            Infer.load_active_pixels!(config, images, patches)
 
             # Load vp with shared target source params, and also vp
             # that doesn't share target source params

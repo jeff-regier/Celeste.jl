@@ -7,6 +7,8 @@ module DeterministicVIImagePSF
 
 using StaticArrays, DiffBase, Compat
 
+import ..Configs
+
 import ..DeterministicVI:
     ElboArgs, ElboIntermediateVariables,
     StarPosParams, GalaxyPosParams, CanonicalParams, VariationalParams,
@@ -46,14 +48,14 @@ export elbo_likelihood_with_fft!, FSMSensitiveFloatMatrices,
        FFTElboFunction, load_fsm_mat
 
 
-function infer_source_fft(images::Vector{Image},
+function infer_source_fft(config::Configs.Config,
+                          images::Vector{Image},
                           neighbors::Vector{CatalogEntry},
-                          entry::CatalogEntry;
-                          min_radius_pix=Nullable{Float64}())
+                          entry::CatalogEntry)
     cat_local = vcat([entry], neighbors)
     vp = init_sources([1], cat_local)
     patches = get_sky_patches(images, cat_local)
-    load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
+    load_active_pixels!(config, images, patches)
 
     ea_fft, fsm_mat = initialize_fft_elbo_parameters(images, vp, patches, [1], use_raw_psf=true)
     elbo_fft_opt = FFTElboFunction(fsm_mat)
@@ -63,6 +65,12 @@ function infer_source_fft(images::Vector{Image},
     return vp[1]
 end
 
+# legacy wrapper
+function infer_source_fft(images::Vector{Image},
+                          neighbors::Vector{CatalogEntry},
+                          entry::CatalogEntry)
+    infer_source_fft(Configs.Config(), images, neighbors, entry)
+end
 
 function infer_source_fft_two_step(images::Vector{Image},
                                    neighbors::Vector{CatalogEntry},

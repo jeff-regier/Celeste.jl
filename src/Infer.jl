@@ -12,6 +12,7 @@ module Infer
 import WCS
 using StaticArrays
 
+import ..Configs
 using ..Model
 import ..Log
 
@@ -127,14 +128,12 @@ objective function.
 
 Non-standard arguments:
   noise_fraction: The proportion of the noise below which we will remove pixels.
-  min_radius_pix: A minimum pixel radius to be included.
 """
-function load_active_pixels!(images::Vector{Image},
+function load_active_pixels!(config::Configs.Config,
+                             images::Vector{Image},
                              patches::Matrix{SkyPatch};
                              exclude_nan=true,
-                             noise_fraction=0.5,
-                             min_radius_pix=Nullable{Float64}())
-    min_radius_pix = get(min_radius_pix, 8.0)
+                             noise_fraction=0.5)
     S, N = size(patches)
 
     for n = 1:N, s=1:S
@@ -155,7 +154,7 @@ function load_active_pixels!(images::Vector{Image},
 
             # include pixels that are close, even if they aren't bright
             sq_dist = (h - p.pixel_center[1])^2 + (w - p.pixel_center[2])^2
-            if sq_dist < min_radius_pix^2
+            if sq_dist < config.min_radius_pix^2
                 p.active_pixel_bitmap[h2, w2] = true
                 continue
             end
@@ -173,6 +172,19 @@ function load_active_pixels!(images::Vector{Image},
     end
 end
 
+# legacy wrapper
+function load_active_pixels!(images::Vector{Image},
+                             patches::Matrix{SkyPatch};
+                             exclude_nan=true,
+                             noise_fraction=0.5)
+    load_active_pixels!(
+        Configs.Config(),
+        images,
+        patches,
+        exclude_nan=exclude_nan,
+        noise_fraction=noise_fraction,
+    )
+end
 
 # The range of image pixels in a vector of patches
 function get_active_pixel_range(

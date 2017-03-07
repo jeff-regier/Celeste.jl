@@ -5,6 +5,7 @@ using Base.Threads
 import FITSIO
 import JLD
 
+import ..Configs
 import ..Log
 using ..Model
 import ..SDSSIO
@@ -186,7 +187,8 @@ end
 """
 Optimize the `ts`th element of `sources`.
 """
-function process_source(ts::Int,
+function process_source(config::Configs.Config,
+                        ts::Int,
                         target_sources::Vector{Int},
                         catalog::Vector{CatalogEntry},
                         neighbor_map::Vector{Vector{Int}},
@@ -198,7 +200,7 @@ function process_source(ts::Int,
     neighbors = catalog[neighbor_map[ts]]
 
     tic()
-    vs_opt = infer_source_callback(images, neighbors, entry)
+    vs_opt = infer_source_callback(config, images, neighbors, entry)
     ntputs(nodeid, threadid(), "processed objid $(entry.objid) in $(toq()) secs")
     return OptimizedSource(entry.thing_id,
                            entry.objid,
@@ -212,7 +214,8 @@ end
 Use multiple threads to process each target source with the specified
 callback and write the results to a file.
 """
-function one_node_single_infer(catalog::Vector{CatalogEntry},
+function one_node_single_infer(config::Configs.Config,
+                               catalog::Vector{CatalogEntry},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
                                images::Vector{Image};
@@ -238,7 +241,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
             end
 
             try
-                result = process_source(ts, target_sources, catalog, neighbor_map,
+                result = process_source(config, ts, target_sources, catalog, neighbor_map,
                                         images;
                                         infer_source_callback=infer_source_callback)
 
@@ -268,6 +271,23 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
     return results
 end
 
+# legacy wrapper
+function one_node_single_infer(catalog::Vector{CatalogEntry},
+                               target_sources::Vector{Int},
+                               neighbor_map::Vector{Vector{Int}},
+                               images::Vector{Image};
+                               infer_source_callback=infer_source,
+                               timing=InferTiming())
+    one_node_single_infer(
+        Configs.Config(),
+        catalog,
+        target_sources,
+        neighbor_map,
+        images,
+        infer_source_callback=infer_source_callback,
+        timing=timing,
+    )
+end
 
 """
 Use mulitple threads on one node to fit the Celeste model to sources in a given

@@ -1,8 +1,9 @@
 import JLD
-import ..Infer
-import ..ParallelRun: infer_init, one_node_infer, BoundingBox,
+
+import Celeste.Infer
+import Celeste.ParallelRun: infer_init, one_node_infer, BoundingBox,
     one_node_joint_infer, one_node_single_infer
-import ..SensitiveFloats: SensitiveFloat
+import Celeste.SensitiveFloats: SensitiveFloat
 import Celeste.DeterministicVI.NewtonMaximize
 
 """

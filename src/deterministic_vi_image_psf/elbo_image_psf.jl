@@ -391,6 +391,7 @@ end
 
 
 function initialize_fft_elbo_parameters(
+    config::Configs.Config,
     images::Vector{Image},
     vp::VariationalParams{Float64},
     patches::Matrix{SkyPatch},
@@ -398,10 +399,9 @@ function initialize_fft_elbo_parameters(
     use_raw_psf=true,
     use_trimmed_psf=true,
     allocate_fsm_mat=true,
-    min_radius_pix=Nullable{Float64}())
-
+)
     ea = ElboArgs(images, vp, patches, active_sources, psf_K=1)
-    load_active_pixels!(images, ea.patches; exclude_nan=false, min_radius_pix=min_radius_pix)
+    load_active_pixels!(config, images, ea.patches; exclude_nan=false)
 
     fsm_mat = nothing
     if allocate_fsm_mat
@@ -411,6 +411,27 @@ function initialize_fft_elbo_parameters(
     ea, fsm_mat
 end
 
+# legacy wrapper
+function initialize_fft_elbo_parameters(
+    images::Vector{Image},
+    vp::VariationalParams{Float64},
+    patches::Matrix{SkyPatch},
+    active_sources::Vector{Int};
+    use_raw_psf=true,
+    use_trimmed_psf=true,
+    allocate_fsm_mat=true,
+)
+    initialize_fft_elbo_parameters(
+        Configs.Config(),
+        images,
+        vp,
+        patches,
+        active_sources,
+        use_raw_psf=use_raw_psf,
+        use_trimmed_psf=use_trimmed_psf,
+        allocate_fsm_mat=allocate_fsm_mat,
+    )
+end
 
 @doc """
 Return a function callback for an FFT elbo.
