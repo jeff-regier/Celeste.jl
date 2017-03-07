@@ -87,8 +87,8 @@ end
 
 function custom_optim_options(; xtol_abs = 1e-7, ftol_rel = 1e-6, max_iters = 50)
     return Optim.Options(x_tol = xtol_abs, f_tol = ftol_rel, g_tol = 1e-8,
-                         iterations = max_iters, store_trace = false,
-                         show_trace = false, extended_trace = false)
+                         iterations = max_iters, store_trace = true,
+                         show_trace = true, extended_trace = true)
 end
 
 function custom_trust_region(; initial_radius = 10.0, max_radius = 1e9)
@@ -218,7 +218,7 @@ end
 # maximize! #
 #############
 
-function maximize!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::Config = Config(ea, vp))
+function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config = Config(ea, vp))
     enforce_references!(ea, vp, cfg)
     enforce!(cfg.bound_params, cfg.constraints)
     to_free!(cfg.free_params, cfg.bound_params, cfg.constraints)
@@ -227,11 +227,11 @@ function maximize!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::Config = Conf
     ddf = TwiceDifferentiableHV(Objective(ea, vp, cfg),
                                 Gradient(ea, vp, cfg),
                                 HessianVectorProduct(ea, vp, cfg))
-    R = Optim.MultivariateOptimizationResults{T,1,CGTrustRegion{T}}
+    R = Optim.MultivariateOptimizationResults{Float64,1,CGTrustRegion{Float64}}
     result::R = Optim.optimize(ddf, x, cfg.trust_region, cfg.optim_options)
 
-    min_value::T = -(Optim.minimum(result))
-    min_solution::Vector{T} = Optim.minimizer(result)
+    min_value::Float64 = -(Optim.minimum(result))
+    min_solution::Vector{Float64} = Optim.minimizer(result)
     from_vector!(cfg.free_params, min_solution)
     to_bound!(cfg.bound_params, cfg.free_params, cfg.constraints)
 

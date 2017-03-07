@@ -10,7 +10,7 @@ import Celeste.DeterministicVI.ElboMaximize
 load_ea_from_source
 Helper function to load elbo args for a particular source
 """
-function load_ea_from_source(target_source, target_sources, catalog, images, all_vps; use_fft=false)
+function load_ea_from_source(target_source, target_sources, catalog, images, all_vps)
     # Get neighbors of the source from which to load elbo args.
     neighbor_map = Infer.find_neighbors([target_source], catalog, images)
 
@@ -40,16 +40,15 @@ end
 """
 compute_unconstrained_gradient
 """
-function compute_unconstrained_gradient(target_source, target_sources, catalog, images, all_vps; use_fft=false)
+function compute_unconstrained_gradient(target_source, target_sources, catalog, images, all_vps)
     # Load ea
     (ea, fsm) = load_ea_from_source(target_source, target_sources, catalog, images,
-                                    all_vps, use_fft=use_fft)
+                                    all_vps)
 
     # Evaluate in constrained space and then unconstrain (taken from the old maximize_elbo.jl code)
     last_sf::SensitiveFloat{Float64} = SensitiveFloats.SensitiveFloat{Float64}(length(UnconstrainedParams), 1, true, true)
     transform = DeterministicVI.get_mp_transform(ea.vp, ea.active_sources)
-    elbo = use_fft ? FFTElboFunction(ea, fsm) : DeterministicVI.elbo
-    f_res = elbo(ea)
+    f_res = DeterministiscVI.elbo(ea)
     Transform.transform_sensitive_float!(transform, last_sf, f_res, ea.vp, ea.active_sources)
     last_sf.d
 end
@@ -57,11 +56,11 @@ end
 """
 unconstrained_gradient_near_zero
 """
-function unconstrained_gradient_near_zero(target_sources, catalog, images, all_vps; use_fft=false)
+function unconstrained_gradient_near_zero(target_sources, catalog, images, all_vps)
 
     # Compute gradient per source
     for (cur_source_indx, source) in enumerate(target_sources)
-        gradient = compute_unconstrained_gradient(source, target_sources, catalog, images,all_vps; use_fft=use_fft)
+        gradient = compute_unconstrained_gradient(source, target_sources, catalog, images,all_vps)
         if !isapprox(gradient, zeros(length(gradient)), atol=1)
             return false
         end
@@ -149,14 +148,12 @@ end
 """
 test_improve_stripe_82_obj_value
 """
-function test_improve_stripe_82_obj_value(; use_fft=false)
+function test_improve_stripe_82_obj_value()
     println("Testing that joint_infer improves score on stripe 82...")
     (rcfs, datadir, target_sources, catalog, images) = load_stripe_82_data()
 
     # Single inference obj value
-    infer_source_callback = use_fft ?
-        DeterministicVIImagePSF.infer_source_fft :
-        DeterministicVI.infer_source
+    infer_source_callback = DeterministicVI.infer_source
     infer_single(ctni...) = one_node_single_infer(ctni...;
                                                   infer_source_callback=infer_source_callback)
     result_single = one_node_infer(rcfs, datadir;
@@ -168,8 +165,7 @@ function test_improve_stripe_82_obj_value(; use_fft=false)
     # Joint inference obj value
     infer_multi(ctni...) = one_node_joint_infer(ctni...;
                                                 n_iters=30,
-                                                within_batch_shuffling=true,
-                                                use_fft=use_fft)
+                                                within_batch_shuffling=true)
     result_multi = one_node_infer(rcfs, datadir;
                                   infer_callback=infer_multi,
                                   primary_initialization=false)
@@ -186,16 +182,16 @@ end
 test_gradient_is_near_zero_on_stripe_82
 TODO(max) - This doesn't pass right now since some light sources are not close to zero.
 """
-function test_gradient_is_near_zero_on_stripe_82(; use_fft=false)
+function test_gradient_is_near_zero_on_stripe_82()
     (rcfs, datadir, target_sources, catalog, images) = load_stripe_82_data()
 
     # Make sure joint infer with few iterations does not pass the gradient near zero check
-    joint_few(cnti...) = one_node_joint_infer(cnti...; use_fft=use_fft)
+    joint_few(cnti...) = one_node_joint_infer(cnti...)
     results_few = one_node_infer(rcfs, datadir; infer_callback=joint_few, primary_initialization=false)
     @test !unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_few])
 
     # Make sure joint infer with many iterations passes the gradient near zero check
-    joint_many(cnti...) = one_node_joint_infer(cnti...; use_fft=use_fft, n_iters=10)
+    joint_many(cnti...) = one_node_joint_infer(cnti...; n_iters=10)
     results_many = one_node_infer(rcfs, datadir; infer_callback=joint_many, primary_initialization=false)
     @test unconstrained_gradient_near_zero(target_sources, catalog, images, [x.vs for x in results_many])
 end
@@ -205,7 +201,7 @@ test_gradient_is_near_zero_on_four_sources
 Tests that the gradient is zero on four sources after joint optimization.
 Makes sure that with fewer iterations the gradient is not zero.
 """
-function test_gradient_is_near_zero_on_four_sources(; use_fft=false)
+function test_gradient_is_near_zero_on_four_sources()
     box = BoundingBox(154.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
 
@@ -214,8 +210,7 @@ function test_gradient_is_near_zero_on_four_sources(; use_fft=false)
 
     infer_few(ctni...) = one_node_joint_infer(ctni...;
                                               n_iters=2,
-                                              within_batch_shuffling=true,
-                                              use_fft=use_fft)
+                                              within_batch_shuffling=true)
     result_few = one_node_infer(field_triplets, datadir;
                                 infer_callback=infer_few,
                                 box=box)
@@ -223,8 +218,7 @@ function test_gradient_is_near_zero_on_four_sources(; use_fft=false)
 
     infer_many(ctni...) = one_node_joint_infer(ctni...;
                                                n_iters=100,
-                                               within_batch_shuffling=true,
-                                               use_fft=use_fft)
+                                               within_batch_shuffling=true)
     result_many = one_node_infer(field_triplets, datadir;
                                  infer_callback=infer_many,
                                  box=box)
@@ -236,22 +230,20 @@ end
 test_different_result_with_different_iter()
 Using 3 iters instead of 1 iters should result in a different set of parameters.
 """
-function test_different_result_with_different_iter(; use_fft=false)
+function test_different_result_with_different_iter()
     # This bounding box has overlapping stars. (neighbor map is not empty)
     box = BoundingBox(154.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
 
     infer_few(ctni...) = one_node_joint_infer(ctni...;
                                               n_iters=1,
-                                              within_batch_shuffling=false,
-                                              use_fft=use_fft)
+                                              within_batch_shuffling=false)
     result_iter_1 = one_node_infer(field_triplets, datadir;
                                    infer_callback=infer_few, box=box)
 
     infer_many(ctni...) = one_node_joint_infer(ctni...;
                                                n_iters=5,
-                                               within_batch_shuffling=false,
-                                               use_fft=use_fft)
+                                               within_batch_shuffling=false)
     result_iter_5 = one_node_infer(field_triplets, datadir;
                                    infer_callback=infer_many, box=box)
 
@@ -263,7 +255,7 @@ end
 test_same_result_with_diff_batch_sizes
 Varying batch sizes using the cyclades algorithm should not change final objective value.
 """
-function test_same_result_with_diff_batch_sizes(;use_fft=false)
+function test_same_result_with_diff_batch_sizes()
     # This bounding box has overlapping stars. (neighbor map is not empty)
     box = BoundingBox(154.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
@@ -272,8 +264,7 @@ function test_same_result_with_diff_batch_sizes(;use_fft=false)
     infer_few(ctni...) = one_node_joint_infer(ctni...;
                                 n_iters=3,
                                 batch_size=7,
-                                within_batch_shuffling=false,
-                                use_fft=use_fft)
+                                within_batch_shuffling=false)
     result_bs_7 = one_node_infer(field_triplets, datadir;
                                  infer_callback=infer_few,
                                  box=box)
@@ -283,8 +274,7 @@ function test_same_result_with_diff_batch_sizes(;use_fft=false)
     infer_many(ctni...) = one_node_joint_infer(ctni...;
                                 n_iters=3,
                                 batch_size=39,
-                                within_batch_shuffling=false,
-                                use_fft=use_fft)
+                                within_batch_shuffling=false)
     result_bs_39 = one_node_infer(field_triplets, datadir;
                                   infer_callback=infer_many,
                                   box=box)
@@ -293,7 +283,7 @@ function test_same_result_with_diff_batch_sizes(;use_fft=false)
     @test compare_vp_params(result_bs_7, result_bs_39)
 end
 
-function test_same_one_node_infer_twice(;use_fft=false)
+function test_same_one_node_infer_twice()
     # This bounding box has overlapping stars. (neighbor map is not empty)
     box = BoundingBox(154.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
@@ -301,8 +291,7 @@ function test_same_one_node_infer_twice(;use_fft=false)
     infer_few(ctni...) = one_node_joint_infer(ctni...;
                                               n_iters=3,
                                               batch_size=7,
-                                              within_batch_shuffling=false,
-                                              use_fft=use_fft)
+                                              within_batch_shuffling=false)
     result_bs_7_1 = one_node_infer(field_triplets, datadir;
                                    infer_callback=infer_few,
                                    box=box)
@@ -334,9 +323,8 @@ end
 test infer multi iter obj overlapping.
 This makes sure one_node_joint_infer achieves sum objective value less
 than single iter on non overlapping sources.
-todo(max) - this fails with use_fft=true. Fix.
 """
-function test_one_node_joint_infer_obj_overlapping(;use_fft=false)
+function test_one_node_joint_infer_obj_overlapping()
 
     # This bounding box has overlapping stars. (neighbor map is not empty)
     box = BoundingBox(154.39, 164.41, 39.11, 39.13)
@@ -346,8 +334,7 @@ function test_one_node_joint_infer_obj_overlapping(;use_fft=false)
     tic()
     infer_multi(ctni...) = one_node_joint_infer(ctni...;
                                                 n_iters=30,
-                                                within_batch_shuffling=true,
-                                                use_fft=use_fft)
+                                                within_batch_shuffling=true)
     result_multi = one_node_infer(field_triplets, datadir;
                                   infer_callback=infer_multi,
                                   box=box)
@@ -358,8 +345,7 @@ function test_one_node_joint_infer_obj_overlapping(;use_fft=false)
     tic()
     infer_two(ctni...) = one_node_joint_infer(ctni...;
                                               n_iters=2,
-                                              within_batch_shuffling=true,
-                                              use_fft=use_fft)
+                                              within_batch_shuffling=true)
     result_two = one_node_infer(field_triplets, datadir;
                                 infer_callback=infer_two,
                                 box=box)
@@ -368,9 +354,7 @@ function test_one_node_joint_infer_obj_overlapping(;use_fft=false)
 
     # One node infer (1 iteration, butm ore newton steps)
     tic()
-    infer_source_callback = use_fft ?
-        DeterministicVIImagePSF.infer_source_fft :
-        DeterministicVI.infer_source
+    infer_source_callback = DeterministicVI.infer_source
     infer_single(ctni...) = one_node_single_infer(ctni...;
                                                   infer_source_callback=infer_source_callback)
     result_single = one_node_infer(field_triplets, datadir;
@@ -489,7 +473,7 @@ if test_long_running
     test_improve_stripe_82_obj_value()
 
     # Test gradients near zero (this takes 100 iterations and is a bit slow)
-    test_gradient_is_near_zero_on_four_sources(; use_fft=false)
+    test_gradient_is_near_zero_on_four_sources()
 
     # Test that we reach a higher objective with more iterations. This is a bit slow.
     test_one_node_joint_infer_obj_overlapping()

@@ -24,6 +24,7 @@ using StaticArrays
 import Base.convert
 
 export ElboArgs, generic_init_source, catalog_init_source, init_sources
+export VariationalParams
 
 @compat const VariationalParams{T<:Number} = Vector{Vector{T}}
 

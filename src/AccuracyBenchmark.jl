@@ -740,11 +740,9 @@ function match_position(ras, decs, ra, dec, maxdist_px)
     throw(MatchException(@sprintf("No source found at %f  %f", ra, dec)))
 end
 
-# Run Celeste with any combination of single/joint inference and MOG/FFT model
-function run_celeste(
-    config::Configs.Config, catalog_entries, target_sources, images;
-    use_joint_inference=false, use_fft=false
-)
+# Run Celeste with any combination of single/joint inference
+function run_celeste(config::Configs.Config, catalog_entries, target_sources, images;
+                     use_joint_inference=false)
     neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
     if use_joint_inference
         ParallelRun.one_node_joint_infer(
@@ -753,14 +751,9 @@ function run_celeste(
             target_sources,
             neighbor_map,
             images,
-            use_fft=use_fft,
         )
     else
-        if use_fft
-            infer_source_callback = DeterministicVIImagePSF.infer_source_fft
-        else
-            infer_source_callback = DeterministicVI.infer_source
-        end
+        infer_source_callback = DeterministicVI.infer_source
         ParallelRun.one_node_single_infer(
             config,
             catalog_entries,
