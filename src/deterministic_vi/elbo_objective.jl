@@ -450,7 +450,7 @@ Returns: A sensitive float with the log likelihood.
 """
 function elbo_likelihood{NumType <: Number}(
              ea::ElboArgs,
-             vp::VariationalParams{NumType};
+             vp::VariationalParams{NumType},
              elbo_vars = ElboIntermediateVariables(NumType, ea.S, ea.Sa))
     clear!(elbo_vars)
 
@@ -529,13 +529,13 @@ Returns: A sensitive float containing the ELBO for the image.
 """
 function elbo{NumType <: Number}(
                  ea::ElboArgs,
-                 vp::VariationalParams{NumType};
+                 vp::VariationalParams{NumType},
                  elbo_vars = ElboIntermediateVariables(NumType, ea.S, ea.Sa, true, false),
                  kl_source = SensitiveFloat{NumType}(length(CanonicalParams), 1,
                                                elbo_vars.elbo.has_gradient, false),
                  kl_helper = KLDivergence.get_kl_helper(NumType))
     @assert(all([all(isfinite, vs) for vs in vp]), "vp contains NaNs or Infs")
-    ret = elbo_likelihood(ea, vp; elbo_vars=elbo_vars)
+    ret = elbo_likelihood(ea, vp, elbo_vars)
     if ea.include_kl
         KLDivergence.subtract_kl_all_sources!(ea, vp, ret, kl_source, kl_helper)
     end
