@@ -298,7 +298,7 @@ function get_bvn_derivs!{NumType <: Number}(
 end
 
 
-
+const gal_shape_ids_len = 3
 
 ##############################
 
@@ -312,7 +312,7 @@ parameters are indexed by GalaxyShapeParams.
       derivatives d2 Sigma / d GalaxyShapeParams d GalaxyShapeParams.
 """
 type GalaxySigmaDerivs{NumType <: Number}
-    j::Matrix{NumType}
+    j::SMatrix{3,gal_shape_ids_len,NumType,9}
     t::Array{NumType, 3}
 end
 
@@ -334,13 +334,16 @@ function GalaxySigmaDerivs{NumType <: Number}(
   sin_sq = sin(e_angle)^2
   cos_sq = cos(e_angle)^2
 
-  j = Matrix{NumType}(3, length(gal_shape_ids))
-  j[:, gal_shape_ids.e_axis] =
-    2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
-  j[:, gal_shape_ids.e_angle] =
-    e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
-  j[:, gal_shape_ids.e_scale] =
-    2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale
+  # j = Matrix{NumType}(3, length(gal_shape_ids))
+  # j[:, gal_shape_ids.e_axis] =
+    # 2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
+  # j[:, gal_shape_ids.e_angle] =
+    # e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
+  # j[:, gal_shape_ids.e_scale] =
+    # 2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale
+    j = hcat(2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq),
+        e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin),
+        2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale)
 
   t = Array{NumType,3}(3, length(gal_shape_ids), length(gal_shape_ids))
   if calculate_tensor
@@ -421,7 +424,7 @@ function GalaxyCacheComponent{NumType <: Number}(
 
   # Declare in advance to save memory allocation.
   const empty_sig_sf =
-    GalaxySigmaDerivs(Matrix{NumType}(0, 0), Array{NumType,3}(0, 0, 0))
+    GalaxySigmaDerivs(@SMatrix(zeros(3,gal_shape_ids_len)), Array{NumType,3}(0, 0, 0))
 
   XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = @SVector NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
@@ -434,7 +437,7 @@ function GalaxyCacheComponent{NumType <: Number}(
   if calculate_gradient
     sig_sf = GalaxySigmaDerivs(
       e_angle, e_axis, e_scale, XiXi, calculate_hessian)
-    scale!(sig_sf.j, gc.nuBar)
+    sig_sf.j *= gc.nuBar # move into GalaxySigmaDerivs
     if calculate_hessian
       # The tensor is only needed for the Hessian.
       scale!(sig_sf.t, gc.nuBar)

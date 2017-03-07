@@ -69,7 +69,8 @@ function load_bvn_mixtures!{NumType <: Number}(
             e_dev_i = (i == 1) ? sp[lidx.e_dev] : 1. - sp[lidx.e_dev]
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components.
-            for j in 1:[8,6][i]
+            for j in 1:ifelse(i == 1, 8, 6)
+                # [8,6][i]
                 for k = 1:psf_K
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
