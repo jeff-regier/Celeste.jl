@@ -157,11 +157,13 @@ end
 ###################
 
 using ForwardDiff: Dual, JacobianConfig, pickchunksize
-using ReverseDiff: compile_gradient
+using ReverseDiff: CompiledTape, GradientTape
 
-immutable KLHelper{G,H}
-    gradient!::G
-    hessian!::H
+immutable KLHelper{G,NG,D,J}
+    gradient_tape::G
+    nested_gradient_tape::NG
+    dual_buffer::D
+    jacobian_config::J
 end
 
 const PARAM_LENGTH = length(CanonicalParams)
@@ -169,12 +171,22 @@ const PARAM_LENGTH = length(CanonicalParams)
 function KLHelper{N,T}(::Type{Dual{N,T}})
     dual_buffer = zeros(Dual{N,T}, PARAM_LENGTH)
     jacobian_config = JacobianConfig{N}(rand(T, PARAM_LENGTH))
-    gradient! = compile_gradient(subtract_kl, rand(T, PARAM_LENGTH))
-    nested_gradient! = compile_gradient(subtract_kl, rand(Dual{N,T}, PARAM_LENGTH))
-    nested_gradient = x -> nested_gradient!(dual_buffer, x)
-    hessian! = (out, x) -> ForwardDiff.jacobian!(out, nested_gradient, x, jacobian_config)
-    return KLHelper(gradient!, hessian!)
+    gradient_tape = CompiledTape{:kl_gradient}(GradientTape(subtract_kl, rand(T, PARAM_LENGTH)))
+    nested_gradient_tape = CompiledTape{:kl_nested_gradient}(GradientTape(subtract_kl, rand(Dual{N,T}, PARAM_LENGTH)))
+    ReverseDiff.compile(gradient_tape)
+    ReverseDiff.compile(nested_gradient_tape)
+    return KLHelper(gradient_tape, nested_gradient_tape, dual_buffer, jacobian_config)
 end
+
+function kl_gradient!(out, x, helper::KLHelper)
+    return ReverseDiff.gradient!(out, helper.gradient_tape, x)
+end
+
+function kl_hessian!(out, x, helper::KLHelper)
+    f = x -> ReverseDiff.gradient!(helper.dual_buffer, helper.nested_gradient_tape, x)
+    return ForwardDiff.jacobian!(out, f, x, helper.jacobian_config)
+end
+
 
 ###############
 # Entry Point #
@@ -183,13 +195,13 @@ end
 function subtract_kl_source!(kl_source::SensitiveFloat, result::DiffBase.DiffResult,
                              vs, helper::KLHelper)
     if kl_source.has_gradient
-        helper.gradient!(result, vs)
+        kl_gradient!(result, vs, helper)
         kl_source.v[] = DiffBase.value(result)
     else
         kl_source.v[] = subtract_kl(vs)
     end
     if kl_source.has_hessian
-        helper.hessian!(kl_source.h, vs)
+        kl_hessian!(kl_source.h, vs, helper)
     end
     return kl_source
 end
@@ -210,23 +222,27 @@ end
 # __init__ #
 ############
 
-const KL_HELPER_POOL_1 = Vector{KLHelper}()
-const KL_HELPER_POOL_2 = Vector{KLHelper}()
-get_kl_helper(::Type{Float64}) = KL_HELPER_POOL_1[Base.Threads.threadid()]
-get_kl_helper(::Type{Dual{1,Float64}}) = KL_HELPER_POOL_2[Base.Threads.threadid()]
+const KL_HELPER_POOL_FLOAT = Vector{KLHelper}()
+const KL_HELPER_POOL_DUAL = Vector{KLHelper}()
+
+get_kl_helper(::Type{Float64}) = KL_HELPER_POOL_FLOAT[Base.Threads.threadid()]
+get_kl_helper(::Type{Dual{1,Float64}}) = KL_HELPER_POOL_DUAL[Base.Threads.threadid()]
+
 function __init__()
     N = pickchunksize(PARAM_LENGTH)
-    D1 = Dual{N,Float64}
-    D2 = Dual{N,Dual{1,Float64}}
-    if length(KL_HELPER_POOL_1) != Base.Threads.nthreads()
-        empty!(KL_HELPER_POOL_1)
-        empty!(KL_HELPER_POOL_2)
+    DualFloat = Dual{N,Float64}
+    DualDual = Dual{N,Dual{1,Float64}}
+    if length(KL_HELPER_POOL_FLOAT) != Base.Threads.nthreads()
+        empty!(KL_HELPER_POOL_FLOAT)
+        empty!(KL_HELPER_POOL_DUAL)
         for i = 1:Base.Threads.nthreads()
-            push!(KL_HELPER_POOL_1, KLHelper(D1))
-            push!(KL_HELPER_POOL_2, KLHelper(D2))
+            push!(KL_HELPER_POOL_FLOAT, KLHelper(DualFloat))
+            push!(KL_HELPER_POOL_DUAL, KLHelper(DualDual))
         end
     end
 end
+
+# explicitly call this for use with compiled system image
 __init__()
 
 end # module
