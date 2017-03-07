@@ -317,12 +317,17 @@ function initialize_elboargs_sources!(ea_vec, cfg_vec, thread_initialize_sources
                                       trust_region, use_fft, min_radius_pix,
                                       target_source_variational_params)
     Threads.@threads for i in 1:nthreads()
-        for batch in 1:length(thread_initialize_sources_assignment[i])
-            initialize_elboargs_sources_kernel!(ea_vec, cfg_vec,
-                                                thread_initialize_sources_assignment[i][batch],
-                                                catalog, target_sources, neighbor_map, images,
-                                                trust_region, use_fft, min_radius_pix,
-                                                target_source_variational_params)
+        try
+            for batch in 1:length(thread_initialize_sources_assignment[i])
+                initialize_elboargs_sources_kernel!(ea_vec, cfg_vec,
+                                                    thread_initialize_sources_assignment[i][batch],
+                                                    catalog, target_sources, neighbor_map, images,
+                                                    trust_region, use_fft, min_radius_pix,
+                                                    target_source_variational_params)
+            end
+        catch ex
+            Log.exception(ex)
+            rethrow()
         end
     end
 end
@@ -393,11 +398,16 @@ function process_sources!(images::Vector{Model.Image},
             process_sources_elapsed_times::Vector{Float64} = Vector{Float64}(n_threads)
             # Process every batch of every iteration with n_threads
             Threads.@threads for i in 1:n_threads
-                tic()
-                process_sources_kernel!(images, ea_vec, cfg_vec,
-                                        thread_sources_assignment[i::Int][batch::Int],
-                                        iter, use_fft, within_batch_shuffling)
-                process_sources_elapsed_times[i::Int] = toq()
+                try
+                    tic()
+                    process_sources_kernel!(images, ea_vec, cfg_vec,
+                                            thread_sources_assignment[i::Int][batch::Int],
+                                            iter, use_fft, within_batch_shuffling)
+                    process_sources_elapsed_times[i::Int] = toq()
+                catch exc
+                    Log.exception(exc)
+                    rethrow()
+                end
             end
             Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
         end
