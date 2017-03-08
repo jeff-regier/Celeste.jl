@@ -55,6 +55,7 @@ else
                  "test_kl.jl",
                  "test_constraints.jl",
                  "test_elbo.jl",
+                 "test_elbo_maximize.jl",
                  "test_galsim_benchmarks.jl",
                  "test_images.jl",
                  "test_infer.jl",
