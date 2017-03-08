@@ -309,7 +309,6 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
     results
 end
 
-<<<<<<< 94b90cbcc3b819e8aca99c5a257ab0ae3e0c79ec
 # legacy wrapper
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
