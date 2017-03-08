@@ -1,5 +1,6 @@
 #!/usr/bin/env julia
 
+import ForwardDiff
 import Celeste.ParallelRun: BoundingBox,
                             one_node_infer,
                             one_node_single_infer,
