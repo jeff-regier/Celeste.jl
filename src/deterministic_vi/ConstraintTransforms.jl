@@ -396,12 +396,12 @@ end
 # (`sf_output`) to the input-parameterized SensitiveFloat (`sf_input`). Note that the memory
 # for the raw output parameters is supplied via `cfg`, whose constructor is
 # `TransformJacobianBundle(output_params, input_params)`.
-function propagate_derivatives!{F,T}(transform!::F,
-                                     sf_output::SensitiveFloat{T},
-                                     sf_input::SensitiveFloat{T},
-                                     input_sources::VariationalParams{T},
-                                     constraints::ConstraintBatch,
-                                     bundle::TransformJacobianBundle)
+function propagate_derivatives!{F,N,T}(transform!::F,
+                                       sf_output::SensitiveFloat{T},
+                                       sf_input::SensitiveFloat{T},
+                                       input_sources::VariationalParams{T},
+                                       constraints::ConstraintBatch,
+                                       bundle::TransformJacobianBundle{N,T})
     sf_input.v[] = sf_output.v[]
     n_sources = length(input_sources)
     n_input_params = size(sf_input.d, 1)

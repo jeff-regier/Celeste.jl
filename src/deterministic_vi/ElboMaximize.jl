@@ -134,7 +134,7 @@ function dual_from_vector!(sources, x, v)
     i = 1
     for src in sources
         for j in 1:length(src)
-            src[j] = Dual(x[i], v[j])
+            src[j] = Dual(x[i], v[i])
             i += 1
         end
     end
