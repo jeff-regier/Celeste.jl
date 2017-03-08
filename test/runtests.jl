@@ -51,6 +51,7 @@ if length(test_files) > 0
     testfiles = ["test_$(arg).jl" for arg in test_files]
 else
     testfiles = [
+                 "test_argument_parse.jl",
                  "test_derivatives.jl",
                  "test_kl.jl",
                  "test_eda.jl",
