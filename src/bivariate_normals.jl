@@ -373,7 +373,7 @@ function GalaxySigmaDerivs{NumType <: Number}(
     # t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
     #     2 * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
 
-    t = SArray{(3,3,3), NumType}(sin_sq * 2 * e_scale^2, -cos_sin * 2 * e_scale^2, cos_sq * 2 * e_scale^2,
+    t = SArray{(3,3,3), NumType, 3, 27}(sin_sq * 2 * e_scale^2, -cos_sin * 2 * e_scale^2, cos_sq * 2 * e_scale^2,
         2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
         2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
         2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
