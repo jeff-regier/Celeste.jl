@@ -86,12 +86,12 @@ function Config{T}(ea::ElboArgs,
 end
 
 function custom_optim_options(; xtol_abs = 1e-7, ftol_rel = 1e-6, max_iters = 50)
-    return Optim.Options(x_tol = xtol_abs, f_tol = ftol_rel, g_tol = 1e-8,
+    return Optim.Options(x_tol = xtol_abs, f_tol = ftol_rel, g_tol = 1e-0,
                          iterations = max_iters, store_trace = false,
                          show_trace = false, extended_trace = false)
 end
 
-function custom_trust_region(; initial_radius = 10.0, max_radius = 1e9)
+function custom_trust_region(; initial_radius = 0.1, max_radius = 1e9)
     return CGTrustRegion(initial_radius = initial_radius,
                          max_radius = max_radius)
 end

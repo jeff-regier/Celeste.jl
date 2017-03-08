@@ -433,4 +433,3 @@ function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::Strin
 end
 
 end
-
