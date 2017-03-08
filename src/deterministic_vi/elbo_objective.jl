@@ -87,11 +87,11 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
             u_ind = i == 1 ? star_ids.u : gal_ids.u
 
             # Derivatives with respect to the spatial parameters
+            tmp1 = sb_E_l_a_b_i_v * a_i
+            tmp2 = sb_E_ll_a_b_i_v * 2 * fsm_i_v * a_i
             for p0_shape_ind in 1:length(p0_shape)
-                E_G_s_d[p0_shape[p0_shape_ind], 1] +=
-                    sb_E_l_a_b_i_v * a_i * fsm_i_d[p0_shape_ind, 1]
-                E_G2_s_d[p0_shape[p0_shape_ind], 1] +=
-                    sb_E_ll_a_b_i_v * 2 * fsm_i_v * a_i * fsm_i_d[p0_shape_ind, 1]
+                E_G_s_d[p0_shape[p0_shape_ind], 1] += tmp1 * fsm_i_d[p0_shape_ind, 1]
+                E_G2_s_d[p0_shape[p0_shape_ind], 1] += tmp2 * fsm_i_d[p0_shape_ind, 1]
             end
 
             # Derivatives with respect to the brightness parameters.
@@ -530,7 +530,8 @@ Returns: A sensitive float containing the ELBO for the image.
 function elbo{NumType <: Number}(
                  ea::ElboArgs,
                  vp::VariationalParams{NumType},
-                 elbo_vars = ElboIntermediateVariables(NumType, ea.S, ea.Sa, true, false),
+                 elbo_vars::ElboIntermediateVariables{NumType} =
+                    ElboIntermediateVariables(NumType, ea.S, ea.Sa, true, false),
                  kl_source = SensitiveFloat{NumType}(length(CanonicalParams), 1,
                                                elbo_vars.elbo.has_gradient, false),
                  kl_helper = KLDivergence.get_kl_helper(NumType))
