@@ -3,6 +3,7 @@ module KLDivergence
 using ..DeterministicVI: ElboArgs
 using ...Model: CanonicalParams, ids, prior, Ia, D
 using ...SensitiveFloats: SensitiveFloat, add_sources_sf!
+using Compat
 using ForwardDiff, ReverseDiff, DiffBase
 
 # Calculate the Kullback-Leibler divergences between pairs of well-known parameteric
@@ -157,13 +158,17 @@ end
 ###################
 
 using ForwardDiff: Dual, JacobianConfig, pickchunksize
-using ReverseDiff: CompiledTape, GradientTape
+using ReverseDiff: TrackedArray, TrackedReal, CompiledTape, GradientTape
 
-immutable KLHelper{G,NG,D,J}
-    gradient_tape::G
-    nested_gradient_tape::NG
-    dual_buffer::D
-    jacobian_config::J
+@compat const KLGradientTape{T} = GradientTape{typeof(subtract_kl),
+                                               TrackedArray{T,T,1,Vector{T},Vector{T}},
+                                               TrackedReal{T,T,Void}}
+
+immutable KLHelper{N,T}
+    gradient_tape::CompiledTape{:kl_gradient,KLGradientTape{T}}
+    nested_gradient_tape::CompiledTape{:kl_nested_gradient,KLGradientTape{Dual{N,T}}}
+    dual_buffer::Vector{Dual{N,T}}
+    jacobian_config::JacobianConfig{N,T,Vector{Dual{N,T}}}
 end
 
 const PARAM_LENGTH = length(CanonicalParams)
@@ -175,7 +180,7 @@ function KLHelper{N,T}(::Type{Dual{N,T}})
     nested_gradient_tape = CompiledTape{:kl_nested_gradient}(GradientTape(subtract_kl, rand(Dual{N,T}, PARAM_LENGTH)))
     ReverseDiff.compile(gradient_tape)
     ReverseDiff.compile(nested_gradient_tape)
-    return KLHelper(gradient_tape, nested_gradient_tape, dual_buffer, jacobian_config)
+    return KLHelper{N,T}(gradient_tape, nested_gradient_tape, dual_buffer, jacobian_config)
 end
 
 function kl_gradient!(out, x, helper::KLHelper)
@@ -222,22 +227,20 @@ end
 # __init__ #
 ############
 
-const KL_HELPER_POOL_FLOAT = Vector{KLHelper}()
-const KL_HELPER_POOL_DUAL = Vector{KLHelper}()
+const CHUNK_SIZE = pickchunksize(PARAM_LENGTH)
+const KL_HELPER_POOL_FLOAT = Vector{KLHelper{CHUNK_SIZE,Float64}}()
+const KL_HELPER_POOL_DUAL = Vector{KLHelper{CHUNK_SIZE,Dual{1,Float64}}}()
 
 get_kl_helper(::Type{Float64}) = KL_HELPER_POOL_FLOAT[Base.Threads.threadid()]
 get_kl_helper(::Type{Dual{1,Float64}}) = KL_HELPER_POOL_DUAL[Base.Threads.threadid()]
 
 function __init__()
-    N = pickchunksize(PARAM_LENGTH)
-    DualFloat = Dual{N,Float64}
-    DualDual = Dual{N,Dual{1,Float64}}
     if length(KL_HELPER_POOL_FLOAT) != Base.Threads.nthreads()
         empty!(KL_HELPER_POOL_FLOAT)
         empty!(KL_HELPER_POOL_DUAL)
         for i = 1:Base.Threads.nthreads()
-            push!(KL_HELPER_POOL_FLOAT, KLHelper(DualFloat))
-            push!(KL_HELPER_POOL_DUAL, KLHelper(DualDual))
+            push!(KL_HELPER_POOL_FLOAT, KLHelper(Dual{CHUNK_SIZE,Float64}))
+            push!(KL_HELPER_POOL_DUAL, KLHelper(Dual{CHUNK_SIZE,Dual{1,Float64}}))
         end
     end
 end
