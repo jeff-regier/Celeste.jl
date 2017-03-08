@@ -38,6 +38,7 @@ type CGTrustRegionState{T,N,G}
     r::Vector{T}  # residual vector
     d::Vector{T}  # direction to consider
     Hd::Vector{T} # hessian-vector product
+    cg_iters::Int64
 end
 
 
@@ -72,7 +73,8 @@ function initial_state{T}(method::CGTrustRegion, options, d, initial_x::Array{T}
                          0., # state.rho
                          Vector{T}(n),  # residual vector
                          Vector{T}(n),  # direction to consider
-                         Vector{T}(n)) # hessian-vector product
+                         Vector{T}(n), # hessian-vector product
+                         0)
 end
 
 
@@ -86,6 +88,7 @@ function trace!(tr, state, iteration, method::CGTrustRegion, options)
         dt["rho"] = state.rho
         dt["m_diff"] = state.m_diff
         dt["f_diff"] = state.f_diff
+        dt["cg_iters"] = state.cg_iters
     end
     g_norm = norm(state.g, Inf)
     update!(tr,
@@ -118,7 +121,9 @@ function cg_steihaug!{T}(objective::TwiceDifferentiableHV,
     d[:] = -r # the first direction is the direction of steepest descent.
     rho0 = 1e100  # just a big number
 
+    state.cg_iters = 0
     for i in 1:n
+        state.cg_iters += 1
         objective.hv!(x, d, Hd)
 
         dHd = dot(d, Hd)
