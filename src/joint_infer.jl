@@ -278,7 +278,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
     tic()
     thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} = partition_equally(n_threads, n_sources)
 
-    initialize_elboargs_sources!(config, ea_vec, cfg_vec, thread_initialize_sources_assignment,
+    initialize_elboargs_sources!(config, ea_vec, vp_vec, cfg_vec, thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
                                  target_source_variational_params)
 
@@ -312,7 +312,6 @@ end
 # legacy wrapper
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
-                              use_fft::Bool=false,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3)
@@ -323,21 +322,20 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
         neighbor_map,
         images,
         cyclades_partition=cyclades_partition,
-        use_fft=use_fft,
         batch_size=batch_size,
         within_batch_shuffling=within_batch_shuffling,
         n_iters=n_iters
     )
 end
 
-function initialize_elboargs_sources!(config::Configs.Config, ea_vec, cfg_vec,
+function initialize_elboargs_sources!(config::Configs.Config, ea_vec, vp_vec, cfg_vec,
                                       thread_initialize_sources_assignment,
                                       catalog, target_sources, neighbor_map, images,
                                       target_source_variational_params)
     Threads.@threads for i in 1:nthreads()
         try
             for batch in 1:length(thread_initialize_sources_assignment[i])
-                initialize_elboargs_sources_kernel!(config, ea_vec, cfg_vec,
+                initialize_elboargs_sources_kernel!(config, ea_vec, vp_vec, cfg_vec,
                                                     thread_initialize_sources_assignment[i][batch],
                                                     catalog, target_sources, neighbor_map, images,
                                                     target_source_variational_params)
@@ -350,7 +348,7 @@ function initialize_elboargs_sources!(config::Configs.Config, ea_vec, cfg_vec,
 end
 
 
-function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg_vec, sources,
+function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, vp_vec, cfg_vec, sources,
                                              catalog, target_sources, neighbor_map, images,
                                              target_source_variational_params)
     try
@@ -380,8 +378,7 @@ function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg
         end
         return nothing
     catch ex
-        bt = sprint(show_backtrace, catch_backtrace())
-        Log.error(string(ex,"\n",bt))
+        Log.exception(ex)
     end
 end
 
@@ -404,7 +401,7 @@ function process_sources!(images::Vector{Model.Image},
             Threads.@threads for i in 1:n_threads
                 try
                     tic()
-                    process_sources_kernel!(images, ea_vec, cfg_vec,
+                    process_sources_kernel!(images, ea_vec, vp_vec, cfg_vec,
                                             thread_sources_assignment[i::Int][batch::Int],
                                             iter, within_batch_shuffling)
                     process_sources_elapsed_times[i::Int] = toq()
