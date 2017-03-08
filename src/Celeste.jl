@@ -28,6 +28,8 @@ include("Stripe82Score.jl")
 
 include("CelesteEDA.jl")
 
+include("ArgumentParse.jl")
+
 
 import .ParallelRun: BoundingBox, OptimizedSource
 import .SDSSIO: RunCamcolField, CatalogEntry

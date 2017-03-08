@@ -1,33 +1,43 @@
 #!/usr/bin/env julia
 
-import ArgParse
 using DataFrames
 import FITSIO
 
 import Celeste.AccuracyBenchmark
+import Celeste.ArgumentParse
 import Celeste.SDSSIO
 
 const OUTPUT_DIRECTORY = joinpath(splitdir(Base.source_path())[1], "output")
 
-arg_parse_settings = ArgParse.ArgParseSettings()
-ArgParse.@add_arg_table arg_parse_settings begin
-    "--run"
-        help = "SDSS run #"
-        arg_type = Int
-        default = AccuracyBenchmark.STRIPE82_RCF.run
-    "--camcol"
-        help = "SDSS camcol #"
-        arg_type = Int
-        default = AccuracyBenchmark.STRIPE82_RCF.camcol
-    "--field"
-        help = "SDSS field #"
-        arg_type = Int
-        default = AccuracyBenchmark.STRIPE82_RCF.field
-    "truth_catalog_csv"
-        help = "CSV file containing coadd 'ground truth' catalog"
-        required = true
-end
-parsed_args = ArgParse.parse_args(ARGS, arg_parse_settings)
+parser = Celeste.ArgumentParse.ArgumentParser()
+ArgumentParse.add_argument(
+    parser,
+    "--run",
+    help="SDSS run #",
+    arg_type=Int,
+    default=AccuracyBenchmark.STRIPE82_RCF.run,
+)
+ArgumentParse.add_argument(
+    parser,
+    "--camcol",
+    help="SDSS camcol #",
+    arg_type=Int,
+    default=AccuracyBenchmark.STRIPE82_RCF.camcol,
+)
+ArgumentParse.add_argument(
+    parser,
+    "--field",
+    help="SDSS field #",
+    arg_type=Int,
+    default=AccuracyBenchmark.STRIPE82_RCF.field,
+)
+ArgumentParse.add_argument(
+    parser,
+    "truth_catalog_csv",
+    help = "CSV file containing coadd 'ground truth' catalog",
+    required = true,
+)
+parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
 run_camcol_field = SDSSIO.RunCamcolField(
     parsed_args["run"],
