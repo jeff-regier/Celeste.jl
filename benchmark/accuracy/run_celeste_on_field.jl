@@ -41,7 +41,7 @@ parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
 srand(12345)
 
-if parsed_args["image-fits"] != nothing
+if haskey(parsed_args, "image-fits")
     extensions = AccuracyBenchmark.read_fits(parsed_args["image-fits"])
     images = AccuracyBenchmark.make_images(extensions)
 else
@@ -59,7 +59,7 @@ catalog_entries = AccuracyBenchmark.make_initialization_catalog(
 )
 @printf("Loaded %d sources...\n", length(catalog_entries))
 
-if parsed_args["limit-num-sources"] != nothing
+if haskey(parsed_args, "limit-num-sources")
     target_sources = collect(1:parsed_args["limit-num-sources"])
 else
     target_sources = collect(1:length(catalog_entries))
@@ -76,7 +76,7 @@ results = AccuracyBenchmark.run_celeste(
 )
 results_df = AccuracyBenchmark.celeste_to_df(results)
 
-if parsed_args["image-fits"] != nothing
+if haskey(parsed_args, "image-fits")
     catalog_label = splitext(basename(parsed_args["image-fits"]))[1]
 else
     rcf = AccuracyBenchmark.STRIPE82_RCF

@@ -51,6 +51,17 @@ end
     @test parsed_args["my-arg"] == "hi there"
 end
 
+@testset "keyword argument :store_true" begin
+    parser = ArgumentParse.ArgumentParser(propagate_errors=true)
+    ArgumentParse.add_argument(parser, "--my-arg", action=:store_true)
+
+    parsed_args = ArgumentParse.parse_args(parser, String[])
+    @test parsed_args["my-arg"] == false
+
+    parsed_args = ArgumentParse.parse_args(parser, String["--my-arg"])
+    @test parsed_args["my-arg"] == true
+end
+
 @testset "help message" begin
     parser = ArgumentParse.ArgumentParser(program_name="test.jl", propagate_errors=true)
     ArgumentParse.add_argument(parser, "--my-keyword", default="hello")
