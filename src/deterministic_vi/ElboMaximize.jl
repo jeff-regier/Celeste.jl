@@ -148,7 +148,8 @@ end
 # Objective #
 #-----------#
 
-immutable Objective{N,T} <: Function
+immutable Objective{F,N,T} <: Function
+    f::F
     ea::ElboArgs
     vp::VariationalParams{T}
     cfg::Config{N,T}
@@ -157,17 +158,18 @@ end
 """
 An unconstrained version of the ELBO
 """
-function (f::Objective)(x::Vector)
+function (f::Objective{F}){F}(x::Vector)
     from_vector!(f.cfg.free_params, x)
     to_bound!(f.cfg.bound_params, f.cfg.free_params, f.cfg.constraints)
-    sf_bound = elbo(f.ea, f.vp, f.cfg.objective_elbo_vars)
+    sf_bound = f.f(f.ea, f.vp, f.cfg.objective_elbo_vars)
     return -(sf_bound.v[])
 end
 
 # Gradient #
 #----------#
 
-immutable Gradient{N,T} <: Function
+immutable Gradient{F,N,T} <: Function
+    f::F
     ea::ElboArgs
     vp::VariationalParams{T}
     cfg::Config{N,T}
@@ -176,10 +178,10 @@ end
 """
 Computes both the gradient the objective function's value
 """
-function (f::Gradient)(x::Vector, result::Vector)
+function (f::Gradient{F}){F}(x::Vector, result::Vector)
     from_vector!(f.cfg.free_params, x)
     to_bound!(f.cfg.bound_params, f.cfg.free_params, f.cfg.constraints)
-    sf_bound = elbo(f.ea, f.vp, f.cfg.gradient_elbo_vars)
+    sf_bound = f.f(f.ea, f.vp, f.cfg.gradient_elbo_vars)
     propagate_derivatives!(to_bound!, sf_bound, f.cfg.sf_free, f.cfg.free_params,
                            f.cfg.constraints, f.cfg.jacobian_bundle)
     free_gradient = f.cfg.sf_free.d
@@ -192,7 +194,8 @@ end
 # HessianVectorProduct #
 #----------------------#
 
-immutable HessianVectorProduct{N,T} <: Function
+immutable HessianVectorProduct{F,N,T} <: Function
+    f::F
     ea::ElboArgs
     vp::VariationalParams{T}
     cfg::Config{N,T}
@@ -201,10 +204,10 @@ end
 """
 Computes hessian-vector products
 """
-function (f::HessianVectorProduct)(x::Vector, v::Vector, result::Vector)
+function (f::HessianVectorProduct{F}){F}(x::Vector, v::Vector, result::Vector)
     dual_from_vector!(f.cfg.dual_free_params, x, v)
     to_bound!(f.cfg.dual_bound_params, f.cfg.dual_free_params, f.cfg.constraints)
-    dual_sf_bound = elbo(f.ea, f.cfg.dual_vp, f.cfg.hessvec_elbo_vars)
+    dual_sf_bound = f.f(f.ea, f.cfg.dual_vp, f.cfg.hessvec_elbo_vars)
     propagate_derivatives!(to_bound!, dual_sf_bound, f.cfg.dual_sf_free, f.cfg.dual_free_params,
                            f.cfg.constraints, f.cfg.dual_jacobian_bundle)
     free_gradient = f.cfg.dual_sf_free.d
@@ -218,15 +221,15 @@ end
 # maximize! #
 #############
 
-function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config = Config(ea, vp))
+function maximize!{F}(f::F, ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config = Config(ea, vp))
     enforce_references!(ea, vp, cfg)
     enforce!(cfg.bound_params, cfg.constraints)
     to_free!(cfg.free_params, cfg.bound_params, cfg.constraints)
     x = to_vector(cfg.free_params)
 
-    ddf = TwiceDifferentiableHV(Objective(ea, vp, cfg),
-                                Gradient(ea, vp, cfg),
-                                HessianVectorProduct(ea, vp, cfg))
+    ddf = TwiceDifferentiableHV(Objective(f, ea, vp, cfg),
+                                Gradient(f, ea, vp, cfg),
+                                HessianVectorProduct(f, ea, vp, cfg))
     R = Optim.MultivariateOptimizationResults{Float64,1,CGTrustRegion{Float64}}
     result::R = Optim.optimize(ddf, x, cfg.trust_region, cfg.optim_options)
 
@@ -236,6 +239,10 @@ function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config = C
     to_bound!(cfg.bound_params, cfg.free_params, cfg.constraints)
 
     return result.f_calls::Int64, min_value, min_solution, result
+end
+
+@inline function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config = Config(ea, vp))
+    return maximize!(elbo, ea, vp, cfg)
 end
 
 end # module

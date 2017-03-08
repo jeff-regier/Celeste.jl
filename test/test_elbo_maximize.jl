@@ -18,19 +18,19 @@ ConstraintTransforms.to_free!(cfg.free_params, cfg.bound_params, cfg.constraints
 x = ElboMaximize.to_vector(cfg.free_params)
 
 # testing the objective
-f = ElboMaximize.Objective(ea, vp, cfg)
+f = ElboMaximize.Objective(DeterministicVI.elbo, ea, vp, cfg)
 @test f(x) == -(DeterministicVI.elbo(ea, vp).v[])
 
 # testing the gradient
 actual_grad = zeros(x)
-g! = ElboMaximize.Gradient(ea, vp, cfg)
+g! = ElboMaximize.Gradient(DeterministicVI.elbo, ea, vp, cfg)
 g!(x, actual_grad)
 finite_diff_grad = Calculus.gradient(f, x)
 @test isapprox(finite_diff_grad, actual_grad, atol=1e-5)
 
 # testing the Hessian-vector product
 actual_hvp, v = zeros(x), ones(x)
-hvp! = ElboMaximize.HessianVectorProduct(ea, vp, cfg)
+hvp! = ElboMaximize.HessianVectorProduct(DeterministicVI.elbo, ea, vp, cfg)
 hvp!(x, v, actual_hvp)
 g = y -> (z = zeros(y); g!(y, z); z)
 finite_diff_hvp = Calculus.jacobian(g, x, :central) * v
