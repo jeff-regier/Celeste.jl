@@ -1,5 +1,8 @@
 using StaticArrays
 
+# Defining gal_shape_ids_len might not be needed but it is critical that this is compile time constant
+const gal_shape_ids_len = 3
+
 """
 Unpack a rotation-parameterized BVN covariance matrix.
 
@@ -297,9 +300,6 @@ function get_bvn_derivs!{NumType <: Number}(
   end
 end
 
-
-const gal_shape_ids_len = 3
-
 ##############################
 
 """
@@ -314,7 +314,6 @@ parameters are indexed by GalaxyShapeParams.
 immutable GalaxySigmaDerivs{NumType <: Number}
     j::SMatrix{3,gal_shape_ids_len,NumType,9}
     t::SArray{(3,gal_shape_ids_len,gal_shape_ids_len),NumType,3,27}
-    # t::Array{NumType,3}
 end
 
 
@@ -332,64 +331,31 @@ function GalaxySigmaDerivs{NumType <: Number}(
     XiXi::SMatrix{2,2,NumType,4}, nuBar::NumType, calculate_tensor::Bool=true)
 
   cos_sin = cos(e_angle)sin(e_angle)
-  sin_sq = sin(e_angle)^2
-  cos_sq = cos(e_angle)^2
+  sin_sq  = sin(e_angle)^2
+  cos_sq  = cos(e_angle)^2
 
-  # j = Matrix{NumType}(3, length(gal_shape_ids))
-  # j[:, gal_shape_ids.e_axis] =
-    # 2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
-  # j[:, gal_shape_ids.e_angle] =
-    # e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
-  # j[:, gal_shape_ids.e_scale] =
-    # 2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale
-    j = hcat(2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq),
-        e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin),
-        2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale)*nuBar
+  j = hcat(2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq),
+           e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin),
+           2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale)*nuBar
 
-  # t = Array{NumType,3}(3, length(gal_shape_ids), length(gal_shape_ids))
   if calculate_tensor
     # Second derivatives.
 
-    # for i = 1:3
-    #   # Second derivatives involving e_scale
-    #   t[i, gal_shape_ids.e_scale, gal_shape_ids.e_scale] = 2 * XiXi[1 << (i - 1)] / e_scale^2
-    #   t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]  = 2 * j[i, gal_shape_ids.e_axis]  / e_scale
-    #   t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle] = 2 * j[i, gal_shape_ids.e_angle] / e_scale
-
-    #   t[i, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
-    #     t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]
-    #   t[i, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
-    #     t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle]
-
-    # end
-    #   # Remaining second derivatives involving e_angle
-    # t[:, gal_shape_ids.e_angle, gal_shape_ids.e_angle]  =
-    #   2 * e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq)
-    # t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle]   =
-    #   t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
-    #     2 * e_scale^2 * e_axis       * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
-
-    #   # The second derivative involving only e_axis.
-    # t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
-    #     2 * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
-
     t = SArray{(3,3,3), NumType, 3, 27}(sin_sq * 2 * e_scale^2, -cos_sin * 2 * e_scale^2, cos_sq * 2 * e_scale^2,
-        2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
-        2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
-        2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
-        (cos_sq - sin_sq) * 2 * e_scale^2 * (e_axis^2 - 1), 2cos_sin * 2 * e_scale^2 * (e_axis^2 - 1), (sin_sq - cos_sq) * 2 * e_scale^2 * (e_axis^2 - 1),
-        2 * j[1, gal_shape_ids.e_angle] / e_scale, 2 * j[2, gal_shape_ids.e_angle] / e_scale, 2 * j[3, gal_shape_ids.e_angle] / e_scale,
-        2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
-        2 * j[1, gal_shape_ids.e_angle] / e_scale, 2 * j[2, gal_shape_ids.e_angle] / e_scale, 2 * j[3, gal_shape_ids.e_angle] / e_scale,
-        2 * XiXi[1 << (1 - 1)] / e_scale^2, 2 * XiXi[1 << (2 - 1)] / e_scale^2, 2 * XiXi[1 << (3 - 1)] / e_scale^2)
+      2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
+      2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
+      2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
+      (cos_sq - sin_sq) * 2 * e_scale^2 * (e_axis^2 - 1), 2cos_sin * 2 * e_scale^2 * (e_axis^2 - 1), (sin_sq - cos_sq) * 2 * e_scale^2 * (e_axis^2 - 1),
+      2 * j[1, gal_shape_ids.e_angle] / e_scale, 2 * j[2, gal_shape_ids.e_angle] / e_scale, 2 * j[3, gal_shape_ids.e_angle] / e_scale,
+      2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
+      2 * j[1, gal_shape_ids.e_angle] / e_scale, 2 * j[2, gal_shape_ids.e_angle] / e_scale, 2 * j[3, gal_shape_ids.e_angle] / e_scale,
+      2 * XiXi[1 << (1 - 1)] / e_scale^2, 2 * XiXi[1 << (2 - 1)] / e_scale^2, 2 * XiXi[1 << (3 - 1)] / e_scale^2)
 
   else
-    # fill!(t, 0.0)
     t = @SArray zeros(NumType, 3, 3, 3)
   end
 
   GalaxySigmaDerivs(j, t*nuBar)
-  # GalaxySigmaDerivs(j, t)
 end
 
 
@@ -439,7 +405,6 @@ function GalaxyCacheComponent{NumType <: Number}(
   const empty_sig_sf =
     GalaxySigmaDerivs(@SMatrix(zeros(NumType,3,gal_shape_ids_len)),
                       @SArray(zeros(NumType,3,gal_shape_ids_len,gal_shape_ids_len)))
-                      # zeros(NumType,3,gal_shape_ids_len,gal_shape_ids_len))
 
   XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = @SVector NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
@@ -452,12 +417,6 @@ function GalaxyCacheComponent{NumType <: Number}(
   if calculate_gradient
     sig_sf = GalaxySigmaDerivs(
       e_angle, e_axis, e_scale, XiXi, gc.nuBar, calculate_hessian)
-    # sig_sf.j *= gc.nuBar # move into GalaxySigmaDerivs
-    # if calculate_hessian
-    #   # The tensor is only needed for the Hessian.
-    #   # scale!(sig_sf.t, gc.nuBar)
-    #   sig_sf.t *= gc.nuBar
-    # end
   else
     sig_sf = empty_sig_sf
   end
