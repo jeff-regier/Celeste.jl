@@ -8,10 +8,7 @@ using Calculus
 include(joinpath(dirname(@__FILE__), "Synthetic.jl"))
 include(joinpath(dirname(@__FILE__), "SampleData.jl"))
 
-ea, vp, catalog = SampleData.gen_two_body_dataset()
-
-@assert ea.active_sources == [1, 2]
-@assert length(vp) == 2
+ea, vp, _ = SampleData.gen_two_body_dataset()
 
 cfg = ElboMaximize.Config(ea, vp)
 ElboMaximize.enforce_references!(ea, vp, cfg)
@@ -35,7 +32,9 @@ finite_diff_grad = Calculus.gradient(f, x)
 actual_hvp, v = zeros(x), ones(x)
 hvp! = ElboMaximize.HessianVectorProduct(ea, vp, cfg)
 hvp!(x, v, actual_hvp)
-finite_diff_hess = Calculus.hessian(f, x)
-@test isapprox(finite_diff_hess * v, actual_hvp, atol=1e-4)
+g = y -> (z = zeros(y); g!(y, z); z)
+finite_diff_hvp = Calculus.jacobian(g, x, :central) * v
+@test all(isapprox.(finite_diff_hvp ./ actual_hvp, 1.0, atol=1e-5))
+@test isapprox(finite_diff_hvp, actual_hvp, atol=0.05)
 
 end # module
