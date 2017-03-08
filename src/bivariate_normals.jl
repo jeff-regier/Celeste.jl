@@ -346,38 +346,49 @@ function GalaxySigmaDerivs{NumType <: Number}(
         e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin),
         2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale)*nuBar
 
-  t = Array{NumType,3}(3, length(gal_shape_ids), length(gal_shape_ids))
+  # t = Array{NumType,3}(3, length(gal_shape_ids), length(gal_shape_ids))
   if calculate_tensor
     # Second derivatives.
 
-    for i = 1:3
-      # Second derivatives involving e_scale
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_scale] = 2 * XiXi[1 << (i - 1)] / e_scale^2
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]  = 2 * j[i, gal_shape_ids.e_axis]  / e_scale
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle] = 2 * j[i, gal_shape_ids.e_angle] / e_scale
+    # for i = 1:3
+    #   # Second derivatives involving e_scale
+    #   t[i, gal_shape_ids.e_scale, gal_shape_ids.e_scale] = 2 * XiXi[1 << (i - 1)] / e_scale^2
+    #   t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]  = 2 * j[i, gal_shape_ids.e_axis]  / e_scale
+    #   t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle] = 2 * j[i, gal_shape_ids.e_angle] / e_scale
 
-      t[i, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
-        t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]
-      t[i, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
-        t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle]
+    #   t[i, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
+    #     t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]
+    #   t[i, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
+    #     t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle]
 
-    end
-      # Remaining second derivatives involving e_angle
-    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_angle]  =
-      2 * e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq)
-    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle]   =
-      t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
-        2 * e_scale^2 * e_axis       * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
+    # end
+    #   # Remaining second derivatives involving e_angle
+    # t[:, gal_shape_ids.e_angle, gal_shape_ids.e_angle]  =
+    #   2 * e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq)
+    # t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle]   =
+    #   t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
+    #     2 * e_scale^2 * e_axis       * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
 
-      # The second derivative involving only e_axis.
-    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
-        2 * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
+    #   # The second derivative involving only e_axis.
+    # t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
+    #     2 * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
+
+    t = SArray{(3,3,3), NumType}(sin_sq * 2 * e_scale^2, -cos_sin * 2 * e_scale^2, cos_sq * 2 * e_scale^2,
+        2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
+        2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
+        2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
+        (cos_sq - sin_sq) * 2 * e_scale^2 * (e_axis^2 - 1), 2cos_sin * 2 * e_scale^2 * (e_axis^2 - 1), (sin_sq - cos_sq) * 2 * e_scale^2 * (e_axis^2 - 1),
+        2 * j[1, gal_shape_ids.e_angle] / e_scale, 2 * j[2, gal_shape_ids.e_angle] / e_scale, 2 * j[3, gal_shape_ids.e_angle] / e_scale,
+        2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
+        2 * j[1, gal_shape_ids.e_angle] / e_scale, 2 * j[2, gal_shape_ids.e_angle] / e_scale, 2 * j[3, gal_shape_ids.e_angle] / e_scale,
+        2 * XiXi[1 << (1 - 1)] / e_scale^2, 2 * XiXi[1 << (2 - 1)] / e_scale^2, 2 * XiXi[1 << (3 - 1)] / e_scale^2)
 
   else
-    fill!(t, 0.0)
+    # fill!(t, 0.0)
+    t = @SArray zeros(NumType, 3, 3, 3)
   end
 
-  GalaxySigmaDerivs(j, SArray{(3,gal_shape_ids_len,gal_shape_ids_len)}(t)*nuBar)
+  GalaxySigmaDerivs(j, t*nuBar)
   # GalaxySigmaDerivs(j, t)
 end
 
