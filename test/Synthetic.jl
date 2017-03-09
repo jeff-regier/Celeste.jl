@@ -7,6 +7,8 @@ import Celeste: Infer, DeterministicVI
 
 import WCS
 import Distributions
+using ForwardDiff
+using StaticArrays
 
 include("../src/bivariate_normals.jl")
 

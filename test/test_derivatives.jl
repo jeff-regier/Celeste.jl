@@ -34,7 +34,7 @@ function test_active_pixels()
     function tile_lik_wrapper_fun{NumType <: Number}(
             ea::ElboArgs{NumType}, calculate_gradient::Bool)
         elbo_vars = DeterministicVI.ElboIntermediateVariables(
-            NumType, ea.S,
+            NumType, ea.psf_K, ea.S,
             length(ea.active_sources),
             calculate_gradient=calculate_gradient,
             calculate_hessian=calculate_gradient)
@@ -380,7 +380,7 @@ function test_bvn_derivatives()
     weight = 0.724
 
     bvn = BvnComponent(offset, sigma, weight)
-    elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1)
+    elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1, 1)
     DeterministicVI.eval_bvn_pdf!(elbo_vars.bvn_derivs, bvn, x)
     DeterministicVI.get_bvn_derivs!(elbo_vars.bvn_derivs, bvn, true, true)
 
@@ -492,7 +492,7 @@ function test_galaxy_variable_transform()
     bmc = BvnComponent(SVector{2,Float64}(u_pix), sigma, 1.0)
     sig_sf = DeterministicVI.GalaxySigmaDerivs(e_angle, e_axis, e_scale, sigma)
     gcc = GalaxyCacheComponent(1.0, 1.0, bmc, sig_sf)
-    elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1)
+    elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1, 1)
     DeterministicVI.eval_bvn_pdf!(elbo_vars.bvn_derivs, bmc, x)
     DeterministicVI.get_bvn_derivs!(elbo_vars.bvn_derivs, bmc, true, true)
     DeterministicVI.transform_bvn_derivs!(
@@ -555,7 +555,7 @@ function test_galaxy_cache_component()
         e_scale = par[par_ids_e_scale]
         u_pix = Model.linear_world_to_pix(
             patch.wcs_jacobian, patch.center, patch.pixel_center, u)
-        elbo_vars_fd = DeterministicVI.ElboIntermediateVariables(T, 1, 1)
+        elbo_vars_fd = DeterministicVI.ElboIntermediateVariables(T, 1, 1, 1)
         e_dev_i_fd = convert(T, e_dev_i)
         gcc = GalaxyCacheComponent(
                         e_dev_dir, e_dev_i_fd, gp, psf,
@@ -582,7 +582,7 @@ function test_galaxy_cache_component()
     gcc = GalaxyCacheComponent(
                     e_dev_dir, e_dev_i, gp, psf,
                     u_pix, e_axis, e_angle, e_scale, true, true)
-    elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1)
+    elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, 1, 1, 1)
     eval_bvn_pdf!(elbo_vars.bvn_derivs, gcc.bmc, x)
     get_bvn_derivs!(elbo_vars.bvn_derivs, gcc.bmc, true, true)
     transform_bvn_derivs!(elbo_vars.bvn_derivs, gcc.sig_sf, patch.wcs_jacobian, true)

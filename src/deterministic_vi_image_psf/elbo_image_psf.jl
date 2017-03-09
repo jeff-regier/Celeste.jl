@@ -47,10 +47,6 @@ function GalaxyCacheComponent{NumType <: Number}(
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
     calculate_gradient::Bool, calculate_hessian::Bool)
 
-    # Declare in advance to save memory allocation.
-    const empty_sig_sf =
-        GalaxySigmaDerivs(Matrix{NumType}(0, 0), Array{NumType}(0, 0, 0))
-
     XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
     var_s = gc.nuBar * XiXi
 
@@ -60,14 +56,9 @@ function GalaxyCacheComponent{NumType <: Number}(
 
     if calculate_gradient
         sig_sf = GalaxySigmaDerivs(
-            e_angle, e_axis, e_scale, XiXi, calculate_hessian)
-        sig_sf.j .*= gc.nuBar
-        if calculate_hessian
-            # The tensor is only needed for the Hessian.
-            sig_sf.t .*= gc.nuBar
-        end
+            e_angle, e_axis, e_scale, XiXi, gc.nuBar, calculate_hessian)
     else
-        sig_sf = empty_sig_sf
+        sig_sf = GalaxySigmaDerivs(NumType)
     end
 
     GalaxyCacheComponent(e_dev_dir, e_dev_i, bmc, sig_sf)

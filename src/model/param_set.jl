@@ -38,7 +38,6 @@ const star_ids = StarPosParams()
 getids(::Type{StarPosParams}) = star_ids
 length(::Type{StarPosParams}) = 2
 
-
 type GalaxyShapeParams <: ParamSet
     e_axis::Int
     e_angle::Int
@@ -48,7 +47,6 @@ end
 const gal_shape_ids = GalaxyShapeParams()
 getids(::Type{GalaxyShapeParams}) = gal_shape_ids
 length(::Type{GalaxyShapeParams}) = 3
-
 
 type GalaxyPosParams <: ParamSet
     u::Vector{Int}
