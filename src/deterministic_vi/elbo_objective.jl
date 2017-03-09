@@ -471,11 +471,13 @@ function elbo_likelihood{NumType <: Number}(ea::ElboArgs{NumType})
         # all ~50 evalulations of the likelihood
         # This convolves the PSF with the star/galaxy model, returning a
         # mixture of bivariate normals.
-        star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+        star_mcs, gal_mcs = Model.load_bvn_mixtures!(
+                                    ea.elbo_vars.star_mcs, ea.elbo_vars.gal_mcs,
+                                    ea.S, ea.patches,
                                     ea.vp, ea.active_sources,
                                     ea.psf_K, n,
-                                    calculate_gradient=ea.elbo_vars.elbo.has_gradient,
-                                    calculate_hessian=ea.elbo_vars.elbo.has_hessian)
+                                    ea.elbo_vars.elbo.has_gradient,
+                                    ea.elbo_vars.elbo.has_hessian)
 
         # if there's only one active source, we know each pixel we visit
         # hasn't been visited before, so no need to allocate memory.
