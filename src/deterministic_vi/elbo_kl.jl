@@ -178,8 +178,6 @@ function KLHelper{N,T}(::Type{Dual{N,T}})
     jacobian_config = JacobianConfig{N}(rand(T, PARAM_LENGTH))
     gradient_tape = CompiledTape{:kl_gradient}(GradientTape(subtract_kl, rand(T, PARAM_LENGTH)))
     nested_gradient_tape = CompiledTape{:kl_nested_gradient}(GradientTape(subtract_kl, rand(Dual{N,T}, PARAM_LENGTH)))
-    ReverseDiff.compile(gradient_tape)
-    ReverseDiff.compile(nested_gradient_tape)
     return KLHelper{N,T}(gradient_tape, nested_gradient_tape, dual_buffer, jacobian_config)
 end
 
@@ -191,7 +189,6 @@ function kl_hessian!(out, x, helper::KLHelper)
     f = x -> ReverseDiff.gradient!(helper.dual_buffer, helper.nested_gradient_tape, x)
     return ForwardDiff.jacobian!(out, f, x, helper.jacobian_config)
 end
-
 
 ###############
 # Entry Point #
@@ -233,6 +230,16 @@ const KL_HELPER_POOL_DUAL = Vector{KLHelper{CHUNK_SIZE,Dual{1,Float64}}}()
 
 get_kl_helper(::Type{Float64}) = KL_HELPER_POOL_FLOAT[Base.Threads.threadid()]
 get_kl_helper(::Type{Dual{1,Float64}}) = KL_HELPER_POOL_DUAL[Base.Threads.threadid()]
+
+let helper = KLHelper(Dual{CHUNK_SIZE,Float64})
+    ReverseDiff.compile(helper.gradient_tape)
+    ReverseDiff.compile(helper.nested_gradient_tape)
+end
+
+let helper = KLHelper(Dual{1,Dual{CHUNK_SIZE,Float64}})
+    ReverseDiff.compile(helper.gradient_tape)
+    ReverseDiff.compile(helper.nested_gradient_tape)
+end
 
 function __init__()
     if length(KL_HELPER_POOL_FLOAT) != Base.Threads.nthreads()
