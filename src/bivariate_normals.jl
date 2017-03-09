@@ -1,5 +1,3 @@
-using StaticArrays
-
 # Defining gal_shape_ids_len might not be needed but it is critical that this is compile time constant
 const gal_shape_ids_len = 3
 
@@ -328,7 +326,7 @@ Note that nubar is not included.
 """
 function GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
-    XiXi::SMatrix{2,2,NumType,4}, nuBar::NumType, calculate_tensor::Bool=true)
+    XiXi::SMatrix{2,2,NumType,4}, nuBar::NumType = one(NumType), calculate_tensor::Bool=true)
 
   cos_sin = cos(e_angle)sin(e_angle)
   sin_sq  = sin(e_angle)^2
@@ -336,7 +334,7 @@ function GalaxySigmaDerivs{NumType <: Number}(
 
   j = hcat(2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq),
            e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin),
-           2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale)*nuBar
+           2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale)
 
   if calculate_tensor
     # Second derivatives.
@@ -355,7 +353,7 @@ function GalaxySigmaDerivs{NumType <: Number}(
     t = @SArray zeros(NumType, 3, 3, 3)
   end
 
-  GalaxySigmaDerivs(j, t*nuBar)
+  GalaxySigmaDerivs(j*nuBar, t*nuBar)
 end
 
 
@@ -401,11 +399,6 @@ function GalaxyCacheComponent{NumType <: Number}(
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
     calculate_gradient::Bool, calculate_hessian::Bool)
 
-  # Declare in advance to save memory allocation.
-  const empty_sig_sf =
-    GalaxySigmaDerivs(@SMatrix(zeros(NumType,3,gal_shape_ids_len)),
-                      @SArray(zeros(NumType,3,gal_shape_ids_len,gal_shape_ids_len)))
-
   XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = @SVector NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
   var_s = pc.tauBar + gc.nuBar * XiXi
@@ -418,12 +411,14 @@ function GalaxyCacheComponent{NumType <: Number}(
     sig_sf = GalaxySigmaDerivs(
       e_angle, e_axis, e_scale, XiXi, gc.nuBar, calculate_hessian)
   else
-    sig_sf = empty_sig_sf
+    sig_sf = GalaxySigmaDerivs(NumType)
   end
 
   GalaxyCacheComponent(e_dev_dir, e_dev_i, bmc, sig_sf)
 end
 
+GalaxySigmaDerivs(NumType::Type) = GalaxySigmaDerivs(@SMatrix(zeros(NumType,3,gal_shape_ids_len)),
+                                                     @SArray( zeros(NumType,3,gal_shape_ids_len,gal_shape_ids_len)))
 
 ###################################################
 # Transform derivatives into the model parameterization.
@@ -494,12 +489,14 @@ function transform_bvn_derivs!{NumType <: Number}(
 
   # Use the chain rule for the shape derviatives.
   # TODO: time consuming **************
-  bvn_s_d = bvn_derivs.bvn_s_d
+  bvn_s_d   = bvn_derivs.bvn_s_d
   bvn_sig_d = bvn_derivs.bvn_sig_d
 
   fill!(bvn_s_d, 0.0)
-  @inbounds for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
-    bvn_s_d[shape_id] += bvn_sig_d[sig_id] * sig_sf.j[sig_id, shape_id]
+  for shape_id in 1:length(gal_shape_ids)
+    @inbounds for sig_id in 1:3
+      bvn_s_d[shape_id] += bvn_sig_d[sig_id] * sig_sf.j[sig_id, shape_id]
+    end
   end
 
   if calculate_hessian
@@ -513,36 +510,44 @@ function transform_bvn_derivs!{NumType <: Number}(
 
     # Second derviatives involving only shape parameters.
     # TODO: time consuming **************
-    @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
-      @inbounds for sig_id1 in 1:3
-        bvn_ss_h[shape_id1, shape_id2] +=
-          bvn_sig_d[sig_id1] * sig_sf.t[sig_id1, shape_id1, shape_id2]
+    for shape_id2 in 1:length(gal_shape_ids)
+      for shape_id1 in 1:shape_id2
+        @inbounds for sig_id1 in 1:3
+          bvn_ss_h[shape_id1, shape_id2] += bvn_sig_d[sig_id1] * sig_sf.t[sig_id1, shape_id1, shape_id2]
+        end
       end
     end
 
     bvn_sigsig_h = bvn_derivs.bvn_sigsig_h
-    @inbounds for sig_id1 in 1:3, sig_id2 in 1:3,
-                  shape_id2 in 1:length(gal_shape_ids)
-      inner_term =
-        bvn_sigsig_h[sig_id1, sig_id2] * sig_sf.j[sig_id2, shape_id2]
-      @inbounds for shape_id1 in 1:shape_id2
-        bvn_ss_h[shape_id1, shape_id2] +=
-          inner_term * sig_sf.j[sig_id1, shape_id1]
+    for sig_id1 in 1:3
+      for sig_id2 in 1:3
+        @inbounds for shape_id2 in 1:length(gal_shape_ids)
+          inner_term = bvn_sigsig_h[sig_id1, sig_id2] * sig_sf.j[sig_id2, shape_id2]
+          for shape_id1 in 1:shape_id2
+            bvn_ss_h[shape_id1, shape_id2] += inner_term * sig_sf.j[sig_id1, shape_id1]
+          end
+        end
       end
     end
 
-    @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
-      bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
+    for shape_id2 in 1:length(gal_shape_ids)
+      @inbounds for shape_id1 in 1:shape_id2
+        bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
+      end
     end
 
     # Second derivates involving both a shape term and a u term.
     # TODO: time consuming **************
     bvn_xsig_h = bvn_derivs.bvn_xsig_h
-    @inbounds for shape_id in 1:length(gal_shape_ids),
-                  u_id in 1:2, sig_id in 1:3, x_id in 1:2
-      bvn_us_h[u_id, shape_id] +=
-        bvn_xsig_h[x_id, sig_id] * sig_sf.j[sig_id, shape_id] *
-        (-wcs_jacobian[x_id, u_id])
+    for shape_id in 1:length(gal_shape_ids)
+      for u_id in 1:2
+        for sig_id in 1:3
+          @inbounds for x_id in 1:2
+            bvn_us_h[u_id, shape_id] +=
+              bvn_xsig_h[x_id, sig_id] * sig_sf.j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
+          end
+        end
+      end
     end
   end
 end

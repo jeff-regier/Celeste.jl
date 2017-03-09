@@ -16,6 +16,9 @@ import ..SensitiveFloats
 import Optim
 import WCS
 
+using ForwardDiff
+using StaticArrays
+
 include("bivariate_normals.jl")
 
 

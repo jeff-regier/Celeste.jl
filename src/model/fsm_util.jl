@@ -70,7 +70,6 @@ function load_bvn_mixtures!{NumType <: Number}(
 
             # Galaxies of type 1 have 8 components, and type 2 have 6 components.
             for j in 1:ifelse(i == 1, 8, 6)
-                # [8,6][i]
                 for k = 1:psf_K
                     gal_mcs[k, j, i, s] = GalaxyCacheComponent(
                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
@@ -96,7 +95,7 @@ function load_bvn_mixtures{NumType <: Number}(S::Int64,
               calculate_hessian::Bool=true)
     star_mcs = Matrix{BvnComponent{NumType}}(psf_K, S)
     gal_mcs  = Array{GalaxyCacheComponent{NumType}}(psf_K, 8, 2, S)
-    load_bvn_mixtures!(star_mcs, gal_mcs, patches, source_params, active_sources,
+    load_bvn_mixtures!(star_mcs, gal_mcs, S, patches, source_params, active_sources,
       psf_K, n, calculate_gradient, calculate_hessian)
 end
 
