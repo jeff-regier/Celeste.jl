@@ -53,21 +53,16 @@ catalog_df[:objid] = fill("", size(catalog_df, 1))
 truth_df = AccuracyBenchmark.read_catalog(parsed_args["truth_catalog_csv"])
 used_truth_indices = Set()
 for source_index in 1:size(catalog_df, 1)
-    matching_truth_index = nothing
-    try
-        matching_truth_index = AccuracyBenchmark.match_position(
-            truth_df[:right_ascension_deg], truth_df[:declination_deg],
-            catalog_df[source_index, :right_ascension_deg],
-            catalog_df[source_index, :declination_deg],
-            1,
-        )
-    catch exc
-        if !isa(exc, AccuracyBenchmark.MatchException)
-            rethrow()
-        else
-            continue
-        end
+    matching_truth_indices = AccuracyBenchmark.match_position(
+        truth_df[:right_ascension_deg], truth_df[:declination_deg],
+        catalog_df[source_index, :right_ascension_deg],
+        catalog_df[source_index, :declination_deg],
+        1 / 0.396, # to match up with Stripe82Score
+    )
+    if isempty(matching_truth_indices)
+        continue
     end
+    matching_truth_index = matching_truth_indices[1]
 
     if in(matching_truth_index, used_truth_indices)
         continue

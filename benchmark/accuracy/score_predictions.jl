@@ -3,8 +3,6 @@
 using DataFrames
 
 import Celeste.AccuracyBenchmark
-import Celeste.Infer
-import Celeste.ParallelRun
 
 if !(2 <= length(ARGS) <= 3)
     println("Usage: score_predictions.jl <ground truth> <predictions> [predictions]")
