@@ -174,10 +174,6 @@ function test_e_g_s_functions()
             DeterministicVI.calculate_source_pixel_brightness!(
                 ea.elbo_vars,
                 ea,
-                ea.elbo_vars.E_G_s,
-                ea.elbo_vars.var_G_s,
-                ea.elbo_vars.fs0m,
-                ea.elbo_vars.fs1m,
                 sb,
                 b, s,
                 is_active_source)
