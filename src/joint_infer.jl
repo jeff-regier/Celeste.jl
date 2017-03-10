@@ -234,8 +234,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
                               cyclades_partition::Bool=true,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
-                              n_iters::Int=3,
-                              trust_region::NewtonTrustRegion{Float64}=NewtonTrustRegion())
+                              n_iters::Int=3)
 
     # Seed random number generator to ensure the same results per run.
     srand(42)
@@ -280,7 +279,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
 
     initialize_elboargs_sources!(config, ea_vec, cfg_vec, thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
-                                 trust_region, target_source_variational_params)
+                                 target_source_variational_params)
 
     Log.info("Done preallocating array of elboargs. Elapsed time: $(toq())")
 
@@ -314,8 +313,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
-                              n_iters::Int=3,
-                              trust_region::NewtonTrustRegion{Float64}=NewtonTrustRegion())
+                              n_iters::Int=3)
     one_node_joint_infer(
         Configs.Config(),
         catalog,
@@ -326,21 +324,19 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
         batch_size=batch_size,
         within_batch_shuffling=within_batch_shuffling,
         n_iters=n_iters,
-        trust_region=trust_region,
     )
 end
 
 function initialize_elboargs_sources!(config::Configs.Config, ea_vec, cfg_vec,
                                       thread_initialize_sources_assignment,
                                       catalog, target_sources, neighbor_map, images,
-                                      trust_region, target_source_variational_params)
+                                      target_source_variational_params)
     Threads.@threads for i in 1:nthreads()
         try
             for batch in 1:length(thread_initialize_sources_assignment[i])
                 initialize_elboargs_sources_kernel!(config, ea_vec, cfg_vec,
                                                     thread_initialize_sources_assignment[i][batch],
                                                     catalog, target_sources, neighbor_map, images,
-                                                    trust_region,
                                                     target_source_variational_params)
             end
         catch ex
@@ -352,7 +348,6 @@ end
 
 function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg_vec, sources,
                                              catalog, target_sources, neighbor_map, images,
-                                             trust_region,
                                              target_source_variational_params)
     try
         for cur_source_index in sources
@@ -376,7 +371,7 @@ function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg
 
             ea = ElboArgs(images, vp, patches, [1])
             ea_vec[cur_source_index] = ea
-            cfg_vec[cur_source_index] = Config(ea, trust_region = trust_region)
+            cfg_vec[cur_source_index] = Config(ea)
         end
         return nothing
     catch ex
