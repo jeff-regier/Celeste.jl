@@ -17,8 +17,8 @@ using StaticArrays
 
 using Celeste: Model, DeterministicVI
 
-import Celeste: Infer, DeterministicVI, ParallelRun, DeterministicVIImagePSF
-import Celeste: PSF, SDSSIO, SensitiveFloats, Transform, CelesteEDA
+import Celeste: Infer, DeterministicVI, ParallelRun
+import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
 import Celeste.SensitiveFloats.clear!
 import Celeste.SDSSIO: RunCamcolField
 
@@ -54,15 +54,12 @@ else
                  "test_argument_parse.jl",
                  "test_derivatives.jl",
                  "test_kl.jl",
-                 "test_eda.jl",
                  "test_constraints.jl",
                  "test_elbo.jl",
-                 "test_fft.jl",
                  "test_galsim_benchmarks.jl",
                  "test_images.jl",
                  "test_infer.jl",
                  "test_joint_infer.jl",
-                 "test_kernels.jl",
                  "test_log_prob.jl",
                  "test_misc.jl",
                  "test_optimization.jl",

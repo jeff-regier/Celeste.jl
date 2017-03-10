@@ -3,7 +3,7 @@
 import Celeste.ParallelRun: one_node_joint_infer, infer_init, BoundingBox
 import Celeste.SDSSIO: RunCamcolField, load_field_images
 import Celeste.Infer: find_neighbors
-import Celeste.DeterministicVIImagePSF
+
 
 const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
 wd = pwd()

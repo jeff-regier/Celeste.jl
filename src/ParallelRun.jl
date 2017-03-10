@@ -14,7 +14,7 @@ import ..SDSSIO: RunCamcolField
 import ..PSF
 
 import ..DeterministicVI: infer_source
-import ..DeterministicVIImagePSF
+
 
 include("joint_infer.jl")
 
@@ -434,4 +434,3 @@ function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::Strin
 end
 
 end
-

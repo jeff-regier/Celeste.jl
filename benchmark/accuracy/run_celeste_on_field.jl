@@ -12,7 +12,6 @@ import Celeste.SDSSIO
 const OUTPUT_DIRECTORY = joinpath(splitdir(Base.source_path())[1], "output")
 
 parser = Celeste.ArgumentParse.ArgumentParser()
-ArgumentParse.add_argument(parser, "--fft", help="Use FFT inference", action=:store_true)
 ArgumentParse.add_argument(parser, "--joint", help="Use joint inference", action=:store_true)
 ArgumentParse.add_argument(
     parser,
@@ -98,7 +97,6 @@ results = AccuracyBenchmark.run_celeste(
     target_sources,
     images,
     use_joint_inference=parsed_args["joint"],
-    use_fft=parsed_args["fft"],
 )
 results_df = AccuracyBenchmark.celeste_to_df(results)
 

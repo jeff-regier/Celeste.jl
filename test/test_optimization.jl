@@ -1,6 +1,6 @@
 using Base.Test
 
-using Celeste: Model, SensitiveFloats, DeterministicVIImagePSF
+using Celeste: Model, SensitiveFloats
 using Celeste.ConstraintTransforms: ParameterConstraint, ConstraintBatch,
                                     BoxConstraint, SimplexConstraint
 using Celeste.DeterministicVI: ElboArgs
@@ -100,129 +100,7 @@ function test_full_elbo_optimization()
 end
 
 
-function test_real_stamp_optimization()
-    images = SampleData.load_stamp_blob(datadir, "5.0073-0.0739_2kpsf");
-    cat_entries = SampleData.load_stamp_catalog(datadir, "s82-5.0073-0.0739_2kpsf", images);
-    bright(ce) = sum(ce.star_fluxes) > 3 || sum(ce.gal_fluxes) > 3
-    cat_entries = filter(bright, cat_entries);
-    inbounds(ce) = ce.pos[1] > -10. && ce.pos[2] > -10 &&
-        ce.pos[1] < 61 && ce.pos[2] < 61
-    cat_entries = filter(inbounds, cat_entries);
-
-    ea = make_elbo_args(images, cat_entries);
-    cfg = Config(ea; loc_width=1.0,
-                 optim_options=custom_optim_options(xtol_abs=0.0))
-    maximize!(DeterministicVI.elbo, ea, cfg)
-end
-
-
-function test_quadratic_optimization()
-    println("Testing quadratic optimization.")
-
-    # A very simple quadratic function to test the optimization.
-    const centers = collect(linspace(0.1, 0.9, length(CanonicalParams)));
-
-    # Set feasible centers for the indicators.
-    centers[ids.a] = [0.4, 0.6]
-    centers[ids.k[:, 1]] = [0.3, 0.7]
-    centers[ids.k[:, 2]] = centers[ids.k[:, 1]]
-
-    function quadratic{T}(ea::ElboArgs{T})
-        val = SensitiveFloat{T}(length(ids), 1, true, true)
-        val.v[] = -sum((ea.vp[1] - centers) .^ 2)
-        val.d[:] = -2.0 * (ea.vp[1] - centers)
-        val.h[:, :] = diagm(fill(-2.0, length(CanonicalParams)))
-        return val
-    end
-
-    box = BoxConstraint(0.0, 1.0, 1.0)
-    simplex = SimplexConstraint(0.0, 1.0, 2)
-    boxes = Vector{Vector{ParameterConstraint{BoxConstraint}}}(1)
-    simplexes = Vector{Vector{ParameterConstraint{SimplexConstraint}}}(1)
-    boxes[1] = eltype(boxes)()
-    simplexes[1] = eltype(simplexes)()
-    for paramname in fieldnames(ids)
-        param = getfield(ids, paramname)
-        if paramname in (:a, :k)
-            for inds in param
-                push!(simplexes[1], ParameterConstraint(simplex, inds))
-            end
-        elseif isa(param, Tuple)
-            for inds in param
-                push!(boxes[1], ParameterConstraint(box, inds))
-            end
-        else
-            push!(boxes[1], ParameterConstraint(box, param))
-        end
-    end
-
-    ea = empty_model_params(1);
-    n = length(CanonicalParams)
-    ea.vp = convert(VariationalParams{Float64}, [fill(0.5, n) for s in 1:1]);
-
-    cfg = Config(ea; constraints=ConstraintBatch(boxes, simplexes),
-                 optim_options=custom_optim_options(xtol_abs=1e-16, ftol_rel=1e-16))
-    maximize!(quadratic, ea, cfg)
-
-    @test isapprox(ea.vp[1]                  , centers, 1e-6)
-    @test isapprox(quadratic_function(ea).v[], 0.0    , 1e-15)
-end
-
-
-function test_star_optimization_fft()
-    println("Testing star fft optimization.")
-
-    images, ea, body = gen_sample_star_dataset()
-    ea.vp[1][ids.a] = [0.8, 0.2]
-    ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
-        images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
-    elbo_fft_objective = DeterministicVIImagePSF.FFTElboFunction(fsm_mat)
-
-    cfg = Config(ea_fft; loc_width=1.0)
-    maximize!(elbo_fft_objective, ea_fft, cfg)
-
-    verify_sample_star(ea_fft.vp[1], [10.1, 12.2])
-end
-
-
-function test_galaxy_optimization_fft()
-    println("Testing galaxy fft optimization.")
-
-    images, ea, body = gen_sample_galaxy_dataset()
-    ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
-        images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
-    elbo_fft_opt = DeterministicVIImagePSF.FFTElboFunction(fsm_mat)
-    cfg_star = star_only_config(ea_fft; loc_width=1.0)
-    cfg_both = Config(ea_fft; loc_width=1.0)
-    maximize_two_steps!(elbo_fft_opt, ea_fft, cfg_star, cfg_both)
-    # TODO: Currently failing since it misses the brighness by 3%, which is
-    # greater than the 1% permitted by the test.  However, the ELBO of the
-    # FFT optimum is lower than that of the MOG optimum.
-    # verify_sample_galaxy(ea_fft.vp[1], [8.5, 9.6])
-end
-
-
-function test_three_body_optimization_fft()
-    println("Testing three body fft optimization.")
-
-    images, ea, three_bodies = gen_three_body_dataset();
-    Infer.load_active_pixels!(images, ea.patches; exclude_nan=false);
-    ea_fft, fsm_mat = DeterministicVIImagePSF.initialize_fft_elbo_parameters(
-        images, deepcopy(ea.vp), ea.patches, [1], use_raw_psf=false)
-    elbo_fft_opt = DeterministicVIImagePSF.FFTElboFunction(fsm_mat)
-    cfg_star = star_only_config(ea_fft; loc_width=1.0)
-    cfg_both = Config(ea_fft; loc_width=1.0)
-    maximize_two_steps!(elbo_fft_opt, ea_fft, cfg_star, cfg_both)
-end
-
-
-test_galaxy_optimization_fft()
-test_three_body_optimization_fft()
-test_star_optimization_fft()
-
-#test_quadratic_optimization()
 test_star_optimization()
 test_single_source_optimization()
 test_full_elbo_optimization()
-#test_real_stamp_optimization()
 test_galaxy_optimization()
