@@ -4,8 +4,7 @@ using Celeste: Model, SensitiveFloats
 using Celeste.ConstraintTransforms: ParameterConstraint, ConstraintBatch,
                                     BoxConstraint, SimplexConstraint
 using Celeste.DeterministicVI: ElboArgs
-using Celeste.DeterministicVI.NewtonMaximize: Config, maximize!, custom_optim_options,
-                                              star_only_config, maximize_two_steps!
+using Celeste.DeterministicVI.NewtonMaximize: Config, maximize!, custom_optim_options
 
 function verify_sample_star(vs, pos)
     @test vs[ids.a[2]] <= 0.01
