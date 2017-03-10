@@ -326,7 +326,7 @@ Note that nubar is not included.
 """
 function GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
-    XiXi::SMatrix{2,2,NumType,4}, nuBar::NumType = one(NumType), calculate_tensor::Bool=true)
+    XiXi::SMatrix{2,2,NumType,4}, nuBar::Float64=1.0, calculate_tensor::Bool=true)
 
   cos_sin = cos(e_angle)sin(e_angle)
   sin_sq  = sin(e_angle)^2
@@ -417,7 +417,8 @@ function GalaxyCacheComponent{NumType <: Number}(
   GalaxyCacheComponent(e_dev_dir, e_dev_i, bmc, sig_sf)
 end
 
-GalaxySigmaDerivs(NumType::Type) = GalaxySigmaDerivs(@SMatrix(zeros(NumType,3,gal_shape_ids_len)),
+GalaxySigmaDerivs{NumType}(::Type{NumType}) = GalaxySigmaDerivs(
+                                                     @SMatrix(zeros(NumType,3,gal_shape_ids_len)),
                                                      @SArray( zeros(NumType,3,gal_shape_ids_len,gal_shape_ids_len)))
 
 ###################################################
