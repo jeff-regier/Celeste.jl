@@ -104,7 +104,7 @@ function color_from_fluxes(flux1::AbstractFloat, flux2::AbstractFloat)
     end
 end
 function color_from_mags(mags1::AbstractFloat, mags2::AbstractFloat)
-    color_from_fluxes(mag_to_flux(mags1), mag_to_flux(mags1))
+    color_from_fluxes(mag_to_flux(mags1), mag_to_flux(mags2))
 end
 
 canonical_angle(angle_deg) = angle_deg - floor(angle_deg / 180) * 180
@@ -267,6 +267,9 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
     # gal angle (degrees)
     raw_phi = dev_or_exp(:phi_dev, :phi_exp)
     result[:angle_deg] = canonical_angle.(raw_phi)
+
+    # primary is better at flagging oversaturated sources than coadd
+    result = result[flux_to_mag.(raw_df[:psfflux_r]) .>= 16, :]
 
     return result
 end
@@ -559,15 +562,12 @@ end
 # Score a set of predictions against a ground truth catalog
 ################################################################################
 
-ABSOLUTE_ERROR_COLUMNS = [
-    :de_vaucouleurs_mixture_weight,
-    :minor_major_axis_ratio,
-    :half_light_radius_px,
-    :color_log_ratio_ug,
-    :color_log_ratio_gr,
-    :color_log_ratio_ri,
-    :color_log_ratio_iz,
-]
+COLOR_COLUMNS = [:color_log_ratio_ug, :color_log_ratio_gr, :color_log_ratio_ri, :color_log_ratio_iz]
+
+ABSOLUTE_ERROR_COLUMNS = vcat(
+    [:de_vaucouleurs_mixture_weight, :minor_major_axis_ratio, :half_light_radius_px],
+    COLOR_COLUMNS,
+)
 
 function degrees_to_diff(a, b)
     angle_between = abs(a - b) % 180
@@ -586,7 +586,8 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
 
     predicted_galaxy = predicted[:is_star] .< .5
     true_galaxy = truth[:is_star] .< .5
-    errors[:misclassified] =  (predicted_galaxy .!= true_galaxy)
+    errors[:missed_stars] = !true_galaxy .& predicted_galaxy
+    errors[:missed_galaxies] = true_galaxy .& !predicted_galaxy
 
     errors[:position] = sky_distance_px.(
         truth[:right_ascension_deg],
@@ -594,32 +595,40 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
         predicted[:right_ascension_deg],
         predicted[:declination_deg],
     )
+
+    # compare flux in both mags and nMgy for now
     errors[:reference_band_flux_mag] = abs(
         flux_to_mag.(truth[:reference_band_flux_nmgy])
         .- flux_to_mag.(predicted[:reference_band_flux_nmgy])
+    )
+    errors[:reference_band_flux_nmgy] = abs(
+        truth[:reference_band_flux_nmgy] .- predicted[:reference_band_flux_nmgy]
     )
     errors[:angle_deg] = degrees_to_diff(truth[:angle_deg], predicted[:angle_deg])
 
     for column_symbol in ABSOLUTE_ERROR_COLUMNS
         errors[column_symbol] = abs(truth[column_symbol] - predicted[column_symbol])
     end
+    for color_column in COLOR_COLUMNS
+        # to match up with Stripe82Score, which used differences of mags
+        errors[color_column] *= 2.5 / log(10)
+    end
 
     errors
 end
 
-function filter_rows(truth::DataFrame, errors::DataFrame, column_name::Symbol, source_type::Symbol)
-    good_row = .!isna(errors[column_name])
-    if source_type == :star
-        good_row .&= (truth[:is_star] .> 0.5)
-    else
-        good_row .&= (truth[:is_star] .< 0.5)
-        if column_name in [:minor_major_axis_ratio, :half_light_radius_px, :angle_deg,
-                          :de_vaucouleurs_mixture_weight]
-            good_row .&= !(0.05 .< truth[:de_vaucouleurs_mixture_weight] .< 0.95)
-        end
-        if column_name == :angle_deg
-            good_row .&= truth[:minor_major_axis_ratio] .< .6
-        end
+function filter_rows(truth::DataFrame, errors::DataFrame, column_name::Symbol)
+    good_row = (.!isna(errors[column_name]) .& !isnan(errors[column_name]))
+    good_row .&= (isna(truth[:half_light_radius_px]) .| (truth[:half_light_radius_px] .<= 20))
+    if column_name in [:minor_major_axis_ratio, :half_light_radius_px, :angle_deg,
+                       :de_vaucouleurs_mixture_weight]
+        good_row .&= (
+            isna(truth[:de_vaucouleurs_mixture_weight])
+            .| !(0.05 .< truth[:de_vaucouleurs_mixture_weight] .< 0.95)
+        )
+    end
+    if column_name == :angle_deg
+        good_row .&= (isna(truth[:minor_major_axis_ratio]) .| (truth[:minor_major_axis_ratio] .< .6))
     end
     good_row
 end
@@ -649,26 +658,25 @@ function get_scores_df(
         if column_name == :objid
             continue
         end
-        for source_type in [:star, :galaxy]
-            good_row = filter_rows(truth, first_errors, column_name, source_type)
-            if !isnull(second_errors)
-                good_row .&= filter_rows(truth, get(second_errors), column_name, source_type)
-            end
-            if sum(good_row) <= 1
-                continue
+
+        good_row = filter_rows(truth, first_errors, column_name)
+        if !isnull(second_errors)
+            good_row .&= filter_rows(truth, get(second_errors), column_name)
+        end
+        if sum(good_row) <= 1
+            continue
+        else
+            if isnull(second_errors)
+                row = score_column(first_errors[good_row, column_name])
             else
-                if isnull(second_errors)
-                    row = score_column(first_errors[good_row, column_name])
-                else
-                    row = score_column(
-                        first_errors[good_row, column_name],
-                        get(second_errors)[good_row, column_name],
-                    )
-                end
-                row[:field] = column_name
-                row[:source_type] = source_type
-                push!(score_rows, row)
+                row = score_column(
+                    first_errors[good_row, column_name],
+                    get(second_errors)[good_row, column_name],
+                )
             end
+
+            row[:field] = column_name
+            push!(score_rows, row)
         end
     end
     vcat(score_rows...)
@@ -732,17 +740,16 @@ position `ra`, `dec`. If none found, an exception is raised.
 """
 function match_position(ras, decs, ra, dec, maxdist_px)
     @assert length(ras) == length(decs)
-    for i in 1:length(ras)
-        if sky_distance_px(ra, dec, ras[i], decs[i]) < maxdist_px
-            return i
-        end
+    filter(eachindex(ras)) do index
+        sky_distance_px(ra, dec, ras[index], decs[index]) < maxdist_px
     end
-    throw(MatchException(@sprintf("No source found at %f  %f", ra, dec)))
 end
 
 # Run Celeste with any combination of single/joint inference
-function run_celeste(config::Configs.Config, catalog_entries, target_sources, images;
-                     use_joint_inference=false)
+function run_celeste(
+    config::Configs.Config, catalog_entries, target_sources, images;
+    use_joint_inference=false,
+)
     neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
     if use_joint_inference
         ParallelRun.one_node_joint_infer(
@@ -753,14 +760,12 @@ function run_celeste(config::Configs.Config, catalog_entries, target_sources, im
             images,
         )
     else
-        infer_source_callback = DeterministicVI.infer_source
         ParallelRun.one_node_single_infer(
             config,
             catalog_entries,
             target_sources,
             neighbor_map,
             images,
-            infer_source_callback=infer_source_callback,
         )
     end
 end

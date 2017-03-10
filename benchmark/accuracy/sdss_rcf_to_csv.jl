@@ -33,11 +33,41 @@ ArgumentParse.add_argument(
 )
 ArgumentParse.add_argument(
     parser,
-    "truth_catalog_csv",
-    help = "CSV file containing coadd 'ground truth' catalog",
-    required = true,
+    "--objid-csv",
+    help = string(
+        "If given, sources in the SDSS primary catalog will be matched to sources from the given ",
+        "catalog by position, and objid's will be taken from the given catalog. (Typically used ",
+        "with coadd ground truth catalog, for later comparison by score_predictions.jl.)",
+    ),
 )
 parsed_args = ArgumentParse.parse_args(parser, ARGS)
+
+function match_and_load_objids(catalog_df::DataFrame, objid_csv::String)
+    catalog_df[:objid] = fill("", size(catalog_df, 1))
+    truth_df = AccuracyBenchmark.read_catalog(parsed_args["objid-csv"])
+    used_truth_indices = Set()
+    for source_index in 1:size(catalog_df, 1)
+        matching_truth_indices = AccuracyBenchmark.match_position(
+            truth_df[:right_ascension_deg], truth_df[:declination_deg],
+            catalog_df[source_index, :right_ascension_deg],
+            catalog_df[source_index, :declination_deg],
+            1 / 0.396, # to match up with Stripe82Score
+        )
+        if isempty(matching_truth_indices)
+            continue
+        end
+        matching_truth_index = matching_truth_indices[1]
+
+        if in(matching_truth_index, used_truth_indices)
+            continue
+        else
+            catalog_df[source_index, :objid] = string(truth_df[matching_truth_index, :objid])
+            union!(used_truth_indices, matching_truth_index)
+        end
+    end
+    @printf("Matched %d objects to objid catalog\n", size(catalog_df, 1))
+    return catalog_df[catalog_df[:objid] .!= "", :]
+end
 
 run_camcol_field = SDSSIO.RunCamcolField(
     parsed_args["run"],
@@ -49,36 +79,9 @@ catalog_df = AccuracyBenchmark.load_primary(run_camcol_field, AccuracyBenchmark.
 @printf("Loaded %d objects from catalog\n", size(catalog_df, 1))
 
 # Match sources to ground truth catalog, and pull object IDs from truth catalog
-catalog_df[:objid] = fill("", size(catalog_df, 1))
-truth_df = AccuracyBenchmark.read_catalog(parsed_args["truth_catalog_csv"])
-used_truth_indices = Set()
-for source_index in 1:size(catalog_df, 1)
-    matching_truth_index = nothing
-    try
-        matching_truth_index = AccuracyBenchmark.match_position(
-            truth_df[:right_ascension_deg], truth_df[:declination_deg],
-            catalog_df[source_index, :right_ascension_deg],
-            catalog_df[source_index, :declination_deg],
-            1,
-        )
-    catch exc
-        if !isa(exc, AccuracyBenchmark.MatchException)
-            rethrow()
-        else
-            continue
-        end
-    end
-
-    if in(matching_truth_index, used_truth_indices)
-        continue
-    else
-        catalog_df[source_index, :objid] = string(truth_df[matching_truth_index, :objid])
-        union!(used_truth_indices, matching_truth_index)
-    end
+if haskey(parsed_args, "objid-csv")
+    catalog_df = match_and_load_objids(catalog_df, parsed_args["objid-csv"])
 end
-
-catalog_df = catalog_df[catalog_df[:objid] .!= "", :]
-@printf("Matched %d objects to ground truth catalog\n", size(catalog_df, 1))
 
 output_filename = @sprintf(
     "sdss_%s_%s_%s_primary.csv",

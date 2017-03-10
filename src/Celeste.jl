@@ -2,6 +2,10 @@ __precompile__()
 
 module Celeste
 
+# import this before StaticArrays has a chance to load, to
+# workaround a bug
+import ForwardDiff
+
 # submodules
 include("Configs.jl")
 include("Log.jl")

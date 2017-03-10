@@ -64,9 +64,9 @@ function Config{T}(ea::ElboArgs,
     n_free_params = length(free_params[1])
     n_bound_params = length(bound_params[1])
     jacobian_bundle = TransformJacobianBundle(bound_params, free_params)
-    objective_elbo_vars = ElboIntermediateVariables(T, ea.S, n_active_sources,
+    objective_elbo_vars = ElboIntermediateVariables(T, ea.psf_K, ea.S, n_active_sources,
                                                     false, false)
-    gradient_elbo_vars = ElboIntermediateVariables(T, ea.S, n_active_sources,
+    gradient_elbo_vars = ElboIntermediateVariables(T, ea.psf_K, ea.S, n_active_sources,
                                                    true, false)
     sf_free = SensitiveFloat{T}(n_free_params, n_bound_params, true, false)
 
@@ -74,7 +74,7 @@ function Config{T}(ea::ElboArgs,
     dual_bound_params = dual_vp[ea.active_sources]
     dual_free_params = Vector{Dual{1,T}}[similar(x, Dual{1,T}) for x in free_params]
     dual_jacobian_bundle = TransformJacobianBundle(dual_bound_params, dual_free_params)
-    hessvec_elbo_vars = ElboIntermediateVariables(Dual{1,T}, ea.S, n_active_sources,
+    hessvec_elbo_vars = ElboIntermediateVariables(Dual{1,T}, ea.psf_K, ea.S, n_active_sources,
                                                   true, false)
     dual_sf_free = SensitiveFloat{Dual{1,T}}(n_free_params, n_bound_params, true, false)
 

@@ -324,7 +324,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
         cyclades_partition=cyclades_partition,
         batch_size=batch_size,
         within_batch_shuffling=within_batch_shuffling,
-        n_iters=n_iters
+        n_iters=n_iters,
     )
 end
 

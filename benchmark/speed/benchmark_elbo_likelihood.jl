@@ -20,7 +20,7 @@ function benchmark_elbo_likelihood()
         vp_dual[i] = vp[i]
     end
 
-    elbo_vars = ElboIntermediateVariables(Dual{1, Float64}, ea.S, ea.Sa, true, false)
+    elbo_vars = ElboIntermediateVariables(Dual{1, Float64}, ea.psf_K, ea.S, ea.Sa, true, false)
 
     # Warm up---this compiles the code
     DeterministicVI.elbo_likelihood(ea, vp_dual, elbo_vars)

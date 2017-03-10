@@ -250,7 +250,11 @@ function calculate_var_G_s!{NumType <: Number}(
                     vp::VariationalParams{NumType},
                     elbo_vars::ElboIntermediateVariables{NumType},
                     is_active_source::Bool)
-    clear!(elbo_vars.var_G_s)
+    E_G_s = elbo_vars.E_G_s
+    E_G2_s = elbo_vars.E_G2_s
+    var_G_s = elbo_vars.var_G_s
+
+    clear!(var_G_s)
 
     E_G_s_v = elbo_vars.E_G_s.v[]
     E_G2_s_v = elbo_vars.E_G2_s.v[]
@@ -296,10 +300,8 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
                     is_active_source::Bool)
-    # This updates elbo_vars.E_G_s and elbo_vars.var_G_s
-    calculate_source_pixel_brightness!(
-        ea, vp, elbo_vars,
-        sb, b, s, is_active_source)
+    # This updates elbo_vars
+    calculate_source_pixel_brightness!(ea, vp, elbo_vars, sb, b, s, is_active_source)
 
     if is_active_source
         sa = findfirst(ea.active_sources, s)
@@ -389,7 +391,7 @@ function add_pixel_term!{NumType <: Number}(
                     star_mcs::Array{BvnComponent{NumType}, 2},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     sbs::Vector{SourceBrightness{NumType}};
-                    elbo_vars = ElboIntermediateVariables(NumType, ea.S, ea.Sa, true, false))
+                    elbo_vars = ElboIntermediateVariables(NumType, ea.psf_K, ea.S, ea.Sa, true, false))
     img = ea.images[n]
 
     # This combines the sources into a single brightness value for the pixel.
@@ -451,7 +453,7 @@ Returns: A sensitive float with the log likelihood.
 function elbo_likelihood{NumType <: Number}(
              ea::ElboArgs,
              vp::VariationalParams{NumType},
-             elbo_vars = ElboIntermediateVariables(NumType, ea.S, ea.Sa))
+             elbo_vars = ElboIntermediateVariables(NumType, ea.psf_K, ea.S, ea.Sa))
     clear!(elbo_vars)
 
     # this call loops over light sources (but not images)
@@ -464,11 +466,13 @@ function elbo_likelihood{NumType <: Number}(
         # all ~50 evalulations of the likelihood
         # This convolves the PSF with the star/galaxy model, returning a
         # mixture of bivariate normals.
-        star_mcs, gal_mcs = Model.load_bvn_mixtures(ea.S, ea.patches,
+        star_mcs, gal_mcs = Model.load_bvn_mixtures!(
+                                    elbo_vars.star_mcs, elbo_vars.gal_mcs,
+                                    ea.S, ea.patches,
                                     vp, ea.active_sources,
                                     ea.psf_K, n,
-                                    calculate_gradient=elbo_vars.elbo.has_gradient,
-                                    calculate_hessian=elbo_vars.elbo.has_hessian)
+                                    elbo_vars.elbo.has_gradient,
+                                    elbo_vars.elbo.has_hessian)
 
         # if there's only one active source, we know each pixel we visit
         # hasn't been visited before, so no need to allocate memory.
@@ -531,7 +535,7 @@ function elbo{NumType <: Number}(
                  ea::ElboArgs,
                  vp::VariationalParams{NumType},
                  elbo_vars::ElboIntermediateVariables{NumType} =
-                    ElboIntermediateVariables(NumType, ea.S, ea.Sa, true, false),
+                    ElboIntermediateVariables(NumType, ea.psf_K, ea.S, ea.Sa, true, false),
                  kl_source = SensitiveFloat{NumType}(length(CanonicalParams), 1,
                                                elbo_vars.elbo.has_gradient, false),
                  kl_helper = KLDivergence.get_kl_helper(NumType))

@@ -15,6 +15,7 @@ import ..PSF
 
 import ..DeterministicVI: infer_source
 
+
 include("joint_infer.jl")
 
 # In production mode, rather the development mode, always catch exceptions

@@ -63,7 +63,7 @@ function add_argument(
         name = argument_string
     end
     if action == :store_true
-        @assert default == nothing || default == false
+        @assert default == NoDefault || default == false
         default = false
     end
     specification = ArgumentSpecification(

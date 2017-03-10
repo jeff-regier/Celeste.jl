@@ -32,9 +32,7 @@ function load_ea_from_source(target_source, target_sources, catalog, images, all
           DeterministicVI.catalog_init_source(catalog[x]) for x in ids_local]
 
     # Create elbo args
-    fsm_mat = 0
-    ea = ElboArgs(images, vp, patches, [1])
-    ea, fsm_mat
+    ElboArgs(images, vp, patches, [1])
 end
 
 """
@@ -42,13 +40,13 @@ compute_unconstrained_gradient
 """
 function compute_unconstrained_gradient(target_source, target_sources, catalog, images, all_vps)
     # Load ea
-    (ea, fsm) = load_ea_from_source(target_source, target_sources, catalog, images,
+    ea = load_ea_from_source(target_source, target_sources, catalog, images,
                                     all_vps)
 
     # Evaluate in constrained space and then unconstrain (taken from the old maximize_elbo.jl code)
     last_sf::SensitiveFloat{Float64} = SensitiveFloats.SensitiveFloat{Float64}(length(UnconstrainedParams), 1, true, true)
     transform = DeterministicVI.get_mp_transform(ea.vp, ea.active_sources)
-    f_res = DeterministiscVI.elbo(ea)
+    f_res = DeterministicVI.elbo(ea)
     Transform.transform_sensitive_float!(transform, last_sf, f_res, ea.vp, ea.active_sources)
     last_sf.d
 end
@@ -153,11 +151,8 @@ function test_improve_stripe_82_obj_value()
     (rcfs, datadir, target_sources, catalog, images) = load_stripe_82_data()
 
     # Single inference obj value
-    infer_source_callback = DeterministicVI.infer_source
-    infer_single(ctni...) = one_node_single_infer(ctni...;
-                                                  infer_source_callback=infer_source_callback)
+    infer_single(ctni...) = one_node_single_infer(ctni...)
     result_single = one_node_infer(rcfs, datadir;
-                                   infer_callback=infer_single,
                                    primary_initialization=false)
     score_single = compute_obj_value(result_single, rcfs, datadir;
                                      primary_initialization=false)
@@ -325,7 +320,6 @@ This makes sure one_node_joint_infer achieves sum objective value less
 than single iter on non overlapping sources.
 """
 function test_one_node_joint_infer_obj_overlapping()
-
     # This bounding box has overlapping stars. (neighbor map is not empty)
     box = BoundingBox(154.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
@@ -354,11 +348,8 @@ function test_one_node_joint_infer_obj_overlapping()
 
     # One node infer (1 iteration, butm ore newton steps)
     tic()
-    infer_source_callback = DeterministicVI.infer_source
-    infer_single(ctni...) = one_node_single_infer(ctni...;
-                                                  infer_source_callback=infer_source_callback)
     result_single = one_node_infer(field_triplets, datadir;
-                                   infer_callback=infer_single,
+                                   infer_callback=one_node_single_infer,
                                    box=box)
     single_iter_time = toq()
     score_single = compute_obj_value(result_single, field_triplets, datadir; box=box)

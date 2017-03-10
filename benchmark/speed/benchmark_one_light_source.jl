@@ -7,10 +7,11 @@ import Celeste.Infer: find_neighbors
 
 
 const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
-wd = pwd()
-cd(datadir)
-run(`make RUN=7713 CAMCOL=3 FIELD=152`)
-cd(wd)
+if ccall(:jl_generating_output, Cint, ()) == 0
+    cd(datadir) do
+        run(`make RUN=7713 CAMCOL=3 FIELD=152`)
+    end
+end
 
 """
 This benchmark operates on a box of the sky that contains just
