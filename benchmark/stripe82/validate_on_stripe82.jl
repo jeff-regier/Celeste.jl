@@ -1,5 +1,6 @@
 #!/usr/bin/env julia
 
+import ForwardDiff
 import Celeste.ParallelRun: BoundingBox,
                             one_node_infer,
                             one_node_single_infer,
@@ -7,7 +8,6 @@ import Celeste.ParallelRun: BoundingBox,
 import Celeste.Stripe82Score: score_field_disk, score_object_disk
 import Celeste.SDSSIO: RunCamcolField
 import Celeste.DeterministicVI: infer_source
-
 
 
 # I'd rather let the user specify a rcf on the command line, but picking
@@ -80,6 +80,7 @@ else
     result_description = "full_box"
     source_callback = infer_source
     result_description *= "_mog"
+
     fname = @sprintf("%s/celeste-%s-%06d-%d-%04d.jld",
                      outdir,
                      result_description,
@@ -90,10 +91,7 @@ else
     # the user gets the option to just run the scoring mode. Running scoring
     # alone is primarily useful for debugging.
     if !("--score-only" in ARGS)
-        wrap_joint(cnti...) = one_node_joint_infer(cnti...)
-        wrap_single(cnti...) = one_node_single_infer(cnti...;
-                                      infer_source_callback=source_callback)
-        infer_callback = "--joint" in ARGS ? wrap_joint : wrap_single
+        infer_callback = "--joint" in ARGS ? one_node_joint_infer : one_node_single_infer
         # Here `one_node_infer` is called just with a single rcf, even though
         # other rcfs may overlap with this one. That's because this function is
         # just for testing on stripe 82: in practice we always use all relevent

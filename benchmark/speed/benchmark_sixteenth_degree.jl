@@ -1,5 +1,6 @@
 #!/usr/bin/env julia
 
+import ForwardDiff
 import Celeste.ParallelRun: BoundingBox, get_overlapping_fields,
                             one_node_joint_infer, infer_init
 import Celeste.SDSSIO: RunCamcolField, load_field_images
@@ -28,7 +29,7 @@ cd(wd)
 This benchmark optimizes all the light sources in a
 one-sixteenth-square-degree region of sky.
 During the optimization, a pixel is visited
-35,937,971 times (``pixel visits'').
+35,937,971 times (pixel visits).
 """
 function benchmark_sixteenth_degree()
     box = BoundingBox(124.25, 124.50, 58.5, 58.75)

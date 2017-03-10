@@ -3,7 +3,8 @@ import SensitiveFloats: zero_sensitive_float_array
 
 function test_sky_noise_estimates()
     images_vec = Vector{Vector{Image}}(2)
-    images_vec[1], ea, three_bodies = gen_three_body_dataset()  # synthetic
+    ea, vp, three_bodies = gen_three_body_dataset()  # synthetic
+    images_vec[1] = ea.images
     images_vec[2] = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")  # real
 
     for images in images_vec

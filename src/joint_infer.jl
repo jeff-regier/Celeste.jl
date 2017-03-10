@@ -1,7 +1,5 @@
 import FITSIO
 import JLD
-import Optim
-import Optim: NewtonTrustRegion
 using DataStructures
 
 import ..Log
@@ -10,10 +8,10 @@ import ..SDSSIO
 import ..Infer
 import ..SDSSIO: RunCamcolField
 import ..PSF
-using ..ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
+
 using ..DeterministicVI
-using ..DeterministicVI.NewtonMaximize
-using ..DeterministicVI.NewtonMaximize: Config
+using ..DeterministicVI.ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
+using ..DeterministicVI.ElboMaximize: Config, maximize!
 
 
 function union_find!(i, components_tree)
@@ -36,13 +34,16 @@ to process. Writes to the components argument.
 
 - source_start - start source
 - end_source - end source (inclusively processed)
-- sources - the actual source ids to find connected components for (indexed by source_start and source_end)
+- sources - the actual source ids to find connected components for
+    (indexed by source_start and source_end)
 - neighbor_map - conflict graph of sources
 - components_tree - the components array to do union find on.
-- components - Dict{Int64, Vector{Int64}} dictionary from cc_id to target_source index in that component
-- src_to_target_index - a mapping from light source id -> index within the target_sources array. This is required
-                        since we need to write the index within target sources to the output, rather than the source id itself.
-
+- components - Dict{Int64, Vector{Int64}} dictionary from cc_id to
+              target_source index in that component
+- src_to_target_index - a mapping from light source id -> index
+            within the target_sources array. This is required
+            since we need to write the index within target sources
+            to the output, rather than the source id itself.
 Returns:
 - Nothing
 """
@@ -234,9 +235,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
                               cyclades_partition::Bool=true,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
-                              n_iters::Int=3,
-                              trust_region::NewtonTrustRegion{Float64}=NewtonTrustRegion())
-
+                              n_iters::Int=3)
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
@@ -271,23 +270,24 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
 
     # configurations need to be persisted across calls to maximize! so
     # that location constraints don't shift from their initial position
-    ea_vec::Vector{ElboArgs{Float64}} = Vector{ElboArgs{Float64}}(n_sources)
+    ea_vec::Vector{ElboArgs} = Vector{ElboArgs}(n_sources)
+    vp_vec::Vector{VariationalParams{Float64}} = Vector{VariationalParams{Float64}}(n_sources)
     cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}} = Vector{Config{DEFAULT_CHUNK,Float64}}(n_sources)
 
     # Initialize elboargs in parallel
     tic()
     thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} = partition_equally(n_threads, n_sources)
 
-    initialize_elboargs_sources!(config, ea_vec, cfg_vec, thread_initialize_sources_assignment,
+    initialize_elboargs_sources!(config, ea_vec, vp_vec, cfg_vec, thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
-                                 trust_region, target_source_variational_params)
+                                 target_source_variational_params)
 
     Log.info("Done preallocating array of elboargs. Elapsed time: $(toq())")
 
     # Process sources in parallel
     tic()
 
-    process_sources!(images, ea_vec, cfg_vec,
+    process_sources!(images, ea_vec, vp_vec, cfg_vec,
                      thread_sources_assignment,
                      n_iters, within_batch_shuffling)
 
@@ -302,7 +302,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
                                  entry.objid,
                                  entry.pos[1],
                                  entry.pos[2],
-                                 ea_vec[i].vp[1])
+                                 vp_vec[i][1])
         push!(results, result)
     end
 
@@ -314,8 +314,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
-                              n_iters::Int=3,
-                              trust_region::NewtonTrustRegion{Float64}=NewtonTrustRegion())
+                              n_iters::Int=3)
     one_node_joint_infer(
         Configs.Config(),
         catalog,
@@ -326,21 +325,19 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
         batch_size=batch_size,
         within_batch_shuffling=within_batch_shuffling,
         n_iters=n_iters,
-        trust_region=trust_region,
     )
 end
 
-function initialize_elboargs_sources!(config::Configs.Config, ea_vec, cfg_vec,
+function initialize_elboargs_sources!(config::Configs.Config, ea_vec, vp_vec, cfg_vec,
                                       thread_initialize_sources_assignment,
                                       catalog, target_sources, neighbor_map, images,
-                                      trust_region, target_source_variational_params)
+                                      target_source_variational_params)
     Threads.@threads for i in 1:nthreads()
         try
             for batch in 1:length(thread_initialize_sources_assignment[i])
-                initialize_elboargs_sources_kernel!(config, ea_vec, cfg_vec,
+                initialize_elboargs_sources_kernel!(config, ea_vec, vp_vec, cfg_vec,
                                                     thread_initialize_sources_assignment[i][batch],
                                                     catalog, target_sources, neighbor_map, images,
-                                                    trust_region,
                                                     target_source_variational_params)
             end
         catch ex
@@ -350,9 +347,9 @@ function initialize_elboargs_sources!(config::Configs.Config, ea_vec, cfg_vec,
     end
 end
 
-function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg_vec, sources,
+
+function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, vp_vec, cfg_vec, sources,
                                              catalog, target_sources, neighbor_map, images,
-                                             trust_region,
                                              target_source_variational_params)
     try
         for cur_source_index in sources
@@ -373,23 +370,21 @@ function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg
             vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
                                  target_source_variational_params[x] :
                                  catalog_init_source(catalog[x]) for x in ids_local]
+            ea = ElboArgs(images, patches, [1])
 
-            ea = ElboArgs(images, vp, patches, [1])
             ea_vec[cur_source_index] = ea
-            cfg_vec[cur_source_index] = Config(ea, trust_region = trust_region)
+            vp_vec[cur_source_index] = vp
+            cfg_vec[cur_source_index] = Config(ea, vp)
         end
         return nothing
     catch ex
-        if is_production_run || nthreads() > 1
-            Log.error(string(ex))
-        else
-            rethrow(ex)
-        end
+        Log.exception(ex)
     end
 end
 
 function process_sources!(images::Vector{Model.Image},
-                          ea_vec::Vector{ElboArgs{Float64}},
+                          ea_vec::Vector{ElboArgs},
+                          vp_vec::Vector{VariationalParams{Float64}},
                           cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
                           thread_sources_assignment::Vector{Vector{Vector{Int64}}},
                           n_iters::Int,
@@ -406,7 +401,7 @@ function process_sources!(images::Vector{Model.Image},
             Threads.@threads for i in 1:n_threads
                 try
                     tic()
-                    process_sources_kernel!(images, ea_vec, cfg_vec,
+                    process_sources_kernel!(images, ea_vec, vp_vec, cfg_vec,
                                             thread_sources_assignment[i::Int][batch::Int],
                                             iter, within_batch_shuffling)
                     process_sources_elapsed_times[i::Int] = toq()
@@ -422,7 +417,8 @@ end
 
 # Process partition of sources. Multiple threads call this function in parallel.
 function process_sources_kernel!(images::Vector{Model.Image},
-                                 ea_vec::Vector{ElboArgs{Float64}},
+                                 ea_vec::Vector{ElboArgs},
+                                 vp_vec::Vector{VariationalParams{Float64}},
                                  cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
                                  source_assignment::Vector{Int64},
                                  iter::Int,
@@ -435,8 +431,7 @@ function process_sources_kernel!(images::Vector{Model.Image},
             shuffle!(source_assignment)
         end
         for i in source_assignment
-            ea, cfg = ea_vec[i], cfg_vec[i]
-            NewtonMaximize.maximize!(DeterministicVI.elbo, ea, cfg)
+            maximize!(ea_vec[i], vp_vec[i], cfg_vec[i])
         end
     catch ex
         if is_production_run || nthreads() > 1

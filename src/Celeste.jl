@@ -14,7 +14,6 @@ include("SensitiveFloats.jl")
 
 include("Model.jl")
 include("Infer.jl")
-include("ConstraintTransforms.jl")
 include("Transform.jl")
 include("PSF.jl")
 include("SDSSIO.jl")
@@ -30,7 +29,6 @@ include("GalsimBenchmark.jl")
 include("Stripe82Score.jl")
 
 include("ArgumentParse.jl")
-
 
 import .ParallelRun: BoundingBox, OptimizedSource
 import .SDSSIO: RunCamcolField, CatalogEntry

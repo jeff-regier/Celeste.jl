@@ -21,10 +21,10 @@ import Celeste: Infer, DeterministicVI, ParallelRun
 import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
 import Celeste.SensitiveFloats.clear!
 import Celeste.SDSSIO: RunCamcolField
+import Celeste.DeterministicVI: VariationalParams
 
 include(joinpath(Pkg.dir("Celeste"), "test", "Synthetic.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
-include(joinpath(Pkg.dir("Celeste"), "test", "DerivativeTestUtils.jl"))
 
 using SampleData
 
@@ -52,21 +52,19 @@ if length(test_files) > 0
 else
     testfiles = [
                  "test_argument_parse.jl",
-                 "test_derivatives.jl",
                  "test_kl.jl",
                  "test_constraints.jl",
                  "test_elbo.jl",
+                 "test_elbo_maximize.jl",
                  "test_galsim_benchmarks.jl",
                  "test_images.jl",
                  "test_infer.jl",
                  "test_joint_infer.jl",
                  "test_log_prob.jl",
                  "test_misc.jl",
-                 "test_optimization.jl",
                  "test_psf.jl",
                  "test_score.jl",
                  "test_sdssio.jl",
-                 "test_transforms.jl",
                  "test_wcs.jl",
                 ]
 end

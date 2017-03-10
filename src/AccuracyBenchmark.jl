@@ -760,14 +760,12 @@ function run_celeste(
             images,
         )
     else
-        infer_source_callback = DeterministicVI.infer_source
         ParallelRun.one_node_single_infer(
             config,
             catalog_entries,
             target_sources,
             neighbor_map,
             images,
-            infer_source_callback=infer_source_callback,
         )
     end
 end

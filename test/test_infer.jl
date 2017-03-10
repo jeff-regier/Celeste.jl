@@ -3,11 +3,7 @@ import JLD
 
 import Celeste.Configs
 
-"""
-test infer with a single (run, camcol, field).
-This is basically just to make sure it runs at all.
-"""
-function test_infer_single()
+@testset "single infer runs at all" begin
     # very small patch of sky that turns out to have 4 sources.
     # We checked that this patch is in the given field.
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
@@ -16,43 +12,8 @@ function test_infer_single()
 end
 
 
-function load_surrounding_rcfs()
-    wd = pwd()
-    cd(datadir)
-
-    # these rcfs are all the rcfs that overlap with (3900,6,269)
-    run(`make RUN=3900 CAMCOL=6 FIELD=268`)
-    run(`make RUN=3900 CAMCOL=6 FIELD=269`)
-    run(`make RUN=3900 CAMCOL=6 FIELD=270`)
-    run(`make RUN=4469 CAMCOL=5 FIELD=342`)
-    run(`make RUN=4469 CAMCOL=5 FIELD=343`)
-    run(`make RUN=4469 CAMCOL=6 FIELD=342`)
-    run(`make RUN=4469 CAMCOL=6 FIELD=343`)
-    run(`make RUN=4469 CAMCOL=6 FIELD=344`)
-
-    cd(wd)
-end
-
-
-function test_infer_rcf()
-    load_surrounding_rcfs()
-
-    resfile = joinpath(datadir, "celeste-003900-6-0269.jld")
-    rm(resfile, force=true)
-
-    rcf = RunCamcolField(3900, 6, 269)
-    objid = "1237662226208063492"
-    ParallelRun.infer_rcf(rcf, datadir, datadir; objid=objid)
-
-    @test isfile(resfile)
-    println(filesize(resfile))
-    @test filesize(resfile) > 1000  # should be about 15 KB
-    rm(resfile)
-end
-
-
-function test_load_active_pixels()
-    images, ea, one_body = gen_sample_star_dataset()
+@testset "load active pixels" begin
+    ea, vp, catalog = gen_sample_star_dataset()
 
     # these images have 20 * 23 * 5 = 2300 pixels in total.
     # the star is bright but it doesn't cover the whole image.
@@ -91,7 +52,7 @@ function test_load_active_pixels()
     @test num_active_photons > 0.9 * total_photons
 
     # super dim images
-    for img in images
+    for img in ea.images
         img.pixels[:,:] = img.epsilon_mat[:,:]
     end
 
@@ -108,12 +69,12 @@ function test_load_active_pixels()
 end
 
 
-function test_patch_pixel_selection()
-    images, ea, two_body = gen_two_body_dataset();
-    patches = Infer.get_sky_patches(images, two_body; radius_override_pix=5);
+@testset "patch pixel selection" begin
+    ea, vp, catalog = gen_two_body_dataset();
+    patches = Infer.get_sky_patches(ea.images, catalog; radius_override_pix=5);
     config = Configs.Config()
     config.min_radius_pix = 5
-    Infer.load_active_pixels!(config, images, patches, noise_fraction=Inf)
+    Infer.load_active_pixels!(config, ea.images, patches, noise_fraction=Inf)
 
     for n in 1:ea.N
         # Make sure, for testing purposes, that the whole bitmap isn't full.
@@ -123,8 +84,8 @@ function test_patch_pixel_selection()
         end
 
         function patch_in_whole_image(p::SkyPatch)
-            patch_image = zeros(size(images[n].pixels))
-            for h in 1:images[n].H, w in 1:images[n].W
+            patch_image = zeros(size(ea.images[n].pixels))
+            for h in 1:ea.images[n].H, w in 1:ea.images[n].W
                 if Infer.is_pixel_in_patch(h, w, p)
                     patch_image[h, w] += 1
                 end
@@ -151,7 +112,7 @@ function test_patch_pixel_selection()
 end
 
 
-@testset "test that we don't select a patch that is way too big" begin
+@testset "patch isn't way too big" begin
     wd = pwd()
     cd(datadir)
     run(`make RUN=4114 CAMCOL=3 FIELD=127`)
@@ -172,10 +133,30 @@ end
     @test length(neighbors) < 5
 end
 
-if test_long_running
-    test_infer_rcf()
-end
 
-test_patch_pixel_selection()
-test_load_active_pixels()
-test_infer_single()
+test_long_running && @testset "test infer rcf" begin
+    wd = pwd()
+    cd(datadir)
+    # these rcfs are all the rcfs that overlap with (3900,6,269)
+    run(`make RUN=3900 CAMCOL=6 FIELD=268`)
+    run(`make RUN=3900 CAMCOL=6 FIELD=269`)
+    run(`make RUN=3900 CAMCOL=6 FIELD=270`)
+    run(`make RUN=4469 CAMCOL=5 FIELD=342`)
+    run(`make RUN=4469 CAMCOL=5 FIELD=343`)
+    run(`make RUN=4469 CAMCOL=6 FIELD=342`)
+    run(`make RUN=4469 CAMCOL=6 FIELD=343`)
+    run(`make RUN=4469 CAMCOL=6 FIELD=344`)
+    cd(wd)
+
+    resfile = joinpath(datadir, "celeste-003900-6-0269.jld")
+    rm(resfile, force=true)
+
+    rcf = RunCamcolField(3900, 6, 269)
+    objid = "1237662226208063492"
+    ParallelRun.infer_rcf(rcf, datadir, datadir; objid=objid)
+
+    @test isfile(resfile)
+    println(filesize(resfile))
+    @test filesize(resfile) > 1000  # should be about 15 KB
+    rm(resfile)
+end
