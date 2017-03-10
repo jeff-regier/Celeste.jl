@@ -14,7 +14,7 @@ using ..ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
 using ..DeterministicVI
 using ..DeterministicVI.NewtonMaximize
 using ..DeterministicVI.NewtonMaximize: Config
-using ..DeterministicVIImagePSF
+
 
 function union_find!(i, components_tree)
     root = i
@@ -232,7 +232,6 @@ Returns:
 """
 function one_node_joint_infer(config::Configs.Config, catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
-                              use_fft::Bool=false,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3,
@@ -281,7 +280,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
 
     initialize_elboargs_sources!(config, ea_vec, cfg_vec, thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
-                                 trust_region, use_fft, target_source_variational_params)
+                                 trust_region, target_source_variational_params)
 
     Log.info("Done preallocating array of elboargs. Elapsed time: $(toq())")
 
@@ -290,7 +289,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
 
     process_sources!(images, ea_vec, cfg_vec,
                      thread_sources_assignment,
-                     n_iters, use_fft, within_batch_shuffling)
+                     n_iters, within_batch_shuffling)
 
     Log.info("Done fitting elboargs. Elapsed time: $(toq())")
 
@@ -313,7 +312,6 @@ end
 # legacy wrapper
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
-                              use_fft::Bool=false,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3,
@@ -325,7 +323,6 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
         neighbor_map,
         images,
         cyclades_partition=cyclades_partition,
-        use_fft=use_fft,
         batch_size=batch_size,
         within_batch_shuffling=within_batch_shuffling,
         n_iters=n_iters,
@@ -336,14 +333,14 @@ end
 function initialize_elboargs_sources!(config::Configs.Config, ea_vec, cfg_vec,
                                       thread_initialize_sources_assignment,
                                       catalog, target_sources, neighbor_map, images,
-                                      trust_region, use_fft, target_source_variational_params)
+                                      trust_region, target_source_variational_params)
     Threads.@threads for i in 1:nthreads()
         try
             for batch in 1:length(thread_initialize_sources_assignment[i])
                 initialize_elboargs_sources_kernel!(config, ea_vec, cfg_vec,
                                                     thread_initialize_sources_assignment[i][batch],
                                                     catalog, target_sources, neighbor_map, images,
-                                                    trust_region, use_fft,
+                                                    trust_region,
                                                     target_source_variational_params)
             end
         catch ex
@@ -355,7 +352,7 @@ end
 
 function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg_vec, sources,
                                              catalog, target_sources, neighbor_map, images,
-                                             trust_region, use_fft,
+                                             trust_region,
                                              target_source_variational_params)
     try
         for cur_source_index in sources
@@ -377,18 +374,7 @@ function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, cfg
                                  target_source_variational_params[x] :
                                  catalog_init_source(catalog[x]) for x in ids_local]
 
-            # Switch parameters based on whether or not we're using the fft method
-            if use_fft
-                ea, _ = initialize_fft_elbo_parameters(images,
-                                                       vp,
-                                                       patches,
-                                                       [1],
-                                                       use_raw_psf=false,
-                                                       allocate_fsm_mat=true)
-            else
-                ea = ElboArgs(images, vp, patches, [1])
-            end
-
+            ea = ElboArgs(images, vp, patches, [1])
             ea_vec[cur_source_index] = ea
             cfg_vec[cur_source_index] = Config(ea, trust_region = trust_region)
         end
@@ -407,7 +393,6 @@ function process_sources!(images::Vector{Model.Image},
                           cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
                           thread_sources_assignment::Vector{Vector{Vector{Int64}}},
                           n_iters::Int,
-                          use_fft::Bool,
                           within_batch_shuffling::Bool)
     n_threads::Int = nthreads()
     n_batches::Int = length(thread_sources_assignment[1])
@@ -423,7 +408,7 @@ function process_sources!(images::Vector{Model.Image},
                     tic()
                     process_sources_kernel!(images, ea_vec, cfg_vec,
                                             thread_sources_assignment[i::Int][batch::Int],
-                                            iter, use_fft, within_batch_shuffling)
+                                            iter, within_batch_shuffling)
                     process_sources_elapsed_times[i::Int] = toq()
                 catch exc
                     Log.exception(exc)
@@ -441,7 +426,6 @@ function process_sources_kernel!(images::Vector{Model.Image},
                                  cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
                                  source_assignment::Vector{Int64},
                                  iter::Int,
-                                 use_fft::Bool,
                                  within_batch_shuffling::Bool)
     try
         # Shuffle the source assignments within each batch of each process.
@@ -452,12 +436,7 @@ function process_sources_kernel!(images::Vector{Model.Image},
         end
         for i in source_assignment
             ea, cfg = ea_vec[i], cfg_vec[i]
-            if use_fft
-                f = FFTElboFunction(load_fsm_mat(ea, images; use_raw_psf=true))
-            else
-                f = DeterministicVI.elbo
-            end
-            NewtonMaximize.maximize!(f, ea, cfg)
+            NewtonMaximize.maximize!(DeterministicVI.elbo, ea, cfg)
         end
     catch ex
         if is_production_run || nthreads() > 1

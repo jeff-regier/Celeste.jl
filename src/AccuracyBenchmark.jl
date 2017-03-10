@@ -8,7 +8,6 @@ import WCS
 
 import Celeste.Configs
 import Celeste.DeterministicVI
-import Celeste.DeterministicVIImagePSF
 import Celeste.Infer
 import Celeste.Model
 import Celeste.ParallelRun
@@ -746,10 +745,10 @@ function match_position(ras, decs, ra, dec, maxdist_px)
     end
 end
 
-# Run Celeste with any combination of single/joint inference and MOG/FFT model
+# Run Celeste with any combination of single/joint inference
 function run_celeste(
     config::Configs.Config, catalog_entries, target_sources, images;
-    use_joint_inference=false, use_fft=false
+    use_joint_inference=false,
 )
     neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
     if use_joint_inference
@@ -759,14 +758,9 @@ function run_celeste(
             target_sources,
             neighbor_map,
             images,
-            use_fft=use_fft,
         )
     else
-        if use_fft
-            infer_source_callback = DeterministicVIImagePSF.infer_source_fft
-        else
-            infer_source_callback = DeterministicVI.infer_source
-        end
+        infer_source_callback = DeterministicVI.infer_source
         ParallelRun.one_node_single_infer(
             config,
             catalog_entries,

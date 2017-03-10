@@ -28,16 +28,16 @@ function benchmark_seven_light_sources()
 
     # Warm up---this compiles the code
     ctni2 = (catalog, target_sources[1:1], neighbor_map[1:1], images[1:1])
-    one_node_joint_infer(ctni2...; use_fft=false)
+    one_node_joint_infer(ctni2...)
 
     # clear allocations in case julia is running with --track-allocations=user
     Profile.clear_malloc_data()
 
     if isempty(ARGS)
-        @time one_node_joint_infer(ctni...; use_fft=false)
+        @time one_node_joint_infer(ctni...)
     elseif ARGS[1] == "--profile"
         Profile.init(delay=0.01)
-        @profile one_node_joint_infer(ctni...; use_fft=false)
+        @profile one_node_joint_infer(ctni...)
         Profile.print(format=:flat, sortedby=:count)
     end
 end

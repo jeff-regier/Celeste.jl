@@ -2,6 +2,10 @@ __precompile__()
 
 module Celeste
 
+# import this before StaticArrays has a chance to load, to
+# workaround a bug
+import ForwardDiff
+
 # submodules
 include("Configs.jl")
 include("Log.jl")
@@ -18,15 +22,12 @@ include("SDSSIO.jl")
 include("MCMC.jl")
 include("StochasticVI.jl")
 include("DeterministicVI.jl")
-include("DeterministicVIImagePSF.jl")
 
 include("ParallelRun.jl")
 
 include("AccuracyBenchmark.jl")
 include("GalsimBenchmark.jl")
 include("Stripe82Score.jl")
-
-include("CelesteEDA.jl")
 
 include("ArgumentParse.jl")
 
