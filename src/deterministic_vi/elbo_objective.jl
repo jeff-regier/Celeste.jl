@@ -20,19 +20,19 @@ Returns:
 function calculate_source_pixel_brightness!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     ea::ElboArgs{NumType},
-                    E_G_s::SensitiveFloat{NumType},
-                    var_G_s::SensitiveFloat{NumType},
-                    fs0m::SensitiveFloat{NumType},
-                    fs1m::SensitiveFloat{NumType},
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
                     is_active_source::Bool)
+    E_G_s = elbo_vars.E_G_s
+    E_G2_s = elbo_vars.E_G2_s
+    var_G_s = elbo_vars.var_G_s
+    fs0m = elbo_vars.fs0m
+    fs1m = elbo_vars.fs1m
+
     @assert E_G_s.local_P == var_G_s.local_P == length(CanonicalParams)
     @assert E_G_s.local_S == var_G_s.local_S == 1
     @assert fs0m.local_P == length(StarPosParams)
     @assert fs1m.local_P == length(GalaxyPosParams)
-
-    E_G2_s = elbo_vars.E_G2_s
 
     clear!(E_G_s)
     clear!(E_G2_s)
@@ -226,7 +226,7 @@ function calculate_source_pixel_brightness!{NumType <: Number}(
         end
     end
 
-    calculate_var_G_s!(elbo_vars, E_G_s, E_G2_s, var_G_s, is_active_source)
+    calculate_var_G_s!(elbo_vars, is_active_source)
 end
 
 
@@ -245,10 +245,11 @@ Returns:
 """
 function calculate_var_G_s!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
-                    E_G_s::SensitiveFloat{NumType},
-                    E_G2_s::SensitiveFloat{NumType},
-                    var_G_s::SensitiveFloat{NumType},
                     is_active_source::Bool)
+    E_G_s = elbo_vars.E_G_s
+    E_G2_s = elbo_vars.E_G2_s
+    var_G_s = elbo_vars.var_G_s
+
     clear!(var_G_s)
 
     E_G_s_v = E_G_s.v[]
@@ -291,34 +292,20 @@ sensitive floast E_G and var_G, which are updated in place.
 function accumulate_source_pixel_brightness!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables{NumType},
                     ea::ElboArgs{NumType},
-                    E_G::SensitiveFloat{NumType},
-                    var_G::SensitiveFloat{NumType},
-                    fs0m::SensitiveFloat{NumType},
-                    fs1m::SensitiveFloat{NumType},
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
                     is_active_source::Bool)
-    # This updates elbo_vars.E_G_s and elbo_vars.var_G_s
-    calculate_source_pixel_brightness!(
-        elbo_vars,
-        ea,
-        elbo_vars.E_G_s,
-        elbo_vars.var_G_s,
-        fs0m,
-        fs1m,
-        sb,
-        b,
-        s,
-        is_active_source)
+    # This updates elbo_vars
+    calculate_source_pixel_brightness!(elbo_vars, ea, sb, b, s, is_active_source)
 
     if is_active_source
         sa = findfirst(ea.active_sources, s)
-        add_sources_sf!(E_G, elbo_vars.E_G_s, sa)
-        add_sources_sf!(var_G, elbo_vars.var_G_s, sa)
+        add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa)
+        add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa)
     else
         # If the sources is inactive, simply accumulate the values.
-        E_G.v[] += elbo_vars.E_G_s.v[]
-        var_G.v[] += elbo_vars.var_G_s.v[]
+        elbo_vars.E_G.v[] += elbo_vars.E_G_s.v[]
+        elbo_vars.var_G.v[] += elbo_vars.var_G_s.v[]
     end
 end
 
@@ -423,9 +410,7 @@ function add_pixel_term!{NumType <: Number}(
         H2, W2 = size(p.active_pixel_bitmap)
         if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
             is_active_source = s in ea.active_sources
-            accumulate_source_pixel_brightness!(
-                elbo_vars, ea, elbo_vars.E_G, elbo_vars.var_G,
-                elbo_vars.fs0m, elbo_vars.fs1m,
+            accumulate_source_pixel_brightness!(elbo_vars, ea,
                 sbs[s], ea.images[n].b, s, is_active_source)
         end
     end
