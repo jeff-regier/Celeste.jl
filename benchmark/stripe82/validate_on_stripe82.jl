@@ -90,10 +90,7 @@ else
     # the user gets the option to just run the scoring mode. Running scoring
     # alone is primarily useful for debugging.
     if !("--score-only" in ARGS)
-        wrap_joint(cnti...) = one_node_joint_infer(cnti...)
-        wrap_single(cnti...) = one_node_single_infer(cnti...;
-                                      infer_source_callback=source_callback)
-        infer_callback = "--joint" in ARGS ? wrap_joint : wrap_single
+        infer_callback = "--joint" in ARGS ? one_node_joint_infer : one_node_single_infer
         # Here `one_node_infer` is called just with a single rcf, even though
         # other rcfs may overlap with this one. That's because this function is
         # just for testing on stripe 82: in practice we always use all relevent

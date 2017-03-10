@@ -151,11 +151,8 @@ function test_improve_stripe_82_obj_value()
     (rcfs, datadir, target_sources, catalog, images) = load_stripe_82_data()
 
     # Single inference obj value
-    infer_source_callback = DeterministicVI.infer_source
-    infer_single(ctni...) = one_node_single_infer(ctni...;
-                                                  infer_source_callback=infer_source_callback)
+    infer_single(ctni...) = one_node_single_infer(ctni...)
     result_single = one_node_infer(rcfs, datadir;
-                                   infer_callback=infer_single,
                                    primary_initialization=false)
     score_single = compute_obj_value(result_single, rcfs, datadir;
                                      primary_initialization=false)
@@ -351,11 +348,8 @@ function test_one_node_joint_infer_obj_overlapping()
 
     # One node infer (1 iteration, butm ore newton steps)
     tic()
-    infer_source_callback = DeterministicVI.infer_source
-    infer_single(ctni...) = one_node_single_infer(ctni...;
-                                                  infer_source_callback=infer_source_callback)
     result_single = one_node_infer(field_triplets, datadir;
-                                   infer_callback=infer_single,
+                                   infer_callback=one_node_single_infer,
                                    box=box)
     single_iter_time = toq()
     score_single = compute_obj_value(result_single, field_triplets, datadir; box=box)
