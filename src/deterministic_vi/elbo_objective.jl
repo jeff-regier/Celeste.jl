@@ -535,9 +535,9 @@ function elbo{NumType <: Number}(
                  ea::ElboArgs,
                  vp::VariationalParams{NumType},
                  elbo_vars::ElboIntermediateVariables{NumType} =
-                    ElboIntermediateVariables(NumType, ea.psf_K, ea.S, ea.Sa, true, false),
+                    ElboIntermediateVariables(NumType, ea.psf_K, ea.S, ea.Sa, true, true),
                  kl_source = SensitiveFloat{NumType}(length(CanonicalParams), 1,
-                                               elbo_vars.elbo.has_gradient, false),
+                       elbo_vars.elbo.has_gradient, elbo_vars.elbo.has_hessian),
                  kl_helper = KLDivergence.get_kl_helper(NumType))
     @assert(all([all(isfinite, vs) for vs in vp]), "vp contains NaNs or Infs")
     ret = elbo_likelihood(ea, vp, elbo_vars)
