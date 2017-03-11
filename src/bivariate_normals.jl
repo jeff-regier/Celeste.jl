@@ -45,9 +45,9 @@ type BivariateNormalDerivatives{NumType <: Number}
   # Derivatives of a bvn with respect to (x, sig).
   bvn_x_d::Array{NumType, 1}
   bvn_sig_d::Array{NumType, 1}
-  bvn_xx_h::Array{NumType, 2}
-  bvn_xsig_h::Array{NumType, 2}
-  bvn_sigsig_h::Array{NumType, 2}
+  bvn_xx_h::SizedMatrix{(2,2), NumType, 2}
+  bvn_xsig_h::SizedMatrix{(2,3), NumType, 2}
+  bvn_sigsig_h::SizedMatrix{(3,3), NumType, 2}
 
   # intermediate values used in d bvn / d(x, sig)
   dpy1_dsig::Array{NumType, 1}
@@ -58,10 +58,10 @@ type BivariateNormalDerivatives{NumType <: Number}
 
   # Derivatives of a bvn with respect to (u, shape)
   bvn_u_d::Array{NumType, 1}
-  bvn_uu_h::Array{NumType, 2}
+  bvn_uu_h::SizedMatrix{(2,2), NumType, 2}
   bvn_s_d::Array{NumType, 1}
-  bvn_ss_h::Array{NumType, 2}
-  bvn_us_h::Array{NumType, 2}
+  bvn_ss_h::SizedMatrix{(length(gal_shape_ids), length(gal_shape_ids)), NumType, 2}
+  bvn_us_h::SizedMatrix{(2, length(gal_shape_ids)), NumType, 2}
 
   function (::Type{BivariateNormalDerivatives{NumType}}){NumType}()
     py1 = zeros(NumType, 1)
