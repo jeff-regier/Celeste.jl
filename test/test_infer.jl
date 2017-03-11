@@ -165,7 +165,6 @@ end
     entry = catalog[entry_id]
 
     neighbors = Infer.find_neighbors([entry_id,], catalog, images)[1]
-    @show neighbors
 
     # there's a lot near this star, but not a lot that overlaps with it, see
     # http://skyserver.sdss.org/dr10/en/tools/explore/summary.aspx?id=0x112d1012607f050a

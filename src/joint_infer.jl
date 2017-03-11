@@ -10,7 +10,7 @@ import ..SDSSIO: RunCamcolField
 import ..PSF
 
 using ..DeterministicVI
-using ..ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
+using ..DeterministicVI.ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
 using ..DeterministicVI.ElboMaximize: Config, maximize!
 
 

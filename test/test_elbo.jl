@@ -220,7 +220,6 @@ end
     d1 = DeterministicVI.elbo(ea, vp1).d[:]
 
     hv_manual = (d1 - d0) / perturbation
-    @show hv_manual
 
     vp_dual = convert(VariationalParams{Dual{1, Float64}}, vp)
 
@@ -232,7 +231,6 @@ end
 
     P = length(ids)
     hv_auto = [elbo_dual.d[i].partials[] for i in 1:(2P)]
-    @show hv_auto
 
     for i in 1:20
         @test hv_manual[i] ≈ hv_auto[i] atol=abs(0.01 * hv_auto[i])

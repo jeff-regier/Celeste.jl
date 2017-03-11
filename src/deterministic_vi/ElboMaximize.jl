@@ -5,8 +5,8 @@ using Optim: Options, NewtonTrustRegion
 using ..Model
 using ..SensitiveFloats
 using ..DeterministicVI
-using ...ConstraintTransforms: TransformDerivatives,
-                               ParameterBatch,
+using ..DeterministicVI.ConstraintTransforms: TransformDerivatives,
+                               VariationalParams,
                                ConstraintBatch,
                                ParameterConstraint,
                                BoxConstraint,
@@ -23,28 +23,29 @@ using ...ConstraintTransforms: TransformDerivatives,
 ##################################################
 
 immutable Config{N,T}
-    bound_params::ParameterBatch{T}
-    free_params::ParameterBatch{T}
+    vp::VariationalParams{T}
+    bound_params::VariationalParams{T}
+    free_params::VariationalParams{T}
     constraints::ConstraintBatch
     derivs::TransformDerivatives{N,T}
     optim_options::Options{Void}
     trust_region::NewtonTrustRegion{T}
 end
 
-function Config{T}(bound_params::ParameterBatch{T};
+function Config{T}(ea::ElboArgs,
+                   vp::VariationalParams{T},
+                   bound_params::VariationalParams{T} = vp[ea.active_sources];
                    loc_width::Float64 = 1e-4,
                    loc_scale::Float64 = 1.0,
                    max_iters::Int = 50,
                    constraints::ConstraintBatch = ConstraintBatch(bound_params, loc_width, loc_scale),
-                   free_params::ParameterBatch{T} = allocate_free_params(bound_params, constraints),
+                   free_params::VariationalParams{T} = allocate_free_params(bound_params, constraints),
                    derivs::TransformDerivatives = TransformDerivatives(bound_params, free_params),
                    optim_options::Options = custom_optim_options(max_iters=max_iters),
                    trust_region::NewtonTrustRegion = custom_trust_region())
-    return Config(bound_params, free_params, constraints, derivs,
+    return Config(vp, bound_params, free_params, constraints, derivs,
                   optim_options, trust_region)
 end
-
-Config(ea::ElboArgs, vp::VariationalParams; kwargs...) = Config(vp[ea.active_sources]; kwargs...)
 
 function custom_optim_options(; xtol_abs = 1e-7, ftol_rel = 1e-6, max_iters = 50)
     return Optim.Options(x_tol = xtol_abs, f_tol = ftol_rel, g_tol = 1e-8,
@@ -87,8 +88,7 @@ function evaluate!(f::Objective, x::Vector)
         copy!(f.previous_x, x)
         from_vector!(f.cfg.free_params, x)
         to_bound!(f.cfg.bound_params, f.cfg.free_params, f.cfg.constraints)
-        @show f.cfg.bound_params
-        sf_bound = elbo(f.ea, f.cfg.bound_params)
+        sf_bound = elbo(f.ea, f.cfg.vp)
         propagate_derivatives!(to_bound!, sf_bound, f.sf_free, f.cfg.free_params,
                                f.cfg.constraints, f.cfg.derivs)
     end
@@ -137,7 +137,7 @@ function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config = C
     return result.f_calls, min_value, min_solution, result
 end
 
-to_vector{T}(sources::ParameterBatch{T}) = vcat(sources...)::Vector{T}
+to_vector{T}(sources::VariationalParams{T}) = vcat(sources...)::Vector{T}
 
 function from_vector!(sources, x)
     i = 1

@@ -1,8 +1,8 @@
 using Base.Test
 
 using Celeste: Model, SensitiveFloats
-using Celeste.ConstraintTransforms: ParameterConstraint, ConstraintBatch,
-                                    BoxConstraint, SimplexConstraint
+using Celeste.DeterministicVI.ConstraintTransforms: ParameterConstraint,
+                        ConstraintBatch, BoxConstraint, SimplexConstraint
 using Celeste.DeterministicVI: ElboArgs
 using Celeste.DeterministicVI.ElboMaximize: Config, maximize!, custom_optim_options
 

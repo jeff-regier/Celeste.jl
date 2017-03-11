@@ -2,9 +2,8 @@ module ConstraintTransforms
 
 using ..Model
 using ..SensitiveFloats
+using ..DeterministicVI: VariationalParams
 using Compat
-
-@compat const ParameterBatch{T<:Number} = Vector{Vector{T}}
 
 ####################
 # Constraint Types #
@@ -55,7 +54,7 @@ immutable ConstraintBatch
 end
 
 # default ConstraintBatch for Celeste's model
-function ConstraintBatch{T}(bound::ParameterBatch{T},
+function ConstraintBatch{T}(bound::VariationalParams{T},
                             loc_width::Real = 1.0e-4,
                             loc_scale::Real = 1.0)
     n_sources = length(bound)
@@ -232,7 +231,7 @@ function to_bound!{T<:Real}(bound::Vector{T}, free::Vector{T},
     end
 end
 
-function to_bound!{T}(bound::ParameterBatch{T}, free::ParameterBatch{T},
+function to_bound!{T}(bound::VariationalParams{T}, free::VariationalParams{T},
                       constraints::ConstraintBatch)
     @assert length(free) == length(bound)
     for src in 1:length(free)
@@ -253,7 +252,7 @@ function to_free!{T<:Real}(free::Vector{T}, bound::Vector{T},
     end
 end
 
-function to_free!{T}(free::ParameterBatch{T}, bound::ParameterBatch{T},
+function to_free!{T}(free::VariationalParams{T}, bound::VariationalParams{T},
                      constraints::ConstraintBatch)
     @assert length(free) == length(bound)
     for src in 1:length(free)
@@ -325,7 +324,7 @@ function enforce!{T<:Real}(bound::Vector{T}, constraints::ConstraintBatch, src::
     end
 end
 
-function enforce!{T}(bound::ParameterBatch{T}, constraints::ConstraintBatch)
+function enforce!{T}(bound::VariationalParams{T}, constraints::ConstraintBatch)
     for src in 1:length(bound)
         enforce!(bound[src], constraints, src)
     end
@@ -343,7 +342,7 @@ function free_length(simplexes::Vector{ParameterConstraint{SimplexConstraint}})
     return sum(simplex.constraint.n - 1 for simplex in simplexes)
 end
 
-function allocate_free_params{T}(bound::ParameterBatch{T}, constraints::ConstraintBatch)
+function allocate_free_params{T}(bound::VariationalParams{T}, constraints::ConstraintBatch)
     free = similar(bound)
     for src in 1:length(bound)
         n_simplex_params = free_length(constraints.simplexes[src])
@@ -383,8 +382,8 @@ function TransformDerivatives{T<:Real,N}(output::Vector{T}, input::Vector{T},
     return TransformDerivatives(jacobian, hessian, output_dual, inner_cfg, outer_cfg)
 end
 
-function TransformDerivatives{T<:Real,N}(output::ParameterBatch{T},
-                                         input::ParameterBatch{T},
+function TransformDerivatives{T<:Real,N}(output::VariationalParams{T},
+                                         input::VariationalParams{T},
                                          ::Type{Val{N}} = Val{DEFAULT_CHUNK})
     @assert length(output) == length(input)
     @assert all(length(src) == length(output[1]) for src in output)
@@ -407,7 +406,7 @@ end
 function propagate_derivatives!{F,T}(transform!::F,
                                      sf_output::SensitiveFloat,
                                      sf_input::SensitiveFloat,
-                                     input_sources::ParameterBatch{T},
+                                     input_sources::VariationalParams{T},
                                      constraints::ConstraintBatch,
                                      derivs::TransformDerivatives)
     sf_input.v[] = sf_output.v[]

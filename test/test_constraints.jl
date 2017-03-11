@@ -2,7 +2,8 @@ module ConstraintTransformsTests
 
 using Celeste.Model: CanonicalParams, ids, D
 
-using Celeste.ConstraintTransforms: Constraint, BoxConstraint, SimplexConstraint,
+using Celeste.DeterministicVI.ConstraintTransforms: Constraint, BoxConstraint,
+                                    SimplexConstraint,
                                     ParameterConstraint, ConstraintBatch,
                                     u_ParameterConstraints, inv_logit, logit, to_free,
                                     to_free!, to_bound, to_bound!, simplexify, unsimplexify,
