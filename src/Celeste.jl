@@ -6,6 +6,9 @@ module Celeste
 # workaround a bug
 import ForwardDiff
 
+# alias scopes
+include("aliasscopes.jl")
+
 # submodules
 include("Configs.jl")
 include("Log.jl")

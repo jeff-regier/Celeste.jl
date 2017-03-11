@@ -31,6 +31,7 @@ import Distributions
 import FITSIO, WCS
 import WCS.WCSTransform
 import ..Log
+import ..Celeste: Const, @aliasscope, @unroll_loop
 
 import Base.length
 
