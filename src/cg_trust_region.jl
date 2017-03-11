@@ -2,6 +2,7 @@ import Optim: update!, solve_tr_subproblem!, Optimizer, @add_generic_fields,
               Options, initial_state, update_state!, trace!, assess_convergence,
               update_g!
 
+
 immutable CGTrustRegion{T <: Real} <: Optimizer
     initial_radius::T
     max_radius::T
@@ -37,6 +38,7 @@ type CGTrustRegionState{T,N,G}
     r::Vector{T}  # residual vector
     d::Vector{T}  # direction to consider
     Hd::Vector{T} # hessian-vector product
+    cg_iters::Int64
 end
 
 
@@ -71,15 +73,14 @@ function initial_state{T}(method::CGTrustRegion, options, d, initial_x::Array{T}
                          0., # state.rho
                          Vector{T}(n),  # residual vector
                          Vector{T}(n),  # direction to consider
-                         Vector{T}(n)) # hessian-vector product
+                         Vector{T}(n), # hessian-vector product
+                         0)
 end
 
 
 function trace!(tr, state, iteration, method::CGTrustRegion, options)
     dt = Dict()
     if options.extended_trace
-        dt["x"] = copy(state.x)
-        dt["g(x)"] = copy(state.g)
         dt["radius"] = copy(state.radius)
         dt["interior"] = state.interior
         dt["accept_step"] = state.accept_step
@@ -87,6 +88,7 @@ function trace!(tr, state, iteration, method::CGTrustRegion, options)
         dt["rho"] = state.rho
         dt["m_diff"] = state.m_diff
         dt["f_diff"] = state.f_diff
+        dt["cg_iters"] = state.cg_iters
     end
     g_norm = norm(state.g, Inf)
     update!(tr,
@@ -117,9 +119,11 @@ function cg_steihaug!{T}(objective::TwiceDifferentiableHV,
     fill!(z, 0.0)  # the search direction is initialized to the 0 vector,
     r[:] = g  # so at first the whole gradient is the residual.
     d[:] = -r # the first direction is the direction of steepest descent.
-    rho0 = 1e22  # just a big number
+    rho0 = 1e100  # just a big number
 
+    state.cg_iters = 0
     for i in 1:n
+        state.cg_iters += 1
         objective.hv!(x, d, Hd)
 
         dHd = dot(d, Hd)
@@ -182,6 +186,7 @@ function update_state!{T}(objective::TwiceDifferentiableHV,
     return false
 end
 
+
 function update_g!(objective, state::CGTrustRegionState, method)
     if state.accept_step
         # Update the function value and gradient
@@ -189,6 +194,7 @@ function update_g!(objective, state::CGTrustRegionState, method)
         state.f_calls, state.g_calls = state.f_calls + 1, state.g_calls + 1
     end
 end
+
 
 function assess_convergence(state::CGTrustRegionState, options)
     if !state.accept_step

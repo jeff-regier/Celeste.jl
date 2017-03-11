@@ -2,7 +2,8 @@ module ConstraintTransformsTests
 
 using Celeste.Model: CanonicalParams, ids, D
 
-using Celeste.ConstraintTransforms: Constraint, BoxConstraint, SimplexConstraint,
+using Celeste.DeterministicVI.ConstraintTransforms: Constraint, BoxConstraint,
+                                    SimplexConstraint,
                                     ParameterConstraint, ConstraintBatch,
                                     u_ParameterConstraints, inv_logit, logit, to_free,
                                     to_free!, to_bound, to_bound!, simplexify, unsimplexify,
@@ -453,9 +454,9 @@ to_bound!(bound, free, constraints)
 # check derivatives #
 #-------------------#
 
-_, ea, _ = SampleData.gen_n_body_dataset(1)
+ea, vp, catalog = SampleData.gen_n_body_dataset(1)
 
-bound = ea.vp
+bound = vp
 constraints = ConstraintBatch(bound)
 free = allocate_free_params(bound, constraints)
 
@@ -466,8 +467,8 @@ derivs = TransformDerivatives(bound, free)
 
 differentiate!((y, x) -> to_bound!(y, x, constraints, 1), derivs, free[1])
 
-dt = Transform.get_mp_transform(ea.vp, [1])
-td = Transform.get_transform_derivatives(ea.vp, [1], dt.bounds)
+dt = Transform.get_mp_transform(vp, [1])
+td = Transform.get_transform_derivatives(vp, [1], dt.bounds)
 
 @test isapprox(td.dparam_dfree, derivs.jacobian)
 
@@ -478,9 +479,9 @@ end
 # check SensitiveFloat propagation #
 #----------------------------------#
 
-_, ea, _ = SampleData.gen_n_body_dataset(1)
+ea, vp, catalog = SampleData.gen_n_body_dataset(1)
 
-bound = ea.vp
+bound = vp
 constraints = ConstraintBatch(bound)
 free = allocate_free_params(bound, constraints)
 
@@ -488,7 +489,7 @@ enforce!(bound, constraints)
 to_free!(free, bound, constraints)
 
 derivs = TransformDerivatives(bound, free)
-dt = Transform.get_mp_transform(ea.vp, [1])
+dt = Transform.get_mp_transform(vp, [1])
 
 sf_bound1 = SensitiveFloats.SensitiveFloat{Float64}(length(bound[1]), 1, true, true)
 sf_bound1.v[] = rand()
@@ -502,7 +503,7 @@ sf_free1 = SensitiveFloats.SensitiveFloat{Float64}(length(free[1]), 1, true, tru
 sf_free2 = SensitiveFloats.SensitiveFloat{Float64}(length(free[1]), 1, true, true)
 
 propagate_derivatives!(to_bound!, sf_bound1, sf_free1, free, constraints, derivs)
-Transform.transform_sensitive_float!(dt, sf_free2, sf_bound2, ea.vp, [1])
+Transform.transform_sensitive_float!(dt, sf_free2, sf_bound2, vp, [1])
 
 @test isapprox(sf_free1.v[], sf_free2.v[])
 @test isapprox(sf_free1.d, sf_free2.d)

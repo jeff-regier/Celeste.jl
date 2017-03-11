@@ -1,10 +1,11 @@
 using Base.Test
 
 using Celeste: Model, SensitiveFloats
-using Celeste.ConstraintTransforms: ParameterConstraint, ConstraintBatch,
-                                    BoxConstraint, SimplexConstraint
+using Celeste.DeterministicVI.ConstraintTransforms: ParameterConstraint,
+                        ConstraintBatch, BoxConstraint, SimplexConstraint
 using Celeste.DeterministicVI: ElboArgs
-using Celeste.DeterministicVI.NewtonMaximize: Config, maximize!, custom_optim_options
+using Celeste.DeterministicVI.ElboMaximize: Config, maximize!, custom_optim_options
+
 
 function verify_sample_star(vs, pos)
     @test vs[ids.a[2]] <= 0.01
@@ -49,53 +50,53 @@ end
 #########################################################
 
 function test_star_optimization()
-    images, ea, body = gen_sample_star_dataset();
+    ea, vp, catalog = gen_sample_star_dataset();
 
     # Newton's method converges on a small galaxy unless we start with
     # a high star probability.
-    ea.vp[1][ids.a] = [0.8, 0.2]
+    vp[1][ids.a] = [0.8, 0.2]
 
-    cfg = Config(ea; loc_width=1.0)
-    maximize!(DeterministicVI.elbo, ea, cfg)
+    cfg = Config(ea, vp; loc_width=1.0)
+    maximize!(ea, vp, cfg)
 
-    verify_sample_star(ea.vp[1], [10.1, 12.2])
+    verify_sample_star(vp[1], [10.1, 12.2])
 end
 
 
 function test_single_source_optimization()
-    images, ea, three_bodies = gen_three_body_dataset();
+    ea, vp, catalog = gen_three_body_dataset();
 
     s = 2
-    ea = make_elbo_args(images, three_bodies, active_source=s);
-    ea_original = deepcopy(ea);
+    ea = make_elbo_args(ea.images, catalog, active_source=s);
+    ea.include_kl = false
+    vp_original = deepcopy(vp);
 
-    DeterministicVI.elbo_likelihood(ea).v[]
-
-    cfg = Config(ea; loc_width=1.0)
-    maximize!(DeterministicVI.elbo_likelihood, ea, cfg)
+    cfg = Config(ea, vp; loc_width=1.0)
+    maximize!(ea, vp, cfg)
 
     # Test that it only optimized source s
-    @test ea.vp[s] != ea_original.vp[s]
+    @test vp[s] != vp_original[s]
     for other_s in setdiff(1:ea.S, s)
-        @test ea.vp[other_s] ≈ ea_original.vp[other_s]
+        @test vp[other_s] ≈ vp_original[other_s]
     end
 end
 
 
 function test_galaxy_optimization()
-    images, ea, body = gen_sample_galaxy_dataset();
-    cfg = Config(ea; loc_width=3.0)
-    maximize!(DeterministicVI.elbo_likelihood, ea, cfg)
-    verify_sample_galaxy(ea.vp[1], [8.5, 9.6])
+    ea, vp, catalog = gen_sample_galaxy_dataset();
+    ea.include_kl = false
+    cfg = Config(ea, vp; loc_width=3.0)
+    maximize!(ea, vp, cfg)
+    verify_sample_galaxy(vp[1], [8.5, 9.6])
 end
 
 
 function test_full_elbo_optimization()
-    images, ea, body = gen_sample_galaxy_dataset(perturb=true);
-    cfg = Config(ea; loc_width=1.0,
+    ea, vp, catalog = gen_sample_galaxy_dataset(perturb=true);
+    cfg = Config(ea, vp; loc_width=1.0,
                  optim_options=custom_optim_options(xtol_abs=0.0))
-    maximize!(DeterministicVI.elbo, ea, cfg)
-    verify_sample_galaxy(ea.vp[1], [8.5, 9.6]);
+    maximize!(ea, vp, cfg)
+    verify_sample_galaxy(vp[1], [8.5, 9.6]);
 end
 
 

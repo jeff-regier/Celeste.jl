@@ -1,12 +1,12 @@
-module NewtonMaximize
+module ElboMaximize
 
 using Optim
 using Optim: Options, NewtonTrustRegion
 using ..Model
 using ..SensitiveFloats
-using ..DeterministicVI: ElboArgs
-using ...ConstraintTransforms: TransformDerivatives,
-                               ParameterBatch,
+using ..DeterministicVI
+using ..DeterministicVI.ConstraintTransforms: TransformDerivatives,
+                               VariationalParams,
                                ConstraintBatch,
                                ParameterConstraint,
                                BoxConstraint,
@@ -23,54 +23,47 @@ using ...ConstraintTransforms: TransformDerivatives,
 ##################################################
 
 immutable Config{N,T}
-    bound_params::ParameterBatch{T}
-    free_params::ParameterBatch{T}
+    vp::VariationalParams{T}
+    bound_params::VariationalParams{T}
+    free_params::VariationalParams{T}
     constraints::ConstraintBatch
     derivs::TransformDerivatives{N,T}
     optim_options::Options{Void}
     trust_region::NewtonTrustRegion{T}
-    verbose::Bool
 end
 
-function Config{T}(bound_params::ParameterBatch{T};
+function Config{T}(ea::ElboArgs,
+                   vp::VariationalParams{T},
+                   bound_params::VariationalParams{T} = vp[ea.active_sources];
                    loc_width::Float64 = 1e-4,
                    loc_scale::Float64 = 1.0,
-                   verbose::Bool = false,
                    max_iters::Int = 50,
                    constraints::ConstraintBatch = ConstraintBatch(bound_params, loc_width, loc_scale),
-                   free_params::ParameterBatch{T} = allocate_free_params(bound_params, constraints),
+                   free_params::VariationalParams{T} = allocate_free_params(bound_params, constraints),
                    derivs::TransformDerivatives = TransformDerivatives(bound_params, free_params),
-                   optim_options::Options = custom_optim_options(verbose=verbose, max_iters=max_iters),
+                   optim_options::Options = custom_optim_options(max_iters=max_iters),
                    trust_region::NewtonTrustRegion = custom_trust_region())
-    return Config(bound_params, free_params, constraints, derivs,
-                  optim_options, trust_region, verbose)
+    return Config(vp, bound_params, free_params, constraints, derivs,
+                  optim_options, trust_region)
 end
 
-Config(ea::ElboArgs; kwargs...) = Config(ea.vp[ea.active_sources]; kwargs...)
-
-function custom_optim_options(; xtol_abs = 1e-7, ftol_rel = 1e-6, max_iters = 50, verbose = false)
+function custom_optim_options(; xtol_abs = 1e-7, ftol_rel = 1e-6, max_iters = 50)
     return Optim.Options(x_tol = xtol_abs, f_tol = ftol_rel, g_tol = 1e-8,
-                         iterations = max_iters, store_trace = verbose,
-                         show_trace = false, extended_trace = verbose)
+                         iterations = max_iters, store_trace = false,
+                         show_trace = false, extended_trace = false)
 end
 
-function custom_trust_region(; initial_delta = 10.0, delta_hat = 1e9, eta = 0.1,
-                             rho_lower = 0.25, rho_upper = 0.75)
+function custom_trust_region(; initial_delta = 10.0, delta_hat = 1e9)
     return Optim.NewtonTrustRegion(initial_delta = initial_delta,
-                                   delta_hat = delta_hat,
-                                   eta = eta,
-                                   rho_lower = rho_lower,
-                                   rho_upper = rho_upper)
+                                   delta_hat = delta_hat)
 end
 
 #############
 # Objective #
 #############
 
-immutable Objective{F,N,T} <: Function
-    f::F
-    ea::ElboArgs{T}
-    f_evals::Ref{Int}
+immutable Objective{N,T} <: Function
+    ea::ElboArgs
     previous_x::Vector{T}
     sf_free::SensitiveFloat{T}
     cfg::Config{N,T}
@@ -84,10 +77,10 @@ immutable Hessian{F<:Objective} <: Function
     f::F
 end
 
-function Objective{F,T}(f::F, ea::ElboArgs{T}, cfg::Config, x::Vector)
-    sf_free = SensitiveFloat{T}(length(cfg.free_params[1]), length(cfg.bound_params), true, true)
+function Objective(ea::ElboArgs, cfg::Config, x::Vector)
+    sf_free = SensitiveFloat{Float64}(length(cfg.free_params[1]), length(cfg.bound_params), true, true)
     previous_x = fill(NaN, length(x))
-    return Objective(f, ea, Ref{Int}(0), previous_x, sf_free, cfg)
+    return Objective(ea, previous_x, sf_free, cfg)
 end
 
 function evaluate!(f::Objective, x::Vector)
@@ -95,9 +88,7 @@ function evaluate!(f::Objective, x::Vector)
         copy!(f.previous_x, x)
         from_vector!(f.cfg.free_params, x)
         to_bound!(f.cfg.bound_params, f.cfg.free_params, f.cfg.constraints)
-        sf_bound = f.f(f.ea)
-        f.f_evals[] += 1
-        f.cfg.verbose && log_eval(f, sf_bound)
+        sf_bound = elbo(f.ea, f.cfg.vp)
         propagate_derivatives!(to_bound!, sf_bound, f.sf_free, f.cfg.free_params,
                                f.cfg.constraints, f.cfg.derivs)
     end
@@ -127,43 +118,26 @@ function (f::Hessian)(x::Vector, result::Matrix)
     return result
 end
 
-function log_eval(f::Objective, sf)
-    Log.debug("f_evals=$(f.f_evals[]) | value=$(sf.v[])")
-    Log.debug(sprint(io -> show_params(io, f.cfg.bound_params, sf)))
-    Log.debug("=======================================\n")
-end
-
-function show_params(io, sources, sf)
-    n_params = size(sf.d, 1)
-    param_names = n_params == length(ids_names) ? ids_names : ["x$i" for i=1:n_params]
-    for src in 1:length(sources)
-        println(io, "source $(src):")
-        for i in 1:n_params
-            println(io, "  $(param_names[i])=$(sources[src][i]), ∂$(param_names[i])=$(sf.d[i, src])")
-        end
-    end
-end
-
 #############
 # maximize! #
 #############
 
-function maximize!{F,T}(f::F, ea::ElboArgs{T}, cfg::Config = Config(ea))
+function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config = Config(ea, vp))
     enforce!(cfg.bound_params, cfg.constraints)
     to_free!(cfg.free_params, cfg.bound_params, cfg.constraints)
     x = to_vector(cfg.free_params)
-    objective = Objective(f, ea, cfg, x)
-    R = Optim.MultivariateOptimizationResults{T,1,Optim.NewtonTrustRegion{T}}
+    objective = Objective(ea, cfg, x)
+    R = Optim.MultivariateOptimizationResults{Float64,1,Optim.NewtonTrustRegion{Float64}}
     result::R = Optim.optimize(objective, Gradient(objective), Hessian(objective),
                                x, cfg.trust_region, cfg.optim_options)
-    min_value::T = -(Optim.minimum(result))
-    min_solution::Vector{T} = Optim.minimizer(result)
+    min_value::Float64 = -(Optim.minimum(result))
+    min_solution::Vector{Float64} = Optim.minimizer(result)
     from_vector!(cfg.free_params, min_solution)
     to_bound!(cfg.bound_params, cfg.free_params, cfg.constraints)
-    return objective.f_evals[]::Int64, min_value, min_solution, result
+    return result.f_calls, min_value, min_solution, result
 end
 
-to_vector{T}(sources::ParameterBatch{T}) = vcat(sources...)::Vector{T}
+to_vector{T}(sources::VariationalParams{T}) = vcat(sources...)::Vector{T}
 
 function from_vector!(sources, x)
     i = 1
