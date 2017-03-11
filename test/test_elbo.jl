@@ -207,7 +207,7 @@ end
 end
 
 
-@testset "manual elbo hessian matches auto diff hessian" begin
+@testset "manual elbo hessian column sums match auto diff" begin
     ea, vp, catalog = gen_two_body_dataset()
 
     # compute the hessian of the elbo manually
@@ -219,20 +219,19 @@ end
     vp_dual = convert(VariationalParams{Dual{1, Float64}}, vp)
 
     for s in 1:2, i in 1:length(ids)
-        # we effectively multiplying the hessian by the 1's vector here
+        # we're effectively multiplying the hessian by the 1's vector here.
         vp_dual[s][i] += ForwardDiff.Dual(0, 1)
     end
 
     @time elbo_dual = DeterministicVI.elbo(ea, vp_dual)
+    @show elbo_dual.d
 
-    auto_hessian_sum = 0.0
-    for s in 1:2, i in 1:length(ids)
-        auto_hessian_sum += elbo_dual.g[s][i].partials[]
+    for s in 1:2, p in 1:length(ids)
+        auto_hessian_column_sum = elbo_dual.d[p, s].partials[]
+        col_id = (s - 1) * length(ids) + p
+        manual_hessian_column_sum = sum(elbo_float.h[:, col_id])
+        @test manual_hessian_column_sum ≈ auto_hessian_column_sum
     end
-
-    manual_hessian_sum = sum(elbo_float.h)
-
-    @test manual_hessian_sum ≈ auto_hessian_sum
 end
 
 
