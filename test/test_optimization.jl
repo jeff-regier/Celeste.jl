@@ -67,17 +67,17 @@ function test_single_source_optimization()
     ea, vp, catalog = gen_three_body_dataset();
 
     s = 2
-    ea = make_elbo_args(images, three_bodies, active_source=s);
+    ea = make_elbo_args(ea.images, catalog, active_source=s);
     ea.include_kl = false
-    ea_original = deepcopy(ea);
+    vp_original = deepcopy(vp);
 
     cfg = Config(ea, vp; loc_width=1.0)
     maximize!(ea, vp, cfg)
 
     # Test that it only optimized source s
-    @test vp[s] != ea_original.vp[s]
+    @test vp[s] != vp_original[s]
     for other_s in setdiff(1:ea.S, s)
-        @test vp[other_s] ≈ ea_original.vp[other_s]
+        @test vp[other_s] ≈ vp_original[other_s]
     end
 end
 

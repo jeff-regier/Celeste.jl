@@ -207,7 +207,36 @@ end
 end
 
 
-@testset "automative hessian vector product matches finite diff" begin
+@testset "manual elbo hessian matches auto diff hessian" begin
+    ea, vp, catalog = gen_two_body_dataset()
+
+    # compute the hessian of the elbo manually
+    elbo_float = DeterministicVI.elbo(ea, vp)
+
+    # create elbo arguments of the Dual number type, that compute the gradient but not
+    # the hessian (it doesn't matter that the "perturbation" are all zero, it's just
+    # for testing the speed and verifying that it works)
+    vp_dual = convert(VariationalParams{Dual{1, Float64}}, vp)
+
+    for s in 1:2, i in 1:length(ids)
+        # we effectively multiplying the hessian by the 1's vector here
+        vp_dual[s][i] += ForwardDiff.Dual(0, 1)
+    end
+
+    @time elbo_dual = DeterministicVI.elbo(ea, vp_dual)
+
+    auto_hessian_sum = 0.0
+    for s in 1:2, i in 1:length(ids)
+        auto_hessian_sum += elbo_dual.g[s][i].partials[]
+    end
+
+    manual_hessian_sum = sum(elbo_float.h)
+
+    @test manual_hessian_sum ≈ auto_hessian_sum
+end
+
+
+@testset "automatic hessian vector product matches finite diff" begin
     ea, vp, catalog = gen_two_body_dataset()
 
     # compute the gradient (and the value) of the elbo manually
