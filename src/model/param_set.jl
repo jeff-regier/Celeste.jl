@@ -166,7 +166,7 @@ const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
 # Note that gal_shape_alignment aligns the shape ids with the GalaxyPosParams,
 # not the CanonicalParams.
-const gal_shape_alignment = align(gal_shape_ids, gal_ids)
+const gal_shape_alignment = Const(align(gal_shape_ids, gal_ids))
 
 function get_id_names(ids::CanonicalParams)
     ids_names = Vector{String}(length(ids))

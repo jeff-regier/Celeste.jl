@@ -453,6 +453,81 @@ function transform_bvn_ux_derivs!{NumType <: Number}(
   end
 end
 
+@generated function fast_fill!{T<:SizedMatrix}(s::T, x)
+  quote
+    $(Expr(:meta, :inline))
+    @unroll_loop for i in 1:$(size(s, 1))
+      @unroll_loop for j in 1:$(size(s, 2))
+        @inbounds s[i, j] = x
+      end
+    end
+  end
+end
+fast_fill!{T<:Array}(s::T, x) = fill!(s, x)
+
+# WARNING: HUGE PERFORMANCE HOTSPOT
+function transform_bvn_derivs_hessian!{NumType <: Number}(
+    bvn_derivs::BivariateNormalDerivatives{NumType},
+    sig_sf::GalaxySigmaDerivs{NumType},
+    wcs_jacobian)
+  @aliasscope begin
+    # Hessian calculations.
+    
+    bvn_ss_h = bvn_derivs.bvn_ss_h
+    bvn_us_h = bvn_derivs.bvn_us_h
+    bvn_sig_d = Const(bvn_derivs.bvn_sig_d)
+    #wcs_jacobian = Const(wcs_jacobian)
+    sig_sf_j = sig_sf.j
+    
+    # Manually inlined version of fill!
+    fast_fill!(bvn_ss_h, 0.0)
+    fast_fill!(bvn_us_h, 0.0)
+
+    # Second derviatives involving only shape parameters.
+    # TODO: time consuming **************
+    sig_sf_t = sig_sf.t
+    @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
+      @unroll_loop for shape_id1 in 1:shape_id2
+        @inbounds @unroll_loop for sig_id1 in 1:3
+          bvn_ss_h[shape_id1, shape_id2] += bvn_sig_d[sig_id1] * sig_sf_t[sig_id1, shape_id1, shape_id2]
+        end
+      end
+    end
+
+    bvn_sigsig_h = Const(bvn_derivs.bvn_sigsig_h)
+    @unroll_loop for sig_id1 in 1:3
+      @unroll_loop for sig_id2 in 1:3
+        @inbounds @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
+          inner_term = bvn_sigsig_h[sig_id1, sig_id2] * sig_sf_j[sig_id2, shape_id2]
+          @unroll_loop for shape_id1 in 1:shape_id2
+            bvn_ss_h[shape_id1, shape_id2] += inner_term * sig_sf_j[sig_id1, shape_id1]
+          end
+        end
+      end
+    end
+
+    @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
+      @inbounds @unroll_loop for shape_id1 in 1:shape_id2
+        bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
+      end
+    end
+
+    # Second derivates involving both a shape term and a u term.
+    # TODO: time consuming **************
+    bvn_xsig_h = Const(bvn_derivs.bvn_xsig_h)
+    @unroll_loop for shape_id in 1:length(gal_shape_ids)
+      @unroll_loop for u_id in 1:2
+        @unroll_loop for sig_id in 1:3
+          @inbounds @unroll_loop for x_id in 1:2
+            bvn_us_h[u_id, shape_id] +=
+              bvn_xsig_h[x_id, sig_id] * sig_sf_j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
+          end
+        end
+      end
+    end      
+  end
+end
+
 
 """
 Transform all the bvn derivatives from x and sigma to u and the model
@@ -476,67 +551,24 @@ function transform_bvn_derivs!{NumType <: Number}(
 
   # Gradient calculations.
 
-  # Use the chain rule for the shape derviatives.
-  # TODO: time consuming **************
-  bvn_s_d   = bvn_derivs.bvn_s_d
-  bvn_sig_d = bvn_derivs.bvn_sig_d
+  @aliasscope begin
+      # Use the chain rule for the shape derviatives.
+      # TODO: time consuming **************
+      @aliasscope begin
+        bvn_s_d   = bvn_derivs.bvn_s_d
+        bvn_sig_d = Const(bvn_derivs.bvn_sig_d)
+        sig_sf_j = sig_sf.j
 
-  fill!(bvn_s_d, 0.0)
-  for shape_id in 1:length(gal_shape_ids)
-    @inbounds for sig_id in 1:3
-      bvn_s_d[shape_id] += bvn_sig_d[sig_id] * sig_sf.j[sig_id, shape_id]
-    end
-  end
-
-  if calculate_hessian
-    # Hessian calculations.
-
-    bvn_ss_h = bvn_derivs.bvn_ss_h
-    bvn_us_h = bvn_derivs.bvn_us_h
-
-    fill!(bvn_ss_h, 0.0)
-    fill!(bvn_us_h, 0.0)
-
-    # Second derviatives involving only shape parameters.
-    # TODO: time consuming **************
-    for shape_id2 in 1:length(gal_shape_ids)
-      for shape_id1 in 1:shape_id2
-        @inbounds for sig_id1 in 1:3
-          bvn_ss_h[shape_id1, shape_id2] += bvn_sig_d[sig_id1] * sig_sf.t[sig_id1, shape_id1, shape_id2]
-        end
-      end
-    end
-
-    bvn_sigsig_h = bvn_derivs.bvn_sigsig_h
-    for sig_id1 in 1:3
-      for sig_id2 in 1:3
-        @inbounds for shape_id2 in 1:length(gal_shape_ids)
-          inner_term = bvn_sigsig_h[sig_id1, sig_id2] * sig_sf.j[sig_id2, shape_id2]
-          for shape_id1 in 1:shape_id2
-            bvn_ss_h[shape_id1, shape_id2] += inner_term * sig_sf.j[sig_id1, shape_id1]
+        fast_fill!(bvn_s_d, 0.0)
+        @unroll_loop for shape_id in 1:length(gal_shape_ids)
+          @inbounds @unroll_loop for sig_id in 1:3
+            bvn_s_d[shape_id] += bvn_sig_d[sig_id] * sig_sf_j[sig_id, shape_id]
           end
         end
       end
-    end
 
-    for shape_id2 in 1:length(gal_shape_ids)
-      @inbounds for shape_id1 in 1:shape_id2
-        bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
+      if calculate_hessian
+        transform_bvn_derivs_hessian!(bvn_derivs, sig_sf, wcs_jacobian)
       end
     end
-
-    # Second derivates involving both a shape term and a u term.
-    # TODO: time consuming **************
-    bvn_xsig_h = bvn_derivs.bvn_xsig_h
-    for shape_id in 1:length(gal_shape_ids)
-      for u_id in 1:2
-        for sig_id in 1:3
-          @inbounds for x_id in 1:2
-            bvn_us_h[u_id, shape_id] +=
-              bvn_xsig_h[x_id, sig_id] * sig_sf.j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
-          end
-        end
-      end
-    end
-  end
 end
