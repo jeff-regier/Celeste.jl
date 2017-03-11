@@ -521,7 +521,7 @@ function elbo_likelihood{NumType <: Number}(
     end
 
     assert_all_finite(elbo_vars.elbo)
-    deepcopy(elbo_vars.elbo)
+    elbo_vars.elbo
 end
 
 

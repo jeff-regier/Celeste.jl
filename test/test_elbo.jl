@@ -224,7 +224,6 @@ end
     end
 
     @time elbo_dual = DeterministicVI.elbo(ea, vp_dual)
-    @show elbo_dual.d
 
     for s in 1:2, p in 1:length(ids)
         auto_hessian_column_sum = elbo_dual.d[p, s].partials[]
