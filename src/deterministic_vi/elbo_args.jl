@@ -79,7 +79,7 @@ Args:
 function ElboIntermediateVariables(NumType::DataType,
                                    psf_K::Int,
                                    S::Int,
-                                   num_active_sources::Int;
+                                   num_active_sources::Int,
                                    calculate_gradient::Bool=true,
                                    calculate_hessian::Bool=true)
     @assert NumType <: Number
@@ -176,11 +176,14 @@ end
 ElboArgs stores the arguments needed to evaluate the variational objective
 function.
 """
-type ElboArgs{NumType <: Number}
+type ElboArgs
     # the overall number of sources: we don't necessarily visit them
     # all or optimize them all, but if we do visit a pixel where any
     # of these are active, we use it in the elbo calculation
     S::Int64
+
+    # number of active sources (see below)
+    Sa::Int64
 
     # the number of images
     N::Int64
@@ -188,7 +191,6 @@ type ElboArgs{NumType <: Number}
     # The number of components in the point spread function.
     psf_K::Int64
     images::Vector{Image}
-    vp::VariationalParams{NumType}
 
     # subimages is a better name for patches: regions of an image
     # around a particular light source
@@ -208,25 +210,24 @@ type ElboArgs{NumType <: Number}
     # If true, only render star parameters for active sources.
     active_source_star_only::Bool
 
-    elbo_vars::ElboIntermediateVariables{NumType}
+    # If false, elbo = elbo_likelihood
+    include_kl::Bool
 end
 
 
-function ElboArgs{NumType <: Number}(
+function ElboArgs(
             images::Vector{Image},
-            vp::VariationalParams{NumType},
             patches::Matrix{SkyPatch},
             active_sources::Vector{Int};
             psf_K::Int=2,
             num_allowed_sd::Float64=Inf,
-            calculate_gradient=true,
-            calculate_hessian=true)
+            include_kl=true)
+    S = size(patches, 1)
+    Sa = length(active_sources)
     N = length(images)
-    S = length(vp)
 
-    @assert psf_K > 0
-    @assert size(patches, 1) == S
     @assert size(patches, 2) == N
+    @assert psf_K > 0
 
     for img in images, ep in img.epsilon_mat
         if ep <= 0.0
@@ -238,41 +239,7 @@ function ElboArgs{NumType <: Number}(
 
     @assert(length(active_sources) <= 5 || !calculate_hessian,
             "too many active_sources to store a hessian")
-    @assert(all([all(isfinite, vs) for vs in vp]),
-            "VariationalParameters contains NaNs or Infs")
 
-    elbo_vars = ElboIntermediateVariables(NumType,
-                                          psf_K,
-                                          S,
-                                          length(active_sources);
-                                          calculate_gradient=calculate_gradient,
-                                          calculate_hessian=calculate_hessian)
-    ElboArgs(S, N, psf_K, images, vp, patches,
-             active_sources, num_allowed_sd, false, elbo_vars)
-end
-
-
-function convert(::Type{ElboArgs{Dual{1, Float64}}}, ea::ElboArgs{Float64})
-    T = Dual{1, Float64}
-    P = length(CanonicalParams)
-    vp = Vector{T}[zeros(T, P) for s=1:ea.S]
-    for s in 1:ea.S
-        vp[s][:] = ea.vp[s]
-    end
-    ElboArgs(ea.images, vp, ea.patches, ea.active_sources,
-             psf_K=ea.psf_K,
-             num_allowed_sd=ea.num_allowed_sd,
-             calculate_gradient=ea.elbo_vars.elbo.has_gradient,
-             calculate_hessian=ea.elbo_vars.elbo.has_hessian)
-end
-
-
-function ElboArgs{NumType <: Number}(ea::ElboArgs{NumType};
-                                     calculate_gradient=true,
-                                     calculate_hessian=true)
-    ElboArgs(ea.images, ea.vp, ea.patches, ea.active_sources,
-             psf_K=ea.psf_K,
-             num_allowed_sd=ea.num_allowed_sd,
-             calculate_gradient=calculate_gradient,
-             calculate_hessian=calculate_hessian)
+    ElboArgs(S, Sa, N, psf_K, images, patches,
+             active_sources, num_allowed_sd, false, include_kl)
 end

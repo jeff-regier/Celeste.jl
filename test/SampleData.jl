@@ -40,14 +40,13 @@ function make_elbo_args(images::Vector{Image},
                         catalog::Vector{CatalogEntry};
                         active_source=-1,
                         patch_radius_pix::Float64=NaN)
-    vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
     patches = Infer.get_sky_patches(images,
                                     catalog,
                                     radius_override_pix=patch_radius_pix)
     S = length(catalog)
     active_sources = active_source > 0 ? [active_source] :
                                           S <= 3 ? collect(1:S) : [1,2,3]
-    ElboArgs(images, vp, patches, active_sources)
+    ElboArgs(images, patches, active_sources)
 end
 
 
@@ -202,8 +201,9 @@ function sample_ce(pos, is_star::Bool)
 end
 
 
-function perturb_params(ea) # for testing derivatives != 0
-    for vs in ea.vp
+# for testing away from the truth, where derivatives != 0
+function perturb_params(vp)
+    for vs in vp
         vs[ids.a] = [ 0.4, 0.6 ]
         vs[ids.u[1]] += .8
         vs[ids.u[2]] -= .7
@@ -226,13 +226,16 @@ function gen_sample_star_dataset(; perturb=true)
         images0[b].H, images0[b].W = 20, 23
         images0[b].wcs = wcs_id
     end
-    one_body = [sample_ce([10.1, 12.2], true),]
-    images = Synthetic.gen_blob(images0, one_body)
-    ea = make_elbo_args(images, one_body)
+    catalog = [sample_ce([10.1, 12.2], true),]
+    images = Synthetic.gen_blob(images0, catalog)
+    ea = make_elbo_args(images, catalog)
+
+    vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
     if perturb
-        perturb_params(ea)
+        perturb_params(vp)
     end
-    images, ea, one_body
+
+    ea, vp, catalog
 end
 
 
@@ -243,13 +246,16 @@ function gen_sample_galaxy_dataset(; perturb=true)
         images0[b].H, images0[b].W = 20, 23
         images0[b].wcs = wcs_id
     end
-    one_body = [sample_ce([8.5, 9.6], false),]
-    images = Synthetic.gen_blob(images0, one_body)
-    ea = make_elbo_args(images, one_body)
+    catalog = [sample_ce([8.5, 9.6], false),]
+    images = Synthetic.gen_blob(images0, catalog)
+    ea = make_elbo_args(images, catalog)
+
+    vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
     if perturb
-        perturb_params(ea)
+        perturb_params(vp)
     end
-    images, ea, one_body
+
+    ea, vp, catalog
 end
 
 function gen_two_body_dataset(; perturb=true)
@@ -262,16 +268,19 @@ function gen_two_body_dataset(; perturb=true)
         images0[b].H, images0[b].W = 20, 23
         images0[b].wcs = wcs_id
     end
-    two_bodies = [
+    catalog = [
         sample_ce([4.5, 3.6], false),
         sample_ce([10.1, 12.1], true)
     ]
-    images = Synthetic.gen_blob(images0, two_bodies)
-    ea = make_elbo_args(images, two_bodies)
+    images = Synthetic.gen_blob(images0, catalog)
+    ea = make_elbo_args(images, catalog)
+
+    vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
     if perturb
-        perturb_params(ea)
+        perturb_params(vp)
     end
-    images, ea, two_bodies
+
+    ea, vp, catalog
 end
 
 
@@ -283,17 +292,20 @@ function gen_three_body_dataset(; perturb=true)
         images0[b].H, images0[b].W = 112, 238
         images0[b].wcs = wcs_id
     end
-    three_bodies = [
+    catalog = [
         sample_ce([4.5, 3.6], false),
         sample_ce([60.1, 82.2], true),
         sample_ce([71.3, 100.4], false),
     ];
-    images = Synthetic.gen_blob(images0, three_bodies);
-    ea = make_elbo_args(images, three_bodies);
+    images = Synthetic.gen_blob(images0, catalog);
+    ea = make_elbo_args(images, catalog);
+
+    vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
     if perturb
-        perturb_params(ea)
+        perturb_params(vp)
     end
-    images, ea, three_bodies
+
+    ea, vp, catalog
 end
 
 
@@ -302,51 +314,55 @@ Generate a large dataset with S randomly placed bodies and non-constant
 background.
 """
 function gen_n_body_dataset(
-    S::Int; patch_pixel_radius=20., seed=NaN)
+        S::Int; patch_pixel_radius=20., seed=NaN, perturb=true)
+    if !isnan(seed)
+        srand(seed)
+    end
 
-  if !isnan(seed)
-    srand(seed)
-  end
+    images0 = load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf");
+    img_size_h = 900
+    img_size_w = 1000
+    for b in 1:5
+        images0[b].H, images0[b].W = img_size_h, img_size_w
+    end
 
-  images0 = load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf");
-  img_size_h = 900
-  img_size_w = 1000
-  for b in 1:5
-      images0[b].H, images0[b].W = img_size_h, img_size_w
-  end
+    fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
 
-  fluxes = [4.451805E+03,1.491065E+03,2.264545E+03,2.027004E+03,1.846822E+04]
+    locations = rand(2, S) .* [img_size_h, img_size_w]
+    world_locations = WCS.pix_to_world(images0[3].wcs, locations)
 
-  locations = rand(2, S) .* [img_size_h, img_size_w]
-  world_locations = WCS.pix_to_world(images0[3].wcs, locations)
+    catalog = CatalogEntry[CatalogEntry(world_locations[:, s], true,
+            fluxes, fluxes, 0.1, .7, pi/4, 4., string(s), s) for s in 1:S];
 
-  S_bodies = CatalogEntry[CatalogEntry(world_locations[:, s], true,
-      fluxes, fluxes, 0.1, .7, pi/4, 4., string(s), s) for s in 1:S];
+    images = Synthetic.gen_blob(images0, catalog);
 
-  images = Synthetic.gen_blob(images0, S_bodies);
+    # Make non-constant background.
+    for b=1:5
+        images[b].iota_vec = fill(images[b].iota_vec[1], images[b].H)
+        images[b].epsilon_mat = fill(images[b].epsilon_mat[1], images[b].H, images[b].W)
+    end
 
-  # Make non-constant background.
-  for b=1:5
-    images[b].iota_vec = fill(images[b].iota_vec[1], images[b].H)
-    images[b].epsilon_mat = fill(images[b].epsilon_mat[1], images[b].H, images[b].W)
-  end
+    ea = make_elbo_args(
+        images, catalog, patch_radius_pix=patch_pixel_radius)
 
-  ea = make_elbo_args(
-    images, S_bodies, patch_radius_pix=patch_pixel_radius)
+    vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
+    if perturb
+        perturb_params(vp)
+    end
 
-  images, ea, S_bodies
+    ea, vp, catalog
 end
 
 
 function true_star_init()
-    images, ea, body = gen_sample_star_dataset(perturb=false)
+    ea, vp, catalog = gen_sample_star_dataset(perturb=false)
 
-    ea.vp[1][ids.a] = [ 1.0 - 1e-4, 1e-4 ]
-    ea.vp[1][ids.r2] = 1e-4
-    ea.vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * ea.vp[1][ids.r2]
-    #ea.vp[1][ids.r1] = sample_star_fluxes[3] ./ ea.vp[1][ids.r2]
-    ea.vp[1][ids.c2] = 1e-4
-    images, ea, body
+    vp[1][ids.a] = [ 1.0 - 1e-4, 1e-4 ]
+    vp[1][ids.r2] = 1e-4
+    vp[1][ids.r1] = log(sample_star_fluxes[3]) - 0.5 * vp[1][ids.r2]
+    vp[1][ids.c2] = 1e-4
+
+    ea, vp, catalog
 end
 
 

@@ -50,14 +50,14 @@ end
 function test_parameter_conversion()
     blob, ea, body = gen_three_body_dataset();
 
-    transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
+    transform = get_mp_transform(vp, ea.active_sources, loc_width=1.0);
 
     function check_transform(transform::DataTransform, ea::ElboArgs)
-        original_vp = deepcopy(ea.vp);
+        original_vp = deepcopy(vp);
         ea_check = deepcopy(ea);
 
         # Check that the constrain and unconstrain operations undo each other.
-        vp_free = Transform.from_vp(transform, ea.vp)
+        vp_free = Transform.from_vp(transform, vp)
         Transform.to_vp!(transform, vp_free, ea_check.vp)
 
         for id in fieldnames(tids), s in 1:ea.S
@@ -68,7 +68,7 @@ function test_parameter_conversion()
         # Check conversion to and from a vector.
         omitted_ids = Vector{Int}(0)
         kept_ids = setdiff(1:length(Transform.UnconstrainedParams), omitted_ids)
-        vp = deepcopy(ea.vp)
+        vp = deepcopy(vp)
         x = Transform.vp_to_array(transform, vp, omitted_ids)
         @test length(x) == length(vp_free[1]) * length(ea.active_sources)
 
@@ -82,7 +82,7 @@ function test_parameter_conversion()
 
     end
 
-    transform = get_mp_transform(ea.vp, ea.active_sources, loc_width=1.0);
+    transform = get_mp_transform(vp, ea.active_sources, loc_width=1.0);
     check_transform(transform, ea)
 
     # Test transforming only active sources.
@@ -198,16 +198,16 @@ function test_enforce_bounds()
   transform = get_mp_transform(ea_original.vp, ea_original.active_sources);
 
   ea = deepcopy(ea_original);
-  ea.vp[1][tids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
-  ea.vp[2][tids.r1[1]] = transform.bounds[2][:r1][1].lb - 1.0
-  ea.vp[2][tids.r1[2]] = transform.bounds[2][:r1][1].ub + 1.0
-  ea.vp[3][tids.k[1, 1]] = transform.bounds[3][:k][1].lb - 0.00001
+  vp[1][tids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
+  vp[2][tids.r1[1]] = transform.bounds[2][:r1][1].lb - 1.0
+  vp[2][tids.r1[2]] = transform.bounds[2][:r1][1].ub + 1.0
+  vp[3][tids.k[1, 1]] = transform.bounds[3][:k][1].lb - 0.00001
 
-  @test_throws AssertionError Transform.from_vp(transform, ea.vp)
-  Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)
+  @test_throws AssertionError Transform.from_vp(transform, vp)
+  Transform.enforce_bounds!(vp, ea.active_sources, transform)
 
   # Check that it now works and all values are finite.
-  x_trans = Transform.from_vp(transform, ea.vp)
+  x_trans = Transform.from_vp(transform, vp)
   for s = 1:ea.S
       @test !any(Bool[ isinf(x) for x in x_trans[1] ])
   end
@@ -217,30 +217,30 @@ function test_enforce_bounds()
   # doesn't violate the minimization constraints
   ea = deepcopy(ea_original);
   constraint = transform.bounds[1][:a][1]
-  ea.vp[1][tids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
-  ea.vp[1][tids.a[2, 1]] = 100
-  @test_throws AssertionError Transform.from_vp(transform, ea.vp)
-  Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)
+  vp[1][tids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
+  vp[1][tids.a[2, 1]] = 100
+  @test_throws AssertionError Transform.from_vp(transform, vp)
+  Transform.enforce_bounds!(vp, ea.active_sources, transform)
   # Check that it runs without an error now
-  Transform.from_vp(transform, ea.vp)
+  Transform.from_vp(transform, vp)
 
 
   # Test with only one active source.
   ea = deepcopy(ea_original);
   sa = 2
   ea.active_sources = [sa]
-  transform = get_mp_transform(ea.vp, ea.active_sources);
+  transform = get_mp_transform(vp, ea.active_sources);
 
-  ea.vp[sa][tids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
-  ea.vp[sa][tids.r1[1]] = transform.bounds[1][:r1][1].lb - 1.0
-  ea.vp[sa][tids.r1[2]] = transform.bounds[1][:r1][1].ub + 1.0
-  ea.vp[sa][tids.k[1, 1]] = transform.bounds[1][:k][1].lb - 0.00001
+  vp[sa][tids.a[1, 1]] = transform.bounds[1][:a][1].lb - 0.00001
+  vp[sa][tids.r1[1]] = transform.bounds[1][:r1][1].lb - 1.0
+  vp[sa][tids.r1[2]] = transform.bounds[1][:r1][1].ub + 1.0
+  vp[sa][tids.k[1, 1]] = transform.bounds[1][:k][1].lb - 0.00001
 
-  @test_throws AssertionError Transform.from_vp(transform, ea.vp)
-  Transform.enforce_bounds!(ea.vp, ea.active_sources, transform)
+  @test_throws AssertionError Transform.from_vp(transform, vp)
+  Transform.enforce_bounds!(vp, ea.active_sources, transform)
 
   # Check that it now works and all values are finite.
-  x_trans = Transform.from_vp(transform, ea.vp)
+  x_trans = Transform.from_vp(transform, vp)
   for s = 1:ea.S
       @test !any(Bool[ isinf(x) for x in x_trans[1] ])
   end

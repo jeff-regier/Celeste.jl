@@ -4,7 +4,7 @@ import Celeste.Infer
 import Celeste.ParallelRun: infer_init, one_node_infer, BoundingBox,
     one_node_joint_infer, one_node_single_infer
 import Celeste.SensitiveFloats: SensitiveFloat
-import Celeste.DeterministicVI.NewtonMaximize
+import Celeste.DeterministicVI.ElboMaximize
 
 """
 load_ea_from_source
@@ -32,7 +32,7 @@ function load_ea_from_source(target_source, target_sources, catalog, images, all
           DeterministicVI.catalog_init_source(catalog[x]) for x in ids_local]
 
     # Create elbo args
-    ElboArgs(images, vp, patches, [1])
+    ElboArgs(images, patches, [1])
 end
 
 """
@@ -45,9 +45,9 @@ function compute_unconstrained_gradient(target_source, target_sources, catalog, 
 
     # Evaluate in constrained space and then unconstrain (taken from the old maximize_elbo.jl code)
     last_sf::SensitiveFloat{Float64} = SensitiveFloats.SensitiveFloat{Float64}(length(UnconstrainedParams), 1, true, true)
-    transform = DeterministicVI.get_mp_transform(ea.vp, ea.active_sources)
+    transform = DeterministicVI.get_mp_transform(vp, ea.active_sources)
     f_res = DeterministicVI.elbo(ea)
-    Transform.transform_sensitive_float!(transform, last_sf, f_res, ea.vp, ea.active_sources)
+    Transform.transform_sensitive_float!(transform, last_sf, f_res, vp, ea.active_sources)
     last_sf.d
 end
 
@@ -125,7 +125,7 @@ function compute_obj_value(results,
     # active_sources = target_sources
     active_sources = collect(1:length(target_sources))
 
-    ea = ElboArgs(images, vp, patches, active_sources,
+    ea = ElboArgs(images, patches, active_sources,
                   calculate_gradient=false, calculate_hessian=false)
     DeterministicVI.elbo(ea).v[]
 end

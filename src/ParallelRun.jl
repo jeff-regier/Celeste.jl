@@ -163,7 +163,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
             images = SDSSIO.load_field_images(rcfs, stagedir)
             timing.read_img = toq()
         catch ex
-            Log.error(string(ex))
+            Log.exception(ex)
         end
 
         tic()
@@ -250,7 +250,7 @@ function one_node_single_infer(config::Configs.Config,
                 unlock(results_lock)
             catch ex
                 if is_production_run || nthreads() > 1
-                    Log.error(string(ex))
+                    Log.exception(ex)
                 else
                     rethrow(ex)
                 end

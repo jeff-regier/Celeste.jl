@@ -22,7 +22,8 @@ import ForwardDiff.Dual
 using StaticArrays
 import Base.convert
 
-export ElboArgs, generic_init_source, catalog_init_source, init_sources
+export ElboArgs, generic_init_source, catalog_init_source, init_sources,
+       VariationalParams, elbo
 
 
 """
@@ -99,7 +100,7 @@ include("deterministic_vi/elbo_args.jl")
 include("deterministic_vi/elbo_kl.jl")
 include("deterministic_vi/source_brightness.jl")
 include("deterministic_vi/elbo_objective.jl")
-include("deterministic_vi/NewtonMaximize.jl")
+include("deterministic_vi/ElboMaximize.jl")
 
 
 """
@@ -129,8 +130,8 @@ function infer_source(config::Configs.Config,
     patches = Infer.get_sky_patches(images, cat_local)
     Infer.load_active_pixels!(config, images, patches)
 
-    ea = ElboArgs(images, vp, patches, [1])
-    f_evals, max_f, max_x, nm_result = NewtonMaximize.maximize!(elbo, ea)
+    ea = ElboArgs(images, patches, [1])
+    f_evals, max_f, max_x, nm_result = ElboMaximize.maximize!(ea, vp)
     return vp[1]
 end
 

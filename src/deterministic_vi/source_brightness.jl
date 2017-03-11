@@ -209,27 +209,6 @@ end
 
 
 """
-A convenience function for getting only the brightness parameters
-from model parameters.
-
-Args:
-  ea: Model parameters
-
-Returns:
-  An array of E_l_a and E_ll_a for each source.
-"""
-function get_brightness{NumType <: Number}(ea::ElboArgs{NumType})
-    brightness = [SourceBrightness(ea.vp[s]) for s in ea.S]
-    brightness_vals = [ Float64[b.E_l_a[i, j].v[] for
-        i=1:size(b.E_l_a, 1), j=1:size(b.E_l_a, 2)] for b in brightness]
-    brightness_squares = [ Float64[b.E_l_a[i, j].v[] for
-        i=1:size(b.E_ll_a, 1), j=1:size(b.E_ll_a, 2)] for b in brightness]
-
-    brightness_vals, brightness_squares
-end
-
-
-"""
 Load the source brightnesses for these model params.  Each SourceBrightness
 object has information for all bands and object types.
 
@@ -238,7 +217,8 @@ Returns:
     sources in ea.active_sources will have derivative information.
 """
 function load_source_brightnesses{NumType <: Number}(
-                    ea::ElboArgs{NumType};
+                    ea::ElboArgs,
+                    vp::VariationalParams{NumType};
                     calculate_gradient::Bool=true,
                     calculate_hessian::Bool=true)
     sbs = Vector{SourceBrightness{NumType}}(ea.S)
@@ -246,7 +226,7 @@ function load_source_brightnesses{NumType <: Number}(
     for s in 1:ea.S
         this_deriv = (s in ea.active_sources) && calculate_gradient
         this_hess = (s in ea.active_sources) && calculate_hessian
-        sbs[s] = SourceBrightness(ea.vp[s];
+        sbs[s] = SourceBrightness(vp[s];
                                   calculate_gradient=this_deriv,
                                   calculate_hessian=this_hess)
     end

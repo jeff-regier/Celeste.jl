@@ -52,7 +52,7 @@ end
 
 
 function test_load_active_pixels()
-    images, ea, one_body = gen_sample_star_dataset()
+    ea, vp, catalog = gen_sample_star_dataset()
 
     # these images have 20 * 23 * 5 = 2300 pixels in total.
     # the star is bright but it doesn't cover the whole image.
@@ -91,7 +91,7 @@ function test_load_active_pixels()
     @test num_active_photons > 0.9 * total_photons
 
     # super dim images
-    for img in images
+    for img in ea.images
         img.pixels[:,:] = img.epsilon_mat[:,:]
     end
 
@@ -109,11 +109,11 @@ end
 
 
 function test_patch_pixel_selection()
-    images, ea, two_body = gen_two_body_dataset();
-    patches = Infer.get_sky_patches(images, two_body; radius_override_pix=5);
+    ea, vp, catalog = gen_two_body_dataset();
+    patches = Infer.get_sky_patches(ea.images, catalog; radius_override_pix=5);
     config = Configs.Config()
     config.min_radius_pix = 5
-    Infer.load_active_pixels!(config, images, patches, noise_fraction=Inf)
+    Infer.load_active_pixels!(config, ea.images, patches, noise_fraction=Inf)
 
     for n in 1:ea.N
         # Make sure, for testing purposes, that the whole bitmap isn't full.
@@ -123,8 +123,8 @@ function test_patch_pixel_selection()
         end
 
         function patch_in_whole_image(p::SkyPatch)
-            patch_image = zeros(size(images[n].pixels))
-            for h in 1:images[n].H, w in 1:images[n].W
+            patch_image = zeros(size(ea.images[n].pixels))
+            for h in 1:ea.images[n].H, w in 1:ea.images[n].W
                 if Infer.is_pixel_in_patch(h, w, p)
                     patch_image[h, w] += 1
                 end

@@ -162,7 +162,7 @@ ntputs(nodeid, tid, "source $ts of $(length(cbox.sources))")
                     unlock(cbox.lock)
                 catch ex
                     if is_production_run || nthreads() > 1
-                        Log.error(string(ex))
+                        Log.exception(ex)
                     else
                         rethrow(ex)
                     end
