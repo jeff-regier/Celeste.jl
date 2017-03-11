@@ -41,7 +41,7 @@ cd(galsim_benchmark_dir)
 run(`make fetch`)
 cd(wd)
 
-# Check whether to run time-consuming derivatives tests.
+# Check whether to run time-consuming tests.
 long_running_flag = "--long-running"
 test_long_running = long_running_flag in ARGS
 test_files = setdiff(ARGS, [ long_running_flag ])
@@ -64,7 +64,6 @@ else
                  "test_psf.jl",
                  "test_score.jl",
                  "test_sdssio.jl",
-                 "test_transforms.jl",
                  "test_wcs.jl",
                 ]
 end

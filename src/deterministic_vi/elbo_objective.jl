@@ -390,7 +390,7 @@ function add_pixel_term!{NumType <: Number}(
                     n::Int, h::Int, w::Int,
                     star_mcs::Array{BvnComponent{NumType}, 2},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    sbs::Vector{SourceBrightness{NumType}};
+                    sbs::Vector{SourceBrightness{NumType}},
                     elbo_vars = ElboIntermediateVariables(NumType, ea.psf_K, ea.S, ea.Sa, true, false))
     img = ea.images[n]
 
@@ -515,8 +515,7 @@ function elbo_likelihood{NumType <: Number}(
                 # Note that although we are iterating over pixels within a
                 # single patch, add_pixel_term /also/ iterates over patches to
                 # find all patches that overlap with this pixel.
-                add_pixel_term!(ea, vp, n, h, w, star_mcs, gal_mcs, sbs;
-                                elbo_vars=elbo_vars)
+                add_pixel_term!(ea, vp, n, h, w, star_mcs, gal_mcs, sbs, elbo_vars)
             end
         end
     end
