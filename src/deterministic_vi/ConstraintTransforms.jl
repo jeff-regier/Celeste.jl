@@ -3,6 +3,7 @@ module ConstraintTransforms
 using ..Model
 using ..SensitiveFloats
 using ..DeterministicVI: VariationalParams
+using StaticArrays
 using Compat
 
 ####################
@@ -359,22 +360,28 @@ end
 using ForwardDiff
 using ForwardDiff: Dual, jacobian!, JacobianConfig
 
+const NUM_ELBO_BOUND_PARAMS = length(CanonicalParams)
+const NUM_ELBO_FREE_PARAMS = begin
+    c = ConstraintBatch(Vector{Float64}[ones(length(CanonicalParams))])
+    free_length(c.boxes[1]) + free_length(c.simplexes[1])
+end
+
 @compat const TransformJacobianConfig{M,N,T} = JacobianConfig{N,T,Tuple{Array{Dual{N,T},M},Vector{Dual{N,T}}}}
 
 immutable TransformDerivatives{N,T}
-    jacobian::Matrix{T}
+    jacobian::SizedMatrix{(NUM_ELBO_BOUND_PARAMS,NUM_ELBO_FREE_PARAMS),T,2}
     hessian::Array{T,3}
     output_dual::Vector{Dual{N,T}}
     inner_cfg::TransformJacobianConfig{1,N,Dual{N,T}}
     outer_cfg::TransformJacobianConfig{2,N,T}
 end
 
-# this is a good chunk size because it divides evenly into `length(CanonicalParams)`
+# this is a good chunk size because it divides evenly into `NUM_ELBO_BOUND_PARAMS`
 const DEFAULT_CHUNK = 11
 
 function TransformDerivatives{T<:Real,N}(output::Vector{T}, input::Vector{T},
                                          ::Type{Val{N}} = Val{DEFAULT_CHUNK})
-    jacobian = zeros(T, length(output), length(input))
+    jacobian = SizedMatrix{(NUM_ELBO_BOUND_PARAMS,NUM_ELBO_FREE_PARAMS)}(zeros(T, length(output), length(input)))
     hessian = zeros(T, length(output), length(input), length(input))
     output_dual = copy!(similar(output, Dual{N,T}), output)
     inner_cfg = JacobianConfig{N}(output_dual, similar(input, Dual{N,T}))
@@ -455,13 +462,13 @@ end
 
 # equivalent to `At_mul_B!(view(C, src, :, src, :), A, view(B, src, :, src, :) * A)`
 # this could be further optimized by assuming the symmetry of `view(B, src, :, src, :)`
-function first_quad_form!(C, A, B, src)
-    m, n = size(A, 1), size(A, 2)
-    for i in 1:n, j in 1:n
+function first_quad_form!{size_tuple}(C, A::SizedArray{size_tuple}, B, src)
+    M, N = size_tuple
+    for i in 1:N, j in 1:N
         x = zero(eltype(C))
-        for k in 1:m
+        for k in 1:M
             y = zero(eltype(C))
-            for l in 1:m
+            for l in 1:M
                 @inbounds y += B[src, k, src, l] * A[l, j]
             end
             @inbounds x += A[k, i] * y
