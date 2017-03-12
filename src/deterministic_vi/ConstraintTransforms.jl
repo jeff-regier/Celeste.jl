@@ -360,6 +360,8 @@ end
 using ForwardDiff
 using ForwardDiff: Dual, jacobian!, JacobianConfig
 
+const NUM_ELBO_BOUND_PARAMS = length(CanonicalParams)
+
 @compat const TransformJacobianConfig{M,N,T} = JacobianConfig{N,T,Tuple{Array{Dual{N,T},M},Vector{Dual{N,T}}}}
 
 immutable TransformDerivatives{N,T}
@@ -457,7 +459,9 @@ end
 # equivalent to `At_mul_B!(view(C, src, :, src, :), A, view(B, src, :, src, :) * A)`
 # this could be further optimized by assuming the symmetry of `view(B, src, :, src, :)`
 function first_quad_form!(C, A, B, src)
-    m, n = size(A, 1), size(A, 2)
+    const m = NUM_ELBO_BOUND_PARAMS
+    @assert m == size(A, 1)
+    n = size(A, 2)
     scratch = Array{Float64, 2}(m, m)
     @aliasscope begin
       for i in 1:m, j in 1:m
@@ -469,8 +473,8 @@ function first_quad_form!(C, A, B, src)
           x = zero(eltype(C))
           for k in 1:m
               y = zero(eltype(C))
-              for l in 1:m
-                  @inbounds y += Const(scratch)[l, k] * Const(A)[l, j]
+              @inbounds for l in 1:m
+                  @fastmath y += Const(scratch)[l, k] * Const(A)[l, j]
               end
               @inbounds x += Const(A)[k, i] * y
           end
