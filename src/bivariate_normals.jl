@@ -1,6 +1,8 @@
 # Defining gal_shape_ids_len might not be needed but it is critical that this is compile time constant
 const gal_shape_ids_len = 3
 
+using Celeste: Const, @aliasscope, @unroll_loop
+
 """
 Unpack a rotation-parameterized BVN covariance matrix.
 
