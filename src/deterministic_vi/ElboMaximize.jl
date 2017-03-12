@@ -64,6 +64,7 @@ end
 
 immutable Objective{N,T} <: Function
     ea::ElboArgs
+    elbo_vars::ElboIntermediateVariables{T}
     previous_x::Vector{T}
     sf_free::SensitiveFloat{T}
     cfg::Config{N,T}
@@ -80,7 +81,8 @@ end
 function Objective(ea::ElboArgs, cfg::Config, x::Vector)
     sf_free = SensitiveFloat{Float64}(length(cfg.free_params[1]), length(cfg.bound_params), true, true)
     previous_x = fill(NaN, length(x))
-    return Objective(ea, previous_x, sf_free, cfg)
+    elbo_vars = ElboIntermediateVariables(Float64, ea.psf_K, ea.S, ea.Sa, true, true)
+    return Objective(ea, elbo_vars, previous_x, sf_free, cfg)
 end
 
 function evaluate!(f::Objective, x::Vector)
@@ -88,7 +90,7 @@ function evaluate!(f::Objective, x::Vector)
         copy!(f.previous_x, x)
         from_vector!(f.cfg.free_params, x)
         to_bound!(f.cfg.bound_params, f.cfg.free_params, f.cfg.constraints)
-        sf_bound = elbo(f.ea, f.cfg.vp)
+        sf_bound = elbo(f.ea, f.cfg.vp, f.elbo_vars)
         propagate_derivatives!(to_bound!, sf_bound, f.sf_free, f.cfg.free_params,
                                f.cfg.constraints, f.cfg.derivs)
     end
@@ -122,7 +124,9 @@ end
 # maximize! #
 #############
 
-function maximize!(ea::ElboArgs, vp::VariationalParams{Float64}, cfg::Config = Config(ea, vp))
+function maximize!(ea::ElboArgs,
+                   vp::VariationalParams{Float64},
+                   cfg::Config = Config(ea, vp))
     enforce!(cfg.bound_params, cfg.constraints)
     to_free!(cfg.free_params, cfg.bound_params, cfg.constraints)
     x = to_vector(cfg.free_params)

@@ -23,7 +23,7 @@ using StaticArrays
 import Base.convert
 
 export ElboArgs, generic_init_source, catalog_init_source, init_sources,
-       VariationalParams, elbo
+       VariationalParams, elbo, ElboIntermediateVariables
 
 
 """
