@@ -9,7 +9,7 @@ import WCS
 import ..Log
 import ..Model: RawPSF, Image, CatalogEntry, eval_psf
 import ..PSF
-import Base.convert
+import Base.convert, Base.getindex
 
 
 # types of things to mask in read_mask().
@@ -79,6 +79,10 @@ function interp_sky_kernel(sky::SkyIntensity, i::Int, j::Int)
 
     (xw0 * yw0 * sky.sky_small[x0, y0] + xw1 * yw0 * sky.sky_small[x1, y0] +
          xw0 * yw1 * sky.sky_small[x0, y1] + xw1 * yw1 * sky.sky_small[x1, y1])
+end
+
+function getindex(sky::SkyIntensity, i::Int, j::Int)
+    interp_sky_kernel(sky, i, j)
 end
 
 
@@ -385,7 +389,6 @@ The photoObj file format is documented here:
 https://data.sdss.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
 """
 function read_photoobj(fname, band::Char='r')
-
     b = BAND_CHAR_TO_NUM[band]
 
     f = FITSIO.FITS(fname)
