@@ -36,52 +36,51 @@ function RunCamcolField(run::String, camcol::String, field::String)
 end
 
 
-"""
-interp_sky(data, xcoords, ycoords)
+immutable SkyIntensity
+    sky_small::Matrix{Float32}
+    sky_x::Vector{Float32}
+    sky_y::Vector{Float32}
+end
 
-Interpolate the 2-d array `data` at the grid of array coordinates spanned
-by the vectors `xcoords` and `ycoords` using bilinear interpolation.
-The output array will have size `(length(xcoords), length(ycoords))`.
+
+"""
+Interpolate the 2-d array `sky_small` at the grid of array coordinates spanned
+by the vectors `sky_x` and `sky_y` using bilinear interpolation.
+The output array will have size `(length(sky_x), length(sky_y))`.
 For example, if `x[1] = 3.3` and `y[2] = 4.7`, the element `out[1, 2]`
 will be a result of linear interpolation between the values
-`data[3:4, 4:5]`.
+`sky_small[3:4, 4:5]`.
 
-For coordinates that are out-of-bounds (e.g., `xcoords[i] < 1.0` or
-`xcoords[i] > size(data,1)` where the interpolation would index data values
-outside the array, the nearest values in the data array are used. (This is
+For coordinates that are out-of-bounds (e.g., `sky_x[i] < 1.0` or
+`sky_x[i] > size(sky_small,1)` where the interpolation would index sky_small values
+outside the array, the nearest values in the sky_small array are used. (This is
 constant extrapolation.)
 """
-function interp_sky{T, S}(data::Array{T, 2}, xcoords::Vector{S},
-                          ycoords::Vector{S})
-    nx, ny = size(data)
-    out = Matrix{T}(length(xcoords), length(ycoords))
-    for j=1:length(ycoords)
-        y0 = floor(Int, ycoords[j])
-        y1 = y0 + 1
-        yw0 = ycoords[j] - y0
-        yw1 = one(S) - yw0
+function interp_sky_kernel(sky::SkyIntensity, i::Int, j::Int)
+    nx, ny = size(sky.sky_small)
 
-        # modify out-of-bounds indicies to 1 or ny
-        y0 = min(max(y0, 1), ny)
-        y1 = min(max(y1, 1), ny)
+    y0 = floor(Int, sky.sky_y[j])
+    y1 = y0 + 1
+    yw0 = sky.sky_y[j] - y0
+    yw1 = 1.0f0 - yw0
 
-        for i=1:length(xcoords)
-            x0 = floor(Int, xcoords[i])
-            x1 = x0 + 1
-            xw0 = xcoords[i] - x0
-            xw1 = one(S) - xw0
+    # modify out-of-bounds indicies to 1 or ny
+    y0 = min(max(y0, 1), ny)
+    y1 = min(max(y1, 1), ny)
 
-            # modify out-of-bounds indicies to 1 or nx
-            x0 = min(max(x0, 1), nx)
-            x1 = min(max(x1, 1), nx)
-            @inbounds out[i, j] = (xw0 * yw0 * data[x0, y0] +
-                                   xw1 * yw0 * data[x1, y0] +
-                                   xw0 * yw1 * data[x0, y1] +
-                                   xw1 * yw1 * data[x1, y1])
-        end
-    end
-    return out
+    x0 = floor(Int, sky.sky_x[i])
+    x1 = x0 + 1
+    xw0 = sky.sky_x[i] - x0
+    xw1 = 1.0f0 - xw0
+
+    # modify out-of-bounds indicies to 1 or nx
+    x0 = min(max(x0, 1), nx)
+    x1 = min(max(x1, 1), nx)
+
+    (xw0 * yw0 * sky.sky_small[x0, y0] + xw1 * yw0 * sky.sky_small[x1, y0] +
+         xw0 * yw1 * sky.sky_small[x0, y1] + xw1 * yw1 * sky.sky_small[x1, y1])
 end
+
 
 """
 read_sky(hdu)
@@ -103,7 +102,7 @@ function read_sky(hdu::FITSIO.TableHDU)
     end
 
     # interpolate to full sky image
-    return interp_sky(sky_small, sky_x, sky_y)
+    return SkyIntensity(sky_small, sky_x, sky_y)
 end
 
 
@@ -130,24 +129,6 @@ function read_frame(fname)
     return image, calibration, sky, wcs
 end
 
-"""
-decalibrate!(image, sky, calibration, gain)
-
-Convert `image` to raw counts. `image` is modified in-place.
-
-Note that result may not be close to integers due to the analog to digital
-conversion process in the instrument.
-"""
-function decalibrate!{T<:Number}(image::Array{T, 2}, sky::Array{T, 2},
-                                 calibration::Vector{T}, gain::Number)
-    @assert size(image) == size(sky)
-    @assert size(image, 1) == length(calibration)
-    for j=1:size(image, 2), i=1:size(image, 1)
-        @inbounds image[i, j] = gain * (image[i, j] / calibration[i] +
-                                        sky[i, j])
-    end
-end
-
 
 """
 read_field_gains(fname, fieldnum)
@@ -156,7 +137,6 @@ Return the image gains for field number `fieldnum` in an SDSS
 \"photoField\" file `fname`.
 """
 function read_field_gains(fname, fieldnum::Integer)
-
     f = FITSIO.FITS(fname)
     fieldnums = read(f[2], "FIELD")::Vector{Int32}
     gains = read(f[2], "GAIN")::Array{Float32, 2}
@@ -224,17 +204,14 @@ function read_mask(fname, mask_planes=DEFAULT_MASK_PLANES)
 end
 
 
-type RawImage
-    H::Int
-    W::Int
+immutable RawImage
+    rcf::RunCamcolField
+    b::Int  # band index
     pixels::Matrix{Float32}
-    b::Int
+    calibration::Vector{Float32}
+    sky::SkyIntensity
     wcs::WCS.WCSTransform
-    run_num::Int
-    camcol_num::Int
-    field_num::Int
-    epsilon_mat::Matrix{Float32}
-    iota_vec::Vector{Float32}
+    gain::Float32
     raw_psf_comp::RawPSF
 end
 
@@ -256,17 +233,13 @@ function load_raw_images(rcf::RunCamcolField, datadir::String)
                         subdir3, rcf.run, rcf.camcol, rcf.field)
     psffile = FITSIO.FITS(psf_name)
 
-    result = Vector{RawImage}(5)
+    raw_images = Vector{RawImage}(5)
 
     for (b, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
-
         # load image data
         frame_name = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
                               subdir3, band, rcf.run, rcf.camcol, rcf.field)
         pixels, calibration, sky, wcs = read_frame(frame_name)
-
-        # scale pixels to raw electron counts
-        decalibrate!(pixels, sky, calibration, gains[band])
 
         # read mask
         mask_name = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
@@ -278,25 +251,16 @@ function load_raw_images(rcf::RunCamcolField, datadir::String)
             pixels[mask_xranges[i], mask_yranges[i]] = NaN
         end
 
-        H, W = size(pixels)
-
         # read the psf
-        sdsspsf = read_psf(psffile, band)
-
-        # For now, use the median noise and sky.  Here,
-        # epsilon * iota needs to be in units comparable to nelec
-        # electron counts.
-        # Note that each are actuall pretty variable.
-        iota_vec = convert(Vector{Float32}, gains[band] ./ calibration)
-        epsilon_mat = convert(Array{Float32, 2}, sky .* calibration)
+        raw_psf_comp = read_psf(psffile, band)
 
         # Set it to use a constant background but include the non-constant data.
-        result[b] = RawImage(H, W, pixels, b, wcs,
-                             rcf.run, rcf.camcol, rcf.field,
-                             epsilon_mat, iota_vec, sdsspsf)
+        raw_images[b] = RawImage(rcf, b,
+                            pixels, calibration, sky, wcs,
+                            gains[band], raw_psf_comp)
     end
 
-    return result
+    return raw_images
 end
 
 
@@ -320,11 +284,25 @@ end
 Converts a raw image to an image by fitting the PSF, a mixture of Gaussians.
 """
 function convert(::Type{Image}, r::RawImage)
-    psfstamp = eval_psf(r.raw_psf_comp, r.H / 2., r.W / 2.)
+    H, W = size(r.pixels)
+
+    psfstamp = eval_psf(r.raw_psf_comp, H / 2., W / 2.)
     celeste_psf = PSF.fit_raw_psf_for_celeste(psfstamp, 2)[1]
-    Image(r.H, r.W, r.pixels, r.b, r.wcs, celeste_psf,
-          r.run_num, r.camcol_num, r.field_num,
-          r.epsilon_mat, r.iota_vec, r.raw_psf_comp)
+
+    # scale pixels to raw electron counts
+    @assert size(r.pixels, 1) == length(r.calibration)
+    epsilon_mat = similar(r.pixels)
+    @inbounds for j=1:size(r.pixels, 2), i=1:size(r.pixels, 1)
+        sky_ij = interp_sky_kernel(r.sky, i, j)
+        r.pixels[i, j] = r.gain * (r.pixels[i, j] / r.calibration[i] + sky_ij)
+        epsilon_mat[i, j] = sky_ij * r.calibration[i]
+    end
+
+    iota_vec = r.gain ./ r.calibration
+
+    Image(H, W, r.pixels, r.b, r.wcs, celeste_psf,
+          r.rcf.run, r.rcf.camcol, r.rcf.field,
+          epsilon_mat, iota_vec, r.raw_psf_comp)
 end
 
 
@@ -346,6 +324,8 @@ function load_field_images(rcfs, stagedir)
         end
     end
 
+    @show Base.summarysize(raw_images)
+    @show Base.summarysize(images)
     return images
 end
 
