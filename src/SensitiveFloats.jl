@@ -237,11 +237,11 @@ function add_sources_sf!{NumType <: Number}(
         @inbounds for s_ind1 in 1:P
             s_all_ind1 = P_shifted + s_ind1
 
-            @inbounds for s_ind2 in 1:s_ind1
+            @inbounds for s_ind2 in 1:P
                 s_all_ind2 = P_shifted + s_ind2
                 sf_all.h[s_all_ind2, s_all_ind1] += sf_s.h[s_ind2, s_ind1]
                 # TODO: move outside the loop?
-                sf_all.h[s_all_ind1, s_all_ind2] = sf_all.h[s_all_ind2, s_all_ind1]
+                # sf_all.h[s_all_ind1, s_all_ind2] = sf_all.h[s_all_ind2, s_all_ind1]
             end
         end
     end
