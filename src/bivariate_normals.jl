@@ -55,9 +55,6 @@ type BivariateNormalDerivatives{NumType <: Number}
   dpy1_dsig::Array{NumType, 1}
   dpy2_dsig::Array{NumType, 1}
 
-  # TODO: delete this, it is now in BvnComponent
-  dsiginv_dsig::Array{NumType, 2}
-
   # Derivatives of a bvn with respect to (u, shape)
   bvn_u_d::Array{NumType, 1}
   bvn_uu_h::SizedMatrix{(2,2), NumType, 2}
@@ -78,7 +75,6 @@ type BivariateNormalDerivatives{NumType <: Number}
 
     dpy1_dsig = zeros(NumType, 3)
     dpy2_dsig = zeros(NumType, 3)
-    dsiginv_dsig = zeros(NumType, 3, 3)
 
     # Derivatives wrt u.
     bvn_u_d = zeros(NumType, 2)
@@ -94,11 +90,29 @@ type BivariateNormalDerivatives{NumType <: Number}
     new{NumType}(py1, py2, f_pre,
         bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
         dpy1_dsig, dpy2_dsig,
-        dsiginv_dsig,
         bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h)
   end
 end
 
+function clear!{T}(bvn_derivs::BivariateNormalDerivatives{T})
+    x = zero(T)
+    fill!(bvn_derivs.py1, x)
+    fill!(bvn_derivs.py2, x)
+    fill!(bvn_derivs.f_pre, x)
+    fill!(bvn_derivs.bvn_x_d, x)
+    fill!(bvn_derivs.bvn_sig_d, x)
+    fill!(bvn_derivs.bvn_xx_h, x)
+    fill!(bvn_derivs.bvn_xsig_h, x)
+    fill!(bvn_derivs.bvn_sigsig_h, x)
+    fill!(bvn_derivs.dpy1_dsig, x)
+    fill!(bvn_derivs.dpy2_dsig, x)
+    fill!(bvn_derivs.bvn_u_d, x)
+    fill!(bvn_derivs.bvn_uu_h, x)
+    fill!(bvn_derivs.bvn_s_d, x)
+    fill!(bvn_derivs.bvn_ss_h, x)
+    fill!(bvn_derivs.bvn_us_h, x)
+    return bvn_derivs
+end
 
 """
 Relevant parameters of a bivariate normal distribution.
@@ -474,13 +488,13 @@ function transform_bvn_derivs_hessian!{NumType <: Number}(
     wcs_jacobian)
   @aliasscope begin
     # Hessian calculations.
-    
+
     bvn_ss_h = bvn_derivs.bvn_ss_h
     bvn_us_h = bvn_derivs.bvn_us_h
     bvn_sig_d = Const(bvn_derivs.bvn_sig_d)
     #wcs_jacobian = Const(wcs_jacobian)
     sig_sf_j = sig_sf.j
-    
+
     # Manually inlined version of fill!
     fast_fill!(bvn_ss_h, 0.0)
     fast_fill!(bvn_us_h, 0.0)
@@ -526,7 +540,7 @@ function transform_bvn_derivs_hessian!{NumType <: Number}(
           end
         end
       end
-    end      
+    end
   end
 end
 
@@ -574,3 +588,16 @@ function transform_bvn_derivs!{NumType <: Number}(
       end
     end
 end
+
+immutable BvnBundle{T<:Real}
+    bvn_derivs::BivariateNormalDerivatives{T}
+    star_mcs::Matrix{BvnComponent{T}}
+    gal_mcs::Array{GalaxyCacheComponent{T},4}
+    function (::Type{BvnBundle{T}}){T}(psf_K::Int, S::Int)
+        return new{T}(BivariateNormalDerivatives{T}(),
+                      Matrix{BvnComponent{T}}(psf_K, S),
+                      Array{GalaxyCacheComponent{T}}(psf_K, 8, 2, S))
+    end
+end
+
+clear!(bvn_bundle::BvnBundle) = (clear!(bvn_bundle.bvn_derivs); bvn_bundle)

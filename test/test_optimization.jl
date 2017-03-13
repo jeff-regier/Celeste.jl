@@ -4,7 +4,7 @@ using Celeste: Model, SensitiveFloats
 using Celeste.DeterministicVI.ConstraintTransforms: ParameterConstraint,
                         ConstraintBatch, BoxConstraint, SimplexConstraint
 using Celeste.DeterministicVI: ElboArgs
-using Celeste.DeterministicVI.ElboMaximize: Config, maximize!, custom_optim_options
+using Celeste.DeterministicVI.ElboMaximize: Config, maximize!, elbo_optim_options
 
 
 function verify_sample_star(vs, pos)
@@ -67,8 +67,7 @@ function test_single_source_optimization()
     ea, vp, catalog = gen_three_body_dataset();
 
     s = 2
-    ea = make_elbo_args(ea.images, catalog, active_source=s);
-    ea.include_kl = false
+    ea = make_elbo_args(ea.images, catalog, active_source=s, include_kl=false);
     vp_original = deepcopy(vp);
 
     cfg = Config(ea, vp; loc_width=1.0)
@@ -83,8 +82,7 @@ end
 
 
 function test_galaxy_optimization()
-    ea, vp, catalog = gen_sample_galaxy_dataset();
-    ea.include_kl = false
+    ea, vp, catalog = gen_sample_galaxy_dataset(; include_kl = false);
     cfg = Config(ea, vp; loc_width=3.0)
     maximize!(ea, vp, cfg)
     verify_sample_galaxy(vp[1], [8.5, 9.6])
@@ -94,7 +92,7 @@ end
 function test_full_elbo_optimization()
     ea, vp, catalog = gen_sample_galaxy_dataset(perturb=true);
     cfg = Config(ea, vp; loc_width=1.0,
-                 optim_options=custom_optim_options(xtol_abs=0.0))
+                 optim_options=elbo_optim_options(xtol_abs=0.0))
     maximize!(ea, vp, cfg)
     verify_sample_galaxy(vp[1], [8.5, 9.6]);
 end

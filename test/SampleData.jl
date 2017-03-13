@@ -39,14 +39,15 @@ that can be used with Celeste.
 function make_elbo_args(images::Vector{Image},
                         catalog::Vector{CatalogEntry};
                         active_source=-1,
-                        patch_radius_pix::Float64=NaN)
+                        patch_radius_pix::Float64=NaN,
+                        include_kl=true)
     patches = Infer.get_sky_patches(images,
                                     catalog,
                                     radius_override_pix=patch_radius_pix)
     S = length(catalog)
     active_sources = active_source > 0 ? [active_source] :
                                           S <= 3 ? collect(1:S) : [1,2,3]
-    ElboArgs(images, patches, active_sources)
+    ElboArgs(images, patches, active_sources; include_kl=include_kl)
 end
 
 
@@ -239,7 +240,7 @@ function gen_sample_star_dataset(; perturb=true)
 end
 
 
-function gen_sample_galaxy_dataset(; perturb=true)
+function gen_sample_galaxy_dataset(; perturb=true, include_kl=true)
     srand(1)
     images0 = load_stamp_blob(dat_dir, "164.4311-39.0359_2kpsf")
     for b in 1:5
@@ -248,7 +249,7 @@ function gen_sample_galaxy_dataset(; perturb=true)
     end
     catalog = [sample_ce([8.5, 9.6], false),]
     images = Synthetic.gen_blob(images0, catalog)
-    ea = make_elbo_args(images, catalog)
+    ea = make_elbo_args(images, catalog; include_kl=include_kl)
 
     vp = Vector{Float64}[DeterministicVI.catalog_init_source(ce) for ce in catalog]
     if perturb
