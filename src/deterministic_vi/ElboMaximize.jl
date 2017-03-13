@@ -53,7 +53,7 @@ function custom_optim_options(; xtol_abs = 1e-7, ftol_rel = 1e-6, max_iters = 50
                          show_trace = false, extended_trace = false)
 end
 
-function custom_trust_region(; initial_delta = 10.0, delta_hat = 1e9)
+function custom_trust_region(; initial_delta = 1.0, delta_hat = 1e9)
     return Optim.NewtonTrustRegion(initial_delta = initial_delta,
                                    delta_hat = delta_hat)
 end
