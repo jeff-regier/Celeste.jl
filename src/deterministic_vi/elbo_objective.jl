@@ -3,18 +3,15 @@ Calculate the contributions of a single source for a single pixel to
 the sensitive floats E_G_s and var_G_s, which are cleared and updated in place.
 
 Args:
-    - elbo_vars: Elbo intermediate values, with updated fs1m and fs0m.
     - ea: Model parameters
-    - E_G_s, var_G_s: The expectatio and variance of the brightnesses of this
-          source at this pixel, updated in place.
-    - fs0m, fs1m: The star and galaxy shape parameters for this source at
-          this pixel.
+    - vp: the variational parameters
+    - elbo_vars: Elbo intermediate values, with updated fs1m and fs0m.
     - sb: Source brightnesse
     - s: The source, in 1:ea.S
     - b: The band
 
 Returns:
-    Updates E_G_s and var_G_s in place with the brightness
+    Updates E_G_s, E_G2_s, and var_G_s in place with the brightness
     for this source at this pixel.
 """
 function calculate_G_s!{NumType <: Number}(
@@ -28,16 +25,19 @@ function calculate_G_s!{NumType <: Number}(
     E_G_s = elbo_vars.E_G_s
     E_G2_s = elbo_vars.E_G2_s
     var_G_s = elbo_vars.var_G_s
-    fs0m = elbo_vars.fs0m
-    fs1m = elbo_vars.fs1m
 
     @assert E_G_s.local_P == var_G_s.local_P == length(CanonicalParams)
     @assert E_G_s.local_S == var_G_s.local_S == 1
-    @assert fs0m.local_P == length(StarPosParams)
-    @assert fs1m.local_P == length(GalaxyPosParams)
+    @assert elbo_vars.fs0m.local_P == length(StarPosParams)
+    @assert elbo_vars.fs1m.local_P == length(GalaxyPosParams)
+
+    # we'd like to get rid of these calls to `fill!`
+    clear!(E_G_s)
+    clear!(E_G2_s)
+    clear!(var_G_s)
 
     @inbounds for i in 1:Ia # Celestial object types (e.g. stars and galaxies)
-        fsm_i = (i == 1) ? fs0m : fs1m
+        fsm_i = (i == 1) ? elbo_vars.fs0m : elbo_vars.fs1m
         a_i = vp[s][ids.a[i]]
         sb_E_l_a_b_i = sb.E_l_a[b, i]
         sb_E_ll_a_b_i = sb.E_ll_a[b, i]
@@ -58,20 +58,12 @@ function calculate_G_s!{NumType <: Number}(
         lf = sb_E_l_a_b_i_v * fsm_i_v
         llff = sb_E_ll_a_b_i_v * fsm_i_v^2
 
-        if i == 1
-            E_G_s.v[] = 0.0
-            E_G2_s.v[] = 0.0
-        end
         E_G_s.v[] += a_i * lf
         E_G2_s.v[] += a_i * llff
 
         ############ Only gradient and hessian code below ##############
         (is_active_source && elbo_vars.elbo.has_gradient) || continue
 
-        if i == 1
-            E_G_s_d[ids.a[i], 1] = 0.0
-            E_G2_s_d[ids.a[i], 1] = 0.0
-        end
         E_G_s_d[ids.a[i], 1] += lf
         E_G2_s_d[ids.a[i], 1] += llff
 
@@ -83,23 +75,15 @@ function calculate_G_s!{NumType <: Number}(
         tmp1 = sb_E_l_a_b_i_v * a_i
         tmp2 = sb_E_ll_a_b_i_v * 2 * fsm_i_v * a_i
         for p0_shape_ind in 1:length(p0_shape)
-            if i == 1
-                E_G_s_d[p0_shape[p0_shape_ind], 1] = 0.0
-                E_G2_s_d[p0_shape[p0_shape_ind], 1] = 0.0
-            end
             E_G_s_d[p0_shape[p0_shape_ind], 1] += tmp1 * fsm_i_d[p0_shape_ind, 1]
             E_G2_s_d[p0_shape[p0_shape_ind], 1] += tmp2 * fsm_i_d[p0_shape_ind, 1]
         end
 
         # Derivatives with respect to the brightness parameters.
         for p0_bright_ind in 1:length(p0_bright)
-            if i == 1
-                E_G_s_d[p0_bright[p0_bright_ind], 1] = 0.0
-                E_G2_s_d[p0_bright[p0_bright_ind], 1] = 0.0
-            end
-            E_G_s_d[p0_bright[p0_bright_ind], 1] +=
+            E_G_s_d[p0_bright[p0_bright_ind], 1] =
                 a_i * fsm_i_v * sb_E_l_a_b_i_d[p0_bright_ind, 1]
-            E_G2_s_d[p0_bright[p0_bright_ind], 1] +=
+            E_G2_s_d[p0_bright[p0_bright_ind], 1] =
                 a_i * (fsm_i_v^2) * sb_E_ll_a_b_i_d[p0_bright_ind, 1]
         end
 
@@ -199,12 +183,6 @@ function calculate_G_s!{NumType <: Number}(
         #     E_G2_u_u_hess += elbo_vars.E_G2_s_hsub_vec[i].u_u
         # end
         # For each value in 1:Ia, written this way for speed.
-
-        if i == 1
-            fill!(elbo_vars.E_G_s.h, 0.0)
-            fill!(elbo_vars.E_G2_s.h, 0.0)
-        end
-
         for u_ind1 = 1:2, u_ind2 = 1:2
             elbo_vars.E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
                 elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
@@ -219,14 +197,7 @@ function calculate_G_s!{NumType <: Number}(
     ####################################################
     #### the code below loads var_G_s ##################
 
-    var_G_s = elbo_vars.var_G_s
-
-    clear!(var_G_s)
-
-    E_G_s_v = elbo_vars.E_G_s.v[]
-    E_G2_s_v = elbo_vars.E_G2_s.v[]
-
-    elbo_vars.var_G_s.v[] = E_G2_s_v - (E_G_s_v ^ 2)
+    var_G_s.v[] = E_G2_s.v[] - (E_G_s.v[] ^ 2)
 
     ############### only gradient and hessian code below
     (is_active_source && elbo_vars.elbo.has_gradient) || return
@@ -238,7 +209,7 @@ function calculate_G_s!{NumType <: Number}(
     @assert length(var_G_s_d) == length(E_G2_s_d) == length(E_G_s_d)
 
     @inbounds for ind1 = 1:length(var_G_s_d)
-        var_G_s_d[ind1] = E_G2_s_d[ind1] - 2 * E_G_s_v * E_G_s_d[ind1]
+        var_G_s_d[ind1] = E_G2_s_d[ind1] - 2 * E_G_s.v[] * E_G_s_d[ind1]
     end
 
     ########## only hessian code below
@@ -251,7 +222,7 @@ function calculate_G_s!{NumType <: Number}(
     @inbounds for ind2 = 1:p2, ind1 = 1:ind2
         var_G_s_h[ind1, ind2] =
             E_G2_s_h[ind1, ind2] - 2 * (
-                E_G_s_v * E_G_s_h[ind1, ind2] +
+                E_G_s.v[] * E_G_s_h[ind1, ind2] +
                 E_G_s_d[ind1, 1] * E_G_s_d[ind2, 1])
         var_G_s_h[ind2, ind1] = var_G_s_h[ind1, ind2]
     end

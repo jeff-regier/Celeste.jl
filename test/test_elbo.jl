@@ -59,7 +59,7 @@ end
     @test util_22 ≈ manual_22
 end
 
-#=
+
 @testset "test active sources" begin
     # Test that the derivatives of the expected brightnesses partition in
     # active_sources.
@@ -125,7 +125,6 @@ end
     @test elbo_lik_12.h[1:P, 1:P] ≈ elbo_lik_1.h
     @test elbo_lik_12.h[(1:P) + P, (1:P) + P] ≈ elbo_lik_2.h
 end
-=#
 
 @testset "star truth is most likely" begin
     ea, vp, catalog = true_star_init()
