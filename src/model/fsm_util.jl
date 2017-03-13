@@ -113,22 +113,17 @@ function populate_gal_fsm!{NumType <: Number}(
                     x::SVector{2,Float64},
                     is_active_source::Bool,
                     wcs_jacobian::Matrix{Float64},
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    num_allowed_sd=Inf)
+                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
     clear!(fs1m)
     for i = 1:2 # Galaxy types
         for j in 1:8 # Galaxy component
             # If i == 2 then there are only six galaxy components.
             if (i == 1) || (j <= 6)
                 for k = 1:size(gal_mcs, 1) # PSF component
-                    if (num_allowed_sd == Inf ||
-                        check_point_close_to_bvn(
-                            gal_mcs[k, j, i, s].bmc, x, num_allowed_sd))
-                        accum_galaxy_pos!(
-                            bvn_derivs, fs1m,
-                            gal_mcs[k, j, i, s], x, wcs_jacobian,
-                            is_active_source)
-                    end
+                    accum_galaxy_pos!(
+                        bvn_derivs, fs1m,
+                        gal_mcs[k, j, i, s], x, wcs_jacobian,
+                        is_active_source)
                 end
             end
         end
@@ -151,22 +146,17 @@ function populate_fsm!{NumType <: Number}(
                     is_active_source::Bool,
                     wcs_jacobian::Matrix{Float64},
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
-                    star_mcs::Array{BvnComponent{NumType}, 2},
-                    num_allowed_sd=Inf)
+                    star_mcs::Array{BvnComponent{NumType}, 2})
     clear!(fs0m)
     for k = 1:size(star_mcs, 1) # PSF component
-        if (num_allowed_sd == Inf ||
-            check_point_close_to_bvn(star_mcs[k, s], x, num_allowed_sd))
-            accum_star_pos!(
-                bvn_derivs, fs0m,
-                star_mcs[k, s], x, wcs_jacobian, is_active_source)
-        end
+        accum_star_pos!(
+            bvn_derivs, fs0m,
+            star_mcs[k, s], x, wcs_jacobian, is_active_source)
     end
 
     populate_gal_fsm!(bvn_derivs, fs1m,
                       s, x, is_active_source,
-                      wcs_jacobian, gal_mcs,
-                      num_allowed_sd)
+                      wcs_jacobian, gal_mcs)
 end
 
 
