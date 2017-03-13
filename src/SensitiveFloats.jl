@@ -76,15 +76,21 @@ function set_hess!{NumType <: Number}(
 end
 
 
+function zero!{T}(m::Array{T})
+    for i in eachindex(m)
+        @inbounds m[i] = zero(T)
+    end
+end
+
 function clear!{NumType <: Number}(sf::SensitiveFloat{NumType})
     sf.v[] = zero(NumType)
 
     if sf.has_gradient
-        fill!(sf.d, zero(NumType))
+        zero!(sf.d)
     end
 
     if sf.has_hessian
-        fill!(sf.h, zero(NumType))
+        zero!(sf.h)
     end
 end
 
@@ -111,13 +117,13 @@ function combine_sfs_hessian!{T1 <: Number, T2 <: Number, T3 <: Number}(
         sf11_factor = g_h[1, 1] * sf1.d[ind2] + g_h[1, 2] * sf2.d[ind2]
         sf21_factor = g_h[1, 2] * sf1.d[ind2] + g_h[2, 2] * sf2.d[ind2]
 
-        @inbounds for ind1 = 1:ind2
+        @inbounds for ind1 = 1:p2
             sf_result.h[ind1, ind2] =
                 g_d[1] * sf1.h[ind1, ind2] +
                 g_d[2] * sf2.h[ind1, ind2] +
                 sf11_factor * sf1.d[ind1] +
                 sf21_factor * sf2.d[ind1]
-            sf_result.h[ind2, ind1] = sf_result.h[ind1, ind2]
+            #sf_result.h[ind2, ind1] = sf_result.h[ind1, ind2]
         end
     end
 end
@@ -237,11 +243,11 @@ function add_sources_sf!{NumType <: Number}(
         @inbounds for s_ind1 in 1:P
             s_all_ind1 = P_shifted + s_ind1
 
-            @inbounds for s_ind2 in 1:s_ind1
+            @inbounds for s_ind2 in 1:P
                 s_all_ind2 = P_shifted + s_ind2
                 sf_all.h[s_all_ind2, s_all_ind1] += sf_s.h[s_ind2, s_ind1]
                 # TODO: move outside the loop?
-                sf_all.h[s_all_ind1, s_all_ind2] = sf_all.h[s_all_ind2, s_all_ind1]
+                # sf_all.h[s_all_ind1, s_all_ind2] = sf_all.h[s_all_ind2, s_all_ind1]
             end
         end
     end

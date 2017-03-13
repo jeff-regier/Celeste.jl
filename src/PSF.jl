@@ -7,6 +7,7 @@ relating to the PSF).
 module PSF
 
 using Celeste
+using Celeste: Const, @aliasscope, @unroll_loop
 using ..Model
 using ..Transform
 using ..SensitiveFloats.SensitiveFloat

@@ -232,72 +232,80 @@ function accum_galaxy_pos!{NumType <: Number}(
                         fs1m.has_gradient, fs1m.has_hessian)
         transform_bvn_derivs!(
             bvn_derivs, gcc.sig_sf, wcs_jacobian, fs1m.has_hessian)
+            
+        @aliasscope begin
+            bvn_u_d = Const(bvn_derivs.bvn_u_d)
+            bvn_s_d = Const(bvn_derivs.bvn_s_d)
+            bvn_derivs_f_pre = Const(bvn_derivs.f_pre)
 
-        bvn_u_d = bvn_derivs.bvn_u_d
-        bvn_s_d = bvn_derivs.bvn_s_d
+            # Accumulate the derivatives.
+            @inbounds for u_id in 1:2
+                fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]
+            end
 
-        # Accumulate the derivatives.
-        for u_id in 1:2
-            fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]
-        end
+            @inbounds for gal_id in 1:length(gal_shape_ids)
+                fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
+            end
 
-        for gal_id in 1:length(gal_shape_ids)
-            fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
-        end
+            # The e_dev derivative. e_dev just scales the entire component.
+            # The direction is positive or negative depending on whether this
+            # is an exp or dev component.
+            @inbounds fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * bvn_derivs_f_pre[1]
 
-        # The e_dev derivative. e_dev just scales the entire component.
-        # The direction is positive or negative depending on whether this
-        # is an exp or dev component.
-        fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * bvn_derivs.f_pre[1]
+            if fs1m.has_hessian
+                # The Hessians:
+                bvn_uu_h = Const(bvn_derivs.bvn_uu_h)
+                bvn_ss_h = Const(bvn_derivs.bvn_ss_h)
+                bvn_us_h = Const(bvn_derivs.bvn_us_h)
+                gal_ids_u = Const(gal_ids.u)
 
-        if fs1m.has_hessian
-            # The Hessians:
-            bvn_uu_h = bvn_derivs.bvn_uu_h
-            bvn_ss_h = bvn_derivs.bvn_ss_h
-            bvn_us_h = bvn_derivs.bvn_us_h
-
-            # Hessian terms involving only the shape parameters.
-            for shape_id1 in 1:length(gal_shape_ids)
-                for shape_id2 in 1:length(gal_shape_ids)
-                    s1 = gal_shape_alignment[shape_id1]
-                    s2 = gal_shape_alignment[shape_id2]
-                    fs1m.h[s1, s2] +=
-                        f * (bvn_ss_h[shape_id1, shape_id2] +
-                                 bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
+                # Hessian terms involving only the shape parameters.
+                @inbounds for shape_id1 in 1:length(gal_shape_ids)
+                    @inbounds for shape_id2 in 1:length(gal_shape_ids)
+                        s1 = gal_shape_alignment[shape_id1]
+                        s2 = gal_shape_alignment[shape_id2]
+                        fs1m.h[s1, s2] +=
+                            f * (bvn_ss_h[shape_id1, shape_id2] +
+                                     bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
+                    end
                 end
-            end
 
-            # Hessian terms involving only the location parameters.
-            for u_id1 in 1:2, u_id2 in 1:2
-                u1 = gal_ids.u[u_id1]
-                u2 = gal_ids.u[u_id2]
-                fs1m.h[u1, u2] +=
-                    f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
-            end
+                # Hessian terms involving only the location parameters.
+                @inbounds for u_id1 in 1:2
+                    @inbounds for u_id2 in 1:2
+                        u1 = gal_ids_u[u_id1]
+                        u2 = gal_ids_u[u_id2]
+                        fs1m.h[u1, u2] +=
+                            f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
+                    end
+                end
 
-            # Hessian terms involving both the shape and location parameters.
-            for u_id in 1:2, shape_id in 1:length(gal_shape_ids)
-                ui = gal_ids.u[u_id]
-                si = gal_shape_alignment[shape_id]
-                fs1m.h[ui, si] +=
-                    f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
-                fs1m.h[si, ui] = fs1m.h[ui, si]
-            end
+                # Hessian terms involving both the shape and location parameters.
+                for u_id in 1:2
+                  @inbounds for shape_id in 1:length(gal_shape_ids)
+                    ui = gal_ids_u[u_id]
+                    si = gal_shape_alignment[shape_id]
+                    fs1m.h[ui, si] +=
+                        f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
+                    fs1m.h[si, ui] = fs1m.h[ui, si]
+                  end
+                end
 
-            # Do the e_dev hessian terms.
-            devi = gal_ids.e_dev
-            for u_id in 1:2
-                ui = gal_ids.u[u_id]
-                fs1m.h[ui, devi] +=
-                    bvn_derivs.f_pre[1] * gcc.e_dev_dir * bvn_u_d[u_id]
-                fs1m.h[devi, ui] = fs1m.h[ui, devi]
-            end
-            for shape_id in 1:length(gal_shape_ids)
-                si = gal_shape_alignment[shape_id]
-                fs1m.h[si, devi] +=
-                    bvn_derivs.f_pre[1] * gcc.e_dev_dir * bvn_s_d[shape_id]
-                fs1m.h[devi, si] = fs1m.h[si, devi]
-            end
-        end # if calculate hessian
+                # Do the e_dev hessian terms.
+                devi = gal_ids.e_dev
+                @inbounds for u_id in 1:2
+                    ui = gal_ids.u[u_id]
+                    fs1m.h[ui, devi] +=
+                        bvn_derivs_f_pre[1] * gcc.e_dev_dir * bvn_u_d[u_id]
+                    fs1m.h[devi, ui] = fs1m.h[ui, devi]
+                end
+                @inbounds for shape_id in 1:length(gal_shape_ids)
+                    si = gal_shape_alignment[shape_id]
+                    fs1m.h[si, devi] +=
+                        bvn_derivs_f_pre[1] * gcc.e_dev_dir * bvn_s_d[shape_id]
+                    fs1m.h[devi, si] = fs1m.h[si, devi]
+                end
+            end # if calculate hessian
+        end
     end # if is_active_source
 end
