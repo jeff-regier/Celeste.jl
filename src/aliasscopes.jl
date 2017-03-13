@@ -1,5 +1,6 @@
 using StaticArrays
 
+if isdefined(Base.SimdLoop, Symbol("@unroll_annotation"))
 immutable Const{T}
     a::T
 end
@@ -48,4 +49,14 @@ macro aliasscope(body)
         $(Expr(:popaliasscope))
         $sym
     end)
+end
+else
+# Compatibility definitions when compiler enhancements not present
+Const(x) = x
+macro unroll_loop(x)
+  esc(x)
+end
+macro aliasscope(body)
+  esc(body)
+end
 end
