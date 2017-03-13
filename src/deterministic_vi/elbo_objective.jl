@@ -17,7 +17,7 @@ Returns:
     Updates E_G_s and var_G_s in place with the brightness
     for this source at this pixel.
 """
-function calculate_E_G_s!{NumType <: Number}(
+function calculate_G_s!{NumType <: Number}(
                     ea::ElboArgs,
                     vp::VariationalParams{NumType},
                     elbo_vars::ElboIntermediateVariables{NumType},
@@ -35,9 +35,6 @@ function calculate_E_G_s!{NumType <: Number}(
     @assert E_G_s.local_S == var_G_s.local_S == 1
     @assert fs0m.local_P == length(StarPosParams)
     @assert fs1m.local_P == length(GalaxyPosParams)
-
-    clear!(E_G_s)
-    clear!(E_G2_s)
 
     @inbounds for i in 1:Ia # Celestial object types (e.g. stars and galaxies)
         fsm_i = (i == 1) ? fs0m : fs1m
@@ -61,12 +58,20 @@ function calculate_E_G_s!{NumType <: Number}(
         lf = sb_E_l_a_b_i_v * fsm_i_v
         llff = sb_E_ll_a_b_i_v * fsm_i_v^2
 
+        if i == 1
+            E_G_s.v[] = 0.0
+            E_G2_s.v[] = 0.0
+        end
         E_G_s.v[] += a_i * lf
         E_G2_s.v[] += a_i * llff
 
         ############ Only gradient and hessian code below ##############
         (is_active_source && elbo_vars.elbo.has_gradient) || continue
 
+        if i == 1
+            E_G_s_d[ids.a[i], 1] = 0.0
+            E_G2_s_d[ids.a[i], 1] = 0.0
+        end
         E_G_s_d[ids.a[i], 1] += lf
         E_G2_s_d[ids.a[i], 1] += llff
 
@@ -78,12 +83,20 @@ function calculate_E_G_s!{NumType <: Number}(
         tmp1 = sb_E_l_a_b_i_v * a_i
         tmp2 = sb_E_ll_a_b_i_v * 2 * fsm_i_v * a_i
         for p0_shape_ind in 1:length(p0_shape)
+            if i == 1
+                E_G_s_d[p0_shape[p0_shape_ind], 1] = 0.0
+                E_G2_s_d[p0_shape[p0_shape_ind], 1] = 0.0
+            end
             E_G_s_d[p0_shape[p0_shape_ind], 1] += tmp1 * fsm_i_d[p0_shape_ind, 1]
             E_G2_s_d[p0_shape[p0_shape_ind], 1] += tmp2 * fsm_i_d[p0_shape_ind, 1]
         end
 
         # Derivatives with respect to the brightness parameters.
         for p0_bright_ind in 1:length(p0_bright)
+            if i == 1
+                E_G_s_d[p0_bright[p0_bright_ind], 1] = 0.0
+                E_G2_s_d[p0_bright[p0_bright_ind], 1] = 0.0
+            end
             E_G_s_d[p0_bright[p0_bright_ind], 1] +=
                 a_i * fsm_i_v * sb_E_l_a_b_i_d[p0_bright_ind, 1]
             E_G2_s_d[p0_bright[p0_bright_ind], 1] +=
@@ -100,7 +113,6 @@ function calculate_E_G_s!{NumType <: Number}(
 
         # The (bright, bright) block:
         for p0_ind1 in 1:length(p0_bright), p0_ind2 in 1:length(p0_bright)
-            # TODO: time consuming **************
             E_G_s_h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
                 a_i * sb_E_l_a_b_i.h[p0_ind1, p0_ind2] * fsm_i_v
             E_G2_s_h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
@@ -188,6 +200,11 @@ function calculate_E_G_s!{NumType <: Number}(
         # end
         # For each value in 1:Ia, written this way for speed.
 
+        if i == 1
+            fill!(elbo_vars.E_G_s.h, 0.0)
+            fill!(elbo_vars.E_G2_s.h, 0.0)
+        end
+
         for u_ind1 = 1:2, u_ind2 = 1:2
             elbo_vars.E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
                 elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
@@ -198,29 +215,10 @@ function calculate_E_G_s!{NumType <: Number}(
                 elbo_vars.E_G2_s_hsub_vec[2].u_u[u_ind1, u_ind2]
         end
     end
-end
 
+    ####################################################
+    #### the code below loads var_G_s ##################
 
-"""
-Calculate the variance var_G_s as a function of (E_G_s, E_G2_s).
-
-Args:
-    - elbo_vars: Elbo intermediate values.
-    - E_G_s: The expected brightness for a source
-    - E_G2_s: The expected squared brightness for a source
-    - var_G_s: Updated in place.  The variance of the brightness of a source.
-    - is_active_source: Whether this is an active source that requires derivatives
-
-Returns:
-    Updates var_G_s in place.
-"""
-function calculate_var_G_s!{NumType <: Number}(
-                    ea::ElboArgs,
-                    vp::VariationalParams{NumType},
-                    elbo_vars::ElboIntermediateVariables{NumType},
-                    is_active_source::Bool)
-    E_G_s = elbo_vars.E_G_s
-    E_G2_s = elbo_vars.E_G2_s
     var_G_s = elbo_vars.var_G_s
 
     clear!(var_G_s)
@@ -271,8 +269,7 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
                     is_active_source::Bool)
-    calculate_E_G_s!(ea, vp, elbo_vars, sb, b, s, is_active_source)
-    calculate_var_G_s!(ea, vp, elbo_vars, is_active_source)
+    calculate_G_s!(ea, vp, elbo_vars, sb, b, s, is_active_source)
 
     if is_active_source
         sa = findfirst(ea.active_sources, s)
