@@ -1,5 +1,5 @@
 using Celeste: DeterministicVI, SensitiveFloats
-import DeterministicVI: calculate_E_G_s!, load_source_brightnesses
+import DeterministicVI: calculate_G_s!, load_source_brightnesses, elbo_likelihood
 
 using Base.Test
 using Distributions
@@ -9,38 +9,35 @@ import ForwardDiff.Dual
 import SampleData: gen_two_body_dataset, true_star_init
 
 
-@testset "calculate_E_G_s fully overwrites E_G_s and E_G2_s" begin
+@testset "calculate_G_s overwrites E_G_s, E_G2_s, and var_G_s" begin
     ea, vp, catalog = gen_two_body_dataset()
     elbo_vars = ElboIntermediateVariables(Float64, ea.psf_K, ea.S, ea.Sa, true, true)
+
+    # let's write some non-trivial derivatives to the fs0m and fs1m
+    elbo_likelihood(ea, vp, elbo_vars)
+
     sbs = load_source_brightnesses(ea, vp)
 
-    # there are two light source, lets test the second one
-    s = 2
-    b = 4
-
-    # gradients and hessians overwritten only for active sources
-    is_active_source = true
-
     # for this call E_G_s and E_G2_s are initialized to zero
-    calculate_E_G_s!(ea, vp, elbo_vars, sbs[s], b, s, is_active_source)
-    egs1 = deepcopy(elbo_vars.E_G_s)
-    eg2s1 = deepcopy(elbo_vars.E_G2_s)
-
-    for sf in (elbo_vars.E_G_s, elbo_vars.E_G2_s)
-        sf.v[] = 9e99
-        sf.d[:] = 9e99
-        sf.h[:] = 9e99
-    end
+    calculate_G_s!(ea, vp, elbo_vars, sbs[2], 4, 2, true)
+    ev_cleared = deepcopy(elbo_vars)
 
     # for this call E_G_s and E_G2_s have not been zeroed out
-    calculate_E_G_s!(ea, vp, elbo_vars, sbs[s], b, s, is_active_source)
+    calculate_G_s!(ea, vp, elbo_vars, sbs[1], 2, 1, true)
+    calculate_G_s!(ea, vp, elbo_vars, sbs[2], 3, 2, true)
+    calculate_G_s!(ea, vp, elbo_vars, sbs[2], 4, 2, true)
 
-    @test egs1.v[] ≈ elbo_vars.E_G_s.v[]
-    @test egs1.d[] ≈ elbo_vars.E_G_s.d[]
-    @test egs1.h[] ≈ elbo_vars.E_G_s.h[]
-    @test eg2s1.v[] ≈ elbo_vars.E_G2_s.v[]
-    @test eg2s1.d[] ≈ elbo_vars.E_G2_s.d[]
-    @test eg2s1.h[] ≈ elbo_vars.E_G2_s.h[]
+    @test ev_cleared.E_G_s.v[] ≈ elbo_vars.E_G_s.v[]
+    @test ev_cleared.E_G_s.d[] ≈ elbo_vars.E_G_s.d[]
+    @test ev_cleared.E_G_s.h[] ≈ elbo_vars.E_G_s.h[]
+
+    @test ev_cleared.E_G2_s.v[] ≈ elbo_vars.E_G2_s.v[]
+    @test ev_cleared.E_G2_s.d[] ≈ elbo_vars.E_G2_s.d[]
+    @test ev_cleared.E_G2_s.h[] ≈ elbo_vars.E_G2_s.h[]
+
+    @test ev_cleared.var_G_s.v[] ≈ elbo_vars.var_G_s.v[]
+    @test ev_cleared.var_G_s.d[] ≈ elbo_vars.var_G_s.d[]
+    @test ev_cleared.var_G_s.h[] ≈ elbo_vars.var_G_s.h[]
 end
 
 
@@ -128,7 +125,6 @@ end
     @test elbo_lik_12.h[1:P, 1:P] ≈ elbo_lik_1.h
     @test elbo_lik_12.h[(1:P) + P, (1:P) + P] ≈ elbo_lik_2.h
 end
-
 
 @testset "star truth is most likely" begin
     ea, vp, catalog = true_star_init()
