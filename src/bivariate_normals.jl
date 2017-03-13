@@ -163,18 +163,6 @@ end
 
 
 """
-Check whether a point is close enough to a BvnComponent to bother making
-calculations with it.
-"""
-function check_point_close_to_bvn{NumType <: Number}(
-    bmc::BvnComponent{NumType}, x::SVector{2,NumType}, num_allowed_sd::NumType)
-
-    dist = sqrt(norm(x - bmc.the_mean))
-    return dist < (num_allowed_sd * bmc.major_sd)
-end
-
-
-"""
 Return quantities related to the pdf of an offset bivariate normal.
 
 Args:

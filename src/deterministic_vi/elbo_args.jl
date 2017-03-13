@@ -199,17 +199,6 @@ type ElboArgs
     # the sources to optimize
     active_sources::Vector{Int}
 
-    # Bivarite normals will not be evaulated at points further than this many
-    # standard deviations away from their mean.  See its usage in the ELBO and
-    # bivariate normals for details.
-    #
-    # If this is set to Inf, the bivariate normals will be evaluated at all
-    # points irrespective of their distance from the mean.
-    num_allowed_sd::Float64
-
-    # If true, only render star parameters for active sources.
-    active_source_star_only::Bool
-
     # If false, elbo = elbo_likelihood
     include_kl::Bool
 end
@@ -220,7 +209,6 @@ function ElboArgs(
             patches::Matrix{SkyPatch},
             active_sources::Vector{Int};
             psf_K::Int=2,
-            num_allowed_sd::Float64=Inf,
             include_kl=true)
     S = size(patches, 1)
     Sa = length(active_sources)
@@ -233,5 +221,5 @@ function ElboArgs(
             "too many active_sources to store a hessian")
 
     ElboArgs(S, Sa, N, psf_K, images, patches,
-             active_sources, num_allowed_sd, false, include_kl)
+             active_sources, include_kl)
 end
