@@ -332,8 +332,6 @@ function load_field_images(rcfs, stagedir)
         end
     end
 
-    @show Base.summarysize(raw_images)
-    @show Base.summarysize(images)
     return images
 end
 
