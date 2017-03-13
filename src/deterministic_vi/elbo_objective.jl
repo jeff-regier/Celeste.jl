@@ -61,13 +61,8 @@ function calculate_E_G_s!{NumType <: Number}(
         lf = sb_E_l_a_b_i_v * fsm_i_v
         llff = sb_E_ll_a_b_i_v * fsm_i_v^2
 
-        if i == 1
-            E_G_s.v[] = a_i * lf
-            E_G2_s.v[] = a_i * llff
-        else
-            E_G_s.v[] += a_i * lf
-            E_G2_s.v[] += a_i * llff
-        end
+        E_G_s.v[] += a_i * lf
+        E_G2_s.v[] += a_i * llff
 
         ############ Only gradient and hessian code below ##############
         (is_active_source && elbo_vars.elbo.has_gradient) || continue
