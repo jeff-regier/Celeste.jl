@@ -229,14 +229,6 @@ function ElboArgs(
     @assert size(patches, 2) == N
     @assert psf_K > 0
 
-    for img in images, ep in img.epsilon_mat
-        if ep <= 0.0
-            msg = string("You must set all values of epsilon_mat > 0 ",
-                         "for all images included in ElboArgs")
-            throw(InvalidInputError(msg))
-        end
-    end
-
     @assert(length(active_sources) <= 5 || !calculate_hessian,
             "too many active_sources to store a hessian")
 

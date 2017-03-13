@@ -105,6 +105,10 @@ function read_sky(hdu::FITSIO.TableHDU)
         sky_y[i] += 1.0f0
     end
 
+    # sky intensity has to be strictly greater than 0 for the elbo
+    # to be defined
+    @assert all((x)-> x > 1e-12, sky_small)
+
     # interpolate to full sky image
     return SkyIntensity(sky_small, sky_x, sky_y)
 end
