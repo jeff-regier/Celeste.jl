@@ -15,7 +15,6 @@ import ..PSF
 
 import ..DeterministicVI: infer_source
 
-
 include("joint_infer.jl")
 
 # In production mode, rather the development mode, always catch exceptions
@@ -25,9 +24,9 @@ const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != 
 const distributed = haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
 
 if distributed
-import Gasp.nodeid
+using Gasp
 else
-nodeid = 1
+grank() = 1
 end
 
 #
@@ -48,50 +47,48 @@ end
 
 
 # ------
-# thread-safe print functions
-@inline nputs(nid, s...) = ccall(:puts, Cint, (Cstring,), string("[$nid] ", s...))
-@inline ntputs(nid, tid, s...) = ccall(:puts, Cint, (Cstring,), string("[$nid]<$tid> ", s...))
-
-@inline phalse(b) = b[] = false
-
-
-# ------
 # timed parts of Celeste
 type InferTiming
     query_fids::Float64
-    num_infers::Int64
     read_photoobj::Float64
     read_img::Float64
+    find_neigh::Float64
+    init_elbo::Float64
     opt_srcs::Float64
     num_srcs::Int64
+    ga_put::Float64
     write_results::Float64
     wait_done::Float64
 
-    InferTiming() = new(0.0, 0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
+    InferTiming() = new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0)
 end
 
 function add_timing!(i::InferTiming, j::InferTiming)
     i.query_fids = i.query_fids + j.query_fids
-    i.num_infers = i.num_infers + j.num_infers
     i.read_photoobj = i.read_photoobj + j.read_photoobj
     i.read_img = i.read_img + j.read_img
+    i.find_neigh = i.find_neigh + j.find_neigh
+    i.init_elbo = i.init_elbo + j.init_elbo
     i.opt_srcs = i.opt_srcs + j.opt_srcs
     i.num_srcs = i.num_srcs + j.num_srcs
+    i.ga_put = i.ga_put + j.ga_put
     i.write_results = i.write_results + j.write_results
     i.wait_done = i.wait_done + j.wait_done
 end
 
 function puts_timing(i::InferTiming)
     i.num_srcs = max(1, i.num_srcs)
-    nputs(nodeid, "timing: query_fids=$(i.query_fids)")
-    nputs(nodeid, "timing: num_infers=$(i.num_infers)")
-    nputs(nodeid, "timing: read_photoobj=$(i.read_photoobj)")
-    nputs(nodeid, "timing: read_img=$(i.read_img)")
-    nputs(nodeid, "timing: opt_srcs=$(i.opt_srcs)")
-    nputs(nodeid, "timing: num_srcs=$(i.num_srcs)")
-    nputs(nodeid, "timing: average opt_srcs=$(i.opt_srcs/i.num_srcs)")
-    nputs(nodeid, "timing: write_results=$(i.write_results)")
-    nputs(nodeid, "timing: wait_done=$(i.wait_done)")
+    Log.message("timing: query_fids=$(i.query_fids)")
+    Log.message("timing: read_photoobj=$(i.read_photoobj)")
+    Log.message("timing: read_img=$(i.read_img)")
+    Log.message("timing: find_neigh=$(i.find_neigh)")
+    Log.message("timing: init_elbo=$(i.init_elbo)")
+    Log.message("timing: opt_srcs=$(i.opt_srcs/nthreads())")
+    Log.message("timing: num_srcs=$(i.num_srcs)")
+    Log.message("timing: average opt_srcs=$((i.opt_srcs/nthreads())/i.num_srcs)")
+    Log.message("timing: ga_put=$(i.ga_put/nthreads())")
+    Log.message("timing: write_results=$(i.write_results)")
+    Log.message("timing: wait_done=$(i.wait_done)")
 end
 
 function time_puts(elapsedtime, bytes, gctime, allocs)
@@ -121,7 +118,7 @@ function time_puts(elapsedtime, bytes, gctime, allocs)
     elseif gctime > 0
         s = string(s, @sprintf(", %.2f%% gc time", 100*gctime/elapsedtime))
     end
-    nputs(nodeid, s)
+    Log.message(s)
 end
 
 
@@ -136,7 +133,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
     tic()
     catalog = SDSSIO.read_photoobj_files(rcfs, stagedir,
                         duplicate_policy=duplicate_policy)
-    timing.read_photoobj = toq()
+    timing.read_photoobj += toq()
     Log.info("$(length(catalog)) primary sources")
 
     # Get indices of entries in the RA/Dec range of interest.
@@ -144,8 +141,8 @@ function infer_init(rcfs::Vector{RunCamcolField},
                              (box.decmin < entry.pos[2] < box.decmax))
     target_sources = find(entry_in_range, catalog)
 
-    Log.info(string("Found $(length(target_sources)) target sources in ",
-          "$(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax)"))
+    Log.info("found $(length(target_sources)) target sources in ",
+             "$(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax)")
 
     # Filter any object not specified, if an objid is specified
     if objid != ""
@@ -161,14 +158,14 @@ function infer_init(rcfs::Vector{RunCamcolField},
         try
             tic()
             images = SDSSIO.load_field_images(rcfs, stagedir)
-            timing.read_img = toq()
+            timing.read_img += toq()
         catch ex
             Log.exception(ex)
         end
 
         tic()
         neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
-        Log.info("neighbors found in $(toq()) seconds")
+        timing.find_neigh += toq()
     end
 
     return catalog, target_sources, neighbor_map, images
@@ -181,6 +178,36 @@ immutable OptimizedSource
     init_ra::Float64
     init_dec::Float64
     vs::Vector{Float64}
+end
+const OptimizedSourceLen = 465
+
+function serialize(s::Base.AbstractSerializer, os::OptimizedSource)
+    Base.serialize_type(s, typeof(os))
+    write(s.io, os.thingid)
+    @assert length(os.objid) == 19
+    for i = 1:19
+        write(s.io, os.objid.data[i])
+    end
+    write(s.io, os.init_ra)
+    write(s.io, os.init_dec)
+    for i = 1:length(Celeste.Model.ids)
+        write(s.io, os.vs[i])
+    end
+end
+
+function deserialize(s::Base.AbstractSerializer, t::Type{OptimizedSource})
+    thingid = read(s.io, Int64)::Int64
+    objid_data = zeros(UInt8, 19)
+    for i = 1:19
+        objid_data[i] = read(s.io, UInt8)::UInt8
+    end
+    init_ra = read(s.io, Float64)::Float64
+    init_dec = read(s.io, Float64)::Float64
+    vs = zeros(Float64, length(Celeste.Model.ids))
+    for i = 1:length(Celeste.Model.ids)
+        vs[i] = read(s.io, Float64)
+    end
+    OptimizedSource(thingid, String(objid_data), init_ra, init_dec, vs)
 end
 
 
@@ -201,7 +228,7 @@ function process_source(config::Configs.Config,
 
     tic()
     vs_opt = infer_source_callback(config, images, neighbors, entry)
-    ntputs(nodeid, threadid(), "processed objid $(entry.objid) in $(toq()) secs")
+    Log.message("processed objid $(entry.objid) in $(toq()) secs")
     return OptimizedSource(entry.thing_id,
                            entry.objid,
                            entry.pos[1],
@@ -290,7 +317,7 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
 end
 
 """
-Use mulitple threads on one node to fit the Celeste model to sources in a given
+Use multiple threads on one node to fit the Celeste model to sources in a given
 bounding box.
 """
 function one_node_infer(rcfs::Vector{RunCamcolField},
@@ -365,8 +392,8 @@ end
 Save provided results to a JLD file.
 """
 function save_results(outdir, ramin, ramax, decmin, decmax, results)
-    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f-node%d.jld",
-                     outdir, ramin, ramax, decmin, decmax, nodeid)
+    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f-rank%d.jld",
+                     outdir, ramin, ramax, decmin, decmax, grank())
     JLD.save(fname, "results", results)
 end
 
@@ -377,16 +404,25 @@ save_results(outdir, box, results) =
 """
 called from main entry point.
 """
-function infer_box(box::BoundingBox, stagedir::String, outdir::String;
-                   timing=InferTiming())
-    Log.debug("multithreaded parallelism only")
+function infer_box(box::BoundingBox, stagedir::String, outdir::String)
+    timing = InferTiming()
+
+    Log.info("processing box $(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax) with $(nthreads()) threads")
 
     tic()
     # Get vector of (run, camcol, field) triplets overlapping this patch
     rcfs = get_overlapping_fields(box, stagedir)
     timing.query_fids = toq()
 
-    results = one_node_infer(rcfs, stagedir; box=box, timing=timing)
+    catalog, target_sources, neighbor_map, images =
+        infer_init(rcfs,
+                   stagedir;
+                   box=box,
+                   primary_initialization=true,
+                   timing=timing)
+
+    #@time results = one_node_single_infer(catalog, target_sources, neighbor_map, images; timing=timing)
+    @time results = one_node_joint_infer(catalog, target_sources, neighbor_map, images; timing=timing)
 
     tic()
     save_results(outdir, box, results)
@@ -399,11 +435,25 @@ end
 if distributed
 include("multinode_run.jl")
 else
-function multi_node_infer(boxes::Vector{BoundingBox},
-                          stagedir::String;
-                          outdir=".",
-                          primary_initialization=true,
-                          timing=InferTiming())
+function multi_node_single_infer(all_boxes::Vector{BoundingBox},
+                                 box_source_counts::Vector{Int64},
+                                 stagedir::String;
+                                 outdir=".",
+                                 primary_initialization=true,
+                                 timing=InferTiming())
+    Log.error("distributed functionality is disabled (set USE_DTREE=1 to enable)")
+    exit(-1)
+end
+function multi_node_joint_infer(all_boxes::Vector{BoundingBox},
+                                box_source_counts::Vector{Int64},
+                                stagedir::String;
+                                outdir=".",
+                                primary_initialization=true,
+                                cyclades_partition=true,
+                                batch_size=400,
+                                within_batch_shuffling=true,
+                                niters=3,
+                                timing=InferTiming())
     Log.error("distributed functionality is disabled (set USE_DTREE=1 to enable)")
     exit(-1)
 end
@@ -413,7 +463,10 @@ end
 """
 called from main entry point.
 """
-function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::String;
+function infer_boxes(boxes::Vector{BoundingBox},
+                     box_source_counts::Vector{Int64},
+                     stagedir::String,
+                     outdir::String;
                      timing = InferTiming())
     # Base.@time hack for distributed environment
     gc_stats = ()
@@ -422,7 +475,10 @@ function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::Strin
     gc_stats = Base.gc_num()
     elapsed_time = time_ns()
 
-    multi_node_infer(boxes, stagedir; outdir=outdir, timing=timing)
+    multi_node_single_infer(boxes, box_source_counts, stagedir;
+                            outdir=outdir, timing=timing)
+    #multi_node_joint_infer(boxes, box_source_counts, stagedir;
+    #                       outdir=outdir, timing=timing)
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time
@@ -434,3 +490,4 @@ function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::Strin
 end
 
 end
+

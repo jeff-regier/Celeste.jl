@@ -230,7 +230,7 @@ function load_raw_images(rcfs::Vector{RunCamcolField}, datadir::String)
     raw_images = RawImage[]
 
     for rcf in rcfs
-        Log.info("loading images for $rcf")
+        #Log.info("loading images for $rcf")
         rcf_raw_images = SDSSIO.load_raw_images(rcf, datadir)
         append!(raw_images, rcf_raw_images)
     end
@@ -272,7 +272,8 @@ function load_field_images(rcfs, stagedir)
     N = length(raw_images)
     images = Vector{Image}(N)
 
-    Threads.@threads for n in 1:N
+    #Threads.@threads for n in 1:N
+    for n in 1:N
         try
             images[n] = convert(Image, raw_images[n])
         catch exc
@@ -535,7 +536,7 @@ function read_photoobj_files(fts::Vector{RunCamcolField},
     @assert duplicate_policy == :primary || duplicate_policy == :first
     @assert duplicate_policy == :primary || length(fts) == 1
 
-    Log.info("reading photoobj catalogs for $(length(fts)) fields")
+    #Log.info("reading photoobj catalogs for $(length(fts)) fields")
 
     # the code below assumes there is at least one field.
     if length(fts) == 0
@@ -548,13 +549,13 @@ function read_photoobj_files(fts::Vector{RunCamcolField},
         ft = fts[i]
         dir = "$datadir/$(ft.run)/$(ft.camcol)/$(ft.field)"
         fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir ft.run ft.camcol ft.field
-        Log.info("field $(fts[i]): reading $fname")
+        #Log.info("field $(fts[i]): reading $fname")
         rawcatalogs[i] = read_photoobj(fname)
     end
 
-    for i in eachindex(fts)
-        Log.info("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) entries")
-    end
+    #for i in eachindex(fts)
+    #    Log.info("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) entries")
+    #end
 
     # Limit each catalog to primary objects and objects where thing_id != -1
     # (thing_id == -1 indicates that the matching process failed)
@@ -568,10 +569,10 @@ function read_photoobj_files(fts::Vector{RunCamcolField},
         end
     end
 
-    for i in eachindex(fts)
-        Log.info(string("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) ",
-                "filtered entries"))
-    end
+    #for i in eachindex(fts)
+    #    Log.info(string("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) ",
+    #            "filtered entries"))
+    #end
 
     # Merge all catalogs together (there should be no duplicate objects,
     # because for each object there should only be one "primary" occurance.)

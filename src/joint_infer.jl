@@ -96,7 +96,7 @@ Returns:
 - An array of vectors representing the workload of each thread ([thread][batch][sources(indices)])
 """
 function partition_cyclades(n_threads, target_sources, neighbor_map; batch_size=60)
-    Log.info("Starting Cyclades partitioning...")
+    #Log.info("Starting Cyclades partitioning...")
     tic()
 
     n_sources = length(target_sources)
@@ -163,14 +163,14 @@ function partition_cyclades(n_threads, target_sources, neighbor_map; batch_size=
         end
     end
 
-    Log.info("Cyclades - Assigned sources: $(assigned_sources) vs correct number of sources: $(n_sources)")
+    #Log.info("Cyclades - Assigned sources: $(assigned_sources) vs correct number of sources: $(n_sources)")
     @assert assigned_sources == n_sources
-    Log.info("Cyclades - Number of batches: $(n_total_batches)")
-    Log.info("Finished Cyclades partitioning.  Elapsed time: $(toq()) seconds")
+    #Log.info("Cyclades - Number of batches: $(n_total_batches)")
+    #Log.info("Finished Cyclades partitioning.  Elapsed time: $(toq()) seconds")
 
     for cur_batch = 1:length(collect(1:batch_size:n_sources))
         load_balance_for_batch = [length(thread_sources_assignment[t][cur_batch]) for t=1:n_threads]
-        Log.info("Load balance for batch $(cur_batch) - $(load_balance_for_batch)")
+        #Log.info("Load balance for batch $(cur_batch) - $(load_balance_for_batch)")
     end
 
     thread_sources_assignment
@@ -188,7 +188,7 @@ Returns:
 
 """
 function partition_equally(n_threads, n_sources)
-    Log.info("Starting basic source partitioning...")
+    #Log.info("Starting basic source partitioning...")
     tic()
     n_sources_per_thread = floor(Int64, n_sources / n_threads)
     thread_sources_assignment = Vector{Vector{Vector{Int64}}}(n_threads)
@@ -208,7 +208,7 @@ function partition_equally(n_threads, n_sources)
         end
     end
     @assert n_sources_assigned == n_sources
-    Log.info("Finished basic source partitioning. Elapsed time: $(toq()) seconds")
+    #Log.info("Finished basic source partitioning. Elapsed time: $(toq()) seconds")
     thread_sources_assignment
 end
 
