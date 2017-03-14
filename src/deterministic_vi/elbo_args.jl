@@ -59,8 +59,8 @@ immutable ElboIntermediateVariables{NumType <: Number}
     # The ELBO itself.
     elbo::SensitiveFloat{NumType}
 
-    active_pixel_counter::Int64
-    inactive_pixel_counter::Int64
+    active_pixel_counter::Ref{Int64}
+    inactive_pixel_counter::Ref{Int64}
 end
 
 
