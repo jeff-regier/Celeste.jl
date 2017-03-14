@@ -40,6 +40,7 @@ immutable SkyIntensity
     sky_small::Matrix{Float32}
     sky_x::Vector{Float32}
     sky_y::Vector{Float32}
+    calibration::Vector{Float64}
 end
 
 
@@ -77,9 +78,16 @@ function interp_sky_kernel(sky::SkyIntensity, i::Int, j::Int)
     x0 = min(max(x0, 1), nx)
     x1 = min(max(x1, 1), nx)
 
-    (xw0 * yw0 * sky.sky_small[x0, y0] + xw1 * yw0 * sky.sky_small[x1, y0] +
-         xw0 * yw1 * sky.sky_small[x0, y1] + xw1 * yw1 * sky.sky_small[x1, y1])
+    # bi-linear interpolation
+    skynmgy = (xw0 * yw0 * sky.sky_small[x0, y0]
+             + xw1 * yw0 * sky.sky_small[x1, y0]
+             + xw0 * yw1 * sky.sky_small[x0, y1]
+             + xw1 * yw1 * sky.sky_small[x1, y1])
+
+    # return sky intensity in counts
+    skynmgy * sky.calibration[i]
 end
+
 
 function getindex(sky::SkyIntensity, i::Int, j::Int)
     interp_sky_kernel(sky, i, j)
@@ -109,8 +117,7 @@ function read_sky(hdu::FITSIO.TableHDU)
     # to be defined
     @assert all((x)-> x > 1e-12, sky_small)
 
-    # interpolate to full sky image
-    return SkyIntensity(sky_small, sky_x, sky_y)
+    return sky_small, sky_x, sky_y
 end
 
 
@@ -129,8 +136,10 @@ function read_frame(fname)
     hdr = FITSIO.read_header(f[1], String)::String
     image = read(f[1])::Array{Float32, 2}  # sky-subtracted & calibrated data
     calibration = read(f[2])::Vector{Float32}
-    sky = read_sky(f[3])
+    sky_small, sky_x, sky_y = read_sky(f[3])
     close(f)
+
+    sky = SkyIntensity(sky_small, sky_x, sky_y, calibration)
 
     wcs = WCS.from_header(hdr)[1]
 
@@ -301,9 +310,9 @@ function convert(::Type{Image}, r::RawImage)
     @assert size(r.pixels, 1) == length(r.calibration)
     epsilon_mat = similar(r.pixels)
     @inbounds for j=1:size(r.pixels, 2), i=1:size(r.pixels, 1)
-        sky_ij = interp_sky_kernel(r.sky, i, j)
-        r.pixels[i, j] = r.gain * (r.pixels[i, j] / r.calibration[i] + sky_ij)
-        epsilon_mat[i, j] = sky_ij * r.calibration[i]
+        sky_ij = r.sky[i, j]
+        r.pixels[i, j] = (r.gain / r.calibration[i]) * (r.pixels[i, j] + sky_ij)
+        epsilon_mat[i, j] = sky_ij
     end
 
     iota_vec = r.gain ./ r.calibration
