@@ -11,7 +11,7 @@ import SampleData: gen_two_body_dataset, true_star_init
 
 @testset "calculate_G_s overwrites E_G_s, E_G2_s, and var_G_s" begin
     ea, vp, catalog = gen_two_body_dataset()
-    elbo_vars = ElboIntermediateVariables(Float64, ea.psf_K, ea.S, ea.Sa, true, true)
+    elbo_vars = DeterministicVI.ElboIntermediateVariables(Float64, ea.Sa, true, true)
 
     # let's write some non-trivial derivatives to the fs0m and fs1m
     elbo_likelihood(ea, vp, elbo_vars)

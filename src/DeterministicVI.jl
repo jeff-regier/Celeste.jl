@@ -8,7 +8,7 @@ using Base.Threads: threadid, nthreads
 import ..Configs
 using ..Model
 import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
-                GalaxySigmaDerivs, SkyPatch,
+                BvnBundle, GalaxySigmaDerivs, SkyPatch,
                 get_bvn_cov, eval_bvn_pdf!, get_bvn_derivs!,
                 transform_bvn_derivs!, populate_fsm!
 import ..Celeste: Const, @aliasscope, @unroll_loop
@@ -26,6 +26,14 @@ import Base.convert
 export ElboArgs, generic_init_source, catalog_init_source, init_sources,
        VariationalParams, elbo, ElboIntermediateVariables
 
+function init_thread_pool!(pool::Vector, create)
+    if length(pool) != Base.Threads.nthreads()
+        empty!(pool)
+        for i = 1:Base.Threads.nthreads()
+            push!(pool, create())
+        end
+    end
+end
 
 """
 Return a default-initialized VariationalParams instance.

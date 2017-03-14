@@ -2,7 +2,7 @@
 Store pre-allocated memory in this data structures, which contains
 intermediate values used in the ELBO calculation.
 """
-type HessianSubmatrices{NumType <: Number}
+immutable HessianSubmatrices{NumType <: Number}
     u_u::Matrix{NumType}
     shape_shape::Matrix{NumType}
 end
@@ -26,10 +26,7 @@ function HessianSubmatrices(NumType::DataType, i::Int)
 end
 
 
-type ElboIntermediateVariables{NumType <: Number}
-
-    bvn_derivs::BivariateNormalDerivatives{NumType}
-
+immutable ElboIntermediateVariables{NumType <: Number}
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
     # The vector has one element for each active source, in the same order
     # as ea.active_sources.
@@ -62,32 +59,24 @@ type ElboIntermediateVariables{NumType <: Number}
     # The ELBO itself.
     elbo::SensitiveFloat{NumType}
 
-    star_mcs::Matrix{BvnComponent{NumType}}
-    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4}
-
-    active_pixel_counter::Int64
-    inactive_pixel_counter::Int64
+    active_pixel_counter::Ref{Int64}
+    inactive_pixel_counter::Ref{Int64}
 end
 
 
 """
 Args:
-    - S: The total number of sources
-    - num_active_sources: The number of actives sources (with deriviatives)
+    - num_active_sources: The number of actives sources (with derivatives)
     - calculate_gradient: If false, only calculate values
     - calculate_hessian: If false, only calculate gradients. Note that if
                 calculate_gradient = false, then hessians will not be
                 calculated irrespective of the value of calculate_hessian.
 """
 function ElboIntermediateVariables(NumType::DataType,
-                                   psf_K::Int,
-                                   S::Int,
                                    num_active_sources::Int,
                                    calculate_gradient::Bool=true,
                                    calculate_hessian::Bool=true)
     @assert NumType <: Number
-
-    bvn_derivs = BivariateNormalDerivatives{NumType}()
 
     # fs0m and fs1m accumulate contributions from all bvn components
     # for a given source.
@@ -116,21 +105,14 @@ function ElboIntermediateVariables(NumType::DataType,
     elbo_log_term = SensitiveFloat(E_G)
     elbo = SensitiveFloat(E_G)
 
-    star_mcs = Matrix{BvnComponent{NumType}}(psf_K, S)
-    gal_mcs  = Array{GalaxyCacheComponent{NumType}}(psf_K, 8, 2, S)
-
     ElboIntermediateVariables{NumType}(
-        bvn_derivs, fs0m, fs1m,
+        fs0m, fs1m,
         E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
         E_G, var_G, combine_grad, combine_hess,
-        elbo_log_term, elbo, star_mcs, gal_mcs, 0, 0)
+        elbo_log_term, elbo, 0, 0)
 end
 
-
 function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType})
-    #TODO: don't allocate memory here?
-    elbo_vars.bvn_derivs = BivariateNormalDerivatives{NumType}()
-
     clear!(elbo_vars.fs0m)
     clear!(elbo_vars.fs1m)
     clear!(elbo_vars.E_G_s)
@@ -179,7 +161,7 @@ end
 ElboArgs stores the arguments needed to evaluate the variational objective
 function.
 """
-type ElboArgs
+immutable ElboArgs
     # the overall number of sources: we don't necessarily visit them
     # all or optimize them all, but if we do visit a pixel where any
     # of these are active, we use it in the elbo calculation
@@ -212,7 +194,7 @@ function ElboArgs(
             patches::Matrix{SkyPatch},
             active_sources::Vector{Int};
             psf_K::Int=2,
-            include_kl=true)
+            include_kl::Bool=true)
     S = size(patches, 1)
     Sa = length(active_sources)
     N = length(images)

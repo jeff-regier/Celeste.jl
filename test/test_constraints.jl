@@ -2,10 +2,11 @@ module ConstraintTransformsTests
 
 using Celeste.Model: CanonicalParams, ids, D
 
+using Celeste.DeterministicVI.ElboMaximize: elbo_constraints
+
 using Celeste.DeterministicVI.ConstraintTransforms: Constraint, BoxConstraint,
-                                    SimplexConstraint,
-                                    ParameterConstraint, ConstraintBatch,
-                                    u_ParameterConstraints, inv_logit, logit, to_free,
+                                    SimplexConstraint, ParameterConstraint, ConstraintBatch,
+                                    inv_logit, logit, to_free,
                                     to_free!, to_bound, to_bound!, simplexify, unsimplexify,
                                     enforce, enforce!, allocate_free_params,
                                     TransformDerivatives, differentiate!,
@@ -368,7 +369,7 @@ end
 loc_width, loc_scale = rand(), rand()
 n_sources = 4
 bound = collect(rand(length(CanonicalParams)) for _ in 1:n_sources)
-constraints = ConstraintBatch(bound, loc_width, loc_scale)
+constraints = elbo_constraints(bound, loc_width, loc_scale)
 
 for src in 1:n_sources
     u1_box = constraints.boxes[src][1].constraint
@@ -417,10 +418,11 @@ function star_constraints(bound; loc_width = 1.5e-3, loc_scale = 1.0)
     boxes = Vector{Vector{ParameterConstraint{BoxConstraint}}}(n_sources)
     simplexes = Vector{Vector{ParameterConstraint{SimplexConstraint}}}(n_sources)
     for src in 1:n_sources
-        u1, u2 = u_ParameterConstraints(bound[src], loc_width, loc_scale)
+        i1, i2 = ids.u[1], ids.u[2]
+        u1, u2 = bound[src][i1], bound[src][i2]
         boxes[src] = [
-            u1,
-            u2,
+            ParameterConstraint(BoxConstraint(u1 - loc_width, u1 + loc_width, loc_scale), i1),
+            ParameterConstraint(BoxConstraint(u2 - loc_width, u2 + loc_width, loc_scale), i2),
             ParameterConstraint(BoxConstraint(-1.0, 10.0, 1.0), ids.r1[1]),
             ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.c1[:, 1]),
             ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 1])
@@ -457,7 +459,7 @@ to_bound!(bound, free, constraints)
 ea, vp, catalog = SampleData.gen_n_body_dataset(1)
 
 bound = vp
-constraints = ConstraintBatch(bound)
+constraints = elbo_constraints(bound)
 free = allocate_free_params(bound, constraints)
 
 enforce!(bound, constraints)
@@ -482,7 +484,7 @@ end
 ea, vp, catalog = SampleData.gen_n_body_dataset(1)
 
 bound = vp
-constraints = ConstraintBatch(bound)
+constraints = elbo_constraints(bound)
 free = allocate_free_params(bound, constraints)
 
 enforce!(bound, constraints)

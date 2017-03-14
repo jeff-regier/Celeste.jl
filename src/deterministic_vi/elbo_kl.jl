@@ -1,6 +1,6 @@
 module KLDivergence
 
-using ..DeterministicVI: ElboArgs, VariationalParams
+using ..DeterministicVI: ElboArgs, VariationalParams, init_thread_pool!
 using ...Model: CanonicalParams, ids, prior, Ia, D
 using ...SensitiveFloats: SensitiveFloat, add_sources_sf!
 using Compat
@@ -214,8 +214,8 @@ end
 function subtract_kl_all_sources!{T}(ea::ElboArgs,
                                      vp::VariationalParams{T},
                                      accum::SensitiveFloat,
-                                     kl_source::SensitiveFloat{T},
-                                     helper::KLHelper)
+                                     kl_source::SensitiveFloat = get_kl_source(T),
+                                     helper::KLHelper = get_kl_helper(T))
     result = DiffBase.DiffResult(zero(T), kl_source.d)
     for sa in 1:length(ea.active_sources)
         subtract_kl_source!(kl_source, result, vp[ea.active_sources[sa]], helper)
@@ -229,21 +229,24 @@ end
 ############
 
 const CHUNK_SIZE = pickchunksize(PARAM_LENGTH)
-const KL_HELPER_POOL_FLOAT = Vector{KLHelper{CHUNK_SIZE,Float64}}()
-const KL_HELPER_POOL_DUAL = Vector{KLHelper{CHUNK_SIZE,Dual{1,Float64}}}()
 
-get_kl_helper(::Type{Float64}) = KL_HELPER_POOL_FLOAT[Base.Threads.threadid()]
-get_kl_helper(::Type{Dual{1,Float64}}) = KL_HELPER_POOL_DUAL[Base.Threads.threadid()]
+const KL_HELPER_FLOAT_POOL = Vector{KLHelper{CHUNK_SIZE,Float64}}()
+const KL_HELPER_DUAL_POOL = Vector{KLHelper{CHUNK_SIZE,Dual{1,Float64}}}()
+
+const KL_SOURCE_FLOAT_POOL = Vector{SensitiveFloat{Float64}}()
+const KL_SOURCE_DUAL_POOL = Vector{SensitiveFloat{Dual{1,Float64}}}()
+
+get_kl_helper(::Type{Float64}) = KL_HELPER_FLOAT_POOL[Base.Threads.threadid()]
+get_kl_helper(::Type{Dual{1,Float64}}) = KL_HELPER_DUAL_POOL[Base.Threads.threadid()]
+
+get_kl_source(::Type{Float64}) = KL_SOURCE_FLOAT_POOL[Base.Threads.threadid()]
+get_kl_source(::Type{Dual{1,Float64}}) = KL_SOURCE_DUAL_POOL[Base.Threads.threadid()]
 
 function __init__()
-    if length(KL_HELPER_POOL_FLOAT) != Base.Threads.nthreads()
-        empty!(KL_HELPER_POOL_FLOAT)
-        empty!(KL_HELPER_POOL_DUAL)
-        for i = 1:Base.Threads.nthreads()
-            push!(KL_HELPER_POOL_FLOAT, KLHelper(Dual{CHUNK_SIZE,Float64}))
-            push!(KL_HELPER_POOL_DUAL, KLHelper(Dual{CHUNK_SIZE,Dual{1,Float64}}))
-        end
-    end
+    init_thread_pool!(KL_HELPER_FLOAT_POOL, () -> KLHelper(Dual{CHUNK_SIZE,Float64}))
+    init_thread_pool!(KL_HELPER_DUAL_POOL, () -> KLHelper(Dual{CHUNK_SIZE,Dual{1,Float64}}))
+    init_thread_pool!(KL_SOURCE_FLOAT_POOL, () -> SensitiveFloat{Float64}(PARAM_LENGTH, 1, true, true))
+    init_thread_pool!(KL_SOURCE_DUAL_POOL, () -> SensitiveFloat{Dual{1,Float64}}(PARAM_LENGTH, 1, true, false))
 end
 
 # explicitly call this for use with compiled system image

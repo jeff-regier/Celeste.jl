@@ -54,49 +54,6 @@ immutable ConstraintBatch
     end
 end
 
-# default ConstraintBatch for Celeste's model
-function ConstraintBatch{T}(bound::VariationalParams{T},
-                            loc_width::Real = 1.0e-4,
-                            loc_scale::Real = 1.0)
-    n_sources = length(bound)
-    boxes = Vector{Vector{ParameterConstraint{BoxConstraint}}}(n_sources)
-    simplexes = Vector{Vector{ParameterConstraint{SimplexConstraint}}}(n_sources)
-    for src in 1:n_sources
-        u1, u2 = u_ParameterConstraints(bound[src], loc_width, loc_scale)
-        boxes[src] = [
-            u1,
-            u2,
-            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.e_dev),
-            ParameterConstraint(BoxConstraint(1e-2, 0.99, 1.0), ids.e_axis),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.e_angle),
-            ParameterConstraint(BoxConstraint(0.10, 70.0, 1.0), ids.e_scale),
-            ParameterConstraint(BoxConstraint(-1.0, 10.0, 1.0), ids.r1),
-            ParameterConstraint(BoxConstraint(1e-4, 0.10, 1.0), ids.r2),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.c1[:, 1]),
-            ParameterConstraint(BoxConstraint(-10.0, 10.0, 1.0), ids.c1[:, 2]),
-            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 1]),
-            ParameterConstraint(BoxConstraint(1e-4, 1.0, 1.0), ids.c2[:, 2])
-        ]
-        simplexes[src] = [
-            ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.a),
-            ParameterConstraint(SimplexConstraint(0.01/D, 1.0, D), ids.k[:, 1]),
-            ParameterConstraint(SimplexConstraint(0.01/D, 1.0, D), ids.k[:, 2])
-        ]
-    end
-    return ConstraintBatch(boxes, simplexes)
-end
-
-function u_BoxConstraint(loc, loc_width, loc_scale)
-    return BoxConstraint(loc - loc_width, loc + loc_width, loc_scale)
-end
-
-function u_ParameterConstraints(params, loc_width, loc_scale)
-    i1, i2 = ids.u[1], ids.u[2]
-    u1 = ParameterConstraint(u_BoxConstraint(params[i1], loc_width, loc_scale), i1)
-    u2 = ParameterConstraint(u_BoxConstraint(params[i2], loc_width, loc_scale), i2)
-    return u1, u2
-end
-
 #################################################
 # `to_bound`/`to_bound!` & `to_free`/`to_free!` #
 #################################################

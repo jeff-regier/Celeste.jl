@@ -327,10 +327,9 @@ function add_pixel_term!{NumType <: Number}(
                     ea::ElboArgs,
                     vp::VariationalParams{NumType},
                     n::Int, h::Int, w::Int,
-                    star_mcs::Array{BvnComponent{NumType}, 2},
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+                    bvn_bundle::BvnBundle{NumType},
                     sbs::Vector{SourceBrightness{NumType}},
-                    elbo_vars = ElboIntermediateVariables(NumType, ea.psf_K, ea.S, ea.Sa, true, false))
+                    elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(NumType, ea.Sa, true, false))
     img = ea.images[n]
 
     # This combines the sources into a single brightness value for the pixel.
@@ -346,19 +345,20 @@ function add_pixel_term!{NumType <: Number}(
         hw = SVector{2,Float64}(h, w)
         is_active_source = s in ea.active_sources  # fast?
 
-        populate_fsm!(elbo_vars.bvn_derivs,
+        populate_fsm!(bvn_bundle.bvn_derivs,
                       elbo_vars.fs0m,
                       elbo_vars.fs1m,
                       s, hw, is_active_source,
                       p.wcs_jacobian,
-                      gal_mcs, star_mcs)
+                      bvn_bundle.gal_mcs,
+                      bvn_bundle.star_mcs)
 
         H2, W2 = size(p.active_pixel_bitmap)
         if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
             if is_active_source
-                elbo_vars.active_pixel_counter += 1
+                elbo_vars.active_pixel_counter[] += 1
             else
-                elbo_vars.inactive_pixel_counter += 1
+                elbo_vars.inactive_pixel_counter[] += 1
             end
 
             accumulate_source_pixel_brightness!(ea, vp, elbo_vars,
@@ -394,11 +394,13 @@ Return the expected log likelihood for all bands in a section
 of the sky.
 Returns: A sensitive float with the log likelihood.
 """
-function elbo_likelihood{NumType <: Number}(
-             ea::ElboArgs,
-             vp::VariationalParams{NumType},
-             elbo_vars = ElboIntermediateVariables(NumType, ea.psf_K, ea.S, ea.Sa))
+function elbo_likelihood{T}(ea::ElboArgs,
+                            vp::VariationalParams{T},
+                            elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(T, ea.Sa),
+                            bvn_bundle::BvnBundle{T} = BvnBundle{T}(ea.psf_K, ea.S))
+
     clear!(elbo_vars)
+    clear!(bvn_bundle)
 
     # this call loops over light sources (but not images)
     sbs = load_source_brightnesses(ea, vp)
@@ -411,7 +413,8 @@ function elbo_likelihood{NumType <: Number}(
         # This convolves the PSF with the star/galaxy model, returning a
         # mixture of bivariate normals.
         star_mcs, gal_mcs = Model.load_bvn_mixtures!(
-                                    elbo_vars.star_mcs, elbo_vars.gal_mcs,
+                                    bvn_bundle.star_mcs,
+                                    bvn_bundle.gal_mcs,
                                     ea.S, ea.patches,
                                     vp, ea.active_sources,
                                     ea.psf_K, n,
@@ -459,7 +462,7 @@ function elbo_likelihood{NumType <: Number}(
                 # Note that although we are iterating over pixels within a
                 # single patch, add_pixel_term /also/ iterates over patches to
                 # find all patches that overlap with this pixel.
-                add_pixel_term!(ea, vp, n, h, w, star_mcs, gal_mcs, sbs, elbo_vars)
+                add_pixel_term!(ea, vp, n, h, w, bvn_bundle, sbs, elbo_vars)
             end
         end
     end
@@ -474,20 +477,13 @@ Calculates and returns the ELBO and its derivatives for all the bands
 of an image.
 Returns: A sensitive float containing the ELBO for the image.
 """
-function elbo{NumType <: Number}(
-                 ea::ElboArgs,
-                 vp::VariationalParams{NumType},
-                 elbo_vars::ElboIntermediateVariables{NumType} =
-                    ElboIntermediateVariables(NumType, ea.psf_K, ea.S, ea.Sa,
-                                              true, NumType <: AbstractFloat),
-                 kl_source = SensitiveFloat{NumType}(length(CanonicalParams), 1,
-                       elbo_vars.elbo.has_gradient, elbo_vars.elbo.has_hessian),
-                 kl_helper = KLDivergence.get_kl_helper(NumType))
-    @assert(all([all(isfinite, vs) for vs in vp]), "vp contains NaNs or Infs")
-    ret = elbo_likelihood(ea, vp, elbo_vars)
-    if ea.include_kl
-        KLDivergence.subtract_kl_all_sources!(ea, vp, ret, kl_source, kl_helper)
-    end
+function elbo{T}(ea::ElboArgs,
+                 vp::VariationalParams{T},
+                 elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(T, ea.Sa, true,  T<:AbstractFloat),
+                 bvn_bundle::BvnBundle = BvnBundle{T}(ea.psf_K, ea.S))
+    @assert(all(all(isfinite, vs) for vs in vp), "vp contains NaNs or Infs")
+    result = elbo_likelihood(ea, vp, elbo_vars, bvn_bundle)
+    ea.include_kl && KLDivergence.subtract_kl_all_sources!(ea, vp, result)
     assert_all_finite(elbo_vars.elbo)
-    return ret
+    return result
 end
