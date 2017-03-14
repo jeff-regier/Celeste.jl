@@ -368,7 +368,7 @@ function add_pixel_term!{NumType <: Number}(
 
     # There are no derivatives with respect to epsilon, so can safely add
     # to the value.
-    elbo_vars.E_G.v[] += img.epsilon_mat[h, w]
+    elbo_vars.E_G.v[] += img.sky[h, w]
 
     # Add the terms to the elbo given the brightness.
     add_elbo_log_term!(elbo_vars,

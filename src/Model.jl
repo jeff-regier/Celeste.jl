@@ -10,7 +10,7 @@ export Image, SkyPatch, PsfComponent,
        PriorParams, CanonicalParams, BrightnessParams, StarPosParams,
        GalaxyPosParams, GalaxyShapeParams,
        PsfParams, RawPSF, CatalogEntry,
-       ParamSet
+       ParamSet, SkyIntensity
 
 # functions
 export align

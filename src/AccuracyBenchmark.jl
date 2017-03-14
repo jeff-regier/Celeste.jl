@@ -455,6 +455,8 @@ function make_images(band_extensions::Vector{FitsImage})
     map(enumerate(band_extensions)) do pair
         band_index, extension = pair
         height, width = size(extension.pixels)
+        sky = Model.SkyIntensity(fill(extension.header["CLSKY"], height, width),
+                           collect(1:height), collect(1:width), ones(1:height))
         Model.Image(
             height,
             width,
@@ -465,7 +467,7 @@ function make_images(band_extensions::Vector{FitsImage})
             0, # SDSS run
             0, # SDSS camcol
             0, # SDSS field
-            fill(extension.header["CLSKY"], height, width),
+            sky,
             fill(extension.header["CLIOTA"], height),
             Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
         )

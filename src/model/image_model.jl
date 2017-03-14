@@ -1,6 +1,3 @@
-import Base.getindex
-
-
 immutable SkyIntensity
     sky_small::Matrix{Float32}
     sky_x::Vector{Float32}
@@ -49,10 +46,11 @@ function interp_sky_kernel(sky::SkyIntensity, i::Int, j::Int)
              + xw0 * yw1 * sky.sky_small[x0, y1]
              + xw1 * yw1 * sky.sky_small[x1, y1])
 
-    # return sky intensity in nmgy
+    # return sky intensity in counts
     skynmgy * sky.calibration[i]
 end
 
+import Base.getindex
 
 function getindex(sky::SkyIntensity, i::Int, j::Int)
     interp_sky_kernel(sky, i, j)
