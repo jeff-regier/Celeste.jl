@@ -7,7 +7,7 @@ import FITSIO
 import WCS
 
 import ..Log
-import ..Model: RawPSF, Image, CatalogEntry, eval_psf
+import ..Model: RawPSF, Image, CatalogEntry, eval_psf, SkyIntensity
 import ..PSF
 import Base.convert, Base.getindex
 
@@ -36,56 +36,6 @@ function RunCamcolField(run::String, camcol::String, field::String)
 end
 
 
-immutable SkyIntensity
-    sky_small::Matrix{Float32}
-    sky_x::Vector{Float32}
-    sky_y::Vector{Float32}
-end
-
-
-"""
-Interpolate the 2-d array `sky_small` at the grid of array coordinates spanned
-by the vectors `sky_x` and `sky_y` using bilinear interpolation.
-The output array will have size `(length(sky_x), length(sky_y))`.
-For example, if `x[1] = 3.3` and `y[2] = 4.7`, the element `out[1, 2]`
-will be a result of linear interpolation between the values
-`sky_small[3:4, 4:5]`.
-
-For coordinates that are out-of-bounds (e.g., `sky_x[i] < 1.0` or
-`sky_x[i] > size(sky_small,1)` where the interpolation would index sky_small values
-outside the array, the nearest values in the sky_small array are used. (This is
-constant extrapolation.)
-"""
-function interp_sky_kernel(sky::SkyIntensity, i::Int, j::Int)
-    nx, ny = size(sky.sky_small)
-
-    y0 = floor(Int, sky.sky_y[j])
-    y1 = y0 + 1
-    yw0 = sky.sky_y[j] - y0
-    yw1 = 1.0f0 - yw0
-
-    # modify out-of-bounds indicies to 1 or ny
-    y0 = min(max(y0, 1), ny)
-    y1 = min(max(y1, 1), ny)
-
-    x0 = floor(Int, sky.sky_x[i])
-    x1 = x0 + 1
-    xw0 = sky.sky_x[i] - x0
-    xw1 = 1.0f0 - xw0
-
-    # modify out-of-bounds indicies to 1 or nx
-    x0 = min(max(x0, 1), nx)
-    x1 = min(max(x1, 1), nx)
-
-    (xw0 * yw0 * sky.sky_small[x0, y0] + xw1 * yw0 * sky.sky_small[x1, y0] +
-         xw0 * yw1 * sky.sky_small[x0, y1] + xw1 * yw1 * sky.sky_small[x1, y1])
-end
-
-function getindex(sky::SkyIntensity, i::Int, j::Int)
-    interp_sky_kernel(sky, i, j)
-end
-
-
 """
 read_sky(hdu)
 
@@ -109,8 +59,7 @@ function read_sky(hdu::FITSIO.TableHDU)
     # to be defined
     @assert all((x)-> x > 1e-12, sky_small)
 
-    # interpolate to full sky image
-    return SkyIntensity(sky_small, sky_x, sky_y)
+    return sky_small, sky_x, sky_y
 end
 
 
@@ -129,8 +78,10 @@ function read_frame(fname)
     hdr = FITSIO.read_header(f[1], String)::String
     image = read(f[1])::Array{Float32, 2}  # sky-subtracted & calibrated data
     calibration = read(f[2])::Vector{Float32}
-    sky = read_sky(f[3])
+    sky_small, sky_x, sky_y = read_sky(f[3])
     close(f)
+
+    sky = SkyIntensity(sky_small, sky_x, sky_y, calibration)
 
     wcs = WCS.from_header(hdr)[1]
 
@@ -299,18 +250,16 @@ function convert(::Type{Image}, r::RawImage)
 
     # scale pixels to raw electron counts
     @assert size(r.pixels, 1) == length(r.calibration)
-    epsilon_mat = similar(r.pixels)
     @inbounds for j=1:size(r.pixels, 2), i=1:size(r.pixels, 1)
-        sky_ij = interp_sky_kernel(r.sky, i, j)
-        r.pixels[i, j] = r.gain * (r.pixels[i, j] / r.calibration[i] + sky_ij)
-        epsilon_mat[i, j] = sky_ij * r.calibration[i]
+        sky_ij = r.sky[i, j]
+        r.pixels[i, j] = (r.gain / r.calibration[i]) * (r.pixels[i, j] + sky_ij)
     end
 
     iota_vec = r.gain ./ r.calibration
 
     Image(H, W, r.pixels, r.b, r.wcs, celeste_psf,
           r.rcf.run, r.rcf.camcol, r.rcf.field,
-          epsilon_mat, iota_vec, r.raw_psf_comp)
+          r.sky, iota_vec, r.raw_psf_comp)
 end
 
 

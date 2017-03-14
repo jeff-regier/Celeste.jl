@@ -58,6 +58,9 @@ immutable ElboIntermediateVariables{NumType <: Number}
 
     # The ELBO itself.
     elbo::SensitiveFloat{NumType}
+
+    active_pixel_counter::Int64
+    inactive_pixel_counter::Int64
 end
 
 
@@ -106,7 +109,7 @@ function ElboIntermediateVariables(NumType::DataType,
         fs0m, fs1m,
         E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
         E_G, var_G, combine_grad, combine_hess,
-        elbo_log_term, elbo)
+        elbo_log_term, elbo, 0, 0)
 end
 
 function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType})

@@ -186,7 +186,7 @@ function state_log_likelihood(is_star::Bool,                # source is star
             hw = SVector{2,Float64}(h, w)
 
             # compute the background rate for this pixel
-            background_rate = img.epsilon_mat[h, w]
+            background_rate = img.sky[h, w]
             for s in 2:S  # excludes source #1
                 # determine if background source is star/gal; get fluxes
                 params_s  = source_params[s]

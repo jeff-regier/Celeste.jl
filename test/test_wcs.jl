@@ -6,15 +6,14 @@ import WCS
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
 
-"Test that the identity WCSTransform works as expected."
-function test_id_wcs()
+@testset "the identity WCSTransform works as expected" begin
     rand_coord = rand(2, 10)
     @test WCS.pix_to_world(SampleData.wcs_id, rand_coord) == rand_coord
     @test WCS.world_to_pix(SampleData.wcs_id, rand_coord) == rand_coord
 end
 
 
-function test_linear_world_to_pix()
+@testset "linear_world_to_pix works" begin
     rcf = SDSSIO.RunCamcolField(3900, 6, 269)
     image = SDSSIO.load_field_images(rcf, datadir)[1]
     wcs = image.wcs
@@ -40,7 +39,3 @@ function test_linear_world_to_pix()
 
     test_jacobian(wcs, pix_center, world_center)
 end
-
-
-test_id_wcs()
-test_linear_world_to_pix()

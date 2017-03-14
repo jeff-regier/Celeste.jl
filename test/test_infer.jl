@@ -75,7 +75,7 @@ function test_load_active_pixels()
             # (h2, w2) index the local patch, while (h, w) index the image
             h = p.bitmap_offset[1] + h2
             w = p.bitmap_offset[2] + w2
-            num_active_photons += img.pixels[h, w] - img.epsilon_mat[h, w]
+            num_active_photons += img.pixels[h, w] - img.sky[h, w]
             num_active_pixels += 1
         end
     end
@@ -84,7 +84,9 @@ function test_load_active_pixels()
 
     total_photons = 0.0
     for img in ea.images
-        total_photons += sum(img.pixels) - sum(img.epsilon_mat)
+        for w in 1:img.W, h in 1:img.H
+            total_photons += img.pixels[h, w] - img.sky[h, w]
+        end
     end
 
     @test num_active_photons <= total_photons  # sanity check
@@ -92,7 +94,9 @@ function test_load_active_pixels()
 
     # super dim images
     for img in ea.images
-        img.pixels[:,:] = img.epsilon_mat[:,:]
+        for w in 1:img.W, h in 1:img.H
+            img.pixels[h, w] = img.sky[h, w]
+        end
     end
 
     # only 2 pixels per image are within 0.6 pixels of the
