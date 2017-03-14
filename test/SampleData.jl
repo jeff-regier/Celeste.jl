@@ -94,13 +94,14 @@ function load_stamp_blob(stamp_dir, stamp_id)
         camcol_num = round(Int, hdr["CAMCOL"])
         field_num = round(Int, hdr["FIELD"])
 
-        epsilon_mat = fill(epsilon, H, W)
+        sky = SkyIntensity(fill(epsilon, H, W),
+                           collect(1:H), collect(1:W), ones(H))
         iota_vec = fill(iota, H)
         empty_psf_comp = RawPSF(Matrix{Float64}(0, 0), 0, 0,
                                  Array{Float64,3}(0, 0, 0))
 
         Image(H, W, nelec, b, wcs, psf,
-              run_num, camcol_num, field_num, epsilon_mat, iota_vec,
+              run_num, camcol_num, field_num, sky, iota_vec,
               empty_psf_comp)
     end
 
@@ -339,7 +340,9 @@ function gen_n_body_dataset(
     # Make non-constant background.
     for b=1:5
         images[b].iota_vec = fill(images[b].iota_vec[1], images[b].H)
-        images[b].epsilon_mat = fill(images[b].epsilon_mat[1], images[b].H, images[b].W)
+        images[b].sky = SkyIntensity(fill(images[b].sky[1,1], images[b].H, images[b].W),
+                                     collect(1:images[b].H), collect(1:images[b].W),
+                                     ones(images[b].H))
     end
 
     ea = make_elbo_args(

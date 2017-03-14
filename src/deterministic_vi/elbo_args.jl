@@ -64,6 +64,9 @@ type ElboIntermediateVariables{NumType <: Number}
 
     star_mcs::Matrix{BvnComponent{NumType}}
     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4}
+
+    active_pixel_counter::Int64
+    inactive_pixel_counter::Int64
 end
 
 
@@ -120,7 +123,7 @@ function ElboIntermediateVariables(NumType::DataType,
         bvn_derivs, fs0m, fs1m,
         E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
         E_G, var_G, combine_grad, combine_hess,
-        elbo_log_term, elbo, star_mcs, gal_mcs)
+        elbo_log_term, elbo, star_mcs, gal_mcs, 0, 0)
 end
 
 

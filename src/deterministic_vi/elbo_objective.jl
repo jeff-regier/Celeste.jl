@@ -355,7 +355,12 @@ function add_pixel_term!{NumType <: Number}(
 
         H2, W2 = size(p.active_pixel_bitmap)
         if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
-            is_active_source = s in ea.active_sources
+            if is_active_source
+                elbo_vars.active_pixel_counter += 1
+            else
+                elbo_vars.inactive_pixel_counter += 1
+            end
+
             accumulate_source_pixel_brightness!(ea, vp, elbo_vars,
                 sbs[s], ea.images[n].b, s, is_active_source)
         end
@@ -363,7 +368,7 @@ function add_pixel_term!{NumType <: Number}(
 
     # There are no derivatives with respect to epsilon, so can safely add
     # to the value.
-    elbo_vars.E_G.v[] += img.epsilon_mat[h, w]
+    elbo_vars.E_G.v[] += img.sky[h, w]
 
     # Add the terms to the elbo given the brightness.
     add_elbo_log_term!(elbo_vars,
