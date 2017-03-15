@@ -399,7 +399,7 @@ end
 
 function GalaxyCacheComponent{NumType <: Number}(
     e_dev_dir::Float64, e_dev_i::NumType,
-    gc::GalaxyComponent, pc::PsfComponent, u::Vector{NumType},
+    gc::GalaxyComponent, pc::PsfComponent, u::AbstractVector{NumType},
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
     calculate_gradient::Bool, calculate_hessian::Bool)
 
@@ -505,7 +505,7 @@ function transform_bvn_derivs_hessian!{NumType <: Number}(
     @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
       @unroll_loop for shape_id1 in 1:shape_id2
         @inbounds @unroll_loop for sig_id1 in 1:3
-          bvn_ss_h[shape_id1, shape_id2] += bvn_sig_d[sig_id1] * sig_sf_t[sig_id1, shape_id1, shape_id2]
+          @fastmath bvn_ss_h[shape_id1, shape_id2] += bvn_sig_d[sig_id1] * sig_sf_t[sig_id1, shape_id1, shape_id2]
         end
       end
     end
@@ -514,9 +514,9 @@ function transform_bvn_derivs_hessian!{NumType <: Number}(
     @unroll_loop for sig_id1 in 1:3
       @unroll_loop for sig_id2 in 1:3
         @inbounds @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
-          inner_term = bvn_sigsig_h[sig_id1, sig_id2] * sig_sf_j[sig_id2, shape_id2]
+          @fastmath inner_term = bvn_sigsig_h[sig_id1, sig_id2] * sig_sf_j[sig_id2, shape_id2]
           @unroll_loop for shape_id1 in 1:shape_id2
-            bvn_ss_h[shape_id1, shape_id2] += inner_term * sig_sf_j[sig_id1, shape_id1]
+            @fastmath bvn_ss_h[shape_id1, shape_id2] += inner_term * sig_sf_j[sig_id1, shape_id1]
           end
         end
       end
@@ -535,7 +535,7 @@ function transform_bvn_derivs_hessian!{NumType <: Number}(
       @unroll_loop for u_id in 1:2
         @unroll_loop for sig_id in 1:3
           @inbounds @unroll_loop for x_id in 1:2
-            bvn_us_h[u_id, shape_id] +=
+            @fastmath bvn_us_h[u_id, shape_id] +=
               bvn_xsig_h[x_id, sig_id] * sig_sf_j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
           end
         end

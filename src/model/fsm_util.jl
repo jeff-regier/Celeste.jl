@@ -112,7 +112,7 @@ function populate_gal_fsm!{NumType <: Number}(
                     s::Int,
                     x::SVector{2,Float64},
                     is_active_source::Bool,
-                    wcs_jacobian::Matrix{Float64},
+                    wcs_jacobian,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
     clear!(fs1m)
     for i = 1:2 # Galaxy types
@@ -144,7 +144,7 @@ function populate_fsm!{NumType <: Number}(
                     s::Int,
                     x::SVector{2,Float64},
                     is_active_source::Bool,
-                    wcs_jacobian::Matrix{Float64},
+                    wcs_jacobian,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
     clear!(fs0m)
@@ -179,7 +179,7 @@ function accum_star_pos!{NumType <: Number}(
                     fs0m::SensitiveFloat{NumType},
                     bmc::BvnComponent{NumType},
                     x::SVector{2,Float64},
-                    wcs_jacobian::Array{Float64, 2},
+                    wcs_jacobian,
                     is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, bmc, x)
 
@@ -221,7 +221,7 @@ function accum_galaxy_pos!{NumType <: Number}(
                     fs1m::SensitiveFloat{NumType},
                     gcc::GalaxyCacheComponent{NumType},
                     x::SVector{2,Float64},
-                    wcs_jacobian::Array{Float64, 2},
+                    wcs_jacobian,
                     is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, gcc.bmc, x)
     f = bvn_derivs.f_pre[1] * gcc.e_dev_i

@@ -11,7 +11,7 @@ Args:
 Returns:
     - The 1-indexed pixel locations in the same shape as the input.
 """
-linear_world_to_pix{T <: Number}(wcs_jacobian::Matrix{Float64},
+linear_world_to_pix{T <: Number}(wcs_jacobian,
                           world_offset::Vector{Float64},
                           pix_offset::Vector{Float64},
                           worldcoords::VecOrMat{T}) =
@@ -46,6 +46,6 @@ function pixel_world_jacobian(wcs::WCSTransform, pix_loc::Array{Float64, 1};
     world_loc_1 = world_loc + world_delt * Float64[1, 0]
     world_loc_2 = world_loc + world_delt * Float64[0, 1]
 
-    hcat((WCS.world_to_pix(wcs, world_loc_1) - pix_loc) ./ world_delt,
-         (WCS.world_to_pix(wcs, world_loc_2) - pix_loc) ./ world_delt)
+    SMatrix{2,2,Float64,4}(hcat((WCS.world_to_pix(wcs, world_loc_1) - pix_loc) ./ world_delt,
+         (WCS.world_to_pix(wcs, world_loc_2) - pix_loc) ./ world_delt))
 end
