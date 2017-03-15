@@ -20,7 +20,7 @@ immutable SkyPatch
     radius_pix::Float64
 
     psf::Vector{PsfComponent}
-    wcs_jacobian::Matrix{Float64}
+    wcs_jacobian::SMatrix{2, 2, Float64, 4}
     pixel_center::Vector{Float64}
 
     bitmap_offset::SVector{2, Int64}  # lower left corner index offset
