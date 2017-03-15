@@ -3,29 +3,42 @@
 import Celeste.ParallelRun: BoundingBox, infer_boxes
 import Celeste.Log
 
-
-const usage_info =
-"""
-Usage:
-  infer-boxes.jl <boxes_file> <out_dir>
-"""
-
-const stagedir = ENV["CELESTE_STAGE_DIR"]
-
 if length(ARGS) != 2
-    println(usage_info)
+    println("""
+        Usage:
+          infer-boxes.jl <boxes_file> <out_dir>
+
+        <boxes_file> format, one line per box:
+        <difficulty>	<#RCFs>	<#sources>	<ramin> <ramax> <decmin> <decmax>
+        """)
 else
     all_boxes = BoundingBox[]
-    sky_boxes = ARGS[1]
-    f = open(sky_boxes)
+    box_source_counts = Int64[]
+    boxes_file = ARGS[1]
+    f = open(boxes_file)
     for ln in eachline(f)
-        ss = split(ln, ' ')
-        ns = [parse(Float64, x) for x in ss]
-        bb = BoundingBox(ns...)
+        lp = split(ln, '\t')
+        if length(lp) != 4
+            println("malformed line in box file, skipping remainder")
+            println("> $ln")
+            break
+        end
+        sc = parse(Int64, lp[3])
+        push!(box_source_counts, sc)
+        ss = split(lp[4], ' ')
+        ramin = parse(Float64, ss[1])
+        ramax = parse(Float64, ss[2])
+        decmin = parse(Float64, ss[3])
+        decmax = parse(Float64, ss[4])
+        bb = BoundingBox(ramin, ramax, decmin, decmax)
         push!(all_boxes, bb)
     end
     close(f)
     outdir = ARGS[2]
-    infer_boxes(all_boxes, stagedir, outdir)
+    if length(all_boxes) < 1
+        println("box file is empty?")
+        exit(-1)
+    end
+    infer_boxes(all_boxes, box_source_counts, ENV["CELESTE_STAGE_DIR"], outdir)
 end
 

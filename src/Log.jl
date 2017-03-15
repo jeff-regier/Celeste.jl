@@ -9,22 +9,23 @@ const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != 
 const distributed = haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
 
 if distributed
-nodeid = Gasp.nodeid
+import Gasp.grank
 else
-nodeid = 1
+grank() = 1
 end
 
-# thread-safe print functions
-@inline nputs(nid, s...) = ccall(:puts, Cint, (Cstring,), string("[$nid] ", s...))
+# thread-safe print function
 @inline ntputs(nid, tid, s...) = ccall(:puts, Cint, (Cstring,), string("[$nid]<$tid> ", s...))
 
-# logging functions
-@inline error(msg...) = ntputs(nodeid, threadid(), "ERROR: ", msg...)
-@inline warn(msg...) = ntputs(nodeid, threadid(), "WARN: ", msg...)
-@inline info(msg...) = ntputs(nodeid, threadid(), "INFO: ", msg...)
 
-# In production mode, rather the development mode, don't log debug statements
-@inline debug(msg...) = is_production_run || ntputs(nodeid, threadid(), "DEBUG: ", msg...)
+# logging functions
+@inline message(msg...) = ntputs(grank(), threadid(), msg...) 
+@inline error(msg...) = ntputs(grank(), threadid(), "ERROR: ", msg...)
+@inline warn(msg...) = ntputs(grank(), threadid(), "WARN: ", msg...)
+
+# In production mode, rather the development mode, don't log debug or info statements
+@inline info(msg...) = is_production_run || ntputs(grank(), threadid(), "INFO: ", msg...)
+@inline debug(msg...) = is_production_run || ntputs(grank(), threadid(), "DEBUG: ", msg...)
 
 # Like `error()`, but include exception info and stack trace. Should only be called from a `catch`
 # block, e.g.,
