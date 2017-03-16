@@ -306,6 +306,16 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
         push!(results, result)
     end
 
+    n_active = 0
+    n_inactive = 0
+    for elbo_vars in DeterministicVI.ElboMaximize.ELBO_VARS_POOL
+        n_active += elbo_vars.active_pixel_counter[]
+        n_inactive += elbo_vars.inactive_pixel_counter[]
+        elbo_vars.active_pixel_counter[] = 0
+        elbo_vars.inactive_pixel_counter[] = 0
+    end
+    Log.info("(active,inactive) pixels processed: \($n_active, $n_inactive\)")
+
     results
 end
 
