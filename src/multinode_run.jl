@@ -1,4 +1,39 @@
+# ----------------
+# A simple centralized sense reversing thread barrier. Needed to allow the
+# ordering constraints that Cyclades partitioning imposes on the processing
+# of sources.
+# ----------------
+
+type CentSRBarrier
+    thread_counter::Atomic{Int}
+    num_threads::Int
+    sense::Int
+    thread_senses::Vector{Int}
+end
+
+function setup_barrier(num_threads::Int)
+    CentSRBarrier(Atomic{Int}(num_threads), num_threads, 1, ones(Int, nthreads()))
+end
+
+function thread_barrier(bar::CentSRBarrier)
+    tid = threadid()
+    bar.thread_senses[tid] = 1 - bar.thread_senses[tid]
+    sense = 1 - bar.sense
+    if atomic_sub!(bar.thread_counter, 1) == 1
+        bar.thread_counter[] = bar.num_threads
+        bar.sense = 1 - bar.sense
+    else
+        while bar.thread_senses[tid] != bar.sense
+            ccall(:jl_cpu_pause, Void, ())
+            ccall(:jl_gc_safepoint, Void, ())
+        end
+    end
+end
+
+
+# ----------------
 # container for multinode-specific information
+# ----------------
 type MultinodeInfo
     dt::Dtree
     ni::Int
@@ -6,9 +41,13 @@ type MultinodeInfo
     li::Int
     rundt::Bool
     lock::SpinLock
+    nworkers::Int
+    bar::CentSRBarrier
 end
 
-# one of these is used for every bounding box
+# ----------------
+# container for bounding boxes and associated data
+# ----------------
 type BoxInfo
     state::Atomic{Int}
     box_idx::Int
@@ -20,13 +59,13 @@ type BoxInfo
     lock::SpinLock
     curr_source::Int
     sources_assignment::Vector{Vector{Vector{Int64}}}
-    #ea_vec::Vector{ElboArgs}
-    #vp_vec::Vector{VariationalParams{Float64}}
-    #cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}}
-    #ts_vp::Dict{Int64,Array{Float64}}
+    ea_vec::Vector{ElboArgs}
+    vp_vec::Vector{VariationalParams{Float64}}
+    cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}}
+    ts_vp::Dict{Int64,Array{Float64}}
 
-    BoxInfo() = new(Atomic{Int}(BoxDone), 0, 0, [], [], [], [], SpinLock(), 1, [])
-                    #[], [], [], Dict{Int64,Array{Float64}}())
+    BoxInfo() = new(Atomic{Int}(BoxDone), 0, 0, [], [], [], [], SpinLock(), 1, [],
+                    [], [], [], Dict{Int64,Array{Float64}}())
 end
 
 # box states
@@ -38,16 +77,6 @@ const BoxReady = 3::Int
 # enable loading the next bounding box to process, while light sources
 # in the current box are still being processed
 const NumConcurrentBoxes = 2::Int
-
-
-function show_affinities()
-    function show_affinity()
-        tid = threadid()
-        cpu = ccall(:sched_getcpu, Cint, ())
-        ccall(:puts, Cint, (Cstring,), string("[$(grank())]<$tid> => $cpu"))
-    end
-    ccall(:jl_threading_run, Void, (Any,), Core.svec(show_affinity))
-end
 
 
 """
@@ -89,7 +118,10 @@ function init_multinode(nwi::Int)
 
     Log.debug("dtree: initial: $(ni) ($(ci) to $(li))")
 
-    return MultinodeInfo(dt, ni, ci, li, rundt, lock)
+    nworkers = nthreads() - (rundt ? 1 : 0)
+    bar = setup_barrier(nworkers)
+
+    return MultinodeInfo(dt, ni, ci, li, rundt, lock, nworkers, bar)
 end
 
 
@@ -184,243 +216,141 @@ function load_box(cbox::BoxInfo, mi::MultinodeInfo,
     box = all_boxes[box_idx]
     cbox.box_idx = box_idx
 
-    Log.message("loading box $(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax)")
 
     # load the RCFs
     tic()
     rcfs = get_overlapping_fields(box, stagedir)
-    timing.query_fids = timing.query_fids + toq()
+    rcftime = toq()
+    timing.query_fids += rcftime
 
     # load catalog, target sources, neighbor map and images for these RCFs
+    tic()
     cbox.catalog, cbox.target_sources, cbox.neighbor_map, cbox.images =
             infer_init(rcfs, stagedir;
                        box=box,
                        primary_initialization=primary_initialization,
                        timing=timing)
+    loadtime = toq()
+
     cbox.nsources = length(cbox.target_sources)
     cbox.curr_source = 1
-    Log.message("$(cbox.nsources) sources in box")
     cbox.state[] = BoxLoaded
-
     unlock(cbox.lock)
+
+    Log.message("loaded box $(box.ramin), $(box.ramax), $(box.decmin), ",
+                "$(box.decmax) ($(cbox.nsources) sources) in ",
+                "$(rcftime + loadtime) secs")
+
     return true
 end
 
 
 """
-Run single-inference for the light sources in each of the specified
-bounding boxes. A dynamic scheduler distributes boxes to ranks in
-order to balance load.
+Thread function for running single inference on the light sources in
+the specified bounding boxes. Used by the driver function.
 """
-function multi_node_single_infer(all_boxes::Vector{BoundingBox},
-                                 box_source_counts::Vector{Int64},
-                                 stagedir::String;
-                                 outdir=".",
-                                 primary_initialization=true,
-                                 timing=InferTiming())
-    Log.message("started at $(Dates.now())")
+function single_infer_boxes(config::Configs.Config,
+                            all_boxes::Vector{BoundingBox},
+                            stagedir::String,
+                            mi::MultinodeInfo,
+                            all_results::Garray,
+                            source_counts::Vector{Int},
+                            conc_boxes::Vector{BoxInfo},
+                            all_threads_timing::Vector{InferTiming},
+                            primary_initialization=true)
+    tid = threadid()
+    all_threads_timing[tid] = InferTiming()
+    thread_timing = all_threads_timing[tid]
 
-    # initialize scheduler, set up results global array
-    nwi = length(all_boxes)
-    mi = init_multinode(nwi)
-    all_results, source_counts = setup_results(all_boxes, box_source_counts)
-
-    # for concurrent box processing
-    conc_boxes = [BoxInfo() for i=1:NumConcurrentBoxes]
-
-    nworkers = nthreads() - (mi.rundt ? 1 : 0)
-
-    # per-thread timing
-    thread_timing = Array{InferTiming}(nthreads())
-
-    config = Configs.Config()
-
-    # thread function to process sources in boxes
-    function process_boxes()
-        tid = threadid()
-        thread_timing[tid] = InferTiming()
-        timing = thread_timing[tid]
-
-        # Dtree parent ranks reserve one thread to drive the tree
-        if mi.rundt && tid == nthreads()
-            Log.debug("dtree: running tree")
-            while runtree(mi.dt)
-                Gasp.cpu_pause()
-            end
-            return
+    # Dtree parent ranks reserve one thread to drive the tree
+    if mi.rundt && tid == nthreads()
+        Log.debug("dtree: running tree")
+        while runtree(mi.dt)
+            Gasp.cpu_pause()
         end
-
-        # all other threads process sources
-        ts = 0
-        ts_boxidx = 0
-        curr_cbox = 1
-        cbox = conc_boxes[curr_cbox]
-        load_box(cbox, mi, all_boxes, stagedir;
-                 primary_initialization=primary_initialization,
-                 timing=timing)
-        while true
-            # get the next source to process from the current box
-            lock(cbox.lock)
-            ts = cbox.curr_source
-            ts_boxidx = cbox.box_idx
-            cbox.curr_source = cbox.curr_source + 1
-            unlock(cbox.lock)
-
-            # if the current box is done, switch to the next box
-            if ts > cbox.nsources
-                # mark this box done
-                if cbox.state[] != BoxDone
-                    atomic_cas!(cbox.state, BoxLoaded, BoxDone)
-                end
-
-                # switch to the next box (other threads may still be working here)
-                curr_cbox = curr_cbox + 1
-                if curr_cbox > NumConcurrentBoxes
-                    curr_cbox = 1
-                end
-                cbox = conc_boxes[curr_cbox]
-
-                # if it hasn't already been loaded, load the next box to process
-                if cbox.state[] != BoxLoaded
-                    if !load_box(cbox, mi, all_boxes, stagedir;
-                                primary_initialization=primary_initialization,
-                                timing=timing)
-                        break
-                    end
-                end
-                continue
-            end
-
-            # process the source and record the result
-            try
-                tic()
-                result = process_source(config, ts, cbox.target_sources,
-                                        cbox.catalog, cbox.neighbor_map,
-                                        cbox.images)
-                timing.opt_srcs += toq()
-                timing.num_srcs += 1
-
-                results_idx = source_counts[ts_boxidx] + ts
-                tic()
-                put!(all_results, results_idx, results_idx, [result])
-                timing.ga_put += toq()
-                #Log.debug("wrote result to entry $(results_idx) of $(source_counts[end])")
-            catch ex
-                if is_production_run || nthreads() > 1
-                    Log.exception(ex)
-                else
-                    rethrow(ex)
-                end
-            end
-
-            # if we're close to the end of the sources in this box, start loading
-            # the next box, to overlap loading with processing as much as possible
-            if nworkers > 1 &&
-                    (ts == cbox.nsources - nworkers ||
-                    (cbox.nsources <= nworkers && ts == 1))
-                curr_cbox = curr_cbox + 1
-                if curr_cbox > NumConcurrentBoxes
-                    curr_cbox = 1
-                end
-                cbox = conc_boxes[curr_cbox]
-                if cbox.state[] != BoxLoaded
-                    if !load_box(cbox, mi, all_boxes, stagedir;
-                                 primary_initialization=primary_initialization,
-                                 timing=timing)
-                        break
-                    end
-                end
-            end
-        end
+        return
     end
 
-    if nthreads() == 1
-        process_boxes()
-    else
-        ccall(:jl_threading_run, Void, (Any,), Core.svec(process_boxes))
-        #ccall(:jl_threading_profile, Void, ())
-    end
-    Log.message("completed at $(Dates.now())")
+    # all other threads process sources
+    ts = 0
+    ts_boxidx = 0
+    curr_cbox = 1
+    cbox = conc_boxes[curr_cbox]
+    load_box(cbox, mi, all_boxes, stagedir;
+             primary_initialization=primary_initialization,
+             timing=thread_timing)
+    while true
+        # get the next source to process from the current box
+        lock(cbox.lock)
+        ts = cbox.curr_source
+        ts_boxidx = cbox.box_idx
+        cbox.curr_source = cbox.curr_source + 1
+        unlock(cbox.lock)
 
-    for i = 1:nthreads()
-        add_timing!(timing, thread_timing[i])
-    end
+        # if the current box is done, switch to the next box
+        if ts > cbox.nsources
+            # mark this box done
+            if cbox.state[] != BoxDone
+                atomic_cas!(cbox.state, BoxLoaded, BoxDone)
+            end
 
-    tic()
-    save_results(all_results, outdir)
-    timing.write_results = toq()
+            # switch to the next box (other threads may still be working here)
+            curr_cbox = curr_cbox + 1
+            if curr_cbox > NumConcurrentBoxes
+                curr_cbox = 1
+            end
+            cbox = conc_boxes[curr_cbox]
 
-    tic()
-    finalize(mi.dt)
-    timing.wait_done = toq()
-    Log.message("synchronized ranks at $(Dates.now())")
-end
-
-
-"""
-Return a Cyclades partitioning or an equal partitioning of the target sources.
-"""
-function partition_box(npartitions::Int, target_sources::Vector{Int},
-                       neighbor_map::Vector{Vector{Int}};
-                       cyclades=true,
-                       batch_size=400)
-    if cyclades
-        cyclades_neighbor_map = Dict{Int64,Vector{Int64}}()
-        for (index, neighbors) in enumerate(neighbor_map)
-            cyclades_neighbor_map[target_sources[index]] = neighbors
-        end
-        return partition_cyclades(npartitions, target_sources, cyclades_neighbor_map,
-                                  batch_size=batch_size)
-    else
-        return partition_equally(npartitions, length(target_sources))
-    end
-end
-
-
-"""
-Initialize elbo args for the specified target source.
-"""
-function init_elboargs(ts::Int, catalog::Vector{CatalogEntry},
-                       target_sources::Vector{Int},
-                       neighbor_map::Vector{Vector{Int}}, images::Vector{Image},
-                       ts_vp::Dict{Int64,Array{Float64}},
-                       ea_vec::Vector{ElboArgs},
-                       cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}};
-                       use_fft=false,
-                       trust_region=NewtonTrustRegion())
-    entry_id = target_sources[ts]
-    entry = catalog[entry_id]
-    neighbor_ids = neighbor_map[ts]
-    neighbors = catalog[neighbor_ids]
-    cat_local = vcat([entry], neighbors)
-    ids_local = vcat([entry_id], neighbor_ids)
-    try
-        patches = Infer.get_sky_patches(images, cat_local)
-        Infer.load_active_pixels!(images, patches)
-
-        # Load vp with shared target source params, and also vp
-        # that doesn't share target source params
-        vp = Vector{Float64}[haskey(ts_vp, x) ?
-                             ts_vp[x] :
-                             catalog_init_source(catalog[x])
-                             for x in ids_local]
-
-        # Switch parameters based on whether or not we're using the fft method
-        if use_fft
-            ea, _ = initialize_fft_elbo_parameters(images, vp, patches, [1],
-                                                   use_raw_psf=false,
-                                                   allocate_fsm_mat=true)
-        else
-            ea = ElboArgs(images, vp, patches, [1])
+            # if it hasn't already been loaded, load the next box to process
+            if cbox.state[] != BoxLoaded
+                if !load_box(cbox, mi, all_boxes, stagedir;
+                            primary_initialization=primary_initialization,
+                            timing=thread_timing)
+                    break
+                end
+            end
+            continue
         end
 
-        ea_vec[ts] = ea
-        cfg_vec[ts] = Config(ea, trust_region=trust_region)
-    catch ex
-        if is_production_run || nthreads() > 1
-            Log.exception(ex)
-        else
-            rethrow(ex)
+        # process the source and record the result
+        try
+            tic()
+            result = process_source(config, ts, cbox.target_sources,
+                                    cbox.catalog, cbox.neighbor_map,
+                                    cbox.images)
+            thread_timing.opt_srcs += toq()
+            thread_timing.num_srcs += 1
+
+            results_idx = source_counts[ts_boxidx] + ts
+            tic()
+            put!(all_results, results_idx, results_idx, [result])
+            thread_timing.ga_put += toq()
+        catch ex
+            if is_production_run || nthreads() > 1
+                Log.exception(ex)
+            else
+                rethrow(ex)
+            end
+        end
+
+        # if we're close to the end of the sources in this box, start
+        # loading the next box, to overlap loading with processing as
+        # much as possible
+        if mi.nworkers > 1 &&
+                (ts == cbox.nsources - mi.nworkers ||
+                (cbox.nsources <= mi.nworkers && ts == 1))
+            curr_cbox = curr_cbox + 1
+            if curr_cbox > NumConcurrentBoxes
+                curr_cbox = 1
+            end
+            cbox = conc_boxes[curr_cbox]
+            if cbox.state[] != BoxLoaded
+                if !load_box(cbox, mi, all_boxes, stagedir;
+                             primary_initialization=primary_initialization,
+                             timing=thread_timing)
+                    break
+                end
+            end
         end
     end
 end
@@ -431,11 +361,9 @@ Joint inference requires some initialization of a box: the sources must
 be partitioned/batched, and persistent configurations allocated. All the
 threads call this function, and may participate in initialization.
 """
-function init_box(cbox::BoxInfo, nworkers::Int;
-                  cyclades=true,
+function init_box(config::Configs.Config, cbox::BoxInfo, nworkers::Int;
+                  cyclades_partition=true,
                   batch_size=400,
-                  use_fft=false,
-                  trust_region=NewtonTrustRegion(),
                   timing=InferTiming())
     # if this thread was late, move on quickly
     if cbox.state[] == BoxReady
@@ -446,21 +374,11 @@ function init_box(cbox::BoxInfo, nworkers::Int;
     lock(cbox.lock)
     if cbox.state[] == BoxLoaded
         cbox.sources_assignment = partition_box(nworkers, cbox.target_sources,
-                                                cbox.neighbor_map;
-                                                cyclades=cyclades,
-                                                batch_size=batch_size)
-
-        # configurations need to be persisted across calls to maximize! so
-        # that location constraints don't shift from their initial position
-        cbox.ea_vec = Vector{ElboArgs}(cbox.nsources)
-        cbox.cfg_vec = Vector{Config{DEFAULT_CHUNK,Float64}}(cbox.nsources)
-
-        # pre-allocate elbo args variational params
-        cbox.ts_vp = Dict{Int64,Array{Float64}}()
-        for ts in cbox.target_sources
-            cat = cbox.catalog[ts]
-            cbox.ts_vp[ts] = generic_init_source(cat.pos)
-        end
+                                        cbox.neighbor_map;
+                                        cyclades_partition=cyclades_partition,
+                                        batch_size=batch_size)
+        cbox.ea_vec, cbox.vp_vec, cbox.cfg_vec, cbox.ts_vp =
+                setup_vecs(cbox.nsources, cbox.target_sources, cbox.catalog)
 
         # update box state
         cbox.state[] = BoxInitializing
@@ -478,41 +396,139 @@ function init_box(cbox::BoxInfo, nworkers::Int;
             if cbox.state[] == BoxInitializing
                 atomic_cas!(cbox.state, BoxInitializing, BoxReady)
             end
-        else
-            #Log.debug("initializing source $ts")
-            init_elboargs(ts, cbox.catalog, cbox.target_sources, cbox.neighbor_map,
-                          cbox.images, cbox.ts_vp, cbox.ea_vec, cbox.cfg_vec;
-                          use_fft=use_fft,
-                          trust_region=trust_region)
+            break
         end
+        init_elboargs(config, ts, cbox.catalog, cbox.target_sources,
+                      cbox.neighbor_map, cbox.images, cbox.ea_vec,
+                      cbox.vp_vec, cbox.cfg_vec, cbox.ts_vp)
     end
-    timing.init_elbo = timing.init_elbo + toq()
+    timing.init_elbo += toq()
 end
 
 
 """
-Called by a thread to process a batch of sources in a box.
+Thread function for running joint inference on the light sources in
+the specified bounding boxes. Used by the driver function.
 """
-function process_sources(sources::Vector{Int64}, cbox::BoxInfo;
-                         use_fft=false,
-                         within_batch_shuffling=true)
-    for s in sources
+function joint_infer_boxes(config::Configs.Config,
+                           all_boxes::Vector{BoundingBox},
+                           stagedir::String,
+                           mi::MultinodeInfo,
+                           all_results::Garray,
+                           source_counts::Vector{Int},
+                           conc_boxes::Vector{BoxInfo},
+                           all_threads_timing::Vector{InferTiming},
+                           primary_initialization::Bool,
+                           cyclades_partition::Bool,
+                           batch_size::Int,
+                           within_batch_shuffling::Bool,
+                           niters::Int)
+    tid = threadid()
+    all_threads_timing[tid] = InferTiming()
+    thread_timing = all_threads_timing[tid]
+    rng = MersenneTwister()
+    srand(rng, 42)
+
+    # Dtree parent ranks reserve one thread to drive the tree
+    if mi.rundt && tid == nthreads()
+        Log.debug("dtree: running tree")
+        while runtree(mi.dt)
+            Gasp.cpu_pause()
+        end
+        return
+    end
+
+    # all other threads are workers
+    curr_cbox = 0
+    while true
+        # load the next box
+        curr_cbox = curr_cbox + 1
+        if curr_cbox > NumConcurrentBoxes
+            curr_cbox = 1
+        end
+        cbox = conc_boxes[curr_cbox]
+        if cbox.state[] != BoxDone
+            Log.warn("box state should be done, but is $(cbox.state[])?!")
+        end
+        if !load_box(cbox, mi, all_boxes, stagedir;
+                     primary_initialization=primary_initialization,
+                     timing=thread_timing)
+            break
+        end
+        init_box(config, cbox, mi.nworkers;
+                 cyclades_partition=cyclades_partition,
+                 batch_size=batch_size,
+                 timing=thread_timing)
+        thread_barrier(mi.bar)
+
+        # process sources in the box
+        tic()
+        nbatches = length(cbox.sources_assignment[1])
         try
-            ea, cfg = cbox.ea_vec[s], cbox.cfg_vec[s]
-            if use_fft
-                f = FFTElboFunction(load_fsm_mat(ea, cbox.images; use_raw_psf=true))
-            else
-                f = DeterministicVI.elbo
+            for iter = 1:niters
+                for batch = 1:nbatches
+                    # Shuffle the source assignments within each batch. This is
+                    # disabled by default because it ruins the deterministic outcome
+                    # required by the test cases.
+                    # TODO: it isn't actually disabled by default?
+                    if within_batch_shuffling
+                        shuffle!(rng, cbox.sources_assignment[tid][batch])
+                    end
+
+                    for s in cbox.sources_assignment[tid][batch]
+                        maximize!(cbox.ea_vec[s], cbox.vp_vec[s], cbox.cfg_vec[s])
+                    end
+
+                    # don't barrier on the last iteration
+                    if !(iter == niters && batch == nbatches)
+                        tic()
+                        thread_barrier(mi.bar)
+                        thread_timing.load_imba += toq()
+                    end
+                end
             end
-            Log.debug("maximizing source $s")
-            NewtonMaximize.maximize!(f, ea, cfg)
-        catch ex
+        catch exc
             if is_production_run || nthreads() > 1
-                Log.exception(ex)
+                Log.exception(exc)
             else
-                rethrow(ex)
+                rethrow()
             end
         end
+        boxtime = toq()
+        thread_timing.opt_srcs += boxtime
+        if atomic_cas!(cbox.state, BoxReady, BoxDone) == BoxReady
+            box = all_boxes[cbox.box_idx]
+            Log.message("processed $(cbox.nsources) sources from box ",
+                        "$(box.ramin), $(box.ramax), $(box.decmin), ",
+                        "$(box.decmax) in $boxtime secs")
+        end
+
+        # each thread writes results for its sources
+        nsrcs = 0
+        tic()
+        try
+            for batch = 1:nbatches
+                nsrcs = nsrcs + length(cbox.sources_assignment[tid][batch])
+                for s in cbox.sources_assignment[tid][batch]
+                    entry = cbox.catalog[cbox.target_sources[s]]
+                    result = OptimizedSource(entry.thing_id,
+                                             entry.objid,
+                                             entry.pos[1],
+                                             entry.pos[2],
+                                             cbox.vp_vec[s][1])
+                    results_idx = source_counts[cbox.box_idx] + s
+                    put!(all_results, results_idx, results_idx, [result])
+                end
+            end
+        catch exc
+            if is_production_run || nthreads() > 1
+                Log.exception(exc)
+            else
+                rethrow()
+            end
+        end
+        thread_timing.ga_put += toq()
+        thread_timing.num_srcs += nsrcs
     end
 end
 
@@ -520,18 +536,19 @@ end
 """
 Use Dtree to distribute the passed bounding boxes to multiple ranks for
 processing. Within each rank, process the light sources in each of the
-assigned boxes with multiple threads.
+assigned boxes with multiple threads. This function drives both single
+and joint inference.
 """
-function multi_node_joint_infer(all_boxes::Vector{BoundingBox},
-                                box_source_counts::Vector{Int64},
-                                stagedir::String;
-                                outdir=".",
-                                primary_initialization=true,
-                                cyclades_partition=true,
-                                batch_size=400,
-                                within_batch_shuffling=true,
-                                niters=3,
-                                timing=InferTiming())
+function multi_node_infer(all_boxes::Vector{BoundingBox},
+                          box_source_counts::Vector{Int64},
+                          stagedir::String;
+                          outdir=".",
+                          primary_initialization=true,
+                          cyclades_partition=true,
+                          batch_size=400,
+                          within_batch_shuffling=true,
+                          niters=3,
+                          timing=InferTiming())
     Log.message("started at $(Dates.now())")
 
     # initialize scheduler, set up results global array
@@ -542,156 +559,58 @@ function multi_node_joint_infer(all_boxes::Vector{BoundingBox},
     # for concurrent box processing
     conc_boxes = [BoxInfo() for i=1:NumConcurrentBoxes]
 
-    # thread barrier for ordering source processing
+    # number of threads that process sources
     nworkers = nthreads() - (mi.rundt ? 1 : 0)
-    bar = setup_barrier(nworkers)
 
     # per-thread timing
-    thread_timing = Array{InferTiming}(nthreads())
+    all_threads_timing = Array{InferTiming}(nthreads())
 
+    # inference configuration
     config = Configs.Config()
 
-    # thread function
-    function process_boxes()
-        tid = threadid()
-        thread_timing[tid] = InferTiming()
-        timing = thread_timing[tid]
-        rng = MersenneTwister()
-
-        # Dtree parent ranks reserve one thread to drive the tree
-        if mi.rundt && tid == nthreads()
-            Log.debug("dtree: running tree")
-            while runtree(mi.dt)
-                Gasp.cpu_pause()
-            end
-            return
-        end
-
-        # all other threads are workers
-        curr_cbox = 0
-        while true
-            # load the next box
-            curr_cbox = curr_cbox + 1
-            if curr_cbox > NumConcurrentBoxes
-                curr_cbox = 1
-            end
-            cbox = conc_boxes[curr_cbox]
-            if cbox.state[] != BoxDone
-                atomic_cas!(cbox.state, BoxReady, BoxDone)
-            end
-            if !load_box(cbox, mi, all_boxes, stagedir;
-                         primary_initialization=primary_initialization,
-                         timing=timing)
-                break
-            end
-            init_box(cbox, nworkers;
-                     cyclades=cyclades_partition,
-                     batch_size=batch_size,
-                     use_fft=use_fft,
-                     timing=timing)
-            # process sources in the box
-            tic()
-            nbatches = length(cbox.sources_assignment[1])
-            for iter = 1:niters
-                for batch = 1:nbatches
-                    # Shuffle the source assignments within each batch. This is
-                    # disabled by default because it ruins the deterministic outcome
-                    # required by the test cases.
-                    # TODO: it isn't disabled by default?
-                    if within_batch_shuffling
-                        shuffle!(rng, cbox.sources_assignment[tid][batch])
-                    end
-
-                    #process_sources_elapsed_times = Vector{Float64}(nworkers)
-                    #tic()
-                    Log.debug("processing sources $(cbox.sources_assignment[tid][batch]), iter $iter, batch $batch")
-                    process_sources(cbox.sources_assignment[tid][batch], cbox;
-                                    use_fft=use_fft,
-                                    within_batch_shuffling=within_batch_shuffling)
-                    #process_sources_elapsed_times[tid] = toq()
-
-                    # don't barrier on the last iteration
-                    if !(iter == niters && batch == nbatches)
-                        Log.debug("skipping barrier")
-                        thread_barrier(bar)
-                    end
-                end
-            end
-            timing.opt_srcs += toq()
-
-            # each thread writes results for its sources
-            nsrcs = 0
-            Log.debug("writing results")
-            tic()
-            for batch = 1:nbatches
-                nsrcs = nsrcs + length(cbox.sources_assignment[tid][batch])
-                for s in cbox.sources_assignment[tid][batch]
-                    entry = cbox.catalog[cbox.target_sources[s]]
-                    result = OptimizedSource(entry.thing_id,
-                                             entry.objid,
-                                             entry.pos[1],
-                                             entry.pos[2],
-                                             cbox.ea_vec[s].vp[1])
-                    results_idx = source_counts[cbox.box_idx] + s
-                    put!(all_results, results_idx, results_idx, [result])
-                end
-            end
-            timing.ga_put += toq()
-            timing.num_srcs += nsrcs
-        end
-    end
-
+    # run the thread function
     if nthreads() == 1
-        process_boxes()
+        #single_infer_boxes(config, all_boxes, stagedir, mi, all_results,
+        #                   source_counts, conc_boxes, all_threads_timing,
+        #                   primary_initialization)
+        joint_infer_boxes(config, all_boxes, stagedir, mi, all_results,
+                          source_counts, conc_boxes, all_threads_timing,
+                          primary_initialization, cyclades_partition,
+                          batch_size, within_batch_shuffling, niters)
     else
-        ccall(:jl_threading_run, Void, (Any,), Core.svec(process_boxes))
-        #ccall(:jl_threading_profile, Void, ())
+        #ccall(:jl_threading_run, Void, (Any,),
+        #      Core.svec(single_infer_boxes, config, all_boxes, stagedir, mi,
+        #                all_results, source_counts, conc_boxes,
+        #                all_threads_timing, primary_initialization))
+        ccall(:jl_threading_run, Void, (Any,),
+              Core.svec(joint_infer_boxes, config, all_boxes, stagedir, mi,
+                        all_results, source_counts, conc_boxes,
+                        all_threads_timing, primary_initialization,
+                        cyclades_partition, batch_size, within_batch_shuffling,
+                        niters))
     end
     Log.message("completed at $(Dates.now())")
 
-    for i = 1:nthreads()
-        add_timing!(timing, thread_timing[i])
-    end
+    show_pixels_processed()
 
+    # reduce and normalize collected timing information
+    for i = 1:nthreads()
+        add_timing!(timing, all_threads_timing[i])
+    end
+    timing.init_elbo /= mi.nworkers
+    timing.opt_srcs /= mi.nworkers
+    timing.load_imba /= mi.nworkers
+    timing.ga_put /= mi.nworkers
+
+    # output results
     tic()
     save_results(all_results, outdir)
     timing.write_results = toq()
 
+    # shut down
     tic()
     finalize(mi.dt)
     timing.wait_done = toq()
     Log.message("synchronized ranks at $(Dates.now())")
-end
-
-
-# ----------------
-# A simple centralized sense reversing thread barrier. Needed to allow the
-# ordering constraints that Cyclades partitioning imposes on the processing
-# of sources.
-# ----------------
-
-type CentSRBarrier
-    thread_counter::Atomic{Int}
-    num_threads::Int
-    sense::Int
-    thread_senses::Vector{Int}
-end
-
-function setup_barrier(num_threads::Int)
-    CentSRBarrier(Atomic{Int}(num_threads), num_threads, 1, ones(Int, nthreads()))
-end
-
-function thread_barrier(bar::CentSRBarrier)
-    tid = threadid()
-    bar.thread_senses[tid] = 1 - bar.thread_senses[tid]
-    sense = 1 - bar.sense
-    if atomic_sub!(bar.thread_counter, 1) == 1
-        bar.thread_counter[] = bar.num_threads
-        bar.sense = 1 - bar.sense
-    else
-        while bar.thread_senses[tid] != bar.sense
-            ccall(:jl_cpu_pause, Void, ())
-        end
-    end
 end
 

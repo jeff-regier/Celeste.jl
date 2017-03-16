@@ -56,11 +56,12 @@ type InferTiming
     init_elbo::Float64
     opt_srcs::Float64
     num_srcs::Int64
+    load_imba::Float64
     ga_put::Float64
     write_results::Float64
     wait_done::Float64
 
-    InferTiming() = new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0)
+    InferTiming() = new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0.0)
 end
 
 function add_timing!(i::InferTiming, j::InferTiming)
@@ -71,6 +72,7 @@ function add_timing!(i::InferTiming, j::InferTiming)
     i.init_elbo = i.init_elbo + j.init_elbo
     i.opt_srcs = i.opt_srcs + j.opt_srcs
     i.num_srcs = i.num_srcs + j.num_srcs
+    i.load_imba = i.load_imba + j.load_imba
     i.ga_put = i.ga_put + j.ga_put
     i.write_results = i.write_results + j.write_results
     i.wait_done = i.wait_done + j.wait_done
@@ -83,10 +85,11 @@ function puts_timing(i::InferTiming)
     Log.message("timing: read_img=$(i.read_img)")
     Log.message("timing: find_neigh=$(i.find_neigh)")
     Log.message("timing: init_elbo=$(i.init_elbo)")
-    Log.message("timing: opt_srcs=$(i.opt_srcs/nthreads())")
+    Log.message("timing: opt_srcs=$(i.opt_srcs)")
     Log.message("timing: num_srcs=$(i.num_srcs)")
-    Log.message("timing: average opt_srcs=$((i.opt_srcs/nthreads())/i.num_srcs)")
-    Log.message("timing: ga_put=$(i.ga_put/nthreads())")
+    Log.message("timing: average opt_srcs=$(i.opt_srcs/i.num_srcs)")
+    Log.message("timing: load_imba=$(i.load_imba)")
+    Log.message("timing: ga_put=$(i.ga_put)")
     Log.message("timing: write_results=$(i.write_results)")
     Log.message("timing: wait_done=$(i.wait_done)")
 end
@@ -409,25 +412,26 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
 
     Log.info("processing box $(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax) with $(nthreads()) threads")
 
-    tic()
-    # Get vector of (run, camcol, field) triplets overlapping this patch
-    rcfs = get_overlapping_fields(box, stagedir)
-    timing.query_fids = toq()
+    @time begin
+        tic()
+        # Get vector of (run, camcol, field) triplets overlapping this patch
+        rcfs = get_overlapping_fields(box, stagedir)
+        timing.query_fids = toq()
 
-    catalog, target_sources, neighbor_map, images =
-        infer_init(rcfs,
-                   stagedir;
-                   box=box,
-                   primary_initialization=true,
-                   timing=timing)
+        catalog, target_sources, neighbor_map, images =
+            infer_init(rcfs,
+                       stagedir;
+                       box=box,
+                       primary_initialization=true,
+                       timing=timing)
 
-    #@time results = one_node_single_infer(catalog, target_sources, neighbor_map, images; timing=timing)
-    @time results = one_node_joint_infer(catalog, target_sources, neighbor_map, images; timing=timing)
+        #results = one_node_single_infer(catalog, target_sources, neighbor_map, images; timing=timing)
+        results = one_node_joint_infer(catalog, target_sources, neighbor_map, images; timing=timing)
 
-    tic()
-    save_results(outdir, box, results)
-    timing.write_results = toq()
-
+        tic()
+        save_results(outdir, box, results)
+        timing.write_results = toq()
+    end
     puts_timing(timing)
 end
 
@@ -435,25 +439,16 @@ end
 if distributed
 include("multinode_run.jl")
 else
-function multi_node_single_infer(all_boxes::Vector{BoundingBox},
-                                 box_source_counts::Vector{Int64},
-                                 stagedir::String;
-                                 outdir=".",
-                                 primary_initialization=true,
-                                 timing=InferTiming())
-    Log.error("distributed functionality is disabled (set USE_DTREE=1 to enable)")
-    exit(-1)
-end
-function multi_node_joint_infer(all_boxes::Vector{BoundingBox},
-                                box_source_counts::Vector{Int64},
-                                stagedir::String;
-                                outdir=".",
-                                primary_initialization=true,
-                                cyclades_partition=true,
-                                batch_size=400,
-                                within_batch_shuffling=true,
-                                niters=3,
-                                timing=InferTiming())
+function multi_node_infer(all_boxes::Vector{BoundingBox},
+                          box_source_counts::Vector{Int64},
+                          stagedir::String;
+                          outdir=".",
+                          primary_initialization=true,
+                          cyclades_partition=true,
+                          batch_size=400,
+                          within_batch_shuffling=true,
+                          niters=3,
+                          timing=InferTiming())
     Log.error("distributed functionality is disabled (set USE_DTREE=1 to enable)")
     exit(-1)
 end
@@ -466,8 +461,9 @@ called from main entry point.
 function infer_boxes(boxes::Vector{BoundingBox},
                      box_source_counts::Vector{Int64},
                      stagedir::String,
-                     outdir::String;
-                     timing = InferTiming())
+                     outdir::String)
+    timing=InferTiming()
+
     # Base.@time hack for distributed environment
     gc_stats = ()
     gc_diff_stats = ()
@@ -475,10 +471,8 @@ function infer_boxes(boxes::Vector{BoundingBox},
     gc_stats = Base.gc_num()
     elapsed_time = time_ns()
 
-    multi_node_single_infer(boxes, box_source_counts, stagedir;
-                            outdir=outdir, timing=timing)
-    #multi_node_joint_infer(boxes, box_source_counts, stagedir;
-    #                       outdir=outdir, timing=timing)
+    multi_node_infer(boxes, box_source_counts, stagedir;
+                     outdir=outdir, timing=timing)
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time
