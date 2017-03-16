@@ -329,37 +329,38 @@ function add_pixel_term!{NumType <: Number}(
                     n::Int, h::Int, w::Int,
                     bvn_bundle::BvnBundle{NumType},
                     sbs::Vector{SourceBrightness{NumType}},
-                    elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(NumType, ea.Sa, true, false))
+                    elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(NumType, ea.Sa))
     img = ea.images[n]
 
-    # This combines the sources into a single brightness value for the pixel.
     clear!(elbo_vars.E_G)
     clear!(elbo_vars.var_G)
 
-    for s in 1:size(ea.patches, 1)
+    for s in 1:ea.S
         p = ea.patches[s,n]
 
         h2 = h - p.bitmap_offset[1]
         w2 = w - p.bitmap_offset[2]
 
-        hw = SVector{2,Float64}(h, w)
-        is_active_source = s in ea.active_sources  # fast?
-
-        populate_fsm!(bvn_bundle.bvn_derivs,
-                      elbo_vars.fs0m,
-                      elbo_vars.fs1m,
-                      s, hw, is_active_source,
-                      p.wcs_jacobian,
-                      bvn_bundle.gal_mcs,
-                      bvn_bundle.star_mcs)
-
         H2, W2 = size(p.active_pixel_bitmap)
         if 1 <= h2 <= H2 && 1 <= w2 < W2 && p.active_pixel_bitmap[h2, w2]
+            is_active_source = s in ea.active_sources
+
+            # this if/else block is for reporting purposes only
             if is_active_source
                 elbo_vars.active_pixel_counter[] += 1
             else
                 elbo_vars.inactive_pixel_counter[] += 1
             end
+
+            populate_fsm!(bvn_bundle.bvn_derivs,
+                          elbo_vars.fs0m,
+                          elbo_vars.fs1m,
+                          s,
+                          SVector{2,Float64}(h, w),
+                          is_active_source,
+                          p.wcs_jacobian,
+                          bvn_bundle.gal_mcs,
+                          bvn_bundle.star_mcs)
 
             accumulate_source_pixel_brightness!(ea, vp, elbo_vars,
                 sbs[s], ea.images[n].b, s, is_active_source)
@@ -398,7 +399,6 @@ function elbo_likelihood{T}(ea::ElboArgs,
                             vp::VariationalParams{T},
                             elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(T, ea.Sa),
                             bvn_bundle::BvnBundle{T} = BvnBundle{T}(ea.psf_K, ea.S))
-
     clear!(elbo_vars)
     clear!(bvn_bundle)
 
@@ -479,7 +479,8 @@ Returns: A sensitive float containing the ELBO for the image.
 """
 function elbo{T}(ea::ElboArgs,
                  vp::VariationalParams{T},
-                 elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(T, ea.Sa, true,  T<:AbstractFloat),
+                 elbo_vars::ElboIntermediateVariables =
+                        ElboIntermediateVariables(T, ea.Sa, true,  T<:AbstractFloat),
                  bvn_bundle::BvnBundle = BvnBundle{T}(ea.psf_K, ea.S))
     @assert(all(all(isfinite, vs) for vs in vp), "vp contains NaNs or Infs")
     result = elbo_likelihood(ea, vp, elbo_vars, bvn_bundle)
