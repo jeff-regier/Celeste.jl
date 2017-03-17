@@ -11,7 +11,7 @@ import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
                 BvnBundle, GalaxySigmaDerivs, SkyPatch,
                 get_bvn_cov, eval_bvn_pdf!, get_bvn_derivs!,
                 transform_bvn_derivs!, populate_fsm!
-import ..Celeste: Const, @aliasscope, @unroll_loop
+import ..Celeste: Const, @aliasscope, @unroll_loop, ParameterizedArray
 import ..Infer
 using ..SensitiveFloats
 import ..SensitiveFloats.clear!

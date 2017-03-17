@@ -195,18 +195,14 @@ function accum_star_pos!{NumType <: Number}(
         bvn_uu_h = bvn_derivs.bvn_uu_h
 
         # Accumulate the derivatives.
-        for u_id in 1:2
-            fs0m.d[star_ids.u[u_id]] += bvn_derivs.f_pre[1] * bvn_u_d[u_id]
-        end
+        fs0m.d[star_ids.u] += bvn_derivs.f_pre[1] * bvn_u_d[star_ids.u]
 
         if fs0m.has_hessian
             # Hessian terms involving only the location parameters.
             # TODO: redundant term
-            for u_id1 in 1:2, u_id2 in 1:2
-                fs0m.h[star_ids.u[u_id1], star_ids.u[u_id2]] +=
-                    bvn_derivs.f_pre[1] * (bvn_uu_h[u_id1, u_id2] +
-                    bvn_u_d[u_id1] * bvn_u_d[u_id2])
-            end
+            fs0m.h[star_ids.u, star_ids.u] +=
+                bvn_derivs.f_pre[1] * (bvn_uu_h[star_ids.u, star_ids.u] +
+                bvn_u_d[star_ids.u] * bvn_u_d[star_ids.u]')
         end
     end
 end

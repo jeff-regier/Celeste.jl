@@ -28,85 +28,59 @@
 #
 # Note Ia denotes the number of types of astronomical objects (e.g., 2 for stars and galaxies).
 
+using Celeste: Param, @concretize, @inline_unnamed, ParameterizedArray
+
 @compat abstract type ParamSet end
 
-type StarPosParams <: ParamSet
-    u::Vector{Int}
-    StarPosParams() = new([1, 2])
+immutable Star; end
+immutable Galaxy; end
+
+type SharedPosParams <: ParamSet
+    u::Param{SharedPosParams, :u, (2,)}
 end
+const StarPosParams = SharedPosParams
+@eval @concretize $SharedPosParams
 const star_ids = StarPosParams()
-getids(::Type{StarPosParams}) = star_ids
-length(::Type{StarPosParams}) = 2
 
 type GalaxyShapeParams <: ParamSet
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
-    GalaxyShapeParams() = new(1, 2, 3)
+    e_axis::Param{:GalaxyShapeParams, :e_axis, ()}
+    e_angle::Param{:GalaxyShapeParams, :e_angle, ()}
+    e_scale::Param{:GalaxyShapeParams, :e_scale, ()}
 end
+@eval @concretize $GalaxyShapeParams
 const gal_shape_ids = GalaxyShapeParams()
-getids(::Type{GalaxyShapeParams}) = gal_shape_ids
-length(::Type{GalaxyShapeParams}) = 3
 
-type GalaxyPosParams <: ParamSet
-    u::Vector{Int}
-    e_dev::Int
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
-    GalaxyPosParams() = new([1, 2], 3, 4, 5, 6)
+@inline_unnamed struct GalaxyPosParams <: ParamSet
+    ::SharedPosParams
+    e_dev::Param{:GalaxyPosParams, :e_dev, ()}
+    ::GalaxyShapeParams
 end
+@eval @concretize $GalaxyPosParams
 const gal_ids = GalaxyPosParams()
-getids(::Type{GalaxyPosParams}) = gal_ids
-length(::Type{GalaxyPosParams}) = 6
 
-
-type BrightnessParams <: ParamSet
-    r1::Int
-    r2::Int
-    c1::Vector{Int}
-    c2::Vector{Int}
-    BrightnessParams() = new(1, 2,
-                             collect(3:(3+(B-1)-1)),
-                             collect((3+B-1):(3+2*(B-1)-1)))
+type BrightnessParams{kind} <: ParamSet
+    r1::Param{Tuple{BrightnessParams, kind}, :r1, ()}
+    r2::Param{Tuple{BrightnessParams, kind}, :r2, ()}
+    c1::Param{Tuple{BrightnessParams, kind}, :c1, (B-1,)}
+    c2::Param{Tuple{BrightnessParams, kind}, :c2, (B-1,)}
 end
-const bids = BrightnessParams()
-getids(::Type{BrightnessParams}) = bids
-length(::Type{BrightnessParams}) = 2 + 2 * (B-1)
+@eval @concretize $BrightnessParams
+const bids = BrightnessParams{Any}()
 
-immutable CanonicalParams <: ParamSet
-    u::Vector{Int}
-    e_dev::Int
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
-    r1::Vector{Int}
-    r2::Vector{Int}
-    c1::Matrix{Int}
-    c2::Matrix{Int}
-    a::Vector{Int}
-    k::Matrix{Int}
-    function CanonicalParams()
-        new([1, 2], # u
-            3, # e_dev
-            4, # e_axis
-            5, # e_angle
-            6, # e_scale
-            collect(7:(7+Ia-1)),  # r1
-            collect((7+Ia):(7+2Ia-1)), # r2
-            reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
-            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
-            collect((7+2Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia-1)),  # a
-            reshape((7+3Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia+D*Ia-1), (D, Ia))) # k
-    end
+@inline_unnamed immutable CanonicalParams <: ParamSet
+    # shared u and galaxy_pos_params
+    ::GalaxyPosParams
+    
+    star_brightness::BrightnessParams{Star}
+    star_k::Param{CanonicalParams, :star_k, (D,)}
+    
+    galaxy_brightness::BrightnessParams{Star}
+    galaxy_k::Param{CanonicalParams, :star_k, (D,)}
+    
+    a::Param{CanonicalParams, :a, (2,)}
 end
-
+@eval @concretize $CanonicalParams
 const ids = CanonicalParams()
-
-getids(::Type{CanonicalParams}) = ids
-
-length(::Type{CanonicalParams}) = 6 + 3*Ia + 2*(B-1)*Ia + D*Ia
-
 
 type LatentStateIndexes <: ParamSet
     u::Vector{Int}
@@ -149,44 +123,3 @@ length(::Type{PsfParams}) = 6
 
 # define length(value) in addition to length(Type) for ParamSets
 length{T<:ParamSet}(::T) = length(T)
-
-#TODO: build these from ue_align, etc., here.
-align(::StarPosParams, ids) = ids.u
-align(::GalaxyPosParams, ids) =
-   [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
-align(::CanonicalParams, _ids) = collect(1:length(CanonicalParams))
-align(::GalaxyShapeParams, gal_ids) =
-  [gal_ids.e_axis; gal_ids.e_angle; gal_ids.e_scale]
-
-# The shape and brightness parameters for stars and galaxies respectively.
-const shape_standard_alignment = (ids.u,
-   [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale])
-bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
-const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
-
-# Note that gal_shape_alignment aligns the shape ids with the GalaxyPosParams,
-# not the CanonicalParams.
-const gal_shape_alignment = Const(align(gal_shape_ids, gal_ids))
-
-function get_id_names(ids::CanonicalParams)
-    ids_names = Vector{String}(length(ids))
-    for name in fieldnames(ids)
-        inds = getfield(ids, name)
-        if isa(inds, Matrix)
-            for i in 1:size(inds, 1), j in 1:size(inds, 2)
-                ids_names[inds[i, j]] = "$(name)_$(i)_$(j)"
-            end
-        elseif isa(inds, Vector)
-            for i in eachindex(inds)
-                ids_names[inds[i]] = "$(name)_$(i)"
-            end
-        elseif isa(inds, Int)
-            ids_names[inds] = "$(name)_$(inds)"
-        else
-            error("found unsupported index type for parameter $(name): $(typeof(inds))")
-        end
-    end
-    return ids_names
-end
-
-const ids_names = get_id_names(ids)

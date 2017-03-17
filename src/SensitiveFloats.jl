@@ -1,12 +1,16 @@
 module SensitiveFloats
 
-export SensitiveFloat,
+export SingleSourceSensitiveFloat,
+       MultiSourceSensitiveFloat,
+       SensitiveFloat,
        clear!,
        multiply_sfs!,
        add_scaled_sfs!,
        combine_sfs!,
        add_sources_sf!,
        set_hess!
+       
+using Celeste: ParameterizedArray
 
 
 """
@@ -21,31 +25,61 @@ Attributes:
       in the same format as d.  This is used for the full Hessian
       with respect to all the sources.
 """
-immutable SensitiveFloat{NumType}
+abstract type SensitiveFloat{NumType} end
+
+# This should really be a base method, but for now keep it here
+zeros_type(::Type{Matrix{T}}, dims...) where T = zeros(T, dims...)
+
+# Special case for local_S == 1
+immutable SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation} <: SensitiveFloat{NumType}
     v::Base.RefValue{NumType}
 
-    # local_P x local_S matrix of gradients
-    d::Matrix{NumType}
+    # local_S vector of local_P gradients
+    d::ParameterizedArray{ParamSet, Vector{NumType}}
 
-    # h is ordered so that p changes fastest.  For example, the indices
-    # of a column of h correspond to the indices of d's stacked columns.
-    h::Matrix{NumType}
-
-    local_P::Int64
-    local_S::Int64
+    # local_S x local_S matrix of hessians (generally local_P x local_P matrices)
+    h::HessianRepresentation
 
     has_gradient::Bool
     has_hessian::Bool
 
-    function (::Type{SensitiveFloat{NumType}}){NumType}(local_P, local_S, has_gradient, has_hessian)
+    function (::Type{SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation}}){NumType, ParamSet, HessianRepresentation}(has_gradient, has_hessian)
         @assert has_gradient || !has_hessian
+        local_P = length(ParamSet)
         v = Ref(zero(NumType))
-        d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
-        h_dim = local_P * local_S * has_hessian
-        h = zeros(NumType, h_dim, h_dim)
-        new{NumType}(v, d, h, local_P, local_S, has_gradient, has_hessian)
+        d = zeros(NumType, local_P * has_gradient)
+        h_dim = local_P * has_hessian
+        h = zeros_type(HessianRepresentation, h_dim, h_dim)
+        new{NumType, ParamSet, HessianRepresentation}(v, d, h, has_gradient, has_hessian)
     end
 end
+
+immutable MultiSourceSensitiveFloat{NumType, ParamSet} <: SensitiveFloat{NumType}
+    v::Base.RefValue{NumType}
+
+    # local_S x local_P vector gradients
+    d::Matrix{NumType}
+
+    # (local_S + local_P) x (local_S + local_P) hessian
+    h::Matrix{NumType}
+
+    local_S::Int
+
+    has_gradient::Bool
+    has_hessian::Bool
+
+    function (::Type{MultiSourceSensitiveFloat{NumType}}){NumType}(local_S, has_gradient, has_hessian)
+        @assert has_gradient || !has_hessian
+        local_P = length(ParamSet)
+        v = Ref(zero(NumType))
+        d = zeros(NumType, local_P * has_gradient, local_S * has_hessian)
+        h_dim = local_P * has_hessian * local_S^2
+        h = zeros(NumType, h_dim, h_dim)
+        new{NumType, ParamSet}(v, d, h, has_gradient, has_hessian)
+    end
+end
+
+
 
 function SensitiveFloat(local_P::Int64, local_S::Int64,
                         has_gradient::Bool = true,

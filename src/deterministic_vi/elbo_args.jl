@@ -25,39 +25,33 @@ function HessianSubmatrices(NumType::DataType, i::Int)
     HessianSubmatrices{NumType}(u_u, shape_shape)
 end
 
-
+DenseHessianSSSF(ParamSet, NumType) = SingleSourceSensitiveFloat{NumType, ParamSet, ParameterizedArray{ParamSet, Matrix{NumType}}}
+DenseHessianMSSF(ParamSet, NumType) = MultiSourceSensitiveFloat{NumType, ParamSet}
 immutable ElboIntermediateVariables{NumType <: Number}
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
     # The vector has one element for each active source, in the same order
     # as ea.active_sources.
-
-    fs0m::SensitiveFloat{NumType}
-    fs1m::SensitiveFloat{NumType}
+    fs0m::DenseHessianSSSF(StarPosParams, NumType)
+    fs1m::DenseHessianSSSF(GalaxyPosParams, NumType)
 
     # Brightness values for a single source
-    E_G_s::SensitiveFloat{NumType}
-    E_G2_s::SensitiveFloat{NumType}
-    var_G_s::SensitiveFloat{NumType}
-
-    # Subsets of the Hessian of E_G_s and E_G2_s that allow us to use BLAS
-    # functions to accumulate Hessian terms. There is one submatrix for
-    # each celestial object type in 1:Ia
-    E_G_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
-    E_G2_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
+    E_G_s::DenseHessianSSSF(CanonicalParams, NumType)
+    E_G2_s::DenseHessianSSSF(CanonicalParams, NumType)
+    var_G_s::DenseHessianSSSF(CanonicalParams, NumType)
 
     # Expected pixel intensity and variance for a pixel from all sources.
-    E_G::SensitiveFloat{NumType}
-    var_G::SensitiveFloat{NumType}
+    E_G::DenseHessianMSSF(CanonicalParams, NumType)
+    var_G::DenseHessianMSSF(CanonicalParams, NumType)
 
     # Pre-allocated memory for the gradient and Hessian of combine functions.
     combine_grad::Vector{NumType}
     combine_hess::Matrix{NumType}
 
     # A placeholder for the log term in the ELBO.
-    elbo_log_term::SensitiveFloat{NumType}
+    elbo_log_term::DenseHessianMSSF(CanonicalParams, NumType)
 
     # The ELBO itself.
-    elbo::SensitiveFloat{NumType}
+    elbo::DenseHessianMSSF(CanonicalParams, NumType)
 
     active_pixel_counter::Ref{Int64}
     inactive_pixel_counter::Ref{Int64}
@@ -80,22 +74,17 @@ function ElboIntermediateVariables(NumType::DataType,
 
     # fs0m and fs1m accumulate contributions from all bvn components
     # for a given source.
-    fs0m = SensitiveFloat{NumType}(length(StarPosParams), 1,
+    fs0m = DenseHessianSSSF(StarPosParams, NumType)(
                                 calculate_gradient, calculate_hessian)
-    fs1m = SensitiveFloat{NumType}(length(GalaxyPosParams), 1,
+    fs1m = DenseHessianSSSF(GalaxyPosParams, NumType)(
                                 calculate_gradient, calculate_hessian)
 
-    E_G_s = SensitiveFloat{NumType}(length(CanonicalParams), 1,
-                                    calculate_gradient, calculate_hessian)
+    E_G_s = DenseHessianSSSF(CanonicalParams, NumType)(
+                                calculate_gradient, calculate_hessian)
     E_G2_s = SensitiveFloat(E_G_s)
     var_G_s = SensitiveFloat(E_G_s)
 
-    E_G_s_hsub_vec =
-        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
-    E_G2_s_hsub_vec =
-        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:Ia ]
-
-    E_G = SensitiveFloat{NumType}(length(CanonicalParams), num_active_sources,
+    E_G = DenseHessianMSSF(CanonicalParams, NumType)(num_active_sources,
                                   calculate_gradient, calculate_hessian)
     var_G = SensitiveFloat(E_G)
 
@@ -118,13 +107,6 @@ function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType}
     clear!(elbo_vars.E_G_s)
     clear!(elbo_vars.E_G2_s)
     clear!(elbo_vars.var_G_s)
-
-    for i in 1:Ia
-        fill!(elbo_vars.E_G_s_hsub_vec[i].u_u, zero(NumType))
-        fill!(elbo_vars.E_G_s_hsub_vec[i].shape_shape, zero(NumType))
-        fill!(elbo_vars.E_G2_s_hsub_vec[i].u_u, zero(NumType))
-        fill!(elbo_vars.E_G2_s_hsub_vec[i].shape_shape, zero(NumType))
-    end
 
     clear!(elbo_vars.E_G)
     clear!(elbo_vars.var_G)

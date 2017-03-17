@@ -9,6 +9,8 @@ import ForwardDiff
 # alias scopes
 include("aliasscopes.jl")
 
+include("model/param_set_utils.jl")
+
 # submodules
 include("Configs.jl")
 include("Log.jl")
