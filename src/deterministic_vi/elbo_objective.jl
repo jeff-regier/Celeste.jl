@@ -30,209 +30,65 @@ function calculate_G_s!{NumType <: Number}(
     @assert elbo_vars.fs0m.local_P == length(StarPosParams)
     @assert elbo_vars.fs1m.local_P == length(GalaxyPosParams)
 
-    # we'd like to get rid of these calls to `fill!`
-    if is_active_source
-        clear!(E_G_s)
-        clear!(E_G2_s)
-        clear!(var_G_s)
-    else
-        E_G_s.v[] = 0.0
-        E_G2_s.v[] = 0.0
-        var_G_s.v[] = 0.0
-    end
+    # The compiler can fold this into the arith below. No actual
+    # time is spent here.
+    clear!(E_G_s)
+    clear!(E_G2_s)
+    clear!(var_G_s)
 
-    @inbounds for i in 1:Ia # Celestial object types (e.g. stars and galaxies)
-        fsm_i = (i == 1) ? elbo_vars.fs0m : elbo_vars.fs1m
-        a_i = vp[s][ids.a[i]]
-        sb_E_l_a_b_i = sb.E_l_a[b, i]
-        sb_E_ll_a_b_i = sb.E_ll_a[b, i]
+    # Calculate E_G_s and E_G2_s
+    @syntactic_unroll for kind in (Star(), Galaxy())
+        fsm_i = (kind == :star) ? elbo_vars.fs0m : elbo_vars.fs1m
 
         fsm_i_v = fsm_i.v[]
-        sb_E_l_a_b_i_v = sb_E_l_a_b_i.v[]
-        sb_E_ll_a_b_i_v = sb_E_ll_a_b_i.v[]
-
-        fsm_i_d = fsm_i.d
-        sb_E_l_a_b_i_d = sb_E_l_a_b_i.d
-        sb_E_ll_a_b_i_d = sb_E_ll_a_b_i.d
-        E_G_s_d = E_G_s.d
-        E_G2_s_d = E_G2_s.d
-
-        E_G_s_h = E_G_s.h
-        E_G2_s_h = E_G2_s.h
-
         lf = sb_E_l_a_b_i_v * fsm_i_v
         llff = sb_E_ll_a_b_i_v * fsm_i_v^2
 
+        # Values
         E_G_s.v[] += a_i * lf
         E_G2_s.v[] += a_i * llff
 
-        ############ Only gradient and hessian code below ##############
+        # Gradients
         (is_active_source && elbo_vars.elbo.has_gradient) || continue
+        E_G_s.d[a_param(ids, kind)] += lf
+        E_G2_s.d[a_param(ids, kind)] += llff
 
-        E_G_s_d[ids.a[i], 1] += lf
-        E_G2_s_d[ids.a[i], 1] += llff
+        E_G_s_d[shape_params(ids, kind)] += tmp1 * fsm_i_d[shape_params(ids, kind)]
+        E_G2_s_d[shape_params(ids, kind)] += tmp2 * fsm_i_d[shape_params(ids, kind)]
 
-        p0_shape = shape_standard_alignment[i]
-        p0_bright = brightness_standard_alignment[i]
-        u_ind = i == 1 ? star_ids.u : gal_ids.u
-
-        # Derivatives with respect to the spatial parameters
-        tmp1 = sb_E_l_a_b_i_v * a_i
-        tmp2 = sb_E_ll_a_b_i_v * 2 * fsm_i_v * a_i
-        for p0_shape_ind in 1:length(p0_shape)
-            E_G_s_d[p0_shape[p0_shape_ind], 1] += tmp1 * fsm_i_d[p0_shape_ind, 1]
-            E_G2_s_d[p0_shape[p0_shape_ind], 1] += tmp2 * fsm_i_d[p0_shape_ind, 1]
-        end
-
-        # Derivatives with respect to the brightness parameters.
-        for p0_bright_ind in 1:length(p0_bright)
-            E_G_s_d[p0_bright[p0_bright_ind], 1] =
-                a_i * fsm_i_v * sb_E_l_a_b_i_d[p0_bright_ind, 1]
-            E_G2_s_d[p0_bright[p0_bright_ind], 1] =
-                a_i * (fsm_i_v^2) * sb_E_ll_a_b_i_d[p0_bright_ind, 1]
-        end
-
-        ############ only hessian code below ##############
+        # Hessians
         elbo_vars.elbo.has_hessian || continue
+        bparams = sb_E_l_a_b_i.h[brightness_params(ids, kind), brightness_params(ids, kind)]
+        E_G_s.h[brightness_params(ids, kind), brightness_params(ids, kind)] = a_i * bparams * fsm_i_v
+        E_G2_s.h[brightness_params(ids, kind), brightness_params(ids, kind)] = (fsm_i_v^2) * a_i * bparams
 
-        E_G_s_hsub = elbo_vars.E_G_s_hsub_vec[i]
-        E_G2_s_hsub = elbo_vars.E_G2_s_hsub_vec[i]
+        # The u_u submatrix is shared between stars/galaxies, so use += here
+        E_G_s.h[shape_params(ids, kind), shape_params(ids, kind)] += a_i * sb_E_l_a_b_i_v * fsm_i.h[shape_params(ids, kind), shape_params(ids, kind)]
+        E_G2_s.h[shape_params(ids, kind), shape_params(ids, kind)] +=
+            2 * a_i * sb_E_ll_a_b_i_v * (fsm_i_v * fsm_i.h[shape_params(ids, kind), shape_params(ids, kind)] + fsm_i.d*fsm_i.d')
 
-        # The (a, a) block of the hessian is zero.
+        @implicit_transpose begin
+            E_G_s.h[shape_params(ids, kind), a_param(ids, kind)] = sb_E_l_a_b_i_v * fsm_i_d[shape_params(ids, kind)]
+            E_G2_s.h[shape_params(ids, kind), a_param(ids, kind)] = sb_E_ll_a_b_i_v * 2 * fsm_i_v * fsm_i_d[shape_params(ids, kind)]
 
-        # The (bright, bright) block:
-        for p0_ind1 in 1:length(p0_bright), p0_ind2 in 1:length(p0_bright)
-            E_G_s_h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-                a_i * sb_E_l_a_b_i.h[p0_ind1, p0_ind2] * fsm_i_v
-            E_G2_s_h[p0_bright[p0_ind1], p0_bright[p0_ind2]] =
-                (fsm_i_v^2) * a_i * sb_E_ll_a_b_i.h[p0_ind1, p0_ind2]
-        end
+            E_G_s.h[shape_params(ids, kind), a_param(ids, kind)] = sb_E_l_a_b_i_v * fsm_i_d[shape_params(:star)]
+            E_G2_s.h[shape_params(ids, kind), a_param(ids, kind)] = sb_E_ll_a_b_i_v * 2 * fsm_i_v * fsm_i_d[shape_params(:star)]
 
-        # The (shape, shape) block:
-        p1, p2 = size(E_G_s_hsub.shape_shape)
-        for ind1 = 1:p1, ind2 = 1:p2
-            E_G_s_hsub.shape_shape[ind1, ind2] =
-                a_i * sb_E_l_a_b_i_v * fsm_i.h[ind1, ind2]
-            E_G2_s_hsub.shape_shape[ind1, ind2] =
-                2 * a_i * sb_E_ll_a_b_i_v * (
-                    fsm_i_v * fsm_i.h[ind1, ind2] +
-                    fsm_i_d[ind1, 1] * fsm_i_d[ind2, 1])
-        end
-
-        # The u_u submatrix of this assignment will be overwritten after
-        # the loop.
-        for p0_ind1 in 1:length(p0_shape), p0_ind2 in 1:length(p0_shape)
-            E_G_s_h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
-                a_i * sb_E_l_a_b_i_v * fsm_i.h[p0_ind1, p0_ind2]
-            E_G2_s_h[p0_shape[p0_ind1], p0_shape[p0_ind2]] =
-                E_G2_s_hsub.shape_shape[p0_ind1, p0_ind2]
-        end
-
-        # Since the u_u submatrix is not disjoint between different i, accumulate
-        # it separate and add it at the end.
-        for u_ind1 = 1:2, u_ind2 = 1:2
-            E_G_s_hsub.u_u[u_ind1, u_ind2] =
-                E_G_s_hsub.shape_shape[u_ind[u_ind1], u_ind[u_ind2]]
-            E_G2_s_hsub.u_u[u_ind1, u_ind2] =
-                E_G2_s_hsub.shape_shape[u_ind[u_ind1], u_ind[u_ind2]]
-        end
-
-        # All other terms are disjoint between different i and don't involve
-        # addition, so we can just assign their values (which is efficient in
-        # native julia).
-
-        # The (a, bright) blocks:
-        for p0_ind in 1:length(p0_bright)
-            E_G_s_h[p0_bright[p0_ind], ids.a[i]] =
-                fsm_i_v * sb_E_l_a_b_i_d[p0_ind, 1]
-            E_G2_s_h[p0_bright[p0_ind], ids.a[i]] =
-                (fsm_i_v ^ 2) * sb_E_ll_a_b_i_d[p0_ind, 1]
-            E_G_s_h[ids.a[i], p0_bright[p0_ind]] =
-                E_G_s_h[p0_bright[p0_ind], ids.a[i]]
-            E_G2_s_h[ids.a[i], p0_bright[p0_ind]] =
-                E_G2_s_h[p0_bright[p0_ind], ids.a[i]]
-        end
-
-        # The (a, shape) blocks.
-        for p0_ind in 1:length(p0_shape)
-            E_G_s_h[p0_shape[p0_ind], ids.a[i]] =
-                sb_E_l_a_b_i_v * fsm_i_d[p0_ind, 1]
-            E_G2_s_h[p0_shape[p0_ind], ids.a[i]] =
-                sb_E_ll_a_b_i_v * 2 * fsm_i_v * fsm_i_d[p0_ind, 1]
-            E_G_s_h[ids.a[i], p0_shape[p0_ind]] =
-                E_G_s_h[p0_shape[p0_ind], ids.a[i]]
-            E_G2_s_h[ids.a[i], p0_shape[p0_ind]] =
-                E_G2_s_h[p0_shape[p0_ind], ids.a[i]]
-        end
-
-        for ind_b in 1:length(p0_bright), ind_s in 1:length(p0_shape)
-            E_G_s_h[p0_bright[ind_b], p0_shape[ind_s]] =
-                a_i * sb_E_l_a_b_i_d[ind_b, 1] * fsm_i_d[ind_s, 1]
-            E_G2_s_h[p0_bright[ind_b], p0_shape[ind_s]] =
-                2 * a_i * sb_E_ll_a_b_i_d[ind_b, 1] * fsm_i_v * fsm_i_d[ind_s]
-
-            E_G_s_h[p0_shape[ind_s], p0_bright[ind_b]] =
-                E_G_s_h[p0_bright[ind_b], p0_shape[ind_s]]
-            E_G2_s_h[p0_shape[ind_s], p0_bright[ind_b]] =
-                E_G2_s_h[p0_bright[ind_b], p0_shape[ind_s]]
-        end
-    end # i loop
-
-    if elbo_vars.elbo.has_hessian
-        # Accumulate the u Hessian. u is the only parameter that is shared between
-        # different values of i.
-
-        # This is
-        # for i = 1:Ia
-        #     E_G_u_u_hess += elbo_vars.E_G_s_hsub_vec[i].u_u
-        #     E_G2_u_u_hess += elbo_vars.E_G2_s_hsub_vec[i].u_u
-        # end
-        # For each value in 1:Ia, written this way for speed.
-        for u_ind1 = 1:2, u_ind2 = 1:2
-            elbo_vars.E_G_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
-                elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
-                elbo_vars.E_G_s_hsub_vec[2].u_u[u_ind1, u_ind2]
-
-            elbo_vars.E_G2_s.h[ids.u[u_ind1], ids.u[u_ind2]] =
-                elbo_vars.E_G2_s_hsub_vec[1].u_u[u_ind1, u_ind2] +
-                elbo_vars.E_G2_s_hsub_vec[2].u_u[u_ind1, u_ind2]
+            E_G_s.h[brightness_params(ids, kind), shape_params(ids, kind)] = a_i * sb_E_l_a_b_i_d[ind_b, 1] * fsm_i_d[shape_params(ids, kind), 1]
+            E_G2_s.h[brightness_params(ids, kind), shape_params(ids, kind)] = 2 * a_i * fsm_i_v * sb_E_l_a_b_i_d[ind_b, 1] * fsm_i_d[shape_params(ids, kind), 1]
         end
     end
 
-    ####################################################
-    #### the code below loads var_G_s ##################
-
+    # Calculate var_G
     var_G_s.v[] = E_G2_s.v[] - (E_G_s.v[] ^ 2)
 
-    ############### only gradient and hessian code below
     (is_active_source && elbo_vars.elbo.has_gradient) || return
 
-    var_G_s_d = elbo_vars.var_G_s.d
-    E_G2_s_d = elbo_vars.E_G2_s.d
-    E_G_s_d = elbo_vars.E_G_s.d
-
-    @assert length(var_G_s_d) == length(E_G2_s_d) == length(E_G_s_d)
-
-    @inbounds for ind1 = 1:length(var_G_s_d)
-        var_G_s_d[ind1] = E_G2_s_d[ind1] - 2 * E_G_s.v[] * E_G_s_d[ind1]
-    end
-
-    ########## only hessian code below
-    elbo_vars.elbo.has_hessian || return
-
-    var_G_s_h = elbo_vars.var_G_s.h
-    E_G2_s_h = elbo_vars.E_G2_s.h
-    E_G_s_h = elbo_vars.E_G_s.h
-    p1, p2 = size(var_G_s_h)
-    @inbounds for ind2 = 1:p2, ind1 = 1:ind2
-        var_G_s_h[ind1, ind2] =
-            E_G2_s_h[ind1, ind2] - 2 * (
-                E_G_s.v[] * E_G_s_h[ind1, ind2] +
-                E_G_s_d[ind1, 1] * E_G_s_d[ind2, 1])
-        var_G_s_h[ind2, ind1] = var_G_s_h[ind1, ind2]
-    end
+    var_G_s.d = E_G2_s_d - 2 * E_G_s.v[] * E_G_s_d
+    var_G_s_h = E_G2_s_h[ind1, ind2] - 2 * (
+                    E_G_s.v[] * E_G_s_h[ind1, ind2] +
+                    E_G_s.d[ind1] * E_G_s.d[ind2]')
 end
-
 
 """
 Add the contributions from a single source at a single pixel to the
