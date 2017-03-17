@@ -212,6 +212,50 @@ function partition_equally(n_threads, n_sources)
     thread_sources_assignment
 end
 
+
+"""
+Return a Cyclades partitioning or an equal partitioning of the target
+sources.
+"""
+function partition_box(npartitions::Int, target_sources::Vector{Int},
+                       neighbor_map::Vector{Vector{Int}};
+                       cyclades_partition=true,
+                       batch_size=400)
+    if cyclades_partition
+        cyclades_neighbor_map = Dict{Int64,Vector{Int64}}()
+        for (index, neighbors) in enumerate(neighbor_map)
+            cyclades_neighbor_map[target_sources[index]] = neighbors
+        end
+        return partition_cyclades(npartitions, target_sources,
+                                  cyclades_neighbor_map,
+                                  batch_size=batch_size)
+    else
+        return partition_equally(npartitions, length(target_sources))
+    end
+end
+
+
+"""
+Pre-allocate elbo args variational parameters; configurations need to
+be persisted across calls to `maximize!()` so that location constraints
+don't shift from their initial position.
+"""
+function setup_vecs(n_sources::Int, target_sources::Vector{Int},
+                    catalog::Vector{CatalogEntry})
+    ts_vp = Dict{Int64, Array{Float64}}()
+    for ts in target_sources
+        cat = catalog[ts]
+        ts_vp[ts] = generic_init_source(cat.pos)
+    end
+
+    ea_vec = Vector{ElboArgs}(n_sources)
+    vp_vec = Vector{VariationalParams{Float64}}(n_sources)
+    cfg_vec = Vector{Config{DEFAULT_CHUNK,Float64}}(n_sources)
+
+    return ea_vec, vp_vec, cfg_vec, ts_vp
+end
+
+
 """
 Like one_node_infer, uses multiple threads on one node to fit the Celeste
 model over numerous iterations.
@@ -235,7 +279,8 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
                               cyclades_partition::Bool=true,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
-                              n_iters::Int=3)
+                              n_iters::Int=3,
+                              timing=InferTiming())
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
@@ -244,35 +289,14 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
     # Partition the sources
     n_sources = length(target_sources)
     Log.info("Optimizing $(n_sources) sources")
-
-    local thread_sources_assignment::Vector{Vector{Vector{Int64}}}
-
-    if cyclades_partition
-        # Convert neighbormap to cyclades map (map from source_id -> [neighbor source_ids])
-        cyclades_neighbor_map = Dict{Int64, Vector{Int64}}()
-        for (index, neighbors) in enumerate(neighbor_map)
-            source_id = target_sources[index]
-            cyclades_neighbor_map[source_id] = neighbors
-        end
-        thread_sources_assignment = partition_cyclades(n_threads, target_sources, cyclades_neighbor_map, batch_size=batch_size)
-    else
-        thread_sources_assignment = partition_equally(n_threads, n_sources)
-    end
-
+    thread_sources_assignment = partition_box(n_threads, target_sources,
+                                      neighbor_map;
+                                      cyclades_partition=cyclades_partition,
+                                      batch_size=batch_size)
     Log.info("Done assigning sources to threads for processing")
 
-    # Pre allocate elbo args variational params
-    target_source_variational_params::Dict{Int64, Array{Float64}} = Dict{Int64, Array{Float64}}()
-    for target_source in target_sources
-        cat = catalog[target_source]
-        target_source_variational_params[target_source] = generic_init_source(cat.pos)
-    end
-
-    # configurations need to be persisted across calls to maximize! so
-    # that location constraints don't shift from their initial position
-    ea_vec::Vector{ElboArgs} = Vector{ElboArgs}(n_sources)
-    vp_vec::Vector{VariationalParams{Float64}} = Vector{VariationalParams{Float64}}(n_sources)
-    cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}} = Vector{Config{DEFAULT_CHUNK,Float64}}(n_sources)
+    ea_vec, vp_vec, cfg_vec, target_source_variational_params =
+            setup_vecs(n_sources, target_sources, catalog)
 
     # Initialize elboargs in parallel
     tic()
@@ -281,8 +305,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
     initialize_elboargs_sources!(config, ea_vec, vp_vec, cfg_vec, thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
                                  target_source_variational_params)
-
-    Log.info("Done preallocating array of elboargs. Elapsed time: $(toq())")
+    timing.init_elbo = toq()
 
     # Process sources in parallel
     tic()
@@ -291,7 +314,8 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
                      thread_sources_assignment,
                      n_iters, within_batch_shuffling)
 
-    Log.info("Done fitting elboargs. Elapsed time: $(toq())")
+    timing.opt_srcs = toq()
+    timing.num_srcs = n_sources
 
     # Return add results to vector
     results = OptimizedSource[]
@@ -306,15 +330,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
         push!(results, result)
     end
 
-    n_active = 0
-    n_inactive = 0
-    for elbo_vars in DeterministicVI.ElboMaximize.ELBO_VARS_POOL
-        n_active += elbo_vars.active_pixel_counter[]
-        n_inactive += elbo_vars.inactive_pixel_counter[]
-        elbo_vars.active_pixel_counter[] = 0
-        elbo_vars.inactive_pixel_counter[] = 0
-    end
-    Log.info("(active,inactive) pixels processed: \($n_active, $n_inactive\)")
+    show_pixels_processed()
 
     results
 end
@@ -324,7 +340,8 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
                               batch_size::Int=400,
                               within_batch_shuffling::Bool=true,
-                              n_iters::Int=3)
+                              n_iters::Int=3,
+                              timing=InferTiming())
     one_node_joint_infer(
         Configs.Config(),
         catalog,
@@ -335,6 +352,7 @@ function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
         batch_size=batch_size,
         within_batch_shuffling=within_batch_shuffling,
         n_iters=n_iters,
+        timing=timing
     )
 end
 
@@ -345,10 +363,11 @@ function initialize_elboargs_sources!(config::Configs.Config, ea_vec, vp_vec, cf
     Threads.@threads for i in 1:nthreads()
         try
             for batch in 1:length(thread_initialize_sources_assignment[i])
-                initialize_elboargs_sources_kernel!(config, ea_vec, vp_vec, cfg_vec,
-                                                    thread_initialize_sources_assignment[i][batch],
-                                                    catalog, target_sources, neighbor_map, images,
-                                                    target_source_variational_params)
+                for source_index in thread_initialize_sources_assignment[i][batch]
+                    init_elboargs(config, source_index, catalog, target_sources,
+                                  neighbor_map, images, ea_vec, vp_vec, cfg_vec,
+                                  target_source_variational_params)
+                end
             end
         catch ex
             Log.exception(ex)
@@ -358,39 +377,50 @@ function initialize_elboargs_sources!(config::Configs.Config, ea_vec, vp_vec, cf
 end
 
 
-function initialize_elboargs_sources_kernel!(config::Configs.Config, ea_vec, vp_vec, cfg_vec, sources,
-                                             catalog, target_sources, neighbor_map, images,
-                                             target_source_variational_params)
+"""
+Initialize elbo args for the specified target source.
+"""
+function init_elboargs(config::Configs.Config,
+                       ts::Int,
+                       catalog::Vector{CatalogEntry},
+                       target_sources::Vector{Int},
+                       neighbor_map::Vector{Vector{Int}},
+                       images::Vector{Image},
+                       ea_vec::Vector{ElboArgs},
+                       vp_vec::Vector{VariationalParams{Float64}},
+                       cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
+                       ts_vp::Dict{Int64,Array{Float64}})
     try
-        for cur_source_index in sources
-            entry_id = target_sources[cur_source_index]
-            entry = catalog[target_sources[cur_source_index]]
-            neighbor_ids = neighbor_map[cur_source_index]
-            neighbors = catalog[neighbor_map[cur_source_index]]
+        entry_id = target_sources[ts]
+        entry = catalog[entry_id]
+        neighbor_ids = neighbor_map[ts]
+        neighbors = catalog[neighbor_ids]
+        cat_local = vcat([entry], neighbors)
+        ids_local = vcat([entry_id], neighbor_ids)
 
-            # TODO max: refactor this portion? It's reused in infer_source.
-            cat_local = vcat([entry], neighbors)
-            ids_local = vcat([entry_id], neighbor_ids)
+        patches = Infer.get_sky_patches(images, cat_local)
+        Infer.load_active_pixels!(config, images, patches)
 
-            patches = Infer.get_sky_patches(images, cat_local)
-            Infer.load_active_pixels!(config, images, patches)
+        # Load vp with shared target source params, and also vp
+        # that doesn't share target source params
+        vp = Vector{Float64}[haskey(ts_vp, x) ?
+                             ts_vp[x] :
+                             catalog_init_source(catalog[x])
+                             for x in ids_local]
+        ea = ElboArgs(images, patches, [1])
 
-            # Load vp with shared target source params, and also vp
-            # that doesn't share target source params
-            vp = Vector{Float64}[haskey(target_source_variational_params, x) ?
-                                 target_source_variational_params[x] :
-                                 catalog_init_source(catalog[x]) for x in ids_local]
-            ea = ElboArgs(images, patches, [1])
-
-            ea_vec[cur_source_index] = ea
-            vp_vec[cur_source_index] = vp
-            cfg_vec[cur_source_index] = Config(ea, vp)
+        ea_vec[ts] = ea
+        vp_vec[ts] = vp
+        cfg_vec[ts] = Config(ea, vp)
+    catch exc
+        if is_production_run || nthreads() > 1
+            Log.exception(exc)
+        else
+            rethrow()
         end
-        return nothing
-    catch ex
-        Log.exception(ex)
     end
 end
+
 
 function process_sources!(images::Vector{Model.Image},
                           ea_vec::Vector{ElboArgs},
@@ -451,3 +481,17 @@ function process_sources_kernel!(images::Vector{Model.Image},
         end
     end
 end
+
+# Count and display the number of active and inactive pixels processed.
+function show_pixels_processed()
+    n_active = 0
+    n_inactive = 0
+    for elbo_vars in DeterministicVI.ElboMaximize.ELBO_VARS_POOL
+        n_active += elbo_vars.active_pixel_counter[]
+        n_inactive += elbo_vars.inactive_pixel_counter[]
+        elbo_vars.active_pixel_counter[] = 0
+        elbo_vars.inactive_pixel_counter[] = 0
+    end
+    Log.message("(active,inactive) pixels processed: \($n_active, $n_inactive\)")
+end
+
