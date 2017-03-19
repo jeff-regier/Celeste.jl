@@ -32,18 +32,18 @@ end
 
 
 # ----------------
-# container for multinode-specific information
+# container for multiprocessing/multithreading-specific information
 # ----------------
-type MultinodeInfo
+type MultiInfo
     dt::Dtree
     ni::Int
     ci::Int
     li::Int
     rundt::Bool
-    lock::SpinLock
     nworkers::Int
     bar::CentSRBarrier
 end
+
 
 # ----------------
 # container for bounding boxes and associated data
@@ -51,39 +51,32 @@ end
 type BoxInfo
     state::Atomic{Int}
     box_idx::Int
-    nsources::Int
     catalog::Vector{CatalogEntry}
     target_sources::Vector{Int}
     neighbor_map::Vector{Vector{Int}}
     images::Vector{Image}
-    lock::SpinLock
-    curr_source::Int
+    source_rcfs::Vector{RunCamcolField}
+    source_cat_idxs::Vector{Int16}
     sources_assignment::Vector{Vector{Vector{Int64}}}
+    curr_cc::Atomic{Int}
     ea_vec::Vector{ElboArgs}
     vp_vec::Vector{VariationalParams{Float64}}
     cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}}
-    ts_vp::Dict{Int64,Array{Float64}}
 
-    BoxInfo() = new(Atomic{Int}(BoxDone), 0, 0, [], [], [], [], SpinLock(), 1, [],
-                    [], [], [], Dict{Int64,Array{Float64}}())
+    BoxInfo() = new(Atomic{Int}(BoxDone), 0, [], [], [], [], [], [], [],
+                    Atomic{Int}(1), [], [], [])
 end
 
 # box states
 const BoxDone = 0::Int
-const BoxLoaded = 1::Int
-const BoxInitializing = 2::Int
-const BoxReady = 3::Int
-
-# enable loading the next bounding box to process, while light sources
-# in the current box are still being processed
-const NumConcurrentBoxes = 2::Int
+const BoxReady = 1::Int
+const BoxEnd = 2::Int
 
 
 """
-Set up thread affinities for all ranks and create the Dtree scheduler
-for distributing boxes to ranks.
+Set thread affinities on all ranks, if so configured.
 """
-function init_multinode(nwi::Int)
+function set_affinities()
     ranks_per_node = 1
     rpn = "?"
     if haskey(ENV, "CELESTE_RANKS_PER_NODE")
@@ -92,6 +85,9 @@ function init_multinode(nwi::Int)
         use_threads_per_core = 1
         if haskey(ENV, "CELESTE_THREADS_PER_CORE")
             use_threads_per_core = parse(Int, ENV["CELESTE_THREADS_PER_CORE"])
+        else
+            Log.one_message("WARN: assuming 1 thread per core, ",
+                            "CELESTE_THREADS_PER_CORE not set")
         end
         if ccall(:jl_generating_output, Cint, ()) == 0
             lscpu = split(readstring(`lscpu`), '\n')
@@ -104,141 +100,161 @@ function init_multinode(nwi::Int)
         cores = div(cpus, tpc)
         affinitize(cores, tpc, ranks_per_node;
                    use_threads_per_core=use_threads_per_core)
+    else
+        Log.one_message("WARN: not affinitizing threads, ",
+                        "CELESTE_RANKS_PER_NODE not set")
     end
 
-    if grank() == 1
-        Log.message("running with $rpn ranks per node, $(ngranks()) total ranks")
-        Log.message("$nwi bounding boxes, ~$(ceil(Int, nwi / ngranks())) per rank")
-    end
-
-    dt, _ = Dtree(nwi, 0.4)
-    ni, (ci, li) = initwork(dt)
-    rundt = runtree(dt)
-    lock = SpinLock()
-
-    Log.debug("dtree: initial: $(ni) ($(ci) to $(li))")
-
-    nworkers = nthreads() - (rundt ? 1 : 0)
-    bar = setup_barrier(nworkers)
-
-    return MultinodeInfo(dt, ni, ci, li, rundt, lock, nworkers, bar)
+    return rpn
 end
 
 
 """
-Set up a global array to hold the results for each light source. Perform an
-exclusive scan of the source counts array, to help locate the entry for each
-source.
+Create the Dtree scheduler for distributing boxes to ranks.
 """
-function setup_results(boxes::Vector{BoundingBox}, box_source_counts::Vector{Int64})
-    num_boxes = length(boxes)
-    source_counts = zeros(Int, num_boxes+1)
-    for i = 1:num_boxes
-        box = boxes[i]
-        source_counts[i+1] = source_counts[i] + box_source_counts[i]
+function setup_multi(nwi::Int)
+    dt, _ = Dtree(nwi, 0.25)
+    ni, (ci, li) = initwork(dt)
+    rundt = runtree(dt)
+
+    Log.info("dtree: initial: $(ni) ($(ci) to $(li))")
+
+    nworkers = nthreads() - (rundt ? 1 : 0) - 1
+    bar = setup_barrier(max(1, nworkers))
+
+    return MultiInfo(dt, ni, ci, li, rundt, nworkers, bar)
+end
+
+
+"""
+Given an array of arrays of bounding boxes, determine how many primary sources
+are in all the RCFs overlapped by those boxes. Use an exclusive scan of the
+counts of sources in those RCFs (provided in `rcf_nsrcs`) to build a
+dictionary mapping RCFs to their prefix sums. We use this dictionary to find
+an RCF's sources' offset in a global array of all sources.
+"""
+function build_rcf_map(all_rcfs::Vector{RunCamcolField},
+                       all_rcf_nsrcs::Vector{Int16},
+                       all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}})
+    # generate a list of all the indices of the RCFs that overlap all the boxes
+    all_rcf_idxs = Vector{Int32}()
+    for boxes_rcf_idxs in all_boxes_rcf_idxs
+        for rcf_idxs in boxes_rcf_idxs
+            append!(all_rcf_idxs, rcf_idxs)
+        end
+        all_rcf_idxs = unique(all_rcf_idxs)
     end
-    num_sources = source_counts[num_boxes+1]
 
-    if grank() == 1
-        Log.message("$(num_sources) total sources in all boxes")
+    # build the map for all these RCFs
+    rcf_map = Dict{RunCamcolField,Int32}()
+    num_rcfs = length(all_rcf_idxs)
+    tot_srcs = 0
+    for idx in all_rcf_idxs
+        nsrcs = all_rcf_nsrcs[idx]
+        rcf_map[all_rcfs[idx]] = tot_srcs
+        tot_srcs += nsrcs
     end
 
-    results = Garray(OptimizedSource, OptimizedSourceLen, num_sources)
-
-    return results, source_counts
+    return tot_srcs, rcf_map
 end
 
 
 """
 Each node saves its portion of the results global array.
 """
-function save_results(results::Garray, outdir::String)
-    lo, hi = distribution(results, grank())
-    lresults = access(results, lo, hi)
-    fname = @sprintf("%s/celeste-multinode-rank%d.jld", outdir, grank())
-    JLD.save(fname, "results", lresults)
-    Log.message("saved results to $fname at $(Dates.now())")
+function save_results(results::Garray, boxgroup::Int, outdir::String)
+    try
+        lo, hi = distribution(results, grank())
+        lresults = access(results, lo, hi)
+        fname = @sprintf("%s/celeste-multi-boxgroup%d-rank%d.jld", outdir,
+                          boxgroup, grank())
+        JLD.save(fname, "results", lresults)
+        Log.message("$(Time(now())): saved results to $fname")
+    catch exc
+        Log.exception(exc)
+    end
 end
 
 
 """
-Determine the next bounding box to process and use `infer_init()` to
-load its catalog, target sources, neighbor map, and images. Possibly
-ask the scheduler for more box(es), if needed.
+Determine the next bounding box to process and load its catalog, target
+sources, neighbor map, and images. Possibly ask the scheduler for more
+box(es), if needed.
 """
-function load_box(cbox::BoxInfo, mi::MultinodeInfo,
-                  all_boxes::Vector{BoundingBox}, stagedir::String;
-                  primary_initialization=true,
-                  timing=InferTiming())
-    tid = threadid()
-    lock(cbox.lock)
-
-    # another thread might have loaded this box already
-    if cbox.state[] != BoxDone
-        unlock(cbox.lock)
-        return true
-    end
+function load_box(boxes::Vector{BoundingBox},
+                  field_extents::Vector{FieldExtent},
+                  stagedir::String, mi::MultiInfo, cbox::BoxInfo,
+                  timing::InferTiming)
+    # expected: cbox.state[] == BoxDone
 
     # determine which box to load next
     box_idx = 0
+    tic()
     while true
-        lock(mi.lock)
-
         # the last item is 0 only when we're out of work
         if mi.li == 0
-            unlock(mi.lock)
-            unlock(cbox.lock)
+            timing.sched_ovh += toq()
             return false
         end
 
         # if we've run out of items, ask for more work
         if mi.ci > mi.li
-            Log.debug("dtree: consumed allocation (last was $(mi.li))")
-            mi.ni, (mi.ci, mi.li) = getwork(mi.dt)
-            unlock(mi.lock)
+            mi.ni, (mi.ci, mi.li) = try getwork(mi.dt)
+            catch exc
+                Log.exception(exc)
+                return false
+            end
             if mi.li == 0
-                Log.debug("dtree: out of work")
+                Log.info("dtree: out of work")
             else
-                Log.debug("dtree: $(mi.ni) work items ($(mi.ci) to $(mi.li))")
+                Log.info("dtree: $(mi.ni) work items ($(mi.ci) to $(mi.li))")
             end
 
         # otherwise, get the next box from our current allocation
         else
             box_idx = mi.ci
-            mi.ci = mi.ci + 1
-            unlock(mi.lock)
+            mi.ci += 1
             break
         end
     end
+    timing.sched_ovh += toq()
 
     # load box `box_idx`
-    @assert box_idx > 0
-    box = all_boxes[box_idx]
+    box = boxes[box_idx]
     cbox.box_idx = box_idx
 
+    # determine the RCFs
+    rcfs = []
+    try
+        tic()
+        rcfs = get_overlapping_fields(box, field_extents)
+        rcftime = toq()
+        timing.query_fids += rcftime
+    catch exc
+        Log.exception(exc)
+    end
 
     # load the RCFs
-    tic()
-    rcfs = get_overlapping_fields(box, stagedir)
-    rcftime = toq()
-    timing.query_fids += rcftime
+    cbox.catalog = []
+    cbox.target_sources = []
+    cbox.neighbor_map = []
+    cbox.images = []
+    try
+        tic()
+        cbox.catalog, cbox.target_sources, cbox.neighbor_map,
+            cbox.images, cbox.source_rcfs, cbox.source_cat_idxs =
+                    infer_init(rcfs, stagedir; box=box, timing=timing)
+        loadtime = toq()
+    catch exc
+        Log.exception(exc)
+    end
 
-    # load catalog, target sources, neighbor map and images for these RCFs
-    tic()
-    cbox.catalog, cbox.target_sources, cbox.neighbor_map, cbox.images =
-            infer_init(rcfs, stagedir;
-                       box=box,
-                       primary_initialization=primary_initialization,
-                       timing=timing)
-    loadtime = toq()
+    # set box information
+    cbox.curr_cc[] = 1
 
-    cbox.nsources = length(cbox.target_sources)
-    cbox.curr_source = 1
-    cbox.state[] = BoxLoaded
-    unlock(cbox.lock)
-
-    Log.message("loaded box $(box.ramin), $(box.ramax), $(box.decmin), ",
-                "$(box.decmax) ($(cbox.nsources) sources) in ",
+    Log.message("$(Time(now())): loaded box #$(box_idx) ($(box.ramin), ",
+                "$(box.ramax), $(box.decmin), $(box.decmax) ",
+                "($(length(cbox.target_sources)) target sources)) in ",
                 "$(rcftime + loadtime) secs")
 
     return true
@@ -246,288 +262,305 @@ end
 
 
 """
-Thread function for running single inference on the light sources in
-the specified bounding boxes. Used by the driver function.
+Joint inference requires some initialization of a box: the sources must
+be partitioned and persistent configurations allocated. We also load
+previous inference results if the global array is provided.
 """
-function single_infer_boxes(config::Configs.Config,
-                            all_boxes::Vector{BoundingBox},
-                            stagedir::String,
-                            mi::MultinodeInfo,
-                            all_results::Garray,
-                            source_counts::Vector{Int},
-                            conc_boxes::Vector{BoxInfo},
-                            all_threads_timing::Vector{InferTiming},
-                            primary_initialization=true)
-    tid = threadid()
-    all_threads_timing[tid] = InferTiming()
-    thread_timing = all_threads_timing[tid]
+function init_box(npartitions::Int, rcf_map::Dict{RunCamcolField,Int32},
+                  prev_results, cbox::BoxInfo, timing::InferTiming)
+    cbox.sources_assignment = partition_box(npartitions, cbox.target_sources,
+                                            cbox.neighbor_map)
 
-    # Dtree parent ranks reserve one thread to drive the tree
-    if mi.rundt && tid == nthreads()
-        Log.debug("dtree: running tree")
-        while runtree(mi.dt)
-            Gasp.cpu_pause()
+    nsources = length(cbox.target_sources)
+    cbox.ea_vec, cbox.vp_vec, cbox.cfg_vec, ts_vp =
+            setup_vecs(nsources, cbox.target_sources, cbox.catalog)
+
+    # to hold previously computed variational parameters (if any)
+    cache = Dict{Int,Vector{Float64}}()
+
+    # initialize elbo args for all sources
+    tic()
+    for ts = 1:nsources
+        entry_id = cbox.target_sources[ts]
+        entry = cbox.catalog[entry_id]
+        neighbor_ids = cbox.neighbor_map[ts]
+        neighbors = cbox.catalog[neighbor_ids]
+
+        cat_local = vcat([entry], neighbors)
+        ids_local = vcat([entry_id], neighbor_ids)
+
+        patches = Infer.get_sky_patches(cbox.images, cat_local)
+        Infer.load_active_pixels!(cbox.images, patches)
+        cbox.ea_vec[ts] = ElboArgs(cbox.images, patches, [1])
+
+        vp = Vector{Float64}[haskey(ts_vp, x) ?
+                             ts_vp[x] :
+                             catalog_init_source(cbox.catalog[x])
+                             for x in ids_local]
+        cbox.cfg_vec[ts] = Config(cbox.ea_vec[ts], vp)
+
+        init_source(i) = i == 1 ?
+                         generic_init_source(cat_local[i].pos) :
+                         catalog_init_source(cat_local[i])
+
+        if prev_results != nothing
+            # we have previous results; load previously computed variational
+            # parameters
+            try
+                cache_hits = 0
+                ga_hits = 0
+                loaded_vp = Vector{Vector{Float64}}(length(cat_local))
+                for i = 1:length(cat_local)
+
+                    # first check the cache
+                    i_vp = get(cache, cat_local[i].thing_id, [])
+                    if !isempty(i_vp)
+                        cache_hits += 1
+                        loaded_vp[i] = copy(i_vp)
+                        continue
+                    end
+
+                    # it isn't in the cache; look in the global array
+                    rcf = cbox.source_rcfs[ids_local[i]]
+                    rofs = get(rcf_map, rcf, -1)
+                    if rofs != -1
+                        ri = cbox.source_cat_idxs[ids_local[i]]
+                        ridx = convert(Int64, rofs + ri)
+                        tic()
+                        opt_src, osh = get(prev_results, ridx, ridx)
+                        timing.ga_get += toq()
+                        if isassigned(opt_src, 1)
+                            ga_hits += 1
+                            loaded_vp[i] = copy(opt_src[1].vs)
+                            cache[opt_src[1].thingid] = copy(loaded_vp[i])
+                            continue
+                        else
+                            #Log.debug("not found: $(cat_local[i].thing_id)")
+                        end
+                    else
+                        Log.warn("no offset for RCF $(rcf.run), $(rcf.camcol), ",
+                                 "$(rcf.field) (source $(entry.objid)) in map?")
+                    end
+
+                    # it isn't in the global array
+                    loaded_vp[i] = vp[i]
+                end
+                vp = loaded_vp
+                #Log.debug("got previous results for $ga_hits/$(length(cat_local)) ",
+                #          "sources ($cache_hits cache hits)")
+            catch exc
+                Log.exception(exc)
+            end
         end
-        return
+        cbox.vp_vec[ts] = vp
     end
+    timing.init_elbo += toq()
+    cbox.state[] = BoxReady
+end
 
-    # all other threads process sources
-    ts = 0
-    ts_boxidx = 0
-    curr_cbox = 1
-    cbox = conc_boxes[curr_cbox]
-    load_box(cbox, mi, all_boxes, stagedir;
-             primary_initialization=primary_initialization,
-             timing=thread_timing)
-    while true
-        # get the next source to process from the current box
-        lock(cbox.lock)
-        ts = cbox.curr_source
-        ts_boxidx = cbox.box_idx
-        cbox.curr_source = cbox.curr_source + 1
-        unlock(cbox.lock)
 
-        # if the current box is done, switch to the next box
-        if ts > cbox.nsources
-            # mark this box done
-            if cbox.state[] != BoxDone
-                atomic_cas!(cbox.state, BoxLoaded, BoxDone)
-            end
+"""
+Put inference results for a box into the global array.
+"""
+function store_box(cbox::BoxInfo, rcf_map::Dict{RunCamcolField,Int32},
+                   results::Garray, timing::InferTiming)
+    tic()
+    try
+        for ts = 1:length(cbox.target_sources)
+            entry = cbox.catalog[cbox.target_sources[ts]]
+            result = OptimizedSource(entry.thing_id,
+                                     entry.objid,
+                                     entry.pos[1],
+                                     entry.pos[2],
+                                     cbox.vp_vec[ts][1])
 
-            # switch to the next box (other threads may still be working here)
-            curr_cbox = curr_cbox + 1
-            if curr_cbox > NumConcurrentBoxes
-                curr_cbox = 1
-            end
-            cbox = conc_boxes[curr_cbox]
-
-            # if it hasn't already been loaded, load the next box to process
-            if cbox.state[] != BoxLoaded
-                if !load_box(cbox, mi, all_boxes, stagedir;
-                            primary_initialization=primary_initialization,
-                            timing=thread_timing)
-                    break
-                end
-            end
-            continue
-        end
-
-        # process the source and record the result
-        try
-            tic()
-            result = process_source(config, ts, cbox.target_sources,
-                                    cbox.catalog, cbox.neighbor_map,
-                                    cbox.images)
-            thread_timing.opt_srcs += toq()
-            thread_timing.num_srcs += 1
-
-            results_idx = source_counts[ts_boxidx] + ts
-            tic()
-            put!(all_results, results_idx, results_idx, [result])
-            thread_timing.ga_put += toq()
-        catch ex
-            if is_production_run || nthreads() > 1
-                Log.exception(ex)
+            ci = cbox.target_sources[ts]
+            rcf = cbox.source_rcfs[ci]
+            rofs = get(rcf_map, rcf, -1)
+            if rofs == -1
+                Log.warn("no offset for RCF $(rcf.run), $(rcf.camcol), ",
+                         "$(rcf.field) (source $(entry.objid)) in map?")
             else
-                rethrow(ex)
+                ri = cbox.source_cat_idxs[ci]
+                ridx = convert(Int64, rofs + ri)
+                #Log.debug("$(result.thingid) -> GA[$ridx]")
+                tic()
+                put!(results, ridx, ridx, [result])
+                timing.ga_put += toq()
             end
         end
+    catch exc
+        if is_production_run || nthreads() > 1
+            Log.exception(exc)
+        else
+            rethrow()
+        end
+    end
+    timing.store_res += toq()
+    timing.num_srcs += length(cbox.target_sources)
 
-        # if we're close to the end of the sources in this box, start
-        # loading the next box, to overlap loading with processing as
-        # much as possible
-        if mi.nworkers > 1 &&
-                (ts == cbox.nsources - mi.nworkers ||
-                (cbox.nsources <= mi.nworkers && ts == 1))
-            curr_cbox = curr_cbox + 1
-            if curr_cbox > NumConcurrentBoxes
-                curr_cbox = 1
-            end
-            cbox = conc_boxes[curr_cbox]
-            if cbox.state[] != BoxLoaded
-                if !load_box(cbox, mi, all_boxes, stagedir;
-                             primary_initialization=primary_initialization,
-                             timing=thread_timing)
-                    break
-                end
-            end
-        end
+    if length(cbox.target_sources) > 0
+        Log.message("$(Time(now())): completed box #$(cbox.box_idx) ",
+                    "($(length(cbox.target_sources)) target sources)")
     end
 end
 
 
 """
-Joint inference requires some initialization of a box: the sources must
-be partitioned/batched, and persistent configurations allocated. All the
-threads call this function, and may participate in initialization.
+To be called by a thread dedicated to preloading boxes into `conc_boxes`.
 """
-function init_box(config::Configs.Config, cbox::BoxInfo, nworkers::Int;
-                  cyclades_partition=true,
-                  batch_size=400,
-                  timing=InferTiming())
-    # if this thread was late, move on quickly
-    if cbox.state[] == BoxReady
-        return
-    end
+function preload_boxes(config::Configs.Config,
+                       boxes::Vector{BoundingBox},
+                       rcf_map::Dict{RunCamcolField,Int32},
+                       field_extents::Vector{FieldExtent},
+                       stagedir::String,
+                       mi::MultiInfo,
+                       results::Garray,
+                       prev_results,
+                       conc_boxes::Vector{BoxInfo},
+                       timing::InferTiming)
+    curr_cbox = 1
+    cbox = conc_boxes[curr_cbox]
+    state = BoxReady
 
-    # only one thread does the partitioning and pre-allocation
-    lock(cbox.lock)
-    if cbox.state[] == BoxLoaded
-        cbox.sources_assignment = partition_box(nworkers, cbox.target_sources,
-                                        cbox.neighbor_map;
-                                        cyclades_partition=cyclades_partition,
-                                        batch_size=batch_size)
-        cbox.ea_vec, cbox.vp_vec, cbox.cfg_vec, cbox.ts_vp =
-                setup_vecs(cbox.nsources, cbox.target_sources, cbox.catalog)
-
-        # update box state
-        cbox.state[] = BoxInitializing
-    end
-    unlock(cbox.lock)
-
-    # initialize elbo args for all sources
-    tic()
-    while cbox.state[] == BoxInitializing
-        lock(cbox.lock)
-        ts = cbox.curr_source
-        cbox.curr_source = cbox.curr_source + 1
-        unlock(cbox.lock)
-        if ts > cbox.nsources
-            if cbox.state[] == BoxInitializing
-                atomic_cas!(cbox.state, BoxInitializing, BoxReady)
-            end
-            break
+    while cbox.state[] != BoxEnd
+        tic()
+        while cbox.state[] != BoxDone
+            Gasp.cpu_pause()
+            ccall(:jl_gc_safepoint, Void, ())
         end
-        init_elboargs(config, ts, cbox.catalog, cbox.target_sources,
-                      cbox.neighbor_map, cbox.images, cbox.ea_vec,
-                      cbox.vp_vec, cbox.cfg_vec, cbox.ts_vp)
+        timing.proc_wait += toq()
+
+        # store box results
+        store_box(cbox, rcf_map, results, timing)
+
+        # load and initialize box
+        if state != BoxEnd
+            if load_box(boxes, field_extents, stagedir, mi, cbox, timing)
+                init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
+            else
+                state = BoxEnd
+                cbox.state[] = BoxEnd
+            end
+        end
+
+        # switch to the next box
+        curr_cbox += 1
+        if curr_cbox > length(conc_boxes)
+            curr_cbox = 1
+        end
+        cbox = conc_boxes[curr_cbox]
     end
-    timing.init_elbo += toq()
 end
 
 
 """
 Thread function for running joint inference on the light sources in
-the specified bounding boxes. Used by the driver function.
+the specified bounding boxes.
 """
 function joint_infer_boxes(config::Configs.Config,
-                           all_boxes::Vector{BoundingBox},
+                           boxes::Vector{BoundingBox},
+                           rcf_map::Dict{RunCamcolField,Int32},
+                           field_extents::Vector{FieldExtent},
                            stagedir::String,
-                           mi::MultinodeInfo,
-                           all_results::Garray,
-                           source_counts::Vector{Int},
+                           mi::MultiInfo,
+                           results::Garray,
+                           prev_results,
                            conc_boxes::Vector{BoxInfo},
-                           all_threads_timing::Vector{InferTiming},
-                           primary_initialization::Bool,
-                           cyclades_partition::Bool,
-                           batch_size::Int,
-                           within_batch_shuffling::Bool,
-                           niters::Int)
+                           all_threads_timing::Vector{InferTiming};
+                           batch_size=7000,
+                           within_batch_shuffling=true,
+                           niters=3)
     tid = threadid()
-    all_threads_timing[tid] = InferTiming()
-    thread_timing = all_threads_timing[tid]
-    rng = MersenneTwister(42)
+    timing = all_threads_timing[tid]
+    rng = MersenneTwister()
 
     # Dtree parent ranks reserve one thread to drive the tree
     if mi.rundt && tid == nthreads()
-        Log.debug("dtree: running tree")
+        Log.debug("$(Time(now())): dtree: running tree")
         while runtree(mi.dt)
             Gasp.cpu_pause()
         end
         return
     end
 
-    # all other threads are workers
+    # if we have at least one worker thread, we can use a preloader thread
+    if mi.nworkers >= 1 && tid == 1
+        Log.debug("$(Time(now())): preloading boxes")
+        preload_boxes(config, boxes, rcf_map, field_extents, stagedir, mi,
+                      results, prev_results, conc_boxes, timing)
+        return
+    end
+
+    # all remaining threads are workers
     curr_cbox = 0
     while true
-        # load the next box
+        # switch to the the next box
         curr_cbox = curr_cbox + 1
-        if curr_cbox > NumConcurrentBoxes
+        if curr_cbox > length(conc_boxes)
             curr_cbox = 1
         end
         cbox = conc_boxes[curr_cbox]
-        if cbox.state[] != BoxDone
-            Log.warn("box state should be done, but is $(cbox.state[])?!")
+
+        # prepare the box/wait for the box to be prepared
+        if mi.nworkers == 0
+            if !load_box(boxes, field_extents, stagedir, mi, cbox, timing)
+                break
+            end
+            init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
+        else
+            tic()
+            while cbox.state[] == BoxDone
+                Gasp.cpu_pause()
+                ccall(:jl_gc_safepoint, Void, ())
+            end
+            timing.load_wait += toq()
+            thread_barrier(mi.bar)
         end
-        if !load_box(cbox, mi, all_boxes, stagedir;
-                     primary_initialization=primary_initialization,
-                     timing=thread_timing)
+        if cbox.state[] != BoxReady
             break
         end
-        init_box(config, cbox, mi.nworkers;
-                 cyclades_partition=cyclades_partition,
-                 batch_size=batch_size,
-                 timing=thread_timing)
-        thread_barrier(mi.bar)
 
         # process sources in the box
         tic()
-        nbatches = length(cbox.sources_assignment[1])
-        try
-            for iter = 1:niters
-                for batch = 1:nbatches
-                    # Shuffle the source assignments within each batch. This is
-                    # disabled by default because it ruins the deterministic outcome
-                    # required by the test cases.
-                    # TODO: it isn't actually disabled by default?
+        nbatches = length(cbox.sources_assignment)
+        for iter = 1:niters
+            for batch = 1:nbatches
+                while true
+                    cc = atomic_add!(cbox.curr_cc, 1)
+                    if cc > length(cbox.sources_assignment[batch])
+                        break
+                    end
+
                     if within_batch_shuffling
-                        shuffle!(rng, cbox.sources_assignment[tid][batch])
+                        shuffle!(rng, cbox.sources_assignment[batch][cc])
                     end
 
-                    for s in cbox.sources_assignment[tid][batch]
-                        maximize!(cbox.ea_vec[s], cbox.vp_vec[s], cbox.cfg_vec[s])
-                    end
-
-                    # don't barrier on the last iteration
-                    if !(iter == niters && batch == nbatches)
-                        tic()
-                        thread_barrier(mi.bar)
-                        thread_timing.load_imba += toq()
+                    for ts in cbox.sources_assignment[batch][cc]
+                        try maximize!(cbox.ea_vec[ts], cbox.vp_vec[ts],
+                                      cbox.cfg_vec[ts])
+                        catch exc
+                            if is_production_run || nthreads() > 1
+                                Log.exception(exc)
+                            else
+                                rethrow()
+                            end
+                        end
                     end
                 end
-            end
-        catch exc
-            if is_production_run || nthreads() > 1
-                Log.exception(exc)
-            else
-                rethrow()
+                tic()
+                thread_barrier(mi.bar)
+                timing.load_imba += toq()
             end
         end
         boxtime = toq()
-        thread_timing.opt_srcs += boxtime
-        if atomic_cas!(cbox.state, BoxReady, BoxDone) == BoxReady
-            box = all_boxes[cbox.box_idx]
-            Log.message("processed $(cbox.nsources) sources from box ",
-                        "$(box.ramin), $(box.ramax), $(box.decmin), ",
-                        "$(box.decmax) in $boxtime secs")
-        end
+        timing.opt_srcs += boxtime
 
-        # each thread writes results for its sources
-        nsrcs = 0
-        tic()
-        try
-            for batch = 1:nbatches
-                nsrcs = nsrcs + length(cbox.sources_assignment[tid][batch])
-                for s in cbox.sources_assignment[tid][batch]
-                    entry = cbox.catalog[cbox.target_sources[s]]
-                    result = OptimizedSource(entry.thing_id,
-                                             entry.objid,
-                                             entry.pos[1],
-                                             entry.pos[2],
-                                             cbox.vp_vec[s][1])
-                    results_idx = source_counts[cbox.box_idx] + s
-                    put!(all_results, results_idx, results_idx, [result])
-                end
-            end
-        catch exc
-            if is_production_run || nthreads() > 1
-                Log.exception(exc)
-            else
-                rethrow()
-            end
+        cbox.state[] = BoxDone
+
+        if mi.nworkers == 0
+            store_box(cbox, rcf_map, results, timing)
         end
-        thread_timing.ga_put += toq()
-        thread_timing.num_srcs += nsrcs
     end
 end
 
@@ -538,78 +571,102 @@ processing. Within each rank, process the light sources in each of the
 assigned boxes with multiple threads. This function drives both single
 and joint inference.
 """
-function multi_node_infer(all_boxes::Vector{BoundingBox},
-                          box_source_counts::Vector{Int64},
-                          stagedir::String;
-                          outdir=".",
-                          primary_initialization=true,
-                          cyclades_partition=true,
-                          batch_size=400,
-                          within_batch_shuffling=true,
-                          niters=3,
-                          timing=InferTiming())
-    Log.message("started at $(Dates.now())")
+function multi_node_infer(all_rcfs::Vector{RunCamcolField},
+                          all_rcf_nsrcs::Vector{Int16},
+                          all_boxes::Vector{Vector{BoundingBox}},
+                          all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
+                          stagedir::String,
+                          outdir::String)
+    rpn = set_affinities()
 
-    # initialize scheduler, set up results global array
-    nwi = length(all_boxes)
-    mi = init_multinode(nwi)
-    all_results, source_counts = setup_results(all_boxes, box_source_counts)
+    Log.one_message("$(Time(now())): Celeste started, $rpn ranks/node, ",
+                    "$(ngranks()) total ranks, $(nthreads()) threads/rank")
+    Log.one_message("  $(length(all_rcfs)) total RCFs\n",
+                    "  $(length(all_boxes)) runs:")
+    for i = 1:length(all_boxes)
+        Log.one_message("    run $i: $(length(all_boxes[i])) boxes")
+    end
 
-    # for concurrent box processing
-    conc_boxes = [BoxInfo() for i=1:NumConcurrentBoxes]
+    # determine number of concurrent boxes
+    num_conc_boxes = 2
+    if haskey(ENV, "CELESTE_NUM_CONC_BOXES")
+        num_conc_boxes = parse(Int, ENV["CELESTE_NUM_CONC_BOXES"])
+    end
 
-    # number of threads that process sources
-    nworkers = nthreads() - (mi.rundt ? 1 : 0)
+    # load field extents
+    field_extents = load_field_extents(stagedir)
 
-    # per-thread timing
-    all_threads_timing = Array{InferTiming}(nthreads())
+    # determine required size for the results global array and build the
+    # offsets map into it to help locate a source
+    tic()
+    tot_srcs, rcf_map = build_rcf_map(all_rcfs, all_rcf_nsrcs, all_boxes_rcf_idxs)
+    empty!(all_rcfs)
+    empty!(all_rcf_nsrcs)
+    empty!(all_boxes_rcf_idxs)
+    gc()
+    Log.one_message("  $(length(rcf_map)) RCFs overlap these boxes ",
+                    "(map built in $(toq()) secs)\n",
+                    "  $tot_srcs sources in these RCFs")
 
     # inference configuration
     config = Configs.Config()
 
-    # run the thread function
-    if nthreads() == 1
-        #single_infer_boxes(config, all_boxes, stagedir, mi, all_results,
-        #                   source_counts, conc_boxes, all_threads_timing,
-        #                   primary_initialization)
-        joint_infer_boxes(config, all_boxes, stagedir, mi, all_results,
-                          source_counts, conc_boxes, all_threads_timing,
-                          primary_initialization, cyclades_partition,
-                          batch_size, within_batch_shuffling, niters)
-    else
-        #ccall(:jl_threading_run, Void, (Any,),
-        #      Core.svec(single_infer_boxes, config, all_boxes, stagedir, mi,
-        #                all_results, source_counts, conc_boxes,
-        #                all_threads_timing, primary_initialization))
-        ccall(:jl_threading_run, Void, (Any,),
-              Core.svec(joint_infer_boxes, config, all_boxes, stagedir, mi,
-                        all_results, source_counts, conc_boxes,
-                        all_threads_timing, primary_initialization,
-                        cyclades_partition, batch_size, within_batch_shuffling,
-                        niters))
+    prev_results = nothing
+    for i = 1:length(all_boxes)
+        boxes = all_boxes[i]
+        nwi = length(boxes)
+
+        Log.one_message("$(Time(now())): starting run $i ($nwi boxes)")
+
+        # timing per-run and per-thread
+        timing = InferTiming()
+        all_threads_timing = [InferTiming() for t = 1:nthreads()]
+
+        # set up the scheduler and the global array for results
+        mi = setup_multi(nwi)
+        results = Garray(OptimizedSource, OptimizedSourceLen, tot_srcs)
+
+        # for concurrent box processing
+        conc_boxes = [BoxInfo() for i = 1:num_conc_boxes]
+
+        # run the optimization
+        if nthreads() == 1
+            joint_infer_boxes(config, boxes, rcf_map,
+                              field_extents, stagedir, mi, results,
+                              prev_results, conc_boxes, all_threads_timing)
+        else
+            ccall(:jl_threading_run, Void, (Any,),
+                  Core.svec(joint_infer_boxes, config, boxes, rcf_map,
+                            field_extents, stagedir, mi, results,
+                            prev_results, conc_boxes, all_threads_timing))
+        end
+
+        # write intermediate results to disk
+        tic()
+        save_results(results, i, outdir)
+        timing.write_results = toq()
+        prev_results = results
+
+        show_pixels_processed()
+
+        # shut down the scheduler
+        tic()
+        finalize(mi.dt)
+        timing.wait_done = toq()
+        Log.one_message("$(Time(now())): completed run $i")
+
+        # reduce, normalize, and display collected timing information
+        for i = 1:nthreads()
+            add_timing!(timing, all_threads_timing[i])
+        end
+        nprocthreads = max(1, mi.nworkers)
+        timing.load_wait /= nprocthreads
+        timing.init_elbo /= nprocthreads
+        timing.opt_srcs /= nprocthreads
+        timing.load_imba /= nprocthreads
+        timing.ga_get /= nprocthreads
+        timing.ga_put /= nprocthreads
+        puts_timing(timing)
     end
-    Log.message("completed at $(Dates.now())")
-
-    show_pixels_processed()
-
-    # reduce and normalize collected timing information
-    for i = 1:nthreads()
-        add_timing!(timing, all_threads_timing[i])
-    end
-    timing.init_elbo /= mi.nworkers
-    timing.opt_srcs /= mi.nworkers
-    timing.load_imba /= mi.nworkers
-    timing.ga_put /= mi.nworkers
-
-    # output results
-    tic()
-    save_results(all_results, outdir)
-    timing.write_results = toq()
-
-    # shut down
-    tic()
-    finalize(mi.dt)
-    timing.wait_done = toq()
-    Log.message("synchronized ranks at $(Dates.now())")
 end
 
