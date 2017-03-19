@@ -302,7 +302,7 @@ function partition_box(npartitions::Int, target_sources::Vector{Int},
         #return partition_cyclades(npartitions, target_sources,
         #                          cyclades_neighbor_map,
         #                          batch_size=batch_size)
-    return partition_cyclades_dynamic(target_sources,
+        return partition_cyclades_dynamic(target_sources,
                                           cyclades_neighbor_map,
                                           batch_size=batch_size)
     else
@@ -374,6 +374,7 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
                                                  neighbor_map;
                                                  cyclades_partition=cyclades_partition,
                                                  batch_size=batch_size)
+    #Log.info(batched_connected_components)
 
     Log.info("Done assigning sources to threads for processing")
 
@@ -635,6 +636,6 @@ function show_pixels_processed()
         elbo_vars.active_pixel_counter[] = 0
         elbo_vars.inactive_pixel_counter[] = 0
     end
-    Log.message("(active,inactive) pixels processed: \($n_active, $n_inactive\)")
+    Log.message("$(Time(now())): (active,inactive) pixels processed: \($n_active,$n_inactive\)")
 end
 

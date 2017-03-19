@@ -22,17 +22,17 @@ const BAND_CHAR_TO_NUM = Dict('u'=>1, 'g'=>2, 'r'=>3, 'i'=>4, 'z'=>5)
 
 
 immutable RunCamcolField
-    run::Int64
-    camcol::Int64
-    field::Int64
+    run::Int16
+    camcol::UInt8
+    field::Int16
 end
 
 
 function RunCamcolField(run::String, camcol::String, field::String)
     RunCamcolField(
-        parse(Int64, run),
-        parse(Int64, camcol),
-        parse(Int64, field))
+        parse(Int16, run),
+        parse(UInt8, camcol),
+        parse(Int16, field))
 end
 
 
