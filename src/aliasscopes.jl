@@ -5,7 +5,9 @@ immutable Const{T}
     a::T
 end
 
+Base.size(a::Const) = Base.size(a.a)
 Base.getindex(A::Const{<:Array}, i1::Int) = Core.const_arrayref(A.a, i1)
+Base.getindex(A::Const{<:Array}, x...) = Base.getindex(A.a, x...)
 @inline Base.getindex(A::Const{<:Array}, i1::Int, i2::Int, I::Int...) =  Core.const_arrayref(A.a, i1, i2, I...)
 
 @generated function Base.getindex{SM<:SizedMatrix}(m::Const{SM}, i1::Integer, i2::Integer)

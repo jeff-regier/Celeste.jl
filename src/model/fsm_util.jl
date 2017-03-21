@@ -1,3 +1,5 @@
+using Celeste: @implicit_transpose, is_implicitly_symmetric
+
 """
 Convolve the current locations and galaxy shapes with the PSF.  If
 calculate_gradient is true, also calculate derivatives and hessians for
@@ -108,7 +110,7 @@ Non-standard args:
 """
 function populate_gal_fsm!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs1m::SensitiveFloat{NumType},
+                    fs1m,
                     s::Int,
                     x::SVector{2,Float64},
                     is_active_source::Bool,
@@ -139,8 +141,8 @@ Non-standard args:
 """
 function populate_fsm!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs0m::SensitiveFloat{NumType},
-                    fs1m::SensitiveFloat{NumType},
+                    fs0m,
+                    fs1m,
                     s::Int,
                     x::SVector{2,Float64},
                     is_active_source::Bool,
@@ -176,7 +178,7 @@ Args:
 """
 function accum_star_pos!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs0m::SensitiveFloat{NumType},
+                    fs0m,
                     bmc::BvnComponent{NumType},
                     x::SVector{2,Float64},
                     wcs_jacobian,
@@ -191,8 +193,8 @@ function accum_star_pos!{NumType <: Number}(
 
     if fs0m.has_gradient && is_active_source
         transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, fs0m.has_hessian)
-        bvn_u_d = bvn_derivs.bvn_u_d
-        bvn_uu_h = bvn_derivs.bvn_uu_h
+        bvn_u_d = ParameterizedArray{StarPosParams}(bvn_derivs.bvn_u_d)
+        bvn_uu_h = ParameterizedArray{StarPosParams}(bvn_derivs.bvn_uu_h)
 
         # Accumulate the derivatives.
         fs0m.d[star_ids.u] += bvn_derivs.f_pre[1] * bvn_u_d[star_ids.u]
@@ -214,7 +216,7 @@ updating fs1m in place.
 """
 function accum_galaxy_pos!{NumType <: Number}(
                     bvn_derivs::BivariateNormalDerivatives{NumType},
-                    fs1m::SensitiveFloat{NumType},
+                    fs1m,
                     gcc::GalaxyCacheComponent{NumType},
                     x::SVector{2,Float64},
                     wcs_jacobian,
@@ -229,19 +231,14 @@ function accum_galaxy_pos!{NumType <: Number}(
         transform_bvn_derivs!(
             bvn_derivs, gcc.sig_sf, wcs_jacobian, fs1m.has_hessian)
             
-        @aliasscope begin
-            bvn_u_d = Const(bvn_derivs.bvn_u_d)
-            bvn_s_d = Const(bvn_derivs.bvn_s_d)
+        @aliasscope @inbounds begin
+            bvn_u_d = ParameterizedArray{SharedPosParams}(Const(bvn_derivs.bvn_u_d))
+            bvn_s_d = ParameterizedArray{GalaxyShapeParams}(Const(bvn_derivs.bvn_s_d))
             bvn_derivs_f_pre = Const(bvn_derivs.f_pre)
 
             # Accumulate the derivatives.
-            @inbounds for u_id in 1:2
-                fs1m.d[gal_ids.u[u_id]] += f * bvn_u_d[u_id]
-            end
-
-            @inbounds for gal_id in 1:length(gal_shape_ids)
-                fs1m.d[gal_shape_alignment[gal_id]] += f * bvn_s_d[gal_id]
-            end
+            fs1m.d[gal_ids.u] += f * bvn_u_d[gal_ids.u]
+            fs1m.d[gal_shape_ids] += f * bvn_s_d[gal_shape_ids]
 
             # The e_dev derivative. e_dev just scales the entire component.
             # The direction is positive or negative depending on whether this
@@ -250,58 +247,31 @@ function accum_galaxy_pos!{NumType <: Number}(
 
             if fs1m.has_hessian
                 # The Hessians:
-                bvn_uu_h = Const(bvn_derivs.bvn_uu_h)
-                bvn_ss_h = Const(bvn_derivs.bvn_ss_h)
-                bvn_us_h = Const(bvn_derivs.bvn_us_h)
-                gal_ids_u = Const(gal_ids.u)
+                bvn_uu_h = ParameterizedArray{SharedPosParams}(bvn_derivs.bvn_uu_h)
+                bvn_ss_h = ParameterizedArray{GalaxyShapeParams}(bvn_derivs.bvn_ss_h)
+                bvn_us_h = ParameterizedArray{Tuple{SharedPosParams,GalaxyShapeParams}}(bvn_derivs.bvn_us_h)
 
                 # Hessian terms involving only the shape parameters.
-                @inbounds for shape_id1 in 1:length(gal_shape_ids)
-                    @inbounds for shape_id2 in 1:length(gal_shape_ids)
-                        s1 = gal_shape_alignment[shape_id1]
-                        s2 = gal_shape_alignment[shape_id2]
-                        fs1m.h[s1, s2] +=
-                            f * (bvn_ss_h[shape_id1, shape_id2] +
-                                     bvn_s_d[shape_id1] * bvn_s_d[shape_id2])
-                    end
-                end
+                fs1m.h[gal_shape_ids, gal_shape_ids] +=
+                    f * (bvn_ss_h[gal_shape_ids, gal_shape_ids] +
+                             bvn_s_d[gal_shape_ids] * bvn_s_d[gal_shape_ids]')
 
                 # Hessian terms involving only the location parameters.
-                @inbounds for u_id1 in 1:2
-                    @inbounds for u_id2 in 1:2
-                        u1 = gal_ids_u[u_id1]
-                        u2 = gal_ids_u[u_id2]
-                        fs1m.h[u1, u2] +=
-                            f * (bvn_uu_h[u_id1, u_id2] + bvn_u_d[u_id1] * bvn_u_d[u_id2])
-                    end
-                end
+                fs1m.h[gal_ids.u, gal_ids.u] +=
+                    f * (bvn_uu_h[gal_ids.u, gal_ids.u] + bvn_u_d[gal_ids.u] * bvn_u_d[gal_ids.u]')
 
                 # Hessian terms involving both the shape and location parameters.
-                for u_id in 1:2
-                  @inbounds for shape_id in 1:length(gal_shape_ids)
-                    ui = gal_ids_u[u_id]
-                    si = gal_shape_alignment[shape_id]
-                    fs1m.h[ui, si] +=
-                        f * (bvn_us_h[u_id, shape_id] + bvn_u_d[u_id] * bvn_s_d[shape_id])
-                    fs1m.h[si, ui] = fs1m.h[ui, si]
-                  end
+                @implicit_transpose begin
+                    fs1m.h[gal_ids.u, gal_shape_ids] +=
+                        f * (bvn_us_h[gal_ids.u, gal_shape_ids] + bvn_u_d[gal_ids.u] * bvn_s_d[gal_shape_ids]')
+                    fs1m.h[gal_ids.u, gal_ids.e_dev] +=
+                        (bvn_derivs_f_pre[1] * gcc.e_dev_dir) * bvn_u_d[gal_ids.u]
+                    fs1m.h[gal_shape_ids, gal_ids.e_dev] +=
+                        (bvn_derivs_f_pre[1] * gcc.e_dev_dir) * bvn_s_d[gal_shape_ids]
                 end
-
-                # Do the e_dev hessian terms.
-                devi = gal_ids.e_dev
-                @inbounds for u_id in 1:2
-                    ui = gal_ids.u[u_id]
-                    fs1m.h[ui, devi] +=
-                        bvn_derivs_f_pre[1] * gcc.e_dev_dir * bvn_u_d[u_id]
-                    fs1m.h[devi, ui] = fs1m.h[ui, devi]
-                end
-                @inbounds for shape_id in 1:length(gal_shape_ids)
-                    si = gal_shape_alignment[shape_id]
-                    fs1m.h[si, devi] +=
-                        bvn_derivs_f_pre[1] * gcc.e_dev_dir * bvn_s_d[shape_id]
-                    fs1m.h[devi, si] = fs1m.h[si, devi]
-                end
+                nothing
             end # if calculate hessian
         end
     end # if is_active_source
+    nothing
 end

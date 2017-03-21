@@ -27,6 +27,10 @@ import SampleData: gen_two_body_dataset, true_star_init
     calculate_G_s!(vp, elbo_vars, sbs[2], 3, 2, true)
     calculate_G_s!(vp, elbo_vars, sbs[2], 4, 2, true)
 
+    @test issymmetric(elbo_vars.E_G_s.h)
+    @test issymmetric(elbo_vars.E_G2_s.h)
+    @test issymmetric(elbo_vars.var_G_s.h)
+    
     @test ev_cleared.E_G_s.v[] ≈ elbo_vars.E_G_s.v[]
     @test ev_cleared.E_G_s.d[] ≈ elbo_vars.E_G_s.d[]
     @test ev_cleared.E_G_s.h[] ≈ elbo_vars.E_G_s.h[]

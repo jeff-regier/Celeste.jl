@@ -1,3 +1,7 @@
+using Celeste: @syntactic_unroll, @implicit_transpose, is_implicitly_symmetric, fixup
+using Celeste.Model: Star, Galaxy, a_param, shape_params, brightness_params, bright_ids, ids_2_to_ids,
+  dense_block_mapping, dense_blocks
+
 """
 Calculate the contributions of a single source for a single pixel to
 the sensitive floats E_G_s and var_G_s, which are cleared and updated in place.
@@ -25,11 +29,6 @@ function calculate_G_s!{NumType <: Number}(
     E_G2_s = elbo_vars.E_G2_s
     var_G_s = elbo_vars.var_G_s
 
-    @assert E_G_s.local_P == var_G_s.local_P == length(CanonicalParams)
-    @assert E_G_s.local_S == var_G_s.local_S == 1
-    @assert elbo_vars.fs0m.local_P == length(StarPosParams)
-    @assert elbo_vars.fs1m.local_P == length(GalaxyPosParams)
-
     # The compiler can fold this into the arith below. No actual
     # time is spent here.
     clear!(E_G_s)
@@ -37,57 +36,123 @@ function calculate_G_s!{NumType <: Number}(
     clear!(var_G_s)
 
     # Calculate E_G_s and E_G2_s
-    @syntactic_unroll for kind in (Star(), Galaxy())
-        fsm_i = (kind == :star) ? elbo_vars.fs0m : elbo_vars.fs1m
+    @inbounds begin
+        @syntactic_unroll for kind in (Star(), Galaxy())
+            fsm_i = (kind == Star()) ? elbo_vars.fs0m : elbo_vars.fs1m
 
-        fsm_i_v = fsm_i.v[]
-        lf = sb_E_l_a_b_i_v * fsm_i_v
-        llff = sb_E_ll_a_b_i_v * fsm_i_v^2
+            i = (kind == Star()) ? 1 : 2
+            sb_E_l_a_b_i = sb.E_l_a[b, i]
+            sb_E_ll_a_b_i = sb.E_ll_a[b, i]
+            sb_E_l_a_b_i_d = sb_E_l_a_b_i.d
+            sb_E_ll_a_b_i_d = sb_E_ll_a_b_i.d
 
-        # Values
-        E_G_s.v[] += a_i * lf
-        E_G2_s.v[] += a_i * llff
+            fsm_i_v = fsm_i.v[]
+            sb_E_l_a_b_i_v = sb_E_l_a_b_i.v[]
+            sb_E_ll_a_b_i_v = sb_E_ll_a_b_i.v[]
 
-        # Gradients
-        (is_active_source && elbo_vars.elbo.has_gradient) || continue
-        E_G_s.d[a_param(ids, kind)] += lf
-        E_G2_s.d[a_param(ids, kind)] += llff
+            fsm_i_v = fsm_i.v[]
+            lf = sb_E_l_a_b_i_v * fsm_i_v
+            llff = sb_E_ll_a_b_i_v * fsm_i_v^2
 
-        E_G_s_d[shape_params(ids, kind)] += tmp1 * fsm_i_d[shape_params(ids, kind)]
-        E_G2_s_d[shape_params(ids, kind)] += tmp2 * fsm_i_d[shape_params(ids, kind)]
+            a_i = vp[s][ids.a[i]]
 
-        # Hessians
-        elbo_vars.elbo.has_hessian || continue
-        bparams = sb_E_l_a_b_i.h[brightness_params(ids, kind), brightness_params(ids, kind)]
-        E_G_s.h[brightness_params(ids, kind), brightness_params(ids, kind)] = a_i * bparams * fsm_i_v
-        E_G2_s.h[brightness_params(ids, kind), brightness_params(ids, kind)] = (fsm_i_v^2) * a_i * bparams
+            # Values
+            E_G_s.v[] += a_i * lf
+            E_G2_s.v[] += a_i * llff
 
-        # The u_u submatrix is shared between stars/galaxies, so use += here
-        E_G_s.h[shape_params(ids, kind), shape_params(ids, kind)] += a_i * sb_E_l_a_b_i_v * fsm_i.h[shape_params(ids, kind), shape_params(ids, kind)]
-        E_G2_s.h[shape_params(ids, kind), shape_params(ids, kind)] +=
-            2 * a_i * sb_E_ll_a_b_i_v * (fsm_i_v * fsm_i.h[shape_params(ids, kind), shape_params(ids, kind)] + fsm_i.d*fsm_i.d')
+            # Gradients
+            (is_active_source && elbo_vars.elbo.has_gradient) || continue
+            E_G_s.d[a_param(kind)] += lf
+            E_G2_s.d[a_param(kind)] += llff
 
-        @implicit_transpose begin
-            E_G_s.h[shape_params(ids, kind), a_param(ids, kind)] = sb_E_l_a_b_i_v * fsm_i_d[shape_params(ids, kind)]
-            E_G2_s.h[shape_params(ids, kind), a_param(ids, kind)] = sb_E_ll_a_b_i_v * 2 * fsm_i_v * fsm_i_d[shape_params(ids, kind)]
+            E_G_s.d[shape_params(kind)] += (sb_E_l_a_b_i_v * a_i) * fsm_i.d[shape_params(kind)]
+            E_G2_s.d[shape_params(kind)] += (sb_E_ll_a_b_i_v * 2 * fsm_i_v * a_i) * fsm_i.d[shape_params(kind)]
 
-            E_G_s.h[shape_params(ids, kind), a_param(ids, kind)] = sb_E_l_a_b_i_v * fsm_i_d[shape_params(:star)]
-            E_G2_s.h[shape_params(ids, kind), a_param(ids, kind)] = sb_E_ll_a_b_i_v * 2 * fsm_i_v * fsm_i_d[shape_params(:star)]
+            E_G_s.d[brightness_params(kind)] += (a_i * fsm_i_v) * vec(sb_E_l_a_b_i_d)
+            E_G2_s.d[brightness_params(kind)] += (a_i * fsm_i_v^2) * vec(sb_E_ll_a_b_i_d)
 
-            E_G_s.h[brightness_params(ids, kind), shape_params(ids, kind)] = a_i * sb_E_l_a_b_i_d[ind_b, 1] * fsm_i_d[shape_params(ids, kind), 1]
-            E_G2_s.h[brightness_params(ids, kind), shape_params(ids, kind)] = 2 * a_i * fsm_i_v * sb_E_l_a_b_i_d[ind_b, 1] * fsm_i_d[shape_params(ids, kind), 1]
+            # Hessians
+            elbo_vars.elbo.has_hessian || continue
+            E_G_s.h[brightness_params(kind), brightness_params(kind)] = (a_i * fsm_i_v) * sb_E_l_a_b_i.h 
+            E_G2_s.h[brightness_params(kind), brightness_params(kind)] = (a_i * fsm_i_v^2) * sb_E_ll_a_b_i.h
+
+            # The u_u submatrix is shared between stars/galaxies, so use += here
+            E_G_s.h[shape_params(kind), shape_params(kind)] += (a_i * sb_E_l_a_b_i_v) * fsm_i.h[shape_params(kind), shape_params(kind)]
+            E_G2_s.h[shape_params(kind), shape_params(kind)] +=
+                2 * a_i * sb_E_ll_a_b_i_v * (fsm_i_v * fsm_i.h[shape_params(kind), shape_params(kind)] + fsm_i.d*fsm_i.d')
+
+            @implicit_transpose begin
+                E_G_s.h[brightness_params(kind), a_param(kind)] = fsm_i_v * sb_E_l_a_b_i_d
+                E_G2_s.h[brightness_params(kind), a_param(kind)] = (fsm_i_v ^ 2) * sb_E_ll_a_b_i_d
+
+                E_G_s.h[shape_params(kind), a_param(kind)] = sb_E_l_a_b_i_v * fsm_i.d[shape_params(kind)]
+                E_G2_s.h[shape_params(kind), a_param(kind)] = (sb_E_ll_a_b_i_v * 2 * fsm_i_v) * fsm_i.d[shape_params(kind)]
+
+                E_G_s.h[brightness_params(kind), shape_params(kind)] = a_i * (sb_E_l_a_b_i_d * fsm_i.d[shape_params(kind)]')
+                E_G2_s.h[brightness_params(kind), shape_params(kind)] = (2 * a_i * fsm_i_v) * (sb_E_ll_a_b_i_d * fsm_i.d[shape_params(kind)]')
+            end
         end
     end
+    nothing
+end
 
+# This is a hack, where we manually write things out
+@eval function add_var_G_s!{NumType <: Number}(
+                    var_G::SensitiveFloat{NumType},
+                    E_G_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
+                    E_G2_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
+                    s::Int)
+                    
     # Calculate var_G
-    var_G_s.v[] = E_G2_s.v[] - (E_G_s.v[] ^ 2)
+    var_G.v[] += E_G2_s.v[] - (E_G_s.v[] ^ 2)
 
-    (is_active_source && elbo_vars.elbo.has_gradient) || return
+    var_G.has_gradient || return
 
-    var_G_s.d = E_G2_s_d - 2 * E_G_s.v[] * E_G_s_d
-    var_G_s_h = E_G2_s_h[ind1, ind2] - 2 * (
-                    E_G_s.v[] * E_G_s_h[ind1, ind2] +
-                    E_G_s.d[ind1] * E_G_s.d[ind2]')
+    P = length(CanonicalParams2)
+    @assert P == var_G.local_P
+    P_shifted = P * (s - 1)
+
+    reparametrized_E_G_d = E_G_s.d[ids_2_to_ids]
+    var_G.d[P_shifted + (1:P)] += E_G2_s.d[ids_2_to_ids] - 2 * E_G_s.v[] * reparametrized_E_G_d
+    
+    var_G.has_hessian || return
+    
+    @inbounds begin
+        # We do this in two steps. First we add the dense terms (E_G(2)_s), then
+        # the sparse components.
+        for i = 1:P
+            @unroll_loop for j = 1:P
+                var_G.h[P_shifted + j, P_shifted + i] -= 2 * reparametrized_E_G_d[i] * reparametrized_E_G_d[j]
+            end
+        end
+            
+        @syntactic_unroll for (lhs, rhs) in $(zip(dense_block_mapping, dense_blocks))
+            var_G.h[P_shifted + lhs[1], P_shifted + lhs[2]] += E_G2_s.h[rhs[1], rhs[2]] - 2 * E_G_s.v[] * E_G_s.h[rhs[1], rhs[2]]
+        end
+    end
+end
+
+@eval function SensitiveFloats.add_sources_sf!{NumType <: Number}(
+                    sf_all::SensitiveFloat{NumType},
+                    sf_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
+                    s::Int)
+    sf_all.v[] += sf_s.v[]
+
+    @assert size(sf_all.d, 1) == size(sf_s.d, 1)
+
+    P = length(CanonicalParams2)
+    @assert P == sf_all.local_P
+    P_shifted = P * (s - 1)
+
+    if sf_all.has_gradient
+        @inbounds sf_all.d[P_shifted + (1:P)] += sf_s.d[ids_2_to_ids]
+    end
+
+    @inbounds if sf_all.has_hessian
+        @syntactic_unroll for (lhs, rhs) in $(zip(dense_block_mapping, dense_blocks))
+            sf_all.h[P_shifted + lhs[1], P_shifted + lhs[2]] += fixup(sf_s.h[rhs[1], rhs[2]])
+        end
+    end            
 end
 
 """
@@ -106,11 +171,11 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
     if is_active_source
         sa = findfirst(ea.active_sources, s)
         add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa)
-        add_sources_sf!(elbo_vars.var_G, elbo_vars.var_G_s, sa)
+        add_var_G_s!(elbo_vars.var_G, elbo_vars.E_G_s, elbo_vars.E_G2_s, sa)
     else
         # If the sources is inactive, simply accumulate the values.
         elbo_vars.E_G.v[] += elbo_vars.E_G_s.v[]
-        elbo_vars.var_G.v[] += elbo_vars.var_G_s.v[]
+        elbo_vars.var_G.v[] += elbo_vars.E_G2_s.v[] - (elbo_vars.E_G_s.v[] ^ 2)
     end
 end
 
