@@ -26,32 +26,32 @@ function HessianSubmatrices(NumType::DataType, i::Int)
 end
 
 DenseHessianSSSF(ParamSet, NumType) = SingleSourceSensitiveFloat{NumType, ParamSet, ParameterizedArray{ParamSet, Matrix{NumType}}}
-DenseHessianMSSF(ParamSet, NumType) = MultiSourceSensitiveFloat{NumType, ParamSet}
 immutable ElboIntermediateVariables{NumType <: Number}
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
     # The vector has one element for each active source, in the same order
     # as ea.active_sources.
+
     fs0m::DenseHessianSSSF(StarPosParams, NumType)
     fs1m::DenseHessianSSSF(GalaxyPosParams, NumType)
 
     # Brightness values for a single source
-    E_G_s::DenseHessianSSSF(CanonicalParams, NumType)
-    E_G2_s::DenseHessianSSSF(CanonicalParams, NumType)
-    var_G_s::DenseHessianSSSF(CanonicalParams, NumType)
+    E_G_s::DenseHessianSSSF(CanonicalParams2, NumType)
+    E_G2_s::DenseHessianSSSF(CanonicalParams2, NumType)
+    var_G_s::DenseHessianSSSF(CanonicalParams2, NumType)
 
     # Expected pixel intensity and variance for a pixel from all sources.
-    E_G::DenseHessianMSSF(CanonicalParams, NumType)
-    var_G::DenseHessianMSSF(CanonicalParams, NumType)
+    E_G::SensitiveFloat{NumType}
+    var_G::SensitiveFloat{NumType}
 
     # Pre-allocated memory for the gradient and Hessian of combine functions.
     combine_grad::Vector{NumType}
     combine_hess::Matrix{NumType}
 
     # A placeholder for the log term in the ELBO.
-    elbo_log_term::DenseHessianMSSF(CanonicalParams, NumType)
+    elbo_log_term::SensitiveFloat{NumType}
 
     # The ELBO itself.
-    elbo::DenseHessianMSSF(CanonicalParams, NumType)
+    elbo::SensitiveFloat{NumType}
 
     active_pixel_counter::Ref{Int64}
     inactive_pixel_counter::Ref{Int64}
@@ -79,12 +79,12 @@ function ElboIntermediateVariables(NumType::DataType,
     fs1m = DenseHessianSSSF(GalaxyPosParams, NumType)(
                                 calculate_gradient, calculate_hessian)
 
-    E_G_s = DenseHessianSSSF(CanonicalParams, NumType)(
-                                calculate_gradient, calculate_hessian)
+    E_G_s = DenseHessianSSSF(CanonicalParams2, NumType)(
+                                    calculate_gradient, calculate_hessian)
     E_G2_s = SensitiveFloat(E_G_s)
     var_G_s = SensitiveFloat(E_G_s)
 
-    E_G = DenseHessianMSSF(CanonicalParams, NumType)(num_active_sources,
+    E_G = SensitiveFloat{NumType}(length(CanonicalParams), num_active_sources,
                                   calculate_gradient, calculate_hessian)
     var_G = SensitiveFloat(E_G)
 
@@ -96,7 +96,7 @@ function ElboIntermediateVariables(NumType::DataType,
 
     ElboIntermediateVariables{NumType}(
         fs0m, fs1m,
-        E_G_s, E_G2_s, var_G_s, E_G_s_hsub_vec, E_G2_s_hsub_vec,
+        E_G_s, E_G2_s, var_G_s,
         E_G, var_G, combine_grad, combine_hess,
         elbo_log_term, elbo, 0, 0)
 end

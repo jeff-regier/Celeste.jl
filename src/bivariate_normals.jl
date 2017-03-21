@@ -343,14 +343,17 @@ function GalaxySigmaDerivs{NumType <: Number}(
   if calculate_tensor
     # Second derivatives.
 
+    gal_shape_ids_e_angle = Base.to_index(typeof(gal_shape_ids), gal_shape_ids.e_angle)
+    gal_shape_ids_e_axis = Base.to_index(typeof(gal_shape_ids), gal_shape_ids.e_axis)
+
     t = SArray{(3,3,3), NumType, 3, 27}(sin_sq * 2 * e_scale^2, -cos_sin * 2 * e_scale^2, cos_sq * 2 * e_scale^2,
       2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
-      2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
+      2 * j[1, gal_shape_ids_e_axis]  / e_scale, 2 * j[2, gal_shape_ids_e_axis]  / e_scale, 2 * j[3, gal_shape_ids_e_axis]  / e_scale,
       2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
       (cos_sq - sin_sq) * 2 * e_scale^2 * (e_axis^2 - 1), 2cos_sin * 2 * e_scale^2 * (e_axis^2 - 1), (sin_sq - cos_sq) * 2 * e_scale^2 * (e_axis^2 - 1),
-      2 * j[1, gal_shape_ids.e_angle] / e_scale, 2 * j[2, gal_shape_ids.e_angle] / e_scale, 2 * j[3, gal_shape_ids.e_angle] / e_scale,
-      2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
-      2 * j[1, gal_shape_ids.e_angle] / e_scale, 2 * j[2, gal_shape_ids.e_angle] / e_scale, 2 * j[3, gal_shape_ids.e_angle] / e_scale,
+      2 * j[1, gal_shape_ids_e_angle] / e_scale, 2 * j[2, gal_shape_ids_e_angle] / e_scale, 2 * j[3, gal_shape_ids_e_angle] / e_scale,
+      2 * j[1, gal_shape_ids_e_axis]  / e_scale, 2 * j[2, gal_shape_ids_e_axis]  / e_scale, 2 * j[3, gal_shape_ids_e_axis]  / e_scale,
+      2 * j[1, gal_shape_ids_e_angle] / e_scale, 2 * j[2, gal_shape_ids_e_angle] / e_scale, 2 * j[3, gal_shape_ids_e_angle] / e_scale,
       2 * XiXi[1 << (1 - 1)] / e_scale^2, 2 * XiXi[1 << (2 - 1)] / e_scale^2, 2 * XiXi[1 << (3 - 1)] / e_scale^2)
 
   else
