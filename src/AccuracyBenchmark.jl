@@ -312,12 +312,20 @@ function variational_parameters_to_data_frame_row(objid::String, variational_par
     )
     result[:angle_deg] = canonical_angle(180 / pi * variational_params[ids.e_angle])
 
-    fluxes = get_median_fluxes(variational_params, result[1, :is_star] > 0.5 ? 1 : 2)
+    star_galaxy_index = (result[1, :is_star] > 0.5 ? 1 : 2)
+    fluxes = get_median_fluxes(variational_params, star_galaxy_index)
     result[:reference_band_flux_nmgy] = fluxes[3]
     result[:color_log_ratio_ug] = color_from_fluxes(fluxes[1], fluxes[2])
     result[:color_log_ratio_gr] = color_from_fluxes(fluxes[2], fluxes[3])
     result[:color_log_ratio_ri] = color_from_fluxes(fluxes[3], fluxes[4])
     result[:color_log_ratio_iz] = color_from_fluxes(fluxes[4], fluxes[5])
+
+    result[:log_reference_band_flux_stderr] = variational_params[ids.r2[star_galaxy_index]]
+    result[:color_log_ratio_ug_stderr] = variational_params[ids.c2[1, star_galaxy_index]]
+    result[:color_log_ratio_gr_stderr] = variational_params[ids.c2[2, star_galaxy_index]]
+    result[:color_log_ratio_ri_stderr] = variational_params[ids.c2[3, star_galaxy_index]]
+    result[:color_log_ratio_iz_stderr] = variational_params[ids.c2[4, star_galaxy_index]]
+
     result
 end
 
