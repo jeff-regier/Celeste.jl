@@ -54,8 +54,16 @@ CATALOG_COLUMNS = Set([
     :angle_deg,
 ])
 
-function assert_columns_are_valid(catalog_df::DataFrame)
-    missing_columns = setdiff(CATALOG_COLUMNS, Set(names(catalog_df)))
+STDERR_COLUMNS = Set([
+    :log_reference_band_flux_stderr,
+    :color_log_ratio_ug_stderr,
+    :color_log_ratio_gr_stderr,
+    :color_log_ratio_ri_stderr,
+    :color_log_ratio_iz_stderr,
+])
+
+function assert_columns_are_present(catalog_df::DataFrame, required_columns::Set{Symbol})
+    missing_columns = setdiff(required_columns, Set(names(catalog_df)))
     if !isempty(missing_columns)
         throw(MissingColumnsError([missing_columns...]))
     end
@@ -64,13 +72,13 @@ end
 function read_catalog(csv_file::String)
     @printf("Reading '%s'...\n", csv_file)
     catalog_df = readtable(csv_file)
-    assert_columns_are_valid(catalog_df)
+    assert_columns_are_present(catalog_df, CATALOG_COLUMNS)
     catalog_df[:objid] = String[string(objid) for objid in catalog_df[:objid]]
     catalog_df
 end
 
 function write_catalog(csv_file::String, catalog_df::DataFrame)
-    assert_columns_are_valid(catalog_df)
+    assert_columns_are_present(catalog_df, CATALOG_COLUMNS)
     @printf("Writing '%s'...\n", csv_file)
     writetable(csv_file, catalog_df)
 end
@@ -312,12 +320,20 @@ function variational_parameters_to_data_frame_row(objid::String, variational_par
     )
     result[:angle_deg] = canonical_angle(180 / pi * variational_params[ids.e_angle])
 
-    fluxes = get_median_fluxes(variational_params, result[1, :is_star] > 0.5 ? 1 : 2)
+    star_galaxy_index = (result[1, :is_star] > 0.5 ? 1 : 2)
+    fluxes = get_median_fluxes(variational_params, star_galaxy_index)
     result[:reference_band_flux_nmgy] = fluxes[3]
     result[:color_log_ratio_ug] = color_from_fluxes(fluxes[1], fluxes[2])
     result[:color_log_ratio_gr] = color_from_fluxes(fluxes[2], fluxes[3])
     result[:color_log_ratio_ri] = color_from_fluxes(fluxes[3], fluxes[4])
     result[:color_log_ratio_iz] = color_from_fluxes(fluxes[4], fluxes[5])
+
+    result[:log_reference_band_flux_stderr] = sqrt(variational_params[ids.r2[star_galaxy_index]])
+    result[:color_log_ratio_ug_stderr] = sqrt(variational_params[ids.c2[1, star_galaxy_index]])
+    result[:color_log_ratio_gr_stderr] = sqrt(variational_params[ids.c2[2, star_galaxy_index]])
+    result[:color_log_ratio_ri_stderr] = sqrt(variational_params[ids.c2[3, star_galaxy_index]])
+    result[:color_log_ratio_iz_stderr] = sqrt(variational_params[ids.c2[4, star_galaxy_index]])
+
     result
 end
 
@@ -733,6 +749,42 @@ function score_predictions(truth::DataFrame, prediction_dfs::Vector{DataFrame})
         error_dfs[1],
         length(error_dfs) > 1 ? Nullable(error_dfs[2]) : Nullable{DataFrame}(),
     )
+end
+
+function score_uncertainty(truth::DataFrame, predictions::DataFrame)
+    assert_columns_are_present(predictions, STDERR_COLUMNS)
+    matched_truth, matched_prediction_dfs = match_catalogs(truth, [predictions])
+    matched_predictions = matched_prediction_dfs[1]
+    get_errors(column, map_fn) =
+        map_fn.(matched_predictions[column]) .- map_fn.(matched_truth[column])
+    get_errors(column) = get_errors(column, x -> x)
+    errors = [
+        get_errors(:reference_band_flux_nmgy, log),
+        get_errors(:color_log_ratio_ug),
+        get_errors(:color_log_ratio_gr),
+        get_errors(:color_log_ratio_ri),
+        get_errors(:color_log_ratio_iz),
+    ]
+    std_errs = [
+        matched_predictions[:log_reference_band_flux_stderr],
+        matched_predictions[:color_log_ratio_ug_stderr],
+        matched_predictions[:color_log_ratio_gr_stderr],
+        matched_predictions[:color_log_ratio_ri_stderr],
+        matched_predictions[:color_log_ratio_iz_stderr],
+    ]
+    names = [:reference_band_flux_nmgy, :color_log_ratio_ug, :color_log_ratio_gr,
+             :color_log_ratio_ri, :color_log_ratio_iz]
+    error_sd_data = mapreduce(vcat, zip(names, errors, std_errs)) do values
+        name, error, std_err = values
+        abs_error_sds = error ./ std_err
+        DataFrame(
+            field=name,
+            within_half_sd=mean(abs_error_sds .<= 1/2),
+            within_1_sd=mean(abs_error_sds .<= 1),
+            within_2_sd=mean(abs_error_sds .<= 2),
+            within_3_sd=mean(abs_error_sds .<= 3),
+        )
+    end
 end
 
 ################################################################################
