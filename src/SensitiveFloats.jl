@@ -51,7 +51,7 @@ Attributes:
       in the same format as d.  This is used for the full Hessian
       with respect to all the sources.
 """
-immutable SensitiveFloat{NumType}
+immutable SensitiveFloat{NumType} <: AbstractSensitiveFloat{NumType}
     v::Base.RefValue{NumType}
 
     # local_P x local_S matrix of gradients
@@ -144,9 +144,9 @@ end
 Factor out the hessian part of combine_sfs!.
 """
 function combine_sfs_hessian!{T1 <: Number, T2 <: Number, T3 <: Number}(
-            sf1::SensitiveFloat{T1},
-            sf2::SensitiveFloat{T1},
-            sf_result::SensitiveFloat{T1},
+            sf1::AbstractSensitiveFloat{T1},
+            sf2::AbstractSensitiveFloat{T1},
+            sf_result::AbstractSensitiveFloat{T1},
             g_d::Vector{T2},
             g_h::Matrix{T3})
     p1, p2 = size(sf_result.h)
@@ -184,9 +184,9 @@ The result is stored in sf_result.  The order is done in such a way that
 it can overwrite sf1 or sf2 and still be accurate.
 """
 function combine_sfs!{T1 <: Number, T2 <: Number, T3 <: Number}(
-                        sf1::SensitiveFloat{T1},
-                        sf2::SensitiveFloat{T1},
-                        sf_result::SensitiveFloat{T1},
+                        sf1::AbstractSensitiveFloat{T1},
+                        sf2::AbstractSensitiveFloat{T1},
+                        sf_result::AbstractSensitiveFloat{T1},
                         v::T1,
                         g_d::Vector{T2},
                         g_h::Matrix{T3})
@@ -218,8 +218,8 @@ const multiply_sfs_hess = Float64[0 1; 1 0]
 """
 Updates sf1 in place with sf1 * sf2.
 """
-function multiply_sfs!{NumType <: Number}(sf1::SensitiveFloat{NumType},
-                                          sf2::SensitiveFloat{NumType})
+function multiply_sfs!{NumType <: Number}(sf1::AbstractSensitiveFloat{NumType},
+                                          sf2::AbstractSensitiveFloat{NumType})
     v = sf1.v[] * sf2.v[]
     g_d = NumType[sf2.v[], sf1.v[]]
     combine_sfs!(sf1, sf2, sf1, v, g_d, multiply_sfs_hess)

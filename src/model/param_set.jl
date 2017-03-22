@@ -44,43 +44,33 @@ const StarPosParams = SharedPosParams
 const star_ids = StarPosParams()
  
 type GalaxyShapeParams <: ParamSet
-    e_axis::Param{:GalaxyShapeParams, :e_axis, ()}
-    e_angle::Param{:GalaxyShapeParams, :e_angle, ()}
-    e_scale::Param{:GalaxyShapeParams, :e_scale, ()}
+    e_axis::Param{GalaxyShapeParams, :e_axis, ()}
+    e_angle::Param{GalaxyShapeParams, :e_angle, ()}
+    e_scale::Param{GalaxyShapeParams, :e_scale, ()}
 end
 @eval @concretize $GalaxyShapeParams
 const gal_shape_ids = GalaxyShapeParams()
 
 @inline_unnamed struct GalaxyPosParams <: ParamSet
     ::SharedPosParams
-    e_dev::Param{:GalaxyPosParams, :e_dev, ()}
+    e_dev::Param{GalaxyPosParams, :e_dev, ()}
     ::GalaxyShapeParams
 end
 @eval @concretize $GalaxyPosParams
 const gal_ids = GalaxyPosParams()
 
-
-type BrightnessParams <: ParamSet
-    r1::Int
-    r2::Int
-    c1::Vector{Int}
-    c2::Vector{Int}
-    BrightnessParams() = new(1, 2,
-                             collect(3:(3+(B-1)-1)),
-                             collect((3+B-1):(3+2*(B-1)-1)))
+type BrightnessParams{kind} <: ParamSet
+    r1::Param{Tuple{BrightnessParams, kind}, :r1, ()}
+    r2::Param{Tuple{BrightnessParams, kind}, :r2, ()}
+    c1::Param{Tuple{BrightnessParams, kind}, :c1, (B-1,)}
+    c2::Param{Tuple{BrightnessParams, kind}, :c2, (B-1,)}
 end
-const bids = BrightnessParams()
-getids(::Type{BrightnessParams}) = bids
-length(::Type{BrightnessParams}) = 2 + 2 * (B-1)
+@eval @concretize $BrightnessParams
+const star_bids = BrightnessParams{Star}()
+const gal_bids = BrightnessParams{Galaxy}()
+bids(kind) = kind == Star() ? star_bids : gal_bids
 
-type BrightnessParams2{kind} <: ParamSet
-    r1::Param{Tuple{BrightnessParams2, kind}, :r1, ()}
-    r2::Param{Tuple{BrightnessParams2, kind}, :r2, ()}
-    c1::Param{Tuple{BrightnessParams2, kind}, :c1, (B-1,)}
-    c2::Param{Tuple{BrightnessParams2, kind}, :c2, (B-1,)}
-end
-@eval @concretize $BrightnessParams2
-
+#= This is defined this way for legacy reasons. CanonicalParams2 is preferred =#
 immutable CanonicalParams <: ParamSet
     u::Vector{Int}
     e_dev::Int
@@ -117,11 +107,11 @@ bright_ids(i) = [ids.r1[i]; ids.r2[i]; ids.c1[:, i]; ids.c2[:, i]]
     # shared u and galaxy_pos_params
     ::GalaxyPosParams
 
-    star_brightness::BrightnessParams2{Star}
+    star_brightness::BrightnessParams{Star}
     star_k::Param{CanonicalParams2, :star_k, (D,)}
     star_a::Param{CanonicalParams2, :star_a, ()}
 
-    galaxy_brightness::BrightnessParams2{Galaxy}
+    galaxy_brightness::BrightnessParams{Galaxy}
     galaxy_k::Param{CanonicalParams2, :galaxy_k, (D,)}
     galaxy_a::Param{CanonicalParams2, :galaxy_a, ()}
 end

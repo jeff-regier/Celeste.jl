@@ -232,6 +232,7 @@ end
     vp_dual = convert(VariationalParams{Dual{1, Float64}}, vp)
 
     for s in 1:2, i in 1:length(ids)
+        @show (s, i)
         vp_dual[s][i] += ForwardDiff.Dual(0, 1)
         elbo_dual = DeterministicVI.elbo(ea, vp_dual)
         vp_dual[s][i] -= ForwardDiff.Dual(0, 1)
