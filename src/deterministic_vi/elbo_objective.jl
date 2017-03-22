@@ -39,12 +39,11 @@ function calculate_G_s!{NumType <: Number}(
             fsm_i = (kind == Star()) ? elbo_vars.fs0m : elbo_vars.fs1m
 
             i = (kind == Star()) ? 1 : 2
-            sb_E_l_a_b_i = sb.E_l_a[b, i]
-            sb_E_ll_a_b_i = sb.E_ll_a[b, i]
+            sb_E_l_a_b_i = sb.E_l_a[i][b]
+            sb_E_ll_a_b_i = sb.E_ll_a[i][b]
             sb_E_l_a_b_i_d = sb_E_l_a_b_i.d
             sb_E_ll_a_b_i_d = sb_E_ll_a_b_i.d
 
-            fsm_i_v = fsm_i.v[]
             sb_E_l_a_b_i_v = sb_E_l_a_b_i.v[]
             sb_E_ll_a_b_i_v = sb_E_ll_a_b_i.v[]
 
@@ -66,13 +65,13 @@ function calculate_G_s!{NumType <: Number}(
             E_G_s.d[shape_params(kind)] += (sb_E_l_a_b_i_v * a_i) * fsm_i.d[shape_params(kind)]
             E_G2_s.d[shape_params(kind)] += (sb_E_ll_a_b_i_v * 2 * fsm_i_v * a_i) * fsm_i.d[shape_params(kind)]
 
-            E_G_s.d[brightness_params(kind)] += (a_i * fsm_i_v) * vec(sb_E_l_a_b_i_d)
-            E_G2_s.d[brightness_params(kind)] += (a_i * fsm_i_v^2) * vec(sb_E_ll_a_b_i_d)
+            E_G_s.d[brightness_params(kind)] += (a_i * fsm_i_v) * sb_E_l_a_b_i_d[brightness_params(kind)]
+            E_G2_s.d[brightness_params(kind)] += (a_i * fsm_i_v^2) * sb_E_ll_a_b_i_d[brightness_params(kind)]
 
             # Hessians
             elbo_vars.elbo.has_hessian || continue
-            E_G_s.h[brightness_params(kind), brightness_params(kind)] = (a_i * fsm_i_v) * sb_E_l_a_b_i.h 
-            E_G2_s.h[brightness_params(kind), brightness_params(kind)] = (a_i * fsm_i_v^2) * sb_E_ll_a_b_i.h
+            E_G_s.h[brightness_params(kind), brightness_params(kind)] = (a_i * fsm_i_v) * sb_E_l_a_b_i.h[brightness_params(kind), brightness_params(kind)]
+            E_G2_s.h[brightness_params(kind), brightness_params(kind)] = (a_i * fsm_i_v^2) * sb_E_ll_a_b_i.h[brightness_params(kind), brightness_params(kind)]
 
             # The u_u submatrix is shared between stars/galaxies, so use += here
             E_G_s.h[shape_params(kind), shape_params(kind)] += (a_i * sb_E_l_a_b_i_v) * fsm_i.h[shape_params(kind), shape_params(kind)]
@@ -80,14 +79,14 @@ function calculate_G_s!{NumType <: Number}(
                 2 * a_i * sb_E_ll_a_b_i_v * (fsm_i_v * fsm_i.h[shape_params(kind), shape_params(kind)] + fsm_i.d*fsm_i.d')
 
             @implicit_transpose begin
-                E_G_s.h[brightness_params(kind), a_param(kind)] = fsm_i_v * sb_E_l_a_b_i_d
-                E_G2_s.h[brightness_params(kind), a_param(kind)] = (fsm_i_v ^ 2) * sb_E_ll_a_b_i_d
+                E_G_s.h[brightness_params(kind), a_param(kind)] = fsm_i_v * sb_E_l_a_b_i_d[brightness_params(kind)]
+                E_G2_s.h[brightness_params(kind), a_param(kind)] = (fsm_i_v ^ 2) * sb_E_ll_a_b_i_d[brightness_params(kind)]
 
                 E_G_s.h[shape_params(kind), a_param(kind)] = sb_E_l_a_b_i_v * fsm_i.d[shape_params(kind)]
                 E_G2_s.h[shape_params(kind), a_param(kind)] = (sb_E_ll_a_b_i_v * 2 * fsm_i_v) * fsm_i.d[shape_params(kind)]
 
-                E_G_s.h[brightness_params(kind), shape_params(kind)] = a_i * (sb_E_l_a_b_i_d * fsm_i.d[shape_params(kind)]')
-                E_G2_s.h[brightness_params(kind), shape_params(kind)] = (2 * a_i * fsm_i_v) * (sb_E_ll_a_b_i_d * fsm_i.d[shape_params(kind)]')
+                E_G_s.h[brightness_params(kind), shape_params(kind)] = a_i * (sb_E_l_a_b_i_d[brightness_params(kind)] * fsm_i.d[shape_params(kind)]')
+                E_G2_s.h[brightness_params(kind), shape_params(kind)] = (2 * a_i * fsm_i_v) * (sb_E_ll_a_b_i_d[brightness_params(kind)] * fsm_i.d[shape_params(kind)]')
             end
         end
     end
