@@ -619,20 +619,33 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
     errors
 end
 
-function filter_rows(truth::DataFrame, errors::DataFrame, column_name::Symbol)
-    good_row = (.!isna(errors[column_name]) .& !isnan(errors[column_name]))
-    good_row .&= (isna(truth[:half_light_radius_px]) .| (truth[:half_light_radius_px] .<= 20))
+function is_good_row(truth_row::DataFrameRow, error_row::DataFrameRow, column_name::Symbol)
+    if isna(error_row[column_name]) || isnan(error_row[column_name])
+        return false
+    elseif !isna(truth_row[:half_light_radius_px]) && truth_row[:half_light_radius_px] > 20
+        return false
+    end
+
     if column_name in [:minor_major_axis_ratio, :half_light_radius_px, :angle_deg,
                        :de_vaucouleurs_mixture_weight]
-        good_row .&= (
-            isna(truth[:de_vaucouleurs_mixture_weight])
-            .| !(0.05 .< truth[:de_vaucouleurs_mixture_weight] .< 0.95)
-        )
+        has_mixture_weight = !isna(truth_row[:de_vaucouleurs_mixture_weight])
+        if has_mixture_weight && (0.05 < truth_row[:de_vaucouleurs_mixture_weight] < 0.95)
+            return false
+        end
     end
     if column_name == :angle_deg
-        good_row .&= (isna(truth[:minor_major_axis_ratio]) .| (truth[:minor_major_axis_ratio] .< .6))
+        if !isna(truth_row[:minor_major_axis_ratio]) && truth_row[:minor_major_axis_ratio] > .6
+            return false
+        end
     end
-    good_row
+    return true
+end
+
+function filter_rows(truth::DataFrame, errors::DataFrame, column_name::Symbol)
+    map(zip(eachrow(truth), eachrow(errors))) do rows
+        (truth_row, error_row) = rows
+        is_good_row(truth_row, error_row, column_name)
+    end
 end
 
 function score_column(errors::DataArray)
