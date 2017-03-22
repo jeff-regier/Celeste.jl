@@ -27,11 +27,9 @@ function calculate_G_s!{NumType <: Number}(
                     is_active_source::Bool)
     E_G_s = elbo_vars.E_G_s
     E_G2_s = elbo_vars.E_G2_s
-    var_G_s = elbo_vars.var_G_s
 
     clear!(E_G_s)
     clear!(E_G2_s)
-    clear!(var_G_s)
 
     # Calculate E_G_s and E_G2_s
     @inbounds begin
@@ -76,7 +74,7 @@ function calculate_G_s!{NumType <: Number}(
             # The u_u submatrix is shared between stars/galaxies, so use += here
             E_G_s.h[shape_params(kind), shape_params(kind)] += (a_i * sb_E_l_a_b_i_v) * fsm_i.h[shape_params(kind), shape_params(kind)]
             E_G2_s.h[shape_params(kind), shape_params(kind)] +=
-                2 * a_i * sb_E_ll_a_b_i_v * (fsm_i_v * fsm_i.h[shape_params(kind), shape_params(kind)] + fsm_i.d*fsm_i.d')
+                (2 * a_i * sb_E_ll_a_b_i_v) * (fsm_i_v * fsm_i.h[shape_params(kind), shape_params(kind)] + fsm_i.d[shape_params(kind)]*fsm_i.d[shape_params(kind)]')
 
             @implicit_transpose begin
                 E_G_s.h[brightness_params(kind), a_param(kind)] = fsm_i_v * sb_E_l_a_b_i_d[brightness_params(kind)]
@@ -95,6 +93,7 @@ end
 
 # This is a hack, where we manually write things out
 @eval function add_var_G_s!{NumType <: Number}(
+                    reparametrized_E_G_d,
                     var_G::SensitiveFloat{NumType},
                     E_G_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
                     E_G2_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
@@ -109,8 +108,11 @@ end
     @assert P == var_G.local_P
     P_shifted = P * (s - 1)
 
-    reparametrized_E_G_d = E_G_s.d[ids_2_to_ids]
-    var_G.d[P_shifted + (1:P)] += E_G2_s.d[ids_2_to_ids] - 2 * E_G_s.v[] * reparametrized_E_G_d
+    reparametrized_E_G_d[:] = E_G_s.d[ids_2_to_ids]
+    reparametrized_E_G2_d = E_G2_s.d[ids_2_to_ids]
+    for i = 1:P
+        @fastmath var_G.d[P_shifted + i] += reparametrized_E_G2_d[i] - 2 * E_G_s.v[] * reparametrized_E_G_d[i]
+    end
     
     var_G.has_hessian || return
     
@@ -119,7 +121,7 @@ end
         # the sparse components.
         for i = 1:P
             @unroll_loop for j = 1:P
-                var_G.h[P_shifted + j, P_shifted + i] -= 2 * reparametrized_E_G_d[i] * reparametrized_E_G_d[j]
+                @fastmath var_G.h[P_shifted + j, P_shifted + i] -= 2 * reparametrized_E_G_d[i] * reparametrized_E_G_d[j]
             end
         end
             
@@ -141,8 +143,11 @@ end
     @assert P == sf_all.local_P
     P_shifted = P * (s - 1)
 
-    if sf_all.has_gradient
-        @inbounds sf_all.d[P_shifted + (1:P)] += sf_s.d[ids_2_to_ids]
+    @inbounds if sf_all.has_gradient
+        reparam_sf_s_d = sf_s.d[ids_2_to_ids]
+        for i = 1:P
+            sf_all.d[P_shifted + i] += reparam_sf_s_d[i]
+        end
     end
 
     @inbounds if sf_all.has_hessian
@@ -168,7 +173,7 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
     if is_active_source
         sa = findfirst(ea.active_sources, s)
         add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa)
-        add_var_G_s!(elbo_vars.var_G, elbo_vars.E_G_s, elbo_vars.E_G2_s, sa)
+        add_var_G_s!(elbo_vars.reparametrized_E_G_d, elbo_vars.var_G, elbo_vars.E_G_s, elbo_vars.E_G2_s, sa)
     else
         # If the sources is inactive, simply accumulate the values.
         elbo_vars.E_G.v[] += elbo_vars.E_G_s.v[]

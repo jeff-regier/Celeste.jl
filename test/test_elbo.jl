@@ -29,7 +29,6 @@ import SampleData: gen_two_body_dataset, true_star_init
 
     @test issymmetric(elbo_vars.E_G_s.h)
     @test issymmetric(elbo_vars.E_G2_s.h)
-    @test issymmetric(elbo_vars.var_G_s.h)
     
     @test ev_cleared.E_G_s.v[] ≈ elbo_vars.E_G_s.v[]
     @test ev_cleared.E_G_s.d[] ≈ elbo_vars.E_G_s.d[]
@@ -38,10 +37,6 @@ import SampleData: gen_two_body_dataset, true_star_init
     @test ev_cleared.E_G2_s.v[] ≈ elbo_vars.E_G2_s.v[]
     @test ev_cleared.E_G2_s.d[] ≈ elbo_vars.E_G2_s.d[]
     @test ev_cleared.E_G2_s.h[] ≈ elbo_vars.E_G2_s.h[]
-
-    @test ev_cleared.var_G_s.v[] ≈ elbo_vars.var_G_s.v[]
-    @test ev_cleared.var_G_s.d[] ≈ elbo_vars.var_G_s.d[]
-    @test ev_cleared.var_G_s.h[] ≈ elbo_vars.var_G_s.h[]
 end
 
 
@@ -232,7 +227,6 @@ end
     vp_dual = convert(VariationalParams{Dual{1, Float64}}, vp)
 
     for s in 1:2, i in 1:length(ids)
-        @show (s, i)
         vp_dual[s][i] += ForwardDiff.Dual(0, 1)
         elbo_dual = DeterministicVI.elbo(ea, vp_dual)
         vp_dual[s][i] -= ForwardDiff.Dual(0, 1)
