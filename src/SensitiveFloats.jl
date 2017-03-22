@@ -10,10 +10,12 @@ export SensitiveFloat,
        set_hess!
 
 using Celeste: ParameterizedArray
+using StaticArrays
 
 abstract type AbstractSensitiveFloat{NumType} end
 zeros_type(::Type{Array{T,N}} where N, dims...) where T = zeros(T, dims...)
 zeros_type(T::Type{ParameterizedArray{x,A}} where x, dims...) where A = T(zeros_type(A, dims...))
+zeros_type(aT::Type{SizedArray{S,T,N,M}} where {S,N}, dims...) where {T,M} = aT(zeros_type(Array{T,M}, dims...))
 
 # Special case for local_S == 1
 immutable SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation} <: AbstractSensitiveFloat{NumType}
@@ -33,7 +35,7 @@ immutable SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation} <
        local_P = length(ParamSet)
        v = Ref(zero(NumType))
        d = zeros_type(ParameterizedArray{ParamSet, Vector{NumType}}, local_P * has_gradient)
-       h_dim = local_P * has_hessian
+       h_dim = local_P
        h = zeros_type(HessianRepresentation, h_dim, h_dim)
        new{NumType, ParamSet, HessianRepresentation}(v, d, h, has_gradient, has_hessian)
    end
@@ -109,7 +111,7 @@ function set_hess!{NumType <: Number}(
 end
 
 
-function zero!{T}(m::Array{T})
+function zero!{T}(m::Union{Array{T},SizedArray{S,T,N,M} where {S,N,M}})
     for i in eachindex(m)
         @inbounds m[i] = zero(T)
     end

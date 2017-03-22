@@ -46,8 +46,8 @@ end
 Base.size(arr::ParameterizedArray, dim) = Base.size(arr.arr, dim)
 Base.issymmetric(arr::ParameterizedArray) = Base.issymmetric(arr.arr)
 
-function normalize_param(T)
-    if T.parameters[1] <: Tuple
+function normalize_param(xT, T)
+    if T.parameters[1] <: Tuple && xT == T.parameters[1].parameters[1]
         Param{Base.unwrap_unionall(T.parameters[1].parameters[1]).name.wrapper,
           T.parameters[2], T.parameters[3]}
     else
@@ -55,18 +55,18 @@ function normalize_param(T)
     end
 end
 
-function process_params!(T, cur_start_idx, params, oT = T)
+function process_params!(xT, T, cur_start_idx, params, oT = T)
     if !(nfields(T) > 0)
       error("Type $oT had non-parameter fields")
     end
     for (fName, fT) in map(i->(fieldname(T, i), fieldtype(T, i)), 1:nfields(T))
         if !(fT <: Param)
-            cur_start_idx = process_params!(fT, cur_start_idx, params, oT)
+            cur_start_idx = process_params!(xT, fT, cur_start_idx, params, oT)
             continue
         end
         dims = fT.parameters[3]
         nparams = reduce(*, 1, dims)
-        params[normalize_param(fT)] = length(dims) == 0 ? cur_start_idx :
+        params[normalize_param(xT, fT)] = length(dims) == 0 ? cur_start_idx :
           SVector{nparams}(collect(cur_start_idx:(cur_start_idx + nparams -1)))
         cur_start_idx += nparams
     end
@@ -88,12 +88,12 @@ macro concretize(xT)
     tname = gensym(T.name.name)
     cur_start_idx = 1
     params = ObjectIdDict()
-    cur_start_idx = process_params!(T, cur_start_idx, params)
+    cur_start_idx = process_params!(xT, T, cur_start_idx, params)
     esc(quote
         (X::Type{x})() where x <: $xT = X($((:(fieldtype(X, $i)()) for i = 1:nfields(T))...))
         let params = $params
           @Base.pure function Base.to_index(::Type{<:$xT}, I::Param)
-            x = ($normalize_param)(typeof(I))
+            x = ($normalize_param)($xT, typeof(I))
             params[x]
           end
         end
@@ -117,7 +117,6 @@ function with_inline!(def, types)
         length(field.args) == 2 && continue
         def.args[3].args[i] = Expr(:block, get_fields(shift!(types))...)
     end
-    @show def
     def
 end
 
@@ -129,7 +128,6 @@ function collect_parameters(def)
         length(field.args) == 2 && continue
         push!(params, strip_quote(field.args[1]))
     end
-    @show params
     params
 end
 
@@ -376,11 +374,23 @@ macro syntactic_unroll(for_loop)
         # AbstractTrees.jl has this function, but let's just leave it here
         replace_continue(expr) = isexpr(expr, :continue) ? :(@goto($l)) : expr
         recursive_replace!(identity, replace_continue, body)
-        push!(ret.args, quote
-            let $sym = $el
-                $body
+        if isexpr(sym, :tuple)
+            expr = body
+            for (s,v) in reverse(collect(zip(sym.args, el)))
+                expr = quote
+                  let $s = $v
+                    $expr
+                  end
+                end
             end
-        end)
+        else
+            expr = quote
+                let $sym = $el
+                    $body
+                end
+            end
+        end
+        push!(ret.args, expr)
         push!(ret.args, next_label)
     end
     x = esc(ret)
