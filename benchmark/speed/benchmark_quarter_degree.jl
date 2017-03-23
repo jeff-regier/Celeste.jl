@@ -7,14 +7,21 @@ import Celeste.Infer: find_neighbors
 
 
 const rcfs = [
-    RunCamcolField(4294,6,136),
+    RunCamcolField(4264,6,160),
+    RunCamcolField(4264,6,161),
     RunCamcolField(4264,5,158),
     RunCamcolField(4264,5,159),
-    RunCamcolField(4264,5,161),
-    RunCamcolField(4264,6,160),
     RunCamcolField(4264,5,160),
+    RunCamcolField(4264,5,161),
+    RunCamcolField(4264,5,162),
+    RunCamcolField(4294,6,133),
+    RunCamcolField(4294,6,134),
     RunCamcolField(4294,6,135),
+    RunCamcolField(4294,6,136),
+    RunCamcolField(4294,6,137),
+    RunCamcolField(4294,6,138),
     RunCamcolField(4294,5,135)]
+
 
 const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
 wd = pwd()
@@ -24,14 +31,8 @@ for rcf in rcfs
 end
 cd(wd)
 
-"""
-This benchmark optimizes all the light sources in a
-one-sixteenth-square-degree region of sky.
-During the optimization, a pixel is visited
-35,937,971 times (``pixel visits'').
-"""
-function benchmark_sixteenth_degree()
-    box = BoundingBox(124.25, 124.50, 58.5, 58.75)
+function benchmark_quarter_degree()
+    box = BoundingBox(124.0, 124.5, 58.5, 59.0)
     rcfs = get_overlapping_fields(box, datadir)
 
     # ctni = (catalogs, target, neighbor_map, images)
@@ -55,4 +56,4 @@ function benchmark_sixteenth_degree()
 end
 
 
-benchmark_sixteenth_degree()
+benchmark_quarter_degree()
