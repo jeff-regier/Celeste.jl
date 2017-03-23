@@ -49,7 +49,7 @@ function Config{T}(ea::ElboArgs,
     free_params = allocate_free_params(bound_params, constraints)
     free_initial_input = to_flat_vector(free_params)
     free_previous_input = similar(free_initial_input)
-    free_result = SensitiveFloat{Float64}(length(free_params[1]), length(bound_params), true, true)
+    free_result = SensitiveFloat{Float64,length(free_params[1])}(length(bound_params), true, true)
     bvn_bundle = Model.BvnBundle{T}(ea.psf_K, ea.S)
     derivs = TransformDerivatives(bound_params, free_params)
     return Config(bound_params, free_params, free_initial_input,

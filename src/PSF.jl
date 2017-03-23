@@ -57,11 +57,11 @@ type PsfOptimizer
 
         bvn_derivs = BivariateNormalDerivatives{Float64}()
 
-        log_pdf = SensitiveFloat{Float64}(length(PsfParams), 1, true, true)
-        pdf = SensitiveFloat{Float64}(length(PsfParams), 1, true, true)
-        pixel_value = SensitiveFloat{Float64}(length(PsfParams), K, true, true)
-        squared_error = SensitiveFloat{Float64}(length(PsfParams), K, true, true)
-        sf_free = SensitiveFloat{Float64}(length(PsfParams), K, true, true)
+        log_pdf = SensitiveFloat{Float64, PsfParams}(1, true, true)
+        pdf = SensitiveFloat{Float64, PsfParams}(1, true, true)
+        pixel_value = SensitiveFloat{Float64, PsfParams}(K, true, true)
+        squared_error = SensitiveFloat{Float64, PsfParams}(K, true, true)
+        sf_free = SensitiveFloat{Float64, PsfParams}(K, true, true)
 
         psf_params_free_vec_cache = fill(NaN, K * length(PsfParams))
 
