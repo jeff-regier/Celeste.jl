@@ -133,10 +133,9 @@ end
 
 @eval function add_var_G_s!{NumType <: Number}(
                     reparametrized_E_G_d,
-                    var_G::SSparseSensitiveFloat{NumType, CanonicalParams},
+                    var_G::SingleSourceSensitiveFloat{NumType, CanonicalParams},
                     E_G_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
-                    E_G2_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
-                    s::Int)
+                    E_G2_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2})
                     
     # Calculate var_G
     var_G.v[] += E_G2_s.v[] - (E_G_s.v[] ^ 2)
@@ -147,8 +146,8 @@ end
 
     reparametrized_E_G_d[:] = E_G_s.d[ids_2_to_ids]
     reparametrized_E_G2_d = E_G2_s.d[ids_2_to_ids]
-    for i = 1:P
-        @fastmath var_G.d[s][i] += reparametrized_E_G2_d[i] - 2 * E_G_s.v[] * reparametrized_E_G_d[i]
+    @inbounds for i = 1:P
+        @fastmath var_G.d[i] += reparametrized_E_G2_d[i] - 2 * E_G_s.v[] * reparametrized_E_G_d[i]
     end
     
     var_G.has_hessian || return
@@ -158,12 +157,12 @@ end
         # the sparse components.
         for i = 1:P
             @unroll_loop for j = 1:P
-                @fastmath var_G.h[s][j,i] -= 2 * reparametrized_E_G_d[i] * reparametrized_E_G_d[j]
+                @fastmath var_G.h[j,i] -= 2 * reparametrized_E_G_d[i] * reparametrized_E_G_d[j]
             end
         end
             
         @syntactic_unroll for (lhs, rhs) in $(zip(dense_block_mapping, dense_blocks))
-            var_G.h[s][lhs[1], lhs[2]] += E_G2_s.h[rhs[1], rhs[2]] - 2 * E_G_s.v[] * E_G_s.h[rhs[1], rhs[2]]
+            var_G.h[lhs[1], lhs[2]] += E_G2_s.h[rhs[1], rhs[2]] - 2 * E_G_s.v[] * E_G_s.h[rhs[1], rhs[2]]
         end
     end
 end
@@ -234,7 +233,9 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
     if is_active_source
         sa = findfirst(ea.active_sources, s)
         add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa)
-        add_var_G_s!(elbo_vars.reparametrized_E_G_d, elbo_vars.var_G, elbo_vars.E_G_s, elbo_vars.E_G2_s, sa)
+        add_var_G_s!(elbo_vars.reparametrized_E_G_d,
+          elbo_vars.var_G[SensitiveFloats.Source(sa)],
+          elbo_vars.E_G_s, elbo_vars.E_G2_s)
     else
         # If the sources is inactive, simply accumulate the values.
         elbo_vars.E_G.v[] += elbo_vars.E_G_s.v[]
