@@ -177,6 +177,79 @@ function partition_cyclades(n_threads, target_sources, neighbor_map; batch_size=
 end
 
 """
+Partitions sources via the cyclades algorithm.
+
+- target_sources - array of target sources. Elements should match keys of neighbor_map.
+- neighbor_map - graph of connections of sources
+
+Returns:
+- An array of vectors representing the workload of each thread ([thread][batch][sources(indices)])
+"""
+function partition_cyclades_dynamic(target_sources, neighbor_map; batch_size=60)
+    #Log.info("Starting Cyclades partitioning...")
+    tic()
+
+    n_sources = length(target_sources)
+    n_total_batches = convert(Int64, ceil(n_sources / batch_size))
+
+    # Construct src_to_indx map
+    src_to_indx = Dict{Int64, Int64}()
+    for i=1:n_sources
+        src_to_indx[target_sources[i]] = i
+    end
+
+    # The final workload distribution.
+    thread_sources_assignment = Vector{Vector{Vector{Int64}}}(n_total_batches)
+    for batch = 1:n_total_batches
+        thread_sources_assignment[batch] = Vector{Vector{Int64}}()
+    end
+
+    # First shuffle the sources. Note Cyclades is serially equivalent
+    # to this permutation of sources.
+    sources = [x for x in keys(neighbor_map)]
+    shuffle!(sources)
+
+    # Process batch_size number of sources at a time.
+    # TODO max - parallelize everything below (particularly CC computation)
+
+    # The components tree is for union-find.
+    components_tree = Vector{Int64}(batch_size)
+
+    # We have n_total_batches components, where each component is a dictionary
+    # from the component id, to a list of sources in that component
+    components = [Dict{Int64, Vector{Int64}}() for i=1:n_total_batches]
+    sources_in_components = 0
+    for (cur_batch, source_index) in enumerate(collect(1:batch_size:n_sources))
+        source_start = source_index
+        source_end = min(source_index+batch_size-1, n_sources)
+        @assert source_end - source_start + 1 <= batch_size
+
+        # TODO max - parallelize this
+        compute_connected_components(source_start, source_end, sources, neighbor_map,
+                                     components_tree,
+                                     components[cur_batch],
+                                     src_to_indx)
+    end
+
+    assigned_sources = 0
+    # Add sources to sources assignment
+    for (cur_batch, cur_batch_component) in enumerate(components)
+        for (component_group_id, sources_of_component) in cur_batch_component
+            push!(thread_sources_assignment[cur_batch], copy(sources_of_component))
+	    assigned_sources += length(sources_of_component)
+        end
+    end
+
+    #Log.info("Cyclades - Assigned sources: $(assigned_sources) vs correct number of sources: $(n_sources)")
+    @assert assigned_sources == n_sources
+    #Log.info("Cyclades - Number of batches: $(n_total_batches)")
+    #Log.info("Finished Cyclades partitioning.  Elapsed time: $(toq()) seconds")
+
+    thread_sources_assignment
+end
+
+
+"""
 Partitions sources across threads equally.
 
 - n_threads - number of threads to which to distribute processing the sources.
@@ -220,15 +293,19 @@ sources.
 function partition_box(npartitions::Int, target_sources::Vector{Int},
                        neighbor_map::Vector{Vector{Int}};
                        cyclades_partition=true,
-                       batch_size=400)
+                       batch_size=7000)
     if cyclades_partition
         cyclades_neighbor_map = Dict{Int64,Vector{Int64}}()
         for (index, neighbors) in enumerate(neighbor_map)
             cyclades_neighbor_map[target_sources[index]] = neighbors
         end
-        return partition_cyclades(npartitions, target_sources,
-                                  cyclades_neighbor_map,
-                                  batch_size=batch_size)
+	println("$(partition_cyclades_dynamic(target_sources, cyclades_neighbor_map, batch_size=batch_size))")
+        #return partition_cyclades(npartitions, target_sources,
+        #                          cyclades_neighbor_map,
+        #                          batch_size=batch_size)
+	return partition_cyclades_dynamic(target_sources,
+                                          cyclades_neighbor_map,
+                                          batch_size=batch_size)
     else
         return partition_equally(npartitions, length(target_sources))
     end
@@ -277,7 +354,7 @@ Returns:
 """
 function one_node_joint_infer(config::Configs.Config, catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
-                              batch_size::Int=400,
+                              batch_size::Int=7000,
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3,
                               timing=InferTiming())
@@ -289,10 +366,16 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
     # Partition the sources
     n_sources = length(target_sources)
     Log.info("Optimizing $(n_sources) sources")
-    thread_sources_assignment = partition_box(n_threads, target_sources,
-                                      neighbor_map;
-                                      cyclades_partition=cyclades_partition,
-                                      batch_size=batch_size)
+
+    #thread_sources_assignment = partition_box(n_threads, target_sources,
+    #                                  neighbor_map;
+    #                                  cyclades_partition=cyclades_partition,
+    #                                  batch_size=batch_size)
+    batched_connected_components = partition_box(n_threads, target_sources,
+                                                 neighbor_map;
+                                                 cyclades_partition=cyclades_partition,
+                                                 batch_size=batch_size)
+
     Log.info("Done assigning sources to threads for processing")
 
     ea_vec, vp_vec, cfg_vec, target_source_variational_params =
@@ -310,9 +393,12 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
     # Process sources in parallel
     tic()
 
-    process_sources!(images, ea_vec, vp_vec, cfg_vec,
-                     thread_sources_assignment,
-                     n_iters, within_batch_shuffling)
+    #process_sources!(images, ea_vec, vp_vec, cfg_vec,
+    #                 thread_sources_assignment,
+    #                 n_iters, within_batch_shuffling)
+    process_sources_dynamic!(images, ea_vec, vp_vec, cfg_vec,
+                             batched_connected_components,
+                             n_iters, within_batch_shuffling)
 
     timing.opt_srcs = toq()
     timing.num_srcs = n_sources
@@ -338,7 +424,7 @@ end
 # legacy wrapper
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
-                              batch_size::Int=400,
+                              batch_size::Int=7000,
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3,
                               timing=InferTiming())
@@ -451,6 +537,68 @@ function process_sources!(images::Vector{Model.Image},
                 end
             end
             Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
+        end
+    end
+end
+
+function process_sources_dynamic!(images::Vector{Model.Image},
+                                  ea_vec::Vector{ElboArgs},
+                                  vp_vec::Vector{VariationalParams{Float64}},
+                                  cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
+                                  thread_sources_assignment::Vector{Vector{Vector{Int64}}},
+                                  n_iters::Int,
+                                  within_batch_shuffling::Bool)
+    println("Processing with dynamic connected components load balancing")
+
+    n_threads::Int = nthreads()
+    n_batches::Int = length(thread_sources_assignment)
+
+    println("YO $(n_batches), $(thread_sources_assignment)")
+
+    l = SpinLock()
+
+    for iter in 1:n_iters
+
+        # Process every batch of every iteration. We do the batches on the outside
+        # Since there is an implicit barrier after the inner threaded for loop below.
+        # We want this barrier because there may be conflict _between_ Cyclades batches.
+        for batch in 1:n_batches
+
+	    connected_components_index = 1
+            process_sources_elapsed_times::Vector{Float64} = Vector{Float64}(n_threads)
+
+            # Process every batch of every iteration with n_threads
+            Threads.@threads for i in 1:n_threads
+                try
+                    tic()
+		    while true
+		        cc_index = -1
+
+			#ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) $(cc_index)")
+
+			lock(l)
+			cc_index = connected_components_index
+			connected_components_index += 1
+			unlock(l)
+			
+			if cc_index > length(thread_sources_assignment[batch::Int])
+			   break
+			end
+
+			#ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) $(cc_index) popped")
+			
+                        process_sources_kernel!(images, ea_vec, vp_vec, cfg_vec,
+                                                thread_sources_assignment[batch::Int][cc_index],
+                                                iter, within_batch_shuffling)
+                    end
+                    process_sources_elapsed_times[i::Int] = toq()
+                catch exc
+                    Log.exception(exc)
+                    rethrow()
+                end
+            end
+            Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
+	    Log.info("Batch $(batch) Avg load imbalance - $(mean(process_sources_elapsed_times-minimum(process_sources_elapsed_times)))")
         end
     end
 end
