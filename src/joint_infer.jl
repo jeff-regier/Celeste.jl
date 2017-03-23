@@ -293,7 +293,7 @@ sources.
 function partition_box(npartitions::Int, target_sources::Vector{Int},
                        neighbor_map::Vector{Vector{Int}};
                        cyclades_partition=true,
-                       batch_size=400)
+                       batch_size=7000)
     if cyclades_partition
         cyclades_neighbor_map = Dict{Int64,Vector{Int64}}()
         for (index, neighbors) in enumerate(neighbor_map)
@@ -354,7 +354,7 @@ Returns:
 """
 function one_node_joint_infer(config::Configs.Config, catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
-                              batch_size::Int=400,
+                              batch_size::Int=7000,
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3,
                               timing=InferTiming())
@@ -424,7 +424,7 @@ end
 # legacy wrapper
 function one_node_joint_infer(catalog, target_sources, neighbor_map, images;
                               cyclades_partition::Bool=true,
-                              batch_size::Int=400,
+                              batch_size::Int=7000,
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3,
                               timing=InferTiming())
