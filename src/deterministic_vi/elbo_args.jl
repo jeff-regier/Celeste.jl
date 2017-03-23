@@ -26,9 +26,9 @@ function HessianSubmatrices(NumType::DataType, i::Int)
 end
 
 DenseHessianSSSF(ParamSet, NumType) = SingleSourceSensitiveFloat{NumType, ParamSet,
-  ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),Float64,2}}}
+  ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}}
 DenseHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumType, ParamSet,
-  ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),Float64,2}}}
+  ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}}
 immutable ElboIntermediateVariables{NumType <: Number}
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
     # The vector has one element for each active source, in the same order

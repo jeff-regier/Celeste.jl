@@ -11,7 +11,7 @@ export SensitiveFloat,
        SSparseSensitiveFloat,
        AbstractSensitiveFloat
 
-using Celeste: ParameterizedArray
+using Celeste: ParameterizedArray, @aliasscope, Const
 using StaticArrays
 
 abstract type AbstractSensitiveFloat{NumType} end
@@ -132,7 +132,6 @@ immutable SensitiveFloat{NumType, ParamSet} <: AbstractSensitiveFloat{NumType}
         @assert has_gradient || !has_hessian
         v = Ref(zero(NumType))
         local_P = isa(ParamSet, Integer) ? ParamSet : length(ParamSet)
-        @show (ParamSet, local_P)
         d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
         h_dim = local_P * local_S * has_hessian
         h = zeros(NumType, h_dim, h_dim)
@@ -141,7 +140,7 @@ immutable SensitiveFloat{NumType, ParamSet} <: AbstractSensitiveFloat{NumType}
 end
 n_sources(sf::SensitiveFloat) = sf.local_S
 n_local_params(sf::SensitiveFloat{NumType, ParamSet} where NumType) where {ParamSet} = isa(ParamSet, Int) ? ParamSet : length(ParamSet)
-Base.getindex(sf::SensitiveFloat{NumType, ParamSet}, s::Source) where {NumType, ParamSet} =
+@inline Base.getindex(sf::SensitiveFloat{NumType, ParamSet}, s::Source) where {NumType, ParamSet} =
   SourceViewSensitiveFloat{NumType, ParamSet}(sf.v,
     SourceViewArray{ParamSet, typeof(sf.d)}(s.n, sf.d),
     SourceViewArray{ParamSet, typeof(sf.h)}(s.n, sf.h))
@@ -241,23 +240,31 @@ function combine_sfs_hessian!{T1 <: Number, T2 <: Number, T3 <: Number}(
     @assert sf_result.has_hessian
     @assert sf_result.has_gradient
 
-    @assert n_sources(sf1) == n_sources(sf2) == n_sources(sf_result)
-    for source in 1:n_sources(sf_result)
-        sf1_s = sf1[Source(source)]
-        sf2_s = sf2[Source(source)]
-        sf_result_s = sf_result[Source(source)]
-        for ind2 in 1:n_local_params(sf1)
-            sf11_factor = g_h[1, 1] * sf1_s.d[ind2] + g_h[1, 2] * sf2_s.d[ind2]
-            sf21_factor = g_h[1, 2] * sf1_s.d[ind2] + g_h[2, 2] * sf2_s.d[ind2]            
-        
-            @inbounds for ind1 = 1:n_local_params(sf2)
-                sf_result_s.h[ind1, ind2] =
-                    g_d[1] * sf1_s.h[ind1, ind2] +
-                    g_d[2] * sf2_s.h[ind1, ind2] +
-                    sf11_factor * sf1_s.d[ind1] +
-                    sf21_factor * sf2_s.d[ind1]
-                #sf_result.h[ind2, ind1] = sf_result.h[ind1, ind2]
-            end
+    @assert n_sources(sf1) == n_sources(sf2) == n_sources(sf_result)    
+    P = n_local_params(sf_result)
+    @inbounds for source_i in 1:n_sources(sf_result)
+          for ind2 in 1:n_local_params(sf_result)
+              sf11_factor = g_h[1, 1] * sf1[Source(source_i)].d[ind2] + g_h[1, 2] * sf2[Source(source_i)].d[ind2]
+              sf21_factor = g_h[1, 2] * sf1[Source(source_i)].d[ind2] + g_h[2, 2] * sf2[Source(source_i)].d[ind2]
+              for source_j in 1:n_sources(sf_result)
+                sf1_s = sf1[Source(source_j)]
+                sf2_s = sf2[Source(source_j)]
+                if source_i == source_j
+                  for ind1 = 1:n_local_params(sf_result)
+                      var =
+                        sf11_factor * sf1_s.d[ind1] + sf21_factor * sf2_s.d[ind1]
+                      var +=
+                            g_d[1] * sf1_s.h[ind1, ind2] +
+                            g_d[2] * sf2_s.h[ind1, ind2]
+                      sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2] = var
+                  end                  
+                else
+                  for ind1 = 1:n_local_params(sf_result)
+                      var = sf11_factor * sf1_s.d[ind1] + sf21_factor * sf2_s.d[ind1]
+                      sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2] = var
+                  end
+                end
+            end 
         end
     end
 end
@@ -276,9 +283,10 @@ function combine_sfs_gradient!(sf1::AbstractSparseSSensitiveFloat{T1},
             sf2::AbstractSparseSSensitiveFloat{T1},
             sf_result::AbstractSensitiveFloat{T1},
             g_d) where T1
+    P = n_local_params(sf_result)
     for source in 1:n_sources(sf_result)
         for ind in 1:n_local_params(sf_result)
-            sf_result[Source(source)].d[ind] =
+            sf_result.d[(source - 1)*P + ind] =
                 g_d[1] * sf1[Source(source)].d[ind] + g_d[2] * sf2[Source(source)].d[ind]
         end
     end
@@ -371,22 +379,26 @@ function add_scaled_sfs!{NumType <: Number}(
     @assert sf1.has_gradient == sf2.has_gradient
     @assert sf1.has_hessian == sf2.has_hessian
 
-    if sf1.has_gradient
+    P = n_local_params(sf1)
+    @inbounds if sf1.has_gradient
         for source in 1:n_sources(sf1)
             for ind in 1:n_local_params(sf1)
-                sf1[Source(source)].d[ind] = scale * sf2[Source(source)].d[ind]
+                sf1.d[(source-1)*P+ind] += scale * sf2[Source(source)].d[ind]
             end
         end
     end
 
     if sf1.has_hessian
-        for source in 1:n_sources(sf1)
+      @aliasscope begin
+        @inbounds for source in 1:n_sources(sf1)
+            sf2_s_h = Const(sf2[Source(source)].h.arr)
             for ind1 in 1:n_local_params(sf1)
                 for ind2 in 1:n_local_params(sf1)
-                    sf1[Source(source)].h[ind2, ind1] = scale * sf2[Source(source)].h[ind2, ind1]
+                    @fastmath sf1.h[(source-1)*P+ind2, (source-1)*P+ind1] += scale * sf2_s_h[ind2, ind1]
                 end
             end
         end
+      end
     end
 
     true # Set definite return type
