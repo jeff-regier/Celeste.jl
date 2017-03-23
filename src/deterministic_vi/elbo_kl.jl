@@ -245,8 +245,8 @@ get_kl_source(::Type{Dual{1,Float64}}) = KL_SOURCE_DUAL_POOL[Base.Threads.thread
 function __init__()
     init_thread_pool!(KL_HELPER_FLOAT_POOL, () -> KLHelper(Dual{CHUNK_SIZE,Float64}))
     init_thread_pool!(KL_HELPER_DUAL_POOL, () -> KLHelper(Dual{CHUNK_SIZE,Dual{1,Float64}}))
-    init_thread_pool!(KL_SOURCE_FLOAT_POOL, () -> SensitiveFloat{Float64}(PARAM_LENGTH, 1, true, true))
-    init_thread_pool!(KL_SOURCE_DUAL_POOL, () -> SensitiveFloat{Dual{1,Float64}}(PARAM_LENGTH, 1, true, false))
+    init_thread_pool!(KL_SOURCE_FLOAT_POOL, () -> SensitiveFloat{Float64, CanonicalParams}(1, true, true))
+    init_thread_pool!(KL_SOURCE_DUAL_POOL, () -> SensitiveFloat{Dual{1,Float64}, CanonicalParams}(1, true, false))
 end
 
 # explicitly call this for use with compiled system image

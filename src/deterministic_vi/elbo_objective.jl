@@ -131,6 +131,67 @@ end
     end
 end
 
+@eval function add_var_G_s!{NumType <: Number}(
+                    reparametrized_E_G_d,
+                    var_G::SSparseSensitiveFloat{NumType, CanonicalParams},
+                    E_G_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
+                    E_G2_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
+                    s::Int)
+                    
+    # Calculate var_G
+    var_G.v[] += E_G2_s.v[] - (E_G_s.v[] ^ 2)
+
+    var_G.has_gradient || return
+
+    P = length(CanonicalParams2)
+
+    reparametrized_E_G_d[:] = E_G_s.d[ids_2_to_ids]
+    reparametrized_E_G2_d = E_G2_s.d[ids_2_to_ids]
+    for i = 1:P
+        @fastmath var_G.d[s][i] += reparametrized_E_G2_d[i] - 2 * E_G_s.v[] * reparametrized_E_G_d[i]
+    end
+    
+    var_G.has_hessian || return
+    
+    @inbounds begin
+        # We do this in two steps. First we add the dense terms (E_G(2)_s), then
+        # the sparse components.
+        for i = 1:P
+            @unroll_loop for j = 1:P
+                @fastmath var_G.h[s][j,i] -= 2 * reparametrized_E_G_d[i] * reparametrized_E_G_d[j]
+            end
+        end
+            
+        @syntactic_unroll for (lhs, rhs) in $(zip(dense_block_mapping, dense_blocks))
+            var_G.h[s][lhs[1], lhs[2]] += E_G2_s.h[rhs[1], rhs[2]] - 2 * E_G_s.v[] * E_G_s.h[rhs[1], rhs[2]]
+        end
+    end
+end
+
+@eval function SensitiveFloats.add_sources_sf!{NumType <: Number}(
+                    sf_all::SSparseSensitiveFloat{NumType, CanonicalParams},
+                    sf_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
+                    s::Int)
+    sf_all.v[] += sf_s.v[]
+
+    @assert size(sf_all.d[1], 1) == size(sf_s.d, 1)
+
+    P = length(CanonicalParams2)
+
+    @inbounds if sf_all.has_gradient
+        reparam_sf_s_d = sf_s.d[ids_2_to_ids]
+        for i = 1:P
+            sf_all.d[s][i] += reparam_sf_s_d[i]
+        end
+    end
+
+    @inbounds if sf_all.has_hessian
+        @syntactic_unroll for (lhs, rhs) in $(zip(dense_block_mapping, dense_blocks))
+            sf_all.h[s][lhs[1], lhs[2]] += fixup(sf_s.h[rhs[1], rhs[2]])
+        end
+    end            
+end
+
 @eval function SensitiveFloats.add_sources_sf!{NumType <: Number}(
                     sf_all::SensitiveFloat{NumType},
                     sf_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
@@ -196,8 +257,8 @@ Args:
 """
 function add_elbo_log_term!{NumType <: Number}(
                 elbo_vars::ElboIntermediateVariables{NumType},
-                E_G::SensitiveFloat{NumType},
-                var_G::SensitiveFloat{NumType},
+                E_G::AbstractSensitiveFloat{NumType},
+                var_G::AbstractSensitiveFloat{NumType},
                 elbo::SensitiveFloat{NumType},
                 x_nbm::AbstractFloat,
                 iota::AbstractFloat)
