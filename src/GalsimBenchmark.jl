@@ -66,7 +66,7 @@ function truth_comparison_df(truth_df::DataFrame, prediction_df::DataFrame)
     long_truth_df
 end
 
-function run_benchmarks(; test_case_names=String[], print_fn=println, joint_inference=false)
+function run_benchmarks(; test_case_names=String[], joint_inference=false)
     latest_fits_filename = get_latest_fits_filename("galsim_benchmarks")
     full_fits_path = joinpath(GALSIM_BENCHMARK_DIR, "output", latest_fits_filename)
     extensions = AccuracyBenchmark.read_fits(full_fits_path)

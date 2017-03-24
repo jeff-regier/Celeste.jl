@@ -188,7 +188,7 @@ function kl_gradient!(out, x, helper::KLHelper)
 end
 
 function kl_hessian!(out, x, helper::KLHelper)
-    f = x -> ReverseDiff.gradient!(helper.dual_buffer, helper.nested_gradient_tape, x)
+    f = t -> ReverseDiff.gradient!(helper.dual_buffer, helper.nested_gradient_tape, t)
     return ForwardDiff.jacobian!(out, f, x, helper.jacobian_config)
 end
 

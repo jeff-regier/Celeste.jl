@@ -19,13 +19,13 @@ import SampleData: gen_two_body_dataset, true_star_init
     sbs = load_source_brightnesses(ea, vp)
 
     # for this call E_G_s and E_G2_s are initialized to zero
-    calculate_G_s!(ea, vp, elbo_vars, sbs[2], 4, 2, true)
+    calculate_G_s!(vp, elbo_vars, sbs[2], 4, 2, true)
     ev_cleared = deepcopy(elbo_vars)
 
     # for this call E_G_s and E_G2_s have not been zeroed out
-    calculate_G_s!(ea, vp, elbo_vars, sbs[1], 2, 1, true)
-    calculate_G_s!(ea, vp, elbo_vars, sbs[2], 3, 2, true)
-    calculate_G_s!(ea, vp, elbo_vars, sbs[2], 4, 2, true)
+    calculate_G_s!(vp, elbo_vars, sbs[1], 2, 1, true)
+    calculate_G_s!(vp, elbo_vars, sbs[2], 3, 2, true)
+    calculate_G_s!(vp, elbo_vars, sbs[2], 4, 2, true)
 
     @test ev_cleared.E_G_s.v[] ≈ elbo_vars.E_G_s.v[]
     @test ev_cleared.E_G_s.d[] ≈ elbo_vars.E_G_s.d[]

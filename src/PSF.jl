@@ -397,7 +397,6 @@ Returns:
 """
 function evaluate_psf_pixel_fit!{NumType <: Number}(
         x::SVector{2,Float64}, psf_params::Vector{Vector{NumType}},
-        sigma_vec::Vector{SMatrix{2,2,NumType,4}},
         sig_sf_vec::Vector{GalaxySigmaDerivs{NumType}},
         bvn_vec::Vector{BvnComponent{NumType}},
         bvn_derivs::BivariateNormalDerivatives{NumType},
@@ -525,7 +524,7 @@ function evaluate_psf_fit!{NumType <: Number}(
     @inbounds for x_ind in 1:length(x_mat)
         clear!(pixel_value)
         evaluate_psf_pixel_fit!(
-                x_mat[x_ind], psf_params, sigma_vec, sig_sf_vec, bvn_vec,
+                x_mat[x_ind], psf_params, sig_sf_vec, bvn_vec,
                 bvn_derivs, log_pdf, pdf, pixel_value, calculate_gradient)
 
         diff = (pixel_value.v[] - raw_psf[x_ind])
