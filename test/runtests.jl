@@ -22,7 +22,6 @@ import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
 import Celeste.SensitiveFloats.clear!
 import Celeste.SDSSIO: RunCamcolField
 
-include(joinpath(Pkg.dir("Celeste"), "test", "Synthetic.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
 
 using SampleData

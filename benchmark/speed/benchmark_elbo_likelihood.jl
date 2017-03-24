@@ -3,10 +3,8 @@
 import Celeste.DeterministicVI
 import Celeste.DeterministicVI: ElboIntermediateVariables, elbo_likelihood
 
-include(joinpath(Pkg.dir("Celeste"), "test", "Synthetic.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
 
-import Synthetic
 import SampleData
 
 
