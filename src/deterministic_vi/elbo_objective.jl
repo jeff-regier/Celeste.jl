@@ -15,7 +15,6 @@ Returns:
     for this source at this pixel.
 """
 function calculate_G_s!{NumType <: Number}(
-                    ea::ElboArgs,
                     vp::VariationalParams{NumType},
                     elbo_vars::ElboIntermediateVariables{NumType},
                     sb::SourceBrightness{NumType},
@@ -240,7 +239,7 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
                     sb::SourceBrightness{NumType},
                     b::Int, s::Int,
                     is_active_source::Bool)
-    calculate_G_s!(ea, vp, elbo_vars, sb, b, s, is_active_source)
+    calculate_G_s!(vp, elbo_vars, sb, b, s, is_active_source)
 
     if is_active_source
         sa = findfirst(ea.active_sources, s)

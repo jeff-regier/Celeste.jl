@@ -151,11 +151,11 @@ length(::Type{PsfParams}) = 6
 length{T<:ParamSet}(::T) = length(T)
 
 #TODO: build these from ue_align, etc., here.
-align(::StarPosParams, CanonicalParams) = ids.u
-align(::GalaxyPosParams, CanonicalParams) =
+align(::StarPosParams, ids) = ids.u
+align(::GalaxyPosParams, ids) =
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
-align(::CanonicalParams, CanonicalParams) = collect(1:length(CanonicalParams))
-align(::GalaxyShapeParams, GalaxyPosParams) =
+align(::CanonicalParams, _ids) = collect(1:length(CanonicalParams))
+align(::GalaxyShapeParams, gal_ids) =
   [gal_ids.e_axis; gal_ids.e_angle; gal_ids.e_scale]
 
 # The shape and brightness parameters for stars and galaxies respectively.

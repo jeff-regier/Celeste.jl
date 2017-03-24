@@ -41,7 +41,6 @@ end
 @testset "GalSim benchmark tests, single-source inference" begin
     truth, results = GalsimBenchmark.run_benchmarks(
         test_case_names=GALSIM_CASES_EXERCISED,
-        print_fn=x -> 0,
         joint_inference=false
     )
     assert_estimates_are_close(GalsimBenchmark.truth_comparison_df(truth, results))
@@ -50,7 +49,6 @@ end
 @testset "GalSim benchmark tests, joint inference" begin
     truth, results = GalsimBenchmark.run_benchmarks(
         test_case_names=GALSIM_CASES_EXERCISED,
-        print_fn=x -> 0,
         joint_inference=true
     )
     assert_estimates_are_close(GalsimBenchmark.truth_comparison_df(truth, results))

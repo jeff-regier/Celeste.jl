@@ -38,12 +38,6 @@ function SourceBrightness{NumType <: Number}(vs::Vector{NumType};
     E_ll_a = Matrix{SensitiveFloat{NumType}}(B, Ia)
 
     for i = 1:Ia
-        ids_band_3 = Int[bids.r1, bids.r2]
-        ids_color_1 = Int[bids.c1[1], bids.c2[1]]
-        ids_color_2 = Int[bids.c1[2], bids.c2[2]]
-        ids_color_3 = Int[bids.c1[3], bids.c2[3]]
-        ids_color_4 = Int[bids.c1[4], bids.c2[4]]
-
         for b = 1:B
             E_l_a[b, i] = SensitiveFloat{NumType}(length(BrightnessParams), 1,
                                        calculate_gradient, calculate_hessian)

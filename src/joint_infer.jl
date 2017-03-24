@@ -236,7 +236,7 @@ function partition_cyclades_dynamic(target_sources, neighbor_map; batch_size=60)
     for (cur_batch, cur_batch_component) in enumerate(components)
         for (component_group_id, sources_of_component) in cur_batch_component
             push!(thread_sources_assignment[cur_batch], copy(sources_of_component))
-	    assigned_sources += length(sources_of_component)
+        assigned_sources += length(sources_of_component)
         end
     end
 
@@ -299,11 +299,11 @@ function partition_box(npartitions::Int, target_sources::Vector{Int},
         for (index, neighbors) in enumerate(neighbor_map)
             cyclades_neighbor_map[target_sources[index]] = neighbors
         end
-	println("$(partition_cyclades_dynamic(target_sources, cyclades_neighbor_map, batch_size=batch_size))")
+    println("$(partition_cyclades_dynamic(target_sources, cyclades_neighbor_map, batch_size=batch_size))")
         #return partition_cyclades(npartitions, target_sources,
         #                          cyclades_neighbor_map,
         #                          batch_size=batch_size)
-	return partition_cyclades_dynamic(target_sources,
+    return partition_cyclades_dynamic(target_sources,
                                           cyclades_neighbor_map,
                                           batch_size=batch_size)
     else
@@ -527,9 +527,9 @@ function process_sources!(images::Vector{Model.Image},
             Threads.@threads for i in 1:n_threads
                 try
                     tic()
-                    process_sources_kernel!(images, ea_vec, vp_vec, cfg_vec,
+                    process_sources_kernel!(ea_vec, vp_vec, cfg_vec,
                                             thread_sources_assignment[i::Int][batch::Int],
-                                            iter, within_batch_shuffling)
+                                            within_batch_shuffling)
                     process_sources_elapsed_times[i::Int] = toq()
                 catch exc
                     Log.exception(exc)
@@ -564,32 +564,32 @@ function process_sources_dynamic!(images::Vector{Model.Image},
         # We want this barrier because there may be conflict _between_ Cyclades batches.
         for batch in 1:n_batches
 
-	    connected_components_index = 1
+            connected_components_index = 1
             process_sources_elapsed_times::Vector{Float64} = Vector{Float64}(n_threads)
 
             # Process every batch of every iteration with n_threads
             Threads.@threads for i in 1:n_threads
                 try
                     tic()
-		    while true
-		        cc_index = -1
+                    while true
+                        cc_index = -1
 
-			#ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) $(cc_index)")
+                        #ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) $(cc_index)")
 
-			lock(l)
-			cc_index = connected_components_index
-			connected_components_index += 1
-			unlock(l)
-			
-			if cc_index > length(thread_sources_assignment[batch::Int])
-			   break
-			end
+                        lock(l)
+                        cc_index = connected_components_index
+                        connected_components_index += 1
+                        unlock(l)
 
-			#ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) $(cc_index) popped")
-			
-                        process_sources_kernel!(images, ea_vec, vp_vec, cfg_vec,
+                        if cc_index > length(thread_sources_assignment[batch::Int])
+                            break
+                        end
+
+                        #ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) $(cc_index) popped")
+
+                        process_sources_kernel!(ea_vec, vp_vec, cfg_vec,
                                                 thread_sources_assignment[batch::Int][cc_index],
-                                                iter, within_batch_shuffling)
+                                                within_batch_shuffling)
                     end
                     process_sources_elapsed_times[i::Int] = toq()
                 catch exc
@@ -598,18 +598,16 @@ function process_sources_dynamic!(images::Vector{Model.Image},
                 end
             end
             Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
-	    Log.info("Batch $(batch) Avg load imbalance - $(mean(process_sources_elapsed_times-minimum(process_sources_elapsed_times)))")
+            Log.info("Batch $(batch) Avg load imbalance - $(mean(process_sources_elapsed_times-minimum(process_sources_elapsed_times)))")
         end
     end
 end
 
 # Process partition of sources. Multiple threads call this function in parallel.
-function process_sources_kernel!(images::Vector{Model.Image},
-                                 ea_vec::Vector{ElboArgs},
+function process_sources_kernel!(ea_vec::Vector{ElboArgs},
                                  vp_vec::Vector{VariationalParams{Float64}},
                                  cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
                                  source_assignment::Vector{Int64},
-                                 iter::Int,
                                  within_batch_shuffling::Bool)
     try
         # Shuffle the source assignments within each batch of each process.

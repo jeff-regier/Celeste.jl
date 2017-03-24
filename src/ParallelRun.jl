@@ -198,7 +198,7 @@ function serialize(s::Base.AbstractSerializer, os::OptimizedSource)
     end
 end
 
-function deserialize(s::Base.AbstractSerializer, t::Type{OptimizedSource})
+function deserialize(s::Base.AbstractSerializer, ::Type{OptimizedSource})
     thingid = read(s.io, Int64)::Int64
     objid_data = zeros(UInt8, 19)
     for i = 1:19
@@ -467,7 +467,6 @@ function infer_boxes(boxes::Vector{BoundingBox},
     # Base.@time hack for distributed environment
     gc_stats = ()
     gc_diff_stats = ()
-    elapsed_time = 0.0
     gc_stats = Base.gc_num()
     elapsed_time = time_ns()
 
