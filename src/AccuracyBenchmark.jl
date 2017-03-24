@@ -751,7 +751,7 @@ function score_predictions(truth::DataFrame, prediction_dfs::Vector{DataFrame})
     )
 end
 
-function score_uncertainty(truth::DataFrame, predictions::DataFrame)
+function get_uncertainty_df(truth::DataFrame, predictions::DataFrame)
     assert_columns_are_present(predictions, STDERR_COLUMNS)
     matched_truth, matched_prediction_dfs = match_catalogs(truth, [predictions])
     matched_predictions = matched_prediction_dfs[1]
@@ -772,13 +772,24 @@ function score_uncertainty(truth::DataFrame, predictions::DataFrame)
         matched_predictions[:color_log_ratio_ri_stderr],
         matched_predictions[:color_log_ratio_iz_stderr],
     ]
-    names = [:reference_band_flux_nmgy, :color_log_ratio_ug, :color_log_ratio_gr,
+    names = [:log_reference_band_flux_nmgy, :color_log_ratio_ug, :color_log_ratio_gr,
              :color_log_ratio_ri, :color_log_ratio_iz]
-    error_sd_data = mapreduce(vcat, zip(names, errors, std_errs)) do values
+    mapreduce(vcat, zip(names, errors, std_errs)) do values
         name, error, std_err = values
-        abs_error_sds = error ./ std_err
         DataFrame(
-            field=name,
+            objid=matched_truth[:objid],
+            name=fill(name, length(error)),
+            error=error,
+            posterior_std_err=std_err,
+        )
+    end
+end
+
+function score_uncertainty(uncertainty_df::DataFrame)
+    mapreduce(vcat, groupby(uncertainty_df, :name)) do group_df
+        abs_error_sds = abs.(group_df[:error] ./ group_df[:posterior_std_err])
+        DataFrame(
+            field=group_df[1, :name],
             within_half_sd=mean(abs_error_sds .<= 1/2),
             within_1_sd=mean(abs_error_sds .<= 1),
             within_2_sd=mean(abs_error_sds .<= 2),
