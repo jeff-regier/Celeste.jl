@@ -529,6 +529,8 @@ end
 
 ensure_small_flux(value) = (isna(value) || value <= 0) ? 1e-6 : value
 
+na_to_default(value, default) = isna(value) ? default : value
+
 function make_catalog_entry(row::DataFrameRow)
     color_log_ratios = DataArray{Float64}(DataArray(Any[
         row[:color_log_ratio_ug],
@@ -543,10 +545,10 @@ function make_catalog_entry(row::DataFrameRow)
         row[:is_star],
         fluxes,
         fluxes,
-        row[:de_vaucouleurs_mixture_weight],
-        row[:minor_major_axis_ratio],
-        row[:angle_deg],
-        row[:half_light_radius_px],
+        na_to_default(row[:de_vaucouleurs_mixture_weight], 0.),
+        na_to_default(row[:minor_major_axis_ratio], 0.),
+        na_to_default(row[:angle_deg], 0.),
+        na_to_default(row[:half_light_radius_px], 0.),
         row[:objid],
         0, # thing_id
     )
@@ -574,6 +576,151 @@ function make_initialization_catalog(catalog::DataFrame, use_full_initialzation:
             )
         end
     end
+end
+
+# TODO move/merge with make_images/categorize
+
+immutable ImageGeometry
+    height_px::Int64
+    width_px::Int64
+    world_coordinate_origin::Tuple{Float64, Float64}
+end
+
+function get_image_geometry(catalog_data::DataFrame; field_expand_arcsec=10.0)
+    min_ra_deg = minimum(catalog_data[:right_ascension_deg])
+    max_ra_deg = maximum(catalog_data[:right_ascension_deg])
+    min_dec_deg = minimum(catalog_data[:declination_deg])
+    max_dec_deg = maximum(catalog_data[:declination_deg])
+
+    width_arcsec = (max_ra_deg - min_ra_deg) * ARCSEC_PER_DEGREE + 2 * field_expand_arcsec
+    height_arcsec = (max_dec_deg - min_dec_deg) * ARCSEC_PER_DEGREE + 2 * field_expand_arcsec
+    width_px = convert(Int64, round(width_arcsec / SDSS_ARCSEC_PER_PIXEL))
+    height_px = convert(Int64, round(height_arcsec / SDSS_ARCSEC_PER_PIXEL))
+
+    ImageGeometry(
+        height_px,
+        width_px,
+        (
+            min_ra_deg - field_expand_arcsec / ARCSEC_PER_DEGREE,
+            min_dec_deg - field_expand_arcsec / ARCSEC_PER_DEGREE,
+        )
+    )
+end
+
+function make_template_images(
+    catalog_data::DataFrame, psf_sigma_px::Float64, sky_level_nmgy::Float64,
+    counts_per_nmgy::Float64
+)
+    geometry = get_image_geometry(catalog_data)
+    println("  Image dimensions $(geometry.height_px) H x $(geometry.width_px) W px")
+    dec_deg_per_pixel = SDSS_ARCSEC_PER_PIXEL / ARCSEC_PER_DEGREE
+    ra_deg_per_pixel = dec_deg_per_pixel / cosd(geometry.world_coordinate_origin[2])
+    wcs = WCS.WCSTransform(
+        2, # dimensions
+        # reference pixel coordinates...
+        crpix=[0., 0.],
+        # ...and corresponding reference world coordinates
+        crval=[geometry.world_coordinate_origin[1], geometry.world_coordinate_origin[2]],
+        # this WCS is a simple linear transformation
+        ctype=["RA---TAN", "DEC--TAN"],
+        cunit=["deg", "deg"],
+        # these are [du/dx du/dy; dv/dx dv/dy]. (u, v) = world coords, (x, y) = pixel coords.
+        pc=[0. ra_deg_per_pixel; dec_deg_per_pixel 0.],
+    )
+    psf = make_psf(psf_sigma_px)
+    sky_intensity = Model.SkyIntensity(
+        fill(sky_level_nmgy, geometry.height_px, geometry.width_px),
+        collect(1:geometry.height_px),
+        collect(1:geometry.width_px),
+        ones(geometry.height_px),
+    )
+    iota_vec = fill(counts_per_nmgy, geometry.height_px)
+    map(1:5) do band
+        Model.Image(
+            geometry.height_px,
+            geometry.width_px,
+            zeros(Float32, (geometry.height_px, geometry.width_px)),
+            band,
+            wcs,
+            psf,
+            0, 0, 0, # run, camcol, field
+            sky_intensity,
+            iota_vec,
+            Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
+        )
+    end
+end
+
+function extract_psf_sigma_px(psf::Vector{Model.PsfComponent})
+    # ensure the PSF is a multiple of identity covariance
+    @assert psf[1].alphaBar == 1.
+    @assert all(psf[1].xiBar .== [0.; 0.])
+    @assert psf[1].tauBar[1, 2] == 0.
+    @assert psf[1].tauBar[2, 1] == 0.
+    @assert psf[1].tauBar[1, 1] == psf[1].tauBar[2, 2]
+    sqrt(psf[1].tauBar[1, 1])
+end
+
+## Parse a FITS header from a raw string representation
+
+# It's silly that we have to do this, but the Julia FITSIO library doesn't support this (it can only
+# read a header from a file), while the Julia WCS library will only generate a header in raw string
+# form. (The Julia FITSIO library also won't write a raw string header to a file, so scrap that idea
+# :).) Fortunately, the FITS header format is a simple fixed-width textual format with only a few
+# data types. See https://fits.gsfc.nasa.gov/fits_primer.html.
+
+function parse_fits_header_value(raw_value::AbstractString)
+    if raw_value == "T"
+        true
+    elseif raw_value == "F"
+        false
+    elseif raw_value[1] == '\''
+        convert(String, raw_value[2:(end - 1)])
+    elseif ismatch(r"^[0-9]+$", raw_value)
+        parse(Int64, raw_value)
+    else
+        parse(Float64, raw_value)
+    end
+end
+
+function parse_fits_header_from_string(header_string::AbstractString)
+    header = FITSIO.FITSHeader(String[], [], String[])
+    start_position = 1
+    while start_position < length(header_string)
+        field_string = header_string[start_position:(start_position + 79)]
+        field_name = strip(field_string[1:8])
+        if length(field_name) != 0 && field_string[9:10] == "= "
+            field_parts = split(field_string[11:80], "/", limit=2)
+            raw_value = field_parts[1]
+            header[field_name] = parse_fits_header_value(strip(raw_value))
+            if length(field_parts) == 2
+                comment = strip(field_parts[2])
+                if length(comment) > 0
+                    FITSIO.set_comment!(header, field_name, convert(String, comment))
+                end
+            end
+        end
+        start_position += 80
+    end
+    header
+end
+
+function save_images_to_fits(filename::String, images::Vector{Model.Image})
+    println("Writing images to $filename...")
+    fits_file = FITSIO.FITS(filename, "w")
+    for band_image in images
+        header = parse_fits_header_from_string(WCS.to_header(band_image.wcs))
+        header["CLSKY"] = band_image.sky.sky_small[1, 1]
+        header["CLSIGMA"] = extract_psf_sigma_px(band_image.psf)
+        header["CLIOTA"] = band_image.iota_vec[1]
+        write(
+            fits_file,
+            band_image.pixels,
+            header=header,
+            name="CELESTE_FIELD_$(band_image.b)",
+        )
+    end
+    close(fits_file)
 end
 
 ################################################################################
