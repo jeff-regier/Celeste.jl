@@ -1,10 +1,14 @@
 struct Param{Set, name, dims}; end
-Base.length(x::Param{Set, name, dims} where {Set, name}) where {dims} = reduce(*, 1, dims)
+@Base.pure Base.length(x::Param{Set, name, dims} where {Set, name}) where {dims} = reduce(*, 1, dims)
+@Base.pure Base.length(x::Type{Param{Set, name, dims}} where {Set, name}) where {dims} = reduce(*, 1, dims)
+to_batch(p::Param) = p
 
 struct ParamBatch{T<:Tuple}
     params::T
 end
-Base.length(x::ParamBatch) = mapreduce(length, +, 0, typeof(x).parameters[1].parameters)
+to_batch(p::ParamBatch) = p
+@Base.pure Base.length(x::ParamBatch) = mapreduce(length, +, 0, typeof(x).parameters[1].parameters)
+@Base.pure Base.length(T::Type{<:ParamBatch}) = mapreduce(length, +, 0, T.parameters[1].parameters)
 @Base.pure function Base.getindex(x::ParamBatch, y::Param)
     idx = 1
     for (i,p) in enumerate(x.params)
@@ -29,9 +33,12 @@ Base.eachindex(a::ParameterizedArray) = Base.eachindex(a.arr)
 @inline Base.@propagate_inbounds Base.getindex(a::ParameterizedArray, inds...) = a.arr[to_indices(a, inds)...]
 @inline Base.@propagate_inbounds Base.setindex!(a::ParameterizedArray, v, inds...) = Base.setindex!(a.arr,
   v, to_indices(a, inds)...)
+@Base.pure function get_axis_parameterization(tA, tInds)
+    params = tA.parameters[1]
+    params.parameters[Base.sub_int(Base.add_int(1, params.parameters.length), tInds.parameters.length)]
+end
 @inline function Base.to_indices(A::ParameterizedArray{<:Tuple}, inds, I::Tuple{Any, Vararg{Any}})
-      params = typeof(A).parameters[1]
-      axis_parametrization = params.parameters[Base.sub_int(Base.add_int(1, params.parameters.length), typeof(inds).parameters.length)]
+      axis_parametrization = get_axis_parameterization(typeof(A), typeof(inds))
       (Base.to_index(axis_parametrization, I[1]),
         Base.to_indices(A, Base._maybetail(inds), Base.tail(I))...)
 end
@@ -191,24 +198,30 @@ end
     end
 end
 
-function diagonal_block(T, p::Param{PT, s, dims} where {PT,s}) where dims
-    nparams = reduce(*, 1, dims)
+function diagonal_block(T, p::Union{Param, ParamBatch})
+    nparams = length(typeof(p))
     SArray{(nparams, nparams), T, 2, nparams^2}
 end
+diagonal_block(T, x) = diagonal_block(T, to_batch(x))
 
-function off_diagonal_block(T, ::Param{PT, s, dims1} where {PT,s},
-                               ::Param{PT, s, dims2} where {PT,s}) where {dims1, dims2}
-    nparams1 = reduce(*, 1, dims1)
-    nparams2 = reduce(*, 1, dims2)
-    SArray{(nparams1, nparams2), T, 2, nparams1*nparams2}
+function off_diagonal_block(T, p1::Union{Param, ParamBatch},
+                               p2::Union{Param, ParamBatch})
+    SArray{(length(p1), length(p2)), T, 2, length(p1)*length(p2)}
 end
+off_diagonal_block(T, x1, x2) = off_diagonal_block(T, to_batch(x1), to_batch(x2))
 
 macro create_sparse_implementation(T, sT)
     zero_init = map(1:nfields(Base.unwrap_unionall(T))) do i
         :(zero(fieldtype(X, $i)))
     end
+    zero_reset = map(1:nfields(Base.unwrap_unionall(T))) do i
+        :(setfield!(x, $i, zero(fieldtype(typeof(x), $i))))
+    end
     esc(quote
         Base.zeros(X::Type{<:$sT}) = X($(zero_init...))
+        zero!(x::$sT) = begin
+            $(zero_reset...)
+        end
     end)
 end
 
@@ -235,50 +248,48 @@ function strip_quote(sym)
     end
 end
 
-function generate_fieldname_matrix(param_set, sparse_def)
+function generate_fieldname_map(param_set, sparse_def)
     sparse_def = get_actual_def(sparse_def)
-    fieldname_matrix = Matrix{Any}(nfields(param_set), nfields(param_set))
-    fill!(fieldname_matrix, 0)
+    fieldname_map = Vector{Tuple{Any,Any,Any}}()
     for field in sparse_def.args[3].args
         isexpr(field, :line) && continue
         @assert isexpr(field, :(::))
         fname = field.args[1]
         typ = field.args[2]
         @assert isexpr(typ, :call)
-        dump(typ.args[3].args[2])
         if typ.args[1] == :diagonal_block
-            col_fieldname = row_fieldname = strip_quote(typ.args[3].args[2])
+            col_fieldname = row_fieldname = typ.args[3]
         elseif typ.args[1] == :off_diagonal_block
-            row_fieldname = strip_quote(typ.args[3].args[2])
-            col_fieldname = strip_quote(typ.args[4].args[2])
+            row_fieldname = typ.args[3]
+            col_fieldname = typ.args[4]
         end
-        i = findfirst(i->row_fieldname == fieldname(param_set, i), 1:nfields(param_set))
-        j = findfirst(j->col_fieldname == fieldname(param_set, j), 1:nfields(param_set))
-        # We automatically only consider the upper triangular part, so reverse indices if necessary
-        i > j && ((i,j) = (j,i))
-        fieldname_matrix[i, j] = fname
+        push!(fieldname_map, (row_fieldname, col_fieldname, fname))
     end
-    fieldname_matrix
+    fieldname_map
 end
 
 
-function generate_indexing_body_for_type(callback, param_set, ids_instance, fieldname_matrix)
+function generate_indexing_body_for_type(callback, param_set, ids_instance, fieldname_map, allow_transposed)
     ex = ret = nothing
-    for (i, rowName) in enumerate(fieldnames(param_set))
-        bodyEx = body = nothing
-        for (j, colName) in enumerate(fieldnames(param_set))
-            if i > j || fieldname_matrix[i, j] === nothing || fieldname_matrix[i, j] === 0
-                continue
-            end
-            newbex = Expr(:if, :(col == $ids_instance.$colName), callback(fieldname_matrix[i,j]))
-            (bodyEx !== nothing) && push!(bodyEx.args, newbex)
-            bodyEx = newbex
-            (body == nothing) && (body = bodyEx)
+    for (rowName, colName, fname) in fieldname_map
+        body = Expr(:if,:(row == $rowName && col == $colName),callback(fname, false))
+        if ex == nothing
+            ex = ret = body
+        else
+            push!(ex.args, body)
+            ex = body
         end
-        newex = Expr(:if, :(row == $ids_instance.$rowName), body)
-        (ex !== nothing) && push!(ex.args, newex)
-        ex = newex
-        (ret == nothing) && (ret = newex)
+    end
+    if allow_transposed
+        for (rowName, colName, fname) in fieldname_map
+            body = Expr(:if,:(row == $colName && col == $rowName),callback(fname, true))
+            if ex == nothing
+                ex = ret = body
+            else
+                push!(ex.args, body)
+                ex = body
+            end
+        end
     end
     ret
 end
@@ -287,49 +298,34 @@ fixup(mat::StaticArrays.SArray{dims, T, N, 1} where {dims, T, N}) = mat[]
 fixup(mat::StaticArrays.SMatrix{1, 1, T, 1} where T) = mat[]
 fixup(mat) = mat
 
+fill_if_scalar(mat::AbstractArray, T) = mat
+fill_if_scalar(scalar, T) = fill(scalar, T)
 macro define_accessors(param_set, instance_var, def)
-    fieldname_matrix = generate_fieldname_matrix(param_set, def)
-    name = get_actual_def(def).args[2].args[1].args[1]
-    setindex_body(field) = :(return mat.$field = (isa(val, AbstractArray) ?
-                    val : fill(val, typeof(mat.$field)) ))
-    getindex_body(field) = :(return mat.$field)
+    fieldname_map = generate_fieldname_map(param_set, def)
+    name = get_actual_def(def).args[2].args[1]
+    if isexpr(name, :(<:))
+        name = name.args[1]
+    end
+    setindex_body(field, transposed) = :(return mat.$field = ($fill_if_scalar)(val, typeof(mat.$field)) )
+    getindex_body(field, transposed) = transposed ? :(return transpose(mat.$field)) :
+                                                    :(return mat.$field)
     a = quote
         $def
-        @inline function Base.setindex!(mat::$name, val, row::Param, col::Param)
-            $(generate_indexing_body_for_type(setindex_body, param_set, instance_var, fieldname_matrix))
+        @inline function Base.setindex!(mat::$name, val, row, col)
+            #(row, col) = (to_batch(row), to_batch(col))
+            ((length(typeof(row)) == 0) || length(typeof(col)) == 0) && return
+            $(generate_indexing_body_for_type(setindex_body, param_set, instance_var, fieldname_map, false))
+            @show (row, col, length(typeof(col)), length(typeof(row)))
             error("Trying to assign to region that is implicitly zero or below the diagonal")
         end
-        @inline function Base.getindex(mat::$name, val, row::Param, col::Param)
-            $(generate_indexing_body_for_type(getindex_body, param_set, instance_var, fieldname_matrix))
+        @inline function Base.getindex(mat::$name, row, col)
+            #(row, col) = (to_batch(row), to_batch(col))
+            $(generate_indexing_body_for_type(getindex_body, param_set, instance_var, fieldname_map, true))
+            @show (row, col, length(typeof(col)), length(typeof(row)))
             error("Trying to access a region that is implicitly zero or below the diagonal")
         end
     end
-    statements = Expr(:block)
-    for (i, rowname) in enumerate(fieldnames(param_set))
-        for (j, colname) in enumerate(fieldnames(param_set))
-            do_transpose = false
-            ii, ij = i,j
-            if ii > ij
-                (ii,ij) = (ij,ii)
-                do_transpose = true
-            end
-            (fieldname_matrix[ii,ij] == 0) && continue
-            val = :(mat.$(fieldname_matrix[ii, ij]))
-            do_transpose && (val = :(transpose($val)))
-            push!(statements.args,:(ret[$instance_var.$rowname, $instance_var.$colname] = fixup($val)))
-        end
-    end
-    b = quote
-        function Base.convert{T}(::Type{Matrix}, mat::$name{T})
-            ret = zeros(T, length(typeof($instance_var)), length(typeof($instance_var)))
-            $statements
-            ret
-        end
-    end
-    esc(quote
-        $a
-        $b
-    end)
+    esc(a)
 end
 
 # Parse iteration space expression

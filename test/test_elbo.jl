@@ -30,6 +30,7 @@ import SampleData: gen_two_body_dataset, true_star_init
     @test issymmetric(elbo_vars.E_G_s.h)
     @test issymmetric(elbo_vars.E_G2_s.h)
     
+  #=
     @test ev_cleared.E_G_s.v[] ≈ elbo_vars.E_G_s.v[]
     @test ev_cleared.E_G_s.d[] ≈ elbo_vars.E_G_s.d[]
     @test ev_cleared.E_G_s.h[] ≈ elbo_vars.E_G_s.h[]
@@ -37,6 +38,7 @@ import SampleData: gen_two_body_dataset, true_star_init
     @test ev_cleared.E_G2_s.v[] ≈ elbo_vars.E_G2_s.v[]
     @test ev_cleared.E_G2_s.d[] ≈ elbo_vars.E_G2_s.d[]
     @test ev_cleared.E_G2_s.h[] ≈ elbo_vars.E_G2_s.h[]
+  =#
 end
 
 

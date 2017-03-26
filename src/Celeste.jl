@@ -6,6 +6,8 @@ module Celeste
 # workaround a bug
 import ForwardDiff
 
+function zero! end
+
 # alias scopes
 include("aliasscopes.jl")
 

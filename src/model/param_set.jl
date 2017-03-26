@@ -28,8 +28,10 @@
 #
 # Note Ia denotes the number of types of astronomical objects (e.g., 2 for stars and galaxies).
 
-using Celeste: Param, @concretize, @inline_unnamed, ParameterizedArray, ParamBatch
+using Celeste: Param, @concretize, @inline_unnamed, ParameterizedArray, ParamBatch, @define_accessors, Celeste, @create_sparse_implementation,
+  diagonal_block, off_diagonal_block
 import Celeste: to_batch
+import Celeste: zero!
 
 @compat abstract type ParamSet end
 
@@ -140,12 +142,16 @@ brightness_params(::Galaxy) = ids2.galaxy_brightness
 
 dense_diagonal_blocks(kind) = tuple(
   (brightness_params(kind), brightness_params(kind)),
-  (non_u_shape_params(kind), non_u_shape_params(kind))
+  (length(non_u_shape_params(kind)) > 0 ? 
+    ((non_u_shape_params(kind), non_u_shape_params(kind)),) :
+    ())...
 )
 dense_off_diagonal_blocks(kind) = tuple(
   (brightness_params(kind), a_param(kind)),
-  (shape_params(kind), a_param(kind)),  
-  (non_u_shape_params(kind), ids2.u),
+  (shape_params(kind), a_param(kind)),
+  (length(non_u_shape_params(kind)) > 0 ? 
+      ((non_u_shape_params(kind), ids2.u),) :
+      ())...,
   (brightness_params(kind), shape_params(kind))
 )
 all_dense_off_diagonal_blocks(kind) = tuple(
@@ -161,8 +167,34 @@ const dense_blocks = tuple(
   all_dense_off_diagonal_blocks(Galaxy())...,  
 )
 
-const dense_block_mapping = map(x->(ids_2_to_ids[x[1]],ids_2_to_ids[x[2]]), dense_blocks)
+const symmetric_dense_blocks = tuple(
+  (ids2.u, ids2.u),
+  dense_diagonal_blocks(Star())...,
+  dense_diagonal_blocks(Galaxy())...,
+  dense_off_diagonal_blocks(Star())...,
+  dense_off_diagonal_blocks(Galaxy())...,  
+)
 
+const dense_block_mapping = map(x->(ids_2_to_ids[x[1]],ids_2_to_ids[x[2]]), dense_blocks)
+const symmetric_dense_block_mapping = 
+  map(x->(ids_2_to_ids[x[1]],ids_2_to_ids[x[2]]), symmetric_dense_blocks)
+
+@eval @define_accessors $CanonicalParams2 ids2 mutable struct SparseStruct{NumType}
+    u_u_block::diagonal_block(NumType, ids2.u)
+    star_bright_bright_block::diagonal_block(NumType, brightness_params(Star()))
+    gal_shape_shape_block::diagonal_block(NumType, non_u_shape_params(Galaxy()))
+    gal_bright_bright_block::diagonal_block(NumType, brightness_params(Galaxy()))  
+    star_bright_a_block::off_diagonal_block(NumType, brightness_params(Star()), a_param(Star()))
+    star_shape_a_block::off_diagonal_block(NumType, shape_params(Star()), a_param(Star()))
+    star_bright_shape_block::off_diagonal_block(NumType, brightness_params(Star()), shape_params(Star()))
+    gal_bright_a_block::off_diagonal_block(NumType, brightness_params(Galaxy()), a_param(Galaxy()))
+    gal_shape_a_block::off_diagonal_block(NumType, shape_params(Galaxy()), a_param(Galaxy()))
+    gal_shape_u_block::off_diagonal_block(NumType, non_u_shape_params(Galaxy()), ids2.u)
+    gal_bright_shape_block::off_diagonal_block(NumType, brightness_params(Galaxy()), shape_params(Galaxy()))
+end
+@eval @create_sparse_implementation $SparseStruct SparseStruct
+Celeste.is_implicitly_symmetric(s::SparseStruct) = true
+Base.issymmetric(s::SparseStruct) = true
 
 type LatentStateIndexes <: ParamSet
     u::Vector{Int}
