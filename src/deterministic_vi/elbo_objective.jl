@@ -1,4 +1,4 @@
-using Celeste: @syntactic_unroll, @implicit_transpose, is_implicitly_symmetric, fixup
+using Celeste: @syntactic_unroll, @implicit_transpose, is_implicitly_symmetric, fixup, Const
 using Celeste.Model: Star, Galaxy, a_param, shape_params, brightness_params, bright_ids, ids_2_to_ids,
   dense_block_mapping, dense_blocks
 
@@ -146,25 +146,29 @@ end
 
     P = length(CanonicalParams2)
 
-    reparametrized_E_G_d[:] = E_G_s.d[ids_2_to_ids]
-    reparametrized_E_G2_d = E_G2_s.d[ids_2_to_ids]
-    @inbounds for i = 1:P
-        @fastmath var_G.d[i] += reparametrized_E_G2_d[i] - 2 * E_G_s.v[] * reparametrized_E_G_d[i]
+    @aliasscope @inbounds begin
+        reparametrized_E_G_d[:] = E_G_s.d[ids_2_to_ids]
+        reparametrized_E_G2_d = E_G2_s.d[ids_2_to_ids]
     end
-    
-    var_G.has_hessian || return
-    
-    @inbounds begin
-        # We do this in two steps. First we add the dense terms (E_G(2)_s), then
-        # the sparse components.
-        for i = 1:P
-            @unroll_loop for j = 1:P
-                @fastmath var_G.h[j,i] -= 2 * reparametrized_E_G_d[i] * reparametrized_E_G_d[j]
-            end
+    @aliasscope begin
+        @inbounds for i = 1:P
+            @fastmath var_G.d[i] += reparametrized_E_G2_d[i] - 2 * E_G_s.v[] * Const(reparametrized_E_G_d)[i]
         end
-            
-        @syntactic_unroll for (lhs, rhs) in $(zip(dense_block_mapping, dense_blocks))
-            var_G.h[lhs[1], lhs[2]] += E_G2_s.h[rhs[1], rhs[2]] - 2 * E_G_s.v[] * E_G_s.h[rhs[1], rhs[2]]
+        
+        var_G.has_hessian || return
+        
+        @inbounds begin
+            # We do this in two steps. First we add the dense terms (E_G(2)_s), then
+            # the sparse components.
+            for i = 1:P
+                @unroll_loop for j = 1:P
+                    @fastmath var_G.h[j,i] -= 2 * Const(reparametrized_E_G_d)[i] * Const(reparametrized_E_G_d)[j]
+                end
+            end
+                
+            @syntactic_unroll for (lhs, rhs) in $(zip(dense_block_mapping, dense_blocks))
+                var_G.h[lhs[1], lhs[2]] += E_G2_s.h[rhs[1], rhs[2]] - 2 * E_G_s.v[] * E_G_s.h[rhs[1], rhs[2]]
+            end
         end
     end
 end
@@ -277,39 +281,27 @@ function add_elbo_log_term!{NumType <: Number}(
 
         # Add x_nbm * (log term * log(iota)) to the elbo.
         # If not calculating derivatives, add the values directly.
-        elbo.v[] += x_nbm * (log(iota) + log_term_value)
+        elbo.v[] += x_nbm * log(iota)
+        
+        if !elbo_vars.elbo.has_gradient
+            elbo.v[] += x_nbm * log_term_value
+        end
 
         if elbo_vars.elbo.has_gradient
-            elbo_vars.combine_grad[1] = -0.5 / (E_G_v ^ 2)
-            elbo_vars.combine_grad[2] = 1 / E_G_v + var_G_v / (E_G_v ^ 3)
+            combine_grad = SVector{2, NumType}(
+              -0.5 / (E_G_v ^ 2),
+              1 / E_G_v + var_G_v / (E_G_v ^ 3))
 
-            if elbo_vars.elbo.has_hessian
-                elbo_vars.combine_hess[1, 1] = 0.0
-                elbo_vars.combine_hess[1, 2] = elbo_vars.combine_hess[2, 1] = 1 / E_G_v^3
-                elbo_vars.combine_hess[2, 2] =
-                    -(1 / E_G_v ^ 2 + 3 * var_G_v / (E_G_v ^ 4))
-            end
-
+            combine_hess = SMatrix{2, 2, NumType, 4}(
+                 (0.0,1 / E_G_v^3,1 / E_G_v^3,
+                -(1 / E_G_v ^ 2 + 3 * var_G_v / (E_G_v ^ 4))))
+                
             # Calculate the log term.
             combine_sfs!(
-                var_G, E_G, elbo_vars.elbo_log_term,
-                log_term_value, elbo_vars.combine_grad, elbo_vars.combine_hess)
-
-            # Add to the ELBO.
-            elbo_d = elbo.d
-            elbo_vars_elbo_log_term_d = elbo_vars.elbo_log_term.d
-
-            for ind in 1:length(elbo_d)
-                elbo_d[ind] += x_nbm * elbo_vars_elbo_log_term_d[ind]
-            end
-
-            if elbo_vars.elbo.has_hessian
-                elbo_h = elbo.h
-                elbo_vars_elbo_log_term_h = elbo_vars.elbo_log_term.h
-                for ind in 1:length(elbo_h)
-                    elbo_h[ind] += x_nbm * elbo_vars_elbo_log_term_h[ind]
-                end
-            end
+                (oldval, newval)->oldval + x_nbm*newval,
+                Const,
+                var_G, E_G, elbo,
+                log_term_value, combine_grad, combine_hess)
         end
     end
 end

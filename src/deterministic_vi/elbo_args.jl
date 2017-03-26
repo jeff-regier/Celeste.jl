@@ -51,9 +51,6 @@ immutable ElboIntermediateVariables{NumType <: Number}
     # Just a cache
     reparametrized_E_G_d::SizedVector{(length(CanonicalParams2),), NumType, 1}
 
-    # A placeholder for the log term in the ELBO.
-    elbo_log_term::SensitiveFloat{NumType, CanonicalParams}
-
     # The ELBO itself.
     elbo::SensitiveFloat{NumType, CanonicalParams}
 
@@ -95,15 +92,14 @@ function ElboIntermediateVariables(NumType::DataType,
     combine_hess = zeros(NumType, 2, 2)
     reparametrized_E_G_d = zeros(NumType, length(CanonicalParams2))
 
-    elbo_log_term = SensitiveFloat{NumType, CanonicalParams}(num_active_sources,
+    elbo = SensitiveFloat{NumType, CanonicalParams}(num_active_sources,
                                     calculate_gradient, calculate_hessian)
-    elbo = SensitiveFloat(elbo_log_term)
 
     ElboIntermediateVariables{NumType}(
         fs0m, fs1m,
         E_G_s, E_G2_s,
         E_G, var_G, combine_grad, combine_hess, reparametrized_E_G_d,
-        elbo_log_term, elbo, Ref{Int64}(0), Ref{Int64}(0))
+        elbo, Ref{Int64}(0), Ref{Int64}(0))
 end
 
 function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType})
@@ -118,7 +114,6 @@ function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType}
     fill!(elbo_vars.combine_grad, zero(NumType))
     fill!(elbo_vars.combine_hess, zero(NumType))
 
-    clear!(elbo_vars.elbo_log_term)
     clear!(elbo_vars.elbo)
 end
 
