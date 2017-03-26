@@ -11,7 +11,7 @@ export SensitiveFloat,
        SSparseSensitiveFloat,
        AbstractSensitiveFloat
 
-using Celeste: ParameterizedArray, @aliasscope, Const
+using Celeste: ParameterizedArray, @aliasscope, Const, @unroll_loop
 using StaticArrays
 
 abstract type AbstractSensitiveFloat{NumType} end
@@ -229,39 +229,42 @@ end
 
 """
 Factor out the hessian part of combine_sfs!.
+Const can be set to identify if sf_result is the same as one of the other, sfs
 """
-function combine_sfs_hessian!{T1 <: Number, T2 <: Number, T3 <: Number}(
+function combine_sfs_hessian!{T,TT,T1 <: Number}(
+            combinator::T, Const::TT,
             sf1::AbstractSparseSSensitiveFloat{T1},
             sf2::AbstractSparseSSensitiveFloat{T1},
             sf_result::AbstractSensitiveFloat{T1},
-            g_d::Vector{T2},
-            g_h::Matrix{T3})
+            g_d, g_h)
     @assert g_h[1, 2] == g_h[2, 1]
     @assert sf_result.has_hessian
     @assert sf_result.has_gradient
 
     @assert n_sources(sf1) == n_sources(sf2) == n_sources(sf_result)    
     P = n_local_params(sf_result)
-    @inbounds for source_i in 1:n_sources(sf_result)
+    @aliasscope @inbounds for source_i in 1:n_sources(sf_result)
           for ind2 in 1:n_local_params(sf_result)
-              sf11_factor = g_h[1, 1] * sf1[Source(source_i)].d[ind2] + g_h[1, 2] * sf2[Source(source_i)].d[ind2]
-              sf21_factor = g_h[1, 2] * sf1[Source(source_i)].d[ind2] + g_h[2, 2] * sf2[Source(source_i)].d[ind2]
+              sf11_factor = g_h[1, 1] * Const(sf1[Source(source_i)].d)[ind2] + g_h[1, 2] * Const(sf2[Source(source_i)].d)[ind2]
+              sf21_factor = g_h[1, 2] * Const(sf1[Source(source_i)].d)[ind2] + g_h[2, 2] * Const(sf2[Source(source_i)].d)[ind2]
               for source_j in 1:n_sources(sf_result)
                 sf1_s = sf1[Source(source_j)]
                 sf2_s = sf2[Source(source_j)]
                 if source_i == source_j
                   for ind1 = 1:n_local_params(sf_result)
                       var =
-                        sf11_factor * sf1_s.d[ind1] + sf21_factor * sf2_s.d[ind1]
+                        sf11_factor * Const(sf1_s.d)[ind1] + sf21_factor * Const(sf2_s.d)[ind1]
                       var +=
-                            g_d[1] * sf1_s.h[ind1, ind2] +
-                            g_d[2] * sf2_s.h[ind1, ind2]
-                      sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2] = var
+                            g_d[1] * Const(sf1_s.h)[ind1, ind2] +
+                            g_d[2] * Const(sf2_s.h)[ind1, ind2]
+                      sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2] =
+                        combinator(sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2], var)
                   end                  
                 else
                   for ind1 = 1:n_local_params(sf_result)
-                      var = sf11_factor * sf1_s.d[ind1] + sf21_factor * sf2_s.d[ind1]
-                      sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2] = var
+                      var = sf11_factor * Const(sf1_s.d)[ind1] + sf21_factor * Const(sf2_s.d)[ind1]
+                      sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2] =
+                        combinator(sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2], var)
                   end
                 end
             end 
@@ -269,25 +272,27 @@ function combine_sfs_hessian!{T1 <: Number, T2 <: Number, T3 <: Number}(
     end
 end
 
-function combine_sfs_gradient!(sf1::AbstractSensitiveFloat{T1},
+function combine_sfs_gradient!(combinator::T, sf1::AbstractSensitiveFloat{T1},
             sf2::AbstractSensitiveFloat{T1},
             sf_result::AbstractSensitiveFloat{T1},
-            g_d) where T1
+            g_d) where {T,T1}
     for ind in eachindex(sf_result.d)
-        sf_result.d[ind] = g_d[1] * sf1.d[ind] + g_d[2] * sf2.d[ind]
+        sf_result.d[ind] = combinator(sf_result.d[ind],
+          g_d[1] * sf1.d[ind] + g_d[2] * sf2.d[ind])
     end
 end
 
 
-function combine_sfs_gradient!(sf1::AbstractSparseSSensitiveFloat{T1},
+function combine_sfs_gradient!(combinator::T, sf1::AbstractSparseSSensitiveFloat{T1},
             sf2::AbstractSparseSSensitiveFloat{T1},
             sf_result::AbstractSensitiveFloat{T1},
-            g_d) where T1
+            g_d) where {T,T1}
     P = n_local_params(sf_result)
     for source in 1:n_sources(sf_result)
         for ind in 1:n_local_params(sf_result)
-            sf_result.d[(source - 1)*P + ind] =
-                g_d[1] * sf1[Source(source)].d[ind] + g_d[2] * sf2[Source(source)].d[ind]
+            sf_result.d[(source - 1)*P + ind] = combinator(
+                sf_result.d[(source - 1)*P + ind],
+                g_d[1] * sf1[Source(source)].d[ind] + g_d[2] * sf2[Source(source)].d[ind])
         end
     end
 end
@@ -301,32 +306,24 @@ each evaluated at (sf1, sf2).
 The result is stored in sf_result.  The order is done in such a way that
 it can overwrite sf1 or sf2 and still be accurate.
 """
-function combine_sfs!{T1 <: Number, T2 <: Number, T3 <: Number}(
+function combine_sfs!{T, TT, T1 <: Number}(
+                        combinator::T, Const::TT,
                         sf1::AbstractSensitiveFloat{T1},
                         sf2::AbstractSensitiveFloat{T1},
                         sf_result::AbstractSensitiveFloat{T1},
                         v::T1,
-                        g_d::Vector{T2},
-                        g_h::Matrix{T3})
+                        g_d, g_h)
     # You have to do this in the right order to not overwrite needed terms.
     if sf_result.has_hessian
-        combine_sfs_hessian!(sf1, sf2, sf_result, g_d, g_h)
+        combine_sfs_hessian!(combinator, Const, sf1, sf2, sf_result, g_d, g_h)
     end
 
     if sf_result.has_gradient
-        combine_sfs_gradient!(sf1, sf2, sf_result, g_d)
-#=
-        sf_result.d[:] = sf1.d
-        n = length(sf_result.d)
-        @show (n, g_d[1], sf_result.d, 1)
-        LinAlg.BLAS.scal!(n, g_d[1], sf_result.d, 1)
-        LinAlg.BLAS.axpy!(g_d[2], sf2.d, sf_result.d)
-=#
+        combine_sfs_gradient!(combinator, sf1, sf2, sf_result, g_d)
     end
 
-    sf_result.v[] = v
+    sf_result.v[] = combinator(sf_result.v[], v)
 end
-
 
 # Decalare outside to avoid allocating memory.
 const multiply_sfs_hess = Float64[0 1; 1 0]
@@ -338,7 +335,8 @@ function multiply_sfs!{NumType <: Number}(sf1::AbstractSensitiveFloat{NumType},
                                           sf2::AbstractSensitiveFloat{NumType})
     v = sf1.v[] * sf2.v[]
     g_d = NumType[sf2.v[], sf1.v[]]
-    combine_sfs!(sf1, sf2, sf1, v, g_d, multiply_sfs_hess)
+    project_b(a, b) = b
+    combine_sfs!(project_b, identity, sf1, sf2, sf1, v, g_d, multiply_sfs_hess)
 end
 
 

@@ -25,6 +25,7 @@ end
   ParameterizedArray{ParamSet, A}(a)
 Base.size(a::ParameterizedArray) = Base.size(a.arr)
 Base.eachindex(a::ParameterizedArray) = Base.eachindex(a.arr)
+@inline Base.@propagate_inbounds Base.getindex(a::Const{<:ParameterizedArray}, inds...) = Const(a.a.arr)[inds...]
 @inline Base.@propagate_inbounds Base.getindex(a::ParameterizedArray, inds...) = a.arr[to_indices(a, inds)...]
 @inline Base.@propagate_inbounds Base.setindex!(a::ParameterizedArray, v, inds...) = Base.setindex!(a.arr,
   v, to_indices(a, inds)...)
