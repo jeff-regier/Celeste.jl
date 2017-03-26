@@ -12,6 +12,7 @@ export SensitiveFloat,
        AbstractSensitiveFloat
 
 using Celeste: ParameterizedArray, @aliasscope, Const, @unroll_loop
+import Celeste: zero!
 using StaticArrays
 
 abstract type AbstractSensitiveFloat{NumType} end

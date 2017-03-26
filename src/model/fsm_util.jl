@@ -222,7 +222,7 @@ function accum_galaxy_pos!{NumType <: Number}(
                     wcs_jacobian,
                     is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, gcc.bmc, x)
-    f = bvn_derivs.f_pre[1] * gcc.e_dev_i
+    @inbounds f = bvn_derivs.f_pre[1] * gcc.e_dev_i
     fs1m.v[] += f
 
     if fs1m.has_gradient && is_active_source

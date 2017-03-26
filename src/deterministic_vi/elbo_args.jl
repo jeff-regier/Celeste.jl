@@ -27,8 +27,10 @@ end
 
 DenseHessianSSSF(ParamSet, NumType) = SingleSourceSensitiveFloat{NumType, ParamSet,
   ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}}
+SparseHessianCanonicalSSSF(NumType) = SingleSourceSensitiveFloat{NumType, CanonicalParams2, SparseStruct{NumType}}
 DenseHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumType, ParamSet,
   ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}}
+SensitiveFloats.zeros_type(T::Type{<:SparseStruct}, args...) = zeros(T)
 immutable ElboIntermediateVariables{NumType <: Number}
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
     # The vector has one element for each active source, in the same order
@@ -38,8 +40,8 @@ immutable ElboIntermediateVariables{NumType <: Number}
     fs1m::DenseHessianSSSF(GalaxyPosParams, NumType)
 
     # Brightness values for a single source
-    E_G_s::DenseHessianSSSF(CanonicalParams2, NumType)
-    E_G2_s::DenseHessianSSSF(CanonicalParams2, NumType)
+    E_G_s::SparseHessianCanonicalSSSF(NumType)
+    E_G2_s::SparseHessianCanonicalSSSF(NumType)
     
     # Expected pixel intensity and variance for a pixel from all sources.
     E_G::DenseHessianSSparseSF(CanonicalParams, NumType)
@@ -80,7 +82,7 @@ function ElboIntermediateVariables(NumType::DataType,
     fs1m = DenseHessianSSSF(GalaxyPosParams, NumType)(
                                 calculate_gradient, calculate_hessian)
 
-    E_G_s = DenseHessianSSSF(CanonicalParams2, NumType)(
+    E_G_s = SparseHessianCanonicalSSSF(NumType)(
                                     calculate_gradient, calculate_hessian)
     E_G2_s = SensitiveFloat(E_G_s)
 

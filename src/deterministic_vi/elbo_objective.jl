@@ -1,6 +1,7 @@
-using Celeste: @syntactic_unroll, @implicit_transpose, is_implicitly_symmetric, fixup, Const
+using Celeste: @syntactic_unroll, @implicit_transpose, is_implicitly_symmetric, fixup, Const, zero!
 using Celeste.Model: Star, Galaxy, a_param, shape_params, brightness_params, bright_ids, ids_2_to_ids,
-  dense_block_mapping, dense_blocks
+  dense_block_mapping, dense_blocks, ids2, non_u_shape_params, symmetric_dense_block_mapping,
+  symmetric_dense_blocks
 
 """
 Calculate the contributions of a single source for a single pixel to
@@ -28,11 +29,14 @@ function calculate_G_s!{NumType <: Number}(
     E_G_s = elbo_vars.E_G_s
     E_G2_s = elbo_vars.E_G2_s
 
-    # The compiler can fold this into the arith below. No actual
-    # time is spent here.
-    clear!(E_G_s)
-    clear!(E_G2_s)
-
+    E_G_s.v[] = 0
+    E_G2_s.v[] = 0
+    zero!(E_G_s.d)
+    zero!(E_G2_s.d)
+    # We're careful about overwriting the entire hessian below
+    E_G_s.h[ids2.u, ids2.u] = 0.0
+    E_G2_s.h[ids2.u, ids2.u] = 0.0
+    
     # Calculate E_G_s and E_G2_s
     @inbounds begin
         @syntactic_unroll for kind in (Star(), Galaxy())
@@ -74,11 +78,19 @@ function calculate_G_s!{NumType <: Number}(
             E_G2_s.h[brightness_params(kind), brightness_params(kind)] = (a_i * fsm_i_v^2) * sb_E_ll_a_b_i.h[brightness_params(kind), brightness_params(kind)]
 
             # The u_u submatrix is shared between stars/galaxies, so use += here
-            E_G_s.h[shape_params(kind), shape_params(kind)] += (a_i * sb_E_l_a_b_i_v) * fsm_i.h[shape_params(kind), shape_params(kind)]
-            E_G2_s.h[shape_params(kind), shape_params(kind)] +=
-                (2 * a_i * sb_E_ll_a_b_i_v) * (fsm_i_v * fsm_i.h[shape_params(kind), shape_params(kind)] + fsm_i.d[shape_params(kind)]*fsm_i.d[shape_params(kind)]')
+            E_G_s.h[ids2.u, ids2.u] += (a_i * sb_E_l_a_b_i_v) * fsm_i.h[ids2.u, ids2.u]
+            E_G2_s.h[ids2.u, ids2.u] +=
+                (2 * a_i * sb_E_ll_a_b_i_v) * (fsm_i_v * fsm_i.h[ids2.u, ids2.u] + fsm_i.d[ids2.u]*fsm_i.d[ids2.u]')
+
+            E_G_s.h[non_u_shape_params(kind), non_u_shape_params(kind)] = (a_i * sb_E_l_a_b_i_v) * fsm_i.h[non_u_shape_params(kind), non_u_shape_params(kind)]
+            E_G2_s.h[non_u_shape_params(kind), non_u_shape_params(kind)] =
+                (2 * a_i * sb_E_ll_a_b_i_v) * (fsm_i_v * fsm_i.h[non_u_shape_params(kind), non_u_shape_params(kind)] + fsm_i.d[non_u_shape_params(kind)]*fsm_i.d[non_u_shape_params(kind)]')
 
             @implicit_transpose begin
+                E_G_s.h[non_u_shape_params(kind), ids2.u] = (a_i * sb_E_l_a_b_i_v) * fsm_i.h[non_u_shape_params(kind), ids2.u]
+                E_G2_s.h[non_u_shape_params(kind), ids2.u] =
+                    (2 * a_i * sb_E_ll_a_b_i_v) * (fsm_i_v * fsm_i.h[non_u_shape_params(kind), ids2.u] + fsm_i.d[non_u_shape_params(kind)]*fsm_i.d[ids2.u]')
+                
                 E_G_s.h[brightness_params(kind), a_param(kind)] = fsm_i_v * sb_E_l_a_b_i_d[brightness_params(kind)]
                 E_G2_s.h[brightness_params(kind), a_param(kind)] = (fsm_i_v ^ 2) * sb_E_ll_a_b_i_d[brightness_params(kind)]
 
@@ -135,10 +147,12 @@ end
 
 @eval function add_var_G_s!{NumType <: Number}(
                     reparametrized_E_G_d,
-                    var_G::SingleSourceSensitiveFloat{NumType, CanonicalParams},
+                    var_G_all::SSparseSensitiveFloat{NumType, CanonicalParams},
                     E_G_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
-                    E_G2_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2})
-                    
+                    E_G2_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
+                    s)
+    var_G = var_G_all[SensitiveFloats.Source(s)]                
+    
     # Calculate var_G
     var_G.v[] += E_G2_s.v[] - (E_G_s.v[] ^ 2)
 
@@ -240,12 +254,14 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
         sa = findfirst(ea.active_sources, s)
         add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa)
         add_var_G_s!(elbo_vars.reparametrized_E_G_d,
-          elbo_vars.var_G[SensitiveFloats.Source(sa)],
-          elbo_vars.E_G_s, elbo_vars.E_G2_s)
+          elbo_vars.var_G,
+          elbo_vars.E_G_s, elbo_vars.E_G2_s, sa)
+        nothing
     else
         # If the sources is inactive, simply accumulate the values.
         elbo_vars.E_G.v[] += elbo_vars.E_G_s.v[]
         elbo_vars.var_G.v[] += elbo_vars.E_G2_s.v[] - (elbo_vars.E_G_s.v[] ^ 2)
+        nothing
     end
 end
 
