@@ -581,7 +581,7 @@ function make_catalog_entry(row::DataFrameRow)
         fluxes,
         na_to_default(row[:de_vaucouleurs_mixture_weight], 0.),
         na_to_default(row[:minor_major_axis_ratio], 0.),
-        na_to_default(row[:angle_deg], 0.),
+        na_to_default(row[:angle_deg], 0.) / 180.0 * pi,
         na_to_default(row[:half_light_radius_px], 0.),
         row[:objid],
         0, # thing_id
