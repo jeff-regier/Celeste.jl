@@ -622,7 +622,7 @@ immutable ImageGeometry
     world_coordinate_origin::Tuple{Float64, Float64}
 end
 
-function get_image_geometry(catalog_data::DataFrame; field_expand_arcsec=10.0)
+function get_image_geometry(catalog_data::DataFrame; field_expand_arcsec=20.0)
     min_ra_deg = minimum(catalog_data[:right_ascension_deg])
     max_ra_deg = maximum(catalog_data[:right_ascension_deg])
     min_dec_deg = minimum(catalog_data[:declination_deg])
@@ -926,6 +926,11 @@ function get_uncertainty_df(truth::DataFrame, predictions::DataFrame)
     assert_columns_are_present(predictions, STDERR_COLUMNS)
     matched_truth, matched_prediction_dfs = match_catalogs(truth, [predictions])
     matched_predictions = matched_prediction_dfs[1]
+
+    valid_rows = (matched_truth[:reference_band_flux_nmgy] .> 0)
+    matched_truth = matched_truth[valid_rows, :]
+    matched_predictions = matched_predictions[valid_rows, :]
+
     get_errors(column, map_fn) =
         map_fn.(matched_predictions[column]) .- map_fn.(matched_truth[column])
     get_errors(column) = get_errors(column, x -> x)
@@ -945,6 +950,7 @@ function get_uncertainty_df(truth::DataFrame, predictions::DataFrame)
     ]
     names = [:log_reference_band_flux_nmgy, :color_log_ratio_ug, :color_log_ratio_gr,
              :color_log_ratio_ri, :color_log_ratio_iz]
+
     mapreduce(vcat, zip(names, errors, std_errs)) do values
         name, error, std_err = values
         DataFrame(
@@ -959,6 +965,7 @@ end
 function score_uncertainty(uncertainty_df::DataFrame)
     mapreduce(vcat, groupby(uncertainty_df, :name)) do group_df
         abs_error_sds = abs.(group_df[:error] ./ group_df[:posterior_std_err])
+        abs_error_sds = abs_error_sds[!isna(abs_error_sds)]
         DataFrame(
             field=group_df[1, :name],
             within_half_sd=mean(abs_error_sds .<= 1/2),

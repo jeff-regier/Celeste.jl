@@ -9,6 +9,7 @@ arguments <- parser$parse_args()
 data <- (
     read.csv(arguments$errors_csv)
     %>% mutate(z_score=error / posterior_std_err)
+    %>% filter(!is.na(z_score))
 )
 
 (ggplot(data, aes(sample=z_score))
