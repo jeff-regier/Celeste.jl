@@ -99,10 +99,26 @@ end
 ################################################################################
 
 """
-convert between SDSS mags and SDSS flux (nMgy)
+Convert between SDSS asinh mags and SDSS flux (nMgy).
+See http://www.sdss.org/dr12/algorithms/magnitudes/#asinh.
 """
-mag_to_flux(m::AbstractFloat) = 10.^(0.4 * (22.5 - m))
-flux_to_mag(nm::AbstractFloat) = nm > 0 ? 22.5 - 2.5 * log10(nm) : NaN
+const ASINH_SOFTENING_PARAMETERS = [
+    1.4e-10, # for band 1 = u
+    0.9e-10,
+    1.2e-10,
+    1.8e-10,
+    7.4e-10, # for band 5 = z
+]
+
+function mag_to_flux(mags::AbstractFloat, band_index::Int)
+    b = ASINH_SOFTENING_PARAMETERS[band_index]
+    1e9 * 2 * b * sinh(-log(10) / 2.5 * mags - log(b))
+end
+
+function flux_to_mag(flux_nmgy::AbstractFloat, band_index::Int)
+    b = ASINH_SOFTENING_PARAMETERS[band_index]
+    -2.5 / log(10) * (asinh(flux_nmgy * 1e-9 / (2*b)) + log(b))
+end
 
 function color_from_fluxes(flux1::AbstractFloat, flux2::AbstractFloat)
     if flux1 <= 0 || flux2 <= 0
@@ -111,8 +127,9 @@ function color_from_fluxes(flux1::AbstractFloat, flux2::AbstractFloat)
         log(flux2 / flux1)
     end
 end
-function color_from_mags(mags1::AbstractFloat, mags2::AbstractFloat)
-    color_from_fluxes(mag_to_flux(mags1), mag_to_flux(mags2))
+
+function color_from_mags(mags1::AbstractFloat, band1::Int, mags2::AbstractFloat, band2::Int)
+    color_from_fluxes(mag_to_flux(mags1, band1), mag_to_flux(mags2, band2))
 end
 
 canonical_angle(angle_deg) = angle_deg - floor(angle_deg / 180) * 180
@@ -190,12 +207,12 @@ function load_coadd_catalog(fits_filename)
     result[:declination_deg] = raw_df[:dec]
     result[:is_star] = is_star
 
-    result[:reference_band_flux_nmgy] = mag_to_flux.(mag_r)
+    result[:reference_band_flux_nmgy] = mag_to_flux.(mag_r, 3)
 
-    result[:color_log_ratio_ug] = color_from_mags.(mag_u, mag_g)
-    result[:color_log_ratio_gr] = color_from_mags.(mag_g, mag_r)
-    result[:color_log_ratio_ri] = color_from_mags.(mag_r, mag_i)
-    result[:color_log_ratio_iz] = color_from_mags.(mag_i, mag_z)
+    result[:color_log_ratio_ug] = color_from_mags.(mag_u, 1, mag_g, 2)
+    result[:color_log_ratio_gr] = color_from_mags.(mag_g, 2, mag_r, 3)
+    result[:color_log_ratio_ri] = color_from_mags.(mag_r, 3, mag_i, 4)
+    result[:color_log_ratio_iz] = color_from_mags.(mag_i, 4, mag_z, 5)
 
     # gal shape -- fracdev
     result[:de_vaucouleurs_mixture_weight] = raw_df[:fracdev_r]
@@ -277,7 +294,7 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
     result[:angle_deg] = canonical_angle.(raw_phi)
 
     # primary is better at flagging oversaturated sources than coadd
-    result = result[flux_to_mag.(raw_df[:psfflux_r]) .>= 16, :]
+    result = result[flux_to_mag.(raw_df[:psfflux_r], 3) .>= 16, :]
 
     return result
 end
@@ -763,8 +780,8 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
 
     # compare flux in both mags and nMgy for now
     errors[:reference_band_flux_mag] = abs(
-        flux_to_mag.(truth[:reference_band_flux_nmgy])
-        .- flux_to_mag.(predicted[:reference_band_flux_nmgy])
+        flux_to_mag.(truth[:reference_band_flux_nmgy], 3)
+        .- flux_to_mag.(predicted[:reference_band_flux_nmgy], 3)
     )
     errors[:reference_band_flux_nmgy] = abs(
         truth[:reference_band_flux_nmgy] .- predicted[:reference_band_flux_nmgy]
