@@ -91,6 +91,7 @@ immutable SourceViewArray{ParamSet, AT}
     s::Int
     a::AT
 end
+Base.size(a::SourceViewArray,inds...) = Base.size(a.a, inds...)
 @inline Base.getindex(a::SourceViewArray{ParamSet}, inds...) where ParamSet = getindex(a.a,
   map(x->x+length(ParamSet)*(a.s-1),Base.to_indices(a.a, inds))...)
 @inline Base.setindex!(a::SourceViewArray{ParamSet}, v, inds...) where ParamSet = setindex!(a.a,
@@ -98,8 +99,8 @@ end
 
 immutable SourceViewSensitiveFloat{NumType, ParamSet}
     v::Base.RefValue{NumType}    
-    d::SourceViewArray{ParamSet, Matrix{NumType}}
-    h::SourceViewArray{ParamSet, Matrix{NumType}}
+    d::ParameterizedArray{ParamSet, SourceViewArray{ParamSet, Matrix{NumType}}}
+    h::ParameterizedArray{ParamSet, SourceViewArray{ParamSet, Matrix{NumType}}}
 end
 
 """
@@ -128,23 +129,22 @@ immutable SensitiveFloat{NumType, ParamSet} <: AbstractSensitiveFloat{NumType}
 
     has_gradient::Bool
     has_hessian::Bool
-
-    function (::Type{SensitiveFloat{NumType, ParamSet}}){NumType, ParamSet}(local_S, has_gradient, has_hessian)
-        @assert has_gradient || !has_hessian
-        v = Ref(zero(NumType))
-        local_P = isa(ParamSet, Integer) ? ParamSet : length(ParamSet)
-        d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
-        h_dim = local_P * local_S * has_hessian
-        h = zeros(NumType, h_dim, h_dim)
-        new{NumType, ParamSet}(v, d, h, local_S, has_gradient, has_hessian)
-    end
+end
+function (::Type{SensitiveFloat{NumType, ParamSet}}){NumType, ParamSet}(local_S, has_gradient, has_hessian)
+    @assert has_gradient || !has_hessian
+    v = Ref(zero(NumType))
+    local_P = isa(ParamSet, Integer) ? ParamSet : length(ParamSet)
+    d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
+    h_dim = local_P * local_S * has_hessian
+    h = zeros(NumType, h_dim, h_dim)
+    SensitiveFloat{NumType, ParamSet}(v, d, h, local_S, has_gradient, has_hessian)
 end
 n_sources(sf::SensitiveFloat) = sf.local_S
 n_local_params(sf::SensitiveFloat{NumType, ParamSet} where NumType) where {ParamSet} = isa(ParamSet, Int) ? ParamSet : length(ParamSet)
 @inline Base.getindex(sf::SensitiveFloat{NumType, ParamSet}, s::Source) where {NumType, ParamSet} =
   SourceViewSensitiveFloat{NumType, ParamSet}(sf.v,
-    SourceViewArray{ParamSet, typeof(sf.d)}(s.n, sf.d),
-    SourceViewArray{ParamSet, typeof(sf.h)}(s.n, sf.h))
+    ParameterizedArray{ParamSet}(SourceViewArray{ParamSet, typeof(sf.d)}(s.n, sf.d)),
+    ParameterizedArray{ParamSet}(SourceViewArray{ParamSet, typeof(sf.h)}(s.n, sf.h)))
 
 function SensitiveFloat(local_S::Int64,
                         has_gradient::Bool = true,

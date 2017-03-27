@@ -2,6 +2,7 @@ using Celeste: @syntactic_unroll, @implicit_transpose, is_implicitly_symmetric, 
 using Celeste.Model: Star, Galaxy, a_param, shape_params, brightness_params, bright_ids, ids_2_to_ids,
   dense_block_mapping, dense_blocks, ids2, non_u_shape_params, symmetric_dense_block_mapping,
   symmetric_dense_blocks
+using Celeste.SensitiveFloats: AbstractSparseSSensitiveFloat
 
 """
 Calculate the contributions of a single source for a single pixel to
@@ -122,6 +123,7 @@ end
     @assert P == var_G.local_P
     P_shifted = P * (s - 1)
 
+    error()
     reparametrized_E_G_d[:] = E_G_s.d[ids_2_to_ids]
     reparametrized_E_G2_d = E_G2_s.d[ids_2_to_ids]
     for i = 1:P
@@ -129,7 +131,6 @@ end
     end
     
     var_G.has_hessian || return
-    
     @inbounds begin
         # We do this in two steps. First we add the dense terms (E_G(2)_s), then
         # the sparse components.
@@ -141,6 +142,43 @@ end
             
         @syntactic_unroll for (lhs, rhs) in $(zip(dense_block_mapping, dense_blocks))
             var_G.h[P_shifted + lhs[1], P_shifted + lhs[2]] += E_G2_s.h[rhs[1], rhs[2]] - 2 * E_G_s.v[] * E_G_s.h[rhs[1], rhs[2]]
+        end
+    end
+end
+
+@eval function add_var_G_s!{NumType <: Number}(
+                    var_G_all::SSparseSensitiveFloat{NumType, CanonicalParams2},
+                    E_G_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
+                    E_G2_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
+                    s)
+    var_G = var_G_all[SensitiveFloats.Source(s)]                
+    
+    # Calculate var_G
+    var_G.v[] += E_G2_s.v[] - (E_G_s.v[] ^ 2)
+
+    var_G.has_gradient || return
+
+    P = length(CanonicalParams2)
+
+    @aliasscope begin
+        @inbounds for i = 1:P
+            @fastmath var_G.d[i] += Const(E_G2_s.d)[i] - 2 * E_G_s.v[] * Const(E_G_s.d)[i]
+        end
+        
+        var_G.has_hessian || return
+        
+        @inbounds begin
+            # We do this in two steps. First we add the dense terms (E_G(2)_s), then
+            # the sparse components.
+            for i = 1:P
+                @unroll_loop for j = 1:P
+                    @fastmath var_G.h[j,i] -= 2 * Const(E_G_s.d)[i] * Const(E_G_s.d)[j]
+                end
+            end
+                
+            @syntactic_unroll for (lhs, rhs) in $(zip(dense_blocks, dense_blocks))
+                var_G.h[lhs[1], lhs[2]] += E_G2_s.h[rhs[1], rhs[2]] - 2 * E_G_s.v[] * E_G_s.h[rhs[1], rhs[2]]
+            end
         end
     end
 end
@@ -159,7 +197,7 @@ end
     var_G.has_gradient || return
 
     P = length(CanonicalParams2)
-
+    error()
     @aliasscope @inbounds begin
         reparametrized_E_G_d[:] = E_G_s.d[ids_2_to_ids]
         reparametrized_E_G2_d = E_G2_s.d[ids_2_to_ids]
@@ -197,6 +235,7 @@ end
 
     P = length(CanonicalParams2)
 
+    error()
     @inbounds if sf_all.has_gradient
         reparam_sf_s_d = sf_s.d[ids_2_to_ids]
         for i = 1:P
@@ -206,6 +245,53 @@ end
 
     @inbounds if sf_all.has_hessian
         @syntactic_unroll for (lhs, rhs) in $(zip(dense_block_mapping, dense_blocks))
+            sf_all.h[s][lhs[1], lhs[2]] += fixup(sf_s.h[rhs[1], rhs[2]])
+        end
+    end            
+end
+
+@eval function SensitiveFloats.add_sources_sf!{NumType <: Number}(
+                    sf_all::SSparseSensitiveFloat{NumType, CanonicalParams2, <:SparseStruct},
+                    sf_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2, <:SparseStruct},
+                    s::Int)
+    sf_all.v[] += sf_s.v[]
+
+    @assert size(sf_all.d[1], 1) == size(sf_s.d, 1)
+
+    P = length(CanonicalParams2)
+
+    @inbounds if sf_all.has_gradient
+        for i = 1:P
+            sf_all.d[s][i] += sf_s.d[i]
+        end
+    end
+
+    @inbounds if sf_all.has_hessian
+        @syntactic_unroll for (lhs, rhs) in $(zip(symmetric_dense_blocks, symmetric_dense_blocks))
+            sf_all.h[s][lhs[1], lhs[2]] += fixup(sf_s.h[rhs[1], rhs[2]])
+        end
+    end            
+end
+
+
+@eval function SensitiveFloats.add_sources_sf!{NumType <: Number}(
+                    sf_all::SSparseSensitiveFloat{NumType, CanonicalParams2},
+                    sf_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
+                    s::Int)
+    sf_all.v[] += sf_s.v[]
+
+    @assert size(sf_all.d[1], 1) == size(sf_s.d, 1)
+
+    P = length(CanonicalParams2)
+
+    @inbounds if sf_all.has_gradient
+        for i = 1:P
+            sf_all.d[s][i] += sf_s.d[i]
+        end
+    end
+
+    @inbounds if sf_all.has_hessian
+        @syntactic_unroll for (lhs, rhs) in $(zip(dense_blocks, dense_blocks))
             sf_all.h[s][lhs[1], lhs[2]] += fixup(sf_s.h[rhs[1], rhs[2]])
         end
     end            
@@ -222,6 +308,8 @@ end
     P = length(CanonicalParams2)
     @assert P == sf_all.local_P
     P_shifted = P * (s - 1)
+
+    error()
 
     @inbounds if sf_all.has_gradient
         reparam_sf_s_d = sf_s.d[ids_2_to_ids]
@@ -253,8 +341,7 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
     if is_active_source
         sa = findfirst(ea.active_sources, s)
         add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa)
-        add_var_G_s!(elbo_vars.reparametrized_E_G_d,
-          elbo_vars.var_G,
+        add_var_G_s!(elbo_vars.var_G,
           elbo_vars.E_G_s, elbo_vars.E_G2_s, sa)
         nothing
     else
@@ -263,6 +350,137 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
         elbo_vars.var_G.v[] += elbo_vars.E_G2_s.v[] - (elbo_vars.E_G_s.v[] ^ 2)
         nothing
     end
+end
+
+using Celeste.SensitiveFloats: Source
+@eval function add_sparse_components!{T}(combinator::T, source_j, sf_result, scale, E_G)
+    P = length(CanonicalParams2)
+    E_G_s = E_G[Source(source_j)]
+    @inbounds begin
+        @syntactic_unroll for (lhs, rhs) in $(zip(dense_blocks, dense_blocks))
+            inds1 = (source_j-1)*P+Base.to_index(CanonicalParams2, lhs[1])
+            inds2 = (source_j-1)*P+Base.to_index(CanonicalParams2, lhs[2])
+            sf_result.h[inds1, inds2] =
+              combinator(sf_result.h[inds1, inds2], scale*E_G_s.h[rhs[1], rhs[2]])
+        end
+    end
+    nothing
+end
+
+function combine_sfs_hessian2!{T,TT,T1 <: Number}(
+            combinator::T, Const::TT,
+            var_G::AbstractSparseSSensitiveFloat{T1},
+            E_G::AbstractSparseSSensitiveFloat{T1},
+            sf_result::AbstractSensitiveFloat{T1},
+            g_d, g_h)
+    @assert g_h[1, 2] == g_h[2, 1]
+    @assert sf_result.has_hessian
+    @assert sf_result.has_gradient
+
+    @assert n_sources(var_G) == n_sources(E_G) == n_sources(sf_result)    
+    P = n_local_params(sf_result)
+    @aliasscope @inbounds begin
+        for source_i in 1:n_sources(sf_result)
+           for ind2 in 1:n_local_params(sf_result)
+               E_G_i_d = Const(E_G.d[source_i])
+               sf11_factor = g_h[1, 1] * Const(var_G[Source(source_i)].d)[ind2] + g_h[1, 2] * E_G_i_d[ind2]
+               sf21_factor = g_h[1, 2] * Const(var_G[Source(source_i)].d)[ind2] + g_h[2, 2] * E_G_i_d[ind2]
+               for source_j in 1:n_sources(sf_result)
+                   var_G_s = var_G[Source(source_j)]
+                   E_G_s_d = Const(E_G.d[source_j])
+                   if source_i == source_j
+                       # Dense components
+                       for ind1 = 1:n_local_params(sf_result)
+                          var =
+                            sf11_factor * Const(var_G_s.d)[ind1] + sf21_factor * E_G_s_d[ind1]
+                          var += g_d[1] * Const(var_G_s.h)[ind1, ind2]
+                          sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2] =
+                            combinator(sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2], var)
+                       end
+                       # Sparse Components deferred
+                   else
+                       for ind1 = 1:n_local_params(sf_result)
+                          var = sf11_factor * Const(var_G_s.d)[ind1] + sf21_factor * E_G_s_d[ind1]
+                          sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2] =
+                            combinator(sf_result.h[(source_j-1) * P + ind1, (source_i-1) * P + ind2], var)
+                        end
+                    end
+                end
+            end
+        end
+    end
+#=
+    @aliasscope @inbounds for source_i in 1:n_sources(sf_result)
+        E_G_s = E_G[Source(source_i)]
+        for ind2 in 1:n_local_params(sf_result)
+            for ind1 = 1:n_local_params(sf_result)
+                sf_result.h[(source_i-1) * P + ind1, (source_i-1) * P + ind2] =
+                  combinator(sf_result.h[(source_i-1) * P + ind1, (source_i-1) * P + ind2],
+                  g_d[2] * Const(E_G_s.h)[ind1, ind2])
+            end
+        end
+    end
+=#
+    for source_i in 1:n_sources(sf_result)
+        add_sparse_components!(combinator, source_i, sf_result, g_d[2], E_G)
+    end
+end
+
+"""
+Updates sf_result in place with g(sf1, sf2), where
+g_d = (g_1, g_2) is the gradient of g and
+g_h = (g_11, g_12; g_12, g_22) is the hessian of g,
+each evaluated at (sf1, sf2).
+
+The result is stored in sf_result.  The order is done in such a way that
+it can overwrite sf1 or sf2 and still be accurate.
+"""
+function combine_sfs2!{T, TT, T1 <: Number}(
+                        combinator::T, Const::TT,
+                        sf1::AbstractSensitiveFloat{T1},
+                        sf2::AbstractSensitiveFloat{T1},
+                        sf_result::AbstractSensitiveFloat{T1},
+                        v::T1,
+                        g_d, g_h)
+    # You have to do this in the right order to not overwrite needed terms.
+    if sf_result.has_hessian
+        combine_sfs_hessian2!(combinator, Const, sf1, sf2, sf_result, g_d, g_h)
+    end
+
+    if sf_result.has_gradient
+        SensitiveFloats.combine_sfs_gradient!(combinator, sf1, sf2, sf_result, g_d)
+    end
+
+    sf_result.v[] = combinator(sf_result.v[], v)
+end
+
+function add_scaled_sfs!{NumType <: Number}(
+                    sf1::SensitiveFloat{NumType},
+                    sf2::SSparseSensitiveFloat{NumType, <:Any, <:SparseStruct},
+                    scale::AbstractFloat)
+    sf1.v[] += scale * sf2.v[]
+
+    @assert sf1.has_gradient == sf2.has_gradient
+    @assert sf1.has_hessian == sf2.has_hessian
+
+    P = n_local_params(sf1)
+    @inbounds if sf1.has_gradient
+        for source in 1:n_sources(sf1)
+            for ind in 1:n_local_params(sf1)
+                sf1.d[(source-1)*P+ind] += scale * sf2[Source(source)].d[ind]
+            end
+        end
+    end
+
+    if sf1.has_hessian
+      for source in 1:n_sources(sf1)
+          add_sparse_components!(
+              (old,nv)->(Base.@_inline_meta; old+nv),
+              source, sf1, scale, sf2)
+      end
+    end
+
+    true # Set definite return type
 end
 
 
@@ -313,8 +531,8 @@ function add_elbo_log_term!{NumType <: Number}(
                 -(1 / E_G_v ^ 2 + 3 * var_G_v / (E_G_v ^ 4))))
                 
             # Calculate the log term.
-            combine_sfs!(
-                (oldval, newval)->oldval + x_nbm*newval,
+            combine_sfs2!(
+                (oldval, newval)->(@Base._inline_meta; oldval + x_nbm*newval),
                 Const,
                 var_G, E_G, elbo,
                 log_term_value, combine_grad, combine_hess)
@@ -412,7 +630,7 @@ function elbo_likelihood{T}(ea::ElboArgs,
         # all ~50 evalulations of the likelihood
         # This convolves the PSF with the star/galaxy model, returning a
         # mixture of bivariate normals.
-        star_mcs, gal_mcs = Model.load_bvn_mixtures!(
+        Model.load_bvn_mixtures!(
                                     bvn_bundle.star_mcs,
                                     bvn_bundle.gal_mcs,
                                     ea.S, ea.patches,
@@ -420,6 +638,7 @@ function elbo_likelihood{T}(ea::ElboArgs,
                                     ea.psf_K, n,
                                     elbo_vars.elbo.has_gradient,
                                     elbo_vars.elbo.has_hessian)
+        star_mcs, gal_mcs = (bvn_bundle.star_mcs, bvn_bundle.gal_mcs)
 
         # if there's only one active source, we know each pixel we visit
         # hasn't been visited before, so no need to allocate memory.
@@ -471,6 +690,31 @@ function elbo_likelihood{T}(ea::ElboArgs,
     elbo_vars.elbo
 end
 
+using Celeste: Celeste
+using Celeste.SensitiveFloats: n_sources, n_local_params
+const index_map = Base.to_index(typeof(Celeste.Model.ids2),Celeste.Model.ids_2_to_ids)
+function reparameterize_elbo{NumType}(sf::SensitiveFloat{NumType, CanonicalParams2})
+    P = n_local_params(sf)
+    d = Array{NumType}(n_local_params(sf) * sf.has_gradient, n_sources(sf))
+    if sf.has_gradient
+        for s in 1:n_sources(sf)
+            for i = 1:P
+                d[(s-1)*P + i] = sf.d[(s-1)*P + index_map[i]]
+            end
+        end
+    end
+    h = Array{NumType}(n_sources(sf) * n_local_params(sf) * sf.has_hessian, n_sources(sf) * n_local_params(sf) * sf.has_hessian)
+    if sf.has_hessian
+        for source_i in 1:n_sources(sf), source_j in 1:n_sources(sf)
+            for i = 1:P, j = 1:P
+                h[(source_j-1)*P + j, (source_i-1)*P + i] =
+                  sf.h[(source_j-1)*P + index_map[j], (source_i-1)*P + index_map[i]]
+            end
+        end
+    end
+    SensitiveFloat{NumType, CanonicalParams}(sf.v, d, h, n_sources(sf),
+      sf.has_gradient, sf.has_hessian)
+end
 
 """
 Calculates and returns the ELBO and its derivatives for all the bands
@@ -484,6 +728,7 @@ function elbo{T}(ea::ElboArgs,
                  bvn_bundle::BvnBundle = BvnBundle{T}(ea.psf_K, ea.S))
     @assert(all(all(isfinite, vs) for vs in vp), "vp contains NaNs or Infs")
     result = elbo_likelihood(ea, vp, elbo_vars, bvn_bundle)
+    result = reparameterize_elbo(result)
     ea.include_kl && KLDivergence.subtract_kl_all_sources!(ea, vp, result)
     assert_all_finite(elbo_vars.elbo)
     return result

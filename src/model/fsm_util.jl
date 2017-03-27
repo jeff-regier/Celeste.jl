@@ -84,7 +84,7 @@ function load_bvn_mixtures!{NumType <: Number}(
         end
     end
 
-    star_mcs, gal_mcs
+    nothing
 end
 
 function load_bvn_mixtures{NumType <: Number}(S::Int64,
@@ -99,6 +99,7 @@ function load_bvn_mixtures{NumType <: Number}(S::Int64,
     gal_mcs  = Array{GalaxyCacheComponent{NumType}}(psf_K, 8, 2, S)
     load_bvn_mixtures!(star_mcs, gal_mcs, S, patches, source_params, active_sources,
       psf_K, n, calculate_gradient, calculate_hessian)
+    (star_mcs, gal_mcs)
 end
 
 

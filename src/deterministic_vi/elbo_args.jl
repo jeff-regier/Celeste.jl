@@ -30,6 +30,7 @@ DenseHessianSSSF(ParamSet, NumType) = SingleSourceSensitiveFloat{NumType, ParamS
 SparseHessianCanonicalSSSF(NumType) = SingleSourceSensitiveFloat{NumType, CanonicalParams2, SparseStruct{NumType}}
 DenseHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumType, ParamSet,
   ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}}
+SparseHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumType, ParamSet, SparseStruct{NumType}}
 SensitiveFloats.zeros_type(T::Type{<:SparseStruct}, args...) = zeros(T)
 immutable ElboIntermediateVariables{NumType <: Number}
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
@@ -44,17 +45,15 @@ immutable ElboIntermediateVariables{NumType <: Number}
     E_G2_s::SparseHessianCanonicalSSSF(NumType)
     
     # Expected pixel intensity and variance for a pixel from all sources.
-    E_G::DenseHessianSSparseSF(CanonicalParams, NumType)
-    var_G::DenseHessianSSparseSF(CanonicalParams, NumType)
+    E_G::SparseHessianSSparseSF(CanonicalParams2, NumType)
+    var_G::DenseHessianSSparseSF(CanonicalParams2, NumType)
 
     # Pre-allocated memory for the gradient and Hessian of combine functions.
     combine_grad::Vector{NumType}
     combine_hess::Matrix{NumType}
-    # Just a cache
-    reparametrized_E_G_d::SizedVector{(length(CanonicalParams2),), NumType, 1}
 
     # The ELBO itself.
-    elbo::SensitiveFloat{NumType, CanonicalParams}
+    elbo::SensitiveFloat{NumType, CanonicalParams2}
 
     active_pixel_counter::typeof(Ref{Int64}(0))
     inactive_pixel_counter::typeof(Ref{Int64}(0))
@@ -86,21 +85,21 @@ function ElboIntermediateVariables(NumType::DataType,
                                     calculate_gradient, calculate_hessian)
     E_G2_s = SensitiveFloat(E_G_s)
 
-    E_G = DenseHessianSSparseSF(CanonicalParams, NumType)(num_active_sources,
+    E_G = SparseHessianSSparseSF(CanonicalParams2, NumType)(num_active_sources,
                                   calculate_gradient, calculate_hessian)
-    var_G = SensitiveFloat(E_G)
+    var_G = DenseHessianSSparseSF(CanonicalParams2, NumType)(num_active_sources,
+                                  calculate_gradient, calculate_hessian)
 
     combine_grad = zeros(NumType, 2)
     combine_hess = zeros(NumType, 2, 2)
-    reparametrized_E_G_d = zeros(NumType, length(CanonicalParams2))
 
-    elbo = SensitiveFloat{NumType, CanonicalParams}(num_active_sources,
+    elbo = SensitiveFloat{NumType, CanonicalParams2}(num_active_sources,
                                     calculate_gradient, calculate_hessian)
 
     ElboIntermediateVariables{NumType}(
         fs0m, fs1m,
         E_G_s, E_G2_s,
-        E_G, var_G, combine_grad, combine_hess, reparametrized_E_G_d,
+        E_G, var_G, combine_grad, combine_hess,
         elbo, Ref{Int64}(0), Ref{Int64}(0))
 end
 

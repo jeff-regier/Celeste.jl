@@ -196,7 +196,7 @@ end
 Celeste.is_implicitly_symmetric(s::SparseStruct) = true
 Base.issymmetric(s::SparseStruct) = true
 
-type LatentStateIndexes <: ParamSet
+struct LatentStateIndexes <: ParamSet
     u::Vector{Int}
     e_dev::Int
     e_axis::Int
@@ -208,7 +208,7 @@ type LatentStateIndexes <: ParamSet
     k::Matrix{Int}        # (not needed, i think)
 
     LatentStateIndexes() =
-        new([1, 2], 3, 4, 5, 6,
+        new(SVector(1, 2), 3, 4, 5, 6,
             collect(7:(7+Ia-1)),  # r
             reshape((7+Ia):(7+Ia+(B-1)*Ia-1), (B-1, Ia)),  # c
             reshape((7+Ia+(B-1)*Ia):(7+2Ia+(B-1)*Ia-1), (Ia, 1)),  # a
