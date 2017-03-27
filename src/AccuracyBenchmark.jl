@@ -364,7 +364,7 @@ function celeste_to_df(results::Vector{ParallelRun.OptimizedSource})
 end
 
 ################################################################################
-# Generate a catalog from the Celeste prior
+# Generate a random catalog from the Celeste prior
 ################################################################################
 
 # This is the ratio of stars derived from the catalog used the generate the prior; the value 0.99 is
@@ -484,25 +484,42 @@ function make_psf(psf_sigma_px)
     ]
 end
 
+function make_image(
+    pixels::Matrix{Float32}, band_index::Int, wcs::WCS.WCSTransform, psf_sigma_px::Float64,
+    sky_level_nmgy::Float64, counts_per_nmgy::Float64
+)
+    height_px, width_px = size(pixels)
+    sky_intensity = Model.SkyIntensity(
+        fill(sky_level_nmgy, height_px, width_px),
+        collect(1:height_px),
+        collect(1:width_px),
+        ones(height_px),
+    )
+    iota_vec = fill(counts_per_nmgy, height_px)
+    Model.Image(
+        height_px,
+        width_px,
+        pixels,
+        band_index,
+        wcs,
+        make_psf(psf_sigma_px),
+        0, 0, 0, # run, camcol, field
+        sky_intensity,
+        iota_vec,
+        Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
+    )
+end
+
 function make_images(band_extensions::Vector{FitsImage})
     map(enumerate(band_extensions)) do pair
         band_index, extension = pair
-        height, width = size(extension.pixels)
-        sky = Model.SkyIntensity(fill(extension.header["CLSKY"], height, width),
-                           collect(1:height), collect(1:width), ones(1:height))
-        Model.Image(
-            height,
-            width,
+        make_image(
             extension.pixels,
             band_index,
             extension.wcs,
-            make_psf(extension.header["CLSIGMA"]),
-            0, # SDSS run
-            0, # SDSS camcol
-            0, # SDSS field
-            sky,
-            fill(extension.header["CLIOTA"], height),
-            Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
+            convert(Float64, extension.header["CLSIGMA"]),
+            convert(Float64, extension.header["CLSKY"]),
+            convert(Float64, extension.header["CLIOTA"]),
         )
     end
 end
@@ -595,7 +612,9 @@ function make_initialization_catalog(catalog::DataFrame, use_full_initialzation:
     end
 end
 
-# TODO move/merge with make_images/categorize
+################################################################################
+# Support for generating imagery using Synthetic.jl
+################################################################################
 
 immutable ImageGeometry
     height_px::Int64
@@ -644,26 +663,14 @@ function make_template_images(
         # these are [du/dx du/dy; dv/dx dv/dy]. (u, v) = world coords, (x, y) = pixel coords.
         pc=[0. ra_deg_per_pixel; dec_deg_per_pixel 0.],
     )
-    psf = make_psf(psf_sigma_px)
-    sky_intensity = Model.SkyIntensity(
-        fill(sky_level_nmgy, geometry.height_px, geometry.width_px),
-        collect(1:geometry.height_px),
-        collect(1:geometry.width_px),
-        ones(geometry.height_px),
-    )
-    iota_vec = fill(counts_per_nmgy, geometry.height_px)
     map(1:5) do band
-        Model.Image(
-            geometry.height_px,
-            geometry.width_px,
+        make_image(
             zeros(Float32, (geometry.height_px, geometry.width_px)),
             band,
             wcs,
-            psf,
-            0, 0, 0, # run, camcol, field
-            sky_intensity,
-            iota_vec,
-            Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
+            psf_sigma_px,
+            sky_level_nmgy,
+            counts_per_nmgy,
         )
     end
 end
