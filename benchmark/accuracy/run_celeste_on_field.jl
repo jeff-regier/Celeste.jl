@@ -27,6 +27,12 @@ ArgumentParse.add_argument(
 )
 ArgumentParse.add_argument(
     parser,
+    "--min-radius-px",
+    help="Override Config.min_radius_px with the given value",
+    arg_type=Float64,
+)
+ArgumentParse.add_argument(
+    parser,
     "--image-fits",
     help="FITS file containing synthetic imagery; if not specified, will use SDSS RCF",
 )
@@ -91,8 +97,12 @@ else
 end
 neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
 
+config = Configs.Config()
+if haskey(parsed_args, "min-radius-px")
+    config.min_radius_px = parsed_args["min-radius-px"]
+end
 results = AccuracyBenchmark.run_celeste(
-    Configs.Config(),
+    config,
     catalog_entries,
     target_sources,
     images,
