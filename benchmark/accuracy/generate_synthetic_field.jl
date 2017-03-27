@@ -7,7 +7,7 @@ import Celeste.ArgumentParse
 import Celeste.Model
 import Celeste.Synthetic
 
-const PSF_SIGMA_PX = 4.0
+const PSF_SIGMA_PX = 2.29 # similar to SDSS
 const COUNTS_PER_NMGY = 180.0 # a.k.a. "iota" in Celeste
 const SKY_LEVEL_NMGY = 0.155
 const OUTPUT_DIRECTORY = joinpath(splitdir(Base.source_path())[1], "output")
