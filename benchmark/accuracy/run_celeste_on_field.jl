@@ -84,6 +84,9 @@ end
 @assert length(images) == 5
 
 catalog_data = AccuracyBenchmark.read_catalog(parsed_args["catalog_csv"])
+if parsed_args["use-full-initialization"]
+    @printf("Using full initialization from %s\n", parsed_args["catalog_csv"])
+end
 catalog_entries = AccuracyBenchmark.make_initialization_catalog(
     catalog_data,
     parsed_args["use-full-initialization"],
@@ -99,7 +102,7 @@ neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)
 
 config = Configs.Config()
 if haskey(parsed_args, "min-radius-px")
-    config.min_radius_px = parsed_args["min-radius-px"]
+    config.min_radius_pix = parsed_args["min-radius-px"]
 end
 results = AccuracyBenchmark.run_celeste(
     config,
