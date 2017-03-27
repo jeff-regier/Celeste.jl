@@ -210,17 +210,19 @@ function off_diagonal_block(T, p1::Union{Param, ParamBatch},
 end
 off_diagonal_block(T, x1, x2) = off_diagonal_block(T, to_batch(x1), to_batch(x2))
 
+using Base.Meta
 macro create_sparse_implementation(T, sT)
     zero_init = map(1:nfields(Base.unwrap_unionall(T))) do i
         :(zero(fieldtype(X, $i)))
     end
     zero_reset = map(1:nfields(Base.unwrap_unionall(T))) do i
-        :(setfield!(x, $i, zero(fieldtype(typeof(x), $i))))
+        :(setfield!(x, $(quot(fieldname(T, i))), zero(fieldtype(typeof(x), $i))))
     end
     esc(quote
         Base.zeros(X::Type{<:$sT}) = X($(zero_init...))
         zero!(x::$sT) = begin
             $(zero_reset...)
+            nothing
         end
     end)
 end
