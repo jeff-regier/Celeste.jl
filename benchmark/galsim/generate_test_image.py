@@ -13,7 +13,7 @@ RANDOM_SEED = 1234
 FITS_COMMENT_PREPEND = 'Celeste: '
 
 ARCSEC_PER_DEGREE = 3600.
-COUNTS_PER_NMGY = 1000.0 # a.k.a. "iota" in Celeste
+COUNTS_PER_NMGY = 180.0 # a.k.a. "iota" in Celeste
 
 # intensity (flux) relative to third band (= "a" band = reference)
 # see GalsimBenchmark.typical_band_relative_intensities()
@@ -34,46 +34,56 @@ DEFAULT_GALAXY_RELATIVE_INTENSITIES = [
     1.7750,
 ]
 
-class ImageParameters(object):
-    def __init__(self):
-        self.width_px = 96
-        self.height_px = 96
-        # 0.396 = resolution of SDSS images (https://github.com/jeff-regier/Celeste.jl/pull/411)
-        self.arcsec_per_pixel = 0.396
-        self.origin_right_ascension_arcsec = 0
-        self.origin_declination_arcsec = 0
-
-    def degrees_per_pixel(self):
-        return self.arcsec_per_pixel / ARCSEC_PER_DEGREE
-
-    def get_world_origin_degrees(self):
-        return galsim.PositionD(
-            self.origin_right_ascension_arcsec / ARCSEC_PER_DEGREE,
-            self.origin_declination_arcsec / ARCSEC_PER_DEGREE,
-        )
-
-    def get_image_center_world_coordinates(self):
-        origin_deg = self.get_world_origin_degrees()
-        width_deg = self.width_px * self.degrees_per_pixel()
-        height_deg = self.height_px * self.degrees_per_pixel()
-        return (origin_deg[0] + width_deg / 2.0, origin_deg[1] + height_deg / 2.0)
-
-class AbsolutePosition(object):
+class WorldCoordinate(object):
     def __init__(self, right_ascension_deg, declination_deg):
         self.right_ascension_deg = right_ascension_deg
         self.declination_deg = declination_deg
 
-    def get_position_deg(self, image_parameters):
-        return (self.right_ascension_deg, self.declination_deg)
+    def as_galsim_position(self):
+        return galsim.PositionD(
+            self.right_ascension_deg,
+            self.declination_deg,
+        )
+
+    def add(self, right_ascension_offset_deg, declination_offset_deg):
+        return WorldCoordinate(
+            self.right_ascension_deg + right_ascension_offset_deg,
+            self.declination_deg + declination_offset_deg,
+        )
+
+class ImageParameters(object):
+    def __init__(self):
+        # "width" corresponds to declination, "height" to right ascension
+        self.width_px = 96
+        self.height_px = 96
+        # 0.396 = resolution of SDSS images (https://github.com/jeff-regier/Celeste.jl/pull/411)
+        self.arcsec_per_pixel = 0.396
+        self.world_origin = WorldCoordinate(0, 0)
+
+    def degrees_per_pixel(self):
+        return self.arcsec_per_pixel / ARCSEC_PER_DEGREE
+
+    def get_image_center_world_coordinates(self):
+        width_deg = self.width_px * self.degrees_per_pixel()
+        height_deg = self.height_px * self.degrees_per_pixel()
+        return self.world_origin.add(height_deg / 2., width_deg / 2.)
+
+class AbsolutePosition(object):
+    def __init__(self, right_ascension_deg, declination_deg):
+        self._position = WorldCoordinate(right_ascension_deg, declination_deg)
+
+    def get_position(self, image_parameters):
+        return self._position
 
 class OffsetFromCenterPosition(object):
-    def __init__(self, x_offset_deg, y_offset_deg):
-        self.x_offset_deg = x_offset_deg
-        self.y_offset_deg = y_offset_deg
+    def __init__(self, right_ascension_offset_deg, declination_offset_deg):
+        self._offset = WorldCoordinate(right_ascension_offset_deg, declination_offset_deg)
 
-    def get_position_deg(self, image_parameters):
-        image_center_deg = image_parameters.get_image_center_world_coordinates()
-        return (image_center_deg[0] + self.x_offset_deg, image_center_deg[1] + self.y_offset_deg)
+    def get_position(self, image_parameters):
+        return image_parameters.get_image_center_world_coordinates().add(
+            self._offset.right_ascension_deg,
+            self._offset.declination_deg,
+        )
 
 # fields and logic shared between stars and galaxies
 class CommonFields(object):
@@ -83,17 +93,25 @@ class CommonFields(object):
         # relative flux in each band defines "color" of light sources
         self._flux_relative_to_reference_band = DEFAULT_GALAXY_RELATIVE_INTENSITIES
 
-    def set_offset_from_center_arcsec(self, x_offset_arcsec, y_offset_arcsec):
+    def set_offset_from_center_arcsec(self, right_ascension_offset_arcsec, declination_offset_arcsec):
         self.position = OffsetFromCenterPosition(
-            x_offset_arcsec / ARCSEC_PER_DEGREE,
-            y_offset_arcsec / ARCSEC_PER_DEGREE,
+            right_ascension_offset_arcsec / ARCSEC_PER_DEGREE,
+            declination_offset_arcsec / ARCSEC_PER_DEGREE,
         )
 
     def set_world_coordinates_deg(self, right_ascension_deg, declination_deg):
         self.position = AbsolutePosition(right_ascension_deg, declination_deg)
 
-    def get_world_coordinates_deg(self, image_parameters):
-        return self.position.get_position_deg(image_parameters)
+    def get_world_offset(self, image_parameters):
+        """Get offset from image center, in world coordinates (degrees)
+
+        We do this because GalSim images are located at the center of the image by default, and the
+        only way I've found to change the position of an object is using `shift()` (I don't know how
+        to set an absolute position in world coords).
+        """
+        image_center = image_parameters.get_image_center_world_coordinates()
+        world_position = self.position.get_position(image_parameters)
+        return world_position.add(-image_center.right_ascension_deg, -image_center.declination_deg)
 
     def set_flux_relative_to_reference_band(self, relative_flux):
         assert len(relative_flux) == 5
@@ -107,9 +125,9 @@ class CommonFields(object):
         )
 
     def add_header_fields(self, header, index_str, image_parameters, star_or_galaxy):
-        position_deg = self.position.get_position_deg(image_parameters)
-        header['CLRA' + index_str] = (position_deg[0], 'Center right ascension, deg')
-        header['CLDEC' + index_str] = (position_deg[1], 'Center declination, deg')
+        position = self.position.get_position(image_parameters)
+        header['CLRA' + index_str] = (position.right_ascension_deg, 'Center right ascension, deg')
+        header['CLDEC' + index_str] = (position.declination_deg, 'Center declination, deg')
         header['CLFLX' + index_str] = (
             self.reference_band_flux_nmgy,
             'reference (=3) band brightness (nMgy)',
@@ -165,7 +183,7 @@ class Star(LightSource):
         flux_counts = self._common_fields.get_flux_counts(band_index)
         return (
             galsim.Gaussian(flux=flux_counts, sigma=psf_sigma_degrees)
-                .shift(self._common_fields.get_world_coordinates_deg(image_parameters))
+                .shift(self._common_fields.get_world_offset(image_parameters).as_galsim_position())
         )
 
     def add_header_fields(self, header, index_str, image_parameters):
@@ -215,8 +233,11 @@ class Galaxy(LightSource):
     def get_galsim_light_source(self, band_index, psf_sigma_degrees, image_parameters):
         def apply_shear_and_shift(galaxy):
             return (
-                galaxy.shear(q=self._minor_major_axis_ratio, beta=self._angle_deg * galsim.degrees)
-                    .shift(self._common_fields.get_world_coordinates_deg(image_parameters))
+                galaxy.shear(
+                    q=self._minor_major_axis_ratio,
+                    beta=(90. - self._angle_deg) * galsim.degrees,
+                )
+                .shift(self._common_fields.get_world_offset(image_parameters).as_galsim_position())
             )
 
         flux_counts = self._common_fields.get_flux_counts(band_index)
@@ -239,7 +260,7 @@ class Galaxy(LightSource):
 
     def add_header_fields(self, header, index_str, image_parameters):
         self._common_fields.add_header_fields(header, index_str, image_parameters, 'galaxy')
-        header['CLANG' + index_str] = (self._angle_deg, 'major axis angle (degrees from x-axis)')
+        header['CLANG' + index_str] = (self._angle_deg, 'maj axis angle (deg from +dec -> +ra)')
         header['CLRTO' + index_str] = (self._minor_major_axis_ratio, 'minor/major axis ratio')
         header['CLRDA' + index_str] = (
             self._half_light_radius_arcsec,
@@ -272,9 +293,8 @@ class GalSimTestCase(object):
     def set_resolution(self, arcsec_per_pixel):
         self.image_parameters.arcsec_per_pixel = arcsec_per_pixel
 
-    def set_world_origin(self, right_ascension_arcsec, declination_arcsec):
-        self.image_parameters.origin_right_ascension_arcsec = right_ascension_arcsec
-        self.image_parameters.origin_declination_arcsec = declination_arcsec
+    def set_world_origin(self, right_ascension_deg, declination_deg):
+        self.image_parameters.world_origin = WorldCoordinate(right_ascension_deg, declination_deg)
 
     def get_resolution(self):
         return self.image_parameters.arcsec_per_pixel
@@ -298,9 +318,11 @@ class GalSimTestCase(object):
             image.array[:] = image.array + sky_level_counts
 
     def construct_image(self, band_index, uniform_deviate):
-        world_origin = self.image_parameters.get_world_origin_degrees()
+        world_origin = self.image_parameters.world_origin.as_galsim_position()
+        degrees_per_pixel = self.image_parameters.degrees_per_pixel()
         wcs = (
-            galsim.PixelScale(self.image_parameters.degrees_per_pixel())
+            # Here we implement the confusing mapping X <-> Dec, Y <-> RA
+            galsim.JacobianWCS(0, degrees_per_pixel, degrees_per_pixel, 0)
                 .withOrigin(galsim.PositionI(0, 0), world_origin=world_origin)
         )
         image = galsim.ImageF(
