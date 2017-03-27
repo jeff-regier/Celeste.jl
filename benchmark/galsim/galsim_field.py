@@ -11,6 +11,8 @@ import generate_test_image
 FITS_CATALOG_FILENAME = os.path.join('output', 'galsim_field_500_catalog.fits')
 ARCSEC_PER_DEGREE = 3600.
 FIELD_EXPAND_ARCSEC = 10
+SKY_LEVEL_NMGY = 0.155 # similar to SDSS
+COUNTS_PER_NMGY = 180.0 # similar to SDSS
 
 def set_image_dimensions(test_case, catalog_rows):
     min_ra_deg = min(float(row['right_ascension_deg']) for row in catalog_rows)
@@ -35,7 +37,8 @@ def generate_field(test_case, catalog_csv):
     with open(catalog_csv) as stream:
         catalog_rows = list(csv.DictReader(stream))
 
-    test_case.sky_level_nmgy = 0.155 # similar to SDSS
+    test_case.sky_level_nmgy = SKY_LEVEL_NMGY
+    test_case.set_counts_per_nmgy(COUNTS_PER_NMGY)
     set_image_dimensions(test_case, catalog_rows)
 
     for source_row in catalog_rows:

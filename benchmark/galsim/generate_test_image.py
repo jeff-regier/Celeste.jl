@@ -13,7 +13,6 @@ RANDOM_SEED = 1234
 FITS_COMMENT_PREPEND = 'Celeste: '
 
 ARCSEC_PER_DEGREE = 3600.
-COUNTS_PER_NMGY = 180.0 # a.k.a. "iota" in Celeste
 
 # intensity (flux) relative to third band (= "a" band = reference)
 # see GalsimBenchmark.typical_band_relative_intensities()
@@ -59,6 +58,7 @@ class ImageParameters(object):
         # 0.396 = resolution of SDSS images (https://github.com/jeff-regier/Celeste.jl/pull/411)
         self.arcsec_per_pixel = 0.396
         self.world_origin = WorldCoordinate(0, 0)
+        self.counts_per_nmgy = 1000.0
 
     def degrees_per_pixel(self):
         return self.arcsec_per_pixel / ARCSEC_PER_DEGREE
@@ -118,10 +118,9 @@ class CommonFields(object):
         assert relative_flux[2] == 1
         self._flux_relative_to_reference_band = relative_flux
 
-    def get_flux_counts(self, band_index):
+    def get_flux_nmgy(self, band_index):
         return (
             self.reference_band_flux_nmgy * self._flux_relative_to_reference_band[band_index]
-            * COUNTS_PER_NMGY
         )
 
     def add_header_fields(self, header, index_str, image_parameters, star_or_galaxy):
@@ -180,7 +179,9 @@ class Star(LightSource):
         return self
 
     def get_galsim_light_source(self, band_index, psf_sigma_degrees, image_parameters):
-        flux_counts = self._common_fields.get_flux_counts(band_index)
+        flux_counts = (
+            self._common_fields.get_flux_nmgy(band_index) * image_parameters.counts_per_nmgy
+        )
         return (
             galsim.Gaussian(flux=flux_counts, sigma=psf_sigma_degrees)
                 .shift(self._common_fields.get_world_offset(image_parameters).as_galsim_position())
@@ -240,7 +241,9 @@ class Galaxy(LightSource):
                 .shift(self._common_fields.get_world_offset(image_parameters).as_galsim_position())
             )
 
-        flux_counts = self._common_fields.get_flux_counts(band_index)
+        flux_counts = (
+            self._common_fields.get_flux_nmgy(band_index) * image_parameters.counts_per_nmgy
+        )
         half_light_radius_deg = self._half_light_radius_arcsec / ARCSEC_PER_DEGREE
         exponential_profile = apply_shear_and_shift(
             galsim.Exponential(
@@ -296,6 +299,9 @@ class GalSimTestCase(object):
     def set_world_origin(self, right_ascension_deg, declination_deg):
         self.image_parameters.world_origin = WorldCoordinate(right_ascension_deg, declination_deg)
 
+    def set_counts_per_nmgy(self, counts_per_nmgy):
+        self.image_parameters.counts_per_nmgy = counts_per_nmgy
+
     def get_resolution(self):
         return self.image_parameters.arcsec_per_pixel
 
@@ -310,7 +316,7 @@ class GalSimTestCase(object):
         return galaxy
 
     def _add_sky_background(self, image, uniform_deviate):
-        sky_level_counts = self.sky_level_nmgy * COUNTS_PER_NMGY
+        sky_level_counts = self.sky_level_nmgy * self.image_parameters.counts_per_nmgy
         if self.include_noise:
             poisson_deviate = galsim.PoissonDeviate(uniform_deviate, mean=sky_level_counts)
             image.addNoise(galsim.DeviateNoise(poisson_deviate))
@@ -342,7 +348,7 @@ class GalSimTestCase(object):
                 image,
                 add_to_image=True,
                 method='phot',
-                max_extra_noise=self.sky_level_nmgy * COUNTS_PER_NMGY / 1000.0,
+                max_extra_noise=self.sky_level_nmgy * self.image_parameters.counts_per_nmgy / 1000.0,
                 rng=uniform_deviate,
             )
         self._add_sky_background(image, uniform_deviate)
@@ -354,7 +360,7 @@ class GalSimTestCase(object):
         header = collections.OrderedDict([
             ('CLCASEI', (case_index + 1, 'test case index')),
             ('CLDESCR', (self.comment, 'comment')),
-            ('CLIOTA', (COUNTS_PER_NMGY, 'counts per nMgy')),
+            ('CLIOTA', (self.image_parameters.counts_per_nmgy, 'counts per nMgy')),
             ('CLSKY', (self.sky_level_nmgy, '"epsilon" sky level (nMgy each px)')),
             ('CLNOISE', (self.include_noise, 'was Poisson noise added?')),
             ('CLSIGMA', (self.psf_sigma_pixels, 'Gaussian PSF sigma (px)')),
@@ -420,4 +426,4 @@ def generate_fits_file(output_label, test_case_callbacks):
     save_multi_extension_fits(fits_hdus, image_file_name)
     final_filename = append_md5sum_to_filename(image_file_name)
     _logger.info('Wrote multi-extension FITS file to %r', final_filename)
-    write_latest_filename(output_label, os.path.basename(final_filename))
+    return final_filename
