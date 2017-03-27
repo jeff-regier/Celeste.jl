@@ -1,6 +1,5 @@
 #!/usr/bin/env julia
 
-import ForwardDiff
 import Celeste.AccuracyBenchmark
 import Celeste.GalsimBenchmark
 

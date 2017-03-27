@@ -54,11 +54,12 @@ function add_argument(
     if required == nothing
         required = !is_keyword
     end
+    if required
+        @assert default == NoDefault
+    end
     if is_keyword
         name = strip_keyword_argument_prefix(argument_string)
     else
-        @assert required
-        @assert default == NoDefault
         @assert action == :store
         name = argument_string
     end
@@ -213,12 +214,16 @@ function format_help(parser::ArgumentParser)
             specification.action == :store ? @sprintf(" %s", specification.name) : "",
         )
         if !specification.required
-            display = @sprintf("[%s]", display)
+            display = "[$display]"
         end
         display
     end
     positional_args = map(parser.positional_arguments) do specification
-        specification.argument_string
+        if !specification.required
+            "[$(specification.argument_string)]"
+        else
+            specification.argument_string
+        end
     end
     display_parts = []
     if length(keyword_args) > 0

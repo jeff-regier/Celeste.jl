@@ -1,6 +1,9 @@
 import logging
+import os
 
 import generate_test_image
+
+OUTPUT_LABEL = 'galsim_benchmarks'
 
 # populated by the `galsim_test_case` decorator
 TEST_CASE_CALLBACKS = []
@@ -156,7 +159,8 @@ def larger_psf(test_case):
 
 def main():
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-    generate_test_image.generate_fits_file('galsim_benchmarks', TEST_CASE_CALLBACKS)
+    final_filename = generate_test_image.generate_fits_file(OUTPUT_LABEL, TEST_CASE_CALLBACKS)
+    generate_test_image.write_latest_filename(OUTPUT_LABEL, os.path.basename(final_filename))
 
 if __name__ == "__main__":
     main()

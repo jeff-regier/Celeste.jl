@@ -2,8 +2,7 @@ module SampleData
 
 using Celeste: Model, DeterministicVI
 import Celeste: Infer
-
-import ..Synthetic
+import Celeste: Synthetic
 
 using Distributions
 using StaticArrays

@@ -11,6 +11,8 @@ import generate_test_image
 FITS_CATALOG_FILENAME = os.path.join('output', 'galsim_field_500_catalog.fits')
 ARCSEC_PER_DEGREE = 3600.
 FIELD_EXPAND_ARCSEC = 10
+SKY_LEVEL_NMGY = 0.155 # similar to SDSS
+COUNTS_PER_NMGY = 180.0 # similar to SDSS
 
 def set_image_dimensions(test_case, catalog_rows):
     min_ra_deg = min(float(row['right_ascension_deg']) for row in catalog_rows)
@@ -18,13 +20,13 @@ def set_image_dimensions(test_case, catalog_rows):
     min_dec_deg = min(float(row['declination_deg']) for row in catalog_rows)
     max_dec_deg = max(float(row['declination_deg']) for row in catalog_rows)
 
-    width_arcsec = (max_ra_deg - min_ra_deg) * ARCSEC_PER_DEGREE + 2 * FIELD_EXPAND_ARCSEC
-    height_arcsec = (max_dec_deg - min_dec_deg) * ARCSEC_PER_DEGREE + 2 * FIELD_EXPAND_ARCSEC
+    height_arcsec = (max_ra_deg - min_ra_deg) * ARCSEC_PER_DEGREE + 2 * FIELD_EXPAND_ARCSEC
+    width_arcsec = (max_dec_deg - min_dec_deg) * ARCSEC_PER_DEGREE + 2 * FIELD_EXPAND_ARCSEC
     arcsec_per_pixel = test_case.get_resolution()
     width_px = int(width_arcsec / arcsec_per_pixel)
     height_px = int(height_arcsec / arcsec_per_pixel)
 
-    print('  Image dimensions {} x {} px'.format(width_px, height_px))
+    print('  Image dimensions {} W x {} H px'.format(width_px, height_px))
     test_case.set_dimensions(width_px, height_px)
     test_case.set_world_origin(
         min_ra_deg - FIELD_EXPAND_ARCSEC / ARCSEC_PER_DEGREE,
@@ -35,6 +37,8 @@ def generate_field(test_case, catalog_csv):
     with open(catalog_csv) as stream:
         catalog_rows = list(csv.DictReader(stream))
 
+    test_case.sky_level_nmgy = SKY_LEVEL_NMGY
+    test_case.set_counts_per_nmgy(COUNTS_PER_NMGY)
     set_image_dimensions(test_case, catalog_rows)
 
     for source_row in catalog_rows:

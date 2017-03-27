@@ -27,6 +27,7 @@ include("DeterministicVI.jl")
 
 include("ParallelRun.jl")
 
+include("Synthetic.jl")
 include("AccuracyBenchmark.jl")
 include("GalsimBenchmark.jl")
 

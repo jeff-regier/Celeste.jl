@@ -14,7 +14,6 @@ using Celeste.DeterministicVI.ConstraintTransforms: Constraint, BoxConstraint,
 
 import Celeste.Transform, Celeste.SensitiveFloats
 
-include(joinpath(dirname(@__FILE__), "Synthetic.jl"))
 include(joinpath(dirname(@__FILE__), "SampleData.jl"))
 
 using Base.Test

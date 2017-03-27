@@ -99,10 +99,26 @@ end
 ################################################################################
 
 """
-convert between SDSS mags and SDSS flux (nMgy)
+Convert between SDSS asinh mags and SDSS flux (nMgy).
+See http://www.sdss.org/dr12/algorithms/magnitudes/#asinh.
 """
-mag_to_flux(m::AbstractFloat) = 10.^(0.4 * (22.5 - m))
-flux_to_mag(nm::AbstractFloat) = nm > 0 ? 22.5 - 2.5 * log10(nm) : NaN
+const ASINH_SOFTENING_PARAMETERS = [
+    1.4e-10, # for band 1 = u
+    0.9e-10,
+    1.2e-10,
+    1.8e-10,
+    7.4e-10, # for band 5 = z
+]
+
+function mag_to_flux(mags::AbstractFloat, band_index::Int)
+    b = ASINH_SOFTENING_PARAMETERS[band_index]
+    1e9 * 2 * b * sinh(-log(10) / 2.5 * mags - log(b))
+end
+
+function flux_to_mag(flux_nmgy::AbstractFloat, band_index::Int)
+    b = ASINH_SOFTENING_PARAMETERS[band_index]
+    -2.5 / log(10) * (asinh(flux_nmgy * 1e-9 / (2*b)) + log(b))
+end
 
 function color_from_fluxes(flux1::AbstractFloat, flux2::AbstractFloat)
     if flux1 <= 0 || flux2 <= 0
@@ -111,8 +127,9 @@ function color_from_fluxes(flux1::AbstractFloat, flux2::AbstractFloat)
         log(flux2 / flux1)
     end
 end
-function color_from_mags(mags1::AbstractFloat, mags2::AbstractFloat)
-    color_from_fluxes(mag_to_flux(mags1), mag_to_flux(mags2))
+
+function color_from_mags(mags1::AbstractFloat, band1::Int, mags2::AbstractFloat, band2::Int)
+    color_from_fluxes(mag_to_flux(mags1, band1), mag_to_flux(mags2, band2))
 end
 
 canonical_angle(angle_deg) = angle_deg - floor(angle_deg / 180) * 180
@@ -190,12 +207,12 @@ function load_coadd_catalog(fits_filename)
     result[:declination_deg] = raw_df[:dec]
     result[:is_star] = is_star
 
-    result[:reference_band_flux_nmgy] = mag_to_flux.(mag_r)
+    result[:reference_band_flux_nmgy] = mag_to_flux.(mag_r, 3)
 
-    result[:color_log_ratio_ug] = color_from_mags.(mag_u, mag_g)
-    result[:color_log_ratio_gr] = color_from_mags.(mag_g, mag_r)
-    result[:color_log_ratio_ri] = color_from_mags.(mag_r, mag_i)
-    result[:color_log_ratio_iz] = color_from_mags.(mag_i, mag_z)
+    result[:color_log_ratio_ug] = color_from_mags.(mag_u, 1, mag_g, 2)
+    result[:color_log_ratio_gr] = color_from_mags.(mag_g, 2, mag_r, 3)
+    result[:color_log_ratio_ri] = color_from_mags.(mag_r, 3, mag_i, 4)
+    result[:color_log_ratio_iz] = color_from_mags.(mag_i, 4, mag_z, 5)
 
     # gal shape -- fracdev
     result[:de_vaucouleurs_mixture_weight] = raw_df[:fracdev_r]
@@ -277,7 +294,7 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
     result[:angle_deg] = canonical_angle.(raw_phi)
 
     # primary is better at flagging oversaturated sources than coadd
-    result = result[flux_to_mag.(raw_df[:psfflux_r]) .>= 16, :]
+    result = result[flux_to_mag.(raw_df[:psfflux_r], 3) .>= 16, :]
 
     return result
 end
@@ -347,7 +364,7 @@ function celeste_to_df(results::Vector{ParallelRun.OptimizedSource})
 end
 
 ################################################################################
-# Generate a catalog from the Celeste prior
+# Generate a random catalog from the Celeste prior
 ################################################################################
 
 # This is the ratio of stars derived from the catalog used the generate the prior; the value 0.99 is
@@ -467,25 +484,42 @@ function make_psf(psf_sigma_px)
     ]
 end
 
+function make_image(
+    pixels::Matrix{Float32}, band_index::Int, wcs::WCS.WCSTransform, psf_sigma_px::Float64,
+    sky_level_nmgy::Float64, counts_per_nmgy::Float64
+)
+    height_px, width_px = size(pixels)
+    sky_intensity = Model.SkyIntensity(
+        fill(sky_level_nmgy, height_px, width_px),
+        collect(1:height_px),
+        collect(1:width_px),
+        ones(height_px),
+    )
+    iota_vec = fill(counts_per_nmgy, height_px)
+    Model.Image(
+        height_px,
+        width_px,
+        pixels,
+        band_index,
+        wcs,
+        make_psf(psf_sigma_px),
+        0, 0, 0, # run, camcol, field
+        sky_intensity,
+        iota_vec,
+        Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
+    )
+end
+
 function make_images(band_extensions::Vector{FitsImage})
     map(enumerate(band_extensions)) do pair
         band_index, extension = pair
-        height, width = size(extension.pixels)
-        sky = Model.SkyIntensity(fill(extension.header["CLSKY"], height, width),
-                           collect(1:height), collect(1:width), ones(1:height))
-        Model.Image(
-            height,
-            width,
+        make_image(
             extension.pixels,
             band_index,
             extension.wcs,
-            make_psf(extension.header["CLSIGMA"]),
-            0, # SDSS run
-            0, # SDSS camcol
-            0, # SDSS field
-            sky,
-            fill(extension.header["CLIOTA"], height),
-            Model.RawPSF(Matrix{Float64}(0, 0), 0, 0, Array{Float64,3}(0, 0, 0)),
+            convert(Float64, extension.header["CLSIGMA"]),
+            convert(Float64, extension.header["CLSKY"]),
+            convert(Float64, extension.header["CLIOTA"]),
         )
     end
 end
@@ -529,6 +563,8 @@ end
 
 ensure_small_flux(value) = (isna(value) || value <= 0) ? 1e-6 : value
 
+na_to_default(value, default) = isna(value) ? default : value
+
 function make_catalog_entry(row::DataFrameRow)
     color_log_ratios = DataArray{Float64}(DataArray(Any[
         row[:color_log_ratio_ug],
@@ -543,10 +579,10 @@ function make_catalog_entry(row::DataFrameRow)
         row[:is_star],
         fluxes,
         fluxes,
-        row[:de_vaucouleurs_mixture_weight],
-        row[:minor_major_axis_ratio],
-        row[:angle_deg],
-        row[:half_light_radius_px],
+        na_to_default(row[:de_vaucouleurs_mixture_weight], 0.),
+        na_to_default(row[:minor_major_axis_ratio], 0.),
+        na_to_default(row[:angle_deg], 0.) / 180.0 * pi,
+        na_to_default(row[:half_light_radius_px], 0.),
         row[:objid],
         0, # thing_id
     )
@@ -574,6 +610,141 @@ function make_initialization_catalog(catalog::DataFrame, use_full_initialzation:
             )
         end
     end
+end
+
+################################################################################
+# Support for generating imagery using Synthetic.jl
+################################################################################
+
+immutable ImageGeometry
+    height_px::Int64
+    width_px::Int64
+    world_coordinate_origin::Tuple{Float64, Float64}
+end
+
+function get_image_geometry(catalog_data::DataFrame; field_expand_arcsec=20.0)
+    min_ra_deg = minimum(catalog_data[:right_ascension_deg])
+    max_ra_deg = maximum(catalog_data[:right_ascension_deg])
+    min_dec_deg = minimum(catalog_data[:declination_deg])
+    max_dec_deg = maximum(catalog_data[:declination_deg])
+
+    width_arcsec = (max_ra_deg - min_ra_deg) * ARCSEC_PER_DEGREE + 2 * field_expand_arcsec
+    height_arcsec = (max_dec_deg - min_dec_deg) * ARCSEC_PER_DEGREE + 2 * field_expand_arcsec
+    width_px = convert(Int64, round(width_arcsec / SDSS_ARCSEC_PER_PIXEL))
+    height_px = convert(Int64, round(height_arcsec / SDSS_ARCSEC_PER_PIXEL))
+
+    ImageGeometry(
+        height_px,
+        width_px,
+        (
+            min_ra_deg - field_expand_arcsec / ARCSEC_PER_DEGREE,
+            min_dec_deg - field_expand_arcsec / ARCSEC_PER_DEGREE,
+        )
+    )
+end
+
+function make_template_images(
+    catalog_data::DataFrame, psf_sigma_px::Float64, sky_level_nmgy::Float64,
+    counts_per_nmgy::Float64
+)
+    geometry = get_image_geometry(catalog_data)
+    println("  Image dimensions $(geometry.height_px) H x $(geometry.width_px) W px")
+    dec_deg_per_pixel = SDSS_ARCSEC_PER_PIXEL / ARCSEC_PER_DEGREE
+    ra_deg_per_pixel = dec_deg_per_pixel / cosd(geometry.world_coordinate_origin[2])
+    wcs = WCS.WCSTransform(
+        2, # dimensions
+        # reference pixel coordinates...
+        crpix=[0., 0.],
+        # ...and corresponding reference world coordinates
+        crval=[geometry.world_coordinate_origin[1], geometry.world_coordinate_origin[2]],
+        # this WCS is a simple linear transformation
+        ctype=["RA---TAN", "DEC--TAN"],
+        cunit=["deg", "deg"],
+        # these are [du/dx du/dy; dv/dx dv/dy]. (u, v) = world coords, (x, y) = pixel coords.
+        pc=[0. ra_deg_per_pixel; dec_deg_per_pixel 0.],
+    )
+    map(1:5) do band
+        make_image(
+            zeros(Float32, (geometry.height_px, geometry.width_px)),
+            band,
+            wcs,
+            psf_sigma_px,
+            sky_level_nmgy,
+            counts_per_nmgy,
+        )
+    end
+end
+
+function extract_psf_sigma_px(psf::Vector{Model.PsfComponent})
+    # ensure the PSF is a multiple of identity covariance
+    @assert psf[1].alphaBar == 1.
+    @assert all(psf[1].xiBar .== [0.; 0.])
+    @assert psf[1].tauBar[1, 2] == 0.
+    @assert psf[1].tauBar[2, 1] == 0.
+    @assert psf[1].tauBar[1, 1] == psf[1].tauBar[2, 2]
+    sqrt(psf[1].tauBar[1, 1])
+end
+
+## Parse a FITS header from a raw string representation
+
+# It's silly that we have to do this, but the Julia FITSIO library doesn't support this (it can only
+# read a header from a file), while the Julia WCS library will only generate a header in raw string
+# form. (The Julia FITSIO library also won't write a raw string header to a file, so scrap that idea
+# :).) Fortunately, the FITS header format is a simple fixed-width textual format with only a few
+# data types. See https://fits.gsfc.nasa.gov/fits_primer.html.
+
+function parse_fits_header_value(raw_value::AbstractString)
+    if raw_value == "T"
+        true
+    elseif raw_value == "F"
+        false
+    elseif raw_value[1] == '\''
+        convert(String, raw_value[2:(end - 1)])
+    elseif ismatch(r"^[0-9]+$", raw_value)
+        parse(Int64, raw_value)
+    else
+        parse(Float64, raw_value)
+    end
+end
+
+function parse_fits_header_from_string(header_string::AbstractString)
+    header = FITSIO.FITSHeader(String[], [], String[])
+    start_position = 1
+    while start_position < length(header_string)
+        field_string = header_string[start_position:(start_position + 79)]
+        field_name = strip(field_string[1:8])
+        if length(field_name) != 0 && field_string[9:10] == "= "
+            field_parts = split(field_string[11:80], "/", limit=2)
+            raw_value = field_parts[1]
+            header[field_name] = parse_fits_header_value(strip(raw_value))
+            if length(field_parts) == 2
+                comment = strip(field_parts[2])
+                if length(comment) > 0
+                    FITSIO.set_comment!(header, field_name, convert(String, comment))
+                end
+            end
+        end
+        start_position += 80
+    end
+    header
+end
+
+function save_images_to_fits(filename::String, images::Vector{Model.Image})
+    println("Writing images to $filename...")
+    fits_file = FITSIO.FITS(filename, "w")
+    for band_image in images
+        header = parse_fits_header_from_string(WCS.to_header(band_image.wcs))
+        header["CLSKY"] = band_image.sky.sky_small[1, 1]
+        header["CLSIGMA"] = extract_psf_sigma_px(band_image.psf)
+        header["CLIOTA"] = band_image.iota_vec[1]
+        write(
+            fits_file,
+            band_image.pixels,
+            header=header,
+            name="CELESTE_FIELD_$(band_image.b)",
+        )
+    end
+    close(fits_file)
 end
 
 ################################################################################
@@ -616,8 +787,8 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
 
     # compare flux in both mags and nMgy for now
     errors[:reference_band_flux_mag] = abs(
-        flux_to_mag.(truth[:reference_band_flux_nmgy])
-        .- flux_to_mag.(predicted[:reference_band_flux_nmgy])
+        flux_to_mag.(truth[:reference_band_flux_nmgy], 3)
+        .- flux_to_mag.(predicted[:reference_band_flux_nmgy], 3)
     )
     errors[:reference_band_flux_nmgy] = abs(
         truth[:reference_band_flux_nmgy] .- predicted[:reference_band_flux_nmgy]
@@ -755,6 +926,11 @@ function get_uncertainty_df(truth::DataFrame, predictions::DataFrame)
     assert_columns_are_present(predictions, STDERR_COLUMNS)
     matched_truth, matched_prediction_dfs = match_catalogs(truth, [predictions])
     matched_predictions = matched_prediction_dfs[1]
+
+    valid_rows = (matched_truth[:reference_band_flux_nmgy] .> 0)
+    matched_truth = matched_truth[valid_rows, :]
+    matched_predictions = matched_predictions[valid_rows, :]
+
     get_errors(column, map_fn) =
         map_fn.(matched_predictions[column]) .- map_fn.(matched_truth[column])
     get_errors(column) = get_errors(column, x -> x)
@@ -774,6 +950,7 @@ function get_uncertainty_df(truth::DataFrame, predictions::DataFrame)
     ]
     names = [:log_reference_band_flux_nmgy, :color_log_ratio_ug, :color_log_ratio_gr,
              :color_log_ratio_ri, :color_log_ratio_iz]
+
     mapreduce(vcat, zip(names, errors, std_errs)) do values
         name, error, std_err = values
         DataFrame(
@@ -788,6 +965,7 @@ end
 function score_uncertainty(uncertainty_df::DataFrame)
     mapreduce(vcat, groupby(uncertainty_df, :name)) do group_df
         abs_error_sds = abs.(group_df[:error] ./ group_df[:posterior_std_err])
+        abs_error_sds = abs_error_sds[!isna(abs_error_sds)]
         DataFrame(
             field=group_df[1, :name],
             within_half_sd=mean(abs_error_sds .<= 1/2),

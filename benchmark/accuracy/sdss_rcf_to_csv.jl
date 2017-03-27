@@ -51,7 +51,7 @@ function match_and_load_objids(catalog_df::DataFrame, objid_csv::String)
             truth_df[:right_ascension_deg], truth_df[:declination_deg],
             catalog_df[source_index, :right_ascension_deg],
             catalog_df[source_index, :declination_deg],
-            1 / 0.396, # to match up with Stripe82Score
+            1.0,
         )
         if isempty(matching_truth_indices)
             continue

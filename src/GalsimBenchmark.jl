@@ -36,8 +36,8 @@ function extract_catalog_from_header(header::FITSIO.FITSHeader)
         end
         DataFrame(
             objid=@sprintf("%s_%03d", header["CLDESCR"], source_index),
-            right_ascension_deg=source_field("CLX"),
-            declination_deg=source_field("CLY"),
+            right_ascension_deg=source_field("CLRA"),
+            declination_deg=source_field("CLDEC"),
             is_star=(source_field("CLTYP") == "star" ? 1 : 0),
             reference_band_flux_nmgy=convert(Float64, source_field("CLFLX")),
             color_log_ratio_ug=log(source_field("CLC12")),

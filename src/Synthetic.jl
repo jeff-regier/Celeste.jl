@@ -10,7 +10,7 @@ import Distributions
 using ForwardDiff
 using StaticArrays
 
-include("../src/bivariate_normals.jl")
+include("bivariate_normals.jl")
 
 # Generate synthetic data.
 
