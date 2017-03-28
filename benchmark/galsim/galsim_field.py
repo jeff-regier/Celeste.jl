@@ -11,6 +11,7 @@ import generate_test_image
 FITS_CATALOG_FILENAME = os.path.join('output', 'galsim_field_500_catalog.fits')
 ARCSEC_PER_DEGREE = 3600.
 FIELD_EXPAND_ARCSEC = 10
+PSF_SIGMA_PX = 2.29 # similar to SDSS
 SKY_LEVEL_NMGY = 0.155 # similar to SDSS
 COUNTS_PER_NMGY = 180.0 # similar to SDSS
 
@@ -39,6 +40,7 @@ def generate_field(test_case, catalog_csv):
 
     test_case.sky_level_nmgy = SKY_LEVEL_NMGY
     test_case.set_counts_per_nmgy(COUNTS_PER_NMGY)
+    test_case.psf_sigma_pixels = PSF_SIGMA_PX
     set_image_dimensions(test_case, catalog_rows)
 
     for source_row in catalog_rows:

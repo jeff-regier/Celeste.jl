@@ -161,29 +161,9 @@ function load_stripe82_fits_catalog_as_data_frame(filename, extension_index)
 end
 
 """
-Load Stripe 82 objects into a DataFrame. `fits_filename` should be a FITS file
-created by running a CasJobs (skyserver.sdss.org/casjobs/) query
-on the Stripe82 database. Run the following query in the \"Stripe82\"
-context, then download the table as a FITS file.
-
-```
-select
-  objid, rerun, run, camcol, field, flags,
-  ra, dec, probpsf,
-  psfmag_u, psfmag_g, psfmag_r, psfmag_i, psfmag_z,
-  devmag_u, devmag_g, devmag_r, devmag_i, devmag_z,
-  expmag_u, expmag_g, expmag_r, expmag_i, expmag_z,
-  fracdev_r,
-  devab_r, expab_r,
-  devphi_r, expphi_r,
-  devrad_r, exprad_r
-into mydb.s82_0_1_0_1
-from stripe82.photoobj
-where
-  run in (106, 206) and
-  ra between 0. and 1. and
-  dec between 0. and 1.
-```
+Load Stripe 82 objects into a DataFrame. `fits_filename` should be a FITS file created by running a
+CasJobs (skyserver.sdss.org/casjobs/) query on the Stripe82 database. See
+https://github.com/jeff-regier/Celeste.jl/wiki/About-SDSS-and-Stripe-82.
 """
 function load_coadd_catalog(fits_filename)
     raw_df = load_stripe82_fits_catalog_as_data_frame(fits_filename, 2)
