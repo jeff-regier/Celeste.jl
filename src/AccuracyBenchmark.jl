@@ -755,8 +755,8 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
 
     predicted_galaxy = predicted[:is_star] .< .5
     true_galaxy = truth[:is_star] .< .5
-    errors[:missed_stars] = !true_galaxy .& predicted_galaxy
-    errors[:missed_galaxies] = true_galaxy .& !predicted_galaxy
+    errors[:missed_stars] = ifelse(!true_galaxy, predicted_galaxy, NA)
+    errors[:missed_galaxies] = ifelse(true_galaxy, !predicted_galaxy, NA)
 
     errors[:position] = sky_distance_px.(
         truth[:right_ascension_deg],
@@ -828,7 +828,7 @@ function score_column(first_errors::DataArray, second_errors::DataArray)
     scores[:second] = mean(second_errors)
     diffs = first_errors .- second_errors
     scores[:diff] = mean(diffs)
-    scores[:diff_sd] = std(abs(diffs)) / sqrt(length(diffs))
+    scores[:diff_sd] = std(abs.(diffs)) / sqrt(length(diffs))
     scores
 end
 
