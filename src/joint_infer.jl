@@ -299,7 +299,6 @@ function partition_box(npartitions::Int, target_sources::Vector{Int},
         for (index, neighbors) in enumerate(neighbor_map)
             cyclades_neighbor_map[target_sources[index]] = neighbors
         end
-    println("$(partition_cyclades_dynamic(target_sources, cyclades_neighbor_map, batch_size=batch_size))")
         #return partition_cyclades(npartitions, target_sources,
         #                          cyclades_neighbor_map,
         #                          batch_size=batch_size)
@@ -548,12 +547,10 @@ function process_sources_dynamic!(images::Vector{Model.Image},
                                   thread_sources_assignment::Vector{Vector{Vector{Int64}}},
                                   n_iters::Int,
                                   within_batch_shuffling::Bool)
-    println("Processing with dynamic connected components load balancing")
+    Log.message("Processing with dynamic connected components load balancing")
 
     n_threads::Int = nthreads()
     n_batches::Int = length(thread_sources_assignment)
-
-    println("YO $(n_batches), $(thread_sources_assignment)")
 
     l = SpinLock()
 
