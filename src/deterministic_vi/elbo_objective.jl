@@ -355,6 +355,8 @@ end
 using Celeste.SensitiveFloats: Source
 @eval function add_sparse_components!{T}(combinator::T, source_j, sf_result, scale, E_G)
     P = length(CanonicalParams2)
+    @assert source_j == 1
+    source_j = 1
     E_G_s = E_G[Source(source_j)]
     @inbounds begin
         @syntactic_unroll for (lhs, rhs) in $(zip(dense_blocks, dense_blocks))
@@ -529,13 +531,15 @@ function add_elbo_log_term!{NumType <: Number}(
             combine_hess = SMatrix{2, 2, NumType, 4}(
                  (0.0,1 / E_G_v^3,1 / E_G_v^3,
                 -(1 / E_G_v ^ 2 + 3 * var_G_v / (E_G_v ^ 4))))
-                
-            # Calculate the log term.
-            combine_sfs2!(
-                (oldval, newval)->(@Base._inline_meta; oldval + x_nbm*newval),
-                Const,
-                var_G, E_G, elbo,
-                log_term_value, combine_grad, combine_hess)
+            
+            let x_nbm = NumType(x_nbm)
+                # Calculate the log term.
+                combine_sfs2!(
+                    (oldval, newval)->(@Base._inline_meta; oldval + x_nbm*newval),
+                    Const,
+                    var_G, E_G, elbo,
+                    log_term_value, combine_grad, combine_hess)
+            end
         end
     end
 end

@@ -38,14 +38,14 @@ import Celeste: zero!
 immutable Star; end
 immutable Galaxy; end
 
-type SharedPosParams <: ParamSet
+struct SharedPosParams <: ParamSet
     u::Param{SharedPosParams, :u, (2,)}
 end
 const StarPosParams = SharedPosParams
 @eval @concretize $SharedPosParams
 const star_ids = StarPosParams()
  
-type GalaxyShapeParams <: ParamSet
+struct GalaxyShapeParams <: ParamSet
     e_axis::Param{GalaxyShapeParams, :e_axis, ()}
     e_angle::Param{GalaxyShapeParams, :e_angle, ()}
     e_scale::Param{GalaxyShapeParams, :e_scale, ()}
@@ -61,7 +61,7 @@ end
 @eval @concretize $GalaxyPosParams
 const gal_ids = GalaxyPosParams()
 
-type BrightnessParams{kind} <: ParamSet
+struct BrightnessParams{kind} <: ParamSet
     r1::Param{Tuple{BrightnessParams, kind}, :r1, ()}
     r2::Param{Tuple{BrightnessParams, kind}, :r2, ()}
     c1::Param{Tuple{BrightnessParams, kind}, :c1, (B-1,)}

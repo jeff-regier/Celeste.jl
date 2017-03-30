@@ -200,13 +200,13 @@ end
 
 function diagonal_block(T, p::Union{Param, ParamBatch})
     nparams = length(typeof(p))
-    SArray{(nparams, nparams), T, 2, nparams^2}
+    SArray{Tuple{nparams, nparams}, T, 2, nparams^2}
 end
 diagonal_block(T, x) = diagonal_block(T, to_batch(x))
 
 function off_diagonal_block(T, p1::Union{Param, ParamBatch},
                                p2::Union{Param, ParamBatch})
-    SArray{(length(p1), length(p2)), T, 2, length(p1)*length(p2)}
+    SArray{Tuple{length(p1), length(p2)}, T, 2, length(p1)*length(p2)}
 end
 off_diagonal_block(T, x1, x2) = off_diagonal_block(T, to_batch(x1), to_batch(x2))
 
