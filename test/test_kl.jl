@@ -65,7 +65,7 @@ function test_gaussian_kl_value()
 end
 
 function test_subtract_kl()
-    sf = SensitiveFloat{Float64}(KLDivergence.PARAM_LENGTH, 1, true, true)
+    sf = SensitiveFloat{Float64, Celeste.Model.CanonicalParams}(1, true, true)
     vs = rand(MersenneTwister(1), KLDivergence.PARAM_LENGTH)
     kl_result = DiffBase.DiffResult(0.0, sf.d)
     kl_helper = KLDivergence.get_kl_helper(Float64)

@@ -172,7 +172,7 @@ function unbox_parameter{NumType <: Number}(param::NumType, pb::ParamBox)
 
     # exp and the logit functions handle infinities correctly, so
     # parameters can equal the bounds.
-    @assert(pb.lb .<= param .<= pb.ub,
+    @assert(pb.lb <= param <= pb.ub,
                     string("unbox_parameter: param outside bounds: ",
                                  "$param ($(pb.lb), $(pb.ub))"))
 
