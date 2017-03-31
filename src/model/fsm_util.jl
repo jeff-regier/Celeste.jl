@@ -53,9 +53,9 @@ function load_bvn_mixtures!{NumType <: Number}(
         # and elbo_objective.jl with `vp`.
         # We need a safer way to let both methods call this method.
         world_loc = sp[lidx.u]
-        m_pos = Model.linear_world_to_pix(patches[s, n].wcs_jacobian,
-                                          patches[s, n].center,
-                                          patches[s, n].pixel_center, world_loc)
+        m_pos = Model.linear_world_to_pix(SMatrix{2,2,NumType,4}(patches[s, n].wcs_jacobian),
+                                          SVector{2,NumType}(patches[s, n].center),
+                                          SVector{2,NumType}(patches[s, n].pixel_center), world_loc)
 
         # Convolve the star locations with the PSF.
         for k in 1:psf_K

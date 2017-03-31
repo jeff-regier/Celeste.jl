@@ -7,10 +7,7 @@ end
 
 Base.size(a::Const) = Base.size(a.a)
 Base.getindex(A::Const{<:Array}, i1::Int) = Core.const_arrayref(A.a, i1)
-Base.getindex(A::Const{<:Array}, x::SVector) = Base.getindex(A.a, x)
-#Base.getindex(A::Const{<:Array}, x...) = Base.getindex(A.a, x...)
 @inline Base.getindex(A::Const{<:Array}, i1::Int, i2::Int, I::Int...) =  Core.const_arrayref(A.a, i1, i2, I...)
-
 @generated function Base.getindex{SM<:SizedMatrix}(m::Const{SM}, i1::Integer, i2::Integer)
     quote
       $(Expr(:meta, :inline, :propagate_inbounds))
@@ -23,6 +20,7 @@ Base.getindex(A::Const{<:Array}, x::SVector) = Base.getindex(A.a, x)
     end
 end
 Base.getindex{SM<:SizedArray}(m::Const{SM}, i1::Integer) = Core.const_arrayref(m.a.data, i1)
+Base.getindex(m::Const, inds...) = Base.getindex(m.a, inds...)
 
 function compile_unroll(x)
     (isa(x, Expr) && x.head == :for) || throw(SimdError("for loop expected"))

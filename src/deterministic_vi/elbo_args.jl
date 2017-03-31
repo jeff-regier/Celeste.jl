@@ -25,99 +25,19 @@ function HessianSubmatrices(NumType::DataType, i::Int)
     HessianSubmatrices{NumType}(u_u, shape_shape)
 end
 
+using Celeste: Symmetric2
+
 DenseHessianSSSF(ParamSet, NumType) = SingleSourceSensitiveFloat{NumType, ParamSet,
   ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}}
 SparseHessianCanonicalSSSF(NumType) = SingleSourceSensitiveFloat{NumType, CanonicalParams2, SparseStruct{NumType}}
 DenseHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumType, ParamSet,
   ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}}
+DenseSymmetricHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumType, ParamSet,
+  ParameterizedArray{ParamSet, Symmetric2{NumType, SizedVector{
+    div(length(ParamSet)*(length(ParamSet)+1),2), NumType, 1
+  }, :U}}}
 SparseHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumType, ParamSet, SparseStruct{NumType}}
 SensitiveFloats.zeros_type(T::Type{<:SparseStruct}, args...) = zeros(T)
-immutable ElboIntermediateVariables{NumType <: Number}
-    # Vectors of star and galaxy bvn quantities from all sources for a pixel.
-    # The vector has one element for each active source, in the same order
-    # as ea.active_sources.
-
-    fs0m::DenseHessianSSSF(StarPosParams, NumType)
-    fs1m::DenseHessianSSSF(GalaxyPosParams, NumType)
-
-    # Brightness values for a single source
-    E_G_s::SparseHessianCanonicalSSSF(NumType)
-    E_G2_s::SparseHessianCanonicalSSSF(NumType)
-    
-    # Expected pixel intensity and variance for a pixel from all sources.
-    E_G::SparseHessianSSparseSF(CanonicalParams2, NumType)
-    var_G::DenseHessianSSparseSF(CanonicalParams2, NumType)
-
-    # Pre-allocated memory for the gradient and Hessian of combine functions.
-    combine_grad::Vector{NumType}
-    combine_hess::Matrix{NumType}
-
-    # The ELBO itself.
-    elbo::SensitiveFloat{NumType, CanonicalParams2}
-
-    active_pixel_counter::typeof(Ref{Int64}(0))
-    inactive_pixel_counter::typeof(Ref{Int64}(0))
-end
-
-
-"""
-Args:
-    - num_active_sources: The number of actives sources (with derivatives)
-    - calculate_gradient: If false, only calculate values
-    - calculate_hessian: If false, only calculate gradients. Note that if
-                calculate_gradient = false, then hessians will not be
-                calculated irrespective of the value of calculate_hessian.
-"""
-function ElboIntermediateVariables(NumType::DataType,
-                                   num_active_sources::Int,
-                                   calculate_gradient::Bool=true,
-                                   calculate_hessian::Bool=true)
-    @assert NumType <: Number
-
-    # fs0m and fs1m accumulate contributions from all bvn components
-    # for a given source.
-    fs0m = DenseHessianSSSF(StarPosParams, NumType)(
-                                calculate_gradient, calculate_hessian)
-    fs1m = DenseHessianSSSF(GalaxyPosParams, NumType)(
-                                calculate_gradient, calculate_hessian)
-
-    E_G_s = SparseHessianCanonicalSSSF(NumType)(
-                                    calculate_gradient, calculate_hessian)
-    E_G2_s = SensitiveFloat(E_G_s)
-
-    E_G = SparseHessianSSparseSF(CanonicalParams2, NumType)(num_active_sources,
-                                  calculate_gradient, calculate_hessian)
-    var_G = DenseHessianSSparseSF(CanonicalParams2, NumType)(num_active_sources,
-                                  calculate_gradient, calculate_hessian)
-
-    combine_grad = zeros(NumType, 2)
-    combine_hess = zeros(NumType, 2, 2)
-
-    elbo = SensitiveFloat{NumType, CanonicalParams2}(num_active_sources,
-                                    calculate_gradient, calculate_hessian)
-
-    ElboIntermediateVariables{NumType}(
-        fs0m, fs1m,
-        E_G_s, E_G2_s,
-        E_G, var_G, combine_grad, combine_hess,
-        elbo, Ref{Int64}(0), Ref{Int64}(0))
-end
-
-function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType})
-    clear!(elbo_vars.fs0m)
-    clear!(elbo_vars.fs1m)
-    clear!(elbo_vars.E_G_s)
-    clear!(elbo_vars.E_G2_s)
-
-    clear!(elbo_vars.E_G)
-    clear!(elbo_vars.var_G)
-
-    fill!(elbo_vars.combine_grad, zero(NumType))
-    fill!(elbo_vars.combine_hess, zero(NumType))
-
-    clear!(elbo_vars.elbo)
-end
-
 
 """
 If Infs/NaNs have crept into the ELBO evaluation (a symptom of poorly conditioned optimization),

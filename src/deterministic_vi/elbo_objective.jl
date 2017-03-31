@@ -353,17 +353,18 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
 end
 
 using Celeste.SensitiveFloats: Source
-@eval function add_sparse_components!{T}(combinator::T, source_j, sf_result, scale, E_G)
+@eval @Base.hotspot function add_sparse_components!{T}(combinator::T, source_j, sf_result, scale, E_G)
     P = length(CanonicalParams2)
     @assert source_j == 1
     source_j = 1
-    E_G_s = E_G[Source(source_j)]
-    @inbounds begin
+    @aliasscope @inbounds begin
+        P = length(CanonicalParams2)
+        E_G_s_h = E_G.h[source_j]
         @syntactic_unroll for (lhs, rhs) in $(zip(dense_blocks, dense_blocks))
             inds1 = (source_j-1)*P+Base.to_index(CanonicalParams2, lhs[1])
             inds2 = (source_j-1)*P+Base.to_index(CanonicalParams2, lhs[2])
             sf_result.h[inds1, inds2] =
-              combinator(sf_result.h[inds1, inds2], scale*E_G_s.h[rhs[1], rhs[2]])
+              combinator(sf_result.h[inds1, inds2], scale*E_G_s_h[rhs[1], rhs[2]])
         end
     end
     nothing
@@ -612,6 +613,8 @@ function add_pixel_term!{NumType <: Number}(
 end
 
 
+const already_visited_zero = falses(0,0)
+
 """
 Return the expected log likelihood for all bands in a section
 of the sky.
@@ -623,9 +626,12 @@ function elbo_likelihood{T}(ea::ElboArgs,
                             bvn_bundle::BvnBundle{T} = BvnBundle{T}(ea.psf_K, ea.S))
     clear!(elbo_vars)
     clear!(bvn_bundle)
+    # We preallocate one of these for type stability. If and only if it is
+    # used, it gets a properly sized one allocated below.
+    already_visited = already_visited_zero
 
     # this call loops over light sources (but not images)
-    sbs = load_source_brightnesses(ea, vp)
+    sbs = load_source_brightnesses!(bvn_bundle.sbs, ea, vp)
 
     for n in 1:ea.N
         img = ea.images[n]
@@ -648,9 +654,9 @@ function elbo_likelihood{T}(ea::ElboArgs,
         # hasn't been visited before, so no need to allocate memory.
         # currently length(ea.active_sources) > 1 only in unit tests, never
         # when invoked from `bin`.
-        already_visited = length(ea.active_sources) == 1 ?
-                              falses(0, 0) :
-                              falses(size(img.pixels))
+        if length(ea.active_sources) > 1
+            already_visited = falses(size(img.pixels))
+        end
 
         # iterate over the pixels by iterating over the patches, and visiting
         # all the pixels in the patch that are active and haven't already been
@@ -668,7 +674,7 @@ function elbo_likelihood{T}(ea::ElboArgs,
                 end
 
                 # if there's only one source to visit, we know this pixel is new
-                if length(ea.active_sources) != 1
+                if length(ea.active_sources) > 1
                     if already_visited[h,w]
                         continue
                     end
@@ -697,27 +703,25 @@ end
 using Celeste: Celeste
 using Celeste.SensitiveFloats: n_sources, n_local_params
 const index_map = Base.to_index(typeof(Celeste.Model.ids2),Celeste.Model.ids_2_to_ids)
-function reparameterize_elbo{NumType}(sf::SensitiveFloat{NumType, CanonicalParams2})
+function reparameterize_elbo{NumType}(sf_result::SensitiveFloat{NumType, CanonicalParams, Matrix{Float64}}, sf::SensitiveFloat{NumType, CanonicalParams2})
     P = n_local_params(sf)
-    d = Array{NumType}(n_local_params(sf) * sf.has_gradient, n_sources(sf))
     if sf.has_gradient
         for s in 1:n_sources(sf)
             for i = 1:P
-                d[(s-1)*P + i] = sf.d[(s-1)*P + index_map[i]]
+                sf_result.d[(s-1)*P + i] = sf.d[(s-1)*P + index_map[i]]
             end
         end
     end
-    h = Array{NumType}(n_sources(sf) * n_local_params(sf) * sf.has_hessian, n_sources(sf) * n_local_params(sf) * sf.has_hessian)
     if sf.has_hessian
         for source_i in 1:n_sources(sf), source_j in 1:n_sources(sf)
             for i = 1:P, j = 1:P
-                h[(source_j-1)*P + j, (source_i-1)*P + i] =
+                sf_result.h[(source_j-1)*P + j, (source_i-1)*P + i] =
                   sf.h[(source_j-1)*P + index_map[j], (source_i-1)*P + index_map[i]]
             end
         end
     end
-    SensitiveFloat{NumType, CanonicalParams}(sf.v, d, h, n_sources(sf),
-      sf.has_gradient, sf.has_hessian)
+    sf_result.v[] = sf.v[]
+    sf_result
 end
 
 """
@@ -732,8 +736,8 @@ function elbo{T}(ea::ElboArgs,
                  bvn_bundle::BvnBundle = BvnBundle{T}(ea.psf_K, ea.S))
     @assert(all(all(isfinite, vs) for vs in vp), "vp contains NaNs or Infs")
     result = elbo_likelihood(ea, vp, elbo_vars, bvn_bundle)
-    result = reparameterize_elbo(result)
-    ea.include_kl && KLDivergence.subtract_kl_all_sources!(ea, vp, result)
+    reparam_result = reparameterize_elbo(elbo_vars.reparameterized_elbo, result)
+    ea.include_kl && KLDivergence.subtract_kl_all_sources!(ea, vp, reparam_result)
     assert_all_finite(elbo_vars.elbo)
-    return result
+    return reparam_result
 end

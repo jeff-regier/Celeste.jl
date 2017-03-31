@@ -8,7 +8,7 @@ using Base.Threads: threadid, nthreads
 import ..Configs
 using ..Model
 import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
-                BvnBundle, GalaxySigmaDerivs, SkyPatch,
+                GalaxySigmaDerivs, SkyPatch,
                 get_bvn_cov, eval_bvn_pdf!, get_bvn_derivs!,
                 transform_bvn_derivs!, populate_fsm!, SparseStruct
 import ..Celeste: Const, @aliasscope, @unroll_loop, ParameterizedArray
@@ -106,8 +106,9 @@ end
 
 
 include("deterministic_vi/elbo_args.jl")
-include("deterministic_vi/elbo_kl.jl")
 include("deterministic_vi/source_brightness.jl")
+include("deterministic_vi/elbo_intermediate_vars.jl")
+include("deterministic_vi/elbo_kl.jl")
 include("deterministic_vi/elbo_objective.jl")
 include("deterministic_vi/ConstraintTransforms.jl")
 include("deterministic_vi/ElboMaximize.jl")

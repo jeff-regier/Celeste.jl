@@ -12,7 +12,7 @@ export SensitiveFloat,
        AbstractSensitiveFloat
 
 using Celeste: ParameterizedArray, @aliasscope, Const, @unroll_loop
-import Celeste: zero!
+import Celeste: zero!, zeros_type
 using StaticArrays
 
 abstract type AbstractSensitiveFloat{NumType} end
@@ -115,7 +115,7 @@ Attributes:
       in the same format as d.  This is used for the full Hessian
       with respect to all the sources.
 """
-immutable SensitiveFloat{NumType, ParamSet} <: AbstractSensitiveFloat{NumType}
+immutable SensitiveFloat{NumType, ParamSet, HessianRepresentation} <: AbstractSensitiveFloat{NumType}
     v::Base.RefValue{NumType}
 
     # local_P x local_S matrix of gradients
@@ -123,21 +123,30 @@ immutable SensitiveFloat{NumType, ParamSet} <: AbstractSensitiveFloat{NumType}
 
     # h is ordered so that p changes fastest.  For example, the indices
     # of a column of h correspond to the indices of d's stacked columns.
-    h::Matrix{NumType}
+    h::HessianRepresentation
 
     local_S::Int64
 
     has_gradient::Bool
     has_hessian::Bool
 end
-function (::Type{SensitiveFloat{NumType, ParamSet}}){NumType, ParamSet}(local_S, has_gradient, has_hessian)
+function (::Type{SensitiveFloat{NumType, ParamSet, HessianRepresentation} where HessianRepresentation}){NumType, ParamSet}(local_S, has_gradient, has_hessian)
     @assert has_gradient || !has_hessian
     v = Ref(zero(NumType))
     local_P = isa(ParamSet, Integer) ? ParamSet : length(ParamSet)
     d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
     h_dim = local_P * local_S * has_hessian
     h = zeros(NumType, h_dim, h_dim)
-    SensitiveFloat{NumType, ParamSet}(v, d, h, local_S, has_gradient, has_hessian)
+    SensitiveFloat{NumType, ParamSet, Matrix{NumType}}(v, d, h, local_S, has_gradient, has_hessian)
+end
+function (::Type{SensitiveFloat{NumType, ParamSet, HessianRepresentation}}){NumType, ParamSet, HessianRepresentation}(local_S, has_gradient, has_hessian)
+    @assert has_gradient || !has_hessian
+    v = Ref(zero(NumType))
+    local_P = isa(ParamSet, Integer) ? ParamSet : length(ParamSet)
+    d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
+    h_dim = local_P * local_S * has_hessian
+    h = zeros_type(HessianRepresentation, h_dim, h_dim)
+    SensitiveFloat{NumType, ParamSet, HessianRepresentation}(v, d, h, local_S, has_gradient, has_hessian)
 end
 n_sources(sf::SensitiveFloat) = sf.local_S
 n_local_params(sf::SensitiveFloat{NumType, ParamSet} where NumType) where {ParamSet} = isa(ParamSet, Int) ? ParamSet : length(ParamSet)

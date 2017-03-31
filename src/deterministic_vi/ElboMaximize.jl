@@ -5,7 +5,7 @@ using Optim: Options, NewtonTrustRegion
 using ..Model
 using ..SensitiveFloats
 using ..DeterministicVI
-using ..DeterministicVI: init_thread_pool!, ElboIntermediateVariables
+using ..DeterministicVI: init_thread_pool!, ElboIntermediateVariables, BvnBundle
 using ..DeterministicVI.ConstraintTransforms: TransformDerivatives,
                                               VariationalParams,
                                               ConstraintBatch,
@@ -28,7 +28,7 @@ immutable Config{N,T}
     free_initial_input::Vector{T}
     free_previous_input::Vector{T}
     free_result::SensitiveFloat{T}
-    bvn_bundle::Model.BvnBundle{T}
+    bvn_bundle::BvnBundle{T}
     constraints::ConstraintBatch
     derivs::TransformDerivatives{N,T}
     optim_options::Options
@@ -50,7 +50,7 @@ function Config{T}(ea::ElboArgs,
     free_initial_input = to_flat_vector(free_params)
     free_previous_input = similar(free_initial_input)
     free_result = SensitiveFloat{Float64,length(free_params[1])}(length(bound_params), true, true)
-    bvn_bundle = Model.BvnBundle{T}(ea.psf_K, ea.S)
+    bvn_bundle = BvnBundle{T}(ea.psf_K, ea.S)
     derivs = TransformDerivatives(bound_params, free_params)
     return Config(bound_params, free_params, free_initial_input,
                   free_previous_input, free_result, bvn_bundle,
@@ -163,7 +163,8 @@ function evaluate!{T}(ea::ElboArgs, vp::VariationalParams{T}, cfg::Config, x::Ve
         bound_result = elbo(ea, vp, get_elbo_vars(), cfg.bvn_bundle)
         propagate_derivatives!(to_bound!, bound_result,
                                cfg.free_result, cfg.free_params,
-                               cfg.constraints, cfg.derivs)
+                               cfg.constraints, cfg.derivs,
+                               get_elbo_vars().pd_scratch)
     end
     return nothing
 end

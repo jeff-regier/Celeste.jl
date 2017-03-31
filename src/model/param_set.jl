@@ -197,7 +197,7 @@ Celeste.is_implicitly_symmetric(s::SparseStruct) = true
 Base.issymmetric(s::SparseStruct) = true
 
 struct LatentStateIndexes <: ParamSet
-    u::Vector{Int}
+    u::SVector{2, Int}
     e_dev::Int
     e_axis::Int
     e_angle::Int

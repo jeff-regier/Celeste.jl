@@ -5,6 +5,7 @@ using ...Model: CanonicalParams, ids, prior, Ia, D
 using ...SensitiveFloats: SensitiveFloat, add_sources_sf!
 using Compat
 using ForwardDiff, ReverseDiff, DiffBase
+using Celeste: zeros_type
 
 # Calculate the Kullback-Leibler divergences between pairs of well-known parameteric
 # distributions, and derivatives with respect to the parameters of the first distributions.
@@ -163,12 +164,16 @@ using ReverseDiff: TrackedArray, TrackedReal, CompiledTape, GradientTape
 @compat const KLGradientTape{T} = GradientTape{typeof(subtract_kl),
                                                TrackedArray{T,T,1,Vector{T},Vector{T}},
                                                TrackedReal{T,T,Void}}
+const KLSensitiveFloat{NumType} = SensitiveFloat{NumType,CanonicalParams,Matrix{NumType}}
+
 
 immutable KLHelper{N,T}
     gradient_tape::CompiledTape{:kl_gradient,KLGradientTape{T}}
     nested_gradient_tape::CompiledTape{:kl_nested_gradient,KLGradientTape{Dual{N,T}}}
     dual_buffer::Vector{Dual{N,T}}
     jacobian_config::JacobianConfig{N,T,Vector{Dual{N,T}}}
+    kl_source::KLSensitiveFloat{T}
+    result::DiffBase.DiffResult{1,T,NTuple{1,fieldtype(KLSensitiveFloat{T}, :d)}}
 end
 
 const PARAM_LENGTH = length(CanonicalParams)
@@ -180,15 +185,19 @@ function KLHelper{N,T}(::Type{Dual{N,T}})
     nested_gradient_tape = CompiledTape{:kl_nested_gradient}(GradientTape(subtract_kl, rand(Dual{N,T}, PARAM_LENGTH)))
     ReverseDiff.compile(gradient_tape)
     ReverseDiff.compile(nested_gradient_tape)
-    return KLHelper{N,T}(gradient_tape, nested_gradient_tape, dual_buffer, jacobian_config)
+    kl_source = KLSensitiveFloat{T}(1, true, true)
+    result = DiffBase.DiffResult(zero(T), kl_source.d)
+    return KLHelper{N,T}(gradient_tape, nested_gradient_tape, dual_buffer, jacobian_config, kl_source, result)
 end
 
 function kl_gradient!(out, x, helper::KLHelper)
     return ReverseDiff.gradient!(out, helper.gradient_tape, x)
 end
 
+# A bit of a hack, but avoids having to allocate a closure
+(helper::KLHelper)(t) = ReverseDiff.gradient!(helper.dual_buffer, helper.nested_gradient_tape, t)
 function kl_hessian!(out, x, helper::KLHelper)
-    f = t -> ReverseDiff.gradient!(helper.dual_buffer, helper.nested_gradient_tape, t)
+    f = helper
     return ForwardDiff.jacobian!(out, f, x, helper.jacobian_config)
 end
 
@@ -216,7 +225,9 @@ function subtract_kl_all_sources!{T}(ea::ElboArgs,
                                      accum::SensitiveFloat,
                                      kl_source::SensitiveFloat = get_kl_source(T),
                                      helper::KLHelper = get_kl_helper(T))
-    result = DiffBase.DiffResult(zero(T), kl_source.d)
+    result = helper.result
+    result.value = zero(T)
+    # result.derivs is implicitly set to kl_source.derivs
     for sa in 1:length(ea.active_sources)
         subtract_kl_source!(kl_source, result, vp[ea.active_sources[sa]], helper)
         add_sources_sf!(accum, kl_source, sa)
@@ -233,20 +244,15 @@ const CHUNK_SIZE = pickchunksize(PARAM_LENGTH)
 const KL_HELPER_FLOAT_POOL = Vector{KLHelper{CHUNK_SIZE,Float64}}()
 const KL_HELPER_DUAL_POOL = Vector{KLHelper{CHUNK_SIZE,Dual{1,Float64}}}()
 
-const KL_SOURCE_FLOAT_POOL = Vector{SensitiveFloat{Float64}}()
-const KL_SOURCE_DUAL_POOL = Vector{SensitiveFloat{Dual{1,Float64}}}()
-
 get_kl_helper(::Type{Float64}) = KL_HELPER_FLOAT_POOL[Base.Threads.threadid()]
 get_kl_helper(::Type{Dual{1,Float64}}) = KL_HELPER_DUAL_POOL[Base.Threads.threadid()]
 
-get_kl_source(::Type{Float64}) = KL_SOURCE_FLOAT_POOL[Base.Threads.threadid()]
-get_kl_source(::Type{Dual{1,Float64}}) = KL_SOURCE_DUAL_POOL[Base.Threads.threadid()]
+get_kl_source(::Type{Float64}) = get_kl_helper(Float64).kl_source
+get_kl_source(::Type{Dual{1,Float64}}) = get_kl_helper(Dual{1,Float64}).kl_source
 
 function __init__()
     init_thread_pool!(KL_HELPER_FLOAT_POOL, () -> KLHelper(Dual{CHUNK_SIZE,Float64}))
     init_thread_pool!(KL_HELPER_DUAL_POOL, () -> KLHelper(Dual{CHUNK_SIZE,Dual{1,Float64}}))
-    init_thread_pool!(KL_SOURCE_FLOAT_POOL, () -> SensitiveFloat{Float64, CanonicalParams}(1, true, true))
-    init_thread_pool!(KL_SOURCE_DUAL_POOL, () -> SensitiveFloat{Dual{1,Float64}, CanonicalParams}(1, true, false))
 end
 
 # explicitly call this for use with compiled system image

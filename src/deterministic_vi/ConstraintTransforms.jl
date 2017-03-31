@@ -368,7 +368,8 @@ function propagate_derivatives!{F,T}(transform!::F,
                                      sf_input::SensitiveFloat,
                                      input_sources::VariationalParams{T},
                                      constraints::ConstraintBatch,
-                                     derivs::TransformDerivatives)
+                                     derivs::TransformDerivatives,
+                                     scratch = Array{Float64, 2}(NUM_ELBO_BOUND_PARAMS, NUM_ELBO_BOUND_PARAMS))
     sf_input.v[] = sf_output.v[]
     n_sources = length(input_sources)
     n_input_params = size(sf_input.d, 1)
@@ -381,7 +382,7 @@ function propagate_derivatives!{F,T}(transform!::F,
     for src::Int64 in 1:n_sources
         differentiate!((y, x) -> transform!(y, x, constraints, src), derivs, input_sources[src])
         backprop_jacobian!(sf_input.d, sf_output.d, derivs.jacobian, src)
-        backprop_hessian!(input_hessian, output_hessian, derivs.hessian, derivs.jacobian, sf_output.d, src)
+        backprop_hessian!(input_hessian, output_hessian, derivs.hessian, derivs.jacobian, sf_output.d, src, scratch)
     end
     symmetrize!(sf_input.h)
     return sf_input
@@ -399,8 +400,8 @@ function backprop_jacobian!(input, output, jacobian, src)
     return input
 end
 
-function backprop_hessian!(input, output, hessian, jacobian, gradient, src)
-    first_quad_form!(input, jacobian, output, src)
+function backprop_hessian!(input, output, hessian, jacobian, gradient, src, scratch = Array{Float64, 2}(NUM_ELBO_BOUND_PARAMS, NUM_ELBO_BOUND_PARAMS))
+    first_quad_form!(input, jacobian, output, src, scratch)
     for j in 1:size(hessian, 2)
         for k in 1:size(hessian, 3)
             x = zero(eltype(input))
@@ -415,11 +416,10 @@ end
 
 # equivalent to `At_mul_B!(view(C, src, :, src, :), A, view(B, src, :, src, :) * A)`
 # this could be further optimized by assuming the symmetry of `view(B, src, :, src, :)`
-function first_quad_form!(C, A, B, src)
+function first_quad_form!(C, A, B, src, scratch = Array{Float64, 2}(NUM_ELBO_BOUND_PARAMS, NUM_ELBO_BOUND_PARAMS))
     const m = NUM_ELBO_BOUND_PARAMS
     @assert m == size(A, 1)
     n = size(A, 2)
-    scratch = Array{Float64, 2}(m, m)
     @aliasscope begin
       for i in 1:m, j in 1:m
         scratch[i, j] = Const(B)[src, j, src, i]

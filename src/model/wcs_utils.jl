@@ -11,10 +11,10 @@ Args:
 Returns:
     - The 1-indexed pixel locations in the same shape as the input.
 """
-linear_world_to_pix{T <: Number}(wcs_jacobian,
-                          world_offset::Vector{Float64},
-                          pix_offset::Vector{Float64},
-                          worldcoords::VecOrMat{T}) =
+linear_world_to_pix(wcs_jacobian,
+                          world_offset,
+                          pix_offset,
+                          worldcoords) =
     wcs_jacobian * (worldcoords .- world_offset) + pix_offset
 
 

@@ -485,7 +485,7 @@ end
 fast_fill!{T<:Array}(s::T, x) = fill!(s, x)
 
 # WARNING: HUGE PERFORMANCE HOTSPOT
-function transform_bvn_derivs_hessian!{NumType <: Number}(
+@Base.hotspot function transform_bvn_derivs_hessian!{NumType <: Number}(
     bvn_derivs::BivariateNormalDerivatives{NumType},
     sig_sf::GalaxySigmaDerivs{NumType},
     wcs_jacobian)
@@ -575,7 +575,7 @@ function transform_bvn_derivs!{NumType <: Number}(
       # TODO: time consuming **************
       @aliasscope begin
         bvn_s_d   = bvn_derivs.bvn_s_d
-        bvn_sig_d = Const(bvn_derivs.bvn_sig_d)
+        bvn_sig_d = bvn_derivs.bvn_sig_d
         sig_sf_j = sig_sf.j
 
         fast_fill!(bvn_s_d, 0.0)
@@ -591,16 +591,3 @@ function transform_bvn_derivs!{NumType <: Number}(
       end
     end
 end
-
-immutable BvnBundle{T<:Real}
-    bvn_derivs::BivariateNormalDerivatives{T}
-    star_mcs::Matrix{BvnComponent{T}}
-    gal_mcs::Array{GalaxyCacheComponent{T},4}
-    function (::Type{BvnBundle{T}}){T}(psf_K::Int, S::Int)
-        return new{T}(BivariateNormalDerivatives{T}(),
-                      Matrix{BvnComponent{T}}(psf_K, S),
-                      Array{GalaxyCacheComponent{T}}(psf_K, 8, 2, S))
-    end
-end
-
-clear!(bvn_bundle::BvnBundle) = (clear!(bvn_bundle.bvn_derivs); bvn_bundle)
