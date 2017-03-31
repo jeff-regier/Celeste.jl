@@ -176,6 +176,67 @@ function partition_cyclades(n_threads, target_sources, neighbor_map; batch_size=
     thread_sources_assignment
 end
 
+function load_balance_across_threads(n_threads, times)
+    ts = [0 for i=1:n_threads]
+    for t in times
+        minimum,index_min = findmin(ts)
+        ts[index_min] += t
+    end
+    return ts
+end
+
+"""
+Partitions sources via the cyclades algorithm. Finds the batch size which returns most balanced CC distribution.
+
+- target_sources - array of target sources. Elements should match keys of neighbor_map.
+- neighbor_map - graph of connections of sources
+"""
+function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map)
+
+    println("Partition cyclades auto batchsize...")
+
+    n_threads = nthreads()
+    
+    # Sample batch sizes at intervals
+    n_to_sample = 100
+    stepsize = trunc(Int, length(target_sources) / n_to_sample)
+
+    # Best load imbalance of the batch sizes to test
+    best_score = -1
+    best_result = 0
+    best_batch_size = -1
+
+    println("Num elements $(length(target_sources))")
+    for batch_size_to_use = 1 : stepsize : length(target_sources)+1
+        println("Testing batch $(batch_size_to_use)")
+        ccs = partition_cyclades_dynamic(target_sources, neighbor_map, batch_size=batch_size_to_use)
+        score = 0
+        for batch in ccs
+            # Find average load imbalance within the batch as a percentage
+            times = [length(x) for x in batch]
+            #println("Raw times $(times)")
+            #times = load_balance_across_threads(n_threads, times)
+            #println("Load balanced times $(times)")
+            #estimated_imbalance = mean(maximum(times) - times) / maximum(times)
+            #cur_load_imbalance = max(estimated_imbalance, cur_load_imbalance)
+            score += length(times)
+        end
+        score /= length(ccs)
+        println("Score: $(score)")
+        if score >= best_score
+            best_result = ccs
+            best_score = score
+            best_batch_size = batch_size_to_use
+        end
+    end
+    println("Using CCs with batchsize $(best_batch_size)")
+    for batch in best_result
+        sizes = [length(x) for x in batch]
+        println("$(sizes)")
+    end
+    best_result
+end
+
 """
 Partitions sources via the cyclades algorithm.
 
@@ -302,9 +363,10 @@ function partition_box(npartitions::Int, target_sources::Vector{Int},
         #return partition_cyclades(npartitions, target_sources,
         #                          cyclades_neighbor_map,
         #                          batch_size=batch_size)
-    return partition_cyclades_dynamic(target_sources,
-                                          cyclades_neighbor_map,
-                                          batch_size=batch_size)
+    #return partition_cyclades_dynamic(target_sources,
+    #                                      cyclades_neighbor_map,
+    #                                      batch_size=batch_size)
+    return partition_cyclades_dynamic_auto_batchsize(target_sources, cyclades_neighbor_map)                        
     else
         return partition_equally(npartitions, length(target_sources))
     end
@@ -357,6 +419,8 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
                               within_batch_shuffling::Bool=true,
                               n_iters::Int=3,
                               timing=InferTiming())
+
+    batch_size = 100
     # Seed random number generator to ensure the same results per run.
     srand(42)
 
@@ -595,7 +659,7 @@ function process_sources_dynamic!(images::Vector{Model.Image},
                 end
             end
             Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
-            Log.info("Batch $(batch) Avg load imbalance - $(mean(process_sources_elapsed_times-minimum(process_sources_elapsed_times)))")
+            Log.info("Batch $(batch) Avg load imbalance - $(mean(maximum(process_sources_elapsed_times)-process_sources_elapsed_times)/maximum(process_sources_elapsed_times))")
         end
     end
 end
