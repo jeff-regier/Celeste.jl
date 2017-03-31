@@ -7,9 +7,11 @@ module Celeste
 import ForwardDiff
 
 function zero! end
+function zeros_type end
 
 # alias scopes
 include("aliasscopes.jl")
+include("PackedSymmetric.jl")
 
 include("model/param_set_utils.jl")
 
