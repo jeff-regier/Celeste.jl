@@ -25,8 +25,6 @@ function HessianSubmatrices(NumType::DataType, i::Int)
     HessianSubmatrices{NumType}(u_u, shape_shape)
 end
 
-using Celeste: Symmetric2
-
 DenseHessianSSSF(ParamSet, NumType) = SingleSourceSensitiveFloat{NumType, ParamSet,
   ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}}
 SparseHessianCanonicalSSSF(NumType) = SingleSourceSensitiveFloat{NumType, CanonicalParams2, SparseStruct{NumType}}
