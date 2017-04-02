@@ -426,8 +426,7 @@ function joint_infer_boxes(config::Configs.Config,
     tid = threadid()
     all_threads_timing[tid] = InferTiming()
     thread_timing = all_threads_timing[tid]
-    rng = MersenneTwister()
-    srand(rng, 42)
+    rng = MersenneTwister(42)
 
     # Dtree parent ranks reserve one thread to drive the tree
     if mi.rundt && tid == nthreads()
