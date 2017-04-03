@@ -56,11 +56,11 @@ Base.getindex(sf::SingleSourceSensitiveFloat, s::Source) = (@assert s.n == 1; sf
 immutable SSparseSensitiveFloat{NumType, ParamSet, HessianRepresentation} <: AbstractSparseSSensitiveFloat{NumType}
     v::Base.RefValue{NumType}
 
-    # local_S vector of local_P gradients
-    d::Vector{ParameterizedArray{ParamSet, Vector{NumType}}}
+    # local_S tuple of local_P gradients
+    d::NTuple{N, ParameterizedArray{ParamSet, Vector{NumType}}} where N
 
     # local_S x local_S matrix of hessians (generally local_P x local_P matrices)
-    h::Vector{HessianRepresentation}
+    h::NTuple{N, HessianRepresentation} where N
 
     local_S::Int
 
@@ -70,9 +70,9 @@ immutable SSparseSensitiveFloat{NumType, ParamSet, HessianRepresentation} <: Abs
         @assert has_gradient || !has_hessian
         local_P = length(ParamSet)
         v = Ref(zero(NumType))
-        d = [zeros_type(ParameterizedArray{ParamSet, Vector{NumType}}, local_P * has_gradient) for i = 1:local_S]
+        d = tuple((zeros_type(ParameterizedArray{ParamSet, Vector{NumType}}, local_P * has_gradient) for i = 1:local_S)...)
         h_dim = local_P
-        h = [zeros_type(HessianRepresentation, h_dim, h_dim) for i = 1:local_S]
+        h = tuple((zeros_type(HessianRepresentation, h_dim, h_dim) for i = 1:local_S)...)
         new{NumType, ParamSet, HessianRepresentation}(v, d, h, local_S, has_gradient, has_hessian)
     end
 end
@@ -148,6 +148,7 @@ function (::Type{SensitiveFloat{NumType, ParamSet, HessianRepresentation}}){NumT
     h = zeros_type(HessianRepresentation, h_dim, h_dim)
     SensitiveFloat{NumType, ParamSet, HessianRepresentation}(v, d, h, local_S, has_gradient, has_hessian)
 end
+n_sources(sf::SensitiveFloat{A,B,<:StaticArray} where {A,B}) = div(size(sf.h, 2), n_local_params(sf))
 n_sources(sf::SensitiveFloat) = sf.local_S
 n_local_params(sf::SensitiveFloat{NumType, ParamSet} where NumType) where {ParamSet} = isa(ParamSet, Int) ? ParamSet : length(ParamSet)
 @inline Base.getindex(sf::SensitiveFloat{NumType, ParamSet}, s::Source) where {NumType, ParamSet} =

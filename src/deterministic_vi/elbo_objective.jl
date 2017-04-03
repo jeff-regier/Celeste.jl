@@ -355,8 +355,7 @@ end
 using Celeste.SensitiveFloats: Source
 @eval @Base.hotspot function add_sparse_components!{T}(combinator::T, source_j, sf_result, scale, E_G)
     P = length(CanonicalParams2)
-    @assert source_j == 1
-    source_j = 1
+    @assert 1 <= source_j <= n_sources(sf_result)
     @aliasscope @inbounds begin
         P = length(CanonicalParams2)
         E_G_s_h = E_G.h[source_j]
@@ -393,7 +392,7 @@ function combine_sfs_hessian2!{T,TT,T1 <: Number}(
                    E_G_s_d = Const(E_G.d[source_j])
                    if source_i == source_j
                        # Dense components
-                       for ind1 = 1:n_local_params(sf_result)
+                       @unroll_loop for ind1 = 1:n_local_params(sf_result)
                           var =
                             sf11_factor * Const(var_G_s.d)[ind1] + sf21_factor * E_G_s_d[ind1]
                           var += g_d[1] * Const(var_G_s.h)[ind1, ind2]
