@@ -178,14 +178,14 @@ end
 
 const PARAM_LENGTH = length(CanonicalParams)
 
-function KLHelper{N,T}(::Type{Dual{N,T}})
+function KLHelper{N,T}(::Type{Dual{N,T}}, has_gradient=true, has_hessian=true)
     dual_buffer = zeros(Dual{N,T}, PARAM_LENGTH)
     jacobian_config = JacobianConfig{N}(rand(T, PARAM_LENGTH))
     gradient_tape = CompiledTape{:kl_gradient}(GradientTape(subtract_kl, rand(T, PARAM_LENGTH)))
     nested_gradient_tape = CompiledTape{:kl_nested_gradient}(GradientTape(subtract_kl, rand(Dual{N,T}, PARAM_LENGTH)))
     ReverseDiff.compile(gradient_tape)
     ReverseDiff.compile(nested_gradient_tape)
-    kl_source = KLSensitiveFloat{T}(1, true, true)
+    kl_source = KLSensitiveFloat{T}(1, has_gradient, has_hessian)
     result = DiffBase.DiffResult(zero(T), kl_source.d)
     return KLHelper{N,T}(gradient_tape, nested_gradient_tape, dual_buffer, jacobian_config, kl_source, result)
 end
@@ -227,7 +227,7 @@ function subtract_kl_all_sources!{T}(ea::ElboArgs,
                                      helper::KLHelper = get_kl_helper(T))
     result = helper.result
     result.value = zero(T)
-    # result.derivs is implicitly set to kl_source.derivs
+    @assert result.derivs[1] == kl_source.d
     for sa in 1:length(ea.active_sources)
         subtract_kl_source!(kl_source, result, vp[ea.active_sources[sa]], helper)
         add_sources_sf!(accum, kl_source, sa)
@@ -251,8 +251,8 @@ get_kl_source(::Type{Float64}) = get_kl_helper(Float64).kl_source
 get_kl_source(::Type{Dual{1,Float64}}) = get_kl_helper(Dual{1,Float64}).kl_source
 
 function __init__()
-    init_thread_pool!(KL_HELPER_FLOAT_POOL, () -> KLHelper(Dual{CHUNK_SIZE,Float64}))
-    init_thread_pool!(KL_HELPER_DUAL_POOL, () -> KLHelper(Dual{CHUNK_SIZE,Dual{1,Float64}}))
+    init_thread_pool!(KL_HELPER_FLOAT_POOL, () -> KLHelper(Dual{CHUNK_SIZE,Float64},true,true))
+    init_thread_pool!(KL_HELPER_DUAL_POOL, () -> KLHelper(Dual{CHUNK_SIZE,Dual{1,Float64}},true,false))
 end
 
 # explicitly call this for use with compiled system image
