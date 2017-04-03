@@ -702,7 +702,7 @@ end
 using Celeste: Celeste
 using Celeste.SensitiveFloats: n_sources, n_local_params
 const index_map = Base.to_index(typeof(Celeste.Model.ids2),Celeste.Model.ids_2_to_ids)
-function reparameterize_elbo{NumType}(sf_result::SensitiveFloat{NumType, CanonicalParams, Matrix{Float64}}, sf::SensitiveFloat{NumType, CanonicalParams2})
+function reparameterize_elbo{NumType}(sf_result::SensitiveFloat{NumType, CanonicalParams, Matrix{NumType}}, sf::SensitiveFloat{NumType, CanonicalParams2})
     P = n_local_params(sf)
     if sf.has_gradient
         for s in 1:n_sources(sf)

@@ -144,7 +144,7 @@ function (::Type{SensitiveFloat{NumType, ParamSet, HessianRepresentation}}){NumT
     v = Ref(zero(NumType))
     local_P = isa(ParamSet, Integer) ? ParamSet : length(ParamSet)
     d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
-    h_dim = local_P * local_S * has_hessian
+    h_dim = local_P * local_S
     h = zeros_type(HessianRepresentation, h_dim, h_dim)
     SensitiveFloat{NumType, ParamSet, HessianRepresentation}(v, d, h, local_S, has_gradient, has_hessian)
 end

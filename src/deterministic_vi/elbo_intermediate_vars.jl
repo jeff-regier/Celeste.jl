@@ -65,7 +65,7 @@ function ElboIntermediateVariables(NumType::DataType,
       SizedMatrix{(length(CanonicalParams2)*num_active_sources,length(CanonicalParams2)*num_active_sources),NumType,2}}(
         num_active_sources, calculate_gradient, calculate_hessian)
         
-    reparameterized_elbo = SensitiveFloat{NumType, CanonicalParams, Matrix{Float64}}(
+    reparameterized_elbo = SensitiveFloat{NumType, CanonicalParams, Matrix{NumType}}(
       num_active_sources, calculate_gradient, calculate_hessian)
 
     pd_scratch = Matrix{NumType}(length(CanonicalParams), length(CanonicalParams))

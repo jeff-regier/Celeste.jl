@@ -86,6 +86,9 @@ function SourceBrightness!{NumType <: Number}(sbs::SourceBrightness{NumType},
 
     @syntactic_unroll for kind in (Star(), Galaxy())
         i = (kind == Star() ? 1 : 2)
+        for b = 1:B
+            clear!(E_l_a[i][b])
+        end
 
         E_l_a[i][3].v[] = exp(r1[i] + 0.5 * r2[i])
         E_l_a[i][4].v[] = exp(c1[3, i] + .5 * c2[3, i])
@@ -93,11 +96,7 @@ function SourceBrightness!{NumType <: Number}(sbs::SourceBrightness{NumType},
         E_l_a[i][2].v[] = exp(-c1[2, i] + .5 * c2[2, i])
         E_l_a[i][1].v[] = exp(-c1[1, i] + .5 * c2[1, i])
 
-        if calculate_gradient
-            for b = 1:B
-                clear!(E_l_a[i][b])
-            end
-              
+        if calculate_gradient              
             # band 3 is the reference band, relative to which the colors are
             # specified.
             # It is denoted r_s and has a lognormal expectation.
@@ -203,6 +202,6 @@ function load_source_brightnesses(ea::ElboArgs,
           vp::VariationalParams{NumType},
           calculate_gradient::Bool=true,
           calculate_hessian::Bool=true) where NumType
-    sbs = Vector{SourceBrightness{NumType}}(ea.S)
+    sbs = SourceBrightness{NumType}[SourceBrightness{NumType}(calculate_gradient, calculate_hessian) for _ in 1:ea.S]
     load_source_brightnesses!(sbs, ea, vp, calculate_gradient, calculate_hessian)
 end
