@@ -148,7 +148,7 @@ function (::Type{SensitiveFloat{NumType, ParamSet, HessianRepresentation}}){NumT
     h = zeros_type(HessianRepresentation, h_dim, h_dim)
     SensitiveFloat{NumType, ParamSet, HessianRepresentation}(v, d, h, local_S, has_gradient, has_hessian)
 end
-n_sources(sf::SensitiveFloat{A,B,<:StaticArray} where {A,B}) = div(size(sf.h, 2), n_local_params(sf))
+@inline n_sources(sf::SensitiveFloat{A,B,<:StaticArray} where {A,B}) = div(size(sf.h, 2), n_local_params(sf))
 n_sources(sf::SensitiveFloat) = sf.local_S
 n_local_params(sf::SensitiveFloat{NumType, ParamSet} where NumType) where {ParamSet} = isa(ParamSet, Int) ? ParamSet : length(ParamSet)
 @inline Base.getindex(sf::SensitiveFloat{NumType, ParamSet}, s::Source) where {NumType, ParamSet} =
