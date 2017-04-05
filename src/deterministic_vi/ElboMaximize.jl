@@ -95,7 +95,7 @@ function elbo_optim_options(args...; xtol_abs = 1e-7, ftol_rel = 1e-6, max_iters
                          g_tol = 1e-8, iterations = max_iters,
                          store_trace = false, show_trace = false,
                          extended_trace = false,
-                         termination_callback = nothing,
+                         callback = termination_callback,
                          kwargs...)
 end
 
