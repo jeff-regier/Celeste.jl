@@ -87,10 +87,11 @@ function elbo_constraints{T}(bound::VariationalParams{T},
     return ConstraintBatch(boxes, simplexes)
 end
 
-function elbo_optim_options(; xtol_abs = 1e-7, ftol_rel = 1e-6, max_iters = 50)
-    return Optim.Options(x_tol = xtol_abs, f_tol = ftol_rel, g_tol = 1e-8,
-                         iterations = max_iters, store_trace = false,
-                         show_trace = false, extended_trace = false)
+function elbo_optim_options(args...; xtol_abs = 1e-7, ftol_rel = 1e-6, max_iters = 50, kwargs...)
+    return Optim.Options(args...; x_tol = xtol_abs, f_tol = ftol_rel,
+                         g_tol = 1e-8, iterations = max_iters,
+                         store_trace = false, show_trace = false,
+                         extended_trace = false, kwargs...)
 end
 
 function elbo_trust_region(; initial_delta = 1.0, delta_hat = 1e9)
