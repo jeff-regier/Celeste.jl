@@ -38,11 +38,13 @@ end
 function Config{T}(ea::ElboArgs,
                    vp::VariationalParams{T},
                    bound_params::VariationalParams{T} = vp[ea.active_sources];
+                   termination_callback = nothing,
                    loc_width::Float64 = 1e-4,
                    loc_scale::Float64 = 1.0,
                    max_iters::Int = 50,
                    constraints::ConstraintBatch = elbo_constraints(bound_params, loc_width, loc_scale),
-                   optim_options::Options = elbo_optim_options(max_iters=max_iters),
+                   optim_options::Options = elbo_optim_options(max_iters=max_iters,
+                                                               termination_callback=termination_callback),
                    trust_region::NewtonTrustRegion = elbo_trust_region())
     free_params = allocate_free_params(bound_params, constraints)
     free_initial_input = to_flat_vector(free_params)
@@ -87,11 +89,14 @@ function elbo_constraints{T}(bound::VariationalParams{T},
     return ConstraintBatch(boxes, simplexes)
 end
 
-function elbo_optim_options(args...; xtol_abs = 1e-7, ftol_rel = 1e-6, max_iters = 50, kwargs...)
+function elbo_optim_options(args...; xtol_abs = 1e-7, ftol_rel = 1e-6, max_iters = 50,
+                            termination_callback = nothing, kwargs...)
     return Optim.Options(args...; x_tol = xtol_abs, f_tol = ftol_rel,
                          g_tol = 1e-8, iterations = max_iters,
                          store_trace = false, show_trace = false,
-                         extended_trace = false, kwargs...)
+                         extended_trace = false,
+                         termination_callback = nothing,
+                         kwargs...)
 end
 
 function elbo_trust_region(; initial_delta = 1.0, delta_hat = 1e9)
