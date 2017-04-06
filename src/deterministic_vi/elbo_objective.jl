@@ -31,9 +31,15 @@ function calculate_G_s!{NumType <: Number}(
     @assert elbo_vars.fs1m.local_P == length(GalaxyPosParams)
 
     # we'd like to get rid of these calls to `fill!`
-    clear!(E_G_s)
-    clear!(E_G2_s)
-    clear!(var_G_s)
+    if is_active_source
+        clear!(E_G_s)
+        clear!(E_G2_s)
+        clear!(var_G_s)
+    else
+        E_G_s.v[] = 0.0
+        E_G2_s.v[] = 0.0
+        var_G_s.v[] = 0.0
+    end
 
     @inbounds for i in 1:Ia # Celestial object types (e.g. stars and galaxies)
         fsm_i = (i == 1) ? elbo_vars.fs0m : elbo_vars.fs1m
