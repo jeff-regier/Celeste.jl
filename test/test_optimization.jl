@@ -5,7 +5,7 @@ using Celeste.DeterministicVI.ConstraintTransforms: ParameterConstraint,
                         ConstraintBatch, BoxConstraint, SimplexConstraint
 using Celeste.DeterministicVI: ElboArgs
 using Celeste.DeterministicVI.ElboMaximize: Config, maximize!, elbo_optim_options
-
+using Optim
 
 function verify_sample_star(vs, pos)
     @test vs[ids.a[2]] <= 0.01
@@ -98,7 +98,18 @@ function test_full_elbo_optimization()
 end
 
 
+function test_termination_callback()
+    ea, vp, catalog = gen_sample_galaxy_dataset(; include_kl = false);
+    terminated = false
+    callback = x -> (terminated = x.iteration >= 3; return terminated)
+    cfg = Config(ea, vp; termination_callback = callback)
+    _, _, _, result = maximize!(ea, vp, cfg)
+    return terminated && Optim.iterations(result) == 3
+end
+
+
 test_star_optimization()
 test_single_source_optimization()
 test_full_elbo_optimization()
 test_galaxy_optimization()
+test_termination_callback()

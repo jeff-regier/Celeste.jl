@@ -31,7 +31,7 @@ immutable Config{N,T}
     bvn_bundle::Model.BvnBundle{T}
     constraints::ConstraintBatch
     derivs::TransformDerivatives{N,T}
-    optim_options::Options{Void}
+    optim_options::Options
     trust_region::NewtonTrustRegion{T}
 end
 
