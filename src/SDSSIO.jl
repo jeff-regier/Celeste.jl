@@ -1,8 +1,6 @@
 # Functions for loading FITS files from the SloanDigitalSkySurvey.
 module SDSSIO
 
-using Compat
-
 import FITSIO
 import WCS
 
@@ -383,9 +381,15 @@ function read_photoobj(fname, band::Char='r')
 
     # Get "bright" objects.
     # (In objc_flags, the bit pattern Int32(2) corresponds to bright objects.)
-    is_bright    = @compat(read(hdu, "objc_flags")::Vector{Int32} .& Int32(2)) .!= 0
-    is_saturated = @compat(read(hdu, "objc_flags")::Vector{Int32} .& Int32(18)) .!= 0
-    is_large     = @compat(read(hdu, "objc_flags")::Vector{Int32} .& Int32(24)) .!= 0
+    objc_flags = read(hdu, "objc_flags")::Vector{Int32}
+    objc_flags2 = read(hdu, "objc_flags2")::Vector{Int32}
+
+    # bright, saturated, or large
+    bad_flags1 = objc_flags .& UInt32(1^2 + 2^18 + 2^24) .!= 0
+
+    # 14 = nopeak, DEBLEND_DEGENERATE, or saturated center
+    bad_flags2 = objc_flags2 .& UInt32(2^14 + 2^18 + 2^11) .!= 0
+    i = findfirst(objid, "1237680069097291856")
 
     has_child = read(hdu, "nchild")::Vector{Int16} .> 0
 
@@ -393,20 +397,20 @@ function read_photoobj(fname, band::Char='r')
     objc_type = read(hdu, "objc_type")::Vector{Int32}
     is_star = objc_type .== 6
     is_gal = objc_type .== 3
-    is_bad_obj = @compat((!).(is_star .| is_gal))
+    bad_type = ((!).(is_star .| is_gal))
 
     fracdev = vec((read(hdu, "fracdev")::Matrix{Float32})[b, :])
 
     # determine mask for rows
     has_dev = fracdev .> 0.
     has_exp = fracdev .< 1.
-    is_comp = @compat(has_dev .& has_exp)
-    is_bad_fracdev = @compat((fracdev .< 0.) .| (fracdev .> 1))
+    is_comp = (has_dev .& has_exp)
+    is_bad_fracdev = ((fracdev .< 0.) .| (fracdev .> 1))
 
     # TODO: We don't really want to exclude objects entirely just for being
     # bright: we just don't want to use for scoring (since
     # they're very saturated, presumably).
-    mask = @compat((!).(is_bad_fracdev .| is_bad_obj .| is_bright .| has_child))
+    mask = (!).(is_bad_fracdev .| bad_type .| bad_flags1 .| bad_flags2 .| has_child)
 
     # Read the fluxes.
     # Record the cmodelflux if the galaxy is composite, otherwise use
@@ -446,9 +450,7 @@ function read_photoobj(fname, band::Char='r')
                    "ab_dev"=>vec(ab_dev[b, mask]),
                    "theta_dev"=>vec(theta_dev[b, mask]),
                    "phi_dev"=>vec(phi_dev_deg[b, mask]),
-                   "phi_offset"=>vec(phi_offset[b, mask]),
-                   "is_large"=>vec(is_large[mask]),
-                   "is_saturated"=>vec(is_saturated[mask]))
+                   "phi_offset"=>vec(phi_offset[b, mask]))
     for (b, n) in BAND_CHAR_TO_NUM
         catalog["psfflux_$b"] = vec(psfflux[n, mask])
         catalog["compflux_$b"] = vec(cmodelflux[n, mask])
@@ -468,7 +470,7 @@ Convert from a catalog in dictionary-of-arrays, as returned by
 read_photoobj to Vector{CatalogEntry}.
 """
 function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{String, Any})
-    out = Vector{CatalogEntry}(length(catalog["objid"]))
+    out = CatalogEntry[]
 
     for i=1:length(catalog["objid"])
         worldcoords = [catalog["ra"][i], catalog["dec"][i]]
@@ -478,9 +480,7 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{String, Any})
         star_fluxes = zeros(5)
         gal_fluxes = zeros(5)
         for (j, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
-
             # Make negative fluxes positive.
-            # TODO: How can there be negative fluxes?
             psfflux = max(catalog["psfflux_$band"][i], 1e-6)
             devflux = max(catalog["devflux_$band"][i], 1e-6)
             expflux = max(catalog["expflux_$band"][i], 1e-6)
@@ -489,6 +489,10 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{String, Any})
             star_fluxes[j] = psfflux
             gal_fluxes[j] = frac_dev * devflux + (1.0 - frac_dev) * expflux
         end
+
+#        if minimum(star_fluxes[2:4]) <= 1e-4
+#            continue
+#        end
 
         # For shape parameters, we use the dominant component (dev or exp)
         usedev = frac_dev > 0.5
@@ -511,7 +515,7 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{String, Any})
         entry = CatalogEntry(worldcoords, catalog["is_star"][i], star_fluxes,
                              gal_fluxes, frac_dev, fits_ab, celeste_phi_rad, re_pixel,
                              catalog["objid"][i], Int(catalog["thing_id"][i]))
-        out[i] = entry
+        push!(out, entry)
     end
 
     return out
@@ -562,7 +566,7 @@ function read_photoobj_files(fts::Vector{RunCamcolField},
     for cat in rawcatalogs
         mask = (cat["thing_id"] .!= -1)
         if duplicate_policy == :primary
-            mask = @compat(mask .& (cat["mode"] .== 0x01))
+            mask = (mask .& (cat["mode"] .== 0x01))
         end
         for key in keys(cat)
             cat[key] = cat[key][mask]

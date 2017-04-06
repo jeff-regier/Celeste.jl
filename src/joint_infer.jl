@@ -486,7 +486,6 @@ function init_elboargs(config::Configs.Config,
 
         patches = Infer.get_sky_patches(images, cat_local)
         Infer.load_active_pixels!(config, images, patches)
-
         # Load vp with shared target source params, and also vp
         # that doesn't share target source params
         vp = Vector{Float64}[haskey(ts_vp, x) ?
@@ -596,7 +595,10 @@ function process_sources_dynamic!(images::Vector{Model.Image},
                 end
             end
             Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
-            Log.info("Batch $(batch) Avg load imbalance - $(mean(process_sources_elapsed_times-minimum(process_sources_elapsed_times)))")
+            idle_percent = 100.0 * (maximum(process_sources_elapsed_times) -
+                                      mean(process_sources_elapsed_times)) /
+                                      maximum(process_sources_elapsed_times)
+            Log.info("Batch $(batch) avg threads idle: $(round(Int, idle_percent))%")
         end
     end
 end

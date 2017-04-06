@@ -42,7 +42,7 @@ function test_images()
     ea = make_elbo_args(images, cat_entries, patch_radius_pix=1e-6)
 
     # Just check some basic facts about the catalog.
-    @test length(cat_entries) == 805
+    @test length(cat_entries) > 500
     @test 0 < sum([ce.is_star for ce in cat_entries]) < 805
 
     # Find an object near the middle of the image.
