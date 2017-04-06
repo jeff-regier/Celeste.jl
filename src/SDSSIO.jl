@@ -387,7 +387,7 @@ function read_photoobj(fname, band::Char='r')
     # bright, saturated, or large
     bad_flags1 = objc_flags .& UInt32(1^2 + 2^18 + 2^24) .!= 0
 
-    # 14 = nopeak, DEBLEND_DEGENERATE, or saturated center
+    # nopeak, DEBLEND_DEGENERATE, or saturated center
     bad_flags2 = objc_flags2 .& UInt32(2^14 + 2^18 + 2^11) .!= 0
     i = findfirst(objid, "1237680069097291856")
 
@@ -489,10 +489,6 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{String, Any})
             star_fluxes[j] = psfflux
             gal_fluxes[j] = frac_dev * devflux + (1.0 - frac_dev) * expflux
         end
-
-#        if minimum(star_fluxes[2:4]) <= 1e-4
-#            continue
-#        end
 
         # For shape parameters, we use the dominant component (dev or exp)
         usedev = frac_dev > 0.5
