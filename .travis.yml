@@ -9,6 +9,7 @@ notifications:
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
   - julia -e 'Pkg.clone(pwd()); Pkg.build("Celeste")'
+  - julia -e 'Pkg.checkout("StaticArrays")'
   - julia -e 'Pkg.test("Celeste"; coverage=(VERSION < v"0.4"))'
 
 after_success:
