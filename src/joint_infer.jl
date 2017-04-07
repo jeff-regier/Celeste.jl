@@ -237,7 +237,7 @@ function partition_cyclades_dynamic(target_sources, neighbor_map; batch_size=60)
         for (component_group_id, sources_of_component) in cur_batch_component
             push!(thread_sources_assignment[cur_batch], copy(sources_of_component))
         assigned_sources += length(sources_of_component)
-        end		
+        end
     end
 
     #Log.info("Cyclades - Assigned sources: $(assigned_sources) vs correct number of sources: $(n_sources)")
@@ -353,15 +353,9 @@ function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map,
         score = 0
         for batch in ccs
             # Find average load imbalance within the batch as a percentage
-            #times = [length(x) for x in batch]
 	    times = [sum([estimate_time(ea_vec[source_index].patches) for source_index in component]) for component in batch]
-            #println("Raw times $(times)")
             times = load_balance_across_threads(n_threads, times)
-            #println("Load balanced times $(times)")
             estimated_imbalance = mean(maximum(times) - times) 
-            #cur_load_imbalance = max(estimated_imbalance, cur_load_imbalance)
-            #score += length(times)
-	    #score = max(estimated_imbalance, score)
 	    score += estimated_imbalance
         end
         println("Score: $(score)")
