@@ -237,13 +237,15 @@ function partition_cyclades_dynamic(target_sources, neighbor_map; batch_size=60)
         for (component_group_id, sources_of_component) in cur_batch_component
             push!(thread_sources_assignment[cur_batch], copy(sources_of_component))
         assigned_sources += length(sources_of_component)
-        end
+        end		
     end
 
     #Log.info("Cyclades - Assigned sources: $(assigned_sources) vs correct number of sources: $(n_sources)")
     @assert assigned_sources == n_sources
     #Log.info("Cyclades - Number of batches: $(n_total_batches)")
     #Log.info("Finished Cyclades partitioning.  Elapsed time: $(toq()) seconds")
+
+    Log.info("Assigned sources: $(thread_sources_assignment)")
 
     thread_sources_assignment
 end
@@ -291,7 +293,7 @@ Return a Cyclades partitioning or an equal partitioning of the target
 sources.
 """
 function partition_box(npartitions::Int, target_sources::Vector{Int},
-                       neighbor_map::Vector{Vector{Int}};
+                       neighbor_map::Vector{Vector{Int}}, ea_vec;
                        cyclades_partition=true,
                        batch_size=7000)
     if cyclades_partition
@@ -302,14 +304,80 @@ function partition_box(npartitions::Int, target_sources::Vector{Int},
         #return partition_cyclades(npartitions, target_sources,
         #                          cyclades_neighbor_map,
         #                          batch_size=batch_size)
-        return partition_cyclades_dynamic(target_sources,
-                                          cyclades_neighbor_map,
-                                          batch_size=batch_size)
+        #return partition_cyclades_dynamic(target_sources,
+        #                                  cyclades_neighbor_map,
+        #                                  batch_size=batch_size)
+	return partition_cyclades_dynamic_auto_batchsize(target_sources, cyclades_neighbor_map, ea_vec)
     else
         return partition_equally(npartitions, length(target_sources))
     end
 end
 
+function estimate_time(patches)
+    sum(sum(p.active_pixel_bitmap) for p in patches)
+end
+
+function load_balance_across_threads(n_threads, times)
+    ts = [0 for i=1:n_threads]
+    for t in times
+        minimum,index_min = findmin(ts)
+        ts[index_min] += t
+    end
+    return ts
+end
+
+"""
+Partitions sources via the cyclades algorithm. Finds the batch size which returns most balanced CC distribution.
+- target_sources - array of target sources. Elements should match keys of neighbor_map.
+- neighbor_map - graph of connections of sources
+"""
+function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map, ea_vec)
+
+    println("Partition cyclades auto batchsize...")
+
+    n_threads = nthreads()
+    
+    # Sample batch sizes at intervals
+    n_to_sample = 100
+    stepsize = max(1, trunc(Int, length(target_sources) / n_to_sample))
+
+    # Best load imbalance of the batch sizes to test
+    best_score = Inf
+    best_result = Inf
+    best_batch_size = -Inf
+
+    println("Num elements $(length(target_sources))")
+    for batch_size_to_use = 1 : stepsize : length(target_sources)+1
+        println("Testing batch $(batch_size_to_use)")
+        ccs = partition_cyclades_dynamic(target_sources, neighbor_map, batch_size=batch_size_to_use)
+        score = 0
+        for batch in ccs
+            # Find average load imbalance within the batch as a percentage
+            #times = [length(x) for x in batch]
+	    times = [sum([estimate_time(ea_vec[source_index].patches) for source_index in component]) for component in batch]
+            #println("Raw times $(times)")
+            times = load_balance_across_threads(n_threads, times)
+            #println("Load balanced times $(times)")
+            estimated_imbalance = mean(maximum(times) - times) 
+            #cur_load_imbalance = max(estimated_imbalance, cur_load_imbalance)
+            #score += length(times)
+	    #score = max(estimated_imbalance, score)
+	    score += estimated_imbalance
+        end
+        println("Score: $(score)")
+        if score <= best_score
+            best_result = ccs
+            best_score = score
+            best_batch_size = batch_size_to_use
+        end
+    end
+    println("Using CCs with batchsize $(best_batch_size)")
+    for batch in best_result
+        sizes = [length(x) for x in batch]
+        println("$(sizes)")
+    end
+    best_result
+end
 
 """
 Pre-allocate elbo args variational parameters; configurations need to
@@ -366,14 +434,6 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
     n_sources = length(target_sources)
     Log.info("Optimizing $(n_sources) sources")
 
-    #thread_sources_assignment = partition_box(n_threads, target_sources,
-    #                                  neighbor_map;
-    #                                  cyclades_partition=cyclades_partition,
-    #                                  batch_size=batch_size)
-    batched_connected_components = partition_box(n_threads, target_sources,
-                                                 neighbor_map;
-                                                 cyclades_partition=cyclades_partition,
-                                                 batch_size=batch_size)
     #Log.info(batched_connected_components)
 
     Log.info("Done assigning sources to threads for processing")
@@ -389,6 +449,15 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
                                  catalog, target_sources, neighbor_map, images,
                                  target_source_variational_params)
     timing.init_elbo = toq()
+
+    #thread_sources_assignment = partition_box(n_threads, target_sources,
+    #                                  neighbor_map;
+    #                                  cyclades_partition=cyclades_partition,
+    #                                  batch_size=batch_size)
+    batched_connected_components = partition_box(n_threads, target_sources,
+                                                 neighbor_map, ea_vec;
+                                                 cyclades_partition=cyclades_partition,
+                                                 batch_size=batch_size)
 
     # Process sources in parallel
     tic()
@@ -554,6 +623,8 @@ function process_sources_dynamic!(images::Vector{Model.Image},
 
     l = SpinLock()
 
+    total_idle_time = 0
+
     for iter in 1:n_iters
 
         # Process every batch of every iteration. We do the batches on the outside
@@ -595,12 +666,14 @@ function process_sources_dynamic!(images::Vector{Model.Image},
                 end
             end
             Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
-            idle_percent = 100.0 * (maximum(process_sources_elapsed_times) -
-                                      mean(process_sources_elapsed_times)) /
-                                      maximum(process_sources_elapsed_times)
-            Log.info("Batch $(batch) avg threads idle: $(round(Int, idle_percent))%")
+	    avg_thread_idle_time = mean(maximum(process_sources_elapsed_times) - process_sources_elapsed_times)
+	    maximum_thread_time = maximum(process_sources_elapsed_times)
+            idle_percent = 100.0 * (avg_thread_idle_time / maximum_thread_time)
+            Log.info("Batch $(batch) avg threads idle: $(round(Int, idle_percent))% ($(avg_thread_idle_time) / $(maximum_thread_time))")
+	    total_idle_time += sum(maximum(process_sources_elapsed_times) - process_sources_elapsed_times)
         end
     end
+    Log.info("Total idle time: $(total_idle_time)")
 end
 
 # Process partition of sources. Multiple threads call this function in parallel.
@@ -616,9 +689,12 @@ function process_sources_kernel!(ea_vec::Vector{ElboArgs},
         if within_batch_shuffling
             shuffle!(source_assignment)
         end
+	
+	tic()
         for i in source_assignment
             maximize!(ea_vec[i], vp_vec[i], cfg_vec[i])
         end
+	#ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) took $(toq()) seconds to process batch with $(length(source_assignment)) sources")
     catch ex
         if is_production_run || nthreads() > 1
             Log.exception(ex)
