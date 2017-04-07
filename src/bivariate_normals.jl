@@ -315,7 +315,7 @@ parameters are indexed by GalaxyShapeParams.
 """
 immutable GalaxySigmaDerivs{NumType <: Number}
     j::SMatrix{3,gal_shape_ids_len,NumType,9}
-    t::SArray{(3,gal_shape_ids_len,gal_shape_ids_len),NumType,3,27}
+    t::SArray{Tuple{3,gal_shape_ids_len,gal_shape_ids_len},NumType,3,27}
 end
 
 
@@ -343,7 +343,7 @@ function GalaxySigmaDerivs{NumType <: Number}(
   if calculate_tensor
     # Second derivatives.
 
-    t = SArray{(3,3,3), NumType, 3, 27}(sin_sq * 2 * e_scale^2, -cos_sin * 2 * e_scale^2, cos_sq * 2 * e_scale^2,
+    t = SArray{Tuple{3,3,3}, NumType, 3, 27}(sin_sq * 2 * e_scale^2, -cos_sin * 2 * e_scale^2, cos_sq * 2 * e_scale^2,
       2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
       2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
       2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
