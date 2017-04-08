@@ -333,8 +333,6 @@ Partitions sources via the cyclades algorithm. Finds the batch size which return
 """
 function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map, ea_vec)
 
-    println("Partition cyclades auto batchsize...")
-
     n_threads = nthreads()
     
     # Sample batch sizes at intervals
@@ -346,9 +344,7 @@ function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map,
     best_result = Inf
     best_batch_size = -Inf
 
-    #println("Num elements $(length(target_sources))")
     for batch_size_to_use = 1 : stepsize : length(target_sources)+1
-        #println("Testing batch $(batch_size_to_use)")
         ccs = partition_cyclades_dynamic(target_sources, neighbor_map, batch_size=batch_size_to_use)
         score = 0
         for batch in ccs
@@ -358,17 +354,14 @@ function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map,
             estimated_imbalance = mean(maximum(times) - times) 
 	    score += estimated_imbalance
         end
-        #println("Score: $(score)")
         if score <= best_score
             best_result = ccs
             best_score = score
             best_batch_size = batch_size_to_use
         end
     end
-    #println("Using CCs with batchsize $(best_batch_size)")
     for batch in best_result
         sizes = [length(x) for x in batch]
-        #println("$(sizes)")
     end
     best_result
 end
@@ -619,6 +612,9 @@ function process_sources_dynamic!(images::Vector{Model.Image},
 
     total_idle_time = 0
 
+    # Keep track of total elapsed time
+    tic()
+
     for iter in 1:n_iters
 
         # Process every batch of every iteration. We do the batches on the outside
@@ -667,7 +663,8 @@ function process_sources_dynamic!(images::Vector{Model.Image},
 	    total_idle_time += sum(maximum(process_sources_elapsed_times) - process_sources_elapsed_times)
         end
     end
-    Log.info("Total idle time: $(total_idle_time)")
+    total_elapsed_time = toq()
+    Log.info("Total idle time: $(round(Int, total_idle_time)), Total elapsed time: $(round(Int, total_elapsed_time))")
 end
 
 # Process partition of sources. Multiple threads call this function in parallel.
