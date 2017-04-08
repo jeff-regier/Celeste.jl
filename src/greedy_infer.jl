@@ -37,10 +37,14 @@ function BoxTaskManager(catalog::Vector{CatalogEntry},
     # optimize sources without neighbors just once; others 3 times
     iters_left = [isempty(conflict_map[ts]) ? 1 : 3 for ts in 1:num_tasks]
 
+    # copied over from joint_infer.jl
+    # TODO: initialize these in a simpler way, without "thread assignments"
     ea_vec, vp_vec, cfg_vec, target_source_variational_params =
             setup_vecs(num_tasks, target_sources, catalog)
-    thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} = partition_equally(n_threads, n_sources)
-    initialize_elboargs_sources!(config, ea_vec, vp_vec, cfg_vec, thread_initialize_sources_assignment,
+    thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} =
+            partition_equally(nthreads(), num_tasks)
+    initialize_elboargs_sources!(Config(), ea_vec, vp_vec, cfg_vec,
+                                 thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
                                  target_source_variational_params)
 
