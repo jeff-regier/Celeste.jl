@@ -223,7 +223,7 @@ function accum_galaxy_pos!{NumType <: Number}(
                     wcs_jacobian,
                     is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, gcc.bmc, x)
-    @inbounds f = bvn_derivs.f_pre[1] * gcc.e_dev_i
+    @inbounds f = bvn_derivs.f_pre * gcc.e_dev_i
     fs1m.v[] += f
 
     if fs1m.has_gradient && is_active_source
@@ -233,9 +233,8 @@ function accum_galaxy_pos!{NumType <: Number}(
             bvn_derivs, gcc.sig_sf, wcs_jacobian, fs1m.has_hessian)
             
         @aliasscope @inbounds begin
-            bvn_u_d = ParameterizedArray{SharedPosParams}(Const(bvn_derivs.bvn_u_d))
-            bvn_s_d = ParameterizedArray{GalaxyShapeParams}(Const(bvn_derivs.bvn_s_d))
-            bvn_derivs_f_pre = Const(bvn_derivs.f_pre)
+            bvn_u_d = ParameterizedArray{SharedPosParams}(bvn_derivs.bvn_u_d)
+            bvn_s_d = ParameterizedArray{GalaxyShapeParams}(bvn_derivs.bvn_s_d)
 
             # Accumulate the derivatives.
             fs1m.d[gal_ids.u] += f * bvn_u_d[gal_ids.u]
@@ -244,7 +243,7 @@ function accum_galaxy_pos!{NumType <: Number}(
             # The e_dev derivative. e_dev just scales the entire component.
             # The direction is positive or negative depending on whether this
             # is an exp or dev component.
-            @inbounds fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * bvn_derivs_f_pre[1]
+            fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * bvn_derivs.f_pre
 
             if fs1m.has_hessian
                 # The Hessians:
@@ -266,9 +265,9 @@ function accum_galaxy_pos!{NumType <: Number}(
                     fs1m.h[gal_ids.u, gal_shape_ids] +=
                         f * (bvn_us_h[gal_ids.u, gal_shape_ids] + bvn_u_d[gal_ids.u] * bvn_s_d[gal_shape_ids]')
                     fs1m.h[gal_ids.u, gal_ids.e_dev] +=
-                        (bvn_derivs_f_pre[1] * gcc.e_dev_dir) * bvn_u_d[gal_ids.u]
+                        (bvn_derivs.f_pre * gcc.e_dev_dir) * bvn_u_d[gal_ids.u]
                     fs1m.h[gal_shape_ids, gal_ids.e_dev] +=
-                        (bvn_derivs_f_pre[1] * gcc.e_dev_dir) * bvn_s_d[gal_shape_ids]
+                        (bvn_derivs.f_pre * gcc.e_dev_dir) * bvn_s_d[gal_shape_ids]
                 end
                 nothing
             end # if calculate hessian
