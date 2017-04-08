@@ -231,28 +231,19 @@ function get_bvn_derivs!{NumType <: Number}(
   @inbounds begin
 
     # Gradient with respect to x.
-    bvn_x_d = bvn_derivs.bvn_x_d
-    bvn_x_d[1] = -bvn_derivs.py1[1]
-    bvn_x_d[2] = -bvn_derivs.py2[1]
+    bvn_derivs.bvn_x_d = -[bvn_derivs.py1; bvn_derivs.py2]
 
     if calculate_x_hess
-      bvn_xx_h = bvn_derivs.bvn_xx_h
-
-      # Hessian terms involving only x
-      bvn_xx_h[1, 1] = -bvn.precision[1, 1]
-      bvn_xx_h[2, 2] = -bvn.precision[2, 2]
-      bvn_xx_h[1, 2] = bvn_xx_h[2, 1] = -bvn.precision[1 ,2]
+      bvn_derivs.bvn_xx_h = -bvn.precision
     end
 
     # The first term is the derivative of -0.5 * x' Sigma^{-1} x
     # The second term is the derivative of -0.5 * log|Sigma|
-    bvn_sig_d = bvn_derivs.bvn_sig_d
-    bvn_sig_d[1] =
-      0.5 * bvn_derivs.py1[1] * bvn_derivs.py1[1] - 0.5 * bvn.precision[1, 1]
-    bvn_sig_d[2] =
-      bvn_derivs.py1[1] * bvn_derivs.py2[1]             - bvn.precision[1, 2]
-    bvn_sig_d[3] =
+    bvn_derivs.bvn_sig_d = NumType[
+      0.5 * bvn_derivs.py1[1] * bvn_derivs.py1[1] - 0.5 * bvn.precision[1, 1],
+      bvn_derivs.py1[1] * bvn_derivs.py2[1]             - bvn.precision[1, 2],
       0.5 * bvn_derivs.py2[1] * bvn_derivs.py2[1] - 0.5 * bvn.precision[2, 2]
+    ]
 
     if calculate_sigma_hessian
 
@@ -260,44 +251,36 @@ function get_bvn_derivs!{NumType <: Number}(
 
       # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
       # These are used for the hessian calculations.
-      dpy1_dsig = bvn_derivs.dpy1_dsig
-      dpy1_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,1]
-      dpy1_dsig[2] = -bvn_derivs.py2[1] * bvn.precision[1,1] -
-                      bvn_derivs.py1[1] * bvn.precision[1,2]
-      dpy1_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[1,2]
+      dpy1_dsig = @SVector NumType[
+        -bvn_derivs.py1[1] * bvn.precision[1,1],
+        -bvn_derivs.py2[1] * bvn.precision[1,1] - bvn_derivs.py1[1] * bvn.precision[1,2],
+        -bvn_derivs.py2[1] * bvn.precision[1,2]
+      ]
 
-      dpy2_dsig = bvn_derivs.dpy2_dsig
-      dpy2_dsig[1] = -bvn_derivs.py1[1] * bvn.precision[1,2]
-      dpy2_dsig[2] = -bvn_derivs.py1[1] * bvn.precision[2,2] -
-                      bvn_derivs.py2[1] * bvn.precision[1,2]
-      dpy2_dsig[3] = -bvn_derivs.py2[1] * bvn.precision[2,2]
+      dpy2_dsig = @SVector NumType[
+        -bvn_derivs.py1[1] * bvn.precision[1,2],
+        -bvn_derivs.py1[1] * bvn.precision[2,2] - bvn_derivs.py2[1] * bvn.precision[1,2],
+        -bvn_derivs.py2[1] * bvn.precision[2,2]
+      ]
 
       # Hessian terms involving only sigma
-      bvn_sigsig_h = bvn_derivs.bvn_sigsig_h
-      for s_ind=1:3
+      bvn_derivs.bvn_sigsig_h = NumType[
         # Differentiate with respect to s_ind second.
-        bvn_sigsig_h[1, s_ind] = #bvn_sigsig_h[s_ind, 1] =
-          bvn_derivs.py1[1] * dpy1_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[1, s_ind]
-
+        (bvn_derivs.py1[1] * dpy1_dsig - 0.5 * bvn.dsiginv_dsig[1, :])';
         # d log|sigma| / dsigma12 is twice lambda12.
-        bvn_sigsig_h[2, s_ind] =
-          bvn_derivs.py1[1] * dpy2_dsig[s_ind] + bvn_derivs.py2[1] * dpy1_dsig[s_ind] -
-          bvn.dsiginv_dsig[2, s_ind]
-
-        bvn_sigsig_h[3, s_ind] = #bvn_sigsig_h[s_ind, 3] =
-          bvn_derivs.py2[1] * dpy2_dsig[s_ind] - 0.5 * bvn.dsiginv_dsig[3, s_ind]
-      end
+        (bvn_derivs.py1[1] * dpy2_dsig + bvn_derivs.py2[1] * dpy1_dsig -
+                bvn.dsiginv_dsig[2, :])';
+        (bvn_derivs.py2[1] * dpy2_dsig - 0.5 * bvn.dsiginv_dsig[3, :])'
+      ]
 
       # Hessian terms involving both x and sigma.
       # Note that dpyA / dxB = bvn.precision[A, B]
-      bvn_xsig_h = bvn_derivs.bvn_xsig_h
-      for x_ind=1:2
-        bvn_xsig_h[x_ind, 1] = bvn_derivs.py1[1] * bvn.precision[1, x_ind]
-        bvn_xsig_h[x_ind, 2] =
-          bvn_derivs.py1[1] * bvn.precision[2, x_ind] +
-          bvn_derivs.py2[1] * bvn.precision[1, x_ind]
-        bvn_xsig_h[x_ind, 3] = bvn_derivs.py2[1] * bvn.precision[2, x_ind]
-      end
+      bvn_derivs.bvn_xsig_h = hcat(
+        (bvn_derivs.py1[1] * bvn.precision[1, :]),
+        (bvn_derivs.py1[1] * bvn.precision[2, :] +
+         bvn_derivs.py2[1] * bvn.precision[1, :]),
+        (bvn_derivs.py2[1] * bvn.precision[2, :])
+      )
     end
   end
 end
@@ -446,29 +429,10 @@ function transform_bvn_ux_derivs!{NumType <: Number}(
   # Note that dxA_duB = -wcs_jacobian[A, B].  (It is minus the jacobian
   # because the object position affects the bvn.the_mean term, which is
   # subtracted from the pixel location as defined in bvn_sf.d.)
-  bvn_u_d = bvn_derivs.bvn_u_d
-  bvn_x_d = bvn_derivs.bvn_x_d
-  bvn_u_d[1] =
-    -(bvn_x_d[1] * wcs_jacobian[1, 1] + bvn_x_d[2] * wcs_jacobian[2, 1])
-  bvn_u_d[2] =
-    -(bvn_x_d[1] * wcs_jacobian[1, 2] + bvn_x_d[2] * wcs_jacobian[2, 2])
+  bvn_derivs.bvn_u_d = - (wcs_jacobian' * bvn_derivs.bvn_x_d)
 
   if calculate_hessian
-    # Hessian calculations.
-
-    bvn_uu_h = bvn_derivs.bvn_uu_h
-    bvn_xx_h = bvn_derivs.bvn_xx_h
-    fill!(bvn_uu_h, 0.0)
-    # Second derivatives involving only u.
-    # As above, dxA_duB = -wcs_jacobian[A, B] and d2x / du2 = 0.
-    # TODO: time consuming **************
-    @inbounds for x_id2 in 1:2, x_id1 in 1:2, u_id2 in 1:2
-      inner_term = bvn_xx_h[x_id1, x_id2] * wcs_jacobian[x_id2, u_id2]
-      @inbounds for u_id1 in 1:u_id2
-        bvn_uu_h[u_id1, u_id2] += inner_term * wcs_jacobian[x_id1, u_id1]
-      end
-    end
-    @inbounds bvn_uu_h[2, 1] = bvn_uu_h[1, 2]
+    bvn_derivs.bvn_uu_h = wcs_jacobian' * bvn_derivs.bvn_xx_h * wcs_jacobian
   end
 end
 
@@ -491,59 +455,20 @@ fast_fill!{T<:Array}(s::T, x) = fill!(s, x)
     wcs_jacobian)
   @aliasscope begin
     # Hessian calculations.
-
-    bvn_ss_h = bvn_derivs.bvn_ss_h
-    bvn_us_h = bvn_derivs.bvn_us_h
-    bvn_sig_d = Const(bvn_derivs.bvn_sig_d)
-    #wcs_jacobian = Const(wcs_jacobian)
-    sig_sf_j = sig_sf.j
-
-    # Manually inlined version of fill!
-    fast_fill!(bvn_ss_h, 0.0)
-    fast_fill!(bvn_us_h, 0.0)
+    bvn_derivs.bvn_ss_h = zeros(3, 3)
 
     # Second derviatives involving only shape parameters.
     # TODO: time consuming **************
     sig_sf_t = sig_sf.t
-    @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
-      @unroll_loop for shape_id1 in 1:shape_id2
-        @inbounds @unroll_loop for sig_id1 in 1:3
-          @fastmath bvn_ss_h[shape_id1, shape_id2] += bvn_sig_d[sig_id1] * sig_sf_t[sig_id1, shape_id1, shape_id2]
-        end
-      end
+    for sig_id1 in 1:3
+        bvn_derivs.bvn_ss_h += bvn_derivs.bvn_sig_d[sig_id1] * sig_sf.t[sig_id1, :, :]
     end
 
-    bvn_sigsig_h = Const(bvn_derivs.bvn_sigsig_h)
-    @unroll_loop for sig_id1 in 1:3
-      @unroll_loop for sig_id2 in 1:3
-        @inbounds @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
-          @fastmath inner_term = bvn_sigsig_h[sig_id1, sig_id2] * sig_sf_j[sig_id2, shape_id2]
-          @unroll_loop for shape_id1 in 1:shape_id2
-            @fastmath bvn_ss_h[shape_id1, shape_id2] += inner_term * sig_sf_j[sig_id1, shape_id1]
-          end
-        end
-      end
-    end
-
-    @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
-      @inbounds @unroll_loop for shape_id1 in 1:shape_id2
-        bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
-      end
-    end
+    bvn_derivs.bvn_ss_h += sig_sf.j' * bvn_derivs.bvn_sigsig_h * sig_sf.j
 
     # Second derivates involving both a shape term and a u term.
     # TODO: time consuming **************
-    bvn_xsig_h = Const(bvn_derivs.bvn_xsig_h)
-    @unroll_loop for shape_id in 1:length(gal_shape_ids)
-      @unroll_loop for u_id in 1:2
-        @unroll_loop for sig_id in 1:3
-          @inbounds @unroll_loop for x_id in 1:2
-            @fastmath bvn_us_h[u_id, shape_id] +=
-              bvn_xsig_h[x_id, sig_id] * sig_sf_j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
-          end
-        end
-      end
-    end
+    bvn_derivs.bvn_us_h = -wcs_jacobian' * bvn_derivs.bvn_xsig_h * sig_sf.j
   end
 end
 
