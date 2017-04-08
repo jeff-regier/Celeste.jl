@@ -40,41 +40,34 @@ normals.
 type BivariateNormalDerivatives{NumType <: Number}
 
   # Pre-allocated memory for py1, py2, and f when evaluating BVNs
-  py1::Array{NumType, 1}
-  py2::Array{NumType, 1}
-  f_pre::Array{NumType, 1}
+  py1::NumType
+  py2::NumType
+  f_pre::NumType
 
   # Derivatives of a bvn with respect to (x, sig).
-  bvn_x_d::Array{NumType, 1}
-  bvn_sig_d::Array{NumType, 1}
-  bvn_xx_h::SizedMatrix{(2,2), NumType, 2}
-  bvn_xsig_h::SizedMatrix{(2,3), NumType, 2}
-  bvn_sigsig_h::SizedMatrix{(3,3), NumType, 2}
-
-  # intermediate values used in d bvn / d(x, sig)
-  dpy1_dsig::Array{NumType, 1}
-  dpy2_dsig::Array{NumType, 1}
+  bvn_x_d::SVector{2, NumType}
+  bvn_sig_d::SVector{3, NumType}
+  bvn_xx_h::SArray{Tuple{2,2}, NumType, 2, 4}
+  bvn_xsig_h::SArray{Tuple{2,3}, NumType, 2, 6}
+  bvn_sigsig_h::SArray{Tuple{3,3}, NumType, 2, 9}
 
   # Derivatives of a bvn with respect to (u, shape)
-  bvn_u_d::Array{NumType, 1}
-  bvn_uu_h::SizedMatrix{(2,2), NumType, 2}
-  bvn_s_d::Array{NumType, 1}
-  bvn_ss_h::SizedMatrix{(length(gal_shape_ids), length(gal_shape_ids)), NumType, 2}
-  bvn_us_h::SizedMatrix{(2, length(gal_shape_ids)), NumType, 2}
+  bvn_u_d::SVector{2, NumType}
+  bvn_uu_h::SMatrix{2, 2, NumType, 4}
+  bvn_s_d::SVector{length(gal_shape_ids), NumType}
+  bvn_ss_h::SArray{Tuple{length(gal_shape_ids), length(gal_shape_ids)}, NumType, 2, length(gal_shape_ids)^2}
+  bvn_us_h::SArray{Tuple{2, length(gal_shape_ids)}, NumType, 2, 2*length(gal_shape_ids)}
 
   function (::Type{BivariateNormalDerivatives{NumType}}){NumType}()
-    py1 = zeros(NumType, 1)
-    py2 = zeros(NumType, 1)
-    f_pre = zeros(NumType, 1)
+    py1 = zero(NumType)
+    py2 = zero(NumType)
+    f_pre = zero(NumType)
 
     bvn_x_d = zeros(NumType, 2)
     bvn_sig_d = zeros(NumType, 3)
     bvn_xx_h = zeros(NumType, 2, 2)
     bvn_xsig_h = zeros(NumType, 2, 3)
     bvn_sigsig_h = zeros(NumType, 3, 3)
-
-    dpy1_dsig = zeros(NumType, 3)
-    dpy2_dsig = zeros(NumType, 3)
 
     # Derivatives wrt u.
     bvn_u_d = zeros(NumType, 2)
@@ -89,28 +82,25 @@ type BivariateNormalDerivatives{NumType <: Number}
 
     new{NumType}(py1, py2, f_pre,
         bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
-        dpy1_dsig, dpy2_dsig,
         bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h)
   end
 end
 
 function clear!{T}(bvn_derivs::BivariateNormalDerivatives{T})
     x = zero(T)
-    fill!(bvn_derivs.py1, x)
-    fill!(bvn_derivs.py2, x)
-    fill!(bvn_derivs.f_pre, x)
-    fill!(bvn_derivs.bvn_x_d, x)
-    fill!(bvn_derivs.bvn_sig_d, x)
-    fill!(bvn_derivs.bvn_xx_h, x)
-    fill!(bvn_derivs.bvn_xsig_h, x)
-    fill!(bvn_derivs.bvn_sigsig_h, x)
-    fill!(bvn_derivs.dpy1_dsig, x)
-    fill!(bvn_derivs.dpy2_dsig, x)
-    fill!(bvn_derivs.bvn_u_d, x)
-    fill!(bvn_derivs.bvn_uu_h, x)
-    fill!(bvn_derivs.bvn_s_d, x)
-    fill!(bvn_derivs.bvn_ss_h, x)
-    fill!(bvn_derivs.bvn_us_h, x)
+    bvn_derivs.py1 = x
+    bvn_derivs.py2 = x
+    bvn_derivs.f_pre = x
+    bvn_derivs.bvn_x_d = fill(x, typeof(bvn_derivs.bvn_x_d))
+    bvn_derivs.bvn_sig_d = fill(x, typeof(bvn_derivs.bvn_sig_d))
+    bvn_derivs.bvn_xx_h = fill(x, typeof(bvn_derivs.bvn_xx_h))
+    bvn_derivs.bvn_xsig_h = fill(x, typeof(bvn_derivs.bvn_xsig_h))
+    bvn_derivs.bvn_sigsig_h = fill(x, typeof(bvn_derivs.bvn_sigsig_h))
+    bvn_derivs.bvn_u_d = fill(x, typeof(bvn_derivs.bvn_u_d))
+    bvn_derivs.bvn_uu_h = fill(x, typeof(bvn_derivs.bvn_uu_h))
+    bvn_derivs.bvn_s_d = fill(x, typeof(bvn_derivs.bvn_s_d))
+    bvn_derivs.bvn_ss_h = fill(x, typeof(bvn_derivs.bvn_ss_h))
+    bvn_derivs.bvn_us_h = fill(x, typeof(bvn_derivs.bvn_us_h))
     return bvn_derivs
 end
 
@@ -196,15 +186,15 @@ function eval_bvn_pdf!{NumType <: Number}(
     bvn_derivs::BivariateNormalDerivatives{NumType},
     bmc::BvnComponent{NumType}, x::SVector{2,Float64})
 
-  bvn_derivs.py1[1] =
+  bvn_derivs.py1 =
     bmc.precision[1,1] * (x[1] - bmc.the_mean[1]) +
     bmc.precision[1,2] * (x[2] - bmc.the_mean[2])
-  bvn_derivs.py2[1] =
+  bvn_derivs.py2 =
     bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
     bmc.precision[2,2] * (x[2] - bmc.the_mean[2])
-  bvn_derivs.f_pre[1] =
-    bmc.z * exp(-0.5 * ((x[1] - bmc.the_mean[1]) * bvn_derivs.py1[1] +
-                        (x[2] - bmc.the_mean[2]) * bvn_derivs.py2[1]))
+  bvn_derivs.f_pre =
+    bmc.z * exp(-0.5 * ((x[1] - bmc.the_mean[1]) * bvn_derivs.py1 +
+                        (x[2] - bmc.the_mean[2]) * bvn_derivs.py2))
 end
 
 ##################
@@ -231,7 +221,7 @@ function get_bvn_derivs!{NumType <: Number}(
   @inbounds begin
 
     # Gradient with respect to x.
-    bvn_derivs.bvn_x_d = -[bvn_derivs.py1; bvn_derivs.py2]
+    bvn_derivs.bvn_x_d = -(@SVector [bvn_derivs.py1, bvn_derivs.py2])
 
     if calculate_x_hess
       bvn_derivs.bvn_xx_h = -bvn.precision
@@ -239,10 +229,10 @@ function get_bvn_derivs!{NumType <: Number}(
 
     # The first term is the derivative of -0.5 * x' Sigma^{-1} x
     # The second term is the derivative of -0.5 * log|Sigma|
-    bvn_derivs.bvn_sig_d = NumType[
-      0.5 * bvn_derivs.py1[1] * bvn_derivs.py1[1] - 0.5 * bvn.precision[1, 1],
-      bvn_derivs.py1[1] * bvn_derivs.py2[1]             - bvn.precision[1, 2],
-      0.5 * bvn_derivs.py2[1] * bvn_derivs.py2[1] - 0.5 * bvn.precision[2, 2]
+    bvn_derivs.bvn_sig_d = @SVector NumType[
+      0.5 * bvn_derivs.py1 * bvn_derivs.py1 - 0.5 * bvn.precision[1, 1],
+      bvn_derivs.py1 * bvn_derivs.py2             - bvn.precision[1, 2],
+      0.5 * bvn_derivs.py2 * bvn_derivs.py2 - 0.5 * bvn.precision[2, 2]
     ]
 
     if calculate_sigma_hessian
@@ -252,26 +242,26 @@ function get_bvn_derivs!{NumType <: Number}(
       # Derivatives of py1 and py2 with respect to s11, s12, s22 in that order.
       # These are used for the hessian calculations.
       dpy1_dsig = @SVector NumType[
-        -bvn_derivs.py1[1] * bvn.precision[1,1],
-        -bvn_derivs.py2[1] * bvn.precision[1,1] - bvn_derivs.py1[1] * bvn.precision[1,2],
-        -bvn_derivs.py2[1] * bvn.precision[1,2]
+        -bvn_derivs.py1 * bvn.precision[1,1],
+        -bvn_derivs.py2 * bvn.precision[1,1] - bvn_derivs.py1 * bvn.precision[1,2],
+        -bvn_derivs.py2 * bvn.precision[1,2]
       ]
 
       dpy2_dsig = @SVector NumType[
-        -bvn_derivs.py1[1] * bvn.precision[1,2],
-        -bvn_derivs.py1[1] * bvn.precision[2,2] - bvn_derivs.py2[1] * bvn.precision[1,2],
-        -bvn_derivs.py2[1] * bvn.precision[2,2]
+        -bvn_derivs.py1 * bvn.precision[1,2],
+        -bvn_derivs.py1 * bvn.precision[2,2] - bvn_derivs.py2 * bvn.precision[1,2],
+        -bvn_derivs.py2 * bvn.precision[2,2]
       ]
 
       # Hessian terms involving only sigma
-      bvn_derivs.bvn_sigsig_h = NumType[
+      bvn_derivs.bvn_sigsig_h = vcat(
         # Differentiate with respect to s_ind second.
-        (bvn_derivs.py1[1] * dpy1_dsig - 0.5 * bvn.dsiginv_dsig[1, :])';
+        (bvn_derivs.py1[1] * dpy1_dsig - 0.5 * bvn.dsiginv_dsig[1, :])',
         # d log|sigma| / dsigma12 is twice lambda12.
         (bvn_derivs.py1[1] * dpy2_dsig + bvn_derivs.py2[1] * dpy1_dsig -
-                bvn.dsiginv_dsig[2, :])';
+                bvn.dsiginv_dsig[2, :])',
         (bvn_derivs.py2[1] * dpy2_dsig - 0.5 * bvn.dsiginv_dsig[3, :])'
-      ]
+      )
 
       # Hessian terms involving both x and sigma.
       # Note that dpyA / dxB = bvn.precision[A, B]
@@ -436,18 +426,6 @@ function transform_bvn_ux_derivs!{NumType <: Number}(
   end
 end
 
-@generated function fast_fill!{T<:SizedMatrix}(s::T, x)
-  quote
-    $(Expr(:meta, :inline))
-    @unroll_loop for i in 1:$(size(s, 1))
-      @unroll_loop for j in 1:$(size(s, 2))
-        @inbounds s[i, j] = x
-      end
-    end
-  end
-end
-fast_fill!{T<:Array}(s::T, x) = fill!(s, x)
-
 # WARNING: HUGE PERFORMANCE HOTSPOT
 @Base.hotspot function transform_bvn_derivs_hessian!{NumType <: Number}(
     bvn_derivs::BivariateNormalDerivatives{NumType},
@@ -455,7 +433,7 @@ fast_fill!{T<:Array}(s::T, x) = fill!(s, x)
     wcs_jacobian)
   @aliasscope begin
     # Hessian calculations.
-    bvn_derivs.bvn_ss_h = zeros(3, 3)
+    bvn_derivs.bvn_ss_h = @SMatrix zeros(Float64, 3, 3)
 
     # Second derviatives involving only shape parameters.
     # TODO: time consuming **************
@@ -494,25 +472,11 @@ function transform_bvn_derivs!{NumType <: Number}(
   transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, calculate_hessian)
 
   # Gradient calculations.
+  # Use the chain rule for the shape derviatives.
+  # TODO: time consuming **************
+  bvn_derivs.bvn_s_d = sig_sf.j' * bvn_derivs.bvn_sig_d
 
-  @aliasscope begin
-      # Use the chain rule for the shape derviatives.
-      # TODO: time consuming **************
-      @aliasscope begin
-        bvn_s_d   = bvn_derivs.bvn_s_d
-        bvn_sig_d = bvn_derivs.bvn_sig_d
-        sig_sf_j = sig_sf.j
-
-        fast_fill!(bvn_s_d, 0.0)
-        @unroll_loop for shape_id in 1:length(gal_shape_ids)
-          @inbounds @unroll_loop for sig_id in 1:3
-            bvn_s_d[shape_id] += bvn_sig_d[sig_id] * sig_sf_j[sig_id, shape_id]
-          end
-        end
-      end
-
-      if calculate_hessian
-        transform_bvn_derivs_hessian!(bvn_derivs, sig_sf, wcs_jacobian)
-      end
-    end
+  if calculate_hessian
+    transform_bvn_derivs_hessian!(bvn_derivs, sig_sf, wcs_jacobian)
+  end
 end
