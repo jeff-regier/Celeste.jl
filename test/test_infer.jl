@@ -2,6 +2,15 @@
 import JLD
 
 import Celeste.Configs
+import Celeste.ParallelRun: BoundingBox, infer_init, one_node_greedy_infer
+
+
+@testset "run greedy infer" begin
+    box = BoundingBox(164.39, 164.41, 39.11, 39.13)
+    rcfs = [RunCamcolField(3900, 6, 269),]
+    ctniss = infer_init(rcfs, datadir; box=box)
+    result = one_node_greedy_infer(ctniss[1:4]...)
+end
 
 """
 test infer with a single (run, camcol, field).
