@@ -35,7 +35,7 @@ function benchmark_sixteenth_degree()
     rcfs = get_overlapping_fields(box, datadir)
 
     # ctni = (catalogs, target, neighbor_map, images)
-    ctni = infer_init(rcfs, datadir; box=box)
+    ctni = infer_init(rcfs, datadir; box=box)[1:4]
 
     # Warm up---this compiles the code
     ctni2 = (ctni[1], ctni[2][1:1], ctni[3][1:1], ctni[4][1:1])

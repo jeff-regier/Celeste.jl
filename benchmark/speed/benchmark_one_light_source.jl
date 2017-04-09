@@ -22,8 +22,7 @@ function benchmark_one_light_source()
     box = BoundingBox(347.7444, 347.7446, 16.6202, 16.6204)
     rcfs = [RunCamcolField(7713, 3, 152)]
 
-    catalog, target_sources, neighbor_map, images = infer_init(rcfs, datadir; box=box)
-    ctni = (catalog, target_sources, neighbor_map, images)
+    ctni = infer_init(rcfs, datadir; box=box)[1:4]
 
     # Warm up---this compiles the code
     one_node_joint_infer(ctni...)
