@@ -25,6 +25,8 @@ include("bivariate_normals.jl")
 
 const ID_MAT_2D = eye(Float64, 2)
 
+const PSFSF = SensitiveFloat{Float64, PsfParams, Matrix{Float64}, true, true}
+
 """
 A data type to store functions related to optimizing a PSF fit. Initialize
 using the transform and number of components, and then call fit_psf
@@ -41,11 +43,11 @@ type PsfOptimizer
     # Variable that will be allocated in optimization:
     bvn_derivs::BivariateNormalDerivatives{Float64}
 
-    log_pdf::SensitiveFloat{Float64}
-    pdf::SensitiveFloat{Float64}
-    pixel_value::SensitiveFloat{Float64}
-    squared_error::SensitiveFloat{Float64}
-    sf_free::SensitiveFloat{Float64}
+    log_pdf::PSFSF
+    pdf::PSFSF
+    pixel_value::PSFSF
+    squared_error::PSFSF
+    sf_free::PSFSF
 
     psf_params_free_vec_cache::Vector{Float64}
 
@@ -57,11 +59,11 @@ type PsfOptimizer
 
         bvn_derivs = BivariateNormalDerivatives{Float64}()
 
-        log_pdf = SensitiveFloat{Float64, PsfParams}(1, true, true)
-        pdf = SensitiveFloat{Float64, PsfParams}(1, true, true)
-        pixel_value = SensitiveFloat{Float64, PsfParams}(K, true, true)
-        squared_error = SensitiveFloat{Float64, PsfParams}(K, true, true)
-        sf_free = SensitiveFloat{Float64, PsfParams}(K, true, true)
+        log_pdf = PSFSF(1)
+        pdf = PSFSF(1)
+        pixel_value = PSFSF(K)
+        squared_error = PSFSF(K)
+        sf_free = PSFSF(K)
 
         psf_params_free_vec_cache = fill(NaN, K * length(PsfParams))
 

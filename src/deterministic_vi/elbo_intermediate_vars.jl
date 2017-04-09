@@ -1,24 +1,24 @@
-immutable ElboIntermediateVariables{NumType <: Number, ElboRep}
+immutable ElboIntermediateVariables{NumType <: Number, ElboRep, HasGradient, HasHessian}
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
     # The vector has one element for each active source, in the same order
     # as ea.active_sources.
 
-    fs0m::DenseHessianSSSF(StarPosParams, NumType)
-    fs1m::DenseHessianSSSF(GalaxyPosParams, NumType)
+    fs0m::DenseHessianSSSF(StarPosParams, NumType, HasGradient, HasHessian)
+    fs1m::DenseHessianSSSF(GalaxyPosParams, NumType, HasGradient, HasHessian)
 
     # Brightness values for a single source
-    E_G_s::SparseHessianCanonicalSSSF(NumType)
-    E_G2_s::SparseHessianCanonicalSSSF(NumType)
+    E_G_s::SparseHessianCanonicalSSSF(NumType, HasGradient, HasHessian)
+    E_G2_s::SparseHessianCanonicalSSSF(NumType, HasGradient, HasHessian)
     
     # Expected pixel intensity and variance for a pixel from all sources.
-    E_G::SparseHessianSSparseSF(CanonicalParams2, NumType)
-    var_G::DenseHessianSSparseSF(CanonicalParams2, NumType)
+    E_G::SparseHessianSSparseSF(CanonicalParams2, NumType, HasGradient, HasHessian)
+    var_G::DenseHessianSSparseSF(CanonicalParams2, NumType, HasGradient, HasHessian)
 
     # The ELBO itself in whatever representation is most efficient inside the loop
     elbo::ElboRep
     
     # The ELBO after a once-per-evaluation reparameterization step
-    reparameterized_elbo::SensitiveFloat{NumType, CanonicalParams, Matrix{NumType}}
+    reparameterized_elbo::SensitiveFloat{NumType, CanonicalParams, Matrix{NumType}, HasGradient, HasHessian}
 
     # Some scratch space for propagate_derivatives!
     pd_scratch::Matrix{NumType}
@@ -44,33 +44,27 @@ function ElboIntermediateVariables(NumType::DataType,
 
     # fs0m and fs1m accumulate contributions from all bvn components
     # for a given source.
-    fs0m = DenseHessianSSSF(StarPosParams, NumType)(
-                                calculate_gradient, calculate_hessian)
-    fs1m = DenseHessianSSSF(GalaxyPosParams, NumType)(
-                                calculate_gradient, calculate_hessian)
-
-    E_G_s = SparseHessianCanonicalSSSF(NumType)(
-                                    calculate_gradient, calculate_hessian)
+    fs0m = DenseHessianSSSF(StarPosParams, NumType, calculate_gradient, calculate_hessian)()
+    fs1m = DenseHessianSSSF(GalaxyPosParams, NumType, calculate_gradient, calculate_hessian)()
+    E_G_s = SparseHessianCanonicalSSSF(NumType, calculate_gradient, calculate_hessian)()
     E_G2_s = SensitiveFloat(E_G_s)
 
-    E_G = SparseHessianSSparseSF(CanonicalParams2, NumType)(num_active_sources,
-                                  calculate_gradient, calculate_hessian)
-    var_G = DenseHessianSSparseSF(CanonicalParams2, NumType)(num_active_sources,
-                                  calculate_gradient, calculate_hessian)
+    E_G = SparseHessianSSparseSF(CanonicalParams2, NumType, calculate_gradient, calculate_hessian)(num_active_sources)
+    var_G = DenseHessianSSparseSF(CanonicalParams2, NumType, calculate_gradient, calculate_hessian)(num_active_sources)
 
     combine_grad = zeros(NumType, 2)
     combine_hess = zeros(NumType, 2, 2)
 
     elbo = SensitiveFloat{NumType, CanonicalParams2,
-      SizedMatrix{(length(CanonicalParams2)*num_active_sources,length(CanonicalParams2)*num_active_sources),NumType,2}}(
-        num_active_sources, calculate_gradient, calculate_hessian)
+      SizedMatrix{(length(CanonicalParams2)*num_active_sources,length(CanonicalParams2)*num_active_sources),NumType,2},
+      calculate_gradient, calculate_hessian}(num_active_sources)
         
-    reparameterized_elbo = SensitiveFloat{NumType, CanonicalParams, Matrix{NumType}}(
-      num_active_sources, calculate_gradient, calculate_hessian)
+    reparameterized_elbo = SensitiveFloat{NumType, CanonicalParams, Matrix{NumType}, calculate_gradient, calculate_hessian}(
+      num_active_sources)
 
     pd_scratch = Matrix{NumType}(length(CanonicalParams), length(CanonicalParams))
 
-    ElboIntermediateVariables{NumType, typeof(elbo)}(
+    ElboIntermediateVariables{NumType, typeof(elbo), calculate_gradient, calculate_hessian}(
         fs0m, fs1m,
         E_G_s, E_G2_s,
         E_G, var_G,
@@ -89,17 +83,19 @@ function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType}
     clear!(elbo_vars.elbo)
 end
 
-immutable BvnBundle{T<:Real}
+immutable BvnBundle{T<:Real, HasGradient, HasHessian}
     bvn_derivs::BivariateNormalDerivatives{T}
     star_mcs::Matrix{BvnComponent{T}}
     gal_mcs::Array{GalaxyCacheComponent{T},4}
     sbs::Vector{SourceBrightness{T}}
-    function (::Type{BvnBundle{T}}){T}(psf_K::Int, S::Int, calculate_gradient::Bool=true, calculate_hessian::Bool=true)
-        return new{T}(BivariateNormalDerivatives{T}(),
+    function (::Type{BvnBundle{T, HasGradient, HasHessian}}){T,HasGradient, HasHessian}(psf_K::Int, S::Int)
+        return new{T, HasGradient, HasHessian}(BivariateNormalDerivatives{T}(),
                       Matrix{BvnComponent{T}}(psf_K, S),
                       Array{GalaxyCacheComponent{T}}(psf_K, 8, 2, S),
-                      [SourceBrightness{T}(calculate_gradient, calculate_hessian) for i = 1:S])
+                      [SourceBrightness{T, HasGradient, HasHessian}() for i = 1:S])
     end
 end
+BvnBundle{T}(psf_K::Int, S::Int, has_gradient::Bool=true, has_hessian::Bool=true) where {T} =
+  BvnBundle{T, has_gradient, has_hessian}(psf_K, S)
 
 clear!(bvn_bundle::BvnBundle) = (clear!(bvn_bundle.bvn_derivs); bvn_bundle)

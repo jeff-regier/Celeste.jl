@@ -1,4 +1,4 @@
-using Celeste: @syntactic_unroll, @implicit_transpose, is_implicitly_symmetric, fixup, Const, zero!
+using Celeste: @syntactic_unroll, @implicit_transpose, is_implicitly_symmetric, fixup, Const, zero!, has_gradient, has_hessian
 using Celeste.Model: Star, Galaxy, a_param, shape_params, brightness_params, bright_ids, ids_2_to_ids,
   dense_block_mapping, dense_blocks, ids2, non_u_shape_params, symmetric_dense_block_mapping,
   symmetric_dense_blocks
@@ -63,7 +63,7 @@ function calculate_G_s!{NumType <: Number}(
             E_G2_s.v[] += a_i * llff
 
             # Gradients
-            (is_active_source && elbo_vars.elbo.has_gradient) || continue
+            (is_active_source && has_gradient(elbo_vars.elbo)) || continue
             E_G_s.d[a_param(kind)] += lf
             E_G2_s.d[a_param(kind)] += llff
 
@@ -74,7 +74,7 @@ function calculate_G_s!{NumType <: Number}(
             E_G2_s.d[brightness_params(kind)] += (a_i * fsm_i_v^2) * sb_E_ll_a_b_i_d[brightness_params(kind)]
 
             # Hessians
-            elbo_vars.elbo.has_hessian || continue
+            has_hessian(elbo_vars.elbo) || continue
             E_G_s.h[brightness_params(kind), brightness_params(kind)] = (a_i * fsm_i_v) * sb_E_l_a_b_i.h[brightness_params(kind), brightness_params(kind)]
             E_G2_s.h[brightness_params(kind), brightness_params(kind)] = (a_i * fsm_i_v^2) * sb_E_ll_a_b_i.h[brightness_params(kind), brightness_params(kind)]
 
@@ -117,7 +117,7 @@ end
     # Calculate var_G
     var_G.v[] += E_G2_s.v[] - (E_G_s.v[] ^ 2)
 
-    var_G.has_gradient || return
+    has_gradient(var_G) || return
 
     P = length(CanonicalParams2)
     @assert P == var_G.local_P
@@ -130,7 +130,7 @@ end
         @fastmath var_G.d[P_shifted + i] += reparametrized_E_G2_d[i] - 2 * E_G_s.v[] * reparametrized_E_G_d[i]
     end
     
-    var_G.has_hessian || return
+    has_hessian(var_G) || return
     @inbounds begin
         # We do this in two steps. First we add the dense terms (E_G(2)_s), then
         # the sparse components.
@@ -156,7 +156,7 @@ end
     # Calculate var_G
     var_G.v[] += E_G2_s.v[] - (E_G_s.v[] ^ 2)
 
-    var_G.has_gradient || return
+    has_gradient(var_G) || return
 
     P = length(CanonicalParams2)
 
@@ -165,7 +165,7 @@ end
             @fastmath var_G.d[i] += Const(E_G2_s.d)[i] - 2 * E_G_s.v[] * Const(E_G_s.d)[i]
         end
         
-        var_G.has_hessian || return
+        has_hessian(var_G) || return
         
         @inbounds begin
             # We do this in two steps. First we add the dense terms (E_G(2)_s), then
@@ -194,7 +194,7 @@ end
     # Calculate var_G
     var_G.v[] += E_G2_s.v[] - (E_G_s.v[] ^ 2)
 
-    var_G.has_gradient || return
+    has_gradient(var_G) || return
 
     P = length(CanonicalParams2)
     error()
@@ -207,7 +207,7 @@ end
             @fastmath var_G.d[i] += reparametrized_E_G2_d[i] - 2 * E_G_s.v[] * Const(reparametrized_E_G_d)[i]
         end
         
-        var_G.has_hessian || return
+        has_hessian(var_G) || return
         
         @inbounds begin
             # We do this in two steps. First we add the dense terms (E_G(2)_s), then
@@ -236,14 +236,14 @@ end
     P = length(CanonicalParams2)
 
     error()
-    @inbounds if sf_all.has_gradient
+    @inbounds if has_gradient(sf_all)
         reparam_sf_s_d = sf_s.d[ids_2_to_ids]
         for i = 1:P
             sf_all.d[s][i] += reparam_sf_s_d[i]
         end
     end
 
-    @inbounds if sf_all.has_hessian
+    @inbounds if has_hessian(sf_all)
         @syntactic_unroll for (lhs, rhs) in $(zip(dense_block_mapping, dense_blocks))
             sf_all.h[s][lhs[1], lhs[2]] += fixup(sf_s.h[rhs[1], rhs[2]])
         end
@@ -260,13 +260,13 @@ end
 
     P = length(CanonicalParams2)
 
-    @inbounds if sf_all.has_gradient
+    @inbounds if has_gradient(sf_all)
         for i = 1:P
             sf_all.d[s][i] += sf_s.d[i]
         end
     end
 
-    @inbounds if sf_all.has_hessian
+    @inbounds if has_hessian(sf_all)
         @syntactic_unroll for (lhs, rhs) in $(zip(symmetric_dense_blocks, symmetric_dense_blocks))
             sf_all.h[s][lhs[1], lhs[2]] += fixup(sf_s.h[rhs[1], rhs[2]])
         end
@@ -284,13 +284,13 @@ end
 
     P = length(CanonicalParams2)
 
-    @inbounds if sf_all.has_gradient
+    @inbounds if has_gradient(sf_all)
         for i = 1:P
             sf_all.d[s][i] += sf_s.d[i]
         end
     end
 
-    @inbounds if sf_all.has_hessian
+    @inbounds if has_hessian(sf_all)
         @syntactic_unroll for (lhs, rhs) in $(zip(dense_blocks, dense_blocks))
             sf_all.h[s][lhs[1], lhs[2]] += fixup(sf_s.h[rhs[1], rhs[2]])
         end
@@ -311,14 +311,14 @@ end
 
     error()
 
-    @inbounds if sf_all.has_gradient
+    @inbounds if has_gradient(sf_all)
         reparam_sf_s_d = sf_s.d[ids_2_to_ids]
         for i = 1:P
             sf_all.d[P_shifted + i] += reparam_sf_s_d[i]
         end
     end
 
-    @inbounds if sf_all.has_hessian
+    @inbounds if has_hessian(sf_all)
         @syntactic_unroll for (lhs, rhs) in $(zip(dense_block_mapping, dense_blocks))
             sf_all.h[P_shifted + lhs[1], P_shifted + lhs[2]] += fixup(sf_s.h[rhs[1], rhs[2]])
         end
@@ -376,8 +376,8 @@ function combine_sfs_hessian2!{T,TT,T1 <: Number}(
             sf_result::AbstractSensitiveFloat{T1},
             g_d, g_h)
     @assert g_h[1, 2] == g_h[2, 1]
-    @assert sf_result.has_hessian
-    @assert sf_result.has_gradient
+    @assert has_hessian(sf_result)
+    @assert has_gradient(sf_result)
 
     @assert n_sources(var_G) == n_sources(E_G) == n_sources(sf_result)    
     P = n_local_params(sf_result)
@@ -445,11 +445,11 @@ function combine_sfs2!{T, TT, T1 <: Number}(
                         v::T1,
                         g_d, g_h)
     # You have to do this in the right order to not overwrite needed terms.
-    if sf_result.has_hessian
+    if has_hessian(sf_result)
         combine_sfs_hessian2!(combinator, Const, sf1, sf2, sf_result, g_d, g_h)
     end
 
-    if sf_result.has_gradient
+    if has_gradient(sf_result)
         SensitiveFloats.combine_sfs_gradient!(combinator, sf1, sf2, sf_result, g_d)
     end
 
@@ -462,11 +462,11 @@ function add_scaled_sfs!{NumType <: Number}(
                     scale::AbstractFloat)
     sf1.v[] += scale * sf2.v[]
 
-    @assert sf1.has_gradient == sf2.has_gradient
-    @assert sf1.has_hessian == sf2.has_hessian
+    @assert has_gradient(sf1) == has_gradient(sf2)
+    @assert has_hessian(sf1) == has_hessian(sf2)
 
     P = n_local_params(sf1)
-    @inbounds if sf1.has_gradient
+    @inbounds if has_gradient(sf1)
         for source in 1:n_sources(sf1)
             for ind in 1:n_local_params(sf1)
                 sf1.d[(source-1)*P+ind] += scale * sf2[Source(source)].d[ind]
@@ -474,7 +474,7 @@ function add_scaled_sfs!{NumType <: Number}(
         end
     end
 
-    if sf1.has_hessian
+    if has_hessian(sf1)
       for source in 1:n_sources(sf1)
           add_sparse_components!(
               (old,nv)->(Base.@_inline_meta; old+nv),
@@ -519,11 +519,11 @@ function add_elbo_log_term!{NumType <: Number}(
         # If not calculating derivatives, add the values directly.
         elbo.v[] += x_nbm * log(iota)
         
-        if !elbo_vars.elbo.has_gradient
+        if !has_gradient(elbo_vars.elbo)
             elbo.v[] += x_nbm * log_term_value
         end
 
-        if elbo_vars.elbo.has_gradient
+        if has_gradient(elbo_vars.elbo)
             combine_grad = SVector{2, NumType}(
               -0.5 / (E_G_v ^ 2),
               1 / E_G_v + var_G_v / (E_G_v ^ 3))
@@ -645,8 +645,8 @@ function elbo_likelihood{T}(ea::ElboArgs,
                                     ea.S, ea.patches,
                                     vp, ea.active_sources,
                                     ea.psf_K, n,
-                                    elbo_vars.elbo.has_gradient,
-                                    elbo_vars.elbo.has_hessian)
+                                    has_gradient(elbo_vars.elbo),
+                                    has_hessian(elbo_vars.elbo))
         star_mcs, gal_mcs = (bvn_bundle.star_mcs, bvn_bundle.gal_mcs)
 
         # if there's only one active source, we know each pixel we visit
@@ -704,14 +704,14 @@ using Celeste.SensitiveFloats: n_sources, n_local_params
 const index_map = Base.to_index(typeof(Celeste.Model.ids2),Celeste.Model.ids_2_to_ids)
 function reparameterize_elbo{NumType}(sf_result::SensitiveFloat{NumType, CanonicalParams, Matrix{NumType}}, sf::SensitiveFloat{NumType, CanonicalParams2})
     P = n_local_params(sf)
-    if sf.has_gradient
+    if has_gradient(sf)
         for s in 1:n_sources(sf)
             for i = 1:P
                 sf_result.d[(s-1)*P + i] = sf.d[(s-1)*P + index_map[i]]
             end
         end
     end
-    if sf.has_hessian
+    if has_hessian(sf)
         for source_i in 1:n_sources(sf), source_j in 1:n_sources(sf)
             for i = 1:P, j = 1:P
                 sf_result.h[(source_j-1)*P + j, (source_i-1)*P + i] =

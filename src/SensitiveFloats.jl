@@ -12,22 +12,25 @@ export SensitiveFloat,
        AbstractSensitiveFloat
 
 using Celeste: ParameterizedArray, @aliasscope, Const, @unroll_loop
-import Celeste: zero!, zeros_type
+import Celeste: zero!, zeros_type, has_gradient, has_hessian
 using StaticArrays
 
-abstract type AbstractSensitiveFloat{NumType} end
+abstract type AbstractSensitiveFloat{NumType, HasGradient, HasHessian} end
+has_gradient(sf::AbstractSensitiveFloat{<:Any, G}) where {G} = G
+has_hessian(sf::AbstractSensitiveFloat{<:Any, G, H}) where {G,H} = H
+
 zeros_type(::Type{Array{T,N}} where N, dims...) where T = zeros(T, dims...)
 zeros_type(T::Type{ParameterizedArray{x,A}} where x, dims...) where A = T(zeros_type(A, dims...))
 zeros_type(aT::Type{SizedArray{S,T,N,M}} where {S,N}, dims...) where {T,M} = aT(zeros_type(Array{T,M}, dims...))
 
-abstract type AbstractSparseSSensitiveFloat{NumType} <: AbstractSensitiveFloat{NumType} end
+abstract type AbstractSparseSSensitiveFloat{NumType, HasGradient, HasHessian} <: AbstractSensitiveFloat{NumType, HasGradient, HasHessian} end
 
 immutable Source
     n::Int
 end
 
 # Special case for local_S == 1
-immutable SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation} <: AbstractSparseSSensitiveFloat{NumType}
+immutable SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian} <: AbstractSparseSSensitiveFloat{NumType, HasGradient, HasHessian}
    v::Base.RefValue{NumType}
 
    # local_S vector of local_P gradients
@@ -35,25 +38,22 @@ immutable SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation} <
 
    # local_S x local_S matrix of hessians (generally local_P x local_P matrices)
    h::HessianRepresentation
-
-   has_gradient::Bool
-   has_hessian::Bool
 end
-function (::Type{SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation}}){NumType, ParamSet, HessianRepresentation}(has_gradient, has_hessian)
-    @assert has_gradient || !has_hessian
+function (::Type{SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian}}){NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian}()
+    @assert HasGradient || !HasHessian
     local_P = length(ParamSet)
     v = Ref(zero(NumType))
-    d = zeros_type(ParameterizedArray{ParamSet, Vector{NumType}}, local_P * has_gradient)
+    d = zeros_type(ParameterizedArray{ParamSet, Vector{NumType}}, local_P * HasGradient)
     h_dim = local_P
     h = zeros_type(HessianRepresentation, h_dim, h_dim)
-    SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation}(v, d, h, has_gradient, has_hessian)
+    SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian}(v, d, h)
 end
 n_sources(sf::SingleSourceSensitiveFloat) = 1
 n_local_params(sf::SingleSourceSensitiveFloat{NumType, ParamSet} where NumType) where {ParamSet} = isa(ParamSet, Int) ? ParamSet : length(ParamSet)
 Base.getindex(sf::SingleSourceSensitiveFloat, s::Source) = (@assert s.n == 1; sf)
 
 # multiple SSSF that are sparse in S
-immutable SSparseSensitiveFloat{NumType, ParamSet, HessianRepresentation} <: AbstractSparseSSensitiveFloat{NumType}
+immutable SSparseSensitiveFloat{NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian} <: AbstractSparseSSensitiveFloat{NumType, HasGradient, HasHessian}
     v::Base.RefValue{NumType}
 
     # local_S tuple of local_P gradients
@@ -63,28 +63,24 @@ immutable SSparseSensitiveFloat{NumType, ParamSet, HessianRepresentation} <: Abs
     h::NTuple{N, HessianRepresentation} where N
 
     local_S::Int
-
-    has_gradient::Bool
-    has_hessian::Bool
-    function (::Type{SSparseSensitiveFloat{NumType, ParamSet, HessianRepresentation}}){NumType, ParamSet, HessianRepresentation}(local_S, has_gradient, has_hessian)
-        @assert has_gradient || !has_hessian
+    function (::Type{SSparseSensitiveFloat{NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian}}){NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian}(local_S)
+        @assert HasGradient || !HasHessian
         local_P = length(ParamSet)
         v = Ref(zero(NumType))
-        d = tuple((zeros_type(ParameterizedArray{ParamSet, Vector{NumType}}, local_P * has_gradient) for i = 1:local_S)...)
+        d = tuple((zeros_type(ParameterizedArray{ParamSet, Vector{NumType}}, local_P * HasGradient) for i = 1:local_S)...)
         h_dim = local_P
         h = tuple((zeros_type(HessianRepresentation, h_dim, h_dim) for i = 1:local_S)...)
-        new{NumType, ParamSet, HessianRepresentation}(v, d, h, local_S, has_gradient, has_hessian)
+        new{NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian}(v, d, h, local_S)
     end
 end
 n_sources(sf::SSparseSensitiveFloat) = sf.local_S
 n_local_params(sf::SSparseSensitiveFloat{NumType, ParamSet} where NumType) where {ParamSet} = isa(ParamSet, Int) ? ParamSet : length(ParamSet)
 # This shares the underlying data, so modifications will show up
 Base.getindex(sf::SSparseSensitiveFloat{NumType, ParamSet, HessianRepresentation}, s::Source) where {NumType, ParamSet, HessianRepresentation} = 
-    SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation}(
+    SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation, has_gradient(sf), has_hessian(sf)}(
       sf.v,
       sf.d[s.n],
-      sf.h[s.n],
-      sf.has_gradient, sf.has_hessian
+      sf.h[s.n]
     )
 
 immutable SourceViewArray{ParamSet, AT}
@@ -115,7 +111,7 @@ Attributes:
       in the same format as d.  This is used for the full Hessian
       with respect to all the sources.
 """
-immutable SensitiveFloat{NumType, ParamSet, HessianRepresentation} <: AbstractSensitiveFloat{NumType}
+immutable SensitiveFloat{NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian} <: AbstractSensitiveFloat{NumType, HasGradient, HasHessian}
     v::Base.RefValue{NumType}
 
     # local_P x local_S matrix of gradients
@@ -126,27 +122,24 @@ immutable SensitiveFloat{NumType, ParamSet, HessianRepresentation} <: AbstractSe
     h::HessianRepresentation
 
     local_S::Int64
-
-    has_gradient::Bool
-    has_hessian::Bool
 end
-function (::Type{SensitiveFloat{NumType, ParamSet, HessianRepresentation} where HessianRepresentation}){NumType, ParamSet}(local_S, has_gradient, has_hessian)
+function (::Type{SensitiveFloat{NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian} where HessianRepresentation}){NumType, ParamSet, HasGradient, HasHessian}(local_S)
     @assert has_gradient || !has_hessian
     v = Ref(zero(NumType))
     local_P = isa(ParamSet, Integer) ? ParamSet : length(ParamSet)
-    d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
-    h_dim = local_P * local_S * has_hessian
+    d = zeros(NumType, local_P * has_gradient, local_S * HasGradient)
+    h_dim = local_P * local_S * HasHessian
     h = zeros(NumType, h_dim, h_dim)
-    SensitiveFloat{NumType, ParamSet, Matrix{NumType}}(v, d, h, local_S, has_gradient, has_hessian)
+    SensitiveFloat{NumType, ParamSet, Matrix{NumType}, HasGradient, HasHessian}(v, d, h, local_S)
 end
-function (::Type{SensitiveFloat{NumType, ParamSet, HessianRepresentation}}){NumType, ParamSet, HessianRepresentation}(local_S, has_gradient, has_hessian)
-    @assert has_gradient || !has_hessian
+function (::Type{SensitiveFloat{NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian}}){NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian}(local_S)
+    @assert HasGradient || !HasHessian
     v = Ref(zero(NumType))
     local_P = isa(ParamSet, Integer) ? ParamSet : length(ParamSet)
-    d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
+    d = zeros(NumType, local_P * HasGradient, local_S * HasGradient)
     h_dim = local_P * local_S
     h = zeros_type(HessianRepresentation, h_dim, h_dim)
-    SensitiveFloat{NumType, ParamSet, HessianRepresentation}(v, d, h, local_S, has_gradient, has_hessian)
+    SensitiveFloat{NumType, ParamSet, HessianRepresentation, HasGradient, HasHessian}(v, d, h, local_S)
 end
 @inline n_sources(sf::SensitiveFloat{A,B,<:StaticArray} where {A,B}) = div(size(sf.h, 2), n_local_params(sf))
 n_sources(sf::SensitiveFloat) = sf.local_S
@@ -156,23 +149,12 @@ n_local_params(sf::SensitiveFloat{NumType, ParamSet} where NumType) where {Param
     ParameterizedArray{ParamSet}(SourceViewArray{ParamSet, typeof(sf.d)}(s.n, sf.d)),
     ParameterizedArray{ParamSet}(SourceViewArray{ParamSet, typeof(sf.h)}(s.n, sf.h)))
 
-function SensitiveFloat(local_S::Int64,
-                        has_gradient::Bool = true,
-                        has_hessian::Bool = true)
-    return SensitiveFloat{Float64}(local_S, has_gradient, has_hessian)
-end
-
 function SensitiveFloat{NumType <: Number, ParamSet}(prototype_sf::SensitiveFloat{NumType, ParamSet})
-    SensitiveFloat{NumType, ParamSet}(prototype_sf.local_S,
-                                      prototype_sf.has_gradient,
-                                      prototype_sf.has_hessian)
+    typeof(prototype_sf)(prototype_sf.local_S)
 end
 
-SensitiveFloat(prototype_sf::SingleSourceSensitiveFloat) = 
-  typeof(prototype_sf)(prototype_sf.has_gradient, prototype_sf.has_hessian)
-
-  SensitiveFloat(prototype_sf::SSparseSensitiveFloat) = 
-    typeof(prototype_sf)(prototype_sf.local_S, prototype_sf.has_gradient, prototype_sf.has_hessian)
+SensitiveFloat(prototype_sf::SingleSourceSensitiveFloat) = typeof(prototype_sf)()
+SensitiveFloat(prototype_sf::SSparseSensitiveFloat) = typeof(prototype_sf)(prototype_sf.local_S)
 
 #########################################################
 
@@ -200,11 +182,11 @@ zero!(a::ParameterizedArray) = zero!(a.arr)
 function clear!{NumType <: Number}(sf::SensitiveFloat{NumType})
     sf.v[] = zero(NumType)
 
-    if sf.has_gradient
+    if has_gradient(sf)
         zero!(sf.d)
     end
 
-    if sf.has_hessian
+    if has_hessian(sf)
         zero!(sf.h)
     end
 end
@@ -212,11 +194,11 @@ end
 function clear!{NumType <: Number}(sf::SingleSourceSensitiveFloat{NumType, ParamSet, HessianRepresentation} where {ParamSet, HessianRepresentation})
     sf.v[] = zero(NumType)
 
-    if sf.has_gradient
+    if has_gradient(sf)
         zero!(sf.d)
     end
 
-    if sf.has_hessian
+    if has_hessian(sf)
         zero!(sf.h)
     end
 end
@@ -224,13 +206,13 @@ end
 function clear!{NumType <: Number}(sf::SSparseSensitiveFloat{NumType, ParamSet, HessianRepresentation} where {ParamSet, HessianRepresentation})
     sf.v[] = zero(NumType)
 
-    if sf.has_gradient
+    if has_gradient(sf)
         for arr in sf.d
             zero!(arr)
         end
     end
 
-    if sf.has_hessian
+    if has_hessian(sf)
         for arr in sf.h
             zero!(arr)
         end
@@ -249,8 +231,8 @@ function combine_sfs_hessian!{T,TT,T1 <: Number}(
             sf_result::AbstractSensitiveFloat{T1},
             g_d, g_h)
     @assert g_h[1, 2] == g_h[2, 1]
-    @assert sf_result.has_hessian
-    @assert sf_result.has_gradient
+    @assert has_hessian(sf_result)
+    @assert has_gradient(sf_result)
 
     @assert n_sources(sf1) == n_sources(sf2) == n_sources(sf_result)    
     P = n_local_params(sf_result)
@@ -325,11 +307,11 @@ function combine_sfs!{T, TT, T1 <: Number}(
                         v::T1,
                         g_d, g_h)
     # You have to do this in the right order to not overwrite needed terms.
-    if sf_result.has_hessian
+    if has_hessian(sf_result)
         combine_sfs_hessian!(combinator, Const, sf1, sf2, sf_result, g_d, g_h)
     end
 
-    if sf_result.has_gradient
+    if has_gradient(sf_result)
         combine_sfs_gradient!(combinator, sf1, sf2, sf_result, g_d)
     end
 
@@ -360,14 +342,14 @@ function add_scaled_sfs!{NumType <: Number}(
                     scale::AbstractFloat)
     sf1.v[] += scale * sf2.v[]
 
-    @assert sf1.has_gradient == sf2.has_gradient
-    @assert sf1.has_hessian == sf2.has_hessian
+    @assert has_gradient(sf1) == has_gradient(sf2)
+    @assert has_hessian(sf1) == has_hessian(sf2)
 
-    if sf1.has_gradient
+    if has_gradient(sf1)
         LinAlg.BLAS.axpy!(scale, sf2.d, sf1.d)
     end
 
-    if sf1.has_hessian
+    if has_hessian(sf1)
         p1, p2 = size(sf1.h)
         @assert (p1, p2) == size(sf2.h)
         @inbounds for ind2=1:p2, ind1=1:ind2
@@ -385,11 +367,11 @@ function add_scaled_sfs!{NumType <: Number}(
                     scale::AbstractFloat)
     sf1.v[] += scale * sf2.v[]
 
-    @assert sf1.has_gradient == sf2.has_gradient
-    @assert sf1.has_hessian == sf2.has_hessian
+    @assert has_gradient(sf1) == has_gradient(sf2)
+    @assert has_hessian(sf1) == has_hessian(sf2)
 
     P = n_local_params(sf1)
-    @inbounds if sf1.has_gradient
+    @inbounds if has_gradient(sf1)
         for source in 1:n_sources(sf1)
             for ind in 1:n_local_params(sf1)
                 sf1.d[(source-1)*P+ind] += scale * sf2[Source(source)].d[ind]
@@ -397,7 +379,7 @@ function add_scaled_sfs!{NumType <: Number}(
         end
     end
 
-    if sf1.has_hessian
+    if has_hessian(sf1)
       @aliasscope begin
         @inbounds for source in 1:n_sources(sf1)
             sf2_s_h = Const(sf2[Source(source)].h.arr)
@@ -428,7 +410,7 @@ function add_sources_sf!{NumType <: Number, ParamSet}(
     P = length(ParamSet)
     P_shifted = P * (s - 1)
 
-    if sf_all.has_gradient
+    if has_gradient(sf_all)
         @assert size(sf_s.d) == (P, 1)
         @inbounds for s_ind1 in 1:P
             s_all_ind1 = P_shifted + s_ind1
@@ -436,7 +418,7 @@ function add_sources_sf!{NumType <: Number, ParamSet}(
         end
     end
 
-    if sf_all.has_hessian
+    if has_hessian(sf_all)
         Ph = size(sf_all.h)[1]
         @assert Ph == size(sf_all.h)[2]
         @assert size(sf_s.h) == (P, P)
