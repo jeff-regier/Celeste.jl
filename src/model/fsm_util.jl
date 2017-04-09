@@ -1,4 +1,4 @@
-using Celeste: @implicit_transpose, is_implicitly_symmetric
+using Celeste: @implicit_transpose, is_implicitly_symmetric, has_gradient, has_hessian
 
 """
 Convolve the current locations and galaxy shapes with the PSF.  If
@@ -186,21 +186,21 @@ function accum_star_pos!{NumType <: Number}(
                     is_active_source::Bool)
     eval_bvn_pdf!(bvn_derivs, bmc, x)
 
-    if fs0m.has_gradient && is_active_source
+    if has_gradient(fs0m) && is_active_source
         get_bvn_derivs!(bvn_derivs, bmc, true, false)
     end
 
     fs0m.v[] += bvn_derivs.f_pre[1]
 
-    if fs0m.has_gradient && is_active_source
-        transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, fs0m.has_hessian)
+    if has_gradient(fs0m) && is_active_source
+        transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, has_hessian(fs0m))
         bvn_u_d = ParameterizedArray{StarPosParams}(bvn_derivs.bvn_u_d)
         bvn_uu_h = ParameterizedArray{StarPosParams}(bvn_derivs.bvn_uu_h)
 
         # Accumulate the derivatives.
         fs0m.d[star_ids.u] += bvn_derivs.f_pre[1] * bvn_u_d[star_ids.u]
 
-        if fs0m.has_hessian
+        if has_hessian(fs0m)
             # Hessian terms involving only the location parameters.
             # TODO: redundant term
             fs0m.h[star_ids.u, star_ids.u] +=
@@ -226,11 +226,9 @@ function accum_galaxy_pos!{NumType <: Number}(
     @inbounds f = bvn_derivs.f_pre * gcc.e_dev_i
     fs1m.v[] += f
 
-    if fs1m.has_gradient && is_active_source
-        get_bvn_derivs!(bvn_derivs, gcc.bmc,
-                        fs1m.has_gradient, fs1m.has_hessian)
-        transform_bvn_derivs!(
-            bvn_derivs, gcc.sig_sf, wcs_jacobian, fs1m.has_hessian)
+    if has_gradient(fs1m) && is_active_source
+        get_bvn_derivs!(bvn_derivs, gcc.bmc, has_gradient(fs1m), has_hessian(fs1m))
+        transform_bvn_derivs!(bvn_derivs, gcc.sig_sf, wcs_jacobian, has_hessian(fs1m))
             
         @aliasscope @inbounds begin
             bvn_u_d = ParameterizedArray{SharedPosParams}(bvn_derivs.bvn_u_d)
@@ -245,7 +243,7 @@ function accum_galaxy_pos!{NumType <: Number}(
             # is an exp or dev component.
             fs1m.d[gal_ids.e_dev] += gcc.e_dev_dir * bvn_derivs.f_pre
 
-            if fs1m.has_hessian
+            if has_hessian(fs1m)
                 # The Hessians:
                 bvn_uu_h = ParameterizedArray{SharedPosParams}(bvn_derivs.bvn_uu_h)
                 bvn_ss_h = ParameterizedArray{GalaxyShapeParams}(bvn_derivs.bvn_ss_h)

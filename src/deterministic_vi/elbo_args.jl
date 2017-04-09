@@ -25,16 +25,16 @@ function HessianSubmatrices(NumType::DataType, i::Int)
     HessianSubmatrices{NumType}(u_u, shape_shape)
 end
 
-DenseHessianSSSF(ParamSet, NumType) = SingleSourceSensitiveFloat{NumType, ParamSet,
-  ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}}
-SparseHessianCanonicalSSSF(NumType) = SingleSourceSensitiveFloat{NumType, CanonicalParams2, SparseStruct{NumType}}
-DenseHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumType, ParamSet,
-  ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}}
+DenseHessianSSSF(ParamSet, NumType, HasGradient, HasHessian) = SingleSourceSensitiveFloat{NumType, ParamSet,
+  ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}, HasGradient, HasHessian}
+SparseHessianCanonicalSSSF(NumType, HasGradient, HasHessian) = SingleSourceSensitiveFloat{NumType, CanonicalParams2, SparseStruct{NumType}, HasGradient, HasHessian}
+DenseHessianSSparseSF(ParamSet, NumType, HasGradient, HasHessian) = SSparseSensitiveFloat{NumType, ParamSet,
+  ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}, HasGradient, HasHessian}
 DenseSymmetricHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumType, ParamSet,
   ParameterizedArray{ParamSet, Symmetric2{NumType, SizedVector{
     div(length(ParamSet)*(length(ParamSet)+1),2), NumType, 1
   }, :U}}}
-SparseHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumType, ParamSet, SparseStruct{NumType}}
+SparseHessianSSparseSF(ParamSet, NumType, HasGradient, HasHessian) = SSparseSensitiveFloat{NumType, ParamSet, SparseStruct{NumType}, HasGradient, HasHessian}
 SensitiveFloats.zeros_type(T::Type{<:SparseStruct}, args...) = zeros(T)
 
 """

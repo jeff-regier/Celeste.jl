@@ -5,7 +5,7 @@ using ...Model: CanonicalParams, ids, prior, Ia, D
 using ...SensitiveFloats: SensitiveFloat, add_sources_sf!
 using Compat
 using ForwardDiff, ReverseDiff, DiffBase
-using Celeste: zeros_type
+using Celeste: zeros_type, has_gradient, has_hessian
 
 # Calculate the Kullback-Leibler divergences between pairs of well-known parameteric
 # distributions, and derivatives with respect to the parameters of the first distributions.
@@ -164,16 +164,16 @@ using ReverseDiff: TrackedArray, TrackedReal, CompiledTape, GradientTape
 @compat const KLGradientTape{T} = GradientTape{typeof(subtract_kl),
                                                TrackedArray{T,T,1,Vector{T},Vector{T}},
                                                TrackedReal{T,T,Void}}
-const KLSensitiveFloat{NumType} = SensitiveFloat{NumType,CanonicalParams,Matrix{NumType}}
+const KLSensitiveFloat{NumType, HasGradient, HasHessian} = SensitiveFloat{NumType,CanonicalParams,Matrix{NumType}, HasGradient, HasHessian}
 
 
-immutable KLHelper{N,T}
+immutable KLHelper{N,T, HasGradient, HasHessian}
     gradient_tape::CompiledTape{:kl_gradient,KLGradientTape{T}}
     nested_gradient_tape::CompiledTape{:kl_nested_gradient,KLGradientTape{Dual{N,T}}}
     dual_buffer::Vector{Dual{N,T}}
     jacobian_config::JacobianConfig{N,T,Vector{Dual{N,T}}}
-    kl_source::KLSensitiveFloat{T}
-    result::DiffBase.DiffResult{1,T,NTuple{1,fieldtype(KLSensitiveFloat{T}, :d)}}
+    kl_source::KLSensitiveFloat{T, HasGradient, HasHessian}
+    result::DiffBase.DiffResult{1,T,NTuple{1,fieldtype(KLSensitiveFloat{T, HasGradient, HasHessian}, :d)}}
 end
 
 const PARAM_LENGTH = length(CanonicalParams)
@@ -185,9 +185,9 @@ function KLHelper{N,T}(::Type{Dual{N,T}}, has_gradient=true, has_hessian=true)
     nested_gradient_tape = CompiledTape{:kl_nested_gradient}(GradientTape(subtract_kl, rand(Dual{N,T}, PARAM_LENGTH)))
     ReverseDiff.compile(gradient_tape)
     ReverseDiff.compile(nested_gradient_tape)
-    kl_source = KLSensitiveFloat{T}(1, has_gradient, has_hessian)
+    kl_source = KLSensitiveFloat{T, has_gradient, has_hessian}(1)
     result = DiffBase.DiffResult(zero(T), kl_source.d)
-    return KLHelper{N,T}(gradient_tape, nested_gradient_tape, dual_buffer, jacobian_config, kl_source, result)
+    return KLHelper{N, T, has_gradient, has_hessian}(gradient_tape, nested_gradient_tape, dual_buffer, jacobian_config, kl_source, result)
 end
 
 function kl_gradient!(out, x, helper::KLHelper)
@@ -208,13 +208,13 @@ end
 
 function subtract_kl_source!(kl_source::SensitiveFloat, result::DiffBase.DiffResult,
                              vs, helper::KLHelper)
-    if kl_source.has_gradient
+    if has_gradient(kl_source)
         kl_gradient!(result, vs, helper)
         kl_source.v[] = DiffBase.value(result)
     else
         kl_source.v[] = subtract_kl(vs)
     end
-    if kl_source.has_hessian
+    if has_hessian(kl_source)
         kl_hessian!(kl_source.h, vs, helper)
     end
     return kl_source

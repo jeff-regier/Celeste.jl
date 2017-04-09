@@ -8,6 +8,8 @@ import ForwardDiff
 
 function zero! end
 function zeros_type end
+function has_gradient end
+function has_hessian end
 
 # alias scopes
 include("aliasscopes.jl")
