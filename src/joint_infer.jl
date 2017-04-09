@@ -611,9 +611,7 @@ function process_sources_dynamic!(images::Vector{Model.Image},
     l = SpinLock()
 
     total_idle_time = 0
-
-    # Keep track of total elapsed time
-    tic()
+    total_sum_of_thread_times = 0
 
     for iter in 1:n_iters
 
@@ -661,10 +659,10 @@ function process_sources_dynamic!(images::Vector{Model.Image},
             idle_percent = 100.0 * (avg_thread_idle_time / maximum_thread_time)
             Log.info("Batch $(batch) avg threads idle: $(round(Int, idle_percent))% ($(avg_thread_idle_time) / $(maximum_thread_time))")
 	    total_idle_time += sum(maximum(process_sources_elapsed_times) - process_sources_elapsed_times)
+            total_sum_of_thread_times += sum(process_sources_elapsed_times)
         end
     end
-    total_elapsed_time = toq()
-    Log.info("Total idle time: $(round(Int, total_idle_time)), Total elapsed time: $(round(Int, total_elapsed_time))")
+    Log.info("Total idle time: $(round(Int, total_idle_time)), Total sum of threads times: $(round(Int, total_sum_of_thread_times))")
 end
 
 # Process partition of sources. Multiple threads call this function in parallel.
