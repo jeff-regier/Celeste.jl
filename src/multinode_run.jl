@@ -62,9 +62,10 @@ type BoxInfo
     ea_vec::Vector{ElboArgs}
     vp_vec::Vector{VariationalParams{Float64}}
     cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}}
+    ks::BoxKillSwitch
 
     BoxInfo() = new(Atomic{Int}(BoxDone), 0, [], [], [], [], [], [], [],
-                    Atomic{Int}(1), [], [], [])
+                    Atomic{Int}(1), [], [], [], BoxKillSwitch())
 end
 
 # box states
@@ -268,15 +269,15 @@ previous inference results if the global array is provided.
 """
 function init_box(npartitions::Int, rcf_map::Dict{RunCamcolField,Int32},
                   prev_results, cbox::BoxInfo, timing::InferTiming)
-    cbox.sources_assignment = partition_box(npartitions, cbox.target_sources,
-                                            cbox.neighbor_map)
-
     nsources = length(cbox.target_sources)
     cbox.ea_vec, cbox.vp_vec, cbox.cfg_vec, ts_vp =
             setup_vecs(nsources, cbox.target_sources, cbox.catalog)
 
     # to hold previously computed variational parameters (if any)
     cache = Dict{Int,Vector{Float64}}()
+
+    # kill switch for this box
+    cbox.ks = BoxKillSwitch()
 
     # initialize elbo args for all sources
     tic()
@@ -297,7 +298,8 @@ function init_box(npartitions::Int, rcf_map::Dict{RunCamcolField,Int32},
                              ts_vp[x] :
                              catalog_init_source(cbox.catalog[x])
                              for x in ids_local]
-        cbox.cfg_vec[ts] = Config(cbox.ea_vec[ts], vp)
+        cbox.cfg_vec[ts] = Config(cbox.ea_vec[ts], vp;
+                                  termination_callback=cbox.ks)
 
         init_source(i) = i == 1 ?
                          generic_init_source(cat_local[i].pos) :
@@ -355,6 +357,8 @@ function init_box(npartitions::Int, rcf_map::Dict{RunCamcolField,Int32},
         cbox.vp_vec[ts] = vp
     end
     timing.init_elbo += toq()
+    cbox.sources_assignment = partition_box(npartitions, cbox.target_sources,
+                                            cbox.neighbor_map, cbox.ea_vec)
     cbox.state[] = BoxReady
 end
 
@@ -364,6 +368,11 @@ Put inference results for a box into the global array.
 """
 function store_box(cbox::BoxInfo, rcf_map::Dict{RunCamcolField,Int32},
                    results::Garray, timing::InferTiming)
+    if cbox.ks.killed
+        Log.message("$(Time(now())): abandoned box #$(cbox.box_idx)")
+        return
+    end
+
     tic()
     try
         for ts = 1:length(cbox.target_sources)
@@ -400,8 +409,7 @@ function store_box(cbox::BoxInfo, rcf_map::Dict{RunCamcolField,Int32},
     timing.num_srcs += length(cbox.target_sources)
 
     if length(cbox.target_sources) > 0
-        Log.message("$(Time(now())): completed box #$(cbox.box_idx) ",
-                    "($(length(cbox.target_sources)) target sources)")
+        Log.message("$(Time(now())): completed box #$(cbox.box_idx)")
     end
 end
 
@@ -432,12 +440,22 @@ function preload_boxes(config::Configs.Config,
         timing.proc_wait += toq()
 
         # store box results
-        store_box(cbox, rcf_map, results, timing)
+        try store_box(cbox, rcf_map, results, timing)
+        catch exc
+            Log.exception(exc)
+        end
 
         # load and initialize box
         if state != BoxEnd
             if load_box(boxes, field_extents, stagedir, mi, cbox, timing)
-                init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
+                try init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
+                catch exc
+                    Log.exception(exc)
+                    if cbox.state[] != BoxReady
+                        empty!(cbox.sources_assignment)
+                        cbox.state[] = BoxReady
+                    end
+                end
             else
                 state = BoxEnd
                 cbox.state[] = BoxEnd
@@ -546,11 +564,24 @@ function joint_infer_boxes(config::Configs.Config,
                                 rethrow()
                             end
                         end
+                        if cbox.ks.killed
+                            break
+                        end
                     end
                 end
+                cbox.ks.finished[tid] = time_ns()
+                cbox.ks.lastfin[] = tid
+                atomic_add!(cbox.ks.numfin, 1)
+
                 tic()
                 thread_barrier(mi.bar)
                 timing.load_imba += toq()
+                if cbox.ks.killed
+                    break
+                end
+            end
+            if cbox.ks.killed
+                break
             end
         end
         boxtime = toq()

@@ -14,6 +14,50 @@ using ..DeterministicVI.ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
 using ..DeterministicVI.ElboMaximize: Config, maximize!
 
 
+# 20 minute threshold
+const box_max_threshold = convert(UInt64, 20*60*1e9)::UInt64
+
+type BoxKillSwitch <: Function
+    started::UInt64
+    numfin_threshold::Int64
+    numfin::Atomic{Int64}
+    finished::Vector{UInt64}
+    lastfin::Atomic{Int64}
+    killed::Bool
+    messaged::Bool
+
+    BoxKillSwitch() = new(0, ceil(Int64, nthreads()/2), Atomic{Int64}(0),
+                          fill(typemax(UInt64), nthreads()),
+                          Atomic{Int64}(0), false, false)
+end
+
+function (f::BoxKillSwitch)(x)
+    now_ns = time_ns()
+    if f.started == 0
+        # benign race here
+        f.started = now_ns
+        Log.debug("box kill timer started at $(now_ns)")
+    elseif (now_ns - f.started) > box_max_threshold
+        # and here
+        f.killed = true
+        Log.debug("box kill timer expired, killed")
+    elseif f.numfin[] >= f.numfin_threshold
+        lastfinat = f.finished[f.lastfin[]]
+        if now_ns - lastfinat > floor(Int64, (lastfinat - f.started) * 0.25)
+            #f.killed = true
+            if !f.messaged
+                ttms = [f.finished[i] == typemax(UInt64) ? "" : "$(i):$(f.finished[i] - f.started) " for i in 1:length(f.finished)]
+                Log.message("imbalance threshold reached at $(now_ns), ",
+                            "started at $(f.started), $(ttms...)")
+                f.messaged = true
+            end
+            Log.debug("box thread imbalance threshold, killed")
+        end
+    end
+    return f.killed
+end
+
+
 function union_find!(i, components_tree)
     root = i
     while components_tree[i] != i
@@ -332,7 +376,6 @@ Partitions sources via the cyclades algorithm. Finds the batch size which return
 - neighbor_map - graph of connections of sources
 """
 function partition_cyclades_dynamic_auto_batchsize(target_sources, neighbor_map, ea_vec)
-
     n_threads = nthreads()
     
     # Sample batch sizes at intervals
@@ -428,13 +471,16 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
     ea_vec, vp_vec, cfg_vec, target_source_variational_params =
             setup_vecs(n_sources, target_sources, catalog)
 
+    ks = BoxKillSwitch()
+
     # Initialize elboargs in parallel
     tic()
     thread_initialize_sources_assignment::Vector{Vector{Vector{Int64}}} = partition_equally(n_threads, n_sources)
 
     initialize_elboargs_sources!(config, ea_vec, vp_vec, cfg_vec, thread_initialize_sources_assignment,
                                  catalog, target_sources, neighbor_map, images,
-                                 target_source_variational_params)
+                                 target_source_variational_params;
+                                 termination_callback=ks)
     timing.init_elbo = toq()
 
     #thread_sources_assignment = partition_box(n_threads, target_sources,
@@ -454,7 +500,8 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
     #                 n_iters, within_batch_shuffling)
     process_sources_dynamic!(images, ea_vec, vp_vec, cfg_vec,
                              batched_connected_components,
-                             n_iters, within_batch_shuffling)
+                             n_iters, within_batch_shuffling;
+                             kill_switch=ks)
 
     timing.opt_srcs = toq()
     timing.num_srcs = n_sources
@@ -462,14 +509,18 @@ function one_node_joint_infer(config::Configs.Config, catalog, target_sources, n
     # Return add results to vector
     results = OptimizedSource[]
 
-    for i = 1:n_sources
-        entry = catalog[target_sources[i]]
-        result = OptimizedSource(entry.thing_id,
-                                 entry.objid,
-                                 entry.pos[1],
-                                 entry.pos[2],
-                                 vp_vec[i][1])
-        push!(results, result)
+    if ks.killed
+        Log.message("optimization terminated due to timeout")
+    else
+        for i = 1:n_sources
+            entry = catalog[target_sources[i]]
+            result = OptimizedSource(entry.thing_id,
+                                     entry.objid,
+                                     entry.pos[1],
+                                     entry.pos[2],
+                                     vp_vec[i][1])
+            push!(results, result)
+        end
     end
 
     show_pixels_processed()
@@ -501,14 +552,16 @@ end
 function initialize_elboargs_sources!(config::Configs.Config, ea_vec, vp_vec, cfg_vec,
                                       thread_initialize_sources_assignment,
                                       catalog, target_sources, neighbor_map, images,
-                                      target_source_variational_params)
+                                      target_source_variational_params;
+                                      termination_callback=nothing)
     Threads.@threads for i in 1:nthreads()
         try
             for batch in 1:length(thread_initialize_sources_assignment[i])
                 for source_index in thread_initialize_sources_assignment[i][batch]
                     init_elboargs(config, source_index, catalog, target_sources,
                                   neighbor_map, images, ea_vec, vp_vec, cfg_vec,
-                                  target_source_variational_params)
+                                  target_source_variational_params;
+                                  termination_callback=termination_callback)
                 end
             end
         catch ex
@@ -531,7 +584,8 @@ function init_elboargs(config::Configs.Config,
                        ea_vec::Vector{ElboArgs},
                        vp_vec::Vector{VariationalParams{Float64}},
                        cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
-                       ts_vp::Dict{Int64,Array{Float64}})
+                       ts_vp::Dict{Int64,Array{Float64}};
+                       termination_callback=nothing)
     try
         entry_id = target_sources[ts]
         entry = catalog[entry_id]
@@ -552,7 +606,8 @@ function init_elboargs(config::Configs.Config,
 
         ea_vec[ts] = ea
         vp_vec[ts] = vp
-        cfg_vec[ts] = Config(ea, vp)
+        cfg_vec[ts] = Config(ea, vp;
+                termination_callback=termination_callback)
     catch exc
         if is_production_run || nthreads() > 1
             Log.exception(exc)
@@ -602,8 +657,9 @@ function process_sources_dynamic!(images::Vector{Model.Image},
                                   cfg_vec::Vector{Config{DEFAULT_CHUNK,Float64}},
                                   thread_sources_assignment::Vector{Vector{Vector{Int64}}},
                                   n_iters::Int,
-                                  within_batch_shuffling::Bool)
-    Log.message("Processing with dynamic connected components load balancing")
+                                  within_batch_shuffling::Bool;
+                                  kill_switch=nothing)
+    Log.info("Processing with dynamic connected components load balancing")
 
     n_threads::Int = nthreads()
     n_batches::Int = length(thread_sources_assignment)
@@ -646,11 +702,20 @@ function process_sources_dynamic!(images::Vector{Model.Image},
                         process_sources_kernel!(ea_vec, vp_vec, cfg_vec,
                                                 thread_sources_assignment[batch::Int][cc_index],
                                                 within_batch_shuffling)
+                        if kill_switch != nothing && kill_switch.killed
+                            break
+                        end
                     end
                     process_sources_elapsed_times[i::Int] = toq()
                 catch exc
                     Log.exception(exc)
                     rethrow()
+                end
+                if kill_switch != nothing
+                    tid = threadid()
+                    kill_switch.finished[tid] = time_ns()
+                    kill_switch.lastfin[] = tid
+                    atomic_add!(kill_switch.numfin, 1)
                 end
             end
             Log.info("Batch $(batch) - $(process_sources_elapsed_times)")
@@ -660,6 +725,12 @@ function process_sources_dynamic!(images::Vector{Model.Image},
             Log.info("Batch $(batch) avg threads idle: $(round(Int, idle_percent))% ($(avg_thread_idle_time) / $(maximum_thread_time))")
 	    total_idle_time += sum(maximum(process_sources_elapsed_times) - process_sources_elapsed_times)
             total_sum_of_thread_times += sum(process_sources_elapsed_times)
+            if kill_switch != nothing && kill_switch.killed
+                break
+            end
+        end
+        if kill_switch != nothing && kill_switch.killed
+            break
         end
     end
     Log.info("Total idle time: $(round(Int, total_idle_time)), Total sum of threads times: $(round(Int, total_sum_of_thread_times))")
@@ -682,6 +753,9 @@ function process_sources_kernel!(ea_vec::Vector{ElboArgs},
 	#tic()
         for i in source_assignment
             maximize!(ea_vec[i], vp_vec[i], cfg_vec[i])
+            if cfg_vec[i].optim_options.callback.killed
+                break
+            end
         end
 	#ccall(:jl_,Void,(Any,), "this is thread number $(Threads.threadid()) took $(toq()) seconds to process batch with $(length(source_assignment)) sources")
     catch ex
