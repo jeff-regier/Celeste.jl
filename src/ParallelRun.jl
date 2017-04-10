@@ -30,6 +30,10 @@ else
 grank() = 1
 end
 
+const jld2_installed = try Pkg.installed("JLD2"); true
+                       catch exc false end
+const FlatImage = SDSSIO.FlatImage
+
 #
 # ------ bounding box ------
 immutable BoundingBox
@@ -144,7 +148,6 @@ end
 
 # ------
 # initialization helpers
-
 """
 Given a list of RCFs, load the catalogs, determine the target sources,
 load the images, and build the neighbor map.
@@ -154,6 +157,9 @@ function infer_init(rcfs::Vector{RunCamcolField},
                     objid="",
                     box=BoundingBox(-1000., 1000., -1000., 1000.),
                     primary_initialization=true,
+                    slurp=false,
+                    images_in_jld=false,
+                    rcfs_in_mdts=false,
                     timing=InferTiming())
     catalog = Vector{CatalogEntry}()
     target_sources = Vector{Int}()
@@ -166,8 +172,15 @@ function infer_init(rcfs::Vector{RunCamcolField},
     duplicate_policy = primary_initialization ? :primary : :first
     tic()
     for rcf in rcfs
-        this_cat = SDSSIO.read_photoobj_files([rcf], stagedir,
-                        duplicate_policy=duplicate_policy)
+        if rcfs_in_mdts
+            mdtdir = "$stagedir/mdt$(rcf.run%5)"
+            rdir = images_in_jld ? mdtdir : "$mdtdir/plan_b"
+        else
+            rdir = stagedir
+        end
+        this_cat = SDSSIO.read_photoobj_files([rcf], rdir,
+                        duplicate_policy=duplicate_policy,
+                        slurp=slurp)
         these_sources_rcfs = Vector{RunCamcolField}(length(this_cat))
         fill!(these_sources_rcfs, rcf)
         these_sources_idxs = collect(Int16, 1:length(this_cat))
@@ -197,7 +210,12 @@ function infer_init(rcfs::Vector{RunCamcolField},
         # Read in images for all (run, camcol, field).
         try
             tic()
-            images = SDSSIO.load_field_images(rcfs, stagedir)
+            if images_in_jld
+                images = SDSSIO.load_images_from_jld(rcfs, stagedir, rcfs_in_mdts)
+            else
+                images = SDSSIO.load_field_images(rcfs, stagedir, slurp,
+                                                  rcfs_in_mdts)
+            end
             timing.read_img += toq()
         catch ex
             Log.exception(ex)
@@ -547,7 +565,8 @@ save_results(outdir, box, results) =
 """
 called from main entry point.
 """
-function infer_box(box::BoundingBox, stagedir::String, outdir::String)
+function infer_box(box::BoundingBox, stagedir::String, outdir::String;
+                   slurp=false, images_in_jld=false, rcfs_in_mdts=false)
     timing = InferTiming()
 
     Log.info("processing box $(box.ramin), $(box.ramax), $(box.decmin), ",
@@ -564,6 +583,9 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
                        stagedir;
                        box=box,
                        primary_initialization=true,
+                       slurp=slurp,
+                       images_in_jld=images_in_jld,
+                       rcfs_in_mdts=rcfs_in_mdts,
                        timing=timing)
 
         #results = one_node_single_infer(catalog, target_sources,
@@ -587,7 +609,10 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
                           all_boxes::Vector{Vector{BoundingBox}},
                           all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
                           stagedir::String,
-                          outdir::String)
+                          outdir::String;
+                          slurp=false,
+                          images_in_jld=false,
+                          rcfs_in_mdts=false)
     Log.one_message("ERROR: distributed functionality is disabled ",
                     "(set USE_DTREE=1 to enable)")
     exit(-1)
@@ -603,7 +628,16 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
                      all_boxes::Vector{Vector{BoundingBox}},
                      all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
                      stagedir::String,
-                     outdir::String)
+                     outdir::String;
+                     slurp=false,
+                     images_in_jld=false,
+                     rcfs_in_mdts=false)
+    if images_in_jld && !jld2_installed
+        Log.one_message("ERROR: images are in JLD files, but JLD2 is ",
+                        "not installed!")
+        exit(-1)
+    end
+
     # Base.@time hack for distributed environment
     gc_stats = ()
     gc_diff_stats = ()
@@ -611,7 +645,10 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
     elapsed_time = time_ns()
 
     multi_node_infer(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                     stagedir, outdir)
+                     stagedir, outdir;
+                     slurp=slurp,
+                     images_in_jld=images_in_jld,
+                     rcfs_in_mdts=rcfs_in_mdts)
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time

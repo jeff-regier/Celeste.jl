@@ -5,10 +5,16 @@ import FITSIO
 import WCS
 
 import ..Log
-import ..Model: RawPSF, Image, CatalogEntry, eval_psf, SkyIntensity
+import ..Model: PsfComponent, RawPSF, Image, CatalogEntry, eval_psf, SkyIntensity
 import ..PSF
 import Base.convert, Base.getindex
 
+
+const jld2_installed = try Pkg.installed("JLD2"); true
+                       catch exc false end
+if jld2_installed
+using JLD2
+end
 
 # types of things to mask in read_mask().
 const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
@@ -31,6 +37,45 @@ function RunCamcolField(run::String, camcol::String, field::String)
         parse(Int16, run),
         parse(UInt8, camcol),
         parse(Int16, field))
+end
+
+
+immutable FlatImage
+    H::Int
+    W::Int
+    pixels::Matrix{Float32}
+    b::Int
+    wcs_header::String
+    psf::Vector{PsfComponent}
+    run_num::Int
+    camcol_num::Int
+    field_num::Int
+    sky::SkyIntensity
+    iota_vec::Array{Float32, 1}
+    raw_psf_comp::RawPSF
+end
+
+
+function convert(::Type{FlatImage}, img::Image)
+    wcs_header = WCS.to_header(img.wcs)
+    @assert(length(wcs_header) <= 10000)
+    FlatImage(img.H, img.W, img.pixels, img.b,
+              wcs_header, img.psf, img.run_num,
+              img.camcol_num, img.field_num,
+              img.sky, img.iota_vec,
+              img.raw_psf_comp)
+end
+
+
+function convert(::Type{Image}, img::FlatImage)
+    wcs_array = WCS.from_header(img.wcs_header)
+    @assert(length(wcs_array) == 1)
+    wcs = wcs_array[1]
+    Image(img.H, img.W, img.pixels, img.b,
+          wcs, img.psf, img.run_num,
+          img.camcol_num, img.field_num,
+          img.sky, img.iota_vec,
+          img.raw_psf_comp)
 end
 
 
@@ -245,12 +290,16 @@ end
 """
 Load all the images for multiple rcfs
 """
-function load_raw_images(rcfs::Vector{RunCamcolField}, datadir, slurp::Bool = false, drop_quickly::Bool = false)
+function load_raw_images(rcfs::Vector{RunCamcolField}, datadir,
+                         slurp::Bool = false,
+                         drop_quickly::Bool = false,
+                         rcfs_in_mdts::Bool = false)
     raw_images = RawImage[]
 
     for rcf in rcfs
         #Log.info("loading images for $rcf")
-        rcf_raw_images = SDSSIO.load_raw_images(rcf, datadir, slurp, drop_quickly)
+        rdir = rcfs_in_mdts ? "$datadir/mdt$(rcf.run%5)/plan_b" : datadir
+        rcf_raw_images = SDSSIO.load_raw_images(rcf, rdir, slurp, drop_quickly)
         append!(raw_images, rcf_raw_images)
     end
 
@@ -285,8 +334,12 @@ end
 """
 Read a SDSS run/camcol/field into an array of Images.
 """
-function load_field_images(rcfs, stagedir, slurp::Bool = false, drop_quickly::Bool = false)
-    raw_images = SDSSIO.load_raw_images(rcfs, stagedir, slurp, drop_quickly)
+function load_field_images(rcfs, stagedir,
+                           slurp::Bool = false,
+                           drop_quickly::Bool = false,
+                           rcfs_in_mdts::Bool = false)
+    raw_images = SDSSIO.load_raw_images(rcfs, stagedir, slurp, drop_quickly,
+                                        rcfs_in_mdts)
 
     N = length(raw_images)
     images = Vector{Image}(N)
@@ -300,6 +353,34 @@ function load_field_images(rcfs, stagedir, slurp::Bool = false, drop_quickly::Bo
         catch exc
             Log.exception(exc)
             rethrow()
+        end
+    end
+
+    return images
+end
+
+
+"""
+Read in all images for the specified SDSS run/camcol/fields from a
+JLD file.
+"""
+function load_images_from_jld(rcfs::Vector{RunCamcolField}, stagedir::String,
+                              rcfs_in_mdts::Bool = false)
+    images = Vector{Image}()
+
+    for rcf in rcfs
+        rdir = rcfs_in_mdts ? "$stagedir/mdt$(rcf.run%5)" : stagedir
+        jld_fname = @sprintf("images-%06d-%1d-%04d.jld", rcf.run, rcf.camcol,
+                             rcf.field)
+        jld_full = "$(rdir)/$(rcf.run)/$(rcf.camcol)/$(rcf.field)/$jld_fname"
+        try
+            jf = jldopen(jld_full)
+            fimgs = read(jf, "rcf-images")
+            close(jf)
+            imgs = [convert(Image, fimg) for fimg in fimgs]
+            append!(images, imgs)
+        catch exc
+            Log.exception(exc)
         end
     end
 

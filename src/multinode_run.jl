@@ -185,7 +185,8 @@ box(es), if needed.
 function load_box(boxes::Vector{BoundingBox},
                   field_extents::Vector{FieldExtent},
                   stagedir::String, mi::MultiInfo, cbox::BoxInfo,
-                  timing::InferTiming)
+                  timing::InferTiming; slurp=false, images_in_jld=false,
+                  rcfs_in_mdts=false)
     # expected: cbox.state[] == BoxDone
 
     # determine which box to load next
@@ -244,7 +245,9 @@ function load_box(boxes::Vector{BoundingBox},
         tic()
         cbox.catalog, cbox.target_sources, cbox.neighbor_map,
             cbox.images, cbox.source_rcfs, cbox.source_cat_idxs =
-                    infer_init(rcfs, stagedir; box=box, timing=timing)
+                    infer_init(rcfs, stagedir; box=box,
+                            slurp=slurp, images_in_jld=images_in_jld,
+                            rcfs_in_mdts=rcfs_in_mdts, timing=timing)
         loadtime = toq()
     catch exc
         Log.exception(exc)
@@ -426,7 +429,10 @@ function preload_boxes(config::Configs.Config,
                        results::Garray,
                        prev_results,
                        conc_boxes::Vector{BoxInfo},
-                       timing::InferTiming)
+                       timing::InferTiming,
+                       slurp::Bool,
+                       images_in_jld::Bool,
+                       rcfs_in_mdts::Bool)
     curr_cbox = 1
     cbox = conc_boxes[curr_cbox]
     state = BoxReady
@@ -447,7 +453,9 @@ function preload_boxes(config::Configs.Config,
 
         # load and initialize box
         if state != BoxEnd
-            if load_box(boxes, field_extents, stagedir, mi, cbox, timing)
+            if load_box(boxes, field_extents, stagedir, mi, cbox, timing,
+                        slurp=slurp, images_in_jld=images_in_jld,
+                        rcfs_in_mdts=rcfs_in_mdts)
                 try init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
                 catch exc
                     Log.exception(exc)
@@ -485,10 +493,10 @@ function joint_infer_boxes(config::Configs.Config,
                            results::Garray,
                            prev_results,
                            conc_boxes::Vector{BoxInfo},
-                           all_threads_timing::Vector{InferTiming};
-                           batch_size=7000,
-                           within_batch_shuffling=true,
-                           niters=3)
+                           all_threads_timing::Vector{InferTiming},
+                           slurp::Bool,
+                           images_in_jld::Bool,
+                           rcfs_in_mdts::Bool)
     tid = threadid()
     timing = all_threads_timing[tid]
     rng = MersenneTwister()
@@ -506,7 +514,8 @@ function joint_infer_boxes(config::Configs.Config,
     if mi.nworkers >= 1 && tid == 1
         Log.debug("$(Time(now())): preloading boxes")
         preload_boxes(config, boxes, rcf_map, field_extents, stagedir, mi,
-                      results, prev_results, conc_boxes, timing)
+                      results, prev_results, conc_boxes, timing,
+                      slurp, images_in_jld, rcfs_in_mdts)
         return
     end
 
@@ -522,7 +531,9 @@ function joint_infer_boxes(config::Configs.Config,
 
         # prepare the box/wait for the box to be prepared
         if mi.nworkers == 0
-            if !load_box(boxes, field_extents, stagedir, mi, cbox, timing)
+            if !load_box(boxes, field_extents, stagedir, mi, cbox, timing,
+                         slurp=slurp, images_in_jld=images_in_jld,
+                         rcfs_in_mdts=rcfs_in_mdts)
                 break
             end
             init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
@@ -542,7 +553,7 @@ function joint_infer_boxes(config::Configs.Config,
         # process sources in the box
         tic()
         nbatches = length(cbox.sources_assignment)
-        for iter = 1:niters
+        for iter = 1:3
             for batch = 1:nbatches
                 while true
                     cc = atomic_add!(cbox.curr_cc, 1)
@@ -550,9 +561,7 @@ function joint_infer_boxes(config::Configs.Config,
                         break
                     end
 
-                    if within_batch_shuffling
-                        shuffle!(rng, cbox.sources_assignment[batch][cc])
-                    end
+                    shuffle!(rng, cbox.sources_assignment[batch][cc])
 
                     for ts in cbox.sources_assignment[batch][cc]
                         try maximize!(cbox.ea_vec[ts], cbox.vp_vec[ts],
@@ -607,7 +616,10 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
                           all_boxes::Vector{Vector{BoundingBox}},
                           all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
                           stagedir::String,
-                          outdir::String)
+                          outdir::String;
+                          slurp=false,
+                          images_in_jld=false,
+                          rcfs_in_mdts=false)
     rpn = set_affinities()
 
     Log.one_message("$(Time(now())): Celeste started, $rpn ranks/node, ",
@@ -664,12 +676,15 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
         if nthreads() == 1
             joint_infer_boxes(config, boxes, rcf_map,
                               field_extents, stagedir, mi, results,
-                              prev_results, conc_boxes, all_threads_timing)
+                              prev_results, conc_boxes, all_threads_timing,
+                              slurp, images_in_jld, rcfs_in_mdts)
         else
             ccall(:jl_threading_run, Void, (Any,),
                   Core.svec(joint_infer_boxes, config, boxes, rcf_map,
                             field_extents, stagedir, mi, results,
-                            prev_results, conc_boxes, all_threads_timing))
+                            prev_results, conc_boxes, all_threads_timing,
+                            slurp, images_in_jld,
+                            rcfs_in_mdts))
         end
 
         # write intermediate results to disk

@@ -3,12 +3,13 @@
 import Celeste.ParallelRun: BoundingBox, infer_box
 import Celeste.Log
 
-
 const usage_info =
 """
 Usage:
   infer-box.jl <ramin> <ramax> <decmin> <decmax>
 """
+
+eval(Main, :(const FlatImage = Celeste.SDSSIO.FlatImage))
 
 const stagedir = ENV["CELESTE_STAGE_DIR"]
 
@@ -19,7 +20,8 @@ else
     # Output gets written to the top level of the staging directory.
     # We may want to modify that in the future by changing the third argument.
     tic()
-    infer_box(box, stagedir, ".")
+    infer_box(box, stagedir, ".", slurp=false, images_in_jld=true,
+              rcfs_in_mdts=false)
     Log.info("infer_box for $box took $(toq()) seconds")
 end
 

@@ -4,8 +4,12 @@ import Celeste.ParallelRun: BoundingBox, infer_boxes
 import Celeste.SDSSIO: RunCamcolField
 import Celeste.Log
 
+eval(Main, :(const FlatImage = Celeste.SDSSIO.FlatImage))
 
-function run_infer_boxes(args::Vector{String})
+function run_infer_boxes(args::Vector{String},
+                         slurp=false,
+                         images_in_jld=true,
+                         rcfs_in_mdts=false)
     if length(args) < 3
         println("""
 Usage:
@@ -81,7 +85,9 @@ Usage:
     end
 
     infer_boxes(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                ENV["CELESTE_STAGE_DIR"], args[end])
+                ENV["CELESTE_STAGE_DIR"], args[end];
+                slurp=slurp, images_in_jld=images_in_jld,
+                rcfs_in_mdts=rcfs_in_mdts)
 end
 
 run_infer_boxes(ARGS)
