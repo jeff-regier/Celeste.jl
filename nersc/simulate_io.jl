@@ -3,6 +3,8 @@
 using Celeste
 using Celeste: SDSSIO
 using Gasp
+using Gasp: grank
+using Base.Threads
 
 function run_io_simulation(args::Vector{String})
     if length(args) != 1
@@ -44,47 +46,63 @@ function run_io_simulation(args::Vector{String})
     dt, _ = Dtree(length(boxes), 0.25)
     ni, (ci, li) = initwork(dt)
     rundt = runtree(dt)
-    if rundt
-        Celeste.Log.info("dtree: running tree")
-        while runtree(dt)
-            Gasp.cpu_pause()
-            ccall(:jl_gc_safepoint, Void, ()) 
-        end 
-        return
-    end 
     Celeste.Log.info("dtree: initial: $(ni) ($(ci) to $(li))")
-
+    l = SpinLock()
+    iol = SpinLock()
     datadir(rcf) = joinpath(stagedir,"mdt$(rcf.run%5)","plan_b")
-    while true
-        box_idx = 0
-        while true
-            li == 0 && break
-            if ci > li
-                ni, (ci, li) = try getwork(dt)
-                catch exc
-                    Celeste.Log.exception(exc)
-                    break
+    function do_work()
+        try
+            if rundt && threadid() == nthreads()
+                Celeste.Log.info("dtree: running tree")
+                while runtree(dt)
+                    Gasp.cpu_pause()
+                    ccall(:jl_gc_safepoint, Void, ())
                 end
-                if li == 0
-                    Celeste.Log.info("dtree: out of work")
-                else
-                    Celeste.Log.info("dtree: $(ni) work items ($(ci) to $(li))")
-                end
-            else
-                box_idx = ci
-                ci += 1
-                break
+                return
             end
-        end
-        box_idx == 0 && return
 
-        box = boxes[box_idx]
-        rcfs = Celeste.ParallelRun.get_overlapping_fields(box, field_extents)
-        tic()
-        this_cat = SDSSIO.read_photoobj_files(rcfs, datadir,
-            duplicate_policy = :primary, slurp = true)
-        images = SDSSIO.load_field_images(rcfs, datadir, true)
-        Celeste.Log.message("Loaded box $box_idx in $(toq())")
+            while true
+                box_idx = 0
+                lock(l)
+                while true
+                    li == 0 && break
+                    if ci > li
+                        ni, (ci, li) = try getwork(dt)
+                        catch exc
+                            Celeste.Log.exception(exc)
+                            break
+                        end
+                        if li == 0
+                            Celeste.Log.info("dtree: out of work")
+                        else
+                            Celeste.Log.info("dtree: $(ni) work items ($(ci) to $(li))")
+                        end
+                    else
+                        box_idx = ci
+                        ci += 1
+                        break
+                    end
+                end
+                unlock(l)
+                box_idx == 0 && return
+
+                box = boxes[box_idx]
+                rcfs = Celeste.ParallelRun.get_overlapping_fields(box, field_extents)
+                tic()
+                this_cat = SDSSIO.read_photoobj_files(rcfs, datadir,
+                    duplicate_policy = :primary, slurp = true, drop_quickly = true)
+                images = SDSSIO.load_field_images(rcfs, datadir, true, true)
+                bytes, mb = Base.prettyprint_getunits(Sys.maxrss(), length(Base._mem_units), Int64(1024))
+                lock(iol)
+                Celeste.Log.message("Loaded box $box_idx ($(box.ramin) $(box.ramax) $(box.decmin) $(box.decmax)) with $(length(rcfs)) RCFs in $(toq())s, maxrss is $bytes $(Base._mem_units[mb])")
+                unlock(iol)
+                # Force full GC to drop all the memory we allocated above
+                gc()
+            end
+        catch exc
+            Celeste.Log.exception(exc)
+        end
     end
+    ccall(:jl_threading_run, Void, (Any,), Core.svec(do_work))
 end
 run_io_simulation(ARGS)
