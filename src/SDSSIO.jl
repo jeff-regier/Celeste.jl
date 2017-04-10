@@ -175,6 +175,7 @@ function read_mask(fname, slurp::Bool=false, mask_planes=DEFAULT_MASK_PLANES)
             end
         end
     end
+    close(f)
 
     return xranges, yranges
 end
@@ -195,32 +196,28 @@ end
 """
 Read a SDSS run/camcol/field into a vector of RawImages
 """
-function load_raw_images(rcf::RunCamcolField, datadir, slurp::Bool = false)
+function load_raw_images(rcf::RunCamcolField, datadir, slurp::Bool = false, drop_quickly::Bool = false)
     basedir = isa(datadir, String) ? datadir : datadir(rcf)
     subdir2 = "$basedir/$(rcf.run)/$(rcf.camcol)"
     subdir3 = "$subdir2/$(rcf.field)"
 
     # read gain for each band
-    photofield_name = @sprintf("%s/photoField-%06d-%d.fits",
-                               subdir2, rcf.run, rcf.camcol)
+    photofield_name = "$subdir2/photoField-$(dec(rcf.run,6))-$(rcf.camcol).fits"
     gains = read_field_gains(photofield_name, rcf.field, slurp)
 
     # open FITS file containing PSF for each band
-    psf_name = @sprintf("%s/psField-%06d-%d-%04d.fit",
-                        subdir3, rcf.run, rcf.camcol, rcf.field)
+    psf_name = "$(subdir3)/psField-$(dec(rcf.run,6))-$(rcf.camcol)-$(dec(rcf.field,4)).fit"
     psffile = FITSIO.FITS(slurp ? slurp_fits(psf_name) : psf_name)
 
     raw_images = Vector{RawImage}(5)
 
     for (b, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
         # load image data
-        frame_name = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
-                              subdir3, band, rcf.run, rcf.camcol, rcf.field)
+        frame_name = "$(subdir3)/frame-$(band)-$(dec(rcf.run,6))-$(rcf.camcol)-$(dec(rcf.field,4)).fits"
         pixels, calibration, sky, wcs = read_frame(frame_name, slurp)
 
         # read mask
-        mask_name = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
-                     subdir3, rcf.run, band, rcf.camcol, rcf.field)
+        mask_name = "$(subdir3)/fpM-$(dec(rcf.run,6))-$(band)$(rcf.camcol)-$(dec(rcf.field,4)).fit"
         mask_xranges, mask_yranges = read_mask(mask_name, slurp)
 
         # apply mask
@@ -232,10 +229,14 @@ function load_raw_images(rcf::RunCamcolField, datadir, slurp::Bool = false)
         raw_psf_comp = read_psf(psffile, band)
 
         # Set it to use a constant background but include the non-constant data.
-        raw_images[b] = RawImage(rcf, b,
+        r = RawImage(rcf, b,
                             pixels, calibration, sky, wcs,
                             gains[band], raw_psf_comp)
+        if !drop_quickly
+            raw_images[b] = r
+        end
     end
+    close(psffile)
 
     return raw_images
 end
@@ -244,12 +245,12 @@ end
 """
 Load all the images for multiple rcfs
 """
-function load_raw_images(rcfs::Vector{RunCamcolField}, datadir, slurp::Bool = false)
+function load_raw_images(rcfs::Vector{RunCamcolField}, datadir, slurp::Bool = false, drop_quickly::Bool = false)
     raw_images = RawImage[]
 
     for rcf in rcfs
         #Log.info("loading images for $rcf")
-        rcf_raw_images = SDSSIO.load_raw_images(rcf, datadir, slurp)
+        rcf_raw_images = SDSSIO.load_raw_images(rcf, datadir, slurp, drop_quickly)
         append!(raw_images, rcf_raw_images)
     end
 
@@ -284,11 +285,13 @@ end
 """
 Read a SDSS run/camcol/field into an array of Images.
 """
-function load_field_images(rcfs, stagedir, slurp::Bool = false)
-    raw_images = SDSSIO.load_raw_images(rcfs, stagedir, slurp)
+function load_field_images(rcfs, stagedir, slurp::Bool = false, drop_quickly::Bool = false)
+    raw_images = SDSSIO.load_raw_images(rcfs, stagedir, slurp, drop_quickly)
 
     N = length(raw_images)
     images = Vector{Image}(N)
+
+    drop_quickly && return images
 
     #Threads.@threads for n in 1:N
     for n in 1:N
@@ -553,7 +556,8 @@ combined catalog.
 function read_photoobj_files(fts::Vector{RunCamcolField},
                              datadir;
                              duplicate_policy=:primary,
-                             slurp::Bool = false)
+                             slurp::Bool = false,
+                             drop_quickly::Bool = false)
     @assert duplicate_policy == :primary || duplicate_policy == :first
     @assert duplicate_policy == :primary || length(fts) == 1
 
@@ -570,9 +574,16 @@ function read_photoobj_files(fts::Vector{RunCamcolField},
         ft = fts[i]
         basedir = isa(datadir, String) ? datadir : datadir(ft)
         dir = "$basedir/$(ft.run)/$(ft.camcol)/$(ft.field)"
-        fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir ft.run ft.camcol ft.field
+        fname = "$dir/photoObj-$(dec(ft.run,6))-$(dec(ft.camcol))-$(dec(ft.field,4)).fits"
         #Log.info("field $(fts[i]): reading $fname")
-        rawcatalogs[i] = read_photoobj(fname, 'r', slurp)
+        po = read_photoobj(fname, 'r', slurp)
+        if !drop_quickly
+            rawcatalogs[i] = po
+        end
+    end
+
+    if drop_quickly
+        return CatalogEntry[]
     end
 
     #for i in eachindex(fts)
