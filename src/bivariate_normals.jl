@@ -167,6 +167,16 @@ function BvnComponent{T1<:Number,T2<:Number,T3<:Number}(
     end
 end
 
+using Core.Intrinsics: llvmcall
+
+# Use a form of exp that llvm can recognize and vectorize
+function llvm_exp(x::Float64)
+    llvmcall(
+        ("""declare double @llvm.exp.f64(double)""",
+         """%2 = call double @llvm.exp.f64(double %0)
+            ret double %2"""),
+    Float64, Tuple{Float64}, x)
+end
 
 """
 Return quantities related to the pdf of an offset bivariate normal.
@@ -193,8 +203,8 @@ function eval_bvn_pdf!{NumType <: Number}(
     bmc.precision[2,1] * (x[1] - bmc.the_mean[1]) +
     bmc.precision[2,2] * (x[2] - bmc.the_mean[2])
   bvn_derivs.f_pre =
-    bmc.z * exp(-0.5 * ((x[1] - bmc.the_mean[1]) * bvn_derivs.py1 +
-                        (x[2] - bmc.the_mean[2]) * bvn_derivs.py2))
+    bmc.z * llvm_exp(-0.5 * ((x[1] - bmc.the_mean[1]) * bvn_derivs.py1 +
+                             (x[2] - bmc.the_mean[2]) * bvn_derivs.py2))
 end
 
 ##################
@@ -479,4 +489,6 @@ function transform_bvn_derivs!{NumType <: Number}(
   if calculate_hessian
     transform_bvn_derivs_hessian!(bvn_derivs, sig_sf, wcs_jacobian)
   end
+  
+  nothing
 end
