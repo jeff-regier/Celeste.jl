@@ -114,15 +114,16 @@ function populate_gal_fsm!{NumType <: Number}(
                     fs1m,
                     s::Int,
                     x::SVector{2,Float64},
-                    is_active_source::Bool,
+                    is_active_source::Val,
                     wcs_jacobian,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
     clear!(fs1m)
-    for i = 1:2 # Galaxy types
+    @assert size(gal_mcs, 1) == 2
+    @inbounds for i = 1:2 # Galaxy types
         for j in 1:8 # Galaxy component
             # If i == 2 then there are only six galaxy components.
             if (i == 1) || (j <= 6)
-                for k = 1:size(gal_mcs, 1) # PSF component
+                for k = 1:2 # PSF component
                     accum_galaxy_pos!(
                         bvn_derivs, fs1m,
                         gal_mcs[k, j, i, s], x, wcs_jacobian,
@@ -146,7 +147,7 @@ function populate_fsm!{NumType <: Number}(
                     fs1m,
                     s::Int,
                     x::SVector{2,Float64},
-                    is_active_source::Bool,
+                    is_active_source::Val,
                     wcs_jacobian,
                     gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
                     star_mcs::Array{BvnComponent{NumType}, 2})
@@ -162,6 +163,21 @@ function populate_fsm!{NumType <: Number}(
                       wcs_jacobian, gal_mcs)
 end
 
+# Manual union splitting. The inactive path can be collapsed down quite a bit,
+# so make it easier on the backend to figure that out
+function populate_fsm!(bvn_derivs, fs0m, fs1m, s, x, is_active_source::Bool,
+                    wcs_jacobian, gal_mcs, star_mcs)
+    if is_active_source
+        populate_fsm!(bvn_derivs, fs0m, fs1m, s, x, Val{true}(),
+                            wcs_jacobian, gal_mcs, star_mcs)
+    else
+        populate_fsm!(bvn_derivs, fs0m, fs1m, s, x, Val{false}(),
+                            wcs_jacobian, gal_mcs, star_mcs)
+    end
+end
+
+active(::Val{true}) = true
+active(::Val{false}) = true
 
 """
 Add the contributions of a star's bivariate normal term to the ELBO,
@@ -183,28 +199,28 @@ function accum_star_pos!{NumType <: Number}(
                     bmc::BvnComponent{NumType},
                     x::SVector{2,Float64},
                     wcs_jacobian,
-                    is_active_source::Bool)
+                    is_active_source::Val)
     eval_bvn_pdf!(bvn_derivs, bmc, x)
 
-    if has_gradient(fs0m) && is_active_source
+    if has_gradient(fs0m) && active(is_active_source)
         get_bvn_derivs!(bvn_derivs, bmc, true, false)
     end
 
-    fs0m.v[] += bvn_derivs.f_pre[1]
+    fs0m.v[] += bvn_derivs.f_pre
 
-    if has_gradient(fs0m) && is_active_source
+    @inbounds if has_gradient(fs0m) && active(is_active_source)
         transform_bvn_ux_derivs!(bvn_derivs, wcs_jacobian, has_hessian(fs0m))
         bvn_u_d = ParameterizedArray{StarPosParams}(bvn_derivs.bvn_u_d)
         bvn_uu_h = ParameterizedArray{StarPosParams}(bvn_derivs.bvn_uu_h)
 
         # Accumulate the derivatives.
-        fs0m.d[star_ids.u] += bvn_derivs.f_pre[1] * bvn_u_d[star_ids.u]
+        fs0m.d[star_ids.u] += bvn_derivs.f_pre * bvn_u_d[star_ids.u]
 
         if has_hessian(fs0m)
             # Hessian terms involving only the location parameters.
             # TODO: redundant term
             fs0m.h[star_ids.u, star_ids.u] +=
-                bvn_derivs.f_pre[1] * (bvn_uu_h[star_ids.u, star_ids.u] +
+                bvn_derivs.f_pre * (bvn_uu_h[star_ids.u, star_ids.u] +
                 bvn_u_d[star_ids.u] * bvn_u_d[star_ids.u]')
         end
     end
@@ -221,12 +237,12 @@ function accum_galaxy_pos!{NumType <: Number}(
                     gcc::GalaxyCacheComponent{NumType},
                     x::SVector{2,Float64},
                     wcs_jacobian,
-                    is_active_source::Bool)
+                    is_active_source::Val)
     eval_bvn_pdf!(bvn_derivs, gcc.bmc, x)
-    @inbounds f = bvn_derivs.f_pre * gcc.e_dev_i
+    f = bvn_derivs.f_pre * gcc.e_dev_i
     fs1m.v[] += f
 
-    if has_gradient(fs1m) && is_active_source
+    if has_gradient(fs1m) && active(is_active_source)
         get_bvn_derivs!(bvn_derivs, gcc.bmc, has_gradient(fs1m), has_hessian(fs1m))
         transform_bvn_derivs!(bvn_derivs, gcc.sig_sf, wcs_jacobian, has_hessian(fs1m))
             
