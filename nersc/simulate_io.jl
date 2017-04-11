@@ -6,22 +6,20 @@ using Gasp
 using Gasp: grank
 using Base.Threads
 
+include("../bin/binutil.jl")
+
 function run_io_simulation(args::Vector{String})
-    if length(args) != 1
+    if length(args) != 3
         println("""
             Usage:
-              simulate_io.jl <boxes_file>
+              simulate_io.jl <strategy> <rcf_nsrcs_file> <boxes_file>
             """)
         exit(-1)
     end
-    if !haskey(ENV, "CELESTE_STAGE_DIR")
-        Celeste.Log.one_message("ERROR: set CELESTE_STAGE_DIR!")
-        exit(-2)
-    end
-    stagedir = ENV["CELESTE_STAGE_DIR"]
+    strategy, all_rcfs, all_rcf_nsrcs = decide_strategy(args[1], args[2])
 
     # parse the specified box file
-    boxfile = args[1]
+    boxfile = args[3]
     boxes = Vector{BoundingBox}()
     f = open(boxfile)
     for ln in eachline(f)
@@ -41,7 +39,7 @@ function run_io_simulation(args::Vector{String})
     end
     close(f)
 
-    field_extents = Celeste.ParallelRun.load_field_extents(stagedir)
+    field_extents = Celeste.ParallelRun.load_field_extents(strategy)
 
     dt, _ = Dtree(length(boxes), 0.25)
     ni, (ci, li) = initwork(dt)
@@ -49,7 +47,6 @@ function run_io_simulation(args::Vector{String})
     Celeste.Log.info("dtree: initial: $(ni) ($(ci) to $(li))")
     l = SpinLock()
     iol = SpinLock()
-    datadir(rcf) = joinpath(stagedir,"mdt$(rcf.run%5)","plan_b")
     function do_work()
         try
             if rundt && threadid() == nthreads()
@@ -89,15 +86,17 @@ function run_io_simulation(args::Vector{String})
                 box = boxes[box_idx]
                 rcfs = Celeste.ParallelRun.get_overlapping_fields(box, field_extents)
                 tic()
-                this_cat = SDSSIO.read_photoobj_files(rcfs, datadir,
-                    duplicate_policy = :primary, slurp = true, drop_quickly = true)
-                images = SDSSIO.load_field_images(rcfs, datadir, true, true)
+                for rcf in rcfs
+                    # Do this one RCF at a time, we don't have the memory to keep all images
+                    states = SDSSIO.preload_rcfs(strategy, [rcf])
+                    SDSSIO.read_photoobj(strategy, rcf, states[], drop_quickly = true)
+                    SDSSIO.load_field_images(strategy, [rcf], states, #= drop_quickly = =# true)
+                end
                 bytes, mb = Base.prettyprint_getunits(Sys.maxrss(), length(Base._mem_units), Int64(1024))
                 lock(iol)
                 Celeste.Log.message("Loaded box $box_idx ($(box.ramin) $(box.ramax) $(box.decmin) $(box.decmax)) with $(length(rcfs)) RCFs in $(toq())s, maxrss is $bytes $(Base._mem_units[mb])")
                 unlock(iol)
                 # Force full GC to drop all the memory we allocated above
-                gc()
             end
         catch exc
             Celeste.Log.exception(exc)

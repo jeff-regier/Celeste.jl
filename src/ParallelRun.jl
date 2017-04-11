@@ -11,7 +11,7 @@ import ..Log
 using ..Model
 import ..SDSSIO
 import ..Infer
-import ..SDSSIO: RunCamcolField
+import ..SDSSIO: RunCamcolField, IOStrategy, PlainFITSStrategy
 import ..PSF
 
 import ..DeterministicVI: infer_source
@@ -53,6 +53,7 @@ type InferTiming
     query_fids::Float64
     read_photoobj::Float64
     read_img::Float64
+    preload_rcfs::Float64
     find_neigh::Float64
     load_wait::Float64
     proc_wait::Float64
@@ -75,6 +76,7 @@ function add_timing!(i::InferTiming, j::InferTiming)
     i.query_fids = i.query_fids + j.query_fids
     i.read_photoobj = i.read_photoobj + j.read_photoobj
     i.read_img = i.read_img + j.read_img
+    i.preload_rcfs = i.preload_rcfs + j.preload_rcfs
     i.find_neigh = i.find_neigh + j.find_neigh
     i.load_wait = i.load_wait + j.load_wait
     i.proc_wait = i.proc_wait + j.proc_wait
@@ -95,6 +97,7 @@ function puts_timing(i::InferTiming)
     Log.message("timing: query_fids=$(i.query_fids)")
     Log.message("timing: read_photoobj=$(i.read_photoobj)")
     Log.message("timing: read_img=$(i.read_img)")
+    Log.message("timing: preload_rcfs=$(i.preload_rcfs)")
     Log.message("timing: find_neigh=$(i.find_neigh)")
     Log.message("timing: load_wait=$(i.load_wait)")
     Log.message("timing: proc_wait=$(i.proc_wait)")
@@ -150,7 +153,7 @@ Given a list of RCFs, load the catalogs, determine the target sources,
 load the images, and build the neighbor map.
 """
 function infer_init(rcfs::Vector{RunCamcolField},
-                    stagedir::String;
+                    strategy::SDSSIO.IOStrategy;
                     objid="",
                     box=BoundingBox(-1000., 1000., -1000., 1000.),
                     primary_initialization=true,
@@ -165,9 +168,12 @@ function infer_init(rcfs::Vector{RunCamcolField},
     # Read all primary objects in these fields.
     duplicate_policy = primary_initialization ? :primary : :first
     tic()
-    for rcf in rcfs
-        this_cat = SDSSIO.read_photoobj_files([rcf], stagedir,
-                        duplicate_policy=duplicate_policy)
+    states = SDSSIO.preload_rcfs(strategy, rcfs)
+    timing.preload_rcfs += toq()
+
+    tic()
+    for (i,(rcf,state)) in enumerate(zip(rcfs, states))
+        this_cat = SDSSIO.read_photoobj(strategy, rcf, state, duplicate_policy=duplicate_policy)
         these_sources_rcfs = Vector{RunCamcolField}(length(this_cat))
         fill!(these_sources_rcfs, rcf)
         these_sources_idxs = collect(Int16, 1:length(this_cat))
@@ -197,7 +203,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
         # Read in images for all (run, camcol, field).
         try
             tic()
-            images = SDSSIO.load_field_images(rcfs, stagedir)
+            images = SDSSIO.load_field_images(strategy, rcfs, states)
             timing.read_img += toq()
         catch ex
             Log.exception(ex)
@@ -366,7 +372,7 @@ Use multiple threads on one node to fit the Celeste model to sources in a given
 bounding box.
 """
 function one_node_infer(rcfs::Vector{RunCamcolField},
-                        stagedir::String;
+                        strategy::SDSSIO.IOStrategy;
                         infer_callback=one_node_single_infer,
                         objid="",
                         box=BoundingBox(-1000., 1000., -1000., 1000.),
@@ -374,7 +380,7 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
                         timing=InferTiming())
     catalog, target_sources, neighbor_map, images =
         infer_init(rcfs,
-                   stagedir;
+                   strategy;
                    objid=objid,
                    box=box,
                    primary_initialization=primary_initialization)
@@ -421,13 +427,15 @@ function get_overlapping_field_extents(query::BoundingBox, stagedir::String)
 
     return ret
 end
+get_overlapping_field_extents(query::BoundingBox, strategy::SDSSIO.IOStrategy) =
+    get_overlapping_field_extents(query, strategy.stagedir)
 
 
 """
 Like `get_overlapping_field_extents()`, but return a Vector of
 (run, camcol, field) triplets.
 """
-function get_overlapping_fields(query::BoundingBox, stagedir::String)
+function get_overlapping_fields(query::BoundingBox, stagedir)
     fes = get_overlapping_field_extents(query, stagedir)
     [fe[1] for fe in fes]
 end
@@ -478,6 +486,7 @@ function load_field_extents(stagedir::String)
 
     return fes
 end
+load_field_extents(strategy::SDSSIO.IOStrategy) = load_field_extents(strategy.stagedir)
 
 
 """
@@ -548,6 +557,8 @@ save_results(outdir, box, results) =
 called from main entry point.
 """
 function infer_box(box::BoundingBox, stagedir::String, outdir::String)
+    strategy = PlainFITSStrategy(stagedir)
+
     timing = InferTiming()
 
     Log.info("processing box $(box.ramin), $(box.ramax), $(box.decmin), ",
@@ -556,12 +567,12 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     @time begin
         tic()
         # Get vector of (run, camcol, field) triplets overlapping this patch
-        rcfs = get_overlapping_fields(box, stagedir)
+        rcfs = get_overlapping_fields(box, strategy)
         timing.query_fids = toq()
 
         catalog, target_sources, neighbor_map, images =
             infer_init(rcfs,
-                       stagedir;
+                       strategy;
                        box=box,
                        primary_initialization=true,
                        timing=timing)
@@ -586,7 +597,7 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
                           all_rcf_nsrcs::Vector{Int16},
                           all_boxes::Vector{Vector{BoundingBox}},
                           all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
-                          stagedir::String,
+                          strategy::SDSSIO.IOStrategy,
                           outdir::String)
     Log.one_message("ERROR: distributed functionality is disabled ",
                     "(set USE_DTREE=1 to enable)")
@@ -602,7 +613,7 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
                      all_rcf_nsrcs::Vector{Int16},
                      all_boxes::Vector{Vector{BoundingBox}},
                      all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
-                     stagedir::String,
+                     strategy::SDSSIO.IOStrategy,
                      outdir::String)
     # Base.@time hack for distributed environment
     gc_stats = ()
@@ -611,7 +622,7 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
     elapsed_time = time_ns()
 
     multi_node_infer(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                     stagedir, outdir)
+                     strategy, outdir)
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time
