@@ -391,7 +391,7 @@ function add_pixel_term!{NumType <: Number}(
     # parameters so the derivatives don't need to be updated. Note that
     # even though this does not affect the ELBO's maximum, it affects
     # the optimization convergence criterion, so I will leave it in for now.
-    elbo_vars.elbo.v[] -= lfact(img.pixels[h,w])
+    elbo_vars.elbo.v[] -= lgamma(img.pixels[h,w] + 1.0)
 end
 
 
