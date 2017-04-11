@@ -36,11 +36,9 @@ function (f::BoxKillSwitch)(x)
     if f.started == 0
         # benign race here
         f.started = now_ns
-        Log.debug("box kill timer started at $(now_ns)")
     elseif (now_ns - f.started) > box_max_threshold
         # and here
         f.killed = true
-        Log.debug("box kill timer expired, killed")
     elseif f.numfin[] >= f.numfin_threshold
         lastfinat = f.finished[f.lastfin[]]
         if now_ns - lastfinat > floor(Int64, (lastfinat - f.started) * 0.25)
@@ -51,7 +49,6 @@ function (f::BoxKillSwitch)(x)
                             "started at $(f.started), $(ttms...)")
                 f.messaged = true
             end
-            Log.debug("box thread imbalance threshold, killed")
         end
     end
     return f.killed

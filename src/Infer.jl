@@ -90,6 +90,7 @@ function get_sky_patches(images::Vector{Image},
             pixel_center = WCS.world_to_pix(img.wcs, world_center)
             wcs_jacobian = Model.pixel_world_jacobian(img.wcs, pixel_center)
             radius_pix = Model.choose_patch_radius(catalog[s], img, width_scale=1.2)
+            radius_pix = max(radius_pix, 20.0)
             @assert radius_pix <= 25
             if !isnan(radius_override_pix)
                 radius_pix = radius_override_pix
@@ -167,7 +168,7 @@ function load_active_pixels!(config::Configs.Config,
             # to get included, even if it's because of noise. Therefore it's important
             # to keep the noise fraction pretty low.
             threshold = img.iota_vec[h] * img.sky[h, w] * (1. + noise_fraction)
-            p.active_pixel_bitmap[h2, w2] = img.pixels[h, w] > threshold
+            p.active_pixel_bitmap[h2, w2] = true#img.pixels[h, w] > threshold
         end
     end
 end
