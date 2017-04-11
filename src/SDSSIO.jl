@@ -364,21 +364,23 @@ end
 Read in all images for the specified SDSS run/camcol/fields from a
 JLD file.
 """
-function load_images_from_jld(rcfs::Vector{RunCamcolField}, stagedir::String,
-                              rcfs_in_mdts::Bool = false)
+function load_images_from_jld(rcfs::Vector{RunCamcolField}, stagedir,
+                              rcfs_in_mdts::Bool = false, drop_quickly = false)
     images = Vector{Image}()
 
     for rcf in rcfs
-        rdir = rcfs_in_mdts ? "$stagedir/mdt$(rcf.run%5)" : stagedir
-        jld_fname = @sprintf("images-%06d-%1d-%04d.jld", rcf.run, rcf.camcol,
-                             rcf.field)
+        rdir = isa(stagedir, String) ? stagedir : stagedir(rcf)
+        rdir = rcfs_in_mdts ? "$rdir/mdt$(rcf.run%5)" : rdir
+        jld_fname = "images-$(dec(rcf.run,6))-$(dec(rcf.camcol,1))-$(dec(rcf.field,4)).jld"
         jld_full = "$(rdir)/$(rcf.run)/$(rcf.camcol)/$(rcf.field)/$jld_fname"
         try
             jf = jldopen(jld_full)
             fimgs = read(jf, "rcf-images")
             close(jf)
             imgs = [convert(Image, fimg) for fimg in fimgs]
-            append!(images, imgs)
+            if !drop_quickly
+                append!(images, imgs)
+            end
         catch exc
             Log.exception(exc)
         end

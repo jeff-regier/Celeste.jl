@@ -6,11 +6,13 @@ using Gasp
 using Gasp: grank
 using Base.Threads
 
+const FlatImage = Celeste.SDSSIO.FlatImage
+
 function run_io_simulation(args::Vector{String})
-    if length(args) != 1
+    if length(args) != 2
         println("""
             Usage:
-              simulate_io.jl <boxes_file>
+              simulate_io.jl <mode> <boxes_file>
             """)
         exit(-1)
     end
@@ -20,8 +22,15 @@ function run_io_simulation(args::Vector{String})
     end
     stagedir = ENV["CELESTE_STAGE_DIR"]
 
+    mode = args[1]
+    if !(mode in ["planb","jlds"])
+        Celeste.Log.one_message("ERROR: Unsupported mode ($mode), use planb or jlds!")
+        exit(-2)
+    end
+    mode = Symbol(mode)
+
     # parse the specified box file
-    boxfile = args[1]
+    boxfile = args[2]
     boxes = Vector{BoundingBox}()
     f = open(boxfile)
     for ln in eachline(f)
@@ -49,7 +58,13 @@ function run_io_simulation(args::Vector{String})
     Celeste.Log.info("dtree: initial: $(ni) ($(ci) to $(li))")
     l = SpinLock()
     iol = SpinLock()
-    datadir(rcf) = joinpath(stagedir,"mdt$(rcf.run%5)","plan_b")
+    function datadir(rcf)
+        dir = joinpath(stagedir,"mdt$(rcf.run%5)")
+        if mode == :planb
+            dir = joinpath(dir,"plan_b")
+        end
+        dir
+    end
     function do_work()
         try
             if rundt && threadid() == nthreads()
@@ -89,9 +104,14 @@ function run_io_simulation(args::Vector{String})
                 box = boxes[box_idx]
                 rcfs = Celeste.ParallelRun.get_overlapping_fields(box, field_extents)
                 tic()
-                this_cat = SDSSIO.read_photoobj_files(rcfs, datadir,
-                    duplicate_policy = :primary, slurp = true, drop_quickly = true)
-                images = SDSSIO.load_field_images(rcfs, datadir, true, true)
+                if mode == :planb
+                    this_cat = SDSSIO.read_photoobj_files(rcfs, datadir,
+                        duplicate_policy = :primary, slurp = true, drop_quickly = true)
+                    images = SDSSIO.load_field_images(rcfs, datadir, true, true)
+                else
+                    @assert mode == :jlds
+                    SDSSIO.load_images_from_jld(rcfs, datadir, false, true)
+                end
                 bytes, mb = Base.prettyprint_getunits(Sys.maxrss(), length(Base._mem_units), Int64(1024))
                 lock(iol)
                 Celeste.Log.message("Loaded box $box_idx ($(box.ramin) $(box.ramax) $(box.decmin) $(box.decmax)) with $(length(rcfs)) RCFs in $(toq())s, maxrss is $bytes $(Base._mem_units[mb])")
