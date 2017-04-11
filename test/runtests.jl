@@ -16,6 +16,12 @@ include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
 
 using SampleData
 
+
+if Pkg.installed("StaticArrays") <= v"0.4.0"
+    Pkg.checkout("StaticArrays")
+    Pkg.build("StaticArrays")
+end
+
 anyerrors = false
 
 wd = pwd()
