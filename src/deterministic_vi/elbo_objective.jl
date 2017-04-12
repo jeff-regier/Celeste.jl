@@ -544,6 +544,25 @@ function add_elbo_log_term!{NumType <: Number}(
     end
 end
 
+function densify!(fs1m, fs1m_sparse)
+    fs1m.v[] = fs1m_sparse.v[]
+    for i = 1:length(fs1m.d)
+        fs1m.d[i] = fs1m_sparse.d[i]
+    end
+    # Hessian terms involving only the shape parameters.
+    zero!(fs1m.h)
+    fs1m.h[gal_shape_ids, gal_shape_ids] = fs1m_sparse.h[gal_shape_ids, gal_shape_ids]
+
+    # Hessian terms involving only the location parameters.
+    fs1m.h[gal_ids.u, gal_ids.u] = fs1m_sparse.h[gal_ids.u, gal_ids.u]
+
+    # Hessian terms involving both the shape and location parameters.
+    @implicit_transpose begin
+        fs1m.h[gal_ids.u, gal_shape_ids] = fs1m_sparse.h[gal_ids.u, gal_shape_ids]
+        fs1m.h[gal_ids.u, gal_ids.e_dev] = fs1m_sparse.h[gal_ids.u, gal_ids.e_dev]
+        fs1m.h[gal_shape_ids, gal_ids.e_dev] = fs1m_sparse.h[gal_shape_ids, gal_ids.e_dev]
+    end
+end
 
 function add_pixel_term!{NumType <: Number}(
                     ea::ElboArgs,
@@ -576,13 +595,15 @@ function add_pixel_term!{NumType <: Number}(
 
             populate_fsm!(bvn_bundle.bvn_derivs,
                           elbo_vars.fs0m,
-                          elbo_vars.fs1m,
+                          elbo_vars.fs1m_sparse,
                           s,
                           SVector{2,Float64}(h, w),
                           is_active_source,
                           p.wcs_jacobian,
                           bvn_bundle.gal_mcs,
                           bvn_bundle.star_mcs)
+                          
+            densify!(elbo_vars.fs1m, elbo_vars.fs1m_sparse)
 
             accumulate_source_pixel_brightness!(ea, vp, elbo_vars,
                 sbs[s], ea.images[n].b, s, is_active_source)

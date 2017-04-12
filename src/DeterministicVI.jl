@@ -10,7 +10,7 @@ using ..Model
 import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
                 GalaxySigmaDerivs, SkyPatch,
                 get_bvn_cov, eval_bvn_pdf!, get_bvn_derivs!,
-                transform_bvn_derivs!, populate_fsm!, SparseStruct
+                transform_bvn_derivs!, populate_fsm!, SparseStruct, SparseGalPosParams
 import ..Celeste: Const, @aliasscope, @unroll_loop, ParameterizedArray
 import ..Infer
 using ..SensitiveFloats

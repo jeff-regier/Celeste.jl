@@ -28,6 +28,7 @@ end
 DenseHessianSSSF(ParamSet, NumType, HasGradient, HasHessian) = SingleSourceSensitiveFloat{NumType, ParamSet,
   ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}, HasGradient, HasHessian}
 SparseHessianCanonicalSSSF(NumType, HasGradient, HasHessian) = SingleSourceSensitiveFloat{NumType, CanonicalParams2, SparseStruct{NumType}, HasGradient, HasHessian}
+SparseHessianGalPosSSSF(NumType, HasGradient, HasHessian) = SingleSourceSensitiveFloat{NumType, GalaxyPosParams, SparseGalPosParams{NumType}, HasGradient, HasHessian}
 DenseHessianSSparseSF(ParamSet, NumType, HasGradient, HasHessian) = SSparseSensitiveFloat{NumType, ParamSet,
   ParameterizedArray{ParamSet, SizedMatrix{(length(ParamSet),length(ParamSet)),NumType,2}}, HasGradient, HasHessian}
 DenseSymmetricHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumType, ParamSet,
@@ -36,6 +37,7 @@ DenseSymmetricHessianSSparseSF(ParamSet, NumType) = SSparseSensitiveFloat{NumTyp
   }, :U}}}
 SparseHessianSSparseSF(ParamSet, NumType, HasGradient, HasHessian) = SSparseSensitiveFloat{NumType, ParamSet, SparseStruct{NumType}, HasGradient, HasHessian}
 SensitiveFloats.zeros_type(T::Type{<:SparseStruct}, args...) = zeros(T)
+SensitiveFloats.zeros_type(T::Type{<:SparseGalPosParams}, args...) = zeros(T)
 
 """
 If Infs/NaNs have crept into the ELBO evaluation (a symptom of poorly conditioned optimization),
