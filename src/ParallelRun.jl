@@ -372,12 +372,14 @@ Use multiple threads on one node to fit the Celeste model to sources in a given
 bounding box.
 """
 function one_node_infer(rcfs::Vector{RunCamcolField},
-                        strategy::SDSSIO.IOStrategy;
+                        stagedir::String;
                         infer_callback=one_node_single_infer,
                         objid="",
                         box=BoundingBox(-1000., 1000., -1000., 1000.),
                         primary_initialization=true,
                         timing=InferTiming())
+    strategy = PlainFITSStrategy(stagedir)
+
     catalog, target_sources, neighbor_map, images =
         infer_init(rcfs,
                    strategy;

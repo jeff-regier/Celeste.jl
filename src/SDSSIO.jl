@@ -734,11 +734,22 @@ end
 
 # No mutable state, so should be ok to manipulate GC state
 @noinline function pread64(fd::Cint, data::Ptr{UInt8}, size::Csize_t, offset::Csize_t)
-    gc_state = ccall(:jl_gc_safe_enter, Int8, ())
-    rsize = ccall(:pread64, Cint, (Cint, Ptr{UInt8}, Csize_t, Csize_t), fd, data, size, offset)
-    ccall(:jl_gc_safe_leave, Void, (Int8,), gc_state)
-    rsize
+    nread = 0
+    reqsize = size
+    while nread < reqsize
+        gc_state = ccall(:jl_gc_safe_enter, Int8, ())
+        rdb = ccall(:pread64, Cint, (Cint, Ptr{UInt8}, Csize_t, Csize_t), fd, data, size, offset)
+        ccall(:jl_gc_safe_leave, Void, (Int8,), gc_state)
+        rdb <= 0 && break
+        nread += rdb
+        if rdb < size
+            size -= rdb
+            offset += rdb
+        end
+    end
+    nread
 end
+
 
 function load_rcf_bundle(bfo::BigFileIO, rcf::RunCamcolField, rcf_idx_map, run_idx_map;
                          data_buf = zeros(UInt8, EachRCF + EachPhotoField))
