@@ -44,14 +44,22 @@ function (f::BoxKillSwitch)(x)
         if now_ns - lastfinat > floor(Int64, (lastfinat - f.started) * 0.25)
             #f.killed = true
             if !f.messaged
-                ttms = [f.finished[i] == typemax(UInt64) ? "" : "$(i):$(f.finished[i] - f.started) " for i in 1:length(f.finished)]
-                Log.message("imbalance threshold reached at $(now_ns), ",
-                            "started at $(f.started), $(ttms...)")
                 f.messaged = true
+                ttms = [f.finished[i] == typemax(UInt64) ? "" :
+                            @sprintf("%d:%.3f ", i, (f.finished[i] - f.started) / 1e6)
+                        for i in 1:length(f.finished)]
+                Log.message("imbalance threshold: $(ttms...)ms")
             end
         end
     end
     return f.killed
+end
+
+function ks_reset_finished(ks::BoxKillSwitch)
+    ks.numfin[] = 0
+    fill!(ks.finished, typemax(UInt64))
+    ks.lastfin[] = 0
+    ks.messaged = false
 end
 
 
@@ -722,8 +730,12 @@ function process_sources_dynamic!(images::Vector{Model.Image},
             Log.info("Batch $(batch) avg threads idle: $(round(Int, idle_percent))% ($(avg_thread_idle_time) / $(maximum_thread_time))")
 	    total_idle_time += sum(maximum(process_sources_elapsed_times) - process_sources_elapsed_times)
             total_sum_of_thread_times += sum(process_sources_elapsed_times)
-            if kill_switch != nothing && kill_switch.killed
-                break
+            if kill_switch != nothing
+                if kill_switch.killed
+                    break
+                else
+                    ks_reset_finished(kill_switch)
+                end
             end
         end
         if kill_switch != nothing && kill_switch.killed

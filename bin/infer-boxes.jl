@@ -1,15 +1,21 @@
 #!/usr/bin/env julia
 
 import Celeste.ParallelRun: BoundingBox, infer_boxes
-import Celeste.SDSSIO: RunCamcolField
 import Celeste.Log
+using Celeste: SDSSIO
 
+include("binutil.jl")
 
 function run_infer_boxes(args::Vector{String})
     if length(args) < 3
         println("""
 Usage:
-  infer-boxes.jl <rcf_nsrcs_file> <boxes_file> [<boxes_file>...] <out_dir>
+  infer-boxes.jl [--iostrategy=<strategy>] <rcf_nsrcs_file> <boxes_file> [<boxes_file>...] <out_dir>
+
+Supported IO Strategies (default is FITS):
+  - fits: Load data from stagedir in original SDSS FITS format
+  - mdtfits: Load data from stagedir, split over 5 mdt directories
+  - bigfiles: Load data in bigfile format
 
 <rcf_nsrcs_file> format, one line per RCF:
   <run>	<camcol>	<field>	<num_primary_sources>
@@ -19,26 +25,13 @@ Usage:
             """)
         exit(-1)
     end
-    if !haskey(ENV, "CELESTE_STAGE_DIR")
-        Log.one_message("ERROR: set CELESTE_STAGE_DIR!")
-        exit(-2)
+
+    strategyarg = ""
+    if startswith(args[1], "--iostrategy=")
+        strategyarg = shift!(args)[length("--iostrategy=")+1:end]
     end
 
-    # load the RCFs #sources file
-    rcf_nsrcs_file = args[1]
-    all_rcfs = Vector{RunCamcolField}()
-    all_rcf_nsrcs = Vector{Int16}()
-    f = open(rcf_nsrcs_file)
-    for ln in eachline(f)
-        lp = split(ln, '\t')
-        run = parse(Int16, lp[1])
-        camcol = parse(UInt8, lp[2])
-        field = parse(Int16, lp[3])
-        nsrc = parse(Int16, lp[4])
-        push!(all_rcfs, RunCamcolField(run, camcol, field))
-        push!(all_rcf_nsrcs, nsrc)
-    end
-    close(f)
+    strategy, all_rcfs, all_rcf_nsrcs = decide_strategy(strategyarg, args[1])
 
     # parse the specified box file(s)
     nboxfiles = length(args) - 2
@@ -81,7 +74,7 @@ Usage:
     end
 
     infer_boxes(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                ENV["CELESTE_STAGE_DIR"], args[end])
+                strategy, args[end])
 end
 
 run_infer_boxes(ARGS)

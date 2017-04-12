@@ -40,10 +40,14 @@ function exception(exception::Exception, msg...)
     if length(msg) > 0
         error(msg...)
     end
-    error(exception)
+    if !is_production_run
+        stack_trace = catch_stacktrace()
+    end
+    buf = IOBuffer()
+    Base.showerror(buf, exception)
+    error(takebuf_string(buf))
     if !is_production_run
         error("Stack trace:")
-        stack_trace = catch_stacktrace()
         if length(stack_trace) > 100
             stack_trace = vcat(
                 [string(line) for line in stack_trace[1:50]],

@@ -184,7 +184,7 @@ box(es), if needed.
 """
 function load_box(boxes::Vector{BoundingBox},
                   field_extents::Vector{FieldExtent},
-                  stagedir::String, mi::MultiInfo, cbox::BoxInfo,
+                  strategy::SDSSIO.IOStrategy, mi::MultiInfo, cbox::BoxInfo,
                   timing::InferTiming)
     # expected: cbox.state[] == BoxDone
 
@@ -244,7 +244,7 @@ function load_box(boxes::Vector{BoundingBox},
         tic()
         cbox.catalog, cbox.target_sources, cbox.neighbor_map,
             cbox.images, cbox.source_rcfs, cbox.source_cat_idxs =
-                    infer_init(rcfs, stagedir; box=box, timing=timing)
+                    infer_init(rcfs, strategy; box=box, timing=timing, )
         loadtime = toq()
     catch exc
         Log.exception(exc)
@@ -424,7 +424,7 @@ function preload_boxes(config::Configs.Config,
                        boxes::Vector{BoundingBox},
                        rcf_map::Dict{RunCamcolField,Int32},
                        field_extents::Vector{FieldExtent},
-                       stagedir::String,
+                       strategy::SDSSIO.IOStrategy,
                        mi::MultiInfo,
                        results::Garray,
                        prev_results,
@@ -450,7 +450,7 @@ function preload_boxes(config::Configs.Config,
 
         # load and initialize box
         if state != BoxEnd
-            if load_box(boxes, field_extents, stagedir, mi, cbox, timing)
+            if load_box(boxes, field_extents, strategy, mi, cbox, timing)
                 try init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
                 catch exc
                     Log.exception(exc)
@@ -483,7 +483,7 @@ function joint_infer_boxes(config::Configs.Config,
                            boxes::Vector{BoundingBox},
                            rcf_map::Dict{RunCamcolField,Int32},
                            field_extents::Vector{FieldExtent},
-                           stagedir::String,
+                           strategy::SDSSIO.IOStrategy,
                            mi::MultiInfo,
                            results::Garray,
                            prev_results,
@@ -507,8 +507,7 @@ function joint_infer_boxes(config::Configs.Config,
 
     # if we have at least one worker thread, we can use a preloader thread
     if mi.nworkers >= 1 && tid == 1
-        Log.debug("$(Time(now())): preloading boxes")
-        preload_boxes(config, boxes, rcf_map, field_extents, stagedir, mi,
+        preload_boxes(config, boxes, rcf_map, field_extents, strategy, mi,
                       results, prev_results, conc_boxes, timing)
         return
     end
@@ -525,7 +524,7 @@ function joint_infer_boxes(config::Configs.Config,
 
         # prepare the box/wait for the box to be prepared
         if mi.nworkers == 0
-            if !load_box(boxes, field_extents, stagedir, mi, cbox, timing)
+            if !load_box(boxes, field_extents, strategy, mi, cbox, timing)
                 break
             end
             init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
@@ -609,7 +608,7 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
                           all_rcf_nsrcs::Vector{Int16},
                           all_boxes::Vector{Vector{BoundingBox}},
                           all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
-                          stagedir::String,
+                          strategy::SDSSIO.IOStrategy,
                           outdir::String)
     rpn = set_affinities()
 
@@ -628,7 +627,7 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
     end
 
     # load field extents
-    field_extents = load_field_extents(stagedir)
+    field_extents = load_field_extents(strategy)
 
     # determine required size for the results global array and build the
     # offsets map into it to help locate a source
@@ -666,12 +665,12 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
         # run the optimization
         if nthreads() == 1
             joint_infer_boxes(config, boxes, rcf_map,
-                              field_extents, stagedir, mi, results,
+                              field_extents, strategy, mi, results,
                               prev_results, conc_boxes, all_threads_timing)
         else
             ccall(:jl_threading_run, Void, (Any,),
                   Core.svec(joint_infer_boxes, config, boxes, rcf_map,
-                            field_extents, stagedir, mi, results,
+                            field_extents, strategy, mi, results,
                             prev_results, conc_boxes, all_threads_timing))
         end
 
