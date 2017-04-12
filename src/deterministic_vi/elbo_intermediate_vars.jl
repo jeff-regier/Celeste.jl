@@ -4,7 +4,11 @@ immutable ElboIntermediateVariables{NumType <: Number, ElboRep, HasGradient, Has
     # as ea.active_sources.
 
     fs0m::DenseHessianSSSF(StarPosParams, NumType, HasGradient, HasHessian)
+    
+    # This is a hack. In theory there's no problem with using the sparse
+    # version throughout
     fs1m::DenseHessianSSSF(GalaxyPosParams, NumType, HasGradient, HasHessian)
+    fs1m_sparse::SparseHessianGalPosSSSF(NumType, HasGradient, HasHessian)
 
     # Brightness values for a single source
     E_G_s::SparseHessianCanonicalSSSF(NumType, HasGradient, HasHessian)
@@ -46,6 +50,7 @@ function ElboIntermediateVariables(NumType::DataType,
     # for a given source.
     fs0m = DenseHessianSSSF(StarPosParams, NumType, calculate_gradient, calculate_hessian)()
     fs1m = DenseHessianSSSF(GalaxyPosParams, NumType, calculate_gradient, calculate_hessian)()
+    fs1m_sparse = SparseHessianGalPosSSSF(NumType, calculate_gradient, calculate_hessian)()
     E_G_s = SparseHessianCanonicalSSSF(NumType, calculate_gradient, calculate_hessian)()
     E_G2_s = SensitiveFloat(E_G_s)
 
@@ -65,7 +70,7 @@ function ElboIntermediateVariables(NumType::DataType,
     pd_scratch = Matrix{NumType}(length(CanonicalParams), length(CanonicalParams))
 
     ElboIntermediateVariables{NumType, typeof(elbo), calculate_gradient, calculate_hessian}(
-        fs0m, fs1m,
+        fs0m, fs1m, fs1m_sparse,
         E_G_s, E_G2_s,
         E_G, var_G,
         elbo, reparameterized_elbo, pd_scratch, Ref{Int64}(0), Ref{Int64}(0))

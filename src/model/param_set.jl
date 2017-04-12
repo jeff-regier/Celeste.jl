@@ -196,6 +196,17 @@ end
 Celeste.is_implicitly_symmetric(s::SparseStruct) = true
 Base.issymmetric(s::SparseStruct) = true
 
+@eval @define_accessors $GalaxyPosParams gal_ids mutable struct SparseGalPosParams{NumType}
+    u_u_block::diagonal_block(NumType, gal_ids.u)
+    shape_shape_block::diagonal_block(NumType, gal_shape_ids)
+    u_shape_block::off_diagonal_block(NumType, gal_ids.u, gal_shape_ids)
+    u_dev_block::off_diagonal_block(NumType, gal_ids.u, gal_ids.e_dev)
+    dev_shape_block::off_diagonal_block(NumType, gal_shape_ids, gal_ids.e_dev)
+end
+@eval @create_sparse_implementation $SparseGalPosParams SparseGalPosParams
+Celeste.is_implicitly_symmetric(s::SparseGalPosParams) = true
+Base.issymmetric(s::SparseGalPosParams) = true
+
 struct LatentStateIndexes <: ParamSet
     u::SVector{2, Int}
     e_dev::Int
