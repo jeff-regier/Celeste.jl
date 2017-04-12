@@ -185,5 +185,5 @@ function load_source_brightnesses(ea::ElboArgs,
           calculate_gradient::Bool=true,
           calculate_hessian::Bool=true) where NumType
     sbs = SourceBrightness{NumType}[SourceBrightness{NumType, calculate_gradient, calculate_hessian}() for _ in 1:ea.S]
-    load_source_brightnesses!(sbs, ea, vp, calculate_gradient, calculate_hessian)
+    load_source_brightnesses!(sbs, ea, vp)
 end

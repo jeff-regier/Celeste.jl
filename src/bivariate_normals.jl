@@ -177,6 +177,7 @@ function llvm_exp(x::Float64)
             ret double %2"""),
     Float64, Tuple{Float64}, x)
 end
+llvm_exp(x) = exp(x)
 
 """
 Return quantities related to the pdf of an offset bivariate normal.
