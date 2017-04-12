@@ -599,7 +599,9 @@ end
 immutable ImageGeometry
     height_px::Int64
     width_px::Int64
-    world_coordinate_origin::Tuple{Float64, Float64}
+    world_coordinate_origin::Tuple{Float64, Float64} # (ra, dec)
+    ra_degrees_per_pixel::Float64
+    dec_degrees_per_pixel::Float64
 end
 
 function get_image_geometry(catalog_data::DataFrame; field_expand_arcsec=20.0)
@@ -613,13 +615,18 @@ function get_image_geometry(catalog_data::DataFrame; field_expand_arcsec=20.0)
     width_px = convert(Int64, round(width_arcsec / SDSS_ARCSEC_PER_PIXEL))
     height_px = convert(Int64, round(height_arcsec / SDSS_ARCSEC_PER_PIXEL))
 
+    dec_degrees_per_pixel = SDSS_ARCSEC_PER_PIXEL / ARCSEC_PER_DEGREE
+    ra_degrees_per_pixel = dec_degrees_per_pixel / cosd(min_dec_deg)
+
     ImageGeometry(
         height_px,
         width_px,
         (
             min_ra_deg - field_expand_arcsec / ARCSEC_PER_DEGREE,
             min_dec_deg - field_expand_arcsec / ARCSEC_PER_DEGREE,
-        )
+        ),
+        ra_degrees_per_pixel,
+        dec_degrees_per_pixel,
     )
 end
 
@@ -629,19 +636,17 @@ function make_template_images(
 )
     geometry = get_image_geometry(catalog_data)
     println("  Image dimensions $(geometry.height_px) H x $(geometry.width_px) W px")
-    dec_deg_per_pixel = SDSS_ARCSEC_PER_PIXEL / ARCSEC_PER_DEGREE
-    ra_deg_per_pixel = dec_deg_per_pixel / cosd(geometry.world_coordinate_origin[2])
     wcs = WCS.WCSTransform(
         2, # dimensions
         # reference pixel coordinates...
-        crpix=[0., 0.],
+        crpix=[1., 1.],
         # ...and corresponding reference world coordinates
         crval=[geometry.world_coordinate_origin[1], geometry.world_coordinate_origin[2]],
         # this WCS is a simple linear transformation
         ctype=["RA---TAN", "DEC--TAN"],
         cunit=["deg", "deg"],
         # these are [du/dx du/dy; dv/dx dv/dy]. (u, v) = world coords, (x, y) = pixel coords.
-        pc=[0. ra_deg_per_pixel; dec_deg_per_pixel 0.],
+        pc=[0. geometry.ra_degrees_per_pixel; geometry.dec_degrees_per_pixel 0.],
     )
     map(1:5) do band
         make_image(
