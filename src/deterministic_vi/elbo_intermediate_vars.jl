@@ -1,3 +1,5 @@
+using StructsOfArrays
+
 immutable ElboIntermediateVariables{NumType <: Number, ElboRep, HasGradient, HasHessian}
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
     # The vector has one element for each active source, in the same order
@@ -91,12 +93,12 @@ end
 immutable BvnBundle{T<:Real, HasGradient, HasHessian}
     bvn_derivs::BivariateNormalDerivatives{T}
     star_mcs::Matrix{BvnComponent{T}}
-    gal_mcs::Array{GalaxyCacheComponent{T},4}
-    sbs::Vector{SourceBrightness{T}}
+    gal_mcs::similar(StructOfArrays, Matrix{GalaxyCacheComponent{T}})
+    sbs::Vector{SourceBrightness{T, HasGradient, HasHessian}}
     function (::Type{BvnBundle{T, HasGradient, HasHessian}}){T,HasGradient, HasHessian}(psf_K::Int, S::Int)
         return new{T, HasGradient, HasHessian}(BivariateNormalDerivatives{T}(),
                       Matrix{BvnComponent{T}}(psf_K, S),
-                      Array{GalaxyCacheComponent{T}}(psf_K, 8, 2, S),
+                      fieldtype(BvnBundle{T}, :gal_mcs)(psf_K*(8+6), S),
                       [SourceBrightness{T, HasGradient, HasHessian}() for i = 1:S])
     end
 end
