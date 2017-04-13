@@ -29,7 +29,7 @@ Returns:
 function load_bvn_mixtures!{NumType <: Number}(
                     #outputs
                     star_mcs::Matrix{BvnComponent{NumType}},
-                    gal_mcs::Array{GalaxyCacheComponent{NumType},4},
+                    gal_mcs::AbstractMatrix{GalaxyCacheComponent{NumType}},
                     #inputs
                     S::Int64,
                     patches::Matrix{SkyPatch},
@@ -40,6 +40,7 @@ function load_bvn_mixtures!{NumType <: Number}(
                     calculate_gradient::Bool=true,
                     calculate_hessian::Bool=true)
     @assert size(star_mcs, 1) == psf_K
+    @assert size(gal_mcs, 1) == (8+6)*psf_K
     @assert size(star_mcs, 2) == S
     # TODO: do not keep any derviative information if the sources are not in
     # active_sources.
@@ -66,6 +67,7 @@ function load_bvn_mixtures!{NumType <: Number}(
         end
 
         # Convolve the galaxy representations with the PSF.
+        idx = 1
         for i = 1:2 # i indexes dev vs exp galaxy types.
             e_dev_dir = (i == 1) ? 1. : -1.
             e_dev_i = (i == 1) ? sp[lidx.e_dev] : 1. - sp[lidx.e_dev]
@@ -73,12 +75,13 @@ function load_bvn_mixtures!{NumType <: Number}(
             # Galaxies of type 1 have 8 components, and type 2 have 6 components.
             for j in 1:ifelse(i == 1, 8, 6)
                 for k = 1:psf_K
-                    gal_mcs[k, j, i, s] = GalaxyCacheComponent(
+                    gal_mcs[idx, s] = GalaxyCacheComponent(
                         e_dev_dir, e_dev_i, galaxy_prototypes[i][j], psf[k],
                         m_pos,
                         sp[lidx.e_axis], sp[lidx.e_angle], sp[lidx.e_scale],
                         calculate_gradient && (s in active_sources),
                         calculate_hessian)
+                    idx += 1
                 end
             end
         end
@@ -96,7 +99,7 @@ function load_bvn_mixtures{NumType <: Number}(S::Int64,
               calculate_gradient::Bool=true,
               calculate_hessian::Bool=true)
     star_mcs = Matrix{BvnComponent{NumType}}(psf_K, S)
-    gal_mcs  = Array{GalaxyCacheComponent{NumType}}(psf_K, 8, 2, S)
+    gal_mcs  = Array{GalaxyCacheComponent{NumType}}(psf_K*(8+6), S)
     load_bvn_mixtures!(star_mcs, gal_mcs, S, patches, source_params, active_sources,
       psf_K, n, calculate_gradient, calculate_hessian)
     (star_mcs, gal_mcs)
@@ -116,22 +119,19 @@ function populate_gal_fsm!{NumType <: Number}(
                     x::SVector{2,Float64},
                     is_active_source::Val,
                     wcs_jacobian,
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4})
+                    gal_mcs::AbstractMatrix{GalaxyCacheComponent{NumType}})
     clear!(fs1m)
-    @assert size(gal_mcs, 1) == 2
-    @inbounds for i = 1:2 # Galaxy types
-        for j in 1:8 # Galaxy component
-            # If i == 2 then there are only six galaxy components.
-            if (i == 1) || (j <= 6)
-                for k = 1:2 # PSF component
-                    accum_galaxy_pos!(
-                        bvn_derivs, fs1m,
-                        gal_mcs[k, j, i, s], x, wcs_jacobian,
-                        is_active_source)
-                end
-            end
-        end
+    @assert size(gal_mcs,1)==28
+    @inbounds for i = 1:28
+        accum_galaxy_pos!(
+            bvn_derivs, fs1m,
+            gal_mcs[i, s], x, wcs_jacobian,
+            is_active_source)
     end
+    # Strictly, this is a waste of effort. However, after inlining. LLVM is able
+    # to memconvert this memory away, so zeroing it here, allows it realize
+    # that it doesn't have to preserve the value
+    clear!(bvn_derivs)
 end
 
 
@@ -149,7 +149,7 @@ function populate_fsm!{NumType <: Number}(
                     x::SVector{2,Float64},
                     is_active_source::Val,
                     wcs_jacobian,
-                    gal_mcs::Array{GalaxyCacheComponent{NumType}, 4},
+                    gal_mcs::AbstractMatrix{GalaxyCacheComponent{NumType}},
                     star_mcs::Array{BvnComponent{NumType}, 2})
     clear!(fs0m)
     for k = 1:size(star_mcs, 1) # PSF component

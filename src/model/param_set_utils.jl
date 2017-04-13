@@ -328,7 +328,6 @@ macro define_accessors(param_set, instance_var, def)
             error("Trying to access a region that is implicitly zero or below the diagonal")
         end
     end
-    @show a
     esc(a)
 end
 

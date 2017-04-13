@@ -569,7 +569,7 @@ function add_pixel_term!{NumType <: Number}(
                     vp::VariationalParams{NumType},
                     n::Int, h::Int, w::Int,
                     bvn_bundle::BvnBundle{NumType},
-                    sbs::Vector{SourceBrightness{NumType}},
+                    sbs::Vector{<:SourceBrightness{NumType}},
                     elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(NumType, ea.Sa))
     img = ea.images[n]
 
