@@ -85,10 +85,10 @@ end
 function to_batch
 end
 
-struct SubParam{T}
-    inds::Tuple
+struct SubParam{T,N}
+    inds::NTuple{N, Int}
 end
-Base.getindex(x::T, inds...) where {T<:Param} = SubParam{T}(inds)
+Base.getindex(x::T, inds...) where {T<:Param} = SubParam{T,length(inds)}(inds)
 @Base.pure @inline Base.to_index(a, x::SubParam) = Base.to_index(a, typeof(x).parameters[1]())[x.inds...]
 
 macro concretize(xT)

@@ -59,12 +59,7 @@ function SourceBrightness(vs::Vector{NumType},
 end
 
 function SourceBrightness!{NumType <: Number}(sbs::SourceBrightness{NumType},
-                                             vs::Vector{NumType}, skip_gradient=false, skip_hessian=false)
-    r1 = vs[ids.r1]
-    r2 = vs[ids.r2]
-    c1 = vs[ids.c1]
-    c2 = vs[ids.c2]
-    
+                                              vs::Vector{NumType}, skip_gradient=false, skip_hessian=false)
     E_l_a = sbs.E_l_a
     E_ll_a = sbs.E_ll_a
     
@@ -76,11 +71,15 @@ function SourceBrightness!{NumType <: Number}(sbs::SourceBrightness{NumType},
             clear!(E_l_a[i][b])
         end
 
-        E_l_a[i][3].v[] = exp(r1[i] + 0.5 * r2[i])
-        E_l_a[i][4].v[] = exp(c1[3, i] + .5 * c2[3, i])
-        E_l_a[i][5].v[] = exp(c1[4, i] + .5 * c2[4, i])
-        E_l_a[i][2].v[] = exp(-c1[2, i] + .5 * c2[2, i])
-        E_l_a[i][1].v[] = exp(-c1[1, i] + .5 * c2[1, i])
+        r1 = vs[ids_2_to_ids[bids(kind).r1]]
+        r2 = vs[ids_2_to_ids[bids(kind).r2]]
+        c1 = vs[ids_2_to_ids[bids(kind).c1]]
+        c2 = vs[ids_2_to_ids[bids(kind).c2]]
+        E_l_a[i][3].v[] = exp(r1 + 0.5 * r2)
+        E_l_a[i][4].v[] = exp(c1[3] + .5 * c2[3])
+        E_l_a[i][5].v[] = exp(c1[4] + .5 * c2[4])
+        E_l_a[i][2].v[] = exp(-c1[2] + .5 * c2[2])
+        E_l_a[i][1].v[] = exp(-c1[1] + .5 * c2[1])
 
         if has_gradient(sbs) && !skip_gradient        
             # band 3 is the reference band, relative to which the colors are
@@ -121,11 +120,11 @@ function SourceBrightness!{NumType <: Number}(sbs::SourceBrightness{NumType},
             clear!(E_ll_a[i][b])
         end
 
-        E_ll_a[i][3].v[] = exp(2 * r1[i] + 2 * r2[i])
-        E_ll_a[i][4].v[] = exp(2 * c1[3, i] + 2 * c2[3, i])
-        E_ll_a[i][5].v[] = exp(2 * c1[4, i] + 2 * c2[4, i])
-        E_ll_a[i][2].v[] = exp(-2 * c1[2, i] + 2 * c2[2, i])
-        E_ll_a[i][1].v[] = exp(-2 * c1[1, i] + 2 * c2[1, i])
+        E_ll_a[i][3].v[] = exp(2 * r1 + 2 * r2)
+        E_ll_a[i][4].v[] = exp(2 * c1[3] + 2 * c2[3])
+        E_ll_a[i][5].v[] = exp(2 * c1[4] + 2 * c2[4])
+        E_ll_a[i][2].v[] = exp(-2 * c1[2] + 2 * c2[2])
+        E_ll_a[i][1].v[] = exp(-2 * c1[1] + 2 * c2[1])
 
         if has_gradient(sbs) && !skip_gradient
             # Band 3, the reference band.
