@@ -39,7 +39,7 @@ function (f::BoxKillSwitch)(x)
     elseif (now_ns - f.started) > box_max_threshold
         # and here
         f.killed = true
-    elseif f.numfin[] >= f.numfin_threshold
+#=    elseif f.numfin[] >= f.numfin_threshold
         lastfinat = f.finished[f.lastfin[]]
         if now_ns - lastfinat > floor(Int64, (lastfinat - f.started) * 0.25)
             #f.killed = true
@@ -50,7 +50,7 @@ function (f::BoxKillSwitch)(x)
                         for i in 1:length(f.finished)]
                 Log.message("imbalance threshold: $(ttms...)ms")
             end
-        end
+        end=#
     end
     return f.killed
 end
@@ -776,8 +776,7 @@ function process_sources_kernel!(ea_vec::Vector{ElboArgs},
     end
 end
 
-# Count and display the number of active and inactive pixels processed.
-function show_pixels_processed()
+function get_pixels_processed()
     n_active = 0
     n_inactive = 0
     for elbo_vars in DeterministicVI.ElboMaximize.ELBO_VARS_POOL
@@ -786,6 +785,12 @@ function show_pixels_processed()
         elbo_vars.active_pixel_counter[] = 0
         elbo_vars.inactive_pixel_counter[] = 0
     end
+    return (n_active, n_inactive)
+end
+
+# Count and display the number of active and inactive pixels processed.
+function show_pixels_processed()
+    n_active, n_inactive = get_pixels_processed()
     Log.message("$(Time(now())): (active,inactive) pixels processed: \($n_active,$n_inactive\)")
 end
 
