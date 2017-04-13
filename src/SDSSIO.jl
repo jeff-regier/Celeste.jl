@@ -664,7 +664,8 @@ const NumCamcols = 6
 const EachPhotoField = 3*1024*1024
 
 const NumRCFs = 924038
-const EachRCF = 97*1024*1024
+const EachRCF = 96*1024*1024
+const FirstSlurp = 40*1024*1024
 const GoodTransferSize = 4*1024*1024
 const EachBigFile = 3298534883328
 const NumRCFFiles = 12
@@ -735,31 +736,34 @@ end
 # No mutable state, so should be ok to manipulate GC state
 @noinline function pread64(fd::Cint, data::Ptr{UInt8}, size::Csize_t, offset::Csize_t)
     nread = 0
-    reqsize = size
-    while nread < reqsize
+    while size > 0
         gc_state = ccall(:jl_gc_safe_enter, Int8, ())
         rdb = ccall(:pread64, Cint, (Cint, Ptr{UInt8}, Csize_t, Csize_t), fd, data, size, offset)
         ccall(:jl_gc_safe_leave, Void, (Int8,), gc_state)
         rdb <= 0 && break
         nread += rdb
-        if rdb < size
-            size -= rdb
-            offset += rdb
-        end
+        offset += rdb
+        size -= rdb
     end
     nread
 end
-
 
 function load_rcf_bundle(bfo::BigFileIO, rcf::RunCamcolField, rcf_idx_map, run_idx_map;
                          data_buf = zeros(UInt8, EachRCF + EachPhotoField))
     ridx = rcf_idx_map[rcf] - 1
     bfidx, bfofs = divrem(ridx * EachRCF, EachBigFile)
     bfidx += 1
-    # We have a header, but it doesn't actually tell us how large the whole thing is, just slurp it all at once
-    rsize = pread64(bfo.fds[bfidx], pointer(data_buf), Csize_t(EachRCF), Csize_t(bfofs))
-    systemerror("pread", rsize != EachRCF)
-    fofs = reinterpret(Int64, data_buf[1:(NumRCFFiles * sizeof(Int64))])
+
+    # Read the header in with the first slurp
+    rsize = pread64(bfo.fds[bfidx], pointer(data_buf), Csize_t(FirstSlurp), Csize_t(bfofs))
+    systemerror("pread", rsize != FirstSlurp)
+    fofs = reinterpret(Int64, data_buf[1:((NumRCFFiles + 1) * sizeof(Int64))])
+    @assert fofs[1] == (NumRCFFiles + 1) * sizeof(UInt64)
+
+    # Read in the rest
+    remread = fofs[end] - FirstSlurp
+    rsize = pread64(bfo.fds[bfidx], pointer(data_buf, FirstSlurp + 1), Csize_t(remread), Csize_t(bfofs + FirstSlurp))
+    systemerror("pread", rsize != remread)
 
     # Now read the photofield data
     pidx = ((run_idx_map[rcf.run]-1) * NumCamcols * EachPhotoField) +
@@ -771,8 +775,7 @@ function load_rcf_bundle(bfo::BigFileIO, rcf::RunCamcolField, rcf_idx_map, run_i
     data = Dict{Symbol, Vector{UInt8}}()
     for (k, v) in fileOrder
         startidx = fofs[v]
-        endidx = v == 12 ? EachRCF : fofs[v+1]
-        (v == 1) && (@assert startidx == NumRCFFiles * sizeof(UInt64))
+        endidx = fofs[v+1]
         data[k] = data_buf[startidx+1:endidx]
     end
     RCFBundle(data, photofield_data)

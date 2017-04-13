@@ -1,3 +1,5 @@
+const TenXWork = false
+
 # ----------------
 # A simple centralized sense reversing thread barrier. Needed to allow the
 # ordering constraints that Cyclades partitioning imposes on the processing
@@ -290,11 +292,13 @@ function init_box(npartitions::Int, rcf_map::Dict{RunCamcolField,Int32},
         cat_local = vcat([entry], neighbors)
         ids_local = vcat([entry_id], neighbor_ids)
 
-        #radius overridden to increase total work 10x (change 1 of 2)
-        patches = Infer.get_sky_patches(cbox.images, cat_local, radius_override_pix=20.0)
+        if TenXWork
+            patches = Infer.get_sky_patches(cbox.images, cat_local, radius_override_pix=20.0)
+        else
+            patches = Infer.get_sky_patches(cbox.images, cat_local)
+            Infer.load_active_pixels!(cbox.images, patches)
+        end
 
-        #commented out to increase total work 10x (change 2 of 2)
-        #Infer.load_active_pixels!(cbox.images, patches)
         cbox.ea_vec[ts] = ElboArgs(cbox.images, patches, [1])
 
         vp = Vector{Float64}[haskey(ts_vp, x) ?

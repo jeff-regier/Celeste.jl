@@ -64,6 +64,7 @@ Supported IO Strategies (default is FITS):
         close(f)
         if length(boxes) < 1
             Log.one_message("$boxfile is empty?")
+            continue
         end
         push!(all_boxes, boxes)
         push!(all_boxes_rcf_idxs, boxes_rcf_idxs)
