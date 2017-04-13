@@ -38,6 +38,7 @@ end
 # ----------------
 type MultiInfo
     dt::Dtree
+    dl::Dlog
     ni::Int
     ci::Int
     li::Int
@@ -115,7 +116,8 @@ end
 """
 Create the Dtree scheduler for distributing boxes to ranks.
 """
-function setup_multi(nwi::Int)
+function setup_multi(nwi::Int, outdir::String)
+    dl = Dlog(outdir)
     dt, _ = Dtree(nwi, 0.25)
     ni, (ci, li) = initwork(dt)
     rundt = runtree(dt)
@@ -125,7 +127,7 @@ function setup_multi(nwi::Int)
     nworkers = nthreads() - (rundt ? 1 : 0) - 1
     bar = setup_barrier(max(1, nworkers))
 
-    return MultiInfo(dt, ni, ci, li, rundt, nworkers, bar)
+    return MultiInfo(dt, dl, ni, ci, li, rundt, nworkers, bar)
 end
 
 
@@ -172,7 +174,6 @@ function save_results(results::Garray, boxgroup::Int, outdir::String)
         fname = @sprintf("%s/celeste-multi-boxgroup%d-rank%d.jld", outdir,
                           boxgroup, grank())
         JLD.save(fname, "results", lresults)
-        Log.message("$(Time(now())): saved results to $fname")
     catch exc
         Log.exception(exc)
     end
@@ -255,10 +256,11 @@ function load_box(boxes::Vector{BoundingBox},
     # set box information
     cbox.curr_cc[] = 1
 
-    Log.message("$(Time(now())): loaded box #$(box_idx) ($(box.ramin), ",
-                "$(box.ramax), $(box.decmin), $(box.decmax) ",
-                "($(length(cbox.target_sources)) target sources)) in ",
-                "$(rcftime + loadtime) secs")
+    message(mi.dl, "loaded #$(box_idx) in $(rcftime + loadtime) secs")
+    #Log.message("$(Time(now())): loaded box #$(box_idx) ($(box.ramin), ",
+    #            "$(box.ramax), $(box.decmin), $(box.decmax) ",
+    #            "($(length(cbox.target_sources)) target sources)) in ",
+    #            "$(rcftime + loadtime) secs")
 
     return true
 end
@@ -374,9 +376,10 @@ end
 Put inference results for a box into the global array.
 """
 function store_box(cbox::BoxInfo, rcf_map::Dict{RunCamcolField,Int32},
-                   results::Garray, timing::InferTiming)
+                   mi::MultiInfo, results::Garray, timing::InferTiming)
     if cbox.ks.killed
-        Log.message("$(Time(now())): abandoned box #$(cbox.box_idx)")
+        message(ml.dl, "abandoned #$(cbox.box_idx)")
+        #Log.message("$(Time(now())): abandoned box #$(cbox.box_idx)")
         return
     end
 
@@ -416,7 +419,8 @@ function store_box(cbox::BoxInfo, rcf_map::Dict{RunCamcolField,Int32},
     timing.num_srcs += length(cbox.target_sources)
 
     if length(cbox.target_sources) > 0
-        Log.message("$(Time(now())): completed box #$(cbox.box_idx)")
+        message(mi.dl, "completed #$(cbox.box_idx)")
+        #Log.message("$(Time(now())): completed box #$(cbox.box_idx)")
     end
 end
 
@@ -447,7 +451,7 @@ function preload_boxes(config::Configs.Config,
         timing.proc_wait += toq()
 
         # store box results
-        try store_box(cbox, rcf_map, results, timing)
+        try store_box(cbox, rcf_map, mi, results, timing)
         catch exc
             Log.exception(exc)
         end
@@ -596,7 +600,7 @@ function joint_infer_boxes(config::Configs.Config,
         cbox.state[] = BoxDone
 
         if mi.nworkers == 0
-            store_box(cbox, rcf_map, results, timing)
+            store_box(cbox, rcf_map, mi, results, timing)
         end
     end
 end
@@ -660,7 +664,7 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
         all_threads_timing = [InferTiming() for t = 1:nthreads()]
 
         # set up the scheduler and the global array for results
-        mi = setup_multi(nwi)
+        mi = setup_multi(nwi, outdir)
         results = Garray(OptimizedSource, OptimizedSourceLen, tot_srcs)
 
         # for concurrent box processing
