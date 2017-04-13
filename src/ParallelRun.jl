@@ -114,7 +114,29 @@ function puts_timing(i::InferTiming)
     Log.message("timing: wait_done=$(i.wait_done)")
 end
 
-function time_puts(elapsedtime, bytes, gctime, allocs)
+function puts_timing(dl::Dlog, i::InferTiming)
+    i.num_srcs = max(1, i.num_srcs)
+    message(dl, "timing: query_fids=$(i.query_fids)")
+    message(dl, "timing: read_photoobj=$(i.read_photoobj)")
+    message(dl, "timing: read_img=$(i.read_img)")
+    message(dl, "timing: preload_rcfs=$(i.preload_rcfs)")
+    message(dl, "timing: find_neigh=$(i.find_neigh)")
+    message(dl, "timing: load_wait=$(i.load_wait)")
+    #message("dl, timing: proc_wait=$(i.proc_wait)")
+    message(dl, "timing: init_elbo=$(i.init_elbo)")
+    message(dl, "timing: opt_srcs=$(i.opt_srcs)")
+    message(dl, "timing: num_srcs=$(i.num_srcs)")
+    #message(dl, "timing: average opt_srcs=$(i.opt_srcs/i.num_srcs)")
+    #message(dl, "timing: sched_ovh=$(i.sched_ovh)")
+    message(dl, "timing: load_imba=$(i.load_imba)")
+    #message(dl, "timing: ga_get=$(i.ga_get)")
+    #message(dl, "timing: ga_put=$(i.ga_put)")
+    #message(dl, "timing: store_res=$(i.store_res)")
+    message(dl, "timing: write_results=$(i.write_results)")
+    message(dl, "timing: wait_done=$(i.wait_done)")
+end
+
+function time_puts(dl::Dlog, elapsedtime, bytes, gctime, allocs)
     s = @sprintf("timing: total=%10.6f seconds", elapsedtime/1e9)
     if bytes != 0 || allocs != 0
         bytes, mb = Base.prettyprint_getunits(bytes, length(Base._mem_units),
@@ -141,7 +163,7 @@ function time_puts(elapsedtime, bytes, gctime, allocs)
     elseif gctime > 0
         s = string(s, @sprintf(", %.2f%% gc time", 100*gctime/elapsedtime))
     end
-    Log.message(s)
+    message(dl, s)
 end
 
 
@@ -600,7 +622,8 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
                           all_boxes::Vector{Vector{BoundingBox}},
                           all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
                           strategy::SDSSIO.IOStrategy,
-                          outdir::String)
+                          outdir::String,
+                          dl::Dlog)
     Log.one_message("ERROR: distributed functionality is disabled ",
                     "(set USE_DTREE=1 to enable)")
     exit(-1)
@@ -617,6 +640,9 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
                      all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
                      strategy::SDSSIO.IOStrategy,
                      outdir::String)
+    # set up distributed log
+    dl = Dlog(outdir)
+
     # Base.@time hack for distributed environment
     gc_stats = ()
     gc_diff_stats = ()
@@ -624,12 +650,12 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
     elapsed_time = time_ns()
 
     multi_node_infer(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                     strategy, outdir)
+                     strategy, outdir, dl)
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time
     gc_diff_stats = Base.GC_Diff(Base.gc_num(), gc_stats)
-    time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
+    time_puts(dl, elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
               Base.gc_alloc_count(gc_diff_stats))
 end
 
