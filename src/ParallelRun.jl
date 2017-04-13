@@ -28,6 +28,8 @@ if distributed
 using Gasp
 else
 grank() = 1
+const Dlog = Void
+message(d, msg...) = println(msg...)
 end
 
 #
@@ -99,7 +101,7 @@ function puts_timing(i::InferTiming)
     Log.message("timing: read_img=$(i.read_img)")
     Log.message("timing: preload_rcfs=$(i.preload_rcfs)")
     Log.message("timing: find_neigh=$(i.find_neigh)")
-    Log.message("timing: load_wait=$(i.load_wait)")
+    #Log.message("timing: load_wait=$(i.load_wait)")
     #Log.message("timing: proc_wait=$(i.proc_wait)")
     Log.message("timing: init_elbo=$(i.init_elbo)")
     Log.message("timing: opt_srcs=$(i.opt_srcs)")
@@ -111,7 +113,7 @@ function puts_timing(i::InferTiming)
     #Log.message("timing: ga_put=$(i.ga_put)")
     #Log.message("timing: store_res=$(i.store_res)")
     Log.message("timing: write_results=$(i.write_results)")
-    Log.message("timing: wait_done=$(i.wait_done)")
+    #Log.message("timing: wait_done=$(i.wait_done)")
 end
 
 function puts_timing(dl::Dlog, i::InferTiming)
