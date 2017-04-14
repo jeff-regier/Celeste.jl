@@ -146,7 +146,8 @@ end
     end
 end
 
-@eval function add_var_G_s!{NumType <: Number}(
+@eval function add_var_G_s!{NumType <: Number, callback}(
+                    combinator::callback,
                     var_G_all::SSparseSensitiveFloat{NumType, CanonicalParams2},
                     E_G_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
                     E_G2_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
@@ -162,7 +163,7 @@ end
 
     @aliasscope begin
         @inbounds for i = 1:P
-            @fastmath var_G.d[i] += Const(E_G2_s.d)[i] - 2 * E_G_s.v[] * Const(E_G_s.d)[i]
+            @fastmath var_G.d[i] = combinator(var_G.d[i], Const(E_G2_s.d)[i] - 2 * E_G_s.v[] * Const(E_G_s.d)[i])
         end
         
         has_hessian(var_G) || return
@@ -172,7 +173,7 @@ end
             # the sparse components.
             for i = 1:P
                 @unroll_loop for j = 1:P
-                    @fastmath var_G.h[j,i] -= 2 * Const(E_G_s.d)[i] * Const(E_G_s.d)[j]
+                    @fastmath var_G.h[j,i] = combinator(var_G.h[j,i], - 2 * Const(E_G_s.d)[i] * Const(E_G_s.d)[j])
                 end
             end
                 
@@ -250,7 +251,8 @@ end
     end            
 end
 
-@eval function SensitiveFloats.add_sources_sf!{NumType <: Number}(
+@eval function SensitiveFloats.add_sources_sf!{NumType <: Number, callback}(
+                    combinator::callback,
                     sf_all::SSparseSensitiveFloat{NumType, CanonicalParams2, <:SparseStruct},
                     sf_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2, <:SparseStruct},
                     s::Int)
@@ -262,19 +264,20 @@ end
 
     @inbounds if has_gradient(sf_all)
         for i = 1:P
-            sf_all.d[s][i] += sf_s.d[i]
+            sf_all.d[s][i] = combinator(sf_all.d[s][i], sf_s.d[i])
         end
     end
 
     @inbounds if has_hessian(sf_all)
         @syntactic_unroll for (lhs, rhs) in $(zip(symmetric_dense_blocks, symmetric_dense_blocks))
-            sf_all.h[s][lhs[1], lhs[2]] += fixup(sf_s.h[rhs[1], rhs[2]])
+            sf_all.h[s][lhs[1], lhs[2]] = combinator(sf_all.h[s][lhs[1], lhs[2]], fixup(sf_s.h[rhs[1], rhs[2]]))
         end
     end            
 end
 
 
-@eval function SensitiveFloats.add_sources_sf!{NumType <: Number}(
+@eval function SensitiveFloats.add_sources_sf!{NumType <: Number, callback}(
+                    combinator::callback,
                     sf_all::SSparseSensitiveFloat{NumType, CanonicalParams2},
                     sf_s::SingleSourceSensitiveFloat{NumType, CanonicalParams2},
                     s::Int)
@@ -286,13 +289,13 @@ end
 
     @inbounds if has_gradient(sf_all)
         for i = 1:P
-            sf_all.d[s][i] += sf_s.d[i]
+            sf_all.d[s][i] = combinator(sf_all.d[s][i], sf_s.d[i])
         end
     end
 
     @inbounds if has_hessian(sf_all)
         @syntactic_unroll for (lhs, rhs) in $(zip(dense_blocks, dense_blocks))
-            sf_all.h[s][lhs[1], lhs[2]] += fixup(sf_s.h[rhs[1], rhs[2]])
+            sf_all.h[s][lhs[1], lhs[2]] = combinator(sf_all.h[s][lhs[1], lhs[2]], fixup(sf_s.h[rhs[1], rhs[2]]))
         end
     end            
 end
@@ -325,6 +328,8 @@ end
     end            
 end
 
+select_second(a, b) = b
+
 """
 Add the contributions from a single source at a single pixel to the
 sensitive floast E_G and var_G, which are updated in place.
@@ -340,8 +345,8 @@ function accumulate_source_pixel_brightness!{NumType <: Number}(
 
     if is_active_source
         sa = findfirst(ea.active_sources, s)
-        add_sources_sf!(elbo_vars.E_G, elbo_vars.E_G_s, sa)
-        add_var_G_s!(elbo_vars.var_G,
+        add_sources_sf!(select_second, elbo_vars.E_G, elbo_vars.E_G_s, sa)
+        add_var_G_s!(select_second, elbo_vars.var_G,
           elbo_vars.E_G_s, elbo_vars.E_G2_s, sa)
         nothing
     else
@@ -573,8 +578,13 @@ function add_pixel_term!{NumType <: Number}(
                     elbo_vars::ElboIntermediateVariables = ElboIntermediateVariables(NumType, ea.Sa))
     img = ea.images[n]
 
-    clear!(elbo_vars.E_G)
-    clear!(elbo_vars.var_G)
+    # Performance micro optimization. We can avoid clearing here, by
+    # telling the later code to unconditionally set the value, rather than
+    # updating it.
+    #clear!(elbo_vars.E_G)
+    #clear!(elbo_vars.var_G)
+    elbo_vars.E_G.v[] = zero(NumType)
+    elbo_vars.var_G.v[] = zero(NumType)
 
     for s in 1:ea.S
         p = ea.patches[s,n]
@@ -607,6 +617,13 @@ function add_pixel_term!{NumType <: Number}(
 
             accumulate_source_pixel_brightness!(ea, vp, elbo_vars,
                 sbs[s], ea.images[n].b, s, is_active_source)
+
+        elseif s in ea.active_sources
+            sa = findfirst(ea.active_sources, s)
+            zero!(elbo_vars.E_G.d[sa])
+            zero!(elbo_vars.var_G.d[sa])
+            zero!(elbo_vars.E_G.h[sa])
+            zero!(elbo_vars.var_G.h[sa])
         end
     end
 
