@@ -1,5 +1,3 @@
-const TenXWork = false
-
 # ----------------
 # A simple centralized sense reversing thread barrier. Needed to allow the
 # ordering constraints that Cyclades partitioning imposes on the processing
@@ -115,14 +113,14 @@ end
 """
 Create the Dtree scheduler for distributing boxes to ranks.
 """
-function setup_multi(nwi::Int, outdir::String)
+function setup_multi(nwi::Int, prefetch::Bool)
     dt, _ = Dtree(nwi, 0.25)
     ni, (ci, li) = initwork(dt)
     rundt = runtree(dt)
 
     Log.info("dtree: initial: $(ni) ($(ci) to $(li))")
 
-    nworkers = nthreads() - (rundt ? 1 : 0) - 1
+    nworkers = nthreads() - (rundt ? 1 : 0) - (prefetch ? 1 : 0)
     bar = setup_barrier(max(1, nworkers))
 
     return MultiInfo(dt, ni, ci, li, rundt, nworkers, bar)
@@ -299,8 +297,9 @@ function init_box(npartitions::Int, rcf_map::Dict{RunCamcolField,Int32},
         cat_local = vcat([entry], neighbors)
         ids_local = vcat([entry_id], neighbor_ids)
 
-        if TenXWork
-            patches = Infer.get_sky_patches(cbox.images, cat_local, radius_override_pix=20.0)
+        if PeakFlops
+            patches = Infer.get_sky_patches(cbox.images, cat_local,
+                                            radius_override_pix=20.0)
         else
             patches = Infer.get_sky_patches(cbox.images, cat_local)
             Infer.load_active_pixels!(cbox.images, patches)
@@ -499,6 +498,7 @@ function joint_infer_boxes(config::Configs.Config,
                            rcf_map::Dict{RunCamcolField,Int32},
                            field_extents::Vector{FieldExtent},
                            strategy::SDSSIO.IOStrategy,
+                           prefetch::Bool,
                            mi::MultiInfo,
                            results::Garray,
                            prev_results,
@@ -522,7 +522,7 @@ function joint_infer_boxes(config::Configs.Config,
     end
 
     # if we have at least one worker thread, we can use a preloader thread
-    if mi.nworkers >= 1 && tid == 1
+    if prefetch && mi.nworkers >= 1 && tid == 1
         preload_boxes(config, boxes, rcf_map, field_extents, strategy, mi,
                       results, prev_results, conc_boxes, dl, timing)
         return
@@ -539,11 +539,26 @@ function joint_infer_boxes(config::Configs.Config,
         cbox = conc_boxes[curr_cbox]
 
         # prepare the box/wait for the box to be prepared
-        if mi.nworkers == 0
-            if !load_box(boxes, field_extents, strategy, mi, cbox, dl, timing)
-                break
+        if (!prefetch && tid == 1) || mi.nworkers == 0
+            if load_box(boxes, field_extents, strategy, mi, cbox, dl, timing)
+                try
+                    init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
+                    if PeakFlops
+                        sync()
+                        message(dl, "start peak FLOPS run")
+                        cbox.ks.started = time_ns()
+                    end
+                catch exc
+                    Log.exception(exc)
+                    if cbox.state[] != BoxReady
+                        empty!(cbox.sources_assignment)
+                        cbox.state[] = BoxReady
+                    end
+                end
+            else
+                cbox.state[] = BoxEnd
             end
-            init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
+            thread_barrier(mi.bar)
         else
             tic()
             while cbox.state[] == BoxDone
@@ -587,9 +602,9 @@ function joint_infer_boxes(config::Configs.Config,
                         end
                     end
                 end
-                cbox.ks.finished[tid] = time_ns()
-                cbox.ks.lastfin[] = tid
-                atomic_add!(cbox.ks.numfin, 1)
+                #cbox.ks.finished[tid] = time_ns()
+                #cbox.ks.lastfin[] = tid
+                #atomic_add!(cbox.ks.numfin, 1)
 
                 tic()
                 thread_barrier(mi.bar)
@@ -607,7 +622,12 @@ function joint_infer_boxes(config::Configs.Config,
 
         cbox.state[] = BoxDone
 
-        if mi.nworkers == 0
+        if (!prefetch && tid == nthreads()) || mi.nworkers == 0
+            if PeakFlops
+                n_active, n_inactive = get_pixels_processed()
+                message(dl, "pixel visits: ($n_active,$n_inactive)")
+                message(dl, "end peak FLOPS run")
+            end
             store_box(cbox, rcf_map, mi, results, dl, timing)
         end
     end
@@ -625,8 +645,18 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
                           all_boxes::Vector{Vector{BoundingBox}},
                           all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
                           strategy::SDSSIO.IOStrategy,
+                          prefetch::Bool,
                           outdir::String,
                           dl::Dlog)
+    if PeakFlops
+        if prefetch
+            Log.one_message("Peak FLOPS runs require `--noprefetch`")
+            exit(-1)
+        end
+        global gdlog
+        gdlog = dl
+    end
+
     rpn = set_affinities()
 
     Log.one_message("$(Time(now())): Celeste started, $rpn ranks/node, ",
@@ -673,7 +703,7 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
         all_threads_timing = [InferTiming() for t = 1:nthreads()]
 
         # set up the scheduler and the global array for results
-        mi = setup_multi(nwi, outdir)
+        mi = setup_multi(nwi, prefetch)
         results = Garray(OptimizedSource, OptimizedSourceLen, tot_srcs)
 
         # for concurrent box processing
@@ -682,12 +712,12 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
         # run the optimization
         if nthreads() == 1
             joint_infer_boxes(config, boxes, rcf_map,
-                              field_extents, strategy, mi, results,
+                              field_extents, strategy, prefetch, mi, results,
                               prev_results, conc_boxes, dl, all_threads_timing)
         else
             ccall(:jl_threading_run, Void, (Any,),
                   Core.svec(joint_infer_boxes, config, boxes, rcf_map,
-                            field_extents, strategy, mi, results,
+                            field_extents, strategy, prefetch, mi, results,
                             prev_results, conc_boxes, dl, all_threads_timing))
         end
 
