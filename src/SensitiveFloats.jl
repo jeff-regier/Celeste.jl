@@ -327,7 +327,7 @@ Updates sf1 in place with sf1 * sf2.
 function multiply_sfs!{NumType <: Number}(sf1::AbstractSensitiveFloat{NumType},
                                           sf2::AbstractSensitiveFloat{NumType})
     v = sf1.v[] * sf2.v[]
-    g_d = NumType[sf2.v[], sf1.v[]]
+    g_d = @SVector NumType[sf2.v[], sf1.v[]]
     project_b(a, b) = b
     combine_sfs!(project_b, identity, sf1, sf2, sf1, v, g_d, multiply_sfs_hess)
 end
