@@ -281,7 +281,7 @@ function combine_sfs_gradient!(combinator::T, sf1::AbstractSparseSSensitiveFloat
             sf_result::AbstractSensitiveFloat{T1},
             g_d) where {T,T1}
     P = n_local_params(sf_result)
-    for source in 1:n_sources(sf_result)
+    @inbounds for source in 1:n_sources(sf_result)
         for ind in 1:n_local_params(sf_result)
             sf_result.d[(source - 1)*P + ind] = combinator(
                 sf_result.d[(source - 1)*P + ind],
