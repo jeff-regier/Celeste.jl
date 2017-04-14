@@ -1,10 +1,14 @@
 #!julia
 if length(ARGS) < 2
-    println("Usage: build_balzing_fast_sysimage.sh [--opt-only] <mcpu> <PRECOMPILE_REQUEST>")
+    println("Usage: build_balzing_fast_sysimage.sh [--opt-only|--noopt] <mcpu> <PRECOMPILE_REQUEST>")
 end
 opt_only = false
+noopt = false
 if ARGS[1] == "--opt-only"
     opt_only = true
+    shift!(ARGS)
+elseif ARGS[1] == "--noopt"
+    noopt = true
     shift!(ARGS)
 end
 if length(ARGS) > 2
@@ -25,6 +29,11 @@ ENV["JULIA_NUM_THREADS"]=1
 full_request = "Base.Sys.__init__(); Base.Random.__init__(); Base.LinAlg.__init__(); $request"
 if !opt_only
 run(`julia --mcpu=$mcpu --output-bc sys-all.bc --sysimage $JULIA_BASE_SYS_IMG --depwarn=no --startup-file=no -O3 --eval $full_request`)
+end
+if noopt
+run(`$("$LLVM_BIN_DIR/llc") sys-all.bc -fp-contract=fast -mcpu=$mcpu -relocation-model=pic -filetype=obj -o sys-all.o`)
+run(`cc -shared -o sys-all.so sys-all.o`)
+exit(0)
 end
 run(pipeline(`$("$LLVM_BIN_DIR/llvm-extract") --recursive -rfunc .\*elbo_likelihood.\* -rfunc .\*first_quad_form.\* -rfunc .\*propagate_derivatives.\* sys-all.bc`, "hotspot.bc"))
 run(pipeline(`$("$LLVM_BIN_DIR/llvm-extract") --delete --recursive -rfunc .\*elbo_likelihood.\* -rfunc .\*first_quad_form.\* -rfunc .\*propagate_derivatives.\* sys-all.bc`, "residual.bc"))
