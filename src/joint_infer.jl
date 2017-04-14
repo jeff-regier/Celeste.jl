@@ -13,9 +13,12 @@ using ..DeterministicVI
 using ..DeterministicVI.ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
 using ..DeterministicVI.ElboMaximize: Config, maximize!
 
+const PeakFlops = false
+gdlog = nothing
 
 # 20 minute threshold
-const box_max_threshold = convert(UInt64, 20*60*1e9)::UInt64
+const BoxMaxThreshold = convert(UInt64, 20*60*1e9)::UInt64
+const OneMinute = 0x0000000df8475800 # in nanoseconds
 
 type BoxKillSwitch <: Function
     started::UInt64
@@ -31,15 +34,46 @@ type BoxKillSwitch <: Function
                           Atomic{Int64}(0), false, false)
 end
 
+if PeakFlops
 function (f::BoxKillSwitch)(x)
     now_ns = time_ns()
     if f.started == 0
         # benign race here
         f.started = now_ns
-    elseif (now_ns - f.started) > box_max_threshold
+        return false
+    end
+    intv = now_ns - f.started
+    if intv > BoxMaxThreshold
         # and here
-        f.killed = true
-#=    elseif f.numfin[] >= f.numfin_threshold
+        return f.killed = true
+    end
+    if div(intv, OneMinute) > 0
+        f.started = now_ns
+        n_active = 0
+        n_inactive = 0
+        for elbo_vars in DeterministicVI.ElboMaximize.ELBO_VARS_POOL
+            n_active += elbo_vars.active_pixel_counter[]
+            n_inactive += elbo_vars.inactive_pixel_counter[]
+        end
+        message(gdlog, "pixel visits: ($n_active,$n_inactive)")
+    end
+    return f.killed
+end
+else # !PeakFlops
+function (f::BoxKillSwitch)(x)
+    now_ns = time_ns()
+    if f.started == 0
+        # benign race here
+        f.started = now_ns
+        return false
+    end
+    intv = now_ns - f.started
+    if intv > BoxMaxThreshold
+        # and here
+        return f.killed = true
+    end
+#=
+    if f.numfin[] >= f.numfin_threshold
         lastfinat = f.finished[f.lastfin[]]
         if now_ns - lastfinat > floor(Int64, (lastfinat - f.started) * 0.25)
             #f.killed = true
@@ -50,9 +84,10 @@ function (f::BoxKillSwitch)(x)
                         for i in 1:length(f.finished)]
                 Log.message("imbalance threshold: $(ttms...)ms")
             end
-        end=#
-    end
+        end
+=#
     return f.killed
+end
 end
 
 function ks_reset_finished(ks::BoxKillSwitch)

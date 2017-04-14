@@ -624,6 +624,7 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
                           all_boxes::Vector{Vector{BoundingBox}},
                           all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
                           strategy::SDSSIO.IOStrategy,
+                          prefetch::Bool,
                           outdir::String,
                           dl::Dlog)
     Log.one_message("ERROR: distributed functionality is disabled ",
@@ -641,9 +642,10 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
                      all_boxes::Vector{Vector{BoundingBox}},
                      all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
                      strategy::SDSSIO.IOStrategy,
+                     prefetch::Bool,
                      outdir::String)
     # set up distributed log
-    dl = Dlog(outdir)
+    dl = Dlog(joinpath(outdir, "dlog"))
 
     # Base.@time hack for distributed environment
     gc_stats = ()
@@ -652,7 +654,7 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
     elapsed_time = time_ns()
 
     multi_node_infer(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                     strategy, outdir, dl)
+                     strategy, prefetch, outdir, dl)
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time

@@ -10,7 +10,7 @@ function run_infer_boxes(args::Vector{String})
     if length(args) < 3
         println("""
 Usage:
-  infer-boxes.jl [--iostrategy=<strategy>] <rcf_nsrcs_file> <boxes_file> [<boxes_file>...] <out_dir>
+  infer-boxes.jl [--noprefetch] [--iostrategy=<strategy>] <rcf_nsrcs_file> <boxes_file> [<boxes_file>...] <out_dir>
 
 Supported IO Strategies (default is FITS):
   - fits: Load data from stagedir in original SDSS FITS format
@@ -24,6 +24,12 @@ Supported IO Strategies (default is FITS):
   <difficulty>	<#RCFs>	<#sources>	<ramin> <ramax> <decmin> <decmax>	<rcf1idx>,<rcf2idx>...
             """)
         exit(-1)
+    end
+
+    prefetch = true
+    if args[1] == "--noprefetch"
+        shift!(args)
+        prefetch = false
     end
 
     strategyarg = ""
@@ -75,7 +81,7 @@ Supported IO Strategies (default is FITS):
     end
 
     infer_boxes(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                strategy, args[end])
+                strategy, prefetch, args[end])
 end
 
 run_infer_boxes(ARGS)
