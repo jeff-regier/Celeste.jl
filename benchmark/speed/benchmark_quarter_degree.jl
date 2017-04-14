@@ -2,7 +2,7 @@
 
 import Celeste.ParallelRun: BoundingBox, get_overlapping_fields,
                             one_node_joint_infer, infer_init
-import Celeste.SDSSIO: RunCamcolField, load_field_images
+import Celeste.SDSSIO: RunCamcolField, load_field_images, PlainFITSStrategy
 import Celeste.Infer: find_neighbors
 
 
@@ -36,7 +36,7 @@ function benchmark_quarter_degree()
     rcfs = get_overlapping_fields(box, datadir)
 
     # ctni = (catalogs, target, neighbor_map, images)
-    ctni = infer_init(rcfs, datadir; box=box)[1:4]
+    ctni = infer_init(rcfs, PlainFITSStrategy(datadir); box=box)[1:4]
 
     # Warm up---this compiles the code
     ctni2 = (ctni[1], ctni[2][1:1], ctni[3][1:1], ctni[4][1:1])
