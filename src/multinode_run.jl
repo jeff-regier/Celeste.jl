@@ -231,15 +231,10 @@ function load_box(boxes::Vector{BoundingBox},
     cbox.box_idx = box_idx
 
     # determine the RCFs
-    rcfs = []
-    try
-        tic()
-        rcfs = get_overlapping_fields(box, field_extents)
-        rcftime = toq()
-        timing.query_fids += rcftime
-    catch exc
-        Log.exception(exc)
-    end
+    tic()
+    rcfs = get_overlapping_fields(box, field_extents)
+    rcftime = toq()
+    timing.query_fids += rcftime
 
     # load the RCFs
     cbox.catalog = []
@@ -370,8 +365,16 @@ function init_box(npartitions::Int, rcf_map::Dict{RunCamcolField,Int32},
         cbox.vp_vec[ts] = vp
     end
     timing.init_elbo += toq()
-    cbox.sources_assignment = partition_box(npartitions, cbox.target_sources,
-                                            cbox.neighbor_map, cbox.ea_vec)
+    if length(cbox.target_sources) > 0
+        try
+            cbox.sources_assignment = partition_box(npartitions, cbox.target_sources,
+                                                    cbox.neighbor_map, cbox.ea_vec)
+        catch exc
+            Log.exception(exc)
+            empty!(cbox.sources_assignment)
+        end
+    end
+    cbox.ks.started[] = time_ns()
     cbox.state[] = BoxReady
 end
 
@@ -544,9 +547,9 @@ function joint_infer_boxes(config::Configs.Config,
                 try
                     init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
                     if PeakFlops
+                        gc()
                         sync()
                         message(dl, "start peak FLOPS run")
-                        cbox.ks.started = time_ns()
                     end
                 catch exc
                     Log.exception(exc)
@@ -674,7 +677,7 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
     end
 
     # load field extents
-    field_extents = load_field_extents(strategy)
+    field_extents = load_field_extents("/tmp")
 
     # determine required size for the results global array and build the
     # offsets map into it to help locate a source

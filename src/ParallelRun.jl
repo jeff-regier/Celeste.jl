@@ -229,14 +229,18 @@ function infer_init(rcfs::Vector{RunCamcolField},
             tic()
             images = SDSSIO.load_field_images(strategy, rcfs, states)
             timing.read_img += toq()
+            tic()
+            neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
+            timing.find_neigh += toq()
         catch ex
             Log.exception(ex)
+            empty!(catalog)
             empty!(target_sources)
+            empty!(neighbor_map)
+            empty!(images)
+            empty!(source_rcfs)
+            empty!(source_cat_idxs)
         end
-
-        tic()
-        neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
-        timing.find_neigh += toq()
     end
 
     return catalog, target_sources, neighbor_map, images,

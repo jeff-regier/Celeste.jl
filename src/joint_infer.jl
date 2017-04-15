@@ -16,12 +16,12 @@ using ..DeterministicVI.ElboMaximize: Config, maximize!
 const PeakFlops = false
 gdlog = nothing
 
-# 20 minute threshold
-const BoxMaxThreshold = convert(UInt64, 20*60*1e9)::UInt64
+# 10 minute threshold
+const BoxMaxThreshold = convert(UInt64, 10*60*1e9)::UInt64
 const OneMinute = 0x0000000df8475800 # in nanoseconds
 
 type BoxKillSwitch <: Function
-    started::UInt64
+    started::Atomic{UInt64}
     numfin_threshold::Int64
     numfin::Atomic{Int64}
     finished::Vector{UInt64}
@@ -29,26 +29,20 @@ type BoxKillSwitch <: Function
     killed::Bool
     messaged::Bool
 
-    BoxKillSwitch() = new(0, ceil(Int64, nthreads()/2), Atomic{Int64}(0),
-                          fill(typemax(UInt64), nthreads()),
+    BoxKillSwitch() = new(Atomic{UInt64}(0), ceil(Int64, nthreads()/2),
+                          Atomic{Int64}(0), fill(typemax(UInt64), nthreads()),
                           Atomic{Int64}(0), false, false)
 end
 
 if PeakFlops
 function (f::BoxKillSwitch)(x)
     now_ns = time_ns()
-    if f.started == 0
-        # benign race here
-        f.started = now_ns
-        return false
-    end
-    intv = now_ns - f.started
+    intv = now_ns - f.started[]
     if intv > BoxMaxThreshold
-        # and here
         return f.killed = true
     end
     if div(intv, OneMinute) > 0
-        f.started = now_ns
+        f.started[] = now_ns
         n_active = 0
         n_inactive = 0
         for elbo_vars in DeterministicVI.ElboMaximize.ELBO_VARS_POOL
@@ -62,12 +56,7 @@ end
 else # !PeakFlops
 function (f::BoxKillSwitch)(x)
     now_ns = time_ns()
-    if f.started == 0
-        # benign race here
-        f.started = now_ns
-        return false
-    end
-    intv = now_ns - f.started
+    intv = now_ns - f.started[]
     if intv > BoxMaxThreshold
         # and here
         return f.killed = true
@@ -75,12 +64,13 @@ function (f::BoxKillSwitch)(x)
 #=
     if f.numfin[] >= f.numfin_threshold
         lastfinat = f.finished[f.lastfin[]]
-        if now_ns - lastfinat > floor(Int64, (lastfinat - f.started) * 0.25)
+        if now_ns - lastfinat > floor(Int64, (lastfinat - f.started[]) * 0.25)
             #f.killed = true
             if !f.messaged
                 f.messaged = true
                 ttms = [f.finished[i] == typemax(UInt64) ? "" :
-                            @sprintf("%d:%.3f ", i, (f.finished[i] - f.started) / 1e6)
+                            @sprintf("%d:%.3f ", i,
+                                     (f.finished[i] - f.started[]) / 1e6)
                         for i in 1:length(f.finished)]
                 Log.message("imbalance threshold: $(ttms...)ms")
             end
