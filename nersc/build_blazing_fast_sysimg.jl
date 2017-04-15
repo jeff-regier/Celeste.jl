@@ -1,14 +1,19 @@
 #!julia
 if length(ARGS) < 2
-    println("Usage: build_balzing_fast_sysimage.sh [--opt-only|--noopt] <mcpu> <PRECOMPILE_REQUEST>")
+    println("Usage: build_balzing_fast_sysimage.sh [--opt-only|--noopt] [--nosvml] <mcpu> <PRECOMPILE_REQUEST>")
 end
 opt_only = false
 noopt = false
+nosvml = false
 if ARGS[1] == "--opt-only"
     opt_only = true
     shift!(ARGS)
 elseif ARGS[1] == "--noopt"
     noopt = true
+    shift!(ARGS)
+end
+if ARGS[1] == "--nosvml"
+    nosvml = true
     shift!(ARGS)
 end
 if length(ARGS) > 2
@@ -44,7 +49,12 @@ run(pipeline(`$("$LLVM_BIN_DIR/opt") -strip-debug -memdep-block-scan-limit=10000
 run(`sed -i 's/fadd/fadd fast/g' gal_fsm2.ll`)
 run(`sed -i 's/fsub/fsub fast/g' gal_fsm2.ll`)
 run(`sed -i 's/fmul/fmul fast/g' gal_fsm2.ll`)
-run(pipeline(`$("$LLVM_BIN_DIR/opt") -tbaa -basicaa -scev-aa -scoped-noalias -mcpu $mcpu -vector-library=SVML -loop-vectorize -instcombine -S gal_fsm2.ll`,"gal_fsm_vectorized.ll"))
+if !nosvml
+  run(pipeline(`$("$LLVM_BIN_DIR/opt") -tbaa -basicaa -scev-aa -scoped-noalias -mcpu $mcpu -vector-library=SVML -loop-vectorize -instcombine -S gal_fsm2.ll`,"gal_fsm_vectorized.ll"))
+  run(`sed -i 's/__svml_exp8/__svml_exp8_b3/g' gal_fsm_vectorized.ll`)
+else
+  run(pipeline(`$("$LLVM_BIN_DIR/opt") -tbaa -basicaa -scev-aa -scoped-noalias -mcpu $mcpu -loop-vectorize -instcombine -S gal_fsm2.ll`,"gal_fsm_vectorized.ll"))
+end
 run(pipeline(`$("$LLVM_BIN_DIR/llvm-extract") --delete -S -rfunc .\*populate_gal_fsm.\* hotspot.bc`,"hotspot-rest.bc"))
 run(pipeline(`$("$LLVM_BIN_DIR/opt") -tbaa -basicaa -scev-aa -scoped-noalias -mcpu $mcpu -licm -gvn -slp-vectorizer -instcombine -loop-vectorize -instcombine hotspot-rest.bc`,"hotspot-rest-opt.bc"))
 #~/llvm-debug-build/bin/opt -tbaa -basicaa -scev-aa -scoped-noalias -mcpu $mcpu -licm -gvn -loop-vectorize -instcombine residual.bc > residual-opt.bc
@@ -68,6 +78,7 @@ sed -i 's/fadd/fadd fast/g' gal_fsm2.ll
 sed -i 's/fsub/fsub fast/g' gal_fsm2.ll
 sed -i 's/fmul/fmul fast/g' gal_fsm2.ll
 $LLVM_BIN_DIR/opt -tbaa -basicaa -scev-aa -scoped-noalias -mcpu $mcpu -vector-library=SVML -loop-vectorize -instcombine -S gal_fsm2.ll > gal_fsm_vectorized.ll
+sed -i 's/__svml_exp8/__svml_exp8_b3/g' gal_fsm2.ll
 $LLVM_BIN_DIR/llvm-extract --delete -S -rfunc .*populate_gal_fsm.* hotspot.bc > hotspot-rest.bc
 $LLVM_BIN_DIR/opt -tbaa -basicaa -scev-aa -scoped-noalias -mcpu $mcpu -licm -gvn -slp-vectorizer -instcombine -loop-vectorize -instcombine hotspot-rest.bc > hotspot-rest-opt.bc
 #~/llvm-debug-build/bin/opt -tbaa -basicaa -scev-aa -scoped-noalias -mcpu $mcpu -licm -gvn -loop-vectorize -instcombine residual.bc > residual-opt.bc
