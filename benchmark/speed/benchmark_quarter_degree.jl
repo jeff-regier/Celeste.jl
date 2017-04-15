@@ -23,7 +23,7 @@ const rcfs = [
     RunCamcolField(4294,5,135)]
 
 
-const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
+const datadir = joinpath(dirname(@__FILE__), "..", "..", "test", "data")
 wd = pwd()
 cd(datadir)
 for rcf in rcfs
