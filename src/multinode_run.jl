@@ -194,61 +194,70 @@ function load_box(boxes::Vector{BoundingBox},
                   timing::InferTiming)
     # expected: cbox.state[] == BoxDone
 
-    # determine which box to load next
-    box_idx = 0
-    tic()
     while true
-        # the last item is 0 only when we're out of work
-        if mi.li == 0
-            timing.sched_ovh += toq()
-            return false
-        end
-
-        # if we've run out of items, ask for more work
-        if mi.ci > mi.li
-            mi.ni, (mi.ci, mi.li) = try getwork(mi.dt)
-            catch exc
-                Log.exception(exc)
+        # determine which box to load next
+        box_idx = 0
+        tic()
+        while true
+            # the last item is 0 only when we're out of work
+            if mi.li == 0
+                timing.sched_ovh += toq()
                 return false
             end
-            if mi.li == 0
-                Log.info("dtree: out of work")
-            else
-                Log.info("dtree: $(mi.ni) work items ($(mi.ci) to $(mi.li))")
-            end
 
-        # otherwise, get the next box from our current allocation
+            # if we've run out of items, ask for more work
+            if mi.ci > mi.li
+                mi.ni, (mi.ci, mi.li) = try getwork(mi.dt)
+                catch exc
+                    Log.exception(exc)
+                    return false
+                end
+                if mi.li == 0
+                    Log.info("dtree: out of work")
+                else
+                    Log.info("dtree: $(mi.ni) work items ($(mi.ci) to $(mi.li))")
+                end
+
+            # otherwise, get the next box from our current allocation
+            else
+                box_idx = mi.ci
+                mi.ci += 1
+                break
+            end
+        end
+        timing.sched_ovh += toq()
+
+        # load box `box_idx`
+        box = boxes[box_idx]
+        cbox.box_idx = box_idx
+
+        # determine the RCFs
+        tic()
+        rcfs = get_overlapping_fields(box, field_extents)
+        rcftime = toq()
+        timing.query_fids += rcftime
+
+        # load the RCFs
+        cbox.catalog = []
+        cbox.target_sources = []
+        cbox.neighbor_map = []
+        cbox.images = []
+        try
+            tic()
+            cbox.catalog, cbox.target_sources, cbox.neighbor_map,
+                cbox.images, cbox.source_rcfs, cbox.source_cat_idxs =
+                        infer_init(rcfs, strategy; box=box, timing=timing)
+            loadtime = toq()
+        catch exc
+            Log.exception(exc)
+        end
+
+        # if we successfully loaded a box, all is well
+        if length(cbox.target_sources) == 0
+            message(dl, "discarded #$(box_idx)")
         else
-            box_idx = mi.ci
-            mi.ci += 1
             break
         end
-    end
-    timing.sched_ovh += toq()
-
-    # load box `box_idx`
-    box = boxes[box_idx]
-    cbox.box_idx = box_idx
-
-    # determine the RCFs
-    tic()
-    rcfs = get_overlapping_fields(box, field_extents)
-    rcftime = toq()
-    timing.query_fids += rcftime
-
-    # load the RCFs
-    cbox.catalog = []
-    cbox.target_sources = []
-    cbox.neighbor_map = []
-    cbox.images = []
-    try
-        tic()
-        cbox.catalog, cbox.target_sources, cbox.neighbor_map,
-            cbox.images, cbox.source_rcfs, cbox.source_cat_idxs =
-                    infer_init(rcfs, strategy; box=box, timing=timing, )
-        loadtime = toq()
-    catch exc
-        Log.exception(exc)
     end
 
     # set box information
@@ -629,7 +638,7 @@ function joint_infer_boxes(config::Configs.Config,
 
         cbox.state[] = BoxDone
 
-        if (!prefetch && tid == nthreads()) || mi.nworkers == 0
+        if (!prefetch && tid == 1) || mi.nworkers == 0
             if PeakFlops
                 n_active, n_inactive = get_pixels_processed()
                 message(dl, "pixel visits: ($n_active,$n_inactive)")
