@@ -1,11 +1,10 @@
 #!/usr/bin/env julia
 
 import Celeste.ParallelRun: one_node_joint_infer, infer_init, BoundingBox
-import Celeste.SDSSIO: RunCamcolField, load_field_images
+import Celeste.SDSSIO: RunCamcolField, load_field_images, PlainFITSStrategy
 import Celeste.Infer: find_neighbors
 
-
-const datadir = joinpath(Pkg.dir("Celeste"), "test", "data")
+const datadir = joinpath(dirname(@__FILE__), "..", "..", "test", "data")
 wd = pwd()
 cd(datadir)
 run(`make`)
@@ -23,7 +22,7 @@ function benchmark_seven_light_sources()
     rcfs = [RunCamcolField(3900, 6, 269),]
 
     catalog, target_sources, neighbor_map, images =
-                        infer_init(rcfs, datadir; box=box)
+                        infer_init(rcfs, PlainFITSStrategy(datadir); box=box)
     ctni = (catalog, target_sources, neighbor_map, images)
 
     # Warm up---this compiles the code
