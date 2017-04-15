@@ -364,7 +364,9 @@ function init_box(npartitions::Int, rcf_map::Dict{RunCamcolField,Int32},
         end
         cbox.vp_vec[ts] = vp
     end
-    timing.init_elbo += toq()
+    inittime = toq()
+    Log.info("initialized ElboArgs in $(inittime) secs")
+    timing.init_elbo += inittime
     if length(cbox.target_sources) > 0
         try
             cbox.sources_assignment = partition_box(npartitions, cbox.target_sources,
@@ -561,7 +563,6 @@ function joint_infer_boxes(config::Configs.Config,
             else
                 cbox.state[] = BoxEnd
             end
-            thread_barrier(mi.bar)
         else
             tic()
             while cbox.state[] == BoxDone
@@ -569,8 +570,8 @@ function joint_infer_boxes(config::Configs.Config,
                 ccall(:jl_gc_safepoint, Void, ())
             end
             timing.load_wait += toq()
-            thread_barrier(mi.bar)
         end
+        thread_barrier(mi.bar)
         if cbox.state[] != BoxReady
             break
         end
@@ -603,6 +604,9 @@ function joint_infer_boxes(config::Configs.Config,
                         if cbox.ks.killed
                             break
                         end
+                    end
+                    if cbox.ks.killed
+                        break
                     end
                 end
                 #cbox.ks.finished[tid] = time_ns()
@@ -725,9 +729,11 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
         end
 
         # write intermediate results to disk
-        tic()
-        save_results(results, i, outdir)
-        timing.write_results = toq()
+        if grank() % 16384 == 0
+            tic()
+            save_results(results, i, outdir)
+            timing.write_results = toq()
+        end
         prev_results = results
 
         n_active, n_inactive = get_pixels_processed()
