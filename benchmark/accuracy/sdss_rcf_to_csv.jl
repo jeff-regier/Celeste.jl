@@ -65,7 +65,7 @@ function match_and_load_objids(catalog_df::DataFrame, objid_csv::String)
             union!(used_truth_indices, matching_truth_index)
         end
     end
-    @printf("Matched %d objects to objid catalog\n", size(catalog_df, 1))
+    @printf("Matched %d objects to objid catalog\n", length(used_truth_indices))
     return catalog_df[catalog_df[:objid] .!= "", :]
 end
 

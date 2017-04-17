@@ -52,6 +52,7 @@ CATALOG_COLUMNS = Set([
     :minor_major_axis_ratio,
     :half_light_radius_px,
     :angle_deg,
+    :is_saturated,
 ])
 
 STDERR_COLUMNS = Set([
@@ -144,7 +145,7 @@ STRIPE_82_CATALOG_KEYS = [
     :devab_r, :expab_r,
     :devphi_r, :expphi_r,
     :devrad_r, :exprad_r,
-    :flags,
+    :flags, :is_saturated,
 ]
 
 function load_stripe82_fits_catalog_as_data_frame(filename, extension_index)
@@ -185,6 +186,7 @@ function load_coadd_catalog(fits_filename)
     result[:objid] = [string(objid) for objid in raw_df[:objid]]
     result[:right_ascension_deg] = raw_df[:ra]
     result[:declination_deg] = raw_df[:dec]
+    result[:is_saturated] = (raw_df[:is_saturated] .!= 0)
     result[:is_star] = is_star
 
     result[:reference_band_flux_nmgy] = mag_to_flux.(mag_r, 3)
@@ -274,7 +276,7 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
     result[:angle_deg] = canonical_angle.(raw_phi)
 
     # primary is better at flagging oversaturated sources than coadd
-    result = result[flux_to_mag.(raw_df[:psfflux_r], 3) .>= 16, :]
+    result[:is_saturated] = flux_to_mag.(raw_df[:psfflux_r], 3) .< 16
 
     return result
 end
@@ -309,6 +311,7 @@ function variational_parameters_to_data_frame_row(objid::String, variational_par
     result[:objid] = objid
     result[:right_ascension_deg] = variational_params[ids.u[1]]
     result[:declination_deg] = variational_params[ids.u[2]]
+    result[:is_saturated] = false
     result[:is_star] = variational_params[ids.a[1, 1]]
     result[:de_vaucouleurs_mixture_weight] = variational_params[ids.e_dev]
     result[:minor_major_axis_ratio] = variational_params[ids.e_axis]
@@ -599,7 +602,9 @@ end
 immutable ImageGeometry
     height_px::Int64
     width_px::Int64
-    world_coordinate_origin::Tuple{Float64, Float64}
+    world_coordinate_origin::Tuple{Float64, Float64} # (ra, dec)
+    ra_degrees_per_pixel::Float64
+    dec_degrees_per_pixel::Float64
 end
 
 function get_image_geometry(catalog_data::DataFrame; field_expand_arcsec=20.0)
@@ -613,13 +618,18 @@ function get_image_geometry(catalog_data::DataFrame; field_expand_arcsec=20.0)
     width_px = convert(Int64, round(width_arcsec / SDSS_ARCSEC_PER_PIXEL))
     height_px = convert(Int64, round(height_arcsec / SDSS_ARCSEC_PER_PIXEL))
 
+    dec_degrees_per_pixel = SDSS_ARCSEC_PER_PIXEL / ARCSEC_PER_DEGREE
+    ra_degrees_per_pixel = dec_degrees_per_pixel / cosd(min_dec_deg)
+
     ImageGeometry(
         height_px,
         width_px,
         (
             min_ra_deg - field_expand_arcsec / ARCSEC_PER_DEGREE,
             min_dec_deg - field_expand_arcsec / ARCSEC_PER_DEGREE,
-        )
+        ),
+        ra_degrees_per_pixel,
+        dec_degrees_per_pixel,
     )
 end
 
@@ -629,19 +639,17 @@ function make_template_images(
 )
     geometry = get_image_geometry(catalog_data)
     println("  Image dimensions $(geometry.height_px) H x $(geometry.width_px) W px")
-    dec_deg_per_pixel = SDSS_ARCSEC_PER_PIXEL / ARCSEC_PER_DEGREE
-    ra_deg_per_pixel = dec_deg_per_pixel / cosd(geometry.world_coordinate_origin[2])
     wcs = WCS.WCSTransform(
         2, # dimensions
         # reference pixel coordinates...
-        crpix=[0., 0.],
+        crpix=[1., 1.],
         # ...and corresponding reference world coordinates
         crval=[geometry.world_coordinate_origin[1], geometry.world_coordinate_origin[2]],
         # this WCS is a simple linear transformation
         ctype=["RA---TAN", "DEC--TAN"],
         cunit=["deg", "deg"],
         # these are [du/dx du/dy; dv/dx dv/dy]. (u, v) = world coords, (x, y) = pixel coords.
-        pc=[0. ra_deg_per_pixel; dec_deg_per_pixel 0.],
+        pc=[0. geometry.ra_degrees_per_pixel; geometry.dec_degrees_per_pixel 0.],
     )
     map(1:5) do band
         make_image(
@@ -751,7 +759,10 @@ compute an a data frame containing each prediction's error.
 Let's call the return type of this function an \"error data frame\".
 """
 function get_error_df(truth::DataFrame, predicted::DataFrame)
-    errors = DataFrame(objid=truth[:objid])
+    errors = DataFrame(
+        objid=truth[:objid],
+        is_saturated=predicted[:is_saturated],
+    )
 
     predicted_galaxy = predicted[:is_star] .< .5
     true_galaxy = truth[:is_star] .< .5
@@ -790,6 +801,8 @@ function is_good_row(truth_row::DataFrameRow, error_row::DataFrameRow, column_na
     if isna(error_row[column_name]) || isnan(error_row[column_name])
         return false
     elseif !isna(truth_row[:half_light_radius_px]) && truth_row[:half_light_radius_px] > 20
+        return false
+    elseif truth_row[:is_saturated] || error_row[:is_saturated]
         return false
     end
 
