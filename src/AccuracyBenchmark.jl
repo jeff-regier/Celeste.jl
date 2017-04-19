@@ -453,7 +453,7 @@ end
 
 ## Create Celeste images from FITS imagery
 
-function make_psf(psf_sigma_px)
+function make_simple_psf(psf_sigma_px)
     alphaBar = [1.; 0.]
     xiBar = [0.; 0.]
     tauBar = [psf_sigma_px^2 0.; 0. psf_sigma_px^2]
@@ -467,8 +467,43 @@ function make_psf(psf_sigma_px)
     ]
 end
 
+function make_psf_from_header(header::FITSIO.FITSHeader)
+    if haskey(header, "CLSIGMA")
+        return make_simple_psf(header["CLSIGMA"])
+    end
+
+    num_components = header["PSFNCOMP"]
+    map(1:num_components) do index
+        get(field) = header["PSF$(index)_$(field)"]
+        alpha_bar = get("A")
+        xi_bar = Float64[get("X1"), get("X2")]
+        tau_bar = Float64[get("T11") get("T12"); get("T12") get("T22")]
+        Model.PsfComponent(
+            alpha_bar,
+            StaticArrays.SVector{2, Float64}(xi_bar),
+            StaticArrays.SMatrix{2, 2, Float64, 4}(tau_bar),
+        )
+    end
+end
+
+function serialize_psf_to_header(psf::Vector{Model.PsfComponent}, header::FITSIO.FITSHeader)
+    header["PSFNCOMP"] = length(psf)
+    for (index, component) in enumerate(psf)
+        @assert component.tauBar[1, 2] == component.tauBar[2, 1]
+        function set(field, value)
+            header["PSF$(index)_$(field)"] = value
+        end
+        set("A", component.alphaBar)
+        set("X1", component.xiBar[1])
+        set("X2", component.xiBar[2])
+        set("T11", component.tauBar[1, 1])
+        set("T12", component.tauBar[1, 2])
+        set("T22", component.tauBar[2, 2])
+    end
+end
+
 function make_image(
-    pixels::Matrix{Float32}, band_index::Int, wcs::WCS.WCSTransform, psf_sigma_px::Float64,
+    pixels::Matrix{Float32}, band_index::Int, wcs::WCS.WCSTransform, psf::Vector{Model.PsfComponent},
     sky_level_nmgy::Float64, counts_per_nmgy::Float64
 )
     height_px, width_px = size(pixels)
@@ -485,7 +520,7 @@ function make_image(
         pixels,
         band_index,
         wcs,
-        make_psf(psf_sigma_px),
+        psf,
         0, 0, 0, # run, camcol, field
         sky_intensity,
         iota_vec,
@@ -500,7 +535,7 @@ function make_images(band_extensions::Vector{FitsImage})
             extension.pixels,
             band_index,
             extension.wcs,
-            convert(Float64, extension.header["CLSIGMA"]),
+            make_psf_from_header(extension.header),
             convert(Float64, extension.header["CLSKY"]),
             convert(Float64, extension.header["CLIOTA"]),
         )
@@ -655,16 +690,6 @@ function make_template_images(
     end
 end
 
-function extract_psf_sigma_px(psf::Vector{Model.PsfComponent})
-    # ensure the PSF is a multiple of identity covariance
-    @assert psf[1].alphaBar == 1.
-    @assert all(psf[1].xiBar .== [0.; 0.])
-    @assert psf[1].tauBar[1, 2] == 0.
-    @assert psf[1].tauBar[2, 1] == 0.
-    @assert psf[1].tauBar[1, 1] == psf[1].tauBar[2, 2]
-    sqrt(psf[1].tauBar[1, 1])
-end
-
 ## Parse a FITS header from a raw string representation
 
 # It's silly that we have to do this, but the Julia FITSIO library doesn't support this (it can only
@@ -714,8 +739,8 @@ function save_images_to_fits(filename::String, images::Vector{Model.Image})
     fits_file = FITSIO.FITS(filename, "w")
     for band_image in images
         header = parse_fits_header_from_string(WCS.to_header(band_image.wcs))
+        serialize_psf_to_header(band_image.psf, header)
         header["CLSKY"] = band_image.sky.sky_small[1, 1]
-        header["CLSIGMA"] = extract_psf_sigma_px(band_image.psf)
         header["CLIOTA"] = band_image.iota_vec[1]
         write(
             fits_file,
