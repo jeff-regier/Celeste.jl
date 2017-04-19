@@ -557,27 +557,19 @@ function make_catalog_entry(row::DataFrameRow)
     ]))
     fluxes = fluxes_from_colors(row[:reference_band_flux_nmgy], color_log_ratios)
     fluxes = convert(Vector{Float64}, ensure_small_flux.(fluxes))
+    minor_major_axis_ratio = na_to_default(row[:minor_major_axis_ratio], 0.8)
     Model.CatalogEntry(
         [row[:right_ascension_deg], row[:declination_deg]],
         row[:is_star],
         fluxes,
         fluxes,
-        na_to_default(row[:de_vaucouleurs_mixture_weight], 0.),
-        na_to_default(row[:minor_major_axis_ratio], 0.),
+        na_to_default(row[:de_vaucouleurs_mixture_weight], 0.5),
+        minor_major_axis_ratio,
         na_to_default(row[:angle_deg], 0.) / 180.0 * pi,
-        na_to_default(row[:half_light_radius_px], 0.),
+        na_to_default(row[:half_light_radius_px] / sqrt(minor_major_axis_ratio), 2.),
         row[:objid],
         0, # thing_id
     )
-end
-
-function get_field(header::FITSIO.FITSHeader, label::String, index::Int64)
-    key = @sprintf("%s%03d", label, index)
-    if haskey(header, key)
-        header[key]
-    else
-        NA
-    end
 end
 
 function make_initialization_catalog(catalog::DataFrame, use_full_initialzation::Bool)
@@ -982,10 +974,8 @@ function sky_distance_px(ra1, dec1, ra2, dec2)
 end
 
 """
-match_position(ras, decs, ra, dec, dist)
-
-Return index of first position in `ras`, `decs` that is within a distance `maxdist_px` of the target
-position `ra`, `dec`. If none found, an exception is raised.
+Return indices of positions in `ras`, `decs` that are within a distance `maxdist_px` of the target
+position `ra`, `dec`.
 """
 function match_position(ras, decs, ra, dec, maxdist_px)
     @assert length(ras) == length(decs)
