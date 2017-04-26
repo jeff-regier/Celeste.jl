@@ -504,7 +504,7 @@ end
 
 function make_image(
     pixels::Matrix{Float32}, band_index::Int, wcs::WCS.WCSTransform, psf::Vector{Model.PsfComponent},
-    sky_level_nmgy::Float64, counts_per_nmgy::Float64
+    sky_level_nmgy::Float64, nelec_per_nmgy::Float64
 )
     height_px, width_px = size(pixels)
     sky_intensity = Model.SkyIntensity(
@@ -513,7 +513,7 @@ function make_image(
         collect(1:width_px),
         ones(height_px),
     )
-    iota_vec = fill(counts_per_nmgy, height_px)
+    iota_vec = fill(nelec_per_nmgy, height_px)
     Model.Image(
         height_px,
         width_px,
@@ -662,7 +662,7 @@ end
 
 function make_template_images(
     catalog_data::DataFrame, psf_sigma_px::Float64, sky_level_nmgy::Float64,
-    counts_per_nmgy::Float64
+    nelec_per_nmgy::Float64
 )
     geometry = get_image_geometry(catalog_data)
     println("  Image dimensions $(geometry.height_px) H x $(geometry.width_px) W px")
@@ -685,7 +685,7 @@ function make_template_images(
             wcs,
             psf_sigma_px,
             sky_level_nmgy,
-            counts_per_nmgy,
+            nelec_per_nmgy,
         )
     end
 end
@@ -740,8 +740,8 @@ function save_images_to_fits(filename::String, images::Vector{Model.Image})
     for band_image in images
         header = parse_fits_header_from_string(WCS.to_header(band_image.wcs))
         serialize_psf_to_header(band_image.psf, header)
-        header["CLSKY"] = band_image.sky.sky_small[1, 1]
-        header["CLIOTA"] = band_image.iota_vec[1]
+        header["CLSKY"] = mean(band_image.sky.sky_small) * mean(band_image.sky.calibration)
+        header["CLIOTA"] = mean(band_image.iota_vec)
         write(
             fits_file,
             band_image.pixels,

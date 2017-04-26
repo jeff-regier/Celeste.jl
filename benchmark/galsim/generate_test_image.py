@@ -360,8 +360,8 @@ class GalSimTestCase(object):
         header = collections.OrderedDict([
             ('CLCASEI', (case_index + 1, 'test case index')),
             ('CLDESCR', (self.comment, 'comment')),
-            ('CLIOTA', (self.image_parameters.counts_per_nmgy, 'counts per nMgy')),
-            ('CLSKY', (self.sky_level_nmgy, '"epsilon" sky level (nMgy each px)')),
+            ('CLIOTA', (self.image_parameters.counts_per_nmgy, 'nelec per nMgy')),
+            ('CLSKY', (self.sky_level_nmgy, 'background level (nMgy each px)')),
             ('CLNOISE', (self.include_noise, 'was Poisson noise added?')),
             ('CLSIGMA', (self.psf_sigma_pixels, 'Gaussian PSF sigma (px)')),
             ('CLBAND', (band_index + 1, 'color band')),
