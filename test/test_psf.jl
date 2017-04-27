@@ -121,7 +121,7 @@ function test_psf_fit()
 
     clear!(pixel_value)
     PSF.evaluate_psf_pixel_fit!(
-        x, psf_params, sigma_vec, sig_sf_vec, bvn_vec,
+        x, psf_params, sig_sf_vec, bvn_vec,
         bvn_derivs, log_pdf, pdf, pixel_value, calculate_gradient)
 
     pixel_value

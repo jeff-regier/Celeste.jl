@@ -37,17 +37,21 @@ immutable SensitiveFloat{NumType}
     has_gradient::Bool
     has_hessian::Bool
 
-    SensitiveFloat(local_P::Int64, local_S::Int64,
-                   has_gradient::Bool, has_hessian::Bool) = begin
+    function (::Type{SensitiveFloat{NumType}}){NumType}(local_P, local_S, has_gradient, has_hessian)
         @assert has_gradient || !has_hessian
         v = Ref(zero(NumType))
-        d = has_gradient ? zeros(NumType, local_P, local_S) : Matrix{NumType}(0, 0)
-        h = has_hessian ? zeros(NumType, local_P * local_S, local_P * local_S) :
-                       Matrix{NumType}(0, 0)
-        new(v, d, h, local_P, local_S, has_gradient, has_hessian)
+        d = zeros(NumType, local_P * has_gradient, local_S * has_gradient)
+        h_dim = local_P * local_S * has_hessian
+        h = zeros(NumType, h_dim, h_dim)
+        new{NumType}(v, d, h, local_P, local_S, has_gradient, has_hessian)
     end
 end
 
+function SensitiveFloat(local_P::Int64, local_S::Int64,
+                        has_gradient::Bool = true,
+                        has_hessian::Bool = true)
+    return SensitiveFloat{Float64}(local_P, local_S, has_gradient, has_hessian)
+end
 
 function SensitiveFloat{NumType <: Number}(prototype_sf::SensitiveFloat{NumType})
     SensitiveFloat{NumType}(prototype_sf.local_P,
@@ -72,15 +76,21 @@ function set_hess!{NumType <: Number}(
 end
 
 
+function zero!{T}(m::Array{T})
+    for i in eachindex(m)
+        @inbounds m[i] = zero(T)
+    end
+end
+
 function clear!{NumType <: Number}(sf::SensitiveFloat{NumType})
     sf.v[] = zero(NumType)
 
     if sf.has_gradient
-        fill!(sf.d, zero(NumType))
+        zero!(sf.d)
     end
 
     if sf.has_hessian
-        fill!(sf.h, zero(NumType))
+        zero!(sf.h)
     end
 end
 
@@ -107,13 +117,13 @@ function combine_sfs_hessian!{T1 <: Number, T2 <: Number, T3 <: Number}(
         sf11_factor = g_h[1, 1] * sf1.d[ind2] + g_h[1, 2] * sf2.d[ind2]
         sf21_factor = g_h[1, 2] * sf1.d[ind2] + g_h[2, 2] * sf2.d[ind2]
 
-        @inbounds for ind1 = 1:ind2
+        @inbounds for ind1 = 1:p2
             sf_result.h[ind1, ind2] =
                 g_d[1] * sf1.h[ind1, ind2] +
                 g_d[2] * sf2.h[ind1, ind2] +
                 sf11_factor * sf1.d[ind1] +
                 sf21_factor * sf2.d[ind1]
-            sf_result.h[ind2, ind1] = sf_result.h[ind1, ind2]
+            #sf_result.h[ind2, ind1] = sf_result.h[ind1, ind2]
         end
     end
 end
@@ -141,10 +151,16 @@ function combine_sfs!{T1 <: Number, T2 <: Number, T3 <: Number}(
     end
 
     if sf_result.has_gradient
+        for ind in eachindex(sf_result.d)
+            sf_result.d[ind] = g_d[1] * sf1.d[ind] + g_d[2] * sf2.d[ind]
+        end
+#=
         sf_result.d[:] = sf1.d
         n = length(sf_result.d)
+        @show (n, g_d[1], sf_result.d, 1)
         LinAlg.BLAS.scal!(n, g_d[1], sf_result.d, 1)
         LinAlg.BLAS.axpy!(g_d[2], sf2.d, sf_result.d)
+=#
     end
 
     sf_result.v[] = v
@@ -227,11 +243,11 @@ function add_sources_sf!{NumType <: Number}(
         @inbounds for s_ind1 in 1:P
             s_all_ind1 = P_shifted + s_ind1
 
-            @inbounds for s_ind2 in 1:s_ind1
+            @inbounds for s_ind2 in 1:P
                 s_all_ind2 = P_shifted + s_ind2
                 sf_all.h[s_all_ind2, s_all_ind1] += sf_s.h[s_ind2, s_ind1]
                 # TODO: move outside the loop?
-                sf_all.h[s_all_ind1, s_all_ind2] = sf_all.h[s_all_ind2, s_all_ind1]
+                # sf_all.h[s_all_ind1, s_all_ind2] = sf_all.h[s_all_ind2, s_all_ind1]
             end
         end
     end

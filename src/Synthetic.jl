@@ -7,8 +7,10 @@ import Celeste: Infer, DeterministicVI
 
 import WCS
 import Distributions
+using ForwardDiff
+using StaticArrays
 
-include("../src/bivariate_normals.jl")
+include("bivariate_normals.jl")
 
 # Generate synthetic data.
 
@@ -51,7 +53,7 @@ function write_star(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
                     expectation=false)
     iota = median(img0.iota_vec)
     for k in 1:length(img0.psf)
-        the_mean = WCS.world_to_pix(img0.wcs, ce.pos) + img0.psf[k].xiBar
+        the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, ce.pos)) + img0.psf[k].xiBar
         the_cov = img0.psf[k].tauBar
         intensity = ce.star_fluxes[img0.b] * iota * img0.psf[k].alphaBar
         write_gaussian(the_mean, the_cov, intensity, pixels,
@@ -69,7 +71,7 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
     for i in 1:2
         for gproto in galaxy_prototypes[i]
             for k in 1:length(img0.psf)
-                the_mean = WCS.world_to_pix(img0.wcs, ce.pos) +
+                the_mean = SVector{2}(WCS.world_to_pix(img0.wcs, ce.pos)) +
                            img0.psf[k].xiBar
                 the_cov = img0.psf[k].tauBar + gproto.nuBar * XiXi
                 intensity = ce.gal_fluxes[img0.b] * iota *
@@ -82,7 +84,7 @@ function write_galaxy(img0::Image, ce::CatalogEntry, pixels::Matrix{Float64};
 end
 
 function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=false)
-    epsilon = img0.epsilon_mat[1]
+    epsilon = img0.sky[1, 1]
     iota = img0.iota_vec[1]
 
     if expectation
@@ -96,13 +98,15 @@ function gen_image(img0::Image, n_bodies::Vector{CatalogEntry}; expectation=fals
         body.is_star ? write_star(img0, body, pixels) : write_galaxy(img0, body, pixels)
     end
 
-    epsilon_mat = fill(epsilon, img0.H, img0.W)
+    sky = SkyIntensity(fill(epsilon, img0.H, img0.W),
+                       collect(1:img0.H), collect(1:img0.W),
+                       ones(img0.H))
     iota_vec = fill(iota, img0.H)
 
     return Image(img0.H, img0.W, pixels, img0.b, img0.wcs,
                  img0.psf,
                  img0.run_num, img0.camcol_num, img0.field_num,
-                 epsilon_mat, iota_vec,
+                 sky, iota_vec,
                  img0.raw_psf_comp)
 end
 

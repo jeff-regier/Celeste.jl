@@ -28,7 +28,7 @@
 #
 # Note Ia denotes the number of types of astronomical objects (e.g., 2 for stars and galaxies).
 
-abstract ParamSet
+@compat abstract type ParamSet end
 
 type StarPosParams <: ParamSet
     u::Vector{Int}
@@ -37,7 +37,6 @@ end
 const star_ids = StarPosParams()
 getids(::Type{StarPosParams}) = star_ids
 length(::Type{StarPosParams}) = 2
-
 
 type GalaxyShapeParams <: ParamSet
     e_axis::Int
@@ -48,7 +47,6 @@ end
 const gal_shape_ids = GalaxyShapeParams()
 getids(::Type{GalaxyShapeParams}) = gal_shape_ids
 length(::Type{GalaxyShapeParams}) = 3
-
 
 type GalaxyPosParams <: ParamSet
     u::Vector{Int}
@@ -76,8 +74,7 @@ const bids = BrightnessParams()
 getids(::Type{BrightnessParams}) = bids
 length(::Type{BrightnessParams}) = 2 + 2 * (B-1)
 
-
-type CanonicalParams <: ParamSet
+immutable CanonicalParams <: ParamSet
     u::Vector{Int}
     e_dev::Int
     e_axis::Int
@@ -87,19 +84,27 @@ type CanonicalParams <: ParamSet
     r2::Vector{Int}
     c1::Matrix{Int}
     c2::Matrix{Int}
-    a::Matrix{Int}
+    a::Vector{Int}
     k::Matrix{Int}
-    CanonicalParams() =
-        new([1, 2], 3, 4, 5, 6,
+    function CanonicalParams()
+        new([1, 2], # u
+            3, # e_dev
+            4, # e_axis
+            5, # e_angle
+            6, # e_scale
             collect(7:(7+Ia-1)),  # r1
             collect((7+Ia):(7+2Ia-1)), # r2
             reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
             reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
-            reshape((7+2Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia-1), (Ia, 1)),  # a
+            collect((7+2Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia-1)),  # a
             reshape((7+3Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia+D*Ia-1), (D, Ia))) # k
+    end
 end
+
 const ids = CanonicalParams()
+
 getids(::Type{CanonicalParams}) = ids
+
 length(::Type{CanonicalParams}) = 6 + 3*Ia + 2*(B-1)*Ia + D*Ia
 
 
@@ -126,34 +131,6 @@ const lidx = LatentStateIndexes()
 getlidx(::Type{LatentStateIndexes}) = lidx
 length(::Type{LatentStateIndexes}) = 22 #6 + 3*Ia + 2*(B-1)*Ia + D*Ia
 
-
-type UnconstrainedParams <: ParamSet
-    u::Vector{Int}
-    e_dev::Int
-    e_axis::Int
-    e_angle::Int
-    e_scale::Int
-    r1::Vector{Int}
-    r2::Vector{Int}
-    c1::Matrix{Int}
-    c2::Matrix{Int}
-    a::Matrix{Int}
-    k::Matrix{Int}
-    UnconstrainedParams() =
-        new([1, 2], 3, 4, 5, 6,
-            collect(7:(7+Ia-1)),  # r1
-            collect((7+Ia):(7+2Ia-1)), # r2
-            reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
-            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
-            reshape((7+2Ia+2*(B-1)*Ia):
-                    (7+2Ia+2*(B-1)*Ia+(Ia-1)-1), (Ia - 1, 1)),  # a
-            reshape((7+2Ia+2*(B-1)*Ia+(Ia-1)):
-                    (7+2Ia+2*(B-1)*Ia+(Ia-1)+(D-1)*Ia-1), (D-1, Ia))) # k
-end
-const ids_free = UnconstrainedParams()
-getids(::Type{UnconstrainedParams}) = ids_free
-length(::Type{UnconstrainedParams}) =  6 + 2*Ia + 2*(B-1)*Ia + (D-1)*Ia + Ia-1
-
 # Parameters for a representation of the PSF
 immutable PsfParams <: ParamSet
     mu::UnitRange{Int}
@@ -174,11 +151,11 @@ length(::Type{PsfParams}) = 6
 length{T<:ParamSet}(::T) = length(T)
 
 #TODO: build these from ue_align, etc., here.
-align(::StarPosParams, CanonicalParams) = ids.u
-align(::GalaxyPosParams, CanonicalParams) =
+align(::StarPosParams, ids) = ids.u
+align(::GalaxyPosParams, ids) =
    [ids.u; ids.e_dev; ids.e_axis; ids.e_angle; ids.e_scale]
-align(::CanonicalParams, CanonicalParams) = collect(1:length(CanonicalParams))
-align(::GalaxyShapeParams, GalaxyPosParams) =
+align(::CanonicalParams, _ids) = collect(1:length(CanonicalParams))
+align(::GalaxyShapeParams, gal_ids) =
   [gal_ids.e_axis; gal_ids.e_angle; gal_ids.e_scale]
 
 # The shape and brightness parameters for stars and galaxies respectively.
@@ -189,29 +166,27 @@ const brightness_standard_alignment = (bright_ids(1), bright_ids(2))
 
 # Note that gal_shape_alignment aligns the shape ids with the GalaxyPosParams,
 # not the CanonicalParams.
-const gal_shape_alignment = align(gal_shape_ids, gal_ids)
+const gal_shape_alignment = Const(align(gal_shape_ids, gal_ids))
 
-function get_id_names(
-  ids::Union{CanonicalParams, UnconstrainedParams})
-  ids_names = Vector{String}(length(ids))
-  for name in fieldnames(ids)
-    inds = getfield(ids, name)
-    if length(size(inds)) == 0
-      ids_names[inds] = "$(name)"
-    elseif length(size(inds)) == 1
-      for i = 1:size(inds)[1]
-          ids_names[inds[i]] = "$(name)_$(i)"
-      end
-    elseif length(size(inds)) == 2
-      for i = 1:size(inds)[1], j = 1:size(inds)[2]
-          ids_names[inds[i, j]] = "$(name)_$(i)_$(j)"
-      end
-    else
-      error("Names of 3d parameters not supported ($(name))")
+function get_id_names(ids::CanonicalParams)
+    ids_names = Vector{String}(length(ids))
+    for name in fieldnames(ids)
+        inds = getfield(ids, name)
+        if isa(inds, Matrix)
+            for i in 1:size(inds, 1), j in 1:size(inds, 2)
+                ids_names[inds[i, j]] = "$(name)_$(i)_$(j)"
+            end
+        elseif isa(inds, Vector)
+            for i in eachindex(inds)
+                ids_names[inds[i]] = "$(name)_$(i)"
+            end
+        elseif isa(inds, Int)
+            ids_names[inds] = "$(name)_$(inds)"
+        else
+            error("found unsupported index type for parameter $(name): $(typeof(inds))")
+        end
     end
-  end
-  return ids_names
+    return ids_names
 end
 
 const ids_names = get_id_names(ids)
-const ids_free_names = get_id_names(ids_free)

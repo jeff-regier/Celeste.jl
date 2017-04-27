@@ -12,11 +12,7 @@ _logger = logging.getLogger(__name__)
 RANDOM_SEED = 1234
 FITS_COMMENT_PREPEND = 'Celeste: '
 
-# populated by the `galsim_test_case` decorator
-TEST_CASE_FNS = []
-
 ARCSEC_PER_DEGREE = 3600.
-COUNTS_PER_NMGY = 1000.0 # a.k.a. "iota" in Celeste
 
 # intensity (flux) relative to third band (= "a" band = reference)
 # see GalsimBenchmark.typical_band_relative_intensities()
@@ -37,56 +33,100 @@ DEFAULT_GALAXY_RELATIVE_INTENSITIES = [
     1.7750,
 ]
 
+class WorldCoordinate(object):
+    def __init__(self, right_ascension_deg, declination_deg):
+        self.right_ascension_deg = right_ascension_deg
+        self.declination_deg = declination_deg
+
+    def as_galsim_position(self):
+        return galsim.PositionD(
+            self.right_ascension_deg,
+            self.declination_deg,
+        )
+
+    def add(self, right_ascension_offset_deg, declination_offset_deg):
+        return WorldCoordinate(
+            self.right_ascension_deg + right_ascension_offset_deg,
+            self.declination_deg + declination_offset_deg,
+        )
+
 class ImageParameters(object):
     def __init__(self):
+        # "width" corresponds to declination, "height" to right ascension
         self.width_px = 96
         self.height_px = 96
         # 0.396 = resolution of SDSS images (https://github.com/jeff-regier/Celeste.jl/pull/411)
         self.arcsec_per_pixel = 0.396
+        self.world_origin = WorldCoordinate(0, 0)
+        self.counts_per_nmgy = 1000.0
 
     def degrees_per_pixel(self):
         return self.arcsec_per_pixel / ARCSEC_PER_DEGREE
 
-    def get_dimensions_arcsec(self):
-        return (self.width_px * self.arcsec_per_pixel, self.height_px * self.arcsec_per_pixel)
+    def get_image_center_world_coordinates(self):
+        width_deg = self.width_px * self.degrees_per_pixel()
+        height_deg = self.height_px * self.degrees_per_pixel()
+        return self.world_origin.add(height_deg / 2., width_deg / 2.)
+
+class AbsolutePosition(object):
+    def __init__(self, right_ascension_deg, declination_deg):
+        self._position = WorldCoordinate(right_ascension_deg, declination_deg)
+
+    def get_position(self, image_parameters):
+        return self._position
+
+class OffsetFromCenterPosition(object):
+    def __init__(self, right_ascension_offset_deg, declination_offset_deg):
+        self._offset = WorldCoordinate(right_ascension_offset_deg, declination_offset_deg)
+
+    def get_position(self, image_parameters):
+        return image_parameters.get_image_center_world_coordinates().add(
+            self._offset.right_ascension_deg,
+            self._offset.declination_deg,
+        )
 
 # fields and logic shared between stars and galaxies
 class CommonFields(object):
     def __init__(self):
-        self.offset_from_center_arcsec = (0, 0)
+        self.position = OffsetFromCenterPosition(0, 0) # or an AbsolutePosition
         self.reference_band_flux_nmgy = 40
         # relative flux in each band defines "color" of light sources
         self._flux_relative_to_reference_band = DEFAULT_GALAXY_RELATIVE_INTENSITIES
+
+    def set_offset_from_center_arcsec(self, right_ascension_offset_arcsec, declination_offset_arcsec):
+        self.position = OffsetFromCenterPosition(
+            right_ascension_offset_arcsec / ARCSEC_PER_DEGREE,
+            declination_offset_arcsec / ARCSEC_PER_DEGREE,
+        )
+
+    def set_world_coordinates_deg(self, right_ascension_deg, declination_deg):
+        self.position = AbsolutePosition(right_ascension_deg, declination_deg)
+
+    def get_world_offset(self, image_parameters):
+        """Get offset from image center, in world coordinates (degrees)
+
+        We do this because GalSim images are located at the center of the image by default, and the
+        only way I've found to change the position of an object is using `shift()` (I don't know how
+        to set an absolute position in world coords).
+        """
+        image_center = image_parameters.get_image_center_world_coordinates()
+        world_position = self.position.get_position(image_parameters)
+        return world_position.add(-image_center.right_ascension_deg, -image_center.declination_deg)
 
     def set_flux_relative_to_reference_band(self, relative_flux):
         assert len(relative_flux) == 5
         assert relative_flux[2] == 1
         self._flux_relative_to_reference_band = relative_flux
 
-    def get_offset_from_center_degrees(self):
-        return (
-            self.offset_from_center_arcsec[0] / ARCSEC_PER_DEGREE,
-            self.offset_from_center_arcsec[1] / ARCSEC_PER_DEGREE,
-        )
-
-    def get_position_deg(self, image_parameters):
-        return (
-            (image_parameters.width_px + 1) / 2.0 * image_parameters.degrees_per_pixel()
-                + self.offset_from_center_arcsec[0] / ARCSEC_PER_DEGREE,
-            (image_parameters.height_px + 1) / 2.0 * image_parameters.degrees_per_pixel()
-                + self.offset_from_center_arcsec[1] / ARCSEC_PER_DEGREE,
-        )
-
-    def get_flux_counts(self, band_index):
+    def get_flux_nmgy(self, band_index):
         return (
             self.reference_band_flux_nmgy * self._flux_relative_to_reference_band[band_index]
-            * COUNTS_PER_NMGY
         )
 
     def add_header_fields(self, header, index_str, image_parameters, star_or_galaxy):
-        position_deg = self.get_position_deg(image_parameters)
-        header['CLX' + index_str] = (position_deg[0], 'X center in world coordinates (deg)')
-        header['CLY' + index_str] = (position_deg[1], 'Y center in world coordinates (deg)')
+        position = self.position.get_position(image_parameters)
+        header['CLRA' + index_str] = (position.right_ascension_deg, 'Center right ascension, deg')
+        header['CLDEC' + index_str] = (position.declination_deg, 'Center declination, deg')
         header['CLFLX' + index_str] = (
             self.reference_band_flux_nmgy,
             'reference (=3) band brightness (nMgy)',
@@ -123,7 +163,11 @@ class Star(LightSource):
         self._common_fields.set_flux_relative_to_reference_band(DEFAULT_STAR_RELATIVE_INTENSITIES)
 
     def offset_arcsec(self, x, y):
-        self._common_fields.offset_from_center_arcsec = (x, y)
+        self._common_fields.set_offset_from_center_arcsec(x, y)
+        return self
+
+    def world_coordinates_deg(self, right_ascension_deg, declination_deg):
+        self._common_fields.set_world_coordinates_deg(right_ascension_deg, declination_deg)
         return self
 
     def reference_band_flux_nmgy(self, flux):
@@ -134,11 +178,13 @@ class Star(LightSource):
         self._common_fields.set_flux_relative_to_reference_band(relative_flux)
         return self
 
-    def get_galsim_light_source(self, band_index, psf_sigma_degrees):
-        flux_counts = self._common_fields.get_flux_counts(band_index)
+    def get_galsim_light_source(self, band_index, psf_sigma_degrees, image_parameters):
+        flux_counts = (
+            self._common_fields.get_flux_nmgy(band_index) * image_parameters.counts_per_nmgy
+        )
         return (
             galsim.Gaussian(flux=flux_counts, sigma=psf_sigma_degrees)
-                .shift(self._common_fields.get_offset_from_center_degrees())
+                .shift(self._common_fields.get_world_offset(image_parameters).as_galsim_position())
         )
 
     def add_header_fields(self, header, index_str, image_parameters):
@@ -154,7 +200,11 @@ class Galaxy(LightSource):
         self._de_vaucouleurs_mixture_weight = 0.0
 
     def offset_arcsec(self, x, y):
-        self._common_fields.offset_from_center_arcsec = (x, y)
+        self._common_fields.set_offset_from_center_arcsec(x, y)
+        return self
+
+    def world_coordinates_deg(self, right_ascension_deg, declination_deg):
+        self._common_fields.set_world_coordinates_deg(right_ascension_deg, declination_deg)
         return self
 
     def reference_band_flux_nmgy(self, flux):
@@ -181,14 +231,19 @@ class Galaxy(LightSource):
         self._de_vaucouleurs_mixture_weight = weight
         return self
 
-    def get_galsim_light_source(self, band_index, psf_sigma_degrees):
+    def get_galsim_light_source(self, band_index, psf_sigma_degrees, image_parameters):
         def apply_shear_and_shift(galaxy):
             return (
-                galaxy.shear(q=self._minor_major_axis_ratio, beta=self._angle_deg * galsim.degrees)
-                    .shift(self._common_fields.get_offset_from_center_degrees())
+                galaxy.shear(
+                    q=self._minor_major_axis_ratio,
+                    beta=(90. - self._angle_deg) * galsim.degrees,
+                )
+                .shift(self._common_fields.get_world_offset(image_parameters).as_galsim_position())
             )
 
-        flux_counts = self._common_fields.get_flux_counts(band_index)
+        flux_counts = (
+            self._common_fields.get_flux_nmgy(band_index) * image_parameters.counts_per_nmgy
+        )
         half_light_radius_deg = self._half_light_radius_arcsec / ARCSEC_PER_DEGREE
         exponential_profile = apply_shear_and_shift(
             galsim.Exponential(
@@ -208,7 +263,7 @@ class Galaxy(LightSource):
 
     def add_header_fields(self, header, index_str, image_parameters):
         self._common_fields.add_header_fields(header, index_str, image_parameters, 'galaxy')
-        header['CLANG' + index_str] = (self._angle_deg, 'major axis angle (degrees from x-axis)')
+        header['CLANG' + index_str] = (self._angle_deg, 'maj axis angle (deg from +dec -> +ra)')
         header['CLRTO' + index_str] = (self._minor_major_axis_ratio, 'minor/major axis ratio')
         header['CLRDA' + index_str] = (
             self._half_light_radius_arcsec,
@@ -241,8 +296,14 @@ class GalSimTestCase(object):
     def set_resolution(self, arcsec_per_pixel):
         self.image_parameters.arcsec_per_pixel = arcsec_per_pixel
 
-    def get_dimensions_arcsec(self):
-        return self.image_parameters.get_dimensions_arcsec()
+    def set_world_origin(self, right_ascension_deg, declination_deg):
+        self.image_parameters.world_origin = WorldCoordinate(right_ascension_deg, declination_deg)
+
+    def set_counts_per_nmgy(self, counts_per_nmgy):
+        self.image_parameters.counts_per_nmgy = counts_per_nmgy
+
+    def get_resolution(self):
+        return self.image_parameters.arcsec_per_pixel
 
     def add_star(self):
         star = Star()
@@ -255,7 +316,7 @@ class GalSimTestCase(object):
         return galaxy
 
     def _add_sky_background(self, image, uniform_deviate):
-        sky_level_counts = self.sky_level_nmgy * COUNTS_PER_NMGY
+        sky_level_counts = self.sky_level_nmgy * self.image_parameters.counts_per_nmgy
         if self.include_noise:
             poisson_deviate = galsim.PoissonDeviate(uniform_deviate, mean=sky_level_counts)
             image.addNoise(galsim.DeviateNoise(poisson_deviate))
@@ -263,10 +324,17 @@ class GalSimTestCase(object):
             image.array[:] = image.array + sky_level_counts
 
     def construct_image(self, band_index, uniform_deviate):
+        world_origin = self.image_parameters.world_origin.as_galsim_position()
+        degrees_per_pixel = self.image_parameters.degrees_per_pixel()
+        wcs = (
+            # Here we implement the confusing mapping X <-> Dec, Y <-> RA
+            galsim.JacobianWCS(0, degrees_per_pixel, degrees_per_pixel, 0)
+                .withOrigin(galsim.PositionI(0, 0), world_origin=world_origin)
+        )
         image = galsim.ImageF(
             self.image_parameters.width_px,
             self.image_parameters.height_px,
-            scale=self.image_parameters.degrees_per_pixel(),
+            wcs=wcs,
         )
         for index, light_source in enumerate(self._light_sources):
             sys.stdout.write('Band {} source {}\r'.format(band_index + 1, index + 1))
@@ -274,12 +342,13 @@ class GalSimTestCase(object):
             galsim_light_source = light_source.get_galsim_light_source(
                 band_index,
                 self.psf_sigma_pixels * self.image_parameters.degrees_per_pixel(),
+                self.image_parameters,
             )
             galsim_light_source.drawImage(
                 image,
                 add_to_image=True,
                 method='phot',
-                max_extra_noise=self.sky_level_nmgy * COUNTS_PER_NMGY / 1000.0,
+                max_extra_noise=self.sky_level_nmgy * self.image_parameters.counts_per_nmgy / 1000.0,
                 rng=uniform_deviate,
             )
         self._add_sky_background(image, uniform_deviate)
@@ -291,7 +360,7 @@ class GalSimTestCase(object):
         header = collections.OrderedDict([
             ('CLCASEI', (case_index + 1, 'test case index')),
             ('CLDESCR', (self.comment, 'comment')),
-            ('CLIOTA', (COUNTS_PER_NMGY, 'counts per nMgy')),
+            ('CLIOTA', (self.image_parameters.counts_per_nmgy, 'counts per nMgy')),
             ('CLSKY', (self.sky_level_nmgy, '"epsilon" sky level (nMgy each px)')),
             ('CLNOISE', (self.include_noise, 'was Poisson noise added?')),
             ('CLSIGMA', (self.psf_sigma_pixels, 'Gaussian PSF sigma (px)')),
@@ -303,16 +372,6 @@ class GalSimTestCase(object):
             index_str = '{:03d}'.format(source_index + 1)
             light_source.add_header_fields(header, index_str, self.image_parameters)
         return header
-
-# just a trick to set the test case function name as the `GalSimTestCase.comment` field (for
-# inclusion in the FITS header)
-def galsim_test_case(fn):
-    def decorated(test_case):
-        fn(test_case)
-        test_case.comment = fn.__name__
-    decorated.__name__ = fn.__name__
-    TEST_CASE_FNS.append(decorated)
-    return decorated
 
 def add_header_to_hdu(hdu, header_dict):
     header = galsim.fits.FitsHeader(hdu.header)
@@ -349,10 +408,10 @@ def write_latest_filename(output_label, latest_filename):
         stream.write('\n')
     _logger.info('Updated %r', latest_fits_filename_holder)
 
-def generate_fits_file(output_label):
-    _logger.info('Generating %d test cases', len(TEST_CASE_FNS))
+def generate_fits_file(output_label, test_case_callbacks):
+    _logger.info('Generating %d test cases', len(test_case_callbacks))
     fits_hdus = astropy.io.fits.HDUList()
-    for case_index, test_case_fn in enumerate(TEST_CASE_FNS):
+    for case_index, test_case_fn in enumerate(test_case_callbacks):
         _logger.info('  Generating case %s', test_case_fn.__name__)
         uniform_deviate = galsim.UniformDeviate(RANDOM_SEED + case_index)
         test_case = GalSimTestCase()
@@ -367,4 +426,4 @@ def generate_fits_file(output_label):
     save_multi_extension_fits(fits_hdus, image_file_name)
     final_filename = append_md5sum_to_filename(image_file_name)
     _logger.info('Wrote multi-extension FITS file to %r', final_filename)
-    write_latest_filename(output_label, os.path.basename(final_filename))
+    return final_filename

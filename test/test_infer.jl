@@ -1,6 +1,7 @@
 ## test the main entry point in Celeste: the `infer` function
 import JLD
 
+import Celeste.Configs
 
 """
 test infer with a single (run, camcol, field).
@@ -51,13 +52,15 @@ end
 
 
 function test_load_active_pixels()
-    images, ea, one_body = gen_sample_star_dataset()
+    ea, vp, catalog = gen_sample_star_dataset()
 
     # these images have 20 * 23 * 5 = 2300 pixels in total.
     # the star is bright but it doesn't cover the whole image.
     # it's hard to say exactly how many pixels should be active,
     # but not all of them, and not none of them.
-    Infer.load_active_pixels!(ea.images, ea.patches; min_radius_pix=Nullable(0.0))
+    config = Configs.Config()
+    config.min_radius_pix = 0
+    Infer.load_active_pixels!(config, ea.images, ea.patches)
 
     # most star light (>90%) should be recorded by the active pixels
     num_active_photons = 0.0
@@ -72,7 +75,7 @@ function test_load_active_pixels()
             # (h2, w2) index the local patch, while (h, w) index the image
             h = p.bitmap_offset[1] + h2
             w = p.bitmap_offset[2] + w2
-            num_active_photons += img.pixels[h, w] - img.epsilon_mat[h, w]
+            num_active_photons += img.pixels[h, w] - img.sky[h, w]
             num_active_pixels += 1
         end
     end
@@ -81,20 +84,26 @@ function test_load_active_pixels()
 
     total_photons = 0.0
     for img in ea.images
-        total_photons += sum(img.pixels) - sum(img.epsilon_mat)
+        for w in 1:img.W, h in 1:img.H
+            total_photons += img.pixels[h, w] - img.sky[h, w]
+        end
     end
 
     @test num_active_photons <= total_photons  # sanity check
     @test num_active_photons > 0.9 * total_photons
 
     # super dim images
-    for img in images
-        img.pixels[:,:] = img.epsilon_mat[:,:]
+    for img in ea.images
+        for w in 1:img.W, h in 1:img.H
+            img.pixels[h, w] = img.sky[h, w]
+        end
     end
 
     # only 2 pixels per image are within 0.6 pixels of the
     # source's center (10.9, 11.5)
-    Infer.load_active_pixels!(ea.images, ea.patches; min_radius_pix=Nullable(0.6))
+    config = Configs.Config()
+    config.min_radius_pix = 0.6
+    Infer.load_active_pixels!(config, ea.images, ea.patches)
 
     for n in 1:ea.N
 #  FIXME: is load active pixels off by (0.5, 0.5)?
@@ -104,10 +113,11 @@ end
 
 
 function test_patch_pixel_selection()
-    images, ea, two_body = gen_two_body_dataset();
-    patches = Infer.get_sky_patches(images, two_body; radius_override_pix=5);
-    Infer.load_active_pixels!(
-        images, patches, noise_fraction=Inf, min_radius_pix=Nullable(5));
+    ea, vp, catalog = gen_two_body_dataset();
+    patches = Infer.get_sky_patches(ea.images, catalog; radius_override_pix=5);
+    config = Configs.Config()
+    config.min_radius_pix = 5
+    Infer.load_active_pixels!(config, ea.images, patches, noise_fraction=Inf)
 
     for n in 1:ea.N
         # Make sure, for testing purposes, that the whole bitmap isn't full.
@@ -117,8 +127,8 @@ function test_patch_pixel_selection()
         end
 
         function patch_in_whole_image(p::SkyPatch)
-            patch_image = zeros(size(images[n].pixels))
-            for h in 1:images[n].H, w in 1:images[n].W
+            patch_image = zeros(size(ea.images[n].pixels))
+            for h in 1:ea.images[n].H, w in 1:ea.images[n].W
                 if Infer.is_pixel_in_patch(h, w, p)
                     patch_image[h, w] += 1
                 end
@@ -142,6 +152,27 @@ function test_patch_pixel_selection()
         end
         @test all(patch_image .== sum(patch_images)[H_min:H_max, W_min:W_max])
     end
+end
+
+
+@testset "test that we don't select a patch that is way too big" begin
+    wd = pwd()
+    cd(datadir)
+    run(`make RUN=4114 CAMCOL=3 FIELD=127`)
+    run(`make RUN=4114 CAMCOL=4 FIELD=127`)
+    cd(wd)
+
+    rcfs= [RunCamcolField(4114, 3, 127), RunCamcolField(4114, 4, 127)]
+    images = SDSSIO.load_field_images(rcfs, datadir)
+    catalog = SDSSIO.read_photoobj_files(rcfs, datadir)
+    entry_id = findfirst((ce)->ce.objid == "1237663143711147274", catalog)
+    entry = catalog[entry_id]
+
+    neighbors = Infer.find_neighbors([entry_id,], catalog, images)[1]
+
+    # there's a lot near this star, but not a lot that overlaps with it, see
+    # http://skyserver.sdss.org/dr10/en/tools/explore/summary.aspx?id=0x112d1012607f050a
+    @test length(neighbors) < 5
 end
 
 if test_long_running

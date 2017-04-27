@@ -1,22 +1,26 @@
 using Base.Test
 import SensitiveFloats: zero_sensitive_float_array
 
-function test_sky_noise_estimates()
+
+@testset "sky noise estimates" begin
     images_vec = Vector{Vector{Image}}(2)
-    images_vec[1], ea, three_bodies = gen_three_body_dataset()  # synthetic
+    ea, vp, three_bodies = gen_three_body_dataset()  # synthetic
+    images_vec[1] = ea.images
     images_vec[2] = SampleData.load_stamp_blob(datadir, "164.4311-39.0359_2kpsf")  # real
 
     for images in images_vec
         for b in 1:5
-            sdss_sky_estimate = median(images[b].epsilon_mat) * median(images[b].iota_vec)
-            crude_estimate = median(images[b].pixels)
+            img = images[b]
+            epsilon = img.sky[div(img.H, 2), div(img.W, 2)]
+            sdss_sky_estimate = epsilon * median(img.iota_vec)
+            crude_estimate = median(img.pixels)
             @test isapprox(sdss_sky_estimate / crude_estimate, 1.0, atol=0.3)
         end
     end
 end
 
 
-function test_zero_sensitive_float_array()
+@testset "zero sensitive float array" begin
     S = 3
     sf_vec = zero_sensitive_float_array(Float64, length(ids), S, 3, 5)
     @test size(sf_vec) == (3, 5)
@@ -39,9 +43,3 @@ function test_zero_sensitive_float_array()
         @test all(sf.h .== 0)
     end
 end
-
-
-####################################################
-
-test_sky_noise_estimates()
-test_zero_sensitive_float_array()

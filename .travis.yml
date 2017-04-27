@@ -1,20 +1,15 @@
 language: julia
 os:
   - linux
-  - osx
 julia:
-  - 0.5
   - nightly
 notifications:
   email: false
 
-matrix:
-  allow_failures:
-  - julia: nightly
-
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
   - julia -e 'Pkg.clone(pwd()); Pkg.build("Celeste")'
+  - julia -e 'Pkg.checkout("StaticArrays")'
   - julia -e 'Pkg.test("Celeste"; coverage=(VERSION < v"0.4"))'
 
 after_success:

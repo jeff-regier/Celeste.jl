@@ -4,11 +4,14 @@ Calculate value, gradient, and hessian of the variational ELBO.
 module DeterministicVI
 
 using Base.Threads: threadid, nthreads
+
+import ..Configs
 using ..Model
 import ..Model: BivariateNormalDerivatives, BvnComponent, GalaxyCacheComponent,
-                GalaxySigmaDerivs, SkyPatch,
+                BvnBundle, GalaxySigmaDerivs, SkyPatch,
                 get_bvn_cov, eval_bvn_pdf!, get_bvn_derivs!,
                 transform_bvn_derivs!, populate_fsm!
+import ..Celeste: Const, @aliasscope, @unroll_loop
 import ..Infer
 using ..SensitiveFloats
 import ..SensitiveFloats.clear!
@@ -16,28 +19,37 @@ import ..Log
 using ..Transform
 import DataFrames
 import Optim
+import ForwardDiff.Dual
 using StaticArrays
+import Base.convert
 
-export ElboArgs, generic_init_source, catalog_init_source, init_sources
+export ElboArgs, generic_init_source, catalog_init_source, init_sources,
+       VariationalParams, elbo, ElboIntermediateVariables
 
+function init_thread_pool!(pool::Vector, create)
+    if length(pool) != Base.Threads.nthreads()
+        empty!(pool)
+        for i = 1:Base.Threads.nthreads()
+            push!(pool, create())
+        end
+    end
+end
 
 """
 Return a default-initialized VariationalParams instance.
 """
 function generic_init_source(init_pos::Vector{Float64})
     ret = Vector{Float64}(length(CanonicalParams))
-    ret[ids.a[2, 1]] = 0.5
-    ret[ids.a[1, 1]] = 1.0 - ret[ids.a[2, 1]]
-    ret[ids.u[1]] = init_pos[1]
-    ret[ids.u[2]] = init_pos[2]
+    ret[ids.a] = 0.5
+    ret[ids.u] = init_pos
     ret[ids.r1] = log(2.0)
     ret[ids.r2] = 1e-3
     ret[ids.e_dev] = 0.5
     ret[ids.e_axis] = 0.5
-    ret[ids.e_angle] = 0.
-    ret[ids.e_scale] = 1.
-    ret[ids.k] = 1. / size(ids.k, 1)
-    ret[ids.c1] = 0.
+    ret[ids.e_angle] = 0.0
+    ret[ids.e_scale] = 1.0
+    ret[ids.k] = 1.0 / size(ids.k, 1)
+    ret[ids.c1] = 0.0
     ret[ids.c2] =  1e-2
     ret
 end
@@ -52,8 +64,8 @@ function catalog_init_source(ce::CatalogEntry; max_gal_scale=Inf)
 
     # TODO: don't do this thresholding for background sources,
     # just for sources that are being optimized
-    ret[ids.a[1, 1]] = ce.is_star ? 0.8: 0.2
-    ret[ids.a[2, 1]] = ce.is_star ? 0.2: 0.8
+    ret[ids.a[1]] = ce.is_star ? 0.8: 0.2
+    ret[ids.a[2]] = ce.is_star ? 0.2: 0.8
 
     ret[ids.r1[1]] = log(max(0.1, ce.star_fluxes[3]))
     ret[ids.r1[2]] = log(max(0.1, ce.gal_fluxes[3]))
@@ -97,7 +109,8 @@ include("deterministic_vi/elbo_args.jl")
 include("deterministic_vi/elbo_kl.jl")
 include("deterministic_vi/source_brightness.jl")
 include("deterministic_vi/elbo_objective.jl")
-include("deterministic_vi/maximize_elbo.jl")
+include("deterministic_vi/ConstraintTransforms.jl")
+include("deterministic_vi/ElboMaximize.jl")
 
 
 """
@@ -109,26 +122,34 @@ Arguments:
     neighbors: the other light sources near `entry`
     entry: the source to infer
 """
-function infer_source(images::Vector{Image},
+function infer_source(config::Configs.Config,
+                      images::Vector{Image},
                       neighbors::Vector{CatalogEntry},
-                      entry::CatalogEntry;
-                      min_radius_pix=Nullable{Float64}())
+                      entry::CatalogEntry)
     if length(neighbors) > 100
-        Log.warn("Excessive number ($(length(neighbors))) of neighbors")
+        msg = string("objid $(entry.objid) [ra: $(entry.pos)] has an excessive",
+                     "number ($(length(neighbors))) of neighbors")
+        Log.warn(msg)
     end
 
     # It's a bit inefficient to call the next 5 lines every time we optimize_f.
-    # But, as long as runtime is dominated by the call to maximize_f, that
+    # But, as long as runtime is dominated by the call to maximize!, that
     # isn't a big deal.
     cat_local = vcat([entry], neighbors)
     vp = init_sources([1], cat_local)
     patches = Infer.get_sky_patches(images, cat_local)
-    Infer.load_active_pixels!(images, patches, min_radius_pix=min_radius_pix)
+    Infer.load_active_pixels!(config, images, patches)
 
-    ea = ElboArgs(images, vp, patches, [1])
-    f_evals, max_f, max_x, nm_result = maximize_f(elbo, ea)
-    vp[1]
+    ea = ElboArgs(images, patches, [1])
+    f_evals, max_f, max_x, nm_result = ElboMaximize.maximize!(ea, vp)
+    return vp[1]
 end
 
+# legacy wrapper
+function infer_source(images::Vector{Image},
+                      neighbors::Vector{CatalogEntry},
+                      entry::CatalogEntry)
+    infer_source(Configs.Config(), images, neighbors, entry)
+end
 
 end

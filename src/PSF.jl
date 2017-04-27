@@ -7,6 +7,7 @@ relating to the PSF).
 module PSF
 
 using Celeste
+using Celeste: Const, @aliasscope, @unroll_loop
 using ..Model
 using ..Transform
 using ..SensitiveFloats.SensitiveFloat
@@ -16,6 +17,7 @@ import ..SensitiveFloats
 import Optim
 import WCS
 
+using ForwardDiff
 using StaticArrays
 
 include("bivariate_normals.jl")
@@ -395,7 +397,6 @@ Returns:
 """
 function evaluate_psf_pixel_fit!{NumType <: Number}(
         x::SVector{2,Float64}, psf_params::Vector{Vector{NumType}},
-        sigma_vec::Vector{SMatrix{2,2,NumType,4}},
         sig_sf_vec::Vector{GalaxySigmaDerivs{NumType}},
         bvn_vec::Vector{BvnComponent{NumType}},
         bvn_derivs::BivariateNormalDerivatives{NumType},
@@ -495,10 +496,10 @@ function get_sigma_from_params{NumType <: Number}(psf_params::Vector{Vector{NumT
         sig_sf_vec[k] = GalaxySigmaDerivs(
             psf_params[k][psf_ids.e_angle],
             psf_params[k][psf_ids.e_axis],
-            psf_params[k][psf_ids.e_scale], sigma_vec[k], true)
+            psf_params[k][psf_ids.e_scale], sigma_vec[k], 1.0, true)
 
         bvn_vec[k] =
-            BvnComponent{NumType}(SVector{2,NumType}(psf_params[k][psf_ids.mu]), sigma_vec[k], 1.0)
+            BvnComponent(SVector{2,NumType}(psf_params[k][psf_ids.mu]), sigma_vec[k], 1.0)
     end
     sigma_vec, sig_sf_vec, bvn_vec
 end
@@ -523,7 +524,7 @@ function evaluate_psf_fit!{NumType <: Number}(
     @inbounds for x_ind in 1:length(x_mat)
         clear!(pixel_value)
         evaluate_psf_pixel_fit!(
-                x_mat[x_ind], psf_params, sigma_vec, sig_sf_vec, bvn_vec,
+                x_mat[x_ind], psf_params, sig_sf_vec, bvn_vec,
                 bvn_derivs, log_pdf, pdf, pixel_value, calculate_gradient)
 
         diff = (pixel_value.v[] - raw_psf[x_ind])

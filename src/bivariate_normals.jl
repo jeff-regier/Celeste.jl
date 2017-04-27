@@ -1,4 +1,7 @@
-using StaticArrays
+# Defining gal_shape_ids_len might not be needed but it is critical that this is compile time constant
+const gal_shape_ids_len = 3
+
+using Celeste: Const, @aliasscope, @unroll_loop
 
 """
 Unpack a rotation-parameterized BVN covariance matrix.
@@ -44,25 +47,22 @@ type BivariateNormalDerivatives{NumType <: Number}
   # Derivatives of a bvn with respect to (x, sig).
   bvn_x_d::Array{NumType, 1}
   bvn_sig_d::Array{NumType, 1}
-  bvn_xx_h::Array{NumType, 2}
-  bvn_xsig_h::Array{NumType, 2}
-  bvn_sigsig_h::Array{NumType, 2}
+  bvn_xx_h::SizedMatrix{(2,2), NumType, 2}
+  bvn_xsig_h::SizedMatrix{(2,3), NumType, 2}
+  bvn_sigsig_h::SizedMatrix{(3,3), NumType, 2}
 
   # intermediate values used in d bvn / d(x, sig)
   dpy1_dsig::Array{NumType, 1}
   dpy2_dsig::Array{NumType, 1}
 
-  # TODO: delete this, it is now in BvnComponent
-  dsiginv_dsig::Array{NumType, 2}
-
   # Derivatives of a bvn with respect to (u, shape)
   bvn_u_d::Array{NumType, 1}
-  bvn_uu_h::Array{NumType, 2}
+  bvn_uu_h::SizedMatrix{(2,2), NumType, 2}
   bvn_s_d::Array{NumType, 1}
-  bvn_ss_h::Array{NumType, 2}
-  bvn_us_h::Array{NumType, 2}
+  bvn_ss_h::SizedMatrix{(length(gal_shape_ids), length(gal_shape_ids)), NumType, 2}
+  bvn_us_h::SizedMatrix{(2, length(gal_shape_ids)), NumType, 2}
 
-  function BivariateNormalDerivatives()
+  function (::Type{BivariateNormalDerivatives{NumType}}){NumType}()
     py1 = zeros(NumType, 1)
     py2 = zeros(NumType, 1)
     f_pre = zeros(NumType, 1)
@@ -75,7 +75,6 @@ type BivariateNormalDerivatives{NumType <: Number}
 
     dpy1_dsig = zeros(NumType, 3)
     dpy2_dsig = zeros(NumType, 3)
-    dsiginv_dsig = zeros(NumType, 3, 3)
 
     # Derivatives wrt u.
     bvn_u_d = zeros(NumType, 2)
@@ -88,14 +87,32 @@ type BivariateNormalDerivatives{NumType <: Number}
     bvn_ss_h = zeros(NumType, length(gal_shape_ids), length(gal_shape_ids))
     bvn_us_h = zeros(NumType, 2, length(gal_shape_ids))
 
-    new(py1, py2, f_pre,
+    new{NumType}(py1, py2, f_pre,
         bvn_x_d, bvn_sig_d, bvn_xx_h, bvn_xsig_h, bvn_sigsig_h,
         dpy1_dsig, dpy2_dsig,
-        dsiginv_dsig,
         bvn_u_d, bvn_uu_h, bvn_s_d, bvn_ss_h, bvn_us_h)
   end
 end
 
+function clear!{T}(bvn_derivs::BivariateNormalDerivatives{T})
+    x = zero(T)
+    fill!(bvn_derivs.py1, x)
+    fill!(bvn_derivs.py2, x)
+    fill!(bvn_derivs.f_pre, x)
+    fill!(bvn_derivs.bvn_x_d, x)
+    fill!(bvn_derivs.bvn_sig_d, x)
+    fill!(bvn_derivs.bvn_xx_h, x)
+    fill!(bvn_derivs.bvn_xsig_h, x)
+    fill!(bvn_derivs.bvn_sigsig_h, x)
+    fill!(bvn_derivs.dpy1_dsig, x)
+    fill!(bvn_derivs.dpy2_dsig, x)
+    fill!(bvn_derivs.bvn_u_d, x)
+    fill!(bvn_derivs.bvn_uu_h, x)
+    fill!(bvn_derivs.bvn_s_d, x)
+    fill!(bvn_derivs.bvn_ss_h, x)
+    fill!(bvn_derivs.bvn_us_h, x)
+    return bvn_derivs
+end
 
 """
 Relevant parameters of a bivariate normal distribution.
@@ -118,18 +135,19 @@ immutable BvnComponent{NumType <: Number}
     z::NumType
     dsiginv_dsig::SMatrix{3,3,NumType,9}
     major_sd::NumType
+end
 
-    function BvnComponent{T1 <: Number, T2 <: Number, T3 <: Number}(
-        the_mean::SVector{2,T1}, the_cov::SMatrix{2,2,T2,4}, weight::T3,
-        calculate_siginv_deriv::Bool=true)
+function BvnComponent{T1<:Number,T2<:Number,T3<:Number}(
+    the_mean::SVector{2,T1}, the_cov::SMatrix{2,2,T2,4}, weight::T3,
+    calculate_siginv_deriv::Bool=true)
 
-      ThisNumType = promote_type(T1, T2, T3)
-      c = 1 / (sqrt(det(the_cov)) * 2pi)
-      major_sd = sqrt(max( the_cov[1, 1], the_cov[2, 2] ))
+    NumType = promote_type(T1,T2,T3)
+    c = 1 / (sqrt(det(the_cov)) * 2pi)
+    major_sd = sqrt(max( the_cov[1, 1], the_cov[2, 2] ))
 
-      precision = inv(the_cov)
+    precision = inv(the_cov)
 
-      if calculate_siginv_deriv
+    if calculate_siginv_deriv
         # Derivatives of Sigma^{-1} with respect to sigma.  These are the second
         # derivatives of log|Sigma| with respect to sigma.
         # dsiginv_dsig[a, b] is the derivative of sig^{-1}[a] / d sig[b]
@@ -147,29 +165,16 @@ immutable BvnComponent{NumType <: Number}
         dsiginv_dsig32 = - 2 * precision[2, 2] * precision[2, 1]
         dsiginv_dsig33 = -precision[2, 2] ^ 2
 
-        dsiginv_dsig = @SMatrix ThisNumType[ dsiginv_dsig11 dsiginv_dsig12 dsiginv_dsig13;
-                                             dsiginv_dsig21 dsiginv_dsig22 dsiginv_dsig23;
-                                             dsiginv_dsig13 dsiginv_dsig32 dsiginv_dsig33 ]
+        dsiginv_dsig = @SMatrix NumType[ dsiginv_dsig11 dsiginv_dsig12 dsiginv_dsig13;
+                                           dsiginv_dsig21 dsiginv_dsig22 dsiginv_dsig23;
+                                           dsiginv_dsig13 dsiginv_dsig32 dsiginv_dsig33 ]
 
-        new{ThisNumType}(the_mean, precision, c * weight,
-                         dsiginv_dsig, major_sd)
-      else
-        new{ThisNumType}(the_mean, precision, c * weight,
-                         zeros(SMatrix{3,3,ThisNumType,9}), major_sd)
-      end
+        BvnComponent{NumType}(the_mean, precision, c * weight,
+                              dsiginv_dsig, major_sd)
+    else
+        BvnComponent{NumType}(the_mean, precision, c * weight,
+                              zeros(SMatrix{3,3,NumType,9}), major_sd)
     end
-end
-
-
-"""
-Check whether a point is close enough to a BvnComponent to bother making
-calculations with it.
-"""
-function check_point_close_to_bvn{NumType <: Number}(
-    bmc::BvnComponent{NumType}, x::SVector{2,NumType}, num_allowed_sd::NumType)
-
-    dist = sqrt(norm(x - bmc.the_mean))
-    return dist < (num_allowed_sd * bmc.major_sd)
 end
 
 
@@ -297,9 +302,6 @@ function get_bvn_derivs!{NumType <: Number}(
   end
 end
 
-
-
-
 ##############################
 
 """
@@ -311,9 +313,9 @@ parameters are indexed by GalaxyShapeParams.
  - t: A Sigma x GalaxyShapeParams x GalaxyShapeParams tensor of second
       derivatives d2 Sigma / d GalaxyShapeParams d GalaxyShapeParams.
 """
-type GalaxySigmaDerivs{NumType <: Number}
-    j::Matrix{NumType}
-    t::Array{NumType, 3}
+immutable GalaxySigmaDerivs{NumType <: Number}
+    j::SMatrix{3,gal_shape_ids_len,NumType,9}
+    t::SArray{Tuple{3,gal_shape_ids_len,gal_shape_ids_len},NumType,3,27}
 end
 
 
@@ -328,52 +330,34 @@ Note that nubar is not included.
 """
 function GalaxySigmaDerivs{NumType <: Number}(
     e_angle::NumType, e_axis::NumType, e_scale::NumType,
-    XiXi::SMatrix{2,2,NumType,4}, calculate_tensor::Bool=true)
+    XiXi::SMatrix{2,2,NumType,4}, nuBar::Float64=1.0, calculate_tensor::Bool=true)
 
   cos_sin = cos(e_angle)sin(e_angle)
-  sin_sq = sin(e_angle)^2
-  cos_sq = cos(e_angle)^2
+  sin_sq  = sin(e_angle)^2
+  cos_sq  = cos(e_angle)^2
 
-  j = Matrix{NumType}(3, length(gal_shape_ids))
-  j[:, gal_shape_ids.e_axis] =
-    2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
-  j[:, gal_shape_ids.e_angle] =
-    e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
-  j[:, gal_shape_ids.e_scale] =
-    2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale
+  j = hcat(2 * e_axis * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq),
+           e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin),
+           2 * SVector{3,NumType}(XiXi[1], XiXi[2], XiXi[4]) / e_scale)
 
-  t = Array{NumType,3}(3, length(gal_shape_ids), length(gal_shape_ids))
   if calculate_tensor
     # Second derivatives.
 
-    for i = 1:3
-      # Second derivatives involving e_scale
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_scale] = 2 * XiXi[1 << (i - 1)] / e_scale^2
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]  = 2 * j[i, gal_shape_ids.e_axis]  / e_scale
-      t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle] = 2 * j[i, gal_shape_ids.e_angle] / e_scale
-
-      t[i, gal_shape_ids.e_axis, gal_shape_ids.e_scale] =
-        t[i, gal_shape_ids.e_scale, gal_shape_ids.e_axis]
-      t[i, gal_shape_ids.e_angle, gal_shape_ids.e_scale] =
-        t[i, gal_shape_ids.e_scale, gal_shape_ids.e_angle]
-
-    end
-      # Remaining second derivatives involving e_angle
-    t[:, gal_shape_ids.e_angle, gal_shape_ids.e_angle]  =
-      2 * e_scale^2 * (e_axis^2 - 1) * SVector{3,NumType}(cos_sq - sin_sq, 2cos_sin, sin_sq - cos_sq)
-    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_angle]   =
-      t[:, gal_shape_ids.e_angle, gal_shape_ids.e_axis] =
-        2 * e_scale^2 * e_axis       * SVector{3,NumType}(2cos_sin, sin_sq - cos_sq, -2cos_sin)
-
-      # The second derivative involving only e_axis.
-    t[:, gal_shape_ids.e_axis, gal_shape_ids.e_axis] =
-        2 * e_scale^2 * SVector{3,NumType}(sin_sq, -cos_sin, cos_sq)
+    t = SArray{Tuple{3,3,3}, NumType, 3, 27}(sin_sq * 2 * e_scale^2, -cos_sin * 2 * e_scale^2, cos_sq * 2 * e_scale^2,
+      2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
+      2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
+      2cos_sin * 2 * e_scale^2 * e_axis, (sin_sq - cos_sq) * 2 * e_scale^2 * e_axis, -2cos_sin * 2 * e_scale^2 * e_axis,
+      (cos_sq - sin_sq) * 2 * e_scale^2 * (e_axis^2 - 1), 2cos_sin * 2 * e_scale^2 * (e_axis^2 - 1), (sin_sq - cos_sq) * 2 * e_scale^2 * (e_axis^2 - 1),
+      2 * j[1, gal_shape_ids.e_angle] / e_scale, 2 * j[2, gal_shape_ids.e_angle] / e_scale, 2 * j[3, gal_shape_ids.e_angle] / e_scale,
+      2 * j[1, gal_shape_ids.e_axis]  / e_scale, 2 * j[2, gal_shape_ids.e_axis]  / e_scale, 2 * j[3, gal_shape_ids.e_axis]  / e_scale,
+      2 * j[1, gal_shape_ids.e_angle] / e_scale, 2 * j[2, gal_shape_ids.e_angle] / e_scale, 2 * j[3, gal_shape_ids.e_angle] / e_scale,
+      2 * XiXi[1 << (1 - 1)] / e_scale^2, 2 * XiXi[1 << (2 - 1)] / e_scale^2, 2 * XiXi[1 << (3 - 1)] / e_scale^2)
 
   else
-    fill!(t, 0.0)
+    t = @SArray zeros(NumType, 3, 3, 3)
   end
 
-  GalaxySigmaDerivs(j, t)
+  GalaxySigmaDerivs(j*nuBar, t*nuBar)
 end
 
 
@@ -419,34 +403,27 @@ function GalaxyCacheComponent{NumType <: Number}(
     e_axis::NumType, e_angle::NumType, e_scale::NumType,
     calculate_gradient::Bool, calculate_hessian::Bool)
 
-  # Declare in advance to save memory allocation.
-  const empty_sig_sf =
-    GalaxySigmaDerivs(Matrix{NumType}(0, 0), Array{NumType,3}(0, 0, 0))
-
   XiXi = get_bvn_cov(e_axis, e_angle, e_scale)
   mean_s = @SVector NumType[pc.xiBar[1] + u[1], pc.xiBar[2] + u[2]]
   var_s = pc.tauBar + gc.nuBar * XiXi
   weight = pc.alphaBar * gc.etaBar  # excludes e_dev
 
   # d siginv / dsigma is only necessary for the Hessian.
-  bmc = BvnComponent{NumType}(
-    mean_s, var_s, weight, calculate_gradient && calculate_hessian)
+  bmc = BvnComponent(mean_s, var_s, weight, calculate_gradient && calculate_hessian)
 
   if calculate_gradient
     sig_sf = GalaxySigmaDerivs(
-      e_angle, e_axis, e_scale, XiXi, calculate_hessian)
-    scale!(sig_sf.j, gc.nuBar)
-    if calculate_hessian
-      # The tensor is only needed for the Hessian.
-      scale!(sig_sf.t, gc.nuBar)
-    end
+      e_angle, e_axis, e_scale, XiXi, gc.nuBar, calculate_hessian)
   else
-    sig_sf = empty_sig_sf
+    sig_sf = GalaxySigmaDerivs(NumType)
   end
 
   GalaxyCacheComponent(e_dev_dir, e_dev_i, bmc, sig_sf)
 end
 
+GalaxySigmaDerivs{NumType}(::Type{NumType}) = GalaxySigmaDerivs(
+                                                     @SMatrix(zeros(NumType,3,gal_shape_ids_len)),
+                                                     @SArray( zeros(NumType,3,gal_shape_ids_len,gal_shape_ids_len)))
 
 ###################################################
 # Transform derivatives into the model parameterization.
@@ -492,6 +469,81 @@ function transform_bvn_ux_derivs!{NumType <: Number}(
   end
 end
 
+@generated function fast_fill!{T<:SizedMatrix}(s::T, x)
+  quote
+    $(Expr(:meta, :inline))
+    @unroll_loop for i in 1:$(size(s, 1))
+      @unroll_loop for j in 1:$(size(s, 2))
+        @inbounds s[i, j] = x
+      end
+    end
+  end
+end
+fast_fill!{T<:Array}(s::T, x) = fill!(s, x)
+
+# WARNING: HUGE PERFORMANCE HOTSPOT
+function transform_bvn_derivs_hessian!{NumType <: Number}(
+    bvn_derivs::BivariateNormalDerivatives{NumType},
+    sig_sf::GalaxySigmaDerivs{NumType},
+    wcs_jacobian)
+  @aliasscope begin
+    # Hessian calculations.
+
+    bvn_ss_h = bvn_derivs.bvn_ss_h
+    bvn_us_h = bvn_derivs.bvn_us_h
+    bvn_sig_d = Const(bvn_derivs.bvn_sig_d)
+    #wcs_jacobian = Const(wcs_jacobian)
+    sig_sf_j = sig_sf.j
+
+    # Manually inlined version of fill!
+    fast_fill!(bvn_ss_h, 0.0)
+    fast_fill!(bvn_us_h, 0.0)
+
+    # Second derviatives involving only shape parameters.
+    # TODO: time consuming **************
+    sig_sf_t = sig_sf.t
+    @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
+      @unroll_loop for shape_id1 in 1:shape_id2
+        @inbounds @unroll_loop for sig_id1 in 1:3
+          bvn_ss_h[shape_id1, shape_id2] += bvn_sig_d[sig_id1] * sig_sf_t[sig_id1, shape_id1, shape_id2]
+        end
+      end
+    end
+
+    bvn_sigsig_h = Const(bvn_derivs.bvn_sigsig_h)
+    @unroll_loop for sig_id1 in 1:3
+      @unroll_loop for sig_id2 in 1:3
+        @inbounds @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
+          inner_term = bvn_sigsig_h[sig_id1, sig_id2] * sig_sf_j[sig_id2, shape_id2]
+          @unroll_loop for shape_id1 in 1:shape_id2
+            bvn_ss_h[shape_id1, shape_id2] += inner_term * sig_sf_j[sig_id1, shape_id1]
+          end
+        end
+      end
+    end
+
+    @unroll_loop for shape_id2 in 1:length(gal_shape_ids)
+      @inbounds @unroll_loop for shape_id1 in 1:shape_id2
+        bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
+      end
+    end
+
+    # Second derivates involving both a shape term and a u term.
+    # TODO: time consuming **************
+    bvn_xsig_h = Const(bvn_derivs.bvn_xsig_h)
+    @unroll_loop for shape_id in 1:length(gal_shape_ids)
+      @unroll_loop for u_id in 1:2
+        @unroll_loop for sig_id in 1:3
+          @inbounds @unroll_loop for x_id in 1:2
+            bvn_us_h[u_id, shape_id] +=
+              bvn_xsig_h[x_id, sig_id] * sig_sf_j[sig_id, shape_id] * (-wcs_jacobian[x_id, u_id])
+          end
+        end
+      end
+    end
+  end
+end
+
 
 """
 Transform all the bvn derivatives from x and sigma to u and the model
@@ -515,57 +567,37 @@ function transform_bvn_derivs!{NumType <: Number}(
 
   # Gradient calculations.
 
-  # Use the chain rule for the shape derviatives.
-  # TODO: time consuming **************
-  bvn_s_d = bvn_derivs.bvn_s_d
-  bvn_sig_d = bvn_derivs.bvn_sig_d
+  @aliasscope begin
+      # Use the chain rule for the shape derviatives.
+      # TODO: time consuming **************
+      @aliasscope begin
+        bvn_s_d   = bvn_derivs.bvn_s_d
+        bvn_sig_d = Const(bvn_derivs.bvn_sig_d)
+        sig_sf_j = sig_sf.j
 
-  fill!(bvn_s_d, 0.0)
-  @inbounds for shape_id in 1:length(gal_shape_ids), sig_id in 1:3
-    bvn_s_d[shape_id] += bvn_sig_d[sig_id] * sig_sf.j[sig_id, shape_id]
-  end
+        fast_fill!(bvn_s_d, 0.0)
+        @unroll_loop for shape_id in 1:length(gal_shape_ids)
+          @inbounds @unroll_loop for sig_id in 1:3
+            bvn_s_d[shape_id] += bvn_sig_d[sig_id] * sig_sf_j[sig_id, shape_id]
+          end
+        end
+      end
 
-  if calculate_hessian
-    # Hessian calculations.
-
-    bvn_ss_h = bvn_derivs.bvn_ss_h
-    bvn_us_h = bvn_derivs.bvn_us_h
-
-    fill!(bvn_ss_h, 0.0)
-    fill!(bvn_us_h, 0.0)
-
-    # Second derviatives involving only shape parameters.
-    # TODO: time consuming **************
-    @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
-      @inbounds for sig_id1 in 1:3
-        bvn_ss_h[shape_id1, shape_id2] +=
-          bvn_sig_d[sig_id1] * sig_sf.t[sig_id1, shape_id1, shape_id2]
+      if calculate_hessian
+        transform_bvn_derivs_hessian!(bvn_derivs, sig_sf, wcs_jacobian)
       end
     end
-
-    bvn_sigsig_h = bvn_derivs.bvn_sigsig_h
-    @inbounds for sig_id1 in 1:3, sig_id2 in 1:3,
-                  shape_id2 in 1:length(gal_shape_ids)
-      inner_term =
-        bvn_sigsig_h[sig_id1, sig_id2] * sig_sf.j[sig_id2, shape_id2]
-      @inbounds for shape_id1 in 1:shape_id2
-        bvn_ss_h[shape_id1, shape_id2] +=
-          inner_term * sig_sf.j[sig_id1, shape_id1]
-      end
-    end
-
-    @inbounds for shape_id2 in 1:length(gal_shape_ids), shape_id1 in 1:shape_id2
-      bvn_ss_h[shape_id2, shape_id1] = bvn_ss_h[shape_id1, shape_id2]
-    end
-
-    # Second derivates involving both a shape term and a u term.
-    # TODO: time consuming **************
-    bvn_xsig_h = bvn_derivs.bvn_xsig_h
-    @inbounds for shape_id in 1:length(gal_shape_ids),
-                  u_id in 1:2, sig_id in 1:3, x_id in 1:2
-      bvn_us_h[u_id, shape_id] +=
-        bvn_xsig_h[x_id, sig_id] * sig_sf.j[sig_id, shape_id] *
-        (-wcs_jacobian[x_id, u_id])
-    end
-  end
 end
+
+immutable BvnBundle{T<:Real}
+    bvn_derivs::BivariateNormalDerivatives{T}
+    star_mcs::Matrix{BvnComponent{T}}
+    gal_mcs::Array{GalaxyCacheComponent{T},4}
+    function (::Type{BvnBundle{T}}){T}(psf_K::Int, S::Int)
+        return new{T}(BivariateNormalDerivatives{T}(),
+                      Matrix{BvnComponent{T}}(psf_K, S),
+                      Array{GalaxyCacheComponent{T}}(psf_K, 8, 2, S))
+    end
+end
+
+clear!(bvn_bundle::BvnBundle) = (clear!(bvn_bundle.bvn_derivs); bvn_bundle)

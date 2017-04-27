@@ -53,12 +53,13 @@ function choose_patch_radius(ce::CatalogEntry,
     obj_width += psf_width
 
     flux = ce.is_star ? ce.star_fluxes[img.b] : ce.gal_fluxes[img.b]
+    if (!(flux > 0.)) @show ce end
     @assert flux > 0.
 
-    # Choose enough pixels that the light is either 90% of the light
+    # Choose enough pixels that the light is either 80% of the light
     # would be captured from a 1d gaussian or 5% of the sky noise,
     # whichever is a larger radius.
-    epsilon = img.epsilon_mat[div(img.H, 2), div(img.W, 2)]
+    epsilon = img.sky[div(img.H, 2), div(img.W, 2)]
     pdf_90 = exp(-0.5 * (1.64)^2) / (sqrt(2pi) * obj_width)
     pdf_target = min(pdf_90, epsilon / (20 * flux))
     rhs = log(pdf_target) + 0.5 * log(2pi) + log(obj_width)

@@ -1,19 +1,20 @@
 module ParallelRun
 
 using Base.Threads
+using Base.Dates
 
 import FITSIO
 import JLD
 
+import ..Configs
 import ..Log
 using ..Model
 import ..SDSSIO
 import ..Infer
-import ..SDSSIO: RunCamcolField
+import ..SDSSIO: RunCamcolField, IOStrategy, PlainFITSStrategy
 import ..PSF
 
 import ..DeterministicVI: infer_source
-import ..DeterministicVIImagePSF
 
 include("joint_infer.jl")
 
@@ -24,9 +25,11 @@ const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != 
 const distributed = haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
 
 if distributed
-import Gasp.nodeid
+using Gasp
 else
-nodeid = 1
+grank() = 1
+const Dlog = Void
+message(d, msg...) = println(msg...)
 end
 
 #
@@ -47,54 +50,96 @@ end
 
 
 # ------
-# thread-safe print functions
-@inline nputs(nid, s...) = ccall(:puts, Cint, (Cstring,), string("[$nid] ", s...))
-@inline ntputs(nid, tid, s...) = ccall(:puts, Cint, (Cstring,), string("[$nid]<$tid> ", s...))
-
-@inline phalse(b) = b[] = false
-
-
-# ------
-# timed parts of Celeste
+# to time parts of Celeste
 type InferTiming
     query_fids::Float64
-    num_infers::Int64
     read_photoobj::Float64
     read_img::Float64
+    preload_rcfs::Float64
+    find_neigh::Float64
+    load_wait::Float64
+    proc_wait::Float64
+    init_elbo::Float64
     opt_srcs::Float64
     num_srcs::Int64
+    sched_ovh::Float64
+    load_imba::Float64
+    ga_get::Float64
+    ga_put::Float64
+    store_res::Float64
     write_results::Float64
     wait_done::Float64
 
-    InferTiming() = new(0.0, 0, 0.0, 0.0, 0.0, 0, 0.0, 0.0)
+    InferTiming() = new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0)
 end
 
 function add_timing!(i::InferTiming, j::InferTiming)
     i.query_fids = i.query_fids + j.query_fids
-    i.num_infers = i.num_infers + j.num_infers
     i.read_photoobj = i.read_photoobj + j.read_photoobj
     i.read_img = i.read_img + j.read_img
+    i.preload_rcfs = i.preload_rcfs + j.preload_rcfs
+    i.find_neigh = i.find_neigh + j.find_neigh
+    i.load_wait = i.load_wait + j.load_wait
+    i.proc_wait = i.proc_wait + j.proc_wait
+    i.init_elbo = i.init_elbo + j.init_elbo
     i.opt_srcs = i.opt_srcs + j.opt_srcs
     i.num_srcs = i.num_srcs + j.num_srcs
+    i.sched_ovh = i.sched_ovh + j.sched_ovh
+    i.load_imba = i.load_imba + j.load_imba
+    i.ga_get = i.ga_get + j.ga_get
+    i.ga_put = i.ga_put + j.ga_put
+    i.store_res = i.store_res + j.store_res
     i.write_results = i.write_results + j.write_results
     i.wait_done = i.wait_done + j.wait_done
 end
 
 function puts_timing(i::InferTiming)
     i.num_srcs = max(1, i.num_srcs)
-    nputs(nodeid, "timing: query_fids=$(i.query_fids)")
-    nputs(nodeid, "timing: num_infers=$(i.num_infers)")
-    nputs(nodeid, "timing: read_photoobj=$(i.read_photoobj)")
-    nputs(nodeid, "timing: read_img=$(i.read_img)")
-    nputs(nodeid, "timing: opt_srcs=$(i.opt_srcs)")
-    nputs(nodeid, "timing: num_srcs=$(i.num_srcs)")
-    nputs(nodeid, "timing: average opt_srcs=$(i.opt_srcs/i.num_srcs)")
-    nputs(nodeid, "timing: write_results=$(i.write_results)")
-    nputs(nodeid, "timing: wait_done=$(i.wait_done)")
+    Log.message("timing: query_fids=$(i.query_fids)")
+    Log.message("timing: read_photoobj=$(i.read_photoobj)")
+    Log.message("timing: read_img=$(i.read_img)")
+    Log.message("timing: preload_rcfs=$(i.preload_rcfs)")
+    Log.message("timing: find_neigh=$(i.find_neigh)")
+    #Log.message("timing: load_wait=$(i.load_wait)")
+    #Log.message("timing: proc_wait=$(i.proc_wait)")
+    Log.message("timing: init_elbo=$(i.init_elbo)")
+    Log.message("timing: opt_srcs=$(i.opt_srcs)")
+    Log.message("timing: num_srcs=$(i.num_srcs)")
+    #Log.message("timing: average opt_srcs=$(i.opt_srcs/i.num_srcs)")
+    #Log.message("timing: sched_ovh=$(i.sched_ovh)")
+    Log.message("timing: load_imba=$(i.load_imba)")
+    #Log.message("timing: ga_get=$(i.ga_get)")
+    #Log.message("timing: ga_put=$(i.ga_put)")
+    #Log.message("timing: store_res=$(i.store_res)")
+    Log.message("timing: write_results=$(i.write_results)")
+    #Log.message("timing: wait_done=$(i.wait_done)")
 end
 
-function time_puts(elapsedtime, bytes, gctime, allocs)
-    s = @sprintf("%10.6f seconds", elapsedtime/1e9)
+function puts_timing(dl::Dlog, i::InferTiming)
+    i.num_srcs = max(1, i.num_srcs)
+    message(dl, "timing: query_fids=$(i.query_fids)")
+    message(dl, "timing: read_photoobj=$(i.read_photoobj)")
+    message(dl, "timing: read_img=$(i.read_img)")
+    message(dl, "timing: preload_rcfs=$(i.preload_rcfs)")
+    message(dl, "timing: find_neigh=$(i.find_neigh)")
+    message(dl, "timing: load_wait=$(i.load_wait)")
+    #message("dl, timing: proc_wait=$(i.proc_wait)")
+    message(dl, "timing: init_elbo=$(i.init_elbo)")
+    message(dl, "timing: opt_srcs=$(i.opt_srcs)")
+    message(dl, "timing: num_srcs=$(i.num_srcs)")
+    #message(dl, "timing: average opt_srcs=$(i.opt_srcs/i.num_srcs)")
+    #message(dl, "timing: sched_ovh=$(i.sched_ovh)")
+    message(dl, "timing: load_imba=$(i.load_imba)")
+    #message(dl, "timing: ga_get=$(i.ga_get)")
+    #message(dl, "timing: ga_put=$(i.ga_put)")
+    #message(dl, "timing: store_res=$(i.store_res)")
+    message(dl, "timing: write_results=$(i.write_results)")
+    message(dl, "timing: wait_done=$(i.wait_done)")
+end
+
+function time_puts(dl::Dlog, elapsedtime, bytes, gctime, allocs)
+    s = @sprintf("timing: total=%10.6f seconds", elapsedtime/1e9)
     if bytes != 0 || allocs != 0
         bytes, mb = Base.prettyprint_getunits(bytes, length(Base._mem_units),
                             Int64(1024))
@@ -120,31 +165,56 @@ function time_puts(elapsedtime, bytes, gctime, allocs)
     elseif gctime > 0
         s = string(s, @sprintf(", %.2f%% gc time", 100*gctime/elapsedtime))
     end
-    nputs(nodeid, s)
+    message(dl, s)
 end
 
 
+# ------
+# initialization helpers
+
+"""
+Given a list of RCFs, load the catalogs, determine the target sources,
+load the images, and build the neighbor map.
+"""
 function infer_init(rcfs::Vector{RunCamcolField},
-                    stagedir::String;
+                    strategy::SDSSIO.IOStrategy;
                     objid="",
                     box=BoundingBox(-1000., 1000., -1000., 1000.),
                     primary_initialization=true,
                     timing=InferTiming())
+    catalog = Vector{CatalogEntry}()
+    target_sources = Vector{Int}()
+    neighbor_map = Vector{Vector{Int}}()
+    images = Vector{Image}()
+    source_rcfs = Vector{RunCamcolField}()
+    source_cat_idxs = Vector{Int16}()
+
     # Read all primary objects in these fields.
     duplicate_policy = primary_initialization ? :primary : :first
     tic()
-    catalog = SDSSIO.read_photoobj_files(rcfs, stagedir,
-                        duplicate_policy=duplicate_policy)
-    timing.read_photoobj = toq()
-    Log.info("$(length(catalog)) primary sources")
+    states = SDSSIO.preload_rcfs(strategy, rcfs)
+    timing.preload_rcfs += toq()
+
+    tic()
+    for (i,(rcf,state)) in enumerate(zip(rcfs, states))
+        this_cat = SDSSIO.read_photoobj(strategy, rcf, state, duplicate_policy=duplicate_policy)
+        these_sources_rcfs = Vector{RunCamcolField}(length(this_cat))
+        fill!(these_sources_rcfs, rcf)
+        these_sources_idxs = collect(Int16, 1:length(this_cat))
+        append!(catalog, this_cat)
+        append!(source_rcfs, these_sources_rcfs)
+        append!(source_cat_idxs, these_sources_idxs)
+    end
+    timing.read_photoobj += toq()
 
     # Get indices of entries in the RA/Dec range of interest.
     entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
                              (box.decmin < entry.pos[2] < box.decmax))
     target_sources = find(entry_in_range, catalog)
 
-    Log.info(string("Found $(length(target_sources)) target sources in ",
-          "$(box.ramin), $(box.ramax), $(box.decmin), $(box.decmax)"))
+    Log.info("$(Time(now())): $(length(catalog)) primary sources, ",
+             "$(length(target_sources)) target sources in $(box.ramin), ",
+             "$(box.ramax), $(box.decmin), $(box.decmax)")
 
     # Filter any object not specified, if an objid is specified
     if objid != ""
@@ -153,26 +223,29 @@ function infer_init(rcfs::Vector{RunCamcolField},
     end
 
     # Load images and neighbor map for target sources
-    images = Image[]
-    neighbor_map = Vector{Int}[]
     if length(target_sources) > 0
         # Read in images for all (run, camcol, field).
         try
             tic()
-            images = SDSSIO.load_field_images(rcfs, stagedir)
-            timing.read_img = toq()
+            images = SDSSIO.load_field_images(strategy, rcfs, states)
+            timing.read_img += toq()
         catch ex
-            Log.error(string(ex))
+            Log.exception(ex)
+            empty!(target_sources)
         end
 
         tic()
         neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
-        Log.info("neighbors found in $(toq()) seconds")
+        timing.find_neigh += toq()
     end
 
-    return catalog, target_sources, images, neighbor_map
+    return catalog, target_sources, neighbor_map, images,
+           source_rcfs, source_cat_idxs
 end
 
+
+# ------
+# optimization result container
 
 immutable OptimizedSource
     thingid::Int64
@@ -181,26 +254,57 @@ immutable OptimizedSource
     init_dec::Float64
     vs::Vector{Float64}
 end
+const OptimizedSourceLen = 465
+
+function serialize(s::Base.AbstractSerializer, os::OptimizedSource)
+    Base.serialize_type(s, typeof(os))
+    write(s.io, os.thingid)
+    @assert length(os.objid) == 19
+    for i = 1:19
+        write(s.io, os.objid.data[i])
+    end
+    write(s.io, os.init_ra)
+    write(s.io, os.init_dec)
+    for i = 1:length(Celeste.Model.ids)
+        write(s.io, os.vs[i])
+    end
+end
+
+function deserialize(s::Base.AbstractSerializer, ::Type{OptimizedSource})
+    thingid = read(s.io, Int64)::Int64
+    objid_data = zeros(UInt8, 19)
+    for i = 1:19
+        objid_data[i] = read(s.io, UInt8)::UInt8
+    end
+    init_ra = read(s.io, Float64)::Float64
+    init_dec = read(s.io, Float64)::Float64
+    vs = zeros(Float64, length(Celeste.Model.ids))
+    for i = 1:length(Celeste.Model.ids)
+        vs[i] = read(s.io, Float64)
+    end
+    OptimizedSource(thingid, String(objid_data), init_ra, init_dec, vs)
+end
 
 
+# ------
+# optimization
+
 """
-Optimize the `ts`th element of `sources`.
+Optimize the `ts`th element of `target_sources`.
 """
-function process_source(ts::Int,
-                        target_sources::Vector{Int},
+function process_source(config::Configs.Config,
+                        ts::Int,
                         catalog::Vector{CatalogEntry},
+                        target_sources::Vector{Int},
                         neighbor_map::Vector{Vector{Int}},
-                        images::Vector{Image};
-                        infer_source_callback=infer_source)
+                        images::Vector{Image})
     s = target_sources[ts]
     entry = catalog[s]
-
     neighbors = catalog[neighbor_map[ts]]
 
-    ntputs(nodeid, threadid(), "processing objid $(entry.objid)")
     tic()
-    vs_opt = infer_source_callback(images, neighbors, entry)
-    ntputs(nodeid, threadid(), "processed objid $(entry.objid) in $(toq()) secs")
+    vs_opt = infer_source(config, images, neighbors, entry)
+    Log.info("$(entry.objid): $(toq()) secs")
     return OptimizedSource(entry.thing_id,
                            entry.objid,
                            entry.pos[1],
@@ -213,7 +317,8 @@ end
 Use multiple threads to process each target source with the specified
 callback and write the results to a file.
 """
-function one_node_single_infer(catalog::Vector{CatalogEntry},
+function one_node_single_infer(config::Configs.Config,
+                               catalog::Vector{CatalogEntry},
                                target_sources::Vector{Int},
                                neighbor_map::Vector{Vector{Int}},
                                images::Vector{Image};
@@ -239,16 +344,15 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
             end
 
             try
-                result = process_source(ts, target_sources, catalog, neighbor_map,
-                                        images;
-                                        infer_source_callback=infer_source_callback)
+                result = process_source(config, ts, catalog, target_sources,
+                                        neighbor_map, images)
 
                 lock(results_lock)
                 push!(results, result)
                 unlock(results_lock)
             catch ex
                 if is_production_run || nthreads() > 1
-                    Log.error(string(ex))
+                    Log.exception(ex)
                 else
                     rethrow(ex)
                 end
@@ -269,9 +373,26 @@ function one_node_single_infer(catalog::Vector{CatalogEntry},
     return results
 end
 
+# legacy wrapper
+function one_node_single_infer(catalog::Vector{CatalogEntry},
+                               target_sources::Vector{Int},
+                               neighbor_map::Vector{Vector{Int}},
+                               images::Vector{Image};
+                               infer_source_callback=infer_source,
+                               timing=InferTiming())
+    one_node_single_infer(
+        Configs.Config(),
+        catalog,
+        target_sources,
+        neighbor_map,
+        images,
+        infer_source_callback=infer_source_callback,
+        timing=timing,
+    )
+end
 
 """
-Use mulitple threads on one node to fit the Celeste model to sources in a given
+Use multiple threads on one node to fit the Celeste model to sources in a given
 bounding box.
 """
 function one_node_infer(rcfs::Vector{RunCamcolField},
@@ -279,15 +400,18 @@ function one_node_infer(rcfs::Vector{RunCamcolField},
                         infer_callback=one_node_single_infer,
                         objid="",
                         box=BoundingBox(-1000., 1000., -1000., 1000.),
-                        primary_initialization=true)
-    catalog, target_sources, images, neighbor_map =
+                        primary_initialization=true,
+                        timing=InferTiming())
+    strategy = PlainFITSStrategy(stagedir)
+
+    catalog, target_sources, neighbor_map, images =
         infer_init(rcfs,
-                   stagedir;
+                   strategy;
                    objid=objid,
                    box=box,
                    primary_initialization=primary_initialization)
 
-    Log.info("Running with $(nthreads()) threads")
+    Log.info("running with $(nthreads()) threads")
 
     # NB: All I/O happens above. The methods below don't touch disk.
     infer_callback(catalog, target_sources, neighbor_map, images)
@@ -329,15 +453,116 @@ function get_overlapping_field_extents(query::BoundingBox, stagedir::String)
 
     return ret
 end
+get_overlapping_field_extents(query::BoundingBox, strategy::SDSSIO.IOStrategy) =
+    get_overlapping_field_extents(query, strategy.stagedir)
 
 
 """
-Like `get_overlapping_fields`, but return a Vector of
+Like `get_overlapping_field_extents()`, but return a Vector of
 (run, camcol, field) triplets.
 """
-function get_overlapping_fields(query::BoundingBox, stagedir::String)
+function get_overlapping_fields(query::BoundingBox, stagedir)
     fes = get_overlapping_field_extents(query, stagedir)
     [fe[1] for fe in fes]
+end
+
+
+"""
+Store the contents of the `field_extents.fits` file, so it doesn't
+have to be loaded repeatedly.
+"""
+type FieldExtent
+    run::Int16
+    camcol::UInt8
+    field::Int16
+    ramin::Float64
+    ramax::Float64
+    decmin::Float64
+    decmax::Float64
+end
+
+
+"""
+Load `field_extents.fits` from `stagedir` and return a vector of
+`FieldExtent`s.
+"""
+function load_field_extents(stagedir::String)
+    f = FITSIO.FITS("$stagedir/field_extents.fits")
+
+    hdu = f[2]::FITSIO.TableHDU
+
+    # read in the entire table.
+    all_run = read(hdu, "run")::Vector{Int16}
+    all_camcol = read(hdu, "camcol")::Vector{UInt8}
+    all_field = read(hdu, "field")::Vector{Int16}
+    all_ramin = read(hdu, "ramin")::Vector{Float64}
+    all_ramax = read(hdu, "ramax")::Vector{Float64}
+    all_decmin = read(hdu, "decmin")::Vector{Float64}
+    all_decmax = read(hdu, "decmax")::Vector{Float64}
+
+    close(f)
+
+    fes = Vector{FieldExtent}()
+    for i = 1:length(all_run)
+        fe = FieldExtent(all_run[i], all_camcol[i], all_field[i],
+                         all_ramin[i], all_ramax[i],
+                         all_decmin[i], all_decmax[i])
+        push!(fes, fe)
+    end
+
+    return fes
+end
+load_field_extents(strategy::SDSSIO.IOStrategy) = load_field_extents(strategy.stagedir)
+
+
+"""
+Use the provided `FieldExtent`s to return a list of RCFs that overlap
+the specified box.
+"""
+function get_overlapping_fields(query::BoundingBox, fes::Vector{FieldExtent})
+    # The ramin, ramax, etc is a bit unintuitive because we're looking
+    # for any overlap.
+    rcfs = Vector{RunCamcolField}()
+    for i in eachindex(fes)
+        if (fes[i].ramax > query.ramin &&
+                fes[i].ramin < query.ramax &&
+                fes[i].decmax > query.decmin &&
+                fes[i].decmin < query.decmax)
+            push!(rcfs, RunCamcolField(fes[i].run, fes[i].camcol, fes[i].field))
+        end
+    end
+
+    return rcfs
+end
+
+
+"""
+Use the provided `FieldExtent`s to return a list of RCFs that overlap
+all the provided boxes.
+"""
+function get_overlapping_fields(queries::Vector{Vector{BoundingBox}},
+                                fes::Vector{FieldExtent})
+    rcfs = Vector{RunCamcolField}()
+
+    for boxlist in queries
+        for query in boxlist
+            # The ramin, ramax, etc is a bit unintuitive because we're looking
+            # for any overlap.
+            for i in eachindex(fes)
+                if (fes[i].ramax > query.ramin &&
+                        fes[i].ramin < query.ramax &&
+                        fes[i].decmax > query.decmin &&
+                        fes[i].decmin < query.decmax)
+                    push!(rcfs, RunCamcolField(fes[i].run,
+                                               fes[i].camcol,
+                                               fes[i].field))
+                end
+            end
+        end
+        rcfs = unique(rcfs)
+    end
+
+    return rcfs
 end
 
 
@@ -345,8 +570,8 @@ end
 Save provided results to a JLD file.
 """
 function save_results(outdir, ramin, ramax, decmin, decmax, results)
-    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f-node%d.jld",
-                     outdir, ramin, ramax, decmin, decmax, nodeid)
+    fname = @sprintf("%s/celeste-%.4f-%.4f-%.4f-%.4f-rank%d.jld",
+                     outdir, ramin, ramax, decmin, decmax, grank())
     JLD.save(fname, "results", results)
 end
 
@@ -358,34 +583,52 @@ save_results(outdir, box, results) =
 called from main entry point.
 """
 function infer_box(box::BoundingBox, stagedir::String, outdir::String)
-    times = InferTiming()
+    strategy = PlainFITSStrategy(stagedir)
 
-    Log.debug("multithreaded parallelism only")
+    timing = InferTiming()
 
-    tic()
-    # Get vector of (run, camcol, field) triplets overlapping this patch
-    rcfs = get_overlapping_fields(box, stagedir)
-    times.query_fids = toq()
+    Log.info("processing box $(box.ramin), $(box.ramax), $(box.decmin), ",
+             "$(box.decmax) with $(nthreads()) threads")
 
-    @time results = one_node_infer(rcfs, stagedir; box=box, timing=times)
+    @time begin
+        tic()
+        # Get vector of (run, camcol, field) triplets overlapping this patch
+        rcfs = get_overlapping_fields(box, strategy)
+        timing.query_fids = toq()
 
-    tic()
-    save_results(outdir, box, results)
-    times.write_results = toq()
+        catalog, target_sources, neighbor_map, images =
+            infer_init(rcfs,
+                       strategy;
+                       box=box,
+                       primary_initialization=true,
+                       timing=timing)
 
-    puts_timing(times)
+        #results = one_node_single_infer(catalog, target_sources,
+        #                                neighbor_map, images; timing=timing)
+        results = one_node_joint_infer(catalog, target_sources, neighbor_map,
+                                       images; timing=timing)
+
+        tic()
+        save_results(outdir, box, results)
+        timing.write_results = toq()
+    end
+    puts_timing(timing)
 end
 
 
 if distributed
 include("multinode_run.jl")
 else
-function multi_node_infer(boxes::Vector{BoundingBox},
-                          stagedir::String;
-                          outdir=".",
-                          primary_initialization=true,
-                          timing=InferTiming())
-    Log.error("distributed functionality is disabled (set USE_DTREE=1 to enable)")
+function multi_node_infer(all_rcfs::Vector{RunCamcolField},
+                          all_rcf_nsrcs::Vector{Int16},
+                          all_boxes::Vector{Vector{BoundingBox}},
+                          all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
+                          strategy::SDSSIO.IOStrategy,
+                          prefetch::Bool,
+                          outdir::String,
+                          dl::Dlog)
+    Log.one_message("ERROR: distributed functionality is disabled ",
+                    "(set USE_DTREE=1 to enable)")
     exit(-1)
 end
 end
@@ -394,25 +637,30 @@ end
 """
 called from main entry point.
 """
-function infer_boxes(boxes::Vector{BoundingBox}, stagedir::String, outdir::String)
-    times = InferTiming()
+function infer_boxes(all_rcfs::Vector{RunCamcolField},
+                     all_rcf_nsrcs::Vector{Int16},
+                     all_boxes::Vector{Vector{BoundingBox}},
+                     all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
+                     strategy::SDSSIO.IOStrategy,
+                     prefetch::Bool,
+                     outdir::String)
+    # set up distributed log
+    dl = Dlog(joinpath(outdir, "dlog"))
 
     # Base.@time hack for distributed environment
     gc_stats = ()
     gc_diff_stats = ()
-    elapsed_time = 0.0
     gc_stats = Base.gc_num()
     elapsed_time = time_ns()
 
-    multi_node_infer(boxes, stagedir; outdir=outdir, timing=times)
+    multi_node_infer(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
+                     strategy, prefetch, outdir, dl)
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time
     gc_diff_stats = Base.GC_Diff(Base.gc_num(), gc_stats)
-    time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
+    time_puts(dl, elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
               Base.gc_alloc_count(gc_diff_stats))
-
-    puts_timing(times)
 end
 
 end

@@ -2,11 +2,14 @@
 
 module Transform
 
+using Compat
+
 # TODO: don't import Model; transformations should operate on
 # generic ParamSets
-using ..Model
 using ..SensitiveFloats
 import ..Log
+
+import ..Model: Ia, ParamSet, B, D
 
 export DataTransform, ParamBounds, ParamBox, SimplexBox,
        get_mp_transform, enforce_bounds!,
@@ -16,9 +19,63 @@ export DataTransform, ParamBounds, ParamBox, SimplexBox,
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual
 # parameters for that object (referenced using ParamIndex).
-typealias VariationalParams{NumType <: Number} Vector{Vector{NumType}}
-typealias FreeVariationalParams{NumType <: Number} Vector{Vector{NumType}}
+@compat const VariationalParams{NumType <: Number}     = Vector{Vector{NumType}}
+@compat const FreeVariationalParams{NumType <: Number} = Vector{Vector{NumType}}
 
+#####################################################################################
+# this is essentially a compatibility layer since Model has gotten rid of this code
+# it's messy, but this doesn't really matter too much, since Transforms.jl is going
+# the way of the dinosaur
+
+type CanonicalParams <: ParamSet
+    u::Vector{Int}
+    e_dev::Int
+    e_axis::Int
+    e_angle::Int
+    e_scale::Int
+    r1::Vector{Int}
+    r2::Vector{Int}
+    c1::Matrix{Int}
+    c2::Matrix{Int}
+    a::Matrix{Int}
+    k::Matrix{Int}
+    CanonicalParams() =
+        new([1, 2], 3, 4, 5, 6,
+            collect(7:(7+Ia-1)),  # r1
+            collect((7+Ia):(7+2Ia-1)), # r2
+            reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
+            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
+            reshape((7+2Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia-1), (Ia, 1)),  # a
+            reshape((7+3Ia+2*(B-1)*Ia):(7+3Ia+2*(B-1)*Ia+D*Ia-1), (D, Ia))) # k
+end
+const ids = CanonicalParams()
+Base.length(::Type{CanonicalParams}) = 6 + 3*Ia + 2*(B-1)*Ia + D*Ia
+
+type UnconstrainedParams <: ParamSet
+    u::Vector{Int}
+    e_dev::Int
+    e_axis::Int
+    e_angle::Int
+    e_scale::Int
+    r1::Vector{Int}
+    r2::Vector{Int}
+    c1::Matrix{Int}
+    c2::Matrix{Int}
+    a::Matrix{Int}
+    k::Matrix{Int}
+    UnconstrainedParams() =
+        new([1, 2], 3, 4, 5, 6,
+            collect(7:(7+Ia-1)),  # r1
+            collect((7+Ia):(7+2Ia-1)), # r2
+            reshape((7+2Ia):(7+2Ia+(B-1)*Ia-1), (B-1, Ia)),  # c1
+            reshape((7+2Ia+(B-1)*Ia):(7+2Ia+2*(B-1)*Ia-1), (B-1, Ia)),  # c2
+            reshape((7+2Ia+2*(B-1)*Ia):
+                    (7+2Ia+2*(B-1)*Ia+(Ia-1)-1), (Ia - 1, 1)),  # a
+            reshape((7+2Ia+2*(B-1)*Ia+(Ia-1)):
+                    (7+2Ia+2*(B-1)*Ia+(Ia-1)+(D-1)*Ia-1), (D-1, Ia))) # k
+end
+const ids_free = UnconstrainedParams()
+Base.length(::Type{UnconstrainedParams}) =  6 + 2*Ia + 2*(B-1)*Ia + (D-1)*Ia + Ia-1
 
 ################################
 # Elementary functions.
@@ -104,7 +161,7 @@ immutable SimplexBox
 end
 
 # The vector of transform parameters for a Symbol.
-typealias ParamBounds Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
+@compat const ParamBounds = Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
 
 
 ###############################################
@@ -294,7 +351,7 @@ type TransformDerivatives{NumType <: Number}
     Sa::Int
 
     # TODO: use sparse matrices?
-    function TransformDerivatives(Sa::Int)
+    function (::Type{TransformDerivatives{NumType}}){NumType}(Sa::Int)
         dparam_dfree =
             zeros(NumType,
                         Sa * length(CanonicalParams), Sa * length(UnconstrainedParams))
@@ -304,7 +361,7 @@ type TransformDerivatives{NumType <: Number}
                 zeros(NumType,
                             Sa * length(UnconstrainedParams), Sa * length(UnconstrainedParams))
         end
-        new(dparam_dfree, d2param_dfree2, Sa)
+        new{NumType}(dparam_dfree, d2param_dfree2, Sa)
     end
 end
 
@@ -612,11 +669,11 @@ function transform_sensitive_float!{T}(dt::DataTransform,
        error("sf has NaN value:", sf_free.v[])
     end
 
-    if any(isnan(sf.d))
+    if any(isnan.(sf.d))
        error("sf has NaN derivatives:", sf_free.d[])
     end
 
-    if any(isnan(sf.h))
+    if any(isnan.(sf.h))
        error("sf has NaN hessian:", sf_free.h)
     end
 
@@ -644,16 +701,16 @@ function transform_sensitive_float!{T}(dt::DataTransform,
     end
 
     symmetrize!(free_h)
-    
+
     if isnan(sf_free.v[])
         error("sf_free has NaN value:", sf_free.v[])
     end
 
-    if any(isnan(sf_free.d))
+    if any(isnan.(sf_free.d))
         error("sf_free has NaN derivatives:", sf_free.d[])
     end
 
-    if any(isnan(sf_free.h))
+    if any(isnan.(sf_free.h))
         error("sf_free has NaN hessian:", sf_free.h)
     end
 

@@ -1,15 +1,13 @@
 # Functions for loading FITS files from the SloanDigitalSkySurvey.
 module SDSSIO
 
-using Compat
-
 import FITSIO
 import WCS
 
 import ..Log
-import ..Model: RawPSF, Image, CatalogEntry, eval_psf
+import ..Model: RawPSF, Image, CatalogEntry, eval_psf, SkyIntensity
 import ..PSF
-import Base.convert
+import Base.convert, Base.getindex
 
 
 # types of things to mask in read_mask().
@@ -22,66 +20,19 @@ const BAND_CHAR_TO_NUM = Dict('u'=>1, 'g'=>2, 'r'=>3, 'i'=>4, 'z'=>5)
 
 
 immutable RunCamcolField
-    run::Int64
-    camcol::Int64
-    field::Int64
+    run::Int16
+    camcol::UInt8
+    field::Int16
 end
 
 
 function RunCamcolField(run::String, camcol::String, field::String)
     RunCamcolField(
-        parse(Int64, run),
-        parse(Int64, camcol),
-        parse(Int64, field))
+        parse(Int16, run),
+        parse(UInt8, camcol),
+        parse(Int16, field))
 end
 
-
-"""
-interp_sky(data, xcoords, ycoords)
-
-Interpolate the 2-d array `data` at the grid of array coordinates spanned
-by the vectors `xcoords` and `ycoords` using bilinear interpolation.
-The output array will have size `(length(xcoords), length(ycoords))`.
-For example, if `x[1] = 3.3` and `y[2] = 4.7`, the element `out[1, 2]`
-will be a result of linear interpolation between the values
-`data[3:4, 4:5]`.
-
-For coordinates that are out-of-bounds (e.g., `xcoords[i] < 1.0` or
-`xcoords[i] > size(data,1)` where the interpolation would index data values
-outside the array, the nearest values in the data array are used. (This is
-constant extrapolation.)
-"""
-function interp_sky{T, S}(data::Array{T, 2}, xcoords::Vector{S},
-                          ycoords::Vector{S})
-    nx, ny = size(data)
-    out = Matrix{T}(length(xcoords), length(ycoords))
-    for j=1:length(ycoords)
-        y0 = floor(Int, ycoords[j])
-        y1 = y0 + 1
-        yw0 = ycoords[j] - y0
-        yw1 = one(S) - yw0
-
-        # modify out-of-bounds indicies to 1 or ny
-        y0 = min(max(y0, 1), ny)
-        y1 = min(max(y1, 1), ny)
-
-        for i=1:length(xcoords)
-            x0 = floor(Int, xcoords[i])
-            x1 = x0 + 1
-            xw0 = xcoords[i] - x0
-            xw1 = one(S) - xw0
-
-            # modify out-of-bounds indicies to 1 or nx
-            x0 = min(max(x0, 1), nx)
-            x1 = min(max(x1, 1), nx)
-            @inbounds out[i, j] = (xw0 * yw0 * data[x0, y0] +
-                                   xw1 * yw0 * data[x1, y0] +
-                                   xw0 * yw1 * data[x0, y1] +
-                                   xw1 * yw1 * data[x1, y1])
-        end
-    end
-    return out
-end
 
 """
 read_sky(hdu)
@@ -102,10 +53,32 @@ function read_sky(hdu::FITSIO.TableHDU)
         sky_y[i] += 1.0f0
     end
 
-    # interpolate to full sky image
-    return interp_sky(sky_small, sky_x, sky_y)
+    # sky intensity has to be strictly greater than 0 for the elbo
+    # to be defined
+    @assert all((x)-> x > 1e-12, sky_small)
+
+    return sky_small, sky_x, sky_y
 end
 
+function slurp_fits(fname)
+    is_linux() || error("Slurping not implemented on this OS")
+    # Do this with explicit POSIX calls, to make sure to avoid
+    # any well-intended, but ultimately unhelpful intermediate
+    # buffering.
+    fd = ccall(:open, Cint, (Ptr{UInt8}, Cint, Cint), fname, Base.Filesystem.JL_O_RDONLY, 0)
+    systemerror("open", fd == -1)
+    stat_struct = zeros(UInt8, ccall(:jl_sizeof_stat, Int32, ()))
+    # Can't use Base.stat because threading
+    ret = ccall(:jl_fstat, Cint, (Cint, Ptr{UInt8}), fd, stat_struct)
+    ret == 0 || throw(Base.UVError("stat",r))
+    size = Base.Filesystem.StatStruct(stat_struct).size
+    data = Array(UInt8, size)
+    rsize = ccall(:read, Cint, (Cint, Ptr{UInt8}, Csize_t), fd, data, size)
+    systemerror("read", rsize != size)
+    r = ccall(:close, Cint, (Cint,), fd)
+    systemerror("close", r == -1)
+    data
+end
 
 """
 read_frame(fname)
@@ -117,35 +90,19 @@ Read an SDSS \"frame\" FITS file and return a 4-tuple:
 - `sky`: 2-d sky that was subtracted.
 - `wcs`: WCSTransform constructed from image header.
 """
-function read_frame(fname)
-    f = FITSIO.FITS(fname)
+function read_frame(fname; data=nothing)
+    f = FITSIO.FITS(data != nothing ? data : fname)
     hdr = FITSIO.read_header(f[1], String)::String
     image = read(f[1])::Array{Float32, 2}  # sky-subtracted & calibrated data
     calibration = read(f[2])::Vector{Float32}
-    sky = read_sky(f[3])
+    sky_small, sky_x, sky_y = read_sky(f[3])
     close(f)
+
+    sky = SkyIntensity(sky_small, sky_x, sky_y, calibration)
 
     wcs = WCS.from_header(hdr)[1]
 
     return image, calibration, sky, wcs
-end
-
-"""
-decalibrate!(image, sky, calibration, gain)
-
-Convert `image` to raw counts. `image` is modified in-place.
-
-Note that result may not be close to integers due to the analog to digital
-conversion process in the instrument.
-"""
-function decalibrate!{T<:Number}(image::Array{T, 2}, sky::Array{T, 2},
-                                 calibration::Vector{T}, gain::Number)
-    @assert size(image) == size(sky)
-    @assert size(image, 1) == length(calibration)
-    for j=1:size(image, 2), i=1:size(image, 1)
-        @inbounds image[i, j] = gain * (image[i, j] / calibration[i] +
-                                        sky[i, j])
-    end
 end
 
 
@@ -155,9 +112,8 @@ read_field_gains(fname, fieldnum)
 Return the image gains for field number `fieldnum` in an SDSS
 \"photoField\" file `fname`.
 """
-function read_field_gains(fname, fieldnum::Integer)
-
-    f = FITSIO.FITS(fname)
+function read_field_gains(fname, fieldnum::Integer; data=nothing)
+    f = FITSIO.FITS(data != nothing ? data : fname)
     fieldnums = read(f[2], "FIELD")::Vector{Int32}
     gains = read(f[2], "GAIN")::Array{Float32, 2}
     close(f)
@@ -181,8 +137,8 @@ Read a \"fpM\"-format SDSS file and return masked image ranges,
 based on `mask_planes`. Returns two `Vector{UnitRange{Int}}`,
 giving the range of x and y indicies to be masked.
 """
-function read_mask(fname, mask_planes=DEFAULT_MASK_PLANES)
-    f = FITSIO.FITS(fname)
+function read_mask(fname, mask_planes=DEFAULT_MASK_PLANES; data=nothing)
+    f = FITSIO.FITS(data != nothing ? data : fname)
 
     # The last (12th) HDU contains a key describing what each of the
     # other HDUs are. Use this to find the indicies of all the relevant
@@ -219,22 +175,20 @@ function read_mask(fname, mask_planes=DEFAULT_MASK_PLANES)
             end
         end
     end
+    close(f)
 
     return xranges, yranges
 end
 
 
-type RawImage
-    H::Int
-    W::Int
+immutable RawImage
+    rcf::RunCamcolField
+    b::Int  # band index
     pixels::Matrix{Float32}
-    b::Int
+    calibration::Vector{Float32}
+    sky::SkyIntensity
     wcs::WCS.WCSTransform
-    run_num::Int
-    camcol_num::Int
-    field_num::Int
-    epsilon_mat::Matrix{Float32}
-    iota_vec::Vector{Float32}
+    gain::Float32
     raw_psf_comp::RawPSF
 end
 
@@ -242,73 +196,71 @@ end
 """
 Read a SDSS run/camcol/field into a vector of RawImages
 """
-function load_raw_images(rcf::RunCamcolField, datadir::String)
-    subdir2 = "$datadir/$(rcf.run)/$(rcf.camcol)"
+function load_raw_images(rcf::RunCamcolField, datadir, slurp::Bool = false, drop_quickly::Bool = false)
+    basedir = isa(datadir, String) ? datadir : datadir(rcf)
+    subdir2 = "$basedir/$(rcf.run)/$(rcf.camcol)"
     subdir3 = "$subdir2/$(rcf.field)"
 
     # read gain for each band
-    photofield_name = @sprintf("%s/photoField-%06d-%d.fits",
-                               subdir2, rcf.run, rcf.camcol)
-    gains = read_field_gains(photofield_name, rcf.field)
+    photofield_name = "$subdir2/photoField-$(dec(rcf.run,6))-$(rcf.camcol).fits"
+    gains = read_field_gains(photofield_name, rcf.field;
+                data=(slurp ? slurp_fits(photofield_name) : nothing))
 
     # open FITS file containing PSF for each band
-    psf_name = @sprintf("%s/psField-%06d-%d-%04d.fit",
-                        subdir3, rcf.run, rcf.camcol, rcf.field)
-    psffile = FITSIO.FITS(psf_name)
+    psf_name = "$(subdir3)/psField-$(dec(rcf.run,6))-$(rcf.camcol)-$(dec(rcf.field,4)).fit"
+    psffile = FITSIO.FITS(slurp ? slurp_fits(psf_name) : psf_name)
 
-    result = Vector{RawImage}(5)
+    raw_images = Vector{RawImage}(5)
 
     for (b, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
-
         # load image data
-        frame_name = @sprintf("%s/frame-%s-%06d-%d-%04d.fits",
-                              subdir3, band, rcf.run, rcf.camcol, rcf.field)
-        pixels, calibration, sky, wcs = read_frame(frame_name)
-
-        # scale pixels to raw electron counts
-        decalibrate!(pixels, sky, calibration, gains[band])
-
-        # read mask
-        mask_name = @sprintf("%s/fpM-%06d-%s%d-%04d.fit",
-                     subdir3, rcf.run, band, rcf.camcol, rcf.field)
-        mask_xranges, mask_yranges = read_mask(mask_name)
-
-        # apply mask
-        for i=1:length(mask_xranges)
-            pixels[mask_xranges[i], mask_yranges[i]] = NaN
+        frame_name = "$(subdir3)/frame-$(band)-$(dec(rcf.run,6))-$(rcf.camcol)-$(dec(rcf.field,4)).fits"
+        mask_name = "$(subdir3)/fpM-$(dec(rcf.run,6))-$(band)$(rcf.camcol)-$(dec(rcf.field,4)).fit"
+        r = parse_image(rcf, b, frame_name, mask_name, psffile, band, gains)
+        if !drop_quickly
+            raw_images[b] = r
         end
+    end
+    close(psffile)
 
-        H, W = size(pixels)
+    return raw_images
+end
 
-        # read the psf
-        sdsspsf = read_psf(psffile, band)
+function parse_image(rcf, b, frame_name, mask_name, psffile, band, gains; frame_data=nothing, mask_data=nothing)
+    @assert !isempty(frame_name) || frame_data != nothing
+    @assert !isempty(mask_name) || mask_data != nothing
 
-        # For now, use the median noise and sky.  Here,
-        # epsilon * iota needs to be in units comparable to nelec
-        # electron counts.
-        # Note that each are actuall pretty variable.
-        iota_vec = convert(Vector{Float32}, gains[band] ./ calibration)
-        epsilon_mat = convert(Array{Float32, 2}, sky .* calibration)
+    # load image data
+    pixels, calibration, sky, wcs = read_frame(frame_name; data=frame_data)
 
-        # Set it to use a constant background but include the non-constant data.
-        result[b] = RawImage(H, W, pixels, b, wcs,
-                             rcf.run, rcf.camcol, rcf.field,
-                             epsilon_mat, iota_vec, sdsspsf)
+    # read mask
+    mask_xranges, mask_yranges = read_mask(mask_name; data=mask_data)
+
+    # apply mask
+    for i=1:length(mask_xranges)
+        pixels[mask_xranges[i], mask_yranges[i]] = NaN
     end
 
-    return result
+    # read the psf
+    raw_psf_comp = read_psf(psffile, band)
+
+    # Set it to use a constant background but include the non-constant data.
+    r = RawImage(rcf, b,
+                        pixels, calibration, sky, wcs,
+                        gains[band], raw_psf_comp)
+    r
 end
 
 
 """
 Load all the images for multiple rcfs
 """
-function load_raw_images(rcfs::Vector{RunCamcolField}, datadir::String)
+function load_raw_images(rcfs::Vector{RunCamcolField}, datadir, slurp::Bool = false, drop_quickly::Bool = false)
     raw_images = RawImage[]
 
     for rcf in rcfs
-        Log.info("loading images for $rcf")
-        rcf_raw_images = SDSSIO.load_raw_images(rcf, datadir)
+        #Log.info("loading images for $rcf")
+        rcf_raw_images = SDSSIO.load_raw_images(rcf, datadir, slurp, drop_quickly)
         append!(raw_images, rcf_raw_images)
     end
 
@@ -320,25 +272,45 @@ end
 Converts a raw image to an image by fitting the PSF, a mixture of Gaussians.
 """
 function convert(::Type{Image}, r::RawImage)
-    psfstamp = eval_psf(r.raw_psf_comp, r.H / 2., r.W / 2.)
+    H, W = size(r.pixels)
+
+    psfstamp = eval_psf(r.raw_psf_comp, H / 2., W / 2.)
     celeste_psf = PSF.fit_raw_psf_for_celeste(psfstamp, 2)[1]
-    Image(r.H, r.W, r.pixels, r.b, r.wcs, celeste_psf,
-          r.run_num, r.camcol_num, r.field_num,
-          r.epsilon_mat, r.iota_vec, r.raw_psf_comp)
+
+    # scale pixels to raw electron counts
+    @assert size(r.pixels, 1) == length(r.calibration)
+    @inbounds for j=1:size(r.pixels, 2), i=1:size(r.pixels, 1)
+        sky_ij = r.sky[i, j]
+        r.pixels[i, j] = (r.gain / r.calibration[i]) * (r.pixels[i, j] + sky_ij)
+    end
+
+    iota_vec = r.gain ./ r.calibration
+
+    Image(H, W, r.pixels, r.b, r.wcs, celeste_psf,
+          r.rcf.run, r.rcf.camcol, r.rcf.field,
+          r.sky, iota_vec, r.raw_psf_comp)
 end
 
 
 """
 Read a SDSS run/camcol/field into an array of Images.
 """
-function load_field_images(rcfs, stagedir)
-    raw_images = SDSSIO.load_raw_images(rcfs, stagedir)
+function load_field_images(rcfs, stagedir, slurp::Bool = false, drop_quickly::Bool = false)
+    raw_images = SDSSIO.load_raw_images(rcfs, stagedir, slurp, drop_quickly)
 
     N = length(raw_images)
     images = Vector{Image}(N)
 
-    Threads.@threads for n in 1:N
-        images[n] = convert(Image, raw_images[n])
+    drop_quickly && return images
+
+    #Threads.@threads for n in 1:N
+    for n in 1:N
+        try
+            images[n] = convert(Image, raw_images[n])
+        catch exc
+            Log.exception(exc)
+            rethrow()
+        end
     end
 
     return images
@@ -399,11 +371,10 @@ columns.
 The photoObj file format is documented here:
 https://data.sdss.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
 """
-function read_photoobj(fname, band::Char='r')
-
+function read_photoobj(fname, band::Char='r'; data=nothing)
     b = BAND_CHAR_TO_NUM[band]
 
-    f = FITSIO.FITS(fname)
+    f = FITSIO.FITS(data != nothing ? data : fname)
 
     # sometimes the expected table extension is only an empty generic FITS
     # header, indicating no objects. We check explicitly for this case here
@@ -443,9 +414,15 @@ function read_photoobj(fname, band::Char='r')
 
     # Get "bright" objects.
     # (In objc_flags, the bit pattern Int32(2) corresponds to bright objects.)
-    is_bright    = @compat(read(hdu, "objc_flags")::Vector{Int32} .& Int32(2)) .!= 0
-    is_saturated = @compat(read(hdu, "objc_flags")::Vector{Int32} .& Int32(18)) .!= 0
-    is_large     = @compat(read(hdu, "objc_flags")::Vector{Int32} .& Int32(24)) .!= 0
+    objc_flags = read(hdu, "objc_flags")::Vector{Int32}
+    objc_flags2 = read(hdu, "objc_flags2")::Vector{Int32}
+
+    # bright, saturated, or large
+    bad_flags1 = objc_flags .& UInt32(1^2 + 2^18 + 2^24) .!= 0
+
+    # nopeak, DEBLEND_DEGENERATE, or saturated center
+    bad_flags2 = objc_flags2 .& UInt32(2^14 + 2^18 + 2^11) .!= 0
+    i = findfirst(objid, "1237680069097291856")
 
     has_child = read(hdu, "nchild")::Vector{Int16} .> 0
 
@@ -453,20 +430,20 @@ function read_photoobj(fname, band::Char='r')
     objc_type = read(hdu, "objc_type")::Vector{Int32}
     is_star = objc_type .== 6
     is_gal = objc_type .== 3
-    is_bad_obj = @compat(!(is_star .| is_gal))
+    bad_type = ((!).(is_star .| is_gal))
 
     fracdev = vec((read(hdu, "fracdev")::Matrix{Float32})[b, :])
 
     # determine mask for rows
     has_dev = fracdev .> 0.
     has_exp = fracdev .< 1.
-    is_comp = @compat(has_dev .& has_exp)
-    is_bad_fracdev = @compat((fracdev .< 0.) .| (fracdev .> 1))
+    is_comp = (has_dev .& has_exp)
+    is_bad_fracdev = ((fracdev .< 0.) .| (fracdev .> 1))
 
     # TODO: We don't really want to exclude objects entirely just for being
     # bright: we just don't want to use for scoring (since
     # they're very saturated, presumably).
-    mask = @compat(!(is_bad_fracdev .| is_bad_obj .| is_bright .| has_child))
+    mask = (!).(is_bad_fracdev .| bad_type .| bad_flags1 .| bad_flags2 .| has_child)
 
     # Read the fluxes.
     # Record the cmodelflux if the galaxy is composite, otherwise use
@@ -506,9 +483,7 @@ function read_photoobj(fname, band::Char='r')
                    "ab_dev"=>vec(ab_dev[b, mask]),
                    "theta_dev"=>vec(theta_dev[b, mask]),
                    "phi_dev"=>vec(phi_dev_deg[b, mask]),
-                   "phi_offset"=>vec(phi_offset[b, mask]),
-                   "is_large"=>vec(is_large[mask]),
-                   "is_saturated"=>vec(is_saturated[mask]))
+                   "phi_offset"=>vec(phi_offset[b, mask]))
     for (b, n) in BAND_CHAR_TO_NUM
         catalog["psfflux_$b"] = vec(psfflux[n, mask])
         catalog["compflux_$b"] = vec(cmodelflux[n, mask])
@@ -528,7 +503,7 @@ Convert from a catalog in dictionary-of-arrays, as returned by
 read_photoobj to Vector{CatalogEntry}.
 """
 function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{String, Any})
-    out = Vector{CatalogEntry}(length(catalog["objid"]))
+    out = CatalogEntry[]
 
     for i=1:length(catalog["objid"])
         worldcoords = [catalog["ra"][i], catalog["dec"][i]]
@@ -538,9 +513,7 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{String, Any})
         star_fluxes = zeros(5)
         gal_fluxes = zeros(5)
         for (j, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
-
             # Make negative fluxes positive.
-            # TODO: How can there be negative fluxes?
             psfflux = max(catalog["psfflux_$band"][i], 1e-6)
             devflux = max(catalog["devflux_$band"][i], 1e-6)
             expflux = max(catalog["expflux_$band"][i], 1e-6)
@@ -571,68 +544,31 @@ function convert(::Type{Vector{CatalogEntry}}, catalog::Dict{String, Any})
         entry = CatalogEntry(worldcoords, catalog["is_star"][i], star_fluxes,
                              gal_fluxes, frac_dev, fits_ab, celeste_phi_rad, re_pixel,
                              catalog["objid"][i], Int(catalog["thing_id"][i]))
-        out[i] = entry
+        push!(out, entry)
     end
 
     return out
 end
 
 
-"""
-read_photoobj_files(fieldids, dirs) -> Vector{CatalogEntry}
-
-Combine photoobj catalogs for the given overlapping fields, returning a single
-joined catalog.
-
-The `duplicate_policy` argument controls how catalogs are joined.
-With `duplicate_policy = :primary`, only primary objects are included in the
-combined catalog.
-With `duplicate_policy = :first`, only the first detection is included in the
-combined catalog.
-"""
-function read_photoobj_files(fts::Vector{RunCamcolField},
-                             datadir::String;
-                             duplicate_policy=:primary)
-    @assert duplicate_policy == :primary || duplicate_policy == :first
-    @assert duplicate_policy == :primary || length(fts) == 1
-
-    Log.info("reading photoobj catalogs for $(length(fts)) fields")
-
-    # the code below assumes there is at least one field.
-    if length(fts) == 0
-        return CatalogEntry[]
-    end
-
-    # Read in all photoobj catalogs.
-    rawcatalogs = Vector{Dict}(length(fts))
-    for i in eachindex(fts)
-        ft = fts[i]
-        dir = "$datadir/$(ft.run)/$(ft.camcol)/$(ft.field)"
-        fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir ft.run ft.camcol ft.field
-        Log.info("field $(fts[i]): reading $fname")
-        rawcatalogs[i] = read_photoobj(fname)
-    end
-
-    for i in eachindex(fts)
-        Log.info("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) entries")
-    end
-
+function assemble_catalog(rawcatalogs::Vector{Dict};
+                          duplicate_policy=:primary)
     # Limit each catalog to primary objects and objects where thing_id != -1
     # (thing_id == -1 indicates that the matching process failed)
     for cat in rawcatalogs
         mask = (cat["thing_id"] .!= -1)
         if duplicate_policy == :primary
-            mask = @compat(mask .& (cat["mode"] .== 0x01))
+            mask = (mask .& (cat["mode"] .== 0x01))
         end
         for key in keys(cat)
             cat[key] = cat[key][mask]
         end
     end
 
-    for i in eachindex(fts)
-        Log.info(string("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) ",
-                "filtered entries"))
-    end
+    #for i in eachindex(fts)
+    #    Log.info(string("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) ",
+    #            "filtered entries"))
+    #end
 
     # Merge all catalogs together (there should be no duplicate objects,
     # because for each object there should only be one "primary" occurance.)
@@ -656,6 +592,58 @@ function read_photoobj_files(fts::Vector{RunCamcolField},
 end
 
 
+"""
+read_photoobj_files(fieldids, dirs) -> Vector{CatalogEntry}
+
+Combine photoobj catalogs for the given overlapping fields, returning a single
+joined catalog.
+
+The `duplicate_policy` argument controls how catalogs are joined.
+With `duplicate_policy = :primary`, only primary objects are included in the
+combined catalog.
+With `duplicate_policy = :first`, only the first detection is included in the
+combined catalog.
+"""
+function read_photoobj_files(fts::Vector{RunCamcolField}, datadir;
+                             duplicate_policy=:primary,
+                             slurp::Bool = false, drop_quickly::Bool = false)
+    @assert duplicate_policy == :primary || duplicate_policy == :first
+    @assert duplicate_policy == :primary || length(fts) == 1
+
+    #Log.info("reading photoobj catalogs for $(length(fts)) fields")
+
+    # the code below assumes there is at least one field.
+    if length(fts) == 0
+        return CatalogEntry[]
+    end
+
+    # Read in all photoobj catalogs.
+    rawcatalogs = Vector{Dict}(length(fts))
+    for i in eachindex(fts)
+        ft = fts[i]
+        basedir = isa(datadir, String) ? datadir : datadir(ft)
+        dir = "$basedir/$(ft.run)/$(ft.camcol)/$(ft.field)"
+        fname = "$dir/photoObj-$(dec(ft.run,6))-$(dec(ft.camcol))-$(dec(ft.field,4)).fits"
+        #Log.info("field $(fts[i]): reading $fname")
+        po = read_photoobj(fname, 'r';
+                           data=(slurp ? slurp_fits(fname) : nothing))
+        if !drop_quickly
+            rawcatalogs[i] = po
+        end
+    end
+
+    if drop_quickly
+        return CatalogEntry[]
+    end
+
+    #for i in eachindex(fts)
+    #    Log.info("field $(fts[i]): $(length(rawcatalogs[i]["objid"])) entries")
+    #end
+
+    return assemble_catalog(rawcatalogs; duplicate_policy=duplicate_policy)
+end
+
+
 # TODO: this is obsolete, remove it.
 """
 read_photoobj_celeste(fname)
@@ -666,5 +654,250 @@ function read_photoobj_celeste(fname)
     rawcatalog = read_photoobj(fname)
     convert(Vector{CatalogEntry}, rawcatalog)
 end
+
+
+# -----------------------------------------------------------------------------
+# big file I/O
+
+const NumRuns = 761
+const NumCamcols = 6
+const EachPhotoField = 3*1024*1024
+
+const NumRCFs = 924038
+const EachRCF = 96*1024*1024
+const FirstSlurp = 40*1024*1024
+const GoodTransferSize = 4*1024*1024
+const EachBigFile = 3298534883328
+const NumRCFFiles = 12
+const MaxRCFFileSize = 12*1024*1024
+
+
+immutable BigFileIO
+    num_bf::Int
+    fds::Vector{Cint}
+    pffd::Cint
+end
+
+
+function init_bigfile_io(datadir::String)
+    all_b = NumRCFs * EachRCF
+    quot, rem = divrem(all_b, EachBigFile)
+    num_bf = quot + (rem > 0 ? 1 : 0)
+    fds = Vector{Cint}(num_bf)
+    for i = 1:num_bf
+        fn = joinpath(datadir, "celeste_sdss-$i")
+        fds[i] = ccall(:open, Cint, (Ptr{UInt8}, Cint, Cint), fn,
+                       Base.Filesystem.JL_O_RDONLY, 0)
+        if fds[i] == -1
+            @show fn
+            systemerror("open", true)
+        end
+    end
+
+    fn = joinpath(datadir, "celeste_sdss-photofields")
+    pffd = ccall(:open, Cint, (Ptr{UInt8}, Cint, Cint), fn,
+                       Base.Filesystem.JL_O_RDONLY, 0)
+    systemerror("open", pffd == -1)
+
+    return BigFileIO(num_bf, fds, pffd)
+end
+
+
+function shutdown_bigfile_io(bfo::BigFileIO)
+    ccall(:close, Cint, (Cint,), bfo.pffd)
+    bfo.pffd = convert(Cint, -1)
+    for i = 1:bfo.num_bf
+        ccall(:close, Cint, (Cint,), bfo.fds[i])
+    end
+    bfo.num_bf = 0
+    empty!(bfo.fds)
+end
+
+const fileOrder = Dict{Symbol, Int}(
+    :fpMg       =>  1,
+    :fpMi       =>  2,
+    :fpMr       =>  3,
+    :fpMu       =>  4,
+    :fpMz       =>  5,
+    :frameg     =>  6,
+    :framei     =>  7,
+    :framer     =>  8,
+    :frameu     =>  9,
+    :framez     => 10,
+    :photoObj   => 11,
+    :psField    => 12
+)
+
+struct RCFBundle
+    images::Dict{Symbol, Vector{UInt8}}
+    photofield_data::Vector{UInt8}
+end
+
+# No mutable state, so should be ok to manipulate GC state
+@noinline function pread64(fd::Cint, data::Ptr{UInt8}, size::Csize_t, offset::Csize_t)
+    nread = 0
+    while size > 0
+        gc_state = ccall(:jl_gc_safe_enter, Int8, ())
+        rdb = ccall(:pread64, Cint, (Cint, Ptr{UInt8}, Csize_t, Csize_t), fd, data, size, offset)
+        ccall(:jl_gc_safe_leave, Void, (Int8,), gc_state)
+        rdb <= 0 && break
+        nread += rdb
+        offset += rdb
+        size -= rdb
+    end
+    nread
+end
+
+function load_rcf_bundle(bfo::BigFileIO, rcf::RunCamcolField, rcf_idx_map, run_idx_map;
+                         data_buf = zeros(UInt8, EachRCF + EachPhotoField))
+    ridx = rcf_idx_map[rcf] - 1
+    bfidx, bfofs = divrem(ridx * EachRCF, EachBigFile)
+    bfidx += 1
+
+    # Read the header in with the first slurp
+    rsize = pread64(bfo.fds[bfidx], pointer(data_buf), Csize_t(FirstSlurp), Csize_t(bfofs))
+    systemerror("pread", rsize != FirstSlurp)
+    fofs = reinterpret(Int64, data_buf[1:((NumRCFFiles + 1) * sizeof(Int64))])
+    @assert fofs[1] == (NumRCFFiles + 1) * sizeof(UInt64)
+
+    # Read in the rest
+    remread = fofs[end] - FirstSlurp
+    rsize = pread64(bfo.fds[bfidx], pointer(data_buf, FirstSlurp + 1), Csize_t(remread), Csize_t(bfofs + FirstSlurp))
+    systemerror("pread", rsize != remread)
+
+    # Now read the photofield data
+    pidx = ((run_idx_map[rcf.run]-1) * NumCamcols * EachPhotoField) +
+           ((rcf.camcol - 1) * EachPhotoField)
+    rsize = pread64(bfo.pffd, pointer(data_buf) + EachRCF, Csize_t(EachPhotoField), Csize_t(pidx))
+    systemerror("pread", rsize != EachPhotoField)
+    photofield_data = data_buf[EachRCF+1:end]
+
+    data = Dict{Symbol, Vector{UInt8}}()
+    for (k, v) in fileOrder
+        startidx = fofs[v]
+        endidx = fofs[v+1]
+        data[k] = data_buf[startidx+1:endidx]
+    end
+    RCFBundle(data, photofield_data)
+end
+function load_rcf_bundles(bfo::BigFileIO, rcfs::Vector{RunCamcolField}, rcf_idx_map, run_idx_map;
+                         data_buf = zeros(UInt8, EachRCF + EachPhotoField))
+    [load_rcf_bundle(bfo, rcf, rcf_idx_map, run_idx_map) for rcf in rcfs]
+end
+
+function read_bigfile_photoobjs(rcf_bundles::Vector{RCFBundle};
+                                duplicate_policy=:primary,
+                                drop_quickly=false)
+    @assert duplicate_policy == :primary || duplicate_policy == :first
+    @assert duplicate_policy == :primary || length(fts) == 1
+
+    if length(rcf_bundles) == 0
+        return CatalogEntry[]
+    end
+
+    rawcatalogs = Vector{Dict}(length(rcf_bundles))
+    for i in eachindex(rcf_bundles)
+        rcf_bundle = rcf_bundles[i]
+        po = read_photoobj(""; data=rcf_bundle.images[:photoObj])
+        if !drop_quickly
+            rawcatalogs[i] = po
+        end
+    end
+
+    if drop_quickly
+        return CatalogEntry[]
+    end
+
+    return assemble_catalog(rawcatalogs; duplicate_policy=duplicate_policy)
+end
+
+function load_raw_images_bigfile(rcf::RunCamcolField,
+                                 rcf_bundle::RCFBundle;
+                                 drop_quickly = false)
+    gains = read_field_gains("", rcf.field; data = rcf_bundle.photofield_data)
+    psffile = FITSIO.FITS(rcf_bundle.images[:psField])
+    raw_images = Vector{RawImage}(5)
+    for (b, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
+        # load image data
+        r = parse_image(rcf, b, "", "", psffile, band, gains;
+            frame_data = rcf_bundle.images[Symbol("frame$band")],
+            mask_data = rcf_bundle.images[Symbol("fpM$band")])
+        if !drop_quickly
+            raw_images[b] = r
+        end
+    end
+    raw_images
+end
+
+function load_raw_images_bigfile(rcfs::Vector{RunCamcolField},
+                                 rcf_bundles::Vector{RCFBundle};
+                                 drop_quickly = false)
+    mapreduce(data->load_raw_images_bigfile(data...; drop_quickly=drop_quickly), vcat, zip(rcfs, rcf_bundles))
+end
+
+
+# IO Strategies
+abstract type IOStrategy end
+
+struct PlainFITSStrategy <: IOStrategy
+    stagedir::String
+    # Could be a string or rcf -> stagedir function
+    rcf_stagedir
+    slurp::Bool
+end
+PlainFITSStrategy(stagedir::String, slurp::Bool = false) = PlainFITSStrategy(stagedir, stagedir, slurp)
+
+struct BigFileStrategy <: IOStrategy
+    stagedir::String
+    bfo::BigFileIO
+    rcf_idx_map
+    run_idx_map
+end
+
+# We load data on demand, do nothing here
+preload_rcfs(::PlainFITSStrategy, rcfs) = [nothing for rcf in rcfs]
+preload_rcfs(strategy::BigFileStrategy, rcfs) = load_rcf_bundles(strategy.bfo, rcfs, strategy.rcf_idx_map, strategy.run_idx_map)
+
+read_photoobj(strategy::PlainFITSStrategy, rcf, state; duplicate_policy=:primary, drop_quickly::Bool=false) =
+    read_photoobj_files([rcf],strategy.rcf_stagedir,
+        duplicate_policy = duplicate_policy,
+        slurp = strategy.slurp,
+        drop_quickly = drop_quickly)
+
+read_photoobj(strategy::BigFileStrategy, rcf, rcf_bundle; duplicate_policy=:primary, drop_quickly::Bool=false) =
+    read_bigfile_photoobjs([rcf_bundle],
+        duplicate_policy = duplicate_policy,
+        drop_quickly = drop_quickly)
+
+load_raw_images(strategy::PlainFITSStrategy, rcfs, states, drop_quickly::Bool = false) =
+    SDSSIO.load_raw_images(rcfs, strategy.rcf_stagedir, strategy.slurp, drop_quickly)
+
+load_raw_images(strategy::BigFileStrategy, rcfs, states, drop_quickly::Bool = false) =
+    SDSSIO.load_raw_images_bigfile(rcfs, states; drop_quickly=drop_quickly)
+
+"""
+Read a SDSS run/camcol/field into an array of Images.
+"""
+function load_field_images(strategy::IOStrategy, rcfs, states, drop_quickly::Bool = false)
+    raw_images = SDSSIO.load_raw_images(strategy, rcfs, states, drop_quickly)
+
+    N = length(raw_images)
+    images = Vector{Image}(N)
+
+    drop_quickly && return images
+
+    #Threads.@threads for n in 1:N
+    for n in 1:N
+        try
+            images[n] = convert(Image, raw_images[n])
+        catch exc
+            Log.exception(exc)
+            rethrow()
+        end
+    end
+
+    return images
+end
+
 
 end  # module

@@ -1,21 +1,26 @@
 #!/usr/bin/env julia
 
-using Celeste: Model, DeterministicVI
-
-import Celeste: Infer, DeterministicVI, ParallelRun, DeterministicVIImagePSF
-import Celeste: PSF, SDSSIO, SensitiveFloats, Transform, CelesteEDA
-import SensitiveFloats.clear!
-import SDSSIO: RunCamcolField
-
-include(joinpath(Pkg.dir("Celeste"), "test", "Synthetic.jl"))
-include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
-include(joinpath(Pkg.dir("Celeste"), "test", "DerivativeTestUtils.jl"))
-
-import Synthetic
-using SampleData
-
 using Base.Test
 using Distributions
+using ForwardDiff
+using StaticArrays
+
+using Celeste: Model, DeterministicVI
+
+import Celeste: Infer, DeterministicVI, ParallelRun
+import Celeste: PSF, SDSSIO, SensitiveFloats, Transform
+import Celeste.SensitiveFloats.clear!
+import Celeste.SDSSIO: RunCamcolField
+
+include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
+
+using SampleData
+
+
+if Pkg.installed("StaticArrays") <= v"0.4.0"
+    Pkg.checkout("StaticArrays")
+    Pkg.build("StaticArrays")
+end
 
 anyerrors = false
 
@@ -31,7 +36,7 @@ cd(galsim_benchmark_dir)
 run(`make fetch`)
 cd(wd)
 
-# Check whether to run time-consuming derivatives tests.
+# Check whether to run time-consuming tests.
 long_running_flag = "--long-running"
 test_long_running = long_running_flag in ARGS
 test_files = setdiff(ARGS, [ long_running_flag ])
@@ -40,23 +45,20 @@ if length(test_files) > 0
     testfiles = ["test_$(arg).jl" for arg in test_files]
 else
     testfiles = [
-                 "test_derivatives.jl",
+                 "test_argument_parse.jl",
                  "test_kl.jl",
-                 "test_eda.jl",
+                 "test_constraints.jl",
                  "test_elbo.jl",
-                 "test_fft.jl",
                  "test_galsim_benchmarks.jl",
                  "test_images.jl",
                  "test_infer.jl",
                  "test_joint_infer.jl",
-                 "test_kernels.jl",
                  "test_log_prob.jl",
                  "test_misc.jl",
                  "test_optimization.jl",
                  "test_psf.jl",
                  "test_score.jl",
                  "test_sdssio.jl",
-                 "test_transforms.jl",
                  "test_wcs.jl",
                  "test_infer.jl",
                  "test_mcmc.jl"]

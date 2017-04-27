@@ -13,11 +13,11 @@ test log_prob.jl and log_prob_util.jl
 function test_that_star_truth_is_most_likely_log_prob()
 
     # init ground truth star
-    images, ea, body = SampleData.true_star_init()
+    ea, vp, catalog = SampleData.true_star_init()
 
     # turn list of catalog entries a list of LatentStateParams
-    source_states = [Model.catalog_entry_to_latent_state_params(body[s])
-                     for s in 1:length(body)]
+    source_states = [Model.catalog_entry_to_latent_state_params(catalog[s])
+                     for s in 1:ea.S]
 
     # create logpdf function handle
     star_logpdf, star_logprior =
@@ -64,12 +64,12 @@ end
 
 function test_that_gal_truth_is_most_likely_log_prob()
     # init ground truth star
-    images, ea, body = gen_sample_galaxy_dataset()
+    ea, vp, catalog = gen_sample_galaxy_dataset()
 
     # turn list of catalog entries a list of LatentStateParams
-    source_states = [Model.catalog_entry_to_latent_state_params(body[s])
-                     for s in 1:length(body)]
-    println("  active source params: ", body[1])
+    source_states = [Model.catalog_entry_to_latent_state_params(catalog[s])
+                     for s in 1:ea.S]
+    println("  active source params: ", catalog[1])
     println("  corresponding ls    : ", source_states[1])
 
     # create logpdf function handle
