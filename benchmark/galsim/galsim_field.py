@@ -12,8 +12,10 @@ FITS_CATALOG_FILENAME = os.path.join('output', 'galsim_field_500_catalog.fits')
 ARCSEC_PER_DEGREE = 3600.
 FIELD_EXPAND_ARCSEC = 10
 PSF_SIGMA_PX = 2.29 # similar to SDSS
-SKY_LEVEL_NMGY = 0.155 # similar to SDSS
-COUNTS_PER_NMGY = 180.0 # similar to SDSS
+BAND_SKY_LEVEL_NMGY = [0.2696, 0.3425, 0.7748, 1.6903, 4.9176]
+BAND_NELEC_PER_NMGY = [146.9, 838.1, 829.8, 597.2, 129.8]
+
+class MissingFieldError(Exception): pass
 
 def set_image_dimensions(test_case, catalog_rows):
     min_ra_deg = min(float(row['right_ascension_deg']) for row in catalog_rows)
@@ -38,13 +40,29 @@ def generate_field(test_case, catalog_csv):
     with open(catalog_csv) as stream:
         catalog_rows = list(csv.DictReader(stream))
 
-    test_case.sky_level_nmgy = SKY_LEVEL_NMGY
-    test_case.set_counts_per_nmgy(COUNTS_PER_NMGY)
+    test_case.band_sky_level_nmgy = BAND_SKY_LEVEL_NMGY
+    test_case.set_band_nelec_per_nmgy(BAND_NELEC_PER_NMGY)
     test_case.psf_sigma_pixels = PSF_SIGMA_PX
     set_image_dimensions(test_case, catalog_rows)
 
     for source_row in catalog_rows:
-        def field(name): return float(source_row[name])
+        def field(name):
+            raw_value = source_row[name]
+            try:
+                return float(raw_value)
+            except ValueError:
+                raise MissingFieldError()
+
+        try:
+            color_log_ratios = [
+                field('color_log_ratio_ug'),
+                field('color_log_ratio_gr'),
+                field('color_log_ratio_ri'),
+                field('color_log_ratio_iz'),
+            ]
+        except MissingFieldError:
+            continue # just skip sources with missing colors
+
         if source_row['is_star'] == 'true':
             source = test_case.add_star()
         else:
@@ -58,11 +76,11 @@ def generate_field(test_case, catalog_csv):
         source.world_coordinates_deg(field('right_ascension_deg'), field('declination_deg'))
         source.reference_band_flux_nmgy(field('reference_band_flux_nmgy'))
         source.flux_relative_to_reference_band([
-            math.exp(-field('color_log_ratio_ug') - field('color_log_ratio_gr')),
-            math.exp(-field('color_log_ratio_gr')),
+            math.exp(-color_log_ratios[0] - color_log_ratios[1]),
+            math.exp(-color_log_ratios[1]),
             1,
-            math.exp(field('color_log_ratio_ri')),
-            math.exp(field('color_log_ratio_ri') + field('color_log_ratio_iz')),
+            math.exp(color_log_ratios[2]),
+            math.exp(color_log_ratios[2] + color_log_ratios[3]),
         ])
 
     test_case.include_noise = True
