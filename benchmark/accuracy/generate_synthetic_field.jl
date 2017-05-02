@@ -8,23 +8,11 @@ import Celeste.Model
 import Celeste.Synthetic
 
 const PSF_SIGMA_PX = 2.29 # similar to SDSS
+const BAND_SKY_LEVEL_NMGY = [0.2696, 0.3425, 0.7748, 1.6903, 4.9176]
+const BAND_NELEC_PER_NMGY = [146.9, 838.1, 829.8, 597.2, 129.8]
 const OUTPUT_DIRECTORY = joinpath(splitdir(Base.source_path())[1], "output")
 
 parser = Celeste.ArgumentParse.ArgumentParser()
-ArgumentParse.add_argument(
-    parser,
-    "--sky_level_nmgy",
-    arg_type=Float64,
-    default=0.155,
-    help="Sky background noise level, nMgy",
-)
-ArgumentParse.add_argument(
-    parser,
-    "--nelec_per_nmgy",
-    arg_type=Float64,
-    default=180.0,
-    help="Nelec (units of pixel values) per nMgy of flux (aka iota)",
-)
 ArgumentParse.add_argument(
     parser,
     "catalog_csv",
@@ -42,8 +30,8 @@ catalog_entries = [
 template_images = AccuracyBenchmark.make_template_images(
     catalog_data,
     PSF_SIGMA_PX,
-    parsed_args["sky_level_nmgy"],
-    parsed_args["nelec_per_nmgy"],
+    BAND_SKY_LEVEL_NMGY,
+    BAND_NELEC_PER_NMGY,
 )
 generated_images = Synthetic.gen_blob(template_images, catalog_entries)
 

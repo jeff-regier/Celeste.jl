@@ -661,9 +661,11 @@ function get_image_geometry(catalog_data::DataFrame; field_expand_arcsec=20.0)
 end
 
 function make_template_images(
-    catalog_data::DataFrame, psf_sigma_px::Float64, sky_level_nmgy::Float64,
-    nelec_per_nmgy::Float64
+    catalog_data::DataFrame, psf_sigma_px::Float64, band_sky_level_nmgy::Vector{Float64},
+    band_nelec_per_nmgy::Vector{Float64}
 )
+    @assert length(band_sky_level_nmgy) == 5
+    @assert length(band_nelec_per_nmgy) == 5
     geometry = get_image_geometry(catalog_data)
     println("  Image dimensions $(geometry.height_px) H x $(geometry.width_px) W px")
     wcs = WCS.WCSTransform(
@@ -683,9 +685,9 @@ function make_template_images(
             zeros(Float32, (geometry.height_px, geometry.width_px)),
             band,
             wcs,
-            psf_sigma_px,
-            sky_level_nmgy,
-            nelec_per_nmgy,
+            make_simple_psf(psf_sigma_px),
+            band_sky_level_nmgy[band],
+            band_nelec_per_nmgy[band],
         )
     end
 end
