@@ -743,7 +743,9 @@ function save_images_to_fits(filename::String, images::Vector{Model.Image})
         header = parse_fits_header_from_string(WCS.to_header(band_image.wcs))
         serialize_psf_to_header(band_image.psf, header)
         header["CLSKY"] = mean(band_image.sky.sky_small) * mean(band_image.sky.calibration)
+        FITSIO.set_comment!(header, "CLSKY", "Mean sky background per pixel, nMgy")
         header["CLIOTA"] = mean(band_image.iota_vec)
+        FITSIO.set_comment!(header, "CLIOTA", "Gain, nelec per nMgy")
         write(
             fits_file,
             band_image.pixels,
