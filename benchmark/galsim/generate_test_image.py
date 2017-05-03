@@ -7,7 +7,7 @@ import sys
 import astropy.io.fits
 import galsim
 
-_logger = logging.getLogger(__name__) 
+_logger = logging.getLogger(__name__)
 
 RANDOM_SEED = 1234
 FITS_COMMENT_PREPEND = 'Celeste: '
@@ -58,7 +58,7 @@ class ImageParameters(object):
         # 0.396 = resolution of SDSS images (https://github.com/jeff-regier/Celeste.jl/pull/411)
         self.arcsec_per_pixel = 0.396
         self.world_origin = WorldCoordinate(0, 0)
-        self.counts_per_nmgy = 1000.0
+        self.band_nelec_per_nmgy = [1000.0 for _ in range(5)]
 
     def degrees_per_pixel(self):
         return self.arcsec_per_pixel / ARCSEC_PER_DEGREE
@@ -179,11 +179,12 @@ class Star(LightSource):
         return self
 
     def get_galsim_light_source(self, band_index, psf_sigma_degrees, image_parameters):
-        flux_counts = (
-            self._common_fields.get_flux_nmgy(band_index) * image_parameters.counts_per_nmgy
+        flux_nelec = (
+            self._common_fields.get_flux_nmgy(band_index)
+            * image_parameters.band_nelec_per_nmgy[band_index]
         )
         return (
-            galsim.Gaussian(flux=flux_counts, sigma=psf_sigma_degrees)
+            galsim.Gaussian(flux=flux_nelec, sigma=psf_sigma_degrees)
                 .shift(self._common_fields.get_world_offset(image_parameters).as_galsim_position())
         )
 
@@ -241,20 +242,21 @@ class Galaxy(LightSource):
                 .shift(self._common_fields.get_world_offset(image_parameters).as_galsim_position())
             )
 
-        flux_counts = (
-            self._common_fields.get_flux_nmgy(band_index) * image_parameters.counts_per_nmgy
+        flux_nelec = (
+            self._common_fields.get_flux_nmgy(band_index)
+            * image_parameters.band_nelec_per_nmgy[band_index]
         )
         half_light_radius_deg = self._half_light_radius_arcsec / ARCSEC_PER_DEGREE
         exponential_profile = apply_shear_and_shift(
             galsim.Exponential(
                 half_light_radius=half_light_radius_deg,
-                flux=flux_counts * (1 - self._de_vaucouleurs_mixture_weight),
+                flux=flux_nelec * (1 - self._de_vaucouleurs_mixture_weight),
             )
         )
         de_vaucouleurs_profile = apply_shear_and_shift(
             galsim.DeVaucouleurs(
                 half_light_radius=half_light_radius_deg,
-                flux=flux_counts * self._de_vaucouleurs_mixture_weight,
+                flux=flux_nelec * self._de_vaucouleurs_mixture_weight,
             )
         )
         galaxy = exponential_profile + de_vaucouleurs_profile
@@ -285,7 +287,7 @@ class GalSimTestCase(object):
         self._light_sources = []
         self.image_parameters = ImageParameters()
         self.psf_sigma_pixels = 4
-        self.sky_level_nmgy = 0.01
+        self.band_sky_level_nmgy = [0.01 for _ in xrange(5)] # very low noise by default
         self.include_noise = False
         self.comment = None
 
@@ -299,8 +301,8 @@ class GalSimTestCase(object):
     def set_world_origin(self, right_ascension_deg, declination_deg):
         self.image_parameters.world_origin = WorldCoordinate(right_ascension_deg, declination_deg)
 
-    def set_counts_per_nmgy(self, counts_per_nmgy):
-        self.image_parameters.counts_per_nmgy = counts_per_nmgy
+    def set_band_nelec_per_nmgy(self, band_nelec_per_nmgy):
+        self.image_parameters.band_nelec_per_nmgy = band_nelec_per_nmgy
 
     def get_resolution(self):
         return self.image_parameters.arcsec_per_pixel
@@ -315,13 +317,16 @@ class GalSimTestCase(object):
         self._light_sources.append(galaxy)
         return galaxy
 
-    def _add_sky_background(self, image, uniform_deviate):
-        sky_level_counts = self.sky_level_nmgy * self.image_parameters.counts_per_nmgy
+    def _add_sky_background(self, image, band_index, uniform_deviate):
+        sky_level_nelec = (
+            self.band_sky_level_nmgy[band_index]
+            * self.image_parameters.band_nelec_per_nmgy[band_index]
+        )
         if self.include_noise:
-            poisson_deviate = galsim.PoissonDeviate(uniform_deviate, mean=sky_level_counts)
+            poisson_deviate = galsim.PoissonDeviate(uniform_deviate, mean=sky_level_nelec)
             image.addNoise(galsim.DeviateNoise(poisson_deviate))
         else:
-            image.array[:] = image.array + sky_level_counts
+            image.array[:] = image.array + sky_level_nelec
 
     def construct_image(self, band_index, uniform_deviate):
         world_origin = self.image_parameters.world_origin.as_galsim_position()
@@ -348,10 +353,12 @@ class GalSimTestCase(object):
                 image,
                 add_to_image=True,
                 method='phot',
-                max_extra_noise=self.sky_level_nmgy * self.image_parameters.counts_per_nmgy / 1000.0,
+                max_extra_noise=
+                    self.band_sky_level_nmgy[band_index]
+                    * self.image_parameters.band_nelec_per_nmgy[band_index] / 1000.0,
                 rng=uniform_deviate,
             )
-        self._add_sky_background(image, uniform_deviate)
+        self._add_sky_background(image, band_index, uniform_deviate)
         return image
 
     def get_fits_header(self, case_index, band_index):
@@ -360,8 +367,8 @@ class GalSimTestCase(object):
         header = collections.OrderedDict([
             ('CLCASEI', (case_index + 1, 'test case index')),
             ('CLDESCR', (self.comment, 'comment')),
-            ('CLIOTA', (self.image_parameters.counts_per_nmgy, 'counts per nMgy')),
-            ('CLSKY', (self.sky_level_nmgy, '"epsilon" sky level (nMgy each px)')),
+            ('CLIOTA', (self.image_parameters.band_nelec_per_nmgy[band_index], 'nelec per nMgy')),
+            ('CLSKY', (self.band_sky_level_nmgy[band_index], 'background level (nMgy each px)')),
             ('CLNOISE', (self.include_noise, 'was Poisson noise added?')),
             ('CLSIGMA', (self.psf_sigma_pixels, 'Gaussian PSF sigma (px)')),
             ('CLBAND', (band_index + 1, 'color band')),

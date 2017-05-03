@@ -1,6 +1,7 @@
 using Base.Test
 
 using DataFrames
+import FITSIO
 
 import Celeste: AccuracyBenchmark
 import Celeste: DeterministicVI
@@ -55,6 +56,19 @@ end
     @test isapprox(catalog_entry.gal_scale, 10.0)
     @test isapprox(catalog_entry.gal_angle, 3 * pi / 4)
     @test isapprox(catalog_entry.gal_fluxes[3], 20.0)
+end
+
+@testset "PSF serialize/deserialize" begin
+    psf = PsfComponent[
+        PsfComponent(0.3, StaticArrays.@SVector([1., 2.]), StaticArrays.@SMatrix([3. 1.; 1. 4.])),
+        PsfComponent(0.7, StaticArrays.@SVector([-2., -3.]), StaticArrays.@SMatrix([2. 0.; 0. 1.]))
+    ]
+    header = FITSIO.FITSHeader(String[], [], String[])
+
+    AccuracyBenchmark.serialize_psf_to_header(psf, header)
+    new_psf = AccuracyBenchmark.make_psf_from_header(header)
+
+    @test new_psf == psf
 end
 
 const FITS_HEADER_STRING = "SIMPLE  =                    T /                                                BITPIX  =                  -32 / 32 bit floating point                          NAXIS   =                    2                                                  NAXIS1  =                 2048                                                  NAXIS2  =                 1489                                                  EXTEND  =                    T /Extensions may be present                       BZERO   =              0.00000 /Set by MRD_SCALE                                BSCALE  =              1.00000 /Set by MRD_SCALE                                TAI     =        4537928038.58 / 1st row - Number of seconds since Nov 17 1858  RA      =            359.76830 / 1st row - Right ascension of telescope boresighDEC     =            0.000000  / 1st row - Declination of telescope boresight (dSPA     =              90.000  / 1st row - Camera col position angle wrt north (IPA     =             102.229  / 1st row - Instrument rotator position angle (deIPARATE =              0.0000  / 1st row - Instrument rotator angular velocity (AZ      =            14.483496 / 1st row - Azimuth  (encoder) of tele (0=N?) (deALT     =            56.247810 / 1st row - Altitude (encoder) of tele        (deFOCUS   =           -436.80000 / 1st row - Focus piston (microns?)              DATE-OBS= '2002-09-05'         / 1st row - TAI date                             TAIHMS  = '07:33:58.57'        / 1st row - TAI time (HH:MM:SS.SS) (TAI-UT = apprCOMMENT  TAI,RA,DEC,SPA,IPA,IPARATE,AZ,ALT,FOCUS at reading of col 0, row 0     ORIGIN  = 'SDSS    '                                                            "

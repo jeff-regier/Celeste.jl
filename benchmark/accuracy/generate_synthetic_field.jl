@@ -8,8 +8,8 @@ import Celeste.Model
 import Celeste.Synthetic
 
 const PSF_SIGMA_PX = 2.29 # similar to SDSS
-const COUNTS_PER_NMGY = 180.0 # a.k.a. "iota" in Celeste
-const SKY_LEVEL_NMGY = 0.155
+const BAND_SKY_LEVEL_NMGY = [0.2696, 0.3425, 0.7748, 1.6903, 4.9176]
+const BAND_NELEC_PER_NMGY = [146.9, 838.1, 829.8, 597.2, 129.8]
 const OUTPUT_DIRECTORY = joinpath(splitdir(Base.source_path())[1], "output")
 
 parser = Celeste.ArgumentParse.ArgumentParser()
@@ -30,8 +30,8 @@ catalog_entries = [
 template_images = AccuracyBenchmark.make_template_images(
     catalog_data,
     PSF_SIGMA_PX,
-    SKY_LEVEL_NMGY,
-    COUNTS_PER_NMGY,
+    BAND_SKY_LEVEL_NMGY,
+    BAND_NELEC_PER_NMGY,
 )
 generated_images = Synthetic.gen_blob(template_images, catalog_entries)
 

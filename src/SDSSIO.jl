@@ -93,7 +93,7 @@ Read an SDSS \"frame\" FITS file and return a 4-tuple:
 function read_frame(fname; data=nothing)
     f = FITSIO.FITS(data != nothing ? data : fname)
     hdr = FITSIO.read_header(f[1], String)::String
-    image = read(f[1])::Array{Float32, 2}  # sky-subtracted & calibrated data
+    image = read(f[1])::Array{Float32, 2}  # sky-subtracted & calibrated data, in nMgy
     calibration = read(f[2])::Vector{Float32}
     sky_small, sky_x, sky_y = read_sky(f[3])
     close(f)
@@ -184,7 +184,7 @@ end
 immutable RawImage
     rcf::RunCamcolField
     b::Int  # band index
-    pixels::Matrix{Float32}
+    pixels::Matrix{Float32} # in nMgy, sky-subtracted and calibrated
     calibration::Vector{Float32}
     sky::SkyIntensity
     wcs::WCS.WCSTransform
