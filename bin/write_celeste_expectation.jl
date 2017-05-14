@@ -45,7 +45,9 @@ ArgumentParse.add_argument(
 )
 parsed_args = ArgumentParse.parse_args(parser, ARGS)
 
-function find_relevant_catalog_files(ra_min_deg, ra_max_deg, dec_min_deg, dec_max_deg)
+function find_relevant_catalog_files(
+    ra_min_deg::Float64, ra_max_deg::Float64, dec_min_deg::Float64, dec_max_deg::Float64
+)
     @assert ra_max_deg >= ra_min_deg
     @assert dec_max_deg >= dec_min_deg
 
@@ -71,15 +73,29 @@ function find_relevant_catalog_files(ra_min_deg, ra_max_deg, dec_min_deg, dec_ma
     relevant_paths
 end
 
-function load_sources(file_paths::Vector{String})
-    source_arrays = []
+function load_sources(
+    ra_min_deg::Float64, ra_max_deg::Float64, dec_min_deg::Float64, dec_max_deg::Float64
+)
+    file_paths = find_relevant_catalog_files(ra_min_deg, ra_max_deg, dec_min_deg, dec_max_deg)
+    Log.info("Found $(length(file_paths)) relevant catalog files")
+    all_sources = ParallelRun.OptimizedSource[]
     for file_path in file_paths
         Log.info("Loading $file_path")
         sources::Vector{ParallelRun.OptimizedSource} = JLD.load(file_path)["results"]
-        Log.info("  Found $(length(sources)) soures in $file_path")
-        push!(source_arrays, sources)
+        Log.info("  Found $(length(sources)) sources in $file_path")
+        for source in sources
+            source_ra_deg = source.vs[Model.ids.u[1]]
+            source_dec_deg = source.vs[Model.ids.u[2]]
+            if source_ra_deg < ra_min_deg || source_ra_deg > ra_max_deg
+                continue
+            elseif source_dec_deg < dec_min_deg || source_dec_deg > dec_max_deg
+                continue
+            else
+                push!(all_sources, source)
+            end
+        end
     end
-    vcat(source_arrays...)
+    all_sources
 end
 
 function catalog_entry_from_variational_params(variational_parameters)
@@ -162,14 +178,12 @@ function main()
     field_row = field_extents_data[row_selector, :]
     Log.info(field_row)
 
-    file_paths = find_relevant_catalog_files(
+    full_sources = load_sources(
         field_row[1, :ramin],
         field_row[1, :ramax],
         field_row[1, :decmin],
         field_row[1, :decmax],
     )
-    Log.info("Found $(length(file_paths)) relevant catalog files")
-    full_sources = load_sources(file_paths)
     Log.info("Found $(length(full_sources)) sources total")
 
     images = SDSSIO.load_field_images([rcf], AccuracyBenchmark.SDSS_DATA_DIR)
