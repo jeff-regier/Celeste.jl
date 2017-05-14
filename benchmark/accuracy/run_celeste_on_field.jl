@@ -115,9 +115,18 @@ results_df = AccuracyBenchmark.celeste_to_df(results)
 
 # save results in both JLD and CSV format
 
-jld_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.jld", catalog_label))
+jld_filename = joinpath(
+    OUTPUT_DIRECTORY,
+    @sprintf(
+        "celeste-%.4f-%.4f-%.4f-%.4f.jld",
+        minimum(results_df[:right_ascension_deg]),
+        maximum(results_df[:right_ascension_deg]),
+        minimum(results_df[:declination_deg]),
+        maximum(results_df[:declination_deg]),
+    )
+)
+println("Writing $(jld_filename)...")
 JLD.save(jld_filename, "results", results)
-AccuracyBenchmark.append_hash_to_file(jld_filename)
 
 csv_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.csv", catalog_label))
 AccuracyBenchmark.write_catalog(csv_filename, results_df)
