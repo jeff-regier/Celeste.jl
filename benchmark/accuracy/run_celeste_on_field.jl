@@ -113,6 +113,12 @@ results = AccuracyBenchmark.run_celeste(
 )
 results_df = AccuracyBenchmark.celeste_to_df(results)
 
-output_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.csv", catalog_label))
-AccuracyBenchmark.write_catalog(output_filename, results_df)
-AccuracyBenchmark.append_hash_to_file(output_filename)
+# save results in both JLD and CSV format
+
+jld_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.jld", catalog_label))
+JLD.save(jld_filename, "results", results)
+AccuracyBenchmark.append_hash_to_file(jld_filename)
+
+csv_filename = joinpath(OUTPUT_DIRECTORY, @sprintf("%s_predictions.csv", catalog_label))
+AccuracyBenchmark.write_catalog(csv_filename, results_df)
+AccuracyBenchmark.append_hash_to_file(csv_filename)
