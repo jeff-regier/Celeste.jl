@@ -27,6 +27,12 @@ ArgumentParse.add_argument(
 )
 ArgumentParse.add_argument(
     parser,
+    "--subtract-sdss",
+    action=:store_true,
+    help="Write Celeste expectation - SDSS imagery instead of just expectation",
+)
+ArgumentParse.add_argument(
+    parser,
     "run",
     help="SDSS run #",
     arg_type=Int,
@@ -135,18 +141,26 @@ function fill_celeste_expectation!(
             elbo_vars.elbo.has_hessian,
         )
         image = images[image_index]
-        for image_h in 1:image.H, image_w in 1:image.W
+        for h in 1:image.H, w in 1:image.W
             # fills elbo_vars.E_G in-place
             DeterministicVI.add_pixel_term!(
                 elbo_args,
                 variational_params,
-                image_index, image_h, image_w,
+                image_index, h, w,
                 bvn_bundle,
                 source_brightnesses,
                 elbo_vars,
             )
-            image.pixels[image_h, image_w] += elbo_vars.E_G.v[] - image.sky[image_h, image_w]
+            image.pixels[h, w] += elbo_vars.E_G.v[] - image.sky[h, w]
         end
+    end
+end
+
+function subtract_sdss_values!(
+    celeste_images::Vector{Model.Image}, sdss_images::Vector{Model.Image}
+)
+    for band in 1:5, h in 1:celeste_images[band].H, w in 1:celeste_images[band].W
+        celeste_images[band].pixels[h, w] -= sdss_images[band].pixels[h, w]
     end
 end
 
@@ -186,14 +200,21 @@ function main()
     )
     Log.info("Found $(length(full_sources)) sources total")
 
-    images = SDSSIO.load_field_images([rcf], AccuracyBenchmark.SDSS_DATA_DIR)
+    sdss_images = SDSSIO.load_field_images([rcf], AccuracyBenchmark.SDSS_DATA_DIR)
+    images = deepcopy(sdss_images)
     for band in 1:5, h in 1:images[band].H, w in 1:images[band].W
         images[band].pixels[h, w] = 0
     end
 
     fill_celeste_expectation!(images, full_sources)
 
-    output_filename = "celeste_expectations_$(rcf.run)_$(rcf.camcol)_$(rcf.field).fits"
+    label = "expectations"
+    if parsed_args["subtract-sdss"]
+        subtract_sdss_values!(images, sdss_images)
+        label = "errors"
+    end
+
+    output_filename = "celeste_$(label)_$(rcf.run)_$(rcf.camcol)_$(rcf.field).fits"
     AccuracyBenchmark.save_images_to_fits(output_filename, images)
 end
 
