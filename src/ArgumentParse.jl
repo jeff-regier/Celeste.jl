@@ -191,7 +191,11 @@ function parse_value(specification::ArgumentSpecification, raw_value::String)
 end
 
 function set_defaults(parser::ArgumentParser, parsed_args::Dict{String, Any})
-    for specification in values(parser.keyword_arguments)
+    all_specifications = vcat(
+        parser.positional_arguments,
+        collect(values(parser.keyword_arguments)),
+    )
+    for specification in all_specifications
         if !haskey(parsed_args, specification.name) && specification.default != NoDefault
             parsed_args[specification.name] = specification.default
         end

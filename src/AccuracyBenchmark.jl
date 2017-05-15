@@ -148,17 +148,22 @@ STRIPE_82_CATALOG_KEYS = [
     :flags, :is_saturated,
 ]
 
-function load_stripe82_fits_catalog_as_data_frame(filename, extension_index)
+function load_fits_table_as_data_frame(filename, extension_index, field_names)
     result_df = DataFrame()
     fits = FITSIO.FITS(filename)
     try
-        for key in STRIPE_82_CATALOG_KEYS
+        for key in field_names
             result_df[key] = read(fits[extension_index], string(key))
         end
         return result_df
     finally
         close(fits)
     end
+end
+
+
+function load_stripe82_fits_catalog_as_data_frame(filename, extension_index)
+    load_fits_table_as_data_frame(filename, extension_index, STRIPE_82_CATALOG_KEYS)
 end
 
 """
@@ -595,7 +600,7 @@ function make_catalog_entry(row::DataFrameRow)
     minor_major_axis_ratio = na_to_default(row[:minor_major_axis_ratio], 0.8)
     Model.CatalogEntry(
         [row[:right_ascension_deg], row[:declination_deg]],
-        row[:is_star],
+        row[:is_star] > 0.5,
         fluxes,
         fluxes,
         na_to_default(row[:de_vaucouleurs_mixture_weight], 0.5),
