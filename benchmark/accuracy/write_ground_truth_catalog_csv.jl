@@ -7,6 +7,7 @@ import Celeste.ArgumentParse
 
 const OUTPUT_DIRECTORY = joinpath(splitdir(Base.source_path())[1], "output")
 const CELESTE_PRIOR_CATALOG_CSV = joinpath(OUTPUT_DIRECTORY, "celeste_prior_catalog.csv")
+const COADD_CATALOG_FITS = joinpath(Pkg.dir("Celeste"), "test", "data", "coadd_for_4263_5_119.fit")
 
 GALAXY_ONLY_COLUMNS = [
     :de_vaucouleurs_mixture_weight,
@@ -28,6 +29,7 @@ ArgumentParse.add_argument(
     parser,
     "coadd_fits",
     help="Stripe82 catalog FITS file, for 'coadd'",
+    default=COADD_CATALOG_FITS,
     required=false,
 )
 parsed_args = ArgumentParse.parse_args(parser, ARGS)

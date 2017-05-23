@@ -17,7 +17,7 @@ include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
 using SampleData
 
 
-if Pkg.installed("StaticArrays") <= v"0.4.0"
+if Pkg.installed("StaticArrays") <= v"0.5.0"
     Pkg.checkout("StaticArrays")
     Pkg.build("StaticArrays")
 end
@@ -54,7 +54,6 @@ else
                  "test_infer.jl",
                  "test_joint_infer.jl",
                  "test_log_prob.jl",
-                 "test_misc.jl",
                  "test_optimization.jl",
                  "test_psf.jl",
                  "test_score.jl",

@@ -1,8 +1,9 @@
+# See https://github.com/jeff-regier/Celeste.jl/wiki/About-SDSS-and-Stripe-82
 immutable SkyIntensity
-    sky_small::Matrix{Float32}
-    sky_x::Vector{Float32}
+    sky_small::Matrix{Float32} # background flux per pixel, in DNs
+    sky_x::Vector{Float32} # interpolation coordinates
     sky_y::Vector{Float32}
-    calibration::Vector{Float64}
+    calibration::Vector{Float64} # nMgy per DN for each row
 end
 
 
@@ -18,6 +19,8 @@ For coordinates that are out-of-bounds (e.g., `sky_x[i] < 1.0` or
 `sky_x[i] > size(sky_small,1)` where the interpolation would index sky_small values
 outside the array, the nearest values in the sky_small array are used. (This is
 constant extrapolation.)
+
+Return value has units of nMgy.
 """
 function interp_sky_kernel(sky::SkyIntensity, i::Int, j::Int)
     nx, ny = size(sky.sky_small)
@@ -41,13 +44,13 @@ function interp_sky_kernel(sky::SkyIntensity, i::Int, j::Int)
     x1 = min(max(x1, 1), nx)
 
     # bi-linear interpolation
-    skynmgy = (xw0 * yw0 * sky.sky_small[x0, y0]
+    sky_dns = (xw0 * yw0 * sky.sky_small[x0, y0]
              + xw1 * yw0 * sky.sky_small[x1, y0]
              + xw0 * yw1 * sky.sky_small[x0, y1]
              + xw1 * yw1 * sky.sky_small[x1, y1])
 
-    # return sky intensity in counts
-    skynmgy * sky.calibration[i]
+    # return sky intensity in nMgy
+    sky_dns * sky.calibration[i]
 end
 
 import Base.getindex
@@ -65,7 +68,7 @@ type Image
     # The image width.
     W::Int
 
-    # An HxW matrix of pixel intensities.
+    # An HxW matrix of pixel intensities, in raw electron counts (nelec).
     pixels::Matrix{Float32}
 
     # The band id (takes on values from 1 to 5).
