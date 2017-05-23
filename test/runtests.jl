@@ -54,7 +54,6 @@ else
                  "test_infer.jl",
                  "test_joint_infer.jl",
                  "test_log_prob.jl",
-                 "test_misc.jl",
                  "test_optimization.jl",
                  "test_psf.jl",
                  "test_score.jl",

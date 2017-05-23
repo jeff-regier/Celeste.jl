@@ -3,6 +3,7 @@ import JLD
 
 import Celeste.Configs
 
+
 """
 test infer with a single (run, camcol, field).
 This is basically just to make sure it runs at all.
@@ -13,41 +14,6 @@ function test_infer_single()
     box = ParallelRun.BoundingBox(164.39, 164.41, 39.11, 39.13)
     field_triplets = [RunCamcolField(3900, 6, 269),]
     result = ParallelRun.one_node_infer(field_triplets, datadir; box=box)
-end
-
-
-function load_surrounding_rcfs()
-    wd = pwd()
-    cd(datadir)
-
-    # these rcfs are all the rcfs that overlap with (3900,6,269)
-    run(`make RUN=3900 CAMCOL=6 FIELD=268`)
-    run(`make RUN=3900 CAMCOL=6 FIELD=269`)
-    run(`make RUN=3900 CAMCOL=6 FIELD=270`)
-    run(`make RUN=4469 CAMCOL=5 FIELD=342`)
-    run(`make RUN=4469 CAMCOL=5 FIELD=343`)
-    run(`make RUN=4469 CAMCOL=6 FIELD=342`)
-    run(`make RUN=4469 CAMCOL=6 FIELD=343`)
-    run(`make RUN=4469 CAMCOL=6 FIELD=344`)
-
-    cd(wd)
-end
-
-
-function test_infer_rcf()
-    load_surrounding_rcfs()
-
-    resfile = joinpath(datadir, "celeste-003900-6-0269.jld")
-    rm(resfile, force=true)
-
-    rcf = RunCamcolField(3900, 6, 269)
-    objid = "1237662226208063492"
-    ParallelRun.infer_rcf(rcf, datadir, datadir; objid=objid)
-
-    @test isfile(resfile)
-    println(filesize(resfile))
-    @test filesize(resfile) > 1000  # should be about 15 KB
-    rm(resfile)
 end
 
 
@@ -175,9 +141,6 @@ end
     @test length(neighbors) < 5
 end
 
-if test_long_running
-    test_infer_rcf()
-end
 
 test_patch_pixel_selection()
 test_load_active_pixels()
