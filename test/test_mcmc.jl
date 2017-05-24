@@ -3,10 +3,7 @@ using Base.Test
 using Celeste: Model, Transform, SensitiveFloats, MCMC
 using StatsBase
 
-#### to run
-include(joinpath(Pkg.dir("Celeste"), "test", "Synthetic.jl"))
 include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
-include(joinpath(Pkg.dir("Celeste"), "test", "DerivativeTestUtils.jl"))
 import SampleData: gen_sample_star_dataset
 
 
@@ -53,44 +50,37 @@ end
 #########################################################
 
 function test_star_mcmc()
-    blob, ea, body = SampleData.gen_sample_star_dataset();
-    println("Active sources", ea.active_sources)
 
-    # run single source slice sampler on synthetic dataset
-    star_chain = MCMC.run_single_star_mcmc(25,  # num_samples,
-                                           body, # sources
-                                           ea.images,
-                                           ea.S, ea.N,
-                                           ea.patches, ea.active_sources,
-                                           ea.psf_K)
+    ##########################
+    # load up star lnpdf     #
+    ##########################
+    # init ground truth star
+    ea, vp, catalog = SampleData.true_star_init()
 
-    # chain stuff
-    Mamba.describe(star_chain)
-
-    # output to file
-    p = Mamba.plot(sim)
-    Mamba.draw(p, filename="starplot.svg")
+    # run chains
+    chains, logprobs =
+        MCMC.run_single_star_mcmc(catalog, ea.images, ea.patches,
+                                  ea.active_sources, ea.psf_K;
+                                  num_samples = 5000,
+                                  num_chains  = 6,
+                                  prop_scale  = .0005,
+                                  print_skip  = 250)
 
     # make sure chains contain true params in middle 95%
     source_states = [Model.catalog_entry_to_latent_state_params(s)
-                     for s in body]
+                     for s in catalog]
     true_star_state = Model.extract_star_state(source_states[1])
 
-    ## check to make sure posterior percentiles cover truth
-    #for i in 1:length(true_star_state)
-    #    ths = star_chain.value[:,i,1]
-    #    lo, hi = percentile(ths, 1), percentile(ths, 99)
-    #    @printf "   %s (true_val %2.4f)  = %2.4f  [%2.4f,  %2.4f] \n" MCMC.star_param_names[i] true_star_state[i] mean(ths) lo hi
-    #    @test (true_star_state[i] < hi) & (true_star_state[i] > lo)
-    #end
+    samples = vcat(chains...)
+    for i in 1:length(true_star_state)
+        ths = samples[:,i] #star_chain.value[:,i,1]
+        lo, hi = percentile(ths, 1), percentile(ths, 99)
+        @printf "   %s (true_val %2.4f)  = %2.4f  [%2.4f,  %2.4f] \n" MCMC.star_param_names[i] true_star_state[i] mean(ths) lo hi
+        @test (true_star_state[i] < hi) & (true_star_state[i] > lo)
+    end
+
 end
 
-
-#function plot_mcmc_samples(chain, true_state)
-#  
-#    blob, 
-#
-#end
 
 
 #function test_galaxy_mcmc()

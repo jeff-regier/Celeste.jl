@@ -64,7 +64,7 @@ function init_star_params(star_params::Vector{Float64};
                           radec_scale::Float64=1e-5)
     th0 = copy(star_params)
     for ii in 1:5
-      th0[ii] += .2*randn()
+      th0[ii] += .1*randn()
     end
     th0[6:7] += radec_scale*randn(2)
     return th0
