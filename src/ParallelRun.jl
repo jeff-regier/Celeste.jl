@@ -26,9 +26,11 @@ const distributed = haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
 
 if distributed
 using Gasp
+dlog(x) = Dlog(x)
 else
 grank() = 1
-const Dlog = Void
+dlog(x) = nothing
+Dlog = Void
 message(d, msg...) = println(msg...)
 end
 
@@ -192,12 +194,11 @@ function infer_init(rcfs::Vector{RunCamcolField},
     # Read all primary objects in these fields.
     duplicate_policy = primary_initialization ? :primary : :first
     tic()
-    states = SDSSIO.preload_rcfs(strategy, rcfs)
     timing.preload_rcfs += toq()
 
     tic()
-    for (i,(rcf,state)) in enumerate(zip(rcfs, states))
-        this_cat = SDSSIO.read_photoobj(strategy, rcf, state, duplicate_policy=duplicate_policy)
+    for rcf in rcfs
+        this_cat = SDSSIO.read_photoobj_files(strategy, [rcf], duplicate_policy=duplicate_policy)
         these_sources_rcfs = Vector{RunCamcolField}(length(this_cat))
         fill!(these_sources_rcfs, rcf)
         these_sources_idxs = collect(Int16, 1:length(this_cat))
@@ -227,7 +228,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
         # Read in images for all (run, camcol, field).
         try
             tic()
-            images = SDSSIO.load_field_images(strategy, rcfs, states)
+            images = SDSSIO.load_field_images(strategy, rcfs)
             timing.read_img += toq()
         catch ex
             Log.exception(ex)
@@ -582,9 +583,7 @@ save_results(outdir, box, results) =
 """
 called from main entry point.
 """
-function infer_box(box::BoundingBox, stagedir::String, outdir::String)
-    strategy = PlainFITSStrategy(stagedir)
-
+function infer_box(strategy, box::BoundingBox, outdir::String)
     timing = InferTiming()
 
     Log.info("processing box $(box.ramin), $(box.ramax), $(box.decmin), ",
@@ -613,6 +612,11 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
         timing.write_results = toq()
     end
     puts_timing(timing)
+end
+
+function infer_box(box::BoundingBox, stagedir::String, outdir::String)
+    strategy = PlainFITSStrategy(stagedir)
+    infer_box(strategy, box, outdir)
 end
 
 
@@ -645,7 +649,7 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
                      prefetch::Bool,
                      outdir::String)
     # set up distributed log
-    dl = Dlog(joinpath(outdir, "dlog"))
+    dl = dlog(joinpath(outdir, "dlog"))
 
     # Base.@time hack for distributed environment
     gc_stats = ()
@@ -653,8 +657,16 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
     gc_stats = Base.gc_num()
     elapsed_time = time_ns()
 
-    multi_node_infer(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                     strategy, prefetch, outdir, dl)
+    if distributed
+        multi_node_infer(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
+                         strategy, prefetch, outdir, dl)
+    else
+        for boxes in all_boxes
+            for box in boxes
+                infer_box(strategy, box, outdir)
+            end
+        end
+    end
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time
