@@ -9,5 +9,5 @@ ForwardDiff 0.3.4 0.5
 ReverseDiff 0.1.1 0.2
 JLD 0.6.0
 Optim 0.7.4
-StaticArrays 0.1.4
+StaticArrays 0.5.1
 WCS 0.1.3
