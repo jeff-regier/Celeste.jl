@@ -17,6 +17,8 @@ import ..PSF
 import ..DeterministicVI: infer_source
 
 include("joint_infer.jl")
+include("greedy_infer.jl")
+
 
 # In production mode, rather the development mode, always catch exceptions
 const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != ""
@@ -664,4 +666,3 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
 end
 
 end
-
