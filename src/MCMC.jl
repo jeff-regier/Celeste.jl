@@ -1,12 +1,66 @@
 module MCMC
 
 using ..Model
+#include("Synthetic.jl")
 using DataFrames
-
+using Distributions
 
 # TODO move these to model/log_prob.jl
 star_param_names = ["lnr", "cug", "cgr", "cri", "ciz", "ra", "dec"]
 galaxy_param_names = [star_param_names; ["gdev", "gaxis", "gangle", "gscale"]]
+
+
+"""
+Make a synthetic log pdf --- based on Synthetic.jl
+"""
+function make_star_logpdf_synth(images::Vector{Image},
+                                patches::Matrix{SkyPatch},
+                                fixed_pos::Array{Float64,1})
+    # define star prior log probability density function
+    prior = Model.construct_prior()
+    subprior = prior.star
+
+    function star_logprior(state::Vector{Float64})
+        brightness, colors, u = state[1], state[2:5], state[6:end]
+        return Model.color_logprior(brightness, colors, prior, true)
+    end
+
+    # define star log joint probability density function
+    function star_logpdf(state::Vector{Float64})
+        #println(" callign synth star logpdf")
+        ll_prior = star_logprior(state)
+
+        # convert state to catalog entry --- render expected image
+        brightness, colors, position = state[1], state[2:5], state[6:end]
+        fluxes = Model.colors_to_fluxes(brightness, colors)
+        ce = Model.CatalogEntry(fixed_pos, true, fluxes, fluxes,
+                                .1, .7, pi/4, 4., "ll", 0);
+
+        # render expected image
+        mod_images = Synthetic.gen_blob(images, [ce]; expectation=true)
+
+        # first render start state and data image --- make sure they overlap
+
+        # compute Poisson LL for each Pixel
+        ll = 0
+        for n in 1:length(mod_images)
+            mimg = mod_images[n]
+            dimg = images[n]
+            for w in 1:mimg.W, h in 1:mimg.H
+                # note that images are indexed HEIGHT, WIDTH (row, col or y, x)
+                pix_lam  = mimg.pixels[h,w]
+                pix_dat  = dimg.pixels[h,w]
+                #pixel_ll = logpdf(Distributions.Poisson(pix_lam),
+                #                  round(Int, pix_dat))
+                pixel_ll = pix_dat*log(pix_lam) - pix_lam
+                ll += pixel_ll
+            end
+        end
+        return ll + ll_prior
+    end
+
+    return star_logpdf, star_logprior
+end
 
 
 """
@@ -25,19 +79,26 @@ function run_single_star_mcmc(sources::Vector{CatalogEntry},
                               warmup_prop_scale::Float64=.1,
                               print_skip::Int64=250)
 
+    println("--- chain prop scale: ", chain_prop_scale)
     # turn list of catalog entries a list of LatentStateParams
     # and create logpdf function handle
     source_states = [Model.catalog_entry_to_latent_state_params(s)
                      for s in sources]
     S = length(source_states)
     N = length(images)
-    star_logpdf, star_logprior =
-        Model.make_star_logpdf(images, S, N, source_states,
-                               patches, active_sources, psf_K)
+    #star_logpdf, star_logprior =
+    ##    Model.make_star_logpdf(images, S, N, source_states,
+    #                           patches, active_sources, psf_K)
+    ce = sources[1]
+    fixed_pos = ce.pos
+    star_logpdf, star_logprior = 
+          make_star_logpdf_synth(images, patches, fixed_pos)
 
     # initialize star params
     star_state = Model.extract_star_state(source_states[1])
     best_ll = star_logpdf(star_state)
+    println(" initial log posterior: ", best_ll)
+    println(" initial log prior: ", star_logprior(star_state))
 
     # determine proposal scale for each dimension --- estimate the
     # diagonal of the hessian
@@ -56,6 +117,10 @@ function run_single_star_mcmc(sources::Vector{CatalogEntry},
                                    keep_warmup=true,
                                    warmup_prop_scale=warmup_prop_scale,
                                    chain_prop_scale=chain_prop_scale)
+
+      thlast = samples[end,:]
+      println(" mixed value, log post, log prior ",
+              star_logpdf(thlast), ", ", star_logprior(thlast))
 
       push!(chains, samples[(num_warmup+1):end, :])
       push!(logprobs, lls[(num_warmup+1):end])
@@ -105,12 +170,13 @@ end
 function init_star_params(star_params::Vector{Float64};
                           radec_scale::Float64=1e-5)
     th0 = copy(star_params)
-    for ii in 1:5
-      th0[ii] += .1*randn()
-    end
-    th0[6:7] += radec_scale*randn(2)
+    #for ii in 1:5
+    #  th0[ii] += .01*randn()
+    #end
+    #th0[6:7] += radec_scale*randn(2)
     return th0
 end
+
 
 ###########
 # Helpers #
@@ -151,9 +217,11 @@ end
 
 
 """
-Run single metropolis hastings chain
+Run single metropolis hastings chain --- 
+  - with warmup first computes a proposal scale based on 
+    starting th0, and then re-adjusts the proposal scale after
+    the target proposal
 """
-
 function run_mh_sampler_with_warmup(lnpdf::Function,
                                     th0::Vector{Float64},
                                     N::Int64,
@@ -163,13 +231,15 @@ function run_mh_sampler_with_warmup(lnpdf::Function,
                                     warmup_prop_scale::Float64=.1,
                                     chain_prop_scale::Float64=.05)
     println("warming up .... ")
-    prop_scale   = warmup_prop_scale*compute_proposal_scale(lnpdf, th0)
+    #prop_scale   = warmup_prop_scale*compute_proposal_scale(lnpdf, th0)
+    prop_scale   = warmup_prop_scale * ones(length(th0))
     wchain, wlls = run_mh_sampler(lnpdf, th0, warmup, prop_scale;
                                   print_skip=print_skip)
 
     println("running sampler .... ")
     th0 = wchain[end,:]
-    prop_scale = chain_prop_scale*compute_proposal_scale(lnpdf, th0)
+    #prop_scale = chain_prop_scale*compute_proposal_scale(lnpdf, th0)
+    prop_scale = chain_prop_scale * ones(length(th0))
     chain, lls = run_mh_sampler(lnpdf, th0, N, prop_scale;
                                 print_skip=print_skip)
 
@@ -221,9 +291,18 @@ function run_mh_sampler(lnpdf::Function,
 end
 
 
+function run_slice_sampler(lnpdf::Function,
+                           th0::Vector{Float64},
+                           N::Int64)
+
+end
+
+
+
 """
-Potential Scale Reduction Factor --- Followed the formula from the 
-following website:
+Potential Scale Reduction Factor --- computes a metric that 
+assesses how well MCMC chains have mixed.  Followed the formula
+as written at the following website:
 http://blog.stata.com/2016/05/26/gelman-rubin-convergence-diagnostic-using-multiple-chains/
 """
 function potential_scale_reduction_factor(chains)
