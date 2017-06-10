@@ -16,6 +16,10 @@ using Celeste.Log
 using Gasp
 using JLD
 
+function __init__()
+    Celeste.Log.rank[] = Gasp.grank()
+end
+
 import Celeste.ParallelRun: puts_timing
 
 function puts_timing(dl::Dlog, i::InferTiming)

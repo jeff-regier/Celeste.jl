@@ -27,54 +27,15 @@ Usage:
     strategy = Celeste.read_settings_file(args[1])
 
     # load the RCFs #sources file
-    rcf_nsrcs_file = args[2]
-    all_rcfs = Vector{RunCamcolField}()
-    all_rcf_nsrcs = Vector{Int16}()
-    f = open(rcf_nsrcs_file)
-    for ln in eachline(f)
-        lp = split(ln, '\t')
-        run = parse(Int16, lp[1])
-        camcol = parse(UInt8, lp[2])
-        field = parse(Int16, lp[3])
-        nsrc = parse(Int16, lp[4])
-        push!(all_rcfs, RunCamcolField(run, camcol, field))
-        push!(all_rcf_nsrcs, nsrc)
-    end
-    close(f)
+    all_rcfs, all_rcf_nsrcs = parse_rcfs_nsrcs(args[2])
+
 
     # parse the specified box file(s)
     nboxfiles = length(args) - 3
     all_boxes = Vector{Vector{BoundingBox}}()
     all_boxes_rcf_idxs = Vector{Vector{Vector{Int32}}}()
     for i = 1:nboxfiles
-        boxfile = args[i+2]
-        boxes = Vector{BoundingBox}()
-        boxes_rcf_idxs = Vector{Vector{Int32}}()
-        f = open(boxfile)
-        for ln in eachline(f)
-            lp = split(ln, '\t')
-            if length(lp) != 5
-                Log.one_message("ERROR: malformed line in box file:\n> $ln ")
-                continue
-            end
-
-            ss = split(lp[4], ' ')
-            ramin = parse(Float64, ss[1])
-            ramax = parse(Float64, ss[2])
-            decmin = parse(Float64, ss[3])
-            decmax = parse(Float64, ss[4])
-            bb = BoundingBox(ramin, ramax, decmin, decmax)
-            push!(boxes, bb)
-
-            ris = split(lp[5], ',')
-            rcf_idxs = [parse(Int32, ri) for ri in ris]
-            push!(boxes_rcf_idxs, rcf_idxs)
-        end
-        close(f)
-        if length(boxes) < 1
-            Log.one_message("$boxfile is empty?")
-            continue
-        end
+        all_boxes, all_boxes_rcf_idxs = parse_boxfile(args[i+2])
         push!(all_boxes, boxes)
         push!(all_boxes_rcf_idxs, boxes_rcf_idxs)
     end
