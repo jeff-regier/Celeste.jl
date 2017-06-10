@@ -1,0 +1,7 @@
+io:
+    dataset: sdss
+    dirlayout: sdss
+    basedir: /sdss/dr12
+    strategy: fits
+    compressed: true
+    slurp: false

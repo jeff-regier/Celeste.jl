@@ -56,6 +56,7 @@ struct Mask <: SDSSImageDesc
     rcf::RunCamcolField
     band::Char
 end
+struct FieldExtents <: SDSSImageDesc; end
 rcf(img::SDSSImageDesc) = img.rcf
 rcf(img::PhotoField) = RunCamcolField(img.run, img.camcol, -1)
 
@@ -64,6 +65,7 @@ filename(p::PhotoField) = "photoField-$(dec(p.run,6))-$(p.camcol).fits"
 filename(p::PsField) = "psField-$(dec(p.rcf.run,6))-$(p.rcf.camcol)-$(dec(p.rcf.field,4)).fit"
 filename(p::Frame) = "frame-$(p.band)-$(dec(p.rcf.run,6))-$(p.rcf.camcol)-$(dec(p.rcf.field,4)).fits"
 filename(p::Mask) = "fpM-$(dec(p.rcf.run,6))-$(p.band)$(p.rcf.camcol)-$(dec(p.rcf.field,4)).fit"
+filename(p::FieldExtents) = "field_extents.fits"
 
 """
 read_sky(hdu)
@@ -613,7 +615,7 @@ function read_photoobj_files(strategy, fts::Vector{RunCamcolField};
     return assemble_catalog(rawcatalogs; duplicate_policy=duplicate_policy)
 end
 
-# IO Strategies
+# IO Strategies, these are specification objects fed in from external
 abstract type IOStrategy end
 
 struct PlainFITSStrategy <: IOStrategy
@@ -647,6 +649,7 @@ function slurp_fits(fname)
 end
 
 function compute_fname(strategy::PlainFITSStrategy, img::SDSSImageDesc)
+    isa(img, FieldExtents) && return (joinpath(strategy.stagedir, filename(img)), nothing)
     imgrcf = rcf(img)
     basedir = isa(strategy.rcf_stagedir, String) ? strategy.rcf_stagedir : strategy.rcf_stagedir(imgrcf)
     if strategy.dirlayout == :celeste

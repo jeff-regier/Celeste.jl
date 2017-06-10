@@ -6,22 +6,22 @@ module Log
 import Base.Threads.threadid
 
 const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != ""
-const distributed = haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
 
-if distributed
-import Gasp.grank
-else
-grank() = 1
-end
+# This can be set by the multinode functionality on startup
+const rank = Ref{Int}(1)
+grank() = rank[]
 
 # thread-safe print function
-@inline puts(s...) = ccall(:puts, Cint, (Cstring,), string(s...))
+@inline function puts(s...)
+    data = string(s..., '\n')
+    ccall(:write, Cint, (Cint, Cstring, Csize_t), 1, data, sizeof(data))
+end
 @inline rtputs(s...) = puts("[$(grank())]<$(threadid())> ", s...)
 
 
 # logging functions
 @inline message(msg...) = rtputs(msg...)
-@inline one_message(msg...) = grank() == 1 && puts(msg...) 
+@inline one_message(msg...) = grank() == 1 && puts(msg...)
 @inline error(msg...) = rtputs("ERROR: ", msg...)
 @inline warn(msg...) = rtputs("WARN: ", msg...)
 
@@ -45,7 +45,7 @@ function exception(exception::Exception, msg...)
     end
     buf = IOBuffer()
     Base.showerror(buf, exception)
-    error(takebuf_string(buf))
+    error(String(take!(buf)))
     if !is_production_run
         error("Stack trace:")
         if length(stack_trace) > 100
