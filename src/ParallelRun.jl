@@ -422,8 +422,8 @@ end
 """
 Query the SDSS database for all fields that overlap the given RA, Dec range.
 """
-function get_overlapping_field_extents(query::BoundingBox, stagedir::String)
-    f = FITSIO.FITS("$stagedir/field_extents.fits")
+function get_overlapping_field_extents(query::BoundingBox, strategy::SDSSIO.IOStrategy)
+    f = SDSSIO.readFITS(strategy, SDSSIO.FieldExtents())
 
     hdu = f[2]::FITSIO.TableHDU
 
@@ -454,8 +454,8 @@ function get_overlapping_field_extents(query::BoundingBox, stagedir::String)
 
     return ret
 end
-get_overlapping_field_extents(query::BoundingBox, strategy::SDSSIO.IOStrategy) =
-    get_overlapping_field_extents(query, strategy.stagedir)
+get_overlapping_field_extents(query::BoundingBox, stagedir::String) =
+    get_overlapping_field_extents(query, SDSSIO.PlainFITSStrategy(stagedir))
 
 
 """
@@ -487,8 +487,9 @@ end
 Load `field_extents.fits` from `stagedir` and return a vector of
 `FieldExtent`s.
 """
-function load_field_extents(stagedir::String)
-    f = FITSIO.FITS("$stagedir/field_extents.fits")
+function load_field_extents(strategy)
+    f = SDSSIO.readFITS(strategy, SDSSIO.FieldExtents())
+
 
     hdu = f[2]::FITSIO.TableHDU
 
@@ -513,7 +514,6 @@ function load_field_extents(stagedir::String)
 
     return fes
 end
-load_field_extents(strategy::SDSSIO.IOStrategy) = load_field_extents(strategy.stagedir)
 
 
 """
