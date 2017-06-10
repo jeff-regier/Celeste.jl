@@ -18,21 +18,12 @@ import ..DeterministicVI: infer_source
 
 include("joint_infer.jl")
 
+abstract type ParallelismStrategy; end
+struct ThreadsStrategy <: ParallelismStrategy; end
+
+
 # In production mode, rather the development mode, always catch exceptions
 const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != ""
-
-# Use distributed parallelism (with Dtree)
-const distributed = haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
-
-if distributed
-using Gasp
-dlog(x) = Dlog(x)
-else
-grank() = 1
-dlog(x) = nothing
-Dlog = Void
-message(d, msg...) = println(msg...)
-end
 
 #
 # ------ bounding box ------
@@ -118,29 +109,8 @@ function puts_timing(i::InferTiming)
     #Log.message("timing: wait_done=$(i.wait_done)")
 end
 
-function puts_timing(dl::Dlog, i::InferTiming)
-    i.num_srcs = max(1, i.num_srcs)
-    message(dl, "timing: query_fids=$(i.query_fids)")
-    message(dl, "timing: read_photoobj=$(i.read_photoobj)")
-    message(dl, "timing: read_img=$(i.read_img)")
-    message(dl, "timing: preload_rcfs=$(i.preload_rcfs)")
-    message(dl, "timing: find_neigh=$(i.find_neigh)")
-    message(dl, "timing: load_wait=$(i.load_wait)")
-    #message("dl, timing: proc_wait=$(i.proc_wait)")
-    message(dl, "timing: init_elbo=$(i.init_elbo)")
-    message(dl, "timing: opt_srcs=$(i.opt_srcs)")
-    message(dl, "timing: num_srcs=$(i.num_srcs)")
-    #message(dl, "timing: average opt_srcs=$(i.opt_srcs/i.num_srcs)")
-    #message(dl, "timing: sched_ovh=$(i.sched_ovh)")
-    message(dl, "timing: load_imba=$(i.load_imba)")
-    #message(dl, "timing: ga_get=$(i.ga_get)")
-    #message(dl, "timing: ga_put=$(i.ga_put)")
-    #message(dl, "timing: store_res=$(i.store_res)")
-    message(dl, "timing: write_results=$(i.write_results)")
-    message(dl, "timing: wait_done=$(i.wait_done)")
-end
 
-function time_puts(dl::Dlog, elapsedtime, bytes, gctime, allocs)
+function time_puts(elapsedtime, bytes, gctime, allocs)
     s = @sprintf("timing: total=%10.6f seconds", elapsedtime/1e9)
     if bytes != 0 || allocs != 0
         bytes, mb = Base.prettyprint_getunits(bytes, length(Base._mem_units),
@@ -167,9 +137,8 @@ function time_puts(dl::Dlog, elapsedtime, bytes, gctime, allocs)
     elseif gctime > 0
         s = string(s, @sprintf(", %.2f%% gc time", 100*gctime/elapsedtime))
     end
-    message(dl, s)
+    Log.message(s)
 end
-
 
 # ------
 # initialization helpers
@@ -619,37 +588,33 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     infer_box(strategy, box, outdir)
 end
 
-
-if distributed
-include("multinode_run.jl")
-else
-function multi_node_infer(all_rcfs::Vector{RunCamcolField},
-                          all_rcf_nsrcs::Vector{Int16},
-                          all_boxes::Vector{Vector{BoundingBox}},
-                          all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
-                          strategy::SDSSIO.IOStrategy,
-                          prefetch::Bool,
-                          outdir::String,
-                          dl::Dlog)
-    Log.one_message("ERROR: distributed functionality is disabled ",
-                    "(set USE_DTREE=1 to enable)")
-    exit(-1)
-end
+function do_infer_boxes(pstrategy::ThreadsStrategy,
+                        all_rcfs::Vector{RunCamcolField},
+                        all_rcf_nsrcs::Vector{Int16},
+                        all_boxes::Vector{Vector{BoundingBox}},
+                        all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
+                        iostrategy::SDSSIO.IOStrategy,
+                        prefetch::Bool,
+                        outdir::String)
+    for boxes in all_boxes
+        for box in boxes
+            infer_box(iostrategy, box, outdir)
+        end
+    end
 end
 
 
 """
 called from main entry point.
 """
-function infer_boxes(all_rcfs::Vector{RunCamcolField},
+function infer_boxes(pstrategy::ParallelismStrategy,
+                     all_rcfs::Vector{RunCamcolField},
                      all_rcf_nsrcs::Vector{Int16},
                      all_boxes::Vector{Vector{BoundingBox}},
                      all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
-                     strategy::SDSSIO.IOStrategy,
+                     iostrategy::SDSSIO.IOStrategy,
                      prefetch::Bool,
                      outdir::String)
-    # set up distributed log
-    dl = dlog(joinpath(outdir, "dlog"))
 
     # Base.@time hack for distributed environment
     gc_stats = ()
@@ -657,23 +622,14 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
     gc_stats = Base.gc_num()
     elapsed_time = time_ns()
 
-    if distributed
-        multi_node_infer(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                         strategy, prefetch, outdir, dl)
-    else
-        for boxes in all_boxes
-            for box in boxes
-                infer_box(strategy, box, outdir)
-            end
-        end
-    end
+    do_infer_boxes(pstrategy, all_rcfs, all_rcf_nsrcs, all_boxes,
+                   all_boxes_rcf_idxs, iostrategy, prefetch, outdir)
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time
     gc_diff_stats = Base.GC_Diff(Base.gc_num(), gc_stats)
-    time_puts(dl, elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
+    time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
               Base.gc_alloc_count(gc_diff_stats))
 end
 
 end
-

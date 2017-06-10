@@ -1,3 +1,46 @@
+__precompile__()
+module CelesteMultiNode
+
+using Base.Dates
+using Base.Threads
+
+using Celeste
+import Celeste: SDSSIO, ParallelRun, Infer
+using Celeste.Model
+using Celeste.ParallelRun: InferTiming, BoxKillSwitch, FieldExtent, OptimizedSourceLen, get_overlapping_fields, infer_init, is_production_run, setup_vecs, partition_box, get_pixels_processed, add_timing!
+using Celeste.DeterministicVI
+using Celeste.DeterministicVI.ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
+using Celeste.DeterministicVI.ElboMaximize: Config, maximize!
+using Celeste.Configs
+using Celeste.Log
+using Gasp
+using JLD
+
+import Celeste.ParallelRun: puts_timing
+
+function puts_timing(dl::Dlog, i::InferTiming)
+    i.num_srcs = max(1, i.num_srcs)
+    message(dl, "timing: query_fids=$(i.query_fids)")
+    message(dl, "timing: read_photoobj=$(i.read_photoobj)")
+    message(dl, "timing: read_img=$(i.read_img)")
+    message(dl, "timing: preload_rcfs=$(i.preload_rcfs)")
+    message(dl, "timing: find_neigh=$(i.find_neigh)")
+    message(dl, "timing: load_wait=$(i.load_wait)")
+    #message("dl, timing: proc_wait=$(i.proc_wait)")
+    message(dl, "timing: init_elbo=$(i.init_elbo)")
+    message(dl, "timing: opt_srcs=$(i.opt_srcs)")
+    message(dl, "timing: num_srcs=$(i.num_srcs)")
+    #message(dl, "timing: average opt_srcs=$(i.opt_srcs/i.num_srcs)")
+    #message(dl, "timing: sched_ovh=$(i.sched_ovh)")
+    message(dl, "timing: load_imba=$(i.load_imba)")
+    #message(dl, "timing: ga_get=$(i.ga_get)")
+    #message(dl, "timing: ga_put=$(i.ga_put)")
+    #message(dl, "timing: store_res=$(i.store_res)")
+    message(dl, "timing: write_results=$(i.write_results)")
+    message(dl, "timing: wait_done=$(i.wait_done)")
+end
+
+
 # ----------------
 # A simple centralized sense reversing thread barrier. Needed to allow the
 # ordering constraints that Cyclades partitioning imposes on the processing
@@ -190,7 +233,6 @@ box(es), if needed.
 function load_box(boxes::Vector{BoundingBox},
                   field_extents::Vector{FieldExtent},
                   strategy::SDSSIO.IOStrategy, mi::MultiInfo, cbox::BoxInfo,
-                  dl::Dlog,
                   timing::InferTiming)
     # expected: cbox.state[] == BoxDone
 
@@ -232,6 +274,7 @@ function load_box(boxes::Vector{BoundingBox},
 
     # determine the RCFs
     rcfs = []
+    rcftime = 0.0
     try
         tic()
         rcfs = get_overlapping_fields(box, field_extents)
@@ -250,8 +293,9 @@ function load_box(boxes::Vector{BoundingBox},
         tic()
         cbox.catalog, cbox.target_sources, cbox.neighbor_map,
             cbox.images, cbox.source_rcfs, cbox.source_cat_idxs =
-                    infer_init(rcfs, strategy; box=box, timing=timing, )
+                    infer_init(rcfs, strategy; box=box, timing=timing)
         loadtime = toq()
+        Log.message("loaded #$(box_idx) in $(rcftime + loadtime) secs")
     catch exc
         Log.exception(exc)
     end
@@ -259,7 +303,6 @@ function load_box(boxes::Vector{BoundingBox},
     # set box information
     cbox.curr_cc[] = 1
 
-    message(dl, "loaded #$(box_idx) in $(rcftime + loadtime) secs")
     #Log.message("$(Time(now())): loaded box #$(box_idx) ($(box.ramin), ",
     #            "$(box.ramax), $(box.decmin), $(box.decmax) ",
     #            "($(length(cbox.target_sources)) target sources)) in ",
@@ -297,13 +340,8 @@ function init_box(npartitions::Int, rcf_map::Dict{RunCamcolField,Int32},
         cat_local = vcat([entry], neighbors)
         ids_local = vcat([entry_id], neighbor_ids)
 
-        if PeakFlops
-            patches = Infer.get_sky_patches(cbox.images, cat_local,
-                                            radius_override_pix=20.0)
-        else
-            patches = Infer.get_sky_patches(cbox.images, cat_local)
-            Infer.load_active_pixels!(cbox.images, patches)
-        end
+        patches = Infer.get_sky_patches(cbox.images, cat_local)
+        Infer.load_active_pixels!(cbox.images, patches)
 
         cbox.ea_vec[ts] = ElboArgs(cbox.images, patches, [1])
 
@@ -380,10 +418,9 @@ end
 Put inference results for a box into the global array.
 """
 function store_box(cbox::BoxInfo, rcf_map::Dict{RunCamcolField,Int32},
-                   mi::MultiInfo, results::Garray,
-                   dl::Dlog, timing::InferTiming)
+                   mi::MultiInfo, results::Garray, timing::InferTiming)
     if cbox.ks.killed
-        message(dl, "abandoned #$(cbox.box_idx)")
+        Log.message("abandoned #$(cbox.box_idx)")
         #Log.message("$(Time(now())): abandoned box #$(cbox.box_idx)")
         return
     end
@@ -424,7 +461,7 @@ function store_box(cbox::BoxInfo, rcf_map::Dict{RunCamcolField,Int32},
     timing.num_srcs += length(cbox.target_sources)
 
     if length(cbox.target_sources) > 0
-        message(dl, "completed #$(cbox.box_idx)")
+        Log.message("completed #$(cbox.box_idx)")
         #Log.message("$(Time(now())): completed box #$(cbox.box_idx)")
     end
 end
@@ -442,7 +479,6 @@ function preload_boxes(config::Configs.Config,
                        results::Garray,
                        prev_results,
                        conc_boxes::Vector{BoxInfo},
-                       dl::Dlog,
                        timing::InferTiming)
     curr_cbox = 1
     cbox = conc_boxes[curr_cbox]
@@ -457,14 +493,14 @@ function preload_boxes(config::Configs.Config,
         timing.proc_wait += toq()
 
         # store box results
-        try store_box(cbox, rcf_map, mi, results, dl, timing)
+        try store_box(cbox, rcf_map, mi, results, timing)
         catch exc
             Log.exception(exc)
         end
 
         # load and initialize box
         if state != BoxEnd
-            if load_box(boxes, field_extents, strategy, mi, cbox, dl, timing)
+            if load_box(boxes, field_extents, strategy, mi, cbox, timing)
                 try init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
                 catch exc
                     Log.exception(exc)
@@ -503,14 +539,13 @@ function joint_infer_boxes(config::Configs.Config,
                            results::Garray,
                            prev_results,
                            conc_boxes::Vector{BoxInfo},
-                           dl::Dlog,
                            all_threads_timing::Vector{InferTiming};
                            batch_size=7000,
                            within_batch_shuffling=true,
                            niters=3)
     tid = threadid()
     timing = all_threads_timing[tid]
-    rng = MersenneTwister()
+    rng = MersenneTwister(0)
 
     # Dtree parent ranks reserve one thread to drive the tree
     if mi.rundt && tid == nthreads()
@@ -524,7 +559,7 @@ function joint_infer_boxes(config::Configs.Config,
     # if we have at least one worker thread, we can use a preloader thread
     if prefetch && mi.nworkers >= 1 && tid == 1
         preload_boxes(config, boxes, rcf_map, field_extents, strategy, mi,
-                      results, prev_results, conc_boxes, dl, timing)
+                      results, prev_results, conc_boxes, timing)
         return
     end
 
@@ -540,14 +575,9 @@ function joint_infer_boxes(config::Configs.Config,
 
         # prepare the box/wait for the box to be prepared
         if (!prefetch && tid == 1) || mi.nworkers == 0
-            if load_box(boxes, field_extents, strategy, mi, cbox, dl, timing)
+            if load_box(boxes, field_extents, strategy, mi, cbox, timing)
                 try
                     init_box(mi.nworkers, rcf_map, prev_results, cbox, timing)
-                    if PeakFlops
-                        sync()
-                        message(dl, "start peak FLOPS run")
-                        cbox.ks.started = time_ns()
-                    end
                 catch exc
                     Log.exception(exc)
                     if cbox.state[] != BoxReady
@@ -623,15 +653,12 @@ function joint_infer_boxes(config::Configs.Config,
         cbox.state[] = BoxDone
 
         if (!prefetch && tid == nthreads()) || mi.nworkers == 0
-            if PeakFlops
-                n_active, n_inactive = get_pixels_processed()
-                message(dl, "pixel visits: ($n_active,$n_inactive)")
-                message(dl, "end peak FLOPS run")
-            end
-            store_box(cbox, rcf_map, mi, results, dl, timing)
+            store_box(cbox, rcf_map, mi, results, timing)
         end
     end
 end
+
+struct DtreeStrategy <: Celeste.ParallelRun.ParallelismStrategy; end
 
 
 """
@@ -640,23 +667,15 @@ processing. Within each rank, process the light sources in each of the
 assigned boxes with multiple threads. This function drives both single
 and joint inference.
 """
-function multi_node_infer(all_rcfs::Vector{RunCamcolField},
+function Celeste.ParallelRun.do_infer_boxes(
+                          pstrategy::DtreeStrategy,
+                          all_rcfs::Vector{RunCamcolField},
                           all_rcf_nsrcs::Vector{Int16},
                           all_boxes::Vector{Vector{BoundingBox}},
                           all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
                           strategy::SDSSIO.IOStrategy,
                           prefetch::Bool,
-                          outdir::String,
-                          dl::Dlog)
-    if PeakFlops
-        if prefetch
-            Log.one_message("Peak FLOPS runs require `--noprefetch`")
-            exit(-1)
-        end
-        global gdlog
-        gdlog = dl
-    end
-
+                          outdir::String)
     rpn = set_affinities()
 
     Log.one_message("$(Time(now())): Celeste started, $rpn ranks/node, ",
@@ -674,7 +693,7 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
     end
 
     # load field extents
-    field_extents = load_field_extents(strategy)
+    field_extents = ParallelRun.load_field_extents(strategy)
 
     # determine required size for the results global array and build the
     # offsets map into it to help locate a source
@@ -713,12 +732,12 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
         if nthreads() == 1
             joint_infer_boxes(config, boxes, rcf_map,
                               field_extents, strategy, prefetch, mi, results,
-                              prev_results, conc_boxes, dl, all_threads_timing)
+                              prev_results, conc_boxes, all_threads_timing)
         else
             ccall(:jl_threading_run, Void, (Any,),
                   Core.svec(joint_infer_boxes, config, boxes, rcf_map,
                             field_extents, strategy, prefetch, mi, results,
-                            prev_results, conc_boxes, dl, all_threads_timing))
+                            prev_results, conc_boxes, all_threads_timing))
         end
 
         # write intermediate results to disk
@@ -728,7 +747,7 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
         prev_results = results
 
         n_active, n_inactive = get_pixels_processed()
-        message(dl, "pixel visits: ($n_active,$n_inactive)")
+        Log.message("pixel visits: ($n_active,$n_inactive)")
 
         # shut down the scheduler
         tic()
@@ -747,7 +766,8 @@ function multi_node_infer(all_rcfs::Vector{RunCamcolField},
         timing.load_imba /= nprocthreads
         timing.ga_get /= nprocthreads
         timing.ga_put /= nprocthreads
-        puts_timing(dl, timing)
+        puts_timing(timing)
     end
 end
 
+end

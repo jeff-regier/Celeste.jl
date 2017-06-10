@@ -4,6 +4,9 @@ import Celeste.ParallelRun: BoundingBox, infer_boxes
 import Celeste.Log
 using Celeste: SDSSIO
 
+distributed = haskey(ENV, "USE_DTREE")
+distributed && !isdefined(:CelesteMultiNode) && include(joinpath(@__DIR__,"src","multinode_run.jl"))
+
 include("binutil.jl")
 
 function run_infer_boxes(args::Vector{String})
@@ -80,7 +83,10 @@ Usage:
         exit(-3)
     end
 
-    infer_boxes(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
+    infer_boxes(distributed ? Celeste.ParallelRun.ThreadsStrategy() :
+                              CelesteMultiNode.DtreeStrategy(),
+                all_rcfs, all_rcf_nsrcs,
+                all_boxes, all_boxes_rcf_idxs,
                 strategy, true, args[end])
 end
 
