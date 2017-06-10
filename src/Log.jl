@@ -15,7 +15,10 @@ grank() = 1
 end
 
 # thread-safe print function
-@inline puts(s...) = ccall(:puts, Cint, (Cstring,), string(s...))
+@inline function puts(s...)
+    data = string(s..., '\n')
+    ccall(:write, Cint, (Cint, Cstring, Csize_t), 1, data, sizeof(data))
+end
 @inline rtputs(s...) = puts("[$(grank())]<$(threadid())> ", s...)
 
 
