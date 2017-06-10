@@ -1,5 +1,6 @@
 using Base.Test
 using DataFrames
+using Celeste.SDSSIO: PlainFITSStrategy
 import WCS
 
 const rcf = RunCamcolField(3900, 6, 269)
@@ -33,11 +34,10 @@ end
 function test_images()
     # A lot of tests are in a single function to avoid having to reload
     # the full image multiple times.
-    images = SDSSIO.load_field_images(rcf, datadir)
+    strategy = PlainFITSStrategy(datadir)
+    images = SDSSIO.load_field_images(strategy, [rcf])
 
-    dir = "$datadir/$(rcf.run)/$(rcf.camcol)/$(rcf.field)"
-    fname = @sprintf "%s/photoObj-%06d-%d-%04d.fits" dir rcf.run rcf.camcol rcf.field
-    cat_entries = SDSSIO.read_photoobj_celeste(fname)
+    cat_entries = convert(Vector{CatalogEntry}, SDSSIO.read_photoobj(strategy, rcf))
 
     ea = make_elbo_args(images, cat_entries, patch_radius_pix=1e-6)
 

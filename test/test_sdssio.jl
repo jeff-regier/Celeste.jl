@@ -1,3 +1,4 @@
+using Celeste.SDSSIO
 import Celeste.SDSSIO: SkyIntensity
 
 
@@ -33,11 +34,12 @@ end
 
 @testset "read_photoobj handles missing table extensions" begin
     # get an example of a photoobj file with a missing table
-    fname = joinpath(Pkg.dir("Celeste"), "test", "data",
-                     "photoObj-006597-4-0025.fits")
+    strategy = PlainFITSStrategy(joinpath(Pkg.dir("Celeste"), "test", "data"))
+    rcf = RunCamcolField(6597, 4, 25)
+    fname = SDSSIO.compute_fname(strategy, SDSSIO.PhotoObj(rcf))[1]
     if !isfile(fname)
         run(`curl --create-dirs -o $fname https://data.sdss.org/sas/dr12/boss/photoObj/301/6597/4/photoObj-006597-4-0025.fits`)
     end
 
-    catalog = SDSSIO.read_photoobj(fname)
+    catalog = SDSSIO.read_photoobj(strategy, rcf)
 end

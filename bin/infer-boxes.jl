@@ -10,12 +10,7 @@ function run_infer_boxes(args::Vector{String})
     if length(args) < 3
         println("""
 Usage:
-  infer-boxes.jl [--noprefetch] [--iostrategy=<strategy>] <rcf_nsrcs_file> <boxes_file> [<boxes_file>...] <out_dir>
-
-Supported IO Strategies (default is FITS):
-  - fits: Load data from stagedir in original SDSS FITS format
-  - mdtfits: Load data from stagedir, split over 5 mdt directories
-  - bigfiles: Load data in bigfile format
+  infer-boxes.jl <settings> <rcf_nsrcs_file> <boxes_file> [<boxes_file>...] <out_dir>
 
 <rcf_nsrcs_file> format, one line per RCF:
   <run>	<camcol>	<field>	<num_primary_sources>
@@ -26,25 +21,30 @@ Supported IO Strategies (default is FITS):
         exit(-1)
     end
 
-    prefetch = true
-    if args[1] == "--noprefetch"
-        shift!(args)
-        prefetch = false
-    end
+    strategy = Celeste.read_settings_file(args[1])
 
-    strategyarg = ""
-    if startswith(args[1], "--iostrategy=")
-        strategyarg = shift!(args)[length("--iostrategy=")+1:end]
+    # load the RCFs #sources file
+    rcf_nsrcs_file = args[2]
+    all_rcfs = Vector{RunCamcolField}()
+    all_rcf_nsrcs = Vector{Int16}()
+    f = open(rcf_nsrcs_file)
+    for ln in eachline(f)
+        lp = split(ln, '\t')
+        run = parse(Int16, lp[1])
+        camcol = parse(UInt8, lp[2])
+        field = parse(Int16, lp[3])
+        nsrc = parse(Int16, lp[4])
+        push!(all_rcfs, RunCamcolField(run, camcol, field))
+        push!(all_rcf_nsrcs, nsrc)
     end
-
-    strategy, all_rcfs, all_rcf_nsrcs = decide_strategy(strategyarg, args[1])
+    close(f)
 
     # parse the specified box file(s)
-    nboxfiles = length(args) - 2
+    nboxfiles = length(args) - 3
     all_boxes = Vector{Vector{BoundingBox}}()
     all_boxes_rcf_idxs = Vector{Vector{Vector{Int32}}}()
     for i = 1:nboxfiles
-        boxfile = args[i+1]
+        boxfile = args[i+2]
         boxes = Vector{BoundingBox}()
         boxes_rcf_idxs = Vector{Vector{Int32}}()
         f = open(boxfile)
@@ -81,7 +81,7 @@ Supported IO Strategies (default is FITS):
     end
 
     infer_boxes(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                strategy, prefetch, args[end])
+                strategy, true, args[end])
 end
 
 run_infer_boxes(ARGS)

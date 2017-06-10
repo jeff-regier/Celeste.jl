@@ -3,12 +3,14 @@ module SDSSIO
 
 import FITSIO
 import WCS
+using CodecZlib
+using CodecBzip2
 
 import ..Log
 import ..Model: RawPSF, Image, CatalogEntry, eval_psf, SkyIntensity
 import ..PSF
 import Base.convert, Base.getindex
-
+export PlainFITSStrategy, RunCamcolField
 
 # types of things to mask in read_mask().
 const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
@@ -33,6 +35,35 @@ function RunCamcolField(run::String, camcol::String, field::String)
         parse(Int16, field))
 end
 
+
+abstract type SDSSImageDesc; end
+
+struct PhotoObj <: SDSSImageDesc
+    rcf::RunCamcolField
+end
+struct PhotoField <: SDSSImageDesc
+    run::Int16
+    camcol::UInt8
+end
+struct PsField <: SDSSImageDesc
+    rcf::RunCamcolField
+end
+struct Frame <: SDSSImageDesc
+    rcf::RunCamcolField
+    band::Char
+end
+struct Mask <: SDSSImageDesc
+    rcf::RunCamcolField
+    band::Char
+end
+rcf(img::SDSSImageDesc) = img.rcf
+rcf(img::PhotoField) = RunCamcolField(img.run, img.camcol, -1)
+
+filename(p::PhotoObj) = "photoObj-$(dec(p.rcf.run,6))-$(dec(p.rcf.camcol))-$(dec(p.rcf.field,4)).fits"
+filename(p::PhotoField) = "photoField-$(dec(p.run,6))-$(p.camcol).fits"
+filename(p::PsField) = "psField-$(dec(p.rcf.run,6))-$(p.rcf.camcol)-$(dec(p.rcf.field,4)).fit"
+filename(p::Frame) = "frame-$(p.band)-$(dec(p.rcf.run,6))-$(p.rcf.camcol)-$(dec(p.rcf.field,4)).fits"
+filename(p::Mask) = "fpM-$(dec(p.rcf.run,6))-$(p.band)$(p.rcf.camcol)-$(dec(p.rcf.field,4)).fit"
 
 """
 read_sky(hdu)
@@ -60,26 +91,6 @@ function read_sky(hdu::FITSIO.TableHDU)
     return sky_small, sky_x, sky_y
 end
 
-function slurp_fits(fname)
-    is_linux() || error("Slurping not implemented on this OS")
-    # Do this with explicit POSIX calls, to make sure to avoid
-    # any well-intended, but ultimately unhelpful intermediate
-    # buffering.
-    fd = ccall(:open, Cint, (Ptr{UInt8}, Cint, Cint), fname, Base.Filesystem.JL_O_RDONLY, 0)
-    systemerror("open", fd == -1)
-    stat_struct = zeros(UInt8, ccall(:jl_sizeof_stat, Int32, ()))
-    # Can't use Base.stat because threading
-    ret = ccall(:jl_fstat, Cint, (Cint, Ptr{UInt8}), fd, stat_struct)
-    ret == 0 || throw(Base.UVError("stat",r))
-    size = Base.Filesystem.StatStruct(stat_struct).size
-    data = Array(UInt8, size)
-    rsize = ccall(:read, Cint, (Cint, Ptr{UInt8}, Csize_t), fd, data, size)
-    systemerror("read", rsize != size)
-    r = ccall(:close, Cint, (Cint,), fd)
-    systemerror("close", r == -1)
-    data
-end
-
 """
 read_frame(fname)
 
@@ -90,8 +101,8 @@ Read an SDSS \"frame\" FITS file and return a 4-tuple:
 - `sky`: 2-d sky that was subtracted.
 - `wcs`: WCSTransform constructed from image header.
 """
-function read_frame(fname; data=nothing)
-    f = FITSIO.FITS(data != nothing ? data : fname)
+function read_frame(strategy, rcf, b)
+    f = readFITS(strategy, Frame(rcf, b))
     hdr = FITSIO.read_header(f[1], String)::String
     image = read(f[1])::Array{Float32, 2}  # sky-subtracted & calibrated data, in nMgy
     calibration = read(f[2])::Vector{Float32}
@@ -112,8 +123,9 @@ read_field_gains(fname, fieldnum)
 Return the image gains for field number `fieldnum` in an SDSS
 \"photoField\" file `fname`.
 """
-function read_field_gains(fname, fieldnum::Integer; data=nothing)
-    f = FITSIO.FITS(data != nothing ? data : fname)
+function read_field_gains(strategy, rcf)
+    fieldnum = rcf.field
+    f = readFITS(strategy, PhotoField(rcf.run, rcf.camcol))
     fieldnums = read(f[2], "FIELD")::Vector{Int32}
     gains = read(f[2], "GAIN")::Array{Float32, 2}
     close(f)
@@ -137,8 +149,8 @@ Read a \"fpM\"-format SDSS file and return masked image ranges,
 based on `mask_planes`. Returns two `Vector{UnitRange{Int}}`,
 giving the range of x and y indicies to be masked.
 """
-function read_mask(fname, mask_planes=DEFAULT_MASK_PLANES; data=nothing)
-    f = FITSIO.FITS(data != nothing ? data : fname)
+function read_mask(strategy, rcf, b, mask_planes=DEFAULT_MASK_PLANES; data=nothing)
+    f = readFITS(strategy, Mask(rcf, b))
 
     # The last (12th) HDU contains a key describing what each of the
     # other HDUs are. Use this to find the indicies of all the relevant
@@ -196,27 +208,18 @@ end
 """
 Read a SDSS run/camcol/field into a vector of RawImages
 """
-function load_raw_images(rcf::RunCamcolField, datadir, slurp::Bool = false, drop_quickly::Bool = false)
-    basedir = isa(datadir, String) ? datadir : datadir(rcf)
-    subdir2 = "$basedir/$(rcf.run)/$(rcf.camcol)"
-    subdir3 = "$subdir2/$(rcf.field)"
-
+function load_raw_images(strategy, rcf::RunCamcolField, drop_quickly::Bool = false)
     # read gain for each band
-    photofield_name = "$subdir2/photoField-$(dec(rcf.run,6))-$(rcf.camcol).fits"
-    gains = read_field_gains(photofield_name, rcf.field;
-                data=(slurp ? slurp_fits(photofield_name) : nothing))
+    gains = read_field_gains(strategy, rcf)
 
     # open FITS file containing PSF for each band
-    psf_name = "$(subdir3)/psField-$(dec(rcf.run,6))-$(rcf.camcol)-$(dec(rcf.field,4)).fit"
-    psffile = FITSIO.FITS(slurp ? slurp_fits(psf_name) : psf_name)
+    psffile = readFITS(strategy, PsField(rcf))
 
     raw_images = Vector{RawImage}(5)
 
     for (b, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
         # load image data
-        frame_name = "$(subdir3)/frame-$(band)-$(dec(rcf.run,6))-$(rcf.camcol)-$(dec(rcf.field,4)).fits"
-        mask_name = "$(subdir3)/fpM-$(dec(rcf.run,6))-$(band)$(rcf.camcol)-$(dec(rcf.field,4)).fit"
-        r = parse_image(rcf, b, frame_name, mask_name, psffile, band, gains)
+        r = parse_image(strategy, rcf, b, psffile, band, gains)
         if !drop_quickly
             raw_images[b] = r
         end
@@ -226,15 +229,12 @@ function load_raw_images(rcf::RunCamcolField, datadir, slurp::Bool = false, drop
     return raw_images
 end
 
-function parse_image(rcf, b, frame_name, mask_name, psffile, band, gains; frame_data=nothing, mask_data=nothing)
-    @assert !isempty(frame_name) || frame_data != nothing
-    @assert !isempty(mask_name) || mask_data != nothing
-
+function parse_image(strategy, rcf, b, psffile, band, gains)
     # load image data
-    pixels, calibration, sky, wcs = read_frame(frame_name; data=frame_data)
+    pixels, calibration, sky, wcs = read_frame(strategy, rcf, band)
 
     # read mask
-    mask_xranges, mask_yranges = read_mask(mask_name; data=mask_data)
+    mask_xranges, mask_yranges = read_mask(strategy, rcf, band)
 
     # apply mask
     for i=1:length(mask_xranges)
@@ -255,12 +255,12 @@ end
 """
 Load all the images for multiple rcfs
 """
-function load_raw_images(rcfs::Vector{RunCamcolField}, datadir, slurp::Bool = false, drop_quickly::Bool = false)
+function load_raw_images(strategy, rcfs::Vector{RunCamcolField}, drop_quickly::Bool = false)
     raw_images = RawImage[]
 
     for rcf in rcfs
         #Log.info("loading images for $rcf")
-        rcf_raw_images = SDSSIO.load_raw_images(rcf, datadir, slurp, drop_quickly)
+        rcf_raw_images = SDSSIO.load_raw_images(strategy, rcf, drop_quickly)
         append!(raw_images, rcf_raw_images)
     end
 
@@ -290,32 +290,6 @@ function convert(::Type{Image}, r::RawImage)
           r.rcf.run, r.rcf.camcol, r.rcf.field,
           r.sky, iota_vec, r.raw_psf_comp)
 end
-
-
-"""
-Read a SDSS run/camcol/field into an array of Images.
-"""
-function load_field_images(rcfs, stagedir, slurp::Bool = false, drop_quickly::Bool = false)
-    raw_images = SDSSIO.load_raw_images(rcfs, stagedir, slurp, drop_quickly)
-
-    N = length(raw_images)
-    images = Vector{Image}(N)
-
-    drop_quickly && return images
-
-    #Threads.@threads for n in 1:N
-    for n in 1:N
-        try
-            images[n] = convert(Image, raw_images[n])
-        catch exc
-            Log.exception(exc)
-            rethrow()
-        end
-    end
-
-    return images
-end
-
 
 # -----------------------------------------------------------------------------
 # PSF-related functions
@@ -371,10 +345,10 @@ columns.
 The photoObj file format is documented here:
 https://data.sdss.org/datamodel/files/BOSS_PHOTOOBJ/RERUN/RUN/CAMCOL/photoObj.html
 """
-function read_photoobj(fname, band::Char='r'; data=nothing)
+function read_photoobj(strategy, rcf, band::Char='r')
     b = BAND_CHAR_TO_NUM[band]
 
-    f = FITSIO.FITS(data != nothing ? data : fname)
+    f = readFITS(strategy, PhotoObj(rcf))
 
     # sometimes the expected table extension is only an empty generic FITS
     # header, indicating no objects. We check explicitly for this case here
@@ -604,7 +578,7 @@ combined catalog.
 With `duplicate_policy = :first`, only the first detection is included in the
 combined catalog.
 """
-function read_photoobj_files(fts::Vector{RunCamcolField}, datadir;
+function read_photoobj_files(strategy, fts::Vector{RunCamcolField};
                              duplicate_policy=:primary,
                              slurp::Bool = false, drop_quickly::Bool = false)
     @assert duplicate_policy == :primary || duplicate_policy == :first
@@ -621,12 +595,8 @@ function read_photoobj_files(fts::Vector{RunCamcolField}, datadir;
     rawcatalogs = Vector{Dict}(length(fts))
     for i in eachindex(fts)
         ft = fts[i]
-        basedir = isa(datadir, String) ? datadir : datadir(ft)
-        dir = "$basedir/$(ft.run)/$(ft.camcol)/$(ft.field)"
-        fname = "$dir/photoObj-$(dec(ft.run,6))-$(dec(ft.camcol))-$(dec(ft.field,4)).fits"
         #Log.info("field $(fts[i]): reading $fname")
-        po = read_photoobj(fname, 'r';
-                           data=(slurp ? slurp_fits(fname) : nothing))
+        po = read_photoobj(strategy, ft, 'r')
         if !drop_quickly
             rawcatalogs[i] = po
         end
@@ -643,243 +613,99 @@ function read_photoobj_files(fts::Vector{RunCamcolField}, datadir;
     return assemble_catalog(rawcatalogs; duplicate_policy=duplicate_policy)
 end
 
-
-# TODO: this is obsolete, remove it.
-"""
-read_photoobj_celeste(fname)
-
-Read a SDSS \"photoobj\" FITS catalog into a Vector{CatalogEntry}.
-"""
-function read_photoobj_celeste(fname)
-    rawcatalog = read_photoobj(fname)
-    convert(Vector{CatalogEntry}, rawcatalog)
-end
-
-
-# -----------------------------------------------------------------------------
-# big file I/O
-
-const NumRuns = 761
-const NumCamcols = 6
-const EachPhotoField = 3*1024*1024
-
-const NumRCFs = 924038
-const EachRCF = 96*1024*1024
-const FirstSlurp = 40*1024*1024
-const GoodTransferSize = 4*1024*1024
-const EachBigFile = 3298534883328
-const NumRCFFiles = 12
-const MaxRCFFileSize = 12*1024*1024
-
-
-immutable BigFileIO
-    num_bf::Int
-    fds::Vector{Cint}
-    pffd::Cint
-end
-
-
-function init_bigfile_io(datadir::String)
-    all_b = NumRCFs * EachRCF
-    quot, rem = divrem(all_b, EachBigFile)
-    num_bf = quot + (rem > 0 ? 1 : 0)
-    fds = Vector{Cint}(num_bf)
-    for i = 1:num_bf
-        fn = joinpath(datadir, "celeste_sdss-$i")
-        fds[i] = ccall(:open, Cint, (Ptr{UInt8}, Cint, Cint), fn,
-                       Base.Filesystem.JL_O_RDONLY, 0)
-        if fds[i] == -1
-            @show fn
-            systemerror("open", true)
-        end
-    end
-
-    fn = joinpath(datadir, "celeste_sdss-photofields")
-    pffd = ccall(:open, Cint, (Ptr{UInt8}, Cint, Cint), fn,
-                       Base.Filesystem.JL_O_RDONLY, 0)
-    systemerror("open", pffd == -1)
-
-    return BigFileIO(num_bf, fds, pffd)
-end
-
-
-function shutdown_bigfile_io(bfo::BigFileIO)
-    ccall(:close, Cint, (Cint,), bfo.pffd)
-    bfo.pffd = convert(Cint, -1)
-    for i = 1:bfo.num_bf
-        ccall(:close, Cint, (Cint,), bfo.fds[i])
-    end
-    bfo.num_bf = 0
-    empty!(bfo.fds)
-end
-
-const fileOrder = Dict{Symbol, Int}(
-    :fpMg       =>  1,
-    :fpMi       =>  2,
-    :fpMr       =>  3,
-    :fpMu       =>  4,
-    :fpMz       =>  5,
-    :frameg     =>  6,
-    :framei     =>  7,
-    :framer     =>  8,
-    :frameu     =>  9,
-    :framez     => 10,
-    :photoObj   => 11,
-    :psField    => 12
-)
-
-struct RCFBundle
-    images::Dict{Symbol, Vector{UInt8}}
-    photofield_data::Vector{UInt8}
-end
-
-# No mutable state, so should be ok to manipulate GC state
-@noinline function pread64(fd::Cint, data::Ptr{UInt8}, size::Csize_t, offset::Csize_t)
-    nread = 0
-    while size > 0
-        gc_state = ccall(:jl_gc_safe_enter, Int8, ())
-        rdb = ccall(:pread64, Cint, (Cint, Ptr{UInt8}, Csize_t, Csize_t), fd, data, size, offset)
-        ccall(:jl_gc_safe_leave, Void, (Int8,), gc_state)
-        rdb <= 0 && break
-        nread += rdb
-        offset += rdb
-        size -= rdb
-    end
-    nread
-end
-
-function load_rcf_bundle(bfo::BigFileIO, rcf::RunCamcolField, rcf_idx_map, run_idx_map;
-                         data_buf = zeros(UInt8, EachRCF + EachPhotoField))
-    ridx = rcf_idx_map[rcf] - 1
-    bfidx, bfofs = divrem(ridx * EachRCF, EachBigFile)
-    bfidx += 1
-
-    # Read the header in with the first slurp
-    rsize = pread64(bfo.fds[bfidx], pointer(data_buf), Csize_t(FirstSlurp), Csize_t(bfofs))
-    systemerror("pread", rsize != FirstSlurp)
-    fofs = reinterpret(Int64, data_buf[1:((NumRCFFiles + 1) * sizeof(Int64))])
-    @assert fofs[1] == (NumRCFFiles + 1) * sizeof(UInt64)
-
-    # Read in the rest
-    remread = fofs[end] - FirstSlurp
-    rsize = pread64(bfo.fds[bfidx], pointer(data_buf, FirstSlurp + 1), Csize_t(remread), Csize_t(bfofs + FirstSlurp))
-    systemerror("pread", rsize != remread)
-
-    # Now read the photofield data
-    pidx = ((run_idx_map[rcf.run]-1) * NumCamcols * EachPhotoField) +
-           ((rcf.camcol - 1) * EachPhotoField)
-    rsize = pread64(bfo.pffd, pointer(data_buf) + EachRCF, Csize_t(EachPhotoField), Csize_t(pidx))
-    systemerror("pread", rsize != EachPhotoField)
-    photofield_data = data_buf[EachRCF+1:end]
-
-    data = Dict{Symbol, Vector{UInt8}}()
-    for (k, v) in fileOrder
-        startidx = fofs[v]
-        endidx = fofs[v+1]
-        data[k] = data_buf[startidx+1:endidx]
-    end
-    RCFBundle(data, photofield_data)
-end
-function load_rcf_bundles(bfo::BigFileIO, rcfs::Vector{RunCamcolField}, rcf_idx_map, run_idx_map;
-                         data_buf = zeros(UInt8, EachRCF + EachPhotoField))
-    [load_rcf_bundle(bfo, rcf, rcf_idx_map, run_idx_map) for rcf in rcfs]
-end
-
-function read_bigfile_photoobjs(rcf_bundles::Vector{RCFBundle};
-                                duplicate_policy=:primary,
-                                drop_quickly=false)
-    @assert duplicate_policy == :primary || duplicate_policy == :first
-    @assert duplicate_policy == :primary || length(fts) == 1
-
-    if length(rcf_bundles) == 0
-        return CatalogEntry[]
-    end
-
-    rawcatalogs = Vector{Dict}(length(rcf_bundles))
-    for i in eachindex(rcf_bundles)
-        rcf_bundle = rcf_bundles[i]
-        po = read_photoobj(""; data=rcf_bundle.images[:photoObj])
-        if !drop_quickly
-            rawcatalogs[i] = po
-        end
-    end
-
-    if drop_quickly
-        return CatalogEntry[]
-    end
-
-    return assemble_catalog(rawcatalogs; duplicate_policy=duplicate_policy)
-end
-
-function load_raw_images_bigfile(rcf::RunCamcolField,
-                                 rcf_bundle::RCFBundle;
-                                 drop_quickly = false)
-    gains = read_field_gains("", rcf.field; data = rcf_bundle.photofield_data)
-    psffile = FITSIO.FITS(rcf_bundle.images[:psField])
-    raw_images = Vector{RawImage}(5)
-    for (b, band) in enumerate(['u', 'g', 'r', 'i', 'z'])
-        # load image data
-        r = parse_image(rcf, b, "", "", psffile, band, gains;
-            frame_data = rcf_bundle.images[Symbol("frame$band")],
-            mask_data = rcf_bundle.images[Symbol("fpM$band")])
-        if !drop_quickly
-            raw_images[b] = r
-        end
-    end
-    raw_images
-end
-
-function load_raw_images_bigfile(rcfs::Vector{RunCamcolField},
-                                 rcf_bundles::Vector{RCFBundle};
-                                 drop_quickly = false)
-    mapreduce(data->load_raw_images_bigfile(data...; drop_quickly=drop_quickly), vcat, zip(rcfs, rcf_bundles))
-end
-
-
 # IO Strategies
 abstract type IOStrategy end
 
 struct PlainFITSStrategy <: IOStrategy
     stagedir::String
+    dirlayout::Symbol
+    compressed::Bool
     # Could be a string or rcf -> stagedir function
     rcf_stagedir
     slurp::Bool
 end
-PlainFITSStrategy(stagedir::String, slurp::Bool = false) = PlainFITSStrategy(stagedir, stagedir, slurp)
+PlainFITSStrategy(stagedir::String, slurp::Bool = false) = PlainFITSStrategy(stagedir, :celeste, false, stagedir, slurp)
 
-struct BigFileStrategy <: IOStrategy
-    stagedir::String
-    bfo::BigFileIO
-    rcf_idx_map
-    run_idx_map
+function slurp_fits(fname)
+    is_linux() || is_bsd() || error("Slurping not implemented on this OS")
+    # Do this with explicit POSIX calls, to make sure to avoid
+    # any well-intended, but ultimately unhelpful intermediate
+    # buffering.
+    fd = ccall(:open, Cint, (Ptr{UInt8}, Cint, Cint), fname, Base.Filesystem.JL_O_RDONLY, 0)
+    systemerror("open($fname)", fd == -1)
+    stat_struct = zeros(UInt8, ccall(:jl_sizeof_stat, Int32, ()))
+    # Can't use Base.stat because threading
+    ret = ccall(:jl_fstat, Cint, (Cint, Ptr{UInt8}), fd, stat_struct)
+    ret == 0 || throw(Base.UVError("stat",r))
+    size = Base.Filesystem.StatStruct(stat_struct).size
+    data = Array{UInt8}(size)
+    rsize = ccall(:read, Cint, (Cint, Ptr{UInt8}, Csize_t), fd, data, size)
+    systemerror("read", rsize != size)
+    r = ccall(:close, Cint, (Cint,), fd)
+    systemerror("close", r == -1)
+    data
 end
 
-# We load data on demand, do nothing here
-preload_rcfs(::PlainFITSStrategy, rcfs) = [nothing for rcf in rcfs]
-preload_rcfs(strategy::BigFileStrategy, rcfs) = load_rcf_bundles(strategy.bfo, rcfs, strategy.rcf_idx_map, strategy.run_idx_map)
+function compute_fname(strategy::PlainFITSStrategy, img::SDSSImageDesc)
+    imgrcf = rcf(img)
+    basedir = isa(strategy.rcf_stagedir, String) ? strategy.rcf_stagedir : strategy.rcf_stagedir(imgrcf)
+    if strategy.dirlayout == :celeste
+        subdir = "$basedir/$(imgrcf.run)/$(imgrcf.camcol)"
+        !isa(img, PhotoField) && (subdir = joinpath(subdir, string(imgrcf.field)))
+    elseif strategy.dirlayout == :sdss
+        if typeof(img) <: Union{Mask, PsField}
+            # Photometric reductions
+            subdir = joinpath(basedir, "boss/photo/redux/301", "$(imgrcf.run)/objcs/$(imgrcf.camcol)")
+        elseif typeof(img) <: PhotoField
+            subdir = joinpath(basedir, "boss/photoObj/301", "$(imgrcf.run)")
+        elseif typeof(img) <: PhotoObj
+            subdir = joinpath(basedir, "boss/photoObj/301", "$(imgrcf.run)/$(imgrcf.camcol)")
+        elseif typeof(img) <: Frame
+            subdir = joinpath(basedir, "boss/photoObj/frames/301", "$(imgrcf.run)/$(imgrcf.camcol)")
+        end
+    end
+    fname = joinpath(subdir, filename(img))
+    compression = nothing
+    (strategy.compressed && isa(img, Frame)) && (fname *= ".bz2"; compression = Bzip2Decompression())
+    (strategy.compressed && isa(img, Mask)) && (fname *= ".gz"; compression = GzipDecompression())
+    fname, compression
+end
 
-read_photoobj(strategy::PlainFITSStrategy, rcf, state; duplicate_policy=:primary, drop_quickly::Bool=false) =
-    read_photoobj_files([rcf],strategy.rcf_stagedir,
-        duplicate_policy = duplicate_policy,
-        slurp = strategy.slurp,
-        drop_quickly = drop_quickly)
+function readFITS(strategy::PlainFITSStrategy, img::SDSSImageDesc)
+    fname, compression = compute_fname(strategy, img)
+    if strategy.slurp || compression != nothing
+        data = slurp_fits(fname)
+        (compression != nothing) && (data = transcode(compression, data))
+        return FITSIO.FITS(data)
+    else
+        return FITSIO.FITS(fname)
+    end
+end
 
-read_photoobj(strategy::BigFileStrategy, rcf, rcf_bundle; duplicate_policy=:primary, drop_quickly::Bool=false) =
-    read_bigfile_photoobjs([rcf_bundle],
-        duplicate_policy = duplicate_policy,
-        drop_quickly = drop_quickly)
+abstract type NetworkIoStrategy <: IOStrategy; end
 
-load_raw_images(strategy::PlainFITSStrategy, rcfs, states, drop_quickly::Bool = false) =
-    SDSSIO.load_raw_images(rcfs, strategy.rcf_stagedir, strategy.slurp, drop_quickly)
+struct MasterRPCStrategy <: NetworkIoStrategy
+    remote_strategy::IOStrategy
+end
 
-load_raw_images(strategy::BigFileStrategy, rcfs, states, drop_quickly::Bool = false) =
-    SDSSIO.load_raw_images_bigfile(rcfs, states; drop_quickly=drop_quickly)
+function readRawData(strategy, img)
+    fname, compression = compute_fname(strategy, img)
+    data = slurp_fits(fname)
+    data, compression
+end
+
+function readFITS(strategy::MasterRPCStrategy, img::SDSSImageDesc)
+    data, compression = remotecall_fetch(readRawData, 1, strategy.remote_strategy, img)
+    (compression != nothing) && (data = transcode(compression, data))
+    return FITSIO.FITS(data)
+end
+
 
 """
 Read a SDSS run/camcol/field into an array of Images.
 """
-function load_field_images(strategy::IOStrategy, rcfs, states, drop_quickly::Bool = false)
-    raw_images = SDSSIO.load_raw_images(strategy, rcfs, states, drop_quickly)
+function load_field_images(strategy::IOStrategy, rcfs, drop_quickly::Bool = false)
+    raw_images = SDSSIO.load_raw_images(strategy, rcfs, drop_quickly)
 
     N = length(raw_images)
     images = Vector{Image}(N)
