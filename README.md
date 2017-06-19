@@ -17,11 +17,13 @@ It implements variational inference for the generative model described in
 > International Conference on Machine Learning (ICML)*. 2015.](
 > http://www.stat.berkeley.edu/~jeff/publications/regier2015celeste.pdf)
 
+and
+
 > [Jeffrey Regier, Kiran Pamnany, Ryan Giordano, Rollin Thomas, David Schlegel, Jon McAuliffe, Prabhat.
 > “Learning an Astronomical Catalog of the Visible Universe through Scalable Bayesian Inference.”
 > In: arXiv pre-print. 2017.](https://arxiv.org/abs/1611.03404)
 
-Please see [the project wiki](https://github.com/jeff-regier/Celeste.jl/wiki/) for documentation
+Please see [the project wiki](https://github.com/jeff-regier/Celeste.jl/wiki/) for documentation.
 
 #### License
 
