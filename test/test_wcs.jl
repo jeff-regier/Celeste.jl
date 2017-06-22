@@ -1,7 +1,7 @@
 import DataFrames
 import FITSIO
 import WCS
-
+using Celeste.SDSSIO
 
 const band_letters = ['u', 'g', 'r', 'i', 'z']
 
@@ -14,8 +14,8 @@ end
 
 
 @testset "linear_world_to_pix works" begin
-    rcf = SDSSIO.RunCamcolField(3900, 6, 269)
-    image = SDSSIO.load_field_images(rcf, datadir)[1]
+    image = SDSSIO.load_field_images(PlainFITSStrategy(datadir),
+                SDSSIO.RunCamcolField(3900, 6, 269))[1]
     wcs = image.wcs
 
     pix_center = Float64[0.5 * image.H, 0.5 * image.W]

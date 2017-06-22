@@ -2,7 +2,7 @@
 import JLD
 
 import Celeste.Configs
-
+using Celeste.SDSSIO
 
 """
 test infer with a single (run, camcol, field).
@@ -128,9 +128,10 @@ end
     run(`make RUN=4114 CAMCOL=4 FIELD=127`)
     cd(wd)
 
-    rcfs= [RunCamcolField(4114, 3, 127), RunCamcolField(4114, 4, 127)]
-    images = SDSSIO.load_field_images(rcfs, datadir)
-    catalog = SDSSIO.read_photoobj_files(rcfs, datadir)
+    rcfs = [RunCamcolField(4114, 3, 127), RunCamcolField(4114, 4, 127)]
+    strategy = PlainFITSStrategy(datadir)
+    images = SDSSIO.load_field_images(strategy, rcfs)
+    catalog = SDSSIO.read_photoobj_files(strategy, rcfs)
     entry_id = findfirst((ce)->ce.objid == "1237663143711147274", catalog)
     entry = catalog[entry_id]
 

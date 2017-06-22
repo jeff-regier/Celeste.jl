@@ -18,19 +18,12 @@ import ..DeterministicVI: infer_source
 
 include("joint_infer.jl")
 
+abstract type ParallelismStrategy; end
+struct ThreadsStrategy <: ParallelismStrategy; end
+
+
 # In production mode, rather the development mode, always catch exceptions
 const is_production_run = haskey(ENV, "CELESTE_PROD") && ENV["CELESTE_PROD"] != ""
-
-# Use distributed parallelism (with Dtree)
-const distributed = haskey(ENV, "USE_DTREE") && ENV["USE_DTREE"] != ""
-
-if distributed
-using Gasp
-else
-grank() = 1
-const Dlog = Void
-message(d, msg...) = println(msg...)
-end
 
 #
 # ------ bounding box ------
@@ -116,29 +109,8 @@ function puts_timing(i::InferTiming)
     #Log.message("timing: wait_done=$(i.wait_done)")
 end
 
-function puts_timing(dl::Dlog, i::InferTiming)
-    i.num_srcs = max(1, i.num_srcs)
-    message(dl, "timing: query_fids=$(i.query_fids)")
-    message(dl, "timing: read_photoobj=$(i.read_photoobj)")
-    message(dl, "timing: read_img=$(i.read_img)")
-    message(dl, "timing: preload_rcfs=$(i.preload_rcfs)")
-    message(dl, "timing: find_neigh=$(i.find_neigh)")
-    message(dl, "timing: load_wait=$(i.load_wait)")
-    #message("dl, timing: proc_wait=$(i.proc_wait)")
-    message(dl, "timing: init_elbo=$(i.init_elbo)")
-    message(dl, "timing: opt_srcs=$(i.opt_srcs)")
-    message(dl, "timing: num_srcs=$(i.num_srcs)")
-    #message(dl, "timing: average opt_srcs=$(i.opt_srcs/i.num_srcs)")
-    #message(dl, "timing: sched_ovh=$(i.sched_ovh)")
-    message(dl, "timing: load_imba=$(i.load_imba)")
-    #message(dl, "timing: ga_get=$(i.ga_get)")
-    #message(dl, "timing: ga_put=$(i.ga_put)")
-    #message(dl, "timing: store_res=$(i.store_res)")
-    message(dl, "timing: write_results=$(i.write_results)")
-    message(dl, "timing: wait_done=$(i.wait_done)")
-end
 
-function time_puts(dl::Dlog, elapsedtime, bytes, gctime, allocs)
+function time_puts(elapsedtime, bytes, gctime, allocs)
     s = @sprintf("timing: total=%10.6f seconds", elapsedtime/1e9)
     if bytes != 0 || allocs != 0
         bytes, mb = Base.prettyprint_getunits(bytes, length(Base._mem_units),
@@ -165,9 +137,8 @@ function time_puts(dl::Dlog, elapsedtime, bytes, gctime, allocs)
     elseif gctime > 0
         s = string(s, @sprintf(", %.2f%% gc time", 100*gctime/elapsedtime))
     end
-    message(dl, s)
+    Log.message(s)
 end
-
 
 # ------
 # initialization helpers
@@ -192,12 +163,11 @@ function infer_init(rcfs::Vector{RunCamcolField},
     # Read all primary objects in these fields.
     duplicate_policy = primary_initialization ? :primary : :first
     tic()
-    states = SDSSIO.preload_rcfs(strategy, rcfs)
     timing.preload_rcfs += toq()
 
     tic()
-    for (i,(rcf,state)) in enumerate(zip(rcfs, states))
-        this_cat = SDSSIO.read_photoobj(strategy, rcf, state, duplicate_policy=duplicate_policy)
+    for rcf in rcfs
+        this_cat = SDSSIO.read_photoobj_files(strategy, [rcf], duplicate_policy=duplicate_policy)
         these_sources_rcfs = Vector{RunCamcolField}(length(this_cat))
         fill!(these_sources_rcfs, rcf)
         these_sources_idxs = collect(Int16, 1:length(this_cat))
@@ -227,7 +197,7 @@ function infer_init(rcfs::Vector{RunCamcolField},
         # Read in images for all (run, camcol, field).
         try
             tic()
-            images = SDSSIO.load_field_images(strategy, rcfs, states)
+            images = SDSSIO.load_field_images(strategy, rcfs)
             timing.read_img += toq()
         catch ex
             Log.exception(ex)
@@ -421,8 +391,8 @@ end
 """
 Query the SDSS database for all fields that overlap the given RA, Dec range.
 """
-function get_overlapping_field_extents(query::BoundingBox, stagedir::String)
-    f = FITSIO.FITS("$stagedir/field_extents.fits")
+function get_overlapping_field_extents(query::BoundingBox, strategy::SDSSIO.IOStrategy)
+    f = SDSSIO.readFITS(strategy, SDSSIO.FieldExtents())
 
     hdu = f[2]::FITSIO.TableHDU
 
@@ -453,8 +423,8 @@ function get_overlapping_field_extents(query::BoundingBox, stagedir::String)
 
     return ret
 end
-get_overlapping_field_extents(query::BoundingBox, strategy::SDSSIO.IOStrategy) =
-    get_overlapping_field_extents(query, strategy.stagedir)
+get_overlapping_field_extents(query::BoundingBox, stagedir::String) =
+    get_overlapping_field_extents(query, SDSSIO.PlainFITSStrategy(stagedir))
 
 
 """
@@ -486,8 +456,9 @@ end
 Load `field_extents.fits` from `stagedir` and return a vector of
 `FieldExtent`s.
 """
-function load_field_extents(stagedir::String)
-    f = FITSIO.FITS("$stagedir/field_extents.fits")
+function load_field_extents(strategy)
+    f = SDSSIO.readFITS(strategy, SDSSIO.FieldExtents())
+
 
     hdu = f[2]::FITSIO.TableHDU
 
@@ -512,7 +483,6 @@ function load_field_extents(stagedir::String)
 
     return fes
 end
-load_field_extents(strategy::SDSSIO.IOStrategy) = load_field_extents(strategy.stagedir)
 
 
 """
@@ -582,9 +552,7 @@ save_results(outdir, box, results) =
 """
 called from main entry point.
 """
-function infer_box(box::BoundingBox, stagedir::String, outdir::String)
-    strategy = PlainFITSStrategy(stagedir)
-
+function infer_box(strategy, box::BoundingBox, outdir::String)
     timing = InferTiming()
 
     Log.info("processing box $(box.ramin), $(box.ramax), $(box.decmin), ",
@@ -615,37 +583,38 @@ function infer_box(box::BoundingBox, stagedir::String, outdir::String)
     puts_timing(timing)
 end
 
-
-if distributed
-include("multinode_run.jl")
-else
-function multi_node_infer(all_rcfs::Vector{RunCamcolField},
-                          all_rcf_nsrcs::Vector{Int16},
-                          all_boxes::Vector{Vector{BoundingBox}},
-                          all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
-                          strategy::SDSSIO.IOStrategy,
-                          prefetch::Bool,
-                          outdir::String,
-                          dl::Dlog)
-    Log.one_message("ERROR: distributed functionality is disabled ",
-                    "(set USE_DTREE=1 to enable)")
-    exit(-1)
+function infer_box(box::BoundingBox, stagedir::String, outdir::String)
+    strategy = PlainFITSStrategy(stagedir)
+    infer_box(strategy, box, outdir)
 end
+
+function do_infer_boxes(pstrategy::ThreadsStrategy,
+                        all_rcfs::Vector{RunCamcolField},
+                        all_rcf_nsrcs::Vector{Int16},
+                        all_boxes::Vector{Vector{BoundingBox}},
+                        all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
+                        iostrategy::SDSSIO.IOStrategy,
+                        prefetch::Bool,
+                        outdir::String)
+    for boxes in all_boxes
+        for box in boxes
+            infer_box(iostrategy, box, outdir)
+        end
+    end
 end
 
 
 """
 called from main entry point.
 """
-function infer_boxes(all_rcfs::Vector{RunCamcolField},
+function infer_boxes(pstrategy::ParallelismStrategy,
+                     all_rcfs::Vector{RunCamcolField},
                      all_rcf_nsrcs::Vector{Int16},
                      all_boxes::Vector{Vector{BoundingBox}},
                      all_boxes_rcf_idxs::Vector{Vector{Vector{Int32}}},
-                     strategy::SDSSIO.IOStrategy,
+                     iostrategy::SDSSIO.IOStrategy,
                      prefetch::Bool,
                      outdir::String)
-    # set up distributed log
-    dl = Dlog(joinpath(outdir, "dlog"))
 
     # Base.@time hack for distributed environment
     gc_stats = ()
@@ -653,15 +622,14 @@ function infer_boxes(all_rcfs::Vector{RunCamcolField},
     gc_stats = Base.gc_num()
     elapsed_time = time_ns()
 
-    multi_node_infer(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                     strategy, prefetch, outdir, dl)
+    do_infer_boxes(pstrategy, all_rcfs, all_rcf_nsrcs, all_boxes,
+                   all_boxes_rcf_idxs, iostrategy, prefetch, outdir)
 
     # Base.@time hack for distributed environment
     elapsed_time = time_ns() - elapsed_time
     gc_diff_stats = Base.GC_Diff(Base.gc_num(), gc_stats)
-    time_puts(dl, elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
+    time_puts(elapsed_time, gc_diff_stats.allocd, gc_diff_stats.total_time,
               Base.gc_alloc_count(gc_diff_stats))
 end
 
 end
-

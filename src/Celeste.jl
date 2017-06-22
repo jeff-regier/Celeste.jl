@@ -33,6 +33,8 @@ include("GalsimBenchmark.jl")
 
 include("ArgumentParse.jl")
 
+include("settings.jl")
+
 
 import .ParallelRun: BoundingBox, OptimizedSource
 import .SDSSIO: RunCamcolField, CatalogEntry

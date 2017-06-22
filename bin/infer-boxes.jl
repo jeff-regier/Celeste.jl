@@ -4,18 +4,16 @@ import Celeste.ParallelRun: BoundingBox, infer_boxes
 import Celeste.Log
 using Celeste: SDSSIO
 
+distributed = haskey(ENV, "USE_DTREE")
+distributed && !isdefined(:CelesteMultiNode) && include(joinpath(@__DIR__,"src","multinode_run.jl"))
+
 include("binutil.jl")
 
 function run_infer_boxes(args::Vector{String})
     if length(args) < 3
         println("""
 Usage:
-  infer-boxes.jl [--noprefetch] [--iostrategy=<strategy>] <rcf_nsrcs_file> <boxes_file> [<boxes_file>...] <out_dir>
-
-Supported IO Strategies (default is FITS):
-  - fits: Load data from stagedir in original SDSS FITS format
-  - mdtfits: Load data from stagedir, split over 5 mdt directories
-  - bigfiles: Load data in bigfile format
+  infer-boxes.jl <settings> <rcf_nsrcs_file> <boxes_file> [<boxes_file>...] <out_dir>
 
 <rcf_nsrcs_file> format, one line per RCF:
   <run>	<camcol>	<field>	<num_primary_sources>
@@ -26,52 +24,18 @@ Supported IO Strategies (default is FITS):
         exit(-1)
     end
 
-    prefetch = true
-    if args[1] == "--noprefetch"
-        shift!(args)
-        prefetch = false
-    end
+    strategy = Celeste.read_settings_file(args[1])
 
-    strategyarg = ""
-    if startswith(args[1], "--iostrategy=")
-        strategyarg = shift!(args)[length("--iostrategy=")+1:end]
-    end
+    # load the RCFs #sources file
+    all_rcfs, all_rcf_nsrcs = parse_rcfs_nsrcs(args[2])
 
-    strategy, all_rcfs, all_rcf_nsrcs = decide_strategy(strategyarg, args[1])
 
     # parse the specified box file(s)
-    nboxfiles = length(args) - 2
+    nboxfiles = length(args) - 3
     all_boxes = Vector{Vector{BoundingBox}}()
     all_boxes_rcf_idxs = Vector{Vector{Vector{Int32}}}()
     for i = 1:nboxfiles
-        boxfile = args[i+1]
-        boxes = Vector{BoundingBox}()
-        boxes_rcf_idxs = Vector{Vector{Int32}}()
-        f = open(boxfile)
-        for ln in eachline(f)
-            lp = split(ln, '\t')
-            if length(lp) != 5
-                Log.one_message("ERROR: malformed line in box file:\n> $ln ")
-                continue
-            end
-
-            ss = split(lp[4], ' ')
-            ramin = parse(Float64, ss[1])
-            ramax = parse(Float64, ss[2])
-            decmin = parse(Float64, ss[3])
-            decmax = parse(Float64, ss[4])
-            bb = BoundingBox(ramin, ramax, decmin, decmax)
-            push!(boxes, bb)
-
-            ris = split(lp[5], ',')
-            rcf_idxs = [parse(Int32, ri) for ri in ris]
-            push!(boxes_rcf_idxs, rcf_idxs)
-        end
-        close(f)
-        if length(boxes) < 1
-            Log.one_message("$boxfile is empty?")
-            continue
-        end
+        all_boxes, all_boxes_rcf_idxs = parse_boxfile(args[i+2])
         push!(all_boxes, boxes)
         push!(all_boxes_rcf_idxs, boxes_rcf_idxs)
     end
@@ -80,8 +44,11 @@ Supported IO Strategies (default is FITS):
         exit(-3)
     end
 
-    infer_boxes(all_rcfs, all_rcf_nsrcs, all_boxes, all_boxes_rcf_idxs,
-                strategy, prefetch, args[end])
+    infer_boxes(distributed ? Celeste.ParallelRun.ThreadsStrategy() :
+                              CelesteMultiNode.DtreeStrategy(),
+                all_rcfs, all_rcf_nsrcs,
+                all_boxes, all_boxes_rcf_idxs,
+                strategy, true, args[end])
 end
 
 run_infer_boxes(ARGS)
