@@ -13,6 +13,9 @@
 # Require force to add any data
 test/data/*
 
+# Omit deps build products
+deps/*
+
 *.swp
 *.jld
 

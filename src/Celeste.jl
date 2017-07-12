@@ -20,6 +20,7 @@ include("Infer.jl")
 include("Transform.jl")
 include("PSF.jl")
 include("SDSSIO.jl")
+include("SEP.jl")
 
 include("MCMC.jl")
 include("StochasticVI.jl")
