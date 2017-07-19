@@ -409,6 +409,7 @@ function draw_source_params(prior, object_id)
         minor_major_axis_ratio=minor_major_axis_ratio,
         half_light_radius_px=half_light_radius_px,
         angle_deg=angle_deg,
+        is_saturated=false,
     )
 end
 
