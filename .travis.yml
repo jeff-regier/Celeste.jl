@@ -6,12 +6,6 @@ julia:
 notifications:
   email: false
 
-script:
-  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia -e 'Pkg.clone(pwd()); Pkg.build("Celeste")'
-  - julia -e 'Pkg.checkout("StaticArrays")'
-  - julia -e 'Pkg.test("Celeste"; coverage=(VERSION < v"0.4"))'
-
 after_success:
-  - julia -e 'if VERSION < v"0.4" cd(Pkg.dir("Celeste")); Pkg.add("Coverage");
-        using Coverage; Coveralls.submit(Coveralls.process_folder()) end'
+  - julia -e 'cd(Pkg.dir("Celeste")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
+
