@@ -16,12 +16,6 @@ include(joinpath(Pkg.dir("Celeste"), "test", "SampleData.jl"))
 
 using SampleData
 
-
-if Pkg.installed("StaticArrays") <= v"0.5.0"
-    Pkg.checkout("StaticArrays")
-    Pkg.build("StaticArrays")
-end
-
 anyerrors = false
 
 wd = pwd()
@@ -44,24 +38,9 @@ test_files = setdiff(ARGS, [ long_running_flag ])
 if length(test_files) > 0
     testfiles = ["test_$(arg).jl" for arg in test_files]
 else
-    testfiles = [
-                 "test_argument_parse.jl",
-                 "test_kl.jl",
-                 "test_constraints.jl",
-                 "test_elbo.jl",
-                 "test_galsim_benchmarks.jl",
-                 "test_images.jl",
-                 "test_infer.jl",
-                 "test_joint_infer.jl",
-                 "test_log_prob.jl",
-                 "test_optimization.jl",
-                 "test_psf.jl",
-                 "test_score.jl",
-                 "test_sdssio.jl",
-                 "test_wcs.jl",
-                ]
+    testdir = joinpath(Pkg.dir("Celeste"), "test")
+    testfiles = filter(r"test_.*\.jl", readdir(testdir))
 end
-
 
 if !test_long_running
     warn("Skipping long running tests.  ",

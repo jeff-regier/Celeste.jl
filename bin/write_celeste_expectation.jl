@@ -200,8 +200,10 @@ function main()
     )
     Log.info("Found $(length(full_sources)) sources total")
 
-    sdss_images = SDSSIO.load_field_images([rcf], AccuracyBenchmark.SDSS_DATA_DIR)
+    strategy = SDSSIO.PlainFITSStrategy(AccuracyBenchmark.SDSS_DATA_DIR)
+    sdss_images = SDSSIO.load_field_images(strategy, [rcf])
     images = deepcopy(sdss_images)
+
     for band in 1:5, h in 1:images[band].H, w in 1:images[band].W
         images[band].pixels[h, w] = 0
     end
