@@ -5,6 +5,8 @@ julia:
   - 0.6
 notifications:
   email: false
+git:
+  depth: 99999999
 
 after_success:
   - julia -e 'cd(Pkg.dir("Celeste")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
