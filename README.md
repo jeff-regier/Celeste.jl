@@ -5,7 +5,7 @@ Celeste.jl
 ========
 
 [![Build Status](https://travis-ci.org/jeff-regier/Celeste.jl.svg?branch=master)](https://travis-ci.org/jeff-regier/Celeste.jl)
-[![codecov.io](http://codecov.io/github/jeff-regier/StochasticCubicDescent.jl/coverage.svg?branch=master)](http://codecov.io/github/jeff-regier/StochasticCubicDescent.jl?branch=master)
+[![codecov.io](http://codecov.io/github/jeff-regier/Celeste.jl/coverage.svg?branch=master)](http://codecov.io/github/jeff-regier/Celeste.jl?branch=master)
 
 
 Celeste.jl finds and characterizes stars and galaxies in astronomical images.
