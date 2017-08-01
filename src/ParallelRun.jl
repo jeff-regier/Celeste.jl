@@ -13,6 +13,7 @@ import ..SDSSIO
 import ..Infer
 import ..SDSSIO: RunCamcolField, IOStrategy, PlainFITSStrategy
 import ..PSF
+import ..SEP
 
 import ..DeterministicVI: infer_source
 
@@ -144,6 +145,110 @@ end
 # initialization helpers
 
 """
+    detect_sources(images, band = 'r')
+
+Detect sources in a set of (possibly overlapping) raw images and combine
+duplicates, returning a catalog.
+
+Here, we're dealing with the `RawImage` type, which is SDSS-specific. The
+pixel values are already sky subtracted (and calibrated), so we don't have to
+background subtract. However, we still run a background analysis, just to
+determine the rough image noise for the purposes of thresholding.
+
+This could be slightly suboptimal in terms of
+selecting faint sources: If the image noise varies significantly
+across the image, the threshold might be too high or too low in some
+places. However, we don't really trust the variable background RMS without
+first masking sources. (We could add this.)
+"""
+function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
+
+    catalog = Vector{CatalogEntry}()
+
+    for image in images
+
+        # If this image is not the detection band, skip it
+        band_letters[image.b] == detection_band || continue
+
+        # Run background, just to get background rms.
+        bkg = SEP.Background(image.pixels; boxsize=(256, 256),
+                             filtersize=(3, 3))
+        sep_catalog = SEP.extract(image.pixels, 3.0; noise=global_rms(bkg))
+
+        # convert pixel coordinates to world coordinates
+        pixcoords = Array{Float64}(2, length(catalog.x))
+        for i in eachindex(catalog.x)
+            pixcoords[1, i] = catalog.x[i]
+            pixcoords[2, i] = catalog.y[i]
+        end
+        worldcoords = pix_to_world(wcs, pixcoords)
+
+        # Get angle offset between +RA axis and +x axis from the image's WCS.
+        # This assumes there is no skew: x and y axes are perpindicular in
+        # world coordinates.
+        cd = image.wcs[:cd]
+        sgn = sign(det(cd))
+        n_vs_y_rot = atan2(sgn * cd[1, 2],  sgn * cd[1,1])  # angle of N CCW
+                                                            # from +y axis
+        x_vs_n_rot = -(n_vs_y_rot + pi/2)  # angle of +x CCW from N
+
+        # convert sep_catalog entries to CatalogEntries
+        imcat = Vector{CatalogEntry}(length(sep_catalog.npix))
+        for i in eachindex(sep_catalog.npix)
+
+            # for both star and galaxy flux, use sum of all pixels above
+            # threshold, and assume same flux in all bands (all colors = 0)
+            star_fluxes = fill(sep_catalog.flux[i], B)
+            gal_fluxes = fill(sep_catalog.flux[i], B)
+
+            gal_ab = sep_catalog.a[i] / sep_catalog.b[i]
+
+            # SEP angle is CCW from +x axis and in [-pi/2, pi/2].
+            # Add offset of x axis from N to make angle CCW from N
+            gal_angle = sep_catalog.theta[i] + x_vs_n_rot
+
+            # A 2-d symmetric gaussian has a CDF of 1 - exp(-(r/sigma)^2/2)
+            # The half-light radius is then r = sigma * sqrt(2 ln(2))
+            sigma = sqrt(sep_catalog.a[i] * sep_catalog.b[i])
+            gal_scale = sigma * sqrt(2. * log(2.))
+
+            imcat[i] = CatalogEntry(worldcoords[:, i],  # pos
+                                    0.5,  # is_star
+                                    star_fluxes,
+                                    gal_fluxes,
+                                    0.5,  # gal_frac_dev
+                                    gal_ab,
+                                    gal_angle,
+                                    gal_scale,
+                                    "",  # objid
+                                    0  # thing_id
+                                    )
+        end
+
+        # Combine the catalog for this image with the joined catalog
+        # Currently we do this very stupidly: for each source in this image,
+        # we searching through the joined catalog for any nearby objects.
+        is_duplicate = zeros(Bool, length(imcat))
+        for i, ce in enumerate(imcat)
+            for joined_ce in catalog
+                ra1, dec1 = ce.pos
+                ra2, dec2 = joined_ce.pos
+                dist2 = ((ra1 - ra2) * cosd(0.5 * (dec1 + dec2)))^2 +
+                    (dec1 - dec2)^2
+
+                # consider it a duplicate if within 1 arcsec of existing source
+                is_duplicate[i] = dist2 < (1./3600.)^2
+            end
+        end
+
+        for i, ce in enumerate(imcat)
+            is_duplicate[i] || push!(catalog, ce)
+        end
+    end
+
+    return catalog
+end
+"""
 Given a list of RCFs, load the catalogs, determine the target sources,
 load the images, and build the neighbor map.
 """
@@ -197,8 +302,20 @@ function infer_init(rcfs::Vector{RunCamcolField},
         # Read in images for all (run, camcol, field).
         try
             tic()
-            images = SDSSIO.load_field_images(strategy, rcfs)
+            raw_images = SDSSIO.load_raw_images(strategy, rcfs)
             timing.read_img += toq()
+
+            # detect sources on raw images (before background added back)
+            catalog = detect_sources(raw_images)
+
+            # convert to images
+            try
+                images = [convert(Image, raw_image) for raw_image in images]
+            catch exc
+                Log.exception(exc)
+                rethrow()
+            end
+
         catch ex
             Log.exception(ex)
             empty!(target_sources)
