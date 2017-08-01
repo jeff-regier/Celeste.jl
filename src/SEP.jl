@@ -272,6 +272,7 @@ theta::Vector{Cfloat}
 cxx::Vector{Cfloat}
 cyy::Vector{Cfloat}
 cxy::Vector{Cfloat}
+flux::Vector{Cfloat}
 pix::Vector{Vector{Cint}}
 end
 
@@ -384,6 +385,7 @@ function extract(data::Array{T, 2} where T, thresh::Real;
                      unsafe_copy(ccatalog.cxx, nobj),
                      unsafe_copy(ccatalog.cyy, nobj),
                      unsafe_copy(ccatalog.cxy, nobj),
+                     unsafe_copy(ccatalog.flux, nobj),
                      pix)
 
     # switch to 1 indexing
