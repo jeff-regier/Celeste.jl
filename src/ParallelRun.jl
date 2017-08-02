@@ -145,10 +145,31 @@ end
 # initialization helpers
 
 """
+    angdist_approx(ra1, dec1, ra2, dec2)
+
+Approximate angular distance in degrees between point `(ra1, dec1)` and
+`(ra2, dec2)` (in degrees).
+"""
+angdist_approx(ra1, dec1, ra2, dec2) =
+    sqrt(((ra1 - ra2) * cosd(0.5 * (dec1 + dec2)))^2 + (dec1 - dec2)^2)
+
+"""
     detect_sources(images, band = 'r')
 
-Detect sources in a set of (possibly overlapping) raw images and combine
-duplicates, returning a catalog.
+Detect sources in a set of (possibly overlapping) `RawImage`s and combine
+duplicates.
+
+# Returns
+
+- `catalog::Vector{CatalogEntry}`: Detected sources.
+- `source_rcfs::Vector{RunCamcolField}`: The `RunCamcolField` corresponding
+  to each entry in `catalog` (same length as `catalog`).
+- `source_idxs::Vector{Int16}`: The index in the `RunCamcolField` corresponding
+  to each entry in `catalog` (same length as `catalog`).
+- `source_radii::Vector{Float64}`: Radius of circle containing all of each
+  source's member pixels (degrees).
+
+# Notes
 
 Here, we're dealing with the `RawImage` type, which is SDSS-specific. The
 pixel values are already sky subtracted (and calibrated), so we don't have to
@@ -164,6 +185,9 @@ first masking sources. (We could add this.)
 function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
 
     catalog = Vector{CatalogEntry}()
+    source_rcfs = Vector{RunCamcolField}()
+    source_idxs = Vector{Int16}()
+    source_radii = Vector{Float64}()
 
     for image in images
 
@@ -193,7 +217,8 @@ function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
         x_vs_n_rot = -(n_vs_y_rot + pi/2)  # angle of +x CCW from N
 
         # convert sep_catalog entries to CatalogEntries
-        imcat = Vector{CatalogEntry}(length(sep_catalog.npix))
+        im_catalog = Vector{CatalogEntry}(length(sep_catalog.npix))
+        im_source_radii = Vector{Float64}(length(sep_catalog.npix))
         for i in eachindex(sep_catalog.npix)
 
             # for both star and galaxy flux, use sum of all pixels above
@@ -207,47 +232,67 @@ function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
             # Add offset of x axis from N to make angle CCW from N
             gal_angle = sep_catalog.theta[i] + x_vs_n_rot
 
-            # A 2-d symmetric gaussian has a CDF of 1 - exp(-(r/sigma)^2/2)
+            # A 2-d symmetric gaussian has CDF(r) =  1 - exp(-(r/sigma)^2/2)
             # The half-light radius is then r = sigma * sqrt(2 ln(2))
             sigma = sqrt(sep_catalog.a[i] * sep_catalog.b[i])
             gal_scale = sigma * sqrt(2. * log(2.))
 
-            imcat[i] = CatalogEntry(worldcoords[:, i],  # pos
-                                    0.5,  # is_star
-                                    star_fluxes,
-                                    gal_fluxes,
-                                    0.5,  # gal_frac_dev
-                                    gal_ab,
-                                    gal_angle,
-                                    gal_scale,
-                                    "",  # objid
-                                    0  # thing_id
-                                    )
+            pos = worldcoords[:, i]
+            im_catalog[i] = CatalogEntry(pos,
+                                         0.5,  # is_star
+                                         star_fluxes,
+                                         gal_fluxes,
+                                         0.5,  # gal_frac_dev
+                                         gal_ab,
+                                         gal_angle,
+                                         gal_scale,
+                                         "",  # objid
+                                         0)  # thing_id
+
+            # get object extent in degrees from bounding box in pixels
+            xmin = sep_catalog.xmin[i]
+            xmax = sep_catalog.xmax[i]
+            ymin = sep_catalog.ymin[i]
+            ymax = sep_catalog.ymax[i]
+            corner_pixcoords = Float64[xmin xmin xmax xmax;
+                                       ymin ymax ymin ymax]
+            corners = pix_to_world(wcs, corner_pixcoords)
+            im_source_radii[i] =
+                maximum(angdist_approx(pos[1], pos[2],
+                                       corners[1, j], corners[2, j])
+                        for j in 1:4)
         end
 
         # Combine the catalog for this image with the joined catalog
         # Currently we do this very stupidly: for each source in this image,
         # we searching through the joined catalog for any nearby objects.
-        is_duplicate = zeros(Bool, length(imcat))
-        for i, ce in enumerate(imcat)
+        is_duplicate = zeros(Bool, length(im_catalog))
+        for i, ce in enumerate(im_catalog)
             for joined_ce in catalog
+                # consider it a duplicate if within 1 arcsec of existing source
                 ra1, dec1 = ce.pos
                 ra2, dec2 = joined_ce.pos
-                dist2 = ((ra1 - ra2) * cosd(0.5 * (dec1 + dec2)))^2 +
-                    (dec1 - dec2)^2
-
-                # consider it a duplicate if within 1 arcsec of existing source
-                is_duplicate[i] = dist2 < (1./3600.)^2
+                is_duplicate[i] =
+                    angdist_approx(ra1, dec1, ra2, dec2) < (1.0 / 3600.0)
             end
         end
 
-        for i, ce in enumerate(imcat)
-            is_duplicate[i] || push!(catalog, ce)
+        j = 1
+        for i, ce in enumerate(im_catalog)
+            if !is_duplicate[i]
+                push!(catalog, ce)
+                push!(source_radii, im_source_radii[i])
+                push!(source_rcfs, image.rcf)
+                push!(source_idxs, j)
+                j += 1
+            end
         end
     end
 
-    return catalog
+    return catalog, source_rcfs, source_idxs, source_radii
 end
+
+
 """
 Given a list of RCFs, load the catalogs, determine the target sources,
 load the images, and build the neighbor map.
@@ -258,73 +303,69 @@ function infer_init(rcfs::Vector{RunCamcolField},
                     box=BoundingBox(-1000., 1000., -1000., 1000.),
                     primary_initialization=true,
                     timing=InferTiming())
-    catalog = Vector{CatalogEntry}()
-    target_sources = Vector{Int}()
-    neighbor_map = Vector{Vector{Int}}()
-    images = Vector{Image}()
-    source_rcfs = Vector{RunCamcolField}()
-    source_cat_idxs = Vector{Int16}()
 
-    # Read all primary objects in these fields.
-    duplicate_policy = primary_initialization ? :primary : :first
-    tic()
-    timing.preload_rcfs += toq()
-
-    tic()
-    for rcf in rcfs
-        this_cat = SDSSIO.read_photoobj_files(strategy, [rcf], duplicate_policy=duplicate_policy)
-        these_sources_rcfs = Vector{RunCamcolField}(length(this_cat))
-        fill!(these_sources_rcfs, rcf)
-        these_sources_idxs = collect(Int16, 1:length(this_cat))
-        append!(catalog, this_cat)
-        append!(source_rcfs, these_sources_rcfs)
-        append!(source_cat_idxs, these_sources_idxs)
+    # check if any non-default values are passed for functionality that has
+    # been removed.
+    if !primary_initialization
+        error("primary_initialization no longer supported.")
     end
-    timing.read_photoobj += toq()
+    if !(objid == "")
+        error("objid no longer supported")
+    end
 
-    # Get indices of entries in the RA/Dec range of interest.
-    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
-                             (box.decmin < entry.pos[2] < box.decmax))
-    target_sources = find(entry_in_range, catalog)
+    try
+        # Read in images for all RCFs
+        tic()
+        raw_images = SDSSIO.load_raw_images(strategy, rcfs)
+        timing.read_img += toq()
 
-    Log.info("$(Time(now())): $(length(catalog)) primary sources, ",
+        # detect sources on all raw images (before background added back)
+        catalog, source_rcfs, source_cat_idxs, source_radii = detect_sources(raw_images)
+
+        # Get indices of entries in the RA/Dec range of interest.
+        # (Some images can have regions that are outside the box, so not
+        # all sources are necessarily in the box.)
+        entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
+                                 (box.decmin < entry.pos[2] < box.decmax))
+        target_sources = find(entry_in_range, catalog)
+
+        Log.info("$(Time(now())): $(length(catalog)) primary sources, ",
              "$(length(target_sources)) target sources in $(box.ramin), ",
              "$(box.ramax), $(box.decmin), $(box.decmax)")
 
-    # Filter any object not specified, if an objid is specified
-    if objid != ""
-        target_sources = filter(ts->(catalog[ts].objid == objid), target_sources)
-        Log.info("$(length(target_sources)) target light sources after objid cut")
-    end
-
-    # Load images and neighbor map for target sources
-    if length(target_sources) > 0
-        # Read in images for all (run, camcol, field).
+        # convert raw images to images
         try
-            tic()
-            raw_images = SDSSIO.load_raw_images(strategy, rcfs)
-            timing.read_img += toq()
-
-            # detect sources on raw images (before background added back)
-            catalog = detect_sources(raw_images)
-
-            # convert to images
-            try
-                images = [convert(Image, raw_image) for raw_image in images]
-            catch exc
-                Log.exception(exc)
-                rethrow()
-            end
-
-        catch ex
-            Log.exception(ex)
-            empty!(target_sources)
+            images = [convert(Image, raw_image) for raw_image in images]
+        catch exc
+            Log.exception(exc)
+            rethrow()
         end
 
-        tic()
-        neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
-        timing.find_neigh += toq()
+    catch ex
+        Log.exception(ex)
+        target_sources = Int[]
     end
+
+    # build neighbor map based on source radii
+    tic()
+    neighbor_map = Vector{Int64}[Int64[] for s in target_sources]
+    for ts in 1:length(target_sources)
+        s = target_sources[ts]
+        ce = catalog[s]
+        ce_rad = source_radii[s]
+
+        for s2 in 1:length(catalog)
+            s2 == s && continue
+            ce2 = catalog[s2]
+            dist = angdist_approx(ce.pos[1], ce.pos[2],
+                                  ce2.pos[1], ce2.pos[2])
+
+            if dist < source_radii[s] + source_radii[s2]
+                push!(neighbor_map[ts], s2)
+            end
+        end
+    end
+    timing.find_neigh += toq()
 
     return catalog, target_sources, neighbor_map, images,
            source_rcfs, source_cat_idxs
