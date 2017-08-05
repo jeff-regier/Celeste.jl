@@ -5,6 +5,7 @@ using Base.Dates
 
 import FITSIO
 import JLD
+import WCS
 
 import ..Configs
 import ..Log
@@ -197,15 +198,15 @@ function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
         # Run background, just to get background rms.
         bkg = SEP.Background(image.pixels; boxsize=(256, 256),
                              filtersize=(3, 3))
-        sep_catalog = SEP.extract(image.pixels, 3.0; noise=global_rms(bkg))
+        sep_catalog = SEP.extract(image.pixels, 3.0; noise=SEP.global_rms(bkg))
 
         # convert pixel coordinates to world coordinates
-        pixcoords = Array{Float64}(2, length(catalog.x))
-        for i in eachindex(catalog.x)
-            pixcoords[1, i] = catalog.x[i]
-            pixcoords[2, i] = catalog.y[i]
+        pixcoords = Array{Float64}(2, length(sep_catalog.x))
+        for i in eachindex(sep_catalog.x)
+            pixcoords[1, i] = sep_catalog.x[i]
+            pixcoords[2, i] = sep_catalog.y[i]
         end
-        worldcoords = pix_to_world(wcs, pixcoords)
+        worldcoords = WCS.pix_to_world(image.wcs, pixcoords)
 
         # Get angle offset between +RA axis and +x axis from the image's WCS.
         # This assumes there is no skew: x and y axes are perpindicular in
@@ -239,7 +240,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
 
             pos = worldcoords[:, i]
             im_catalog[i] = CatalogEntry(pos,
-                                         0.5,  # is_star
+                                         false,  # is_star
                                          star_fluxes,
                                          gal_fluxes,
                                          0.5,  # gal_frac_dev
@@ -256,7 +257,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
             ymax = sep_catalog.ymax[i]
             corner_pixcoords = Float64[xmin xmin xmax xmax;
                                        ymin ymax ymin ymax]
-            corners = pix_to_world(wcs, corner_pixcoords)
+            corners = WCS.pix_to_world(image.wcs, corner_pixcoords)
             im_source_radii[i] =
                 maximum(angdist_approx(pos[1], pos[2],
                                        corners[1, j], corners[2, j])
@@ -267,7 +268,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
         # Currently we do this very stupidly: for each source in this image,
         # we searching through the joined catalog for any nearby objects.
         is_duplicate = zeros(Bool, length(im_catalog))
-        for i, ce in enumerate(im_catalog)
+        for (i, ce) in enumerate(im_catalog)
             for joined_ce in catalog
                 # consider it a duplicate if within 1 arcsec of existing source
                 ra1, dec1 = ce.pos
@@ -278,7 +279,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
         end
 
         j = 1
-        for i, ce in enumerate(im_catalog)
+        for (i, ce) in enumerate(im_catalog)
             if !is_duplicate[i]
                 push!(catalog, ce)
                 push!(source_radii, im_source_radii[i])
@@ -313,6 +314,14 @@ function infer_init(rcfs::Vector{RunCamcolField},
         error("objid no longer supported")
     end
 
+    # Initialize variables to empty vectors in case try block fails
+    catalog = CatalogEntry[]
+    source_rcfs = RunCamcolField[]
+    source_cat_idxs = Int16[]
+    source_radii = Float64[]
+    target_sources = Int[]
+    images = Image[]
+
     try
         # Read in images for all RCFs
         tic()
@@ -320,7 +329,8 @@ function infer_init(rcfs::Vector{RunCamcolField},
         timing.read_img += toq()
 
         # detect sources on all raw images (before background added back)
-        catalog, source_rcfs, source_cat_idxs, source_radii = detect_sources(raw_images)
+        catalog, source_rcfs, source_cat_idxs, source_radii =
+            detect_sources(raw_images)
 
         # Get indices of entries in the RA/Dec range of interest.
         # (Some images can have regions that are outside the box, so not
@@ -330,12 +340,12 @@ function infer_init(rcfs::Vector{RunCamcolField},
         target_sources = find(entry_in_range, catalog)
 
         Log.info("$(Time(now())): $(length(catalog)) primary sources, ",
-             "$(length(target_sources)) target sources in $(box.ramin), ",
-             "$(box.ramax), $(box.decmin), $(box.decmax)")
+                 "$(length(target_sources)) target sources in $(box.ramin), ",
+                 "$(box.ramax), $(box.decmin), $(box.decmax)")
 
         # convert raw images to images
         try
-            images = [convert(Image, raw_image) for raw_image in images]
+            images = [convert(Image, raw_image) for raw_image in raw_images]
         catch exc
             Log.exception(exc)
             rethrow()
@@ -343,7 +353,8 @@ function infer_init(rcfs::Vector{RunCamcolField},
 
     catch ex
         Log.exception(ex)
-        target_sources = Int[]
+        empty!(target_sources)
+        rethrow()
     end
 
     # build neighbor map based on source radii
