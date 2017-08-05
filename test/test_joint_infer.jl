@@ -75,27 +75,19 @@ Return true if vp params are the same, false otherwise
 """
 function compare_vp_params(r1, r2)
 
-    # Create a map from thingid -> vp for r1
-    r1_vp = Dict{Int64, Vector{Float64}}()
-    for r1_result in r1
-        r1_vp[r1_result.thingid] = r1_result.vs
-    end
+    length(r1) == length(r2) || return false
 
     # Check the existence and equivalence of each source's vp in r2
-    for r2_result in r2
-        if haskey(r1_vp, r2_result.thingid)
-            a, b = r1_vp[r2_result.thingid], r2_result.vs
-            if !(isapprox(a, b))
-                println("compare_vp_params: Mismatch - $(a) vs $(b)")
-                print("norm(a - b): ", norm(a - b))
-                return false
-            end
-        else
+    for i in eachindex(r1)
+        a = r1[i].vs
+        b = r2[i].vs
+        if !(isapprox(a, b))
+            println("compare_vp_params: Mismatch - $(a) vs $(b)")
+            print("norm(a - b): ", norm(a - b))
             return false
         end
     end
-
-    return length(r1) == length(r2)
+    return true
 end
 
 """
