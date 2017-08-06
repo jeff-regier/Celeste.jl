@@ -175,10 +175,10 @@ function load_coadd_catalog(fits_filename)
     raw_df = load_stripe82_fits_catalog_as_data_frame(fits_filename, 2)
 
     usedev = raw_df[:fracdev_r] .> 0.5  # true=> use dev, false=> use exp
-    dev_or_exp(dev_column, exp_column) = ifelse(usedev, raw_df[dev_column], raw_df[exp_column])
+    dev_or_exp(dev_column, exp_column) = ifelse.(usedev, raw_df[dev_column], raw_df[exp_column])
     is_star = [x != 0 for x in raw_df[:probpsf]]
     function star_or_galaxy(star_column, galaxy_dev_column, galaxy_exp_column)
-        ifelse(is_star, raw_df[star_column], dev_or_exp(galaxy_dev_column, galaxy_exp_column))
+        ifelse.(is_star, raw_df[star_column], dev_or_exp(galaxy_dev_column, galaxy_exp_column))
     end
 
     mag_u = star_or_galaxy(:psfmag_u, :devmag_u, :expmag_u)
@@ -242,9 +242,9 @@ function load_primary(rcf::SDSSIO.RunCamcolField, stagedir::String)
     raw_df = object_dict_to_data_frame(SDSSIO.read_photoobj(strategy, rcf))
 
     usedev = raw_df[:frac_dev] .> 0.5  # true=> use dev, false=> use exp
-    dev_or_exp(dev_column, exp_column) = ifelse(usedev, raw_df[dev_column], raw_df[exp_column])
+    dev_or_exp(dev_column, exp_column) = ifelse.(usedev, raw_df[dev_column], raw_df[exp_column])
     function star_or_galaxy(star_column, galaxy_dev_column, galaxy_exp_column)
-        ifelse(raw_df[:is_star], raw_df[star_column], dev_or_exp(galaxy_dev_column, galaxy_exp_column))
+        ifelse.(raw_df[:is_star], raw_df[star_column], dev_or_exp(galaxy_dev_column, galaxy_exp_column))
     end
 
     flux_u = star_or_galaxy(:psfflux_u, :devflux_u, :expflux_u)
@@ -791,8 +791,8 @@ function get_error_df(truth::DataFrame, predicted::DataFrame)
 
     predicted_galaxy = predicted[:is_star] .< .5
     true_galaxy = truth[:is_star] .< .5
-    errors[:missed_stars] = ifelse(!true_galaxy, predicted_galaxy, NA)
-    errors[:missed_galaxies] = ifelse(true_galaxy, !predicted_galaxy, NA)
+    errors[:missed_stars] = ifelse.(!true_galaxy, predicted_galaxy, NA)
+    errors[:missed_galaxies] = ifelse.(true_galaxy, !predicted_galaxy, NA)
 
     errors[:position] = sky_distance_px.(
         truth[:right_ascension_deg],
