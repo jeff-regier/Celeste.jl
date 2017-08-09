@@ -78,7 +78,8 @@ else
         parsed_args["camcol"],
         parsed_args["field"],
     )
-    images = SDSSIO.load_field_images([rcf], AccuracyBenchmark.SDSS_DATA_DIR)
+    strategy = SDSSIO.PlainFITSStrategy(AccuracyBenchmark.SDSS_DATA_DIR)
+    images = SDSSIO.load_field_images(strategy, [rcf])
     catalog_label = @sprintf("sdss_%s_%s_%s", rcf.run, rcf.camcol, rcf.field)
 end
 @assert length(images) == 5

@@ -7,11 +7,12 @@ const read_with_strategy = function(strategy)
 end
 
 function test_config(config)
+    @show config
     strategy = Celeste.read_settings_file(joinpath("ioconfigs", config))
     read_with_strategy(strategy)
 end
 
-for config in ["compressed.yml", "plain.yml", "slurp.yml"]
+for config in ["plain.yml", "slurp.yml"]
     test_config(config)
 end
 

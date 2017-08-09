@@ -34,7 +34,8 @@ rcf = SDSSIO.RunCamcolField(
     parsed_args["camcol"],
     parsed_args["field"],
 )
-images = SDSSIO.load_field_images([rcf], AccuracyBenchmark.SDSS_DATA_DIR)
+strategy = SDSSIO.PlainFITSStrategy(AccuracyBenchmark.SDSS_DATA_DIR)
+images = SDSSIO.load_field_images(strategy, [rcf])
 @assert length(images) == 5
 
 if !isdir(OUTPUT_DIRECTORY)
