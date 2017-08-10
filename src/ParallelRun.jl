@@ -15,6 +15,7 @@ import ..Infer
 import ..SDSSIO: RunCamcolField, IOStrategy, PlainFITSStrategy
 import ..PSF
 import ..SEP
+import ..Coordinates: angular_distance, match_coordinates
 
 import ..DeterministicVI: infer_source
 
@@ -145,14 +146,6 @@ end
 # ------
 # initialization helpers
 
-"""
-    angdist_approx(ra1, dec1, ra2, dec2)
-
-Approximate angular distance in degrees between point `(ra1, dec1)` and
-`(ra2, dec2)` (in degrees).
-"""
-angdist_approx(ra1, dec1, ra2, dec2) =
-    sqrt(((ra1 - ra2) * cosd(0.5 * (dec1 + dec2)))^2 + (dec1 - dec2)^2)
 
 """
     detect_sources(images, band = 'r')
@@ -183,7 +176,7 @@ across the image, the threshold might be too high or too low in some
 places. However, we don't really trust the variable background RMS without
 first masking sources. (We could add this.)
 """
-function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
+function detect_sources(images::Vector{SDSSIO.RawImage})
 
     catalog = Vector{CatalogEntry}()
     source_rcfs = Vector{RunCamcolField}()
@@ -208,13 +201,13 @@ function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
         end
         worldcoords = WCS.pix_to_world(image.wcs, pixcoords)
 
-        # Get angle offset between +RA axis and +x axis from the image's WCS.
-        # This assumes there is no skew: x and y axes are perpindicular in
-        # world coordinates.
+        # Get angle offset between +RA axis and +x axis from the
+        # image's WCS.  This assumes there is no skew, meaning the x
+        # and y axes are perpindicular in world coordinates.
         cd = image.wcs[:cd]
         sgn = sign(det(cd))
-        n_vs_y_rot = atan2(sgn * cd[1, 2],  sgn * cd[1,1])  # angle of N CCW
-                                                            # from +y axis
+        n_vs_y_rot = atan2(sgn * cd[1, 2],  sgn * cd[1, 1])  # angle of N CCW
+                                                             # from +y axis
         x_vs_n_rot = -(n_vs_y_rot + pi/2)  # angle of +x CCW from N
 
         # convert sep_catalog entries to CatalogEntries
@@ -259,8 +252,8 @@ function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
                                        ymin ymax ymin ymax]
             corners = WCS.pix_to_world(image.wcs, corner_pixcoords)
             im_source_radii[i] =
-                maximum(angdist_approx(pos[1], pos[2],
-                                       corners[1, j], corners[2, j])
+                maximum(angular_distance(pos[1], pos[2],
+                                         corners[1, j], corners[2, j])
                         for j in 1:4)
         end
 
@@ -274,7 +267,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage}, detection_band = 'r')
                 ra1, dec1 = ce.pos
                 ra2, dec2 = joined_ce.pos
                 is_duplicate[i] =
-                    angdist_approx(ra1, dec1, ra2, dec2) < (1.0 / 3600.0)
+                    angular_distance(ra1, dec1, ra2, dec2) < (1.0 / 3600.0)
             end
         end
 
@@ -368,8 +361,8 @@ function infer_init(rcfs::Vector{RunCamcolField},
         for s2 in 1:length(catalog)
             s2 == s && continue
             ce2 = catalog[s2]
-            dist = angdist_approx(ce.pos[1], ce.pos[2],
-                                  ce2.pos[1], ce2.pos[2])
+            dist = angular_distance(ce.pos[1], ce.pos[2],
+                                    ce2.pos[1], ce2.pos[2])
 
             if dist < source_radii[s] + source_radii[s2]
                 push!(neighbor_map[ts], s2)

@@ -15,6 +15,8 @@ include("Log.jl")
 
 include("SensitiveFloats.jl")
 
+include("Coordinates.jl")
+
 include("Model.jl")
 include("Infer.jl")
 include("Transform.jl")
@@ -25,7 +27,6 @@ include("SEP.jl")
 include("MCMC.jl")
 include("StochasticVI.jl")
 include("DeterministicVI.jl")
-
 include("ParallelRun.jl")
 
 include("Synthetic.jl")
