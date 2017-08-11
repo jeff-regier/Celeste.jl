@@ -15,7 +15,7 @@ import ..Infer
 import ..SDSSIO: RunCamcolField, IOStrategy, PlainFITSStrategy
 import ..PSF
 import ..SEP
-import ..Coordinates: angular_distance, match_coordinates
+import ..Coordinates: angular_separation, match_coordinates
 
 import ..DeterministicVI: infer_source
 
@@ -146,9 +146,8 @@ end
 # ------
 # initialization helpers
 
-
 """
-    detect_sources(images, band = 'r')
+    detect_sources(images)
 
 Detect sources in a set of (possibly overlapping) `RawImage`s and combine
 duplicates.
@@ -180,18 +179,14 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
 
     catalog = Vector{CatalogEntry}()
     source_rcfs = Vector{RunCamcolField}()
-    source_idxs = Vector{Int16}()
     source_radii = Vector{Float64}()
 
     for image in images
 
-        # If this image is not the detection band, skip it
-        band_letters[image.b] == detection_band || continue
-
         # Run background, just to get background rms.
         bkg = SEP.Background(image.pixels; boxsize=(256, 256),
                              filtersize=(3, 3))
-        sep_catalog = SEP.extract(image.pixels, 3.0; noise=SEP.global_rms(bkg))
+        sep_catalog = SEP.extract(image.pixels, 1.3; noise=SEP.global_rms(bkg))
 
         # convert pixel coordinates to world coordinates
         pixcoords = Array{Float64}(2, length(sep_catalog.x))
@@ -215,10 +210,12 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
         im_source_radii = Vector{Float64}(length(sep_catalog.npix))
         for i in eachindex(sep_catalog.npix)
 
-            # for both star and galaxy flux, use sum of all pixels above
-            # threshold, and assume same flux in all bands (all colors = 0)
-            star_fluxes = fill(sep_catalog.flux[i], B)
-            gal_fluxes = fill(sep_catalog.flux[i], B)
+            # For galaxy flux, use sum of all pixels above
+            # threshold. Set other band fluxes to NaN, to indicate which
+            # band the flux is measured in. We'll use this information below
+            # when merging detections in different bands.
+            gal_fluxes = fill(NaN, B)
+            gal_fluxes[image.b] = sep_catalog.flux[i]
 
             gal_ab = sep_catalog.a[i] / sep_catalog.b[i]
 
@@ -234,7 +231,7 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
             pos = worldcoords[:, i]
             im_catalog[i] = CatalogEntry(pos,
                                          false,  # is_star
-                                         star_fluxes,
+                                         Float64[],  # will replace below
                                          gal_fluxes,
                                          0.5,  # gal_frac_dev
                                          gal_ab,
@@ -252,35 +249,67 @@ function detect_sources(images::Vector{SDSSIO.RawImage})
                                        ymin ymax ymin ymax]
             corners = WCS.pix_to_world(image.wcs, corner_pixcoords)
             im_source_radii[i] =
-                maximum(angular_distance(pos[1], pos[2],
-                                         corners[1, j], corners[2, j])
+                maximum(angular_separation(pos[1], pos[2],
+                                           corners[1, j], corners[2, j])
                         for j in 1:4)
         end
 
         # Combine the catalog for this image with the joined catalog
-        # Currently we do this very stupidly: for each source in this image,
-        # we searching through the joined catalog for any nearby objects.
-        is_duplicate = zeros(Bool, length(im_catalog))
-        for (i, ce) in enumerate(im_catalog)
-            for joined_ce in catalog
-                # consider it a duplicate if within 1 arcsec of existing source
-                ra1, dec1 = ce.pos
-                ra2, dec2 = joined_ce.pos
-                is_duplicate[i] =
-                    angular_distance(ra1, dec1, ra2, dec2) < (1.0 / 3600.0)
-            end
-        end
+        if length(catalog) == 0
+            catalog = im_catalog
+            source_radii = im_source_radii
+            source_rcfs = fill(image.rcf, length(catalog))
+        else
+            # for each detection in image, find nearest match in joined catalog
+            idx, dist = match_coordinates([ce.pos[1] for ce in im_catalog],
+                                          [ce.pos[2] for ce in im_catalog],
+                                          [ce.pos[1] for ce in catalog],
+                                          [ce.pos[2] for ce in catalog])
 
-        j = 1
-        for (i, ce) in enumerate(im_catalog)
-            if !is_duplicate[i]
-                push!(catalog, ce)
-                push!(source_radii, im_source_radii[i])
-                push!(source_rcfs, image.rcf)
-                push!(source_idxs, j)
-                j += 1
+            for (i, ce) in enumerate(im_catalog)
+                # if there is an existing object within 1 arcsec,
+                # add it to the joined catalog
+                if dist[i] < (1.0 / 3600.)
+                    existing_ce = catalog[idx[i]]
+                    if isnan(existing_ce.gal_fluxes[image.b])
+                        existing_ce.gal_fluxes[image.b] =
+                            ce.gal_fluxes[image.b]
+                    end
+                    if im_source_radii[i] > source_radii[idx[i]]
+                        source_radii[idx[i]] = im_source_radii[i]
+                    end
+
+                # if not, add entry to joined catalog
+                else
+                    push!(catalog, ce)
+                    push!(source_radii, im_source_radii[i])
+                    push!(source_rcfs, image.rcf)
+                end
             end
         end
+    end  # loop over images
+
+    # clean up NaN flux entries in joined catalog,
+    # copy gal_fluxes to star_fluxes
+    for ce in catalog
+        minflux = minimum(f for f in ce.gal_fluxes if !isnan(f))
+        for i in eachindex(ce.gal_fluxes)
+            if isnan(ce.gal_fluxes[i])
+                ce.gal_fluxes[i] = minflux
+            end
+        end
+        ce.star_fluxes = copy(ce.gal_fluxes)
+    end
+
+    # build source_idx array (running index in each rcf).
+    # Hopefully we can eventually just entirely remove this: sources
+    # are not necessarily uniquely detected in single RCF, so assigning a single
+    # RCF and index to them doesn't make sense. Plus, RCF is SDSS specific.
+    source_idxs = similar(catalog, Int16)
+    running_max = Dict(rcf=>Int16(0) for rcf in Set(source_rcfs))
+    for (i, rcf) in enumerate(source_rcfs)
+        running_max[rcf] += Int16(1)
+        source_idxs[i] = running_max[rcf]
     end
 
     return catalog, source_rcfs, source_idxs, source_radii
@@ -361,8 +390,8 @@ function infer_init(rcfs::Vector{RunCamcolField},
         for s2 in 1:length(catalog)
             s2 == s && continue
             ce2 = catalog[s2]
-            dist = angular_distance(ce.pos[1], ce.pos[2],
-                                    ce2.pos[1], ce2.pos[2])
+            dist = angular_separation(ce.pos[1], ce.pos[2],
+                                      ce2.pos[1], ce2.pos[2])
 
             if dist < source_radii[s] + source_radii[s2]
                 push!(neighbor_map[ts], s2)
