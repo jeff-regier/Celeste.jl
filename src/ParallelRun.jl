@@ -317,15 +317,15 @@ end
 
 
 """
-Given a list of RCFs, load the catalogs, determine the target sources,
-load the images, and build the neighbor map.
+New version of infer_init() that uses detect_sources() instead of SDSS
+photoObj catalog for initialization.
 """
-function infer_init(rcfs::Vector{RunCamcolField},
-                    strategy::SDSSIO.IOStrategy;
-                    objid="",
-                    box=BoundingBox(-1000., 1000., -1000., 1000.),
-                    primary_initialization=true,
-                    timing=InferTiming())
+function infer_init_new(rcfs::Vector{RunCamcolField},
+                        strategy::SDSSIO.IOStrategy;
+                        objid="",
+                        box=BoundingBox(-1000., 1000., -1000., 1000.),
+                        primary_initialization=true,
+                        timing=InferTiming())
 
     # check if any non-default values are passed for functionality that has
     # been removed.
@@ -403,6 +403,78 @@ function infer_init(rcfs::Vector{RunCamcolField},
     return catalog, target_sources, neighbor_map, images,
            source_rcfs, source_cat_idxs
 end
+
+
+"""
+Given a list of RCFs, load the catalogs, determine the target sources,
+load the images, and build the neighbor map.
+"""
+function infer_init(rcfs::Vector{RunCamcolField},
+                    strategy::SDSSIO.IOStrategy;
+                    objid="",
+                    box=BoundingBox(-1000., 1000., -1000., 1000.),
+                    primary_initialization=true,
+                    timing=InferTiming())
+    catalog = Vector{CatalogEntry}()
+    target_sources = Vector{Int}()
+    neighbor_map = Vector{Vector{Int}}()
+    images = Vector{Image}()
+    source_rcfs = Vector{RunCamcolField}()
+    source_cat_idxs = Vector{Int16}()
+
+    # Read all primary objects in these fields.
+    duplicate_policy = primary_initialization ? :primary : :first
+    tic()
+    timing.preload_rcfs += toq()
+
+    tic()
+    for rcf in rcfs
+        this_cat = SDSSIO.read_photoobj_files(strategy, [rcf], duplicate_policy=duplicate_policy)
+        these_sources_rcfs = Vector{RunCamcolField}(length(this_cat))
+        fill!(these_sources_rcfs, rcf)
+        these_sources_idxs = collect(Int16, 1:length(this_cat))
+        append!(catalog, this_cat)
+        append!(source_rcfs, these_sources_rcfs)
+        append!(source_cat_idxs, these_sources_idxs)
+    end
+    timing.read_photoobj += toq()
+
+    # Get indices of entries in the RA/Dec range of interest.
+    entry_in_range = entry->((box.ramin < entry.pos[1] < box.ramax) &&
+                             (box.decmin < entry.pos[2] < box.decmax))
+    target_sources = find(entry_in_range, catalog)
+
+    Log.info("$(Time(now())): $(length(catalog)) primary sources, ",
+             "$(length(target_sources)) target sources in $(box.ramin), ",
+             "$(box.ramax), $(box.decmin), $(box.decmax)")
+
+    # Filter any object not specified, if an objid is specified
+    if objid != ""
+        target_sources = filter(ts->(catalog[ts].objid == objid), target_sources)
+        Log.info("$(length(target_sources)) target light sources after objid cut")
+    end
+
+    # Load images and neighbor map for target sources
+    if length(target_sources) > 0
+        # Read in images for all (run, camcol, field).
+        try
+            tic()
+            images = SDSSIO.load_field_images(strategy, rcfs)
+            timing.read_img += toq()
+        catch ex
+            Log.exception(ex)
+            empty!(target_sources)
+        end
+
+        tic()
+        neighbor_map = Infer.find_neighbors(target_sources, catalog, images)
+        timing.find_neigh += toq()
+    end
+
+    return catalog, target_sources, neighbor_map, images,
+           source_rcfs, source_cat_idxs
+end
+
 
 
 # ------
