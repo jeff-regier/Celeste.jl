@@ -2,10 +2,12 @@ import JLD
 
 import Celeste.Infer
 import Celeste.ParallelRun: infer_init, one_node_infer, BoundingBox,
-    one_node_joint_infer, one_node_single_infer
+    one_node_joint_infer, one_node_single_infer, detect_sources
 import Celeste.SensitiveFloats: SensitiveFloat
 import Celeste.DeterministicVI.ElboMaximize
+import Celeste.Coordinates: match_coordinates
 
+import FITSIO
 """
 load_ea_from_source
 Helper function to load elbo args for a particular source
@@ -75,27 +77,19 @@ Return true if vp params are the same, false otherwise
 """
 function compare_vp_params(r1, r2)
 
-    # Create a map from thingid -> vp for r1
-    r1_vp = Dict{Int64, Vector{Float64}}()
-    for r1_result in r1
-        r1_vp[r1_result.thingid] = r1_result.vs
-    end
+    length(r1) == length(r2) || return false
 
     # Check the existence and equivalence of each source's vp in r2
-    for r2_result in r2
-        if haskey(r1_vp, r2_result.thingid)
-            a, b = r1_vp[r2_result.thingid], r2_result.vs
-            if !(isapprox(a, b))
-                println("compare_vp_params: Mismatch - $(a) vs $(b)")
-                print("norm(a - b): ", norm(a - b))
-                return false
-            end
-        else
+    for i in eachindex(r1)
+        a = r1[i].vs
+        b = r2[i].vs
+        if !(isapprox(a, b))
+            println("compare_vp_params: Mismatch - $(a) vs $(b)")
+            print("norm(a - b): ", norm(a - b))
             return false
         end
     end
-
-    return length(r1) == length(r2)
+    return true
 end
 
 """
@@ -141,6 +135,39 @@ function load_stripe_82_data()
     catalog, target_sources = infer_init([rcf], datadir, primary_initialization=false)
     images = SDSSIO.load_field_images([rcf], datadir)
     ([rcf], datadir, target_sources, catalog, images)
+end
+
+"""
+Compare the initial catalog produced by detect_sources() versus the
+SDSS primary catalog.
+"""
+function test_detect_sources()
+    rcf = RunCamcolField(4263, 5, 119)
+    cd(datadir)
+    run(`make RUN=$(rcf.run) CAMCOL=$(rcf.camcol) FIELD=$(rcf.field)`)
+    cd(wd)
+    stagedir = joinpath(datadir, string(rcf.run), string(rcf.camcol),
+                        string(rcf.field))
+
+    # SDSS catalog
+    fname_photoobj = joinpath(stagedir, SDSSIO.filename(SDSSIO.PhotoObj(rcf)))
+    sdss_catalog = SDSSIO.read_photoobj(FITSIO.FITS(fname_photoobj))
+
+    # Get raw images
+    strategy = SDSSIO.PlainFITSStrategy(datadir)
+    raw_images = SDSSIO.load_raw_images(strategy, [rcf])
+    catalog, source_rcfs, source_idxs, source_radii = detect_sources(raw_images)
+
+    @test all(source_rcfs .== rcf)
+
+    ra = [ce.pos[1] for ce in catalog]
+    dec = [ce.pos[2] for ce in catalog]
+    idx, dists = match_coordinates(ra, dec,
+                                   sdss_catalog["ra"], sdss_catalog["dec"])
+
+    # Test that there are a bunch of coordinates that match within 0.5 arcsec
+    # (This is a basic sanity check, not a very strict test.)
+    @test sum(dists .< 0.5/3600.) > 600
 end
 
 """
@@ -470,6 +497,7 @@ if test_long_running
     test_one_node_joint_infer_obj_overlapping()
 end
 
+test_detect_sources()
 test_same_one_node_infer_twice()
 test_different_result_with_different_iter()
 test_same_result_with_diff_batch_sizes()

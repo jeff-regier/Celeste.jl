@@ -1,4 +1,5 @@
 julia 0.6
+BinDeps
 Compat 0.18.0
 DataFrames
 DataStructures 0.5.2
@@ -15,3 +16,4 @@ YAML
 TranscodingStreams
 CodecBzip2
 CodecZlib
+NearestNeighbors
