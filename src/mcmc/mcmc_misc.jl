@@ -1,5 +1,4 @@
 import Distributions: logpdf, Poisson, Normal, MvNormal
-using NPZ
 
 ################################
 # poisson convenience wrappers #
