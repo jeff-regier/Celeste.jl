@@ -263,12 +263,12 @@ function construct_prior()
     star_prior = StarPrior(
         LogNormal(pp.flux_mean[1], sqrt(pp.flux_var[1])),
         Categorical(pp.k[:,1]),
-        [MvNormal(pp.color_mean[:,k,1], pp.color_cov[:,:,k,1]) for k in 1:num_color_components])
+        [MvNormal(pp.color_mean[:,k,1], pp.color_cov[:,:,k,1]) for k in 1:NUM_COLOR_COMPONENTS])
 
     gal_prior = GalaxyPrior(
         LogNormal(pp.flux_mean[2], sqrt(pp.flux_var[2])),
         Categorical(pp.k[:,2]),
-        [MvNormal(pp.color_mean[:,k,2], pp.color_cov[:,:,k,2]) for k in 1:num_color_components],
+        [MvNormal(pp.color_mean[:,k,2], pp.color_cov[:,:,k,2]) for k in 1:NUM_COLOR_COMPONENTS],
         LogNormal(0, 10),
         Beta(1, 1),
         Beta(1, 1))
@@ -287,7 +287,7 @@ function color_logprior(brightness::Float64,
                         is_star::Bool)
     subprior      = is_star ? prior.star : prior.galaxy
     ll_brightness = logpdf(subprior.brightness, exp(brightness))
-    ll_component  = [logpdf(subprior.colors[k], colors) for k in 1:num_color_components]
+    ll_component  = [logpdf(subprior.colors[k], colors) for k in 1:NUM_COLOR_COMPONENTS]
     ll_color      = logsumexp(ll_component + log.(subprior.color_component.p))
     return ll_brightness + ll_color
 end

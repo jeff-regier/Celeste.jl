@@ -56,7 +56,7 @@ function load_raw_psf(; x::Float64=500., y::Float64=500.)
         datadir, run_num, camcol_num, field_num,
                  run_num, camcol_num, field_num)
   psf_fits = FITSIO.FITS(psf_filename)
-  raw_psf_comp = SDSSIO.read_psf(psf_fits, band_letters[b])
+  raw_psf_comp = SDSSIO.read_psf(psf_fits, BAND_LETTERS[b])
   close(psf_fits)
 
   eval_psf(raw_psf_comp, x, y)

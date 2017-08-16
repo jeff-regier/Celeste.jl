@@ -368,10 +368,10 @@ function draw_source_params(prior, object_id)
     ))
 
     color_mixture_weights = prior.k[:, source_type_index]
-    num_color_components = length(color_mixture_weights)
+    NUM_COLOR_COMPONENTS = length(color_mixture_weights)
     color_components = MvNormal[
         MvNormal(prior.color_mean[:, k, source_type_index], prior.color_cov[:, :, k, source_type_index])
-        for k in 1:num_color_components
+        for k in 1:NUM_COLOR_COMPONENTS
     ]
     color_log_ratios = rand(MixtureModel(color_components, color_mixture_weights))
 

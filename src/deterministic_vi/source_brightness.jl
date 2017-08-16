@@ -8,10 +8,10 @@ Attributes:
 Each matrix has one row for each color and a column for
 star / galaxy.  Row 3 is the gamma distribute baseline brightness,
 and all other rows are lognormal offsets.
-- E_l_a: A num_bands x num_source_types matrix of expectations and derivatives of
+- E_l_a: A NUM_BANDS x NUM_SOURCE_TYPES matrix of expectations and derivatives of
   color terms.  The rows are bands, and the columns
   are star / galaxy.
-- E_ll_a: A num_bands x num_source_types matrix of expectations and derivatives of
+- E_ll_a: A NUM_BANDS x NUM_SOURCE_TYPES matrix of expectations and derivatives of
   squared color terms.  The rows are bands, and the columns
   are star / galaxy.
 """
@@ -34,11 +34,11 @@ function SourceBrightness{NumType <: Number}(vs::Vector{NumType};
 
     # E_l_a has a row for each of the five colors and columns
     # for star / galaxy.
-    E_l_a  = Matrix{SensitiveFloat{NumType}}(num_bands, num_source_types)
-    E_ll_a = Matrix{SensitiveFloat{NumType}}(num_bands, num_source_types)
+    E_l_a  = Matrix{SensitiveFloat{NumType}}(NUM_BANDS, NUM_SOURCE_TYPES)
+    E_ll_a = Matrix{SensitiveFloat{NumType}}(NUM_BANDS, NUM_SOURCE_TYPES)
 
-    for i = 1:num_source_types
-        for b = 1:num_bands
+    for i = 1:NUM_SOURCE_TYPES
+        for b = 1:NUM_BANDS
             E_l_a[b, i] = SensitiveFloat{NumType}(length(BrightnessParams), 1,
                                        calculate_gradient, calculate_hessian)
         end
@@ -115,7 +115,7 @@ function SourceBrightness{NumType <: Number}(vs::Vector{NumType};
         ################################
         # Squared terms.
 
-        for b = 1:num_bands
+        for b = 1:NUM_BANDS
             E_ll_a[b, i] = SensitiveFloat{NumType}(length(BrightnessParams), 1,
                                            calculate_gradient, calculate_hessian)
         end

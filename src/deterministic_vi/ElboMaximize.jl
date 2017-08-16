@@ -82,8 +82,8 @@ function elbo_constraints{T}(bound::VariationalParams{T},
         ]
         simplexes[src] = [
             ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.is_star),
-            ParameterConstraint(SimplexConstraint(0.01/num_color_components, 1.0, num_color_components), ids.k[:, 1]),
-            ParameterConstraint(SimplexConstraint(0.01/num_color_components, 1.0, num_color_components), ids.k[:, 2])
+            ParameterConstraint(SimplexConstraint(0.01/NUM_COLOR_COMPONENTS, 1.0, NUM_COLOR_COMPONENTS), ids.k[:, 1]),
+            ParameterConstraint(SimplexConstraint(0.01/NUM_COLOR_COMPONENTS, 1.0, NUM_COLOR_COMPONENTS), ids.k[:, 2])
         ]
     end
     return ConstraintBatch(boxes, simplexes)

@@ -14,10 +14,10 @@ of the E_G_s and E_G2_s Hessian.
 
 Args:
     NumType: The numeric type of the hessian.
-    i: The type of celestial source, from 1:num_source_types
+    i: The type of celestial source, from 1:NUM_SOURCE_TYPES
 """
 function HessianSubmatrices(NumType::DataType, i::Int)
-    @assert 1 <= i <= num_source_types
+    @assert 1 <= i <= NUM_SOURCE_TYPES
     shape_p = length(shape_standard_alignment[i])
 
     u_u = zeros(NumType, 2, 2)
@@ -41,7 +41,7 @@ struct ElboIntermediateVariables{NumType <: Number}
 
     # Subsets of the Hessian of E_G_s and E_G2_s that allow us to use BLAS
     # functions to accumulate Hessian terms. There is one submatrix for
-    # each celestial object type in 1:num_source_types
+    # each celestial object type in 1:NUM_SOURCE_TYPES
     E_G_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
     E_G2_s_hsub_vec::Vector{HessianSubmatrices{NumType}}
 
@@ -91,9 +91,9 @@ function ElboIntermediateVariables(NumType::DataType,
     var_G_s = SensitiveFloat(E_G_s)
 
     E_G_s_hsub_vec =
-        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:num_source_types ]
+        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:NUM_SOURCE_TYPES ]
     E_G2_s_hsub_vec =
-        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:num_source_types ]
+        HessianSubmatrices{NumType}[ HessianSubmatrices(NumType, i) for i=1:NUM_SOURCE_TYPES ]
 
     E_G = SensitiveFloat{NumType}(length(CanonicalParams), num_active_sources,
                                   calculate_gradient, calculate_hessian)
@@ -119,7 +119,7 @@ function clear!{NumType <: Number}(elbo_vars::ElboIntermediateVariables{NumType}
     clear!(elbo_vars.E_G2_s)
     clear!(elbo_vars.var_G_s)
 
-    for i in 1:num_source_types
+    for i in 1:NUM_SOURCE_TYPES
         fill!(elbo_vars.E_G_s_hsub_vec[i].u_u, zero(NumType))
         fill!(elbo_vars.E_G_s_hsub_vec[i].shape_shape, zero(NumType))
         fill!(elbo_vars.E_G2_s_hsub_vec[i].u_u, zero(NumType))

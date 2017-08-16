@@ -16,8 +16,8 @@ export Image, SkyPatch, PsfComponent,
 export align
 
 # constants
-export band_letters, num_color_components, num_source_types, num_bands,
-       galaxy_prototypes, prior,
+export NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES, NUM_BANDS,
+       BAND_LETTERS, galaxy_prototypes, prior,
        shape_standard_alignment,
        brightness_standard_alignment,
        gal_shape_alignment,
@@ -37,10 +37,10 @@ import Base.length
 
 const cfgdir = joinpath(Pkg.dir("Celeste"), "cfg")
 
-const band_letters = ['u', 'g', 'r', 'i', 'z']
+const BAND_LETTERS = "ugriz"
 
 # The number of bands (colors).
-const num_bands = length(band_letters)
+const NUM_BANDS = length(BAND_LETTERS)
 
 
 include("model/light_source_model.jl")

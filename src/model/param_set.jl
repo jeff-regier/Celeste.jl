@@ -12,9 +12,9 @@
 # gal_scale = Galaxy scale (sigma). gal_scale times sqrt(gal_ab) gives the half-light radius in pixel
 #           coords.
 # For flux_loc, flux_scale, color_mean and color_var, the first row is stars, and the second is galaxies.
-# flux_loc      = num_source_typesx1 lognormal mean parameter for r_s, the brightness/total flux of the object, in nMgy.
+# flux_loc      = NUM_SOURCE_TYPESx1 lognormal mean parameter for r_s, the brightness/total flux of the object, in nMgy.
 #           For example, flux_loc[1] gives the lognormal mean brightness for a star.
-# flux_scale      = num_source_typesx1 lognormal variance parameter for r_s.
+# flux_scale      = NUM_SOURCE_TYPESx1 lognormal variance parameter for r_s.
 # color_mean      = C_s means (formerly beta), the log ratios of brightness from each color band to the
 #           previous one. For example color_mean[1,2] gives the mean log brightness ratio of band 3 over
 #           band 2.
@@ -22,10 +22,10 @@
 # is_star       = probability of being a star or galaxy.  is_star[1, 1] is the
 #           probability of being a star and is_star[2, 1] of being a galaxy.
 #           (formerly chi)
-# k       = {num_color_components|num_color_components-1}xnum_source_types matrix of color prior component indicators.
+# k       = {NUM_COLOR_COMPONENTS|NUM_COLOR_COMPONENTS-1}xNUM_SOURCE_TYPES matrix of color prior component indicators.
 #           (formerly kappa)
 #
-# Note num_source_types denotes the number of types of astronomical objects (e.g., 2 for stars and galaxies).
+# Note NUM_SOURCE_TYPES denotes the number of types of astronomical objects (e.g., 2 for stars and galaxies).
 
 abstract type ParamSet end
 
@@ -66,12 +66,12 @@ struct BrightnessParams <: ParamSet
     color_mean::Vector{Int}
     color_var::Vector{Int}
     BrightnessParams() = new(1, 2,
-                             collect(3:(3+(num_bands-1)-1)),
-                             collect((3+num_bands-1):(3+2*(num_bands-1)-1)))
+                             collect(3:(3+(NUM_BANDS-1)-1)),
+                             collect((3+NUM_BANDS-1):(3+2*(NUM_BANDS-1)-1)))
 end
 const bids = BrightnessParams()
 getids(::Type{BrightnessParams}) = bids
-length(::Type{BrightnessParams}) = 2 + 2 * (num_bands-1)
+length(::Type{BrightnessParams}) = 2 + 2 * (NUM_BANDS-1)
 
 struct CanonicalParams <: ParamSet
     pos::Vector{Int}
@@ -91,12 +91,12 @@ struct CanonicalParams <: ParamSet
             4, # gal_ab
             5, # gal_angle
             6, # gal_scale
-            collect(7:(7+num_source_types-1)),  # flux_loc
-            collect((7+num_source_types):(7+2num_source_types-1)), # flux_scale
-            reshape((7+2num_source_types):(7+2num_source_types+(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_mean
-            reshape((7+2num_source_types+(num_bands-1)*num_source_types):(7+2num_source_types+2*(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_var
-            collect((7+2num_source_types+2*(num_bands-1)*num_source_types):(7+3num_source_types+2*(num_bands-1)*num_source_types-1)),  # is_star
-            reshape((7+3num_source_types+2*(num_bands-1)*num_source_types):(7+3num_source_types+2*(num_bands-1)*num_source_types+num_color_components*num_source_types-1), (num_color_components, num_source_types))) # k
+            collect(7:(7+NUM_SOURCE_TYPES-1)),  # flux_loc
+            collect((7+NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES-1)), # flux_scale
+            reshape((7+2NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # color_mean
+            reshape((7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # color_var
+            collect((7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+3NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES-1)),  # is_star
+            reshape((7+3NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+3NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES+NUM_COLOR_COMPONENTS*NUM_SOURCE_TYPES-1), (NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES))) # k
     end
 end
 
@@ -104,7 +104,7 @@ const ids = CanonicalParams()
 
 getids(::Type{CanonicalParams}) = ids
 
-length(::Type{CanonicalParams}) = 6 + 3*num_source_types + 2*(num_bands-1)*num_source_types + num_color_components*num_source_types
+length(::Type{CanonicalParams}) = 6 + 3*NUM_SOURCE_TYPES + 2*(NUM_BANDS-1)*NUM_SOURCE_TYPES + NUM_COLOR_COMPONENTS*NUM_SOURCE_TYPES
 
 
 struct LatentStateIndexes <: ParamSet
@@ -120,15 +120,15 @@ struct LatentStateIndexes <: ParamSet
 
     LatentStateIndexes() =
         new([1, 2], 3, 4, 5, 6,
-            collect(7:(7+num_source_types-1)),  # r
-            reshape((7+num_source_types):(7+num_source_types+(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # c
-            reshape((7+num_source_types+(num_bands-1)*num_source_types):(7+2num_source_types+(num_bands-1)*num_source_types-1), (num_source_types, 1)),  # is_star
-            reshape((7+2num_source_types+(num_bands-1)*num_source_types):(7+2num_source_types+(num_bands-1)*num_source_types+num_color_components*num_source_types-1), (num_color_components, num_source_types))) # k
+            collect(7:(7+NUM_SOURCE_TYPES-1)),  # r
+            reshape((7+NUM_SOURCE_TYPES):(7+NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # c
+            reshape((7+NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_SOURCE_TYPES, 1)),  # is_star
+            reshape((7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES+NUM_COLOR_COMPONENTS*NUM_SOURCE_TYPES-1), (NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES))) # k
 end
 
 const lidx = LatentStateIndexes()
 getlidx(::Type{LatentStateIndexes}) = lidx
-length(::Type{LatentStateIndexes}) = 22 #6 + 3*num_source_types + 2*(num_bands-1)*num_source_types + num_color_components*num_source_types
+length(::Type{LatentStateIndexes}) = 22 #6 + 3*NUM_SOURCE_TYPES + 2*(NUM_BANDS-1)*NUM_SOURCE_TYPES + NUM_COLOR_COMPONENTS*NUM_SOURCE_TYPES
 
 # Parameters for a representation of the PSF
 struct PsfParams <: ParamSet

@@ -41,7 +41,7 @@ function calculate_G_s!{NumType <: Number}(
         var_G_s.v[] = 0.0
     end
 
-    @inbounds for i in 1:num_source_types # Celestial object types (e.g. stars and galaxies)
+    @inbounds for i in 1:NUM_SOURCE_TYPES # Celestial object types (e.g. stars and galaxies)
         fsm_i = (i == 1) ? elbo_vars.fs0m : elbo_vars.fs1m
         a_i = vp[s][ids.is_star[i]]
         sb_E_l_a_b_i = sb.E_l_a[b, i]
@@ -183,11 +183,11 @@ function calculate_G_s!{NumType <: Number}(
         # different values of i.
 
         # This is
-        # for i = 1:num_source_types
+        # for i = 1:NUM_SOURCE_TYPES
         #     E_G_u_u_hess += elbo_vars.E_G_s_hsub_vec[i].u_u
         #     E_G2_u_u_hess += elbo_vars.E_G2_s_hsub_vec[i].u_u
         # end
-        # For each value in 1:num_source_types, written this way for speed.
+        # For each value in 1:NUM_SOURCE_TYPES, written this way for speed.
         for u_ind1 = 1:2, u_ind2 = 1:2
             elbo_vars.E_G_s.h[ids.pos[u_ind1], ids.pos[u_ind2]] =
                 elbo_vars.E_G_s_hsub_vec[1].u_u[u_ind1, u_ind2] +

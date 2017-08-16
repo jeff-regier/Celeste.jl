@@ -2,10 +2,10 @@ import JLD
 
 
 # The number of components in the color prior.
-const num_color_components = 8
+const NUM_COLOR_COMPONENTS = 8
 
 # The number of types of celestial objects (here, stars and galaxies).
-const num_source_types = 2
+const NUM_SOURCE_TYPES = 2
 
 
 mutable struct CatalogEntry
@@ -95,9 +95,9 @@ function load_prior()
     # due to the greater flexibility of the galaxy model
     #is_star = [0.28, 0.72]
     is_star = [0.099, 0.001]
-    k = Matrix{Float64}(num_color_components, num_source_types)
-    color_mean = Array{Float64}(num_bands - 1, num_color_components, num_source_types)
-    color_cov = Array{Float64}(num_bands - 1, num_bands - 1, num_color_components, num_source_types)
+    k = Matrix{Float64}(NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES)
+    color_mean = Array{Float64}(NUM_BANDS - 1, NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES)
+    color_cov = Array{Float64}(NUM_BANDS - 1, NUM_BANDS - 1, NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES)
 
     prior_params = [JLD.load(joinpath(cfgdir, "star_prior.jld")),
                     JLD.load(joinpath(cfgdir, "gal_prior.jld"))]

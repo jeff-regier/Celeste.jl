@@ -48,8 +48,8 @@ end
 
 
 """
-Given a function (lnpdf), that takes in a num_color_components dimensional vector (th),
-this function fixes num_color_components-1 of the dimensions of th, and returns a function
+Given a function (lnpdf), that takes in a NUM_COLOR_COMPONENTS dimensional vector (th),
+this function fixes NUM_COLOR_COMPONENTS-1 of the dimensions of th, and returns a function
 handle that only varies with respect to dimension d.
 """
 function curry_dim(lnpdf::Function, th0::Vector{Float64}, dim::Int)
@@ -247,8 +247,8 @@ following website:
 http://blog.stata.com/2016/05/26/gelman-rubin-convergence-diagnostic-using-multiple-chains/
 """
 function potential_scale_reduction_factor(chains)
-    # each chain has to be size N x num_color_components, we have M chains
-    N, num_color_components  = size(chains[1])
+    # each chain has to be size N x NUM_COLOR_COMPONENTS, we have M chains
+    N, NUM_COLOR_COMPONENTS  = size(chains[1])
     M     = length(chains)
 
     # mean and variance of each chain
@@ -259,13 +259,13 @@ function potential_scale_reduction_factor(chains)
     gmu   = mean(means, 1)
 
     # between chain variance:w
-    num_bands = float(N)/(float(M)-1)*sum( broadcast(-, means, gmu).^2, 1)
+    NUM_BANDS = float(N)/(float(M)-1)*sum( broadcast(-, means, gmu).^2, 1)
 
     # average within chain variance
     W = mean(vars, 1)
 
     # compute PRSF ratio
-    Vhat = (float(N)-1.)/float(N) * W + (float(M)+1)/float(N*M) * num_bands
+    Vhat = (float(N)-1.)/float(N) * W + (float(M)+1)/float(N*M) * NUM_BANDS
     psrf = Vhat ./ W
     return psrf
 end

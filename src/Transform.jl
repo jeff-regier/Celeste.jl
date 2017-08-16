@@ -9,7 +9,7 @@ using Compat
 using ..SensitiveFloats
 import ..Log
 
-import ..Model: num_source_types, ParamSet, num_bands, num_color_components
+import ..Model: NUM_SOURCE_TYPES, ParamSet, NUM_BANDS, NUM_COLOR_COMPONENTS
 
 export DataTransform, ParamBounds, ParamBox, SimplexBox,
        get_mp_transform, enforce_bounds!,
@@ -41,15 +41,15 @@ struct CanonicalParams <: ParamSet
     k::Matrix{Int}
     CanonicalParams() =
         new([1, 2], 3, 4, 5, 6,
-            collect(7:(7+num_source_types-1)),  # flux_loc
-            collect((7+num_source_types):(7+2num_source_types-1)), # flux_scale
-            reshape((7+2num_source_types):(7+2num_source_types+(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_mean
-            reshape((7+2num_source_types+(num_bands-1)*num_source_types):(7+2num_source_types+2*(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_var
-            reshape((7+2num_source_types+2*(num_bands-1)*num_source_types):(7+3num_source_types+2*(num_bands-1)*num_source_types-1), (num_source_types, 1)),  # a
-            reshape((7+3num_source_types+2*(num_bands-1)*num_source_types):(7+3num_source_types+2*(num_bands-1)*num_source_types+num_color_components*num_source_types-1), (num_color_components, num_source_types))) # k
+            collect(7:(7+NUM_SOURCE_TYPES-1)),  # flux_loc
+            collect((7+NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES-1)), # flux_scale
+            reshape((7+2NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # color_mean
+            reshape((7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # color_var
+            reshape((7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+3NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_SOURCE_TYPES, 1)),  # a
+            reshape((7+3NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+3NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES+NUM_COLOR_COMPONENTS*NUM_SOURCE_TYPES-1), (NUM_COLOR_COMPONENTS, NUM_SOURCE_TYPES))) # k
 end
 const ids = CanonicalParams()
-Base.length(::Type{CanonicalParams}) = 6 + 3*num_source_types + 2*(num_bands-1)*num_source_types + num_color_components*num_source_types
+Base.length(::Type{CanonicalParams}) = 6 + 3*NUM_SOURCE_TYPES + 2*(NUM_BANDS-1)*NUM_SOURCE_TYPES + NUM_COLOR_COMPONENTS*NUM_SOURCE_TYPES
 
 struct UnconstrainedParams <: ParamSet
     pos::Vector{Int}
@@ -65,17 +65,17 @@ struct UnconstrainedParams <: ParamSet
     k::Matrix{Int}
     UnconstrainedParams() =
         new([1, 2], 3, 4, 5, 6,
-            collect(7:(7+num_source_types-1)),  # flux_loc
-            collect((7+num_source_types):(7+2num_source_types-1)), # flux_scale
-            reshape((7+2num_source_types):(7+2num_source_types+(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_mean
-            reshape((7+2num_source_types+(num_bands-1)*num_source_types):(7+2num_source_types+2*(num_bands-1)*num_source_types-1), (num_bands-1, num_source_types)),  # color_var
-            reshape((7+2num_source_types+2*(num_bands-1)*num_source_types):
-                    (7+2num_source_types+2*(num_bands-1)*num_source_types+(num_source_types-1)-1), (num_source_types - 1, 1)),  # a
-            reshape((7+2num_source_types+2*(num_bands-1)*num_source_types+(num_source_types-1)):
-                    (7+2num_source_types+2*(num_bands-1)*num_source_types+(num_source_types-1)+(num_color_components-1)*num_source_types-1), (num_color_components-1, num_source_types))) # k
+            collect(7:(7+NUM_SOURCE_TYPES-1)),  # flux_loc
+            collect((7+NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES-1)), # flux_scale
+            reshape((7+2NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # color_mean
+            reshape((7+2NUM_SOURCE_TYPES+(NUM_BANDS-1)*NUM_SOURCE_TYPES):(7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES-1), (NUM_BANDS-1, NUM_SOURCE_TYPES)),  # color_var
+            reshape((7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES):
+                    (7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES+(NUM_SOURCE_TYPES-1)-1), (NUM_SOURCE_TYPES - 1, 1)),  # a
+            reshape((7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES+(NUM_SOURCE_TYPES-1)):
+                    (7+2NUM_SOURCE_TYPES+2*(NUM_BANDS-1)*NUM_SOURCE_TYPES+(NUM_SOURCE_TYPES-1)+(NUM_COLOR_COMPONENTS-1)*NUM_SOURCE_TYPES-1), (NUM_COLOR_COMPONENTS-1, NUM_SOURCE_TYPES))) # k
 end
 const ids_free = UnconstrainedParams()
-Base.length(::Type{UnconstrainedParams}) =  6 + 2*num_source_types + 2*(num_bands-1)*num_source_types + (num_color_components-1)*num_source_types + num_source_types-1
+Base.length(::Type{UnconstrainedParams}) =  6 + 2*NUM_SOURCE_TYPES + 2*(NUM_BANDS-1)*NUM_SOURCE_TYPES + (NUM_COLOR_COMPONENTS-1)*NUM_SOURCE_TYPES + NUM_SOURCE_TYPES-1
 
 ################################
 # Elementary functions.
@@ -744,14 +744,14 @@ function get_mp_transform{NumType <: Number}(
             bounds[si][:pos][axis] =
                 ParamBox(pos[axis] - loc_width, pos[axis] + loc_width, loc_scale)
         end
-        bounds[si][:flux_loc] = Vector{ParamBox}(num_source_types)
-        bounds[si][:flux_scale] = Vector{ParamBox}(num_source_types)
-        for i in 1:num_source_types
+        bounds[si][:flux_loc] = Vector{ParamBox}(NUM_SOURCE_TYPES)
+        bounds[si][:flux_scale] = Vector{ParamBox}(NUM_SOURCE_TYPES)
+        for i in 1:NUM_SOURCE_TYPES
             bounds[si][:flux_loc][i] = ParamBox(-1.0, 10., 1.0)
             bounds[si][:flux_scale][i] = ParamBox(1e-4, 0.1, 1.0)
         end
-        bounds[si][:color_mean] = Vector{ParamBox}(4 * num_source_types)
-        bounds[si][:color_var] = Vector{ParamBox}(4 * num_source_types)
+        bounds[si][:color_mean] = Vector{ParamBox}(4 * NUM_SOURCE_TYPES)
+        bounds[si][:color_var] = Vector{ParamBox}(4 * NUM_SOURCE_TYPES)
         for ind in 1:length(ids.color_mean)
             bounds[si][:color_mean][ind] = ParamBox(-10., 10., 1.0)
             bounds[si][:color_var][ind] = ParamBox(1e-4, 1., 1.0)
@@ -764,9 +764,9 @@ function get_mp_transform{NumType <: Number}(
         bounds[si][:a] = Vector{SimplexBox}(1)
         bounds[si][:a][1] = SimplexBox(0.005, 1.0, 2)
 
-        bounds[si][:k] = Vector{SimplexBox}(num_source_types)
-        for i in 1:num_source_types
-            bounds[si][:k][i] = SimplexBox(0.01 / num_color_components, 1.0, num_color_components)
+        bounds[si][:k] = Vector{SimplexBox}(NUM_SOURCE_TYPES)
+        for i in 1:NUM_SOURCE_TYPES
+            bounds[si][:k][i] = SimplexBox(0.01 / NUM_COLOR_COMPONENTS, 1.0, NUM_COLOR_COMPONENTS)
         end
     end
 

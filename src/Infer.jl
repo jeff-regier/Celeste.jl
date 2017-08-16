@@ -29,13 +29,13 @@ Arguments:
 function find_neighbors(target_sources::Vector{Int64},
                         catalog::Vector{CatalogEntry},
                         images::Vector{Image})
-    psf_width_ub = zeros(num_bands)
+    psf_width_ub = zeros(NUM_BANDS)
     for img in images
         psf_width = Model.get_psf_width(img.psf)
         psf_width_ub[img.b] = max(psf_width_ub[img.b], psf_width)
     end
 
-    epsilon_lb = fill(Inf, num_bands)
+    epsilon_lb = fill(Inf, NUM_BANDS)
     for img in images
         epsilon = img.sky[div(img.H, 2), div(img.W, 2)]
         epsilon_lb[img.b] = min(epsilon_lb[img.b], epsilon)

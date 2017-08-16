@@ -1,6 +1,6 @@
 module ConstraintTransformsTests
 
-using Celeste.Model: CanonicalParams, ids, num_color_components
+using Celeste.Model: CanonicalParams, ids, NUM_COLOR_COMPONENTS
 
 using Celeste.DeterministicVI.ElboMaximize: elbo_constraints
 
@@ -428,7 +428,7 @@ function star_constraints(bound; loc_width = 1.5e-3, loc_scale = 1.0)
         ]
         simplexes[src] = [
             ParameterConstraint(SimplexConstraint(0.005, 1.0, 2), ids.is_star)
-            ParameterConstraint(SimplexConstraint(0.01/num_color_components, 1.0, num_color_components), ids.k[:, 1])
+            ParameterConstraint(SimplexConstraint(0.01/NUM_COLOR_COMPONENTS, 1.0, NUM_COLOR_COMPONENTS), ids.k[:, 1])
         ]
     end
     return ConstraintBatch(boxes, simplexes)

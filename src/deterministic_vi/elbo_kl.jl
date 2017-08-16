@@ -1,7 +1,7 @@
 module KLDivergence
 
 using ..DeterministicVI: ElboArgs, VariationalParams, init_thread_pool!
-using ...Model: CanonicalParams, ids, prior, num_source_types, num_color_components
+using ...Model: CanonicalParams, ids, prior, NUM_SOURCE_TYPES, NUM_COLOR_COMPONENTS
 using ...SensitiveFloats: SensitiveFloat, add_sources_sf!
 using Compat
 using ForwardDiff, ReverseDiff, DiffBase
@@ -95,7 +95,7 @@ kl_source_a(vs) = categorical_kl(vs[ids.is_star], prior.is_star)
 
 function kl_source_r(vs)
     kl = zero(eltype(vs))
-    for i in 1:num_source_types
+    for i in 1:NUM_SOURCE_TYPES
         kl += vs[ids.is_star[i]] * gaussian_kl(vs[ids.flux_loc[i]], vs[ids.flux_scale[i]],
                                             prior.flux_mean[i], prior.flux_var[i])
     end
@@ -105,7 +105,7 @@ end
 
 function kl_source_k(vs)
     kl = zero(eltype(vs))
-    for i in 1:num_source_types
+    for i in 1:NUM_SOURCE_TYPES
         kl += vs[ids.is_star[i]] * categorical_kl(vs[ids.k[:, i]], prior.k[:, i])
     end
     assert(!isnan(kl))
@@ -114,10 +114,10 @@ end
 
 function kl_source_c(vs)
     kl = zero(eltype(vs))
-    for i in 1:num_source_types
+    for i in 1:NUM_SOURCE_TYPES
         μ₁, var₁ = vs[ids.color_mean[:, i]], vs[ids.color_var[:, i]]
         a = vs[ids.is_star[i]]
-        for d in 1:num_color_components
+        for d in 1:NUM_COLOR_COMPONENTS
             μ₂, Σ₂ = prior.color_mean[:, d, i], prior.color_cov[:, :, d, i]
             kl += a * vs[ids.k[d, i]] * diagmvn_mvn_kl(μ₁, var₁, μ₂, Σ₂)
         end

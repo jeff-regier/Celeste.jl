@@ -71,10 +71,10 @@ else
     fit_r = fit_mle(LogNormal, r0)
     println(fit_r)
 
-    num_color_components = 8
+    NUM_COLOR_COMPONENTS = 8
     c0_train = c0
     #c0_test = c0[120001:end, :]
-    fit_gmm = GMM(num_color_components, c0_train, kind=:full, method=:split)
+    fit_gmm = GMM(NUM_COLOR_COMPONENTS, c0_train, kind=:full, method=:split)
     println("train avll:", GaussianMixtures.avll(fit_gmm, c0_train))
     #println("test avll:", GaussianMixtures.avll(fit_gmm, c0_test))
 
