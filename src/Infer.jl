@@ -12,7 +12,7 @@ module Infer
 import WCS
 using StaticArrays
 
-import ..Configs
+import ..Config
 using ..Model
 import ..Log
 
@@ -129,7 +129,7 @@ objective function.
 Non-standard arguments:
   noise_fraction: The proportion of the noise below which we will remove pixels.
 """
-function load_active_pixels!(config::Configs.Config,
+function load_active_pixels!(config::Config,
                              images::Vector{Image},
                              patches::Matrix{SkyPatch};
                              exclude_nan=true,
@@ -178,7 +178,7 @@ function load_active_pixels!(images::Vector{Image},
                              exclude_nan=true,
                              noise_fraction=0.5)
     load_active_pixels!(
-        Configs.Config(),
+        Config(),
         images,
         patches,
         exclude_nan=exclude_nan,

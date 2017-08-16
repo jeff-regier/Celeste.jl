@@ -6,12 +6,12 @@ import FITSIO
 import StaticArrays
 import WCS
 
-import Celeste.Configs
-import Celeste.DeterministicVI
-import Celeste.Infer
-import Celeste.Model
-import Celeste.ParallelRun
-import Celeste.SDSSIO
+import ..Config
+import ..DeterministicVI
+import ..Infer
+import ..Model
+import ..ParallelRun
+import ..SDSSIO
 
 const ARCSEC_PER_DEGREE = 3600
 const SDSS_ARCSEC_PER_PIXEL = 0.396
@@ -1018,7 +1018,7 @@ end
 
 # Run Celeste with any combination of single/joint inference
 function run_celeste(
-    config::Configs.Config, catalog_entries, target_sources, images;
+    config::Config, catalog_entries, target_sources, images;
     use_joint_inference=false,
 )
     neighbor_map = Infer.find_neighbors(target_sources, catalog_entries, images)

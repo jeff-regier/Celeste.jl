@@ -5,13 +5,12 @@ using Base.Dates
 using Base.Threads
 
 using Celeste
-import Celeste: SDSSIO, ParallelRun, Infer
+import Celeste: SDSSIO, ParallelRun, Infer, Config
 using Celeste.Model
 using Celeste.ParallelRun: InferTiming, BoxKillSwitch, FieldExtent, OptimizedSourceLen, get_overlapping_fields, infer_init, is_production_run, setup_vecs, partition_box, get_pixels_processed, add_timing!
 using Celeste.DeterministicVI
 using Celeste.DeterministicVI.ConstraintTransforms: ConstraintBatch, DEFAULT_CHUNK
 using Celeste.DeterministicVI.ElboMaximize: Config, maximize!
-using Celeste.Configs
 using Celeste.Log
 using Gasp
 using JLD
@@ -474,7 +473,7 @@ end
 """
 To be called by a thread dedicated to preloading boxes into `conc_boxes`.
 """
-function preload_boxes(config::Configs.Config,
+function preload_boxes(config::Config,
                        boxes::Vector{BoundingBox},
                        rcf_map::Dict{RunCamcolField,Int32},
                        field_extents::Vector{FieldExtent},
@@ -533,7 +532,7 @@ end
 Thread function for running joint inference on the light sources in
 the specified bounding boxes.
 """
-function joint_infer_boxes(config::Configs.Config,
+function joint_infer_boxes(config::Config,
                            boxes::Vector{BoundingBox},
                            rcf_map::Dict{RunCamcolField,Int32},
                            field_extents::Vector{FieldExtent},
@@ -712,7 +711,7 @@ function Celeste.ParallelRun.do_infer_boxes(
                     "  $tot_srcs sources in these RCFs")
 
     # inference configuration
-    config = Configs.Config()
+    config = Config()
 
     prev_results = nothing
     for i = 1:length(all_boxes)

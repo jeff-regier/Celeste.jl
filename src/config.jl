@@ -1,4 +1,4 @@
-module Configs
+# Configuration parameters
 
 mutable struct Config
     # A minimum pixel radius to be included around each source.
@@ -9,6 +9,4 @@ mutable struct Config
         config.min_radius_pix = 8.0
         config
     end
-end
-
 end

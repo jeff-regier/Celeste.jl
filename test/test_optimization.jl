@@ -4,7 +4,7 @@ using Celeste: Model, SensitiveFloats
 using Celeste.DeterministicVI.ConstraintTransforms: ParameterConstraint,
                         ConstraintBatch, BoxConstraint, SimplexConstraint
 using Celeste.DeterministicVI: ElboArgs
-using Celeste.DeterministicVI.ElboMaximize: Config, maximize!, elbo_optim_options
+using Celeste.DeterministicVI.ElboMaximize: ElboConfig, maximize!, elbo_optim_options
 using Optim
 
 function verify_sample_star(vs, pos)
@@ -58,7 +58,7 @@ function test_star_optimization()
     # a high star probability.
     vp[1][ids.is_star] = [0.8, 0.2]
 
-    cfg = Config(ea, vp; loc_width=1.0)
+    cfg = ElboConfig(ea, vp; loc_width=1.0)
     maximize!(ea, vp, cfg)
 
     verify_sample_star(vp[1], [10.1, 12.2])
@@ -72,7 +72,7 @@ function test_single_source_optimization()
     ea = make_elbo_args(ea.images, catalog, active_source=s, include_kl=false);
     vp_original = deepcopy(vp);
 
-    cfg = Config(ea, vp; loc_width=1.0)
+    cfg = ElboConfig(ea, vp; loc_width=1.0)
     maximize!(ea, vp, cfg)
 
     # Test that it only optimized source s
@@ -85,7 +85,7 @@ end
 
 function test_galaxy_optimization()
     ea, vp, catalog = gen_sample_galaxy_dataset(; include_kl = false);
-    cfg = Config(ea, vp; loc_width=3.0)
+    cfg = ElboConfig(ea, vp; loc_width=3.0)
     maximize!(ea, vp, cfg)
     verify_sample_galaxy(vp[1], [8.5, 9.6])
 end
@@ -93,7 +93,7 @@ end
 
 function test_full_elbo_optimization()
     ea, vp, catalog = gen_sample_galaxy_dataset(perturb=true);
-    cfg = Config(ea, vp; loc_width=1.0,
+    cfg = ElboConfig(ea, vp; loc_width=1.0,
                  optim_options=elbo_optim_options(xtol_abs=0.0))
     maximize!(ea, vp, cfg)
     verify_sample_galaxy(vp[1], [8.5, 9.6]);
@@ -104,7 +104,7 @@ function test_termination_callback()
     ea, vp, catalog = gen_sample_galaxy_dataset(; include_kl = false);
     terminated = false
     callback = x -> (terminated = x.iteration >= 3; return terminated)
-    cfg = Config(ea, vp; termination_callback = callback)
+    cfg = ElboConfig(ea, vp; termination_callback = callback)
     _, _, _, result = maximize!(ea, vp, cfg)
     return terminated && Optim.iterations(result) == 3
 end
