@@ -19,15 +19,15 @@ export DataTransform, ParamBounds, ParamBox, SimplexBox,
 # A vector of variational parameters.  The outer index is
 # of celestial objects, and the inner index is over individual
 # parameters for that object (referenced using ParamIndex).
-@compat const VariationalParams{NumType <: Number}     = Vector{Vector{NumType}}
-@compat const FreeVariationalParams{NumType <: Number} = Vector{Vector{NumType}}
+const VariationalParams{NumType <: Number} = Vector{Vector{NumType}}
+const FreeVariationalParams{NumType <: Number} = Vector{Vector{NumType}}
 
 #####################################################################################
 # this is essentially a compatibility layer since Model has gotten rid of this code
 # it's messy, but this doesn't really matter too much, since Transforms.jl is going
 # the way of the dinosaur
 
-type CanonicalParams <: ParamSet
+struct CanonicalParams <: ParamSet
     pos::Vector{Int}
     gal_fracdev::Int
     gal_ab::Int
@@ -51,7 +51,7 @@ end
 const ids = CanonicalParams()
 Base.length(::Type{CanonicalParams}) = 6 + 3*num_source_types + 2*(num_bands-1)*num_source_types + num_color_components*num_source_types
 
-type UnconstrainedParams <: ParamSet
+struct UnconstrainedParams <: ParamSet
     pos::Vector{Int}
     gal_fracdev::Int
     gal_ab::Int
@@ -135,7 +135,7 @@ end
 ################################
 # The transforms for Celeste.
 
-immutable ParamBox
+struct ParamBox
     lb::Float64  # lower bound
     ub::Float64  # upper bound
     scale::Float64
@@ -148,7 +148,7 @@ immutable ParamBox
     end
 end
 
-immutable SimplexBox
+struct SimplexBox
     lb::Float64  # lower bound
     scale::Float64
     n::Int
@@ -161,7 +161,7 @@ immutable SimplexBox
 end
 
 # The vector of transform parameters for a Symbol.
-@compat const ParamBounds = Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
+const ParamBounds = Dict{Symbol, Union{Vector{ParamBox}, Vector{SimplexBox}}}
 
 
 ###############################################
@@ -345,7 +345,7 @@ Members:
   d2param_dfree2: A vector of hessians.  Each element is the Hessian of one
                   component of the aforementioned f()
 """
-type TransformDerivatives{NumType <: Number}
+struct TransformDerivatives{NumType <: Number}
     dparam_dfree::Matrix{NumType}
     d2param_dfree2::Vector{Matrix{NumType}}
     Sa::Int
@@ -587,7 +587,7 @@ bounds: The bounds for each parameter and each object in ElboArgs.
 active_sources: The sources that are being optimized.    Only these sources'
     parameters are transformed into the parameter vector.
 """
-type DataTransform
+struct DataTransform
     bounds::Vector{ParamBounds}
     active_sources::Vector{Int}
     S::Int

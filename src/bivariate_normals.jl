@@ -37,7 +37,7 @@ end
 Pre-allocated memory for quantities related to derivatives of bivariate
 normals.
 """
-type BivariateNormalDerivatives{NumType <: Number}
+struct BivariateNormalDerivatives{NumType <: Number}
 
   # Pre-allocated memory for py1, py2, and f when evaluating BVNs
   py1::Array{NumType, 1}
@@ -129,7 +129,7 @@ Attributes:
    dsiginv_dsig: The derivative of sigma inverse with respect to sigma.
    major_sd: The standard deviation of the major axis.
 """
-immutable BvnComponent{NumType <: Number}
+struct BvnComponent{NumType <: Number}
     the_mean::SVector{2,NumType}
     precision::SMatrix{2,2,NumType,4}
     z::NumType
@@ -313,7 +313,7 @@ parameters are indexed by GalaxyShapeParams.
  - t: A Sigma x GalaxyShapeParams x GalaxyShapeParams tensor of second
       derivatives d2 Sigma / d GalaxyShapeParams d GalaxyShapeParams.
 """
-immutable GalaxySigmaDerivs{NumType <: Number}
+struct GalaxySigmaDerivs{NumType <: Number}
     j::SMatrix{3,gal_shape_ids_len,NumType,9}
     t::SArray{Tuple{3,gal_shape_ids_len,gal_shape_ids_len},NumType,3,27}
 end
@@ -388,7 +388,7 @@ Attributes:
      [Sigma11, Sigma12, Sigma22] (in the rows) with respect to
      [gal_ab, gal_angle, gal_scale] (in the columns)
 """
-immutable GalaxyCacheComponent{NumType <: Number}
+struct GalaxyCacheComponent{NumType <: Number}
     gal_fracdev_dir::Float64
     gal_fracdev_i::NumType
     bmc::BvnComponent{NumType}
@@ -589,7 +589,7 @@ function transform_bvn_derivs!{NumType <: Number}(
     end
 end
 
-immutable BvnBundle{T<:Real}
+struct BvnBundle{T<:Real}
     bvn_derivs::BivariateNormalDerivatives{T}
     star_mcs::Matrix{BvnComponent{T}}
     gal_mcs::Array{GalaxyCacheComponent{T},4}

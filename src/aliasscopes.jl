@@ -1,7 +1,7 @@
 using StaticArrays
 
 if isdefined(Base.SimdLoop, Symbol("@unroll_annotation"))
-immutable Const{T}
+struct Const{T}
     a::T
 end
 

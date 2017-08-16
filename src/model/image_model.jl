@@ -1,5 +1,5 @@
 # See https://github.com/jeff-regier/Celeste.jl/wiki/About-SDSS-and-Stripe-82
-immutable SkyIntensity
+struct SkyIntensity
     sky_small::Matrix{Float32} # background flux per pixel, in DNs
     sky_x::Vector{Float32} # interpolation coordinates
     sky_y::Vector{Float32}
@@ -61,7 +61,7 @@ end
 
 
 """An image, taken though a particular filter band"""
-type Image
+mutable struct Image
     # The image height.
     H::Int
 

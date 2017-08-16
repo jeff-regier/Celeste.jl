@@ -22,7 +22,7 @@ using ..DeterministicVI.ConstraintTransforms: TransformDerivatives,
 # defaults for optional arguments to `maximize!` #
 ##################################################
 
-immutable Config{N,T}
+struct Config{N,T}
     bound_params::VariationalParams{T}
     free_params::VariationalParams{T}
     free_initial_input::Vector{T}
@@ -171,7 +171,7 @@ end
 # Objective #
 #-----------#
 
-immutable Objective{N,T} <: Function
+struct Objective{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
     cfg::Config{N,T}
@@ -185,7 +185,7 @@ end
 # Gradient #
 #----------#
 
-immutable Gradient{N,T} <: Function
+struct Gradient{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
     cfg::Config{N,T}
@@ -203,7 +203,7 @@ end
 # Hessian #
 #---------#
 
-immutable Hessian{N,T} <: Function
+struct Hessian{N,T} <: Function
     ea::ElboArgs
     vp::VariationalParams{T}
     cfg::Config{N,T}

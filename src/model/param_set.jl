@@ -27,9 +27,9 @@
 #
 # Note num_source_types denotes the number of types of astronomical objects (e.g., 2 for stars and galaxies).
 
-@compat abstract type ParamSet end
+abstract type ParamSet end
 
-type StarPosParams <: ParamSet
+struct StarPosParams <: ParamSet
     pos::Vector{Int}
     StarPosParams() = new([1, 2])
 end
@@ -37,7 +37,7 @@ const star_ids = StarPosParams()
 getids(::Type{StarPosParams}) = star_ids
 length(::Type{StarPosParams}) = 2
 
-type GalaxyShapeParams <: ParamSet
+struct GalaxyShapeParams <: ParamSet
     gal_ab::Int
     gal_angle::Int
     gal_scale::Int
@@ -47,7 +47,7 @@ const gal_shape_ids = GalaxyShapeParams()
 getids(::Type{GalaxyShapeParams}) = gal_shape_ids
 length(::Type{GalaxyShapeParams}) = 3
 
-type GalaxyPosParams <: ParamSet
+struct GalaxyPosParams <: ParamSet
     pos::Vector{Int}
     gal_fracdev::Int
     gal_ab::Int
@@ -60,7 +60,7 @@ getids(::Type{GalaxyPosParams}) = gal_ids
 length(::Type{GalaxyPosParams}) = 6
 
 
-type BrightnessParams <: ParamSet
+struct BrightnessParams <: ParamSet
     flux_loc::Int
     flux_scale::Int
     color_mean::Vector{Int}
@@ -73,7 +73,7 @@ const bids = BrightnessParams()
 getids(::Type{BrightnessParams}) = bids
 length(::Type{BrightnessParams}) = 2 + 2 * (num_bands-1)
 
-immutable CanonicalParams <: ParamSet
+struct CanonicalParams <: ParamSet
     pos::Vector{Int}
     gal_fracdev::Int
     gal_ab::Int
@@ -107,7 +107,7 @@ getids(::Type{CanonicalParams}) = ids
 length(::Type{CanonicalParams}) = 6 + 3*num_source_types + 2*(num_bands-1)*num_source_types + num_color_components*num_source_types
 
 
-type LatentStateIndexes <: ParamSet
+struct LatentStateIndexes <: ParamSet
     pos::Vector{Int}
     gal_fracdev::Int
     gal_ab::Int
@@ -131,7 +131,7 @@ getlidx(::Type{LatentStateIndexes}) = lidx
 length(::Type{LatentStateIndexes}) = 22 #6 + 3*num_source_types + 2*(num_bands-1)*num_source_types + num_color_components*num_source_types
 
 # Parameters for a representation of the PSF
-immutable PsfParams <: ParamSet
+struct PsfParams <: ParamSet
     mu::UnitRange{Int}
     gal_ab::Int
     gal_angle::Int

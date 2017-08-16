@@ -18,19 +18,19 @@ const SDSS_ARCSEC_PER_PIXEL = 0.396
 const SDSS_DATA_DIR = joinpath(Pkg.dir("Celeste"), "test", "data")
 const STRIPE82_RCF = SDSSIO.RunCamcolField(4263, 5, 119)
 
-immutable BenchmarkFitsFileNotFound <: Exception
+struct BenchmarkFitsFileNotFound <: Exception
     filename::String
 end
 
-immutable MatchException <: Exception
+struct MatchException <: Exception
     msg::String
 end
 
-immutable ObjectsMissingFromGroundTruth <: Exception
+struct ObjectsMissingFromGroundTruth <: Exception
     missing_objids::Vector{String}
 end
 
-immutable MissingColumnsError <: Exception
+struct MissingColumnsError <: Exception
     missing_columns::Vector{Symbol}
 end
 
@@ -429,7 +429,7 @@ end
 
 ## Load a multi-extension FITS imagery file
 
-immutable FitsImage
+struct FitsImage
     pixels::Matrix{Float32}
     header::FITSIO.FITSHeader
     wcs::WCS.WCSTransform
@@ -629,7 +629,7 @@ end
 # Support for generating imagery using Synthetic.jl
 ################################################################################
 
-immutable ImageGeometry
+struct ImageGeometry
     height_px::Int64
     width_px::Int64
     world_coordinate_origin::Tuple{Float64, Float64} # (ra, dec)

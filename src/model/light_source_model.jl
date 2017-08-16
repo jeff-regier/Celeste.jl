@@ -8,7 +8,7 @@ const num_color_components = 8
 const num_source_types = 2
 
 
-type CatalogEntry
+mutable struct CatalogEntry
     pos::Vector{Float64}
     is_star::Bool
     star_fluxes::Vector{Float64}
@@ -29,13 +29,13 @@ Attributes:
   etaBar: The weight of the galaxy component
   nuBar: The scale of the galaxy component
 """
-immutable GalaxyComponent
+struct GalaxyComponent
     etaBar::Float64
     nuBar::Float64
 end
 
 
-@compat const GalaxyPrototype = Vector{GalaxyComponent}
+const GalaxyPrototype = Vector{GalaxyComponent}
 
 
 """
@@ -78,7 +78,7 @@ end
 const galaxy_prototypes = get_galaxy_prototypes()
 
 
-immutable PriorParams
+struct PriorParams
     is_star::Vector{Float64}
     flux_mean::Vector{Float64}
     flux_var::Vector{Float64}

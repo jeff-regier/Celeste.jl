@@ -1,6 +1,6 @@
 module Configs
 
-type Config
+mutable struct Config
     # A minimum pixel radius to be included around each source.
     min_radius_pix::Float64
 

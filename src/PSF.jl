@@ -30,7 +30,7 @@ A data type to store functions related to optimizing a PSF fit. Initialize
 using the transform and number of components, and then call fit_psf
 to perform a fit to a specificed psf and initial parameters.
 """
-type PsfOptimizer
+mutable struct PsfOptimizer
     psf_transform::DataTransform
     ftol::Float64
     grtol::Float64

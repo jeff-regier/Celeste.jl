@@ -2,7 +2,7 @@
 Store pre-allocated memory in this data structures, which contains
 intermediate values used in the ELBO calculation.
 """
-immutable HessianSubmatrices{NumType <: Number}
+struct HessianSubmatrices{NumType <: Number}
     u_u::Matrix{NumType}
     shape_shape::Matrix{NumType}
 end
@@ -26,7 +26,7 @@ function HessianSubmatrices(NumType::DataType, i::Int)
 end
 
 
-immutable ElboIntermediateVariables{NumType <: Number}
+struct ElboIntermediateVariables{NumType <: Number}
     # Vectors of star and galaxy bvn quantities from all sources for a pixel.
     # The vector has one element for each active source, in the same order
     # as ea.active_sources.
@@ -152,7 +152,7 @@ end
 Some parameter to a function has invalid values. The message should explain what parameter is
 invalid and why.
 """
-type InvalidInputError <: Exception
+struct InvalidInputError <: Exception
     message::String
 end
 
@@ -161,7 +161,7 @@ end
 ElboArgs stores the arguments needed to evaluate the variational objective
 function.
 """
-immutable ElboArgs
+struct ElboArgs
     # the overall number of sources: we don't necessarily visit them
     # all or optimize them all, but if we do visit a pixel where any
     # of these are active, we use it in the elbo calculation

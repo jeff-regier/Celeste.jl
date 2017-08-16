@@ -160,11 +160,11 @@ end
 using ForwardDiff: Dual, JacobianConfig, pickchunksize
 using ReverseDiff: TrackedArray, TrackedReal, CompiledTape, GradientTape
 
-@compat const KLGradientTape{T} = GradientTape{typeof(subtract_kl),
-                                               TrackedArray{T,T,1,Vector{T},Vector{T}},
-                                               TrackedReal{T,T,Void}}
+const KLGradientTape{T} = GradientTape{typeof(subtract_kl),
+                                       TrackedArray{T,T,1,Vector{T},Vector{T}},
+                                       TrackedReal{T,T,Void}}
 
-immutable KLHelper{N,T}
+struct KLHelper{N,T}
     gradient_tape::CompiledTape{:kl_gradient,KLGradientTape{T}}
     nested_gradient_tape::CompiledTape{:kl_nested_gradient,KLGradientTape{Dual{N,T}}}
     dual_buffer::Vector{Dual{N,T}}

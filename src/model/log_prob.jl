@@ -231,14 +231,14 @@ end
 ###########################################################################
 
 
-type StarPrior
+struct StarPrior
     brightness::LogNormal
     color_component::Categorical
     colors::Vector{MvNormal}
 end
 
 
-type GalaxyPrior
+struct GalaxyPrior
     brightness::LogNormal
     color_component::Categorical
     colors::Vector{MvNormal}
@@ -248,7 +248,7 @@ type GalaxyPrior
 end
 
 
-type Prior
+struct Prior
     is_star::Bernoulli
     star::StarPrior
     galaxy::GalaxyPrior

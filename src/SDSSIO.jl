@@ -21,7 +21,7 @@ const DEFAULT_MASK_PLANES = ["S_MASK_INTERP",  # bad pixel (was interpolated)
 const BAND_CHAR_TO_NUM = Dict('u'=>1, 'g'=>2, 'r'=>3, 'i'=>4, 'z'=>5)
 
 
-immutable RunCamcolField
+struct RunCamcolField
     run::Int16
     camcol::UInt8
     field::Int16
@@ -195,7 +195,7 @@ function read_mask(strategy, rcf, b, mask_planes=DEFAULT_MASK_PLANES; data=nothi
 end
 
 
-immutable RawImage
+struct RawImage
     rcf::RunCamcolField
     b::Int  # band index
     pixels::Matrix{Float32} # in nMgy, sky-subtracted and calibrated

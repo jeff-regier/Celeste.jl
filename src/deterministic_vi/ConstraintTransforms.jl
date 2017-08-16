@@ -10,9 +10,9 @@ using Compat
 # Constraint Types #
 ####################
 
-@compat abstract type Constraint end
+abstract type Constraint end
 
-immutable BoxConstraint <: Constraint
+struct BoxConstraint <: Constraint
     lower::Float64
     upper::Float64
     scale::Float64
@@ -25,7 +25,7 @@ immutable BoxConstraint <: Constraint
     end
 end
 
-immutable SimplexConstraint <: Constraint
+struct SimplexConstraint <: Constraint
     lower::Float64
     scale::Float64
     n::Int # length of the simplex in the free parameterization
@@ -37,7 +37,7 @@ immutable SimplexConstraint <: Constraint
     end
 end
 
-immutable ParameterConstraint{C<:Constraint} <: Constraint
+struct ParameterConstraint{C<:Constraint} <: Constraint
     constraint::C
     indices::UnitRange{Int} # indices in the bound parameterization
 end
@@ -45,7 +45,7 @@ end
 ParameterConstraint(c::Constraint, i::Vector) = ParameterConstraint(c, first(i):last(i))
 ParameterConstraint(c::Constraint, i::Int) = ParameterConstraint(c, i:i)
 
-immutable ConstraintBatch
+struct ConstraintBatch
     boxes::Vector{Vector{ParameterConstraint{BoxConstraint}}}
     simplexes::Vector{Vector{ParameterConstraint{SimplexConstraint}}}
     function ConstraintBatch(boxes, simplexes)
@@ -319,9 +319,9 @@ using ForwardDiff: Dual, jacobian!, JacobianConfig
 
 const NUM_ELBO_BOUND_PARAMS = length(CanonicalParams)
 
-@compat const TransformJacobianConfig{M,N,T} = JacobianConfig{N,T,Tuple{Array{Dual{N,T},M},Vector{Dual{N,T}}}}
+const TransformJacobianConfig{M,N,T} = JacobianConfig{N,T,Tuple{Array{Dual{N,T},M},Vector{Dual{N,T}}}}
 
-immutable TransformDerivatives{N,T}
+struct TransformDerivatives{N,T}
     jacobian::Matrix{T}
     hessian::Array{T,3}
     output_dual::Vector{Dual{N,T}}

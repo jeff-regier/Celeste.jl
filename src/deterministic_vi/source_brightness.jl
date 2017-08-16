@@ -15,7 +15,7 @@ and all other rows are lognormal offsets.
   squared color terms.  The rows are bands, and the columns
   are star / galaxy.
 """
-immutable SourceBrightness{NumType <: Number}
+struct SourceBrightness{NumType <: Number}
     # [E[l|a=0], E[l]|a=1]]
     E_l_a::Matrix{SensitiveFloat{NumType}}
 
